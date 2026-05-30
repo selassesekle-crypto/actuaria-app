@@ -67,8 +67,8 @@ st.markdown("""
 
 with st.sidebar:
     st.markdown("### ⚙️ Configuration")
-    api_key = st.text_input("Clé API Claude", type="password", placeholder="sk-ant-...")
-    st.markdown("---")
+    api_key = st.secrets.get("ANTHROPIC_API_KEY", "") or st.text_input(
+    "Clé API Claude (optionnel)", type="password", placeholder="sk-ant-...")    st.markdown("---")
     st.markdown("### 📂 Navigation")
     page = st.radio("Module", [
         "🏠 Tableau de Bord",
