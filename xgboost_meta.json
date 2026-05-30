@@ -1,0 +1,17 @@
+{
+  "modele": "XGBoost Fréquence",
+  "best_params": {
+    "n_estimators": 200,
+    "max_depth": 3,
+    "learning_rate": 0.05,
+    "min_child_weight": 10
+  },
+  "gini_train": 0.7251,
+  "gini_test": -0.301,
+  "gini_cv": 0.041,
+  "top3_features": [
+    "Age",
+    "Anciennete Vehicule Ans",
+    "Anciennete Permis Ans"
+  ]
+}
