@@ -47,7 +47,7 @@ def charger_resultats():
     }
     for cle, fichier in fichiers.items():
         try:
-            with open(f'{PROJECT_ROOT}/models/{fichier}') as f:
+            with open(fichier) as f:
                 resultats[cle] = json.load(f)
         except:
             resultats[cle] = {}
