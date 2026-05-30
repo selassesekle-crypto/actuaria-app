@@ -1,4 +1,3 @@
-%%writefile /content/drive/MyDrive/ActuarIA/ui/actuaria_app.py
 import streamlit as st
 import json, os
 import pandas as pd
