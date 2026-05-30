@@ -1,3 +1,4 @@
+%%writefile /content/drive/MyDrive/ActuarIA/ui/actuaria_app.py
 import streamlit as st
 import json, os
 import pandas as pd
@@ -67,8 +68,16 @@ st.markdown("""
 
 with st.sidebar:
     st.markdown("### ⚙️ Configuration")
-    api_key = st.secrets.get("ANTHROPIC_API_KEY", "") or st.text_input(
-    "Clé API Claude (optionnel)", type="password", placeholder="sk-ant-...")    st.markdown("---")
+    try:
+        api_key = st.secrets["ANTHROPIC_API_KEY"]
+        st.success("Clé API chargée automatiquement")
+    except:
+        api_key = st.text_input(
+            "Clé API Claude",
+            type="password",
+            placeholder="sk-ant-..."
+        )
+    st.markdown("---")
     st.markdown("### 📂 Navigation")
     page = st.radio("Module", [
         "🏠 Tableau de Bord",
@@ -108,9 +117,11 @@ if page == "🏠 Tableau de Bord":
         st.markdown("### Décomposition SCR")
         if s:
             fig = go.Figure(go.Pie(
-                labels=['SCR Marché','SCR Non-Vie','SCR Contrepartie','SCR Opérationnel'],
+                labels=['SCR Marché','SCR Non-Vie',
+                        'SCR Contrepartie','SCR Opérationnel'],
                 values=[s.get('scr_marche',0), s.get('scr_nv',0),
-                        s.get('scr_contrepartie',0), s.get('scr_operationnel',0)],
+                        s.get('scr_contrepartie',0),
+                        s.get('scr_operationnel',0)],
                 marker_colors=['#1F4E79','#C55A11','#FFC000','#2E75B6'],
                 hole=0.4, textinfo='label+percent'
             ))
@@ -157,11 +168,13 @@ if page == "🏠 Tableau de Bord":
         ],
         'Statut': ['Validé','Validé','Conforme SCR','Profitable','Calculée']
     }
-    st.dataframe(pd.DataFrame(recap), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(recap), use_container_width=True,
+                 hide_index=True)
 
 elif page == "💬 Agent IA":
     st.markdown("## 💬 Agent Actuariel IA")
-    st.markdown("Posez votre question — l'agent sélectionne automatiquement le bon module.")
+    st.markdown(
+        "Posez votre question — l'agent sélectionne automatiquement le bon module.")
     if not api_key:
         st.warning("Entrez votre clé API Claude dans la barre latérale.")
     else:
@@ -170,8 +183,8 @@ elif page == "💬 Agent IA":
         st.markdown("**Questions rapides :**")
         cols = st.columns(3)
         exemples = [
-            "IBNR total ?","Ratio SCR ?","CSM IFRS 17 ?",
-            "Prime pure GLM ?","PM maximale vie ?","Synthèse bilan ?",
+            "IBNR total ?", "Ratio SCR ?", "CSM IFRS 17 ?",
+            "Prime pure GLM ?", "PM maximale vie ?", "Synthèse bilan ?",
         ]
         for j, ex in enumerate(exemples):
             with cols[j % 3]:
@@ -194,12 +207,12 @@ elif page == "💬 Agent IA":
                 )
                 resp_r = client.messages.create(
                     model="claude-sonnet-4-6", max_tokens=50,
-                    messages=[{"role":"user","content":prompt_r}]
+                    messages=[{"role": "user", "content": prompt_r}]
                 )
                 try:
                     module = json.loads(
                         resp_r.content[0].text.strip()
-                    ).get('module','inconnu')
+                    ).get('module', 'inconnu')
                 except:
                     module = 'inconnu'
 
@@ -211,23 +224,43 @@ elif page == "💬 Agent IA":
                 pmd = resultats.get('pm_vie', {})
 
                 contextes = {
-                    'tarification':   f"Prime pure moy={gd.get('prime_pure_moy')}EUR, Gini CV={gf.get('gini_cv_mean')}, Phi={gf.get('phi_pearson')}",
-                    'provisionnement':f"CL={pd2.get('methodes',{}).get('chain_ladder')}EUR, BF={pd2.get('methodes',{}).get('bornhuetter_ferguson')}EUR, CC={pd2.get('methodes',{}).get('cape_cod')}EUR, Retenu={pd2.get('provision_retenue')}EUR",
-                    'solvabilite2':   f"SCR={sd.get('scr_total')}EUR, Ratio={sd.get('ratio_scr_pct')}%, FP={sd.get('fonds_propres')}EUR",
-                    'ifrs17':         f"Revenue={id2.get('modele_paa',{}).get('insurance_revenue')}EUR, LR={id2.get('modele_paa',{}).get('loss_ratio_pct')}%, CSM={id2.get('modele_bba',{}).get('csm')}EUR",
-                    'provisions_vie': f"PM max={pmd.get('contrat_reference',{}).get('pm_max')}EUR, PM totale={pmd.get('portefeuille',{}).get('pm_totale')}EUR",
-                    'synthese':       f"Prime={gd.get('prime_pure_moy')}EUR, IBNR={pd2.get('provision_retenue')}EUR, SCR={sd.get('ratio_scr_pct')}%, LR={id2.get('modele_paa',{}).get('loss_ratio_pct')}%",
+                    'tarification':
+                        f"Prime pure moy={gd.get('prime_pure_moy')}EUR, "
+                        f"Gini CV={gf.get('gini_cv_mean')}, "
+                        f"Phi={gf.get('phi_pearson')}",
+                    'provisionnement':
+                        f"CL={pd2.get('methodes',{}).get('chain_ladder')}EUR, "
+                        f"BF={pd2.get('methodes',{}).get('bornhuetter_ferguson')}EUR, "
+                        f"CC={pd2.get('methodes',{}).get('cape_cod')}EUR, "
+                        f"Retenu={pd2.get('provision_retenue')}EUR",
+                    'solvabilite2':
+                        f"SCR={sd.get('scr_total')}EUR, "
+                        f"Ratio={sd.get('ratio_scr_pct')}%, "
+                        f"FP={sd.get('fonds_propres')}EUR",
+                    'ifrs17':
+                        f"Revenue={id2.get('modele_paa',{}).get('insurance_revenue')}EUR, "
+                        f"LR={id2.get('modele_paa',{}).get('loss_ratio_pct')}%, "
+                        f"CSM={id2.get('modele_bba',{}).get('csm')}EUR",
+                    'provisions_vie':
+                        f"PM max={pmd.get('contrat_reference',{}).get('pm_max')}EUR, "
+                        f"PM totale={pmd.get('portefeuille',{}).get('pm_totale')}EUR",
+                    'synthese':
+                        f"Prime={gd.get('prime_pure_moy')}EUR, "
+                        f"IBNR={pd2.get('provision_retenue')}EUR, "
+                        f"SCR={sd.get('ratio_scr_pct')}%, "
+                        f"LR={id2.get('modele_paa',{}).get('loss_ratio_pct')}%",
                 }
                 ctx = contextes.get(module, "")
                 prompt_a = (
                     f"Tu es un actuaire expert. "
                     f"Donnees reelles: {ctx}\n"
                     f"Question: {question}\n"
-                    f"Reponds professionnellement avec les chiffres exacts. 3-4 phrases."
+                    f"Reponds professionnellement avec les chiffres exacts. "
+                    f"3-4 phrases."
                 )
                 resp_a = client.messages.create(
                     model="claude-sonnet-4-6", max_tokens=400,
-                    messages=[{"role":"user","content":prompt_a}]
+                    messages=[{"role": "user", "content": prompt_a}]
                 )
                 reponse = resp_a.content[0].text
                 st.session_state.messages.append({
@@ -241,7 +274,8 @@ elif page == "💬 Agent IA":
         for msg in reversed(st.session_state.messages):
             st.markdown(f"**Question : {msg['question']}**")
             st.markdown(
-                f'<span class="module-badge">Module : {msg["module"].upper()}</span>',
+                f'<span class="module-badge">'
+                f'Module : {msg["module"].upper()}</span>',
                 unsafe_allow_html=True)
             st.markdown(
                 f'<div class="agent-response">{msg["reponse"]}</div>',
@@ -272,18 +306,23 @@ elif page == "📐 Provisionnement":
         m = p['methodes']
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("Chain-Ladder", f"{m.get('chain_ladder',0):,.0f} €")
+            st.metric("Chain-Ladder",
+                      f"{m.get('chain_ladder',0):,.0f} €")
         with col2:
-            st.metric("Bornhuetter-Ferguson", f"{m.get('bornhuetter_ferguson',0):,.0f} €")
+            st.metric("Bornhuetter-Ferguson",
+                      f"{m.get('bornhuetter_ferguson',0):,.0f} €")
         with col3:
-            st.metric("Cape Cod", f"{m.get('cape_cod',0):,.0f} €")
+            st.metric("Cape Cod",
+                      f"{m.get('cape_cod',0):,.0f} €")
         with col4:
-            st.metric("Provision retenue", f"{p.get('provision_retenue',0):,.0f} €")
+            st.metric("Provision retenue",
+                      f"{p.get('provision_retenue',0):,.0f} €")
         st.markdown("---")
         par_annee = cl.get('par_annee', {})
         if par_annee:
             df_a = pd.DataFrame([
-                {'Annee': a, 'IBNR': round(v['ibnr']),
+                {'Annee': a,
+                 'IBNR': round(v['ibnr']),
                  'Ultime': round(v['ultime']),
                  'Pct Dev': str(v['pct_dev'])+'%'}
                 for a, v in par_annee.items()
@@ -291,7 +330,7 @@ elif page == "📐 Provisionnement":
             st.dataframe(df_a, use_container_width=True, hide_index=True)
 
 elif page == "🏛️ Solvabilité 2":
-    st.markdown("## Solvabilite 2 — SCR Formule Standard")
+    st.markdown("## Solvabilité 2 — SCR Formule Standard")
     s = resultats.get('scr', {})
     col1, col2, col3, col4 = st.columns(4)
     with col1:
@@ -306,35 +345,42 @@ elif page == "🏛️ Solvabilité 2":
         st.metric("Statut", s.get('statut','N/A'))
     st.markdown("---")
     data_scr = {
-        'Module': ['SCR Marche','SCR Non-Vie','SCR Contrepartie','SCR Operationnel'],
-        'Montant': [s.get('scr_marche',0), s.get('scr_nv',0),
-                    s.get('scr_contrepartie',0), s.get('scr_operationnel',0)],
-        'Pct BSCR': [
+        'Module': ['SCR Marché','SCR Non-Vie',
+                   'SCR Contrepartie','SCR Opérationnel'],
+        'Montant (€)': [
+            s.get('scr_marche',0), s.get('scr_nv',0),
+            s.get('scr_contrepartie',0), s.get('scr_operationnel',0)
+        ],
+        '% BSCR': [
             round(s.get('scr_marche',0)/max(s.get('bscr',1),1)*100,1),
             round(s.get('scr_nv',0)/max(s.get('bscr',1),1)*100,1),
             round(s.get('scr_contrepartie',0)/max(s.get('bscr',1),1)*100,1),
             round(s.get('scr_operationnel',0)/max(s.get('bscr',1),1)*100,1),
         ]
     }
-    st.dataframe(pd.DataFrame(data_scr), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(data_scr), use_container_width=True,
+                 hide_index=True)
 
 elif page == "📋 IFRS 17":
     st.markdown("## IFRS 17 — PAA & BBA")
     i   = resultats.get('ifrs17', {})
     paa = i.get('modele_paa', {})
     bba = i.get('modele_bba', {})
-    st.markdown("### Modele PAA")
+    st.markdown("### Modèle PAA")
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Insurance Revenue", f"{paa.get('insurance_revenue',0):,.0f} €")
+        st.metric("Insurance Revenue",
+                  f"{paa.get('insurance_revenue',0):,.0f} €")
     with col2:
-        st.metric("Insurance Expenses", f"{paa.get('insurance_expenses',0):,.0f} €")
+        st.metric("Insurance Expenses",
+                  f"{paa.get('insurance_expenses',0):,.0f} €")
     with col3:
-        st.metric("Insurance Result", f"{paa.get('insurance_result',0):,.0f} €")
+        st.metric("Insurance Result",
+                  f"{paa.get('insurance_result',0):,.0f} €")
     with col4:
         st.metric("Loss Ratio", f"{paa.get('loss_ratio_pct',0)}%")
     st.markdown("---")
-    st.markdown("### Modele BBA")
+    st.markdown("### Modèle BBA")
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("FCF", f"{bba.get('fcf',0):,.0f} €")
@@ -343,27 +389,32 @@ elif page == "📋 IFRS 17":
     with col3:
         st.metric("CSM", f"{bba.get('csm',0):,.0f} €")
     with col4:
-        st.metric("Passif initial", f"{bba.get('total_passif_init',0):,.0f} €")
+        st.metric("Passif initial",
+                  f"{bba.get('total_passif_init',0):,.0f} €")
 
 elif page == "💼 Provisions Vie":
-    st.markdown("## Provisions Mathematiques Vie")
+    st.markdown("## Provisions Mathématiques Vie")
     pm = resultats.get('pm_vie', {})
     cr = pm.get('contrat_reference', {})
     pf = pm.get('portefeuille', {})
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Prime nivelee", f"{cr.get('prime_nivelee',0)} EUR/an")
+        st.metric("Prime nivelée",
+                  f"{cr.get('prime_nivelee',0)} EUR/an")
     with col2:
-        st.metric("PM maximale", f"{cr.get('pm_max',0):,.0f} EUR")
+        st.metric("PM maximale",
+                  f"{cr.get('pm_max',0):,.0f} EUR")
     with col3:
-        st.metric("PM a t=10", f"{cr.get('pm_t10',0):,.0f} EUR")
+        st.metric("PM à t=10",
+                  f"{cr.get('pm_t10',0):,.0f} EUR")
     with col4:
-        st.metric("PM portefeuille", f"{pf.get('pm_totale',0):,.0f} EUR")
+        st.metric("PM portefeuille",
+                  f"{pf.get('pm_totale',0):,.0f} EUR")
 
 st.markdown("---")
 st.markdown("""
 <div style="text-align:center; color:#888; font-size:0.85rem; padding:1rem">
 ActuarIA v1.0 — Plateforme Actuarielle Intelligente<br>
-IARD · Vie · Solvabilite 2 · IFRS 17 · LangGraph · Claude API
+IARD · Vie · Solvabilité 2 · IFRS 17 · LangGraph · Claude API
 </div>
 """, unsafe_allow_html=True)
