@@ -1238,7 +1238,7 @@ elif page == "📄 Rapports":
             </div>""", unsafe_allow_html=True)
         with col2:
             if st.button(f"📥 PDF",
-                         key=f"pdf_{titre[:8]}"):
+                         key=f"pdf_{i}"):
                 st.info("Phase 14 — en cours")
 
 # ── Footer ────────────────────────────────────────────────────
