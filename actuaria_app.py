@@ -42,6 +42,283 @@ def logo_html(width=120):
                 f'style="object-fit:contain;">')
     return '🏢'
 
+
+# ══════════════════════════════════════════════════════════════
+# THÈME ET FONCTIONS GRAPHIQUES STYLE POWERBI
+# ══════════════════════════════════════════════════════════════
+
+POWERBI_COLORS = [
+    '#118DFF','#12239E','#E66C37','#6B007B',
+    '#E044A7','#744EC2','#D9B300','#D64550']
+
+def pbi_bar_h(labels, values, titre,
+              couleurs=None, highlight=None):
+    """Barres horizontales style PowerBI"""
+    if couleurs is None:
+        couleurs = [
+            '#118DFF' if (highlight and l==highlight)
+            else '#C8C6C4'
+            for l in labels]
+    fig = go.Figure(go.Bar(
+        x=values, y=labels,
+        orientation='h',
+        marker=dict(color=couleurs,
+                    line=dict(width=0)),
+        text=[f"{v:,.2f}" if v < 10
+              else f"{v:,.0f}"
+              for v in values],
+        textposition='outside',
+        hovertemplate=(
+            '<b>%{y}</b><br>%{x:,.2f}'
+            '<extra></extra>')))
+    fig.update_layout(
+        title=dict(text=titre,
+                   font=dict(size=13,
+                             color='#252423',
+                             family='Segoe UI'),
+                   x=0),
+        paper_bgcolor='white',
+        plot_bgcolor='white',
+        margin=dict(t=40,b=20,l=10,r=80),
+        font=dict(family='Segoe UI',
+                  color='#252423'),
+        xaxis=dict(showgrid=True,
+                   gridcolor='#F3F2F1',
+                   zeroline=False,
+                   showline=False),
+        yaxis=dict(showgrid=False,
+                   zeroline=False))
+    return fig
+
+
+def pbi_donut(labels, values, titre,
+              couleurs=None):
+    """Donut style PowerBI avec total au centre"""
+    if couleurs is None:
+        couleurs = POWERBI_COLORS
+    total = sum(values)
+    pcts  = [v/total*100 for v in values]
+    fig = go.Figure(go.Pie(
+        labels=labels,
+        values=values,
+        hole=0.62,
+        marker=dict(
+            colors=couleurs[:len(labels)],
+            line=dict(color='white',width=2)),
+        textinfo='none',
+        hovertemplate=(
+            '<b>%{label}</b><br>'
+            '%{value:,.0f} €<br>'
+            '%{percent}<extra></extra>')))
+    fig.add_annotation(
+        text=(f'<b>{total/1000:.0f}k</b>'
+              if total > 1000
+              else f'<b>{total:,.0f}</b>'),
+        x=0.5, y=0.55,
+        font=dict(size=20,color='#252423',
+                  family='Segoe UI'),
+        showarrow=False)
+    fig.add_annotation(
+        text='Total',
+        x=0.5, y=0.38,
+        font=dict(size=10,color='#605E5C',
+                  family='Segoe UI'),
+        showarrow=False)
+    # Légende tableau à droite
+    legend_html = ""
+    for lbl,val,pct,col in zip(
+            labels,values,pcts,
+            couleurs[:len(labels)]):
+        legend_html += (
+            f'<div style="display:flex;'
+            f'align-items:center;gap:6px;'
+            f'margin-bottom:4px;">'
+            f'<div style="width:10px;height:10px;'
+            f'background:{col};border-radius:2px;'
+            f'flex-shrink:0;"></div>'
+            f'<div style="font-size:0.7rem;'
+            f'color:#252423;">{lbl}</div>'
+            f'<div style="margin-left:auto;'
+            f'font-size:0.7rem;font-weight:600;'
+            f'color:#252423;">{pct:.1f}%</div>'
+            f'</div>')
+    fig.update_layout(
+        title=dict(text=titre,
+                   font=dict(size=13,
+                             color='#252423',
+                             family='Segoe UI'),
+                   x=0),
+        showlegend=False,
+        paper_bgcolor='white',
+        margin=dict(t=40,b=20,l=10,r=10),
+        font=dict(family='Segoe UI'))
+    return fig, legend_html
+
+
+def pbi_gauge(valeur, maxi, cible, titre,
+              unite='%'):
+    """Jauge style PowerBI"""
+    if valeur >= cible:
+        couleur = '#118DFF'
+    elif valeur >= cible * 0.7:
+        couleur = '#E66C37'
+    else:
+        couleur = '#D64550'
+
+    fig = go.Figure(go.Indicator(
+        mode='gauge+number+delta',
+        value=valeur,
+        number=dict(
+            suffix=unite,
+            font=dict(size=32,color='#252423',
+                      family='Segoe UI')),
+        delta=dict(
+            reference=cible,
+            valueformat='.1f',
+            suffix=unite,
+            increasing=dict(color='#118DFF'),
+            decreasing=dict(color='#D64550')),
+        gauge=dict(
+            axis=dict(
+                range=[0,maxi],
+                tickcolor='#C8C6C4',
+                tickfont=dict(
+                    color='#605E5C',size=9)),
+            bar=dict(color=couleur,thickness=0.25),
+            bgcolor='white',
+            borderwidth=0,
+            steps=[
+                dict(range=[0,cible*0.5],
+                     color='#FEE9E8'),
+                dict(range=[cible*0.5,cible],
+                     color='#FFF4CE'),
+                dict(range=[cible,maxi],
+                     color='#E8F4FD')],
+            threshold=dict(
+                line=dict(color='#D64550',width=3),
+                thickness=0.8,
+                value=cible))))
+    fig.update_layout(
+        title=dict(text=titre,
+                   font=dict(size=13,
+                             color='#252423',
+                             family='Segoe UI'),
+                   x=0),
+        paper_bgcolor='white',
+        margin=dict(t=50,b=20,l=30,r=30),
+        height=250,
+        font=dict(family='Segoe UI'))
+    return fig
+
+
+def pbi_waterfall(labels, values, titre):
+    """Waterfall style PowerBI"""
+    measures = (
+        ['absolute'] +
+        ['relative']*(len(values)-2) +
+        ['total'])
+    fig = go.Figure(go.Waterfall(
+        x=labels, y=values,
+        measure=measures,
+        connector=dict(
+            line=dict(color='#C8C6C4',
+                      width=1,dash='dot')),
+        increasing=dict(
+            marker=dict(color='#118DFF')),
+        decreasing=dict(
+            marker=dict(color='#D64550')),
+        totals=dict(
+            marker=dict(color='#252423')),
+        text=[f"{v:+,.0f}" for v in values],
+        textposition='outside'))
+    fig.update_layout(
+        title=dict(text=titre,
+                   font=dict(size=13,
+                             color='#252423',
+                             family='Segoe UI'),
+                   x=0),
+        paper_bgcolor='white',
+        plot_bgcolor='white',
+        margin=dict(t=40,b=20,l=10,r=10),
+        font=dict(family='Segoe UI',
+                  color='#252423'),
+        xaxis=dict(showgrid=False),
+        yaxis=dict(showgrid=True,
+                   gridcolor='#F3F2F1'))
+    return fig
+
+
+def pbi_line(x_labels, series, titre):
+    """
+    Courbes multi-séries style PowerBI
+    series = [{'name':'...','values':[...]}, ...]
+    """
+    fig = go.Figure()
+    for idx,serie in enumerate(series):
+        col = POWERBI_COLORS[
+            idx % len(POWERBI_COLORS)]
+        fig.add_trace(go.Scatter(
+            x=x_labels,
+            y=serie['values'],
+            name=serie['name'],
+            mode='lines+markers',
+            line=dict(color=col,width=2.5),
+            marker=dict(color=col,size=6),
+            hovertemplate=(
+                f"<b>{serie['name']}</b><br>"
+                f"%{{x}}<br>%{{y:,.0f}}"
+                f"<extra></extra>")))
+    fig.update_layout(
+        title=dict(text=titre,
+                   font=dict(size=13,
+                             color='#252423',
+                             family='Segoe UI'),
+                   x=0),
+        paper_bgcolor='white',
+        plot_bgcolor='white',
+        legend=dict(
+            orientation='h',
+            yanchor='bottom',y=1.02,
+            xanchor='left',x=0,
+            font=dict(size=10)),
+        margin=dict(t=60,b=20,l=10,r=10),
+        font=dict(family='Segoe UI',
+                  color='#252423'),
+        xaxis=dict(showgrid=True,
+                   gridcolor='#F3F2F1',
+                   zeroline=False),
+        yaxis=dict(showgrid=True,
+                   gridcolor='#F3F2F1',
+                   zeroline=False))
+    return fig
+
+
+def pbi_kpi_card(titre, valeur, delta,
+                 delta_label, couleur='#118DFF'):
+    """Card KPI style PowerBI"""
+    dir_arrow = ('▲' if delta >= 0 else '▼')
+    col_delta  = ('#118DFF' if delta >= 0
+                  else '#D64550')
+    return f"""
+    <div style="background:white;
+        border-radius:4px;padding:1rem 1.2rem;
+        border-top:3px solid {couleur};
+        box-shadow:0 1px 6px rgba(0,0,0,0.08);
+        font-family:Segoe UI,sans-serif;">
+      <div style="color:#605E5C;font-size:0.7rem;
+          text-transform:uppercase;
+          letter-spacing:0.5px;margin-bottom:0.4rem;">
+        {titre}</div>
+      <div style="color:#252423;font-size:1.9rem;
+          font-weight:700;line-height:1.1;">
+        {valeur}</div>
+      <div style="color:{col_delta};
+          font-size:0.75rem;margin-top:0.3rem;">
+        {dir_arrow} {abs(delta):.1f} {delta_label}
+      </div>
+    </div>"""
+
+
 # ── Palette ───────────────────────────────────────────────────
 C = {
     'navy':    '#0D1B3E',
@@ -227,7 +504,8 @@ with st.sidebar:
 
     page = st.radio("", [
         "🏠 Accueil",
-        "📊 Branche Non-Vie",
+        "📊 Dashboard PowerBI",
+        "📉 Branche Non-Vie",
         "💼 Branche Vie",
         "📈 ALM",
         "🤖 Agent IA",
@@ -264,6 +542,316 @@ st.markdown(
 # ══════════════════════════════════════════════════════════════
 # PAGE ACCUEIL
 # ══════════════════════════════════════════════════════════════
+
+elif page == "📊 Dashboard PowerBI":
+
+    # En-tête style PowerBI
+    st.markdown(f"""
+    <div style="background:#252423;
+        padding:0.7rem 1.2rem;margin:-1rem -1rem 1.2rem;
+        border-radius:8px;
+        display:flex;align-items:center;gap:1rem;">
+      <div style="color:#F3F2F1;font-size:1rem;
+          font-weight:600;font-family:Segoe UI;">
+        📊 Tableau de Bord Exécutif
+      </div>
+      <div style="color:#A19F9D;font-size:0.75rem;
+          margin-left:auto;">
+        ActuarIA v2.0 —
+        {datetime.now().strftime("%d/%m/%Y %H:%M")}
+      </div>
+    </div>""", unsafe_allow_html=True)
+
+    # Données
+    s   = DATA.get('scr',{})
+    p   = DATA.get('prov',{})
+    ml  = DATA.get('ml_v2',{})
+    ir  = DATA.get('ifrs17',{})
+    g   = DATA.get('glm_g',{})
+    pm  = DATA.get('pm_vie',{})
+    mp  = p.get('methodes',{})
+    paa = ir.get('modele_paa',{})
+    bba = ir.get('modele_bba',{})
+    pf  = pm.get('portefeuille',{})
+    bscr= max(s.get('bscr',1),1)
+    mod = ml.get('modele_retenu','N/A')
+    r_s = s.get('ratio_scr_pct',0)
+    r_m = s.get('ratio_mcr_pct',0)
+    lr  = paa.get('loss_ratio_pct',0)
+
+    # ── LIGNE 1 : KPI Cards ───────────────────────
+    st.markdown(
+        '<div style="font-size:0.72rem;'
+        'color:#605E5C;font-family:Segoe UI;'
+        'text-transform:uppercase;'
+        'letter-spacing:1px;margin-bottom:0.6rem;">'
+        'Indicateurs Clés</div>',
+        unsafe_allow_html=True)
+
+    c1,c2,c3,c4,c5 = st.columns(5)
+    kpis = [
+        (c1,'Prime Pure',
+         f"{g.get('prime_pure_moy','N/A')} €",
+         2.3,'vs N-1','#118DFF'),
+        (c2,'Ratio SCR',f"{r_s}%",
+         r_s-150,'vs cible 150%',
+         '#118DFF' if r_s>=150 else '#E66C37'),
+        (c3,'Loss Ratio IFRS 17',f"{lr}%",
+         65-lr,'vs benchmark 65%',
+         '#118DFF' if lr<=65 else '#E66C37'),
+        (c4,'IBNR Best Estimate',
+         f"{p.get('provision_retenue',0):,.0f} €",
+         1.2,'vs trim.','#12239E'),
+        (c5,'CSM BBA',
+         f"{bba.get('csm',0):,.0f} €",
+         0.0,'stable','#6B007B'),
+    ]
+    for col,titre,val,delta,lbl,col_hex in kpis:
+        with col:
+            st.markdown(
+                pbi_kpi_card(
+                    titre,val,delta,lbl,col_hex),
+                unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── LIGNE 2 : Tarification + SCR ─────────────
+    st.markdown(
+        '<div style="font-size:0.72rem;'
+        'color:#605E5C;font-family:Segoe UI;'
+        'text-transform:uppercase;'
+        'letter-spacing:1px;margin-bottom:0.6rem;">'
+        'Tarification & Solvabilité</div>',
+        unsafe_allow_html=True)
+
+    c1,c2,c3 = st.columns([1.3,1,1])
+
+    with c1:
+        # Barres Gini modèles
+        cmp = ml.get('comparaison',[])
+        if cmp:
+            fig = pbi_bar_h(
+                labels=[m['modele'] for m in cmp],
+                values=[m['gini_test'] for m in cmp],
+                titre='Gini Test — Modèles ML/DL',
+                highlight=mod)
+            st.plotly_chart(
+                fig, use_container_width=True,
+                key='pbi_gini')
+
+    with c2:
+        # Donut BSCR
+        fig2,leg = pbi_donut(
+            labels=['Marché','Non-Vie',
+                    'Contrep.','Opérat.'],
+            values=[s.get('scr_marche',0),
+                    s.get('scr_nv',0),
+                    s.get('scr_contrepartie',0),
+                    s.get('scr_operationnel',0)],
+            titre='Décomposition BSCR',
+            couleurs=['#118DFF','#12239E',
+                      '#E66C37','#6B007B'])
+        st.plotly_chart(
+            fig2, use_container_width=True,
+            key='pbi_bscr')
+        st.markdown(leg, unsafe_allow_html=True)
+
+    with c3:
+        # Gauge SCR
+        fig3 = pbi_gauge(
+            valeur=r_s, maxi=250,
+            cible=150,
+            titre='Ratio SCR (%)',
+            unite='%')
+        st.plotly_chart(
+            fig3, use_container_width=True,
+            key='pbi_gauge_scr')
+
+        # Gauge MCR
+        fig_mcr = pbi_gauge(
+            valeur=r_m, maxi=150,
+            cible=100,
+            titre='Ratio MCR (%)',
+            unite='%')
+        st.plotly_chart(
+            fig_mcr, use_container_width=True,
+            key='pbi_gauge_mcr')
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── LIGNE 3 : Provisionnement + IFRS 17 ──────
+    st.markdown(
+        '<div style="font-size:0.72rem;'
+        'color:#605E5C;font-family:Segoe UI;'
+        'text-transform:uppercase;'
+        'letter-spacing:1px;margin-bottom:0.6rem;">'
+        'Provisionnement & IFRS 17</div>',
+        unsafe_allow_html=True)
+
+    c1,c2 = st.columns(2)
+
+    with c1:
+        # Waterfall IBNR
+        cl_v = mp.get('chain_ladder',0)
+        bf_v = mp.get('bornhuetter_ferguson',0)
+        cc_v = mp.get('cape_cod',0)
+        be_v = p.get('provision_retenue',0)
+        fig4 = pbi_waterfall(
+            labels=['Chain-Ladder','→ BF',
+                    '→ Cape Cod','BE retenu'],
+            values=[cl_v,
+                    bf_v - cl_v,
+                    cc_v - bf_v,
+                    be_v],
+            titre='Waterfall IBNR — 3 méthodes (€)')
+        st.plotly_chart(
+            fig4, use_container_width=True,
+            key='pbi_waterfall')
+
+    with c2:
+        # Barres IFRS 17 PAA
+        fig5 = pbi_bar_h(
+            labels=['Insurance Revenue',
+                    'Insurance Expenses',
+                    'Insurance Result',
+                    'CSM BBA'],
+            values=[paa.get(
+                        'insurance_revenue',0),
+                    paa.get(
+                        'insurance_expenses',0),
+                    paa.get(
+                        'insurance_result',0),
+                    bba.get('csm',0)],
+            titre='IFRS 17 — PAA & BBA (€)',
+            couleurs=['#118DFF','#D64550',
+                      '#12239E','#E66C37'])
+        st.plotly_chart(
+            fig5, use_container_width=True,
+            key='pbi_ifrs17')
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── LIGNE 4 : ALM Stress Tests ────────────────
+    st.markdown(
+        '<div style="font-size:0.72rem;'
+        'color:#605E5C;font-family:Segoe UI;'
+        'text-transform:uppercase;'
+        'letter-spacing:1px;margin-bottom:0.6rem;">'
+        'ALM — Stress Tests Taux</div>',
+        unsafe_allow_html=True)
+
+    passif = pf.get('pm_totale',763460)
+    actif  = passif*1.15
+    dur_a,dur_p = 6.2,9.8
+    fp = s.get('fonds_propres',480000)
+    chocs = [-200,-100,-50,0,50,100,200]
+    imp_n = [actif*(-dur_a*c/10000) -
+             passif*(-dur_p*c/10000)
+             for c in chocs]
+
+    c1,c2 = st.columns([1.5,1])
+
+    with c1:
+        # Barres stress tests
+        fig6 = go.Figure(go.Bar(
+            x=[f'{c:+d}bp' for c in chocs],
+            y=imp_n,
+            marker_color=[
+                '#D64550' if v<0
+                else '#118DFF'
+                for v in imp_n],
+            text=[f'{v:+,.0f}€' for v in imp_n],
+            textposition='outside'))
+        fig6.add_hline(
+            y=0,
+            line_color='#252423',
+            line_width=1.5)
+        fig6.update_layout(
+            title=dict(
+                text='Impact sur Fonds Propres (€)',
+                font=dict(size=13,
+                          color='#252423',
+                          family='Segoe UI'),
+                x=0),
+            paper_bgcolor='white',
+            plot_bgcolor='white',
+            margin=dict(t=40,b=20,l=10,r=10),
+            font=dict(family='Segoe UI'),
+            xaxis=dict(showgrid=False),
+            yaxis=dict(showgrid=True,
+                       gridcolor='#F3F2F1'))
+        st.plotly_chart(
+            fig6, use_container_width=True,
+            key='pbi_alm')
+
+    with c2:
+        # Tableau synthèse ALM
+        st.markdown(
+            '<div style="background:white;'
+            'border-radius:4px;padding:1rem;'
+            'box-shadow:0 1px 6px rgba(0,0,0,0.08);'
+            'font-family:Segoe UI;">'
+            '<div style="color:#252423;'
+            'font-weight:600;font-size:0.85rem;'
+            'margin-bottom:0.8rem;">'
+            'Synthèse ALM</div>',
+            unsafe_allow_html=True)
+
+        alm_data = [
+            ('Duration Actif',
+             f'{dur_a:.1f} ans',''),
+            ('Duration Passif',
+             f'{dur_p:.1f} ans',''),
+            ('Gap Duration',
+             f'{dur_a-dur_p:.1f} ans',
+             '⚠️'),
+            ('Couverture A/P',
+             f'{actif/passif*100:.1f}%','✅'),
+            ('Impact +100bp',
+             f'{imp_n[5]:+,.0f} €',
+             '🔵'),
+            ('Impact +200bp',
+             f'{imp_n[6]:+,.0f} €',
+             '🟡'),
+            ('Impact -200bp',
+             f'{imp_n[0]:+,.0f} €',
+             '🔴'),
+        ]
+        for lbl,val,ic in alm_data:
+            st.markdown(
+                f'<div style="display:flex;'
+                f'justify-content:space-between;'
+                f'padding:0.3rem 0;'
+                f'border-bottom:1px solid #F3F2F1;'
+                f'font-size:0.82rem;">'
+                f'<span style="color:#605E5C;">'
+                f'{lbl}</span>'
+                f'<span style="color:#252423;'
+                f'font-weight:600;">'
+                f'{ic} {val}</span>'
+                f'</div>',
+                unsafe_allow_html=True)
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # ── Footer PowerBI style ──────────────────────
+    st.markdown(f"""
+    <div style="background:#F3F2F1;
+        border-radius:4px;padding:0.5rem 1rem;
+        margin-top:1rem;
+        display:flex;justify-content:space-between;
+        font-family:Segoe UI;font-size:0.7rem;
+        color:#605E5C;">
+      <span>ActuarIA v2.0 — Actuarial Intelligence
+      </span>
+      <span>Données : 100 000 contrats —
+        2010-2024</span>
+      <span>
+        {datetime.now().strftime("%d/%m/%Y %H:%M")}
+      </span>
+    </div>""", unsafe_allow_html=True)
+
+
 if page == "🏠 Accueil":
 
     st.markdown(f"""
@@ -347,7 +935,7 @@ if page == "🏠 Accueil":
 # ══════════════════════════════════════════════════════════════
 # PAGE BRANCHE NON-VIE
 # ══════════════════════════════════════════════════════════════
-elif page == "📊 Branche Non-Vie":
+elif page == "📉 Branche Non-Vie":
 
     st.markdown("## 📊 Branche Non-Vie")
     tab1,tab2,tab3,tab4 = st.tabs([
