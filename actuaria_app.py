@@ -4,6 +4,14 @@
 # ══════════════════════════════════════════════════════════════
 
 import streamlit as st
+
+# ── Import générateur PDF ─────────────────────────────────────
+try:
+    from pdf_generator import generer_pdf_streamlit
+    PDF_DISPONIBLE = True
+except Exception as _e:
+    PDF_DISPONIBLE = False
+
 import json, os, sys, base64, copy, math, io
 import pandas as pd
 import numpy as np
@@ -1338,10 +1346,15 @@ elif page == "📄 Rapports":
       {classification}
     </div>""", unsafe_allow_html=True)
 
-    rapports = [
+    if not nom_societe or not nom_actuaire:
+        st.warning(
+            "⚠️ Renseignez **Société** et **Actuaire** "
+            "dans la sidebar pour activer les rapports.")
+
+    rapports_def = [
         ("🏢","Rapport Direction Générale",
-         "Synthèse exécutive 10 pages — "
-         "graphiques PowerBI — commentaires ORSA",
+         "Synthèse 10 pages — graphiques PowerBI — "
+         "commentaires ORSA",
          "DG · Conseil d'Administration"),
         ("📊","Rapport Technique IARD",
          "Tarification + Provisionnement + "
@@ -1354,44 +1367,88 @@ elif page == "📄 Rapports":
          "Duration gap + stress taux + immunisation",
          "Direction Financière"),
         ("📋","Rapport Général Consolidé",
-         "Rapport complet — niveau Actuaire Senior",
+         "Rapport complet toutes branches",
          "ACPR · Commissaires aux comptes"),
     ]
 
     for i,(icon,titre,desc,public) in enumerate(
-            rapports):
+            rapports_def):
         c1,c2 = st.columns([4,1])
         with c1:
             st.markdown(f"""
             <div style="background:white;
-                border-radius:9px;padding:0.9rem 1.1rem;
+                border-radius:9px;
+                padding:0.9rem 1.1rem;
                 border-left:4px solid {C['navy']};
                 margin-bottom:0.7rem;
-                box-shadow:0 1px 4px rgba(0,0,0,0.06);">
+                box-shadow:0 1px 4px
+                rgba(0,0,0,0.06);">
               <strong style="color:{C['navy']};">
                 {icon} {titre}</strong>
               <div style="color:#4A5568;
-                  font-size:0.8rem;margin-top:0.2rem;">
-                {desc}</div>
+                  font-size:0.8rem;
+                  margin-top:0.2rem;">{desc}</div>
               <div style="color:#A0AEC0;
-                  font-size:0.7rem;margin-top:0.1rem;">
-                {public}</div>
+                  font-size:0.7rem;
+                  margin-top:0.1rem;">{public}</div>
             </div>""", unsafe_allow_html=True)
         with c2:
-            if st.button(
-                    f"📥 PDF",
-                    key=f"pdf_{i}"):
-                if not nom_societe or not nom_actuaire:
-                    st.warning(
-                        "Renseignez Société et "
-                        "Actuaire dans la sidebar.")
-                else:
-                    st.info(
-                        f"Génération {langue_code} "
-                        f"en cours...\n"
-                        f"Utilisez le notebook "
-                        f"Phase14 pour générer "
-                        f"le PDF complet.")
+            if (nom_societe and nom_actuaire
+                    and PDF_DISPONIBLE and i == 0):
+                if st.button(
+                        "⚙️ Générer PDF",
+                        key=f"gen_{i}"):
+                    with st.spinner(
+                            f"Génération {langue_code}"
+                            f"..."):
+                        try:
+                            pdf_bytes = (
+                                generer_pdf_streamlit(
+                                    data=DATA,
+                                    nom_societe=(
+                                        nom_societe),
+                                    nom_actuaire=(
+                                        nom_actuaire),
+                                    classification=(
+                                        classification),
+                                    langue=langue_code))
+                            nom_pdf = (
+                                f"Rapport_DG_"
+                                f"{langue_code}_"
+                                f"{nom_societe.replace(' ','_')}_"
+                                f"{datetime.now().strftime('%Y%m%d')}"
+                                f".pdf")
+                            st.success(
+                                f"✅ PDF généré — "
+                                f"{len(pdf_bytes)/1e6:.1f}"
+                                f" Mo")
+                            st.download_button(
+                                label=(
+                                    f"📥 Télécharger "
+                                    f"{nom_pdf}"),
+                                data=pdf_bytes,
+                                file_name=nom_pdf,
+                                mime="application/pdf",
+                                key=f"dl_{i}")
+                        except Exception as e_pdf:
+                            st.error(
+                                f"Erreur PDF : "
+                                f"{e_pdf}")
+            else:
+                st.markdown(
+                    f'<div style="background:'
+                    f'#F0F4FF;border-radius:7px;'
+                    f'padding:0.5rem;text-align:center;'
+                    f'font-size:0.75rem;'
+                    f'color:#718096;">'
+                    f'Phase 14 Colab</div>',
+                    unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.info(
+        "💡 Pour tous les rapports (IARD, Vie, ALM) "
+        "utilisez le notebook Phase14_Rapports_PDF.ipynb.")
+
 
 # ── Footer ────────────────────────────────────────────────────
 st.markdown(f"""
