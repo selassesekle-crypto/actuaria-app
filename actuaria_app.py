@@ -1394,7 +1394,7 @@ elif page == "📄 Rapports":
             </div>""", unsafe_allow_html=True)
         with c2:
             if (nom_societe and nom_actuaire
-                    and PDF_DISPONIBLE and i == 0):
+                    and PDF_DISPONIBLE):
                 if st.button(
                         "⚙️ Générer PDF",
                         key=f"gen_{i}"):
