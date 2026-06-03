@@ -4,6 +4,9 @@
 # ══════════════════════════════════════════════════════════════
 
 import streamlit as st
+import os
+import copy
+import math
 
 # ── Import générateur PDF ─────────────────────────────────────
 try:
@@ -543,7 +546,7 @@ st.markdown(
 # PAGE ACCUEIL
 # ══════════════════════════════════════════════════════════════
 
-elif page == "📊 Dashboard PowerBI":
+if page == "📊 Dashboard PowerBI":
 
     # En-tête style PowerBI
     st.markdown(f"""
@@ -640,21 +643,40 @@ elif page == "📊 Dashboard PowerBI":
                 key='pbi_gini')
 
     with c2:
-        # Donut BSCR
-        fig2,leg = pbi_donut(
-            labels=['Marché','Non-Vie',
-                    'Contrep.','Opérat.'],
-            values=[s.get('scr_marche',0),
-                    s.get('scr_nv',0),
-                    s.get('scr_contrepartie',0),
-                    s.get('scr_operationnel',0)],
-            titre='Décomposition BSCR',
-            couleurs=['#118DFF','#12239E',
-                      '#E66C37','#6B007B'])
+        # Barres H PowerBI — BSCR
+        fig_bscr = go.Figure(go.Bar(
+            x=[s.get('scr_marche',0),
+               s.get('scr_nv',0),
+               s.get('scr_contrepartie',0),
+               s.get('scr_operationnel',0)],
+            y=['SCR Marché','SCR Non-Vie',
+               'SCR Contrepartie',
+               'SCR Opérationnel'],
+            orientation='h',
+            marker=dict(
+                color=['#118DFF','#12239E',
+                       '#E66C37','#6B007B'],
+                line=dict(width=0)),
+            text=[f"{v:,.0f} €"
+                  for v in [
+                      s.get('scr_marche',0),
+                      s.get('scr_nv',0),
+                      s.get('scr_contrepartie',0),
+                      s.get('scr_operationnel',0)]],
+            textposition='outside'))
+        fig_bscr.update_layout(
+            title='Décomposition BSCR',
+            height=300,
+            paper_bgcolor='white',
+            plot_bgcolor='white',
+            margin=dict(l=10,r=80,t=40,b=10),
+            xaxis=dict(showgrid=True,
+                       gridcolor='#F3F2F1'),
+            yaxis=dict(showgrid=False))
         st.plotly_chart(
-            fig2, use_container_width=True,
+            fig_bscr,
+            use_container_width=True,
             key='pbi_bscr')
-        st.markdown(leg, unsafe_allow_html=True)
 
     with c3:
         # Gauge SCR
@@ -852,7 +874,7 @@ elif page == "📊 Dashboard PowerBI":
     </div>""", unsafe_allow_html=True)
 
 
-if page == "🏠 Accueil":
+elif page == "🏠 Accueil":
 
     st.markdown(f"""
     <div style="background:linear-gradient(135deg,
