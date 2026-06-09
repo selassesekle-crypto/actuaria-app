@@ -736,9 +736,9 @@ def _render_radar_hero():
         polar=dict(
             bgcolor   = NAVY_L,
             radialaxis= dict(visible=True, range=[0,1], tickfont=dict(color=GRIS, size=9),
-                             gridcolor=f"{OR}22", linecolor=f"{OR}33"),
-            angularaxis=dict(tickfont=dict(color=BLANC, size=10), gridcolor=f"{OR}22",
-                              linecolor=f"{OR}33"),
+                             gridcolor="rgba(201,168,76,0.13)", linecolor="rgba(201,168,76,0.20)"),
+            angularaxis=dict(tickfont=dict(color=BLANC, size=10), gridcolor="rgba(201,168,76,0.13)",
+                              linecolor="rgba(201,168,76,0.20)"),
         ),
         paper_bgcolor = 'rgba(0,0,0,0)',
         plot_bgcolor  = 'rgba(0,0,0,0)',
@@ -793,8 +793,8 @@ def _render_provisions_chart():
     fig.update_layout(
         paper_bgcolor = 'rgba(0,0,0,0)',
         plot_bgcolor  = 'rgba(0,0,0,0)',
-        xaxis = dict(tickfont=dict(color=BLANC, size=9), gridcolor=f"{OR}11"),
-        yaxis = dict(tickfont=dict(color=GRIS, size=9), gridcolor=f"{OR}11",
+        xaxis = dict(tickfont=dict(color=BLANC, size=9), gridcolor="rgba(201,168,76,0.07)"),
+        yaxis = dict(tickfont=dict(color=GRIS, size=9), gridcolor="rgba(201,168,76,0.07)",
                      title=dict(text='M€', font=dict(color=GRIS))),
         margin= dict(l=0, r=0, t=24, b=8),
         height= 220,
@@ -813,7 +813,7 @@ def _render_orsa_chart():
         x=annees, y=central, name='Central',
         line=dict(color=OR, width=2.5),
         marker=dict(color=OR, size=6),
-        fill='tonexty',
+        fill='none',
     ))
     fig.add_trace(go.Scatter(
         x=annees, y=stress, name='Stressé',
@@ -827,8 +827,8 @@ def _render_orsa_chart():
     fig.update_layout(
         paper_bgcolor = 'rgba(0,0,0,0)',
         plot_bgcolor  = 'rgba(0,0,0,0)',
-        xaxis = dict(tickfont=dict(color=BLANC, size=9), gridcolor=f"{OR}11"),
-        yaxis = dict(tickfont=dict(color=GRIS, size=9),  gridcolor=f"{OR}11",
+        xaxis = dict(tickfont=dict(color=BLANC, size=9), gridcolor="rgba(201,168,76,0.07)"),
+        yaxis = dict(tickfont=dict(color=GRIS, size=9),  gridcolor="rgba(201,168,76,0.07)",
                      title=dict(text='%', font=dict(color=GRIS))),
         legend= dict(font=dict(color=BLANC, size=10), bgcolor='rgba(0,0,0,0)'),
         margin= dict(l=0, r=0, t=8, b=8),
@@ -968,9 +968,9 @@ def _tab_solvabilite():
                 axis=dict(range=[0,300], tickcolor=GRIS),
                 bar=dict(color=OR),
                 steps=[
-                    dict(range=[0,100],   color=ROUGE+'44'),
-                    dict(range=[100,150], color=AMBRE+'44'),
-                    dict(range=[150,300], color=VERT+'44'),
+                    dict(range=[0,100],   color='rgba(231,76,60,0.27)'),
+                    dict(range=[100,150], color='rgba(243,156,18,0.27)'),
+                    dict(range=[150,300], color='rgba(46,204,113,0.27)'),
                 ],
                 threshold=dict(line=dict(color=ROUGE, width=3), value=100),
                 bgcolor=NAVY_L,
