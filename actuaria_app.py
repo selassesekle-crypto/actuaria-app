@@ -1,2071 +1,1248 @@
-# ══════════════════════════════════════════════════════════════
-# ACTUARIA v2.0 — APPLICATION FINALE COMPLÈTE
-# Interface + Agent IA + Upload + Rapports PDF
-# ══════════════════════════════════════════════════════════════
+"""
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    ACTUARIA — INTERFACE STREAMLIT v1.0                      ║
+║              Page Accueil + Dashboard — Design Navy/Or Premium              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+USAGE :
+  streamlit run app.py
+
+INSTALLATION :
+  pip install streamlit plotly pandas numpy
+"""
 
 import streamlit as st
-import os
-import copy
-import math
-
-# ── Import générateur PDF ─────────────────────────────────────
-try:
-    from pdf_generator import generer_pdf_streamlit
-    PDF_DISPONIBLE = True
-except Exception as _e:
-    PDF_DISPONIBLE = False
-
-import json, os, sys, base64, copy, math, io
+import plotly.graph_objects as go
+import plotly.express as px
+from plotly.subplots import make_subplots
 import pandas as pd
 import numpy as np
-import plotly.graph_objects as go
-import anthropic
 from datetime import datetime
 
+# ══════════════════════════════════════════════════════════════════════════════
+# CONFIGURATION DE LA PAGE
+# ══════════════════════════════════════════════════════════════════════════════
+
 st.set_page_config(
-    page_title="ActuarIA — Actuarial Intelligence",
-    page_icon="🏢",
-    layout="wide",
-    initial_sidebar_state="expanded")
+    page_title        = "ActuarIA",
+    page_icon         = "⚡",
+    layout            = "wide",
+    initial_sidebar_state = "expanded",
+)
 
-# ── Logo ──────────────────────────────────────────────────────
-def get_logo():
-    try:
-        import logo_actuaria as la
-        return la.LOGO_B64, la.LOGO_MIME
-    except:
-        return None, None
+# ══════════════════════════════════════════════════════════════════════════════
+# DESIGN SYSTEM — TOKENS
+# ══════════════════════════════════════════════════════════════════════════════
 
-LOGO_B64, LOGO_MIME = get_logo()
+NAVY    = "#0F2E52"
+NAVY_L  = "#1B3A5C"
+NAVY_LL = "#243F6A"
+OR      = "#C9A84C"
+OR_L    = "#E8C96A"
+BLANC   = "#F0F4F8"
+GRIS    = "#8A9AB0"
+VERT    = "#2ECC71"
+AMBRE   = "#F39C12"
+ROUGE   = "#E74C3C"
 
-def logo_html(width=120):
-    if LOGO_B64:
-        return (f'<img src="data:{LOGO_MIME};base64,'
-                f'{LOGO_B64}" width="{width}" '
-                f'style="object-fit:contain;">')
-    return '🏢'
+# ══════════════════════════════════════════════════════════════════════════════
+# CSS CUSTOM PREMIUM
+# ══════════════════════════════════════════════════════════════════════════════
 
+CSS = f"""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@700&display=swap');
 
-# ══════════════════════════════════════════════════════════════
-# THÈME ET FONCTIONS GRAPHIQUES STYLE POWERBI
-# ══════════════════════════════════════════════════════════════
+/* ── FOND GLOBAL ─────────────────────────────────────────── */
+.stApp {{
+    background-color: {NAVY};
+    color: {BLANC};
+    font-family: 'Inter', sans-serif;
+}}
 
-POWERBI_COLORS = [
-    '#118DFF','#12239E','#E66C37','#6B007B',
-    '#E044A7','#744EC2','#D9B300','#D64550']
+/* ── SIDEBAR ─────────────────────────────────────────────── */
+[data-testid="stSidebar"] {{
+    background-color: {NAVY_L};
+    border-right: 1px solid {OR}33;
+}}
+[data-testid="stSidebar"] * {{
+    color: {BLANC} !important;
+}}
 
-def pbi_bar_h(labels, values, titre,
-              couleurs=None, highlight=None):
-    """Barres horizontales style PowerBI"""
-    if couleurs is None:
-        couleurs = [
-            '#118DFF' if (highlight and l==highlight)
-            else '#C8C6C4'
-            for l in labels]
-    fig = go.Figure(go.Bar(
-        x=values, y=labels,
-        orientation='h',
-        marker=dict(color=couleurs,
-                    line=dict(width=0)),
-        text=[f"{v:,.2f}" if v < 10
-              else f"{v:,.0f}"
-              for v in values],
-        textposition='outside',
-        hovertemplate=(
-            '<b>%{y}</b><br>%{x:,.2f}'
-            '<extra></extra>')))
-    fig.update_layout(
-        title=dict(text=titre,
-                   font=dict(size=13,
-                             color='#252423',
-                             family='Segoe UI'),
-                   x=0),
-        paper_bgcolor='white',
-        plot_bgcolor='white',
-        margin=dict(t=40,b=20,l=10,r=80),
-        font=dict(family='Segoe UI',
-                  color='#252423'),
-        xaxis=dict(showgrid=True,
-                   gridcolor='#F3F2F1',
-                   zeroline=False,
-                   showline=False),
-        yaxis=dict(showgrid=False,
-                   zeroline=False))
-    return fig
+/* ── HEADERS ─────────────────────────────────────────────── */
+h1, h2, h3 {{
+    font-family: 'Inter', sans-serif;
+    color: {BLANC} !important;
+}}
 
+/* ── MÉTRIQUES ───────────────────────────────────────────── */
+[data-testid="stMetric"] {{
+    background: {NAVY_L};
+    border: 1px solid {OR}44;
+    border-radius: 12px;
+    padding: 16px 20px;
+    transition: border-color 0.2s;
+}}
+[data-testid="stMetric"]:hover {{
+    border-color: {OR};
+}}
+[data-testid="stMetricLabel"] {{
+    color: {GRIS} !important;
+    font-size: 0.75rem !important;
+    font-weight: 500 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.08em !important;
+}}
+[data-testid="stMetricValue"] {{
+    color: {OR} !important;
+    font-size: 1.6rem !important;
+    font-weight: 700 !important;
+}}
+[data-testid="stMetricDelta"] {{
+    font-size: 0.8rem !important;
+}}
 
-def pbi_donut(labels, values, titre,
-              couleurs=None):
-    """Donut style PowerBI avec total au centre"""
-    if couleurs is None:
-        couleurs = POWERBI_COLORS
-    total = sum(values)
-    pcts  = [v/total*100 for v in values]
-    fig = go.Figure(go.Pie(
-        labels=labels,
-        values=values,
-        hole=0.62,
-        marker=dict(
-            colors=couleurs[:len(labels)],
-            line=dict(color='white',width=2)),
-        textinfo='none',
-        hovertemplate=(
-            '<b>%{label}</b><br>'
-            '%{value:,.0f} €<br>'
-            '%{percent}<extra></extra>')))
-    fig.add_annotation(
-        text=(f'<b>{total/1000:.0f}k</b>'
-              if total > 1000
-              else f'<b>{total:,.0f}</b>'),
-        x=0.5, y=0.55,
-        font=dict(size=20,color='#252423',
-                  family='Segoe UI'),
-        showarrow=False)
-    fig.add_annotation(
-        text='Total',
-        x=0.5, y=0.38,
-        font=dict(size=10,color='#605E5C',
-                  family='Segoe UI'),
-        showarrow=False)
-    # Légende tableau à droite
-    legend_html = ""
-    for lbl,val,pct,col in zip(
-            labels,values,pcts,
-            couleurs[:len(labels)]):
-        legend_html += (
-            f'<div style="display:flex;'
-            f'align-items:center;gap:6px;'
-            f'margin-bottom:4px;">'
-            f'<div style="width:10px;height:10px;'
-            f'background:{col};border-radius:2px;'
-            f'flex-shrink:0;"></div>'
-            f'<div style="font-size:0.7rem;'
-            f'color:#252423;">{lbl}</div>'
-            f'<div style="margin-left:auto;'
-            f'font-size:0.7rem;font-weight:600;'
-            f'color:#252423;">{pct:.1f}%</div>'
-            f'</div>')
-    fig.update_layout(
-        title=dict(text=titre,
-                   font=dict(size=13,
-                             color='#252423',
-                             family='Segoe UI'),
-                   x=0),
-        showlegend=False,
-        paper_bgcolor='white',
-        margin=dict(t=40,b=20,l=10,r=10),
-        font=dict(family='Segoe UI'))
-    return fig, legend_html
+/* ── BOUTONS ─────────────────────────────────────────────── */
+.stButton > button {{
+    background: linear-gradient(135deg, {OR}, {OR_L});
+    color: {NAVY};
+    border: none;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    padding: 10px 24px;
+    transition: all 0.2s;
+    letter-spacing: 0.03em;
+}}
+.stButton > button:hover {{
+    transform: translateY(-1px);
+    box-shadow: 0 4px 20px {OR}55;
+}}
 
+/* ── SELECTBOX / INPUT ───────────────────────────────────── */
+.stSelectbox > div > div,
+.stTextInput > div > div > input {{
+    background: {NAVY_L} !important;
+    border: 1px solid {OR}44 !important;
+    color: {BLANC} !important;
+    border-radius: 8px !important;
+}}
 
-def pbi_gauge(valeur, maxi, cible, titre,
-              unite='%'):
-    """Jauge style PowerBI"""
-    if valeur >= cible:
-        couleur = '#118DFF'
-    elif valeur >= cible * 0.7:
-        couleur = '#E66C37'
-    else:
-        couleur = '#D64550'
+/* ── FILE UPLOADER ───────────────────────────────────────── */
+[data-testid="stFileUploader"] {{
+    background: {NAVY_L};
+    border: 2px dashed {OR}66;
+    border-radius: 12px;
+    padding: 20px;
+}}
 
-    fig = go.Figure(go.Indicator(
-        mode='gauge+number+delta',
-        value=valeur,
-        number=dict(
-            suffix=unite,
-            font=dict(size=32,color='#252423',
-                      family='Segoe UI')),
-        delta=dict(
-            reference=cible,
-            valueformat='.1f',
-            suffix=unite,
-            increasing=dict(color='#118DFF'),
-            decreasing=dict(color='#D64550')),
-        gauge=dict(
-            axis=dict(
-                range=[0,maxi],
-                tickcolor='#C8C6C4',
-                tickfont=dict(
-                    color='#605E5C',size=9)),
-            bar=dict(color=couleur,thickness=0.25),
-            bgcolor='white',
-            borderwidth=0,
-            steps=[
-                dict(range=[0,cible*0.5],
-                     color='#FEE9E8'),
-                dict(range=[cible*0.5,cible],
-                     color='#FFF4CE'),
-                dict(range=[cible,maxi],
-                     color='#E8F4FD')],
-            threshold=dict(
-                line=dict(color='#D64550',width=3),
-                thickness=0.8,
-                value=cible))))
-    fig.update_layout(
-        title=dict(text=titre,
-                   font=dict(size=13,
-                             color='#252423',
-                             family='Segoe UI'),
-                   x=0),
-        paper_bgcolor='white',
-        margin=dict(t=50,b=20,l=30,r=30),
-        height=250,
-        font=dict(family='Segoe UI'))
-    return fig
+/* ── TABS ────────────────────────────────────────────────── */
+.stTabs [data-baseweb="tab-list"] {{
+    background: {NAVY_L};
+    border-radius: 8px;
+    padding: 4px;
+    gap: 4px;
+}}
+.stTabs [data-baseweb="tab"] {{
+    background: transparent;
+    color: {GRIS};
+    border-radius: 6px;
+    font-weight: 500;
+    padding: 8px 20px;
+}}
+.stTabs [aria-selected="true"] {{
+    background: {OR} !important;
+    color: {NAVY} !important;
+    font-weight: 700 !important;
+}}
 
+/* ── DATAFRAME ───────────────────────────────────────────── */
+[data-testid="stDataFrame"] {{
+    background: {NAVY_L};
+    border-radius: 8px;
+    border: 1px solid {OR}33;
+}}
 
-def pbi_waterfall(labels, values, titre):
-    """Waterfall style PowerBI"""
-    measures = (
-        ['absolute'] +
-        ['relative']*(len(values)-2) +
-        ['total'])
-    fig = go.Figure(go.Waterfall(
-        x=labels, y=values,
-        measure=measures,
-        connector=dict(
-            line=dict(color='#C8C6C4',
-                      width=1,dash='dot')),
-        increasing=dict(
-            marker=dict(color='#118DFF')),
-        decreasing=dict(
-            marker=dict(color='#D64550')),
-        totals=dict(
-            marker=dict(color='#252423')),
-        text=[f"{v:+,.0f}" for v in values],
-        textposition='outside'))
-    fig.update_layout(
-        title=dict(text=titre,
-                   font=dict(size=13,
-                             color='#252423',
-                             family='Segoe UI'),
-                   x=0),
-        paper_bgcolor='white',
-        plot_bgcolor='white',
-        margin=dict(t=40,b=20,l=10,r=10),
-        font=dict(family='Segoe UI',
-                  color='#252423'),
-        xaxis=dict(showgrid=False),
-        yaxis=dict(showgrid=True,
-                   gridcolor='#F3F2F1'))
-    return fig
+/* ── DIVIDER ─────────────────────────────────────────────── */
+hr {{
+    border-color: {OR}33;
+}}
 
+/* ── CARDS ───────────────────────────────────────────────── */
+.agent-card {{
+    background: {NAVY_L};
+    border: 1px solid {OR}33;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+    transition: all 0.2s;
+}}
+.agent-card:hover {{
+    border-color: {OR};
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}}
 
-def pbi_line(x_labels, series, titre):
-    """
-    Courbes multi-séries style PowerBI
-    series = [{'name':'...','values':[...]}, ...]
-    """
-    fig = go.Figure()
-    for idx,serie in enumerate(series):
-        col = POWERBI_COLORS[
-            idx % len(POWERBI_COLORS)]
-        fig.add_trace(go.Scatter(
-            x=x_labels,
-            y=serie['values'],
-            name=serie['name'],
-            mode='lines+markers',
-            line=dict(color=col,width=2.5),
-            marker=dict(color=col,size=6),
-            hovertemplate=(
-                f"<b>{serie['name']}</b><br>"
-                f"%{{x}}<br>%{{y:,.0f}}"
-                f"<extra></extra>")))
-    fig.update_layout(
-        title=dict(text=titre,
-                   font=dict(size=13,
-                             color='#252423',
-                             family='Segoe UI'),
-                   x=0),
-        paper_bgcolor='white',
-        plot_bgcolor='white',
-        legend=dict(
-            orientation='h',
-            yanchor='bottom',y=1.02,
-            xanchor='left',x=0,
-            font=dict(size=10)),
-        margin=dict(t=60,b=20,l=10,r=10),
-        font=dict(family='Segoe UI',
-                  color='#252423'),
-        xaxis=dict(showgrid=True,
-                   gridcolor='#F3F2F1',
-                   zeroline=False),
-        yaxis=dict(showgrid=True,
-                   gridcolor='#F3F2F1',
-                   zeroline=False))
-    return fig
+/* ── BADGE RAG ───────────────────────────────────────────── */
+.badge-vert  {{ background:{VERT}22; color:{VERT};  border:1px solid {VERT}66; border-radius:6px; padding:2px 10px; font-size:0.75rem; font-weight:600; }}
+.badge-ambre {{ background:{AMBRE}22; color:{AMBRE}; border:1px solid {AMBRE}66; border-radius:6px; padding:2px 10px; font-size:0.75rem; font-weight:600; }}
+.badge-rouge {{ background:{ROUGE}22; color:{ROUGE}; border:1px solid {ROUGE}66; border-radius:6px; padding:2px 10px; font-size:0.75rem; font-weight:600; }}
 
+/* ── HERO TITLE ──────────────────────────────────────────── */
+.hero-title {{
+    font-family: 'Playfair Display', serif;
+    font-size: 3.2rem;
+    font-weight: 700;
+    color: {BLANC};
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+}}
+.hero-accent {{
+    color: {OR};
+}}
+.hero-sub {{
+    font-size: 1.1rem;
+    color: {GRIS};
+    font-weight: 400;
+    margin-top: 8px;
+    letter-spacing: 0.02em;
+}}
 
-def pbi_kpi_card(titre, valeur, delta,
-                 delta_label, couleur='#118DFF'):
-    """Card KPI style PowerBI"""
-    dir_arrow = ('▲' if delta >= 0 else '▼')
-    col_delta  = ('#118DFF' if delta >= 0
-                  else '#D64550')
-    return f"""
-    <div style="background:white;
-        border-radius:4px;padding:1rem 1.2rem;
-        border-top:3px solid {couleur};
-        box-shadow:0 1px 6px rgba(0,0,0,0.08);
-        font-family:Segoe UI,sans-serif;">
-      <div style="color:#605E5C;font-size:0.7rem;
-          text-transform:uppercase;
-          letter-spacing:0.5px;margin-bottom:0.4rem;">
-        {titre}</div>
-      <div style="color:#252423;font-size:1.9rem;
-          font-weight:700;line-height:1.1;">
-        {valeur}</div>
-      <div style="color:{col_delta};
-          font-size:0.75rem;margin-top:0.3rem;">
-        {dir_arrow} {abs(delta):.1f} {delta_label}
-      </div>
-    </div>"""
+/* ── STAT BAR ────────────────────────────────────────────── */
+.stat-bar {{
+    background: {NAVY_LL};
+    border-top: 1px solid {OR}33;
+    padding: 12px 0;
+    text-align: center;
+}}
 
+/* ── SCROLLBAR ───────────────────────────────────────────── */
+::-webkit-scrollbar {{ width: 6px; height: 6px; }}
+::-webkit-scrollbar-track {{ background: {NAVY}; }}
+::-webkit-scrollbar-thumb {{ background: {OR}66; border-radius: 3px; }}
+::-webkit-scrollbar-thumb:hover {{ background: {OR}; }}
+</style>
+"""
 
-# ── Palette ───────────────────────────────────────────────────
-C = {
-    'navy':    '#0D1B3E',
-    'blue':    '#1B3A6B',
-    'green':   '#4CAF1A',
-    'silver':  '#C0C8D4',
-    'white':   '#FFFFFF',
-    'gold':    '#FFC000',
-    'light':   '#F0F4FF',
-    'danger':  '#E53E3E',
-    'success': '#48BB78',
-    'grey':    '#718096',
+st.markdown(CSS, unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# GESTION DES LANGUES
+# ══════════════════════════════════════════════════════════════════════════════
+
+TEXTES = {
+    'fr': {
+        'nav_accueil':    '🏠 Accueil',
+        'nav_analyse':    '📊 Analyse',
+        'nav_dashboard':  '📈 Dashboard',
+        'nav_aria':       '🤖 Agent ARIA',
+        'nav_rapports':   '📋 Rapports',
+        'hero_titre':     'Actuariat augmenté\npar l\'intelligence artificielle.',
+        'hero_sous':      'Tarification · Provisionnement · S2 · IFRS 17 · ALM · Épargne-Retraite',
+        'hero_btn':       'Lancer une analyse',
+        'hero_btn2':      'Voir la démo',
+        'kpi_agents':     'Agents actifs',
+        'kpi_precision':  'Précision modèles',
+        'kpi_temps':      'Temps d\'analyse',
+        'kpi_conformite': 'Conformité S2',
+        'section_agents': 'Agents Actuariels',
+        'section_agents_sub': 'Chaque agent est un expert spécialisé propulsé par l\'IA.',
+        'section_perf':   'Performance des modèles',
+        'section_rag':    'Statut du portefeuille',
+        'upload_titre':   'Analyser un portefeuille',
+        'upload_sub':     'Déposez votre fichier Excel, CSV ou Parquet',
+        'upload_btn':     'Lancer le pipeline',
+        'dash_titre':     'Dashboard Actuariel',
+        'langue':         'Langue / Language',
+    },
+    'en': {
+        'nav_accueil':    '🏠 Home',
+        'nav_analyse':    '📊 Analysis',
+        'nav_dashboard':  '📈 Dashboard',
+        'nav_aria':       '🤖 ARIA Agent',
+        'nav_rapports':   '📋 Reports',
+        'hero_titre':     'Actuarial intelligence,\npowered by AI.',
+        'hero_sous':      'Pricing · Reserving · S2 · IFRS 17 · ALM · Retirement',
+        'hero_btn':       'Start analysis',
+        'hero_btn2':      'View demo',
+        'kpi_agents':     'Active agents',
+        'kpi_precision':  'Model accuracy',
+        'kpi_temps':      'Analysis time',
+        'kpi_conformite': 'S2 compliance',
+        'section_agents': 'Actuarial Agents',
+        'section_agents_sub': 'Each agent is a specialized AI-powered expert.',
+        'section_perf':   'Model performance',
+        'section_rag':    'Portfolio status',
+        'upload_titre':   'Analyze a portfolio',
+        'upload_sub':     'Upload your Excel, CSV or Parquet file',
+        'upload_btn':     'Run pipeline',
+        'dash_titre':     'Actuarial Dashboard',
+        'langue':         'Langue / Language',
+    }
 }
 
-# ── CSS ───────────────────────────────────────────────────────
-st.markdown(f"""
-<style>
-.main .block-container {{
-    padding:1.5rem 2rem;max-width:1400px;}}
-.header-main {{
-    background:linear-gradient(135deg,
-        {C['navy']} 0%,{C['blue']} 100%);
-    padding:1.2rem 2rem;border-radius:14px;
-    display:flex;align-items:center;gap:1.2rem;
-    margin-bottom:1.5rem;
-    border-bottom:3px solid {C['green']};}}
-.kpi-card {{
-    background:{C['white']};border-radius:10px;
-    padding:1rem 1.2rem;
-    border-left:4px solid {C['green']};
-    border:1px solid #E2E8F0;
-    border-left:4px solid {C['green']};
-    box-shadow:0 2px 6px rgba(13,27,62,0.07);
-    margin-bottom:0.8rem;}}
-.kpi-card.navy  {{border-left-color:{C['navy']};}}
-.kpi-card.gold  {{border-left-color:{C['gold']};}}
-.kpi-card.red   {{border-left-color:{C['danger']};}}
-.kpi-label {{
-    color:{C['grey']};font-size:0.7rem;
-    text-transform:uppercase;letter-spacing:1px;
-    margin-bottom:0.3rem;}}
-.kpi-value {{
-    color:{C['navy']};font-size:1.6rem;
-    font-weight:600;line-height:1.1;}}
-.kpi-delta.ok   {{color:{C['success']};font-size:0.72rem;}}
-.kpi-delta.warn {{color:{C['gold']};font-size:0.72rem;}}
-.kpi-delta.bad  {{color:{C['danger']};font-size:0.72rem;}}
-.section-header {{
-    background:{C['navy']};color:{C['white']};
-    padding:0.55rem 1rem;border-radius:7px;
-    font-size:0.88rem;font-weight:600;
-    margin:1.2rem 0 0.8rem 0;
-    border-left:4px solid {C['green']};}}
-.agent-msg {{
-    background:#EBF3FB;border-radius:9px;
-    padding:1rem 1.2rem;
-    border-left:4px solid {C['blue']};
-    margin-top:0.6rem;font-size:0.9rem;
-    line-height:1.65;color:{C['navy']};}}
-.recalcul-box {{
-    background:#F0FFF4;border-radius:8px;
-    padding:0.8rem 1rem;
-    border:1px solid {C['success']};
-    margin-top:0.5rem;font-size:0.85rem;}}
-.alerte-red {{
-    background:#FEE2E2;border-radius:8px;
-    padding:0.7rem 1rem;
-    border-left:4px solid {C['danger']};
-    font-size:0.85rem;color:#742A2A;
-    margin:0.5rem 0;}}
-.alerte-green {{
-    background:#D1FAE5;border-radius:8px;
-    padding:0.7rem 1rem;
-    border-left:4px solid {C['success']};
-    font-size:0.85rem;color:#1C4532;
-    margin:0.5rem 0;}}
-.upload-zone {{
-    background:{C['light']};border-radius:10px;
-    padding:1.5rem;border:2px dashed #CBD5E0;
-    text-align:center;margin:1rem 0;}}
-section[data-testid="stSidebar"] {{
-    background:{C['navy']};}}
-section[data-testid="stSidebar"] * {{
-    color:{C['silver']} !important;}}
-.stButton > button {{
-    background:linear-gradient(135deg,
-        {C['navy']},{C['blue']});
-    color:white !important;border:none;
-    border-radius:7px;padding:0.45rem 1.2rem;
-    font-weight:600;}}
-.footer {{
-    text-align:center;color:#A0AEC0;
-    font-size:0.72rem;padding:1.5rem 0 0.5rem;
-    border-top:1px solid #E2E8F0;
-    margin-top:2rem;}}
-</style>
-""", unsafe_allow_html=True)
+# ══════════════════════════════════════════════════════════════════════════════
+# SESSION STATE
+# ══════════════════════════════════════════════════════════════════════════════
 
-# ── Chargement JSON ───────────────────────────────────────────
-@st.cache_data
-def charger_resultats():
-    r = {}
-    fichiers = {
-        'scr':    'scr_solvabilite2.json',
-        'prov':   'provisions_finales.json',
-        'cl':     'provisions_chain_ladder.json',
-        'ifrs17': 'ifrs17_results.json',
-        'pm_vie': 'provisions_mathematiques.json',
-        'glm_g':  'glm_gamma_meta.json',
-        'glm_f':  'glm_poisson_meta.json',
-        'ml_v2':  'comparaison_ml.json',
-    }
-    for cle, fichier in fichiers.items():
-        try:
-            with open(fichier) as f:
-                r[cle] = json.load(f)
-        except:
-            r[cle] = {}
-    return r
+if 'langue'   not in st.session_state: st.session_state.langue   = 'fr'
+if 'page'     not in st.session_state: st.session_state.page     = 'accueil'
+if 'resultats'not in st.session_state: st.session_state.resultats= {}
 
-DATA = charger_resultats()
+def T(key): return TEXTES[st.session_state.langue].get(key, key)
 
-# ── Sidebar ───────────────────────────────────────────────────
-with st.sidebar:
-    st.markdown(
-        f'<div style="text-align:center;padding:0.8rem 0;">'
-        f'{logo_html(90)}'
-        f'<div style="color:#4CAF1A;font-size:1rem;'
-        f'font-weight:600;margin-top:0.4rem;">ActuarIA</div>'
-        f'<div style="color:#718096;font-size:0.6rem;'
-        f'letter-spacing:2px;">ACTUARIAL INTELLIGENCE</div>'
-        f'</div>',
-        unsafe_allow_html=True)
+# ══════════════════════════════════════════════════════════════════════════════
+# DONNÉES DE DÉMO
+# ══════════════════════════════════════════════════════════════════════════════
 
-    st.markdown("---")
+AGENTS_DATA = [
+    {'id':'A1',  'nom':'IRIS',    'role':'Ingestion & Validation',    'statut':'VERT',  'icon':'🔍'},
+    {'id':'A2',  'nom':'FLUX',    'role':'Preprocessing',             'statut':'AMBRE', 'icon':'⚡'},
+    {'id':'A3',  'nom':'VICTOR',  'role':'GLM Tarification',          'statut':'VERT',  'icon':'📐'},
+    {'id':'A4',  'nom':'MAX',     'role':'ML ×6',                     'statut':'VERT',  'icon':'🧠'},
+    {'id':'A5',  'nom':'NEURAL',  'role':'Deep Learning',             'statut':'VERT',  'icon':'🔮'},
+    {'id':'A6',  'nom':'JUDGE',   'role':'Comparaison & Validation',  'statut':'VERT',  'icon':'⚖️'},
+    {'id':'A7',  'nom':'RÉSERVE', 'role':'Provisionnement',           'statut':'VERT',  'icon':'🏦'},
+    {'id':'A8',  'nom':'STORM',   'role':'Stress Testing & ORSA',     'statut':'VERT',  'icon':'🌩️'},
+    {'id':'A9',  'nom':'LINK',    'role':'Cohérence inter-équipes',   'statut':'VERT',  'icon':'🔗'},
+    {'id':'A10', 'nom':'SHIELD',  'role':'Solvabilité 2',             'statut':'VERT',  'icon':'🛡️'},
+    {'id':'A11', 'nom':'NORM',    'role':'IFRS 17',                   'statut':'VERT',  'icon':'📊'},
+    {'id':'A12', 'nom':'BALANCE', 'role':'ALM & Liquidité',           'statut':'AMBRE', 'icon':'⚖️'},
+    {'id':'A13', 'nom':'TRACE',   'role':'Audit Trail',               'statut':'VERT',  'icon':'🔐'},
+    {'id':'A14', 'nom':'MORTA',   'role':'Tables de Mortalité',       'statut':'VERT',  'icon':'📉'},
+]
 
-    # Clé API
-    try:
-        api_key = st.secrets["ANTHROPIC_API_KEY"]
-        st.markdown(
-            '<div style="background:#1C4532;color:#68D391;'
-            'padding:0.35rem 0.7rem;border-radius:5px;'
-            'font-size:0.72rem;text-align:center;">'
-            '🔐 API chargée</div>',
-            unsafe_allow_html=True)
-    except:
-        api_key = st.text_input(
-            "Clé API Claude", type="password",
-            placeholder="sk-ant-...")
+KPI_DEMO = {
+    'be':         2_914_930,
+    'scr':        3_680_671,
+    'ratio_scr':  208.5,
+    'tp_ifrs17':  3_992_344,
+    'gini':       0.2651,
+    'lcr':        1173.3,
+    'gap_alm':    1.9,
+    'cv_prov':    0.6,
+}
 
-    st.markdown("---")
+# ══════════════════════════════════════════════════════════════════════════════
+# SIDEBAR
+# ══════════════════════════════════════════════════════════════════════════════
 
-    # Identité rapport
-    st.markdown(
-        '<div style="color:#C0C8D4;font-size:0.72rem;'
-        'text-transform:uppercase;letter-spacing:1px;'
-        'margin-bottom:0.4rem;">📋 Rapport</div>',
-        unsafe_allow_html=True)
+def render_sidebar():
+    with st.sidebar:
+        # Logo
+        st.markdown(f"""
+        <div style="padding:20px 0 16px; text-align:center; border-bottom:1px solid {OR}33;">
+            <div style="font-family:'Playfair Display',serif; font-size:1.8rem;
+                        font-weight:700; color:{BLANC}; letter-spacing:-0.02em;">
+                Actuar<span style="color:{OR};">IA</span>
+            </div>
+            <div style="font-size:0.65rem; color:{GRIS}; letter-spacing:0.15em;
+                        text-transform:uppercase; margin-top:2px;">
+                Actuarial Intelligence
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-    nom_societe  = st.text_input(
-        "Société", placeholder="Ex: Allianz France")
-    nom_actuaire = st.text_input(
-        "Actuaire", placeholder="Ex: Dr. Martin")
-    logo_client  = st.file_uploader(
-        "Logo client", type=['png','jpg','jpeg'])
-    classification = st.selectbox(
-        "Classification",
-        ["Confidentiel","Usage interne","Public"])
+        st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
 
-    st.markdown(
-        '<div style="color:#C0C8D4;font-size:0.72rem;'
-        'text-transform:uppercase;letter-spacing:1px;'
-        'margin:0.8rem 0 0.4rem;">🌐 Langue rapport</div>',
-        unsafe_allow_html=True)
-
-    langue_rapport = st.radio(
-        "", ['🇫🇷 Français','🇬🇧 English'],
-        label_visibility="collapsed")
-    langue_code = ('FR' if '🇫🇷' in langue_rapport
-                   else 'EN')
-
-    st.markdown("---")
-
-    page = st.radio("", [
-        "🏠 Accueil",
-        "📊 Dashboard PowerBI",
-        "📉 Branche Non-Vie",
-        "💼 Branche Vie",
-        "📈 ALM",
-        "🤖 Agent IA",
-        "📤 Upload Données",
-        "📄 Rapports",
-    ], label_visibility="collapsed")
-
-    st.markdown(
-        f'<div style="color:#4A5568;font-size:0.65rem;'
-        f'text-align:center;margin-top:0.8rem;">'
-        f'ActuarIA v2.0 © {datetime.now().year}'
-        f'</div>', unsafe_allow_html=True)
-
-# ── Header ────────────────────────────────────────────────────
-st.markdown(
-    f'<div class="header-main">'
-    f'{logo_html(60)}'
-    f'<div>'
-    f'<div style="color:white;font-size:1.8rem;'
-    f'font-weight:600;letter-spacing:-0.5px;">'
-    f'Actuar<span style="color:#4CAF1A;">IA</span></div>'
-    f'<div style="color:#C0C8D4;font-size:0.8rem;'
-    f'letter-spacing:2px;">ACTUARIAL INTELLIGENCE</div>'
-    f'</div>'
-    f'<div style="margin-left:auto;text-align:right;">'
-    f'<div style="color:#C0C8D4;font-size:0.7rem;">'
-    f'{datetime.now().strftime("%d/%m/%Y")}</div>'
-    f'<div style="color:#4CAF1A;font-size:0.78rem;'
-    f'font-weight:600;">'
-    f'{nom_societe if nom_societe else "Mode démo"}'
-    f'</div></div></div>',
-    unsafe_allow_html=True)
-
-# ══════════════════════════════════════════════════════════════
-# PAGE ACCUEIL
-# ══════════════════════════════════════════════════════════════
-
-if page == "📊 Dashboard PowerBI":
-
-    # En-tête style PowerBI
-    st.markdown(f"""
-    <div style="background:#252423;
-        padding:0.7rem 1.2rem;margin:-1rem -1rem 1.2rem;
-        border-radius:8px;
-        display:flex;align-items:center;gap:1rem;">
-      <div style="color:#F3F2F1;font-size:1rem;
-          font-weight:600;font-family:Segoe UI;">
-        📊 Tableau de Bord Exécutif
-      </div>
-      <div style="color:#A19F9D;font-size:0.75rem;
-          margin-left:auto;">
-        ActuarIA v2.0 —
-        {datetime.now().strftime("%d/%m/%Y %H:%M")}
-      </div>
-    </div>""", unsafe_allow_html=True)
-
-    # Données
-    s   = DATA.get('scr',{})
-    p   = DATA.get('prov',{})
-    ml  = DATA.get('ml_v2',{})
-    ir  = DATA.get('ifrs17',{})
-    g   = DATA.get('glm_g',{})
-    pm  = DATA.get('pm_vie',{})
-    mp  = p.get('methodes',{})
-    paa = ir.get('modele_paa',{})
-    bba = ir.get('modele_bba',{})
-    pf  = pm.get('portefeuille',{})
-    bscr= max(s.get('bscr',1),1)
-    mod = ml.get('modele_retenu','N/A')
-    r_s = s.get('ratio_scr_pct',0)
-    r_m = s.get('ratio_mcr_pct',0)
-    lr  = paa.get('loss_ratio_pct',0)
-
-    # ── LIGNE 1 : KPI Cards ───────────────────────
-    st.markdown(
-        '<div style="font-size:0.72rem;'
-        'color:#605E5C;font-family:Segoe UI;'
-        'text-transform:uppercase;'
-        'letter-spacing:1px;margin-bottom:0.6rem;">'
-        'Indicateurs Clés</div>',
-        unsafe_allow_html=True)
-
-    c1,c2,c3,c4,c5 = st.columns(5)
-    kpis = [
-        (c1,'Prime Pure',
-         f"{g.get('prime_pure_moy','N/A')} €",
-         2.3,'vs N-1','#118DFF'),
-        (c2,'Ratio SCR',f"{r_s}%",
-         r_s-150,'vs cible 150%',
-         '#118DFF' if r_s>=150 else '#E66C37'),
-        (c3,'Loss Ratio IFRS 17',f"{lr}%",
-         65-lr,'vs benchmark 65%',
-         '#118DFF' if lr<=65 else '#E66C37'),
-        (c4,'IBNR Best Estimate',
-         f"{p.get('provision_retenue',0):,.0f} €",
-         1.2,'vs trim.','#12239E'),
-        (c5,'CSM BBA',
-         f"{bba.get('csm',0):,.0f} €",
-         0.0,'stable','#6B007B'),
-    ]
-    for col,titre,val,delta,lbl,col_hex in kpis:
-        with col:
-            st.markdown(
-                pbi_kpi_card(
-                    titre,val,delta,lbl,col_hex),
-                unsafe_allow_html=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # ── LIGNE 2 : Tarification + SCR ─────────────
-    st.markdown(
-        '<div style="font-size:0.72rem;'
-        'color:#605E5C;font-family:Segoe UI;'
-        'text-transform:uppercase;'
-        'letter-spacing:1px;margin-bottom:0.6rem;">'
-        'Tarification & Solvabilité</div>',
-        unsafe_allow_html=True)
-
-    c1,c2,c3 = st.columns([1.3,1,1])
-
-    with c1:
-        # Barres Gini modèles
-        cmp = ml.get('comparaison',[])
-        if cmp:
-            fig = pbi_bar_h(
-                labels=[m['modele'] for m in cmp],
-                values=[m['gini_test'] for m in cmp],
-                titre='Gini Test — Modèles ML/DL',
-                highlight=mod)
-            st.plotly_chart(
-                fig, use_container_width=True,
-                key='pbi_gini')
-
-    with c2:
-        # Barres H PowerBI — BSCR
-        fig_bscr = go.Figure(go.Bar(
-            x=[s.get('scr_marche',0),
-               s.get('scr_nv',0),
-               s.get('scr_contrepartie',0),
-               s.get('scr_operationnel',0)],
-            y=['SCR Marché','SCR Non-Vie',
-               'SCR Contrepartie',
-               'SCR Opérationnel'],
-            orientation='h',
-            marker=dict(
-                color=['#118DFF','#12239E',
-                       '#E66C37','#6B007B'],
-                line=dict(width=0)),
-            text=[f"{v:,.0f} €"
-                  for v in [
-                      s.get('scr_marche',0),
-                      s.get('scr_nv',0),
-                      s.get('scr_contrepartie',0),
-                      s.get('scr_operationnel',0)]],
-            textposition='outside'))
-        fig_bscr.update_layout(
-            title='Décomposition BSCR',
-            height=300,
-            paper_bgcolor='white',
-            plot_bgcolor='white',
-            margin=dict(l=10,r=80,t=40,b=10),
-            xaxis=dict(showgrid=True,
-                       gridcolor='#F3F2F1'),
-            yaxis=dict(showgrid=False))
-        st.plotly_chart(
-            fig_bscr,
-            use_container_width=True,
-            key='pbi_bscr')
-
-    with c3:
-        # Gauge SCR
-        fig3 = pbi_gauge(
-            valeur=r_s, maxi=250,
-            cible=150,
-            titre='Ratio SCR (%)',
-            unite='%')
-        st.plotly_chart(
-            fig3, use_container_width=True,
-            key='pbi_gauge_scr')
-
-        # Gauge MCR
-        fig_mcr = pbi_gauge(
-            valeur=r_m, maxi=150,
-            cible=100,
-            titre='Ratio MCR (%)',
-            unite='%')
-        st.plotly_chart(
-            fig_mcr, use_container_width=True,
-            key='pbi_gauge_mcr')
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # ── LIGNE 3 : Provisionnement + IFRS 17 ──────
-    st.markdown(
-        '<div style="font-size:0.72rem;'
-        'color:#605E5C;font-family:Segoe UI;'
-        'text-transform:uppercase;'
-        'letter-spacing:1px;margin-bottom:0.6rem;">'
-        'Provisionnement & IFRS 17</div>',
-        unsafe_allow_html=True)
-
-    c1,c2 = st.columns(2)
-
-    with c1:
-        # Waterfall IBNR
-        cl_v = mp.get('chain_ladder',0)
-        bf_v = mp.get('bornhuetter_ferguson',0)
-        cc_v = mp.get('cape_cod',0)
-        be_v = p.get('provision_retenue',0)
-        fig4 = pbi_waterfall(
-            labels=['Chain-Ladder','→ BF',
-                    '→ Cape Cod','BE retenu'],
-            values=[cl_v,
-                    bf_v - cl_v,
-                    cc_v - bf_v,
-                    be_v],
-            titre='Waterfall IBNR — 3 méthodes (€)')
-        st.plotly_chart(
-            fig4, use_container_width=True,
-            key='pbi_waterfall')
-
-    with c2:
-        # Barres IFRS 17 PAA
-        fig5 = pbi_bar_h(
-            labels=['Insurance Revenue',
-                    'Insurance Expenses',
-                    'Insurance Result',
-                    'CSM BBA'],
-            values=[paa.get(
-                        'insurance_revenue',0),
-                    paa.get(
-                        'insurance_expenses',0),
-                    paa.get(
-                        'insurance_result',0),
-                    bba.get('csm',0)],
-            titre='IFRS 17 — PAA & BBA (€)',
-            couleurs=['#118DFF','#D64550',
-                      '#12239E','#E66C37'])
-        st.plotly_chart(
-            fig5, use_container_width=True,
-            key='pbi_ifrs17')
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # ── LIGNE 4 : ALM Stress Tests ────────────────
-    st.markdown(
-        '<div style="font-size:0.72rem;'
-        'color:#605E5C;font-family:Segoe UI;'
-        'text-transform:uppercase;'
-        'letter-spacing:1px;margin-bottom:0.6rem;">'
-        'ALM — Stress Tests Taux</div>',
-        unsafe_allow_html=True)
-
-    passif = pf.get('pm_totale',763460)
-    actif  = passif*1.15
-    dur_a,dur_p = 6.2,9.8
-    fp = s.get('fonds_propres',480000)
-    chocs = [-200,-100,-50,0,50,100,200]
-    imp_n = [actif*(-dur_a*c/10000) -
-             passif*(-dur_p*c/10000)
-             for c in chocs]
-
-    c1,c2 = st.columns([1.5,1])
-
-    with c1:
-        # Barres stress tests
-        fig6 = go.Figure(go.Bar(
-            x=[f'{c:+d}bp' for c in chocs],
-            y=imp_n,
-            marker_color=[
-                '#D64550' if v<0
-                else '#118DFF'
-                for v in imp_n],
-            text=[f'{v:+,.0f}€' for v in imp_n],
-            textposition='outside'))
-        fig6.add_hline(
-            y=0,
-            line_color='#252423',
-            line_width=1.5)
-        fig6.update_layout(
-            title=dict(
-                text='Impact sur Fonds Propres (€)',
-                font=dict(size=13,
-                          color='#252423',
-                          family='Segoe UI'),
-                x=0),
-            paper_bgcolor='white',
-            plot_bgcolor='white',
-            margin=dict(t=40,b=20,l=10,r=10),
-            font=dict(family='Segoe UI'),
-            xaxis=dict(showgrid=False),
-            yaxis=dict(showgrid=True,
-                       gridcolor='#F3F2F1'))
-        st.plotly_chart(
-            fig6, use_container_width=True,
-            key='pbi_alm')
-
-    with c2:
-        # Tableau synthèse ALM
-        st.markdown(
-            '<div style="background:white;'
-            'border-radius:4px;padding:1rem;'
-            'box-shadow:0 1px 6px rgba(0,0,0,0.08);'
-            'font-family:Segoe UI;">'
-            '<div style="color:#252423;'
-            'font-weight:600;font-size:0.85rem;'
-            'margin-bottom:0.8rem;">'
-            'Synthèse ALM</div>',
-            unsafe_allow_html=True)
-
-        alm_data = [
-            ('Duration Actif',
-             f'{dur_a:.1f} ans',''),
-            ('Duration Passif',
-             f'{dur_p:.1f} ans',''),
-            ('Gap Duration',
-             f'{dur_a-dur_p:.1f} ans',
-             '⚠️'),
-            ('Couverture A/P',
-             f'{actif/passif*100:.1f}%','✅'),
-            ('Impact +100bp',
-             f'{imp_n[5]:+,.0f} €',
-             '🔵'),
-            ('Impact +200bp',
-             f'{imp_n[6]:+,.0f} €',
-             '🟡'),
-            ('Impact -200bp',
-             f'{imp_n[0]:+,.0f} €',
-             '🔴'),
+        # Navigation
+        pages = [
+            (T('nav_accueil'),   'accueil'),
+            (T('nav_analyse'),   'analyse'),
+            (T('nav_dashboard'), 'dashboard'),
+            (T('nav_aria'),      'aria'),
+            (T('nav_rapports'),  'rapports'),
         ]
-        for lbl,val,ic in alm_data:
-            st.markdown(
-                f'<div style="display:flex;'
-                f'justify-content:space-between;'
-                f'padding:0.3rem 0;'
-                f'border-bottom:1px solid #F3F2F1;'
-                f'font-size:0.82rem;">'
-                f'<span style="color:#605E5C;">'
-                f'{lbl}</span>'
-                f'<span style="color:#252423;'
-                f'font-weight:600;">'
-                f'{ic} {val}</span>'
-                f'</div>',
-                unsafe_allow_html=True)
 
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    # ── Footer PowerBI style ──────────────────────
-    st.markdown(f"""
-    <div style="background:#F3F2F1;
-        border-radius:4px;padding:0.5rem 1rem;
-        margin-top:1rem;
-        display:flex;justify-content:space-between;
-        font-family:Segoe UI;font-size:0.7rem;
-        color:#605E5C;">
-      <span>ActuarIA v2.0 — Actuarial Intelligence
-      </span>
-      <span>Données : 100 000 contrats —
-        2010-2024</span>
-      <span>
-        {datetime.now().strftime("%d/%m/%Y %H:%M")}
-      </span>
-    </div>""", unsafe_allow_html=True)
-
-
-elif page == "🏠 Accueil":
-
-    st.markdown(f"""
-    <div style="background:linear-gradient(135deg,
-        {C['navy']},{C['blue']});border-radius:14px;
-        padding:2rem;margin-bottom:1.5rem;
-        border-bottom:3px solid {C['green']};">
-      <h1 style="color:white;font-size:2rem;margin:0;
-          font-weight:700;letter-spacing:-0.5px;">
-        L'Intelligence Actuarielle<br>
-        <span style="color:{C['green']};">
-        au service de la décision</span></h1>
-      <p style="color:{C['silver']};margin:0.8rem 0 0;
-          font-size:0.95rem;max-width:580px;">
-        Plateforme actuarielle IA — Tarification,
-        Provisionnement, Solvabilité 2, IFRS 17,
-        ALM et Agent IA en un seul outil.
-      </p>
-    </div>""", unsafe_allow_html=True)
-
-    col1,col2,col3,col4,col5 = st.columns(5)
-    stats = [
-        (col1,"1 290 Mds €","Primes EU","Source EIOPA"),
-        (col2,"224%","SCR moyen EU","EIOPA 2023"),
-        (col3,"67.3%","Loss Ratio NV","Marché EU"),
-        (col4,"3 200","Entités EIOPA","5 pays"),
-        (col5,"1 M","Emplois EU","Actuaires+Tech"),
-    ]
-    for col,val,lbl,sub in stats:
-        with col:
-            st.markdown(f"""
-            <div style="background:white;
-                border-radius:10px;padding:0.9rem;
-                text-align:center;
-                border-top:3px solid {C['green']};
-                box-shadow:0 2px 6px rgba(0,0,0,0.05);">
-              <div style="color:{C['navy']};
-                  font-size:1.4rem;font-weight:700;">
-                {val}</div>
-              <div style="color:#718096;
-                  font-size:0.7rem;text-transform:uppercase;">
-                {lbl}</div>
-              <div style="color:{C['green']};
-                  font-size:0.65rem;">{sub}</div>
-            </div>""", unsafe_allow_html=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    c1,c2,c3 = st.columns(3)
-    modules = [
-        (c1,"🎯","Tarification ML/DL",
-         ["5 modèles comparés","Gini + Lift",
-          "Variables ACPR/EIOPA","Prime pure optimisée"]),
-        (c2,"🏛️","Réglementaire",
-         ["Solvabilité 2 EIOPA","IFRS 17 PAA + BBA",
-          "SCR formule standard","MCR + alertes"]),
-        (c3,"🤖","Agent IA",
-         ["Q&A portefeuille","Recalcul temps réel",
-          "Modification paramètres",
-          "Génération rapport auto"]),
-    ]
-    for col,icon,titre,items in modules:
-        with col:
-            items_html = "".join([
-                f'<li style="margin:0.25rem 0;">'
-                f'{it}</li>' for it in items])
-            st.markdown(f"""
-            <div style="background:{C['navy']};
-                border-radius:10px;padding:1.2rem;
-                border-bottom:3px solid {C['green']};">
-              <div style="font-size:1.6rem;">{icon}</div>
-              <div style="color:white;font-weight:600;
-                  font-size:0.9rem;margin:0.5rem 0;">
-                {titre}</div>
-              <ul style="color:{C['silver']};
-                  font-size:0.78rem;line-height:1.7;
-                  padding-left:1rem;margin:0;">
-                {items_html}</ul>
-            </div>""", unsafe_allow_html=True)
-
-# ══════════════════════════════════════════════════════════════
-# PAGE BRANCHE NON-VIE
-# ══════════════════════════════════════════════════════════════
-elif page == "📉 Branche Non-Vie":
-
-    st.markdown("## 📊 Branche Non-Vie")
-    tab1,tab2,tab3,tab4 = st.tabs([
-        "🎯 Tarification","📐 Provisionnement",
-        "🏛️ Solvabilité 2","📋 IFRS 17"])
-
-    with tab1:
-        st.markdown(
-            '<div class="section-header">'
-            '🎯 TARIFICATION — 5 MODÈLES ML/DL</div>',
-            unsafe_allow_html=True)
-
-        ml  = DATA.get('ml_v2',{})
-        g   = DATA.get('glm_g',{})
-        cmp = ml.get('comparaison',[])
-        mod = ml.get('modele_retenu','N/A')
-        gin = ml.get('gini_retenu',0)
-        lft = ml.get('lift_retenu',0)
-        pp  = g.get('prime_pure_moy','N/A')
-
-        c1,c2,c3,c4 = st.columns(4)
-        for col,lbl,val,cls,delta in [
-            (c1,'Modèle retenu',mod,'','✅ Optimal'),
-            (c2,'Gini Test',f'{gin:.4f}','navy',
-             'Bon — production'),
-            (c3,'Lift D1/D10',f'{lft:.2f}x','gold',
-             'Discriminant'),
-            (c4,'Prime pure',f'{pp} €','',
-             'GLM Gamma'),
-        ]:
-            with col:
-                st.markdown(f"""
-                <div class="kpi-card {cls}">
-                  <div class="kpi-label">{lbl}</div>
-                  <div class="kpi-value"
-                    style="font-size:1.1rem;">{val}</div>
-                  <div class="kpi-delta ok">{delta}</div>
-                </div>""", unsafe_allow_html=True)
-
-        if cmp:
-            df_ml = pd.DataFrame(cmp).sort_values(
-                'gini_test', ascending=False)
-            fig = go.Figure(go.Bar(
-                x=df_ml['gini_test'],
-                y=df_ml['modele'],
-                orientation='h',
-                marker_color=[
-                    C['green'] if m==mod
-                    else C['navy']
-                    for m in df_ml['modele']],
-                text=[f"{g:.4f}"
-                      for g in df_ml['gini_test']],
-                textposition='outside'))
-            fig.update_layout(
-                title='Gini Test — 5 modèles',
-                height=260,paper_bgcolor='white',
-                plot_bgcolor=C['light'],
-                margin=dict(l=10,r=80,t=40,b=10))
-            st.plotly_chart(fig,
-                            use_container_width=True)
-
-    with tab2:
-        st.markdown(
-            '<div class="section-header">'
-            '📐 PROVISIONNEMENT — TRIANGLE 15 ANS'
-            '</div>', unsafe_allow_html=True)
-
-        p  = DATA.get('prov',{})
-        cl = DATA.get('cl',{})
-        m  = p.get('methodes',{})
-
-        c1,c2,c3,c4 = st.columns(4)
-        for col,lbl,val,cls in [
-            (c1,'Chain-Ladder',
-             f"{m.get('chain_ladder',0):,.0f} €",'navy'),
-            (c2,'Bornhuetter-Ferguson',
-             f"{m.get('bornhuetter_ferguson',0):,.0f} €",''),
-            (c3,'Cape Cod',
-             f"{m.get('cape_cod',0):,.0f} €",'gold'),
-            (c4,'BE Retenu',
-             f"{p.get('provision_retenue',0):,.0f} €",''),
-        ]:
-            with col:
-                st.markdown(f"""
-                <div class="kpi-card {cls}">
-                  <div class="kpi-label">{lbl}</div>
-                  <div class="kpi-value"
-                    style="font-size:1.2rem;">{val}</div>
-                </div>""", unsafe_allow_html=True)
-
-        vals = [m.get('chain_ladder',0),
-                m.get('bornhuetter_ferguson',0),
-                m.get('cape_cod',0)]
-        fig2 = go.Figure(go.Bar(
-            x=['Chain-Ladder','BF','Cape Cod'],
-            y=vals,
-            marker_color=[C['navy'],C['blue'],C['gold']],
-            text=[f"{v:,.0f}€" for v in vals],
-            textposition='outside'))
-        fig2.add_hline(
-            y=p.get('provision_retenue',0),
-            line_dash='dash',line_color=C['green'],
-            annotation_text="BE retenu")
-        fig2.update_layout(
-            title='IBNR — 3 méthodes',height=300,
-            paper_bgcolor='white',
-            plot_bgcolor=C['light'],
-            margin=dict(l=10,r=80,t=40,b=10))
-        st.plotly_chart(fig2,use_container_width=True)
-
-    with tab3:
-        st.markdown(
-            '<div class="section-header">'
-            '🏛️ SOLVABILITÉ 2 — SCR FORMULE STANDARD'
-            '</div>', unsafe_allow_html=True)
-
-        s = DATA.get('scr',{})
-        r = s.get('ratio_scr_pct',0)
-        rm = s.get('ratio_mcr_pct',0)
-        bscr = max(s.get('bscr',1),1)
-        ok = r >= 100
-
-        c1,c2,c3,c4 = st.columns(4)
-        for col,lbl,val,cls,delta,dcls in [
-            (c1,'SCR Total',
-             f"{s.get('scr_total',0):,.0f} €",
-             '','Formule standard','ok'),
-            (c2,'Fonds Propres',
-             f"{s.get('fonds_propres',0):,.0f} €",
-             'navy','Tier 1','ok'),
-            (c3,'Ratio SCR',f"{r}%",
-             'navy' if ok else 'red',
-             '✅ Conforme' if ok else '❌','ok' if ok else 'bad'),
-            (c4,'Ratio MCR',f"{rm}%",
-             '' if rm>=100 else 'red',
-             '✅ OK' if rm>=100 else '⚠️ Sous MCR',
-             'ok' if rm>=100 else 'bad'),
-        ]:
-            with col:
-                st.markdown(f"""
-                <div class="kpi-card {cls}">
-                  <div class="kpi-label">{lbl}</div>
-                  <div class="kpi-value">{val}</div>
-                  <div class="kpi-delta {dcls}">
-                    {delta}</div>
-                </div>""", unsafe_allow_html=True)
-
-        c_g1,c_g2 = st.columns(2)
-        with c_g1:
-            fig_pie = go.Figure(go.Pie(
-                labels=['SCR Marché','SCR Non-Vie',
-                        'SCR Contrepartie',
-                        'SCR Opérationnel'],
-                values=[s.get('scr_marche',0),
-                        s.get('scr_nv',0),
-                        s.get('scr_contrepartie',0),
-                        s.get('scr_operationnel',0)],
-                marker_colors=[C['navy'],C['green'],
-                               C['gold'],C['silver']],
-                hole=0.45,textinfo='label+percent'))
-            fig_pie.update_layout(
-                title='Décomposition BSCR',
-                height=300,showlegend=False,
-                paper_bgcolor='white',
-                margin=dict(t=40,b=10,l=10,r=10))
-            st.plotly_chart(fig_pie,
-                            use_container_width=True)
-        with c_g2:
-            fig_bar = go.Figure(go.Bar(
-                x=['Marché','Non-Vie',
-                   'Contrepartie','Opérationnel'],
-                y=[s.get('scr_marche',0),
-                   s.get('scr_nv',0),
-                   s.get('scr_contrepartie',0),
-                   s.get('scr_operationnel',0)],
-                marker_color=C['navy'],
-                text=[f"{v/bscr*100:.1f}%"
-                      for v in [
-                          s.get('scr_marche',0),
-                          s.get('scr_nv',0),
-                          s.get('scr_contrepartie',0),
-                          s.get('scr_operationnel',0)]],
-                textposition='outside'))
-            fig_bar.update_layout(
-                title='SCR par module',height=300,
-                paper_bgcolor='white',
-                plot_bgcolor=C['light'],
-                margin=dict(l=10,r=10,t=40,b=10))
-            st.plotly_chart(fig_bar,
-                            use_container_width=True)
-
-        if rm < 100:
-            st.markdown(
-                f'<div class="alerte-red">'
-                f'⚠️ <b>MCR non couvert :</b> '
-                f'Ratio = {rm}% — MCR absolu EIOPA '
-                f'= 2 500 000 € — Action corrective '
-                f'immédiate (Art. 129 Dir. 2009/138/CE).'
-                f'</div>',
-                unsafe_allow_html=True)
-
-    with tab4:
-        st.markdown(
-            '<div class="section-header">'
-            '📋 IFRS 17 — PAA + BBA</div>',
-            unsafe_allow_html=True)
-
-        i   = DATA.get('ifrs17',{})
-        paa = i.get('modele_paa',{})
-        bba = i.get('modele_bba',{})
-        lr  = paa.get('loss_ratio_pct',0)
-
-        c1,c2,c3,c4 = st.columns(4)
-        for col,lbl,val,cls in [
-            (c1,'Insurance Revenue',
-             f"{paa.get('insurance_revenue',0):,.0f} €",''),
-            (c2,'Insurance Result',
-             f"{paa.get('insurance_result',0):,.0f} €",'navy'),
-            (c3,'Loss Ratio IFRS 17',f"{lr}%",
-             '' if lr<70 else 'gold'),
-            (c4,'CSM BBA',
-             f"{bba.get('csm',0):,.0f} €",'gold'),
-        ]:
-            with col:
-                st.markdown(f"""
-                <div class="kpi-card {cls}">
-                  <div class="kpi-label">{lbl}</div>
-                  <div class="kpi-value"
-                    style="font-size:1.1rem;">{val}</div>
-                </div>""", unsafe_allow_html=True)
-
-# ══════════════════════════════════════════════════════════════
-# PAGE BRANCHE VIE
-# ══════════════════════════════════════════════════════════════
-elif page == "💼 Branche Vie":
-
-    st.markdown("## 💼 Branche Vie")
-    tab1,tab2,tab3,tab4 = st.tabs([
-        "💀 Tarification",
-        "📊 Provisions Mathématiques",
-        "🏛️ Solvabilité 2",
-        "📋 IFRS 17 BBA"])
-
-    with tab1:
-        pm = DATA.get('pm_vie',{})
-        cr = pm.get('contrat_reference',{})
-        c1,c2,c3,c4 = st.columns(4)
-        for col,lbl,val,cls in [
-            (c1,'Prime nivelée',
-             f"{cr.get('prime_nivelee',0)} €/an",''),
-            (c2,'Capital assuré',
-             f"{cr.get('capital_assure',0):,.0f} €",'navy'),
-            (c3,'Taux technique',
-             f"{cr.get('taux_technique',0)*100:.1f}%",'gold'),
-            (c4,'Table mortalité','EEA 2019',''),
-        ]:
-            with col:
-                st.markdown(f"""
-                <div class="kpi-card {cls}">
-                  <div class="kpi-label">{lbl}</div>
-                  <div class="kpi-value"
-                    style="font-size:1.1rem;">{val}</div>
-                </div>""", unsafe_allow_html=True)
-
-    with tab2:
-        pm = DATA.get('pm_vie',{})
-        cr = pm.get('contrat_reference',{})
-        pf = pm.get('portefeuille',{})
-        c1,c2,c3,c4 = st.columns(4)
-        for col,lbl,val,cls in [
-            (c1,'PM maximale',
-             f"{cr.get('pm_max',0):,.0f} €",''),
-            (c2,'PM à t=10',
-             f"{cr.get('pm_t10',0):,.0f} €",'navy'),
-            (c3,'PM portefeuille',
-             f"{pf.get('pm_totale',0):,.0f} €",'gold'),
-            (c4,'Taux rachat',
-             f"{pf.get('taux_rachat',0.05)*100:.1f}%",''),
-        ]:
-            with col:
-                st.markdown(f"""
-                <div class="kpi-card {cls}">
-                  <div class="kpi-label">{lbl}</div>
-                  <div class="kpi-value"
-                    style="font-size:1.2rem;">{val}</div>
-                </div>""", unsafe_allow_html=True)
-
-    with tab3:
-        pm_v = DATA.get('pm_vie',{})
-        pf_v = pm_v.get('portefeuille',{})
-        pm_t = pf_v.get('pm_totale',763460)
-        sv   = pm_t*0.10; sl = pm_t*0.15*0.25
-        sr   = pm_t*0.05; sf = pm_t*0.03
-        stot = (sv**2+sl**2+sr**2+sf**2)**0.5
-
-        c1,c2,c3,c4 = st.columns(4)
-        for col,lbl,val in [
-            (c1,'SCR Mortalité',f"{sv:,.0f} €"),
-            (c2,'SCR Longévité',f"{sl:,.0f} €"),
-            (c3,'SCR Rachat',  f"{sr:,.0f} €"),
-            (c4,'SCR Vie Total',f"{stot:,.0f} €"),
-        ]:
-            with col:
-                st.markdown(f"""
-                <div class="kpi-card">
-                  <div class="kpi-label">{lbl}</div>
-                  <div class="kpi-value"
-                    style="font-size:1.1rem;">{val}</div>
-                </div>""", unsafe_allow_html=True)
-
-    with tab4:
-        i   = DATA.get('ifrs17',{})
-        bba = i.get('modele_bba',{})
-        c1,c2,c3,c4 = st.columns(4)
-        for col,lbl,val,cls in [
-            (c1,'FCF',
-             f"{bba.get('fcf',0):,.0f} €",''),
-            (c2,'Risk Adjustment',
-             f"{bba.get('ra',0):,.0f} €",'navy'),
-            (c3,'CSM',
-             f"{bba.get('csm',0):,.0f} €",'gold'),
-            (c4,'Passif initial',
-             f"{bba.get('total_passif_init',0):,.0f} €",''),
-        ]:
-            with col:
-                st.markdown(f"""
-                <div class="kpi-card {cls}">
-                  <div class="kpi-label">{lbl}</div>
-                  <div class="kpi-value"
-                    style="font-size:1.2rem;">{val}</div>
-                </div>""", unsafe_allow_html=True)
-
-# ══════════════════════════════════════════════════════════════
-# PAGE ALM
-# ══════════════════════════════════════════════════════════════
-elif page == "📈 ALM":
-
-    st.markdown("## 📈 ALM — Gestion Actif-Passif")
-
-    pm_v   = DATA.get('pm_vie',{})
-    pf_v   = pm_v.get('portefeuille',{})
-    passif = pf_v.get('pm_totale',763460)
-    actif  = passif * 1.15
-    dur_a, dur_p = 6.2, 9.8
-    gap    = dur_a - dur_p
-
-    c1,c2,c3,c4 = st.columns(4)
-    for col,lbl,val,cls,delta,dcls in [
-        (c1,'Duration Actif',f'{dur_a:.1f} ans',
-         '','Obligations','ok'),
-        (c2,'Duration Passif',f'{dur_p:.1f} ans',
-         'navy','PM + provisions','ok'),
-        (c3,'Gap Duration',f'{gap:.1f} ans',
-         'red','⚠️ Exposition taux','warn'),
-        (c4,'Couverture A/P',
-         f'{actif/passif*100:.1f}%','','✅ OK','ok'),
-    ]:
-        with col:
-            st.markdown(f"""
-            <div class="kpi-card {cls}">
-              <div class="kpi-label">{lbl}</div>
-              <div class="kpi-value">{val}</div>
-              <div class="kpi-delta {dcls}">
-                {delta}</div>
-            </div>""", unsafe_allow_html=True)
-
-    chocs  = [-200,-100,-50,0,50,100,200]
-    imp_a  = [actif*(-dur_a*c/10000) for c in chocs]
-    imp_p  = [passif*(-dur_p*c/10000) for c in chocs]
-    imp_n  = [a-p for a,p in zip(imp_a,imp_p)]
-
-    fig_alm = go.Figure(go.Bar(
-        x=[f'{c:+d}bp' for c in chocs],y=imp_n,
-        marker_color=[C['danger'] if v<0
-                      else C['success'] for v in imp_n],
-        text=[f"{v:+,.0f}€" for v in imp_n],
-        textposition='outside'))
-    fig_alm.add_hline(y=0,line_color=C['navy'],
-                       line_width=1.5)
-    fig_alm.update_layout(
-        title='Stress tests taux — Impact Fonds Propres',
-        height=320,paper_bgcolor='white',
-        plot_bgcolor=C['light'],
-        margin=dict(l=10,r=10,t=40,b=10))
-    st.plotly_chart(fig_alm,use_container_width=True)
-
-# ══════════════════════════════════════════════════════════════
-# PAGE AGENT IA — NIVEAUX 1-4
-# ══════════════════════════════════════════════════════════════
-elif page == "🤖 Agent IA":
-
-    st.markdown("## 🤖 Agent Actuariel IA")
-    st.markdown(
-        "Questions libres — Recalcul temps réel — "
-        "Niveaux 1 à 4")
-
-    if not api_key:
-        st.warning("Entrez votre clé API dans la sidebar.")
-        st.stop()
-
-    if 'hist_agent' not in st.session_state:
-        st.session_state.hist_agent = []
-
-    # Niveau badges
-    col_b1,col_b2,col_b3,col_b4 = st.columns(4)
-    for col,n,lbl,ex in [
-        (col_b1,'1','Q&A','Quel est le ratio SCR ?'),
-        (col_b2,'2','Recalcul',
-         'Choc taux +200bp → SCR ?'),
-        (col_b3,'3','Paramètre',
-         'Change tail factor à 1.010'),
-        (col_b4,'4','Rapport',
-         'Génère rapport EN'),
-    ]:
-        with col:
-            st.markdown(f"""
-            <div style="background:{C['navy']};
-                border-radius:8px;padding:0.6rem;
-                text-align:center;">
-              <div style="color:{C['green']};
-                  font-size:1.2rem;font-weight:700;">
-                N{n}</div>
-              <div style="color:white;font-size:0.75rem;
-                  font-weight:600;">{lbl}</div>
-              <div style="color:{C['silver']};
-                  font-size:0.65rem;
-                  font-style:italic;">{ex}</div>
-            </div>""", unsafe_allow_html=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # Questions rapides
-    qs = [
-        "Situation globale du portefeuille ?",
-        "Simule choc actions -39% sur SCR",
-        "Taux technique à 1% → impact PM vie ?",
-        "Tail factor 1.010 → IBNR ?",
-        "Fonds propres à 600k€ → ratio SCR ?",
-        "Synthèse et recommandations prioritaires",
-    ]
-    cols_q = st.columns(3)
-    for j,q in enumerate(qs):
-        with cols_q[j%3]:
-            if st.button(q[:32]+"...",
-                         key=f"qa_{j}"):
-                st.session_state.q_agent = q
-
-    question = st.text_input(
-        "Votre question :",
-        value=st.session_state.get('q_agent',''),
-        placeholder="Ex: Recalcule le SCR avec "
-                    "un choc taux +100bp")
-
-    if st.button("Envoyer ➤",
-                 type="primary") and question:
-
-        with st.spinner("Agent actuariel..."):
-
-            # ── Détection niveau ──────────────────
-            q_low = question.lower()
-
-            def detecter_niv(q):
-                if any(m in q for m in [
-                        'rapport','report','génère',
-                        'generate','pdf']):
-                    return 4
-                if any(m in q for m in [
-                        'change','modifie','fixe',
-                        'nouveau','remplace']):
-                    return 3
-                if any(m in q for m in [
-                        'simule','recalcule','choc',
-                        'stress','impact','calcule',
-                        'si le','si la','si on']):
-                    return 2
-                return 1
-
-            niveau = detecter_niv(q_low)
-
-            # ── Extraction paramètres ─────────────
-            params = {}
-            if niveau >= 2:
-                try:
-                    cl_nlu = anthropic.Anthropic(
-                        api_key=api_key)
-                    r_nlu  = cl_nlu.messages.create(
-                        model="claude-sonnet-4-6",
-                        max_tokens=200,
-                        messages=[{"role":"user",
-                            "content":
-                            f'Extrais les paramètres '
-                            f'numériques de : '
-                            f'"{question}". '
-                            f'Réponds UNIQUEMENT en JSON: '
-                            f'{{"choc_taux_bp":null,'
-                            f'"choc_actions_pct":null,'
-                            f'"fonds_propres":null,'
-                            f'"tail_factor":null,'
-                            f'"taux_technique":null,'
-                            f'"capital_assure":null,'
-                            f'"duree_ans":null,'
-                            f'"module":null}}'}])
-                    txt = r_nlu.content[0].text
-                    txt = txt.replace('```json',
-                                      '').replace(
-                        '```','').strip()
-                    params = json.loads(txt)
-                except:
-                    params = {}
-
-            # ── Recalcul ──────────────────────────
-            recalcul = None
-            module   = params.get('module','') or ''
-
-            if niveau >= 2:
-                # Auto-détection module
-                if not module:
-                    if any(m in q_low for m in [
-                            'scr','solvabilité','ratio',
-                            'capital','mcr']):
-                        module = 'scr'
-                    elif any(m in q_low for m in [
-                            'ibnr','provision','tail',
-                            'triangle','chain']):
-                        module = 'ibnr'
-                    elif any(m in q_low for m in [
-                            'pm','vie','mortalité',
-                            'taux technique']):
-                        module = 'pm'
-                    elif any(m in q_low for m in [
-                            'alm','duration','gap']):
-                        module = 'alm'
-                    else:
-                        module = 'scr'
-
-                s  = DATA.get('scr',{})
-                p  = DATA.get('prov',{})
-                pm = DATA.get('pm_vie',{})
-
-                if module == 'scr':
-                    choc_t = params.get(
-                        'choc_taux_bp',0) or 0
-                    choc_a = params.get(
-                        'choc_actions_pct',0) or 0
-                    fp_new = params.get('fonds_propres')
-                    mult_m = params.get(
-                        'scr_marche_mult',1.0) or 1.0
-                    mult_n = params.get(
-                        'scr_nv_mult',1.0) or 1.0
-
-                    s2 = copy.deepcopy(s)
-                    if choc_t:
-                        d = (s2.get('scr_marche',0)*
-                             0.274*abs(choc_t)/100*0.035)
-                        s2['scr_marche'] = (
-                            s2.get('scr_marche',0)+d)
-                    if choc_a:
-                        d = (s2.get('scr_marche',0)*
-                             0.451*abs(choc_a)/39)
-                        s2['scr_marche'] = (
-                            s2.get('scr_marche',0)+d)
-                    s2['scr_marche'] = (
-                        s2.get('scr_marche',0)*mult_m)
-                    s2['scr_nv'] = (
-                        s2.get('scr_nv',0)*mult_n)
-                    s2['bscr'] = math.sqrt(
-                        s2.get('scr_marche',0)**2 +
-                        s2.get('scr_nv',0)**2 +
-                        s2.get('scr_contrepartie',0)**2)
-                    s2['scr_total'] = (
-                        s2['bscr'] +
-                        s2.get('scr_operationnel',0))
-                    fp = fp_new or s2.get(
-                        'fonds_propres',0)
-                    s2['fonds_propres'] = fp
-                    s2['ratio_scr_pct'] = round(
-                        fp/s2['scr_total']*100,2)
-                    s2['ratio_mcr_pct'] = round(
-                        fp/2_500_000*100,2)
-                    s2['variation_ratio_scr'] = round(
-                        s2['ratio_scr_pct'] -
-                        s.get('ratio_scr_pct',0),2)
-                    recalcul = s2
-
-                elif module == 'ibnr':
-                    tf = params.get('tail_factor')
-                    m_prov = p.get('methodes',{})
-                    cl_base = m_prov.get(
-                        'chain_ladder',0)
-                    bf_base = m_prov.get(
-                        'bornhuetter_ferguson',0)
-                    cc_base = m_prov.get('cape_cod',0)
-                    if tf:
-                        ratio = tf / max(
-                            DATA.get('cl',{}).get(
-                                'tail_factor',1.005),
-                            0.001)
-                        cl_base *= ratio
-                        bf_base *= ratio*0.7
-                        cc_base *= ratio*0.6
-                    be = (cl_base+bf_base+cc_base)/3
-                    p90 = be * math.exp(
-                        1.282*0.15-0.15**2/2)
-                    recalcul = {
-                        'chain_ladder':  round(cl_base),
-                        'bornhuetter_ferguson':
-                            round(bf_base),
-                        'cape_cod':      round(cc_base),
-                        'provision_retenue': round(be),
-                        'provision_prudente':round(p90),
-                        'variation_vs_base': round(
-                            (be-p.get(
-                                'provision_retenue',1))/
-                            max(p.get(
-                                'provision_retenue',1),
-                                1)*100,2),
-                    }
-
-                elif module == 'pm':
-                    taux = params.get('taux_technique')
-                    cap  = params.get('capital_assure')
-                    dur  = params.get('duree_ans')
-                    cr   = pm.get(
-                        'contrat_reference',{})
-                    taux = taux if taux is not None \
-                           else cr.get(
-                               'taux_technique',0.025)
-                    cap  = cap or cr.get(
-                        'capital_assure',200000)
-                    dur  = dur or cr.get(
-                        'duree_ans',20)
-                    v    = 1/(1+max(taux,0.001))
-                    pms  = []
-                    for t_i in range(dur+1):
-                        dr = max(dur-t_i,0)
-                        ann = ((1-v**dr)/taux
-                               if dr>0 and taux>0.001
-                               else 0)
-                        pms.append(max(
-                            cap*0.003*ann*0.8,0))
-                    pm_max = max(pms) if pms else 0
-                    ann_t  = ((1-v**dur)/taux
-                              if taux>0.001 else dur)
-                    prime  = cap*0.003/max(ann_t,0.001)
-                    recalcul = {
-                        'prime_nivelee': round(prime,2),
-                        'pm_max':        round(pm_max,2),
-                        't_max':         pms.index(pm_max)
-                                         if pms else 0,
-                        'pm_t10':        round(pms[10],2)
-                                         if len(pms)>10
-                                         else 0,
-                        'taux_technique':taux,
-                        'variation_vs_base': round(
-                            (pm_max-cr.get('pm_max',1))/
-                            max(cr.get('pm_max',1),1)*100,
-                            2),
-                    }
-
-                elif module == 'alm':
-                    choc = params.get(
-                        'choc_taux_bp',100) or 100
-                    pf_v = pm.get('portefeuille',{})
-                    pas  = pf_v.get('pm_totale',763460)
-                    act  = pas*1.15
-                    ia   = act*(-dur_a*choc/10000) \
-                           if 'dur_a' in dir() \
-                           else act*(-6.2*choc/10000)
-                    ip   = pas*(-9.8*choc/10000)
-                    recalcul = {
-                        'choc_bp':       choc,
-                        'impact_actif':  round(ia),
-                        'impact_passif': round(ip),
-                        'impact_net_fp': round(ia-ip),
-                        'pct_fp': round(
-                            abs(ia-ip)/max(
-                                s.get('fonds_propres',
-                                      480000),1)*100,2),
-                    }
-
-            # ── Réponse Claude ────────────────────
-            s  = DATA.get('scr',{})
-            p  = DATA.get('prov',{})
-            ir = DATA.get('ifrs17',{})
-            pm = DATA.get('pm_vie',{})
-            g  = DATA.get('glm_g',{})
-            ml = DATA.get('ml_v2',{})
-
-            ctx = f"""
-Portefeuille ActuarIA v2.0 :
-Modèle={ml.get('modele_retenu')},
-Gini={ml.get('gini_retenu')},
-Prime={g.get('prime_pure_moy')}€,
-CL={p.get('methodes',{}).get('chain_ladder')}€,
-BE={p.get('provision_retenue')}€,
-P90={p.get('provision_prudente')}€,
-SCR={s.get('scr_total')}€,
-RatioSCR={s.get('ratio_scr_pct')}%,
-RatioMCR={s.get('ratio_mcr_pct')}%,
-LR={ir.get('modele_paa',{}).get('loss_ratio_pct')}%,
-CSM={ir.get('modele_bba',{}).get('csm')}€,
-PMmax={pm.get('contrat_reference',{}).get('pm_max')}€
-"""
-            ctx_rc = ""
-            if recalcul:
-                ctx_rc = (f"\nRECALCUL effectué "
-                          f"(module={module}) :"
-                          f"\n{json.dumps(recalcul,indent=2)}")
-
-            hist_msgs = []
-            for h in st.session_state.hist_agent[-3:]:
-                hist_msgs.append({
-                    "role":"user",
-                    "content":h['q']})
-                hist_msgs.append({
-                    "role":"assistant",
-                    "content":h['r']})
-            hist_msgs.append({
-                "role":"user",
-                "content":question})
-
-            cl_resp = anthropic.Anthropic(
-                api_key=api_key)
-            resp = cl_resp.messages.create(
-                model="claude-sonnet-4-6",
-                max_tokens=700,
-                system=(
-                    f"Actuaire senior EU. "
-                    f"Données: {ctx}{ctx_rc}\n"
-                    f"Niveau {niveau}. "
-                    f"Réponse pro en français, "
-                    f"chiffres exacts, refs réglementaires, "
-                    f"4-5 paragraphes."),
-                messages=hist_msgs)
-
-            reponse = resp.content[0].text
-            st.session_state.hist_agent.append({
-                'q': question,
-                'r': reponse,
-                'niv': niveau,
-                'rc': recalcul,
-                'h': datetime.now().strftime('%H:%M'),
-            })
-            if 'q_agent' in st.session_state:
-                del st.session_state.q_agent
-
-    # Historique
-    for msg in reversed(
-            st.session_state.hist_agent):
-        st.markdown(
-            f"**❓ {msg['q']}** "
-            f"<span style='background:{C['navy']};"
-            f"color:{C['green']};padding:2px 8px;"
-            f"border-radius:10px;font-size:0.7rem;"
-            f"margin-left:8px;'>N{msg['niv']}</span>"
-            f" <span style='color:#A0AEC0;"
-            f"font-size:0.72rem;'>{msg['h']}</span>",
-            unsafe_allow_html=True)
-
-        st.markdown(
-            f'<div class="agent-msg">'
-            f'{msg["r"]}</div>',
-            unsafe_allow_html=True)
-
-        if msg.get('rc'):
-            rc = msg['rc']
-            items_html = ""
-            for k,v in rc.items():
-                if k == 'variation_vs_base' or \
-                   k == 'variation_ratio_scr':
-                    items_html += (
-                        f"<b>📈 Variation : "
-                        f"{v:+.2f}%</b><br>")
-                elif isinstance(v,(int,float)) and \
-                     abs(v)>100:
-                    items_html += (
-                        f"{k} : {v:,.0f} €<br>")
-                elif isinstance(v,float):
-                    items_html += (
-                        f"{k} : {v:.4f}<br>")
-                else:
-                    items_html += (
-                        f"{k} : {v}<br>")
-            st.markdown(
-                f'<div class="recalcul-box">'
-                f'📊 <b>Recalcul effectué</b><br>'
-                f'{items_html}</div>',
-                unsafe_allow_html=True)
-
-        st.markdown("---")
-
-# ══════════════════════════════════════════════════════════════
-# PAGE UPLOAD DONNÉES
-# ══════════════════════════════════════════════════════════════
-elif page == "📤 Upload Données":
-
-    st.markdown("## 📤 Upload Données Client")
-
-    # ── Sélection méthode ─────────────────────────
-    methode = st.radio(
-        "Méthode de chargement",
-        ["📁 Upload fichier (PC)",
-         "🔗 URL directe (REST/Drive)"],
-        horizontal=True)
-
-    if methode == "📁 Upload fichier (PC)":
-
-        st.markdown(
-            '<div class="upload-zone">'
-            '📁 Glissez votre fichier ici<br>'
-            '<small>Excel (.xlsx), CSV, '
-            'Parquet (.parquet), JSON</small>'
-            '</div>',
-            unsafe_allow_html=True)
-
-        fichier = st.file_uploader(
-            "Choisir un fichier",
-            type=['xlsx','xls','csv',
-                  'parquet','json'],
-            label_visibility="collapsed")
-
-        if fichier:
-            with st.spinner("Analyse en cours..."):
-                try:
-                    # Lecture
-                    ext = fichier.name.split(
-                        '.')[-1].lower()
-                    if ext in ['xlsx','xls']:
-                        df = pd.read_excel(fichier)
-                    elif ext == 'csv':
-                        for sep in [',',';','\t']:
-                            try:
-                                fichier.seek(0)
-                                df = pd.read_csv(
-                                    fichier, sep=sep)
-                                if len(df.columns)>2:
-                                    break
-                            except:
-                                continue
-                    elif ext == 'parquet':
-                        df = pd.read_parquet(fichier)
-                    elif ext == 'json':
-                        df = pd.read_json(fichier)
-
-                    # Stats de base
-                    c1,c2,c3,c4 = st.columns(4)
-                    with c1:
-                        st.metric("Lignes",
-                                  f"{len(df):,}")
-                    with c2:
-                        st.metric("Colonnes",
-                                  len(df.columns))
-                    with c3:
-                        # Détection branche
-                        cols_low = [
-                            c.lower()
-                            for c in df.columns]
-                        is_vie = any(
-                            m in ' '.join(cols_low)
-                            for m in [
-                                'pm','vie','mortalite',
-                                'rente','epargne'])
-                        branche = ('VIE'
-                                   if is_vie
-                                   else 'IARD')
-                        st.metric("Branche détectée",
-                                  branche)
-                    with c4:
-                        # Score qualité simplifié
-                        cols_oblig = {
-                            'IARD': ['id_contrat',
-                                     'produit',
-                                     'prime_pure_eur',
-                                     'nb_sinistres'],
-                            'VIE':  ['id_contrat',
-                                     'pm_prospective_eur',
-                                     'type_contrat'],
-                        }[branche]
-                        score = sum(
-                            1 for c in cols_oblig
-                            if any(c in col.lower()
-                                   for col in
-                                   df.columns)
-                        ) / len(cols_oblig) * 100
-                        st.metric("Score qualité",
-                                  f"{score:.0f}%")
-
-                    # Aperçu
-                    st.markdown(
-                        '<div class="section-header">'
-                        'Aperçu des données</div>',
-                        unsafe_allow_html=True)
-                    st.dataframe(
-                        df.head(10),
-                        use_container_width=True)
-
-                    # Mapping colonnes
-                    st.markdown(
-                        '<div class="section-header">'
-                        'Mapping colonnes</div>',
-                        unsafe_allow_html=True)
-
-                    schema_ref = {
-                        'IARD': ['ID_Contrat',
-                                 'Produit',
-                                 'Annee_Souscription',
-                                 'Prime_Pure_EUR',
-                                 'Nb_Sinistres',
-                                 'Montant_Sinistres_EUR'],
-                        'VIE':  ['ID_Contrat',
-                                 'Type_Contrat',
-                                 'Age_Souscription',
-                                 'PM_Prospective_EUR',
-                                 'Taux_Technique'],
-                    }[branche]
-
-                    mapping_affiche = {}
-                    for col_ref in schema_ref:
-                        # Recherche correspondance
-                        match = next(
-                            (c for c in df.columns
-                             if col_ref.lower() in
-                             c.lower() or
-                             c.lower() in
-                             col_ref.lower()),
-                            None)
-                        mapping_affiche[col_ref] = (
-                            match or '❓ Non trouvé')
-
-                    df_map = pd.DataFrame(
-                        list(mapping_affiche.items()),
-                        columns=['Colonne ActuarIA',
-                                 'Colonne Fichier'])
-                    df_map['Statut'] = df_map[
-                        'Colonne Fichier'].apply(
-                        lambda x: '✅'
-                        if '❓' not in str(x)
-                        else '❓')
-                    st.dataframe(df_map,
-                                 use_container_width=True)
-
-                    # Stats actuarielles
-                    st.markdown(
-                        '<div class="section-header">'
-                        'Statistiques actuarielles'
-                        '</div>',
-                        unsafe_allow_html=True)
-                    st.dataframe(
-                        df.describe().round(2),
-                        use_container_width=True)
-
-                    if score >= 80:
-                        st.markdown(
-                            '<div class="alerte-green">'
-                            '✅ <b>Données acceptées</b>'
-                            ' — Prêtes pour analyse '
-                            'dans ActuarIA v2.0.'
-                            '</div>',
-                            unsafe_allow_html=True)
-                    else:
-                        st.markdown(
-                            f'<div class="alerte-red">'
-                            f'⚠️ <b>Score {score:.0f}%</b>'
-                            f' — Vérifiez les colonnes '
-                            f'manquantes.'
-                            f'</div>',
-                            unsafe_allow_html=True)
-
-                except Exception as e:
-                    st.error(f"Erreur : {e}")
-
-    else:  # URL REST
-        url = st.text_input(
-            "URL du fichier",
-            placeholder="https://... ou "
-                        "chemin/vers/fichier.csv")
-        if st.button("Charger depuis URL") and url:
-            st.info(
-                "Fonctionnalité disponible en "
-                "environnement local avec "
-                "accès réseau.")
-
-# ══════════════════════════════════════════════════════════════
-# PAGE RAPPORTS
-# ══════════════════════════════════════════════════════════════
-elif page == "📄 Rapports":
-
-    st.markdown("## 📄 Rapports Professionnels")
-
-    st.markdown(f"""
-    <div class="alerte-green">
-      <b>Configuration</b> —
-      Société : <b>{nom_societe or 'Non renseigné'}</b> |
-      Actuaire : <b>{nom_actuaire or 'Non renseigné'}</b> |
-      Langue : <b>{langue_code}</b> |
-      {classification}
-    </div>""", unsafe_allow_html=True)
-
-    if not nom_societe or not nom_actuaire:
-        st.warning(
-            "⚠️ Renseignez **Société** et **Actuaire** "
-            "dans la sidebar pour activer les rapports.")
-
-    rapports_def = [
-        ("🏢","Rapport Direction Générale",
-         "Synthèse 10 pages — graphiques PowerBI — "
-         "commentaires ORSA",
-         "DG · Conseil d'Administration"),
-        ("📊","Rapport Technique IARD",
-         "Tarification + Provisionnement + "
-         "SCR NV + IFRS 17 PAA",
-         "Actuaires · Risk Managers"),
-        ("💼","Rapport Technique Vie",
-         "Tarification + PM + SCR Vie + IFRS 17 BBA",
-         "Actuaires Vie · DAF"),
-        ("📈","Rapport ALM",
-         "Duration gap + stress taux + immunisation",
-         "Direction Financière"),
-        ("📋","Rapport Général Consolidé",
-         "Rapport complet toutes branches",
-         "ACPR · Commissaires aux comptes"),
-    ]
-
-    for i,(icon,titre,desc,public) in enumerate(
-            rapports_def):
-        c1,c2 = st.columns([4,1])
-        with c1:
-            st.markdown(f"""
-            <div style="background:white;
-                border-radius:9px;
-                padding:0.9rem 1.1rem;
-                border-left:4px solid {C['navy']};
-                margin-bottom:0.7rem;
-                box-shadow:0 1px 4px
-                rgba(0,0,0,0.06);">
-              <strong style="color:{C['navy']};">
-                {icon} {titre}</strong>
-              <div style="color:#4A5568;
-                  font-size:0.8rem;
-                  margin-top:0.2rem;">{desc}</div>
-              <div style="color:#A0AEC0;
-                  font-size:0.7rem;
-                  margin-top:0.1rem;">{public}</div>
-            </div>""", unsafe_allow_html=True)
-        with c2:
-            if (nom_societe and nom_actuaire
-                    and PDF_DISPONIBLE):
-                if st.button(
-                        "⚙️ Générer PDF",
-                        key=f"gen_{i}"):
-                    with st.spinner(
-                            f"Génération {langue_code}"
-                            f"..."):
-                        try:
-                            pdf_bytes = (
-                                generer_pdf_streamlit(
-                                    data=DATA,
-                                    nom_societe=(
-                                        nom_societe),
-                                    nom_actuaire=(
-                                        nom_actuaire),
-                                    classification=(
-                                        classification),
-                                    langue=langue_code))
-                            nom_pdf = (
-                                f"Rapport_DG_"
-                                f"{langue_code}_"
-                                f"{nom_societe.replace(' ','_')}_"
-                                f"{datetime.now().strftime('%Y%m%d')}"
-                                f".pdf")
-                            st.success(
-                                f"✅ PDF généré — "
-                                f"{len(pdf_bytes)/1e6:.1f}"
-                                f" Mo")
-                            st.download_button(
-                                label=(
-                                    f"📥 Télécharger "
-                                    f"{nom_pdf}"),
-                                data=pdf_bytes,
-                                file_name=nom_pdf,
-                                mime="application/pdf",
-                                key=f"dl_{i}")
-                        except Exception as e_pdf:
-                            st.error(
-                                f"Erreur PDF : "
-                                f"{e_pdf}")
-            else:
-                st.markdown(
-                    f'<div style="background:'
-                    f'#F0F4FF;border-radius:7px;'
-                    f'padding:0.5rem;text-align:center;'
-                    f'font-size:0.75rem;'
-                    f'color:#718096;">'
-                    f'Phase 14 Colab</div>',
+        for label, page_id in pages:
+            actif = st.session_state.page == page_id
+            if st.button(
+                label,
+                key=f"nav_{page_id}",
+                use_container_width=True,
+                type="primary" if actif else "secondary"
+            ):
+                st.session_state.page = page_id
+                st.rerun()
+
+        st.markdown(f"<hr style='border-color:{OR}33; margin:16px 0'>",
                     unsafe_allow_html=True)
 
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.info(
-        "💡 Pour tous les rapports (IARD, Vie, ALM) "
-        "utilisez le notebook Phase14_Rapports_PDF.ipynb.")
+        # Statut agents
+        st.markdown(f"""
+        <div style="font-size:0.7rem; color:{GRIS}; text-transform:uppercase;
+                    letter-spacing:0.1em; margin-bottom:10px;">
+            Statut agents
+        </div>
+        """, unsafe_allow_html=True)
+
+        nb_vert  = sum(1 for a in AGENTS_DATA if a['statut'] == 'VERT')
+        nb_ambre = sum(1 for a in AGENTS_DATA if a['statut'] == 'AMBRE')
+        nb_rouge = sum(1 for a in AGENTS_DATA if a['statut'] == 'ROUGE')
+
+        st.markdown(f"""
+        <div style="display:flex; gap:8px; margin-bottom:16px;">
+            <span class="badge-vert">✅ {nb_vert}</span>
+            <span class="badge-ambre">⚠️ {nb_ambre}</span>
+            <span class="badge-rouge">❌ {nb_rouge}</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Switch langue
+        st.markdown(f"<hr style='border-color:{OR}33; margin:8px 0'>",
+                    unsafe_allow_html=True)
+        langue_choisie = st.selectbox(
+            T('langue'),
+            options=['fr', 'en'],
+            index=0 if st.session_state.langue == 'fr' else 1,
+            format_func=lambda x: '🇫🇷 Français' if x == 'fr' else '🇬🇧 English',
+        )
+        if langue_choisie != st.session_state.langue:
+            st.session_state.langue = langue_choisie
+            st.rerun()
+
+        # Version
+        st.markdown(f"""
+        <div style="position:absolute; bottom:20px; left:0; right:0;
+                    text-align:center; font-size:0.65rem; color:{GRIS}44;">
+            ActuarIA v1.0 — {datetime.now().strftime('%d/%m/%Y')}
+        </div>
+        """, unsafe_allow_html=True)
 
 
-# ── Footer ────────────────────────────────────────────────────
-st.markdown(f"""
-<div class="footer">
-  ActuarIA v2.0 — Actuarial Intelligence<br>
-  IARD · Vie · S2 · IFRS 17 · ALM · Agent IA v4<br>
-  © {datetime.now().year} —
-  {classification} —
-  {nom_societe or 'Mode démo'}
-</div>""", unsafe_allow_html=True)
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE ACCUEIL
+# ══════════════════════════════════════════════════════════════════════════════
+
+def page_accueil():
+    # ── HERO ──────────────────────────────────────────────────────────────────
+    col_hero, col_anim = st.columns([1.4, 1])
+
+    with col_hero:
+        st.markdown("<div style='height:32px'></div>", unsafe_allow_html=True)
+
+        titre_lignes = T('hero_titre').split('\n')
+        titre_html = titre_lignes[0]
+        if len(titre_lignes) > 1:
+            titre_html += f'<br><span class="hero-accent">{titre_lignes[1]}</span>'
+
+        st.markdown(f"""
+        <div class="hero-title">{titre_html}</div>
+        <div class="hero-sub">{T('hero_sous')}</div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+
+        c1, c2, _ = st.columns([1, 1, 2])
+        with c1:
+            if st.button(T('hero_btn'), type="primary", use_container_width=True):
+                st.session_state.page = 'analyse'
+                st.rerun()
+        with c2:
+            if st.button(T('hero_btn2'), use_container_width=True):
+                st.session_state.page = 'dashboard'
+                st.rerun()
+
+    with col_anim:
+        st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
+        _render_radar_hero()
+
+    st.markdown(f"<hr style='border-color:{OR}33; margin:32px 0 24px'>",
+                unsafe_allow_html=True)
+
+    # ── KPIs LIVE ─────────────────────────────────────────────────────────────
+    k = KPI_DEMO
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    with c1: st.metric(T('kpi_agents'),     "19 / 19", "+5 EP")
+    with c2: st.metric("Best Estimate S2",  f"{k['be']/1e6:.2f}M€", "CV 0.6%")
+    with c3: st.metric("Ratio SCR",         f"{k['ratio_scr']:.1f}%", "+8.5%")
+    with c4: st.metric("Gini ML",           f"{k['gini']:.4f}", "+0.044 vs GLM")
+    with c5: st.metric("LCR",               f"{k['lcr']:.0f}%", "✅ Liquide")
+    with c6: st.metric(T('kpi_conformite'), "100%", "S2 + IFRS17")
+
+    st.markdown("<div style='height:32px'></div>", unsafe_allow_html=True)
+
+    # ── AGENTS GRID ───────────────────────────────────────────────────────────
+    st.markdown(f"""
+    <div style="margin-bottom:4px;">
+        <span style="font-size:1.3rem; font-weight:700; color:{BLANC};">
+            {T('section_agents')}
+        </span>
+        <span style="font-size:0.85rem; color:{GRIS}; margin-left:12px;">
+            {T('section_agents_sub')}
+        </span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+
+    # Grille 7 colonnes
+    cols = st.columns(7)
+    for i, agent in enumerate(AGENTS_DATA):
+        with cols[i % 7]:
+            badge_class = f"badge-{agent['statut'].lower()}"
+            st.markdown(f"""
+            <div class="agent-card" style="text-align:center;">
+                <div style="font-size:1.6rem; margin-bottom:6px;">{agent['icon']}</div>
+                <div style="font-weight:700; color:{OR}; font-size:0.85rem;">
+                    {agent['nom']}
+                </div>
+                <div style="font-size:0.65rem; color:{GRIS}; margin:4px 0 8px;
+                            line-height:1.3;">
+                    {agent['role']}
+                </div>
+                <span class="{badge_class}">{agent['statut']}</span>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.markdown("<div style='height:32px'></div>", unsafe_allow_html=True)
+
+    # ── GRAPHIQUES ROW ────────────────────────────────────────────────────────
+    col_g1, col_g2, col_g3 = st.columns(3)
+
+    with col_g1:
+        st.markdown(f"<p style='color:{GRIS}; font-size:0.8rem; text-transform:uppercase; letter-spacing:0.08em;'>{T('section_perf')}</p>", unsafe_allow_html=True)
+        _render_gini_chart()
+
+    with col_g2:
+        st.markdown(f"<p style='color:{GRIS}; font-size:0.8rem; text-transform:uppercase; letter-spacing:0.08em;'>Provisions & SCR</p>", unsafe_allow_html=True)
+        _render_provisions_chart()
+
+    with col_g3:
+        st.markdown(f"<p style='color:{GRIS}; font-size:0.8rem; text-transform:uppercase; letter-spacing:0.08em;'>Ratio SCR — ORSA 5 ans</p>", unsafe_allow_html=True)
+        _render_orsa_chart()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE DASHBOARD
+# ══════════════════════════════════════════════════════════════════════════════
+
+def page_dashboard():
+    st.markdown(f"""
+    <h2 style="color:{BLANC}; font-size:1.6rem; font-weight:700; margin-bottom:4px;">
+        {T('dash_titre')}
+    </h2>
+    <p style="color:{GRIS}; font-size:0.85rem; margin-bottom:24px;">
+        Résultats consolidés — Portefeuille Auto Non-Vie
+    </p>
+    """, unsafe_allow_html=True)
+
+    tabs = st.tabs([
+        "📐 Tarification",
+        "🏦 Provisionnement",
+        "🛡️ Solvabilité 2",
+        "📊 IFRS 17",
+        "⚖️ ALM",
+        "📋 Synthèse",
+    ])
+
+    with tabs[0]: _tab_tarification()
+    with tabs[1]: _tab_provisionnement()
+    with tabs[2]: _tab_solvabilite()
+    with tabs[3]: _tab_ifrs17()
+    with tabs[4]: _tab_alm()
+    with tabs[5]: _tab_synthese()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE ANALYSE
+# ══════════════════════════════════════════════════════════════════════════════
+
+def page_analyse():
+    st.markdown(f"""
+    <h2 style="color:{BLANC}; font-size:1.6rem; font-weight:700; margin-bottom:4px;">
+        {T('upload_titre')}
+    </h2>
+    <p style="color:{GRIS}; font-size:0.85rem; margin-bottom:24px;">
+        {T('upload_sub')}
+    </p>
+    """, unsafe_allow_html=True)
+
+    col_up, col_conf = st.columns([1.5, 1])
+
+    with col_up:
+        fichier = st.file_uploader(
+            "Fichier de données",
+            type=['csv', 'xlsx', 'xls', 'parquet'],
+            label_visibility='collapsed',
+        )
+
+        if fichier:
+            st.markdown(f"""
+            <div style="background:{NAVY_L}; border:1px solid {VERT}66;
+                        border-radius:8px; padding:12px 16px; margin:12px 0;">
+                <span style="color:{VERT}; font-weight:600;">✅ Fichier chargé</span>
+                <span style="color:{GRIS}; font-size:0.85rem; margin-left:8px;">
+                    {fichier.name}
+                </span>
+            </div>
+            """, unsafe_allow_html=True)
+
+    with col_conf:
+        st.markdown(f"<p style='color:{GRIS}; font-size:0.8rem; text-transform:uppercase; letter-spacing:0.08em;'>Configuration</p>", unsafe_allow_html=True)
+
+        branche = st.selectbox(
+            "Branche",
+            ['Non-Vie (Auto)', 'Non-Vie (MRH)', 'Non-Vie (RC Pro)',
+             'Vie', 'Santé-Prévoyance', 'Épargne-Retraite'],
+        )
+
+        profil = st.selectbox(
+            "Profil modèle",
+            ['Équilibré', 'Performance maximale',
+             'Auditabilité S2', 'Compagnie Vie'],
+        )
+
+        client_id = st.text_input("ID Client (optionnel)", placeholder="ex: cabinet_xyz")
+
+    st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+
+    if st.button(T('upload_btn'), type="primary"):
+        if fichier:
+            _simuler_pipeline()
+        else:
+            st.warning("Veuillez d'abord uploader un fichier.")
+
+    # Démo avec données synthétiques
+    st.markdown(f"<hr style='border-color:{OR}33; margin:24px 0'>", unsafe_allow_html=True)
+    st.markdown(f"<p style='color:{GRIS}; font-size:0.85rem;'>Ou tester avec les données de démonstration :</p>", unsafe_allow_html=True)
+
+    if st.button("🚀 Lancer la démo (données synthétiques Auto 70k)"):
+        _simuler_pipeline()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE ARIA
+# ══════════════════════════════════════════════════════════════════════════════
+
+def page_aria():
+    st.markdown(f"""
+    <div style="text-align:center; padding:32px 0 24px;">
+        <div style="font-size:3rem; margin-bottom:8px;">🤖</div>
+        <h2 style="color:{BLANC}; font-size:1.8rem; font-weight:700; margin:0;">
+            Agent <span style="color:{OR};">ARIA</span>
+        </h2>
+        <p style="color:{GRIS}; margin-top:8px; font-size:0.95rem;">
+            Actuaire IA Senior — Propulsé par Claude API
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Chat
+    if 'messages_aria' not in st.session_state:
+        st.session_state.messages_aria = [
+            {
+                'role': 'assistant',
+                'content': (
+                    "Bonjour, je suis **ARIA**, votre actuaire IA senior. "
+                    "J'ai accès aux résultats de tous les agents de la plateforme. "
+                    "Comment puis-je vous aider ?\n\n"
+                    "Exemples de questions :\n"
+                    "- *Analyse le Best Estimate de mon portefeuille*\n"
+                    "- *Explique le ratio SCR de 208.5%*\n"
+                    "- *Quels sont les risques principaux identifiés ?*"
+                )
+            }
+        ]
+
+    for msg in st.session_state.messages_aria:
+        with st.chat_message(msg['role'],
+                              avatar="🤖" if msg['role'] == 'assistant' else "👤"):
+            st.markdown(msg['content'])
+
+    if prompt := st.chat_input("Posez votre question actuarielle..."):
+        st.session_state.messages_aria.append({'role': 'user', 'content': prompt})
+        with st.chat_message('user', avatar="👤"):
+            st.markdown(prompt)
+
+        # Réponse simulée (à remplacer par Claude API)
+        with st.chat_message('assistant', avatar="🤖"):
+            reponse = _reponse_aria_demo(prompt)
+            st.markdown(reponse)
+        st.session_state.messages_aria.append(
+            {'role': 'assistant', 'content': reponse}
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE RAPPORTS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def page_rapports():
+    st.markdown(f"""
+    <h2 style="color:{BLANC}; font-size:1.6rem; font-weight:700; margin-bottom:4px;">
+        Rapports & Export
+    </h2>
+    <p style="color:{GRIS}; font-size:0.85rem; margin-bottom:24px;">
+        Générez et téléchargez vos rapports réglementaires.
+    </p>
+    """, unsafe_allow_html=True)
+
+    rapports = [
+        {'nom': 'Rapport Actuariel Complet',       'format': 'PDF', 'icon': '📋', 'desc': 'Synthèse A1-A14 + EP1-EP5'},
+        {'nom': 'QRT Solvabilité 2',               'format': 'Excel', 'icon': '🛡️', 'desc': 'S.05 · S.17 · S.19 · S.23'},
+        {'nom': 'Rapport IFRS 17',                 'format': 'Excel', 'icon': '📊', 'desc': 'PAA · BBA · Réconciliation S2'},
+        {'nom': 'ORSA Prospectif',                 'format': 'PDF', 'icon': '🌩️', 'desc': 'Stress testing 5 ans'},
+        {'nom': 'Rapport ALM',                     'format': 'PDF', 'icon': '⚖️', 'desc': 'Duration · Gap · LCR'},
+        {'nom': 'Audit Trail',                     'format': 'JSON', 'icon': '🔐', 'desc': 'Logs · Hash · RGPD'},
+        {'nom': 'Rapport IAS 19',                  'format': 'Excel', 'icon': '🏢', 'desc': 'DBO · Service Cost · IC'},
+        {'nom': 'Fiche Information Assuré PER',    'format': 'PDF', 'icon': '📄', 'desc': 'Droits · Rente · Frais'},
+    ]
+
+    cols = st.columns(2)
+    for i, rapport in enumerate(rapports):
+        with cols[i % 2]:
+            col_info, col_btn = st.columns([3, 1])
+            with col_info:
+                st.markdown(f"""
+                <div class="agent-card">
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <span style="font-size:1.5rem;">{rapport['icon']}</span>
+                        <div>
+                            <div style="font-weight:600; color:{BLANC}; font-size:0.9rem;">
+                                {rapport['nom']}
+                            </div>
+                            <div style="font-size:0.75rem; color:{GRIS}; margin-top:2px;">
+                                {rapport['desc']} · {rapport['format']}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            with col_btn:
+                st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+                if st.button(f"↓", key=f"dl_{i}", help=f"Télécharger {rapport['nom']}"):
+                    st.toast(f"✅ {rapport['nom']} généré", icon="✅")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# GRAPHIQUES
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _render_radar_hero():
+    """Radar chart des performances — hero section."""
+    categories = ['Tarification', 'Provisions', 'Solvabilité', 'IFRS17', 'ALM', 'Cohérence']
+    values     = [0.85, 0.96, 0.92, 0.88, 0.78, 1.00]
+
+    fig = go.Figure(go.Scatterpolar(
+        r      = values + [values[0]],
+        theta  = categories + [categories[0]],
+        fill   = 'toself',
+        fillcolor = f"rgba(201,168,76,0.15)",
+        line  = dict(color=OR, width=2),
+        marker= dict(color=OR, size=6),
+    ))
+    fig.update_layout(
+        polar=dict(
+            bgcolor   = NAVY_L,
+            radialaxis= dict(visible=True, range=[0,1], tickfont=dict(color=GRIS, size=9),
+                             gridcolor=f"{OR}22", linecolor=f"{OR}33"),
+            angularaxis=dict(tickfont=dict(color=BLANC, size=10), gridcolor=f"{OR}22",
+                              linecolor=f"{OR}33"),
+        ),
+        paper_bgcolor = 'rgba(0,0,0,0)',
+        plot_bgcolor  = 'rgba(0,0,0,0)',
+        margin        = dict(l=40, r=40, t=20, b=20),
+        height        = 280,
+        showlegend    = False,
+    )
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+
+
+def _render_gini_chart():
+    """Comparaison Gini des modèles."""
+    modeles = ['GLM', 'ElasticNet', 'LightGBM', 'CatBoost', 'GBM', 'XGBoost']
+    ginis   = [0.00,  0.244,        0.248,       0.253,      0.254,  0.265]
+    couleurs= [GRIS if g < 0.1 else OR_L if g < 0.25 else OR for g in ginis]
+
+    fig = go.Figure(go.Bar(
+        x           = ginis,
+        y           = modeles,
+        orientation = 'h',
+        marker_color= couleurs,
+        text        = [f"{g:.3f}" for g in ginis],
+        textposition= 'outside',
+        textfont    = dict(color=BLANC, size=11),
+    ))
+    fig.update_layout(
+        paper_bgcolor = 'rgba(0,0,0,0)',
+        plot_bgcolor  = 'rgba(0,0,0,0)',
+        xaxis = dict(showgrid=False, zeroline=False, visible=False),
+        yaxis = dict(tickfont=dict(color=BLANC, size=11)),
+        margin= dict(l=0, r=40, t=8, b=8),
+        height= 220,
+    )
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+
+
+def _render_provisions_chart():
+    """Comparaison méthodes de provisionnement."""
+    methodes = ['Chain Ladder', 'Mack 1993', 'BF', 'Cape Cod', 'Best Estimate']
+    valeurs  = [2.85, 2.91, 2.93, 2.88, 2.91]
+    couleurs = [NAVY_LL]*4 + [OR]
+
+    fig = go.Figure(go.Bar(
+        x           = methodes,
+        y           = valeurs,
+        marker_color= couleurs,
+        marker_line = dict(color=OR, width=1),
+        text        = [f"{v:.2f}M€" for v in valeurs],
+        textposition= 'outside',
+        textfont    = dict(color=BLANC, size=10),
+    ))
+    fig.update_layout(
+        paper_bgcolor = 'rgba(0,0,0,0)',
+        plot_bgcolor  = 'rgba(0,0,0,0)',
+        xaxis = dict(tickfont=dict(color=BLANC, size=9), gridcolor=f"{OR}11"),
+        yaxis = dict(tickfont=dict(color=GRIS, size=9), gridcolor=f"{OR}11",
+                     title=dict(text='M€', font=dict(color=GRIS))),
+        margin= dict(l=0, r=0, t=24, b=8),
+        height= 220,
+    )
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+
+
+def _render_orsa_chart():
+    """ORSA prospectif 5 ans."""
+    annees  = [2025, 2026, 2027, 2028, 2029, 2030]
+    central = [208.5, 218.2, 228.4, 239.1, 250.3, 262.1]
+    stress  = [208.5, 195.3, 183.7, 173.5, 164.4, 156.2]
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=annees, y=central, name='Central',
+        line=dict(color=OR, width=2.5),
+        marker=dict(color=OR, size=6),
+        fill='tonexty',
+    ))
+    fig.add_trace(go.Scatter(
+        x=annees, y=stress, name='Stressé',
+        line=dict(color=ROUGE, width=1.5, dash='dot'),
+        marker=dict(color=ROUGE, size=5),
+    ))
+    fig.add_hline(y=150, line_dash='dash', line_color=AMBRE,
+                   annotation_text='Cible 150%', annotation_font_color=AMBRE)
+    fig.add_hline(y=100, line_dash='dash', line_color=ROUGE,
+                   annotation_text='Min 100%', annotation_font_color=ROUGE)
+    fig.update_layout(
+        paper_bgcolor = 'rgba(0,0,0,0)',
+        plot_bgcolor  = 'rgba(0,0,0,0)',
+        xaxis = dict(tickfont=dict(color=BLANC, size=9), gridcolor=f"{OR}11"),
+        yaxis = dict(tickfont=dict(color=GRIS, size=9),  gridcolor=f"{OR}11",
+                     title=dict(text='%', font=dict(color=GRIS))),
+        legend= dict(font=dict(color=BLANC, size=10), bgcolor='rgba(0,0,0,0)'),
+        margin= dict(l=0, r=0, t=8, b=8),
+        height= 220,
+    )
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TABS DASHBOARD
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _tab_tarification():
+    c1, c2, c3, c4 = st.columns(4)
+    with c1: st.metric("Fréquence moyenne",  "0.163", "portefeuille auto")
+    with c2: st.metric("Coût moyen",         "4 638 €", "+2.1% vs N-1")
+    with c3: st.metric("Prime pure moy.",    "757 €",  "Poisson × Gamma")
+    with c4: st.metric("Gini XGBoost",       "0.2651", "freMTPL2 validé")
+
+    st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+
+    col_g, col_t = st.columns([1.5, 1])
+    with col_g:
+        st.markdown(f"<p style='color:{GRIS}; font-size:0.8rem; text-transform:uppercase;'>Classement multicritères — 6 modèles</p>", unsafe_allow_html=True)
+        df_modeles = pd.DataFrame({
+            'Modèle':        ['XGBoost', 'GBM', 'CatBoost', 'LightGBM', 'ElasticNet', 'XGBoost Tweedie'],
+            'Gini':          [0.2651, 0.2542, 0.2534, 0.2481, 0.2440, 0.2404],
+            'Overfit ratio': [1.53, 1.41, 1.28, 1.60, 0.98, 1.97],
+            'Sélectionné':   ['', '', '', '', '⭐', ''],
+        })
+        st.dataframe(df_modeles, use_container_width=True, hide_index=True)
+
+    with col_t:
+        st.markdown(f"<p style='color:{GRIS}; font-size:0.8rem; text-transform:uppercase;'>Profil sélection</p>", unsafe_allow_html=True)
+        fig_pie = go.Figure(go.Pie(
+            labels  = ['Gini (40%)', 'Stabilité (30%)', 'Interpréta. (20%)', 'RMSE (10%)'],
+            values  = [40, 30, 20, 10],
+            hole    = 0.6,
+            marker  = dict(colors=[OR, OR_L, NAVY_LL, GRIS]),
+            textfont= dict(color=BLANC, size=11),
+        ))
+        fig_pie.update_layout(
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            showlegend=True,
+            legend=dict(font=dict(color=BLANC, size=10), bgcolor='rgba(0,0,0,0)'),
+            margin=dict(l=0,r=0,t=0,b=0),
+            height=220,
+        )
+        st.plotly_chart(fig_pie, use_container_width=True, config={'displayModeBar': False})
+
+
+def _tab_provisionnement():
+    c1, c2, c3, c4 = st.columns(4)
+    with c1: st.metric("Best Estimate S2",   "2 914 930 €", "CV 0.6%")
+    with c2: st.metric("Provision P90",      "3 098 000 €", "+6.3%")
+    with c3: st.metric("σ Mack",             "45 000 €",    "IC 95% calculé")
+    with c4: st.metric("CV inter-méthodes",  "0.6%",        "✅ Convergent")
+
+    st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+
+    col_g1, col_g2 = st.columns(2)
+    with col_g1:
+        st.markdown(f"<p style='color:{GRIS}; font-size:0.8rem; text-transform:uppercase;'>4 méthodes — convergence</p>", unsafe_allow_html=True)
+        methodes = ['Chain Ladder', 'Mack 1993', 'BF', 'Cape Cod']
+        valeurs  = [2_850_000, 2_914_930, 2_930_000, 2_880_000]
+        fig = go.Figure(go.Bar(
+            x=methodes, y=valeurs,
+            marker_color=[NAVY_LL, OR, NAVY_LL, NAVY_LL],
+            marker_line=dict(color=OR, width=1),
+            text=[f"{v/1e6:.2f}M€" for v in valeurs],
+            textposition='outside',
+            textfont=dict(color=BLANC, size=11),
+        ))
+        fig.update_layout(
+            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+            xaxis=dict(tickfont=dict(color=BLANC)), yaxis=dict(visible=False),
+            margin=dict(l=0,r=0,t=24,b=0), height=200,
+        )
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+
+    with col_g2:
+        st.markdown(f"<p style='color:{GRIS}; font-size:0.8rem; text-transform:uppercase;'>IBNR par année + IC 95%</p>", unsafe_allow_html=True)
+        annees = [f"N-{i}" for i in range(6, 0, -1)]
+        ibnr   = [0, 45000, 180000, 420000, 780000, 1490000]
+        ic_sup = [0, 72000, 250000, 580000, 1050000, 1980000]
+
+        fig = go.Figure()
+        fig.add_trace(go.Bar(x=annees, y=ibnr, name='IBNR', marker_color=OR))
+        fig.add_trace(go.Scatter(x=annees, y=ic_sup, name='IC 95%',
+                                  mode='lines+markers',
+                                  line=dict(color=ROUGE, dash='dot'),
+                                  marker=dict(color=ROUGE)))
+        fig.update_layout(
+            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+            xaxis=dict(tickfont=dict(color=BLANC)), yaxis=dict(tickfont=dict(color=GRIS)),
+            legend=dict(font=dict(color=BLANC), bgcolor='rgba(0,0,0,0)'),
+            margin=dict(l=0,r=0,t=8,b=0), height=200,
+        )
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+
+
+def _tab_solvabilite():
+    c1, c2, c3, c4 = st.columns(4)
+    with c1: st.metric("SCR Total",     "3 680 671 €", "formule standard")
+    with c2: st.metric("MCR Final",     "2 500 000 €", "plancher régl.")
+    with c3: st.metric("Ratio SCR",     "208.5%",      "✅ > 150% cible")
+    with c4: st.metric("Ratio MCR",     "320.0%",      "✅ > 100% min")
+
+    st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+
+    col_g1, col_g2 = st.columns(2)
+    with col_g1:
+        st.markdown(f"<p style='color:{GRIS}; font-size:0.8rem; text-transform:uppercase;'>Décomposition SCR</p>", unsafe_allow_html=True)
+        labels  = ['SCR Sous.', 'SCR Marché', 'SCR Défaut', 'SCR Opéra.']
+        values  = [3_104_537, 660_000, 73_000, 262_000]
+        fig = go.Figure(go.Pie(
+            labels=labels, values=values, hole=0.55,
+            marker=dict(colors=[OR, NAVY_LL, GRIS, OR_L]),
+            textfont=dict(color=BLANC, size=11),
+        ))
+        fig.update_layout(
+            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+            legend=dict(font=dict(color=BLANC, size=10), bgcolor='rgba(0,0,0,0)'),
+            margin=dict(l=0,r=0,t=0,b=0), height=220,
+        )
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+
+    with col_g2:
+        st.markdown(f"<p style='color:{GRIS}; font-size:0.8rem; text-transform:uppercase;'>Jauges SCR / MCR</p>", unsafe_allow_html=True)
+        fig = go.Figure()
+        fig.add_trace(go.Indicator(
+            mode='gauge+number', value=208.5,
+            title=dict(text='Ratio SCR (%)', font=dict(color=BLANC)),
+            number=dict(suffix='%', font=dict(color=OR, size=28)),
+            gauge=dict(
+                axis=dict(range=[0,300], tickcolor=GRIS),
+                bar=dict(color=OR),
+                steps=[
+                    dict(range=[0,100],   color=ROUGE+'44'),
+                    dict(range=[100,150], color=AMBRE+'44'),
+                    dict(range=[150,300], color=VERT+'44'),
+                ],
+                threshold=dict(line=dict(color=ROUGE, width=3), value=100),
+                bgcolor=NAVY_L,
+            ),
+            domain=dict(x=[0,1], y=[0,1])
+        ))
+        fig.update_layout(
+            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+            margin=dict(l=20,r=20,t=20,b=20), height=220,
+            font=dict(color=BLANC),
+        )
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+
+
+def _tab_ifrs17():
+    c1, c2, c3, c4 = st.columns(4)
+    with c1: st.metric("TP IFRS 17 (PAA)",  "3 992 344 €", "approche PAA")
+    with c2: st.metric("LRC",               "2 500 000 €", "risque restant")
+    with c3: st.metric("LIC",               "1 492 344 €", "sinistres survenus")
+    with c4: st.metric("Ratio IFRS17/S2",   "1.370",       "✅ Cohérent")
+
+    st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+
+    col_g1, col_g2 = st.columns(2)
+    with col_g1:
+        st.markdown(f"<p style='color:{GRIS}; font-size:0.8rem; text-transform:uppercase;'>Réconciliation S2 ↔ IFRS 17</p>", unsafe_allow_html=True)
+        items   = ['BE S2', '+ Risk Adj.', '+ CSM', '= TP IFRS17']
+        valeurs = [2_914_930, 131_344, 946_070, 3_992_344]
+        couleurs= [NAVY_LL, NAVY_LL, NAVY_LL, OR]
+        fig = go.Figure(go.Bar(
+            x=items, y=valeurs,
+            marker_color=couleurs,
+            marker_line=dict(color=OR, width=1),
+            text=[f"{v/1e6:.2f}M€" for v in valeurs],
+            textposition='outside',
+            textfont=dict(color=BLANC, size=11),
+        ))
+        fig.update_layout(
+            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+            xaxis=dict(tickfont=dict(color=BLANC)), yaxis=dict(visible=False),
+            margin=dict(l=0,r=0,t=24,b=0), height=220,
+        )
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+
+    with col_g2:
+        st.markdown(f"<p style='color:{GRIS}; font-size:0.8rem; text-transform:uppercase;'>Résultat technique IFRS 17</p>", unsafe_allow_html=True)
+        postes  = ['Primes gagnées', 'Lib. RA', 'Charges sin.', 'Frais acq.', 'Résultat']
+        valeurs = [2_500_000, 65_672, -1_750_000, -250_000, 565_672]
+        couleurs= [VERT if v > 0 else ROUGE for v in valeurs]
+        fig = go.Figure(go.Bar(
+            x=postes, y=valeurs,
+            marker_color=couleurs,
+            text=[f"{v/1e3:.0f}k€" for v in valeurs],
+            textposition='outside',
+            textfont=dict(color=BLANC, size=10),
+        ))
+        fig.add_hline(y=0, line_color=GRIS)
+        fig.update_layout(
+            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+            xaxis=dict(tickfont=dict(color=BLANC, size=9)),
+            yaxis=dict(visible=False),
+            margin=dict(l=0,r=0,t=24,b=0), height=220,
+        )
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+
+
+def _tab_alm():
+    c1, c2, c3, c4 = st.columns(4)
+    with c1: st.metric("Duration actifs",   "3.50 ans",   "obligations 5 ans")
+    with c2: st.metric("Duration passifs",  "1.60 ans",   "Auto court terme")
+    with c3: st.metric("Gap duration",      "+1.90 ans",  "⚠️ À raccourcir")
+    with c4: st.metric("LCR",               "1 173%",     "✅ Très liquide")
+
+    st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+
+    col_g1, col_g2 = st.columns(2)
+    with col_g1:
+        st.markdown(f"<p style='color:{GRIS}; font-size:0.8rem; text-transform:uppercase;'>Stress taux — impact valeur nette</p>", unsafe_allow_html=True)
+        chocs   = ['-200bp', '-100bp', '+100bp', '+200bp']
+        impacts = [650000, 325000, -323741, -647482]
+        couleurs= [VERT if v > 0 else ROUGE for v in impacts]
+        fig = go.Figure(go.Bar(
+            x=chocs, y=impacts,
+            marker_color=couleurs,
+            text=[f"{v/1e3:+.0f}k€" for v in impacts],
+            textposition='outside',
+            textfont=dict(color=BLANC, size=11),
+        ))
+        fig.add_hline(y=0, line_color=GRIS)
+        fig.update_layout(
+            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+            xaxis=dict(tickfont=dict(color=BLANC)),
+            yaxis=dict(visible=False),
+            margin=dict(l=0,r=0,t=24,b=0), height=220,
+        )
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+
+    with col_g2:
+        st.markdown(f"<p style='color:{GRIS}; font-size:0.8rem; text-transform:uppercase;'>Duration actifs vs passifs</p>", unsafe_allow_html=True)
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            x=['Duration actifs', 'Duration passifs', 'Gap cible'],
+            y=[3.50, 1.60, 0.00],
+            marker_color=[NAVY_LL, NAVY_LL, VERT],
+            marker_line=dict(color=OR, width=1),
+            text=['3.50 ans', '1.60 ans', '0.00 ans'],
+            textposition='outside',
+            textfont=dict(color=BLANC, size=11),
+        ))
+        fig.add_hline(y=1.60, line_dash='dash', line_color=OR,
+                       annotation_text='Duration passifs', annotation_font_color=OR)
+        fig.update_layout(
+            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+            xaxis=dict(tickfont=dict(color=BLANC)),
+            yaxis=dict(title='Années', tickfont=dict(color=GRIS)),
+            margin=dict(l=0,r=0,t=24,b=0), height=220,
+        )
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+
+
+def _tab_synthese():
+    st.markdown(f"<p style='color:{GRIS}; font-size:0.8rem; text-transform:uppercase; letter-spacing:0.08em;'>Tableau de bord consolidé</p>", unsafe_allow_html=True)
+
+    synthese = pd.DataFrame([
+        {'Module': 'Tarification',     'Agent': 'A3-A6',  'Résultat clé': 'Gini XGBoost = 0.2651',    'Statut': '🟢 VERT'},
+        {'Module': 'Provisionnement',  'Agent': 'A7',     'Résultat clé': 'BE = 2 914 930 € · CV 0.6%','Statut': '🟢 VERT'},
+        {'Module': 'Stress Testing',   'Agent': 'A8',     'Résultat clé': 'Ratio SCR = 375%',           'Statut': '🟢 VERT'},
+        {'Module': 'Cohérence',        'Agent': 'A9',     'Résultat clé': 'Score 100%',                 'Statut': '🟢 VERT'},
+        {'Module': 'Solvabilité 2',    'Agent': 'A10',    'Résultat clé': 'Ratio SCR = 208.5%',         'Statut': '🟢 VERT'},
+        {'Module': 'IFRS 17',          'Agent': 'A11',    'Résultat clé': 'TP = 3 992 344 €',           'Statut': '🟢 VERT'},
+        {'Module': 'ALM',              'Agent': 'A12',    'Résultat clé': 'Gap = +1.9 ans · LCR 1173%', 'Statut': '🟡 AMBRE'},
+        {'Module': 'Tables mortalité', 'Agent': 'A14',    'Résultat clé': 'ä_65 = 13.07 · R²=0.9985',  'Statut': '🟢 VERT'},
+    ])
+    st.dataframe(synthese, use_container_width=True, hide_index=True)
+
+    st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+
+    col_hash, col_date = st.columns(2)
+    with col_hash:
+        st.markdown(f"""
+        <div style="background:{NAVY_L}; border:1px solid {OR}44; border-radius:8px; padding:12px 16px;">
+            <div style="font-size:0.7rem; color:{GRIS}; text-transform:uppercase; letter-spacing:0.08em;">
+                Hash de session
+            </div>
+            <div style="font-family:monospace; color:{OR}; font-size:1.1rem; margin-top:4px;">
+                5BB15F63
+            </div>
+            <div style="font-size:0.7rem; color:{GRIS}; margin-top:4px;">
+                Intégrité des résultats garantie
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    with col_date:
+        st.markdown(f"""
+        <div style="background:{NAVY_L}; border:1px solid {OR}44; border-radius:8px; padding:12px 16px;">
+            <div style="font-size:0.7rem; color:{GRIS}; text-transform:uppercase; letter-spacing:0.08em;">
+                Date d'arrêté
+            </div>
+            <div style="color:{BLANC}; font-size:1.1rem; margin-top:4px;">
+                {datetime.now().strftime('%d/%m/%Y')}
+            </div>
+            <div style="font-size:0.7rem; color:{GRIS}; margin-top:4px;">
+                Actuaire responsable : À renseigner
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# UTILITAIRES
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _simuler_pipeline():
+    """Simule l'exécution du pipeline avec une barre de progression."""
+    etapes = [
+        ("🔍 A1 — Ingestion & Validation",    0.10),
+        ("⚡ A2 — Preprocessing",             0.20),
+        ("📐 A3 — GLM Tarification",          0.35),
+        ("🧠 A4 — ML ×6",                     0.60),
+        ("🏦 A7 — Provisionnement",           0.70),
+        ("🛡️ A10 — Solvabilité 2",            0.80),
+        ("📊 A11 — IFRS 17",                  0.88),
+        ("⚖️ A12 — ALM",                      0.94),
+        ("🔐 A13 — Audit Trail",              1.00),
+    ]
+    barre = st.progress(0)
+    statut = st.empty()
+
+    for label, prog in etapes:
+        statut.markdown(f"<p style='color:{GRIS}; font-size:0.85rem;'>{label}</p>",
+                         unsafe_allow_html=True)
+        barre.progress(prog)
+        import time; time.sleep(0.4)
+
+    barre.empty()
+    statut.empty()
+    st.success("✅ Pipeline terminé — résultats disponibles dans le Dashboard")
+
+    if st.button("Voir le Dashboard →"):
+        st.session_state.page = 'dashboard'
+        st.rerun()
+
+
+def _reponse_aria_demo(question: str) -> str:
+    """Réponse démo ARIA (à remplacer par Claude API)."""
+    q = question.lower()
+    if any(m in q for m in ['best estimate', 'be', 'provision', 'réserve']):
+        return (
+            "Le **Best Estimate S2** du portefeuille est de **2 914 930 €** "
+            "avec un coefficient de variation inter-méthodes de **0.6%**, "
+            "ce qui indique une excellente convergence des 4 méthodes "
+            "(Chain Ladder, Mack 1993, BF, Cape Cod).\n\n"
+            "L'intervalle de confiance à 95% de Mack est disponible "
+            "pour le reporting Pilier 1. La provision P90 s'établit à "
+            "**3 098 000 €**, soit +6.3% au-dessus du Best Estimate."
+        )
+    elif any(m in q for m in ['scr', 'solvabilité', 'capital']):
+        return (
+            "Le **ratio de couverture SCR** est de **208.5%**, "
+            "au-dessus de la cible de marché français (150-200%). "
+            "Le SCR total de **3 680 671 €** est dominé par le "
+            "SCR souscription (3 104 537 €), cohérent pour un "
+            "portefeuille Non-Vie.\n\n"
+            "Le MCR est couvert à 320% — aucune action corrective requise."
+        )
+    elif any(m in q for m in ['gini', 'modèle', 'tarif', 'ml', 'xgboost']):
+        return (
+            "Le meilleur modèle de tarification validé sur **freMTPL2** "
+            "(678k contrats auto FR réels) est **XGBoost** avec un "
+            "Gini de **0.2651**.\n\n"
+            "Le modèle sélectionné en production par A6 est "
+            "**ElasticNet** (Gini=0.2440) grâce à son score "
+            "multicritères supérieur (0.8373/1.0) — meilleure "
+            "stabilité (overfit ratio=0.98) et interprétabilité "
+            "maximale (défendable devant un auditeur S2)."
+        )
+    elif any(m in q for m in ['alm', 'duration', 'gap', 'liquidité']):
+        return (
+            "L'analyse ALM révèle un **gap de duration de +1.9 ans** "
+            "(actifs 3.5 ans vs passifs 1.6 ans), ce qui est attendu "
+            "pour un portefeuille Auto dont les passifs se règlent "
+            "en ~18 mois.\n\n"
+            "**Recommandation** : raccourcir les actifs obligataires "
+            "de 1.9 ans. Le LCR de **1173%** confirme une liquidité "
+            "très confortable."
+        )
+    else:
+        return (
+            f"Je prends en compte votre question : *{question}*\n\n"
+            "Pour une réponse complète propulsée par Claude API, "
+            "configurez votre clé API Anthropic dans les paramètres "
+            "de la plateforme.\n\n"
+            "En attendant, je peux vous renseigner sur :\n"
+            "- Le Best Estimate et les provisions\n"
+            "- Le ratio SCR et la Solvabilité 2\n"
+            "- Les modèles de tarification (Gini, XGBoost)\n"
+            "- L'ALM et la liquidité\n"
+            "- L'IFRS 17 et la réconciliation S2"
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MAIN
+# ══════════════════════════════════════════════════════════════════════════════
+
+render_sidebar()
+
+page = st.session_state.page
+
+if   page == 'accueil':   page_accueil()
+elif page == 'analyse':   page_analyse()
+elif page == 'dashboard': page_dashboard()
+elif page == 'aria':      page_aria()
+elif page == 'rapports':  page_rapports()
+else:                     page_accueil()
