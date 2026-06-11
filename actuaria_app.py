@@ -315,7 +315,7 @@ def appeler_claude(messages, system_prompt=None):
                 for m in messages if m["role"] in ["user", "assistant"]]
 
         kwargs = {
-            "model":      "claude-sonnet-4-20250514",
+            "model":      "claude-sonnet-4-6",
             "max_tokens": 1024,
             "messages":   msgs,
         }
