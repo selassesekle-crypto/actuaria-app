@@ -12,7 +12,6 @@ import numpy as np
 from datetime import datetime
 import anthropic
 
-# VERSION : 3.1 — sidebar colorée
 # ══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
 # ══════════════════════════════════════════════════════════════════════════════
@@ -72,7 +71,10 @@ def inject_css():
 
     /* SIDEBAR */
     [data-testid="stSidebar"] {{ background-color:{NAVY_L}; border-right:1px solid rgba(201,168,76,0.25); }}
-    [data-testid="stSidebar"] * {{ color:{BLANC} !important; }}
+    [data-testid="stSidebar"] p,
+    [data-testid="stSidebar"] span,
+    [data-testid="stSidebar"] div,
+    [data-testid="stSidebar"] label {{ color:#F0F4F8; }}
     [data-testid="stSidebar"] .stButton > button {{
         background:rgba(255,255,255,0.06);
         border:1px solid rgba(255,255,255,0.12);
