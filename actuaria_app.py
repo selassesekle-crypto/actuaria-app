@@ -630,7 +630,7 @@ def page_agent_detail():
     with col_av:
         # Avatar (photo ou initiale)
         try:
-            st.image(f"assets/avatars/{agent_key}.png", width=120)
+            st.image(f"{agent_key}.png", width=120)
         except:
             st.markdown(f"""
             <div style="width:100px;height:100px;border-radius:50%;
