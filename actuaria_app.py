@@ -907,7 +907,14 @@ def _tab_chat_agent(agent_key):
 def page_aria():
     st.markdown(f"""
     <div style="text-align:center;padding:16px 0 24px;">
-        <div style="font-size:2.5rem;margin-bottom:10px;">🤖</div>
+        """, unsafe_allow_html=True)
+    try:
+        col_c1, col_c2, col_c3 = st.columns([2,1,2])
+        with col_c2:
+            st.image("sofia.png", width=100)
+    except:
+        st.markdown(f"""
+        <div style="font-size:2.5rem;margin-bottom:10px;text-align:center;">🤖</div>
         <div style="font-family:'Playfair Display',serif;font-size:1.8rem;
                     font-weight:700;color:{BLANC};">
             Agent <span style="color:{OR};">Sofia</span>
