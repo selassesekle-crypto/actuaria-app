@@ -12,6 +12,7 @@ import numpy as np
 from datetime import datetime
 import anthropic
 
+# VERSION : 3.1 — sidebar colorée
 # ══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
 # ══════════════════════════════════════════════════════════════════════════════
