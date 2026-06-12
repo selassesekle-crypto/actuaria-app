@@ -628,43 +628,41 @@ def page_agent_detail():
     col_av, col_info = st.columns([1, 3])
 
     with col_av:
-        # Avatar (photo ou initiale)
         try:
-            st.image(f"{agent_key}.png", width=120)
+            st.image(f"{agent_key}.png", width=160)
         except:
             st.markdown(f"""
-            <div style="width:100px;height:100px;border-radius:50%;
+            <div style="width:140px;height:140px;border-radius:16px;
                         background:linear-gradient(135deg,{OR},{OR_L});
                         display:flex;align-items:center;justify-content:center;
-                        font-size:2.5rem;font-weight:700;color:{NAVY};
-                        margin-bottom:12px;">
+                        font-size:3.5rem;font-weight:700;color:{NAVY};">
                 {agent['prenom'][0]}
             </div>
             """, unsafe_allow_html=True)
-
-        st.markdown(f"""
-        <div style="margin-top:8px;">
-            <div style="font-family:'Playfair Display',serif;font-size:1.5rem;
-                        color:{BLANC};font-weight:700;">{agent['prenom']}</div>
-            <div style="font-size:0.7rem;color:{GRIS};text-transform:uppercase;
-                        letter-spacing:0.1em;margin:4px 0 8px;">{agent['code']}</div>
-            <span class="badge-{agent['statut']}">{agent['statut']}</span>
-            <div style="font-size:0.78rem;color:{OR};margin-top:10px;
-                        font-weight:600;">{agent['kpi']}</div>
-        </div>
-        """, unsafe_allow_html=True)
 
     with col_info:
         st.markdown(f"""
         <div style="background:{NAVY_L};border:1px solid rgba(201,168,76,0.2);
                     border-radius:12px;padding:24px;">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+                <div style="font-family:'Playfair Display',serif;font-size:1.5rem;
+                            color:{BLANC};font-weight:700;">{agent['prenom']}</div>
+                <div style="font-size:0.7rem;color:{GRIS};text-transform:uppercase;
+                            letter-spacing:0.1em;">{agent['code']}</div>
+                <span class="badge-{agent['statut']}">{agent['statut']}</span>
+            </div>
             <div style="color:{OR};font-size:1rem;font-weight:600;
                         margin-bottom:12px;">{agent['role_fr']}</div>
             <div style="font-size:0.88rem;color:{BLANC};line-height:1.7;
                         margin-bottom:16px;">{agent['desc_fr']}</div>
             <div style="font-size:0.7rem;color:{GRIS};text-transform:uppercase;
                         letter-spacing:0.08em;margin-bottom:6px;">Spécialités</div>
-            <div style="font-size:0.82rem;color:{OR};">{agent['spec_fr']}</div>
+            <div style="font-size:0.82rem;color:{OR};margin-bottom:12px;">
+                {agent['spec_fr']}
+            </div>
+            <div style="font-size:0.78rem;color:{OR};font-weight:600;">
+                {agent['kpi']}
+            </div>
         </div>
         """, unsafe_allow_html=True)
 
