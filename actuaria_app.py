@@ -73,14 +73,26 @@ def inject_css():
     [data-testid="stSidebar"] {{ background-color:{NAVY_L}; border-right:1px solid rgba(201,168,76,0.25); }}
     [data-testid="stSidebar"] * {{ color:{BLANC} !important; }}
     [data-testid="stSidebar"] .stButton > button {{
-        background:transparent; border:1px solid rgba(201,168,76,0.3);
-        color:{BLANC} !important; border-radius:8px; font-size:0.85rem;
-        padding:8px 16px; width:100%; text-align:left;
-        transition:all 0.2s; margin-bottom:2px;
+        background:rgba(255,255,255,0.06);
+        border:1px solid rgba(255,255,255,0.12);
+        color:#F0F4F8 !important; border-radius:10px;
+        font-size:0.85rem; font-weight:500;
+        padding:10px 16px; width:100%; text-align:left;
+        transition:all 0.25s; margin-bottom:4px;
+        letter-spacing:0.01em;
     }}
     [data-testid="stSidebar"] .stButton > button:hover {{
-        background:rgba(201,168,76,0.15); border-color:{OR};
-        color:{OR} !important;
+        background:rgba(201,168,76,0.18);
+        border-color:rgba(201,168,76,0.6);
+        color:#C9A84C !important;
+        transform:translateX(3px);
+        box-shadow:0 4px 16px rgba(0,0,0,0.3);
+    }}
+    [data-testid="stSidebar"] .stButton > button[kind="primary"] {{
+        background:linear-gradient(135deg,rgba(201,168,76,0.25),rgba(232,201,106,0.12));
+        border:1px solid rgba(201,168,76,0.5);
+        color:#C9A84C !important;
+        font-weight:700;
     }}
 
     /* MÉTRIQUES */
@@ -399,9 +411,12 @@ def render_sidebar():
 
         # Menu Équipes
         st.markdown(f"""
-        <div style="font-size:0.68rem;color:{GRIS};text-transform:uppercase;
-                    letter-spacing:0.1em;margin-bottom:10px;font-weight:600;">
-            Équipes
+        <div style="font-size:0.65rem;color:rgba(201,168,76,0.7);
+                    text-transform:uppercase;letter-spacing:0.15em;
+                    margin-bottom:8px;font-weight:700;
+                    padding:8px 0 4px;
+                    border-top:1px solid rgba(201,168,76,0.15);">
+            ◆ Équipes
         </div>
         """, unsafe_allow_html=True)
 
@@ -409,8 +424,11 @@ def render_sidebar():
         with st.expander("🏢 Direction Non-Vie", expanded=False):
             for eq_key, eq in STRUCTURE['non_vie']['equipes'].items():
                 st.markdown(f"""
-                <div style="font-size:0.72rem;color:{OR};font-weight:600;
-                            margin:8px 0 6px;padding-left:4px;">
+                <div style="font-size:0.68rem;color:rgba(201,168,76,0.8);
+                            font-weight:700;margin:10px 0 6px;
+                            padding:4px 8px;
+                            border-left:2px solid rgba(201,168,76,0.5);
+                            text-transform:uppercase;letter-spacing:0.06em;">
                     {eq['label']}
                 </div>
                 """, unsafe_allow_html=True)
@@ -449,12 +467,27 @@ def render_sidebar():
         nb_r = sum(1 for a in AGENTS.values() if a['statut']=='ROUGE')
 
         st.markdown(f"""
-        <div style="font-size:0.68rem;color:{GRIS};text-transform:uppercase;
-                    letter-spacing:0.1em;margin-bottom:8px;">Statut agents</div>
-        <div style="display:flex;gap:8px;margin-bottom:16px;">
-            <span class="badge-VERT">✅ {nb_v}</span>
-            <span class="badge-AMBRE">⚠ {nb_a}</span>
-            <span class="badge-ROUGE">❌ {nb_r}</span>
+        <div style="font-size:0.65rem;color:rgba(201,168,76,0.7);
+                    text-transform:uppercase;letter-spacing:0.15em;
+                    margin-bottom:8px;font-weight:700;">
+            ◆ Statut agents
+        </div>
+        <div style="display:flex;gap:6px;margin-bottom:16px;">
+            <div style="background:rgba(46,204,113,0.12);color:#2ECC71;
+                        border:1px solid rgba(46,204,113,0.35);border-radius:8px;
+                        padding:5px 10px;font-size:0.75rem;font-weight:700;">
+                ✅ {nb_v} VERT
+            </div>
+            <div style="background:rgba(243,156,18,0.12);color:#F39C12;
+                        border:1px solid rgba(243,156,18,0.35);border-radius:8px;
+                        padding:5px 10px;font-size:0.75rem;font-weight:700;">
+                ⚠ {nb_a}
+            </div>
+            <div style="background:rgba(231,76,60,0.12);color:#E74C3C;
+                        border:1px solid rgba(231,76,60,0.35);border-radius:8px;
+                        padding:5px 10px;font-size:0.75rem;font-weight:700;">
+                ❌ {nb_r}
+            </div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -659,9 +692,6 @@ def page_agent_detail():
                         letter-spacing:0.08em;margin-bottom:6px;">Spécialités</div>
             <div style="font-size:0.82rem;color:{OR};margin-bottom:12px;">
                 {agent['spec_fr']}
-            </div>
-            <div style="font-size:0.78rem;color:{OR};font-weight:600;">
-                {agent['kpi']}
             </div>
         </div>
         """, unsafe_allow_html=True)
