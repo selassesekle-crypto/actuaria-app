@@ -31,13 +31,33 @@ AMBRE  = "#F39C12"
 ROUGE  = "#E74C3C"
 BLEU   = "#3498DB"
 
-# ── SESSION STATE ─────────────────────────────────────────────────────────────
-for k, v in {
-    'langue': 'fr', 'page': 'accueil',
-    'agent_selec': None, 'messages_aria': [],
-}.items():
-    if k not in st.session_state:
-        st.session_state[k] = v
+# ── SESSION STATE + QUERY PARAMS (fix bug copier-coller) ─────────────────────
+def _init():
+    qp = st.query_params
+    defs = {
+        "page": qp.get("page", "accueil"),
+        "agent_selec": qp.get("agent", None),
+        "dir_selec": qp.get("dir", None),
+        "messages_aria": [],
+    }
+    for k, v in defs.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
+
+def nav_to(page, agent=None, dir_key=None):
+    st.session_state.page = page
+    st.session_state.agent_selec = agent
+    st.session_state.dir_selec = dir_key
+    try:
+        params = {"page": page}
+        if agent: params["agent"] = agent
+        if dir_key: params["dir"] = dir_key
+        st.query_params.update(params)
+    except Exception:
+        pass
+    st.rerun()
+
+_init()
 
 # ── CSS ───────────────────────────────────────────────────────────────────────
 st.markdown(f"""
@@ -688,15 +708,13 @@ def render_sidebar():
             ('🏠', 'Accueil', 'accueil'),
             ('📊', 'Analyse', 'analyse'),
             ('📈', 'Dashboard', 'dashboard'),
-            ('📋', 'Rapports', 'rapports'),
+            ('📁', 'Rapports Consolidés', 'rapports'),
         ]:
             actif = st.session_state.page == pid
             if st.button(f"{icon} {label}", key=f"nav_{pid}",
                          use_container_width=True,
                          type="primary" if actif else "secondary"):
-                st.session_state.page = pid
-                st.session_state.agent_selec = None
-                st.rerun()
+                nav_to(pid)
 
         st.markdown(f"<hr style='border-color:rgba(201,168,76,0.2);margin:10px 0;'>", unsafe_allow_html=True)
 
@@ -739,9 +757,7 @@ margin:4px 0 4px;text-transform:uppercase;letter-spacing:0.06em;">
                     if st.button(f"{a['icon']} {a['prenom']} ({a['code']})",
                                  key=f"side_{dir_agent_key}",
                                  use_container_width=True):
-                        st.session_state.agent_selec = dir_agent_key
-                        st.session_state.page = 'agent_detail'
-                        st.rerun()
+                        nav_to('agent_detail', agent=dir_agent_key)
 
                 # Équipes
                 for eq_key, eq in dir_info['equipes'].items():
@@ -762,9 +778,7 @@ text-transform:uppercase;letter-spacing:0.05em;">
                             key=f"side_{mgr_key}",
                             use_container_width=True,
                         ):
-                            st.session_state.agent_selec = mgr_key
-                            st.session_state.page = 'agent_detail'
-                            st.rerun()
+                            nav_to('agent_detail', agent=mgr_key)
 
                     # Agents
                     for ak in eq['agents']:
@@ -798,12 +812,8 @@ letter-spacing:0.12em;margin-bottom:6px;font-weight:700;">◆ Statuts</div>
 </div>
 """, unsafe_allow_html=True)
 
-        # Langue
-        lang = st.session_state.langue
-        if st.button("🇫🇷 Français" if lang == 'fr' else "🇬🇧 English",
-                     key="lang_btn", use_container_width=True):
-            st.session_state.langue = 'en' if lang == 'fr' else 'fr'
-            st.rerun()
+        # Plateforme en français
+        st.markdown(f"<div style='font-size:0.65rem;color:{GRIS};text-align:center;'>🇫🇷 Plateforme en français</div>", unsafe_allow_html=True)
 
         st.markdown(f"""
 <div style="font-size:0.6rem;color:rgba(138,154,176,0.4);text-align:center;margin-top:12px;">
@@ -961,9 +971,13 @@ def page_agent_detail():
     agent = AGENTS[ak]
 
     if st.button("← Retour", key="btn_retour"):
-        st.session_state.agent_selec = None
-        st.session_state.page = 'accueil'
-        st.rerun()
+        # Retour vers la direction si applicable
+        a_tmp = AGENTS.get(st.session_state.agent_selec, {})
+        dir_tmp = a_tmp.get("dir")
+        if dir_tmp and dir_tmp in STRUCTURE:
+            nav_to("direction", dir_key=dir_tmp)
+        else:
+            nav_to("accueil")
 
     st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
@@ -1369,20 +1383,119 @@ border-radius:8px;padding:12px 16px;">
         st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
+# PAGE DIRECTION
+# ══════════════════════════════════════════════════════════════════════════════
+def page_direction():
+    dk = st.session_state.dir_selec
+    if not dk or dk not in STRUCTURE:
+        nav_to("accueil")
+        return
+    d = STRUCTURE[dk]
+    dir_agent = AGENTS[d["directeur"]]
+
+    if st.button("← Retour à l'accueil", key="btn_ret_dir"):
+        nav_to("accueil")
+
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+    # HERO DIRECTION
+    nb_total = sum(1 + len(eq["agents"]) for eq in d["equipes"].values())
+    nb_eq    = len(d["equipes"])
+
+    col_info, col_dir = st.columns([2, 1])
+    with col_info:
+        st.markdown(f"""
+<div style="background:{NAVY_L};border:1px solid rgba(201,168,76,0.25);border-radius:14px;padding:24px;margin-bottom:20px;">
+  <div style="font-size:0.62rem;color:{OR};text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:700;">Direction</div>
+  <div style="font-family:'Playfair Display',serif;font-size:1.8rem;color:{BLANC};font-weight:700;margin-bottom:8px;">
+    {d['icon']} {d['label']}
+  </div>
+  <div style="font-size:0.86rem;color:{GRIS};line-height:1.65;margin-bottom:16px;">{d['mission']}</div>
+  <div style="display:flex;gap:16px;">
+    <div style="background:{NAVY_LL};border-radius:8px;padding:8px 16px;text-align:center;">
+      <div style="font-size:1.2rem;font-weight:700;color:{OR};">{nb_eq}</div>
+      <div style="font-size:0.65rem;color:{GRIS};text-transform:uppercase;">Équipes</div>
+    </div>
+    <div style="background:{NAVY_LL};border-radius:8px;padding:8px 16px;text-align:center;">
+      <div style="font-size:1.2rem;font-weight:700;color:{OR};">{nb_total}</div>
+      <div style="font-size:0.65rem;color:{GRIS};text-transform:uppercase;">Agents</div>
+    </div>
+  </div>
+</div>""", unsafe_allow_html=True)
+
+    with col_dir:
+        st.markdown(f"""
+<div style="background:{NAVY_L};border:1px solid rgba(150,100,200,0.35);border-radius:14px;padding:20px;text-align:center;">
+  <div style="font-size:2.2rem;margin-bottom:8px;">{dir_agent['icon']}</div>
+  <div style="font-size:0.62rem;color:{VIOLET};text-transform:uppercase;letter-spacing:0.1em;font-weight:700;margin-bottom:4px;">Directeur·trice</div>
+  <div style="font-size:1.05rem;font-weight:700;color:{BLANC};margin-bottom:4px;">{dir_agent['prenom']}</div>
+  <div style="font-size:0.72rem;color:{GRIS};margin-bottom:12px;">{dir_agent['kpi']}</div>
+</div>""", unsafe_allow_html=True)
+        if st.button(f"💬 Parler à {dir_agent['prenom']}", key="btn_dir_chat", use_container_width=True):
+            nav_to("agent_detail", agent=d["directeur"])
+
+    # ÉQUIPES
+    st.markdown(f"""
+<div style="font-size:0.62rem;color:{OR};text-transform:uppercase;letter-spacing:0.12em;margin-bottom:12px;font-weight:700;">
+◆ Équipes de la direction
+</div>""", unsafe_allow_html=True)
+
+    for eq_key, eq in d["equipes"].items():
+        mgr_k  = eq.get("manager")
+        mgr    = AGENTS[mgr_k] if mgr_k else None
+        nb_agt = len(eq["agents"])
+
+        with st.expander(f"{eq['icon']} {eq['label']} — {nb_agt} agents", expanded=True):
+            if mgr:
+                col_m, col_mb = st.columns([3,1])
+                with col_m:
+                    st.markdown(f"""
+<div style="background:{NAVY_LL};border:1px solid rgba(52,152,219,0.3);border-radius:10px;padding:12px 16px;margin-bottom:10px;">
+  <div style="display:flex;align-items:center;gap:10px;">
+    <span style="font-size:1.1rem;">{mgr['icon']}</span>
+    <div>
+      <span style="font-size:0.6rem;color:{BLEU};text-transform:uppercase;font-weight:700;letter-spacing:0.08em;">Manager</span>
+      <div style="font-weight:700;color:{BLANC};font-size:0.88rem;">{mgr['prenom']} ({mgr['code']})</div>
+      <div style="font-size:0.72rem;color:{GRIS};">{mgr['kpi']}</div>
+    </div>
+  </div>
+</div>""", unsafe_allow_html=True)
+                with col_mb:
+                    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+                    if st.button(f"💬 {mgr['prenom']}", key=f"dir_mgr_{mgr_k}", use_container_width=True):
+                        nav_to("agent_detail", agent=mgr_k)
+
+            # Agents en grille
+            cols = st.columns(min(3, max(1, nb_agt)))
+            for i, ak in enumerate(eq["agents"]):
+                a = AGENTS[ak]
+                with cols[i % len(cols)]:
+                    badge_cl = f"badge-{a['statut']}" if a['statut'] != 'DEV' else "badge-DEV"
+                    st_lbl   = a['statut'] if a['statut'] != 'DEV' else 'EN DEV'
+                    st.markdown(f"""
+<div style="background:{NAVY_L};border:1px solid rgba(201,168,76,0.15);border-radius:10px;padding:12px;margin-bottom:8px;">
+  <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;">
+    <span style="font-size:0.95rem;">{a['icon']}</span>
+    <span style="font-weight:700;color:{BLANC};font-size:0.84rem;">{a['prenom']}</span>
+    <span style="font-size:0.62rem;color:{GRIS};">({a['code']})</span>
+  </div>
+  <div style="font-size:0.7rem;color:{GRIS};margin-bottom:5px;line-height:1.4;">{a['role_fr']}</div>
+  <div style="font-size:0.68rem;color:{OR};margin-bottom:7px;">{a['kpi']}</div>
+  <span class="{badge_cl}">{st_lbl}</span>
+</div>""", unsafe_allow_html=True)
+                    if st.button(f"Voir {a['prenom']}", key=f"dir_agt_{ak}", use_container_width=True):
+                        nav_to("agent_detail", agent=ak)
+
+# ══════════════════════════════════════════════════════════════════════════════
 # ROUTEUR PRINCIPAL
 # ══════════════════════════════════════════════════════════════════════════════
 render_sidebar()
 
 page = st.session_state.page
-if page == 'accueil':
-    page_accueil()
-elif page == 'analyse':
-    page_analyse()
-elif page == 'dashboard':
-    page_dashboard()
-elif page == 'rapports':
-    page_rapports()
-elif page == 'agent_detail':
-    page_agent_detail()
-else:
-    page_accueil()
+if   page == "accueil":      page_accueil()
+elif page == "dashboard":    page_dashboard()
+elif page == "analyse":      page_analyse()
+elif page == "rapports":     page_rapports()
+elif page == "direction":    page_direction() if "page_direction" in dir() else page_accueil()
+elif page == "agent_detail": page_agent_detail()
+else:                        page_accueil()
