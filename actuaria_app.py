@@ -732,6 +732,9 @@ letter-spacing:0.14em;margin-bottom:6px;font-weight:700;">◆ Direction Généra
             dir_icon  = ICONS_DIR[dir_key]
 
             with st.expander(f"{dir_icon} {dir_label}", expanded=False):
+                # Bouton page direction
+                if st.button(f"📋 Vue direction", key=f"dir_page_{dir_key}", use_container_width=True):
+                    nav_to("direction", dir_key=dir_key)
                 # Directeur
                 dir_agent_key = dir_info.get('directeur')
                 if dir_agent_key:
