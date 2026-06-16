@@ -31,33 +31,21 @@ AMBRE  = "#F39C12"
 ROUGE  = "#E74C3C"
 BLEU   = "#3498DB"
 
-# ── SESSION STATE + QUERY PARAMS (fix bug copier-coller) ─────────────────────
-def _init():
-    qp = st.query_params
-    defs = {
-        "page": qp.get("page", "accueil"),
-        "agent_selec": qp.get("agent", None),
-        "dir_selec": qp.get("dir", None),
-        "messages_aria": [],
-    }
-    for k, v in defs.items():
-        if k not in st.session_state:
-            st.session_state[k] = v
+# ── SESSION STATE (compatible toutes versions Streamlit) ──────────────────────
+for k, v in {
+    "page": "accueil",
+    "agent_selec": None,
+    "dir_selec": None,
+    "messages_aria": [],
+}.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
 
 def nav_to(page, agent=None, dir_key=None):
     st.session_state.page = page
     st.session_state.agent_selec = agent
     st.session_state.dir_selec = dir_key
-    try:
-        params = {"page": page}
-        if agent: params["agent"] = agent
-        if dir_key: params["dir"] = dir_key
-        st.query_params.update(params)
-    except Exception:
-        pass
     st.rerun()
-
-_init()
 
 # ── CSS ───────────────────────────────────────────────────────────────────────
 st.markdown(f"""
