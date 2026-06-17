@@ -471,6 +471,7 @@ STRUCTURE = {
     },
     'non_vie': {
         'label': 'Direction Non-Vie', 'icon': '🏢',
+        'mission': 'Tarification, provisionnement et réglementation pour les contrats Non-Vie (IARD) : Auto, MRH, RC Pro, Construction.',
         'directeur': 'leila',
         'equipes': {
             'tarification': {
@@ -492,6 +493,7 @@ STRUCTURE = {
     },
     'vie_epre': {
         'label': 'Direction Vie & EP-RE', 'icon': '💼',
+        'mission': 'Vie pure, épargne-retraite (PER, Art.39, Art.83) et réglementation Vie/EP-RE : IAS 19, IFRS 17 BBA/VFA, ALM long terme.',
         'directeur': 'paul',
         'equipes': {
             'vie_pure': {
@@ -513,6 +515,7 @@ STRUCTURE = {
     },
     'sante_prev': {
         'label': 'Direction Santé-Prévoyance', 'icon': '🏥',
+        'mission': 'Tarification et provisionnement santé (CCAM/NGAP) et prévoyance (ITT, invalidité, décès). Mutuelles et institutions de prévoyance.',
         'directeur': 'amira',
         'equipes': {
             'sante': {
