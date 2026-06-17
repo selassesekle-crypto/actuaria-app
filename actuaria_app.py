@@ -31,33 +31,21 @@ AMBRE  = "#F39C12"
 ROUGE  = "#E74C3C"
 BLEU   = "#3498DB"
 
-# ── SESSION STATE + QUERY PARAMS (fix bug copier-coller) ─────────────────────
-def _init():
- 
-    defs = {
-        "page": "accueil",
-        "agent_selec": None,
-        "dir_selec": None,
-        "messages_aria": [],
-    }
-    for k, v in defs.items():
-        if k not in st.session_state:
-            st.session_state[k] = v
+# ── SESSION STATE (compatible toutes versions Streamlit) ──────────────────────
+for k, v in {
+    "page": "accueil",
+    "agent_selec": None,
+    "dir_selec": None,
+    "messages_aria": [],
+}.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
 
 def nav_to(page, agent=None, dir_key=None):
     st.session_state.page = page
     st.session_state.agent_selec = agent
     st.session_state.dir_selec = dir_key
-    try:
-        params = {"page": page}
-        if agent: params["agent"] = agent
-        if dir_key: params["dir"] = dir_key
-     
-    except Exception:
-        pass
     st.rerun()
-
-_init()
 
 # ── CSS ───────────────────────────────────────────────────────────────────────
 st.markdown(f"""
@@ -744,6 +732,9 @@ letter-spacing:0.14em;margin-bottom:6px;font-weight:700;">◆ Direction Généra
             dir_icon  = ICONS_DIR[dir_key]
 
             with st.expander(f"{dir_icon} {dir_label}", expanded=False):
+                # Bouton page direction
+                if st.button(f"📋 Vue direction", key=f"dir_page_{dir_key}", use_container_width=True):
+                    nav_to("direction", dir_key=dir_key)
                 # Directeur
                 dir_agent_key = dir_info.get('directeur')
                 if dir_agent_key:
