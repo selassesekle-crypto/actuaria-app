@@ -915,7 +915,7 @@ def _dashboard_agent(ak):
     st.markdown("<hr>", unsafe_allow_html=True)
     col1,col2,col3 = st.columns(3)
     with col1:
-        if st.button("📄 Rapport PDF", use_container_width=True, key=f"rpt_{ak}"):
+        if st.button("📄 Rapport PDF", use_container_width=True, key=f"pdf_{ak}"):
             st.toast(f"✅ Rapport {a['prenom']} généré", icon="✅")
     with col2:
         if st.button("📊 Export Excel", use_container_width=True, key=f"xls_{ak}"):
@@ -1134,7 +1134,7 @@ def page_rapports():
         ("📋","Note de synthèse CA","Synthèse exécutive pour le Conseil d'Administration","Toutes directions · Décision",VERT,"Disponible"),
     ]
 
-    for icon,titre,desc,tags,col_st,st_lbl in rapports:
+    for i, (icon,titre,desc,tags,col_st,st_lbl) in enumerate(rapports):
         col1, col2 = st.columns([4,1])
         with col1:
             badge_cl = "badge-VERT" if col_st==VERT else "badge-AMBRE" if col_st==AMBRE else "badge-DEV"
@@ -1151,7 +1151,7 @@ def page_rapports():
         with col2:
             st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
             if col_st != GRIS:
-                if st.button("⬇️ Générer", key=f"rpt_{titre[:8]}", use_container_width=True):
+                if st.button("⬇️ Générer", key=f"rpt_{i}", use_container_width=True):
                     st.toast(f"✅ {titre} généré", icon="✅")
             else:
                 st.markdown(f"<div style='font-size:0.72rem;color:{GRIS};text-align:center;padding:10px;'>⏸ Bientôt</div>", unsafe_allow_html=True)
