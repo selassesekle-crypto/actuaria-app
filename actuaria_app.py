@@ -30,6 +30,8 @@ VERT   = "#2ECC71"
 AMBRE  = "#F39C12"
 ROUGE  = "#E74C3C"
 BLEU   = "#3498DB"
+VIOLET = "#9B59B6"
+
 
 # ── SESSION STATE (compatible toutes versions Streamlit) ──────────────────────
 for k, v in {
