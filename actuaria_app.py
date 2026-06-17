@@ -1450,7 +1450,7 @@ def page_direction():
         mgr    = AGENTS[mgr_k] if mgr_k else None
         nb_agt = len(eq["agents"])
 
-        with st.expander(f"{eq['icon']} {eq['label']} — {nb_agt} agents", expanded=True):
+        with st.expander(f"{eq.get('icon','📋')} {eq['label']} — {nb_agt} agents", expanded=True):
             if mgr:
                 col_m, col_mb = st.columns([3,1])
                 with col_m:
