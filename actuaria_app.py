@@ -30,8 +30,6 @@ VERT   = "#2ECC71"
 AMBRE  = "#F39C12"
 ROUGE  = "#E74C3C"
 BLEU   = "#3498DB"
-VIOLET = "#9B59B6"
-
 
 # ── SESSION STATE (compatible toutes versions Streamlit) ──────────────────────
 for k, v in {
@@ -471,26 +469,22 @@ STRUCTURE = {
         'label': 'Direction Générale', 'icon': '🤖',
         'agents_directs': ['sofia', 'rafael'],
     },
-   'non_vie': {
-    'label': 'Direction Non-Vie', 'icon': '🏢',
-    'mission': 'Tarification, provisionnement et réglementation pour les contrats Non-Vie (IARD) : Auto, MRH, RC Pro, Construction.',
-    'directeur': 'leila',
+    'non_vie': {
+        'label': 'Direction Non-Vie', 'icon': '🏢',
+        'directeur': 'leila',
         'equipes': {
             'tarification': {
                 'label': 'Équipe Tarification',
-                'icon': '🧠',
                 'manager': 'meilin',
                 'agents': ['amara','kenji','laurent','priya','yohan','victor'],
             },
             'provisionnement': {
                 'label': 'Équipe Provisionnement',
-                'icon': '📊',
                 'manager': 'kwame',
                 'agents': ['ibrahim','isabelle','marcus'],
             },
             'reglementation_nv': {
                 'label': 'Équipe Réglementation',
-                'icon': '🛡️',
                 'manager': 'nadia',
                 'agents': ['elena','thomas','aisha'],
             },
@@ -498,24 +492,20 @@ STRUCTURE = {
     },
     'vie_epre': {
         'label': 'Direction Vie & EP-RE', 'icon': '💼',
-        'mission': 'Vie pure, épargne-retraite (PER, Art.39, Art.83) et réglementation Vie/EP-RE : IAS 19, IFRS 17 BBA/VFA, ALM long terme.',
         'directeur': 'paul',
         'equipes': {
             'vie_pure': {
                 'label': 'Équipe Vie Pure',
-                'icon': '💀',
                 'manager': 'sven',
                 'agents': ['nour','kofi','amelie','theo','nia'],
             },
             'epre': {
                 'label': 'Équipe EP-RE',
-                'icon': '💰',
                 'manager': 'fatou',
                 'agents': ['henri','salome','jinho','claire','omar'],
             },
             'reglementation_vie': {
                 'label': 'Équipe Réglementation',
-                'icon': '📊',
                 'manager': 'olivier',
                 'agents': ['eric','camille','yuki'],
             },
@@ -523,24 +513,20 @@ STRUCTURE = {
     },
     'sante_prev': {
         'label': 'Direction Santé-Prévoyance', 'icon': '🏥',
-        'mission': 'Tarification et provisionnement santé (frais médicaux, CCAM/NGAP) et prévoyance (ITT, invalidité, décès). Mutuelles et institutions de prévoyance.',
         'directeur': 'amira',
         'equipes': {
             'sante': {
                 'label': 'Équipe Santé',
-                'icon': '💊',
                 'manager': 'chiara',
                 'agents': ['leonie','selma','binta'],
             },
             'prevoyance': {
                 'label': 'Équipe Prévoyance',
-                'icon': '🩺',
                 'manager': 'diallo',
                 'agents': ['axel','rayan','elodie','valentin'],
             },
             'transversal_sp': {
                 'label': 'Stress Testing',
-                'icon': '🌡️',
                 'manager': None,
                 'agents': ['naomie'],
             },
@@ -1450,7 +1436,7 @@ def page_direction():
         mgr    = AGENTS[mgr_k] if mgr_k else None
         nb_agt = len(eq["agents"])
 
-        with st.expander(f"{eq.get('icon','📋')} {eq['label']} — {nb_agt} agents", expanded=True):
+        with st.expander(f"{eq['icon']} {eq['label']} — {nb_agt} agents", expanded=True):
             if mgr:
                 col_m, col_mb = st.columns([3,1])
                 with col_m:
