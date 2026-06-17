@@ -478,16 +478,19 @@ STRUCTURE = {
         'equipes': {
             'tarification': {
                 'label': 'Équipe Tarification',
+                'icon': '🧠',
                 'manager': 'meilin',
                 'agents': ['amara','kenji','laurent','priya','yohan','victor'],
             },
             'provisionnement': {
                 'label': 'Équipe Provisionnement',
+                'icon': '📊',
                 'manager': 'kwame',
                 'agents': ['ibrahim','isabelle','marcus'],
             },
             'reglementation_nv': {
                 'label': 'Équipe Réglementation',
+                'icon': '🛡️',
                 'manager': 'nadia',
                 'agents': ['elena','thomas','aisha'],
             },
@@ -500,16 +503,19 @@ STRUCTURE = {
         'equipes': {
             'vie_pure': {
                 'label': 'Équipe Vie Pure',
+                'icon': '💀',
                 'manager': 'sven',
                 'agents': ['nour','kofi','amelie','theo','nia'],
             },
             'epre': {
                 'label': 'Équipe EP-RE',
+                'icon': '💰',
                 'manager': 'fatou',
                 'agents': ['henri','salome','jinho','claire','omar'],
             },
             'reglementation_vie': {
                 'label': 'Équipe Réglementation',
+                'icon': '📊',
                 'manager': 'olivier',
                 'agents': ['eric','camille','yuki'],
             },
@@ -522,16 +528,19 @@ STRUCTURE = {
         'equipes': {
             'sante': {
                 'label': 'Équipe Santé',
+                'icon': '💊',
                 'manager': 'chiara',
                 'agents': ['leonie','selma','binta'],
             },
             'prevoyance': {
                 'label': 'Équipe Prévoyance',
+                'icon': '🩺',
                 'manager': 'diallo',
                 'agents': ['axel','rayan','elodie','valentin'],
             },
             'transversal_sp': {
                 'label': 'Stress Testing',
+                'icon': '🌡️',
                 'manager': None,
                 'agents': ['naomie'],
             },
