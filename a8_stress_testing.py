@@ -32,10 +32,6 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
-print("Agent A8 — Stress Testing & ORSA Non-Vie ActuarIA v2.0")
-print("Flux : result_a7 (BE · bootstrap · ORSA) + result_a6 (prime · Gini)")
-print("Usage : agent_a8 = AgentA8StressTesting()")
-print("        result_a8 = agent_a8.run(result_a7=result_a7, result_a6=result_a6)")
 
 
 # ── Chargement du module données marché ───────────────────────────────────────
@@ -193,9 +189,13 @@ class AgentA8StressTesting:
             logger.info("Étape 2/8 : Extraction données A7")
             if result_a7 and result_a7.get('success'):
                 be         = result_a7['best_estimate']['best_estimate']
-                p99_5      = result_a7.get('bootstrap', {}).get('P99_5', be * 1.25)
-                p90        = result_a7.get('bootstrap', {}).get('P90',   be * 1.12)
-                tail_f     = result_a7.get('tail_factor', {}).get('tail_factor', 1.0)
+                # Clés bootstrap en minuscule (A7 retourne p99_5, p90)
+                boot       = result_a7.get('bootstrap', {})
+                p99_5      = boot.get('p99_5', boot.get('P99_5', be * 1.25))
+                p90        = boot.get('p90',   boot.get('P90',   be * 1.12))
+                # tail_factor est un dict avec clé 'tail_factor'
+                tail_d     = result_a7.get('tail_factor', {})
+                tail_f     = tail_d.get('tail_factor', 1.0) if isinstance(tail_d, dict) else 1.0
                 orsa_a7    = result_a7.get('orsa_provisions', {})
                 sous_br    = result_a7.get('sous_branche', sous_branche)
                 facteurs_cl= result_a7.get('chain_ladder', {}).get('facteurs', [])
@@ -213,10 +213,18 @@ class AgentA8StressTesting:
             # ── Étape 3 : Extraire les données de A6 ─────────────────────────
             logger.info("Étape 3/8 : Extraction données A6")
             if result_a6 and result_a6.get('success', True):
-                prime_nette = result_a6.get('prime_nette', primes_acq)
-                gini        = result_a6.get('gini', 0.25)
+                # A6 retourne modele_production avec gini_test et prime_pure
+                mp          = result_a6.get('modele_production', {})
+                # Prime : depuis modele_production ou backtest ou fallback
+                bt          = result_a6.get('backtest', {})
+                prime_nette = (mp.get('prime_pure',
+                               bt.get('moy_train',
+                               result_a6.get('prime_nette', primes_acq))))
+                if not prime_nette or prime_nette == 0:
+                    prime_nette = primes_acq
+                gini        = mp.get('gini_test', result_a6.get('gini', 0.25))
                 lr_attendu  = result_a6.get('loss_ratio_attendu', 0.72)
-                modele      = result_a6.get('modele_retenu', 'N/A')
+                modele      = mp.get('modele', result_a6.get('modele_retenu', 'N/A'))
                 logger.info(f"A6 branché : PA={prime_nette:,.0f}€ | Gini={gini:.4f} | LR={lr_attendu:.2f}")
             else:
                 prime_nette = primes_acq
