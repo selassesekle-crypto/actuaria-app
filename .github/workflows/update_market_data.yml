@@ -1,0 +1,119 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# ActuarIA — Mise à jour automatique des données marché
+# GitHub Actions Workflow
+#
+# CE QUE FAIT CE FICHIER :
+# → Se lance automatiquement le 1er de chaque mois à 7h00 (UTC)
+# → Tente de récupérer les taux OAT depuis l'API BCE
+# → Met à jour reference_actuaria.json si les taux ont changé
+# → Commit et push automatiquement sur GitHub
+# → Render redéploie l'application automatiquement
+#
+# COÛT : 0€ (GitHub Actions gratuit jusqu'à 2 000 min/mois)
+# ══════════════════════════════════════════════════════════════════════════════
+
+name: "Mise à jour données marché ActuarIA"
+
+on:
+  # ── Déclenchement automatique mensuel ──────────────────────────────────────
+  schedule:
+    - cron: "0 7 1 * *"   # Le 1er de chaque mois à 7h00 UTC (8h Paris)
+
+  # ── Déclenchement manuel depuis GitHub (bouton "Run workflow") ─────────────
+  workflow_dispatch:
+    inputs:
+      force_update:
+        description: "Forcer la mise à jour même si les taux n'ont pas changé"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+jobs:
+  update-market-data:
+    name: "Récupérer et mettre à jour les taux marché"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+
+      # ── Étape 1 : Récupérer le code du projet ────────────────────────────
+      - name: "Checkout du projet ActuarIA"
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 1
+
+      # ── Étape 2 : Installer Python ────────────────────────────────────────
+      - name: "Configurer Python 3.11"
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      # ── Étape 3 : Installer les dépendances minimales ─────────────────────
+      - name: "Installer les dépendances"
+        run: |
+          pip install requests python-dateutil --quiet
+
+      # ── Étape 4 : Lancer le script de mise à jour ─────────────────────────
+      - name: "Mettre à jour reference_actuaria.json"
+        id: update
+        env:
+          FORCE_UPDATE: ${{ github.event.inputs.force_update || 'false' }}
+        run: |
+          python scripts/update_market_data_auto.py
+        continue-on-error: true   # Si l'API est down, on continue sans erreur
+
+      # ── Étape 5 : Vérifier si le fichier a changé ─────────────────────────
+      - name: "Vérifier les modifications"
+        id: check_changes
+        run: |
+          if git diff --quiet data/marche/reference_actuaria.json; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ Taux inchangés — pas de commit nécessaire"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "✅ Taux mis à jour — commit en cours"
+            git diff data/marche/reference_actuaria.json
+          fi
+
+      # ── Étape 6 : Commit et push si changements ───────────────────────────
+      - name: "Commit et push des nouveaux taux"
+        if: steps.check_changes.outputs.changed == 'true'
+        run: |
+          git config user.name  "ActuarIA Bot"
+          git config user.email "actuaria-bot@noreply.github.com"
+          git add data/marche/reference_actuaria.json
+          git commit -m "📈 Mise à jour automatique taux marché $(date +'%Y-%m-%d')
+
+          Sources :
+          - OAT France : API BCE (data-api.ecb.europa.eu)
+          - RFR EIOPA  : Référence mensuelle EIOPA
+          - Inflation  : Dernière publication INSEE
+          
+          [skip ci]"
+          git push
+
+      # ── Étape 7 : Résumé dans les logs GitHub ─────────────────────────────
+      - name: "Résumé de la mise à jour"
+        if: always()
+        run: |
+          echo "════════════════════════════════════════"
+          echo "ActuarIA — Mise à jour données marché"
+          echo "════════════════════════════════════════"
+          echo "Date       : $(date +'%Y-%m-%d %H:%M UTC')"
+          echo "Modifié    : ${{ steps.check_changes.outputs.changed }}"
+          python -c "
+          import json
+          with open('data/marche/reference_actuaria.json') as f:
+              d = json.load(f)
+          print(f\"OAT 10 ans : {d['oat_france']['tec10']}%\")
+          print(f\"RFR 10 ans : {d['eiopa_rfr_eur']['rfr_10ans']}%\")
+          print(f\"UFR EIOPA  : {d['eiopa_rfr_eur']['ufr']}%\")
+          print(f\"Taux BCE   : {d['macroeconomique']['taux_directeur_bce']}%\")
+          print(f\"Inflation  : {d['macroeconomique']['inflation_france_mai2026']}%\")
+          "
+          echo "════════════════════════════════════════"

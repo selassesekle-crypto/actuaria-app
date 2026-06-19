@@ -1,0 +1,146 @@
+{
+  "_metadata": {
+    "description": "Données marché de référence ActuarIA",
+    "date_mise_a_jour": "2026-06-19",
+    "sources": {
+      "oat": "Agence France Trésor / Banque de France (15/06/2026)",
+      "eiopa": "EIOPA RFR Term Structures (publication juin 2026)",
+      "inflation": "INSEE mai 2026",
+      "notation": "Moody's avril 2026"
+    },
+    "periodicite_mise_a_jour": "Trimestrielle (janvier, avril, juillet, octobre)",
+    "prochaine_maj": "2026-10-01"
+  },
+  "oat_france": {
+    "description": "Obligations Assimilables du Trésor (AFT / Banque de France)",
+    "devise": "EUR",
+    "unite": "pourcentage annuel",
+    "date": "2026-06-15",
+    "taux": {
+      "1_an": 2.6,
+      "2_ans": 2.8,
+      "3_ans": 2.95,
+      "5_ans": 3.1,
+      "7_ans": 3.35,
+      "10_ans": 3.65,
+      "15_ans": 3.95,
+      "20_ans": 4.2,
+      "30_ans": 4.55
+    },
+    "tec10": 3.65,
+    "commentaire": "OAT 10 ans à 3.65% au 15/06/2026 (AFT). Hausse par rapport à fin 2025 (3.60%). Notation Moody's Aa3 perspective négative depuis avril 2026."
+  },
+  "eiopa_rfr_eur": {
+    "description": "Courbe des taux sans risque EIOPA (Risk-Free Rate) pour l'euro",
+    "devise": "EUR",
+    "unite": "pourcentage annuel",
+    "date": "2026-05-31",
+    "publication_suivante": "2026-07-03",
+    "methode": "Smith-Wilson avec Last Liquid Point à 20 ans",
+    "ufr": 3.3,
+    "cra": 0.1,
+    "volatility_adjustment": 0.35,
+    "rfr_par_maturite": {
+      "1": 2.51,
+      "2": 2.68,
+      "3": 2.79,
+      "4": 2.87,
+      "5": 2.94,
+      "6": 3.0,
+      "7": 3.05,
+      "8": 3.09,
+      "10": 3.2,
+      "15": 3.27,
+      "20": 3.3,
+      "30": 3.3,
+      "40": 3.3,
+      "50": 3.3
+    },
+    "rfr_10ans": 3.2,
+    "rfr_20ans": 3.3,
+    "commentaire": "RFR EIOPA EUR mai 2026. UFR = 3.30% (stable depuis 2024). VA = 0.35% (portefeuille représentatif mis à jour mars 2026)."
+  },
+  "parametres_scr_standard": {
+    "description": "Paramètres de la formule standard SCR Solvabilité 2 (Actes Délégués 2015/35/UE)",
+    "date_reference": "2026-01-01",
+    "scr_souscription_non_vie": {
+      "sigma_primes_rc_auto": 0.1,
+      "sigma_primes_incendie": 0.08,
+      "sigma_primes_rc_general": 0.11,
+      "sigma_reserves_rc_auto": 0.09,
+      "sigma_reserves_incendie": 0.1,
+      "sigma_reserves_rc_general": 0.11,
+      "facteur_catastrophe_vent": 0.1,
+      "facteur_catastrophe_grele": 0.03,
+      "facteur_catastrophe_inondation": 0.04
+    },
+    "scr_marche": {
+      "choc_taux_hausse_10ans": 0.48,
+      "choc_taux_baisse_10ans": -0.38,
+      "choc_actions_type1": 0.39,
+      "choc_actions_type2": 0.49,
+      "choc_immobilier": 0.25,
+      "choc_spread_IG": 0.009,
+      "choc_devise": 0.25
+    },
+    "scr_vie": {
+      "choc_mortalite": 0.15,
+      "choc_longevite": 0.2,
+      "choc_invalidite": 0.35,
+      "choc_rachat_hausse": 0.4,
+      "choc_rachat_baisse": 0.4,
+      "choc_frais": 0.1,
+      "choc_catastrophe": 0.0015
+    },
+    "mcr": {
+      "pct_scr_min": 0.25,
+      "pct_scr_max": 0.45,
+      "seuil_absolu_non_vie": 2500000,
+      "seuil_absolu_vie": 3700000,
+      "seuil_absolu_mixte": 3700000
+    }
+  },
+  "marche_credit": {
+    "description": "Spreads de crédit de référence (marché obligataire euro)",
+    "date": "2026-06-19",
+    "spreads_IG_sur_rfr": {
+      "1_3_ans": 0.65,
+      "3_5_ans": 0.85,
+      "5_7_ans": 1.05,
+      "7_10_ans": 1.25,
+      "10_ans_plus": 1.55
+    },
+    "spread_souverain_france": 0.45,
+    "commentaire": "Spreads IG en légère hausse par rapport à 2025. Spread France/Allemagne stable à 45bp."
+  },
+  "macroeconomique": {
+    "description": "Indicateurs macro de référence pour l'ORSA",
+    "date": "2026-06-19",
+    "inflation_france_mai2026": 2.4,
+    "croissance_pib_france_2025": 1.1,
+    "croissance_pib_france_2026_prev": 0.9,
+    "taux_directeur_bce": 2.25,
+    "euribor_3m": 2.45,
+    "euribor_6m": 2.6,
+    "volatilite_actions_vix_eur": 18.5,
+    "notation_france_moodys": "Aa3",
+    "notation_france_sp": "AA-",
+    "commentaire": "Contexte de détente monétaire BCE en 2025. Inflation revenue à 2.4% en France mai 2026. Taux directeur BCE à 2.25%."
+  },
+  "portefeuille_type_assureur": {
+    "description": "Portefeuille actif type d'un assureur Non-Vie français (référence EIOPA)",
+    "date": "2026-01-01",
+    "allocation": {
+      "obligations_souveraines": 0.45,
+      "obligations_corporate_IG": 0.25,
+      "actions": 0.1,
+      "immobilier": 0.08,
+      "monetaire": 0.07,
+      "autres": 0.05
+    },
+    "duration_passifs_moy_nv": 3.5,
+    "duration_actifs_moy": 4.2,
+    "rendement_actifs_attendu": 3.8,
+    "commentaire": "Portefeuille type basé sur les remontées EIOPA des assureurs européens (end-2024 reporting)."
+  }
+}
