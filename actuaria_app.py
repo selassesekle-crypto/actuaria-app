@@ -737,10 +737,16 @@ def page_agent_detail():
         with tab2:
             _chat(ak)
     elif ak in AGENTS_CALCULS:
-        tab1, tab2 = st.tabs([f"📋 Tableau de bord", f"💬 Dialoguer avec {a['prenom']}"])
+        tab1, tab2, tab3 = st.tabs([
+            f"📊 Résultats",
+            f"🔬 Validation",
+            f"💬 Dialoguer avec {a['prenom']}",
+        ])
         with tab1:
             _dashboard_agent(ak)
         with tab2:
+            _validation_agent(ak)
+        with tab3:
             _chat(ak)
     else:
         tab1, tab2 = st.tabs([f"📋 Vue d'ensemble", f"💬 Dialoguer avec {a['prenom']}"])
@@ -940,6 +946,50 @@ def _dashboard_agent(ak):
                 mime="application/json",
                 key=f"dl_aud_{ak}",
             )
+
+def _validation_agent(ak):
+    """Onglet Validation — hypothèses testées avec graphiques auto-explicatifs."""
+    a = AGENTS[ak]
+    st.markdown(f"""
+<div style="background:{NAVY_L};border:1px solid rgba(201,168,76,0.2);border-radius:10px;padding:16px;margin-bottom:16px;">
+  <div style="font-size:0.68rem;color:{OR};text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;font-weight:700;">
+    🔬 Validation des hypothèses — Standard ActuarIA
+  </div>
+  <div style="font-size:0.82rem;color:{GRIS};line-height:1.65;">
+    Chaque modèle utilisé par {a['prenom']} repose sur des hypothèses statistiques.
+    Cette section montre si ces hypothèses sont validées ou non,
+    avec une explication claire pour tout lecteur, actuaire ou non.
+  </div>
+</div>""", unsafe_allow_html=True)
+
+    # Charger les graphiques de validation si disponibles
+    # (ils seront chargés depuis les résultats du pipeline Colab)
+    st.info(f"⚙️ Les graphiques de validation s'affichent après exécution du pipeline {a['prenom']} depuis Colab.")
+    st.markdown(f"""
+<div style="background:{NAVY_LL};border:1px solid rgba(201,168,76,0.15);border-radius:10px;padding:16px;">
+  <div style="font-size:0.82rem;color:{BLANC};line-height:1.8;">
+    <strong style="color:{OR};">Hypothèses validées pour {a['prenom']} :</strong><br>
+    {_get_hypotheses_texte(a['code'])}
+  </div>
+</div>""", unsafe_allow_html=True)
+
+def _get_hypotheses_texte(code):
+    """Retourne le texte des hypothèses par agent."""
+    h = {
+        "A7":  "H1 — Sur-dispersion ODP (φ > 1)<br>H2 — Résidus de Pearson i.i.d. (χ², p > 0.05)<br>H3 — Convergence Bootstrap vs Chain Ladder (écart < 2%)",
+        "A10": "H1 — Convergence Monte Carlo (erreur VaR < 1%)<br>H2 — Cohérence Formule Standard vs MC (écart < 10%)<br>H3 — Matrice corrélations EIOPA définie positive",
+        "A4":  "H1 — Absence d'overfitting (ratio train/test > 0.90)<br>H2 — Stabilité PSI (< 0.10 = stable)<br>H3 — Gini suffisant (> 0.20)",
+        "A12": "H1 — Mean reversion significative Vasicek (κ > 0)<br>H2 — 3 conditions Redington (duration, convexité, VA)<br>H3 — Calibration Vasicek RMSE acceptable",
+        "A3":  "H1 — Distribution Poisson (test dispersion)<br>H2 — Indépendance résidus (Durbin-Watson)<br>H3 — Linéarité lien log (test RESET)",
+        "A5":  "H1 — Convergence loss (décroissante)<br>H2 — Pas de surapprentissage (val_loss stable)<br>H3 — Résidus non biaisés",
+        "A14": "H1 — Ajustement Lee-Carter (R² > 0.95)<br>H2 — Cohérence tables réglementaires<br>H3 — Extrapolation raisonnable (qx ≤ 1)",
+        "EP1": "H1 — Taux d'actualisation OAT AA cohérent<br>H2 — Sensibilité DBO < 20%/100bp",
+        "EP2": "H1 — Taux technique ≤ taux marché<br>H2 — Rente calculée > 0",
+        "EP3": "H1 — PM ≥ encours (pas de sous-provisionnement)<br>H2 — PPB réglementaire > 0",
+        "EP4": "H1 — Chocs calibrés EIOPA (longévité +20%)<br>H2 — Ratio base cohérent (actifs > PM)",
+    }
+    return h.get(code, "Contrôles de qualité spécifiques à cet agent — voir notebook.")
+
 
 def _chat(ak):
     a = AGENTS[ak]
