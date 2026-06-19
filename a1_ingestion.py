@@ -192,6 +192,7 @@ class AgentA1Ingestion:
         branche:   str = 'non_vie',
         fichier:   str = 'contrats_auto_70k.parquet',
         client_id: str = None,
+        dataframe  = None,
     ) -> Dict[str, Any]:
         """
         Pipeline d'ingestion complet.
@@ -220,9 +221,20 @@ class AgentA1Ingestion:
 
         try:
             # ── ÉTAPE 1 : CHARGEMENT ──────────────────────────────────────────
-            df, sous_branche = self._charger_fichier(fichier, branche)
-            rapport['etapes'].append('chargement')
-            logger.info(f"Chargé : {df.shape} | sous-branche détectée : {sous_branche}")
+            # Si un DataFrame est fourni directement → on saute le chargement
+            # fichier. Permet l'utilisation depuis Streamlit, FastAPI, etc.
+            if dataframe is not None:
+                import pandas as pd
+                if not isinstance(dataframe, pd.DataFrame):
+                    raise ValueError("Le paramètre 'dataframe' doit être un pd.DataFrame.")
+                df = dataframe.copy()
+                sous_branche = self._detecter_sous_branche(df, branche)
+                rapport['etapes'].append('dataframe_direct')
+                logger.info(f"DataFrame direct : {df.shape} | sous-branche : {sous_branche}")
+            else:
+                df, sous_branche = self._charger_fichier(fichier, branche)
+                rapport['etapes'].append('chargement')
+                logger.info(f"Chargé : {df.shape} | sous-branche détectée : {sous_branche}")
 
             # ── ÉTAPE 2 : MAPPING COLONNES CLIENT ────────────────────────────
             if client_id:

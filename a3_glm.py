@@ -765,8 +765,8 @@ class AgentA3GLM:
         mask_train = df_train[col_cout] > 0
         mask_test  = df_test[col_cout]  > 0
 
-        df_sin_train = df_train[mask_train].copy()
-        df_sin_test  = df_test[mask_test].copy()
+        df_sin_train = df_train[mask_train].copy().reset_index(drop=True)
+        df_sin_test  = df_test[mask_test].copy().reset_index(drop=True)
 
         nb_sin_train = int(mask_train.sum())
         nb_sin_test  = int(mask_test.sum())
