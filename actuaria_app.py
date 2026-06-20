@@ -131,7 +131,7 @@ hr {{border-color:rgba(201,168,76,0.15);}}
 # AGENTS
 # ══════════════════════════════════════════════════════════════════════════════
 AGENTS = {
-    "sofia":    {"prenom":"Sofia",   "code":"ARIA",    "icon":"🤖","statut":"VERT","niveau":"centrale","dir":"centrale","role_fr":"Directrice IA Générale","intro":"Bonjour, je suis Sofia, Directrice IA Générale de la plateforme ActuarIA. Je supervise 3 directions, 9 managers et 46 agents spécialisés. Je maîtrise l'ensemble des résultats actuariels de la plateforme et réponds à toutes vos questions, quelle que soit la branche ou le domaine.","spec_fr":"IA générative · Claude API · Synthèse multi-directions","kpi":"46 agents · 4 directions"},
+    "sofia":    {"prenom":"Sofia",   "code":"ARIA",    "icon":"🤖","statut":"VERT","niveau":"centrale","dir":"centrale","role_fr":"Directrice IA Générale","intro":"Bonjour, je suis Sofia, Directrice IA Générale de la plateforme ActuarIA. Je supervise 4 directions, 12 managers et 46 agents spécialisés. Je maîtrise l'ensemble des résultats actuariels de la plateforme et réponds à toutes vos questions, quelle que soit la branche ou le domaine.","spec_fr":"IA générative · Claude API · Synthèse multi-directions","kpi":"46 agents · 4 directions"},
     "rafael":   {"prenom":"Rafael",  "code":"A13",     "icon":"🔐","statut":"VERT","niveau":"agent","dir":"data","equipe":"data","role_fr":"Audit Trail & Conformité RGPD","intro":"Bonjour, je suis Rafael, responsable de l'Audit Trail et de la conformité RGPD sur toute la plateforme ActuarIA. Je garantis l'intégrité de chaque calcul produit par nos 46 agents grâce au hachage SHA-256 et au registre RGPD Art.30.","spec_fr":"SHA-256 · RGPD Art.30 · Versioning · Audit S2","kpi":"Hash 5BB15F63"},
     # Direction Non-Vie
     "leila":    {"prenom":"Leila",   "code":"DIR-NV",  "icon":"👩‍💼","statut":"VERT","niveau":"directeur","dir":"non_vie","role_fr":"Directrice Direction Non-Vie","intro":"Bonjour, je suis Leila, Directrice de la Direction Non-Vie chez ActuarIA. Je supervise 3 équipes et 12 agents spécialisés. J'assume la pleine responsabilité de tous les résultats de ma direction : tarification, provisionnement et réglementation Non-Vie.","spec_fr":"IARD · Auto · MRH · RC Pro · Supervision direction","kpi":"3 équipes · 12 agents"},
@@ -170,17 +170,17 @@ AGENTS = {
     "camille":  {"prenom":"Camille", "code":"R-VIE2",  "icon":"⚖️","statut":"DEV","niveau":"agent","dir":"vie_epre","equipe":"reglementation_vie","role_fr":"ALM Long Terme","intro":"Bonjour, je suis Camille, experte en ALM pour les contrats vie et EP-RE. Je calcule l'ALM avec une duration passif de 15 à 25 ans et le stress taux spécifique aux contrats longs.","spec_fr":"ALM long terme · Duration 15-25 ans · Gap · BV01","kpi":"En développement"},
     "yuki":     {"prenom":"Yuki",    "code":"A14",     "icon":"📉","statut":"VERT","niveau":"agent","dir":"vie_epre","equipe":"reglementation_vie","role_fr":"Tables de Mortalité & Biométrie","intro":"Bonjour, je suis Yuki, spécialiste des tables de mortalité et de la biométrie actuarielle. Je calcule les annuités viagères, espérances de vie et capitaux décès. J'accepte également les tables d'expérience de vos clients.","spec_fr":"TH0002 · TF0002 · TGHF05 · Lee-Carter · Table custom","kpi":"R²=0.9985 · ä65=13.07"},
     # Direction Santé-Prévoyance
-    "amira":    {"prenom":"Amira",   "code":"DIR-SP",  "icon":"👩‍⚕️","statut":"DEV","niveau":"directeur","dir":"sante_prev","role_fr":"Directrice Direction Santé-Prévoyance","intro":"Bonjour, je suis Amira, Directrice de la Direction Santé-Prévoyance. Je supervise les équipes Santé et Prévoyance. Naomie (Stress Testing) me rend compte directement. La direction est en cours de développement.","spec_fr":"Santé · Prévoyance · Mutuelles · IP · AMEXA","kpi":"Direction en développement"},
-    "chiara":   {"prenom":"Chiara",  "code":"MGR-SAN", "icon":"🏥","statut":"DEV","niveau":"manager","dir":"sante_prev","equipe":"sante","role_fr":"Manager Équipe Santé","intro":"Bonjour, je suis Chiara, Manager de l'Équipe Santé. Je supervise les travaux de tarification, provisionnement et reporting santé : frais médicaux, CCAM/NGAP, ANI et AMEXA.","spec_fr":"CCAM · NGAP · ANI · AMEXA · PSAP Santé","kpi":"Équipe en développement"},
-    "diallo":   {"prenom":"Diallo",  "code":"MGR-PRE", "icon":"🩺","statut":"DEV","niveau":"manager","dir":"sante_prev","equipe":"prevoyance","role_fr":"Manager Équipe Prévoyance","intro":"Bonjour, je suis Diallo, Manager de l'Équipe Prévoyance. Je supervise les travaux de tarification, provisionnement et reporting prévoyance : ITT, invalidité, décès et tables de morbidité.","spec_fr":"ITT · Invalidité · TD 88-90 · BCAC 2004","kpi":"Équipe en développement"},
-    "leonie":   {"prenom":"Léonie",  "code":"S1",      "icon":"💊","statut":"DEV","niveau":"agent","dir":"sante_prev","equipe":"sante","role_fr":"Tarification Frais de Santé","intro":"Bonjour, je suis Léonie, spécialiste en tarification des contrats complémentaires santé. Je tarifie les garanties soins courants, hospitalisation, dentaire et optique sur la base des tables CCAM/NGAP.","spec_fr":"CCAM · NGAP · ANI · Garanties santé","kpi":"En développement"},
-    "selma":    {"prenom":"Selma",   "code":"S2",      "icon":"📦","statut":"DEV","niveau":"agent","dir":"sante_prev","equipe":"sante","role_fr":"Provisionnement Santé","intro":"Bonjour, je suis Selma, experte en provisionnement santé. Je calcule le PSAP santé, la Provision pour Risques en Cours et les cadences de règlement des actes médicaux.","spec_fr":"PSAP Santé · PRC · Cadences règlement","kpi":"En développement"},
-    "binta":    {"prenom":"Binta",   "code":"S3",      "icon":"📋","statut":"DEV","niveau":"agent","dir":"sante_prev","equipe":"sante","role_fr":"Reporting Santé","intro":"Bonjour, je suis Binta, responsable du reporting réglementaire santé. Je génère les QRT S.13, l'enquête AMEXA pour les mutuelles, les statistiques DREES et les rapports de conformité ANI.","spec_fr":"QRT S.13 · AMEXA · DREES · ANI","kpi":"En développement"},
-    "axel":     {"prenom":"Axel",    "code":"P1",      "icon":"🦺","statut":"DEV","niveau":"agent","dir":"sante_prev","equipe":"prevoyance","role_fr":"Tarification Prévoyance","intro":"Bonjour, je suis Axel, spécialiste en tarification prévoyance. Je tarifie l'incapacité temporaire de travail (ITT), l'invalidité permanente et le décès prévoyance sur les tables TD 88-90 et BCAC 2004.","spec_fr":"ITT · Invalidité · TD 88-90 · BCAC 2004","kpi":"En développement"},
-    "rayan":    {"prenom":"Rayan",   "code":"P2",      "icon":"📊","statut":"DEV","niveau":"agent","dir":"sante_prev","equipe":"prevoyance","role_fr":"Tables de Morbidité","intro":"Bonjour, je suis Rayan, expert en tables de morbidité. Je gère les tables d'incapacité-invalidité et modélise les probabilités de passage entre états par chaîne de Markov.","spec_fr":"Tables morbidité · Incapacité · Chaîne de Markov","kpi":"En développement"},
-    "elodie":   {"prenom":"Élodie",  "code":"P3",      "icon":"📐","statut":"DEV","niveau":"agent","dir":"sante_prev","equipe":"prevoyance","role_fr":"Provisionnement Prévoyance","intro":"Bonjour, je suis Élodie, experte en provisionnement prévoyance. Je calcule les provisions mathématiques pour les rentes d'invalidité long terme.","spec_fr":"PM invalidité · Long terme · Actuariat vie","kpi":"En développement"},
-    "valentin": {"prenom":"Valentin","code":"P4",      "icon":"📋","statut":"DEV","niveau":"agent","dir":"sante_prev","equipe":"prevoyance","role_fr":"Reporting Prévoyance","intro":"Bonjour, je suis Valentin, responsable du reporting réglementaire prévoyance. Je génère les QRT S.12, le rapport actuariel annuel prévoyance et l'ORSA prévoyance.","spec_fr":"QRT S.12 · Rapport actuariel · ORSA prévoyance","kpi":"En développement"},
-    "naomie":   {"prenom":"Naomie",  "code":"SP-ST",   "icon":"🌡️","statut":"DEV","niveau":"agent","dir":"sante_prev","equipe":"transversal_sp","role_fr":"Stress Testing Santé-Prévoyance","intro":"Bonjour, je suis Naomie, experte en stress testing Santé-Prévoyance. Je travaille de manière transversale sur les deux équipes, évaluant l'impact des chocs pandémie, morbidité et désengagement de la Sécurité sociale.","spec_fr":"Choc pandémie · Morbidité · Désengagement Sécu","kpi":"En développement"},
+    "amira":    {"prenom":"Amira",   "code":"DIR-SP",  "icon":"👩‍⚕️","statut":"VERT","niveau":"directeur","dir":"sante_prev","role_fr":"Directrice Direction Santé-Prévoyance","intro":"Bonjour, je suis Amira, Directrice de la Direction Santé-Prévoyance. Je supervise les équipes Santé et Prévoyance. Naomie (Stress Testing) me rend compte directement. La direction est en cours de développement.","spec_fr":"Santé · Prévoyance · Mutuelles · IP · AMEXA","kpi":"Direction en développement"},
+    "chiara":   {"prenom":"Chiara",  "code":"MGR-SAN", "icon":"🏥","statut":"VERT","niveau":"manager","dir":"sante_prev","equipe":"sante","role_fr":"Manager Équipe Santé","intro":"Bonjour, je suis Chiara, Manager de l'Équipe Santé. Je supervise les travaux de tarification, provisionnement et reporting santé : frais médicaux, CCAM/NGAP, ANI et AMEXA.","spec_fr":"CCAM · NGAP · ANI · AMEXA · PSAP Santé","kpi":"Équipe en développement"},
+    "diallo":   {"prenom":"Diallo",  "code":"MGR-PRE", "icon":"🩺","statut":"VERT","niveau":"manager","dir":"sante_prev","equipe":"prevoyance","role_fr":"Manager Équipe Prévoyance","intro":"Bonjour, je suis Diallo, Manager de l'Équipe Prévoyance. Je supervise les travaux de tarification, provisionnement et reporting prévoyance : ITT, invalidité, décès et tables de morbidité.","spec_fr":"ITT · Invalidité · TD 88-90 · BCAC 2004","kpi":"Équipe en développement"},
+    "leonie":   {"prenom":"Léonie",  "code":"S1",      "icon":"💊","statut":"VERT","niveau":"agent","dir":"sante_prev","equipe":"sante","role_fr":"Tarification Frais de Santé","intro":"Bonjour, je suis Léonie, spécialiste en tarification des contrats complémentaires santé. Je tarifie les garanties soins courants, hospitalisation, dentaire et optique sur la base des tables CCAM/NGAP.","spec_fr":"CCAM · NGAP · ANI · Garanties santé","kpi":"En développement"},
+    "selma":    {"prenom":"Selma",   "code":"S2",      "icon":"📦","statut":"VERT","niveau":"agent","dir":"sante_prev","equipe":"sante","role_fr":"Provisionnement Santé","intro":"Bonjour, je suis Selma, experte en provisionnement santé. Je calcule le PSAP santé, la Provision pour Risques en Cours et les cadences de règlement des actes médicaux.","spec_fr":"PSAP Santé · PRC · Cadences règlement","kpi":"En développement"},
+    "binta":    {"prenom":"Binta",   "code":"S3",      "icon":"📋","statut":"VERT","niveau":"agent","dir":"sante_prev","equipe":"sante","role_fr":"Reporting Santé","intro":"Bonjour, je suis Binta, responsable du reporting réglementaire santé. Je génère les QRT S.13, l'enquête AMEXA pour les mutuelles, les statistiques DREES et les rapports de conformité ANI.","spec_fr":"QRT S.13 · AMEXA · DREES · ANI","kpi":"En développement"},
+    "axel":     {"prenom":"Axel",    "code":"P1",      "icon":"🦺","statut":"VERT","niveau":"agent","dir":"sante_prev","equipe":"prevoyance","role_fr":"Tarification Prévoyance","intro":"Bonjour, je suis Axel, spécialiste en tarification prévoyance. Je tarifie l'incapacité temporaire de travail (ITT), l'invalidité permanente et le décès prévoyance sur les tables TD 88-90 et BCAC 2004.","spec_fr":"ITT · Invalidité · TD 88-90 · BCAC 2004","kpi":"En développement"},
+    "rayan":    {"prenom":"Rayan",   "code":"P2",      "icon":"📊","statut":"VERT","niveau":"agent","dir":"sante_prev","equipe":"prevoyance","role_fr":"Tables de Morbidité","intro":"Bonjour, je suis Rayan, expert en tables de morbidité. Je gère les tables d'incapacité-invalidité et modélise les probabilités de passage entre états par chaîne de Markov.","spec_fr":"Tables morbidité · Incapacité · Chaîne de Markov","kpi":"En développement"},
+    "elodie":   {"prenom":"Élodie",  "code":"P3",      "icon":"📐","statut":"VERT","niveau":"agent","dir":"sante_prev","equipe":"prevoyance","role_fr":"Provisionnement Prévoyance","intro":"Bonjour, je suis Élodie, experte en provisionnement prévoyance. Je calcule les provisions mathématiques pour les rentes d'invalidité long terme.","spec_fr":"PM invalidité · Long terme · Actuariat vie","kpi":"En développement"},
+    "valentin": {"prenom":"Valentin","code":"P4",      "icon":"📋","statut":"VERT","niveau":"agent","dir":"sante_prev","equipe":"prevoyance","role_fr":"Reporting Prévoyance","intro":"Bonjour, je suis Valentin, responsable du reporting réglementaire prévoyance. Je génère les QRT S.12, le rapport actuariel annuel prévoyance et l'ORSA prévoyance.","spec_fr":"QRT S.12 · Rapport actuariel · ORSA prévoyance","kpi":"En développement"},
+    "naomie":   {"prenom":"Naomie",  "code":"SP-ST",   "icon":"🌡️","statut":"VERT","niveau":"agent","dir":"sante_prev","equipe":"transversal_sp","role_fr":"Stress Testing Santé-Prévoyance","intro":"Bonjour, je suis Naomie, experte en stress testing Santé-Prévoyance. Je travaille de manière transversale sur les deux équipes, évaluant l'impact des chocs pandémie, morbidité et désengagement de la Sécurité sociale.","spec_fr":"Choc pandémie · Morbidité · Désengagement Sécu","kpi":"En développement"},
 }
 
 # ── STRUCTURE ──────────────────────────────────────────────────────────────────
@@ -675,7 +675,8 @@ def page_direction():
 # ══════════════════════════════════════════════════════════════════════════════
 AGENTS_CALCULS = ["diana","amara","kenji","laurent","priya","yohan","victor",
                   "ibrahim","isabelle","marcus","elena","thomas","aisha",
-                  "henri","salome","jinho","claire","omar","yuki","rafael"]
+                  "henri","salome","jinho","claire","omar","yuki","rafael",
+                  "leonie","selma","binta","axel","rayan","elodie","valentin","naomie"]
 
 NIVEAU_LABELS = {
     "centrale":    ("Direction Générale", OR),
@@ -1536,10 +1537,13 @@ def _executer_analyse(besoin, direction, equipe, client):
         try:
             import sys, os
             # Chemin agents
-            for path in ["/content/drive/MyDrive/ActuarIA/agents", ".", os.path.dirname(__file__)]:
+            for path in [".", os.path.dirname(__file__)]:  # Streamlit Cloud
                 if path not in sys.path:
                     sys.path.insert(0, path)
 
+            import os as _os
+            _tmp = "/tmp/actuaria"
+            _os.makedirs(_tmp, exist_ok=True)
             resultats = {}
 
             # ── TARIFICATION ────────────────────────────────────────────────
@@ -1547,13 +1551,13 @@ def _executer_analyse(besoin, direction, equipe, client):
                 from a1_ingestion import AgentA1Ingestion
                 from a2_preprocessing import AgentA2Preprocessing
 
-                a1 = AgentA1Ingestion(verbose=False)
+                a1 = AgentA1Ingestion(audit_path=_tmp, verbose=False)
                 r1 = a1.run(dataframe=df, branche="non_vie")
                 if not r1["success"]:
                     st.error(f"❌ A1 Amara : {r1['erreur']}")
                     return
 
-                a2 = AgentA2Preprocessing(verbose=False)
+                a2 = AgentA2Preprocessing(audit_path=_tmp, verbose=False)
                 r2 = a2.run(r1)
                 if not r2["success"]:
                     st.error(f"❌ A2 Kenji : {r2['erreur']}")
@@ -1564,22 +1568,22 @@ def _executer_analyse(besoin, direction, equipe, client):
 
                 if besoin == "prime_glm":
                     from a3_glm import AgentA3GLM
-                    r3 = AgentA3GLM(verbose=False).run(r2, generer_graphiques=False)
+                    r3 = AgentA3GLM(audit_path=_tmp, verbose=False).run(r2, generer_graphiques=False)
                     resultats["principal"] = r3
                 elif besoin == "prime_ml":
                     from a4_ml import AgentA4ML
-                    r4 = AgentA4ML(verbose=False).run(r2, generer_graphiques=False, calcul_shap=False)
+                    r4 = AgentA4ML(audit_path=_tmp, verbose=False).run(r2, generer_graphiques=False, calcul_shap=False)
                     resultats["principal"] = r4
                 elif besoin == "prime_dl":
                     from a5_deep_learning import AgentA5DeepLearning
-                    r5 = AgentA5DeepLearning(verbose=False).run(r2, n_epochs=10, generer_graphiques=False)
+                    r5 = AgentA5DeepLearning(audit_path=_tmp, verbose=False).run(r2, n_epochs=10, generer_graphiques=False)
                     resultats["principal"] = r5
                 elif besoin in ["selection","sinistres"]:
                     from a3_glm import AgentA3GLM
-                    r3 = AgentA3GLM(verbose=False).run(r2, generer_graphiques=False)
+                    r3 = AgentA3GLM(audit_path=_tmp, verbose=False).run(r2, generer_graphiques=False)
                     if besoin == "selection":
                         from a6_comparaison import AgentA6Comparaison
-                        r6 = AgentA6Comparaison(verbose=False).run(r2, result_a3=r3, generer_graphiques=False, aide_decision=True)
+                        r6 = AgentA6Comparaison(audit_path=_tmp, verbose=False).run(r2, result_a3=r3, generer_graphiques=False, aide_decision=True)
                         resultats["principal"] = r6
                     else:
                         resultats["principal"] = r3
@@ -1587,7 +1591,7 @@ def _executer_analyse(besoin, direction, equipe, client):
             # ── TRIANGLE DIRECT → A7 ────────────────────────────────────────
             elif besoin == "triangle_xl":
                 from a7_provisionnement import AgentA7Provisionnement
-                a7 = AgentA7Provisionnement(verbose=False)
+                a7 = AgentA7Provisionnement(audit_path=_tmp, verbose=False)
                 # Construire le triangle depuis le DataFrame
                 if df is not None and len(df) > 1:
                     tri = df.select_dtypes(include=["number"]).values
@@ -1599,7 +1603,7 @@ def _executer_analyse(besoin, direction, equipe, client):
             # ── STRESS TESTING A8 ───────────────────────────────────────────
             elif besoin == "stress":
                 from a8_stress_testing import AgentA8StressTesting
-                r8 = AgentA8StressTesting(verbose=False).run(
+                r8 = AgentA8StressTesting(audit_path=_tmp, verbose=False).run(
                     primes_acq=params.get("primes", 10_000_000),
                     fonds_propres=params.get("fonds_propres", 7_650_000),
                     generer_graphiques=False,
@@ -1610,13 +1614,13 @@ def _executer_analyse(besoin, direction, equipe, client):
             elif besoin == "s2":
                 from a10_solvabilite2 import AgentA10Solvabilite2
                 a7_synt = {"best_estimate":{"best_estimate":params.get("be",2_914_930),"sigma_mack":params.get("be",2_914_930)*0.015,"cv_inter_methodes":5,"nb_methodes_convergentes":4},"tail":{"tail_factor":1.037},"meta":{"nb_lignes":50000,"n_annees":8},"sous_branche":params.get("branche","rc_auto")}
-                r10 = AgentA10Solvabilite2(verbose=False).run(result_a7=a7_synt, fonds_propres=params.get("fonds_propres",7_650_000), generer_graphiques=False)
+                r10 = AgentA10Solvabilite2(audit_path=_tmp, verbose=False).run(result_a7=a7_synt, fonds_propres=params.get("fonds_propres",7_650_000), generer_graphiques=False)
                 resultats["principal"] = r10
 
             # ── IAS 19 ──────────────────────────────────────────────────────
             elif besoin == "ias19":
                 from ep1_ias19 import AgentEP1IAS19
-                r_ep1 = AgentEP1IAS19(verbose=False).run(
+                r_ep1 = AgentEP1IAS19(audit_path=_tmp, verbose=False).run(
                     nb_salaries=params.get("nb_salaries",250),
                     salaire_moyen=params.get("salaire_moyen",42000),
                     age_moyen=params.get("age_moyen",45),
@@ -1630,13 +1634,13 @@ def _executer_analyse(besoin, direction, equipe, client):
                 if df is not None:
                     from a1_ingestion import AgentA1Ingestion
                     from a2_preprocessing import AgentA2Preprocessing
-                    r1 = AgentA1Ingestion(verbose=False).run(dataframe=df, branche="sante_prevoyance")
-                    r2 = AgentA2Preprocessing(verbose=False).run(r1)
+                    r1 = AgentA1Ingestion(audit_path=_tmp, verbose=False).run(dataframe=df, branche="sante_prevoyance")
+                    r2 = AgentA2Preprocessing(audit_path=_tmp, verbose=False).run(r1)
                     resultats["r2"] = r2
 
                 if besoin == "tarif_sante":
                     from leonie_s1_tarification_sante import AgentS1TarificationSante
-                    r_s1 = AgentS1TarificationSante(verbose=False).run(
+                    r_s1 = AgentS1TarificationSante(audit_path=_tmp, verbose=False).run(
                         nb_assures=params.get("nb_assures",1000),
                         age_moyen=params.get("age_moyen",42),
                         garantie_niveau=params.get("garantie_niveau","confort"),
@@ -1645,23 +1649,91 @@ def _executer_analyse(besoin, direction, equipe, client):
                     resultats["principal"] = r_s1
                 elif besoin == "prov_sante":
                     from selma_s2_provisionnement_sante import AgentS2ProvisionnemntSante
-                    r_s2 = AgentS2ProvisionnemntSante(verbose=False).run(
+                    r_s2 = AgentS2ProvisionnemntSante(audit_path=_tmp, verbose=False).run(
                         primes_acquises=params.get("primes_acquises",5_000_000),
                         generer_graphiques=False,
                     )
                     resultats["principal"] = r_s2
 
+            # ── COHÉRENCE A9 ────────────────────────────────────────────────
+            elif besoin == "coherence":
+                from a9_coherence import AgentA9Coherence
+                r9 = AgentA9Coherence(audit_path=_tmp, verbose=False).run(
+                    result_a7={"best_estimate":{"best_estimate":params.get("be",2_914_930)}},
+                    fonds_propres=params.get("fonds_propres",7_650_000),
+                    generer_graphiques=False,
+                )
+                resultats["principal"] = r9
+
+            # ── IFRS 17 A11 ─────────────────────────────────────────────────
+            elif besoin == "ifrs17":
+                from a11_ifrs17 import AgentA11IFRS17
+                r11 = AgentA11IFRS17(audit_path=_tmp, verbose=False).run(
+                    result_a7={"best_estimate":{"best_estimate":params.get("be",2_914_930)}},
+                    generer_graphiques=False,
+                )
+                resultats["principal"] = r11
+
+            # ── ALM A12 ─────────────────────────────────────────────────────
+            elif besoin == "alm":
+                from a12_alm import AgentA12ALM
+                r12 = AgentA12ALM(audit_path=_tmp, verbose=False).run(
+                    result_a7={"best_estimate":{"best_estimate":params.get("be",2_914_930)}},
+                    fonds_propres=params.get("fonds_propres",7_650_000),
+                    generer_graphiques=False,
+                )
+                resultats["principal"] = r12
+
+            # ── MORTALITÉ A14 ───────────────────────────────────────────────
+            elif besoin == "mortalite":
+                from a14_mortalite import AgentA14Mortalite
+                r14 = AgentA14Mortalite(audit_path=_tmp, verbose=False).run(
+                    table_custom=df,
+                    generer_graphiques=False,
+                )
+                resultats["principal"] = r14
+
+            # ── REPORT SANTÉ S3 ─────────────────────────────────────────────
+            elif besoin == "report_sante":
+                from binta_s3_reporting_sante import AgentS3ReportingSante
+                r_s3 = AgentS3ReportingSante(audit_path=_tmp, verbose=False).run(
+                    primes_acquises=params.get("primes_acquises",5_000_000),
+                    nb_assures=params.get("nb_assures",1000),
+                    generer_graphiques=False,
+                )
+                resultats["principal"] = r_s3
+
             # ── PRÉVOYANCE ───────────────────────────────────────────────────
             elif besoin in ["tarif_prev","tables","prov_prev","report_prev"]:
                 if besoin == "tarif_prev":
                     from axel_p1_tarification_prevoyance import AgentP1TarificationPrevoyance
-                    r_p1 = AgentP1TarificationPrevoyance(verbose=False).run(
+                    r_p1 = AgentP1TarificationPrevoyance(audit_path=_tmp, verbose=False).run(
                         age=params.get("age",40),
                         salaire_brut=params.get("salaire_brut",45000),
                         categorie=params.get("categorie","employe"),
                         generer_graphiques=False,
                     )
                     resultats["principal"] = r_p1
+                elif besoin == "tables":
+                    from rayan_p2_tables_morbidite import AgentP2TablesMorbidite
+                    r_p2 = AgentP2TablesMorbidite(audit_path=_tmp, verbose=False).run(
+                        generer_graphiques=False,
+                    )
+                    resultats["principal"] = r_p2
+                elif besoin == "prov_prev":
+                    from elodie_p3_provisionnement_prevoyance import AgentP3ProvisionnemntPrevoyance
+                    r_p3 = AgentP3ProvisionnemntPrevoyance(audit_path=_tmp, verbose=False).run(
+                        primes_acquises=params.get("primes",8_000_000),
+                        generer_graphiques=False,
+                    )
+                    resultats["principal"] = r_p3
+                elif besoin == "report_prev":
+                    from valentin_p4_reporting_prevoyance import AgentP4ReportingPrevoyance
+                    r_p4 = AgentP4ReportingPrevoyance(audit_path=_tmp, verbose=False).run(
+                        primes_acquises=params.get("primes",8_000_000),
+                        generer_graphiques=False,
+                    )
+                    resultats["principal"] = r_p4
 
             else:
                 st.info(f"⏸️ L'agent pour ce besoin ({besoin}) sera disponible prochainement.")
