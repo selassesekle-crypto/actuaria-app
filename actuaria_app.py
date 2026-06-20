@@ -371,7 +371,7 @@ def render_sidebar():
 
         # Direction Générale
         st.markdown(f"<div style='font-size:0.6rem;color:rgba(201,168,76,0.7);text-transform:uppercase;letter-spacing:0.14em;margin-bottom:6px;font-weight:700;'>◆ Direction Générale</div>", unsafe_allow_html=True)
-        for ak in ["sofia","diana","rafael"]:
+        for ak in ["sofia"]:
             a = AGENTS[ak]
             if st.button(f"{a['icon']} {a['prenom']} ({a['code']})", key=f"side_{ak}", use_container_width=True):
                 nav_to("agent_detail", agent=ak)
