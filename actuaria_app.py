@@ -46,6 +46,127 @@ def nav_to(page, agent=None, dir_key=None):
     st.session_state.dir_selec = dir_key
     st.rerun()
 
+# ══════════════════════════════════════════════════════════════════════════════
+# MAPPING COLONNES CLIENT
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Variables attendues par besoin
+VARIABLES_ATTENDUES = {
+    "prime_glm":   ["id_contrat","nb_sinistres","cout_total_sinistres","exposition","age","bonus_malus","puissance_fiscale","age_vehicule","zone_geographique","carburant"],
+    "prime_ml":    ["id_contrat","nb_sinistres","cout_total_sinistres","exposition","age","bonus_malus","puissance_fiscale","age_vehicule","zone_geographique","carburant"],
+    "prime_dl":    ["id_contrat","nb_sinistres","cout_total_sinistres","exposition","age","bonus_malus","puissance_fiscale","age_vehicule","zone_geographique","carburant"],
+    "selection":   ["id_contrat","nb_sinistres","cout_total_sinistres","exposition","age","bonus_malus","puissance_fiscale","age_vehicule","zone_geographique","carburant"],
+    "sinistres":   ["id_contrat","id_sinistre","nb_sinistres","cout_total_sinistres","annee_survenance"],
+    "triangle_xl": [],
+    "tarif_sante": ["id_contrat","nb_sinistres","cout_total_sinistres","age","exposition"],
+    "tarif_prev":  ["id_contrat","nb_sinistres","cout_total_sinistres","age","exposition"],
+}
+
+SYNONYMES_AUTO = {
+    'id_contrat':           ['num_police','id_police','policy_id','num_contrat','idpol','id_pol','contract_id','id_client','client_id'],
+    'id_sinistre':          ['id_claim','claim_id','num_sinistre','sinistre_id'],
+    'nb_sinistres':         ['claimnb','nb_claims','claim_count','nbre_sinistres','claim_nb','nombre_sinistres','sinistres'],
+    'cout_total_sinistres': ['claimamount','montant_sinistres','cout_sinistres','claim_amount','montant','charge','cout_sinistre','claim_cost'],
+    'exposition':           ['exposure','expo','duree','duration','poids','duree_contrat'],
+    'annee_survenance':     ['annee','year','id_year','annee_sinistre','year_occ','loss_year'],
+    'age':                  ['drimage','age_conducteur','age_cdt','age_driver','age_assure','age_client'],
+    'bonus_malus':          ['bonusmalus','crm','bm','bonus_malus_coeff','malus'],
+    'puissance_fiscale':    ['vehpower','puiss','puiss_fisc','puissance','cv_fiscaux','power'],
+    'age_vehicule':         ['vehage','age_veh','anciennete_vehicule','vehicle_age','age_auto'],
+    'zone_geographique':    ['area','zone','region_risque','zone_geo','area_code'],
+    'carburant':            ['vehgas','fuel','energie','motorisation'],
+}
+
+def _suggerer_mapping_auto(colonnes_client, besoin):
+    """Suggère automatiquement un mapping colonnes client → variables ActuarIA."""
+    variables = VARIABLES_ATTENDUES.get(besoin, [])
+    mapping = {}
+    cols_lower = {c.lower().replace(" ","_"): c for c in colonnes_client}
+    
+    for var in variables:
+        # 1. Correspondance exacte
+        if var in cols_lower:
+            mapping[var] = cols_lower[var]
+            continue
+        # 2. Synonymes
+        for syn in SYNONYMES_AUTO.get(var, []):
+            if syn.lower() in cols_lower:
+                mapping[var] = cols_lower[syn.lower()]
+                break
+        # 3. Correspondance partielle
+        if var not in mapping:
+            for col_low, col_orig in cols_lower.items():
+                if var.split("_")[0] in col_low or col_low in var:
+                    mapping[var] = col_orig
+                    break
+    return mapping
+
+def _afficher_mapping_interactif(df, besoin):
+    """
+    Affiche un écran de mapping interactif entre les colonnes du fichier client
+    et les variables attendues par ActuarIA.
+    Retourne le DataFrame renommé ou None si pas confirmé.
+    """
+    variables = VARIABLES_ATTENDUES.get(besoin, [])
+    if not variables:
+        return df  # Pas de mapping nécessaire (ex: triangle)
+    
+    colonnes_client = list(df.columns)
+    mapping_auto = _suggerer_mapping_auto(colonnes_client, besoin)
+    
+    st.markdown(f"""
+<div style="background:{NAVY_L};border:1px solid rgba(201,168,76,0.3);border-radius:10px;padding:16px;margin:10px 0;">
+  <div style="font-size:0.65rem;color:{OR};text-transform:uppercase;font-weight:700;margin-bottom:10px;">
+    🔗 Mapping des colonnes — Associez vos colonnes aux variables ActuarIA
+  </div>
+  <div style="font-size:0.78rem;color:{GRIS};margin-bottom:12px;">
+    ActuarIA a détecté automatiquement les correspondances. Vérifiez et corrigez si nécessaire.
+  </div>
+</div>""", unsafe_allow_html=True)
+
+    options = ["— Non disponible —"] + colonnes_client
+    mapping_final = {}
+    
+    cols_ui = st.columns(2)
+    for i, var in enumerate(variables):
+        with cols_ui[i % 2]:
+            suggestion = mapping_auto.get(var, "— Non disponible —")
+            idx = options.index(suggestion) if suggestion in options else 0
+            choix = st.selectbox(
+                f"**{var}**",
+                options=options,
+                index=idx,
+                key=f"map_{besoin}_{var}",
+                help=f"Synonymes connus : {', '.join(SYNONYMES_AUTO.get(var, [])[:4])}"
+            )
+            if choix != "— Non disponible —":
+                mapping_final[var] = choix
+
+    # Résumé
+    n_ok = len(mapping_final)
+    n_tot = len(variables)
+    color = VERT if n_ok == n_tot else AMBRE if n_ok >= n_tot * 0.7 else ROUGE
+    st.markdown(f"<div style='font-size:0.8rem;color:{color};margin:8px 0;'>{'✅' if n_ok==n_tot else '⚠️'} {n_ok}/{n_tot} variables mappées</div>", unsafe_allow_html=True)
+
+    col_ok, col_skip = st.columns(2)
+    with col_ok:
+        if st.button("✅ Confirmer le mapping", type="primary", use_container_width=True, key=f"confirm_map_{besoin}"):
+            # Appliquer le renommage
+            rename_dict = {v: k for k, v in mapping_final.items()}
+            df_mapped = df.rename(columns=rename_dict)
+            st.session_state["analyse_df"] = df_mapped
+            st.session_state["mapping_confirme"] = True
+            st.success(f"✅ Mapping appliqué — {len(rename_dict)} colonnes renommées")
+            st.rerun()
+    with col_skip:
+        if st.button("⏭️ Ignorer le mapping", use_container_width=True, key=f"skip_map_{besoin}"):
+            st.session_state["mapping_confirme"] = True
+            st.rerun()
+    
+    return None  # Pas encore confirmé
+
+
+
 # ── CSS ───────────────────────────────────────────────────────────────────────
 st.markdown(f"""
 <style>
@@ -1368,6 +1489,7 @@ def page_analyse():
                         st.dataframe(df_preview.head(5), use_container_width=True)
                     st.session_state["analyse_df"] = df_preview
                     st.session_state["analyse_fichier_nom"] = fichier.name
+                    st.session_state["mapping_confirme"] = False
                 except Exception as e:
                     st.error(f"❌ Erreur lecture : {e}")
             else:
@@ -1500,6 +1622,14 @@ def page_analyse():
 
     # ── ÉTAPE 5 : LANCER ─────────────────────────────────────────────────────
     col_btn, col_rst, _ = st.columns([1.2, 1, 2])
+
+    # ── Mapping interactif si fichier uploadé et pas encore confirmé ──────────
+    if (st.session_state.get("analyse_df") is not None
+            and not st.session_state.get("mapping_confirme", False)
+            and besoin in VARIABLES_ATTENDUES
+            and VARIABLES_ATTENDUES.get(besoin)):
+        _afficher_mapping_interactif(st.session_state["analyse_df"], besoin)
+        return
 
     # Vérification données disponibles
     pret = True
