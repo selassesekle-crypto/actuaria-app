@@ -783,13 +783,67 @@ def _vue_ensemble(ak):
         st.plotly_chart(fig_jauge(208.5,"Ratio SCR (%)"), use_container_width=True)
 
 def _dashboard_agent(ak):
-    a  = AGENTS[ak]
+    a    = AGENTS[ak]
     code = a["code"]
+
+    # ── Lire les vrais résultats si disponibles ──────────────────────────────
+    r = (st.session_state.get("agent_results") or {}).get(ak)
+
+    if r and r.get("success"):
+        # ── RÉSULTATS RÉELS ──────────────────────────────────────────────────
+        statut = r.get("statut_rag", r.get("statut", ""))
+        col_st = VERT if statut == "VERT" else AMBRE if statut == "AMBRE" else ROUGE
+        st.markdown(f"""
+<div style="background:{NAVY_L};border:1px solid rgba(201,168,76,0.25);border-radius:10px;padding:14px 18px;margin-bottom:14px;">
+  <div style="font-size:0.65rem;color:{GRIS};text-transform:uppercase;margin-bottom:4px;">Résultats réels — {datetime.now().strftime('%d/%m/%Y %H:%M')}</div>
+  <div style="font-size:1.2rem;font-weight:700;color:{col_st};">{'✅' if statut=='VERT' else '⚠️' if statut=='AMBRE' else '🔴'} {statut}</div>
+  <div style="font-size:0.7rem;color:{GRIS};margin-top:3px;">Données client · Calcul réel</div>
+</div>""", unsafe_allow_html=True)
+
+        # Commentaire actuariel
+        com = r.get("commentaire", "")
+        if com:
+            with st.expander("📋 Rapport actuariel complet", expanded=True):
+                st.code(com, language=None)
+
+        # Hypothèses
+        hyp = r.get("hypotheses", [])
+        if hyp:
+            st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:10px 0 6px;'>◆ Hypothèses validées</div>", unsafe_allow_html=True)
+            for h in hyp:
+                ic  = "✅" if h.get("statut") == "VALIDÉE" else "⚠️"
+                st.markdown(f"**{ic} [{h.get('id','')}]** {h.get('hypothese','')[:80]}  \n`{h.get('valeur','')[:80]}` — *{h.get('statut','')}*")
+
+        # Export JSON
+        import json
+        st.markdown("<hr>", unsafe_allow_html=True)
+        col1, col2 = st.columns(2)
+        with col1:
+            st.download_button(
+                "⬇️ Exporter résultats (JSON)",
+                data=json.dumps(r, indent=2, ensure_ascii=False, default=str),
+                file_name=f"actuaria_{ak}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                mime="application/json",
+                use_container_width=True,
+                key=f"dl_res_{ak}",
+            )
+        with col2:
+            if st.button("🔄 Relancer l'analyse", use_container_width=True, key=f"rerun_{ak}"):
+                nav_to("analyse")
+        return
+
+    # ── PAS ENCORE DE RÉSULTATS RÉELS → AFFICHER DÉMO + INVITE ─────────────
+    st.info(f"💡 Aucune analyse client lancée pour {a['prenom']}. Allez dans **Analyse** pour uploader vos données et obtenir de vrais résultats.")
+    if st.button("🚀 Lancer une analyse", use_container_width=True, key=f"goto_analyse_{ak}"):
+        nav_to("analyse")
+
+    st.markdown(f"<div style='font-size:0.72rem;color:{GRIS};margin:10px 0 4px;text-transform:uppercase;'>Exemple de résultats (données démo)</div>", unsafe_allow_html=True)
+
     st.markdown(f"""
 <div style="background:{NAVY_L};border:1px solid rgba(201,168,76,0.25);border-radius:10px;padding:14px 18px;margin-bottom:14px;">
   <div style="font-size:0.65rem;color:{GRIS};text-transform:uppercase;margin-bottom:4px;">KPI principal</div>
   <div style="font-size:1.2rem;font-weight:700;color:{OR};">{a['kpi']}</div>
-  <div style="font-size:0.7rem;color:{GRIS};margin-top:3px;">freMTPL2 · {datetime.now().strftime('%d/%m/%Y')}</div>
+  <div style="font-size:0.7rem;color:{GRIS};margin-top:3px;">freMTPL2 · Données démo</div>
 </div>""", unsafe_allow_html=True)
 
     if code == "A7":
@@ -1614,6 +1668,22 @@ def _executer_analyse(besoin, direction, equipe, client):
                 return
 
             # ── AFFICHAGE RÉSULTATS ─────────────────────────────────────────
+            # ── SAUVEGARDER DANS SESSION_STATE POUR LE DASHBOARD AGENT ────
+            _ak_map = {
+                "prime_glm": "laurent", "prime_ml": "priya", "prime_dl": "yohan",
+                "selection": "victor", "triangle_xl": "ibrahim", "sinistres": "ibrahim",
+                "stress": "isabelle", "coherence": "marcus", "s2": "elena",
+                "ifrs17": "thomas", "alm": "aisha", "ias19": "henri",
+                "tarif": "salome", "prov": "jinho", "report": "omar",
+                "mortalite": "yuki", "tarif_sante": "leonie", "prov_sante": "selma",
+                "report_sante": "binta", "tarif_prev": "axel", "tables": "rayan",
+                "prov_prev": "elodie", "report_prev": "valentin",
+            }
+            if besoin in _ak_map:
+                if "agent_results" not in st.session_state:
+                    st.session_state["agent_results"] = {}
+                st.session_state["agent_results"][_ak_map[besoin]] = resultats.get("principal", {})
+
             _afficher_resultats(resultats, besoin, ref_client)
 
         except ImportError as e:
