@@ -76,8 +76,8 @@ class AgentA13AuditTrail:
     EXEMPLE D'UTILISATION :
     ─────────────────────────
     agent_a13 = AgentA13AuditTrail(
-        audit_path  = '/content/drive/MyDrive/ActuarIA/audit',
-        models_path = '/content/drive/MyDrive/ActuarIA/models',
+        audit_path  = '/tmp/actuaria',
+        models_path = '/tmp/actuaria',
     )
     result_a13 = agent_a13.run(
         resultats_agents = {
@@ -92,8 +92,8 @@ class AgentA13AuditTrail:
 
     def __init__(
         self,
-        audit_path:  str = '/content/drive/MyDrive/ActuarIA/audit',
-        models_path: str = '/content/drive/MyDrive/ActuarIA/models',
+        audit_path:  str = '/tmp/actuaria',
+        models_path: str = '/tmp/actuaria',
         verbose:     bool = True
     ):
         self.audit_path  = Path(audit_path)

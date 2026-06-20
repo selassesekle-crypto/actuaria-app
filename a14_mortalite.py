@@ -135,8 +135,8 @@ class AgentA14Mortalite:
     EXEMPLE D'UTILISATION :
     ─────────────────────────
     agent_a14 = AgentA14Mortalite(
-        models_path = '/content/drive/MyDrive/ActuarIA/models',
-        audit_path  = '/content/drive/MyDrive/ActuarIA/audit',
+        models_path = '/tmp/actuaria',
+        audit_path  = '/tmp/actuaria',
     )
     result_a14 = agent_a14.run(
         age       = 65,
@@ -148,8 +148,8 @@ class AgentA14Mortalite:
 
     def __init__(
         self,
-        models_path: str = '/content/drive/MyDrive/ActuarIA/models',
-        audit_path:  str = '/content/drive/MyDrive/ActuarIA/audit',
+        models_path: str = '/tmp/actuaria',
+        audit_path:  str = '/tmp/actuaria',
         verbose:     bool = True
     ):
         self.models_path = Path(models_path)

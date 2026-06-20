@@ -39,7 +39,7 @@
 ║                                                                              ║
 ║  USAGE DANS GOOGLE COLAB                                                     ║
 ║  ─────────────────────────────────────────────────────────────────────────  ║
-║  %run '/content/drive/MyDrive/ActuarIA/agents/a2_preprocessing.py'          ║
+║  %run '/tmp/actuaria/agents/a2_preprocessing.py'          ║
 ║                                                                              ║
 ║  agent_a2 = AgentA2Preprocessing()                                          ║
 ║  result   = agent_a2.run(result_a1)  # Passe le résultat de A1             ║
@@ -226,8 +226,8 @@ class AgentA2Preprocessing:
                               fichier='contrats_auto_70k.parquet')
 
     agent_a2 = AgentA2Preprocessing(
-        models_path='/content/drive/MyDrive/ActuarIA/models',
-        audit_path ='/content/drive/MyDrive/ActuarIA/audit',
+        models_path='/tmp/actuaria',
+        audit_path ='/tmp/actuaria',
     )
     result_a2 = agent_a2.run(result_a1)
 
@@ -238,8 +238,8 @@ class AgentA2Preprocessing:
 
     def __init__(
         self,
-        models_path: str = '/content/drive/MyDrive/ActuarIA/models',
-        audit_path:  str = '/content/drive/MyDrive/ActuarIA/audit',
+        models_path: str = '/tmp/actuaria',
+        audit_path:  str = '/tmp/actuaria',
         verbose:     bool = True
     ):
         """
@@ -1603,17 +1603,17 @@ if __name__ == '__main__':
     ─────────────────────────────────────────────────────────────────────
     # Cellule 1
     from google.colab import drive
-    drive.mount('/content/drive')
+    # drive.mount('/content/drive')  # Colab uniquement
 
     # Cellule 2
-    %run '/content/drive/MyDrive/ActuarIA/agents/a1_ingestion.py'
-    %run '/content/drive/MyDrive/ActuarIA/agents/a2_preprocessing.py'
+    %run '/tmp/actuaria/agents/a1_ingestion.py'
+    %run '/tmp/actuaria/agents/a2_preprocessing.py'
     print("✅ Agents A1 et A2 chargés")
 
     # Cellule 3 — Chargement avec A1
     agent_a1 = AgentA1Ingestion(
-        base_path  = '/content/drive/MyDrive/ActuarIA/data',
-        audit_path = '/content/drive/MyDrive/ActuarIA/audit',
+        base_path  = '/tmp/actuaria/data',
+        audit_path = '/tmp/actuaria',
         verbose    = False
     )
     result_a1 = agent_a1.run(
@@ -1624,8 +1624,8 @@ if __name__ == '__main__':
 
     # Cellule 4 — Preprocessing avec A2
     agent_a2 = AgentA2Preprocessing(
-        models_path = '/content/drive/MyDrive/ActuarIA/models',
-        audit_path  = '/content/drive/MyDrive/ActuarIA/audit',
+        models_path = '/tmp/actuaria',
+        audit_path  = '/tmp/actuaria',
         verbose     = True
     )
     result_a2 = agent_a2.run(result_a1)

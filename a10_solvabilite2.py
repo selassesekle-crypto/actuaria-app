@@ -111,7 +111,7 @@ class AgentA10Solvabilite2:
     """Agent A10 Elena — Solvabilité 2 Non-Vie v2.0 DÉFINITIVE."""
     NOM="Elena"; CODE="A10"; VERSION="2.0"; RESPONSABLE="NADIA (Réglementation)"
 
-    def __init__(self, audit_path='/content/drive/MyDrive/ActuarIA/audit',
+    def __init__(self, audit_path='/tmp/actuaria',
                  verbose=True):
         self.audit_path = Path(audit_path)
         self.audit_path.mkdir(parents=True, exist_ok=True)

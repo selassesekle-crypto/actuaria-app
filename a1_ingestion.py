@@ -57,8 +57,8 @@ def _charger_config(config_path: str = None) -> Dict:
     """
     chemins_possibles = [
         config_path,
-        '/content/drive/MyDrive/ActuarIA/config/actuaria_config.json',
-        '/content/drive/MyDrive/ActuarIA/actuaria_config.json',
+        '/tmp/actuaria/config/actuaria_config.json',
+        '/tmp/actuaria/actuaria_config.json',
         './actuaria_config.json',
     ]
 
@@ -74,7 +74,7 @@ def _charger_config(config_path: str = None) -> Dict:
 
     # Valeurs par défaut
     logger.warning("Config non trouvée — valeurs par défaut utilisées")
-    base = '/content/drive/MyDrive/ActuarIA'
+    base = '/tmp/actuaria'
     return {
         'base_path':    base,
         'data_path':    f'{base}/data',
@@ -693,7 +693,7 @@ def creer_mapping_client(
     """
     config  = _charger_config()
     dossier = Path(config_path or config.get('config_path',
-        '/content/drive/MyDrive/ActuarIA/config'))
+        '/tmp/actuaria/config'))
     dossier.mkdir(parents=True, exist_ok=True)
 
     chemin = dossier / f"{client_id}_mapping.json"

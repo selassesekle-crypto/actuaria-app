@@ -214,8 +214,8 @@ class AgentA4ML:
     EXEMPLE D'UTILISATION :
     ─────────────────────────
     agent_a4 = AgentA4ML(
-        models_path = '/content/drive/MyDrive/ActuarIA/models',
-        audit_path  = '/content/drive/MyDrive/ActuarIA/audit',
+        models_path = '/tmp/actuaria',
+        audit_path  = '/tmp/actuaria',
     )
     result_a4 = agent_a4.run(result_a2, result_a3=result_a3)
 
@@ -226,8 +226,8 @@ class AgentA4ML:
 
     def __init__(
         self,
-        models_path: str = '/content/drive/MyDrive/ActuarIA/models',
-        audit_path:  str = '/content/drive/MyDrive/ActuarIA/audit',
+        models_path: str = '/tmp/actuaria',
+        audit_path:  str = '/tmp/actuaria',
         verbose:     bool = True
     ):
         self.models_path = Path(models_path)

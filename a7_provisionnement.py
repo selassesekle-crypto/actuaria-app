@@ -87,8 +87,8 @@ class AgentA7Provisionnement:
     EXEMPLE D'UTILISATION :
     ─────────────────────────
     agent_a7 = AgentA7Provisionnement(
-        models_path = '/content/drive/MyDrive/ActuarIA/models',
-        audit_path  = '/content/drive/MyDrive/ActuarIA/audit',
+        models_path = '/tmp/actuaria',
+        audit_path  = '/tmp/actuaria',
     )
     # Avec triangle externe
     result_a7 = agent_a7.run(triangle=mon_triangle)
@@ -99,8 +99,8 @@ class AgentA7Provisionnement:
 
     def __init__(
         self,
-        models_path: str = '/content/drive/MyDrive/ActuarIA/models',
-        audit_path:  str = '/content/drive/MyDrive/ActuarIA/audit',
+        models_path: str = '/tmp/actuaria',
+        audit_path:  str = '/tmp/actuaria',
         verbose:     bool = True
     ):
         self.models_path = Path(models_path)

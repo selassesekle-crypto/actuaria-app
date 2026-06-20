@@ -43,7 +43,7 @@
 ║                                                                              ║
 ║  USAGE DANS GOOGLE COLAB                                                     ║
 ║  ─────────────────────────────────────────────────────────────────────────  ║
-║  %run '/content/drive/MyDrive/ActuarIA/agents/a3_glm.py'                    ║
+║  %run '/tmp/actuaria/agents/a3_glm.py'                    ║
 ║  agent_a3 = AgentA3GLM()                                                    ║
 ║  result_a3 = agent_a3.run(result_a2)                                        ║
 ║                                                                              ║
@@ -221,8 +221,8 @@ class AgentA3GLM:
     EXEMPLE D'UTILISATION :
     ─────────────────────────
     agent_a3 = AgentA3GLM(
-        models_path = '/content/drive/MyDrive/ActuarIA/models',
-        audit_path  = '/content/drive/MyDrive/ActuarIA/audit',
+        models_path = '/tmp/actuaria',
+        audit_path  = '/tmp/actuaria',
     )
     result_a3 = agent_a3.run(result_a2)
 
@@ -234,8 +234,8 @@ class AgentA3GLM:
 
     def __init__(
         self,
-        models_path: str = '/content/drive/MyDrive/ActuarIA/models',
-        audit_path:  str = '/content/drive/MyDrive/ActuarIA/audit',
+        models_path: str = '/tmp/actuaria',
+        audit_path:  str = '/tmp/actuaria',
         verbose:     bool = True
     ):
         self.models_path = Path(models_path)

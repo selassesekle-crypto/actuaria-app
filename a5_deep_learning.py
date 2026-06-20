@@ -263,16 +263,16 @@ class AgentA5DeepLearning:
     EXEMPLE D'UTILISATION :
     ─────────────────────────
     agent_a5 = AgentA5DeepLearning(
-        models_path = '/content/drive/MyDrive/ActuarIA/models',
-        audit_path  = '/content/drive/MyDrive/ActuarIA/audit',
+        models_path = '/tmp/actuaria',
+        audit_path  = '/tmp/actuaria',
     )
     result_a5 = agent_a5.run(result_a2, result_a3=result_a3, result_a4=result_a4)
     """
 
     def __init__(
         self,
-        models_path: str = '/content/drive/MyDrive/ActuarIA/models',
-        audit_path:  str = '/content/drive/MyDrive/ActuarIA/audit',
+        models_path: str = '/tmp/actuaria',
+        audit_path:  str = '/tmp/actuaria',
         verbose:     bool = True
     ):
         self.models_path = Path(models_path)

@@ -95,7 +95,7 @@ class AgentA11IFRS17:
     """
     NOM="Thomas"; CODE="A11"; VERSION="1.0"; RESPONSABLE="NADIA (Réglementation)"
 
-    def __init__(self, audit_path='/content/drive/MyDrive/ActuarIA/audit', verbose=True):
+    def __init__(self, audit_path='/tmp/actuaria', verbose=True):
         self.audit_path = Path(audit_path)
         self.audit_path.mkdir(parents=True, exist_ok=True)
         self.logger  = logging.getLogger('actuaria.a11.thomas')
