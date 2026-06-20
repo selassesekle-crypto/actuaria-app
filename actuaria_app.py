@@ -150,20 +150,18 @@ def _afficher_mapping_interactif(df, besoin):
 
     col_ok, col_skip = st.columns(2)
     with col_ok:
-        confirmer = st.button("✅ Confirmer le mapping", type="primary", use_container_width=True, key=f"confirm_map_{besoin}")
+        if st.button("✅ Confirmer le mapping", type="primary", use_container_width=True, key=f"confirm_map_{besoin}"):
+            # Appliquer le renommage
+            rename_dict = {v: k for k, v in mapping_final.items()}
+            df_mapped = df.rename(columns=rename_dict)
+            st.session_state["analyse_df"] = df_mapped
+            st.session_state["mapping_confirme"] = True
+            st.success(f"✅ Mapping appliqué — {len(rename_dict)} colonnes renommées")
+            st.rerun()
     with col_skip:
-        ignorer = st.button("⏭️ Ignorer le mapping", use_container_width=True, key=f"skip_map_{besoin}")
-
-    if confirmer:
-        rename_dict = {v: k for k, v in mapping_final.items()}
-        df_mapped = df.rename(columns=rename_dict)
-        st.session_state["analyse_df"] = df_mapped
-        st.session_state["mapping_confirme"] = True
-        st.rerun()
-    
-    if ignorer:
-        st.session_state["mapping_confirme"] = True
-        st.rerun()
+        if st.button("⏭️ Ignorer le mapping", use_container_width=True, key=f"skip_map_{besoin}"):
+            st.session_state["mapping_confirme"] = True
+            st.rerun()
     
     return None  # Pas encore confirmé
 
@@ -247,16 +245,6 @@ st.markdown(f"""
 hr {{border-color:rgba(201,168,76,0.15);}}
 ::-webkit-scrollbar {{width:4px;}}
 ::-webkit-scrollbar-thumb {{background:rgba(201,168,76,0.35);border-radius:2px;}}
-/* Labels champs formulaires lisibles */
-label, [data-testid="stWidgetLabel"] p {{
-  color: #F0F4F8 !important;
-  font-size: 0.82rem !important;
-  font-weight: 600 !important;
-}}
-.stSelectbox [data-baseweb="select"] {{
-  background: #243F6A !important;
-  border: 1px solid rgba(201,168,76,0.4) !important;
-}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -333,7 +321,7 @@ STRUCTURE = {
         "equipes": {
             "tarification":     {"label":"Équipe Tarification",    "icon":"🧠","manager":"meilin","agents":["laurent","priya","yohan","victor"]},
             "provisionnement":  {"label":"Équipe Provisionnement", "icon":"📊","manager":"kwame", "agents":["ibrahim","isabelle"]},
-            "coherence":        {"label":"Cohérence & Contrôles","icon":"🔗","manager":"marcus","agents":["marcus"]},
+            "coherence":        {"label":"Cohérence & Contrôles","icon":"🔗","manager":None,"agents":["marcus"]},
             "reglementation_nv":{"label":"Équipe Réglementation",  "icon":"🛡️","manager":"nadia", "agents":["elena","thomas","aisha"]},
         },
     },
