@@ -1658,28 +1658,39 @@ def _executer_analyse(besoin, direction, equipe, client):
             # ── COHÉRENCE A9 ────────────────────────────────────────────────
             elif besoin == "coherence":
                 from a9_coherence import AgentA9Coherence
+                _be = params.get("be", 2_914_930)
+                _r7_synt = {"best_estimate":{"best_estimate":_be,"sigma_mack":_be*0.015,"cv_inter_methodes":5,"nb_methodes_convergentes":4},"tail":{"tail_factor":1.037},"meta":{"nb_lignes":50000,"n_annees":8}}
                 r9 = AgentA9Coherence(audit_path=_tmp, verbose=False).run(
-                    result_a7={"best_estimate":{"best_estimate":params.get("be",2_914_930)}},
-                    fonds_propres=params.get("fonds_propres",7_650_000),
+                    result_a7=_r7_synt,
+                    primes_acq=params.get("primes", 10_000_000),
                     generer_graphiques=False,
                 )
                 resultats["principal"] = r9
 
             # ── IFRS 17 A11 ─────────────────────────────────────────────────
             elif besoin == "ifrs17":
+                from a10_solvabilite2 import AgentA10Solvabilite2
                 from a11_ifrs17 import AgentA11IFRS17
+                _be = params.get("be", 2_914_930)
+                _r7_synt = {"best_estimate":{"best_estimate":_be,"sigma_mack":_be*0.015,"cv_inter_methodes":5,"nb_methodes_convergentes":4},"tail":{"tail_factor":1.037},"meta":{"nb_lignes":50000,"n_annees":8},"sous_branche":params.get("branche","rc_auto")}
+                _r10 = AgentA10Solvabilite2(audit_path=_tmp, verbose=False).run(result_a7=_r7_synt, fonds_propres=params.get("fonds_propres",7_650_000), generer_graphiques=False)
                 r11 = AgentA11IFRS17(audit_path=_tmp, verbose=False).run(
-                    result_a7={"best_estimate":{"best_estimate":params.get("be",2_914_930)}},
+                    result_a7=_r7_synt,
+                    result_a10=_r10,
                     generer_graphiques=False,
                 )
                 resultats["principal"] = r11
 
             # ── ALM A12 ─────────────────────────────────────────────────────
             elif besoin == "alm":
+                from a10_solvabilite2 import AgentA10Solvabilite2
                 from a12_alm import AgentA12ALM
+                _be = params.get("be", 2_914_930)
+                _r7_synt = {"best_estimate":{"best_estimate":_be,"sigma_mack":_be*0.015,"cv_inter_methodes":5,"nb_methodes_convergentes":4},"tail":{"tail_factor":1.037},"meta":{"nb_lignes":50000,"n_annees":8},"sous_branche":params.get("branche","rc_auto")}
+                _r10 = AgentA10Solvabilite2(audit_path=_tmp, verbose=False).run(result_a7=_r7_synt, fonds_propres=params.get("fonds_propres",7_650_000), generer_graphiques=False)
                 r12 = AgentA12ALM(audit_path=_tmp, verbose=False).run(
-                    result_a7={"best_estimate":{"best_estimate":params.get("be",2_914_930)}},
-                    fonds_propres=params.get("fonds_propres",7_650_000),
+                    result_a10=_r10,
+                    result_a7=_r7_synt,
                     generer_graphiques=False,
                 )
                 resultats["principal"] = r12
@@ -1688,52 +1699,71 @@ def _executer_analyse(besoin, direction, equipe, client):
             elif besoin == "mortalite":
                 from a14_mortalite import AgentA14Mortalite
                 r14 = AgentA14Mortalite(audit_path=_tmp, verbose=False).run(
-                    table_custom=df,
                     generer_graphiques=False,
                 )
                 resultats["principal"] = r14
 
-            # ── REPORT SANTÉ S3 ─────────────────────────────────────────────
+            # ── REPORT SANTÉ S3 — pipeline S1→S2→S3 ────────────────────────
             elif besoin == "report_sante":
+                from leonie_s1_tarification_sante import AgentS1TarificationSante
+                from selma_s2_provisionnement_sante import AgentS2ProvisionnemntSante
                 from binta_s3_reporting_sante import AgentS3ReportingSante
-                r_s3 = AgentS3ReportingSante(audit_path=_tmp, verbose=False).run(
-                    primes_acquises=params.get("primes_acquises",5_000_000),
+                _r_s1 = AgentS1TarificationSante(audit_path=_tmp, verbose=False).run(
                     nb_assures=params.get("nb_assures",1000),
+                    age_moyen=params.get("age_moyen",42),
+                    garantie_niveau=params.get("garantie_niveau","confort"),
+                    generer_graphiques=False,
+                )
+                _r_s2 = AgentS2ProvisionnemntSante(audit_path=_tmp, verbose=False).run(
+                    primes_acquises=params.get("primes_acquises",5_000_000),
+                    generer_graphiques=False,
+                )
+                r_s3 = AgentS3ReportingSante(audit_path=_tmp, verbose=False).run(
+                    result_s1=_r_s1,
+                    result_s2=_r_s2,
+                    fonds_propres=params.get("fonds_propres",0.0),
                     generer_graphiques=False,
                 )
                 resultats["principal"] = r_s3
 
-            # ── PRÉVOYANCE ───────────────────────────────────────────────────
+            # ── PRÉVOYANCE — pipelines chaînés ──────────────────────────────
             elif besoin in ["tarif_prev","tables","prov_prev","report_prev"]:
-                if besoin == "tarif_prev":
-                    from axel_p1_tarification_prevoyance import AgentP1TarificationPrevoyance
-                    r_p1 = AgentP1TarificationPrevoyance(audit_path=_tmp, verbose=False).run(
-                        age=params.get("age",40),
-                        salaire_brut=params.get("salaire_brut",45000),
-                        categorie=params.get("categorie","employe"),
-                        generer_graphiques=False,
-                    )
-                    resultats["principal"] = r_p1
-                elif besoin == "tables":
+                from axel_p1_tarification_prevoyance import AgentP1TarificationPrevoyance
+                _r_p1 = AgentP1TarificationPrevoyance(audit_path=_tmp, verbose=False).run(
+                    age=params.get("age",40),
+                    salaire_brut=params.get("salaire_brut",45000),
+                    categorie=params.get("categorie","employe"),
+                    generer_graphiques=False,
+                )
+                resultats["principal"] = _r_p1
+
+                if besoin in ["tables","prov_prev","report_prev"]:
                     from rayan_p2_tables_morbidite import AgentP2TablesMorbidite
-                    r_p2 = AgentP2TablesMorbidite(audit_path=_tmp, verbose=False).run(
+                    _r_p2 = AgentP2TablesMorbidite(audit_path=_tmp, verbose=False).run(
+                        result_p1=_r_p1,
                         generer_graphiques=False,
                     )
-                    resultats["principal"] = r_p2
-                elif besoin == "prov_prev":
+                    resultats["principal"] = _r_p2
+
+                if besoin in ["prov_prev","report_prev"]:
                     from elodie_p3_provisionnement_prevoyance import AgentP3ProvisionnemntPrevoyance
-                    r_p3 = AgentP3ProvisionnemntPrevoyance(audit_path=_tmp, verbose=False).run(
-                        primes_acquises=params.get("primes",8_000_000),
+                    _r_p3 = AgentP3ProvisionnemntPrevoyance(audit_path=_tmp, verbose=False).run(
+                        result_p1=_r_p1,
+                        result_p2=_r_p2,
                         generer_graphiques=False,
                     )
-                    resultats["principal"] = r_p3
-                elif besoin == "report_prev":
+                    resultats["principal"] = _r_p3
+
+                if besoin == "report_prev":
                     from valentin_p4_reporting_prevoyance import AgentP4ReportingPrevoyance
-                    r_p4 = AgentP4ReportingPrevoyance(audit_path=_tmp, verbose=False).run(
-                        primes_acquises=params.get("primes",8_000_000),
+                    _r_p4 = AgentP4ReportingPrevoyance(audit_path=_tmp, verbose=False).run(
+                        result_p1=_r_p1,
+                        result_p2=_r_p2,
+                        result_p3=_r_p3,
+                        fonds_propres=params.get("fonds_propres",0.0),
                         generer_graphiques=False,
                     )
-                    resultats["principal"] = r_p4
+                    resultats["principal"] = _r_p4
 
             else:
                 st.info(f"⏸️ L'agent pour ce besoin ({besoin}) sera disponible prochainement.")
