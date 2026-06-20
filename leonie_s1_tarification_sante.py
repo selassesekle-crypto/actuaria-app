@@ -1,229 +1,725 @@
 """
-ActuarIA — Agent S1 : Léonie — Tarification Frais de Santé
-Direction Santé-Prévoyance | Manager : Chiara | Directeur : Amira
-
-Tarification santé individuelle et collective :
-→ Tables CCAM (actes médicaux) / NGAP (nomenclature)
-→ Sinistralité par poste (médecine, pharmacie, hospitalisation, dentaire, optique)
-→ Prime pure, commerciale, ratio S/P
-→ Validation hypothèses + graphiques auto-explicatifs
+╔══════════════════════════════════════════════════════════════════════════════╗
+║      ACTUARIA — AGENT S1 LÉONIE : TARIFICATION FRAIS DE SANTÉ v2.0        ║
+║                  Sous CHIARA (Équipe Santé) · Direction SP                  ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║  PÉRIMÈTRE : Complémentaire santé individuelle et collective                ║
+║              Tables DREES 2023 · CCAM · NGAP · ANI 2013 · 100% Santé      ║
+║                                                                              ║
+║  NOUVEAUTÉS v2 :                                                             ║
+║    ✅ Branchement result_a2 (données réelles client via Diana)              ║
+║    ✅ Tarification par poste depuis données réelles si disponibles          ║
+║    ✅ Fallback paramètres manuels si pas de données                         ║
+║    ✅ Standard ActuarIA : RAG + 3 hypothèses + 4 graphiques + commentaire  ║
+║    ✅ Sorties vers S2 Selma et S3 Binta                                     ║
+║                                                                              ║
+║  ENTRÉES :                                                                   ║
+║    result_a2     → données réelles depuis Diana/Kenji (optionnel)          ║
+║    nb_assures    → nombre d'assurés (fallback si pas de données)           ║
+║    age_moyen     → âge moyen du portefeuille                               ║
+║    contrat       → 'individuel' | 'collectif'                              ║
+║    garantie_niveau → 'eco' | 'confort' | 'premium' | 'luxe'              ║
+║    chargement_pct  → taux de chargement                                    ║
+║                                                                              ║
+║  SORTIES VERS S2 SELMA :                                                    ║
+║    primes_acquises  → base provisionnement                                 ║
+║    sinistralite_par_poste → PSAP par poste                                ║
+║    loss_ratio_attendu → LR attendu                                         ║
+║                                                                              ║
+║  VERSION : 2.0 — 20/06/2026                                                ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 """
 
-import numpy as np, logging, os, json
+import json, logging, os, warnings
 from datetime import datetime
-from typing import Dict
+from pathlib import Path
+from typing import Dict, Optional
 
+import numpy as np
+
+try:
+    import plotly.graph_objects as go
+    PLOTLY_OK = True
+except ImportError:
+    PLOTLY_OK = False
+
+warnings.filterwarnings('ignore')
 logging.basicConfig(level=logging.INFO,
-    format='%(asctime)s | actuaria.s1 | %(levelname)s | %(message)s',
+    format='%(asctime)s | %(name)s | %(levelname)s | %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S')
 
-print("Agent S1 — Tarification Frais de Santé ActuarIA v1.0")
-print("Postes : Médecine · Pharmacie · Hospitalisation · Dentaire · Optique")
-print("Usage : agent_s1 = AgentS1TarificationSante()")
-print("        result_s1 = agent_s1.run(nb_assures=1000, age_moyen=42)")
+# ── Palette ActuarIA ──────────────────────────────────────────────────────────
+NAVY="#0F2E52"; NAVY_L="#1B3A5C"; NAVY_LL="#243F6A"; OR="#C9A84C"
+BLANC="#F0F4F8"; GRIS="#8A9AB0"; VERT="#2ECC71"; ROUGE="#E74C3C"
+AMBRE="#F39C12"; BLEU="#3498DB"; VIOLET="#9B59B6"
 
-# Coûts moyens par poste (€/assuré/an) — source DREES 2023
+LAYOUT_BASE = dict(paper_bgcolor=NAVY, plot_bgcolor=NAVY_L,
+    font=dict(family="Inter, Arial", color=BLANC, size=11),
+    margin=dict(l=16,r=16,t=60,b=60), height=300,
+    hoverlabel=dict(bgcolor=NAVY_LL, bordercolor=OR, font_size=12, font_color=BLANC))
+
+# ── Référentiels DREES 2023 ───────────────────────────────────────────────────
+# Coûts moyens par poste (€/assuré/an) — source DREES Comptes de la Santé 2023
 COUTS_POSTES_REF = {
-    "medecine":       {"freq": 4.2,  "cout_acte": 28.5,  "tc_ss": 0.70},
-    "pharmacie":      {"freq": 8.5,  "cout_acte": 22.0,  "tc_ss": 0.65},
-    "hospitalisation":{"freq": 0.15, "cout_acte": 3500.0,"tc_ss": 0.80},
-    "dentaire":       {"freq": 1.2,  "cout_acte": 180.0, "tc_ss": 0.25},
-    "optique":        {"freq": 0.45, "cout_acte": 320.0, "tc_ss": 0.00},
+    "medecine":        {"freq": 4.2,  "cout_acte": 28.5,   "tc_ss": 0.70},
+    "pharmacie":       {"freq": 8.5,  "cout_acte": 22.0,   "tc_ss": 0.65},
+    "hospitalisation": {"freq": 0.15, "cout_acte": 3_500.0,"tc_ss": 0.80},
+    "dentaire":        {"freq": 1.2,  "cout_acte": 180.0,  "tc_ss": 0.25},
+    "optique":         {"freq": 0.45, "cout_acte": 320.0,  "tc_ss": 0.00},
 }
 
+# Niveaux de garantie
+NIVEAUX_GARANTIE = {"eco": 0.60, "confort": 1.00, "premium": 1.40, "luxe": 1.80}
+
+# Facteur catégorie sociopro (risque santé)
+FACT_CSP = {"ouvrier": 1.20, "employe": 1.00, "cadre": 0.85, "cadre_sup": 0.75}
+
+# Seuils ANI 2013 : panier minimum obligatoire
+ANI_PANIER_MIN = {
+    "medecine":        30.0,   # ≥ 100% BR consultations
+    "hospitalisation": 100.0,  # ≥ 100% BR séjour
+    "dentaire":        75.0,   # ≥ 125% BR soins dentaires
+    "optique":         100.0,  # verres + montures min
+    "pharmacie":       0.0,
+}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 class AgentS1TarificationSante:
-    def __init__(self,models_path="models",audit_path="audit",verbose=True):
-        self.models_path=models_path; self.audit_path=audit_path
-        self.verbose=verbose; self.logger=logging.getLogger("actuaria.s1")
-        os.makedirs(models_path,exist_ok=True); os.makedirs(audit_path,exist_ok=True)
+    """
+    Agent S1 Léonie — Tarification Frais de Santé v2.0.
+    Sous CHIARA, Direction Santé-Prévoyance.
 
-    def run(self,nb_assures=1000,age_moyen=42,contrat="individuel",
-            garantie_niveau="confort",chargement_pct=0.18,
-            generer_graphiques=True) -> Dict:
-        audit_id=f"S1_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        logger=self.logger
-        if self.verbose: logger.info(f"[{audit_id}] Agent S1 démarré | {nb_assures} assurés | âge moy={age_moyen}")
+    Tarifie les garanties santé par poste (médecine, pharmacie,
+    hospitalisation, dentaire, optique) selon les tables DREES 2023,
+    avec branchement sur les données réelles du client si disponibles.
+    """
+    NOM     = "Léonie"
+    CODE    = "S1"
+    VERSION = "2.0"
+    MANAGER = "Chiara (Équipe Santé)"
+
+    def __init__(self, models_path="models", audit_path="audit", verbose=True):
+        self.models_path = Path(models_path)
+        self.audit_path  = Path(audit_path)
+        self.models_path.mkdir(parents=True, exist_ok=True)
+        self.audit_path.mkdir(parents=True, exist_ok=True)
+        self.logger  = logging.getLogger("actuaria.s1.leonie")
+        self.verbose = verbose
+        if verbose:
+            self.logger.info(f"S1 Léonie v{self.VERSION} | {self.MANAGER}")
+
+    # ──────────────────────────────────────────────────────────────────────────
+    def run(self,
+            result_a2        = None,
+            nb_assures:  int = 1000,
+            age_moyen:   float = 42.0,
+            contrat:     str = "individuel",
+            garantie_niveau: str = "confort",
+            chargement_pct:  float = 0.18,
+            csp:         str = "employe",
+            generer_graphiques: bool = True) -> Dict:
+
+        t0  = datetime.now()
+        aid = f"S1_{t0.strftime('%Y%m%d_%H%M%S')}"
+        self.logger.info(f"[{aid}] S1 Léonie v{self.VERSION} | {nb_assures} assurés | âge={age_moyen}")
+
         try:
-            # Facteur d'âge (sinistralité croît avec l'âge)
-            fact_age = 0.7 + (age_moyen - 30) * 0.015
-
-            # Niveau de garantie
-            niveaux = {"eco":0.6,"confort":1.0,"premium":1.4,"luxe":1.8}
-            fact_garantie = niveaux.get(garantie_niveau, 1.0)
-
-            # Sinistralité par poste
-            postes = {}
-            total_sinistres = 0
-            for poste, ref in COUTS_POSTES_REF.items():
-                freq = ref["freq"] * fact_age * fact_garantie
-                cout = ref["cout_acte"] * fact_age
-                remboursement_ss = cout * ref["tc_ss"]
-                charge_mutuelle  = (cout - remboursement_ss) * min(fact_garantie, 2.0)
-                sinistre_an = freq * charge_mutuelle
-                postes[poste] = {
-                    "frequence_an":    round(freq, 3),
-                    "cout_moyen":      round(cout, 2),
-                    "remb_ss":         round(remboursement_ss, 2),
-                    "charge_mutuelle": round(charge_mutuelle, 2),
-                    "sinistre_annuel": round(sinistre_an, 2),
-                }
-                total_sinistres += sinistre_an
-
-            prime_pure    = total_sinistres
-            prime_comm    = prime_pure * (1 + chargement_pct)
-            prime_mensuelle = prime_comm / 12
-
-            # Ratio S/P attendu
-            ratio_sp_attendu = prime_pure / max(prime_comm, 1)
-
-            # Comparaison marché
-            prime_marche_ref = prime_pure * 1.20
-
-            commentaire = (
-                f"✅ Tarification Santé finalisée — {nb_assures} assurés | âge moy {age_moyen} ans | {contrat}.\n"
-                f"Prime pure : {prime_pure:.2f}€/an/assuré ({prime_mensuelle:.2f}€/mois).\n"
-                f"Sinistralité : Médecine {postes['medecine']['sinistre_annuel']:.0f}€ "
-                f"| Hospit {postes['hospitalisation']['sinistre_annuel']:.0f}€ "
-                f"| Dentaire {postes['dentaire']['sinistre_annuel']:.0f}€ "
-                f"| Optique {postes['optique']['sinistre_annuel']:.0f}€.\n"
-                f"Ratio S/P attendu : {ratio_sp_attendu*100:.1f}% | Chargement : {chargement_pct*100:.0f}%."
+            # ── 1. EXTRACTION DONNÉES RÉELLES (si A2 disponible) ─────────────
+            source, nb_assures, age_moyen, csp = self._extraire_donnees(
+                result_a2, nb_assures, age_moyen, csp
             )
 
-            val_hyp = self._valider_sante(prime_pure, prime_comm, prime_marche_ref,
-                                          ratio_sp_attendu, postes, age_moyen)
-            gv  = self._graphiques_validation_sante(val_hyp, postes, prime_pure, prime_comm) if generer_graphiques else {}
-            graphiques = self._generer_graphiques(postes) if generer_graphiques else {}
-            self._sauvegarder({'agent':'S1 Léonie','prime_pure':prime_pure,'prime_comm':prime_comm,
-                               'ratio_sp':ratio_sp_attendu,'postes':postes}, audit_id)
+            # ── 2. FACTEURS ──────────────────────────────────────────────────
+            fact_age      = max(0.5, 0.7 + (age_moyen - 30) * 0.015)
+            fact_garantie = NIVEAUX_GARANTIE.get(garantie_niveau, 1.0)
+            fact_csp      = FACT_CSP.get(csp, 1.0)
+
+            # ── 3. SINISTRALITÉ PAR POSTE ─────────────────────────────────────
+            postes, total_sin = self._calculer_postes(
+                result_a2, fact_age, fact_garantie, fact_csp, nb_assures
+            )
+
+            # ── 4. PRIMES ────────────────────────────────────────────────────
+            prime_pure     = total_sin
+            prime_comm     = prime_pure * (1 + chargement_pct)
+            prime_mensuelle= prime_comm / 12
+            prime_marche   = prime_pure * 1.20   # référence marché
+
+            # Primes acquises portefeuille
+            primes_acquises = prime_comm * nb_assures
+
+            # Loss Ratio attendu
+            lr_attendu = prime_pure / max(prime_comm, 1)
+
+            # ── 5. CONFORMITÉ ANI 2013 ────────────────────────────────────────
+            ani = self._verifier_ani(postes, garantie_niveau)
+
+            # ── 6. STATUT RAG + HYPOTHÈSES ───────────────────────────────────
+            hyp = self._hypotheses(lr_attendu, postes, prime_comm, prime_marche,
+                                   ani, garantie_niveau)
+            rag = self._rag(hyp, lr_attendu, ani)
+
+            # ── 7. COMMENTAIRE ────────────────────────────────────────────────
+            com = self._commentaire(rag, nb_assures, age_moyen, contrat,
+                                    garantie_niveau, prime_pure, prime_comm,
+                                    prime_mensuelle, lr_attendu, postes,
+                                    primes_acquises, ani, source, hyp)
+
+            # ── 8. GRAPHIQUES ─────────────────────────────────────────────────
+            gph = {}
+            if generer_graphiques and PLOTLY_OK:
+                gph = self._graphiques(postes, prime_pure, prime_comm,
+                                       prime_marche, lr_attendu, hyp)
+
+            # ── 9. AUDIT ─────────────────────────────────────────────────────
+            self._audit(aid, prime_pure, prime_comm, lr_attendu, rag, nb_assures)
+
+            if self.verbose:
+                self._console(aid, rag, prime_pure, prime_comm, lr_attendu,
+                              nb_assures, primes_acquises)
+
+            duree = (datetime.now()-t0).total_seconds()
 
             return {
-                'success':True,'agent':'S1 Léonie','contrat':contrat,
-                'nb_assures':nb_assures,'age_moyen':age_moyen,
-                'statut_rag':'VERT' if val_hyp['statut_global']=='VERT' else 'AMBRE',
-                'prime_pure':round(prime_pure,2),
-                'prime_commerciale':round(prime_comm,2),
-                'prime_mensuelle':round(prime_mensuelle,2),
-                'ratio_sp_attendu':round(ratio_sp_attendu,4),
-                'postes':postes,
-                'commentaire':commentaire,'audit_id':audit_id,
-                'graphiques':graphiques,'validation_sante':val_hyp,'graphiques_validation':gv,'erreur':None,
-            }
-        except Exception as e:
-            logger.error(f"[{audit_id}] ERREUR : {e}", exc_info=True)
-            return {'success':False,'statut_rag':'ROUGE','erreur':str(e),'audit_id':audit_id}
+                'success':         True,
+                'agent':           self.NOM,
+                'version':         self.VERSION,
+                'audit_id':        aid,
+                'statut_rag':      rag,
+                'source_donnees':  source,
 
-    def _valider_sante(self,prime_pure,prime_comm,prime_marche,ratio_sp,postes,age):
-        # H1 — Ratio S/P ∈ [0.65, 0.85]
-        if 0.65<=ratio_sp<=0.85: h1_s,h1_m,h1_c="VERT",f"Ratio S/P = {ratio_sp*100:.1f}% ∈ [65%,85%] ✅","Ratio sinistres/primes conforme normes mutualité"
-        elif 0.55<=ratio_sp<0.65: h1_s,h1_m,h1_c="AMBRE",f"Ratio S/P = {ratio_sp*100:.1f}% < 65% ⚠️","Prime trop élevée — risque de perte d'adhérents"
-        elif ratio_sp<=0.95: h1_s,h1_m,h1_c="AMBRE",f"Ratio S/P = {ratio_sp*100:.1f}% > 85% ⚠️","Ratio élevé — rentabilité insuffisante"
-        else: h1_s,h1_m,h1_c="ROUGE",f"Ratio S/P = {ratio_sp*100:.1f}% > 95% ❌","Contrat déficitaire — revoir les garanties ou le tarif"
-        # H2 — Hospitalisation ≤ 50% du total
-        hospit = postes['hospitalisation']['sinistre_annuel']
-        total  = sum(p['sinistre_annuel'] for p in postes.values())
-        part_hospit = hospit / max(total, 1)
-        if part_hospit<=0.50: h2_s,h2_m,h2_c="VERT",f"Hospit = {part_hospit*100:.1f}% du total ≤ 50% ✅","Répartition sinistralité équilibrée"
-        elif part_hospit<=0.65: h2_s,h2_m,h2_c="AMBRE",f"Hospit = {part_hospit*100:.1f}% ∈ [50%,65%] ⚠️","Hospit dominante — surveiller l'anti-sélection"
-        else: h2_s,h2_m,h2_c="ROUGE",f"Hospit = {part_hospit*100:.1f}% > 65% ❌","Concentration risque hospitalier — revoir les garanties hospit"
-        # H3 — Prime compétitive vs marché
-        ratio_comp = prime_comm / max(prime_marche, 1)
-        if ratio_comp<=1.10: h3_s,h3_m,h3_c="VERT",f"Prime/marché = {ratio_comp:.3f} ≤ 1.10 ✅","Tarif compétitif — bon positionnement commercial"
-        elif ratio_comp<=1.25: h3_s,h3_m,h3_c="AMBRE",f"Prime/marché = {ratio_comp:.3f} ∈ [1.10,1.25] ⚠️","Prime légèrement élevée — optimiser les chargements"
-        else: h3_s,h3_m,h3_c="ROUGE",f"Prime/marché = {ratio_comp:.3f} > 1.25 ❌","Prime non compétitive — perte de marché probable"
-        sts=[h1_s,h2_s,h3_s]; sg="ROUGE" if "ROUGE" in sts else "AMBRE" if "AMBRE" in sts else "VERT"
+                # ── Tarification ────────────────────────────────────────────
+                'prime_pure':           round(prime_pure, 2),
+                'prime_commerciale':    round(prime_comm, 2),
+                'prime_mensuelle':      round(prime_mensuelle, 2),
+                'primes_acquises':      round(primes_acquises, 2),
+                'chargement_pct':       chargement_pct,
+                'ratio_sp_attendu':     round(lr_attendu, 4),
+
+                # ── Portefeuille ─────────────────────────────────────────────
+                'nb_assures':       nb_assures,
+                'age_moyen':        age_moyen,
+                'contrat':          contrat,
+                'garantie_niveau':  garantie_niveau,
+                'csp':              csp,
+
+                # ── Sinistralité par poste ────────────────────────────────────
+                'postes': postes,
+
+                # ── ANI 2013 ─────────────────────────────────────────────────
+                'ani_conforme': ani['conforme'],
+                'ani_detail':   ani,
+
+                # ── Sorties vers S2 Selma ────────────────────────────────────
+                'sorties_s2': {
+                    'primes_acquises':        round(primes_acquises, 2),
+                    'sinistres_attendus':      round(prime_pure * nb_assures, 2),
+                    'loss_ratio_attendu':      round(lr_attendu, 4),
+                    'sinistralite_par_poste':  {
+                        p: round(v['sinistre_annuel'] * nb_assures, 2)
+                        for p, v in postes.items()
+                    },
+                    'nb_assures':              nb_assures,
+                    'prime_pure_unitaire':     round(prime_pure, 2),
+                },
+
+                # ── Standard ActuarIA ────────────────────────────────────────
+                'hypotheses':  hyp,
+                'commentaire': com,
+                'graphiques':  gph,
+                'duree_sec':   round(duree, 2),
+                'erreur':      None,
+            }
+
+        except Exception as e:
+            self.logger.error(f"[{aid}] ERREUR : {e}", exc_info=True)
+            return self._erreur(str(e), aid)
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 1. EXTRACTION DONNÉES RÉELLES
+    # ══════════════════════════════════════════════════════════════════════════
+    def _extraire_donnees(self, result_a2, nb_assures, age_moyen, csp):
+        """
+        Extrait les paramètres depuis result_a2 si disponible.
+        Fallback sur les paramètres manuels sinon.
+        """
+        if not result_a2 or not result_a2.get('success'):
+            return 'parametres_manuels', nb_assures, age_moyen, csp
+
+        try:
+            df = result_a2.get('dataframe')
+            if df is None or len(df) == 0:
+                return 'parametres_manuels', nb_assures, age_moyen, csp
+
+            import pandas as pd
+            # Nombre d'assurés
+            nb_reel = len(df)
+
+            # Âge moyen
+            for col in ['age','age_assure','age_client']:
+                if col in df.columns:
+                    age_reel = float(df[col].dropna().mean())
+                    break
+            else:
+                age_reel = age_moyen
+
+            # CSP
+            for col in ['categorie_sociopro','csp','statut_professionnel']:
+                if col in df.columns:
+                    mode_csp = df[col].mode()
+                    csp_reel = str(mode_csp.iloc[0]).lower() if len(mode_csp) > 0 else csp
+                    break
+            else:
+                csp_reel = csp
+
+            self.logger.info(
+                f"Données réelles A2 : {nb_reel} assurés | "
+                f"âge moy={age_reel:.1f} | CSP={csp_reel}"
+            )
+            return 'donnees_reelles_a2', nb_reel, age_reel, csp_reel
+
+        except Exception as e:
+            self.logger.warning(f"Extraction A2 : {e} → fallback paramètres")
+            return 'parametres_manuels', nb_assures, age_moyen, csp
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 2. CALCUL SINISTRALITÉ PAR POSTE
+    # ══════════════════════════════════════════════════════════════════════════
+    def _calculer_postes(self, result_a2, fact_age, fact_garantie, fact_csp, nb_assures):
+        """
+        Calcule la sinistralité par poste.
+        Si données réelles disponibles → les utilise directement.
+        Sinon → tables DREES 2023.
+        """
+        postes = {}
+        total_sin = 0.0
+
+        # Vérifier si données réelles santé disponibles dans A2
+        donnees_reelles = {}
+        if result_a2 and result_a2.get('success'):
+            df = result_a2.get('dataframe')
+            if df is not None:
+                for p in COUTS_POSTES_REF:
+                    col_sin = f'sinistre_{p}'
+                    if col_sin in df.columns:
+                        donnees_reelles[p] = float(df[col_sin].mean())
+
+        for poste, ref in COUTS_POSTES_REF.items():
+            if poste in donnees_reelles:
+                # Données réelles du client
+                sin_an = donnees_reelles[poste]
+                freq   = ref['freq'] * fact_age
+                cout   = sin_an / max(freq, 0.01)
+                remb   = cout * ref['tc_ss']
+                charge = sin_an
+                source_p = 'donnees_client'
+            else:
+                # Tables DREES 2023
+                freq   = ref['freq']   * fact_age * fact_garantie * fact_csp
+                cout   = ref['cout_acte'] * fact_age
+                remb   = cout * ref['tc_ss']
+                charge = (cout - remb) * min(fact_garantie, 2.0)
+                sin_an = freq * charge
+                source_p = 'DREES_2023'
+
+            postes[poste] = {
+                'frequence_an':     round(freq, 3),
+                'cout_moyen':       round(cout, 2),
+                'remb_ss':          round(remb, 2),
+                'charge_mutuelle':  round(charge, 2),
+                'sinistre_annuel':  round(sin_an, 2),
+                'source':           source_p,
+            }
+            total_sin += sin_an
+
+        nb_postes_reels = len(donnees_reelles)
+        if nb_postes_reels > 0:
+            self.logger.info(
+                f"{nb_postes_reels}/5 postes depuis données client | "
+                f"{5-nb_postes_reels} depuis DREES 2023"
+            )
+
+        return postes, total_sin
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 3. CONFORMITÉ ANI 2013
+    # ══════════════════════════════════════════════════════════════════════════
+    def _verifier_ani(self, postes, garantie_niveau):
+        """
+        Vérifie la conformité au panier ANI 2013 (complémentaire collective).
+        Le panier minimum doit couvrir : médecine, hospit, dentaire, optique.
+        """
+        resultats = {}
+        conforme  = True
+
+        for poste, seuil in ANI_PANIER_MIN.items():
+            if seuil == 0 or poste not in postes:
+                resultats[poste] = {'ok': True, 'seuil': seuil, 'note': 'N/A'}
+                continue
+            charge = postes[poste].get('charge_mutuelle', 0)
+            ok = charge >= seuil
+            if not ok:
+                conforme = False
+            resultats[poste] = {
+                'ok':     ok,
+                'seuil':  seuil,
+                'charge': round(charge, 2),
+                'note':   '✅' if ok else f'❌ {charge:.0f}€ < {seuil:.0f}€ min ANI',
+            }
+
+        # Éco → ANI non requis (individuel uniquement)
+        if garantie_niveau == 'eco':
+            conforme = True   # L'ANI s'applique au collectif
+
         return {
-            "h1_ratio_sp":{"ratio":round(ratio_sp,4),"statut":h1_s,"message":h1_m,"conseil":h1_c,"titre_graphique":f"{'✅' if h1_s=='VERT' else '⚠️' if h1_s=='AMBRE' else '❌'} Ratio S/P = {ratio_sp*100:.1f}%"},
-            "h2_hospit":{"part_hospit":round(part_hospit,4),"statut":h2_s,"message":h2_m,"conseil":h2_c,"titre_graphique":f"{'✅' if h2_s=='VERT' else '⚠️' if h2_s=='AMBRE' else '❌'} Hospit = {part_hospit*100:.1f}% du total"},
-            "h3_competitivite":{"ratio_comp":round(ratio_comp,4),"statut":h3_s,"message":h3_m,"conseil":h3_c,"titre_graphique":f"{'✅' if h3_s=='VERT' else '⚠️' if h3_s=='AMBRE' else '❌'} Compétitivité = {ratio_comp:.3f}"},
-            "statut_global":sg,"conclusion":{"VERT":"✅ Tarification Santé validée — S/P, répartition et compétitivité conformes","AMBRE":"⚠️ Tarification acceptable — vérifier les points signalés","ROUGE":"❌ Tarification à corriger — non-conformité détectée"}[sg],
+            'conforme':   conforme,
+            'detail':     resultats,
+            'note_globale': (
+                "✅ Garanties conformes au panier ANI 2013"
+                if conforme else
+                "⚠️ Panier ANI 2013 non atteint sur certains postes"
+            ),
         }
 
-    def _graphiques_validation_sante(self,val,postes,prime_pure,prime_comm):
+    # ══════════════════════════════════════════════════════════════════════════
+    # 4. HYPOTHÈSES — STANDARD ACTUARIA
+    # ══════════════════════════════════════════════════════════════════════════
+    def _hypotheses(self, lr, postes, prime_comm, prime_marche, ani, garantie):
+        # H1 — Ratio S/P ∈ [65%, 85%]
+        if 0.65 <= lr <= 0.85:
+            h1_s = 'VALIDÉE'
+            h1_m = f"Ratio S/P = {lr*100:.1f}% ∈ [65%, 85%] ✅"
+        elif lr < 0.65:
+            h1_s = 'À JUSTIFIER'
+            h1_m = f"Ratio S/P = {lr*100:.1f}% < 65% — prime trop élevée"
+        elif lr <= 0.95:
+            h1_s = 'À JUSTIFIER'
+            h1_m = f"Ratio S/P = {lr*100:.1f}% > 85% — rentabilité insuffisante"
+        else:
+            h1_s = 'NON VALIDÉE'
+            h1_m = f"Ratio S/P = {lr*100:.1f}% > 95% — contrat déficitaire"
+
+        # H2 — Hospitalisation ≤ 50% du total
+        total = sum(v['sinistre_annuel'] for v in postes.values())
+        part_hospit = postes['hospitalisation']['sinistre_annuel'] / max(total, 1)
+        if part_hospit <= 0.50:
+            h2_s = 'VALIDÉE'
+            h2_m = f"Hospit = {part_hospit*100:.1f}% ≤ 50% — répartition équilibrée ✅"
+        elif part_hospit <= 0.65:
+            h2_s = 'À JUSTIFIER'
+            h2_m = f"Hospit = {part_hospit*100:.1f}% ∈ [50%, 65%] — surveiller l'anti-sélection"
+        else:
+            h2_s = 'NON VALIDÉE'
+            h2_m = f"Hospit = {part_hospit*100:.1f}% > 65% — concentration risque hospitalier"
+
+        # H3 — Prime compétitive vs marché + conformité ANI
+        ratio_comp = prime_comm / max(prime_marche, 1)
+        if ratio_comp <= 1.10 and ani['conforme']:
+            h3_s = 'VALIDÉE'
+            h3_m = f"Prime/marché = {ratio_comp:.3f} ✅ | ANI 2013 conforme ✅"
+        elif ratio_comp <= 1.25:
+            h3_s = 'À JUSTIFIER'
+            h3_m = f"Prime/marché = {ratio_comp:.3f} légèrement élevée | ANI: {'✅' if ani['conforme'] else '⚠️'}"
+        else:
+            h3_s = 'NON VALIDÉE'
+            h3_m = f"Prime/marché = {ratio_comp:.3f} > 1.25 — non compétitif"
+            if not ani['conforme']:
+                h3_m += " | ANI 2013 non conforme"
+
+        return [
+            {'id':'H1','hypothese':'Ratio S/P dans la norme mutualité [65%, 85%]',
+             'valeur':h1_m,'statut':h1_s,'critique':True},
+            {'id':'H2','hypothese':'Hospitalisation ≤ 50% de la sinistralité totale',
+             'valeur':h2_m,'statut':h2_s,'critique':True},
+            {'id':'H3','hypothese':'Prime compétitive vs marché + conformité ANI 2013',
+             'valeur':h3_m,'statut':h3_s,'critique':True},
+        ]
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 5. STATUT RAG
+    # ══════════════════════════════════════════════════════════════════════════
+    def _rag(self, hyp, lr, ani):
+        non_val = [h for h in hyp if h['statut'] == 'NON VALIDÉE']
+        a_just  = [h for h in hyp if h['statut'] == 'À JUSTIFIER']
+        if non_val:
+            return 'ROUGE'
+        if a_just or not ani['conforme']:
+            return 'AMBRE'
+        return 'VERT'
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 6. COMMENTAIRE ACTUARIEL
+    # ══════════════════════════════════════════════════════════════════════════
+    def _commentaire(self, rag, nb_assures, age_moyen, contrat, garantie,
+                     prime_pure, prime_comm, prime_mois, lr, postes,
+                     primes_acq, ani, source, hyp):
+        ic = "🟢" if rag=='VERT' else ("🟡" if rag=='AMBRE' else "🔴")
+        L = [
+            "="*70,
+            f"  RAPPORT TARIFICATION SANTÉ — S1 LÉONIE v{self.VERSION}",
+            f"  Contrat : {contrat} | Garantie : {garantie} | Source : {source}",
+            f"  {ic} STATUT : {rag}",
+            "="*70, "",
+            "📊 RÉSUMÉ DIRECTION", "─"*40,
+        ]
+        if rag == 'VERT':
+            L.append(f"✅ Tarification validée. Prime={prime_comm:.2f}€/an ({prime_mois:.2f}€/mois). Ratio S/P={lr*100:.1f}%.")
+        elif rag == 'AMBRE':
+            L.append(f"⚠️ Tarification acceptable — vérifier les points signalés. Prime={prime_comm:.2f}€/an.")
+        else:
+            L.append(f"❌ Tarification à corriger. Ratio S/P={lr*100:.1f}% hors norme ou prime non compétitive.")
+
+        L += [
+            "", "🔢 TARIFICATION PAR POSTE", "─"*40,
+            f"  {'Poste':<20} {'Fréq/an':>8} {'Coût moy':>10} {'Charge mut':>12} {'Sinistre/an':>12} {'Source':>12}",
+            "  " + "─"*66,
+        ]
+        for p, v in postes.items():
+            L.append(
+                f"  {p:<20} {v['frequence_an']:>8.3f} {v['cout_moyen']:>9.0f}€ "
+                f"{v['charge_mutuelle']:>11.0f}€ {v['sinistre_annuel']:>11.0f}€ "
+                f"{v['source']:>12}"
+            )
+        L += [
+            "  " + "─"*66,
+            f"  {'TOTAL':<20} {'':>8} {'':>10} {'':>12} {sum(v['sinistre_annuel'] for v in postes.values()):>11.0f}€",
+            "",
+            "💰 PRIMES", "─"*40,
+            f"  Prime pure unitaire       : {prime_pure:>12.2f}€/an/assuré",
+            f"  Prime commerciale         : {prime_comm:>12.2f}€/an/assuré ({prime_mois:.2f}€/mois)",
+            f"  Primes acquises portfolio : {primes_acq:>12,.0f}€",
+            f"  Ratio S/P attendu         : {lr*100:>11.1f}%",
+            f"  Nombre d'assurés          : {nb_assures:>12,}",
+            f"  Âge moyen                 : {age_moyen:>12.1f} ans",
+            "", "📋 ANI 2013", "─"*40,
+            f"  {ani['note_globale']}",
+        ]
+        for p, d in ani['detail'].items():
+            if d['note'] != 'N/A':
+                L.append(f"  {p:<20} : {d['note']}")
+
+        L += ["", "📋 HYPOTHÈSES", "─"*40]
+        for h in hyp:
+            ic_h = "✅" if h['statut']=='VALIDÉE' else "⚠️"
+            L += [f"  {ic_h} [{h['id']}] {h['hypothese']}",
+                  f"       → {h['valeur']} : {h['statut']}"]
+
+        L += ["", "🎯 AVIS LÉONIE → CHIARA", "─"*40]
+        if rag == 'VERT':
+            L.append("✅ VALIDÉE — Données transmises à S2 Selma (provisionnement) et S3 Binta (reporting).")
+        elif rag == 'AMBRE':
+            L.append("⚠️ Revoir les points signalés avant transmission à S2/S3.")
+        else:
+            L.append("❌ NON VALIDÉE — Revoir la tarification avant déploiement.")
+        L.append("")
+        return "\n".join(L)
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 7. GRAPHIQUES — 4 AUTO-EXPLICATIFS
+    # ══════════════════════════════════════════════════════════════════════════
+    def _graphiques(self, postes, prime_pure, prime_comm, prime_marche, lr, hyp):
+        gph = {}
+
+        # G1 — Sinistralité par poste (barres)
         try:
-            import plotly.graph_objects as go
-        except: return {}
-        NAVY="#0F2E52";NAVY_L="#1B3A5C";OR="#C9A84C";BLANC="#F0F4F8";GRIS="#8A9AB0"
-        VERT="#2ECC71";ROUGE="#E74C3C";AMBRE="#F39C12";BLEU="#3498DB"
-        LAYOUT=dict(paper_bgcolor=NAVY,plot_bgcolor=NAVY_L,font=dict(family="Inter",color=BLANC,size=11),margin=dict(l=16,r=16,t=60,b=50),height=300)
-        graphiques={}
-        # G1 — Décomposition sinistralité par poste
+            noms  = [p.replace('_',' ').title() for p in postes]
+            vals  = [postes[p]['sinistre_annuel'] for p in postes]
+            cols  = [OR, BLEU, ROUGE, AMBRE, VERT]
+            fig = go.Figure(go.Bar(
+                x=noms, y=vals, marker_color=cols[:len(noms)],
+                width=0.5, opacity=0.88,
+                text=[f"{v:.0f}€" for v in vals],
+                textposition="outside", textfont=dict(color=BLANC, size=10),
+                hovertemplate="<b>%{x}</b><br>%{y:.0f}€/assuré/an<extra></extra>",
+            ))
+            h2 = next(h for h in hyp if h['id']=='H2')
+            c2 = VERT if h2['statut']=='VALIDÉE' else (AMBRE if h2['statut']=='À JUSTIFIER' else ROUGE)
+            l = dict(**LAYOUT_BASE)
+            l.update(dict(
+                title=dict(text="G1 — Sinistralité par poste (€/assuré/an) — DREES 2023",
+                           font=dict(color=OR,size=12),x=0.01),
+                showlegend=False,
+                xaxis=dict(tickfont=dict(color=BLANC,size=9),showgrid=False),
+                yaxis=dict(visible=False),
+                annotations=[dict(
+                    text="💡 L'hospitalisation ne doit pas dépasser 50% du total — risque d'anti-sélection.",
+                    xref="paper",yref="paper",x=0.01,y=-0.22,
+                    font=dict(color=GRIS,size=9),showarrow=False)],
+            ))
+            fig.update_layout(**l)
+            gph['sinistralite_postes'] = fig
+        except Exception as e:
+            self.logger.warning(f"G1:{e}")
+
+        # G2 — Jauge Ratio S/P
         try:
-            noms=[p.replace("_"," ").title() for p in postes]
-            vals=[postes[p]['sinistre_annuel'] for p in postes]
-            colors=[OR,BLEU,"#9B59B6",AMBRE,VERT]
-            fig1=go.Figure(go.Bar(x=noms,y=vals,marker_color=colors[:len(noms)],width=0.5,opacity=0.88,
-                text=[f"{v:.0f}€" for v in vals],textposition="outside",textfont=dict(color=BLANC,size=10),
-                hovertemplate="<b>%{x}</b><br>%{y:.0f}€/an<extra></extra>"))
-            h2=val["h2_hospit"]; c2=VERT if h2["statut"]=="VERT" else AMBRE if h2["statut"]=="AMBRE" else ROUGE
-            l1=dict(**LAYOUT); l1.update(dict(title=dict(text=f"{'✅' if h2['statut']=='VERT' else '⚠️'} Sinistralité par poste — {h2['message'][:40]}",font=dict(color=c2,size=11),x=0.01),
-                xaxis=dict(tickfont=dict(color=BLANC),showgrid=False),yaxis=dict(visible=False),bargap=0.3,showlegend=False,
-                annotations=[dict(text="💡 L'hospitalisation ne doit pas dépasser 50% du total — sinon risque d'anti-sélection sur ce poste.",xref="paper",yref="paper",x=0.01,y=-0.22,font=dict(color=GRIS,size=9),showarrow=False)]))
-            fig1.update_layout(**l1); graphiques["sinistralite_postes"]=fig1
-        except: pass
-        # G2 — Ratio S/P jauge
-        try:
-            h1=val["h1_ratio_sp"]; c1=VERT if h1["statut"]=="VERT" else AMBRE if h1["statut"]=="AMBRE" else ROUGE
-            fig2=go.Figure(go.Indicator(mode="gauge+number",value=h1["ratio"]*100,
-                number=dict(suffix="%",font=dict(color=c1,size=28),valueformat=".1f"),
-                title=dict(text=h1["titre_graphique"],font=dict(color=c1,size=11)),
-                gauge=dict(axis=dict(range=[0,110],tickfont=dict(color=GRIS,size=8),tickvals=[0,55,65,85,95,110],ticktext=["0","55","65%","85%","95",""]),
-                    bar=dict(color=c1,thickness=0.25),bgcolor="#1B3A5C",borderwidth=0,
-                    steps=[dict(range=[0,55],color="rgba(243,156,18,0.12)"),dict(range=[55,65],color="rgba(243,156,18,0.12)"),dict(range=[65,85],color="rgba(46,204,113,0.12)"),dict(range=[85,110],color="rgba(231,76,60,0.12)")],
-                    threshold=dict(line=dict(color=VERT,width=3),thickness=0.8,value=75))))
-            fig2.update_layout(paper_bgcolor=NAVY,font=dict(color=BLANC),margin=dict(l=30,r=30,t=80,b=50),height=300,
-                annotations=[dict(text=f"💡 {h1['conseil']}",xref="paper",yref="paper",x=0.5,y=-0.12,font=dict(color=GRIS,size=9),showarrow=False)])
-            graphiques["jauge_ratio_sp"]=fig2
-        except: pass
+            h1 = next(h for h in hyp if h['id']=='H1')
+            c1 = VERT if h1['statut']=='VALIDÉE' else (AMBRE if h1['statut']=='À JUSTIFIER' else ROUGE)
+            fig = go.Figure(go.Indicator(
+                mode="gauge+number", value=lr*100,
+                number=dict(suffix="%", font=dict(color=c1, size=28), valueformat=".1f"),
+                title=dict(text=f"Ratio S/P — {h1['valeur'][:40]}", font=dict(color=c1, size=11)),
+                gauge=dict(
+                    axis=dict(range=[0,110], tickvals=[0,55,65,75,85,95,110],
+                              ticktext=["0","55","65%","75%","85%","95",""],
+                              tickfont=dict(color=GRIS,size=8)),
+                    bar=dict(color=c1, thickness=0.25),
+                    bgcolor=NAVY_L, borderwidth=0,
+                    steps=[
+                        dict(range=[0,65],  color="rgba(243,156,18,0.12)"),
+                        dict(range=[65,85],  color="rgba(46,204,113,0.12)"),
+                        dict(range=[85,110], color="rgba(231,76,60,0.12)"),
+                    ],
+                    threshold=dict(line=dict(color=VERT,width=3), thickness=0.8, value=75),
+                ),
+            ))
+            fig.update_layout(
+                paper_bgcolor=NAVY, font=dict(color=BLANC),
+                margin=dict(l=30,r=30,t=80,b=50), height=300,
+                annotations=[dict(
+                    text="💡 Zone verte [65%-85%] = norme mutualité. En dessous = prime trop élevée.",
+                    xref="paper",yref="paper",x=0.5,y=-0.12,
+                    font=dict(color=GRIS,size=9),showarrow=False)],
+            )
+            gph['jauge_ratio_sp'] = fig
+        except Exception as e:
+            self.logger.warning(f"G2:{e}")
+
         # G3 — Prime pure vs commerciale vs marché
         try:
-            h3=val["h3_competitivite"]; c3=VERT if h3["statut"]=="VERT" else AMBRE if h3["statut"]=="AMBRE" else ROUGE
-            marche=prime_comm/h3["ratio_comp"]
-            fig3=go.Figure(go.Bar(x=["Prime pure","Prime commerciale","Référence marché"],
-                y=[prime_pure,prime_comm,marche],marker_color=[OR,c3,GRIS],width=0.4,opacity=0.88,
-                text=[f"{v:.0f}€" for v in [prime_pure,prime_comm,marche]],textposition="outside",textfont=dict(color=BLANC,size=10)))
-            l3=dict(**LAYOUT); l3.update(dict(title=dict(text=h3["titre_graphique"],font=dict(color=c3,size=11),x=0.01),
-                xaxis=dict(tickfont=dict(color=BLANC),showgrid=False),yaxis=dict(visible=False),bargap=0.35,showlegend=False,
-                annotations=[dict(text="💡 La prime commerciale doit rester proche de la référence marché pour rester compétitive.",xref="paper",yref="paper",x=0.01,y=-0.22,font=dict(color=GRIS,size=9),showarrow=False)]))
-            fig3.update_layout(**l3); graphiques["comparaison_primes_sante"]=fig3
-        except: pass
-        # G4 — Scorecard
-        try:
-            items=[("H1 — Ratio S/P ∈ [65%,85%]",val["h1_ratio_sp"]["statut"],val["h1_ratio_sp"]["message"],val["h1_ratio_sp"]["conseil"]),
-                   ("H2 — Hospit ≤ 50% total",val["h2_hospit"]["statut"],val["h2_hospit"]["message"],val["h2_hospit"]["conseil"]),
-                   ("H3 — Prime compétitive",val["h3_competitivite"]["statut"],val["h3_competitivite"]["message"],val["h3_competitivite"]["conseil"])]
-            fig4=go.Figure()
-            for nom,statut,msg,conseil in items:
-                c=VERT if statut=="VERT" else AMBRE if statut=="AMBRE" else ROUGE
-                i="✅" if statut=="VERT" else "⚠️" if statut=="AMBRE" else "❌"
-                s=1.0 if statut=="VERT" else 0.5 if statut=="AMBRE" else 0.0
-                fig4.add_trace(go.Bar(x=[s],y=[nom],orientation="h",marker_color=c,width=0.5,text=f"{i} {statut}",textposition="outside",textfont=dict(color=c,size=10),hovertemplate=f"<b>{nom}</b><br>{msg}<br>💡 {conseil}<extra></extra>",showlegend=False))
-            sg=val["statut_global"]; cg=VERT if sg=="VERT" else AMBRE if sg=="AMBRE" else ROUGE
-            l4=dict(**LAYOUT); l4.update(dict(title=dict(text=f"Scorecard Santé — {val['conclusion']}",font=dict(color=cg,size=10),x=0.01),
-                xaxis=dict(range=[0,1.6],visible=False),yaxis=dict(tickfont=dict(color=BLANC,size=10),showgrid=False),
-                barmode="overlay",height=260,annotations=[dict(text="💡 3 ✅ = Tarification Santé validée, conforme CCAM/NGAP et compétitive.",xref="paper",yref="paper",x=0.01,y=-0.22,font=dict(color=GRIS,size=9),showarrow=False)]))
-            fig4.update_layout(**l4); graphiques["scorecard_sante"]=fig4
-        except: pass
-        return graphiques
+            h3 = next(h for h in hyp if h['id']=='H3')
+            c3 = VERT if h3['statut']=='VALIDÉE' else (AMBRE if h3['statut']=='À JUSTIFIER' else ROUGE)
+            fig = go.Figure(go.Bar(
+                x=["Prime pure", "Prime commerciale", "Référence marché"],
+                y=[prime_pure, prime_comm, prime_marche],
+                marker_color=[OR, c3, GRIS],
+                width=0.4, opacity=0.88,
+                text=[f"{v:.0f}€" for v in [prime_pure, prime_comm, prime_marche]],
+                textposition="outside", textfont=dict(color=BLANC, size=11),
+            ))
+            l = dict(**LAYOUT_BASE)
+            l.update(dict(
+                title=dict(text=f"G3 — Compétitivité tarifaire | {h3['valeur'][:50]}",
+                           font=dict(color=c3,size=11),x=0.01),
+                showlegend=False,
+                xaxis=dict(tickfont=dict(color=BLANC),showgrid=False),
+                yaxis=dict(visible=False), bargap=0.35,
+                annotations=[dict(
+                    text="💡 La prime commerciale doit rester proche de la référence marché pour éviter la perte d'adhérents.",
+                    xref="paper",yref="paper",x=0.01,y=-0.22,
+                    font=dict(color=GRIS,size=9),showarrow=False)],
+            ))
+            fig.update_layout(**l)
+            gph['competitivite_tarifaire'] = fig
+        except Exception as e:
+            self.logger.warning(f"G3:{e}")
 
-    def _generer_graphiques(self,postes):
+        # G4 — Scorecard hypothèses
         try:
-            import plotly.graph_objects as go
-            NAVY="#0F2E52";NAVY_L="#1B3A5C";BLANC="#F0F4F8";GRIS="#8A9AB0"
-            OR="#C9A84C";BLEU="#3498DB";AMBRE="#F39C12";VERT="#2ECC71"
-            noms=[p.replace("_"," ").title() for p in postes]
-            vals=[postes[p]['sinistre_annuel'] for p in postes]
-            fig=go.Figure(go.Pie(labels=noms,values=vals,hole=0.4,
-                marker_colors=[OR,BLEU,"#9B59B6",AMBRE,VERT],
-                hovertemplate="<b>%{label}</b><br>%{value:.0f}€ (%{percent})<extra></extra>"))
-            fig.update_layout(paper_bgcolor=NAVY,font=dict(family="Inter",color=BLANC,size=11),
-                margin=dict(l=16,r=16,t=60,b=40),height=300,
-                title=dict(text="Répartition de la sinistralité par poste",font=dict(color=BLANC,size=12),x=0.01),
-                legend=dict(bgcolor="rgba(0,0,0,0)",font=dict(color=BLANC,size=9)))
-            return {"sinistralite_pie":fig}
-        except: return {}
+            fig = go.Figure()
+            for h in hyp:
+                c = VERT if h['statut']=='VALIDÉE' else (AMBRE if h['statut']=='À JUSTIFIER' else ROUGE)
+                ic = "✅" if h['statut']=='VALIDÉE' else ("⚠️" if h['statut']=='À JUSTIFIER' else "❌")
+                s = 1.0 if h['statut']=='VALIDÉE' else (0.5 if h['statut']=='À JUSTIFIER' else 0.0)
+                fig.add_trace(go.Bar(
+                    x=[s], y=[h['hypothese'][:40]], orientation="h",
+                    marker_color=c, width=0.5, opacity=0.85,
+                    text=f"{ic} {h['statut']}", textposition="outside",
+                    textfont=dict(color=c,size=10),
+                    hovertemplate=f"<b>{h['hypothese']}</b><br>{h['valeur']}<extra></extra>",
+                    showlegend=False,
+                ))
+            statut_glob = 'VERT' if all(h['statut']=='VALIDÉE' for h in hyp) else ('ROUGE' if any(h['statut']=='NON VALIDÉE' for h in hyp) else 'AMBRE')
+            cg = VERT if statut_glob=='VERT' else (AMBRE if statut_glob=='AMBRE' else ROUGE)
+            l = dict(**LAYOUT_BASE)
+            l.update(dict(
+                title=dict(text="G4 — Scorecard Tarification Santé",
+                           font=dict(color=cg,size=12),x=0.01),
+                xaxis=dict(range=[0,1.6],visible=False),
+                yaxis=dict(tickfont=dict(color=BLANC,size=10),showgrid=False),
+                barmode="overlay", height=260,
+                annotations=[dict(
+                    text="💡 3 ✅ = tarification santé validée, conforme DREES/ANI et compétitive.",
+                    xref="paper",yref="paper",x=0.01,y=-0.22,
+                    font=dict(color=GRIS,size=9),showarrow=False)],
+            ))
+            fig.update_layout(**l)
+            gph['scorecard_sante'] = fig
+        except Exception as e:
+            self.logger.warning(f"G4:{e}")
 
-    def _sauvegarder(self,rapport,audit_id):
+        return gph
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # UTILITAIRES
+    # ══════════════════════════════════════════════════════════════════════════
+    def _audit(self, aid, prime_pure, prime_comm, lr, rag, nb_assures):
         try:
-            with open(os.path.join(self.models_path,f"s1_sante_{audit_id}.json"),'w') as f: json.dump(rapport,f,indent=2)
-            self.logger.info(f"Sauvegardé : s1_sante_{audit_id}.json")
-        except Exception as e: self.logger.warning(f"Sauvegarde : {e}")
+            r = {'audit_id':aid,'agent':self.NOM,'version':self.VERSION,
+                 'timestamp':datetime.now().isoformat(),'statut_rag':rag,
+                 'prime_pure':prime_pure,'prime_comm':prime_comm,
+                 'lr_attendu':lr,'nb_assures':nb_assures}
+            with open(self.audit_path/f"audit_{aid}.json",'w',encoding='utf-8') as f:
+                json.dump(r,f,ensure_ascii=False,indent=2,default=str)
+        except Exception as e:
+            self.logger.warning(f"Audit:{e}")
+
+    def _console(self, aid, rag, prime_pure, prime_comm, lr, nb_assures, primes_acq):
+        ic = "🟢" if rag=='VERT' else ("🟡" if rag=='AMBRE' else "🔴")
+        print(f"\n{'─'*70}")
+        print(f"  S1 LÉONIE v{self.VERSION} | {aid} | {ic} {rag}")
+        print(f"  Prime pure={prime_pure:.2f}€ | Commerciale={prime_comm:.2f}€ | S/P={lr*100:.1f}%")
+        print(f"  Portfolio: {nb_assures:,} assurés | Primes={primes_acq:,.0f}€")
+        print(f"{'─'*70}")
+
+    def _erreur(self, msg, aid):
+        return {'success':False,'agent':self.NOM,'version':self.VERSION,
+                'audit_id':aid,'statut_rag':'ROUGE',
+                'prime_pure':0,'prime_commerciale':0,'primes_acquises':0,
+                'ratio_sp_attendu':0,'postes':{},'ani_conforme':False,
+                'sorties_s2':{},'hypotheses':[],'commentaire':f"❌ ERREUR S1:{msg}",
+                'graphiques':{},'duree_sec':0.0,'erreur':msg}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+if __name__ == '__main__':
+    print("="*70)
+    print("  S1 LÉONIE v2.0 — DÉMO TARIFICATION FRAIS DE SANTÉ")
+    print("  DREES 2023 | ANI 2013 | Branchement A2 | Standard ActuarIA")
+    print("="*70)
+
+    agent = AgentS1TarificationSante(
+        models_path='/tmp/s1/models', audit_path='/tmp/s1/audit', verbose=True
+    )
+
+    # Démo sans données (paramètres manuels)
+    r = agent.run(
+        result_a2=None,
+        nb_assures=5000,
+        age_moyen=43.0,
+        contrat="collectif",
+        garantie_niveau="confort",
+        chargement_pct=0.18,
+        csp="employe",
+        generer_graphiques=False,
+    )
+
+    print(f"\n{'='*70}\n  RÉSULTATS\n{'='*70}")
+    print(f"  Statut     : {r['statut_rag']}")
+    print(f"  Source     : {r['source_donnees']}")
+    print(f"  Prime pure : {r['prime_pure']:.2f}€/an/assuré")
+    print(f"  Prime comm : {r['prime_commerciale']:.2f}€/an ({r['prime_mensuelle']:.2f}€/mois)")
+    print(f"  Primes acq : {r['primes_acquises']:,.0f}€")
+    print(f"  Ratio S/P  : {r['ratio_sp_attendu']*100:.1f}%")
+    print(f"  ANI 2013   : {'✅' if r['ani_conforme'] else '⚠️'}")
+    print(f"\n  Sinistralité par poste :")
+    for p, v in r['postes'].items():
+        print(f"    {p:<20} : {v['sinistre_annuel']:>8.0f}€/assuré/an [{v['source']}]")
+    print(f"\n  Sorties vers S2 Selma :")
+    s2 = r['sorties_s2']
+    print(f"    Primes acquises    : {s2['primes_acquises']:,.0f}€")
+    print(f"    Sinistres attendus : {s2['sinistres_attendus']:,.0f}€")
+    print(f"    Loss Ratio attendu : {s2['loss_ratio_attendu']*100:.1f}%")
+    print(f"\n  Durée : {r['duree_sec']:.2f}s")

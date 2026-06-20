@@ -1,197 +1,754 @@
 """
-ActuarIA — Agent S2 : Selma — Provisionnement Santé
-Direction Santé-Prévoyance | Manager : Chiara | Directeur : Amira
-
-Provisions spécifiques santé :
-→ PSAP (Provision Sinistres À Payer) — triangle de développement santé
-→ PREC (Provision pour Risques En Cours)
-→ Validation hypothèses + graphiques auto-explicatifs
+╔══════════════════════════════════════════════════════════════════════════════╗
+║     ACTUARIA — AGENT S2 SELMA : PROVISIONNEMENT SANTÉ v2.0                ║
+║                Sous CHIARA (Équipe Santé) · Direction SP                    ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║  PÉRIMÈTRE : Provisions techniques santé                                    ║
+║              PSAP (dossiers + IBNR) · PREC · Triangle santé rapide        ║
+║                                                                              ║
+║  NOUVEAUTÉS v2 :                                                             ║
+║    ✅ Reçoit result_s1 (Léonie) — données réelles du portefeuille          ║
+║    ✅ PSAP par poste (médecine, hospit, dentaire, optique, pharmacie)      ║
+║    ✅ IBNR cadences santé différenciées par poste (1-3 mois)              ║
+║    ✅ PREC sur base primes acquises S1                                      ║
+║    ✅ Triangle de développement santé simplifié (3 mois)                   ║
+║    ✅ Standard ActuarIA : RAG + 3 hypothèses + 4 graphiques + commentaire  ║
+║    ✅ Sorties vers S3 Binta                                                 ║
+║                                                                              ║
+║  ENTRÉES :                                                                   ║
+║    result_s1  → Tarification Léonie (obligatoire)                          ║
+║    result_a2  → Données brutes Kenji (optionnel — enrichit les dossiers)  ║
+║    nb_sinistres_ouverts → dossiers en cours                                ║
+║    cout_moyen_ouvert    → coût moyen dossier ouvert                        ║
+║    delai_reglement_mois → délai moyen règlement (santé : 1-3 mois)        ║
+║                                                                              ║
+║  SORTIES VERS S3 BINTA :                                                    ║
+║    psap_total · prec · provision_totale · loss_ratio · be_sante           ║
+║                                                                              ║
+║  VERSION : 2.0 — 20/06/2026                                                ║
+╚══════════════════════════════════════════════════════════════════════════════╝
 """
 
-import numpy as np, logging, os, json
+import json, logging, warnings
 from datetime import datetime
-from typing import Dict
+from pathlib import Path
+from typing import Dict, Optional
 
+import numpy as np
+
+try:
+    import plotly.graph_objects as go
+    PLOTLY_OK = True
+except ImportError:
+    PLOTLY_OK = False
+
+warnings.filterwarnings('ignore')
 logging.basicConfig(level=logging.INFO,
-    format='%(asctime)s | actuaria.s2 | %(levelname)s | %(message)s',
+    format='%(asctime)s | %(name)s | %(levelname)s | %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S')
 
-print("Agent S2 — Provisionnement Santé ActuarIA v1.0")
-print("PSAP (Sinistres À Payer) · PREC (Risques En Cours) · Triangle Santé")
-print("Usage : agent_s2 = AgentS2ProvisionnemntSante()")
-print("        result_s2 = agent_s2.run(primes_acquises=5e6, sinistres_payes=3.2e6)")
+# ── Palette ActuarIA ──────────────────────────────────────────────────────────
+NAVY="#0F2E52"; NAVY_L="#1B3A5C"; NAVY_LL="#243F6A"; OR="#C9A84C"
+BLANC="#F0F4F8"; GRIS="#8A9AB0"; VERT="#2ECC71"; ROUGE="#E74C3C"
+AMBRE="#F39C12"; BLEU="#3498DB"
 
+LAYOUT_BASE = dict(paper_bgcolor=NAVY, plot_bgcolor=NAVY_L,
+    font=dict(family="Inter, Arial", color=BLANC, size=11),
+    margin=dict(l=16,r=16,t=60,b=60), height=300,
+    hoverlabel=dict(bgcolor=NAVY_LL, bordercolor=OR, font_size=12, font_color=BLANC))
+
+# ── Paramètres IBNR santé par poste ──────────────────────────────────────────
+# En santé, IBNR très faible car remboursement rapide (1-3 mois)
+# Différent de l'IARD (6-18 mois) et de la prévoyance (12-36 mois)
+IBNR_TAUX_POSTE = {
+    "medecine":        0.08,   # 8%  — feuilles de soins rapides
+    "pharmacie":       0.05,   # 5%  — pharmacie quasi-immédiat
+    "hospitalisation": 0.25,   # 25% — séjours complexes, retards facturation
+    "dentaire":        0.15,   # 15% — prothèses, délais laboratoire
+    "optique":         0.10,   # 10% — remboursement différé
+}
+IBNR_TAUX_GLOBAL = 0.18   # fallback si pas de détail poste
+
+# Délais de règlement santé (mois) — base triangle
+DELAIS_REGLEMENT = {
+    "medecine":        1,
+    "pharmacie":       1,
+    "hospitalisation": 3,
+    "dentaire":        2,
+    "optique":         2,
+}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 class AgentS2ProvisionnemntSante:
-    def __init__(self,models_path="models",audit_path="audit",verbose=True):
-        self.models_path=models_path; self.audit_path=audit_path
-        self.verbose=verbose; self.logger=logging.getLogger("actuaria.s2")
-        os.makedirs(models_path,exist_ok=True); os.makedirs(audit_path,exist_ok=True)
+    """
+    Agent S2 Selma — Provisionnement Santé v2.0.
+    Sous CHIARA, Direction Santé-Prévoyance.
+    """
+    NOM     = "Selma"
+    CODE    = "S2"
+    VERSION = "2.0"
+    MANAGER = "Chiara (Équipe Santé)"
 
-    def run(self,primes_acquises=5_000_000,sinistres_payes=3_200_000,
-            nb_sinistres_ouverts=1200,cout_moyen_ouvert=850,
-            delai_reglement_mois=3,generer_graphiques=True) -> Dict:
-        audit_id=f"S2_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        logger=self.logger
-        if self.verbose: logger.info(f"[{audit_id}] Agent S2 démarré | PA={primes_acquises/1e6:.1f}M€ | SP={sinistres_payes/1e6:.1f}M€")
+    def __init__(self, models_path="models", audit_path="audit", verbose=True):
+        self.models_path = Path(models_path)
+        self.audit_path  = Path(audit_path)
+        self.models_path.mkdir(parents=True, exist_ok=True)
+        self.audit_path.mkdir(parents=True, exist_ok=True)
+        self.logger  = logging.getLogger("actuaria.s2.selma")
+        self.verbose = verbose
+        if verbose:
+            self.logger.info(f"S2 Selma v{self.VERSION} | {self.MANAGER}")
+
+    # ──────────────────────────────────────────────────────────────────────────
+    def run(self,
+            result_s1,
+            result_a2            = None,
+            nb_sinistres_ouverts: int   = None,
+            cout_moyen_ouvert:    float = None,
+            delai_reglement_mois: int   = 2,
+            generer_graphiques:   bool  = True) -> Dict:
+
+        t0  = datetime.now()
+        aid = f"S2_{t0.strftime('%Y%m%d_%H%M%S')}"
+
         try:
-            # PSAP — Méthode des dossiers connus
-            psap_dossiers = nb_sinistres_ouverts * cout_moyen_ouvert
-
-            # PSAP IBNR (Incurred But Not Reported) — ratio de développement santé
-            # En santé, IBNR ≈ 15-25% des sinistres payés (liquidation rapide)
-            facteur_ibnr = 0.18
-            psap_ibnr = sinistres_payes * facteur_ibnr
-            psap_total = psap_dossiers + psap_ibnr
-
-            # PREC — Provision pour Risques En Cours
-            # PREC = max(0, PA × (1 - ratio combiné attendu))
-            ratio_sp = sinistres_payes / max(primes_acquises, 1)
-            ratio_combine_attendu = ratio_sp + 0.15  # chargements
-            prec = max(0, primes_acquises * max(0, ratio_combine_attendu - 1))
-
-            # Loss Ratio
-            loss_ratio = sinistres_payes / max(primes_acquises, 1)
-            provision_totale = psap_total + prec
-
-            # Taux de provisionnement
-            taux_prov = provision_totale / max(primes_acquises, 1)
-
-            commentaire = (
-                f"✅ Provisionnement Santé — PA={primes_acquises/1e6:.1f}M€ | SP={sinistres_payes/1e6:.1f}M€.\n"
-                f"PSAP dossiers : {psap_dossiers/1e3:.0f}k€ ({nb_sinistres_ouverts} sin. × {cout_moyen_ouvert:.0f}€).\n"
-                f"PSAP IBNR     : {psap_ibnr/1e3:.0f}k€ ({facteur_ibnr*100:.0f}% des SP).\n"
-                f"PSAP totale   : {psap_total/1e3:.0f}k€ | PREC : {prec/1e3:.0f}k€.\n"
-                f"Loss Ratio    : {loss_ratio*100:.1f}% | Taux prov. : {taux_prov*100:.1f}%."
+            # ── 1. EXTRACTION DONNÉES S1 ──────────────────────────────────────
+            src = self._extraire_s1(result_s1)
+            self.logger.info(
+                f"[{aid}] S2 Selma | PA={src['primes_acquises']:,.0f}€ | "
+                f"LR={src['loss_ratio_attendu']*100:.1f}%"
             )
 
-            val_hyp = self._valider_provisionnement_sante(
-                psap_total, prec, loss_ratio, taux_prov, primes_acquises, psap_ibnr, sinistres_payes)
-            gv  = self._graphiques_validation_s2(val_hyp, psap_dossiers, psap_ibnr, prec, primes_acquises, sinistres_payes) if generer_graphiques else {}
-            graphiques = self._generer_graphiques(psap_dossiers, psap_ibnr, prec) if generer_graphiques else {}
-            self._sauvegarder({'agent':'S2 Selma','psap_total':psap_total,'prec':prec,'loss_ratio':loss_ratio}, audit_id)
+            # ── 2. DOSSIERS OUVERTS (PSAP dossiers) ──────────────────────────
+            nb_ouv, cout_ouv = self._parametres_dossiers(
+                result_a2, nb_sinistres_ouverts, cout_moyen_ouvert, src
+            )
+
+            # ── 3. PSAP PAR POSTE ─────────────────────────────────────────────
+            psap_postes = self._calculer_psap_postes(src, nb_ouv, cout_ouv)
+
+            # ── 4. IBNR PAR POSTE (cadences santé) ───────────────────────────
+            ibnr_postes = self._calculer_ibnr_postes(src)
+
+            # ── 5. TOTAUX PSAP ────────────────────────────────────────────────
+            psap_dossiers = sum(v['psap_dossiers'] for v in psap_postes.values())
+            psap_ibnr     = sum(v['ibnr']          for v in ibnr_postes.values())
+            psap_total    = psap_dossiers + psap_ibnr
+
+            # ── 6. PREC ───────────────────────────────────────────────────────
+            prec = self._calculer_prec(src)
+
+            # ── 7. PROVISION TOTALE ───────────────────────────────────────────
+            provision_totale = psap_total + prec
+            loss_ratio       = src['sinistres_payes'] / max(src['primes_acquises'], 1)
+            taux_prov        = provision_totale / max(src['primes_acquises'], 1)
+
+            # ── 8. BE SANTÉ (pour S3 Binta) ───────────────────────────────────
+            be_sante   = psap_total
+            risk_adj   = be_sante * 0.05
+            tp_sante   = be_sante + risk_adj
+
+            # ── 9. TRIANGLE SANTÉ SIMPLIFIÉ ───────────────────────────────────
+            triangle = self._triangle_sante(src, psap_postes, ibnr_postes)
+
+            # ── 10. HYPOTHÈSES + RAG ──────────────────────────────────────────
+            hyp = self._hypotheses(
+                psap_total, psap_ibnr, loss_ratio, taux_prov,
+                src['primes_acquises'], src['sinistres_payes']
+            )
+            rag = self._rag(hyp, loss_ratio)
+
+            # ── 11. COMMENTAIRE ───────────────────────────────────────────────
+            com = self._commentaire(
+                rag, src, psap_dossiers, psap_ibnr, psap_total,
+                prec, provision_totale, loss_ratio, taux_prov,
+                be_sante, risk_adj, tp_sante, psap_postes, ibnr_postes, hyp
+            )
+
+            # ── 12. GRAPHIQUES ────────────────────────────────────────────────
+            gph = {}
+            if generer_graphiques and PLOTLY_OK:
+                gph = self._graphiques(
+                    psap_dossiers, psap_ibnr, prec, loss_ratio,
+                    src, psap_postes, ibnr_postes, hyp
+                )
+
+            self._audit(aid, psap_total, prec, loss_ratio, rag)
+            if self.verbose:
+                self._console(aid, rag, psap_total, prec, provision_totale, loss_ratio)
+
+            duree = (datetime.now()-t0).total_seconds()
 
             return {
-                'success':True,'agent':'S2 Selma',
-                'statut_rag':'VERT' if val_hyp['statut_global']!='ROUGE' else 'AMBRE',
-                'primes_acquises':primes_acquises,'sinistres_payes':sinistres_payes,
-                'psap_dossiers':round(psap_dossiers,2),
-                'psap_ibnr':round(psap_ibnr,2),
-                'psap_total':round(psap_total,2),
-                'prec':round(prec,2),
-                'provision_totale':round(provision_totale,2),
-                'loss_ratio':round(loss_ratio,4),
-                'taux_provisionnement':round(taux_prov,4),
-                'commentaire':commentaire,'audit_id':audit_id,
-                'graphiques':graphiques,'validation_s2':val_hyp,'graphiques_validation':gv,'erreur':None,
-            }
-        except Exception as e:
-            logger.error(f"[{audit_id}] ERREUR : {e}", exc_info=True)
-            return {'success':False,'statut_rag':'ROUGE','erreur':str(e),'audit_id':audit_id}
+                'success':    True,
+                'agent':      self.NOM,
+                'version':    self.VERSION,
+                'audit_id':   aid,
+                'statut_rag': rag,
 
-    def _valider_provisionnement_sante(self,psap,prec,lr,taux_prov,pa,ibnr,sp):
-        # H1 — PSAP ≥ 10% des primes
-        ratio_psap = psap / max(pa, 1)
-        if ratio_psap>=0.10: h1_s,h1_m,h1_c="VERT",f"PSAP = {ratio_psap*100:.1f}% PA ≥ 10% ✅","PSAP suffisante — sinistres couverts"
-        elif ratio_psap>=0.05: h1_s,h1_m,h1_c="AMBRE",f"PSAP = {ratio_psap*100:.1f}% PA ∈ [5%,10%] ⚠️","PSAP limite — revoir les dossiers ouverts"
-        else: h1_s,h1_m,h1_c="ROUGE",f"PSAP = {ratio_psap*100:.1f}% PA < 5% ❌","PSAP insuffisante — sous-provisionnement probable"
-        # H2 — IBNR ∈ [10%, 30%] des sinistres payés
-        ratio_ibnr = ibnr / max(sp, 1)
-        if 0.10<=ratio_ibnr<=0.30: h2_s,h2_m,h2_c="VERT",f"IBNR = {ratio_ibnr*100:.0f}% SP ∈ [10%,30%] ✅","IBNR santé cohérent avec la liquidation rapide"
-        elif ratio_ibnr<0.10: h2_s,h2_m,h2_c="AMBRE",f"IBNR = {ratio_ibnr*100:.0f}% SP < 10% ⚠️","IBNR faible — vérifier les délais de déclaration"
-        else: h2_s,h2_m,h2_c="AMBRE",f"IBNR = {ratio_ibnr*100:.0f}% SP > 30% ⚠️","IBNR élevé pour la santé — vérifier la méthode"
-        # H3 — Loss Ratio ≤ 85%
-        if lr<=0.85: h3_s,h3_m,h3_c="VERT",f"Loss Ratio = {lr*100:.1f}% ≤ 85% ✅","Sinistralité maîtrisée — contrat rentable"
-        elif lr<=0.95: h3_s,h3_m,h3_c="AMBRE",f"Loss Ratio = {lr*100:.1f}% ∈ [85%,95%] ⚠️","Sinistralité limite — surveiller l'évolution"
-        else: h3_s,h3_m,h3_c="ROUGE",f"Loss Ratio = {lr*100:.1f}% > 95% ❌","Contrat déficitaire — révision tarifaire urgente"
-        sts=[h1_s,h2_s,h3_s]; sg="ROUGE" if "ROUGE" in sts else "AMBRE" if "AMBRE" in sts else "VERT"
+                # ── Provisions ──────────────────────────────────────────────
+                'psap_dossiers':    round(psap_dossiers, 2),
+                'psap_ibnr':        round(psap_ibnr, 2),
+                'psap_total':       round(psap_total, 2),
+                'prec':             round(prec, 2),
+                'provision_totale': round(provision_totale, 2),
+                'loss_ratio':       round(loss_ratio, 4),
+                'taux_provisionnement': round(taux_prov, 4),
+
+                # ── Détail par poste ─────────────────────────────────────────
+                'psap_par_poste':   psap_postes,
+                'ibnr_par_poste':   ibnr_postes,
+                'triangle':         triangle,
+
+                # ── Sorties vers S3 Binta ────────────────────────────────────
+                'sorties_s3': {
+                    'be_sante':         round(be_sante, 2),
+                    'risk_adjustment':  round(risk_adj, 2),
+                    'tp_sante':         round(tp_sante, 2),
+                    'psap_total':       round(psap_total, 2),
+                    'prec':             round(prec, 2),
+                    'provision_totale': round(provision_totale, 2),
+                    'loss_ratio':       round(loss_ratio, 4),
+                    'primes_acquises':  src['primes_acquises'],
+                    'fonds_propres':    src['primes_acquises'] * 0.80,
+                },
+
+                # ── Standard ActuarIA ────────────────────────────────────────
+                'hypotheses':  hyp,
+                'commentaire': com,
+                'graphiques':  gph,
+                'duree_sec':   round(duree, 2),
+                'erreur':      None,
+            }
+
+        except Exception as e:
+            self.logger.error(f"[{aid}] ERREUR : {e}", exc_info=True)
+            return self._erreur(str(e), aid)
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 1. EXTRACTION S1
+    # ══════════════════════════════════════════════════════════════════════════
+    def _extraire_s1(self, result_s1):
+        if not result_s1 or not result_s1.get('success'):
+            raise ValueError("result_s1 absent ou en erreur — S2 nécessite S1")
+
+        s2 = result_s1.get('sorties_s2', {})
+        postes = result_s1.get('postes', {})
+
+        primes_acq = float(s2.get('primes_acquises',
+                    result_s1.get('primes_acquises', 5_000_000)))
+        lr_att     = float(s2.get('loss_ratio_attendu',
+                    result_s1.get('ratio_sp_attendu', 0.72)))
+        nb_ass     = int(result_s1.get('nb_assures', 1000))
+        sin_att    = float(s2.get('sinistres_attendus', primes_acq * lr_att))
+        sin_poste  = s2.get('sinistralite_par_poste', {})
+
+        # Sinistres payés estimés = 85% des sinistres attendus (en cours d'année)
+        sinistres_payes = sin_att * 0.85
+
         return {
-            "h1_psap":{"ratio_psap":round(ratio_psap,4),"statut":h1_s,"message":h1_m,"conseil":h1_c,"titre_graphique":f"{'✅' if h1_s=='VERT' else '⚠️' if h1_s=='AMBRE' else '❌'} PSAP = {ratio_psap*100:.1f}% PA"},
-            "h2_ibnr":{"ratio_ibnr":round(ratio_ibnr,4),"statut":h2_s,"message":h2_m,"conseil":h2_c,"titre_graphique":f"{'✅' if h2_s=='VERT' else '⚠️'} IBNR = {ratio_ibnr*100:.0f}% SP"},
-            "h3_loss_ratio":{"loss_ratio":round(lr,4),"statut":h3_s,"message":h3_m,"conseil":h3_c,"titre_graphique":f"{'✅' if h3_s=='VERT' else '⚠️' if h3_s=='AMBRE' else '❌'} Loss Ratio = {lr*100:.1f}%"},
-            "statut_global":sg,"conclusion":{"VERT":"✅ Provisionnement Santé validé — PSAP, IBNR et sinistralité conformes","AMBRE":"⚠️ Provisionnement acceptable — vérifier les points signalés","ROUGE":"❌ Provisionnement insuffisant — action corrective requise"}[sg],
+            'primes_acquises':      primes_acq,
+            'sinistres_payes':      sinistres_payes,
+            'sinistres_attendus':   sin_att,
+            'loss_ratio_attendu':   lr_att,
+            'nb_assures':           nb_ass,
+            'sin_par_poste':        sin_poste,
+            'postes_s1':            postes,
+            'prime_pure_unitaire':  float(result_s1.get('prime_pure', 0)),
         }
 
-    def _graphiques_validation_s2(self,val,psap_d,psap_i,prec,pa,sp):
-        try:
-            import plotly.graph_objects as go
-        except: return {}
-        NAVY="#0F2E52";NAVY_L="#1B3A5C";OR="#C9A84C";BLANC="#F0F4F8";GRIS="#8A9AB0"
-        VERT="#2ECC71";ROUGE="#E74C3C";AMBRE="#F39C12";BLEU="#3498DB"
-        LAYOUT=dict(paper_bgcolor=NAVY,plot_bgcolor=NAVY_L,font=dict(family="Inter",color=BLANC,size=11),margin=dict(l=16,r=16,t=60,b=50),height=300)
-        graphiques={}
+    # ══════════════════════════════════════════════════════════════════════════
+    # 2. PARAMÈTRES DOSSIERS OUVERTS
+    # ══════════════════════════════════════════════════════════════════════════
+    def _parametres_dossiers(self, result_a2, nb_ouv, cout_ouv, src):
+        """
+        Détermine le nombre et coût moyen des dossiers ouverts.
+        Priorité : données A2 réelles > paramètres manuels > estimation.
+        """
+        # Depuis A2 si disponible
+        if result_a2 and result_a2.get('success'):
+            df = result_a2.get('dataframe')
+            if df is not None and 'flag_dossier_ouvert' in df.columns:
+                nb_reel  = int(df['flag_dossier_ouvert'].sum())
+                if nb_reel > 0:
+                    self.logger.info(f"Dossiers ouverts depuis A2 : {nb_reel}")
+                    # Coût moyen depuis sinistres réels si disponibles
+                    if 'cout_total_sinistres' in df.columns:
+                        df_ouv = df[df['flag_dossier_ouvert'] == 1]
+                        cout_reel = float(df_ouv['cout_total_sinistres'].mean())
+                        return nb_reel, cout_reel
+
+        # Paramètres manuels
+        if nb_ouv is not None and cout_ouv is not None:
+            return nb_ouv, cout_ouv
+
+        # Estimation depuis S1
+        # Nb dossiers ouverts ≈ 3% des assurés (taux hospit + gros sinistres)
+        nb_est   = max(10, int(src['nb_assures'] * 0.03))
+        # Coût moyen dossier ouvert ≈ sinistres payés / (nb_assures * freq_sin)
+        cout_est = src['sinistres_payes'] / max(src['nb_assures'] * 0.15, 1) * 3
+        cout_est = max(cout_est, 300.0)
+        self.logger.info(
+            f"Dossiers estimés : {nb_est} × {cout_est:.0f}€ (3% assurés)"
+        )
+        return nb_est, cout_est
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 3. PSAP PAR POSTE
+    # ══════════════════════════════════════════════════════════════════════════
+    def _calculer_psap_postes(self, src, nb_ouv, cout_ouv):
+        """
+        PSAP dossiers connus par poste.
+        Répartition du nombre de dossiers selon les fréquences relatives.
+        """
+        postes_s1 = src.get('postes_s1', {})
+
+        # Poids relatifs par poste (fréquences)
+        freq_total = sum(
+            v.get('frequence_an', 0) for v in postes_s1.values()
+        ) if postes_s1 else 1.0
+
+        result = {}
+        for poste in ['medecine','pharmacie','hospitalisation','dentaire','optique']:
+            if postes_s1 and poste in postes_s1:
+                poids = postes_s1[poste].get('frequence_an', 0) / max(freq_total, 1)
+            else:
+                # Poids par défaut
+                poids_def = {'medecine':0.45,'pharmacie':0.25,'hospitalisation':0.08,
+                             'dentaire':0.12,'optique':0.10}
+                poids = poids_def.get(poste, 0.10)
+
+            nb_ouv_poste   = max(1, int(nb_ouv * poids))
+            # Coût moyen ajusté par poste (hospit >> médecine)
+            mult = {'medecine':0.3,'pharmacie':0.15,'hospitalisation':3.5,
+                    'dentaire':1.2,'optique':0.8}
+            cout_poste = cout_ouv * mult.get(poste, 1.0)
+
+            psap_d = nb_ouv_poste * cout_poste
+
+            result[poste] = {
+                'nb_dossiers_ouverts': nb_ouv_poste,
+                'cout_moyen_dossier':  round(cout_poste, 2),
+                'psap_dossiers':       round(psap_d, 2),
+                'delai_reglement_mois':DELAIS_REGLEMENT.get(poste, 2),
+            }
+
+        return result
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 4. IBNR PAR POSTE (cadences santé)
+    # ══════════════════════════════════════════════════════════════════════════
+    def _calculer_ibnr_postes(self, src):
+        """
+        IBNR par poste — cadences de développement spécifiques santé.
+
+        En santé, l'IBNR est faible (5-25% selon le poste) car
+        les soins sont déclarés et remboursés rapidement (1-3 mois).
+        C'est très différent de l'IARD (6-18 mois) et de la prévoyance.
+
+        Méthode : IBNR_poste = sinistres_poste × taux_IBNR_poste
+        """
+        sin_poste = src.get('sin_par_poste', {})
+        # Si pas de détail poste depuis S1
+        if not sin_poste:
+            sin_total = src['sinistres_payes']
+            postes_def = {'medecine':0.07,'pharmacie':0.13,'hospitalisation':0.20,
+                          'dentaire':0.32,'optique':0.28}
+            sin_poste = {p: sin_total * w for p, w in postes_def.items()}
+
+        result = {}
+        for poste, taux_ibnr in IBNR_TAUX_POSTE.items():
+            sin_p = sin_poste.get(poste, 0.0)
+            ibnr_p = sin_p * taux_ibnr
+            result[poste] = {
+                'sinistres_payes': round(sin_p, 2),
+                'taux_ibnr':       taux_ibnr,
+                'ibnr':            round(ibnr_p, 2),
+                'note':            f"IBNR = {taux_ibnr*100:.0f}% des SP — cadence santé",
+            }
+
+        return result
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 5. PREC
+    # ══════════════════════════════════════════════════════════════════════════
+    def _calculer_prec(self, src):
+        """
+        PREC = Provision pour Risques en Cours.
+        PREC = max(0, PA × max(0, ratio_combiné_attendu − 1))
+        où ratio_combiné = LR + chargements (≈ LR + 15%)
+        """
+        lr   = src['loss_ratio_attendu']
+        pa   = src['primes_acquises']
+        rc   = lr + 0.15   # ratio combiné (sinistres + frais)
+        prec = max(0.0, pa * max(0.0, rc - 1.0))
+        return prec
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 6. TRIANGLE SANTÉ SIMPLIFIÉ
+    # ══════════════════════════════════════════════════════════════════════════
+    def _triangle_sante(self, src, psap_postes, ibnr_postes):
+        """
+        Triangle de développement simplifié pour la santé.
+        3 mois de développement (vs 8-10 ans en IARD).
+        Montre la vitesse de liquidation caractéristique de la santé.
+        """
+        sp = src['sinistres_payes']
+        # Mois 1 : 60% payé
+        # Mois 2 : 85% payé
+        # Mois 3 : 97% payé (IBNR résiduel 3%)
+        return {
+            'description': "Triangle santé 3 mois — liquidation rapide",
+            'mois_1':  round(sp * 0.60, 0),
+            'mois_2':  round(sp * 0.85, 0),
+            'mois_3':  round(sp * 0.97, 0),
+            'ultime':  round(sp + sum(v['ibnr'] for v in ibnr_postes.values()), 0),
+            'note': (
+                "Santé : 97% des sinistres payés en 3 mois "
+                "(vs 18-36 mois en IARD, 60+ mois en prévoyance)"
+            ),
+        }
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 7. HYPOTHÈSES
+    # ══════════════════════════════════════════════════════════════════════════
+    def _hypotheses(self, psap, ibnr, lr, taux_prov, pa, sp):
+        # H1 — PSAP ≥ 10% des primes
+        ratio_psap = psap / max(pa, 1)
+        if ratio_psap >= 0.10:
+            h1_s = 'VALIDÉE'
+            h1_m = f"PSAP = {ratio_psap*100:.1f}% PA ≥ 10% ✅"
+        elif ratio_psap >= 0.05:
+            h1_s = 'À JUSTIFIER'
+            h1_m = f"PSAP = {ratio_psap*100:.1f}% PA ∈ [5%,10%] — vérifier dossiers"
+        else:
+            h1_s = 'NON VALIDÉE'
+            h1_m = f"PSAP = {ratio_psap*100:.1f}% PA < 5% — sous-provisionnement"
+
+        # H2 — IBNR ∈ [10%, 30%] des sinistres payés
+        ratio_ibnr = ibnr / max(sp, 1)
+        if 0.10 <= ratio_ibnr <= 0.30:
+            h2_s = 'VALIDÉE'
+            h2_m = f"IBNR = {ratio_ibnr*100:.0f}% SP ∈ [10%,30%] — cadence santé ✅"
+        elif ratio_ibnr < 0.10:
+            h2_s = 'À JUSTIFIER'
+            h2_m = f"IBNR = {ratio_ibnr*100:.0f}% SP < 10% — vérifier délais déclaration"
+        else:
+            h2_s = 'À JUSTIFIER'
+            h2_m = f"IBNR = {ratio_ibnr*100:.0f}% SP > 30% — élevé pour la santé"
+
+        # H3 — Loss Ratio ≤ 85%
+        if lr <= 0.85:
+            h3_s = 'VALIDÉE'
+            h3_m = f"Loss Ratio = {lr*100:.1f}% ≤ 85% ✅"
+        elif lr <= 0.95:
+            h3_s = 'À JUSTIFIER'
+            h3_m = f"Loss Ratio = {lr*100:.1f}% ∈ [85%,95%] — surveiller"
+        else:
+            h3_s = 'NON VALIDÉE'
+            h3_m = f"Loss Ratio = {lr*100:.1f}% > 95% — contrat déficitaire"
+
+        return [
+            {'id':'H1','hypothese':'PSAP ≥ 10% des primes acquises',
+             'valeur':h1_m,'statut':h1_s,'critique':True},
+            {'id':'H2','hypothese':'IBNR santé ∈ [10%,30%] des sinistres payés (cadence rapide)',
+             'valeur':h2_m,'statut':h2_s,'critique':True},
+            {'id':'H3','hypothese':'Loss Ratio ≤ 85% — sinistralité maîtrisée',
+             'valeur':h3_m,'statut':h3_s,'critique':True},
+        ]
+
+    def _rag(self, hyp, lr):
+        non_val = [h for h in hyp if h['statut']=='NON VALIDÉE']
+        a_just  = [h for h in hyp if h['statut']=='À JUSTIFIER']
+        if non_val or lr > 0.95:
+            return 'ROUGE'
+        if a_just:
+            return 'AMBRE'
+        return 'VERT'
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 8. COMMENTAIRE
+    # ══════════════════════════════════════════════════════════════════════════
+    def _commentaire(self, rag, src, psap_d, psap_i, psap_tot, prec,
+                     prov_tot, lr, taux_prov, be, ra, tp, psap_p, ibnr_p, hyp):
+        ic = "🟢" if rag=='VERT' else ("🟡" if rag=='AMBRE' else "🔴")
+        L = [
+            "="*70,
+            f"  RAPPORT PROVISIONNEMENT SANTÉ — S2 SELMA v{self.VERSION}",
+            f"  {ic} STATUT : {rag}",
+            "="*70, "",
+            "📊 RÉSUMÉ DIRECTION", "─"*40,
+        ]
+        if rag=='VERT':
+            L.append(f"✅ Provisionnement validé. PSAP={psap_tot:,.0f}€ | PREC={prec:,.0f}€ | LR={lr*100:.1f}%")
+        elif rag=='AMBRE':
+            L.append(f"⚠️ Provisionnement acceptable — vérifier les points signalés.")
+        else:
+            L.append(f"❌ Provisionnement insuffisant ou LR>{0.95*100:.0f}% — action requise.")
+
+        L += [
+            "", "🔢 PROVISIONS", "─"*40,
+            f"  Primes acquises (S1)       : {src['primes_acquises']:>15,.0f}€",
+            f"  Sinistres payés (estimés)  : {src['sinistres_payes']:>15,.0f}€",
+            f"  Loss Ratio                 : {lr*100:>14.1f}%",
+            "  " + "─"*45,
+            f"  PSAP dossiers connus       : {psap_d:>15,.0f}€",
+            f"  PSAP IBNR (cadence santé)  : {psap_i:>15,.0f}€",
+            f"  PSAP Total                 : {psap_tot:>15,.0f}€",
+            f"  PREC                       : {prec:>15,.0f}€",
+            f"  Provision Totale           : {prov_tot:>15,.0f}€",
+            f"  Taux provisionnement       : {taux_prov*100:>14.1f}%",
+            "", "📦 PSAP PAR POSTE", "─"*40,
+            f"  {'Poste':<20} {'Dossiers':>8} {'PSAP dos.':>12} {'IBNR':>12} {'Total':>12}",
+            "  " + "─"*56,
+        ]
+        for p in ['medecine','pharmacie','hospitalisation','dentaire','optique']:
+            pd_v = psap_p.get(p, {})
+            ib_v = ibnr_p.get(p, {})
+            tot  = pd_v.get('psap_dossiers',0) + ib_v.get('ibnr',0)
+            L.append(
+                f"  {p:<20} {pd_v.get('nb_dossiers_ouverts',0):>8,} "
+                f"{pd_v.get('psap_dossiers',0):>11,.0f}€ "
+                f"{ib_v.get('ibnr',0):>11,.0f}€ "
+                f"{tot:>11,.0f}€"
+            )
+
+        L += [
+            "", "📐 BE SANTÉ → S3 BINTA", "─"*40,
+            f"  BE Santé (PSAP total)      : {be:>15,.0f}€",
+            f"  Risk Adjustment (5% BE)    : {ra:>15,.0f}€",
+            f"  TP Santé                   : {tp:>15,.0f}€",
+            "", "📋 HYPOTHÈSES", "─"*40,
+        ]
+        for h in hyp:
+            ic_h = "✅" if h['statut']=='VALIDÉE' else "⚠️"
+            L += [f"  {ic_h} [{h['id']}] {h['hypothese']}",
+                  f"       → {h['valeur']} : {h['statut']}"]
+
+        L += ["", "🎯 AVIS SELMA → CHIARA", "─"*40]
+        if rag=='VERT':
+            L.append("✅ VALIDÉ — Données transmises à S3 Binta (QRT S.13).")
+        elif rag=='AMBRE':
+            L.append("⚠️ Documenter les hypothèses avant transmission à S3.")
+        else:
+            L.append("❌ NON VALIDÉ — Escalade Chiara. Revoir le provisionnement.")
+        L.append("")
+        return "\n".join(L)
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 9. GRAPHIQUES
+    # ══════════════════════════════════════════════════════════════════════════
+    def _graphiques(self, psap_d, psap_i, prec, lr, src, psap_p, ibnr_p, hyp):
+        gph = {}
+
         # G1 — Décomposition provisions
         try:
-            h1=val["h1_psap"]; c1=VERT if h1["statut"]=="VERT" else AMBRE if h1["statut"]=="AMBRE" else ROUGE
-            fig1=go.Figure(go.Bar(x=["PSAP Dossiers","PSAP IBNR","PREC","Total"],
-                y=[psap_d/1e3,psap_i/1e3,prec/1e3,(psap_d+psap_i+prec)/1e3],
-                marker_color=[OR,BLEU,AMBRE,c1],width=0.45,opacity=0.88,
-                text=[f"{v:.0f}k€" for v in [psap_d/1e3,psap_i/1e3,prec/1e3,(psap_d+psap_i+prec)/1e3]],
-                textposition="outside",textfont=dict(color=BLANC,size=10)))
-            l1=dict(**LAYOUT); l1.update(dict(title=dict(text=f"{'✅' if h1['statut']=='VERT' else '⚠️'} Décomposition des provisions santé",font=dict(color=c1,size=11),x=0.01),
-                xaxis=dict(tickfont=dict(color=BLANC),showgrid=False),yaxis=dict(visible=False),bargap=0.3,showlegend=False,
-                annotations=[dict(text="💡 PSAP=sinistres connus, IBNR=non encore déclarés, PREC=risques futurs.",xref="paper",yref="paper",x=0.01,y=-0.22,font=dict(color=GRIS,size=9),showarrow=False)]))
-            fig1.update_layout(**l1); graphiques["decomposition_provisions"]=fig1
-        except: pass
-        # G2 — Loss Ratio jauge
+            tot = psap_d + psap_i + prec
+            fig = go.Figure(go.Bar(
+                x=["PSAP Dossiers", "PSAP IBNR", "PREC", "Total"],
+                y=[psap_d/1e3, psap_i/1e3, prec/1e3, tot/1e3],
+                marker_color=[OR, BLEU, AMBRE,
+                              VERT if lr<=0.85 else (AMBRE if lr<=0.95 else ROUGE)],
+                width=0.45, opacity=0.88,
+                text=[f"{v:.0f}k€" for v in [psap_d/1e3,psap_i/1e3,prec/1e3,tot/1e3]],
+                textposition="outside", textfont=dict(color=BLANC,size=10),
+            ))
+            l = dict(**LAYOUT_BASE)
+            l.update(dict(
+                title=dict(text="G1 — Décomposition des provisions santé",
+                           font=dict(color=OR,size=12),x=0.01),
+                showlegend=False,
+                xaxis=dict(tickfont=dict(color=BLANC),showgrid=False),
+                yaxis=dict(visible=False),
+                annotations=[dict(
+                    text="💡 PSAP = sinistres connus. IBNR = non encore déclarés (5-25% en santé). PREC = risques futurs.",
+                    xref="paper",yref="paper",x=0.01,y=-0.22,
+                    font=dict(color=GRIS,size=9),showarrow=False)],
+            ))
+            fig.update_layout(**l)
+            gph['decomposition_provisions'] = fig
+        except Exception as e:
+            self.logger.warning(f"G1:{e}")
+
+        # G2 — Jauge Loss Ratio
         try:
-            h3=val["h3_loss_ratio"]; lr=h3["loss_ratio"]; c3=VERT if h3["statut"]=="VERT" else AMBRE if h3["statut"]=="AMBRE" else ROUGE
-            fig2=go.Figure(go.Indicator(mode="gauge+number",value=lr*100,
-                number=dict(suffix="%",font=dict(color=c3,size=28),valueformat=".1f"),
-                title=dict(text=h3["titre_graphique"],font=dict(color=c3,size=11)),
-                gauge=dict(axis=dict(range=[0,120],tickfont=dict(color=GRIS,size=8),tickvals=[0,65,85,95,100,120],ticktext=["0","65%","85%","95%","100","120"]),
-                    bar=dict(color=c3,thickness=0.25),bgcolor="#1B3A5C",borderwidth=0,
-                    steps=[dict(range=[0,85],color="rgba(46,204,113,0.12)"),dict(range=[85,95],color="rgba(243,156,18,0.12)"),dict(range=[95,120],color="rgba(231,76,60,0.12)")],
-                    threshold=dict(line=dict(color=VERT,width=3),thickness=0.8,value=85))))
-            fig2.update_layout(paper_bgcolor=NAVY,font=dict(color=BLANC),margin=dict(l=30,r=30,t=80,b=50),height=300,
-                annotations=[dict(text=f"💡 {h3['conseil']}",xref="paper",yref="paper",x=0.5,y=-0.12,font=dict(color=GRIS,size=9),showarrow=False)])
-            graphiques["jauge_loss_ratio"]=fig2
-        except: pass
-        # G3 — IBNR vs sinistres payés
+            c = VERT if lr<=0.85 else (AMBRE if lr<=0.95 else ROUGE)
+            fig = go.Figure(go.Indicator(
+                mode="gauge+number", value=lr*100,
+                number=dict(suffix="%", font=dict(color=c,size=28), valueformat=".1f"),
+                title=dict(text="Loss Ratio Santé", font=dict(color=c,size=12)),
+                gauge=dict(
+                    axis=dict(range=[0,120], tickvals=[0,65,85,95,100,120],
+                              ticktext=["0","65","85%","95%","100","120"],
+                              tickfont=dict(color=GRIS,size=8)),
+                    bar=dict(color=c, thickness=0.25),
+                    bgcolor=NAVY_L, borderwidth=0,
+                    steps=[
+                        dict(range=[0,85],   color="rgba(46,204,113,0.12)"),
+                        dict(range=[85,95],  color="rgba(243,156,18,0.12)"),
+                        dict(range=[95,120], color="rgba(231,76,60,0.12)"),
+                    ],
+                    threshold=dict(line=dict(color=VERT,width=3), thickness=0.8, value=85),
+                ),
+            ))
+            fig.update_layout(
+                paper_bgcolor=NAVY, font=dict(color=BLANC),
+                margin=dict(l=30,r=30,t=60,b=50), height=300,
+                annotations=[dict(
+                    text="💡 Seuil confort : LR ≤ 85%. Au-delà = révision tarifaire recommandée.",
+                    xref="paper",yref="paper",x=0.5,y=-0.12,
+                    font=dict(color=GRIS,size=9),showarrow=False)],
+            )
+            gph['jauge_loss_ratio'] = fig
+        except Exception as e:
+            self.logger.warning(f"G2:{e}")
+
+        # G3 — IBNR par poste vs santé standard
         try:
-            h2=val["h2_ibnr"]; c2=VERT if h2["statut"]=="VERT" else AMBRE if h2["statut"]=="AMBRE" else ROUGE
-            ibnr=sp*h2["ratio_ibnr"]
-            fig3=go.Figure(go.Bar(x=["Sinistres payés","IBNR"],y=[sp/1e3,ibnr/1e3],
-                marker_color=[OR,c2],width=0.4,opacity=0.88,
-                text=[f"{sp/1e3:.0f}k€",f"{ibnr/1e3:.0f}k€"],textposition="outside",textfont=dict(color=BLANC,size=12)))
-            l3=dict(**LAYOUT); l3.update(dict(title=dict(text=h2["titre_graphique"]+" — Proportion vs sinistres payés",font=dict(color=c2,size=11),x=0.01),
-                xaxis=dict(tickfont=dict(color=BLANC),showgrid=False),yaxis=dict(title="k€",tickfont=dict(color=GRIS)),bargap=0.4,showlegend=False,
-                annotations=[dict(text="💡 En santé, l'IBNR est faible (10-30%) car les soins sont déclarés rapidement vs l'IARD (40-60%).",xref="paper",yref="paper",x=0.01,y=-0.22,font=dict(color=GRIS,size=9),showarrow=False)]))
-            fig3.update_layout(**l3); graphiques["ibnr_vs_sinistres"]=fig3
-        except: pass
+            postes_lbls = [p.replace('_',' ').title() for p in IBNR_TAUX_POSTE]
+            ibnr_taux   = [IBNR_TAUX_POSTE[p]*100 for p in IBNR_TAUX_POSTE]
+            ibnr_vals   = [ibnr_p.get(p,{}).get('ibnr',0)/1e3 for p in IBNR_TAUX_POSTE]
+            from plotly.subplots import make_subplots
+            fig = make_subplots(rows=1, cols=2,
+                subplot_titles=["Taux IBNR par poste (%)", "IBNR (k€)"])
+            fig.add_trace(go.Bar(x=postes_lbls, y=ibnr_taux,
+                marker_color=[OR,BLEU,ROUGE,AMBRE,VERT], opacity=0.85,
+                text=[f"{v:.0f}%" for v in ibnr_taux], textposition="outside",
+                textfont=dict(color=BLANC,size=9), showlegend=False),
+                row=1, col=1)
+            fig.add_trace(go.Bar(x=postes_lbls, y=ibnr_vals,
+                marker_color=[OR,BLEU,ROUGE,AMBRE,VERT], opacity=0.85,
+                text=[f"{v:.0f}k€" for v in ibnr_vals], textposition="outside",
+                textfont=dict(color=BLANC,size=9), showlegend=False),
+                row=1, col=2)
+            l = dict(**LAYOUT_BASE)
+            l.update(dict(
+                title=dict(text="G3 — IBNR Santé par poste (cadences spécifiques santé)",
+                           font=dict(color=OR,size=12),x=0.01),
+                annotations=[dict(
+                    text="💡 En santé, l'IBNR est faible (5-25%) vs IARD (40-60%) — liquidation en 1-3 mois.",
+                    xref="paper",yref="paper",x=0.01,y=-0.22,
+                    font=dict(color=GRIS,size=9),showarrow=False)],
+            ))
+            fig.update_layout(**l)
+            gph['ibnr_par_poste'] = fig
+        except Exception as e:
+            self.logger.warning(f"G3:{e}")
+
         # G4 — Scorecard
         try:
-            items=[("H1 — PSAP ≥ 10% PA",val["h1_psap"]["statut"],val["h1_psap"]["message"],val["h1_psap"]["conseil"]),
-                   ("H2 — IBNR ∈ [10%,30%] SP",val["h2_ibnr"]["statut"],val["h2_ibnr"]["message"],val["h2_ibnr"]["conseil"]),
-                   ("H3 — Loss Ratio ≤ 85%",val["h3_loss_ratio"]["statut"],val["h3_loss_ratio"]["message"],val["h3_loss_ratio"]["conseil"])]
-            fig4=go.Figure()
-            for nom,statut,msg,conseil in items:
-                c=VERT if statut=="VERT" else AMBRE if statut=="AMBRE" else ROUGE
-                i="✅" if statut=="VERT" else "⚠️" if statut=="AMBRE" else "❌"
-                s=1.0 if statut=="VERT" else 0.5 if statut=="AMBRE" else 0.0
-                fig4.add_trace(go.Bar(x=[s],y=[nom],orientation="h",marker_color=c,width=0.5,text=f"{i} {statut}",textposition="outside",textfont=dict(color=c,size=10),hovertemplate=f"<b>{nom}</b><br>{msg}<br>💡 {conseil}<extra></extra>",showlegend=False))
-            sg=val["statut_global"]; cg=VERT if sg=="VERT" else AMBRE if sg=="AMBRE" else ROUGE
-            l4=dict(**LAYOUT); l4.update(dict(title=dict(text=f"Scorecard Provisionnement Santé — {val['conclusion']}",font=dict(color=cg,size=10),x=0.01),
-                xaxis=dict(range=[0,1.6],visible=False),yaxis=dict(tickfont=dict(color=BLANC,size=10),showgrid=False),barmode="overlay",height=260,
-                annotations=[dict(text="💡 3 ✅ = provisionnement santé conforme, PSAP et IBNR adéquats.",xref="paper",yref="paper",x=0.01,y=-0.22,font=dict(color=GRIS,size=9),showarrow=False)]))
-            fig4.update_layout(**l4); graphiques["scorecard_s2"]=fig4
-        except: pass
-        return graphiques
+            fig = go.Figure()
+            for h in hyp:
+                c  = VERT if h['statut']=='VALIDÉE' else (AMBRE if h['statut']=='À JUSTIFIER' else ROUGE)
+                ic = "✅" if h['statut']=='VALIDÉE' else ("⚠️" if h['statut']=='À JUSTIFIER' else "❌")
+                s  = 1.0 if h['statut']=='VALIDÉE' else (0.5 if h['statut']=='À JUSTIFIER' else 0.0)
+                fig.add_trace(go.Bar(
+                    x=[s], y=[h['hypothese'][:40]], orientation="h",
+                    marker_color=c, width=0.5, opacity=0.85,
+                    text=f"{ic} {h['statut']}", textposition="outside",
+                    textfont=dict(color=c,size=10), showlegend=False,
+                    hovertemplate=f"<b>{h['hypothese']}</b><br>{h['valeur']}<extra></extra>",
+                ))
+            cg = VERT if all(h['statut']=='VALIDÉE' for h in hyp) else (ROUGE if any(h['statut']=='NON VALIDÉE' for h in hyp) else AMBRE)
+            l = dict(**LAYOUT_BASE)
+            l.update(dict(
+                title=dict(text="G4 — Scorecard Provisionnement Santé",
+                           font=dict(color=cg,size=12),x=0.01),
+                xaxis=dict(range=[0,1.6],visible=False),
+                yaxis=dict(tickfont=dict(color=BLANC,size=10),showgrid=False),
+                barmode="overlay", height=260,
+                annotations=[dict(
+                    text="💡 3 ✅ = provisionnement santé conforme — PSAP, IBNR et LR validés.",
+                    xref="paper",yref="paper",x=0.01,y=-0.22,
+                    font=dict(color=GRIS,size=9),showarrow=False)],
+            ))
+            fig.update_layout(**l)
+            gph['scorecard_s2'] = fig
+        except Exception as e:
+            self.logger.warning(f"G4:{e}")
 
-    def _generer_graphiques(self,psap_d,psap_i,prec):
-        try:
-            import plotly.graph_objects as go
-            NAVY="#0F2E52";NAVY_L="#1B3A5C";OR="#C9A84C";BLANC="#F0F4F8";GRIS="#8A9AB0";BLEU="#3498DB";AMBRE="#F39C12"
-            fig=go.Figure(go.Pie(labels=["PSAP Dossiers","PSAP IBNR","PREC"],
-                values=[psap_d,psap_i,prec],hole=0.4,marker_colors=[OR,BLEU,AMBRE],
-                hovertemplate="<b>%{label}</b><br>%{value:,.0f}€ (%{percent})<extra></extra>"))
-            fig.update_layout(paper_bgcolor=NAVY,font=dict(family="Inter",color=BLANC,size=11),
-                margin=dict(l=16,r=16,t=60,b=40),height=300,
-                title=dict(text="Répartition des provisions santé",font=dict(color=BLANC,size=12),x=0.01))
-            return {"provisions_pie":fig}
-        except: return {}
+        return gph
 
-    def _sauvegarder(self,rapport,audit_id):
+    # ══════════════════════════════════════════════════════════════════════════
+    # UTILITAIRES
+    # ══════════════════════════════════════════════════════════════════════════
+    def _audit(self, aid, psap, prec, lr, rag):
         try:
-            with open(os.path.join(self.models_path,f"s2_prov_{audit_id}.json"),'w') as f: json.dump(rapport,f,indent=2)
-            self.logger.info(f"Sauvegardé : s2_prov_{audit_id}.json")
-        except Exception as e: self.logger.warning(f"Sauvegarde : {e}")
+            r = {'audit_id':aid,'agent':self.NOM,'version':self.VERSION,
+                 'timestamp':datetime.now().isoformat(),'statut_rag':rag,
+                 'psap_total':psap,'prec':prec,'loss_ratio':lr}
+            with open(self.audit_path/f"audit_{aid}.json",'w',encoding='utf-8') as f:
+                json.dump(r,f,ensure_ascii=False,indent=2,default=str)
+        except Exception as e:
+            self.logger.warning(f"Audit:{e}")
+
+    def _console(self, aid, rag, psap, prec, prov, lr):
+        ic = "🟢" if rag=='VERT' else ("🟡" if rag=='AMBRE' else "🔴")
+        print(f"\n{'─'*70}")
+        print(f"  S2 SELMA v{self.VERSION} | {aid} | {ic} {rag}")
+        print(f"  PSAP={psap:,.0f}€ | PREC={prec:,.0f}€ | Total={prov:,.0f}€ | LR={lr*100:.1f}%")
+        print(f"{'─'*70}")
+
+    def _erreur(self, msg, aid):
+        return {'success':False,'agent':self.NOM,'version':self.VERSION,
+                'audit_id':aid,'statut_rag':'ROUGE',
+                'psap_total':0,'prec':0,'provision_totale':0,'loss_ratio':0,
+                'sorties_s3':{},'hypotheses':[],'commentaire':f"❌ ERREUR S2:{msg}",
+                'graphiques':{},'duree_sec':0.0,'erreur':msg}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+if __name__ == '__main__':
+    print("="*70)
+    print("  S2 SELMA v2.0 — DÉMO PROVISIONNEMENT SANTÉ")
+    print("  PSAP par poste | IBNR cadences santé | PREC | Triangle")
+    print("="*70)
+
+    # Simuler result_s1
+    r_s1 = {
+        'success': True,
+        'prime_pure': 410.41,
+        'prime_commerciale': 484.29,
+        'primes_acquises': 2_421_438.0,
+        'ratio_sp_attendu': 0.848,
+        'nb_assures': 5000,
+        'postes': {
+            'medecine':        {'frequence_an':3.2,'sinistre_annuel':29.0},
+            'pharmacie':       {'frequence_an':6.5,'sinistre_annuel':52.0},
+            'hospitalisation': {'frequence_an':0.12,'sinistre_annuel':84.0},
+            'dentaire':        {'frequence_an':0.9,'sinistre_annuel':130.0},
+            'optique':         {'frequence_an':0.35,'sinistre_annuel':115.0},
+        },
+        'sorties_s2': {
+            'primes_acquises':      2_421_438.0,
+            'sinistres_attendus':   2_052_066.0,
+            'loss_ratio_attendu':   0.848,
+            'sinistralite_par_poste': {
+                'medecine':145_000, 'pharmacie':260_000,
+                'hospitalisation':420_000, 'dentaire':650_000, 'optique':577_000,
+            },
+            'nb_assures': 5000,
+            'prime_pure_unitaire': 410.41,
+        },
+    }
+
+    agent = AgentS2ProvisionnemntSante(
+        models_path='/tmp/s2/models', audit_path='/tmp/s2/audit', verbose=True
+    )
+    r = agent.run(result_s1=r_s1, generer_graphiques=False)
+
+    print(f"\n{'='*70}\n  RÉSULTATS\n{'='*70}")
+    print(f"  Statut          : {r['statut_rag']}")
+    print(f"  PSAP dossiers   : {r['psap_dossiers']:>12,.0f}€")
+    print(f"  PSAP IBNR       : {r['psap_ibnr']:>12,.0f}€")
+    print(f"  PSAP Total      : {r['psap_total']:>12,.0f}€")
+    print(f"  PREC            : {r['prec']:>12,.0f}€")
+    print(f"  Provision totale: {r['provision_totale']:>12,.0f}€")
+    print(f"  Loss Ratio      : {r['loss_ratio']*100:>11.1f}%")
+    print(f"\n  Sorties vers S3 :")
+    s3 = r['sorties_s3']
+    print(f"    BE santé    : {s3['be_sante']:,.0f}€")
+    print(f"    TP santé    : {s3['tp_sante']:,.0f}€")
+    print(f"  Durée : {r['duree_sec']:.2f}s")

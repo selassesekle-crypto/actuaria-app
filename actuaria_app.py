@@ -131,15 +131,16 @@ hr {{border-color:rgba(201,168,76,0.15);}}
 # AGENTS
 # ══════════════════════════════════════════════════════════════════════════════
 AGENTS = {
-    "sofia":    {"prenom":"Sofia",   "code":"ARIA",    "icon":"🤖","statut":"VERT","niveau":"centrale","dir":"centrale","role_fr":"Directrice IA Générale","intro":"Bonjour, je suis Sofia, Directrice IA Générale de la plateforme ActuarIA. Je supervise 3 directions, 9 managers et 46 agents spécialisés. Je maîtrise l'ensemble des résultats actuariels de la plateforme et réponds à toutes vos questions, quelle que soit la branche ou le domaine.","spec_fr":"IA générative · Claude API · Synthèse multi-directions","kpi":"46 agents · 3 directions"},
-    "rafael":   {"prenom":"Rafael",  "code":"A13",     "icon":"🔐","statut":"VERT","niveau":"transversal","dir":"centrale","role_fr":"Audit Trail & Conformité RGPD","intro":"Bonjour, je suis Rafael, responsable de l'Audit Trail et de la conformité RGPD sur toute la plateforme ActuarIA. Je garantis l'intégrité de chaque calcul produit par nos 46 agents grâce au hachage SHA-256 et au registre RGPD Art.30.","spec_fr":"SHA-256 · RGPD Art.30 · Versioning · Audit S2","kpi":"Hash 5BB15F63"},
+    "sofia":    {"prenom":"Sofia",   "code":"ARIA",    "icon":"🤖","statut":"VERT","niveau":"centrale","dir":"centrale","role_fr":"Directrice IA Générale","intro":"Bonjour, je suis Sofia, Directrice IA Générale de la plateforme ActuarIA. Je supervise 3 directions, 9 managers et 46 agents spécialisés. Je maîtrise l'ensemble des résultats actuariels de la plateforme et réponds à toutes vos questions, quelle que soit la branche ou le domaine.","spec_fr":"IA générative · Claude API · Synthèse multi-directions","kpi":"46 agents · 4 directions"},
+    "rafael":   {"prenom":"Rafael",  "code":"A13",     "icon":"🔐","statut":"VERT","niveau":"agent","dir":"data","equipe":"data","role_fr":"Audit Trail & Conformité RGPD","intro":"Bonjour, je suis Rafael, responsable de l'Audit Trail et de la conformité RGPD sur toute la plateforme ActuarIA. Je garantis l'intégrité de chaque calcul produit par nos 46 agents grâce au hachage SHA-256 et au registre RGPD Art.30.","spec_fr":"SHA-256 · RGPD Art.30 · Versioning · Audit S2","kpi":"Hash 5BB15F63"},
     # Direction Non-Vie
     "leila":    {"prenom":"Leila",   "code":"DIR-NV",  "icon":"👩‍💼","statut":"VERT","niveau":"directeur","dir":"non_vie","role_fr":"Directrice Direction Non-Vie","intro":"Bonjour, je suis Leila, Directrice de la Direction Non-Vie chez ActuarIA. Je supervise 3 équipes et 12 agents spécialisés. J'assume la pleine responsabilité de tous les résultats de ma direction : tarification, provisionnement et réglementation Non-Vie.","spec_fr":"IARD · Auto · MRH · RC Pro · Supervision direction","kpi":"3 équipes · 12 agents"},
     "meilin":   {"prenom":"Mei-Lin", "code":"MGR-TAR", "icon":"⚖️","statut":"VERT","niveau":"manager","dir":"non_vie","equipe":"tarification","role_fr":"Manager Équipe Tarification Non-Vie","intro":"Bonjour, je suis Mei-Lin, Manager de l'Équipe Tarification Non-Vie. Je supervise et valide tous les travaux de tarification de mon équipe. Je réponds à toutes les questions tarifaires et assume pleinement les résultats.","spec_fr":"GLM · ML · Deep Learning · Sélection modèle","kpi":"Gini=0.2651 · ElasticNet · Score 0.8373"},
     "kwame":    {"prenom":"Kwame",   "code":"MGR-PRV", "icon":"🏦","statut":"VERT","niveau":"manager","dir":"non_vie","equipe":"provisionnement","role_fr":"Manager Équipe Provisionnement Non-Vie","intro":"Bonjour, je suis Kwame, Manager de l'Équipe Provisionnement Non-Vie. Je valide et assume tous les travaux de provisionnement : Chain Ladder, Mack, BF, Cape Cod, Stress Testing et Cohérence.","spec_fr":"Chain Ladder · Mack · BF · Cape Cod · ORSA","kpi":"BE=2.91M€ · CV 0.6%"},
     "nadia":    {"prenom":"Nadia",   "code":"MGR-REG", "icon":"🛡️","statut":"VERT","niveau":"manager","dir":"non_vie","equipe":"reglementation_nv","role_fr":"Manager Équipe Réglementation Non-Vie","intro":"Bonjour, je suis Nadia, Manager de l'Équipe Réglementation Non-Vie. Je supervise et valide tous les travaux réglementaires : Solvabilité 2, IFRS 17 PAA, ALM et QRT Non-Vie.","spec_fr":"S2 · IFRS17 PAA · ALM Non-Vie · QRT","kpi":"SCR 208.5% · MCR 320%"},
-    "amara":    {"prenom":"Amara",   "code":"A1",      "icon":"🔍","statut":"VERT","niveau":"agent","dir":"non_vie","equipe":"tarification","role_fr":"Ingestion & Validation des données","intro":"Bonjour, je suis Amara, spécialiste en ingestion et validation de données actuarielles. J'ingère vos fichiers Excel, CSV ou Parquet, valide leur qualité et garantis la conformité RGPD Art.30 avant tout calcul.","spec_fr":"Multi-format · Qualité données · RGPD Art.30","kpi":"678k contrats validés"},
-    "kenji":    {"prenom":"Kenji",   "code":"A2",      "icon":"⚡","statut":"AMBRE","niveau":"agent","dir":"non_vie","equipe":"tarification","role_fr":"Preprocessing & Feature Engineering","intro":"Bonjour, je suis Kenji, expert en preprocessing et feature engineering actuariel. Je transforme vos données brutes en features exploitables : imputation, winsorisation, encodage et création de variables actuarielles.","spec_fr":"Imputation · Winsorisation · Encodage · Features","kpi":"30 features créées"},
+    "diana":    {"prenom":"Diana",   "code":"DAT",     "icon":"🗄️","statut":"VERT","niveau":"directeur","dir":"data","role_fr":"Directrice Data — Qualité & Conformité","intro":"Bonjour, je suis Diana, Directrice Data chez ActuarIA. Je garantis que chaque donnée qui alimente nos calculs actuariels est propre, traçable et conforme RGPD. Mon équipe — Amara (ingestion), Kenji (preprocessing) et Rafael (audit RGPD) — est le premier maillon de votre pipeline.","spec_fr":"Qualité données · RGPD Art.30 · Transversal toutes directions","kpi":"Données certifiées"},
+    "amara":    {"prenom":"Amara",   "code":"A1",      "icon":"🔍","statut":"VERT","niveau":"agent","dir":"data","equipe":"data","role_fr":"Ingestion & Validation des données","intro":"Bonjour, je suis Amara, spécialiste en ingestion et validation de données actuarielles. J'ingère vos fichiers Excel, CSV ou Parquet, valide leur qualité et garantis la conformité RGPD Art.30 avant tout calcul.","spec_fr":"Multi-format · Qualité données · RGPD Art.30","kpi":"678k contrats validés"},
+    "kenji":    {"prenom":"Kenji",   "code":"A2",      "icon":"⚡","statut":"AMBRE","niveau":"agent","dir":"data","equipe":"data","role_fr":"Preprocessing & Feature Engineering","intro":"Bonjour, je suis Kenji, expert en preprocessing et feature engineering actuariel. Je transforme vos données brutes en features exploitables : imputation, winsorisation, encodage et création de variables actuarielles.","spec_fr":"Imputation · Winsorisation · Encodage · Features","kpi":"30 features créées"},
     "laurent":  {"prenom":"Laurent", "code":"A3",      "icon":"📐","statut":"VERT","niveau":"agent","dir":"non_vie","equipe":"tarification","role_fr":"GLM Tarification — Poisson · Gamma · Tweedie","intro":"Bonjour, je suis Laurent, spécialiste des modèles linéaires généralisés (GLM). Je calibre les GLM réglementaires Poisson, Gamma et Tweedie avec sélection stepwise. Mes coefficients sont interprétables et défendables devant l'ACPR.","spec_fr":"GLM Poisson · Gamma · Tweedie · AIC/BIC","kpi":"AIC validé · Gini GLM"},
     "priya":    {"prenom":"Priya",   "code":"A4",      "icon":"🧠","statut":"VERT","niveau":"agent","dir":"non_vie","equipe":"tarification","role_fr":"Machine Learning — 6 modèles","intro":"Bonjour, je suis Priya, experte en Machine Learning actuariel. Je maîtrise 6 algorithmes : GBM, XGBoost, XGBoost Tweedie, LightGBM, CatBoost et ElasticNet. Je calcule le Gini, détecte l'overfitting et fournis les explications SHAP.","spec_fr":"XGBoost · LightGBM · CatBoost · ElasticNet · SHAP","kpi":"Gini XGBoost=0.2651"},
     "yohan":    {"prenom":"Yohan",   "code":"A5",      "icon":"🔮","statut":"VERT","niveau":"agent","dir":"non_vie","equipe":"tarification","role_fr":"Deep Learning — CANN · TabNet","intro":"Bonjour, je suis Yohan, spécialiste Deep Learning actuariel. Je calibre les réseaux CANN (Wüthrich 2019) et TabNet pour la tarification. Mon TabNet atteint un Gini de 0.2334 sur freMTPL2.","spec_fr":"CANN · TabNet · PyTorch · Wüthrich 2019","kpi":"TabNet Gini=0.2334"},
@@ -184,12 +185,20 @@ AGENTS = {
 
 # ── STRUCTURE ──────────────────────────────────────────────────────────────────
 STRUCTURE = {
+    "data": {
+        "label":"Direction Data","icon":"🗄️",
+        "mission":"Infrastructure données transversale. Amara valide vos fichiers, Kenji les transforme en features actuarielles, Rafael certifie chaque opération RGPD Art.30. La Direction Data alimente toutes les directions.",
+        "directeur":"diana",
+        "equipes": {
+            "data": {"label":"Équipe Data","icon":"🔍","manager":"diana","agents":["amara","kenji","rafael"]},
+        },
+    },
     "non_vie": {
         "label":"Direction Non-Vie","icon":"🏢",
         "mission":"Tarification, provisionnement et réglementation pour les contrats Non-Vie (IARD) : Auto, MRH, RC Pro, Construction.",
         "directeur":"leila",
         "equipes": {
-            "tarification":     {"label":"Équipe Tarification",    "icon":"🧠","manager":"meilin","agents":["amara","kenji","laurent","priya","yohan","victor"]},
+            "tarification":     {"label":"Équipe Tarification",    "icon":"🧠","manager":"meilin","agents":["laurent","priya","yohan","victor"]},
             "provisionnement":  {"label":"Équipe Provisionnement", "icon":"📊","manager":"kwame", "agents":["ibrahim","isabelle","marcus"]},
             "reglementation_nv":{"label":"Équipe Réglementation",  "icon":"🛡️","manager":"nadia", "agents":["elena","thomas","aisha"]},
         },
@@ -236,7 +245,7 @@ Résultats validés sur freMTPL2 (678 013 contrats auto France) :
 REGLE = "Tu assumes PLEINEMENT tous les résultats. Tu ne délègues JAMAIS la parole. Tu parles en ton nom propre. Réponds en français."
 
 SP = {
-    "sofia":    f"Tu es Sofia, Directrice IA Générale d'ActuarIA. Tu supervises 3 directions, 9 managers et 46 agents. {RESULTATS} Tu réponds à TOUTES les questions actuarielles. Sois précise, professionnelle et synthétique. {REGLE}",
+    "sofia":    f"Tu es Sofia, Directrice IA Générale d'ActuarIA. Tu supervises 4 directions, 9 managers et 46 agents. {RESULTATS} Tu réponds à TOUTES les questions actuarielles. Sois précise, professionnelle et synthétique. {REGLE}",
     "rafael":   f"Tu es Rafael, Audit Trail & Conformité RGPD chez ActuarIA. {RESULTATS} Tu garantis l'intégrité de tous les calculs : SHA-256, RGPD Art.30, versioning. {REGLE}",
     "leila":    f"Tu es Leila, Directrice Non-Vie d'ActuarIA. Tu supervises Mei-Lin (Tarification), Kwame (Provisionnement), Nadia (Réglementation). {RESULTATS} {REGLE}",
     "paul":     f"Tu es Paul, Directeur Vie & EP-RE d'ActuarIA. Tu supervises Sven (Vie Pure), Fatou (EP-RE), Olivier (Réglementation). {RESULTATS} {REGLE}",
@@ -362,7 +371,7 @@ def render_sidebar():
 
         # Direction Générale
         st.markdown(f"<div style='font-size:0.6rem;color:rgba(201,168,76,0.7);text-transform:uppercase;letter-spacing:0.14em;margin-bottom:6px;font-weight:700;'>◆ Direction Générale</div>", unsafe_allow_html=True)
-        for ak in ["sofia","rafael"]:
+        for ak in ["sofia","diana","rafael"]:
             a = AGENTS[ak]
             if st.button(f"{a['icon']} {a['prenom']} ({a['code']})", key=f"side_{ak}", use_container_width=True):
                 nav_to("agent_detail", agent=ak)
@@ -664,7 +673,7 @@ def page_direction():
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE AGENT
 # ══════════════════════════════════════════════════════════════════════════════
-AGENTS_CALCULS = ["amara","kenji","laurent","priya","yohan","victor",
+AGENTS_CALCULS = ["diana","amara","kenji","laurent","priya","yohan","victor",
                   "ibrahim","isabelle","marcus","elena","thomas","aisha",
                   "henri","salome","jinho","claire","omar","yuki","rafael"]
 
@@ -1107,58 +1116,567 @@ def page_analyse():
 <div style="margin-bottom:20px;">
   <div style="font-size:0.65rem;color:{OR};text-transform:uppercase;letter-spacing:0.12em;margin-bottom:4px;font-weight:700;">Pipeline actuariel</div>
   <div style="font-family:'Playfair Display',serif;font-size:1.5rem;color:{BLANC};font-weight:700;">Lancer une analyse</div>
-  <div style="font-size:0.8rem;color:{GRIS};margin-top:4px;">Uploadez vos données et sélectionnez l'équipe et l'agent à exécuter.</div>
+  <div style="font-size:0.8rem;color:{GRIS};margin-top:4px;">Sélectionnez votre direction, votre équipe et votre besoin — puis fournissez vos données.</div>
 </div>""", unsafe_allow_html=True)
 
-    col1, col2 = st.columns([1.5,1])
-    with col1:
-        fichier = st.file_uploader("Données (CSV, Excel, Parquet)", type=["csv","xlsx","parquet"])
-        if fichier:
-            st.success(f"✅ {fichier.name} chargé")
-        client = st.text_input("Référence client", placeholder="Ex : Assurance XYZ — Portefeuille Auto 2024")
+    # ── ÉTAPE 1 : DIRECTION ───────────────────────────────────────────────────
+    st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;letter-spacing:0.12em;font-weight:700;margin-bottom:6px;'>◆ Étape 1 — Direction</div>", unsafe_allow_html=True)
+    col_d1, col_d2, col_d3 = st.columns(3)
+    dirs_opt = {
+        "🏢 Non-Vie":            "non_vie",
+        "💼 Vie & EP-RE":        "vie_epre",
+        "🏥 Santé-Prévoyance":   "sante_prev",
+    }
+    if "analyse_dir" not in st.session_state:
+        st.session_state.analyse_dir = "non_vie"
 
-        # Sélecteur Direction → Équipe → Agent
-        direction = st.selectbox("Direction", [
-            "Direction Non-Vie",
-            "Direction Vie & EP-RE",
-            "Direction Santé-Prévoyance",
-        ])
-        if direction == "Direction Non-Vie":
-            equipe = st.selectbox("Équipe", ["Équipe Tarification","Équipe Provisionnement","Équipe Réglementation"])
-            if equipe == "Équipe Tarification":
-                agent_choix = st.selectbox("Agent", ["Amara (A1) — Ingestion","Kenji (A2) — Preprocessing","Laurent (A3) — GLM","Priya (A4) — Machine Learning","Yohan (A5) — Deep Learning","Victor (A6) — Comparaison & Sélection"])
-            elif equipe == "Équipe Provisionnement":
-                agent_choix = st.selectbox("Agent", ["Ibrahim (A7) — Chain Ladder/Mack/BF","Isabelle (A8) — Stress Testing","Marcus (A9) — Cohérence"])
-            else:
-                agent_choix = st.selectbox("Agent", ["Elena (A10) — Solvabilité 2","Thomas (A11) — IFRS 17 PAA","Aisha (A12) — ALM"])
-        elif direction == "Direction Vie & EP-RE":
-            equipe = st.selectbox("Équipe", ["Équipe EP-RE","Équipe Réglementation Vie"])
-            if equipe == "Équipe EP-RE":
-                agent_choix = st.selectbox("Agent", ["Henri (EP1) — IAS 19","Salomé (EP2) — Tarification EP-RE","Jin-Ho (EP3) — Provisionnement","Claire (EP4) — Stress Testing","Omar (EP5) — Reporting"])
-            else:
-                agent_choix = st.selectbox("Agent", ["Yuki (A14) — Tables de Mortalité"])
-        else:
-            st.info("⏸️ Direction Santé-Prévoyance en développement.")
-            agent_choix = None
+    for col, (lbl, key) in zip([col_d1, col_d2, col_d3], dirs_opt.items()):
+        with col:
+            actif = st.session_state.analyse_dir == key
+            style_border = f"border:2px solid {OR};" if actif else f"border:1px solid rgba(201,168,76,0.2);"
+            style_bg     = f"background:rgba(201,168,76,0.12);" if actif else f"background:{NAVY_L};"
+            st.markdown(f"""
+<div style="{style_bg}{style_border}border-radius:10px;padding:14px;text-align:center;margin-bottom:8px;">
+  <div style="font-size:1.2rem;">{lbl.split()[0]}</div>
+  <div style="font-size:0.8rem;font-weight:700;color:{'#C9A84C' if actif else BLANC};">{" ".join(lbl.split()[1:])}</div>
+</div>""", unsafe_allow_html=True)
+            if st.button(f"Choisir", key=f"dir_btn_{key}", use_container_width=True):
+                st.session_state.analyse_dir = key
+                st.session_state.analyse_equipe = None
+                st.session_state.analyse_besoin = None
+                st.rerun()
 
-    with col2:
+    direction = st.session_state.analyse_dir
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    # ── ÉTAPE 2 : ÉQUIPE ─────────────────────────────────────────────────────
+    st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;letter-spacing:0.12em;font-weight:700;margin-bottom:6px;'>◆ Étape 2 — Équipe</div>", unsafe_allow_html=True)
+
+    equipes_map = {
+        "non_vie": {
+            "tarification":      "🧠 Équipe Tarification",
+            "provisionnement":   "📊 Équipe Provisionnement",
+            "reglementation_nv": "🛡️ Équipe Réglementation",
+        },
+        "vie_epre": {
+            "epre":              "💰 Équipe EP-RE",
+            "reglementation_vie":"📋 Équipe Réglementation Vie",
+        },
+        "sante_prev": {
+            "sante":             "💊 Équipe Santé",
+            "prevoyance":        "🩺 Équipe Prévoyance",
+        },
+    }
+
+    if "analyse_equipe" not in st.session_state:
+        st.session_state.analyse_equipe = None
+
+    equipes = equipes_map.get(direction, {})
+    eq_cols = st.columns(max(len(equipes), 1))
+    for col, (eq_key, eq_lbl) in zip(eq_cols, equipes.items()):
+        with col:
+            actif = st.session_state.analyse_equipe == eq_key
+            style_border = f"border:2px solid {OR};" if actif else f"border:1px solid rgba(201,168,76,0.2);"
+            style_bg     = f"background:rgba(201,168,76,0.12);" if actif else f"background:{NAVY_L};"
+            st.markdown(f"""
+<div style="{style_bg}{style_border}border-radius:10px;padding:12px;text-align:center;margin-bottom:8px;">
+  <div style="font-size:0.82rem;font-weight:700;color:{'#C9A84C' if actif else BLANC};">{eq_lbl}</div>
+</div>""", unsafe_allow_html=True)
+            if st.button("Choisir", key=f"eq_btn_{eq_key}", use_container_width=True):
+                st.session_state.analyse_equipe = eq_key
+                st.session_state.analyse_besoin = None
+                st.rerun()
+
+    equipe = st.session_state.analyse_equipe
+    if not equipe:
+        st.info("👆 Sélectionnez une équipe pour continuer.")
+        return
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    # ── ÉTAPE 3 : BESOIN ─────────────────────────────────────────────────────
+    st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;letter-spacing:0.12em;font-weight:700;margin-bottom:6px;'>◆ Étape 3 — Votre besoin</div>", unsafe_allow_html=True)
+
+    besoins_map = {
+        "tarification": {
+            "prime_glm":  ("📐 Modéliser la prime (GLM)",          "Laurent A3 · Poisson/Gamma/Tweedie"),
+            "prime_ml":   ("🧠 Modéliser la prime (ML)",           "Priya A4 · XGBoost/LightGBM/ElasticNet"),
+            "prime_dl":   ("🔮 Modéliser la prime (Deep Learning)", "Yohan A5 · CANN/TabNet"),
+            "selection":  ("🎯 Sélectionner le meilleur modèle",   "Victor A6 · Score multicritères"),
+        },
+        "provisionnement": {
+            "triangle_xl": ("📊 Triangle déjà construit (Excel/CSV)", "Ibrahim A7 · Upload direct du triangle"),
+            "sinistres":   ("📁 Sinistres bruts (données contrats)",   "Diana A1→A2→Ibrahim A7"),
+            "stress":      ("🌩️ Stress Testing & ORSA",               "Isabelle A8 · Chocs EIOPA"),
+            "coherence":   ("🔗 Cohérence inter-équipes",             "Marcus A9 · Contrôles RAG"),
+        },
+        "reglementation_nv": {
+            "s2":    ("🛡️ Solvabilité 2 (SCR/MCR/QRT)",  "Elena A10"),
+            "ifrs17":("📋 IFRS 17 PAA",                   "Thomas A11"),
+            "alm":   ("⚖️ ALM & Liquidité",               "Aisha A12"),
+        },
+        "epre": {
+            "ias19":  ("🏢 Engagements retraite IAS 19",  "Henri EP1"),
+            "tarif":  ("💰 Tarification EP-RE",           "Salomé EP2"),
+            "prov":   ("📈 Provisionnement EP-RE",        "Jin-Ho EP3"),
+            "stress": ("⚡ Stress Testing EP-RE",         "Claire EP4"),
+            "report": ("📋 Reporting ACPR/DARES",         "Omar EP5"),
+        },
+        "reglementation_vie": {
+            "mortalite": ("📉 Tables de mortalité & biométrie", "Yuki A14"),
+        },
+        "sante": {
+            "tarif_sante": ("💊 Tarification frais de santé",    "Léonie S1 · CCAM/NGAP"),
+            "prov_sante":  ("📦 Provisionnement santé (PSAP)",   "Selma S2"),
+            "report_sante":("📋 Reporting santé (QRT S.13)",     "Binta S3"),
+        },
+        "prevoyance": {
+            "tarif_prev": ("🦺 Tarification ITT/IP/Décès",        "Axel P1 · BCAC/TD88"),
+            "tables":     ("📊 Tables de morbidité (Markov)",     "Rayan P2"),
+            "prov_prev":  ("📐 Provisionnement prévoyance",       "Élodie P3"),
+            "report_prev":("📋 Reporting prévoyance (QRT S.14)", "Valentin P4"),
+        },
+    }
+
+    if "analyse_besoin" not in st.session_state:
+        st.session_state.analyse_besoin = None
+
+    besoins = besoins_map.get(equipe, {})
+    nb_cols = min(len(besoins), 3)
+    if nb_cols == 0:
+        st.info("⏸️ Cette équipe est en cours de développement.")
+        return
+
+    b_cols = st.columns(nb_cols)
+    for i, (b_key, (b_lbl, b_agents)) in enumerate(besoins.items()):
+        with b_cols[i % nb_cols]:
+            actif = st.session_state.analyse_besoin == b_key
+            style_border = f"border:2px solid {OR};" if actif else f"border:1px solid rgba(201,168,76,0.2);"
+            style_bg     = f"background:rgba(201,168,76,0.12);" if actif else f"background:{NAVY_L};"
+            st.markdown(f"""
+<div style="{style_bg}{style_border}border-radius:10px;padding:12px;margin-bottom:8px;">
+  <div style="font-size:0.82rem;font-weight:700;color:{'#C9A84C' if actif else BLANC};margin-bottom:4px;">{b_lbl}</div>
+  <div style="font-size:0.68rem;color:{GRIS};">{b_agents}</div>
+</div>""", unsafe_allow_html=True)
+            if st.button("Choisir", key=f"b_btn_{b_key}", use_container_width=True):
+                st.session_state.analyse_besoin = b_key
+                st.rerun()
+
+    besoin = st.session_state.analyse_besoin
+    if not besoin:
+        st.info("👆 Sélectionnez votre besoin pour continuer.")
+        return
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    # ── ÉTAPE 4 : DONNÉES & PARAMÈTRES ───────────────────────────────────────
+    st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;letter-spacing:0.12em;font-weight:700;margin-bottom:10px;'>◆ Étape 4 — Vos données</div>", unsafe_allow_html=True)
+
+    col_data, col_info = st.columns([1.5, 1])
+
+    with col_data:
+        client = st.text_input("Référence client", placeholder="Ex : Mutuelle XYZ — Portefeuille Auto 2024", key="analyse_client")
+
+        # ── Cas upload fichier ─────────────────────────────────────────────
+        besoins_upload = ["prime_glm","prime_ml","prime_dl","selection",
+                          "triangle_xl","sinistres","mortalite",
+                          "tarif_sante","prov_sante","tarif_prev"]
+
+        if besoin in besoins_upload:
+            if besoin == "triangle_xl":
+                st.markdown(f"<div style='font-size:0.78rem;color:{BLANC};margin-bottom:6px;'>📊 <strong>Format attendu :</strong> Excel ou CSV avec le triangle cumulé (lignes = années survenance, colonnes = années développement)</div>", unsafe_allow_html=True)
+                fichier = st.file_uploader("Triangle de développement", type=["csv","xlsx","xls"], key="upload_triangle")
+            elif besoin == "sinistres":
+                st.markdown(f"<div style='font-size:0.78rem;color:{BLANC};margin-bottom:6px;'>📁 <strong>Format attendu :</strong> CSV/Excel/Parquet avec les sinistres individuels (annee_survenance, cout, annee_paiement...)</div>", unsafe_allow_html=True)
+                fichier = st.file_uploader("Données sinistres brutes", type=["csv","xlsx","parquet"], key="upload_sinistres")
+            elif besoin == "mortalite":
+                st.markdown(f"<div style='font-size:0.78rem;color:{BLANC};margin-bottom:6px;'>📉 <strong>Optionnel :</strong> Uploadez votre table d'expérience client (âge, qx) ou laissez vide pour utiliser TH0002/TF0002</div>", unsafe_allow_html=True)
+                fichier = st.file_uploader("Table de mortalité (optionnel)", type=["csv","xlsx"], key="upload_mortalite")
+            else:
+                st.markdown(f"<div style='font-size:0.78rem;color:{BLANC};margin-bottom:6px;'>📁 <strong>Format attendu :</strong> CSV, Excel ou Parquet — Amara (A1) valide et Kenji (A2) prépare vos données automatiquement</div>", unsafe_allow_html=True)
+                fichier = st.file_uploader("Données contrats", type=["csv","xlsx","parquet"], key="upload_contrats")
+
+            if fichier:
+                try:
+                    import pandas as pd, io
+                    if fichier.name.endswith(".parquet"):
+                        df_preview = pd.read_parquet(io.BytesIO(fichier.read()))
+                        fichier.seek(0)
+                    elif fichier.name.endswith(".csv"):
+                        df_preview = pd.read_csv(fichier)
+                        fichier.seek(0)
+                    else:
+                        df_preview = pd.read_excel(fichier)
+                        fichier.seek(0)
+                    st.success(f"✅ {fichier.name} — {len(df_preview):,} lignes × {len(df_preview.columns)} colonnes")
+                    with st.expander("👁️ Aperçu des données (5 premières lignes)"):
+                        st.dataframe(df_preview.head(5), use_container_width=True)
+                    st.session_state["analyse_df"] = df_preview
+                    st.session_state["analyse_fichier_nom"] = fichier.name
+                except Exception as e:
+                    st.error(f"❌ Erreur lecture : {e}")
+            else:
+                st.session_state["analyse_df"] = None
+
+        # ── Cas paramètres manuels ────────────────────────────────────────
+        elif besoin in ["stress","coherence","s2","ifrs17","alm","ias19","tarif","prov","stress","report","report_sante","prov_sante","tables","prov_prev","report_prev"]:
+            st.markdown(f"<div style='font-size:0.78rem;color:{BLANC};margin-bottom:10px;'>✏️ <strong>Saisie des paramètres :</strong> Les agents de réglementation n'ont pas besoin de fichier — renseignez les paramètres clés ci-dessous.</div>", unsafe_allow_html=True)
+
+            if besoin in ["s2","ifrs17","alm","coherence"]:
+                c1, c2 = st.columns(2)
+                with c1:
+                    be_param = st.number_input("Best Estimate (€)", value=2_914_930, step=10000, key="p_be")
+                    primes_param = st.number_input("Primes acquises (€)", value=10_000_000, step=100000, key="p_primes")
+                with c2:
+                    fpp_param = st.number_input("Fonds propres (€)", value=7_650_000, step=100000, key="p_fpp")
+                    branche_param = st.selectbox("Branche", ["rc_auto","mrh","incendie","rc_generale","construction","transport"], key="p_branche")
+                st.session_state["analyse_params"] = {
+                    "be": be_param, "primes": primes_param,
+                    "fonds_propres": fpp_param, "branche": branche_param
+                }
+
+            elif besoin == "ias19":
+                c1, c2 = st.columns(2)
+                with c1:
+                    nb_sal = st.number_input("Nombre de salariés", value=250, step=10, key="p_nbsal")
+                    sal_moy = st.number_input("Salaire moyen (€/an)", value=42_000, step=1000, key="p_salmoy")
+                with c2:
+                    age_moy = st.number_input("Âge moyen (ans)", value=45, step=1, key="p_age")
+                    taux_act = st.number_input("Taux actualisation (%)", value=3.50, step=0.05, key="p_taux")
+                st.session_state["analyse_params"] = {
+                    "nb_salaries": nb_sal, "salaire_moyen": sal_moy,
+                    "age_moyen": age_moy, "taux_actualisation": taux_act/100
+                }
+
+            elif besoin == "stress":
+                c1, c2 = st.columns(2)
+                with c1:
+                    be_st = st.number_input("Best Estimate (€)", value=2_914_930, step=10000, key="p_be_st")
+                    primes_st = st.number_input("Primes acquises (€)", value=10_000_000, step=100000, key="p_pr_st")
+                with c2:
+                    fpp_st = st.number_input("Fonds propres (€)", value=7_650_000, step=100000, key="p_fp_st")
+                st.session_state["analyse_params"] = {"be": be_st, "primes": primes_st, "fonds_propres": fpp_st}
+
+            elif besoin in ["tarif_sante","prov_sante","report_sante"]:
+                c1, c2 = st.columns(2)
+                with c1:
+                    nb_ass = st.number_input("Nombre d'assurés", value=1000, step=100, key="p_nbass")
+                    age_s = st.number_input("Âge moyen (ans)", value=42, step=1, key="p_ages")
+                with c2:
+                    garantie = st.selectbox("Niveau de garantie", ["eco","confort","premium","luxe"], index=1, key="p_gar")
+                    primes_s = st.number_input("Primes acquises (€)", value=5_000_000, step=100000, key="p_prs")
+                st.session_state["analyse_params"] = {
+                    "nb_assures": nb_ass, "age_moyen": age_s,
+                    "garantie_niveau": garantie, "primes_acquises": primes_s
+                }
+
+            elif besoin in ["tarif_prev","tables","prov_prev","report_prev"]:
+                c1, c2 = st.columns(2)
+                with c1:
+                    age_p = st.number_input("Âge moyen (ans)", value=40, step=1, key="p_agep")
+                    sal_p = st.number_input("Salaire brut moyen (€/an)", value=45_000, step=1000, key="p_salp")
+                with c2:
+                    cat_p = st.selectbox("Catégorie", ["ouvrier","employe","cadre","cadre_sup"], index=1, key="p_catp")
+                    primes_p = st.number_input("Primes acquises (€)", value=8_000_000, step=100000, key="p_prp")
+                st.session_state["analyse_params"] = {
+                    "age": age_p, "salaire_brut": sal_p,
+                    "categorie": cat_p, "primes": primes_p
+                }
+
+            else:
+                st.info("Paramètres spécifiques à cet agent — disponibles prochainement.")
+                st.session_state["analyse_params"] = {}
+
+    with col_info:
+        # Panneau agents impliqués
+        agents_impliques = {
+            "prime_glm":    [("Laurent","A3",VERT),("Amara","A1",VERT),("Kenji","A2",AMBRE)],
+            "prime_ml":     [("Priya","A4",VERT),("Amara","A1",VERT),("Kenji","A2",AMBRE)],
+            "prime_dl":     [("Yohan","A5",VERT),("Amara","A1",VERT),("Kenji","A2",AMBRE)],
+            "selection":    [("Victor","A6",VERT)],
+            "triangle_xl":  [("Ibrahim","A7",VERT)],
+            "sinistres":    [("Amara","A1",VERT),("Kenji","A2",AMBRE),("Ibrahim","A7",VERT)],
+            "stress":       [("Isabelle","A8",VERT),("Ibrahim","A7",VERT)],
+            "coherence":    [("Marcus","A9",VERT)],
+            "s2":           [("Elena","A10",VERT)],
+            "ifrs17":       [("Thomas","A11",VERT)],
+            "alm":          [("Aisha","A12",AMBRE)],
+            "ias19":        [("Henri","EP1",VERT)],
+            "tarif":        [("Salomé","EP2",VERT)],
+            "prov":         [("Jin-Ho","EP3",VERT)],
+            "report":       [("Omar","EP5",VERT)],
+            "mortalite":    [("Yuki","A14",VERT)],
+            "tarif_sante":  [("Léonie","S1",VERT)],
+            "prov_sante":   [("Selma","S2",VERT),("Léonie","S1",VERT)],
+            "report_sante": [("Binta","S3",VERT),("Selma","S2",VERT)],
+            "tarif_prev":   [("Axel","P1",VERT)],
+            "tables":       [("Rayan","P2",VERT),("Axel","P1",VERT)],
+            "prov_prev":    [("Élodie","P3",VERT),("Rayan","P2",VERT)],
+            "report_prev":  [("Valentin","P4",VERT)],
+        }
+        agents_liste = agents_impliques.get(besoin, [])
+
         st.markdown(f"""
-<div style="background:{NAVY_L};border:1px solid rgba(201,168,76,0.2);border-radius:12px;padding:18px;margin-top:28px;">
-  <div style="font-size:0.68rem;color:{OR};font-weight:700;margin-bottom:10px;">AGENTS OPÉRATIONNELS</div>""", unsafe_allow_html=True)
-        for ak, a in [(k,v) for k,v in AGENTS.items() if v["statut"] in ["VERT","AMBRE"] and v["niveau"]=="agent"][:10]:
-            dot = "🟢" if a["statut"]=="VERT" else "🟡"
-            st.markdown(f"<div style='font-size:0.78rem;color:{BLANC};margin-bottom:4px;'>{dot} {a['prenom']} ({a['code']})</div>", unsafe_allow_html=True)
+<div style="background:{NAVY_L};border:1px solid rgba(201,168,76,0.2);border-radius:12px;padding:16px;">
+  <div style="font-size:0.65rem;color:{OR};font-weight:700;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:10px;">Agents mobilisés</div>""", unsafe_allow_html=True)
+        for prenom, code, col_st in agents_liste:
+            dot = "🟢" if col_st==VERT else "🟡"
+            st.markdown(f"<div style='font-size:0.82rem;color:{BLANC};margin-bottom:5px;'>{dot} <strong>{prenom}</strong> <span style='color:{GRIS};font-size:0.72rem;'>({code})</span></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
-    col_b1, col_b2, _ = st.columns([1,1,2])
-    with col_b1:
-        if st.button("🚀 Lancer l'analyse", type="primary", use_container_width=True):
-            with st.spinner("Analyse en cours..."):
-                import time; time.sleep(2)
-            st.success("✅ Analyse terminée — Consultez le Dashboard pour les résultats")
-    with col_b2:
-        if st.button("📊 Voir résultats freMTPL2", use_container_width=True):
+        # Durée estimée
+        durees = {
+            "prime_glm":"~15 sec","prime_ml":"~45 sec","prime_dl":"~3-5 min",
+            "selection":"~5 sec","triangle_xl":"~5 sec","sinistres":"~20 sec",
+            "stress":"~10 sec","coherence":"~5 sec","s2":"~5 sec",
+            "ifrs17":"~5 sec","alm":"~5 sec","ias19":"~3 sec",
+            "tarif":"~3 sec","prov":"~3 sec","report":"~3 sec",
+            "mortalite":"~3 sec","tarif_sante":"~3 sec","prov_sante":"~3 sec",
+            "report_sante":"~3 sec","tarif_prev":"~3 sec","tables":"~5 sec",
+            "prov_prev":"~3 sec","report_prev":"~3 sec",
+        }
+        st.markdown(f"""
+<div style="background:{NAVY_LL};border-radius:8px;padding:10px 14px;margin-top:10px;">
+  <div style="font-size:0.65rem;color:{GRIS};text-transform:uppercase;margin-bottom:3px;">Durée estimée</div>
+  <div style="font-size:0.88rem;font-weight:700;color:{OR};">{durees.get(besoin,"~5 sec")}</div>
+</div>""", unsafe_allow_html=True)
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    # ── ÉTAPE 5 : LANCER ─────────────────────────────────────────────────────
+    col_btn, col_rst, _ = st.columns([1.2, 1, 2])
+
+    # Vérification données disponibles
+    pret = True
+    if besoin in besoins_upload and besoin != "mortalite":
+        if st.session_state.get("analyse_df") is None:
+            pret = False
+
+    with col_btn:
+        btn_label = "🚀 Lancer l'analyse"
+        if not pret:
+            st.button(btn_label, disabled=True, use_container_width=True, key="btn_lancer")
+            st.caption("⚠️ Uploadez d'abord vos données")
+        else:
+            if st.button(btn_label, type="primary", use_container_width=True, key="btn_lancer"):
+                _executer_analyse(besoin, direction, equipe, client)
+
+    with col_rst:
+        if st.button("🔄 Recommencer", use_container_width=True, key="btn_reset"):
+            for k in ["analyse_dir","analyse_equipe","analyse_besoin","analyse_df","analyse_params","analyse_fichier_nom"]:
+                if k in st.session_state:
+                    del st.session_state[k]
+            st.rerun()
+
+
+def _executer_analyse(besoin, direction, equipe, client):
+    """Exécute l'analyse et affiche les résultats dans la page."""
+    import io, pandas as pd
+
+    df        = st.session_state.get("analyse_df")
+    params    = st.session_state.get("analyse_params", {})
+    nom_fic   = st.session_state.get("analyse_fichier_nom", "")
+    ref_client = client or "Client ActuarIA"
+
+    with st.spinner(f"⚙️ Analyse en cours pour {ref_client}..."):
+        try:
+            import sys, os
+            # Chemin agents
+            for path in ["/content/drive/MyDrive/ActuarIA/agents", ".", os.path.dirname(__file__)]:
+                if path not in sys.path:
+                    sys.path.insert(0, path)
+
+            resultats = {}
+
+            # ── TARIFICATION ────────────────────────────────────────────────
+            if besoin in ["prime_glm","prime_ml","prime_dl","selection","sinistres"]:
+                from a1_ingestion import AgentA1Ingestion
+                from a2_preprocessing import AgentA2Preprocessing
+
+                a1 = AgentA1Ingestion(verbose=False)
+                r1 = a1.run(dataframe=df, branche="non_vie")
+                if not r1["success"]:
+                    st.error(f"❌ A1 Amara : {r1['erreur']}")
+                    return
+
+                a2 = AgentA2Preprocessing(verbose=False)
+                r2 = a2.run(r1)
+                if not r2["success"]:
+                    st.error(f"❌ A2 Kenji : {r2['erreur']}")
+                    return
+
+                resultats["r1"] = r1
+                resultats["r2"] = r2
+
+                if besoin == "prime_glm":
+                    from a3_glm import AgentA3GLM
+                    r3 = AgentA3GLM(verbose=False).run(r2, generer_graphiques=False)
+                    resultats["principal"] = r3
+                elif besoin == "prime_ml":
+                    from a4_ml import AgentA4ML
+                    r4 = AgentA4ML(verbose=False).run(r2, generer_graphiques=False, calcul_shap=False)
+                    resultats["principal"] = r4
+                elif besoin == "prime_dl":
+                    from a5_deep_learning import AgentA5DeepLearning
+                    r5 = AgentA5DeepLearning(verbose=False).run(r2, n_epochs=10, generer_graphiques=False)
+                    resultats["principal"] = r5
+                elif besoin in ["selection","sinistres"]:
+                    from a3_glm import AgentA3GLM
+                    r3 = AgentA3GLM(verbose=False).run(r2, generer_graphiques=False)
+                    if besoin == "selection":
+                        from a6_comparaison import AgentA6Comparaison
+                        r6 = AgentA6Comparaison(verbose=False).run(r2, result_a3=r3, generer_graphiques=False, aide_decision=True)
+                        resultats["principal"] = r6
+                    else:
+                        resultats["principal"] = r3
+
+            # ── TRIANGLE DIRECT → A7 ────────────────────────────────────────
+            elif besoin == "triangle_xl":
+                from a7_provisionnement import AgentA7Provisionnement
+                a7 = AgentA7Provisionnement(verbose=False)
+                # Construire le triangle depuis le DataFrame
+                if df is not None and len(df) > 1:
+                    tri = df.select_dtypes(include=["number"]).values
+                    r7 = a7.run(source=tri, generer_graphiques=False)
+                else:
+                    r7 = a7.run(generer_graphiques=False)
+                resultats["principal"] = r7
+
+            # ── STRESS TESTING A8 ───────────────────────────────────────────
+            elif besoin == "stress":
+                from a8_stress_testing import AgentA8StressTesting
+                r8 = AgentA8StressTesting(verbose=False).run(
+                    primes_acq=params.get("primes", 10_000_000),
+                    fonds_propres=params.get("fonds_propres", 7_650_000),
+                    generer_graphiques=False,
+                )
+                resultats["principal"] = r8
+
+            # ── SOLVABILITÉ 2 ───────────────────────────────────────────────
+            elif besoin == "s2":
+                from a10_solvabilite2 import AgentA10Solvabilite2
+                a7_synt = {"best_estimate":{"best_estimate":params.get("be",2_914_930),"sigma_mack":params.get("be",2_914_930)*0.015,"cv_inter_methodes":5,"nb_methodes_convergentes":4},"tail":{"tail_factor":1.037},"meta":{"nb_lignes":50000,"n_annees":8},"sous_branche":params.get("branche","rc_auto")}
+                r10 = AgentA10Solvabilite2(verbose=False).run(result_a7=a7_synt, fonds_propres=params.get("fonds_propres",7_650_000), generer_graphiques=False)
+                resultats["principal"] = r10
+
+            # ── IAS 19 ──────────────────────────────────────────────────────
+            elif besoin == "ias19":
+                from ep1_ias19 import AgentEP1IAS19
+                r_ep1 = AgentEP1IAS19(verbose=False).run(
+                    nb_salaries=params.get("nb_salaries",250),
+                    salaire_moyen=params.get("salaire_moyen",42000),
+                    age_moyen=params.get("age_moyen",45),
+                    taux_actualisation=params.get("taux_actualisation",0.035),
+                    generer_graphiques=False,
+                )
+                resultats["principal"] = r_ep1
+
+            # ── SANTÉ ────────────────────────────────────────────────────────
+            elif besoin in ["tarif_sante","prov_sante","report_sante"]:
+                if df is not None:
+                    from a1_ingestion import AgentA1Ingestion
+                    from a2_preprocessing import AgentA2Preprocessing
+                    r1 = AgentA1Ingestion(verbose=False).run(dataframe=df, branche="sante_prevoyance")
+                    r2 = AgentA2Preprocessing(verbose=False).run(r1)
+                    resultats["r2"] = r2
+
+                if besoin == "tarif_sante":
+                    from leonie_s1_tarification_sante import AgentS1TarificationSante
+                    r_s1 = AgentS1TarificationSante(verbose=False).run(
+                        nb_assures=params.get("nb_assures",1000),
+                        age_moyen=params.get("age_moyen",42),
+                        garantie_niveau=params.get("garantie_niveau","confort"),
+                        generer_graphiques=False,
+                    )
+                    resultats["principal"] = r_s1
+                elif besoin == "prov_sante":
+                    from selma_s2_provisionnement_sante import AgentS2ProvisionnemntSante
+                    r_s2 = AgentS2ProvisionnemntSante(verbose=False).run(
+                        primes_acquises=params.get("primes_acquises",5_000_000),
+                        generer_graphiques=False,
+                    )
+                    resultats["principal"] = r_s2
+
+            # ── PRÉVOYANCE ───────────────────────────────────────────────────
+            elif besoin in ["tarif_prev","tables","prov_prev","report_prev"]:
+                if besoin == "tarif_prev":
+                    from axel_p1_tarification_prevoyance import AgentP1TarificationPrevoyance
+                    r_p1 = AgentP1TarificationPrevoyance(verbose=False).run(
+                        age=params.get("age",40),
+                        salaire_brut=params.get("salaire_brut",45000),
+                        categorie=params.get("categorie","employe"),
+                        generer_graphiques=False,
+                    )
+                    resultats["principal"] = r_p1
+
+            else:
+                st.info(f"⏸️ L'agent pour ce besoin ({besoin}) sera disponible prochainement.")
+                return
+
+            # ── AFFICHAGE RÉSULTATS ─────────────────────────────────────────
+            _afficher_resultats(resultats, besoin, ref_client)
+
+        except ImportError as e:
+            st.warning(f"⚠️ Module non disponible dans cet environnement : {e}")
+            st.info("💡 Les agents s'exécutent dans l'environnement Python avec les dépendances installées (Colab, serveur local ou Render avec requirements.txt complet).")
+        except Exception as e:
+            st.error(f"❌ Erreur lors de l'analyse : {e}")
+
+
+def _afficher_resultats(resultats, besoin, ref_client):
+    """Affiche les résultats d'analyse dans la page."""
+    r = resultats.get("principal", {})
+    if not r:
+        st.warning("Aucun résultat à afficher.")
+        return
+
+    statut = r.get("statut_rag", r.get("statut", "N/A"))
+    success = r.get("success", False)
+
+    # Badge statut
+    col_st, _ = st.columns([1,3])
+    with col_st:
+        if statut == "VERT":
+            st.success(f"✅ VERT — Analyse validée")
+        elif statut == "AMBRE":
+            st.warning(f"⚠️ AMBRE — Vérifications recommandées")
+        elif statut == "ROUGE":
+            st.error(f"❌ ROUGE — Action requise")
+        else:
+            st.info(f"ℹ️ Analyse terminée")
+
+    # Commentaire actuariel
+    com = r.get("commentaire","")
+    if com:
+        with st.expander("📋 Rapport actuariel complet", expanded=True):
+            st.code(com, language=None)
+
+    # Hypothèses
+    hyp = r.get("hypotheses", [])
+    if hyp:
+        st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:10px 0 6px;'>◆ Hypothèses validées</div>", unsafe_allow_html=True)
+        for h in hyp:
+            ic = "✅" if h.get("statut")=="VALIDÉE" else "⚠️"
+            hid = h.get("id","")
+            htxt = h.get("hypothese","")[:80]
+            hval = h.get("valeur","")[:80]
+            hst  = h.get("statut","")
+            st.markdown(f"**{ic} [{hid}]** {htxt}  \n`{hval}` — *{hst}*")
+
+    # Boutons export
+    st.markdown("<hr>", unsafe_allow_html=True)
+    import json
+    col1, col2 = st.columns(2)
+    with col1:
+        st.download_button(
+            "⬇️ Exporter résultats (JSON)",
+            data=json.dumps(r, indent=2, ensure_ascii=False, default=str),
+            file_name=f"actuaria_{besoin}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            mime="application/json",
+            use_container_width=True,
+        )
+    with col2:
+        if st.button("📊 Voir Dashboard", use_container_width=True, key="res_dash"):
             nav_to("dashboard")
 
 # ══════════════════════════════════════════════════════════════════════════════

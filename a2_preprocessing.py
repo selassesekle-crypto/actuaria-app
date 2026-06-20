@@ -1078,6 +1078,49 @@ class AgentA2Preprocessing:
                 )
                 features_nouvelles.append('levier_assurance')
 
+        # ── VARIABLES SPÉCIFIQUES SANTÉ ──────────────────────────────────────
+        elif 'sante' in sous_branche:
+
+            # Consommation médicale par poste (si données sinistres détaillées)
+            # Utilisée par S1 Léonie pour la tarification par poste
+            postes = ['medecine','pharmacie','hospitalisation','dentaire','optique']
+            for poste in postes:
+                col_cout  = f'cout_{poste}'
+                col_freq  = f'freq_{poste}'
+                col_nb    = f'nb_actes_{poste}'
+                if col_cout in df.columns:
+                    df[f'sinistre_{poste}'] = df[col_cout]
+                    features_nouvelles.append(f'sinistre_{poste}')
+                if col_nb in df.columns and col_cout in df.columns:
+                    df[f'cout_moyen_{poste}'] = (
+                        df[col_cout] / np.maximum(df[col_nb], 1)
+                    )
+                    features_nouvelles.append(f'cout_moyen_{poste}')
+
+            # Ratio hospit / total (indicateur anti-sélection)
+            if 'cout_hospitalisation' in df.columns:
+                total_cols = [c for c in df.columns if c.startswith('cout_')]
+                if len(total_cols) > 1:
+                    df['total_sinistres_sante'] = df[total_cols].sum(axis=1)
+                    df['part_hospit'] = (
+                        df['cout_hospitalisation'] /
+                        np.maximum(df['total_sinistres_sante'], 1)
+                    ).clip(0, 1)
+                    features_nouvelles.extend(['total_sinistres_sante','part_hospit'])
+
+            # Facteur d'âge santé (sinistralité croît avec l'âge)
+            if 'age' in df.columns:
+                df['facteur_age_sante'] = (
+                    0.7 + (df['age'] - 30) * 0.015
+                ).clip(0.5, 2.5)
+                features_nouvelles.append('facteur_age_sante')
+
+            # Ancienneté contrat santé (fidélisation)
+            if 'annee_adhesion' in df.columns:
+                annee_courante = pd.Timestamp.now().year
+                df['anciennete_sante'] = annee_courante - df['annee_adhesion']
+                features_nouvelles.append('anciennete_sante')
+
         # ── VARIABLES SPÉCIFIQUES PRÉVOYANCE ─────────────────────────────────
         elif 'prevoyance' in sous_branche:
 
@@ -1091,6 +1134,46 @@ class AgentA2Preprocessing:
                 )
                 df['taux_remplacement'] = df['taux_remplacement'].clip(0, 1)
                 features_nouvelles.append('taux_remplacement')
+
+            # Durée d'arrêt ITT (utilisée par P2 Rayan pour les tables Markov)
+            if 'date_debut_arret' in df.columns and 'date_fin_arret' in df.columns:
+                df['duree_arret_jours'] = (
+                    pd.to_datetime(df['date_fin_arret']) -
+                    pd.to_datetime(df['date_debut_arret'])
+                ).dt.days.clip(0, 1825)   # max 5 ans
+                features_nouvelles.append('duree_arret_jours')
+            elif 'duree_arret_jours' in df.columns:
+                df['duree_arret_jours'] = df['duree_arret_jours'].clip(0, 1825)
+
+            # Flag dossier ouvert (utilisé par P3 Élodie pour la PSAP)
+            if 'statut_dossier' in df.columns:
+                df['flag_dossier_ouvert'] = (
+                    df['statut_dossier'].str.lower().isin(
+                        ['ouvert','en_cours','actif','open']
+                    ).astype(int)
+                )
+                features_nouvelles.append('flag_dossier_ouvert')
+            elif 'date_cloture' in df.columns:
+                df['flag_dossier_ouvert'] = df['date_cloture'].isna().astype(int)
+                features_nouvelles.append('flag_dossier_ouvert')
+
+            # Catégorie socioprofessionnelle (factor de risque ITT BCAC)
+            if 'categorie_sociopro' in df.columns:
+                csp_map = {'ouvrier':1.35,'employe':1.0,'cadre':0.75,'cadre_sup':0.60}
+                df['facteur_csp_itt'] = (
+                    df['categorie_sociopro'].str.lower()
+                    .map(csp_map).fillna(1.0)
+                )
+                features_nouvelles.append('facteur_csp_itt')
+
+            # Ancienneté en invalidité (pour PM rentes long terme P3)
+            if 'date_debut_invalidite' in df.columns:
+                annee_courante = pd.Timestamp.now().year
+                df['anciennete_invalidite_ans'] = (
+                    annee_courante -
+                    pd.to_datetime(df['date_debut_invalidite']).dt.year
+                ).clip(0, 40)
+                features_nouvelles.append('anciennete_invalidite_ans')
 
         # ── INTERACTIONS GÉNÉRIQUES ───────────────────────────────────────────
         # Création des interactions définies dans INTERACTIONS
