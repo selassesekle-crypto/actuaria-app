@@ -190,7 +190,7 @@ STRUCTURE = {
         "mission":"Infrastructure données transversale. Amara valide vos fichiers, Kenji les transforme en features actuarielles, Rafael certifie chaque opération RGPD Art.30. La Direction Data alimente toutes les directions.",
         "directeur":"diana",
         "equipes": {
-            "data": {"label":"Équipe Data","icon":"🔍","manager":"diana","agents":["amara","kenji","rafael"]},
+            "data": {"label":"Équipe Data","icon":"🔍","manager":None,"agents":["amara","kenji","rafael"]},
         },
     },
     "non_vie": {
