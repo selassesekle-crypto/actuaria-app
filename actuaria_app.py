@@ -126,20 +126,28 @@ def _afficher_mapping_interactif(df, besoin):
 
     options = ["— Non disponible —"] + colonnes_client
 
+    # Initialiser les valeurs par défaut dans session_state si pas encore fait
+    for var in variables:
+        key = f"map_{besoin}_{var}"
+        if key not in st.session_state:
+            suggestion = mapping_auto.get(var, "— Non disponible —")
+            st.session_state[key] = suggestion
+
     cols_ui = st.columns(2)
     for i, var in enumerate(variables):
         with cols_ui[i % 2]:
-            suggestion = mapping_auto.get(var, "— Non disponible —")
-            idx = options.index(suggestion) if suggestion in options else 0
+            key = f"map_{besoin}_{var}"
+            current = st.session_state.get(key, "— Non disponible —")
+            idx = options.index(current) if current in options else 0
             st.selectbox(
                 f"**{var}**",
                 options=options,
                 index=idx,
-                key=f"map_{besoin}_{var}",
+                key=key,
                 help=f"Synonymes connus : {', '.join(SYNONYMES_AUTO.get(var, [])[:4])}"
             )
 
-    # Lire les valeurs depuis session_state (disponibles après rerun)
+    # Lire les valeurs depuis session_state
     mapping_final = {}
     for var in variables:
         choix = st.session_state.get(f"map_{besoin}_{var}", "— Non disponible —")
@@ -248,6 +256,11 @@ st.markdown(f"""
 hr {{border-color:rgba(201,168,76,0.15);}}
 ::-webkit-scrollbar {{width:4px;}}
 ::-webkit-scrollbar-thumb {{background:rgba(201,168,76,0.35);border-radius:2px;}}
+label, [data-testid="stWidgetLabel"] p, [data-testid="stWidgetLabel"] span {{
+  color: #F0F4F8 !important;
+  font-size: 0.82rem !important;
+  font-weight: 600 !important;
+}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1388,9 +1401,9 @@ def page_analyse():
             "triangle_xl": ("📊 Triangle déjà construit (Excel/CSV)", "Ibrahim A7 · Upload direct du triangle"),
             "sinistres":   ("📁 Sinistres bruts (données contrats)",   "Diana A1→A2→Ibrahim A7"),
             "stress":      ("🌩️ Stress Testing & ORSA",               "Isabelle A8 · Chocs EIOPA"),
-            "coherence":   ("🔗 Cohérence inter-équipes",             "Marcus A9 · Contrôles RAG"),
         },
         "reglementation_nv": {
+            "coherence":   ("🔗 Cohérence inter-équipes",             "Marcus A9 · Contrôles RAG"),
             "s2":    ("🛡️ Solvabilité 2 (SCR/MCR/QRT)",  "Elena A10"),
             "ifrs17":("📋 IFRS 17 PAA",                   "Thomas A11"),
             "alm":   ("⚖️ ALM & Liquidité",               "Aisha A12"),
