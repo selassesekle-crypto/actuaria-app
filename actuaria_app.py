@@ -103,17 +103,17 @@ def _suggerer_mapping_auto(colonnes_client, besoin):
 
 def _afficher_mapping_interactif(df, besoin):
     """
-    Affiche un écran de mapping interactif entre les colonnes du fichier client
-    et les variables attendues par ActuarIA.
-    Retourne le DataFrame renommé ou None si pas confirmé.
+    Affiche un écran de mapping interactif.
+    Utilise session_state pour lire les valeurs des selectbox après rerun.
     """
     variables = VARIABLES_ATTENDUES.get(besoin, [])
     if not variables:
-        return df  # Pas de mapping nécessaire (ex: triangle)
-    
+        st.session_state["mapping_confirme"] = True
+        return
+
     colonnes_client = list(df.columns)
     mapping_auto = _suggerer_mapping_auto(colonnes_client, besoin)
-    
+
     st.markdown(f"""
 <div style="background:{NAVY_L};border:1px solid rgba(201,168,76,0.3);border-radius:10px;padding:16px;margin:10px 0;">
   <div style="font-size:0.65rem;color:{OR};text-transform:uppercase;font-weight:700;margin-bottom:10px;">
@@ -125,24 +125,27 @@ def _afficher_mapping_interactif(df, besoin):
 </div>""", unsafe_allow_html=True)
 
     options = ["— Non disponible —"] + colonnes_client
-    mapping_final = {}
-    
+
     cols_ui = st.columns(2)
     for i, var in enumerate(variables):
         with cols_ui[i % 2]:
             suggestion = mapping_auto.get(var, "— Non disponible —")
             idx = options.index(suggestion) if suggestion in options else 0
-            choix = st.selectbox(
+            st.selectbox(
                 f"**{var}**",
                 options=options,
                 index=idx,
                 key=f"map_{besoin}_{var}",
                 help=f"Synonymes connus : {', '.join(SYNONYMES_AUTO.get(var, [])[:4])}"
             )
-            if choix != "— Non disponible —":
-                mapping_final[var] = choix
 
-    # Résumé
+    # Lire les valeurs depuis session_state (disponibles après rerun)
+    mapping_final = {}
+    for var in variables:
+        choix = st.session_state.get(f"map_{besoin}_{var}", "— Non disponible —")
+        if choix != "— Non disponible —":
+            mapping_final[var] = choix
+
     n_ok = len(mapping_final)
     n_tot = len(variables)
     color = VERT if n_ok == n_tot else AMBRE if n_ok >= n_tot * 0.7 else ROUGE
@@ -164,8 +167,6 @@ def _afficher_mapping_interactif(df, besoin):
     if ignorer:
         st.session_state["mapping_confirme"] = True
         st.rerun()
-
-    return None  # Pas encore confirmé
 
 
 
@@ -247,15 +248,6 @@ st.markdown(f"""
 hr {{border-color:rgba(201,168,76,0.15);}}
 ::-webkit-scrollbar {{width:4px;}}
 ::-webkit-scrollbar-thumb {{background:rgba(201,168,76,0.35);border-radius:2px;}}
-label, [data-testid="stWidgetLabel"] p {{
-  color: #F0F4F8 !important;
-  font-size: 0.82rem !important;
-  font-weight: 600 !important;
-}}
-.stSelectbox [data-baseweb="select"] {{
-  background: #243F6A !important;
-  border: 1px solid rgba(201,168,76,0.4) !important;
-}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -279,7 +271,7 @@ AGENTS = {
     "victor":   {"prenom":"Victor",  "code":"A6",      "icon":"🎯","statut":"VERT","niveau":"agent","dir":"non_vie","equipe":"tarification","role_fr":"Comparaison & Sélection du modèle de production","intro":"Bonjour, je suis Victor, responsable de la sélection du modèle de production. J'applique une grille multicritères avec 4 profils de pondération et produis la fiche de décision actuarielle finale conforme à l'AI Act 2025.","spec_fr":"Multicritères · 4 profils · Fiche décision · AI Act","kpi":"ElasticNet · Score 0.8373"},
     "ibrahim":  {"prenom":"Ibrahim", "code":"A7",      "icon":"📊","statut":"VERT","niveau":"agent","dir":"non_vie","equipe":"provisionnement","role_fr":"Provisionnement — Chain Ladder · Mack · BF · Cape Cod","intro":"Bonjour, je suis Ibrahim, spécialiste du provisionnement Non-Vie. Je calibre les 4 méthodes actuarielles de référence et calcule le Best Estimate S2 avec intervalle de confiance Mack 1993.","spec_fr":"Chain Ladder · Mack 1993 · BF · Cape Cod","kpi":"BE=2.91M€ · CV 0.6%"},
     "isabelle": {"prenom":"Isabelle","code":"A8",      "icon":"🌩️","statut":"VERT","niveau":"agent","dir":"non_vie","equipe":"provisionnement","role_fr":"Stress Testing & ORSA Non-Vie","intro":"Bonjour, je suis Isabelle, experte en stress testing et ORSA Non-Vie. J'évalue la résistance de votre portefeuille aux chocs réglementaires EIOPA et projette l'ORSA prospectif sur 5 ans selon 3 scénarios.","spec_fr":"Chocs S2 EIOPA · ORSA 5 ans · Scénarios","kpi":"SCR post-stress=375%"},
-    "marcus":   {"prenom":"Marcus",  "code":"A9",      "icon":"🔗","statut":"VERT","niveau":"agent","dir":"non_vie","equipe":"reglementation_nv","role_fr":"Cohérence inter-équipes","intro":"Bonjour, je suis Marcus, responsable de la cohérence inter-équipes. Je vérifie que les résultats de Tarification, Provisions, S2 et IFRS 17 sont cohérents entre eux et alerte proactivement en cas d'incohérence.","spec_fr":"Loss Ratios · Réconciliation · Contrôles RAG","kpi":"Score cohérence 100% VERT"},
+    "marcus":   {"prenom":"Marcus",  "code":"A9",      "icon":"🔗","statut":"VERT","niveau":"agent","dir":"non_vie","equipe":"coherence","role_fr":"Cohérence inter-équipes","intro":"Bonjour, je suis Marcus, responsable de la cohérence inter-équipes. Je vérifie que les résultats de Tarification, Provisions, S2 et IFRS 17 sont cohérents entre eux et alerte proactivement en cas d'incohérence.","spec_fr":"Loss Ratios · Réconciliation · Contrôles RAG","kpi":"Score cohérence 100% VERT"},
     "elena":    {"prenom":"Elena",   "code":"A10",     "icon":"🛡️","statut":"VERT","niveau":"agent","dir":"non_vie","equipe":"reglementation_nv","role_fr":"Solvabilité 2 — SCR · MCR · QRT","intro":"Bonjour, je suis Elena, spécialiste Solvabilité 2 Non-Vie. Je calcule le SCR souscription, marché et opérationnel selon la formule standard EIOPA, le MCR et génère les QRT S.05, S.17 et S.19 pour le reporting ACPR.","spec_fr":"Formule std EIOPA · QRT S.05/S.17/S.19","kpi":"Ratio SCR=208.5%"},
     "thomas":   {"prenom":"Thomas",  "code":"A11",     "icon":"📋","statut":"VERT","niveau":"agent","dir":"non_vie","equipe":"reglementation_nv","role_fr":"IFRS 17 PAA — Non-Vie","intro":"Bonjour, je suis Thomas, spécialiste IFRS 17 pour les contrats Non-Vie. J'applique l'approche PAA pour les contrats de durée inférieure à 1 an et réconcilie avec le Best Estimate S2.","spec_fr":"IFRS17 PAA · LRC · LIC · Risk Adjustment","kpi":"TP=3.99M€ · Ratio 1.370"},
     "aisha":    {"prenom":"Aisha",   "code":"A12",     "icon":"⚖️","statut":"AMBRE","niveau":"agent","dir":"non_vie","equipe":"reglementation_nv","role_fr":"ALM & Risque de Liquidité — Non-Vie","intro":"Bonjour, je suis Aisha, spécialiste ALM et risque de liquidité Non-Vie. Je calcule la duration de Macaulay, le gap actif-passif, le BV01 et le LCR. J'évalue l'impact des chocs de taux ±200bp.","spec_fr":"Duration · Gap ALM · LCR · Stress taux","kpi":"LCR=1173% · Gap +1.9 ans"},
@@ -332,7 +324,8 @@ STRUCTURE = {
         "equipes": {
             "tarification":     {"label":"Équipe Tarification",    "icon":"🧠","manager":"meilin","agents":["laurent","priya","yohan","victor"]},
             "provisionnement":  {"label":"Équipe Provisionnement", "icon":"📊","manager":"kwame", "agents":["ibrahim","isabelle"]},
-            "reglementation_nv":{"label":"Équipe Réglementation",  "icon":"🛡️","manager":"nadia", "agents":["elena","thomas","aisha","marcus"]},
+            "coherence":        {"label":"Cohérence & Contrôles","icon":"🔗","manager":None,"agents":["marcus"]},
+            "reglementation_nv":{"label":"Équipe Réglementation",  "icon":"🛡️","manager":"nadia", "agents":["elena","thomas","aisha"]},
         },
     },
     "vie_epre": {
