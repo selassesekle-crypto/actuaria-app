@@ -495,8 +495,6 @@ def render_sidebar():
         # Navigation
         for icon, label, pid in [
             ("🏠","Accueil","accueil"),
-            ("📈","Dashboard","dashboard"),
-            ("📊","Analyse","analyse"),
             ("📁","Rapports Consolidés","rapports"),
         ]:
             actif = st.session_state.page == pid
@@ -588,11 +586,11 @@ def page_accueil():
 </div>""", unsafe_allow_html=True)
         c1, c2 = st.columns(2)
         with c1:
-            if st.button("📈 Dashboard", type="primary", use_container_width=True):
-                nav_to("dashboard")
-        with c2:
-            if st.button("📊 Lancer une analyse", use_container_width=True):
+            if st.button("📊 Lancer une analyse", type="primary", use_container_width=True):
                 nav_to("analyse")
+        with c2:
+            if st.button("📈 Dashboard", use_container_width=True):
+                nav_to("dashboard")
 
     with col_r:
         cats = ["Tarification","Provisions","Réglementation","EP-RE","Audit","Santé"]
@@ -2052,7 +2050,7 @@ def _executer_analyse(besoin, direction, equipe, client):
 
 
 def page_resultats():
-    """Page résultats — pleine largeur, tout en vertical."""
+    """Page résultats pleine largeur — tout en vertical."""
     import json as _json
     import plotly.graph_objects as go
 
@@ -2072,27 +2070,37 @@ def page_resultats():
     cl         = r.get("chain_ladder", {})
     bf         = r.get("bf", {})
     cc_r       = r.get("cape_cod", {})
-    graphiques = r.get("graphiques", {})
     boot       = r.get("bootstrap", {})
+    cred       = r.get("credibilite", {})
     comp       = r.get("comparaison_n1", {})
+    tail       = r.get("tail_factor", {})
+    bt         = r.get("back_testing", {})
+    orsa       = r.get("orsa_provisions", {})
+    munich     = r.get("munich_cl", {})
+    grands     = r.get("grands_sinistres", {})
+    fp         = r.get("facteurs_ponderes", {})
+    stab       = r.get("stabilite_facteurs", {})
+    dm         = r.get("donnees_manquantes", {})
+    recon      = r.get("reconciliation", {})
     validation = r.get("validation", {})
     diag       = r.get("diagnostic", {})
     rapport_act= r.get("rapport_actuaire", {})
+    graphiques = r.get("graphiques", {})
     methode_u  = be.get("methode_facteurs", "standard")
     raison     = r.get("rapport", {}).get("raison_methode", "")
     be_val     = be.get("best_estimate", 0)
     cv_val     = be.get("cv_inter_methodes", 0)
     p90        = be.get("reserve_p90", mack.get("reserve_p90", 0))
     sig        = mack.get("sigma_total", 0)
+    emoji_s    = "🟢" if statut=="VERT" else "🟡" if statut=="AMBRE" else "🔴"
+    col_s      = VERT if statut=="VERT" else AMBRE if statut=="AMBRE" else ROUGE
 
     # ── HEADER ───────────────────────────────────────────────────────────────
     st.markdown(f"""
-<div style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:flex-start;">
-  <div>
-    <div style="font-size:0.65rem;color:{OR};text-transform:uppercase;letter-spacing:0.12em;font-weight:700;">Résultats · {ref_client} · {datetime.now().strftime('%d/%m/%Y %H:%M')}</div>
-    <div style="font-family:'Playfair Display',serif;font-size:1.5rem;color:{BLANC};font-weight:700;">Rapport Actuariel — {besoin.upper()}</div>
-    <div style="font-size:0.8rem;color:{GRIS};">Méthode : <b style='color:{OR}'>{methode_u}</b>{"  ·  " + raison if raison else ""}</div>
-  </div>
+<div style="margin-bottom:16px;">
+  <div style="font-size:0.65rem;color:{OR};text-transform:uppercase;letter-spacing:0.12em;font-weight:700;">Résultats · {ref_client} · {datetime.now().strftime('%d/%m/%Y %H:%M')}</div>
+  <div style="font-family:'Playfair Display',serif;font-size:1.5rem;color:{BLANC};font-weight:700;">Rapport Actuariel — {besoin.upper()}</div>
+  <div style="font-size:0.8rem;color:{GRIS};">Méthode : <b style='color:{OR}'>{methode_u}</b>{"  ·  " + raison if raison else ""}</div>
 </div>""", unsafe_allow_html=True)
 
     if st.button("← Nouvelle analyse", key="btn_back_res"):
@@ -2101,14 +2109,13 @@ def page_resultats():
     st.markdown("<hr>", unsafe_allow_html=True)
 
     # ── KPIs ─────────────────────────────────────────────────────────────────
-    emoji_s = "🟢" if statut=="VERT" else "🟡" if statut=="AMBRE" else "🔴"
-    k1, k2, k3, k4, k5 = st.columns(5)
+    k1,k2,k3,k4,k5 = st.columns(5)
     for col, titre, valeur, sous in [
-        (k1, "STATUT",           f"{emoji_s} {statut}",  methode_u),
-        (k2, "BEST ESTIMATE S2", f"{be_val:,.0f} €",     "Art. 77 S2"),
-        (k3, "PROVISION P90",    f"{p90:,.0f} €",        "Mack IC 95%"),
-        (k4, "CV INTER-MÉTHODES",f"{cv_val:.1f}%",       "< 5% = VERT"),
-        (k5, "σ MACK",           f"{sig:,.0f} €",        "Incertitude"),
+        (k1,"STATUT",           f"{emoji_s} {statut}",  methode_u),
+        (k2,"BEST ESTIMATE S2", f"{be_val:,.0f} €",     "Art. 77 S2"),
+        (k3,"PROVISION P90",    f"{p90:,.0f} €",        "Mack IC 95%"),
+        (k4,"CV INTER-MÉTHODES",f"{cv_val:.1f}%",       "< 5% = VERT"),
+        (k5,"σ MACK",           f"{sig:,.0f} €",        "Incertitude"),
     ]:
         with col:
             st.markdown(f"""
@@ -2118,21 +2125,21 @@ def page_resultats():
   <div style="font-size:0.65rem;color:{GRIS};margin-top:3px;">{sous}</div>
 </div>""", unsafe_allow_html=True)
 
-    # ── TABLEAU 4 MÉTHODES ────────────────────────────────────────────────────
-    st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:8px 0 8px;'>◆ Résultats des 4 méthodes actuarielles</div>", unsafe_allow_html=True)
+    # ── TABLEAU TOUTES MÉTHODES ───────────────────────────────────────────────
+    st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:8px 0 8px;'>◆ Résultats de toutes les méthodes actuarielles</div>", unsafe_allow_html=True)
     poids = be.get("poids_methodes", {})
     rows = [
-        {"Méthode": "🔗 Chain Ladder",         "Réserve (€)": f"{cl.get('reserve_totale',0):,.0f}",          "Poids BE": f"{poids.get('cl',0)*100:.0f}%"},
-        {"Méthode": "📐 Mack 1993 (S2)",       "Réserve (€)": f"{mack.get('reserve_best_estimate',0):,.0f}", "Poids BE": f"{poids.get('mack',0)*100:.0f}%"},
-        {"Méthode": "⚖️ Bornhuetter-Ferguson", "Réserve (€)": f"{bf.get('reserve_totale',0):,.0f}",          "Poids BE": f"{poids.get('bf',0)*100:.0f}%"},
-        {"Méthode": "🌊 Cape Cod",             "Réserve (€)": f"{cc_r.get('reserve_totale',0):,.0f}",        "Poids BE": f"{poids.get('cc',0)*100:.0f}%"},
-        {"Méthode": "⭐ BEST ESTIMATE S2",     "Réserve (€)": f"{be_val:,.0f}",                              "Poids BE": "100%"},
+        {"Méthode": "🔗 Chain Ladder",              "Réserve (€)": f"{cl.get('reserve_totale',0):,.0f}",          "Poids BE": f"{poids.get('cl',0)*100:.0f}%",   "Statut": "✅"},
+        {"Méthode": "📐 Mack 1993 (IC 95%)",        "Réserve (€)": f"{mack.get('reserve_best_estimate',0):,.0f}", "Poids BE": f"{poids.get('mack',0)*100:.0f}%", "Statut": "✅"},
+        {"Méthode": "⚖️ Bornhuetter-Ferguson",      "Réserve (€)": f"{bf.get('reserve_totale',0):,.0f}",          "Poids BE": f"{poids.get('bf',0)*100:.0f}%",   "Statut": "✅"},
+        {"Méthode": "🌊 Cape Cod",                  "Réserve (€)": f"{cc_r.get('reserve_totale',0):,.0f}",        "Poids BE": f"{poids.get('cc',0)*100:.0f}%",   "Statut": "✅"},
+        {"Méthode": "🎲 Bootstrap ODP (P50)",       "Réserve (€)": f"{boot.get('p50',0):,.0f}",                   "Poids BE": "—",                               "Statut": "✅" if boot else "—"},
+        {"Méthode": "🎲 Bootstrap ODP (P90)",       "Réserve (€)": f"{boot.get('p90',0):,.0f}",                   "Poids BE": "—",                               "Statut": "✅" if boot else "—"},
+        {"Méthode": "🇩🇪 Munich CL",               "Réserve (€)": f"{munich.get('be_munich',0):,.0f}",            "Poids BE": "—",                               "Statut": "⚠️" if munich.get('proxy_utilise') else "✅"},
+        {"Méthode": "🏆 Crédibilité Bühlmann-Straub","Réserve (€)": f"{cred.get('be_credibilite',0):,.0f}",        "Poids BE": "—",                               "Statut": "✅"},
+        {"Méthode": "⭐ BEST ESTIMATE S2",          "Réserve (€)": f"{be_val:,.0f}",                              "Poids BE": "100%",                            "Statut": "→ Bilan S2"},
     ]
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
-
-    cred = r.get("credibilite", {})
-    if cred:
-        st.markdown(f"<div style='font-size:0.72rem;color:{GRIS};margin:4px 0 16px;'>Crédibilité Bühlmann-Straub : Z={cred.get('Z',0):.2f} ({cred.get('niveau_credibilite','')})</div>", unsafe_allow_html=True)
 
     # ── COMMENTAIRE ACTUARIEL ─────────────────────────────────────────────────
     com = r.get("commentaire", "")
@@ -2149,11 +2156,17 @@ def page_resultats():
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
+    # ── TRIANGLE — en expander fermé ──────────────────────────────────────────
+    fig_heat = graphiques.get("heatmap_triangle")
+    if fig_heat:
+        with st.expander("📐 Triangle de développement (cliquer pour afficher)", expanded=False):
+            try: st.plotly_chart(fig_heat, use_container_width=True)
+            except Exception: pass
+
     # ── GRAPHIQUES NATIFS A7 ──────────────────────────────────────────────────
     for nom, titre in [
-        ("heatmap_triangle",   "◆ Triangle de développement — Heatmap"),
-        ("facteurs_cl",        "◆ Facteurs de développement ±2σ"),
-        ("ibnr_par_annee",     "◆ IBNR par année de survenance"),
+        ("facteurs_cl",         "◆ Facteurs de développement ±2σ"),
+        ("ibnr_par_annee",      "◆ IBNR par année de survenance"),
         ("convergence_methodes","◆ Convergence des 4 méthodes avec IC Mack 95%"),
     ]:
         fig = graphiques.get(nom)
@@ -2168,8 +2181,7 @@ def page_resultats():
         dist = boot["distribution"]
         fig_boot = go.Figure()
         fig_boot.add_trace(go.Histogram(x=dist, nbinsx=50,
-            marker_color="rgba(201,168,76,0.7)",
-            marker_line=dict(color="#0F2E52", width=0.5)))
+            marker_color="rgba(201,168,76,0.7)", marker_line=dict(color="#0F2E52", width=0.5)))
         for p, lbl, clr in [(boot.get("p50",0),"P50","#2ECC71"),(boot.get("p90",0),"P90","#F39C12"),(boot.get("p99_5",0),"P99.5","#E74C3C")]:
             if p:
                 fig_boot.add_vline(x=p, line_color=clr, line_width=2, line_dash="dash",
@@ -2186,7 +2198,7 @@ def page_resultats():
 
     # ── WATERFALL N vs N-1 ────────────────────────────────────────────────────
     if comp and comp.get("waterfall"):
-        st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:16px 0 8px;'>◆ Waterfall Provisions N-1 → N</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:16px 0 8px;'>◆ Décomposition des écarts de provisions N-1 → N</div>", unsafe_allow_html=True)
         w = comp["waterfall"]
         labels = ["BE N-1","Run-off","Nouveaux","Réouvertures","Hypothèses","Résiduel","BE N"]
         values = [w.get("be_n1",0),w.get("effet_run_off",0),w.get("effet_nouveaux",0),
@@ -2199,7 +2211,7 @@ def page_resultats():
         fig_wf.update_layout(
             paper_bgcolor="#0F2E52", plot_bgcolor="#1B3A5C",
             font=dict(family="Inter",color="#F0F4F8",size=11),
-            title=dict(text="Décomposition des écarts de provisions N-1 → N", font=dict(color="#F0F4F8",size=13), x=0.01),
+            title=dict(text="Waterfall Provisions N-1 → N", font=dict(color="#F0F4F8",size=13), x=0.01),
             xaxis=dict(tickfont=dict(color="#F0F4F8",size=10), showgrid=False),
             yaxis=dict(visible=False), bargap=0.35, showlegend=False, height=380,
             margin=dict(t=40,b=40,l=20,r=20),
@@ -2210,14 +2222,27 @@ def page_resultats():
 
     # ── ANALYSES AVANCÉES ─────────────────────────────────────────────────────
     st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:8px 0 10px;'>◆ Analyses avancées</div>", unsafe_allow_html=True)
-    for label, key in [("🔚 Tail Factor","tail_factor"),("🔁 Back-Testing","back_testing"),("📅 ORSA Provisions","orsa_provisions"),("🇩🇪 Munich Chain Ladder","munich_cl")]:
-        obj = r.get(key, {})
-        if obj:
-            sc = VERT if obj.get("statut")=="VERT" else AMBRE if obj.get("statut")=="AMBRE" else ROUGE
-            st.markdown(f"<div style='background:{NAVY_L};border-left:3px solid {sc};border-radius:6px;padding:10px 14px;margin-bottom:8px;'><span style='font-size:0.78rem;color:{sc};font-weight:600;'>{label}</span><br><span style='font-size:0.75rem;color:{BLANC};'>{str(obj.get('message',''))[:200]}</span><br><span style='font-size:0.7rem;color:{GRIS};'>{str(obj.get('conseil',''))[:200]}</span></div>", unsafe_allow_html=True)
-    if comp:
-        sc2 = VERT if comp.get("statut_evolution")=="VERT" else AMBRE
-        st.markdown(f"<div style='background:{NAVY_L};border-left:3px solid {sc2};border-radius:6px;padding:10px 14px;margin-bottom:8px;'><span style='font-size:0.78rem;color:{sc2};font-weight:600;'>📊 Comparaison N vs N-1</span><br><span style='font-size:0.75rem;color:{BLANC};'>{str(comp.get('interpretation',''))}</span></div>", unsafe_allow_html=True)
+    for label, obj in [
+        ("🔚 Tail Factor",           tail),
+        ("🔁 Back-Testing",          bt),
+        ("📅 ORSA Provisions 5 ans", orsa),
+        ("🇩🇪 Munich Chain Ladder",  munich),
+        ("📊 Comparaison N vs N-1",  comp),
+        ("🏗️ Grands sinistres",      grands),
+        ("⚖️ Facteurs pondérés récents", fp),
+        ("📈 Stabilité des facteurs", stab),
+        ("🔍 Données manquantes",    dm),
+        ("🔄 Réconciliation comptable", recon),
+    ]:
+        if obj and obj.get("message"):
+            sc = VERT if obj.get("statut")=="VERT" else AMBRE if obj.get("statut")=="AMBRE" else ROUGE if obj.get("statut")=="ROUGE" else GRIS
+            conseil = obj.get("conseil","")
+            st.markdown(f"""
+<div style="background:{NAVY_L};border-left:3px solid {sc};border-radius:6px;padding:10px 14px;margin-bottom:8px;">
+  <div style="font-size:0.78rem;color:{sc};font-weight:600;">{label}</div>
+  <div style="font-size:0.78rem;color:{BLANC};margin-top:3px;">{obj.get('message','')}</div>
+  {f'<div style="font-size:0.72rem;color:{GRIS};margin-top:3px;">{conseil[:200]}</div>' if conseil else ''}
+</div>""", unsafe_allow_html=True)
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
@@ -2229,7 +2254,9 @@ def page_resultats():
         for sec in rapport_act.get("sections", []):
             with st.expander(f"§{sec.get('numero','')} — {sec.get('titre','')}"):
                 st.markdown(sec.get("contenu",""))
-        st.markdown(f"<div style='font-size:0.7rem;color:{GRIS};margin-top:10px;font-style:italic;'>{rapport_act.get('formule_signature','')[:300]}</div>", unsafe_allow_html=True)
+        sig_txt = rapport_act.get("formule_signature","")
+        if sig_txt:
+            st.markdown(f"<div style='font-size:0.7rem;color:{GRIS};margin-top:10px;font-style:italic;'>{sig_txt[:300]}</div>", unsafe_allow_html=True)
 
     # ── VALIDATION HYPOTHÈSES ─────────────────────────────────────────────────
     st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:16px 0 8px;'>◆ Validation des hypothèses actuarielles</div>", unsafe_allow_html=True)
@@ -2245,14 +2272,16 @@ def page_resultats():
                 ok  = val.get("ok", val.get("statut")=="VERT")
                 ic  = "✅" if ok else "⚠️"
                 msg = str(val.get("message", val.get("conseil","")))
-                st.markdown(f"<div style='background:{NAVY_L};border-radius:6px;padding:10px 14px;margin-bottom:6px;font-size:0.78rem;color:{BLANC};'>{ic} <b>{cle.upper()}</b> — {msg[:200]}</div>", unsafe_allow_html=True)
+                st.markdown(f"""
+<div style="background:{NAVY_L};border-radius:6px;padding:10px 14px;margin-bottom:6px;font-size:0.78rem;color:{BLANC};">
+  {ic} <b>{cle.upper()}</b> — {msg[:250]}
+</div>""", unsafe_allow_html=True)
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
     # ── EXPORT ───────────────────────────────────────────────────────────────
-    st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:8px 0 10px;'>◆ Export</div>", unsafe_allow_html=True)
-    col_e1, col_e2, _ = st.columns([1, 1, 3])
-    with col_e1:
+    e1, e2, _ = st.columns([1,1,3])
+    with e1:
         st.download_button(
             "⬇️ Export JSON complet",
             data=_json.dumps(r, indent=2, ensure_ascii=False, default=str),
@@ -2261,7 +2290,7 @@ def page_resultats():
             use_container_width=True,
             key="dl_res_json",
         )
-    with col_e2:
+    with e2:
         if st.button("📊 Voir Dashboard", use_container_width=True, key="res_to_dash"):
             nav_to("dashboard")
 

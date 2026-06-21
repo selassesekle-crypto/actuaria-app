@@ -2463,13 +2463,13 @@ class AgentA7Provisionnement:
         methodes_str= ', '.join(methodes_used)
 
         s1 = (
-            "Les provisions Non-Vie (branche " + branche + ") ont ete calculees"
+            "Les provisions Non-Vie (branche " + branche + ") ont été calculées"
             " par ActuarIA (Agent A7) au " + date_arrete + ".\n\n"
-            "Best Estimate : " + "{:,.0f}".format(be) + "E\n"
-            "Methodes : " + methodes_str + "\n"
+            "Best Estimate S2 : " + "{:,.0f}".format(be) + "E\n"
+            "Méthodes : " + methodes_str + "\n"
             "Tail factor : " + "{:.4f}".format(tf_valeur)
             + " (methode : " + tf_methode + ")\n\n"
-            "Meilleure methode back-testing : " + meilleure_m
+            "Meilleure méthode back-testing : " + meilleure_m
             + " (statut : " + bt_statut + ")"
         )
 
@@ -4650,61 +4650,51 @@ class AgentA7Provisionnement:
                 ibnr_cumul.append(cumul)
 
             from plotly.subplots import make_subplots
-            fig3 = make_subplots(specs=[[{"secondary_y": True}]])
-
-            # Barres IBNR (axe gauche) — fines et espacées
+            # Graphique horizontal : IBNR sur axe X, Année sur axe Y
+            fig3 = go.Figure()
             fig3.add_trace(go.Bar(
-                x             = labels_ann,
-                y             = ibnr,
+                y             = labels_ann,
+                x             = ibnr,
+                orientation   = 'h',
                 name          = "IBNR par année",
                 marker_color  = colors_bar,
                 marker_line   = dict(color=NAVY, width=1),
-                width         = 0.45,
                 opacity       = 0.85,
-                hovertemplate = "<b>%{x}</b><br>IBNR : <b>%{y:,.0f} €</b><extra></extra>",
-            ), secondary_y=False)
-
-            # Courbe cumul (axe droit)
-            fig3.add_trace(go.Scatter(
-                x             = labels_ann,
-                y             = ibnr_cumul,
-                name          = "IBNR cumulé",
-                mode          = 'lines+markers',
-                line          = dict(color=BLANC, width=2, shape='spline', smoothing=0.6),
-                marker        = dict(color=BLANC, size=7,
-                                     line=dict(color=NAVY_L, width=2)),
-                hovertemplate = "<b>%{x}</b><br>Cumul : <b>%{y:,.0f} €</b><extra></extra>",
-            ), secondary_y=True)
-
+                text          = [f"{v:,.0f} €" for v in ibnr],
+                textposition  = "outside",
+                textfont      = dict(color=BLANC, size=10),
+                hovertemplate = "<b>%{y}</b><br>IBNR : <b>%{x:,.0f} €</b><extra></extra>",
+            ))
             fig3.update_layout(
                 title       = dict(
-                    text = "📊 IBNR par année · Courbe de cumul",
+                    text = "📊 IBNR par année de survenance",
                     font = dict(color=BLANC, size=13), x=0.01,
                 ),
                 paper_bgcolor = NAVY,
                 plot_bgcolor  = NAVY_L,
                 font          = dict(family="Inter, Arial", color=BLANC),
-                margin        = dict(l=16, r=16, t=48, b=16),
-                height        = 300,
-                legend        = dict(
-                    bgcolor="rgba(0,0,0,0)", font=dict(color=BLANC, size=10),
-                    orientation="h", yanchor="bottom", y=1.02,
-                ),
+                margin        = dict(l=80, r=60, t=48, b=30),
+                height        = max(300, len(labels_ann) * 22),
+                showlegend    = False,
                 hoverlabel    = dict(bgcolor=NAVY_LL, bordercolor=OR,
                                      font_size=12, font_color=BLANC),
-                bargap        = 0.35,
+                xaxis = dict(
+                    title      = "IBNR (€)",
+                    showgrid   = True,
+                    gridcolor  = "rgba(255,255,255,0.05)",
+                    tickfont   = dict(color=GRIS, size=10),
+                    title_font = dict(color=GRIS, size=10),
+                    zeroline   = True,
+                    zerolinecolor = "rgba(255,255,255,0.1)",
+                ),
+                yaxis = dict(
+                    title      = "Année de survenance",
+                    showgrid   = False,
+                    tickfont   = dict(color=BLANC, size=10),
+                    title_font = dict(color=GRIS, size=10),
+                    autorange  = "reversed",
+                ),
             )
-            fig3.update_xaxes(showgrid=False, tickfont=dict(color=GRIS, size=10),
-                               zeroline=False)
-            fig3.update_yaxes(showgrid=True, gridcolor="rgba(255,255,255,0.05)",
-                               tickfont=dict(color=GRIS, size=10),
-                               title_text="IBNR (€)",
-                               title_font=dict(color=GRIS, size=10),
-                               secondary_y=False)
-            fig3.update_yaxes(showgrid=False, tickfont=dict(color=GRIS, size=10),
-                               title_text="Cumul (€)",
-                               title_font=dict(color=GRIS, size=10),
-                               secondary_y=True)
 
             graphiques['ibnr_par_annee'] = fig3
         except Exception as e:
@@ -5299,86 +5289,100 @@ class AgentA7Provisionnement:
         res_atypiques, sous_branche, statut_rag,
         methode_facteurs, taux_bf_manuel
     ) -> str:
-        """Commentaire actuaire sénior v2 avec alertes atypiques."""
-        emoji = {'VERT': '🟢', 'AMBRE': '🟡', 'ROUGE': '🔴'}[statut_rag]
-        be    = res_be.get('best_estimate', 0)
-        cv    = res_be.get('cv_inter_methodes', 0)
-        p90   = res_be.get('reserve_p90', 0)
-        nb_exc= len(res_atypiques.get('annees_exclues', []))
+        """Commentaire actuariel structuré — langage professionnel."""
+        emoji         = {'VERT': '🟢', 'AMBRE': '🟡', 'ROUGE': '🔴'}[statut_rag]
+        be            = res_be.get('best_estimate', 0)
+        cv            = res_be.get('cv_inter_methodes', 0)
+        p90           = res_be.get('reserve_p90', 0)
+        p75           = res_be.get('reserve_p75', 0)
+        be_cl         = res_cl.get('reserve_totale', 0)
+        be_bf         = res_bf.get('reserve_totale', 0)
+        be_cc         = res_cc.get('reserve_totale', 0)
+        be_mack       = res_mack.get('reserve_best_estimate', 0)
+        sigma         = res_mack.get('sigma_total', 0)
+        cv_mack       = res_mack.get('cv_pct', 0)
+        poids         = res_be.get('poids_methodes', {})
+        nb_atypiques  = res_atypiques.get('nb_atypiques', 0)
+        methodes_rob  = ['mediane', 'volume_weighted', 'trimmed_mean']
+        correction    = methode_facteurs in methodes_rob
+        taux_bf       = res_bf.get('taux_apriori', 0)
 
         n1 = (
-            f"{emoji} PROVISIONNEMENT v2 — {statut_rag}\n"
-            f"Sous-branche : {sous_branche}\n"
-            f"Méthode facteurs : {methode_facteurs}\n"
-            f"Taux BF : {'manuel=' + str(taux_bf_manuel) if taux_bf_manuel else 'auto'}\n\n"
-            f"BEST ESTIMATE S2 : {be:,.0f} €\n"
-            f"CV inter-méthodes : {cv:.1f}%\n"
-            f"Provision P90 : {p90:,.0f} €\n"
+            f"{emoji} PROVISIONNEMENT — {statut_rag}\n"
+            f"Branche : {sous_branche.upper()} · Méthode : {methode_facteurs} · "
+            f"Date : {__import__('datetime').datetime.now().strftime('%d/%m/%Y')}\n"
+            f"{'─'*60}\n\n"
+            f"RÉSULTATS PRINCIPAUX\n"
+            f"  Best Estimate S2 (Art. 77 DAS) : {be:>15,.0f} €\n"
+            f"  Provision P75 (prudentielle)   : {p75:>15,.0f} €\n"
+            f"  Provision P90 (stress test)    : {p90:>15,.0f} €\n"
+            f"  Écart-type Mack (σ)            : {sigma:>15,.0f} €\n"
+            f"  CV inter-méthodes              : {cv:>14.1f} %\n\n"
+            f"DÉTAIL PAR MÉTHODE\n"
+            f"  Chain Ladder                   : {be_cl:>15,.0f} € (poids {poids.get('cl',0)*100:.0f}%)\n"
+            f"  Mack 1993 (stochastique)       : {be_mack:>15,.0f} € (poids {poids.get('mack',0)*100:.0f}%)\n"
+            f"  Bornhuetter-Ferguson (LR={taux_bf:.0%}): {be_bf:>12,.0f} € (poids {poids.get('bf',0)*100:.0f}%)\n"
+            f"  Cape Cod                       : {be_cc:>15,.0f} € (poids {poids.get('cc',0)*100:.0f}%)\n"
         )
 
-        if nb_exc > 0:
+        if nb_atypiques > 0:
             n1 += (
-                f"\n⚠️  ANNÉES ATYPIQUES EXCLUES : {res_atypiques['annees_exclues']}\n"
+                f"\nANALYSE DE ROBUSTESSE\n"
+                f"  {nb_atypiques} facteur(s) atypique(s) détecté(s) sur le triangle (seuil ±2σ).\n"
             )
-
-        if res_atypiques.get('alertes'):
-            n1 += "\nALERTES FACTEURS :\n"
-            for alerte in res_atypiques['alertes'][:5]:
-                n1 += f"  {alerte}\n"
-
-        methodes_robustes = ['mediane', 'volume_weighted', 'trimmed_mean']
-        correction_app    = methode_facteurs in methodes_robustes
-        nb_atypiques      = res_atypiques.get('nb_atypiques', 0)
+            if correction:
+                n1 += (
+                    f"  ✅ Correction automatique appliquée : méthode '{methode_facteurs}'\n"
+                    f"     substituée à 'standard' pour neutraliser le biais.\n"
+                    f"     Impact estimé : BE robuste ({be:,.0f}€) vs BE standard (surestimé).\n"
+                )
+            else:
+                n1 += (
+                    f"  ⚠️  Méthode standard utilisée malgré les anomalies.\n"
+                    f"     Recommandation : utiliser methode_facteurs='mediane'.\n"
+                )
 
         if statut_rag == 'VERT':
             n2 = (
-                "DIAGNOSTIC :\n"
-                "Triangle sans anomalie détectée. "
-                f"Les {res_be.get('nb_methodes', 4)} méthodes convergent "
-                f"avec un CV de {cv:.1f}%."
-            )
-            n3 = (
-                "RECOMMANDATION :\n"
-                "→ Best Estimate retenu pour le bilan S2.\n"
-                "→ Documenter la méthode de facteurs dans l'audit trail."
+                f"DIAGNOSTIC\n"
+                f"  Le triangle de développement ne présente pas d'anomalie structurelle.\n"
+                f"  Les 4 méthodes convergent vers un Best Estimate cohérent (CV={cv:.1f}%).\n"
+                f"  L'incertitude de réserve (σ={sigma:,.0f}€, CV Mack={cv_mack:.1f}%) est dans les\n"
+                f"  normes du marché pour cette branche.\n\n"
+                f"RECOMMANDATION\n"
+                f"  → Best Estimate de {be:,.0f}€ retenu pour inscription au bilan S2.\n"
+                f"  → Provision P90 de {p90:,.0f}€ pour le stress test ORSA.\n"
+                f"  → Documenter la méthode '{methode_facteurs}' dans l'audit trail ACPR.\n"
+                f"  → Revue trimestrielle du triangle recommandée."
             )
         elif statut_rag == 'AMBRE':
-            be_std_note = ""
-            if nb_atypiques > 0 and correction_app:
-                be_std_note = (
-                    f"\n✅ CORRECTION APPLIQUÉE : méthode '{methode_facteurs}' "
-                    f"utilisée à la place de 'standard'.\n"
-                    f"   BE robuste ({methode_facteurs}) = {be:,.0f} €\n"
-                    f"   BE standard (non corrigé) = potentiellement surestimé."
-                )
             n2 = (
-                "DIAGNOSTIC :\n"
-                f"{nb_atypiques} année(s) atypique(s) détectée(s). "
-                f"{be_std_note}\n"
-                "Les provisions ont été recalculées avec la méthode robuste. "
-                "L'actuaire doit valider les exclusions avant signature."
-            )
-            n3 = (
-                "RECOMMANDATION :\n"
-                "→ Vérifier les années atypiques avec le client.\n"
-                "→ Documenter la décision dans le rapport d'audit.\n"
-                f"→ La méthode '{methode_facteurs}' a corrigé le biais.\n"
-                "→ Comparer BE robuste vs BE standard pour quantifier l'impact."
+                f"DIAGNOSTIC\n"
+                f"  Le triangle présente {nb_atypiques} facteur(s) atypique(s) nécessitant attention.\n"
+                f"  {'La méthode médiane a été appliquée automatiquement pour corriger le biais.' if correction else 'La correction manuelle est recommandée.'}\n"
+                f"  La divergence entre CL ({be_cl:,.0f}€) et BF ({be_bf:,.0f}€) de "
+                f"{abs(be_cl-be_bf)/max(be_cl,1)*100:.1f}% reste acceptable\n"
+                f"  mais mérite une analyse des années récentes.\n\n"
+                f"RECOMMANDATION\n"
+                f"  → Valider les {nb_atypiques} années atypiques avec l'équipe sinistres.\n"
+                f"  → Obtenir l'avis de l'actuaire désigné avant signature du bilan.\n"
+                f"  → Constituer une provision de risque complémentaire si CV > 10%.\n"
+                f"  → Documenter les décisions dans le dossier actuariel annuel."
             )
         else:
-            # ROUGE = atypique détecté sans correction (méthode standard)
             n2 = (
-                "DIAGNOSTIC :\n"
-                f"Anomalie(s) détectée(s) dans le triangle ({nb_exc} année(s)). "
-                f"La méthode '{methode_facteurs}' ne corrige pas ce biais.\n"
-                f"BE actuel = {be:,.0f} € — potentiellement surestimé."
+                f"DIAGNOSTIC\n"
+                f"  Triangle présentant des anomalies significatives non corrigées.\n"
+                f"  CV inter-méthodes = {cv:.1f}% (seuil d'alerte : 10%).\n"
+                f"  Le Best Estimate de {be:,.0f}€ est potentiellement biaisé.\n\n"
+                f"RECOMMANDATION\n"
+                f"  → NE PAS utiliser ce BE pour le bilan S2 sans correction.\n"
+                f"  → Relancer l'analyse avec methode_facteurs='mediane'.\n"
+                f"  → Consulter l'actuaire désigné avant toute décision.\n"
+                f"  → Vérifier la qualité des données source (sinistres bruts)."
             )
-            n3 = (
-                "RECOMMANDATION :\n"
-                "→ Utiliser methode_facteurs='mediane' pour corriger le biais.\n"
-                "→ OU exclure les années atypiques via annees_a_exclure=[...].\n"
-                "→ Ne pas signer ce BE sans correction actuarielle."
-            )
+
+        return f"{n1}\n{'─'*60}\n{n2}"
 
         return f"{n1}\n{n2}\n\n{n3}"
 
