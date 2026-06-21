@@ -1778,7 +1778,7 @@ def _executer_analyse(besoin, direction, equipe, client):
                         else:
                             df_a7[_col_an] = _s.astype(int)
                 a7 = AgentA7Provisionnement(audit_path=_tmp, models_path=_tmp, verbose=False)
-                r7 = a7.run(source=df_a7, generer_graphiques=False)
+                r7 = a7.run(source=df_a7, generer_graphiques=True)
                 resultats["principal"] = r7
 
             # ── TARIFICATION ────────────────────────────────────────────────
@@ -1847,7 +1847,7 @@ def _executer_analyse(besoin, direction, equipe, client):
                         tri = _np.hstack([tri, _np.zeros((n_rows, n_max - n_cols))])
                     if n_rows < n_max:
                         tri = _np.vstack([tri, _np.zeros((n_max - n_rows, n_max))])
-                    r7 = a7.run(source=tri, mode_declare='cumule', generer_graphiques=False)
+                    r7 = a7.run(source=tri, mode_declare='cumule', generer_graphiques=True)
                 else:
                     r7 = a7.run(generer_graphiques=False)
                 resultats["principal"] = r7
@@ -2048,60 +2048,154 @@ def _executer_analyse(besoin, direction, equipe, client):
 
 
 def _afficher_resultats(resultats, besoin, ref_client):
-    """Affiche les résultats d'analyse dans la page."""
+    """Affiche les résultats d'analyse dans la page — version complète."""
+    import json
     r = resultats.get("principal", {})
     if not r:
         st.warning("Aucun résultat à afficher.")
         return
 
-    statut = r.get("statut_rag", r.get("statut", "N/A"))
-    success = r.get("success", False)
+    statut  = r.get("statut_rag", r.get("statut", "N/A"))
 
-    # Badge statut
-    col_st, _ = st.columns([1,3])
+    # ── BADGE STATUT ─────────────────────────────────────────────────────────
+    col_st, col_ref, _ = st.columns([1.2, 1.5, 2])
     with col_st:
         if statut == "VERT":
-            st.success(f"✅ VERT — Analyse validée")
+            st.success("✅ VERT — Validé")
         elif statut == "AMBRE":
-            st.warning(f"⚠️ AMBRE — Vérifications recommandées")
+            st.warning("⚠️ AMBRE — À vérifier")
         elif statut == "ROUGE":
-            st.error(f"❌ ROUGE — Action requise")
+            st.error("❌ ROUGE — Action requise")
         else:
-            st.info(f"ℹ️ Analyse terminée")
+            st.info("ℹ️ Terminé")
+    with col_ref:
+        st.markdown(f"<div style='font-size:0.72rem;color:{GRIS};padding-top:8px;'>Réf : {ref_client} · {datetime.now().strftime('%d/%m/%Y %H:%M')}</div>", unsafe_allow_html=True)
 
-    # Commentaire actuariel
-    com = r.get("commentaire","")
-    if com:
-        with st.expander("📋 Rapport actuariel complet", expanded=True):
-            st.code(com, language=None)
+    # ── ONGLETS RÉSULTATS ────────────────────────────────────────────────────
+    tabs = st.tabs(["📊 Résultats", "📈 Graphiques", "📋 Rapport", "✅ Hypothèses", "⬇️ Export"])
 
-    # Hypothèses
-    hyp = r.get("hypotheses", [])
-    if hyp:
-        st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:10px 0 6px;'>◆ Hypothèses validées</div>", unsafe_allow_html=True)
-        for h in hyp:
-            ic = "✅" if h.get("statut")=="VALIDÉE" else "⚠️"
-            hid = h.get("id","")
-            htxt = h.get("hypothese","")[:80]
-            hval = h.get("valeur","")[:80]
-            hst  = h.get("statut","")
-            st.markdown(f"**{ic} [{hid}]** {htxt}  \n`{hval}` — *{hst}*")
+    # ── ONGLET 1 : RÉSULTATS ─────────────────────────────────────────────────
+    with tabs[0]:
+        # KPIs principaux
+        be   = r.get("best_estimate", {})
+        mack = r.get("mack", {})
+        cl   = r.get("chain_ladder", {})
+        bf   = r.get("bf", {})
+        cc   = r.get("cape_cod", {})
 
-    # Boutons export
-    st.markdown("<hr>", unsafe_allow_html=True)
-    import json
-    col1, col2 = st.columns(2)
-    with col1:
-        st.download_button(
-            "⬇️ Exporter résultats (JSON)",
-            data=json.dumps(r, indent=2, ensure_ascii=False, default=str),
-            file_name=f"actuaria_{besoin}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-            mime="application/json",
-            use_container_width=True,
-        )
-    with col2:
-        if st.button("📊 Voir Dashboard", use_container_width=True, key="res_dash"):
-            nav_to("dashboard")
+        if be or mack:
+            st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin-bottom:8px;'>◆ Best Estimate Solvabilité 2</div>", unsafe_allow_html=True)
+            k1, k2, k3, k4 = st.columns(4)
+            be_val  = be.get("best_estimate", 0)
+            cv_val  = be.get("cv_inter_methodes", mack.get("cv_pct", 0))
+            p90_val = be.get("reserve_p90", be_val * 1.08)
+            sig_val = mack.get("sigma_mack", 0)
+            with k1:
+                st.metric("Best Estimate S2", f"{be_val:,.0f} €")
+            with k2:
+                st.metric("CV inter-méthodes", f"{cv_val:.1f}%")
+            with k3:
+                st.metric("Provision P90", f"{p90_val:,.0f} €")
+            with k4:
+                st.metric("σ Mack", f"{sig_val:,.0f} €")
+
+        # Tableau des 4 méthodes
+        methodes_data = []
+        if cl.get("be_chain_ladder"):
+            methodes_data.append({"Méthode": "Chain Ladder", "Réserve (€)": f"{cl['be_chain_ladder']:,.0f}", "Statut": "✅"})
+        if mack.get("reserve_mack"):
+            methodes_data.append({"Méthode": "Mack 1993", "Réserve (€)": f"{mack['reserve_mack']:,.0f}", "Statut": "✅"})
+        if bf.get("be_bf"):
+            methodes_data.append({"Méthode": "Bornhuetter-Ferguson", "Réserve (€)": f"{bf['be_bf']:,.0f}", "Statut": "✅"})
+        if cc.get("be_cc"):
+            methodes_data.append({"Méthode": "Cape Cod", "Réserve (€)": f"{cc['be_cc']:,.0f}", "Statut": "✅"})
+
+        if methodes_data:
+            st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:14px 0 6px;'>◆ Convergence des 4 méthodes</div>", unsafe_allow_html=True)
+            st.dataframe(pd.DataFrame(methodes_data), use_container_width=True, hide_index=True)
+
+        # Alertes atypiques
+        atypiques = r.get("atypiques", {})
+        ann_exc   = atypiques.get("annees_exclues", [])
+        if ann_exc:
+            st.warning(f"⚠️ {len(ann_exc)} années atypiques exclues automatiquement : {ann_exc}")
+            methode_utilisee = r.get("best_estimate", {}).get("methode_facteurs", be.get("methode_facteurs",""))
+            if methode_utilisee and methode_utilisee != "standard":
+                st.success(f"✅ Correction automatique appliquée → méthode **{methode_utilisee}**")
+
+        # Commentaire synthétique
+        com = r.get("commentaire", "")
+        if com:
+            st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:14px 0 6px;'>◆ Diagnostic actuariel</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='background:{NAVY_L};border-radius:8px;padding:12px 16px;font-size:0.8rem;color:{BLANC};white-space:pre-wrap;font-family:monospace;'>{com}</div>", unsafe_allow_html=True)
+
+    # ── ONGLET 2 : GRAPHIQUES ────────────────────────────────────────────────
+    with tabs[1]:
+        graphiques = r.get("graphiques", {})
+        graphiques_av = r.get("graphiques_avances", {})
+        tous_graphiques = {**graphiques, **graphiques_av}
+
+        if tous_graphiques:
+            for nom, fig in tous_graphiques.items():
+                if fig is not None:
+                    try:
+                        st.plotly_chart(fig, use_container_width=True)
+                    except Exception:
+                        pass
+        else:
+            st.info("Graphiques non disponibles — relancez l'analyse avec les graphiques activés.")
+
+    # ── ONGLET 3 : RAPPORT ───────────────────────────────────────────────────
+    with tabs[2]:
+        rapport_act = r.get("rapport_actuaire", {})
+        if rapport_act:
+            st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin-bottom:10px;'>◆ Rapport Actuaire Désigné</div>", unsafe_allow_html=True)
+            for section, contenu in rapport_act.items():
+                if contenu:
+                    with st.expander(f"📄 {section.replace('_',' ').title()}", expanded=False):
+                        if isinstance(contenu, dict):
+                            st.json(contenu)
+                        elif isinstance(contenu, str):
+                            st.markdown(contenu)
+                        else:
+                            st.write(contenu)
+        else:
+            com = r.get("commentaire", "")
+            if com:
+                st.markdown(f"<pre style='background:{NAVY_L};padding:16px;border-radius:8px;font-size:0.8rem;color:{BLANC};white-space:pre-wrap;'>{com}</pre>", unsafe_allow_html=True)
+
+    # ── ONGLET 4 : HYPOTHÈSES ────────────────────────────────────────────────
+    with tabs[3]:
+        validation = r.get("validation", {})
+        hyp = r.get("hypotheses", validation.get("hypotheses", []))
+        if hyp:
+            for h in hyp:
+                ic  = "✅" if h.get("statut") in ["VALIDÉE","OK","VERT"] else "⚠️"
+                txt = f"**{ic} [{h.get('id','')}]** {h.get('hypothese','')[:100]}  \n`{h.get('valeur','')[:100]}` — *{h.get('statut','')}*"
+                st.markdown(txt)
+        else:
+            alertes_val = validation.get("alertes", [])
+            if alertes_val:
+                for a in alertes_val:
+                    st.markdown(f"• {a}")
+            else:
+                st.info("Hypothèses validées automatiquement par A7.")
+
+    # ── ONGLET 5 : EXPORT ────────────────────────────────────────────────────
+    with tabs[4]:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.download_button(
+                "⬇️ Résultats complets (JSON)",
+                data=json.dumps(r, indent=2, ensure_ascii=False, default=str),
+                file_name=f"actuaria_{besoin}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                mime="application/json",
+                use_container_width=True,
+                key=f"dl_json_{besoin}",
+            )
+        with col2:
+            if st.button("📊 Voir Dashboard agent", use_container_width=True, key="res_dash"):
+                nav_to("dashboard")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE RAPPORTS CONSOLIDÉS
