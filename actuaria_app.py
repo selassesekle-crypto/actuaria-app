@@ -1746,8 +1746,15 @@ def _executer_analyse(besoin, direction, equipe, client):
             _os.makedirs(_tmp, exist_ok=True)
             resultats = {}
 
+            # ── SINISTRES BRUTS → A7 directement ────────────────────────
+            if besoin == "sinistres":
+                from a7_provisionnement import AgentA7Provisionnement
+                a7 = AgentA7Provisionnement(audit_path=_tmp, models_path=_tmp, verbose=False)
+                r7 = a7.run(source=df, generer_graphiques=False)
+                resultats["principal"] = r7
+
             # ── TARIFICATION ────────────────────────────────────────────────
-            if besoin in ["prime_glm","prime_ml","prime_dl","selection","sinistres"]:
+            elif besoin in ["prime_glm","prime_ml","prime_dl","selection"]:
                 from a1_ingestion import AgentA1Ingestion
                 from a2_preprocessing import AgentA2Preprocessing
 
