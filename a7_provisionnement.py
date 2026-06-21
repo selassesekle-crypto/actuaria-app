@@ -248,6 +248,30 @@ class AgentA7Provisionnement:
             # Triangle robuste (exclusion années atypiques)
             C_robuste = self._appliquer_exclusions(C, res_atypiques['annees_exclues'])
 
+            # ── SÉLECTION AUTOMATIQUE DE LA MÉTHODE ──────────────────────────
+            # Si des années atypiques sont détectées ET méthode=standard
+            # → basculer automatiquement vers méthode robuste
+            n_atypiques = len(res_atypiques.get('annees_exclues', []))
+            if methode_facteurs == 'standard' and n_atypiques > 0:
+                if n_atypiques >= 8:
+                    methode_facteurs = 'mediane'
+                    raison_methode = f"Basculement automatique → médiane ({n_atypiques} anomalies — robustesse maximale requise)"
+                elif n_atypiques >= 4:
+                    methode_facteurs = 'trimmed_mean'
+                    raison_methode = f"Basculement automatique → trimmed_mean ({n_atypiques} anomalies — écrêtage des extrêmes)"
+                else:
+                    methode_facteurs = 'volume_weighted'
+                    raison_methode = f"Basculement automatique → volume_weighted ({n_atypiques} anomalie(s) — pondération par volume)"
+                rapport['alertes'].append({
+                    'niveau': 'INFO',
+                    'message': raison_methode,
+                })
+                logger.info(raison_methode)
+            else:
+                raison_methode = f"Méthode {methode_facteurs} conservée (aucune anomalie)"
+
+            rapport['raison_methode'] = raison_methode
+
             # ── ÉTAPE 3 : CHAIN LADDER ROBUSTE ───────────────────────────────
             logger.info(f"Étape 3/8 : Chain Ladder ({methode_facteurs})")
             res_cl = self._chain_ladder_robuste(C, C_robuste, methode_facteurs)
