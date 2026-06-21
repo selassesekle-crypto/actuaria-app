@@ -1640,13 +1640,63 @@ def page_analyse():
     # ── ÉTAPE 5 : LANCER ─────────────────────────────────────────────────────
     col_btn, col_rst, _ = st.columns([1.2, 1, 2])
 
-    # ── Mapping interactif si fichier uploadé et pas encore confirmé ──────────
-    if (st.session_state.get("analyse_df") is not None
-            and not st.session_state.get("mapping_confirme", False)
-            and besoin in VARIABLES_ATTENDUES
-            and VARIABLES_ATTENDUES.get(besoin)):
-        _afficher_mapping_interactif(st.session_state["analyse_df"], besoin)
-        return
+    # ── Mapping interactif INLINE ────────────────────────────────────────────
+    _vars = VARIABLES_ATTENDUES.get(besoin, [])
+    _df_upload = st.session_state.get("analyse_df")
+    _mapping_fait = st.session_state.get("mapping_confirme", False)
+
+    if _df_upload is not None and _vars and not _mapping_fait:
+        _cols_client = list(_df_upload.columns)
+        _options = ["— Non disponible —"] + _cols_client
+        _mapping_auto = _suggerer_mapping_auto(_cols_client, besoin)
+
+        st.markdown(f"""
+<div style="background:{NAVY_L};border:1px solid rgba(201,168,76,0.3);border-radius:10px;padding:16px;margin:10px 0;">
+  <div style="font-size:0.65rem;color:{OR};text-transform:uppercase;font-weight:700;margin-bottom:6px;">
+    🔗 Mapping des colonnes
+  </div>
+  <div style="font-size:0.78rem;color:{GRIS};">
+    ActuarIA a détecté automatiquement les correspondances. Vérifiez et corrigez si nécessaire.
+  </div>
+</div>""", unsafe_allow_html=True)
+
+        # Initialiser session_state pour chaque variable
+        for _var in _vars:
+            _key = f"map_{besoin}_{_var}"
+            if _key not in st.session_state:
+                _sug = _mapping_auto.get(_var, "— Non disponible —")
+                st.session_state[_key] = _sug
+
+        # Afficher les selectbox
+        _ui_cols = st.columns(2)
+        for _i, _var in enumerate(_vars):
+            with _ui_cols[_i % 2]:
+                _key = f"map_{besoin}_{_var}"
+                _cur = st.session_state.get(_key, "— Non disponible —")
+                _idx = _options.index(_cur) if _cur in _options else 0
+                st.selectbox(f"**{_var}**", options=_options, index=_idx, key=_key,
+                             help=f"Synonymes : {', '.join(SYNONYMES_AUTO.get(_var, [])[:4])}")
+
+        # Compter variables mappées
+        _mapped = {v: st.session_state.get(f"map_{besoin}_{v}") 
+                   for v in _vars 
+                   if st.session_state.get(f"map_{besoin}_{v}","— Non disponible —") != "— Non disponible —"}
+        _n_ok = len(_mapped)
+        _col = VERT if _n_ok == len(_vars) else AMBRE if _n_ok >= len(_vars)*0.7 else ROUGE
+        st.markdown(f"<div style='font-size:0.8rem;color:{_col};margin:8px 0;'>{'✅' if _n_ok==len(_vars) else '⚠️'} {_n_ok}/{len(_vars)} variables mappées</div>", unsafe_allow_html=True)
+
+        _c1, _c2 = st.columns(2)
+        with _c1:
+            if st.button("✅ Confirmer le mapping", type="primary", use_container_width=True, key=f"btn_confirm_{besoin}"):
+                _rename = {v: k for k, v in _mapped.items()}
+                st.session_state["analyse_df"] = _df_upload.rename(columns=_rename)
+                st.session_state["mapping_confirme"] = True
+                st.rerun()
+        with _c2:
+            if st.button("⏭️ Ignorer", use_container_width=True, key=f"btn_ignore_{besoin}"):
+                st.session_state["mapping_confirme"] = True
+                st.rerun()
+        st.stop()  # Stopper ici — ne pas afficher le bouton Lancer
 
     # Vérification données disponibles
     pret = True
