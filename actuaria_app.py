@@ -2048,140 +2048,203 @@ def _executer_analyse(besoin, direction, equipe, client):
 
 
 def _afficher_resultats(resultats, besoin, ref_client):
-    """Affiche les résultats d'analyse dans la page — version complète."""
+    """Affiche les résultats complets d'analyse."""
     import json
     r = resultats.get("principal", {})
     if not r:
         st.warning("Aucun résultat à afficher.")
         return
 
-    statut  = r.get("statut_rag", r.get("statut", "N/A"))
+    statut = r.get("statut_rag", r.get("statut", "N/A"))
 
-    # ── BADGE STATUT ─────────────────────────────────────────────────────────
-    col_st, col_ref, _ = st.columns([1.2, 1.5, 2])
-    with col_st:
-        if statut == "VERT":
-            st.success("✅ VERT — Validé")
-        elif statut == "AMBRE":
-            st.warning("⚠️ AMBRE — À vérifier")
-        elif statut == "ROUGE":
-            st.error("❌ ROUGE — Action requise")
-        else:
-            st.info("ℹ️ Terminé")
-    with col_ref:
-        st.markdown(f"<div style='font-size:0.72rem;color:{GRIS};padding-top:8px;'>Réf : {ref_client} · {datetime.now().strftime('%d/%m/%Y %H:%M')}</div>", unsafe_allow_html=True)
+    # ── BADGE STATUT + RÉFÉRENCE ─────────────────────────────────────────────
+    c1, c2, _ = st.columns([1.2, 2, 2])
+    with c1:
+        if statut == "VERT":   st.success("✅ VERT — Validé")
+        elif statut == "AMBRE": st.warning("⚠️ AMBRE — À vérifier")
+        elif statut == "ROUGE": st.error("❌ ROUGE — Action requise")
+        else:                   st.info("ℹ️ Terminé")
+    with c2:
+        methode_utilisee = r.get("best_estimate", {}).get("methode_facteurs", "standard")
+        raison = r.get("rapport", {}).get("raison_methode", "")
+        st.markdown(f"<div style='font-size:0.72rem;color:{GRIS};padding-top:8px;'>{ref_client} · {datetime.now().strftime('%d/%m/%Y %H:%M')} · Méthode : <b style=color:{OR}>{methode_utilisee}</b></div>", unsafe_allow_html=True)
+        if raison:
+            st.markdown(f"<div style='font-size:0.68rem;color:{AMBRE};'>ℹ️ {raison}</div>", unsafe_allow_html=True)
 
-    # ── ONGLETS RÉSULTATS ────────────────────────────────────────────────────
-    tabs = st.tabs(["📊 Résultats", "📈 Graphiques", "📋 Rapport", "✅ Hypothèses", "⬇️ Export"])
+    st.markdown("<hr>", unsafe_allow_html=True)
 
-    # ── ONGLET 1 : RÉSULTATS ─────────────────────────────────────────────────
+    # ── ONGLETS ──────────────────────────────────────────────────────────────
+    tabs = st.tabs(["📊 Résultats & Méthodes", "📋 Rapport actuariel", "🔍 Analyses avancées", "✅ Validation", "⬇️ Export"])
+
+    # ════════════════════════════════════════════════════════════════════════
+    # ONGLET 1 — RÉSULTATS & MÉTHODES
+    # ════════════════════════════════════════════════════════════════════════
     with tabs[0]:
-        # KPIs principaux
         be   = r.get("best_estimate", {})
         mack = r.get("mack", {})
         cl   = r.get("chain_ladder", {})
         bf   = r.get("bf", {})
         cc   = r.get("cape_cod", {})
+        cred = r.get("credibilite", {})
 
-        if be or mack:
-            st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin-bottom:8px;'>◆ Best Estimate Solvabilité 2</div>", unsafe_allow_html=True)
-            k1, k2, k3, k4 = st.columns(4)
-            be_val  = be.get("best_estimate", 0)
-            cv_val  = be.get("cv_inter_methodes", mack.get("cv_pct", 0))
-            p90_val = be.get("reserve_p90", be_val * 1.08)
-            sig_val = mack.get("sigma_mack", 0)
-            with k1:
-                st.metric("Best Estimate S2", f"{be_val:,.0f} €")
-            with k2:
-                st.metric("CV inter-méthodes", f"{cv_val:.1f}%")
-            with k3:
-                st.metric("Provision P90", f"{p90_val:,.0f} €")
-            with k4:
-                st.metric("σ Mack", f"{sig_val:,.0f} €")
+        # KPIs principaux
+        be_val  = be.get("best_estimate", 0)
+        cv_val  = be.get("cv_inter_methodes", 0)
+        p90_val = be.get("reserve_p90", mack.get("reserve_p90", 0))
+        sig_val = mack.get("sigma_total", be.get("sigma_mack", 0))
+
+        st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin-bottom:10px;'>◆ Best Estimate Solvabilité 2</div>", unsafe_allow_html=True)
+        k1, k2, k3, k4 = st.columns(4)
+        with k1: st.metric("Best Estimate S2", f"{be_val:,.0f} €")
+        with k2: st.metric("CV inter-méthodes", f"{cv_val:.1f}%")
+        with k3: st.metric("Provision P90", f"{p90_val:,.0f} €")
+        with k4: st.metric("σ Mack", f"{sig_val:,.0f} €")
 
         # Tableau des 4 méthodes
-        methodes_data = []
-        if cl.get("be_chain_ladder"):
-            methodes_data.append({"Méthode": "Chain Ladder", "Réserve (€)": f"{cl['be_chain_ladder']:,.0f}", "Statut": "✅"})
-        if mack.get("reserve_mack"):
-            methodes_data.append({"Méthode": "Mack 1993", "Réserve (€)": f"{mack['reserve_mack']:,.0f}", "Statut": "✅"})
-        if bf.get("be_bf"):
-            methodes_data.append({"Méthode": "Bornhuetter-Ferguson", "Réserve (€)": f"{bf['be_bf']:,.0f}", "Statut": "✅"})
-        if cc.get("be_cc"):
-            methodes_data.append({"Méthode": "Cape Cod", "Réserve (€)": f"{cc['be_cc']:,.0f}", "Statut": "✅"})
+        st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:16px 0 8px;'>◆ Résultats des 4 méthodes actuarielles</div>", unsafe_allow_html=True)
+        poids = be.get("poids_methodes", {})
+        rows = [
+            {"Méthode": "🔗 Chain Ladder", "Réserve (€)": f"{cl.get('reserve_totale',0):,.0f}", "Poids BE": f"{poids.get('cl',0)*100:.0f}%", "Statut": "✅"},
+            {"Méthode": "📐 Mack 1993 (S2)", "Réserve (€)": f"{mack.get('reserve_best_estimate',0):,.0f}", "Poids BE": f"{poids.get('mack',0)*100:.0f}%", "IC 95%": f"[{mack.get('reserve_p75',0):,.0f} — {mack.get('reserve_p90',0):,.0f}]"},
+            {"Méthode": "⚖️ Bornhuetter-Ferguson", "Réserve (€)": f"{bf.get('reserve_totale',0):,.0f}", "Poids BE": f"{poids.get('bf',0)*100:.0f}%", "Statut": "✅"},
+            {"Méthode": "🌊 Cape Cod", "Réserve (€)": f"{cc.get('reserve_totale',0):,.0f}", "Poids BE": f"{poids.get('cc',0)*100:.0f}%", "Statut": "✅"},
+            {"Méthode": "⭐ BEST ESTIMATE S2", "Réserve (€)": f"{be_val:,.0f}", "Poids BE": "100%", "Statut": "→ Bilan S2"},
+        ]
+        df_methodes = pd.DataFrame(rows)
+        st.dataframe(df_methodes, use_container_width=True, hide_index=True)
 
-        if methodes_data:
-            st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:14px 0 6px;'>◆ Convergence des 4 méthodes</div>", unsafe_allow_html=True)
-            st.dataframe(pd.DataFrame(methodes_data), use_container_width=True, hide_index=True)
+        # Crédibilité
+        if cred:
+            st.markdown(f"<div style='font-size:0.72rem;color:{GRIS};margin-top:6px;'>Crédibilité Bühlmann-Straub : Z={cred.get('Z',0):.2f} ({cred.get('niveau_credibilite','')}) — {cred.get('interpretation','')[:120]}</div>", unsafe_allow_html=True)
 
-        # Alertes atypiques
+        # Facteurs atypiques — information sans exclusion
         atypiques = r.get("atypiques", {})
-        ann_exc   = atypiques.get("annees_exclues", [])
-        if ann_exc:
-            st.warning(f"⚠️ {len(ann_exc)} années atypiques exclues automatiquement : {ann_exc}")
-            methode_utilisee = r.get("best_estimate", {}).get("methode_facteurs", be.get("methode_facteurs",""))
-            if methode_utilisee and methode_utilisee != "standard":
-                st.success(f"✅ Correction automatique appliquée → méthode **{methode_utilisee}**")
+        alertes_f = atypiques.get("alertes", [])
+        if alertes_f:
+            st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:16px 0 6px;'>◆ Facteurs atypiques détectés — traités par méthode {methode_utilisee}</div>", unsafe_allow_html=True)
+            for a in alertes_f[:5]:
+                st.markdown(f"<div style='font-size:0.75rem;color:{AMBRE};'>{a}</div>", unsafe_allow_html=True)
 
-        # Commentaire synthétique
-        com = r.get("commentaire", "")
-        if com:
-            st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:14px 0 6px;'>◆ Diagnostic actuariel</div>", unsafe_allow_html=True)
-            st.markdown(f"<div style='background:{NAVY_L};border-radius:8px;padding:12px 16px;font-size:0.8rem;color:{BLANC};white-space:pre-wrap;font-family:monospace;'>{com}</div>", unsafe_allow_html=True)
-
-    # ── ONGLET 2 : GRAPHIQUES ────────────────────────────────────────────────
-    with tabs[1]:
+        # Graphiques A7
         graphiques = r.get("graphiques", {})
-        graphiques_av = r.get("graphiques_avances", {})
-        tous_graphiques = {**graphiques, **graphiques_av}
-
-        if tous_graphiques:
-            for nom, fig in tous_graphiques.items():
+        if graphiques:
+            st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:16px 0 8px;'>◆ Graphiques</div>", unsafe_allow_html=True)
+            for nom, fig in graphiques.items():
                 if fig is not None:
                     try:
                         st.plotly_chart(fig, use_container_width=True)
                     except Exception:
                         pass
-        else:
-            st.info("Graphiques non disponibles — relancez l'analyse avec les graphiques activés.")
 
-    # ── ONGLET 3 : RAPPORT ───────────────────────────────────────────────────
-    with tabs[2]:
+    # ════════════════════════════════════════════════════════════════════════
+    # ONGLET 2 — RAPPORT ACTUARIEL
+    # ════════════════════════════════════════════════════════════════════════
+    with tabs[1]:
         rapport_act = r.get("rapport_actuaire", {})
         if rapport_act:
-            st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin-bottom:10px;'>◆ Rapport Actuaire Désigné</div>", unsafe_allow_html=True)
-            for section, contenu in rapport_act.items():
-                if contenu:
-                    with st.expander(f"📄 {section.replace('_',' ').title()}", expanded=False):
-                        if isinstance(contenu, dict):
-                            st.json(contenu)
-                        elif isinstance(contenu, str):
-                            st.markdown(contenu)
-                        else:
-                            st.write(contenu)
+            avis_color = VERT if "FAVORABLE" in rapport_act.get("avis","") and "RESERVE" not in rapport_act.get("avis","") else AMBRE if "RESERVE" in rapport_act.get("avis","") else ROUGE
+            st.markdown(f"""
+<div style="background:{NAVY_L};border:2px solid {avis_color};border-radius:10px;padding:16px;margin-bottom:16px;">
+  <div style="font-size:0.65rem;color:{GRIS};text-transform:uppercase;">Rapport Actuaire Désigné</div>
+  <div style="font-size:1.1rem;font-weight:700;color:{BLANC};">{rapport_act.get('titre','')}</div>
+  <div style="font-size:0.8rem;color:{GRIS};">{rapport_act.get('sous_titre','')} · {rapport_act.get('date_arrete','')}</div>
+  <div style="font-size:0.9rem;font-weight:700;color:{avis_color};margin-top:8px;">AVIS : {rapport_act.get('avis','')}</div>
+</div>""", unsafe_allow_html=True)
+
+            sections = rapport_act.get("sections", [])
+            for sec in sections:
+                with st.expander(f"§{sec.get('numero','')} — {sec.get('titre','')}"):
+                    st.markdown(sec.get("contenu",""))
+
+            st.markdown(f"<div style='font-size:0.72rem;color:{GRIS};margin-top:12px;font-style:italic;'>{rapport_act.get('formule_signature','')}</div>", unsafe_allow_html=True)
         else:
-            com = r.get("commentaire", "")
+            com = r.get("commentaire","")
             if com:
                 st.markdown(f"<pre style='background:{NAVY_L};padding:16px;border-radius:8px;font-size:0.8rem;color:{BLANC};white-space:pre-wrap;'>{com}</pre>", unsafe_allow_html=True)
 
-    # ── ONGLET 4 : HYPOTHÈSES ────────────────────────────────────────────────
+    # ════════════════════════════════════════════════════════════════════════
+    # ONGLET 3 — ANALYSES AVANCÉES
+    # ════════════════════════════════════════════════════════════════════════
+    with tabs[2]:
+        col_a, col_b = st.columns(2)
+
+        with col_a:
+            # Tail factor
+            tail = r.get("tail_factor", {})
+            if tail:
+                st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin-bottom:6px;'>Tail Factor</div>", unsafe_allow_html=True)
+                st.metric("Tail Factor", f"{tail.get('tail_factor',1):.4f}")
+                st.markdown(f"<div style='font-size:0.72rem;color:{GRIS};'>{tail.get('conseil','')[:150]}</div>", unsafe_allow_html=True)
+
+            # Bootstrap
+            boot = r.get("bootstrap", {})
+            if boot:
+                st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:12px 0 6px;'>Bootstrap ODP</div>", unsafe_allow_html=True)
+                st.metric("BE Bootstrap", f"{boot.get('be_bootstrap',0):,.0f} €")
+                st.metric("P90 Bootstrap", f"{boot.get('p90',0):,.0f} €")
+
+        with col_b:
+            # ORSA
+            orsa = r.get("orsa_provisions", {})
+            if orsa:
+                st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin-bottom:6px;'>ORSA Provisions 5 ans</div>", unsafe_allow_html=True)
+                orsa_col = VERT if orsa.get("statut") == "VERT" else AMBRE if orsa.get("statut") == "AMBRE" else ROUGE
+                st.markdown(f"<div style='font-size:0.8rem;color:{orsa_col};'>{orsa.get('message','')}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='font-size:0.72rem;color:{GRIS};'>{orsa.get('conseil','')[:150]}</div>", unsafe_allow_html=True)
+
+            # Back-testing
+            bt = r.get("back_testing", {})
+            if bt:
+                st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:12px 0 6px;'>Back-Testing</div>", unsafe_allow_html=True)
+                bt_col = VERT if bt.get("statut") == "VERT" else AMBRE if bt.get("statut") == "AMBRE" else ROUGE
+                st.markdown(f"<div style='font-size:0.8rem;color:{bt_col};'>{bt.get('message','')}</div>", unsafe_allow_html=True)
+
+        # Comparaison N vs N-1
+        comp = r.get("comparaison_n1", {})
+        if comp:
+            st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:12px 0 6px;'>◆ Comparaison N vs N-1</div>", unsafe_allow_html=True)
+            cc1, cc2, cc3 = st.columns(3)
+            with cc1: st.metric("BE N", f"{comp.get('be_n',0):,.0f} €")
+            with cc2: st.metric("BE N-1", f"{comp.get('be_n1',0):,.0f} €")
+            with cc3:
+                var = comp.get("variation_pct", 0)
+                st.metric("Variation", f"{var:+.1f}%", delta=f"{var:+.1f}%")
+            st.markdown(f"<div style='font-size:0.72rem;color:{GRIS};'>{comp.get('interpretation','')}</div>", unsafe_allow_html=True)
+
+        # Munich CL
+        munich = r.get("munich_cl", {})
+        if munich:
+            st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:12px 0 6px;'>◆ Munich Chain Ladder</div>", unsafe_allow_html=True)
+            mc = VERT if munich.get("statut") == "VERT" else AMBRE if munich.get("statut") == "AMBRE" else ROUGE
+            st.markdown(f"<div style='font-size:0.8rem;color:{mc};'>{munich.get('message','')}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='font-size:0.72rem;color:{GRIS};'>{munich.get('conseil','')[:150]}</div>", unsafe_allow_html=True)
+
+    # ════════════════════════════════════════════════════════════════════════
+    # ONGLET 4 — VALIDATION
+    # ════════════════════════════════════════════════════════════════════════
     with tabs[3]:
         validation = r.get("validation", {})
-        hyp = r.get("hypotheses", validation.get("hypotheses", []))
-        if hyp:
-            for h in hyp:
-                ic  = "✅" if h.get("statut") in ["VALIDÉE","OK","VERT"] else "⚠️"
-                txt = f"**{ic} [{h.get('id','')}]** {h.get('hypothese','')[:100]}  \n`{h.get('valeur','')[:100]}` — *{h.get('statut','')}*"
-                st.markdown(txt)
-        else:
-            alertes_val = validation.get("alertes", [])
-            if alertes_val:
-                for a in alertes_val:
-                    st.markdown(f"• {a}")
-            else:
-                st.info("Hypothèses validées automatiquement par A7.")
+        diag = r.get("diagnostic", {})
 
-    # ── ONGLET 5 : EXPORT ────────────────────────────────────────────────────
+        if diag:
+            st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin-bottom:8px;'>◆ Méthode recommandée par le diagnostic</div>", unsafe_allow_html=True)
+            diag_col = VERT if diag.get("statut") == "VERT" else AMBRE
+            st.markdown(f"<div style='font-size:0.85rem;color:{diag_col};font-weight:700;'>{diag.get('message','')}</div>", unsafe_allow_html=True)
+            for r_txt in diag.get("raisons", []):
+                st.markdown(f"• {r_txt}")
+
+        if validation:
+            st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:14px 0 6px;'>◆ Validation des hypothèses actuarielles</div>", unsafe_allow_html=True)
+            for cle, val in validation.items():
+                if cle.startswith("h") and isinstance(val, dict):
+                    ok  = val.get("ok", val.get("statut") == "VERT")
+                    ic  = "✅" if ok else "⚠️"
+                    msg = val.get("message", val.get("conseil", ""))
+                    st.markdown(f"**{ic} {cle.upper()}** — {msg[:150]}")
+
+    # ════════════════════════════════════════════════════════════════════════
+    # ONGLET 5 — EXPORT
+    # ════════════════════════════════════════════════════════════════════════
     with tabs[4]:
         col1, col2 = st.columns(2)
         with col1:
@@ -2196,7 +2259,6 @@ def _afficher_resultats(resultats, besoin, ref_client):
         with col2:
             if st.button("📊 Voir Dashboard agent", use_container_width=True, key="res_dash"):
                 nav_to("dashboard")
-
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE RAPPORTS CONSOLIDÉS
 # ══════════════════════════════════════════════════════════════════════════════

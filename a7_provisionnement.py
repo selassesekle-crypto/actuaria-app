@@ -245,32 +245,30 @@ class AgentA7Provisionnement:
             rapport['etapes'].append('detection_atypiques')
             rapport['alertes'].extend(res_atypiques['alertes'])
 
-            # Triangle robuste (exclusion années atypiques)
-            C_robuste = self._appliquer_exclusions(C, res_atypiques['annees_exclues'])
-
             # ── SÉLECTION AUTOMATIQUE DE LA MÉTHODE ──────────────────────────
             # Si des années atypiques sont détectées ET méthode=standard
-            # → basculer automatiquement vers méthode robuste
+            # → basculer vers méthode robuste SANS exclure les années
+            # Les méthodes robustes traitent les anomalies par leur calcul
             n_atypiques = len(res_atypiques.get('annees_exclues', []))
             if methode_facteurs == 'standard' and n_atypiques > 0:
                 if n_atypiques >= 8:
                     methode_facteurs = 'mediane'
-                    raison_methode = f"Basculement automatique → médiane ({n_atypiques} anomalies — robustesse maximale requise)"
+                    raison_methode = f"Basculement automatique → médiane ({n_atypiques} anomalies — robustesse maximale, aucune année exclue)"
                 elif n_atypiques >= 4:
                     methode_facteurs = 'trimmed_mean'
-                    raison_methode = f"Basculement automatique → trimmed_mean ({n_atypiques} anomalies — écrêtage des extrêmes)"
+                    raison_methode = f"Basculement automatique → trimmed_mean ({n_atypiques} anomalies — écrêtage des extrêmes, aucune année exclue)"
                 else:
                     methode_facteurs = 'volume_weighted'
-                    raison_methode = f"Basculement automatique → volume_weighted ({n_atypiques} anomalie(s) — pondération par volume)"
-                rapport['alertes'].append({
-                    'niveau': 'INFO',
-                    'message': raison_methode,
-                })
+                    raison_methode = f"Basculement automatique → volume_weighted ({n_atypiques} anomalie(s) — pondération par volume, aucune année exclue)"
+                rapport['alertes'].append({'niveau': 'INFO', 'message': raison_methode})
                 logger.info(raison_methode)
             else:
-                raison_methode = f"Méthode {methode_facteurs} conservée (aucune anomalie)"
+                raison_methode = f"Méthode {methode_facteurs} conservée (aucune anomalie détectée)"
 
             rapport['raison_methode'] = raison_methode
+
+            # Triangle robuste = triangle complet (pas d'exclusion avec méthodes robustes)
+            C_robuste = C.copy()
 
             # ── ÉTAPE 3 : CHAIN LADDER ROBUSTE ───────────────────────────────
             logger.info(f"Étape 3/8 : Chain Ladder ({methode_facteurs})")
