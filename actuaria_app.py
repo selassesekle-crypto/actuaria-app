@@ -1826,10 +1826,18 @@ def _executer_analyse(besoin, direction, equipe, client):
             # ── TRIANGLE DIRECT → A7 ────────────────────────────────────────
             elif besoin == "triangle_xl":
                 from a7_provisionnement import AgentA7Provisionnement
-                a7 = AgentA7Provisionnement(audit_path=_tmp, verbose=False)
-                # Construire le triangle depuis le DataFrame
+                a7 = AgentA7Provisionnement(audit_path=_tmp, models_path=_tmp, verbose=False)
                 if df is not None and len(df) > 1:
-                    tri = df.select_dtypes(include=["number"]).values
+                    df_num = df.select_dtypes(include=["number"])
+                    df_num = df_num.dropna(how="all").dropna(axis=1, how="all")
+                    # Retirer ligne 0 et col 0 si ce sont des labels d'années
+                    if df_num.shape[0] > 1 and df_num.shape[1] > 1:
+                        if df_num.iloc[0, 0] > 1900:
+                            df_num = df_num.iloc[1:, 1:]
+                    tri = df_num.fillna(0).values.astype(float)
+                    if tri.shape[0] < 3 or tri.shape[1] < 3:
+                        st.error("❌ Triangle trop petit — minimum 3 années requises")
+                        return
                     r7 = a7.run(source=tri, mode_declare='cumule', generer_graphiques=False)
                 else:
                     r7 = a7.run(generer_graphiques=False)
