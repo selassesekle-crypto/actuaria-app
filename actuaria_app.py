@@ -1757,16 +1757,26 @@ def _executer_analyse(besoin, direction, equipe, client):
                     if n_neg > 0:
                         df_a7[col_montant] = df_a7[col_montant].abs()
                         st.info(f"ℹ️ {n_neg} montants négatifs convertis en valeur absolue (recours/remboursements)")
-                # Colonnes survenance/paiement — mapping automatique
+                # Renommer colonnes survenance/paiement
                 col_surv = next((c for c in df_a7.columns if c in ["annee_survenance","id_year","year","annee","loss_year"]), None)
                 col_paie = next((c for c in df_a7.columns if c in ["annee_paiement","payment_year","annee_reglement"]), None)
                 if col_surv and col_surv != "annee_survenance":
                     df_a7 = df_a7.rename(columns={col_surv: "annee_survenance"})
                 if col_paie and col_paie != "annee_paiement":
                     df_a7 = df_a7.rename(columns={col_paie: "annee_paiement"})
-                if "annee_paiement" not in df_a7.columns and "annee_survenance" in df_a7.columns:
-                    df_a7["annee_paiement"] = df_a7["annee_survenance"]
-                    st.info("ℹ️ Colonne 'annee_paiement' non trouvée — hypothèse : paiement dans l'année de survenance")
+                if "annee_paiement" not in df_a7.columns:
+                    df_a7["annee_paiement"] = df_a7.get("annee_survenance", 2017)
+                    st.info("ℹ️ 'annee_paiement' non trouvée — hypothèse : paiement dans l'année de survenance")
+                # Convertir années en entiers (ex: "Year 0" → 2017)
+                import re as _re
+                for _col_an in ["annee_survenance", "annee_paiement"]:
+                    if _col_an in df_a7.columns:
+                        _s = df_a7[_col_an]
+                        if _s.dtype == object:
+                            _nums = _s.str.extract(r"(\d+)")[0].astype(float)
+                            df_a7[_col_an] = (2017 + _nums).astype(int)
+                        else:
+                            df_a7[_col_an] = _s.astype(int)
                 a7 = AgentA7Provisionnement(audit_path=_tmp, models_path=_tmp, verbose=False)
                 r7 = a7.run(source=df_a7, generer_graphiques=False)
                 resultats["principal"] = r7
