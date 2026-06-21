@@ -1836,13 +1836,17 @@ def _executer_analyse(besoin, direction, equipe, client):
                     if df_num.shape[0] > 1 and df_num.shape[1] > 1:
                         if df_num.iloc[0, 0] > 1900:
                             df_num = df_num.iloc[1:, 1:]
+                    # Retirer lignes sans aucune valeur (dernières années sans données)
+                    df_num = df_num[df_num.notna().any(axis=1)]
+                    df_num = df_num.loc[:, df_num.notna().any(axis=0)]
                     tri = df_num.fillna(0).values.astype(float)
                     # Rendre la matrice carrée (A7 exige n×n)
                     n_rows, n_cols = tri.shape
-                    if n_cols < n_rows:
-                        tri = _np.hstack([tri, _np.zeros((n_rows, n_rows - n_cols))])
-                    elif n_rows < n_cols:
-                        tri = _np.vstack([tri, _np.zeros((n_cols - n_rows, n_cols))])
+                    n_max = max(n_rows, n_cols)
+                    if n_cols < n_max:
+                        tri = _np.hstack([tri, _np.zeros((n_rows, n_max - n_cols))])
+                    if n_rows < n_max:
+                        tri = _np.vstack([tri, _np.zeros((n_max - n_rows, n_max))])
                     r7 = a7.run(source=tri, mode_declare='cumule', generer_graphiques=False)
                 else:
                     r7 = a7.run(generer_graphiques=False)
