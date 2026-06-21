@@ -1749,8 +1749,16 @@ def _executer_analyse(besoin, direction, equipe, client):
             # ── SINISTRES BRUTS → A7 directement ────────────────────────
             if besoin == "sinistres":
                 from a7_provisionnement import AgentA7Provisionnement
+                df_a7 = df.copy()
+                col_montant = next((c for c in df_a7.columns
+                    if c in ["cout_total_sinistres","claim_amount","montant","charge","cout_sinistre"]), None)
+                if col_montant:
+                    n_neg = (df_a7[col_montant] < 0).sum()
+                    if n_neg > 0:
+                        df_a7[col_montant] = df_a7[col_montant].abs()
+                        st.info(f"ℹ️ {n_neg} montants négatifs convertis en valeur absolue (recours/remboursements)")
                 a7 = AgentA7Provisionnement(audit_path=_tmp, models_path=_tmp, verbose=False)
-                r7 = a7.run(source=df, generer_graphiques=False)
+                r7 = a7.run(source=df_a7, generer_graphiques=False)
                 resultats["principal"] = r7
 
             # ── TARIFICATION ────────────────────────────────────────────────
@@ -1785,7 +1793,7 @@ def _executer_analyse(besoin, direction, equipe, client):
                     from a5_deep_learning import AgentA5DeepLearning
                     r5 = AgentA5DeepLearning(audit_path=_tmp, verbose=False).run(r2, n_epochs=10, generer_graphiques=False)
                     resultats["principal"] = r5
-                elif besoin in ["selection","sinistres"]:
+                elif besoin == "selection":
                     from a3_glm import AgentA3GLM
                     r3 = AgentA3GLM(audit_path=_tmp, verbose=False).run(r2, generer_graphiques=False)
                     if besoin == "selection":
