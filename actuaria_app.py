@@ -2038,13 +2038,259 @@ def _executer_analyse(besoin, direction, equipe, client):
                     st.session_state["agent_results"] = {}
                 st.session_state["agent_results"][_ak_map[besoin]] = resultats.get("principal", {})
 
-            _afficher_resultats(resultats, besoin, ref_client)
+            st.session_state["res_data"]   = resultats
+            st.session_state["res_besoin"] = besoin
+            st.session_state["res_client"] = ref_client
+            nav_to("resultats")
 
         except ImportError as e:
             st.warning(f"⚠️ Module non disponible dans cet environnement : {e}")
             st.info("💡 Les agents s'exécutent dans l'environnement Python avec les dépendances installées (Colab, serveur local ou Render avec requirements.txt complet).")
         except Exception as e:
             st.error(f"❌ Erreur lors de l'analyse : {e}")
+
+
+
+def page_resultats():
+    """Page résultats pleine largeur — style Dashboard."""
+    import json as _json
+    import plotly.graph_objects as go
+
+    resultats  = st.session_state.get("res_data", {})
+    besoin     = st.session_state.get("res_besoin", "")
+    ref_client = st.session_state.get("res_client", "")
+    r = resultats.get("principal", {})
+
+    if not r:
+        st.warning("Aucun résultat disponible.")
+        if st.button("← Retour à l'analyse"): nav_to("analyse")
+        return
+
+    statut    = r.get("statut_rag", r.get("statut", ""))
+    be        = r.get("best_estimate", {})
+    mack      = r.get("mack", {})
+    cl        = r.get("chain_ladder", {})
+    bf        = r.get("bf", {})
+    cc_r      = r.get("cape_cod", {})
+    graphiques = r.get("graphiques", {})
+    boot      = r.get("bootstrap", {})
+    comp      = r.get("comparaison_n1", {})
+    validation = r.get("validation", {})
+    diag      = r.get("diagnostic", {})
+    rapport_act = r.get("rapport_actuaire", {})
+    methode_u = be.get("methode_facteurs", "standard")
+    raison    = r.get("rapport", {}).get("raison_methode", "")
+
+    # ── HEADER ───────────────────────────────────────────────────────────────
+    col_h, col_b = st.columns([5, 1])
+    with col_h:
+        st.markdown(f"""
+<div style="margin-bottom:16px;">
+  <div style="font-size:0.65rem;color:{OR};text-transform:uppercase;letter-spacing:0.12em;font-weight:700;">Résultats · {ref_client} · {datetime.now().strftime('%d/%m/%Y %H:%M')}</div>
+  <div style="font-family:'Playfair Display',serif;font-size:1.5rem;color:{BLANC};font-weight:700;">Rapport Actuariel — {besoin.upper()}</div>
+  <div style="font-size:0.8rem;color:{GRIS};">Méthode : <b style='color:{OR}'>{methode_u}</b>{"  ·  " + raison if raison else ""}</div>
+</div>""", unsafe_allow_html=True)
+    with col_b:
+        st.markdown("<div style='height:22px'></div>", unsafe_allow_html=True)
+        if st.button("← Nouvelle analyse", use_container_width=True, key="btn_back_res"):
+            nav_to("analyse")
+
+    # ── LIGNE 1 : KPIs ───────────────────────────────────────────────────────
+    be_val = be.get("best_estimate", 0)
+    cv_val = be.get("cv_inter_methodes", 0)
+    p90    = be.get("reserve_p90", mack.get("reserve_p90", 0))
+    sig    = mack.get("sigma_total", 0)
+    col_s  = VERT if statut=="VERT" else AMBRE if statut=="AMBRE" else ROUGE
+    emoji_s = "🟢" if statut=="VERT" else "🟡" if statut=="AMBRE" else "🔴"
+
+    k1, k2, k3, k4, k5 = st.columns(5)
+    for col, titre, valeur, sous in [
+        (k1, "STATUT", f"{emoji_s} {statut}", methode_u),
+        (k2, "BEST ESTIMATE S2", f"{be_val:,.0f} €", "Art. 77 S2"),
+        (k3, "PROVISION P90", f"{p90:,.0f} €", "Mack IC 95%"),
+        (k4, "CV INTER-MÉTHODES", f"{cv_val:.1f}%", "< 5% = VERT"),
+        (k5, "σ MACK", f"{sig:,.0f} €", "Incertitude"),
+    ]:
+        with col:
+            st.markdown(f"""
+<div style="background:{NAVY_L};border:1px solid rgba(201,168,76,0.2);border-radius:10px;padding:14px 16px;">
+  <div style="font-size:0.6rem;color:{GRIS};text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px;">{titre}</div>
+  <div style="font-size:1.05rem;font-weight:700;color:{OR};">{valeur}</div>
+  <div style="font-size:0.65rem;color:{GRIS};margin-top:3px;">{sous}</div>
+</div>""", unsafe_allow_html=True)
+
+    st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+
+    # ── LIGNE 2 : TABLEAU 4 MÉTHODES + COMMENTAIRE ───────────────────────────
+    c_tab, c_com = st.columns([1, 1.3])
+
+    with c_tab:
+        st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin-bottom:8px;'>◆ 4 Méthodes actuarielles</div>", unsafe_allow_html=True)
+        poids = be.get("poids_methodes", {})
+        rows = [
+            {"Méthode": "🔗 Chain Ladder",         "Réserve (€)": f"{cl.get('reserve_totale',0):,.0f}",          "Poids": f"{poids.get('cl',0)*100:.0f}%"},
+            {"Méthode": "📐 Mack 1993 (S2)",       "Réserve (€)": f"{mack.get('reserve_best_estimate',0):,.0f}", "Poids": f"{poids.get('mack',0)*100:.0f}%"},
+            {"Méthode": "⚖️ Bornhuetter-Ferguson", "Réserve (€)": f"{bf.get('reserve_totale',0):,.0f}",          "Poids": f"{poids.get('bf',0)*100:.0f}%"},
+            {"Méthode": "🌊 Cape Cod",             "Réserve (€)": f"{cc_r.get('reserve_totale',0):,.0f}",        "Poids": f"{poids.get('cc',0)*100:.0f}%"},
+            {"Méthode": "⭐ BEST ESTIMATE S2",     "Réserve (€)": f"{be_val:,.0f}",                              "Poids": "100%"},
+        ]
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+        cred = r.get("credibilite", {})
+        if cred:
+            st.markdown(f"<div style='font-size:0.72rem;color:{GRIS};margin-top:6px;'>Crédibilité Bühlmann-Straub : Z={cred.get('Z',0):.2f} ({cred.get('niveau_credibilite','')})</div>", unsafe_allow_html=True)
+
+        # Analyses avancées résumé
+        st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:14px 0 6px;'>◆ Analyses avancées</div>", unsafe_allow_html=True)
+        for label, key in [("🔚 Tail Factor","tail_factor"),("🔁 Back-Testing","back_testing"),("📅 ORSA","orsa_provisions"),("🇩🇪 Munich CL","munich_cl")]:
+            obj = r.get(key, {})
+            if obj:
+                sc = VERT if obj.get("statut")=="VERT" else AMBRE if obj.get("statut")=="AMBRE" else ROUGE
+                st.markdown(f"<div style='font-size:0.75rem;color:{sc};margin-bottom:3px;'>{label} : {str(obj.get('message',''))[:100]}</div>", unsafe_allow_html=True)
+        if comp:
+            sc2 = VERT if comp.get("statut_evolution")=="VERT" else AMBRE
+            st.markdown(f"<div style='font-size:0.75rem;color:{sc2};margin-bottom:3px;'>📊 N vs N-1 : {str(comp.get('interpretation',''))[:100]}</div>", unsafe_allow_html=True)
+
+        # Facteurs atypiques
+        alertes_f = r.get("atypiques", {}).get("alertes", [])
+        if alertes_f:
+            st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:12px 0 6px;'>◆ Facteurs atypiques → {methode_u}</div>", unsafe_allow_html=True)
+            for a in alertes_f[:5]:
+                st.markdown(f"<div style='font-size:0.72rem;color:{AMBRE};'>{a}</div>", unsafe_allow_html=True)
+
+    with c_com:
+        com = r.get("commentaire", "")
+        if com:
+            st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin-bottom:8px;'>◆ Commentaire actuariel</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='background:{NAVY_L};border-radius:10px;padding:16px;font-size:0.8rem;color:{BLANC};white-space:pre-wrap;line-height:1.7;height:420px;overflow-y:auto;'>{com}</div>", unsafe_allow_html=True)
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    # ── LIGNE 3 : HEATMAP TRIANGLE pleine largeur ─────────────────────────────
+    fig_heat = graphiques.get("heatmap_triangle")
+    if fig_heat:
+        st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin-bottom:8px;'>◆ Triangle de développement</div>", unsafe_allow_html=True)
+        try:
+            st.plotly_chart(fig_heat, use_container_width=True)
+        except Exception:
+            pass
+
+    # ── LIGNE 4 : FACTEURS CL + IBNR côte à côte ─────────────────────────────
+    c_fcl, c_ibnr = st.columns(2)
+    with c_fcl:
+        fig_fcl = graphiques.get("facteurs_cl")
+        if fig_fcl:
+            st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin-bottom:8px;'>◆ Facteurs de développement ±2σ</div>", unsafe_allow_html=True)
+            try: st.plotly_chart(fig_fcl, use_container_width=True)
+            except Exception: pass
+    with c_ibnr:
+        fig_ibnr = graphiques.get("ibnr_par_annee")
+        if fig_ibnr:
+            st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin-bottom:8px;'>◆ IBNR par année de survenance</div>", unsafe_allow_html=True)
+            try: st.plotly_chart(fig_ibnr, use_container_width=True)
+            except Exception: pass
+
+    # ── LIGNE 5 : CONVERGENCE pleine largeur ──────────────────────────────────
+    fig_conv = graphiques.get("convergence_methodes")
+    if fig_conv:
+        st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin-bottom:8px;'>◆ Convergence des 4 méthodes avec IC Mack 95%</div>", unsafe_allow_html=True)
+        try: st.plotly_chart(fig_conv, use_container_width=True)
+        except Exception: pass
+
+    # ── LIGNE 6 : BOOTSTRAP + WATERFALL côte à côte ──────────────────────────
+    c_boot, c_wf = st.columns(2)
+
+    with c_boot:
+        if boot and boot.get("distribution"):
+            st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin-bottom:8px;'>◆ Distribution Bootstrap — 1 000 simulations</div>", unsafe_allow_html=True)
+            dist = boot["distribution"]
+            fig_boot = go.Figure()
+            fig_boot.add_trace(go.Histogram(x=dist, nbinsx=50,
+                marker_color="rgba(201,168,76,0.7)",
+                marker_line=dict(color="#0F2E52", width=0.5)))
+            for p, lbl, clr in [(boot.get("p50",0),"P50","#2ECC71"),(boot.get("p90",0),"P90","#F39C12"),(boot.get("p99_5",0),"P99.5","#E74C3C")]:
+                if p:
+                    fig_boot.add_vline(x=p, line_color=clr, line_width=2, line_dash="dash",
+                        annotation_text=f"{lbl}={p:,.0f}€", annotation_font=dict(color=clr, size=10))
+            fig_boot.update_layout(
+                paper_bgcolor="#0F2E52", plot_bgcolor="#1B3A5C",
+                font=dict(family="Inter", color="#F0F4F8", size=11),
+                title=dict(text="Distribution Bootstrap des réserves IBNR", font=dict(color="#F0F4F8", size=13), x=0.01),
+                xaxis=dict(title="Réserve IBNR (€)", tickfont=dict(color="#8A9AB0"), showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
+                yaxis=dict(title="Fréquence", tickfont=dict(color="#8A9AB0"), showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
+                showlegend=False, height=350, margin=dict(t=40,b=40,l=40,r=20),
+            )
+            st.plotly_chart(fig_boot, use_container_width=True)
+
+    with c_wf:
+        if comp and comp.get("waterfall"):
+            st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin-bottom:8px;'>◆ Waterfall Provisions N-1 → N</div>", unsafe_allow_html=True)
+            w = comp["waterfall"]
+            labels = ["BE N-1","Run-off","Nouveaux","Réouv.","Hypothèses","Résiduel","BE N"]
+            values = [w.get("be_n1",0),w.get("effet_run_off",0),w.get("effet_nouveaux",0),
+                      w.get("effet_reouverture",0),w.get("effet_hypotheses",0),w.get("effet_residuel",0),comp.get("be_n",0)]
+            colors = ["#C9A84C" if i in [0,6] else "#2ECC71" if v>=0 else "#E74C3C" for i,v in enumerate(values)]
+            fig_wf = go.Figure(go.Bar(x=labels, y=values, marker_color=colors,
+                marker_line=dict(color="#0F2E52",width=1), width=0.45,
+                text=[f"{v:+,.0f}€" if i not in [0,6] else f"{v:,.0f}€" for i,v in enumerate(values)],
+                textposition="outside", textfont=dict(color="#F0F4F8",size=9)))
+            fig_wf.update_layout(
+                paper_bgcolor="#0F2E52", plot_bgcolor="#1B3A5C",
+                font=dict(family="Inter",color="#F0F4F8",size=11),
+                title=dict(text="Waterfall Provisions N-1 → N", font=dict(color="#F0F4F8",size=13), x=0.01),
+                xaxis=dict(tickfont=dict(color="#F0F4F8",size=9), showgrid=False),
+                yaxis=dict(visible=False), bargap=0.35, showlegend=False, height=350,
+                margin=dict(t=40,b=40,l=20,r=20),
+            )
+            st.plotly_chart(fig_wf, use_container_width=True)
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    # ── LIGNE 7 : RAPPORT ACTUAIRE + VALIDATION ───────────────────────────────
+    c_rap, c_val = st.columns(2)
+
+    with c_rap:
+        if rapport_act:
+            avis_c = VERT if "FAVORABLE" in rapport_act.get("avis","") and "RESERVE" not in rapport_act.get("avis","") else AMBRE
+            st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin-bottom:8px;'>◆ Rapport Actuaire Désigné</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='background:{NAVY_L};border-left:3px solid {avis_c};padding:12px 16px;border-radius:8px;font-size:0.85rem;color:{avis_c};font-weight:700;margin-bottom:10px;'>AVIS : {rapport_act.get('avis','')}</div>", unsafe_allow_html=True)
+            for sec in rapport_act.get("sections", []):
+                with st.expander(f"§{sec.get('numero','')} — {sec.get('titre','')}"):
+                    st.markdown(sec.get("contenu",""))
+            st.markdown(f"<div style='font-size:0.68rem;color:{GRIS};margin-top:8px;font-style:italic;'>{rapport_act.get('formule_signature','')[:200]}</div>", unsafe_allow_html=True)
+
+    with c_val:
+        st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin-bottom:8px;'>◆ Validation des hypothèses</div>", unsafe_allow_html=True)
+        if diag:
+            dc = VERT if diag.get("statut")=="VERT" else AMBRE
+            st.markdown(f"<div style='font-size:0.85rem;color:{dc};font-weight:700;margin-bottom:8px;'>{diag.get('message','')}</div>", unsafe_allow_html=True)
+            for r_txt in diag.get("raisons",[]):
+                st.markdown(f"<div style='font-size:0.75rem;color:{GRIS};margin-bottom:3px;'>• {r_txt[:120]}</div>", unsafe_allow_html=True)
+        if validation:
+            st.markdown("<br>", unsafe_allow_html=True)
+            for cle, val in validation.items():
+                if cle.startswith("h") and isinstance(val, dict):
+                    ok  = val.get("ok", val.get("statut")=="VERT")
+                    ic  = "✅" if ok else "⚠️"
+                    msg = str(val.get("message", val.get("conseil","")))[:150]
+                    st.markdown(f"<div style='font-size:0.75rem;color:{BLANC};margin-bottom:6px;'>{ic} <b>{cle.upper()}</b> — {msg}</div>", unsafe_allow_html=True)
+
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    # ── EXPORT ───────────────────────────────────────────────────────────────
+    e1, e2, _ = st.columns([1, 1, 2])
+    with e1:
+        st.download_button(
+            "⬇️ Export JSON complet",
+            data=_json.dumps(r, indent=2, ensure_ascii=False, default=str),
+            file_name=f"actuaria_{besoin}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            mime="application/json",
+            use_container_width=True,
+            key="dl_res_json",
+        )
+    with e2:
+        if st.button("📊 Voir Dashboard", use_container_width=True, key="res_to_dash"):
+            nav_to("dashboard")
 
 
 def _afficher_resultats(resultats, besoin, ref_client):
@@ -2333,4 +2579,5 @@ elif page == "analyse":      page_analyse()
 elif page == "rapports":     page_rapports()
 elif page == "direction":    page_direction()
 elif page == "agent_detail": page_agent_detail()
+elif page == "resultats":    page_resultats()
 else:                        page_accueil()
