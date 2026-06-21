@@ -1504,9 +1504,12 @@ def page_analyse():
                     st.success(f"✅ {fichier.name} — {len(df_preview):,} lignes × {len(df_preview.columns)} colonnes")
                     with st.expander("👁️ Aperçu des données (5 premières lignes)"):
                         st.dataframe(df_preview.head(5), use_container_width=True)
+                    # Remettre mapping_confirme à False seulement si nouveau fichier
+                    ancien_nom = st.session_state.get("analyse_fichier_nom")
+                    if ancien_nom != fichier.name:
+                        st.session_state["mapping_confirme"] = False
                     st.session_state["analyse_df"] = df_preview
                     st.session_state["analyse_fichier_nom"] = fichier.name
-                    st.session_state["mapping_confirme"] = False
                 except Exception as e:
                     st.error(f"❌ Erreur lecture : {e}")
             else:
