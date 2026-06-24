@@ -1179,6 +1179,8 @@ def _validation_agent(ak):
     _n2_val  = _r_val.get("n2", {}) if isinstance(_r_val, dict) else {}
     _n3_val  = _r_val.get("n3", {}) if isinstance(_r_val, dict) else {}
     _graphiques_val = _r_val.get("graphiques", {}) if isinstance(_r_val, dict) else {}
+    st.write("DEBUG graphiques:", list(_graphiques_val.keys()) if _graphiques_val else "VIDE")
+    st.write("DEBUG n2 keys:", list(_n2_val.keys()) if _n2_val else "VIDE")
 
     _hyp_map_val = {
         "H1 — Indépendance (Mack)": _n2_val.get("h1_independance", {}),
