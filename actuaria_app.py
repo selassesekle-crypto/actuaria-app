@@ -943,19 +943,24 @@ def _dashboard_agent(ak):
             with st.expander("📋 Rapport actuariel complet", expanded=True):
                 st.code(com, language=None)
 
-        # Hypothèses
-        hyp = r.get("hypotheses", [])
-        if hyp:
+        # Hypothèses — lire depuis n2 (structure A7 v5.0)
+        _n2 = r.get("n2", r.get("validation", {}))
+        _hyp_map = {
+            "H1 — Indépendance":     _n2.get("h1_independance", {}),
+            "H2 — Stabilité":        _n2.get("h2_stabilite", {}),
+            "H3 — A priori BF":      _n2.get("h3_apriori_bf", {}),
+            "H4 — Homoscédasticité": _n2.get("h4_homosc_bootstrap", {}),
+        }
+        if any(_hyp_map.values()):
             st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:10px 0 6px;'>◆ Hypothèses validées</div>", unsafe_allow_html=True)
-            for h in hyp:
-                if not isinstance(h, dict):
-                    st.markdown(f"⚠️ {str(h)[:120]}")
+            for _hlabel, _hdict in _hyp_map.items():
+                if not isinstance(_hdict, dict) or not _hdict:
                     continue
-                _h_ok = bool(h.get("ok", True))
-                ic  = "✅" if _h_ok else "⚠️"
-                _h_label = str(h.get("hypothese", h.get("message", h.get("description", ""))))[:80]
-                _h_val   = str(h.get("valeur", h.get("score", h.get("statut", ""))))[:80]
-                st.markdown(f"**{ic} [{h.get('id','')}]** {_h_label}  \n`{_h_val}`")
+                _h_ok  = bool(_hdict.get("ok", True))
+                ic     = "✅" if _h_ok else "⚠️"
+                _score = _hdict.get("score", "—")
+                _msg   = str(_hdict.get("message", ""))[:100]
+                st.markdown(f"**{ic} {_hlabel}** — score {_score}/100  \n{_msg}")
 
         # Export JSON
         import json
