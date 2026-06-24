@@ -213,13 +213,28 @@ st.markdown(f"""
 [data-testid="stMetricValue"] {{
   color:{OR}!important;font-size:1.35rem!important;font-weight:700!important;
 }}
-.stButton>button {{
-  background:linear-gradient(135deg,{OR},{OR_L});color:{NAVY}!important;
-  border:none;border-radius:8px;font-weight:700;padding:10px 20px;
-  transition:all 0.2s;
+.stButton>button,
+.stDownloadButton>button {{
+  background:linear-gradient(135deg,{OR},{OR_L}) !important;
+  color:{NAVY} !important;
+  border:none !important;
+  border-radius:8px !important;
+  font-weight:700 !important;
+  padding:10px 20px !important;
+  transition:all 0.2s !important;
 }}
-.stButton>button:hover {{
-  transform:translateY(-1px);box-shadow:0 4px 16px rgba(201,168,76,0.4);
+.stButton>button:hover,
+.stDownloadButton>button:hover {{
+  transform:translateY(-1px) !important;
+  box-shadow:0 4px 16px rgba(201,168,76,0.4) !important;
+}}
+.stButton>button:disabled,
+.stDownloadButton>button:disabled {{
+  background:{NAVY_L} !important;
+  color:rgba(138,155,176,0.5) !important;
+  cursor:not-allowed !important;
+  transform:none !important;
+  box-shadow:none !important;
 }}
 .stTabs [data-baseweb="tab-list"] {{
   background:{NAVY_L};border-radius:8px;padding:4px;gap:4px;
@@ -1209,15 +1224,21 @@ def _validation_agent(ak):
 </div>""", unsafe_allow_html=True)
 
         # Graphiques de validation — regénérés à la volée depuis données brutes
-        _tri_val = (
-            st.session_state.get("triangle_a7")
-            or (_r_val.get("triangle") if isinstance(_r_val, dict) else None)
-        )
+        try:
+            _tri_val = (
+                st.session_state.get("triangle_a7")
+                or (_r_val.get("triangle") if isinstance(_r_val, dict) else None)
+            )
+        except Exception:
+            _tri_val = _r_val.get("triangle") if isinstance(_r_val, dict) else None
+
         if _tri_val is not None and _n2_val and _n3_val:
             try:
                 import numpy as _np_val
                 from a7_provisionnement.n5_graphiques import generer_graphiques as _gen_g
                 _C_val = _np_val.array(_tri_val) if not hasattr(_tri_val, "shape") else _tri_val
+                if _C_val.ndim != 2 or _C_val.shape[0] < 2:
+                    raise ValueError(f"Triangle invalide shape={_C_val.shape}")
                 _figs_val = _gen_g(_C_val, _n2_val, _n3_val, _r_val.get("n4", {}))
                 for _gnom, _gtitle in [
                     ("g8_h1",         "H1 — Indépendance (corrélations Spearman)"),
