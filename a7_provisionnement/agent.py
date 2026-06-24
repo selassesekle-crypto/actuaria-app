@@ -358,9 +358,20 @@ class AgentA7Provisionnement:
 
             # PDF
             pdf_bytes = b''
-            if generer_pdf_flag and word_bytes:
+            if generer_pdf_flag:
                 try:
-                    pdf_bytes = export_pdf(word_bytes)
+                    pdf_bytes = export_pdf(
+                        n1          = n1,
+                        n2          = n2,
+                        n3          = n3,
+                        n4          = n4,
+                        commentaire = commentaire,
+                        graphiques  = graphiques_dict,
+                        ref_client  = ref_client,
+                        arrete      = arrete,
+                        audit_id    = audit_id,
+                        lob_label   = lob_label,
+                    )
                     if self.verbose:
                         logger.info(f"N5 PDF : {len(pdf_bytes):,} bytes")
                 except Exception as e:
