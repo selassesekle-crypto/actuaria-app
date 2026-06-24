@@ -1178,9 +1178,12 @@ def _validation_agent(ak):
     _r_val   = _res_val.get("principal", _res_val)
     _n2_val  = _r_val.get("n2", {}) if isinstance(_r_val, dict) else {}
     _n3_val  = _r_val.get("n3", {}) if isinstance(_r_val, dict) else {}
-    _graphiques_val = _r_val.get("graphiques", {}) if isinstance(_r_val, dict) else {}
-    st.write("DEBUG graphiques:", list(_graphiques_val.keys()) if _graphiques_val else "VIDE")
-    st.write("DEBUG n2 keys:", list(_n2_val.keys()) if _n2_val else "VIDE")
+    # Graphiques : clé dédiée en priorité (go.Figure survivent mieux à la navigation)
+    _graphiques_val = (
+        st.session_state.get("graphiques_a7")
+        or (_r_val.get("graphiques", {}) if isinstance(_r_val, dict) else {})
+        or {}
+    )
 
     _hyp_map_val = {
         "H1 — Indépendance (Mack)": _n2_val.get("h1_independance", {}),
@@ -2213,6 +2216,10 @@ def _executer_analyse(besoin, direction, equipe, client):
             st.session_state["res_data"]   = resultats
             st.session_state["res_besoin"] = besoin
             st.session_state["res_client"] = ref_client
+            # Stocker les graphiques séparément (les go.Figure ne survivent pas toujours à la navigation)
+            _r_principal = resultats.get("principal", {})
+            if isinstance(_r_principal, dict) and _r_principal.get("graphiques"):
+                st.session_state["graphiques_a7"] = _r_principal["graphiques"]
             nav_to("resultats")
 
         except ImportError as e:
