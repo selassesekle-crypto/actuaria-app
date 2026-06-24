@@ -251,7 +251,7 @@ def g2_cadences_developpement(
     fig.update_layout(
         **_layout(
             title=dict(
-                text=f"Cadences cumulées par année de survenance · Chain Ladder ({methode_cl})",
+                text=f"Cadences cumulées par année de survenance · {methode_cl}",
                 font=dict(color=OR, size=12),
                 x=0.01,
                 y=0.97,
