@@ -1513,6 +1513,78 @@ def page_analyse():
             else:
                 st.session_state["analyse_df"] = None
 
+            # ── Paramètres avancés A7 (provisionnement uniquement) ────────
+            if besoin in ["triangle_xl", "sinistres"]:
+                with st.expander("⚙️ Paramètres A7 — LoB · Arrêté · Bootstrap · N-1", expanded=False):
+                    _lob_options = {
+                        "mrh":                    "🏠 MRH",
+                        "rc_auto_materiel":       "🚗 RC Auto Matériel",
+                        "rc_auto_corporels":      "🚑 RC Auto Corporels",
+                        "rc_generale":            "🏢 RC Générale",
+                        "rc_medicale":            "🩺 RC Médicale",
+                        "construction":           "🏗️ Construction",
+                        "marine_aviation_transport": "✈️ Marine / Aviation / Transport",
+                        "generique":              "⚙️ Générique (hors classification EIOPA)",
+                    }
+                    _pa1, _pa2 = st.columns(2)
+                    with _pa1:
+                        _lob_sel = st.selectbox(
+                            "Ligne de branche (LoB)",
+                            options=list(_lob_options.keys()),
+                            format_func=lambda k: _lob_options[k],
+                            index=0,
+                            key="a7_lob",
+                        )
+                        _arrete = st.text_input(
+                            "Arrêté comptable",
+                            value="Q2 2026",
+                            placeholder="Ex : Q2 2026 · FY 2025 · S1 2026",
+                            key="a7_arrete",
+                        )
+                    with _pa2:
+                        _n_sim = st.number_input(
+                            "Simulations Bootstrap ODP",
+                            min_value=1000, max_value=50000,
+                            value=5000, step=1000,
+                            key="a7_nsim",
+                            help="EIOPA recommande ≥ 5 000 (S2 Art.105)",
+                        )
+                        _annee_base = st.number_input(
+                            "Année base réserve",
+                            min_value=1, max_value=5,
+                            value=1, step=1,
+                            key="a7_annee_base",
+                            help="Décalage de l'année pivot pour le calcul du BE S2",
+                        )
+
+                    with st.expander("📋 Résultats N-1 (comparatif inter-exercices)", expanded=False):
+                        _rp1, _rp2 = st.columns(2)
+                        with _rp1:
+                            _be_prev   = st.number_input("Best Estimate N-1 (€)", value=0, step=10000, key="a7_be_prev")
+                            _p90_prev  = st.number_input("Réserve P90 N-1 (€)",  value=0, step=10000, key="a7_p90_prev")
+                        with _rp2:
+                            _cv_prev   = st.number_input("CV inter-méthodes N-1 (%)", value=0.0, step=0.1, key="a7_cv_prev")
+                            _sigma_prev= st.number_input("Sigma Mack N-1 (€)",    value=0, step=10000, key="a7_sigma_prev")
+                        _res_prec = None
+                        if _be_prev > 0:
+                            _res_prec = {
+                                "best_estimate":      _be_prev,
+                                "reserve_p90":        _p90_prev,
+                                "cv_inter_methodes":  _cv_prev,
+                                "sigma_mack":         _sigma_prev,
+                            }
+
+                    # Stocker dans session_state pour que l'appel run() les récupère
+                    if "analyse_params" not in st.session_state:
+                        st.session_state["analyse_params"] = {}
+                    st.session_state["analyse_params"].update({
+                        "a7_lob":               _lob_sel,
+                        "a7_arrete":            _arrete,
+                        "a7_n_sim_bootstrap":   int(_n_sim),
+                        "a7_annee_base_reserve": int(_annee_base),
+                        "a7_resultats_precedents": _res_prec,
+                    })
+
         # ── Cas paramètres manuels ────────────────────────────────────────
         elif besoin in ["stress","coherence","s2","ifrs17","alm","ias19","tarif","prov","stress","report","report_sante","prov_sante","tables","prov_prev","report_prev"]:
             st.markdown(f"<div style='font-size:0.78rem;color:{BLANC};margin-bottom:10px;'>✏️ <strong>Saisie des paramètres :</strong> Les agents de réglementation n'ont pas besoin de fichier — renseignez les paramètres clés ci-dessous.</div>", unsafe_allow_html=True)
@@ -1776,7 +1848,16 @@ def _executer_analyse(besoin, direction, equipe, client):
                         else:
                             df_a7[_col_an] = _s.astype(int)
                 a7 = AgentA7Provisionnement(audit_path=_tmp, models_path=_tmp, verbose=False)
-                r7 = a7.run(source=df_a7, generer_graphiques=True)
+                _a7p = st.session_state.get("analyse_params", {})
+                r7 = a7.run(
+                    source=df_a7,
+                    generer_graphiques=True,
+                    lob=_a7p.get("a7_lob", "generique"),
+                    arrete=_a7p.get("a7_arrete", ""),
+                    n_sim_bootstrap=_a7p.get("a7_n_sim_bootstrap", 5000),
+                    annee_base_reserve=_a7p.get("a7_annee_base_reserve", 1),
+                    resultats_precedents=_a7p.get("a7_resultats_precedents"),
+                )
                 resultats["principal"] = r7
 
             # ── TARIFICATION ────────────────────────────────────────────────
@@ -1845,7 +1926,17 @@ def _executer_analyse(besoin, direction, equipe, client):
                         tri = _np.hstack([tri, _np.zeros((n_rows, n_max - n_cols))])
                     if n_rows < n_max:
                         tri = _np.vstack([tri, _np.zeros((n_max - n_rows, n_max))])
-                    r7 = a7.run(source=tri, mode_declare='cumule', generer_graphiques=True)
+                    _a7p = st.session_state.get("analyse_params", {})
+                    r7 = a7.run(
+                        source=tri,
+                        mode_declare='cumule',
+                        generer_graphiques=True,
+                        lob=_a7p.get("a7_lob", "generique"),
+                        arrete=_a7p.get("a7_arrete", ""),
+                        n_sim_bootstrap=_a7p.get("a7_n_sim_bootstrap", 5000),
+                        annee_base_reserve=_a7p.get("a7_annee_base_reserve", 1),
+                        resultats_precedents=_a7p.get("a7_resultats_precedents"),
+                    )
                 else:
                     r7 = a7.run(generer_graphiques=False)
                 resultats["principal"] = r7
@@ -2248,7 +2339,7 @@ def page_resultats():
     st.markdown("<hr>", unsafe_allow_html=True)
 
     # ── EXPORT ───────────────────────────────────────────────────────────────
-    e1, e2, e3, _ = st.columns([1, 1, 1, 2])
+    e1, e2, e3, e4, e5 = st.columns([1, 1, 1, 1, 1])
     with e1:
         st.download_button(
             "⬇️ Export JSON",
@@ -2270,6 +2361,32 @@ def page_resultats():
                 key="dl_res_excel",
             )
     with e3:
+        word_bytes = r_raw.get("word_bytes", b"")
+        if word_bytes:
+            st.download_button(
+                "📄 Rapport Word",
+                data=word_bytes,
+                file_name=f"rapport_actuariel_{besoin}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                use_container_width=True,
+                key="dl_res_word",
+            )
+        else:
+            st.button("📄 Rapport Word", use_container_width=True, key="dl_res_word_na", disabled=True, help="Non disponible pour cet agent")
+    with e4:
+        pdf_bytes = r_raw.get("pdf_bytes", b"")
+        if pdf_bytes:
+            st.download_button(
+                "📑 Rapport PDF",
+                data=pdf_bytes,
+                file_name=f"rapport_actuariel_{besoin}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+                key="dl_res_pdf",
+            )
+        else:
+            st.button("📑 Rapport PDF", use_container_width=True, key="dl_res_pdf_na", disabled=True, help="Non disponible pour cet agent")
+    with e5:
         if st.button("📊 Voir Dashboard", use_container_width=True, key="res_to_dash"):
             nav_to("dashboard")
 
