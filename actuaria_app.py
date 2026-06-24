@@ -1173,13 +1173,52 @@ def _validation_agent(ak):
   </div>
 </div>""", unsafe_allow_html=True)
 
-    # Charger les graphiques de validation si disponibles
-    # (ils seront chargés depuis les résultats du pipeline Colab)
-    st.info(f"⚙️ Les graphiques de validation s'affichent après exécution du pipeline {a['prenom']} depuis Colab.")
-    st.markdown(f"""
+    # Lire les vrais résultats A7 si disponibles
+    _res_val = st.session_state.get("res_data", {})
+    _r_val   = _res_val.get("principal", _res_val)
+    _n2_val  = _r_val.get("n2", {}) if isinstance(_r_val, dict) else {}
+    _n3_val  = _r_val.get("n3", {}) if isinstance(_r_val, dict) else {}
+    _graphiques_val = _r_val.get("graphiques", {}) if isinstance(_r_val, dict) else {}
+
+    _hyp_map_val = {
+        "H1 — Indépendance (Mack)": _n2_val.get("h1_independance", {}),
+        "H2 — Stabilité facteurs":   _n2_val.get("h2_stabilite", {}),
+        "H3 — A priori BF":          _n2_val.get("h3_apriori_bf", {}),
+        "H4 — Homoscédasticité ODP": _n2_val.get("h4_homosc_bootstrap", {}),
+    }
+
+    if any(v for v in _hyp_map_val.values() if isinstance(v, dict) and v):
+        # Résultats réels disponibles
+        for _hl, _hd in _hyp_map_val.items():
+            if not isinstance(_hd, dict) or not _hd:
+                continue
+            _ok  = bool(_hd.get("ok", True))
+            _ic  = "✅" if _ok else "⚠️"
+            _sc  = _hd.get("score", "—")
+            _msg = str(_hd.get("message", ""))
+            _col = VERT if _ok else AMBRE
+            st.markdown(f"""
+<div style="background:{NAVY_L};border-left:3px solid {_col};border-radius:6px;padding:10px 14px;margin-bottom:6px;">
+  <div style="font-size:0.78rem;font-weight:700;color:{_col};">{_ic} {_hl} — score {_sc}/100</div>
+  <div style="font-size:0.76rem;color:{BLANC};margin-top:3px;line-height:1.5;">{_msg}</div>
+</div>""", unsafe_allow_html=True)
+
+        # Graphiques de validation H1/H2/H3
+        for _gnom, _gtitle in [("g6_h1","H1 — Test indépendance"),("g7_h2","H2 — Stabilité facteurs"),("g8_h3","H3 — Loss Ratio a priori")]:
+            _fig_v = _graphiques_val.get(_gnom)
+            if _fig_v is not None:
+                st.markdown(f"<div style='font-size:0.62rem;color:{OR};font-weight:700;margin:12px 0 4px;'>{_gtitle}</div>", unsafe_allow_html=True)
+                try:
+                    st.plotly_chart(_fig_v, use_container_width=True, key=f"val_{_gnom}_{ak}")
+                except Exception as _ev:
+                    st.warning(f"Graphique {_gtitle} : {_ev}")
+    else:
+        # Pas encore de résultats — afficher les hypothèses théoriques
+        st.info(f"⚙️ Lance une analyse depuis la page Analyse pour voir les résultats réels de {a['prenom']}.")
+        st.markdown(f"""
 <div style="background:{NAVY_LL};border:1px solid rgba(201,168,76,0.15);border-radius:10px;padding:16px;">
   <div style="font-size:0.82rem;color:{BLANC};line-height:1.8;">
-    <strong style="color:{OR};">Hypothèses validées pour {a['prenom']} :</strong><br>
+    <strong style="color:{OR};">Hypothèses testées par {a['prenom']} :</strong><br>
     {_get_hypotheses_texte(a['code'])}
   </div>
 </div>""", unsafe_allow_html=True)
