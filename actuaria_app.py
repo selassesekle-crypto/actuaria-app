@@ -216,7 +216,8 @@ st.markdown(f"""
 [data-testid="stMetricValue"] {{
   color:{OR}!important;font-size:1.35rem!important;font-weight:700!important;
 }}
-.stButton>button,
+/* Boutons gold — hors sidebar et hors expanders */
+.stButton>button:not([data-testid="stSidebarContent"] button):not([data-baseweb="accordion"] button),
 .stDownloadButton>button {{
   background:linear-gradient(135deg,{OR},{OR_L}) !important;
   color:{NAVY} !important;
@@ -226,7 +227,7 @@ st.markdown(f"""
   padding:10px 20px !important;
   transition:all 0.2s !important;
 }}
-.stButton>button:hover,
+.stButton>button:not([data-testid="stSidebarContent"] button):not([data-baseweb="accordion"] button):hover,
 .stDownloadButton>button:hover {{
   transform:translateY(-1px) !important;
   box-shadow:0 4px 16px rgba(201,168,76,0.4) !important;
@@ -236,6 +237,16 @@ st.markdown(f"""
   background:{NAVY_L} !important;
   color:rgba(138,155,176,0.5) !important;
   cursor:not-allowed !important;
+  transform:none !important;
+  box-shadow:none !important;
+}}
+/* Expanders — style navy préservé */
+[data-baseweb="accordion"] button,
+details>summary {{
+  background:{NAVY_L} !important;
+  color:{BLANC} !important;
+  border:1px solid rgba(201,168,76,0.15) !important;
+  font-weight:500 !important;
   transform:none !important;
   box-shadow:none !important;
 }}
