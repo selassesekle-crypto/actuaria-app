@@ -1208,23 +1208,24 @@ def _validation_agent(ak):
   <div style="font-size:0.76rem;color:{BLANC};margin-top:3px;line-height:1.5;">{_msg}</div>
 </div>""", unsafe_allow_html=True)
 
-        # Graphiques de validation — regénérés à la volée depuis les données brutes
-        _tri_val = _r_val.get("triangle") if isinstance(_r_val, dict) else None
+        # Graphiques de validation — regénérés à la volée depuis données brutes
+        _tri_val = (
+            st.session_state.get("triangle_a7")
+            or (_r_val.get("triangle") if isinstance(_r_val, dict) else None)
+        )
         if _tri_val is not None and _n2_val and _n3_val:
             try:
                 import numpy as _np_val
                 from a7_provisionnement.n5_graphiques import generer_graphiques as _gen_g
-                _figs_val = _gen_g(
-                    _np_val.array(_tri_val) if not hasattr(_tri_val, "shape") else _tri_val,
-                    _n2_val, _n3_val,
-                    _r_val.get("n4", {})
-                )
+                _C_val = _np_val.array(_tri_val) if not hasattr(_tri_val, "shape") else _tri_val
+                _figs_val = _gen_g(_C_val, _n2_val, _n3_val, _r_val.get("n4", {}))
                 for _gnom, _gtitle in [
-                    ("g8_h1",  "H1 — Indépendance (Spearman)"),
-                    ("g9_h2",  "H2 — Stabilité des facteurs"),
-                    ("g10_h3", "H3 — Loss Ratio a priori"),
-                    ("g6_bootstrap", "Distribution Bootstrap ODP"),
-                    ("g5_convergence", "Convergence des méthodes"),
+                    ("g8_h1",         "H1 — Indépendance (corrélations Spearman)"),
+                    ("g9_h2",         "H2 — Stabilité des facteurs de développement"),
+                    ("g10_h3",        "H3 — Loss Ratio a priori vs référence marché"),
+                    ("g3_facteurs_cl","Facteurs Chain Ladder ±2σ — outliers"),
+                    ("g11_ultimates", "Ultimates projetés vs dernière diagonale"),
+                    ("g12_sensibilites", "Sensibilités du BE — Tornado Chart"),
                 ]:
                     _fig_v = _figs_val.get(_gnom)
                     if _fig_v is not None:
@@ -2311,10 +2312,10 @@ def _executer_analyse(besoin, direction, equipe, client):
             st.session_state["res_data"]   = resultats
             st.session_state["res_besoin"] = besoin
             st.session_state["res_client"] = ref_client
-            # Stocker les graphiques séparément (les go.Figure ne survivent pas toujours à la navigation)
+            # Stocker triangle séparément pour regénération graphiques à la volée
             _r_principal = resultats.get("principal", {})
-            if isinstance(_r_principal, dict) and _r_principal.get("graphiques"):
-                st.session_state["graphiques_a7"] = _r_principal["graphiques"]
+            if isinstance(_r_principal, dict) and _r_principal.get("triangle") is not None:
+                st.session_state["triangle_a7"] = _r_principal["triangle"]
             nav_to("resultats")
 
         except ImportError as e:
@@ -2432,38 +2433,37 @@ def page_resultats():
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
-    # ── GRAPHIQUES ───────────────────────────────────────────────────────────
-    ordre = ["g1_heatmap","g2_facteurs_cl","g3_ibnr","g4_convergence",
-             "g5_bootstrap","g6_h1","g7_h2","g8_h3",
-             # compatibilité ancienne API
-             "heatmap_triangle","facteurs_cl","ibnr_par_annee","convergence_methodes"]
-    titres = {
-        "g1_heatmap":        "◆ Triangle de développement",
-        "g2_facteurs_cl":    "◆ Facteurs de développement ±2σ",
-        "g3_ibnr":           "◆ IBNR par année de survenance",
-        "g4_convergence":    "◆ Convergence des méthodes",
-        "g5_bootstrap":      "◆ Distribution Bootstrap — 1 000 simulations",
-        "g6_h1":             "◆ H1 — Test d'indépendance",
-        "g7_h2":             "◆ H2 — Stabilité des facteurs",
-        "g8_h3":             "◆ H3 — Loss Ratio a priori BF",
-        "heatmap_triangle":  "◆ Triangle de développement",
-        "facteurs_cl":       "◆ Facteurs de développement ±2σ",
-        "ibnr_par_annee":    "◆ IBNR par année de survenance",
-        "convergence_methodes": "◆ Convergence des méthodes",
-    }
+    # ── GRAPHIQUES — regénérés à la volée depuis données brutes ─────────────
+    # (les go.Figure ne survivent pas à la navigation Streamlit)
+    _tri_res = r_raw.get("triangle")
+    _figs_res = {}
+    if _tri_res is not None and n2 and n3:
+        try:
+            import numpy as _np_res
+            from a7_provisionnement.n5_graphiques import generer_graphiques as _gen_res
+            _C_res = _np_res.array(_tri_res) if not hasattr(_tri_res, "shape") else _tri_res
+            _figs_res = _gen_res(_C_res, n2, n3, n4)
+            st.markdown(f"<div style='font-size:0.62rem;color:{VERT};margin-bottom:8px;'>✅ {len(_figs_res)}/12 graphiques générés</div>", unsafe_allow_html=True)
+        except Exception as _eg:
+            st.warning(f"Graphiques non disponibles : {_eg}")
 
-    graphiques_affiches = set()
-    for nom in ordre:
-        fig = graphiques.get(nom)
-        if fig is not None and nom not in graphiques_affiches:
-            graphiques_affiches.add(nom)
-            titre_g = titres.get(nom, nom)
-            st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:16px 0 6px;'>{titre_g}</div>", unsafe_allow_html=True)
+    # Graphiques page Résultats : les 6 graphiques décisionnels
+    _ORDRE_RES = [
+        ("g1_heatmap",       "◆ Triangle de développement cumulé"),
+        ("g2_cadences",      "◆ Cadences cumulées par année de survenance"),
+        ("g5_convergence",   "◆ Convergence des méthodes — Best Estimate S2"),
+        ("g4_ibnr",          "◆ IBNR par année de survenance"),
+        ("g6_bootstrap",     "◆ Distribution Bootstrap ODP — Quantiles de réserve"),
+        ("g7_scr",           "◆ SCR Provisions — Décomposition (Art. 105 S2)"),
+    ]
+    for _gnom, _gtit in _ORDRE_RES:
+        _fig = _figs_res.get(_gnom)
+        if _fig is not None:
+            st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:16px 0 6px;'>{_gtit}</div>", unsafe_allow_html=True)
             try:
-                st.plotly_chart(fig, use_container_width=True, key=f"fig_{nom}")
-                graphiques_affiches.add(nom)
-            except Exception as _e_fig:
-                st.warning(f"Graphique {nom} non disponible : {_e_fig}")
+                st.plotly_chart(_fig, use_container_width=True, key=f"res_{_gnom}")
+            except Exception as _ef:
+                st.warning(f"Graphique {_gtit} : {_ef}")
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
