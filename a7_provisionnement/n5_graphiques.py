@@ -1,0 +1,1275 @@
+# =============================================================================
+#  ActuarIA — Agent A7 Ibrahim
+#  n5_graphiques.py  —  Graphiques Plotly (style dashboard ActuarIA)
+# =============================================================================
+#
+#  12 graphiques professionnels :
+#
+#  G1  — Heatmap triangle de développement (zone connue + projection)
+#  G2  — Courbes de cadence cumulées par année (style image fournie)
+#  G3  — Facteurs CL avec bande ±2σ et coloration outliers
+#  G4  — IBNR par année (barplot horizontal, dégradé couleur)
+#  G5  — Convergence des méthodes + BE S2 + IC Mack
+#  G6  — Distribution Bootstrap (histogramme + P50/P90/P99.5)
+#  G7  — SCR par composante (donut, style image fournie)
+#  G8  — H1 Indépendance (corrélations Spearman par paire)
+#  G9  — H2 Stabilité (heatmap écarts facteurs individuels vs CL)
+#  G10 — H3 LR a priori par année mature vs référence marché
+#  G11 — Ultimates projetés vs dernière diagonale
+#  G12 — Sensibilités du BE (tornado chart)
+#
+#  Palette ActuarIA
+#  ─────────────────
+#  Fond      : #0F2E52  (Navy profond)
+#  Or        : #C9A84C  (Gold)
+#  Blanc     : #F0F4F8
+#  Gris clair: #8A9AB0
+#  Bleu vif  : #378ADD
+#  Vert vif  : #2ECC71
+#  Rouge vif : #E74C3C
+#  Ambre     : #F39C12
+#  Violet    : #9B59B6
+#  Cyan      : #1ABC9C
+#
+# =============================================================================
+
+import logging
+from typing import Dict, List, Optional
+
+import numpy as np
+
+logger = logging.getLogger('actuaria.a7')
+
+try:
+    import plotly.graph_objects as go
+    import plotly.figure_factory as ff
+    PLOTLY_OK = True
+except ImportError:
+    PLOTLY_OK = False
+    logger.warning("Plotly non disponible — graphiques désactivés")
+
+# ── Palette ──────────────────────────────────────────────────────────────────
+NAVY     = '#0F2E52'
+NAVY_L   = '#1B3A5C'
+NAVY_LL  = '#243F61'
+OR       = '#C9A84C'
+BLANC    = '#F0F4F8'
+GRIS     = '#8A9AB0'
+BLEU     = '#378ADD'
+VERT     = '#2ECC71'
+ROUGE    = '#E74C3C'
+AMBRE    = '#F39C12'
+VIOLET   = '#9B59B6'
+CYAN     = '#1ABC9C'
+ROSE     = '#E91E8C'
+
+# Séquence de couleurs pour les années de survenance (style image fournie)
+COULEURS_ANNEES = [
+    '#00D4FF', '#7C3AED', '#10B981', '#F59E0B',
+    '#EF4444', '#8B5CF6', '#06B6D4', '#F97316',
+    '#84CC16', '#EC4899', '#14B8A6', '#F43F5E',
+    '#A855F7', '#22D3EE', '#4ADE80',
+]
+
+# Layout de base commun à tous les graphiques
+LAYOUT_BASE = dict(
+    paper_bgcolor=NAVY,
+    plot_bgcolor=NAVY_L,
+    font=dict(family='Inter, Arial, sans-serif', color=BLANC, size=11),
+    margin=dict(l=60, r=30, t=55, b=50),
+    height=420,
+    hoverlabel=dict(
+        bgcolor=NAVY_LL,
+        bordercolor=OR,
+        font=dict(color=BLANC, size=11),
+    ),
+)
+
+
+def _layout(**kwargs) -> dict:
+    """Fusionne LAYOUT_BASE avec des overrides spécifiques."""
+    base = LAYOUT_BASE.copy()
+    base.update(kwargs)
+    return base
+
+
+# =============================================================================
+#  G1 — HEATMAP TRIANGLE DE DÉVELOPPEMENT
+# =============================================================================
+
+def g1_heatmap_triangle(C: np.ndarray) -> 'go.Figure':
+    """
+    Heatmap du triangle de développement.
+    Zone connue en dégradé Navy→Or→Rouge.
+    Zone projetée grisée.
+    """
+    if not PLOTLY_OK:
+        return None
+    n, m = C.shape
+
+    z_known = []
+    z_proj  = []
+    for i in range(n):
+        row_k, row_p = [], []
+        for j in range(m):
+            in_zone = (j <= n - i - 1) and C[i, j] > 0
+            row_k.append(float(C[i, j]) if in_zone else None)
+            row_p.append(float(C[i, j]) if not in_zone and C[i, j] > 0 else None)
+        z_known.append(row_k)
+        z_proj.append(row_p)
+
+    x_lbl = [f"{(j+1)*12}M" for j in range(m)]
+    y_lbl = [f"An. {i}" for i in range(n)]
+
+    fig = go.Figure()
+
+    # Zone connue
+    fig.add_trace(go.Heatmap(
+        z=z_known,
+        x=x_lbl, y=y_lbl,
+        colorscale=[[0, NAVY_LL], [0.4, '#1A5276'], [0.75, OR], [1, ROUGE]],
+        showscale=True,
+        name='Zone connue',
+        hovertemplate=(
+            "<b>%{y} — %{x}</b><br>"
+            "Cumulé payé : <b>%{z:,.0f} €</b><extra></extra>"
+        ),
+        colorbar=dict(
+            title=dict(text='Sinistres cumulés', font=dict(color=BLANC, size=10)),
+            tickfont=dict(color=BLANC, size=9),
+            x=1.02,
+        ),
+    ))
+
+    fig.update_layout(
+        **_layout(
+            title=dict(
+                text="Triangle de développement — Sinistres cumulés payés",
+                font=dict(color=OR, size=13, family='Inter, Arial'),
+                x=0.01,
+            ),
+            xaxis=dict(
+                title="Période de développement",
+                tickfont=dict(color=GRIS, size=9),
+                showgrid=False,
+            ),
+            yaxis=dict(
+                tickfont=dict(color=BLANC, size=9),
+                showgrid=False,
+                autorange='reversed',
+            ),
+            annotations=[dict(
+                text=f"Triangle {n}×{m}",
+                xref='paper', yref='paper',
+                x=0.99, y=1.02,
+                showarrow=False,
+                font=dict(color=OR, size=10),
+            )],
+        )
+    )
+    return fig
+
+
+# =============================================================================
+#  G2 — COURBES DE CADENCE CUMULÉES PAR ANNÉE
+# =============================================================================
+
+def g2_cadences_developpement(
+    C:              np.ndarray,
+    facteurs_cum:   List[float],
+    pct_dev:        List[float],
+    methode_cl:     str = 'standard',
+) -> 'go.Figure':
+    """
+    Courbes de développement cumulé par année de survenance.
+    Style identique à l'image fournie (ligne par ligne, fond sombre).
+
+    Montre la cadence normalisée (fraction développée) par période.
+    La dernière année inclut la projection (pointillés).
+    """
+    if not PLOTLY_OK:
+        return None
+    n, m = C.shape
+
+    fig = go.Figure()
+
+    for i in range(n):
+        color = COULEURS_ANNEES[i % len(COULEURS_ANNEES)]
+        k_i   = min(n - i - 1, m - 1)   # dernière colonne connue
+
+        # Cadence connue
+        x_known, y_known = [], []
+        for j in range(k_i + 1):
+            if C[i, j] > 0 and C[i, k_i] > 0:
+                x_known.append(f"{(j+1)*12}M")
+                y_known.append(round(C[i, j] / C[i, k_i] * pct_dev[i], 4))
+
+        if x_known:
+            fig.add_trace(go.Scatter(
+                x=x_known, y=y_known,
+                mode='lines+markers',
+                line=dict(color=color, width=2),
+                marker=dict(size=4, color=color),
+                name=f"An. {i}",
+                legendgroup=f"An. {i}",
+                hovertemplate=(
+                    f"<b>Année {i}</b><br>"
+                    "Développement : %{x}<br>"
+                    "Fraction dev. : <b>%{y:.1%}</b><extra></extra>"
+                ),
+            ))
+
+        # Projection (pointillés)
+        if k_i < m - 1 and pct_dev[i] < 0.99:
+            x_proj = [f"{(k_i+1)*12}M"]
+            y_proj = [round(pct_dev[i], 4)]
+            for j2 in range(k_i + 1, m):
+                cum_j2 = float(np.prod([facteurs_cum[j3]
+                                        for j3 in range(k_i, j2)]
+                                       if j2 > k_i else [1.0]))
+                x_proj.append(f"{(j2+1)*12}M")
+                y_proj.append(round(min(pct_dev[i] * cum_j2, 1.0), 4))
+
+            fig.add_trace(go.Scatter(
+                x=x_proj, y=y_proj,
+                mode='lines',
+                line=dict(color=color, width=1.5, dash='dot'),
+                showlegend=False,
+                legendgroup=f"An. {i}",
+                hovertemplate=(
+                    f"<b>Année {i} (proj.)</b><br>"
+                    "Développement : %{x}<br>"
+                    "Fraction dev. : <b>%{y:.1%}</b><extra></extra>"
+                ),
+            ))
+
+    fig.update_layout(
+        **_layout(
+            title=dict(
+                text=f"Triangles de développement — Cadences cumulées · {methode_cl.title()}",
+                font=dict(color=OR, size=13),
+                x=0.01,
+            ),
+            xaxis=dict(
+                title="Période",
+                tickfont=dict(color=GRIS, size=9),
+                showgrid=True,
+                gridcolor='rgba(255,255,255,0.05)',
+            ),
+            yaxis=dict(
+                title="Fraction développée",
+                tickfont=dict(color=GRIS, size=10),
+                tickformat='.0%',
+                showgrid=True,
+                gridcolor='rgba(255,255,255,0.05)',
+                range=[0, 1.05],
+            ),
+            legend=dict(
+                bgcolor='rgba(15,46,82,0.8)',
+                bordercolor=OR,
+                borderwidth=0.5,
+                font=dict(color=BLANC, size=9),
+                orientation='h',
+                yanchor='bottom', y=1.01,
+                xanchor='left', x=0,
+            ),
+        )
+    )
+    return fig
+
+
+# =============================================================================
+#  G3 — FACTEURS DE DÉVELOPPEMENT CL ±2σ
+# =============================================================================
+
+def g3_facteurs_cl(n3: Dict) -> 'go.Figure':
+    """
+    Facteurs de développement CL avec bande ±2σ.
+    Coloration : vert si dans σ, ambre si dans 2σ, rouge si outlier.
+    """
+    if not PLOTLY_OK:
+        return None
+    facteurs = n3.get('chain_ladder', {}).get('facteurs', [])
+    if not facteurs:
+        return None
+
+    f_arr = np.array(facteurs, dtype=float)
+    moy   = float(np.mean(f_arr))
+    std   = float(np.std(f_arr))
+    x     = [f"j→{j+1}" for j in range(len(facteurs))]
+
+    colors = [
+        ROUGE if abs(f - moy) > 2 * std else
+        AMBRE if abs(f - moy) > std else
+        BLEU
+        for f in facteurs
+    ]
+
+    fig = go.Figure()
+
+    # Bande ±2σ (fond)
+    x_fill = list(range(len(facteurs)))
+    fig.add_trace(go.Scatter(
+        x=x_fill + x_fill[::-1],
+        y=[moy + 2*std]*len(x_fill) + [moy - 2*std]*len(x_fill),
+        fill='toself',
+        fillcolor='rgba(201,168,76,0.08)',
+        line=dict(color='rgba(0,0,0,0)'),
+        name='±2σ',
+        showlegend=True,
+    ))
+
+    # Bande ±1σ
+    fig.add_trace(go.Scatter(
+        x=x_fill + x_fill[::-1],
+        y=[moy + std]*len(x_fill) + [moy - std]*len(x_fill),
+        fill='toself',
+        fillcolor='rgba(201,168,76,0.15)',
+        line=dict(color='rgba(0,0,0,0)'),
+        name='±1σ',
+        showlegend=True,
+    ))
+
+    # Barres facteurs
+    fig.add_trace(go.Bar(
+        x=x, y=list(facteurs),
+        marker_color=colors,
+        marker_line=dict(color=NAVY, width=1),
+        width=0.5,
+        name='Facteurs CL',
+        text=[f"{f:.4f}" for f in facteurs],
+        textposition='outside',
+        textfont=dict(color=BLANC, size=9),
+        hovertemplate=(
+            "<b>Transition %{x}</b><br>"
+            "Facteur : <b>%{y:.5f}</b><extra></extra>"
+        ),
+    ))
+
+    # Ligne moyenne
+    fig.add_hline(
+        y=moy,
+        line_color=OR, line_dash='dash', line_width=1.5,
+        annotation_text=f"Moy = {moy:.4f}",
+        annotation_font=dict(color=OR, size=10),
+        annotation_position='top right',
+    )
+
+    fig.update_layout(
+        **_layout(
+            title=dict(
+                text="Facteurs de développement Chain Ladder — Stabilité ±2σ",
+                font=dict(color=OR, size=13),
+                x=0.01,
+            ),
+            xaxis=dict(
+                title="Transition de développement",
+                tickfont=dict(color=GRIS, size=9),
+                showgrid=False,
+            ),
+            yaxis=dict(
+                title="Facteur f_j",
+                tickfont=dict(color=GRIS, size=10),
+                showgrid=True,
+                gridcolor='rgba(255,255,255,0.05)',
+            ),
+            showlegend=True,
+            legend=dict(
+                bgcolor='rgba(15,46,82,0.8)',
+                font=dict(color=BLANC, size=9),
+            ),
+            barmode='overlay',
+        )
+    )
+    return fig
+
+
+# =============================================================================
+#  G4 — IBNR PAR ANNÉE DE SURVENANCE
+# =============================================================================
+
+def g4_ibnr_par_annee(n3: Dict) -> 'go.Figure':
+    """
+    IBNR par année — barplot horizontal avec dégradé couleur.
+    Texte hors barre. Zoom sur les années les plus importantes.
+    """
+    if not PLOTLY_OK:
+        return None
+    ibnr = n3.get('chain_ladder', {}).get('ibnr_par_annee', [])
+    ult  = n3.get('chain_ladder', {}).get('ultimates', [])
+    if not ibnr:
+        return None
+
+    n      = len(ibnr)
+    labels = [f"Année {i}" for i in range(n)]
+    vals   = [max(float(v), 0) for v in ibnr]
+    ults   = [float(v) for v in ult] if ult else [0]*n
+    max_v  = max(vals) if vals else 1
+
+    # Dégradé Or → Rouge selon magnitude
+    colors = [
+        f'rgba({int(201 + 46*(v/max_v))},{int(168 - 168*(v/max_v))},{int(76 - 76*(v/max_v))},0.85)'
+        for v in vals
+    ]
+
+    fig = go.Figure()
+
+    # Barres IBNR
+    fig.add_trace(go.Bar(
+        y=labels,
+        x=vals,
+        orientation='h',
+        marker_color=colors,
+        marker_line=dict(color=NAVY, width=0.5),
+        name='IBNR',
+        text=[f"  {v:,.0f} €" if v > 0 else "" for v in vals],
+        textposition='outside',
+        textfont=dict(color=BLANC, size=9),
+        hovertemplate=(
+            "<b>%{y}</b><br>"
+            "IBNR : <b>%{x:,.0f} €</b><extra></extra>"
+        ),
+    ))
+
+    fig.update_layout(
+        **_layout(
+            height=max(380, n * 28),
+            title=dict(
+                text="IBNR par année de survenance — Chain Ladder",
+                font=dict(color=OR, size=13),
+                x=0.01,
+            ),
+            xaxis=dict(
+                title="IBNR (€)",
+                tickfont=dict(color=GRIS, size=9),
+                showgrid=True,
+                gridcolor='rgba(255,255,255,0.05)',
+            ),
+            yaxis=dict(
+                tickfont=dict(color=BLANC, size=9),
+                showgrid=False,
+                autorange='reversed',
+            ),
+        )
+    )
+    return fig
+
+
+# =============================================================================
+#  G5 — CONVERGENCE DES MÉTHODES
+# =============================================================================
+
+def g5_convergence_methodes(n3: Dict, n4: Dict) -> 'go.Figure':
+    """
+    Convergence des méthodes actuarielles + BE S2 + IC Mack.
+    Les méthodes incluses vs exclues sont visuellement différenciées.
+    """
+    if not PLOTLY_OK:
+        return None
+
+    methodes_incluses = n4.get('methodes_incluses', [])
+    methodes_exclues  = n4.get('methodes_exclues',  [])
+    be                = n4.get('best_estimate', 0)
+    be_mack           = n3['mack']['reserve_best_estimate']
+    sigma             = n3['mack']['sigma_total']
+
+    label_map = {
+        'chain_ladder':         'Chain Ladder',
+        'mack':                 'Mack 1993',
+        'bornhuetter_ferguson': 'Bornhuetter-Ferguson',
+        'cape_cod':             'Cape Cod',
+    }
+    res_map = {
+        'chain_ladder':         n3['chain_ladder']['reserve_totale'],
+        'mack':                 n3['mack']['reserve_best_estimate'],
+        'bornhuetter_ferguson': n3['bf']['reserve_totale'],
+        'cape_cod':             n3['cape_cod']['reserve_totale'],
+    }
+
+    fig = go.Figure()
+
+    # Méthodes incluses (couleurs vives)
+    couleurs_inc = [BLEU, CYAN, VERT, VIOLET]
+    for idx, m in enumerate(methodes_incluses):
+        c = couleurs_inc[idx % len(couleurs_inc)]
+        r = res_map.get(m, 0)
+        w = n4.get('poids', {}).get(m, 0)
+        fig.add_trace(go.Bar(
+            x=[label_map.get(m, m)], y=[r],
+            name=f"{label_map.get(m,m)} ({w:.0%})",
+            marker_color=c,
+            marker_line=dict(color=NAVY, width=1),
+            width=0.45,
+            text=[f"{r:,.0f}€"],
+            textposition='outside',
+            textfont=dict(color=BLANC, size=9),
+            hovertemplate=(
+                f"<b>{label_map.get(m,m)}</b><br>"
+                f"Réserve : <b>%{{y:,.0f}} €</b><br>"
+                f"Poids BE : {w:.0%}<extra></extra>"
+            ),
+        ))
+
+    # Méthodes exclues (grisées)
+    for m in methodes_exclues:
+        r = res_map.get(m, 0)
+        fig.add_trace(go.Bar(
+            x=[label_map.get(m, m)], y=[r],
+            name=f"{label_map.get(m,m)} (exclu)",
+            marker_color='rgba(138,154,176,0.35)',
+            marker_line=dict(color=GRIS, width=1),
+            width=0.45,
+            text=[f"{r:,.0f}€"],
+            textposition='outside',
+            textfont=dict(color=GRIS, size=9),
+            hovertemplate=(
+                f"<b>{label_map.get(m,m)} — EXCLU</b><br>"
+                f"Réserve : <b>%{{y:,.0f}} €</b><extra></extra>"
+            ),
+        ))
+
+    # BE S2 (barre distincte, orange vif)
+    fig.add_trace(go.Bar(
+        x=['Best Estimate S2'], y=[be],
+        name='BE S2',
+        marker_color=OR,
+        marker_line=dict(color=BLANC, width=1),
+        width=0.55,
+        text=[f"<b>{be:,.0f}€</b>"],
+        textposition='outside',
+        textfont=dict(color=OR, size=11),
+        hovertemplate=(
+            "<b>Best Estimate S2 (Art. 77)</b><br>"
+            "BE : <b>%{y:,.0f} €</b><extra></extra>"
+        ),
+    ))
+
+    # IC Mack (ligne d'erreur sur Mack)
+    fig.add_trace(go.Scatter(
+        x=['Mack 1993', 'Mack 1993'],
+        y=[max(be_mack - sigma, 0), be_mack + sigma],
+        mode='lines+markers',
+        line=dict(color=BLANC, width=2, dash='dot'),
+        marker=dict(size=8, color=BLANC, symbol='line-ew-open'),
+        name='±σ Mack',
+    ))
+
+    # Ligne BE
+    fig.add_hline(
+        y=be,
+        line_color=OR, line_dash='dash', line_width=2,
+        annotation_text=f"BE S2 = {be:,.0f} €",
+        annotation_font=dict(color=OR, size=11),
+        annotation_position='top left',
+    )
+
+    fig.update_layout(
+        **_layout(
+            title=dict(
+                text="Convergence des méthodes actuarielles — Best Estimate S2",
+                font=dict(color=OR, size=13),
+                x=0.01,
+            ),
+            xaxis=dict(tickfont=dict(color=BLANC, size=10), showgrid=False),
+            yaxis=dict(
+                title="Réserve IBNR (€)",
+                tickfont=dict(color=GRIS, size=10),
+                showgrid=True,
+                gridcolor='rgba(255,255,255,0.05)',
+            ),
+            showlegend=True,
+            legend=dict(
+                bgcolor='rgba(15,46,82,0.8)',
+                bordercolor=OR,
+                borderwidth=0.5,
+                font=dict(color=BLANC, size=9),
+                orientation='h',
+                yanchor='bottom', y=1.01,
+                xanchor='left', x=0,
+            ),
+            barmode='group',
+        )
+    )
+    return fig
+
+
+# =============================================================================
+#  G6 — DISTRIBUTION BOOTSTRAP ODP
+# =============================================================================
+
+def g6_distribution_bootstrap(n3: Dict) -> 'go.Figure':
+    """
+    Histogramme de la distribution Bootstrap ODP avec :
+    · P50 (médiane) · P75 · P90 · P99.5 (SCR)
+    · Zone IC 95% surlignée
+    · Courbe KDE superposée
+    """
+    if not PLOTLY_OK:
+        return None
+    boot = n3.get('bootstrap', {})
+    dist = boot.get('distribution', [])
+    if not dist or len(set([round(v, -3) for v in dist])) < 5:
+        return None
+
+    arr = np.array(dist)
+    fig = go.Figure()
+
+    # Zone IC 95%
+    ic_inf = boot.get('ic_95_inf', np.percentile(arr, 2.5))
+    ic_sup = boot.get('ic_95_sup', np.percentile(arr, 97.5))
+    fig.add_vrect(
+        x0=ic_inf, x1=ic_sup,
+        fillcolor='rgba(55,138,221,0.08)',
+        line_width=0,
+        annotation_text="IC 95%",
+        annotation_font=dict(color=BLEU, size=9),
+        annotation_position='top left',
+    )
+
+    # Histogramme
+    fig.add_trace(go.Histogram(
+        x=dist,
+        nbinsx=60,
+        marker_color='rgba(201,168,76,0.65)',
+        marker_line=dict(color=NAVY, width=0.3),
+        name=f'{boot.get("n_simulations", len(dist)):,} simulations',
+        hovertemplate="Réserve : <b>%{x:,.0f} €</b><br>Fréquence : <b>%{y}</b><extra></extra>",
+    ))
+
+    # Percentiles
+    percentiles_config = [
+        (boot.get('p50',  0), 'P50',   CYAN,  'solid',  1.5),
+        (boot.get('p75',  0), 'P75',   VERT,  'dash',   1.5),
+        (boot.get('p90',  0), 'P90',   AMBRE, 'dash',   2),
+        (boot.get('p99_5',0), 'P99.5 (SCR)', ROUGE, 'dash', 2.5),
+    ]
+    for val, lbl, clr, dash, width in percentiles_config:
+        if val > 0:
+            fig.add_vline(
+                x=val,
+                line_color=clr, line_width=width, line_dash=dash,
+                annotation_text=f"<b>{lbl}</b><br>{val:,.0f}€",
+                annotation_font=dict(color=clr, size=9),
+                annotation_position='top right' if lbl in ('P99.5 (SCR)',) else 'top left',
+            )
+
+    cv = boot.get('cv_bootstrap', 0) * 100
+    fig.update_layout(
+        **_layout(
+            title=dict(
+                text=(
+                    f"Bootstrap ODP — Distribution des réserves "
+                    f"({boot.get('n_simulations', len(dist)):,} simulations · "
+                    f"CV={cv:.1f}% · φ={boot.get('phi', 0):.4f})"
+                ),
+                font=dict(color=OR, size=12),
+                x=0.01,
+            ),
+            xaxis=dict(
+                title="Réserve IBNR simulée (€)",
+                tickfont=dict(color=GRIS, size=9),
+                showgrid=True,
+                gridcolor='rgba(255,255,255,0.05)',
+            ),
+            yaxis=dict(
+                title="Fréquence",
+                tickfont=dict(color=GRIS, size=10),
+                showgrid=True,
+                gridcolor='rgba(255,255,255,0.05)',
+            ),
+            showlegend=True,
+            legend=dict(bgcolor='rgba(15,46,82,0.8)', font=dict(color=BLANC, size=9)),
+        )
+    )
+    return fig
+
+
+# =============================================================================
+#  G7 — SCR PAR COMPOSANTE (DONUT)
+# =============================================================================
+
+def g7_scr_donut(n4: Dict) -> 'go.Figure':
+    """
+    Donut SCR provisions vs marge de sécurité.
+    Style identique à l'image fournie (SCR par risque).
+    """
+    if not PLOTLY_OK:
+        return None
+
+    scr  = n4.get('scr', {})
+    be   = n4.get('best_estimate', 0)
+    p90  = n4.get('reserve_p90',  0)
+    p995 = n4.get('reserve_p99_5', 0)
+    scr_prov = scr.get('scr_provisions', 0)
+
+    if be <= 0:
+        return None
+
+    marge_p90  = max(p90  - be, 0)
+    marge_p995 = max(p995 - p90, 0)
+
+    labels = ['Best Estimate', 'Marge P75-BE', 'Marge P90-P75', 'SCR (P99.5)']
+    p75    = n4.get('reserve_p75', be)
+    values = [
+        be,
+        max(p75 - be, 0),
+        max(p90 - p75, 0),
+        max(p995 - p90, 0),
+    ]
+    colors = [BLEU, CYAN, AMBRE, ROUGE]
+
+    fig = go.Figure(go.Pie(
+        labels=labels,
+        values=values,
+        hole=0.55,
+        marker=dict(
+            colors=colors,
+            line=dict(color=NAVY, width=2),
+        ),
+        textfont=dict(color=BLANC, size=10),
+        hovertemplate=(
+            "<b>%{label}</b><br>"
+            "Montant : <b>%{value:,.0f} €</b><br>"
+            "Part : <b>%{percent}</b><extra></extra>"
+        ),
+        showlegend=True,
+    ))
+
+    # Annotation centrale
+    fig.add_annotation(
+        text=(
+            f"<b style='font-size:14px;color:{OR}'>SCR</b><br>"
+            f"<span style='font-size:10px;color:{BLANC}'>{scr_prov:,.0f}€</span>"
+        ),
+        x=0.5, y=0.5,
+        showarrow=False,
+        font=dict(color=BLANC),
+    )
+
+    fig.update_layout(
+        **_layout(
+            height=380,
+            title=dict(
+                text=(
+                    f"SCR provisions — Formule standard Art. 105 S2 · "
+                    f"σ(LoB)={scr.get('sigma_eiopa',0):.0%} · "
+                    f"{scr.get('lob_label','—')}"
+                ),
+                font=dict(color=OR, size=12),
+                x=0.01,
+            ),
+            legend=dict(
+                bgcolor='rgba(15,46,82,0.8)',
+                bordercolor=OR,
+                borderwidth=0.5,
+                font=dict(color=BLANC, size=9),
+                orientation='v',
+                x=0.75, y=0.5,
+            ),
+        )
+    )
+    return fig
+
+
+# =============================================================================
+#  G8 — H1 INDÉPENDANCE (CORRÉLATIONS SPEARMAN)
+# =============================================================================
+
+def g8_h1_independance(n2: Dict) -> 'go.Figure':
+    """
+    Corrélations Spearman par paire de colonnes.
+    Seuil de rejet visible. Barres colorées selon le statut.
+    """
+    if not PLOTLY_OK:
+        return None
+    h1      = n2.get('h1_independance', {})
+    details = h1.get('details', [])
+    if not details:
+        return None
+
+    ok      = h1.get('ok', True)
+    seuil   = h1.get('seuil_utilise', 0.50)
+    labels  = [d.get('colonnes', f"Col {i}") for i, d in enumerate(details)]
+    corrs   = [abs(d.get('corr', 0)) for d in details]
+    sigs    = [d.get('significatif', False) for d in details]
+
+    colors = [
+        ROUGE if s else AMBRE if c > seuil * 0.6 else VERT
+        for c, s in zip(corrs, sigs)
+    ]
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=labels, y=corrs,
+        marker_color=colors,
+        marker_line=dict(color=NAVY, width=1),
+        width=0.6,
+        name='|Corrélation|',
+        text=[f"{c:.3f}{'*' if s else ''}" for c, s in zip(corrs, sigs)],
+        textposition='outside',
+        textfont=dict(color=BLANC, size=9),
+        hovertemplate=(
+            "<b>%{x}</b><br>"
+            "|Corr Spearman| : <b>%{y:.3f}</b><br>"
+            "%{text}<extra></extra>"
+        ),
+    ))
+
+    # Seuil de rejet
+    fig.add_hline(
+        y=seuil,
+        line_color=ROUGE, line_dash='dash', line_width=1.5,
+        annotation_text=f"Seuil H1 ({seuil:.2f})",
+        annotation_font=dict(color=ROUGE, size=10),
+        annotation_position='top right',
+    )
+    # Zone acceptable
+    fig.add_hrect(
+        y0=0, y1=seuil * 0.6,
+        fillcolor='rgba(46,204,113,0.05)',
+        line_width=0,
+    )
+
+    titre_statut = '✅ VALIDÉE' if ok else '⚠️ REJETÉE'
+    fig.update_layout(
+        **_layout(
+            title=dict(
+                text=f"H1 Indépendance : {titre_statut} — Corrélations Spearman inter-colonnes",
+                font=dict(color=VERT if ok else ROUGE, size=13),
+                x=0.01,
+            ),
+            xaxis=dict(
+                title="Paires de colonnes",
+                tickfont=dict(color=GRIS, size=9),
+                showgrid=False,
+            ),
+            yaxis=dict(
+                title="|Corrélation Spearman|",
+                tickfont=dict(color=GRIS, size=10),
+                showgrid=True,
+                gridcolor='rgba(255,255,255,0.05)',
+                range=[0, 1.05],
+            ),
+        )
+    )
+    return fig
+
+
+# =============================================================================
+#  G9 — H2 STABILITÉ (HEATMAP ÉCARTS FACTEURS)
+# =============================================================================
+
+def g9_h2_stabilite(C: np.ndarray, n3: Dict) -> 'go.Figure':
+    """
+    Heatmap des écarts facteurs individuels vs CL agrégé.
+    Rouge = facteur anormalement élevé.
+    Bleu  = facteur anormalement bas.
+    Centre (blanc/navy) = proche du facteur CL.
+    """
+    if not PLOTLY_OK:
+        return None
+    n, m = C.shape
+    fi   = n3.get('chain_ladder', {}).get('facteurs_indiv', [])
+    fcl  = n3.get('chain_ladder', {}).get('facteurs', [])
+    if not fi or not fcl:
+        return None
+
+    max_j = min(len(fi), 12)
+    max_i = min(n, 12)
+    z, text_z = [], []
+
+    for i in range(max_i):
+        row, row_t = [], []
+        for j in range(max_j):
+            f_ind_j = fi[j] if j < len(fi) else []
+            f_cl_j  = float(fcl[j]) if j < len(fcl) and fcl[j] > 0 else 1.0
+            if i < len(f_ind_j) and f_cl_j > 0:
+                ecart = (f_ind_j[i] - f_cl_j) / f_cl_j * 100
+                row.append(round(ecart, 1))
+                row_t.append(f"{ecart:+.1f}%")
+            else:
+                row.append(None)
+                row_t.append('')
+        z.append(row)
+        text_z.append(row_t)
+
+    fig = go.Figure(go.Heatmap(
+        z=z,
+        text=text_z,
+        texttemplate="%{text}",
+        textfont=dict(color=BLANC, size=8),
+        x=[f"j={j}" for j in range(max_j)],
+        y=[f"i={i}" for i in range(max_i)],
+        colorscale=[
+            [0.0,  ROUGE],
+            [0.35, AMBRE],
+            [0.50, NAVY_L],
+            [0.65, BLEU],
+            [1.0,  VERT],
+        ],
+        zmid=0,
+        showscale=True,
+        colorbar=dict(
+            title=dict(text='Écart vs CL (%)', font=dict(color=BLANC, size=9)),
+            tickfont=dict(color=BLANC, size=8),
+        ),
+        hovertemplate=(
+            "<b>Année i=%{y} — Colonne %{x}</b><br>"
+            "Écart vs CL : <b>%{z:+.1f}%</b><extra></extra>"
+        ),
+    ))
+
+    fig.update_layout(
+        **_layout(
+            title=dict(
+                text="H2 Stabilité — Écart des facteurs individuels vs CL agrégé (%)",
+                font=dict(color=OR, size=13),
+                x=0.01,
+            ),
+            xaxis=dict(tickfont=dict(color=GRIS, size=9)),
+            yaxis=dict(tickfont=dict(color=BLANC, size=9), autorange='reversed'),
+        )
+    )
+    return fig
+
+
+# =============================================================================
+#  G10 — H3 LR A PRIORI PAR ANNÉE MATURE
+# =============================================================================
+
+def g10_h3_lr_apriori(n2: Dict, n3: Dict) -> 'go.Figure':
+    """
+    Loss Ratio par année mature vs LR a priori retenu vs référence marché.
+    Beaucoup plus informatif que la simple barre unique de v4.0.
+    """
+    if not PLOTLY_OK:
+        return None
+    h3  = n2.get('h3_apriori_bf', {})
+    lr  = h3.get('lr_apriori', 0)
+    lr_ref = h3.get('lr_reference')
+    ok  = h3.get('ok', True)
+    src = h3.get('source', '')
+
+    # LR BF par année (depuis BF n3)
+    mu_arr  = n3.get('bf', {}).get('mu_par_annee', [])
+    ibnr_bf = n3.get('bf', {}).get('ibnr_par_annee', [])
+    ult_bf  = n3.get('bf', {}).get('ultimates', [])
+    ult_cl  = n3.get('chain_ladder', {}).get('ultimates', [])
+
+    n = max(len(mu_arr), 1)
+    x = [f"Année {i}" for i in range(n)]
+
+    fig = go.Figure()
+
+    # Barres LR implicite BF par année (ultime BF / mu)
+    if mu_arr and ult_bf:
+        lr_impl = [
+            float(u)/float(m)*lr if m > 0 else 0
+            for u, m in zip(ult_bf, mu_arr)
+        ]
+        fig.add_trace(go.Bar(
+            x=x, y=[v*100 for v in lr_impl],
+            name='LR implicite BF',
+            marker_color=[VERT if 0.5 < v < 1.5 else AMBRE for v in lr_impl],
+            marker_line=dict(color=NAVY, width=1),
+            width=0.4,
+            hovertemplate=(
+                "<b>%{x}</b><br>"
+                "LR implicite : <b>%{y:.1f}%</b><extra></extra>"
+            ),
+        ))
+
+    # Ligne LR a priori retenu
+    fig.add_hline(
+        y=lr*100,
+        line_color=OR, line_dash='solid', line_width=2,
+        annotation_text=f"LR a priori = {lr:.1%} ({src})",
+        annotation_font=dict(color=OR, size=10),
+        annotation_position='top right',
+    )
+
+    # Référence marché
+    if lr_ref:
+        fig.add_hline(
+            y=lr_ref*100,
+            line_color=GRIS, line_dash='dot', line_width=1.5,
+            annotation_text=f"Réf. marché = {lr_ref:.1%}",
+            annotation_font=dict(color=GRIS, size=9),
+            annotation_position='bottom right',
+        )
+
+    # Plage acceptable [30%, 150%]
+    fig.add_hrect(y0=30, y1=150, fillcolor='rgba(46,204,113,0.04)', line_width=0)
+
+    titre_statut = '✅ VALIDÉ' if ok else '⚠️ À VÉRIFIER'
+    fig.update_layout(
+        **_layout(
+            title=dict(
+                text=f"H3 Loss Ratio a priori BF — {titre_statut}",
+                font=dict(color=VERT if ok else AMBRE, size=13),
+                x=0.01,
+            ),
+            xaxis=dict(tickfont=dict(color=BLANC, size=9), showgrid=False),
+            yaxis=dict(
+                title="Loss Ratio (%)",
+                tickfont=dict(color=GRIS, size=10),
+                showgrid=True,
+                gridcolor='rgba(255,255,255,0.05)',
+                range=[0, 200],
+            ),
+            showlegend=True,
+            legend=dict(bgcolor='rgba(15,46,82,0.8)', font=dict(color=BLANC, size=9)),
+        )
+    )
+    return fig
+
+
+# =============================================================================
+#  G11 — ULTIMATES PROJETÉS VS DERNIÈRE DIAGONALE
+# =============================================================================
+
+def g11_ultimates_vs_diagonale(n3: Dict) -> 'go.Figure':
+    """
+    Comparaison ultimates projetés (CL, Mack, BF, CC) vs dernière diagonale.
+    Permet de visualiser l'IBNR implicite de chaque méthode.
+    """
+    if not PLOTLY_OK:
+        return None
+
+    ult_cl   = n3.get('chain_ladder', {}).get('ultimates', [])
+    ult_mack = n3.get('mack',         {}).get('reserve_best_estimate', 0)
+    ult_bf   = n3.get('bf',           {}).get('ultimates', [])
+    ult_cc   = n3.get('cape_cod',     {}).get('ultimates', [])
+    last_d   = n3.get('chain_ladder', {}).get('last_diagonale', [])
+    if not ult_cl or not last_d:
+        return None
+
+    n = len(ult_cl)
+    x = [f"An. {i}" for i in range(n)]
+
+    fig = go.Figure()
+
+    # Dernière diagonale (référence)
+    fig.add_trace(go.Scatter(
+        x=x, y=last_d,
+        mode='lines+markers',
+        name='Dernière diagonale',
+        line=dict(color=BLANC, width=1.5, dash='dot'),
+        marker=dict(size=6, color=BLANC, symbol='diamond'),
+        hovertemplate=(
+            "<b>%{x}</b><br>"
+            "Sinistres payés : <b>%{y:,.0f} €</b><extra></extra>"
+        ),
+    ))
+
+    # Ultimates par méthode
+    for ult, lbl, clr in [
+        (ult_cl,  'Chain Ladder', BLEU),
+        (ult_bf,  'BF',           VERT),
+        (ult_cc,  'Cape Cod',     VIOLET),
+    ]:
+        if ult:
+            fig.add_trace(go.Scatter(
+                x=x, y=ult,
+                mode='lines+markers',
+                name=lbl,
+                line=dict(width=2),
+                marker=dict(size=5),
+                line_color=clr,
+                hovertemplate=(
+                    f"<b>%{{x}} — {lbl}</b><br>"
+                    "Ultimate : <b>%{y:,.0f} €</b><extra></extra>"
+                ),
+            ))
+
+    fig.update_layout(
+        **_layout(
+            title=dict(
+                text="Ultimates projetés par méthode vs dernière diagonale observée",
+                font=dict(color=OR, size=13),
+                x=0.01,
+            ),
+            xaxis=dict(tickfont=dict(color=BLANC, size=9), showgrid=False),
+            yaxis=dict(
+                title="Montant (€)",
+                tickfont=dict(color=GRIS, size=10),
+                showgrid=True,
+                gridcolor='rgba(255,255,255,0.05)',
+            ),
+            showlegend=True,
+            legend=dict(
+                bgcolor='rgba(15,46,82,0.8)',
+                bordercolor=OR,
+                borderwidth=0.5,
+                font=dict(color=BLANC, size=9),
+            ),
+        )
+    )
+    return fig
+
+
+# =============================================================================
+#  G12 — TORNADO CHART SENSIBILITÉS
+# =============================================================================
+
+def g12_sensibilites_tornado(n4: Dict) -> 'go.Figure':
+    """
+    Tornado chart des sensibilités du BE.
+    Montre l'impact de l'exclusion de chaque méthode et des scénarios Bootstrap.
+    """
+    if not PLOTLY_OK:
+        return None
+
+    be   = n4.get('best_estimate', 0)
+    sens = n4.get('sensibilites', {})
+    if not sens or be <= 0:
+        return None
+
+    labels, deltas_pos, deltas_neg = [], [], []
+    label_map = {
+        'sans_chain_ladder':         'Sans Chain Ladder',
+        'sans_mack':                 'Sans Mack 1993',
+        'sans_bornhuetter_ferguson': 'Sans BF',
+        'sans_cape_cod':             'Sans Cape Cod',
+        'boot_ic_inf':               'Boot. IC 95% inf.',
+        'boot_ic_sup':               'Boot. IC 95% sup.',
+        'boot_p90':                  'Bootstrap P90',
+        'boot_p99_5':                'Bootstrap P99.5',
+    }
+
+    items = []
+    for k, v in sens.items():
+        delta  = float(v) - be
+        lbl    = label_map.get(k, k.replace('_', ' ').title())
+        items.append((abs(delta), lbl, delta))
+
+    # Trier par amplitude
+    items.sort(key=lambda x: x[0], reverse=True)
+
+    for _, lbl, delta in items[:10]:
+        labels.append(lbl)
+        if delta >= 0:
+            deltas_pos.append(delta)
+            deltas_neg.append(0)
+        else:
+            deltas_pos.append(0)
+            deltas_neg.append(delta)
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Bar(
+        y=labels,
+        x=deltas_pos,
+        orientation='h',
+        name='Impact positif',
+        marker_color=ROUGE,
+        marker_line=dict(color=NAVY, width=0.5),
+        hovertemplate="<b>%{y}</b><br>Δ BE : <b>+%{x:,.0f} €</b><extra></extra>",
+    ))
+
+    fig.add_trace(go.Bar(
+        y=labels,
+        x=deltas_neg,
+        orientation='h',
+        name='Impact négatif',
+        marker_color=BLEU,
+        marker_line=dict(color=NAVY, width=0.5),
+        hovertemplate="<b>%{y}</b><br>Δ BE : <b>%{x:,.0f} €</b><extra></extra>",
+    ))
+
+    # Ligne zéro (BE de référence)
+    fig.add_vline(
+        x=0,
+        line_color=OR, line_width=1.5,
+        annotation_text=f"BE = {be:,.0f}€",
+        annotation_font=dict(color=OR, size=10),
+    )
+
+    fig.update_layout(
+        **_layout(
+            height=max(350, len(labels) * 35),
+            title=dict(
+                text="Analyse de sensibilité — Impact sur le Best Estimate S2",
+                font=dict(color=OR, size=13),
+                x=0.01,
+            ),
+            xaxis=dict(
+                title="Variation vs BE de référence (€)",
+                tickfont=dict(color=GRIS, size=9),
+                showgrid=True,
+                gridcolor='rgba(255,255,255,0.05)',
+            ),
+            yaxis=dict(
+                tickfont=dict(color=BLANC, size=9),
+                showgrid=False,
+                autorange='reversed',
+            ),
+            barmode='overlay',
+            showlegend=True,
+            legend=dict(bgcolor='rgba(15,46,82,0.8)', font=dict(color=BLANC, size=9)),
+        )
+    )
+    return fig
+
+
+# =============================================================================
+#  FONCTION PRINCIPALE — GÉNÈRE TOUS LES GRAPHIQUES
+# =============================================================================
+
+def generer_graphiques(
+    C:              np.ndarray,
+    n2:             Dict,
+    n3:             Dict,
+    n4:             Dict,
+) -> Dict:
+    """
+    Génère les 12 graphiques ActuarIA.
+
+    Parameters
+    ----------
+    C  : triangle cumulé
+    n2 : résultats hypothèses
+    n3 : résultats méthodes
+    n4 : résultats best estimate
+
+    Returns
+    -------
+    dict {nom: go.Figure} — chaque graphique accessible par clé.
+    Graphiques échoués → absents du dict (avec warning logger).
+    """
+    if not PLOTLY_OK:
+        logger.warning("Plotly non disponible — graphiques non générés")
+        return {}
+
+    cl       = n3.get('chain_ladder', {})
+    facteurs = cl.get('facteurs', [])
+    f_cum    = cl.get('facteurs_cumules', [])
+    pct_dev  = cl.get('pct_developpe', [])
+    methode  = cl.get('methode', 'Chain Ladder (standard)')
+
+    g = {}
+    specs = [
+        ('g1_heatmap',        lambda: g1_heatmap_triangle(C)),
+        ('g2_cadences',       lambda: g2_cadences_developpement(C, f_cum, pct_dev, methode)),
+        ('g3_facteurs_cl',    lambda: g3_facteurs_cl(n3)),
+        ('g4_ibnr',           lambda: g4_ibnr_par_annee(n3)),
+        ('g5_convergence',    lambda: g5_convergence_methodes(n3, n4)),
+        ('g6_bootstrap',      lambda: g6_distribution_bootstrap(n3)),
+        ('g7_scr',            lambda: g7_scr_donut(n4)),
+        ('g8_h1',             lambda: g8_h1_independance(n2)),
+        ('g9_h2',             lambda: g9_h2_stabilite(C, n3)),
+        ('g10_h3',            lambda: g10_h3_lr_apriori(n2, n3)),
+        ('g11_ultimates',     lambda: g11_ultimates_vs_diagonale(n3)),
+        ('g12_sensibilites',  lambda: g12_sensibilites_tornado(n4)),
+    ]
+
+    for nom, fn in specs:
+        try:
+            fig = fn()
+            if fig is not None:
+                g[nom] = fig
+        except Exception as e:
+            logger.warning(f"Graphique {nom} échoué : {e}")
+
+    logger.info(f"Graphiques générés : {len(g)}/12")
+    return g
