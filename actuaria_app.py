@@ -1208,15 +1208,32 @@ def _validation_agent(ak):
   <div style="font-size:0.76rem;color:{BLANC};margin-top:3px;line-height:1.5;">{_msg}</div>
 </div>""", unsafe_allow_html=True)
 
-        # Graphiques de validation H1/H2/H3
-        for _gnom, _gtitle in [("g6_h1","H1 — Test indépendance"),("g7_h2","H2 — Stabilité facteurs"),("g8_h3","H3 — Loss Ratio a priori")]:
-            _fig_v = _graphiques_val.get(_gnom)
-            if _fig_v is not None:
-                st.markdown(f"<div style='font-size:0.62rem;color:{OR};font-weight:700;margin:12px 0 4px;'>{_gtitle}</div>", unsafe_allow_html=True)
-                try:
-                    st.plotly_chart(_fig_v, use_container_width=True, key=f"val_{_gnom}_{ak}")
-                except Exception as _ev:
-                    st.warning(f"Graphique {_gtitle} : {_ev}")
+        # Graphiques de validation — regénérés à la volée depuis les données brutes
+        _tri_val = _r_val.get("triangle") if isinstance(_r_val, dict) else None
+        if _tri_val is not None and _n2_val and _n3_val:
+            try:
+                import numpy as _np_val
+                from a7_provisionnement.n5_graphiques import generer_graphiques as _gen_g
+                _figs_val = _gen_g(
+                    _np_val.array(_tri_val) if not hasattr(_tri_val, "shape") else _tri_val,
+                    _n2_val, _n3_val,
+                    _r_val.get("n4", {})
+                )
+                for _gnom, _gtitle in [
+                    ("g8_h1",  "H1 — Indépendance (Spearman)"),
+                    ("g9_h2",  "H2 — Stabilité des facteurs"),
+                    ("g10_h3", "H3 — Loss Ratio a priori"),
+                    ("g6_bootstrap", "Distribution Bootstrap ODP"),
+                    ("g5_convergence", "Convergence des méthodes"),
+                ]:
+                    _fig_v = _figs_val.get(_gnom)
+                    if _fig_v is not None:
+                        st.markdown(f"<div style='font-size:0.62rem;color:{OR};font-weight:700;margin:12px 0 4px;'>{_gtitle}</div>", unsafe_allow_html=True)
+                        st.plotly_chart(_fig_v, use_container_width=True, key=f"val_{_gnom}_{ak}")
+            except Exception as _ev_g:
+                st.warning(f"Graphiques non disponibles : {_ev_g}")
+        elif not _tri_val:
+            st.info("💡 Lance une analyse depuis la page Analyse pour afficher les graphiques de validation.")
     else:
         # Pas encore de résultats — afficher les hypothèses théoriques
         st.info(f"⚙️ Lance une analyse depuis la page Analyse pour voir les résultats réels de {a['prenom']}.")
@@ -1291,22 +1308,100 @@ def page_dashboard():
     ])
 
     with tab_nv:
-        st.markdown(f"<div style='font-size:0.82rem;color:{GRIS};margin-bottom:14px;'>Tarification, provisionnement et réglementation Non-Vie sur 678 013 contrats auto France.</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size:0.82rem;color:{GRIS};margin-bottom:14px;'>Tarification, provisionnement et réglementation Non-Vie.</div>", unsafe_allow_html=True)
+
+        # ── Lire les vrais résultats A7 si disponibles ──────────────────
+        _r_ib = (st.session_state.get("agent_results") or {}).get("ibrahim", {})
+        _n3   = _r_ib.get("n3", {}) if _r_ib else {}
+        _n4   = _r_ib.get("n4", {}) if _r_ib else {}
+        _n2   = _r_ib.get("n2", {}) if _r_ib else {}
+        _scr  = _n4.get("scr", {}) if _n4 else {}
+        _a7_ok = bool(_n4.get("best_estimate"))
+
+        # KPIs
+        _be     = _n4.get("best_estimate", 2_914_930) if _a7_ok else 2_914_930
+        _cv     = _n4.get("cv_inter_methodes", 0.6) if _a7_ok else 0.6
+        _p90    = _n4.get("reserve_p90", 0) if _a7_ok else 0
+        _scr_be = _scr.get("ratio_scr_be", 30.0) if _scr else 30.0
+        _lob_l  = _r_ib.get("lob_label", "MRH") if _r_ib else "MRH"
+
+        _be_str  = f"{_be/1e6:.2f}M€" if _be >= 1e6 else f"{_be:,.0f}€"
+        _p90_str = f"{_p90/1e6:.2f}M€" if _p90 >= 1e6 else f"{_p90:,.0f}€" if _p90 else "—"
+
+        _r_tarif = (st.session_state.get("agent_results") or {}).get("victor", {})
+        _gini    = _r_tarif.get("gini", 0.2651) if _r_tarif else 0.2651
+        _modele  = _r_tarif.get("modele_retenu", "ElasticNet") if _r_tarif else "ElasticNet"
+
+        if _a7_ok:
+            st.success(f"✅ Résultats A7 chargés — {_lob_l}")
+        else:
+            st.info("💡 Lancez une analyse provisionnement pour afficher vos données réelles.")
+
         c1,c2,c3,c4 = st.columns(4)
-        with c1: st.metric("Gini ML","0.2651","XGBoost")
-        with c2: st.metric("Modèle retenu","ElasticNet","overfit 0.98")
-        with c3: st.metric("Best Estimate","2.91M€","CV 0.6%")
-        with c4: st.metric("Ratio SCR","208.5%","✅ > 150%")
-        col_a,col_b = st.columns(2)
+        with c1: st.metric("Gini ML", f"{_gini:.4f}", "XGBoost" if not _r_tarif else _modele)
+        with c2: st.metric("Best Estimate S2", _be_str, f"CV {_cv:.1f}%")
+        with c3: st.metric("Provision P90", _p90_str, "+25% vs BE" if _p90 else "—")
+        with c4: st.metric("Ratio SCR/BE", f"{_scr_be:.1f}%", "✅ < 35%" if _scr_be < 35 else "⚠️ Élevé")
+
+        col_a, col_b = st.columns(2)
         with col_a:
-            st.plotly_chart(fig_bar(["XGBoost","GBM","CatBoost","LightGBM","ElasticNet"],[0.2651,0.2542,0.2534,0.2481,0.2440],"Tarification — Gini par modèle ML",[ROUGE,OR,OR,OR,VERT]), use_container_width=True)
+            if _a7_ok:
+                _cl  = _n3.get("chain_ladder", {}).get("reserve_totale", 0)
+                _mk  = _n3.get("mack", {}).get("reserve_best_estimate", 0)
+                _bf  = _n3.get("bf", {}).get("reserve_totale", 0)
+                _cc  = _n3.get("cape_cod", {}).get("reserve_totale", 0)
+                st.plotly_chart(fig_bar(
+                    ["Chain Ladder","Mack 1993","BF","Cape Cod","Best Est. S2"],
+                    [_cl, _mk, _bf, _cc, _be],
+                    f"Provisionnement {_lob_l} — 4 méthodes (€)",
+                    [OR, OR, OR, OR, VERT]
+                ), use_container_width=True, key="dash_nv_prov")
+            else:
+                st.plotly_chart(fig_bar(
+                    ["Chain Ladder","Mack 1993","BF","Cape Cod","Best Est."],
+                    [2_850_000,2_914_930,2_930_000,2_880_000,2_914_930],
+                    "Provisionnement — 4 méthodes (€) [démo]",
+                    [OR,OR,OR,OR,VERT]
+                ), use_container_width=True, key="dash_nv_prov_demo")
         with col_b:
-            st.plotly_chart(fig_bar(["Chain Ladder","Mack 1993","BF","Cape Cod","Best Est."],[2_850_000,2_914_930,2_930_000,2_880_000,2_914_930],"Provisionnement — 4 méthodes (€)",[OR,OR,OR,OR,VERT]), use_container_width=True)
-        col_c,col_d = st.columns(2)
+            st.plotly_chart(fig_bar(
+                ["XGBoost","GBM","CatBoost","LightGBM","ElasticNet"],
+                [0.2651,0.2542,0.2534,0.2481,0.2440],
+                "Tarification — Gini par modèle ML [démo]",
+                [ROUGE,OR,OR,OR,VERT]
+            ), use_container_width=True, key="dash_nv_tarif")
+
+        col_c, col_d = st.columns(2)
         with col_c:
-            st.plotly_chart(fig_jauge(208.5,"Ratio SCR Non-Vie (%)"), use_container_width=True)
+            if _a7_ok:
+                # Bootstrap quantiles
+                _boot = _n3.get("bootstrap", {})
+                _p50  = _boot.get("reserve_p50", _be)
+                _p75  = _n4.get("reserve_p75", 0)
+                _p995 = _n4.get("reserve_p99_5", 0)
+                st.plotly_chart(fig_bar(
+                    ["P50","P75","P90","P99.5"],
+                    [_p50, _p75, _p90, _p995],
+                    "Distribution Bootstrap — Quantiles de réserve (€)",
+                    [VERT, OR, AMBRE, ROUGE]
+                ), use_container_width=True, key="dash_nv_boot")
+            else:
+                st.plotly_chart(fig_jauge(208.5, "Ratio SCR Non-Vie (%) [démo]"), use_container_width=True, key="dash_nv_jauge")
         with col_d:
-            st.plotly_chart(fig_bar(["Base","Choc fréq.","Choc coût","NatCat","Combiné"],[375,310,295,280,245],"ORSA — Ratio SCR après chocs EIOPA (%)",[VERT,OR,OR,AMBRE,ROUGE]), use_container_width=True)
+            if _a7_ok and _scr:
+                _scr_prov = _scr.get("scr_prov", _scr.get("scr_provisions", 0))
+                st.plotly_chart(fig_jauge(
+                    min(_scr_be * 10, 1000),
+                    f"Ratio SCR/BE {_lob_l} (%)",
+                    r1=20, r2=35, max_v=100
+                ), use_container_width=True, key="dash_nv_scr")
+            else:
+                st.plotly_chart(fig_bar(
+                    ["Base","Choc fréq.","Choc coût","NatCat","Combiné"],
+                    [375,310,295,280,245],
+                    "ORSA — Ratio SCR après chocs EIOPA (%) [démo]",
+                    [VERT,OR,OR,AMBRE,ROUGE]
+                ), use_container_width=True, key="dash_nv_orsa")
 
     with tab_vie:
         st.markdown(f"<div style='font-size:0.82rem;color:{GRIS};margin-bottom:14px;'>Engagements de retraite, tarification et provisionnement Épargne-Retraite. Vie Pure en développement.</div>", unsafe_allow_html=True)
