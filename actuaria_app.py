@@ -187,14 +187,17 @@ st.markdown(f"""
 [data-testid="stSidebar"] {{background:{NAVY_L};border-right:1px solid rgba(201,168,76,0.2);}}
 [data-testid="stSidebar"] * {{color:{BLANC}!important;}}
 [data-testid="stSidebar"] .stButton>button {{
-  background:transparent;border:1px solid rgba(255,255,255,0.08);
-  color:{BLANC}!important;border-radius:8px;font-size:0.82rem;
-  font-weight:500;padding:8px 12px;width:100%;text-align:left;
-  transition:all 0.2s;margin-bottom:3px;
+  background:transparent !important;
+  border:1px solid rgba(255,255,255,0.08) !important;
+  color:{BLANC}!important;border-radius:8px !important;font-size:0.82rem !important;
+  font-weight:500 !important;padding:8px 12px !important;width:100% !important;
+  text-align:left !important;transition:all 0.2s !important;margin-bottom:3px !important;
 }}
 [data-testid="stSidebar"] .stButton>button:hover {{
-  background:rgba(201,168,76,0.12);border-color:rgba(201,168,76,0.4);
-  color:{OR}!important;transform:translateX(2px);
+  background:rgba(201,168,76,0.12) !important;
+  border-color:rgba(201,168,76,0.4) !important;
+  color:{OR}!important;transform:translateX(2px) !important;
+  box-shadow:none !important;
 }}
 [data-testid="stSidebar"] .stButton>button[kind="primary"] {{
   background:rgba(201,168,76,0.15)!important;
