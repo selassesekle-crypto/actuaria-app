@@ -2485,9 +2485,9 @@ def page_resultats():
     # Graphiques page Résultats : les 6 graphiques décisionnels
     _ORDRE_RES = [
         ("g1_heatmap",       "◆ Triangle de développement cumulé"),
+        ("g4_ibnr",          "◆ IBNR par année de survenance"),
         ("g2_cadences",      "◆ Cadences cumulées par année de survenance"),
         ("g5_convergence",   "◆ Convergence des méthodes — Best Estimate S2"),
-        ("g4_ibnr",          "◆ IBNR par année de survenance"),
         ("g6_bootstrap",     "◆ Distribution Bootstrap ODP — Quantiles de réserve"),
         ("g7_scr",           "◆ SCR Provisions — Décomposition (Art. 105 S2)"),
     ]
