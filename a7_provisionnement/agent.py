@@ -411,7 +411,7 @@ class AgentA7Provisionnement:
                 'erreur':      None,
 
                 # ── Données ─────────────────────────────────────────────
-                'triangle':    C_calc,
+                'triangle':    C_calc.tolist() if hasattr(C_calc, 'tolist') else C_calc,
                 'lob':         lob,
                 'lob_label':   lob_label,
 
