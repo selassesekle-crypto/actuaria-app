@@ -243,18 +243,26 @@ def g2_cadences_developpement(
                 ),
             ))
 
+    # Masquer les traces au-delà de 10 pour éviter le chevauchement légende
+    for i, trace in enumerate(fig.data):
+        if i >= 10:
+            trace.visible = 'legendonly'
+
     fig.update_layout(
         **_layout(
             title=dict(
-                text=f"Triangles de développement — Cadences cumulées · {methode_cl.title()}",
-                font=dict(color=OR, size=13),
+                text=f"Cadences cumulées par année de survenance · Chain Ladder ({methode_cl})",
+                font=dict(color=OR, size=12),
                 x=0.01,
+                y=0.97,
             ),
+            margin=dict(l=60, r=160, t=50, b=50),
             xaxis=dict(
-                title="Période",
+                title="Période de développement",
                 tickfont=dict(color=GRIS, size=9),
                 showgrid=True,
                 gridcolor='rgba(255,255,255,0.05)',
+                tickangle=-30,
             ),
             yaxis=dict(
                 title="Fraction développée",
@@ -262,17 +270,19 @@ def g2_cadences_developpement(
                 tickformat='.0%',
                 showgrid=True,
                 gridcolor='rgba(255,255,255,0.05)',
-                range=[0, 1.05],
+                range=[0, 1.08],
             ),
             legend=dict(
-                bgcolor='rgba(15,46,82,0.8)',
-                bordercolor=OR,
-                borderwidth=0.5,
-                font=dict(color=BLANC, size=9),
-                orientation='h',
-                yanchor='bottom', y=1.01,
-                xanchor='left', x=0,
+                bgcolor='rgba(11,35,62,0.9)',
+                bordercolor='rgba(201,168,76,0.4)',
+                borderwidth=1,
+                font=dict(color=BLANC, size=8),
+                orientation='v',
+                yanchor='top', y=1.0,
+                xanchor='left', x=1.01,
+                tracegroupgap=2,
             ),
+            height=420,
         )
     )
     return fig
@@ -390,8 +400,7 @@ def g3_facteurs_cl(n3: Dict) -> 'go.Figure':
 
 def g4_ibnr_par_annee(n3: Dict) -> 'go.Figure':
     """
-    IBNR par année — barplot horizontal avec dégradé couleur.
-    Texte hors barre. Zoom sur les années les plus importantes.
+    IBNR par année — barres verticales (années en X) + courbe IBNR cumulé.
     """
     if not PLOTLY_OK:
         return None
@@ -401,9 +410,8 @@ def g4_ibnr_par_annee(n3: Dict) -> 'go.Figure':
         return None
 
     n      = len(ibnr)
-    labels = [f"Année {i}" for i in range(n)]
+    labels = [f"An. {i}" for i in range(n)]
     vals   = [max(float(v), 0) for v in ibnr]
-    ults   = [float(v) for v in ult] if ult else [0]*n
     max_v  = max(vals) if vals else 1
 
     # Dégradé Or → Rouge selon magnitude
@@ -412,44 +420,87 @@ def g4_ibnr_par_annee(n3: Dict) -> 'go.Figure':
         for v in vals
     ]
 
+    # IBNR cumulé croissant pour la courbe
+    cumul = []
+    s = 0.0
+    for v in vals:
+        s += v
+        cumul.append(s)
+
     fig = go.Figure()
 
-    # Barres IBNR
+    # Barres IBNR verticales
     fig.add_trace(go.Bar(
-        y=labels,
-        x=vals,
-        orientation='h',
+        x=labels,
+        y=vals,
         marker_color=colors,
         marker_line=dict(color=NAVY, width=0.5),
-        name='IBNR',
-        text=[f"  {v:,.0f} €" if v > 0 else "" for v in vals],
+        name='IBNR par année',
+        text=[f"{v/1e3:,.0f}K€" if v >= 1000 else f"{v:,.0f}€" for v in vals],
         textposition='outside',
-        textfont=dict(color=BLANC, size=9),
+        textfont=dict(color=BLANC, size=8),
         hovertemplate=(
-            "<b>%{y}</b><br>"
-            "IBNR : <b>%{x:,.0f} €</b><extra></extra>"
+            "<b>%{x}</b><br>"
+            "IBNR : <b>%{y:,.0f} €</b><extra></extra>"
         ),
+        yaxis='y',
+    ))
+
+    # Courbe IBNR cumulé (axe secondaire)
+    fig.add_trace(go.Scatter(
+        x=labels,
+        y=cumul,
+        mode='lines+markers',
+        line=dict(color=BLEU, width=2.5),
+        marker=dict(size=5, color=BLEU, symbol='circle'),
+        name='IBNR cumulé',
+        hovertemplate=(
+            "<b>%{x}</b><br>"
+            "IBNR cumulé : <b>%{y:,.0f} €</b><extra></extra>"
+        ),
+        yaxis='y2',
     ))
 
     fig.update_layout(
         **_layout(
-            height=max(380, n * 28),
+            height=420,
             title=dict(
                 text="IBNR par année de survenance — Chain Ladder",
-                font=dict(color=OR, size=13),
+                font=dict(color=OR, size=12),
                 x=0.01,
             ),
             xaxis=dict(
+                title="Année de survenance",
+                tickfont=dict(color=GRIS, size=9),
+                tickangle=-30 if n > 10 else 0,
+                showgrid=False,
+            ),
+            yaxis=dict(
                 title="IBNR (€)",
                 tickfont=dict(color=GRIS, size=9),
                 showgrid=True,
                 gridcolor='rgba(255,255,255,0.05)',
+                rangemode='tozero',
             ),
-            yaxis=dict(
-                tickfont=dict(color=BLANC, size=9),
+            yaxis2=dict(
+                title="IBNR cumulé (€)",
+                tickfont=dict(color=BLEU, size=9),
+                titlefont=dict(color=BLEU),
+                overlaying='y',
+                side='right',
                 showgrid=False,
-                autorange='reversed',
+                rangemode='tozero',
             ),
+            legend=dict(
+                bgcolor='rgba(11,35,62,0.85)',
+                bordercolor='rgba(201,168,76,0.3)',
+                borderwidth=1,
+                font=dict(color=BLANC, size=9),
+                orientation='h',
+                yanchor='bottom', y=1.01,
+                xanchor='right', x=1,
+            ),
+            barmode='group',
         )
     )
     return fig
