@@ -1557,7 +1557,9 @@ def page_analyse():
                             help="Décalage de l'année pivot pour le calcul du BE S2",
                         )
 
-                    with st.expander("📋 Résultats N-1 (comparatif inter-exercices)", expanded=False):
+                    _show_n1 = st.checkbox("📋 Saisir les résultats N-1 (comparatif inter-exercices)", value=False, key="a7_show_n1")
+                    _res_prec = None
+                    if _show_n1:
                         _rp1, _rp2 = st.columns(2)
                         with _rp1:
                             _be_prev   = st.number_input("Best Estimate N-1 (€)", value=0, step=10000, key="a7_be_prev")
@@ -1565,7 +1567,6 @@ def page_analyse():
                         with _rp2:
                             _cv_prev   = st.number_input("CV inter-méthodes N-1 (%)", value=0.0, step=0.1, key="a7_cv_prev")
                             _sigma_prev= st.number_input("Sigma Mack N-1 (€)",    value=0, step=10000, key="a7_sigma_prev")
-                        _res_prec = None
                         if _be_prev > 0:
                             _res_prec = {
                                 "best_estimate":      _be_prev,
