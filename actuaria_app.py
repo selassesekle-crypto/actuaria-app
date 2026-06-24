@@ -948,8 +948,11 @@ def _dashboard_agent(ak):
         if hyp:
             st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:10px 0 6px;'>◆ Hypothèses validées</div>", unsafe_allow_html=True)
             for h in hyp:
-                ic  = "✅" if h.get("statut") == "VALIDÉE" else "⚠️"
-                st.markdown(f"**{ic} [{h.get('id','')}]** {h.get('hypothese','')[:80]}  \n`{h.get('valeur','')[:80]}` — *{h.get('statut','')}*")
+                _h_ok = h.get("ok", h.get("statut") == "VALIDÉE")
+                ic  = "✅" if _h_ok else "⚠️"
+                _h_label = h.get("hypothese", h.get("message", ""))[:80]
+                _h_val   = h.get("valeur", h.get("score", ""))
+                st.markdown(f"**{ic} [{h.get('id','')}]** {_h_label}  \n`{str(_h_val)[:80]}`")
 
         # Export JSON
         import json
