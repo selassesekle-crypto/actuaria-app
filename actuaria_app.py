@@ -1476,7 +1476,23 @@ def page_analyse():
         if besoin in besoins_upload:
             if besoin == "triangle_xl":
                 st.markdown(f"<div style='font-size:0.78rem;color:{BLANC};margin-bottom:6px;'>📊 <strong>Format attendu :</strong> Excel ou CSV avec le triangle cumulé (lignes = années survenance, colonnes = années développement)</div>", unsafe_allow_html=True)
-                fichier = st.file_uploader("Triangle de développement", type=["csv","xlsx","xls"], key="upload_triangle")
+                fichier = st.file_uploader("Triangle de développement (payés)", type=["csv","xlsx","xls"], key="upload_triangle")
+                fichier_engage = st.file_uploader(
+                    "🇩🇪 Triangle des charges engagées — optionnel, pour Munich Chain Ladder",
+                    type=["csv","xlsx","xls"], key="upload_triangle_engage",
+                    help="Même format que le triangle payés. Requis uniquement pour la méthode Munich CL (Quarg-Mack 2004).",
+                )
+                if fichier_engage:
+                    try:
+                        import pandas as _pd_eng, io as _io_eng
+                        _df_eng = _pd_eng.read_excel(fichier_engage) if not fichier_engage.name.endswith(".csv") else _pd_eng.read_csv(fichier_engage)
+                        fichier_engage.seek(0)
+                        _df_eng_num = _df_eng.select_dtypes(include=["number"]).dropna(how="all").dropna(axis=1, how="all")
+                        st.session_state["analyse_params"] = st.session_state.get("analyse_params", {})
+                        st.session_state["analyse_params"]["a7_triangle_engage"] = _df_eng_num.fillna(0).values.tolist()
+                        st.success(f"✅ Triangle engagé : {_df_eng_num.shape[0]}×{_df_eng_num.shape[1]}")
+                    except Exception as _e_eng:
+                        st.error(f"❌ Erreur triangle engagé : {_e_eng}")
             elif besoin == "sinistres":
                 st.markdown(f"<div style='font-size:0.78rem;color:{BLANC};margin-bottom:6px;'>📁 <strong>Format attendu :</strong> CSV/Excel/Parquet avec les sinistres individuels (annee_survenance, cout, annee_paiement...)</div>", unsafe_allow_html=True)
                 fichier = st.file_uploader("Données sinistres brutes", type=["csv","xlsx","parquet"], key="upload_sinistres")
@@ -1557,6 +1573,15 @@ def page_analyse():
                             help="Décalage de l'année pivot pour le calcul du BE S2",
                         )
 
+                    # Champ a priori BF/Cape Cod
+                    _lr_apriori = st.number_input(
+                        "A priori Loss Ratio BF/Cape Cod (%)",
+                        min_value=0.0, max_value=300.0,
+                        value=0.0, step=1.0,
+                        key="a7_lr_apriori",
+                        help="Laisser à 0 pour estimation automatique par proxy (sinistres/primes)",
+                    )
+
                     _show_n1 = st.checkbox("📋 Saisir les résultats N-1 (comparatif inter-exercices)", value=False, key="a7_show_n1")
                     _res_prec = None
                     if _show_n1:
@@ -1584,6 +1609,7 @@ def page_analyse():
                         "a7_n_sim_bootstrap":   int(_n_sim),
                         "a7_annee_base_reserve": int(_annee_base),
                         "a7_resultats_precedents": _res_prec,
+                        "a7_lr_apriori":        float(_lr_apriori) / 100 if _lr_apriori > 0 else None,
                     })
 
         # ── Cas paramètres manuels ────────────────────────────────────────
@@ -1858,6 +1884,8 @@ def _executer_analyse(besoin, direction, equipe, client):
                     n_sim_bootstrap=_a7p.get("a7_n_sim_bootstrap", 5000),
                     annee_base_reserve=_a7p.get("a7_annee_base_reserve", 1),
                     resultats_precedents=_a7p.get("a7_resultats_precedents"),
+                    primes=_a7p.get("a7_lr_apriori"),
+                    triangle_engage=_a7p.get("a7_triangle_engage"),
                 )
                 resultats["principal"] = r7
 
@@ -1937,6 +1965,8 @@ def _executer_analyse(besoin, direction, equipe, client):
                         n_sim_bootstrap=_a7p.get("a7_n_sim_bootstrap", 5000),
                         annee_base_reserve=_a7p.get("a7_annee_base_reserve", 1),
                         resultats_precedents=_a7p.get("a7_resultats_precedents"),
+                        primes=_a7p.get("a7_lr_apriori"),
+                        triangle_engage=_a7p.get("a7_triangle_engage"),
                     )
                 else:
                     r7 = a7.run(generer_graphiques=False)
@@ -2273,15 +2303,13 @@ def page_resultats():
         fig = graphiques.get(nom)
         if fig is not None and nom not in graphiques_affiches:
             graphiques_affiches.add(nom)
-            with st.expander(titres.get(nom, nom), expanded=True) if nom == "g1_heatmap" else st.container():
-                if nom == "g1_heatmap":
-                    pass
-                else:
-                    st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:16px 0 6px;'>{titres.get(nom, nom)}</div>", unsafe_allow_html=True)
-                try:
-                    st.plotly_chart(fig, use_container_width=True)
-                except Exception:
-                    pass
+            titre_g = titres.get(nom, nom)
+            st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:16px 0 6px;'>{titre_g}</div>", unsafe_allow_html=True)
+            try:
+                st.plotly_chart(fig, use_container_width=True, key=f"fig_{nom}")
+                graphiques_affiches.add(nom)
+            except Exception as _e_fig:
+                st.warning(f"Graphique {nom} non disponible : {_e_fig}")
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
@@ -2334,8 +2362,26 @@ def page_resultats():
     # ── JUGEMENT ACTUARIEL ───────────────────────────────────────────────────
     jugement = n4.get("jugement", "")
     if jugement:
-        st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:8px 0 8px;'>◆ Jugement actuariel documenté</div>", unsafe_allow_html=True)
-        st.markdown(f"<pre style='background:{NAVY_L};padding:16px;border-radius:8px;font-size:0.78rem;color:{BLANC};white-space:pre-wrap;'>{jugement}</pre>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:8px 0 12px;'>◆ Jugement actuariel documenté</div>", unsafe_allow_html=True)
+        import re as _re_jug
+        _sections_jug = _re_jug.split(r'(?=\d+\.\s+[A-ZÀÂÉÈÊ])', jugement.strip())
+        for _sec in _sections_jug:
+            _sec = _sec.strip()
+            if not _sec:
+                continue
+            _lines_sec = _sec.split("\n", 1)
+            _titre_sec = _lines_sec[0].strip()
+            _corps_sec = _lines_sec[1].strip() if len(_lines_sec) > 1 else ""
+            _corps_sec = _re_jug.sub(r'─+', '', _corps_sec).strip()
+            if _titre_sec:
+                _html_sec = (
+                    f"<div style='background:{NAVY_L};border-left:3px solid {OR};"
+                    f"border-radius:6px;padding:12px 16px;margin-bottom:8px;'>"
+                    f"<div style='font-size:0.75rem;font-weight:700;color:{OR};margin-bottom:6px;'>{_titre_sec}</div>"
+                    f"<div style='font-size:0.78rem;color:{BLANC};line-height:1.7;white-space:pre-wrap;'>{_corps_sec}</div>"
+                    f"</div>"
+                )
+                st.markdown(_html_sec, unsafe_allow_html=True)
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
