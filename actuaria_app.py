@@ -1796,9 +1796,9 @@ def page_analyse():
                     _annee_debut = st.number_input(
                         "Année de début du triangle — optionnel",
                         min_value=1900, max_value=2030,
-                        value=0, step=1,
+                        value=1900, step=1,
                         key="a7_annee_debut",
-                        help="Si renseigné, les années de survenance s'affichent en années calendaires. Laisser à 0 si inconnu.",
+                        help="Première année de survenance du triangle. Laisser à 1900 si inconnue.",
                     )
 
                     _lr_apriori = st.number_input(
@@ -1839,7 +1839,7 @@ def page_analyse():
                         "a7_resultats_precedents": _res_prec,
                         "a7_primes":             _primes_array,
                         "a7_lr_apriori":         float(_lr_apriori) / 100 if _lr_apriori > 0 else None,
-                        "a7_annee_debut":        int(_annee_debut) if _annee_debut > 0 else None,
+                        "a7_annee_debut":        int(_annee_debut) if _annee_debut > 1900 else None,
                     })
 
         # ── Cas paramètres manuels ────────────────────────────────────────
