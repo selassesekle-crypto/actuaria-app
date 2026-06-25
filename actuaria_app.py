@@ -1793,6 +1793,14 @@ def page_analyse():
                         except Exception as _ep:
                             st.error(f"❌ Erreur primes : {_ep}")
 
+                    _annee_debut = st.number_input(
+                        "Année de début du triangle — optionnel",
+                        min_value=1900, max_value=2030,
+                        value=0, step=1,
+                        key="a7_annee_debut",
+                        help="Si renseigné, les années de survenance s'affichent en années calendaires. Laisser à 0 si inconnu.",
+                    )
+
                     _lr_apriori = st.number_input(
                         "A priori Loss Ratio BF/Cape Cod (%) — optionnel",
                         min_value=0.0, max_value=300.0,
@@ -1831,6 +1839,7 @@ def page_analyse():
                         "a7_resultats_precedents": _res_prec,
                         "a7_primes":             _primes_array,
                         "a7_lr_apriori":         float(_lr_apriori) / 100 if _lr_apriori > 0 else None,
+                        "a7_annee_debut":        int(_annee_debut) if _annee_debut > 0 else None,
                     })
 
         # ── Cas paramètres manuels ────────────────────────────────────────
@@ -2107,6 +2116,7 @@ def _executer_analyse(besoin, direction, equipe, client):
                     resultats_precedents=_a7p.get("a7_resultats_precedents"),
                     primes=_a7p.get("a7_primes"),
                     lr_bf_manuel=_a7p.get("a7_lr_apriori"),
+                    annee_debut=_a7p.get("a7_annee_debut"),
                     triangle_engage=_a7p.get("a7_triangle_engage"),
                 )
                 resultats["principal"] = r7
@@ -2189,6 +2199,7 @@ def _executer_analyse(besoin, direction, equipe, client):
                         resultats_precedents=_a7p.get("a7_resultats_precedents"),
                         primes=_a7p.get("a7_primes"),
                         lr_bf_manuel=_a7p.get("a7_lr_apriori"),
+                    annee_debut=_a7p.get("a7_annee_debut"),
                         triangle_engage=_a7p.get("a7_triangle_engage"),
                     )
                 else:
@@ -2506,6 +2517,7 @@ def page_resultats():
     st.markdown("<hr>", unsafe_allow_html=True)
 
     # ── BACK-TESTING BONI/MALI ───────────────────────────────────────────────
+    _annee_debut_bt = st.session_state.get("analyse_params", {}).get("a7_annee_debut")
     _bt = r_raw.get("n3", {}).get("backtesting", {})
     if _bt.get("success"):
         _bt_statut = _bt.get("statut", "AMBRE")
@@ -2542,13 +2554,29 @@ def page_resultats():
         # Détail alertes si ROUGE ou AMBRE
         if _bt_rouge > 0 or _bt_ambre > 0:
             with st.expander(f"⚠️ Détail des alertes back-testing ({_bt_rouge + _bt_ambre} années)", expanded=False):
+                import pandas as _pd_bt
+                _rows_bt = []
                 for alerte in _bt.get("alertes", []):
-                    _ac = ROUGE if alerte["statut"]=="ROUGE" else AMBRE
-                    st.markdown(
-                        f"<div style='border-left:3px solid {_ac};padding:4px 10px;"
-                        f"margin-bottom:4px;font-size:0.78rem;color:{BLANC};'>"
-                        f"{alerte.get('message','')}</div>",
-                        unsafe_allow_html=True
+                    _idx    = alerte.get("annee", "—")
+                    _an_lbl = str(_annee_debut_bt + _idx) if (_annee_debut_bt and isinstance(_idx, int)) else f"An. {_idx}"
+                    _h_lbl  = f"N-{alerte.get('horizon','')}"
+                    _ecart  = alerte.get("ecart_pct", 0)
+                    _type   = "🟢 Boni" if _ecart > 0 else "🔴 Mali"
+                    _stat   = "🔴 ROUGE" if alerte["statut"]=="ROUGE" else "🟡 AMBRE"
+                    _rows_bt.append({
+                        "Année":    _an_lbl,
+                        "Horizon":  _h_lbl,
+                        "Écart %":  f"{_ecart:+.1f}%",
+                        "Type":     _type,
+                        "Statut":   _stat,
+                        "Seuil IA 2023": "⚠️ Dépassé" if alerte["statut"]=="ROUGE" else "🟡 Vigilance",
+                    })
+                if _rows_bt:
+                    _df_bt = _pd_bt.DataFrame(_rows_bt)
+                    st.dataframe(
+                        _df_bt,
+                        use_container_width=True,
+                        hide_index=True,
                     )
 
     # ── GRAPHIQUES — regénérés à la volée depuis données brutes ─────────────
