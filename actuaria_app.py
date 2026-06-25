@@ -2505,16 +2505,51 @@ def page_resultats():
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
-    # ── DEBUG BACKTESTING ────────────────────────────────────────────────────
-    _bt_debug = r_raw.get("n3", {}).get("backtesting", {})
-    st.write("DEBUG backtesting:", {
-        "success": _bt_debug.get("success"),
-        "statut":  _bt_debug.get("statut"),
-        "erreur":  _bt_debug.get("erreur"),
-        "horizons": list(_bt_debug.get("resultats", {}).keys()),
-        "n_rouge": _bt_debug.get("n_rouge"),
-        "score":   _bt_debug.get("score_qualite"),
-    })
+    # ── BACK-TESTING BONI/MALI ───────────────────────────────────────────────
+    _bt = r_raw.get("n3", {}).get("backtesting", {})
+    if _bt.get("success"):
+        _bt_statut = _bt.get("statut", "AMBRE")
+        _bt_col = VERT if _bt_statut=="VERT" else AMBRE if _bt_statut=="AMBRE" else ROUGE
+        _bt_emoji = "✅" if _bt_statut=="VERT" else "⚠️" if _bt_statut=="AMBRE" else "🔴"
+        _bt_horizons = list(_bt.get("resultats", {}).keys())
+        _bt_score = _bt.get("score_qualite", 0)
+        _bt_rouge = _bt.get("n_rouge", 0)
+        _bt_ambre = _bt.get("n_ambre", 0)
+
+        st.markdown(
+            f"<div style='background:{NAVY_L};border-left:4px solid {_bt_col};"
+            f"border-radius:8px;padding:14px 18px;margin-bottom:12px;'>"
+            f"<div style='font-size:0.72rem;color:{OR};font-weight:700;text-transform:uppercase;"
+            f"margin-bottom:8px;'>◆ Back-testing Boni/Mali de liquidation</div>"
+            f"<div style='display:flex;gap:24px;flex-wrap:wrap;'>"
+            f"<div><span style='font-size:0.72rem;color:{GRIS};'>Statut</span><br>"
+            f"<span style='font-size:0.9rem;font-weight:700;color:{_bt_col};'>{_bt_emoji} {_bt_statut}</span></div>"
+            f"<div><span style='font-size:0.72rem;color:{GRIS};'>Score qualité</span><br>"
+            f"<span style='font-size:0.9rem;font-weight:700;color:{BLANC};'>{_bt_score}/100</span></div>"
+            f"<div><span style='font-size:0.72rem;color:{GRIS};'>Horizons</span><br>"
+            f"<span style='font-size:0.9rem;font-weight:700;color:{BLANC};'>"
+            f"{', '.join(h.replace('horizon_','N-') for h in _bt_horizons)}</span></div>"
+            f"<div><span style='font-size:0.72rem;color:{GRIS};'>Alertes</span><br>"
+            f"<span style='font-size:0.9rem;font-weight:700;color:{ROUGE};'>{_bt_rouge} rouge</span>"
+            f"<span style='font-size:0.9rem;color:{AMBRE};'> · {_bt_ambre} ambre</span></div>"
+            f"</div>"
+            f"<div style='font-size:0.76rem;color:{BLANC};margin-top:8px;line-height:1.6;'>"
+            f"{_bt.get('message','').split(chr(10))[0]}</div>"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+
+        # Détail alertes si ROUGE ou AMBRE
+        if _bt_rouge > 0 or _bt_ambre > 0:
+            with st.expander(f"⚠️ Détail des alertes back-testing ({_bt_rouge + _bt_ambre} années)", expanded=False):
+                for alerte in _bt.get("alertes", []):
+                    _ac = ROUGE if alerte["statut"]=="ROUGE" else AMBRE
+                    st.markdown(
+                        f"<div style='border-left:3px solid {_ac};padding:4px 10px;"
+                        f"margin-bottom:4px;font-size:0.78rem;color:{BLANC};'>"
+                        f"{alerte.get('message','')}</div>",
+                        unsafe_allow_html=True
+                    )
 
     # ── GRAPHIQUES — regénérés à la volée depuis données brutes ─────────────
     # (les go.Figure ne survivent pas à la navigation Streamlit)
