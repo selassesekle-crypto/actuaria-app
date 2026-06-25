@@ -441,7 +441,7 @@ class BestEstimateS2:
 
         # Alertes N2
         for alerte in n2.get('alertes', [])[:3]:
-            clean = alerte.encode('ascii', 'ignore').decode('ascii').strip()
+            clean = str(alerte).strip()
             if clean:
                 lignes.append(f"  {clean}")
 
