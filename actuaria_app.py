@@ -2076,7 +2076,8 @@ def _executer_analyse(besoin, direction, equipe, client):
                     n_sim_bootstrap=_a7p.get("a7_n_sim_bootstrap", 5000),
                     annee_base_reserve=_a7p.get("a7_annee_base_reserve", 1),
                     resultats_precedents=_a7p.get("a7_resultats_precedents"),
-                    primes=_a7p.get("a7_lr_apriori"),
+                    primes=_a7p.get("a7_primes"),
+                    lr_bf_manuel=_a7p.get("a7_lr_apriori"),
                     triangle_engage=_a7p.get("a7_triangle_engage"),
                 )
                 resultats["principal"] = r7
@@ -2157,7 +2158,8 @@ def _executer_analyse(besoin, direction, equipe, client):
                         n_sim_bootstrap=_a7p.get("a7_n_sim_bootstrap", 5000),
                         annee_base_reserve=_a7p.get("a7_annee_base_reserve", 1),
                         resultats_precedents=_a7p.get("a7_resultats_precedents"),
-                        primes=_a7p.get("a7_lr_apriori"),
+                        primes=_a7p.get("a7_primes"),
+                        lr_bf_manuel=_a7p.get("a7_lr_apriori"),
                         triangle_engage=_a7p.get("a7_triangle_engage"),
                     )
                 else:
