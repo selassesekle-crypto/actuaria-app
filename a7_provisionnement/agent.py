@@ -56,6 +56,7 @@ from .n3.mack         import mack_1993
 from .n3.bf_cape_cod  import bornhuetter_ferguson, cape_cod
 from .n3.bootstrap_odp import bootstrap_odp
 from .n3.munich_cl    import munich_cl
+from .n3.backtesting  import calculer_backtesting
 
 logger = logging.getLogger('actuaria.a7')
 
@@ -590,6 +591,7 @@ class AgentA7Provisionnement:
             'bootstrap':       r_boot,
             'munich_cl':       r_munich,
             'tail_factor':     tail_info,
+            'backtesting':     calculer_backtesting(C_calc) if C_calc is not None else {},
         }
 
     # =========================================================================
