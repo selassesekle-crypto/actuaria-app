@@ -2505,6 +2505,17 @@ def page_resultats():
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
+    # ── DEBUG BACKTESTING ────────────────────────────────────────────────────
+    _bt_debug = r_raw.get("n3", {}).get("backtesting", {})
+    st.write("DEBUG backtesting:", {
+        "success": _bt_debug.get("success"),
+        "statut":  _bt_debug.get("statut"),
+        "erreur":  _bt_debug.get("erreur"),
+        "horizons": list(_bt_debug.get("resultats", {}).keys()),
+        "n_rouge": _bt_debug.get("n_rouge"),
+        "score":   _bt_debug.get("score_qualite"),
+    })
+
     # ── GRAPHIQUES — regénérés à la volée depuis données brutes ─────────────
     # (les go.Figure ne survivent pas à la navigation Streamlit)
     _tri_res = st.session_state.get("triangle_a7")
