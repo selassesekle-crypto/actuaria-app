@@ -148,6 +148,7 @@ class AgentA7Provisionnement:
         mode_declare:     str           = 'auto',
         taux_bf_manuel: Optional[float] = None,   # alias lr_bf_manuel
         generer_graphiques: bool        = True,    # alias generer_graphiques_flag
+        annee_debut:      Optional[int]  = None,   # année calendaire de la 1ère ligne
         **kwargs,
     ) -> Dict:
         """
@@ -293,6 +294,9 @@ class AgentA7Provisionnement:
             except Exception as _ebt:
                 logger.warning(f"Back-testing ignoré : {_ebt}")
                 n3['backtesting'] = {}
+            # Année début pour labels calendaires
+            if annee_debut:
+                n3['annee_debut_triangle'] = annee_debut
 
             n4 = self._be.calculer(n2, n3, C_calc, lob=lob)
 

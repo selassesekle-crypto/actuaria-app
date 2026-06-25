@@ -1366,10 +1366,11 @@ def g13_paiements_cumules(C: np.ndarray) -> 'go.Figure':
 #  G14 — BACK-TESTING BONI/MALI DE LIQUIDATION
 # =============================================================================
 
-def g14_backtesting(n3: Dict) -> 'go.Figure':
+def g14_backtesting(n3: Dict, annee_debut: int = None) -> 'go.Figure':
     """
     Boni/Mali de liquidation — back-testing N-1 et N-2.
     Barres : boni en vert, mali en rouge. Seuils ±15% guide IA 2023.
+    annee_debut : si fourni, affiche les vraies années calendaires en X.
     """
     if not PLOTLY_OK: return None
     bt = n3.get('backtesting', {})
@@ -1384,7 +1385,10 @@ def g14_backtesting(n3: Dict) -> 'go.Figure':
         annees = h_data['annees']
         if not annees: continue
 
-        x_vals     = [f"An. {r['annee']}" for r in annees]
+        x_vals = [
+            str(annee_debut + r['annee']) if annee_debut else f"An. {r['annee']}"
+            for r in annees
+        ]
         ecarts_pct = [r['ecart_pct']       for r in annees]
         statuts    = [r['statut']           for r in annees]
         bm_vals    = [r['boni_mali']        for r in annees]
@@ -1493,7 +1497,7 @@ def generer_graphiques(
         ('g11_ultimates',     lambda: g11_ultimates_vs_diagonale(n3)),
         ('g12_sensibilites',  lambda: g12_sensibilites_tornado(n4)),
         ('g13_paiements',      lambda: g13_paiements_cumules(C)),
-        ('g14_backtesting',    lambda: g14_backtesting(n3)),
+        ('g14_backtesting',    lambda: g14_backtesting(n3, annee_debut=n3.get('annee_debut_triangle'))),
     ]
 
     for nom, fn in specs:
