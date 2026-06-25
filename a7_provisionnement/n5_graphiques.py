@@ -143,7 +143,7 @@ def g1_heatmap_triangle(C: np.ndarray) -> 'go.Figure':
 
     fig.update_layout(
         **_layout(
-            title=None,
+            title="",
             xaxis=dict(
                 title="Période de développement",
                 tickfont=dict(color=GRIS, size=9),
@@ -246,7 +246,7 @@ def g2_cadences_developpement(
 
     fig.update_layout(
         **_layout(
-            title=None,
+            title="",
             margin=dict(l=60, r=160, t=50, b=50),
             xaxis=dict(
                 title="Période de développement",
@@ -358,7 +358,7 @@ def g3_facteurs_cl(n3: Dict) -> 'go.Figure':
 
     fig.update_layout(
         **_layout(
-            title=None,
+            title="",
             xaxis=dict(
                 title="Transition de développement",
                 tickfont=dict(color=GRIS, size=9),
@@ -451,7 +451,7 @@ def g4_ibnr_par_annee(n3: Dict) -> 'go.Figure':
     fig.update_layout(
         **_layout(
             height=420,
-            title=None,
+            title="",
             xaxis=dict(
                 title="Année de survenance",
                 tickfont=dict(color=GRIS, size=9),
@@ -599,7 +599,7 @@ def g5_convergence_methodes(n3: Dict, n4: Dict) -> 'go.Figure':
 
     fig.update_layout(
         **_layout(
-            title=None,
+            title="",
             xaxis=dict(tickfont=dict(color=BLANC, size=10), showgrid=False),
             yaxis=dict(
                 title="Réserve IBNR (€)",
@@ -951,7 +951,7 @@ def g9_h2_stabilite(C: np.ndarray, n3: Dict) -> 'go.Figure':
 
     fig.update_layout(
         **_layout(
-            title=None,
+            title="",
             xaxis=dict(tickfont=dict(color=GRIS, size=9)),
             yaxis=dict(tickfont=dict(color=BLANC, size=9), autorange='reversed'),
         )
@@ -1110,7 +1110,7 @@ def g11_ultimates_vs_diagonale(n3: Dict) -> 'go.Figure':
 
     fig.update_layout(
         **_layout(
-            title=None,
+            title="",
             xaxis=dict(tickfont=dict(color=BLANC, size=9), showgrid=False),
             yaxis=dict(
                 title="Montant (€)",
@@ -1210,7 +1210,7 @@ def g12_sensibilites_tornado(n4: Dict) -> 'go.Figure':
     fig.update_layout(
         **_layout(
             height=max(350, len(labels) * 35),
-            title=None,
+            title="",
             xaxis=dict(
                 title="Variation vs BE de référence (€)",
                 tickfont=dict(color=GRIS, size=9),
@@ -1236,10 +1236,9 @@ def g12_sensibilites_tornado(n4: Dict) -> 'go.Figure':
 
 def g13_paiements_cumules(C: np.ndarray) -> 'go.Figure':
     """
-    Paiements cumulés — X = années de survenance, Y = montant cumulé.
-    Une courbe par période de développement (12M, 24M, 36M...).
-    Chaque courbe monte puis se stabilise quand les sinistres sont réglés.
-    Style PowerBI : dégradé gold→bleu, fond navy, impact visuel fort.
+    Paiements cumulés par année de survenance — style G4.
+    X = années de survenance, Y = paiement cumulé à la dernière période connue.
+    Barres par année + courbe cumulée superposée sur axe secondaire.
     """
     if not PLOTLY_OK:
         return None
@@ -1247,134 +1246,107 @@ def g13_paiements_cumules(C: np.ndarray) -> 'go.Figure':
         return None
 
     n_ann, n_dev = C.shape
+    annees = [f"An. {i}" for i in range(n_ann)]
 
-    # Années de survenance en X (labels)
-    annees = [f"{i}" for i in range(n_ann)]
+    # Pour chaque année i : dernier paiement cumulé observé (dernière valeur non nulle)
+    paiements = []
+    for i in range(n_ann):
+        # Dernière valeur non nulle de la ligne i
+        vals_nonzero = [float(C[i, j]) for j in range(n_dev) if C[i, j] > 0]
+        paiements.append(vals_nonzero[-1] if vals_nonzero else 0.0)
 
-    # Palette dégradée gold → bleu électrique (style PowerBI)
-    def _couleur(j, n):
-        # j=0 → gold, j=n-1 → bleu électrique
-        r = int(201 - (201 - 41)  * j / max(n-1, 1))
-        g = int(168 - (168 - 128) * j / max(n-1, 1))
-        b = int(76  + (255 - 76)  * j / max(n-1, 1))
-        return f'rgb({r},{g},{b})'
+    max_p = max(paiements) if paiements else 1
+
+    # Dégradé gold → rouge selon magnitude (même logique que G4)
+    colors = [
+        f'rgba({int(201 + 46*(v/max_p))},{int(168 - 168*(v/max_p))},{int(76 - 76*(v/max_p))},0.85)'
+        for v in paiements
+    ]
+
+    # Cumulé croissant
+    cumul = []
+    s = 0.0
+    for v in paiements:
+        s += v
+        cumul.append(s)
 
     fig = go.Figure()
 
-    # Sélectionner les périodes à afficher (max 12 pour lisibilité)
-    step = max(1, n_dev // 12)
-    periodes_idx = list(range(0, n_dev, step))
+    # Barres paiements par année
+    fig.add_trace(go.Bar(
+        x=annees,
+        y=paiements,
+        marker_color=colors,
+        marker_line=dict(color=NAVY, width=0.5),
+        name='Paiements cumulés',
+        text=[f"{v/1e3:,.0f}K€" if v >= 1000 else f"{v:,.0f}€" for v in paiements],
+        textposition='outside',
+        textfont=dict(color=BLANC, size=8),
+        hovertemplate=(
+            "<b>%{x}</b><br>"
+            "Paiements cumulés : <b>%{y:,.0f} €</b><extra></extra>"
+        ),
+        yaxis='y',
+    ))
 
-    for j in periodes_idx:
-        periode_label = f"{(j+1)*12}M"
-        # Pour chaque année de survenance, valeur à la période j
-        # Si C[i,j] == 0 et j > n_ann - 1 - i → données futures (NaN)
-        y_vals = []
-        x_vals = []
-        for i in range(n_ann):
-            val = float(C[i, j])
-            # Masquer les cellules vides (triangle supérieur)
-            if val > 0 or j <= (n_ann - 1 - i):
-                y_vals.append(val if val > 0 else None)
-                x_vals.append(annees[i])
-
-        if not any(v is not None and v > 0 for v in y_vals):
-            continue
-
-        is_recent = (j >= periodes_idx[-3]) if len(periodes_idx) >= 3 else True
-        couleur = _couleur(j, n_dev)
-
-        fig.add_trace(go.Scatter(
-            x=x_vals,
-            y=y_vals,
-            mode='lines+markers',
-            name=periode_label,
-            line=dict(
-                color=couleur,
-                width=2.5 if is_recent else 1.5,
-                dash='solid',
-            ),
-            marker=dict(
-                size=6 if is_recent else 4,
-                color=couleur,
-                symbol='circle',
-                line=dict(color='rgba(255,255,255,0.3)', width=1),
-            ),
-            connectgaps=False,
-            hovertemplate=(
-                f"<b>Période {periode_label}</b><br>"
-                "Année survenance : <b>%{x}</b><br>"
-                "Cumulé : <b>%{y:,.0f} €</b><extra></extra>"
-            ),
-            visible=True if j in periodes_idx[-6:] else 'legendonly',
-        ))
-
-    # Zone de remplissage pour la dernière période (impact visuel)
-    derniere_periode = periodes_idx[-1]
-    y_fill = [float(C[i, derniere_periode]) if float(C[i, derniere_periode]) > 0
-              else None for i in range(n_ann)]
-    if any(v is not None for v in y_fill):
-        fig.add_trace(go.Scatter(
-            x=annees,
-            y=y_fill,
-            mode='none',
-            fill='tozeroy',
-            fillcolor='rgba(201,168,76,0.08)',
-            showlegend=False,
-            hoverinfo='skip',
-        ))
-
-    # Annotation diagonale
-    fig.add_annotation(
-        text="← Données observées | Projection →",
-        xref="paper", yref="paper",
-        x=0.5, y=1.04,
-        showarrow=False,
-        font=dict(color=GRIS, size=9),
-        align="center",
-    )
+    # Courbe cumulée (axe secondaire)
+    fig.add_trace(go.Scatter(
+        x=annees,
+        y=cumul,
+        mode='lines+markers',
+        line=dict(color=BLEU, width=2.5),
+        marker=dict(size=5, color=BLEU, symbol='circle',
+                    line=dict(color='rgba(255,255,255,0.3)', width=1)),
+        name='Cumulé total',
+        hovertemplate=(
+            "<b>%{x}</b><br>"
+            "Cumulé total : <b>%{y:,.0f} €</b><extra></extra>"
+        ),
+        yaxis='y2',
+    ))
 
     fig.update_layout(
         **_layout(
             height=440,
-            title=None,
-            margin=dict(l=70, r=150, t=40, b=60),
+            title="",
+            margin=dict(l=70, r=80, t=30, b=60),
             xaxis=dict(
                 title=dict(text="Année de survenance", font=dict(color=GRIS, size=10)),
                 tickfont=dict(color=BLANC, size=9),
-                showgrid=True,
-                gridcolor='rgba(255,255,255,0.06)',
-                zeroline=False,
+                tickangle=-30 if n_ann > 10 else 0,
+                showgrid=False,
             ),
             yaxis=dict(
                 title=dict(text="Paiements cumulés (€)", font=dict(color=GRIS, size=10)),
                 tickfont=dict(color=GRIS, size=9),
                 showgrid=True,
-                gridcolor='rgba(255,255,255,0.06)',
+                gridcolor='rgba(255,255,255,0.05)',
                 tickformat=',.0f',
-                zeroline=False,
+                rangemode='tozero',
+            ),
+            yaxis2=dict(
+                title=dict(text="Cumulé total (€)", font=dict(color=BLEU, size=10)),
+                tickfont=dict(color=BLEU, size=9),
+                overlaying='y',
+                side='right',
+                showgrid=False,
+                rangemode='tozero',
+                tickformat=',.0f',
             ),
             legend=dict(
-                title=dict(text="Période dev.", font=dict(color=OR, size=9)),
                 bgcolor='rgba(11,35,62,0.92)',
                 bordercolor='rgba(201,168,76,0.5)',
                 borderwidth=1,
-                font=dict(color=BLANC, size=8),
-                orientation='v',
-                yanchor='middle', y=0.5,
-                xanchor='left', x=1.01,
-                tracegroupgap=1,
+                font=dict(color=BLANC, size=9),
+                orientation='h',
+                yanchor='bottom', y=1.01,
+                xanchor='right', x=1,
             ),
+            barmode='group',
             hovermode='x unified',
-            plot_bgcolor='rgba(8,25,45,0.95)',
         )
     )
     return fig
-
-
-# =============================================================================
-#  FONCTION PRINCIPALE — GÉNÈRE TOUS LES GRAPHIQUES
-# =============================================================================
 
 def generer_graphiques(
     C:              np.ndarray,
