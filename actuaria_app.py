@@ -2528,7 +2528,7 @@ def page_resultats():
         _bt_rouge = _bt.get("n_rouge", 0)
         _bt_ambre = _bt.get("n_ambre", 0)
 
-        _n_ann_bt = len(_tableau_bt) if _tableau_bt else len(_bt.get("tableau", []))
+        _n_ann_bt = len(_bt.get("tableau", []))
         st.markdown(
             f"<div style='background:{NAVY_L};border-left:4px solid {_bt_col};"
             f"border-radius:8px;padding:14px 18px;margin-bottom:12px;'>"
