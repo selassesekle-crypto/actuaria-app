@@ -1361,6 +1361,92 @@ def g13_paiements_cumules(C: np.ndarray) -> 'go.Figure':
     )
     return fig
 
+
+# =============================================================================
+#  G14 — BACK-TESTING BONI/MALI DE LIQUIDATION
+# =============================================================================
+
+def g14_backtesting(n3: Dict) -> 'go.Figure':
+    """
+    Boni/Mali de liquidation — back-testing N-1 et N-2.
+    Barres : boni en vert, mali en rouge. Seuils ±15% guide IA 2023.
+    """
+    if not PLOTLY_OK: return None
+    bt = n3.get('backtesting', {})
+    if not bt.get('success'): return None
+    resultats = bt.get('resultats', {})
+    if not resultats: return None
+
+    fig = go.Figure()
+
+    for k_str, h_data in resultats.items():
+        k      = h_data['k']
+        annees = h_data['annees']
+        if not annees: continue
+
+        x_vals     = [f"An. {r['annee']}" for r in annees]
+        ecarts_pct = [r['ecart_pct']       for r in annees]
+        statuts    = [r['statut']           for r in annees]
+        bm_vals    = [r['boni_mali']        for r in annees]
+
+        bar_colors = []
+        for s, e in zip(statuts, ecarts_pct):
+            if s == 'ROUGE':
+                bar_colors.append('rgba(192,57,43,0.85)')
+            elif s == 'AMBRE':
+                bar_colors.append('rgba(243,156,18,0.85)')
+            else:
+                bar_colors.append('rgba(39,174,96,0.85)' if e >= 0 else 'rgba(52,152,219,0.85)')
+
+        lbl = {1:'N-1', 2:'N-2'}.get(k, f'N-{k}')
+        fig.add_trace(go.Bar(
+            x=x_vals, y=ecarts_pct,
+            name=f'Horizon {lbl}',
+            marker_color=bar_colors,
+            marker_line=dict(color=NAVY, width=0.5),
+            text=[f"{e:+.1f}%" for e in ecarts_pct],
+            textposition='outside',
+            textfont=dict(color=BLANC, size=8),
+            hovertemplate=(
+                "<b>%{x}</b><br>"
+                f"Horizon {lbl}<br>"
+                "Écart : <b>%{y:+.1f}%</b><br>"
+                "Boni/Mali : <b>%{customdata:,.0f} €</b><extra></extra>"
+            ),
+            customdata=bm_vals,
+            offsetgroup=str(k),
+        ))
+
+    fig.add_hline(y=0,   line=dict(color=BLANC, width=1))
+    fig.add_hline(y=15,  line=dict(color='rgba(192,57,43,0.7)', width=1.5, dash='dash'),
+                  annotation_text="+15% (seuil IA 2023)",
+                  annotation_font=dict(color='rgba(192,57,43,0.9)', size=8),
+                  annotation_position="top right")
+    fig.add_hline(y=-15, line=dict(color='rgba(192,57,43,0.7)', width=1.5, dash='dash'),
+                  annotation_text="-15% (seuil IA 2023)",
+                  annotation_font=dict(color='rgba(192,57,43,0.9)', size=8),
+                  annotation_position="bottom right")
+    fig.add_hrect(y0=-8, y1=8, fillcolor='rgba(39,174,96,0.06)', line_width=0)
+
+    fig.update_layout(
+        **_layout(
+            height=440, title="",
+            margin=dict(l=60, r=80, t=30, b=60),
+            xaxis=dict(title=dict(text="Année de survenance", font=dict(color=GRIS,size=10)),
+                       tickfont=dict(color=BLANC,size=9), tickangle=-30, showgrid=False),
+            yaxis=dict(title=dict(text="Écart % (projeté vs observé)", font=dict(color=GRIS,size=10)),
+                       tickfont=dict(color=GRIS,size=9),
+                       showgrid=True, gridcolor='rgba(255,255,255,0.06)',
+                       ticksuffix=' %', zeroline=False),
+            legend=dict(bgcolor='rgba(11,35,62,0.92)', bordercolor='rgba(201,168,76,0.5)',
+                        borderwidth=1, font=dict(color=BLANC,size=9),
+                        orientation='h', yanchor='bottom', y=1.01, xanchor='right', x=1),
+            barmode='group', hovermode='x unified',
+        )
+    )
+    return fig
+
+
 def generer_graphiques(
     C:              np.ndarray,
     n2:             Dict,
@@ -1407,6 +1493,7 @@ def generer_graphiques(
         ('g11_ultimates',     lambda: g11_ultimates_vs_diagonale(n3)),
         ('g12_sensibilites',  lambda: g12_sensibilites_tornado(n4)),
         ('g13_paiements',      lambda: g13_paiements_cumules(C)),
+        ('g14_backtesting',    lambda: g14_backtesting(n3)),
     ]
 
     for nom, fn in specs:
