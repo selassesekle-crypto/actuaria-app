@@ -1261,12 +1261,13 @@ def _validation_agent(ak):
                     raise ValueError(f"Triangle invalide shape={_C_val.shape}")
                 _figs_val = _gen_g(_C_val, _n2_val, _n3_val, _r_val.get("n4", {}))
                 for _gnom, _gtitle in [
-                    ("g8_h1",         "H1 — Indépendance (corrélations Spearman)"),
-                    ("g9_h2",         "H2 — Stabilité des facteurs de développement"),
-                    ("g10_h3",        "H3 — Loss Ratio a priori vs référence marché"),
-                    ("g3_facteurs_cl","Facteurs Chain Ladder ±2σ — outliers"),
-                    ("g11_ultimates", "Ultimates projetés vs dernière diagonale"),
-                    ("g12_sensibilites", "Sensibilités du BE — Tornado Chart"),
+                    ("g8_h1",           "H1 — Indépendance (corrélations Spearman)"),
+                    ("g9_h2",           "H2 — Stabilité des facteurs de développement"),
+                    ("g10_h3",          "H3 — Loss Ratio a priori vs référence marché"),
+                    ("g14_backtesting", "Back-testing — Boni/Mali de liquidation"),
+                    ("g3_facteurs_cl",  "Facteurs Chain Ladder ±2σ — outliers"),
+                    ("g11_ultimates",   "Ultimates projetés vs dernière diagonale"),
+                    ("g12_sensibilites","Sensibilités du BE — Tornado Chart"),
                 ]:
                     _fig_v = _figs_val.get(_gnom)
                     if _fig_v is not None:
@@ -2525,6 +2526,7 @@ def page_resultats():
         ("g1_heatmap",       "◆ Triangle de développement cumulé"),
         ("g13_paiements",    "◆ Paiements cumulés par année de survenance"),
         ("g4_ibnr",          "◆ IBNR par année de survenance"),
+        ("g14_backtesting",  "◆ Back-testing — Boni/Mali de liquidation"),
         ("g2_cadences",      "◆ Cadences cumulées — Chain Ladder"),
         ("g5_convergence",   "◆ Convergence des méthodes — Best Estimate S2"),
         ("g6_bootstrap",     "◆ Distribution Bootstrap ODP — Quantiles de réserve"),
