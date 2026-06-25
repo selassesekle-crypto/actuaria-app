@@ -2554,8 +2554,6 @@ def page_resultats():
         # Deux tableaux boni/mali séparés
         _tableau_bt = _bt.get("tableau", [])
         _totaux_bt  = _bt.get("totaux", {})
-        st.write("DEBUG tableau_bt:", len(_tableau_bt), "| clés bt:", list(_bt.keys())[:8])
-
         if _tableau_bt:
             import pandas as _pd_bt
 
@@ -2573,73 +2571,90 @@ def page_resultats():
                 if a >= 8:  return "🟡 Vigilance (>8%)"
                 return "✅ OK"
 
-            # ── Tableau N vs N-1 ──────────────────────────────────────────────
-            st.markdown(
-                f"<div style='font-size:0.72rem;color:{OR};font-weight:700;"
-                f"text-transform:uppercase;margin:12px 0 6px;'>"
-                f"Tableau 1 — Comparaison N vs N-1 (arrêté précédent)</div>",
-                unsafe_allow_html=True
-            )
-            _rows_n1 = []
-            for r in _tableau_bt:
-                if r["ultimate_n1"] is None: continue
-                _rows_n1.append({
-                    "Année":             r["annee_label"],
-                    "Provision projetée N-1 (€)": _fmt_e(r["ultimate_n1"]),
-                    "Observé N (€)":     _fmt_e(r["observe_n"]),
-                    "Boni/Mali (€)":     _fmt_bm(r["boni_mali_n1"]),
-                    "Écart %":           _fmt_p(r["ecart_pct_n1"]),
-                    "Alerte":            _alerte(r["ecart_pct_n1"]),
-                })
-            # Ligne total N-1
-            _rows_n1.append({
-                "Année":             "📊 TOTAL",
-                "Provision projetée N-1 (€)": _fmt_e(_totaux_bt.get("ultimate_n1")),
-                "Observé N (€)":     _fmt_e(_totaux_bt.get("observe_n")),
-                "Boni/Mali (€)":     _fmt_bm(_totaux_bt.get("boni_mali_n1")),
-                "Écart %":           _fmt_p(_totaux_bt.get("ecart_pct_n1")),
-                "Alerte":            _alerte(_totaux_bt.get("ecart_pct_n1")),
-            })
-            st.dataframe(_pd_bt.DataFrame(_rows_n1), use_container_width=True, hide_index=True)
-            st.markdown(
-                f"<div style='font-size:0.72rem;color:{GRIS};font-style:italic;margin-bottom:12px;'>"
-                f"Seuil d'alerte : ±15% — Vigilance : ±8% — Source : Guide Institut des Actuaires 2023</div>",
-                unsafe_allow_html=True
-            )
+            def _html_tableau_bt(titre, rows, totaux, key_ult, key_bm, key_ep):
+                """Génère un tableau HTML pro pour le back-testing."""
+                def _td_num(v, bold=False):
+                    s = f"{v:,.0f} €".replace(",", " ") if v is not None else "—"
+                    return f"<td style='text-align:right;padding:7px 12px;{'font-weight:700;' if bold else ''}'>{s}</td>"
+                def _td_bm(v, bold=False):
+                    if v is None: return f"<td style='text-align:right;padding:7px 12px;'>—</td>"
+                    col = "#27AE60" if v > 0 else "#C0392B" if v < 0 else "#8A9BB0"
+                    sign = "+" if v > 0 else ""
+                    s = f"{sign}{v:,.0f} €".replace(",", " ")
+                    fw = "font-weight:700;" if bold else ""
+                    return f"<td style='text-align:right;padding:7px 12px;color:{col};{fw}'>{s}</td>"
+                def _td_pct(v, bold=False):
+                    if v is None: return f"<td style='text-align:right;padding:7px 12px;'>—</td>"
+                    col = "#27AE60" if v > 0 else "#C0392B" if v < 0 else "#8A9BB0"
+                    fw = "font-weight:700;" if bold else ""
+                    return f"<td style='text-align:right;padding:7px 12px;color:{col};{fw}'>{v:+.1f}%</td>"
+                def _td_alerte(ep, bold=False):
+                    if ep is None: return "<td style='padding:7px 12px;'>—</td>"
+                    a = abs(ep)
+                    if a >= 15: badge = f"<span style='background:#C0392B;color:#fff;padding:2px 8px;border-radius:4px;font-size:0.7rem;'>🔴 Alerte</span>"
+                    elif a >= 8: badge = f"<span style='background:#F39C12;color:#fff;padding:2px 8px;border-radius:4px;font-size:0.7rem;'>🟡 Vigilance</span>"
+                    else: badge = f"<span style='background:#27AE60;color:#fff;padding:2px 8px;border-radius:4px;font-size:0.7rem;'>✅ OK</span>"
+                    fw = "font-weight:700;" if bold else ""
+                    return f"<td style='padding:7px 12px;{fw}'>{badge}</td>"
 
-            # ── Tableau N vs N-2 ──────────────────────────────────────────────
-            st.markdown(
-                f"<div style='font-size:0.72rem;color:{OR};font-weight:700;"
-                f"text-transform:uppercase;margin:12px 0 6px;'>"
-                f"Tableau 2 — Comparaison N vs N-2 (il y a 2 arrêtés)</div>",
-                unsafe_allow_html=True
-            )
-            _rows_n2 = []
-            for r in _tableau_bt:
-                if r["ultimate_n2"] is None: continue
-                _rows_n2.append({
-                    "Année":             r["annee_label"],
-                    "Provision projetée N-2 (€)": _fmt_e(r["ultimate_n2"]),
-                    "Observé N (€)":     _fmt_e(r["observe_n"]),
-                    "Boni/Mali (€)":     _fmt_bm(r["boni_mali_n2"]),
-                    "Écart %":           _fmt_p(r["ecart_pct_n2"]),
-                    "Alerte":            _alerte(r["ecart_pct_n2"]),
-                })
-            # Ligne total N-2
-            _rows_n2.append({
-                "Année":             "📊 TOTAL",
-                "Provision projetée N-2 (€)": _fmt_e(_totaux_bt.get("ultimate_n2")),
-                "Observé N (€)":     _fmt_e(_totaux_bt.get("observe_n")),
-                "Boni/Mali (€)":     _fmt_bm(_totaux_bt.get("boni_mali_n2")),
-                "Écart %":           _fmt_p(_totaux_bt.get("ecart_pct_n2")),
-                "Alerte":            _alerte(_totaux_bt.get("ecart_pct_n2")),
-            })
-            st.dataframe(_pd_bt.DataFrame(_rows_n2), use_container_width=True, hide_index=True)
-            st.markdown(
-                f"<div style='font-size:0.72rem;color:{GRIS};font-style:italic;margin-bottom:12px;'>"
-                f"Seuil d'alerte : ±15% — Vigilance : ±8% — Source : Guide Institut des Actuaires 2023</div>",
-                unsafe_allow_html=True
-            )
+                html = f"""
+<div style='margin-bottom:4px;'>
+<div style='font-size:0.72rem;color:#C9A84C;font-weight:700;text-transform:uppercase;margin-bottom:8px;'>{titre}</div>
+<div style='overflow-x:auto;'>
+<table style='width:100%;border-collapse:collapse;font-size:0.8rem;font-family:Arial,sans-serif;'>
+<thead>
+<tr style='background:#0F2E52;'>
+  <th style='text-align:left;padding:9px 12px;color:#C9A84C;font-weight:700;border-bottom:2px solid #C9A84C;'>Année</th>
+  <th style='text-align:right;padding:9px 12px;color:#C9A84C;font-weight:700;border-bottom:2px solid #C9A84C;'>Provision projetée (€)</th>
+  <th style='text-align:right;padding:9px 12px;color:#C9A84C;font-weight:700;border-bottom:2px solid #C9A84C;'>Observé N (€)</th>
+  <th style='text-align:right;padding:9px 12px;color:#C9A84C;font-weight:700;border-bottom:2px solid #C9A84C;'>Boni / Mali (€)</th>
+  <th style='text-align:right;padding:9px 12px;color:#C9A84C;font-weight:700;border-bottom:2px solid #C9A84C;'>Écart %</th>
+  <th style='text-align:center;padding:9px 12px;color:#C9A84C;font-weight:700;border-bottom:2px solid #C9A84C;'>Alerte</th>
+</tr>
+</thead>
+<tbody>"""
+                for i, r in enumerate(rows):
+                    bg = "background:rgba(26,63,107,0.4);" if i % 2 == 0 else "background:rgba(15,46,82,0.2);"
+                    html += f"<tr style='{bg}'>"
+                    html += f"<td style='padding:7px 12px;color:#E8EDF2;font-weight:500;'>{r['annee_label']}</td>"
+                    html += _td_num(r[key_ult])
+                    html += _td_num(r["observe_n"])
+                    html += _td_bm(r[key_bm])
+                    html += _td_pct(r[key_ep])
+                    html += _td_alerte(r[key_ep])
+                    html += "</tr>"
+
+                # Ligne total
+                html += f"""<tr style='background:#0F2E52;border-top:2px solid #C9A84C;'>
+  <td style='padding:9px 12px;color:#C9A84C;font-weight:700;'>TOTAL</td>"""
+                html += _td_num(totaux.get(key_ult), bold=True)
+                html += _td_num(totaux.get("observe_n"), bold=True)
+                html += _td_bm(totaux.get(key_bm), bold=True)
+                html += _td_pct(totaux.get(key_ep), bold=True)
+                html += _td_alerte(totaux.get(key_ep), bold=True)
+                html += "</tr>"
+
+                html += """</tbody></table></div>
+<div style='font-size:0.68rem;color:#8A9BB0;font-style:italic;margin-top:6px;'>
+Seuil d'alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Source : Guide Institut des Actuaires 2023
+</div></div>"""
+                return html
+
+            # Filtrer les lignes avec données
+            _rows_n1 = [r for r in _tableau_bt if r.get("ultimate_n1") is not None]
+            _rows_n2 = [r for r in _tableau_bt if r.get("ultimate_n2") is not None]
+
+            st.markdown(_html_tableau_bt(
+                "Tableau 1 — Comparaison N vs N-1 (arrêté précédent)",
+                _rows_n1, _totaux_bt, "ultimate_n1", "boni_mali_n1", "ecart_pct_n1"
+            ), unsafe_allow_html=True)
+
+            st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
+
+            st.markdown(_html_tableau_bt(
+                "Tableau 2 — Comparaison N vs N-2 (il y a 2 arrêtés)",
+                _rows_n2, _totaux_bt, "ultimate_n2", "boni_mali_n2", "ecart_pct_n2"
+            ), unsafe_allow_html=True)
 
             # ── Narration ─────────────────────────────────────────────────────
             _msg_bt = _bt.get("message", "")
