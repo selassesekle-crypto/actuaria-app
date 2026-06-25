@@ -2,103 +2,77 @@
 #  ActuarIA — Agent A7 Ibrahim v5.0
 #  n5_rapport.py  —  Export Word (.docx) + PDF professionnel
 #
-#  Générateur : python-docx (Word) + reportlab (PDF)
-#  Graphiques : kaleido (PNG embarqués) avec fallback gracieux si absent
-#
-#  Palette : Navy #0F2E52 / Gold #C9A84C / Blanc #FFFFFF / Gris #8A9BB0
+#  Structure : 6 sections, pas de duplication, graphiques embarqués via kaleido
+#  Palette   : Navy #0F2E52 / Gold #C9A84C
 # =============================================================================
 
 from __future__ import annotations
-
-import io
-import logging
-import re
+import io, logging, re
 from datetime import datetime
-from typing import Dict, Optional
-
+from typing import Dict
 import numpy as np
 
 logger = logging.getLogger('actuaria.a7.rapport')
 
-# ── Couleurs hex ──────────────────────────────────────────────────────────────
-NAVY    = '0F2E52'
-NAVY_L  = '1A3F6B'
-GOLD    = 'C9A84C'
-BLANC   = 'FFFFFF'
-GRIS    = '8A9BB0'
-ROUGE   = 'C0392B'
-VERT    = '27AE60'
-AMBRE   = 'F39C12'
-BLEU    = '2980B9'
+NAVY = '0F2E52'; NAVY_L = '1A3F6B'; GOLD = 'C9A84C'
+BLANC = 'FFFFFF'; GRIS = '8A9BB0'; ROUGE = 'C0392B'
+VERT = '27AE60'; AMBRE = 'F39C12'
 
 
-# =============================================================================
-#  HELPERS
-# =============================================================================
+# ── Helpers numériques ────────────────────────────────────────────────────────
 
-def _f(v, decimals=0) -> str:
+def _f(v, dec=0):
     if v is None: return '—'
     try:
         fv = float(v)
         if np.isnan(fv) or np.isinf(fv): return '—'
-        if decimals == 0:
-            return f"{fv:,.0f} €".replace(',', ' ')
-        return f"{fv:,.{decimals}f}".replace(',', ' ')
-    except Exception: return '—'
+        return f"{fv:,.0f} €".replace(',', ' ') if dec == 0 else f"{fv:,.{dec}f}".replace(',', ' ')
+    except: return '—'
 
-def _pct(v, decimals=1) -> str:
+def _pct(v, dec=1):
     if v is None: return '—'
     try:
         fv = float(v)
-        if np.isnan(fv) or np.isinf(fv): return '—'
-        return f"{fv:.{decimals}f} %"
-    except Exception: return '—'
+        return '—' if (np.isnan(fv) or np.isinf(fv)) else f"{fv:.{dec}f} %"
+    except: return '—'
 
-def _statut_txt(b) -> str:
-    return 'VALIDÉE' if b else 'REJETÉE'
+def _ok(b): return 'VALIDÉE' if b else 'REJETÉE'
 
-def _nettoyer(texte: str) -> str:
-    """Supprimer les caractères spéciaux illisibles."""
-    if not texte: return ''
-    texte = re.sub(r'[■□▪▸►]+', '•', texte)
-    texte = re.sub(r'─+', '', texte)
-    texte = re.sub(r'\n{3,}', '\n\n', texte)
-    return texte.strip()
+def _clean(txt):
+    """Nettoyer les caractères illisibles du commentaire."""
+    if not txt: return ''
+    txt = re.sub(r'[■□▪▸►═╔╗╚╝║]+', '', txt)
+    txt = re.sub(r'─+', '', txt)
+    txt = re.sub(r'={4,}', '', txt)
+    txt = re.sub(r'\n{3,}', '\n\n', txt)
+    return txt.strip()
 
 
-# =============================================================================
-#  EXPORT PNG DES GRAPHIQUES via kaleido
-# =============================================================================
+# ── Export PNG graphiques ─────────────────────────────────────────────────────
 
-def _exporter_pngs(graphiques: Dict, width=900, height=380) -> Dict[str, bytes]:
-    pngs = {}
-    if not graphiques:
-        return pngs
+def _pngs(graphiques: Dict, w=900, h=360) -> Dict[str, bytes]:
+    out = {}
+    if not graphiques: return out
     try:
         import plotly.io as pio
         for nom, fig in graphiques.items():
             try:
-                png = pio.to_image(fig, format='png', width=width, height=height, scale=2)
-                pngs[nom] = png
+                out[nom] = pio.to_image(fig, format='png', width=w, height=h, scale=2)
             except Exception as e:
-                logger.debug(f"PNG {nom} ignoré : {e}")
+                logger.debug(f"PNG {nom} : {e}")
     except ImportError:
-        logger.info("kaleido absent — graphiques omis dans le rapport")
-    return pngs
+        logger.info("kaleido absent — graphiques omis")
+    return out
 
 
 # =============================================================================
-#  EXPORT WORD  (python-docx)
+#  EXPORT WORD
 # =============================================================================
 
 def export_word(
     n1: Dict, n2: Dict, n3: Dict, n4: Dict,
-    commentaire : str  = '',
-    ref_client  : str  = '',
-    arrete      : str  = '',
-    audit_id    : str  = '',
-    lob_label   : str  = '',
-    graphiques  : Dict = None,
+    commentaire='', ref_client='', arrete='',
+    audit_id='', lob_label='', graphiques=None,
 ) -> bytes:
     try:
         from docx import Document
@@ -107,369 +81,367 @@ def export_word(
         from docx.oxml.ns import qn
         from docx.oxml import OxmlElement
     except ImportError as e:
-        logger.error(f"python-docx non disponible : {e}")
-        return b''
+        logger.error(f"python-docx absent : {e}"); return b''
 
     try:
-        def _rgb(hex6: str) -> RGBColor:
-            h = hex6.lstrip('#')
-            return RGBColor(int(h[0:2],16), int(h[2:4],16), int(h[4:6],16))
+        def rgb(h):
+            h = h.lstrip('#')
+            return RGBColor(int(h[:2],16), int(h[2:4],16), int(h[4:],16))
 
-        NAVY_RGB  = _rgb(NAVY);  GOLD_RGB  = _rgb(GOLD)
-        BLANC_RGB = _rgb(BLANC); GRIS_RGB  = _rgb(GRIS)
-        ROUGE_RGB = _rgb(ROUGE); VERT_RGB  = _rgb(VERT)
-        AMBRE_RGB = _rgb(AMBRE)
+        NR=rgb(NAVY); GR=rgb(GOLD); BR=rgb(BLANC); GrR=rgb(GRIS)
+        RgR=rgb(ROUGE); VR=rgb(VERT); AR=rgb(AMBRE)
 
         doc = Document()
-        for section in doc.sections:
-            section.top_margin = Cm(2.0); section.bottom_margin = Cm(2.0)
-            section.left_margin = Cm(2.5); section.right_margin = Cm(2.5)
+        for s in doc.sections:
+            s.top_margin=Cm(2); s.bottom_margin=Cm(2)
+            s.left_margin=Cm(2.5); s.right_margin=Cm(2.5)
 
         # ── Données ───────────────────────────────────────────────────────────
-        cl   = n3.get('chain_ladder', {});  mack = n3.get('mack', {})
-        bf   = n3.get('bf', {});            cc   = n3.get('cape_cod', {})
-        boot = n3.get('bootstrap', {});     scr  = n4.get('scr', {})
-        h1   = n2.get('h1_independance', {}); h2 = n2.get('h2_stabilite', {})
-        h3   = n2.get('h3_apriori_bf', {});   h4 = n2.get('h4_homosc_bootstrap', {})
-        poids = n4.get('poids', {})
+        cl  = n3.get('chain_ladder',{}); mk = n3.get('mack',{})
+        bf  = n3.get('bf',{});           cc = n3.get('cape_cod',{})
+        bt  = n3.get('bootstrap',{});    sc = n4.get('scr',{})
+        h1=n2.get('h1_independance',{}); h2=n2.get('h2_stabilite',{})
+        h3=n2.get('h3_apriori_bf',{});   h4=n2.get('h4_homosc_bootstrap',{})
+        pw = n4.get('poids',{})
 
-        be_val   = float(n4.get('best_estimate', 0) or 0)
-        sigma    = float(mack.get('sigma_total', n4.get('sigma_mack', 0)) or 0)
-        cv_val   = float(n4.get('cv_inter_methodes', 0) or 0)
-        p75      = float(n4.get('reserve_p75', 0) or 0)
-        p90      = float(n4.get('reserve_p90', mack.get('reserve_p90', 0)) or 0)
-        p99      = float(n4.get('reserve_p99_5', 0) or 0)
-        scr_prov = float(scr.get('scr_prov', be_val*0.30) if scr else be_val*0.30)
-        scr_ratio = scr_prov / be_val * 100 if be_val else 0
+        BE   = float(n4.get('best_estimate',0) or 0)
+        SIG  = float(mk.get('sigma_total', n4.get('sigma_mack',0)) or 0)
+        CV   = float(n4.get('cv_inter_methodes',0) or 0)
+        P75  = float(n4.get('reserve_p75',0) or 0)
+        P90  = float(n4.get('reserve_p90', mk.get('reserve_p90',0)) or 0)
+        P99  = float(n4.get('reserve_p99_5',0) or 0)
+        SCP  = float(sc.get('scr_prov', BE*0.30) if sc else BE*0.30)
+        SCR  = SCP/BE*100 if BE else 0
 
-        date_str  = datetime.now().strftime('%d/%m/%Y')
-        arrete_s  = arrete or date_str
-        client_s  = ref_client or 'ActuarIA'
-        lob_s     = lob_label or n2.get('lob_label', '—')
-        methode_s = n4.get('methode_facteurs', n2.get('methode_recommandee', '—'))
-        statut_s  = n4.get('statut', 'AMBRE')
-        statut_rgb = VERT_RGB if statut_s=='VERT' else AMBRE_RGB if statut_s=='AMBRE' else ROUGE_RGB
+        dt    = datetime.now().strftime('%d/%m/%Y')
+        arr   = arrete or dt
+        cli   = ref_client or 'ActuarIA'
+        lob   = lob_label or n2.get('lob_label','—')
+        meth  = n4.get('methode_facteurs', n2.get('methode_recommandee','—'))
+        stat  = n4.get('statut','AMBRE')
+        scol  = VR if stat=='VERT' else AR if stat=='AMBRE' else RgR
+        semj  = '✅' if stat=='VERT' else '⚠️' if stat=='AMBRE' else '❌'
 
-        pngs = _exporter_pngs(graphiques or {})
+        imgs = _pngs(graphiques or {})
 
-        # ── Helpers ───────────────────────────────────────────────────────────
-        def _cell_bg(cell, hex_color):
-            tc = cell._tc; tcp = tc.get_or_add_tcPr()
-            shd = OxmlElement('w:shd')
-            shd.set(qn('w:fill'), hex_color); shd.set(qn('w:color'), 'auto')
-            shd.set(qn('w:val'), 'clear'); tcp.append(shd)
+        # ── Helpers docx ──────────────────────────────────────────────────────
+        def bg(cell, hex6):
+            tc=cell._tc; tcp=tc.get_or_add_tcPr()
+            s=OxmlElement('w:shd')
+            s.set(qn('w:fill'),hex6); s.set(qn('w:color'),'auto')
+            s.set(qn('w:val'),'clear'); tcp.append(s)
 
-        def _run(para, text, bold=False, italic=False, size=10, color=None):
-            r = para.add_run(str(text))
-            r.bold = bold; r.italic = italic; r.font.size = Pt(size)
-            if color: r.font.color.rgb = color
+        def run(p, txt, bold=False, italic=False, sz=10, col=None):
+            r=p.add_run(str(txt)); r.bold=bold; r.italic=italic; r.font.size=Pt(sz)
+            if col: r.font.color.rgb=col
             return r
 
-        def _h(text, level=1, color=None, sb=10, sa=4):
-            p = doc.add_paragraph()
-            p.paragraph_format.space_before = Pt(sb)
-            p.paragraph_format.space_after  = Pt(sa)
-            sz = {1:16, 2:13, 3:11}.get(level, 10)
-            cl = color or (NAVY_RGB if level==1 else GOLD_RGB)
-            _run(p, text, bold=True, size=sz, color=cl)
+        def h(txt, lv=1, col=None, sb=8, sa=3):
+            p=doc.add_paragraph()
+            p.paragraph_format.space_before=Pt(sb)
+            p.paragraph_format.space_after=Pt(sa)
+            sz={1:16,2:12,3:10}.get(lv,10)
+            c=col or (NR if lv==1 else GR)
+            run(p,txt,bold=True,sz=sz,col=c)
             return p
 
-        def _p(text, size=9, color=None, bold=False, italic=False, sa=3, align=None):
-            p = doc.add_paragraph()
-            p.paragraph_format.space_after  = Pt(sa)
-            p.paragraph_format.space_before = Pt(0)
-            if align: p.alignment = align
-            _run(p, _nettoyer(str(text)), bold=bold, italic=italic,
-                 size=size, color=color or NAVY_RGB)
+        def para(txt, sz=9, col=None, bold=False, italic=False, sa=3, indent=0):
+            if not txt: return None
+            p=doc.add_paragraph()
+            p.paragraph_format.space_after=Pt(sa)
+            p.paragraph_format.space_before=Pt(0)
+            if indent: p.paragraph_format.left_indent=Cm(indent)
+            run(p,_clean(str(txt)),bold=bold,italic=italic,sz=sz,col=col or NR)
             return p
 
-        def _sep(color=NAVY):
-            p = doc.add_paragraph()
-            p.paragraph_format.space_before = Pt(2); p.paragraph_format.space_after = Pt(2)
-            pPr = p._p.get_or_add_pPr()
-            pBdr = OxmlElement('w:pBdr')
-            b = OxmlElement('w:bottom')
+        def sep(col=GOLD):
+            p=doc.add_paragraph()
+            p.paragraph_format.space_before=Pt(2); p.paragraph_format.space_after=Pt(2)
+            pPr=p._p.get_or_add_pPr(); pBdr=OxmlElement('w:pBdr')
+            b=OxmlElement('w:bottom')
             b.set(qn('w:val'),'single'); b.set(qn('w:sz'),'6')
-            b.set(qn('w:space'),'1'); b.set(qn('w:color'), color)
+            b.set(qn('w:space'),'1'); b.set(qn('w:color'),col)
             pBdr.append(b); pPr.append(pBdr)
 
-        def _tbl(headers, rows, widths=None, hdr=NAVY):
+        def tbl(heads, rows, ws=None, hbg=NAVY):
             from docx.enum.table import WD_ALIGN_VERTICAL
-            t = doc.add_table(rows=1+len(rows), cols=len(headers))
-            t.style = 'Table Grid'
-            # Header
-            for i, h in enumerate(headers):
-                c = t.rows[0].cells[i]; _cell_bg(c, hdr)
-                p = c.paragraphs[0]; p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                r = p.add_run(str(h)); r.bold=True; r.font.size=Pt(9)
-                r.font.color.rgb=BLANC_RGB; c.vertical_alignment=WD_ALIGN_VERTICAL.CENTER
-            # Rows
-            for ri, row in enumerate(rows):
-                for ci, val in enumerate(row):
-                    c = t.rows[ri+1].cells[ci]
-                    if ri%2==1: _cell_bg(c, 'EEF2F7')
-                    p = c.paragraphs[0]; p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                    r = p.add_run(str(val) if val is not None else '—')
+            t=doc.add_table(rows=1+len(rows), cols=len(heads)); t.style='Table Grid'
+            for i,hd in enumerate(heads):
+                c=t.rows[0].cells[i]; bg(c,hbg)
+                p=c.paragraphs[0]; p.alignment=WD_ALIGN_PARAGRAPH.CENTER
+                r=p.add_run(str(hd)); r.bold=True; r.font.size=Pt(9); r.font.color.rgb=BR
+                c.vertical_alignment=WD_ALIGN_VERTICAL.CENTER
+            for ri,row in enumerate(rows):
+                for ci,v in enumerate(row):
+                    c=t.rows[ri+1].cells[ci]
+                    if ri%2==1: bg(c,'EEF2F7')
+                    p=c.paragraphs[0]; p.alignment=WD_ALIGN_PARAGRAPH.CENTER
+                    r=p.add_run(str(v) if v is not None else '—')
                     r.font.size=Pt(9); c.vertical_alignment=WD_ALIGN_VERTICAL.CENTER
-            if widths:
-                for i, w in enumerate(widths):
-                    for row in t.rows: row.cells[i].width = Cm(w)
-            doc.add_paragraph().paragraph_format.space_after = Pt(4)
-            return t
+            if ws:
+                for i,w in enumerate(ws):
+                    for row in t.rows: row.cells[i].width=Cm(w)
+            doc.add_paragraph().paragraph_format.space_after=Pt(2)
 
-        def _img(png_bytes, width_cm=14.5):
-            if not png_bytes: return
+        def img(png, wcm=14.5):
+            if not png: return
             try:
-                doc.add_picture(io.BytesIO(png_bytes), width=Cm(width_cm))
-                doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                doc.add_picture(io.BytesIO(png), width=Cm(wcm))
+                doc.paragraphs[-1].alignment=WD_ALIGN_PARAGRAPH.CENTER
+                doc.add_paragraph().paragraph_format.space_after=Pt(4)
             except Exception as e:
-                _p(f'[Graphique non disponible : {e}]', size=8, italic=True)
+                para(f'[Graphique non disponible : {e}]', sz=8, italic=True)
 
-        # =========================================================================
+        # =====================================================================
         #  PAGE DE GARDE
-        # =========================================================================
-        doc.add_paragraph(); doc.add_paragraph()
-        p = doc.add_paragraph(); p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        _run(p, 'RAPPORT ACTUARIEL\n', bold=True, size=26, color=NAVY_RGB)
-        _run(p, 'Provisionnement Non-Vie', bold=True, size=18, color=GOLD_RGB)
-        doc.add_paragraph()
-        p = doc.add_paragraph(); p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        _run(p, f'{client_s}\n', bold=True, size=14, color=NAVY_RGB)
-        _run(p, f'Arrêté : {arrete_s}  ·  Branche : {lob_s}', size=12, color=GRIS_RGB)
-        doc.add_paragraph()
-        p = doc.add_paragraph(); p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        _run(p, 'Statut global : ', size=11, color=NAVY_RGB)
-        emoji = '✅' if statut_s=='VERT' else '⚠️' if statut_s=='AMBRE' else '❌'
-        _run(p, f'{emoji} {statut_s}', bold=True, size=11, color=statut_rgb)
-        doc.add_paragraph()
-        p = doc.add_paragraph(); p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        _run(p, 'CONFIDENTIEL — USAGE STRICTEMENT ACTUARIEL', bold=True, size=10, color=ROUGE_RGB)
-        doc.add_paragraph()
-        _tbl(['Référence client','Branche (LoB)','Méthode retenue','Date','Audit ID'],
-             [[client_s, lob_s, methode_s.replace('_',' ').title(), date_str, audit_id or '—']],
-             widths=[3.0,3.0,3.5,2.5,4.0])
+        # =====================================================================
+        doc.add_paragraph().paragraph_format.space_after=Pt(24)
+
+        p=doc.add_paragraph(); p.alignment=WD_ALIGN_PARAGRAPH.CENTER
+        run(p,'RAPPORT ACTUARIEL\n',bold=True,sz=26,col=NR)
+        run(p,'Provisionnement Non-Vie',bold=True,sz=18,col=GR)
+
+        p=doc.add_paragraph(); p.alignment=WD_ALIGN_PARAGRAPH.CENTER
+        p.paragraph_format.space_before=Pt(12)
+        run(p,f'{cli}\n',bold=True,sz=14,col=NR)
+        run(p,f'Arrêté : {arr}  ·  Branche : {lob}',sz=12,col=rgb(GRIS))
+
+        p=doc.add_paragraph(); p.alignment=WD_ALIGN_PARAGRAPH.CENTER
+        p.paragraph_format.space_before=Pt(8)
+        run(p,'Statut : ',sz=11,col=NR)
+        run(p,f'{semj} {stat}',bold=True,sz=11,col=scol)
+
+        p=doc.add_paragraph(); p.alignment=WD_ALIGN_PARAGRAPH.CENTER
+        p.paragraph_format.space_before=Pt(6)
+        run(p,'CONFIDENTIEL — USAGE STRICTEMENT ACTUARIEL',bold=True,sz=9,col=RgR)
+
+        doc.add_paragraph().paragraph_format.space_after=Pt(8)
+        tbl(['Référence client','Branche','Méthode retenue','Date','Audit ID'],
+            [[cli, lob, meth.replace('_',' ').title(), dt, audit_id or '—']],
+            ws=[3.2,3.0,3.5,2.3,4.0])
+
         doc.add_page_break()
 
-        # =========================================================================
-        #  1. SYNTHÈSE
-        # =========================================================================
-        _h('1. Synthèse exécutive'); _sep(GOLD)
-        _tbl(['Indicateur','Valeur','Indicateur','Valeur'],
-             [['Best Estimate S2 (Art.77)', _f(be_val), 'σ Mack total', _f(sigma)],
-              ['Provision P75', _f(p75), 'CV inter-méthodes', _pct(cv_val)],
-              ['Provision P90', _f(p90), 'SCR Provisions', _f(scr_prov)],
-              ['Provision P99.5', _f(p99), 'Ratio SCR/BE', _pct(scr_ratio)]],
-             widths=[4.5,3.5,4.5,3.5])
-        if pngs.get('g5_convergence'):
-            _h('Convergence des méthodes', level=2)
-            _img(pngs['g5_convergence'])
-        if commentaire:
-            _h('Points saillants', level=2)
-            extrait = _nettoyer(commentaire)
-            for ligne in [l.strip() for l in extrait.split('\n') if l.strip()][:10]:
-                p = doc.add_paragraph()
-                p.paragraph_format.space_after = Pt(2)
-                p.paragraph_format.left_indent = Cm(0.3)
-                _run(p, ligne, size=9,
-                     color=GOLD_RGB if ligne[0].isdigit() or ligne.startswith('§') else NAVY_RGB,
-                     bold=ligne[0].isdigit() or ligne.startswith('§'))
+        # =====================================================================
+        #  1. SYNTHÈSE EXÉCUTIVE
+        # =====================================================================
+        h('1. Synthèse exécutive'); sep()
+
+        tbl(['Indicateur','Valeur','Indicateur','Valeur'],
+            [['Best Estimate S2 (Art.77)',_f(BE),'σ Mack total',_f(SIG)],
+             ['Provision P75',_f(P75),'CV inter-méthodes',_pct(CV)],
+             ['Provision P90',_f(P90),'SCR Provisions',_f(SCP)],
+             ['Provision P99.5',_f(P99),'Ratio SCR/BE',_pct(SCR)]],
+            ws=[4.5,3.5,4.5,3.5])
+
+        if imgs.get('g5_convergence'):
+            h('Convergence des méthodes', lv=2); img(imgs['g5_convergence'])
+
         doc.add_page_break()
 
-        # =========================================================================
+        # =====================================================================
         #  2. RÉSULTATS PAR MÉTHODE
-        # =========================================================================
-        _h('2. Résultats par méthode actuarielle'); _sep(GOLD)
-        _tbl(['Méthode','Réserve IBNR (€)','Poids BE','Score /100','Statut'],
-             [['Chain Ladder', _f(cl.get('reserve_totale')),
-               _pct(poids.get('chain_ladder',0)*100),
-               str(n2.get('scores_confiance',{}).get('chain_ladder','—')), '✓'],
-              ['Mack 1993', _f(mack.get('reserve_best_estimate')),
-               _pct(poids.get('mack',0)*100),
-               str(n2.get('scores_confiance',{}).get('mack','—')), '✓'],
-              ['Bornhuetter-Ferguson', _f(bf.get('reserve_totale')),
-               _pct(poids.get('bf',0)*100),
-               str(n2.get('scores_confiance',{}).get('bf','—')), '✓'],
-              ['Cape Cod', _f(cc.get('reserve_totale')),
-               _pct(poids.get('cape_cod',0)*100),
-               str(n2.get('scores_confiance',{}).get('cape_cod','—')), '✓'],
-              ['⭐ BEST ESTIMATE S2', _f(be_val), '100 %', '—', '→ Bilan S2']],
-             widths=[4.5,3.5,2.5,2.5,3.0], hdr=NAVY_L)
-        for nom_g, titre_g in [('g1_heatmap','Triangle de développement cumulé'),
-                                ('g13_paiements','Paiements cumulés par année de survenance'),
-                                ('g4_ibnr','IBNR par année de survenance'),
-                                ('g2_cadences','Cadences cumulées — Chain Ladder')]:
-            if pngs.get(nom_g):
-                _h(titre_g, level=2); _img(pngs[nom_g])
+        # =====================================================================
+        h('2. Résultats par méthode actuarielle'); sep()
+
+        tbl(['Méthode','Réserve IBNR (€)','Poids BE','Score /100'],
+            [['Chain Ladder',
+              _f(cl.get('reserve_totale')),
+              _pct(pw.get('chain_ladder',0)*100),
+              str(n2.get('scores_confiance',{}).get('chain_ladder','—'))],
+             ['Mack 1993',
+              _f(mk.get('reserve_best_estimate')),
+              _pct(pw.get('mack',0)*100),
+              str(n2.get('scores_confiance',{}).get('mack','—'))],
+             ['Bornhuetter-Ferguson',
+              _f(bf.get('reserve_totale')),
+              _pct(pw.get('bf',0)*100),
+              str(n2.get('scores_confiance',{}).get('bf','—'))],
+             ['Cape Cod',
+              _f(cc.get('reserve_totale')),
+              _pct(pw.get('cape_cod',0)*100),
+              str(n2.get('scores_confiance',{}).get('cape_cod','—'))],
+             ['⭐ BEST ESTIMATE S2',_f(BE),'100 %','—']],
+            ws=[5.0,3.5,2.5,2.5], hbg=NAVY_L)
+
+        # Incertitude Mack
+        h('Incertitude de réserve — Mack 1993 & Bootstrap ODP', lv=2)
+        tbl(['Approche','BE (€)','P90 (€)','P99.5 (€)','CV (%)'],
+            [['Mack 1993 (analytique)',
+              _f(BE), _f(P90), _f(P99), _pct(SIG/BE*100 if BE else 0)],
+             ['Bootstrap ODP (5 000 sim.)',
+              _f(bt.get('reserve_p50',BE)),
+              _f(bt.get('reserve_p90',P90)),
+              _f(bt.get('reserve_p99_5',P99)),
+              _pct(bt.get('cv',CV))]],
+            ws=[5.0,3.0,3.0,3.0,2.0])
+
+        # Graphiques résultats
+        for gnom, gtit in [
+            ('g1_heatmap',    'Triangle de développement cumulé'),
+            ('g13_paiements', 'Paiements cumulés par année de survenance'),
+            ('g4_ibnr',       'IBNR par année de survenance'),
+            ('g2_cadences',   'Cadences cumulées — Chain Ladder'),
+            ('g6_bootstrap',  'Distribution Bootstrap ODP — Quantiles'),
+        ]:
+            if imgs.get(gnom):
+                h(gtit, lv=2); img(imgs[gnom])
+
         doc.add_page_break()
 
-        # =========================================================================
+        # =====================================================================
         #  3. VALIDATION DES HYPOTHÈSES
-        # =========================================================================
-        _h('3. Validation des hypothèses actuarielles'); _sep(GOLD)
-        rows_hyp = []
-        for label, h in [('H1 — Indépendance (Mack 1993)', h1),
-                          ('H2 — Stabilité des facteurs', h2),
-                          ('H3 — A priori BF/Cape Cod', h3),
-                          ('H4 — Homoscédasticité ODP', h4)]:
-            if not h: continue
-            ok = bool(h.get('ok', True))
-            indic = (f"corr={h.get('corr_moy','—')}" if 'corr_moy' in h else
-                     f"CV={h.get('cv_moy','—')}"     if 'cv_moy'   in h else
-                     f"LR={h.get('lr_apriori','—')}" if 'lr_apriori' in h else
-                     f"φ={h.get('phi','—')}")
-            rows_hyp.append([label, _statut_txt(ok), f"{h.get('score','—')}/100", indic])
-        _tbl(['Hypothèse','Résultat','Score','Indicateur'], rows_hyp,
-             widths=[6.0,2.5,2.0,5.5])
-        for label, h in [('H1 — Indépendance (Mack 1993)', h1),
-                          ('H2 — Stabilité des facteurs', h2),
-                          ('H3 — A priori BF/Cape Cod', h3),
-                          ('H4 — Homoscédasticité ODP', h4)]:
-            if not h: continue
-            ok  = bool(h.get('ok', True))
-            msg = _nettoyer(h.get('message', ''))
+        # =====================================================================
+        h('3. Validation des hypothèses actuarielles'); sep()
+
+        # Tableau synthèse
+        rows_h = []
+        for lbl, hd in [('H1 — Indépendance (Mack)',h1),('H2 — Stabilité facteurs',h2),
+                         ('H3 — A priori BF/CC',h3),('H4 — Homoscédasticité ODP',h4)]:
+            if not hd: continue
+            ok = bool(hd.get('ok',True))
+            indic = (f"corr_moy={hd.get('corr_moy','—')}" if 'corr_moy' in hd else
+                     f"CV={hd.get('cv_moy','—')}"         if 'cv_moy' in hd else
+                     f"LR={hd.get('lr_apriori','—')}"     if 'lr_apriori' in hd else
+                     f"φ={hd.get('phi','—')}")
+            rows_h.append([lbl, _ok(ok), f"{hd.get('score','—')}/100", indic])
+        if rows_h:
+            tbl(['Hypothèse','Résultat','Score','Indicateur clé'],
+                rows_h, ws=[5.5,2.5,2.0,6.0])
+
+        # Détail narratif de chaque hypothèse
+        for lbl, hd in [('H1 — Indépendance (Mack 1993)',h1),
+                         ('H2 — Stabilité des facteurs',h2),
+                         ('H3 — A priori Bornhuetter-Ferguson',h3),
+                         ('H4 — Homoscédasticité Bootstrap ODP',h4)]:
+            if not hd: continue
+            ok  = bool(hd.get('ok',True))
+            msg = _clean(hd.get('message',''))
             if not msg: continue
-            _h(label, level=2, color=VERT_RGB if ok else AMBRE_RGB)
-            _p(msg, size=9, sa=4)
-        for nom_g, titre_g in [('g8_h1','H1 — Indépendance Spearman'),
-                                ('g9_h2','H2 — Stabilité facteurs'),
-                                ('g6_bootstrap','Distribution Bootstrap ODP')]:
-            if pngs.get(nom_g):
-                _h(titre_g, level=2); _img(pngs[nom_g])
+            h(lbl, lv=2, col=VR if ok else AR)
+            para(msg, sz=9, sa=4, indent=0.3)
+
+        # Décision méthodologique
+        raison_rec = _clean(n2.get('raison_recommandation',''))
+        methode_rec = n2.get('methode_recommandee','—')
+        if raison_rec:
+            h('Décision méthodologique', lv=2)
+            p=doc.add_paragraph(); p.paragraph_format.space_after=Pt(3)
+            run(p,'Méthode recommandée : ',bold=True,sz=9,col=NR)
+            run(p,methode_rec.replace('_',' ').title(),sz=9,col=GR)
+            para(raison_rec, sz=9, indent=0.3)
+
+        # Graphiques hypothèses
+        for gnom, gtit in [('g8_h1','H1 — Test indépendance Spearman'),
+                            ('g9_h2','H2 — Stabilité des facteurs'),
+                            ('g10_h3','H3 — Loss Ratio a priori')]:
+            if imgs.get(gnom):
+                h(gtit, lv=2); img(imgs[gnom])
+
         doc.add_page_break()
 
-        # =========================================================================
-        #  4. SCR
-        # =========================================================================
-        _h('4. SCR Provisions — Art. 105 Solvabilité 2'); _sep(GOLD)
-        _tbl(['Composante','Valeur','Référence réglementaire'],
-             [['Best Estimate S2', _f(be_val), 'Art. 77 Directive S2'],
-              ['Facteur σ EIOPA', '10 %', f'LoB : {lob_s} (Annexe II, Rgt 2015/35)'],
-              ['SCR Provisions', _f(scr_prov), 'SCR = 3 × σ(LoB) × BE'],
-              ['Ratio SCR/BE', _pct(scr_ratio), 'Cible < 35 % (pratique marché)']],
-             widths=[4.5,3.5,8.0])
-        scr_msg = scr.get('message','') if scr else ''
-        if scr_msg: _p(_nettoyer(scr_msg), size=9)
+        # =====================================================================
+        #  4. SCR PROVISIONS
+        # =====================================================================
+        h('4. SCR Provisions — Art. 105 Solvabilité 2'); sep()
+
+        tbl(['Composante','Valeur','Référence réglementaire'],
+            [['Best Estimate S2', _f(BE), 'Art. 77 Directive S2'],
+             ['Facteur σ EIOPA',  '10 %',  f'LoB : {lob} (Annexe II, Rgt 2015/35)'],
+             ['SCR Provisions',   _f(SCP), 'SCR = 3 × σ(LoB) × BE (Art. 105)'],
+             ['Ratio SCR/BE',     _pct(SCR),'Cible marché < 35 %']],
+            ws=[4.5,3.5,8.0])
+
+        scr_msg = _clean(sc.get('message','') if sc else '')
+        if scr_msg: para(scr_msg, sz=9, sa=4)
+
+        if imgs.get('g7_scr'):
+            h('Décomposition SCR', lv=2); img(imgs['g7_scr'])
+
         doc.add_page_break()
 
-        # =========================================================================
-        #  5. COMMENTAIRE
-        # =========================================================================
-        _h('5. Commentaire actuariel complet'); _sep(GOLD)
-        if commentaire:
-            comm = _nettoyer(commentaire)
-            sections = re.split(r'(?=§\d+\s*—|\d+\.\s+[A-ZÀÂÉÈÊ])', comm)
-            for sec in sections:
-                sec = sec.strip()
-                if not sec: continue
-                lignes = sec.split('\n', 1)
-                titre_s = lignes[0].strip()
-                corps_s = lignes[1].strip() if len(lignes) > 1 else ''
-                if titre_s: _h(titre_s, level=2)
-                if corps_s:
-                    for para_txt in corps_s.split('\n'):
-                        para_txt = para_txt.strip()
-                        if para_txt:
-                            p = doc.add_paragraph()
-                            p.paragraph_format.space_after = Pt(3)
-                            p.paragraph_format.left_indent = Cm(0.3)
-                            _run(p, para_txt, size=9, color=NAVY_RGB)
-        else:
-            _p('Commentaire non disponible.', size=9, italic=True)
-        doc.add_page_break()
+        # =====================================================================
+        #  5. JUGEMENT ACTUARIEL & RECOMMANDATIONS
+        # =====================================================================
+        h('5. Jugement actuariel & Recommandations'); sep()
 
-        # =========================================================================
-        #  6. JUGEMENT ACTUARIEL
-        # =========================================================================
-        _h('6. Jugement actuariel documenté'); _sep(GOLD)
-        jugement = n4.get('jugement', '')
+        # Jugement structuré depuis n4
+        jugement = _clean(n4.get('jugement',''))
         if jugement:
-            jug = _nettoyer(jugement)
-            sections_j = re.split(r'(?=\d+\.\s+[A-ZÀÂÉÈÊ])', jug)
+            sections_j = re.split(r'(?=\d+\.\s+[A-ZÀÂÉÈÊ])', jugement)
             for sec in sections_j:
                 sec = sec.strip()
                 if not sec: continue
-                lignes = sec.split('\n', 1)
-                titre_j = lignes[0].strip()
-                corps_j = lignes[1].strip() if len(lignes) > 1 else ''
-                if titre_j: _h(titre_j, level=2)
+                lignes = sec.split('\n',1)
+                tit_j  = lignes[0].strip()
+                corps_j = lignes[1].strip() if len(lignes)>1 else ''
+                if tit_j: h(tit_j, lv=2)
                 if corps_j:
-                    for para_txt in corps_j.split('\n'):
-                        para_txt = para_txt.strip()
-                        if para_txt:
-                            p = doc.add_paragraph()
-                            p.paragraph_format.space_after = Pt(3)
-                            p.paragraph_format.left_indent = Cm(0.3)
-                            _run(p, para_txt, size=9, color=NAVY_RGB)
-        else:
-            _p('Jugement actuariel non disponible.', size=9, italic=True)
-        doc.add_page_break()
+                    for ln in corps_j.split('\n'):
+                        ln = ln.strip()
+                        if ln: para(ln, sz=9, sa=2, indent=0.3)
 
-        # =========================================================================
-        #  7. RECOMMANDATIONS
-        # =========================================================================
-        _h('7. Recommandations'); _sep(GOLD)
-        alertes = n4.get('alertes', n2.get('alertes', []))
+        # Alertes spécifiques
+        alertes = n4.get('alertes', n2.get('alertes',[]))
         if alertes:
-            _h('Points de vigilance', level=2)
-            for alerte in alertes:
-                a = _nettoyer(str(alerte))
-                if not a: continue
-                p = doc.add_paragraph()
-                p.paragraph_format.space_after = Pt(4)
-                p.paragraph_format.left_indent = Cm(0.5)
-                _run(p, '⚠️  ', size=10, color=AMBRE_RGB)
-                _run(p, a, size=9, color=NAVY_RGB)
-        recs = n4.get('recommandations', [])
+            h('Points de vigilance', lv=2)
+            for a in alertes:
+                at = _clean(str(a))
+                if not at: continue
+                p=doc.add_paragraph()
+                p.paragraph_format.space_after=Pt(3)
+                p.paragraph_format.left_indent=Cm(0.4)
+                run(p,'⚠️  ',sz=10,col=AR)
+                run(p,at,sz=9,col=NR)
+
+        # Recommandations
+        recs = n4.get('recommandations',[])
         if recs:
-            _h('Actions recommandées', level=2)
-            for i, rec in enumerate(recs, 1):
-                r = _nettoyer(str(rec))
+            h('Actions recommandées', lv=2)
+            for i,rec in enumerate(recs,1):
+                r=_clean(str(rec))
                 if not r: continue
-                p = doc.add_paragraph()
-                p.paragraph_format.space_after = Pt(4)
-                p.paragraph_format.left_indent = Cm(0.5)
-                _run(p, f'{i}.  ', bold=True, size=10, color=GOLD_RGB)
-                _run(p, r, size=9, color=NAVY_RGB)
-        avis = n4.get('avis_actuariel', '')
+                p=doc.add_paragraph()
+                p.paragraph_format.space_after=Pt(3)
+                p.paragraph_format.left_indent=Cm(0.4)
+                run(p,f'{i}.  ',bold=True,sz=10,col=GR)
+                run(p,r,sz=9,col=NR)
+
+        # Avis final
+        avis = _clean(n4.get('avis_actuariel',''))
         if avis:
-            _h('Avis actuariel final', level=2)
-            p = doc.add_paragraph()
-            p.paragraph_format.space_after = Pt(6)
-            p.paragraph_format.left_indent = Cm(0.3)
-            _run(p, _nettoyer(avis), size=9,
-                 color=ROUGE_RGB if 'DÉFAVORABLE' in avis.upper() else VERT_RGB)
+            h('Avis actuariel', lv=2)
+            p=doc.add_paragraph()
+            p.paragraph_format.space_after=Pt(4)
+            p.paragraph_format.left_indent=Cm(0.3)
+            col_avis = RgR if 'DÉFAVORABLE' in avis.upper() else VR
+            run(p,avis,sz=9,col=col_avis)
 
-        # ── Footer ────────────────────────────────────────────────────────────
-        _sep(NAVY)
-        p = doc.add_paragraph(); p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        _run(p, f'ActuarIA · {client_s} · Arrêté {arrete_s} · '
-                f'Audit ID : {audit_id or "—"} · Généré le {date_str} · CONFIDENTIEL',
-             size=7, color=GRIS_RGB, italic=True)
+        # ── Pied de page ──────────────────────────────────────────────────────
+        sep(NAVY)
+        p=doc.add_paragraph(); p.alignment=WD_ALIGN_PARAGRAPH.CENTER
+        run(p,
+            f'ActuarIA · {cli} · Arrêté {arr} · Audit ID : {audit_id or "—"} · '
+            f'{dt} · CONFIDENTIEL',
+            sz=7, col=GrR, italic=True)
 
-        buf = io.BytesIO()
-        doc.save(buf); buf.seek(0)
-        word_bytes = buf.read()
-        logger.info(f"Word généré : {len(word_bytes):,} bytes — {len(pngs)} graphiques")
-        return word_bytes
+        buf=io.BytesIO(); doc.save(buf); buf.seek(0)
+        wb=buf.read()
+        logger.info(f"Word : {len(wb):,} bytes | {len(imgs)} graphiques")
+        return wb
 
     except Exception as e:
-        logger.error(f"export_word échoué : {e}", exc_info=True)
-        return b''
+        logger.error(f"export_word : {e}", exc_info=True); return b''
 
 
 # =============================================================================
-#  EXPORT PDF  (reportlab)
+#  EXPORT PDF  (reportlab) — même structure 5 sections
 # =============================================================================
 
 def export_pdf(
-    n1: Dict = None, n2: Dict = None, n3: Dict = None, n4: Dict = None,
-    commentaire : str  = '',
-    ref_client  : str  = '',
-    arrete      : str  = '',
-    audit_id    : str  = '',
-    lob_label   : str  = '',
-    graphiques  : Dict = None,
-    **kwargs,
+    n1=None, n2=None, n3=None, n4=None,
+    commentaire='', ref_client='', arrete='',
+    audit_id='', lob_label='', graphiques=None, **kw,
 ) -> bytes:
     n1=n1 or {}; n2=n2 or {}; n3=n3 or {}; n4=n4 or {}
     try:
@@ -481,215 +453,180 @@ def export_pdf(
             Table, TableStyle, PageBreak, HRFlowable)
         from reportlab.platypus import Image as RLImage
     except ImportError as e:
-        logger.error(f"reportlab non disponible : {e}"); return b''
+        logger.error(f"reportlab absent : {e}"); return b''
 
     try:
-        cl   = n3.get('chain_ladder',{}); mack = n3.get('mack',{})
-        bf   = n3.get('bf',{});           cc   = n3.get('cape_cod',{})
-        boot = n3.get('bootstrap',{});    scr  = n4.get('scr',{})
-        poids = n4.get('poids',{})
+        cl=n3.get('chain_ladder',{}); mk=n3.get('mack',{})
+        bf=n3.get('bf',{});           cc=n3.get('cape_cod',{})
+        bt=n3.get('bootstrap',{});    sc=n4.get('scr',{})
         h1=n2.get('h1_independance',{}); h2=n2.get('h2_stabilite',{})
         h3=n2.get('h3_apriori_bf',{});   h4=n2.get('h4_homosc_bootstrap',{})
+        pw=n4.get('poids',{})
 
-        be_val   = float(n4.get('best_estimate',0) or 0)
-        sigma    = float(mack.get('sigma_total',n4.get('sigma_mack',0)) or 0)
-        cv_val   = float(n4.get('cv_inter_methodes',0) or 0)
-        p75      = float(n4.get('reserve_p75',0) or 0)
-        p90      = float(n4.get('reserve_p90',0) or 0)
-        p99      = float(n4.get('reserve_p99_5',0) or 0)
-        scr_prov = float(scr.get('scr_prov',be_val*0.30) if scr else be_val*0.30)
-        scr_ratio = scr_prov/be_val*100 if be_val else 0
+        BE  = float(n4.get('best_estimate',0) or 0)
+        SIG = float(mk.get('sigma_total',n4.get('sigma_mack',0)) or 0)
+        CV  = float(n4.get('cv_inter_methodes',0) or 0)
+        P75 = float(n4.get('reserve_p75',0) or 0)
+        P90 = float(n4.get('reserve_p90',0) or 0)
+        P99 = float(n4.get('reserve_p99_5',0) or 0)
+        SCP = float(sc.get('scr_prov',BE*0.30) if sc else BE*0.30)
+        SCR = SCP/BE*100 if BE else 0
 
-        date_str = datetime.now().strftime('%d/%m/%Y')
-        arrete_s = arrete or date_str
-        client_s = ref_client or 'ActuarIA'
-        lob_s    = lob_label or n2.get('lob_label','—')
-        methode_s = n4.get('methode_facteurs', n2.get('methode_recommandee','—'))
+        dt=datetime.now().strftime('%d/%m/%Y')
+        arr=arrete or dt; cli=ref_client or 'ActuarIA'
+        lob=lob_label or n2.get('lob_label','—')
+        meth=n4.get('methode_facteurs',n2.get('methode_recommandee','—'))
 
-        NAVY_RL  = colors.HexColor(f'#{NAVY}')
-        GOLD_RL  = colors.HexColor(f'#{GOLD}')
-        GRIS_RL  = colors.HexColor(f'#{GRIS}')
-        ROUGE_RL = colors.HexColor(f'#{ROUGE}')
-        VERT_RL  = colors.HexColor(f'#{VERT}')
-        AMBRE_RL = colors.HexColor(f'#{AMBRE}')
-        BLANC_RL = colors.white
-        LGRIS_RL = colors.HexColor('#EEF2F7')
+        NRL=colors.HexColor(f'#{NAVY}'); GRL=colors.HexColor(f'#{GOLD}')
+        GrRL=colors.HexColor(f'#{GRIS}'); RgRL=colors.HexColor(f'#{ROUGE}')
+        VRL=colors.HexColor(f'#{VERT}'); ARL=colors.HexColor(f'#{AMBRE}')
+        WRL=colors.white; LgRL=colors.HexColor('#EEF2F7')
 
-        buf = io.BytesIO()
-        doc = SimpleDocTemplate(buf, pagesize=A4,
+        buf=io.BytesIO()
+        doc=SimpleDocTemplate(buf, pagesize=A4,
             topMargin=2*cm, bottomMargin=2*cm,
             leftMargin=2.5*cm, rightMargin=2.5*cm,
-            title=f"Rapport Actuariel {arrete_s}", author="ActuarIA")
+            title=f"Rapport Actuariel {arr}", author="ActuarIA")
 
-        def S(name, **kw): return ParagraphStyle(name, **kw)
-        styles = {
-            'titre': S('titre', fontSize=22, fontName='Helvetica-Bold',
-                       textColor=NAVY_RL, alignment=1, spaceAfter=8),
-            'sous':  S('sous',  fontSize=13, fontName='Helvetica',
-                       textColor=GOLD_RL, alignment=1, spaceAfter=6),
-            'conf':  S('conf',  fontSize=9,  fontName='Helvetica-Bold',
-                       textColor=ROUGE_RL, alignment=1, spaceAfter=12),
-            'h1':    S('h1',    fontSize=14, fontName='Helvetica-Bold',
-                       textColor=NAVY_RL, spaceBefore=12, spaceAfter=4),
-            'h2':    S('h2',    fontSize=11, fontName='Helvetica-Bold',
-                       textColor=GOLD_RL, spaceBefore=8, spaceAfter=3),
-            'h3':    S('h3',    fontSize=10, fontName='Helvetica-Bold',
-                       textColor=NAVY_RL, spaceBefore=4, spaceAfter=2),
-            'body':  S('body',  fontSize=9,  fontName='Helvetica',
-                       textColor=colors.black, spaceAfter=4, leading=13),
-            'footer':S('footer',fontSize=7,  fontName='Helvetica',
-                       textColor=GRIS_RL, alignment=1),
+        def S(n,**kw): return ParagraphStyle(n,**kw)
+        st={
+            'T': S('T',fontSize=22,fontName='Helvetica-Bold',textColor=NRL,alignment=1,spaceAfter=6),
+            'S': S('S',fontSize=13,fontName='Helvetica',textColor=GRL,alignment=1,spaceAfter=4),
+            'C': S('C',fontSize=9,fontName='Helvetica-Bold',textColor=RgRL,alignment=1,spaceAfter=10),
+            'H1':S('H1',fontSize=14,fontName='Helvetica-Bold',textColor=NRL,spaceBefore=10,spaceAfter=3),
+            'H2':S('H2',fontSize=11,fontName='Helvetica-Bold',textColor=GRL,spaceBefore=6,spaceAfter=2),
+            'H3':S('H3',fontSize=10,fontName='Helvetica-Bold',textColor=NRL,spaceBefore=3,spaceAfter=2),
+            'B': S('B',fontSize=9,fontName='Helvetica',textColor=colors.black,spaceAfter=3,leading=13),
+            'F': S('F',fontSize=7,fontName='Helvetica',textColor=GrRL,alignment=1),
         }
 
-        def _tbl(headers, rows, col_w=None, hdr_bg=None):
-            hdr_bg = hdr_bg or NAVY_RL
-            data = [[Paragraph(f'<b>{h}</b>',
-                               ParagraphStyle('th',fontSize=9,fontName='Helvetica-Bold',
-                                              textColor=BLANC_RL,alignment=1))
-                     for h in headers]]
+        def T(heads, rows, cw=None, hbg=None):
+            hbg=hbg or NRL
+            th=ParagraphStyle('th',fontSize=9,fontName='Helvetica-Bold',textColor=WRL,alignment=1)
+            td=ParagraphStyle('td',fontSize=9,fontName='Helvetica',alignment=1)
+            data=[[Paragraph(f'<b>{x}</b>',th) for x in heads]]
             for row in rows:
-                data.append([Paragraph(str(c or '—'),
-                                       ParagraphStyle('td',fontSize=9,fontName='Helvetica',
-                                                      alignment=1))
-                             for c in row])
-            t = Table(data, colWidths=col_w, repeatRows=1)
+                data.append([Paragraph(str(v or '—'),td) for v in row])
+            t=Table(data,colWidths=cw,repeatRows=1)
             t.setStyle(TableStyle([
-                ('BACKGROUND',(0,0),(-1,0),hdr_bg),
-                ('TEXTCOLOR',(0,0),(-1,0),BLANC_RL),
-                ('FONTNAME',(0,0),(-1,0),'Helvetica-Bold'),
-                ('FONTSIZE',(0,0),(-1,-1),9),
-                ('ALIGN',(0,0),(-1,-1),'CENTER'),
-                ('VALIGN',(0,0),(-1,-1),'MIDDLE'),
+                ('BACKGROUND',(0,0),(-1,0),hbg),('TEXTCOLOR',(0,0),(-1,0),WRL),
+                ('FONTNAME',(0,0),(-1,0),'Helvetica-Bold'),('FONTSIZE',(0,0),(-1,-1),9),
+                ('ALIGN',(0,0),(-1,-1),'CENTER'),('VALIGN',(0,0),(-1,-1),'MIDDLE'),
                 ('GRID',(0,0),(-1,-1),0.5,colors.HexColor('#D0D8E4')),
-                ('ROWBACKGROUNDS',(0,1),(-1,-1),[BLANC_RL,LGRIS_RL]),
-                ('TOPPADDING',(0,0),(-1,-1),5),
-                ('BOTTOMPADDING',(0,0),(-1,-1),5),
+                ('ROWBACKGROUNDS',(0,1),(-1,-1),[WRL,LgRL]),
+                ('TOPPADDING',(0,0),(-1,-1),5),('BOTTOMPADDING',(0,0),(-1,-1),5),
             ]))
             return t
 
-        pngs = _exporter_pngs(graphiques or {})
-        story = []
+        imgs=_pngs(graphiques or {})
+        HR=lambda: HRFlowable(width='100%',thickness=1.5,color=GRL,spaceAfter=6)
+
+        def IM(nom, w=15*cm, hh=5.5*cm):
+            if not imgs.get(nom): return []
+            return [Spacer(1,0.2*cm), RLImage(io.BytesIO(imgs[nom]),width=w,height=hh), Spacer(1,0.2*cm)]
+
+        story=[]
 
         # Page de garde
-        story += [Spacer(1,2*cm),
-                  Paragraph('RAPPORT ACTUARIEL<br/>Provisionnement Non-Vie', styles['titre']),
-                  Spacer(1,0.5*cm),
-                  Paragraph(f'{client_s}<br/>'
-                            f'<font size="11">Arrêté : {arrete_s}  ·  Branche : {lob_s}</font>',
-                            styles['sous']),
-                  Spacer(1,0.3*cm),
-                  Paragraph('CONFIDENTIEL — USAGE STRICTEMENT ACTUARIEL', styles['conf']),
-                  Spacer(1,0.8*cm),
-                  _tbl(['Référence','Méthode','Date','Audit ID'],
-                       [[client_s, methode_s.replace('_',' ').title(), date_str, audit_id or '—']],
-                       col_w=[4*cm,5*cm,3*cm,4*cm]),
-                  PageBreak()]
+        story+=[Spacer(1,2*cm),
+                Paragraph('RAPPORT ACTUARIEL<br/>Provisionnement Non-Vie',st['T']),
+                Spacer(1,0.4*cm),
+                Paragraph(f'{cli}<br/><font size="11">Arrêté : {arr}  ·  Branche : {lob}</font>',st['S']),
+                Spacer(1,0.2*cm),
+                Paragraph('CONFIDENTIEL — USAGE STRICTEMENT ACTUARIEL',st['C']),
+                Spacer(1,0.6*cm),
+                T(['Référence','Méthode','Date','Audit ID'],
+                  [[cli,meth.replace('_',' ').title(),dt,audit_id or '—']],
+                  cw=[4*cm,5*cm,3*cm,4*cm]),
+                PageBreak()]
 
         # 1. Synthèse
-        story += [Paragraph('1. Synthèse exécutive', styles['h1']),
-                  HRFlowable(width='100%',thickness=1.5,color=GOLD_RL,spaceAfter=8),
-                  _tbl(['Indicateur','Valeur','Indicateur','Valeur'],
-                       [['Best Estimate S2',_f(be_val),'σ Mack total',_f(sigma)],
-                        ['Provision P75',_f(p75),'CV inter-méthodes',_pct(cv_val)],
-                        ['Provision P90',_f(p90),'SCR Provisions',_f(scr_prov)],
-                        ['Provision P99.5',_f(p99),'Ratio SCR/BE',_pct(scr_ratio)]],
-                       col_w=[4*cm,4*cm,4*cm,4*cm])]
-        if pngs.get('g5_convergence'):
-            story += [Spacer(1,0.3*cm), Paragraph('Convergence des méthodes',styles['h2']),
-                      RLImage(io.BytesIO(pngs['g5_convergence']),width=15*cm,height=6*cm)]
-        story.append(PageBreak())
+        story+=[Paragraph('1. Synthèse exécutive',st['H1']),HR(),
+                T(['Indicateur','Valeur','Indicateur','Valeur'],
+                  [['Best Estimate S2',_f(BE),'σ Mack total',_f(SIG)],
+                   ['Provision P75',_f(P75),'CV inter-méthodes',_pct(CV)],
+                   ['Provision P90',_f(P90),'SCR Provisions',_f(SCP)],
+                   ['Provision P99.5',_f(P99),'Ratio SCR/BE',_pct(SCR)]],
+                  cw=[4*cm,4*cm,4*cm,4*cm])]
+        story+=IM('g5_convergence'); story.append(PageBreak())
 
         # 2. Résultats
-        story += [Paragraph('2. Résultats par méthode',styles['h1']),
-                  HRFlowable(width='100%',thickness=1.5,color=GOLD_RL,spaceAfter=8),
-                  _tbl(['Méthode','Réserve (€)','Poids','Score'],
-                       [['Chain Ladder',_f(cl.get('reserve_totale')),
-                         _pct(poids.get('chain_ladder',0)*100),
-                         str(n2.get('scores_confiance',{}).get('chain_ladder','—'))],
-                        ['Mack 1993',_f(mack.get('reserve_best_estimate')),
-                         _pct(poids.get('mack',0)*100),
-                         str(n2.get('scores_confiance',{}).get('mack','—'))],
-                        ['Bornhuetter-Ferguson',_f(bf.get('reserve_totale')),
-                         _pct(poids.get('bf',0)*100),
-                         str(n2.get('scores_confiance',{}).get('bf','—'))],
-                        ['Cape Cod',_f(cc.get('reserve_totale')),
-                         _pct(poids.get('cape_cod',0)*100),
-                         str(n2.get('scores_confiance',{}).get('cape_cod','—'))],
-                        ['⭐ BEST ESTIMATE S2',_f(be_val),'100 %','—']],
-                       col_w=[5*cm,4*cm,3*cm,4*cm])]
-        for nom_g, titre_g in [('g1_heatmap','Triangle'),('g13_paiements','Paiements cumulés'),
-                                ('g4_ibnr','IBNR par année')]:
-            if pngs.get(nom_g):
-                story += [Spacer(1,0.3*cm), Paragraph(titre_g,styles['h2']),
-                          RLImage(io.BytesIO(pngs[nom_g]),width=15*cm,height=5.5*cm)]
+        story+=[Paragraph('2. Résultats par méthode',st['H1']),HR(),
+                T(['Méthode','Réserve (€)','Poids','Score'],
+                  [['Chain Ladder',_f(cl.get('reserve_totale')),
+                    _pct(pw.get('chain_ladder',0)*100),
+                    str(n2.get('scores_confiance',{}).get('chain_ladder','—'))],
+                   ['Mack 1993',_f(mk.get('reserve_best_estimate')),
+                    _pct(pw.get('mack',0)*100),
+                    str(n2.get('scores_confiance',{}).get('mack','—'))],
+                   ['Bornhuetter-Ferguson',_f(bf.get('reserve_totale')),
+                    _pct(pw.get('bf',0)*100),
+                    str(n2.get('scores_confiance',{}).get('bf','—'))],
+                   ['Cape Cod',_f(cc.get('reserve_totale')),
+                    _pct(pw.get('cape_cod',0)*100),
+                    str(n2.get('scores_confiance',{}).get('cape_cod','—'))],
+                   ['⭐ BEST ESTIMATE S2',_f(BE),'100 %','—']],
+                  cw=[5*cm,4*cm,3*cm,4*cm],
+                  hbg=colors.HexColor(f'#{NAVY_L}'))]
+        for gn,gt in [('g1_heatmap','Triangle'),('g13_paiements','Paiements cumulés'),
+                       ('g4_ibnr','IBNR par année'),('g6_bootstrap','Bootstrap ODP')]:
+            if imgs.get(gn):
+                story+=[Paragraph(gt,st['H2'])]+IM(gn)
         story.append(PageBreak())
 
         # 3. Hypothèses
-        story += [Paragraph('3. Validation des hypothèses',styles['h1']),
-                  HRFlowable(width='100%',thickness=1.5,color=GOLD_RL,spaceAfter=8),
-                  _tbl(['Hypothèse','Résultat','Score','Message'],
-                       [['H1 — Indépendance',_statut_txt(h1.get('ok',True)),
-                         f"{h1.get('score','—')}/100",_nettoyer(h1.get('message',''))[:80]],
-                        ['H2 — Stabilité',_statut_txt(h2.get('ok',True)),
-                         f"{h2.get('score','—')}/100",_nettoyer(h2.get('message',''))[:80]],
-                        ['H3 — A priori BF',_statut_txt(h3.get('ok',True)),
-                         f"{h3.get('score','—')}/100",_nettoyer(h3.get('message',''))[:80]],
-                        ['H4 — Homoscédasticité',_statut_txt(h4.get('ok',True)),
-                         f"{h4.get('score','—')}/100",_nettoyer(h4.get('message',''))[:80]]],
-                       col_w=[4*cm,2.5*cm,2*cm,7.5*cm])]
+        rows_h=[]
+        for lbl,hd in [('H1 — Indépendance',h1),('H2 — Stabilité',h2),
+                        ('H3 — A priori BF',h3),('H4 — Homoscédasticité',h4)]:
+            if not hd: continue
+            ok=bool(hd.get('ok',True))
+            rows_h.append([lbl,_ok(ok),f"{hd.get('score','—')}/100",
+                           _clean(hd.get('message',''))[:70]])
+        story+=[Paragraph('3. Validation des hypothèses',st['H1']),HR()]
+        if rows_h:
+            story.append(T(['Hypothèse','Résultat','Score','Message'],rows_h,
+                           cw=[4*cm,2.5*cm,2*cm,7.5*cm]))
+        for gn,gt in [('g8_h1','H1 — Indépendance'),('g9_h2','H2 — Stabilité')]:
+            if imgs.get(gn):
+                story+=[Paragraph(gt,st['H2'])]+IM(gn,hh=4.5*cm)
         story.append(PageBreak())
 
         # 4. SCR
-        story += [Paragraph('4. SCR Provisions — Art. 105 S2',styles['h1']),
-                  HRFlowable(width='100%',thickness=1.5,color=GOLD_RL,spaceAfter=8),
-                  _tbl(['Composante','Valeur','Référence'],
-                       [['Best Estimate S2',_f(be_val),'Art. 77'],
-                        ['Facteur σ EIOPA','10 %',f'LoB : {lob_s}'],
-                        ['SCR Provisions',_f(scr_prov),'SCR = 3 × σ × BE'],
-                        ['Ratio SCR/BE',_pct(scr_ratio),'Cible < 35 %']],
-                       col_w=[5*cm,4*cm,7*cm]),
-                  PageBreak()]
+        story+=[Paragraph('4. SCR Provisions — Art. 105 S2',st['H1']),HR(),
+                T(['Composante','Valeur','Référence'],
+                  [['Best Estimate S2',_f(BE),'Art. 77'],
+                   ['Facteur σ EIOPA','10 %',f'LoB : {lob}'],
+                   ['SCR Provisions',_f(SCP),'3 × σ × BE'],
+                   ['Ratio SCR/BE',_pct(SCR),'< 35 %']],
+                  cw=[5*cm,4*cm,7*cm]),
+                PageBreak()]
 
-        # 5. Commentaire + jugement
-        story.append(Paragraph('5. Commentaire actuariel',styles['h1']))
-        story.append(HRFlowable(width='100%',thickness=1.5,color=GOLD_RL,spaceAfter=8))
-        if commentaire:
-            for sec in re.split(r'(?=§\d+\s*—|\d+\.\s+[A-ZÀÂÉÈÊ])', _nettoyer(commentaire)):
-                sec = sec.strip()
+        # 5. Jugement & Recommandations
+        story+=[Paragraph('5. Jugement actuariel & Recommandations',st['H1']),HR()]
+        jug=_clean(n4.get('jugement',''))
+        if jug:
+            for sec in re.split(r'(?=\d+\.\s+[A-ZÀÂÉÈÊ])',jug):
+                sec=sec.strip()
                 if not sec: continue
-                lignes = sec.split('\n',1)
-                if lignes[0]: story.append(Paragraph(lignes[0],styles['h2']))
-                if len(lignes)>1:
-                    for pt in lignes[1].split('\n'):
-                        pt = pt.strip()
-                        if pt: story.append(Paragraph(pt,styles['body']))
-        jugement = n4.get('jugement','')
-        if jugement:
-            story.append(Spacer(1,0.3*cm))
-            story.append(Paragraph('Jugement actuariel documenté',styles['h2']))
-            for sec in re.split(r'(?=\d+\.\s+[A-ZÀÂÉÈÊ])', _nettoyer(jugement)):
-                sec = sec.strip()
-                if not sec: continue
-                lignes = sec.split('\n',1)
-                if lignes[0]: story.append(Paragraph(lignes[0],styles['h3']))
-                if len(lignes)>1:
-                    for pt in lignes[1].split('\n'):
-                        pt = pt.strip()
-                        if pt: story.append(Paragraph(pt,styles['body']))
+                ls=sec.split('\n',1)
+                if ls[0]: story.append(Paragraph(ls[0],st['H2']))
+                if len(ls)>1:
+                    for ln in ls[1].split('\n'):
+                        ln=ln.strip()
+                        if ln: story.append(Paragraph(ln,st['B']))
 
         # Footer
-        story += [Spacer(1,0.5*cm),
-                  HRFlowable(width='100%',thickness=0.5,color=GRIS_RL),
-                  Paragraph(f'ActuarIA · {client_s} · Arrêté {arrete_s} · '
-                            f'Audit ID : {audit_id or "—"} · {date_str} · CONFIDENTIEL',
-                            styles['footer'])]
+        story+=[Spacer(1,0.5*cm),
+                HRFlowable(width='100%',thickness=0.5,
+                           color=colors.HexColor(f'#{GRIS}'),spaceAfter=3),
+                Paragraph(f'ActuarIA · {cli} · Arrêté {arr} · '
+                          f'Audit ID : {audit_id or "—"} · {dt} · CONFIDENTIEL',
+                          st['F'])]
 
         doc.build(story)
-        buf.seek(0)
-        pdf_bytes = buf.read()
-        logger.info(f"PDF généré : {len(pdf_bytes):,} bytes")
-        return pdf_bytes
+        buf.seek(0); pb=buf.read()
+        logger.info(f"PDF : {len(pb):,} bytes")
+        return pb
 
     except Exception as e:
-        logger.error(f"export_pdf échoué : {e}", exc_info=True)
-        return b''
+        logger.error(f"export_pdf : {e}", exc_info=True); return b''
