@@ -143,11 +143,7 @@ def g1_heatmap_triangle(C: np.ndarray) -> 'go.Figure':
 
     fig.update_layout(
         **_layout(
-            title=dict(
-                text="Triangle de développement — Sinistres cumulés payés",
-                font=dict(color=OR, size=13, family='Inter, Arial'),
-                x=0.01,
-            ),
+            title=None,
             xaxis=dict(
                 title="Période de développement",
                 tickfont=dict(color=GRIS, size=9),
@@ -250,12 +246,7 @@ def g2_cadences_developpement(
 
     fig.update_layout(
         **_layout(
-            title=dict(
-                text=f"Cadences cumulées par année de survenance · {methode_cl}",
-                font=dict(color=OR, size=12),
-                x=0.01,
-                y=0.97,
-            ),
+            title=None,
             margin=dict(l=60, r=160, t=50, b=50),
             xaxis=dict(
                 title="Période de développement",
@@ -367,11 +358,7 @@ def g3_facteurs_cl(n3: Dict) -> 'go.Figure':
 
     fig.update_layout(
         **_layout(
-            title=dict(
-                text="Facteurs de développement Chain Ladder — Stabilité ±2σ",
-                font=dict(color=OR, size=13),
-                x=0.01,
-            ),
+            title=None,
             xaxis=dict(
                 title="Transition de développement",
                 tickfont=dict(color=GRIS, size=9),
@@ -464,11 +451,7 @@ def g4_ibnr_par_annee(n3: Dict) -> 'go.Figure':
     fig.update_layout(
         **_layout(
             height=420,
-            title=dict(
-                text="IBNR par année de survenance — Chain Ladder",
-                font=dict(color=OR, size=12),
-                x=0.01,
-            ),
+            title=None,
             xaxis=dict(
                 title="Année de survenance",
                 tickfont=dict(color=GRIS, size=9),
@@ -616,11 +599,7 @@ def g5_convergence_methodes(n3: Dict, n4: Dict) -> 'go.Figure':
 
     fig.update_layout(
         **_layout(
-            title=dict(
-                text="Convergence des méthodes actuarielles — Best Estimate S2",
-                font=dict(color=OR, size=13),
-                x=0.01,
-            ),
+            title=None,
             xaxis=dict(tickfont=dict(color=BLANC, size=10), showgrid=False),
             yaxis=dict(
                 title="Réserve IBNR (€)",
@@ -972,11 +951,7 @@ def g9_h2_stabilite(C: np.ndarray, n3: Dict) -> 'go.Figure':
 
     fig.update_layout(
         **_layout(
-            title=dict(
-                text="H2 Stabilité — Écart des facteurs individuels vs CL agrégé (%)",
-                font=dict(color=OR, size=13),
-                x=0.01,
-            ),
+            title=None,
             xaxis=dict(tickfont=dict(color=GRIS, size=9)),
             yaxis=dict(tickfont=dict(color=BLANC, size=9), autorange='reversed'),
         )
@@ -1135,11 +1110,7 @@ def g11_ultimates_vs_diagonale(n3: Dict) -> 'go.Figure':
 
     fig.update_layout(
         **_layout(
-            title=dict(
-                text="Ultimates projetés par méthode vs dernière diagonale observée",
-                font=dict(color=OR, size=13),
-                x=0.01,
-            ),
+            title=None,
             xaxis=dict(tickfont=dict(color=BLANC, size=9), showgrid=False),
             yaxis=dict(
                 title="Montant (€)",
@@ -1239,11 +1210,7 @@ def g12_sensibilites_tornado(n4: Dict) -> 'go.Figure':
     fig.update_layout(
         **_layout(
             height=max(350, len(labels) * 35),
-            title=dict(
-                text="Analyse de sensibilité — Impact sur le Best Estimate S2",
-                font=dict(color=OR, size=13),
-                x=0.01,
-            ),
+            title=None,
             xaxis=dict(
                 title="Variation vs BE de référence (€)",
                 tickfont=dict(color=GRIS, size=9),
