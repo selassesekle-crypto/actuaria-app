@@ -2430,7 +2430,7 @@ def page_resultats():
   </div>
   <div style="font-size:0.8rem;color:{GRIS};">
     Méthode : <b style='color:{OR}'>{methode_u}</b>
-    {f"  ·  {n4.get('jugement','')[:60]}..." if n4.get('jugement') else ""}
+    {f"  ·  Jugement actuariel documenté" if n4.get('jugement') else ""}
   </div>
 </div>""", unsafe_allow_html=True)
 
@@ -2498,8 +2498,9 @@ def page_resultats():
     # Graphiques page Résultats : les 6 graphiques décisionnels
     _ORDRE_RES = [
         ("g1_heatmap",       "◆ Triangle de développement cumulé"),
+        ("g13_paiements",    "◆ Paiements cumulés par année de survenance"),
         ("g4_ibnr",          "◆ IBNR par année de survenance"),
-        ("g2_cadences",      "◆ Cadences cumulées par année de survenance"),
+        ("g2_cadences",      "◆ Cadences cumulées — Chain Ladder"),
         ("g5_convergence",   "◆ Convergence des méthodes — Best Estimate S2"),
         ("g6_bootstrap",     "◆ Distribution Bootstrap ODP — Quantiles de réserve"),
         ("g7_scr",           "◆ SCR Provisions — Décomposition (Art. 105 S2)"),
@@ -2529,7 +2530,7 @@ def page_resultats():
 <div style="background:{NAVY_L};border-left:3px solid {sc};border-radius:6px;padding:10px 14px;margin-bottom:8px;">
   <div style="font-size:0.78rem;color:{sc};font-weight:600;">{label}</div>
   <div style="font-size:0.78rem;color:{BLANC};margin-top:3px;">{obj.get('message','')}</div>
-  {f'<div style="font-size:0.72rem;color:{GRIS};margin-top:3px;">{obj.get("conseil","")[:200]}</div>' if obj.get("conseil") else ""}
+  {f'<div style="font-size:0.72rem;color:{GRIS};margin-top:3px;white-space:pre-wrap;word-break:break-word;">{obj.get("conseil","")}</div>' if obj.get("conseil") else ""}
 </div>""", unsafe_allow_html=True)
 
     st.markdown("<hr>", unsafe_allow_html=True)
@@ -2549,14 +2550,22 @@ def page_resultats():
         ("H4", h4, "Homoscédasticité Bootstrap"),
     ]:
         if h:
-            ok = h.get("ok", True)
-            ic = "✅" if ok else "⚠️"
-            sc = VERT if ok else AMBRE
+            ok  = h.get("ok", True)
+            ic  = "✅" if ok else "⚠️"
+            sc  = VERT if ok else AMBRE
             msg = h.get("message", "")
+            score = h.get("score", "—")
+            detail_keys = ["corr_moy","cv_moy","lr_apriori","phi","max_corr","derive"]
+            details = " · ".join(f"{k}={h[k]}" for k in detail_keys if k in h and h[k] is not None)
             st.markdown(f"""
-<div style="background:{NAVY_L};border-radius:6px;padding:10px 14px;margin-bottom:6px;">
-  <span style="font-size:0.78rem;color:{sc};font-weight:700;">{ic} {cle} — {label}</span>
-  <div style="font-size:0.75rem;color:{BLANC};margin-top:3px;">{msg}</div>
+<div style="background:{NAVY_L};border-left:3px solid {sc};border-radius:6px;
+            padding:12px 16px;margin-bottom:8px;width:100%;box-sizing:border-box;">
+  <div style="font-size:0.78rem;color:{sc};font-weight:700;margin-bottom:4px;">
+    {ic} {cle} — {label} &nbsp;<span style="font-weight:400;font-size:0.72rem;">score {score}/100</span>
+  </div>
+  {f'<div style="font-size:0.72rem;color:{GRIS};margin-bottom:4px;">{details}</div>' if details else ''}
+  <div style="font-size:0.76rem;color:{BLANC};line-height:1.7;
+              white-space:pre-wrap;word-break:break-word;">{msg}</div>
 </div>""", unsafe_allow_html=True)
 
     st.markdown("<hr>", unsafe_allow_html=True)
@@ -2580,7 +2589,7 @@ def page_resultats():
                     f"<div style='background:{NAVY_L};border-left:3px solid {OR};"
                     f"border-radius:6px;padding:12px 16px;margin-bottom:8px;'>"
                     f"<div style='font-size:0.75rem;font-weight:700;color:{OR};margin-bottom:6px;'>{_titre_sec}</div>"
-                    f"<div style='font-size:0.78rem;color:{BLANC};line-height:1.7;white-space:pre-wrap;'>{_corps_sec}</div>"
+                    f"<div style='font-size:0.78rem;color:{BLANC};line-height:1.7;white-space:pre-wrap;word-break:break-word;'>{_corps_sec}</div>"
                     f"</div>"
                 )
                 st.markdown(_html_sec, unsafe_allow_html=True)
