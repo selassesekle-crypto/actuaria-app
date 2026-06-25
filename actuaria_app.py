@@ -2197,7 +2197,7 @@ def _executer_analyse(besoin, direction, equipe, client):
                     resultats["r2"] = r2
 
                 if besoin == "tarif_sante":
-                    from leonie_s1_tarification_sante import AgentS1TarificationSante
+                    from sp1_tarification_sante import AgentS1TarificationSante
                     r_s1 = AgentS1TarificationSante(audit_path=_tmp, verbose=False).run(
                         nb_assures=params.get("nb_assures",1000),
                         age_moyen=params.get("age_moyen",42),
@@ -2206,7 +2206,7 @@ def _executer_analyse(besoin, direction, equipe, client):
                     )
                     resultats["principal"] = r_s1
                 elif besoin == "prov_sante":
-                    from selma_s2_provisionnement_sante import AgentS2ProvisionnemntSante
+                    from sp2_provisionnement_sante import AgentS2ProvisionnemntSante
                     r_s2 = AgentS2ProvisionnemntSante(audit_path=_tmp, verbose=False).run(
                         primes_acquises=params.get("primes_acquises",5_000_000),
                         generer_graphiques=False,
@@ -2263,9 +2263,9 @@ def _executer_analyse(besoin, direction, equipe, client):
 
             # ── REPORT SANTÉ S3 — pipeline S1→S2→S3 ────────────────────────
             elif besoin == "report_sante":
-                from leonie_s1_tarification_sante import AgentS1TarificationSante
-                from selma_s2_provisionnement_sante import AgentS2ProvisionnemntSante
-                from binta_s3_reporting_sante import AgentS3ReportingSante
+                from sp1_tarification_sante import AgentS1TarificationSante
+                from sp2_provisionnement_sante import AgentS2ProvisionnemntSante
+                from sp3_reporting_sante import AgentS3ReportingSante
                 _r_s1 = AgentS1TarificationSante(audit_path=_tmp, verbose=False).run(
                     nb_assures=params.get("nb_assures",1000),
                     age_moyen=params.get("age_moyen",42),
@@ -2286,7 +2286,7 @@ def _executer_analyse(besoin, direction, equipe, client):
 
             # ── PRÉVOYANCE — pipelines chaînés ──────────────────────────────
             elif besoin in ["tarif_prev","tables","prov_prev","report_prev"]:
-                from axel_p1_tarification_prevoyance import AgentP1TarificationPrevoyance
+                from sp4_tarification_prevoyance import AgentP1TarificationPrevoyance
                 _r_p1 = AgentP1TarificationPrevoyance(audit_path=_tmp, verbose=False).run(
                     age=params.get("age",40),
                     salaire_brut=params.get("salaire_brut",45000),
@@ -2296,7 +2296,7 @@ def _executer_analyse(besoin, direction, equipe, client):
                 resultats["principal"] = _r_p1
 
                 if besoin in ["tables","prov_prev","report_prev"]:
-                    from rayan_p2_tables_morbidite import AgentP2TablesMorbidite
+                    from sp5_tables_morbidite import AgentP2TablesMorbidite
                     _r_p2 = AgentP2TablesMorbidite(audit_path=_tmp, verbose=False).run(
                         result_p1=_r_p1,
                         generer_graphiques=False,
@@ -2304,7 +2304,7 @@ def _executer_analyse(besoin, direction, equipe, client):
                     resultats["principal"] = _r_p2
 
                 if besoin in ["prov_prev","report_prev"]:
-                    from elodie_p3_provisionnement_prevoyance import AgentP3ProvisionnemntPrevoyance
+                    from sp6_provisionnement_prevoyance import AgentP3ProvisionnemntPrevoyance
                     _r_p3 = AgentP3ProvisionnemntPrevoyance(audit_path=_tmp, verbose=False).run(
                         result_p1=_r_p1,
                         result_p2=_r_p2,
@@ -2313,7 +2313,7 @@ def _executer_analyse(besoin, direction, equipe, client):
                     resultats["principal"] = _r_p3
 
                 if besoin == "report_prev":
-                    from valentin_p4_reporting_prevoyance import AgentP4ReportingPrevoyance
+                    from sp7_reporting_prevoyance import AgentP4ReportingPrevoyance
                     _r_p4 = AgentP4ReportingPrevoyance(audit_path=_tmp, verbose=False).run(
                         result_p1=_r_p1,
                         result_p2=_r_p2,
