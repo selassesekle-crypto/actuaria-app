@@ -1231,6 +1231,92 @@ def g12_sensibilites_tornado(n4: Dict) -> 'go.Figure':
 
 
 # =============================================================================
+#  G13 — PAIEMENTS CUMULÉS PAR ANNÉE DE SURVENANCE
+# =============================================================================
+
+def g13_paiements_cumules(C: np.ndarray) -> 'go.Figure':
+    """
+    Paiements cumulés par année de survenance.
+    Montre la vitesse de liquidation de chaque cohorte.
+    Clé pour valider la cohérence avec les facteurs CL et détecter
+    des anomalies de paiement sur les années récentes.
+    """
+    if not PLOTLY_OK:
+        return None
+    if C is None or C.ndim != 2 or C.shape[0] < 2:
+        return None
+
+    n = C.shape[0]
+    periodes = [f"{(j+1)*12}M" for j in range(C.shape[1])]
+
+    couleurs = [
+        f'hsl({int(210 + 30*i/max(n-1,1))},{int(60 - 20*i/max(n-1,1))}%,{int(45 + 20*i/max(n-1,1))}%)'
+        for i in range(n)
+    ]
+
+    fig = go.Figure()
+
+    for i in range(n):
+        vals = [float(C[i, j]) for j in range(C.shape[1]) if C[i, j] > 0]
+        if not vals:
+            continue
+        pds  = periodes[:len(vals)]
+        is_last = (i == n - 1)
+        fig.add_trace(go.Scatter(
+            x=pds, y=vals,
+            mode='lines+markers',
+            name=f'An. {i}',
+            line=dict(color=couleurs[i], width=2 if not is_last else 1.5,
+                      dash='dot' if is_last else 'solid'),
+            marker=dict(size=4, color=couleurs[i]),
+            hovertemplate=(
+                f"<b>Année {i}</b><br>Période : %{{x}}<br>"
+                "Cumulé : <b>%{y:,.0f} €</b><extra></extra>"
+            ),
+            visible=True if i >= n - 10 else 'legendonly',
+        ))
+
+    # Diagonale — derniers paiements observés
+    diag_x, diag_y = [], []
+    for i in range(n):
+        j = min(n - 1 - i, C.shape[1] - 1)
+        if j >= 0 and C[i, j] > 0:
+            diag_x.append(periodes[j])
+            diag_y.append(float(C[i, j]))
+    if diag_x:
+        fig.add_trace(go.Scatter(
+            x=diag_x, y=diag_y,
+            mode='markers',
+            name='Diagonale',
+            marker=dict(size=8, color=OR, symbol='diamond',
+                        line=dict(color=NAVY, width=1)),
+            hovertemplate="<b>Diagonale</b><br>%{x} : <b>%{y:,.0f} €</b><extra></extra>",
+        ))
+
+    fig.update_layout(
+        **_layout(
+            height=420,
+            title=None,
+            margin=dict(l=60, r=160, t=20, b=50),
+            xaxis=dict(title="Période de développement",
+                       tickfont=dict(color=GRIS, size=9),
+                       tickangle=-30 if C.shape[1] > 10 else 0,
+                       showgrid=True, gridcolor='rgba(255,255,255,0.05)'),
+            yaxis=dict(title="Paiements cumulés (€)",
+                       tickfont=dict(color=GRIS, size=9),
+                       showgrid=True, gridcolor='rgba(255,255,255,0.05)',
+                       tickformat=',.0f'),
+            legend=dict(bgcolor='rgba(11,35,62,0.9)',
+                        bordercolor='rgba(201,168,76,0.4)', borderwidth=1,
+                        font=dict(color=BLANC, size=8),
+                        orientation='v', yanchor='top', y=1.0,
+                        xanchor='left', x=1.01, tracegroupgap=2),
+        )
+    )
+    return fig
+
+
+# =============================================================================
 #  FONCTION PRINCIPALE — GÉNÈRE TOUS LES GRAPHIQUES
 # =============================================================================
 
@@ -1279,6 +1365,7 @@ def generer_graphiques(
         ('g10_h3',            lambda: g10_h3_lr_apriori(n2, n3)),
         ('g11_ultimates',     lambda: g11_ultimates_vs_diagonale(n3)),
         ('g12_sensibilites',  lambda: g12_sensibilites_tornado(n4)),
+        ('g13_paiements',      lambda: g13_paiements_cumules(C)),
     ]
 
     for nom, fn in specs:
