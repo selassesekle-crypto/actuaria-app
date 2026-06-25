@@ -2554,6 +2554,7 @@ def page_resultats():
         # Deux tableaux boni/mali séparés
         _tableau_bt = _bt.get("tableau", [])
         _totaux_bt  = _bt.get("totaux", {})
+        st.write("DEBUG tableau_bt:", len(_tableau_bt), "| clés bt:", list(_bt.keys())[:8])
 
         if _tableau_bt:
             import pandas as _pd_bt
