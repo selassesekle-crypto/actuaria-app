@@ -290,11 +290,11 @@ class AgentA7Provisionnement:
 
             # Back-testing boni/mali (calculé ici avec C_calc)
             try:
-                n3['backtesting'] = calculer_backtesting(C_calc)
+                n3['backtesting'] = calculer_backtesting(C_calc, annee_debut=annee_debut)
             except Exception as _ebt:
                 logger.warning(f"Back-testing ignoré : {_ebt}")
                 n3['backtesting'] = {}
-            # Année début pour labels calendaires
+            # Année début pour labels calendaires (G14)
             if annee_debut:
                 n3['annee_debut_triangle'] = annee_debut
 
