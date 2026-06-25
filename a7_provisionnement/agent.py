@@ -287,6 +287,13 @@ class AgentA7Provisionnement:
             if self.verbose:
                 logger.info("N4 — Best Estimate S2 + SCR provisions")
 
+            # Back-testing boni/mali (calculé ici avec C_calc)
+            try:
+                n3['backtesting'] = calculer_backtesting(C_calc)
+            except Exception as _ebt:
+                logger.warning(f"Back-testing ignoré : {_ebt}")
+                n3['backtesting'] = {}
+
             n4 = self._be.calculer(n2, n3, C_calc, lob=lob)
 
             if self.verbose:
@@ -591,7 +598,7 @@ class AgentA7Provisionnement:
             'bootstrap':       r_boot,
             'munich_cl':       r_munich,
             'tail_factor':     tail_info,
-            'backtesting':     calculer_backtesting(C) if C is not None else {},
+            'backtesting':     calculer_backtesting(C_calc) if C_calc is not None else {},
         }
 
     # =========================================================================
