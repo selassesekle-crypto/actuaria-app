@@ -2648,7 +2648,9 @@ def page_resultats():
     if jugement:
         st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:8px 0 12px;'>◆ Jugement actuariel documenté</div>", unsafe_allow_html=True)
         import re as _re_jug
-        _sections_jug = _re_jug.split(r'(?=\d+\.\s+[A-ZÀÂÉÈÊ])', jugement.strip())
+        # Nettoyer les séparateurs
+        _jug_clean = _re_jug.sub(r'─+', '', jugement).strip()
+        _sections_jug = _re_jug.split(r'(?=\d+\.\s+[A-ZÀÂÉÈÊ])', _jug_clean)
         for _sec in _sections_jug:
             _sec = _sec.strip()
             if not _sec:
@@ -2656,16 +2658,34 @@ def page_resultats():
             _lines_sec = _sec.split("\n", 1)
             _titre_sec = _lines_sec[0].strip()
             _corps_sec = _lines_sec[1].strip() if len(_lines_sec) > 1 else ""
-            _corps_sec = _re_jug.sub(r'─+', '', _corps_sec).strip()
-            if _titre_sec:
-                _html_sec = (
-                    f"<div style='background:{NAVY_L};border-left:3px solid {OR};"
-                    f"border-radius:6px;padding:12px 16px;margin-bottom:8px;'>"
-                    f"<div style='font-size:0.75rem;font-weight:700;color:{OR};margin-bottom:6px;'>{_titre_sec}</div>"
-                    f"<div style='font-size:0.78rem;color:{BLANC};line-height:1.7;white-space:pre-wrap;word-break:break-word;'>{_corps_sec}</div>"
-                    f"</div>"
-                )
-                st.markdown(_html_sec, unsafe_allow_html=True)
+            if not _titre_sec:
+                continue
+            # Construire le corps ligne par ligne
+            _lignes_corps = [l.strip() for l in _corps_sec.split("\n") if l.strip()]
+            _items_html = ""
+            for _ln in _lignes_corps:
+                # Détecter les items avec indicateurs
+                if any(_ln.startswith(p) for p in ["✅","⚠️","🔴","🟡","ℹ️","•","-"]):
+                    _col_ln = VERT if _ln.startswith("✅") else AMBRE if _ln.startswith(("⚠️","🟡")) else ROUGE if _ln.startswith("🔴") else BLANC
+                    _items_html += (
+                        f"<div style='font-size:0.76rem;color:{_col_ln};padding:2px 0;"
+                        f"border-left:2px solid {_col_ln};padding-left:8px;margin:3px 0;"
+                        f"word-break:break-word;'>{_ln}</div>"
+                    )
+                else:
+                    _items_html += (
+                        f"<div style='font-size:0.76rem;color:{BLANC};padding:2px 0;"
+                        f"word-break:break-word;line-height:1.6;'>{_ln}</div>"
+                    )
+            _html_sec = (
+                f"<div style='background:{NAVY_L};border-left:3px solid {OR};"
+                f"border-radius:6px;padding:12px 16px;margin-bottom:8px;'>"
+                f"<div style='font-size:0.75rem;font-weight:700;color:{OR};"
+                f"margin-bottom:8px;'>{_titre_sec}</div>"
+                f"{_items_html}"
+                f"</div>"
+            )
+            st.markdown(_html_sec, unsafe_allow_html=True)
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
