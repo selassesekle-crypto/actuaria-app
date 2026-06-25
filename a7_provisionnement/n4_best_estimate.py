@@ -410,9 +410,9 @@ class BestEstimateS2:
             f"score={h4.get('score', 0)}/100",
             "",
             f"  Méthode CL retenue    : {n2.get('methode_cl_retenue', '—')}",
-            f"  Justification CL      : {raison_cl[:100]}",
+            f"  Justification CL      : {raison_cl}",
             f"  Méthode recommandée   : {methode_rec}",
-            f"  Justification         : {raison_rec[:100]}",
+            f"  Justification         : {raison_rec}",
             "",
             "3. BEST ESTIMATE S2 (Art. 77)",
             "─" * 40,
@@ -435,7 +435,7 @@ class BestEstimateS2:
         if alertes_lob:
             lignes += ["", "5. POINTS DE VIGILANCE — BRANCHE", "─" * 40]
             for a in alertes_lob[:4]:
-                lignes.append(f"  ⚠️  {a[:120]}")
+                lignes.append(f"  ⚠️  {a}")
         else:
             lignes += ["", "5. POINTS DE VIGILANCE", "─" * 40]
 
@@ -443,7 +443,7 @@ class BestEstimateS2:
         for alerte in n2.get('alertes', [])[:3]:
             clean = alerte.encode('ascii', 'ignore').decode('ascii').strip()
             if clean:
-                lignes.append(f"  {clean[:120]}")
+                lignes.append(f"  {clean}")
 
         lignes += [
             "",
