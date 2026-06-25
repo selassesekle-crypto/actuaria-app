@@ -2528,6 +2528,7 @@ def page_resultats():
         _bt_rouge = _bt.get("n_rouge", 0)
         _bt_ambre = _bt.get("n_ambre", 0)
 
+        _n_ann_bt = len(_tableau_bt)
         st.markdown(
             f"<div style='background:{NAVY_L};border-left:4px solid {_bt_col};"
             f"border-radius:8px;padding:14px 18px;margin-bottom:12px;'>"
@@ -2539,14 +2540,16 @@ def page_resultats():
             f"<div><span style='font-size:0.72rem;color:{GRIS};'>Score qualité</span><br>"
             f"<span style='font-size:0.9rem;font-weight:700;color:{BLANC};'>{_bt_score}/100</span></div>"
             f"<div><span style='font-size:0.72rem;color:{GRIS};'>Horizons</span><br>"
-            f"<span style='font-size:0.9rem;font-weight:700;color:{BLANC};'>"
-            f"{', '.join(h.replace('horizon_','N-') for h in _bt_horizons)}</span></div>"
+            f"<span style='font-size:0.9rem;font-weight:700;color:{BLANC};'>N-1, N-2</span></div>"
             f"<div><span style='font-size:0.72rem;color:{GRIS};'>Alertes</span><br>"
-            f"<span style='font-size:0.9rem;font-weight:700;color:{ROUGE};'>{_bt_rouge} rouge</span>"
-            f"<span style='font-size:0.9rem;color:{AMBRE};'> · {_bt_ambre} ambre</span></div>"
+            f"<span style='font-size:0.9rem;font-weight:700;color:{ROUGE if _bt_rouge>0 else VERT};'>"
+            f"{_bt_rouge} rouge</span>"
+            f"<span style='font-size:0.9rem;color:{AMBRE};'> · {_bt_ambre} ambre</span>"
+            f"<span style='font-size:0.9rem;color:{VERT};'> · {_bt.get('n_vert',0)} OK</span></div>"
             f"</div>"
             f"<div style='font-size:0.76rem;color:{BLANC};margin-top:8px;line-height:1.6;'>"
-            f"{_bt.get('message','').split(chr(10))[0]}</div>"
+            f"Analyse de la qualité du provisionnement historique "
+            f"sur {_n_ann_bt} années de survenance.</div>"
             f"</div>",
             unsafe_allow_html=True
         )
@@ -2643,6 +2646,23 @@ Seuil d'alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Source : G
             # Filtrer les lignes avec données
             _rows_n1 = [r for r in _tableau_bt if r.get("ultimate_n1") is not None]
             _rows_n2 = [r for r in _tableau_bt if r.get("ultimate_n2") is not None]
+
+            # Recalculer statut/alertes sur les lignes visibles uniquement
+            _rows_visibles = list({r["annee"]: r for r in _rows_n1 + _rows_n2}.values())
+            _n_rouge_vis = sum(1 for r in _rows_visibles
+                               if abs(r.get("ecart_pct_n1") or 0) >= 15
+                               or abs(r.get("ecart_pct_n2") or 0) >= 15)
+            _n_ambre_vis = sum(1 for r in _rows_visibles
+                               if (8 <= abs(r.get("ecart_pct_n1") or 0) < 15)
+                               or (8 <= abs(r.get("ecart_pct_n2") or 0) < 15))
+            _n_vert_vis  = len(_rows_visibles) - _n_rouge_vis - _n_ambre_vis
+            _statut_vis  = "ROUGE" if _n_rouge_vis >= 1 else "AMBRE" if _n_ambre_vis >= 3 else "VERT"
+            # Mettre à jour la carte
+            _bt_rouge   = _n_rouge_vis
+            _bt_ambre   = _n_ambre_vis
+            _bt_statut  = _statut_vis
+            _bt_col     = VERT if _statut_vis=="VERT" else AMBRE if _statut_vis=="AMBRE" else ROUGE
+            _bt_emoji   = "✅" if _statut_vis=="VERT" else "⚠️" if _statut_vis=="AMBRE" else "🔴"
 
             st.markdown(_html_tableau_bt(
                 "Tableau 1 — Comparaison N vs N-1 (arrêté précédent)",
