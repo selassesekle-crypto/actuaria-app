@@ -598,7 +598,7 @@ class AgentA7Provisionnement:
             'bootstrap':       r_boot,
             'munich_cl':       r_munich,
             'tail_factor':     tail_info,
-            'backtesting':     calculer_backtesting(C_calc) if C_calc is not None else {},
+            'backtesting':     {},
         }
 
     # =========================================================================
