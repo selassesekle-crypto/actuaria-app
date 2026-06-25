@@ -2551,33 +2551,105 @@ def page_resultats():
             unsafe_allow_html=True
         )
 
-        # Détail alertes si ROUGE ou AMBRE
-        if _bt_rouge > 0 or _bt_ambre > 0:
-            with st.expander(f"⚠️ Détail des alertes back-testing ({_bt_rouge + _bt_ambre} années)", expanded=False):
-                import pandas as _pd_bt
-                _rows_bt = []
-                for alerte in _bt.get("alertes", []):
-                    _idx    = alerte.get("annee", "—")
-                    _an_lbl = str(_annee_debut_bt + _idx) if (_annee_debut_bt and isinstance(_idx, int)) else f"An. {_idx}"
-                    _h_lbl  = f"N-{alerte.get('horizon','')}"
-                    _ecart  = alerte.get("ecart_pct", 0)
-                    _type   = "🟢 Boni" if _ecart > 0 else "🔴 Mali"
-                    _stat   = "🔴 ROUGE" if alerte["statut"]=="ROUGE" else "🟡 AMBRE"
-                    _rows_bt.append({
-                        "Année":    _an_lbl,
-                        "Horizon":  _h_lbl,
-                        "Écart %":  f"{_ecart:+.1f}%",
-                        "Type":     _type,
-                        "Statut":   _stat,
-                        "Seuil IA 2023": "⚠️ Dépassé" if alerte["statut"]=="ROUGE" else "🟡 Vigilance",
-                    })
-                if _rows_bt:
-                    _df_bt = _pd_bt.DataFrame(_rows_bt)
-                    st.dataframe(
-                        _df_bt,
-                        use_container_width=True,
-                        hide_index=True,
-                    )
+        # Deux tableaux boni/mali séparés
+        _tableau_bt = _bt.get("tableau", [])
+        _totaux_bt  = _bt.get("totaux", {})
+
+        if _tableau_bt:
+            import pandas as _pd_bt
+
+            def _fmt_e(v):
+                return f"{v:,.0f} €".replace(",", " ") if v is not None else "—"
+            def _fmt_p(v):
+                return f"{v:+.1f}%" if v is not None else "—"
+            def _fmt_bm(v):
+                if v is None: return "—"
+                return f"🟢 +{v:,.0f} €".replace(",", " ") if v > 0 else f"🔴 {v:,.0f} €".replace(",", " ")
+            def _alerte(ep):
+                if ep is None: return "—"
+                a = abs(ep)
+                if a >= 15: return "🔴 Dépassé (>15%)"
+                if a >= 8:  return "🟡 Vigilance (>8%)"
+                return "✅ OK"
+
+            # ── Tableau N vs N-1 ──────────────────────────────────────────────
+            st.markdown(
+                f"<div style='font-size:0.72rem;color:{OR};font-weight:700;"
+                f"text-transform:uppercase;margin:12px 0 6px;'>"
+                f"Tableau 1 — Comparaison N vs N-1 (arrêté précédent)</div>",
+                unsafe_allow_html=True
+            )
+            _rows_n1 = []
+            for r in _tableau_bt:
+                if r["ultimate_n1"] is None: continue
+                _rows_n1.append({
+                    "Année":             r["annee_label"],
+                    "Provision projetée N-1 (€)": _fmt_e(r["ultimate_n1"]),
+                    "Observé N (€)":     _fmt_e(r["observe_n"]),
+                    "Boni/Mali (€)":     _fmt_bm(r["boni_mali_n1"]),
+                    "Écart %":           _fmt_p(r["ecart_pct_n1"]),
+                    "Alerte":            _alerte(r["ecart_pct_n1"]),
+                })
+            # Ligne total N-1
+            _rows_n1.append({
+                "Année":             "📊 TOTAL",
+                "Provision projetée N-1 (€)": _fmt_e(_totaux_bt.get("ultimate_n1")),
+                "Observé N (€)":     _fmt_e(_totaux_bt.get("observe_n")),
+                "Boni/Mali (€)":     _fmt_bm(_totaux_bt.get("boni_mali_n1")),
+                "Écart %":           _fmt_p(_totaux_bt.get("ecart_pct_n1")),
+                "Alerte":            _alerte(_totaux_bt.get("ecart_pct_n1")),
+            })
+            st.dataframe(_pd_bt.DataFrame(_rows_n1), use_container_width=True, hide_index=True)
+            st.markdown(
+                f"<div style='font-size:0.72rem;color:{GRIS};font-style:italic;margin-bottom:12px;'>"
+                f"Seuil d'alerte : ±15% — Vigilance : ±8% — Source : Guide Institut des Actuaires 2023</div>",
+                unsafe_allow_html=True
+            )
+
+            # ── Tableau N vs N-2 ──────────────────────────────────────────────
+            st.markdown(
+                f"<div style='font-size:0.72rem;color:{OR};font-weight:700;"
+                f"text-transform:uppercase;margin:12px 0 6px;'>"
+                f"Tableau 2 — Comparaison N vs N-2 (il y a 2 arrêtés)</div>",
+                unsafe_allow_html=True
+            )
+            _rows_n2 = []
+            for r in _tableau_bt:
+                if r["ultimate_n2"] is None: continue
+                _rows_n2.append({
+                    "Année":             r["annee_label"],
+                    "Provision projetée N-2 (€)": _fmt_e(r["ultimate_n2"]),
+                    "Observé N (€)":     _fmt_e(r["observe_n"]),
+                    "Boni/Mali (€)":     _fmt_bm(r["boni_mali_n2"]),
+                    "Écart %":           _fmt_p(r["ecart_pct_n2"]),
+                    "Alerte":            _alerte(r["ecart_pct_n2"]),
+                })
+            # Ligne total N-2
+            _rows_n2.append({
+                "Année":             "📊 TOTAL",
+                "Provision projetée N-2 (€)": _fmt_e(_totaux_bt.get("ultimate_n2")),
+                "Observé N (€)":     _fmt_e(_totaux_bt.get("observe_n")),
+                "Boni/Mali (€)":     _fmt_bm(_totaux_bt.get("boni_mali_n2")),
+                "Écart %":           _fmt_p(_totaux_bt.get("ecart_pct_n2")),
+                "Alerte":            _alerte(_totaux_bt.get("ecart_pct_n2")),
+            })
+            st.dataframe(_pd_bt.DataFrame(_rows_n2), use_container_width=True, hide_index=True)
+            st.markdown(
+                f"<div style='font-size:0.72rem;color:{GRIS};font-style:italic;margin-bottom:12px;'>"
+                f"Seuil d'alerte : ±15% — Vigilance : ±8% — Source : Guide Institut des Actuaires 2023</div>",
+                unsafe_allow_html=True
+            )
+
+            # ── Narration ─────────────────────────────────────────────────────
+            _msg_bt = _bt.get("message", "")
+            if _msg_bt:
+                st.markdown(
+                    f"<div style='background:rgba(15,46,82,0.5);border-left:3px solid {OR};"
+                    f"border-radius:6px;padding:10px 14px;margin-top:4px;"
+                    f"font-size:0.78rem;color:{BLANC};line-height:1.7;'>"
+                    f"{_msg_bt.replace(chr(10), '<br>')}</div>",
+                    unsafe_allow_html=True
+                )
 
     # ── GRAPHIQUES — regénérés à la volée depuis données brutes ─────────────
     # (les go.Figure ne survivent pas à la navigation Streamlit)
