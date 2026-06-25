@@ -5,291 +5,270 @@
 #  Conformité : Guide Institut des Actuaires 2023 — Section 4.3
 #
 #  Principe :
-#    Pour chaque horizon de recul k (k=1, k=2) :
-#    1. Tronquer le triangle à la colonne (n - k) → triangle "passé"
-#    2. Appliquer Chain Ladder sur ce triangle tronqué
-#    3. Comparer les ultimates projetés avec la diagonale actuelle
-#    4. Calculer boni/mali = ultimate_projeté - sinistres_observés
+#    Pour chaque année de survenance i :
+#    · Ultimate N-2 = projection CL depuis triangle tronqué à (n-2) colonnes
+#    · Ultimate N-1 = projection CL depuis triangle tronqué à (n-1) colonnes
+#    · Observé N    = dernière diagonale connue (sinistres actuels)
+#    · Boni/Mali    = Ultimate projeté - Observé
+#      > 0 : Boni (sur-provisionnement → libération de réserve)
+#      < 0 : Mali (sous-provisionnement → insuffisance de réserve)
 #
-#  Interprétation :
-#    · Boni (positif)  : sur-provisionnement → libération de réserve
-#    · Mali (négatif)  : sous-provisionnement → insuffisance de réserve
-#    · Seuil alerte    : |écart| > 15% (guide IA 2023)
-#
+#  Seuil d'alerte : |écart| > 15% (guide IA 2023)
+#  Seuil vigilance: |écart| > 8%
 # =============================================================================
 
 from __future__ import annotations
-
 import logging
-from typing import Dict, List, Optional, Tuple
-
+from typing import Dict, List, Optional
 import numpy as np
 
 logger = logging.getLogger('actuaria.a7.backtesting')
 
-# Seuil d'alerte guide IA 2023
-SEUIL_ALERTE_PCT = 15.0
-SEUIL_AMBRE_PCT  = 8.0
+SEUIL_ROUGE = 15.0
+SEUIL_AMBRE = 8.0
 
 
-def _chain_ladder_simple(C: np.ndarray, methode: str = 'volume_weighted') -> np.ndarray:
-    """
-    Chain Ladder simplifié sur un triangle tronqué.
-    Retourne les ultimates projetés (array de longueur n).
-    """
+def _chain_ladder_simple(C: np.ndarray) -> np.ndarray:
+    """Chain Ladder volume_weighted sur triangle tronqué. Retourne les ultimates."""
     n, m = C.shape
-
-    # Facteurs volume_weighted
     facteurs = []
     for j in range(m - 1):
         num = sum(C[i, j+1] for i in range(n - j - 1) if C[i, j] > 0)
         den = sum(C[i, j]   for i in range(n - j - 1) if C[i, j] > 0)
         facteurs.append(num / den if den > 0 else 1.0)
 
-    # Tail factor = 1.0 (triangle supposé complet à la dernière colonne)
-    tail = 1.0
-
-    # Facteurs cumulés (de droite à gauche)
     f_cum = np.ones(m)
-    f_cum[-1] = tail
     for j in range(m - 2, -1, -1):
         f_cum[j] = f_cum[j+1] * (facteurs[j] if j < len(facteurs) else 1.0)
 
-    # Ultimates
     ultimates = np.zeros(n)
     for i in range(n):
-        # Dernière valeur non nulle de la ligne i
         last_j = 0
         for j in range(m - 1, -1, -1):
             if C[i, j] > 0:
                 last_j = j
                 break
-        if f_cum[last_j] > 0:
-            ultimates[i] = C[i, last_j] * f_cum[last_j]
-        else:
-            ultimates[i] = C[i, last_j]
-
+        ultimates[i] = C[i, last_j] * f_cum[last_j] if f_cum[last_j] > 0 else C[i, last_j]
     return ultimates
 
 
 def calculer_backtesting(
-    C          : np.ndarray,
-    horizons   : List[int] = [1, 2],
-    methode_cl : str       = 'volume_weighted',
-    seuil_alerte: float    = SEUIL_ALERTE_PCT,
+    C              : np.ndarray,
+    annee_debut    : Optional[int] = None,
 ) -> Dict:
     """
-    Calcule les boni/mali de liquidation sur les horizons demandés.
+    Calcule le tableau consolidé boni/mali N / N-1 / N-2.
 
     Parameters
     ----------
     C           : triangle cumulé complet (n×n)
-    horizons    : liste des horizons de recul en périodes (défaut [1, 2])
-    methode_cl  : variante Chain Ladder pour le triangle tronqué
-    seuil_alerte: seuil % au-delà duquel une alerte est générée (guide IA 2023 : 15%)
+    annee_debut : première année calendaire (optionnel, pour les labels)
 
     Returns
     -------
     Dict avec :
-        resultats       : liste de dicts par horizon × année de survenance
-        synthese        : boni/mali total par horizon
-        alertes         : années avec écart > seuil
+        tableau         : list de dicts par année (colonnes pro)
+        totaux          : dict avec sommes et ratios globaux
+        alertes         : list d'alertes (années hors seuil)
         statut          : VERT / AMBRE / ROUGE
-        score_qualite   : 0-100 (qualité du provisionnement historique)
-        message         : narration
+        score_qualite   : 0-100
+        ratio_stabilite : % d'années dans la zone verte
+        message         : narration liée aux hypothèses
+        success         : bool
     """
     n, m = C.shape
 
     if n < 4:
         return {
             'success': False,
-            'erreur':  f'Triangle trop petit ({n} années) — minimum 4 requis pour le back-testing',
-            'resultats': [], 'synthese': {}, 'alertes': [], 'statut': 'ROUGE',
-            'score_qualite': 0, 'message': 'Back-testing impossible — triangle insuffisant.',
+            'erreur':  f'Triangle trop petit ({n} lignes) — minimum 4 requis',
+            'tableau': [], 'totaux': {}, 'alertes': [],
+            'statut': 'ROUGE', 'score_qualite': 0,
+            'ratio_stabilite': 0, 'message': 'Back-testing impossible.',
         }
 
-    resultats_par_horizon = {}
-    toutes_alertes        = []
-    scores_horizon        = []
+    # ── Calcul des ultimates pour k=1 et k=2 ─────────────────────────────────
+    def _ult_tronque(k: int) -> np.ndarray:
+        """Ultimates depuis triangle tronqué de k colonnes."""
+        n_t = n - k
+        m_t = m - k
+        if n_t < 3 or m_t < 3:
+            return np.zeros(n)
+        C_t = C[:n_t, :m_t].copy()
+        ult = _chain_ladder_simple(C_t)
+        # Prolonger avec des zéros pour les années non calculées
+        result = np.zeros(n)
+        result[:n_t] = ult
+        return result
 
-    for k in horizons:
-        if k >= n - 2:
-            logger.warning(f"Horizon {k} ignoré — triangle trop petit")
+    ult_n1 = _ult_tronque(1)  # Ultimate projeté à N-1
+    ult_n2 = _ult_tronque(2)  # Ultimate projeté à N-2
+
+    # Observé N = dernière valeur connue de chaque ligne
+    obs_n = np.zeros(n)
+    for i in range(n):
+        for j in range(m - 1, -1, -1):
+            if C[i, j] > 0:
+                obs_n[i] = float(C[i, j])
+                break
+
+    # ── Construire le tableau consolidé ──────────────────────────────────────
+    tableau   = []
+    alertes   = []
+    scores    = []
+    n_vert = n_ambre = n_rouge = 0
+
+    for i in range(n):
+        obs  = float(obs_n[i])
+        u_n1 = float(ult_n1[i])
+        u_n2 = float(ult_n2[i])
+
+        if obs <= 0:
             continue
 
-        # ── Triangle tronqué : on enlève les k dernières colonnes ────────────
-        # Simuler ce qu'on aurait calculé k périodes en arrière :
-        # · On prend les n-k premières lignes et m-k premières colonnes
-        # · La "diagonale passée" = colonne (m-k-1)
-        n_tronc = n - k
-        m_tronc = m - k
-        C_tronc = C[:n_tronc, :m_tronc].copy()
+        # Boni/Mali
+        bm_n1 = u_n1 - obs if u_n1 > 0 else None
+        bm_n2 = u_n2 - obs if u_n2 > 0 else None
 
-        # ── Ultimates projetés depuis le triangle tronqué ────────────────────
-        ult_projetes = _chain_ladder_simple(C_tronc, methode=methode_cl)
+        # Écarts %
+        ep_n1 = (bm_n1 / obs * 100) if bm_n1 is not None else None
+        ep_n2 = (bm_n2 / obs * 100) if bm_n2 is not None else None
 
-        # ── Diagonale actuelle (sinistres observés k périodes plus tard) ─────
-        # Pour chaque année i < n_tronc, la valeur observée aujourd'hui
-        # est sur la diagonale de C (colonne min(i + k, m-1))
-        diag_actuelle = np.zeros(n_tronc)
-        for i in range(n_tronc):
-            j_obs = min(i + k, m - 1)  # colonne k périodes plus tard
-            diag_actuelle[i] = float(C[i, j_obs])
+        # Statut basé sur le pire écart disponible
+        ecarts_abs = [abs(e) for e in [ep_n1, ep_n2] if e is not None]
+        pire = max(ecarts_abs) if ecarts_abs else 0
 
-        # ── Boni/Mali ─────────────────────────────────────────────────────────
-        resultats_annees = []
-        n_alertes_rouge  = 0
-        n_alertes_ambre  = 0
-        ecarts_pct_abs   = []
-
-        for i in range(n_tronc):
-            ult_p  = float(ult_projetes[i])
-            obs    = float(diag_actuelle[i])
-
-            if obs <= 0 or ult_p <= 0:
-                continue
-
-            boni_mali     = ult_p - obs          # positif = boni, négatif = mali
-            ecart_pct     = (boni_mali / obs) * 100
-            ecart_abs_pct = abs(ecart_pct)
-            ecarts_pct_abs.append(ecart_abs_pct)
-
-            statut_annee = (
-                'ROUGE' if ecart_abs_pct > seuil_alerte else
-                'AMBRE' if ecart_abs_pct > SEUIL_AMBRE_PCT else
-                'VERT'
-            )
-
-            if statut_annee == 'ROUGE': n_alertes_rouge += 1
-            if statut_annee == 'AMBRE': n_alertes_ambre += 1
-
-            annee_result = {
-                'annee':          i,
-                'horizon':        k,
-                'ultimate_projete': round(ult_p, 2),
-                'observe':          round(obs, 2),
-                'boni_mali':        round(boni_mali, 2),
-                'ecart_pct':        round(ecart_pct, 2),
-                'statut':           statut_annee,
-                'type':             'Boni' if boni_mali > 0 else 'Mali',
-            }
-            resultats_annees.append(annee_result)
-
-            if statut_annee in ('ROUGE', 'AMBRE'):
-                toutes_alertes.append({
-                    'annee':    i,
-                    'horizon':  k,
-                    'ecart_pct': round(ecart_pct, 2),
-                    'statut':   statut_annee,
-                    'message': (
-                        f"Année {i} — horizon {k} : écart {ecart_pct:+.1f}% "
-                        f"({'BONI' if boni_mali > 0 else 'MALI'}) — "
-                        f"{'⚠️ dépasse le seuil IA 2023 (15%)' if statut_annee=='ROUGE' else '🟡 vigilance'}"
-                    ),
-                })
-
-        # ── Synthèse horizon k ────────────────────────────────────────────────
-        total_ult = sum(r['ultimate_projete'] for r in resultats_annees)
-        total_obs = sum(r['observe']          for r in resultats_annees)
-        total_bm  = total_ult - total_obs
-        ecart_global_pct = (total_bm / total_obs * 100) if total_obs > 0 else 0
-
-        # Score qualité horizon (100 - moyenne des écarts abs pondérée)
-        if ecarts_pct_abs:
-            score_h = max(0, 100 - np.mean(ecarts_pct_abs) * 2)
+        if pire >= SEUIL_ROUGE:
+            statut_i = 'ROUGE'; n_rouge += 1
+        elif pire >= SEUIL_AMBRE:
+            statut_i = 'AMBRE'; n_ambre += 1
         else:
-            score_h = 100
+            statut_i = 'VERT'; n_vert += 1
 
-        scores_horizon.append(score_h)
+        # Score (100 - écart moyen pondéré)
+        scores.append(max(0, 100 - pire * 2))
 
-        resultats_par_horizon[f'horizon_{k}'] = {
-            'k':               k,
-            'annees':          resultats_annees,
-            'total_ult':       round(total_ult, 2),
-            'total_obs':       round(total_obs, 2),
-            'total_boni_mali': round(total_bm, 2),
-            'ecart_global_pct': round(ecart_global_pct, 2),
-            'n_alertes_rouge': n_alertes_rouge,
-            'n_alertes_ambre': n_alertes_ambre,
-            'score_qualite':   round(score_h, 1),
-            'type_global':     'Boni' if total_bm > 0 else 'Mali',
+        # Label année
+        annee_label = str(annee_debut + i) if annee_debut else f"An. {i}"
+
+        row = {
+            'annee':         i,
+            'annee_label':   annee_label,
+            'observe_n':     round(obs, 0),
+            'ultimate_n1':   round(u_n1, 0) if u_n1 > 0 else None,
+            'ultimate_n2':   round(u_n2, 0) if u_n2 > 0 else None,
+            'boni_mali_n1':  round(bm_n1, 0) if bm_n1 is not None else None,
+            'boni_mali_n2':  round(bm_n2, 0) if bm_n2 is not None else None,
+            'ecart_pct_n1':  round(ep_n1, 1) if ep_n1 is not None else None,
+            'ecart_pct_n2':  round(ep_n2, 1) if ep_n2 is not None else None,
+            'statut':        statut_i,
+            'type_n1':       ('Boni' if bm_n1 > 0 else 'Mali') if bm_n1 is not None else '—',
+            'type_n2':       ('Boni' if bm_n2 > 0 else 'Mali') if bm_n2 is not None else '—',
         }
+        tableau.append(row)
+
+        # Alertes
+        if statut_i in ('ROUGE', 'AMBRE'):
+            detail_n1 = f"N-1 : {ep_n1:+.1f}%" if ep_n1 is not None else ""
+            detail_n2 = f"N-2 : {ep_n2:+.1f}%" if ep_n2 is not None else ""
+            alertes.append({
+                'annee':       i,
+                'annee_label': annee_label,
+                'statut':      statut_i,
+                'ecart_pct_n1': ep_n1,
+                'ecart_pct_n2': ep_n2,
+                'message': (
+                    f"{annee_label} — {detail_n1}  {detail_n2} — "
+                    f"{'⚠️ Dépasse le seuil (15%)' if statut_i=='ROUGE' else '🟡 Vigilance (>8%)'}"
+                ),
+            })
+
+    # ── Totaux ────────────────────────────────────────────────────────────────
+    tot_obs  = sum(r['observe_n']   for r in tableau if r['observe_n'])
+    tot_u_n1 = sum(r['ultimate_n1'] for r in tableau if r['ultimate_n1'])
+    tot_u_n2 = sum(r['ultimate_n2'] for r in tableau if r['ultimate_n2'])
+    tot_bm_n1 = tot_u_n1 - tot_obs if tot_u_n1 else None
+    tot_bm_n2 = tot_u_n2 - tot_obs if tot_u_n2 else None
+    tot_ep_n1 = (tot_bm_n1 / tot_obs * 100) if tot_bm_n1 and tot_obs else None
+    tot_ep_n2 = (tot_bm_n2 / tot_obs * 100) if tot_bm_n2 and tot_obs else None
+
+    totaux = {
+        'observe_n':    round(tot_obs, 0),
+        'ultimate_n1':  round(tot_u_n1, 0) if tot_u_n1 else None,
+        'ultimate_n2':  round(tot_u_n2, 0) if tot_u_n2 else None,
+        'boni_mali_n1': round(tot_bm_n1, 0) if tot_bm_n1 else None,
+        'boni_mali_n2': round(tot_bm_n2, 0) if tot_bm_n2 else None,
+        'ecart_pct_n1': round(tot_ep_n1, 1) if tot_ep_n1 else None,
+        'ecart_pct_n2': round(tot_ep_n2, 1) if tot_ep_n2 else None,
+    }
 
     # ── Statut global ─────────────────────────────────────────────────────────
-    n_rouge_total = sum(
-        h['n_alertes_rouge'] for h in resultats_par_horizon.values()
-    )
-    n_ambre_total = sum(
-        h['n_alertes_ambre'] for h in resultats_par_horizon.values()
-    )
+    if n_rouge >= 3:     statut_global = 'ROUGE'
+    elif n_rouge >= 1 or n_ambre >= 3: statut_global = 'AMBRE'
+    else:                statut_global = 'VERT'
 
-    if n_rouge_total >= 3:
-        statut_global = 'ROUGE'
-    elif n_rouge_total >= 1 or n_ambre_total >= 3:
-        statut_global = 'AMBRE'
-    else:
-        statut_global = 'VERT'
+    score_global    = round(float(np.mean(scores)), 1) if scores else 0
+    ratio_stabilite = round(n_vert / len(tableau) * 100, 1) if tableau else 0
 
-    score_global = round(np.mean(scores_horizon), 1) if scores_horizon else 0
+    # ── Message narratif lié aux hypothèses ───────────────────────────────────
+    sign_n1 = f"{tot_ep_n1:+.1f}%" if tot_ep_n1 else "—"
+    sign_n2 = f"{tot_ep_n2:+.1f}%" if tot_ep_n2 else "—"
+    type_gl_n1 = "BONI global" if (tot_bm_n1 or 0) > 0 else "MALI global"
+    type_gl_n2 = "BONI global" if (tot_bm_n2 or 0) > 0 else "MALI global"
 
-    # ── Message narratif ──────────────────────────────────────────────────────
-    lignes_msg = [
-        f"BACK-TESTING BONI/MALI — {len(horizons)} horizon(s) analysé(s)\n"
+    msg_lignes = [
+        f"BACK-TESTING BONI/MALI — Triangle {n}×{m}\n",
+        f"Horizon N-1 : {type_gl_n1} = {sign_n1} "
+        f"({n_rouge} alerte(s) rouge, {n_ambre} ambre).",
+        f"Horizon N-2 : {type_gl_n2} = {sign_n2}.",
+        f"Score qualité provisionnement : {score_global}/100 "
+        f"— {ratio_stabilite:.0f}% des années dans la zone verte.",
     ]
-    for k_str, h in resultats_par_horizon.items():
-        k = h['k']
-        sign  = '+' if h['total_boni_mali'] >= 0 else ''
-        type_ = 'BONI' if h['total_boni_mali'] >= 0 else 'MALI'
-        lignes_msg.append(
-            f"Horizon N-{k} : {type_} global = {sign}{h['total_boni_mali']:,.0f} € "
-            f"({sign}{h['ecart_global_pct']:.1f}%) — "
-            f"{h['n_alertes_rouge']} alerte(s) rouge, {h['n_alertes_ambre']} ambre. "
-            f"Score qualité : {h['score_qualite']}/100."
-        )
 
-    if n_rouge_total == 0 and n_ambre_total == 0:
-        lignes_msg.append(
+    if n_rouge == 0 and n_ambre == 0:
+        msg_lignes.append(
             "\nQualité du provisionnement historique BONNE — "
-            "les projections passées sont cohérentes avec les observations actuelles. "
-            "Aucun écart significatif détecté (seuil guide IA 2023 : 15%)."
+            "les projections passées sont cohérentes avec les observations actuelles."
         )
-    elif n_rouge_total > 0:
-        lignes_msg.append(
-            f"\nATTENTION : {n_rouge_total} année(s) dépassent le seuil d'alerte de {seuil_alerte:.0f}% "
-            "du guide Institut des Actuaires 2023. "
-            "Une révision des hypothèses de développement est recommandée."
+    elif n_rouge > 0 and (tot_bm_n1 or 0) > 0:
+        msg_lignes.append(
+            f"\nBONI significatifs sur les années les plus anciennes — "
+            f"indique un sur-provisionnement probable sur ces cohortes. "
+            f"Vérifier la présence de sinistres CAT NAT ou de grands sinistres "
+            f"non isolés qui auraient gonflé les provisions initiales."
         )
-    else:
-        lignes_msg.append(
-            f"\nVIGILANCE : {n_ambre_total} année(s) présentent des écarts modérés "
-            f"(>{SEUIL_AMBRE_PCT:.0f}%). Suivi recommandé au prochain arrêté."
+    elif n_rouge > 0 and (tot_bm_n1 or 0) < 0:
+        msg_lignes.append(
+            f"\nMALI significatifs détectés — "
+            f"sous-provisionnement sur {n_rouge} année(s). "
+            f"Révision des facteurs de développement recommandée. "
+            f"Consulter l'actuaire désigné avant inscription au bilan S2."
         )
 
     return {
         'success':          True,
-        'resultats':        resultats_par_horizon,
-        'alertes':          toutes_alertes,
+        'tableau':          tableau,
+        'totaux':           totaux,
+        'alertes':          alertes,
         'statut':           statut_global,
         'score_qualite':    score_global,
-        'n_rouge':          n_rouge_total,
-        'n_ambre':          n_ambre_total,
-        'message':          '\n'.join(lignes_msg),
-        'seuil_alerte_pct': seuil_alerte,
-        'methode_cl':       methode_cl,
-        'horizons':         horizons,
+        'ratio_stabilite':  ratio_stabilite,
+        'n_vert':           n_vert,
+        'n_ambre':          n_ambre,
+        'n_rouge':          n_rouge,
+        'message':          '\n'.join(msg_lignes),
+        'horizons':         ['horizon_1', 'horizon_2'],
+        # Compatibilité ancienne API
+        'resultats': {
+            'horizon_1': {'k': 1, 'annees': [
+                {**r, 'ecart_pct': r['ecart_pct_n1'], 'boni_mali': r['boni_mali_n1'],
+                 'annee': r['annee'], 'statut': r['statut']}
+                for r in tableau if r['ultimate_n1']
+            ]},
+            'horizon_2': {'k': 2, 'annees': [
+                {**r, 'ecart_pct': r['ecart_pct_n2'], 'boni_mali': r['boni_mali_n2'],
+                 'annee': r['annee'], 'statut': r['statut']}
+                for r in tableau if r['ultimate_n2']
+            ]},
+        },
     }
-
-
-def tableau_boni_mali(bt_result: Dict, horizon: int = 2) -> List[Dict]:
-    """
-    Extrait un tableau boni/mali pour un horizon donné.
-    Format adapté pour affichage Streamlit et rapport Word.
-
-    Returns
-    -------
-    List de dicts avec clés : annee, ultimate_projete, observe, boni_mali, ecart_pct, statut
-    """
-    h_key = f'horizon_{horizon}'
-    if not bt_result.get('success') or h_key not in bt_result.get('resultats', {}):
-        return []
-    return bt_result['resultats'][h_key].get('annees', [])
