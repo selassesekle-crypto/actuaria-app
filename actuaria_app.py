@@ -988,8 +988,18 @@ def _dashboard_agent(ak):
                 _h_ok  = bool(_hdict.get("ok", True))
                 ic     = "✅" if _h_ok else "⚠️"
                 _score = _hdict.get("score", "—")
-                _msg   = str(_hdict.get("message", ""))[:100]
-                st.markdown(f"**{ic} {_hlabel}** — score {_score}/100  \n{_msg}")
+                _msg   = str(_hdict.get("message", ""))
+                st.markdown(
+                    f"<div style='background:rgba(15,46,82,0.6);border-left:3px solid "
+                    f"{'#2ECC71' if _h_ok else '#F39C12'};border-radius:6px;"
+                    f"padding:10px 14px;margin-bottom:8px;'>"
+                    f"<div style='font-size:0.78rem;font-weight:700;color:"
+                    f"{'#2ECC71' if _h_ok else '#F39C12'};margin-bottom:4px;'>"
+                    f"{ic} {_hlabel} — score {_score}/100</div>"
+                    f"<div style='font-size:0.76rem;color:#E8EDF2;line-height:1.6;'>{_msg}</div>"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
 
         # Export JSON
         import json
@@ -2470,7 +2480,10 @@ def page_resultats():
 
     # ── GRAPHIQUES — regénérés à la volée depuis données brutes ─────────────
     # (les go.Figure ne survivent pas à la navigation Streamlit)
-    _tri_res = r_raw.get("triangle")
+    _tri_res = (
+        st.session_state.get("triangle_a7")
+        or r_raw.get("triangle")
+    )
     _figs_res = {}
     if _tri_res is not None and n2 and n3:
         try:
@@ -2539,7 +2552,7 @@ def page_resultats():
             ok = h.get("ok", True)
             ic = "✅" if ok else "⚠️"
             sc = VERT if ok else AMBRE
-            msg = h.get("message", "")[:200]
+            msg = h.get("message", "")
             st.markdown(f"""
 <div style="background:{NAVY_L};border-radius:6px;padding:10px 14px;margin-bottom:6px;">
   <span style="font-size:0.78rem;color:{sc};font-weight:700;">{ic} {cle} — {label}</span>
