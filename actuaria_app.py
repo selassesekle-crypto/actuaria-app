@@ -1248,12 +1248,8 @@ def _validation_agent(ak):
 </div>""", unsafe_allow_html=True)
 
         # Graphiques de validation — regénérés à la volée depuis données brutes
-        try:
-            _tri_val = (
-                st.session_state.get("triangle_a7")
-                or (_r_val.get("triangle") if isinstance(_r_val, dict) else None)
-            )
-        except Exception:
+        _tri_val = st.session_state.get("triangle_a7")
+        if _tri_val is None:
             _tri_val = _r_val.get("triangle") if isinstance(_r_val, dict) else None
 
         if _tri_val is not None and _n2_val and _n3_val:
@@ -2480,10 +2476,9 @@ def page_resultats():
 
     # ── GRAPHIQUES — regénérés à la volée depuis données brutes ─────────────
     # (les go.Figure ne survivent pas à la navigation Streamlit)
-    _tri_res = (
-        st.session_state.get("triangle_a7")
-        or r_raw.get("triangle")
-    )
+    _tri_res = st.session_state.get("triangle_a7")
+    if _tri_res is None:
+        _tri_res = r_raw.get("triangle")
     _figs_res = {}
     if _tri_res is not None and n2 and n3:
         try:
