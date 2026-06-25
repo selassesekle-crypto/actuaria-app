@@ -361,9 +361,47 @@ def export_word(
         doc.add_page_break()
 
         # =====================================================================
-        #  5. JUGEMENT ACTUARIEL & RECOMMANDATIONS
+        #  5. COMMENTAIRE ACTUARIEL COMPLET
         # =====================================================================
-        h('5. Jugement actuariel & Recommandations'); sep()
+        h('5. Commentaire actuariel complet'); sep()
+
+        if commentaire:
+            comm = _clean(commentaire)
+            # Supprimer le header répété (RAPPORT DE PROVISIONNEMENT...)
+            comm = re.sub(
+                r'={4,}.*?AGENT A7 IBRAHIM.*?={4,}',
+                '', comm, flags=re.DOTALL
+            ).strip()
+            # Découper par sections §
+            sections_c = re.split(r'(?=§\d+\s*—|\d+\.\s+[A-ZÀÂÉÈÊ])', comm)
+            for sec in sections_c:
+                sec = sec.strip()
+                if not sec: continue
+                lignes = sec.split('\n', 1)
+                tit_c  = lignes[0].strip()
+                corps_c = lignes[1].strip() if len(lignes) > 1 else ''
+                if tit_c: h(tit_c, lv=2)
+                if corps_c:
+                    for ln in corps_c.split('\n'):
+                        ln = ln.strip()
+                        if ln:
+                            p = doc.add_paragraph()
+                            p.paragraph_format.space_after  = Pt(2)
+                            p.paragraph_format.left_indent  = Cm(0.3)
+                            # Bullet points
+                            if ln.startswith('•') or ln.startswith('-'):
+                                run(p, ln, sz=9, col=NR)
+                            else:
+                                run(p, ln, sz=9, col=NR)
+        else:
+            para('Commentaire non disponible.', sz=9, italic=True)
+
+        doc.add_page_break()
+
+        # =====================================================================
+        #  6. JUGEMENT ACTUARIEL & RECOMMANDATIONS
+        # =====================================================================
+        h('6. Jugement actuariel & Recommandations'); sep()
 
         # Jugement structuré depuis n4
         jugement = _clean(n4.get('jugement',''))
