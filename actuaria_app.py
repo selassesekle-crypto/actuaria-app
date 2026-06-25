@@ -1765,13 +1765,40 @@ def page_analyse():
                             help="Décalage de l'année pivot pour le calcul du BE S2",
                         )
 
-                    # Champ a priori BF/Cape Cod
+                    # ── Primes acquises (BF/Cape Cod conformes S2) ──────────
+                    st.markdown(
+                        f"<div style='font-size:0.72rem;color:{OR};font-weight:600;"
+                        f"margin-bottom:4px;'>📌 Primes acquises — BF/Cape Cod (Art.77 S2)</div>",
+                        unsafe_allow_html=True
+                    )
+                    _primes_file = st.file_uploader(
+                        "Upload primes par année (CSV ou Excel — 1 colonne)",
+                        type=["csv","xlsx","xls"],
+                        key="a7_primes_file",
+                        help="Une valeur par ligne = prime acquise de chaque année de survenance "
+                             "(ordre croissant). Sans upload : proxy FFA utilisé (approximation).",
+                    )
+                    _primes_array = None
+                    if _primes_file:
+                        try:
+                            import pandas as _pd_p
+                            if _primes_file.name.endswith(".csv"):
+                                _df_p = _pd_p.read_csv(_primes_file, header=None)
+                            else:
+                                _df_p = _pd_p.read_excel(_primes_file, header=None)
+                            _primes_array = _df_p.iloc[:,0].dropna().astype(float).values.tolist()
+                            st.success(f"✅ {len(_primes_array)} primes chargées — "
+                                       f"total {sum(_primes_array):,.0f} €")
+                        except Exception as _ep:
+                            st.error(f"❌ Erreur primes : {_ep}")
+
                     _lr_apriori = st.number_input(
-                        "A priori Loss Ratio BF/Cape Cod (%)",
+                        "A priori Loss Ratio BF/Cape Cod (%) — optionnel",
                         min_value=0.0, max_value=300.0,
                         value=0.0, step=1.0,
                         key="a7_lr_apriori",
-                        help="Laisser à 0 pour estimation automatique par proxy (sinistres/primes)",
+                        help="Si fourni, écrase le LR calculé depuis les primes. "
+                             "Laisser à 0 pour calcul automatique.",
                     )
 
                     _show_n1 = st.checkbox("📋 Saisir les résultats N-1 (comparatif inter-exercices)", value=False, key="a7_show_n1")
@@ -1796,12 +1823,13 @@ def page_analyse():
                     if "analyse_params" not in st.session_state:
                         st.session_state["analyse_params"] = {}
                     st.session_state["analyse_params"].update({
-                        "a7_lob":               _lob_sel,
-                        "a7_arrete":            _arrete,
-                        "a7_n_sim_bootstrap":   int(_n_sim),
+                        "a7_lob":                _lob_sel,
+                        "a7_arrete":             _arrete,
+                        "a7_n_sim_bootstrap":    int(_n_sim),
                         "a7_annee_base_reserve": int(_annee_base),
                         "a7_resultats_precedents": _res_prec,
-                        "a7_lr_apriori":        float(_lr_apriori) / 100 if _lr_apriori > 0 else None,
+                        "a7_primes":             _primes_array,
+                        "a7_lr_apriori":         float(_lr_apriori) / 100 if _lr_apriori > 0 else None,
                     })
 
         # ── Cas paramètres manuels ────────────────────────────────────────
