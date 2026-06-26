@@ -1255,7 +1255,7 @@ def _validation_agent(ak):
         if _tri_val is not None and _n2_val and _n3_val:
             try:
                 import numpy as _np_val
-                from a7_provisionnement.n5_graphiques import generer_graphiques as _gen_g
+                from direction_non_vie.provisionnement.a7_provisionnement.n5_graphiques import generer_graphiques as _gen_g
                 _C_val = _np_val.array(_tri_val) if not hasattr(_tri_val, "shape") else _tri_val
                 if _C_val.ndim != 2 or _C_val.shape[0] < 2:
                     raise ValueError(f"Triangle invalide shape={_C_val.shape}")
@@ -2075,7 +2075,7 @@ def _executer_analyse(besoin, direction, equipe, client):
 
             # ── SINISTRES BRUTS → A7 directement ────────────────────────
             if besoin == "sinistres":
-                from a7_provisionnement import AgentA7Provisionnement
+                from direction_non_vie.provisionnement.a7_provisionnement import AgentA7Provisionnement
                 df_a7 = df.copy()
                 col_montant = next((c for c in df_a7.columns
                     if c in ["cout_total_sinistres","claim_amount","montant","charge","cout_sinistre"]), None)
@@ -2165,7 +2165,7 @@ def _executer_analyse(besoin, direction, equipe, client):
 
             # ── TRIANGLE DIRECT → A7 ────────────────────────────────────────
             elif besoin == "triangle_xl":
-                from a7_provisionnement import AgentA7Provisionnement
+                from direction_non_vie.provisionnement.a7_provisionnement import AgentA7Provisionnement
                 import numpy as _np
                 a7 = AgentA7Provisionnement(audit_path=_tmp, models_path=_tmp, verbose=False)
                 if df is not None and len(df) > 1:
@@ -2687,7 +2687,7 @@ Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non 
     if _tri_res is not None and n2 and n3:
         try:
             import numpy as _np_res
-            from a7_provisionnement.n5_graphiques import generer_graphiques as _gen_res
+            from direction_non_vie.provisionnement.a7_provisionnement.n5_graphiques import generer_graphiques as _gen_res
             _C_res = _np_res.array(_tri_res) if not hasattr(_tri_res, "shape") else _tri_res
             _figs_res = _gen_res(_C_res, n2, n3, n4)
             st.markdown(f"<div style='font-size:0.62rem;color:{VERT};margin-bottom:8px;'>✅ {len(_figs_res)}/12 graphiques générés</div>", unsafe_allow_html=True)
