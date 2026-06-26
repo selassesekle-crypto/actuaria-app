@@ -2525,35 +2525,39 @@ def page_resultats():
         _bt_emoji = "✅" if _bt_statut=="VERT" else "⚠️" if _bt_statut=="AMBRE" else "🔴"
         _bt_horizons = list(_bt.get("resultats", {}).keys())
         _bt_score = _bt.get("score_qualite", 0)
-        _bt_rouge = _bt.get("n_rouge", 0)
-        _bt_ambre = _bt.get("n_ambre", 0)
-        st.write("DEBUG alertes bt:", _bt_rouge, "rouge |", _bt_ambre, "ambre | n_vert:", _bt.get("n_vert",0))
+        _bt_rouge    = _bt.get("n_rouge", 0)
+        _bt_ambre    = _bt.get("n_ambre", 0)
+        _bt_rouge_n1 = _bt.get("n_rouge_n1", 0)
+        _bt_rouge_n2 = _bt.get("n_rouge_n2", 0)
+        _bt_ambre_n1 = _bt.get("n_ambre_n1", 0)
+        _bt_ambre_n2 = _bt.get("n_ambre_n2", 0)
+        _bt_matures  = _bt.get("n_matures", 0)
+        _bt_seuil    = _bt.get("seuil_maturite", 0.75)
+        _bt_score_n1 = _bt.get("score_n1", _bt_score)
+        _bt_score_n2 = _bt.get("score_n2", _bt_score)
 
         _n_ann_bt = len(_bt.get("tableau", []))
-        st.markdown(
-            f"<div style='background:{NAVY_L};border-left:4px solid {_bt_col};"
-            f"border-radius:8px;padding:14px 18px;margin-bottom:12px;'>"
-            f"<div style='font-size:0.72rem;color:{OR};font-weight:700;text-transform:uppercase;"
-            f"margin-bottom:8px;'>◆ Back-testing Boni/Mali de liquidation</div>"
-            f"<div style='display:flex;gap:24px;flex-wrap:wrap;'>"
-            f"<div><span style='font-size:0.72rem;color:{GRIS};'>Statut</span><br>"
-            f"<span style='font-size:0.9rem;font-weight:700;color:{_bt_col};'>{_bt_emoji} {_bt_statut}</span></div>"
-            f"<div><span style='font-size:0.72rem;color:{GRIS};'>Score qualité</span><br>"
-            f"<span style='font-size:0.9rem;font-weight:700;color:{BLANC};'>{_bt_score}/100</span></div>"
-            f"<div><span style='font-size:0.72rem;color:{GRIS};'>Horizons</span><br>"
-            f"<span style='font-size:0.9rem;font-weight:700;color:{BLANC};'>N-1, N-2</span></div>"
-            f"<div><span style='font-size:0.72rem;color:{GRIS};'>Alertes</span><br>"
-            f"<span style='font-size:0.9rem;font-weight:700;color:{ROUGE if _bt_rouge>0 else VERT};'>"
-            f"{_bt_rouge} rouge</span>"
-            f"<span style='font-size:0.9rem;color:{AMBRE};'> · {_bt_ambre} ambre</span>"
-            f"<span style='font-size:0.9rem;color:{VERT};'> · {_bt.get('n_vert',0)} OK</span></div>"
-            f"</div>"
-            f"<div style='font-size:0.76rem;color:{BLANC};margin-top:8px;line-height:1.6;'>"
-            f"Analyse de la qualité du provisionnement historique "
-            f"sur {_n_ann_bt} années de survenance.</div>"
-            f"</div>",
-            unsafe_allow_html=True
-        )
+        st.markdown(f"""
+<div style='background:{NAVY_L};border-left:4px solid {_bt_col};border-radius:8px;padding:14px 18px;margin-bottom:12px;'>
+  <div style='font-size:0.72rem;color:{OR};font-weight:700;text-transform:uppercase;margin-bottom:10px;'>◆ Back-testing Boni/Mali de liquidation</div>
+  <div style='display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;'>
+    <div><span style='font-size:0.7rem;color:{GRIS};'>Statut global</span><br>
+    <span style='font-size:0.9rem;font-weight:700;color:{_bt_col};'>{_bt_emoji} {_bt_statut}</span></div>
+    <div><span style='font-size:0.7rem;color:{GRIS};'>Score N-1</span><br>
+    <span style='font-size:0.9rem;font-weight:700;color:{BLANC};'>{_bt_score_n1}/100</span></div>
+    <div><span style='font-size:0.7rem;color:{GRIS};'>Score N-2</span><br>
+    <span style='font-size:0.9rem;font-weight:700;color:{BLANC};'>{_bt_score_n2}/100</span></div>
+    <div><span style='font-size:0.7rem;color:{GRIS};'>Alertes N-1</span><br>
+    <span style='font-size:0.85rem;font-weight:700;color:{ROUGE if _bt_rouge_n1>0 else VERT};'>{_bt_rouge_n1} 🔴</span>
+    <span style='font-size:0.85rem;color:{AMBRE};'> {_bt_ambre_n1} 🟡</span></div>
+    <div><span style='font-size:0.7rem;color:{GRIS};'>Alertes N-2</span><br>
+    <span style='font-size:0.85rem;font-weight:700;color:{ROUGE if _bt_rouge_n2>0 else VERT};'>{_bt_rouge_n2} 🔴</span>
+    <span style='font-size:0.85rem;color:{AMBRE};'> {_bt_ambre_n2} 🟡</span></div>
+    <div><span style='font-size:0.7rem;color:{GRIS};'>Années évaluées</span><br>
+    <span style='font-size:0.85rem;font-weight:700;color:{BLANC};'>{_bt_matures}/{_n_ann_bt}</span>
+    <span style='font-size:0.72rem;color:{GRIS};'> (≥{int(_bt_seuil*100)}% dev.)</span></div>
+  </div>
+</div>""", unsafe_allow_html=True)
 
         # Deux tableaux boni/mali séparés
         _tableau_bt = _bt.get("tableau", [])
