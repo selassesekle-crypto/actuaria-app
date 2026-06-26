@@ -2641,6 +2641,35 @@ def page_resultats():
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
+    # ── EFFETS CALENDAIRE (BARNETT-ZEHNWIRTH) ───────────────────────────────
+    _bz = r_raw.get("n3", {}).get("barnett_zehnwirth", {})
+    if _bz.get("success"):
+        _bz_statut = _bz.get("statut", "VERT")
+        _bz_col    = VERT if _bz_statut=="VERT" else AMBRE if _bz_statut=="AMBRE" else ROUGE
+        _bz_emoji  = "✅" if _bz_statut=="VERT" else "⚠️" if _bz_statut=="AMBRE" else "🔴"
+        _bz_n_sig  = _bz.get("n_effets_significatifs", 0)
+        _bz_diags  = _bz.get("diagonales_anormales", [])
+        _bz_reco   = _bz.get("recommandation", "")
+        st.markdown(
+            f"<div style='background:{NAVY_L};border-left:4px solid {_bz_col};"
+            f"border-radius:8px;padding:12px 16px;margin-bottom:12px;'>"
+            f"<div style='font-size:0.72rem;color:{OR};font-weight:700;"
+            f"text-transform:uppercase;margin-bottom:8px;'>◆ Effets Calendaire — Barnett-Zehnwirth</div>"
+            f"<div style='display:flex;gap:20px;flex-wrap:wrap;'>"
+            f"<div><span style='font-size:0.7rem;color:{GRIS};'>Statut</span><br>"
+            f"<span style='font-size:0.9rem;font-weight:700;color:{_bz_col};'>{_bz_emoji} {_bz_statut}</span></div>"
+            f"<div><span style='font-size:0.7rem;color:{GRIS};'>Diagonales anormales</span><br>"
+            f"<span style='font-size:0.9rem;font-weight:700;color:{BLANC};'>{_bz_n_sig}</span>"
+            f"<span style='font-size:0.8rem;color:{GRIS};'>/{_bz.get('n_diagonales_evaluees',0)}</span></div>"
+            f"{f'<div><span style="font-size:0.7rem;color:{GRIS};">Années</span><br><span style="font-size:0.8rem;color:{AMBRE};">{" · ".join(_bz_diags[:5])}</span></div>' if _bz_diags else ''}"
+            f"</div>"
+            f"<div style='font-size:0.74rem;color:{BLANC};margin-top:8px;line-height:1.6;'>"
+            f"{_bz.get('message','')[:200]}</div>"
+            f"{f'<div style="font-size:0.72rem;color:{OR};margin-top:6px;">💡 {_bz_reco[:100]}</div>' if _bz_n_sig > 0 else ''}"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+
     # ── BACK-TESTING BONI/MALI ───────────────────────────────────────────────
     _annee_debut_bt = st.session_state.get("analyse_params", {}).get("a7_annee_debut")
     _bt = r_raw.get("n3", {}).get("backtesting", {})
@@ -2849,6 +2878,7 @@ Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non 
         ("🔁 Back-Testing",          r_raw.get("back_testing", {})),
         ("🇩🇪 Munich Chain Ladder",  munich),
         ("📐 Clark LDF (log-logistique / Weibull)", n3.get('clark', {})),
+        ("📅 Effets Calendaire (Barnett-Zehnwirth)", n3.get('barnett_zehnwirth', {})),
     ]:
         if obj and obj.get("message"):
             sc = VERT if obj.get("statut")=="VERT" else AMBRE if obj.get("statut")=="AMBRE" else ROUGE if obj.get("statut")=="ROUGE" else GRIS
