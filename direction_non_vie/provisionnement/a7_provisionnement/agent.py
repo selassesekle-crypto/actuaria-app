@@ -35,7 +35,7 @@ from typing import Dict, List, Optional
 import numpy as np
 
 # ── Imports modules A7 ───────────────────────────────────────────────────────
-from .n1_ingestion      import TriangleValidator
+from direction_non_vie.services.nv_triangle_validator import TriangleValidator
 from .n2_hypotheses     import HypothesesValidator
 from .n4_best_estimate  import BestEstimateS2
 from .n5_graphiques     import generer_graphiques
