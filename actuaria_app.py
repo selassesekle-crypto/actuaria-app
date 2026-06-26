@@ -2527,6 +2527,7 @@ def page_resultats():
         _bt_score = _bt.get("score_qualite", 0)
         _bt_rouge = _bt.get("n_rouge", 0)
         _bt_ambre = _bt.get("n_ambre", 0)
+        st.write("DEBUG alertes bt:", _bt_rouge, "rouge |", _bt_ambre, "ambre | n_vert:", _bt.get("n_vert",0))
 
         _n_ann_bt = len(_bt.get("tableau", []))
         st.markdown(
