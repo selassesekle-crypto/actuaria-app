@@ -2630,7 +2630,8 @@ def page_resultats():
 
                 # Ligne total
                 html += f"""<tr style='background:#0F2E52;border-top:2px solid #C9A84C;'>
-  <td style='padding:9px 12px;color:#C9A84C;font-weight:700;'>TOTAL</td>"""
+  <td style='padding:9px 12px;color:#C9A84C;font-weight:700;'>TOTAL</td>
+  <td style='padding:9px 12px;'>—</td>"""
                 html += _td_num(totaux.get(key_ult), bold=True)
                 html += _td_num(totaux.get("observe_n"), bold=True)
                 html += _td_bm(totaux.get(key_bm), bold=True)
@@ -2640,7 +2641,7 @@ def page_resultats():
 
                 html += """</tbody></table></div>
 <div style='font-size:0.68rem;color:#8A9BB0;font-style:italic;margin-top:6px;'>
-Seuil d'alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Source : Guide Institut des Actuaires 2023
+Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non évaluées : développement &lt; 75% &nbsp;·&nbsp; Source : Guide Institut des Actuaires 2023
 </div></div>"""
                 return html
 
@@ -2648,22 +2649,7 @@ Seuil d'alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Source : G
             _rows_n1 = [r for r in _tableau_bt if r.get("ultimate_n1") is not None]
             _rows_n2 = [r for r in _tableau_bt if r.get("ultimate_n2") is not None]
 
-            # Recalculer statut/alertes sur les lignes visibles uniquement
-            _rows_visibles = list({r["annee"]: r for r in _rows_n1 + _rows_n2}.values())
-            _n_rouge_vis = sum(1 for r in _rows_visibles
-                               if abs(r.get("ecart_pct_n1") or 0) >= 15
-                               or abs(r.get("ecart_pct_n2") or 0) >= 15)
-            _n_ambre_vis = sum(1 for r in _rows_visibles
-                               if (8 <= abs(r.get("ecart_pct_n1") or 0) < 15)
-                               or (8 <= abs(r.get("ecart_pct_n2") or 0) < 15))
-            _n_vert_vis  = len(_rows_visibles) - _n_rouge_vis - _n_ambre_vis
-            _statut_vis  = "ROUGE" if _n_rouge_vis >= 1 else "AMBRE" if _n_ambre_vis >= 3 else "VERT"
-            # Mettre à jour la carte
-            _bt_rouge   = _n_rouge_vis
-            _bt_ambre   = _n_ambre_vis
-            _bt_statut  = _statut_vis
-            _bt_col     = VERT if _statut_vis=="VERT" else AMBRE if _statut_vis=="AMBRE" else ROUGE
-            _bt_emoji   = "✅" if _statut_vis=="VERT" else "⚠️" if _statut_vis=="AMBRE" else "🔴"
+            # Statut et alertes déjà corrects depuis backtesting.py (années matures)
 
             st.markdown(_html_tableau_bt(
                 "Tableau 1 — Comparaison N vs N-1 (arrêté précédent)",
