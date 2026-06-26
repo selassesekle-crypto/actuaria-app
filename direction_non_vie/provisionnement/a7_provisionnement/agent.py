@@ -57,7 +57,8 @@ from .n3.bf_cape_cod  import bornhuetter_ferguson, cape_cod
 from .n3.bootstrap_odp import bootstrap_odp
 from .n3.munich_cl    import munich_cl
 from .n3.backtesting  import calculer_backtesting
-from .n3.clark        import clark_ldf
+from .n3.clark               import clark_ldf
+from .n3.barnett_zehnwirth   import barnett_zehnwirth
 
 logger = logging.getLogger('actuaria.a7')
 
@@ -605,6 +606,7 @@ class AgentA7Provisionnement:
             'tail_factor':     tail_info,
             'backtesting':     {},
             'clark':           clark_ldf(C) if C is not None and C.shape[0] >= 4 else {'success': False, 'disponible': False},
+            'barnett_zehnwirth': barnett_zehnwirth(C, annee_base=annee_base_reserve) if C is not None and C.shape[0] >= 5 else {'success': False, 'disponible': False},
         }
 
     # =========================================================================
