@@ -824,3 +824,412 @@ class NVTriangleBuilder:
 
         rapport['infos'].append(msg)
         return methode
+
+
+# =============================================================================
+#  EXTENSION — GESTION MULTI-ONGLETS ET TRIANGLE DES CHARGES ENGAGÉES
+# =============================================================================
+
+    def detecter_onglets(
+        self,
+        chemin_fichier : str,
+    ) -> Dict:
+        """
+        Détecte les onglets d'un fichier Excel et retourne leurs noms
+        et un aperçu de leur structure pour aider l'utilisateur à les mapper.
+
+        Utilisé dans l'UI pour proposer à l'utilisateur de choisir quel
+        onglet correspond aux paiements, aux charges, aux primes, etc.
+
+        Parameters
+        ----------
+        chemin_fichier : str
+            Chemin vers le fichier Excel (.xlsx, .xls)
+
+        Returns
+        -------
+        Dict avec :
+            success  : bool
+            onglets  : list[dict] — nom, nb_lignes, nb_colonnes, apercu_colonnes
+            erreur   : str ou None
+        """
+        try:
+            # Lire la liste des onglets sans charger tout le fichier
+            xl = pd.ExcelFile(chemin_fichier)
+            onglets = []
+
+            for nom_onglet in xl.sheet_names:
+                # Lire seulement les 3 premières lignes pour l'aperçu
+                df_sample = pd.read_excel(
+                    chemin_fichier,
+                    sheet_name=nom_onglet,
+                    nrows=3,
+                )
+                # Détecter le type probable de l'onglet
+                type_probable = self._deviner_type_onglet(df_sample, nom_onglet)
+
+                onglets.append({
+                    'nom':             nom_onglet,
+                    'nb_lignes':       len(pd.read_excel(chemin_fichier, sheet_name=nom_onglet)),
+                    'nb_colonnes':     len(df_sample.columns),
+                    'colonnes':        list(df_sample.columns[:5]),  # 5 premières colonnes
+                    'type_probable':   type_probable,
+                })
+
+            self.logger.info(f"{len(onglets)} onglet(s) détecté(s) : {[o['nom'] for o in onglets]}")
+
+            return {
+                'success':  True,
+                'onglets':  onglets,
+                'erreur':   None,
+            }
+
+        except Exception as e:
+            self.logger.error(f"Détection onglets échouée : {e}")
+            return {
+                'success':  False,
+                'onglets':  [],
+                'erreur':   str(e),
+            }
+
+    def _deviner_type_onglet(self, df_sample: pd.DataFrame, nom: str) -> str:
+        """
+        Devine le type probable d'un onglet Excel en analysant son nom
+        et la structure de ses premières lignes.
+
+        Heuristiques utilisées :
+          · Nom contient "paiement", "paid", "pay" → paiements
+          · Nom contient "charge", "incurred", "engage" → charges engagées
+          · Nom contient "prime", "premium" → primes acquises
+          · Structure numérique carrée → triangle agrégé
+          · Colonnes métier (annee_survenance, montant) → données individuelles
+
+        Parameters
+        ----------
+        df_sample : premières lignes du DataFrame
+        nom       : nom de l'onglet
+
+        Returns
+        -------
+        str : type probable ('paiements' | 'charges' | 'primes' | 'sinistres' | 'inconnu')
+        """
+        nom_lower = nom.lower()
+
+        # Détection par nom d'onglet
+        if any(k in nom_lower for k in ['paiement', 'paid', 'pay', 'reglement', 'payment']):
+            return 'paiements'
+        if any(k in nom_lower for k in ['charge', 'incurred', 'engage', 'provision', 'encours']):
+            return 'charges'
+        if any(k in nom_lower for k in ['prime', 'premium', 'primes', 'acquired']):
+            return 'primes'
+        if any(k in nom_lower for k in ['sinistre', 'claim', 'individuel', 'detail']):
+            return 'sinistres'
+
+        # Détection par structure
+        cols_lower = [str(c).lower() for c in df_sample.columns]
+        n_numeric  = df_sample.select_dtypes(include=[np.number]).shape[1]
+
+        if any(c in cols_lower for c in ['annee_survenance', 'ay', 'accident_year']):
+            if n_numeric >= 2:
+                return 'sinistres'
+        if n_numeric >= 5 and len(df_sample.columns) >= 5:
+            return 'triangle_agregé'
+
+        return 'inconnu'
+
+    def construire_triangle_engage(
+        self,
+        source_charges  : Union[pd.DataFrame, np.ndarray, str],
+        C_paiements     : np.ndarray,
+        schema_mapping  : Optional[Dict] = None,
+        mode_declare    : str            = 'auto',
+        nom_onglet      : Optional[str]  = None,
+    ) -> Dict:
+        """
+        Construit le triangle des charges engagées pour Munich Chain Ladder.
+
+        Accepte 3 formats pour les charges :
+          1. Triangle cumulé agrégé (matrice n×m)
+          2. Triangle incrémental (à cumuler)
+          3. Données individuelles dossier par dossier
+             → une ligne par dossier avec évaluation courante
+             → Charge[i,j] = Σ paiements jusqu'à j + Σ évaluations dossiers ouverts
+
+        Le triangle des charges doit être fourni par le client depuis son
+        système de gestion (évaluations dossier par dossier indépendantes).
+        Il NE DOIT PAS être calculé depuis les provisions IBNR actuarielles
+        car cela introduirait une circularité dans Munich CL.
+        Référence : Quarg & Mack (2004) — Munich Chain Ladder.
+
+        Parameters
+        ----------
+        source_charges : source des données de charges
+        C_paiements    : triangle des paiements déjà construit (np.ndarray)
+                         Utilisé comme référence pour les dimensions et
+                         pour le cas 3 (données individuelles)
+        schema_mapping : mapping colonnes client → noms standard
+        mode_declare   : 'auto' | 'cumule' | 'non_cumule' | 'individuel'
+        nom_onglet     : nom de l'onglet si fichier multi-onglets
+
+        Returns
+        -------
+        Dict avec :
+            success          : bool
+            triangle_engage  : np.ndarray — triangle charges engagées (n×m)
+            format_detecte   : str — format utilisé
+            rapport          : dict — alertes et informations
+            erreur           : str ou None
+        """
+        rapport = {'alertes': [], 'infos': []}
+
+        try:
+            n_ref, m_ref = C_paiements.shape
+
+            # ── Lire la source selon le type ──────────────────────────────────
+            if isinstance(source_charges, np.ndarray):
+                # Numpy array → triangle déjà construit
+                C_engage = self._normaliser_dimensions(
+                    source_charges, n_ref, m_ref, rapport
+                )
+                format_detecte = 'triangle_numpy'
+
+            elif isinstance(source_charges, (str, pd.DataFrame)):
+                # Lire le DataFrame
+                if isinstance(source_charges, str):
+                    if nom_onglet:
+                        # Fichier multi-onglets
+                        df_charges = pd.read_excel(
+                            source_charges,
+                            sheet_name=nom_onglet,
+                        )
+                        rapport['infos'].append(
+                            f"Onglet '{nom_onglet}' chargé pour les charges engagées."
+                        )
+                    elif source_charges.endswith('.csv'):
+                        df_charges = pd.read_csv(source_charges)
+                    else:
+                        df_charges = pd.read_excel(source_charges)
+                else:
+                    df_charges = source_charges.copy()
+
+                # Normaliser les colonnes
+                df_charges.columns = [
+                    str(c).lower().strip().replace(' ', '_')
+                    for c in df_charges.columns
+                ]
+                if schema_mapping:
+                    df_charges = df_charges.rename(columns={
+                        v.lower(): k for k, v in schema_mapping.items()
+                    })
+
+                # Détecter le format
+                est_individuel = self._est_source_individuelle(
+                    df_charges, mode_declare
+                )
+
+                if est_individuel or mode_declare == 'individuel':
+                    # ── Format 3 : données individuelles dossier par dossier ──
+                    # Charge[i,j] = paiements cumulés + évaluations dossiers ouverts
+                    C_engage = self._construire_engage_depuis_individuels(
+                        df_charges  = df_charges,
+                        C_paiements = C_paiements,
+                        rapport     = rapport,
+                    )
+                    format_detecte = 'donnees_individuelles'
+                    rapport['infos'].append(
+                        "Triangle des charges construit depuis évaluations individuelles "
+                        "(paiements cumulés + provisions dossier par dossier)."
+                    )
+                else:
+                    # ── Format 1 ou 2 : triangle agrégé ──────────────────────
+                    # Déléguer au TriangleValidator existant
+                    C_raw, _, _, rapport_val = self._validator.charger(
+                        source       = df_charges,
+                        mode_declare = mode_declare,
+                        rapport      = rapport,
+                    )
+                    rapport['alertes'].extend(rapport_val.get('alertes', []))
+                    C_engage = self._normaliser_dimensions(C_raw, n_ref, m_ref, rapport)
+                    format_detecte = 'triangle_agrege'
+
+            else:
+                raise ValueError(f"Type de source non supporté : {type(source_charges)}")
+
+            # ── Validation cohérence paiements / charges ──────────────────────
+            # Les charges engagées doivent être ≥ paiements cumulés
+            # (on ne peut pas avoir payé plus qu'on n'a engagé)
+            n_incoherences = int(np.sum(
+                (C_engage > 0) & (C_paiements > 0) & (C_engage < C_paiements)
+            ))
+            if n_incoherences > 0:
+                rapport['alertes'].append(
+                    f"⚠️ {n_incoherences} cellule(s) où charges < paiements — "
+                    f"incohérence dans le triangle des charges engagées. "
+                    f"Vérifier la source des données."
+                )
+
+            rapport['infos'].append(
+                f"Triangle engagé construit ({C_engage.shape[0]}×{C_engage.shape[1]}) "
+                f"— format : {format_detecte}"
+            )
+
+            return {
+                'success':         True,
+                'triangle_engage': C_engage,
+                'format_detecte':  format_detecte,
+                'rapport':         rapport,
+                'erreur':          None,
+            }
+
+        except Exception as e:
+            self.logger.error(f"construire_triangle_engage() échoué : {e}", exc_info=True)
+            return {
+                'success':         False,
+                'triangle_engage': None,
+                'format_detecte':  'erreur',
+                'rapport':         rapport,
+                'erreur':          str(e),
+            }
+
+    def _construire_engage_depuis_individuels(
+        self,
+        df_charges  : pd.DataFrame,
+        C_paiements : np.ndarray,
+        rapport     : Dict,
+    ) -> np.ndarray:
+        """
+        Construit le triangle des charges engagées depuis des données
+        individuelles dossier par dossier.
+
+        Formule appliquée pour chaque cellule (i=année survenance, j=période) :
+          · Si j < dernière période connue de l'année i :
+            C_engage[i,j] = C_paiements[i,j]  (déjà entièrement développé)
+          · Si j = dernière période connue (diagonale) :
+            C_engage[i,j] = C_paiements[i,j] + Σ(évaluations dossiers ouverts de l'année i)
+
+        Cette approche garantit que les charges engagées sont égales aux
+        paiements sur les périodes passées et incluent les provisions
+        des dossiers encore ouverts sur la diagonale.
+
+        Parameters
+        ----------
+        df_charges  : DataFrame avec colonnes (annee_survenance, evaluation_courante)
+                      et optionnellement (sinistre_id, statut)
+        C_paiements : triangle des paiements cumulés (référence dimensions)
+        rapport     : dict pour logging
+
+        Returns
+        -------
+        np.ndarray : triangle des charges engagées (mêmes dimensions que C_paiements)
+        """
+        n, m = C_paiements.shape
+
+        # Chercher les colonnes nécessaires
+        col_surv = None
+        col_eval = None
+        cols = list(df_charges.columns)
+
+        for c in cols:
+            if c in SYNONYMES_COLONNES['annee_survenance']:
+                col_surv = c
+            if c in ['evaluation_courante', 'evaluation', 'reserve', 'provision',
+                     'case_reserve', 'outstanding', 'encours', 'provision_dossier',
+                     'montant_reserve', 'charge_courante']:
+                col_eval = c
+            # Fallback sur 'montant' si pas de colonne évaluation
+            if col_eval is None and c in SYNONYMES_COLONNES['montant']:
+                col_eval = c
+
+        if col_surv is None or col_eval is None:
+            rapport['alertes'].append(
+                "⚠️ Colonnes 'annee_survenance' et/ou 'evaluation_courante' "
+                "non trouvées dans les données de charges individuelles. "
+                f"Colonnes disponibles : {cols}"
+            )
+            return C_paiements.copy()
+
+        # Agréger les évaluations par année de survenance
+        df_charges[col_surv] = pd.to_numeric(df_charges[col_surv], errors='coerce')
+        df_charges[col_eval] = pd.to_numeric(df_charges[col_eval], errors='coerce').fillna(0)
+
+        eval_par_annee = df_charges.groupby(col_surv)[col_eval].sum().to_dict()
+
+        annee_min = int(df_charges[col_surv].min())
+
+        # Construire le triangle des charges
+        # Base = triangle des paiements (copie)
+        C_engage = C_paiements.copy()
+
+        for i in range(n):
+            annee_i = annee_min + i
+            provision_i = float(eval_par_annee.get(annee_i, 0.0))
+
+            if provision_i <= 0:
+                continue
+
+            # Trouver la dernière colonne non nulle de cette ligne (diagonale)
+            last_j = -1
+            for j in range(m - 1, -1, -1):
+                if C_paiements[i, j] > 0:
+                    last_j = j
+                    break
+
+            if last_j >= 0:
+                # Ajouter la provision à la dernière valeur connue
+                C_engage[i, last_j] = C_paiements[i, last_j] + provision_i
+
+        rapport['infos'].append(
+            f"Provisions individuelles intégrées pour "
+            f"{len(eval_par_annee)} année(s) de survenance."
+        )
+
+        return C_engage
+
+    def _normaliser_dimensions(
+        self,
+        C       : np.ndarray,
+        n_ref   : int,
+        m_ref   : int,
+        rapport : Dict,
+    ) -> np.ndarray:
+        """
+        Normalise les dimensions d'un triangle pour qu'il corresponde
+        aux dimensions du triangle de référence (paiements).
+
+        Si le triangle fourni est plus petit → compléter avec des zéros.
+        Si le triangle fourni est plus grand → tronquer.
+
+        Cette normalisation est nécessaire pour que Munich CL puisse
+        comparer cellule par cellule les deux triangles.
+
+        Parameters
+        ----------
+        C     : triangle à normaliser
+        n_ref : nombre de lignes de référence (années de survenance)
+        m_ref : nombre de colonnes de référence (périodes de développement)
+        rapport : dict pour logging
+
+        Returns
+        -------
+        np.ndarray : triangle normalisé (n_ref × m_ref)
+        """
+        n, m = C.shape
+
+        if n == n_ref and m == m_ref:
+            return C  # Dimensions identiques — rien à faire
+
+        # Créer un tableau aux bonnes dimensions
+        C_norm = np.zeros((n_ref, m_ref))
+
+        # Copier les données disponibles
+        n_copy = min(n, n_ref)
+        m_copy = min(m, m_ref)
+        C_norm[:n_copy, :m_copy] = C[:n_copy, :m_copy]
+
+        if n != n_ref or m != m_ref:
+            rapport['alertes'].append(
+                f"⚠️ Triangle des charges ({n}×{m}) redimensionné vers "
+                f"({n_ref}×{m_ref}) pour correspondre au triangle des paiements."
+            )
+
+        return C_norm
