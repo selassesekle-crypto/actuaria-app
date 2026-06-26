@@ -2650,6 +2650,14 @@ def page_resultats():
         _bz_n_sig  = _bz.get("n_effets_significatifs", 0)
         _bz_diags  = _bz.get("diagonales_anormales", [])
         _bz_reco   = _bz.get("recommandation", "")
+        # Construire les blocs HTML variables séparément (évite f-strings imbriquées)
+        _bz_diags_html = (
+            f"<div><span style='font-size:0.7rem;color:{GRIS};'>Années</span><br>"
+            f"<span style='font-size:0.8rem;color:{AMBRE};'>{' · '.join(_bz_diags[:5])}</span></div>"
+        ) if _bz_diags else ""
+        _bz_reco_html = (
+            f"<div style='font-size:0.72rem;color:{OR};margin-top:6px;'>💡 {_bz_reco[:100]}</div>"
+        ) if _bz_n_sig > 0 else ""
         st.markdown(
             f"<div style='background:{NAVY_L};border-left:4px solid {_bz_col};"
             f"border-radius:8px;padding:12px 16px;margin-bottom:12px;'>"
@@ -2661,11 +2669,11 @@ def page_resultats():
             f"<div><span style='font-size:0.7rem;color:{GRIS};'>Diagonales anormales</span><br>"
             f"<span style='font-size:0.9rem;font-weight:700;color:{BLANC};'>{_bz_n_sig}</span>"
             f"<span style='font-size:0.8rem;color:{GRIS};'>/{_bz.get('n_diagonales_evaluees',0)}</span></div>"
-            f"{f'<div><span style="font-size:0.7rem;color:{GRIS};">Années</span><br><span style="font-size:0.8rem;color:{AMBRE};">{" · ".join(_bz_diags[:5])}</span></div>' if _bz_diags else ''}"
+            f"{_bz_diags_html}"
             f"</div>"
             f"<div style='font-size:0.74rem;color:{BLANC};margin-top:8px;line-height:1.6;'>"
             f"{_bz.get('message','')[:200]}</div>"
-            f"{f'<div style="font-size:0.72rem;color:{OR};margin-top:6px;">💡 {_bz_reco[:100]}</div>' if _bz_n_sig > 0 else ''}"
+            f"{_bz_reco_html}"
             f"</div>",
             unsafe_allow_html=True
         )
