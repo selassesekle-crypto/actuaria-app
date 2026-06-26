@@ -1832,6 +1832,55 @@ def page_analyse():
                     if _llt > 0:
                         st.info(f"✅ LLT activé : {_llt:,.0f} € — séparation attritional/grands sinistres")
 
+                    # ── Triangle des charges engagées (Munich CL) ─────────────
+                    # Doit provenir des évaluations dossier par dossier indépendantes.
+                    # Ne pas calculer depuis les provisions actuarielles → circularité
+                    # (Quarg & Mack 2004)
+                    st.markdown(
+                        f"<div style='font-size:0.72rem;color:{OR};font-weight:600;"
+                        f"margin-top:8px;margin-bottom:4px;'>"
+                        f"🇩🇪 Charges engagées — Munich CL (optionnel)</div>",
+                        unsafe_allow_html=True
+                    )
+                    st.caption(
+                        "Fourni par vos gestionnaires sinistres. "
+                        "Formats acceptés : triangle cumulé, incrémental, ou données individuelles. "
+                        "Multi-onglets Excel supporté."
+                    )
+                    _fichier_engage_sin = st.file_uploader(
+                        "Charges engagées (CSV ou Excel)",
+                        type=["csv","xlsx","xls"],
+                        key="a7_charges_sinistres",
+                        help="Triangle des charges engagées indépendant des paiements.",
+                    )
+                    if _fichier_engage_sin:
+                        try:
+                            import pandas as _pd_ch
+                            if not _fichier_engage_sin.name.endswith(".csv"):
+                                _xl_ch = _pd_ch.ExcelFile(_fichier_engage_sin)
+                                _fichier_engage_sin.seek(0)
+                                if len(_xl_ch.sheet_names) > 1:
+                                    _onglet_ch = st.selectbox(
+                                        "Onglet contenant les charges",
+                                        options=_xl_ch.sheet_names,
+                                        key="a7_onglet_charges",
+                                    )
+                                    _df_ch = _pd_ch.read_excel(_fichier_engage_sin, sheet_name=_onglet_ch)
+                                else:
+                                    _df_ch = _pd_ch.read_excel(_fichier_engage_sin)
+                            else:
+                                _df_ch = _pd_ch.read_csv(_fichier_engage_sin)
+                            _fichier_engage_sin.seek(0)
+                            _df_ch_num = _df_ch.select_dtypes(include='number')
+                            if len(_df_ch_num.columns) > 0:
+                                st.session_state["analyse_params"]["a7_triangle_engage"] = _df_ch_num.fillna(0).values.tolist()
+                                st.success(f"✅ Charges chargées — {_df_ch_num.shape[0]}×{_df_ch_num.shape[1]}")
+                            else:
+                                st.session_state["analyse_params"]["a7_charges_individuelles"] = _df_ch.to_dict("records")
+                                st.success(f"✅ Évaluations individuelles — {len(_df_ch)} dossiers")
+                        except Exception as _ech:
+                            st.error(f"❌ Erreur chargement charges : {_ech}")
+
                     _show_n1 = st.checkbox("📋 Saisir les résultats N-1 (comparatif inter-exercices)", value=False, key="a7_show_n1")
                     _res_prec = None
                     if _show_n1:
