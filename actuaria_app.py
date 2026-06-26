@@ -1810,6 +1810,28 @@ def page_analyse():
                              "Laisser à 0 pour calcul automatique.",
                     )
 
+                    # ── Large Loss Threshold (LLT) ────────────────────────────
+                    # Uniquement pertinent pour les données individuelles (besoin=sinistres)
+                    # Sur triangle agrégé, ce champ est ignoré avec un message explicatif
+                    st.markdown(
+                        f"<div style='font-size:0.72rem;color:{OR};font-weight:600;"
+                        f"margin-top:8px;margin-bottom:4px;'>"
+                        f"🎯 Large Loss Threshold — Séparation grands sinistres</div>",
+                        unsafe_allow_html=True
+                    )
+                    _llt = st.number_input(
+                        "LLT — Seuil grands sinistres (€)",
+                        min_value=0, max_value=100_000_000,
+                        value=0, step=10_000,
+                        key="a7_llt",
+                        help="Sinistres ≥ LLT sont traités séparément du triangle attritional. "
+                             "Laisser à 0 pour utiliser le triangle global sans séparation. "
+                             "Applicable uniquement sur données individuelles (pas sur triangle cumulé). "
+                             "Guide IA 2023 §3.2 — Homogénéité des données.",
+                    )
+                    if _llt > 0:
+                        st.info(f"✅ LLT activé : {_llt:,.0f} € — séparation attritional/grands sinistres")
+
                     _show_n1 = st.checkbox("📋 Saisir les résultats N-1 (comparatif inter-exercices)", value=False, key="a7_show_n1")
                     _res_prec = None
                     if _show_n1:
@@ -1840,6 +1862,7 @@ def page_analyse():
                         "a7_primes":             _primes_array,
                         "a7_lr_apriori":         float(_lr_apriori) / 100 if _lr_apriori > 0 else None,
                         "a7_annee_debut":        int(_annee_debut) if _annee_debut > 1900 else None,
+                        "a7_llt":                int(_llt) if _llt > 0 else None,
                     })
 
         # ── Cas paramètres manuels ────────────────────────────────────────
@@ -2076,49 +2099,101 @@ def _executer_analyse(besoin, direction, equipe, client):
             # ── SINISTRES BRUTS → A7 directement ────────────────────────
             if besoin == "sinistres":
                 from direction_non_vie.provisionnement.a7_provisionnement import AgentA7Provisionnement
-                df_a7 = df.copy()
-                col_montant = next((c for c in df_a7.columns
-                    if c in ["cout_total_sinistres","claim_amount","montant","charge","cout_sinistre"]), None)
-                if col_montant:
-                    n_neg = (df_a7[col_montant] < 0).sum()
-                    if n_neg > 0:
-                        df_a7[col_montant] = df_a7[col_montant].abs()
-                        st.info(f"ℹ️ {n_neg} montants négatifs convertis en valeur absolue (recours/remboursements)")
-                # Renommer colonnes survenance/paiement
-                col_surv = next((c for c in df_a7.columns if c in ["annee_survenance","id_year","year","annee","loss_year"]), None)
-                col_paie = next((c for c in df_a7.columns if c in ["annee_paiement","payment_year","annee_reglement"]), None)
-                if col_surv and col_surv != "annee_survenance":
-                    df_a7 = df_a7.rename(columns={col_surv: "annee_survenance"})
-                if col_paie and col_paie != "annee_paiement":
-                    df_a7 = df_a7.rename(columns={col_paie: "annee_paiement"})
-                if "annee_paiement" not in df_a7.columns:
-                    df_a7["annee_paiement"] = df_a7.get("annee_survenance", 2017)
-                    st.info("ℹ️ 'annee_paiement' non trouvée — hypothèse : paiement dans l'année de survenance")
-                # Convertir années en entiers (ex: "Year 0" → 2017)
-                import re as _re
-                for _col_an in ["annee_survenance", "annee_paiement"]:
-                    if _col_an in df_a7.columns:
-                        _s = df_a7[_col_an]
-                        if _s.dtype == object:
-                            _nums = _s.str.extract(r"(\d+)")[0].astype(float)
-                            df_a7[_col_an] = (2017 + _nums).astype(int)
-                        else:
-                            df_a7[_col_an] = _s.astype(int)
-                a7 = AgentA7Provisionnement(audit_path=_tmp, models_path=_tmp, verbose=False)
+                from direction_non_vie.services.nv_triangle_builder import NVTriangleBuilder
+
                 _a7p = st.session_state.get("analyse_params", {})
-                r7 = a7.run(
-                    source=df_a7,
-                    generer_graphiques=True,
-                    lob=_a7p.get("a7_lob", "generique"),
-                    arrete=_a7p.get("a7_arrete", ""),
-                    n_sim_bootstrap=_a7p.get("a7_n_sim_bootstrap", 5000),
-                    annee_base_reserve=_a7p.get("a7_annee_base_reserve", 1),
-                    resultats_precedents=_a7p.get("a7_resultats_precedents"),
-                    primes=_a7p.get("a7_primes"),
-                    lr_bf_manuel=_a7p.get("a7_lr_apriori"),
-                    annee_debut=_a7p.get("a7_annee_debut"),
-                    triangle_engage=_a7p.get("a7_triangle_engage"),
+
+                # ── Étape 1 : Construction du triangle via NVTriangleBuilder ──
+                # Remplace le preprocessing manuel — gère automatiquement :
+                # · Détection du format (données individuelles ou triangle agrégé)
+                # · Standardisation des noms de colonnes via synonymes
+                # · Suggestion et application du LLT si fourni
+                # · Séparation attritional / grands sinistres
+                builder = NVTriangleBuilder(verbose=False)
+                _llt_val = _a7p.get("a7_llt")
+                _build_result = builder.construire(
+                    source        = df.copy(),
+                    llt           = _llt_val,
+                    schema_mapping= _a7p.get("a7_schema_mapping"),
+                    annee_debut   = _a7p.get("a7_annee_debut"),
                 )
+
+                # ── Étape 2 : Afficher les résultats du builder ───────────────
+                if not _build_result["success"]:
+                    st.error(f"❌ Erreur construction triangle : {_build_result['erreur']}")
+                    st.stop()
+
+                # Afficher les alertes du builder
+                for _alerte_b in _build_result["rapport"].get("alertes", []):
+                    st.warning(_alerte_b)
+                for _info_b in _build_result["rapport"].get("infos", []):
+                    if "✅" in _info_b or "LLT" in _info_b or "Séparation" in _info_b:
+                        st.info(_info_b)
+
+                # Afficher LLT suggéré si pas de LLT fourni
+                _llt_suggere = _build_result.get("llt_suggere")
+                if _llt_suggere and not _llt_val:
+                    st.info(
+                        f"💡 LLT suggéré automatiquement (P95) : **{_llt_suggere:,.0f} €** — "
+                        f"activez-le dans les paramètres A7 pour séparer les grands sinistres."
+                    )
+
+                # Stats séparation grands sinistres
+                _stats_b = _build_result.get("statistiques", {})
+                if _build_result["mode_separation"] == "attritional_grands":
+                    n_grands = _stats_b.get("n_grands_sinistres", 0)
+                    pct_grands = _stats_b.get("pct_grands_sinistres", 0)
+                    reco = _build_result.get("recommandation_grands", "")
+                    _reco_labels = {
+                        "chain_ladder_separe":          "Chain Ladder sur triangle séparé",
+                        "bornhuetter_ferguson_marche":  "BF avec LR marché externe",
+                        "developpement_individuel":     "Développement dossier par dossier",
+                    }
+                    st.markdown(
+                        f"<div style='background:{NAVY_L};border-left:3px solid {OR};"
+                        f"border-radius:6px;padding:10px 14px;margin-bottom:8px;'>"
+                        f"<div style='font-size:0.72rem;color:{OR};font-weight:700;'>🎯 Séparation LLT = {_llt_val:,.0f} €</div>"
+                        f"<div style='font-size:0.78rem;color:{BLANC};margin-top:4px;'>"
+                        f"{n_grands} grands sinistre(s) identifié(s) — {pct_grands:.1f}% du total<br>"
+                        f"Méthode recommandée : {_reco_labels.get(reco, reco)}</div>"
+                        f"</div>",
+                        unsafe_allow_html=True
+                    )
+
+                # ── Étape 3 : Lancer A7 sur le triangle attritional ───────────
+                # Si séparation active → A7 sur triangle attritional épuré
+                # Sinon → A7 sur triangle total (comportement actuel)
+                _source_a7 = (
+                    _build_result["triangle_attritional"]
+                    if _build_result["mode_separation"] == "attritional_grands"
+                    and _build_result["triangle_attritional"] is not None
+                    else df.copy()  # fallback sur données brutes si pas de séparation
+                )
+
+                a7 = AgentA7Provisionnement(audit_path=_tmp, models_path=_tmp, verbose=False)
+                r7 = a7.run(
+                    source               = _source_a7,
+                    generer_graphiques   = True,
+                    lob                  = _a7p.get("a7_lob", "generique"),
+                    arrete               = _a7p.get("a7_arrete", ""),
+                    n_sim_bootstrap      = _a7p.get("a7_n_sim_bootstrap", 5000),
+                    annee_base_reserve   = _a7p.get("a7_annee_base_reserve", 1),
+                    resultats_precedents = _a7p.get("a7_resultats_precedents"),
+                    primes               = _a7p.get("a7_primes"),
+                    lr_bf_manuel         = _a7p.get("a7_lr_apriori"),
+                    annee_debut          = _a7p.get("a7_annee_debut"),
+                    triangle_engage      = _a7p.get("a7_triangle_engage"),
+                )
+
+                # Enrichir les résultats avec les infos de séparation LLT
+                r7["llt_utilise"]          = _llt_val
+                r7["llt_suggere"]          = _llt_suggere
+                r7["grands_sinistres"]     = _build_result["grands_sinistres"].to_dict("records") if len(_build_result["grands_sinistres"]) > 0 else []
+                r7["triangle_grands"]      = _build_result["triangle_grands"].tolist() if _build_result["triangle_grands"] is not None else None
+                r7["mode_separation"]      = _build_result["mode_separation"]
+                r7["recommandation_grands"]= _build_result.get("recommandation_grands")
+                r7["stats_builder"]        = _stats_b
+
                 resultats["principal"] = r7
 
             # ── TARIFICATION ────────────────────────────────────────────────
