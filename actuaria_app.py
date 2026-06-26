@@ -2629,6 +2629,7 @@ def page_resultats():
         {"Méthode": "🎲 Bootstrap ODP (P50)",       "Réserve (€)": f"{boot.get('p50',0):,.0f}",                   "Poids BE": "—",                                         "Statut": "✅" if boot.get('p50',0) > 0 else "—"},
         {"Méthode": "🎲 Bootstrap ODP (P90)",       "Réserve (€)": f"{boot.get('p90',0):,.0f}",                   "Poids BE": "—",                                         "Statut": "✅" if boot.get('p90',0) > 0 else "—"},
         {"Méthode": "🇩🇪 Munich CL",               "Réserve (€)": f"{munich.get('be_munich',0):,.0f}" if munich.get('disponible') else "N/A",  "Poids BE": "—", "Statut": "✅" if munich.get('disponible') else "ℹ️"},
+        {"Méthode": "📐 Clark (LDF)",             "Réserve (€)": f"{n3.get('clark',{}).get('reserve_be_clark',0):,.0f}" if n3.get('clark',{}).get('disponible') else "N/A", "Poids BE": "—", "Statut": "✅" if n3.get('clark',{}).get('disponible') else "ℹ️"},
         {"Méthode": "⭐ BEST ESTIMATE S2",          "Réserve (€)": f"{be_val:,.0f}",                              "Poids BE": "100%",                                      "Statut": "→ Bilan S2"},
     ]
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
@@ -2847,6 +2848,7 @@ Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non 
         ("🔚 Tail Factor",           tail),
         ("🔁 Back-Testing",          r_raw.get("back_testing", {})),
         ("🇩🇪 Munich Chain Ladder",  munich),
+        ("📐 Clark LDF (log-logistique / Weibull)", n3.get('clark', {})),
     ]:
         if obj and obj.get("message"):
             sc = VERT if obj.get("statut")=="VERT" else AMBRE if obj.get("statut")=="AMBRE" else ROUGE if obj.get("statut")=="ROUGE" else GRIS
