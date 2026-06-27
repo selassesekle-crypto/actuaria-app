@@ -1,14 +1,20 @@
 # =============================================================================
 #  ActuarIA — Agent A7 Ibrahim v5.0
-#  n5_rapport.py  —  Rapport actuariel professionnel v4.0
+#  n5_rapport.py  —  Rapport actuariel professionnel v5.0
 #
-#  3 formats : HTML (principal) · PDF (weasyprint) · Word (.docx)
+#  Style : reproduction exacte du rapport premium ActuarIA
+#  3 formats : HTML · PDF (weasyprint) · Word (.docx)
 #  Narration : Claude API → Templates → Données seules (3 niveaux)
-#  Architecture : ZÉRO f-string imbriquée — toutes les variables HTML
-#                 sont pré-calculées avant le rendu du template
+#
+#  Corrections vs premium :
+#    · "Version A7-IBRAHIM · v4.0.0" supprimé de la page de garde
+#    · Back-testing : tableau détaillé si données dispo, message sinon
+#    · Section 7 : narration complète sans coupure
+#    · LOB codes → libellés français (rc_medicale → RC Médicale)
+#    · BF poids garanti ≥ 50% si méthode recommandée
 #
 #  Auteur  : ActuarIA v5.0
-#  Version : 4.0.0
+#  Version : 5.0.0
 # =============================================================================
 
 from __future__ import annotations
@@ -20,17 +26,25 @@ import numpy as np
 logger = logging.getLogger('actuaria.a7.rapport')
 
 # ── Palette ───────────────────────────────────────────────────────────────────
-NAVY   = '#0F2E52'
-NAVY_L = '#1A3F6B'
-GOLD   = '#C9A84C'
-BLANC  = '#FFFFFF'
-GRIS   = '#8A9BB0'
-ROUGE  = '#C0392B'
-VERT   = '#27AE60'
-AMBRE  = '#F39C12'
-BLEU   = '#2980B9'
+NAVY      = '#0B1E3D'
+NAVY_MID  = '#132844'
+NAVY_L    = '#1E3A5F'
+GOLD      = '#C9A84C'
+GOLD_L    = '#E2C97E'
+GOLD_PALE = 'rgba(201,168,76,0.12)'
+CYAN      = '#4A8FD4'
+ROUGE     = '#C0392B'
+ORANGE    = '#E67E22'
+VERT      = '#1E8449'
+SLATE     = '#8A9BB0'
+SLATE_L   = '#B8C5D3'
+BG        = '#F5F7FA'
+WHITE     = '#FFFFFF'
+TEXT      = '#1C2B3A'
+TEXT_MID  = '#3D5166'
+BORDER    = '#DDE4EE'
 
-# ── Mapping LOB codes → libellés français professionnels ─────────────────────
+# ── Mapping LOB ───────────────────────────────────────────────────────────────
 LOB_LABELS = {
     'mrh':             'MRH — Multirisques Habitation',
     'rc_auto':         'RC Automobile',
@@ -45,15 +59,19 @@ LOB_LABELS = {
 }
 
 def _lob(code: str) -> str:
-    """Convertit un code LOB en libellé français professionnel."""
     if not code:
         return 'Branche Non-Vie'
     c = str(code).lower().strip().replace(' ', '_')
     return LOB_LABELS.get(c, code.replace('_', ' ').title())
 
+def _lob_short(code: str) -> str:
+    """Version courte pour la page de garde."""
+    full = _lob(code)
+    return full.split(' — ')[0] if ' — ' in full else full
+
 
 # =============================================================================
-#  LOGO SVG ACTUARIA
+#  LOGO SVG
 # =============================================================================
 
 LOGO_SVG = (
@@ -94,7 +112,6 @@ LOGO_URI = 'data:image/svg+xml;base64,' + base64.b64encode(LOGO_SVG.encode()).de
 # =============================================================================
 
 def _f(v, dec=0) -> str:
-    """Formate un montant en euros."""
     if v is None:
         return '—'
     try:
@@ -102,15 +119,11 @@ def _f(v, dec=0) -> str:
         if not np.isfinite(fv):
             return '—'
         sep = '\u202f'
-        if dec == 0:
-            return f"{fv:,.0f}\u202f€".replace(',', sep)
-        return f"{fv:,.{dec}f}".replace(',', sep)
+        return f"{fv:,.0f}\u202f\u20ac".replace(',', sep) if dec == 0 else f"{fv:,.{dec}f}".replace(',', sep)
     except Exception:
         return '—'
 
-
 def _pct(v, dec=1) -> str:
-    """Formate un pourcentage."""
     if v is None:
         return '—'
     try:
@@ -119,16 +132,12 @@ def _pct(v, dec=1) -> str:
     except Exception:
         return '—'
 
-
 def _s(v) -> str:
-    """Convertit en string propre."""
     if v is None:
         return '—'
     return re.sub(r'\s+', ' ', str(v)).strip() or '—'
 
-
 def _clean(txt) -> str:
-    """Nettoie le texte des caractères parasites."""
     if not txt:
         return ''
     txt = re.sub(r'[■□▪▸►═╔╗╚╝║─]+', '', str(txt))
@@ -136,14 +145,15 @@ def _clean(txt) -> str:
     txt = re.sub(r'\n{3,}', '\n\n', txt)
     return txt.strip()
 
+def _statut_col(s: str) -> str:
+    return {'VERT': VERT, 'AMBRE': ORANGE, 'ROUGE': ROUGE}.get(s, SLATE)
 
-def _statut_col(statut: str) -> str:
-    """Retourne la couleur HTML associée au statut."""
-    return {'VERT': VERT, 'AMBRE': AMBRE, 'ROUGE': ROUGE}.get(statut, GRIS)
-
-
-def _statut_icon(statut: str) -> str:
-    return {'VERT': '✅', 'AMBRE': '⚠️', 'ROUGE': '🔴'}.get(statut, 'ℹ️')
+def _statut_label(s: str) -> str:
+    return {
+        'VERT':  'Statut RAG : Vert — Conforme',
+        'AMBRE': 'Statut RAG : Ambre — Vigilance',
+        'ROUGE': 'Statut RAG : Rouge — Surveillance renforcée',
+    }.get(s, 'Statut : ' + s)
 
 
 # =============================================================================
@@ -165,10 +175,10 @@ RÈGLES ABSOLUES :
 PAS de tableaux Markdown. PAS de blockquotes >. Sépare les sections par une ligne vide.
 1. LANGUE : Français professionnel. Anglais uniquement pour les termes consacrés.
 2. RIGUEUR : Chaque affirmation est justifiée par les données fournies.
-3. CHIFFRES : En euros avec séparateurs (ex : 2 526 597 €). Pourcentages avec une décimale.
+3. CHIFFRES : En euros avec séparateurs (ex : 2\u202f526\u202f597\u202f€). Pourcentages avec une décimale.
 4. RÉFÉRENCES : Art. 77 S2, Art. 105 S2, Guide IA 2023, Mack 1993, Clark 2003.
 5. ALERTES : Ne jamais minimiser. Présenter avec l'implication réelle pour le bilan S2.
-6. CAUSALITÉ : H1 rejetée (corr=0.52) → CL biaisé → BF retenu → impact X € sur BE.
+6. CAUSALITÉ : H1 rejetée (corr=0.52) → CL biaisé → BF retenu → impact X\u202f€ sur BE.
 7. INCERTITUDE : Toujours quantifier via CV ou intervalles de confiance.
 8. POSTURE : Assertif mais prudent. Recommandations claires avec justification.
 9. INTERDIT : Phrases génériques sans données. FAVORABLE si H1 rejetée ET BT ROUGE.
@@ -185,28 +195,17 @@ STRUCTURE OBLIGATOIRE EN 7 SECTIONS :
 
 
 # =============================================================================
-#  CONTEXTE POUR CLAUDE API
+#  CONTEXTE CLAUDE API
 # =============================================================================
 
-def _construire_contexte(
-    n2: Dict, n3: Dict, n4: Dict,
-    lob_label: str, arrete: str,
-) -> str:
-    """Construit le message utilisateur pour Claude API."""
-    cl    = n3.get('chain_ladder', {})
-    mk    = n3.get('mack', {})
-    bf    = n3.get('bf', {})
-    cc    = n3.get('cape_cod', {})
-    clark = n3.get('clark', {})
-    bz    = n3.get('barnett_zehnwirth', {})
-    bt    = n3.get('backtesting', {})
-    sc    = n4.get('scr', {})
-    h1    = n2.get('h1_independance', {})
-    h2    = n2.get('h2_stabilite', {})
-    h3    = n2.get('h3_apriori_bf', {})
-    h4    = n2.get('h4_homosc_bootstrap', {})
+def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: str) -> str:
+    cl    = n3.get('chain_ladder', {});  mk  = n3.get('mack', {})
+    bf    = n3.get('bf', {});            cc  = n3.get('cape_cod', {})
+    clark = n3.get('clark', {});         bz  = n3.get('barnett_zehnwirth', {})
+    bt    = n3.get('backtesting', {});   sc  = n4.get('scr', {})
+    h1    = n2.get('h1_independance', {}); h2 = n2.get('h2_stabilite', {})
+    h3    = n2.get('h3_apriori_bf', {});  h4  = n2.get('h4_homosc_bootstrap', {})
     pw    = n4.get('poids', {})
-
     BE  = float(n4.get('best_estimate', 0) or 0)
     SIG = float(mk.get('sigma_total', 0) or 0)
     CV  = float(n4.get('cv_inter_methodes', 0) or 0)
@@ -215,7 +214,6 @@ def _construire_contexte(
     P99 = float(n4.get('reserve_p99_5', 0) or 0)
     SCP = float(sc.get('scr_prov', BE * 0.30) if sc else BE * 0.30)
     SCR = SCP / BE * 100 if BE else 0
-
     lines = [
         f"DOSSIER DE PROVISIONNEMENT — {lob_label.upper()} — Arrêté {arrete}",
         "",
@@ -230,31 +228,31 @@ def _construire_contexte(
         f"H3 A priori BF : {'VALIDÉE' if h3.get('ok') else 'REJETÉE'} | LR={h3.get('lr_apriori', '—')} | score={h3.get('score', '—')}/100",
         f"H4 Homoscédasticité : {'VALIDÉE' if h4.get('ok') else 'REJETÉE'} | phi={h4.get('phi', '—')} | score={h4.get('score', '—')}/100",
         "",
-        "=== RÉSULTATS PAR MÉTHODE ===",
-        f"Chain Ladder     : {_f(cl.get('reserve_totale'))} | poids={_pct(pw.get('chain_ladder', 0)*100)}",
-        f"Mack 1993        : {_f(mk.get('reserve_best_estimate'))} | poids={_pct(pw.get('mack', 0)*100)}",
-        f"BF               : {_f(bf.get('reserve_totale'))} | poids={_pct(pw.get('bornhuetter_ferguson', 0)*100)}",
-        f"Cape Cod         : {_f(cc.get('reserve_totale'))} | poids={_pct(pw.get('cape_cod', 0)*100)}",
-        f"Clark LDF        : {_f(clark.get('reserve_be_clark'))} | courbe={clark.get('courbe_choisie', '—')} | tail={clark.get('tail_factor', '—')} | AIC={clark.get('aic_optimal', '—')}",
-        f"BEST ESTIMATE S2 : {_f(BE)} | CV inter-méthodes={_pct(CV)}",
+        "=== RÉSULTATS ===",
+        f"Chain Ladder : {_f(cl.get('reserve_totale'))} | poids={_pct(pw.get('chain_ladder', 0)*100)}",
+        f"Mack 1993 : {_f(mk.get('reserve_best_estimate'))} | poids={_pct(pw.get('mack', 0)*100)}",
+        f"BF : {_f(bf.get('reserve_totale'))} | poids={_pct(pw.get('bornhuetter_ferguson', 0)*100)}",
+        f"Cape Cod : {_f(cc.get('reserve_totale'))} | poids={_pct(pw.get('cape_cod', 0)*100)}",
+        f"Clark LDF : {_f(clark.get('reserve_be_clark'))} | courbe={clark.get('courbe_choisie', '—')} | AIC={clark.get('aic_optimal', '—')}",
+        f"BEST ESTIMATE S2 : {_f(BE)} | CV={_pct(CV)}",
         "",
         "=== INCERTITUDE ===",
-        f"σ Mack total : {_f(SIG)} | P75={_f(P75)} | P90={_f(P90)} | P99.5={_f(P99)}",
+        f"σ Mack={_f(SIG)} | P75={_f(P75)} | P90={_f(P90)} | P99.5={_f(P99)}",
         "",
-        "=== SCR PROVISIONS ===",
+        "=== SCR ===",
         f"SCR={_f(SCP)} | Ratio SCR/BE={_pct(SCR)}",
         "",
         "=== BACK-TESTING ===",
         f"Statut={bt.get('statut', '—')} | Score={bt.get('score_qualite', '—')}/100",
-        f"N-1 : {bt.get('n_rouge_n1', 0)} rouge / {bt.get('n_ambre_n1', 0)} ambre | N-2 : {bt.get('n_rouge_n2', 0)} rouge / {bt.get('n_ambre_n2', 0)} ambre",
-        f"Message : {str(bt.get('message', ''))[:300]}",
+        f"N-1: {bt.get('n_rouge_n1', 0)} rouge / {bt.get('n_ambre_n1', 0)} ambre | N-2: {bt.get('n_rouge_n2', 0)} rouge / {bt.get('n_ambre_n2', 0)} ambre",
+        f"Message: {str(bt.get('message', ''))[:300]}",
         "",
         "=== EFFETS CALENDAIRE ===",
-        f"Statut={bz.get('statut', '—')} | Effets sig.={bz.get('n_effets_significatifs', 0)}/{bz.get('n_diagonales_evaluees', 0)}",
-        f"Diagonales anormales : {', '.join(bz.get('diagonales_anormales', [])) or 'Aucune'}",
-        f"Recommandation : {bz.get('recommandation', '—')}",
+        f"Statut={bz.get('statut', '—')} | Sig.={bz.get('n_effets_significatifs', 0)}/{bz.get('n_diagonales_evaluees', 0)}",
+        f"Diagonales anormales: {', '.join(bz.get('diagonales_anormales', [])) or 'Aucune'}",
+        f"Recommandation: {bz.get('recommandation', '—')}",
         "",
-        "Rédige maintenant le commentaire actuariel complet selon la structure en 7 sections.",
+        "Rédige le commentaire actuariel complet en 7 sections.",
     ]
     return '\n'.join(lines)
 
@@ -263,10 +261,7 @@ def _construire_contexte(
 #  GÉNÉRATION NARRATION (3 NIVEAUX)
 # =============================================================================
 
-def _narration_claude_api(
-    n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: str,
-) -> str:
-    """Niveau 1 : Narration via Claude API."""
+def _narration_claude_api(n2, n3, n4, lob_label, arrete) -> str:
     try:
         import anthropic
         api_key = os.environ.get('ANTHROPIC_API_KEY')
@@ -279,29 +274,21 @@ def _narration_claude_api(
         if not api_key:
             raise ValueError('ANTHROPIC_API_KEY non définie')
         client = anthropic.Anthropic(api_key=api_key)
-        ctx    = _construire_contexte(n2, n3, n4, lob_label, arrete)
-        resp   = client.messages.create(
-            model      = 'claude-sonnet-4-6',
-            max_tokens = 3000,
-            system     = SYSTEM_PROMPT,
-            messages   = [{'role': 'user', 'content': ctx}],
+        ctx = _construire_contexte(n2, n3, n4, lob_label, arrete)
+        resp = client.messages.create(
+            model='claude-sonnet-4-6', max_tokens=3000,
+            system=SYSTEM_PROMPT,
+            messages=[{'role': 'user', 'content': ctx}],
         )
         return resp.content[0].text
     except Exception as e:
         logger.warning(f'Claude API indisponible : {e}')
         raise
 
-
-def _narration_templates(n4: Dict, commentaire: str) -> str:
-    """Niveau 2 : Templates existants."""
+def _narration_templates(n4, commentaire) -> str:
     return _clean(commentaire) or _clean(n4.get('jugement', ''))
 
-
-def _generer_narration(
-    n2: Dict, n3: Dict, n4: Dict,
-    commentaire: str, lob_label: str, arrete: str,
-) -> Tuple[str, str]:
-    """Orchestrateur 3 niveaux. Retourne (texte, source)."""
+def _generer_narration(n2, n3, n4, commentaire, lob_label, arrete) -> Tuple[str, str]:
     try:
         txt = _narration_claude_api(n2, n3, n4, lob_label, arrete)
         if txt:
@@ -318,64 +305,49 @@ def _generer_narration(
 
 
 # =============================================================================
-#  RENDU MARKDOWN → HTML
+#  RENDU MARKDOWN → HTML (style premium)
 # =============================================================================
 
 def _md_to_html(texte: str) -> str:
-    """Convertit le Markdown de Claude en HTML structuré."""
+    """Convertit le Markdown de Claude en HTML avec les classes premium."""
     if not texte:
-        return '<p style="color:#999;font-style:italic;">Narration non disponible.</p>'
-
+        return '<p class="comm-p" style="color:#8A9BB0;font-style:italic;">Narration non disponible.</p>'
     txt = texte.strip()
 
-    # §N — TITRE → h3 gold
+    # §N — TITRE → comm-section-title
     def _section(m):
         t = m.group(1).strip()
-        return (
-            '<h3 style="font-family:Georgia,serif;font-size:11pt;font-weight:700;'
-            'color:#C9A84C;margin:24px 0 8px;border-bottom:1px solid rgba(201,168,76,0.3);'
-            'padding-bottom:4px;">' + t + '</h3>'
-        )
+        return '<div class="comm-section-title">' + t + '</div>'
     txt = re.sub(r'(§\d+\s*[—\-–]\s*[^\n]+)', _section, txt)
 
-    # ### Sous-titre → h4 navy
-    def _h4(m):
-        return (
-            '<h4 style="font-family:Georgia,serif;font-size:10pt;font-weight:600;'
-            'color:#0F2E52;margin:16px 0 6px;">' + m.group(1).strip() + '</h4>'
-        )
-    txt = re.sub(r'^###\s+(.+)$', _h4, txt, flags=re.MULTILINE)
+    # ### Sous-titre → comm-h4
+    txt = re.sub(r'^###\s+(.+)$',
+        lambda m: '<div class="comm-h4">' + m.group(1).strip() + '</div>',
+        txt, flags=re.MULTILINE)
 
-    # ## Titre → h3 navy
+    # ## Titre → comm-h4
     txt = re.sub(r'^##\s+(.+)$',
-        lambda m: '<h3 style="color:#0F2E52;">' + m.group(1).strip() + '</h3>',
+        lambda m: '<div class="comm-h4">' + m.group(1).strip() + '</div>',
         txt, flags=re.MULTILINE)
 
-    # --- → séparateur
-    txt = re.sub(r'^---+$',
-        '<hr style="border:none;border-top:1px solid #dde3ea;margin:16px 0;">',
-        txt, flags=re.MULTILINE)
+    # --- → comm-divider
+    txt = re.sub(r'^---+$', '<hr class="comm-divider">', txt, flags=re.MULTILINE)
 
     # **gras** → strong
-    txt = re.sub(r'\*\*(.+?)\*\*',
-        lambda m: '<strong style="color:#0F2E52;">' + m.group(1) + '</strong>', txt)
+    txt = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', txt)
 
     # *italique* → em
-    txt = re.sub(r'\*(.+?)\*', lambda m: '<em>' + m.group(1) + '</em>', txt)
+    txt = re.sub(r'\*(.+?)\*', r'<em>\1</em>', txt)
 
-    # Puces - ou • → li
-    txt = re.sub(r'^[-•]\s+(.+)$',
-        lambda m: '<li style="margin:3px 0 3px 18px;">' + m.group(1) + '</li>',
-        txt, flags=re.MULTILINE)
-
-    # Regrouper les li consécutifs en ul
+    # Puces - → comm-ul li
+    txt = re.sub(r'^[-•]\s+(.+)$', r'<li>\1</li>', txt, flags=re.MULTILINE)
     txt = re.sub(
-        r'(<li[^>]*>.*?</li>\n?)+',
-        lambda m: '<ul style="margin:8px 0;">' + m.group(0) + '</ul>',
+        r'(<li>.*?</li>\n?)+',
+        lambda m: '<ul class="comm-ul">' + m.group(0) + '</ul>',
         txt, flags=re.DOTALL
     )
 
-    # Paragraphes : double saut de ligne
+    # Paragraphes
     blocs = re.split(r'\n{2,}', txt)
     result = ''
     for bloc in blocs:
@@ -386,40 +358,510 @@ def _md_to_html(texte: str) -> str:
             result += bloc + '\n'
         else:
             clean = bloc.replace('\n', ' ').strip()
-            result += (
-                '<p style="margin-bottom:10px;line-height:1.85;color:#2c3e50;">'
-                + clean + '</p>\n'
-            )
-    return result or '<p>' + texte + '</p>'
+            result += '<p class="comm-p">' + clean + '</p>\n'
+    return result or '<p class="comm-p">' + texte + '</p>'
 
 
 # =============================================================================
-#  CONSTRUCTION DES BLOCS HTML PAR SECTION
+#  CSS PREMIUM
 # =============================================================================
 
-def _build_html_blocks(
-    n2: Dict, n3: Dict, n4: Dict,
-    narration: str, source_narration: str,
-    lob: str, cli: str, arr: str, dt: str,
-    audit_id: str, methode: str, statut: str,
-    graphiques_html: Dict,
-) -> Dict[str, str]:
-    """
-    Construit tous les blocs HTML séparément.
-    Aucune f-string imbriquée ici — chaque bloc est une string simple.
-    """
-    cl    = n3.get('chain_ladder', {})
-    mk    = n3.get('mack', {})
-    bf    = n3.get('bf', {})
-    cc    = n3.get('cape_cod', {})
-    clark = n3.get('clark', {})
-    bz    = n3.get('barnett_zehnwirth', {})
-    bt    = n3.get('backtesting', {})
-    sc    = n4.get('scr', {})
-    h1    = n2.get('h1_independance', {})
-    h2    = n2.get('h2_stabilite', {})
-    h3    = n2.get('h3_apriori_bf', {})
-    h4    = n2.get('h4_homosc_bootstrap', {})
+def _css() -> str:
+    return """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,400&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  --navy:        #0B1E3D;
+  --navy-mid:    #132844;
+  --navy-light:  #1E3A5F;
+  --gold:        #C9A84C;
+  --gold-light:  #E2C97E;
+  --gold-pale:   rgba(201,168,76,0.12);
+  --cyan:        #4A8FD4;
+  --cyan-pale:   rgba(74,143,212,0.10);
+  --rouge:       #C0392B;
+  --rouge-pale:  rgba(192,57,43,0.08);
+  --orange:      #E67E22;
+  --vert:        #1E8449;
+  --slate:       #8A9BB0;
+  --slate-light: #B8C5D3;
+  --bg:          #F5F7FA;
+  --white:       #FFFFFF;
+  --text:        #1C2B3A;
+  --text-mid:    #3D5166;
+  --border:      #DDE4EE;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Inter', sans-serif;
+  font-size: 10pt;
+  color: var(--text);
+  background: var(--bg);
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+.rapport-container {
+  max-width: 960px;
+  margin: 0 auto;
+  background: var(--white);
+  box-shadow: 0 4px 40px rgba(11,30,61,0.14);
+}
+
+/* ── PAGE DE GARDE ── */
+.page-garde {
+  position: relative;
+  min-height: 680px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--navy);
+  page-break-after: always;
+}
+
+.garde-bg { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+
+.garde-bg::before {
+  content: '';
+  position: absolute;
+  top: -120px; right: -80px;
+  width: 520px; height: 520px;
+  border: 1px solid rgba(201,168,76,0.12);
+  border-radius: 50%;
+  transform: rotate(15deg);
+}
+
+.garde-bg::after {
+  content: '';
+  position: absolute;
+  top: -60px; right: -20px;
+  width: 360px; height: 360px;
+  border: 1px solid rgba(201,168,76,0.20);
+  border-radius: 50%;
+}
+
+.garde-dots {
+  position: absolute;
+  top: 0; right: 0;
+  width: 320px; height: 100%;
+  background-image: radial-gradient(circle, rgba(201,168,76,0.25) 1px, transparent 1px);
+  background-size: 22px 22px;
+  mask-image: linear-gradient(to left, rgba(0,0,0,0.7) 0%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to left, rgba(0,0,0,0.7) 0%, transparent 100%);
+}
+
+.garde-diagonal {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(135deg, transparent 0%, transparent 62%, rgba(201,168,76,0.06) 62%, rgba(201,168,76,0.06) 100%);
+}
+
+.garde-accent-line {
+  position: absolute;
+  left: 52px; top: 0; bottom: 0;
+  width: 2px;
+  background: linear-gradient(to bottom, transparent 0%, var(--gold) 20%, var(--gold) 80%, transparent 100%);
+  opacity: 0.5;
+}
+
+.garde-inner {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0;
+}
+
+.garde-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 36px 56px 0;
+}
+
+.garde-logo-wrap img { height: 52px; }
+
+.garde-badges {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.badge-confidentiel {
+  font-size: 7.5pt;
+  font-weight: 700;
+  color: var(--rouge);
+  letter-spacing: 2.5px;
+  border: 1.5px solid var(--rouge);
+  padding: 5px 12px;
+  text-transform: uppercase;
+}
+
+.garde-hero {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 48px 56px 0 80px;
+}
+
+.garde-eyebrow {
+  font-size: 8pt;
+  font-weight: 600;
+  color: var(--gold);
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  margin-bottom: 20px;
+}
+
+.garde-titre {
+  font-family: 'Playfair Display', serif;
+  font-size: 52pt;
+  font-weight: 900;
+  color: var(--white);
+  line-height: 1.05;
+  letter-spacing: -1.5px;
+  margin-bottom: 8px;
+}
+
+.garde-titre em {
+  font-style: italic;
+  color: var(--gold);
+}
+
+.garde-subtitle {
+  font-family: 'Playfair Display', serif;
+  font-size: 18pt;
+  font-weight: 400;
+  font-style: italic;
+  color: var(--slate-light);
+  margin-bottom: 32px;
+}
+
+.garde-sep {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.garde-sep-line { height: 1px; width: 80px; background: var(--gold); opacity: 0.6; }
+
+.garde-sep-diamond {
+  width: 8px; height: 8px;
+  background: var(--gold);
+  transform: rotate(45deg);
+  flex-shrink: 0;
+}
+
+.garde-statut {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 24px;
+  margin-bottom: 0;
+}
+
+.garde-statut-rouge { background: rgba(192,57,43,0.15); border: 1px solid rgba(192,57,43,0.5); }
+.garde-statut-ambre { background: rgba(230,126,34,0.15); border: 1px solid rgba(230,126,34,0.5); }
+.garde-statut-vert  { background: rgba(30,132,73,0.15);  border: 1px solid rgba(30,132,73,0.5); }
+
+.statut-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(192,57,43,0.7);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.statut-dot-rouge { background: var(--rouge); box-shadow: 0 0 8px rgba(192,57,43,0.7); }
+.statut-dot-ambre { background: var(--orange); box-shadow: 0 0 8px rgba(230,126,34,0.7); }
+.statut-dot-vert  { background: var(--vert);  box-shadow: 0 0 8px rgba(30,132,73,0.7); }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.2); }
+}
+
+.statut-label-rouge { font-size: 8pt; font-weight: 700; color: var(--rouge); letter-spacing: 3px; text-transform: uppercase; }
+.statut-label-ambre { font-size: 8pt; font-weight: 700; color: var(--orange); letter-spacing: 3px; text-transform: uppercase; }
+.statut-label-vert  { font-size: 8pt; font-weight: 700; color: var(--vert);  letter-spacing: 3px; text-transform: uppercase; }
+
+.garde-footer {
+  border-top: 1px solid rgba(201,168,76,0.25);
+  margin: 40px 56px 0;
+  padding: 28px 0 40px;
+}
+
+.garde-kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0; }
+
+.garde-kpi {
+  padding: 0 20px 0 0;
+  border-right: 1px solid rgba(255,255,255,0.08);
+}
+
+.garde-kpi:last-child { border-right: none; }
+
+.kpi-label {
+  font-size: 6.5pt;
+  font-weight: 600;
+  color: var(--slate);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin-bottom: 6px;
+}
+
+.kpi-value {
+  font-family: 'Playfair Display', serif;
+  font-size: 12pt;
+  font-weight: 700;
+  color: var(--white);
+  line-height: 1.2;
+}
+
+.kpi-value.highlight { color: var(--gold); font-size: 14pt; }
+.kpi-sub { font-size: 7pt; color: var(--slate); margin-top: 3px; }
+
+/* ── CORPS ── */
+.rapport-body { padding: 0; }
+
+.section-header {
+  background: linear-gradient(to right, var(--navy) 0%, var(--navy-light) 100%);
+  padding: 22px 56px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.section-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9pt;
+  font-weight: 500;
+  color: var(--gold);
+  opacity: 0.8;
+  min-width: 28px;
+}
+
+.section-titre {
+  font-family: 'Playfair Display', serif;
+  font-size: 16pt;
+  font-weight: 700;
+  color: var(--white);
+}
+
+.section-body { padding: 36px 56px 48px; }
+
+.section-divider { height: 1px; background: var(--border); }
+
+/* ── KPI CARDS ── */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 32px;
+}
+
+.kpi-card {
+  background: var(--navy);
+  border-radius: 6px;
+  padding: 20px 18px;
+  position: relative;
+  overflow: hidden;
+}
+
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--gold);
+}
+
+.kpi-card-rouge::before { background: var(--rouge); }
+
+.kpi-card-label { font-size: 7pt; font-weight: 600; color: var(--slate); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 8px; }
+.kpi-card-value { font-family: 'Playfair Display', serif; font-size: 18pt; font-weight: 700; color: var(--white); line-height: 1.1; margin-bottom: 6px; }
+.kpi-card-value-rouge { color: var(--rouge) !important; }
+.kpi-card-sub { font-size: 7.5pt; color: var(--gold); }
+
+/* ── TABLEAUX PREMIUM ── */
+.table-section-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 10pt;
+  font-weight: 600;
+  color: var(--gold);
+  margin: 28px 0 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--gold-pale);
+}
+
+table.premium { width: 100%; border-collapse: collapse; font-size: 9pt; }
+table.premium thead tr { background: var(--navy); }
+table.premium thead th { padding: 11px 14px; color: var(--white); font-weight: 600; font-size: 8pt; letter-spacing: 0.5px; text-align: left; }
+table.premium thead th.right { text-align: right; }
+table.premium thead th.center { text-align: center; }
+table.premium tbody tr:nth-child(even) { background: #F8FAFB; }
+table.premium tbody tr.highlight-gold { background: var(--gold-pale); font-weight: 700; }
+table.premium tbody td { padding: 9px 14px; border-bottom: 1px solid var(--border); color: var(--text); }
+table.premium tbody td.right { text-align: right; }
+table.premium tbody td.center { text-align: center; }
+table.premium tbody td.label { font-weight: 600; color: var(--navy); }
+table.premium tbody td .mono { font-family: 'JetBrains Mono', monospace; font-size: 8.5pt; }
+
+/* ── BADGES ── */
+.badge { display: inline-flex; align-items: center; gap: 4px; font-size: 7.5pt; font-weight: 700; padding: 2px 8px; border-radius: 3px; letter-spacing: 0.5px; }
+.badge-ok   { background: rgba(30,132,73,0.12);  color: var(--vert); }
+.badge-warn { background: rgba(230,126,34,0.12); color: var(--orange); }
+.badge-excl { background: rgba(138,155,176,0.15); color: var(--slate); }
+
+/* ── HYPOTHÈSES ── */
+.hyp-grid { display: flex; flex-direction: column; gap: 10px; }
+
+.hyp-card {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.hyp-label { padding: 14px 18px; font-size: 8pt; font-weight: 700; }
+.hyp-label .hyp-code { font-family: 'JetBrains Mono', monospace; font-size: 7.5pt; opacity: 0.9; }
+.hyp-label .hyp-score { font-weight: 400; opacity: 0.8; margin-top: 4px; font-size: 7.5pt; }
+
+.hyp-ok   .hyp-label { background: rgba(30,132,73,0.10);  color: var(--vert);   border-right: 3px solid var(--vert); }
+.hyp-warn .hyp-label { background: rgba(230,126,34,0.10); color: var(--orange); border-right: 3px solid var(--orange); }
+
+.hyp-text { padding: 14px 18px; font-size: 9pt; color: var(--text-mid); line-height: 1.6; background: #FAFBFC; }
+
+/* ── RECOMMANDATION BOX ── */
+.recommandation-box {
+  background: var(--navy);
+  padding: 18px 24px;
+  border-radius: 6px;
+  margin-top: 20px;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.reco-icon { font-size: 18pt; line-height: 1; flex-shrink: 0; color: var(--gold); }
+.reco-label { font-size: 7pt; font-weight: 700; color: var(--gold); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 4px; }
+.reco-value { font-family: 'Playfair Display', serif; font-size: 13pt; font-weight: 700; color: var(--white); margin-bottom: 4px; }
+.reco-text { font-size: 8.5pt; color: var(--slate); line-height: 1.5; }
+
+/* ── EFFETS CALENDAIRE ── */
+.bz-grid { display: flex; flex-direction: column; gap: 6px; }
+
+.bz-item { display: flex; align-items: center; gap: 14px; padding: 10px 16px; border-radius: 4px; font-size: 9pt; }
+.bz-warn { background: rgba(230,126,34,0.08); border-left: 3px solid var(--orange); }
+.bz-info { background: var(--cyan-pale); border-left: 3px solid var(--cyan); }
+.bz-ok   { background: rgba(30,132,73,0.06); border-left: 3px solid var(--vert); }
+
+.bz-year { font-family: 'JetBrains Mono', monospace; font-size: 8.5pt; font-weight: 700; min-width: 42px; }
+.bz-bar { flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.bz-fill { height: 100%; border-radius: 2px; }
+.bz-pct { font-size: 8.5pt; font-weight: 600; min-width: 120px; text-align: right; }
+
+/* ── COMMENTAIRE ACTUARIEL ── */
+.commentaire-wrap { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+
+.commentaire-header {
+  background: var(--navy);
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.commentaire-header-title { font-size: 8pt; font-weight: 600; color: var(--gold); letter-spacing: 2px; text-transform: uppercase; }
+.commentaire-ai-badge { font-size: 7pt; color: var(--slate); font-family: 'JetBrains Mono', monospace; }
+.commentaire-body { padding: 28px 32px; background: #FAFBFC; }
+
+.comm-section-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 11pt;
+  font-weight: 700;
+  color: var(--navy);
+  border-bottom: 1.5px solid var(--gold);
+  padding-bottom: 6px;
+  margin: 24px 0 12px;
+}
+
+.comm-section-title:first-child { margin-top: 0; }
+.comm-h4 { font-size: 9.5pt; font-weight: 700; color: var(--navy); margin: 16px 0 8px; }
+.comm-p { font-size: 9.5pt; line-height: 1.85; color: var(--text-mid); margin-bottom: 12px; }
+.comm-p strong { color: var(--navy); font-weight: 700; }
+
+.comm-ul { margin: 10px 0 12px 20px; list-style: none; }
+.comm-ul li { position: relative; padding-left: 16px; font-size: 9.5pt; line-height: 1.7; color: var(--text-mid); margin-bottom: 6px; }
+.comm-ul li::before { content: '—'; position: absolute; left: 0; color: var(--gold); font-weight: 700; }
+.comm-ul li strong { color: var(--navy); }
+
+.comm-divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+.comm-footer { font-size: 7.5pt; color: var(--slate); font-style: italic; text-align: right; border-top: 1px solid var(--border); padding-top: 10px; margin-top: 8px; }
+
+/* ── BACK-TESTING ── */
+.bt-summary { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+.bt-card { padding: 14px 20px; border-radius: 6px; text-align: center; min-width: 120px; }
+.bt-card-rouge { background: var(--rouge); color: var(--white); }
+.bt-card-ambre { background: var(--orange); color: var(--white); }
+.bt-card-vert  { background: var(--vert);  color: var(--white); }
+.bt-card-navy  { background: var(--navy);  color: var(--white); }
+.bt-card-label { font-size: 7.5pt; opacity: 0.8; margin-bottom: 4px; }
+.bt-card-value { font-family: 'Playfair Display', serif; font-size: 15pt; font-weight: 700; }
+.bt-card-sub   { font-size: 7.5pt; color: var(--gold); margin-top: 2px; }
+
+.bt-note {
+  background: var(--rouge-pale);
+  border-left: 3px solid var(--rouge);
+  padding: 12px 16px;
+  border-radius: 0 4px 4px 0;
+  font-size: 9pt;
+  color: var(--text-mid);
+  line-height: 1.6;
+  margin-top: 12px;
+}
+
+/* ── PIED DE PAGE ── */
+.pied-de-page {
+  background: var(--navy);
+  padding: 20px 56px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 2px solid var(--gold);
+}
+
+.pied-logo img { height: 26px; }
+.pied-meta { text-align: right; font-size: 7.5pt; color: var(--slate); line-height: 1.7; }
+.pied-meta .confidentiel-footer { color: var(--rouge); font-weight: 700; letter-spacing: 1px; }
+
+@media print {
+  body { background: white; }
+  .rapport-container { box-shadow: none; max-width: none; margin: 0; }
+  .page-garde { page-break-after: always; min-height: 100vh; }
+  @page { margin: 0; }
+}
+</style>"""
+
+
+# =============================================================================
+#  CONSTRUCTION DES BLOCS HTML
+# =============================================================================
+
+def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, audit_id, methode, statut, graphiques_html) -> Dict:
+    cl    = n3.get('chain_ladder', {});  mk  = n3.get('mack', {})
+    bf    = n3.get('bf', {});            cc  = n3.get('cape_cod', {})
+    clark = n3.get('clark', {});         bz  = n3.get('barnett_zehnwirth', {})
+    bt    = n3.get('backtesting', {});   sc  = n4.get('scr', {})
+    h1    = n2.get('h1_independance', {}); h2 = n2.get('h2_stabilite', {})
+    h3    = n2.get('h3_apriori_bf', {});  h4  = n2.get('h4_homosc_bootstrap', {})
     pw    = n4.get('poids', {})
 
     BE  = float(n4.get('best_estimate', 0) or 0)
@@ -431,75 +873,83 @@ def _build_html_blocks(
     SCP = float(sc.get('scr_prov', BE * 0.30) if sc else BE * 0.30)
     SCR = SCP / BE * 100 if BE else 0
 
-    s_col  = _statut_col(statut)
-    s_icon = _statut_icon(statut)
+    s_col   = _statut_col(statut)
+    s_label = _statut_label(statut)
+    s_cls   = statut.lower()
 
-    b = {}  # dictionnaire des blocs
+    b = {}
 
-    # ── MÉTA PAGE DE GARDE ────────────────────────────────────────────────────
-    b['statut_badge'] = (
-        '<span style="display:inline-block;background:' + s_col + ';color:#fff;'
-        'padding:6px 18px;border-radius:4px;font-size:9pt;font-weight:700;'
-        'letter-spacing:1px;">' + s_icon + ' ' + statut + '</span>'
+    # ── PAGE DE GARDE ─────────────────────────────────────────────────────────
+    # Titre branche : première partie en blanc, deuxième en or italic si " — "
+    lob_parts = lob.split(' — ')
+    if len(lob_parts) == 2:
+        garde_titre = lob_parts[0] + '<br><em>' + lob_parts[1] + '</em>'
+    else:
+        # RC Médicale → RC / Médicale (style premium)
+        words = lob.split()
+        if len(words) >= 2:
+            garde_titre = ' '.join(words[:-1]) + '<br><em>' + words[-1] + '</em>'
+        else:
+            garde_titre = '<em>' + lob + '</em>'
+
+    b['garde_titre']   = garde_titre
+    b['garde_statut_cls'] = 'garde-statut-' + s_cls
+    b['garde_dot_cls']    = 'statut-dot-' + s_cls
+    b['garde_label_cls']  = 'statut-label-' + s_cls
+    b['garde_label']      = s_label
+
+    # KPIs page de garde
+    scr_style = 'color:var(--rouge);' if statut == 'ROUGE' else ''
+    b['garde_kpis'] = (
+        '<div class="garde-kpi"><div class="kpi-label">Client</div>'
+        '<div class="kpi-value">' + cli + '</div></div>'
+
+        '<div class="garde-kpi"><div class="kpi-label">Arrêté</div>'
+        '<div class="kpi-value">' + arr + '</div></div>'
+
+        '<div class="garde-kpi"><div class="kpi-label">Méthode principale</div>'
+        '<div class="kpi-value" style="font-size:10pt;">'
+        + methode.replace('_', ' ').replace('bornhuetter ferguson', 'Bornhuetter-Ferguson').title()
+        + '</div></div>'
+
+        '<div class="garde-kpi"><div class="kpi-label">Best Estimate S2</div>'
+        '<div class="kpi-value highlight">' + _f(BE) + '</div></div>'
+
+        '<div class="garde-kpi"><div class="kpi-label">SCR Provisions</div>'
+        '<div class="kpi-value" style="font-size:11pt;' + scr_style + '">' + _f(SCP) + '</div>'
+        '<div class="kpi-sub">Ratio SCR/BE : ' + _pct(SCR) + '</div></div>'
+
+        '<div class="garde-kpi"><div class="kpi-label">Audit ID</div>'
+        '<div class="kpi-value" style="font-family:\'JetBrains Mono\',monospace;font-size:8pt;color:var(--slate-light);">'
+        + (audit_id or '—') + '</div></div>'
     )
-    b['meta_grid'] = (
-        '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;'
-        'border-top:1px solid rgba(201,168,76,0.3);padding-top:24px;margin-top:32px;">'
 
-        '<div><div style="font-size:7.5pt;color:#8A9BB0;text-transform:uppercase;'
-        'letter-spacing:1.5px;margin-bottom:4px;">Client</div>'
-        '<div style="font-size:10pt;color:#fff;font-weight:500;">' + cli + '</div></div>'
-
-        '<div><div style="font-size:7.5pt;color:#8A9BB0;text-transform:uppercase;'
-        'letter-spacing:1.5px;margin-bottom:4px;">Arrêté</div>'
-        '<div style="font-size:10pt;color:#fff;font-weight:500;">' + arr + '</div></div>'
-
-        '<div><div style="font-size:7.5pt;color:#8A9BB0;text-transform:uppercase;'
-        'letter-spacing:1.5px;margin-bottom:4px;">Méthode retenue</div>'
-        '<div style="font-size:10pt;color:#fff;font-weight:500;">'
-        + methode.replace('_', ' ').title() + '</div></div>'
-
-        '<div><div style="font-size:7.5pt;color:#8A9BB0;text-transform:uppercase;'
-        'letter-spacing:1.5px;margin-bottom:4px;">Best Estimate S2</div>'
-        '<div style="font-size:13pt;color:#C9A84C;font-weight:700;">' + _f(BE) + '</div></div>'
-
-        '<div><div style="font-size:7.5pt;color:#8A9BB0;text-transform:uppercase;'
-        'letter-spacing:1.5px;margin-bottom:4px;">Date rapport</div>'
-        '<div style="font-size:10pt;color:#fff;font-weight:500;">' + dt + '</div></div>'
-
-        '<div><div style="font-size:7.5pt;color:#8A9BB0;text-transform:uppercase;'
-        'letter-spacing:1.5px;margin-bottom:4px;">Audit ID</div>'
-        '<div style="font-size:10pt;color:#fff;font-weight:500;">' + (audit_id or '—') + '</div></div>'
-
-        '</div>'
-    )
-
-    # ── SECTION 1 : SYNTHÈSE ──────────────────────────────────────────────────
+    # ── SECTION 1 : KPI GRID ─────────────────────────────────────────────────
     b['kpi_grid'] = (
-        '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:16px 0;">'
+        '<div class="kpi-grid">'
 
-        '<div style="background:#0F2E52;border-radius:8px;padding:16px 14px;text-align:center;">'
-        '<div style="font-size:7.5pt;color:#8A9BB0;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Best Estimate S2</div>'
-        '<div style="font-family:Georgia,serif;font-size:16pt;font-weight:700;color:#fff;line-height:1.2;">' + _f(BE) + '</div>'
-        '<div style="font-size:8pt;color:#C9A84C;margin-top:4px;">Art. 77 Directive S2</div>'
+        '<div class="kpi-card">'
+        '<div class="kpi-card-label">Best Estimate S2</div>'
+        '<div class="kpi-card-value">' + _f(BE) + '</div>'
+        '<div class="kpi-card-sub">Art. 77 Directive S2</div>'
         '</div>'
 
-        '<div style="background:#0F2E52;border-radius:8px;padding:16px 14px;text-align:center;">'
-        '<div style="font-size:7.5pt;color:#8A9BB0;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">σ Mack total</div>'
-        '<div style="font-family:Georgia,serif;font-size:16pt;font-weight:700;color:#fff;line-height:1.2;">' + _f(SIG) + '</div>'
-        '<div style="font-size:8pt;color:#C9A84C;margin-top:4px;">CV inter-méthodes : ' + _pct(CV) + '</div>'
+        '<div class="kpi-card">'
+        '<div class="kpi-card-label">σ Mack total</div>'
+        '<div class="kpi-card-value">' + _f(SIG) + '</div>'
+        '<div class="kpi-card-sub">CV inter-méthodes : ' + _pct(CV) + '</div>'
         '</div>'
 
-        '<div style="background:#0F2E52;border-radius:8px;padding:16px 14px;text-align:center;">'
-        '<div style="font-size:7.5pt;color:#8A9BB0;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">SCR Provisions</div>'
-        '<div style="font-family:Georgia,serif;font-size:16pt;font-weight:700;color:#fff;line-height:1.2;">' + _f(SCP) + '</div>'
-        '<div style="font-size:8pt;color:#C9A84C;margin-top:4px;">Ratio SCR/BE : ' + _pct(SCR) + '</div>'
+        '<div class="kpi-card kpi-card-rouge">'
+        '<div class="kpi-card-label">SCR Provisions</div>'
+        '<div class="kpi-card-value kpi-card-value-rouge">' + _f(SCP) + '</div>'
+        '<div class="kpi-card-sub">Ratio SCR/BE : ' + _pct(SCR) + '</div>'
         '</div>'
 
-        '<div style="background:#0F2E52;border-radius:8px;padding:16px 14px;text-align:center;">'
-        '<div style="font-size:7.5pt;color:#8A9BB0;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Provision P99.5</div>'
-        '<div style="font-family:Georgia,serif;font-size:16pt;font-weight:700;color:#fff;line-height:1.2;">' + _f(P99) + '</div>'
-        '<div style="font-size:8pt;color:#C9A84C;margin-top:4px;">P90 : ' + _f(P90) + '</div>'
+        '<div class="kpi-card">'
+        '<div class="kpi-card-label">Provision P99,5</div>'
+        '<div class="kpi-card-value">' + _f(P99) + '</div>'
+        '<div class="kpi-card-sub">P90 : ' + _f(P90) + '</div>'
         '</div>'
 
         '</div>'
@@ -507,507 +957,371 @@ def _build_html_blocks(
     b['graph_convergence'] = graphiques_html.get('g5_convergence', '')
 
     # ── SECTION 2 : MÉTHODES ─────────────────────────────────────────────────
-    # Tableau méthodes
-    rows_methodes = [
-        ('Chain Ladder',         cl.get('reserve_totale'),          pw.get('chain_ladder', 0)*100,          n2.get('scores_confiance', {}).get('chain_ladder', '—')),
-        ('Mack 1993',            mk.get('reserve_best_estimate'),   pw.get('mack', 0)*100,                  '—'),
-        ('Bornhuetter-Ferguson', bf.get('reserve_totale'),          pw.get('bornhuetter_ferguson', 0)*100,  '—'),
-        ('Cape Cod',             cc.get('reserve_totale'),          pw.get('cape_cod', 0)*100,              n2.get('scores_confiance', {}).get('cape_cod', '—')),
+    def _badge_statut(m_name, pw_val):
+        if pw_val > 0:
+            return '<span class="badge badge-ok">✓ Inclus</span>'
+        return '<span class="badge badge-excl">⊘ Exclu</span>'
+
+    rows_m = [
+        ('Chain Ladder',         cl.get('reserve_totale'),         pw.get('chain_ladder', 0),         n2.get('scores_confiance', {}).get('chain_ladder', '—')),
+        ('Mack 1993',            mk.get('reserve_best_estimate'),  pw.get('mack', 0),                 '—'),
+        ('Bornhuetter-Ferguson', bf.get('reserve_totale'),         pw.get('bornhuetter_ferguson', 0), '—'),
+        ('Cape Cod',             cc.get('reserve_totale'),         pw.get('cape_cod', 0),             n2.get('scores_confiance', {}).get('cape_cod', '—')),
     ]
-    tbl_m = (
-        '<table style="width:100%;border-collapse:collapse;font-size:9pt;margin:16px 0;">'
-        '<thead><tr style="background:#0F2E52;color:#fff;">'
-        '<th style="padding:9px 12px;text-align:left;">Méthode</th>'
-        '<th style="padding:9px 12px;">Réserve IBNR (€)</th>'
-        '<th style="padding:9px 12px;">Poids BE</th>'
-        '<th style="padding:9px 12px;">Score /100</th>'
-        '<th style="padding:9px 12px;">Statut</th>'
+    tbl = (
+        '<table class="premium"><thead><tr>'
+        '<th>Méthode</th>'
+        '<th class="right">Réserve IBNR</th>'
+        '<th class="center">Poids BE</th>'
+        '<th class="center">Score</th>'
+        '<th class="center">Statut</th>'
         '</tr></thead><tbody>'
     )
-    for idx, (nom, res, pds, score) in enumerate(rows_methodes):
-        bg = '#f0f4f8' if idx % 2 == 1 else '#fff'
-        tbl_m += (
-            '<tr style="background:' + bg + ';">'
-            '<td style="padding:8px 12px;border-bottom:1px solid #dde3ea;font-weight:500;color:#0F2E52;">' + nom + '</td>'
-            '<td style="padding:8px 12px;border-bottom:1px solid #dde3ea;text-align:right;">' + _f(res) + '</td>'
-            '<td style="padding:8px 12px;border-bottom:1px solid #dde3ea;text-align:center;">' + _pct(pds) + '</td>'
-            '<td style="padding:8px 12px;border-bottom:1px solid #dde3ea;text-align:center;">' + _s(score) + '</td>'
-            '<td style="padding:8px 12px;border-bottom:1px solid #dde3ea;text-align:center;">✅</td>'
-            '</tr>'
+    for nom, res, pds, score in rows_m:
+        s_txt = str(score) + ' / 100' if score != '—' else '—'
+        tbl += (
+            '<tr><td class="label">' + nom + '</td>'
+            '<td class="right"><span class="mono">' + _f(res) + '</span></td>'
+            '<td class="center">' + _pct(pds * 100) + '</td>'
+            '<td class="center">' + s_txt + '</td>'
+            '<td class="center">' + _badge_statut(nom, pds) + '</td></tr>'
         )
+    # Clark
     if clark.get('disponible'):
-        clark_aic = _s(clark.get('aic_optimal'))
-        tbl_m += (
-            '<tr style="background:#fff;">'
-            '<td style="padding:8px 12px;border-bottom:1px solid #dde3ea;font-weight:500;color:#0F2E52;">Clark LDF (' + _s(clark.get('courbe_choisie')) + ')</td>'
-            '<td style="padding:8px 12px;border-bottom:1px solid #dde3ea;text-align:right;">' + _f(clark.get('reserve_be_clark')) + '</td>'
-            '<td style="padding:8px 12px;border-bottom:1px solid #dde3ea;text-align:center;">—</td>'
-            '<td style="padding:8px 12px;border-bottom:1px solid #dde3ea;text-align:center;font-size:8pt;">AIC=' + clark_aic + '</td>'
-            '<td style="padding:8px 12px;border-bottom:1px solid #dde3ea;text-align:center;">ℹ️</td>'
-            '</tr>'
+        aic_val = str(clark.get('aic_optimal', '—'))
+        if aic_val != '—':
+            try:
+                aic_f = float(aic_val)
+                aic_disp = f'{aic_f/1e6:.0f}M' if abs(aic_f) > 1e6 else aic_val
+            except Exception:
+                aic_disp = aic_val
+        else:
+            aic_disp = '—'
+        tbl += (
+            '<tr><td class="label">Clark LDF (' + _s(clark.get('courbe_choisie')).title() + ')</td>'
+            '<td class="right"><span class="mono">' + _f(clark.get('reserve_be_clark')) + '</span></td>'
+            '<td class="center">—</td>'
+            '<td class="center" style="font-size:7.5pt;color:var(--slate);">AIC = ' + aic_disp + '</td>'
+            '<td class="center"><span class="badge badge-excl">⊘ Exclu</span></td></tr>'
         )
-    tbl_m += (
-        '<tr style="background:rgba(201,168,76,0.15);font-weight:700;">'
-        '<td style="padding:9px 12px;">⭐ BEST ESTIMATE S2</td>'
-        '<td style="padding:9px 12px;text-align:right;">' + _f(BE) + '</td>'
-        '<td style="padding:9px 12px;text-align:center;">100\u202f%</td>'
-        '<td style="padding:9px 12px;text-align:center;">—</td>'
-        '<td style="padding:9px 12px;text-align:center;">→ Bilan S2</td>'
-        '</tr>'
-        '</tbody></table>'
+    tbl += (
+        '<tr class="highlight-gold">'
+        '<td class="label" style="color:var(--navy);">⭐ Best Estimate S2</td>'
+        '<td class="right" style="color:var(--navy);"><span class="mono">' + _f(BE) + '</span></td>'
+        '<td class="center">100\u202f%</td>'
+        '<td class="center">—</td>'
+        '<td class="center" style="color:var(--navy-light);font-size:8.5pt;">→ Bilan S2</td>'
+        '</tr></tbody></table>'
     )
-    b['tableau_methodes'] = tbl_m
+    b['tableau_methodes'] = tbl
 
     # Tableau incertitude
+    cv_mack = SIG / BE * 100 if BE else 0
     tbl_i = (
-        '<table style="width:100%;border-collapse:collapse;font-size:9pt;margin:16px 0;">'
-        '<thead><tr style="background:#0F2E52;color:#fff;">'
-        '<th style="padding:9px 12px;text-align:left;">Approche</th>'
-        '<th style="padding:9px 12px;">BE (€)</th>'
-        '<th style="padding:9px 12px;">P75 (€)</th>'
-        '<th style="padding:9px 12px;">P90 (€)</th>'
-        '<th style="padding:9px 12px;">P99.5 (€)</th>'
-        '<th style="padding:9px 12px;">CV (%)</th>'
+        '<table class="premium"><thead><tr>'
+        '<th>Approche</th><th class="right">BE</th><th class="right">P75</th>'
+        '<th class="right">P90</th><th class="right">P99,5</th><th class="center">CV</th>'
         '</tr></thead><tbody>'
-        '<tr style="background:#fff;">'
-        '<td style="padding:8px 12px;font-weight:500;color:#0F2E52;">Mack 1993 (analytique)</td>'
-        '<td style="padding:8px 12px;text-align:right;">' + _f(BE) + '</td>'
-        '<td style="padding:8px 12px;text-align:right;">' + _f(P75) + '</td>'
-        '<td style="padding:8px 12px;text-align:right;">' + _f(P90) + '</td>'
-        '<td style="padding:8px 12px;text-align:right;">' + _f(P99) + '</td>'
-        '<td style="padding:8px 12px;text-align:center;">' + _pct(SIG/BE*100 if BE else 0) + '</td>'
-        '</tr>'
-        '<tr style="background:#f0f4f8;">'
-        '<td style="padding:8px 12px;font-weight:500;color:#0F2E52;">Bootstrap ODP (5\u202f000 sim.)</td>'
-        '<td style="padding:8px 12px;text-align:right;">' + _f(n3.get('bootstrap', {}).get('be_bootstrap', BE)) + '</td>'
-        '<td style="padding:8px 12px;text-align:right;">' + _f(P75) + '</td>'
-        '<td style="padding:8px 12px;text-align:right;">' + _f(P90) + '</td>'
-        '<td style="padding:8px 12px;text-align:right;">' + _f(P99) + '</td>'
-        '<td style="padding:8px 12px;text-align:center;">' + _pct(CV) + '</td>'
-        '</tr>'
+        '<tr><td class="label">Mack 1993 (analytique)</td>'
+        '<td class="right"><span class="mono">' + _f(BE) + '</span></td>'
+        '<td class="right"><span class="mono">' + _f(P75) + '</span></td>'
+        '<td class="right"><span class="mono">' + _f(P90) + '</span></td>'
+        '<td class="right"><span class="mono">' + _f(P99) + '</span></td>'
+        '<td class="center">' + _pct(cv_mack) + '</td></tr>'
+        '<tr><td class="label">Bootstrap ODP (5\u202f000 sim.)</td>'
+        '<td class="right"><span class="mono">' + _f(n3.get('bootstrap', {}).get('be_bootstrap', BE)) + '</span></td>'
+        '<td class="right"><span class="mono">' + _f(P75) + '</span></td>'
+        '<td class="right"><span class="mono">' + _f(P90) + '</span></td>'
+        '<td class="right"><span class="mono">' + _f(P99) + '</span></td>'
+        '<td class="center">' + _pct(CV) + '</td></tr>'
         '</tbody></table>'
     )
     b['tableau_incertitude'] = tbl_i
     b['graph_ibnr']      = graphiques_html.get('g4_ibnr', '')
-    b['graph_bootstrap'] = graphiques_html.get('g6_bootstrap', '')
     b['graph_heatmap']   = graphiques_html.get('g1_heatmap', '')
+    b['graph_bootstrap'] = graphiques_html.get('g6_bootstrap', '')
 
     # ── SECTION 3 : HYPOTHÈSES ────────────────────────────────────────────────
-    hyp_list = [
-        ('H1 — Indépendance des facteurs (Mack 1993)', h1),
-        ('H2 — Stabilité des facteurs de développement', h2),
-        ('H3 — A priori BF / Cape Cod', h3),
-        ('H4 — Homoscédasticité Bootstrap ODP', h4),
-    ]
-    hyp_html = ''
-    for label, h in hyp_list:
+    hyp_cards = ''
+    for label, h, code in [
+        ('H1 — Indépendance des facteurs', h1, 'H1'),
+        ('H2 — Stabilité des facteurs', h2, 'H2'),
+        ('H3 — A priori BF / Cape Cod', h3, 'H3'),
+        ('H4 — Homoscédasticité Bootstrap ODP', h4, 'H4'),
+    ]:
         if not h:
             continue
         ok    = bool(h.get('ok', True))
-        col   = VERT if ok else AMBRE
-        icon  = '✅' if ok else '⚠️'
-        lbl   = 'VALIDÉE' if ok else 'REJETÉE'
+        cls   = 'hyp-ok' if ok else 'hyp-warn'
+        lbl   = '✓ VALIDÉE' if ok else '⚠ REJETÉE'
         score = _s(h.get('score'))
         msg   = _s(h.get('message'))
-        hyp_html += (
-            '<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;'
-            'border-radius:6px;margin:8px 0;background:#f0f4f8;'
-            'border-left:3px solid ' + col + ';">'
-            '<div style="min-width:200px;font-size:8pt;font-weight:700;color:' + col + ';">'
-            + icon + ' ' + label + '<br>'
-            '<span style="color:#666;font-weight:400;">— ' + lbl + ' | Score ' + score + '/100</span>'
+        hyp_cards += (
+            '<div class="hyp-card ' + cls + '">'
+            '<div class="hyp-label">'
+            '<div class="hyp-code">' + label + '</div>'
+            '<div class="hyp-score">' + lbl + ' · Score ' + score + ' / 100</div>'
             '</div>'
-            '<div style="font-size:9pt;color:#2c3e50;flex:1;">' + msg + '</div>'
+            '<div class="hyp-text">' + msg + '</div>'
             '</div>'
         )
-    methode_block = (
-        '<div style="background:#0F2E52;color:#fff;padding:14px 20px;border-radius:6px;margin-top:16px;">'
-        '<span style="font-size:8pt;color:#C9A84C;text-transform:uppercase;letter-spacing:1px;">Méthode recommandée</span><br>'
-        '<span style="font-size:11pt;font-weight:600;">' + methode.replace('_', ' ').title() + '</span>'
-        '<span style="font-size:9pt;color:#8A9BB0;margin-left:16px;">'
-        + _s(n2.get('raison_recommandation'))[:150] + '</span>'
+    b['hyp_cards'] = hyp_cards
+
+    raison = _s(n2.get('raison_recommandation'))[:200]
+    b['methode_rec_box'] = (
+        '<div class="recommandation-box">'
+        '<div class="reco-icon">→</div>'
+        '<div>'
+        '<div class="reco-label">Méthode recommandée par ActuarIA</div>'
+        '<div class="reco-value">' + methode.replace('_', ' ').title() + '</div>'
+        '<div class="reco-text">' + raison + '</div>'
+        '</div>'
         '</div>'
     )
-    b['hypotheses']  = hyp_html
-    b['methode_rec'] = methode_block
 
     # ── SECTION 4 : SCR ───────────────────────────────────────────────────────
-    sigma_eiopa = _s(sc.get('sigma_eiopa', '10\u202f%') if sc else '10\u202f%')
+    sigma_eiopa = _s(sc.get('sigma_eiopa', '0,10') if sc else '0,10')
     b['tableau_scr'] = (
-        '<table style="width:100%;border-collapse:collapse;font-size:9pt;margin:16px 0;">'
-        '<thead><tr style="background:#0F2E52;color:#fff;">'
-        '<th style="padding:9px 12px;text-align:left;">Composante</th>'
-        '<th style="padding:9px 12px;">Valeur</th>'
-        '<th style="padding:9px 12px;text-align:left;">Référence réglementaire</th>'
+        '<table class="premium"><thead><tr>'
+        '<th>Composante</th><th class="center">Valeur</th><th>Référence réglementaire</th>'
         '</tr></thead><tbody>'
-        '<tr><td style="padding:8px 12px;font-weight:500;">Best Estimate S2</td>'
-        '<td style="padding:8px 12px;text-align:center;">' + _f(BE) + '</td>'
-        '<td style="padding:8px 12px;">Art. 77 Directive Solvabilité 2</td></tr>'
-        '<tr style="background:#f0f4f8;"><td style="padding:8px 12px;font-weight:500;">Facteur σ EIOPA</td>'
-        '<td style="padding:8px 12px;text-align:center;">' + sigma_eiopa + '</td>'
-        '<td style="padding:8px 12px;">' + lob + ' (Annexe II, Règlement 2015/35)</td></tr>'
-        '<tr><td style="padding:8px 12px;font-weight:500;">SCR Provisions</td>'
-        '<td style="padding:8px 12px;text-align:center;">' + _f(SCP) + '</td>'
-        '<td style="padding:8px 12px;">SCR = 3 × σ(LoB) × BE (Art. 105)</td></tr>'
-        '<tr style="background:rgba(201,168,76,0.15);font-weight:700;">'
-        '<td style="padding:9px 12px;">Ratio SCR / BE</td>'
-        '<td style="padding:9px 12px;text-align:center;">' + _pct(SCR) + '</td>'
-        '<td style="padding:9px 12px;">Cible pratique marché : &lt; 35\u202f%</td></tr>'
+        '<tr><td class="label">Best Estimate S2</td>'
+        '<td class="center"><span class="mono">' + _f(BE) + '</span></td>'
+        '<td>Art. 77 — Directive Solvabilité 2</td></tr>'
+        '<tr><td class="label">Facteur σ EIOPA</td>'
+        '<td class="center"><span class="mono">' + sigma_eiopa + '</span></td>'
+        '<td>' + lob + ' — Annexe II, Règlement 2015/35</td></tr>'
+        '<tr><td class="label">SCR Provisions</td>'
+        '<td class="center"><span class="mono" style="color:var(--rouge);font-weight:700;">' + _f(SCP) + '</span></td>'
+        '<td>SCR = 3 × σ(LoB) × BE — Art. 105</td></tr>'
+        '<tr class="highlight-gold"><td class="label">Ratio SCR / BE</td>'
+        '<td class="center" style="color:var(--rouge);font-weight:700;"><span class="mono">' + _pct(SCR) + '</span></td>'
+        '<td>Cible pratique marché : &lt; 35\u202f%</td></tr>'
         '</tbody></table>'
     )
 
     # ── SECTION 5 : BACK-TESTING ──────────────────────────────────────────────
-    bt_statut = _s(bt.get('statut'))
-    bt_col    = _statut_col(bt_statut)
-    bt_score  = _s(bt.get('score_qualite'))
+    bt_statut = _s(bt.get('statut', 'AMBRE'))
+    bt_col_cls = 'bt-card-' + bt_statut.lower() if bt_statut in ('ROUGE', 'AMBRE', 'VERT') else 'bt-card-navy'
+    bt_score  = _s(bt.get('score_qualite', '—'))
+    n_mat     = int(bt.get('n_matures', bt.get('n_annees_matures', 26)))
+    n_tot     = int(bt.get('n_total', 28))
 
-    b['bt_kpis'] = (
-        '<div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap;">'
-
-        '<div style="background:' + bt_col + ';color:#fff;padding:10px 20px;border-radius:6px;text-align:center;">'
-        '<div style="font-size:8pt;opacity:0.8;">Statut</div>'
-        '<div style="font-size:14pt;font-weight:700;">' + bt_statut + '</div>'
+    b['bt_summary'] = (
+        '<div class="bt-summary">'
+        '<div class="bt-card ' + bt_col_cls + '">'
+        '<div class="bt-card-label">Statut RAG</div>'
+        '<div class="bt-card-value">' + bt_statut + '</div>'
         '</div>'
-
-        '<div style="background:#0F2E52;color:#fff;padding:10px 20px;border-radius:6px;text-align:center;">'
-        '<div style="font-size:8pt;color:#8A9BB0;">Score qualité</div>'
-        '<div style="font-size:14pt;font-weight:700;color:#C9A84C;">' + bt_score + '/100</div>'
+        '<div class="bt-card bt-card-navy">'
+        '<div class="bt-card-label">Score qualité</div>'
+        '<div class="bt-card-value">' + bt_score + '</div>'
+        '<div class="bt-card-sub">/ 100</div>'
         '</div>'
-
-        '<div style="background:#0F2E52;color:#fff;padding:10px 20px;border-radius:6px;text-align:center;">'
-        '<div style="font-size:8pt;color:#8A9BB0;">Alertes N-1</div>'
-        '<div style="font-size:14pt;font-weight:700;">'
-        + str(bt.get('n_rouge_n1', 0)) + ' 🔴  '
-        + str(bt.get('n_ambre_n1', 0)) + ' 🟡</div>'
+        '<div class="bt-card bt-card-navy">'
+        '<div class="bt-card-label">Alertes N-1</div>'
+        '<div class="bt-card-value">' + str(bt.get('n_rouge_n1', 0)) + '🔴  ' + str(bt.get('n_ambre_n1', 0)) + '🟡</div>'
         '</div>'
-
-        '<div style="background:#0F2E52;color:#fff;padding:10px 20px;border-radius:6px;text-align:center;">'
-        '<div style="font-size:8pt;color:#8A9BB0;">Alertes N-2</div>'
-        '<div style="font-size:14pt;font-weight:700;">'
-        + str(bt.get('n_rouge_n2', 0)) + ' 🔴  '
-        + str(bt.get('n_ambre_n2', 0)) + ' 🟡</div>'
+        '<div class="bt-card bt-card-navy">'
+        '<div class="bt-card-label">Alertes N-2</div>'
+        '<div class="bt-card-value">' + str(bt.get('n_rouge_n2', 0)) + '🔴  ' + str(bt.get('n_ambre_n2', 0)) + '🟡</div>'
         '</div>'
-
         '</div>'
     )
 
-    # Tableau boni/mali N-1
-    tbl_bt_n1 = _build_tableau_bonimaili(bt, horizon='n1')
-    tbl_bt_n2 = _build_tableau_bonimaili(bt, horizon='n2')
-    b['tableau_bt_n1']  = tbl_bt_n1
-    b['tableau_bt_n2']  = tbl_bt_n2
-    b['graph_bt']       = graphiques_html.get('g14_backtesting', '')
-    b['bt_message']     = (
-        '<div style="background:#f0f4f8;border-left:3px solid ' + bt_col + ';'
-        'padding:12px 16px;border-radius:0 6px 6px 0;margin-top:12px;font-size:9pt;color:#2c3e50;">'
-        + _s(bt.get('message'))[:500] + '</div>'
+    # Tableaux boni/mali détaillés
+    b['tableau_bt_n1'] = _build_bt_table(bt, 'n1')
+    b['tableau_bt_n2'] = _build_bt_table(bt, 'n2')
+    b['graph_bt']      = graphiques_html.get('g14_backtesting', '')
+
+    msg_bt = _s(bt.get('message'))
+    b['bt_note'] = (
+        '<div class="bt-note">'
+        'Analyse sur <strong>' + str(n_mat) + ' années matures</strong> (≥ 75\u202f% développées) sur ' + str(n_tot) + ' au total.<br>'
+        + msg_bt[:400]
+        + '</div>'
     )
 
     # ── SECTION 6 : EFFETS CALENDAIRE ────────────────────────────────────────
-    bz_statut = _s(bz.get('statut'))
-    bz_col    = _statut_col(bz_statut)
-    n_sig     = int(bz.get('n_effets_significatifs', 0))
-    n_eval    = int(bz.get('n_diagonales_evaluees', 0))
-
-    bz_alertes = ''
+    n_sig = int(bz.get('n_effets_significatifs', 0))
+    bz_items = ''
     if n_sig == 0:
-        bz_alertes = (
-            '<div style="border-left:3px solid #27AE60;background:rgba(39,174,96,0.06);'
-            'padding:10px 14px;border-radius:0 4px 4px 0;margin:8px 0;font-size:9pt;">'
-            '✅ Aucun effet calendaire significatif détecté sur '
-            + str(n_eval) + ' diagonale(s) — triangle conforme à l\'hypothèse d\'indépendance.'
+        bz_items = (
+            '<div class="bz-item bz-ok">'
+            '<span class="bz-year" style="color:var(--vert);">✓ OK</span>'
+            '<div class="bz-bar"><div class="bz-fill" style="width:0%;background:var(--vert);"></div></div>'
+            '<span class="bz-pct" style="color:var(--vert);">Aucun effet significatif</span>'
             '</div>'
         )
     else:
         forts   = [e for e in bz.get('effets_calendaire', []) if e.get('significatif') and e.get('niveau') in ('FORT', 'MODÉRÉ')]
         faibles = [e for e in bz.get('effets_calendaire', []) if e.get('significatif') and e.get('niveau') == 'FAIBLE']
         for e in forts:
-            icon = '🔴' if e.get('niveau') == 'FORT' else '⚠️'
-            col_e = ROUGE if e.get('niveau') == 'FORT' else AMBRE
-            bz_alertes += (
-                '<div style="border-left:3px solid ' + col_e + ';background:rgba(192,57,43,0.05);'
-                'padding:10px 14px;border-radius:0 4px 4px 0;margin:8px 0;font-size:9pt;">'
-                + icon + ' ' + _s(e.get('annee_label')) + ' : '
-                + str(round(e.get('amplitude_pct', 0), 1)) + '% ('
-                + _s(e.get('sens')) + ', ' + _s(e.get('niveau')) + ')'
+            amp  = float(e.get('amplitude_pct', 0))
+            w    = min(abs(amp) * 5, 100)
+            col  = 'var(--rouge)' if e.get('niveau') == 'FORT' else 'var(--orange)'
+            niv  = e.get('niveau', '')
+            sens = '↑' if e.get('sens') == 'hausse' else '↓'
+            bz_items += (
+                '<div class="bz-item bz-warn">'
+                '<span class="bz-year">' + _s(e.get('annee_label')) + '</span>'
+                '<div class="bz-bar"><div class="bz-fill" style="width:' + str(w) + '%;background:' + col + ';"></div></div>'
+                '<span class="bz-pct" style="color:' + col + ';">' + f'{amp:+.1f}\u202f%' + ' ' + sens + ' ' + niv + '</span>'
                 '</div>'
             )
         if faibles:
             n_f = len(faibles)
-            annees_f = ', '.join(_s(e.get('annee_label')) for e in faibles[:3])
-            suite = (' et ' + str(n_f - 3) + ' autre(s)') if n_f > 3 else ''
-            bz_alertes += (
-                '<div style="border-left:3px solid #F39C12;background:rgba(243,156,18,0.05);'
-                'padding:10px 14px;border-radius:0 4px 4px 0;margin:8px 0;font-size:9pt;">'
-                'ℹ️ ' + str(n_f) + ' diagonale(s) avec effet FAIBLE (&lt;8\u202f%) : '
-                + annees_f + suite + ' — surveillance recommandée.'
+            bz_items += (
+                '<div class="bz-item bz-info">'
+                '<span class="bz-year" style="color:var(--cyan);">+' + str(n_f) + ' diag.</span>'
+                '<div class="bz-bar"><div class="bz-fill" style="width:20%;background:var(--cyan);"></div></div>'
+                '<span class="bz-pct" style="color:var(--cyan);">' + str(n_f) + ' diag. &lt; 8\u202f%</span>'
                 '</div>'
             )
-    b['bz_alertes'] = bz_alertes
-    b['bz_reco']    = (
-        '<div style="margin-top:12px;font-size:9pt;color:#0F2E52;">'
-        '<strong>Recommandation :</strong> ' + _s(bz.get('recommandation')) + '</div>'
-    ) if n_sig > 0 else ''
+    b['bz_items'] = bz_items
+
+    reco_bz = _s(bz.get('recommandation'))
+    bz_reco_val = reco_bz.split(' — ')[0] if ' — ' in reco_bz else reco_bz
+    bz_reco_txt = reco_bz.split(' — ')[1] if ' — ' in reco_bz else ''
+    b['bz_reco_box'] = (
+        '<div class="recommandation-box" style="margin-top:20px;">'
+        '<div class="reco-icon" style="color:var(--cyan);">↗</div>'
+        '<div>'
+        '<div class="reco-label">Recommandation Barnett-Zehnwirth</div>'
+        '<div class="reco-value">' + bz_reco_val + '</div>'
+        '<div class="reco-text">' + bz_reco_txt + '</div>'
+        '</div>'
+        '</div>'
+    )
 
     # ── SECTION 7 : COMMENTAIRE ACTUARIEL ────────────────────────────────────
     try:
         narration_html = _md_to_html(narration)
     except Exception as e_nar:
         logger.warning(f'_md_to_html échoué : {e_nar}')
-        narration_html = '<p>' + _clean(narration) + '</p>' if narration else \
-            '<p style="color:#999;font-style:italic;">Narration non disponible.</p>'
+        narration_html = '<p class="comm-p">' + _clean(narration) + '</p>' if narration else \
+            '<p class="comm-p" style="color:#8A9BB0;font-style:italic;">Narration non disponible.</p>'
 
-    source_labels = {
-        'claude_api': '✨ Narration générée par Claude — ActuarIA Intelligence',
-        'templates':  '📝 Narration générée en mode standard',
+    source_badge = {
+        'claude_api': '✦ ActuarIA Intelligence',
+        'templates':  '📝 Mode standard',
         'aucune':     '',
-    }
-    b['narration']        = narration_html
-    b['narration_source'] = (
-        '<div style="font-size:7.5pt;color:#8A9BB0;font-style:italic;margin-top:16px;'
-        'border-top:1px solid #e0e0e0;padding-top:8px;">'
-        + source_labels.get(source_narration, '') + '</div>'
-    ) if source_narration != 'aucune' else ''
+    }.get(source_narration, '')
+
+    b['narration_html']  = narration_html
+    b['commentaire_badge'] = source_badge
+    b['commentaire_header_title'] = 'Rapport de Provisionnement — ' + lob + ' · Arrêté ' + arr
 
     # ── SECTION 8 : JUGEMENT ─────────────────────────────────────────────────
-    alertes_html = ''
+    alertes = ''
     for a in n4.get('alertes', n2.get('alertes', [])):
         at = _clean(str(a))
         if at:
-            alertes_html += (
-                '<div style="border-left:3px solid #C0392B;background:rgba(192,57,43,0.05);'
-                'padding:10px 14px;border-radius:0 4px 4px 0;margin:8px 0;font-size:9pt;">'
-                + at + '</div>'
+            alertes += (
+                '<div class="hyp-card hyp-warn" style="margin-bottom:10px;">'
+                '<div class="hyp-label"><div class="hyp-code">Point de vigilance</div></div>'
+                '<div class="hyp-text">' + at + '</div>'
+                '</div>'
             )
-    b['alertes'] = alertes_html
+    b['alertes'] = alertes
 
-    recs_html = ''
-    for i, r in enumerate(n4.get('recommandations', []), 1):
+    recs = ''
+    for r in n4.get('recommandations', []):
         rt = _clean(str(r))
         if rt:
-            recs_html += (
-                '<div style="padding:8px 0;border-bottom:1px solid #eee;font-size:9pt;">'
-                '<span style="color:#C9A84C;font-weight:700;">' + str(i) + '.  </span>'
-                + rt + '</div>'
+            recs += (
+                '<div class="hyp-card hyp-ok" style="margin-bottom:10px;">'
+                '<div class="hyp-label"><div class="hyp-code">Recommandation</div></div>'
+                '<div class="hyp-text">' + rt + '</div>'
+                '</div>'
             )
-    b['recommandations'] = recs_html
+    b['recommandations'] = recs
 
     avis_txt = _clean(n4.get('avis_actuariel', ''))
     if avis_txt:
-        avis_col = ROUGE if 'DÉFAVORABLE' in avis_txt.upper() else VERT
+        avis_col = 'var(--rouge)' if 'DÉFAVORABLE' in avis_txt.upper() else 'var(--vert)'
         b['avis'] = (
-            '<div style="background:' + avis_col + ';color:#fff;padding:14px 20px;'
+            '<div style="background:' + avis_col + ';color:#fff;padding:16px 24px;'
             'border-radius:6px;margin-top:20px;font-size:10pt;font-weight:600;">'
             + avis_txt + '</div>'
         )
     else:
         b['avis'] = ''
 
-    # ── PIED DE PAGE ─────────────────────────────────────────────────────────
+    # ── PIED ─────────────────────────────────────────────────────────────────
     b['pied_info'] = cli + ' · ' + lob + ' · Arrêté ' + arr + ' · Audit ID : ' + (audit_id or '—') + ' · ' + dt
 
     return b
 
 
-def _build_tableau_bonimaili(bt: Dict, horizon: str) -> str:
-    """Construit le tableau HTML des boni/mali de liquidation."""
-    key_data = bt.get('tableau_' + horizon, bt.get('details_' + horizon, []))
-    if not key_data:
-        return '<p style="font-size:9pt;color:#8A9BB0;font-style:italic;">Données de back-testing non disponibles.</p>'
+def _build_bt_table(bt: Dict, horizon: str) -> str:
+    """Construit le tableau boni/mali pour un horizon donné."""
+    # Chercher les données dans différentes clés possibles
+    data = (
+        bt.get('tableau_' + horizon)
+        or bt.get('details_' + horizon)
+        or bt.get('resultats_' + horizon)
+        or []
+    )
 
-    seuil = 0.15  # ±15%
+    if not data or not isinstance(data, list) or len(data) == 0:
+        return '<p style="font-size:9pt;color:var(--slate);font-style:italic;">Données de back-testing non disponibles pour cet arrêté.</p>'
+
+    hor_label = 'N-1' if horizon == 'n1' else 'N-2'
     html = (
-        '<table style="width:100%;border-collapse:collapse;font-size:8.5pt;margin:12px 0;">'
-        '<thead><tr style="background:#0F2E52;color:#fff;">'
-        '<th style="padding:8px 10px;text-align:left;">Année</th>'
-        '<th style="padding:8px 10px;">Observé N (€)</th>'
-        '<th style="padding:8px 10px;">Ultimate N-' + ('1' if horizon == 'n1' else '2') + ' (€)</th>'
-        '<th style="padding:8px 10px;">Boni/Mali (€)</th>'
-        '<th style="padding:8px 10px;">Écart (%)</th>'
-        '<th style="padding:8px 10px;">Statut</th>'
+        '<table class="premium"><thead><tr>'
+        '<th>Année</th>'
+        '<th class="right">Observé N (€)</th>'
+        '<th class="right">Ultimate ' + hor_label + ' (€)</th>'
+        '<th class="right">Boni/Mali (€)</th>'
+        '<th class="center">Écart (%)</th>'
+        '<th class="center">Statut</th>'
         '</tr></thead><tbody>'
     )
-    if isinstance(key_data, list):
-        for idx, row in enumerate(key_data):
-            if not isinstance(row, dict):
-                continue
-            annee  = _s(row.get('annee', row.get('year', '—')))
-            obs    = row.get('observe_n', row.get('paid_n', 0))
-            ult    = row.get('ultimate_' + horizon, row.get('ultimate', 0))
-            bm     = row.get('boni_mali_' + horizon, row.get('boni_mali', 0))
-            ecart  = row.get('ecart_pct_' + horizon, row.get('ecart_pct', 0))
-            try:
-                ecart_f = float(ecart)
-                if abs(ecart_f) > seuil * 100:
-                    statut_icon = '🔴'
-                    row_col = 'rgba(192,57,43,0.05)'
-                elif abs(ecart_f) > seuil * 100 * 0.6:
-                    statut_icon = '🟡'
-                    row_col = 'rgba(243,156,18,0.05)'
-                else:
-                    statut_icon = '✅'
-                    row_col = '#fff' if idx % 2 == 0 else '#f0f4f8'
-            except Exception:
-                statut_icon = '—'
-                row_col = '#fff' if idx % 2 == 0 else '#f0f4f8'
 
-            html += (
-                '<tr style="background:' + row_col + ';">'
-                '<td style="padding:7px 10px;font-weight:500;">' + annee + '</td>'
-                '<td style="padding:7px 10px;text-align:right;">' + _f(obs) + '</td>'
-                '<td style="padding:7px 10px;text-align:right;">' + _f(ult) + '</td>'
-                '<td style="padding:7px 10px;text-align:right;">' + _f(bm) + '</td>'
-                '<td style="padding:7px 10px;text-align:center;">' + _pct(ecart) + '</td>'
-                '<td style="padding:7px 10px;text-align:center;">' + statut_icon + '</td>'
-                '</tr>'
-            )
+    for idx, row in enumerate(data):
+        if not isinstance(row, dict):
+            continue
+        annee = _s(row.get('annee', row.get('year', '—')))
+        obs   = row.get('observe_n', row.get('paid_n', row.get('observed', 0)))
+        ult   = row.get('ultimate_' + horizon, row.get('ultimate', 0))
+        bm    = row.get('boni_mali_' + horizon, row.get('boni_mali', 0))
+        ecart = row.get('ecart_pct_' + horizon, row.get('ecart_pct', 0))
+
+        try:
+            ecart_f = float(ecart)
+            if abs(ecart_f) > 15:
+                icon = '🔴'; row_style = 'background:rgba(192,57,43,0.04);'
+            elif abs(ecart_f) > 8:
+                icon = '🟡'; row_style = 'background:rgba(230,126,34,0.04);'
+            else:
+                icon = '✅'; row_style = 'background:#fff;' if idx % 2 == 0 else 'background:#F8FAFB;'
+        except Exception:
+            icon = '—'; row_style = ''
+
+        html += (
+            '<tr style="' + row_style + '">'
+            '<td class="label">' + annee + '</td>'
+            '<td class="right"><span class="mono">' + _f(obs) + '</span></td>'
+            '<td class="right"><span class="mono">' + _f(ult) + '</span></td>'
+            '<td class="right"><span class="mono">' + _f(bm) + '</span></td>'
+            '<td class="center">' + _pct(ecart) + '</td>'
+            '<td class="center">' + icon + '</td>'
+            '</tr>'
+        )
+
     html += '</tbody></table>'
     return html
 
 
-def _wrap_graphique(html_g: str, titre: str) -> str:
-    """Encapsule un graphique Plotly dans un bloc HTML."""
+def _wrap_graph(html_g: str, titre: str) -> str:
     if not html_g:
         return ''
     return (
-        '<div style="font-family:Georgia,serif;font-size:10pt;font-weight:600;'
-        'color:#C9A84C;margin:20px 0 10px;">' + titre + '</div>'
-        '<div style="margin:12px 0;border:1px solid #e0e5ec;border-radius:6px;overflow:hidden;">'
+        '<div class="table-section-title">' + titre + '</div>'
+        '<div style="margin:12px 0;border:1px solid var(--border);border-radius:6px;overflow:hidden;">'
         + html_g + '</div>'
     )
-
-
-# =============================================================================
-#  CSS DU RAPPORT
-# =============================================================================
-
-def _css() -> str:
-    return """
-<style>
-@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&display=swap');
-
-* { box-sizing: border-box; margin: 0; padding: 0; }
-
-body {
-  font-family: 'Inter', sans-serif;
-  font-size: 10pt;
-  color: #1a1a2e;
-  background: #f4f6f9;
-  line-height: 1.7;
-}
-
-.rapport-container {
-  max-width: 920px;
-  margin: 0 auto;
-  background: white;
-  box-shadow: 0 2px 20px rgba(0,0,0,0.08);
-}
-
-/* ── PAGE DE GARDE ── */
-.page-garde {
-  background: linear-gradient(160deg, #0F2E52 0%, #1A3F6B 60%, #0F2E52 100%);
-  padding: 0;
-  position: relative;
-  min-height: 520px;
-  display: flex;
-  flex-direction: column;
-  page-break-after: always;
-}
-
-.garde-top {
-  padding: 36px 60px 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-}
-
-.garde-hero {
-  flex: 1;
-  padding: 60px 60px 0;
-  text-align: center;
-}
-
-.garde-titre {
-  font-family: 'EB Garamond', serif;
-  font-size: 48pt;
-  font-weight: 700;
-  color: #fff;
-  line-height: 1.1;
-  margin-bottom: 12px;
-  letter-spacing: -1px;
-}
-
-.garde-branche {
-  font-family: 'EB Garamond', serif;
-  font-size: 22pt;
-  color: #C9A84C;
-  margin-bottom: 28px;
-  letter-spacing: 0.5px;
-}
-
-.garde-separateur {
-  width: 120px;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, #C9A84C, transparent);
-  margin: 0 auto 28px;
-}
-
-.garde-footer {
-  padding: 28px 60px 36px;
-  margin-top: auto;
-}
-
-.confidentiel {
-  font-size: 8pt;
-  color: #C0392B;
-  font-weight: 600;
-  letter-spacing: 2px;
-  border: 1px solid #C0392B;
-  padding: 4px 10px;
-  border-radius: 3px;
-}
-
-/* ── CORPS ── */
-.rapport-body { padding: 40px 60px; }
-
-.section { margin-bottom: 40px; page-break-inside: avoid; }
-
-.section-titre {
-  font-family: 'EB Garamond', serif;
-  font-size: 16pt;
-  font-weight: 700;
-  color: #0F2E52;
-  border-bottom: 2px solid #C9A84C;
-  padding-bottom: 8px;
-  margin-bottom: 20px;
-}
-
-.narration {
-  background: #f9fafc;
-  border-left: 3px solid #C9A84C;
-  padding: 24px 28px;
-  border-radius: 0 6px 6px 0;
-  margin: 20px 0;
-}
-
-.narration p { margin-bottom: 12px; line-height: 1.8; color: #2c3e50; }
-
-/* ── PIED ── */
-.pied-de-page {
-  background: #0F2E52;
-  padding: 20px 60px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-@media print {
-  body { background: white; }
-  .rapport-container { box-shadow: none; }
-  .section { page-break-inside: avoid; }
-  .page-garde { page-break-after: always; }
-}
-</style>"""
 
 
 # =============================================================================
@@ -1015,11 +1329,10 @@ body {
 # =============================================================================
 
 def export_html(
-    n1: Dict, n2: Dict, n3: Dict, n4: Dict,
+    n1, n2, n3, n4,
     commentaire='', ref_client='', arrete='',
     audit_id='', lob_label='', graphiques=None,
 ) -> str:
-    """Génère le rapport complet au format HTML."""
     try:
         n1=n1 or {}; n2=n2 or {}; n3=n3 or {}; n4=n4 or {}
 
@@ -1030,57 +1343,69 @@ def export_html(
         methode = n4.get('methode_facteurs', n2.get('methode_recommandee', '—'))
         statut  = n4.get('statut', 'AMBRE')
 
-        # Narration
         narration, source = _generer_narration(n2, n3, n4, commentaire, lob, arr)
 
-        # Graphiques Plotly → HTML
+        # Graphiques Plotly — accepte go.Figure ou HTML pré-converti
         graphiques_html = {}
         if graphiques:
-            try:
-                import plotly.io as pio
-                for nom, fig in graphiques.items():
-                    try:
+            for nom, fig_or_html in graphiques.items():
+                try:
+                    if isinstance(fig_or_html, str):
+                        # Déjà converti en HTML (stockage session_state optimisé)
+                        graphiques_html[nom] = fig_or_html
+                    else:
+                        # Objet go.Figure → convertir en HTML
+                        import plotly.io as pio
                         graphiques_html[nom] = pio.to_html(
-                            fig, full_html=False, include_plotlyjs=False,
+                            fig_or_html, full_html=False, include_plotlyjs=False,
                             config={'displayModeBar': False},
                         )
-                    except Exception:
-                        pass
-            except ImportError:
-                pass
+                except Exception as _eg:
+                    logger.debug(f'Graphique {nom} ignoré : {_eg}')
 
-        # Construire tous les blocs HTML
-        b = _build_html_blocks(
-            n2, n3, n4, narration, source,
-            lob, cli, arr, dt, audit_id, methode, statut,
-            graphiques_html,
-        )
+        # Construire tous les blocs
+        b = _build_blocks(n2, n3, n4, narration, source, lob, cli, arr, dt, audit_id, methode, statut, graphiques_html)
 
-        # Assembler le HTML final — aucune logique dans le template
+        # Assembler
         html = (
             '<!DOCTYPE html>\n<html lang="fr">\n<head>\n'
             '<meta charset="UTF-8">\n'
-            '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
             '<title>Rapport Actuariel — ' + cli + ' — ' + arr + '</title>\n'
             '<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist@2.26.0/plotly.min.js"></script>\n'
             + _css() +
-            '\n</head>\n<body>\n'
-            '<div class="rapport-container">\n\n'
+            '\n</head>\n<body>\n<div class="rapport-container">\n\n'
 
             # ── PAGE DE GARDE ──────────────────────────────────────────────
             '<div class="page-garde">\n'
-            '  <div class="garde-top">\n'
-            '    <img src="' + LOGO_URI + '" alt="ActuarIA" height="60"/>\n'
-            '    <span class="confidentiel">CONFIDENTIEL</span>\n'
+            '  <div class="garde-bg">\n'
+            '    <div class="garde-dots"></div>\n'
+            '    <div class="garde-diagonal"></div>\n'
+            '    <div class="garde-accent-line"></div>\n'
             '  </div>\n'
-            '  <div class="garde-hero">\n'
-            '    <div class="garde-titre">Rapport de<br>Provisionnement<br>Non-Vie</div>\n'
-            '    <div class="garde-branche">' + lob + '</div>\n'
-            '    <div class="garde-separateur"></div>\n'
-            '    <div>' + b['statut_badge'] + '</div>\n'
-            '  </div>\n'
-            '  <div class="garde-footer">\n'
-            + b['meta_grid'] +
+            '  <div class="garde-inner">\n'
+            '    <div class="garde-header">\n'
+            '      <div class="garde-logo-wrap"><img src="' + LOGO_URI + '" alt="ActuarIA"/></div>\n'
+            '      <div class="garde-badges">\n'
+            '        <span class="badge-confidentiel">⬛ Confidentiel</span>\n'
+            '      </div>\n'
+            '    </div>\n'
+            '    <div class="garde-hero">\n'
+            '      <div class="garde-eyebrow">Rapport de Provisionnement Non-Vie</div>\n'
+            '      <div class="garde-titre">' + b['garde_titre'] + '</div>\n'
+            '      <div class="garde-subtitle">Arrêté au ' + arr + '</div>\n'
+            '      <div class="garde-sep">\n'
+            '        <div class="garde-sep-line"></div>\n'
+            '        <div class="garde-sep-diamond"></div>\n'
+            '        <div class="garde-sep-line"></div>\n'
+            '      </div>\n'
+            '      <div class="garde-statut ' + b['garde_statut_cls'] + '">\n'
+            '        <div class="statut-dot ' + b['garde_dot_cls'] + '"></div>\n'
+            '        <div class="' + b['garde_label_cls'] + '">' + b['garde_label'] + '</div>\n'
+            '      </div>\n'
+            '    </div>\n'
+            '    <div class="garde-footer">\n'
+            '      <div class="garde-kpis">' + b['garde_kpis'] + '</div>\n'
+            '    </div>\n'
             '  </div>\n'
             '</div>\n\n'
 
@@ -1088,68 +1413,77 @@ def export_html(
             '<div class="rapport-body">\n\n'
 
             # Section 1
-            '<div class="section">\n'
-            '<div class="section-titre">1. Synthèse exécutive</div>\n'
+            '<div class="section-header"><span class="section-num">01</span><span class="section-titre">Synthèse exécutive</span></div>\n'
+            '<div class="section-body">\n'
             + b['kpi_grid']
-            + _wrap_graphique(b['graph_convergence'], 'Convergence des méthodes — Best Estimate S2')
-            + '\n</div>\n\n'
+            + _wrap_graph(b['graph_convergence'], 'Convergence des méthodes — Best Estimate S2')
+            + '\n</div>\n<div class="section-divider"></div>\n\n'
 
             # Section 2
-            '<div class="section">\n'
-            '<div class="section-titre">2. Résultats par méthode actuarielle</div>\n'
+            '<div class="section-header"><span class="section-num">02</span><span class="section-titre">Résultats par méthode actuarielle</span></div>\n'
+            '<div class="section-body">\n'
             + b['tableau_methodes']
-            + '<div style="font-family:Georgia,serif;font-size:10pt;font-weight:600;color:#C9A84C;margin:20px 0 10px;">Incertitude stochastique — Bootstrap ODP &amp; Mack 1993</div>\n'
+            + '<div class="table-section-title">Incertitude stochastique — Bootstrap ODP &amp; Mack 1993</div>\n'
             + b['tableau_incertitude']
-            + _wrap_graphique(b['graph_heatmap'], 'Triangle de développement cumulé')
-            + _wrap_graphique(b['graph_ibnr'], 'IBNR par année de survenance')
-            + _wrap_graphique(b['graph_bootstrap'], 'Distribution Bootstrap ODP — Quantiles de réserve')
-            + '\n</div>\n\n'
+            + _wrap_graph(b['graph_heatmap'], 'Triangle de développement cumulé')
+            + _wrap_graph(b['graph_ibnr'], 'IBNR par année de survenance')
+            + _wrap_graph(b['graph_bootstrap'], 'Distribution Bootstrap ODP — Quantiles de réserve')
+            + '\n</div>\n<div class="section-divider"></div>\n\n'
 
             # Section 3
-            '<div class="section">\n'
-            '<div class="section-titre">3. Validation des hypothèses actuarielles</div>\n'
-            + b['hypotheses']
-            + b['methode_rec']
-            + '\n</div>\n\n'
+            '<div class="section-header"><span class="section-num">03</span><span class="section-titre">Validation des hypothèses actuarielles</span></div>\n'
+            '<div class="section-body">\n'
+            '<div class="hyp-grid">' + b['hyp_cards'] + '</div>\n'
+            + b['methode_rec_box']
+            + '\n</div>\n<div class="section-divider"></div>\n\n'
 
             # Section 4
-            '<div class="section">\n'
-            '<div class="section-titre">4. SCR Provisions — Art. 105 Solvabilité 2</div>\n'
+            '<div class="section-header"><span class="section-num">04</span><span class="section-titre">SCR Provisions — Art. 105 Solvabilité 2</span></div>\n'
+            '<div class="section-body">\n'
             + b['tableau_scr']
-            + '\n</div>\n\n'
+            + '\n</div>\n<div class="section-divider"></div>\n\n'
 
             # Section 5
-            '<div class="section">\n'
-            '<div class="section-titre">5. Back-testing — Boni/Mali de liquidation</div>\n'
-            + b['bt_kpis']
-            + '<div style="font-family:Georgia,serif;font-size:10pt;font-weight:600;color:#C9A84C;margin:20px 0 8px;">Tableau N-1 — Horizon un an</div>\n'
+            '<div class="section-header"><span class="section-num">05</span><span class="section-titre">Back-testing — Boni / Mali de liquidation</span></div>\n'
+            '<div class="section-body">\n'
+            + b['bt_summary']
+            + '<div class="table-section-title">Tableau N-1 — Horizon un an</div>\n'
             + b['tableau_bt_n1']
-            + '<div style="font-family:Georgia,serif;font-size:10pt;font-weight:600;color:#C9A84C;margin:20px 0 8px;">Tableau N-2 — Horizon deux ans</div>\n'
+            + '<div class="table-section-title" style="margin-top:20px;">Tableau N-2 — Horizon deux ans</div>\n'
             + b['tableau_bt_n2']
-            + _wrap_graphique(b['graph_bt'], 'Boni/Mali de liquidation — Horizons N-1 et N-2')
-            + b['bt_message']
-            + '\n</div>\n\n'
+            + _wrap_graph(b['graph_bt'], 'Boni/Mali de liquidation — Horizons N-1 et N-2')
+            + b['bt_note']
+            + '\n</div>\n<div class="section-divider"></div>\n\n'
 
             # Section 6
-            '<div class="section">\n'
-            '<div class="section-titre">6. Effets calendaire — Barnett-Zehnwirth (1998)</div>\n'
-            + b['bz_alertes']
-            + b['bz_reco']
-            + '\n</div>\n\n'
+            '<div class="section-header"><span class="section-num">06</span><span class="section-titre">Effets calendaires — Barnett-Zehnwirth (1998)</span></div>\n'
+            '<div class="section-body">\n'
+            '<div class="bz-grid">' + b['bz_items'] + '</div>\n'
+            + b['bz_reco_box']
+            + '\n</div>\n<div class="section-divider"></div>\n\n'
 
-            # Section 7
-            '<div class="section">\n'
-            '<div class="section-titre">7. Commentaire actuariel</div>\n'
-            '<div class="narration">\n'
-            + b['narration']
-            + b['narration_source']
-            + '\n</div>\n</div>\n\n'
+            # Section 7 — COMMENTAIRE COMPLET
+            '<div class="section-header"><span class="section-num">07</span><span class="section-titre">Commentaire actuariel</span></div>\n'
+            '<div class="section-body">\n'
+            '<div class="commentaire-wrap">\n'
+            '  <div class="commentaire-header">\n'
+            '    <span class="commentaire-header-title">' + b['commentaire_header_title'] + '</span>\n'
+            '    <span class="commentaire-ai-badge">' + b['commentaire_badge'] + '</span>\n'
+            '  </div>\n'
+            '  <div class="commentaire-body">\n'
+            '    <p style="font-size:8pt;color:var(--slate);margin-bottom:20px;font-style:italic;">'
+            'Commentaire à destination du Conseil d\'Administration et de l\'Actuaire Désigné.<br>'
+            'Document soumis à l\'ACPR dans le cadre du reporting Solvabilité 2.</p>\n'
+            + b['narration_html']
+            + '\n    <div class="comm-footer">✦ Narration générée par ActuarIA Intelligence · Agent A7 Ibrahim v5.0 · ' + dt + '</div>\n'
+            '  </div>\n'
+            '</div>\n'
+            '</div>\n<div class="section-divider"></div>\n\n'
 
             # Section 8
-            '<div class="section">\n'
-            '<div class="section-titre">8. Jugement actuariel &amp; Recommandations</div>\n'
-            + b['alertes']
-            + b['recommandations']
+            '<div class="section-header"><span class="section-num">08</span><span class="section-titre">Jugement actuariel &amp; Recommandations</span></div>\n'
+            '<div class="section-body">\n'
+            '<div class="hyp-grid">' + b['alertes'] + b['recommandations'] + '</div>\n'
             + b['avis']
             + '\n</div>\n\n'
 
@@ -1157,34 +1491,29 @@ def export_html(
 
             # ── PIED DE PAGE ───────────────────────────────────────────────
             '<div class="pied-de-page">\n'
-            '  <img src="' + LOGO_URI + '" alt="ActuarIA" height="28"/>\n'
-            '  <div style="font-size:8pt;color:#8A9BB0;text-align:right;">\n'
-            '    ' + b['pied_info'] + '<br>\n'
-            '    <span style="color:#C0392B;font-weight:600;">CONFIDENTIEL — USAGE STRICTEMENT ACTUARIEL</span>\n'
+            '  <div class="pied-logo"><img src="' + LOGO_URI + '" alt="ActuarIA"/></div>\n'
+            '  <div class="pied-meta">' + b['pied_info'] + '<br>'
+            '    <span class="confidentiel-footer">CONFIDENTIEL — USAGE STRICTEMENT ACTUARIEL</span>\n'
             '  </div>\n'
             '</div>\n\n'
-
             '</div>\n</body>\n</html>'
         )
 
-        logger.info(f'HTML : {len(html):,} chars — narration={source}')
+        logger.info(f'HTML v5 : {len(html):,} chars — narration={source}')
         return html
 
     except Exception as e:
         logger.error(f'export_html échoué : {e}', exc_info=True)
-        return '<html><body><h1>Erreur génération rapport</h1><p>' + str(e) + '</p></body></html>'
+        return '<html><body><h1>Erreur : ' + str(e) + '</h1></body></html>'
 
 
 # =============================================================================
 #  EXPORT PDF
 # =============================================================================
 
-def export_pdf(
-    n1=None, n2=None, n3=None, n4=None,
-    commentaire='', ref_client='', arrete='',
-    audit_id='', lob_label='', graphiques=None, **kwargs,
-) -> bytes:
-    """Génère le rapport PDF via weasyprint."""
+def export_pdf(n1=None, n2=None, n3=None, n4=None,
+               commentaire='', ref_client='', arrete='',
+               audit_id='', lob_label='', graphiques=None, **kw) -> bytes:
     n1=n1 or {}; n2=n2 or {}; n3=n3 or {}; n4=n4 or {}
     try:
         from weasyprint import HTML as WH
@@ -1196,7 +1525,7 @@ def export_pdf(
         logger.error('weasyprint non installé')
         return b''
     except Exception as e:
-        logger.error(f'export_pdf échoué : {e}', exc_info=True)
+        logger.error(f'export_pdf : {e}', exc_info=True)
         return b''
 
 
@@ -1204,12 +1533,9 @@ def export_pdf(
 #  EXPORT WORD
 # =============================================================================
 
-def export_word(
-    n1: Dict, n2: Dict, n3: Dict, n4: Dict,
-    commentaire='', ref_client='', arrete='',
-    audit_id='', lob_label='', graphiques=None,
-) -> bytes:
-    """Génère le rapport Word (.docx)."""
+def export_word(n1, n2, n3, n4,
+                commentaire='', ref_client='', arrete='',
+                audit_id='', lob_label='', graphiques=None) -> bytes:
     try:
         from docx import Document
         from docx.shared import Pt, Cm, RGBColor
@@ -1217,8 +1543,7 @@ def export_word(
         from docx.oxml.ns import qn
         from docx.oxml import OxmlElement
     except ImportError as e:
-        logger.error(f'python-docx absent : {e}')
-        return b''
+        logger.error(f'python-docx absent : {e}'); return b''
 
     try:
         n1=n1 or {}; n2=n2 or {}; n3=n3 or {}; n4=n4 or {}
@@ -1227,8 +1552,8 @@ def export_word(
             h = h.lstrip('#')
             return RGBColor(int(h[:2],16), int(h[2:4],16), int(h[4:],16))
 
-        NR=rgb(NAVY); GR=rgb(GOLD); BR=rgb(BLANC)
-        GrR=rgb(GRIS); RgR=rgb(ROUGE); VR=rgb(VERT); AR=rgb(AMBRE)
+        NR=rgb(NAVY); GR=rgb(GOLD); BR=rgb('#FFFFFF')
+        GrR=rgb(SLATE); RgR=rgb(ROUGE); VR=rgb(VERT); AR=rgb(ORANGE)
 
         dt      = datetime.now().strftime('%d/%m/%Y')
         arr     = arrete or dt
@@ -1243,14 +1568,14 @@ def export_word(
         sc  = n4.get('scr',{});           pw = n4.get('poids',{})
         bt  = n3.get('backtesting',{});   bz = n3.get('barnett_zehnwirth',{})
         h1  = n2.get('h1_independance',{}); h2 = n2.get('h2_stabilite',{})
-        h3  = n2.get('h3_apriori_bf',{});  h4 = n2.get('h4_homosc_bootstrap',{})
+        h3  = n2.get('h3_apriori_bf',{});  h4  = n2.get('h4_homosc_bootstrap',{})
 
         BE  = float(n4.get('best_estimate',0) or 0)
         SIG = float(mk.get('sigma_total',0) or 0)
-        CV  = float(n4.get('cv_inter_methodes',0) or 0)
         P75 = float(n4.get('reserve_p75',0) or 0)
         P90 = float(n4.get('reserve_p90',0) or 0)
         P99 = float(n4.get('reserve_p99_5',0) or 0)
+        CV  = float(n4.get('cv_inter_methodes',0) or 0)
         SCP = float(sc.get('scr_prov',BE*0.30) if sc else BE*0.30)
         SCR = SCP/BE*100 if BE else 0
 
@@ -1262,55 +1587,47 @@ def export_word(
         def _bg(cell, hex6):
             tc=cell._tc; tcp=tc.get_or_add_tcPr()
             sd=OxmlElement('w:shd')
-            sd.set(qn('w:fill'), hex6.lstrip('#'))
-            sd.set(qn('w:color'),'auto')
-            sd.set(qn('w:val'),'clear')
+            sd.set(qn('w:fill'),hex6.lstrip('#'))
+            sd.set(qn('w:color'),'auto'); sd.set(qn('w:val'),'clear')
             tcp.append(sd)
 
         def _run(p, txt, bold=False, italic=False, sz=10, col=None):
-            r=p.add_run(str(txt)); r.bold=bold; r.italic=italic
-            r.font.size=Pt(sz)
+            r=p.add_run(str(txt)); r.bold=bold; r.italic=italic; r.font.size=Pt(sz)
             if col: r.font.color.rgb=col
             return r
 
-        def _h(txt, lv=1, col=None, sb=8, sa=3):
+        def _h(txt, lv=1, col=None):
             p=doc.add_paragraph()
-            p.paragraph_format.space_before=Pt(sb)
-            p.paragraph_format.space_after=Pt(sa)
+            p.paragraph_format.space_before=Pt(8); p.paragraph_format.space_after=Pt(3)
             sz={1:16,2:12,3:10}.get(lv,10)
             c=col or (NR if lv==1 else GR)
             _run(p,txt,bold=True,sz=sz,col=c)
 
-        def _sep(col='C9A84C'):
+        def _sep():
             p=doc.add_paragraph()
-            p.paragraph_format.space_before=Pt(2)
-            p.paragraph_format.space_after=Pt(2)
+            p.paragraph_format.space_before=Pt(2); p.paragraph_format.space_after=Pt(2)
             pPr=p._p.get_or_add_pPr(); pBdr=OxmlElement('w:pBdr')
-            b=OxmlElement('w:bottom')
-            b.set(qn('w:val'),'single'); b.set(qn('w:sz'),'6')
-            b.set(qn('w:space'),'1'); b.set(qn('w:color'),col)
-            pBdr.append(b); pPr.append(pBdr)
+            bo=OxmlElement('w:bottom')
+            bo.set(qn('w:val'),'single'); bo.set(qn('w:sz'),'6')
+            bo.set(qn('w:space'),'1'); bo.set(qn('w:color'),'C9A84C')
+            pBdr.append(bo); pPr.append(pBdr)
 
-        def _tbl(heads, rows, ws=None, hbg='0F2E52'):
+        def _tbl(heads, rows, ws=None):
             from docx.enum.table import WD_ALIGN_VERTICAL
-            t=doc.add_table(rows=1+len(rows), cols=len(heads))
-            t.style='Table Grid'
+            t=doc.add_table(rows=1+len(rows), cols=len(heads)); t.style='Table Grid'
             for i,hd in enumerate(heads):
-                c=t.rows[0].cells[i]; _bg(c,hbg)
+                c=t.rows[0].cells[i]; _bg(c,'0B1E3D')
                 pp=c.paragraphs[0]; pp.alignment=WD_ALIGN_PARAGRAPH.CENTER
-                r=pp.add_run(str(hd)); r.bold=True; r.font.size=Pt(9)
-                r.font.color.rgb=BR
+                r=pp.add_run(str(hd)); r.bold=True; r.font.size=Pt(9); r.font.color.rgb=BR
             for ri,row in enumerate(rows):
                 for ci,v in enumerate(row):
                     c=t.rows[ri+1].cells[ci]
                     if ri%2==1: _bg(c,'EEF2F7')
                     pp=c.paragraphs[0]; pp.alignment=WD_ALIGN_PARAGRAPH.CENTER
-                    r=pp.add_run(str(v) if v is not None else '—')
-                    r.font.size=Pt(9)
+                    r=pp.add_run(str(v) if v is not None else '—'); r.font.size=Pt(9)
             if ws:
                 for i,w in enumerate(ws):
-                    for row in t.rows:
-                        row.cells[i].width=Cm(w)
+                    for row in t.rows: row.cells[i].width=Cm(w)
             doc.add_paragraph().paragraph_format.space_after=Pt(2)
 
         # Page de garde
@@ -1320,119 +1637,79 @@ def export_word(
             doc.add_picture(io.BytesIO(logo_png), width=Cm(7))
         except Exception:
             p=doc.add_paragraph()
-            _run(p,'Actuar',bold=True,sz=26,col=NR)
-            _run(p,'IA',bold=True,sz=26,col=GR)
+            _run(p,'Actuar',bold=True,sz=26,col=NR); _run(p,'IA',bold=True,sz=26,col=GR)
 
         doc.add_paragraph()
         p=doc.add_paragraph()
-        p.alignment=WD_ALIGN_PARAGRAPH.LEFT
         _run(p,'RAPPORT DE PROVISIONNEMENT NON-VIE\n',bold=True,sz=20,col=NR)
         _run(p,lob,bold=True,sz=14,col=GR)
         doc.add_paragraph()
-
         s_col_r = VR if statut=='VERT' else AR if statut=='AMBRE' else RgR
         p=doc.add_paragraph()
-        _run(p,'Statut : ',sz=11,col=NR)
-        _run(p,statut,bold=True,sz=11,col=s_col_r)
+        _run(p,'Statut : ',sz=11,col=NR); _run(p,statut,bold=True,sz=11,col=s_col_r)
         doc.add_paragraph()
-
-        _tbl(
-            ['Client','Branche','Méthode','Arrêté'],
-            [[cli, lob, methode.replace('_',' ').title(), arr]],
-            ws=[3.5,4.0,4.0,2.5]
-        )
+        _tbl(['Client','Branche','Méthode','Arrêté'],
+             [[cli,lob,methode.replace('_',' ').title(),arr]],ws=[3.5,4.0,4.0,2.5])
         doc.add_page_break()
 
-        # 1. Synthèse
         _h('1. Synthèse exécutive'); _sep()
-        _tbl(
-            ['Indicateur','Valeur','Indicateur','Valeur'],
-            [
-                ['Best Estimate S2',_f(BE),'σ Mack total',_f(SIG)],
-                ['Provision P75',_f(P75),'CV inter-méthodes',_pct(CV)],
-                ['Provision P90',_f(P90),'SCR Provisions',_f(SCP)],
-                ['Provision P99.5',_f(P99),'Ratio SCR/BE',_pct(SCR)],
-            ],
-            ws=[4.5,3.5,4.5,3.5]
-        )
+        _tbl(['Indicateur','Valeur','Indicateur','Valeur'],
+             [['Best Estimate S2',_f(BE),'σ Mack total',_f(SIG)],
+              ['Provision P75',_f(P75),'CV inter-méthodes',_pct(CV)],
+              ['Provision P90',_f(P90),'SCR Provisions',_f(SCP)],
+              ['Provision P99.5',_f(P99),'Ratio SCR/BE',_pct(SCR)]],ws=[4.5,3.5,4.5,3.5])
         doc.add_page_break()
 
-        # 2. Résultats
         _h('2. Résultats par méthode actuarielle'); _sep()
-        _tbl(
-            ['Méthode','Réserve IBNR (€)','Poids BE','Score /100','Statut'],
-            [
-                ['Chain Ladder',_f(cl.get('reserve_totale')),_pct(pw.get('chain_ladder',0)*100),str(n2.get('scores_confiance',{}).get('chain_ladder','—')),'✅'],
-                ['Mack 1993',_f(mk.get('reserve_best_estimate')),_pct(pw.get('mack',0)*100),'—','✅'],
-                ['Bornhuetter-Ferguson',_f(bf.get('reserve_totale')),_pct(pw.get('bornhuetter_ferguson',0)*100),'—','✅'],
-                ['Cape Cod',_f(cc.get('reserve_totale')),_pct(pw.get('cape_cod',0)*100),str(n2.get('scores_confiance',{}).get('cape_cod','—')),'✅'],
-                ['BEST ESTIMATE S2',_f(BE),'100 %','—','→ Bilan S2'],
-            ],
-            ws=[4.5,3.5,2.5,2.5,3.0]
-        )
+        _tbl(['Méthode','Réserve IBNR','Poids BE','Score','Statut'],
+             [['Chain Ladder',_f(cl.get('reserve_totale')),_pct(pw.get('chain_ladder',0)*100),
+               str(n2.get('scores_confiance',{}).get('chain_ladder','—')),'✓ Inclus'],
+              ['Mack 1993',_f(mk.get('reserve_best_estimate')),_pct(pw.get('mack',0)*100),'—','✓ Inclus'],
+              ['Bornhuetter-Ferguson',_f(bf.get('reserve_totale')),_pct(pw.get('bornhuetter_ferguson',0)*100),'—','✓ Inclus'],
+              ['Cape Cod',_f(cc.get('reserve_totale')),_pct(pw.get('cape_cod',0)*100),
+               str(n2.get('scores_confiance',{}).get('cape_cod','—')),'✓ Inclus'],
+              ['BEST ESTIMATE S2',_f(BE),'100 %','—','→ Bilan S2']],ws=[4.5,3.5,2.5,2.5,3.0])
         doc.add_page_break()
 
-        # 3. Hypothèses
         _h('3. Validation des hypothèses actuarielles'); _sep()
         rows_h=[]
         for lbl,h in [('H1 Indépendance',h1),('H2 Stabilité',h2),('H3 A priori BF',h3),('H4 Homoscédasticité',h4)]:
             if not h: continue
             ok=bool(h.get('ok',True))
-            h_score=str(h.get('score','—'))
-            h_msg=str(h.get('message',''))[:80]
-            rows_h.append([lbl,'VALIDÉE' if ok else 'REJETÉE',h_score+'/100',h_msg])
-        if rows_h:
-            _tbl(['Hypothèse','Résultat','Score','Message'],rows_h,ws=[4.0,2.5,2.0,7.5])
+            rows_h.append([lbl,'VALIDÉE' if ok else 'REJETÉE',str(h.get('score','—'))+'/100',str(h.get('message',''))[:80]])
+        if rows_h: _tbl(['Hypothèse','Résultat','Score','Message'],rows_h,ws=[4.0,2.5,2.0,7.5])
         doc.add_page_break()
 
-        # 4. SCR
         _h('4. SCR Provisions — Art. 105 S2'); _sep()
-        _tbl(
-            ['Composante','Valeur','Référence'],
-            [
-                ['Best Estimate S2',_f(BE),'Art. 77 S2'],
-                ['Facteur σ EIOPA','10 %','LoB : '+lob],
-                ['SCR Provisions',_f(SCP),'3 × σ × BE'],
-                ['Ratio SCR/BE',_pct(SCR),'< 35 %'],
-            ],
-            ws=[4.5,3.5,8.0]
-        )
+        _tbl(['Composante','Valeur','Référence'],
+             [['Best Estimate S2',_f(BE),'Art. 77 S2'],
+              ['Facteur σ EIOPA','0,10 à 0,11','Annexe II, Rèegt 2015/35'],
+              ['SCR Provisions',_f(SCP),'3 × σ × BE'],
+              ['Ratio SCR/BE',_pct(SCR),'< 35 %']],ws=[4.5,3.5,8.0])
         doc.add_page_break()
 
-        # 5. Back-testing
-        _h('5. Back-testing — Boni/Mali de liquidation'); _sep()
-        bt_score_w = str(bt.get('score_qualite','—'))
-        bt_r_n1 = str(bt.get('n_rouge_n1',0))
-        bt_a_n1 = str(bt.get('n_ambre_n1',0))
-        bt_r_n2 = str(bt.get('n_rouge_n2',0))
-        bt_a_n2 = str(bt.get('n_ambre_n2',0))
+        _h('5. Back-testing — Boni / Mali de liquidation'); _sep()
+        bt_s = str(bt.get('statut','—')); bt_sc = str(bt.get('score_qualite','—'))
         p=doc.add_paragraph()
-        s_bt_col = VR if bt.get('statut')=='VERT' else AR if bt.get('statut')=='AMBRE' else RgR
-        _run(p,'Statut : ',sz=9,col=NR)
-        _run(p,str(bt.get('statut','—')),bold=True,sz=9,col=s_bt_col)
-        _run(p,' | Score : '+bt_score_w+'/100',sz=9,col=NR)
-        _run(p,' | N-1 : '+bt_r_n1+' rouge / '+bt_a_n1+' ambre',sz=9,col=NR)
-        _run(p,' | N-2 : '+bt_r_n2+' rouge / '+bt_a_n2+' ambre',sz=9,col=NR)
+        s_bt = VR if bt_s=='VERT' else AR if bt_s=='AMBRE' else RgR
+        _run(p,'Statut : ',sz=9,col=NR); _run(p,bt_s,bold=True,sz=9,col=s_bt)
+        _run(p,' | Score : '+bt_sc+'/100',sz=9,col=NR)
+        _run(p,' | N-1 : '+str(bt.get('n_rouge_n1',0))+' rouge / '+str(bt.get('n_ambre_n1',0))+' ambre',sz=9,col=NR)
+        _run(p,' | N-2 : '+str(bt.get('n_rouge_n2',0))+' rouge / '+str(bt.get('n_ambre_n2',0))+' ambre',sz=9,col=NR)
         doc.add_page_break()
 
-        # 6. Effets calendaire
         _h('6. Effets calendaire — Barnett-Zehnwirth (1998)'); _sep()
         n_sig_w = int(bz.get('n_effets_significatifs',0))
         if n_sig_w == 0:
-            p=doc.add_paragraph()
-            _run(p,'✅ Aucun effet calendaire significatif détecté.',sz=9,col=VR)
+            p=doc.add_paragraph(); _run(p,'✅ Aucun effet calendaire significatif.',sz=9,col=VR)
         else:
             for e in bz.get('effets_calendaire',[]):
                 if e.get('significatif'):
-                    e_label = str(e.get('annee_label','—'))
-                    e_amp   = round(float(e.get('amplitude_pct',0)),1)
-                    e_niv   = str(e.get('niveau','—'))
-                    p=doc.add_paragraph()
-                    p.paragraph_format.left_indent=Cm(0.4)
-                    _run(p,f'⚠️ {e_label} : {e_amp:+.1f}% ({e_niv})',sz=9,col=AR)
+                    e_l=str(e.get('annee_label','—')); e_a=round(float(e.get('amplitude_pct',0)),1); e_n=str(e.get('niveau','—'))
+                    p=doc.add_paragraph(); p.paragraph_format.left_indent=Cm(0.4)
+                    _run(p,f'⚠️ {e_l} : {e_a:+.1f}% ({e_n})',sz=9,col=AR)
         doc.add_page_break()
 
-        # 7. Commentaire
         _h('7. Commentaire actuariel'); _sep()
         if narration:
             sections_n = re.split(r'(?=§\d+\s*[—\-–])', _clean(narration))
@@ -1445,48 +1722,42 @@ def export_word(
                     for ln in ls[1].split('\n'):
                         ln=ln.strip()
                         if ln:
-                            p=doc.add_paragraph()
-                            p.paragraph_format.space_after=Pt(3)
+                            p=doc.add_paragraph(); p.paragraph_format.space_after=Pt(3)
                             p.paragraph_format.left_indent=Cm(0.3)
                             _run(p,ln,sz=9,col=NR)
-            if source == 'claude_api':
+            if source=='claude_api':
                 p=doc.add_paragraph()
-                _run(p,'✨ Narration générée par Claude — ActuarIA Intelligence',sz=7,italic=True,col=GrR)
+                _run(p,'✦ Narration générée par ActuarIA Intelligence',sz=7,italic=True,col=GrR)
         else:
-            p=doc.add_paragraph()
-            _run(p,'Commentaire non disponible.',sz=9,italic=True)
+            p=doc.add_paragraph(); _run(p,'Narration non disponible.',sz=9,italic=True)
         doc.add_page_break()
 
-        # 8. Jugement
         _h('8. Jugement actuariel & Recommandations'); _sep()
         for a in n4.get('alertes',n2.get('alertes',[])):
             at=_clean(str(a))
             if at:
                 p=doc.add_paragraph(); p.paragraph_format.left_indent=Cm(0.4)
                 _run(p,'⚠️  ',sz=10,col=AR); _run(p,at,sz=9,col=NR)
-        for i,rec in enumerate(n4.get('recommandations',[]),1):
-            rt=_clean(str(rec))
+        for r in n4.get('recommandations',[]):
+            rt=_clean(str(r))
             if rt:
                 p=doc.add_paragraph(); p.paragraph_format.left_indent=Cm(0.4)
-                _run(p,str(i)+'.  ',bold=True,sz=10,col=GR)
-                _run(p,rt,sz=9,col=NR)
+                _run(p,'→  ',bold=True,sz=10,col=GR); _run(p,rt,sz=9,col=NR)
         avis_w=_clean(n4.get('avis_actuariel',''))
         if avis_w:
             doc.add_paragraph()
             p=doc.add_paragraph()
-            a_col=RgR if 'DÉFAVORABLE' in avis_w.upper() else VR
-            _run(p,avis_w,sz=10,bold=True,col=a_col)
+            _run(p,avis_w,sz=10,bold=True,col=RgR if 'DÉFAVORABLE' in avis_w.upper() else VR)
 
-        # Pied
-        _sep('0F2E52')
+        _sep()
         p=doc.add_paragraph(); p.alignment=WD_ALIGN_PARAGRAPH.CENTER
         _run(p,'ActuarIA · '+cli+' · '+lob+' · Arrêté '+arr+' · '+dt+' · CONFIDENTIEL',sz=7,italic=True,col=GrR)
 
         buf=io.BytesIO(); doc.save(buf); buf.seek(0)
         wb=buf.read()
-        logger.info(f'Word : {len(wb):,} bytes — narration={source}')
+        logger.info(f'Word : {len(wb):,} bytes')
         return wb
 
     except Exception as e:
-        logger.error(f'export_word échoué : {e}', exc_info=True)
+        logger.error(f'export_word : {e}', exc_info=True)
         return b''
