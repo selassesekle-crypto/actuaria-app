@@ -225,7 +225,8 @@ def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: s
         f"H1 Indépendance : {'VALIDÉE' if h1.get('ok') else 'REJETÉE'} | corr_moy={h1.get('corr_moy', '—')} | score={h1.get('score', '—')}/100",
         f"  Message : {str(h1.get('message', ''))[:200]}",
         f"H2 Stabilité : {'VALIDÉE' if h2.get('ok') else 'REJETÉE'} | CV={h2.get('cv_moy', '—')} | score={h2.get('score', '—')}/100",
-        f"H3 A priori BF : {'VALIDÉE' if h3.get('ok') else 'REJETÉE'} | LR={h3.get('lr_apriori', '—')} | score={h3.get('score', '—')}/100",
+        f"H3 A priori BF : {'VALIDÉE' if h3.get('ok') else 'REJETÉE'} | LR_REEL={h3.get('lr_apriori', '—')} | LR_PROXY={h3.get('lr_proxy', '—')} | score={h3.get('score', '—')}/100",
+        "  IMPORTANT: Si LR_REEL est fourni par l'utilisateur (valeur numérique, pas —), citer ce LR dans le commentaire, pas le LR proxy.",
         f"H4 Homoscédasticité : {'VALIDÉE' if h4.get('ok') else 'REJETÉE'} | phi={h4.get('phi', '—')} | score={h4.get('score', '—')}/100",
         "",
         "=== RÉSULTATS ===",
@@ -308,10 +309,58 @@ def _generer_narration(n2, n3, n4, commentaire, lob_label, arrete) -> Tuple[str,
 #  RENDU MARKDOWN → HTML (style premium)
 # =============================================================================
 
+def _nettoyer_narration(texte: str) -> str:
+    """
+    Supprime le header générique que Claude ajoute en début de narration.
+    Ex: "# RAPPORT ACTUARIEL...", "Arrêté au...", "Document destiné..."
+
+    Tout ce qui précède le premier § est supprimé car c'est du remplissage
+    que Claude génère parfois malgré les instructions du system prompt.
+    """
+    if not texte:
+        return ''
+    txt = texte.strip()
+
+    # Si le texte commence par un header Markdown # ou ##
+    # supprimer tout jusqu'au premier §
+    premier_s = re.search(r'§\s*\d+', txt)
+    if premier_s and premier_s.start() > 10:
+        # Du texte avant le premier § → le couper
+        txt = txt[premier_s.start():]
+
+    # Supprimer les lignes de header génériques ligne par ligne
+    lignes = txt.split(chr(10))
+    filtrees = []
+    patterns_supprimer = [
+        r'^#+\s+RAPPORT',
+        r'^Arrêté\s+(au|Q\d)',
+        r'^Document\s+destin',
+        r'^Commentaire\s+destin',
+        r'^Reporting\s+Solvabilit',
+        r'^Ce\s+rapport.*ACPR',
+    ]
+    for ligne in lignes:
+        supprimer = any(re.match(p, ligne.strip(), re.IGNORECASE) for p in patterns_supprimer)
+        if not supprimer:
+            filtrees.append(ligne)
+    txt = chr(10).join(filtrees)
+
+    # Normaliser les sauts de ligne
+    txt = re.sub(r'\n{3,}', '\n\n', txt)
+
+    return txt.strip()
+
+
 def _md_to_html(texte: str) -> str:
     """Convertit le Markdown de Claude en HTML avec les classes premium."""
     if not texte:
         return '<p class="comm-p" style="color:#8A9BB0;font-style:italic;">Narration non disponible.</p>'
+
+    # Nettoyer le header générique avant conversion
+    texte = _nettoyer_narration(texte)
+    if not texte:
+        return '<p class="comm-p" style="color:#8A9BB0;font-style:italic;">Narration non disponible.</p>'
+
     txt = texte.strip()
 
     # §N — TITRE → comm-section-title
