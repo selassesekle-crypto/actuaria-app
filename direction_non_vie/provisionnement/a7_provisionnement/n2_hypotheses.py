@@ -64,9 +64,10 @@ class HypothesesValidator:
 
     def valider(
         self,
-        C:      np.ndarray,
-        primes: Optional[np.ndarray] = None,
-        lob:    str = 'generique',
+        C:         np.ndarray,
+        primes:    Optional[np.ndarray] = None,
+        lob:       str = 'generique',
+        lr_manuel: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Lance tous les tests H1-H4 et retourne un rapport structuré.
@@ -109,7 +110,7 @@ class HypothesesValidator:
         h2 = self._tester_h2_stabilite(C, alertes, infos, cfg_lob)
 
         # ── H3 : A priori BF ─────────────────────────────────────────────────
-        h3 = self._tester_h3_apriori(C, primes, alertes, infos, cfg_lob)
+        h3 = self._tester_h3_apriori(C, primes, alertes, infos, cfg_lob, lr_manuel=lr_manuel)
 
         # ── H4 : Homoscédasticité ─────────────────────────────────────────────
         h4 = self._tester_h4_homosc(C, alertes, infos)
@@ -416,11 +417,12 @@ class HypothesesValidator:
 
     def _tester_h3_apriori(
         self,
-        C:       np.ndarray,
-        primes:  Optional[np.ndarray],
-        alertes: List,
-        infos:   List,
-        cfg_lob: Dict,
+        C:         np.ndarray,
+        primes:    Optional[np.ndarray],
+        alertes:   List,
+        infos:     List,
+        cfg_lob:   Dict,
+        lr_manuel: Optional[float] = None,
     ) -> Dict:
         """
         Qualité de l'a priori Bornhuetter-Ferguson.
@@ -452,6 +454,23 @@ class HypothesesValidator:
             )
             if not ok:
                 alertes.append(f"H3 A priori : LR manuel = {lr_manuel:.1%} hors plage. Verifier la coherence.")
+            else:
+                infos.append(msg)
+            return {
+                'ok': ok, 'score': score,
+                'lr_apriori': round(lr_manuel, 4),
+                'lr_std': 0.0, 'cv_lr': 0.0,
+                'source': 'manuel', 'lr_manuel': lr_manuel,
+                'message': msg,
+            }
+
+        # Cas 0 : LR manuel prioritaire
+        if lr_manuel is not None and lr_manuel > 0:
+            ok    = 0.20 < lr_manuel < 2.0
+            score = 85 if ok else 40
+            msg   = f"H3 A priori : LR fourni manuellement = {lr_manuel:.1%} - source : jugement actuariel."
+            if not ok:
+                alertes.append(f"H3 A priori : LR manuel = {lr_manuel:.1%} hors plage [20%-200%].")
             else:
                 infos.append(msg)
             return {
