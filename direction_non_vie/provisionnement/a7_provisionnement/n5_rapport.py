@@ -212,7 +212,7 @@ def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: s
     P75 = float(n4.get('reserve_p75', 0) or 0)
     P90 = float(n4.get('reserve_p90', 0) or 0)
     P99 = float(n4.get('reserve_p99_5', 0) or 0)
-    SCP = float(sc.get('scr_prov', BE * 0.30) if sc else BE * 0.30)
+    SCP = float(sc.get('scr_provisions', sc.get('scr_prov', BE * 0.30)) if sc else BE * 0.30)
     SCR = SCP / BE * 100 if BE else 0
     lines = [
         f"DOSSIER DE PROVISIONNEMENT — {lob_label.upper()} — Arrêté {arrete}",
@@ -919,7 +919,7 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     P75 = float(n4.get('reserve_p75', 0) or 0)
     P90 = float(n4.get('reserve_p90', 0) or 0)
     P99 = float(n4.get('reserve_p99_5', 0) or 0)
-    SCP = float(sc.get('scr_prov', BE * 0.30) if sc else BE * 0.30)
+    SCP = float(sc.get('scr_provisions', sc.get('scr_prov', BE * 0.30)) if sc else BE * 0.30)
     SCR = SCP / BE * 100 if BE else 0
 
     s_col   = _statut_col(statut)
@@ -1129,7 +1129,7 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     )
 
     # ── SECTION 4 : SCR ───────────────────────────────────────────────────────
-    sigma_eiopa = _s(sc.get('sigma_eiopa', '0,10') if sc else '0,10')
+    sigma_eiopa = _s(sc.get('sigma_eiopa', '0,10') if sc else '0,10')  # depuis n4['scr']['sigma_eiopa']
     b['tableau_scr'] = (
         '<table class="premium"><thead><tr>'
         '<th>Composante</th><th class="center">Valeur</th><th>Référence réglementaire</th>'
@@ -1633,7 +1633,7 @@ def export_word(n1, n2, n3, n4,
         P90 = float(n4.get('reserve_p90',0) or 0)
         P99 = float(n4.get('reserve_p99_5',0) or 0)
         CV  = float(n4.get('cv_inter_methodes',0) or 0)
-        SCP = float(sc.get('scr_prov',BE*0.30) if sc else BE*0.30)
+        SCP = float(sc.get('scr_provisions', sc.get('scr_prov', BE*0.30)) if sc else BE*0.30)
         SCR = SCP/BE*100 if BE else 0
 
         doc = Document()

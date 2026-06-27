@@ -232,7 +232,7 @@ class AgentA7Provisionnement:
             if self.verbose:
                 logger.info("N2 — Validation hypothèses H1/H2/H3/H4")
 
-            n2 = self._hv.valider(C_calc, primes=primes_norm, lob=lob)
+            n2 = self._hv.valider(C_calc, primes=primes_norm, lob=lob, lr_manuel=lr_bf_manuel)
 
             # CORRECTION BUG v4.0 :
             # methode_cl_retenue est maintenant dans n2 directement

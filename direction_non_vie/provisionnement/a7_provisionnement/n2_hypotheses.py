@@ -441,6 +441,27 @@ class HypothesesValidator:
         """
         n, m       = C.shape
         nb_matures = min(5, n // 2) if n >= 6 else min(3, n - 1)
+        # Cas 0 : LR manuel prioritaire sur proxy et primes
+        if lr_manuel is not None and lr_manuel > 0:
+            ok    = 0.20 < lr_manuel < 2.0
+            score = 85 if ok else 40
+            msg   = (
+                f"H3 A priori : LR fourni manuellement = {lr_manuel:.1%} "
+                f"({'dans' if ok else 'hors'} plage [20%-200%]). "
+                f"Source : jugement actuariel - a documenter dans la note methodologique S2."
+            )
+            if not ok:
+                alertes.append(f"H3 A priori : LR manuel = {lr_manuel:.1%} hors plage. Verifier la coherence.")
+            else:
+                infos.append(msg)
+            return {
+                'ok': ok, 'score': score,
+                'lr_apriori': round(lr_manuel, 4),
+                'lr_std': 0.0, 'cv_lr': 0.0,
+                'source': 'manuel', 'lr_manuel': lr_manuel,
+                'message': msg,
+            }
+
         lr_ref     = cfg_lob.get('lr_marche_reference')
         lr_src     = cfg_lob.get('lr_marche_source', '—')
 
