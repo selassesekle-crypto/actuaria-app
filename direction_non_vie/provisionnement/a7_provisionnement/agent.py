@@ -296,6 +296,12 @@ class AgentA7Provisionnement:
             except Exception as _ebt:
                 logger.warning(f"Back-testing ignoré : {_ebt}")
                 n3['backtesting'] = {}
+            # Effets calendaire Barnett-Zehnwirth
+            try:
+                n3['barnett_zehnwirth'] = barnett_zehnwirth(C_calc, annee_debut=annee_debut, annee_base=annee_base_reserve)
+            except Exception as _ebz:
+                logger.warning(f"Barnett-Zehnwirth ignoré : {_ebz}")
+                n3['barnett_zehnwirth'] = {}
             # Année début pour labels calendaires (G14)
             if annee_debut:
                 n3['annee_debut_triangle'] = annee_debut
@@ -606,7 +612,7 @@ class AgentA7Provisionnement:
             'tail_factor':     tail_info,
             'backtesting':     {},
             'clark':           clark_ldf(C) if C is not None and C.shape[0] >= 4 else {'success': False, 'disponible': False},
-            'barnett_zehnwirth': barnett_zehnwirth(C, annee_base=annee_base_reserve) if C is not None and C.shape[0] >= 5 else {'success': False, 'disponible': False},
+            'barnett_zehnwirth': {},
         }
 
     # =========================================================================
