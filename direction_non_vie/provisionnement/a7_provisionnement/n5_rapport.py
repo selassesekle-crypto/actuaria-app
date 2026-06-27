@@ -896,6 +896,8 @@ def export_html(
                     f"({_e_sens}, {_e_niv})"
                     f"</div>"
                 )
+        _bz_ok_msg = "Aucun effet calendaire significatif détecté — triangle conforme à l'hypothèse d'indépendance des diagonales."
+        _bz_ok_html = f"<div class='alerte-vert alerte'>✅ {_bz_ok_msg}</div>" if bz.get('n_effets_significatifs', 0) == 0 else ""
         _bz_reco_txt = bz.get('recommandation', '')
         _bz_reco_html2 = (
             f"<div style='margin-top:12px;font-size:9pt;color:{NAVY};'>"
@@ -1147,7 +1149,7 @@ def export_html(
 <!-- ── 6. EFFETS CALENDAIRE ── -->
 <div class="section">
   <div class="section-titre">6. Effets calendaire — Barnett-Zehnwirth (1998)</div>
-  {'<div class="alerte-vert alerte">✅ Aucun effet calendaire significatif détecté — triangle conforme à l\'hypothèse d\'indépendance des diagonales.</div>' if bz.get('n_effets_significatifs',0) == 0 else ''}
+  {_bz_ok_html}
   {_bz_alertes_html}
   {_bz_reco_html2}
 </div>
