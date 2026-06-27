@@ -149,6 +149,30 @@ class BestEstimateS2:
                 "Fallback sur Mack + BF avec score=50."
             )
 
+        # Forcer l'inclusion de la méthode recommandée par N2
+        # même si son score est bas (le jugement actuariel prime sur le score mécanique)
+        methode_rec_check = n2.get('methode_recommandee', '').lower().replace(' ', '_')
+        _rec_map_check = {
+            'bornhuetter_ferguson': 'bornhuetter_ferguson',
+            'bf': 'bornhuetter_ferguson',
+            'mack': 'mack', 'mack_1993': 'mack',
+            'chain_ladder': 'chain_ladder',
+            'cape_cod': 'cape_cod',
+        }
+        methode_rec_norm_check = _rec_map_check.get(methode_rec_check, '')
+        if methode_rec_norm_check and methode_rec_norm_check not in methodes_incluses:
+            # La méthode recommandée a été exclue par le seuil de score
+            # On la force avec un score de 70 (score de référence)
+            reserve_rec = methodes_dispo.get(methode_rec_norm_check, 0)
+            if reserve_rec > 0:
+                methodes_incluses[methode_rec_norm_check] = (reserve_rec, 70)
+                if methode_rec_norm_check in methodes_exclues:
+                    del methodes_exclues[methode_rec_norm_check]
+                logger.info(
+                    f"BE N4 : méthode recommandée '{methode_rec_norm_check}' "
+                    f"forcée dans les incluses malgré score bas."
+                )
+
         # ── 2. Poids dynamiques — méthode recommandée dominante ──────────────
         # Si une méthode est recommandée par N2 (ex: BF car H1 rejetée),
         # elle reçoit un poids minimum de 50% pour refléter le jugement actuariel.
