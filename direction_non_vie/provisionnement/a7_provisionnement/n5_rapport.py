@@ -142,6 +142,14 @@ du reporting Solvabilité 2.
 RÈGLES ABSOLUES
 ═══════════════════════════════════════════════
 
+0. FORMAT DE RÉDACTION : Utilise ces marqueurs UNIQUEMENT :
+   §N — TITRE pour les sections principales (ex: §1 — CONTEXTE ET QUALITÉ DES DONNÉES)
+   ### Sous-titre pour les sous-sections
+   **texte** pour les termes importants ou chiffres clés
+   - Tiret pour les éléments de liste
+   N'utilise PAS de tableaux Markdown. N'utilise PAS de > pour les blockquotes.
+   N'utilise PAS de # ou ## seuls. Sépare les sections par une ligne vide.
+
 1. LANGUE : Français professionnel et précis. Anglais uniquement pour les termes techniques \
 consacrés (Best Estimate, Chain Ladder, Bootstrap ODP, etc.)
 
@@ -860,42 +868,100 @@ def export_html(
 
         # ── Narration structurée ───────────────────────────────────────────────
         def _render_narration(texte: str) -> str:
-            """Convertit le texte de narration en HTML structuré."""
+            """Convertit le texte Markdown de Claude en HTML structuré propre."""
             if not texte:
                 return "<p style='color:#999;font-style:italic;'>Narration non disponible.</p>"
-            html = ""
-            sections = re.split(r'(?=§\d+\s*—)', texte.strip())
-            for sec in sections:
-                sec = sec.strip()
-                if not sec:
+
+            txt = texte.strip()
+
+            # 1. Séparateurs --- → ligne horizontale
+            txt = re.sub(r'\n---+\n', '\n<hr style="border:none;border-top:1px solid #dde3ea;margin:16px 0;">\n', txt)
+
+            # 2. Blockquotes > ... → encart gold
+            def _bq(m):
+                inner = re.sub(r'^>\s*', '', m.group(0), flags=re.MULTILINE).strip()
+                inner = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', inner)
+                return (
+                    "<div style='background:rgba(201,168,76,0.08);border-left:3px solid #C9A84C;"
+                    "padding:12px 16px;border-radius:0 4px 4px 0;margin:12px 0;"
+                    f"font-size:9pt;'>{inner}</div>"
+                )
+            txt = re.sub(r'(?:^>.*\n?)+', _bq, txt, flags=re.MULTILINE)
+
+            # 3. §N — TITRE → h3 gold
+            txt = re.sub(
+                r'(§\d+\s*[—\-]\s*[A-ZÀÉÈÊËÎÏÔÙÛÜÇ][^\n]+)',
+                lambda m: (
+                    "<h3 style='font-family:Georgia,serif;font-size:11pt;font-weight:700;"
+                    "color:#C9A84C;margin:24px 0 8px;border-bottom:1px solid rgba(201,168,76,0.3);"
+                    f"padding-bottom:4px;'>{m.group(1)}</h3>"
+                ),
+                txt
+            )
+
+            # 4. ### Sous-titre → h4 navy
+            txt = re.sub(
+                r'^###\s+(.+)$',
+                lambda m: f"<h4 style='font-family:Georgia,serif;font-size:10pt;font-weight:600;color:#0F2E52;margin:14px 0 6px;'>\U0001f539 {m.group(1)}</h4>",
+                txt, flags=re.MULTILINE
+            )
+
+            # 5. ## Titre → h3
+            txt = re.sub(r'^##\s+(.+)$', r'<h3 style="color:#0F2E52;">\1</h3>', txt, flags=re.MULTILINE)
+
+            # 6. **gras** → strong gold
+            txt = re.sub(r'\*\*(.+?)\*\*', r'<strong style="color:#0F2E52;">\1</strong>', txt)
+
+            # 7. *italique* → em
+            txt = re.sub(r'\*(.+?)\*', r'<em>\1</em>', txt)
+
+            # 8. Puces - → liste
+            txt = re.sub(r'^-\s+(.+)$', r'<li style="margin:3px 0;">\1</li>', txt, flags=re.MULTILINE)
+            txt = re.sub(r'(<li[^>]*>.*?</li>\n?)+',
+                lambda m: f"<ul style='margin:8px 0 8px 18px;'>{m.group(0)}</ul>",
+                txt, flags=re.DOTALL)
+
+            # 9. Paragraphes — double saut de ligne
+            blocs = re.split(r'\n{2,}', txt)
+            result = ""
+            for bloc in blocs:
+                bloc = bloc.strip()
+                if not bloc:
                     continue
-                lines = sec.split('\n', 1)
-                titre_sec = lines[0].strip()
-                corps_sec = lines[1].strip() if len(lines) > 1 else ''
-                if titre_sec.startswith('§'):
-                    html += f"<h3>{titre_sec}</h3>"
-                for para in corps_sec.split('\n'):
-                    para = para.strip()
-                    if para:
-                        html += f"<p>{para}</p>"
-            return html or f"<p>{texte}</p>"
+                if bloc.startswith('<'):
+                    result += bloc + "\n"
+                else:
+                    bloc_clean = bloc.replace('\n', ' ')
+                    result += f"<p style='margin-bottom:10px;line-height:1.85;color:#2c3e50;'>{bloc_clean}</p>\n"
+
+            return result or f"<p>{texte}</p>"
 
         # ── Variables HTML complexes (évite les f-strings imbriquées) ──────────
         # Alertes Barnett-Zehnwirth
+        # Filtrer BZ : FORT et MODÉRÉ → alerte individuelle, FAIBLE → résumé compact
+        _bz_forts   = [e for e in bz.get("effets_calendaire", []) if e.get("significatif") and e.get("niveau") in ("FORT", "MODÉRÉ")]
+        _bz_faibles = [e for e in bz.get("effets_calendaire", []) if e.get("significatif") and e.get("niveau") == "FAIBLE"]
         _bz_alertes_html = ""
-        for _e in bz.get('effets_calendaire', []):
-            if _e.get('significatif'):
-                _cls = 'alerte-ambre' if _e.get('niveau') != 'FORT' else ''
-                _e_label = _e.get("annee_label", "—")
-                _e_amp   = _e.get("amplitude_pct", 0)
-                _e_sens  = _e.get("sens", "—")
-                _e_niv   = _e.get("niveau", "—")
-                _bz_alertes_html += (
-                    f"<div class='alerte {_cls}'>"
-                    f"⚠️ {_e_label} : {_e_amp:+.1f}% "
-                    f"({_e_sens}, {_e_niv})"
-                    f"</div>"
-                )
+        for _e in _bz_forts:
+            _icon  = "🔴" if _e.get("niveau") == "FORT" else "⚠️"
+            _cls   = "" if _e.get("niveau") == "FORT" else "alerte-ambre"
+            _e_label = _e.get("annee_label", "—")
+            _e_amp   = _e.get("amplitude_pct", 0)
+            _e_niv   = _e.get("niveau", "—")
+            _bz_alertes_html += (
+                f"<div class='alerte {_cls}'>"
+                f"{_icon} {_e_label} : {_e_amp:+.1f}% ({_e_niv})"
+                f"</div>"
+            )
+        if _bz_faibles:
+            _n_f = len(_bz_faibles)
+            _annees_f = ", ".join(e.get("annee_label", "") for e in _bz_faibles[:3])
+            _suite = f" et {_n_f - 3} autre(s)" if _n_f > 3 else ""
+            _bz_alertes_html += (
+                f"<div class='alerte alerte-ambre'>"
+                f"ℹ️ {_n_f} diagonale(s) avec effet FAIBLE (&lt;8%) : {_annees_f}{_suite} — surveillance recommandée."
+                f"</div>"
+            )
         _bz_ok_msg = "Aucun effet calendaire significatif détecté — triangle conforme à l'hypothèse d'indépendance des diagonales."
         _bz_ok_html = f"<div class='alerte-vert alerte'>✅ {_bz_ok_msg}</div>" if bz.get('n_effets_significatifs', 0) == 0 else ""
         _bz_reco_txt = bz.get('recommandation', '')
