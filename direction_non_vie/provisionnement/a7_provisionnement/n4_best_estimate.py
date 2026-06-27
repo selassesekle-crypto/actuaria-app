@@ -149,12 +149,48 @@ class BestEstimateS2:
                 "Fallback sur Mack + BF avec score=50."
             )
 
-        # ── 2. Poids dynamiques (proportionnels aux scores) ───────────────────
+        # ── 2. Poids dynamiques — méthode recommandée dominante ──────────────
+        # Si une méthode est recommandée par N2 (ex: BF car H1 rejetée),
+        # elle reçoit un poids minimum de 50% pour refléter le jugement actuariel.
+        # Les autres méthodes se partagent le reste proportionnellement à leurs scores.
+        methode_rec = n2.get('methode_recommandee', '')
+        # Normaliser le nom de la méthode recommandée
+        _rec_map = {
+            'bornhuetter_ferguson': 'bornhuetter_ferguson',
+            'bf': 'bornhuetter_ferguson',
+            'mack': 'mack',
+            'mack_1993': 'mack',
+            'chain_ladder': 'chain_ladder',
+            'cape_cod': 'cape_cod',
+        }
+        methode_rec_norm = _rec_map.get(methode_rec.lower().replace(' ','_'), '')
+
         total_scores = sum(s for _, s in methodes_incluses.values())
-        poids = {
-            m: round(s / max(total_scores, 1), 4)
+        poids_bruts = {
+            m: s / max(total_scores, 1)
             for m, (_, s) in methodes_incluses.items()
         }
+
+        # Appliquer bonus méthode recommandée si présente dans les incluses
+        if methode_rec_norm and methode_rec_norm in methodes_incluses:
+            POIDS_MIN_REC = 0.50  # Poids minimum garanti à la méthode recommandée
+            poids_rec     = max(poids_bruts.get(methode_rec_norm, 0), POIDS_MIN_REC)
+            reste         = 1.0 - poids_rec
+            autres        = {m: v for m, v in poids_bruts.items() if m != methode_rec_norm}
+            total_autres  = sum(autres.values())
+            poids = {methode_rec_norm: round(poids_rec, 4)}
+            if total_autres > 0:
+                for m, v in autres.items():
+                    poids[m] = round(v / total_autres * reste, 4)
+            else:
+                poids = {methode_rec_norm: 1.0}
+        else:
+            poids = {m: round(v, 4) for m, v in poids_bruts.items()}
+
+        # Normaliser pour que la somme = 1.0 exactement
+        total_poids = sum(poids.values())
+        if total_poids > 0:
+            poids = {m: round(v / total_poids, 4) for m, v in poids.items()}
 
         # ── 3. Best Estimate (Art. 77) ────────────────────────────────────────
         # BE = Σ w_m × R_m
