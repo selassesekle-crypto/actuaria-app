@@ -94,7 +94,8 @@ def _f(v, dec=0) -> str:
     try:
         fv = float(v)
         if np.isnan(fv) or np.isinf(fv): return '—'
-        return f"{fv:,.0f} €".replace(',', '\u202f') if dec == 0 else f"{fv:,.{dec}f}".replace(',', '\u202f')
+        _sep = '\u202f'
+        return f"{fv:,.0f} €".replace(',', _sep) if dec == 0 else f"{fv:,.{dec}f}".replace(',', _sep)
     except: return '—'
 
 def _pct(v, dec=1) -> str:
@@ -720,36 +721,6 @@ def _css_rapport() -> str:
 #  GÉNÉRATION HTML
 # =============================================================================
 
-def _render_hyp_cards(h1, h2, h3, h4) -> str:
-    """Génère les cartes HTML des hypothèses actuarielles."""
-    result = ""
-    for code, h in [
-        ('H1 Indépendance (Mack 1993)', h1),
-        ('H2 Stabilité des facteurs',   h2),
-        ('H3 A priori BF/Cape Cod',     h3),
-        ('H4 Homoscédasticité ODP',     h4),
-    ]:
-        if not h:
-            continue
-        ok    = bool(h.get('ok', True))
-        cls   = 'ok' if ok else 'fail'
-        col   = VERT if ok else AMBRE
-        icon  = '✅' if ok else '⚠️'
-        label = 'VALIDÉE' if ok else 'REJETÉE'
-        score = h.get('score', '—')
-        msg   = h.get('message', '')
-        result += (
-            f"<div class='hyp-card {cls}'>"
-            f"<div class='hyp-badge' style='color:{col};'>"
-            f"{icon} {code} — {label}"
-            f"<br><span style='font-weight:400;font-size:7.5pt;color:#666;'>Score {score}/100</span>"
-            f"</div>"
-            f"<div class='hyp-message'>{msg}</div>"
-            f"</div>"
-        )
-    return result
-
-
 def export_html(
     n1: Dict, n2: Dict, n3: Dict, n4: Dict,
     commentaire : str  = '',
@@ -1042,7 +1013,19 @@ def export_html(
 <!-- ── 3. VALIDATION DES HYPOTHÈSES ── -->
 <div class="section">
   <div class="section-titre">3. Validation des hypothèses actuarielles</div>
-  {_render_hyp_cards(h1, h2, h3, h4)}
+  {''.join([
+      f"<div class='hyp-card {'ok' if h.get('ok') else 'fail'}'>"
+      f"<div class='hyp-badge' style='color:{'"+VERT+"' if h.get('ok') else '"+AMBRE+"'};'>"
+      f"{'✅' if h.get('ok') else '⚠️'} {code} — {'VALIDÉE' if h.get('ok') else 'REJETÉE'}"
+      f"<br><span style='font-weight:400;font-size:7.5pt;color:#666;'>Score {h.get('score','—')}/100</span></div>"
+      f"<div class='hyp-message'>{h.get('message','')}</div></div>"
+      for code, h in [
+          ('H1 Indépendance (Mack 1993)', h1),
+          ('H2 Stabilité des facteurs', h2),
+          ('H3 A priori BF/Cape Cod', h3),
+          ('H4 Homoscédasticité ODP', h4),
+      ] if h
+  ])}
 
   <!-- Méthode recommandée -->
   <div style="background:{NAVY};color:{BLANC};padding:14px 20px;border-radius:6px;margin-top:16px;">
