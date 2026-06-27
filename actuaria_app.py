@@ -2577,11 +2577,15 @@ def page_resultats():
             nav_to("analyse")
         return
 
-    # Debug temporaire graphiques
-    _dbg_g = st.session_state.get("debug_graph_keys", [])
+    # Debug temporaire graphiques — à supprimer après validation
+    _dbg_g  = st.session_state.get("debug_graph_keys", [])
     _dbg_ga = st.session_state.get("graphiques_a7", {})
     if _dbg_g or _dbg_ga:
-        st.caption(f"DEBUG graphiques raw={_dbg_g} | html={list(_dbg_ga.keys())}")
+        st.info(f"🔍 DEBUG Graphiques — raw keys: {_dbg_g} | html keys: {list(_dbg_ga.keys())} | nb HTML: {len(_dbg_ga)}")
+    elif not _dbg_g and not _dbg_ga:
+        st.warning("⚠️ DEBUG : Aucun graphique dans session_state — vérifier si r_raw contient 'graphiques'")
+        _r_raw_g = r_raw.get("graphiques", {})
+        st.info(f"r_raw graphiques keys : {list(_r_raw_g.keys()) if _r_raw_g else 'vide'}")
 
     # ── Lire la structure v4.0 ────────────────────────────────────────────────
     n4  = r_raw.get("n4", r_raw.get("best_estimate", {}))
