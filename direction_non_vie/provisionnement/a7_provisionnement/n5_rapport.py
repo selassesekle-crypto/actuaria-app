@@ -94,8 +94,7 @@ def _f(v, dec=0) -> str:
     try:
         fv = float(v)
         if np.isnan(fv) or np.isinf(fv): return '—'
-        _sep = '\u202f'
-        return f"{fv:,.0f} €".replace(',', _sep) if dec == 0 else f"{fv:,.{dec}f}".replace(',', _sep)
+        return f"{fv:,.0f} €".replace(',', '\u202f') if dec == 0 else f"{fv:,.{dec}f}".replace(',', '\u202f')
     except: return '—'
 
 def _pct(v, dec=1) -> str:
@@ -721,6 +720,36 @@ def _css_rapport() -> str:
 #  GÉNÉRATION HTML
 # =============================================================================
 
+def _render_hyp_cards(h1, h2, h3, h4) -> str:
+    """Génère les cartes HTML des hypothèses actuarielles."""
+    result = ""
+    for code, h in [
+        ('H1 Indépendance (Mack 1993)', h1),
+        ('H2 Stabilité des facteurs',   h2),
+        ('H3 A priori BF/Cape Cod',     h3),
+        ('H4 Homoscédasticité ODP',     h4),
+    ]:
+        if not h:
+            continue
+        ok    = bool(h.get('ok', True))
+        cls   = 'ok' if ok else 'fail'
+        col   = VERT if ok else AMBRE
+        icon  = '✅' if ok else '⚠️'
+        label = 'VALIDÉE' if ok else 'REJETÉE'
+        score = h.get('score', '—')
+        msg   = h.get('message', '')
+        result += (
+            f"<div class='hyp-card {cls}'>"
+            f"<div class='hyp-badge' style='color:{col};'>"
+            f"{icon} {code} — {label}"
+            f"<br><span style='font-weight:400;font-size:7.5pt;color:#666;'>Score {score}/100</span>"
+            f"</div>"
+            f"<div class='hyp-message'>{msg}</div>"
+            f"</div>"
+        )
+    return result
+
+
 def export_html(
     n1: Dict, n2: Dict, n3: Dict, n4: Dict,
     commentaire : str  = '',
@@ -773,6 +802,20 @@ def export_html(
         statut   = n4.get('statut', 'AMBRE')
         s_colors = {'VERT': VERT, 'AMBRE': AMBRE, 'ROUGE': ROUGE}
         s_col    = s_colors.get(statut, GRIS)
+
+        # ── Ligne Clark pour tableau HTML ────────────────────────────────────
+        if clark.get('disponible'):
+            _clark_courbe = clark.get('courbe_choisie', '')
+            _clark_reserve = _f(clark.get('reserve_be_clark'))
+            _clark_aic = str(clark.get('aic_optimal', '—'))
+            _clark_row = (
+                f"<tr><td>Clark LDF ({_clark_courbe})</td>"
+                f"<td>{_clark_reserve}</td><td>—</td>"
+                f"<td>AIC={_clark_aic}</td>"
+                f"<td style='text-align:center;'>✅</td></tr>"
+            )
+        else:
+            _clark_row = ""
 
         # ── Narration actuarielle (3 niveaux) ─────────────────────────────────
         narration, source_narration = _generer_narration(
@@ -836,6 +879,40 @@ def export_html(
                     if para:
                         html += f"<p>{para}</p>"
             return html or f"<p>{texte}</p>"
+
+        # ── Variables HTML complexes (évite les f-strings imbriquées) ──────────
+        # Alertes Barnett-Zehnwirth
+        _bz_alertes_html = ""
+        for _e in bz.get('effets_calendaire', []):
+            if _e.get('significatif'):
+                _cls = 'alerte-ambre' if _e.get('niveau') != 'FORT' else ''
+                _e_label = _e.get("annee_label", "—")
+                _e_amp   = _e.get("amplitude_pct", 0)
+                _e_sens  = _e.get("sens", "—")
+                _e_niv   = _e.get("niveau", "—")
+                _bz_alertes_html += (
+                    f"<div class='alerte {_cls}'>"
+                    f"⚠️ {_e_label} : {_e_amp:+.1f}% "
+                    f"({_e_sens}, {_e_niv})"
+                    f"</div>"
+                )
+        _bz_reco_txt = bz.get('recommandation', '')
+        _bz_reco_html2 = (
+            f"<div style='margin-top:12px;font-size:9pt;color:{NAVY};'>"
+            f"<strong>Recommandation :</strong> {_bz_reco_txt}</div>"
+        ) if bz.get('n_effets_significatifs', 0) > 0 else ""
+
+
+        _avis_txt = _clean(n4.get('avis_actuariel', ''))
+        if _avis_txt:
+            _avis_col = ROUGE if 'DÉFAVORABLE' in _avis_txt.upper() else VERT
+            _avis_html = (
+                f"<div style='background:{_avis_col};color:#fff;padding:14px 20px;"
+                f"border-radius:6px;margin-top:20px;font-size:10pt;font-weight:600;'>"
+                f"{_avis_txt}</div>"
+            )
+        else:
+            _avis_html = ""
 
         # ── HTML COMPLET ───────────────────────────────────────────────────────
         html = f"""<!DOCTYPE html>
@@ -960,7 +1037,7 @@ def export_html(
         <td>{n2.get('scores_confiance', {}).get('cape_cod', '—')}</td>
         <td style="text-align:center;">✅</td>
       </tr>
-      {'<tr><td>Clark LDF (' + clark.get("courbe_choisie","") + ')</td><td>' + _f(clark.get("reserve_be_clark")) + '</td><td>—</td><td>AIC=' + str(clark.get("aic_optimal","—")) + '</td><td style="text-align:center;">✅</td></tr>' if clark.get('disponible') else ''}
+      {_clark_row}
       <tr class="row-be">
         <td>⭐ BEST ESTIMATE S2</td>
         <td>{_f(BE)}</td>
@@ -1013,19 +1090,7 @@ def export_html(
 <!-- ── 3. VALIDATION DES HYPOTHÈSES ── -->
 <div class="section">
   <div class="section-titre">3. Validation des hypothèses actuarielles</div>
-  {''.join([
-      f"<div class='hyp-card {'ok' if h.get('ok') else 'fail'}'>"
-      f"<div class='hyp-badge' style='color:{'"+VERT+"' if h.get('ok') else '"+AMBRE+"'};'>"
-      f"{'✅' if h.get('ok') else '⚠️'} {code} — {'VALIDÉE' if h.get('ok') else 'REJETÉE'}"
-      f"<br><span style='font-weight:400;font-size:7.5pt;color:#666;'>Score {h.get('score','—')}/100</span></div>"
-      f"<div class='hyp-message'>{h.get('message','')}</div></div>"
-      for code, h in [
-          ('H1 Indépendance (Mack 1993)', h1),
-          ('H2 Stabilité des facteurs', h2),
-          ('H3 A priori BF/Cape Cod', h3),
-          ('H4 Homoscédasticité ODP', h4),
-      ] if h
-  ])}
+  {_render_hyp_cards(h1, h2, h3, h4)}
 
   <!-- Méthode recommandée -->
   <div style="background:{NAVY};color:{BLANC};padding:14px 20px;border-radius:6px;margin-top:16px;">
@@ -1083,14 +1148,8 @@ def export_html(
 <div class="section">
   <div class="section-titre">6. Effets calendaire — Barnett-Zehnwirth (1998)</div>
   {'<div class="alerte-vert alerte">✅ Aucun effet calendaire significatif détecté — triangle conforme à l\'hypothèse d\'indépendance des diagonales.</div>' if bz.get('n_effets_significatifs',0) == 0 else ''}
-  {''.join([
-      f"<div class='alerte {'alerte-ambre' if e.get('niveau')!='FORT' else ''}'>"
-      f"⚠️ {e.get('annee_label','—')} : {e.get('amplitude_pct',0):+.1f}% ({e.get('sens','—')}, {e.get('niveau','—')})"
-      f"</div>"
-      for e in bz.get('effets_calendaire', [])
-      if e.get('significatif')
-  ])}
-  {f"<div style='margin-top:12px;font-size:9pt;color:{NAVY};'><strong>Recommandation :</strong> {bz.get('recommandation','')}</div>" if bz.get('n_effets_significatifs',0) > 0 else ''}
+  {_bz_alertes_html}
+  {_bz_reco_html2}
 </div>
 
 <!-- ── 7. COMMENTAIRE ACTUARIEL ── -->
@@ -1114,7 +1173,7 @@ def export_html(
       f"<span style='color:{GOLD};font-weight:700;'>{i}. </span>{_clean(str(r))}</div>"
       for i, r in enumerate(n4.get('recommandations', []), 1)
   ])}
-  {f"<div style='background:{ROUGE if 'DÉFAVORABLE' in n4.get('avis_actuariel','').upper() else VERT};color:#fff;padding:14px 20px;border-radius:6px;margin-top:20px;font-size:10pt;font-weight:600;'>{_clean(n4.get('avis_actuariel',''))}</div>" if n4.get('avis_actuariel') else ''}
+  {_avis_html}
 </div>
 
 </div><!-- fin rapport-body -->
@@ -1361,7 +1420,9 @@ def export_word(
         for lbl,h in [('H1 — Indépendance',h1),('H2 — Stabilité',h2),('H3 — A priori BF',h3),('H4 — Homoscédasticité',h4)]:
             if not h: continue
             ok=bool(h.get('ok',True))
-            rows_h.append([lbl,'VALIDÉE' if ok else 'REJETÉE',f"{h.get('score','—')}/100",h.get('message','')[:80]])
+            _h_score = h.get("score", "—")
+        _h_msg   = h.get("message", "")[:80]
+        rows_h.append([lbl, 'VALIDÉE' if ok else 'REJETÉE', f"{_h_score}/100", _h_msg])
         if rows_h:
             _tbl(['Hypothèse','Résultat','Score','Message'],rows_h,ws=[4.5,2.5,2.0,7.0])
         doc.add_page_break()
@@ -1381,9 +1442,14 @@ def export_word(
         _run(p,f"Statut : ",sz=9,col=NR)
         s_col_r2 = VR if bt_r.get('statut')=='VERT' else AR if bt_r.get('statut')=='AMBRE' else RgR
         _run(p,bt_r.get('statut','—'),bold=True,sz=9,col=s_col_r2)
-        _run(p,f" | Score qualité : {bt_r.get('score_qualite','—')}/100",sz=9,col=NR)
-        _run(p,f" | N-1 : {bt_r.get('n_rouge_n1',0)} rouge · {bt_r.get('n_ambre_n1',0)} ambre",sz=9,col=NR)
-        _run(p,f" | N-2 : {bt_r.get('n_rouge_n2',0)} rouge · {bt_r.get('n_ambre_n2',0)} ambre",sz=9,col=NR)
+        _bt_score2 = bt_r.get("score_qualite", "—")
+        _bt_r_n1   = bt_r.get("n_rouge_n1", 0)
+        _bt_a_n1   = bt_r.get("n_ambre_n1", 0)
+        _bt_r_n2   = bt_r.get("n_rouge_n2", 0)
+        _bt_a_n2   = bt_r.get("n_ambre_n2", 0)
+        _run(p, f" | Score qualité : {_bt_score2}/100", sz=9, col=NR)
+        _run(p, f" | N-1 : {_bt_r_n1} rouge · {_bt_a_n1} ambre", sz=9, col=NR)
+        _run(p, f" | N-2 : {_bt_r_n2} rouge · {_bt_a_n2} ambre", sz=9, col=NR)
         doc.add_page_break()
 
         # ── 6. Effets calendaire ──────────────────────────────────────────────
@@ -1397,7 +1463,10 @@ def export_word(
                 if e.get('significatif'):
                     p=doc.add_paragraph()
                     p.paragraph_format.left_indent=Cm(0.4)
-                    _run(p,f"⚠️ {e.get('annee_label','—')} : {e.get('amplitude_pct',0):+.1f}% ({e.get('niveau','—')})",sz=9,col=AR)
+                    _e2_label = e.get("annee_label", "—")
+                    _e2_amp   = e.get("amplitude_pct", 0)
+                    _e2_niv   = e.get("niveau", "—")
+                    _run(p, f"⚠️ {_e2_label} : {_e2_amp:+.1f}% ({_e2_niv})", sz=9, col=AR)
         doc.add_page_break()
 
         # ── 7. Commentaire actuariel ──────────────────────────────────────────
