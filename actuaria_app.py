@@ -2550,6 +2550,9 @@ def page_resultats():
     r_raw = resultats.get("principal", resultats)
     if not r_raw or not r_raw.get("success", False):
         st.warning("Aucun résultat disponible.")
+        st.write("DEBUG r_raw keys:", list(r_raw.keys()) if r_raw else "vide")
+        st.write("DEBUG success:", r_raw.get("success") if r_raw else "N/A")
+        st.write("DEBUG erreur:", r_raw.get("erreur") if r_raw else "N/A")
         if st.button("← Retour à l'analyse"):
             nav_to("analyse")
         return
