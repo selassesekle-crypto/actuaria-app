@@ -439,18 +439,22 @@ def _css_rapport() -> str:
 
   .page-garde .titre-rapport {{
     font-family: 'EB Garamond', serif;
-    font-size: 36pt;
+    font-size: 42pt;
     font-weight: 700;
     color: var(--blanc);
-    line-height: 1.2;
-    margin-bottom: 8px;
+    line-height: 1.15;
+    margin-bottom: 12px;
+    text-align: center;
+    letter-spacing: -0.5px;
   }}
 
   .page-garde .sous-titre {{
     font-family: 'EB Garamond', serif;
-    font-size: 18pt;
+    font-size: 20pt;
     color: var(--gold);
-    margin-bottom: 40px;
+    margin-bottom: 32px;
+    text-align: center;
+    letter-spacing: 1px;
   }}
 
   .page-garde .meta-grid {{
@@ -998,11 +1002,13 @@ def export_html(
 <!-- ═══════════════════════════════════════════ PAGE DE GARDE ══ -->
 <div class="page-garde">
   <div class="confidentiel">CONFIDENTIEL</div>
-  <div class="logo">
-    <img src="{LOGO_DATA_URI}" alt="ActuarIA" height="70"/>
+  <div class="logo" style="text-align:center;margin-bottom:40px;">
+    <img src="{LOGO_DATA_URI}" alt="ActuarIA" height="80"/>
   </div>
-  <div class="titre-rapport">Rapport de Provisionnement<br>Non-Vie</div>
-  <div class="sous-titre">{lob}</div>
+  <div style="text-align:center;padding:0 40px;">
+    <div class="titre-rapport">Rapport de Provisionnement<br>Non-Vie</div>
+    <div class="sous-titre">{lob}</div>
+  </div>
   <div style="margin-top:16px;">{_statut_badge(statut)}</div>
   <div class="meta-grid">
     <div class="meta-item">
