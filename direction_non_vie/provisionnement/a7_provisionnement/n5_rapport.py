@@ -333,8 +333,8 @@ def _md_to_html(texte: str) -> str:
     # --- → comm-divider
     txt = re.sub(r'^---+$', '<hr class="comm-divider">', txt, flags=re.MULTILINE)
 
-    # **gras** → strong
-    txt = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', txt)
+    # **gras** → strong (y compris multi-lignes courts)
+    txt = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', txt, flags=re.DOTALL)
 
     # *italique* → em
     txt = re.sub(r'\*(.+?)\*', r'<em>\1</em>', txt)
@@ -1255,16 +1255,24 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
 
 
 def _build_bt_table(bt: Dict, horizon: str) -> str:
-    """Construit le tableau boni/mali pour un horizon donné."""
-    # Chercher les données dans différentes clés possibles
-    data = (
-        bt.get('tableau_' + horizon)
-        or bt.get('details_' + horizon)
-        or bt.get('resultats_' + horizon)
-        or []
-    )
+    """
+    Construit le tableau boni/mali pour un horizon donné.
+    Structure backtesting.py : clé 'tableau' avec champs boni_mali_n1/n2, ecart_pct_n1/n2
+    """
+    # Le tableau principal contient TOUTES les données — on filtre par horizon
+    tableau = bt.get('tableau', [])
 
-    if not data or not isinstance(data, list) or len(data) == 0:
+    # Fallback sur les anciennes clés
+    if not tableau:
+        resultats = bt.get('resultats', {})
+        hor_key = 'horizon_1' if horizon == 'n1' else 'horizon_2'
+        tableau = resultats.get(hor_key, {}).get('annees', [])
+
+    # Filtrer les lignes matures pour l'horizon demandé
+    ult_key = 'ultimate_' + horizon
+    data = [r for r in tableau if isinstance(r, dict) and r.get(ult_key)]
+
+    if not data:
         return '<p style="font-size:9pt;color:var(--slate);font-style:italic;">Données de back-testing non disponibles pour cet arrêté.</p>'
 
     hor_label = 'N-1' if horizon == 'n1' else 'N-2'
@@ -1282,11 +1290,11 @@ def _build_bt_table(bt: Dict, horizon: str) -> str:
     for idx, row in enumerate(data):
         if not isinstance(row, dict):
             continue
-        annee = _s(row.get('annee', row.get('year', '—')))
-        obs   = row.get('observe_n', row.get('paid_n', row.get('observed', 0)))
-        ult   = row.get('ultimate_' + horizon, row.get('ultimate', 0))
-        bm    = row.get('boni_mali_' + horizon, row.get('boni_mali', 0))
-        ecart = row.get('ecart_pct_' + horizon, row.get('ecart_pct', 0))
+        annee = _s(row.get('annee_label', row.get('annee', '—')))
+        obs   = row.get('observe_n', 0)
+        ult   = row.get('ultimate_' + horizon, 0)
+        bm    = row.get('boni_mali_' + horizon, 0)
+        ecart = row.get('ecart_pct_' + horizon, 0)
 
         try:
             ecart_f = float(ecart)
