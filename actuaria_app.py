@@ -2523,6 +2523,8 @@ def _executer_analyse(besoin, direction, equipe, client):
             _r_principal = resultats.get("principal", {})
             if isinstance(_r_principal, dict) and _r_principal.get("triangle") is not None:
                 st.session_state["triangle_a7"] = _r_principal["triangle"]
+                if _r_principal.get("graphiques"):
+                    st.session_state["graphiques_a7"] = _r_principal["graphiques"]
             nav_to("resultats")
 
         except ImportError as e:
@@ -3003,31 +3005,95 @@ Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non 
                 key="dl_res_excel",
             )
     with e3:
-        word_bytes = r_raw.get("word_bytes", b"")
-        if word_bytes:
-            st.download_button(
-                "📄 Rapport Word",
-                data=word_bytes,
-                file_name=f"rapport_actuariel_{besoin}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                use_container_width=True,
-                key="dl_res_word",
-            )
-        else:
-            st.button("📄 Rapport Word", use_container_width=True, key="dl_res_word_na", disabled=True, help="Non disponible pour cet agent")
+        # ── Génération Rapport HTML à la demande ──────────────────────────
+        if st.button("🌐 Rapport HTML", use_container_width=True, key="dl_res_html_btn"):
+            with st.spinner("Génération du rapport HTML..."):
+                try:
+                    from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import export_html as _eh
+                    _n2_rh = r_raw.get("n2",{}); _n3_rh = r_raw.get("n3",{})
+                    _n4_rh = r_raw.get("n4",{}); _a7p_rh = st.session_state.get("analyse_params",{})
+                    _html = _eh(
+                        n1={}, n2=_n2_rh, n3=_n3_rh, n4=_n4_rh,
+                        commentaire=r_raw.get("commentaire",""),
+                        ref_client=_a7p_rh.get("a7_ref_client",""),
+                        arrete=_a7p_rh.get("a7_arrete",""),
+                        audit_id=r_raw.get("audit_id",""),
+                        lob_label=_a7p_rh.get("a7_lob",""),
+                        graphiques=st.session_state.get("graphiques_a7"),
+                    )
+                    if _html:
+                        st.download_button(
+                            "⬇️ Télécharger HTML",
+                            data=_html.encode("utf-8"),
+                            file_name=f"rapport_actuariel_{besoin}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html",
+                            mime="text/html",
+                            use_container_width=True,
+                            key="dl_res_html",
+                        )
+                    else:
+                        st.error("Génération HTML échouée")
+                except Exception as _eh_e:
+                    st.error(f"Erreur HTML : {_eh_e}")
+
+        # ── Génération Rapport Word à la demande ──────────────────────────
+        if st.button("📄 Rapport Word", use_container_width=True, key="dl_res_word_btn"):
+            with st.spinner("Génération du rapport Word..."):
+                try:
+                    from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import export_word as _ew
+                    _n2_rw = r_raw.get("n2", {}); _n3_rw = r_raw.get("n3", {})
+                    _n4_rw = r_raw.get("n4", {}); _a7p_rw = st.session_state.get("analyse_params", {})
+                    _word = _ew(
+                        n1={}, n2=_n2_rw, n3=_n3_rw, n4=_n4_rw,
+                        commentaire=r_raw.get("commentaire",""),
+                        ref_client=_a7p_rw.get("a7_ref_client",""),
+                        arrete=_a7p_rw.get("a7_arrete",""),
+                        audit_id=r_raw.get("audit_id",""),
+                        lob_label=_a7p_rw.get("a7_lob",""),
+                        graphiques=st.session_state.get("graphiques_a7"),
+                    )
+                    if _word:
+                        st.download_button(
+                            "⬇️ Télécharger Word",
+                            data=_word,
+                            file_name=f"rapport_actuariel_{besoin}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            use_container_width=True,
+                            key="dl_res_word",
+                        )
+                    else:
+                        st.error("Génération Word échouée")
+                except Exception as _ew_e:
+                    st.error(f"Erreur Word : {_ew_e}")
     with e4:
-        pdf_bytes = r_raw.get("pdf_bytes", b"")
-        if pdf_bytes:
-            st.download_button(
-                "📑 Rapport PDF",
-                data=pdf_bytes,
-                file_name=f"rapport_actuariel_{besoin}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-                mime="application/pdf",
-                use_container_width=True,
-                key="dl_res_pdf",
-            )
-        else:
-            st.button("📑 Rapport PDF", use_container_width=True, key="dl_res_pdf_na", disabled=True, help="Non disponible pour cet agent")
+        # ── Génération Rapport PDF à la demande ───────────────────────────
+        if st.button("📑 Rapport PDF", use_container_width=True, key="dl_res_pdf_btn"):
+            with st.spinner("Génération du rapport PDF..."):
+                try:
+                    from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import export_pdf as _ep
+                    _n2_rp = r_raw.get("n2", {}); _n3_rp = r_raw.get("n3", {})
+                    _n4_rp = r_raw.get("n4", {}); _a7p_rp = st.session_state.get("analyse_params", {})
+                    _pdf = _ep(
+                        n1={}, n2=_n2_rp, n3=_n3_rp, n4=_n4_rp,
+                        commentaire=r_raw.get("commentaire",""),
+                        ref_client=_a7p_rp.get("a7_ref_client",""),
+                        arrete=_a7p_rp.get("a7_arrete",""),
+                        audit_id=r_raw.get("audit_id",""),
+                        lob_label=_a7p_rp.get("a7_lob",""),
+                        graphiques=st.session_state.get("graphiques_a7"),
+                    )
+                    if _pdf:
+                        st.download_button(
+                            "⬇️ Télécharger PDF",
+                            data=_pdf,
+                            file_name=f"rapport_actuariel_{besoin}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                            mime="application/pdf",
+                            use_container_width=True,
+                            key="dl_res_pdf",
+                        )
+                    else:
+                        st.error("Génération PDF échouée")
+                except Exception as _ep_e:
+                    st.error(f"Erreur PDF : {_ep_e}")
     with e5:
         if st.button("📊 Voir Dashboard", use_container_width=True, key="res_to_dash"):
             nav_to("dashboard")
