@@ -2525,7 +2525,9 @@ def _executer_analyse(besoin, direction, equipe, client):
                 if _r_principal.get("triangle") is not None:
                     st.session_state["triangle_a7"] = _r_principal["triangle"]
                 # Stocker les graphiques en HTML directement (évite pb sérialisation Streamlit)
-                if _r_principal.get("graphiques"):
+                _g_raw = _r_principal.get("graphiques", {})
+                st.session_state["debug_graph_keys"] = list(_g_raw.keys()) if _g_raw else []
+                if _g_raw:
                     try:
                         import plotly.io as _pio
                         _graphiques_html = {}
@@ -2574,6 +2576,12 @@ def page_resultats():
         if st.button("← Retour à l'analyse"):
             nav_to("analyse")
         return
+
+    # Debug temporaire graphiques
+    _dbg_g = st.session_state.get("debug_graph_keys", [])
+    _dbg_ga = st.session_state.get("graphiques_a7", {})
+    if _dbg_g or _dbg_ga:
+        st.caption(f"DEBUG graphiques raw={_dbg_g} | html={list(_dbg_ga.keys())}")
 
     # ── Lire la structure v4.0 ────────────────────────────────────────────────
     n4  = r_raw.get("n4", r_raw.get("best_estimate", {}))
