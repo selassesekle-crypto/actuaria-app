@@ -2521,10 +2521,28 @@ def _executer_analyse(besoin, direction, equipe, client):
             st.session_state["res_client"] = ref_client
             # Stocker triangle séparément pour regénération graphiques à la volée
             _r_principal = resultats.get("principal", {})
-            if isinstance(_r_principal, dict) and _r_principal.get("triangle") is not None:
-                st.session_state["triangle_a7"] = _r_principal["triangle"]
+            if isinstance(_r_principal, dict):
+                if _r_principal.get("triangle") is not None:
+                    st.session_state["triangle_a7"] = _r_principal["triangle"]
+                # Stocker les graphiques en HTML directement (évite pb sérialisation Streamlit)
                 if _r_principal.get("graphiques"):
-                    st.session_state["graphiques_a7"] = _r_principal["graphiques"]
+                    try:
+                        import plotly.io as _pio
+                        _graphiques_html = {}
+                        for _gnom, _gfig in _r_principal["graphiques"].items():
+                            try:
+                                _graphiques_html[_gnom] = _pio.to_html(
+                                    _gfig,
+                                    full_html=False,
+                                    include_plotlyjs=False,
+                                    config={"displayModeBar": False},
+                                )
+                            except Exception:
+                                pass
+                        st.session_state["graphiques_a7"] = _graphiques_html
+                        st.session_state["graphiques_a7_raw"] = _r_principal["graphiques"]
+                    except Exception as _eg:
+                        st.session_state["graphiques_a7"] = {}
             nav_to("resultats")
 
         except ImportError as e:
