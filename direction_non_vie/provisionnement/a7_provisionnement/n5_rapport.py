@@ -218,7 +218,8 @@ def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: s
         f"DOSSIER DE PROVISIONNEMENT — {lob_label.upper()} — Arrêté {arrete}",
         "",
         "=== TRIANGLE ===",
-        f"Dimensions : {n2.get('dimensions', '—')}",
+        f"Dimensions : {n2.get('dimensions', '—')} (n={n2.get('n_lignes', '?')} années × m={n2.get('n_colonnes', '?')} périodes)",
+        f"Années de survenance : {n2.get('annee_debut', '?')} à {n2.get('annee_fin', '?')}",
         f"Méthode retenue : {n4.get('methode_facteurs', n2.get('methode_recommandee', '—'))}",
         "",
         "=== HYPOTHÈSES ===",
@@ -1211,9 +1212,9 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     b['tableau_bt_n2'] = _build_bt_table(bt, 'n2')
     b['graph_bt']      = graphiques_html.get('g14_backtesting', '')
 
-    msg_bt = _s(bt.get('message'))
-    _bt_note_txt = msg_bt if msg_bt and msg_bt != '—' else ''
-    b['bt_note'] = '<div class="bt-note">' + _bt_note_txt + '</div>' if _bt_note_txt else ''
+    # bt_note supprimé — le tfoot du tableau contient déjà le résumé des années matures
+    # et le message de backtesting.py serait un doublon
+    b['bt_note'] = ''
 
     # ── SECTION 6 : EFFETS CALENDAIRE ────────────────────────────────────────
     n_sig = int(bz.get('n_effets_significatifs', 0))
