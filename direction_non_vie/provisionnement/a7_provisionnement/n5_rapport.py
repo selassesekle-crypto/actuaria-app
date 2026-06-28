@@ -1212,14 +1212,8 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     b['graph_bt']      = graphiques_html.get('g14_backtesting', '')
 
     msg_bt = _s(bt.get('message'))
-    b['bt_note'] = (
-        '<div class="bt-note">'
-        'Analyse sur <strong>' + str(n_mat) + ' années matures</strong> (≥ 75\u202f% développées) sur ' + str(n_tot) + ' au total.<br>'
-        + f'Alertes N-1 : {n_rouge_n1_disp} rouge · {n_ambre_n1_disp} ambre | '
-        + f'Alertes N-2 : {n_rouge_n2_disp} rouge · {n_ambre_n2_disp} ambre.<br>'
-        + msg_bt[:200]
-        + '</div>'
-    )
+    _bt_note_txt = msg_bt if msg_bt and msg_bt != '—' else ''
+    b['bt_note'] = '<div class="bt-note">' + _bt_note_txt + '</div>' if _bt_note_txt else ''
 
     # ── SECTION 6 : EFFETS CALENDAIRE ────────────────────────────────────────
     n_sig = int(bz.get('n_effets_significatifs', 0))
