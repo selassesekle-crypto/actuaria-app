@@ -2516,9 +2516,11 @@ def _executer_analyse(besoin, direction, equipe, client):
                     st.session_state["agent_results"] = {}
                 st.session_state["agent_results"][_ak_map[besoin]] = resultats.get("principal", {})
 
-            st.session_state["res_data"]   = resultats
-            st.session_state["res_besoin"] = besoin
-            st.session_state["res_client"] = ref_client
+            st.session_state["res_data"]    = resultats
+            st.session_state["res_besoin"]  = besoin
+            st.session_state["res_client"]  = ref_client
+            # Reset graphiques pour cohérence avec la nouvelle analyse
+            st.session_state["graphiques_a7"] = {}
             # Stocker triangle séparément pour regénération graphiques à la volée
             _r_principal = resultats.get("principal", {})
             if isinstance(_r_principal, dict):
