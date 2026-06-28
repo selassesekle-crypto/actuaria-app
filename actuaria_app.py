@@ -2583,9 +2583,31 @@ def page_resultats():
     if _dbg_g or _dbg_ga:
         st.info(f"🔍 DEBUG Graphiques — raw keys: {_dbg_g} | html keys: {list(_dbg_ga.keys())} | nb HTML: {len(_dbg_ga)}")
     elif not _dbg_g and not _dbg_ga:
-        st.warning("⚠️ DEBUG : Aucun graphique dans session_state — vérifier si r_raw contient 'graphiques'")
         _r_raw_g = r_raw.get("graphiques", {})
-        st.info(f"r_raw graphiques keys : {list(_r_raw_g.keys()) if _r_raw_g else 'vide'}")
+        st.warning(f"⚠️ DEBUG Graphiques — r_raw: {'VIDE' if not _r_raw_g else list(_r_raw_g.keys())}")
+        # Tentative régénération depuis triangle stocké
+        _tri = st.session_state.get("triangle_a7")
+        if _tri is not None:
+            try:
+                import numpy as _np_g
+                from direction_non_vie.provisionnement.a7_provisionnement.n5_graphiques import generer_graphiques as _gen_g_now
+                import plotly.io as _pio_g
+                _C_g = _np_g.array(_tri) if not isinstance(_tri, _np_g.ndarray) else _tri
+                _figs = _gen_g_now(_C_g, r_raw.get("n2",{}), r_raw.get("n3",{}), r_raw.get("n4",{}))
+                if _figs:
+                    _html_g = {}
+                    for _gn, _gf in _figs.items():
+                        try:
+                            _html_g[_gn] = _pio_g.to_html(_gf, full_html=False, include_plotlyjs=False, config={"displayModeBar":False})
+                        except Exception:
+                            pass
+                    st.session_state["graphiques_a7"] = _html_g
+                    st.info(f"✅ Graphiques régénérés : {list(_html_g.keys())}")
+                    st.rerun()
+                else:
+                    st.error("Génération graphiques retourne vide — voir logs Streamlit")
+            except Exception as _eg_now:
+                st.error(f"Erreur génération graphiques : {_eg_now}")
 
     # ── Lire la structure v4.0 ────────────────────────────────────────────────
     n4  = r_raw.get("n4", r_raw.get("best_estimate", {}))
