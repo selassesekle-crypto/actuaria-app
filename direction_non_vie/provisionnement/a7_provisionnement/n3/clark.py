@@ -282,12 +282,18 @@ def _estimer_parametres(
     """
     n, m = C.shape
 
-    # ELR initiaux : dernière valeur observée de chaque ligne
+    # Normaliser le triangle pour stabiliser l'optimisation
+    # La LL ODP n'est pas invariante à l'échelle — on travaille en milliers
+    scale = float(np.median(C[C > 0])) if np.any(C > 0) else 1.0
+    scale = max(scale, 1.0)
+    C_norm = C / scale
+
+    # ELR initiaux : dernière valeur normalisée de chaque ligne
     elr_init = np.zeros(n)
     for i in range(n):
         for j in range(m - 1, -1, -1):
-            if C[i, j] > 0:
-                elr_init[i] = float(C[i, j]) * 1.2  # Légère majoration initiale
+            if C_norm[i, j] > 0:
+                elr_init[i] = float(C_norm[i, j]) * 1.1
                 break
     elr_init = np.maximum(elr_init, EPSILON)
 
@@ -314,7 +320,7 @@ def _estimer_parametres(
                 result = minimize(
                     fun     = _log_vraisemblance_odp,
                     x0      = x0,
-                    args    = (C, periodes, courbe),
+                    args    = (C_norm, periodes, courbe),
                     method  = 'L-BFGS-B',
                     bounds  = bounds,
                     options = {
@@ -337,8 +343,8 @@ def _estimer_parametres(
 
     omega_opt = float(best_result.x[0])
     theta_opt = float(best_result.x[1])
-    elr_opt   = best_result.x[2:]
-    ll_opt    = -float(best_result.fun)  # Reconvertir en positif
+    elr_opt   = best_result.x[2:] * scale  # Rescaler vers euros originaux
+    ll_opt    = -float(best_result.fun)     # Reconvertir en positif
 
     return omega_opt, theta_opt, elr_opt, ll_opt, True
 
@@ -761,9 +767,26 @@ def clark_ldf(
             "Préférer Chain Ladder sur ce triangle."
         )
 
+    # ── Validation de cohérence de Clark ────────────────────────────────────
+    # Si l'ultimate Clark est > 3× la somme des dernières diagonales,
+    # le résultat est aberrant — on le signale clairement
+    last_diag_sum = float(np.sum([C[i, min(n-1-i, m-1)] for i in range(n) if C[i, min(n-1-i, m-1)] > 0]))
+    reserve_clark = round(reserve_totale, 0)
+    clark_aberrant = (
+        last_diag_sum > 0 and reserve_clark > 3.0 * last_diag_sum
+    ) or (best['aic'] > 0 and best['aic'] > 1e6)  # AIC positif très grand = mauvais fit
+
+    message_validation = ''
+    if clark_aberrant:
+        message_validation = (
+            f" ⚠️ RÉSULTAT ABERRANT — réserve Clark ({reserve_clark:,.0f} €) "
+            f"incohérente avec les données. Cette méthode est écartée de la pondération."
+        )
+
     return {
         'success':            True,
         'disponible':         True,
+        'aberrant':           clark_aberrant,
 
         # Modèle sélectionné
         'courbe_choisie':     courbe_choisie,
