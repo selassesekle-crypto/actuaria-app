@@ -345,6 +345,14 @@ def _nettoyer_narration(texte: str) -> str:
             filtrees.append(ligne)
     txt = chr(10).join(filtrees)
 
+    # Supprimer les tableaux Markdown (lignes avec |)
+    _lignes_ok = []
+    for _l in txt.split(chr(10)):
+        if re.match(r'^\s*\|', _l) or re.match(r'^\s*[-|:]+\s*$', _l):
+            continue
+        _lignes_ok.append(_l)
+    txt = chr(10).join(_lignes_ok)
+
     # Normaliser les sauts de ligne
     txt = re.sub(r'\n{3,}', '\n\n', txt)
 
@@ -1155,6 +1163,26 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     bt_score  = _s(bt.get('score_qualite', '—'))
     n_mat     = int(bt.get('n_matures', bt.get('n_annees_matures', 26)))
     n_tot     = int(bt.get('n_total', 28))
+    # Recalculer depuis le tableau réel pour cohérence
+    _bt_tab = bt.get('tableau', [])
+    _SR, _SA = 15.0, 8.0
+    _nr1 = _na1 = _nr2 = _na2 = 0
+    for _r in _bt_tab:
+        if not isinstance(_r, dict) or not _r.get('mature', True): continue
+        for _hor in ['n1', 'n2']:
+            try:
+                _ep = abs(float(_r.get('ecart_pct_' + _hor, 0) or 0))
+                if _ep >= _SR:
+                    if _hor == 'n1': _nr1 += 1
+                    else: _nr2 += 1
+                elif _ep >= _SA:
+                    if _hor == 'n1': _na1 += 1
+                    else: _na2 += 1
+            except Exception: pass
+    n_rouge_n1_disp = _nr1 if _bt_tab else int(bt.get('n_rouge_n1', 0))
+    n_ambre_n1_disp = _na1 if _bt_tab else int(bt.get('n_ambre_n1', 0))
+    n_rouge_n2_disp = _nr2 if _bt_tab else int(bt.get('n_rouge_n2', 0))
+    n_ambre_n2_disp = _na2 if _bt_tab else int(bt.get('n_ambre_n2', 0))
 
     b['bt_summary'] = (
         '<div class="bt-summary">'
