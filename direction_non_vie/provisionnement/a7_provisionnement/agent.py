@@ -243,6 +243,15 @@ class AgentA7Provisionnement:
                 methode_cl_retenue = methode_cl
                 n2['methode_cl_retenue'] = methode_cl_retenue
 
+            # Enrichir n2 avec les dimensions du triangle pour le contexte Claude
+            n, m = C_calc.shape
+            n2['n_lignes']   = n
+            n2['n_colonnes'] = m
+            n2['dimensions'] = f"{n}×{m}"
+            if annee_debut:
+                n2['annee_debut'] = annee_debut
+                n2['annee_fin']   = annee_debut + n - 1
+
             # Alerte ROUGE hypothèses
             if n2['statut_global'] == 'ROUGE':
                 n2['alertes'].insert(0,
