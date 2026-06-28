@@ -1169,11 +1169,11 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         '</div>'
         '<div class="bt-card bt-card-navy">'
         '<div class="bt-card-label">Alertes N-1</div>'
-        '<div class="bt-card-value">' + str(bt.get('n_rouge_n1', 0)) + '🔴  ' + str(bt.get('n_ambre_n1', 0)) + '🟡</div>'
+        '<div class="bt-card-value">' + str(n_rouge_n1_disp) + '🔴  ' + str(n_ambre_n1_disp) + '🟡</div>'
         '</div>'
         '<div class="bt-card bt-card-navy">'
         '<div class="bt-card-label">Alertes N-2</div>'
-        '<div class="bt-card-value">' + str(bt.get('n_rouge_n2', 0)) + '🔴  ' + str(bt.get('n_ambre_n2', 0)) + '🟡</div>'
+        '<div class="bt-card-value">' + str(n_rouge_n2_disp) + '🔴  ' + str(n_ambre_n2_disp) + '🟡</div>'
         '</div>'
         '</div>'
     )
@@ -1187,7 +1187,9 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     b['bt_note'] = (
         '<div class="bt-note">'
         'Analyse sur <strong>' + str(n_mat) + ' années matures</strong> (≥ 75\u202f% développées) sur ' + str(n_tot) + ' au total.<br>'
-        + msg_bt[:400]
+        + f'Alertes N-1 : {n_rouge_n1_disp} rouge · {n_ambre_n1_disp} ambre | '
+        + f'Alertes N-2 : {n_rouge_n2_disp} rouge · {n_ambre_n2_disp} ambre.<br>'
+        + msg_bt[:200]
         + '</div>'
     )
 
