@@ -180,9 +180,9 @@ def _estimer_parametres(
 
     # Grille de points de départ pour omega et theta
     omega_starts = [0.5, 1.0, 2.0, 3.0][:n_multi]
-    theta_starts = [t[m // 2], t[m // 3], t[-2]]  # médiane, 1/3, avant-dernier
+    theta_starts = [t[m // 2], t[m // 3], t[-2], 2.0]  # valeurs en années
 
-    bounds = [(1e-4, 20.0), (1e-2, t[-1] * 3.0)] + [(1.0, None)] * n
+    bounds = [(1e-4, 10.0), (1e-2, t[-1] * 5.0)] + [(1.0, None)] * n
 
     for omega_0 in omega_starts:
         for theta_0 in theta_starts[:2]:
@@ -403,11 +403,14 @@ def clark_ldf(
 
     # ── Périodes de développement ─────────────────────────────────────────────
     if periodes is None:
-        t = np.array([(j + 1) * 12.0 for j in range(m)])
+        # Périodes en années (1, 2, 3, ..., m)
+        # Convention Clark : t_j = âge de développement en années
+        # θ s'interprète donc en années (ex: θ=5 → médiane à 5 ans)
+        t = np.array([(j + 1.0) for j in range(m)], dtype=float)
     else:
         t = np.array(periodes, dtype=float)
         if len(t) != m:
-            t = np.array([(j + 1) * 12.0 for j in range(m)])
+            t = np.array([(j + 1.0) for j in range(m)], dtype=float)
 
     # ── Triangle incrémental ──────────────────────────────────────────────────
     C_float = C.astype(float).copy()
