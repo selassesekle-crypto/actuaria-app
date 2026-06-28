@@ -259,6 +259,45 @@ class BestEstimateS2:
         else:
             statut = 'ROUGE'
 
+        # ── 9. Jugement actuariel (alertes, recommandations, avis) ───────────
+        alertes_jugement = []
+        recommandations  = []
+
+        # Reprendre les alertes de N2
+        for a in n2.get('alertes', []):
+            alertes_jugement.append(str(a))
+
+        # Recommandations depuis la méthode recommandée
+        methode_rec = n2.get('methode_recommandee', 'chain_ladder')
+        raison_rec  = n2.get('raison_recommandation', '')
+        if raison_rec:
+            recommandations.append(f"Méthode principale : {methode_rec.replace('_',' ').title()} — {raison_rec[:150]}")
+
+        # Recommandation back-testing si dispo
+        bt_statut_val = n3.get('backtesting', {}).get('statut', '')
+        if bt_statut_val == 'ROUGE':
+            recommandations.append(
+                "Back-testing ROUGE — réviser les hypothèses de provisionnement N-1/N-2 "
+                "avant inscription au bilan S2."
+            )
+
+        # Recommandation effets calendaire si dispo
+        bz_statut_val = n3.get('barnett_zehnwirth', {}).get('statut', '')
+        if bz_statut_val in ('ROUGE', 'AMBRE'):
+            recommandations.append(
+                "Effets calendaire détectés — documenter la cause (inflation, changement législatif) "
+                "dans la note méthodologique S2."
+            )
+
+        # Avis actuariel global
+        h1_ok = n2.get('h1_independance', {}).get('ok', True)
+        if statut == 'ROUGE' or (not h1_ok and bt_statut_val == 'ROUGE'):
+            avis_actuariel = 'FAVORABLE SOUS RÉSERVE — révisions requises avant bilan S2'
+        elif statut == 'AMBRE' or not h1_ok:
+            avis_actuariel = 'FAVORABLE SOUS RÉSERVE — points de vigilance à documenter'
+        else:
+            avis_actuariel = "FAVORABLE — Best Estimate conforme aux exigences Solvabilité 2"
+
         # ── 9. Jugement actuariel documenté ───────────────────────────────────
         jugement = self._documenter_jugement(
             methodes_incluses, methodes_exclues, poids,
@@ -302,6 +341,15 @@ class BestEstimateS2:
             # Statut
             'statut':                statut,
             'message':               msg,
+
+            # Jugement actuariel — alimenté depuis les alertes N2/N4
+            'alertes':               alertes_jugement,
+            'recommandations':       recommandations,
+            'avis_actuariel':        avis_actuariel,
+
+            # Alias pour compatibilité rapport
+            'scr_prov':              scr['scr_provisions'],
+            'methode_facteurs':      methode_rec,
         }
 
     # =========================================================================

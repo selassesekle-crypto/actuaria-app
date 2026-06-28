@@ -327,10 +327,11 @@ class AgentA7Provisionnement:
             if gen_g:
                 try:
                     graphiques_dict = generer_graphiques(C_calc, n2, n3, n4)
-                    if self.verbose:
-                        logger.info(f"N5 — {len(graphiques_dict)}/12 graphiques")
+                    logger.info(f"N5 — {len(graphiques_dict)}/12 graphiques générés : {list(graphiques_dict.keys())}")
                 except Exception as e:
-                    logger.warning(f"N5 graphiques échoués : {e}")
+                    import traceback
+                    logger.error(f"N5 graphiques ECHEC : {e}\n{traceback.format_exc()}")
+                    graphiques_dict = {}
 
             # Commentaire actuariel
             commentaire = generer_commentaire(
