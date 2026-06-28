@@ -2580,12 +2580,8 @@ def page_resultats():
     # Debug temporaire graphiques — à supprimer après validation
     _dbg_g  = st.session_state.get("debug_graph_keys", [])
     _dbg_ga = st.session_state.get("graphiques_a7", {})
-    if _dbg_g or _dbg_ga:
-        st.info(f"🔍 DEBUG Graphiques — raw keys: {_dbg_g} | html keys: {list(_dbg_ga.keys())} | nb HTML: {len(_dbg_ga)}")
-    elif not _dbg_g and not _dbg_ga:
-        _r_raw_g = r_raw.get("graphiques", {})
-        st.warning(f"⚠️ DEBUG Graphiques — r_raw: {'VIDE' if not _r_raw_g else list(_r_raw_g.keys())}")
-        # Tentative régénération depuis triangle stocké
+    if not st.session_state.get("graphiques_a7"):
+        # Régénération silencieuse des graphiques si absent
         _tri = st.session_state.get("triangle_a7")
         if _tri is not None:
             try:
@@ -2602,12 +2598,9 @@ def page_resultats():
                         except Exception:
                             pass
                     st.session_state["graphiques_a7"] = _html_g
-                    st.info(f"✅ Graphiques régénérés : {list(_html_g.keys())}")
                     st.rerun()
-                else:
-                    st.error("Génération graphiques retourne vide — voir logs Streamlit")
-            except Exception as _eg_now:
-                st.error(f"Erreur génération graphiques : {_eg_now}")
+            except Exception:
+                pass
 
     # ── Lire la structure v4.0 ────────────────────────────────────────────────
     n4  = r_raw.get("n4", r_raw.get("best_estimate", {}))
