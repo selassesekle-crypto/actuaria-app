@@ -1161,8 +1161,8 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     bt_statut = _s(bt.get('statut', 'AMBRE'))
     bt_col_cls = 'bt-card-' + bt_statut.lower() if bt_statut in ('ROUGE', 'AMBRE', 'VERT') else 'bt-card-navy'
     bt_score  = _s(bt.get('score_qualite', '—'))
-    n_mat     = int(bt.get('n_matures', bt.get('n_annees_matures', 26)))
-    n_tot     = int(bt.get('n_total', 28))
+    n_mat     = int(bt.get('n_matures', bt.get('n_annees_matures', 0)))
+    n_tot     = int(bt.get('n_total', n_mat))
     # Recalculer depuis le tableau réel pour cohérence
     _bt_tab = bt.get('tableau', [])
     _SR, _SA = 15.0, 8.0
@@ -1350,6 +1350,9 @@ def _build_bt_table(bt: Dict, horizon: str) -> str:
     # Filtrer les lignes matures pour l'horizon demandé
     ult_key = 'ultimate_' + horizon
     data = [r for r in tableau if isinstance(r, dict) and r.get(ult_key)]
+
+    # Filtrer : n'afficher que les années matures (back-testing fiable)
+    data = [r for r in data if r.get('mature', True)]
 
     if not data:
         return '<p style="font-size:9pt;color:var(--slate);font-style:italic;">Données de back-testing non disponibles pour cet arrêté.</p>'

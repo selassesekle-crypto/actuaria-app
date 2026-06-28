@@ -271,7 +271,11 @@ class BestEstimateS2:
         methode_rec = n2.get('methode_recommandee', 'chain_ladder')
         raison_rec  = n2.get('raison_recommandation', '')
         if raison_rec:
-            recommandations.append(f"Méthode principale : {methode_rec.replace('_',' ').title()} — {raison_rec[:150]}")
+            # Tronquer proprement à la dernière phrase complète
+            _raison_short = raison_rec[:300]
+            if len(raison_rec) > 300 and '.' in _raison_short:
+                _raison_short = _raison_short[:_raison_short.rfind('.')+1]
+            recommandations.append(f"Méthode principale : {methode_rec.replace('_',' ').title()} — {_raison_short}")
 
         # Recommandation back-testing si dispo
         bt_statut_val = n3.get('backtesting', {}).get('statut', '')
