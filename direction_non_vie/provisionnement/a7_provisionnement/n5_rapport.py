@@ -1212,9 +1212,9 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     b['tableau_bt_n2'] = _build_bt_table(bt, 'n2')
     b['graph_bt']      = graphiques_html.get('g14_backtesting', '')
 
-    # bt_note supprimé — le tfoot du tableau contient déjà le résumé des années matures
-    # et le message de backtesting.py serait un doublon
-    b['bt_note'] = ''
+    msg_bt = _s(bt.get('message'))
+    _bt_note_txt = msg_bt if msg_bt and msg_bt != '—' else ''
+    b['bt_note'] = '<div class="bt-note">' + _bt_note_txt + '</div>' if _bt_note_txt else ''
 
     # ── SECTION 6 : EFFETS CALENDAIRE ────────────────────────────────────────
     n_sig = int(bz.get('n_effets_significatifs', 0))
