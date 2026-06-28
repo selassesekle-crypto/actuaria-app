@@ -1336,28 +1336,27 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
 def _build_bt_table(bt: Dict, horizon: str) -> str:
     """
     Construit le tableau boni/mali pour un horizon donné.
-    Structure backtesting.py : clé 'tableau' avec champs boni_mali_n1/n2, ecart_pct_n1/n2
+    Affiche TOUTES les années :
+    - Matures (pct_dev >= 75%) : évaluées avec statut ROUGE/AMBRE/VERT
+    - Immatures : grisées, mention "Immature", non comptabilisées dans les alertes
     """
-    # Le tableau principal contient TOUTES les données — on filtre par horizon
     tableau = bt.get('tableau', [])
-
-    # Fallback sur les anciennes clés
     if not tableau:
         resultats = bt.get('resultats', {})
         hor_key = 'horizon_1' if horizon == 'n1' else 'horizon_2'
         tableau = resultats.get(hor_key, {}).get('annees', [])
 
-    # Filtrer les lignes matures pour l'horizon demandé
-    ult_key = 'ultimate_' + horizon
-    data = [r for r in tableau if isinstance(r, dict) and r.get(ult_key)]
-
-    # Filtrer : n'afficher que les années matures (back-testing fiable)
-    data = [r for r in data if r.get('mature', True)]
+    data = [r for r in tableau if isinstance(r, dict) and r.get('observe_n', 0) > 0]
 
     if not data:
-        return '<p style="font-size:9pt;color:var(--slate);font-style:italic;">Données de back-testing non disponibles pour cet arrêté.</p>'
+        return (
+            '<p style="font-size:9pt;color:var(--slate);font-style:italic;">'
+            'Données de back-testing non disponibles pour cet arrêté.</p>'
+        )
 
-    hor_label = 'N-1' if horizon == 'n1' else 'N-2'
+    hor_label  = 'N-1' if horizon == 'n1' else 'N-2'
+    seuil_r, seuil_a = 15.0, 8.0
+
     html = (
         '<table class="premium"><thead><tr>'
         '<th>Année</th>'
@@ -1365,45 +1364,73 @@ def _build_bt_table(bt: Dict, horizon: str) -> str:
         '<th class="right">Ultimate ' + hor_label + ' (€)</th>'
         '<th class="right">Boni/Mali (€)</th>'
         '<th class="center">Écart (%)</th>'
+        '<th class="center">Développé</th>'
         '<th class="center">Statut</th>'
         '</tr></thead><tbody>'
     )
 
     for idx, row in enumerate(data):
-        if not isinstance(row, dict):
-            continue
-        annee = _s(row.get('annee_label', row.get('annee', '—')))
-        obs   = row.get('observe_n', 0)
-        ult   = row.get('ultimate_' + horizon, 0)
-        bm    = row.get('boni_mali_' + horizon, 0)
-        ecart = row.get('ecart_pct_' + horizon, 0)
+        annee   = _s(row.get('annee_label', row.get('annee', '—')))
+        obs     = row.get('observe_n', 0)
+        ult     = row.get('ultimate_' + horizon)
+        bm      = row.get('boni_mali_' + horizon)
+        ecart   = row.get('ecart_pct_' + horizon)
+        mature  = bool(row.get('mature', True))
+        pct_dev = float(row.get('pct_developpe', 100))
 
+        if not mature:
+            # Immature — grisée et non évaluée
+            html += (
+                '<tr style="opacity:0.55;background:#F5F7FA;">'
+                '<td class="label" style="color:var(--slate);">' + annee + '</td>'
+                '<td class="right" style="color:var(--slate);"><span class="mono">' + _f(obs) + '</span></td>'
+                '<td class="right" style="color:var(--slate);">—</td>'
+                '<td class="right" style="color:var(--slate);">—</td>'
+                '<td class="center" style="color:var(--slate);">—</td>'
+                '<td class="center" style="font-size:8pt;color:var(--slate);">' + _pct(pct_dev) + '</td>'
+                '<td class="center" style="font-size:8pt;color:var(--slate);font-style:italic;">Immature</td>'
+                '</tr>'
+            )
+            continue
+
+        # Mature — évaluée
         try:
-            ecart_f = float(ecart)
-            if abs(ecart_f) > 15:
-                icon = '🔴'; row_style = 'background:rgba(192,57,43,0.04);'
-            elif abs(ecart_f) > 8:
-                icon = '🟡'; row_style = 'background:rgba(230,126,34,0.04);'
+            ecart_f = float(ecart) if ecart is not None else 0.0
+            if abs(ecart_f) >= seuil_r:
+                icon = '🔴'; row_bg = 'background:rgba(192,57,43,0.05);'
+            elif abs(ecart_f) >= seuil_a:
+                icon = '🟡'; row_bg = 'background:rgba(230,126,34,0.04);'
             else:
-                icon = '✅'; row_style = 'background:#fff;' if idx % 2 == 0 else 'background:#F8FAFB;'
+                icon = '✅'; row_bg = 'background:#fff;' if idx % 2 == 0 else 'background:#F8FAFB;'
         except Exception:
-            icon = '—'; row_style = ''
+            icon = '—'; row_bg = ''
 
         html += (
-            '<tr style="' + row_style + '">'
+            '<tr style="' + row_bg + '">'
             '<td class="label">' + annee + '</td>'
             '<td class="right"><span class="mono">' + _f(obs) + '</span></td>'
             '<td class="right"><span class="mono">' + _f(ult) + '</span></td>'
             '<td class="right"><span class="mono">' + _f(bm) + '</span></td>'
             '<td class="center">' + _pct(ecart) + '</td>'
+            '<td class="center" style="font-size:8pt;color:var(--vert);">' + _pct(pct_dev) + '</td>'
             '<td class="center">' + icon + '</td>'
             '</tr>'
         )
 
-    html += '</tbody></table>'
+    n_mat = sum(1 for r in data if r.get('mature', True))
+    n_tot = len(data)
+    n_imm = n_tot - n_mat
+    note  = (' — ' + str(n_imm) + ' année(s) immature(s) non évaluée(s)') if n_imm > 0 else ''
+    html += (
+        '</tbody>'
+        '<tfoot><tr style="background:var(--gold-pale);">'
+        '<td colspan="7" style="padding:8px 14px;font-size:8pt;color:var(--text-mid);">'
+        + str(n_mat) + ' année(s) mature(s) (≥ 75 %) évaluée(s) sur '
+        + str(n_tot) + ' au total' + note
+        + '</td></tr></tfoot>'
+        '</table>'
+    )
     return html
-
-
 def _wrap_graph(html_g: str, titre: str) -> str:
     if not html_g:
         return ''
