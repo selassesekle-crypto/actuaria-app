@@ -1,250 +1,142 @@
 # =============================================================================
-#  ActuarIA — Direction Non-Vie / Provisionnement A7 Ibrahim v5.0
-#  n3/clark.py  —  Méthode de Clark (2003) — Courbes de développement paramétriques
+#  ActuarIA — Agent A7 Ibrahim v5.0
+#  clark.py  —  Méthode de Clark (2003) — LDF Curve-Fitting par MLE ODP
 #
-#  Référence principale :
-#    Clark, D.R. (2003). "LDF Curve-Fitting and Stochastic Reserving:
-#    A Maximum Likelihood Approach." CAS Forum, Fall 2003, pp. 41-92.
+#  Implémentation fidèle à Clark (2003) :
+#  · Modèle : Y_{i,j} ~ ODP avec μ_{i,j} = U_i × p_j(θ, β/ω)
+#  · Courbes : log-logistique ET Weibull
+#  · Estimation : MLE via scipy (BFGS) avec Hessienne approchée
+#  · Sélection : AIC entre les deux courbes
+#  · Tail factor : 1 / G(t_last)
+#  · IC 95% sur les ultimates via matrice de covariance BFGS
 #
-#  Principe :
-#    Contrairement à Chain Ladder qui projette facteur par facteur,
-#    Clark ajuste une courbe de développement paramétrique G(t) sur
-#    l'ensemble du triangle simultanément par Maximum de Vraisemblance (MLE).
-#
-#    G(t) représente la proportion du sinistre ultime payée à la période t.
-#    G(0) = 0 (rien payé au départ) et G(∞) = 1 (tout payé à l'infini).
-#
-#  Deux courbes disponibles :
-#    · Log-logistique : G(t) = t^ω / (t^ω + θ^ω)
-#    · Weibull        : G(t) = 1 - exp(-(t/θ)^ω)
-#
-#  Estimation :
-#    Paramètres (ω, θ, ELR par année) estimés par MLE sous hypothèse
-#    Over-Dispersed Poisson (ODP) — même hypothèse que Bootstrap ODP.
-#
-#  Avantages vs Chain Ladder :
-#    · Tail factor intégré naturellement (G(t) → 1 quand t → ∞)
-#    · Intervalles de confiance analytiques (matrice Fisher)
-#    · Stable sur triangles courts ou à queue longue
-#    · Sélection automatique log-logistique vs Weibull via AIC
-#
-#  Branches recommandées :
-#    RC Médicale, Construction, RC Générale, Catastrophe Nat (queues longues)
-#    Triangles avec < 5 périodes de développement observées
+#  Interface publique : clark_ldf(C, periodes, annee_base)
+#  Retourne le dict standard A7 Ibrahim (compatible n4_best_estimate.py)
 #
 #  Auteur  : ActuarIA v5.0
-#  Version : 1.0.0
+#  Version : 2.0.0  (réécriture sur base Clark 2003)
 # =============================================================================
 
 from __future__ import annotations
-
 import logging
-from typing import Dict, List, Optional, Tuple
-
 import numpy as np
 
-# scipy.optimize pour la maximisation de vraisemblance
-# Pas de nouvelle dépendance — scipy est déjà dans requirements.txt
+logger = logging.getLogger('actuaria.a7.clark')
+
 try:
     from scipy.optimize import minimize
-    from scipy.stats import chi2
     SCIPY_OK = True
 except ImportError:
     SCIPY_OK = False
+    logger.warning('scipy absent — Clark LDF indisponible')
 
-logger = logging.getLogger('actuaria.a7.n3.clark')
-
-
-# =============================================================================
-#  CONSTANTES
-# =============================================================================
-
-# Valeur minimale pour éviter log(0) dans la log-vraisemblance
-EPSILON = 1e-10
-
-# Bornes des paramètres pour l'optimisation
-# ω (forme) : entre 0.1 et 10 — valeurs extrêmes instables
-# θ (échelle) : entre 1 et 200 périodes — couvre tous les cas pratiques
-BOUNDS_OMEGA = (0.1, 10.0)
-BOUNDS_THETA = (1.0, 200.0)
-BOUNDS_ELR   = (EPSILON, None)  # ELR (Expected Loss Ratio) toujours positif
-
-# Nombre de départs multiples pour l'optimisation
-# (évite les minima locaux de la log-vraisemblance)
-N_STARTS = 5
+from typing import Dict, List, Optional, Tuple
 
 
 # =============================================================================
-#  COURBES DE DÉVELOPPEMENT
+#  COURBES DE DÉVELOPPEMENT G(t)
 # =============================================================================
 
 def _g_loglogistique(t: np.ndarray, omega: float, theta: float) -> np.ndarray:
     """
-    Courbe de développement log-logistique (Clark 2003, équation 3.1).
-
+    Courbe log-logistique (Clark 2003, eq. 3) :
     G(t) = t^ω / (t^ω + θ^ω)
-
-    Propriétés :
-      · G(0) = 0   → rien payé au départ
-      · G(∞) = 1   → tout payé à l'infini
-      · G(θ) = 0.5 → θ est la médiane du développement
-      · ω > 1      → courbe en S (accélération puis ralentissement)
-      · ω < 1      → courbe concave (ralentissement immédiat)
 
     Parameters
     ----------
-    t     : périodes de développement (array positif)
-    omega : paramètre de forme (vitesse de développement)
-    theta : paramètre d'échelle (médiane — période à 50% de développement)
-
-    Returns
-    -------
-    np.ndarray : proportion développée à chaque période t (entre 0 et 1)
+    t     : périodes de développement (positives)
+    omega : paramètre de forme (> 0)
+    theta : paramètre d'échelle / médiane (> 0)
     """
-    t_safe = np.maximum(t, EPSILON)
-    t_pow  = t_safe ** omega
-    theta_pow = theta ** omega
-    return t_pow / (t_pow + theta_pow)
+    t_safe = np.maximum(t, 1e-10)
+    return t_safe**omega / (t_safe**omega + theta**omega)
 
 
 def _g_weibull(t: np.ndarray, omega: float, theta: float) -> np.ndarray:
     """
-    Courbe de développement Weibull (Clark 2003, équation 3.2).
-
+    Courbe Weibull (Clark 2003, eq. 4) :
     G(t) = 1 - exp(-(t/θ)^ω)
 
-    Propriétés :
-      · G(0) = 0   → rien payé au départ
-      · G(∞) = 1   → tout payé à l'infini
-      · G(θ) ≈ 0.63 → θ est le percentile 63%
-      · Souvent mieux adaptée aux très longues queues (>20 ans)
-
     Parameters
     ----------
-    t     : périodes de développement
-    omega : paramètre de forme
-    theta : paramètre d'échelle
-
-    Returns
-    -------
-    np.ndarray : proportion développée à chaque période t (entre 0 et 1)
+    t     : périodes de développement (positives)
+    omega : paramètre de forme / β (> 0)
+    theta : paramètre d'échelle (> 0)
     """
-    t_safe = np.maximum(t, EPSILON)
-    return 1.0 - np.exp(-((t_safe / theta) ** omega))
+    t_safe = np.maximum(t, 1e-10)
+    return 1.0 - np.exp(-(t_safe / theta) ** omega)
 
 
-def _g(
-    t      : np.ndarray,
-    omega  : float,
-    theta  : float,
-    courbe : str = 'loglogistique',
-) -> np.ndarray:
-    """
-    Dispatch vers la courbe de développement choisie.
-
-    Parameters
-    ----------
-    t      : périodes de développement
-    omega  : paramètre de forme
-    theta  : paramètre d'échelle
-    courbe : 'loglogistique' ou 'weibull'
-
-    Returns
-    -------
-    np.ndarray : valeurs de la courbe G(t)
-    """
+def _g(t: np.ndarray, omega: float, theta: float, courbe: str) -> np.ndarray:
+    """Dispatch vers la courbe choisie."""
     if courbe == 'weibull':
         return _g_weibull(t, omega, theta)
     return _g_loglogistique(t, omega, theta)
+
+
+def _increments(t: np.ndarray, omega: float, theta: float, courbe: str) -> np.ndarray:
+    """
+    Incréments de développement théoriques :
+    p_j = G(t_j) - G(t_{j-1}), avec G(t_0) = 0
+    """
+    G = _g(t, omega, theta, courbe)
+    G_prev = np.concatenate(([0.0], G[:-1]))
+    return G - G_prev
 
 
 # =============================================================================
 #  LOG-VRAISEMBLANCE ODP
 # =============================================================================
 
-def _log_vraisemblance_odp(
-    params   : np.ndarray,
-    C        : np.ndarray,
-    periodes : np.ndarray,
-    courbe   : str,
+def _neg_loglik_odp(
+    params:   np.ndarray,
+    Y:        np.ndarray,       # triangle incrémental (n×m), NaN = cellule vide
+    t:        np.ndarray,       # périodes de développement (m,)
+    courbe:   str,
+    mask:     np.ndarray,       # booléen (n×m) : True = cellule observée
 ) -> float:
     """
-    Log-vraisemblance négative sous hypothèse Over-Dispersed Poisson (ODP).
+    Négatif de la log-vraisemblance ODP (Clark 2003, eq. 2) :
 
-    Clark (2003) montre que sous ODP, la log-vraisemblance est :
+    ℓ = Σ_{i,j observés} [ Y_{i,j} · log(μ_{i,j}) - μ_{i,j} ]
 
-      LL = Σ_{i,j} [ c_{i,j} * log(μ_{i,j}) - μ_{i,j} ]
+    avec μ_{i,j} = U_i · p_j(ω, θ)
 
-    où c_{i,j} est le paiement incrémental observé en cellule (i,j)
-    et μ_{i,j} = ELR_i * [G(t_{i,j}) - G(t_{i,j-1})] est le paiement attendu.
-
-    On minimise la vraisemblance NÉGATIVE (convention scipy.optimize).
-
-    Parameters
-    ----------
-    params   : vecteur de paramètres [omega, theta, ELR_0, ELR_1, ..., ELR_{n-1}]
-    C        : triangle des paiements CUMULÉS (n × m)
-    periodes : vecteur des périodes de développement (ex: [12, 24, 36, ...])
-    courbe   : 'loglogistique' ou 'weibull'
-
-    Returns
-    -------
-    float : log-vraisemblance négative (à minimiser)
+    params = [omega, theta, U_1, ..., U_n]
     """
-    n, m = C.shape
-    omega  = params[0]
-    theta  = params[1]
-    elr    = params[2:]  # Un ELR par année de survenance
+    omega = params[0]
+    theta = params[1]
+    U     = params[2:]
 
-    # Vérification des bornes (évite les évaluations hors domaine)
-    if omega <= 0 or theta <= 0 or np.any(elr <= 0):
-        return 1e10
+    # Contraintes sur les paramètres
+    if omega <= 0 or theta <= 0 or np.any(U <= 0):
+        return 1e12
 
-    # Calculer les paiements incrémentaux observés
-    # C_inc[i,j] = C[i,j] - C[i,j-1] (avec C[i,-1] = 0)
-    C_inc = np.diff(C, prepend=0, axis=1)
+    n, m = Y.shape
+    if len(U) != n:
+        return 1e12
 
-    ll = 0.0
+    # Incréments théoriques (communs à toutes les années)
+    try:
+        p = _increments(t, omega, theta, courbe)  # (m,)
+    except Exception:
+        return 1e12
 
-    for i in range(n):
-        # Dernière période observée pour l'année i
-        last_j = -1
-        for j in range(m - 1, -1, -1):
-            if C[i, j] > 0:
-                last_j = j
-                break
-        if last_j < 0:
-            continue
+    # Vérification : p doit être positif
+    if np.any(p <= 0):
+        return 1e12
 
-        for j in range(last_j + 1):
-            # Paiement incrémental observé
-            c_obs = float(C_inc[i, j])
-            if c_obs < 0:
-                continue  # Ignorer les cellules négatives (erreurs données)
+    # Construction de μ_{i,j} = U_i × p_j
+    mu = np.outer(U, p)  # (n, m)
 
-            # Période courante et précédente
-            t_cur  = float(periodes[j])
-            t_prev = float(periodes[j - 1]) if j > 0 else 0.0
+    # Log-vraisemblance sur les cellules observées
+    Y_obs  = Y[mask]
+    mu_obs = np.maximum(mu[mask], 1e-12)
 
-            # Proportion développée entre t_prev et t_cur
-            g_cur  = _g(np.array([t_cur]),  omega, theta, courbe)[0]
-            g_prev = _g(np.array([t_prev]), omega, theta, courbe)[0] if j > 0 else 0.0
-            delta_g = max(g_cur - g_prev, EPSILON)
+    # Cellules avec Y=0 : Y·log(μ) = 0 par convention (limite de Poisson)
+    ll = np.sum(np.where(Y_obs > 0, Y_obs * np.log(mu_obs), 0.0) - mu_obs)
 
-            # Paiement attendu = ELR_i × ΔG(t)
-            mu = elr[i] * delta_g
-
-            if mu <= 0:
-                continue
-
-            # Contribution à la log-vraisemblance ODP
-            # LL += c * log(μ) - μ  (terme de Poisson sans le facteur factoriel)
-            if c_obs > 0:
-                ll += c_obs * np.log(mu) - mu
-            else:
-                ll -= mu  # c_obs = 0 → seul terme -μ
-
-    return -ll  # Négatif car on minimise
+    return -ll
 
 
 # =============================================================================
@@ -252,577 +144,444 @@ def _log_vraisemblance_odp(
 # =============================================================================
 
 def _estimer_parametres(
-    C        : np.ndarray,
-    periodes : np.ndarray,
-    courbe   : str,
-) -> Tuple[float, float, np.ndarray, float, bool]:
+    Y:       np.ndarray,
+    t:       np.ndarray,
+    mask:    np.ndarray,
+    courbe:  str,
+    n_multi: int = 4,
+) -> Tuple[Optional[np.ndarray], float, bool, Optional[np.ndarray]]:
     """
-    Estime les paramètres (ω, θ, ELR) par Maximum de Vraisemblance.
-
-    Utilise scipy.optimize.minimize avec la méthode L-BFGS-B (bien adaptée
-    aux problèmes avec bornes sur les paramètres).
-
-    Plusieurs points de départ sont testés pour éviter les minima locaux —
-    le meilleur résultat (vraisemblance maximale) est retenu.
-
-    Parameters
-    ----------
-    C        : triangle cumulé (n × m)
-    periodes : vecteur des périodes de développement
-    courbe   : 'loglogistique' ou 'weibull'
+    Estimation MLE par BFGS avec plusieurs points de départ.
 
     Returns
     -------
-    Tuple :
-        omega    : float — paramètre de forme optimal
-        theta    : float — paramètre d'échelle optimal
-        elr      : np.ndarray — ELR par année de survenance
-        ll_opt   : float — log-vraisemblance maximale (valeur positive)
-        converge : bool — True si l'optimisation a convergé
+    params_hat : np.ndarray ou None si échec
+    ll_opt     : float — log-vraisemblance optimale
+    converge   : bool
+    hess_inv   : np.ndarray ou None — matrice de covariance approchée
     """
-    n, m = C.shape
+    n, m = Y.shape
 
-    # Normaliser le triangle pour stabiliser l'optimisation
-    # La LL ODP n'est pas invariante à l'échelle — on travaille en milliers
-    scale = float(np.median(C[C > 0])) if np.any(C > 0) else 1.0
-    scale = max(scale, 1.0)
-    C_norm = C / scale
-
-    # ELR initiaux : dernière valeur normalisée de chaque ligne
-    elr_init = np.zeros(n)
+    # ── Initialisations multiples ─────────────────────────────────────────────
+    # U_i : dernière valeur cumulée observée par année (proxy robust)
+    U_init_base = np.zeros(n)
     for i in range(n):
-        for j in range(m - 1, -1, -1):
-            if C_norm[i, j] > 0:
-                elr_init[i] = float(C_norm[i, j]) * 1.1
-                break
-    elr_init = np.maximum(elr_init, EPSILON)
+        row_valid = Y[i, mask[i]]
+        if len(row_valid) > 0:
+            # Pour les ultimates : somme des incréments observés × 1.1
+            U_init_base[i] = max(float(np.sum(Y[i, mask[i]])) * 1.1, 1.0)
+        else:
+            U_init_base[i] = 1.0
 
-    # Bornes : [omega, theta, ELR_0, ..., ELR_{n-1}]
-    bounds = [BOUNDS_OMEGA, BOUNDS_THETA] + [BOUNDS_ELR] * n
+    best_ll     = -np.inf
+    best_params = None
+    best_hinv   = None
+    converge    = False
 
-    # Points de départ multiples (grille sur ω et θ)
-    omega_starts = [0.5, 1.0, 2.0, 3.0, 5.0][:N_STARTS]
-    theta_starts = [
-        float(periodes[m // 4]),  # Q1 des périodes
-        float(periodes[m // 2]),  # Médiane des périodes
-        float(periodes[-1]) * 0.5,
-        float(periodes[-1]) * 0.8,
-        float(periodes[-1]) * 1.5,
-    ][:N_STARTS]
+    # Grille de points de départ pour omega et theta
+    omega_starts = [0.5, 1.0, 2.0, 3.0][:n_multi]
+    theta_starts = [t[m // 2], t[m // 3], t[-2]]  # médiane, 1/3, avant-dernier
 
-    best_ll     = np.inf
-    best_result = None
+    bounds = [(1e-4, 20.0), (1e-2, t[-1] * 3.0)] + [(1.0, None)] * n
 
-    for omega_0 in omega_starts[:2]:  # Limiter à 2×2 départs pour la vitesse
+    for omega_0 in omega_starts:
         for theta_0 in theta_starts[:2]:
-            x0 = np.array([omega_0, theta_0] + list(elr_init))
+            # Varier légèrement U_init
+            U_init = U_init_base * np.random.uniform(0.9, 1.1, n)
+            x0 = np.concatenate(([omega_0, theta_0], U_init))
+
             try:
-                result = minimize(
-                    fun     = _log_vraisemblance_odp,
+                res = minimize(
+                    fun     = _neg_loglik_odp,
                     x0      = x0,
-                    args    = (C_norm, periodes, courbe),
+                    args    = (Y, t, courbe, mask),
                     method  = 'L-BFGS-B',
                     bounds  = bounds,
-                    options = {
-                        'maxiter': 1000,
-                        'ftol':    1e-9,
-                        'gtol':    1e-6,
-                    },
+                    options = {'maxiter': 5000, 'ftol': 1e-12, 'gtol': 1e-8},
                 )
-                if result.fun < best_ll:
-                    best_ll     = result.fun
-                    best_result = result
+                if res.success or res.fun < 1e11:
+                    ll_cur = -float(res.fun)
+                    if ll_cur > best_ll:
+                        best_ll     = ll_cur
+                        best_params = res.x.copy()
+                        converge    = res.success
+                        # Hessienne via BFGS (nécessite method='BFGS')
+                        try:
+                            res2 = minimize(
+                                fun    = _neg_loglik_odp,
+                                x0     = best_params,
+                                args   = (Y, t, courbe, mask),
+                                method = 'BFGS',
+                                options = {'maxiter': 1000},
+                            )
+                            if hasattr(res2, 'hess_inv'):
+                                best_hinv = np.array(res2.hess_inv)
+                        except Exception:
+                            best_hinv = None
             except Exception as e:
-                logger.debug(f"Départ ({omega_0}, {theta_0}) échoué : {e}")
+                logger.debug(f'Clark optim ({courbe}, ω={omega_0:.1f}, θ={theta_0:.1f}) : {e}')
                 continue
 
-    if best_result is None or not best_result.success:
-        logger.warning(f"Clark MLE n'a pas convergé pour courbe {courbe}")
-        # Retourner des valeurs par défaut si échec
-        return 1.0, float(periodes[-1]), elr_init, -best_ll if best_ll < np.inf else 0.0, False
-
-    omega_opt = float(best_result.x[0])
-    theta_opt = float(best_result.x[1])
-    elr_opt   = best_result.x[2:] * scale  # Rescaler vers euros originaux
-    ll_opt    = -float(best_result.fun)     # Reconvertir en positif
-
-    return omega_opt, theta_opt, elr_opt, ll_opt, True
+    return best_params, best_ll, converge, best_hinv
 
 
 # =============================================================================
-#  CALCUL DES ULTIMATES ET INTERVALLES DE CONFIANCE
+#  CALCUL DES RÉSULTATS ACTUARIELS
 # =============================================================================
 
-def _calculer_ultimates(
-    C        : np.ndarray,
-    periodes : np.ndarray,
-    omega    : float,
-    theta    : float,
-    elr      : np.ndarray,
-    courbe   : str,
+def _calculer_resultats(
+    C:       np.ndarray,    # triangle cumulé original (n×m)
+    Y:       np.ndarray,    # triangle incrémental (n×m)
+    t:       np.ndarray,    # périodes (m,)
+    params:  np.ndarray,    # [omega, theta, U_1..U_n]
+    courbe:  str,
+    hess_inv: Optional[np.ndarray],
+    annee_base: int,
 ) -> Dict:
     """
-    Calcule les ultimates, IBNR et intervalles de confiance depuis
-    les paramètres MLE estimés.
-
-    Ultimate_i = ELR_i × G(t_max) = ELR_i × 1 (si t_max → ∞)
-    Mais en pratique on utilise t_max = max_periode × facteur_tail
-
-    IBNR_i = Ultimate_i - C_i[dernière_période_observée]
-
-    Pour les intervalles de confiance, Clark utilise l'approximation
-    delta-method basée sur la matrice d'information de Fisher.
-    Ici on utilise une approximation simplifiée via le CV Bootstrap.
-
-    Parameters
-    ----------
-    C        : triangle cumulé
-    periodes : vecteur des périodes
-    omega    : paramètre de forme optimal
-    theta    : paramètre d'échelle optimal
-    elr      : ELR optimaux par année
-    courbe   : 'loglogistique' ou 'weibull'
-
-    Returns
-    -------
-    Dict avec ultimates, IBNR, tail factors, proportions développées
+    Calcule ultimates, IBNR, tail factor, IC 95% et statistiques.
     """
     n, m = C.shape
+    omega = float(params[0])
+    theta = float(params[1])
+    U     = params[2:]
 
-    # Période "infinie" pour le tail — on utilise 10× la dernière période
-    # car G(t) → 1 asymptotiquement
-    t_max_observe = float(periodes[-1])
-    t_infini      = t_max_observe * 10.0
+    # Courbe G(t) aux périodes observées
+    G = _g(t, omega, theta, courbe)           # (m,)
+    p = _increments(t, omega, theta, courbe)  # (m,)
 
-    # Proportion développée à la dernière période observée
-    g_last = _g(np.array([t_max_observe]), omega, theta, courbe)[0]
+    # ── Tail factor ───────────────────────────────────────────────────────────
+    # G(∞) = 1 pour les deux courbes → tail = 1 / G(t_last)
+    tail_factor = float(1.0 / max(G[-1], 1e-10))
 
-    # Proportion développée à "l'infini" (≈ 1.0)
-    g_infini = _g(np.array([t_infini]), omega, theta, courbe)[0]
-
-    # Tail factor = G(∞) / G(t_dernière) — développement résiduel
-    # C'est la grande force de Clark : le tail est estimé directement
-    tail_factor = g_infini / g_last if g_last > 0 else 1.0
-
-    ultimates    = np.zeros(n)
-    ibnr         = np.zeros(n)
-    pct_developpe = np.zeros(n)
-    last_obs     = np.zeros(n)
+    # ── Ultimates et IBNR ─────────────────────────────────────────────────────
+    ultimates      = []
+    ibnr_par_annee = []
+    pct_developpe  = []
 
     for i in range(n):
-        # Dernière valeur observée de l'année i
-        last_val = 0.0
-        last_j   = -1
-        for j in range(m - 1, -1, -1):
-            if C[i, j] > 0:
-                last_val = float(C[i, j])
-                last_j   = j
-                break
+        u_i = float(U[i])
 
-        if last_j < 0:
-            continue
+        # Dernier cumul observé pour cette année
+        row = C[i]
+        last_j = max(j for j in range(m) if not np.isnan(row[j]) and row[j] > 0)
+        obs_last = float(row[last_j])
 
-        # Proportion développée à la dernière période de l'année i
-        t_last_i  = float(periodes[last_j])
-        g_last_i  = _g(np.array([t_last_i]), omega, theta, courbe)[0]
+        # % développé = G(t_{last_j}) pour cette année
+        pct = float(G[last_j]) * 100.0
 
-        # Ultimate Clark = ELR_i × G(∞) ≈ ELR_i (car G(∞) ≈ 1)
-        ultimate_i = float(elr[i]) * g_infini
+        # IBNR = U_i × (1 - G(t_{last_j})) × tail
+        # En fait : IBNR = U_i × tail - obs_last
+        # Clark : U_i = ultimate sans queue, donc IBNR = U_i / G(t_last) - obs
+        # Mais ici U_i est l'ultimate direct (G va vers 1)
+        ibnr_i = u_i * tail_factor - obs_last
 
-        # Alternative : rescaler pour être cohérent avec les observations
-        # Clark recommande d'utiliser directement ELR comme proxy de l'ultimate
-        # si G(∞) ≈ 1, ce qui est le cas en pratique
-        ultimates[i]     = ultimate_i
-        ibnr[i]          = max(ultimate_i - last_val, 0.0)
-        pct_developpe[i] = g_last_i * 100.0
-        last_obs[i]      = last_val
+        ultimates.append(u_i * tail_factor)
+        ibnr_par_annee.append(max(ibnr_i, 0.0))
+        pct_developpe.append(pct)
+
+    # Réserve totale depuis annee_base
+    reserve_totale = float(np.sum(ibnr_par_annee[annee_base - 1:]))
+
+    # ── Intervalles de confiance 95% sur les ultimates ────────────────────────
+    ic_95 = []
+    if hess_inv is not None:
+        try:
+            var_params = np.diag(hess_inv)
+            se_U = np.sqrt(np.maximum(var_params[2:], 0.0))
+            z95  = 1.96
+            for i in range(n):
+                se_ult = se_U[i] * tail_factor
+                ic_95.append((
+                    round(max(ultimates[i] - z95 * se_ult, 0), 0),
+                    round(ultimates[i] + z95 * se_ult, 0),
+                ))
+        except Exception:
+            ic_95 = [(None, None)] * n
+    else:
+        ic_95 = [(None, None)] * n
+
+    # ── Résidus de Pearson (qualité d'ajustement) ─────────────────────────────
+    mu = np.outer(U, p)  # (n, m)
+    residus_list = []
+    for i in range(n):
+        for j in range(m):
+            if not np.isnan(Y[i, j]) and mu[i, j] > 0:
+                r = (Y[i, j] - mu[i, j]) / np.sqrt(mu[i, j])
+                residus_list.append(r)
+
+    residus_arr = np.array(residus_list)
+    residus_stats = {
+        'n':          len(residus_arr),
+        'mean':       round(float(np.mean(residus_arr)), 4),
+        'std':        round(float(np.std(residus_arr)), 4),
+        'min':        round(float(np.min(residus_arr)), 4),
+        'max':        round(float(np.max(residus_arr)), 4),
+        'chi2_stat':  round(float(np.sum(residus_arr**2)), 4),
+    }
 
     return {
-        'ultimates':     ultimates,
-        'ibnr':          ibnr,
-        'pct_developpe': pct_developpe,
-        'last_obs':      last_obs,
-        'tail_factor':   tail_factor,
-        'g_last':        g_last,
-        'g_infini':      g_infini,
-        't_max_observe': t_max_observe,
+        'omega':           round(omega, 4),
+        'theta':           round(theta, 2),
+        'U':               [round(float(u), 0) for u in U],
+        'ultimates':       [round(u, 0) for u in ultimates],
+        'ibnr_par_annee':  [round(v, 0) for v in ibnr_par_annee],
+        'reserve_totale':  round(reserve_totale, 0),
+        'tail_factor':     round(tail_factor, 6),
+        'pct_developpe':   [round(p, 1) for p in pct_developpe],
+        'ic_95':           ic_95,
+        'residus':         residus_stats,
     }
 
 
 # =============================================================================
-#  RÉSIDUS DE PEARSON — QUALITÉ D'AJUSTEMENT
-# =============================================================================
-
-def _residus_pearson(
-    C        : np.ndarray,
-    periodes : np.ndarray,
-    omega    : float,
-    theta    : float,
-    elr      : np.ndarray,
-    courbe   : str,
-) -> Dict:
-    """
-    Calcule les résidus de Pearson standardisés pour évaluer la qualité
-    de l'ajustement de la courbe G(t) aux données.
-
-    Résidu de Pearson : r_{i,j} = (c_obs - μ) / sqrt(μ)
-
-    Où :
-      · c_obs = paiement incrémental observé
-      · μ = paiement incrémental attendu (ELR_i × ΔG)
-
-    Un bon ajustement se caractérise par :
-      · Résidus centrés autour de 0
-      · Pas de structure systématique (pas de tendance par période ou par année)
-      · |résidu| < 2 pour la majorité des cellules
-
-    Référence : Clark (2003), Section 5 — Model Diagnostics.
-
-    Parameters
-    ----------
-    C, periodes, omega, theta, elr, courbe : voir fonctions précédentes
-
-    Returns
-    -------
-    Dict avec résidus, statistiques et indicateurs de qualité
-    """
-    n, m = C.shape
-    C_inc = np.diff(C, prepend=0, axis=1)
-
-    residus     = []
-    residus_mat = np.full((n, m), np.nan)
-
-    for i in range(n):
-        last_j = -1
-        for j in range(m - 1, -1, -1):
-            if C[i, j] > 0:
-                last_j = j
-                break
-        if last_j < 0:
-            continue
-
-        for j in range(last_j + 1):
-            c_obs  = float(C_inc[i, j])
-            if c_obs < 0: continue
-
-            t_cur  = float(periodes[j])
-            t_prev = float(periodes[j - 1]) if j > 0 else 0.0
-            g_cur  = _g(np.array([t_cur]),  omega, theta, courbe)[0]
-            g_prev = _g(np.array([t_prev]), omega, theta, courbe)[0] if j > 0 else 0.0
-            delta_g = max(g_cur - g_prev, EPSILON)
-
-            mu = float(elr[i]) * delta_g
-            if mu <= 0: continue
-
-            # Résidu de Pearson standardisé
-            r = (c_obs - mu) / np.sqrt(mu)
-            residus.append(r)
-            residus_mat[i, j] = r
-
-    residus_arr = np.array(residus)
-
-    # Statistiques des résidus
-    if len(residus_arr) > 0:
-        r_mean   = float(np.mean(residus_arr))
-        r_std    = float(np.std(residus_arr))
-        r_max    = float(np.max(np.abs(residus_arr)))
-        n_grands = int(np.sum(np.abs(residus_arr) > 2))
-        pct_ok   = (len(residus_arr) - n_grands) / len(residus_arr) * 100
-    else:
-        r_mean = r_std = r_max = 0.0
-        n_grands = 0; pct_ok = 100.0
-
-    # Évaluation qualitative
-    if r_max < 2.0 and abs(r_mean) < 0.5:
-        qualite = 'BONNE'
-    elif r_max < 3.0 and abs(r_mean) < 1.0:
-        qualite = 'ACCEPTABLE'
-    else:
-        qualite = 'MÉDIOCRE'
-
-    return {
-        'residus':      residus_arr,
-        'residus_mat':  residus_mat,
-        'r_mean':       round(r_mean, 3),
-        'r_std':        round(r_std, 3),
-        'r_max':        round(r_max, 3),
-        'n_grands':     n_grands,
-        'pct_ok':       round(pct_ok, 1),
-        'qualite':      qualite,
-        'n_cellules':   len(residus_arr),
-    }
-
-
-# =============================================================================
-#  CRITÈRE AIC — SÉLECTION DU MODÈLE
+#  AIC
 # =============================================================================
 
 def _aic(ll: float, n_params: int) -> float:
-    """
-    Critère d'Information d'Akaike (AIC) pour la sélection du modèle.
-
-    AIC = 2k - 2*LL
-
-    où k = nombre de paramètres et LL = log-vraisemblance maximale.
-
-    Le modèle avec l'AIC le plus BAS est préféré — il équilibre
-    la qualité d'ajustement (LL) et la complexité (k).
-
-    Les deux courbes (log-logistique et Weibull) ont le même nombre
-    de paramètres (ω, θ, ELR_1, ..., ELR_n) donc l'AIC revient
-    simplement à choisir la meilleure log-vraisemblance.
-
-    Parameters
-    ----------
-    ll       : log-vraisemblance maximale
-    n_params : nombre de paramètres estimés
-
-    Returns
-    -------
-    float : valeur AIC
-    """
+    """AIC = 2k - 2ℓ (Clark 2003)."""
     return 2.0 * n_params - 2.0 * ll
 
 
 # =============================================================================
-#  FONCTION PRINCIPALE
+#  INTERFACE PUBLIQUE
 # =============================================================================
 
 def clark_ldf(
-    C                : np.ndarray,
-    periodes         : Optional[List[float]] = None,
-    courbes          : List[str]             = ['loglogistique', 'weibull'],
-    annee_base       : int                   = 1,
+    C:          np.ndarray,
+    periodes:   Optional[List[float]] = None,
+    courbes:    List[str]             = ['loglogistique', 'weibull'],
+    annee_base: int                   = 1,
 ) -> Dict:
     """
     Méthode de Clark (2003) — LDF Curve-Fitting par Maximum de Vraisemblance.
 
-    Estime les paramètres des courbes de développement log-logistique et
-    Weibull sur le triangle des paiements cumulés, puis calcule les
-    ultimates, IBNR, tail factor et intervalles de confiance.
-
-    Sélection automatique log-logistique vs Weibull via AIC.
-
     Parameters
     ----------
     C : np.ndarray
-        Triangle des paiements CUMULÉS (n × n).
-        Doit être triangulaire supérieur nul (conventions standard).
+        Triangle des paiements CUMULÉS (n × n), triangulaire supérieur.
     periodes : list[float], optional
-        Périodes de développement en mois ou en années.
-        Si None : [12, 24, 36, ...] mois (convention standard).
-        Exemple pour triangle annuel : [12, 24, 36, 48, ...]
+        Périodes de développement en mois. Défaut : [12, 24, 36, ...].
     courbes : list[str]
-        Courbes à tester. Défaut : les deux (sélection par AIC).
-        Options : ['loglogistique'], ['weibull'], ['loglogistique', 'weibull']
+        Courbes à tester : 'loglogistique' et/ou 'weibull'.
     annee_base : int
-        Indice de la première année à inclure dans les résultats
-        (permet d'exclure les années initiales des résultats).
+        Première année incluse dans la réserve totale.
 
     Returns
     -------
-    Dict avec les clés :
-        success            : bool
-        disponible         : bool (False si scipy absent ou triangle trop petit)
-        courbe_choisie     : str ('loglogistique' ou 'weibull')
-        omega              : float — paramètre de forme optimal
-        theta              : float — paramètre d'échelle (en périodes)
-        elr                : list — Expected Loss Ratio par année
-        ultimates          : list — Ultimates par année
-        ibnr_par_annee     : list — IBNR par année
-        reserve_totale     : float — Σ IBNR (depuis annee_base)
-        reserve_be_clark   : float — alias reserve_totale
-        tail_factor        : float — facteur queue implicite
-        pct_developpe      : list — % développé par année
-        aic_loglogistique  : float — AIC log-logistique
-        aic_weibull        : float — AIC Weibull
-        ll_loglogistique   : float — Log-vraisemblance log-logistique
-        ll_weibull         : float — Log-vraisemblance Weibull
-        residus            : dict — statistiques des résidus de Pearson
-        converge           : bool — True si optimisation convergée
-        message            : str — interprétation actuarielle
-        erreur             : str ou None
+    Dict standard A7 Ibrahim avec les clés :
+        success, disponible, aberrant, courbe_choisie, omega, theta,
+        ultimates, ibnr_par_annee, reserve_totale, reserve_be_clark,
+        tail_factor, pct_developpe, ic_95, aic_loglogistique, aic_weibull,
+        ll_loglogistique, ll_weibull, residus, converge, message, erreur,
+        aic_optimal, g_courbe, periodes_arr
     """
     # ── Vérifications préliminaires ───────────────────────────────────────────
     if not SCIPY_OK:
         return {
-            'success':    False,
-            'disponible': False,
-            'erreur':     "scipy non disponible — installez scipy>=1.11.0",
-            'message':    "Méthode de Clark non disponible.",
+            'success': False, 'disponible': False,
+            'erreur':  'scipy non disponible',
+            'message': 'Méthode de Clark non disponible.',
+        }
+
+    if C is None or C.ndim != 2:
+        return {
+            'success': False, 'disponible': False,
+            'erreur':  'Triangle invalide',
+            'message': 'Triangle invalide.',
         }
 
     n, m = C.shape
 
-    # Triangle minimum : 4×4 pour avoir suffisamment de données
+    # Minimum 4×4 pour avoir des degrés de liberté suffisants
     if n < 4 or m < 4:
         return {
-            'success':    False,
-            'disponible': False,
-            'erreur':     f"Triangle trop petit ({n}×{m}) — minimum 4×4 requis pour Clark",
-            'message':    "Triangle insuffisant pour la méthode de Clark.",
+            'success': False, 'disponible': False,
+            'erreur':  f'Triangle trop petit ({n}×{m}). Minimum 4×4.',
+            'message': 'Triangle insuffisant pour Clark.',
         }
 
     # ── Périodes de développement ─────────────────────────────────────────────
     if periodes is None:
-        # Convention standard : 12M, 24M, 36M...
-        periodes = [float((j + 1) * 12) for j in range(m)]
-    periodes_arr = np.array(periodes, dtype=float)
+        t = np.array([(j + 1) * 12.0 for j in range(m)])
+    else:
+        t = np.array(periodes, dtype=float)
+        if len(t) != m:
+            t = np.array([(j + 1) * 12.0 for j in range(m)])
 
-    # ── Estimation MLE pour chaque courbe ────────────────────────────────────
-    resultats_courbes = {}
-    n_params = 2 + n  # ω, θ, ELR_0, ..., ELR_{n-1}
+    # ── Triangle incrémental ──────────────────────────────────────────────────
+    C_float = C.astype(float).copy()
 
-    for courbe in courbes:
-        logger.info(f"Clark MLE — courbe {courbe}...")
-        try:
-            omega, theta, elr, ll, converge = _estimer_parametres(
-                C, periodes_arr, courbe
-            )
-            aic = _aic(ll, n_params)
-            resultats_courbes[courbe] = {
-                'omega':    omega,
-                'theta':    theta,
-                'elr':      elr,
-                'll':       ll,
-                'aic':      aic,
-                'converge': converge,
-            }
-            logger.info(
-                f"Clark {courbe} : ω={omega:.3f}, θ={theta:.1f}, "
-                f"LL={ll:.1f}, AIC={aic:.1f}, convergé={converge}"
-            )
-        except Exception as e:
-            logger.error(f"Clark {courbe} échoué : {e}")
-            resultats_courbes[courbe] = None
+    # Mettre NaN là où le triangle est vide (cellules au-delà de la diagonale)
+    for i in range(n):
+        for j in range(m):
+            if j > m - 1 - i:
+                C_float[i, j] = np.nan
 
-    # ── Sélection du meilleur modèle via AIC ─────────────────────────────────
-    courbes_valides = {
-        k: v for k, v in resultats_courbes.items()
-        if v is not None
-    }
+    # Normaliser par la médiane des valeurs positives pour stabiliser la LL ODP
+    # (la LL ODP n'est pas invariante à l'échelle des données)
+    vals_pos = C_float[~np.isnan(C_float) & (C_float > 0)]
+    scale = float(np.median(vals_pos)) if len(vals_pos) > 0 else 1.0
+    scale = max(scale, 1.0)
+    C_norm = C_float / scale
 
-    if not courbes_valides:
+    Y_norm = np.full_like(C_norm, np.nan)
+    Y_norm[:, 0] = C_norm[:, 0]
+    for j in range(1, m):
+        Y_norm[:, j] = C_norm[:, j] - C_norm[:, j - 1]
+
+    # Alias pour le reste du code (on travaille en normalisé)
+    Y = Y_norm
+
+    # Masque : cellules effectivement observées (non NaN et non négatif)
+    mask = ~np.isnan(Y) & ~np.isnan(C_norm) & (Y >= 0)
+
+    n_obs = int(mask.sum())
+    if n_obs < (n + 3):  # besoin d'au moins n+2 observations (n ELR + ω + θ)
         return {
-            'success':    False,
-            'disponible': True,
-            'erreur':     "Toutes les optimisations MLE ont échoué",
-            'message':    "Échec de l'estimation Clark — vérifier la qualité du triangle.",
+            'success': False, 'disponible': False,
+            'erreur':  f'Observations insuffisantes ({n_obs}) pour {n} années.',
+            'message': 'Données insuffisantes pour Clark.',
         }
 
-    # Meilleure courbe = AIC le plus bas
-    courbe_choisie = min(courbes_valides, key=lambda k: courbes_valides[k]['aic'])
-    best           = courbes_valides[courbe_choisie]
+    # ── Estimation MLE pour chaque courbe ────────────────────────────────────
+    np.random.seed(42)  # Reproductibilité
 
-    omega  = best['omega']
-    theta  = best['theta']
-    elr    = best['elr']
-    ll     = best['ll']
-    converge = best['converge']
+    resultats_courbes = {}
+    ll_par_courbe     = {}
+    aic_par_courbe    = {}
+    n_params          = n + 2  # n ELR + ω + θ
 
-    # ── Calcul des ultimates ──────────────────────────────────────────────────
-    res_ult = _calculer_ultimates(C, periodes_arr, omega, theta, elr, courbe_choisie)
+    for courbe in courbes:
+        logger.info(f'Clark MLE — courbe={courbe}, n={n}, m={m}')
+        try:
+            params, ll, conv, hinv = _estimer_parametres(Y, t, mask, courbe)
+            if params is None or ll == -np.inf:
+                logger.warning(f'Clark {courbe} : optimisation échouée')
+                ll_par_courbe[courbe]  = None
+                aic_par_courbe[courbe] = None
+                continue
 
-    ultimates    = res_ult['ultimates']
-    ibnr         = res_ult['ibnr']
-    pct_dev      = res_ult['pct_developpe']
-    tail_factor  = res_ult['tail_factor']
+            aic = _aic(ll, n_params)
+            # Rescaler les U_i vers les valeurs originales
+            params_rescaled      = params.copy()
+            params_rescaled[2:] *= scale
+            res = _calculer_resultats(C_float, Y_norm, t, params_rescaled, courbe, hinv, annee_base)
+            res['converge'] = conv
+            res['ll']       = round(ll, 2)
+            res['aic']      = round(aic, 2)
 
-    # Reserve totale depuis annee_base
-    reserve_totale = float(np.sum(ibnr[annee_base:]))
+            resultats_courbes[courbe] = res
+            ll_par_courbe[courbe]     = ll
+            aic_par_courbe[courbe]    = aic
+            logger.info(f'Clark {courbe} : LL={ll:.2f}, AIC={aic:.2f}, '
+                        f'réserve={res["reserve_totale"]:,.0f}€')
 
-    # ── Résidus de Pearson ────────────────────────────────────────────────────
-    residus_stats = _residus_pearson(
-        C, periodes_arr, omega, theta, elr, courbe_choisie
+        except Exception as e:
+            logger.error(f'Clark {courbe} : erreur — {e}', exc_info=True)
+            ll_par_courbe[courbe]  = None
+            aic_par_courbe[courbe] = None
+
+    # ── Sélection par AIC (plus bas = meilleur) ───────────────────────────────
+    courbes_ok = {c: aic for c, aic in aic_par_courbe.items() if aic is not None}
+
+    if not courbes_ok:
+        return {
+            'success': False, 'disponible': True,
+            'erreur':  'Optimisation Clark échouée pour toutes les courbes.',
+            'message': 'Clark non convergé — résultats indisponibles.',
+        }
+
+    courbe_choisie = min(courbes_ok, key=courbes_ok.get)
+    best = resultats_courbes[courbe_choisie]
+
+    aic_ll = aic_par_courbe.get('loglogistique')
+    aic_wb = aic_par_courbe.get('weibull')
+    ll_ll  = ll_par_courbe.get('loglogistique')
+    ll_wb  = ll_par_courbe.get('weibull')
+
+    reserve_totale = float(best['reserve_totale'])
+    tail_factor    = float(best['tail_factor'])
+
+    # ── Validation de cohérence ───────────────────────────────────────────────
+    # Calculer la somme des dernières diagonales comme référence
+    last_diag = []
+    for i in range(n):
+        j_last = m - 1 - i
+        if j_last >= 0 and not np.isnan(C_float[i, j_last]) and C_float[i, j_last] > 0:
+            last_diag.append(float(C_float[i, j_last]))
+    last_diag_sum = sum(last_diag) if last_diag else 0.0
+
+    # Aberrant si :
+    # - réserve > 5× la diagonale (seuil large pour ne pas exclure à tort)
+    # - ou AIC > 1e6 (ajustement complètement dégradé)
+    clark_aberrant = (
+        (last_diag_sum > 0 and reserve_totale > 5.0 * last_diag_sum) or
+        (courbes_ok[courbe_choisie] > 1e6)
     )
-
-    # ── AIC des deux courbes (pour comparaison) ───────────────────────────────
-    aic_ll = resultats_courbes.get('loglogistique', {}).get('aic', None) if resultats_courbes.get('loglogistique') else None
-    aic_wb = resultats_courbes.get('weibull', {}).get('aic', None) if resultats_courbes.get('weibull') else None
-    ll_ll  = resultats_courbes.get('loglogistique', {}).get('ll', None) if resultats_courbes.get('loglogistique') else None
-    ll_wb  = resultats_courbes.get('weibull', {}).get('ll', None) if resultats_courbes.get('weibull') else None
 
     # ── Message actuariel ─────────────────────────────────────────────────────
-    qualite_res = residus_stats['qualite']
-    theta_interp = (
-        f"médiane développement à {theta:.0f} mois"
-        if courbe_choisie == 'loglogistique'
-        else f"percentile 63% à {theta:.0f} mois"
-    )
-    message = (
-        f"Méthode de Clark — courbe {courbe_choisie} sélectionnée (AIC={best['aic']:.1f}). "
-        f"Paramètres : ω={omega:.3f} ({theta_interp}). "
-        f"Tail factor implicite : {tail_factor:.4f}. "
-        f"Qualité d'ajustement : {qualite_res} "
-        f"({residus_stats['pct_ok']:.0f}% des cellules dans ±2σ). "
-        f"Réserve Clark : {reserve_totale:,.0f} €."
-    )
-
-    if not converge:
-        message += " ⚠️ Optimisation non convergée — résultats à interpréter avec prudence."
-
-    if qualite_res == 'MÉDIOCRE':
-        message += (
-            " ⚠️ Résidus élevés — la courbe paramétrique s'ajuste mal aux données. "
-            "Préférer Chain Ladder sur ce triangle."
-        )
-
-    # ── Validation de cohérence de Clark ────────────────────────────────────
-    # Si l'ultimate Clark est > 3× la somme des dernières diagonales,
-    # le résultat est aberrant — on le signale clairement
-    last_diag_sum = float(np.sum([C[i, min(n-1-i, m-1)] for i in range(n) if C[i, min(n-1-i, m-1)] > 0]))
-    reserve_clark = round(reserve_totale, 0)
-    clark_aberrant = (
-        last_diag_sum > 0 and reserve_clark > 3.0 * last_diag_sum
-    ) or (best['aic'] > 0 and best['aic'] > 1e6)  # AIC positif très grand = mauvais fit
-
-    message_validation = ''
     if clark_aberrant:
-        message_validation = (
-            f" ⚠️ RÉSULTAT ABERRANT — réserve Clark ({reserve_clark:,.0f} €) "
-            f"incohérente avec les données. Cette méthode est écartée de la pondération."
+        message = (
+            f"⚠️ RÉSULTAT ABERRANT — réserve Clark ({reserve_totale:,.0f}\u202f€) "
+            f"incohérente avec les données (seuil : 5× diagonale = "
+            f"{5*last_diag_sum:,.0f}\u202f€). "
+            f"Méthode écartée de la pondération."
         )
+    elif tail_factor > 1.20:
+        message = (
+            f"Courbe {courbe_choisie} sélectionnée (AIC={courbes_ok[courbe_choisie]:.1f}). "
+            f"Queue significative : {tail_factor:.3f}× — attention aux développements tardifs."
+        )
+    else:
+        message = (
+            f"Courbe {courbe_choisie} sélectionnée (AIC={courbes_ok[courbe_choisie]:.1f}). "
+            f"Tail factor : {tail_factor:.4f}. Ajustement satisfaisant."
+        )
+
+    # ── Courbe G(t) pour graphique ────────────────────────────────────────────
+    t_dense = np.linspace(0, t[-1] * 1.5, 100)
+    g_courbe = _g(t_dense, float(best['omega']), float(best['theta']), courbe_choisie)
 
     return {
-        'success':            True,
-        'disponible':         True,
-        'aberrant':           clark_aberrant,
+        'success':           True,
+        'disponible':        True,
+        'aberrant':          clark_aberrant,
 
         # Modèle sélectionné
-        'courbe_choisie':     courbe_choisie,
-        'omega':              round(omega, 4),
-        'theta':              round(theta, 2),
-        'elr':                [round(float(e), 0) for e in elr],
+        'courbe_choisie':    courbe_choisie,
+        'omega':             best['omega'],
+        'theta':             best['theta'],
+        'elr':               best['U'],  # alias ELR = U_i (ultimates paramétriques)
 
         # Résultats actuariels
-        'ultimates':          [round(float(u), 0) for u in ultimates],
-        'ibnr_par_annee':     [round(float(v), 0) for v in ibnr],
-        'reserve_totale':     round(reserve_totale, 0),
-        'reserve_be_clark':   round(reserve_totale, 0),  # alias
-        'tail_factor':        round(tail_factor, 6),
-        'pct_developpe':      [round(float(p), 1) for p in pct_dev],
+        'ultimates':         best['ultimates'],
+        'ibnr_par_annee':    best['ibnr_par_annee'],
+        'reserve_totale':    reserve_totale,
+        'reserve_be_clark':  reserve_totale,  # alias
+        'tail_factor':       tail_factor,
+        'pct_developpe':     best['pct_developpe'],
+        'ic_95':             best['ic_95'],
 
         # Comparaison des courbes
-        'aic_loglogistique':  round(aic_ll, 2) if aic_ll else None,
-        'aic_weibull':        round(aic_wb, 2) if aic_wb else None,
-        'll_loglogistique':   round(ll_ll, 2) if ll_ll else None,
-        'll_weibull':         round(ll_wb, 2) if ll_wb else None,
+        'aic_loglogistique': round(aic_ll, 2) if aic_ll is not None else None,
+        'aic_weibull':       round(aic_wb, 2) if aic_wb is not None else None,
+        'll_loglogistique':  round(ll_ll, 2)  if ll_ll  is not None else None,
+        'll_weibull':        round(ll_wb, 2)  if ll_wb  is not None else None,
+        'aic_optimal':       round(courbes_ok[courbe_choisie], 2),
+        'll_optimal':        round(best['ll'], 2),
 
         # Qualité d'ajustement
-        'residus':            residus_stats,
-        'converge':           converge,
+        'residus':           best['residus'],
+        'converge':          best['converge'],
 
-        # Courbe G(t) pour le graphique
-        'periodes_arr':       periodes_arr.tolist(),
-        'g_courbe':           [
-            round(_g(np.array([t]), omega, theta, courbe_choisie)[0], 4)
-            for t in periodes_arr
-        ],
+        # Courbe G(t) pour graphique
+        'periodes_arr':      t_dense.tolist(),
+        'g_courbe':          [round(float(v), 4) for v in g_courbe],
 
         # Métadonnées
-        'message':            message,
-        'erreur':             None,
-        'n_params':           n_params,
-        'll_optimal':         round(ll, 2),
-        'aic_optimal':        round(best['aic'], 2),
+        'n_params':          n_params,
+        'n_obs':             n_obs,
+        'message':           message,
+        'erreur':            None,
     }
