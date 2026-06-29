@@ -520,16 +520,34 @@ class BestEstimateS2:
         rm_sum = 0.0
         tableau = []
 
-        for t in range(m + 10):
-            # BE résiduel à t
-            if t == 0:
-                be_t = be_0
-            elif t < m:
-                cdf_t = max(float(f_cum[t - 1]), 1.0)
-                be_t  = be_0 / cdf_t
+        # f_cum est dans l'ordre [CDF_dernière_col, ..., CDF_1ère_col]
+        # CDF le plus grand en premier (période la moins développée)
+        # Pour le run-off : à l'année t, la proportion de BE résiduelle est
+        # approximée par la part des IBNR qui ne seront pas encore développés
+        # Méthode : utiliser les pct_developpe pour projeter le run-off
+        # pct_dev[i] = % développé de l'année i → IBNR[i] = BE[i] × (1 - pct_dev[i])
+        # À t=1 : les années qui se développent d'un pas → recalculer pct_dev
+        # 
+        # Simplification (méthode 2 EIOPA) : run-off proportionnel aux LDF
+        # BE(t) = BE(0) × facteur_run_off(t)
+        # facteur_run_off(t) = Σ_j [ 1/f_cum[max(0, m-1-j+t)] ] pour j=0..n
+        #
+        # Projection BE en run-off — méthode pct résiduel par CDF (décroissant)
+        # pct_résiduel[j] = 1/f_cum[j] → proportion encore à développer à la colonne j
+        # BE(t) = BE(0) × Σ_{j≥t} pct_résiduel[j] / Σ_j pct_résiduel[j]
+        pct_res  = [1.0 / max(float(f), 1.0) for f in f_cum]
+        total_pr = max(sum(pct_res), 1e-10)
+        m_rm     = len(pct_res)
+        be_par_t = []
+        for _t in range(m_rm + 15):
+            if _t == 0:
+                be_par_t.append(be_0)
+            elif _t < m_rm:
+                be_par_t.append(be_0 * sum(pct_res[_t:]) / total_pr)
             else:
-                be_t  = 0.0
+                be_par_t.append(0.0)
 
+        for t, be_t in enumerate(be_par_t):
             if be_t < be_0 * 0.001:
                 break
 
