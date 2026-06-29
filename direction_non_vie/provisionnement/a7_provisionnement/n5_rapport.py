@@ -1155,7 +1155,17 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         '<tr class="highlight-gold"><td class="label">Ratio SCR / BE</td>'
         '<td class="center" style="color:var(--rouge);font-weight:700;"><span class="mono">' + _pct(SCR) + '</span></td>'
         '<td>Cible pratique marché : &lt; 35\u202f%</td></tr>'
-        '</tbody></table>'
+        # Risk Margin S2
+        + ('<tr style="border-top:2px solid var(--navy);"><td class="label" style="color:var(--navy);font-weight:600;">Risk Margin S2</td>'
+        '<td class="center"><span class="mono" style="color:var(--navy);font-weight:700;">'
+        + _f(n4.get('risk_margin', 0)) + '</span></td>'
+        '<td>Art. 77 §5 — CoC 6% · Méthode proportionnelle · Courbe EIOPA '
+        + _s(n4.get('date_courbe_rfr', '—')) + '</td></tr>'
+        '<tr class="highlight-gold"><td class="label">Provisions Techniques S2</td>'
+        '<td class="center"><span class="mono" style="font-weight:700;">'
+        + _f(n4.get('provisions_techniques_s2', 0)) + '</span></td>'
+        '<td>PT S2 = BE + RM — Art. 77 §1</td></tr>')
+        + '</tbody></table>'
     )
 
     # ── SECTION 5 : BACK-TESTING ──────────────────────────────────────────────
