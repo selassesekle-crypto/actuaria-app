@@ -232,18 +232,46 @@ class BestEstimateS2:
             if len(reserves_val) > 1 else 0.0
         )
 
-        # ── 5. Percentiles log-normale (QIS5 TP.5.26) ────────────────────────
+        # ── 5. Percentiles — Mack (log-normale) puis Bootstrap si disponible ──
+        # Mack : approximation log-normale (QIS5 TP.5.26)
         if sigma > 0 and be > 0:
             cv_ln  = sigma / be
             s2_ln  = np.log(1.0 + cv_ln ** 2)
             s_ln   = np.sqrt(s2_ln)
             m_ln   = np.log(be) - s2_ln / 2.0
 
-            p75  = float(np.exp(m_ln + 0.6745 * s_ln))
-            p90  = float(np.exp(m_ln + 1.2816 * s_ln))
-            p995 = float(np.exp(m_ln + 2.5758 * s_ln))
+            p75_mack  = float(np.exp(m_ln + 0.6745 * s_ln))
+            p90_mack  = float(np.exp(m_ln + 1.2816 * s_ln))
+            p995_mack = float(np.exp(m_ln + 2.5758 * s_ln))
         else:
-            p75 = p90 = p995 = be
+            p75_mack = p90_mack = p995_mack = be
+
+        # Bootstrap : utiliser les vrais percentiles simulés si disponibles
+        # (Bootstrap est plus fiable que Mack quand H4 rejetée)
+        _boot = n3.get('bootstrap', {})
+        _boot_ok = _boot.get('success', False) and _boot.get('be_bootstrap', 0) > 0
+
+        if _boot_ok:
+            p75  = float(_boot.get('p75',  p75_mack))
+            p90  = float(_boot.get('p90',  p90_mack))
+            p995 = float(_boot.get('p99_5', p995_mack))
+            # Conserver Mack séparément pour affichage comparatif
+            p75_source  = 'Bootstrap ODP'
+            p90_source  = 'Bootstrap ODP'
+            p995_source = 'Bootstrap ODP'
+        else:
+            # Pas de Bootstrap → utiliser Mack
+            p75  = p75_mack
+            p90  = p90_mack
+            p995 = p995_mack
+            p75_source  = 'Mack 1993'
+            p90_source  = 'Mack 1993'
+            p995_source = 'Mack 1993'
+
+        # Stocker les deux séries pour affichage dans le rapport
+        p75_mack_val  = p75_mack
+        p90_mack_val  = p90_mack
+        p995_mack_val = p995_mack
 
         # ── 6. SCR provisions formule standard (Art. 105 S2) ──────────────────
         scr = self._calculer_scr(be, lob, cfg)
@@ -391,6 +419,13 @@ class BestEstimateS2:
             'reserve_p75':           round(p75,    0),
             'reserve_p90':           round(p90,    0),
             'reserve_p99_5':         round(p995,   0),
+            'reserve_p75_mack':      round(p75_mack_val,  0),
+            'reserve_p90_mack':      round(p90_mack_val,  0),
+            'reserve_p99_5_mack':    round(p995_mack_val, 0),
+            'reserve_p75_boot':      round(float(_boot.get('p75',  p75_mack_val)), 0) if _boot_ok else None,
+            'reserve_p90_boot':      round(float(_boot.get('p90',  p90_mack_val)), 0) if _boot_ok else None,
+            'reserve_p99_5_boot':    round(float(_boot.get('p99_5',p995_mack_val)),0) if _boot_ok else None,
+            'source_percentiles':    p90_source,
 
             # Incertitude Mack
             'sigma_mack':            round(sigma,  0),
