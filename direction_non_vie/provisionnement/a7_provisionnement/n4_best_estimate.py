@@ -81,6 +81,7 @@ class BestEstimateS2:
         C:            np.ndarray,
         lob:          str   = 'generique',
         seuil_score:  int   = 60,
+        **kwargs,
     ) -> Dict:
         """
         Calcule le Best Estimate S2 et le SCR provisions.
