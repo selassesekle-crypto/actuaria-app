@@ -139,6 +139,7 @@ class AgentA7Provisionnement:
         arrete:           str           = '',
         resultats_precedents: Optional[Dict] = None,
         # ── Options ───────────────────────────────────────────────────────────
+        courbe_rfr:       object        = None,   # Courbe EIOPA RFR (dict rfr_eiopa)
         n_sim_bootstrap:  int           = 5000,
         seed:             int           = 42,
         generer_graphiques_flag: bool   = True,
@@ -315,7 +316,7 @@ class AgentA7Provisionnement:
             if annee_debut:
                 n3['annee_debut_triangle'] = annee_debut
 
-            n4 = self._be.calculer(n2, n3, C_calc, lob=lob)
+            n4 = self._be.calculer(n2, n3, C_calc, lob=lob, courbe_rfr=courbe_rfr)
 
             if self.verbose:
                 logger.info(
