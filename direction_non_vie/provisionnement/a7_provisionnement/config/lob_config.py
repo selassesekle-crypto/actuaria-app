@@ -392,6 +392,10 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
 
         "tail_factor_max_alerte": 1.05,
 
+        # Tail factor — Guide IA 2023 : generique traité comme risque long par prudence
+        "risque_long":              True,   # par prudence
+        "tail_seuil_stabilisation": 1.02,   # dernier LDF min pour appliquer tail
+
         # Tail factor — Guide IA 2023 : applicable uniquement si risque long
         # ET coefficients non stabilisés (dernier LDF > tail_seuil_stabilisation)
         "risque_long":              True,  # Générique = prudence, traité comme risque long
