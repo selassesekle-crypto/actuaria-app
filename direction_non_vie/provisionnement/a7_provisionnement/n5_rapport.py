@@ -1432,7 +1432,7 @@ def _build_bt_table(bt: Dict, horizon: str) -> str:
         bm      = row.get('boni_mali_' + horizon)
         ecart   = row.get('ecart_pct_' + horizon)
         mature  = bool(row.get('mature', True))
-        pct_dev = float(row.get('pct_developpe', 100))
+        pct_dev = float(row.get('pct_developpe', 0))
 
         if not mature:
             # Immature — grisée et non évaluée
