@@ -125,6 +125,26 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         # Tail factor : en général proche de 1.00 pour auto matériel
         "tail_factor_max_alerte": 1.02,
 
+        # Tail factor — Guide IA 2023 (pratique professionnelle française)
+        "risque_long":              True,  # Transport = risque long, seuil 1.05
+        "tail_seuil_stabilisation": 1.05,   # seuil de stabilisation LDF
+
+        # Tail factor — Guide IA 2023 (pratique professionnelle française)
+        "risque_long":              True,  # RC Médicale = risque très long (20-30 ans)
+        "tail_seuil_stabilisation": 1.10,   # seuil de stabilisation LDF
+
+        # Tail factor — Guide IA 2023 (pratique professionnelle française)
+        "risque_long":              True,  # RC Générale = risque long, seuil 1.05
+        "tail_seuil_stabilisation": 1.05,   # seuil de stabilisation LDF
+
+        # Tail factor — Guide IA 2023 (pratique professionnelle française)
+        "risque_long":              False,  # MRH = risque court (< 4 ans)
+        "tail_seuil_stabilisation": 1.01,   # seuil de stabilisation LDF
+
+        # Tail factor — Guide IA 2023 (pratique professionnelle française)
+        "risque_long":              True,  # RC Auto Corporels = risque long (15-25 ans)
+        "tail_seuil_stabilisation": 1.10,   # seuil de stabilisation LDF
+
         # Tail factor — Guide IA 2023 : applicable uniquement si risque long
         # ET coefficients non stabilisés (dernier LDF > tail_seuil_stabilisation)
         "risque_long":              True,  # Transport = risque long (8 ans)
@@ -188,6 +208,10 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         ],
 
         "tail_factor_max_alerte": 1.05,
+
+        # Tail factor — Guide IA 2023 (pratique professionnelle française)
+        "risque_long":              True,  # RC Auto Corporels = risque long (15-25 ans)
+        "tail_seuil_stabilisation": 1.1,
     },
 
     # ── MRH — Multirisque Habitation (queue courte) ───────────────────────────
@@ -220,6 +244,10 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         ],
 
         "tail_factor_max_alerte": 1.01,
+
+        # Tail factor — Guide IA 2023 (pratique professionnelle française)
+        "risque_long":              False,  # MRH = risque court (< 4 ans)
+        "tail_seuil_stabilisation": 1.01,
     },
 
     # ── RC Générale (queue moyenne) ───────────────────────────────────────────
@@ -253,6 +281,10 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         ],
 
         "tail_factor_max_alerte": 1.04,
+
+        # Tail factor — Guide IA 2023 (pratique professionnelle française)
+        "risque_long":              True,  # RC Générale = risque long, seuil 1.05
+        "tail_seuil_stabilisation": 1.05,
     },
 
     # ── RC Médicale (queue très longue) ───────────────────────────────────────
@@ -289,6 +321,10 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         ],
 
         "tail_factor_max_alerte": 1.10,
+
+        # Tail factor — Guide IA 2023 (pratique professionnelle française)
+        "risque_long":              True,  # RC Médicale = risque très long (20-30 ans)
+        "tail_seuil_stabilisation": 1.1,
     },
 
     # ── Construction — RC Décennale / DO (queue longue) ──────────────────────
@@ -360,6 +396,10 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         ],
 
         "tail_factor_max_alerte": 1.03,
+
+        # Tail factor — Guide IA 2023 (pratique professionnelle française)
+        "risque_long":              True,  # Transport = risque long, seuil 1.05
+        "tail_seuil_stabilisation": 1.05,
     },
 
     # ── Générique (fallback si lob non spécifié) ──────────────────────────────
