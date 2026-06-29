@@ -458,11 +458,13 @@ def calculer_pct_developpe(
 # =============================================================================
 
 def chain_ladder(
-    C:                  np.ndarray,
-    methode:            str   = 'standard',
-    annee_base_reserve: int   = 1,
-    lob_tail_max_alerte: float = 1.05,
-    n_facteurs_queue:   int   = 8,
+    C:                       np.ndarray,
+    methode:                 str   = 'standard',
+    annee_base_reserve:      int   = 1,
+    lob_tail_max_alerte:     float = 1.05,
+    n_facteurs_queue:        int   = 4,
+    risque_long:             bool  = True,
+    tail_seuil_stabilisation: float = 1.10,
 ) -> Dict:
     """
     Chain Ladder complet : facteurs → tail → ultimates → IBNR → réserve.
@@ -505,8 +507,10 @@ def chain_ladder(
     # ── 2. Tail factor ────────────────────────────────────────────────────────
     tail = calculer_tail_factor(
         facteurs,
-        lob_tail_max_alerte=lob_tail_max_alerte,
-        n_facteurs_queue=n_facteurs_queue,
+        lob_tail_max_alerte      = lob_tail_max_alerte,
+        n_facteurs_queue         = n_facteurs_queue,
+        risque_long              = risque_long,
+        tail_seuil_stabilisation = tail_seuil_stabilisation,
     )
 
     # ── 3. Facteurs cumulés (avec tail) ───────────────────────────────────────
