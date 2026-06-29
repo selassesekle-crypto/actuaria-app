@@ -277,7 +277,8 @@ class BestEstimateS2:
         scr = self._calculer_scr(be, lob, cfg)
 
         # ── 7. Risk Margin S2 (Art. 77 §5) ───────────────────────────────────
-        _f_cum = n3.get('chain_ladder', {}).get('facteurs_cumules', [])
+        _f_cum  = n3.get('chain_ladder', {}).get('facteurs_cumules', [])
+        _courbe = kwargs.get('courbe_rfr', None)
         if _courbe is None:
             _courbe = get_courbe_embarquee()
         _courbe['_lob'] = lob
