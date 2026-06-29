@@ -278,7 +278,10 @@ class BestEstimateS2:
 
         # ── 7. Risk Margin S2 (Art. 77 §5) ───────────────────────────────────
         _f_cum = n3.get('chain_ladder', {}).get('facteurs_cumules', [])
-        risk_margin_data = self._calculer_risk_margin(be, scr, _f_cum)
+        if _courbe is None:
+            _courbe = get_courbe_embarquee()
+        _courbe['_lob'] = lob
+        risk_margin_data = self._calculer_risk_margin(be, scr, _f_cum, _courbe)
 
         # ── 8. Sensibilités ───────────────────────────────────────────────────
         sensibilites = self._calculer_sensibilites(
@@ -327,15 +330,10 @@ class BestEstimateS2:
                 "dans la note méthodologique S2."
             )
 
-        # Recommandation H1 rejetée
+        # H1 rejetée → déjà dans "Point de vigilance" section 08
+        # On ne la duplique pas ici pour éviter la redondance
         h1_ok  = n2.get('h1_independance', {}).get('ok', True)
         h1_corr = n2.get('h1_independance', {}).get('corr_max', 0.0)
-        if not h1_ok:
-            recommandations.append(
-                f"H1 Indépendance rejetée (corrélation max = {h1_corr:.2f}) — "
-                "Chain Ladder biaisé. Privilégier BF ou Cape Cod pour le Best Estimate. "
-                "Documenter dans la note méthodologique S2 (Art. 77 Guide IA 2023)."
-            )
 
         # Recommandation H4 hétéroscédasticité
         h4_ok = n2.get('h4_homogeneite', {}).get('ok', True)
