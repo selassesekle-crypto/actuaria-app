@@ -299,6 +299,68 @@ class BestEstimateS2:
                 "dans la note méthodologique S2."
             )
 
+        # Recommandation H1 rejetée
+        h1_ok  = n2.get('h1_independance', {}).get('ok', True)
+        h1_corr = n2.get('h1_independance', {}).get('corr_max', 0.0)
+        if not h1_ok:
+            recommandations.append(
+                f"H1 Indépendance rejetée (corrélation max = {h1_corr:.2f}) — "
+                "Chain Ladder biaisé. Privilégier BF ou Cape Cod pour le Best Estimate. "
+                "Documenter dans la note méthodologique S2 (Art. 77 Guide IA 2023)."
+            )
+
+        # Recommandation H4 hétéroscédasticité
+        h4_ok = n2.get('h4_homogeneite', {}).get('ok', True)
+        h4_cv = n2.get('h4_homogeneite', {}).get('cv_variances', 0.0)
+        if not h4_ok:
+            recommandations.append(
+                f"H4 Homogénéité rejetée (CV variances = {h4_cv:.2f}) — "
+                "Bootstrap ODP non fiable sur ce triangle. "
+                "Percentiles P99/P99.5 à interpréter avec prudence pour le Risk Margin S2."
+            )
+
+        # Recommandation Clark aberrant
+        clark = n3.get('clark_ldf', {})
+        if clark.get('aberrant'):
+            recommandations.append(
+                "Clark LDF produit un résultat aberrant — méthode exclue de la pondération. "
+                "Vérifier la structure du triangle et la longueur de la queue de développement."
+            )
+
+        # Recommandation Risk Margin
+        rm = n4_risk_margin if 'n4_risk_margin' in dir() else None
+        recommandations.append(
+            "Risk Margin S2 calculé par la méthode proportionnelle au BE (méthode 2 EIOPA, CoC 6%). "
+            "Documenter la courbe EIOPA RFR utilisée dans la note méthodologique. "
+            "Vérifier la cohérence avec le Risk Margin du dernier arrêté."
+        )
+
+        # Recommandation tail factor si appliqué
+        tail_info = n3.get('chain_ladder', {}).get('tail_factor', {})
+        if isinstance(tail_info, dict) and tail_info.get('tail_factor', 1.0) > 1.0:
+            tail_val = tail_info.get('tail_factor', 1.0)
+            recommandations.append(
+                f"Tail factor = {tail_val:.4f} appliqué (Guide IA 2023 — régression log-linéaire). "
+                "Justifier le seuil de stabilisation retenu dans la note méthodologique S2."
+            )
+
+        # Recommandation rupture sinistralité (back-testing rouge récent)
+        bt_tableau = n3.get('backtesting', {}).get('tableau', [])
+        annees_rouge_recentes = [
+            r.get('annee', '') for r in bt_tableau
+            if isinstance(r, dict) and r.get('mature', True)
+            and abs(float(r.get('ecart_pct_n1', 0) or 0)) >= 15.0
+            and int(str(r.get('annee', '0'))[-4:] if r.get('annee') else 0) >= 2020
+        ]
+        if annees_rouge_recentes:
+            recommandations.append(
+                f"Rupture de sinistralité détectée sur les années récentes "
+                f"({', '.join(str(a) for a in annees_rouge_recentes[:3])}) — "
+                "écart back-testing > 15% sur N-1. Analyser la cause (inflation judiciaire, "
+                "changement de portefeuille) et envisager un chargement prudentiel "
+                "sur les années 2020+ avant inscription au bilan S2."
+            )
+
         # Avis actuariel global
         h1_ok = n2.get('h1_independance', {}).get('ok', True)
         if statut == 'ROUGE' or (not h1_ok and bt_statut_val == 'ROUGE'):
