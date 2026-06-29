@@ -1272,6 +1272,49 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
             )
     b['bz_items'] = bz_items
 
+    # ── Résultats GLM BZ (Niveau 2) ──────────────────────────────────────────
+    glm_dispo  = bz.get('glm_disponible', False)
+    p_cal      = bz.get('p_calendrier')
+    cal_sig    = bz.get('cal_significatif')
+    aic_red    = bz.get('aic_reduit')
+    aic_ful    = bz.get('aic_complet')
+    res_bz     = bz.get('reserve_bz')
+    lr_stat    = bz.get('lr_stat')
+
+    if glm_dispo and p_cal is not None:
+        _cal_col  = 'var(--rouge)' if cal_sig else 'var(--vert)'
+        _cal_txt  = f'SIGNIFICATIFS (p={p_cal:.4f})' if cal_sig else f'Non significatifs (p={p_cal:.4f})'
+        b['bz_glm'] = (
+            '<div style="margin-top:20px;padding:16px 20px;background:rgba(0,0,0,0.15);'
+            'border-radius:8px;border-left:4px solid var(--cyan);">'
+            '<div style="font-size:8pt;color:var(--gold);font-weight:700;'
+            'text-transform:uppercase;margin-bottom:10px;">◆ GLM Barnett-Zehnwirth — Test LR</div>'
+            '<div style="display:flex;gap:24px;flex-wrap:wrap;font-size:8.5pt;">'
+            '<div><span style="color:var(--slate);">Effets calendaires</span><br>'
+            '<span style="font-weight:700;color:' + _cal_col + ';">' + _cal_txt + '</span></div>'
+            '<div><span style="color:var(--slate);">Stat LR</span><br>'
+            '<span class="mono" style="color:var(--blanc);">' + (f'{lr_stat:.1f}' if lr_stat else '—') + '</span></div>'
+            '<div><span style="color:var(--slate);">AIC sans calendrier</span><br>'
+            '<span class="mono" style="color:var(--blanc);">' + (f'{aic_red:,.0f}' if aic_red else '—') + '</span></div>'
+            '<div><span style="color:var(--slate);">AIC avec calendrier</span><br>'
+            '<span class="mono" style="color:var(--blanc);">' + (f'{aic_ful:,.0f}' if aic_ful else '—') + '</span></div>'
+            + (
+                '<div><span style="color:var(--slate);">Réserve BZ corrigée</span><br>'
+                '<span class="mono" style="color:var(--gold);font-weight:700;">'
+                + _f(res_bz) + '</span>'
+                '<span style="color:var(--slate);font-size:7.5pt;"> (informatif)</span></div>'
+                if res_bz else ''
+            )
+            + '</div>'
+            '<div style="font-size:7.5pt;color:var(--slate);margin-top:8px;">'
+            'Modèle : μ_{i,j} = exp(α_i + β_j + γ_k) — Poisson log-linéaire. '
+            'H₀ : γ_k = 0 ∀k (effets calendaires nuls). '
+            'Barnett & Zehnwirth (1998) CAS Forum.</div>'
+            '</div>'
+        )
+    else:
+        b['bz_glm'] = ''
+
     reco_bz = _s(bz.get('recommandation'))
     bz_reco_val = reco_bz.split(' — ')[0] if ' — ' in reco_bz else reco_bz
     bz_reco_txt = reco_bz.split(' — ')[1] if ' — ' in reco_bz else ''
@@ -1589,6 +1632,7 @@ def export_html(
             '<div class="section-header"><span class="section-num">06</span><span class="section-titre">Effets calendaires — Barnett-Zehnwirth (1998)</span></div>\n'
             '<div class="section-body">\n'
             '<div class="bz-grid">' + b['bz_items'] + '</div>\n'
+            + b.get('bz_glm', '') + '\n'
             + b['bz_reco_box']
             + '\n</div>\n<div class="section-divider"></div>\n\n'
 
