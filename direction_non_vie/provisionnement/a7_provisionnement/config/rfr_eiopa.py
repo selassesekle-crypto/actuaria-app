@@ -91,3 +91,102 @@ def get_facteur_actualisation(t: int) -> float:
     """
     r_t = get_taux_rfr(t)
     return 1.0 / (1.0 + r_t) ** t
+
+
+# =============================================================================
+#  FONCTIONS DE SUBSTITUTION — courbe manuelle ou fichier Excel
+# =============================================================================
+
+def get_courbe_taux_plat(taux_pct: float) -> dict:
+    """
+    Retourne une courbe de taux plat (même taux pour toutes les maturités).
+
+    Parameters
+    ----------
+    taux_pct : float — taux annuel en % (ex: 3.2 pour 3.2%)
+
+    Returns
+    -------
+    dict avec 'type', 'taux_pct', 'source', 'date'
+    """
+    taux_decimal = taux_pct / 100.0
+    return {
+        'type':        'taux_plat',
+        'taux_pct':    taux_pct,
+        'taux_fn':     lambda t: taux_decimal,
+        'source':      f'Taux manuel saisi par l\u2019actuaire : {taux_pct:.3f}%',
+        'date':        'Arrêté courant',
+        'label':       f'Taux manuel {taux_pct:.3f}%',
+    }
+
+
+def get_courbe_depuis_excel(fichier_bytes: bytes) -> dict:
+    """
+    Charge une courbe EIOPA depuis un fichier Excel uploadé.
+
+    Format attendu : deux colonnes dans la première feuille
+        - Colonne 1 : maturite (entier, années 1 à 150)
+        - Colonne 2 : taux_pct (float, ex: 2.85 pour 2.85%)
+
+    Parameters
+    ----------
+    fichier_bytes : bytes — contenu du fichier Excel
+
+    Returns
+    -------
+    dict avec 'type', 'taux_fn', 'source', 'date', 'maturites', 'taux'
+    """
+    import io
+    import numpy as np
+    try:
+        import pandas as pd
+        df = pd.read_excel(io.BytesIO(fichier_bytes))
+        # Renommer les colonnes
+        df.columns = [str(c).lower().strip() for c in df.columns]
+        # Chercher colonnes maturite et taux
+        col_mat  = next((c for c in df.columns if 'matur' in c or 'mat' in c or c in ['t', 'annee', 'year']), df.columns[0])
+        col_taux = next((c for c in df.columns if 'taux' in c or 'rate' in c or 'rfr' in c or c in ['r', 'pct']), df.columns[1])
+
+        mats = df[col_mat].dropna().astype(float).tolist()
+        taux = df[col_taux].dropna().astype(float).tolist()
+
+        if len(mats) < 2 or len(taux) < 2:
+            raise ValueError("Fichier invalide — moins de 2 maturités")
+
+        mats_arr = np.array(mats)
+        taux_arr = np.array(taux)
+
+        def taux_fn(t):
+            return float(np.interp(float(t), mats_arr, taux_arr)) / 100.0
+
+        return {
+            'type':      'fichier_excel',
+            'taux_fn':   taux_fn,
+            'source':    'Fichier Excel importé par l\u2019actuaire',
+            'date':      f'Courbe personnalisée ({len(mats)} maturités)',
+            'label':     f'Fichier Excel ({len(mats)} maturités)',
+            'maturites': mats,
+            'taux':      taux,
+            'erreur':    None,
+        }
+    except Exception as e:
+        return {
+            'type':    'erreur',
+            'taux_fn': lambda t: get_taux_rfr(t),
+            'source':  f'Erreur chargement fichier : {e} — courbe embarquée utilisée',
+            'date':    DATE_COURBE,
+            'label':   f'Courbe embarquée (erreur fichier)',
+            'erreur':  str(e),
+        }
+
+
+def get_courbe_embarquee() -> dict:
+    """Retourne la courbe EIOPA embarquée (Q1 2025) comme dict standard."""
+    return {
+        'type':    'embarquee',
+        'taux_fn': get_taux_rfr,
+        'source':  SOURCE,
+        'date':    DATE_COURBE,
+        'label':   f'Courbe EIOPA embarquée ({DATE_COURBE})',
+        'erreur':  None,
+    }
