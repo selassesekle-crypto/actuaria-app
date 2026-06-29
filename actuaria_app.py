@@ -2296,9 +2296,23 @@ def _executer_analyse(besoin, direction, equipe, client):
                     # Extraire valeurs numériques
                     df_num = df.select_dtypes(include=["number"])
                     df_num = df_num.dropna(how="all").dropna(axis=1, how="all")
-                    # Retirer ligne/col 0 si ce sont des labels d'années (> 1900)
+                    # Retirer la colonne d'années de survenance si présente
+                    # Logique robuste : 1ère colonne = années (1900-2100)
+                    #                  ET reste = montants (> 2100) OU noms colonnes petits (<=360)
+                    import numpy as _np_chk
                     if df_num.shape[0] > 1 and df_num.shape[1] > 1:
-                        if df_num.iloc[0, 0] > 1900:
+                        _first_col  = df_num.iloc[:, 0].dropna()
+                        _rest_vals  = df_num.iloc[:, 1:].values.flatten()
+                        _rest_vals  = _rest_vals[~_np_chk.isnan(_rest_vals.astype(float))]
+                        _col0_years = bool((_first_col.between(1900, 2100)).all() and len(_first_col) > 0)
+                        _rest_amts  = bool(len(_rest_vals) > 0 and (_rest_vals > 2100).any())
+                        _col_small  = all(isinstance(c, (int, float)) and float(c) <= 360
+                                         for c in df_num.columns[1:])
+                        if _col0_years and (_rest_amts or _col_small):
+                            # Colonne années de survenance → retirer seulement cette colonne
+                            df_num = df_num.iloc[:, 1:]
+                        elif _col0_years and df_num.shape[0] > 1 and df_num.iloc[1, 0] > 1900:
+                            # En-têtes ligne ET colonne → retirer les deux
                             df_num = df_num.iloc[1:, 1:]
                     # Retirer lignes sans aucune valeur (dernières années sans données)
                     df_num = df_num[df_num.notna().any(axis=1)]
