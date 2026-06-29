@@ -522,7 +522,9 @@ class AgentA7Provisionnement:
         # ── Tail factor ───────────────────────────────────────────────────────
         tail_info = calculer_tail_factor(
             facteurs,
-            lob_tail_max_alerte = cfg_lob.get('tail_factor_max_alerte', 1.05),
+            lob_tail_max_alerte      = cfg_lob.get('tail_factor_max_alerte', 1.05),
+            risque_long              = cfg_lob.get('risque_long', True),
+            tail_seuil_stabilisation = cfg_lob.get('tail_seuil_stabilisation', 1.02),
         )
 
         # ── Facteurs cumulés + % développé ────────────────────────────────────
