@@ -533,12 +533,11 @@ class AgentA7Provisionnement:
 
         # ── Chain Ladder ──────────────────────────────────────────────────────
         r_cl = chain_ladder(
-            C                        = C,
-            methode                  = methode_cl,
-            annee_base_reserve       = annee_base,
-            lob_tail_max_alerte      = cfg_lob.get('tail_factor_max_alerte', 1.05),
-            risque_long              = cfg_lob.get('risque_long', True),
-            tail_seuil_stabilisation = cfg_lob.get('tail_seuil_stabilisation', 1.10),
+            C                   = C,
+            methode             = methode_cl,
+            annee_base_reserve  = annee_base,
+            lob_tail_max_alerte = cfg_lob.get('tail_factor_max_alerte', 1.05),
+            tail_force          = tail_info['tail_factor'],  # tail pré-calculé
         )
         # Injecter tail_factor et facteurs_indiv pour les niveaux suivants
         r_cl['tail_factor']    = tail_info
