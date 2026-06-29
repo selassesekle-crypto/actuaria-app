@@ -58,6 +58,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from .config.lob_config import get_lob_config, get_sigma_eiopa, CORRELATION_EIOPA
+from .config.rfr_eiopa  import get_taux_rfr, DATE_COURBE
 
 logger = logging.getLogger('actuaria.a7')
 
@@ -246,7 +247,11 @@ class BestEstimateS2:
         # ── 6. SCR provisions formule standard (Art. 105 S2) ──────────────────
         scr = self._calculer_scr(be, lob, cfg)
 
-        # ── 7. Sensibilités ───────────────────────────────────────────────────
+        # ── 7. Risk Margin S2 (Art. 77 §5) ───────────────────────────────────
+        _f_cum = n3.get('chain_ladder', {}).get('facteurs_cumules', [])
+        risk_margin_data = self._calculer_risk_margin(be, scr, _f_cum)
+
+        # ── 8. Sensibilités ───────────────────────────────────────────────────
         sensibilites = self._calculer_sensibilites(
             methodes_incluses, poids, boot, be
         )
@@ -336,6 +341,15 @@ class BestEstimateS2:
             # SCR formule standard
             'scr':                   scr,
 
+            # Risk Margin S2 (Art. 77 §5)
+            'risk_margin':              risk_margin_data.get('risk_margin', 0),
+            'provisions_techniques_s2': risk_margin_data.get('provisions_techniques_s2', round(be, 0)),
+            'ratio_rm_be':              risk_margin_data.get('ratio_rm_be', 0),
+            'date_courbe_rfr':          risk_margin_data.get('date_courbe_rfr', '—'),
+            'tableau_run_off':          risk_margin_data.get('tableau_run_off', []),
+            'message_rm':               risk_margin_data.get('message', ''),
+
+
             # Sensibilités
             'sensibilites':          sensibilites,
 
@@ -401,6 +415,93 @@ class BestEstimateS2:
                 f"SCR_prov = 3 × {sigma_eiopa:.0%} × {be:,.0f}€ "
                 f"= {scr_prov:,.0f}€ "
                 f"(ratio SCR/BE = {ratio:.1%})"
+            ),
+        }
+
+    # =========================================================================
+    #  RISK MARGIN S2 (Art. 77 §5 — Directive Solvabilité 2)
+    # =========================================================================
+
+    def _calculer_risk_margin(
+        self,
+        be:    float,
+        scr:   Dict,
+        f_cum: list,
+    ) -> Dict:
+        """
+        Risk Margin S2 — Méthode proportionnelle au BE (méthode 2 EIOPA).
+
+        RM = CoC × Σ_{t=0}^{T} [ SCR_NL(t) / (1+r_t)^(t+1) ]
+
+        SCR_NL(t) = SCR_NL(0) × BE(t) / BE(0)   [méthode 2]
+        BE(t)     = BE(0) / CDF(t)               [run-off CL]
+        CoC       = 6%                            [EIOPA fixé]
+        r_t       = courbe EIOPA RFR EUR embarquée (Q1 2025)
+        """
+        COC  = 0.06
+        be_0 = max(float(be), 1.0)
+        scr_0 = float(scr.get('scr_provisions', 0))
+
+        if be_0 <= 0 or scr_0 <= 0 or not f_cum:
+            return {
+                'risk_margin':              0.0,
+                'provisions_techniques_s2': round(be_0, 0),
+                'ratio_rm_be':              0.0,
+                'coc':                      COC,
+                'date_courbe_rfr':          DATE_COURBE,
+                'tableau_run_off':          [],
+                'message':                  'Risk Margin non calculable — données insuffisantes.',
+            }
+
+        m      = len(f_cum)
+        rm_sum = 0.0
+        tableau = []
+
+        for t in range(m + 10):
+            # BE résiduel à t
+            if t == 0:
+                be_t = be_0
+            elif t < m:
+                cdf_t = max(float(f_cum[t - 1]), 1.0)
+                be_t  = be_0 / cdf_t
+            else:
+                be_t  = 0.0
+
+            if be_t < be_0 * 0.001:
+                break
+
+            # SCR projeté (méthode 2 — proportionnel au BE)
+            scr_t    = scr_0 * (be_t / be_0)
+            r_t      = get_taux_rfr(t + 1)
+            fact_act = 1.0 / (1.0 + r_t) ** (t + 1)
+            contrib  = COC * scr_t * fact_act
+            rm_sum  += contrib
+
+            tableau.append({
+                'annee':      t,
+                'be_t':       round(be_t,    0),
+                'scr_t':      round(scr_t,   0),
+                'taux_rfr':   round(r_t * 100, 4),
+                'fact_act':   round(fact_act,  6),
+                'contrib_rm': round(contrib,   0),
+            })
+
+        risk_margin = round(rm_sum, 0)
+        pt_s2       = round(be_0 + risk_margin, 0)
+        ratio_rm_be = round(risk_margin / be_0 * 100, 2)
+
+        return {
+            'risk_margin':              risk_margin,
+            'provisions_techniques_s2': pt_s2,
+            'ratio_rm_be':              ratio_rm_be,
+            'coc':                      COC,
+            'date_courbe_rfr':          DATE_COURBE,
+            'tableau_run_off':          tableau,
+            'message': (
+                f"Risk Margin = {risk_margin:,.0f}€ ({ratio_rm_be:.1f}% du BE). "
+                f"Provisions Techniques S2 = {pt_s2:,.0f}€. "
+                f"CoC=6%, courbe EIOPA RFR EUR du {DATE_COURBE}. "
+                f"Méthode proportionnelle au BE (méthode 2 EIOPA, Art. 77 §5)."
             ),
         }
 
