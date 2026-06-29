@@ -1899,11 +1899,45 @@ def page_analyse():
                                 "sigma_mack":         _sigma_prev,
                             }
 
+                    # ── Courbe des taux EIOPA (Risk Margin S2) ───────────────────────
+                    st.markdown("**📈 Courbe des taux EIOPA (Risk Margin S2)**")
+                    _rfr_mode = st.radio(
+                        "Source de la courbe des taux sans risque",
+                        ["Courbe embarquée (EIOPA EUR 31/03/2025)", "Taux manuel unique", "Fichier Excel EIOPA"],
+                        key="a7_rfr_mode", horizontal=True,
+                    )
+                    _rfr_courbe = None
+                    if _rfr_mode == "Taux manuel unique":
+                        _taux_man = st.number_input(
+                            "Taux RFR annuel (%)",
+                            min_value=0.0, max_value=10.0, value=2.85, step=0.01,
+                            key="a7_rfr_taux_manuel",
+                            help="Taux EIOPA RFR EUR moyen pour la duration de votre portefeuille"
+                        )
+                        from direction_non_vie.provisionnement.a7_provisionnement.config.rfr_eiopa import get_courbe_taux_plat
+                        _rfr_courbe = get_courbe_taux_plat(_taux_man)
+                        st.info(f"ℹ️ Taux plat {_taux_man:.3f}% appliqué à toutes les maturités")
+                    elif _rfr_mode == "Fichier Excel EIOPA":
+                        _fichier_rfr = st.file_uploader(
+                            "Fichier Excel courbe EIOPA (colonnes : maturite | taux_pct)",
+                            type=["xlsx", "xls"], key="a7_rfr_fichier"
+                        )
+                        if _fichier_rfr:
+                            from direction_non_vie.provisionnement.a7_provisionnement.config.rfr_eiopa import get_courbe_depuis_excel
+                            _rfr_courbe = get_courbe_depuis_excel(_fichier_rfr.read())
+                            if _rfr_courbe.get('erreur'):
+                                st.error(f"❌ {_rfr_courbe['erreur']} — courbe embarquée utilisée")
+                            else:
+                                st.success(f"✅ {_rfr_courbe['label']}")
+                        else:
+                            st.warning("⚠️ Aucun fichier — courbe embarquée Q1 2025 utilisée")
+
                     # Stocker dans session_state pour que l'appel run() les récupère
                     if "analyse_params" not in st.session_state:
                         st.session_state["analyse_params"] = {}
                     st.session_state["analyse_params"].update({
                         "a7_lob":                _lob_sel,
+                        "a7_courbe_rfr":         _rfr_courbe,
                         "a7_arrete":             _arrete,
                         "a7_n_sim_bootstrap":    int(_n_sim),
                         "a7_annee_base_reserve": int(_annee_base),
@@ -2232,6 +2266,7 @@ def _executer_analyse(besoin, direction, equipe, client):
                     lr_bf_manuel         = _a7p.get("a7_lr_apriori"),
                     annee_debut          = _a7p.get("a7_annee_debut"),
                     triangle_engage      = _a7p.get("a7_triangle_engage"),
+                    courbe_rfr           = _a7p.get("a7_courbe_rfr", None),
                 )
 
                 # Enrichir les résultats avec les infos de séparation LLT
