@@ -2725,9 +2725,9 @@ def page_resultats():
     rows = [
         {"Méthode": "🔗 Chain Ladder",              "Réserve (€)": f"{cl.get('reserve_totale',0):,.0f}",          "Poids BE": f"{poids.get('chain_ladder',0)*100:.0f}%", "Statut": "✅"},
         {"Méthode": "📐 Mack 1993 (IC 95%)",        "Réserve (€)": f"{mack.get('reserve_best_estimate',0):,.0f}", "Poids BE": f"{poids.get('mack',0)*100:.0f}%",          "Statut": "✅"},
-        {"Méthode": "⚖️ Bornhuetter-Ferguson",      "Réserve (€)": f"{bf.get('reserve_totale',0):,.0f}",          "Poids BE": f"{poids.get('bf',0)*100:.0f}%",             "Statut": "✅"},
+        {"Méthode": "⚖️ Bornhuetter-Ferguson",      "Réserve (€)": f"{bf.get('reserve_totale',0):,.0f}",          "Poids BE": f"{poids.get('bornhuetter_ferguson', poids.get('bf',0))*100:.0f}%", "Statut": "✅"},
         {"Méthode": "🌊 Cape Cod",                  "Réserve (€)": f"{cc_r.get('reserve_totale',0):,.0f}",        "Poids BE": f"{poids.get('cape_cod',0)*100:.0f}%",       "Statut": "✅"},
-        {"Méthode": "🎲 Bootstrap ODP (P50)",       "Réserve (€)": f"{boot.get('p50',0):,.0f}",                   "Poids BE": "—",                                         "Statut": "✅" if boot.get('p50',0) > 0 else "—"},
+        {"Méthode": "🎲 Bootstrap ODP (BE)",       "Réserve (€)": f"{boot.get('be_bootstrap', boot.get('p50',0)):,.0f}", "Poids BE": "—", "Statut": "✅" if boot.get('be_bootstrap', boot.get('p50',0)) > 0 else "—"},
         {"Méthode": "🎲 Bootstrap ODP (P90)",       "Réserve (€)": f"{boot.get('p90',0):,.0f}",                   "Poids BE": "—",                                         "Statut": "✅" if boot.get('p90',0) > 0 else "—"},
         {"Méthode": "🇩🇪 Munich CL",               "Réserve (€)": f"{munich.get('be_munich',0):,.0f}" if munich.get('disponible') else "N/A",  "Poids BE": "—", "Statut": "✅" if munich.get('disponible') else "ℹ️"},
         {"Méthode": "📐 Clark (LDF)",             "Réserve (€)": f"{n3.get('clark',{}).get('reserve_be_clark',0):,.0f}" if n3.get('clark',{}).get('disponible') else "N/A", "Poids BE": "—", "Statut": "✅" if n3.get('clark',{}).get('disponible') else "ℹ️"},
@@ -3117,7 +3117,7 @@ Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non 
                         ref_client=_a7p_rh.get("a7_ref_client",""),
                         arrete=_a7p_rh.get("a7_arrete",""),
                         audit_id=r_raw.get("audit_id",""),
-                        lob_label=_a7p_rh.get("a7_lob",""),
+                        lob_label=r_raw.get("lob_label", _a7p_rh.get("a7_lob","")),
                         graphiques=st.session_state.get("graphiques_a7"),
                     )
                     if _html:
@@ -3147,7 +3147,7 @@ Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non 
                         ref_client=_a7p_rw.get("a7_ref_client",""),
                         arrete=_a7p_rw.get("a7_arrete",""),
                         audit_id=r_raw.get("audit_id",""),
-                        lob_label=_a7p_rw.get("a7_lob",""),
+                        lob_label=r_raw.get("lob_label", _a7p_rw.get("a7_lob","")),
                         graphiques=st.session_state.get("graphiques_a7"),
                     )
                     if _word:
