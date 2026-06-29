@@ -303,16 +303,31 @@ def calculer_tail_factor(
         }
 
     # ── Condition 2 — Guide IA 2023 : coefficients stabilisés → tail = 1.0 ──
+    # Pratique professionnelle française :
+    # LDF < 1.05 = développement très faible = stabilisé
+    # LDF < 1.10 = développement faible = stabilisé
+    # LDF < 1.15 = quasi-stabilisé
     dernier_ldf = float(facteurs[-1]) if n_f > 0 else 1.0
+
+    if dernier_ldf < 1.05:
+        niveau_stab = "totalement stabilisé (LDF < 1,05)"
+    elif dernier_ldf < 1.10:
+        niveau_stab = "stabilisé (LDF < 1,10)"
+    elif dernier_ldf < 1.15:
+        niveau_stab = "quasi-stabilisé (LDF < 1,15)"
+    else:
+        niveau_stab = "non stabilisé (LDF ≥ 1,15)"
+
     if dernier_ldf < tail_seuil_stabilisation:
         return {
             'tail_factor': 1.0,
             'methode':     'non applicable (coefficients stabilisés)',
             'statut':      'VERT',
             'message':     (
-                f"Tail factor = 1.0 — dernier LDF = {dernier_ldf:.4f} < seuil "
-                f"de stabilisation {tail_seuil_stabilisation:.2f}. "
-                "Guide IA 2023 : tail non justifié si coefficients stabilisés."
+                f"Tail factor = 1.0 — dernier LDF observé = {dernier_ldf:.4f} "
+                f"({niveau_stab}). "
+                f"Seuil de stabilisation LoB = {tail_seuil_stabilisation:.2f}. "
+                "Guide IA 2023 : tail factor non justifié si coefficients stabilisés."
             ),
         }
 
@@ -380,9 +395,12 @@ def calculer_tail_factor(
         )
     else:
         msg = (
-            f"Tail factor = {tail:.4f} — "
+            f"Tail factor = {tail:.4f} appliqué — "
+            f"dernier LDF = {dernier_ldf:.4f} ≥ seuil {tail_seuil_stabilisation:.2f} "
+            f"({niveau_stab}). "
             f"+{(tail - 1)*100:.2f}% de provisions additionnelles "
-            f"au-delà de la dernière colonne."
+            f"au-delà de la dernière colonne. "
+            f"Guide IA 2023 — régression log-linéaire (Mack 1993)."
         )
 
     return {
