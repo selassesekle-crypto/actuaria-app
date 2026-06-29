@@ -928,6 +928,14 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     P75 = float(n4.get('reserve_p75', 0) or 0)
     P90 = float(n4.get('reserve_p90', 0) or 0)
     P99 = float(n4.get('reserve_p99_5', 0) or 0)
+    # Percentiles Mack et Bootstrap séparés
+    P75_mack = float(n4.get('reserve_p75_mack', P75) or P75)
+    P90_mack = float(n4.get('reserve_p90_mack', P90) or P90)
+    P99_mack = float(n4.get('reserve_p99_5_mack', P99) or P99)
+    P75_boot = n4.get('reserve_p75_boot')
+    P90_boot = n4.get('reserve_p90_boot')
+    P99_boot = n4.get('reserve_p99_5_boot')
+    _boot_dispo = P75_boot is not None and float(P75_boot or 0) > 0
     SCP = float(sc.get('scr_provisions', sc.get('scr_prov', BE * 0.30)) if sc else BE * 0.30)
     SCR = SCP / BE * 100 if BE else 0
 
@@ -1082,15 +1090,15 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         '</tr></thead><tbody>'
         '<tr><td class="label">Mack 1993 (analytique)</td>'
         '<td class="right"><span class="mono">' + _f(BE) + '</span></td>'
-        '<td class="right"><span class="mono">' + _f(P75) + '</span></td>'
-        '<td class="right"><span class="mono">' + _f(P90) + '</span></td>'
-        '<td class="right"><span class="mono">' + _f(P99) + '</span></td>'
+        '<td class="right"><span class="mono">' + _f(P75_mack) + '</span></td>'
+        '<td class="right"><span class="mono">' + _f(P90_mack) + '</span></td>'
+        '<td class="right"><span class="mono">' + _f(P99_mack) + '</span></td>'
         '<td class="center">' + _pct(cv_mack) + '</td></tr>'
         '<tr><td class="label">Bootstrap ODP (5\u202f000 sim.)</td>'
         '<td class="right"><span class="mono">' + _f(n3.get('bootstrap', {}).get('be_bootstrap', BE)) + '</span></td>'
-        '<td class="right"><span class="mono">' + _f(P75) + '</span></td>'
-        '<td class="right"><span class="mono">' + _f(P90) + '</span></td>'
-        '<td class="right"><span class="mono">' + _f(P99) + '</span></td>'
+        '<td class="right">' + ('<span class="mono">' + _f(P75_boot) + '</span>' if _boot_dispo else '<span style="color:var(--slate)">—</span>') + '</td>'
+        '<td class="right">' + ('<span class="mono">' + _f(P90_boot) + '</span>' if _boot_dispo else '<span style="color:var(--slate)">—</span>') + '</td>'
+        '<td class="right">' + ('<span class="mono">' + _f(P99_boot) + '</span>' if _boot_dispo else '<span style="color:var(--slate)">—</span>') + '</td>'
         '<td class="center">' + _pct(CV) + '</td></tr>'
         '</tbody></table>'
     )
