@@ -128,7 +128,7 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         # Tail factor — Guide IA 2023 : applicable uniquement si risque long
         # ET coefficients non stabilisés (dernier LDF > tail_seuil_stabilisation)
         "risque_long":              True,  # Transport = risque long (8 ans)
-        "tail_seuil_stabilisation": 1.02,  # dernier LDF min pour appliquer tail
+                                                        "tail_seuil_stabilisation": 1.05,  # LDF < 1.05 = développement très faible = stabilisé
 
         # Tail factor — Guide IA 2023 : applicable uniquement si risque long
         # ET coefficients non stabilisés (dernier LDF > tail_seuil_stabilisation)
@@ -327,7 +327,7 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         # Tail factor — Guide IA 2023 : applicable uniquement si risque long
         # ET coefficients non stabilisés (dernier LDF > tail_seuil_stabilisation)
         "risque_long":              True,  # Construction = risque long (15 ans)
-        "tail_seuil_stabilisation": 1.03,  # dernier LDF min pour appliquer tail
+                "tail_seuil_stabilisation": 1.1,  # LDF < 1.10 = développement faible = stabilisé
     },
 
     # ── Marine / Aviation / Transport ─────────────────────────────────────────
@@ -394,7 +394,7 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
 
         # Tail factor — Guide IA 2023 : generique traité comme risque long par prudence
         "risque_long":              True,   # par prudence
-        "tail_seuil_stabilisation": 1.02,   # dernier LDF min pour appliquer tail
+                "tail_seuil_stabilisation": 1.1,  # prudence maximale — branche inconnue
 
         # Tail factor — Guide IA 2023 : applicable uniquement si risque long
         # ET coefficients non stabilisés (dernier LDF > tail_seuil_stabilisation)
