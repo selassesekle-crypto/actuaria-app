@@ -235,40 +235,54 @@ def calculer_facteurs_cumules(
 # =============================================================================
 
 def calculer_tail_factor(
-    facteurs:             np.ndarray,
-    lob_tail_max_alerte:  float = 1.05,
-    n_facteurs_queue:     int   = 8,
+    facteurs:                  np.ndarray,
+    lob_tail_max_alerte:       float = 1.05,
+    n_facteurs_queue:          int   = 4,
+    risque_long:               bool  = True,
+    tail_seuil_stabilisation:  float = 1.02,
 ) -> Dict:
     """
     Estime le tail factor par régression log-linéaire sur les derniers
     facteurs de développement.
 
-    Principe (Mack 1993, Taylor 1986)
-    ----------------------------------
-    Les facteurs de développement convergent vers 1.0 de façon
-    approximativement log-linéaire :
+    Conditions d'application — Guide de l'Institut des Actuaires (2023)
+    --------------------------------------------------------------------
+    Le tail factor NE s'applique QUE si les deux conditions suivantes
+    sont réunies simultanément :
+
+    1. RISQUE LONG : la branche est classée à développement long
+       (RC Médicale, RC Générale, RC Auto Corporels, Construction,
+        Transport, CAT NAT). Pour les risques courts (MRH, RC Auto
+        Matériel), tail = 1.0.
+
+    2. COEFFICIENTS NON STABILISÉS : le dernier LDF observé dépasse
+       le seuil de stabilisation propre à la LoB (tail_seuil_stabilisation).
+       Si dernier LDF < seuil → coefficients stabilisés → tail = 1.0.
+
+    Méthode de calcul (si applicable) — Mack 1993 / Taylor 1986
+    ------------------------------------------------------------
+    Régression log-linéaire sur les n derniers facteurs (défaut n=4) :
 
         log(f_j - 1) ≈ a + b × j    avec b < 0 (décroissance)
 
-    On effectue une régression OLS sur les k derniers facteurs
-    (k = min(8, n_facteurs)), puis on extrapole :
-
+    Extrapolation :
         tail = Π_{j=m}^{∞} (1 + exp(a + b×j))
 
-    Troncature à convergence : on s'arrête quand f_extrap < 1 + ε
-    (ε = 1e-4) ou après 50 itérations max.
-
-    Le tail est clippé à [1.0, 1.20] — un tail > 1.20 est physiquement
-    suspect et doit être alerté.
+    Troncature à convergence : f_extrap < 1 + 1e-4 ou 50 itérations max.
+    Tail clippé à [1.0, 1.20].
 
     Parameters
     ----------
     facteurs : np.ndarray
         Vecteur des facteurs f_0, ..., f_{m-2}.
     lob_tail_max_alerte : float
-        Seuil d'alerte tail factor depuis lob_config (défaut 1.05).
+        Seuil d'alerte tail factor depuis lob_config.
     n_facteurs_queue : int
-        Nombre de facteurs de queue à utiliser pour la régression (défaut 8).
+        Nombre de derniers facteurs pour la régression (défaut 4).
+    risque_long : bool
+        True si la branche est à développement long (depuis lob_config).
+    tail_seuil_stabilisation : float
+        Dernier LDF minimum pour que le tail soit appliqué (depuis lob_config).
 
     Returns
     -------
@@ -276,7 +290,33 @@ def calculer_tail_factor(
     """
     n_f = len(facteurs)
 
-    # Pas assez de facteurs pour régresser
+    # ── Condition 1 — Guide IA 2023 : risque court → tail = 1.0 ─────────────
+    if not risque_long:
+        return {
+            'tail_factor': 1.0,
+            'methode':     'non applicable (risque court)',
+            'statut':      'VERT',
+            'message':     (
+                "Tail factor = 1.0 — branche à développement court. "
+                "Guide IA 2023 : le tail factor ne s'applique qu'aux risques longs."
+            ),
+        }
+
+    # ── Condition 2 — Guide IA 2023 : coefficients stabilisés → tail = 1.0 ──
+    dernier_ldf = float(facteurs[-1]) if n_f > 0 else 1.0
+    if dernier_ldf < tail_seuil_stabilisation:
+        return {
+            'tail_factor': 1.0,
+            'methode':     'non applicable (coefficients stabilisés)',
+            'statut':      'VERT',
+            'message':     (
+                f"Tail factor = 1.0 — dernier LDF = {dernier_ldf:.4f} < seuil "
+                f"de stabilisation {tail_seuil_stabilisation:.2f}. "
+                "Guide IA 2023 : tail non justifié si coefficients stabilisés."
+            ),
+        }
+
+    # ── Pas assez de facteurs pour régresser ─────────────────────────────────
     if n_f < 4:
         return {
             'tail_factor': 1.0,
@@ -285,7 +325,8 @@ def calculer_tail_factor(
             'message':     "Tail factor = 1.0 — triangle trop court pour régresser.",
         }
 
-    # Utiliser les k derniers facteurs (les plus proches de 1)
+    # ── Régression log-linéaire (Mack 1993) ──────────────────────────────────
+    # Utiliser les k derniers facteurs — Guide IA : facteurs proches de 1.0
     k        = min(n_facteurs_queue, n_f)
     f_queue  = facteurs[n_f - k:]
     x        = np.arange(k, dtype=float)
