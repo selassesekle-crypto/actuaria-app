@@ -464,7 +464,8 @@ def chain_ladder(
     lob_tail_max_alerte:     float = 1.05,
     n_facteurs_queue:        int   = 4,
     risque_long:             bool  = True,
-    tail_seuil_stabilisation: float = 1.10,
+    tail_seuil_stabilisation: float = 1.02,
+    tail_force:              Optional[float] = None,
 ) -> Dict:
     """
     Chain Ladder complet : facteurs → tail → ultimates → IBNR → réserve.
@@ -505,13 +506,22 @@ def chain_ladder(
     facteurs, facteurs_ind = calculer_facteurs(C, methode)
 
     # ── 2. Tail factor ────────────────────────────────────────────────────────
-    tail = calculer_tail_factor(
-        facteurs,
-        lob_tail_max_alerte      = lob_tail_max_alerte,
-        n_facteurs_queue         = n_facteurs_queue,
-        risque_long              = risque_long,
-        tail_seuil_stabilisation = tail_seuil_stabilisation,
-    )
+    if tail_force is not None:
+        # Tail pré-calculé par agent.py — pas de recalcul interne
+        tail = {
+            'tail_factor': tail_force,
+            'methode':     'fourni par agent',
+            'statut':      'VERT' if tail_force <= lob_tail_max_alerte else 'ROUGE',
+            'message':     f"Tail factor = {tail_force:.6f} (fourni par agent).",
+        }
+    else:
+        tail = calculer_tail_factor(
+            facteurs,
+            lob_tail_max_alerte      = lob_tail_max_alerte,
+            n_facteurs_queue         = n_facteurs_queue,
+            risque_long              = risque_long,
+            tail_seuil_stabilisation = tail_seuil_stabilisation,
+        )
 
     # ── 3. Facteurs cumulés (avec tail) ───────────────────────────────────────
     f_cum = calculer_facteurs_cumules(facteurs, tail['tail_factor'])
