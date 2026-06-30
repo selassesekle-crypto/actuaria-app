@@ -60,13 +60,24 @@ def _pct_developpe(C: np.ndarray) -> np.ndarray:
     ult = _chain_ladder_simple(C)
     for i in range(n):
         if ult[i] > 0:
-            # Dernière valeur observée
+            # Dernière colonne observée
+            last_j = 0
             last_val = 0.0
             for j in range(m - 1, -1, -1):
                 if C[i, j] > 0:
+                    last_j   = j
                     last_val = float(C[i, j])
                     break
-            pct[i] = last_val / ult[i] if ult[i] > 0 else 0.0
+
+            # Règle Guide IA : si seulement 1 ou 2 colonnes observées
+            # → toujours immature quel que soit le pct calculé
+            # (LDF proche de 1.0 peut donner pct ≈ 100% à tort)
+            if last_j == 0:
+                pct[i] = 0.0  # 1 seule colonne → immature
+            elif last_j == 1 and n >= 10:
+                pct[i] = 0.0  # 2 colonnes sur grand triangle → immature
+            else:
+                pct[i] = last_val / ult[i] if ult[i] > 0 else 0.0
     return np.clip(pct, 0.0, 1.0)
 
 
