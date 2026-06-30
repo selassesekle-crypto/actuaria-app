@@ -1296,33 +1296,44 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     if glm_dispo and p_cal is not None:
         _cal_col  = 'var(--rouge)' if cal_sig else 'var(--vert)'
         _p_fmt    = 'p\u202f<\u202f0,0001' if p_cal < 0.0001 else f'p\u202f=\u202f{p_cal:.4f}'.replace('.', ',')
-        _cal_txt  = f'Effets calendaires significatifs ({_p_fmt})' if cal_sig else f'Non significatifs ({_p_fmt})'
+        _cal_txt  = ('Effets calendaires significatifs au seuil 1\u202f% (' + _p_fmt + ')'
+                     if cal_sig else 'Effets calendaires non significatifs (' + _p_fmt + ')')
+        # AIC : delta = réduction de l'AIC avec les effets calendaires
+        _delta_aic = round(aic_red - aic_ful, 0) if aic_red and aic_ful else None
         b['bz_glm'] = (
-            '<div style="margin-top:20px;padding:16px 20px;background:rgba(0,0,0,0.15);'
-            'border-radius:8px;border-left:4px solid var(--cyan);">'
-            '<div style="font-size:8pt;color:var(--gold);font-weight:700;'
-            'text-transform:uppercase;margin-bottom:10px;">◆ GLM Barnett-Zehnwirth — Test LR</div>'
-            '<div style="display:flex;gap:24px;flex-wrap:wrap;font-size:8.5pt;">'
-            '<div><span style="color:var(--slate);">Effets calendaires</span><br>'
-            '<span style="font-weight:700;color:' + _cal_col + ';">' + _cal_txt + '</span></div>'
-            '<div><span style="color:var(--slate);">Stat LR</span><br>'
-            '<span class="mono" style="color:var(--blanc);">' + (f'{lr_stat:.1f}' if lr_stat else '—') + '</span></div>'
-            '<div><span style="color:var(--slate);">AIC sans calendrier</span><br>'
-            '<span class="mono" style="color:var(--blanc);">' + (f'{aic_red:,.0f}' if aic_red else '—') + '</span></div>'
-            '<div><span style="color:var(--slate);">AIC avec calendrier</span><br>'
-            '<span class="mono" style="color:var(--blanc);">' + (f'{aic_ful:,.0f}' if aic_ful else '—') + '</span></div>'
-            + (
-                '<div><span style="color:var(--slate);">Réserve BZ corrigée</span><br>'
-                '<span class="mono" style="color:var(--gold);font-weight:700;">'
-                + _f(res_bz) + '</span>'
-                '<span style="color:var(--slate);font-size:7.5pt;"> (informatif)</span></div>'
-                if res_bz else ''
-            )
-            + '</div>'
-            '<div style="font-size:7.5pt;color:var(--slate);margin-top:8px;">'
+            '<div class="section-body" style="margin-top:24px;padding:20px 28px;'
+            'background:var(--navy-mid, #0D2137);border-radius:8px;'
+            'border:1px solid rgba(212,175,55,0.25);">'
+
+            '<div style="font-size:7.5pt;font-weight:700;color:var(--gold);'
+            'text-transform:uppercase;letter-spacing:1.5px;margin-bottom:16px;">'
+            '◆ GLM Barnett-Zehnwirth — Test du rapport de vraisemblance</div>'
+
+            '<table style="width:100%;border-collapse:collapse;font-size:8.5pt;"><tbody>'
+            '<tr style="border-bottom:1px solid rgba(255,255,255,0.08);">'
+            '<td style="padding:8px 0;color:var(--slate);width:55%;">Conclusion du test LR</td>'
+            '<td style="padding:8px 0;font-weight:700;color:' + _cal_col + ';">' + _cal_txt + '</td>'
+            '</tr>'
+            '<tr style="border-bottom:1px solid rgba(255,255,255,0.08);">'
+            '<td style="padding:8px 0;color:var(--slate);">Réduction AIC (avec vs sans effets calendaires)</td>'
+            '<td style="padding:8px 0;"><span class="mono" style="color:var(--white);">'
+            + (f'\u2212\u202f{_delta_aic:,.0f}'.replace(',', '\u202f') if _delta_aic else '—') +
+            '</span><span style="color:var(--slate);font-size:7.5pt;"> (meilleur ajustement)</span></td>'
+            '</tr>'
+            + ('<tr><td style="padding:8px 0;color:var(--slate);">Réserve BZ corrigée des effets calendaires</td>'
+               '<td style="padding:8px 0;"><span class="mono" style="color:var(--gold);font-weight:700;">'
+               + _f(res_bz) +
+               '</span><span style="color:var(--slate);font-size:7.5pt;"> — à titre informatif, '
+               'nécessite jugement actuariel (Guide IA 2023)</span></td></tr>'
+               if res_bz else '') +
+            '</tbody></table>'
+
+            '<div style="margin-top:12px;font-size:7.5pt;color:var(--slate);'
+            'border-top:1px solid rgba(255,255,255,0.06);padding-top:10px;">'
             'Modèle GLM Poisson avec effets cohorte, développement et calendrier '
             '(Barnett &amp; Zehnwirth, 1998 — CAS Forum). '
-            'Test du rapport de vraisemblance — H\u2080\u202f: effets calendaires nuls.</div>'
+            'H\u2080\u202f: les effets calendaires sont nuls — '
+            'rejet\u00e9 si p\u202f<\u202f0,05.</div>'
             '</div>'
         )
     else:
