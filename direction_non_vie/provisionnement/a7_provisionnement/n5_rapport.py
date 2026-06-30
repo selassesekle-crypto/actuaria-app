@@ -251,8 +251,8 @@ def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: s
         "",
         "=== EFFETS CALENDAIRE ===",
         f"Statut={bz.get('statut', '—')} | Sig.={bz.get('n_effets_significatifs', 0)}/{bz.get('n_diagonales_evaluees', 0)}",
-        f"GLM BZ réserve corrigée={_f(bz.get('reserve_bz', 0))} (informatif) | "
-        f"effets calendaires {'SIGNIFICATIFS (p<0,0001)' if bz.get('cal_significatif') else 'non significatifs'}",
+        f"GLM BZ réserve corrigée={_f(bz.get('reserve_bz', 0))} | "
+        f"effets {'SIGNIFICATIFS p<0,0001' if bz.get('cal_significatif') else 'non significatifs'}",
         f"Diagonales anormales: {', '.join(bz.get('diagonales_anormales', [])) or 'Aucune'}",
         f"Recommandation: {bz.get('recommandation', '—')}",
         "",
@@ -1310,7 +1310,7 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     if glm_dispo and p_cal is not None:
         _cal_col  = 'var(--rouge)' if cal_sig else 'var(--vert)'
         _p_fmt    = 'p\u202f<\u202f0,0001' if p_cal < 0.0001 else f'p\u202f=\u202f{p_cal:.4f}'.replace('.', ',')
-        _cal_txt  = f'Effets calendaires significatifs au seuil 1\u202f% ({_p_fmt})' if cal_sig else f'Effets calendaires non significatifs ({_p_fmt})'
+        _cal_txt  = f'Effets calendaires significatifs ({_p_fmt})' if cal_sig else f'Non significatifs ({_p_fmt})'
         b['bz_glm'] = (
             '<div style="margin-top:20px;padding:16px 20px;background:rgba(0,0,0,0.15);'
             'border-radius:8px;border-left:4px solid var(--cyan);">'
