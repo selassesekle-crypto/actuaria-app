@@ -1020,7 +1020,7 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         '<div class="kpi-card-sub">P90 : ' + _f(P90) + '</div>'
         '</div>'
 
-
+        '</div>'
     )
     b['graph_convergence'] = graphiques_html.get('g5_convergence', '')
 
