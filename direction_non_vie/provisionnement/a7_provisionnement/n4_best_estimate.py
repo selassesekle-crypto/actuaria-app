@@ -249,7 +249,7 @@ class BestEstimateS2:
         # Bootstrap : utiliser les vrais percentiles simulés si disponibles
         # (Bootstrap est plus fiable que Mack quand H4 rejetée)
         _boot = n3.get('bootstrap', {})
-        _boot_ok = _boot.get('success', False) and _boot.get('be_bootstrap', 0) > 0
+        _boot_ok = bool(_boot.get('be_bootstrap', 0) > 0)  # bootstrap_odp n'a pas de clé 'success'
 
         if _boot_ok:
             p75  = float(_boot.get('p75',  p75_mack))
@@ -374,10 +374,10 @@ class BestEstimateS2:
         # Recommandation rupture sinistralité (back-testing rouge récent)
         bt_tableau = n3.get('backtesting', {}).get('tableau', [])
         annees_rouge_recentes = [
-            r.get('annee', '') for r in bt_tableau
+            r.get('annee_label', r.get('annee', '')) for r in bt_tableau
             if isinstance(r, dict) and r.get('mature', True)
             and abs(float(r.get('ecart_pct_n1', 0) or 0)) >= 15.0
-            and int(str(r.get('annee', '0'))[-4:] if r.get('annee') else 0) >= 2020
+            and int(str(r.get('annee_label', r.get('annee', '0')))[-4:]) >= 2020
         ]
         if annees_rouge_recentes:
             recommandations.append(
