@@ -318,11 +318,22 @@ def _recommander_methode(
     effet_dernier = any(e['diagonale'] == derniere_diag for e in effets_sig)
 
     if effets_forts or effet_dernier:
-        reco = "Clark (log-logistique/Weibull) recommandé"
+        reco = "Triangles 'As if' corrigés des effets calendaires recommandés"
         if effet_dernier:
-            reco += " — effet calendaire sur la dernière diagonale biaise le BE"
+            reco += (
+                " — effet sur la dernière diagonale biaise directement le BE. "
+                "Retraiter les données avant application de CL ou BF."
+            )
+        else:
+            reco += (
+                " — effets forts. Identifier la cause (inflation, changement "
+                "législatif) et documenter dans la note méthodologique S2."
+            )
     else:
-        reco = "Bornhuetter-Ferguson recommandé"
+        reco = (
+            "Bornhuetter-Ferguson recommandé — effets modérés. "
+            "L'ancrage sur a priori externe atténue l'influence des diagonales perturbées."
+        )
         reco += " — l'ancrage sur l'a priori atténue l'influence des diagonales anormales"
 
     return reco
