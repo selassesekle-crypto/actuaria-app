@@ -251,6 +251,8 @@ def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: s
         "",
         "=== EFFETS CALENDAIRE ===",
         f"Statut={bz.get('statut', '—')} | Sig.={bz.get('n_effets_significatifs', 0)}/{bz.get('n_diagonales_evaluees', 0)}",
+        f"GLM BZ réserve corrigée={_f(bz.get('reserve_bz', 0))} (informatif) | "
+        f"effets calendaires {'SIGNIFICATIFS (p<0,0001)' if bz.get('cal_significatif') else 'non significatifs'}",
         f"Diagonales anormales: {', '.join(bz.get('diagonales_anormales', [])) or 'Aucune'}",
         f"Recommandation: {bz.get('recommandation', '—')}",
         "",
@@ -1084,6 +1086,16 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
             '<td class="center" style="font-size:7.5pt;color:var(--slate);">AIC = ' + aic_disp + '</td>'
             '<td class="center"><span class="badge badge-excl">⊘ Exclu</span></td></tr>'
         )
+    if bz.get('glm_disponible') and bz.get('reserve_bz'):
+        _p_bz = bz.get('p_calendrier', 1)
+        _p_bz_txt = 'p\u202f<\u202f0,0001' if _p_bz < 0.0001 else f'p\u202f=\u202f{_p_bz:.4f}'
+        tbl += (
+            '<tr><td class="label">Barnett-Zehnwirth (GLM)</td>'
+            '<td class="right"><span class="mono">' + _f(bz.get('reserve_bz')) + '</span></td>'
+            '<td class="center">—</td>'
+            '<td class="center" style="font-size:7.5pt;color:var(--slate);">' + _p_bz_txt + '</td>'
+            '<td class="center"><span class="badge badge-excl" style="background:rgba(74,144,226,0.15);color:#4A90E2;">ℹ️ Informatif</span></td></tr>'
+        )
     tbl += (
         '<tr class="highlight-gold">'
         '<td class="label" style="color:var(--navy);">⭐ Best Estimate S2</td>'
@@ -1297,7 +1309,8 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
 
     if glm_dispo and p_cal is not None:
         _cal_col  = 'var(--rouge)' if cal_sig else 'var(--vert)'
-        _cal_txt  = f'SIGNIFICATIFS (p={p_cal:.4f})' if cal_sig else f'Non significatifs (p={p_cal:.4f})'
+        _p_fmt    = 'p\u202f<\u202f0,0001' if p_cal < 0.0001 else f'p\u202f=\u202f{p_cal:.4f}'.replace('.', ',')
+        _cal_txt  = f'Effets calendaires significatifs au seuil 1\u202f% ({_p_fmt})' if cal_sig else f'Effets calendaires non significatifs ({_p_fmt})'
         b['bz_glm'] = (
             '<div style="margin-top:20px;padding:16px 20px;background:rgba(0,0,0,0.15);'
             'border-radius:8px;border-left:4px solid var(--cyan);">'
@@ -1321,9 +1334,9 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
             )
             + '</div>'
             '<div style="font-size:7.5pt;color:var(--slate);margin-top:8px;">'
-            'Modèle : μ_{i,j} = exp(α_i + β_j + γ_k) — Poisson log-linéaire. '
-            'H₀ : γ_k = 0 ∀k (effets calendaires nuls). '
-            'Barnett & Zehnwirth (1998) CAS Forum.</div>'
+            'Modèle GLM Poisson avec effets cohorte, développement et calendrier '
+            '(Barnett &amp; Zehnwirth, 1998 — CAS Forum). '
+            'Test du rapport de vraisemblance — H\u2080\u202f: effets calendaires nuls.</div>'
             '</div>'
         )
     else:
