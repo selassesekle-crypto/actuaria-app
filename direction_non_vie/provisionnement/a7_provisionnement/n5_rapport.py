@@ -1022,7 +1022,7 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
 
 
     )
-        b['graph_convergence'] = graphiques_html.get('g5_convergence', '')
+    b['graph_convergence'] = graphiques_html.get('g5_convergence', '')
 
     # ── SECTION 2 : MÉTHODES ─────────────────────────────────────────────────
     def _badge_statut(m_name, pw_val):
