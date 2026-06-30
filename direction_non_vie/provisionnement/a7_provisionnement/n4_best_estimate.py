@@ -521,9 +521,10 @@ class BestEstimateS2:
 
     def _calculer_risk_margin(
         self,
-        be:    float,
-        scr:   Dict,
-        f_cum: list,
+        be:     float,
+        scr:    Dict,
+        f_cum:  list,
+        courbe: dict = None,
     ) -> Dict:
         """
         Risk Margin S2 — Méthode proportionnelle au BE (méthode 2 EIOPA).
