@@ -1018,8 +1018,22 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         '<div class="kpi-card-sub">P90 : ' + _f(P90) + '</div>'
         '</div>'
 
-        '</div>'
+
     )
+    # RM et PT S2 ajoutés séparément
+    if n4.get('risk_margin', 0) > 0:
+        b['kpi_grid'] = b['kpi_grid'][:-6] + (
+            '<div class="kpi-card">'
+            '<div class="kpi-card-label">Risk Margin S2</div>'
+            '<div class="kpi-card-value">' + _f(n4.get('risk_margin', 0)) + '</div>'
+            '<div class="kpi-card-sub">Art. 77 §5 — CoC 6%</div>'
+            '</div>'
+            '<div class="kpi-card">'
+            '<div class="kpi-card-label">Provisions Tech. S2</div>'
+            '<div class="kpi-card-value">' + _f(n4.get('provisions_techniques_s2', 0)) + '</div>'
+            '<div class="kpi-card-sub">BE + RM — Art. 77 §1</div>'
+            '</div></div>'
+        )
     b['graph_convergence'] = graphiques_html.get('g5_convergence', '')
 
     # ── SECTION 2 : MÉTHODES ─────────────────────────────────────────────────
