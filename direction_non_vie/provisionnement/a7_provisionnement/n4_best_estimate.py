@@ -58,7 +58,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from .config.lob_config import get_lob_config, get_sigma_eiopa, CORRELATION_EIOPA
-from .config.rfr_eiopa  import get_taux_rfr, DATE_COURBE
+from .config.rfr_eiopa  import get_taux_rfr, DATE_COURBE, get_courbe_embarquee
 
 logger = logging.getLogger('actuaria.a7')
 
