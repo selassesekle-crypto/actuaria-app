@@ -1733,6 +1733,11 @@ def page_analyse():
                         "rc_medicale":            "🩺 RC Médicale",
                         "construction":           "🏗️ Construction",
                         "marine_aviation_transport": "✈️ Marine / Aviation / Transport",
+                        "incendie_dommages":         "🔥 Incendie & Dommages aux Biens",
+                        "protection_juridique":      "⚖️ Protection Juridique",
+                        "catastrophes_naturelles":   "🌧️ Catastrophes Naturelles",
+                        "credit_caution":            "💳 Crédit / Caution",
+                        "dommage_corporel_individuel": "🤝 Dommage Corporel Individuel",
                         "generique":              "⚙️ Générique (hors classification EIOPA)",
                     }
                     _pa1, _pa2 = st.columns(2)
