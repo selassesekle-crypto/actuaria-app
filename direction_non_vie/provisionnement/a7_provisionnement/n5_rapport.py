@@ -1016,8 +1016,8 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
 
         '<div class="kpi-card">'
         '<div class="kpi-card-label">Provision P99,5</div>'
-        '<div class="kpi-card-value">' + _f(P99) + '</div>'
-        '<div class="kpi-card-sub">P90 : ' + _f(P90) + '</div>'
+        '<div class="kpi-card-value">' + _f(P99_mack) + '</div>'
+        '<div class="kpi-card-sub">P90 Mack : ' + _f(P90_mack) + '</div>'
         '</div>'
 
         '</div>'
@@ -1074,7 +1074,7 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         )
     if bz.get('glm_disponible') and bz.get('reserve_bz'):
         _p_bz = bz.get('p_calendrier', 1)
-        _p_bz_txt = 'p\u202f<\u202f0,0001' if _p_bz < 0.0001 else f'p\u202f=\u202f{_p_bz:.4f}'
+        _p_bz_txt = 'p\u202f&lt;\u202f0,0001' if _p_bz < 0.0001 else f'p\u202f=\u202f{_p_bz:.4f}'
         tbl += (
             '<tr><td class="label">Barnett-Zehnwirth (GLM)</td>'
             '<td class="right"><span class="mono">' + _f(bz.get('reserve_bz')) + '</span></td>'
@@ -1295,7 +1295,7 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
 
     if glm_dispo and p_cal is not None:
         _cal_col  = 'var(--rouge)' if cal_sig else 'var(--vert)'
-        _p_fmt    = 'p\u202f<\u202f0,0001' if p_cal < 0.0001 else f'p\u202f=\u202f{p_cal:.4f}'.replace('.', ',')
+        _p_fmt    = 'p\u202f&lt;\u202f0,0001' if p_cal < 0.0001 else f'p\u202f=\u202f{p_cal:.4f}'.replace('.', ',')
         _cal_txt  = ('Effets calendaires significatifs au seuil 1\u202f% (' + _p_fmt + ')'
                      if cal_sig else 'Effets calendaires non significatifs (' + _p_fmt + ')')
         # AIC : delta = réduction de l'AIC avec les effets calendaires
