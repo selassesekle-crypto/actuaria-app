@@ -280,7 +280,7 @@ def _narration_claude_api(n2, n3, n4, lob_label, arrete) -> str:
         client = anthropic.Anthropic(api_key=api_key)
         ctx = _construire_contexte(n2, n3, n4, lob_label, arrete)
         resp = client.messages.create(
-            model='claude-sonnet-4-6', max_tokens=6000,
+            model='claude-sonnet-4-6', max_tokens=10000,
             system=SYSTEM_PROMPT,
             messages=[{'role': 'user', 'content': ctx}],
         )
