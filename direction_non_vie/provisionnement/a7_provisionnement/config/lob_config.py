@@ -28,21 +28,21 @@ from typing import Dict, Any
 # ─────────────────────────────────────────────────────────────────────────────
 SIGMA_EIOPA: Dict[str, float] = {
     # LoB 1 — Frais médicaux
-    "frais_medicaux":               0.05,
+    "frais_medicaux":               0.07,  # Annexe II — Maladie frais médicaux
     # LoB 2 — Protection du revenu
     "protection_revenu":            0.10,
     # LoB 3 — Indemnisation des travailleurs
     "indemnisation_travailleurs":   0.11,
     # LoB 4 — RC Auto (corporels et matériels)
-    "rc_auto":                      0.08,
+    "rc_auto":                      0.11,  # Annexe II — Auto RC
     # LoB 5 — Auto (dommages)
     "auto_dommages":                0.09,  # Annexe II Règlement 2015/35 — LoB Auto dommages
     # LoB 6 — Marine, aviation, transport
-    "marine_aviation_transport":    0.17,
+    "marine_aviation_transport":    0.14,  # Annexe II — Aviation (plus conservateur : Transport=0.12, Maritime=0.12, Aviation=0.14)
     # LoB 7 — Incendie et autres dommages aux biens (MRH, RC Générale courte)
     "incendie_dommages":            0.10,
     # LoB 8 — RC Générale (hors auto)
-    "rc_generale":                  0.11,
+    "rc_generale":                  0.12,  # Annexe II — RC générale
     # LoB 9 — Crédit et cautionnement
     "credit_cautionnement":         0.21,  # Annexe II Règlement 2015/35 — LoB Crédit & caution
     # LoB 10 — Protection juridique
@@ -50,15 +50,15 @@ SIGMA_EIOPA: Dict[str, float] = {
     # LoB 11 — Assistance
     "assistance":                   0.08,  # Annexe II Règlement 2015/35 — LoB Assistance
     # LoB 12 — Pertes pécuniaires diverses
-    "pertes_pecuniaires":           0.20,
+    "pertes_pecuniaires":           0.12,  # Annexe II — Pertes pécuniaires diverses
     # CAT Naturelles — σ spécifique (fichier officiel EIOPA)
     "cat_nat":                      0.25,  # Annexe II — CAT naturelles
     # Accidents corporels individuels
     "accidents_corporels":          0.085, # Annexe II — Accidents corporels
     # LoB spécifiques France
-    "rc_auto_corporels":            0.08,   # sous-branche RC Auto, queue très longue
-    "rc_medicale":                  0.11,   # RC professionnelle médicale
-    "rc_decennale":                 0.11,   # Construction décennale
+    "rc_auto_corporels":            0.11,  # Annexe II — Auto RC (corporels)
+    "rc_medicale":                  0.14,  # Annexe II — RC professionnelle
+    "rc_decennale":                 0.14,  # Annexe II — RC professionnelle (Construction décennale)
     "mrh":                          0.10,   # Multirisque Habitation
 }
 
