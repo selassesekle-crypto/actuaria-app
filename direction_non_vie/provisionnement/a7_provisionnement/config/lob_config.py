@@ -445,6 +445,143 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "risque_long":              True,  # Générique = prudence, traité comme risque long
         "tail_seuil_stabilisation": 1.02,  # dernier LDF min pour appliquer tail
     },
+    # =========================================================================
+    #  5.b — INCENDIE & DOMMAGES AUX BIENS (hors MRH)
+    #  Guide IA 2023 p.42 — Risque court, liquidation 3-5 ans
+    # =========================================================================
+    "incendie_dommages": {
+        "label":            "Incendie & Dommages aux Biens",
+        "sigma_eiopa":      SIGMA_EIOPA["incendie_dommages"],
+        "lob_eiopa":        "incendie_dommages",
+        "queue_attendue_ans": 5,
+        "h2_seuil_cv":      0.15,
+        "h2_seuil_derive":  0.20,
+        "h1_seuil_corr":    0.50,
+        "methodes_prioritaires": ["chain_ladder", "bornhuetter_ferguson", "bootstrap_odp"],
+        "methode_par_defaut": "chain_ladder",
+        "munich_cl_disponible": False,
+        "lr_marche_reference":  0.68,
+        "lr_marche_source":     "Marché français FFSA — Dommages aux biens",
+        "risque_long":              False,
+        "tail_seuil_stabilisation": 1.01,
+        "tail_factor_max_alerte":   1.02,
+        "alertes_specifiques": [
+            "Séparer Cat Nat des autres garanties.",
+            "Retraiter l'inflation via indice FFB avant projection.",
+            "Distinguer attritionnels et graves si volume suffisant.",
+        ],
+    },
+
+    # =========================================================================
+    #  5.c — PROTECTION JURIDIQUE
+    #  Guide IA 2023 p.43-44 — Risque court, liquidation 5-8 ans
+    # =========================================================================
+    "protection_juridique": {
+        "label":            "Protection Juridique",
+        "sigma_eiopa":      SIGMA_EIOPA["protection_juridique"],
+        "lob_eiopa":        "protection_juridique",
+        "queue_attendue_ans": 8,
+        "h2_seuil_cv":      0.15,
+        "h2_seuil_derive":  0.20,
+        "h1_seuil_corr":    0.50,
+        "methodes_prioritaires": ["chain_ladder", "bornhuetter_ferguson", "bootstrap_odp"],
+        "methode_par_defaut": "chain_ladder",
+        "munich_cl_disponible": False,
+        "lr_marche_reference":  0.72,
+        "lr_marche_source":     "Marché français — Protection Juridique",
+        "risque_long":              False,
+        "tail_seuil_stabilisation": 1.01,
+        "tail_factor_max_alerte":   1.02,
+        "alertes_specifiques": [
+            "Date déclaration = date survenance (Guide IA 2023 p.43).",
+            "Peu de sinistres tardifs — ne pas confondre avec RC.",
+            "Séparer PJ accessoire et PJ directe si données disponibles.",
+        ],
+    },
+
+    # =========================================================================
+    #  5.g — CATASTROPHES NATURELLES (Cat-Nat)
+    #  Guide IA 2023 p.50-51 — Risque court mais très volatil
+    # =========================================================================
+    "catastrophes_naturelles": {
+        "label":            "Catastrophes Naturelles (Cat-Nat)",
+        "sigma_eiopa":      SIGMA_EIOPA["assistance"],
+        "lob_eiopa":        "incendie_dommages",
+        "queue_attendue_ans": 7,
+        "h2_seuil_cv":      0.25,
+        "h2_seuil_derive":  0.35,
+        "h1_seuil_corr":    0.40,
+        "methodes_prioritaires": ["bornhuetter_ferguson", "cape_cod", "chain_ladder"],
+        "methode_par_defaut": "bornhuetter_ferguson",
+        "munich_cl_disponible": False,
+        "lr_marche_reference":  None,
+        "lr_marche_source":     "Référence CCR/MRN par événement",
+        "risque_long":              False,
+        "tail_seuil_stabilisation": 1.02,
+        "tail_factor_max_alerte":   1.05,
+        "alertes_specifiques": [
+            "Effets calendaires forts — séparer les périls (tempête, sécheresse, inondation, séisme).",
+            "Utiliser les données CCR/MRN pour calibrer les charges ultimes.",
+            "Sécheresse : cadence très différente des autres périls.",
+            "Provisions d'égalisation obligatoires en norme S1 (Art. R331-33).",
+        ],
+    },
+
+    # =========================================================================
+    #  5.h — CRÉDIT / CAUTION
+    #  Guide IA 2023 p.52-53 — Risque moyen, corrélation économique forte
+    # =========================================================================
+    "credit_caution": {
+        "label":            "Crédit / Caution",
+        "sigma_eiopa":      SIGMA_EIOPA["credit_cautionnement"],
+        "lob_eiopa":        "credit_cautionnement",
+        "queue_attendue_ans": 12,
+        "h2_seuil_cv":      0.20,
+        "h2_seuil_derive":  0.30,
+        "h1_seuil_corr":    0.45,
+        "methodes_prioritaires": ["bornhuetter_ferguson", "cape_cod", "chain_ladder"],
+        "methode_par_defaut": "bornhuetter_ferguson",
+        "munich_cl_disponible": False,
+        "lr_marche_reference":  None,
+        "lr_marche_source":     "À calibrer par secteur — corrélation cycle économique",
+        "risque_long":              True,
+        "tail_seuil_stabilisation": 1.05,
+        "tail_factor_max_alerte":   1.04,
+        "alertes_specifiques": [
+            "Traiter par année de souscription (Guide IA 2023 p.52).",
+            "Forte corrélation avec le cycle économique.",
+            "Provisions complémentaires : provision d'égalisation, provision pour menace.",
+            "Distinguer assurance-crédit et caution.",
+        ],
+    },
+
+    # =========================================================================
+    #  5.j — DOMMAGE CORPOREL INDIVIDUEL
+    #  Guide IA 2023 p.55-56 — Risque moyen, rentes potentielles
+    # =========================================================================
+    "dommage_corporel_individuel": {
+        "label":            "Dommage Corporel Individuel",
+        "sigma_eiopa":      SIGMA_EIOPA["indemnisation_travailleurs"],
+        "lob_eiopa":        "indemnisation_travailleurs",
+        "queue_attendue_ans": 7,
+        "h2_seuil_cv":      0.15,
+        "h2_seuil_derive":  0.20,
+        "h1_seuil_corr":    0.50,
+        "methodes_prioritaires": ["bornhuetter_ferguson", "chain_ladder", "mack_1993", "bootstrap_odp"],
+        "methode_par_defaut": "bornhuetter_ferguson",
+        "munich_cl_disponible": False,
+        "lr_marche_reference":  0.75,
+        "lr_marche_source":     "Marché français — GAV / Accident scolaire (estimation)",
+        "risque_long":              True,
+        "tail_seuil_stabilisation": 1.05,
+        "tail_factor_max_alerte":   1.04,
+        "alertes_specifiques": [
+            "Distinguer sinistres transigés en capital et rentes potentielles.",
+            "Provisions Mathématiques de rente pour les rentes constituées.",
+            "Retraiter l'inflation judiciaire (BCRIV, Gazette du palais).",
+        ],
+    },
+
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
