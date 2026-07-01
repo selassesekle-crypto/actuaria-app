@@ -36,7 +36,7 @@ SIGMA_EIOPA: Dict[str, float] = {
     # LoB 4 — RC Auto (corporels et matériels)
     "rc_auto":                      0.08,
     # LoB 5 — Auto (dommages)
-    "auto_dommages":                0.07,
+    "auto_dommages":                0.09,  # Annexe II Règlement 2015/35 — LoB Auto dommages
     # LoB 6 — Marine, aviation, transport
     "marine_aviation_transport":    0.17,
     # LoB 7 — Incendie et autres dommages aux biens (MRH, RC Générale courte)
@@ -44,13 +44,17 @@ SIGMA_EIOPA: Dict[str, float] = {
     # LoB 8 — RC Générale (hors auto)
     "rc_generale":                  0.11,
     # LoB 9 — Crédit et cautionnement
-    "credit_cautionnement":         0.19,
+    "credit_cautionnement":         0.21,  # Annexe II Règlement 2015/35 — LoB Crédit & caution
     # LoB 10 — Protection juridique
-    "protection_juridique":         0.05,
+    "protection_juridique":         0.07,  # Annexe II Règlement 2015/35 — LoB Protection juridique
     # LoB 11 — Assistance
-    "assistance":                   0.22,
+    "assistance":                   0.08,  # Annexe II Règlement 2015/35 — LoB Assistance
     # LoB 12 — Pertes pécuniaires diverses
     "pertes_pecuniaires":           0.20,
+    # CAT Naturelles — σ spécifique (fichier officiel EIOPA)
+    "cat_nat":                      0.25,  # Annexe II — CAT naturelles
+    # Accidents corporels individuels
+    "accidents_corporels":          0.085, # Annexe II — Accidents corporels
     # LoB spécifiques France
     "rc_auto_corporels":            0.08,   # sous-branche RC Auto, queue très longue
     "rc_medicale":                  0.11,   # RC professionnelle médicale
@@ -505,7 +509,7 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
     # =========================================================================
     "catastrophes_naturelles": {
         "label":            "Catastrophes Naturelles (Cat-Nat)",
-        "sigma_eiopa":      SIGMA_EIOPA["assistance"],
+        "sigma_eiopa":      SIGMA_EIOPA["cat_nat"],       # 0.25 — Annexe II EIOPA
         "lob_eiopa":        "incendie_dommages",
         "queue_attendue_ans": 7,
         "h2_seuil_cv":      0.25,
@@ -561,8 +565,8 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
     # =========================================================================
     "dommage_corporel_individuel": {
         "label":            "Dommage Corporel Individuel",
-        "sigma_eiopa":      SIGMA_EIOPA["indemnisation_travailleurs"],
-        "lob_eiopa":        "indemnisation_travailleurs",
+        "sigma_eiopa":      SIGMA_EIOPA["accidents_corporels"],  # 0.085 — Annexe II EIOPA
+        "lob_eiopa":        "accidents_corporels",
         "queue_attendue_ans": 7,
         "h2_seuil_cv":      0.15,
         "h2_seuil_derive":  0.20,
