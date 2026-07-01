@@ -193,6 +193,8 @@ def calculer_fitted_et_residus(
     # φ = Σ r²_ij_brut / df  (avant ajustement)
     # Représente la sur-dispersion moyenne par cellule.
 
+    # Résidus de Pearson bruts : r_ij = (C_ij - C_fit_ij) / sqrt(C_fit_ij)
+    # φ = Σr²/df (England & Verrall 2002) — en unités de C, sert à scaler les simulations
     r_bruts = np.array([
         (C[i, j] - C_fit[i, j]) / np.sqrt(C_fit[i, j])
         for (i, j) in cellules
