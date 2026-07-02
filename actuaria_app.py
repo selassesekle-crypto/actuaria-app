@@ -1905,11 +1905,17 @@ def page_analyse():
                             }
 
                     # ── Courbe des taux EIOPA (Risk Margin S2) ───────────────────────
-                    st.markdown("**📈 Courbe des taux EIOPA (Risk Margin S2)**")
+                    st.markdown(
+                        "<div style='background:#1a2e45;border:1px solid rgba(212,175,55,0.3);border-radius:6px;padding:10px 14px;margin:8px 0 2px;'>"
+                        "<span style='color:#D4AF37;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:1px;'>📈 Courbe des taux EIOPA — Risk Margin S2</span>"
+                        "</div>",
+                        unsafe_allow_html=True
+                    )
                     _rfr_mode = st.radio(
                         "Source de la courbe des taux sans risque",
                         ["Courbe embarquée (EIOPA EUR 31/03/2025)", "Taux manuel unique", "Fichier Excel EIOPA"],
                         key="a7_rfr_mode", horizontal=True,
+                        label_visibility="collapsed",
                     )
                     _rfr_courbe = None
                     if _rfr_mode == "Taux manuel unique":
