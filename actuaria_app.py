@@ -1913,9 +1913,14 @@ def page_analyse():
                         "📈 Courbe des taux EIOPA — Risk Margin S2</span></div>",
                         unsafe_allow_html=True
                     )
+                    # Initialiser la valeur par défaut dans session_state
+                    if "a7_rfr_mode" not in st.session_state:
+                        st.session_state["a7_rfr_mode"] = "Courbe embarquée (EIOPA EUR 31/03/2025)"
+                    _rfr_options = ["Courbe embarquée (EIOPA EUR 31/03/2025)", "Taux manuel unique", "Fichier Excel EIOPA"]
                     _rfr_mode = st.selectbox(
                         "Source de la courbe RFR",
-                        ["Courbe embarquée (EIOPA EUR 31/03/2025)", "Taux manuel unique", "Fichier Excel EIOPA"],
+                        _rfr_options,
+                        index=_rfr_options.index(st.session_state.get("a7_rfr_mode", _rfr_options[0])),
                         key="a7_rfr_mode",
                         label_visibility="visible",
                     )
