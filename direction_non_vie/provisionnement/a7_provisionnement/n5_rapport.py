@@ -993,42 +993,39 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     )
 
     # ── SECTION 1 : KPI GRID ─────────────────────────────────────────────────
+    # 4ème KPI : PT S2 si RM disponible, sinon P99,5
+    _kpi4 = (
+        '<div class="kpi-card" style="border-left:3px solid var(--gold);">'
+        '<div class="kpi-card-label">Provisions Tech. S2</div>'
+        '<div class="kpi-card-value">' + _f(n4.get('provisions_techniques_s2', 0)) + '</div>'
+        '<div class="kpi-card-sub">BE + RM — Art. 77 §1</div>'
+        '</div>'
+        if n4.get('risk_margin', 0) > 0
+        else '<div class="kpi-card">'
+        '<div class="kpi-card-label">Provision P99,5</div>'
+        '<div class="kpi-card-value">' + _f(P99_mack) + '</div>'
+        '<div class="kpi-card-sub">P90 Mack : ' + _f(P90_mack) + '</div>'
+        '</div>'
+    )
     b['kpi_grid'] = (
         '<div class="kpi-grid">'
-
         '<div class="kpi-card">'
         '<div class="kpi-card-label">Best Estimate S2</div>'
         '<div class="kpi-card-value">' + _f(BE) + '</div>'
         '<div class="kpi-card-sub">Art. 77 Directive S2</div>'
         '</div>'
-
         '<div class="kpi-card">'
         '<div class="kpi-card-label">σ Mack total</div>'
         '<div class="kpi-card-value">' + _f(SIG) + '</div>'
         '<div class="kpi-card-sub">CV inter-méthodes : ' + _pct(CV) + '</div>'
         '</div>'
-
         '<div class="kpi-card kpi-card-rouge">'
         '<div class="kpi-card-label">SCR Provisions</div>'
         '<div class="kpi-card-value kpi-card-value-rouge">' + _f(SCP) + '</div>'
         '<div class="kpi-card-sub">Ratio SCR/BE : ' + _pct(SCR) + '</div>'
         '</div>'
-
-        '<div class="kpi-card">'
-        '<div class="kpi-card-label">Provision P99,5</div>'
-        '<div class="kpi-card-value">' + _f(P99_mack) + '</div>'
-        '<div class="kpi-card-sub">P90 Mack : ' + _f(P90_mack) + '</div>'
-        '</div>'
-
-        '</div>'
-
-        # Ligne RM + PT S2 sous la grille principale
-                + ('<div class="kpi-card" style="border-left:3px solid var(--gold);margin-top:10px;">'
-        '<div class="kpi-card-label">Provisions Techniques S2</div>'
-        '<div class="kpi-card-value">' + _f(n4.get('provisions_techniques_s2', 0)) + '</div>'
-        '<div class="kpi-card-sub">BE + Risk Margin — Art. 77 §1 Directive S2</div>'
-        '</div>'
-        if n4.get('risk_margin', 0) > 0 else '')
+        + _kpi4
+        + '</div>'
     )
     b['graph_convergence'] = graphiques_html.get('g5_convergence', '')
 
