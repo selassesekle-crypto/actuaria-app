@@ -371,13 +371,17 @@ class BestEstimateS2:
                 "Justifier le seuil de stabilisation retenu dans la note méthodologique S2."
             )
 
+        def _safe_year(s):
+            try: return int(s.strip()[-4:])
+            except: return 0
+
         # Recommandation rupture sinistralité (back-testing rouge récent)
         bt_tableau = n3.get('backtesting', {}).get('tableau', [])
         annees_rouge_recentes = [
             r.get('annee_label', r.get('annee', '')) for r in bt_tableau
             if isinstance(r, dict) and r.get('mature', True)
             and abs(float(r.get('ecart_pct_n1', 0) or 0)) >= 15.0
-            and int(str(r.get('annee_label', r.get('annee', '0')))[-4:]) >= 2020
+            and _safe_year(str(r.get('annee_label', r.get('annee', '0')))) >= 2020
         ]
         if annees_rouge_recentes:
             recommandations.append(
