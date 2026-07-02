@@ -1023,18 +1023,12 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         '</div>'
 
         # Ligne RM + PT S2 sous la grille principale
-        + ('<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;">'
-        '<div class="kpi-card" style="border-left:3px solid var(--gold);padding:14px 18px;">'
-        '<div class="kpi-card-label">Risk Margin S2</div>'
-        '<div class="kpi-card-value" style="font-size:16pt;">' + _f(n4.get('risk_margin', 0)) + '</div>'
-        '<div class="kpi-card-sub">Art. 77 §5 — CoC 6 % — Courbe EIOPA ' + _s(n4.get('date_courbe_rfr', '')) + '</div>'
+                + ('<div class="kpi-card" style="border-left:3px solid var(--gold);margin-top:10px;">'
+        '<div class="kpi-card-label">Provisions Techniques S2</div>'
+        '<div class="kpi-card-value">' + _f(n4.get('provisions_techniques_s2', 0)) + '</div>'
+        '<div class="kpi-card-sub">BE + Risk Margin — Art. 77 §1 Directive S2</div>'
         '</div>'
-        '<div class="kpi-card" style="border-left:3px solid var(--gold);background:rgba(212,175,55,0.06);padding:14px 18px;">'
-        '<div class="kpi-card-label" style="color:var(--gold);">Provisions Techniques S2</div>'
-        '<div class="kpi-card-value" style="color:var(--gold);font-size:16pt;">' + _f(n4.get('provisions_techniques_s2', 0)) + '</div>'
-        '<div class="kpi-card-sub">BE + RM — Art. 77 §1 Directive Solvabilité 2</div>'
-        '</div>'
-        '</div>' if n4.get('risk_margin', 0) > 0 else '')
+        if n4.get('risk_margin', 0) > 0 else '')
     )
     b['graph_convergence'] = graphiques_html.get('g5_convergence', '')
 
