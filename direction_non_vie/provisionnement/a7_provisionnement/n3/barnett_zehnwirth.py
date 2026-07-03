@@ -79,8 +79,8 @@ SEUIL_SIGNIFICATIVITE = 0.05
 
 
 def _est_cellule_observee(i, j, n, m):
-    """Zone observee : carre (i+j<n) ou rectangle (i+j<=m-1)."""
-    if n == m:
+    """Carre/n>=m: i+j<n. Rectangle m>n: i+j<=m-1."""
+    if n >= m:
         return (i + j) < n
     return (i + j) <= (m - 1)
 
@@ -502,7 +502,7 @@ def _extrapoler_ultimates_bz(df_pred, C, annee_debut, model_ful=None, annee_base
 
         if model_ful is not None and last_j < m - 1:
             try:
-                rows_fut = [{'cohorte': str(annee_i), 'developpement': str(j + 1), 'calendrier': derniere_cal}
+                rows_fut = [{'cohorte': str(annee_i), 'developpement': str(j + 1), 'calendrier': _gel_calendrier(annee_i, j, derniere_cal)}
                             for j in range(last_j + 1, m)]
                 if rows_fut:
                     df_fut = pd.DataFrame(rows_fut)
