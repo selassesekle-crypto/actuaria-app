@@ -45,7 +45,6 @@ except ImportError:
 try:
     import pandas as pd
     import statsmodels.api as sm
-    from scipy import stats as scipy_stats
     STATSMODELS_OK = True
 except ImportError:
     STATSMODELS_OK = False
@@ -439,7 +438,7 @@ def _glm_bz_fit(
         lr_stat  = 2.0 * (m_ful.llf - m_red.llf)
         ddl_reel = int(round(m_red.df_resid - m_ful.df_resid))
         n_cal    = max(ddl_reel, 1)
-        p_value  = 1.0 - scipy_stats.chi2.cdf(lr_stat, df=n_cal)
+        p_value  = 1.0 - sp_stats.chi2.cdf(lr_stat, df=n_cal)
         cal_sig  = p_value < 0.05
 
         # Prédictions modèle complet
