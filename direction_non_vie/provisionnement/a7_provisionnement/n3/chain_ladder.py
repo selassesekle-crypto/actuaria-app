@@ -139,7 +139,7 @@ def calculer_facteurs(
         arr = np.array(f_ind,  dtype=float)
         w   = np.array(c_j,    dtype=float)
 
-        if methode in ('standard', 'volume_weighted') and methode == 'standard':
+        if methode == 'standard':
             # ── Standard (Mack 1993) ────────────────────────────────────────
             # f_j = Σ C[i,j+1] / Σ C[i,j]
             # Équivalent à np.average(arr, weights=w) car :
