@@ -29,12 +29,19 @@ SEUIL_MATURITE = 0.75   # % développement minimum pour être évalué
 
 
 def _chain_ladder_simple(C: np.ndarray) -> np.ndarray:
-    """Chain Ladder volume_weighted sur triangle tronqué. Retourne les ultimates."""
+    """
+    Chain Ladder volume_weighted universel.
+    Utilise un masque NaN pour la zone observée — valide pour tout triangle.
+    """
     n, m = C.shape
+    # Masque : cellule observée = non-NaN et > 0
+    obs = np.where(np.isnan(C), 0.0, C)
     facteurs = []
     for j in range(m - 1):
-        num = sum(C[i, j+1] for i in range(n - j - 1) if C[i, j] > 0)
-        den = sum(C[i, j]   for i in range(n - j - 1) if C[i, j] > 0)
+        # Inclure les lignes où C[i,j] ET C[i,j+1] sont observés
+        mask = (obs[:, j] > 0) & (obs[:, j+1] > 0)
+        num  = float(np.sum(obs[mask, j+1]))
+        den  = float(np.sum(obs[mask, j]))
         facteurs.append(num / den if den > 0 else 1.0)
 
     f_cum = np.ones(m)
@@ -118,13 +125,27 @@ def calculer_backtesting(
 
     # ── Ultimates tronqués ────────────────────────────────────────────────────
     def _ult_tronque(k: int) -> np.ndarray:
-        n_t = n - k; m_t = m - k
-        if n_t < 3 or m_t < 3: return np.zeros(n)
-        C_t = C[:n_t, :m_t].copy()
-        ult = _chain_ladder_simple(C_t)
-        result = np.zeros(n)
-        result[:n_t] = ult
-        return result
+        """
+        Simule le triangle tel qu'il était k périodes avant.
+        On masque les k dernières diagonales (i+j >= max_diag - k)
+        plutôt que de tronquer lignes et colonnes symétriquement.
+        Universel pour triangles carrés et rectangulaires.
+        """
+        # Trouver la diagonale maximale observée
+        max_diag = max((i + j for i in range(n) for j in range(m)
+                        if not np.isnan(C[i,j]) and C[i,j] > 0), default=n-1)
+        seuil_diag = max_diag - k
+        if seuil_diag < 2: return np.zeros(n)
+        # Masquer les cellules au-delà du seuil
+        C_t = C.copy().astype(float)
+        for i in range(n):
+            for j in range(m):
+                if i + j > seuil_diag:
+                    C_t[i, j] = np.nan
+        # Vérifier qu'il reste assez de données
+        n_obs = int(np.sum(~np.isnan(C_t) & (C_t > 0)))
+        if n_obs < 6: return np.zeros(n)
+        return _chain_ladder_simple(C_t)
 
     ult_n1 = _ult_tronque(1)
     ult_n2 = _ult_tronque(2)
@@ -246,7 +267,8 @@ def calculer_backtesting(
     # ── Statut global ─────────────────────────────────────────────────────────
     n_rouge = max(n_rouge_n1, n_rouge_n2)
     n_ambre = max(n_ambre_n1, n_ambre_n2)
-    n_vert  = min(n_vert_n1, n_vert_n2) if (n_vert_n1 and n_vert_n2) else max(n_vert_n1, n_vert_n2)
+    # n_vert = années vertes sur LES DEUX horizons (le plus strict)
+    n_vert  = min(n_vert_n1, n_vert_n2)
 
     if n_rouge >= 1:   statut_global = 'ROUGE'
     elif n_ambre >= 1: statut_global = 'AMBRE'
