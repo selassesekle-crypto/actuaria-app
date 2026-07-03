@@ -34,6 +34,27 @@ from typing import Dict, List, Optional, Tuple
 
 
 # =============================================================================
+#  CONSTANTES — SEUILS D'ABERRATION ET PARAMÈTRES
+# =============================================================================
+#  Regroupés ici pour faciliter la maintenance et l'audit.
+
+# Tail factor au-delà duquel Clark est considéré aberrant
+CLARK_TAIL_MAX          = 1.5
+
+# G(t=2) en dessous duquel le MLE est mal conditionné
+# (triangle trop peu développé à 2 ans — années récentes extrapolées)
+CLARK_G_T2_MIN          = 0.10
+
+# Minimum d'observations pour un MLE fiable : n_obs >= n + CLARK_DF_MIN
+CLARK_DF_MIN            = 3
+
+# Hessienne calculée uniquement si convergence propre (res.success)
+# → évite un calcul O(n²) coûteux sur des solutions instables
+CLARK_HESSIENNE_SI_CONVERGENCE = True
+
+
+
+# =============================================================================
 #  COURBES DE DÉVELOPPEMENT G(t)
 # =============================================================================
 
@@ -221,9 +242,10 @@ def _estimer_parametres(
                                 best_ll     = ll_cur
                                 best_params = res.x.copy()
                                 converge    = res.success
-                                # Hessienne numérique via différences finies centrées
-                                # (L-BFGS-B ne fournit pas de Hessienne exacte)
-                                try:
+                                # Hessienne numérique — seulement si convergence propre
+                                # (O(n²) évaluations de LL — coûteux sur grands triangles)
+                                if not (CLARK_HESSIENNE_SI_CONVERGENCE and not converge):
+                                  try:
                                     from scipy.optimize import approx_fprime
                                     p_opt = best_params
                                     n_p   = len(p_opt)
@@ -246,7 +268,7 @@ def _estimer_parametres(
                                     # Vérifier que les variances sont positives
                                     if np.any(np.diag(best_hinv) < 0):
                                         best_hinv = None
-                                except Exception:
+                                  except Exception:
                                     best_hinv = None
                     except Exception as e:
                         logger.debug(f'Clark optim ({courbe}, ω={omega_0:.1f}, θ={theta_0:.1f}) : {e}')
@@ -285,9 +307,10 @@ def _calculer_resultats(
     tail_factor = float(1.0 / max(G[-1], 1e-10))
 
     # ── Ultimates et IBNR ─────────────────────────────────────────────────────
-    ultimates      = []
-    ibnr_par_annee = []
-    pct_developpe  = []
+    ultimates            = []
+    ibnr_par_annee       = []
+    ibnr_brut_par_annee  = []  # IBNR avant troncature — signal sur-développement
+    pct_developpe        = []
 
     for i in range(n):
         u_i = float(U[i])
@@ -304,11 +327,16 @@ def _calculer_resultats(
         # En fait : IBNR = U_i × tail - obs_last
         # Clark : U_i = ultimate sans queue, donc IBNR = U_i / G(t_last) - obs
         # Mais ici U_i est l'ultimate direct (G va vers 1)
-        ibnr_i = u_i * tail_factor - obs_last
+        ibnr_i      = u_i * tail_factor - obs_last
+        ibnr_brut_i = ibnr_i  # valeur brute avant troncature à 0
 
         ultimates.append(u_i * tail_factor)
-        ibnr_par_annee.append(max(ibnr_i, 0.0))
+        ibnr_par_annee.append(max(ibnr_i, 0.0))  # tronqué : provision ≥ 0
+        ibnr_brut_par_annee.append(round(ibnr_brut_i, 0))  # brut : signal sur-développement
         pct_developpe.append(pct)
+
+    # Sur-développement : années où IBNR brut < 0 → ultimate Clark < cumul observé
+    n_sur_dev = sum(1 for v in ibnr_brut_par_annee if v < 0)
 
     # Réserve totale depuis annee_base
     reserve_totale = float(np.sum(ibnr_par_annee[annee_base - 1:]))
@@ -355,7 +383,9 @@ def _calculer_resultats(
         'theta':           round(theta, 2),
         'U':               [round(float(u), 0) for u in U],
         'ultimates':       [round(u, 0) for u in ultimates],
-        'ibnr_par_annee':  [round(v, 0) for v in ibnr_par_annee],
+        'ibnr_par_annee':        [round(v, 0) for v in ibnr_par_annee],
+        'ibnr_brut_par_annee':   ibnr_brut_par_annee,  # brut < 0 si sur-développement
+        'n_sur_developpement':   n_sur_dev,
         'reserve_totale':  round(reserve_totale, 0),
         'tail_factor':     round(tail_factor, 6),
         'pct_developpe':   [round(p, 1) for p in pct_developpe],
@@ -389,7 +419,8 @@ def clark_ldf(
     Parameters
     ----------
     C : np.ndarray
-        Triangle des paiements CUMULÉS (n × n), triangulaire supérieur.
+        Triangle des paiements CUMULÉS (n × m), zone connue i+j < n.
+        Cas supportés : n=m (carré), n>m (court), n<m (long, rare).
     periodes : list[float], optional
         Périodes de développement en mois. Défaut : [12, 24, 36, ...].
     courbes : list[str]
@@ -467,7 +498,7 @@ def clark_ldf(
     mask = ~np.isnan(Y) & ~np.isnan(C_norm) & (Y >= 0)
 
     n_obs = int(mask.sum())
-    if n_obs < (n + 3):  # besoin d'au moins n+2 observations (n ELR + ω + θ)
+    if n_obs < (n + CLARK_DF_MIN):  # besoin d'au moins n+CLARK_DF_MIN observations
         return {
             'success': False, 'disponible': False,
             'erreur':  f'Observations insuffisantes ({n_obs}) pour {n} années.',
@@ -475,7 +506,10 @@ def clark_ldf(
         }
 
     # ── Estimation MLE pour chaque courbe ────────────────────────────────────
-    np.random.seed(42)  # Reproductibilité
+    # Seed fixe pour reproductibilité des résultats entre deux appels identiques.
+    # Impact : les perturbations aléatoires de U_init (×0.9/1.0/1.1) sont
+    # déterministes. Ne pas modifier sans adapter les tests de non-régression.
+    np.random.seed(42)
 
     resultats_courbes = {}
     ll_par_courbe     = {}
@@ -547,16 +581,9 @@ def clark_ldf(
 
     # ── Validation de cohérence ───────────────────────────────────────────────
     # Calculer la somme des dernières diagonales comme référence
-    last_diag = []
-    for i in range(n):
-        j_last = m - 1 - i
-        if j_last >= 0 and not np.isnan(C_float[i, j_last]) and C_float[i, j_last] > 0:
-            last_diag.append(float(C_float[i, j_last]))
-    last_diag_sum = sum(last_diag) if last_diag else 0.0
+    # (last_diag_sum supprimé — critère 5×diagonale retiré au profit
+    #  des critères actuariels : tail, G(t2), convergence)
 
-    # Aberrant si :
-    # - réserve > 5× la diagonale (seuil large pour ne pas exclure à tort)
-    # - ou AIC > 1e6 (ajustement complètement dégradé)
     # ── Critères d'aberration actuariellement justifiés ──────────────────
     # 1. Tail factor > 1.5 : queue irréaliste quelle que soit la LoB
     # 2. G(t_min) < 3% : triangle trop peu développé à la 1ère période
@@ -574,8 +601,8 @@ def clark_ldf(
     G_at_t1 = float(_g(np.array([t[0]]), _omega_best, _theta_best, courbe_choisie)[0])
     G_at_t2 = float(_g(np.array([t[min(1, m-1)]]), _omega_best, _theta_best, courbe_choisie)[0])
     clark_aberrant = (
-        tail_factor > 1.5                    # queue irréaliste quelle que soit la LoB
-        or G_at_t2 < 0.10                    # MLE mal conditionné (< 10% développé à t=2)
+        tail_factor > CLARK_TAIL_MAX         # queue irréaliste quelle que soit la LoB
+        or G_at_t2 < CLARK_G_T2_MIN          # MLE mal conditionné (< CLARK_G_T2_MIN à t=2)
         or not best.get('converge', True)    # MLE non convergé
     )
 
@@ -587,8 +614,8 @@ def clark_ldf(
 
     if clark_aberrant:
         _raison = []
-        if tail_factor > 1.5:
-            _raison.append(f'tail factor = {tail_factor:.3f} (> 1.5 — queue irréaliste)')
+        if tail_factor > CLARK_TAIL_MAX:
+            _raison.append(f'tail factor = {tail_factor:.3f} (> {CLARK_TAIL_MAX} — queue irréaliste)')
         if G_at_t2 < 0.10:
             _raison.append(f'G(t=2) = {G_at_t2:.3f} (< 10\u202f% — MLE mal conditionné sur années récentes)')
         if not best.get('converge', True):
