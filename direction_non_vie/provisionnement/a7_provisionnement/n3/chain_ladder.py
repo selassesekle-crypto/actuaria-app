@@ -355,11 +355,13 @@ def calculer_tail_factor(
         b, a = np.polyfit(x, log_f_m1, 1)
 
         if b >= 0:
-            # Pente positive = facteurs croissants → tail = 1.0
-            # (anomalie dans les données, ne pas extrapoler)
+            # ⚠️ Pente positive : LDF croissants avec l'âge = pattern anormal
+            # Causes possibles : rupture sinistralité, inflation, données insuffisantes
+            # → tail = 1.0 par prudence (pas d'extrapolation)
             logger.warning(
-                f"Tail factor : pente positive b={b:.4f} → tail=1.0 "
-                f"(facteurs croissants en queue, vérifier les données)"
+                f"⚠️ Tail factor : pente positive b={b:.4f} — LDF croissants avec l'âge. "
+                f"Causes possibles : rupture sinistralité, inflation, données insuffisantes. "
+                f"Tail = 1.0 (pas d'extrapolation)."
             )
             tail = 1.0
         else:
