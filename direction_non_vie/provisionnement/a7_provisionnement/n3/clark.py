@@ -242,9 +242,9 @@ def _estimer_parametres(
                                 best_ll     = ll_cur
                                 best_params = res.x.copy()
                                 converge    = res.success
-                                # Hessienne numérique — seulement si convergence propre
-                                # (O(n²) évaluations de LL — coûteux sur grands triangles)
-                                if not (CLARK_HESSIENNE_SI_CONVERGENCE and not converge):
+                                # Hessienne numérique — seulement si demandée ET convergence propre
+                                # (O(n³) évaluations de LL — coûteux sur 30×30)
+                                if calculer_ic and not (CLARK_HESSIENNE_SI_CONVERGENCE and not converge):
                                   try:
                                     from scipy.optimize import approx_fprime
                                     p_opt = best_params
@@ -408,11 +408,25 @@ def _aic(ll: float, n_params: int) -> float:
 # =============================================================================
 
 def clark_ldf(
-    C:          np.ndarray,
-    periodes:   Optional[List[float]] = None,
-    courbes:    List[str]             = ['loglogistique', 'weibull'],
-    annee_base: int                   = 1,
+    C:              np.ndarray,
+    periodes:       Optional[List[float]] = None,
+    courbes:        List[str]             = ['loglogistique', 'weibull'],
+    annee_base:     int                   = 1,
+    calculer_ic:    bool                  = True,
+    g_t2_min:       Optional[float]       = None,
 ) -> Dict:
+    """
+    Paramètres supplémentaires
+    --------------------------
+    calculer_ic : bool
+        Si True (défaut), calcule la Hessienne numérique et les IC 95%
+        sur les ultimates. Coûteux sur grands triangles (O(n³)) —
+        mettre à False si seule la réserve centrale est nécessaire.
+    g_t2_min : float, optional
+        Seuil G(t=2) en dessous duquel Clark est déclaré aberrant.
+        Par défaut : CLARK_G_T2_MIN (0.10). À ajuster par LoB :
+        RC Médicale / Construction → 0.03, RC Générale → 0.05.
+    """
     """
     Méthode de Clark (2003) — LDF Curve-Fitting par Maximum de Vraisemblance.
 
@@ -473,7 +487,20 @@ def clark_ldf(
     else:
         t = np.array(periodes, dtype=float)
         if len(t) != m:
+            logger.warning(f'Clark : len(periodes)={len(t)} != m={m} — périodes ignorées, fallback [1..m]')
             t = np.array([(j + 1.0) for j in range(m)], dtype=float)
+        elif np.any(np.diff(t) <= 0):
+            return {
+                'success': False, 'disponible': False,
+                'erreur':  'Périodes non strictement croissantes.',
+                'message': 'Clark invalide : les périodes t doivent être strictement croissantes.',
+            }
+        elif np.any(t <= 0):
+            return {
+                'success': False, 'disponible': False,
+                'erreur':  'Périodes négatives ou nulles.',
+                'message': 'Clark invalide : les périodes t doivent être strictement positives.',
+            }
 
     # ── Triangle incrémental ──────────────────────────────────────────────────
     C_float = C.astype(float).copy()
@@ -496,7 +523,17 @@ def clark_ldf(
 
     Y = Y_norm
 
+    # Vérification monotonicité : C[i,j] doit être croissant en j
+    # (incréments négatifs = annulations/corrections — Clark invalide)
+    _n_neg = int(np.sum(Y_norm[~np.isnan(Y_norm)] < 0))
+    if _n_neg > 0:
+        logger.warning(
+            f'Clark : {_n_neg} incrément(s) négatif(s) détecté(s) — '
+            f'triangle non-monotone. Cellules ignorées dans le MLE.'
+        )
+
     # Masque : cellules effectivement observées (non NaN et non négatif)
+    # Les incréments négatifs sont exclus — ils violent H1 de Clark (2003)
     mask = ~np.isnan(Y) & ~np.isnan(C_norm) & (Y >= 0)
 
     n_obs = int(mask.sum())
@@ -593,8 +630,9 @@ def clark_ldf(
     # 3. Non-convergence : le MLE n'a pas trouvé de minimum stable
     # NB : AIC absolu non utilisé (dépend de l'échelle des données)
     # NB : ratio Clark/CL non utilisé (circulaire)
-    _omega_best = float(best.get('omega', 1.0))
-    _theta_best = float(best.get('theta', 1.0))
+    _omega_best  = float(best.get('omega', 1.0))
+    _theta_best  = float(best.get('theta', 1.0))
+    _g_t2_min    = g_t2_min if g_t2_min is not None else CLARK_G_T2_MIN
     # G(t=1) et G(t=2) pour évaluer le conditionnement du MLE
     # Seuil G(t=2) < 10% plus robuste que G(t=1) < 3% :
     # - G(t=1) < 3% peut être normal sur triangles longs (20×20+)
@@ -604,7 +642,7 @@ def clark_ldf(
     G_at_t2 = float(_g(np.array([t[min(1, m-1)]]), _omega_best, _theta_best, courbe_choisie)[0])
     clark_aberrant = (
         tail_factor > CLARK_TAIL_MAX         # queue irréaliste quelle que soit la LoB
-        or G_at_t2 < CLARK_G_T2_MIN          # MLE mal conditionné (< CLARK_G_T2_MIN à t=2)
+        or G_at_t2 < _g_t2_min               # MLE mal conditionné (< _g_t2_min à t=2)
         or not best.get('converge', True)    # MLE non convergé
     )
 
@@ -619,7 +657,7 @@ def clark_ldf(
         if tail_factor > CLARK_TAIL_MAX:
             _raison.append(f'tail factor = {tail_factor:.3f} (> {CLARK_TAIL_MAX} — queue irréaliste)')
         if G_at_t2 < 0.10:
-            _raison.append(f'G(t=2) = {G_at_t2:.3f} (< {CLARK_G_T2_MIN:.0%} — MLE mal conditionné sur années récentes)')
+            _raison.append(f'G(t=2) = {G_at_t2:.3f} (< {_g_t2_min:.0%} — MLE mal conditionné sur années récentes)')
         if not best.get('converge', True):
             _raison.append('MLE non convergé')
         message = (
