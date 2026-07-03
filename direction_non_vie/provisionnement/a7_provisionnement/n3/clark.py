@@ -171,11 +171,12 @@ def _neg_loglik_odp(
 # =============================================================================
 
 def _estimer_parametres(
-    Y:       np.ndarray,
-    t:       np.ndarray,
-    mask:    np.ndarray,
-    courbe:  str,
-    n_multi: int = 4,
+    Y:           np.ndarray,
+    t:           np.ndarray,
+    mask:        np.ndarray,
+    courbe:      str,
+    n_multi:     int  = 4,
+    calculer_ic: bool = True,
 ) -> Tuple[Optional[np.ndarray], float, bool, Optional[np.ndarray]]:
     """
     Estimation MLE par BFGS avec plusieurs points de départ.
@@ -244,7 +245,7 @@ def _estimer_parametres(
                                 converge    = res.success
                                 # Hessienne numérique — seulement si demandée ET convergence propre
                                 # (O(n³) évaluations de LL — coûteux sur 30×30)
-                                if calculer_ic and not (CLARK_HESSIENNE_SI_CONVERGENCE and not converge):
+                                if calculer_ic and converge:
                                   try:
                                     from scipy.optimize import approx_fprime
                                     p_opt = best_params
@@ -558,7 +559,7 @@ def clark_ldf(
     for courbe in courbes:
         logger.info(f'Clark MLE — courbe={courbe}, n={n}, m={m}')
         try:
-            params, ll, conv, hinv = _estimer_parametres(Y, t, mask, courbe)
+            params, ll, conv, hinv = _estimer_parametres(Y, t, mask, courbe, calculer_ic=calculer_ic)
             if params is None or ll == -np.inf:
                 logger.warning(f'Clark {courbe} : optimisation échouée')
                 ll_par_courbe[courbe]  = None
