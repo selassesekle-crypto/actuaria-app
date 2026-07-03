@@ -96,7 +96,8 @@ def calculer_facteurs(
         Zéros utilisés pour les cellules inconnues (hors zone connue).
     methode : str
         'standard'        — volume-weighted (Mack 1993, estimateur optimal)
-        'volume_weighted' — pondération par √C[i,j]
+        'volume_weighted' — pondération par √C[i,j] (distinct de 'standard'
+                            qui pondère par C[i,j] au sens de Mack 1993)
         'mediane'         — médiane des facteurs individuels (robuste outliers)
         'trimmed_mean'    — moyenne écrêtée 10%-90% (compromis)
 
@@ -379,8 +380,9 @@ def calculer_tail_factor(
         logger.warning(f"Tail factor : régression échouée ({e}) → tail=1.0")
         tail = 1.0
 
-    # Clipper à [1.0, 1.20]
-    tail = float(np.clip(tail, 1.0, 1.20))
+    # Clipper à [1.0, tail_max] — tail_max = min(lob_tail_max_alerte × 1.5, 1.50)
+    tail_max = min(lob_tail_max_alerte * 1.5, 1.50)
+    tail = float(np.clip(tail, 1.0, tail_max))
 
     # Statut selon seuil LoB
     if tail >= lob_tail_max_alerte:
