@@ -188,7 +188,7 @@ def bornhuetter_ferguson(
             u  = float(ultimates_cl[i])
             if c0 > 0 and u > 0:
                 # Hypothèse : sinistres initiaux ≈ 35% des primes (FFA Non-Vie)
-                prime_proxy = c0 / 0.35
+                prime_proxy = c0 / max(ratio_c0_primes, 0.01)
                 lr_proxy.append(u / prime_proxy)
 
         lr     = float(np.clip(np.mean(lr_proxy), 0.35, 1.50)) if lr_proxy else 0.75
