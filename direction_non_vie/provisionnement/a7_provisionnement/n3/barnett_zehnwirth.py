@@ -263,16 +263,17 @@ def _detecter_anomalies(
         # k représente le rang de la diagonale → annee calendaire = annee_debut + k
         annee_label = str(annee_debut + k) if annee_debut else f"Diag. {k}"
 
-        # Test de Student optionnel (si scipy disponible et ≥ 3 points)
+        # Test de Student — indicatif uniquement, NE modifie PAS le flag anomalie
+        # Raison : les log-facteurs d'une même diagonale partagent l'effet calendaire k
+        # → ils ne sont pas indépendants → ttest_1samp invalide pour confirmation
+        # Le Z-score MAD est le seul critère de détection (Gemini / Barnett & Zehnwirth)
         p_value = None
-        if SCIPY_OK and n_pts >= 3:
+        if SCIPY_OK and n_pts >= 4:  # min 4 points pour éviter t-test sur 3 obs
             _, p_val = sp_stats.ttest_1samp(
                 par_diag_valide[k], popmean=med_glob
             )
             p_value = round(float(p_val), 4)
-            # Renforcer l'anomalie si t-test confirme (p < 0.10)
-            if not anomalie and p_value < 0.10:
-                anomalie = True  # Confirmation par t-test
+            # p_value conservé dans le dict pour diagnostic — pas de modification d'anomalie
 
         results.append({
             'diagonale':     k,
