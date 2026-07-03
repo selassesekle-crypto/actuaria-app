@@ -539,28 +539,55 @@ def clark_ldf(
     # Aberrant si :
     # - réserve > 5× la diagonale (seuil large pour ne pas exclure à tort)
     # - ou AIC > 1e6 (ajustement complètement dégradé)
+    # ── Critères d'aberration actuariellement justifiés ──────────────────
+    # 1. Tail factor > 1.5 : queue irréaliste quelle que soit la LoB
+    # 2. G(t_min) < 3% : triangle trop peu développé à la 1ère période
+    #    → MLE mal conditionné, ultimates extrapolés massivement
+    # 3. Non-convergence : le MLE n'a pas trouvé de minimum stable
+    # NB : AIC absolu non utilisé (dépend de l'échelle des données)
+    # NB : ratio Clark/CL non utilisé (circulaire)
+    G_at_tmin = float(_g(
+        np.array([t[0]]), best['omega'] if 'omega' in best else best.get('params', [1,1])[0],
+        best['theta'] if 'theta' in best else best.get('params', [1,1])[1],
+        courbe_choisie
+    )[0])
     clark_aberrant = (
-        (last_diag_sum > 0 and reserve_totale > 5.0 * last_diag_sum) or
-        (courbes_ok[courbe_choisie] > 1e6)
+        tail_factor > 1.5                    # queue irréaliste
+        or G_at_tmin < 0.03                  # triangle trop peu développé à t=1
+        or not best.get('converge', True)    # MLE non convergé
     )
 
     # ── Message actuariel ─────────────────────────────────────────────────────
+    # ΔAIC entre les deux courbes (comparaison relative — pas en absolu)
+    _delta_aic = None
+    if aic_ll is not None and aic_wb is not None:
+        _delta_aic = round(aic_ll - aic_wb, 1)  # négatif si log-log meilleure
+
     if clark_aberrant:
+        _raison = []
+        if tail_factor > 1.5:
+            _raison.append(f'tail factor = {tail_factor:.3f} (> 1.5 — queue irréaliste)')
+        if G_at_tmin < 0.03:
+            _raison.append(f'G(t=1) = {G_at_tmin:.3f} (< 3\u202f% — triangle trop peu développé)')
+        if not best.get('converge', True):
+            _raison.append('MLE non convergé')
         message = (
-            f"⚠️ RÉSULTAT ABERRANT — réserve Clark ({reserve_totale:,.0f}\u202f€) "
-            f"incohérente avec les données (seuil : 5× diagonale = "
-            f"{5*last_diag_sum:,.0f}\u202f€). "
-            f"Méthode écartée de la pondération."
+            f"⚠️ Clark {courbe_choisie} écarté — "
+            f"{' ; '.join(_raison)}. "
+            f"Méthode non retenue dans la pondération."
         )
     elif tail_factor > 1.20:
         message = (
-            f"Courbe {courbe_choisie} sélectionnée (AIC={courbes_ok[courbe_choisie]:.1f}). "
-            f"Queue significative : {tail_factor:.3f}× — attention aux développements tardifs."
+            f"Clark {courbe_choisie} sélectionné. "
+            f"Queue notable : tail = {tail_factor:.3f}. "
+            f"Résultat à titre informatif — vérifier le développement tardif."
         )
     else:
         message = (
-            f"Courbe {courbe_choisie} sélectionnée (AIC={courbes_ok[courbe_choisie]:.1f}). "
-            f"Tail factor : {tail_factor:.4f}. Ajustement satisfaisant."
+            f"Clark {courbe_choisie} sélectionné. "
+            f"Tail factor = {tail_factor:.4f}. "
+            + (f"\u0394AIC Weibull vs Log-log = {_delta_aic:+.0f}. " if _delta_aic else '')
+            + "Ajustement satisfaisant."
         )
 
     # ── Courbe G(t) pour graphique ────────────────────────────────────────────
