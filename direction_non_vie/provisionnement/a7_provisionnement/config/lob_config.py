@@ -132,6 +132,7 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         # Tail factor — Guide IA 2023 (pratique professionnelle française)
         "risque_long":              True,  # Transport = risque long, seuil 1.05
         "tail_seuil_stabilisation": 1.05,   # seuil de stabilisation LDF
+        "ratio_c0_primes":          0.45,   # RC Auto Mat. — règlement rapide
 
         # Tail factor — Guide IA 2023 (pratique professionnelle française)
         "risque_long":              True,  # RC Médicale = risque très long (20-30 ans)
@@ -216,6 +217,7 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         # Tail factor — Guide IA 2023 (pratique professionnelle française)
         "risque_long":              True,  # RC Auto Corporels = risque long (15-25 ans)
         "tail_seuil_stabilisation": 1.1,
+        "ratio_c0_primes":          0.08,   # RC Auto Corp. — dev. très long
     },
 
     # ── MRH — Multirisque Habitation (queue courte) ───────────────────────────
@@ -252,6 +254,8 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         # Tail factor — Guide IA 2023 (pratique professionnelle française)
         "risque_long":              False,  # MRH = risque court (< 4 ans)
         "tail_seuil_stabilisation": 1.01,
+        "ratio_c0_primes":          0.52,   # Incendie — règlement rapide
+        "ratio_c0_primes":          0.55,   # MRH — règlement rapide
     },
 
     # ── RC Générale (queue moyenne) ───────────────────────────────────────────
@@ -289,6 +293,7 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         # Tail factor — Guide IA 2023 (pratique professionnelle française)
         "risque_long":              True,  # RC Générale = risque long, seuil 1.05
         "tail_seuil_stabilisation": 1.05,
+        "ratio_c0_primes":          0.18,   # RC Générale — dev. long
     },
 
     # ── RC Médicale (queue très longue) ───────────────────────────────────────
@@ -329,6 +334,7 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         # Tail factor — Guide IA 2023 (pratique professionnelle française)
         "risque_long":              True,  # RC Médicale = risque très long (20-30 ans)
         "tail_seuil_stabilisation": 1.1,
+        "ratio_c0_primes":          0.06,   # RC Médicale — dev. très long
     },
 
     # ── Construction — RC Décennale / DO (queue longue) ──────────────────────
@@ -368,6 +374,7 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         # ET coefficients non stabilisés (dernier LDF > tail_seuil_stabilisation)
         "risque_long":              True,  # Construction = risque long (15 ans)
                 "tail_seuil_stabilisation": 1.1,  # LDF < 1.10 = développement faible = stabilisé
+        "ratio_c0_primes":          0.04,   # Construction — dev. extrêmement long
     },
 
     # ── Marine / Aviation / Transport ─────────────────────────────────────────
@@ -404,6 +411,7 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         # Tail factor — Guide IA 2023 (pratique professionnelle française)
         "risque_long":              True,  # Transport = risque long, seuil 1.05
         "tail_seuil_stabilisation": 1.05,
+        "ratio_c0_primes":          0.25,   # Transport/Marine — dev. long
     },
 
     # ── Générique (fallback si lob non spécifié) ──────────────────────────────
@@ -439,6 +447,7 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         # Tail factor — Guide IA 2023 (pratique professionnelle française)
         "risque_long":              True,   # Générique = prudence maximale
         "tail_seuil_stabilisation": 1.02,   # LDF < 1.02 = développement quasi nul
+        "ratio_c0_primes":          0.35,   # Générique — FFA Non-Vie
 
         # Tail factor — Guide IA 2023 : generique traité comme risque long par prudence
         "risque_long":              True,   # par prudence
@@ -495,6 +504,7 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "lr_marche_source":     "Marché français — Protection Juridique",
         "risque_long":              False,
         "tail_seuil_stabilisation": 1.01,
+        "ratio_c0_primes":          0.40,   # Protection Juridique
         "tail_factor_max_alerte":   1.02,
         "alertes_specifiques": [
             "Date déclaration = date survenance (Guide IA 2023 p.43).",
@@ -522,6 +532,7 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "lr_marche_source":     "Référence CCR/MRN par événement",
         "risque_long":              False,
         "tail_seuil_stabilisation": 1.02,
+        "ratio_c0_primes":          0.45,   # Cat Nat
         "tail_factor_max_alerte":   1.05,
         "alertes_specifiques": [
             "Effets calendaires forts — séparer les périls (tempête, sécheresse, inondation, séisme).",
@@ -550,6 +561,7 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "lr_marche_source":     "À calibrer par secteur — corrélation cycle économique",
         "risque_long":              True,
         "tail_seuil_stabilisation": 1.05,
+        "ratio_c0_primes":          0.15,   # Crédit/Caution
         "tail_factor_max_alerte":   1.04,
         "alertes_specifiques": [
             "Traiter par année de souscription (Guide IA 2023 p.52).",
@@ -578,6 +590,7 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "lr_marche_source":     "Marché français — GAV / Accident scolaire (estimation)",
         "risque_long":              True,
         "tail_seuil_stabilisation": 1.05,
+        "ratio_c0_primes":          0.20,   # Dommage Corporel Individuel
         "tail_factor_max_alerte":   1.04,
         "alertes_specifiques": [
             "Distinguer sinistres transigés en capital et rentes potentielles.",
