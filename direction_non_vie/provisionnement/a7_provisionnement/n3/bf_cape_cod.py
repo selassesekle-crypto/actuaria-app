@@ -98,6 +98,8 @@ def bornhuetter_ferguson(
     annee_base:       int                  = 1,
     lr_reference:     Optional[float]      = None,
     lr_reference_src: str                  = '',
+    ratio_c0_primes:  float                = 0.35,
+    nb_annees_matures: Optional[int]       = None,
 ) -> Dict:
     """
     Méthode de Bornhuetter-Ferguson (1972).
@@ -145,7 +147,8 @@ def bornhuetter_ferguson(
 
     elif primes is not None and len(primes) >= n:
         # Source 2 : LR calculé depuis les années matures avec primes
-        nb_mat    = min(5, n // 2) if n >= 6 else min(3, n - 1)
+        nb_mat    = nb_annees_matures if nb_annees_matures else (min(5, n // 2) if n >= 6 else min(3, n - 1))
+        nb_mat    = max(1, min(nb_mat, n - 1))
         lr_annees = []
         for i in range(nb_mat):
             p = float(primes[i])
@@ -181,7 +184,8 @@ def bornhuetter_ferguson(
     else:
         # Source 3 : proxy sans primes
         # ⚠️ CIRCULARITÉ : μ = Ultimate_CL × LR → BF dépend de CL
-        nb_mat    = min(5, n // 2) if n >= 6 else min(3, n - 1)
+        nb_mat    = nb_annees_matures if nb_annees_matures else (min(5, n // 2) if n >= 6 else min(3, n - 1))
+        nb_mat    = max(1, min(nb_mat, n - 1))
         lr_proxy  = []
         for i in range(nb_mat):
             c0 = float(C[i, 0])
@@ -239,6 +243,12 @@ def bornhuetter_ferguson(
         ultimates_bf[i] = float(last_diag[i]) + ibnr_bf[i]
 
     reserve_totale = float(np.sum(ibnr_bf[annee_base:]))
+    ibnr_cl_ref = [max(float(ultimates_cl[i]) - float(last_diag[i]), 0.0) for i in range(n)]
+    for i in range(annee_base, n):
+        if float(pct_dev[i]) > 0.80 and ibnr_cl_ref[i] > 0:
+            r_bf_cl = ibnr_bf[i] / ibnr_cl_ref[i]
+            if r_bf_cl > 2.0:
+                alertes.append(f'BF an.{annee_base+i}: IBNR_BF={ibnr_bf[i]:,.0f} = {r_bf_cl:.1f}x IBNR_CL -- LR sur-estime?')
 
     msg = (
         f"Bornhuetter-Ferguson (1972) : réserve={reserve_totale:,.0f}€ · "
