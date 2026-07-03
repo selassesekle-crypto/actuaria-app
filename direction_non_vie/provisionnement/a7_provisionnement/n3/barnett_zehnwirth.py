@@ -45,6 +45,7 @@ except ImportError:
 try:
     import pandas as pd
     import statsmodels.api as sm
+    from scipy import stats as scipy_stats
     STATSMODELS_OK = True
 except ImportError:
     STATSMODELS_OK = False
@@ -77,11 +78,10 @@ EPSILON = 1e-10
 SEUIL_SIGNIFICATIVITE = 0.05
 
 
-def _est_cellule_observee(i, j, n, m):
-    """Carre/n>=m: i+j<n. Rectangle m>n: i+j<=m-1."""
-    if n >= m:
-        return (i + j) < n
-    return (i + j) <= (m - 1)
+def _est_cellule_observee(i, j, C):
+    """Universel : observation reelle non-NaN et > 0."""
+    n, m = C.shape
+    return 0 <= i < n and 0 <= j < m and not __import__('numpy').isnan(C[i,j]) and C[i,j] > 0
 
 
 def _gel_calendrier(annee_i, j, derniere_cal):
@@ -117,7 +117,7 @@ def _facteurs_par_cellule(C: np.ndarray) -> List[Dict]:
     for i in range(n):
         for j in range(1, m):
             # Cellule valide = dans le triangle + deux valeurs positives
-            if C[i, j] > 0 and C[i, j-1] > 0 and _est_cellule_observee(i, j, n, m):
+            if _est_cellule_observee(i, j, C) and _est_cellule_observee(i, j-1, C):
                 f = float(C[i, j]) / float(C[i, j-1])
                 cellules.append({
                     'i':           i,
@@ -379,7 +379,7 @@ def _triangle_to_long(
     rows = []
     for i in range(n):
         for j in range(m):
-            if not _est_cellule_observee(i, j, n, m):
+            if not _est_cellule_observee(i, j, C):
                 continue
             val_cum = C[i, j]
             if np.isnan(val_cum) or val_cum <= 0:
@@ -438,7 +438,7 @@ def _glm_bz_fit(
         lr_stat  = 2.0 * (m_ful.llf - m_red.llf)
         ddl_reel = int(round(m_red.df_resid - m_ful.df_resid))
         n_cal    = max(ddl_reel, 1)
-        p_value  = 1.0 - sp_stats.chi2.cdf(lr_stat, df=n_cal)
+        p_value  = 1.0 - scipy_stats.chi2.cdf(lr_stat, df=n_cal)
         cal_sig  = p_value < 0.05
 
         # Prédictions modèle complet
@@ -489,14 +489,14 @@ def _extrapoler_ultimates_bz(df_pred, C, annee_debut, model_ful=None, annee_base
     Fallback par ratio de moyennes si predict echoue.
     """
     n, m = C.shape
-    k_max        = m - 1 if n != m else n - 1
+    k_max = max((i+j for i in range(n) for j in range(m) if not np.isnan(C[i,j]) and C[i,j]>0), default=n-1)
     derniere_cal = str(annee_debut + k_max)
     ultimates, ibnr_annees = [], []
 
     for i in range(n):
-        annee_i  = annee_debut + i
-        last_j   = min(m - 1, k_max - i) if k_max >= i else 0
-        obs_last = float(C[i, last_j]) if (0 <= last_j < m) and not np.isnan(C[i, last_j]) else 0.0
+        annee_i = annee_debut + i
+        last_j  = max((j for j in range(m) if not np.isnan(C[i,j]) and C[i,j]>0), default=0)
+        obs_last = float(C[i, last_j]) if not np.isnan(C[i, last_j]) else 0.0
         ibnr_i   = 0.0
 
         if model_ful is not None and last_j < m - 1:
