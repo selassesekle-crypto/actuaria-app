@@ -228,7 +228,12 @@ def _detecter_anomalies(
 
     # Fallback si MAD = 0 (triangle trop régulier)
     if mad_glob < EPSILON:
-        mad_glob = float(np.std(tous_lf)) if np.std(tous_lf) > EPSILON else 1.0
+        std_glob = float(np.std(tous_lf))
+        if std_glob > EPSILON:
+            mad_glob = std_glob
+        else:
+            mad_glob = 1.0
+            logger.warning('BZ : MAD=0 et std=0 — triangle deterministe, scores Z non significatifs.')
 
     # Constante de normalisation : MAD × 1.4826 ≈ σ pour une loi normale
     # Cette constante rend le score Z comparable à un z-score gaussien standard
@@ -416,8 +421,9 @@ def _glm_bz_fit(
 
         # ── LR test H0 : γ_k = 0 ∀k ──────────────────────────────────────────
         lr_stat  = 2.0 * (m_ful.llf - m_red.llf)
-        n_cal    = df['calendrier'].nunique() - 1
-        p_value  = 1.0 - scipy_stats.chi2.cdf(lr_stat, df=max(n_cal, 1))
+        ddl_reel = int(round(m_red.df_resid - m_ful.df_resid))
+        n_cal    = max(ddl_reel, 1)
+        p_value  = 1.0 - scipy_stats.chi2.cdf(lr_stat, df=n_cal)
         cal_sig  = p_value < 0.05
 
         # Prédictions modèle complet
@@ -445,79 +451,68 @@ def _glm_bz_fit(
         return {'success': False, 'erreur': str(e)}
 
 
-def _extrapoler_ultimates_bz(
-    df_pred:    'pd.DataFrame',
-    C:          np.ndarray,
-    annee_debut: int,
-) -> Dict:
+def _fallback_ratio(df_pred, annee_i, last_j, m, obs_last):
+    """Fallback projection BZ par ratio de moyennes (approximation)."""
+    df = df_pred.copy()
+    df['cohorte_int'] = df['cohorte'].astype(int)
+    ibnr_i = 0.0
+    for j in range(last_j + 1, m):
+        df_dev = df[df['developpement'] == str(j + 1)]
+        df_lj  = df[df['developpement'] == str(last_j + 1)]
+        if len(df_dev) == 0 or len(df_lj) == 0 or df_lj['Y_hat'].mean() <= 0:
+            continue
+        ratio    = df_dev['Y_hat'].mean() / df_lj['Y_hat'].mean()
+        inc_base = float(df[(df['cohorte_int'] == annee_i) & (df['developpement'] == str(last_j + 1))]['Y_hat'].sum()) or (obs_last * 0.05)
+        ibnr_i  += inc_base * ratio
+    return ibnr_i
+
+
+def _extrapoler_ultimates_bz(df_pred, C, annee_debut, model_ful=None, annee_base=1):
     """
-    Extrapole les ultimates BZ en projetant les incréments futurs.
-
-    Pour chaque année de survenance i, reconstruit le cumul observé
-    puis projette les développements futurs en utilisant les paramètres
-    du GLM (effets cohorte + développement estimés).
-
-    Returns dict avec ultimates, IBNR par année, total réserve BZ.
+    Extrapole les ultimates BZ via m_ful.predict — Barnett & Zehnwirth (1998).
+    Hypothese : effet calendaire futur = dernier effet calendaire observe (gel).
+    Fallback par ratio de moyennes si predict echoue.
     """
     n, m = C.shape
-
-    # Reconstruction depuis les prédictions observées
-    df = df_pred.copy()
-    df['cohorte_int']       = df['cohorte'].astype(int)
-    df['developpement_int'] = df['developpement'].astype(int)
-
-    ultimates   = []
-    ibnr_annees = []
+    derniere_cal = str(annee_debut + n - 1)
+    ultimates, ibnr_annees = [], []
 
     for i in range(n):
-        annee_i   = annee_debut + i
-        last_j    = m - 1 - i  # dernière colonne observée
-
-        # Cumul observé à last_j
+        annee_i  = annee_debut + i
+        last_j   = m - 1 - i
         obs_last = float(C[i, last_j]) if last_j >= 0 and not np.isnan(C[i, last_j]) else 0.0
+        ibnr_i   = 0.0
 
-        # Incréments observés (depuis les prédictions GLM pour cohérence)
-        inc_obs_sum = df[df['cohorte_int'] == annee_i]['Y_hat'].sum()
-
-        # Incréments futurs : utiliser le pattern moyen de développement
-        # estimé pour cette cohorte, pondéré par les facteurs de développement
-        # Approximation : le ratio Y_hat_futur / Y_hat_passe
-        # est stable (pattern commun à toutes les cohortes dans BZ)
-
-        # Calculer les facteurs de développement BZ depuis les prédictions
-        # pour les colonnes déjà observées dans d'autres cohortes
-        ibnr_i = 0.0
-        for j in range(last_j + 1, m):
-            # Chercher les prédictions pour ce développement dans d'autres cohortes
-            dev_j = str(j + 1)
-            df_dev = df[df['developpement'] == dev_j]
-            if len(df_dev) == 0:
-                continue
-
-            # Pattern de développement relatif au dernier observé
-            df_last = df[df['developpement'] == str(last_j + 1)]
-            if len(df_last) == 0 or df_last['Y_hat'].mean() <= 0:
-                continue
-
-            ratio = df_dev['Y_hat'].mean() / df_last['Y_hat'].mean()
-            # Incrément futur estimé pour l'année i
-            inc_dernier_obs = float(df[
-                (df['cohorte_int'] == annee_i) &
-                (df['developpement'] == str(last_j + 1))
-            ]['Y_hat'].sum()) or (obs_last * 0.05)
-
-            ibnr_i += inc_dernier_obs * ratio
+        if model_ful is not None and last_j < m - 1:
+            try:
+                rows_fut = [{'cohorte': str(annee_i), 'developpement': str(j + 1), 'calendrier': derniere_cal}
+                            for j in range(last_j + 1, m)]
+                if rows_fut:
+                    df_fut = pd.DataFrame(rows_fut)
+                    X_fut  = pd.get_dummies(df_fut[['cohorte','developpement','calendrier']], drop_first=True).astype(float)
+                    X_fut  = sm.add_constant(X_fut)
+                    for col in model_ful.model.exog_names:
+                        if col not in X_fut.columns:
+                            X_fut[col] = 0.0
+                    X_fut  = X_fut[model_ful.model.exog_names]
+                    y_pred = model_ful.predict(X_fut)
+                    ibnr_i = float(np.sum(np.maximum(y_pred, 0)))
+            except Exception as e_pred:
+                logger.debug(f'BZ predict annee {annee_i}: {e_pred} — fallback ratio')
+                ibnr_i = _fallback_ratio(df_pred, annee_i, last_j, m, obs_last)
+        else:
+            ibnr_i = _fallback_ratio(df_pred, annee_i, last_j, m, obs_last)
 
         ultimates.append(obs_last + ibnr_i)
         ibnr_annees.append(ibnr_i)
 
-    reserve_totale = sum(ibnr_annees[annee_base:])  # depuis annee_base (cohérence avec CL/BF)
-
     return {
         'ultimates':      [round(u, 0) for u in ultimates],
         'ibnr_par_annee': [round(v, 0) for v in ibnr_annees],
-        'reserve_totale': round(reserve_totale, 0),
+        'reserve_totale': round(sum(ibnr_annees[annee_base:]), 0),
     }
+
+
 
 
 
@@ -637,7 +632,9 @@ def barnett_zehnwirth(
 
                     # Ultimates BZ
                     ult_result  = _extrapoler_ultimates_bz(
-                        glm_result['df_pred'], C, annee_debut
+                        glm_result['df_pred'], C, annee_debut,
+                        model_ful=glm_result.get('model_ful'),
+                        annee_base=annee_base,
                     )
                     reserve_bz  = ult_result['reserve_totale']
                     ultimates_bz = ult_result['ultimates']
