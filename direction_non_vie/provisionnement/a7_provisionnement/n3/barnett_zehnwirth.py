@@ -78,6 +78,19 @@ EPSILON = 1e-10
 SEUIL_SIGNIFICATIVITE = 0.05
 
 
+def _est_cellule_observee(i, j, n, m):
+    """Zone observee : carre (i+j<n) ou rectangle (i+j<=m-1)."""
+    if n == m:
+        return (i + j) < n
+    return (i + j) <= (m - 1)
+
+
+def _gel_calendrier(annee_i, j, derniere_cal):
+    """Gele l'effet calendaire futur au niveau maximal observe."""
+    return str(min(annee_i + j, int(derniere_cal)))
+
+
+
 # =============================================================================
 #  CALCUL DES FACTEURS PAR DIAGONALE
 # =============================================================================
@@ -105,7 +118,7 @@ def _facteurs_par_cellule(C: np.ndarray) -> List[Dict]:
     for i in range(n):
         for j in range(1, m):
             # Cellule valide = dans le triangle + deux valeurs positives
-            if C[i, j] > 0 and C[i, j-1] > 0 and (i + j) < n:
+            if C[i, j] > 0 and C[i, j-1] > 0 and _est_cellule_observee(i, j, n, m):
                 f = float(C[i, j]) / float(C[i, j-1])
                 cellules.append({
                     'i':           i,
@@ -367,6 +380,8 @@ def _triangle_to_long(
     rows = []
     for i in range(n):
         for j in range(m):
+            if not _est_cellule_observee(i, j, n, m):
+                continue
             val_cum = C[i, j]
             if np.isnan(val_cum) or val_cum <= 0:
                 continue
@@ -475,7 +490,8 @@ def _extrapoler_ultimates_bz(df_pred, C, annee_debut, model_ful=None, annee_base
     Fallback par ratio de moyennes si predict echoue.
     """
     n, m = C.shape
-    derniere_cal = str(annee_debut + n - 1)
+    k_max        = m - 1 if n != m else n - 1
+    derniere_cal = str(annee_debut + k_max)
     ultimates, ibnr_annees = [], []
 
     for i in range(n):
