@@ -137,12 +137,9 @@ def calculer_backtesting(
         seuil_diag = max_diag - k
         if seuil_diag < 2: return np.zeros(n)
         # Masquer les cellules au-delà du seuil
+        # Masquer les cellules au-delà du seuil — vectorisé numpy
         C_t = C.copy().astype(float)
-        for i in range(n):
-            for j in range(m):
-                if i + j > seuil_diag:
-                    C_t[i, j] = np.nan
-        # Vérifier qu'il reste assez de données
+        C_t[np.add.outer(np.arange(n), np.arange(m)) > seuil_diag] = np.nan
         n_obs = int(np.sum(~np.isnan(C_t) & (C_t > 0)))
         if n_obs < 6: return np.zeros(n)
         return _chain_ladder_simple(C_t)
