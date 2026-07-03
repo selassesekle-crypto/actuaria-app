@@ -150,36 +150,51 @@ def calculer_sigma2(
         )
         sigma2[j] = num / (n_j - 1)
 
-    # ── Extrapolation de la dernière colonne (Mack 1993, formule 3.5) ────────
+    # ── Extrapolation des σ²_j manquants (Mack 1993, formule 3.5) ──────────
     #
-    # Pour la colonne j = m-2 (souvent n_j = 1) :
-    #   σ²_{m-2} = min(σ²_{m-3}, σ²_{m-4}, σ⁴_{m-3} / σ²_{m-4})
+    # Mack 1993 formule 3.5 — pour toute colonne j où n_j ≤ 1 :
+    #   σ²_j = min(σ²_{j-1}, σ²_{j-2}, σ⁴_{j-1} / σ²_{j-2})
     #
-    # Interprétation : σ² doit décroître vers 0 en fin de développement.
-    # La formule garantit que σ²_{m-2} ≤ σ²_{m-3} ≤ σ²_{m-4}.
-    # Le troisième terme σ⁴_{m-3}/σ²_{m-4} est la progression géométrique
-    # de la décroissance observée sur les colonnes précédentes.
+    # Propriété : garantit la décroissance σ²_{j} ≤ σ²_{j-1} ≤ σ²_{j-2}.
+    # Le 3ème terme est la progression géométrique de la décroissance.
+    #
+    # Implémentation : passage unique de gauche à droite.
+    # Les valeurs déjà extrapolées au tour j-1 sont utilisées au tour j
+    # — ce qui est correct car on cherche à propager la décroissance.
+    # Si plusieurs colonnes consécutives sont à 0, chaque extrapolation
+    # s'appuie sur la précédente (déjà extrapolée), garantissant une
+    # décroissance continue sans plateau artificiel.
+    #
+    # Note triangles rectangulaires (m >> n) :
+    # Sur des triangles avec beaucoup plus de colonnes que d'années,
+    # la majorité des σ²_j sera extrapolée. La qualité de l'extrapolation
+    # dépend des 2-3 premières valeurs observées — à interpréter avec
+    # précaution. Dans ActuarIA, les triangles typiques sont n×m avec
+    # n ≈ m (10×10 à 30×30), ce cas reste donc marginal.
 
-    for j in range(m - 1):
-        if sigma2[j] == 0 and j >= 2:
-            s_prev1 = sigma2[j - 1]   # σ²_{j-1}
-            s_prev2 = sigma2[j - 2]   # σ²_{j-2}
+    # j=1 : cas spécial — un seul précédent disponible
+    if m > 2 and sigma2[1] == 0 and sigma2[0] > 0:
+        sigma2[1] = sigma2[0]
 
-            if s_prev1 > 0 and s_prev2 > 0:
-                # Formule Mack 3.5 exacte
-                sigma2[j] = min(
-                    s_prev1,
-                    s_prev2,
-                    s_prev1 ** 2 / s_prev2,   # progression géométrique
-                )
-            elif s_prev1 > 0:
-                # Fallback : utiliser le précédent uniquement
-                sigma2[j] = s_prev1
-            # Sinon : laisser à 0 (colonne quasi-totalement développée)
+    # j ≥ 2 : formule Mack 3.5 ou fallback décroissant
+    for j in range(2, m - 1):
+        if sigma2[j] > 0:
+            continue  # valeur observée — pas d'extrapolation
 
-        elif sigma2[j] == 0 and j == 1:
-            if sigma2[0] > 0:
-                sigma2[1] = sigma2[0]
+        s_prev1 = sigma2[j - 1]   # σ²_{j-1} (peut être extrapolé)
+        s_prev2 = sigma2[j - 2]   # σ²_{j-2} (peut être extrapolé)
+
+        if s_prev1 > 0 and s_prev2 > 0:
+            # Formule Mack 3.5 exacte
+            sigma2[j] = min(
+                s_prev1,
+                s_prev2,
+                s_prev1 ** 2 / s_prev2,   # progression géométrique
+            )
+        elif s_prev1 > 0:
+            # Un seul précédent — plateau conservateur
+            sigma2[j] = s_prev1
+        # else : laisser à 0 (aucune info disponible)
 
     return sigma2
 
