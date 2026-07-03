@@ -496,8 +496,8 @@ def _extrapoler_ultimates_bz(df_pred, C, annee_debut, model_ful=None, annee_base
 
     for i in range(n):
         annee_i  = annee_debut + i
-        last_j   = m - 1 - i
-        obs_last = float(C[i, last_j]) if last_j >= 0 and not np.isnan(C[i, last_j]) else 0.0
+        last_j   = min(m - 1, k_max - i) if k_max >= i else 0
+        obs_last = float(C[i, last_j]) if (0 <= last_j < m) and not np.isnan(C[i, last_j]) else 0.0
         ibnr_i   = 0.0
 
         if model_ful is not None and last_j < m - 1:
