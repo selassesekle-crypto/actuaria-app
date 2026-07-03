@@ -433,6 +433,8 @@ def clark_ldf(
     Dict standard A7 Ibrahim avec les clés :
         success, disponible, aberrant, courbe_choisie, omega, theta,
         ultimates, ibnr_par_annee, reserve_totale, reserve_be_clark,
+        ibnr_brut_par_annee  — IBNR avant troncature à 0 (< 0 = sur-développement)
+        n_sur_developpement  — nombre d'années où ultimate Clark < cumul observé
         tail_factor, pct_developpe, ic_95, aic_loglogistique, aic_weibull,
         ll_loglogistique, ll_weibull, residus, converge, message, erreur,
         aic_optimal, g_courbe, periodes_arr
@@ -617,7 +619,7 @@ def clark_ldf(
         if tail_factor > CLARK_TAIL_MAX:
             _raison.append(f'tail factor = {tail_factor:.3f} (> {CLARK_TAIL_MAX} — queue irréaliste)')
         if G_at_t2 < 0.10:
-            _raison.append(f'G(t=2) = {G_at_t2:.3f} (< 10\u202f% — MLE mal conditionné sur années récentes)')
+            _raison.append(f'G(t=2) = {G_at_t2:.3f} (< {CLARK_G_T2_MIN:.0%} — MLE mal conditionné sur années récentes)')
         if not best.get('converge', True):
             _raison.append('MLE non convergé')
         message = (
