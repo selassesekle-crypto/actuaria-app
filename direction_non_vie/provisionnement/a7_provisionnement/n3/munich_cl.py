@@ -84,8 +84,9 @@ logger = logging.getLogger('actuaria.a7')
 # =============================================================================
 
 def valider_prerequis(
-    C_P: np.ndarray,
-    C_E: np.ndarray,
+    C_P:          np.ndarray,
+    C_E:          np.ndarray,
+    tolerance_ep: float = 0.05,
 ) -> Tuple[bool, str]:
     """
     Vérifie que les conditions d'activation du Munich CL sont remplies.
@@ -121,7 +122,7 @@ def valider_prerequis(
     pct_violations = n_violations / max(n * m // 2, 1)
     if pct_violations > 0.20:
         return False, (
-            f"{n_violations} cellules où payé > engagé×1.05 "
+            f"{n_violations} cellules où payé > engagé×{1.0+tolerance_ep:.0%} "
             f"({pct_violations*100:.0f}% du triangle) — "
             f"triangle engagé incohérent. Munich CL désactivé."
         )
@@ -155,10 +156,11 @@ def _facteurs_cl(C: np.ndarray) -> np.ndarray:
 # =============================================================================
 
 def _calculer_lambda(
-    C_P: np.ndarray,
-    C_E: np.ndarray,
-    f_P: np.ndarray,
-    f_E: np.ndarray,
+    C_P:        np.ndarray,
+    C_E:        np.ndarray,
+    f_P:        np.ndarray,
+    f_E:        np.ndarray,
+    lambda_max: float = 2.0,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Estime les coefficients λ_P[j] et λ_E[j] par régression OLS.
@@ -248,12 +250,7 @@ def munich_cl(
     tolerance_ep: float = 0.05,
     lambda_max:   float = 2.0,
 ) -> Dict:
-    """
-    Paramètres supplémentaires
-    --------------------------
-    tolerance_ep : tolérance sur C_E >= C_P (0.0 = strict Quarg-Mack, 0.05 = défaut).
-    lambda_max   : cap sur λ_P et λ_E (défaut 2.0 — Quarg-Mack ne cappe pas).
-    """
+
     """
     Munich Chain Ladder (Quarg & Mack 2004).
 
@@ -283,7 +280,7 @@ def munich_cl(
         statut, message
     """
     # ── 1. Validation prérequis ───────────────────────────────────────────────
-    ok, msg_prereq = valider_prerequis(C_P, C_E)
+    ok, msg_prereq = valider_prerequis(C_P, C_E, tolerance_ep=tolerance_ep)
     if not ok:
         logger.info(f"Munich CL désactivé : {msg_prereq}")
         return {
@@ -300,7 +297,7 @@ def munich_cl(
     f_E = _facteurs_cl(C_E)
 
     # ── 3. Coefficients λ (Quarg-Mack 2004) ──────────────────────────────────
-    lam_P, lam_E = _calculer_lambda(C_P, C_E, f_P, f_E)
+    lam_P, lam_E = _calculer_lambda(C_P, C_E, f_P, f_E, lambda_max=lambda_max)
 
     # ── 4. Facteurs Munich ajustés ────────────────────────────────────────────
     #
@@ -392,8 +389,8 @@ def munich_cl(
     logger.info(msg)
 
     # Compter les incréments négatifs (P et E) pour audit
-    _inc_P = np.diff(C_P_f, axis=1)
-    _inc_E = np.diff(C_E_f, axis=1)
+    _inc_P = np.diff(np.where(np.isnan(C_P), 0, C_P), axis=1)
+    _inc_E = np.diff(np.where(np.isnan(C_E), 0, C_E), axis=1)
     n_neg_P = int(np.sum(_inc_P[~np.isnan(_inc_P)] < 0))
     n_neg_E = int(np.sum(_inc_E[~np.isnan(_inc_E)] < 0))
     if n_neg_P > 0 or n_neg_E > 0:
