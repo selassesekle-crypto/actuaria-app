@@ -568,6 +568,7 @@ class AgentA7Provisionnement:
             annee_base     = annee_base,
             lr_reference   = cfg_lob.get('lr_marche_reference'),
             lr_reference_src = cfg_lob.get('lr_marche_source', ''),
+            ratio_c0_primes  = cfg_lob.get('ratio_c0_primes', 0.35),
         )
 
         # ── Cape Cod ──────────────────────────────────────────────────────────
