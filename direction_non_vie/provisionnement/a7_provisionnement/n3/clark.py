@@ -122,9 +122,15 @@ def _neg_loglik_odp(
     except Exception:
         return 1e12
 
-    # Vérification : p doit être positif
+    # Vérification : p doit être positif (croissant pour log-logistique,
+    # en cloche pour Weibull — on vérifie juste la positivité stricte)
     if np.any(p <= 0):
         return 1e12
+    # Vérification forme Weibull : p_j doit croître puis décroître (unimodal)
+    # On rejette les solutions dégénérées où p est strictement croissant partout
+    if courbe == 'weibull' and len(p) > 3:
+        if np.all(np.diff(p) > 0):   # strictement croissant → dégénéré
+            return 1e12
 
     # Construction de μ_{i,j} = U_i × p_j
     mu = np.outer(U, p)  # (n, m)
@@ -215,19 +221,31 @@ def _estimer_parametres(
                                 best_ll     = ll_cur
                                 best_params = res.x.copy()
                                 converge    = res.success
-                                # Hessienne : différences finies autour de l'optimum
+                                # Hessienne numérique via différences finies centrées
+                                # (L-BFGS-B ne fournit pas de Hessienne exacte)
                                 try:
                                     from scipy.optimize import approx_fprime
-                                    eps = 1e-5 * np.maximum(np.abs(best_params), 1.0)
-                                    hess_num = np.zeros((len(best_params), len(best_params)))
-                                    for k in range(len(best_params)):
-                                        def f_k(x, k=k):
-                                            e = np.zeros_like(x); e[k] = eps[k]
-                                            g1 = approx_fprime(x+e, _neg_loglik_odp, eps*1e-3, Y, t, courbe, mask)
-                                            g2 = approx_fprime(x-e, _neg_loglik_odp, eps*1e-3, Y, t, courbe, mask)
-                                            return (g1 - g2) / (2*eps[k])
-                                    # Approximation simple : inverse du Hessien diagonalisé
-                                    best_hinv = None  # calculé à la demande si IC requis
+                                    p_opt = best_params
+                                    n_p   = len(p_opt)
+                                    eps_h = 1e-4 * np.maximum(np.abs(p_opt), 1.0)
+                                    H_num = np.zeros((n_p, n_p))
+                                    for ki in range(n_p):
+                                        e_ki = np.zeros(n_p); e_ki[ki] = eps_h[ki]
+                                        g_plus  = approx_fprime(p_opt + e_ki, _neg_loglik_odp,
+                                                                 eps_h * 1e-2, Y, t, courbe, mask)
+                                        g_minus = approx_fprime(p_opt - e_ki, _neg_loglik_odp,
+                                                                 eps_h * 1e-2, Y, t, courbe, mask)
+                                        H_num[ki] = (g_plus - g_minus) / (2.0 * eps_h[ki])
+                                    # Symétriser et inverser
+                                    H_sym = 0.5 * (H_num + H_num.T)
+                                    # Régularisation si mal conditionné
+                                    eigvals = np.linalg.eigvalsh(H_sym)
+                                    if np.min(eigvals) <= 0:
+                                        H_sym += np.eye(n_p) * max(-np.min(eigvals) + 1e-6, 1e-6)
+                                    best_hinv = np.linalg.inv(H_sym)
+                                    # Vérifier que les variances sont positives
+                                    if np.any(np.diag(best_hinv) < 0):
+                                        best_hinv = None
                                 except Exception:
                                     best_hinv = None
                     except Exception as e:
@@ -546,14 +564,18 @@ def clark_ldf(
     # 3. Non-convergence : le MLE n'a pas trouvé de minimum stable
     # NB : AIC absolu non utilisé (dépend de l'échelle des données)
     # NB : ratio Clark/CL non utilisé (circulaire)
-    G_at_tmin = float(_g(
-        np.array([t[0]]), best['omega'] if 'omega' in best else best.get('params', [1,1])[0],
-        best['theta'] if 'theta' in best else best.get('params', [1,1])[1],
-        courbe_choisie
-    )[0])
+    _omega_best = float(best.get('omega', 1.0))
+    _theta_best = float(best.get('theta', 1.0))
+    # G(t=1) et G(t=2) pour évaluer le conditionnement du MLE
+    # Seuil G(t=2) < 10% plus robuste que G(t=1) < 3% :
+    # - G(t=1) < 3% peut être normal sur triangles longs (20×20+)
+    # - G(t=2) < 10% signifie que même à 2 ans, le triangle est très peu
+    #   développé → MLE mal conditionné sur les années récentes
+    G_at_t1 = float(_g(np.array([t[0]]), _omega_best, _theta_best, courbe_choisie)[0])
+    G_at_t2 = float(_g(np.array([t[min(1, m-1)]]), _omega_best, _theta_best, courbe_choisie)[0])
     clark_aberrant = (
-        tail_factor > 1.5                    # queue irréaliste
-        or G_at_tmin < 0.03                  # triangle trop peu développé à t=1
+        tail_factor > 1.5                    # queue irréaliste quelle que soit la LoB
+        or G_at_t2 < 0.10                    # MLE mal conditionné (< 10% développé à t=2)
         or not best.get('converge', True)    # MLE non convergé
     )
 
@@ -567,8 +589,8 @@ def clark_ldf(
         _raison = []
         if tail_factor > 1.5:
             _raison.append(f'tail factor = {tail_factor:.3f} (> 1.5 — queue irréaliste)')
-        if G_at_tmin < 0.03:
-            _raison.append(f'G(t=1) = {G_at_tmin:.3f} (< 3\u202f% — triangle trop peu développé)')
+        if G_at_t2 < 0.10:
+            _raison.append(f'G(t=2) = {G_at_t2:.3f} (< 10\u202f% — MLE mal conditionné sur années récentes)')
         if not best.get('converge', True):
             _raison.append('MLE non convergé')
         message = (
