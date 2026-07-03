@@ -115,7 +115,7 @@ def valider_prerequis(
     for i in range(n):
         for j in range(min(m, n - i)):
             if C_P[i, j] > 0 and C_E[i, j] > 0:
-                if C_P[i, j] > C_E[i, j] * 1.05:   # tolérance 5%
+                if C_P[i, j] > C_E[i, j] * (1.0 + tolerance_ep):  # Quarg-Mack : C_E >= C_P
                     n_violations += 1
 
     pct_violations = n_violations / max(n * m // 2, 1)
@@ -220,13 +220,19 @@ def _calculer_lambda(
         var_Q = float(np.var(r_Q_arr, ddof=1))
         if var_Q < 1e-12:
             # Ratio constant → pas de corrélation exploitable
+            logger.warning(
+                f'Munich CL : Var(r_Q) ≈ 0 colonne j={j} — '
+                f'ratio Q constant, pas de corrélation exploitable. '
+                f'λ_P[{j}] = λ_E[{j}] = 0.'
+            )
             continue
 
         cov_P = float(np.cov(r_P_arr, r_Q_arr, ddof=1)[0, 1])
         cov_E = float(np.cov(r_E_arr, r_Q_arr, ddof=1)[0, 1])
 
-        lam_P[j] = float(np.clip(cov_P / var_Q, 0.0, 2.0))
-        lam_E[j] = float(np.clip(cov_E / var_Q, 0.0, 2.0))
+        # Cap λ ∈ [0, lambda_max] — Quarg-Mack ne cappe pas mais nécessaire en pratique
+        lam_P[j] = float(np.clip(cov_P / var_Q, 0.0, lambda_max))
+        lam_E[j] = float(np.clip(cov_E / var_Q, 0.0, lambda_max))
 
     return lam_P, lam_E
 
@@ -236,10 +242,18 @@ def _calculer_lambda(
 # =============================================================================
 
 def munich_cl(
-    C_P:        np.ndarray,
-    C_E:        Optional[np.ndarray],
-    annee_base: int = 1,
+    C_P:          np.ndarray,
+    C_E:          Optional[np.ndarray],
+    annee_base:   int   = 1,
+    tolerance_ep: float = 0.05,
+    lambda_max:   float = 2.0,
 ) -> Dict:
+    """
+    Paramètres supplémentaires
+    --------------------------
+    tolerance_ep : tolérance sur C_E >= C_P (0.0 = strict Quarg-Mack, 0.05 = défaut).
+    lambda_max   : cap sur λ_P et λ_E (défaut 2.0 — Quarg-Mack ne cappe pas).
+    """
     """
     Munich Chain Ladder (Quarg & Mack 2004).
 
@@ -377,7 +391,21 @@ def munich_cl(
     )
     logger.info(msg)
 
+    # Compter les incréments négatifs (P et E) pour audit
+    _inc_P = np.diff(C_P_f, axis=1)
+    _inc_E = np.diff(C_E_f, axis=1)
+    n_neg_P = int(np.sum(_inc_P[~np.isnan(_inc_P)] < 0))
+    n_neg_E = int(np.sum(_inc_E[~np.isnan(_inc_E)] < 0))
+    if n_neg_P > 0 or n_neg_E > 0:
+        logger.warning(
+            f'Munich CL : {n_neg_P} incrément(s) payé négatif(s), '
+            f'{n_neg_E} incrément(s) engagé négatif(s) — '
+            f'cellules ignorées dans le calcul des λ.'
+        )
+
     return {
+        'n_increments_negatifs_paye':   n_neg_P,
+        'n_increments_negatifs_engage': n_neg_E,
         'disponible':         True,
 
         # Réserves MCL
