@@ -1,0 +1,519 @@
+# =============================================================================
+#   ActuarIA — Direction Non-Vie / Provisionnement A7 Ibrahim v5.0
+#   n3/barnett_zehnwirth.py  —  Détection des Effets Calendaires
+#
+#   Inspiré de : Barnett & Zehnwirth (1998) — Best Estimates for Reserves
+#   Approche : Analyse des facteurs de développement par diagonale
+#   Format supporté : Triangles Carrés et Rectangulaires (Trapèzes)
+#
+#   Auteur  : ActuarIA v5.0
+#   Version : 3.0.0 (Universelle & Statisquement Validée)
+# =============================================================================
+
+from __future__ import annotations
+
+import logging
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
+
+try:
+    from scipy import stats as sp_stats
+    SCIPY_OK = True
+except ImportError:
+    SCIPY_OK = False
+
+try:
+    import pandas as pd
+    import statsmodels.api as sm
+    from scipy import stats as scipy_stats
+    STATSMODELS_OK = True
+except ImportError:
+    STATSMODELS_OK = False
+
+logger = logging.getLogger('actuaria.a7.n3.barnett_zehnwirth')
+
+
+# =============================================================================
+#   CONSTANTES
+# =============================================================================
+
+# Seuil MAD pour la détection des anomalies de diagonale
+SEUIL_MAD = 2.5
+
+# Nombre minimum de facteurs sur une diagonale pour qu'elle soit évaluable
+MIN_POINTS = 3
+
+# Seuils d'amplitude pour la qualification du niveau d'effet
+SEUIL_FORT   = 0.15  # 15% → effet fort
+SEUIL_MODERE = 0.08  # 8%  → effet modéré
+
+# Valeur minimale pour éviter log(0)
+EPSILON = 1e-10
+
+# Seuil de significativité pour les tests statistiques (standard actuariel)
+SEUIL_SIGNIFICATIVITE = 0.05
+
+
+# =============================================================================
+#   UTILITAIRES GÉOMÉTRIQUES POUR TRIANGLES & RECTANGLES
+# =============================================================================
+
+def _est_cellule_observee(i: int, j: int, n: int, m: int) -> bool:
+    """
+    Détermine si une cellule (i, j) fait partie de la zone observée (passée)
+    du triangle ou du rectangle/trapèze de règlement.
+    
+    Logique standard : Dans une diagonale mouvante, pour une année de survenance i,
+    le nombre d'années de développement maximum observées dépend de l'ancienneté.
+    """
+    # Pour un triangle standard carré (n == m) : i + j < n
+    # Pour un rectangle/trapèze de développement : i + j < max(n, m) avec sécurité sur les bords
+    if n == m:
+        return (i + j) < n
+    else:
+        # Dans un cas rectangulaire général, la diagonale s'arrête à la dernière 
+        # année calendaire connue qui correspond généralement à la ligne 0 complète.
+        return (i + j) <= (m - 1)
+
+
+# =============================================================================
+#   CALCUL DES FACTEURS PAR DIAGONALE
+# =============================================================================
+
+def _facteurs_par_cellule(C: np.ndarray) -> List[Dict]:
+    """
+    Calcule le facteur de développement f_{i,j} = C[i,j] / C[i,j-1]
+    Format : Support complet des structures carrées et rectangulaires.
+    """
+    n, m = C.shape
+    cellules = []
+
+    for i in range(n):
+        for j in range(1, m):
+            # Vérification de la validité mathématique et géométrique de la cellule
+            if C[i, j] > 0 and C[i, j-1] > 0 and _est_cellule_observee(i, j, n, m):
+                f = float(C[i, j]) / float(C[i, j-1])
+                cellules.append({
+                    'i':           i,
+                    'j':           j,
+                    'k':           i + j,   # Diagonale calendaire
+                    'facteur':     f,
+                    'log_facteur': np.log(max(f, EPSILON)),
+                })
+
+    return cellules
+
+
+# =============================================================================
+#   DÉTECTION DES DIAGONALES ANORMALES
+# =============================================================================
+
+def _test_kruskal_wallis(cellules: List[Dict]) -> Dict:
+    """
+    Test de Kruskal-Wallis — test global d'existence des effets calendaires.
+    """
+    if not SCIPY_OK:
+        return {'significatif': True, 'p_value': None, 'h_stat': None,
+                'message': 'scipy absent — test Kruskal-Wallis ignoré'}
+
+    par_diag: Dict[int, List[float]] = {}
+    for c in cellules:
+        k = c['k']
+        if k not in par_diag:
+            par_diag[k] = []
+        par_diag[k].append(c['log_facteur'])
+
+    groupes = [v for v in par_diag.values() if len(v) >= MIN_POINTS]
+
+    if len(groupes) < 2:
+        return {'significatif': False, 'p_value': 1.0, 'h_stat': 0.0,
+                'message': "Pas assez de diagonales évaluables pour le test global"}
+
+    try:
+        h_stat, p_value = sp_stats.kruskal(*groupes)
+        significatif = float(p_value) < SEUIL_SIGNIFICATIVITE
+        return {
+            'h_stat':       round(float(h_stat), 3),
+            'p_value':      round(float(p_value), 4),
+            'significatif': significatif,
+            'n_groupes':    len(groupes),
+            'message': (
+                f"Kruskal-Wallis : H={h_stat:.2f}, p={p_value:.4f} — "
+                f"{'Effets calendaires détectés (H0 rejetée)' if significatif else 'Aucun effet calendaire global (H0 non rejetée)'}"
+            ),
+        }
+    except Exception as e:
+        return {'significatif': True, 'p_value': None, 'h_stat': None,
+                'message': f'Kruskal-Wallis échoué : {e}'}
+
+
+def _detecter_anomalies(
+    cellules    : List[Dict],
+    annee_debut : Optional[int] = None,
+) -> List[Dict]:
+    """
+    Détecte les diagonales anormales via score Z robuste (MAD).
+    Le critère décisionnel unique est le Z-score MAD. Le t-test reste indicatif.
+    """
+    if not cellules:
+        return []
+
+    par_diag: Dict[int, List[float]] = {}
+    for c in cellules:
+        k = c['k']
+        if k not in par_diag:
+            par_diag[k] = []
+        par_diag[k].append(c['log_facteur'])
+
+    par_diag_valide = {k: v for k, v in par_diag.items() if len(v) >= MIN_POINTS}
+
+    if not par_diag_valide:
+        return []
+
+    medianes_diag = {k: float(np.median(v)) for k, v in par_diag_valide.items()}
+    tous_lf   = [lf for lfs in par_diag_valide.values() for lf in lfs]
+    med_glob  = float(np.median(tous_lf))
+    mad_glob  = float(np.median(np.abs(np.array(tous_lf) - med_glob)))
+
+    if mad_glob < EPSILON:
+        std_glob = float(np.std(tous_lf))
+        mad_glob = std_glob if std_glob > EPSILON else 1.0
+        logger.warning('BZ : MAD=0 — Triangle déterministe, scores Z non significatifs.')
+
+    scale = mad_glob * 1.4826
+
+    results = []
+    for k in sorted(par_diag_valide.keys()):
+        med_k     = medianes_diag[k]
+        n_pts     = len(par_diag_valide[k])
+        z_score   = (med_k - med_glob) / scale if scale > EPSILON else 0.0
+        anomalie  = abs(z_score) > SEUIL_MAD
+
+        amplitude_pct = (np.exp(med_k - med_glob) - 1.0) * 100
+        amp_abs = abs(amplitude_pct) / 100
+        
+        if amp_abs >= SEUIL_FORT:
+            niveau = 'FORT'
+        elif amp_abs >= SEUIL_MODERE:
+            niveau = 'MODÉRÉ'
+        else:
+            niveau = 'FAIBLE'
+
+        annee_label = str(annee_debut + k) if annee_debut else f"Diag. {k}"
+
+        # Test de Student indicatif (Ne modifie PAS le flag anomalie conformément aux revues de code)
+        p_value = None
+        if SCIPY_OK and n_pts >= 4:
+            try:
+                _, p_val = sp_stats.ttest_1samp(par_diag_valide[k], popmean=med_glob)
+                p_value = round(float(p_val), 4)
+            except Exception:
+                p_value = None
+
+        results.append({
+            'diagonale':     k,
+            'annee_label':   annee_label,
+            'mediane_logf':  round(med_k, 4),
+            'z_score':       round(float(z_score), 3),
+            'amplitude_pct': round(float(amplitude_pct), 1),
+            'n_points':      n_pts,
+            'significatif':  anomalie,
+            'sens':          'hausse' if amplitude_pct > 0 else 'baisse',
+            'niveau':        niveau if anomalie else 'normal',
+            'p_value':       p_value,
+        })
+
+    return results
+
+
+# =============================================================================
+#   RECOMMANDATION MÉTHODE
+# =============================================================================
+
+def _recommander_methode(
+    effets        : List[Dict],
+    n_sig           : int,
+    derniere_diag   : int,
+) -> str:
+    """Génère la recommandation de méthode de provisionnement."""
+    if n_sig == 0:
+        return "Chain Ladder standard — aucun effet calendaire détecté."
+
+    effets_sig   = [e for e in effets if e['significatif']]
+    effets_forts = [e for e in effets_sig if e['niveau'] == 'FORT']
+    effet_dernier = any(e['diagonale'] == derniere_diag for e in effets_sig)
+
+    if effets_forts or effet_dernier:
+        reco = "Triangles 'As if' corrigés des effets calendaires recommandés"
+        if effet_dernier:
+            reco += " — effet sur la dernière diagonale biaise directement le BE. Retraiter."
+        else:
+            reco += " — effets forts détectés. Identifier la cause (inflation, législation)."
+    else:
+        reco = "Bornhuetter-Ferguson recommandé — l'ancrage externe atténue l'influence des diagonales perturbées."
+
+    return reco
+
+
+# =============================================================================
+#   GLM BARNETT-ZEHNWIRTH — CONVERSION & FIT
+# =============================================================================
+
+def _triangle_to_long(C: np.ndarray, annee_debut: int = 2000) -> 'pd.DataFrame':
+    """Convertit tout type de matrice (carrée/rectangulaire) en format long."""
+    n, m = C.shape
+    rows = []
+    for i in range(n):
+        for j in range(m):
+            if not _est_cellule_observee(i, j, n, m):
+                continue
+            val_cum = C[i, j]
+            if np.isnan(val_cum) or val_cum <= 0:
+                continue
+            val_prev = C[i, j-1] if j > 0 else 0.0
+            if np.isnan(val_prev):
+                val_prev = 0.0
+            inc = val_cum - val_prev
+            rows.append({
+                'cohorte':       str(annee_debut + i),
+                'developpement': str(j + 1),
+                'calendrier':    str(annee_debut + i + j),
+                'Y':             float(max(inc, 0.01)),
+                'Y_cum':         float(val_cum),
+            })
+    return pd.DataFrame(rows)
+
+
+def _glm_bz_fit(df_long: 'pd.DataFrame') -> Dict:
+    """Ajuste les modèles GLM Poisson réduit et complet."""
+    if not STATSMODELS_OK:
+        return {'success': False, 'erreur': 'statsmodels non disponible'}
+
+    df = df_long[df_long['Y'] > 0].copy()
+    if len(df) < 8:
+        return {'success': False, 'erreur': f'Données insuffisantes ({len(df)} cellules)'}
+
+    y = df['Y'].values
+
+    try:
+        X_red = pd.get_dummies(df[['cohorte','developpement']], drop_first=True).astype(float)
+        X_red = sm.add_constant(X_red)
+        m_red = sm.GLM(y, X_red, family=sm.families.Poisson()).fit(disp=False)
+
+        X_ful = pd.get_dummies(df[['cohorte','developpement','calendrier']], drop_first=True).astype(float)
+        X_ful = sm.add_constant(X_ful)
+        m_ful = sm.GLM(y, X_ful, family=sm.families.Poisson()).fit(disp=False)
+
+        lr_stat  = 2.0 * (m_ful.llf - m_red.llf)
+        ddl_reel = int(round(m_red.df_resid - m_ful.df_resid))
+        n_cal    = max(ddl_reel, 1)
+        p_value  = 1.0 - scipy_stats.chi2.cdf(lr_stat, df=n_cal)
+        cal_sig  = p_value < 0.05
+
+        df['Y_hat'] = m_ful.fittedvalues
+        df['residu_pearson'] = (df['Y'] - df['Y_hat']) / np.sqrt(np.maximum(df['Y_hat'], 1e-6))
+
+        return {
+            'success':         True,
+            'df_pred':         df,
+            'aic_reduit':      round(m_red.aic, 2),
+            'aic_complet':     round(m_ful.aic, 2),
+            'll_reduit':       round(m_red.llf, 2),
+            'll_complet':      round(m_ful.llf, 2),
+            'lr_stat':         round(lr_stat, 2),
+            'p_calendrier':    round(p_value, 6),
+            'n_cal_ddl':       n_cal,
+            'cal_significatif': cal_sig,
+            'deviance':        round(m_ful.deviance, 4),
+            'model_ful':       m_ful,
+            'model_red':       m_red,
+        }
+    except Exception as e:
+        return {'success': False, 'erreur': str(e)}
+
+
+def _fallback_ratio(df_pred, annee_i, last_j, m, obs_last):
+    """Fallback par ratio si la prédiction GLM échoue."""
+    df = df_pred.copy()
+    df['cohorte_int'] = df['cohorte'].astype(int)
+    ibnr_i = 0.0
+    for j in range(last_j + 1, m):
+        df_dev = df[df['developpement'] == str(j + 1)]
+        df_lj  = df[df['developpement'] == str(last_j + 1)]
+        if len(df_dev) == 0 or len(df_lj) == 0 or df_lj['Y_hat'].mean() <= 0:
+            continue
+        ratio    = df_dev['Y_hat'].mean() / df_lj['Y_hat'].mean()
+        inc_base = float(df[(df['cohorte_int'] == annee_i) & (df['developpement'] == str(last_j + 1))]['Y_hat'].sum()) or (obs_last * 0.05)
+        ibnr_i  += inc_base * ratio
+    return ibnr_i
+
+
+def _extrapoler_ultimates_bz(df_pred, C, annee_debut, model_ful=None, annee_base=1):
+    """Extrapole les ultimates BZ avec calcul dynamique de la dernière diagonale (Carré/Rectangle)."""
+    n, m = C.shape
+    
+    # AJUSTEMENT UNIVERSEL : Recherche de la vraie diagonale maximale observée
+    k_max = max(int(c['calendrier']) - annee_debut for c in df_pred.to_dict('records')) if not df_pred.empty else (n + m - 2)
+    derniere_cal = str(annee_debut + k_max)
+    
+    ultimates, ibnr_annees = [], []
+
+    for i in range(n):
+        annee_i  = annee_debut + i
+        
+        # AJUSTEMENT UNIVERSEL : Localisation de la dernière cellule connue sur la ligne i
+        if n == m:
+            last_j = m - 1 - i
+        else:
+            last_j = min(m - 1, k_max - i)
+
+        obs_last = float(C[i, last_j]) if (0 <= last_j < m) and not np.isnan(C[i, last_j]) else 0.0
+        ibnr_i   = 0.0
+
+        if model_ful is not None and last_j < m - 1:
+            try:
+                rows_fut = [{'cohorte': str(annee_i), 'developpement': str(j + 1), 'calendrier': College_cal_gel(annee_i, j, derniere_cal)}
+                            for j in range(last_j + 1, m)]
+                if rows_fut:
+                    df_fut = pd.DataFrame(rows_fut)
+                    X_fut  = pd.get_dummies(df_fut[['cohorte','developpement','calendrier']], drop_first=True).astype(float)
+                    X_fut  = sm.add_constant(X_fut)
+                    for col in model_ful.model.exog_names:
+                        if col not in X_fut.columns:
+                            X_fut[col] = 0.0
+                    X_fut  = X_fut[model_ful.model.exog_names]
+                    y_pred = model_ful.predict(X_fut)
+                    ibnr_i = float(np.sum(np.maximum(y_pred, 0)))
+            except Exception as e_pred:
+                logger.debug(f'BZ predict annee {annee_i}: {e_pred} — fallback ratio')
+                ibnr_i = _fallback_ratio(df_pred, annee_i, last_j, m, obs_last)
+        else:
+            if last_j < m - 1:
+                ibnr_i = _fallback_ratio(df_pred, annee_i, last_j, m, obs_last)
+
+        ultimates.append(obs_last + ibnr_i)
+        ibnr_annees.append(ibnr_i)
+
+    return {
+        'ultimates':      [round(u, 0) for u in ultimates],
+        'ibnr_par_annee': [round(v, 0) for v in ibnr_annees],
+        'reserve_totale': round(sum(ibnr_annees[annee_base:]), 0),
+    }
+
+def College_cal_gel(annee_i: int, j: int, derniere_cal: str) -> str:
+    """Sécurité pour le gel de l'effet calendaire futur au niveau maximal observé."""
+    cal_futur = annee_i + j
+    if cal_futur > int(derniere_cal):
+        return derniere_cal
+    return str(cal_futur)
+
+
+# =============================================================================
+#   FONCTION PRINCIPALE EXPORTÉE
+# =============================================================================
+
+def barnett_zehnwirth(C: np.ndarray, annee_debut: Optional[int] = None, annee_base: int = 1) -> Dict:
+    """Analyse Barnett-Zehnwirth complète (Niveau 1 Détection MAD & Niveau 2 GLM Poisson)."""
+    n, m = C.shape
+    if annee_debut is None:
+        annee_debut = 2000
+
+    if n < 4 or m < 4:
+        return {
+            'success':    False,
+            'disponible': False,
+            'erreur':      f"Triangle trop petit ({n}×{m}) — minimum 4×4",
+            'message':    "Triangle insuffisant pour l'analyse.",
+        }
+
+    try:
+        cellules = _facteurs_par_cellule(C)
+        if not cellules:
+            return {
+                'success':    False,
+                'disponible': True,
+                'erreur':      "Aucun facteur de développement calculable.",
+                'message':    "Données insuffisantes.",
+            }
+
+        kw     = _test_kruskal_wallis(cellules)
+        effets = _detecter_anomalies(cellules, annee_debut) if kw['significatif'] else []
+
+        n_sig  = sum(1 for e in effets if e['significatif'])
+        pct_sig = n_sig / len(effets) * 100 if effets else 0.0
+        diagonales_anormales = [e['annee_label'] for e in effets if e['significatif']]
+
+        derniere_diag = max(e['diagonale'] for e in effets) if effets else 0
+        recommandation = _recommander_methode(effets, n_sig, derniere_diag)
+
+        effets_forts   = [e for e in effets if e['significatif'] and e['niveau'] == 'FORT']
+        effet_dernier  = any(e['diagonale'] == derniere_diag and e['significatif'] for e in effets)
+
+        if len(effets_forts) >= 2 or effet_dernier:
+            statut = 'ROUGE'
+        elif n_sig >= 1:
+            statut = 'AMBRE'
+        else:
+            statut = 'VERT'
+
+        glm_result, reserve_bz, ultimates_bz, ibnr_bz = {}, None, None, None
+        glm_disponible, p_cal, cal_sig, aic_complet = False, None, None, None
+
+        if STATSMODELS_OK:
+            try:
+                df_long = _triangle_to_long(C, annee_debut)
+                glm_result = _glm_bz_fit(df_long)
+
+                if glm_result.get('success'):
+                    glm_disponible = True
+                    p_cal       = glm_result['p_calendrier']
+                    cal_sig     = glm_result['cal_significatif']
+                    aic_complet = glm_result['aic_complet']
+
+                    # Calcul des provisions BZ extrapolées
+                    ult_result  = _extrapoler_ultimates_bz(
+                        glm_result['df_pred'], C, annee_debut,
+                        model_ful=glm_result.get('model_ful'),
+                        annee_base=annee_base,
+                    )
+                    reserve_bz   = ult_result['reserve_totale']
+                    ultimates_bz = ult_result['ultimates']
+                    ibnr_bz      = ult_result['ibnr_par_annee']
+            except Exception as e_glm:
+                logger.warning(f"GLM BZ échoué : {e_glm}")
+
+        # Construction du message de synthèse
+        if n_sig == 0:
+            message = f"Aucun effet calendaire significatif détecté sur {len(effets)} diagonale(s)."
+        else:
+            details = [f"{e['annee_label']} : {e['amplitude_pct']:+.1f}% ({e['niveau']})" for e in effets if e['significatif']]
+            message = f"{n_sig} effet(s) détecté(s) : {' | '.join(details)}. Reco : {recommandation}"
+
+        if glm_disponible and cal_sig:
+            message += f" [GLM BZ : Significatif (p={p_cal:.4f}), Réserve BZ = {reserve_bz:,.0f}€]"
+
+        return {
+            'success':                   True,
+            'disponible':                 True,
+            'effets_calendaire':         effets,
+            'n_effets_significatifs':    n_sig,
+            'pct_effets_significatifs':  round(pct_sig, 1),
+            'diagonales_anormales':      diagonales_anormales,
+            'kruskal_wallis':            kw,
+            'glm_disponible':            glm_disponible,
+            'p_calendrier':              p_cal,
+            'cal_significatif':          cal_sig,
+            'aic_complet':               aic_complet,
+            'reserve_bz':                reserve_bz,
+            'ultimates_corriges':        ultimates_bz,
+            'ibnr_par_annee_bz':         ibnr_bz,
+            'statut':                    statut,
+            'recommandation':            recommandation,
+            'message':                   message,
+            'erreur':                    None,
+        }
+
+    except Exception as e:
+        logger.error(f"Barnett-Zehnwirth global fatal error : {e}", exc_info=True)
+        return {'success': False, 'disponible': True, 'erreur': str(e), 'message': f"Échec : {e}"}
