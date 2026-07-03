@@ -73,6 +73,10 @@ SEUIL_MODERE = 0.08   # 8%  → effet modéré
 # Valeur minimale pour éviter log(0)
 EPSILON = 1e-10
 
+# Seuil de significativité pour les tests statistiques
+# 0.05 = 5% — standard actuariel (Kruskal-Wallis, t-test)
+SEUIL_SIGNIFICATIVITE = 0.05
+
 
 # =============================================================================
 #  CALCUL DES FACTEURS PAR DIAGONALE
@@ -334,14 +338,8 @@ def _recommander_methode(
             "Bornhuetter-Ferguson recommandé — effets modérés. "
             "L'ancrage sur a priori externe atténue l'influence des diagonales perturbées."
         )
-        reco += " — l'ancrage sur l'a priori atténue l'influence des diagonales anormales"
 
     return reco
-
-
-# =============================================================================
-#  FONCTION PRINCIPALE
-# =============================================================================
 
 
 # =============================================================================
@@ -513,7 +511,7 @@ def _extrapoler_ultimates_bz(
         ultimates.append(obs_last + ibnr_i)
         ibnr_annees.append(ibnr_i)
 
-    reserve_totale = sum(ibnr_annees[max(0, 0):])  # toutes les années
+    reserve_totale = sum(ibnr_annees[annee_base:])  # depuis annee_base (cohérence avec CL/BF)
 
     return {
         'ultimates':      [round(u, 0) for u in ultimates],
@@ -549,6 +547,11 @@ def barnett_zehnwirth(
     Note : les ultimates BZ sont produits à titre informatif.
     La correction des effets calendaires nécessite un jugement
     actuariel documenté (Guide IA 2023).
+
+    Limite connue : la projection des incréments futurs dans
+    `_extrapoler_ultimates_bz` utilise une approximation par ratio
+    de moyennes — pas la projection exacte B&Z 1998 par paramètres β_j.
+    Les ultimates BZ sont donc indicatifs, pas certifiés conformes B&Z.
 
     Parameters
     ----------
