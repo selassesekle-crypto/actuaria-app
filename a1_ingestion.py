@@ -367,13 +367,13 @@ class AgentA1Ingestion:
         sous_branche = self._detecter_sous_branche(df, branche)
         return df, sous_branche
 
-    def _lire_fichier(self, chemin: Path) -> pd.DataFrame:
+    def _lire_fichier(self, chemin: Path, nom_onglet: str = None) -> pd.DataFrame:
         """Lit un fichier selon son extension."""
         ext = chemin.suffix.lower()
         if ext == '.parquet':
             return pd.read_parquet(chemin)
         elif ext in ['.xlsx', '.xls']:
-            return pd.read_excel(chemin, engine='openpyxl')
+            return pd.read_excel(chemin, engine='openpyxl', sheet_name=nom_onglet)
         elif ext == '.csv':
             # Détection automatique du séparateur
             for sep in [',', ';', '\t', '|']:
