@@ -52,27 +52,37 @@ LAYOUT_BASE = dict(paper_bgcolor=NAVY, plot_bgcolor=NAVY_L,
 
 # ── Paramètres EIOPA ─────────────────────────────────────────────────────────
 SIGMA_LOB = {
-    'rc_auto':       {'sigma_prem':0.10,'sigma_res':0.09,'f_cat':0.15},
-    'auto_autre':    {'sigma_prem':0.08,'sigma_res':0.08,'f_cat':0.10},
-    'incendie':      {'sigma_prem':0.08,'sigma_res':0.11,'f_cat':0.25},
-    'mrh':           {'sigma_prem':0.07,'sigma_res':0.10,'f_cat':0.25},
-    'rc_generale':   {'sigma_prem':0.13,'sigma_res':0.11,'f_cat':0.15},
-    'construction':  {'sigma_prem':0.12,'sigma_res':0.19,'f_cat':0.20},
-    'transport':     {'sigma_prem':0.13,'sigma_res':0.13,'f_cat':0.15},
-    'credit':        {'sigma_prem':0.21,'sigma_res':0.19,'f_cat':0.10},
-    'assistance':    {'sigma_prem':0.09,'sigma_res':0.11,'f_cat':0.08},
+    'rc_auto':             {'sigma_prem':0.10,'sigma_res':0.09,'f_cat':0.15},
+    'auto_autre':          {'sigma_prem':0.08,'sigma_res':0.08,'f_cat':0.10},
+    'incendie':            {'sigma_prem':0.08,'sigma_res':0.11,'f_cat':0.25},
+    'mrh':                 {'sigma_prem':0.07,'sigma_res':0.10,'f_cat':0.25},
+    'rc_generale':         {'sigma_prem':0.13,'sigma_res':0.11,'f_cat':0.15},
+    'construction':        {'sigma_prem':0.12,'sigma_res':0.19,'f_cat':0.20},
+    'transport':           {'sigma_prem':0.13,'sigma_res':0.13,'f_cat':0.15},
+    'credit':              {'sigma_prem':0.21,'sigma_res':0.19,'f_cat':0.10},
+    'assistance':          {'sigma_prem':0.09,'sigma_res':0.11,'f_cat':0.08},
     'protection_juridique':{'sigma_prem':0.07,'sigma_res':0.12,'f_cat':0.05},
     'pertes_pecuniaires':  {'sigma_prem':0.13,'sigma_res':0.20,'f_cat':0.15},
-    'autres':        {'sigma_prem':0.13,'sigma_res':0.17,'f_cat':0.15},
+    'autres':              {'sigma_prem':0.13,'sigma_res':0.17,'f_cat':0.15},
+    # Branches longues — sigma calibres EIOPA Annexe II
+    'rc_medicale':         {'sigma_prem':0.13,'sigma_res':0.11,'f_cat':0.15},
+    'corporels_graves':    {'sigma_prem':0.13,'sigma_res':0.11,'f_cat':0.15},
 }
 SIGMA_DEFAULT = {'sigma_prem':0.10,'sigma_res':0.11,'f_cat':0.15}
 
 CORR_LOB = {
-    frozenset(['rc_auto','auto_autre']):0.50,
-    frozenset(['incendie','mrh']):0.50,
-    frozenset(['rc_auto','rc_generale']):0.50,
-    frozenset(['incendie','construction']):0.25,
-    frozenset(['transport','rc_auto']):0.25,
+    # Correlations EIOPA — Annexe IV Reglement Delegue 2015/35
+    frozenset(['rc_auto',      'auto_autre']):         0.50,
+    frozenset(['incendie',     'mrh']):                0.50,
+    frozenset(['rc_auto',      'rc_generale']):        0.50,
+    frozenset(['rc_generale',  'rc_medicale']):        0.50,
+    frozenset(['rc_auto',      'rc_medicale']):        0.25,
+    frozenset(['incendie',     'construction']):       0.25,
+    frozenset(['rc_generale',  'construction']):       0.25,
+    frozenset(['transport',    'rc_auto']):            0.25,
+    frozenset(['corporels_graves', 'rc_medicale']):    0.25,
+    frozenset(['corporels_graves', 'rc_generale']):    0.25,
+    # Paires non listees : correlation par defaut 0.25 (conservateur EIOPA)
 }
 
 CORR_MODULES = np.array([[1.00,0.25,0.25],[0.25,1.00,0.25],[0.25,0.25,1.00]])
@@ -81,10 +91,24 @@ MCR_ALPHA = 0.0418; MCR_BETA = 0.0261; MCR_PLANCHER_ABS = 2_500_000.0
 COC = 0.06
 
 DURATION_LOB = {
-    'rc_auto':4.0,'auto_autre':2.5,'mrh':2.0,'incendie':3.0,
-    'rc_generale':6.0,'construction':8.0,'transport':3.0,
-    'credit':3.0,'assistance':1.5,'protection_juridique':4.0,
-    'pertes_pecuniaires':3.0,
+    # Durees moyennes de liquidation par branche (en annees)
+    # Source : pratique de marche + Guide IA 2023
+    'rc_auto':               4.0,
+    'auto_autre':            2.5,
+    'mrh':                   2.0,
+    'incendie':              3.0,
+    'rc_generale':           6.0,
+    'construction':          10.0,  # Garantie decennale — queue 10 ans minimum
+    'transport':             3.0,
+    'credit':                3.0,
+    'assistance':            1.5,
+    'protection_juridique':  4.0,
+    'pertes_pecuniaires':    3.0,
+    # Branches longues — queues lourdes reglementaires
+    'rc_medicale':           17.0,  # Erreurs medicales, revelation tardive : 15-20 ans
+    'corporels_graves':      20.0,  # Rentes versageres, prejudices corporels : 15-25 ans
+    # Defaut si branche inconnue : 4.0 ans (voir DURATION_LOB.get(n, 4.0))
+    # ATTENTION : toujours verifier que la branche est mappee ici
 }
 
 TAUX_DEFAUT = {
@@ -93,14 +117,29 @@ TAUX_DEFAUT = {
 }
 
 BRANCHE_MAP = {
-    'rc_auto':'rc_auto','auto':'rc_auto','automobile':'rc_auto',
-    'mrh':'mrh','habitation':'mrh','incendie':'incendie','fire':'incendie',
-    'construction':'construction','dommages_ouvrage':'construction',
-    'rc_generale':'rc_generale','rc':'rc_generale',
-    'transport':'transport','auto_autre':'auto_autre',
-    'credit':'credit','assistance':'assistance',
-    'protection_juridique':'protection_juridique',
-    'pertes_pecuniaires':'pertes_pecuniaires',
+    'rc_auto':                 'rc_auto',
+    'auto':                    'rc_auto',
+    'automobile':              'rc_auto',
+    'mrh':                     'mrh',
+    'habitation':              'mrh',
+    'incendie':                'incendie',
+    'fire':                    'incendie',
+    'construction':            'construction',
+    'dommages_ouvrage':        'construction',
+    'rc_generale':             'rc_generale',
+    'rc':                      'rc_generale',
+    'transport':               'transport',
+    'auto_autre':              'auto_autre',
+    'credit':                  'credit',
+    'assistance':              'assistance',
+    'protection_juridique':    'protection_juridique',
+    'pertes_pecuniaires':      'pertes_pecuniaires',
+    # Branches longues
+    'rc_medicale':             'rc_medicale',
+    'responsabilite_medicale': 'rc_medicale',
+    'corporels_graves':        'corporels_graves',
+    'corporel_grave':          'corporels_graves',
+    'prejudice_corporel':      'corporels_graves',
 }
 
 PD_MAP = {'AAA':0.001,'AA':0.001,'A':0.003,'BBB':0.010,'BB':0.050}
@@ -453,6 +492,14 @@ class AgentA10Solvabilite2:
             return {'scr_marche':scr,'scr_taux':scr*0.40,'scr_spread':scr*0.30,
                     'scr_actions':scr*0.20,'scr_immo':scr*0.05,'scr_concentration':0,
                     'mode':'modele_interne','actif_total':be_act['be_s2_total']*1.35}
+        if not alloc:
+            self.logger.warning(
+                'SCR marche : allocation_actif non fournie '
+                '(hypothese par defaut : 70%% oblig / 10%% actions / 5%% immo). '
+                'Le SCR marche peut etre sur-estime de 20-30%% '
+                'si le portefeuille est atypique. '
+                'Fournir allocation_actif pour un calcul precis.'
+            )
         ob=alloc.get('obligations',0.70) if alloc else 0.70
         ac=alloc.get('actions',0.10) if alloc else 0.10
         im=alloc.get('immo',0.05)    if alloc else 0.05
@@ -506,7 +553,17 @@ class AgentA10Solvabilite2:
         else: t1=fpp*0.80; t2=fpp*0.15; t3=fpp*0.05
         fpp_scr=min(t1+min(t2,(t1+t2)*0.50)+min(t3,fpp*0.15),fpp)
         fpp_mcr=t1+min(t2,t1*0.25)
-        rscr=fpp_scr/max(scr,1)*100; rmcr=fpp_mcr/max(mcr_v,1)*100
+        # Si SCR ou MCR nul : erreur amont — forcer ROUGE, ne pas calculer ratio
+        if scr <= 0 or mcr_v <= 0:
+            self.logger.warning(
+                f'SCR={scr:,.0f}EUR ou MCR={mcr_v:,.0f}EUR nul '
+                '— erreur amont. Ratios forces a 0 et statut ROUGE.'
+            )
+            rscr = 0.0
+            rmcr = 0.0
+        else:
+            rscr = fpp_scr / scr * 100
+            rmcr = fpp_mcr / mcr_v * 100
         return {'fonds_propres':fpp,'tier1':t1,'tier2':t2,'tier3':t3,'fpp_scr':fpp_scr,'fpp_mcr':fpp_mcr,
                 'tp_s2':tp,'ratio_scr':rscr,'ratio_mcr':rmcr,'marge_scr':fpp_scr-scr,'marge_mcr':fpp_mcr-mcr_v,
                 'statut_ratio':'VERT' if rscr>=150 else ('AMBRE' if rscr>=100 else 'ROUGE'),
