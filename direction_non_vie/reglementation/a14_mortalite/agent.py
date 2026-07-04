@@ -232,6 +232,8 @@ class AgentA14Mortalite:
             # ── PROBABILITÉS DE BASE ──────────────────────────────────────────
             logger.info("Calcul des probabilités de survie")
             res_proba = self._calculer_probabilites(q_x, age)
+            # Stocker le vecteur q_x complet pour validation H2/H3
+            res_proba['qx_table'] = q_x.tolist() if hasattr(q_x, 'tolist') else list(q_x)
             rapport['etapes'].append('probabilites')
 
             # ── ESPÉRANCE DE VIE ──────────────────────────────────────────────
@@ -665,6 +667,9 @@ class AgentA14Mortalite:
 
         # Simulation Lee-Carter simplifié
         # Dérive annuelle de mortalité (amélioration)
+        # Derive annuelle de mortalite : -1.5%/an par defaut
+        # Source : tendance historique INED France (periodes 1960-2020).
+        # A recalibrer sur donnees recentes si disponibles.
         derive_annuelle = -0.015  # -1.5% par an
 
         # q_x projetés dans h années
@@ -1209,8 +1214,11 @@ class AgentA14Mortalite:
         else:
             qx_moy = 0.01
 
-        # Valeurs de référence TH0002 à l'âge moyen
-        qx_ref = 0.001 * (1.1 ** max(0, age - 40))  # approximation
+        # Valeur de reference : utiliser la table officielle chargee
+        if table in TABLES_DISPONIBLES and age < len(TABLES_DISPONIBLES[table]):
+            qx_ref = float(TABLES_DISPONIBLES[table][age])
+        else:
+            qx_ref = 0.001 * (1.1 ** max(0, age - 40))  # fallback si table absente
         ratio_ae = qx_moy / max(qx_ref, 1e-8)
 
         if 0.5 <= ratio_ae <= 2.0:
@@ -1365,7 +1373,7 @@ class AgentA14Mortalite:
             fig1.update_layout(**l1)
             graphiques["courbe_survie"] = fig1
         except Exception as e:
-            self.logger.warning(f"G1 survie : {e}")
+            logger.warning(f"G1 survie : {e}")
 
         # G2 — Jauge R² Lee-Carter
         try:
@@ -1403,7 +1411,7 @@ class AgentA14Mortalite:
             )
             graphiques["jauge_r2_lee_carter"] = fig2
         except Exception as e:
-            self.logger.warning(f"G2 R² : {e}")
+            logger.warning(f"G2 R2 : {e}")
 
         # G3 — Comparaison qx table vs référence (ratio A/E)
         try:
@@ -1449,7 +1457,7 @@ class AgentA14Mortalite:
             fig3.update_layout(**l3)
             graphiques["ratio_ae_par_age"] = fig3
         except Exception as e:
-            self.logger.warning(f"G3 A/E : {e}")
+            logger.warning(f"G3 A/E : {e}")
 
         # G4 — Scorecard validation Tables de Mortalité
         try:
@@ -1494,7 +1502,7 @@ class AgentA14Mortalite:
             fig4.update_layout(**l4)
             graphiques["scorecard_mortalite"] = fig4
         except Exception as e:
-            self.logger.warning(f"G4 scorecard : {e}")
+            logger.warning(f"G4 scorecard : {e}")
 
         return graphiques
 
