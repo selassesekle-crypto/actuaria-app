@@ -79,6 +79,7 @@ class TriangleValidator:
         triangle_engage                     = None,
         primes                              = None,
         schema_mapping: Optional[Dict[str, str]] = None,
+        nom_onglet:     Optional[str]            = None,
     ) -> Tuple[np.ndarray, Optional[np.ndarray], Optional[np.ndarray], Dict]:
         """
         Point d'entrée universel.
@@ -117,7 +118,7 @@ class TriangleValidator:
 
         try:
             # Étape 1 : lire la source
-            raw = self._lire_source(source, rapport)
+            raw = self._lire_source(source, rapport, nom_onglet=nom_onglet)
 
             # Étape 1b : appliquer schema_mapping si fourni
             if schema_mapping and isinstance(raw, pd.DataFrame):
@@ -198,7 +199,12 @@ class TriangleValidator:
     #  ÉTAPE 1 : LIRE LA SOURCE
     # =========================================================================
 
-    def _lire_source(self, source, rapport: Dict) -> Union[np.ndarray, pd.DataFrame]:
+    def _lire_source(
+        self,
+        source,
+        rapport:    Dict,
+        nom_onglet: Optional[str] = None,
+    ) -> Union[np.ndarray, pd.DataFrame]:
         """Convertit n'importe quelle source en DataFrame ou ndarray."""
 
         if isinstance(source, np.ndarray):
@@ -224,7 +230,9 @@ class TriangleValidator:
             if not path.exists():
                 raise FileNotFoundError(f"Fichier introuvable : {path}")
             if path.suffix.lower() in ('.xlsx', '.xls', '.xlsm'):
-                return pd.read_excel(path)
+                if nom_onglet:
+                    rapport['infos'].append(f"Onglet selectionne : '{nom_onglet}'")
+                return pd.read_excel(path, sheet_name=nom_onglet)
             if path.suffix.lower() in ('.csv', '.txt'):
                 for sep in (',', ';', '\t', '|'):
                     try:
@@ -240,7 +248,9 @@ class TriangleValidator:
         try:
             name = getattr(source, 'name', '')
             if name.lower().endswith(('.xlsx', '.xls')):
-                return pd.read_excel(source)
+                if nom_onglet:
+                    rapport['infos'].append(f"Onglet selectionne (upload) : '{nom_onglet}'")
+                return pd.read_excel(source, sheet_name=nom_onglet)
             source.seek(0)
             return pd.read_csv(source)
         except Exception as e:
@@ -502,11 +512,7 @@ class TriangleValidator:
         C = np.nan_to_num(C, nan=0.0, posinf=0.0, neginf=0.0)
 
         if mode == 'non_cumule':
-            C_cum = np.zeros_like(C)
-            for i in range(C.shape[0]):
-                for j in range(C.shape[1]):
-                    C_cum[i, j] = (C_cum[i, j-1] + C[i, j]) if j > 0 else C[i, j]
-            C = C_cum
+            C = np.cumsum(C, axis=1)
             rapport['infos'].append("Triangle non cumulé → cumulé automatiquement")
 
         return C
