@@ -427,9 +427,9 @@ class AgentA13AuditTrail:
             hypotheses['modules']['solvabilite_2'] = {
                 'formule':          'Standard EIOPA',
                 'reference':        'Règlement délégué (UE) 2015/35',
-                'scr_total':        a10.get('bscr', {}).get('scr_total', 'N/A'),
-                'mcr_final':        a10.get('mcr', {}).get('mcr_final', 'N/A'),
-                'ratio_scr':        a10.get('ratio_scr', 'N/A'),
+                'scr_total':    a10.get('scr', {}).get('total', 'N/A'),
+                'mcr_final':    a10.get('mcr', {}).get('mcr', 'N/A'),
+                'ratio_scr':    a10.get('capital', {}).get('ratio_scr', 'N/A'),
             }
 
         # Hypothèses A11 IFRS 17
