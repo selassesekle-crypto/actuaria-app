@@ -245,8 +245,13 @@ class AgentA9Coherence:
                 agents_presents.append('A7↔A11')
                 self.logger.info(f"C4 S2↔IFRS17 (base) : {c4['statut']} | {c4['message']}")
             else:
-                controles.append(self._ctrl_na('BE S2↔TP IFRS17', 'A7+A10↔A11',
-                                               'result_a7 + result_a11 requis'))
+                controles.append({
+                    'controle': 'BE S2↔TP IFRS17',
+                    'agents':   'A7+A10↔A11',
+                    'statut':   'ROUGE',
+                    'message':  'A11 Thomas absent. Ce controle est OBLIGATOIRE '
+                                'pour une soumission ACPR. Executer A11 avant validation.',
+                })
 
             # ── C5 : COHÉRENCE ALM (BILAN ACTIF/PASSIF) ──────────────────────
             if result_a10 and result_a12:
@@ -1427,7 +1432,7 @@ class AgentA9Coherence:
         return {
             'controle':    nom,
             'agents':      agents,
-            'statut':      'N/A',
+            'statut':      'AMBRE',   # N/A -> AMBRE : un controle non execute est un risque
             'message':     f"Non exécuté : {raison}",
             'conseil':     f"Connecter {agents} pour activer ce contrôle.",
             'description': raison,
