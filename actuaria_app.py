@@ -1502,26 +1502,28 @@ def page_dashboard():
 </div>""", unsafe_allow_html=True)
 
         # ── Étape 1 : Format ─────────────────────────────────────────────────
-        st.markdown(f"<div style='font-size:0.82rem;color:{OR};font-weight:700;margin-bottom:6px;'>① Format du fichier</div>", unsafe_allow_html=True)
-        _ar_fmt_labels = {
-            "cumule":     "Format A — Triangle cumulé  (le plus courant)",
-            "non_cumule": "Format B — Triangle incrémental  (paiements annuels)",
-            "brutes":     "Format C — Données brutes  (une ligne par paiement)",
+        st.markdown(f"<div style='font-size:0.82rem;color:{OR};font-weight:700;margin-bottom:10px;'>① Format de votre fichier</div>", unsafe_allow_html=True)
+        _ar_fmt_opts = {
+            "cumule":     ("A", "Triangle cumulé", "Lignes = années · Colonnes = périodes · Cellule = montant cumulé · Format le plus courant"),
+            "non_cumule": ("B", "Triangle incrémental", "Même structure que A · Cellule = paiement de l'année uniquement · Cumulé automatiquement"),
+            "brutes":     ("C", "Données brutes", "Une ligne par paiement · Colonnes : annee_survenance · annee_paiement · montant"),
         }
-        _ar_fmt = st.radio(
-            "Format",
-            options=list(_ar_fmt_labels.keys()),
-            format_func=lambda x: _ar_fmt_labels[x],
-            key="ar_format_declare",
-            horizontal=False,
-            label_visibility="collapsed",
-        )
-        _ar_fmt_desc = {
-            "cumule":     "Chaque cellule = montant cumulé depuis l'origine. Cellules futures = vides.",
-            "non_cumule": "Chaque cellule = paiement de l'année seulement. Cumulé automatiquement.",
-            "brutes":     "Colonnes obligatoires : annee_survenance · annee_paiement · montant.",
-        }
-        st.caption(_ar_fmt_desc[_ar_fmt])
+        _ar_fmt_actuel = st.session_state.get("ar_format_declare", "cumule")
+        _ar_fmt_cols = st.columns(3)
+        for _ar_fi, (_ar_fk, (_ar_fl, _ar_fn, _ar_fd)) in enumerate(_ar_fmt_opts.items()):
+            with _ar_fmt_cols[_ar_fi]:
+                _ar_sel  = (_ar_fmt_actuel == _ar_fk)
+                _ar_bord = f"2px solid {OR}" if _ar_sel else f"1px solid rgba(201,168,76,0.25)"
+                _ar_bg   = "rgba(201,168,76,0.12)" if _ar_sel else "rgba(15,46,82,0.6)"
+                st.markdown(f"""<div style='background:{_ar_bg};border:{_ar_bord};border-radius:10px;padding:14px 12px;text-align:center;min-height:90px;'>
+  <div style='font-size:1.1rem;font-weight:900;color:{OR};margin-bottom:4px;'>Format {_ar_fl}</div>
+  <div style='font-size:0.82rem;font-weight:700;color:#F0F4F8;margin-bottom:6px;'>{_ar_fn}</div>
+  <div style='font-size:0.72rem;color:#8A9AB0;line-height:1.5;'>{_ar_fd}</div>
+</div>""", unsafe_allow_html=True)
+                if st.button(f"{'✅ Sélectionné' if _ar_sel else 'Choisir'}", key=f"ar_fmt_btn_{_ar_fk}", use_container_width=True):
+                    st.session_state["ar_format_declare"] = _ar_fk
+                    st.rerun()
+        _ar_fmt = st.session_state.get("ar_format_declare", "cumule")
 
         # Template téléchargeable
         _ar_tpl_map = {
@@ -1978,20 +1980,29 @@ def page_analyse():
         if besoin in besoins_upload:
             if besoin == "triangle_xl":
                 # ── Étape 1 : Choix du format de données ─────────────────────
-                _fmt_labels = {
-                    "cumule":     "Format A — Triangle cumulé\n  Tableau Excel : lignes = années de survenance, colonnes = périodes.\n  Chaque cellule = montant cumulé depuis l'origine. C'est le format le plus courant.",
-                    "non_cumule": "Format B — Triangle incrémental\n  Même structure que A, mais chaque cellule = paiement de l'année seulement.\n  Cumulé automatiquement avant analyse.",
-                    "brutes":     "Format C — Données brutes\n  Une ligne par sinistre ou paiement.\n  Colonnes obligatoires : annee_survenance, annee_paiement, montant.\n  Le triangle est reconstruit automatiquement.",
+                _fmt_opts = {
+                    "cumule":     ("A", "Triangle cumulé", "Lignes = années · Colonnes = périodes · Cellule = montant cumulé · Format le plus courant"),
+                    "non_cumule": ("B", "Triangle incrémental", "Même structure que A · Cellule = paiement de l'année uniquement · Cumulé automatiquement"),
+                    "brutes":     ("C", "Données brutes", "Une ligne par paiement · Colonnes : annee_survenance · annee_paiement · montant"),
                 }
-                _fmt_choisi = st.radio(
-                    "Quel est le format de votre fichier ?",
-                    options=list(_fmt_labels.keys()),
-                    format_func=lambda x: _fmt_labels[x].split("\n")[0],
-                    key="a7_format_declare",
-                    horizontal=False,
-                )
-                for ligne in _fmt_labels[_fmt_choisi].split("\n")[1:]:
-                    st.caption(ligne)
+                _fmt_actuel = st.session_state.get("a7_format_declare", "cumule")
+                st.markdown(f"<div style='font-size:0.82rem;color:{OR};font-weight:700;margin-bottom:10px;'>Format de votre fichier</div>", unsafe_allow_html=True)
+                _fmt_cols = st.columns(3)
+                for _fi, (_fk, (_fl, _fn, _fd)) in enumerate(_fmt_opts.items()):
+                    with _fmt_cols[_fi]:
+                        _selected = (_fmt_actuel == _fk)
+                        _border   = f"2px solid {OR}" if _selected else f"1px solid rgba(201,168,76,0.25)"
+                        _bg       = "rgba(201,168,76,0.12)" if _selected else "rgba(15,46,82,0.6)"
+                        _lbl_col  = OR if _selected else "#8A9AB0"
+                        st.markdown(f"""<div style='background:{_bg};border:{_border};border-radius:10px;padding:14px 12px;text-align:center;min-height:90px;'>
+  <div style='font-size:1.1rem;font-weight:900;color:{OR};margin-bottom:4px;'>Format {_fl}</div>
+  <div style='font-size:0.82rem;font-weight:700;color:#F0F4F8;margin-bottom:6px;'>{_fn}</div>
+  <div style='font-size:0.72rem;color:#8A9AB0;line-height:1.5;'>{_fd}</div>
+</div>""", unsafe_allow_html=True)
+                        if st.button(f"{'✅ Sélectionné' if _selected else 'Choisir'}", key=f"fmt_btn_{_fk}", use_container_width=True):
+                            st.session_state["a7_format_declare"] = _fk
+                            st.rerun()
+                _fmt_choisi = st.session_state.get("a7_format_declare", "cumule")
 
                 # ── Bouton template téléchargeable ───────────────────────────
                 _tpl_map = {
@@ -2013,8 +2024,6 @@ def page_analyse():
                             )
                 except Exception:
                     pass
-
-                st.session_state["a7_format_declare"] = _fmt_choisi
 
                 # ── Étape 2 : Upload du fichier ──────────────────────────────
                 fichier = st.file_uploader(
