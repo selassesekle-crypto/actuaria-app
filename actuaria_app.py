@@ -2736,20 +2736,29 @@ def _executer_analyse(besoin, direction, equipe, client):
                     st.error("❌ Aucun fichier chargé. Uploadez votre triangle et relancez l'analyse.")
                     st.stop()
 
-                # Diagnostic du DataFrame reçu
+                # Conversion forcée des colonnes object → numeric (robustesse Excel)
                 import pandas as _pd_diag
                 if isinstance(df, _pd_diag.DataFrame):
-                    _df_num_diag = df.select_dtypes(include=["number"])
+                    # Certains fichiers Excel sont lus avec des colonnes object
+                    # même si elles contiennent des nombres — forcer la conversion
+                    _df_conv = df.copy()
+                    for _col in _df_conv.columns:
+                        _df_conv[_col] = _pd_diag.to_numeric(_df_conv[_col], errors='coerce')
+                    _n_num_avant = df.select_dtypes(include=["number"]).shape[1]
+                    _n_num_apres = _df_conv.select_dtypes(include=["number"]).shape[1]
+                    if _n_num_apres > _n_num_avant:
+                        df = _df_conv  # utiliser le DataFrame converti
+                        st.session_state["analyse_df"] = df  # mettre à jour session
                     st.info(
                         f"📋 Fichier reçu : {df.shape[0]} lignes × {df.shape[1]} colonnes "
-                        f"| {_df_num_diag.shape[1]} col. numériques "
-                        f"| Format déclaré : {_fmt}"
+                        f"| {_n_num_apres} col. numériques "
+                        f"| Format : {_fmt}"
                     )
-                    if _df_num_diag.shape[1] == 0:
+                    if _n_num_apres == 0:
                         st.error(
-                            "❌ Aucune colonne numérique détectée dans votre fichier. "
-                            "Vérifiez que votre triangle contient des valeurs numériques "
-                            "et que vous avez sélectionné le bon onglet."
+                            "❌ Aucune valeur numérique détectée. "
+                            "Vérifiez que votre triangle contient des montants "
+                            "et que vous avez sélectionné le bon onglet Excel."
                         )
                         st.stop()
 
