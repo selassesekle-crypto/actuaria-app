@@ -206,9 +206,8 @@ class NVTriangleBuilder:
             rapport['infos'].append("Construction du triangle total...")
             C_total, C_engage, primes_norm, rapport_n1 = self._validator.charger(
                 source         = source,
-                mode_declare   = mode_declare,
+                mode           = mode_declare,
                 schema_mapping = schema_mapping,
-                rapport        = rapport,
                 nom_onglet     = nom_onglet,
             )
             rapport['alertes'].extend(rapport_n1.get('alertes', []))
