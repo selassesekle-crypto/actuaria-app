@@ -1706,7 +1706,21 @@ def page_analyse():
                         df_preview = pd.read_csv(fichier)
                         fichier.seek(0)
                     else:
-                        df_preview = pd.read_excel(fichier)
+                        import pandas as _pd_ong
+                        _xl_tmp = _pd_ong.ExcelFile(fichier)
+                        fichier.seek(0)
+                        _sheets = _xl_tmp.sheet_names
+                        if len(_sheets) > 1:
+                            _ong = st.selectbox(
+                                'Onglet a utiliser pour le triangle',
+                                options=_sheets,
+                                key='a7_onglet_triangle',
+                                help='Fichier multi-onglets : selectionnez le triangle de paiements.',
+                            )
+                        else:
+                            _ong = _sheets[0] if _sheets else None
+                        st.session_state['a7_onglet_triangle'] = _ong
+                        df_preview = _pd_ong.read_excel(fichier, sheet_name=_ong)
                         fichier.seek(0)
                     st.success(f"✅ {fichier.name} — {len(df_preview):,} lignes × {len(df_preview.columns)} colonnes")
                     with st.expander("👁️ Aperçu des données (5 premières lignes)"):
@@ -2217,6 +2231,7 @@ def _executer_analyse(besoin, direction, equipe, client):
                     llt           = _llt_val,
                     schema_mapping= _a7p.get("a7_schema_mapping"),
                     annee_debut   = _a7p.get("a7_annee_debut"),
+                    nom_onglet    = st.session_state.get("a7_onglet_triangle"),
                 )
 
                 # ── Étape 2 : Afficher les résultats du builder ───────────────
