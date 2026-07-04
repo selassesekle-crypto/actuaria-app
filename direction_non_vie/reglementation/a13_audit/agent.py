@@ -700,6 +700,8 @@ class AgentA13AuditTrail:
             n1 += f"\nALERTES ({len(logs['alertes'])}) :\n"
             for alerte in logs['alertes'][:5]:
                 n1 += f"  ⚠️ {alerte}\n"
+            if len(logs['alertes']) > 5:
+                n1 += f"  ... et {len(logs['alertes']) - 5} autre(s) alerte(s) non affichee(s).\n"
 
         if statut_rag == 'VERT':
             n2 = (
@@ -981,9 +983,10 @@ class AgentA13AuditTrail:
         hash_len = len(hash_str)
 
         # C1 — Intégrité Hash SHA-256
-        hash_ok   = bool(hash_session and len(hash_session) >= 8 and
-                        re.match(r'^[0-9A-Fa-f]+$', hash_session))
-        hash_len  = len(hash_session) if hash_session else 0
+        # Utiliser hash_str (normalise) au lieu de hash_session (peut etre un dict)
+        hash_ok  = bool(hash_str and len(hash_str) >= 8 and
+                        re.match(r'^[0-9A-Fa-f]+$', hash_str))
+        hash_len = len(hash_str)
 
         if hash_ok and hash_len >= 8:
             c1_statut = "VERT"
@@ -1158,7 +1161,7 @@ class AgentA13AuditTrail:
             )
             graphiques["hash_sha256"] = fig1
         except Exception as e:
-            self.logger.warning(f"G1 hash : {e}")
+            logger.warning(f"G1 hash : {e}")
 
         # G2 — Couverture RGPD Art.30 (jauge)
         try:
@@ -1196,7 +1199,7 @@ class AgentA13AuditTrail:
             )
             graphiques["couverture_rgpd"] = fig2
         except Exception as e:
-            self.logger.warning(f"G2 RGPD : {e}")
+            logger.warning(f"G2 RGPD : {e}")
 
         # G3 — Hypothèses versionnées
         try:
@@ -1240,7 +1243,7 @@ class AgentA13AuditTrail:
             fig3.update_layout(**l3)
             graphiques["versioning_hypotheses"] = fig3
         except Exception as e:
-            self.logger.warning(f"G3 versioning : {e}")
+            logger.warning(f"G3 versioning : {e}")
 
         # G4 — Scorecard Audit Trail
         try:
@@ -1285,7 +1288,7 @@ class AgentA13AuditTrail:
             fig4.update_layout(**l4)
             graphiques["scorecard_audit"] = fig4
         except Exception as e:
-            self.logger.warning(f"G4 scorecard : {e}")
+            logger.warning(f"G4 scorecard : {e}")
 
         return graphiques
 
