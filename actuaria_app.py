@@ -2726,48 +2726,54 @@ def _executer_analyse(besoin, direction, equipe, client):
             elif besoin == "triangle_xl":
                 from direction_non_vie.provisionnement.a7_provisionnement import AgentA7Provisionnement
                 from direction_non_vie.services.nv_triangle_builder import NVTriangleBuilder
-                a7  = AgentA7Provisionnement(audit_path=_tmp, models_path=_tmp, verbose=False)
+                import numpy as _np_a7
+
                 _a7p = st.session_state.get("analyse_params", {})
-                # Récupérer le format déclaré par l'utilisateur (P3-bis — plus d'heuristiques)
                 _fmt = st.session_state.get("a7_format_declare", "cumule")
-                # Dans _executer_analyse, le fichier est déjà chargé en DataFrame via session_state
-                if df is not None:
-                    # Un seul chemin : NVTriangleBuilder avec format déclaré
-                    builder = NVTriangleBuilder(verbose=False)
-                    _nom_onglet = st.session_state.get("a7_onglet_triangle") or st.session_state.get("a7_onglet_triangle_mono")
-                    _res_build = builder.construire(
-                        source       = df,
-                        mode_declare = _fmt,
-                        nom_onglet   = _nom_onglet,
-                        schema_mapping = _a7p.get("a7_schema_mapping"),
-                    )
-                    if not _res_build["success"]:
-                        st.error(f"❌ Erreur pipeline données : {_res_build['erreur']}")
-                        r7 = a7.run(generer_graphiques=False)
-                    else:
-                        _tri = _res_build["triangle_total"]
-                        r7 = a7.run(
-                            source             = _tri,
-                            mode_declare       = "cumule",
-                            generer_graphiques = True,
-                            lob                = _a7p.get("a7_lob", "generique"),
-                            arrete             = _a7p.get("a7_arrete", ""),
-                            n_sim_bootstrap    = _a7p.get("a7_n_sim_bootstrap", 5000),
-                            annee_base_reserve = _a7p.get("a7_annee_base_reserve", 1),
-                            resultats_precedents = _a7p.get("a7_resultats_precedents"),
-                            primes             = _a7p.get("a7_primes"),
-                            lr_bf_manuel       = _a7p.get("a7_lr_apriori"),
-                            annee_debut        = _a7p.get("a7_annee_debut"),
-                            triangle_engage    = _a7p.get("a7_triangle_engage"),
-                        )
-                        # Alertes pipeline remontées à l'utilisateur
-                        for _alerte in _res_build["rapport"].get("alertes", []):
-                            if "❌" in _alerte:
-                                st.error(_alerte)
-                            elif "⚠️" in _alerte:
-                                st.warning(_alerte)
-                else:
-                    r7 = a7.run(generer_graphiques=False)
+
+                # df contient le DataFrame brut stocké dans session_state["analyse_df"]
+                if df is None:
+                    st.error("❌ Aucun fichier chargé. Uploadez votre triangle et relancez l'analyse.")
+                    st.stop()
+
+                # Construction du triangle via NVTriangleBuilder (format déclaré, P3-bis)
+                _builder_ex = NVTriangleBuilder(verbose=False)
+                _res_build = _builder_ex.construire(
+                    source       = df,
+                    mode_declare = _fmt,
+                )
+                if not _res_build["success"]:
+                    st.error(f"❌ Erreur pipeline données : {_res_build['erreur']}")
+                    st.stop()
+
+                _tri = _res_build["triangle_total"]
+                if _tri is None or (hasattr(_tri, "size") and _tri.size == 0):
+                    st.error("❌ Triangle vide après construction — vérifiez le format de votre fichier.")
+                    st.stop()
+
+                # Alertes pipeline
+                for _al_ex in _res_build["rapport"].get("alertes", []):
+                    if "❌" in _al_ex:
+                        st.error(_al_ex)
+                    elif "⚠️" in _al_ex:
+                        st.warning(_al_ex)
+
+                # Lancement A7 Ibrahim
+                a7 = AgentA7Provisionnement(audit_path=_tmp, models_path=_tmp, verbose=False)
+                r7 = a7.run(
+                    source             = _tri,
+                    mode_declare       = "cumule",
+                    generer_graphiques = True,
+                    lob                = _a7p.get("a7_lob", "generique"),
+                    arrete             = _a7p.get("a7_arrete", ""),
+                    n_sim_bootstrap    = int(_a7p.get("a7_n_sim_bootstrap", 5000)),
+                    annee_base_reserve = int(_a7p.get("a7_annee_base_reserve", 1)),
+                    resultats_precedents = _a7p.get("a7_resultats_precedents"),
+                    primes             = _a7p.get("a7_primes"),
+                    lr_bf_manuel       = _a7p.get("a7_lr_apriori"),
+                    annee_debut        = _a7p.get("a7_annee_debut"),
+                    triangle_engage    = _a7p.get("a7_triangle_engage"),
+                )
                 resultats["principal"] = r7
 
             # ── STRESS TESTING A8 ───────────────────────────────────────────
