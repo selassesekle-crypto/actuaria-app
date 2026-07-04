@@ -1977,6 +1977,7 @@ def page_analyse():
                           "triangle_xl","sinistres","mortalite",
                           "tarif_sante","prov_sante","tarif_prev"]
 
+        fichier = None  # initialisé avant les blocs conditionnels (évite NameError)
         if besoin in besoins_upload:
             if besoin == "triangle_xl":
                 # ── Étape 1 : Choix du format de données ─────────────────────
