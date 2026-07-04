@@ -2414,7 +2414,7 @@ def _executer_analyse(besoin, direction, equipe, client):
 
             # ── STRESS TESTING A8 ───────────────────────────────────────────
             elif besoin == "stress":
-                from a8_stress_testing import AgentA8StressTesting
+                from direction_non_vie.reglementation.a8_stress_testing.agent import AgentA8StressTesting
                 r8 = AgentA8StressTesting(audit_path=_tmp, verbose=False).run(
                     primes_acq=params.get("primes", 10_000_000),
                     fonds_propres=params.get("fonds_propres", 7_650_000),
@@ -2424,7 +2424,7 @@ def _executer_analyse(besoin, direction, equipe, client):
 
             # ── SOLVABILITÉ 2 ───────────────────────────────────────────────
             elif besoin == "s2":
-                from a10_solvabilite2 import AgentA10Solvabilite2
+                from direction_non_vie.reglementation.a10_solvabilite2.agent import AgentA10Solvabilite2
                 a7_synt = {"best_estimate":{"best_estimate":params.get("be",2_914_930),"sigma_mack":params.get("be",2_914_930)*0.015,"cv_inter_methodes":5,"nb_methodes_convergentes":4},"tail":{"tail_factor":1.037},"meta":{"nb_lignes":50000,"n_annees":8},"sous_branche":params.get("branche","rc_auto")}
                 r10 = AgentA10Solvabilite2(audit_path=_tmp, verbose=False).run(result_a7=a7_synt, fonds_propres=params.get("fonds_propres",7_650_000), generer_graphiques=False)
                 resultats["principal"] = r10
@@ -2469,7 +2469,7 @@ def _executer_analyse(besoin, direction, equipe, client):
 
             # ── COHÉRENCE A9 ────────────────────────────────────────────────
             elif besoin == "coherence":
-                from a9_coherence import AgentA9Coherence
+                from direction_non_vie.reglementation.a9_coherence.agent import AgentA9Coherence
                 _be = params.get("be", 2_914_930)
                 _r7_synt = {"best_estimate":{"best_estimate":_be,"sigma_mack":_be*0.015,"cv_inter_methodes":5,"nb_methodes_convergentes":4},"tail":{"tail_factor":1.037},"meta":{"nb_lignes":50000,"n_annees":8}}
                 r9 = AgentA9Coherence(audit_path=_tmp, verbose=False).run(
@@ -2481,8 +2481,8 @@ def _executer_analyse(besoin, direction, equipe, client):
 
             # ── IFRS 17 A11 ─────────────────────────────────────────────────
             elif besoin == "ifrs17":
-                from a10_solvabilite2 import AgentA10Solvabilite2
-                from a11_ifrs17 import AgentA11IFRS17
+                from direction_non_vie.reglementation.a10_solvabilite2.agent import AgentA10Solvabilite2
+                from direction_non_vie.reglementation.a11_ifrs17.agent import AgentA11IFRS17
                 _be = params.get("be", 2_914_930)
                 _r7_synt = {"best_estimate":{"best_estimate":_be,"sigma_mack":_be*0.015,"cv_inter_methodes":5,"nb_methodes_convergentes":4},"tail":{"tail_factor":1.037},"meta":{"nb_lignes":50000,"n_annees":8},"sous_branche":params.get("branche","rc_auto")}
                 _r10 = AgentA10Solvabilite2(audit_path=_tmp, verbose=False).run(result_a7=_r7_synt, fonds_propres=params.get("fonds_propres",7_650_000), generer_graphiques=False)
@@ -2495,8 +2495,8 @@ def _executer_analyse(besoin, direction, equipe, client):
 
             # ── ALM A12 ─────────────────────────────────────────────────────
             elif besoin == "alm":
-                from a10_solvabilite2 import AgentA10Solvabilite2
-                from a12_alm import AgentA12ALM
+                from direction_non_vie.reglementation.a10_solvabilite2.agent import AgentA10Solvabilite2
+                from direction_non_vie.reglementation.a12_alm.agent import AgentA12ALM
                 _be = params.get("be", 2_914_930)
                 _r7_synt = {"best_estimate":{"best_estimate":_be,"sigma_mack":_be*0.015,"cv_inter_methodes":5,"nb_methodes_convergentes":4},"tail":{"tail_factor":1.037},"meta":{"nb_lignes":50000,"n_annees":8},"sous_branche":params.get("branche","rc_auto")}
                 _r10 = AgentA10Solvabilite2(audit_path=_tmp, verbose=False).run(result_a7=_r7_synt, fonds_propres=params.get("fonds_propres",7_650_000), generer_graphiques=False)
@@ -2509,7 +2509,7 @@ def _executer_analyse(besoin, direction, equipe, client):
 
             # ── MORTALITÉ A14 ───────────────────────────────────────────────
             elif besoin == "mortalite":
-                from a14_mortalite import AgentA14Mortalite
+                from direction_non_vie.reglementation.a14_mortalite.agent import AgentA14Mortalite
                 r14 = AgentA14Mortalite(audit_path=_tmp, verbose=False).run(
                     generer_graphiques=False,
                 )
