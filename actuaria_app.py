@@ -2082,13 +2082,19 @@ def page_analyse():
                                 key='a7_onglet_triangle',
                                 help='Fichier multi-onglets : sélectionnez le triangle de paiements.',
                             )
-                            # Le selectbox gère son propre state via key= — pas d'assignation manuelle
                         else:
                             _ong = _sheets[0] if _sheets else None
-                            # Mono-onglet : stocker sous clé distincte pour éviter le conflit
                             st.session_state['a7_onglet_triangle_mono'] = _ong
-                        df_preview = _pd_ong.read_excel(fichier, sheet_name=_ong)
+                        # Lecture robuste : essayer header=0, puis header=1 si 0 col numériques
+                        # (gère les anciens templates avec titre fusionné en ligne 1)
+                        df_preview = _pd_ong.read_excel(fichier, sheet_name=_ong, header=0)
                         fichier.seek(0)
+                        if df_preview.select_dtypes(include=["number"]).shape[1] == 0:
+                            df_preview = _pd_ong.read_excel(fichier, sheet_name=_ong, header=1)
+                            fichier.seek(0)
+                        # Conversion forcée object→numeric
+                        for _c in df_preview.columns:
+                            df_preview[_c] = _pd_ong.to_numeric(df_preview[_c], errors='coerce').fillna(df_preview[_c])
                     st.success(f"✅ {fichier.name} — {len(df_preview):,} lignes × {len(df_preview.columns)} colonnes")
                     with st.expander("👁️ Aperçu des données (5 premières lignes)"):
                         st.dataframe(df_preview.head(5), use_container_width=True)
