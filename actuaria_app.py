@@ -1668,16 +1668,62 @@ def page_analyse():
 
         if besoin in besoins_upload:
             if besoin == "triangle_xl":
-                st.markdown(f"<div style='font-size:0.78rem;color:{BLANC};margin-bottom:6px;'>📊 <strong>Format attendu :</strong> Excel ou CSV avec le triangle cumulé (lignes = années survenance, colonnes = années développement)</div>", unsafe_allow_html=True)
-                fichier = st.file_uploader("Triangle de développement (payés)", type=["csv","xlsx","xls"], key="upload_triangle")
+                # ── Étape 1 : Choix du format de données ─────────────────────
+                _fmt_labels = {
+                    "cumule":     "Format A — Triangle cumulé\n  Tableau Excel : lignes = années de survenance, colonnes = périodes.\n  Chaque cellule = montant cumulé depuis l'origine. C'est le format le plus courant.",
+                    "non_cumule": "Format B — Triangle incrémental\n  Même structure que A, mais chaque cellule = paiement de l'année seulement.\n  Cumulé automatiquement avant analyse.",
+                    "brutes":     "Format C — Données brutes\n  Une ligne par sinistre ou paiement.\n  Colonnes obligatoires : annee_survenance, annee_paiement, montant.\n  Le triangle est reconstruit automatiquement.",
+                }
+                _fmt_choisi = st.radio(
+                    "Quel est le format de votre fichier ?",
+                    options=list(_fmt_labels.keys()),
+                    format_func=lambda x: _fmt_labels[x].split("\n")[0],
+                    key="a7_format_declare",
+                    horizontal=False,
+                )
+                for ligne in _fmt_labels[_fmt_choisi].split("\n")[1:]:
+                    st.caption(ligne)
+
+                # ── Bouton template téléchargeable ───────────────────────────
+                _tpl_map = {
+                    "cumule":     "direction_non_vie/services/templates/template_format_A_triangle_cumule.xlsx",
+                    "non_cumule": "direction_non_vie/services/templates/template_format_B_triangle_incremental.xlsx",
+                    "brutes":     "direction_non_vie/services/templates/template_format_C_donnees_brutes.xlsx",
+                }
+                try:
+                    import os as _os_tpl
+                    _tpl_path = _tpl_map[_fmt_choisi]
+                    if _os_tpl.path.exists(_tpl_path):
+                        with open(_tpl_path, "rb") as _f_tpl:
+                            st.download_button(
+                                label=f"📥 Télécharger le template {_fmt_choisi.replace('_',' ').title()}",
+                                data=_f_tpl.read(),
+                                file_name=_os_tpl.path.basename(_tpl_path),
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                key=f"dl_tpl_{_fmt_choisi}",
+                            )
+                except Exception:
+                    pass
+
+                st.session_state["a7_format_declare"] = _fmt_choisi
+
+                # ── Étape 2 : Upload du fichier ──────────────────────────────
+                fichier = st.file_uploader(
+                    "Triangle de développement (payés)",
+                    type=["csv","xlsx","xls"],
+                    key="upload_triangle",
+                    help="Uploadez votre fichier dans le format sélectionné ci-dessus.",
+                )
+
+                # ── Triangle des charges engagées (Munich CL) ────────────────
                 fichier_engage = st.file_uploader(
                     "🇩🇪 Triangle des charges engagées — optionnel, pour Munich Chain Ladder",
                     type=["csv","xlsx","xls"], key="upload_triangle_engage",
-                    help="Même format que le triangle payés. Requis uniquement pour la méthode Munich CL (Quarg-Mack 2004).",
+                    help="Format A ou B uniquement. Requis pour Munich CL (Quarg-Mack 2004).",
                 )
                 if fichier_engage:
                     try:
-                        import pandas as _pd_eng, io as _io_eng
+                        import pandas as _pd_eng
                         _df_eng = _pd_eng.read_excel(fichier_engage) if not fichier_engage.name.endswith(".csv") else _pd_eng.read_csv(fichier_engage)
                         fichier_engage.seek(0)
                         _df_eng_num = _df_eng.select_dtypes(include=["number"]).dropna(how="all").dropna(axis=1, how="all")
@@ -2355,59 +2401,49 @@ def _executer_analyse(besoin, direction, equipe, client):
                     else:
                         resultats["principal"] = r3
 
-            # ── TRIANGLE DIRECT → A7 ────────────────────────────────────────
+            # ── TRIANGLE DIRECT → A7 (via NVTriangleBuilder — P3-bis) ────
             elif besoin == "triangle_xl":
                 from direction_non_vie.provisionnement.a7_provisionnement import AgentA7Provisionnement
-                import numpy as _np
-                a7 = AgentA7Provisionnement(audit_path=_tmp, models_path=_tmp, verbose=False)
-                if df is not None and len(df) > 1:
-                    # Extraire valeurs numériques
-                    df_num = df.select_dtypes(include=["number"])
-                    df_num = df_num.dropna(how="all").dropna(axis=1, how="all")
-                    # Retirer la colonne d'années de survenance si présente
-                    # Logique robuste : 1ère colonne = années (1900-2100)
-                    #                  ET reste = montants (> 2100) OU noms colonnes petits (<=360)
-                    import numpy as _np_chk
-                    if df_num.shape[0] > 1 and df_num.shape[1] > 1:
-                        _first_col  = df_num.iloc[:, 0].dropna()
-                        _rest_vals  = df_num.iloc[:, 1:].values.flatten()
-                        _rest_vals  = _rest_vals[~_np_chk.isnan(_rest_vals.astype(float))]
-                        _col0_years = bool((_first_col.between(1900, 2100)).all() and len(_first_col) > 0)
-                        _rest_amts  = bool(len(_rest_vals) > 0 and (_rest_vals > 2100).any())
-                        _col_small  = all(isinstance(c, (int, float)) and float(c) <= 360
-                                         for c in df_num.columns[1:])
-                        if _col0_years and (_rest_amts or _col_small):
-                            # Colonne années de survenance → retirer seulement cette colonne
-                            df_num = df_num.iloc[:, 1:]
-                        elif _col0_years and df_num.shape[0] > 1 and df_num.iloc[1, 0] > 1900:
-                            # En-têtes ligne ET colonne → retirer les deux
-                            df_num = df_num.iloc[1:, 1:]
-                    # Retirer lignes sans aucune valeur (dernières années sans données)
-                    df_num = df_num[df_num.notna().any(axis=1)]
-                    df_num = df_num.loc[:, df_num.notna().any(axis=0)]
-                    tri = df_num.fillna(0).values.astype(float)
-                    # Rendre la matrice carrée (A7 exige n×n)
-                    n_rows, n_cols = tri.shape
-                    n_max = max(n_rows, n_cols)
-                    if n_cols < n_max:
-                        tri = _np.hstack([tri, _np.zeros((n_rows, n_max - n_cols))])
-                    if n_rows < n_max:
-                        tri = _np.vstack([tri, _np.zeros((n_max - n_rows, n_max))])
-                    _a7p = st.session_state.get("analyse_params", {})
-                    r7 = a7.run(
-                        source=tri,
-                        mode_declare='cumule',
-                        generer_graphiques=True,
-                        lob=_a7p.get("a7_lob", "generique"),
-                        arrete=_a7p.get("a7_arrete", ""),
-                        n_sim_bootstrap=_a7p.get("a7_n_sim_bootstrap", 5000),
-                        annee_base_reserve=_a7p.get("a7_annee_base_reserve", 1),
-                        resultats_precedents=_a7p.get("a7_resultats_precedents"),
-                        primes=_a7p.get("a7_primes"),
-                        lr_bf_manuel=_a7p.get("a7_lr_apriori"),
-                    annee_debut=_a7p.get("a7_annee_debut"),
-                        triangle_engage=_a7p.get("a7_triangle_engage"),
+                from direction_non_vie.services.nv_triangle_builder import NVTriangleBuilder
+                a7  = AgentA7Provisionnement(audit_path=_tmp, models_path=_tmp, verbose=False)
+                _a7p = st.session_state.get("analyse_params", {})
+                # Récupérer le format déclaré par l'utilisateur (P3-bis — plus d'heuristiques)
+                _fmt = st.session_state.get("a7_format_declare", "cumule")
+                if fichier is not None:
+                    # Un seul chemin : NVTriangleBuilder avec format déclaré
+                    builder = NVTriangleBuilder(verbose=False)
+                    _nom_onglet = st.session_state.get("a7_onglet_triangle")
+                    _res_build = builder.construire(
+                        source       = fichier,
+                        mode_declare = _fmt,
+                        nom_onglet   = _nom_onglet,
+                        schema_mapping = _a7p.get("a7_schema_mapping"),
                     )
+                    if not _res_build["success"]:
+                        st.error(f"❌ Erreur pipeline données : {_res_build['erreur']}")
+                        r7 = a7.run(generer_graphiques=False)
+                    else:
+                        _tri = _res_build["triangle_total"]
+                        r7 = a7.run(
+                            source             = _tri,
+                            mode_declare       = "cumule",
+                            generer_graphiques = True,
+                            lob                = _a7p.get("a7_lob", "generique"),
+                            arrete             = _a7p.get("a7_arrete", ""),
+                            n_sim_bootstrap    = _a7p.get("a7_n_sim_bootstrap", 5000),
+                            annee_base_reserve = _a7p.get("a7_annee_base_reserve", 1),
+                            resultats_precedents = _a7p.get("a7_resultats_precedents"),
+                            primes             = _a7p.get("a7_primes"),
+                            lr_bf_manuel       = _a7p.get("a7_lr_apriori"),
+                            annee_debut        = _a7p.get("a7_annee_debut"),
+                            triangle_engage    = _a7p.get("a7_triangle_engage"),
+                        )
+                        # Alertes pipeline remontées à l'utilisateur
+                        for _alerte in _res_build["rapport"].get("alertes", []):
+                            if "❌" in _alerte:
+                                st.error(_alerte)
+                            elif "⚠️" in _alerte:
+                                st.warning(_alerte)
                 else:
                     r7 = a7.run(generer_graphiques=False)
                 resultats["principal"] = r7
