@@ -69,7 +69,9 @@ LAYOUT_BASE = dict(paper_bgcolor=NAVY, plot_bgcolor=NAVY_L,
 # ── Paramètres IFRS 17 ────────────────────────────────────────────────────────
 # Taux IFRS 17 bottom-up = actif sans risque + illiquidity premium
 # Pour Non-Vie courte : RFR + prime illiquidité 50-75 bps (vs RFR S2 pur)
-ILLIQUIDITY_PREMIUM_DEFAULT = 0.0060   # 60 bps — Non-Vie courte
+ILLIQUIDITY_PREMIUM_DEFAULT = 0.0060   # 60 bps — Non-Vie courte (contrats <= 1 an)
+ILLIQUIDITY_PREMIUM_LONG    = 0.0090   # 90 bps — branches longues (RC Medicale)
+# Parametrer via params_ifrs['illiq_premium'] selon la branche analysee
 QUANTILE_RA_DEFAULT         = 0.75     # P75 — standard marché PAA
 DUREE_CONTRAT_DEFAULT       = 1.0      # 1 an — Non-Vie standard
 
@@ -254,6 +256,7 @@ class AgentA11IFRS17:
             'duree_contrat':    p.get('duree_contrat',  DUREE_CONTRAT_DEFAULT),
             'taux_chargement':  p.get('taux_chargement',0.25),
             'taux_sinistres':   p.get('taux_sinistres', 0.70),
+            'fraction_ecoule':  p.get('fraction_ecoule', 0.50),
             'annee_ouverture':  p.get('annee_ouverture', datetime.now().year - 1),
             'annee_fermeture':  p.get('annee_fermeture', datetime.now().year),
         }
@@ -511,9 +514,10 @@ class AgentA11IFRS17:
         lrc_tot = 0.0
 
         for b in branches:
-            # LRC = fraction non écoulée des primes
-            # Hypothèse : souscription uniforme → 50% restant en moyenne
-            lrc_b = b['primes'] * 0.50 * d
+            # LRC = fraction non ecoule des primes
+            # Parametrable via params_ifrs['fraction_ecoule'] (defaut 0.50)
+            fraction_ecoule = p.get('fraction_ecoule', 0.50)
+            lrc_b = b['primes'] * (1.0 - fraction_ecoule) * d
             lrc_tot += lrc_b
             par_b.append({
                 'nom':    b['nom'],
@@ -724,6 +728,9 @@ class AgentA11IFRS17:
         lic_tot = lic['lic_total']
         ra_tot  = ra['ra_total']
 
+        # Biais de perimetre a documenter :
+        # LIC IFRS17 = Claims Provision | BE S2 = Claims + Premium Provision
+        # Comparaison directe sous-estime l'ecart reel.
         ecart_be     = lic_tot - be_s2
         ecart_be_pct = ecart_be / max(be_s2, 1) * 100
         ecart_rm_ra  = ra_tot  - rm_s2
