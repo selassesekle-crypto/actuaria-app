@@ -473,31 +473,32 @@ class TriangleValidator:
             num = num.dropna(how='all')
             num = num.loc[:, num.notna().any(axis=0)]
 
-            # Retirer la colonne d'années de survenance si présente
-            # Logique robuste :
-            # 1. La 1ère colonne contient des années calendaires (entre 1900 et 2100)
-            # 2. ET les montants du reste du triangle sont >> 2100 (vrais montants)
-            # 3. OU les noms des colonnes restantes sont petits (1,2..10 ou 12,24..360)
+            # Retirer la colonne d'années de survenance si présente.
+            # Logique stricte (P3-bis) : basée sur la structure des colonnes,
+            # sans heuristique sur les valeurs (plus de seuil > 2100).
+            # Critère : 1ère colonne contient uniquement des entiers dans [1900, 2100]
+            #           ET les noms des colonnes restantes sont numériques ou "Dev.N".
             if num.shape[0] > 1 and num.shape[1] > 1:
                 first_col = num.iloc[:, 0].dropna()
-                rest_vals = num.iloc[:, 1:].values.flatten()
-                rest_vals = rest_vals[~np.isnan(rest_vals)]
-
-                col0_all_years   = bool((first_col.between(1900, 2100)).all() and len(first_col) > 0)
-                rest_are_amounts = bool(len(rest_vals) > 0 and (rest_vals > 2100).any())
-                col_names_small  = all(
-                    isinstance(c, (int, float)) and float(c) <= 360
+                col0_all_years = bool(
+                    len(first_col) > 0 and
+                    first_col.between(1900, 2100).all() and
+                    (first_col == first_col.astype(int)).all()
+                )
+                # Colonnes restantes : noms numériques (1,2,...) ou texte "Dev.N"
+                col_names_dev = all(
+                    str(c).strip().replace("Dev.", "").replace("dev.", "").isdigit()
+                    or (isinstance(c, (int, float)) and 1 <= float(c) <= 600)
                     for c in num.columns[1:]
                 )
 
-                if col0_all_years and (rest_are_amounts or col_names_small):
-                    # Cas standard : 1ère colonne = années de survenance → retirer
+                if col0_all_years and col_names_dev:
                     num = num.iloc[:, 1:]
                     rapport['infos'].append(
-                        "Colonne d'années de survenance détectée et retirée"
+                        "Colonne d'années de survenance détectée et retirée "
+                        "(critère : entiers [1900-2100] + colonnes Dev.N)"
                     )
                 elif col0_all_years and num.shape[0] > 1 and num.iloc[1, 0] > 1900:
-                    # Cas ancien : en-têtes ligne ET colonne numériques
                     num = num.iloc[1:, 1:]
                     rapport['infos'].append(
                         "En-têtes numériques (années) retirés automatiquement"
