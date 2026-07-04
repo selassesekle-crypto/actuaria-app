@@ -67,6 +67,15 @@ SIGMA_LOB = {
     # Branches longues — sigma calibres EIOPA Annexe II
     'rc_medicale':         {'sigma_prem':0.13,'sigma_res':0.11,'f_cat':0.15},
     'corporels_graves':    {'sigma_prem':0.13,'sigma_res':0.11,'f_cat':0.15},
+    # Branches supplementaires lob_config.py (nomenclature A7)
+    'catastrophes_naturelles':   {'sigma_prem':0.10,'sigma_res':0.20,'f_cat':0.50},
+    'marine_aviation_transport': {'sigma_prem':0.13,'sigma_res':0.13,'f_cat':0.15},
+    'incendie_dommages':         {'sigma_prem':0.08,'sigma_res':0.11,'f_cat':0.25},
+    'credit_caution':            {'sigma_prem':0.21,'sigma_res':0.19,'f_cat':0.10},
+    'dommage_corporel_individuel':{'sigma_prem':0.13,'sigma_res':0.11,'f_cat':0.15},
+    'rc_auto_materiel':          {'sigma_prem':0.10,'sigma_res':0.09,'f_cat':0.15},
+    'rc_auto_corporels':         {'sigma_prem':0.10,'sigma_res':0.09,'f_cat':0.15},
+    'generique':                 {'sigma_prem':0.13,'sigma_res':0.17,'f_cat':0.15},
 }
 SIGMA_DEFAULT = {'sigma_prem':0.10,'sigma_res':0.11,'f_cat':0.15}
 
@@ -82,6 +91,12 @@ CORR_LOB = {
     frozenset(['transport',    'rc_auto']):            0.25,
     frozenset(['corporels_graves', 'rc_medicale']):    0.25,
     frozenset(['corporels_graves', 'rc_generale']):    0.25,
+    frozenset(['rc_auto_corporels', 'rc_medicale']):   0.50,
+    frozenset(['rc_auto_corporels', 'rc_auto_materiel']): 0.50,
+    frozenset(['dommage_corporel_individuel', 'rc_medicale']): 0.25,
+    frozenset(['incendie_dommages', 'construction']): 0.25,
+    frozenset(['incendie_dommages', 'mrh']): 0.50,
+    frozenset(['credit_caution', 'rc_generale']): 0.25,
     # Paires non listees : correlation par defaut 0.25 (conservateur EIOPA)
 }
 
@@ -107,6 +122,15 @@ DURATION_LOB = {
     # Branches longues — queues lourdes reglementaires
     'rc_medicale':           17.0,  # Erreurs medicales, revelation tardive : 15-20 ans
     'corporels_graves':      20.0,  # Rentes versageres, prejudices corporels : 15-25 ans
+    # Branches supplementaires lob_config.py (nomenclature A7)
+    'catastrophes_naturelles':    3.0,   # Cat Nat : liquidation rapide post-sinistre
+    'marine_aviation_transport':  3.0,   # Identique transport
+    'incendie_dommages':          3.0,   # Identique incendie
+    'credit_caution':             3.0,   # Identique credit
+    'dommage_corporel_individuel':15.0,  # Queue longue — voir corporels_graves
+    'rc_auto_materiel':           2.5,   # Queue courte — materiel uniquement
+    'rc_auto_corporels':          8.0,   # Queue longue — corporels
+    'generique':                  4.0,   # Defaut generique
     # Defaut si branche inconnue : 4.0 ans (voir DURATION_LOB.get(n, 4.0))
     # ATTENTION : toujours verifier que la branche est mappee ici
 }
@@ -140,6 +164,21 @@ BRANCHE_MAP = {
     'corporels_graves':        'corporels_graves',
     'corporel_grave':          'corporels_graves',
     'prejudice_corporel':      'corporels_graves',
+    # Nomenclature lob_config.py (A7) -> nomenclature A10
+    'rc_auto_materiel':            'rc_auto_materiel',
+    'rc_auto_corporels':           'rc_auto_corporels',
+    'marine_aviation_transport':   'marine_aviation_transport',
+    'marine':                      'marine_aviation_transport',
+    'aviation':                    'marine_aviation_transport',
+    'incendie_dommages':           'incendie_dommages',
+    'catastrophes_naturelles':     'catastrophes_naturelles',
+    'cat_nat':                     'catastrophes_naturelles',
+    'catnat':                      'catastrophes_naturelles',
+    'credit_caution':              'credit_caution',
+    'caution':                     'credit_caution',
+    'dommage_corporel_individuel': 'dommage_corporel_individuel',
+    'dommage_corporel':            'dommage_corporel_individuel',
+    'generique':                   'generique',
 }
 
 PD_MAP = {'AAA':0.001,'AA':0.001,'A':0.003,'BBB':0.010,'BB':0.050}
