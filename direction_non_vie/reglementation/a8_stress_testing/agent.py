@@ -217,10 +217,11 @@ class AgentA8StressTesting:
                 mp          = result_a6.get('modele_production', {})
                 # Prime : depuis modele_production ou backtest ou fallback
                 bt          = result_a6.get('backtest', {})
-                prime_nette = (mp.get('prime_pure',
-                               bt.get('moy_train',
-                               result_a6.get('prime_nette', primes_acq))))
-                if not prime_nette or prime_nette == 0:
+                # prime_pure de A6 = prime unitaire (EUR/contrat), pas les primes acquises.
+                # Utiliser primes_acquises si disponible dans A6.
+                prime_nette = (mp.get('primes_acquises',
+                               bt.get('moy_train', primes_acq)))
+                if not prime_nette or prime_nette <= 0:
                     prime_nette = primes_acq
                 gini        = mp.get('gini_test', result_a6.get('gini', 0.25))
                 lr_attendu  = result_a6.get('loss_ratio_attendu', 0.72)
@@ -709,7 +710,10 @@ class AgentA8StressTesting:
             ratios = []
             for t in horizons:
                 scr_t  = scr_base * (1 + taux_croiss) ** t
-                choc_t = scr_t * choc_annuel if t == 2 else 0
+                # t_choc : annee du choc dans l'ORSA (defaut t=2, paramétrable).
+                # Justifier dans le RSR/SFCR : choc immediat (t=1) ou en cours de route (t=2+).
+                t_choc_orsa = self._config.get('orsa_t_choc', 2) if hasattr(self, '_config') else 2
+                choc_t = scr_t * choc_annuel if t == t_choc_orsa else 0
                 scr_t += choc_t
                 ratio_t = fp / max(scr_t, 1) * 100
                 ratios.append(round(ratio_t, 1))
