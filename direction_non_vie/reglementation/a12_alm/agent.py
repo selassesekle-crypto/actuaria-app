@@ -356,13 +356,23 @@ class AgentA12ALM:
         else:
             alloc_a10 = (result_a10.get('detail', {})
                          .get('scr_mkt', {}).get('allocation', {}))
+            ob = alloc_a10.get('obligations', 0.70)
+            ac = alloc_a10.get('actions',     0.10)
+            im = alloc_a10.get('immo',        0.05)
+            ca = max(0.0, 1.0 - ob - ac - im)
+            total_alloc = ob + ac + im + ca
+            if total_alloc > 1.001:
+                self.logger.warning(
+                    f'ALM : allocation actif somme a {total_alloc:.1%} > 100%'
+                    ' — normalisation appliquee.'
+                )
+                ob /= total_alloc; ac /= total_alloc
+                im /= total_alloc; ca /= total_alloc
             alloc = {
-                'obligations': alloc_a10.get('obligations', 0.70),
-                'actions':     alloc_a10.get('actions',     0.10),
-                'immo':        alloc_a10.get('immo',        0.05),
-                'cash':        1.0 - alloc_a10.get('obligations',0.70)
-                                   - alloc_a10.get('actions',0.10)
-                                   - alloc_a10.get('immo',0.05),
+                'obligations': ob,
+                'actions':     ac,
+                'immo':        im,
+                'cash':        ca,
             }
 
         par_classe = []
@@ -573,12 +583,13 @@ class AgentA12ALM:
 
         detail = []
         pire_nav  = 0.0
-        pire_choc = 0.0
+        pire_choc = CHOCS_TAUX[0]  # valeur de secours
 
         for choc, label in zip(CHOCS_TAUX, CHOC_LABELS):
-            # Impact actif (obligations sensibles)
-            pct_oblig = actif['allocation'].get('obligations', 0.70)
-            imp_a = -dur_a * choc * val_a * pct_oblig
+            # dur_a est la duration GLOBALE du portefeuille actif (toutes classes)
+            # Les classes non sensibles aux taux (actions, cash) ont deja
+            # tire dur_a vers le bas — on applique donc sur val_a entier.
+            imp_a = -dur_a * choc * val_a
 
             # Impact passif (BE actualisé)
             imp_p = -dur_p * choc * val_p
@@ -588,7 +599,8 @@ class AgentA12ALM:
             nav_stress = nav_0 + imp_nav
             pct_nav    = imp_nav / max(abs(nav_0), 1) * 100
 
-            if abs(imp_nav) > abs(pire_nav):
+            # Pire cas = perte maximale (impact negatif le plus fort sur NAV)
+            if imp_nav < pire_nav:
                 pire_nav  = imp_nav
                 pire_choc = choc
 
@@ -603,10 +615,19 @@ class AgentA12ALM:
                 'favorable': imp_nav > 0,
             })
 
+        # Fallback : si aucun choc negatif, prendre la variation absolue max
+        if pire_nav == 0.0 and detail:
+            idx_max = max(range(len(detail)), key=lambda i: abs(detail[i]['imp_nav']))
+            pire_nav  = detail[idx_max]['imp_nav']
+            pire_choc = detail[idx_max]['choc']
+        pire_label = (
+            CHOC_LABELS[CHOCS_TAUX.index(pire_choc)]
+            if pire_choc in CHOCS_TAUX else 'N/A'
+        )
         return {
             'nav_base':  round(nav_0, 0),
             'detail':    detail,
-            'pire_cas':  CHOC_LABELS[CHOCS_TAUX.index(pire_choc)],
+            'pire_cas':  pire_label,
             'pire_nav':  round(pire_nav, 0),
             'chocs':     CHOC_LABELS,
         }
