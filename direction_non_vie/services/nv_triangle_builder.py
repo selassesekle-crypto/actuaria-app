@@ -141,6 +141,7 @@ class NVTriangleBuilder:
         schema_mapping  : Optional[Dict]   = None,
         mode_declare    : str              = 'auto',
         annee_debut     : Optional[int]    = None,
+        nom_onglet      : Optional[str]    = None,
     ) -> Dict:
         """
         Point d'entrée principal — construit les triangles depuis n'importe
@@ -208,6 +209,7 @@ class NVTriangleBuilder:
                 mode_declare   = mode_declare,
                 schema_mapping = schema_mapping,
                 rapport        = rapport,
+                nom_onglet     = nom_onglet,
             )
             rapport['alertes'].extend(rapport_n1.get('alertes', []))
             rapport['infos'].extend(rapport_n1.get('infos', []))
@@ -859,21 +861,17 @@ class NVTriangleBuilder:
             onglets = []
 
             for nom_onglet in xl.sheet_names:
-                # Lire seulement les 3 premières lignes pour l'aperçu
-                df_sample = pd.read_excel(
-                    chemin_fichier,
-                    sheet_name=nom_onglet,
-                    nrows=3,
-                )
-                # Détecter le type probable de l'onglet
+                # Lecture unique via xl.parse — plus performant que deux read_excel
+                df_full   = xl.parse(nom_onglet)
+                df_sample = df_full.head(3)
                 type_probable = self._deviner_type_onglet(df_sample, nom_onglet)
 
                 onglets.append({
-                    'nom':             nom_onglet,
-                    'nb_lignes':       len(pd.read_excel(chemin_fichier, sheet_name=nom_onglet)),
-                    'nb_colonnes':     len(df_sample.columns),
-                    'colonnes':        list(df_sample.columns[:5]),  # 5 premières colonnes
-                    'type_probable':   type_probable,
+                    'nom':           nom_onglet,
+                    'nb_lignes':     len(df_full),
+                    'nb_colonnes':   len(df_full.columns),
+                    'colonnes':      list(df_full.columns[:5]),
+                    'type_probable': type_probable,
                 })
 
             self.logger.info(f"{len(onglets)} onglet(s) détecté(s) : {[o['nom'] for o in onglets]}")
