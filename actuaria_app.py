@@ -2730,12 +2730,13 @@ def _executer_analyse(besoin, direction, equipe, client):
                 _a7p = st.session_state.get("analyse_params", {})
                 # Récupérer le format déclaré par l'utilisateur (P3-bis — plus d'heuristiques)
                 _fmt = st.session_state.get("a7_format_declare", "cumule")
-                if fichier is not None:
+                # Dans _executer_analyse, le fichier est déjà chargé en DataFrame via session_state
+                if df is not None:
                     # Un seul chemin : NVTriangleBuilder avec format déclaré
                     builder = NVTriangleBuilder(verbose=False)
                     _nom_onglet = st.session_state.get("a7_onglet_triangle") or st.session_state.get("a7_onglet_triangle_mono")
                     _res_build = builder.construire(
-                        source       = fichier,
+                        source       = df,
                         mode_declare = _fmt,
                         nom_onglet   = _nom_onglet,
                         schema_mapping = _a7p.get("a7_schema_mapping"),
