@@ -193,9 +193,7 @@ class AgentA13AuditTrail:
                 )
 
             # ── VALIDATION AUDIT TRAIL ───────────────────────────────────────
-            _val_audit_ = self._valider_audit_trail(logs, registre_rgpd, hash_session, hypotheses)
-            _gv_audit_  = self._graphiques_validation_audit(
-                _val_audit_, logs, hypotheses) if generer_graphiques else {}
+            # VALIDATION AUDIT TRAIL
             # ── VALIDATION AUDIT TRAIL ───────────────────────────────────
             _val_aud_ = self._valider_audit_trail(logs, registre_rgpd, hash_session, hypotheses)
             _gv_aud_  = self._graphiques_validation_audit(
@@ -437,7 +435,9 @@ class AgentA13AuditTrail:
         # Hypothèses A11 IFRS 17
         a11 = resultats_agents.get('a11', {})
         if a11.get('success'):
-            prov = a11.get('provisions_ifrs17', {})
+            prov  = a11.get('provisions', {})
+            taux  = a11.get('taux', {})
+            ecart = a11.get('ecart_s2_ifrs', {})
             hypotheses['modules']['ifrs_17'] = {
                 'approche':         a11.get('approche', 'N/A'),
                 'taux_actu_pct':    prov.get('taux_actu', 'N/A'),
@@ -496,8 +496,8 @@ class AgentA13AuditTrail:
         # Extraction des KPIs clés pour le hash
         extractions = {
             'a7':  ('best_estimate', 'best_estimate', 'BE_S2'),
-            'a10': ('bscr', 'scr_total', 'SCR_total'),
-            'a11': ('reconciliation_s2', 'tp_ifrs17', 'TP_IFRS17'),
+            'a10': ('scr', 'total', 'SCR_total'),
+            'a11': ('provisions', 'tp_ifrs17', 'TP_IFRS17'),
             'a12': ('gap_alm', 'gap_duration', 'Gap_ALM'),
         }
 
@@ -569,18 +569,18 @@ class AgentA13AuditTrail:
             kpis['provision_p90']       = f"{be.get('reserve_p90', 0):,.0f} €"
 
         if a10.get('success'):
-            bscr = a10.get('bscr', {})
+            bscr = a10.get('scr', {})
             mcr  = a10.get('mcr', {})
-            kpis['scr_total'] = f"{bscr.get('scr_total', 0):,.0f} €"
+            kpis['scr_total'] = f"{bscr.get('total', 0):,.0f} €"
             kpis['ratio_scr'] = f"{a10.get('ratio_scr', 0):.1f}%"
-            kpis['mcr_final'] = f"{mcr.get('mcr_final', 0):,.0f} €"
+            kpis['mcr_final'] = f"{mcr.get('mcr', 0):,.0f} €"
 
         if a11.get('success'):
-            prov  = a11.get('provisions_ifrs17', {})
-            recon = a11.get('reconciliation_s2', {})
-            tp    = prov.get('tp_total', prov.get('lrc', 0) + prov.get('lic', 0))
+            prov  = a11.get('provisions', {})
+            recon = a11.get('ecart_s2_ifrs', {})
+            tp    = prov.get('tp_ifrs17', 0)
             kpis['tp_ifrs17']       = f"{tp:,.0f} €"
-            kpis['ratio_ifrs17_s2'] = f"{recon.get('ratio_ifrs17_s2', 0):.3f}"
+            kpis['ratio_ifrs17_s2'] = f"{recon.get('ratio_ifrs_s2', 0):.3f}"
 
         if a12.get('success'):
             gap_alm = a12.get('gap_alm', {})
