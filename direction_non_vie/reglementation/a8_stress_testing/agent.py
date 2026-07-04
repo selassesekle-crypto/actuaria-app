@@ -857,7 +857,9 @@ class AgentA8StressTesting:
         Prêt à intégrer dans le SFCR Section E.
         """
         scr = scr_dict['scr_total']
-        vec = scr_dict.get('scr_vec', [0, 0, 0, 0])
+        # Securiser scr_vec : padding a 4 elements si la liste est trop courte
+        _vec_raw = scr_dict.get('scr_vec', [])
+        vec = (_vec_raw + [0, 0, 0, 0])[:4]
         lab = scr_dict.get('labels_vec', ['Souscription', 'Catastrophe', 'Marché', 'Opérationnel'])
 
         return {
