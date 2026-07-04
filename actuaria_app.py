@@ -2736,6 +2736,23 @@ def _executer_analyse(besoin, direction, equipe, client):
                     st.error("❌ Aucun fichier chargé. Uploadez votre triangle et relancez l'analyse.")
                     st.stop()
 
+                # Diagnostic du DataFrame reçu
+                import pandas as _pd_diag
+                if isinstance(df, _pd_diag.DataFrame):
+                    _df_num_diag = df.select_dtypes(include=["number"])
+                    st.info(
+                        f"📋 Fichier reçu : {df.shape[0]} lignes × {df.shape[1]} colonnes "
+                        f"| {_df_num_diag.shape[1]} col. numériques "
+                        f"| Format déclaré : {_fmt}"
+                    )
+                    if _df_num_diag.shape[1] == 0:
+                        st.error(
+                            "❌ Aucune colonne numérique détectée dans votre fichier. "
+                            "Vérifiez que votre triangle contient des valeurs numériques "
+                            "et que vous avez sélectionné le bon onglet."
+                        )
+                        st.stop()
+
                 # Construction du triangle via NVTriangleBuilder (format déclaré, P3-bis)
                 _builder_ex = NVTriangleBuilder(verbose=False)
                 _res_build = _builder_ex.construire(
@@ -2743,7 +2760,12 @@ def _executer_analyse(besoin, direction, equipe, client):
                     mode_declare = _fmt,
                 )
                 if not _res_build["success"]:
-                    st.error(f"❌ Erreur pipeline données : {_res_build['erreur']}")
+                    st.error(
+                        f"❌ Erreur pipeline données : {_res_build['erreur']}\n\n"
+                        f"Dimensions du fichier : {df.shape[0]} lignes × {df.shape[1]} colonnes. "
+                        f"Format déclaré : **{_fmt}**. "
+                        f"Vérifiez que votre fichier correspond au format sélectionné."
+                    )
                     st.stop()
 
                 _tri = _res_build["triangle_total"]
