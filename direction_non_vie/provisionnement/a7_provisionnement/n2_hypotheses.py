@@ -214,9 +214,16 @@ class HypothesesValidator:
 
         for j in range(m - 2):
             f_j, f_j1 = [], []
-            for i in range(n - j - 2):
-                cij, cij1, cij2 = C[i, j], C[i, j+1], C[i, j+2]
-                if cij > 0 and cij1 > 0 and cij2 > 0:
+            import math
+            for i in range(n):
+                if j + 2 >= m:
+                    continue
+                cij  = float(C[i, j])
+                cij1 = float(C[i, j+1])
+                cij2 = float(C[i, j+2])
+                if (cij > 0 and cij1 > 0 and cij2 > 0
+                        and not math.isnan(cij) and not math.isnan(cij1)
+                        and not math.isnan(cij2)):
                     f_j.append(cij1 / cij)
                     f_j1.append(cij2 / cij1)
 
@@ -322,9 +329,16 @@ class HypothesesValidator:
 
         for j in range(m - 1):
             facteurs = []
-            for i in range(n - j - 1):
-                if C[i, j] > 0 and C[i, j+1] > 0:
-                    facteurs.append(C[i, j+1] / C[i, j])
+            import math
+            for i in range(n):
+                if j + 1 >= m:
+                    continue
+                cij  = float(C[i, j])
+                cij1 = float(C[i, j+1])
+                if (cij > 0 and cij1 > 0
+                        and not math.isnan(cij)
+                        and not math.isnan(cij1)):
+                    facteurs.append(cij1 / cij)
 
             if len(facteurs) >= 3:
                 arr = np.array(facteurs)
@@ -464,22 +478,6 @@ class HypothesesValidator:
                 'message': msg,
             }
 
-        # Cas 0 : LR manuel prioritaire
-        if lr_manuel is not None and lr_manuel > 0:
-            ok    = 0.20 < lr_manuel < 2.0
-            score = 85 if ok else 40
-            msg   = f"H3 A priori : LR fourni manuellement = {lr_manuel:.1%} - source : jugement actuariel."
-            if not ok:
-                alertes.append(f"H3 A priori : LR manuel = {lr_manuel:.1%} hors plage [20%-200%].")
-            else:
-                infos.append(msg)
-            return {
-                'ok': ok, 'score': score,
-                'lr_apriori': round(lr_manuel, 4),
-                'lr_std': 0.0, 'cv_lr': 0.0,
-                'source': 'manuel', 'lr_manuel': lr_manuel,
-                'message': msg,
-            }
 
         lr_ref     = cfg_lob.get('lr_marche_reference')
         lr_src     = cfg_lob.get('lr_marche_source', '—')
@@ -624,10 +622,17 @@ class HypothesesValidator:
 
         for j in range(m - 1):
             facteurs, poids = [], []
-            for i in range(n - j - 1):
-                if C[i, j] > 0 and C[i, j+1] > 0:
-                    facteurs.append(C[i, j+1] / C[i, j])
-                    poids.append(C[i, j])
+            import math
+            for i in range(n):
+                if j + 1 >= m:
+                    continue
+                cij  = float(C[i, j])
+                cij1 = float(C[i, j+1])
+                if (cij > 0 and cij1 > 0
+                        and not math.isnan(cij)
+                        and not math.isnan(cij1)):
+                    facteurs.append(cij1 / cij)
+                    poids.append(cij)
 
             if len(facteurs) >= 3:
                 arr  = np.array(facteurs)
