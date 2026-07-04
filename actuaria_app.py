@@ -2076,14 +2076,16 @@ def page_analyse():
                         _sheets = _xl_tmp.sheet_names
                         if len(_sheets) > 1:
                             _ong = st.selectbox(
-                                'Onglet a utiliser pour le triangle',
+                                'Onglet à utiliser pour le triangle',
                                 options=_sheets,
                                 key='a7_onglet_triangle',
-                                help='Fichier multi-onglets : selectionnez le triangle de paiements.',
+                                help='Fichier multi-onglets : sélectionnez le triangle de paiements.',
                             )
+                            # Le selectbox gère son propre state via key= — pas d'assignation manuelle
                         else:
                             _ong = _sheets[0] if _sheets else None
-                        st.session_state['a7_onglet_triangle'] = _ong
+                            # Mono-onglet : stocker sous clé distincte pour éviter le conflit
+                            st.session_state['a7_onglet_triangle_mono'] = _ong
                         df_preview = _pd_ong.read_excel(fichier, sheet_name=_ong)
                         fichier.seek(0)
                     st.success(f"✅ {fichier.name} — {len(df_preview):,} lignes × {len(df_preview.columns)} colonnes")
@@ -2595,7 +2597,7 @@ def _executer_analyse(besoin, direction, equipe, client):
                     llt           = _llt_val,
                     schema_mapping= _a7p.get("a7_schema_mapping"),
                     annee_debut   = _a7p.get("a7_annee_debut"),
-                    nom_onglet    = st.session_state.get("a7_onglet_triangle"),
+                    nom_onglet    = st.session_state.get("a7_onglet_triangle") or st.session_state.get("a7_onglet_triangle_mono"),
                 )
 
                 # ── Étape 2 : Afficher les résultats du builder ───────────────
@@ -2730,7 +2732,7 @@ def _executer_analyse(besoin, direction, equipe, client):
                 if fichier is not None:
                     # Un seul chemin : NVTriangleBuilder avec format déclaré
                     builder = NVTriangleBuilder(verbose=False)
-                    _nom_onglet = st.session_state.get("a7_onglet_triangle")
+                    _nom_onglet = st.session_state.get("a7_onglet_triangle") or st.session_state.get("a7_onglet_triangle_mono")
                     _res_build = builder.construire(
                         source       = fichier,
                         mode_declare = _fmt,
