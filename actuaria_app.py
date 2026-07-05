@@ -1661,6 +1661,7 @@ def page_dashboard():
                     "catastrophes_naturelles":"🌧️ Catastrophes Naturelles",
                     "protection_juridique":   "⚖️ Protection Juridique",
                     "accidents_corporels":    "🏥 Accidents Corporels",
+                    "credit_caution":         "💳 Crédit & Caution",
                     "generique":              "⚙️ Générique",
                 }
                 _ar_lob = st.selectbox("Ligne de branche (LoB)", options=list(_ar_lob_options.keys()),
@@ -1956,6 +1957,7 @@ def page_dashboard():
                 'catastrophes_naturelles':'🌧️ Catastrophes Naturelles',
                 'protection_juridique':   '⚖️ Protection Juridique',
                 'accidents_corporels':    '🏥 Accidents Corporels',
+                'credit_caution':         '💳 Crédit & Caution',
                 'generique':              '⚙️ Générique',
             }
             st.caption('Uploadez un fichier par branche. A7 tourne séquentiellement. Tableau de synthèse BE + SCR.')
