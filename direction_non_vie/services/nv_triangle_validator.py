@@ -474,35 +474,41 @@ class TriangleValidator:
             num = num.loc[:, num.notna().any(axis=0)]
 
             # Retirer la colonne d'années de survenance si présente.
-            # Logique stricte (P3-bis) : basée sur la structure des colonnes,
-            # sans heuristique sur les valeurs (plus de seuil > 2100).
-            # Critère : 1ère colonne contient uniquement des entiers dans [1900, 2100]
-            #           ET les noms des colonnes restantes sont numériques ou "Dev.N".
+            # Critère unique et robuste : la 1ère colonne contient UNIQUEMENT
+            # des entiers dans [1900, 2100] — indépendamment des noms des autres colonnes.
+            # Cela couvre : colonnes "Dev.1"..."Dev.N", colonnes "1"..."10",
+            # colonnes "1981"..."1990", etc.
             if num.shape[0] > 1 and num.shape[1] > 1:
                 first_col = num.iloc[:, 0].dropna()
-                col0_all_years = bool(
-                    len(first_col) > 0 and
-                    first_col.between(1900, 2100).all() and
-                    (first_col == first_col.astype(int)).all()
-                )
-                # Colonnes restantes : noms numériques (1,2,...) ou texte "Dev.N"
-                col_names_dev = all(
-                    str(c).strip().replace("Dev.", "").replace("dev.", "").isdigit()
-                    or (isinstance(c, (int, float)) and 1 <= float(c) <= 600)
-                    for c in num.columns[1:]
-                )
+                try:
+                    first_col_num = first_col.apply(
+                        lambda x: float(x) if not isinstance(x, str) else float('nan')
+                    ).dropna()
+                    col0_all_years = bool(
+                        len(first_col_num) >= 2 and
+                        first_col_num.between(1900, 2100).all() and
+                        (first_col_num == first_col_num.round(0)).all()
+                    )
+                except Exception:
+                    col0_all_years = False
 
-                if col0_all_years and col_names_dev:
+                if col0_all_years:
                     num = num.iloc[:, 1:]
                     rapport['infos'].append(
                         "Colonne d'années de survenance détectée et retirée "
-                        "(critère : entiers [1900-2100] + colonnes Dev.N)"
+                        f"(valeurs [{int(first_col_num.min())}–{int(first_col_num.max())}])"
                     )
-                elif col0_all_years and num.shape[0] > 1 and num.iloc[1, 0] > 1900:
-                    num = num.iloc[1:, 1:]
-                    rapport['infos'].append(
-                        "En-têtes numériques (années) retirés automatiquement"
-                    )
+                elif num.shape[0] > 1 and num.shape[1] > 1:
+                    # Cas en-têtes numériques ligne ET colonne
+                    try:
+                        v01 = float(num.iloc[1, 0])
+                        if 1900 < v01 < 2100:
+                            num = num.iloc[1:, 1:]
+                            rapport['infos'].append(
+                                "En-têtes numériques (années) retirés automatiquement"
+                            )
+                    except Exception:
+                        pass
 
             num = num[(num > 0).any(axis=1)]
             num = num.loc[:, (num > 0).any(axis=0)]
