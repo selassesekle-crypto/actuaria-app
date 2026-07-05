@@ -915,7 +915,7 @@ table.premium tbody td .mono { font-family: 'JetBrains Mono', monospace; font-si
 #  CONSTRUCTION DES BLOCS HTML
 # =============================================================================
 
-def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, audit_id, methode, statut, graphiques_html) -> Dict:
+def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, audit_id, methode, statut, graphiques_html, actuaire_nom='', actuaire_numero_ia='') -> Dict:
     cl    = n3.get('chain_ladder', {});  mk  = n3.get('mack', {})
     bf    = n3.get('bf', {});            cc  = n3.get('cape_cod', {})
     clark = n3.get('clark', {});         bz  = n3.get('barnett_zehnwirth', {})
@@ -1576,7 +1576,7 @@ def export_html(
                     logger.debug(f'Graphique {nom} ignoré : {_eg}')
 
         # Construire tous les blocs
-        b = _build_blocks(n2, n3, n4, narration, source, lob, cli, arr, dt, audit_id, methode, statut, graphiques_html)
+        b = _build_blocks(n2, n3, n4, narration, source, lob, cli, arr, dt, audit_id, methode, statut, graphiques_html, actuaire_nom=actuaire_nom, actuaire_numero_ia=actuaire_numero_ia)
 
         # Assembler
         html = (
