@@ -299,7 +299,7 @@ class NVTriangleBuilder:
                     _diag_qualite = _diagnostiquer(
                         C_total,
                         annee_debut=annee_debut,
-                        lob=lob or 'generique',
+                        lob='generique',  # lob affiné par A7 si nécessaire
                     )
                     for _c in _diag_qualite.get('controles', []):
                         if _c.get('statut') == 'ROUGE':
