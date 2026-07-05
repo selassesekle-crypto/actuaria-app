@@ -3063,9 +3063,28 @@ def _executer_analyse(besoin, direction, equipe, client):
             # A13 — Audit Trail : tracer chaque analyse automatiquement
             try:
                 from direction_non_vie.reglementation.a13_audit.agent import AgentA13AuditTrail
+                # Construire le dict agents avec les clés attendues par A13
+                _r_principal = resultats.get("principal", {})
+                _agents_a13 = {}
+                if besoin in ("triangle_xl", "sinistres"):
+                    _agents_a13["a7"] = _r_principal
+                elif besoin == "stress":   _agents_a13["a8"] = _r_principal
+                elif besoin == "coherence":_agents_a13["a9"] = _r_principal
+                elif besoin == "s2":       _agents_a13["a10"] = _r_principal
+                elif besoin == "ifrs17":   _agents_a13["a11"] = _r_principal
+                elif besoin == "alm":      _agents_a13["a12"] = _r_principal
+                else:                      _agents_a13["principal"] = _r_principal
+                # Enrichir avec les résultats déjà en session
+                _ar = st.session_state.get("agent_results", {})
+                for _ak_13, _ag_13 in [
+                    ("a7","ibrahim"),("a8","isabelle"),("a9","marcus"),
+                    ("a10","elena"),("a11","thomas"),("a12","aisha"),
+                ]:
+                    if _ak_13 not in _agents_a13 and _ag_13 in _ar:
+                        _agents_a13[_ak_13] = _ar[_ag_13]
                 _r13 = AgentA13AuditTrail(audit_path=_tmp, verbose=False).run(
-                    resultats_agents=resultats,
-                    client_nom=ref_client,
+                    resultats_agents=_agents_a13,
+                    client_nom=ref_client or "Client ActuarIA",
                     generer_graphiques=False,
                 )
                 if "agent_results" not in st.session_state:
