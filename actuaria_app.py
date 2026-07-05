@@ -3192,29 +3192,103 @@ def page_resultats():
     if st.button("← Nouvelle analyse", key="btn_back_res"):
         nav_to("analyse")
 
-    # ── Suite réglementaire — accès direct depuis les résultats A7 ────────────
+    # ── Suite réglementaire — lancée directement depuis cette page ─────────────
     if besoin in ("triangle_xl", "sinistres"):
-        st.markdown(f"""
-<div style="background:{NAVY_L};border:1px solid rgba(201,168,76,0.3);border-radius:12px;padding:16px;margin:12px 0;">
-  <div style="font-size:0.65rem;color:{OR};text-transform:uppercase;font-weight:700;margin-bottom:10px;">
-    ◆ Suite réglementaire — lancer directement depuis ces résultats
-  </div>
-  <div style="font-size:0.78rem;color:{GRIS};margin-bottom:12px;">
-    Les résultats A7 Ibrahim sont sauvegardés. Cliquez pour lancer les agents réglementaires sans tout ressaisir.
-  </div>
-</div>""", unsafe_allow_html=True)
-        _suite_agents = [
-            ("stress",    "Stress A8",    "Isabelle"),
-            ("coherence", "Coherence A9", "Marcus"),
-            ("s2",        "SCR/MCR A10",  "Elena"),
-            ("ifrs17",    "IFRS 17 A11",  "Thomas"),
-            ("alm",       "ALM A12",      "Aisha"),
+        st.markdown("<hr>", unsafe_allow_html=True)
+        st.markdown(
+            f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;"
+            f"font-weight:700;margin-bottom:12px;'>Suite reglementaire</div>",
+            unsafe_allow_html=True
+        )
+        import os as _os_suite
+        _os_suite.makedirs("/tmp/actuaria", exist_ok=True)
+        _sc1, _sc2 = st.columns(2)
+        with _sc1:
+            _fpp_suite = st.number_input("Fonds propres (euros)", value=7_650_000,
+                step=100_000, key="suite_fpp")
+        with _sc2:
+            _primes_suite = st.number_input("Primes acquises (euros)", value=10_000_000,
+                step=100_000, key="suite_primes")
+
+        _suite_defs = [
+            ("A8 Stress Testing ORSA",    "isabelle", "stress"),
+            ("A9 Coherence inter-equipes", "marcus",   "coherence"),
+            ("A10 Solvabilite 2 SCR MCR",  "elena",    "s2"),
+            ("A11 IFRS 17 PAA",            "thomas",   "ifrs17"),
+            ("A12 ALM Liquidite",          "aisha",    "alm"),
         ]
-        _suite_cols = st.columns(5)
-        for col, (b_key, b_lbl, b_agent) in zip(_suite_cols, _suite_agents):
-            with col:
-                if st.button(b_lbl, key=f"suite_{b_key}", use_container_width=True):
-                    nav_to("analyse", besoin=b_key, equipe="reglementation_nv")
+        for _s_label, _s_agent, _s_besoin in _suite_defs:
+            with st.expander(_s_label, expanded=False):
+                _s_key = f"res_suite_{_s_besoin}"
+                _s_res = st.session_state.get(_s_key)
+                if st.button(f"Lancer {_s_label}", key=f"btn_suite_{_s_besoin}",
+                             use_container_width=True):
+                    with st.spinner("Calcul en cours..."):
+                        try:
+                            _tmp_s = "/tmp/actuaria"
+                            if _s_besoin == "stress":
+                                from direction_non_vie.reglementation.a8_stress_testing.agent import AgentA8StressTesting
+                                _s_res = AgentA8StressTesting(audit_path=_tmp_s, verbose=False).run(
+                                    result_a7=r_raw, fonds_propres=_fpp_suite,
+                                    primes_acq=_primes_suite, generer_graphiques=False,
+                                )
+                            elif _s_besoin == "coherence":
+                                from direction_non_vie.reglementation.a9_coherence.agent import AgentA9Coherence
+                                _s_res = AgentA9Coherence(audit_path=_tmp_s, verbose=False).run(
+                                    result_a7=r_raw, primes_acq=_primes_suite,
+                                    generer_graphiques=False,
+                                )
+                            elif _s_besoin == "s2":
+                                from direction_non_vie.reglementation.a10_solvabilite2.agent import AgentA10Solvabilite2
+                                _s_res = AgentA10Solvabilite2(audit_path=_tmp_s, verbose=False).run(
+                                    result_a7=r_raw, fonds_propres=_fpp_suite,
+                                    generer_graphiques=False,
+                                )
+                            elif _s_besoin == "ifrs17":
+                                from direction_non_vie.reglementation.a10_solvabilite2.agent import AgentA10Solvabilite2
+                                from direction_non_vie.reglementation.a11_ifrs17.agent import AgentA11IFRS17
+                                _r10s = AgentA10Solvabilite2(audit_path=_tmp_s, verbose=False).run(
+                                    result_a7=r_raw, fonds_propres=_fpp_suite,
+                                    generer_graphiques=False,
+                                )
+                                _s_res = AgentA11IFRS17(audit_path=_tmp_s, verbose=False).run(
+                                    result_a7=r_raw, result_a10=_r10s,
+                                    generer_graphiques=False,
+                                )
+                            elif _s_besoin == "alm":
+                                from direction_non_vie.reglementation.a10_solvabilite2.agent import AgentA10Solvabilite2
+                                from direction_non_vie.reglementation.a12_alm.agent import AgentA12ALM
+                                _r10s = AgentA10Solvabilite2(audit_path=_tmp_s, verbose=False).run(
+                                    result_a7=r_raw, fonds_propres=_fpp_suite,
+                                    generer_graphiques=False,
+                                )
+                                _s_res = AgentA12ALM(audit_path=_tmp_s, verbose=False).run(
+                                    result_a10=_r10s, result_a7=r_raw,
+                                    generer_graphiques=False,
+                                )
+                            st.session_state[_s_key] = _s_res
+                            _ak_m = {"stress":"isabelle","coherence":"marcus",
+                                     "s2":"elena","ifrs17":"thomas","alm":"aisha"}
+                            if "agent_results" not in st.session_state:
+                                st.session_state["agent_results"] = {}
+                            st.session_state["agent_results"][_ak_m[_s_besoin]] = _s_res
+                            st.rerun()
+                        except Exception as _e_s:
+                            st.error(f"Erreur : {_e_s}")
+                if _s_res and _s_res.get("success"):
+                    _s_col = VERT if _s_res.get("statut_rag","") == "VERT" else AMBRE if _s_res.get("statut_rag","") == "AMBRE" else ROUGE
+                    st.markdown(
+                        f"<div style='background:{NAVY_L};border-left:3px solid {_s_col};"
+                        f"border-radius:6px;padding:10px 14px;margin:8px 0;'>"
+                        f"<div style='font-size:0.8rem;font-weight:700;color:{_s_col};"
+                        f"margin-bottom:6px;'>Statut : {_s_res.get('statut_rag', _s_res.get('statut',''))}</div>"
+                        f"<div style='font-size:0.76rem;color:{BLANC};white-space:pre-wrap;"
+                        f"line-height:1.7;'>{str(_s_res.get('commentaire',''))[:1500]}</div>"
+                        f"</div>",
+                        unsafe_allow_html=True
+                    )
+                elif _s_res:
+                    st.error(f"Erreur : {_s_res.get('erreur', 'Inconnue')}")
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
