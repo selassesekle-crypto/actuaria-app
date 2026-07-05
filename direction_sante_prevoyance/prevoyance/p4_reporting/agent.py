@@ -686,9 +686,9 @@ if __name__ == '__main__':
     print("="*70)
 
     import sys; sys.path.insert(0,'/home/claude')
-    from axel_p1_tarification_prevoyance import AgentP1TarificationPrevoyance
-    from rayan_p2_tables_morbidite import AgentP2TablesMorbidite
-    from elodie_p3_provisionnement_prevoyance import AgentP3ProvisionnemntPrevoyance
+    from direction_sante_prevoyance.prevoyance.p1_tarification.agent import AgentP1TarificationPrevoyance
+    from direction_sante_prevoyance.prevoyance.p2_tables_morbidite.agent import AgentP2TablesMorbidite
+    from direction_sante_prevoyance.prevoyance.p3_provisionnement.agent import AgentP3ProvisionnemntPrevoyance
 
     r1 = AgentP1TarificationPrevoyance(models_path='/tmp',audit_path='/tmp',verbose=False).run(
         age=40, salaire_brut=45_000, categorie='employe',
