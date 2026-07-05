@@ -1679,6 +1679,8 @@ def page_dashboard():
                             lob                = _ar_lob,
                             arrete             = _ar_arrete,
                             n_sim_bootstrap    = _ar_n_sim,
+                            generer_word       = False,
+                            generer_pdf_flag   = False,
                         )
                         st.session_state["ar_resultats_a7"] = _r7_ar
                         _ar_res = _r7_ar
@@ -2680,6 +2682,8 @@ def _executer_analyse(besoin, direction, equipe, client):
                     annee_debut          = _a7p.get("a7_annee_debut"),
                     triangle_engage      = _a7p.get("a7_triangle_engage"),
                     courbe_rfr           = _a7p.get("a7_courbe_rfr", None),
+                    generer_word         = False,
+                    generer_pdf_flag     = False,
                 )
 
                 # Enrichir les résultats avec les infos de séparation LLT
@@ -2817,6 +2821,8 @@ def _executer_analyse(besoin, direction, equipe, client):
                     lr_bf_manuel       = _a7p.get("a7_lr_apriori"),
                     annee_debut        = _a7p.get("a7_annee_debut"),
                     triangle_engage    = _a7p.get("a7_triangle_engage"),
+                    generer_word       = False,
+                    generer_pdf_flag   = False,
                 )
                 resultats["principal"] = r7
 
