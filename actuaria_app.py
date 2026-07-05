@@ -1696,21 +1696,20 @@ def page_dashboard():
                                 _demoji = "OK" if _dstat=="VERT" else "ATTENTION" if _dstat=="AMBRE" else "ALERTE"
                                 st.markdown(
                                     f"<div style='background:{NAVY_LL};border-left:4px solid {_dcol};"
-                                    f"border-radius:8px;padding:12px 16px;margin:8px 0;'>",
+                                    f"border-radius:8px;padding:12px 16px;margin:8px 0;'>"
+                                    f"<div style='font-size:0.8rem;font-weight:700;color:{_dcol};"
+                                    f"margin-bottom:6px;'>{_demoji} Qualite du triangle : {_dstat} — Score {_dscore}/100</div>"
+                                    f"<div style='font-size:0.75rem;color:{BLANC};line-height:1.6;'>"
+                                    f"{_diag_ar.get('resume','')[:200]}</div>"
+                                    + "".join(
+                                        f"<div style='font-size:0.72rem;color:{AMBRE if _dc['statut']=='AMBRE' else ROUGE};"
+                                        f"margin-top:4px;'>{_dc['code']} — {_dc['message'][:100]}</div>"
+                                        for _dc in _diag_ar.get("controles", [])
+                                        if _dc.get("statut") != "VERT"
+                                    )
+                                    + "</div>",
                                     unsafe_allow_html=True
                                 )
-                                st.markdown(
-                                    f"<div style='font-size:0.8rem;font-weight:700;color:{_dcol};margin-bottom:6px;'>"
-                                    f"{_demoji} Qualite du triangle : {_dstat} — Score {_dscore}/100</div>"
-                                    f"<div style='font-size:0.75rem;color:{BLANC};'>"
-                                    f"{_diag_ar.get('resume','')[:200]}</div></div>",
-                                    unsafe_allow_html=True
-                                )
-                                for _dc in _diag_ar.get("controles", []):
-                                    if _dc.get("statut") != "VERT":
-                                        st.caption(
-                                            f"{_dc['code']} {_dc['libelle']} : {_dc['message'][:120]}"
-                                        )
                         else:
                             st.error(f"❌ Erreur A7 : {_r7_ar.get('erreur', 'Inconnue')}")
 
