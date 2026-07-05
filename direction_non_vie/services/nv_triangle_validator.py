@@ -599,6 +599,18 @@ class TriangleValidator:
                 C_inc[i, 0] = df[df[col_surv] == ann][col_mont].sum()
 
         C_cum = np.cumsum(C_inc, axis=1)
+
+        # Masquer les cellules futures (zone inconnue du triangle).
+        # Une cellule (i, j) est future si i + j >= n_annees :
+        # l'année de survenance i et la période j n'ont pas encore eu lieu.
+        # np.cumsum propage les 0 de C_inc vers la droite, ce qui produit
+        # des valeurs non nulles dans la zone future — on les remet à 0.
+        n_r, n_c = C_cum.shape
+        for _i in range(n_r):
+            for _j in range(n_c):
+                if _i + _j >= n_annees:
+                    C_cum[_i, _j] = 0.0
+
         rapport['infos'].append(
             f"Triangle construit : {n_annees} années "
             f"({annee_min}→{annee_max}), "
