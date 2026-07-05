@@ -300,8 +300,8 @@ class AgentP2TablesMorbidite:
         q_IP_cond = _interp(Q_IP_COND_BCAC, age)
 
         # Taux décès Actif → Décès (mortalité toutes causes TH0002)
-        from axel_p1_tarification_prevoyance import QX_TH0002
-        qx_AD = _interp(QX_TH0002, age)
+        from direction_sante_prevoyance.services.sp_tables_actuarielles import get_qx_th0002 as _get_qx
+        qx_AD = _get_qx(age, 'M')  # TH0002 — mortalité toutes causes
 
         # Taux décès IP → Décès
         q_PD  = _interp(Q_PD_IP, age)
