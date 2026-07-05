@@ -211,8 +211,9 @@ def _calculer_lambda(
     """
     n, m = C_P.shape
 
-    lam_P = np.zeros(m - 1)
-    lam_E = np.zeros(m - 1)
+    lam_P    = np.zeros(m - 1)
+    lam_E    = np.zeros(m - 1)
+    Q_moy_vec = np.zeros(m - 1)  # Q_moy volumique par colonne
 
     for j in range(m - 1):
         r_P_j, r_E_j, r_Q_j = [], [], []
@@ -230,6 +231,7 @@ def _calculer_lambda(
             continue
 
         Q_moy = sum_CP / sum_CE  # volumique — conforme Quarg & Mack eq. 3.3
+        Q_moy_vec[j] = Q_moy      # stocké pour munich_cl (évite recalcul)
 
         # ── Résidus pondérés (Quarg & Mack eq. 3.1 — Gauss-Markov) ─────
         # Var(F_P[i,j]) = σ²/C_P[i,j] → pondération par sqrt(C_P[i,j])
@@ -277,7 +279,7 @@ def _calculer_lambda(
         lam_P[j] = float(np.clip(cov_P / var_Q, 0.0, lambda_max))
         lam_E[j] = float(np.clip(cov_E / var_Q, 0.0, lambda_max))
 
-    return lam_P, lam_E
+    return lam_P, lam_E, Q_moy_vec
 
 
 # =============================================================================
@@ -338,7 +340,7 @@ def munich_cl(
     f_E = _facteurs_cl(C_E)
 
     # ── 3. Coefficients λ (Quarg-Mack 2004) ──────────────────────────────────
-    lam_P, lam_E = _calculer_lambda(C_P, C_E, f_P, f_E, lambda_max=lambda_max)
+    lam_P, lam_E, Q_moy_vec = _calculer_lambda(C_P, C_E, f_P, f_E, lambda_max=lambda_max)
 
     # ── 4. Facteurs Munich ajustés ────────────────────────────────────────────
     #
@@ -352,28 +354,34 @@ def munich_cl(
     f_star_P = f_P.copy()
     f_star_E = f_E.copy()
 
+    idx = np.arange(n)
     for j in range(m - 1):
         if f_E[j] <= 0 or f_P[j] <= 0:
             continue
 
-        # Q_moy volumique pour la projection (Quarg & Mack eq. 3.3)
-        _sum_p = sum(C_P[i, j] for i in range(n) if i+j < n and C_P[i,j]>0 and C_E[i,j]>0)
-        _sum_e = sum(C_E[i, j] for i in range(n) if i+j < n and C_P[i,j]>0 and C_E[i,j]>0)
-        Q_moy = _sum_p / max(_sum_e, 1e-10)
+        # Q_moy issu de _calculer_lambda — pas de recalcul (Gemini §3)
+        Q_moy = Q_moy_vec[j]
+        if Q_moy <= 0:
+            # Fallback vectorisé si Q_moy non calculé (colonnes courtes)
+            masque_j = (C_P[:, j] > 0) & (C_E[:, j] > 0) & (idx + j < n)
+            sp = float(np.sum(C_P[masque_j, j]))
+            se = float(np.sum(C_E[masque_j, j]))
+            Q_moy = sp / max(se, 1e-10)
 
-        # Ratio prédit par CL payé seul : q̂_P[j] = Q_moy × f_P[j] / f_E[j]
+        # q̂_P[j] = Q_moy × f_P[j] / f_E[j]  (Quarg & Mack eq. 4.4)
         q_hat_P = Q_moy * f_P[j] / max(f_E[j], 1e-10)
 
-        # Ratio prédit par CL engagé seul : q̂_E[j] = Q*_moy × f_E[j] / f_P[j]
-        # Q*_moy = 1/Q_moy (ratio inverse pour le triangle engagé)
-        Q_star_moy = max(_sum_e, 1e-10) / max(_sum_p, 1e-10)
-        q_hat_E = Q_star_moy * f_E[j] / max(f_P[j], 1e-10)
+        # q̂_E[j] = Q_moy × f_E[j] / f_P[j]  (même Q, ratio prédit CL engagé)
+        # NB : Quarg & Mack raisonnent toujours sur Q = P/E, pas sur Q* = E/P
+        q_hat_E = Q_moy * f_E[j] / max(f_P[j], 1e-10)
 
         # Facteurs ajustés — Quarg & Mack eq. 4.4 :
-        # f*_P[j] = f_P[j] + λ_P[j] × (q̂_P[j] - Q_moy[j])
-        # Signe : si payé avance plus vite (f_P>f_E) → q̂_P > Q_moy → adj > 0
+        # f*_P[j] = f_P[j] + λ_P[j] × (q̂_P[j] - Q_moy)
+        # f*_E[j] = f_E[j] + λ_E[j] × (Q_moy - q̂_E[j])
+        # Signe f*_P : si f_P>f_E → q̂_P>Q_moy → adj_P>0 → f*_P hausse
+        # Signe f*_E : si f_E<f_P → q̂_E<Q_moy → adj_E>0 → f*_E hausse
         adj_P = lam_P[j] * (q_hat_P - Q_moy)
-        adj_E = lam_E[j] * (q_hat_E - Q_star_moy)
+        adj_E = lam_E[j] * (Q_moy   - q_hat_E)
 
         f_star_P[j] = max(f_P[j] + adj_P, 1.0)
         f_star_E[j] = max(f_E[j] + adj_E, 1.0)
