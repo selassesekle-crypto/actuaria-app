@@ -3244,10 +3244,10 @@ def page_resultats():
 
         _suite_defs = [
             ("A8 Stress Testing ORSA",    "isabelle", "stress"),
-            ("A9 Coherence inter-equipes", "marcus",   "coherence"),
             ("A10 Solvabilite 2 SCR MCR",  "elena",    "s2"),
             ("A11 IFRS 17 PAA",            "thomas",   "ifrs17"),
             ("A12 ALM Liquidite",          "aisha",    "alm"),
+            ("A9 Coherence inter-equipes", "marcus",   "coherence"),
         ]
         for _s_label, _s_agent, _s_besoin in _suite_defs:
             with st.expander(_s_label, expanded=False):
@@ -3354,19 +3354,28 @@ def page_resultats():
                         with _c2: st.metric("AMBRE", str(_dash.get("nb_ambre", 0)))
                         with _c3: st.metric("ROUGE", str(_dash.get("nb_rouge", 0)))
                         with _c4: st.metric("Pret ACPR", "✅" if _dash.get("pret_acpr") else "❌")
-                        # Alertes — controles est une liste
+                        # Tableau des contrôles
                         _ctrls = _s_res.get("controles", [])
                         if isinstance(_ctrls, list):
+                            import pandas as _pd_a9
+                            _rows_a9 = []
                             for _ctrl in _ctrls:
-                                if not isinstance(_ctrl, dict):
-                                    continue
+                                if not isinstance(_ctrl, dict): continue
                                 _msg = _ctrl.get("message", "")
-                                # Filtrer les contrôles non exécutés (agents manquants)
-                                if "Non exécuté" in _msg or "requis" in _msg:
-                                    continue
-                                if _ctrl.get("statut") in ("ROUGE", "AMBRE"):
-                                    _ic = "🔴" if _ctrl.get("statut") == "ROUGE" else "⚠️"
-                                    st.caption(f"{_ic} {_ctrl.get('controle','')} — {_msg[:100]}")
+                                if "Non exécuté" in _msg or "requis" in _msg: continue
+                                _st9 = _ctrl.get("statut", "")
+                                _ic9 = "✅" if _st9=="VERT" else "⚠️" if _st9=="AMBRE" else "🔴"
+                                _rows_a9.append({
+                                    "Contrôle": _ctrl.get("controle", ""),
+                                    "Statut": f"{_ic9} {_st9}",
+                                    "Message": _msg[:120],
+                                })
+                            if _rows_a9:
+                                st.dataframe(
+                                    _pd_a9.DataFrame(_rows_a9),
+                                    use_container_width=True,
+                                    hide_index=True,
+                                )
                     elif _s_besoin == "s2":
                         _prov  = _s_res.get("provisions", {})
                         _cap   = _s_res.get("capital", {})
