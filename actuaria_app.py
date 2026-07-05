@@ -3812,6 +3812,42 @@ Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non 
     st.markdown("<hr>", unsafe_allow_html=True)
 
     # ── EXPORT ───────────────────────────────────────────────────────────────
+    # Champs obligatoires avant génération des rapports
+    st.markdown(
+        f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;"
+        f"font-weight:700;margin-bottom:10px;'>Informations actuarielle — obligatoires pour rapport</div>",
+        unsafe_allow_html=True
+    )
+    _exp_c1, _exp_c2, _exp_c3 = st.columns(3)
+    with _exp_c1:
+        _ref_client_export = st.text_input(
+            "Référence client *",
+            value=st.session_state.get("res_client", ""),
+            placeholder="Ex : Mutuelle XYZ — RC Auto 2026",
+            key="export_ref_client",
+        )
+    with _exp_c2:
+        _actuaire_nom = st.text_input(
+            "Nom de l'actuaire *",
+            placeholder="Ex : Marie Dupont",
+            key="export_actuaire_nom",
+        )
+    with _exp_c3:
+        _actuaire_ia = st.text_input(
+            "N° Institut des Actuaires",
+            placeholder="Ex : IA-2024-1234",
+            key="export_actuaire_ia",
+        )
+
+    _champs_ok = bool(_ref_client_export and _actuaire_nom)
+    if not _champs_ok:
+        st.caption("⚠️ Référence client et nom de l'actuaire requis pour générer les rapports.")
+
+    _a7p_exp = st.session_state.get("analyse_params", {})
+    _arrete_exp = _a7p_exp.get("a7_arrete", "")
+    _lob_exp = r_raw.get("lob_label", _a7p_exp.get("a7_lob", ""))
+    _graphiques_exp = st.session_state.get("graphiques_a7")
+
     e1, e2, e3, e4, e5 = st.columns([1, 1, 1, 1, 1])
     with e1:
         st.download_button(
@@ -3834,21 +3870,21 @@ Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non 
                 key="dl_res_excel",
             )
     with e3:
-        # ── Génération Rapport HTML à la demande ──────────────────────────
-        if st.button("🌐 Rapport HTML", use_container_width=True, key="dl_res_html_btn"):
+        if st.button("🌐 Rapport HTML", use_container_width=True, key="dl_res_html_btn",
+                     disabled=not _champs_ok):
             with st.spinner("Génération du rapport HTML..."):
                 try:
                     from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import export_html as _eh
-                    _n2_rh = r_raw.get("n2",{}); _n3_rh = r_raw.get("n3",{})
-                    _n4_rh = r_raw.get("n4",{}); _a7p_rh = st.session_state.get("analyse_params",{})
                     _html = _eh(
-                        n1={}, n2=_n2_rh, n3=_n3_rh, n4=_n4_rh,
+                        n1={}, n2=r_raw.get("n2",{}), n3=r_raw.get("n3",{}), n4=r_raw.get("n4",{}),
                         commentaire=r_raw.get("commentaire",""),
-                        ref_client=_a7p_rh.get("a7_ref_client",""),
-                        arrete=_a7p_rh.get("a7_arrete",""),
+                        ref_client=_ref_client_export,
+                        arrete=_arrete_exp,
                         audit_id=r_raw.get("audit_id",""),
-                        lob_label=r_raw.get("lob_label", _a7p_rh.get("a7_lob","")),
-                        graphiques=st.session_state.get("graphiques_a7"),
+                        lob_label=_lob_exp,
+                        graphiques=_graphiques_exp,
+                        actuaire_nom=_actuaire_nom,
+                        actuaire_numero_ia=_actuaire_ia,
                     )
                     if _html:
                         st.download_button(
@@ -3864,21 +3900,21 @@ Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non 
                 except Exception as _eh_e:
                     st.error(f"Erreur HTML : {_eh_e}")
 
-        # ── Génération Rapport Word à la demande ──────────────────────────
-        if st.button("📄 Rapport Word", use_container_width=True, key="dl_res_word_btn"):
+        if st.button("📄 Rapport Word", use_container_width=True, key="dl_res_word_btn",
+                     disabled=not _champs_ok):
             with st.spinner("Génération du rapport Word..."):
                 try:
                     from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import export_word as _ew
-                    _n2_rw = r_raw.get("n2", {}); _n3_rw = r_raw.get("n3", {})
-                    _n4_rw = r_raw.get("n4", {}); _a7p_rw = st.session_state.get("analyse_params", {})
                     _word = _ew(
-                        n1={}, n2=_n2_rw, n3=_n3_rw, n4=_n4_rw,
+                        n1={}, n2=r_raw.get("n2",{}), n3=r_raw.get("n3",{}), n4=r_raw.get("n4",{}),
                         commentaire=r_raw.get("commentaire",""),
-                        ref_client=_a7p_rw.get("a7_ref_client",""),
-                        arrete=_a7p_rw.get("a7_arrete",""),
+                        ref_client=_ref_client_export,
+                        arrete=_arrete_exp,
                         audit_id=r_raw.get("audit_id",""),
-                        lob_label=r_raw.get("lob_label", _a7p_rw.get("a7_lob","")),
-                        graphiques=st.session_state.get("graphiques_a7"),
+                        lob_label=_lob_exp,
+                        graphiques=_graphiques_exp,
+                        actuaire_nom=_actuaire_nom,
+                        actuaire_numero_ia=_actuaire_ia,
                     )
                     if _word:
                         st.download_button(
@@ -3894,21 +3930,21 @@ Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non 
                 except Exception as _ew_e:
                     st.error(f"Erreur Word : {_ew_e}")
     with e4:
-        # ── Génération Rapport PDF à la demande ───────────────────────────
-        if st.button("📑 Rapport PDF", use_container_width=True, key="dl_res_pdf_btn"):
+        if st.button("📑 Rapport PDF", use_container_width=True, key="dl_res_pdf_btn",
+                     disabled=not _champs_ok):
             with st.spinner("Génération du rapport PDF..."):
                 try:
                     from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import export_pdf as _ep
-                    _n2_rp = r_raw.get("n2", {}); _n3_rp = r_raw.get("n3", {})
-                    _n4_rp = r_raw.get("n4", {}); _a7p_rp = st.session_state.get("analyse_params", {})
                     _pdf = _ep(
-                        n1={}, n2=_n2_rp, n3=_n3_rp, n4=_n4_rp,
+                        n1={}, n2=r_raw.get("n2",{}), n3=r_raw.get("n3",{}), n4=r_raw.get("n4",{}),
                         commentaire=r_raw.get("commentaire",""),
-                        ref_client=_a7p_rp.get("a7_ref_client",""),
-                        arrete=_a7p_rp.get("a7_arrete",""),
+                        ref_client=_ref_client_export,
+                        arrete=_arrete_exp,
                         audit_id=r_raw.get("audit_id",""),
-                        lob_label=_a7p_rp.get("a7_lob",""),
-                        graphiques=st.session_state.get("graphiques_a7"),
+                        lob_label=_lob_exp,
+                        graphiques=_graphiques_exp,
+                        actuaire_nom=_actuaire_nom,
+                        actuaire_numero_ia=_actuaire_ia,
                     )
                     if _pdf:
                         st.download_button(
