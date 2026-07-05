@@ -193,9 +193,10 @@ def _calculer_lambda(
     f_P:        np.ndarray,
     f_E:        np.ndarray,
     lambda_max: float = 2.0,
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Estime les coefficients λ_P[j] et λ_E[j] par régression OLS.
+    Estime λ_P[j], λ_E[j] et Q_moy_vec[j] par régression OLS pondérée.
+    Q_moy_vec est retourné pour éviter le recalcul dans munich_cl (Gemini §3).
 
     Pour chaque colonne j :
 
