@@ -40,10 +40,17 @@ for k, v in {
     if k not in st.session_state:
         st.session_state[k] = v
 
-def nav_to(page, agent=None, dir_key=None):
+def nav_to(page, agent=None, dir_key=None, besoin=None, equipe=None):
     st.session_state.page = page
     st.session_state.agent_selec = agent
     st.session_state.dir_selec = dir_key
+    if besoin:
+        st.session_state.analyse_besoin = besoin
+    if equipe:
+        st.session_state.analyse_equipe = equipe
+    if besoin or equipe:
+        st.session_state.analyse_dir = "non_vie"
+        st.session_state.mapping_confirme = True
     st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -3178,6 +3185,31 @@ def page_resultats():
 
     if st.button("← Nouvelle analyse", key="btn_back_res"):
         nav_to("analyse")
+
+    # ── Suite réglementaire — accès direct depuis les résultats A7 ────────────
+    if besoin in ("triangle_xl", "sinistres"):
+        st.markdown(f"""
+<div style="background:{NAVY_L};border:1px solid rgba(201,168,76,0.3);border-radius:12px;padding:16px;margin:12px 0;">
+  <div style="font-size:0.65rem;color:{OR};text-transform:uppercase;font-weight:700;margin-bottom:10px;">
+    ◆ Suite réglementaire — lancer directement depuis ces résultats
+  </div>
+  <div style="font-size:0.78rem;color:{GRIS};margin-bottom:12px;">
+    Les résultats A7 Ibrahim sont sauvegardés. Cliquez pour lancer les agents réglementaires sans tout ressaisir.
+  </div>
+</div>""", unsafe_allow_html=True)
+        _suite_cols = st.columns(5)
+        _suite_agents = [
+            ("stress",    "🌩️ Stress A8",    "Isabelle"),
+            ("coherence", "🔗 Cohérence A9",  "Marcus"),
+            ("s2",        "🛡️ SCR/MCR A10",  "Elena"),
+            ("ifrs17",    "📋 IFRS 17 A11",   "Thomas"),
+            ("alm",       "⚖️ ALM A12",       "Aisha"),
+        ]
+        for col, (b_key, b_lbl, b_agent) in zip(_suite_cols, _suite_agents):
+            with col:
+                if st.button(b_lbl, key=f"suite_{b_key}", use_container_width=True,
+                             help=f"Lancer {b_agent} avec les résultats A7 actuels"):
+                    nav_to("analyse", besoin=b_key, equipe="reglementation_nv")
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
