@@ -773,7 +773,7 @@ def chain_ladder(
             'message':     f"Tail factor = {tail_force:.6f} (fourni par agent).",
         }
     else:
-        tail = calculer_tail_factor(
+        tail = calculer_tail_factor_multi(
             facteurs,
             lob_tail_max_alerte      = lob_tail_max_alerte,
             n_facteurs_queue         = n_facteurs_queue,
