@@ -1667,20 +1667,76 @@ def page_dashboard():
                             elif "⚠️" in _al:
                                 st.warning(_al)
 
-                        _tri_ar = _res_build_ar["triangle_total"]
+                        # Détecter les grands sinistres depuis le builder
+                        _grands_df   = _res_build_ar.get("grands_sinistres", None)
+                        _n_grands    = len(_grands_df) if _grands_df is not None and not _grands_df.empty else 0
+                        _rec_grands  = _res_build_ar.get("recommandation_grands", "non_applicable")
+                        _llt_utilise = _res_build_ar.get("llt_utilise")
+
+                        # Triangle à utiliser : attritional si LLT actif, sinon total
+                        _tri_attrit = _res_build_ar.get("triangle_attritional")
+                        _tri_grands = _res_build_ar.get("triangle_grands")
+                        _tri_ar = _tri_attrit if (_tri_attrit is not None) else _res_build_ar["triangle_total"]
+
+                        # Réserve grands sinistres
+                        _reserve_gs = 0.0
+                        _methode_gs = "non_applicable"
+
+                        if _n_grands > 0 and _llt_utilise:
+                            if _n_grands < 20:
+                                # Développement individuel : saisie manuelle
+                                st.markdown(
+                                    f"<div style='background:{NAVY_LL};border-left:4px solid {AMBRE};"
+                                    f"border-radius:8px;padding:12px 16px;margin:8px 0;'>"
+                                    f"<b style='color:{AMBRE};'>⚠️ {_n_grands} grand(s) sinistre(s) détecté(s)</b><br>"
+                                    f"<span style='color:{BLANC};font-size:0.78rem;'>"
+                                    f"Volume insuffisant pour CL séparé (n&lt;20). "
+                                    f"Saisissez la réserve dossier par dossier ci-dessous (Guide IA 2023 §3.2).</span>"
+                                    f"</div>",
+                                    unsafe_allow_html=True
+                                )
+                                _reserve_gs = st.number_input(
+                                    "Réserve grands sinistres (€) — saisie actuaire",
+                                    min_value=0.0, value=0.0, step=10_000.0,
+                                    key="ar_reserve_gs_manuel",
+                                    help="Somme des réserves dossier par dossier pour les grands sinistres identifiés"
+                                )
+                                _methode_gs = "developpement_individuel"
+                            elif _tri_grands is not None and _n_grands >= 20:
+                                # BF automatique sur triangle grands sinistres
+                                st.info(f"🔄 {_n_grands} grands sinistres — calcul BF automatique sur triangle séparé.")
+                                try:
+                                    _r7_gs = AgentA7Provisionnement(
+                                        audit_path=_tmp_ar, models_path=_tmp_ar, verbose=False
+                                    ).run(
+                                        source=_tri_grands, mode_declare="cumule",
+                                        lob=_ar_lob, generer_graphiques=False,
+                                        n_sim_bootstrap=500,
+                                        generer_word=False, generer_pdf_flag=False,
+                                    )
+                                    if _r7_gs.get("success"):
+                                        _reserve_gs = float(_r7_gs.get("n4",{}).get("best_estimate",0))
+                                        _methode_gs = "bf_auto"
+                                        st.success(f"✅ Réserve grands sinistres : {_reserve_gs:,.0f}€ (BF auto)")
+                                except Exception as _e_gs:
+                                    st.warning(f"⚠️ Calcul BF grands sinistres échoué : {_e_gs}. Saisie manuelle.")
+
                         _a7_ar  = AgentA7Provisionnement(
                             audit_path=_tmp_ar, models_path=_tmp_ar, verbose=False
                         )
                         _ar_fichier.seek(0)
                         _r7_ar = _a7_ar.run(
-                            source             = _tri_ar,
-                            mode_declare       = "cumule",
-                            generer_graphiques = True,
-                            lob                = _ar_lob,
-                            arrete             = _ar_arrete,
-                            n_sim_bootstrap    = _ar_n_sim,
-                            generer_word       = False,
-                            generer_pdf_flag   = False,
+                            source                   = _tri_ar,
+                            mode_declare             = "cumule",
+                            generer_graphiques       = True,
+                            lob                      = _ar_lob,
+                            arrete                   = _ar_arrete,
+                            n_sim_bootstrap          = _ar_n_sim,
+                            generer_word             = False,
+                            generer_pdf_flag         = False,
+                            reserve_grands_sinistres = _reserve_gs if _reserve_gs > 0 else None,
+                            n_grands_sinistres       = _n_grands,
+                            methode_grands           = _methode_gs,
                         )
                         st.session_state["ar_resultats_a7"] = _r7_ar
                         _ar_res = _r7_ar
