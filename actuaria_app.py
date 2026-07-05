@@ -3871,7 +3871,7 @@ Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non 
     _lob_exp = r_raw.get("lob_label", _a7p_exp.get("a7_lob", ""))
     _graphiques_exp = st.session_state.get("graphiques_a7")
 
-    e1, e2, e3, e4, e5 = st.columns([1, 1, 1, 1, 1])
+    e1, e2, e3, e4, e5, e6 = st.columns([1, 1, 1, 1, 1, 1])
     with e1:
         st.download_button(
             "⬇️ Export JSON",
@@ -3923,6 +3923,7 @@ Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non 
                 except Exception as _eh_e:
                     st.error(f"Erreur HTML : {_eh_e}")
 
+    with e4:
         if st.button("📄 Rapport Word", use_container_width=True, key="dl_res_word_btn",
                      disabled=not _champs_ok):
             with st.spinner("Génération du rapport Word..."):
@@ -3952,7 +3953,7 @@ Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non 
                         st.error("Génération Word échouée")
                 except Exception as _ew_e:
                     st.error(f"Erreur Word : {_ew_e}")
-    with e4:
+    with e5:
         if st.button("📑 Rapport PDF", use_container_width=True, key="dl_res_pdf_btn",
                      disabled=not _champs_ok):
             with st.spinner("Génération du rapport PDF..."):
@@ -3982,7 +3983,7 @@ Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non 
                         st.error("Génération PDF échouée")
                 except Exception as _ep_e:
                     st.error(f"Erreur PDF : {_ep_e}")
-    with e5:
+    with e6:
         if st.button("📊 Voir Dashboard", use_container_width=True, key="res_to_dash"):
             nav_to("dashboard")
 
