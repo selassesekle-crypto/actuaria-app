@@ -1413,7 +1413,16 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         b['avis'] = ''
 
     # ── PIED ─────────────────────────────────────────────────────────────────
+    # Signature actuaire
+    act_nom = actuaire_nom or ''
+    act_ia  = actuaire_numero_ia or ''
+    act_str = ''
+    if act_nom:
+        act_str = act_nom + (' — N° IA : ' + act_ia if act_ia else '') + ' · '
     b['pied_info'] = cli + ' · ' + lob + ' · Arrêté ' + arr + ' · Audit ID : ' + (audit_id or '—') + ' · ' + dt
+    b['signature_actuaire'] = act_str
+    b['actuaire_nom'] = act_nom
+    b['actuaire_ia']  = act_ia
 
     return b
 
@@ -1534,6 +1543,7 @@ def export_html(
     n1, n2, n3, n4,
     commentaire='', ref_client='', arrete='',
     audit_id='', lob_label='', graphiques=None,
+    actuaire_nom='', actuaire_numero_ia='',
 ) -> str:
     try:
         n1=n1 or {}; n2=n2 or {}; n3=n3 or {}; n4=n4 or {}
@@ -1695,7 +1705,12 @@ def export_html(
             # ── PIED DE PAGE ───────────────────────────────────────────────
             '<div class="pied-de-page">\n'
             '  <div class="pied-logo"><img src="' + LOGO_URI + '" alt="ActuarIA"/></div>\n'
-            '  <div class="pied-meta">' + b['pied_info'] + '<br>'
+            '  <div class="pied-meta">'
+            + b['signature_actuaire']
+            + b['pied_info'] + '<br>'
+            '    <span style="font-size:6.5pt;color:#8A9AB0;">'
+            'Rapport établi conformément à l\'Art. 77 et 105 de la Directive Solvabilité II '
+            'et au Guide Institut des Actuaires 2023</span><br>'
             '    <span class="confidentiel-footer">CONFIDENTIEL — USAGE STRICTEMENT ACTUARIEL</span>\n'
             '  </div>\n'
             '</div>\n\n'
@@ -1716,11 +1731,13 @@ def export_html(
 
 def export_pdf(n1=None, n2=None, n3=None, n4=None,
                commentaire='', ref_client='', arrete='',
-               audit_id='', lob_label='', graphiques=None, **kw) -> bytes:
+               audit_id='', lob_label='', graphiques=None,
+               actuaire_nom='', actuaire_numero_ia='', **kw) -> bytes:
     n1=n1 or {}; n2=n2 or {}; n3=n3 or {}; n4=n4 or {}
     try:
         from weasyprint import HTML as WH
-        html = export_html(n1, n2, n3, n4, commentaire, ref_client, arrete, audit_id, lob_label, graphiques)
+        html = export_html(n1, n2, n3, n4, commentaire, ref_client, arrete, audit_id, lob_label, graphiques,
+                           actuaire_nom=actuaire_nom, actuaire_numero_ia=actuaire_numero_ia)
         pdf  = WH(string=html).write_pdf()
         logger.info(f'PDF : {len(pdf):,} bytes')
         return pdf
@@ -1738,7 +1755,8 @@ def export_pdf(n1=None, n2=None, n3=None, n4=None,
 
 def export_word(n1, n2, n3, n4,
                 commentaire='', ref_client='', arrete='',
-                audit_id='', lob_label='', graphiques=None) -> bytes:
+                audit_id='', lob_label='', graphiques=None,
+                actuaire_nom='', actuaire_numero_ia='') -> bytes:
     try:
         from docx import Document
         from docx.shared import Pt, Cm, RGBColor
