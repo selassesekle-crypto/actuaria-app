@@ -37,35 +37,32 @@ logging.basicConfig(
 # ── Chargement du module données marché ───────────────────────────────────────
 def _charger_market_data() -> Dict:
     """
-    Charge les données marché depuis market_data.py.
-    Fallback sur valeurs EIOPA par défaut si module indisponible.
+    Charge les données marché depuis market_data.py si disponible localement.
+    Fallback immédiat sur valeurs EIOPA par défaut (Streamlit Cloud / production).
+    Le fallback est la voie normale sur Streamlit Cloud — market_data.py est
+    un module local de développement non déployé.
     """
     logger = logging.getLogger("actuaria.a8")
-    # Chercher market_data.py dans plusieurs chemins possibles
-    chemins = [
-        Path("data/marche/market_data.py"),
-        Path(__file__).parent / "data" / "marche" / "market_data.py",
-        # Path local Windows — non disponible sur Streamlit Cloud
-    ]
-    for chemin in chemins:
-        if chemin.exists():
-            try:
-                import importlib.util
-                spec = importlib.util.spec_from_file_location("market_data", chemin)
-                md   = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(md)
-                data = md.fetch_all_market()
-                logger.info(
-                    f"Données marché chargées ({data['fiabilite']}) : "
-                    f"OAT10={data['oat_10ans']['taux_pct']}% · "
-                    f"RFR={data['rfr_10ans']['rfr_pct']}%"
-                )
-                return data
-            except Exception as e:
-                logger.warning(f"market_data.py trouvé mais erreur : {e}")
+    # Tenter uniquement si le fichier existe localement (dev uniquement)
+    chemin_local = Path(__file__).parent / "data" / "marche" / "market_data.py"
+    if chemin_local.exists():
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("market_data", chemin_local)
+            md   = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(md)
+            data = md.fetch_all_market()
+            logger.info(
+                f"Données marché chargées ({data['fiabilite']}) : "
+                f"OAT10={data['oat_10ans']['taux_pct']}% · "
+                f"RFR={data['rfr_10ans']['rfr_pct']}%"
+            )
+            return data
+        except Exception as e:
+            logger.warning(f"market_data.py erreur : {e}")
 
-    # Fallback EIOPA par défaut
-    logger.warning("market_data indisponible — valeurs EIOPA de référence utilisées")
+    # Fallback EIOPA — valeurs de référence Q2 2026 (voie normale sur Streamlit Cloud)
+    logger.info("market_data : fallback valeurs EIOPA reference Q2 2026")
     return {
         'oat_10ans':     {'taux_pct': 3.65, 'source': 'Défaut EIOPA', 'fiabilite': 'DEFAUT'},
         'oat_5ans':      {'taux_pct': 3.10, 'source': 'Défaut EIOPA', 'fiabilite': 'DEFAUT'},
