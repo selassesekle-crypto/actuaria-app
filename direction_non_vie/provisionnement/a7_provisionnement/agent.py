@@ -152,6 +152,9 @@ class AgentA7Provisionnement:
         taux_bf_manuel: Optional[float] = None,   # alias lr_bf_manuel
         generer_graphiques: bool        = True,    # alias generer_graphiques_flag
         annee_debut:      Optional[int]  = None,   # année calendaire de la 1ère ligne
+        reserve_grands_sinistres: Optional[float] = None,  # réserve LLT à ajouter au BE
+        n_grands_sinistres: int          = 0,       # nombre de grands sinistres identifiés
+        methode_grands: str              = 'manuel', # 'manuel' | 'bf_auto' | 'cl_separe'
         **kwargs,
     ) -> Dict:
         """
@@ -317,6 +320,31 @@ class AgentA7Provisionnement:
                 n3['annee_debut_triangle'] = annee_debut
 
             n4 = self._be.calculer(n2, n3, C_calc, lob=lob, courbe_rfr=courbe_rfr)
+
+            # ── Réintégration grands sinistres (LLT) ──────────────────────────
+            if reserve_grands_sinistres is not None and reserve_grands_sinistres > 0:
+                _rgs = float(reserve_grands_sinistres)
+                _be_attrit = float(n4['best_estimate'])
+                _be_final  = _be_attrit + _rgs
+                n4['best_estimate']              = round(_be_final, 0)
+                n4['be_attritional']             = round(_be_attrit, 0)
+                n4['reserve_grands_sinistres']   = round(_rgs, 0)
+                n4['n_grands_sinistres']         = n_grands_sinistres
+                n4['methode_grands']             = methode_grands
+                n4['llt_applique']               = True
+                # Recalculer le message
+                n4['message'] = (
+                    f"BE S2 final = {_be_final:,.0f}€ "
+                    f"(attritional {_be_attrit:,.0f}€ + grands sinistres {_rgs:,.0f}€) · "
+                    f"LLT appliqué — {n_grands_sinistres} grand(s) sinistre(s) · "
+                    f"méthode grands : {methode_grands}"
+                )
+                if self.verbose:
+                    logger.info(
+                        f"LLT | BE_final={_be_final:,.0f}€ "
+                        f"= attrit {_be_attrit:,.0f}€ + grands {_rgs:,.0f}€ "
+                        f"({n_grands_sinistres} sinistres, méthode={methode_grands})"
+                    )
 
             if self.verbose:
                 logger.info(
