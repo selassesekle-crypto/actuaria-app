@@ -1617,7 +1617,7 @@ def page_dashboard():
                     '<b style="color:#C9A84C;">Munich Chain Ladder (Quarg & Mack 2004)</b> — améliore la précision en exploitant les charges engagées (payé + IBNR dossier).<br><br>'
                     '<b style="color:#E74C3C;">⚠️ Point critique :</b> les charges engagées <b>doivent provenir des gestionnaires sinistres</b> (évaluations dossier par dossier), '
                     'jamais calculées depuis vos provisions actuarielles. '
-                    'Une circularité invalide complètement les résultats MCL (corrélation > 0.98 = détection automatique).<br><br>'
+                    'Une circularité invalide complètement les résultats MCL (CV des ratios engagé/payé < 0.02 = détection automatique).<br><br>'
                     '<b>Format attendu :</b> même structure que votre triangle payé '
                     '(lignes = années survenance, colonnes = périodes développement).'
                     '</div>',
@@ -1629,17 +1629,16 @@ def page_dashboard():
                     key='ar_upload_engage',
                     help='Données dossier par dossier — jamais depuis vos provisions actuarielles (circularité)',
                 )
-            # Lire triangle engagé si fourni
+            # Lire triangle engagé si fourni — via variable locale
             _ar_triangle_engage = None
-            if st.session_state.get('ar_upload_engage') is not None:
+            if _ar_fichier_engage is not None:
                 try:
                     import pandas as _pd_eng
-                    _f_eng = st.session_state['ar_upload_engage']
-                    _f_eng.seek(0)
-                    if _f_eng.name.lower().endswith('.csv'):
-                        _df_eng = _pd_eng.read_csv(_f_eng)
+                    _ar_fichier_engage.seek(0)
+                    if _ar_fichier_engage.name.lower().endswith('.csv'):
+                        _df_eng = _pd_eng.read_csv(_ar_fichier_engage)
                     else:
-                        _df_eng = _pd_eng.read_excel(_f_eng)
+                        _df_eng = _pd_eng.read_excel(_ar_fichier_engage)
                     _ar_triangle_engage = _df_eng.values.astype(float)
                 except Exception as _e_eng:
                     st.warning('⚠️ Triangle engagé : ' + str(_e_eng))
