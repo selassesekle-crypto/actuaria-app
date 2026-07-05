@@ -3305,6 +3305,16 @@ def page_resultats():
                                     result_a10=_r10s, result_a7=r_raw,
                                     generer_graphiques=True,
                                 )
+                            # Sérialiser les graphiques Plotly en JSON (survivent au rerun)
+                            import plotly.io as _pio_s
+                            _graphs_raw = _s_res.get("graphiques", {})
+                            _graphs_json = {}
+                            for _gk, _gfig in _graphs_raw.items():
+                                try:
+                                    _graphs_json[_gk] = _pio_s.to_json(_gfig)
+                                except Exception:
+                                    pass
+                            _s_res["graphiques_json"] = _graphs_json
                             st.session_state[_s_key] = _s_res
                             _ak_m = {"stress":"isabelle","coherence":"marcus",
                                      "s2":"elena","ifrs17":"thomas","alm":"aisha"}
@@ -3384,16 +3394,18 @@ def page_resultats():
                         with _c2: st.metric("LCR", f"{float(_lcr.get('lcr',0)):.0f}%")
                         with _c3: st.metric("BV01 Net", f"{float(_bv01.get('bv01_net',0)):+.0f}€/bp")
                         with _c4: st.metric("Redington", f"{_nb_red}/3")
-                    # Graphiques — colonne unique pleine largeur
-                    _s_graphs = _s_res.get("graphiques", {})
-                    if _s_graphs:
+                    # Graphiques — reconstruire depuis JSON (survie au rerun)
+                    import plotly.io as _pio_d
+                    _s_graphs_json = _s_res.get("graphiques_json", {})
+                    if _s_graphs_json:
                         st.markdown(
                             f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;"
                             f"font-weight:700;margin:12px 0 6px;'>Graphiques</div>",
                             unsafe_allow_html=True
                         )
-                        for _gk, _gfig in _s_graphs.items():
+                        for _gk, _gjson in _s_graphs_json.items():
                             try:
+                                _gfig = _pio_d.from_json(_gjson)
                                 st.plotly_chart(_gfig, use_container_width=True,
                                                 key=f"sg_{_s_besoin}_{_gk}")
                             except Exception:
