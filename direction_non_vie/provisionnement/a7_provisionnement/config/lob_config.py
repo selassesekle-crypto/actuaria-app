@@ -414,6 +414,39 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "ratio_c0_primes":          0.25,   # Transport/Marine — dev. long
     },
 
+    # ── Transport (LoB 6 S2 — sous-catégorie marine_aviation_transport) ────────
+    "transport": {
+        "label":            "Transport",
+        "sigma_eiopa":      SIGMA_EIOPA["marine_aviation_transport"],  # 0.12 — S2 LoB 6
+        "lob_eiopa":        "marine_aviation_transport",
+
+        "queue_attendue_ans": 8,
+
+        "h2_seuil_cv":      0.22,
+        "h2_seuil_derive":  0.22,
+        "h1_seuil_corr":    0.50,
+
+        "methodes_prioritaires": [
+            "bornhuetter_ferguson", "cape_cod", "mack_1993", "bootstrap_odp"
+        ],
+        "methode_par_defaut": "bornhuetter_ferguson",
+        "munich_cl_disponible": False,
+
+        "lr_marche_reference":  0.82,
+        "lr_marche_source":     "FFA Non-Vie 2024 — Transport",
+
+        "alertes_specifiques": [
+            "Portefeuille à fort risque de concentration — isoler les gros sinistres.",
+            "Vérifier la séparation brut/net de réassurance.",
+            "Surveiller l'exposition aux événements géopolitiques et climatiques.",
+        ],
+
+        "tail_factor_max_alerte": 1.05,
+        "risque_long":              True,
+        "tail_seuil_stabilisation": 1.05,
+        "ratio_c0_primes":          0.25,
+    },
+
     # ── Générique (fallback si lob non spécifié) ──────────────────────────────
     "generique": {
         "label":            "Branche Non-Vie Générique",
