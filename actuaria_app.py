@@ -297,6 +297,19 @@ label, [data-testid="stWidgetLabel"] p, [data-testid="stWidgetLabel"] span {{
   font-size: 0.82rem !important;
   font-weight: 600 !important;
 }}
+/* Radio — labels des options lisibles */
+[data-testid="stRadio"] label p,
+[data-testid="stRadio"] label span,
+div[role="radiogroup"] label p {{
+  color: {BLANC} !important;
+  font-size: 0.88rem !important;
+  font-weight: 600 !important;
+}}
+[data-testid="stRadio"] label:has(input:checked) p,
+[data-testid="stRadio"] label:has(input:checked) span {{
+  color: {OR} !important;
+  font-weight: 700 !important;
+}}
 </style>
 """, unsafe_allow_html=True)
 
