@@ -3318,14 +3318,18 @@ def page_resultats():
                     _s_statut = _s_res.get("statut_rag", _s_res.get("statut", ""))
                     _s_emoji = "✅" if _s_statut == "VERT" else "⚠️" if _s_statut == "AMBRE" else "🔴"
                     _s_col = VERT if _s_statut == "VERT" else AMBRE if _s_statut == "AMBRE" else ROUGE
+                    _s_comm = str(_s_res.get("commentaire", "")).strip()
                     st.markdown(
-                        f"<div style='font-size:0.85rem;font-weight:700;color:{_s_col};"
-                        f"margin-bottom:8px;'>{_s_emoji} Statut : {_s_statut}</div>",
+                        f"<div style='background:#243F6A;border-left:4px solid {_s_col};"
+                        f"border-radius:8px;padding:14px 16px;margin:8px 0;'>"
+                        f"<div style='font-size:0.88rem;font-weight:700;color:{_s_col};"
+                        f"margin-bottom:10px;'>{_s_emoji} Statut : {_s_statut}</div>"
+                        f"<pre style='font-size:0.76rem;color:#F0F4F8;white-space:pre-wrap;"
+                        f"word-break:break-word;line-height:1.7;font-family:monospace;"
+                        f"margin:0;'>{_s_comm}</pre>"
+                        f"</div>",
                         unsafe_allow_html=True
                     )
-                    _s_comm = str(_s_res.get("commentaire", "")).strip()
-                    if _s_comm:
-                        st.text(_s_comm)
                 elif _s_res:
                     st.warning("Erreur agent")
 
