@@ -1509,13 +1509,13 @@ def page_dashboard():
 </div>""", unsafe_allow_html=True)
 
         # ── Mode : Mono-branche / Multi-branches ──────────────────
-        _ar_mode = st.radio(
+        _ar_mode_label = st.radio(
             "Mode analyse",
-            ["mono", "multi"],
-            format_func=lambda x: "📊 Mono-branche" if x=="mono" else "📋 Multi-branches",
+            ["📊 Mono-branche", "📋 Multi-branches"],
             horizontal=True,
             key="ar_mode_analyse",
         )
+        _ar_mode = "mono" if _ar_mode_label == "📊 Mono-branche" else "multi"
 
         _ar_fichier_engage = None  # initialisé ici — défini dans le bloc mono si activé
         if _ar_mode == "mono":
@@ -1650,11 +1650,18 @@ def page_dashboard():
             _ar_col1, _ar_col2, _ar_col3 = st.columns(3)
             with _ar_col1:
                 _ar_lob_options = {
-                    "mrh": "🏠 MRH", "rc_auto_materiel": "🚗 RC Auto Mat.",
-                    "rc_auto_corporels": "🚑 RC Auto Corp.", "rc_generale": "🏢 RC Générale",
-                    "rc_medicale": "🩺 RC Médicale", "construction": "🏗️ Construction",
-                    "incendie_dommages": "🔥 Incendie", "catastrophes_naturelles": "🌧️ NatCat",
-                    "generique": "⚙️ Générique",
+                    "rc_auto_corporels":      "🚑 RC Auto Corporels",
+                    "rc_auto_materiel":       "🚗 RC Auto Matériels",
+                    "mrh":                    "🏠 MRH",
+                    "rc_generale":            "🏢 RC Générale",
+                    "rc_medicale":            "🩺 RC Médicale",
+                    "construction":           "🏗️ Construction",
+                    "transport":              "🚢 Transport",
+                    "incendie_dommages":      "🔥 Incendie & Dommages",
+                    "catastrophes_naturelles":"🌧️ Catastrophes Naturelles",
+                    "protection_juridique":   "⚖️ Protection Juridique",
+                    "accidents_corporels":    "🏥 Accidents Corporels",
+                    "generique":              "⚙️ Générique",
                 }
                 _ar_lob = st.selectbox("Ligne de branche (LoB)", options=list(_ar_lob_options.keys()),
                                        format_func=lambda x: _ar_lob_options[x], key="ar_lob", index=0)
@@ -1938,14 +1945,18 @@ def page_dashboard():
                         st.rerun()
         elif _ar_mode == 'multi':
             _lob_labels = {
-                'rc_auto_corporels': 'RC Auto Corporels',
-                'rc_auto_materiel':  'RC Auto Matériels',
-                'mrh':               'MRH',
-                'rc_generale':       'RC Générale',
-                'rc_medicale':       'RC Médicale',
-                'construction':      'Construction',
-                'transport':         'Transport',
-                'generique':         'Générique',
+                'rc_auto_corporels':       '🚑 RC Auto Corporels',
+                'rc_auto_materiel':        '🚗 RC Auto Matériels',
+                'mrh':                    '🏠 MRH',
+                'rc_generale':            '🏢 RC Générale',
+                'rc_medicale':            '🩺 RC Médicale',
+                'construction':           '🏗️ Construction',
+                'transport':              '🚢 Transport',
+                'incendie_dommages':      '🔥 Incendie & Dommages',
+                'catastrophes_naturelles':'🌧️ Catastrophes Naturelles',
+                'protection_juridique':   '⚖️ Protection Juridique',
+                'accidents_corporels':    '🏥 Accidents Corporels',
+                'generique':              '⚙️ Générique',
             }
             st.caption('Uploadez un fichier par branche. A7 tourne séquentiellement. Tableau de synthèse BE + SCR.')
             _mb_n = st.slider('Nombre de branches', 2, 8, 3, key='mb_n_lob')
