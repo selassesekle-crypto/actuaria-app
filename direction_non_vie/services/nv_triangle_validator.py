@@ -521,6 +521,14 @@ class TriangleValidator:
         if mode == 'non_cumule':
             C = np.cumsum(C, axis=1)
             rapport['infos'].append("Triangle non cumulé → cumulé automatiquement")
+            # Masquer les cellules futures après cumsum (même logique que Format C).
+            # np.cumsum propage la dernière valeur connue vers la droite —
+            # les cellules (i,j) avec i+j >= n doivent rester à 0.
+            _n = C.shape[0]
+            for _i in range(C.shape[0]):
+                for _j in range(C.shape[1]):
+                    if _i + _j >= _n:
+                        C[_i, _j] = 0.0
 
         return C
 
