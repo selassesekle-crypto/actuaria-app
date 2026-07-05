@@ -133,15 +133,15 @@ def valider_prerequis(
     # Un triangle indépendant a des ratios variables (CV > 0.05) car
     # l'IBNR varie selon la cohorte et l'ancienneté des dossiers.
     try:
-        import numpy as _np_mcl
+        # numpy déjà importé comme np en tête de fichier
         _ratios = []
         for _i in range(n):
             for _j in range(min(m, n - _i)):
                 if C_P[_i,_j] > 0 and C_E[_i,_j] > 0:
                     _ratios.append(float(C_E[_i,_j] / C_P[_i,_j]))
         if len(_ratios) >= 6:
-            _r = _np_mcl.array(_ratios)
-            _cv = float(_np_mcl.std(_r) / _np_mcl.mean(_r)) if _np_mcl.mean(_r) > 0 else 0.0
+            _r = np.array(_ratios)
+            _cv = float(np.std(_r) / np.mean(_r)) if np.mean(_r) > 0 else 0.0
             if _cv < 0.02:
                 return False, (
                     f'CIRCULARITE DETECTEE — CV des ratios engagé/payé = {_cv:.4f} < 0.02. '
@@ -217,32 +217,44 @@ def _calculer_lambda(
     for j in range(m - 1):
         r_P_j, r_E_j, r_Q_j = [], [], []
 
-        Q_obs = []
+        # ── Q_moy volumique (Quarg & Mack eq. 3.3) ──────────────────────
+        # Q̄[j] = Σ C_P[i,j] / Σ C_E[i,j]  (ratio des sommes, pas moyenne arithmétique)
+        sum_CP = sum_CE = 0.0
         for i in range(n):
             if i + j + 1 < n:
-                cp  = C_P[i, j]
-                cp1 = C_P[i, j+1]
-                ce  = C_E[i, j]
-                ce1 = C_E[i, j+1]
-                if cp > 0 and cp1 > 0 and ce > 0 and ce1 > 0:
-                    Q_obs.append(cp / ce)
+                cp = C_P[i, j]; ce = C_E[i, j]
+                if cp > 0 and ce > 0:
+                    sum_CP += cp; sum_CE += ce
 
-        if len(Q_obs) < 3:
-            # Pas assez d'observations → λ = 0 (CL standard)
+        if sum_CE < 1e-10 or sum_CP < 1e-10:
             continue
 
-        Q_moy = float(np.mean(Q_obs))
+        Q_moy = sum_CP / sum_CE  # volumique — conforme Quarg & Mack eq. 3.3
 
+        # ── Résidus pondérés (Quarg & Mack eq. 3.1 — Gauss-Markov) ─────
+        # Var(F_P[i,j]) = σ²/C_P[i,j] → pondération par sqrt(C_P[i,j])
+        # Filtrer les incréments négatifs (biais sur la régression)
         for i in range(n):
             if i + j + 1 < n:
-                cp  = C_P[i, j]
-                cp1 = C_P[i, j+1]
-                ce  = C_E[i, j]
-                ce1 = C_E[i, j+1]
+                cp  = C_P[i, j]; cp1 = C_P[i, j+1]
+                ce  = C_E[i, j]; ce1 = C_E[i, j+1]
                 if cp > 0 and cp1 > 0 and ce > 0 and ce1 > 0:
-                    r_P_j.append(cp1/cp  - f_P[j])
-                    r_E_j.append(ce1/ce  - f_E[j])
-                    r_Q_j.append(cp/ce   - Q_moy)
+                    # Filtrer incréments négatifs
+                    if cp1 < cp or ce1 < ce:
+                        logger.warning(
+                            f'MCL _calculer_lambda : incrément négatif ignoré '
+                            f'i={i} j={j} (cp={cp:.0f}→{cp1:.0f} ce={ce:.0f}→{ce1:.0f})'
+                        )
+                        continue
+                    # Résidus pondérés par sqrt(charge) — Mack eq. 3.1
+                    w_P = float(np.sqrt(cp))
+                    w_E = float(np.sqrt(ce))
+                    r_P_j.append((cp1/cp - f_P[j]) * w_P)
+                    r_E_j.append((ce1/ce - f_E[j]) * w_E)
+                    r_Q_j.append((cp/ce  - Q_moy)  * w_P)
+
+        if len(r_Q_j) < 3:
+            continue
 
         if len(r_Q_j) < 3:
             continue
@@ -352,17 +364,24 @@ def munich_cl(
         if not Q_obs or f_E[j] <= 0:
             continue
 
-        Q_moy = float(np.mean(Q_obs))
+        # Q_moy volumique pour la projection (Quarg & Mack eq. 3.3)
+        _sum_p = sum(C_P[i, j] for i in range(n) if i+j < n and C_P[i,j]>0 and C_E[i,j]>0)
+        _sum_e = sum(C_E[i, j] for i in range(n) if i+j < n and C_P[i,j]>0 and C_E[i,j]>0)
+        Q_moy = _sum_p / max(_sum_e, 1e-10)
 
-        # Ratio prédit par CL payé seul
+        # Ratio prédit par CL payé seul : q̂_P[j] = Q_moy × f_P[j] / f_E[j]
         q_hat_P = Q_moy * f_P[j] / max(f_E[j], 1e-10)
 
-        # Ratio prédit par CL engagé seul
-        q_hat_E = Q_moy * f_E[j] / max(f_P[j], 1e-10)
+        # Ratio prédit par CL engagé seul : q̂_E[j] = Q*_moy × f_E[j] / f_P[j]
+        # Q*_moy = 1/Q_moy (ratio inverse pour le triangle engagé)
+        Q_star_moy = max(_sum_e, 1e-10) / max(_sum_p, 1e-10)
+        q_hat_E = Q_star_moy * f_E[j] / max(f_P[j], 1e-10)
 
-        # Facteurs ajustés
-        adj_P = lam_P[j] * (Q_moy - q_hat_P)
-        adj_E = lam_E[j] * (Q_moy - q_hat_E)
+        # Facteurs ajustés — Quarg & Mack eq. 4.4 :
+        # f*_P[j] = f_P[j] + λ_P[j] × (q̂_P[j] - Q_moy[j])
+        # Signe : si payé avance plus vite (f_P>f_E) → q̂_P > Q_moy → adj > 0
+        adj_P = lam_P[j] * (q_hat_P - Q_moy)
+        adj_E = lam_E[j] * (q_hat_E - Q_star_moy)
 
         f_star_P[j] = max(f_P[j] + adj_P, 1.0)
         f_star_E[j] = max(f_E[j] + adj_E, 1.0)
