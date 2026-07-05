@@ -45,7 +45,7 @@ def _charger_market_data() -> Dict:
     chemins = [
         Path("data/marche/market_data.py"),
         Path(__file__).parent / "data" / "marche" / "market_data.py",
-        Path("C:/Users/selse/actuaria-app/data/marche/market_data.py"),
+        # Path local Windows — non disponible sur Streamlit Cloud
     ]
     for chemin in chemins:
         if chemin.exists():
