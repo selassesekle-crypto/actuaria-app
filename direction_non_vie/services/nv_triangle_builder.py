@@ -56,6 +56,18 @@ from direction_non_vie.services.nv_triangle_validator import TriangleValidator
 
 logger = logging.getLogger('actuaria.direction_non_vie.services.triangle_builder')
 
+# Import diagnostics qualite triangle
+try:
+    from direction_non_vie.services.nv_triangle_diagnostics import diagnostiquer_triangle as _diagnostiquer
+    DIAGNOSTICS_OK = True
+except ImportError:
+    try:
+        from nv_triangle_diagnostics import diagnostiquer_triangle as _diagnostiquer
+        DIAGNOSTICS_OK = True
+    except ImportError:
+        DIAGNOSTICS_OK = False
+        def _diagnostiquer(*a, **kw): return {}
+
 
 # =============================================================================
 #  CONSTANTES
@@ -280,6 +292,22 @@ class NVTriangleBuilder:
                         "(une ligne par sinistre). Le triangle total sera utilisé sans séparation."
                     )
 
+            # Diagnostic qualite du triangle
+            _diag_qualite = {}
+            if DIAGNOSTICS_OK and C_total is not None:
+                try:
+                    _diag_qualite = _diagnostiquer(
+                        C_total,
+                        annee_debut=annee_debut,
+                        lob=lob or 'generique',
+                    )
+                    for _c in _diag_qualite.get('controles', []):
+                        if _c.get('statut') == 'ROUGE':
+                            rapport['alertes'].append(
+                                f"⚠️ Qualite triangle [{_c['code']}] : {_c['message'][:120]}"
+                            )
+                except Exception as _ed:
+                    self.logger.warning(f'Diagnostic triangle echec : {_ed}')
             return {
                 'success':               True,
                 'triangle_total':        C_total,
@@ -294,6 +322,7 @@ class NVTriangleBuilder:
                 'recommandation_grands': recommandation_grands,
                 'annee_debut':           annee_debut,
                 'erreur':                None,
+                'diagnostic_qualite':    _diag_qualite,
             }
 
         except Exception as e:
