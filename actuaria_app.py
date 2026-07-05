@@ -3315,19 +3315,19 @@ def page_resultats():
                         except Exception as _e_s:
                             st.error(f"Erreur : {_e_s}")
                 if _s_res and _s_res.get("success"):
-                    _s_col = VERT if _s_res.get("statut_rag","") == "VERT" else AMBRE if _s_res.get("statut_rag","") == "AMBRE" else ROUGE
+                    _s_statut = _s_res.get("statut_rag", _s_res.get("statut", ""))
+                    _s_emoji = "✅" if _s_statut == "VERT" else "⚠️" if _s_statut == "AMBRE" else "🔴"
+                    _s_col = VERT if _s_statut == "VERT" else AMBRE if _s_statut == "AMBRE" else ROUGE
                     st.markdown(
-                        f"<div style='background:{NAVY_L};border-left:3px solid {_s_col};"
-                        f"border-radius:6px;padding:10px 14px;margin:8px 0;'>"
-                        f"<div style='font-size:0.8rem;font-weight:700;color:{_s_col};"
-                        f"margin-bottom:6px;'>Statut : {_s_res.get('statut_rag', _s_res.get('statut',''))}</div>"
-                        f"<div style='font-size:0.76rem;color:{BLANC};white-space:pre-wrap;"
-                        f"line-height:1.7;'>{str(_s_res.get('commentaire',''))[:1500]}</div>"
-                        f"</div>",
+                        f"<div style='font-size:0.85rem;font-weight:700;color:{_s_col};"
+                        f"margin-bottom:8px;'>{_s_emoji} Statut : {_s_statut}</div>",
                         unsafe_allow_html=True
                     )
+                    _s_comm = str(_s_res.get("commentaire", "")).strip()
+                    if _s_comm:
+                        st.text(_s_comm)
                 elif _s_res:
-                    st.error(f"Erreur : {_s_res.get('erreur', 'Inconnue')}")
+                    st.warning("Erreur agent")
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
