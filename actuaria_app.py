@@ -1508,388 +1508,517 @@ def page_dashboard():
   <div style="font-size:0.78rem;color:{GRIS};margin-top:4px;">Uploadez votre triangle · Lancez A7 · Visualisez les résultats</div>
 </div>""", unsafe_allow_html=True)
 
-        # ── Étape 1 : Format ─────────────────────────────────────────────────
-        st.markdown(f"<div style='font-size:0.82rem;color:{OR};font-weight:700;margin-bottom:10px;'>① Format de votre fichier</div>", unsafe_allow_html=True)
-        _ar_fmt_opts = {
-            "cumule":     ("A", "Triangle cumulé", "Lignes = années · Colonnes = périodes · Cellule = montant cumulé · Format le plus courant"),
-            "non_cumule": ("B", "Triangle incrémental", "Même structure que A · Cellule = paiement de l'année uniquement · Cumulé automatiquement"),
-            "brutes":     ("C", "Données brutes", "Une ligne par paiement · Colonnes : annee_survenance · annee_paiement · montant"),
-        }
-        _ar_fmt_actuel = st.session_state.get("ar_format_declare", "cumule")
-        _ar_fmt_cols = st.columns(3)
-        for _ar_fi, (_ar_fk, (_ar_fl, _ar_fn, _ar_fd)) in enumerate(_ar_fmt_opts.items()):
-            with _ar_fmt_cols[_ar_fi]:
-                _ar_sel  = (_ar_fmt_actuel == _ar_fk)
-                _ar_bord = f"2px solid {OR}" if _ar_sel else f"1px solid rgba(201,168,76,0.25)"
-                _ar_bg   = "rgba(201,168,76,0.12)" if _ar_sel else "rgba(15,46,82,0.6)"
-                st.markdown(f"""<div style='background:{_ar_bg};border:{_ar_bord};border-radius:10px;padding:14px 12px;text-align:center;min-height:90px;'>
-  <div style='font-size:1.1rem;font-weight:900;color:{OR};margin-bottom:4px;'>Format {_ar_fl}</div>
-  <div style='font-size:0.82rem;font-weight:700;color:#F0F4F8;margin-bottom:6px;'>{_ar_fn}</div>
-  <div style='font-size:0.72rem;color:#8A9AB0;line-height:1.5;'>{_ar_fd}</div>
-</div>""", unsafe_allow_html=True)
-                if st.button(f"{'✅ Sélectionné' if _ar_sel else 'Choisir'}", key=f"ar_fmt_btn_{_ar_fk}", use_container_width=True):
-                    st.session_state["ar_format_declare"] = _ar_fk
-                    st.rerun()
-        _ar_fmt = st.session_state.get("ar_format_declare", "cumule")
-
-        # Template téléchargeable
-        _ar_tpl_map = {
-            "cumule":     "direction_non_vie/services/templates/template_format_A_triangle_cumule.xlsx",
-            "non_cumule": "direction_non_vie/services/templates/template_format_B_triangle_incremental.xlsx",
-            "brutes":     "direction_non_vie/services/templates/template_format_C_donnees_brutes.xlsx",
-        }
-        try:
-            import os as _os_ar
-            _ar_tpl = _ar_tpl_map[_ar_fmt]
-            if _os_ar.path.exists(_ar_tpl):
-                with open(_ar_tpl, "rb") as _f_ar:
-                    st.download_button(
-                        label="📥 Télécharger le template",
-                        data=_f_ar.read(),
-                        file_name=_os_ar.path.basename(_ar_tpl),
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        key=f"ar_dl_tpl_{_ar_fmt}",
-                    )
-        except Exception:
-            pass
-
-        st.divider()
-
-        # ── Étape 2 : Upload ─────────────────────────────────────────────────
-        st.markdown(f"<div style='font-size:0.82rem;color:{OR};font-weight:700;margin-bottom:6px;'>② Uploadez votre fichier</div>", unsafe_allow_html=True)
-        _ar_fichier = st.file_uploader(
-            "Triangle de développement",
-            type=["csv", "xlsx", "xls"],
-            key="ar_upload_triangle",
-            help="Format déclaré ci-dessus. Le pipeline valide et construit le triangle automatiquement.",
+        # ── Mode : Mono-branche / Multi-branches ──────────────────
+        _ar_mode = st.radio(
+            "Mode analyse",
+            ["mono", "multi"],
+            format_func=lambda x: "📊 Mono-branche" if x=="mono" else "📋 Multi-branches",
+            horizontal=True,
+            key="ar_mode_analyse",
         )
 
-        # Onglet si multi-feuilles Excel
-        _ar_onglet = None
-        if _ar_fichier and _ar_fichier.name.lower().endswith((".xlsx", ".xls")):
+        if _ar_mode == "mono":
+
+            # ── Étape 1 : Format ─────────────────────────────────────────────────
+            st.markdown(f"<div style='font-size:0.82rem;color:{OR};font-weight:700;margin-bottom:10px;'>① Format de votre fichier</div>", unsafe_allow_html=True)
+            _ar_fmt_opts = {
+                "cumule":     ("A", "Triangle cumulé", "Lignes = années · Colonnes = périodes · Cellule = montant cumulé · Format le plus courant"),
+                "non_cumule": ("B", "Triangle incrémental", "Même structure que A · Cellule = paiement de l'année uniquement · Cumulé automatiquement"),
+                "brutes":     ("C", "Données brutes", "Une ligne par paiement · Colonnes : annee_survenance · annee_paiement · montant"),
+            }
+            _ar_fmt_actuel = st.session_state.get("ar_format_declare", "cumule")
+            _ar_fmt_cols = st.columns(3)
+            for _ar_fi, (_ar_fk, (_ar_fl, _ar_fn, _ar_fd)) in enumerate(_ar_fmt_opts.items()):
+                with _ar_fmt_cols[_ar_fi]:
+                    _ar_sel  = (_ar_fmt_actuel == _ar_fk)
+                    _ar_bord = f"2px solid {OR}" if _ar_sel else f"1px solid rgba(201,168,76,0.25)"
+                    _ar_bg   = "rgba(201,168,76,0.12)" if _ar_sel else "rgba(15,46,82,0.6)"
+                    st.markdown(f"""<div style='background:{_ar_bg};border:{_ar_bord};border-radius:10px;padding:14px 12px;text-align:center;min-height:90px;'>
+      <div style='font-size:1.1rem;font-weight:900;color:{OR};margin-bottom:4px;'>Format {_ar_fl}</div>
+      <div style='font-size:0.82rem;font-weight:700;color:#F0F4F8;margin-bottom:6px;'>{_ar_fn}</div>
+      <div style='font-size:0.72rem;color:#8A9AB0;line-height:1.5;'>{_ar_fd}</div>
+    </div>""", unsafe_allow_html=True)
+                    if st.button(f"{'✅ Sélectionné' if _ar_sel else 'Choisir'}", key=f"ar_fmt_btn_{_ar_fk}", use_container_width=True):
+                        st.session_state["ar_format_declare"] = _ar_fk
+                        st.rerun()
+            _ar_fmt = st.session_state.get("ar_format_declare", "cumule")
+
+            # Template téléchargeable
+            _ar_tpl_map = {
+                "cumule":     "direction_non_vie/services/templates/template_format_A_triangle_cumule.xlsx",
+                "non_cumule": "direction_non_vie/services/templates/template_format_B_triangle_incremental.xlsx",
+                "brutes":     "direction_non_vie/services/templates/template_format_C_donnees_brutes.xlsx",
+            }
             try:
-                import pandas as _pd_ar
-                _xl_ar = _pd_ar.ExcelFile(_ar_fichier)
-                _ar_fichier.seek(0)
-                if len(_xl_ar.sheet_names) > 1:
-                    _ar_onglet = st.selectbox(
-                        "Onglet contenant le triangle",
-                        options=_xl_ar.sheet_names,
-                        key="ar_onglet_triangle",
-                    )
-                else:
-                    _ar_onglet = _xl_ar.sheet_names[0]
+                import os as _os_ar
+                _ar_tpl = _ar_tpl_map[_ar_fmt]
+                if _os_ar.path.exists(_ar_tpl):
+                    with open(_ar_tpl, "rb") as _f_ar:
+                        st.download_button(
+                            label="📥 Télécharger le template",
+                            data=_f_ar.read(),
+                            file_name=_os_ar.path.basename(_ar_tpl),
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key=f"ar_dl_tpl_{_ar_fmt}",
+                        )
             except Exception:
                 pass
 
-        # Aperçu du fichier uploadé
-        if _ar_fichier:
-            try:
-                import pandas as _pd_ar2
-                _ar_fichier.seek(0)
-                if _ar_fichier.name.lower().endswith(".csv"):
-                    _df_prev = _pd_ar2.read_csv(_ar_fichier)
-                else:
-                    _df_prev = _pd_ar2.read_excel(_ar_fichier, sheet_name=_ar_onglet)
-                _ar_fichier.seek(0)
-                st.success(f"✅ {_ar_fichier.name} — {_df_prev.shape[0]} lignes × {_df_prev.shape[1]} colonnes")
-                with st.expander("👁️ Aperçu (5 premières lignes)"):
-                    st.dataframe(_df_prev.head(5), use_container_width=True)
-            except Exception as _e_prev:
-                st.warning(f"⚠️ Aperçu impossible : {_e_prev}")
+            st.divider()
 
-        st.divider()
+            # ── Étape 2 : Upload ─────────────────────────────────────────────────
+            st.markdown(f"<div style='font-size:0.82rem;color:{OR};font-weight:700;margin-bottom:6px;'>② Uploadez votre fichier</div>", unsafe_allow_html=True)
+            _ar_fichier = st.file_uploader(
+                "Triangle de développement",
+                type=["csv", "xlsx", "xls"],
+                key="ar_upload_triangle",
+                help="Format déclaré ci-dessus. Le pipeline valide et construit le triangle automatiquement.",
+            )
 
-        # ── Étape 3 : Paramètres ──────────────────────────────────────────────
-        st.markdown(f"<div style='font-size:0.82rem;color:{OR};font-weight:700;margin-bottom:6px;'>③ Paramètres (optionnel)</div>", unsafe_allow_html=True)
-        _ar_col1, _ar_col2, _ar_col3 = st.columns(3)
-        with _ar_col1:
-            _ar_lob_options = {
-                "mrh": "🏠 MRH", "rc_auto_materiel": "🚗 RC Auto Mat.",
-                "rc_auto_corporels": "🚑 RC Auto Corp.", "rc_generale": "🏢 RC Générale",
-                "rc_medicale": "🩺 RC Médicale", "construction": "🏗️ Construction",
-                "incendie_dommages": "🔥 Incendie", "catastrophes_naturelles": "🌧️ NatCat",
-                "generique": "⚙️ Générique",
-            }
-            _ar_lob = st.selectbox("Ligne de branche (LoB)", options=list(_ar_lob_options.keys()),
-                                   format_func=lambda x: _ar_lob_options[x], key="ar_lob", index=0)
-        with _ar_col2:
-            _ar_arrete = st.text_input("Date d'arrêté", placeholder="Ex : 31/12/2024", key="ar_arrete")
-        with _ar_col3:
-            _ar_n_sim = st.selectbox("Bootstrap N simulations", options=[1000, 5000, 10000],
-                                     index=1, key="ar_n_sim")
-
-        st.divider()
-
-        # ── Étape 4 : Lancement ───────────────────────────────────────────────
-        st.markdown(f"<div style='font-size:0.82rem;color:{OR};font-weight:700;margin-bottom:6px;'>④ Lancer l'analyse</div>", unsafe_allow_html=True)
-
-        _ar_btn = st.button(
-            "🚀 Lancer A7 Ibrahim — Provisionnement complet",
-            key="ar_lancer",
-            disabled=(_ar_fichier is None),
-            use_container_width=True,
-        )
-
-        if _ar_fichier is None:
-            st.caption("⬆️ Uploadez d'abord votre fichier pour activer l'analyse.")
-
-        # ── Résultats ─────────────────────────────────────────────────────────
-        _ar_res = st.session_state.get("ar_resultats_a7")
-
-        if _ar_btn and _ar_fichier:
-            with st.spinner("⏳ A7 Ibrahim en cours — 7 méthodes actuarielles..."):
+            # Onglet si multi-feuilles Excel
+            _ar_onglet = None
+            if _ar_fichier and _ar_fichier.name.lower().endswith((".xlsx", ".xls")):
                 try:
-                    from direction_non_vie.services.nv_triangle_builder import NVTriangleBuilder
-                    from direction_non_vie.provisionnement.a7_provisionnement import AgentA7Provisionnement
-                    import os as _os_a7r
-
-                    _tmp_ar = "/tmp/actuaria"
-                    _os_a7r.makedirs(_tmp_ar, exist_ok=True)
-
-                    # Construction du triangle via builder (P3-bis — format déclaré)
-                    _builder_ar = NVTriangleBuilder(verbose=False)
+                    import pandas as _pd_ar
+                    _xl_ar = _pd_ar.ExcelFile(_ar_fichier)
                     _ar_fichier.seek(0)
-                    _res_build_ar = _builder_ar.construire(
-                        source       = _ar_fichier,
-                        mode_declare = _ar_fmt,
-                        nom_onglet   = _ar_onglet,
-                    )
-
-                    if not _res_build_ar["success"]:
-                        st.error(f"❌ Erreur pipeline données : {_res_build_ar['erreur']}")
-                        st.session_state["ar_resultats_a7"] = None
+                    if len(_xl_ar.sheet_names) > 1:
+                        _ar_onglet = st.selectbox(
+                            "Onglet contenant le triangle",
+                            options=_xl_ar.sheet_names,
+                            key="ar_onglet_triangle",
+                        )
                     else:
-                        # Alertes pipeline
-                        for _al in _res_build_ar["rapport"].get("alertes", []):
-                            if "❌" in _al:
-                                st.error(_al)
-                            elif "⚠️" in _al:
-                                st.warning(_al)
+                        _ar_onglet = _xl_ar.sheet_names[0]
+                except Exception:
+                    pass
 
-                        # Détecter les grands sinistres depuis le builder
-                        _grands_df   = _res_build_ar.get("grands_sinistres", None)
-                        _n_grands    = len(_grands_df) if _grands_df is not None and not _grands_df.empty else 0
-                        _rec_grands  = _res_build_ar.get("recommandation_grands", "non_applicable")
-                        _llt_utilise = _res_build_ar.get("llt_utilise")
+            # Aperçu du fichier uploadé
+            if _ar_fichier:
+                try:
+                    import pandas as _pd_ar2
+                    _ar_fichier.seek(0)
+                    if _ar_fichier.name.lower().endswith(".csv"):
+                        _df_prev = _pd_ar2.read_csv(_ar_fichier)
+                    else:
+                        _df_prev = _pd_ar2.read_excel(_ar_fichier, sheet_name=_ar_onglet)
+                    _ar_fichier.seek(0)
+                    st.success(f"✅ {_ar_fichier.name} — {_df_prev.shape[0]} lignes × {_df_prev.shape[1]} colonnes")
+                    with st.expander("👁️ Aperçu (5 premières lignes)"):
+                        st.dataframe(_df_prev.head(5), use_container_width=True)
+                except Exception as _e_prev:
+                    st.warning(f"⚠️ Aperçu impossible : {_e_prev}")
 
-                        # Triangle à utiliser : attritional si LLT actif, sinon total
-                        _tri_attrit = _res_build_ar.get("triangle_attritional")
-                        _tri_grands = _res_build_ar.get("triangle_grands")
-                        _tri_ar = _tri_attrit if (_tri_attrit is not None) else _res_build_ar["triangle_total"]
+            st.divider()
 
-                        # Réserve grands sinistres
-                        _reserve_gs = 0.0
-                        _methode_gs = "non_applicable"
+            # ── Étape 3 : Paramètres ──────────────────────────────────────────────
+            st.markdown(f"<div style='font-size:0.82rem;color:{OR};font-weight:700;margin-bottom:6px;'>③ Paramètres (optionnel)</div>", unsafe_allow_html=True)
+            _ar_col1, _ar_col2, _ar_col3 = st.columns(3)
+            with _ar_col1:
+                _ar_lob_options = {
+                    "mrh": "🏠 MRH", "rc_auto_materiel": "🚗 RC Auto Mat.",
+                    "rc_auto_corporels": "🚑 RC Auto Corp.", "rc_generale": "🏢 RC Générale",
+                    "rc_medicale": "🩺 RC Médicale", "construction": "🏗️ Construction",
+                    "incendie_dommages": "🔥 Incendie", "catastrophes_naturelles": "🌧️ NatCat",
+                    "generique": "⚙️ Générique",
+                }
+                _ar_lob = st.selectbox("Ligne de branche (LoB)", options=list(_ar_lob_options.keys()),
+                                       format_func=lambda x: _ar_lob_options[x], key="ar_lob", index=0)
+            with _ar_col2:
+                _ar_arrete = st.text_input("Date d'arrêté", placeholder="Ex : 31/12/2024", key="ar_arrete")
+            with _ar_col3:
+                _ar_n_sim = st.selectbox("Bootstrap N simulations", options=[1000, 5000, 10000],
+                                         index=1, key="ar_n_sim")
 
-                        if _n_grands > 0 and _llt_utilise:
-                            if _n_grands < 20:
-                                # Développement individuel : saisie manuelle
-                                st.markdown(
-                                    f"<div style='background:{NAVY_LL};border-left:4px solid {AMBRE};"
-                                    f"border-radius:8px;padding:12px 16px;margin:8px 0;'>"
-                                    f"<b style='color:{AMBRE};'>⚠️ {_n_grands} grand(s) sinistre(s) détecté(s)</b><br>"
-                                    f"<span style='color:{BLANC};font-size:0.78rem;'>"
-                                    f"Volume insuffisant pour CL séparé (n&lt;20). "
-                                    f"Saisissez la réserve dossier par dossier ci-dessous (Guide IA 2023 §3.2).</span>"
-                                    f"</div>",
-                                    unsafe_allow_html=True
-                                )
-                                _reserve_gs = st.number_input(
-                                    "Réserve grands sinistres (€) — saisie actuaire",
-                                    min_value=0.0, value=0.0, step=10_000.0,
-                                    key="ar_reserve_gs_manuel",
-                                    help="Somme des réserves dossier par dossier pour les grands sinistres identifiés"
-                                )
-                                _methode_gs = "developpement_individuel"
-                            elif _tri_grands is not None and _n_grands >= 20:
-                                # BF automatique sur triangle grands sinistres
-                                st.info(f"🔄 {_n_grands} grands sinistres — calcul BF automatique sur triangle séparé.")
-                                try:
-                                    _r7_gs = AgentA7Provisionnement(
-                                        audit_path=_tmp_ar, models_path=_tmp_ar, verbose=False
-                                    ).run(
-                                        source=_tri_grands, mode_declare="cumule",
-                                        lob=_ar_lob, generer_graphiques=False,
-                                        n_sim_bootstrap=500,
-                                        generer_word=False, generer_pdf_flag=False,
-                                    )
-                                    if _r7_gs.get("success"):
-                                        _reserve_gs = float(_r7_gs.get("n4",{}).get("best_estimate",0))
-                                        _methode_gs = "bf_auto"
-                                        st.success(f"✅ Réserve grands sinistres : {_reserve_gs:,.0f}€ (BF auto)")
-                                except Exception as _e_gs:
-                                    st.warning(f"⚠️ Calcul BF grands sinistres échoué : {_e_gs}. Saisie manuelle.")
+            st.divider()
 
-                        _a7_ar  = AgentA7Provisionnement(
-                            audit_path=_tmp_ar, models_path=_tmp_ar, verbose=False
-                        )
+            # ── Étape 4 : Lancement ───────────────────────────────────────────────
+            st.markdown(f"<div style='font-size:0.82rem;color:{OR};font-weight:700;margin-bottom:6px;'>④ Lancer l'analyse</div>", unsafe_allow_html=True)
+
+            _ar_btn = st.button(
+                "🚀 Lancer A7 Ibrahim — Provisionnement complet",
+                key="ar_lancer",
+                disabled=(_ar_fichier is None),
+                use_container_width=True,
+            )
+
+            if _ar_fichier is None:
+                st.caption("⬆️ Uploadez d'abord votre fichier pour activer l'analyse.")
+
+            # ── Résultats ─────────────────────────────────────────────────────────
+            _ar_res = st.session_state.get("ar_resultats_a7")
+
+            if _ar_btn and _ar_fichier:
+                with st.spinner("⏳ A7 Ibrahim en cours — 7 méthodes actuarielles..."):
+                    try:
+                        from direction_non_vie.services.nv_triangle_builder import NVTriangleBuilder
+                        from direction_non_vie.provisionnement.a7_provisionnement import AgentA7Provisionnement
+                        import os as _os_a7r
+
+                        _tmp_ar = "/tmp/actuaria"
+                        _os_a7r.makedirs(_tmp_ar, exist_ok=True)
+
+                        # Construction du triangle via builder (P3-bis — format déclaré)
+                        _builder_ar = NVTriangleBuilder(verbose=False)
                         _ar_fichier.seek(0)
-                        _r7_ar = _a7_ar.run(
-                            source                   = _tri_ar,
-                            mode_declare             = "cumule",
-                            generer_graphiques       = True,
-                            lob                      = _ar_lob,
-                            arrete                   = _ar_arrete,
-                            n_sim_bootstrap          = _ar_n_sim,
-                            generer_word             = False,
-                            generer_pdf_flag         = False,
-                            reserve_grands_sinistres = _reserve_gs if _reserve_gs > 0 else None,
-                            n_grands_sinistres       = _n_grands,
-                            methode_grands           = _methode_gs,
+                        _res_build_ar = _builder_ar.construire(
+                            source       = _ar_fichier,
+                            mode_declare = _ar_fmt,
+                            nom_onglet   = _ar_onglet,
                         )
-                        st.session_state["ar_resultats_a7"] = _r7_ar
-                        _ar_res = _r7_ar
 
-                        if _r7_ar.get("success"):
-                            st.success("✅ Analyse A7 terminée")
-                            # Diagnostic qualite du triangle
-                            _diag_ar = _res_build_ar.get("diagnostic_qualite", {})
-                            if _diag_ar:
-                                _dscore = _diag_ar.get("score", 0)
-                                _dstat  = _diag_ar.get("statut", "")
-                                _dcol   = VERT if _dstat=="VERT" else AMBRE if _dstat=="AMBRE" else ROUGE
-                                _demoji = "OK" if _dstat=="VERT" else "ATTENTION" if _dstat=="AMBRE" else "ALERTE"
-                                st.markdown(
-                                    f"<div style='background:{NAVY_LL};border-left:4px solid {_dcol};"
-                                    f"border-radius:8px;padding:12px 16px;margin:8px 0;'>"
-                                    f"<div style='font-size:0.8rem;font-weight:700;color:{_dcol};"
-                                    f"margin-bottom:6px;'>{_demoji} Qualite du triangle : {_dstat} — Score {_dscore}/100</div>"
-                                    f"<div style='font-size:0.75rem;color:{BLANC};line-height:1.6;'>"
-                                    f"{_diag_ar.get('resume','')[:200]}</div>"
-                                    + "".join(
-                                        f"<div style='font-size:0.72rem;color:{AMBRE if _dc['statut']=='AMBRE' else ROUGE};"
-                                        f"margin-top:4px;'>{_dc['code']} — {_dc['message'][:100]}</div>"
-                                        for _dc in _diag_ar.get("controles", [])
-                                        if _dc.get("statut") != "VERT"
-                                    )
-                                    + "</div>",
-                                    unsafe_allow_html=True
-                                )
+                        if not _res_build_ar["success"]:
+                            st.error(f"❌ Erreur pipeline données : {_res_build_ar['erreur']}")
+                            st.session_state["ar_resultats_a7"] = None
                         else:
-                            st.error(f"❌ Erreur A7 : {_r7_ar.get('erreur', 'Inconnue')}")
+                            # Alertes pipeline
+                            for _al in _res_build_ar["rapport"].get("alertes", []):
+                                if "❌" in _al:
+                                    st.error(_al)
+                                elif "⚠️" in _al:
+                                    st.warning(_al)
 
-                except Exception as _e_ar:
-                    st.error(f"❌ Erreur inattendue : {_e_ar}")
-                    st.session_state["ar_resultats_a7"] = None
+                            # Détecter les grands sinistres depuis le builder
+                            _grands_df   = _res_build_ar.get("grands_sinistres", None)
+                            _n_grands    = len(_grands_df) if _grands_df is not None and not _grands_df.empty else 0
+                            _rec_grands  = _res_build_ar.get("recommandation_grands", "non_applicable")
+                            _llt_utilise = _res_build_ar.get("llt_utilise")
 
-        # ── Affichage des résultats ───────────────────────────────────────────
-        if _ar_res and _ar_res.get("success"):
-            _ar_n3 = _ar_res.get("n3", {})
-            _ar_n4 = _ar_res.get("n4", {}) or _ar_res.get("best_estimate", {})
-            _ar_n2 = _ar_res.get("n2", {})
+                            # Triangle à utiliser : attritional si LLT actif, sinon total
+                            _tri_attrit = _res_build_ar.get("triangle_attritional")
+                            _tri_grands = _res_build_ar.get("triangle_grands")
+                            _tri_ar = _tri_attrit if (_tri_attrit is not None) else _res_build_ar["triangle_total"]
 
-            # KPIs principaux
-            st.markdown(f"<div style='font-size:0.9rem;color:{OR};font-weight:700;margin:16px 0 8px;'>Résultats — Best Estimate & KPIs</div>", unsafe_allow_html=True)
-            _ar_be   = _ar_n4.get("best_estimate", 0)
-            _ar_cv   = _ar_n4.get("cv_inter_methodes", 0)
-            _ar_p90  = _ar_n4.get("reserve_p90", 0)
-            _ar_p99  = _ar_n4.get("reserve_p99_5", 0)
-            _ar_rag  = _ar_res.get("statut_rag", "VERT")
+                            # Réserve grands sinistres
+                            _reserve_gs = 0.0
+                            _methode_gs = "non_applicable"
 
-            _ar_be_str  = f"{_ar_be/1e6:.3f} M€"  if _ar_be  >= 1e6 else f"{_ar_be:,.0f} €"
-            _ar_p90_str = f"{_ar_p90/1e6:.3f} M€" if _ar_p90 >= 1e6 else f"{_ar_p90:,.0f} €" if _ar_p90 else "—"
-            _ar_p99_str = f"{_ar_p99/1e6:.3f} M€" if _ar_p99 >= 1e6 else f"{_ar_p99:,.0f} €" if _ar_p99 else "—"
-            _ar_rag_col = VERT if _ar_rag == "VERT" else AMBRE if _ar_rag == "AMBRE" else ROUGE
+                            if _n_grands > 0 and _llt_utilise:
+                                if _n_grands < 20:
+                                    # Développement individuel : saisie manuelle
+                                    st.markdown(
+                                        f"<div style='background:{NAVY_LL};border-left:4px solid {AMBRE};"
+                                        f"border-radius:8px;padding:12px 16px;margin:8px 0;'>"
+                                        f"<b style='color:{AMBRE};'>⚠️ {_n_grands} grand(s) sinistre(s) détecté(s)</b><br>"
+                                        f"<span style='color:{BLANC};font-size:0.78rem;'>"
+                                        f"Volume insuffisant pour CL séparé (n&lt;20). "
+                                        f"Saisissez la réserve dossier par dossier ci-dessous (Guide IA 2023 §3.2).</span>"
+                                        f"</div>",
+                                        unsafe_allow_html=True
+                                    )
+                                    _reserve_gs = st.number_input(
+                                        "Réserve grands sinistres (€) — saisie actuaire",
+                                        min_value=0.0, value=0.0, step=10_000.0,
+                                        key="ar_reserve_gs_manuel",
+                                        help="Somme des réserves dossier par dossier pour les grands sinistres identifiés"
+                                    )
+                                    _methode_gs = "developpement_individuel"
+                                elif _tri_grands is not None and _n_grands >= 20:
+                                    # BF automatique sur triangle grands sinistres
+                                    st.info(f"🔄 {_n_grands} grands sinistres — calcul BF automatique sur triangle séparé.")
+                                    try:
+                                        _r7_gs = AgentA7Provisionnement(
+                                            audit_path=_tmp_ar, models_path=_tmp_ar, verbose=False
+                                        ).run(
+                                            source=_tri_grands, mode_declare="cumule",
+                                            lob=_ar_lob, generer_graphiques=False,
+                                            n_sim_bootstrap=500,
+                                            generer_word=False, generer_pdf_flag=False,
+                                        )
+                                        if _r7_gs.get("success"):
+                                            _reserve_gs = float(_r7_gs.get("n4",{}).get("best_estimate",0))
+                                            _methode_gs = "bf_auto"
+                                            st.success(f"✅ Réserve grands sinistres : {_reserve_gs:,.0f}€ (BF auto)")
+                                    except Exception as _e_gs:
+                                        st.warning(f"⚠️ Calcul BF grands sinistres échoué : {_e_gs}. Saisie manuelle.")
 
-            _kc1, _kc2, _kc3, _kc4 = st.columns(4)
-            with _kc1: st.metric("Best Estimate S2", _ar_be_str, f"CV {_ar_cv:.1f}%" if _ar_cv else "—")
-            with _kc2: st.metric("Provision P90", _ar_p90_str, "+quantile bootstrap" if _ar_p90 else "—")
-            with _kc3: st.metric("Provision P99.5", _ar_p99_str, "stress extrême" if _ar_p99 else "—")
-            with _kc4:
-                _ar_rag_emoji = "🟢" if _ar_rag == "VERT" else "🟡" if _ar_rag == "AMBRE" else "🔴"
-                st.metric("Statut RAG", f"{_ar_rag_emoji} {_ar_rag}")
-
-            # Tableau comparatif multi-méthodes
-            st.markdown(f"<div style='font-size:0.9rem;color:{OR};font-weight:700;margin:16px 0 8px;'>Comparaison multi-méthodes</div>", unsafe_allow_html=True)
-            _ar_methodes = {
-                "Chain Ladder":          _ar_n3.get("chain_ladder", {}).get("reserve_totale", 0),
-                "Mack 1993":             _ar_n3.get("mack", {}).get("reserve_best_estimate", 0),
-                "Bornhuetter-Ferguson":  _ar_n3.get("bf", {}).get("reserve_totale", 0),
-                "Cape Cod":              _ar_n3.get("cape_cod", {}).get("reserve_totale", 0),
-                "Munich CL":             _ar_n3.get("munich", {}).get("reserve_totale", 0),
-                "Clark (2003)":          _ar_n3.get("clark", {}).get("reserve_totale", 0),
-                "Barnett-Zehnwirth":     _ar_n3.get("bz", {}).get("reserve_totale", 0),
-                "Best Estimate S2":      _ar_be,
-            }
-            _ar_rows = [(m, v) for m, v in _ar_methodes.items() if v and v > 0]
-            if _ar_rows:
-                import pandas as _pd_tab
-                _ar_df_tab = _pd_tab.DataFrame(_ar_rows, columns=["Méthode", "Réserve (€)"])
-                _ar_df_tab["Réserve (€)"] = _ar_df_tab["Réserve (€)"].apply(lambda x: f"{x:,.0f}")
-                _ar_df_tab["vs Best Est."] = [
-                    f"{(v/(_ar_be or 1)-1)*100:+.1f}%" if m != "Best Estimate S2" else "référence"
-                    for m, v in _ar_rows
-                ]
-                st.dataframe(_ar_df_tab, use_container_width=True, hide_index=True)
-
-            # Graphiques
-            _ar_g_col1, _ar_g_col2 = st.columns(2)
-            with _ar_g_col1:
-                _ar_noms = [m for m, v in _ar_rows if m != "Best Estimate S2"]
-                _ar_vals = [v for m, v in _ar_rows if m != "Best Estimate S2"]
-                if _ar_noms:
-                    st.plotly_chart(fig_bar(
-                        _ar_noms, _ar_vals,
-                        f"Réserves par méthode — {_ar_lob_options.get(_ar_lob, _ar_lob)} (€)",
-                        [OR if m != "Best Estimate S2" else VERT for m in _ar_noms],
-                    ), use_container_width=True, key="ar_bar_methodes")
-
-            with _ar_g_col2:
-                _ar_boot = _ar_n3.get("bootstrap", {})
-                _ar_p50  = _ar_boot.get("reserve_p50", _ar_be)
-                _ar_p75  = _ar_n4.get("reserve_p75", 0)
-                if _ar_p50 and _ar_p90:
-                    st.plotly_chart(fig_bar(
-                        ["P50", "P75", "P90", "P99.5"],
-                        [_ar_p50, _ar_p75 or _ar_p50*1.1, _ar_p90, _ar_p99 or _ar_p90*1.15],
-                        "Distribution Bootstrap — Quantiles de réserve (€)",
-                        [VERT, OR, AMBRE, ROUGE],
-                    ), use_container_width=True, key="ar_bar_quantiles")
-
-            # Graphiques Plotly natifs A7
-            _ar_graphs = _ar_res.get("graphiques", {})
-            if _ar_graphs:
-                st.markdown(f"<div style='font-size:0.9rem;color:{OR};font-weight:700;margin:16px 0 8px;'>Graphiques actuariels</div>", unsafe_allow_html=True)
-                _ar_gcols = st.columns(2)
-                for _gi, (_gk, _gfig) in enumerate(_ar_graphs.items()):
-                    try:
-                        with _ar_gcols[_gi % 2]:
-                            st.plotly_chart(_gfig, use_container_width=True, key=f"ar_g_{_gk}")
-                    except Exception:
-                        pass
-
-            # Commentaire actuariel
-            _ar_comm = _ar_res.get("commentaire", "")
-            if _ar_comm:
-                st.markdown(f"<div style='font-size:0.9rem;color:{OR};font-weight:700;margin:16px 0 8px;'>Commentaire actuariel A7</div>", unsafe_allow_html=True)
-                st.text(_ar_comm[:2000] + ("..." if len(_ar_comm) > 2000 else ""))
-
-            # Export rapport
-            st.markdown(f"<div style='font-size:0.9rem;color:{OR};font-weight:700;margin:16px 0 8px;'>Export</div>", unsafe_allow_html=True)
-            _ar_ecol1, _ar_ecol2 = st.columns(2)
-            with _ar_ecol1:
-                if st.button("📄 Générer rapport Word", key="ar_export_word", use_container_width=True):
-                    try:
-                        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import export_word as _ew_ar
-                        _word_bytes = _ew_ar(_ar_res)
-                        if _word_bytes:
-                            st.download_button(
-                                "⬇️ Télécharger le rapport Word",
-                                data=_word_bytes,
-                                file_name=f"rapport_actuariel_{_ar_lob}_{datetime.now().strftime('%Y%m%d')}.docx",
-                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                key="ar_dl_word",
+                            _a7_ar  = AgentA7Provisionnement(
+                                audit_path=_tmp_ar, models_path=_tmp_ar, verbose=False
                             )
-                    except Exception as _e_word:
-                        st.warning(f"Export Word : {_e_word}")
-            with _ar_ecol2:
-                if st.button("📊 Envoyer au Dashboard Non-Vie", key="ar_to_dash", use_container_width=True):
-                    _ar_ss = st.session_state.get("agent_results", {})
-                    _ar_ss["ibrahim"] = _ar_res
-                    st.session_state["agent_results"] = _ar_ss
-                    st.success("✅ Résultats envoyés au Dashboard Non-Vie (onglet 🏢)")
-                    st.rerun()
+                            _ar_fichier.seek(0)
+                            _r7_ar = _a7_ar.run(
+                                source                   = _tri_ar,
+                                mode_declare             = "cumule",
+                                generer_graphiques       = True,
+                                lob                      = _ar_lob,
+                                arrete                   = _ar_arrete,
+                                n_sim_bootstrap          = _ar_n_sim,
+                                generer_word             = False,
+                                generer_pdf_flag         = False,
+                                reserve_grands_sinistres = _reserve_gs if _reserve_gs > 0 else None,
+                                n_grands_sinistres       = _n_grands,
+                                methode_grands           = _methode_gs,
+                            )
+                            st.session_state["ar_resultats_a7"] = _r7_ar
+                            _ar_res = _r7_ar
+
+                            if _r7_ar.get("success"):
+                                st.success("✅ Analyse A7 terminée")
+                                # Diagnostic qualite du triangle
+                                _diag_ar = _res_build_ar.get("diagnostic_qualite", {})
+                                if _diag_ar:
+                                    _dscore = _diag_ar.get("score", 0)
+                                    _dstat  = _diag_ar.get("statut", "")
+                                    _dcol   = VERT if _dstat=="VERT" else AMBRE if _dstat=="AMBRE" else ROUGE
+                                    _demoji = "OK" if _dstat=="VERT" else "ATTENTION" if _dstat=="AMBRE" else "ALERTE"
+                                    st.markdown(
+                                        f"<div style='background:{NAVY_LL};border-left:4px solid {_dcol};"
+                                        f"border-radius:8px;padding:12px 16px;margin:8px 0;'>"
+                                        f"<div style='font-size:0.8rem;font-weight:700;color:{_dcol};"
+                                        f"margin-bottom:6px;'>{_demoji} Qualite du triangle : {_dstat} — Score {_dscore}/100</div>"
+                                        f"<div style='font-size:0.75rem;color:{BLANC};line-height:1.6;'>"
+                                        f"{_diag_ar.get('resume','')[:200]}</div>"
+                                        + "".join(
+                                            f"<div style='font-size:0.72rem;color:{AMBRE if _dc['statut']=='AMBRE' else ROUGE};"
+                                            f"margin-top:4px;'>{_dc['code']} — {_dc['message'][:100]}</div>"
+                                            for _dc in _diag_ar.get("controles", [])
+                                            if _dc.get("statut") != "VERT"
+                                        )
+                                        + "</div>",
+                                        unsafe_allow_html=True
+                                    )
+                            else:
+                                st.error(f"❌ Erreur A7 : {_r7_ar.get('erreur', 'Inconnue')}")
+
+                    except Exception as _e_ar:
+                        st.error(f"❌ Erreur inattendue : {_e_ar}")
+                        st.session_state["ar_resultats_a7"] = None
+
+            # ── Affichage des résultats ───────────────────────────────────────────
+            if _ar_res and _ar_res.get("success"):
+                _ar_n3 = _ar_res.get("n3", {})
+                _ar_n4 = _ar_res.get("n4", {}) or _ar_res.get("best_estimate", {})
+                _ar_n2 = _ar_res.get("n2", {})
+
+                # KPIs principaux
+                st.markdown(f"<div style='font-size:0.9rem;color:{OR};font-weight:700;margin:16px 0 8px;'>Résultats — Best Estimate & KPIs</div>", unsafe_allow_html=True)
+                _ar_be   = _ar_n4.get("best_estimate", 0)
+                _ar_cv   = _ar_n4.get("cv_inter_methodes", 0)
+                _ar_p90  = _ar_n4.get("reserve_p90", 0)
+                _ar_p99  = _ar_n4.get("reserve_p99_5", 0)
+                _ar_rag  = _ar_res.get("statut_rag", "VERT")
+
+                _ar_be_str  = f"{_ar_be/1e6:.3f} M€"  if _ar_be  >= 1e6 else f"{_ar_be:,.0f} €"
+                _ar_p90_str = f"{_ar_p90/1e6:.3f} M€" if _ar_p90 >= 1e6 else f"{_ar_p90:,.0f} €" if _ar_p90 else "—"
+                _ar_p99_str = f"{_ar_p99/1e6:.3f} M€" if _ar_p99 >= 1e6 else f"{_ar_p99:,.0f} €" if _ar_p99 else "—"
+                _ar_rag_col = VERT if _ar_rag == "VERT" else AMBRE if _ar_rag == "AMBRE" else ROUGE
+
+                _kc1, _kc2, _kc3, _kc4 = st.columns(4)
+                with _kc1: st.metric("Best Estimate S2", _ar_be_str, f"CV {_ar_cv:.1f}%" if _ar_cv else "—")
+                with _kc2: st.metric("Provision P90", _ar_p90_str, "+quantile bootstrap" if _ar_p90 else "—")
+                with _kc3: st.metric("Provision P99.5", _ar_p99_str, "stress extrême" if _ar_p99 else "—")
+                with _kc4:
+                    _ar_rag_emoji = "🟢" if _ar_rag == "VERT" else "🟡" if _ar_rag == "AMBRE" else "🔴"
+                    st.metric("Statut RAG", f"{_ar_rag_emoji} {_ar_rag}")
+
+                # Tableau comparatif multi-méthodes
+                st.markdown(f"<div style='font-size:0.9rem;color:{OR};font-weight:700;margin:16px 0 8px;'>Comparaison multi-méthodes</div>", unsafe_allow_html=True)
+                _ar_methodes = {
+                    "Chain Ladder":          _ar_n3.get("chain_ladder", {}).get("reserve_totale", 0),
+                    "Mack 1993":             _ar_n3.get("mack", {}).get("reserve_best_estimate", 0),
+                    "Bornhuetter-Ferguson":  _ar_n3.get("bf", {}).get("reserve_totale", 0),
+                    "Cape Cod":              _ar_n3.get("cape_cod", {}).get("reserve_totale", 0),
+                    "Munich CL":             _ar_n3.get("munich", {}).get("reserve_totale", 0),
+                    "Clark (2003)":          _ar_n3.get("clark", {}).get("reserve_totale", 0),
+                    "Barnett-Zehnwirth":     _ar_n3.get("bz", {}).get("reserve_totale", 0),
+                    "Best Estimate S2":      _ar_be,
+                }
+                _ar_rows = [(m, v) for m, v in _ar_methodes.items() if v and v > 0]
+                if _ar_rows:
+                    import pandas as _pd_tab
+                    _ar_df_tab = _pd_tab.DataFrame(_ar_rows, columns=["Méthode", "Réserve (€)"])
+                    _ar_df_tab["Réserve (€)"] = _ar_df_tab["Réserve (€)"].apply(lambda x: f"{x:,.0f}")
+                    _ar_df_tab["vs Best Est."] = [
+                        f"{(v/(_ar_be or 1)-1)*100:+.1f}%" if m != "Best Estimate S2" else "référence"
+                        for m, v in _ar_rows
+                    ]
+                    st.dataframe(_ar_df_tab, use_container_width=True, hide_index=True)
+
+                # Graphiques
+                _ar_g_col1, _ar_g_col2 = st.columns(2)
+                with _ar_g_col1:
+                    _ar_noms = [m for m, v in _ar_rows if m != "Best Estimate S2"]
+                    _ar_vals = [v for m, v in _ar_rows if m != "Best Estimate S2"]
+                    if _ar_noms:
+                        st.plotly_chart(fig_bar(
+                            _ar_noms, _ar_vals,
+                            f"Réserves par méthode — {_ar_lob_options.get(_ar_lob, _ar_lob)} (€)",
+                            [OR if m != "Best Estimate S2" else VERT for m in _ar_noms],
+                        ), use_container_width=True, key="ar_bar_methodes")
+
+                with _ar_g_col2:
+                    _ar_boot = _ar_n3.get("bootstrap", {})
+                    _ar_p50  = _ar_boot.get("reserve_p50", _ar_be)
+                    _ar_p75  = _ar_n4.get("reserve_p75", 0)
+                    if _ar_p50 and _ar_p90:
+                        st.plotly_chart(fig_bar(
+                            ["P50", "P75", "P90", "P99.5"],
+                            [_ar_p50, _ar_p75 or _ar_p50*1.1, _ar_p90, _ar_p99 or _ar_p90*1.15],
+                            "Distribution Bootstrap — Quantiles de réserve (€)",
+                            [VERT, OR, AMBRE, ROUGE],
+                        ), use_container_width=True, key="ar_bar_quantiles")
+
+                # Graphiques Plotly natifs A7
+                _ar_graphs = _ar_res.get("graphiques", {})
+                if _ar_graphs:
+                    st.markdown(f"<div style='font-size:0.9rem;color:{OR};font-weight:700;margin:16px 0 8px;'>Graphiques actuariels</div>", unsafe_allow_html=True)
+                    _ar_gcols = st.columns(2)
+                    for _gi, (_gk, _gfig) in enumerate(_ar_graphs.items()):
+                        try:
+                            with _ar_gcols[_gi % 2]:
+                                st.plotly_chart(_gfig, use_container_width=True, key=f"ar_g_{_gk}")
+                        except Exception:
+                            pass
+
+                # Commentaire actuariel
+                _ar_comm = _ar_res.get("commentaire", "")
+                if _ar_comm:
+                    st.markdown(f"<div style='font-size:0.9rem;color:{OR};font-weight:700;margin:16px 0 8px;'>Commentaire actuariel A7</div>", unsafe_allow_html=True)
+                    st.text(_ar_comm[:2000] + ("..." if len(_ar_comm) > 2000 else ""))
+
+                # Export rapport
+                st.markdown(f"<div style='font-size:0.9rem;color:{OR};font-weight:700;margin:16px 0 8px;'>Export</div>", unsafe_allow_html=True)
+                _ar_ecol1, _ar_ecol2 = st.columns(2)
+                with _ar_ecol1:
+                    if st.button("📄 Générer rapport Word", key="ar_export_word", use_container_width=True):
+                        try:
+                            from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import export_word as _ew_ar
+                            _word_bytes = _ew_ar(_ar_res)
+                            if _word_bytes:
+                                st.download_button(
+                                    "⬇️ Télécharger le rapport Word",
+                                    data=_word_bytes,
+                                    file_name=f"rapport_actuariel_{_ar_lob}_{datetime.now().strftime('%Y%m%d')}.docx",
+                                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                    key="ar_dl_word",
+                                )
+                        except Exception as _e_word:
+                            st.warning(f"Export Word : {_e_word}")
+                with _ar_ecol2:
+                    if st.button("📊 Envoyer au Dashboard Non-Vie", key="ar_to_dash", use_container_width=True):
+                        _ar_ss = st.session_state.get("agent_results", {})
+                        _ar_ss["ibrahim"] = _ar_res
+                        st.session_state["agent_results"] = _ar_ss
+                        st.success("✅ Résultats envoyés au Dashboard Non-Vie (onglet 🏢)")
+                        st.rerun()
+        elif _ar_mode == 'multi':
+            _lob_labels = {
+                'rc_auto_corporels': 'RC Auto Corporels',
+                'rc_auto_materiel':  'RC Auto Matériels',
+                'mrh':               'MRH',
+                'rc_generale':       'RC Générale',
+                'rc_medicale':       'RC Médicale',
+                'construction':      'Construction',
+                'transport':         'Transport',
+                'generique':         'Générique',
+            }
+            st.caption('Uploadez un fichier par branche. A7 tourne séquentiellement. Tableau de synthèse BE + SCR.')
+            _mb_n = st.slider('Nombre de branches', 2, 8, 3, key='mb_n_lob')
+            _mb_branches = []
+            for _mb_i in range(_mb_n):
+                with st.container(border=True):
+                    _mb_c1, _mb_c2, _mb_c3 = st.columns([2, 2, 1])
+                    with _mb_c1:
+                        _mb_lob = st.selectbox(
+                            'Branche ' + str(_mb_i+1),
+                            list(_lob_labels.keys()),
+                            format_func=lambda x: _lob_labels.get(x, x),
+                            key='mb_lob_' + str(_mb_i),
+                        )
+                    with _mb_c2:
+                        _mb_file = st.file_uploader(
+                            'Triangle ' + str(_mb_i+1),
+                            type=['csv','xlsx','xls'],
+                            key='mb_file_' + str(_mb_i),
+                        )
+                    with _mb_c3:
+                        _mb_fmt = st.selectbox(
+                            'Format',
+                            ['cumule','non_cumule','brutes'],
+                            format_func=lambda x: {'cumule':'A','non_cumule':'B','brutes':'C'}.get(x,x),
+                            key='mb_fmt_' + str(_mb_i),
+                        )
+                    _mb_branches.append({'lob':_mb_lob,'file':_mb_file,'fmt':_mb_fmt})
+
+            _mb_pc1, _mb_pc2 = st.columns(2)
+            with _mb_pc1:
+                _mb_fpp = st.number_input('Fonds propres (€)', value=10_000_000, step=500_000, key='mb_fpp')
+            with _mb_pc2:
+                _mb_nsim = st.slider('Simulations Bootstrap', 200, 2000, 500, key='mb_nsim')
+
+            if st.button('🚀 Lancer analyse Multi-branches', key='mb_run', use_container_width=True):
+                _mb_ok = [b for b in _mb_branches if b['file'] is not None]
+                if len(_mb_ok) < 2:
+                    st.warning('Uploadez au moins 2 fichiers.')
+                else:
+                    _mb_res = []
+                    _mb_prog = st.progress(0, text='Analyse en cours...')
+                    import os as _os_mb
+                    _os_mb.makedirs('/tmp/actuaria', exist_ok=True)
+                    for _mb_idx, _mb_b in enumerate(_mb_ok):
+                        _mb_prog.progress(
+                            int(_mb_idx / len(_mb_ok) * 100),
+                            text='Analyse ' + _lob_labels.get(_mb_b['lob'], _mb_b['lob']) + '...'
+                        )
+                        try:
+                            _mb_b['file'].seek(0)
+                            _mb_rb = NVTriangleBuilder(verbose=False).construire(
+                                source=_mb_b['file'], mode_declare=_mb_b['fmt']
+                            )
+                            if not _mb_rb['success']:
+                                _mb_res.append({'lob':_mb_b['lob'],'success':False,
+                                    'label':_lob_labels.get(_mb_b['lob'],_mb_b['lob']),
+                                    'erreur':_mb_rb.get('erreur','build échoué')})
+                                continue
+                            _mb_r7 = AgentA7Provisionnement(
+                                audit_path='/tmp/actuaria', models_path='/tmp/actuaria', verbose=False
+                            ).run(
+                                source=_mb_rb['triangle_total'], mode_declare='cumule',
+                                lob=_mb_b['lob'], generer_graphiques=False,
+                                n_sim_bootstrap=_mb_nsim,
+                                generer_word=False, generer_pdf_flag=False,
+                            )
+                            _mb_res.append({
+                                'lob':   _mb_b['lob'],
+                                'label': _lob_labels.get(_mb_b['lob'], _mb_b['lob']),
+                                'success': _mb_r7['success'],
+                                'result':  _mb_r7,
+                            })
+                        except Exception as _mb_e:
+                            _mb_res.append({'lob':_mb_b['lob'],'success':False,
+                                'label':_lob_labels.get(_mb_b['lob'],_mb_b['lob']),
+                                'erreur':str(_mb_e)})
+                    _mb_prog.progress(100, text='Analyses terminées')
+                    st.session_state['mb_resultats'] = _mb_res
+
+            # Affichage résultats
+            _mb_stored = st.session_state.get('mb_resultats', [])
+            if _mb_stored:
+                import pandas as _pd_mb
+                _mb_rows = []
+                _mb_be_tot = 0.0
+                _mb_scr_tot = 0.0
+                for _mbr in _mb_stored:
+                    if _mbr.get('success'):
+                        _n4r = _mbr['result'].get('n4', {})
+                        _be  = float(_n4r.get('best_estimate', 0))
+                        _p90 = float(_n4r.get('reserve_p90', 0))
+                        _scr = float(_n4r.get('scr', {}).get('scr_provisions', 0))
+                        _st  = _mbr['result'].get('statut_rag', '—')
+                        _mb_be_tot  += _be
+                        _mb_scr_tot += _scr
+                        _mb_rows.append({'Branche':_mbr['label'],'Statut':_st,
+                            'BE S2':f'{_be:,.0f} €','P90':f'{_p90:,.0f} €','SCR':f'{_scr:,.0f} €'})
+                    else:
+                        _mb_rows.append({'Branche':_mbr.get('label','—'),'Statut':'❌ ERREUR',
+                            'BE S2':'—','P90':'—','SCR':'—'})
+                _mb_rows.append({'Branche':'📊 TOTAL','Statut':'—',
+                    'BE S2':f'{_mb_be_tot:,.0f} €','P90':'—','SCR':f'{_mb_scr_tot:,.0f} €'})
+                st.dataframe(_pd_mb.DataFrame(_mb_rows), use_container_width=True, hide_index=True)
+                _mbc1, _mbc2 = st.columns(2)
+                with _mbc1: st.metric('BE Total', f'{_mb_be_tot/1e6:.2f} M€')
+                with _mbc2: st.metric('SCR Total (somme simple)', f'{_mb_scr_tot/1e6:.2f} M€')
+                st.caption('SCR conservateur (sans corrélation EIOPA). Lancez A10 pour le SCR agrégé.')
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE ANALYSE
