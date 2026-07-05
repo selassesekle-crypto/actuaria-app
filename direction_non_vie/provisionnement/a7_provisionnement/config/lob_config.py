@@ -414,6 +414,38 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "ratio_c0_primes":          0.25,   # Transport/Marine — dev. long
     },
 
+    # ── Accidents Corporels (LoB 1 S2 — GAV, accident scolaire, individuelle) ──
+    "accidents_corporels": {
+        "label":            "Accidents Corporels",
+        "sigma_eiopa":      SIGMA_EIOPA["accidents_corporels"],  # 0.085 — S2 LoB 1
+        "lob_eiopa":        "accidents_corporels",
+
+        "queue_attendue_ans": 6,
+
+        "h2_seuil_cv":      0.15,
+        "h2_seuil_derive":  0.15,
+        "h1_seuil_corr":    0.55,
+
+        "methodes_prioritaires": [
+            "chain_ladder", "mack_1993", "bornhuetter_ferguson", "bootstrap_odp"
+        ],
+        "methode_par_defaut": "chain_ladder",
+        "munich_cl_disponible": False,
+
+        "lr_marche_reference":  0.70,
+        "lr_marche_source":     "Marché français — GAV / Accident scolaire (estimation)",
+
+        "alertes_specifiques": [
+            "Portefeuille court — vérifier suffisance du triangle (min 5 ans).",
+            "Distinguer GAV individuelle et collective (sinistralité différente).",
+        ],
+
+        "tail_factor_max_alerte": 1.03,
+        "risque_long":              False,
+        "tail_seuil_stabilisation": 1.02,
+        "ratio_c0_primes":          0.40,
+    },
+
     # ── Transport (LoB 6 S2 — sous-catégorie marine_aviation_transport) ────────
     "transport": {
         "label":            "Transport",
