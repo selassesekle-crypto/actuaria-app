@@ -134,9 +134,13 @@ def _ctrl_monotonie(C, n, m, annee_debut) -> Dict:
 
     for i in range(n):
         for j in range(1, m):
-            if C[i, j] == 0:
-                break  # zone future
-            if C[i, j] < C[i, j-1] * 0.99:  # tolérance 1%
+            # Zone future : i + j >= n pour un triangle carré
+            # OU deux zéros consécutifs = fin des données
+            if i + j >= n:
+                break
+            if C[i, j] == 0 and (j+1 >= m or C[i, j+1] == 0):
+                break  # fin réelle des données
+            if C[i, j] > 0 and C[i, j-1] > 0 and C[i, j] < C[i, j-1] * 0.99:
                 an = (annee_debut + i) if annee_debut else i
                 violations.append(f"Ligne {an} col {j+1}: {C[i,j]:,.0f} < {C[i,j-1]:,.0f}")
 
@@ -171,8 +175,15 @@ def _ctrl_diagonales_manquantes(C, n, m, annee_debut) -> Dict:
     # La diagonale k correspond à la période de développement j = n-1-i+k
     # On vérifie les colonnes complètes dans la zone observée
     for j in range(m):
-        col_vals = [C[i, j] for i in range(n) if (i + j) < n]
-        if col_vals and all(v == 0 for v in col_vals):
+        # Zone observable : toutes les lignes i où la cellule peut avoir une valeur
+        # Pour triangle carré : i + j < n. Pour rectangulaire : toutes les lignes
+        col_vals = [
+            C[i, j] for i in range(n)
+            if i + j < n or (m > n and j < m - n + i)
+        ]
+        # Simplification robuste : colonne vide si TOUTES les valeurs de la colonne = 0
+        col_all = [C[i, j] for i in range(n)]
+        if col_all and all(v == 0 for v in col_all):
             diag_vides.append(f"Colonne {j+1} entièrement vide")
 
     if not diag_vides:
@@ -286,7 +297,11 @@ def _ctrl_valeurs_aberrantes(C, n, m) -> Dict:
     for j in range(m - 1):
         col_facteurs = []
         for i in range(n):
-            if i + j + 1 >= n:
+            # Zone observable : i + j < n pour triangle carré
+            # Pour triangles rectangulaires (m > n), on peut avoir des facteurs au-delà
+            if i + j >= n and m <= n:
+                break
+            if j + 1 >= m:
                 break
             if C[i, j] > 0 and C[i, j+1] > 0:
                 f = C[i, j+1] / C[i, j]
@@ -348,9 +363,13 @@ def _ctrl_coherence_diagonale(C, n, m, annee_debut) -> Dict:
     # (les cohortes les plus récentes ont moins de développement → montants plus faibles)
     montants = [d[2] for d in diag]
     # On s'attend à ce que les premières cohortes (plus matures) aient des montants plus élevés
+    # Sur la diagonale : cohortes anciennes (i=0) ont montants élevés (développées)
+    # cohortes récentes (i=n-1) ont montants faibles (peu développées)
+    # Une 'inversion forte' = une cohorte récente a un montant >> cohorte ancienne
+    # ce qui serait anormal sauf si sinistre catastrophique récent
     inversions = sum(
         1 for k in range(len(montants)-1)
-        if montants[k] < montants[k+1] * 0.5  # inversion forte
+        if montants[k+1] > montants[k] * 2.0  # cohorte récente 2x supérieure à l'ancienne
     )
 
     if inversions == 0:
