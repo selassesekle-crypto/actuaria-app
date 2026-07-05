@@ -1521,52 +1521,36 @@ def page_dashboard():
   <div style="font-size:0.78rem;color:{GRIS};margin-top:4px;">Uploadez votre triangle · Lancez A7 · Visualisez les résultats</div>
 </div>""", unsafe_allow_html=True)
 
-        # ── Mode : Mono-branche / Multi-branches — boutons stylisés ─
+        # ── Mode : Mono-branche / Multi-branches — même style que Format A/B/C ─
         if "ar_mode" not in st.session_state:
             st.session_state["ar_mode"] = "mono"
-        st.markdown(
-            f"<div style='font-size:0.75rem;color:{GRIS};font-weight:600;"
-            f"text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;'>"
-            f"Mode analyse</div>",
-            unsafe_allow_html=True
-        )
-        _btn_c1, _btn_c2, _btn_c3 = st.columns([2, 2, 6])
-        with _btn_c1:
-            _mono_actif = st.session_state["ar_mode"] == "mono"
-            _mono_style = (
-                f"background:linear-gradient(135deg,{OR},{OR_L});color:{NAVY};"
-                f"border:2px solid {OR};border-radius:8px;padding:8px 0;"
-                f"font-weight:700;font-size:0.85rem;width:100%;cursor:pointer;"
-            ) if _mono_actif else (
-                f"background:rgba(15,46,82,0.6);color:{BLANC};"
-                f"border:1px solid rgba(201,168,76,0.35);border-radius:8px;padding:8px 0;"
-                f"font-weight:500;font-size:0.85rem;width:100%;cursor:pointer;"
-            )
-            st.markdown(
-                f"<div style='{_mono_style}text-align:center;'>📊 Mono-branche</div>",
-                unsafe_allow_html=True
-            )
-            if st.button("Mono", key="btn_mode_mono", use_container_width=True):
-                st.session_state["ar_mode"] = "mono"
-                st.rerun()
-        with _btn_c2:
-            _multi_actif = st.session_state["ar_mode"] == "multi"
-            _multi_style = (
-                f"background:linear-gradient(135deg,{OR},{OR_L});color:{NAVY};"
-                f"border:2px solid {OR};border-radius:8px;padding:8px 0;"
-                f"font-weight:700;font-size:0.85rem;width:100%;cursor:pointer;"
-            ) if _multi_actif else (
-                f"background:rgba(15,46,82,0.6);color:{BLANC};"
-                f"border:1px solid rgba(201,168,76,0.35);border-radius:8px;padding:8px 0;"
-                f"font-weight:500;font-size:0.85rem;width:100%;cursor:pointer;"
-            )
-            st.markdown(
-                f"<div style='{_multi_style}text-align:center;'>📋 Multi-branches</div>",
-                unsafe_allow_html=True
-            )
-            if st.button("Multi", key="btn_mode_multi", use_container_width=True):
-                st.session_state["ar_mode"] = "multi"
-                st.rerun()
+        st.markdown(f"<div style='font-size:0.82rem;color:{OR};font-weight:700;margin-bottom:10px;'>① Mode d'analyse</div>", unsafe_allow_html=True)
+        _mode_opts = {
+            "mono":  ("📊", "Mono-branche",   "Un seul triangle · Analyse complète A7 · Rapport PDF/Word"),
+            "multi": ("📋", "Multi-branches", "Jusqu'à 13 branches · A7 séquentiel · Tableau BE + SCR consolidé"),
+        }
+        _mode_cols = st.columns([1, 1, 2])
+        for _mi, (_mk, (_mico, _mnom, _mdesc)) in enumerate(_mode_opts.items()):
+            with _mode_cols[_mi]:
+                _m_sel  = st.session_state["ar_mode"] == _mk
+                _m_bord = f"2px solid {OR}" if _m_sel else f"1px solid rgba(201,168,76,0.25)"
+                _m_bg   = "rgba(201,168,76,0.12)" if _m_sel else "rgba(15,46,82,0.6)"
+                st.markdown(
+                    f"<div style='background:{_m_bg};border:{_m_bord};border-radius:10px;"
+                    f"padding:14px 12px;text-align:center;min-height:90px;'>"
+                    f"<div style='font-size:1.4rem;margin-bottom:4px;'>{_mico}</div>"
+                    f"<div style='font-size:0.88rem;font-weight:700;color:{OR};margin-bottom:6px;'>{_mnom}</div>"
+                    f"<div style='font-size:0.72rem;color:#8A9AB0;line-height:1.5;'>{_mdesc}</div>"
+                    f"</div>",
+                    unsafe_allow_html=True
+                )
+                if st.button(
+                    f"{'✅ Actif' if _m_sel else 'Choisir'}",
+                    key=f"btn_mode_{_mk}",
+                    use_container_width=True
+                ):
+                    st.session_state["ar_mode"] = _mk
+                    st.rerun()
         _ar_mode = st.session_state["ar_mode"]
 
         _ar_fichier_engage = None  # initialisé ici — défini dans le bloc mono si activé
