@@ -63,6 +63,11 @@ except ImportError:
         @staticmethod
         def init(): pass
     nn = _FakeModule()
+    # Fallback torch pour les type hints au niveau classe
+    class _FakeTorch:
+        class device: pass
+        class Tensor: pass
+    torch = _FakeTorch()
 
 logging.basicConfig(
     level=logging.INFO,
