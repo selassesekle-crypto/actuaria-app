@@ -3060,6 +3060,19 @@ def _executer_analyse(besoin, direction, equipe, client):
             st.session_state["res_data"]    = resultats
             st.session_state["res_besoin"]  = besoin
             st.session_state["res_client"]  = ref_client
+            # A13 — Audit Trail : tracer chaque analyse automatiquement
+            try:
+                from direction_non_vie.reglementation.a13_audit.agent import AgentA13AuditTrail
+                _r13 = AgentA13AuditTrail(audit_path=_tmp, verbose=False).run(
+                    resultats_agents=resultats,
+                    ref_client=ref_client,
+                    besoin=besoin,
+                )
+                if "agent_results" not in st.session_state:
+                    st.session_state["agent_results"] = {}
+                st.session_state["agent_results"]["rafael"] = _r13
+            except Exception as _e13:
+                pass  # A13 non bloquant
             # Reset graphiques pour cohérence avec la nouvelle analyse
             st.session_state["graphiques_a7"] = {}
             # Stocker triangle séparément pour regénération graphiques à la volée
@@ -3234,8 +3247,15 @@ def page_resultats():
                                 )
                             elif _s_besoin == "coherence":
                                 from direction_non_vie.reglementation.a9_coherence.agent import AgentA9Coherence
+                                # Récupérer les résultats déjà calculés dans cette session
+                                _ss = st.session_state
                                 _s_res = AgentA9Coherence(audit_path=_tmp_s, verbose=False).run(
-                                    result_a7=r_raw, primes_acq=_primes_suite,
+                                    result_a7=r_raw,
+                                    result_a8=_ss.get("res_suite_stress"),
+                                    result_a10=_ss.get("res_suite_s2"),
+                                    result_a11=_ss.get("res_suite_ifrs17"),
+                                    result_a12=_ss.get("res_suite_alm"),
+                                    primes_acq=_primes_suite,
                                     generer_graphiques=False,
                                 )
                             elif _s_besoin == "s2":
