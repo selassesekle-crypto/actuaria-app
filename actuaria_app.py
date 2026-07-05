@@ -3318,18 +3318,79 @@ def page_resultats():
                     _s_statut = _s_res.get("statut_rag", _s_res.get("statut", ""))
                     _s_emoji = "✅" if _s_statut == "VERT" else "⚠️" if _s_statut == "AMBRE" else "🔴"
                     _s_col = VERT if _s_statut == "VERT" else AMBRE if _s_statut == "AMBRE" else ROUGE
-                    _s_comm = str(_s_res.get("commentaire", "")).strip()
+                    # Badge statut
                     st.markdown(
-                        f"<div style='background:#243F6A;border-left:4px solid {_s_col};"
-                        f"border-radius:8px;padding:14px 16px;margin:8px 0;'>"
-                        f"<div style='font-size:0.88rem;font-weight:700;color:{_s_col};"
-                        f"margin-bottom:10px;'>{_s_emoji} Statut : {_s_statut}</div>"
-                        f"<pre style='font-size:0.76rem;color:#F0F4F8;white-space:pre-wrap;"
-                        f"word-break:break-word;line-height:1.7;font-family:monospace;"
-                        f"margin:0;'>{_s_comm}</pre>"
-                        f"</div>",
+                        f"<div style='background:{NAVY_LL};border-left:4px solid {_s_col};"
+                        f"border-radius:8px;padding:10px 16px;margin-bottom:12px;'>"
+                        f"<span style='font-size:0.9rem;font-weight:700;color:{_s_col};'>"
+                        f"{_s_emoji} Statut : {_s_statut}</span></div>",
                         unsafe_allow_html=True
                     )
+                    # KPIs selon agent
+                    if _s_besoin == "stress":
+                        _chocs = _s_res.get("chocs_s2", {})
+                        _scr_t = _s_res.get("scr_total", {})
+                        _fpp   = _s_res.get("fonds_propres", 0)
+                        _ratio = _scr_t.get("ratio_scr", 0) if isinstance(_scr_t, dict) else 0
+                        _scr_v = _scr_t.get("scr_total", 0) if isinstance(_scr_t, dict) else 0
+                        _marge = _s_res.get("reverse_stress", {}).get("marge_insolvabilite", 0)
+                        _c1, _c2, _c3 = st.columns(3)
+                        with _c1: st.metric("Ratio SCR", f"{_ratio:.1f}%", "objectif >150%")
+                        with _c2: st.metric("SCR Total", f"{_scr_v/1e6:.1f}M€")
+                        with _c3: st.metric("Marge insolvabilite", f"{_marge/1e6:.1f}M€")
+                    elif _s_besoin == "coherence":
+                        _dash = _s_res.get("dashboard", {})
+                        _c1, _c2, _c3, _c4 = st.columns(4)
+                        with _c1: st.metric("VERT", str(_dash.get("nb_vert", 0)))
+                        with _c2: st.metric("AMBRE", str(_dash.get("nb_ambre", 0)))
+                        with _c3: st.metric("ROUGE", str(_dash.get("nb_rouge", 0)))
+                        with _c4: st.metric("Pret ACPR", "✅" if _dash.get("pret_acpr") else "❌")
+                        # Alertes
+                        for _ctrl in _s_res.get("controles", {}).values():
+                            if isinstance(_ctrl, dict) and _ctrl.get("statut") in ("ROUGE","AMBRE"):
+                                _ic = "🔴" if _ctrl.get("statut") == "ROUGE" else "⚠️"
+                                st.caption(f"{_ic} {_ctrl.get('libelle','')} — {_ctrl.get('message','')[:80]}")
+                    elif _s_besoin == "s2":
+                        _prov  = _s_res.get("provisions", {})
+                        _scr   = _s_res.get("scr", {})
+                        _cap   = _s_res.get("capital", {})
+                        _c1, _c2, _c3, _c4 = st.columns(4)
+                        with _c1: st.metric("BE S2", f"{_prov.get('be_actualise',0)/1e6:.2f}M€")
+                        with _c2: st.metric("SCR Total", f"{_scr.get('total',0)/1e6:.2f}M€")
+                        with _c3: st.metric("Ratio SCR", f"{_cap.get('ratio_scr',0):.1f}%")
+                        with _c4: st.metric("Ratio MCR", f"{_cap.get('ratio_mcr',0):.1f}%")
+                    elif _s_besoin == "ifrs17":
+                        _prov17 = _s_res.get("provisions", {})
+                        _ecart  = _s_res.get("ecart_s2_ifrs", {})
+                        _lc     = _s_res.get("loss_component", {})
+                        _c1, _c2, _c3 = st.columns(3)
+                        with _c1: st.metric("TP IFRS 17", f"{_prov17.get('tp_total',0)/1e6:.2f}M€")
+                        with _c2: st.metric("Ratio IFRS17/S2", f"{_ecart.get('ratio_tp',0):.3f}")
+                        with _c3: st.metric("Loss Component", f"{_lc.get('total',0)/1e6:.2f}M€")
+                    elif _s_besoin == "alm":
+                        _dur  = _s_res.get("duration", {})
+                        _lcr  = _s_res.get("lcr", {})
+                        _red  = _s_res.get("redington", {})
+                        _c1, _c2, _c3, _c4 = st.columns(4)
+                        with _c1: st.metric("Gap duration", f"{_dur.get('gap_macaulay',0):+.2f} ans")
+                        with _c2: st.metric("LCR", f"{_lcr.get('lcr_pct',0):.0f}%")
+                        with _c3: st.metric("BV01 Net", f"{_s_res.get('bv01',{}).get('bv01_net',0):+.0f}€/bp")
+                        with _c4: st.metric("Redington", f"{_red.get('nb_conditions_ok',0)}/3")
+                    # Toggle graphiques
+                    _show_g = st.toggle("Afficher les graphiques", key=f"tog_g_{_s_besoin}", value=False)
+                    if _show_g:
+                        _s_graphs = _s_res.get("graphiques", {})
+                        if _s_graphs:
+                            _gc1, _gc2 = st.columns(2)
+                            for _gi, (_gk, _gfig) in enumerate(_s_graphs.items()):
+                                try:
+                                    with (_gc1 if _gi % 2 == 0 else _gc2):
+                                        st.plotly_chart(_gfig, use_container_width=True,
+                                                        key=f"sg_{_s_besoin}_{_gk}")
+                                except Exception:
+                                    pass
+                        else:
+                            st.caption("Relancer avec graphiques pour afficher.")
                 elif _s_res:
                     st.warning("Erreur agent")
 
