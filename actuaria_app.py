@@ -1517,6 +1517,7 @@ def page_dashboard():
             key="ar_mode_analyse",
         )
 
+        _ar_fichier_engage = None  # initialisé ici — défini dans le bloc mono si activé
         if _ar_mode == "mono":
 
             # ── Étape 1 : Format ─────────────────────────────────────────────────
