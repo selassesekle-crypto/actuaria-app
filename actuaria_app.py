@@ -1914,17 +1914,25 @@ def page_dashboard():
             }
             st.caption('Uploadez un fichier par branche. A7 tourne séquentiellement. Tableau de synthèse BE + SCR.')
             _mb_n = st.slider('Nombre de branches', 2, 8, 3, key='mb_n_lob')
+
+            # Fonctions format définies hors boucle — évite capture de variable
+            _mb_lob_options  = list(_lob_labels.keys())
+            _mb_lob_labels_list = [_lob_labels[k] for k in _mb_lob_options]
+            _mb_fmt_options  = ['cumule', 'non_cumule', 'brutes']
+            _mb_fmt_labels   = ['A — Cumulé', 'B — Incrémental', 'C — Données brutes']
+
             _mb_branches = []
             for _mb_i in range(_mb_n):
                 with st.container(border=True):
                     _mb_c1, _mb_c2, _mb_c3 = st.columns([2, 2, 1])
                     with _mb_c1:
-                        _mb_lob = st.selectbox(
+                        _mb_lob_idx = st.selectbox(
                             'Branche ' + str(_mb_i+1),
-                            list(_lob_labels.keys()),
-                            format_func=lambda x: _lob_labels.get(x, x),
+                            range(len(_mb_lob_options)),
+                            format_func=lambda i: _mb_lob_labels_list[i],
                             key='mb_lob_' + str(_mb_i),
                         )
+                        _mb_lob = _mb_lob_options[_mb_lob_idx]
                     with _mb_c2:
                         _mb_file = st.file_uploader(
                             'Triangle ' + str(_mb_i+1),
@@ -1932,13 +1940,15 @@ def page_dashboard():
                             key='mb_file_' + str(_mb_i),
                         )
                     with _mb_c3:
-                        _mb_fmt = st.selectbox(
+                        _mb_fmt_idx = st.selectbox(
                             'Format',
-                            ['cumule','non_cumule','brutes'],
-                            format_func=lambda x: {'cumule':'A','non_cumule':'B','brutes':'C'}.get(x,x),
+                            range(len(_mb_fmt_options)),
+                            format_func=lambda i: _mb_fmt_labels[i],
                             key='mb_fmt_' + str(_mb_i),
                         )
-                    _mb_branches.append({'lob':_mb_lob,'file':_mb_file,'fmt':_mb_fmt})
+                        _mb_fmt = _mb_fmt_options[_mb_fmt_idx]
+                # append hors du container — niveau boucle for
+                _mb_branches.append({'lob':_mb_lob,'file':_mb_file,'fmt':_mb_fmt})
 
             _mb_pc1, _mb_pc2 = st.columns(2)
             with _mb_pc1:
