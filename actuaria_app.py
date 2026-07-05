@@ -3065,8 +3065,8 @@ def _executer_analyse(besoin, direction, equipe, client):
                 from direction_non_vie.reglementation.a13_audit.agent import AgentA13AuditTrail
                 _r13 = AgentA13AuditTrail(audit_path=_tmp, verbose=False).run(
                     resultats_agents=resultats,
-                    ref_client=ref_client,
-                    besoin=besoin,
+                    client_nom=ref_client,
+                    generer_graphiques=False,
                 )
                 if "agent_results" not in st.session_state:
                     st.session_state["agent_results"] = {}
