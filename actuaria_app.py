@@ -3262,7 +3262,7 @@ def page_resultats():
                                 from direction_non_vie.reglementation.a8_stress_testing.agent import AgentA8StressTesting
                                 _s_res = AgentA8StressTesting(audit_path=_tmp_s, verbose=False).run(
                                     result_a7=r_raw, fonds_propres=_fpp_suite,
-                                    primes_acq=_primes_suite, generer_graphiques=False,
+                                    primes_acq=_primes_suite, generer_graphiques=True,
                                 )
                             elif _s_besoin == "coherence":
                                 from direction_non_vie.reglementation.a9_coherence.agent import AgentA9Coherence
@@ -3275,13 +3275,13 @@ def page_resultats():
                                     result_a11=_ss.get("res_suite_ifrs17"),
                                     result_a12=_ss.get("res_suite_alm"),
                                     primes_acq=_primes_suite,
-                                    generer_graphiques=False,
+                                    generer_graphiques=True,
                                 )
                             elif _s_besoin == "s2":
                                 from direction_non_vie.reglementation.a10_solvabilite2.agent import AgentA10Solvabilite2
                                 _s_res = AgentA10Solvabilite2(audit_path=_tmp_s, verbose=False).run(
                                     result_a7=r_raw, fonds_propres=_fpp_suite,
-                                    generer_graphiques=False,
+                                    generer_graphiques=True,
                                 )
                             elif _s_besoin == "ifrs17":
                                 from direction_non_vie.reglementation.a10_solvabilite2.agent import AgentA10Solvabilite2
@@ -3292,7 +3292,7 @@ def page_resultats():
                                 )
                                 _s_res = AgentA11IFRS17(audit_path=_tmp_s, verbose=False).run(
                                     result_a7=r_raw, result_a10=_r10s,
-                                    generer_graphiques=False,
+                                    generer_graphiques=True,
                                 )
                             elif _s_besoin == "alm":
                                 from direction_non_vie.reglementation.a10_solvabilite2.agent import AgentA10Solvabilite2
@@ -3303,7 +3303,7 @@ def page_resultats():
                                 )
                                 _s_res = AgentA12ALM(audit_path=_tmp_s, verbose=False).run(
                                     result_a10=_r10s, result_a7=r_raw,
-                                    generer_graphiques=False,
+                                    generer_graphiques=True,
                                 )
                             st.session_state[_s_key] = _s_res
                             _ak_m = {"stress":"isabelle","coherence":"marcus",
@@ -3378,21 +3378,22 @@ def page_resultats():
                         with _c2: st.metric("LCR", f"{float(_lcr.get('lcr',0)):.0f}%")
                         with _c3: st.metric("BV01 Net", f"{float(_bv01.get('bv01_net',0)):+.0f}€/bp")
                         with _c4: st.metric("Redington", f"{_nb_red}/3")
-                    # Toggle graphiques
-                    _show_g = st.toggle("Afficher les graphiques", key=f"tog_g_{_s_besoin}", value=False)
-                    if _show_g:
-                        _s_graphs = _s_res.get("graphiques", {})
-                        if _s_graphs:
-                            _gc1, _gc2 = st.columns(2)
-                            for _gi, (_gk, _gfig) in enumerate(_s_graphs.items()):
-                                try:
-                                    with (_gc1 if _gi % 2 == 0 else _gc2):
-                                        st.plotly_chart(_gfig, use_container_width=True,
-                                                        key=f"sg_{_s_besoin}_{_gk}")
-                                except Exception:
-                                    pass
-                        else:
-                            st.caption("Relancer avec graphiques pour afficher.")
+                    # Graphiques — affichés directement
+                    _s_graphs = _s_res.get("graphiques", {})
+                    if _s_graphs:
+                        st.markdown(
+                            f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;"
+                            f"font-weight:700;margin:12px 0 6px;'>Graphiques</div>",
+                            unsafe_allow_html=True
+                        )
+                        _gc1, _gc2 = st.columns(2)
+                        for _gi, (_gk, _gfig) in enumerate(_s_graphs.items()):
+                            try:
+                                with (_gc1 if _gi % 2 == 0 else _gc2):
+                                    st.plotly_chart(_gfig, use_container_width=True,
+                                                    key=f"sg_{_s_besoin}_{_gk}")
+                            except Exception:
+                                pass
                 elif _s_res:
                     st.warning("Erreur agent")
 
