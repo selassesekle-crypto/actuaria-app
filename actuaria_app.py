@@ -1687,6 +1687,30 @@ def page_dashboard():
 
                         if _r7_ar.get("success"):
                             st.success("✅ Analyse A7 terminée")
+                            # Diagnostic qualite du triangle
+                            _diag_ar = _res_build_ar.get("diagnostic_qualite", {})
+                            if _diag_ar:
+                                _dscore = _diag_ar.get("score", 0)
+                                _dstat  = _diag_ar.get("statut", "")
+                                _dcol   = VERT if _dstat=="VERT" else AMBRE if _dstat=="AMBRE" else ROUGE
+                                _demoji = "OK" if _dstat=="VERT" else "ATTENTION" if _dstat=="AMBRE" else "ALERTE"
+                                st.markdown(
+                                    f"<div style='background:{NAVY_LL};border-left:4px solid {_dcol};"
+                                    f"border-radius:8px;padding:12px 16px;margin:8px 0;'>",
+                                    unsafe_allow_html=True
+                                )
+                                st.markdown(
+                                    f"<div style='font-size:0.8rem;font-weight:700;color:{_dcol};margin-bottom:6px;'>"
+                                    f"{_demoji} Qualite du triangle : {_dstat} — Score {_dscore}/100</div>"
+                                    f"<div style='font-size:0.75rem;color:{BLANC};'>"
+                                    f"{_diag_ar.get('resume','')[:200]}</div></div>",
+                                    unsafe_allow_html=True
+                                )
+                                for _dc in _diag_ar.get("controles", []):
+                                    if _dc.get("statut") != "VERT":
+                                        st.caption(
+                                            f"{_dc['code']} {_dc['libelle']} : {_dc['message'][:120]}"
+                                        )
                         else:
                             st.error(f"❌ Erreur A7 : {_r7_ar.get('erreur', 'Inconnue')}")
 
