@@ -2816,7 +2816,15 @@ def _executer_analyse(besoin, direction, equipe, client):
             # ── STRESS TESTING A8 ───────────────────────────────────────────
             elif besoin == "stress":
                 from direction_non_vie.reglementation.a8_stress_testing.agent import AgentA8StressTesting
+                # Récupérer les vrais résultats A7 si disponibles
+                _r7_reel = (st.session_state.get("agent_results") or {}).get("ibrahim")
+                if _r7_reel and _r7_reel.get("success"):
+                    st.info("✅ Résultats A7 Ibrahim détectés — stress testing sur données réelles")
+                else:
+                    _r7_reel = None
+                    st.warning("⚠️ Aucune analyse provisionnement préalable — stress testing sur paramètres manuels")
                 r8 = AgentA8StressTesting(audit_path=_tmp, verbose=False).run(
+                    result_a7=_r7_reel,
                     primes_acq=params.get("primes", 10_000_000),
                     fonds_propres=params.get("fonds_propres", 7_650_000),
                     generer_graphiques=False,
@@ -2826,8 +2834,19 @@ def _executer_analyse(besoin, direction, equipe, client):
             # ── SOLVABILITÉ 2 ───────────────────────────────────────────────
             elif besoin == "s2":
                 from direction_non_vie.reglementation.a10_solvabilite2.agent import AgentA10Solvabilite2
-                a7_synt = {"best_estimate":{"best_estimate":params.get("be",2_914_930),"sigma_mack":params.get("be",2_914_930)*0.015,"cv_inter_methodes":5,"nb_methodes_convergentes":4},"tail":{"tail_factor":1.037},"meta":{"nb_lignes":50000,"n_annees":8},"sous_branche":params.get("branche","rc_auto")}
-                r10 = AgentA10Solvabilite2(audit_path=_tmp, verbose=False).run(result_a7=a7_synt, fonds_propres=params.get("fonds_propres",7_650_000), generer_graphiques=False)
+                _r7_reel = (st.session_state.get("agent_results") or {}).get("ibrahim")
+                if _r7_reel and _r7_reel.get("success"):
+                    _r7_a10 = _r7_reel
+                    st.info("✅ Résultats A7 Ibrahim détectés — SCR calculé sur données réelles")
+                else:
+                    _be = params.get("be", 2_914_930)
+                    _r7_a10 = {"best_estimate":{"best_estimate":_be,"sigma_mack":_be*0.015,"cv_inter_methodes":5,"nb_methodes_convergentes":4},"tail":{"tail_factor":1.037},"meta":{"nb_lignes":50000,"n_annees":8},"sous_branche":params.get("branche","rc_auto")}
+                    st.warning("⚠️ Aucune analyse provisionnement préalable — SCR calculé sur paramètres manuels")
+                r10 = AgentA10Solvabilite2(audit_path=_tmp, verbose=False).run(
+                    result_a7=_r7_a10,
+                    fonds_propres=params.get("fonds_propres", 7_650_000),
+                    generer_graphiques=False,
+                )
                 resultats["principal"] = r10
 
             # ── IAS 19 ──────────────────────────────────────────────────────
@@ -2871,10 +2890,16 @@ def _executer_analyse(besoin, direction, equipe, client):
             # ── COHÉRENCE A9 ────────────────────────────────────────────────
             elif besoin == "coherence":
                 from direction_non_vie.reglementation.a9_coherence.agent import AgentA9Coherence
-                _be = params.get("be", 2_914_930)
-                _r7_synt = {"best_estimate":{"best_estimate":_be,"sigma_mack":_be*0.015,"cv_inter_methodes":5,"nb_methodes_convergentes":4},"tail":{"tail_factor":1.037},"meta":{"nb_lignes":50000,"n_annees":8}}
+                _r7_reel = (st.session_state.get("agent_results") or {}).get("ibrahim")
+                if _r7_reel and _r7_reel.get("success"):
+                    _r7_a9 = _r7_reel
+                    st.info("✅ Résultats A7 Ibrahim détectés — cohérence sur données réelles")
+                else:
+                    _be = params.get("be", 2_914_930)
+                    _r7_a9 = {"best_estimate":{"best_estimate":_be,"sigma_mack":_be*0.015,"cv_inter_methodes":5,"nb_methodes_convergentes":4},"tail":{"tail_factor":1.037},"meta":{"nb_lignes":50000,"n_annees":8}}
+                    st.warning("⚠️ Aucune analyse provisionnement préalable — cohérence sur paramètres manuels")
                 r9 = AgentA9Coherence(audit_path=_tmp, verbose=False).run(
-                    result_a7=_r7_synt,
+                    result_a7=_r7_a9,
                     primes_acq=params.get("primes", 10_000_000),
                     generer_graphiques=False,
                 )
@@ -2884,12 +2909,22 @@ def _executer_analyse(besoin, direction, equipe, client):
             elif besoin == "ifrs17":
                 from direction_non_vie.reglementation.a10_solvabilite2.agent import AgentA10Solvabilite2
                 from direction_non_vie.reglementation.a11_ifrs17.agent import AgentA11IFRS17
-                _be = params.get("be", 2_914_930)
-                _r7_synt = {"best_estimate":{"best_estimate":_be,"sigma_mack":_be*0.015,"cv_inter_methodes":5,"nb_methodes_convergentes":4},"tail":{"tail_factor":1.037},"meta":{"nb_lignes":50000,"n_annees":8},"sous_branche":params.get("branche","rc_auto")}
-                _r10 = AgentA10Solvabilite2(audit_path=_tmp, verbose=False).run(result_a7=_r7_synt, fonds_propres=params.get("fonds_propres",7_650_000), generer_graphiques=False)
+                _r7_reel = (st.session_state.get("agent_results") or {}).get("ibrahim")
+                if _r7_reel and _r7_reel.get("success"):
+                    _r7_a11 = _r7_reel
+                    st.info("✅ Résultats A7 Ibrahim détectés — IFRS 17 calculé sur données réelles")
+                else:
+                    _be = params.get("be", 2_914_930)
+                    _r7_a11 = {"best_estimate":{"best_estimate":_be,"sigma_mack":_be*0.015,"cv_inter_methodes":5,"nb_methodes_convergentes":4},"tail":{"tail_factor":1.037},"meta":{"nb_lignes":50000,"n_annees":8},"sous_branche":params.get("branche","rc_auto")}
+                    st.warning("⚠️ Aucune analyse provisionnement préalable — IFRS 17 calculé sur paramètres manuels")
+                _r10_a11 = AgentA10Solvabilite2(audit_path=_tmp, verbose=False).run(
+                    result_a7=_r7_a11,
+                    fonds_propres=params.get("fonds_propres", 7_650_000),
+                    generer_graphiques=False,
+                )
                 r11 = AgentA11IFRS17(audit_path=_tmp, verbose=False).run(
-                    result_a7=_r7_synt,
-                    result_a10=_r10,
+                    result_a7=_r7_a11,
+                    result_a10=_r10_a11,
                     generer_graphiques=False,
                 )
                 resultats["principal"] = r11
@@ -2898,12 +2933,22 @@ def _executer_analyse(besoin, direction, equipe, client):
             elif besoin == "alm":
                 from direction_non_vie.reglementation.a10_solvabilite2.agent import AgentA10Solvabilite2
                 from direction_non_vie.reglementation.a12_alm.agent import AgentA12ALM
-                _be = params.get("be", 2_914_930)
-                _r7_synt = {"best_estimate":{"best_estimate":_be,"sigma_mack":_be*0.015,"cv_inter_methodes":5,"nb_methodes_convergentes":4},"tail":{"tail_factor":1.037},"meta":{"nb_lignes":50000,"n_annees":8},"sous_branche":params.get("branche","rc_auto")}
-                _r10 = AgentA10Solvabilite2(audit_path=_tmp, verbose=False).run(result_a7=_r7_synt, fonds_propres=params.get("fonds_propres",7_650_000), generer_graphiques=False)
+                _r7_reel = (st.session_state.get("agent_results") or {}).get("ibrahim")
+                if _r7_reel and _r7_reel.get("success"):
+                    _r7_a12 = _r7_reel
+                    st.info("✅ Résultats A7 Ibrahim détectés — ALM calculé sur données réelles")
+                else:
+                    _be = params.get("be", 2_914_930)
+                    _r7_a12 = {"best_estimate":{"best_estimate":_be,"sigma_mack":_be*0.015,"cv_inter_methodes":5,"nb_methodes_convergentes":4},"tail":{"tail_factor":1.037},"meta":{"nb_lignes":50000,"n_annees":8},"sous_branche":params.get("branche","rc_auto")}
+                    st.warning("⚠️ Aucune analyse provisionnement préalable — ALM calculé sur paramètres manuels")
+                _r10_a12 = AgentA10Solvabilite2(audit_path=_tmp, verbose=False).run(
+                    result_a7=_r7_a12,
+                    fonds_propres=params.get("fonds_propres", 7_650_000),
+                    generer_graphiques=False,
+                )
                 r12 = AgentA12ALM(audit_path=_tmp, verbose=False).run(
-                    result_a10=_r10,
-                    result_a7=_r7_synt,
+                    result_a10=_r10_a12,
+                    result_a7=_r7_a12,
                     generer_graphiques=False,
                 )
                 resultats["principal"] = r12
