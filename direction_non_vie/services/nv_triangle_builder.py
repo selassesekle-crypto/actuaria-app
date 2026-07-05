@@ -645,7 +645,17 @@ class NVTriangleBuilder:
                         C_inc[i, j] += float(row['montant'])
 
                 # Cumuler
-                return np.cumsum(C_inc, axis=1)
+                C_cum = np.cumsum(C_inc, axis=1)
+
+                # Masquer les cellules futures (zone inconnue du triangle)
+                # Une cellule (i, j) est future si i + j >= n_ann
+                # (les données brutes ne peuvent contenir que des paiements passés)
+                for _i in range(n_ann):
+                    for _j in range(n_dev):
+                        if _i + _j >= n_ann:
+                            C_cum[_i, _j] = 0.0
+
+                return C_cum
 
             triangle_attritional = _construire_triangle(df_attritional)
             triangle_grands      = _construire_triangle(df_grands)
