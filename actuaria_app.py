@@ -1610,6 +1610,40 @@ def page_dashboard():
                     st.warning(f"⚠️ Aperçu impossible : {_e_prev}")
 
             st.divider()
+            # ── Munich CL : triangle engagé (optionnel) ─────────────────────
+            with st.expander('📐 Munich Chain Ladder — Triangle charges engagées (optionnel)'):
+                st.markdown(
+                    '<div style="font-size:0.78rem;color:#F0F4F8;line-height:1.7;">'
+                    '<b style="color:#C9A84C;">Munich Chain Ladder (Quarg & Mack 2004)</b> — améliore la précision en exploitant les charges engagées (payé + IBNR dossier).<br><br>'
+                    '<b style="color:#E74C3C;">⚠️ Point critique :</b> les charges engagées <b>doivent provenir des gestionnaires sinistres</b> (évaluations dossier par dossier), '
+                    'jamais calculées depuis vos provisions actuarielles. '
+                    'Une circularité invalide complètement les résultats MCL (corrélation > 0.98 = détection automatique).<br><br>'
+                    '<b>Format attendu :</b> même structure que votre triangle payé '
+                    '(lignes = années survenance, colonnes = périodes développement).'
+                    '</div>',
+                    unsafe_allow_html=True
+                )
+                _ar_fichier_engage = st.file_uploader(
+                    'Triangle des charges engagées',
+                    type=['csv', 'xlsx', 'xls'],
+                    key='ar_upload_engage',
+                    help='Données dossier par dossier — jamais depuis vos provisions actuarielles (circularité)',
+                )
+            # Lire triangle engagé si fourni
+            _ar_triangle_engage = None
+            if st.session_state.get('ar_upload_engage') is not None:
+                try:
+                    import pandas as _pd_eng
+                    _f_eng = st.session_state['ar_upload_engage']
+                    _f_eng.seek(0)
+                    if _f_eng.name.lower().endswith('.csv'):
+                        _df_eng = _pd_eng.read_csv(_f_eng)
+                    else:
+                        _df_eng = _pd_eng.read_excel(_f_eng)
+                    _ar_triangle_engage = _df_eng.values.astype(float)
+                except Exception as _e_eng:
+                    st.warning('⚠️ Triangle engagé : ' + str(_e_eng))
+
 
             # ── Étape 3 : Paramètres ──────────────────────────────────────────────
             st.markdown(f"<div style='font-size:0.82rem;color:{OR};font-weight:700;margin-bottom:6px;'>③ Paramètres (optionnel)</div>", unsafe_allow_html=True)
