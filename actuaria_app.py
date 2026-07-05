@@ -3328,16 +3328,15 @@ def page_resultats():
                     )
                     # KPIs selon agent
                     if _s_besoin == "stress":
-                        _chocs = _s_res.get("chocs_s2", {})
                         _scr_t = _s_res.get("scr_total", {})
-                        _fpp   = _s_res.get("fonds_propres", 0)
-                        _ratio = _scr_t.get("ratio_scr", 0) if isinstance(_scr_t, dict) else 0
-                        _scr_v = _scr_t.get("scr_total", 0) if isinstance(_scr_t, dict) else 0
-                        _marge = _s_res.get("reverse_stress", {}).get("marge_insolvabilite", 0)
+                        _rev   = _s_res.get("reverse_stress", {})
+                        _ratio = float(_scr_t.get("ratio_scr_pct", 0)) if isinstance(_scr_t, dict) else 0
+                        _scr_v = float(_scr_t.get("scr_total", 0)) if isinstance(_scr_t, dict) else 0
+                        _marge = float(_rev.get("marge_euros", 0)) if isinstance(_rev, dict) else 0
                         _c1, _c2, _c3 = st.columns(3)
-                        with _c1: st.metric("Ratio SCR", f"{_ratio:.1f}%", "objectif >150%")
+                        with _c1: st.metric("Ratio SCR", f"{_ratio:.1f}%", "objectif >100%")
                         with _c2: st.metric("SCR Total", f"{_scr_v/1e6:.1f}M€")
-                        with _c3: st.metric("Marge insolvabilite", f"{_marge/1e6:.1f}M€")
+                        with _c3: st.metric("Marge", f"{_marge/1e6:.1f}M€")
                     elif _s_besoin == "coherence":
                         _dash = _s_res.get("dashboard", {})
                         _c1, _c2, _c3, _c4 = st.columns(4)
@@ -3345,11 +3344,13 @@ def page_resultats():
                         with _c2: st.metric("AMBRE", str(_dash.get("nb_ambre", 0)))
                         with _c3: st.metric("ROUGE", str(_dash.get("nb_rouge", 0)))
                         with _c4: st.metric("Pret ACPR", "✅" if _dash.get("pret_acpr") else "❌")
-                        # Alertes
-                        for _ctrl in _s_res.get("controles", {}).values():
-                            if isinstance(_ctrl, dict) and _ctrl.get("statut") in ("ROUGE","AMBRE"):
-                                _ic = "🔴" if _ctrl.get("statut") == "ROUGE" else "⚠️"
-                                st.caption(f"{_ic} {_ctrl.get('libelle','')} — {_ctrl.get('message','')[:80]}")
+                        # Alertes — controles est une liste
+                        _ctrls = _s_res.get("controles", [])
+                        if isinstance(_ctrls, list):
+                            for _ctrl in _ctrls:
+                                if isinstance(_ctrl, dict) and _ctrl.get("statut") in ("ROUGE","AMBRE"):
+                                    _ic = "🔴" if _ctrl.get("statut") == "ROUGE" else "⚠️"
+                                    st.caption(f"{_ic} {_ctrl.get('controle','')} — {_ctrl.get('message','')[:80]}")
                     elif _s_besoin == "s2":
                         _prov  = _s_res.get("provisions", {})
                         _cap   = _s_res.get("capital", {})
@@ -3369,12 +3370,14 @@ def page_resultats():
                     elif _s_besoin == "alm":
                         _dur  = _s_res.get("duration", {})
                         _lcr  = _s_res.get("lcr", {})
+                        _bv01 = _s_res.get("bv01", {})
                         _red  = _s_res.get("redington", {})
+                        _nb_red = _red.get("detail", {}).get("nb_ok", _red.get("nb_conditions_ok", 0))
                         _c1, _c2, _c3, _c4 = st.columns(4)
-                        with _c1: st.metric("Gap duration", f"{_dur.get('gap_macaulay',0):+.2f} ans")
-                        with _c2: st.metric("LCR", f"{_lcr.get('lcr_pct',0):.0f}%")
-                        with _c3: st.metric("BV01 Net", f"{_s_res.get('bv01',{}).get('bv01_net',0):+.0f}€/bp")
-                        with _c4: st.metric("Redington", f"{_red.get('nb_conditions_ok',0)}/3")
+                        with _c1: st.metric("Gap duration", f"{float(_dur.get('gap',0)):+.2f} ans")
+                        with _c2: st.metric("LCR", f"{float(_lcr.get('lcr',0)):.0f}%")
+                        with _c3: st.metric("BV01 Net", f"{float(_bv01.get('bv01_net',0)):+.0f}€/bp")
+                        with _c4: st.metric("Redington", f"{_nb_red}/3")
                     # Toggle graphiques
                     _show_g = st.toggle("Afficher les graphiques", key=f"tog_g_{_s_besoin}", value=False)
                     if _show_g:
