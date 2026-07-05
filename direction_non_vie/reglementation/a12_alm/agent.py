@@ -58,8 +58,8 @@ BLANC="#F0F4F8"; GRIS="#8A9AB0"; VERT="#2ECC71"; ROUGE="#E74C3C"
 AMBRE="#F39C12"; BLEU="#3498DB"; VIOLET="#9B59B6"; TURQUOISE="#1ABC9C"
 
 LAYOUT_BASE = dict(paper_bgcolor=NAVY, plot_bgcolor=NAVY_L,
-    font=dict(family="Inter, Arial", color=BLANC, size=11),
-    margin=dict(l=60,r=40,t=70,b=90), height=420,
+    font=dict(family="Inter, Arial", color=BLANC, size=10),
+    margin=dict(l=90,r=50,t=80,b=120), height=480,
     hoverlabel=dict(bgcolor=NAVY_LL, bordercolor=OR, font_size=12, font_color=BLANC))
 
 # ── Paramètres ALM ────────────────────────────────────────────────────────────
