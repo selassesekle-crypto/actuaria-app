@@ -256,9 +256,6 @@ def _calculer_lambda(
         if len(r_Q_j) < 3:
             continue
 
-        if len(r_Q_j) < 3:
-            continue
-
         r_P_arr = np.array(r_P_j)
         r_E_arr = np.array(r_E_j)
         r_Q_arr = np.array(r_Q_j)
@@ -356,12 +353,7 @@ def munich_cl(
     f_star_E = f_E.copy()
 
     for j in range(m - 1):
-        Q_obs = []
-        for i in range(n):
-            if i + j < n and C_P[i, j] > 0 and C_E[i, j] > 0:
-                Q_obs.append(C_P[i, j] / C_E[i, j])
-
-        if not Q_obs or f_E[j] <= 0:
+        if f_E[j] <= 0 or f_P[j] <= 0:
             continue
 
         # Q_moy volumique pour la projection (Quarg & Mack eq. 3.3)
