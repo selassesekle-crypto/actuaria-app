@@ -74,6 +74,10 @@ import logging
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
+try:
+    from scipy.optimize import curve_fit as _curve_fit
+except ImportError:
+    _curve_fit = None
 
 logger = logging.getLogger('actuaria.a7')
 
@@ -412,6 +416,256 @@ def calculer_tail_factor(
         'methode':     'régression exponentielle log-linéaire',
         'statut':      statut,
         'message':     msg,
+    }
+
+
+
+
+# =============================================================================
+#  TAIL FACTOR MULTI-MÉTHODES AVEC SÉLECTION AIC
+#  À insérer dans chain_ladder.py après la fonction calculer_tail_factor
+# =============================================================================
+#
+#  Trois méthodes calibrées par scipy.optimize.curve_fit :
+#
+#  M1 — Log-linéaire (Mack 1993)  : f(j) = 1 + exp(a + b×j),  b < 0
+#  M2 — Inverse power curve       : f(j) = 1 + c × j^(-d),    c,d > 0
+#  M3 — Exponential decay         : f(j) = 1 + e × exp(-f×j), e,f > 0
+#
+#  Sélection par AIC = 2k - 2×log(L) où L est la vraisemblance gaussienne
+#  sur les résidus des facteurs observés vs ajustés.
+#
+#  Référence : Mack (1993), Clark LDF (2003), Taylor (1986)
+# =============================================================================
+
+
+def _aic(residus: np.ndarray, n_params: int) -> float:
+    """Calcule l'AIC à partir des résidus et du nombre de paramètres."""
+    n = len(residus)
+    if n <= n_params:
+        return np.inf
+    sse = float(np.sum(residus ** 2))
+    if sse <= 0:
+        return -np.inf
+    sigma2 = sse / n
+    log_lik = -n / 2 * np.log(2 * np.pi * sigma2) - sse / (2 * sigma2)
+    return 2 * n_params - 2 * log_lik
+
+
+def _extrapoler_tail(f_func, j_start: int, params: tuple,
+                     max_iter: int = 100, tol: float = 1e-5) -> float:
+    """Produit les facteurs extrapolés jusqu'à convergence."""
+    tail = 1.0
+    for step in range(max_iter):
+        j = j_start + step
+        f_j = float(f_func(j, *params))
+        increment = f_j - 1.0
+        if increment < tol:
+            break
+        tail *= f_j
+    return max(tail, 1.0)
+
+
+def calculer_tail_factor_multi(
+    facteurs:                 np.ndarray,
+    lob_tail_max_alerte:      float = 1.05,
+    n_facteurs_queue:         int   = 4,
+    risque_long:              bool  = True,
+    tail_seuil_stabilisation: float = 1.02,
+) -> Dict:
+    """
+    Estime le tail factor par trois méthodes et sélectionne la meilleure
+    selon le critère AIC (Akaike Information Criterion).
+
+    Méthodes calibrées :
+      M1 — Log-linéaire   : f(j) = 1 + exp(a + b×j)      [2 params]
+      M2 — Inverse power  : f(j) = 1 + c × j^(-d)        [2 params]
+      M3 — Exponential    : f(j) = 1 + e × exp(-f×j)     [2 params]
+
+    Parameters
+    ----------
+    facteurs                 : vecteur des LDF observés f_0..f_{m-2}
+    lob_tail_max_alerte      : seuil d'alerte tail (depuis lob_config)
+    n_facteurs_queue         : nombre de LDF utilisés pour calibration
+    risque_long              : True si branche à développement long
+    tail_seuil_stabilisation : dernier LDF minimum pour appliquer un tail
+
+    Returns
+    -------
+    dict : tail_factor, methode, methode_retenue, comparaison_methodes,
+           statut, message, aic_retenu
+    """
+    from scipy.optimize import curve_fit
+
+    n_f = len(facteurs)
+
+    # ── Conditions préalables identiques à calculer_tail_factor ──────────────
+    if not risque_long:
+        return {
+            'tail_factor': 1.0, 'methode': 'non applicable (risque court)',
+            'methode_retenue': 'aucune', 'comparaison_methodes': {},
+            'statut': 'VERT', 'aic_retenu': None,
+            'message': "Tail = 1.0 — risque court (Guide IA 2023).",
+        }
+
+    dernier_ldf = float(facteurs[-1]) if n_f > 0 else 1.0
+
+    if dernier_ldf < tail_seuil_stabilisation:
+        return {
+            'tail_factor': 1.0, 'methode': 'non applicable (LDF stabilisé)',
+            'methode_retenue': 'aucune', 'comparaison_methodes': {},
+            'statut': 'VERT', 'aic_retenu': None,
+            'message': (
+                f"Tail = 1.0 — dernier LDF={dernier_ldf:.4f} "
+                f"< seuil {tail_seuil_stabilisation:.2f} (coefficients stabilisés)."
+            ),
+        }
+
+    if n_f < 4:
+        return {
+            'tail_factor': 1.0, 'methode': 'aucune (trop peu de facteurs)',
+            'methode_retenue': 'aucune', 'comparaison_methodes': {},
+            'statut': 'VERT', 'aic_retenu': None,
+            'message': "Tail = 1.0 — triangle trop court pour calibrer.",
+        }
+
+    # ── Préparer les données de calibration ───────────────────────────────────
+    k       = min(n_facteurs_queue, n_f)
+    f_queue = facteurs[n_f - k:]
+    x       = np.arange(k, dtype=float)
+    eps     = 1e-8
+
+    # ── Définition des trois courbes ──────────────────────────────────────────
+    def f_log_lin(j, a, b):
+        """M1 — Log-linéaire : f(j) = 1 + exp(a + b×j)"""
+        return 1.0 + np.exp(np.clip(a + b * j, -20, 10))
+
+    def f_inverse_power(j, c, d):
+        """M2 — Inverse power : f(j) = 1 + c × j^(-d)"""
+        j_safe = np.maximum(j, eps)
+        return 1.0 + c * np.power(j_safe + 1, -d)
+
+    def f_exponential(j, e, g):
+        """M3 — Exponential decay : f(j) = 1 + e × exp(-g×j)"""
+        return 1.0 + e * np.exp(-g * j)
+
+    methodes = {
+        'log_lineaire': {
+            'func': f_log_lin,
+            'p0': (-2.0, -0.5),
+            'bounds': ([-10, -5], [5, -1e-6]),
+            'label': 'Log-linéaire (Mack 1993)',
+            'n_params': 2,
+        },
+        'inverse_power': {
+            'func': f_inverse_power,
+            'p0': (0.1, 1.0),
+            'bounds': ([1e-6, 1e-6], [10, 10]),
+            'label': 'Inverse power curve',
+            'n_params': 2,
+        },
+        'exponential': {
+            'func': f_exponential,
+            'p0': (0.1, 0.5),
+            'bounds': ([1e-6, 1e-6], [10, 10]),
+            'label': 'Exponential decay',
+            'n_params': 2,
+        },
+    }
+
+    # ── Calibration + AIC pour chaque méthode ────────────────────────────────
+    resultats = {}
+    tail_max  = min(lob_tail_max_alerte * 1.5, 1.50)
+
+    for nom, cfg in methodes.items():
+        try:
+            popt, _ = curve_fit(
+                cfg['func'], x, f_queue,
+                p0=cfg['p0'], bounds=cfg['bounds'],
+                maxfev=2000,
+            )
+
+            # Vérifier la décroissance (b < 0 pour log-linéaire)
+            if nom == 'log_lineaire' and popt[1] >= 0:
+                resultats[nom] = {'tail': 1.0, 'aic': np.inf,
+                                  'params': popt, 'label': cfg['label'],
+                                  'echec': 'pente positive'}
+                continue
+
+            # Résidus et AIC
+            f_ajuste = cfg['func'](x, *popt)
+            residus  = f_queue - f_ajuste
+            aic      = _aic(residus, cfg['n_params'])
+
+            # Extrapolation
+            tail_raw = _extrapoler_tail(cfg['func'], k, popt)
+            tail     = float(np.clip(tail_raw, 1.0, tail_max))
+
+            resultats[nom] = {
+                'tail': tail, 'aic': aic,
+                'params': popt, 'label': cfg['label'],
+                'residus_mse': float(np.mean(residus ** 2)),
+            }
+
+        except Exception as _e:
+            resultats[nom] = {'tail': 1.0, 'aic': np.inf,
+                              'params': None, 'label': cfg['label'],
+                              'echec': str(_e)}
+
+    # ── Sélection par AIC minimum ─────────────────────────────────────────────
+    valides = {k: v for k, v in resultats.items() if v['aic'] < np.inf}
+
+    if not valides:
+        # Fallback sur log-linéaire classique
+        fallback = calculer_tail_factor(
+            facteurs, lob_tail_max_alerte, n_facteurs_queue,
+            risque_long, tail_seuil_stabilisation
+        )
+        fallback['methode_retenue'] = 'log_lineaire (fallback)'
+        fallback['comparaison_methodes'] = {}
+        fallback['aic_retenu'] = None
+        return fallback
+
+    meilleure = min(valides, key=lambda k: valides[k]['aic'])
+    tail_final = valides[meilleure]['tail']
+    aic_final  = valides[meilleure]['aic']
+
+    # ── Statut ────────────────────────────────────────────────────────────────
+    if tail_final >= lob_tail_max_alerte:
+        statut = 'ROUGE'
+    elif tail_final >= 1.0 + (lob_tail_max_alerte - 1.0) * 0.5:
+        statut = 'AMBRE'
+    else:
+        statut = 'VERT'
+
+    # ── Tableau comparatif ────────────────────────────────────────────────────
+    comparaison = {}
+    for nom, res in resultats.items():
+        comparaison[nom] = {
+            'label':    res['label'],
+            'tail':     round(res['tail'], 6),
+            'aic':      round(res['aic'], 2) if res['aic'] < np.inf else None,
+            'retenu':   (nom == meilleure),
+            'echec':    res.get('echec'),
+        }
+
+    # ── Message ───────────────────────────────────────────────────────────────
+    label_retenu = resultats[meilleure]['label']
+    msg = (
+        f"Tail factor = {tail_final:.4f} — méthode retenue : {label_retenu} "
+        f"(AIC = {aic_final:.1f}). "
+        f"3 méthodes calibrées — sélection par critère AIC. "
+        f"+{(tail_final-1)*100:.2f}% de provisions au-delà de la dernière colonne."
+    )
+
+    return {
+        'tail_factor':          round(tail_final, 6),
+        'methode':              label_retenu,
+        'methode_retenue':      meilleure,
+        'comparaison_methodes': comparaison,
+        'statut':               statut,
+        'aic_retenu':           round(aic_final, 2),
+        'message':              msg,
     }
 
 
