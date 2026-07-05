@@ -1782,6 +1782,7 @@ def page_dashboard():
                                 reserve_grands_sinistres = _reserve_gs if _reserve_gs > 0 else None,
                                 n_grands_sinistres       = _n_grands,
                                 methode_grands           = _methode_gs,
+                                triangle_engage          = _ar_triangle_engage,
                             )
                             st.session_state["ar_resultats_a7"] = _r7_ar
                             _ar_res = _r7_ar
