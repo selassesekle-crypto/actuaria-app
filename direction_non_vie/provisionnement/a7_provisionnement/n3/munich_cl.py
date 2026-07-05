@@ -128,30 +128,32 @@ def valider_prerequis(
         )
 
     # ── Détection de circularité (Quarg & Mack 2004) ─────────────────────────
-    # Si corrélation entre facteurs payé/engagé > 0.98 → données engagées
-    # proviennent probablement des provisions actuarielles → circularité.
+    # Métrique : coefficient de variation (CV) des ratios C_E/C_P.
+    # Si engage = payé × constante → CV ≈ 0 → circularité certaine.
+    # Un triangle indépendant a des ratios variables (CV > 0.05) car
+    # l'IBNR varie selon la cohorte et l'ancienneté des dossiers.
     try:
         import numpy as _np_mcl
-        _incr_P, _incr_E = [], []
+        _ratios = []
         for _i in range(n):
-            for _j in range(min(m - 1, n - _i - 1)):
-                if (C_P[_i,_j] > 0 and C_P[_i,_j+1] > 0 and
-                        C_E[_i,_j] > 0 and C_E[_i,_j+1] > 0):
-                    _incr_P.append(float(C_P[_i,_j+1] / C_P[_i,_j]))
-                    _incr_E.append(float(C_E[_i,_j+1] / C_E[_i,_j]))
-        if len(_incr_P) >= 6:
-            _corr = float(_np_mcl.corrcoef(_incr_P, _incr_E)[0, 1])
-            if _corr > 0.98:
+            for _j in range(min(m, n - _i)):
+                if C_P[_i,_j] > 0 and C_E[_i,_j] > 0:
+                    _ratios.append(float(C_E[_i,_j] / C_P[_i,_j]))
+        if len(_ratios) >= 6:
+            _r = _np_mcl.array(_ratios)
+            _cv = float(_np_mcl.std(_r) / _np_mcl.mean(_r)) if _np_mcl.mean(_r) > 0 else 0.0
+            if _cv < 0.02:
                 return False, (
-                    f'CIRCULARITE DETECTEE — corrélation facteurs payé/engagé = {_corr:.3f} > 0.98. '
-                    f'Les charges engagées semblent calculées depuis les provisions actuarielles. '
+                    f'CIRCULARITE DETECTEE — CV des ratios engagé/payé = {_cv:.4f} < 0.02. '
+                    f'Les charges engagées sont proportionnelles aux paiements (ratio quasi-constant). '
+                    f'Elles semblent calculées depuis les provisions actuarielles. '
                     f'Munich CL désactivé (Quarg & Mack 2004). '
-                    f'Utilisez des évaluations dossier par dossier indépendantes.'
+                    f'Utilisez des évaluations dossier par dossier indépendantes des provisions.'
                 )
-            elif _corr > 0.95:
+            elif _cv < 0.05:
                 return True, (
-                    f'⚠️ Corrélation élevée payé/engagé = {_corr:.3f} (seuil alerte 0.95). '
-                    f'Vérifiez indépendance des charges engagées. '
+                    f'⚠️ CV faible des ratios engagé/payé = {_cv:.4f} (seuil alerte 0.05). '
+                    f'Vérifiez que les charges engagées sont indépendantes des provisions. '
                     f'Munich CL activé sous réserve de validation actuaire.'
                 )
     except Exception:
