@@ -3348,9 +3348,15 @@ def page_resultats():
                         _ctrls = _s_res.get("controles", [])
                         if isinstance(_ctrls, list):
                             for _ctrl in _ctrls:
-                                if isinstance(_ctrl, dict) and _ctrl.get("statut") in ("ROUGE","AMBRE"):
+                                if not isinstance(_ctrl, dict):
+                                    continue
+                                _msg = _ctrl.get("message", "")
+                                # Filtrer les contrôles non exécutés (agents manquants)
+                                if "Non exécuté" in _msg or "requis" in _msg:
+                                    continue
+                                if _ctrl.get("statut") in ("ROUGE", "AMBRE"):
                                     _ic = "🔴" if _ctrl.get("statut") == "ROUGE" else "⚠️"
-                                    st.caption(f"{_ic} {_ctrl.get('controle','')} — {_ctrl.get('message','')[:80]}")
+                                    st.caption(f"{_ic} {_ctrl.get('controle','')} — {_msg[:100]}")
                     elif _s_besoin == "s2":
                         _prov  = _s_res.get("provisions", {})
                         _cap   = _s_res.get("capital", {})
@@ -3378,7 +3384,7 @@ def page_resultats():
                         with _c2: st.metric("LCR", f"{float(_lcr.get('lcr',0)):.0f}%")
                         with _c3: st.metric("BV01 Net", f"{float(_bv01.get('bv01_net',0)):+.0f}€/bp")
                         with _c4: st.metric("Redington", f"{_nb_red}/3")
-                    # Graphiques — affichés directement
+                    # Graphiques — colonne unique pleine largeur
                     _s_graphs = _s_res.get("graphiques", {})
                     if _s_graphs:
                         st.markdown(
@@ -3386,12 +3392,10 @@ def page_resultats():
                             f"font-weight:700;margin:12px 0 6px;'>Graphiques</div>",
                             unsafe_allow_html=True
                         )
-                        _gc1, _gc2 = st.columns(2)
-                        for _gi, (_gk, _gfig) in enumerate(_s_graphs.items()):
+                        for _gk, _gfig in _s_graphs.items():
                             try:
-                                with (_gc1 if _gi % 2 == 0 else _gc2):
-                                    st.plotly_chart(_gfig, use_container_width=True,
-                                                    key=f"sg_{_s_besoin}_{_gk}")
+                                st.plotly_chart(_gfig, use_container_width=True,
+                                                key=f"sg_{_s_besoin}_{_gk}")
                             except Exception:
                                 pass
                 elif _s_res:
