@@ -49,6 +49,20 @@ try:
     TORCH_OK = True
 except ImportError:
     TORCH_OK = False
+    # Fallback — permet l'import du module sans PyTorch
+    # Les classes nn.Module sont inaccessibles mais l'import ne plante pas
+    class _FakeModule:
+        class Module: pass
+        class Linear: pass
+        class ReLU: pass
+        class Dropout: pass
+        class Sequential: pass
+        class ModuleList: pass
+        class BatchNorm1d: pass
+        class Softmax: pass
+        @staticmethod
+        def init(): pass
+    nn = _FakeModule()
 
 logging.basicConfig(
     level=logging.INFO,
