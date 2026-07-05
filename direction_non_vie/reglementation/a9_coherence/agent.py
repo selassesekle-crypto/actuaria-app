@@ -533,11 +533,14 @@ class AgentA9Coherence:
         be      = result_a7.get('best_estimate', {}).get('best_estimate', 0.0)
         sigma   = result_a7.get('best_estimate', {}).get('sigma_mack', 0.0)
 
-        chocs   = result_a8.get('chocs_s2', {})
-        scr_sou = chocs.get('scr_souscription', 0.0)
-        scr_tot = result_a8.get('capital', {}).get('scr_total', 0.0)
-        fpp     = result_a8.get('capital', {}).get('fonds_propres', 0.0)
+        # A8 retourne scr_total comme dict et fonds_propres à la racine
+        _scr_t  = result_a8.get('scr_total', {})
+        scr_sou = float(_scr_t.get('scr_total', 0.0)) if isinstance(_scr_t, dict) else 0.0
+        scr_tot = scr_sou
+        fpp     = float(result_a8.get('fonds_propres', 0.0))
         ratio_scr_fpp = (fpp / max(scr_tot, 1.0)) * 100 if scr_tot > 0 else 0.0
+        chocs   = result_a8.get('chocs_s2', {})
+        scr_sou = float(_scr_t.get('scr_total', 0.0)) if isinstance(_scr_t, dict) else 0.0
 
         ratio_scr_be = scr_sou / max(be, 1.0)
 
