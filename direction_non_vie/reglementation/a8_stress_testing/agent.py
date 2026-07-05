@@ -1000,8 +1000,8 @@ class AgentA8StressTesting:
         GRIS="#8A9AB0";VERT="#2ECC71";ROUGE="#E74C3C";AMBRE="#F39C12";BLEU="#3498DB"
         LAYOUT = dict(
             paper_bgcolor=NAVY, plot_bgcolor=NAVYL,
-            font=dict(family="Inter, Arial", color=BLANC, size=11),
-            margin=dict(l=70, r=40, t=70, b=90), height=420,
+            font=dict(family="Inter, Arial", color=BLANC, size=10),
+            margin=dict(l=90, r=60, t=80, b=120), height=480,
         )
         graphiques = {}
 
