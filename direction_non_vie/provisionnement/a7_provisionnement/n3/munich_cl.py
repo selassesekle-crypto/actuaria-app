@@ -127,6 +127,36 @@ def valider_prerequis(
             f"triangle engagé incohérent. Munich CL désactivé."
         )
 
+    # ── Détection de circularité (Quarg & Mack 2004) ─────────────────────────
+    # Si corrélation entre facteurs payé/engagé > 0.98 → données engagées
+    # proviennent probablement des provisions actuarielles → circularité.
+    try:
+        import numpy as _np_mcl
+        _incr_P, _incr_E = [], []
+        for _i in range(n):
+            for _j in range(min(m - 1, n - _i - 1)):
+                if (C_P[_i,_j] > 0 and C_P[_i,_j+1] > 0 and
+                        C_E[_i,_j] > 0 and C_E[_i,_j+1] > 0):
+                    _incr_P.append(float(C_P[_i,_j+1] / C_P[_i,_j]))
+                    _incr_E.append(float(C_E[_i,_j+1] / C_E[_i,_j]))
+        if len(_incr_P) >= 6:
+            _corr = float(_np_mcl.corrcoef(_incr_P, _incr_E)[0, 1])
+            if _corr > 0.98:
+                return False, (
+                    f'CIRCULARITE DETECTEE — corrélation facteurs payé/engagé = {_corr:.3f} > 0.98. '
+                    f'Les charges engagées semblent calculées depuis les provisions actuarielles. '
+                    f'Munich CL désactivé (Quarg & Mack 2004). '
+                    f'Utilisez des évaluations dossier par dossier indépendantes.'
+                )
+            elif _corr > 0.95:
+                return True, (
+                    f'⚠️ Corrélation élevée payé/engagé = {_corr:.3f} (seuil alerte 0.95). '
+                    f'Vérifiez indépendance des charges engagées. '
+                    f'Munich CL activé sous réserve de validation actuaire.'
+                )
+    except Exception:
+        pass  # Détection circularité non bloquante
+
     return True, "Prérequis Munich CL satisfaits."
 
 
