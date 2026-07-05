@@ -3197,18 +3197,17 @@ def page_resultats():
     Les résultats A7 Ibrahim sont sauvegardés. Cliquez pour lancer les agents réglementaires sans tout ressaisir.
   </div>
 </div>""", unsafe_allow_html=True)
-        _suite_cols = st.columns(5)
         _suite_agents = [
-            ("stress",    "🌩️ Stress A8",    "Isabelle"),
-            ("coherence", "🔗 Cohérence A9",  "Marcus"),
-            ("s2",        "🛡️ SCR/MCR A10",  "Elena"),
-            ("ifrs17",    "📋 IFRS 17 A11",   "Thomas"),
-            ("alm",       "⚖️ ALM A12",       "Aisha"),
+            ("stress",    "Stress A8",    "Isabelle"),
+            ("coherence", "Coherence A9", "Marcus"),
+            ("s2",        "SCR/MCR A10",  "Elena"),
+            ("ifrs17",    "IFRS 17 A11",  "Thomas"),
+            ("alm",       "ALM A12",      "Aisha"),
         ]
+        _suite_cols = st.columns(5)
         for col, (b_key, b_lbl, b_agent) in zip(_suite_cols, _suite_agents):
             with col:
-                if st.button(b_lbl, key=f"suite_{b_key}", use_container_width=True,
-                             help=f"Lancer {b_agent} avec les résultats A7 actuels"):
+                if st.button(b_lbl, key=f"suite_{b_key}", use_container_width=True):
                     nav_to("analyse", besoin=b_key, equipe="reglementation_nv")
 
     st.markdown("<hr>", unsafe_allow_html=True)
@@ -3248,8 +3247,13 @@ def page_resultats():
 
     # ── COMMENTAIRE ACTUARIEL ─────────────────────────────────────────────────
     if commentaire:
-        st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:16px 0 8px;'>◆ Commentaire actuariel</div>", unsafe_allow_html=True)
-        st.markdown(f"<div style='background:{NAVY_L};border-radius:10px;padding:16px 20px;font-size:0.82rem;color:{BLANC};white-space:pre-wrap;line-height:1.8;'>{commentaire}</div>", unsafe_allow_html=True)
+        st.markdown(
+            f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;"
+            f"font-weight:700;margin:16px 0 8px;'>Rapport actuariel complet</div>",
+            unsafe_allow_html=True
+        )
+        with st.expander("Voir le rapport A7 Ibrahim (8 sections)", expanded=False):
+            st.text(commentaire)
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
@@ -3493,13 +3497,16 @@ Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non 
     # ── ANALYSES AVANCÉES ────────────────────────────────────────────────────
     st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:8px 0 10px;'>◆ Analyses avancées</div>", unsafe_allow_html=True)
 
-    for label, obj in [
-        ("🔚 Tail Factor",           tail),
-        ("🔁 Back-Testing",          r_raw.get("back_testing", {})),
-        ("🇩🇪 Munich Chain Ladder",  munich),
-        ("📐 Clark LDF (log-logistique / Weibull)", n3.get('clark', {})),
-        ("📅 Effets Calendaire (Barnett-Zehnwirth)", n3.get('barnett_zehnwirth', {})),
-    ]:
+    _avancees = [
+        ("Tail Factor", tail),
+        ("Back-Testing", r_raw.get("back_testing", {})),
+        ("Munich Chain Ladder", munich),
+        ("Clark LDF", n3.get("clark", {})),
+        ("Effets Calendaire BZ", n3.get("barnett_zehnwirth", {})),
+    ]
+    if not any(o and o.get("message") for _, o in _avancees):
+        st.caption("Analyses avancees disponibles apres une analyse A7.")
+    for label, obj in _avancees:
         if obj and obj.get("message"):
             sc = VERT if obj.get("statut")=="VERT" else AMBRE if obj.get("statut")=="AMBRE" else ROUGE if obj.get("statut")=="ROUGE" else GRIS
             st.markdown(f"""
