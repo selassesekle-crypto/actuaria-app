@@ -816,8 +816,8 @@ class SPDataBuilder:
 
         # Âge moyen consolidé
         ages = []
-        if meta_sante.get("age_moyen"):    ages.append(meta_sante["age_moyen"])
-        if meta_prevoyance.get("age_moyen"): ages.append(meta_prevoyance["age_moyen"])
+        if meta_sante.get("age_moyen") is not None:    ages.append(meta_sante["age_moyen"])
+        if meta_prevoyance.get("age_moyen") is not None: ages.append(meta_prevoyance["age_moyen"])
         if ages:
             profil["age_moyen"] = round(float(np.mean(ages)), 1)
 
