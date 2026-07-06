@@ -609,8 +609,10 @@ class AgentSPAuditTrail:
             "titre":   "Conformité RGPD Art.30",
             "contenu": (
                 f"Responsable : {client_nom} | "
-                f"Catégories sensibles : données de santé + données salariales | "
-                f"Base légale : Art.9 §2(b) + Art.6 §1(b) RGPD | "
+                # Données sensibles Art.9 : santé, biométriques, arrêts ITT
+                # Données non-sensibles Art.6 : salariales (exécution du contrat)
+                f"Catégories sensibles (Art.9) : santé, biométriques, arrêts ITT | "
+                f"Données salariales (Art.6 §1b) : salaire, CSP | "
                 f"Conformité : {registre_rgpd['conformite']['rgpd_art30']}"
             ),
         })
@@ -666,11 +668,15 @@ class AgentSPAuditTrail:
         ]
 
     def _rag(self, hyp: list, logs: Dict) -> str:
+        # H2 est critique et couvre déjà nb_rouge > 0
+        # Les lignes nb_rouge/nb_ambre ci-dessous sont des gardes
+        # supplémentaires en cas de modification future de _hypotheses_rag
         non_val = [h for h in hyp if h["statut"]=="NON VALIDÉE" and h["critique"]]
         if non_val:
             return "ROUGE"
         if any(h["statut"]=="À JUSTIFIER" for h in hyp):
             return "AMBRE"
+        # Garde supplémentaire — cohérence si hypothèses étendues
         if logs["nb_rouge"] > 0:
             return "ROUGE"
         if logs["nb_ambre"] > 0:
@@ -696,7 +702,8 @@ class AgentSPAuditTrail:
         ]
         for a in logs["agents_executes"]:
             ic_a = "🟢" if a["statut"]=="VERT" else ("🟡" if a["statut"]=="AMBRE" else "🔴")
-            L.append(f"  {ic_a} {a['nom']:25s} [{a['audit_id'][:12]}...] {a['duree']:.2f}s")
+            aid_short = a["audit_id"][:12] if a["audit_id"] else "—"
+            L.append(f"  {ic_a} {a['nom']:25s} [{aid_short}] {a['duree']:.2f}s")
 
         if logs["agents_manquants"]:
             L += ["", "⚠️ AGENTS MANQUANTS"]
