@@ -70,33 +70,36 @@ LAYOUT_BASE = dict(paper_bgcolor=NAVY, plot_bgcolor=NAVY_L,
 # TABLES ACTUARIELLES
 # ══════════════════════════════════════════════════════════════════════════════
 
-# Taux d'incidence ITT par âge (BCAC 2019 — simplifiés)
+# ── Tables actuarielles — importées depuis le service centralisé ─────────
+# Source unique : sp_tables_actuarielles.py — évite la duplication entre agents
+try:
+    from direction_sante_prevoyance.services.sp_tables_actuarielles import (
+        get_taux_itt_bcac   as _get_taux_itt,
+        get_taux_ip_td8890  as _get_taux_ip,
+        get_qx_th0002       as _get_qx,
+        BCAC_2019_TAUX_ITT, TD_8890_TAUX_IP, TH0002_QX,
+    )
+    _TABLES_CENTRALISEES = True
+except ImportError:
+    _TABLES_CENTRALISEES = False
+
+# Tables locales — fallback si import centralisé indisponible
 TAUX_ITT_BCAC = {
     25:0.020, 30:0.025, 35:0.032, 40:0.042,
     45:0.055, 50:0.072, 55:0.095, 60:0.120,
 }
-
-# Probabilités d'invalidité permanente par âge (TD 88-90)
 TAUX_IP_TD88 = {
     25:0.0008, 30:0.0012, 35:0.0018, 40:0.0028,
     45:0.0045, 50:0.0072, 55:0.0115, 60:0.0180,
 }
-
-# Tables mortalité TH0002
 QX_TH0002 = {
     25:0.000730, 30:0.000860, 35:0.001180, 40:0.001800,
     45:0.002980, 50:0.005040, 55:0.008640, 60:0.014500, 65:0.023800,
 }
-
-# Facteurs catégorie socioprofessionnelle (sinistralité ITT)
 FACT_CSP_ITT = {
-    "ouvrier":   1.35,
-    "employe":   1.00,
-    "cadre":     0.75,
-    "cadre_sup": 0.60,
+    "ouvrier":   1.35, "employe": 1.00,
+    "cadre":     0.75, "cadre_sup": 0.60,
 }
-
-# Taux actualisation annuités IP
 TAUX_ACTUALISATION = 0.025
 
 
