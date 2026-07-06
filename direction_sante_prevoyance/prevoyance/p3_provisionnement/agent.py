@@ -280,7 +280,13 @@ class AgentP3ProvisionnemntPrevoyance:
         dur_ip     = src['duree_ip_ans']
         v          = 1.0 / (1 + TAUX_ACT)
         annuite    = sum(v**t for t in range(1, int(dur_ip)+1))
-        nb_inv     = max(0, int(src['nb_assures'] * src['taux_ip'] * src['age'] / 10))
+        # nb_inv = nombre d'invalides en cours de rente
+        # Formule correcte : nb_assures × taux_ip × duree_moyenne_rente
+        # La division par age/10 était actuariellement incorrecte :
+        # elle réduisait nb_inv avec l'âge, inverse de la réalité
+        # Approximation : 60% des invalides IP sont en rente viagère
+        # (40% sont encore en phase de consolidation)
+        nb_inv     = max(0, int(src['nb_assures'] * src['taux_ip'] * 0.60))
         pm_rentes  = nb_inv * rente_an * annuite
         return pm_rentes
 
