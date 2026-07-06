@@ -116,7 +116,7 @@ def test_t1_contrat_sortie_complet():
     assert r["agent"] == "SP-Reg1-S2"
     assert r["statut_rag"] in ("VERT", "AMBRE", "ROUGE")
     assert isinstance(r["audit_id"], str) and r["audit_id"].startswith("REG1_")
-    assert isinstance(r["hypotheses"], list)
+    assert isinstance(r["hypotheses"], list) and len(r["hypotheses"]) >= 3
     assert isinstance(r["commentaire"], str) and len(r["commentaire"]) > 50
     assert isinstance(r["graphiques"], dict)
     assert r["erreur"] is None
@@ -446,11 +446,6 @@ def test_t7_rag_rouge_insuffisance_solvabilite():
 
 
 # ── RUNNER ────────────────────────────────────────────────────────────────────
-
-def pytest_approx(val, rel=0.01):
-    """Helper minimal pour tests sans pytest."""
-    return val  # utilisé uniquement dans les assertions relatives
-
 
 if __name__ == "__main__":
     tests = [
