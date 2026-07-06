@@ -158,7 +158,7 @@ class AgentSPReg1Solvabilite2:
 
             gph = {}
             if generer_graphiques and PLOTLY_OK:
-                gph = self._graphiques(src, tableau_scr)
+                gph = self._graphiques(src)
 
             self._audit(aid, src, rag)
             if self.verbose:
@@ -711,54 +711,61 @@ class AgentSPReg1Solvabilite2:
     # =========================================================================
     # 9. GRAPHIQUES
     # =========================================================================
-    def _graphiques(self, src, tableau_scr) -> Dict:
+    def _graphiques(self, src) -> Dict:
+        # tableau_scr n'est pas nécessaire ici — tous les graphiques
+        # sont construits directement depuis src.
         gph = {}
 
-        # Décomposition SCR
-        modules = ["SCR Santé", "SCR Prévoyance", "Diversification", "SCR Consolidé"]
-        valeurs = [src["scr_sante"], src["scr_prev"],
-                   -src["diversification"], src["scr_consolide"]]
-        couleurs = [BLEU, VIOLET, VERT, OR]
+        # G1 — Décomposition SCR
+        try:
+            modules = ["SCR Santé", "SCR Prévoyance", "Diversification", "SCR Consolidé"]
+            valeurs = [src["scr_sante"], src["scr_prev"],
+                       -src["diversification"], src["scr_consolide"]]
+            couleurs = [BLEU, VIOLET, VERT, OR]
+            fig1 = go.Figure(go.Bar(
+                x=modules, y=valeurs,
+                marker_color=couleurs,
+                text=[f"{v/1000:.0f}k€" for v in valeurs],
+                textposition="outside",
+            ))
+            fig1.update_layout(
+                **LAYOUT_BASE,
+                title=dict(text=f"Décomposition SCR S2 (ρ={RHO_NSLT_SLT} EIOPA Annexe IV)",
+                           font=dict(color=OR, size=13)),
+                yaxis_title="€",
+            )
+            gph["scr_decomposition"] = fig1
+        except Exception as e:
+            self.logger.warning(f"G1 SCR décomposition : {e}")
 
-        fig1 = go.Figure(go.Bar(
-            x=modules, y=valeurs,
-            marker_color=couleurs,
-            text=[f"{v/1000:.0f}k€" for v in valeurs],
-            textposition="outside",
-        ))
-        fig1.update_layout(
-            **LAYOUT_BASE,
-            title=dict(text=f"Décomposition SCR S2 (ρ={RHO_NSLT_SLT} EIOPA Annexe IV)",
-                       font=dict(color=OR, size=13)),
-            yaxis_title="€",
-        )
-        gph["scr_decomposition"] = fig1
-
-        # Gauge ratio SCR
-        ratio = src["ratio_scr"]
-        c_gauge = VERT if ratio >= SEUIL_SCR_CIBLE else (AMBRE if ratio >= SEUIL_SCR_MIN else ROUGE)
-        fig2 = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=ratio,
-            title={"text": "Ratio SCR Consolidé (%)", "font": {"color": OR}},
-            number={"font": {"color": c_gauge, "size": 28}, "suffix": "%"},
-            gauge={
-                "axis": {"range": [0, max(300, ratio*1.2)], "tickcolor": GRIS},
-                "bar":  {"color": c_gauge, "thickness": 0.3},
-                "steps": [
-                    {"range": [0, 100],  "color": "rgba(231,76,60,0.15)"},
-                    {"range": [100, 130],"color": "rgba(243,156,18,0.15)"},
-                    {"range": [130, max(300, ratio*1.2)], "color": "rgba(46,204,113,0.12)"},
-                ],
-                "threshold": {
-                    "line": {"color": VERT, "width": 3},
-                    "thickness": 0.8, "value": SEUIL_SCR_CIBLE
+        # G2 — Gauge ratio SCR
+        try:
+            ratio = src["ratio_scr"]
+            c_gauge = VERT if ratio >= SEUIL_SCR_CIBLE else (AMBRE if ratio >= SEUIL_SCR_MIN else ROUGE)
+            fig2 = go.Figure(go.Indicator(
+                mode="gauge+number",
+                value=ratio,
+                title={"text": "Ratio SCR Consolidé (%)", "font": {"color": OR}},
+                number={"font": {"color": c_gauge, "size": 28}, "suffix": "%"},
+                gauge={
+                    "axis": {"range": [0, max(300, ratio*1.2)], "tickcolor": GRIS},
+                    "bar":  {"color": c_gauge, "thickness": 0.3},
+                    "steps": [
+                        {"range": [0, 100],  "color": "rgba(231,76,60,0.15)"},
+                        {"range": [100, 130],"color": "rgba(243,156,18,0.15)"},
+                        {"range": [130, max(300, ratio*1.2)], "color": "rgba(46,204,113,0.12)"},
+                    ],
+                    "threshold": {
+                        "line": {"color": VERT, "width": 3},
+                        "thickness": 0.8, "value": SEUIL_SCR_CIBLE
+                    },
                 },
-            },
-        ))
-        fig2.update_layout(**LAYOUT_BASE,
-            title=dict(text="Solvabilité S2 — Santé-Prévoyance", font=dict(color=OR, size=13)))
-        gph["ratio_scr_s2"] = fig2
+            ))
+            fig2.update_layout(**LAYOUT_BASE,
+                title=dict(text="Solvabilité S2 — Santé-Prévoyance", font=dict(color=OR, size=13)))
+            gph["ratio_scr_s2"] = fig2
+        except Exception as e:
+            self.logger.warning(f"G2 gauge SCR : {e}")
 
         # G3 — Radar QRT S.05.01 : 4 lignes × 2 colonnes (NSLT / SLT)
         # Reconstruit depuis src — mêmes valeurs que _generer_qrt_s05
