@@ -696,7 +696,8 @@ class AgentSPReg1Solvabilite2:
         # SFCR résumé
         L += ["📋 SFCR — SECTIONS A-E (Directive S2 Art.51)", "─"*50]
         for s in sfcr:
-            status = "✅" if "conforme" in s.get("contenu","").lower() or                             "✅" in s.get("contenu","") else "ℹ️"
+            contenu_s = s.get("contenu", "")
+            status = "✅" if ("conforme" in contenu_s.lower() or "✅" in contenu_s) else "ℹ️"
             L.append(f"  {status} Section {s['code']} — {s['titre']}")
 
         # ORSA
