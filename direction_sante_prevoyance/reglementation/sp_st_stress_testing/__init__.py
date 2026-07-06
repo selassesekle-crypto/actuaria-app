@@ -1,5 +1,3 @@
 """
-Agent SP-ST Naomie — Stress Testing Santé-Prévoyance
-Choc pandémie · Morbidité · Désengagement Sécu
+Agent sp_st_stress_testing
 """
-# Agent à créer
