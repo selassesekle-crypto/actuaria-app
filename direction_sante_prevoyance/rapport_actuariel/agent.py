@@ -448,7 +448,10 @@ class AgentSPRapportActuariel:
                 "id": "H1",
                 "hypothese": "Fréquences et coûts santé — DREES 2023",
                 "valeur":    f"PA santé = {m1['pa_sante']:,.0f}€ | LR = {m1['lr_sante']:.1%}",
-                "statut":    "VALIDÉE" if 0.55 <= m1["lr_sante"] <= 0.90 else "À JUSTIFIER",
+                # LR=0 signifie absence de données S1 — statut N/A, pas À JUSTIFIER
+                "statut":    ("VALIDÉE" if 0.55 <= m1["lr_sante"] <= 0.90
+                              else "N/A" if m1["lr_sante"] == 0
+                              else "À JUSTIFIER"),
                 "source":    "DREES — Comptes de la Santé 2023",
                 "critique":  True,
             },
