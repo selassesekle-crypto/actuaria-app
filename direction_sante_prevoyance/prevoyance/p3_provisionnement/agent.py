@@ -122,9 +122,18 @@ class AgentP3ProvisionnemntPrevoyance:
 
             # ── 7. BE + TP PRÉVOYANCE ─────────────────────────────────────────
             be_prev   = psap_total + pm_rentes
-            risk_adj  = be_prev * 0.08   # RA prévoyance ≈ 8% du BE (≠ santé 5%)
-            tp_prev   = be_prev + risk_adj
-            prov_tot  = be_prev + prec
+            # Risk Adjustment IFRS 17 — méthode CoC prévoyance
+            # RA = SCR_morbidité × CoC_rate × duration_moyenne
+            # SCR_morbidité ≈ 35% × BE (choc EIOPA S2 Art.145 — morbidité +35%)
+            # CoC_rate EIOPA = 6% | duration prévoyance ≈ 5 ans (rentes IP)
+            _scr_morb  = 0.35 * be_prev
+            _coc_prev  = 0.06
+            _dur_prev  = 5.0
+            risk_adj   = _scr_morb * _coc_prev * _dur_prev / max(_dur_prev, 1)
+            # Floor : RA ≥ 3% BE (risque long terme prévoyance > santé)
+            risk_adj   = max(risk_adj, be_prev * 0.03)
+            tp_prev    = be_prev + risk_adj
+            prov_tot   = be_prev + prec
 
             # ── 8. RATIOS ─────────────────────────────────────────────────────
             lr        = src['sinistres_payes_total'] / max(src['primes_acquises'], 1)
