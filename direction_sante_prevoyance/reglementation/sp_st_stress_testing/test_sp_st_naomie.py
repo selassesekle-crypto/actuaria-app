@@ -72,9 +72,10 @@ def r_st(pipeline_st):
 
 # ── T1 : Succès et 4 scénarios ────────────────────────────────────────────────
 def test_st_success_et_scenarios(r_st):
-    assert r_st["success"] is True
-    assert r_st["erreur"] is None
-    assert r_st["statut_rag"] in ("VERT", "AMBRE", "ROUGE")
+    """4 scénarios calculés : pandémie, morbidité, cessation, adverse."""
+    assert r_st["success"] is True, "Naomie doit réussir"
+    assert r_st["erreur"] is None, "Pas d'erreur attendue"
+    assert r_st["statut_rag"] in ("VERT", "AMBRE", "ROUGE"), "RAG invalide"
     assert len(r_st["scenarios"]) == 4, f"Attendu 4 scénarios, obtenu {len(r_st['scenarios'])}"
     for nom in ["pandemie", "morbidite", "cessation", "adverse"]:
         assert nom in r_st["scenarios"], f"Scénario manquant : {nom}"
@@ -137,13 +138,14 @@ def test_st_hypotheses_orsa(r_st):
     hyp = r_st["hypotheses"]
     assert len(hyp) == 3
     ids = [h["id"] for h in hyp]
-    assert "H1" in ids and "H2" in ids and "H3" in ids
+    assert "H1" in ids and "H2" in ids and "H3" in ids, f"IDs ORSA manquants : {ids}"
 
 
 # ── T7 : Erreur si S3 absent ──────────────────────────────────────────────────
 def test_st_erreur_sans_inputs(pipeline_st):
+    """Naomie doit retourner success=False si result_s3 est absent."""
     _, r_p4 = pipeline_st
     naomie = AgentSPStressTestingNaomie(verbose=False)
     r = naomie.run(result_s3=None, result_p4=r_p4, generer_graphiques=False)
-    assert r["success"] is False
-    assert r["erreur"] is not None
+    assert r["success"] is False, "Doit échouer sans S3"
+    assert r["erreur"] is not None, "Message d'erreur attendu"
