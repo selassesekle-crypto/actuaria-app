@@ -37,7 +37,7 @@ import logging
 import warnings
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict
 
 import numpy as np
 
@@ -347,9 +347,11 @@ class AgentSPReg1Solvabilite2:
                 {
                     "code":    "R0200",
                     "libelle": "Provisions techniques (BE + RA)",
-                    "C0030":   round(src["be_sante"] + src["ra_sante"], 0),
-                    "C0060":   round(src["be_prev"]  + src["ra_prev"],  0),
-                    "total":   round(src["be_total"] + src["ra_sante"] + src["ra_prev"], 0),
+                    # C0030 et C0060 arrondis séparément, total = somme des arrondis
+                    # pour garantir total == C0030 + C0060 (cohérence QRT EIOPA)
+                    "C0030":   (_r200_s := round(src["be_sante"] + src["ra_sante"], 0)),
+                    "C0060":   (_r200_p := round(src["be_prev"]  + src["ra_prev"],  0)),
+                    "total":   _r200_s + _r200_p,
                 },
             ],
             "note": "Source : RD 2015/35 Annexe I — template S.05.01. "
@@ -801,11 +803,34 @@ class AgentSPReg1Solvabilite2:
 
     def _erreur(self, msg, aid=""):
         return {
-            "success":False, "agent":self.NOM, "version":self.VERSION,
-            "audit_id":aid, "statut_rag":"ROUGE",
-            "be_total":0, "scr_consolide":0, "ratio_scr_pct":0,
-            "qrt_s05":{}, "coherence_qrts":{}, "sfcr_sections":[],
-            "orsa_resume":{}, "tableau_scr":[],
-            "hypotheses":[], "commentaire":"", "graphiques":{},
-            "duree_sec":0, "erreur":msg,
+            # ── Contrat standard ActuarIA ─────────────────────────────────
+            "success":     False,
+            "agent":       self.NOM,
+            "version":     self.VERSION,
+            "audit_id":    aid,
+            "statut_rag":  "ROUGE",
+            # ── Bilan S2 (valeurs neutres) ────────────────────────────────
+            "be_sante":        0.0,
+            "be_prevoyance":   0.0,
+            "be_total":        0.0,
+            "scr_sante":       0.0,
+            "scr_prevoyance":  0.0,
+            "scr_consolide":   0.0,
+            "mcr_consolide":   0.0,
+            "fonds_propres":   0.0,
+            "ratio_scr_pct":   0.0,
+            "ratio_mcr_pct":   0.0,
+            "diversification": 0.0,
+            # ── QRT / SFCR / ORSA ────────────────────────────────────────
+            "qrt_s05":        {},
+            "coherence_qrts": {},
+            "tableau_scr":    [],
+            "sfcr_sections":  [],
+            "orsa_resume":    {},
+            # ── Standard ActuarIA ─────────────────────────────────────────
+            "hypotheses":  [],
+            "commentaire": "",
+            "graphiques":  {},
+            "duree_sec":   0.0,
+            "erreur":      msg,
         }
