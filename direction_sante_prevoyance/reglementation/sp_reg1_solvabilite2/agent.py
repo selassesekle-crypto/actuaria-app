@@ -790,19 +790,20 @@ class AgentSPReg1Solvabilite2:
                 "R0200 Provisions",
                 "R0010 Primes",   # fermeture du radar
             ]
+            # 5e point = 1er point : fermeture du polygone radar (standard Plotly)
             vals_nslt = [
                 src["pa_sante"],
                 sin_sante,
                 dep_sante,
                 r200_s,
-                src["pa_sante"],  # fermeture
+                src["pa_sante"],
             ]
             vals_slt = [
                 src["pa_prev"],
                 sin_prev,
                 dep_prev,
                 r200_p,
-                src["pa_prev"],   # fermeture
+                src["pa_prev"],
             ]
 
             # Normalisation : chaque valeur / max(NSLT, SLT) pour le poste
@@ -827,14 +828,14 @@ class AgentSPReg1Solvabilite2:
                 r=vals_nslt_norm,
                 theta=labels_qrt,
                 fill="toself",
-                fillcolor=f"rgba(52,152,219,0.18)",   # BLEU transparent
+                fillcolor="rgba(52,152,219,0.18)",    # BLEU transparent
                 line=dict(color=BLEU, width=2),
                 name="NSLT — Santé",
                 hovertemplate=(
                     "<b>%{theta}</b><br>"
                     "NSLT : %{customdata:,.0f}€<extra></extra>"
                 ),
-                customdata=vals_nslt,
+                customdata=np.array(vals_nslt),
             ))
 
             # Trace SLT (Prévoyance)
@@ -842,14 +843,14 @@ class AgentSPReg1Solvabilite2:
                 r=vals_slt_norm,
                 theta=labels_qrt,
                 fill="toself",
-                fillcolor=f"rgba(155,89,182,0.18)",   # VIOLET transparent
+                fillcolor="rgba(155,89,182,0.18)",    # VIOLET transparent
                 line=dict(color=VIOLET, width=2),
                 name="SLT — Prévoyance",
                 hovertemplate=(
                     "<b>%{theta}</b><br>"
                     "SLT : %{customdata:,.0f}€<extra></extra>"
                 ),
-                customdata=vals_slt,
+                customdata=np.array(vals_slt),
             ))
 
             fig3.update_layout(
