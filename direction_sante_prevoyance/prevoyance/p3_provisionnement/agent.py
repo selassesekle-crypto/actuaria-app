@@ -61,10 +61,19 @@ LAYOUT_BASE = dict(paper_bgcolor=NAVY, plot_bgcolor=NAVY_L,
 # Source : courbe EIOPA RFR (taux sans risque) — 2.5% utilisé comme proxy
 # En production : charger la courbe EIOPA réelle depuis sp_tables_actuarielles
 # ou passer taux_act= en paramètre de run()
-TAUX_ACT_DEFAUT = 0.025  # proxy EIOPA RFR — à paramétrer en production
-# IBNR prévoyance : bien plus long que la santé
-IBNR_ITT_PCT = 0.35   # 35% des SP — arrêts longs, déclarations tardives
-IBNR_IP_PCT  = 0.20   # 20% — invalidités longues durées
+# ── Taux d'actualisation ─────────────────────────────────────────────────
+# Source : EIOPA Risk-Free Rate curve (EUR) — Art.77 Directive S2
+# Proxy 2.5% = taux long terme (duration rentes IP ~10-15 ans)
+# À remplacer par la courbe EIOPA par échéance en production
+TAUX_ACT_DEFAUT = 0.025
+
+# ── IBNR Prévoyance ──────────────────────────────────────────────────────
+# Source : CTIP — Statistiques prévoyance collective 2023
+# IBNR prévoyance >> santé : déclarations tardives + durées longues
+# ITT 35% : arrêts > 3 mois souvent déclarés avec retard
+# IP  20% : constitution invalidité prend 6-24 mois après l'arrêt
+IBNR_ITT_PCT = 0.35   # 35% SP-ITT — source CTIP 2023
+IBNR_IP_PCT  = 0.20   # 20% SP-IP  — source CTIP 2023
 
 
 # ══════════════════════════════════════════════════════════════════════════════
