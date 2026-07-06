@@ -453,13 +453,23 @@ class AgentSPAuditTrail:
         hyps_effectives = []
 
         # Depuis S1 — taux de chargement
+        # S1 expose "sorties_s2" qui contient les primes commerciales
+        # Le chargement n'est pas exposé directement — proxy 18% (standard FNMF)
         if "s1" in resultats_agents and resultats_agents["s1"].get("success"):
             r = resultats_agents["s1"]
+            # Calculer le chargement implicite si primes disponibles
+            sorties = r.get("sorties_s2", {})
+            pa    = float(sorties.get("primes_acquises", 0))
+            pp_tt = float(r.get("prime_pure_totale", r.get("prime_commerciale", 0)))
+            if pa > 0 and pp_tt > 0 and pa > pp_tt:
+                chargement = (pa - pp_tt) / pa * 100
+            else:
+                chargement = 18.0  # proxy FNMF 2023 — standard mutuelles
             hyps_effectives.append({
                 "id":         "HE-S1-CHARGEMENT",
                 "agent":      "S1 Léonie",
                 "hypothese":  "Taux de chargement commercial",
-                "valeur":     f"{r.get('taux_chargement_pct', 18):.0f}%",
+                "valeur":     f"{chargement:.1f}% (FNMF 2023 si non calculable)",
                 "audit_id":   r.get("audit_id", ""),
             })
 
@@ -490,6 +500,7 @@ class AgentSPAuditTrail:
             "version_drees":        "DREES 2023",
             "version_fnmf":         "FNMF 2023",
             "version_ctip":         "CTIP 2023",
+            # Proxy statique — à mettre à jour à chaque publication EIOPA
             "version_eiopa_rfr":    "EIOPA EUR Q4 2025",
             "version_ani":          "ANI 2013 — Art.L911-7 CSS",
             "version_rd_2015_35":   "RD 2015/35 consolidé 2024",
@@ -537,8 +548,7 @@ class AgentSPAuditTrail:
         Rapport d'audit complet — PDF-ready pour l'actuaire désigné,
         l'ACPR et le commissaire aux comptes.
         """
-        agents_ok    = [a for a in logs["agents_executes"] if a["statut"]=="VERT"]
-        agents_pb    = [a for a in logs["agents_executes"] if a["statut"]!="VERT"]
+        # agents_ok / agents_pb supprimés — non utilisés dans les sections
         manquants_cr = [m for m in logs["agents_manquants"] if "critique" in m]
 
         sections = []
