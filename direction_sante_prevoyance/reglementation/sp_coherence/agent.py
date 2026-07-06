@@ -253,12 +253,16 @@ class AgentSPCoherence:
         """
         Contrôle C1 — Cohérence LR tarification (S1 Léonie) ↔ LR provisionnement (S2 Selma).
 
-        LR_tarif  = prime_pure / prime_commerciale (1/(1+chargement)) — S1
-        LR_prov   = sinistres_payes / primes_acquises — S2
+        LR_tarif = 1 / (1 + chargement) — LR cible de tarification (S1 Léonie)
+        LR_prov  = sinistres_payés / primes_acquises — LR observé (S2 Selma)
 
-        Un écart > 15pp signale une dérive entre hypothèses de tarification
-        et sinistralité observée — signal ACPR important.
-        Source : pratique marché FNMF 2023 + DREES Comptes Santé 2023.
+        Un écart important peut signaler :
+        - une dérive de sinistralité (portefeuille plus sinistré que tarifé)
+        - une différence de maturité (portefeuille jeune → LR prov faible)
+        - une inadéquation de la prime commerciale
+        Seuil 15pp : pratique marché FNMF 2023 — au-delà, justification requise.
+        Note : l'écart S2/IFRS17 attendu est nul (même données sources).
+        Source : FNMF 2023 + DREES Comptes de la Santé 2023.
         """
         if not (result_s1 and result_s1.get("success") and
                 result_s2 and result_s2.get("success")):
@@ -297,10 +301,14 @@ class AgentSPCoherence:
         """
         Contrôle C2 — Réconciliation BE santé S2 (S3 Binta) ↔ BE santé IFRS17 (SP-REG2).
 
-        BE S2 et BE IFRS17 utilisent la même base d'estimation mais des
-        conventions de valorisation différentes (EIOPA vs IFRS 17 §33).
-        Un écart > 5% signale une incohérence méthodologique à documenter.
-        Source : ACPR Q&A IFRS17 2023 — réconciliation S2/IFRS17.
+        Dans l'architecture actuelle, SP-REG2 extrait le BE santé directement
+        de S3 (même source que S3). L'écart attendu est donc nul ou très faible.
+        Ce contrôle valide que les deux agents lisent bien les mêmes données
+        et qu'aucune transformation parasite n'a été appliquée.
+
+        En production avec des systèmes distincts (S2 vs IFRS17 séparés),
+        cet écart peut atteindre 2-5% selon les ajustements de valorisation.
+        Seuil 5% : ACPR Q&A IFRS17 2023 — réconciliation S2/IFRS17.
         """
         if not (result_s3 and result_s3.get("success") and
                 result_reg2 and result_reg2.get("success")):
@@ -339,9 +347,12 @@ class AgentSPCoherence:
         """
         Contrôle C3 — Réconciliation BE prévoyance S2 (P4) ↔ BE prévoyance IFRS17 (SP-REG2).
 
-        Même logique que C2 mais pour la prévoyance SLT.
-        L'écart peut être plus important (méthodes PAA vs GMM — §53 IFRS17).
-        Tolérance maintenue à 5% — si > 5%, documenter la divergence.
+        Même logique que C2 pour la prévoyance SLT.
+        SP-REG2 extrait le BE prévoyance de P4 (même source).
+        L'écart attendu est nul dans l'architecture actuelle.
+        En production (systèmes séparés), l'écart GMM vs PAA peut atteindre
+        3-8% selon les ajustements de valorisation prévoyance long terme.
+        Seuil 5% — si > 5%, documenter la divergence PAA/GMM (§53 IFRS17).
         """
         if not (result_p4 and result_p4.get("success") and
                 result_reg2 and result_reg2.get("success")):
@@ -688,7 +699,8 @@ class AgentSPCoherence:
 
         L += ["", "🔍 DÉTAIL CONTRÔLES", "─"*50]
         for c in controles:
-            ic_c = "✅" if c["ok"] else ("❌" if c["ok"] is False else "—")
+            # True→✅ | False→❌ | None→— (N/A)
+            ic_c = "✅" if c["ok"] is True else ("❌" if c["ok"] is False else "—")
             L.append(f"  {ic_c} [{c['id']}] {c.get('libelle', c['id'])}")
             L.append(f"       → {c['detail']}")
 
