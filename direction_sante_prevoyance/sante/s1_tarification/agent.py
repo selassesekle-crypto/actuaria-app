@@ -335,6 +335,8 @@ class AgentS1TarificationSante:
                 freq   = ref['freq']   * fact_age * fact_csp
                 cout   = ref['cout_acte'] * fact_age
                 remb   = cout * ref['tc_ss']
+                # Cap à 2.0 : garde contre une valeur fact_garantie
+                # hors-dictionnaire (NIVEAUX_GARANTIE max = 1.80).
                 charge = (cout - remb) * min(fact_garantie, 2.0)
                 sin_an = freq * charge
                 source_p = 'DREES_2023'
@@ -521,7 +523,7 @@ class AgentS1TarificationSante:
 
         L += ["", "📋 HYPOTHÈSES", "─"*40]
         for h in hyp:
-            ic_h = "✅" if h['statut']=='VALIDÉE' else "⚠️"
+            ic_h = "✅" if h['statut']=='VALIDÉE' else ("⚠️" if h['statut']=='À JUSTIFIER' else "❌")
             L += [f"  {ic_h} [{h['id']}] {h['hypothese']}",
                   f"       → {h['valeur']} : {h['statut']}"]
 
@@ -555,8 +557,8 @@ class AgentS1TarificationSante:
             ))
             h2 = next(h for h in hyp if h['id']=='H2')
             c2 = VERT if h2['statut']=='VALIDÉE' else (AMBRE if h2['statut']=='À JUSTIFIER' else ROUGE)
-            l = dict(**LAYOUT_BASE)
-            l.update(dict(
+            layout = dict(**LAYOUT_BASE)
+            layout.update(dict(
                 title=dict(text="G1 — Sinistralité par poste (€/assuré/an) — DREES 2023",
                            font=dict(color=OR,size=12),x=0.01),
                 showlegend=False,
@@ -567,7 +569,7 @@ class AgentS1TarificationSante:
                     xref="paper",yref="paper",x=0.01,y=-0.22,
                     font=dict(color=GRIS,size=9),showarrow=False)],
             ))
-            fig.update_layout(**l)
+            fig.update_layout(**layout)
             gph['sinistralite_postes'] = fig
         except Exception as e:
             self.logger.warning(f"G1:{e}")
@@ -618,8 +620,8 @@ class AgentS1TarificationSante:
                 text=[f"{v:.0f}€" for v in [prime_pure, prime_comm, prime_marche]],
                 textposition="outside", textfont=dict(color=BLANC, size=11),
             ))
-            l = dict(**LAYOUT_BASE)
-            l.update(dict(
+            layout = dict(**LAYOUT_BASE)
+            layout.update(dict(
                 title=dict(text=f"G3 — Compétitivité tarifaire | {h3['valeur'][:50]}",
                            font=dict(color=c3,size=11),x=0.01),
                 showlegend=False,
@@ -630,7 +632,7 @@ class AgentS1TarificationSante:
                     xref="paper",yref="paper",x=0.01,y=-0.22,
                     font=dict(color=GRIS,size=9),showarrow=False)],
             ))
-            fig.update_layout(**l)
+            fig.update_layout(**layout)
             gph['competitivite_tarifaire'] = fig
         except Exception as e:
             self.logger.warning(f"G3:{e}")
@@ -652,8 +654,8 @@ class AgentS1TarificationSante:
                 ))
             statut_glob = 'VERT' if all(h['statut']=='VALIDÉE' for h in hyp) else ('ROUGE' if any(h['statut']=='NON VALIDÉE' for h in hyp) else 'AMBRE')
             cg = VERT if statut_glob=='VERT' else (AMBRE if statut_glob=='AMBRE' else ROUGE)
-            l = dict(**LAYOUT_BASE)
-            l.update(dict(
+            layout = dict(**LAYOUT_BASE)
+            layout.update(dict(
                 title=dict(text="G4 — Scorecard Tarification Santé",
                            font=dict(color=cg,size=12),x=0.01),
                 xaxis=dict(range=[0,1.6],visible=False),
@@ -664,7 +666,7 @@ class AgentS1TarificationSante:
                     xref="paper",yref="paper",x=0.01,y=-0.22,
                     font=dict(color=GRIS,size=9),showarrow=False)],
             ))
-            fig.update_layout(**l)
+            fig.update_layout(**layout)
             gph['scorecard_sante'] = fig
         except Exception as e:
             self.logger.warning(f"G4:{e}")
