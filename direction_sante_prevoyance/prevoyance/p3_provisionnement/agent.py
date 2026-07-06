@@ -58,7 +58,10 @@ LAYOUT_BASE = dict(paper_bgcolor=NAVY, plot_bgcolor=NAVY_L,
     hoverlabel=dict(bgcolor=NAVY_LL, bordercolor=OR, font_size=12, font_color=BLANC))
 
 # Taux actualisation PM rentes IP
-TAUX_ACT = 0.025
+# Source : courbe EIOPA RFR (taux sans risque) — 2.5% utilisé comme proxy
+# En production : charger la courbe EIOPA réelle depuis sp_tables_actuarielles
+# ou passer taux_act= en paramètre de run()
+TAUX_ACT_DEFAUT = 0.025  # proxy EIOPA RFR — à paramétrer en production
 # IBNR prévoyance : bien plus long que la santé
 IBNR_ITT_PCT = 0.35   # 35% des SP — arrêts longs, déclarations tardives
 IBNR_IP_PCT  = 0.20   # 20% — invalidités longues durées
@@ -278,7 +281,9 @@ class AgentP3ProvisionnemntPrevoyance:
         """
         rente_an   = src['salaire_brut'] * src['taux_rente_ipp']
         dur_ip     = src['duree_ip_ans']
-        v          = 1.0 / (1 + TAUX_ACT)
+        # Taux d'actualisation — paramétrable pour conformité EIOPA RFR
+        taux_act   = src.get('taux_actualisation', TAUX_ACT_DEFAUT)
+        v          = 1.0 / (1 + taux_act)
         annuite    = sum(v**t for t in range(1, int(dur_ip)+1))
         # nb_inv = nombre d'invalides en cours de rente
         # Formule correcte : nb_assures × taux_ip × duree_moyenne_rente
