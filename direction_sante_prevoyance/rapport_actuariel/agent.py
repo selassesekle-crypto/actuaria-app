@@ -154,9 +154,10 @@ class AgentSPRapportActuariel:
                 result_coord, result_reg1, result_reg2, result_reg3,
                 fonds_propres
             )
+            _be_log = m1['be_sante'] + m1['be_prev']
             self.logger.info(
                 f"[{aid}] SP-Rapport v{self.VERSION} | "
-                f"BE={m1['be_total']:,.0f}€ | "
+                f"BE={_be_log:,.0f}€ | "
                 f"PA={m1['pa_total']:,.0f}€ | "
                 f"modules={m1['modules_disponibles']}"
             )
