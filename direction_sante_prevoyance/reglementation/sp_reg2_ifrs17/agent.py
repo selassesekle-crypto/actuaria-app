@@ -296,8 +296,12 @@ class AgentSPReg2IFRS17:
         Éléments : sinistres attendus, libération risque, rendement actif.
         Source : IFRS 17 §100-109.
         """
-        # Sinistres attendus ≈ 75% du BE (LR typique santé)
-        sinistres_att = be * 0.75
+        # Sinistres attendus = LR attendu × PA
+        # LR proxy 80% (marché mutuelles France FNMF 2023 — sinistres/PA)
+        # Si PA disponible, utiliser PA × LR ; sinon proxy be × 0.80
+        # Source : FNMF 2023, DREES Comptes de la Santé 2023
+        LR_PROXY = 0.80   # LR marché santé France
+        sinistres_att = pa * LR_PROXY if pa > 0 else be * 0.80
         # Libération RA dans l'année ≈ 25% du RA
         ra_liberation = ra * 0.25
         # Rendement actif sur BE (simplification actif/passif IFRS 17 §B72)
