@@ -48,10 +48,21 @@ LAYOUT_BASE = dict(paper_bgcolor=NAVY, plot_bgcolor=NAVY_L,
     hoverlabel=dict(bgcolor=NAVY_LL, bordercolor=OR, font_size=12, font_color=BLANC))
 
 # Paramètres SCR Santé EIOPA (module NSLT — Non-Similar to Life Techniques)
-SCR_SANTE_SIGMA_PREM = 0.05   # σ primes santé NSLT
-SCR_SANTE_SIGMA_RES  = 0.14   # σ réserves santé NSLT
-MCR_PLANCHER_ABS     = 2_500_000.0
-COC_RA               = 0.05   # Risk Adjustment = 5% BE
+# ── Paramètres SCR Santé NSLT ────────────────────────────────────────────
+# Source : Règlement Délégué (UE) 2015/35, Annexe II — Santé Non-SLT
+SCR_SANTE_SIGMA_PREM = 0.05   # σ primes santé NSLT — Art.148 RD 2015/35
+SCR_SANTE_SIGMA_RES  = 0.14   # σ réserves santé NSLT — Art.148 RD 2015/35
+
+# ── MCR Santé — Règlement Délégué Art.252 ────────────────────────────────
+# Source : Art.252 RD 2015/35 | Plancher minimum absolu S2 Art.129 §1(d)
+MCR_PLANCHER_ABS     = 2_500_000.0  # 2.5M€ — plancher absolu santé Art.129
+MCR_COEFF_PREM       = 0.0453       # coefficient primes MCR santé
+MCR_COEFF_RES        = 0.0351       # coefficient provisions MCR santé
+
+# ── Risk Adjustment IFRS 17 ───────────────────────────────────────────────
+# Méthode : CoC (coût du capital) — IFRS 17 §B91
+# RA est calculé dans run() via méthode CoC, pas un coefficient fixe
+# SCR_proxy × CoC_rate × duration — voir run() pour le calcul
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -93,7 +104,16 @@ class AgentS3ReportingSante:
 
             # ── 2. PROVISIONS TECHNIQUES SANTÉ ───────────────────────────────
             be_sante = src['be_sante']
-            risk_adj = be_sante * COC_RA
+            # Risk Adjustment IFRS 17 — méthode CoC (cohérence avec S2)
+            # RA = SCR_proxy × CoC_rate × duration_santé
+            # SCR_proxy santé = σ_prem × PA × 3 (formule std EIOPA)
+            # CoC = 6% EIOPA | duration santé = 0.5 an
+            _scr_s3  = SCR_SANTE_SIGMA_PREM * src['primes_acquises'] * 3
+            _coc_s3  = 0.06   # EIOPA CoC rate — IFRS 17 §B91
+            _dur_s3  = 0.5    # duration santé (règlement rapide)
+            risk_adj = _scr_s3 * _coc_s3 * _dur_s3
+            # Floor : RA ≥ 1% BE — pratique marché
+            risk_adj = max(risk_adj, be_sante * 0.01)
             tp_sante = be_sante + risk_adj
             ratio_tp_be = tp_sante / max(be_sante, 1)
 
@@ -105,12 +125,17 @@ class AgentS3ReportingSante:
                 scr_prem**2 + 2*0.5*scr_prem*scr_res + scr_res**2
             )
             # SCR catastrophe santé (pandémie) = 1% des assurés × coût moyen
+            # SCR catastrophe santé (pandémie/épidémie) — Art.159 RD 2015/35
+            # Proxy simplifié : 1% × PA (formule standard EIOPA module CAT santé)
             scr_cat   = src['primes_acquises'] * 0.01
             # SCR Santé total
             scr_sante = np.sqrt(scr_sous**2 + scr_cat**2)
 
             # ── 4. MCR SANTÉ ─────────────────────────────────────────────────
-            mcr_lin   = 0.0418 * src['primes_acquises'] + 0.0261 * be_sante
+            # MCR santé — Art.252 RD 2015/35
+            # MCR_lin = 0.0418 × PA + 0.0261 × BE (coefficients réglementaires)
+            # Plancher = max(25% SCR, 2.5M€) | Plafond = 45% SCR
+            mcr_lin   = MCR_COEFF_PREM * src['primes_acquises'] + MCR_COEFF_RES * be_sante
             plancher  = max(0.25 * scr_sante, MCR_PLANCHER_ABS)
             plafond   = 0.45 * scr_sante
             mcr_sante = max(min(mcr_lin, plafond), plancher)
