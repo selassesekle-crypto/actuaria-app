@@ -500,7 +500,7 @@ class AgentSPCoherence:
             if result_reg3.get("ani_conforme") is False:
                 alertes.append(
                     "❌ ANI 2013 non conforme — risque ACPR "
-                    "(Art. L911-7 CSS — sanction jusqu'à 3 750€/salarié)"
+                    "(Art. L911-7 CSS — action corrective requise)"
                 )
 
         # Ratio SCR post-stress insuffisant
