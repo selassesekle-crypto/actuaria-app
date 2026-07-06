@@ -213,7 +213,8 @@ class AgentS2ProvisionnemntSante:
                     'provision_totale': round(provision_totale, 2),
                     'loss_ratio':       round(loss_ratio, 4),
                     'primes_acquises':  src['primes_acquises'],
-                    'fonds_propres':    src['primes_acquises'] * 0.80,
+                    # NB : fonds_propres NON estimés ici — S3 les reçoit en paramètre direct
+                    # Estimation à 80% PA était sans base réglementaire (supprimée)
                 },
 
                 # ── Standard ActuarIA ────────────────────────────────────────
