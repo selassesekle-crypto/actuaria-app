@@ -64,7 +64,10 @@ LAYOUT_BASE = dict(paper_bgcolor=NAVY, plot_bgcolor=NAVY_L,
 CHOC_MORBIDITE_HAUSSE  = 0.35   # +35% taux incidence ITT/IP
 CHOC_CESSATION_BAISSE  = 0.20   # -20% taux de cessation (moins de guérisons)
 COC_RA                 = 0.08   # Risk Adjustment prévoyance = 8% BE
-MCR_PLANCHER_ABS       = 3_700_000.0   # plancher absolu prévoyance (≠ 2.5M santé)
+MCR_PLANCHER_ABS       = 3_700_000.0   # plancher absolu prévoyance S2 Art.129 (≠ 2.5M santé)
+# NB : ce plancher s'applique au niveau de l'entreprise, pas par contrat.
+# En test mono-assuré ou petit portefeuille → ROUGE MCR = plancher trop élevé,
+# pas une insuffisance de capital réelle. Fournir fonds_propres réels.
 MCR_ALPHA_PREV         = 0.0338   # coefficient primes prévoyance
 MCR_BETA_PREV          = 0.0191   # coefficient provisions prévoyance
 
@@ -239,9 +242,14 @@ class AgentP4ReportingPrevoyance:
         sal = float(p2_src.get('salaire_brut', 45_000))
 
         # Fonds propres
-        fpp = float(fonds_propres) if fonds_propres > 0 else max(fpp_est, pa * 2.0)
-        if fonds_propres <= 0:
-            self.logger.warning(f"fonds_propres non fournis → estimés à {fpp:,.0f}€")
+        fpp_fournis = float(fonds_propres) > 0
+        fpp = float(fonds_propres) if fpp_fournis else max(fpp_est, pa * 2.0)
+        if not fpp_fournis:
+            self.logger.warning(
+                f"fonds_propres non fournis → estimés à {fpp:,.0f}€ (max(P3, 2×PA)). "
+                f"ROUGE éventuel = estimation, pas insuffisance réelle. "
+                f"Fournissez fonds_propres= pour un résultat fiable."
+            )
 
         return {
             'be_prevoyance':  be_prev,
