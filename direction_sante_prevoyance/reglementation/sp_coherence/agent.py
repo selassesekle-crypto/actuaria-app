@@ -240,7 +240,8 @@ class AgentSPCoherence:
     def _na(self, nom: str, agents_requis: str) -> Dict:
         """Retourne un contrôle N/A si les agents requis sont absents."""
         return {
-            "id": nom, "ok": None, "statut": "N/A",
+            "id": nom, "libelle": f"{nom} — N/A",
+            "ok": None, "statut": "N/A",
             "detail": f"Agents requis absents : {agents_requis}",
             "valeur_a": None, "valeur_b": None, "ecart": None,
         }
@@ -688,7 +689,7 @@ class AgentSPCoherence:
         L += ["", "🔍 DÉTAIL CONTRÔLES", "─"*50]
         for c in controles:
             ic_c = "✅" if c["ok"] else ("❌" if c["ok"] is False else "—")
-            L.append(f"  {ic_c} [{c['id']}] {c['libelle']}")
+            L.append(f"  {ic_c} [{c['id']}] {c.get('libelle', c['id'])}")
             L.append(f"       → {c['detail']}")
 
         if alertes:
