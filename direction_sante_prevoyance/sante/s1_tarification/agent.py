@@ -145,7 +145,7 @@ class AgentS1TarificationSante:
 
             # ── 3. SINISTRALITÉ PAR POSTE ─────────────────────────────────────
             postes, total_sin = self._calculer_postes(
-                result_a2, fact_age, fact_garantie, fact_csp, nb_assures
+                result_a2, fact_age, fact_garantie, fact_csp
             )
 
             # ── 4. PRIMES ────────────────────────────────────────────────────
@@ -169,8 +169,8 @@ class AgentS1TarificationSante:
 
             # ── 6. STATUT RAG + HYPOTHÈSES ───────────────────────────────────
             hyp = self._hypotheses(lr_attendu, postes, prime_comm, prime_marche,
-                                   ani, garantie_niveau)
-            rag = self._rag(hyp, lr_attendu, ani)
+                                   ani)
+            rag = self._rag(hyp, ani)
 
             # ── 7. COMMENTAIRE ────────────────────────────────────────────────
             com = self._commentaire(rag, nb_assures, age_moyen, contrat,
@@ -264,7 +264,6 @@ class AgentS1TarificationSante:
             if df is None or len(df) == 0:
                 return 'parametres_manuels', nb_assures, age_moyen, csp
 
-            import pandas as pd
             # Nombre d'assurés
             nb_reel = len(df)
 
@@ -298,7 +297,7 @@ class AgentS1TarificationSante:
     # ══════════════════════════════════════════════════════════════════════════
     # 2. CALCUL SINISTRALITÉ PAR POSTE
     # ══════════════════════════════════════════════════════════════════════════
-    def _calculer_postes(self, result_a2, fact_age, fact_garantie, fact_csp, nb_assures):
+    def _calculer_postes(self, result_a2, fact_age, fact_garantie, fact_csp):
         """
         Calcule la sinistralité par poste.
         Si données réelles disponibles → les utilise directement.
@@ -405,7 +404,7 @@ class AgentS1TarificationSante:
     # ══════════════════════════════════════════════════════════════════════════
     # 4. HYPOTHÈSES — STANDARD ACTUARIA
     # ══════════════════════════════════════════════════════════════════════════
-    def _hypotheses(self, lr, postes, prime_comm, prime_marche, ani, garantie):
+    def _hypotheses(self, lr, postes, prime_comm, prime_marche, ani):
         # H1 — Ratio S/P ∈ [65%, 85%]
         if 0.65 <= lr <= 0.85:
             h1_s = 'VALIDÉE'
@@ -459,7 +458,7 @@ class AgentS1TarificationSante:
     # ══════════════════════════════════════════════════════════════════════════
     # 5. STATUT RAG
     # ══════════════════════════════════════════════════════════════════════════
-    def _rag(self, hyp, lr, ani):
+    def _rag(self, hyp, ani):
         non_val = [h for h in hyp if h['statut'] == 'NON VALIDÉE']
         a_just  = [h for h in hyp if h['statut'] == 'À JUSTIFIER']
         if non_val:
