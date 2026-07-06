@@ -191,8 +191,12 @@ def test_t2_triangle_reel_vs_synthetique():
     assert r_reel["n_periodes"] == 5
     assert r_reel["triangle_meta"]["annee_debut"] == 2020
     assert r_reel["be_itt"] > 0, "BE ITT doit être > 0 avec triangle réel"
-    # BE ITT doit être inférieur au dernier diagonal (IBNR = développement futur)
-    last_diag = float(C[0, 4])  # première année, dernier semestre = complète
+    # BE ITT = IBNR = développement futur → doit être < ultime observé du triangle
+    # (Le triangle a un ultime max de 174 000€ — le BE ITT doit être nettement inférieur)
+    ultime_max = float(np.max(C))
+    assert r_reel["be_itt"] < ultime_max, (
+        f"BE ITT={r_reel['be_itt']:,.0f}€ ne doit pas dépasser l'ultime triangle={ultime_max:,.0f}€"
+    )
     assert r_reel["chain_ladder"]["reserve_totale"] >= 0
 
     # Avec triangle synthétique (pas de triangle_itt)
