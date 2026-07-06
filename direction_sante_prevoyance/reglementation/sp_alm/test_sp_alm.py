@@ -55,7 +55,7 @@ def test_alm_success_et_structure(r_alm):
     for cle in ["duration","bv01","lcr","passif","actif","gap",
                 "hypotheses","commentaire"]:
         assert cle in r_alm, f"Clé manquante : {cle}"
-    assert len(r_alm["hypotheses"]) == 3, "3 hypothèses attendues"
+    assert len(r_alm["hypotheses"]) == 4, "4 hypothèses attendues (H1-H4 avec Redington)"
 
 
 # ── T2 : Duration passif SP — rentes IP longues, santé courte ────────────────
