@@ -376,9 +376,11 @@ class AgentS1TarificationSante:
                 'note':   '✅' if ok else f'❌ {charge:.0f}€ < {seuil:.0f}€ min ANI',
             }
 
-        # ANI 2013 s'applique UNIQUEMENT aux contrats collectifs (Art. L911-7 CSS)
-        # Pour les contrats individuels, l'ANI ne s'applique pas
-        # La vérification est faite dans run() avant d'appeler _verifier_ani
+        # ANI non applicable aux contrats individuels (Art. L911-7 CSS)
+        if contrat == 'individuel':
+            conforme = True
+            for k in resultats:
+                resultats[k]['note'] = 'N/A (contrat individuel — ANI non applicable)'
 
         return {
             'conforme':   conforme,
