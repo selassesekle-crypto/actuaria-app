@@ -60,8 +60,12 @@ LAYOUT_BASE = dict(paper_bgcolor=NAVY, plot_bgcolor=NAVY_L,
     hoverlabel=dict(bgcolor=NAVY_LL, bordercolor=OR, font_size=12, font_color=BLANC))
 
 # ── Paramètres IBNR santé par poste ──────────────────────────────────────────
-# En santé, IBNR très faible car remboursement rapide (1-3 mois)
-# Différent de l'IARD (6-18 mois) et de la prévoyance (12-36 mois)
+# Source : pratique marché mutuelles France — FNMF 2023 + CTIP 2023
+# En santé, IBNR faible (5-25%) car remboursement rapide (1-3 mois)
+# vs IARD (6-18 mois) et prévoyance (12-36 mois)
+# Médecine/Pharmacie : IBNR faible (feuilles soins dématérialisées)
+# Hospit : IBNR plus élevé (facturation hôpitaux retardée 1-3 mois)
+# Dentaire/Optique : IBNR intermédiaire (prothèses, délais laboratoire)
 IBNR_TAUX_POSTE = {
     "medecine":        0.08,   # 8%  — feuilles de soins rapides
     "pharmacie":       0.05,   # 5%  — pharmacie quasi-immédiat
@@ -71,7 +75,10 @@ IBNR_TAUX_POSTE = {
 }
 IBNR_TAUX_GLOBAL = 0.18   # fallback si pas de détail poste
 
-# Délais de règlement santé (mois) — base triangle
+# Délais de règlement santé (mois) — cadences de liquidation
+# Source : DREES Comptes de la Santé 2023 + pratique marché FNMF
+# Médecine/Pharmacie : dématérialisé → 1 mois
+# Hospit/Dentaire/Optique : facturation manuelle → 2-3 mois
 DELAIS_REGLEMENT = {
     "medecine":        1,
     "pharmacie":       1,
