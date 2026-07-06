@@ -61,7 +61,10 @@ LAYOUT_BASE = dict(paper_bgcolor=NAVY, plot_bgcolor=NAVY_L,
     hoverlabel=dict(bgcolor=NAVY_LL, bordercolor=OR, font_size=12, font_color=BLANC))
 
 # ── Référentiels DREES 2023 ───────────────────────────────────────────────────
-# Coûts moyens par poste (€/assuré/an) — source DREES Comptes de la Santé 2023
+# Source : DREES — Comptes de la Santé 2023 (rapport annuel)
+# Fréquences et coûts moyens par poste — population générale France
+# TC_SS = taux de couverture Sécurité Sociale (base 100%)
+# freq = nombre moyen d'actes/an par assuré | cout_acte = coût moyen en €
 COUTS_POSTES_REF = {
     "medecine":        {"freq": 4.2,  "cout_acte": 28.5,   "tc_ss": 0.70},
     "pharmacie":       {"freq": 8.5,  "cout_acte": 22.0,   "tc_ss": 0.65},
@@ -73,10 +76,15 @@ COUTS_POSTES_REF = {
 # Niveaux de garantie
 NIVEAUX_GARANTIE = {"eco": 0.60, "confort": 1.00, "premium": 1.40, "luxe": 1.80}
 
-# Facteur catégorie sociopro (risque santé)
+# Facteur catégorie socioprofessionnelle — risque santé différentiel
+# Source : DREES Enquête santé et protection sociale 2023
+# + FNMF (Fédération Nationale de la Mutualité Française) — sinistralité 2023
+# Ouvriers : +20% vs employés | Cadres : -15% | Cadres sup : -25%
 FACT_CSP = {"ouvrier": 1.20, "employe": 1.00, "cadre": 0.85, "cadre_sup": 0.75}
 
-# Seuils ANI 2013 : panier minimum obligatoire
+# Seuils ANI 2013 — panier minimum de garanties complémentaire collective
+# Source : ANI du 11 janvier 2013 | Art. L911-7 CSS (transposé par Loi du 14/06/2013)
+# Applicable uniquement aux contrats collectifs obligatoires
 ANI_PANIER_MIN = {
     "medecine":        30.0,   # ≥ 100% BR consultations
     "hospitalisation": 100.0,  # ≥ 100% BR séjour
