@@ -35,7 +35,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict
 
-
 try:
     import plotly.graph_objects as go
     PLOTLY_OK = True
@@ -716,7 +715,7 @@ class AgentS2ProvisionnemntSante:
                 yaxis=dict(tickfont=dict(color=BLANC,size=10),showgrid=False),
                 barmode="overlay", height=260,
                 annotations=[dict(
-                    text="💡 3 ✅ = provisionnement santé conforme — PSAP, IBNR et LR validés.",
+                    text="💡 4 ✅ = provisionnement santé conforme — PSAP, IBNR, LR et A/E validés.",
                     xref="paper",yref="paper",x=0.01,y=-0.22,
                     font=dict(color=GRIS,size=9),showarrow=False)],
             ))
