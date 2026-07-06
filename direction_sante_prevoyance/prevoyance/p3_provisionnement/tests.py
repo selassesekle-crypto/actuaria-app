@@ -1,6 +1,6 @@
 """
 Tests P3 Élodie v3.0 — AgentP3ProvisionnemntPrevoyance
-7 tests couvrant :
+8 tests couvrant :
   T1 — Contrat de sortie complet (toutes clés)
   T2 — Triangle réel fourni (vs synthétique)
   T3 — Méthodes actuarielles (CL, Mack, BF, Bootstrap)
@@ -658,8 +658,9 @@ def test_t8_triangles_rectangulaires():
 
     # Les 4 premières années (i=0..3) ont k_i = m-1 = 3 avec valeur renseignée
     # → elles doivent avoir un ultimate ≥ leur dernière valeur connue
+    n_court = C_court.shape[0]   # 7 — explicite pour éviter constante hardcodée
     for i in range(4):
-        k_i  = min(7 - i - 1, 3)
+        k_i  = min(n_court - i - 1, 3)
         last = float(C_court[i, k_i])
         ult  = cl_court["ultimates"][i]
         if last > 0:
@@ -701,15 +702,7 @@ def test_t8_triangles_rectangulaires():
     assert cl_long["reserve_totale"] >= 0
 
     # ── Cas n > m avec cellules zéro dans zone connue : warning attendu ───────
-    # Ce triangle est incomplet : i=1 a k_i=3 mais C[1,3]=0
-    C_incomplet = np.array([
-        [80_000, 130_000, 148_000, 155_000],
-        [85_000, 138_000, 157_000,       0],  # C[1,3]=0 dans zone connue !
-        [78_000, 126_000,       0,       0],
-        [90_000,       0,       0,       0],
-    ], dtype=float)
-    # Ce triangle est 4×4 standard, pas de problème particulier
-    # Tester plutôt un vrai cas n>m incomplet : 5×3
+    # Triangle 5×3 : i=1 a k_i=min(3,2)=2, C[1,2]=0 → warning loggé
     C_5x3 = np.array([
         [80_000, 130_000, 148_000],
         [85_000, 138_000,       0],  # k_i=min(3,2)=2 → C[1,2]=0 → warning
