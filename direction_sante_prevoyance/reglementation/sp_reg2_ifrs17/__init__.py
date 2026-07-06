@@ -1,3 +1,3 @@
 """
-Agent sp_reg2_ifrs17
+AgentSPReg2IFRS17
 """
