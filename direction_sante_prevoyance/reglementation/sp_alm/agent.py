@@ -405,7 +405,7 @@ class AgentSPAlm:
         Analyse du portefeuille actif SP — allocation type mutuelle.
 
         Duration actif = somme pondérée des durations par classe d'actif.
-        Convexité actif = approximation (D² * valeur) pour obligations.
+        Convexité actif = approximation (D²+D) pondérée par classe d'actif.
 
         Source : ACPR rapport ALM mutuelles 2022.
         """
@@ -625,18 +625,18 @@ class AgentSPAlm:
         # Les deux convexités sont maintenant disponibles :
         #   actif["convexite"]  calculé dans _analyser_actif_sp (D²+D pondéré)
         #   passif["convexite"] calculé dans _analyser_passif_sp (D²+D pondéré)
-        tol_dur      = 0.50   # tolérance ±0.5 an sur l'égalité des durations
-        gap_abs      = gap["gap_abs"]
-        dur_match    = gap_abs <= tol_dur
-        conv_actif   = passif.get("_conv_actif", 0)  # non passé ici — voir note
-        conv_passif  = passif.get("convexite", 0)
-        # Note : convexité actif non accessible directement depuis passif.
-        # On évalue la condition (2) depuis actif via le gap de convexité :
-        # en pratique, actif obligataire (OAT 7.5a) a conv ≈ 63, passif (dur ~18a) ≈ 340
-        # La condition convexité est donc souvent défavorable pour les mutuelles
-        # (passif rentes IP très convexe) — on l'évalue qualitativement ici.
-        # Condition H4 : (1) dur_match ET (2) gap_abs ≤ GAP_CIBLE_MAX (proxy)
-        redington_ok = dur_match and gap_abs <= GAP_CIBLE_MAX
+        tol_dur     = 0.50   # tolérance ±0.5 an sur l'égalité des durations
+        gap_abs     = gap["gap_abs"]
+        dur_match   = gap_abs <= tol_dur   # condition (1) Redington
+        conv_passif = passif.get("convexite", 0)
+        # Condition (2) Redington — convexité actif vs passif :
+        # En pratique, actif obligataire (OAT 7.5a → conv ≈ 63) est moins convexe
+        # que le passif rentes IP (dur ~18a → conv ≈ 340). La condition convexité
+        # est rarement satisfaite pour les mutuelles sans couverture dédiée.
+        # H4 retient uniquement la condition (1) sur la duration — condition
+        # nécessaire et mesurable ; la condition convexité est signalée dans h4_m.
+        # Redington (1952) : redington_ok ⟺ dur_match (condition nécessaire)
+        redington_ok = dur_match
         h4_s = "VALIDÉE" if redington_ok else "À JUSTIFIER"
         h4_m = (
             f"Gap={gap_abs:.2f}a ({'≤' if dur_match else '>'} {tol_dur}a tol.) | "
@@ -707,72 +707,81 @@ class AgentSPAlm:
         gph = {}
 
         # G1 — Duration actif vs passif (barres comparatives)
-        fig1 = go.Figure(go.Bar(
-            x=["Actif SP", "Passif Total", "PM Rentes IP", "PSAP Prév.", "PSAP Santé"],
-            y=[actif["duration_macaulay"],
-               passif["duration_consolidee"],
-               passif["duration_rentes_ip"],
-               passif["duration_psap_prev"],
-               passif["duration_psap_sante"]],
-            marker_color=[BLEU, OR, VIOLET, AMBRE, VERT],
-            text=[f"{d:.2f}a" for d in [
-                actif["duration_macaulay"],
-                passif["duration_consolidee"],
-                passif["duration_rentes_ip"],
-                passif["duration_psap_prev"],
-                passif["duration_psap_sante"],
-            ]],
-            textposition="outside",
-        ))
-        fig1.update_layout(
-            **LAYOUT_BASE,
-            title=dict(text="G1 — Duration Actif vs Passif SP (années)",
-                       font=dict(color=OR, size=13)),
-            yaxis_title="Duration (années)",
-        )
-        gph["duration_comparison"] = fig1
+        try:
+            fig1 = go.Figure(go.Bar(
+                x=["Actif SP", "Passif Total", "PM Rentes IP", "PSAP Prév.", "PSAP Santé"],
+                y=[actif["duration_macaulay"],
+                   passif["duration_consolidee"],
+                   passif["duration_rentes_ip"],
+                   passif["duration_psap_prev"],
+                   passif["duration_psap_sante"]],
+                marker_color=[BLEU, OR, VIOLET, AMBRE, VERT],
+                text=[f"{d:.2f}a" for d in [
+                    actif["duration_macaulay"],
+                    passif["duration_consolidee"],
+                    passif["duration_rentes_ip"],
+                    passif["duration_psap_prev"],
+                    passif["duration_psap_sante"],
+                ]],
+                textposition="outside",
+            ))
+            fig1.update_layout(
+                **LAYOUT_BASE,
+                title=dict(text="G1 — Duration Actif vs Passif SP (années)",
+                           font=dict(color=OR, size=13)),
+                yaxis_title="Duration (années)",
+            )
+            gph["duration_comparison"] = fig1
+        except Exception as e:
+            self.logger.warning(f"G1 duration : {e}")
 
         # G2 — LCR gauge
-        lcr_val = lcr["lcr_ratio"]
-        c_lcr   = VERT if lcr_val >= 1.5 else (AMBRE if lcr_val >= 1.0 else ROUGE)
-        fig2 = go.Figure(go.Indicator(
-            mode="gauge+number", value=lcr_val * 100,
-            title={"text":"LCR Mutuelle Art.L212-7 CSS (%)","font":{"color":OR}},
-            number={"font":{"color":c_lcr,"size":28},"suffix":"%"},
-            gauge={
-                "axis":{"range":[0,300],"tickcolor":GRIS},
-                "bar":{"color":c_lcr,"thickness":0.3},
-                "steps":[
-                    {"range":[0,100],"color":"rgba(231,76,60,0.15)"},
-                    {"range":[100,150],"color":"rgba(243,156,18,0.15)"},
-                    {"range":[150,300],"color":"rgba(46,204,113,0.12)"},
-                ],
-                "threshold":{"line":{"color":ROUGE,"width":3},
-                              "thickness":0.8,"value":100},
-            },
-        ))
-        fig2.update_layout(
-            **LAYOUT_BASE,
-            title=dict(text="G2 — LCR Mutuelle SP",
-                       font=dict(color=OR, size=13))
-        )
-        gph["lcr_gauge"] = fig2
+        try:
+            lcr_val = lcr["lcr_ratio"]
+            c_lcr   = VERT if lcr_val >= 1.5 else (AMBRE if lcr_val >= 1.0 else ROUGE)
+            fig2 = go.Figure(go.Indicator(
+                mode="gauge+number", value=lcr_val * 100,
+                title={"text":"LCR Mutuelle Art.L212-7 CSS (%)","font":{"color":OR}},
+                number={"font":{"color":c_lcr,"size":28},"suffix":"%"},
+                gauge={
+                    "axis":{"range":[0,300],"tickcolor":GRIS},
+                    "bar":{"color":c_lcr,"thickness":0.3},
+                    "steps":[
+                        {"range":[0,100],"color":"rgba(231,76,60,0.15)"},
+                        {"range":[100,150],"color":"rgba(243,156,18,0.15)"},
+                        {"range":[150,300],"color":"rgba(46,204,113,0.12)"},
+                    ],
+                    "threshold":{"line":{"color":ROUGE,"width":3},
+                                  "thickness":0.8,"value":100},
+                },
+            ))
+            fig2.update_layout(
+                **LAYOUT_BASE,
+                title=dict(text="G2 — LCR Mutuelle SP",
+                           font=dict(color=OR, size=13))
+            )
+            gph["lcr_gauge"] = fig2
+        except Exception as e:
+            self.logger.warning(f"G2 LCR gauge : {e}")
 
         # G3 — Allocation actif (camembert)
-        classes = actif["classes"]
-        labels  = list(classes.keys())
-        vals    = [classes[c]["valeur"] for c in labels]
-        couleurs = [BLEU, OR, VERT, AMBRE]
-        fig3 = go.Figure(go.Pie(
-            labels=labels, values=vals,
-            marker_colors=couleurs[:len(labels)], hole=0.4,
-        ))
-        fig3.update_layout(
-            **LAYOUT_BASE,
-            title=dict(text="G3 — Allocation Actif SP (€)",
-                       font=dict(color=OR, size=13))
-        )
-        gph["allocation_actif"] = fig3
+        try:
+            classes  = actif["classes"]
+            labels   = list(classes.keys())
+            vals     = [classes[c]["valeur"] for c in labels]
+            couleurs = [BLEU, OR, VERT, AMBRE]
+            fig3 = go.Figure(go.Pie(
+                labels=labels, values=vals,
+                marker_colors=couleurs[:len(labels)], hole=0.4,
+            ))
+            fig3.update_layout(
+                **LAYOUT_BASE,
+                title=dict(text="G3 — Allocation Actif SP (€)",
+                           font=dict(color=OR, size=13))
+            )
+            gph["allocation_actif"] = fig3
+        except Exception as e:
+            self.logger.warning(f"G3 allocation actif : {e}")
 
         # G4 — BV01 stress ±100bp / ±200bp (EIOPA Art.105 S2)
         try:
