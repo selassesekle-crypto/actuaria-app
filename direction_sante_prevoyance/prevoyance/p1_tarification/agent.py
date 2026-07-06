@@ -182,13 +182,18 @@ class AgentP1TarificationPrevoyance:
             # - Tous arrêts : 45j (dont beaucoup < franchise)
             # - Arrêts > franchise : 180j (dossiers graves qui "passent" la franchise)
             # La prime ITT ne couvre que les arrêts dépassant la franchise
-            # donc on utilise la durée conditionnelle au dépassement
-            duree_moy_itt_all       = 45    # jours — tous arrêts
-            duree_moy_itt_franchise = 180   # jours — arrêts > franchise (BCAC)
-            prob_depasse_franchise  = max(0.0, 1.0 - franchise_jours / 270.0)
-            jours_charges = max(0, duree_moy_itt_franchise - franchise_jours) * prob_depasse_franchise
-            indemnite_j   = sal_men * 0.80 / 30   # 80% salaire / jour
-            prime_itt     = taux_itt * jours_charges * indemnite_j
+            # Probabilité de dépassement calibrée sur BCAC 2019
+            # Distribution des durées : approximation exponentielle
+            # P(durée > franchise) ≈ exp(-franchise/duree_moy_tous_arrets)
+            # BCAC 2019 : durée moyenne tous arrêts = 45j
+            # => P(>90j) ≈ exp(-90/45) ≈ 13.5% | P(>180j) ≈ exp(-180/45) ≈ 1.8%
+            duree_moy_arrets  = 45.0  # jours — tous arrêts BCAC 2019
+            prob_depasse      = float(np.exp(-franchise_jours / max(duree_moy_arrets, 1)))
+            # Durée résiduelle conditionnelle E[D - franchise | D > franchise]
+            # Pour loi exponentielle : E[D-f | D>f] = duree_moy (propriété sans mémoire)
+            jours_residuels   = duree_moy_arrets  # durée résiduelle espérée
+            indemnite_j       = sal_men * 0.80 / 30  # 80% salaire / jour
+            prime_itt         = taux_itt * prob_depasse * jours_residuels * indemnite_j
 
             # ── 4. PRIME IP ───────────────────────────────────────────────────
             age_retraite  = 65
