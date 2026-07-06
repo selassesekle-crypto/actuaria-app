@@ -373,20 +373,24 @@ def export_excel_sp(data: Dict) -> bytes:
         logger.warning("openpyxl non disponible — export Excel SP désactivé")
         return b""
 
-    wb = Workbook()
-    # Supprimer la feuille par défaut
-    if "Sheet" in wb.sheetnames:
-        del wb["Sheet"]
+    try:
+        wb = Workbook()
+        if "Sheet" in wb.sheetnames:
+            del wb["Sheet"]
 
-    _onglet_synthese(wb, data)
-    _onglet_sinistralite(wb, data)
-    _onglet_provisions(wb, data)
-    _onglet_tarification(wb, data)
-    _onglet_morbidite(wb, data)
-    _onglet_solvabilite(wb, data)
-    _onglet_ifrs17(wb, data)
-    _onglet_hypotheses(wb, data)
+        _onglet_synthese(wb, data)
+        _onglet_sinistralite(wb, data)
+        _onglet_provisions(wb, data)
+        _onglet_tarification(wb, data)
+        _onglet_morbidite(wb, data)
+        _onglet_solvabilite(wb, data)
+        _onglet_ifrs17(wb, data)
+        _onglet_hypotheses(wb, data)
 
-    buf = io.BytesIO()
-    wb.save(buf)
-    return buf.getvalue()
+        buf = io.BytesIO()
+        wb.save(buf)
+        return buf.getvalue()
+
+    except Exception as e:
+        logger.error(f"Export Excel SP échoué : {e}")
+        return b""
