@@ -30,13 +30,14 @@ def r_s1_individuel():
 
 # ── T1 : Succès collectif et individuel ───────────────────────────────────────
 def test_reg3_success(r_s1_collectif, r_s1_individuel):
+    """Succès pour contrat collectif et individuel."""
     reg3 = AgentSPReg3ANI100Sante(verbose=False)
     r_c = reg3.run(result_s1=r_s1_collectif, contrat="collectif",
                    generer_graphiques=False)
     r_i = reg3.run(result_s1=r_s1_individuel, contrat="individuel",
                    generer_graphiques=False)
-    assert r_c["success"] is True and r_c["erreur"] is None
-    assert r_i["success"] is True and r_i["erreur"] is None
+    assert r_c["success"] is True and r_c["erreur"] is None, "Collectif doit réussir"
+    assert r_i["success"] is True and r_i["erreur"] is None, "Individuel doit réussir"
 
 
 # ── T2 : ANI individuel → conforme automatiquement ────────────────────────────
@@ -83,7 +84,7 @@ def test_reg3_100_sante_verifie(r_s1_collectif):
     detail = s100.get("detail", s100)
     assert "optique_rac0" in detail, "Optique RAC 0 doit être dans detail"
     assert "dentaire_rac0" in detail, "Dentaire RAC 0 doit être dans detail"
-    assert r["sante_100_conforme"] is not None
+    assert r["sante_100_conforme"] is not None, "sante_100_conforme doit être défini"
 
 
 # ── T5 : Contrat responsable vérifié ─────────────────────────────────────────
@@ -111,7 +112,8 @@ def test_reg3_hypotheses(r_s1_collectif):
 
 # ── T7 : Erreur si S1 absent ──────────────────────────────────────────────────
 def test_reg3_erreur_sans_s1():
+    """SP-Reg3 doit retourner success=False si result_s1 est absent."""
     reg3 = AgentSPReg3ANI100Sante(verbose=False)
     r = reg3.run(result_s1=None, contrat="collectif", generer_graphiques=False)
-    assert r["success"] is False
-    assert r["erreur"] is not None
+    assert r["success"] is False, "Doit échouer sans S1"
+    assert r["erreur"] is not None, "Message d'erreur attendu"
