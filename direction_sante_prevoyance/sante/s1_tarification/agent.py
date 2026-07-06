@@ -12,7 +12,7 @@
 ║    ✅ Branchement result_a2 (données réelles client via Diana)              ║
 ║    ✅ Tarification par poste depuis données réelles si disponibles          ║
 ║    ✅ Fallback paramètres manuels si pas de données                         ║
-║    ✅ Standard ActuarIA : RAG + 3 hypothèses + 4 graphiques + commentaire  ║
+║    ✅ Standard ActuarIA : RAG + 5 hypothèses + 4 graphiques + commentaire  ║
 ║    ✅ Sorties vers S2 Selma et S3 Binta                                     ║
 ║                                                                              ║
 ║  ENTRÉES :                                                                   ║
@@ -169,7 +169,7 @@ class AgentS1TarificationSante:
 
             # ── 6. STATUT RAG + HYPOTHÈSES ───────────────────────────────────
             hyp = self._hypotheses(lr_attendu, postes, prime_comm, prime_marche,
-                                   ani)
+                                   ani, garantie_niveau)
             rag = self._rag(hyp, ani)
 
             # ── 7. COMMENTAIRE ────────────────────────────────────────────────
@@ -404,7 +404,7 @@ class AgentS1TarificationSante:
     # ══════════════════════════════════════════════════════════════════════════
     # 4. HYPOTHÈSES — STANDARD ACTUARIA
     # ══════════════════════════════════════════════════════════════════════════
-    def _hypotheses(self, lr, postes, prime_comm, prime_marche, ani):
+    def _hypotheses(self, lr, postes, prime_comm, prime_marche, ani, garantie_niveau):
         # H1 — Ratio S/P ∈ [65%, 85%]
         if 0.65 <= lr <= 0.85:
             h1_s = 'VALIDÉE'
@@ -446,6 +446,58 @@ class AgentS1TarificationSante:
             if not ani['conforme']:
                 h3_m += " | ANI 2013 non conforme"
 
+        # H4 — LR calculé vs LR marché FNMF 2023
+        # Source : FNMF — Rapport sinistralité mutuelles 2023
+        # LR marché selon niveau de garantie :
+        #   eco=55-65% | confort=65-75% | premium=75-85% | luxe=75-85%
+        LR_FNMF = {
+            'eco':     (0.55, 0.65),
+            'confort': (0.65, 0.75),
+            'premium': (0.75, 0.85),
+            'luxe':    (0.75, 0.85),
+        }
+        lr_min, lr_max = LR_FNMF.get(garantie_niveau, (0.65, 0.85))
+        if lr_min <= lr <= lr_max:
+            h4_s = 'VALIDÉE'
+            h4_m = (f"LR tarifaire = {lr*100:.1f}% ∈ [{lr_min*100:.0f}%-{lr_max*100:.0f}%] "
+                    f"FNMF {garantie_niveau} ✅")
+        elif lr < lr_min:
+            h4_s = 'À JUSTIFIER'
+            h4_m = (f"LR tarifaire = {lr*100:.1f}% < {lr_min*100:.0f}% FNMF "
+                    f"{garantie_niveau} — prime élevée vs marché mutualiste")
+        else:
+            h4_s = 'À JUSTIFIER'
+            h4_m = (f"LR tarifaire = {lr*100:.1f}% > {lr_max*100:.0f}% FNMF "
+                    f"{garantie_niveau} — sinistralité supérieure au marché")
+
+        # H5 — ANI 2013 poste par poste
+        # Détail de conformité par poste : médecine, hospit, dentaire, optique
+        # Source : ANI 11/01/2013 — Art. L911-7 CSS
+        postes_ani = ['medecine', 'hospitalisation', 'dentaire', 'optique']
+        detail_ani = ani.get('detail', {})
+        if ani.get('conforme'):
+            h5_s = 'VALIDÉE'
+            lignes = []
+            for p in postes_ani:
+                d = detail_ani.get(p, {})
+                if d.get('seuil', 0) > 0:
+                    lignes.append(f"{p}={d.get('charge',0):.0f}€≥{d['seuil']:.0f}€")
+            h5_m = "ANI poste/poste ✅ | " + " | ".join(lignes) if lignes else "ANI conforme ✅"
+        else:
+            non_conf = []
+            for p in postes_ani:
+                d = detail_ani.get(p, {})
+                if d.get('seuil', 0) > 0 and not d.get('ok', True):
+                    non_conf.append(
+                        f"{p}={d.get('charge',0):.0f}€<{d['seuil']:.0f}€"
+                    )
+            if non_conf:
+                h5_s = 'NON VALIDÉE'
+                h5_m = "ANI non conforme : " + " | ".join(non_conf)
+            else:
+                h5_s = 'VALIDÉE'
+                h5_m = "ANI conforme (contrat individuel — ANI non applicable)"
+
         return [
             {'id':'H1','hypothese':'Ratio S/P dans la norme mutualité [65%, 85%]',
              'valeur':h1_m,'statut':h1_s,'critique':True},
@@ -453,6 +505,10 @@ class AgentS1TarificationSante:
              'valeur':h2_m,'statut':h2_s,'critique':True},
             {'id':'H3','hypothese':'Prime compétitive vs marché + conformité ANI 2013',
              'valeur':h3_m,'statut':h3_s,'critique':True},
+            {'id':'H4','hypothese':'LR tarifaire dans la norme FNMF 2023 par niveau de garantie',
+             'valeur':h4_m,'statut':h4_s,'critique':False},
+            {'id':'H5','hypothese':'ANI 2013 — conformité poste par poste (médecine/hospit/dentaire/optique)',
+             'valeur':h5_m,'statut':h5_s,'critique':True},
         ]
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -657,7 +713,7 @@ class AgentS1TarificationSante:
                 yaxis=dict(tickfont=dict(color=BLANC,size=10),showgrid=False),
                 barmode="overlay", height=260,
                 annotations=[dict(
-                    text="💡 3 ✅ = tarification santé validée, conforme DREES/ANI et compétitive.",
+                    text="💡 5 ✅ = tarification santé validée — S/P, hospit, compétitivité, LR FNMF et ANI.",
                     xref="paper",yref="paper",x=0.01,y=-0.22,
                     font=dict(color=GRIS,size=9),showarrow=False)],
             ))
