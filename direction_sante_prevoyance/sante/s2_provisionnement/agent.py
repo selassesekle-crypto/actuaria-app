@@ -34,9 +34,8 @@
 import json, logging, warnings
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict
 
-import numpy as np
 
 try:
     import plotly.graph_objects as go
@@ -73,7 +72,6 @@ IBNR_TAUX_POSTE = {
     "dentaire":        0.15,   # 15% — prothèses, délais laboratoire
     "optique":         0.10,   # 10% — remboursement différé
 }
-IBNR_TAUX_GLOBAL = 0.18   # fallback si pas de détail poste
 
 # Délais de règlement santé (mois) — cadences de liquidation
 # Source : DREES Comptes de la Santé 2023 + pratique marché FNMF
@@ -115,7 +113,6 @@ class AgentS2ProvisionnemntSante:
             result_a2            = None,
             nb_sinistres_ouverts: int   = None,
             cout_moyen_ouvert:    float = None,
-            delai_reglement_mois: int   = 2,
             generer_graphiques:   bool  = True) -> Dict:
 
         t0  = datetime.now()
@@ -172,8 +169,9 @@ class AgentS2ProvisionnemntSante:
 
             # ── 10. HYPOTHÈSES + RAG ──────────────────────────────────────────
             hyp = self._hypotheses(
-                psap_total, psap_ibnr, loss_ratio, taux_prov,
-                src['primes_acquises'], src['sinistres_payes']
+                psap_total, psap_ibnr, loss_ratio,
+                src['primes_acquises'], src['sinistres_payes'],
+                src['sinistres_attendus']
             )
             rag = self._rag(hyp, loss_ratio)
 
@@ -189,7 +187,7 @@ class AgentS2ProvisionnemntSante:
             if generer_graphiques and PLOTLY_OK:
                 gph = self._graphiques(
                     psap_dossiers, psap_ibnr, prec, loss_ratio,
-                    src, psap_postes, ibnr_postes, hyp
+                    src, psap_postes, ibnr_postes, hyp, triangle
                 )
 
             self._audit(aid, psap_total, prec, loss_ratio, rag)
@@ -454,7 +452,7 @@ class AgentS2ProvisionnemntSante:
     # ══════════════════════════════════════════════════════════════════════════
     # 7. HYPOTHÈSES
     # ══════════════════════════════════════════════════════════════════════════
-    def _hypotheses(self, psap, ibnr, lr, taux_prov, pa, sp):
+    def _hypotheses(self, psap, ibnr, lr, pa, sp, sin_att):
         # H1 — PSAP ≥ 10% des primes
         ratio_psap = psap / max(pa, 1)
         if ratio_psap >= 0.10:
@@ -490,6 +488,23 @@ class AgentS2ProvisionnemntSante:
             h3_s = 'NON VALIDÉE'
             h3_m = f"Loss Ratio = {lr*100:.1f}% > 95% — contrat déficitaire"
 
+        # H4 — A/E ratio PSAP (Actual vs Expected)
+        # Compare sinistres réellement payés vs sinistres attendus (tarification S1)
+        # Source : pratique marché mutuelles — FNMF 2023
+        ae_ratio = sp / max(sin_att, 1)
+        if 0.90 <= ae_ratio <= 1.10:
+            h4_s = 'VALIDÉE'
+            h4_m = f"A/E = {ae_ratio:.3f} ∈ [0.90,1.10] — hypothèses tarifaires confirmées ✅"
+        elif 0.80 <= ae_ratio < 0.90 or 1.10 < ae_ratio <= 1.20:
+            h4_s = 'À JUSTIFIER'
+            h4_m = f"A/E = {ae_ratio:.3f} — écart modéré vs tarification, à documenter"
+        elif ae_ratio > 1.20:
+            h4_s = 'NON VALIDÉE'
+            h4_m = f"A/E = {ae_ratio:.3f} > 1.20 — sinistralité réelle dépasse les prévisions"
+        else:
+            h4_s = 'À JUSTIFIER'
+            h4_m = f"A/E = {ae_ratio:.3f} < 0.80 — sur-provisionnement ou tarification prudente"
+
         return [
             {'id':'H1','hypothese':'PSAP ≥ 10% des primes acquises',
              'valeur':h1_m,'statut':h1_s,'critique':True},
@@ -497,6 +512,8 @@ class AgentS2ProvisionnemntSante:
              'valeur':h2_m,'statut':h2_s,'critique':True},
             {'id':'H3','hypothese':'Loss Ratio ≤ 85% — sinistralité maîtrisée',
              'valeur':h3_m,'statut':h3_s,'critique':True},
+            {'id':'H4','hypothese':'A/E ratio PSAP ∈ [0.90,1.10] — sinistralité réelle vs attendue',
+             'valeur':h4_m,'statut':h4_s,'critique':False},
         ]
 
     def _rag(self, hyp, lr):
@@ -563,7 +580,7 @@ class AgentS2ProvisionnemntSante:
             "", "📋 HYPOTHÈSES", "─"*40,
         ]
         for h in hyp:
-            ic_h = "✅" if h['statut']=='VALIDÉE' else "⚠️"
+            ic_h = "✅" if h['statut']=='VALIDÉE' else ("⚠️" if h['statut']=='À JUSTIFIER' else "❌")
             L += [f"  {ic_h} [{h['id']}] {h['hypothese']}",
                   f"       → {h['valeur']} : {h['statut']}"]
 
@@ -580,7 +597,7 @@ class AgentS2ProvisionnemntSante:
     # ══════════════════════════════════════════════════════════════════════════
     # 9. GRAPHIQUES
     # ══════════════════════════════════════════════════════════════════════════
-    def _graphiques(self, psap_d, psap_i, prec, lr, src, psap_p, ibnr_p, hyp):
+    def _graphiques(self, psap_d, psap_i, prec, lr, src, psap_p, ibnr_p, hyp, triangle):
         gph = {}
 
         # G1 — Décomposition provisions
@@ -595,8 +612,8 @@ class AgentS2ProvisionnemntSante:
                 text=[f"{v:.0f}k€" for v in [psap_d/1e3,psap_i/1e3,prec/1e3,tot/1e3]],
                 textposition="outside", textfont=dict(color=BLANC,size=10),
             ))
-            l = dict(**LAYOUT_BASE)
-            l.update(dict(
+            layout = dict(**LAYOUT_BASE)
+            layout.update(dict(
                 title=dict(text="G1 — Décomposition des provisions santé",
                            font=dict(color=OR,size=12),x=0.01),
                 showlegend=False,
@@ -607,7 +624,7 @@ class AgentS2ProvisionnemntSante:
                     xref="paper",yref="paper",x=0.01,y=-0.22,
                     font=dict(color=GRIS,size=9),showarrow=False)],
             ))
-            fig.update_layout(**l)
+            fig.update_layout(**layout)
             gph['decomposition_provisions'] = fig
         except Exception as e:
             self.logger.warning(f"G1:{e}")
@@ -663,8 +680,8 @@ class AgentS2ProvisionnemntSante:
                 text=[f"{v:.0f}k€" for v in ibnr_vals], textposition="outside",
                 textfont=dict(color=BLANC,size=9), showlegend=False),
                 row=1, col=2)
-            l = dict(**LAYOUT_BASE)
-            l.update(dict(
+            layout = dict(**LAYOUT_BASE)
+            layout.update(dict(
                 title=dict(text="G3 — IBNR Santé par poste (cadences spécifiques santé)",
                            font=dict(color=OR,size=12),x=0.01),
                 annotations=[dict(
@@ -672,7 +689,7 @@ class AgentS2ProvisionnemntSante:
                     xref="paper",yref="paper",x=0.01,y=-0.22,
                     font=dict(color=GRIS,size=9),showarrow=False)],
             ))
-            fig.update_layout(**l)
+            fig.update_layout(**layout)
             gph['ibnr_par_poste'] = fig
         except Exception as e:
             self.logger.warning(f"G3:{e}")
@@ -692,8 +709,8 @@ class AgentS2ProvisionnemntSante:
                     hovertemplate=f"<b>{h['hypothese']}</b><br>{h['valeur']}<extra></extra>",
                 ))
             cg = VERT if all(h['statut']=='VALIDÉE' for h in hyp) else (ROUGE if any(h['statut']=='NON VALIDÉE' for h in hyp) else AMBRE)
-            l = dict(**LAYOUT_BASE)
-            l.update(dict(
+            layout = dict(**LAYOUT_BASE)
+            layout.update(dict(
                 title=dict(text="G4 — Scorecard Provisionnement Santé",
                            font=dict(color=cg,size=12),x=0.01),
                 xaxis=dict(range=[0,1.6],visible=False),
@@ -704,10 +721,64 @@ class AgentS2ProvisionnemntSante:
                     xref="paper",yref="paper",x=0.01,y=-0.22,
                     font=dict(color=GRIS,size=9),showarrow=False)],
             ))
-            fig.update_layout(**l)
+            fig.update_layout(**layout)
             gph['scorecard_s2'] = fig
         except Exception as e:
             self.logger.warning(f"G4:{e}")
+
+        # G5 — Courbe cadence de règlement santé
+        try:
+            ultime = triangle['ultime']
+            mois   = [0, 1, 2, 3]
+            pct_reg = [0.0, 60.0, 85.0, 97.0]
+            vals_k  = [0.0,
+                       triangle['mois_1']/1e3,
+                       triangle['mois_2']/1e3,
+                       triangle['mois_3']/1e3]
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=mois, y=vals_k, mode='lines+markers', name='Réglé (k€)',
+                line=dict(color=OR, width=2.5), marker=dict(size=8, color=OR),
+                hovertemplate='Mois %{x} → %{y:.0f}k€<extra></extra>',
+            ))
+            fig.add_trace(go.Scatter(
+                x=mois, y=pct_reg, mode='lines+markers', name='% réglé',
+                line=dict(color=VERT, width=2, dash='dot'),
+                marker=dict(size=7, color=VERT), yaxis='y2',
+                hovertemplate='Mois %{x} → %{y:.0f}%<extra></extra>',
+            ))
+            fig.add_hline(y=ultime/1e3, line_dash='dash', line_color=BLEU,
+                          line_width=1.5,
+                          annotation_text=f'Ultime = {ultime/1e3:.0f}k€',
+                          annotation_font=dict(color=BLEU, size=9))
+            fig.update_layout(
+                paper_bgcolor=NAVY, plot_bgcolor=NAVY_L,
+                font=dict(family='Inter, Arial', color=BLANC, size=11),
+                margin=dict(l=16,r=60,t=60,b=60), height=300,
+                hoverlabel=dict(bgcolor=NAVY_LL, bordercolor=OR,
+                                font_size=12, font_color=BLANC),
+                title=dict(text='G5 — Cadence de règlement santé (3 mois)',
+                           font=dict(color=OR,size=12),x=0.01),
+                xaxis=dict(tickvals=[0,1,2,3],
+                           ticktext=['J0','M1','M2','M3'],
+                           tickfont=dict(color=BLANC), showgrid=False,
+                           title='Mois'),
+                yaxis=dict(title='Montant réglé (k€)',
+                           tickfont=dict(color=OR), showgrid=False),
+                yaxis2=dict(title='% réglé', overlaying='y', side='right',
+                            range=[0,110], tickfont=dict(color=VERT),
+                            showgrid=False),
+                legend=dict(x=0.02, y=0.98, font=dict(color=BLANC,size=9),
+                            bgcolor='rgba(0,0,0,0)'),
+                annotations=[dict(
+                    text='💡 Santé : 97% des sinistres liquidés en 3 mois '
+                         '(vs 18-36 mois IARD, 60+ mois prévoyance).',
+                    xref='paper',yref='paper',x=0.01,y=-0.22,
+                    font=dict(color=GRIS,size=9),showarrow=False)],
+            )
+            gph['cadence_reglement'] = fig
+        except Exception as e:
+            self.logger.warning(f'G5:{e}')
 
         return gph
 
