@@ -74,9 +74,10 @@ def r_coord(pipeline):
 
 # ── T1 : Succès et structure ───────────────────────────────────────────────────
 def test_coord_success(r_coord):
-    assert r_coord["success"] is True
-    assert r_coord["erreur"] is None
-    assert r_coord["statut_rag"] in ("VERT", "AMBRE", "ROUGE")
+    """Succès et structure du retour — toutes les clés standard présentes."""
+    assert r_coord["success"] is True, "SP-Coord doit réussir"
+    assert r_coord["erreur"] is None, "Pas d'erreur attendue"
+    assert r_coord["statut_rag"] in ("VERT", "AMBRE", "ROUGE"), "RAG invalide"
     for cle in ["be_consolide", "scr_consolide", "ratio_scr_pct",
                 "diversification", "rho_eiopa", "hypotheses", "commentaire"]:
         assert cle in r_coord, f"Clé manquante : {cle}"
@@ -130,13 +131,14 @@ def test_coord_hypotheses(r_coord):
     hyp = r_coord["hypotheses"]
     assert len(hyp) == 3, f"Attendu 3 hypothèses, obtenu {len(hyp)}"
     ids = [h["id"] for h in hyp]
-    assert "H1" in ids and "H2" in ids and "H3" in ids
+    assert "H1" in ids and "H2" in ids and "H3" in ids, f"IDs manquants : {ids}"
 
 
 # ── T7 : Erreur si S3 absent ──────────────────────────────────────────────────
 def test_coord_erreur_sans_s3(pipeline):
+    """SP-Coord doit retourner success=False si result_s3 est absent."""
     _, r_p4, _ = pipeline
     coord = AgentSPCoord(verbose=False)
     r = coord.run(result_s3=None, result_p4=r_p4, generer_graphiques=False)
-    assert r["success"] is False
-    assert r["erreur"] is not None
+    assert r["success"] is False, "Doit échouer sans S3"
+    assert r["erreur"] is not None, "Message d'erreur attendu"
