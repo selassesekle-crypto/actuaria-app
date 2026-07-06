@@ -536,9 +536,10 @@ class AgentSPAlm:
         LCR = Actifs liquides / Sorties nettes 30 jours ≥ 100%.
 
         Actifs liquides : monétaire + OAT souverains (liquides < 30j).
-        Sorties nettes 30j : PSAP santé/30 (paiements mensuels santé)
-                              + PSAP prévoyance/12 (sinistres prévoyance mensuels)
-                              + charges opérationnelles estimées.
+        Sorties nettes 30j :
+          · Santé       : PSAP_santé / 12  (provisions annuelles → mensualités)
+          · Prévoyance  : (PSAP_prév + PM_rentes×5%) / 12 (paiements mensuels)
+          · Charges op. : TP_total × 2% / 12
 
         Source : Art. L212-7 CSS + ACPR circulaire liquidité 2023.
         """
