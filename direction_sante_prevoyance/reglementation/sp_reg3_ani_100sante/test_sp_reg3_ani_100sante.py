@@ -79,8 +79,10 @@ def test_reg3_100_sante_verifie(r_s1_collectif):
                  inclure_100pct_sante=True, generer_graphiques=False)
     s100 = r["sante_100_detail"]
     assert s100 != {}, "100% Santé doit être vérifié"
-    assert "optique_rac0" in s100, "Optique RAC 0 doit être vérifié"
-    assert "dentaire_rac0" in s100, "Dentaire RAC 0 doit être vérifié"
+    # sante_100_detail contient un sous-dict 'detail' avec les postes
+    detail = s100.get("detail", s100)
+    assert "optique_rac0" in detail, "Optique RAC 0 doit être dans detail"
+    assert "dentaire_rac0" in detail, "Dentaire RAC 0 doit être dans detail"
     assert r["sante_100_conforme"] is not None
 
 
