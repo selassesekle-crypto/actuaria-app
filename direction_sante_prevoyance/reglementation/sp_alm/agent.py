@@ -53,7 +53,7 @@ import logging
 import warnings
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 import numpy as np
 
@@ -66,7 +66,6 @@ logging.basicConfig(
 
 try:
     import plotly.graph_objects as go
-    from plotly.subplots import make_subplots
     PLOTLY_OK = True
 except ImportError:
     PLOTLY_OK = False
@@ -546,9 +545,10 @@ class AgentSPAlm:
         actifs_liquides = actif["actifs_liquides"]
 
         # Sorties nettes 30j
-        # Santé : remboursements rapides (~mensuel)
-        sorties_sante_30j  = passif["psap_sante"] / 30.0
-        # Prévoyance : paiements mensuels ITT + rentes
+        # Santé : PSAP représente les provisions annuelles → sorties mensuelles = /12
+        # Source : cadence règlement frais médicaux — DREES 2023 (remboursements mensuels)
+        sorties_sante_30j  = passif["psap_sante"] / 12.0
+        # Prévoyance : paiements mensuels ITT + 5% des PM rentes (mensualités)
         sorties_prev_30j   = (passif["psap_prevoyance"] + passif["pm_rentes_ip"] * 0.05) / 12.0
         # Charges opérationnelles estimées = 2% des provisions / 12
         charges_30j        = passif["tp_total"] * 0.02 / 12.0
