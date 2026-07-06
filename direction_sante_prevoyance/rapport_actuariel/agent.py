@@ -355,8 +355,8 @@ class AgentSPRapportActuariel:
             if fpp == 0:
                 fpp = float(r_coord.get("fonds_propres", 0))
         else:
-            # Calcul direct
-            rho = 0.25
+            # Calcul direct — ρ=0.25 EIOPA Annexe IV RD 2015/35
+            rho = 0.25   # corrélation NSLT/SLT — Annexe IV RD 2015/35
             scr_consolide = float(np.sqrt(
                 scr_sante**2 + 2*rho*scr_sante*scr_prev + scr_prev**2
             )) if scr_sante or scr_prev else 0
