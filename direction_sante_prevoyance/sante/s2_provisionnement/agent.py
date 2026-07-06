@@ -148,8 +148,17 @@ class AgentS2ProvisionnemntSante:
 
             # ── 8. BE SANTÉ (pour S3 Binta) ───────────────────────────────────
             be_sante   = psap_total
-            risk_adj   = be_sante * 0.05
-            tp_sante   = be_sante + risk_adj
+            # Risk Adjustment IFRS 17 — méthode CoC (coût du capital)
+            # RA = SCR_prévu × CoC_rate × duration_moyenne
+            # Proxy : SCR_santé ≈ σ_primes × PA × 3 (formule std EIOPA)
+            # CoC_rate EIOPA = 6% | duration santé ≈ 0.5 an (règlement rapide)
+            _scr_proxy  = 0.05 * src['primes_acquises'] * 3   # SCR proxy
+            _coc_rate   = 0.06   # EIOPA CoC rate
+            _duration_s = 0.5   # duration santé (mois) en années
+            risk_adj    = _scr_proxy * _coc_rate * _duration_s
+            # Floor : RA ≥ 1% BE (cohérence avec pratique marché)
+            risk_adj    = max(risk_adj, be_sante * 0.01)
+            tp_sante    = be_sante + risk_adj
 
             # ── 9. TRIANGLE SANTÉ SIMPLIFIÉ ───────────────────────────────────
             triangle = self._triangle_sante(src, psap_postes, ibnr_postes)
