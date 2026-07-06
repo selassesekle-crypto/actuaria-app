@@ -190,10 +190,15 @@ class AgentSPReg3ANI100Sante:
     def _extraire(self, result_s1):
         if not result_s1 or not result_s1.get("success"):
             raise ValueError("result_s1 requis et success=True")
-        postes = result_s1.get("sinistralite_par_poste", {})
-        if not postes:
-            # Fallback depuis sorties_s2
-            postes = result_s1.get("sorties_s2", {}).get("sinistralite_par_poste", {})
+        # S1 retourne r["postes"] — dict de dicts avec charge_mutuelle, frequence_an...
+        # Ne pas confondre avec sorties_s2["sinistralite_par_poste"] qui est un dict de floats
+        postes = result_s1.get("postes", {})
+        if not postes or not isinstance(next(iter(postes.values()), None), dict):
+            postes = {}  # postes vides → vérification ANI impossible
+            self.logger.warning(
+                "Postes S1 absents ou format incorrect — "
+                "ANI/100%S vérifiés sur seuils mais charge_mutuelle = 0"
+            )
         return {
             "postes":         postes,
             "garantie_niveau":result_s1.get("garantie_niveau", "confort"),
