@@ -267,9 +267,16 @@ class AgentSPStressTestingNaomie:
         choc_itt = scen.get("choc_itt_pct", 0)
         choc_ces = scen.get("choc_cessation", 0)
         # ITT : augmentation des arrêts
-        delta_be_itt = src["be_prev"] * 0.30 * choc_itt * duree_frac
-        # Cessation : maintien des arrêts → charge rentes plus longue
-        delta_be_ces = src["be_prev"] * 0.15 * choc_ces * duree_frac
+        # Proxy : 30% du BE prévoyance est constitué de PSAP_ITT
+        # (source : décomposition P3 — PSAP_ITT / BE_prév ≈ 20-35% selon portefeuille)
+        # Le choc s'applique sur cette portion sensible aux nouveaux arrêts
+        PCT_BE_ITT = 0.30   # proportion BE prév sensible aux chocs ITT
+        delta_be_itt = src["be_prev"] * PCT_BE_ITT * choc_itt * duree_frac
+        # Cessation : maintien des arrêts → allongement durées
+        # Proxy : 15% du BE prévoyance est sensible aux taux de cessation
+        # (correspond à la part de PSAP en phase de consolidation)
+        PCT_BE_CES = 0.15   # proportion BE prév sensible au taux de cessation
+        delta_be_ces = src["be_prev"] * PCT_BE_CES * choc_ces * duree_frac
         # Décès supplémentaires
         choc_dc = scen.get("choc_dc_pct", 0)
         delta_be_dc = src["pa_prev"] * choc_dc * duree_frac
