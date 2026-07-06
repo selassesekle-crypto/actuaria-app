@@ -772,6 +772,131 @@ class AgentSPReg1Solvabilite2:
             title=dict(text="Solvabilité S2 — Santé-Prévoyance", font=dict(color=OR, size=13)))
         gph["ratio_scr_s2"] = fig2
 
+        # G3 — Radar QRT S.05.01 : 4 lignes × 2 colonnes (NSLT / SLT)
+        # Reconstruit depuis src — mêmes valeurs que _generer_qrt_s05
+        try:
+            sin_sante = src["be_sante"] * 0.80
+            sin_prev  = src["be_prev"]  * 0.70
+            dep_sante = src["pa_sante"] * 0.18
+            dep_prev  = src["pa_prev"]  * 0.20
+            r200_s    = src["be_sante"] + src["ra_sante"]
+            r200_p    = src["be_prev"]  + src["ra_prev"]
+
+            # 4 postes QRT S.05.01
+            labels_qrt = [
+                "R0010 Primes",
+                "R0050 Sinistres",
+                "R0090 Dépenses",
+                "R0200 Provisions",
+                "R0010 Primes",   # fermeture du radar
+            ]
+            vals_nslt = [
+                src["pa_sante"],
+                sin_sante,
+                dep_sante,
+                r200_s,
+                src["pa_sante"],  # fermeture
+            ]
+            vals_slt = [
+                src["pa_prev"],
+                sin_prev,
+                dep_prev,
+                r200_p,
+                src["pa_prev"],   # fermeture
+            ]
+
+            # Normalisation : chaque valeur / max(NSLT, SLT) pour le poste
+            # afin que les deux axes soient comparables visuellement
+            maxima = [
+                max(src["pa_sante"], src["pa_prev"]),
+                max(sin_sante, sin_prev),
+                max(dep_sante, dep_prev),
+                max(r200_s, r200_p),
+                max(src["pa_sante"], src["pa_prev"]),
+            ]
+            # Éviter division par zéro
+            maxima = [m if m > 0 else 1.0 for m in maxima]
+
+            vals_nslt_norm = [v / m for v, m in zip(vals_nslt, maxima)]
+            vals_slt_norm  = [v / m for v, m in zip(vals_slt,  maxima)]
+
+            fig3 = go.Figure()
+
+            # Trace NSLT (Santé)
+            fig3.add_trace(go.Scatterpolar(
+                r=vals_nslt_norm,
+                theta=labels_qrt,
+                fill="toself",
+                fillcolor=f"rgba(52,152,219,0.18)",   # BLEU transparent
+                line=dict(color=BLEU, width=2),
+                name="NSLT — Santé",
+                hovertemplate=(
+                    "<b>%{theta}</b><br>"
+                    "NSLT : %{customdata:,.0f}€<extra></extra>"
+                ),
+                customdata=vals_nslt,
+            ))
+
+            # Trace SLT (Prévoyance)
+            fig3.add_trace(go.Scatterpolar(
+                r=vals_slt_norm,
+                theta=labels_qrt,
+                fill="toself",
+                fillcolor=f"rgba(155,89,182,0.18)",   # VIOLET transparent
+                line=dict(color=VIOLET, width=2),
+                name="SLT — Prévoyance",
+                hovertemplate=(
+                    "<b>%{theta}</b><br>"
+                    "SLT : %{customdata:,.0f}€<extra></extra>"
+                ),
+                customdata=vals_slt,
+            ))
+
+            fig3.update_layout(
+                **LAYOUT_BASE,
+                height=360,
+                title=dict(
+                    text="G3 — QRT S.05.01 : NSLT Santé vs SLT Prévoyance",
+                    font=dict(color=OR, size=13), x=0.01,
+                ),
+                polar=dict(
+                    bgcolor=NAVY_L,
+                    angularaxis=dict(
+                        tickfont=dict(color=BLANC, size=10),
+                        linecolor=GRIS,
+                        gridcolor="rgba(138,154,176,0.20)",
+                    ),
+                    radialaxis=dict(
+                        visible=True,
+                        range=[0, 1.05],
+                        tickfont=dict(color=GRIS, size=8),
+                        tickformat=".0%",
+                        gridcolor="rgba(138,154,176,0.15)",
+                        linecolor="rgba(138,154,176,0.20)",
+                    ),
+                ),
+                legend=dict(
+                    x=0.80, y=1.10,
+                    font=dict(color=BLANC, size=10),
+                    bgcolor="rgba(0,0,0,0)",
+                    orientation="v",
+                ),
+                annotations=[dict(
+                    text=(
+                        "💡 Valeurs normalisées par poste — "
+                        "100% = max(NSLT, SLT) pour chaque ligne QRT S.05.01."
+                    ),
+                    xref="paper", yref="paper",
+                    x=0.01, y=-0.08,
+                    font=dict(color=GRIS, size=9),
+                    showarrow=False,
+                )],
+            )
+            gph["radar_qrt_s05"] = fig3
+
+        except Exception as e:
+            self.logger.warning(f"G3 radar QRT : {e}")
+
         return gph
 
     # =========================================================================
