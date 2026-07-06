@@ -428,12 +428,41 @@ class AgentP3ProvisionnemntPrevoyance:
                 raise ValueError(
                     f"triangle_itt doit être 2D, min 3×3. Reçu : {C.shape}"
                 )
-            C     = np.maximum(C, 0.0)
-            mode  = "réel"
+            C      = np.maximum(C, 0.0)
+            mode   = "réel"
             ultime = float(np.max(C))
+            n_v, m_v = C.shape
+
+            # ── Validation zone connue ─────────────────────────────────────────
+            # Pour chaque ligne i, la dernière colonne connue est k_i = min(n-i-1, m-1).
+            # Si C[i, k_i] == 0, l'ultimate projeté sera 0 → IBNR = 0 → sous-provisionnement.
+            # Ce cas arrive quand :
+            #   (a) le triangle est n > m et des cellules de la zone connue manquent ;
+            #   (b) la ligne i n'a pas encore de sinistres (portefeuille très récent).
+            cellules_zero = []
+            for i_v in range(n_v):
+                k_v = min(n_v - i_v - 1, m_v - 1)
+                if C[i_v, k_v] == 0.0:
+                    cellules_zero.append(i_v)
+
+            if cellules_zero:
+                self.logger.warning(
+                    f"Triangle ITT {n_v}×{m_v} : cellules de la zone connue à zéro "
+                    f"pour les années i={cellules_zero}. "
+                    f"L'ultimate et l'IBNR de ces années seront nuls. "
+                    f"Vérifier que le triangle est complet (toutes cellules i+j < n renseignées)."                )
+
+            # ── Avertissement triangle rectangulaire n > m ─────────────────────
+            if n_v > m_v:
+                self.logger.warning(
+                    f"Triangle ITT rectangulaire n={n_v} > m={m_v}. "
+                    f"Les années i <= {n_v - m_v} ont une zone connue plus large que m colonnes. "
+                    f"Vérifier que toutes les cellules C[i,j] pour i+j < n et j < m sont renseignées."                )
+
             self.logger.info(
-                f"Triangle réel {C.shape[0]}×{C.shape[1]}, "
+                f"Triangle réel {n_v}×{m_v}, "
                 f"ultime max={ultime:,.0f}€"
+                + (f", {len(cellules_zero)} ligne(s) à zéro" if cellules_zero else "")
             )
         else:
             C, ultime = self._triangle_synthetique(src)
