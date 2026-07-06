@@ -99,10 +99,16 @@ TAUX_IP_TD88 = {
     25:0.0008, 30:0.0012, 35:0.0018, 40:0.0028,
     45:0.0045, 50:0.0072, 55:0.0115, 60:0.0180,
 }
+# Source : TH 00-02 — Tables de mortalité réglementaires françaises
+#   BCAC / INSEE — taux annuels de décès toutes causes, hommes
+#   Base : population assurée France 2000-2002
 QX_TH0002 = {
     25:0.000730, 30:0.000860, 35:0.001180, 40:0.001800,
     45:0.002980, 50:0.005040, 55:0.008640, 60:0.014500, 65:0.023800,
 }
+# Facteurs CSP sur sinistralité ITT — source BCAC 2019
+# Ouvriers : +35% vs employés | Cadres : -25% | Cadres sup : -40%
+# Reflète conditions de travail et exposition au risque arrêt
 FACT_CSP_ITT = {
     "ouvrier":   1.35, "employe": 1.00,
     "cadre":     0.75, "cadre_sup": 0.60,
