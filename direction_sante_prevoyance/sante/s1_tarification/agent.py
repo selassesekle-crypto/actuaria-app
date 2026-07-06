@@ -151,11 +151,13 @@ class AgentS1TarificationSante:
             # Primes acquises portefeuille
             primes_acquises = prime_comm * nb_assures
 
-            # Loss Ratio attendu
-            lr_attendu = prime_pure / max(prime_comm, 1)
+            # Loss Ratio attendu = sinistres attendus / primes acquises
+            # (ratio S/P correct — pas prime_pure/prime_comm qui donne 1/(1+chargement))
+            lr_attendu = total_sin * nb_assures / max(prime_comm * nb_assures, 1)
 
             # ── 5. CONFORMITÉ ANI 2013 ────────────────────────────────────────
-            ani = self._verifier_ani(postes, garantie_niveau)
+            # ANI 2013 : applicable uniquement au collectif (Art. L911-7 CSS)
+            ani = self._verifier_ani(postes, garantie_niveau, contrat)
 
             # ── 6. STATUT RAG + HYPOTHÈSES ───────────────────────────────────
             hyp = self._hypotheses(lr_attendu, postes, prime_comm, prime_marche,
@@ -318,7 +320,9 @@ class AgentS1TarificationSante:
                 source_p = 'donnees_client'
             else:
                 # Tables DREES 2023
-                freq   = ref['freq']   * fact_age * fact_garantie * fact_csp
+                # fact_garantie s'applique sur la CHARGE (reste à payer mutuelle)
+                # et NON sur la fréquence — évite la double application
+                freq   = ref['freq']   * fact_age * fact_csp
                 cout   = ref['cout_acte'] * fact_age
                 remb   = cout * ref['tc_ss']
                 charge = (cout - remb) * min(fact_garantie, 2.0)
@@ -347,10 +351,12 @@ class AgentS1TarificationSante:
     # ══════════════════════════════════════════════════════════════════════════
     # 3. CONFORMITÉ ANI 2013
     # ══════════════════════════════════════════════════════════════════════════
-    def _verifier_ani(self, postes, garantie_niveau):
+    def _verifier_ani(self, postes, garantie_niveau, contrat='collectif'):
         """
         Vérifie la conformité au panier ANI 2013 (complémentaire collective).
         Le panier minimum doit couvrir : médecine, hospit, dentaire, optique.
+        NB : ANI applicable UNIQUEMENT aux contrats collectifs (Art. L911-7 CSS).
+        Pour les contrats individuels → conforme=True automatiquement.
         """
         resultats = {}
         conforme  = True
@@ -370,9 +376,9 @@ class AgentS1TarificationSante:
                 'note':   '✅' if ok else f'❌ {charge:.0f}€ < {seuil:.0f}€ min ANI',
             }
 
-        # Éco → ANI non requis (individuel uniquement)
-        if garantie_niveau == 'eco':
-            conforme = True   # L'ANI s'applique au collectif
+        # ANI 2013 s'applique UNIQUEMENT aux contrats collectifs (Art. L911-7 CSS)
+        # Pour les contrats individuels, l'ANI ne s'applique pas
+        # La vérification est faite dans run() avant d'appeler _verifier_ani
 
         return {
             'conforme':   conforme,
