@@ -110,9 +110,10 @@ class AgentSPReg2IFRS17:
 
         try:
             src = self._extraire(result_s3, result_p4, prime_charged)
+            pa_total_src = src['pa_sante'] + src['pa_prev']
             self.logger.info(
                 f"[{aid}] SP-Reg2 IFRS 17 | BE={src['be_total']:,.0f}€ | "
-                f"PA={src['pa_total']:,.0f}€ | r_actif={taux_rendement_actif:.2%}"
+                f"PA={pa_total_src:,.0f}€ | r_actif={taux_rendement_actif:.2%}"
             )
 
             # ── 1. CLASSIFICATION PAA vs GMM ─────────────────────────────────
