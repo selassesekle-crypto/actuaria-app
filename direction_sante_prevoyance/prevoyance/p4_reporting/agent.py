@@ -61,15 +61,22 @@ LAYOUT_BASE = dict(paper_bgcolor=NAVY, plot_bgcolor=NAVY_L,
 
 # ── Paramètres EIOPA Prévoyance ───────────────────────────────────────────────
 # SCR Invalidité (module Vie — Art. 145 Delegated Regulation)
-CHOC_MORBIDITE_HAUSSE  = 0.35   # +35% taux incidence ITT/IP
-CHOC_CESSATION_BAISSE  = 0.20   # -20% taux de cessation (moins de guérisons)
-COC_RA                 = 0.08   # Risk Adjustment prévoyance = 8% BE
-MCR_PLANCHER_ABS       = 3_700_000.0   # plancher absolu prévoyance S2 Art.129 (≠ 2.5M santé)
-# NB : ce plancher s'applique au niveau de l'entreprise, pas par contrat.
-# En test mono-assuré ou petit portefeuille → ROUGE MCR = plancher trop élevé,
-# pas une insuffisance de capital réelle. Fournir fonds_propres réels.
-MCR_ALPHA_PREV         = 0.0338   # coefficient primes prévoyance
-MCR_BETA_PREV          = 0.0191   # coefficient provisions prévoyance
+# ── Chocs SCR Invalidité — Règlement Délégué (UE) 2015/35 Art.145 ────────
+# Source : Art.145 RD 2015/35 — Module Santé SLT (invalidité-morbidité)
+CHOC_MORBIDITE_HAUSSE  = 0.35   # +35% taux incidence ITT/IP — Art.145 §2(a)
+CHOC_CESSATION_BAISSE  = 0.20   # -20% taux cessation (moins guérisons) — Art.145 §2(b)
+
+# ── MCR Prévoyance — Art.252 RD 2015/35 ──────────────────────────────────
+# Source : Art.252 RD 2015/35 | Art.129 §1(d) Directive S2
+MCR_PLANCHER_ABS       = 3_700_000.0  # plancher absolu prévoyance — Art.129 S2
+# NB : plancher niveau entreprise — ROUGE sur petit portefeuille = normal
+MCR_ALPHA_PREV         = 0.0338   # coefficient primes prévoyance — Art.252
+MCR_BETA_PREV          = 0.0191   # coefficient provisions prévoyance — Art.252
+
+# ── Risk Adjustment IFRS 17 ───────────────────────────────────────────────
+# Méthode CoC utilisée dans P3 — P4 réutilise le RA de P3 via sorties_p4
+# COC_RA ci-dessous = fallback si P3 non disponible
+COC_RA                 = 0.08   # fallback RA = 8% BE (non utilisé si P3 fourni)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -112,7 +119,10 @@ class AgentP4ReportingPrevoyance:
 
             # ── 2. PROVISIONS TECHNIQUES PRÉVOYANCE ──────────────────────────
             be_prev  = src['be_prevoyance']
-            risk_adj = be_prev * COC_RA
+            # RA : priorité au calcul CoC de P3 (IFRS 17 conforme)
+            # Fallback : COC_RA × BE si P3 non fourni
+            ra_p3    = src.get('risk_adjustment_p3', 0)
+            risk_adj = ra_p3 if ra_p3 > 0 else max(be_prev * COC_RA, be_prev * 0.03)
             tp_prev  = be_prev + risk_adj
 
             # ── 3. SCR INVALIDITÉ EIOPA ───────────────────────────────────────
