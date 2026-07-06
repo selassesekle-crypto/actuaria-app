@@ -126,11 +126,16 @@ class AgentP3ProvisionnemntPrevoyance:
             # RA = SCR_morbidité × CoC_rate × duration_moyenne
             # SCR_morbidité ≈ 35% × BE (choc EIOPA S2 Art.145 — morbidité +35%)
             # CoC_rate EIOPA = 6% | duration prévoyance ≈ 5 ans (rentes IP)
+            # SCR morbidité proxy = 35% × BE (choc EIOPA Art.145)
             _scr_morb  = 0.35 * be_prev
-            _coc_prev  = 0.06
-            _dur_prev  = 5.0
-            risk_adj   = _scr_morb * _coc_prev * _dur_prev / max(_dur_prev, 1)
-            # Floor : RA ≥ 3% BE (risque long terme prévoyance > santé)
+            _coc_prev  = 0.06   # EIOPA CoC rate
+            # Duration : 1 an seulement (proxy annuel)
+            # RA = SCR × CoC = 0.35 × BE × 6% = 2.1% BE par an
+            # Sur duration 5 ans : RA_total serait 10.5% BE
+            # Mais IFRS 17 RA s'exprime en une fois à la date d'arrêté
+            # → on utilise le proxy annuel = SCR × CoC
+            risk_adj   = _scr_morb * _coc_prev
+            # Floor : RA ≥ 3% BE (risque long terme — pratique marché)
             risk_adj   = max(risk_adj, be_prev * 0.03)
             tp_prev    = be_prev + risk_adj
             prov_tot   = be_prev + prec
