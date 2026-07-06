@@ -197,7 +197,7 @@ class AgentP3ProvisionnemntPrevoyance:
                     'provision_totale': round(prov_tot, 2),
                     'loss_ratio':       round(lr, 4),
                     'primes_acquises':  src['primes_acquises'],
-                    'fonds_propres':    src['primes_acquises'] * 1.20,
+                    # NB : fonds_propres NON estimés ici — P4 les reçoit en paramètre
                 },
 
                 # ── Standard ActuarIA ────────────────────────────────────────
