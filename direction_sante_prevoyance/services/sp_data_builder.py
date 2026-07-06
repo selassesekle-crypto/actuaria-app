@@ -531,16 +531,23 @@ class SPDataBuilder:
         # Valider l'âge
         if "age" in df.columns:
             df["age"] = pd.to_numeric(df["age"], errors="coerce")
+            # 1. Remplir les NaN par la médiane AVANT le masque
+            age_valides = df["age"].dropna()
+            age_median = float(age_valides.median()) if len(age_valides) > 0 else 40.0
+            n_nan = int(df["age"].isna().sum())
+            if n_nan > 0:
+                df.loc[df["age"].isna(), "age"] = age_median
+                rapport["infos"].append(
+                    f"{n_nan} âge(s) manquant(s) remplacé(s) par la médiane ({age_median:.0f} ans)"
+                )
+            # 2. Masque sur les valeurs hors plage
             masque_age = df["age"].between(AGE_MIN, AGE_MAX)
-            n_age_invalide = (~masque_age & df["age"].notna()).sum()
+            n_age_invalide = int((~masque_age).sum())
             if n_age_invalide > 0:
                 rapport["alertes"].append(
                     f"⚠️ {n_age_invalide} ligne(s) avec âge hors [{AGE_MIN},{AGE_MAX}] — supprimées"
                 )
-            # Remplir les âges NaN avec la médiane (meilleur que suppression)
-            age_median = float(df["age"][masque_age].median()) if masque_age.any() else 40.0
-            df.loc[df["age"].isna(), "age"] = age_median
-            masque_valide &= (masque_age | df["age"].isna())
+            masque_valide &= masque_age
 
         # Valider le salaire
         if "salaire_brut" in df.columns:
