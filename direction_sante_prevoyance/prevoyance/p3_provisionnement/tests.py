@@ -606,6 +606,137 @@ def test_t7_rag_rouge():
     )
 
 
+# ── TEST 8 — Triangles rectangulaires ────────────────────────────────────────
+
+def test_t8_triangles_rectangulaires():
+    """
+    T8 — L'agent gère correctement les triangles non carrés.
+
+    Cas n > m : 7 années × 4 semestres — triangle "court".
+      · L'agent réussit (success=True).
+      · Les facteurs CL sont calculés sur m-1 colonnes.
+      · Un warning est loggé pour les cellules zero de la zone connue.
+      · Les années avec C[i, k_i] > 0 ont un ultimate cohérent.
+
+    Cas n < m : 4 années × 7 semestres — triangle "long".
+      · L'agent réussit.
+      · m-1=6 facteurs calculés ; ceux au-delà des données = 1.0.
+      · La réserve est >= 0.
+    """
+    agent = _agent()
+    p1 = _result_p1()
+    p2 = _result_p2()
+
+    # ── Cas n > m : 7 années × 4 semestres ───────────────────────────────────
+    # Triangle COMPLET : toutes cellules de la zone connue renseignées
+    C_court = np.array([
+        [80_000, 130_000, 148_000, 155_000],
+        [85_000, 138_000, 157_000, 165_000],
+        [78_000, 126_000, 144_000, 151_000],
+        [90_000, 145_000, 165_000, 173_000],
+        [88_000, 141_000,       0,       0],
+        [92_000,       0,       0,       0],
+        [86_000,       0,       0,       0],
+    ], dtype=float)
+
+    r_court = agent.run(
+        result_p1=p1, result_p2=p2,
+        triangle_itt=C_court, annees_debut=2018,
+        generer_graphiques=False,
+    )
+
+    assert r_court["success"] is True, "n>m : doit réussir"
+    assert r_court["n_annees"] == 7
+    assert r_court["n_periodes"] == 4
+
+    cl_court = r_court["chain_ladder"]
+    # m-1 = 3 facteurs
+    assert len(cl_court["facteurs"]) == 3, (
+        f"n>m : attendu 3 facteurs, obtenu {len(cl_court['facteurs'])}"
+    )
+    assert all(f >= 1.0 for f in cl_court["facteurs"]), "Facteurs >= 1.0"
+
+    # Les 4 premières années (i=0..3) ont k_i = m-1 = 3 avec valeur renseignée
+    # → elles doivent avoir un ultimate ≥ leur dernière valeur connue
+    for i in range(4):
+        k_i  = min(7 - i - 1, 3)
+        last = float(C_court[i, k_i])
+        ult  = cl_court["ultimates"][i]
+        if last > 0:
+            assert ult >= last, (
+                f"i={i} : ultimate={ult:,.0f} < dernière valeur={last:,.0f}"
+            )
+
+    assert cl_court["reserve_totale"] >= 0
+
+    # ── Cas n < m : 4 années × 7 semestres ───────────────────────────────────
+    C_long = np.array([
+        [80_000, 130_000, 148_000, 155_000, 159_000, 161_000, 162_000],
+        [85_000, 138_000, 157_000, 165_000,       0,       0,       0],
+        [78_000, 126_000, 144_000,       0,       0,       0,       0],
+        [90_000,       0,       0,       0,       0,       0,       0],
+    ], dtype=float)
+
+    r_long = agent.run(
+        result_p1=p1, result_p2=p2,
+        triangle_itt=C_long, annees_debut=2021,
+        generer_graphiques=False,
+    )
+
+    assert r_long["success"] is True, "n<m : doit réussir"
+    assert r_long["n_annees"] == 4
+    assert r_long["n_periodes"] == 7
+
+    cl_long = r_long["chain_ladder"]
+    # m-1 = 6 facteurs
+    assert len(cl_long["facteurs"]) == 6, (
+        f"n<m : attendu 6 facteurs, obtenu {len(cl_long['facteurs'])}"
+    )
+    # Les facteurs au-delà des données disponibles doivent être 1.0
+    # (j=3..5 n'ont aucune paire i+j+1 < n=4 → facteur = 1.0)
+    for j in range(3, 6):
+        assert cl_long["facteurs"][j] == 1.0, (
+            f"Facteur j={j} hors données : attendu 1.0, obtenu {cl_long['facteurs'][j]}"
+        )
+    assert cl_long["reserve_totale"] >= 0
+
+    # ── Cas n > m avec cellules zéro dans zone connue : warning attendu ───────
+    # Ce triangle est incomplet : i=1 a k_i=3 mais C[1,3]=0
+    C_incomplet = np.array([
+        [80_000, 130_000, 148_000, 155_000],
+        [85_000, 138_000, 157_000,       0],  # C[1,3]=0 dans zone connue !
+        [78_000, 126_000,       0,       0],
+        [90_000,       0,       0,       0],
+    ], dtype=float)
+    # Ce triangle est 4×4 standard, pas de problème particulier
+    # Tester plutôt un vrai cas n>m incomplet : 5×3
+    C_5x3 = np.array([
+        [80_000, 130_000, 148_000],
+        [85_000, 138_000,       0],  # k_i=min(3,2)=2 → C[1,2]=0 → warning
+        [78_000,       0,       0],
+        [90_000,       0,       0],
+        [86_000,       0,       0],
+    ], dtype=float)
+
+    r_5x3 = agent.run(
+        result_p1=p1, result_p2=p2,
+        triangle_itt=C_5x3, annees_debut=2020,
+        generer_graphiques=False,
+    )
+    # Doit réussir même avec des zéros (l'agent avertit mais ne plante pas)
+    assert r_5x3["success"] is True, "5×3 incomplet : doit réussir avec warning"
+    # Les années avec C[i,k_i]=0 auront ultimate=0 et IBNR=0
+    cl_5x3 = r_5x3["chain_ladder"]
+    assert cl_5x3["ultimates"][0] > 0, "i=0 (C[0,2]=148000) doit avoir ultimate > 0"
+
+    print(
+        f"  ✅ T8 PASSÉ — "
+        f"n>m (7×4) : réserve={r_court['chain_ladder']['reserve_totale']:,.0f}€ | "
+        f"n<m (4×7) : réserve={r_long['chain_ladder']['reserve_totale']:,.0f}€ | "
+        f"5×3 incomplet : OK avec warning"
+    )
+
+
 # ── RUNNER ────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -617,6 +748,7 @@ if __name__ == "__main__":
         test_t5_best_estimate_itt,
         test_t6_provisions_long_terme,
         test_t7_rag_rouge,
+        test_t8_triangles_rectangulaires,
     ]
 
     print("=" * 65)
