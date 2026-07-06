@@ -246,8 +246,30 @@ class AgentS2ProvisionnemntSante:
         sin_att    = float(s2.get('sinistres_attendus', primes_acq * lr_att))
         sin_poste  = s2.get('sinistralite_par_poste', {})
 
-        # Sinistres payés estimés = 85% des sinistres attendus (en cours d'année)
-        sinistres_payes = sin_att * 0.85
+        # Sinistres payés estimés par poste selon les délais de règlement
+        # Source : DELAIS_REGLEMENT définis en tête de fichier
+        # Taux de règlement dans l'année = f(délai moyen en mois)
+        # Médecine/Pharmacie (1 mois) → ~97% réglé dans l'année
+        # Hospit (3 mois) → ~85% | Dentaire/Optique (2 mois) → ~92%
+        TAUX_REGLEMENT_ANNUEL = {
+            'medecine':        0.97,
+            'pharmacie':       0.98,
+            'hospitalisation': 0.82,
+            'dentaire':        0.88,
+            'optique':         0.90,
+        }
+        TAUX_GLOBAL_DEFAUT = 0.90  # fallback si pas de détail poste
+        sin_poste_detail = s2.get('sinistralite_par_poste', {})
+        if sin_poste_detail:
+            # Pondération par poste
+            sin_pay = 0.0
+            for poste, sin_p in sin_poste_detail.items():
+                taux = TAUX_REGLEMENT_ANNUEL.get(poste, TAUX_GLOBAL_DEFAUT)
+                sin_pay += float(sin_p) * taux
+            sinistres_payes = sin_pay
+        else:
+            # Fallback : taux global pondéré (médiane des postes)
+            sinistres_payes = sin_att * TAUX_GLOBAL_DEFAUT
 
         return {
             'primes_acquises':      primes_acq,
