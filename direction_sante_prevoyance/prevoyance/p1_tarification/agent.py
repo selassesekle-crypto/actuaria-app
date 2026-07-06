@@ -204,7 +204,11 @@ class AgentP1TarificationPrevoyance:
             prime_ip      = taux_ip * rente_ip_an * annuite_ip / max(duree_contrat, 1)
 
             # ── 5. PRIME DÉCÈS ────────────────────────────────────────────────
-            capital_deces  = salaire_m * 3   # 3 × salaire annuel
+            # Capital décès différencié par CSP — référence marché IP France (CTIP 2023)
+            # Cadres/cadres sup (CCN Cadres 1947) : 3-4 × salaire brut
+            # Employés/ouvriers (accords de branche) : 1-2 × salaire brut
+            _mult_dc = {'cadre_sup': 4.0, 'cadre': 3.0, 'employe': 1.5, 'ouvrier': 1.0}
+            capital_deces  = salaire_m * _mult_dc.get(cat_m, 1.5)
             prime_deces    = qx * capital_deces
 
             # ── 6. TOTAUX ─────────────────────────────────────────────────────
