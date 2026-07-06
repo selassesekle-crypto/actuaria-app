@@ -32,10 +32,10 @@
 ╚══════════════════════════════════════════════════════════════════════════════╝
 """
 
-import json, logging, os, warnings
+import json, logging, warnings
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict
 
 import numpy as np
 
@@ -555,8 +555,6 @@ class AgentS1TarificationSante:
                 textposition="outside", textfont=dict(color=BLANC, size=10),
                 hovertemplate="<b>%{x}</b><br>%{y:.0f}€/assuré/an<extra></extra>",
             ))
-            h2 = next(h for h in hyp if h['id']=='H2')
-            c2 = VERT if h2['statut']=='VALIDÉE' else (AMBRE if h2['statut']=='À JUSTIFIER' else ROUGE)
             layout = dict(**LAYOUT_BASE)
             layout.update(dict(
                 title=dict(text="G1 — Sinistralité par poste (€/assuré/an) — DREES 2023",
