@@ -169,9 +169,17 @@ def test_t2_qrt_s05_structure():
             f"Total incohérent ligne {ligne['code']}"
         )
 
-    # R0010 primes = pa_sante + pa_prev
+    # R0010 primes : C0030=pa_sante=1_000_000 + C0060=pa_prev=600_000 = 1_600_000
     r0010 = next(l for l in qrt["lignes"] if l["code"] == "R0010")
-    assert r0010["total"] == pytest_approx(1_600_000, rel=0.01) or r0010["total"] > 0
+    assert r0010["C0030"] == 1_000_000, (
+        f"C0030 (santé) attendu 1_000_000, obtenu {r0010['C0030']}"
+    )
+    assert r0010["C0060"] == 600_000, (
+        f"C0060 (prévoyance) attendu 600_000, obtenu {r0010['C0060']}"
+    )
+    assert r0010["total"] == 1_600_000, (
+        f"Total primes attendu 1_600_000, obtenu {r0010['total']}"
+    )
 
     print("  ✅ T2 PASSÉ — QRT S.05.01 structure conforme")
 
@@ -395,7 +403,8 @@ def test_t7_rag_rouge_insuffisance_solvabilite():
     """
     agent = _agent()
 
-    # FP = 50k, SCR_S = 75k, SCR_P = 60k → SCR_consolidé ≈ 95k > FP
+    # FP = 50k, SCR_S = 75k, SCR_P = 60k → SCR_consolidé ≈ 107k > FP
+    # (formule EIOPA ρ=0.25 : sqrt(75k²+2×0.25×75k×60k+60k²) ≈ 107 121)
     r = agent.run(
         result_s3=_result_s3(scr_sante=75_000, mcr_sante=25_000, fonds_propres=50_000),
         result_p4=_result_p4(scr_invalidite=60_000, mcr=20_000, fonds_propres=50_000),
