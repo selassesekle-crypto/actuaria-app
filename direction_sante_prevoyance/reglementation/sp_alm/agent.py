@@ -619,24 +619,21 @@ class AgentSPAlm:
 
         # H4 — Condition d'immunisation de Redington (1952)
         # Redington F.M. (1952), Journal of the Institute of Actuaries 78(3).
-        # Immunisation ⟺ deux conditions simultanées :
-        #   (1) D_actif ≈ D_passif  (tolérance ±0.5 an — pratique mutuelles)
-        #   (2) Convexité_actif > Convexité_passif (protection asymétrique)
-        # Les deux convexités sont maintenant disponibles :
-        #   actif["convexite"]  calculé dans _analyser_actif_sp (D²+D pondéré)
-        #   passif["convexite"] calculé dans _analyser_passif_sp (D²+D pondéré)
+        # Immunisation complète ⟺ deux conditions :
+        #   (1) D_actif ≈ D_passif  (tolérance ±0.5 an)
+        #   (2) Convexité_actif > Convexité_passif
+        # Seule la condition (1) est évaluée ici : actif n'est pas passé
+        # à cette méthode. La convexité passif est disponible (passif["convexite"]),
+        # mais pas la convexité actif — pour implémenter (2) il faudrait passer
+        # actif en paramètre de _hypotheses.
+        # En pratique pour les mutuelles, (2) est rarement satisfaite :
+        # l'actif OAT (conv ≈ 63) est bien moins convexe que le passif
+        # rentes IP (conv ≈ 340). H4 = condition nécessaire uniquement.
         tol_dur     = 0.50   # tolérance ±0.5 an sur l'égalité des durations
         gap_abs     = gap["gap_abs"]
         dur_match   = gap_abs <= tol_dur   # condition (1) Redington
         conv_passif = passif.get("convexite", 0)
-        # Condition (2) Redington — convexité actif vs passif :
-        # En pratique, actif obligataire (OAT 7.5a → conv ≈ 63) est moins convexe
-        # que le passif rentes IP (dur ~18a → conv ≈ 340). La condition convexité
-        # est rarement satisfaite pour les mutuelles sans couverture dédiée.
-        # H4 retient uniquement la condition (1) sur la duration — condition
-        # nécessaire et mesurable ; la condition convexité est signalée dans h4_m.
-        # Redington (1952) : redington_ok ⟺ dur_match (condition nécessaire)
-        redington_ok = dur_match
+        redington_ok = dur_match           # condition nécessaire (1) uniquement
         h4_s = "VALIDÉE" if redington_ok else "À JUSTIFIER"
         h4_m = (
             f"Gap={gap_abs:.2f}a ({'≤' if dur_match else '>'} {tol_dur}a tol.) | "
