@@ -151,9 +151,11 @@ class AgentS1TarificationSante:
             # Primes acquises portefeuille
             primes_acquises = prime_comm * nb_assures
 
-            # Loss Ratio attendu = sinistres attendus / primes acquises
-            # (ratio S/P correct — pas prime_pure/prime_comm qui donne 1/(1+chargement))
-            lr_attendu = total_sin * nb_assures / max(prime_comm * nb_assures, 1)
+            # Loss Ratio attendu (tarification) = prime_pure / prime_comm
+            # = 1 / (1 + chargement) — c'est le LR que la tarification vise
+            # NB : pas un LR observé (S1 travaille depuis tables DREES, pas sinistres réels)
+            # Le LR observé sera calculé par S2 depuis les sinistres payés réels
+            lr_attendu = prime_pure / max(prime_comm, 1)
 
             # ── 5. CONFORMITÉ ANI 2013 ────────────────────────────────────────
             # ANI 2013 : applicable uniquement au collectif (Art. L911-7 CSS)
