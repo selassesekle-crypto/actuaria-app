@@ -74,19 +74,7 @@ RHO_NSLT_SLT = 0.25
 SEUIL_SCR_MIN   = 100.0   # % — seuil minimal absolu
 SEUIL_SCR_CIBLE = 130.0   # % — seuil cible pratique marché
 
-# Sections SFCR obligatoires — Directive S2 Art.51 + EIOPA Guidelines
-SECTIONS_SFCR = [
-    ("A", "Activité et résultats",
-     "Présentation de l'activité SP, résultats de souscription, investissements"),
-    ("B", "Système de gouvernance",
-     "Organisation, contrôle interne, gestion des risques, actuaire désigné"),
-    ("C", "Profil de risque",
-     "SCR par module, concentration, atténuation, sensibilités"),
-    ("D", "Valorisation à des fins de solvabilité",
-     "Actifs, provisions techniques (BE+RA), autres passifs"),
-    ("E", "Gestion du capital",
-     "Fonds propres, SCR, MCR, non-respect éventuel"),
-]
+# Sections SFCR : construites dynamiquement dans _generer_sfcr (voir méthode)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -244,7 +232,7 @@ class AgentSPReg1Solvabilite2:
             pa_sante = float(result_s3["primes_acquises"])
         else:
             _r0100 = next(
-                (l["C0010"] for l in qrt_s13.get("lignes", []) if l.get("code") == "R0100"),
+                (lig["C0010"] for lig in qrt_s13.get("lignes", []) if lig.get("code") == "R0100"),
                 None
             )
             pa_sante = float(_r0100) if _r0100 is not None else be_sante * 1.8
@@ -782,15 +770,15 @@ class AgentSPReg1Solvabilite2:
             r200_s    = src["be_sante"] + src["ra_sante"]
             r200_p    = src["be_prev"]  + src["ra_prev"]
 
-            # 4 postes QRT S.05.01 distincts + 1 point de fermeture (= R0010 répété)
+            # 4 postes QRT S.05.01 distincts + 1 point de fermeture (= R0010 répété,
+            # standard Plotly pour fermer le polygone du radar)
             labels_qrt = [
                 "R0010 Primes",
                 "R0050 Sinistres",
                 "R0090 Dépenses",
                 "R0200 Provisions",
-                "R0010 Primes",
+                "R0010 Primes",    # fermeture du polygone = 1er point répété
             ]
-            # 5e point = 1er point : fermeture du polygone radar (standard Plotly)
             vals_nslt = [
                 src["pa_sante"],
                 sin_sante,
