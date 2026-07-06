@@ -44,7 +44,7 @@ import logging
 import warnings
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import numpy as np
 
@@ -57,7 +57,6 @@ logging.basicConfig(
 
 try:
     import plotly.graph_objects as go
-    from plotly.subplots import make_subplots
     PLOTLY_OK = True
 except ImportError:
     PLOTLY_OK = False
@@ -415,7 +414,8 @@ class AgentSPTablesBiometriques:
 
         # Espérance de vie curtate e_x = somme k_p_x pour k=1..horizon
         # k_p_x = prod(p_{x+j} pour j=0..k-1)
-        horizon = min(age_int, 50)   # horizon max depuis l'âge x
+        # Horizon = années restantes jusqu'à fin de table (âge 70)
+        horizon = max(0, ages_dispo[-1] - age_int)  # ex: âge 40 → 30 ans
         k_p_x_vals = []
         surv = 1.0
         for k in range(horizon):
@@ -468,7 +468,9 @@ class AgentSPTablesBiometriques:
             q_k   = _TH0002_QX.get(min(age_k, ages_dispo[-1]), 0.02)
             kpx.append(kpx[-1] * (1 - q_k))
 
-        # ä_x immédiate (annuité due)
+        # ä_x due (premier paiement immédiat, k=0)
+        # NB : annuité due ≠ annuité immédiate en jargon strict
+        # Ici : ä_x = sum_{k=0}^{h} v^k * k_p_x (paiement en début de période)
         ann_imm = sum(v**k * kpx[k] for k in range(h_eff + 1))
 
         # ä_x^{temp}(5 ans)
