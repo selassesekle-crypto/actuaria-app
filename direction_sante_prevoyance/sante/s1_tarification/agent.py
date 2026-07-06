@@ -165,7 +165,7 @@ class AgentS1TarificationSante:
 
             # ── 5. CONFORMITÉ ANI 2013 ────────────────────────────────────────
             # ANI 2013 : applicable uniquement au collectif (Art. L911-7 CSS)
-            ani = self._verifier_ani(postes, garantie_niveau, contrat)
+            ani = self._verifier_ani(postes, contrat)
 
             # ── 6. STATUT RAG + HYPOTHÈSES ───────────────────────────────────
             hyp = self._hypotheses(lr_attendu, postes, prime_comm, prime_marche,
@@ -360,7 +360,7 @@ class AgentS1TarificationSante:
     # ══════════════════════════════════════════════════════════════════════════
     # 3. CONFORMITÉ ANI 2013
     # ══════════════════════════════════════════════════════════════════════════
-    def _verifier_ani(self, postes, garantie_niveau, contrat='collectif'):
+    def _verifier_ani(self, postes, contrat='collectif'):
         """
         Vérifie la conformité au panier ANI 2013 (complémentaire collective).
         Le panier minimum doit couvrir : médecine, hospit, dentaire, optique.
