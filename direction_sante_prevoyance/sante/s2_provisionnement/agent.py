@@ -14,7 +14,7 @@
 ║    ✅ IBNR cadences santé différenciées par poste (1-3 mois)              ║
 ║    ✅ PREC sur base primes acquises S1                                      ║
 ║    ✅ Triangle de développement santé simplifié (3 mois)                   ║
-║    ✅ Standard ActuarIA : RAG + 3 hypothèses + 4 graphiques + commentaire  ║
+║    ✅ Standard ActuarIA : RAG + 4 hypothèses + 5 graphiques + commentaire  ║
 ║    ✅ Sorties vers S3 Binta                                                 ║
 ║                                                                              ║
 ║  ENTRÉES :                                                                   ║
@@ -22,7 +22,6 @@
 ║    result_a2  → Données brutes Kenji (optionnel — enrichit les dossiers)  ║
 ║    nb_sinistres_ouverts → dossiers en cours                                ║
 ║    cout_moyen_ouvert    → coût moyen dossier ouvert                        ║
-║    delai_reglement_mois → délai moyen règlement (santé : 1-3 mois)        ║
 ║                                                                              ║
 ║  SORTIES VERS S3 BINTA :                                                    ║
 ║    psap_total · prec · provision_totale · loss_ratio · be_sante           ║
