@@ -69,8 +69,9 @@ def r_reg2(pipeline_reg2):
 
 # ── T1 : Succès et structure ───────────────────────────────────────────────────
 def test_reg2_success(r_reg2):
-    assert r_reg2["success"] is True
-    assert r_reg2["erreur"] is None
+    """Succès et présence de toutes les clés IFRS 17."""
+    assert r_reg2["success"] is True, "SP-Reg2 doit réussir"
+    assert r_reg2["erreur"] is None, "Pas d'erreur attendue"
     for cle in ["be_total", "ra_total", "fcf_total", "csm_total",
                 "lc_total", "classification", "reconciliation"]:
         assert cle in r_reg2
@@ -124,7 +125,8 @@ def test_reg2_reconciliation_bel(r_reg2):
         assert cle in recon, f"Clé manquante dans réconciliation : {cle}"
     # Cohérence : be_cloture = be_ouverture + variation_nette
     assert abs(recon["be_cloture_est"] -
-               (recon["be_ouverture"] + recon["variation_nette"])) < 0.01
+               (recon["be_ouverture"] + recon["variation_nette"])) < 0.01, \
+        "BE_clôture doit = BE_ouverture + variation_nette (§100-109 IFRS 17)"
 
 
 # ── T6 : RA/BE ∈ [1%, 20%] — cohérence CoC §B91 ─────────────────────────────
@@ -140,8 +142,9 @@ def test_reg2_ratio_ra_be(r_reg2):
 
 # ── T7 : Erreur si S3 absent ──────────────────────────────────────────────────
 def test_reg2_erreur_sans_inputs(pipeline_reg2):
+    """SP-Reg2 doit retourner success=False si result_s3 est absent."""
     _, r_p4 = pipeline_reg2
     reg2 = AgentSPReg2IFRS17(verbose=False)
     r = reg2.run(result_s3=None, result_p4=r_p4, generer_graphiques=False)
-    assert r["success"] is False
-    assert r["erreur"] is not None
+    assert r["success"] is False, "Doit échouer sans S3"
+    assert r["erreur"] is not None, "Message d'erreur attendu"
