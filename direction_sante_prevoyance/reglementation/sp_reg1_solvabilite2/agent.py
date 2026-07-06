@@ -782,13 +782,13 @@ class AgentSPReg1Solvabilite2:
             r200_s    = src["be_sante"] + src["ra_sante"]
             r200_p    = src["be_prev"]  + src["ra_prev"]
 
-            # 4 postes QRT S.05.01
+            # 4 postes QRT S.05.01 distincts + 1 point de fermeture (= R0010 répété)
             labels_qrt = [
                 "R0010 Primes",
                 "R0050 Sinistres",
                 "R0090 Dépenses",
                 "R0200 Provisions",
-                "R0010 Primes",   # fermeture du radar
+                "R0010 Primes",
             ]
             # 5e point = 1er point : fermeture du polygone radar (standard Plotly)
             vals_nslt = [
