@@ -51,7 +51,7 @@ import math
 import warnings
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 
@@ -1318,10 +1318,16 @@ class AgentP3ProvisionnemntPrevoyance:
 
         res_list = [residus[i, j] for (i, j) in cellules if residus[i, j] != 0]
         if len(res_list) < 4:
-            reserve_ref = float(sum(
-                max(float(C[i, min(n-i-1, m-1)]) - float(C[i, min(n-i-1, m-1)]), 0.0)
-                for i in range(1, n)
-            ))
+            # Calcul de la réserve CL simple comme référence dégradée
+            # (on ne peut pas soustraire C[i,k] à lui-même — bug corrigé)
+            reserve_ref = 0.0
+            for i in range(1, n):
+                k_i  = min(n - i - 1, m - 1)
+                val  = float(C[i, k_i])
+                for jj in range(k_i, m - 1):
+                    if jj < len(f_arr):
+                        val *= f_arr[jj]
+                reserve_ref += max(val - float(C[i, k_i]), 0.0)
             return self._bootstrap_degrade(reserve_ref, n_sim)
 
         res_arr   = np.array(res_list)
@@ -1558,7 +1564,7 @@ class AgentP3ProvisionnemntPrevoyance:
         }
 
         SEUIL = 55
-        incl = {m: (r, s) for m, (r, s) in reserves.items() if s >= SEUIL and r > 0}
+        incl = {meth: (r, s) for meth, (r, s) in reserves.items() if s >= SEUIL and r > 0}
         if not incl:
             incl = {
                 "mack_1993":            (mack["reserve_best_estimate"], 50),
@@ -1573,28 +1579,28 @@ class AgentP3ProvisionnemntPrevoyance:
         rec_n = _map.get(rec.lower().replace(" ", "_").replace("-", "_"), "")
 
         tot_s  = sum(s for _, s in incl.values())
-        pb     = {m: s / max(tot_s, 1) for m, (_, s) in incl.items()}
+        pb     = {meth: s / max(tot_s, 1) for meth, (_, s) in incl.items()}
 
         PMIN = 0.50
         if rec_n and rec_n in incl:
             pr    = max(pb.get(rec_n, 0), PMIN)
             reste = 1.0 - pr
-            autr  = {m: v for m, v in pb.items() if m != rec_n}
+            autr  = {meth: v for meth, v in pb.items() if meth != rec_n}
             ta    = sum(autr.values())
             poids = {rec_n: round(pr, 4)}
             if ta > 0:
-                for m, v in autr.items():
-                    poids[m] = round(v / ta * reste, 4)
+                for meth, v in autr.items():
+                    poids[meth] = round(v / ta * reste, 4)
             else:
                 poids = {rec_n: 1.0}
         else:
-            poids = {m: round(v, 4) for m, v in pb.items()}
+            poids = {meth: round(v, 4) for meth, v in pb.items()}
 
         tp = sum(poids.values())
         if tp > 0:
-            poids = {m: round(v / tp, 4) for m, v in poids.items()}
+            poids = {meth: round(v / tp, 4) for meth, v in poids.items()}
 
-        be   = float(sum(poids[m] * r for m, (r, _) in incl.items()))
+        be   = float(sum(poids[meth] * r for meth, (r, _) in incl.items()))
         vals = [r for r, _ in incl.values()]
         cvi  = float(np.std(vals) / max(np.mean(vals), 1e-9) * 100) if len(vals) > 1 else 0.0
 
@@ -1931,14 +1937,14 @@ class AgentP3ProvisionnemntPrevoyance:
                 x=ann, y=[v/1e3 for v in ibnr_bf], mode="lines+markers", name="BF",
                 line=dict(color=VERT, width=2, dash="dot"), marker=dict(size=7, color=VERT),
             ), row=1, col=2)
-            l = dict(**LAYOUT_BASE)
-            l.update(dict(
+            lay = dict(**LAYOUT_BASE)
+            lay.update(dict(
                 title=dict(text="G3 — IBNR ITT par année de survenance",
                            font=dict(color=OR, size=13), x=0.01),
                 legend=dict(x=0.55, y=0.95, bgcolor="rgba(0,0,0,0)",
                             font=dict(color=BLANC, size=9)),
             ))
-            fig.update_layout(**l)
+            fig.update_layout(**lay)
             gph["ibnr_par_annee"] = fig
         except Exception as e:
             self.logger.warning(f"G3 : {e}")
@@ -1989,13 +1995,13 @@ class AgentP3ProvisionnemntPrevoyance:
                     labels=lp, values=vp, marker_colors=cp,
                     textfont=dict(size=9, color=BLANC),
                 ), row=1, col=2)
-            l = dict(**LAYOUT_BASE)
-            l.update(dict(title=dict(
+            lay = dict(**LAYOUT_BASE)
+            lay.update(dict(title=dict(
                 text=f"G5 — Provisions prévoyance = {prov_tot/1e3:.0f}k€ | LR={lr*100:.1f}%",
                 font=dict(color=OR if lr<=0.90 else (AMBRE if lr<=1.0 else ROUGE), size=12),
                 x=0.01
             )))
-            fig.update_layout(**l)
+            fig.update_layout(**lay)
             gph["decomposition_provisions"] = fig
         except Exception as e:
             self.logger.warning(f"G5 : {e}")
