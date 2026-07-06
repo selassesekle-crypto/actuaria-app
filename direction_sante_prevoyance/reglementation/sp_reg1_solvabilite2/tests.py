@@ -181,6 +181,14 @@ def test_t2_qrt_s05_structure():
         f"Total primes attendu 1_600_000, obtenu {r0010['total']}"
     )
 
+    # Vérification supplémentaire : pour chaque ligne, total == C0030 + C0060
+    # (cohérence d'arrondi EIOPA — notamment R0200 qui cumule be+ra)
+    for ligne in qrt["lignes"]:
+        assert ligne["total"] == ligne["C0030"] + ligne["C0060"], (
+            f"Incohérence total vs C0030+C0060 pour {ligne['code']} : "
+            f"{ligne['total']} ≠ {ligne['C0030']}+{ligne['C0060']}"
+        )
+
     print("  ✅ T2 PASSÉ — QRT S.05.01 structure conforme")
 
 
