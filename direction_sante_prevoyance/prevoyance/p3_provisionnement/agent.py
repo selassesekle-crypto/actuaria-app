@@ -951,6 +951,9 @@ class AgentP3ProvisionnemntPrevoyance:
             ind_j = []
             c_j   = []
             for i in range(n):
+                # Zone connue : i+j+1 < n (triangle carré ou supérieur)
+                # break valide car les lignes sont ordonnées : si la condition
+                # est vraie pour i, elle l'est pour tous les i suivants
                 if i + j + 1 >= n:
                     break
                 cij  = float(C[i, j])
@@ -1225,11 +1228,12 @@ class AgentP3ProvisionnemntPrevoyance:
         n, m    = C.shape
         alertes = []
 
+        nb_mat_bf = min(3, n - 1)   # cohérent avec _h3_apriori
         if lr_manuel is not None and lr_manuel > 0:
             lr = float(np.clip(lr_manuel, 0.01, 3.0)); source = "manuel"
-        elif primes is not None and len(primes) >= 2:
+        elif primes is not None and len(primes) >= nb_mat_bf:
             lr_an = []
-            for i in range(min(3, n - 1)):
+            for i in range(nb_mat_bf):
                 p = float(primes[i]); u = float(ult_cl[i])
                 if p > 0 and u > 0:
                     lr_an.append(u / p)
