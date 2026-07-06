@@ -105,7 +105,9 @@ def _add_kpi_table(doc, headers, rows, col_widths=None):
             cell = table.rows[r_idx].cells[c_idx]
             cell.text = str(val) if val is not None else "—"
             _cell_bg(cell, bg)
-            run = cell.paragraphs[0].runs[0] if cell.paragraphs[0].runs else cell.paragraphs[0].add_run(str(val) if val else "")
+            # cell.text crée déjà un run — on l'utilise ou on en ajoute un
+            para = cell.paragraphs[0]
+            run  = para.runs[0] if para.runs else para.add_run(str(val) if val else "")
             run.font.color.rgb = _rgb(BLANC)
             run.font.size = Pt(9)
     if col_widths:
