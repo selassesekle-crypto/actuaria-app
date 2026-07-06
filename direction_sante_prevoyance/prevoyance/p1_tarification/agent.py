@@ -83,11 +83,18 @@ try:
 except ImportError:
     _TABLES_CENTRALISEES = False
 
-# Tables locales — fallback si import centralisé indisponible
+# ── Tables actuarielles locales (fallback) ────────────────────────────────
+# Source primaire : sp_tables_actuarielles.py (services centralisés)
+# Source : BCAC 2019 — Bureau Commun des Assurances Collectives
+#   Publication : « Statistiques arrêts de travail 2019 »
+#   Taux d'incidence ITT annuels par âge et CSP (simplifiés)
 TAUX_ITT_BCAC = {
     25:0.020, 30:0.025, 35:0.032, 40:0.042,
     45:0.055, 50:0.072, 55:0.095, 60:0.120,
 }
+# Source : TD 88-90 — Tables INSEE de maintien en incapacité
+#   Probabilités annuelles de passage ITT → IP (invalidité permanente)
+#   Calibrées sur la population active française (simplifiées)
 TAUX_IP_TD88 = {
     25:0.0008, 30:0.0012, 35:0.0018, 40:0.0028,
     45:0.0045, 50:0.0072, 55:0.0115, 60:0.0180,
@@ -100,6 +107,9 @@ FACT_CSP_ITT = {
     "ouvrier":   1.35, "employe": 1.00,
     "cadre":     0.75, "cadre_sup": 0.60,
 }
+# Taux d'actualisation annuités IP — proxy courbe EIOPA RFR
+# Source : EIOPA Risk-Free Rate (EUR) — moyenne long terme ~2.5%
+# À remplacer par la courbe EIOPA réelle en production
 TAUX_ACTUALISATION = 0.025
 
 
