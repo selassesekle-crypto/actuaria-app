@@ -67,8 +67,20 @@ LAYOUT_BASE = dict(paper_bgcolor=NAVY, plot_bgcolor=NAVY_L,
     margin=dict(l=16,r=16,t=60,b=60), height=300,
     hoverlabel=dict(bgcolor=NAVY_LL, bordercolor=OR, font_size=12, font_color=BLANC))
 
+# ── Tables centralisées — importées depuis sp_tables_actuarielles ────────────
+try:
+    from direction_sante_prevoyance.services.sp_tables_actuarielles import (
+        get_taux_itt_bcac as _get_taux_itt_central,
+        get_taux_ip_td8890 as _get_taux_ip_central,
+        get_qx_th0002 as _get_qx_central,
+        get_prob_maintien_itt as _get_maintien_central,
+    )
+    _TABLES_CENTRALISEES = True
+except ImportError:
+    _TABLES_CENTRALISEES = False
+
 # ══════════════════════════════════════════════════════════════════════════════
-# TABLES BCAC 2019 — PROBABILITÉS DE TRANSITION PAR ÂGE
+# TABLES BCAC 2019 — locales (fallback)
 # ══════════════════════════════════════════════════════════════════════════════
 # Ces probabilités sont annuelles et calibrées sur BCAC 2019
 
