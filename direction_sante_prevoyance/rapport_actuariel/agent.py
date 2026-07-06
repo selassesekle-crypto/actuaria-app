@@ -503,15 +503,19 @@ class AgentSPRapportActuariel:
         Calculs actuariels SP spécifiques.
         LR santé par poste, LR prévoyance, indicateurs BCAC/CTIP.
         """
-        # LR global santé
+        # Taux de provisionnement observé = PSAP / PA
+        # NB : c'est un taux de provisionnement, pas un LR sinistres/primes
+        # Le LR complet nécessite les sinistres payés — disponible via S2
+        # On le nomme lr_sante_observe par analogie avec A7 Non-Vie
         lr_sante_obs = (m1["psap_sante"] / max(m1["pa_sante"], 1)
                          if m1["pa_sante"] else 0)
         lr_prev_obs  = (m1["psap_prev"] / max(m1["pa_prev"], 1)
                         if m1["pa_prev"] else 0)
 
-        # Part ITT vs IP dans le BE prévoyance
+        # Part ITT vs PM rentes IP dans le BE prévoyance
+        # part_psap_itt = (PSAP total - PM rentes) / BE — floor à 0 si négatif
         be_prev = m1["be_prev"]
-        part_psap_itt = (m1["psap_prev"] - m1["pm_rentes_ip"]) / max(be_prev, 1)
+        part_psap_itt  = max(0, m1["psap_prev"] - m1["pm_rentes_ip"]) / max(be_prev, 1)
         part_pm_rentes = m1["pm_rentes_ip"] / max(be_prev, 1)
 
         # Bénéfice diversification S+P en %
