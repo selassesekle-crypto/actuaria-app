@@ -537,6 +537,9 @@ class SPDataBuilder:
                 rapport["alertes"].append(
                     f"⚠️ {n_age_invalide} ligne(s) avec âge hors [{AGE_MIN},{AGE_MAX}] — supprimées"
                 )
+            # Remplir les âges NaN avec la médiane (meilleur que suppression)
+            age_median = float(df["age"][masque_age].median()) if masque_age.any() else 40.0
+            df.loc[df["age"].isna(), "age"] = age_median
             masque_valide &= (masque_age | df["age"].isna())
 
         # Valider le salaire
@@ -557,12 +560,13 @@ class SPDataBuilder:
                 df.loc[df["sexe"].isin(variantes), "sexe"] = std
             df.loc[~df["sexe"].isin(["M", "F"]), "sexe"] = "M"  # fallback
 
-        # Normaliser la catégorie CSP
+        # Normaliser la catégorie CSP — map inversé pour éviter les écrasements
         if "categorie" in df.columns:
             df["categorie"] = df["categorie"].astype(str).str.lower().str.strip()
-            for std, variantes in CSP_VALIDES.items():
-                df.loc[df["categorie"].isin(variantes), "categorie"] = std
-            df.loc[~df["categorie"].isin(CSP_VALIDES.keys()), "categorie"] = "employe"
+            _csp_map = {v: k for k, vs in CSP_VALIDES.items() for v in vs}
+            df["categorie"] = df["categorie"].map(
+                lambda x: _csp_map.get(x, x if x in CSP_VALIDES else "employe")
+            )
 
         # Normaliser le niveau de garantie
         if "garanties" in df.columns:
@@ -602,11 +606,18 @@ class SPDataBuilder:
             return "ip_collective"
 
         # Format M : distinguer individuel vs collectif
-        if "garanties" in df.columns:
-            # Collectif → niveau de garantie uniforme pour tous
+        # Collectif → colonne 'contrat' avec valeur 'collectif'
+        #           → ou grande taille (>= 500 adhérents) avec garanties uniformes
+        if "contrat" in df.columns:
+            if any(v in str(df["contrat"].iloc[0]).lower()
+                   for v in ["collectif", "collective", "group", "entreprise"]):
+                return "mutuelle_collective"
+            return "mutuelle_individuelle"
+        # Heuristique volume + uniformité garanties
+        if "garanties" in df.columns and len(df) >= 500:
             import pandas as pd
-            n_garanties = df["garanties"].nunique()
-            if n_garanties <= 2:
+            pct_dominant = df["garanties"].value_counts(normalize=True).iloc[0]
+            if pct_dominant >= 0.80:  # 80%+ sur un seul niveau → collectif
                 return "mutuelle_collective"
         return "mutuelle_individuelle"
 
