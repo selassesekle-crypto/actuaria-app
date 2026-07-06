@@ -236,12 +236,23 @@ class AgentSPReg1Solvabilite2:
         mcr_sante = float(result_s3.get("mcr_sante", 0))
         fpp_s3    = float(result_s3.get("fonds_propres", 0))
 
-        # Primes santé — depuis QRT S.13 si disponible
+        # Primes santé — depuis primes_acquises S3 (priorité 1),
+        # puis QRT S.13 ligne R0100 (priorité 2),
+        # sinon fallback be_sante × 1.8 (proxy LR~55% — à remplacer en production)
         qrt_s13  = result_s3.get("qrt_s13", {})
-        pa_sante = float(result_s3.get("primes_acquises",
-                    next((l["C0010"] for l in qrt_s13.get("lignes", [])
-                          if l.get("code") == "R0100"), be_sante * 2)
-                    if qrt_s13 else be_sante * 2))
+        if "primes_acquises" in result_s3:
+            pa_sante = float(result_s3["primes_acquises"])
+        else:
+            _r0100 = next(
+                (l["C0010"] for l in qrt_s13.get("lignes", []) if l.get("code") == "R0100"),
+                None
+            )
+            pa_sante = float(_r0100) if _r0100 is not None else be_sante * 1.8
+            if _r0100 is None:
+                self.logger.warning(
+                    "primes_acquises absentes de result_s3 et QRT S.13 "
+                    f"— fallback pa_sante={pa_sante:,.0f}€ (be_sante×1.8)"
+                )
 
         # Prévoyance (P4)
         be_prev  = float(result_p4.get("be_prevoyance", 0))
