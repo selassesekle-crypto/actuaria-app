@@ -3164,17 +3164,11 @@ def _executer_analyse(besoin, direction, equipe, client):
                 )
                 resultats["principal"] = r10
 
-            # ── IAS 19 ──────────────────────────────────────────────────────
+            # ── IAS 19 — TODO Direction Vie/EP-RE ────────────────────────────
+            # ep1_ias19.py supprimé (racine obsolète) — sera dans direction_vie_epre/
             elif besoin == "ias19":
-                from ep1_ias19 import AgentEP1IAS19
-                r_ep1 = AgentEP1IAS19(audit_path=_tmp, verbose=False).run(
-                    nb_salaries=params.get("nb_salaries",250),
-                    salaire_moyen=params.get("salaire_moyen",42000),
-                    age_moyen=params.get("age_moyen",45),
-                    taux_actualisation=params.get("taux_actualisation",0.035),
-                    generer_graphiques=False,
-                )
-                resultats["principal"] = r_ep1
+                st.info("⏸ Agent IAS 19 en cours de migration vers Direction Vie/EP-RE — disponible prochainement")
+                resultats["principal"] = {"success": False, "erreur": "Agent IAS 19 en migration", "statut_rag": "AMBRE"}
 
             # ── SANTÉ ────────────────────────────────────────────────────────
             elif besoin in ["tarif_sante","prov_sante","report_sante"]:
