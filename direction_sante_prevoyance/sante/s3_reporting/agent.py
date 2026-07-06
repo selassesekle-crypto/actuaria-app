@@ -203,9 +203,15 @@ class AgentS3ReportingSante:
         pa = float(s3.get('primes_acquises',
                    result_s1.get('primes_acquises', 5_000_000) if result_s1 else 5_000_000))
         be = float(s3.get('be_sante', result_s2.get('psap_total', 0)))
-        fpp = float(fonds_propres) if fonds_propres > 0 else pa * 0.80
-        if fonds_propres <= 0:
-            self.logger.warning(f"fonds_propres non fournis → estimés à {fpp:,.0f}€")
+        fpp_fournis = float(fonds_propres) > 0
+        fpp = float(fonds_propres) if fpp_fournis else pa * 0.80
+        if not fpp_fournis:
+            self.logger.warning(
+                f"fonds_propres non fournis → estimés à {fpp:,.0f}€ (80% PA). "
+                f"Le ROUGE éventuel reflète cette estimation, pas nécessairement "
+                f"une insuffisance de capital réelle. Fournissez fonds_propres= pour "
+                f"un résultat fiable."
+            )
         return {
             'primes_acquises': pa,
             'be_sante':        be,
