@@ -195,7 +195,8 @@ class AgentP2TablesMorbidite:
             prob_maintien = self._calculer_maintien(P)
 
             # ── 7. HYPOTHÈSES + RAG ───────────────────────────────────────────
-            hyp = self._hypotheses(trans, esperances, prob_maintien, age)
+            hyp = self._hypotheses(trans, esperances, prob_maintien, age,
+                                   src['taux_ip'])
             rag = self._rag(hyp, trans)
 
             # ── 8. COMMENTAIRE ────────────────────────────────────────────────
@@ -494,7 +495,7 @@ class AgentP2TablesMorbidite:
     # ══════════════════════════════════════════════════════════════════════════
     # 7. HYPOTHÈSES
     # ══════════════════════════════════════════════════════════════════════════
-    def _hypotheses(self, trans, esperances, prob_maintien, age):
+    def _hypotheses(self, trans, esperances, prob_maintien, age, taux_ip_p1=None):
         # H1 — q_IP < q_AI (invalidité plus rare que l'incapacité)
         if trans['q_IP_annuel'] < trans['q_AI']:
             h1_s = 'VALIDÉE'
@@ -544,26 +545,38 @@ class AgentP2TablesMorbidite:
             h4_m = (f"A/E BCAC = {ae_ratio:.3f} < 0.80 — "
                     f"sinistralité inférieure aux tables, vérifier le portefeuille")
 
-        # H5 — P(IP|ITT) par âge
-        # Vérifie que la probabilité conditionnelle ITT → IP est dans la plage
-        # BCAC attendue ± 20% pour l'âge considéré
+        # H5 — P(IP|ITT) par âge : taux IP client vs référence BCAC
+        # Compare le taux_ip fourni par P1 (données client ou tarification)
+        # au taux conditionnel BCAC 2019 interpolé pour l'âge
+        # taux_ip_p1 = q_AI × q_IP_cond (annuel) transmis par P1
         # Source : BCAC 2019 — Q_IP_COND_BCAC
-        q_ip_ref = _interp(Q_IP_COND_BCAC, age)  # valeur de référence BCAC
-        borne_inf = q_ip_ref * 0.80
-        borne_sup = q_ip_ref * 1.20
-        q_ip_obs  = trans['q_IP_cond']
-        if borne_inf <= q_ip_obs <= borne_sup:
-            h5_s = 'VALIDÉE'
-            h5_m = (f"P(IP|ITT) = {q_ip_obs*100:.1f}% ∈ "
-                    f"[{borne_inf*100:.1f}%-{borne_sup*100:.1f}%] BCAC âge={age:.0f} ✅")
-        elif q_ip_obs > borne_sup:
-            h5_s = 'À JUSTIFIER'
-            h5_m = (f"P(IP|ITT) = {q_ip_obs*100:.1f}% > {borne_sup*100:.1f}% "
-                    f"BCAC âge={age:.0f} — risque d'invalidisation élevé")
+        q_ip_ref_cond = _interp(Q_IP_COND_BCAC, age)   # référence BCAC conditionnelle
+        q_ai_ref      = _interp(Q_AI_BCAC, age)         # incidence brute BCAC
+        q_ip_bcac_an  = q_ai_ref * q_ip_ref_cond        # taux IP annuel BCAC de référence
+        if taux_ip_p1 is not None and taux_ip_p1 > 0:
+            # Comparaison taux IP P1 vs BCAC annuel ± 30%
+            borne_inf5 = q_ip_bcac_an * 0.70
+            borne_sup5 = q_ip_bcac_an * 1.30
+            if borne_inf5 <= taux_ip_p1 <= borne_sup5:
+                h5_s = 'VALIDÉE'
+                h5_m = (f"P(IP|ITT) client = {taux_ip_p1*100:.3f}% ∈ "
+                        f"[{borne_inf5*100:.3f}%-{borne_sup5*100:.3f}%] "
+                        f"BCAC âge={age:.0f} ✅")
+            elif taux_ip_p1 > borne_sup5:
+                h5_s = 'À JUSTIFIER'
+                h5_m = (f"P(IP|ITT) client = {taux_ip_p1*100:.3f}% > "
+                        f"{borne_sup5*100:.3f}% BCAC — risque d'invalidisation "
+                        f"supérieur aux tables pour âge={age:.0f}")
+            else:
+                h5_s = 'À JUSTIFIER'
+                h5_m = (f"P(IP|ITT) client = {taux_ip_p1*100:.3f}% < "
+                        f"{borne_inf5*100:.3f}% BCAC — taux d'invalidisation "
+                        f"faible vs tables pour âge={age:.0f}")
         else:
+            # Pas de taux P1 disponible — affichage de la référence BCAC seule
             h5_s = 'À JUSTIFIER'
-            h5_m = (f"P(IP|ITT) = {q_ip_obs*100:.1f}% < {borne_inf*100:.1f}% "
-                    f"BCAC âge={age:.0f} — taux de consolidation inférieur aux tables")
+            h5_m = (f"P(IP|ITT) BCAC réf = {q_ip_bcac_an*100:.3f}% "
+                    f"pour âge={age:.0f} — taux client non transmis par P1")
 
         return [
             {'id':'H1','hypothese':"P(IP) < P(ITT) — invalidité plus rare que l'incapacité",
@@ -748,7 +761,7 @@ class AgentP2TablesMorbidite:
 
         # G4 — Scorecard
         try:
-            hyp_tmp = self._hypotheses(trans, esp, maint, age)
+            hyp_tmp = self._hypotheses(trans, esp, maint, age, None)
             fig = go.Figure()
             for h in hyp_tmp:
                 c  = VERT if h['statut']=='VALIDÉE' else (AMBRE if h['statut']=='À JUSTIFIER' else ROUGE)
