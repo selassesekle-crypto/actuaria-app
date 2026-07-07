@@ -192,7 +192,7 @@ class AgentP1TarificationPrevoyance:
                 # Tables centralisées sp_tables_actuarielles.py
                 # get_taux_itt_bcac intègre le CSP en csp='cadre'/'non_cadre'
                 _csp_arg = 'cadre' if cat_m in ('cadre', 'cadre_sup') else 'non_cadre'
-                taux_itt = _get_taux_itt(age_m, _csp_arg)
+                taux_itt = _get_taux_itt(age_m, _csp_arg) * fact_csp
                 taux_ip  = _get_taux_ip(age_m) * fact_csp
                 qx       = _get_qx(age_m)
             else:
