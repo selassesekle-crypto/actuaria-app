@@ -40,6 +40,7 @@
 ╚══════════════════════════════════════════════════════════════════════════════╝
 """
 
+import json
 import logging
 import warnings
 from datetime import datetime
@@ -728,7 +729,6 @@ class AgentSPTablesBiometriques:
     # =========================================================================
     def _audit(self, aid, age, csp, res_bcac, res_ae, rag):
         try:
-            import json as _json
             log = self.audit_path / "sp_tables_audit.jsonl"
             entry = {
                 "audit_id":  aid,
@@ -740,7 +740,7 @@ class AgentSPTablesBiometriques:
                 "ae_ratio":  res_ae.get("ae_ratio"),
             }
             with open(log, "a", encoding="utf-8") as f:
-                f.write(_json.dumps(entry, ensure_ascii=False) + "\n")
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         except Exception:
             pass
 
