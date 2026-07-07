@@ -3,7 +3,7 @@ Palette et helpers communs aux modules de rapport SP.
 Reproduit fidèlement le style Navy/Gold de n5_rapport.py.
 """
 from openpyxl.styles import (
-    Font, PatternFill, Alignment, Border, Side, GradientFill
+    Font, PatternFill, Alignment, Border, Side
 )
 from openpyxl.utils import get_column_letter
 
