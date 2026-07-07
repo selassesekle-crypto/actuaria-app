@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../.."))
 
 from direction_sante_prevoyance.prevoyance.p1_tarification.agent import AgentP1TarificationPrevoyance
 from direction_sante_prevoyance.prevoyance.p2_tables_morbidite.agent import AgentP2TablesMorbidite
-from direction_sante_prevoyance.prevoyance.p3_provisionnement.agent import AgentP3ProvisionnemntPrevoyance
+from direction_sante_prevoyance.prevoyance.p3_provisionnement.agent import AgentP3ProvissionnementPrevoyance
 from direction_sante_prevoyance.prevoyance.p4_reporting.agent import AgentP4ReportingPrevoyance
 
 
@@ -28,7 +28,7 @@ def pipeline_p4():
     r_b  = SPDataBuilder(verbose=False).construire(df)
     p1   = AgentP1TarificationPrevoyance(verbose=False)
     p2   = AgentP2TablesMorbidite(verbose=False)
-    p3   = AgentP3ProvisionnemntPrevoyance(verbose=False)
+    p3   = AgentP3ProvissionnementPrevoyance(verbose=False)
     p4   = AgentP4ReportingPrevoyance(verbose=False)
     r_p1 = p1.run(result_a2=r_b, age=42, salaire_brut=45000,
                   categorie="employe", generer_graphiques=False)
@@ -113,7 +113,7 @@ def test_p4_success_sans_fp():
     r_b  = SPDataBuilder(verbose=False).construire(df)
     p1   = AgentP1TarificationPrevoyance(verbose=False)
     p2   = AgentP2TablesMorbidite(verbose=False)
-    p3   = AgentP3ProvisionnemntPrevoyance(verbose=False)
+    p3   = AgentP3ProvissionnementPrevoyance(verbose=False)
     p4   = AgentP4ReportingPrevoyance(verbose=False)
     r_p1 = p1.run(result_a2=r_b, age=42, salaire_brut=45000,
                   categorie="employe", generer_graphiques=False)
