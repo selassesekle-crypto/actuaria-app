@@ -12,12 +12,10 @@ NAVY   = "0F2E52"
 NAVY_L = "1B3A5C"
 GOLD   = "C9A84C"
 GOLD_L = "E2C97E"
-BLANC  = "F0F4F8"
 GRIS   = "8A9BB0"
 VERT   = "1E8449"
 ROUGE  = "C0392B"
 AMBRE  = "E67E22"
-BLEU   = "3498DB"
 
 def _font(bold=False, size=10, color="1C2B3A", italic=False):
     return Font(name="Inter", bold=bold, size=size, color=color, italic=italic)
