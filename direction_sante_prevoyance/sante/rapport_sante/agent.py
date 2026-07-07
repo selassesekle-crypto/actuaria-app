@@ -198,7 +198,6 @@ STRUCTURE OBLIGATOIRE EN 7 SECTIONS :
 def _construire_contexte_sante(m1: Dict, m3: Dict, entite: str, date_arrete: str) -> str:
     postes    = m3.get("postes", {})
     hyp       = m3.get("hypotheses_consolidees", [])
-    hyp_dict  = {h["id"]: h for h in hyp}
 
     lines = [
         f"DOSSIER SANTÉ — {entite.upper()} — Arrêté {date_arrete}",
@@ -1208,7 +1207,6 @@ def _export_excel_sante(m1: Dict, m3: Dict, m4: Dict,
         wb = openpyxl.Workbook()
         NAVY_XL  = "0B1E3D"
         GOLD_XL  = "C9A84C"
-        BGRAY_XL = "F5F7FA"
 
         def _style_header(ws, row, cols):
             for col in range(1, cols + 1):
