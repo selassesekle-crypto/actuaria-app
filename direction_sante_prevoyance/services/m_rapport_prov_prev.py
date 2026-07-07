@@ -148,7 +148,7 @@ def generer(result_p3: dict) -> bytes:
         ("PSAP ITT (dossiers en cours)",            _f(psap), _pct(psap/pa*100 if pa else 0), "Sinistres déclarés"),
         ("PREC (provision risques en cours)",       _f(prec), _pct(prec/pa*100 if pa else 0), "Art. 78 S2"),
         ("Best Estimate Prévoyance",                _f(be),   _pct(be/pa*100 if pa else 0),   "Art. 77 §1 S2"),
-        ("Risk Adjustment (CoC 6% floor 3%)",       _f(ra),   _pct(ra/pa*100 if pa else 0),   "IFRS 17 §B119"),
+        ("Risk Adjustment (CoC 6%)",                _f(ra),   _pct(ra/pa*100 if pa else 0),   "IFRS 17 §B91"),
         ("TP Prévoyance (BE + RA)",                 _f(tp),   _pct(tp/pa*100 if pa else 0),   "Art. 77 §1 S2"),
     ]
     for i, row_p in enumerate(prov_rows):
