@@ -30,6 +30,7 @@
 ╚══════════════════════════════════════════════════════════════════════════════╝
 """
 
+import json
 import logging
 import warnings
 from datetime import datetime
@@ -472,7 +473,6 @@ class AgentSPStressTestingNaomie:
 
     def _audit(self, aid, src, resultats, rag):
         try:
-            import json
             log_path = self.audit_path / "sp_st_audit.jsonl"
             entry = {
                 "audit_id": aid,
