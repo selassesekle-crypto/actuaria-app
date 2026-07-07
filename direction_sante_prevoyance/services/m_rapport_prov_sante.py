@@ -12,12 +12,10 @@ NAVY   = "0F2E52"
 NAVY_L = "1B3A5C"
 GOLD   = "C9A84C"
 GOLD_L = "E2C97E"
-BLANC  = "F0F4F8"
 GRIS   = "8A9BB0"
 VERT   = "1E8449"
 ROUGE  = "C0392B"
 AMBRE  = "E67E22"
-BLEU   = "3498DB"
 
 def _font(bold=False, size=10, color="1C2B3A", italic=False):
     return Font(name="Inter", bold=bold, size=size, color=color, italic=italic)
@@ -148,7 +146,7 @@ def generer(result_s2: dict) -> bytes:
         ("IBNR santé (5-25% — liquidation <3m)",_f(ibnr), _pct(ibnr/pa*100 if pa else 0),"Art. 77 S2 — cadence rapide"),
         ("PREC (provision risques en cours)",    _f(prec), _pct(prec/pa*100 if pa else 0),"Art. 78 S2"),
         ("Best Estimate Santé",                  _f(be),   _pct(be/pa*100 if pa else 0),  "Art. 77 §1 S2"),
-        ("Risk Adjustment (CoC 8%)",             _f(ra),   _pct(ra/pa*100 if pa else 0),  "IFRS 17 §B119"),
+        ("Risk Adjustment (CoC 6%)",             _f(ra),   _pct(ra/pa*100 if pa else 0),  "IFRS 17 §B91"),
         ("TP Santé (BE + RA)",                   _f(tp),   _pct(tp/pa*100 if pa else 0),  "Art. 77 §1 S2"),
     ]
     for i, row_p in enumerate(prov_rows):
