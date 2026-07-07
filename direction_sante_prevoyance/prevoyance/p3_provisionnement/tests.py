@@ -1,5 +1,5 @@
 """
-Tests P3 Élodie v3.0 — AgentP3ProvisionnemntPrevoyance
+Tests P3 Élodie v3.0 — AgentP3ProvissionnementPrevoyance
 8 tests couvrant :
   T1 — Contrat de sortie complet (toutes clés)
   T2 — Triangle réel fourni (vs synthétique)
@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", "..
 import numpy as np
 
 from direction_sante_prevoyance.prevoyance.p3_provisionnement.agent import (
-    AgentP3ProvisionnemntPrevoyance,
+    AgentP3ProvissionnementPrevoyance,
     LR_CTIP_ITT_MARCHE,
     LR_CTIP_ITT_MIN,
     LR_CTIP_ITT_MAX,
@@ -79,7 +79,7 @@ def _result_p2(
 
 
 def _agent():
-    return AgentP3ProvisionnemntPrevoyance(
+    return AgentP3ProvissionnementPrevoyance(
         models_path="/tmp/p3_tests/models",
         audit_path="/tmp/p3_tests/audit",
         verbose=False,
@@ -745,7 +745,7 @@ if __name__ == "__main__":
     ]
 
     print("=" * 65)
-    print("  TESTS P3 ÉLODIE v3.0 — AgentP3ProvisionnemntPrevoyance")
+    print("  TESTS P3 ÉLODIE v3.0 — AgentP3ProvissionnementPrevoyance")
     print("  Triangle ITT | CL/Mack/BF/Bootstrap | PM Rentes | RAG")
     print("=" * 65)
 
