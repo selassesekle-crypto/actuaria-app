@@ -313,6 +313,7 @@ class AgentP3ProvissionnementPrevoyance:
                 # Provisions
                 "pm_rentes_ip":  round(pm_rentes, 2),
                 "psap_ip":       round(psap_ip, 2),
+                "psap_total":    round(psap_ip, 2),  # alias pour compatibilité modules Excel/tests
                 "prec":          round(prec, 2),
 
                 # Totaux
@@ -334,6 +335,7 @@ class AgentP3ProvissionnementPrevoyance:
                     "be_itt":           round(be_itt['be'], 2),
                     "pm_rentes_ip":     round(pm_rentes, 2),
                     "psap_ip":          round(psap_ip, 2),
+                    "psap_total":       round(psap_ip, 2),
                     "prec":             round(prec, 2),
                     "provision_totale": round(prov_tot, 2),
                     "loss_ratio":       round(lr, 4),
