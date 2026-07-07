@@ -1534,7 +1534,7 @@ class AgentRapportPrevoyance:
             h2_m = f"LR = {lr*100:.1f}% ∈ [{lr_ref*100:.0f}%–{lr_ref*100*1.25:.0f}%] — surveiller"
         else:
             h2_s = "NON VALIDÉE"
-            h2_m = f"LR = {lr*100:.1f}% > {lr_ref*100*1.25:.0f}% — sinistrali té excessive vs CTIP"
+            h2_m = f"LR = {lr*100:.1f}% > {lr_ref*100*1.25:.0f}% — sinistralité excessive vs CTIP"
         hyp.append({"id": "H2", "hypothese": f"Loss Ratio ITT ≤ {lr_ref*100*1.10:.0f}% (CTIP 2023 ×1.1)",
                     "valeur": h2_m, "statut": h2_s, "critique": True})
 
