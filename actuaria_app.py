@@ -3313,8 +3313,8 @@ def _executer_analyse(besoin, direction, equipe, client):
                     resultats["principal"] = _r_p2
 
                 if besoin in ["prov_prev","report_prev"]:
-                    from direction_sante_prevoyance.prevoyance.p3_provisionnement.agent import AgentP3ProvisionnemntPrevoyance
-                    _r_p3 = AgentP3ProvisionnemntPrevoyance(audit_path=_tmp, verbose=False).run(
+                    from direction_sante_prevoyance.prevoyance.p3_provisionnement.agent import AgentP3ProvissionnementPrevoyance
+                    _r_p3 = AgentP3ProvissionnementPrevoyance(audit_path=_tmp, verbose=False).run(
                         result_p1=_r_p1,
                         result_p2=_r_p2,
                         generer_graphiques=False,
