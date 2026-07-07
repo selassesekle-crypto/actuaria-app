@@ -14,7 +14,7 @@
 ║    ✅ MCR prévoyance avec bornes 25%/45% SCR et plancher absolu            ║
 ║    ✅ QRT S.14.01 complet (BE, RA 8%, TP, SCR, MCR, FPP)                 ║
 ║    ✅ Réconciliation avec P2 (matrices Markov) et P3 (provisions)         ║
-║    ✅ Standard ActuarIA : RAG + 3 hypothèses + 4 graphiques + commentaire  ║
+║    ✅ Standard ActuarIA : RAG + 4 hypothèses + 5 graphiques + commentaire  ║
 ║    ✅ Sorties vers Naomie (stress testing SP)                              ║
 ║                                                                              ║
 ║  ENTRÉES :                                                                   ║
@@ -455,6 +455,25 @@ class AgentP4ReportingPrevoyance:
             h3_s = 'NON VALIDÉE'
             h3_m = f"Ratio SCR = {ratio_scr:.1f}% < 100% — insuffisance capital"
 
+        # H4 — Ratio SCR/BE : charge en capital par euro de provision
+        # Mesure le poids du SCR relativement au BE — ratio actuariel standard
+        # Trop bas : SCR sous-estimé ou BE surévalué
+        # Trop haut : provisionnement insuffisant ou risque élevé
+        # Plage attendue : [0.20, 1.50] pour la prévoyance collective
+        ratio_scr_be = scr['scr_total'] / max(be, 1)
+        if 0.20 <= ratio_scr_be <= 1.50:
+            h4_s = 'VALIDÉE'
+            h4_m = (f"SCR/BE = {ratio_scr_be:.3f} ∈ [0.20,1.50] — "
+                    f"charge en capital cohérente avec les provisions ✅")
+        elif ratio_scr_be > 1.50:
+            h4_s = 'À JUSTIFIER'
+            h4_m = (f"SCR/BE = {ratio_scr_be:.3f} > 1.50 — "
+                    f"SCR élevé vs BE : vérifier les chocs ou le provisionnement")
+        else:
+            h4_s = 'À JUSTIFIER'
+            h4_m = (f"SCR/BE = {ratio_scr_be:.3f} < 0.20 — "
+                    f"SCR faible vs BE : vérifier les paramètres de choc EIOPA")
+
         return [
             {'id':'H1','hypothese':'BE/PA ≤ 50% — provisions prévoyance cohérentes',
              'valeur':h1_m,'statut':h1_s,'critique':True},
@@ -462,6 +481,8 @@ class AgentP4ReportingPrevoyance:
              'valeur':h2_m,'statut':h2_s,'critique':True},
             {'id':'H3','hypothese':'Ratio SCR ≥ 130% — capitalisation prévoyance solide',
              'valeur':h3_m,'statut':h3_s,'critique':True},
+            {'id':'H4','hypothese':'SCR/BE ∈ [0.20,1.50] — charge en capital vs provisions',
+             'valeur':h4_m,'statut':h4_s,'critique':False},
         ]
 
     def _rag(self, hyp, ratio_scr, ratio_mcr):
@@ -514,7 +535,7 @@ class AgentP4ReportingPrevoyance:
             "", "📋 HYPOTHÈSES", "─"*40,
         ]
         for h in hyp:
-            ic_h = "✅" if h['statut']=='VALIDÉE' else "⚠️"
+            ic_h = "✅" if h['statut']=='VALIDÉE' else ("⚠️" if h['statut']=='À JUSTIFIER' else "❌")
             L += [f"  {ic_h} [{h['id']}] {h['hypothese']}",
                   f"       → {h['valeur']} : {h['statut']}"]
 
@@ -549,8 +570,8 @@ class AgentP4ReportingPrevoyance:
                        ra/1e3, tp/1e3]],
                 textposition="outside", textfont=dict(color=BLANC,size=10),
             ))
-            l = dict(**LAYOUT_BASE)
-            l.update(dict(
+            layout = dict(**LAYOUT_BASE)
+            layout.update(dict(
                 title=dict(text="G1 — BE Prévoyance : PM Rentes IP vs PSAP ITT",
                            font=dict(color=OR,size=12),x=0.01),
                 showlegend=False,
@@ -561,7 +582,7 @@ class AgentP4ReportingPrevoyance:
                     xref="paper",yref="paper",x=0.01,y=-0.22,
                     font=dict(color=GRIS,size=9),showarrow=False)],
             ))
-            fig.update_layout(**l)
+            fig.update_layout(**layout)
             gph['be_decompose_prev'] = fig
         except Exception as e:
             self.logger.warning(f"G1:{e}")
@@ -582,8 +603,8 @@ class AgentP4ReportingPrevoyance:
                        scr['scr_longevite']/1e3, scr['scr_operationnel']/1e3]],
                 textposition="outside", textfont=dict(color=BLANC,size=10),
             ))
-            l = dict(**LAYOUT_BASE)
-            l.update(dict(
+            layout = dict(**LAYOUT_BASE)
+            layout.update(dict(
                 title=dict(text=f"G2 — SCR Invalidité EIOPA décomposé | Total={scr['scr_total']/1e3:.0f}k€",
                            font=dict(color=OR,size=12),x=0.01),
                 showlegend=False,
@@ -594,7 +615,7 @@ class AgentP4ReportingPrevoyance:
                     xref="paper",yref="paper",x=0.01,y=-0.22,
                     font=dict(color=GRIS,size=9),showarrow=False)],
             ))
-            fig.update_layout(**l)
+            fig.update_layout(**layout)
             gph['scr_invalidite_decompose'] = fig
         except Exception as e:
             self.logger.warning(f"G2:{e}")
@@ -622,8 +643,8 @@ class AgentP4ReportingPrevoyance:
                         ],
                         threshold=dict(line=dict(color=ROUGE,width=2),thickness=0.8,value=100),
                     )), row=1, col=col)
-            l = dict(**LAYOUT_BASE)
-            l.update(dict(
+            layout = dict(**LAYOUT_BASE)
+            layout.update(dict(
                 title=dict(text="G3 — Ratios Couverture SCR/MCR Prévoyance",
                            font=dict(color=OR,size=12),x=0.01),
                 annotations=[dict(
@@ -631,7 +652,7 @@ class AgentP4ReportingPrevoyance:
                     xref="paper",yref="paper",x=0.5,y=-0.12,
                     font=dict(color=GRIS,size=9),showarrow=False)],
             ))
-            fig.update_layout(**l)
+            fig.update_layout(**layout)
             gph['jauges_scr_mcr_prev'] = fig
         except Exception as e:
             self.logger.warning(f"G3:{e}")
@@ -650,22 +671,76 @@ class AgentP4ReportingPrevoyance:
                     textfont=dict(color=c,size=10), showlegend=False,
                 ))
             cg = VERT if all(h['statut']=='VALIDÉE' for h in hyp) else (ROUGE if any(h['statut']=='NON VALIDÉE' for h in hyp) else AMBRE)
-            l = dict(**LAYOUT_BASE)
-            l.update(dict(
+            layout = dict(**LAYOUT_BASE)
+            layout.update(dict(
                 title=dict(text="G4 — Scorecard QRT Prévoyance S.14.01",
                            font=dict(color=cg,size=12),x=0.01),
                 xaxis=dict(range=[0,1.6],visible=False),
                 yaxis=dict(tickfont=dict(color=BLANC,size=9),showgrid=False),
                 barmode="overlay",height=260,
                 annotations=[dict(
-                    text="💡 3 ✅ = QRT S.14.01 prêt pour Naomie (stress testing SP).",
+                    text="💡 4 ✅ = QRT S.14.01 prêt pour Naomie (stress testing SP).",
                     xref="paper",yref="paper",x=0.01,y=-0.22,
                     font=dict(color=GRIS,size=9),showarrow=False)],
             ))
-            fig.update_layout(**l)
+            fig.update_layout(**layout)
             gph['scorecard_p4'] = fig
         except Exception as e:
             self.logger.warning(f"G4:{e}")
+
+        # G5 — Comparatif BE / SCR / FPP (évolution de la structure financière)
+        try:
+            labels_g5 = ['BE', 'RA', 'TP', 'SCR Total', 'MCR', 'FPP']
+            vals_g5   = [
+                be/1e3, ra/1e3, tp/1e3,
+                scr['scr_total']/1e3,
+                mcr['mcr']/1e3,
+                fpp/1e3,
+            ]
+            cols_g5 = [ROUGE, AMBRE, OR, BLEU, VIOLET, VERT]
+            fig = go.Figure(go.Bar(
+                x=labels_g5, y=vals_g5,
+                marker_color=cols_g5,
+                width=0.5, opacity=0.88,
+                text=[f"{v:.0f}k€" for v in vals_g5],
+                textposition='outside',
+                textfont=dict(color=BLANC, size=10),
+                hovertemplate='<b>%{x}</b><br>%{y:.0f}k€<extra></extra>',
+            ))
+            # Ligne SCR = repère de solvabilité
+            fig.add_hline(
+                y=scr['scr_total']/1e3,
+                line_dash='dash', line_color=BLEU, line_width=1.5,
+                annotation_text='SCR requis',
+                annotation_font=dict(color=BLEU, size=9)
+            )
+            # Ligne FPP = capital disponible
+            fig.add_hline(
+                y=fpp/1e3,
+                line_dash='dot', line_color=VERT, line_width=1.5,
+                annotation_text='FPP disponibles',
+                annotation_font=dict(color=VERT, size=9)
+            )
+            layout_g5 = dict(**LAYOUT_BASE)
+            layout_g5.update(dict(
+                title=dict(
+                    text=f"G5 — Structure financière prévoyance : BE/SCR/FPP | "
+                         f"Ratio SCR={r_scr:.1f}%",
+                    font=dict(color=OR, size=12), x=0.01),
+                showlegend=False,
+                xaxis=dict(tickfont=dict(color=BLANC, size=9), showgrid=False),
+                yaxis=dict(title='k€', tickfont=dict(color=GRIS, size=9),
+                           showgrid=True, gridcolor='rgba(255,255,255,0.05)'),
+                annotations=[dict(
+                    text='💡 FPP doit couvrir le SCR (≥100%) et idéalement ≥130% '
+                         'pour la prévoyance collective.',
+                    xref='paper', yref='paper', x=0.01, y=-0.22,
+                    font=dict(color=GRIS, size=9), showarrow=False)],
+            ))
+            fig.update_layout(**layout_g5)
+            gph['structure_financiere_prev'] = fig
+        except Exception as e:
+            self.logger.warning(f'G5:{e}')
 
         return gph
 
