@@ -35,6 +35,7 @@
 ╚══════════════════════════════════════════════════════════════════════════════╝
 """
 
+import json
 import logging
 import warnings
 from datetime import datetime
@@ -556,7 +557,6 @@ class AgentSPCoord:
         }
         try:
             with open(log_path, "a", encoding="utf-8") as f:
-                import json
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         except Exception:
             pass
