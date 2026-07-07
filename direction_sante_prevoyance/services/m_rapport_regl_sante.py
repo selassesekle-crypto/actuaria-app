@@ -171,7 +171,7 @@ def generer(result_s3: dict, result_reg2: dict = None, result_reg3: dict = None)
 
     rows_ifrs = [
         ("Best Estimate",           _f(be17),  "Flux futurs actualisés",     "IFRS 17 §33"),
-        ("Risk Adjustment (8% BE)", _f(ra17),  "CoC 6% — floor 3%",          "IFRS 17 §B119"),
+        ("Risk Adjustment (CoC 6%)", _f(ra17),  "CoC 6% EIOPA",              "IFRS 17 §B91"),
         ("TP Santé (BE + RA)",      _f(tp17),  "",                            "IFRS 17 §32"),
         ("CSM (si GMM)",            _f(csm17), "Profit reporté",              "IFRS 17 §38"),
     ]
