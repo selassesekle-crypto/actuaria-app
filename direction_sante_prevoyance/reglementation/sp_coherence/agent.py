@@ -48,6 +48,7 @@
 ╚══════════════════════════════════════════════════════════════════════════════╝
 """
 
+import json
 import logging
 import warnings
 from datetime import datetime
@@ -91,7 +92,6 @@ SEUIL_BE_ECART_PCT     = 0.05   # ≤ 5% d'écart relatif
 SEUIL_SCR_ECART_PCT    = 0.02   # ≤ 2% — même formule, doit être identique
 # Seuil poly-sinistralité alerte
 SEUIL_POLY_ALERTE      = 5.0    # % — source CTIP/FNMF
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 class AgentSPCoherence:
@@ -776,7 +776,7 @@ class AgentSPCoherence:
     # =========================================================================
     def _audit(self, audit_id, controles, rag, agents):
         try:
-            import json as _json
+
             log = self.audit_path / "sp_coherence_audit.jsonl"
             entry = {
                 "audit_id":  audit_id,
@@ -787,7 +787,7 @@ class AgentSPCoherence:
                 "agents":    agents,
             }
             with open(log, "a", encoding="utf-8") as f:
-                f.write(_json.dumps(entry, ensure_ascii=False) + "\n")
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         except Exception:
             pass
 
