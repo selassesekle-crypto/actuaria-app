@@ -75,10 +75,8 @@ except ImportError:
 
 # ── Palette ActuarIA ──────────────────────────────────────────────────────────
 NAVY      = "#0B1E3D"
-NAVY_MID  = "#132844"
 NAVY_L    = "#1E3A5F"
 GOLD      = "#C9A84C"
-GOLD_L    = "#E2C97E"
 ROUGE     = "#C0392B"
 ORANGE    = "#E67E22"
 VERT      = "#1E8449"
@@ -93,7 +91,6 @@ SEUIL_SCR        = 100.0   # seuil minimal % — Art.129 S2
 SEUIL_SCR_CIBLE  = 130.0   # seuil cible interne
 # SCR Invalidité EIOPA — Art.145 RD 2015/35
 CHOC_MORB_HAUT   = 0.35    # choc morbidité +35% (1ère année)
-CHOC_MORB_BAS    = 0.25    # choc morbidité +25% (années suivantes)
 CHOC_CESSATION   = 0.20    # choc cessation −20%
 # MCR Prévoyance — Art.252 RD 2015/35
 MCR_COEFF_PREM   = 0.0453
@@ -101,7 +98,6 @@ MCR_COEFF_RES    = 0.0351
 MCR_PLANCHER     = 3_700_000.0  # plancher absolu prévoyance Art.129 S2
 # LR marché CTIP 2023
 LR_CTIP_ITT      = 0.72    # LR ITT marché France — CTIP 2023
-LR_CTIP_IP       = 0.15    # LR IP marché France — CTIP 2023
 
 # ── Logo SVG ──────────────────────────────────────────────────────────────────
 LOGO_SVG = (
