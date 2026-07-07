@@ -251,7 +251,7 @@ class AgentS3ReportingSante:
             'titre':  'Health Non-Similar to Life Techniques (NSLT)',
             'lignes': [
                 {'code':'R0010','libelle':'BE Santé NSLT','C0010':round(be,0)},
-                {'code':'R0020','libelle':'Risk Adjustment (CoC 5%)','C0010':round(ra,0)},
+                {'code':'R0020','libelle':'Risk Adjustment (CoC 6% — EIOPA IFRS 17 §B91)','C0010':round(ra,0)},
                 {'code':'R0030','libelle':'TP Santé (BE + RA)','C0010':round(tp,0)},
                 {'code':'R0040','libelle':'Ratio TP/BE','C0060':round(ratio_tp_be,4)},
                 {'code':'R0050','libelle':'SCR Souscription Santé','C0040':round(scr,0)},
@@ -350,7 +350,7 @@ class AgentS3ReportingSante:
             "", "📋 HYPOTHÈSES", "─"*40,
         ]
         for h in hyp:
-            ic_h = "✅" if h['statut']=='VALIDÉE' else "⚠️"
+            ic_h = "✅" if h['statut']=='VALIDÉE' else ("❌" if h['statut']=='NON VALIDÉE' else "⚠️")
             L += [f"  {ic_h} [{h['id']}] {h['hypothese']}",
                   f"       → {h['valeur']} : {h['statut']}"]
 
