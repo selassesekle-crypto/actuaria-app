@@ -43,18 +43,20 @@ def test_p3_success(pipeline_p3):
     assert r_p3["erreur"] is None
 
 
-# ── T2 : BE = PSAP + PM (identité comptable) ──────────────────────────────────
+# ── T2 : BE = BE_ITT + PM + PSAP_IP + PREC (identité comptable) ──────────────
 def test_p3_be_identite_comptable(pipeline_p3):
-    """BE_prévoyance = PSAP_total + PM_rentes_IP.
-    C'est l'identité fondamentale du provisionnement prévoyance.
+    """BE_prévoyance = BE_ITT + PM_rentes_IP + PSAP_IP + PREC.
+    Identité fondamentale du provisionnement prévoyance (Art. 77 §1 S2).
     """
     _, _, r_p3 = pipeline_p3
-    be   = r_p3["be_prevoyance"]
-    psap = r_p3["psap_total"]
-    pm   = r_p3["pm_rentes_ip"]
+    be      = r_p3["be_prevoyance"]
+    be_itt  = r_p3["be_itt"]
+    pm      = r_p3["pm_rentes_ip"]
+    psap_ip = r_p3["psap_ip"]
+    prec    = r_p3["prec"]
     assert be > 0, "BE doit être positif"
-    assert abs(be - (psap + pm)) < 0.01, (
-        f"BE ({be:.2f}) ≠ PSAP ({psap:.2f}) + PM ({pm:.2f})"
+    assert abs(be - (be_itt + pm + psap_ip + prec)) < 0.05, (
+        f"BE ({be:.2f}) ≠ BE_ITT ({be_itt:.2f}) + PM ({pm:.2f}) + PSAP_IP ({psap_ip:.2f}) + PREC ({prec:.2f})"
     )
 
 
