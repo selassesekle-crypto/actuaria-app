@@ -15,7 +15,7 @@
 ║    ✅ Espérance de durée en ITT et en IP par tranche d'âge                ║
 ║    ✅ Probabilité de maintien en ITT à 6 mois / 12 mois / 24 mois         ║
 ║    ✅ Projection sur l'horizon du contrat                                   ║
-║    ✅ Standard ActuarIA : RAG + 3 hypothèses + 4 graphiques + commentaire  ║
+║    ✅ Standard ActuarIA : RAG + 5 hypothèses + 4 graphiques + commentaire  ║
 ║    ✅ Sorties structurées vers P3 Élodie (provisionnement)                 ║
 ║                                                                              ║
 ║  MODÈLE DE MARKOV :                                                          ║
@@ -195,7 +195,7 @@ class AgentP2TablesMorbidite:
             prob_maintien = self._calculer_maintien(P)
 
             # ── 7. HYPOTHÈSES + RAG ───────────────────────────────────────────
-            hyp = self._hypotheses(trans, esperances, prob_maintien)
+            hyp = self._hypotheses(trans, esperances, prob_maintien, age)
             rag = self._rag(hyp, trans)
 
             # ── 8. COMMENTAIRE ────────────────────────────────────────────────
@@ -494,7 +494,7 @@ class AgentP2TablesMorbidite:
     # ══════════════════════════════════════════════════════════════════════════
     # 7. HYPOTHÈSES
     # ══════════════════════════════════════════════════════════════════════════
-    def _hypotheses(self, trans, esperances, prob_maintien):
+    def _hypotheses(self, trans, esperances, prob_maintien, age):
         # H1 — q_IP < q_AI (invalidité plus rare que l'incapacité)
         if trans['q_IP_annuel'] < trans['q_AI']:
             h1_s = 'VALIDÉE'
@@ -525,6 +525,46 @@ class AgentP2TablesMorbidite:
             h3_s = 'À JUSTIFIER'
             h3_m = f"Espérance durée IP = {e_ip:.1f} ans — hors plage raisonnable"
 
+        # H4 — A/E ratio BCAC
+        # Compare q_AI observé (avec facteur CSP) vs q_AI brut BCAC pour l'âge
+        # Un ratio > 1 indique une sinistralité réelle supérieure aux tables
+        # Source : BCAC 2019 — tables de référence marché prévoyance France
+        q_ai_bcac_brut = _interp(Q_AI_BCAC, age)  # sans facteur CSP
+        ae_ratio = trans['q_AI'] / max(q_ai_bcac_brut, 1e-9)
+        if 0.80 <= ae_ratio <= 1.20:
+            h4_s = 'VALIDÉE'
+            h4_m = (f"A/E BCAC = {ae_ratio:.3f} ∈ [0.80,1.20] — "
+                    f"q_AI={trans['q_AI']*100:.2f}% cohérent avec BCAC 2019 ✅")
+        elif ae_ratio > 1.20:
+            h4_s = 'À JUSTIFIER'
+            h4_m = (f"A/E BCAC = {ae_ratio:.3f} > 1.20 — "
+                    f"sinistralité réelle supérieure aux tables BCAC 2019")
+        else:
+            h4_s = 'À JUSTIFIER'
+            h4_m = (f"A/E BCAC = {ae_ratio:.3f} < 0.80 — "
+                    f"sinistralité inférieure aux tables, vérifier le portefeuille")
+
+        # H5 — P(IP|ITT) par âge
+        # Vérifie que la probabilité conditionnelle ITT → IP est dans la plage
+        # BCAC attendue ± 20% pour l'âge considéré
+        # Source : BCAC 2019 — Q_IP_COND_BCAC
+        q_ip_ref = _interp(Q_IP_COND_BCAC, age)  # valeur de référence BCAC
+        borne_inf = q_ip_ref * 0.80
+        borne_sup = q_ip_ref * 1.20
+        q_ip_obs  = trans['q_IP_cond']
+        if borne_inf <= q_ip_obs <= borne_sup:
+            h5_s = 'VALIDÉE'
+            h5_m = (f"P(IP|ITT) = {q_ip_obs*100:.1f}% ∈ "
+                    f"[{borne_inf*100:.1f}%-{borne_sup*100:.1f}%] BCAC âge={age:.0f} ✅")
+        elif q_ip_obs > borne_sup:
+            h5_s = 'À JUSTIFIER'
+            h5_m = (f"P(IP|ITT) = {q_ip_obs*100:.1f}% > {borne_sup*100:.1f}% "
+                    f"BCAC âge={age:.0f} — risque d'invalidisation élevé")
+        else:
+            h5_s = 'À JUSTIFIER'
+            h5_m = (f"P(IP|ITT) = {q_ip_obs*100:.1f}% < {borne_inf*100:.1f}% "
+                    f"BCAC âge={age:.0f} — taux de consolidation inférieur aux tables")
+
         return [
             {'id':'H1','hypothese':"P(IP) < P(ITT) — invalidité plus rare que l'incapacité",
              'valeur':h1_m,'statut':h1_s,'critique':True},
@@ -532,6 +572,10 @@ class AgentP2TablesMorbidite:
              'valeur':h2_m,'statut':h2_s,'critique':True},
             {'id':'H3','hypothese':'Espérance de durée en IP ∈ [1,40] ans',
              'valeur':h3_m,'statut':h3_s,'critique':True},
+            {'id':'H4','hypothese':'A/E ratio BCAC ∈ [0.80,1.20] — sinistralité réelle vs tables',
+             'valeur':h4_m,'statut':h4_s,'critique':False},
+            {'id':'H5','hypothese':'P(IP|ITT) dans la plage BCAC 2019 ±20% pour l\'âge',
+             'valeur':h5_m,'statut':h5_s,'critique':True},
         ]
 
     def _rag(self, hyp, trans):
@@ -587,7 +631,7 @@ class AgentP2TablesMorbidite:
             "", "📋 HYPOTHÈSES", "─"*40,
         ]
         for h in hyp:
-            ic_h = "✅" if h['statut']=='VALIDÉE' else "⚠️"
+            ic_h = "✅" if h['statut']=='VALIDÉE' else ("⚠️" if h['statut']=='À JUSTIFIER' else "❌")
             L += [f"  {ic_h} [{h['id']}] {h['hypothese']}",
                   f"       → {h['valeur']} : {h['statut']}"]
 
@@ -620,8 +664,8 @@ class AgentP2TablesMorbidite:
                     fillcolor=f"rgba({','.join(str(int(col[i:i+2],16)) for i in (1,3,5))},0.08)" if etat=='IP' else None,
                     hovertemplate=f"<b>{etat}</b><br>An %{{x}} : %{{y:.2f}}%<extra></extra>",
                 ))
-            l = dict(**LAYOUT_BASE)
-            l.update(dict(
+            layout = dict(**LAYOUT_BASE)
+            layout.update(dict(
                 title=dict(text=f"G1 — Projection Markov 4 états | âge={age:.0f} | {len(annees)-1} ans",
                            font=dict(color=OR,size=12),x=0.01),
                 legend=dict(font=dict(color=BLANC,size=9),bgcolor='rgba(0,0,0,0)',orientation='h',y=-0.15),
@@ -634,7 +678,7 @@ class AgentP2TablesMorbidite:
                     xref="paper",yref="paper",x=0.01,y=-0.28,
                     font=dict(color=GRIS,size=9),showarrow=False)],
             ))
-            fig.update_layout(**l)
+            fig.update_layout(**layout)
             gph['projection_markov'] = fig
         except Exception as e:
             self.logger.warning(f"G1:{e}")
@@ -652,8 +696,8 @@ class AgentP2TablesMorbidite:
                 textfont=dict(color=BLANC,size=10),
                 hovertemplate="De <b>%{y}</b> vers <b>%{x}</b><br>%{text}<extra></extra>",
             ))
-            l = dict(**LAYOUT_BASE)
-            l.update(dict(
+            layout = dict(**LAYOUT_BASE)
+            layout.update(dict(
                 title=dict(text="G2 — Matrice de Transition Markov P (annuelle %)",
                            font=dict(color=OR,size=12),x=0.01),
                 xaxis=dict(title="État suivant",tickfont=dict(color=BLANC,size=10)),
@@ -663,7 +707,7 @@ class AgentP2TablesMorbidite:
                     xref="paper",yref="paper",x=0.01,y=-0.22,
                     font=dict(color=GRIS,size=9),showarrow=False)],
             ))
-            fig.update_layout(**l)
+            fig.update_layout(**layout)
             gph['matrice_transition'] = fig
         except Exception as e:
             self.logger.warning(f"G2:{e}")
@@ -686,8 +730,8 @@ class AgentP2TablesMorbidite:
                 fill='tozeroy', fillcolor='rgba(243,156,18,0.08)',
                 hovertemplate="<b>Mois %{x}</b><br>%{y:.1f}% encore en ITT<extra></extra>",
             ))
-            l = dict(**LAYOUT_BASE)
-            l.update(dict(
+            layout = dict(**LAYOUT_BASE)
+            layout.update(dict(
                 title=dict(text="G3 — Courbe de maintien en ITT (probabilité d'être encore en arrêt)",
                            font=dict(color=AMBRE,size=11),x=0.01),
                 xaxis=dict(title="Mois depuis début arrêt",tickfont=dict(color=GRIS,size=9)),
@@ -697,14 +741,14 @@ class AgentP2TablesMorbidite:
                     xref="paper",yref="paper",x=0.01,y=-0.22,
                     font=dict(color=GRIS,size=9),showarrow=False)],
             ))
-            fig.update_layout(**l)
+            fig.update_layout(**layout)
             gph['maintien_itt'] = fig
         except Exception as e:
             self.logger.warning(f"G3:{e}")
 
         # G4 — Scorecard
         try:
-            hyp_tmp = self._hypotheses(trans, esp, maint)
+            hyp_tmp = self._hypotheses(trans, esp, maint, age)
             fig = go.Figure()
             for h in hyp_tmp:
                 c  = VERT if h['statut']=='VALIDÉE' else (AMBRE if h['statut']=='À JUSTIFIER' else ROUGE)
@@ -717,19 +761,19 @@ class AgentP2TablesMorbidite:
                     textfont=dict(color=c,size=10), showlegend=False,
                 ))
             cg = VERT if all(h['statut']=='VALIDÉE' for h in hyp_tmp) else (ROUGE if any(h['statut']=='NON VALIDÉE' for h in hyp_tmp) else AMBRE)
-            l = dict(**LAYOUT_BASE)
-            l.update(dict(
+            layout = dict(**LAYOUT_BASE)
+            layout.update(dict(
                 title=dict(text="G4 — Scorecard Tables Morbidité BCAC 2019",
                            font=dict(color=cg,size=12),x=0.01),
                 xaxis=dict(range=[0,1.6],visible=False),
                 yaxis=dict(tickfont=dict(color=BLANC,size=10),showgrid=False),
                 barmode="overlay", height=260,
                 annotations=[dict(
-                    text="💡 3 ✅ = tables BCAC 2019 cohérentes, prêtes pour le provisionnement P3.",
+                    text="💡 5 ✅ = tables BCAC 2019 cohérentes, prêtes pour le provisionnement P3.",
                     xref="paper",yref="paper",x=0.01,y=-0.22,
                     font=dict(color=GRIS,size=9),showarrow=False)],
             ))
-            fig.update_layout(**l)
+            fig.update_layout(**layout)
             gph['scorecard_p2'] = fig
         except Exception as e:
             self.logger.warning(f"G4:{e}")
