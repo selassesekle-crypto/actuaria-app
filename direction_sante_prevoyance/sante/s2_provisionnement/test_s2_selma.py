@@ -8,7 +8,7 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../.."))
 
 from direction_sante_prevoyance.sante.s1_tarification.agent import AgentS1TarificationSante
-from direction_sante_prevoyance.sante.s2_provisionnement.agent import AgentS2ProvisionnemntSante
+from direction_sante_prevoyance.sante.s2_provisionnement.agent import AgentS2ProvissionnementSante
 
 
 @pytest.fixture(scope="module")
@@ -21,7 +21,7 @@ def r_s1():
 
 @pytest.fixture(scope="module")
 def s2():
-    return AgentS2ProvisionnemntSante(verbose=False)
+    return AgentS2ProvissionnementSante(verbose=False)
 
 
 @pytest.fixture(scope="module")
