@@ -386,7 +386,7 @@ class AgentS3ReportingSante:
                 xaxis=dict(tickfont=dict(color=BLANC),showgrid=False),
                 yaxis=dict(visible=False), bargap=0.35,
                 annotations=[dict(
-                    text="💡 TP Santé = BE (PSAP) + Risk Adjustment (5%). Ratio TP/BE ∈ [1.0,1.5].",
+                    text="💡 TP Santé = BE (PSAP) + Risk Adjustment (CoC 6% EIOPA §B91). Ratio TP/BE ∈ [1.0,1.5].",
                     xref="paper",yref="paper",x=0.01,y=-0.22,
                     font=dict(color=GRIS,size=9),showarrow=False)],
             ))
