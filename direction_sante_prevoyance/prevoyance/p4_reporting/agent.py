@@ -781,7 +781,7 @@ if __name__ == '__main__':
     import sys; sys.path.insert(0,'/home/claude')
     from direction_sante_prevoyance.prevoyance.p1_tarification.agent import AgentP1TarificationPrevoyance
     from direction_sante_prevoyance.prevoyance.p2_tables_morbidite.agent import AgentP2TablesMorbidite
-    from direction_sante_prevoyance.prevoyance.p3_provisionnement.agent import AgentP3ProvisionnemntPrevoyance
+    from direction_sante_prevoyance.prevoyance.p3_provisionnement.agent import AgentP3ProvissionnementPrevoyance
 
     r1 = AgentP1TarificationPrevoyance(models_path='/tmp',audit_path='/tmp',verbose=False).run(
         age=40, salaire_brut=45_000, categorie='employe',
@@ -789,7 +789,7 @@ if __name__ == '__main__':
         chargement_pct=0.20, generer_graphiques=False)
     r2 = AgentP2TablesMorbidite(models_path='/tmp',audit_path='/tmp',verbose=False).run(
         result_p1=r1, horizon_ans=10, generer_graphiques=False)
-    r3 = AgentP3ProvisionnemntPrevoyance(models_path='/tmp',audit_path='/tmp',verbose=False).run(
+    r3 = AgentP3ProvissionnementPrevoyance(models_path='/tmp',audit_path='/tmp',verbose=False).run(
         result_p1=r1, result_p2=r2, generer_graphiques=False)
 
     agent = AgentP4ReportingPrevoyance(
