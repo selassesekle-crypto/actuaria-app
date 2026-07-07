@@ -49,6 +49,7 @@
 ╚══════════════════════════════════════════════════════════════════════════════╝
 """
 
+import json
 import logging
 import warnings
 from datetime import datetime
@@ -857,7 +858,6 @@ class AgentSPAlm:
     # =========================================================================
     def _audit(self, aid, gap, bv01, lcr, rag):
         try:
-            import json as _json
             log = self.audit_path / "sp_alm_audit.jsonl"
             entry = {
                 "audit_id":      aid,
@@ -869,7 +869,7 @@ class AgentSPAlm:
                 "lcr_conforme":  lcr["conforme"],
             }
             with open(log, "a", encoding="utf-8") as f:
-                f.write(_json.dumps(entry, ensure_ascii=False) + "\n")
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         except Exception:
             pass
 
