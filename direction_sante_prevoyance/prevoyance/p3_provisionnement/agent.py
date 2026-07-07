@@ -118,7 +118,7 @@ N_SIM_BOOTSTRAP = 1000
 #  CLASSE PRINCIPALE
 # =============================================================================
 
-class AgentP3ProvisionnemntPrevoyance:
+class AgentP3ProvissionnementPrevoyance:
     """
     Agent P3 Élodie v3.0 — Provisionnement Prévoyance.
     Direction Santé-Prévoyance · Équipe Prévoyance · Sous DIALLO.
@@ -1744,7 +1744,7 @@ class AgentP3ProvisionnemntPrevoyance:
         self, h: Dict, be_itt: Dict, mack: Dict, bt: Dict, lr: float
     ) -> list:
         """Hypothèses H1-H7 pour le rapport — standard ActuarIA."""
-        def _st(ok): return "VALIDÉE" if ok else "REJETÉE"
+        def _st(ok): return "VALIDÉE" if ok else "NON VALIDÉE"
 
         h1 = h["h1_independance"]; h2 = h["h2_stabilite"]
         h3 = h["h3_apriori_bf"];   h4 = h["h4_homosc_bootstrap"]
@@ -2119,7 +2119,7 @@ if __name__ == "__main__":
         },
     }
 
-    agent = AgentP3ProvisionnemntPrevoyance(
+    agent = AgentP3ProvissionnementPrevoyance(
         models_path="/tmp/p3/models", audit_path="/tmp/p3/audit", verbose=True
     )
     r = agent.run(result_p1=r_p1, result_p2=r_p2, generer_graphiques=False)
