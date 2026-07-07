@@ -16,11 +16,11 @@ from direction_sante_prevoyance.reglementation.sp_coherence.agent import AgentSP
 def pipeline_complet():
     from direction_sante_prevoyance.services.sp_data_builder import SPDataBuilder
     from direction_sante_prevoyance.sante.s1_tarification.agent import AgentS1TarificationSante
-    from direction_sante_prevoyance.sante.s2_provisionnement.agent import AgentS2ProvisionnemntSante
+    from direction_sante_prevoyance.sante.s2_provisionnement.agent import AgentS2ProvissionnementSante
     from direction_sante_prevoyance.sante.s3_reporting.agent import AgentS3ReportingSante
     from direction_sante_prevoyance.prevoyance.p1_tarification.agent import AgentP1TarificationPrevoyance
     from direction_sante_prevoyance.prevoyance.p2_tables_morbidite.agent import AgentP2TablesMorbidite
-    from direction_sante_prevoyance.prevoyance.p3_provisionnement.agent import AgentP3ProvisionnemntPrevoyance
+    from direction_sante_prevoyance.prevoyance.p3_provisionnement.agent import AgentP3ProvissionnementPrevoyance
     from direction_sante_prevoyance.prevoyance.p4_reporting.agent import AgentP4ReportingPrevoyance
     from direction_sante_prevoyance.coordination.sp_coord.agent import AgentSPCoord
     from direction_sante_prevoyance.reglementation.sp_reg2_ifrs17.agent import AgentSPReg2IFRS17
@@ -34,11 +34,11 @@ def pipeline_complet():
     r_bip = SPDataBuilder(verbose=False).construire(df_ip)
 
     r_s1 = AgentS1TarificationSante(verbose=False).run(result_a2=r_bm, nb_assures=1000, age_moyen=40, contrat="collectif", garantie_niveau="confort", generer_graphiques=False)
-    r_s2 = AgentS2ProvisionnemntSante(verbose=False).run(result_s1=r_s1, generer_graphiques=False)
+    r_s2 = AgentS2ProvissionnementSante(verbose=False).run(result_s1=r_s1, generer_graphiques=False)
     r_s3 = AgentS3ReportingSante(verbose=False).run(result_s1=r_s1, result_s2=r_s2, fonds_propres=5_000_000, generer_graphiques=False)
     r_p1 = AgentP1TarificationPrevoyance(verbose=False).run(result_a2=r_bip, age=42, salaire_brut=45000, categorie="employe", generer_graphiques=False)
     r_p2 = AgentP2TablesMorbidite(verbose=False).run(result_p1=r_p1, generer_graphiques=False)
-    r_p3 = AgentP3ProvisionnemntPrevoyance(verbose=False).run(result_p1=r_p1, result_p2=r_p2, generer_graphiques=False)
+    r_p3 = AgentP3ProvissionnementPrevoyance(verbose=False).run(result_p1=r_p1, result_p2=r_p2, generer_graphiques=False)
     r_p4 = AgentP4ReportingPrevoyance(verbose=False).run(result_p1=r_p1, result_p2=r_p2, result_p3=r_p3, fonds_propres=10_000_000, generer_graphiques=False)
     r_coord = AgentSPCoord(verbose=False).run(result_s3=r_s3, result_p4=r_p4, fonds_propres=15_000_000, generer_graphiques=False)
     r_reg2 = AgentSPReg2IFRS17(verbose=False).run(result_s3=r_s3, result_p4=r_p4, generer_graphiques=False)
