@@ -237,7 +237,7 @@ def _construire_contexte_sante(m1: Dict, m3: Dict, entite: str, date_arrete: str
         f"BE Santé : {_f(m3.get('be_sante'))}",
         f"Risk Adjustment (CoC 6% EIOPA §B91) : {_f(m3.get('risk_adjustment'))}",
         f"TP Santé (BE + RA) : {_f(m3.get('tp_sante'))}",
-        f"Ratio TP/BE : {_pct(m3.get('ratio_tp_be', 0) * 100)}",
+        f"Ratio TP/BE : {m3.get('ratio_tp_be', 0):.3f} (cible [1.00 — 1.50])",
         "",
         "=== SCR / MCR (SOLVABILITÉ II) ===",
         f"SCR Santé NSLT (Art.148 RD 2015/35) : {_f(m3.get('scr_sante'))}",
@@ -858,7 +858,7 @@ def _export_html_sante(m1: Dict, m3: Dict, m4: Dict,
             f'      <tr><td>Best Estimate Santé (BE)</td><td>{_f(m3.get("be_sante"))}</td><td>PSAP total — IFRS 17 §33</td></tr>\n'
             f'      <tr><td>Risk Adjustment (RA)</td><td>{_f(m3.get("risk_adjustment"))}</td><td>CoC 6% EIOPA — IFRS 17 §B91</td></tr>\n'
             f'      <tr><td>TP Santé (BE + RA)</td><td>{_f(m3.get("tp_sante"))}</td><td>Provisions techniques S2</td></tr>\n'
-            f'      <tr><td>Ratio TP/BE</td><td>{_pct(m3.get("ratio_tp_be", 0) * 100)}</td><td>Cible [1.0 — 1.5]</td></tr>\n'
+            f'      <tr><td>Ratio TP/BE</td><td>{m3.get("ratio_tp_be", 0):.3f}</td><td>Cible [1.00 — 1.50]</td></tr>\n'
             '    </tbody>\n'
             '  </table>\n'
             '</div>\n\n'
@@ -1116,7 +1116,7 @@ def _export_word_sante(m1: Dict, m3: Dict, m4: Dict,
                 ["Best Estimate (BE)", _f(m3.get("be_sante")), "PSAP total — §33 IFRS 17"],
                 ["Risk Adjustment (RA)", _f(m3.get("risk_adjustment")), "CoC 6% EIOPA — §B91"],
                 ["TP Santé (BE + RA)", _f(m3.get("tp_sante")), "Provisions techniques S2"],
-                ["Ratio TP/BE", _pct(m3.get("ratio_tp_be", 0) * 100), "Cible [1.0 — 1.5]"],
+                ["Ratio TP/BE", f"{m3.get('ratio_tp_be', 0):.3f}", "Cible [1.00 — 1.50]"],
             ],
             ws=[5.0, 4.0, 7.0],
         )
