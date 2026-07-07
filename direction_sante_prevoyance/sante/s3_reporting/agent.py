@@ -338,7 +338,7 @@ class AgentS3ReportingSante:
         L += [
             "", "🔢 QRT S.13.01 — SANTÉ NSLT", "─"*40,
             f"  BE Santé                   : {be:>15,.0f}€",
-            f"  Risk Adjustment (5% BE)    : {ra:>15,.0f}€",
+            f"  Risk Adjustment (CoC 6% EIOPA): {ra:>15,.0f}€",
             f"  TP Santé (BE + RA)         : {tp:>15,.0f}€",
             f"  Ratio TP/BE                : {tp/max(be,1):>15.4f}",
             "  " + "─"*45,
