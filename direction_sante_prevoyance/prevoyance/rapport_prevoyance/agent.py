@@ -254,7 +254,7 @@ def _construire_contexte_prev(m1: Dict, m3: Dict, entite: str, date_arrete: str)
         f"BE Prévoyance : {_f(m3.get('be_prevoyance'))}",
         f"Risk Adjustment (CoC 6% EIOPA §B91) : {_f(m3.get('risk_adjustment'))}",
         f"TP Prévoyance (BE + RA) : {_f(m3.get('tp_prevoyance'))}",
-        f"Ratio TP/BE : {_pct(m3.get('ratio_tp_be', 0) * 100)}",
+        f"Ratio TP/BE : {m3.get('ratio_tp_be', 0):.3f} (cible [1.00 — 1.50])",
         "",
         "=== SCR INVALIDITÉ (Art.145 RD 2015/35) ===",
         f"SCR Morbidité (choc +35%) : {_f(m3.get('scr_morbidite'))}",
@@ -738,7 +738,7 @@ def _export_html_prev(m1: Dict, m3: Dict, m4: Dict,
             f'      <tr><td>Best Estimate Prévoyance (BE)</td><td>{_f(m3.get("be_prevoyance"))}</td><td>IFRS 17 §33</td></tr>\n'
             f'      <tr><td>Risk Adjustment (RA)</td><td>{_f(m3.get("risk_adjustment"))}</td><td>CoC 6% EIOPA — IFRS 17 §B91</td></tr>\n'
             f'      <tr><td>TP Prévoyance (BE + RA)</td><td>{_f(m3.get("tp_prevoyance"))}</td><td>Provisions techniques S2</td></tr>\n'
-            f'      <tr><td>Ratio TP/BE</td><td>{_pct(m3.get("ratio_tp_be", 0) * 100)}</td><td>Cible [1.0 — 1.5]</td></tr>\n'
+            f'      <tr><td>Ratio TP/BE</td><td>{m3.get("ratio_tp_be", 0):.3f}</td><td>Cible [1.00 — 1.50]</td></tr>\n'
             '    </tbody>\n'
             '  </table>\n'
             '</div>\n\n'
@@ -997,7 +997,7 @@ def _export_word_prev(m1: Dict, m3: Dict, m4: Dict,
                 ["BE Prévoyance", _f(m3.get("be_prevoyance")), "IFRS 17 §33"],
                 ["Risk Adjustment (RA)", _f(m3.get("risk_adjustment")), "CoC 6% EIOPA — §B91"],
                 ["TP Prévoyance (BE+RA)", _f(m3.get("tp_prevoyance")), "Provisions techniques S2"],
-                ["Ratio TP/BE", _pct(m3.get("ratio_tp_be", 0) * 100), "Cible [1.0 — 1.5]"],
+                ["Ratio TP/BE", f"{m3.get('ratio_tp_be', 0):.3f}", "Cible [1.00 — 1.50]"],
             ],
             ws=[5.0, 4.0, 7.0],
         )
