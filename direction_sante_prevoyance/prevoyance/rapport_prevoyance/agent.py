@@ -97,7 +97,7 @@ MCR_COEFF_PREM   = 0.0453
 MCR_COEFF_RES    = 0.0351
 MCR_PLANCHER     = 3_700_000.0  # plancher absolu prévoyance Art.129 S2
 # LR marché CTIP 2023
-LR_CTIP_ITT      = 0.72    # LR ITT marché France — CTIP 2023
+LR_CTIP_ITT      = 0.68    # LR ITT médiane marché France — CTIP 2023
 
 # ── Logo SVG ──────────────────────────────────────────────────────────────────
 LOGO_SVG = (
@@ -674,7 +674,7 @@ def _export_html_prev(m1: Dict, m3: Dict, m4: Dict,
             f'    <div class="kpi-card"><div class="kpi-label">Risk Adjustment</div><div class="kpi-val">{_f(m3.get("risk_adjustment"))}</div><div class="kpi-sub">CoC 6% EIOPA — §B91</div></div>\n'
             f'    <div class="kpi-card"><div class="kpi-label">SCR Invalidité</div><div class="kpi-val">{_f(m3.get("scr_invalidite"))}</div><div class="kpi-sub">Art.145 RD 2015/35</div></div>\n'
             f'    <div class="kpi-card"><div class="kpi-label">Ratio SCR</div><div class="kpi-val" style="color:{_statut_col(rag)};">{_pct(m3.get("ratio_scr_pct"))}</div><div class="kpi-sub">Seuil ≥ 100% Art.129 S2</div></div>\n'
-            f'    <div class="kpi-card"><div class="kpi-label">Loss Ratio observé</div><div class="kpi-val">{_pct(m3.get("loss_ratio", 0) * 100)}</div><div class="kpi-sub">CTIP 2023 ITT : 72%</div></div>\n'
+            f'    <div class="kpi-card"><div class="kpi-label">Loss Ratio observé</div><div class="kpi-val">{_pct(m3.get("loss_ratio", 0) * 100)}</div><div class="kpi-sub">CTIP 2023 ITT : 68%</div></div>\n'
             '  </div>\n'
             '</div>\n\n'
 
@@ -951,7 +951,7 @@ def _export_word_prev(m1: Dict, m3: Dict, m4: Dict,
                 ["SCR Invalidité", _f(m3.get("scr_invalidite")), "Art.145 RD 2015/35"],
                 ["MCR Prévoyance", _f(m3.get("mcr")), "Art.252 RD 2015/35"],
                 ["Ratio SCR", _pct(m3.get("ratio_scr_pct")), "≥ 100% Art.129 S2"],
-                ["Loss Ratio observé", _pct(m3.get("loss_ratio", 0) * 100), "CTIP 2023 ITT : 72%"],
+                ["Loss Ratio observé", _pct(m3.get("loss_ratio", 0) * 100), "CTIP 2023 ITT : 68%"],
             ],
             ws=[5.5, 4.0, 6.5],
         )
@@ -1124,7 +1124,7 @@ def _export_excel_prev(m1: Dict, m3: Dict, m4: Dict,
             ["MCR Prévoyance", _f(m3.get("mcr")), "Art.252 RD 2015/35"],
             ["Fonds propres éligibles", _f(m3.get("fonds_propres")), "Bilan S2"],
             ["Ratio SCR", _pct(m3.get("ratio_scr_pct")), "≥ 100% Art.129 S2"],
-            ["Loss Ratio observé", _pct(m3.get("loss_ratio", 0) * 100), "CTIP 2023 ITT : 72%"],
+            ["Loss Ratio observé", _pct(m3.get("loss_ratio", 0) * 100), "CTIP 2023 ITT : 68%"],
             ["Statut RAG", m4.get("statut_rag", "—"), ""],
             ["Avis actuariel", m4.get("avis_actuariel", "—"), ""],
         ]
@@ -1630,7 +1630,7 @@ class AgentRapportPrevoyance:
             f"  SCR Invalidité    : {_f(m3.get('scr_invalidite'))} (Art.145 RD 2015/35)",
             f"  MCR Prévoyance    : {_f(m3.get('mcr'))}",
             f"  Ratio SCR         : {_pct(m3.get('ratio_scr_pct'))}",
-            f"  Loss Ratio ITT    : {_pct(m3.get('loss_ratio', 0) * 100)} (CTIP 2023 : 72%)",
+            f"  Loss Ratio ITT    : {_pct(m3.get('loss_ratio', 0) * 100)} (CTIP 2023 : 68%)",
             "", "📋 HYPOTHÈSES", "─" * 50,
         ]
         for h in m4.get("hypotheses", []):
