@@ -20,7 +20,7 @@ def r_p3():
     from direction_sante_prevoyance.services.sp_data_builder import SPDataBuilder
     from direction_sante_prevoyance.prevoyance.p1_tarification.agent import AgentP1TarificationPrevoyance
     from direction_sante_prevoyance.prevoyance.p2_tables_morbidite.agent import AgentP2TablesMorbidite
-    from direction_sante_prevoyance.prevoyance.p3_provisionnement.agent import AgentP3ProvisionnemntPrevoyance
+    from direction_sante_prevoyance.prevoyance.p3_provisionnement.agent import AgentP3ProvissionnementPrevoyance
 
     np.random.seed(42)
     n = 1000
@@ -35,7 +35,7 @@ def r_p3():
         result_a2=r_bip, age=42, salaire_brut=45000,
         categorie="employe", generer_graphiques=False)
     rp2 = AgentP2TablesMorbidite(verbose=False).run(result_p1=rp1, generer_graphiques=False)
-    return AgentP3ProvisionnemntPrevoyance(verbose=False).run(
+    return AgentP3ProvissionnementPrevoyance(verbose=False).run(
         result_p1=rp1, result_p2=rp2, generer_graphiques=False)
 
 
