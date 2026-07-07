@@ -12,12 +12,10 @@ NAVY   = "0F2E52"
 NAVY_L = "1B3A5C"
 GOLD   = "C9A84C"
 GOLD_L = "E2C97E"
-BLANC  = "F0F4F8"
 GRIS   = "8A9BB0"
 VERT   = "1E8449"
 ROUGE  = "C0392B"
 AMBRE  = "E67E22"
-BLEU   = "3498DB"
 
 def _font(bold=False, size=10, color="1C2B3A", italic=False):
     return Font(name="Inter", bold=bold, size=size, color=color, italic=italic)
@@ -155,7 +153,7 @@ def generer(result_p4: dict, result_alm: dict = None, result_reg1: dict = None) 
         ("PM Rentes IP (long terme)",            _f(pm_r),  "",                "Actuariat vie — TH0002"),
         ("PSAP ITT (court terme)",               _f(psap),  "",                "Sinistres déclarés"),
         ("Best Estimate Prévoyance",             _f(be),    "100%",            "Art. 77 §1 S2"),
-        ("Risk Adjustment (CoC 8%)",             _f(ra),    _pct(ra/be*100 if be else 0), "IFRS 17 §B119"),
+        ("Risk Adjustment (CoC 6%)",             _f(ra),    _pct(ra/be*100 if be else 0), "IFRS 17 §B91"),
         ("TP Prévoyance (BE + RA)",              _f(tp),    "",                "Art. 77 §1 S2"),
         ("SCR Morbidité (+35% incidence)",       _f(scr_m), "Choc dominant",   "Art. 145 §2(a) RD 2015/35"),
         ("SCR Cessation (-20% guérison)",        _f(scr_c), "Corrélation 0.25","Art. 145 §2(b) RD 2015/35"),
