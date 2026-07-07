@@ -85,7 +85,7 @@ DELAIS_REGLEMENT = {
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-class AgentS2ProvisionnemntSante:
+class AgentS2ProvissionnementSante:
     """
     Agent S2 Selma — Provisionnement Santé v2.0.
     Sous CHIARA, Direction Santé-Prévoyance.
@@ -843,7 +843,7 @@ if __name__ == '__main__':
         },
     }
 
-    agent = AgentS2ProvisionnemntSante(
+    agent = AgentS2ProvissionnementSante(
         models_path='/tmp/s2/models', audit_path='/tmp/s2/audit', verbose=True
     )
     r = agent.run(result_s1=r_s1, generer_graphiques=False)
