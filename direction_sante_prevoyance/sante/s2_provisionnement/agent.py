@@ -573,7 +573,7 @@ class AgentS2ProvissionnementSante:
         L += [
             "", "📐 BE SANTÉ → S3 BINTA", "─"*40,
             f"  BE Santé (PSAP total)      : {be:>15,.0f}€",
-            f"  Risk Adjustment (5% BE)    : {ra:>15,.0f}€",
+            f"  Risk Adjustment (CoC 6% EIOPA): {ra:>15,.0f}€",
             f"  TP Santé                   : {tp:>15,.0f}€",
             "", "📋 HYPOTHÈSES", "─"*40,
         ]
