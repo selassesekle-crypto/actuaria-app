@@ -68,10 +68,8 @@ except ImportError:
 
 # ── Palette ActuarIA ──────────────────────────────────────────────────────────
 NAVY      = "#0B1E3D"
-NAVY_MID  = "#132844"
 NAVY_L    = "#1E3A5F"
 GOLD      = "#C9A84C"
-GOLD_L    = "#E2C97E"
 ROUGE     = "#C0392B"
 ORANGE    = "#E67E22"
 VERT      = "#1E8449"
