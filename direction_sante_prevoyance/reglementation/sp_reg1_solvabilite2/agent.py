@@ -33,6 +33,7 @@
 ╚══════════════════════════════════════════════════════════════════════════════╝
 """
 
+import json
 import logging
 import warnings
 from datetime import datetime
@@ -900,7 +901,6 @@ class AgentSPReg1Solvabilite2:
     # =========================================================================
     def _audit(self, aid, src, rag):
         try:
-            import json as _json
             log = self.audit_path / "sp_reg1_s2_audit.jsonl"
             entry = {
                 "audit_id": aid, "timestamp": datetime.now().isoformat(),
@@ -910,7 +910,7 @@ class AgentSPReg1Solvabilite2:
                 "fpp": round(src["fpp"], 2),
             }
             with open(log, "a", encoding="utf-8") as f:
-                f.write(_json.dumps(entry, ensure_ascii=False) + "\n")
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         except Exception:
             pass
 
