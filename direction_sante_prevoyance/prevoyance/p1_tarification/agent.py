@@ -188,9 +188,18 @@ class AgentP1TarificationPrevoyance:
 
             # ── 2. TAUX ACTUARIELS ────────────────────────────────────────────
             fact_csp = FACT_CSP_ITT.get(cat_m, 1.0)
-            taux_itt = _interp(TAUX_ITT_BCAC, age_m) * fact_csp
-            taux_ip  = _interp(TAUX_IP_TD88,  age_m) * fact_csp
-            qx       = _interp(QX_TH0002,     age_m)
+            if _TABLES_CENTRALISEES:
+                # Tables centralisées sp_tables_actuarielles.py
+                # get_taux_itt_bcac intègre le CSP en csp='cadre'/'non_cadre'
+                _csp_arg = 'cadre' if cat_m in ('cadre', 'cadre_sup') else 'non_cadre'
+                taux_itt = _get_taux_itt(age_m, _csp_arg)
+                taux_ip  = _get_taux_ip(age_m) * fact_csp
+                qx       = _get_qx(age_m)
+            else:
+                # Fallback tables locales
+                taux_itt = _interp(TAUX_ITT_BCAC, age_m) * fact_csp
+                taux_ip  = _interp(TAUX_IP_TD88,  age_m) * fact_csp
+                qx       = _interp(QX_TH0002,     age_m)
 
             # ── 3. PRIME ITT ──────────────────────────────────────────────────
             sal_men      = salaire_m / 12
@@ -485,7 +494,7 @@ class AgentP1TarificationPrevoyance:
             "", "📋 HYPOTHÈSES", "─"*40,
         ]
         for h in hyp:
-            ic_h = "✅" if h['statut']=='VALIDÉE' else "⚠️"
+            ic_h = "✅" if h['statut']=='VALIDÉE' else ("❌" if h['statut']=='NON VALIDÉE' else "⚠️")
             L += [f"  {ic_h} [{h['id']}] {h['hypothese']}",
                   f"       → {h['valeur']} : {h['statut']}"]
 
