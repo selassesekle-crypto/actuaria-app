@@ -3189,8 +3189,8 @@ def _executer_analyse(besoin, direction, equipe, client):
                     )
                     resultats["principal"] = r_s1
                 elif besoin == "prov_sante":
-                    from direction_sante_prevoyance.sante.s2_provisionnement.agent import AgentS2ProvisionnemntSante
-                    r_s2 = AgentS2ProvisionnemntSante(audit_path=_tmp, verbose=False).run(
+                    from direction_sante_prevoyance.sante.s2_provisionnement.agent import AgentS2ProvissionnementSante
+                    r_s2 = AgentS2ProvissionnementSante(audit_path=_tmp, verbose=False).run(
                         primes_acquises=params.get("primes_acquises",5_000_000),
                         generer_graphiques=False,
                     )
@@ -3273,7 +3273,7 @@ def _executer_analyse(besoin, direction, equipe, client):
             # ── REPORT SANTÉ S3 — pipeline S1→S2→S3 ────────────────────────
             elif besoin == "report_sante":
                 from direction_sante_prevoyance.sante.s1_tarification.agent import AgentS1TarificationSante
-                from direction_sante_prevoyance.sante.s2_provisionnement.agent import AgentS2ProvisionnemntSante
+                from direction_sante_prevoyance.sante.s2_provisionnement.agent import AgentS2ProvissionnementSante
                 from direction_sante_prevoyance.sante.s3_reporting.agent import AgentS3ReportingSante
                 _r_s1 = AgentS1TarificationSante(audit_path=_tmp, verbose=False).run(
                     nb_assures=params.get("nb_assures",1000),
@@ -3281,7 +3281,7 @@ def _executer_analyse(besoin, direction, equipe, client):
                     garantie_niveau=params.get("garantie_niveau","confort"),
                     generer_graphiques=False,
                 )
-                _r_s2 = AgentS2ProvisionnemntSante(audit_path=_tmp, verbose=False).run(
+                _r_s2 = AgentS2ProvissionnementSante(audit_path=_tmp, verbose=False).run(
                     primes_acquises=params.get("primes_acquises",5_000_000),
                     generer_graphiques=False,
                 )
