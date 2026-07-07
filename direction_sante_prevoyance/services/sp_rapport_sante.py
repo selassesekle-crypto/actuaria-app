@@ -58,6 +58,16 @@ except ImportError:
 
 
 # =============================================================================
+#  CSS ADDITIONNEL (hyp-err absent de n5_rapport)
+# =============================================================================
+
+_CSS_ADDON = """
+<style>
+.hyp-err .hyp-label { background: rgba(192,57,43,0.10); color: var(--rouge); border-right: 3px solid var(--rouge); }
+</style>
+"""
+
+# =============================================================================
 #  SYSTEM PROMPT CLAUDE API — ACTUAIRE SANTÉ SENIOR
 # =============================================================================
 
@@ -339,7 +349,7 @@ def export_html(result_s1, result_s2, result_s3,
         # Assemblage HTML final
         css_str = _css() if callable(_css) else ""
         html = (
-            '<!DOCTYPE html>\n<html lang="fr">\n<head>\n'            '<meta charset="UTF-8">\n'            f'<title>Rapport Santé — {cli} — {arr}</title>\n'            '<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist@2.26.0/plotly.min.js"></script>\n'            + css_str +
+            '<!DOCTYPE html>\n<html lang="fr">\n<head>\n'            '<meta charset="UTF-8">\n'            f'<title>Rapport Santé — {cli} — {arr}</title>\n'            '<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist@2.26.0/plotly.min.js"></script>\n'            + css_str + _CSS_ADDON +
             '\n</head>\n<body>\n<div class="rapport-container">\n'
             # PAGE DE GARDE
             '<div class="page-garde">\n'            '<div class="garde-bg"><div class="garde-dots"></div>'            '<div class="garde-diagonal"></div><div class="garde-accent-line"></div></div>\n'            '<div class="garde-inner">\n'            '<div class="garde-header">\n'            f'<div class="garde-logo-wrap"><img src="{logo_src}" alt="ActuarIA"/></div>\n'            '<div class="garde-badges"><span class="badge-confidentiel">⬛ Confidentiel</span></div>\n'            '</div>\n'            '<div class="garde-hero">\n'            '<div class="garde-eyebrow">Rapport Actuariel Santé</div>\n'            '<div class="garde-titre">Complémentaire<br><em>Santé</em></div>\n'            f'<div class="garde-subtitle">Arrêté au {arr}</div>\n'            '<div class="garde-sep"><div class="garde-sep-line"></div>'            '<div class="garde-sep-diamond"></div><div class="garde-sep-line"></div></div>\n'            f'<div class="garde-statut garde-statut-{s_cls}">'            f'<div class="statut-dot statut-dot-{s_cls}"></div>'            f'<div class="statut-label-{s_cls}">{s_label}</div></div>\n'            '</div>\n'            f'<div class="garde-footer"><div class="garde-kpis">{kpis_html}</div></div>\n'            '</div>\n</div>\n'
