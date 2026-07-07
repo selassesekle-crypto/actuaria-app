@@ -644,7 +644,7 @@ class AgentP3ProvissionnementPrevoyance:
                 f"Possible effet épidémique ou sinistres sériels. BF CTIP recommandé."
             )
             message = (
-                f"H1 REJETÉE — corrélation Spearman moy={corr_moy:.2f}, max={corr_max:.2f}. "
+                f"H1 NON VALIDÉE — corrélation Spearman moy={corr_moy:.2f}, max={corr_max:.2f}. "
                 f"{n_sig} paire(s) significative(s). CL et Mack potentiellement biaisés. "
                 f"En ITT : effet épidémique, changement de franchise ou mix contrats possible."
             )
@@ -748,7 +748,7 @@ class AgentP3ProvissionnementPrevoyance:
             )
 
         message = (
-            f"H2 {'VALIDÉE' if ok else 'REJETÉE'} — "
+            f"H2 {'VALIDÉE' if ok else 'NON VALIDÉE'} — "
             f"CV={cv_moy:.1%} (seuil ITT {seuil_cv:.0%}), "
             f"dérive={derive_moy:.1%} (seuil {seuil_derive:.0%}). "
             + (
@@ -1760,7 +1760,7 @@ class AgentP3ProvissionnementPrevoyance:
              "valeur": h4["message"], "statut": _st(h4["ok"]), "score": h4["score"], "critique": False},
             {"id": "H5", "hypothese": "Loss Ratio Prévoyance ≤ 90%",
              "valeur": f"LR={lr*100:.1f}% {'≤' if lr<=0.90 else '>'} 90%",
-             "statut": "VALIDÉE" if lr<=0.90 else ("À JUSTIFIER" if lr<=1.0 else "REJETÉE"),
+             "statut": "VALIDÉE" if lr<=0.90 else ("À JUSTIFIER" if lr<=1.0 else "NON VALIDÉE"),
              "score": max(0, int((1.2-lr)*100)) if lr<=1.2 else 0, "critique": True},
             {"id": "H6", "hypothese": "Incertitude Mack (CV<20% = VERT EIOPA Guidelines TP)",
              "valeur": f"CV={mack['cv_pct']:.1f}% — {mack['statut']}",
@@ -1782,9 +1782,9 @@ class AgentP3ProvissionnementPrevoyance:
     def _rag(self, hyp: list, lr: float) -> str:
         if lr > 1.0:
             return "ROUGE"
-        if any(h.get("critique") and h["statut"] == "REJETÉE" for h in hyp):
+        if any(h.get("critique") and h["statut"] == "NON VALIDÉE" for h in hyp):
             return "ROUGE"
-        if any(h["statut"] in ("À JUSTIFIER", "REJETÉE") for h in hyp):
+        if any(h["statut"] in ("À JUSTIFIER", "NON VALIDÉE") for h in hyp):
             return "AMBRE"
         return "VERT"
 
