@@ -8,14 +8,14 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../.."))
 
 from direction_sante_prevoyance.sante.s1_tarification.agent import AgentS1TarificationSante
-from direction_sante_prevoyance.sante.s2_provisionnement.agent import AgentS2ProvisionnemntSante
+from direction_sante_prevoyance.sante.s2_provisionnement.agent import AgentS2ProvissionnementSante
 from direction_sante_prevoyance.sante.s3_reporting.agent import AgentS3ReportingSante
 
 
 @pytest.fixture(scope="module")
 def pipeline_s3():
     s1 = AgentS1TarificationSante(verbose=False)
-    s2 = AgentS2ProvisionnemntSante(verbose=False)
+    s2 = AgentS2ProvissionnementSante(verbose=False)
     s3 = AgentS3ReportingSante(verbose=False)
     r_s1 = s1.run(nb_assures=5000, age_moyen=38, contrat="collectif",
                   garantie_niveau="confort", chargement_pct=0.18,
