@@ -16,11 +16,11 @@ from direction_sante_prevoyance.reglementation.sp_reg2_ifrs17.agent import Agent
 def pipeline_reg2():
     from direction_sante_prevoyance.services.sp_data_builder import SPDataBuilder
     from direction_sante_prevoyance.sante.s1_tarification.agent import AgentS1TarificationSante
-    from direction_sante_prevoyance.sante.s2_provisionnement.agent import AgentS2ProvisionnemntSante
+    from direction_sante_prevoyance.sante.s2_provisionnement.agent import AgentS2ProvissionnementSante
     from direction_sante_prevoyance.sante.s3_reporting.agent import AgentS3ReportingSante
     from direction_sante_prevoyance.prevoyance.p1_tarification.agent import AgentP1TarificationPrevoyance
     from direction_sante_prevoyance.prevoyance.p2_tables_morbidite.agent import AgentP2TablesMorbidite
-    from direction_sante_prevoyance.prevoyance.p3_provisionnement.agent import AgentP3ProvisionnemntPrevoyance
+    from direction_sante_prevoyance.prevoyance.p3_provisionnement.agent import AgentP3ProvissionnementPrevoyance
     from direction_sante_prevoyance.prevoyance.p4_reporting.agent import AgentP4ReportingPrevoyance
 
     np.random.seed(42)
@@ -41,7 +41,7 @@ def pipeline_reg2():
     r_s1 = AgentS1TarificationSante(verbose=False).run(
         result_a2=r_bm, nb_assures=1000, age_moyen=40,
         contrat="collectif", garantie_niveau="confort", generer_graphiques=False)
-    r_s2 = AgentS2ProvisionnemntSante(verbose=False).run(
+    r_s2 = AgentS2ProvissionnementSante(verbose=False).run(
         result_s1=r_s1, generer_graphiques=False)
     r_s3 = AgentS3ReportingSante(verbose=False).run(
         result_s1=r_s1, result_s2=r_s2,
@@ -52,7 +52,7 @@ def pipeline_reg2():
         categorie="employe", generer_graphiques=False)
     r_p2 = AgentP2TablesMorbidite(verbose=False).run(
         result_p1=r_p1, generer_graphiques=False)
-    r_p3 = AgentP3ProvisionnemntPrevoyance(verbose=False).run(
+    r_p3 = AgentP3ProvissionnementPrevoyance(verbose=False).run(
         result_p1=r_p1, result_p2=r_p2, generer_graphiques=False)
     r_p4 = AgentP4ReportingPrevoyance(verbose=False).run(
         result_p1=r_p1, result_p2=r_p2, result_p3=r_p3,
