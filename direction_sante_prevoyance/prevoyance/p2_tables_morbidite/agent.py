@@ -304,7 +304,12 @@ class AgentP2TablesMorbidite:
         fact_csp = FACT_CSP.get(categorie, 1.0)
 
         # Actif → ITT (incidence annuelle ajustée CSP)
-        q_AI  = _interp(Q_AI_BCAC, age) * fact_csp
+        # Priorité aux tables centralisées si disponibles
+        if _TABLES_CENTRALISEES:
+            _csp_arg = 'cadre' if categorie in ('cadre', 'cadre_sup') else 'non_cadre'
+            q_AI = _get_taux_itt_central(age, _csp_arg)
+        else:
+            q_AI = _interp(Q_AI_BCAC, age) * fact_csp
 
         # Taux de guérison ITT → Actif
         q_IA  = _interp(Q_IA_BCAC, age)
@@ -313,8 +318,12 @@ class AgentP2TablesMorbidite:
         q_IP_cond = _interp(Q_IP_COND_BCAC, age)
 
         # Taux décès Actif → Décès (mortalité toutes causes TH0002)
-        from direction_sante_prevoyance.services.sp_tables_actuarielles import get_qx_th0002 as _get_qx
-        qx_AD = _get_qx(age, 'M')  # TH0002 — mortalité toutes causes
+        # Import centralisé utilisé directement — pas d'import dynamique
+        if _TABLES_CENTRALISEES:
+            qx_AD = _get_qx_central(age, 'M')  # TH0002 centralisé
+        else:
+            from direction_sante_prevoyance.services.sp_tables_actuarielles import get_qx_th0002 as _get_qx
+            qx_AD = _get_qx(age, 'M')  # fallback
 
         # Taux décès IP → Décès
         q_PD  = _interp(Q_PD_IP, age)
