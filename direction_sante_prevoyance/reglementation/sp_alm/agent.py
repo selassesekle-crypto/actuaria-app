@@ -576,10 +576,12 @@ class AgentSPAlm:
         lcr_ratio = actifs_liquides / sorties_nettes_30j
         conforme  = lcr_ratio >= LCR_MIN
 
+        _al = round(actifs_liquides, 0)
+        _sn = round(sorties_nettes_30j, 0)
         return {
-            "lcr_ratio":          round(lcr_ratio, 2),
-            "actifs_liquides":    round(actifs_liquides, 0),
-            "sorties_nettes_30j": round(sorties_nettes_30j, 0),
+            "lcr_ratio":          round(_al / _sn, 2) if _sn > 0 else 0.0,
+            "actifs_liquides":    _al,
+            "sorties_nettes_30j": _sn,
             "detail_sorties": {
                 "sorties_sante_30j": round(sorties_sante_30j, 0),
                 "sorties_prev_30j":  round(sorties_prev_30j, 0),
