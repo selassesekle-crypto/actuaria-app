@@ -7,9 +7,12 @@
 """
 
 import sys, os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../..")))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from direction_non_vie.reglementation.a13_audit.agent import AgentA13AuditTrail
+try:
+    from agent import AgentA13AuditTrail
+except ImportError:
+    from a13_audit import AgentA13AuditTrail
 
 # ── FIXTURES ──────────────────────────────────────────────────────────────────
 
