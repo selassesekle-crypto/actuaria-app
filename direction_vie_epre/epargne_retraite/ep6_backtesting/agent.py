@@ -173,24 +173,38 @@ class AgentEP6Backtesting:
                 sensib_rotation  = -duree_res_ponderee * 0.6
                 # Facteur 0.6 : la rotation impacte moins que le décès car
                 # les droits acquis passés restent dus (vesting partiel Art. 39)
+
+                # Sensibilité revalorisation salariale — calcul individuel
+                # IAS 19.145 : la DBO est fonction du salaire FINAL projeté.
+                # Chaque bp de revalorisation supplémentaire augmente ce salaire
+                # proportionnellement à la durée résiduelle de l'assuré.
+                # Sensibilité_i = poids_i × (age_retraite_i - age_i)
+                # Sensibilité globale = Σ sensibilité_i (en bp/bp, signe positif)
+                # Un portefeuille jeune (duree_res élevée) est plus sensible
+                # qu'un portefeuille en run-off (duree_res faible)
+                sensib_revalorisation = duree_res_ponderee  # toujours positif
+                source_sensib_rev = 'Durée résiduelle individuelle pondérée (effectifs fournis)'
                 logger.info(
                     f"[{audit_id}] Sensibilités individuelles — "
                     f"mortalité={sensib_mortalite:.1f}bp/bp | "
                     f"rotation={sensib_rotation:.1f}bp/bp | "
+                    f"revalorisation={sensib_revalorisation:.1f}bp/bp | "
                     f"durée résiduelle pondérée={duree_res_ponderee:.1f} ans"
                 )
                 source_sensib_mr = 'Durée résiduelle individuelle pondérée (effectifs fournis)'
             else:
-                sensib_mortalite = -5.0   # valeur fixe : durée résiduelle ~5 ans implicite
-                sensib_rotation  = -8.0   # valeur fixe par défaut
-                source_sensib_mr = 'Sensibilités fixes par défaut (fournir effectifs pour calcul individuel)'
+                sensib_mortalite      = -5.0   # valeur fixe : durée résiduelle ~5 ans implicite
+                sensib_rotation       = -8.0   # valeur fixe par défaut
+                sensib_revalorisation = 15.0   # valeur fixe : durée résiduelle ~15 ans implicite
+                source_sensib_rev     = 'Sensibilité fixe par défaut (fournir effectifs pour calcul individuel)'
+                source_sensib_mr      = 'Sensibilités fixes par défaut (fournir effectifs pour calcul individuel)'
 
             sensibilites = {
-                'taux_mortalite':     sensib_mortalite,  # calculée ou fixe
-                'taux_rotation':      sensib_rotation,   # calculée ou fixe
-                'taux_revalorisation': 15.0,  # revalo ↑ 1bp → DBO ↑ 15 bp
-                'taux_actu':          sensib_taux_actu,  # calculée ou fixe
-                'taux_rendement':      0.0,
+                'taux_mortalite':      sensib_mortalite,       # calculée ou fixe
+                'taux_rotation':       sensib_rotation,        # calculée ou fixe
+                'taux_revalorisation': sensib_revalorisation,  # calculée ou fixe (IAS 19.145)
+                'taux_actu':           sensib_taux_actu,       # calculée ou fixe
+                'taux_rendement':       0.0,
             }
 
             labels_param = {
@@ -292,8 +306,9 @@ class AgentEP6Backtesting:
                 'gain_actuariel':     round(gain_actuariel, 0),
                 'perte_actuarielle':  round(perte_actuarielle, 0),
                 'ecarts':             ecarts,
-                'source_sensibilites':source_sensib,
+                'source_sensibilites':   source_sensib,
                 'source_sensibilites_mr':source_sensib_mr,
+                'source_sensibilites_rev':source_sensib_rev,
                 'sources':            sources,
                 'commentaire':        commentaire,
                 'audit_id':           audit_id,
