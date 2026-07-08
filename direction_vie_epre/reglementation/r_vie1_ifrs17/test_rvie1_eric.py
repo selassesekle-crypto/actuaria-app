@@ -110,3 +110,33 @@ class TestRVIE1QRTVie:
         # SCR doit être recalculé sur la base du BE issu de V3
         assert r['scr_vie_total'] > 0
         assert r.get('source_be_vie') == 'V3 Amélie (pm_prospective)'
+
+    def test_t9_rachat_trois_sous_chocs(self, agent):
+        """Art. 142 S2 : le SCR rachat = max(hausse, baisse, mass_lapse)"""
+        r = agent.run(be_vie=45e6, pm_total=50e6, fonds_propres=12e6,
+                      generer_graphiques=False)
+        assert r['success'] is True
+        assert 'rachat_detail' in r
+        rd = r['rachat_detail']
+        # Les trois sous-chocs doivent être présents
+        for key in ['hausse', 'baisse', 'mass_lapse', 'dominant']:
+            assert key in rd, f"Clé manquante dans rachat_detail : {key}"
+        # Le SCR rachat déclaré = max des trois sous-chocs
+        scr_rachat = r['decomposition_scr']['rachat']['scr']
+        assert scr_rachat == max(rd['hausse'], rd['baisse'], rd['mass_lapse']), \
+            "SCR rachat doit être le maximum des trois sous-chocs (Art. 142 §4)"
+        # Pour un portefeuille vie classique, le mass lapse est dominant
+        assert rd['dominant'] == 'mass_lapse', \
+            "Le mass lapse doit être dominant pour un portefeuille vie standard"
+
+    def test_t10_mass_lapse_superieur_sous_chocs(self, agent):
+        """Le choc mass_lapse (40%) > hausse (25%) > baisse (20%) — cohérence Art. 142"""
+        r = agent.run(be_vie=100e6, pm_total=110e6, fonds_propres=20e6,
+                      generer_graphiques=False)
+        assert r['success'] is True
+        rd = r['rachat_detail']
+        assert rd['mass_lapse'] > rd['hausse'] > rd['baisse'], \
+            "Ordre des sous-chocs incorrect : mass_lapse > hausse > baisse attendu"
+        assert rd['mass_lapse'] == 40_000_000, "mass_lapse doit être 40% × BE = 40M€"
+        assert rd['hausse']     == 25_000_000, "hausse doit être 25% × BE = 25M€"
+        assert rd['baisse']     == 20_000_000, "baisse doit être 20% × BE = 20M€"
