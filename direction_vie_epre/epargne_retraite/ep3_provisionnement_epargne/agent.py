@@ -148,6 +148,7 @@ class AgentEP3ProvissionnementEpargne:
             result = {
                 'success':      True,
                 'audit_id':     audit_id,
+                'sources':      {'parametres': 'saisie manuelle'},
                 'sous_branche': sous_branche,
                 'statut_rag':   statut_rag,
                 'provisions': {
