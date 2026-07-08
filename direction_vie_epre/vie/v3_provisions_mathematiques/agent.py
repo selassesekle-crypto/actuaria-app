@@ -57,8 +57,21 @@ class AgentV3ProvisionsMathematiques:
             # PM prospective = VA des prestations futures - VA des primes futures
             E_rest=(v**duree_rest)*lx_r[duree_rest]
             a_rest=sum(lx_r[k]*(v**k) for k in range(duree_rest))
-            pm_prospective=capital*E_rest - prime_annuelle*a_rest
-            pm_prospective=max(pm_prospective, 0)
+            pm_prospective_brute = capital * E_rest - prime_annuelle * a_rest
+            # Traçabilité réglementaire des réserves non-positives (Art. R331-1)
+            reserve_negative = pm_prospective_brute < 0
+            if reserve_negative:
+                # Réserve négative : le contrat est en-dehors (out-of-the-money)
+                # → prime commerciale insuffisante ou durée écoulée > durée totale
+                # → plancher à 0 conformément à la réglementation française
+                raison_reserve_nulle = (
+                    f"PM brute = {pm_prospective_brute:,.0f}€ < 0 "
+                    f"(E_rest={E_rest:.6f}, a_rest={a_rest:.4f}) "
+                    f"— plancher réglementaire appliqué (Art. R331-1)"
+                )
+            else:
+                raison_reserve_nulle = None
+            pm_prospective = max(pm_prospective_brute, 0)
 
             # PM rétrospective = épargne constituée à ce jour
             qx_p=[_qx(tqx,age+k) for k in range(t_ecoule+5)]
@@ -77,8 +90,10 @@ class AgentV3ProvisionsMathematiques:
                 lx_t=[1.0]
                 for q in qx_t[:dr]: lx_t.append(lx_t[-1]*(1-q))
                 E_t=(v**dr)*lx_t[dr]; a_t=sum(lx_t[k]*(v**k) for k in range(dr))
-                pm_t=capital*E_t - prime_annuelle*a_t
-                pm_evolution.append(max(pm_t,0))
+                pm_t = capital * E_t - prime_annuelle * a_t
+                # Plancher à 0 : réserve négative acceptée uniquement
+                # en tout début de contrat (franchise) ou après l'échéance
+                pm_evolution.append(max(pm_t, 0))
 
             # Valeur de rachat (PM × coefficient de rachat)
             coef_rachat=max(0, 1-max(0,0.05-0.005*(t_ecoule-1)))
@@ -103,6 +118,7 @@ class AgentV3ProvisionsMathematiques:
             gv=self._graphiques_validation_pm(val_hyp,pm_evolution,age,duree,pm_prospective,pm_retrospective) if generer_graphiques else {}
             graphiques=self._generer_graphiques(pm_evolution,age,duree) if generer_graphiques else {}
             self._sauvegarder({'agent':'V3 Amélie','pm_prospective':pm_prospective,'pm_retrospective':pm_retrospective,
+                               'reserve_negative':reserve_negative,'pm_brute':pm_prospective_brute,
                                'valeur_rachat':valeur_rachat,'capital_reduit':capital_reduit}, audit_id)
 
             return {
@@ -110,6 +126,9 @@ class AgentV3ProvisionsMathematiques:
                 'duree':duree,'t_ecoule':t_ecoule,
                 'statut_rag':'VERT' if val_hyp['statut_global']!='ROUGE' else 'AMBRE',
                 'pm_prospective':round(pm_prospective,2),
+                'pm_prospective_brute':round(pm_prospective_brute,2),
+                'reserve_negative_detectee':reserve_negative,
+                'raison_reserve_nulle':raison_reserve_nulle,
                 'pm_retrospective':round(pm_retrospective,2),
                 'ecart_pr_pct':round(ecart_pct,2),
                 'valeur_rachat':round(valeur_rachat,2),
