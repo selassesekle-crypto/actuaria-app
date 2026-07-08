@@ -195,7 +195,19 @@ class AgentSPAlm:
                         f"[{aid}] valeur_actif_total estimée : {valeur_actif_total:,.0f}€"
                     )
 
-            alloc = allocation_actif or ALLOC_MUTUELLE_DEFAUT
+            if allocation_actif:
+                alloc = allocation_actif
+                _alloc_defaut = False
+            else:
+                self.logger.warning(
+                    f"[{aid}] SP-ALM : allocation_actif non fournie. "
+                    f"Allocation type mutuelle par defaut appliquee "
+                    f"(OAT 60%%, corp 25%%, mone 10%%, actions 5%%). "
+                    f"Le gap duration peut etre inexact. "
+                    f"Fournir allocation_actif pour un resultat precis."
+                )
+                alloc = ALLOC_MUTUELLE_DEFAUT
+                _alloc_defaut = True
             actif = self._analyser_actif_sp(alloc, valeur_actif_total, taux_actu)
 
             self.logger.info(
@@ -218,6 +230,12 @@ class AgentSPAlm:
             # ── Hypothèses + RAG ──────────────────────────────────────────────
             hyp = self._hypotheses(gap, bv01, lcr, passif)
             rag = self._rag(hyp, gap, lcr)
+            if _alloc_defaut and rag == 'VERT':
+                rag = 'AMBRE'
+                self.logger.warning(
+                    f"[{aid}] Statut plafonne a AMBRE : "
+                    f"allocation actif par defaut (non verifiee)."
+                )
 
             # ── Commentaire ───────────────────────────────────────────────────
             com = self._commentaire(rag, actif, passif, gap, bv01, lcr, hyp, taux_actu)
