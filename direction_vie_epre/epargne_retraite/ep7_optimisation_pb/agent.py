@@ -285,7 +285,8 @@ class AgentEP7OptimisationPB:
             'c_l132_ok':   c_l132_ok,
             'c_ppb_ok':    c_ppb_ok,
             'c_scr_ok':    c_scr_ok,
-            'spread_vs_tech': round(tx - (tx - (tx * 0.625)), 6),  # spread interne
+            # Note : le spread vs TMG est calculé dans _valider_optimisation
+            # (tx_opt - tx_min) — non recalculé ici car taux_technique absent du scope
         }
 
     def _dichotomie(self, tx_min, tx_max, precision,
