@@ -310,10 +310,17 @@ class AgentV9EmbeddedValue:
             # Formule : VNB = vnb_brut × (a_moy_vnb / a_horizon_demi)
             # soit   : VNB = (charg. - acq. - gestion_VA) × ä_x:n
             # ä_x:n ici = a_moy_vnb (annuité sur durée complète)
-            vnb = vnb_brut * a_moy_vnb
-            # Borne de cohérence : VNB ∈ [0, 20% des primes nouvelles]
-            # Benchmark marché vie : 5-15% selon les produits
-            vnb = min(max(vnb, 0), prime_commerciale_tot * 0.20)
+            vnb = max(vnb_brut * a_moy_vnb, 0)
+            # Pas de borne supérieure arbitraire sur le VNB :
+            # si VNB > 20% des primes, c'est une anomalie à signaler
+            # via le scorecard E3 — pas à masquer par écrêtage silencieux.
+            vnb_anomalie = vnb > prime_commerciale_tot * 0.20
+            if vnb_anomalie:
+                logger.warning(
+                    f"[{audit_id}] VNB = {vnb/1e3:.0f}k€ "
+                    f"({vnb/max(prime_commerciale_tot,1)*100:.1f}% des primes) "
+                    f"— dépasse 20% : vérifier les hypothèses de marge et de frais"
+                )
 
             # ── DÉCOMPOSITION ΔEV (si ev_n1 fourni) ──────────────────────────
             delta_ev = ev - ev_n1 if ev_n1 > 0 else None
@@ -377,6 +384,7 @@ class AgentV9EmbeddedValue:
                     'levier_coc_pct':       round(levier_coc, 2),
                 },
                 'sources':            sources,
+                'vnb_anomalie':        vnb_anomalie,
                 'detail_portefeuille':detail_portefeuille,
                 'commentaire':        commentaire,
                 'audit_id':           audit_id,
@@ -439,9 +447,14 @@ class AgentV9EmbeddedValue:
             e2_c = "Portefeuille destructeur de valeur — revoir le modèle de tarification"
 
         # E3 — VNB / Primes
-        if ratio_vnb >= 10:
+        if ratio_vnb > 20:
+            # VNB > 20% des primes : anomalie actuarielle — marge ou frais suspects
+            e3_s = 'ROUGE'
+            e3_m = f"VNB/Primes = {ratio_vnb:.1f}% > 20% ❌ — anomalie actuarielle"
+            e3_c = "VNB excessif : vérifier les hypothèses de marge, frais d'acquisition et d'actualisation"
+        elif ratio_vnb >= 10:
             e3_s = 'VERT'
-            e3_m = f"VNB/Primes = {ratio_vnb:.1f}% ≥ 10% ✅"
+            e3_m = f"VNB/Primes = {ratio_vnb:.1f}% ∈ [10%,20%] ✅"
             e3_c = "Nouvelles affaires très rentables — maintenir le rythme de croissance"
         elif ratio_vnb >= 5:
             e3_s = 'AMBRE'
