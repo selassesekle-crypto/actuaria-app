@@ -63,14 +63,33 @@ class AgentRVIE1QRTVie:
 
             # ── Chocs EIOPA S.26 — Sous-modules SCR Vie ──────────────────────
             # Chocs calibrés EIOPA QIS5 / Actes délégués S2
+            # ── Sous-module rachat : 3 chocs distincts (Art. 142 Actes délégués S2) ──
+            # Art. 142 §1 — Choc hausse permanente : +50% des taux de rachat prévus
+            # Proxy BE : les rachats hausse génèrent une perte ≈ 5% BE par an × horizon
+            # (taux rachat moyen ≈ 5%, duration ≈ 10 ans → perte ≈ 5% × 10 × 50% = 25%)
+            scr_rachat_hausse   = be_vie * 0.2500
+            # Art. 142 §2 — Choc baisse permanente : -50% des taux de rachat prévus
+            # Les mauvais risques restent → anti-sélection → surcoût ≈ 20% BE
+            scr_rachat_baisse   = be_vie * 0.2000
+            # Art. 142 §3 — Choc ponctuel (mass lapse) : 40% des assurés rachetent
+            # Choc liquidité immédiat — généralement le plus pénalisant pour un assureur vie
+            scr_rachat_mass_lapse = be_vie * 0.4000
+            # SCR rachat = maximum des trois sous-chocs (Art. 142 §4)
+            scr_rachat_total = max(scr_rachat_hausse, scr_rachat_baisse, scr_rachat_mass_lapse)
+            rachat_dominant  = (
+                "mass_lapse"    if scr_rachat_total == scr_rachat_mass_lapse
+                else "hausse"   if scr_rachat_total == scr_rachat_hausse
+                else "baisse"
+            )
+
             chocs = {
-                "mortalite":   be_vie * 0.1500,   # +15% qx pour 1 an
-                "longevite":   be_vie * 0.2000,   # -20% qx permanent
-                "invalidite":  be_vie * 0.3500,   # +35% taux invalidité
-                "rachat":      be_vie * 0.4000,   # hausse/baisse rachats
-                "frais":       be_vie * 0.1000,   # +10% frais + 1% inflation
-                "revision":    be_vie * 0.0300,   # +3% rentes (révision)
-                "catastrophe": be_vie * 0.0015,   # 0.15% capital sous risque
+                "mortalite":   be_vie * 0.1500,       # +15% qx pour 1 an (Art. 137)
+                "longevite":   be_vie * 0.2000,       # -20% qx permanent (Art. 138)
+                "invalidite":  be_vie * 0.3500,       # +35% taux invalidité (Art. 139)
+                "rachat":      scr_rachat_total,      # max(hausse,baisse,mass_lapse) Art. 142
+                "frais":       be_vie * 0.1000,       # +10% frais + 1% inflation (Art. 143)
+                "revision":    be_vie * 0.0300,       # +3% rentes viagères (Art. 144)
+                "catastrophe": be_vie * 0.0015,       # 1.5‰ capital sous risque (Art. 145)
             }
 
             noms_modules = list(chocs.keys())
@@ -92,8 +111,15 @@ class AgentRVIE1QRTVie:
             decompo = {k: {"scr":round(chocs[k],2), "pct":round(chocs[k]/max(SCR_vie_total,1)*100,1)}
                        for k in noms_modules}
 
-            # Module dominant
+            # Module dominant (par niveau de SCR)
             module_dominant = max(chocs, key=chocs.get)
+            # Détail sous-module rachat
+            rachat_detail = {
+                "hausse":     round(scr_rachat_hausse, 0),
+                "baisse":     round(scr_rachat_baisse, 0),
+                "mass_lapse": round(scr_rachat_mass_lapse, 0),
+                "dominant":   rachat_dominant,
+            }
 
             commentaire = (
                 f"✅ QRT S.26 — SCR Vie = {SCR_vie_total/1e6:.2f}M€ | "
@@ -128,6 +154,7 @@ class AgentRVIE1QRTVie:
                 'ratio_mcr_pct':round(ratio_mcr,1),
                 'decomposition_scr':decompo,
                 'module_dominant':module_dominant,
+                'rachat_detail':rachat_detail,
                 'matrice_pos_def':is_pos_def,
                 'eigenvalues_min':round(float(np.min(eigenvalues)),4),
                 'commentaire':commentaire, 'audit_id':audit_id,
@@ -167,7 +194,7 @@ class AgentRVIE1QRTVie:
         else:
             h2_s,h2_m,h2_c = "ROUGE",f"Ratio SCR = {ratio_scr:.1f}% < 100% ❌","INSUFFISANCE DE CAPITAL — notification ACPR obligatoire"
 
-        # H3 — Structure des sous-modules
+        # H3 — Structure des sous-modules (Art. 142 : rachat = max 3 sous-chocs)
         top2 = sorted(chocs, key=chocs.get, reverse=True)[:2]
         structure_ok = any(m in top2 for m in ['longevite','rachat','invalidite'])
         if structure_ok:
