@@ -148,6 +148,23 @@ class AgentRVIE1QRTVie:
                 'agent':'R-VIE1 Éric','scr_vie':SCR_vie_total,
                 'ratio_scr':ratio_scr,'decompo':decompo}, audit_id)
 
+            # ── Rapport Excel individuel ─────────────────────────────
+            _result_for_excel = {
+                'audit_id': audit_id,
+                'agent': 'R-VIE1',
+                'statut_rag': statut_rag if 'statut_rag' in dir() else 'VERT',
+                'commentaire': commentaire if 'commentaire' in dir() else '',
+                'sources': {'parametres': 'saisie manuelle'},
+            }
+            # Enrichir avec les variables numériques disponibles
+            for _k, _v in list(locals().items()):
+                if isinstance(_v, (int, float)) and not _k.startswith('_'):
+                    _result_for_excel[_k] = _v
+            _excel_bytes_tmp = None
+            try:
+                _excel_bytes_tmp = self._generer_excel(_result_for_excel)
+            except Exception as _xe:
+                pass
             return {
                 'success':True, 'agent':'R-VIE1 Éric',
                 'source_be_vie':'V3 Amélie (pm_prospective)' if (result_v3 and result_v3.get('success')) else 'Saisie manuelle',
@@ -168,7 +185,7 @@ class AgentRVIE1QRTVie:
                 'validation_rvie1':val_hyp,
                 'graphiques_validation':gv,
                 'erreur':None,
-                'excel_bytes':        None,
+                'excel_bytes':        _excel_bytes_tmp,
             }
         except Exception as e:
             logger.error(f"[{audit_id}] ERREUR : {e}", exc_info=True)
