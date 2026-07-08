@@ -273,6 +273,7 @@ class AgentV1TarificationDeces:
                     'reserves':  [round(r, 2) for r in reserves],
                 },
                 'rapport':               rapport,
+                                'sources':               {'parametres': 'saisie manuelle'},
                 'commentaire':           commentaire,
                 'audit_id':              audit_id,
                 'graphiques':            graphiques,
