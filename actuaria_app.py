@@ -1962,7 +1962,15 @@ def page_dashboard():
                     if st.button("📄 Générer rapport Word", key="ar_export_word", use_container_width=True):
                         try:
                             from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import export_word as _ew_ar
-                            _word_bytes = _ew_ar(_ar_res)
+                            _word_bytes = _ew_ar(
+                                n1=_ar_res.get("n1", {}),
+                                n2=_ar_res.get("n2", {}),
+                                n3=_ar_res.get("n3", {}),
+                                n4=_ar_res.get("n4", {}),
+                                commentaire=_ar_res.get("commentaire", ""),
+                                lob_label=_ar_res.get("n2", {}).get("lob_label", ""),
+                                audit_id=_ar_res.get("audit_trail", {}).get("id", "") if isinstance(_ar_res.get("audit_trail"), dict) else "",
+                            )
                             if _word_bytes:
                                 st.download_button(
                                     "⬇️ Télécharger le rapport Word",
