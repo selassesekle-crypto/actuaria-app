@@ -43,12 +43,24 @@ class AgentRVIE1QRTVie:
         os.makedirs(audit_path,  exist_ok=True)
 
     def run(self, be_vie=45_000_000, pm_total=50_000_000,
-            fonds_propres=12_000_000, generer_graphiques=True) -> Dict:
+            fonds_propres=12_000_000, generer_graphiques=True,
+            result_v3=None,   # Optional[Dict] — alimente be_vie et pm_total depuis V3 Amélie
+            ) -> Dict:
         audit_id = f"RVIE1_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         logger = self.logger
         if self.verbose:
             logger.info(f"[{audit_id}] Agent R-VIE1 démarré | BE={be_vie/1e6:.1f}M€")
         try:
+            # ── Alimentation depuis V3 Amélie (si disponible) ────────────────
+            # Permet la chaîne automatique : V3 → R-VIE1 sans ressaisie
+            if result_v3 and result_v3.get('success'):
+                be_vie   = result_v3.get('pm_prospective', be_vie)
+                pm_total = result_v3.get('pm_prospective', pm_total)
+                logger.info(
+                    f"[{audit_id}] Alimenté depuis V3 Amélie — "
+                    f"BE Vie = {be_vie/1e6:.2f}M€ | PM = {pm_total/1e6:.2f}M€"
+                )
+
             # ── Chocs EIOPA S.26 — Sous-modules SCR Vie ──────────────────────
             # Chocs calibrés EIOPA QIS5 / Actes délégués S2
             chocs = {
@@ -107,6 +119,7 @@ class AgentRVIE1QRTVie:
 
             return {
                 'success':True, 'agent':'R-VIE1 Éric',
+                'source_be_vie':'V3 Amélie (pm_prospective)' if (result_v3 and result_v3.get('success')) else 'Saisie manuelle',
                 'statut_rag':'VERT' if ratio_scr >= 150 else 'AMBRE' if ratio_scr >= 100 else 'ROUGE',
                 'be_vie':be_vie, 'pm_total':pm_total, 'fonds_propres':fonds_propres,
                 'scr_vie_total':round(SCR_vie_total,2),
