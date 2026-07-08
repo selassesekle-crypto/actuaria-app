@@ -142,6 +142,7 @@ class AgentV4ParticipationBenefices:
                 'spread':round(spread,4),
                 'ppb_evol':[round(p,2) for p in ppb_evol],
                 'taux_servi_evol':[round(t,4) for t in taux_servi_evol],
+                'sources':{'parametres': 'saisie manuelle'},
                 'commentaire':commentaire,'audit_id':audit_id,
                 'graphiques':graphiques,'validation_pb':val_hyp,'graphiques_validation':gv,'erreur':None,
             }
