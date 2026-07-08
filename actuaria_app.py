@@ -3001,8 +3001,8 @@ def _executer_analyse(besoin, direction, equipe, client):
 
             # ── TARIFICATION ────────────────────────────────────────────────
             elif besoin in ["prime_glm","prime_ml","prime_dl","selection"]:
-                from a1_ingestion import AgentA1Ingestion
-                from a2_preprocessing import AgentA2Preprocessing
+                from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
+                from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
 
                 a1 = AgentA1Ingestion(audit_path=_tmp, verbose=False)
                 r1 = a1.run(dataframe=df, branche="non_vie")
@@ -3020,22 +3020,22 @@ def _executer_analyse(besoin, direction, equipe, client):
                 resultats["r2"] = r2
 
                 if besoin == "prime_glm":
-                    from a3_glm import AgentA3GLM
+                    from direction_non_vie.tarification.a3_glm.agent import AgentA3GLM
                     r3 = AgentA3GLM(audit_path=_tmp, verbose=False).run(r2, generer_graphiques=False)
                     resultats["principal"] = r3
                 elif besoin == "prime_ml":
-                    from a4_ml import AgentA4ML
+                    from direction_non_vie.tarification.a4_ml.agent import AgentA4ML
                     r4 = AgentA4ML(audit_path=_tmp, verbose=False).run(r2, generer_graphiques=False, calcul_shap=False)
                     resultats["principal"] = r4
                 elif besoin == "prime_dl":
-                    from a5_deep_learning import AgentA5DeepLearning
+                    from direction_non_vie.tarification.a5_deep_learning.agent import AgentA5DeepLearning
                     r5 = AgentA5DeepLearning(audit_path=_tmp, verbose=False).run(r2, n_epochs=10, generer_graphiques=False)
                     resultats["principal"] = r5
                 elif besoin == "selection":
-                    from a3_glm import AgentA3GLM
+                    from direction_non_vie.tarification.a3_glm.agent import AgentA3GLM
                     r3 = AgentA3GLM(audit_path=_tmp, verbose=False).run(r2, generer_graphiques=False)
                     if besoin == "selection":
-                        from a6_comparaison import AgentA6Comparaison
+                        from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
                         r6 = AgentA6Comparaison(audit_path=_tmp, verbose=False).run(r2, result_a3=r3, generer_graphiques=False, aide_decision=True)
                         resultats["principal"] = r6
                     else:
@@ -3173,8 +3173,8 @@ def _executer_analyse(besoin, direction, equipe, client):
             # ── SANTÉ ────────────────────────────────────────────────────────
             elif besoin in ["tarif_sante","prov_sante","report_sante"]:
                 if df is not None:
-                    from a1_ingestion import AgentA1Ingestion
-                    from a2_preprocessing import AgentA2Preprocessing
+                    from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
+                    from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
                     r1 = AgentA1Ingestion(audit_path=_tmp, verbose=False).run(dataframe=df, branche="sante_prevoyance")
                     r2 = AgentA2Preprocessing(audit_path=_tmp, verbose=False).run(r1)
                     resultats["r2"] = r2
