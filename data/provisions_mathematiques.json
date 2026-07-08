@@ -1,0 +1,27 @@
+{
+  "contrat_reference": {
+    "age_souscription": 40,
+    "duree_ans": 20,
+    "capital_assure": 200000,
+    "taux_technique": 0.025,
+    "prime_nivelee": 236.81,
+    "pm_max": 1159.0,
+    "pm_t10": 1098.0
+  },
+  "portefeuille": {
+    "nb_contrats_analyses": 50,
+    "pm_totale": 763460.0,
+    "pm_moyenne": 15269.0
+  },
+  "sensibilite_taux": {
+    "0.5pct": 1136.0,
+    "1.0pct": 1127.0,
+    "1.5pct": 1118.0,
+    "2.0pct": 1108.0,
+    "2.5pct": 1098.0,
+    "3.0pct": 1088.0,
+    "3.5pct": 1078.0,
+    "4.0pct": 1067.0
+  },
+  "statut": "Phase 6 complete"
+}
