@@ -49,8 +49,10 @@ class TestV6ALMDynamique:
     def test_t5_projection_decroissante(self, agent):
         """Les PM doivent décroître avec des sorties > revalorisation"""
         r = agent.run(pm_initiale=50e6, actif_initiale=55e6,
-                      taux_technique_pm=0.02, taux_sorties_annuel=0.08,
+                      taux_technique_pm=0.02,
+                      taux_prestations=0.03, taux_rachats=0.05,
                       horizon=10, generer_graphiques=False)
+        # Sorties totales = 8% (prestations 3% + rachats 5%) > revalorisation 2%
         assert r['success'] is True
         pms = [p['pm'] for p in r['projection']]
         assert pms[-1] < pms[0], "PM doit décroître si sorties > revalorisation"
