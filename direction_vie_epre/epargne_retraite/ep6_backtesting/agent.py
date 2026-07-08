@@ -300,6 +300,23 @@ class AgentEP6Backtesting:
                 'impact_total': impact_total_dbo, 'dbo_reestimee': dbo_reestimee,
             }, audit_id)
 
+            # ── Rapport Excel individuel ─────────────────────────────
+            _result_for_excel = {
+                'audit_id': audit_id,
+                'agent': 'EP6',
+                'statut_rag': statut_rag if 'statut_rag' in dir() else 'VERT',
+                'commentaire': commentaire if 'commentaire' in dir() else '',
+                'sources': {'parametres': 'saisie manuelle'},
+            }
+            # Enrichir avec les variables numériques disponibles
+            for _k, _v in list(locals().items()):
+                if isinstance(_v, (int, float)) and not _k.startswith('_'):
+                    _result_for_excel[_k] = _v
+            _excel_bytes_tmp = None
+            try:
+                _excel_bytes_tmp = self._generer_excel(_result_for_excel)
+            except Exception as _xe:
+                pass
             return {
                 'success':            True,
                 'agent':              'EP6 Théodore',
@@ -321,7 +338,7 @@ class AgentEP6Backtesting:
                 'validation_bt':      val_hyp,
                 'graphiques_validation': gv,
                 'erreur':             None,
-                'excel_bytes':        None,
+                'excel_bytes':        _excel_bytes_tmp,
             }
 
         except Exception as e:
