@@ -118,10 +118,15 @@ class AgentV2TarificationEpargneVie:
             self._sauvegarder({'agent':'V2 Kofi','type':label_contrat,'prime_pure_an':prime_pure_an,
                                'prime_comm_an':prime_comm_an,'rente':rente_mensuelle,'cag':cag}, audit_id)
 
+            # be_vie = valeur actuelle du capital garanti = capital × E_x:n
+            # Utilisé par R-VIE1 (SCR Vie) pour l'agrégation S.26
+            be_vie = round(capital * E_xn, 2)
+
             return {
                 'success':True,'agent':'V2 Kofi','type_contrat':label_contrat,
                 'table':table_nm,'age':age,'sexe':sexe,'duree':duree,
                 'statut_rag':'VERT' if val_hyp['statut_global']!='ROUGE' else 'AMBRE',
+                'be_vie':be_vie,
                 'prime_pure':{'annuelle':round(prime_pure_an,2),'mensuelle':round(prime_pure_mois,2),'E_xn':round(E_xn,6),'a_xn':round(a_xn,4)},
                 'prime_commerciale':{'annuelle':round(prime_comm_an,2),'mensuelle':round(prime_comm_mois,2),'cag_pct':round(cag*100,2)},
                 'rente_viagere':{'mensuelle':round(rente_mensuelle,2),'annuelle':round(rente_mensuelle*12,2),'a_viager':round(a_viager,4)},
