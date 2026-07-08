@@ -76,7 +76,8 @@ MCR_BETA_PREV          = 0.0191   # coefficient provisions prévoyance — Art.2
 # ── Risk Adjustment IFRS 17 ───────────────────────────────────────────────
 # Méthode CoC utilisée dans P3 — P4 réutilise le RA de P3 via sorties_p4
 # COC_RA ci-dessous = fallback si P3 non disponible
-COC_RA                 = 0.08   # fallback RA = 8% BE (non utilisé si P3 fourni)
+# Source de verite : 6% EIOPA (IFRS 17 §B91) — coherent avec P3 et SP-REG2
+COC_RA                 = 0.06   # fallback RA = 6% BE (EIOPA IFRS 17 §B91)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -388,7 +389,7 @@ class AgentP4ReportingPrevoyance:
                  'C0010': round(src['pm_rentes_ip'], 0)},
                 {'code':'R0012','libelle':'  dont PSAP ITT',
                  'C0010': round(src['psap_total'], 0)},
-                {'code':'R0020','libelle':'Risk Adjustment (CoC 8% BE prévoyance)',
+                {'code':'R0020','libelle':'Risk Adjustment (CoC 6% EIOPA §B91 prévoyance)',
                  'C0010': round(ra, 0)},
                 {'code':'R0030','libelle':'TP Prévoyance (BE + RA)',
                  'C0010': round(tp, 0)},
