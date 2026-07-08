@@ -1,0 +1,65 @@
+{
+  "comparaison": [
+    {
+      "modele": "XGBoost",
+      "gini_test": 0.3536,
+      "auc_test": 0.6768,
+      "overfit": 0.1213,
+      "lift_D1_D10": 7.86,
+      "rang": 1
+    },
+    {
+      "modele": "Random Forest",
+      "gini_test": 0.3451,
+      "auc_test": 0.6726,
+      "overfit": 0.082,
+      "lift_D1_D10": 7.05,
+      "rang": 2
+    },
+    {
+      "modele": "MLP Deep Learning",
+      "gini_test": 0.3265,
+      "auc_test": 0.6633,
+      "overfit": 0.1148,
+      "lift_D1_D10": 5.93,
+      "rang": 3
+    },
+    {
+      "modele": "LightGBM",
+      "gini_test": 0.2972,
+      "auc_test": 0.6486,
+      "overfit": 0.0414,
+      "lift_D1_D10": 5.11,
+      "rang": 4
+    },
+    {
+      "modele": "GLM Logistique",
+      "gini_test": 0.2893,
+      "auc_test": 0.6446,
+      "overfit": 0.0163,
+      "lift_D1_D10": 5.7,
+      "rang": 5
+    }
+  ],
+  "modele_retenu": "LightGBM",
+  "gini_retenu": 0.2972,
+  "auc_retenu": 0.6486,
+  "lift_retenu": 5.11,
+  "features": [
+    "Age",
+    "Puissance_Veh_CV",
+    "Anciennete_Permis_Ans",
+    "Anciennete_Veh_Ans",
+    "KM_Annuels",
+    "Bonus_Malus",
+    "Anciennete_Client_Ans",
+    "Sexe_enc",
+    "CSP_enc",
+    "Zone_Geographique_enc",
+    "Usage_Auto_enc",
+    "Pays_enc"
+  ],
+  "nb_sinistres_train": 4051,
+  "nb_sinistres_test": 1013,
+  "note": "Données simulées avec corrélations actuarielles"
+}
