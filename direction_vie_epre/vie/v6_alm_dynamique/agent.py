@@ -134,7 +134,6 @@ class AgentV6ALMDynamique:
                 sources['taux_technique_pm'] = 'V4 Théo (tx_servi_cible)'
                 logger.info(f"[{audit_id}] Taux servi alimenté depuis V4 : {taux_technique_pm*100:.2f}%")
 
-            fonds_propres_0 = actif_initiale - pm_initiale
             if result_rvie1 and result_rvie1.get('success'):
                 scr_vie = result_rvie1.get('scr_vie_total', pm_initiale * 0.10)
                 sources['scr_ref'] = 'R-VIE1 Éric (scr_vie_total)'
