@@ -89,3 +89,24 @@ class TestV3ProvisionsMathematiques:
             assert r['pm_prospective'] >= 0
         else:
             assert r['erreur'] is not None
+
+    def test_t8_tracabilite_reserve_negative(self, agent):
+        """V3 doit tracer les réserves négatives dans l'audit trail (Art. R331-1)"""
+        # Contrat décès avec durée très courte : PM peut être négative
+        # (prime prospective < prime rétro en début de contrat)
+        r = agent.run(age=40, sexe='H', capital=100_000,
+                      duree=20, t_ecoule=0, taux_technique=0.005,
+                      generer_graphiques=False)
+        assert r['success'] is True
+        # Les clés de traçabilité doivent toujours être présentes
+        assert 'reserve_negative_detectee' in r, "Clé reserve_negative_detectee manquante"
+        assert 'pm_prospective_brute' in r, "Clé pm_prospective_brute manquante"
+        assert 'raison_reserve_nulle' in r, "Clé raison_reserve_nulle manquante"
+        # pm_prospective ≥ 0 (plancher réglementaire toujours appliqué)
+        assert r['pm_prospective'] >= 0, "PM prospective ne peut pas être négative"
+        # Si la PM brute était négative, la raison doit être documentée
+        if r['reserve_negative_detectee']:
+            assert r['raison_reserve_nulle'] is not None
+            assert "plancher réglementaire" in r['raison_reserve_nulle']
+        else:
+            assert r['raison_reserve_nulle'] is None
