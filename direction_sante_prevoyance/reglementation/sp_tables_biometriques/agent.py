@@ -43,6 +43,15 @@
 import json
 import logging
 import warnings
+
+try:
+    from direction_sante_prevoyance.services.sp_tables_import import (
+        charger_table as _charger_table_client,
+        interpoler_table as _interp_client,
+    )
+    SP_TABLES_IMPORT_OK = True
+except ImportError:
+    SP_TABLES_IMPORT_OK = False
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -180,8 +189,9 @@ class AgentSPTablesBiometriques:
             table:            str   = "BCAC2019",
             taux_actu:        float = EIOPA_RFR_PROXY,
             horizon_rente:    int   = 20,
-            donnees_client:   Optional[Dict] = None,
-            generer_graphiques: bool = True) -> Dict:
+            donnees_client:     Optional[Dict] = None,
+            tables_client:      Optional[Dict] = None,
+            generer_graphiques: bool           = True) -> Dict:
         """
         Pipeline tables biométriques SP.
 
@@ -204,6 +214,15 @@ class AgentSPTablesBiometriques:
         """
         t0  = datetime.now()
         aid = f"SPTAB_{t0.strftime('%Y%m%d_%H%M%S')}"
+        _tbl_client = tables_client or {}
+        _src_tables = "TABLE PROPRIÉTAIRE CLIENT" if _tbl_client else "BCAC 2019 / TD 88-90 / TH 00-02"
+        if _tbl_client:
+            self.logger.info(f"[{aid}] Tables client : {list(_tbl_client.keys())}")
+        else:
+            self.logger.warning(
+                f"[{aid}] Aucune table client — BCAC 2019 / TD 88-90 / TH 00-02 par défaut. "
+                f"Fournir tables_client pour calibrage sur données propriétaires."
+            )
 
         try:
             # Normaliser CSP
@@ -257,6 +276,8 @@ class AgentSPTablesBiometriques:
                 "agent":      self.NOM,
                 "version":    self.VERSION,
                 "audit_id":   aid,
+                "source_tables": _src_tables,
+                "tables_client_fournies": bool(_tbl_client),
                 "statut_rag": rag,
                 "table":      table,
                 "age":        age,
