@@ -79,6 +79,12 @@ class AgentV8ReconciliationPMTP:
         taux_marche:        float =      0.040,
         duree_moyenne:      int   =         15,
         nb_contrats:        int   =     10_000,
+        be_ifrs17_override:         Optional[float] = None,
+        # Optionnel — BE IFRS 17 si différent du BE S2.
+        # En pratique, BE_IFRS17 ≠ BE_S2 sur deux points :
+        #   1. Périmètre contrats (IFRS 17 peut exclure certains contrats financiers)
+        #   2. Frais d'acquisition différés (inclus IFRS 17, absents de S2)
+        # Si None : be_ifrs17 = be_vie (approximation conservative, comportement originel).
         hypotheses_differentielles: Optional[Dict] = None,
         # Optionnel — décomposition complète de l'écart PM/TP en 3 composantes.
         # Si fourni : {'qx_s2': float, 'qx_social': float,
@@ -236,7 +242,17 @@ class AgentV8ReconciliationPMTP:
             #     = FCF + LC  (si contrat déficitaire)
             # FCF = BE_IFRS17 + RA_IFRS17
             # BE IFRS 17 ≈ BE S2 (même principe, légères différences de périmètre)
-            be_ifrs17 = be_vie  # approximation : même BE pour simplification
+            # BE IFRS 17 : utiliser la valeur fournie si disponible
+            # Sinon : approximation be_ifrs17 ≈ be_vie (légères différences de périmètre)
+            if be_ifrs17_override is not None:
+                be_ifrs17 = be_ifrs17_override
+                logger.info(
+                    f"[{audit_id}] BE IFRS 17 fourni : {be_ifrs17/1e6:.2f}M€ "
+                    f"(écart vs BE S2 : {(be_ifrs17-be_vie)/1e3:+.0f}k€)"
+                )
+            else:
+                be_ifrs17 = be_vie  # approximation : périmètre S2 ≈ IFRS 17
+                # Pour une réconciliation d'audit : fournir be_ifrs17_override
             fcf = be_ifrs17 + ra_ifrs17
 
             # CSM et LC sont mutuellement exclusifs
@@ -338,6 +354,7 @@ class AgentV8ReconciliationPMTP:
                 'pm_par_contrat':     round(pm_par_contrat, 0),
                 'be_par_contrat':     round(be_par_contrat, 0),
                 'lrc_par_contrat':    round(lrc_par_contrat, 0),
+                'be_ifrs17_mode':     'fourni' if be_ifrs17_override is not None else 'approximation (=be_s2)',
                 'sources':            sources,
                 'commentaire':        commentaire,
                 'audit_id':           audit_id,
