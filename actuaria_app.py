@@ -4436,29 +4436,42 @@ Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non 
                      disabled=not _champs_ok):
             with st.spinner("Génération du rapport HTML..."):
                 try:
-                    from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import export_html as _eh
-                    _html = _eh(
-                        n1={}, n2=r_raw.get("n2",{}), n3=r_raw.get("n3",{}), n4=r_raw.get("n4",{}),
-                        commentaire=r_raw.get("commentaire",""),
-                        ref_client=_ref_client_export,
-                        arrete=_arrete_exp,
-                        audit_id=r_raw.get("audit_id",""),
-                        lob_label=_lob_exp,
-                        graphiques=_graphiques_exp,
-                        actuaire_nom=_actuaire_nom,
-                        actuaire_numero_ia=_actuaire_ia,
-                    )
-                    if _html:
+                    _html_bytes_sp = r_raw.get("html_bytes", b"")
+                    if _html_bytes_sp:
+                        # Rapport SP — html_bytes déjà générés par l'agent
+                        _html_data = _html_bytes_sp if isinstance(_html_bytes_sp, bytes) else _html_bytes_sp.encode("utf-8")
                         st.download_button(
                             "⬇️ Télécharger HTML",
-                            data=_html.encode("utf-8"),
+                            data=_html_data,
                             file_name=f"rapport_actuariel_{besoin}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html",
                             mime="text/html",
                             use_container_width=True,
                             key="dl_res_html",
                         )
                     else:
-                        st.error("Génération HTML échouée")
+                        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import export_html as _eh
+                        _html = _eh(
+                            n1={}, n2=r_raw.get("n2",{}), n3=r_raw.get("n3",{}), n4=r_raw.get("n4",{}),
+                            commentaire=r_raw.get("commentaire",""),
+                            ref_client=_ref_client_export,
+                            arrete=_arrete_exp,
+                            audit_id=r_raw.get("audit_id",""),
+                            lob_label=_lob_exp,
+                            graphiques=_graphiques_exp,
+                            actuaire_nom=_actuaire_nom,
+                            actuaire_numero_ia=_actuaire_ia,
+                        )
+                        if _html:
+                            st.download_button(
+                                "⬇️ Télécharger HTML",
+                                data=_html.encode("utf-8"),
+                                file_name=f"rapport_actuariel_{besoin}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html",
+                                mime="text/html",
+                                use_container_width=True,
+                                key="dl_res_html",
+                            )
+                        else:
+                            st.error("Génération HTML échouée")
                 except Exception as _eh_e:
                     st.error(f"Erreur HTML : {_eh_e}")
 
@@ -4467,29 +4480,41 @@ Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non 
                      disabled=not _champs_ok):
             with st.spinner("Génération du rapport Word..."):
                 try:
-                    from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import export_word as _ew
-                    _word = _ew(
-                        n1={}, n2=r_raw.get("n2",{}), n3=r_raw.get("n3",{}), n4=r_raw.get("n4",{}),
-                        commentaire=r_raw.get("commentaire",""),
-                        ref_client=_ref_client_export,
-                        arrete=_arrete_exp,
-                        audit_id=r_raw.get("audit_id",""),
-                        lob_label=_lob_exp,
-                        graphiques=_graphiques_exp,
-                        actuaire_nom=_actuaire_nom,
-                        actuaire_numero_ia=_actuaire_ia,
-                    )
-                    if _word:
+                    _word_bytes_sp = r_raw.get("word_bytes", b"")
+                    if _word_bytes_sp:
+                        # Rapport SP — word_bytes déjà générés par l'agent
                         st.download_button(
                             "⬇️ Télécharger Word",
-                            data=_word,
+                            data=_word_bytes_sp,
                             file_name=f"rapport_actuariel_{besoin}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx",
                             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                             use_container_width=True,
                             key="dl_res_word",
                         )
                     else:
-                        st.error("Génération Word échouée")
+                        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import export_word as _ew
+                        _word = _ew(
+                            n1={}, n2=r_raw.get("n2",{}), n3=r_raw.get("n3",{}), n4=r_raw.get("n4",{}),
+                            commentaire=r_raw.get("commentaire",""),
+                            ref_client=_ref_client_export,
+                            arrete=_arrete_exp,
+                            audit_id=r_raw.get("audit_id",""),
+                            lob_label=_lob_exp,
+                            graphiques=_graphiques_exp,
+                            actuaire_nom=_actuaire_nom,
+                            actuaire_numero_ia=_actuaire_ia,
+                        )
+                        if _word:
+                            st.download_button(
+                                "⬇️ Télécharger Word",
+                                data=_word,
+                                file_name=f"rapport_actuariel_{besoin}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx",
+                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                use_container_width=True,
+                                key="dl_res_word",
+                            )
+                        else:
+                            st.error("Génération Word échouée")
                 except Exception as _ew_e:
                     st.error(f"Erreur Word : {_ew_e}")
     with e5:
@@ -4497,29 +4522,41 @@ Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non 
                      disabled=not _champs_ok):
             with st.spinner("Génération du rapport PDF..."):
                 try:
-                    from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import export_pdf as _ep
-                    _pdf = _ep(
-                        n1={}, n2=r_raw.get("n2",{}), n3=r_raw.get("n3",{}), n4=r_raw.get("n4",{}),
-                        commentaire=r_raw.get("commentaire",""),
-                        ref_client=_ref_client_export,
-                        arrete=_arrete_exp,
-                        audit_id=r_raw.get("audit_id",""),
-                        lob_label=_lob_exp,
-                        graphiques=_graphiques_exp,
-                        actuaire_nom=_actuaire_nom,
-                        actuaire_numero_ia=_actuaire_ia,
-                    )
-                    if _pdf:
+                    _pdf_bytes_sp = r_raw.get("pdf_bytes", b"")
+                    if _pdf_bytes_sp:
+                        # Rapport SP — pdf_bytes déjà générés par l'agent
                         st.download_button(
                             "⬇️ Télécharger PDF",
-                            data=_pdf,
+                            data=_pdf_bytes_sp,
                             file_name=f"rapport_actuariel_{besoin}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
                             mime="application/pdf",
                             use_container_width=True,
                             key="dl_res_pdf",
                         )
                     else:
-                        st.error("Génération PDF échouée")
+                        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import export_pdf as _ep
+                        _pdf = _ep(
+                            n1={}, n2=r_raw.get("n2",{}), n3=r_raw.get("n3",{}), n4=r_raw.get("n4",{}),
+                            commentaire=r_raw.get("commentaire",""),
+                            ref_client=_ref_client_export,
+                            arrete=_arrete_exp,
+                            audit_id=r_raw.get("audit_id",""),
+                            lob_label=_lob_exp,
+                            graphiques=_graphiques_exp,
+                            actuaire_nom=_actuaire_nom,
+                            actuaire_numero_ia=_actuaire_ia,
+                        )
+                        if _pdf:
+                            st.download_button(
+                                "⬇️ Télécharger PDF",
+                                data=_pdf,
+                                file_name=f"rapport_actuariel_{besoin}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                                mime="application/pdf",
+                                use_container_width=True,
+                                key="dl_res_pdf",
+                            )
+                        else:
+                            st.error("Génération PDF échouée")
                 except Exception as _ep_e:
                     st.error(f"Erreur PDF : {_ep_e}")
     with e6:
