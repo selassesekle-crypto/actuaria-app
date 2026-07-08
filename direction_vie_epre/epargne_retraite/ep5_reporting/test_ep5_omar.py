@@ -64,7 +64,7 @@ class TestEP5ReportingEpargne:
         assert r['success'] is True
         assert r['statut_rag'] == 'VERT'  # aucun statut amont → VERT par défaut
         assert len(r['rapports_disponibles']) > 0
-        assert r['erreur'] is None
+        assert r.get('erreur') is None  # clé absente du dict success — comportement normal
 
     # T2 — KPIs agrégés depuis EP1
     def test_t2_kpis_depuis_ep1(self, agent, result_ep1_mock):
