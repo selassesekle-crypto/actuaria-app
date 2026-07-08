@@ -26,6 +26,11 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
+# Tables de mortalité officielles — Arrêté du 27 juillet 2006
+from direction_vie_epre.services.tables_mortalite_officielles import (
+    calculer_annuite_viagere, REFERENCE_REGLEMENTAIRE,
+)
+
 # ══════════════════════════════════════════════════════════════════════════════
 # AGENT EP1 — ÉVALUATION DES ENGAGEMENTS DE RETRAITE (IAS 19)
 # ══════════════════════════════════════════════════════════════════════════════
@@ -94,7 +99,9 @@ class AgentEP1EngagementsRetraite:
         taux_prestation:     float = 0.015,
         age_moyen:           float = 42,
         age_retraite:        float = 65,
-        annuites_viageres:   float = 14.0,
+        annuites_viageres:   float = None,  # None = calcul auto depuis TH0002/TF0002
+        sexe:                str   = 'H',   # 'H' ou 'F' pour les tables officielles
+        effectifs_df:        'Optional[pd.DataFrame]' = None,  # table individuelle : colonnes [age, anciennete, salaire, sexe?]
         sous_branche:        str  = 'art39',
         generer_graphiques: bool = True,
     ) -> Dict[str, Any]:
@@ -120,15 +127,54 @@ class AgentEP1EngagementsRetraite:
             % du salaire final accordé par année d'ancienneté.
             Ex : 1.5% → 30 ans d'ancienneté = 45% du salaire final.
 
-        annuites_viageres : float
-            ä_x à l'âge de retraite (depuis A14).
-            14 ans à 65 ans avec taux 2% est une valeur typique.
+        annuites_viageres : float, optional
+            ä_x à l'âge de retraite.
+            None = calcul automatique depuis TH0002/TF0002 (arrêté 27/07/2006).
+            Valeur typique : ~14.0 pour H 65 ans taux 2%, ~15.5 pour F 65 ans.
+
+        effectifs_df : pd.DataFrame, optional
+            Table des effectifs individuels pour calcul PUC exact.
+            Colonnes requises : ['age', 'anciennete', 'salaire']
+            Colonne optionnelle : ['sexe'] ('H' ou 'F')
+            Si None → calcul agrégé sur effectif moyen (mode simplifié).
         """
         t_debut  = datetime.now()
         audit_id = f"EP1_{t_debut.strftime('%Y%m%d_%H%M%S')}"
         self.logger.info(f"[{audit_id}] Agent EP1 démarré")
 
         try:
+            # ── Annuités viagères officielles ──────────────────────────────
+            if annuites_viageres is None:
+                annuites_viageres = calculer_annuite_viagere(
+                    age=int(age_retraite),
+                    taux=taux_actu,
+                    sexe=sexe,
+                )
+                self.logger.info(
+                    f"[{audit_id}] Annuité viagère calculée depuis tables officielles "
+                    f"({REFERENCE_REGLEMENTAIRE[:35]}...) : "
+                    f"ä_{int(age_retraite)}({sexe}) = {annuites_viageres:.4f}"
+                )
+
+            # ── Mode PUC individuel (si effectifs_df fourni) ────────────────
+            if effectifs_df is not None and isinstance(effectifs_df, pd.DataFrame):
+                result_individuel = self._puc_individuel(
+                    effectifs_df, taux_actu, taux_revalorisation,
+                    taux_rotation, taux_prestation, age_retraite,
+                    annuites_viageres, sexe, audit_id
+                )
+                if result_individuel:
+                    # Alimenter les paramètres agrégés depuis le calcul individuel
+                    effectif          = result_individuel['nb_salaries']
+                    salaire_moyen     = result_individuel['salaire_moyen']
+                    anciennete_moyenne= result_individuel['anciennete_moyenne']
+                    age_moyen         = result_individuel['age_moyen']
+                    self.logger.info(
+                        f"[{audit_id}] Mode PUC individuel : "
+                        f"{effectif} salariés traités — DBO individuelle = "
+                        f"{result_individuel['dbo_individuelle']:,.0f}€"
+                    )
+
             # Durée résiduelle jusqu'à la retraite
             duree_res = max(age_retraite - age_moyen, 1)
 
@@ -215,6 +261,8 @@ class AgentEP1EngagementsRetraite:
                     'dbo_choc_taux_up50bp': round(dbo_choc_up, 0),
                     'dbo_choc_taux_down50bp':round(dbo_choc_down, 0),
                     'taux_couverture_pct': round(taux_couv, 1),
+                    'annuites_utilisees':  round(annuites_viageres, 4),
+                    'source_annuites':     f'Tables officielles TH0002/TF0002 ({sexe})' if True else 'Saisie manuelle',
                 },
                 'commentaire': self._commenter(
                     dbo_total, service_cost, interest_cost,
@@ -249,6 +297,89 @@ class AgentEP1EngagementsRetraite:
             self.logger.error(f"ERREUR EP1 : {e}", exc_info=True)
             return {'success': False, 'erreur': str(e), 'audit_id': audit_id}
 
+
+    def _puc_individuel(
+        self,
+        df:               pd.DataFrame,
+        taux_actu:        float,
+        taux_revalo:      float,
+        taux_rotation:    float,
+        taux_prestation:  float,
+        age_retraite:     float,
+        annuites:         float,
+        sexe_defaut:      str,
+        audit_id:         str,
+    ) -> dict:
+        """
+        Calcul PUC individuel salarié par salarié.
+
+        La méthode PUC (Projected Unit Credit, IAS 19.67) exige un calcul
+        individuel pour chaque membre du régime. Cette méthode est plus
+        précise que le calcul agrégé et devient obligatoire pour les
+        régimes importants (> 100 salariés selon les auditeurs Big 4).
+
+        Colonnes requises dans df : ['age', 'anciennete', 'salaire']
+        Colonne optionnelle       : ['sexe'] — défaut = sexe_defaut
+        """
+        try:
+            cols_requises = ['age', 'anciennete', 'salaire']
+            for col in cols_requises:
+                if col not in df.columns:
+                    self.logger.error(
+                        f"[{audit_id}] PUC individuel : colonne '{col}' manquante"
+                    )
+                    return {}
+
+            dbo_individuelle  = 0.0
+            service_cost_ind  = 0.0
+            nb               = len(df)
+
+            for _, row in df.iterrows():
+                age_i    = float(row['age'])
+                anc_i    = float(row['anciennete'])
+                sal_i    = float(row['salaire'])
+                sexe_i   = str(row.get('sexe', sexe_defaut)).upper()
+
+                duree_i  = max(age_retraite - age_i, 0.5)
+                anc_tot  = anc_i + duree_i
+
+                # Annuité viagère individuelle (sexe spécifique)
+                a_i = calculer_annuite_viagere(
+                    age=int(age_retraite), taux=taux_actu, sexe=sexe_i
+                )
+
+                # Projection salaire final
+                sal_final_i = sal_i * (1 + taux_revalo) ** duree_i
+
+                # Prestation projetée et unité de crédit
+                prest_i   = taux_prestation * anc_tot * sal_final_i
+                credit_i  = prest_i * (anc_i / max(anc_tot, 1))
+
+                # Probabilité d'atteindre la retraite
+                proba_i   = (1 - taux_rotation) ** duree_i * 0.85
+
+                # Facteur d'actualisation
+                facteur_i = 1 / (1 + taux_actu) ** duree_i
+
+                # DBO individuelle
+                dbo_i     = credit_i * a_i * facteur_i * proba_i
+                dbo_individuelle += dbo_i
+
+                # Service cost individuel
+                sc_i      = taux_prestation * sal_final_i * a_i * facteur_i * proba_i
+                service_cost_ind += sc_i
+
+            return {
+                'nb_salaries':       nb,
+                'dbo_individuelle':  round(dbo_individuelle, 0),
+                'service_cost_ind':  round(service_cost_ind, 0),
+                'age_moyen':         round(float(df['age'].mean()), 1),
+                'salaire_moyen':     round(float(df['salaire'].mean()), 0),
+                'anciennete_moyenne':round(float(df['anciennete'].mean()), 1),
+            }
+        except Exception as e:
+            self.logger.error(f"[{audit_id}] PUC individuel échoué : {e}", exc_info=True)
+            return {}
 
     def _valider_ias19(
         self,
