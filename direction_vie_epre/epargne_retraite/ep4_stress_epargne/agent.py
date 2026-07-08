@@ -136,6 +136,7 @@ class AgentEP4StressEpargne:
             result = {
                 'success':       True,
                 'audit_id':      audit_id,
+                'sources':       {'parametres': 'saisie manuelle'},
                 'sous_branche':  sous_branche,
                 'statut_rag':    statut_rag,
                 'ratio_base':    round(ratio_base, 1),
