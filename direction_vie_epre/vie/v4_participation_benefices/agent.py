@@ -126,6 +126,23 @@ class AgentV4ParticipationBenefices:
             self._sauvegarder({'agent':'V4 Théo','pb_regl_min':pb_reglementaire_min,
                                'pb_servie':pb_servie,'ppb_finale':ppb_finale,'tx_servi':tx_servi_cible}, audit_id)
 
+            # ── Rapport Excel individuel ─────────────────────────────
+            _result_for_excel = {
+                'audit_id': audit_id,
+                'agent': 'V4',
+                'statut_rag': statut_rag if 'statut_rag' in dir() else 'VERT',
+                'commentaire': commentaire if 'commentaire' in dir() else '',
+                'sources': {'parametres': 'saisie manuelle'},
+            }
+            # Enrichir avec les variables numériques disponibles
+            for _k, _v in list(locals().items()):
+                if isinstance(_v, (int, float)) and not _k.startswith('_'):
+                    _result_for_excel[_k] = _v
+            _excel_bytes_tmp = None
+            try:
+                _excel_bytes_tmp = self._generer_excel(_result_for_excel)
+            except Exception as _xe:
+                pass
             return {
                 'success':True,'agent':'V4 Théo',
                 'statut_rag':'VERT' if val_hyp['statut_global']!='ROUGE' else 'AMBRE',
@@ -150,7 +167,7 @@ class AgentV4ParticipationBenefices:
                 'sources':{'parametres': 'saisie manuelle'},
                 'commentaire':commentaire,'audit_id':audit_id,
                 'graphiques':graphiques,'validation_pb':val_hyp,'graphiques_validation':gv,'erreur':None,
-                'excel_bytes':        None,
+                'excel_bytes':        _excel_bytes_tmp,
             }
         except Exception as e:
             logger.error(f"[{audit_id}] ERREUR : {e}", exc_info=True)
