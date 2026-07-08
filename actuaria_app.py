@@ -2171,6 +2171,7 @@ def page_analyse():
         "sante_prev": {
             "sante":             "💊 Équipe Santé",
             "prevoyance":        "🩺 Équipe Prévoyance",
+            "reglementation_sp": "🛡️ Réglementation SP",
         },
     }
 
