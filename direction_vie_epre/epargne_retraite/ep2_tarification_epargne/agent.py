@@ -55,8 +55,8 @@ class AgentEP2TarificationEpargne:
 
     def __init__(
         self,
-        models_path: str = '/content/drive/MyDrive/ActuarIA/models',
-        audit_path:  str = '/content/drive/MyDrive/ActuarIA/audit',
+        models_path: str = '/tmp/actuaria/models',
+        audit_path:  str = '/tmp/actuaria/audit',
         verbose:     bool = True
     ):
         self.models_path = Path(models_path)
@@ -197,8 +197,10 @@ class AgentEP2TarificationEpargne:
                 result['graphiques'] = {}
 
             result['validation_ep2']        = self._valider_tarification_epre(
-                result.get('rente_mensuelle', 0), result.get('taux_technique', 0.02),
-                result.get('cotisation_mensuelle', 0), result.get('capital_cible', 100000))
+                result.get('tarification', {}).get('rente_mensuelle', 0),
+                result.get('parametres', {}).get('taux_technique', 0.0),
+                result.get('tarification', {}).get('cotisation_mensuelle', 0),
+                result.get('tarification', {}).get('capital_cible', 100_000))
             result['graphiques_validation'] = self._graphiques_validation_epre(result['validation_ep2'])
 
             self._sauvegarder(audit_id, result)
