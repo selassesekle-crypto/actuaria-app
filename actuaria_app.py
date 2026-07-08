@@ -2242,6 +2242,16 @@ def page_analyse():
             "prov_prev":  ("📐 Provisionnement prévoyance",       "Élodie P3"),
             "report_prev":("📋 Reporting prévoyance (QRT S.14)", "Valentin P4"),
         },
+        "reglementation_sp": {
+            "sp_alm":    ("⚖️ ALM & Liquidité SP",              "SP-ALM · Duration · BV01 · LCR"),
+            "sp_s2":     ("🛡️ Solvabilité 2 SP (SCR/MCR)",  "SP-REG1 · SCR santé + prév"),
+            "sp_ifrs17": ("📋 IFRS 17 SP",                    "SP-REG2 · PAA CoC 6%"),
+            "sp_ani":    ("💊 ANI 2013 / 100%% Santé",     "SP-REG3 · Reste à charge zéro"),
+            "sp_stress": ("🌡️ Stress Testing SP",          "Naomie · Chocs EIOPA SP"),
+            "sp_coh":    ("🔗 Cohérence SP",                "SP-COH · 6 contrôles C1-C6"),
+            "sp_audit":  ("🔐 Audit Trail SP",               "SP-AUDIT · RGPD Art.30"),
+            "sp_rapport":("📄 Rapport Actuariel SP",         "SP-RAPPORT · PDF/Word"),
+        },
     }
 
     if "analyse_besoin" not in st.session_state:
@@ -3332,6 +3342,92 @@ def _executer_analyse(besoin, direction, equipe, client):
                     )
                     resultats["principal"] = _r_p4
 
+            # ── SP REGLEMENTATION ────────────────────────────────────────────────────
+            elif besoin in ["sp_alm","sp_s2","sp_ifrs17","sp_ani","sp_stress","sp_coh","sp_audit","sp_rapport"]:
+                # Charger les resultats SP depuis session si disponibles
+                _ar_sp = st.session_state.get("agent_results", {})
+                _r_s1 = _ar_sp.get("leonie", {})
+                _r_s2 = _ar_sp.get("selma", {})
+                _r_s3 = _ar_sp.get("binta", {})
+                _r_p1 = _ar_sp.get("axel", {})
+                _r_p2 = _ar_sp.get("rayan", {})
+                _r_p3 = _ar_sp.get("elodie", {})
+                _r_p4 = _ar_sp.get("valentin", {})
+
+                if besoin == "sp_alm":
+                    from direction_sante_prevoyance.reglementation.sp_alm.agent import AgentSPAlm
+                    _r_sp = AgentSPAlm(audit_path=_tmp, verbose=False).run(
+                        result_p3=_r_p3, result_s3=_r_s3,
+                        fonds_propres=params.get("fonds_propres", 0.0),
+                        generer_graphiques=False,
+                    )
+                    resultats["principal"] = _r_sp
+
+                elif besoin == "sp_s2":
+                    from direction_sante_prevoyance.reglementation.sp_reg1_solvabilite2.agent import AgentSPReg1Solvabilite2
+                    _r_sp = AgentSPReg1Solvabilite2(audit_path=_tmp, verbose=False).run(
+                        result_s3=_r_s3, result_p4=_r_p4,
+                        fonds_propres=params.get("fonds_propres", 0.0),
+                        generer_graphiques=False,
+                    )
+                    resultats["principal"] = _r_sp
+
+                elif besoin == "sp_ifrs17":
+                    from direction_sante_prevoyance.reglementation.sp_reg2_ifrs17.agent import AgentSPReg2IFRS17
+                    _r_sp = AgentSPReg2IFRS17(audit_path=_tmp, verbose=False).run(
+                        result_s3=_r_s3, result_p4=_r_p4,
+                        generer_graphiques=False,
+                    )
+                    resultats["principal"] = _r_sp
+
+                elif besoin == "sp_ani":
+                    from direction_sante_prevoyance.reglementation.sp_reg3_ani_100sante.agent import AgentSPReg3ANI100Sante
+                    _r_sp = AgentSPReg3ANI100Sante(audit_path=_tmp, verbose=False).run(
+                        result_s1=_r_s1, result_s3=_r_s3,
+                        generer_graphiques=False,
+                    )
+                    resultats["principal"] = _r_sp
+
+                elif besoin == "sp_stress":
+                    from direction_sante_prevoyance.reglementation.sp_st_stress_testing.agent import AgentSPStressTestingNaomie
+                    _r_sp = AgentSPStressTestingNaomie(audit_path=_tmp, verbose=False).run(
+                        result_s3=_r_s3, result_p3=_r_p3,
+                        generer_graphiques=False,
+                    )
+                    resultats["principal"] = _r_sp
+
+                elif besoin == "sp_coh":
+                    from direction_sante_prevoyance.reglementation.sp_coherence.agent import AgentSPCoherence
+                    _r_sp = AgentSPCoherence(audit_path=_tmp, verbose=False).run(
+                        result_s1=_r_s1, result_s2=_r_s2, result_s3=_r_s3,
+                        result_p1=_r_p1, result_p2=_r_p2, result_p3=_r_p3, result_p4=_r_p4,
+                        generer_graphiques=False,
+                    )
+                    resultats["principal"] = _r_sp
+
+                elif besoin == "sp_audit":
+                    from direction_sante_prevoyance.reglementation.sp_audit.agent import AgentSPAuditTrail
+                    _resultats_sp_audit = {
+                        "s1":_r_s1,"s2":_r_s2,"s3":_r_s3,
+                        "p1":_r_p1,"p2":_r_p2,"p3":_r_p3,"p4":_r_p4,
+                    }
+                    _r_sp = AgentSPAuditTrail(audit_path=_tmp, verbose=False).run(
+                        resultats_agents=_resultats_sp_audit,
+                        client_nom=ref_client or "Client ActuarIA",
+                        generer_graphiques=False,
+                    )
+                    resultats["principal"] = _r_sp
+
+                elif besoin == "sp_rapport":
+                    from direction_sante_prevoyance.rapport_actuariel.agent import AgentSPRapportActuariel
+                    _r_sp = AgentSPRapportActuariel(audit_path=_tmp, verbose=False).run(
+                        result_s1=_r_s1, result_s2=_r_s2, result_s3=_r_s3,
+                        result_p1=_r_p1, result_p2=_r_p2, result_p3=_r_p3, result_p4=_r_p4,
+                        client_nom=ref_client or "Client ActuarIA",
+                        generer_graphiques=False,
+                    )
+                    resultats["principal"] = _r_sp
+
             else:
                 st.info(f"⏸️ L'agent pour ce besoin ({besoin}) sera disponible prochainement.")
                 return
@@ -3347,6 +3443,9 @@ def _executer_analyse(besoin, direction, equipe, client):
                 "mortalite": "yuki", "tarif_sante": "leonie", "prov_sante": "selma",
                 "report_sante": "binta", "tarif_prev": "axel", "tables": "rayan",
                 "prov_prev": "elodie", "report_prev": "valentin",
+                "sp_alm": "sp_alm", "sp_s2": "sp_s2", "sp_ifrs17": "sp_ifrs17",
+                "sp_ani": "sp_ani", "sp_stress": "naomie", "sp_coh": "sp_coh",
+                "sp_audit": "sp_audit", "sp_rapport": "sp_rapport",
             }
             if besoin in _ak_map:
                 if "agent_results" not in st.session_state:
