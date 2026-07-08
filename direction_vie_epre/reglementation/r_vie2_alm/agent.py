@@ -153,6 +153,7 @@ class AgentRVIE2RSRSFCRVie:
                 'ratio_tp_be':round(ratio_tp_be,4),
                 'variation_scr_pp':round(variation_scr,1),
                 'sfcr':sfcr, 'rsr':rsr, 'avis_fa':avis_fa,
+                'sources':{'scr_vie': 'saisie manuelle', 'fonds_propres': 'saisie manuelle', 'be_vie': 'saisie manuelle'},
                 'commentaire':commentaire, 'audit_id':audit_id,
                 'graphiques':graphiques,
                 'validation_rvie2':val_hyp,
