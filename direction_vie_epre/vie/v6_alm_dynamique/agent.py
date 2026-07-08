@@ -205,7 +205,7 @@ class AgentV6ALMDynamique:
             # Impact choc baisse : actif monte, PM monte aussi (actualisation taux bas)
             # Impact choc baisse -200bp : actif MONTE, PM MONTE aussi
             impact_actif_baisse = +actif_initiale * duration_actif * delta_taux_baisse
-            impact_pm_baisse    = pm_initiale * duration_passif * choc_moins_200bp
+            impact_pm_baisse    = pm_initiale * duration_passif * delta_taux_baisse
             surplus_stress_baisse = (
                 (actif_initiale + impact_actif_baisse) -
                 (pm_initiale + impact_pm_baisse)
