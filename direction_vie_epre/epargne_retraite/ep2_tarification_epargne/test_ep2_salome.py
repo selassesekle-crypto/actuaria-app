@@ -30,7 +30,7 @@ class TestEP2TarificationEpargne:
         assert r['statut_rag'] in ('VERT', 'AMBRE')
         assert r['tarification']['cotisation_brute_annuelle'] > 0
         assert r['tarification']['rente_mensuelle'] > 0
-        assert r['erreur'] is None
+        assert r.get('erreur') is None  # clé absente du dict success — comportement normal
 
     # T2 — Cotisation décroît quand le taux net augmente
     def test_t2_cotisation_decroit_avec_taux(self, agent):
