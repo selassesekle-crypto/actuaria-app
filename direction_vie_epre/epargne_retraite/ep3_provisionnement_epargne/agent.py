@@ -75,6 +75,7 @@ class AgentEP3ProvissionnementEpargne:
         taux_marche:        float = 0.03,
         ppb_stock:          float = 1_000_000,
         reserve_capi_stock: float = 500_000,
+        actifs_total:       float = None,    # None = estimation prudente à 105% des provisions. Fournir la valeur de marché réelle.
         sous_branche:       str  = 'per',
         generer_graphiques: bool = True,
     ) -> Dict[str, Any]:
@@ -133,6 +134,11 @@ class AgentEP3ProvissionnementEpargne:
             # ── PROVISIONS TOTALES ────────────────────────────────────────────
             provisions_total = encours_total + ppb_total + reserve_capi_new
 
+            # ── TAUX DE COUVERTURE ACTIFS / PROVISIONS ────────────────────
+            # L'actif total doit couvrir l'ensemble des provisions (PM + PPB + RC)
+            _actifs_reel = actifs_total if actifs_total is not None else provisions_total * 1.05
+            taux_couverture = _actifs_reel / max(provisions_total, 1) * 100
+
             statut_rag = (
                 'VERT'  if ecart_pm <= 10 and taux_ppb >= 0 else
                 'AMBRE' if ecart_pm <= 20 else
@@ -154,7 +160,9 @@ class AgentEP3ProvissionnementEpargne:
                     'taux_ppb_pct':      round(taux_ppb, 2),
                     'reserve_capi':      round(reserve_capi_new, 0),
                     'provisions_total':  round(provisions_total, 0),
-                    'annuites_utilisees':round(annuites, 4),
+                    'annuites_utilisees':  round(annuites, 4),
+                    'actifs_total':        round(_actifs_reel, 0),
+                    'taux_couverture_pct': round(taux_couverture, 2),
                 },
                 'commentaire': self._commenter(
                     encours_total, ppb_total, reserve_capi_new,
@@ -177,7 +185,7 @@ class AgentEP3ProvissionnementEpargne:
                 result.get('provisions',{}).get('pm_calculee', 0),
                 result.get('provisions',{}).get('ppb_total', 0),
                 result.get('provisions',{}).get('pm_encours', 0),
-                result.get('provisions',{}).get('taux_ppb_pct', 100.0))
+                result.get('provisions',{}).get('taux_couverture_pct', 100.0))
             result['graphiques_validation'] = self._graphiques_validation_prov_epre(result['validation_ep3'])
             return result
 
@@ -271,7 +279,8 @@ class AgentEP3ProvissionnementEpargne:
         # G4 — Taux de couverture PM / Actifs
         try:
             pm_val    = encours_total
-            actifs_val= encours_total * 1.10  # Actifs = encours + marge
+            # Utiliser l'actif réel passé en paramètre si disponible
+            actifs_val = actifs_total if actifs_total is not None else encours_total * 1.05
             ppb_v     = ppb_total if 'ppb_total' in dir() else encours_total * 0.02
             rc_v      = reserve_capi_new if 'reserve_capi_new' in dir() else encours_total * 0.01
             prov_tot  = pm_val + ppb_v + rc_v
