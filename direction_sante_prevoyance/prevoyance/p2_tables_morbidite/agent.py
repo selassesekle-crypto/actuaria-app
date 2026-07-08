@@ -7,7 +7,7 @@
 ║                                                                              ║
 ║  PÉRIMÈTRE : Modélisation des transitions d'état en prévoyance              ║
 ║              Chaîne de Markov 4 états : Actif → ITT → IP → Décès          ║
-║              Tables BCAC 2019 · TD 88-90 · Maintien en incapacité          ║
+║     Tables BCAC 2019 (réf. défaut) · TD 88-90 · Import tables client       ║
 ║                                                                              ║
 ║  DIFFÉRENCIATEURS vs marché :                                               ║
 ║    ✅ Vraie chaîne de Markov 4 états avec matrices de transition           ║
@@ -89,11 +89,22 @@ except ImportError:
     _TABLES_CENTRALISEES = False
 
 # ══════════════════════════════════════════════════════════════════════════════
-# TABLES BCAC 2019 — locales (fallback)
+# TABLES BCAC 2019 — VALEURS DE RÉFÉRENCE PAR DÉFAUT
 # ══════════════════════════════════════════════════════════════════════════════
-# Ces probabilités sont annuelles et calibrées sur BCAC 2019
+# Source : BCAC (Bureau Commun des Assurances Collectives) — édition 2019.
+# Ces probabilités sont annuelles, calibrées sur la population active France.
+#
+# IMPORTANT : BCAC publie ses statistiques annuellement (accès réservé aux
+# membres). Les valeurs ci-dessous sont issues de l'édition 2019, disponible
+# publiquement. Les éditions ultérieures (2020-2023) peuvent présenter des
+# écarts, notamment sur les arrêts longs (impact COVID-19).
+#
+# RECOMMANDATION : Si vous disposez d'une version plus récente (BCAC 2023)
+# ou de vos propres tables d'expérience, utiliser le paramètre tables_client
+# de run() via sp_tables_import.charger_table() pour les substituer.
 
-# q_AI : probabilité de tomber en ITT dans l'année
+# q_AI : probabilité annuelle d'entrée en ITT (BCAC 2019 — référence par défaut)
+# Valeurs indicatives. Importer vos tables via tables_client pour un calibrage précis.
 Q_AI_BCAC = {
     25:0.020, 30:0.025, 35:0.032, 40:0.042,
     45:0.055, 50:0.072, 55:0.095, 60:0.120,
