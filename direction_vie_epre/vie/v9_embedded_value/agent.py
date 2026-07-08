@@ -306,7 +306,8 @@ class AgentV9EmbeddedValue:
         E3 — VNB / Primes nouvelles ≥ 5% (rentabilité des affaires nouvelles)
         """
         # E1 — ANE
-        if ane >= fonds_propres_req_ref := max(va_coc, 0):
+        fonds_propres_req_ref = max(va_coc, 0)
+        if ane >= fonds_propres_req_ref:
             e1_s = 'VERT'
             e1_m = f"ANE = {ane/1e6:.2f}M€ ≥ 0 ✅"
             e1_c = "Bilan solvable — actifs couvrent les provisions économiques"
