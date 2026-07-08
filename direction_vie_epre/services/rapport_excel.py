@@ -444,7 +444,7 @@ def ajouter_onglet_audit_trail(
     def _ligne_at(label, valeur, fill=None):
         nonlocal row
         bg = fill or (GRIS_L if row % 2 == 0 else "FFFFFF")
-        _cellule(ws, row, 1, label,  fill_color=NAVY_L, color_font=OR,    bold=True, width=30)
+        _cellule(ws, row, 1, label,  fill_color=NAVY_L, color_font=OR,    bold=True)
         ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=n_cols)
         _cellule(ws, row, 2, str(valeur), fill_color=bg,    color_font="0F2E52", wrap=True)
         ws.row_dimensions[row].height = 18
