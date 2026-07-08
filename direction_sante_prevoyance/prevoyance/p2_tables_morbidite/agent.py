@@ -69,6 +69,15 @@ LAYOUT_BASE = dict(paper_bgcolor=NAVY, plot_bgcolor=NAVY_L,
 
 # ── Tables centralisées — importées depuis sp_tables_actuarielles ────────────
 try:
+    from direction_sante_prevoyance.services.sp_tables_import import (
+        charger_table as _charger_table_client,
+        interpoler_table as _interp_client,
+    )
+    SP_TABLES_IMPORT_OK = True
+except ImportError:
+    SP_TABLES_IMPORT_OK = False
+
+try:
     from direction_sante_prevoyance.services.sp_tables_actuarielles import (
         get_taux_itt_bcac as _get_taux_itt_central,
         get_taux_ip_td8890 as _get_taux_ip_central,
@@ -162,8 +171,9 @@ class AgentP2TablesMorbidite:
     # ──────────────────────────────────────────────────────────────────────────
     def run(self,
             result_p1,
-            horizon_ans:    int  = 5,
-            generer_graphiques: bool = True) -> Dict:
+            horizon_ans:        int            = 5,
+            tables_client:      Optional[Dict] = None,
+            generer_graphiques: bool           = True) -> Dict:
 
         t0  = datetime.now()
         aid = f"P2_{t0.strftime('%Y%m%d_%H%M%S')}"
@@ -179,7 +189,16 @@ class AgentP2TablesMorbidite:
             )
 
             # ── 2. PROBABILITÉS DE TRANSITION ─────────────────────────────────
-            trans = self._calculer_transitions(age, cat)
+            _tbl_client = tables_client or {}
+            _src_tables = "TABLE PROPRIÉTAIRE CLIENT" if _tbl_client else "BCAC 2019"
+            if _tbl_client:
+                self.logger.info(f"[{aid}] Tables client : {list(_tbl_client.keys())}")
+            else:
+                self.logger.warning(
+                    f"[{aid}] Aucune table client — BCAC 2019 / TD 88-90 par défaut. "
+                    f"Fournir tables_client pour calibrage sur données propriétaires."
+                )
+            trans = self._calculer_transitions(age, cat, _tbl_client)
 
             # ── 3. MATRICE DE TRANSITION MARKOV ───────────────────────────────
             # États : 0=Actif 1=ITT 2=IP 3=Décès
@@ -296,17 +315,25 @@ class AgentP2TablesMorbidite:
     # ══════════════════════════════════════════════════════════════════════════
     # 2. PROBABILITÉS DE TRANSITION
     # ══════════════════════════════════════════════════════════════════════════
-    def _calculer_transitions(self, age, categorie):
+    def _calculer_transitions(self, age, categorie, tables_client=None):
         """
-        Calcule toutes les probabilités de transition BCAC 2019.
-        Applique le facteur CSP sur q_AI (incidence ITT).
+        Calcule les probabilités de transition.
+        Utilise les tables propriétaires client si fournies, BCAC 2019 sinon.
         """
         fact_csp = FACT_CSP.get(categorie, 1.0)
 
-        # Actif → ITT (incidence annuelle ajustée CSP)
-        # Priorité aux tables centralisées si disponibles
-        if _TABLES_CENTRALISEES:
-            _csp_arg = 'cadre' if categorie in ('cadre', 'cadre_sup') else 'non_cadre'
+        # Actif → ITT : table client > tables centralisées > BCAC 2019
+        _csp_arg = 'cadre' if categorie in ('cadre', 'cadre_sup') else 'non_cadre'
+        if tables_client and 'incidence_itt' in tables_client:
+            try:
+                _tbl_inc = tables_client['incidence_itt'].get('table', {})
+                _tbl_age = {a: v.get(_csp_arg, list(v.values())[0])
+                            for a, v in _tbl_inc.items() if isinstance(v, dict)}
+                from direction_sante_prevoyance.services.sp_tables_import import interpoler_table as _ic
+                q_AI = _ic(_tbl_age, age) if _tbl_age else _interp(Q_AI_BCAC, age) * fact_csp
+            except Exception:
+                q_AI = _interp(Q_AI_BCAC, age) * fact_csp
+        elif _TABLES_CENTRALISEES:
             q_AI = _get_taux_itt_central(age, _csp_arg)
         else:
             q_AI = _interp(Q_AI_BCAC, age) * fact_csp
