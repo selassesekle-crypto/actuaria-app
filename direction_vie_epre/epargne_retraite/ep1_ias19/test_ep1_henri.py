@@ -131,3 +131,50 @@ class TestEP1EngagementsRetraite:
         assert r['ias19']['dbo_total'] > 0
         # Âge moyen cohérent
         assert abs(r['parametres']['age_moyen'] - 48.4) < 0.1
+
+    def test_t10_iboxx_audit_trail_conforme(self, agent):
+        """Taux dans ±25bp de l'iBoxx → conformité IAS 19.83 confirmée"""
+        r = agent.run(
+            effectif=100, salaire_moyen=40000, anciennete_moyenne=10,
+            taux_actu=0.035,
+            taux_iboxx_reference=0.036,   # écart = -10bp < 25bp → conforme
+            source_taux="iBoxx EUR Corp AA 15Y, 31/12/2024",
+            generer_graphiques=False
+        )
+        assert r['success'] is True
+        assert 'iboxx_audit' in r
+        ib = r['iboxx_audit']
+        assert ib['ecart_vs_iboxx_bp'] is not None
+        assert abs(ib['ecart_vs_iboxx_bp']) <= 25, \
+            f"Écart = {ib['ecart_vs_iboxx_bp']}bp — devrait être ≤ 25bp"
+        assert "✅" in ib['conformite_iboxx'], "Conformité iBoxx attendue ✅"
+        assert ib['source_taux'] == "iBoxx EUR Corp AA 15Y, 31/12/2024"
+
+    def test_t11_iboxx_audit_trail_alerte(self, agent):
+        """Taux en dehors ±50bp de l'iBoxx → alerte non-conformité IAS 19.83"""
+        r = agent.run(
+            effectif=100, salaire_moyen=40000, anciennete_moyenne=10,
+            taux_actu=0.025,
+            taux_iboxx_reference=0.038,   # écart = -130bp > 50bp → non conforme
+            source_taux="iBoxx EUR Corp AA 15Y, 31/12/2024",
+            generer_graphiques=False
+        )
+        assert r['success'] is True
+        ib = r['iboxx_audit']
+        assert abs(ib['ecart_vs_iboxx_bp']) > 50, \
+            "Écart devrait être > 50bp"
+        assert "❌" in ib['conformite_iboxx'], "Non-conformité iBoxx attendue ❌"
+        assert ib['alerte'] is not None, "Alerte doit être renseignée si écart > 50bp"
+
+    def test_t12_iboxx_non_fourni(self, agent):
+        """Sans taux iBoxx fourni → audit trail indique 'Non vérifiable'"""
+        r = agent.run(
+            effectif=100, salaire_moyen=40000, anciennete_moyenne=10,
+            taux_actu=0.035,
+            generer_graphiques=False
+        )
+        assert r['success'] is True
+        ib = r['iboxx_audit']
+        assert ib['taux_iboxx_reference'] is None
+        assert ib['ecart_vs_iboxx_bp'] is None
+        assert "Non vérifiable" in ib['conformite_iboxx']
