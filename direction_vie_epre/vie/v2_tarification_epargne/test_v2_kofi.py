@@ -66,12 +66,14 @@ class TestV2TarificationEpargneVie:
         assert rh['success'] and rf['success']
         # Pour l'épargne vie, la prime pure homme > femme car probabilité de survie H < F
         # (E_xn pour H < F donc prime pure H > prime pure F)
-        assert rh['prime_pure']['annuelle'] > rf['prime_pure']['annuelle']
+        # Pour capital différé : survie F > survie H → E_xn(F) > E_xn(H)
+        # → prime_pure F > prime_pure H (la femme doit cotiser plus pour garantir sa survie)
+        assert rf['prime_pure']['annuelle'] > rh['prime_pure']['annuelle']
 
     # T6 — CAG ≤ 3% (directive DDA) → H3 VERT
     def test_t6_cag_conforme_dda(self, agent):
         r = agent.run(age=35, sexe='H', duree=30, capital=100_000,
-                      taux_technique=0.0, frais_gestion_pct=0.008,
+                      taux_technique=0.0, taux_frais=0.008,
                       chargement_pct=0.15, generer_graphiques=False)
         assert r['success'] is True
         val = r['validation_epv']
