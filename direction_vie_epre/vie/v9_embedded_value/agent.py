@@ -270,8 +270,25 @@ class AgentV9EmbeddedValue:
             #
             # Référence : CEA EV Principles §4.3 / AXA MCEV disclosure methodology
 
-            # Annuité actuarielle moyenne pour les nouvelles affaires
-            # (horizon moyen = duree_moyenne / 2 car souscriptions étalées)
+            # Annuité actuarielle pour les nouvelles affaires — a_moy_vnb
+            # ─────────────────────────────────────────────────────────────
+            # APPROXIMATION DOCUMENTÉE (MCEV §18) :
+            # a_moy_vnb est calculée sur duree_moyenne (durée contractuelle
+            # moyenne du portefeuille), non sur la durée résiduelle individuelle
+            # de chaque nouvelle affaire.
+            #
+            # Impact de cette approximation :
+            # → Si les nouvelles affaires ont une durée contractuelle différente
+            #   de duree_moyenne, le VNB est sous- ou sur-estimé.
+            # → Biais typique : ±10-15% sur le VNB unitaire pour une durée
+            #   résiduelle réelle ≠ duree_moyenne de ±5 ans.
+            #
+            # Pour une précision MCEV niveau publication :
+            # → Fournir 'portefeuille' avec la durée résiduelle individuelle
+            #   de chaque nouvelle affaire. Le VIF individuel est alors exact.
+            # → Ou utiliser une duree_moyenne représentative de la cohorte
+            #   des nouvelles souscriptions de l'exercice (≠ duree moyenne
+            #   du portefeuille total).
             if taux_reference > 0:
                 a_moy_vnb = (1 - (1 + taux_reference)**(-duree_moyenne)) / taux_reference
             else:
