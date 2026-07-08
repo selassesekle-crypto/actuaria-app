@@ -33,7 +33,7 @@ class TestEP3ProvissionnementEpargne:
         assert r['provisions']['pm_encours'] == 50_000_000
         assert r['provisions']['ppb_total'] >= 0
         assert r['provisions']['reserve_capi'] >= 0
-        assert r['erreur'] is None
+        assert r.get('erreur') is None  # clé absente du dict success — comportement normal
 
     # T2 — PPB totale ≥ PPB stock initial (dotation positive)
     def test_t2_ppb_dotation_positive(self, agent):
