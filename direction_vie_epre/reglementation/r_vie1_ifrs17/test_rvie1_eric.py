@@ -89,3 +89,24 @@ class TestRVIE1QRTVie:
         ratio = r2['scr_vie_total'] / max(r1['scr_vie_total'], 1)
         assert abs(ratio - 2.0) < 0.01, \
             f"SCR non proportionnel au BE : ratio={ratio:.3f} (attendu ≈ 2.0)"
+
+    # T8 — A6 : alimentation automatique depuis result_v3
+    def test_t8_alimentation_depuis_v3(self, agent):
+        result_v3_mock = {
+            'success': True,
+            'pm_prospective': 30_000_000,  # BE = PM prospective V3
+        }
+        r = agent.run(
+            fonds_propres=12_000_000,
+            result_v3=result_v3_mock,
+            generer_graphiques=False
+        )
+        assert r['success'] is True
+        # be_vie doit être alimenté depuis result_v3
+        assert r['be_vie'] == 30_000_000, (
+            f"be_vie={r['be_vie']} ≠ 30_000_000 — alimentation V3 non appliquée"
+        )
+        assert r['pm_total'] == 30_000_000
+        # SCR doit être recalculé sur la base du BE issu de V3
+        assert r['scr_vie_total'] > 0
+        assert r.get('source_be_vie') == 'V3 Amélie (pm_prospective)'
