@@ -134,6 +134,7 @@ class AgentV3ProvisionsMathematiques:
                 'valeur_rachat':round(valeur_rachat,2),
                 'capital_reduit':round(capital_reduit,2),
                 'pm_evolution':[round(p,2) for p in pm_evolution],
+                'sources':{'parametres': 'saisie manuelle'},
                 'commentaire':commentaire,'audit_id':audit_id,
                 'graphiques':graphiques,'validation_pm':val_hyp,'graphiques_validation':gv,'erreur':None,
             }
