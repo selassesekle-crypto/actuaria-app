@@ -79,6 +79,12 @@ class AgentV8ReconciliationPMTP:
         taux_marche:        float =      0.040,
         duree_moyenne:      int   =         15,
         nb_contrats:        int   =     10_000,
+        hypotheses_differentielles: Optional[Dict] = None,
+        # Optionnel — décomposition complète de l'écart PM/TP en 3 composantes.
+        # Si fourni : {'qx_s2': float, 'qx_social': float,
+        #              'frais_s2': float, 'frais_social': float}
+        # où qx = taux de mortalité, frais = taux de frais annuels.
+        # Si absent : effet taux uniquement (comportement originel).
         result_v3:          Optional[Dict] = None,
         result_v5:          Optional[Dict] = None,
         generer_graphiques: bool  =       True,
@@ -163,6 +169,55 @@ class AgentV8ReconciliationPMTP:
             d_mod = duree_moyenne / (1 + taux_technique_pm)
             delta_taux_pm_be = pm_sociale * (taux_technique_pm - taux_sans_risque) * d_mod
 
+            # ── Décomposition 3 composantes (si hypothèses différentielles fournies) ──
+            # Effet taux    : Δ taux actualisation (taux_tech → taux_rfr)
+            # Effet mortalité : Δ qx entre référentiel social et S2
+#              Impact ≈ PM × (qx_social - qx_s2) × D_mod × capital_moyen
+            # Effet frais   : Δ frais de gestion entre référentiels
+#              Impact ≈ PM × (frais_social - frais_s2) × ä_residuelle
+            if hypotheses_differentielles:
+                qx_s2     = hypotheses_differentielles.get('qx_s2', 0.003)
+                qx_social = hypotheses_differentielles.get('qx_social', 0.005)
+                frais_s2     = hypotheses_differentielles.get('frais_s2', 0.005)
+                frais_social = hypotheses_differentielles.get('frais_social', 0.008)
+                # Annuité résiduelle (proxy pour actualisation des frais futurs)
+                a_res = (1 - (1 + taux_sans_risque)**(-duree_moyenne)) / max(taux_sans_risque, 0.001)
+                # Effet mortalité : différence de probabilités de survie actualisée
+                effet_mortalite = pm_sociale * (qx_social - qx_s2) * d_mod
+                # Effet frais : VA des frais différentiels sur la durée résiduelle
+                effet_frais = pm_sociale * (frais_social - frais_s2) * a_res
+                # Résiduel = écart non expliqué (autres hypothèses, arrondi)
+                effet_residuel = (
+                    (tp_s2 - pm_sociale)
+                    - delta_taux_pm_be - effet_mortalite - effet_frais
+                    - risk_adjustment_s2
+                )
+                decomposition_ecart = {
+                    'effet_taux':       round(delta_taux_pm_be, 0),
+                    'effet_mortalite':  round(effet_mortalite, 0),
+                    'effet_frais':      round(effet_frais, 0),
+                    'effet_ra':         round(risk_adjustment_s2, 0),
+                    'effet_residuel':   round(effet_residuel, 0),
+                    'total_verifie':    round(
+                        delta_taux_pm_be + effet_mortalite + effet_frais
+                        + risk_adjustment_s2 + effet_residuel, 0
+                    ),
+                    'source': 'Décomposition 3 composantes (hypothèses différentielles fournies)',
+                }
+                logger.info(
+                    f"[{audit_id}] Décomposition écart PM/TP : "
+                    f"taux={delta_taux_pm_be/1e3:.0f}k€ | "
+                    f"mortalité={effet_mortalite/1e3:.0f}k€ | "
+                    f"frais={effet_frais/1e3:.0f}k€"
+                )
+            else:
+                decomposition_ecart = {
+                    'effet_taux':     round(delta_taux_pm_be, 0),
+                    'effet_ra':       round(risk_adjustment_s2, 0),
+                    'effet_autres':   round(tp_s2 - pm_sociale - delta_taux_pm_be - risk_adjustment_s2, 0),
+                    'source': 'Décomposition partielle (fournir hypotheses_differentielles pour la version complète)',
+                }
+
             tp_ref = {
                 'be_vie':              round(be_vie, 0),
                 'risk_adjustment':     round(risk_adjustment_s2, 0),
@@ -173,6 +228,7 @@ class AgentV8ReconciliationPMTP:
                 'base_reglementaire':  'Dir. 2009/138/CE Art. 76-86 + RFR EIOPA',
                 'delta_vs_pm':         round(tp_s2 - pm_sociale, 0),
                 'delta_taux_pm_be':    round(delta_taux_pm_be, 0),
+                'decomposition_ecart': decomposition_ecart,
             }
 
             # ── RÉFÉRENTIEL 3 : IFRS 17 ───────────────────────────────────────
@@ -213,12 +269,10 @@ class AgentV8ReconciliationPMTP:
                 'tp_s2':        round(tp_s2, 0),
                 'lrc_ifrs17':   round(lrc, 0),
 
-                # Passage PM → TP S2
+                # Passage PM → TP S2 (utilise decomposition_ecart calculée ci-dessus)
                 'delta_pm_to_tp': {
                     'total':           round(tp_s2 - pm_sociale, 0),
-                    'effet_taux':      round(delta_taux_pm_be, 0),
-                    'effet_ra':        round(risk_adjustment_s2, 0),
-                    'effet_autres':    round(tp_s2 - pm_sociale - delta_taux_pm_be - risk_adjustment_s2, 0),
+                    'decomposition':   decomposition_ecart,
                     'pct':             round((tp_s2 - pm_sociale) / max(pm_sociale, 1) * 100, 1),
                 },
                 # Passage TP S2 → IFRS 17
