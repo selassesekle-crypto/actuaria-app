@@ -6,6 +6,11 @@
 """
 
 import os, json, logging, warnings
+from direction_vie_epre.services.rapport_excel import (
+    creer_workbook_actuariel, ajouter_onglet_hypotheses,
+    ajouter_onglet_resultats, ajouter_onglet_validation,
+    ajouter_onglet_audit_trail, finaliser_et_retourner,
+)
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -156,6 +161,12 @@ class AgentEP4StressEpargne:
             result['validation_ep4'] = self._valider_stress_epre(
                 result.get('ratio_base', 100.0), result.get('scenarios', []))
             result['graphiques_validation'] = self._graphiques_validation_stress_epre(result['validation_ep4'])
+            # ── Rapport Excel ──────────────────────────────────────
+            try:
+                result['excel_bytes'] = self._generer_excel(result)
+            except Exception as _xe:
+                result['excel_bytes'] = None
+                self.logger.warning(f'Excel non généré : {_xe}')
             return result
 
         except Exception as e:
@@ -503,6 +514,47 @@ class AgentEP4StressEpargne:
         for ligne in result['commentaire'].split('\n'):
             print(f"  {ligne}")
         print(sep + "\n")
+
+
+    def _generer_excel(self, result: dict) -> bytes:
+        """Rapport Excel individuel EP4 — 4 onglets auditables."""
+        from datetime import datetime
+        wb  = creer_workbook_actuariel()
+        aid = result.get("audit_id", "N/A")
+        dte = datetime.now().strftime("%d/%m/%Y %H:%M")
+        hyps = [
+            {"label": str(k), "valeur": v, "unite": "",
+              "source": result.get("sources", {}).get(str(k), "saisie manuelle"),
+              "reference": ""}
+            for k, v in result.items()
+            if isinstance(v, (int, float, str, bool))
+            and k not in ("success", "erreur", "audit_id", "commentaire",
+                          "agent", "statut_rag", "be_ifrs17_mode")
+        ][:20]
+        ajouter_onglet_hypotheses(wb, "EP4", aid, dte, hyps,
+                                  sources=result.get("sources", {}))
+        lignes = [
+            {"label": str(k), "valeur": v,
+              "unite": "€" if isinstance(v, float) and v > 100 else
+                       "%" if isinstance(v, float) and 0 < v < 1 else "",
+              "fmt_excel": "#,##0.00" if isinstance(v, float) else None,
+              "commentaire": ""}
+            for k, v in result.items()
+            if isinstance(v, (int, float)) and k not in ("success",)
+        ][:40]
+        ajouter_onglet_resultats(wb, "EP4", aid, dte,
+                                 [{"titre": "Résultats actuariels", "lignes": lignes}])
+        for vk in [k for k in result if "validat" in k.lower()]:
+            val = result.get(vk, {})
+            if isinstance(val, dict) and "statut_global" in val:
+                cles = [k for k in val if isinstance(val[k], dict)
+                        and "statut" in val[k] and "message" in val[k]]
+                if cles:
+                    ajouter_onglet_validation(wb, "EP4", aid, dte, val,
+                                              cles_controles=cles[:5])
+                break
+        ajouter_onglet_audit_trail(wb, "EP4", aid, dte, result)
+        return finaliser_et_retourner(wb)
 
     def _sauvegarder(self, audit_id, result):
         chemin = self.models_path / f"ep4_stress_{audit_id}.json"
