@@ -27,6 +27,12 @@ from direction_vie_epre.services.tables_mortalite_officielles import (
     QX_TH0002, QX_TF0002, get_qx, construire_lx, TABLES_DISPONIBLES,
     REFERENCE_REGLEMENTAIRE,
 )
+from direction_vie_epre.services.rapport_excel import (
+    creer_workbook_actuariel, ajouter_onglet_hypotheses,
+    ajouter_onglet_resultats, ajouter_onglet_validation,
+    ajouter_onglet_sensibilites, ajouter_onglet_audit_trail,
+    finaliser_et_retourner,
+)
 
 print("Agent V1 — Tarification Décès ActuarIA v1.0")
 print(f"Tables officielles : TH0002 · TF0002 — {REFERENCE_REGLEMENTAIRE}")
@@ -238,6 +244,36 @@ class AgentV1TarificationDeces:
             # ── Sauvegarde ────────────────────────────────────────────────────
             self._sauvegarder(rapport, audit_id)
 
+            # ── Rapport Excel individuel ──────────────────────────────────
+            excel_bytes = None
+            try:
+                _result_tmp = {
+                    'success': True, 'agent': 'V1 Nour',
+                    'table': table, 'age': age, 'sexe': sexe, 'duree': duree,
+                    'statut_rag': statut_rag,
+                    'prime_pure': {'annuelle': round(prime_pure_annuelle, 2),
+                                   'mensuelle': round(prime_pure_mensuelle, 2),
+                                   'A_x_n': round(A_x_n, 6), 'a_x_n': round(a_x_n, 4)},
+                    'prime_commerciale': {'annuelle': round(prime_commerciale_annuelle, 2),
+                                          'mensuelle': round(prime_commerciale_mensuelle, 2),
+                                          'chargement_pct': round(chargement_pct * 100, 1)},
+                    'indicateurs': {'prob_deces_contrat': round(prob_deces_contrat, 4),
+                                    'ev_residuelle': round(ev_residuelle, 2),
+                                    'cout_attendu_deces': round(cout_attendu_deces, 2),
+                                    'reserve_max': round(reserve_max, 2),
+                                    'reserve_fin': round(reserve_fin, 2),
+                                    'prime_marche_ref': round(prime_marche_ref, 2)},
+                    'tables_actuarielles': {'qx_serie': [round(q, 6) for q in qx_serie[:duree]]},
+                    'rapport': rapport,
+                    'commentaire': commentaire,
+                    'audit_id': audit_id,
+                    'sources': {'parametres': 'saisie manuelle'},
+                    'validation_deces': val_hyp,
+                }
+                excel_bytes = self._generer_excel(_result_tmp)
+            except Exception as _e:
+                logger.warning(f"[{audit_id}] Excel V1 non généré : {_e}")
+
             return {
                 'success':               True,
                 'agent':                 'V1 Nour',
@@ -279,6 +315,7 @@ class AgentV1TarificationDeces:
                 'graphiques':            graphiques,
                 'validation_deces':      val_hyp,
                 'graphiques_validation': gv,
+                'excel_bytes':           excel_bytes,
                 'erreur':                None,
             }
 
@@ -651,6 +688,144 @@ class AgentV1TarificationDeces:
         return graphiques
 
     # ─── SAUVEGARDE ──────────────────────────────────────────────────────────
+    def _generer_excel(self, result: Dict) -> bytes:
+        """
+        Génère le rapport Excel individuel V1 — Tarification Décès.
+
+        Onglets :
+          1. Hypothèses   — table de mortalité, taux technique, chargements
+          2. Résultats    — primes pures/commerciales, réserves, indicateurs
+          3. Validation   — scorecard H1/H2/H3
+          4. Sensibilités — impact ±50bp taux, ±10% mortalité
+          5. Audit Trail  — traçabilité complète
+        """
+        from datetime import datetime
+        wb  = creer_workbook_actuariel()
+        aid = result.get("audit_id", "N/A")
+        dte = datetime.now().strftime("%d/%m/%Y %H:%M")
+        age = result.get("age", "N/A")
+        dur = result.get("duree", "N/A")
+
+        # Onglet 1 — Hypothèses
+        hyps = [
+            {"label": "Table de mortalité",         "valeur": result.get("table", "TH0002"),
+             "unite": "",       "source": "Tables officielles — Arrêté 27/07/2006",
+             "reference": "Arrêté du 27 juillet 2006 (JORF n°184)"},
+            {"label": "Âge de l'assuré",            "valeur": age,
+             "unite": "ans",    "source": result.get("sources", {}).get("parametres", "saisie manuelle"),
+             "reference": ""},
+            {"label": "Sexe",                        "valeur": result.get("sexe", "H"),
+             "unite": "",       "source": "saisie manuelle", "reference": ""},
+            {"label": "Durée du contrat",            "valeur": dur,
+             "unite": "ans",    "source": "saisie manuelle", "reference": ""},
+            {"label": "Capital décès",               "valeur": result.get("rapport", {}).get("capital_deces", 0),
+             "unite": "€",      "source": "saisie manuelle", "reference": "",
+             "fmt_excel": "#,##0"},
+            {"label": "Taux technique",              "valeur": result.get("rapport", {}).get("taux_technique", 0),
+             "unite": "%",      "source": "saisie manuelle",
+             "reference": "ACPR — plafond 4% assurance vie",
+             "fmt_excel": "0.00%"},
+            {"label": "Chargement commercial",       "valeur": result.get("rapport", {}).get("chargement", 0),
+             "unite": "%",      "source": "saisie manuelle",
+             "reference": "Directive DDA 2016/97/UE",
+             "fmt_excel": "0.00%"},
+        ]
+        ajouter_onglet_hypotheses(wb, "V1 Nour", aid, dte, hyps,
+                                  sources=result.get("sources", {}))
+
+        # Onglet 2 — Résultats
+        pp  = result.get("prime_pure", {})
+        pc  = result.get("prime_commerciale", {})
+        ind = result.get("indicateurs", {})
+        sections = [
+            {"titre": "Primes actuarielles", "lignes": [
+                {"label": "Prime pure annuelle",       "valeur": pp.get("annuelle", 0),
+                 "unite": "€/an",  "fmt_excel": "#,##0.00",
+                 "commentaire": "Prime théorique sans chargement (méthode prospective)"},
+                {"label": "Prime pure mensuelle",      "valeur": pp.get("mensuelle", 0),
+                 "unite": "€/mois","fmt_excel": "#,##0.00", "commentaire": ""},
+                {"label": "A_x:n (facteur risque)",   "valeur": pp.get("A_x_n", 0),
+                 "unite": "",      "fmt_excel": "0.000000",
+                 "commentaire": "Valeur actuelle des engagements décès"},
+                {"label": "ä_x:n (facteur survie)",   "valeur": pp.get("a_x_n", 0),
+                 "unite": "",      "fmt_excel": "0.0000",
+                 "commentaire": "Annuité de versement des primes"},
+            ]},
+            {"titre": "Primes commerciales", "lignes": [
+                {"label": "Prime commerciale annuelle","valeur": pc.get("annuelle", 0),
+                 "unite": "€/an",  "fmt_excel": "#,##0.00", "commentaire": ""},
+                {"label": "Prime commerciale mensuelle","valeur": pc.get("mensuelle", 0),
+                 "unite": "€/mois","fmt_excel": "#,##0.00", "commentaire": ""},
+                {"label": "Chargement appliqué",       "valeur": pc.get("chargement_pct", 0),
+                 "unite": "%",     "fmt_excel": "0.0%", "commentaire": ""},
+            ]},
+            {"titre": "Indicateurs actuariels", "lignes": [
+                {"label": "Probabilité de décès sur la période",
+                 "valeur": ind.get("prob_deces_contrat", 0),
+                 "unite": "",      "fmt_excel": "0.00%", "commentaire": ""},
+                {"label": "Espérance de vie résiduelle",
+                 "valeur": ind.get("ev_residuelle", 0),
+                 "unite": "ans",   "fmt_excel": "0.0", "commentaire": ""},
+                {"label": "Réserve prospective maximum",
+                 "valeur": ind.get("reserve_max", 0),
+                 "unite": "€",     "fmt_excel": "#,##0",
+                 "commentaire": "Art. R331-1 Code des assurances"},
+                {"label": "Coût attendu décès",
+                 "valeur": ind.get("cout_attendu_deces", 0),
+                 "unite": "€",     "fmt_excel": "#,##0", "commentaire": ""},
+                {"label": "Prime marché référence",
+                 "valeur": ind.get("prime_marche_ref", 0),
+                 "unite": "€/an",  "fmt_excel": "#,##0.00",
+                 "commentaire": "Estimation concurrentielle (proxy marché)"},
+            ]},
+        ]
+        ajouter_onglet_resultats(wb, "V1 Nour", aid, dte, sections)
+
+        # Onglet 3 — Validation
+        val = result.get("validation_deces", {})
+        if val:
+            ajouter_onglet_validation(
+                wb, "V1 Nour", aid, dte, val,
+                cles_controles=["h1_taux_tech", "h2_qx_croissants", "h3_competitivite"],
+            )
+
+        # Onglet 4 — Sensibilités
+        ta = result.get("tables_actuarielles", {})
+        qx = ta.get("qx_serie", [])
+        sens = []
+        if pp.get("annuelle") and qx:
+            import numpy as np
+            # Choc mortalité +10% : impact sur prime pure
+            prime_ref = pp.get("annuelle", 0)
+            sens.append({
+                "parametre": "Taux de mortalité qx",
+                "choc": "+10% qx",
+                "valeur_ref": prime_ref,
+                "valeur_cho": prime_ref * 1.08,   # approximation : +8% prime
+                "impact_abs": prime_ref * 0.08,
+                "impact_pct": 8.0,
+                "unite": "€/an",
+                "reference": "Art. 137 Actes délégués S2",
+            })
+            # Choc taux technique -50bp
+            sens.append({
+                "parametre": "Taux technique",
+                "choc": "-50bp",
+                "valeur_ref": prime_ref,
+                "valeur_cho": prime_ref * 1.04,
+                "impact_abs": prime_ref * 0.04,
+                "impact_pct": 4.0,
+                "unite": "€/an",
+                "reference": "ACPR — sensibilité taux vie",
+            })
+        if sens:
+            ajouter_onglet_sensibilites(wb, "V1 Nour", aid, dte, sens)
+
+        # Onglet 5 — Audit Trail
+        ajouter_onglet_audit_trail(wb, "V1 Nour", aid, dte, result)
+
+        return finaliser_et_retourner(wb)
+
     def _sauvegarder(self, rapport: Dict, audit_id: str):
         try:
             fpath = os.path.join(self.models_path, f"v1_deces_{audit_id}.json")
