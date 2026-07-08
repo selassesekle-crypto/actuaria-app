@@ -28,7 +28,7 @@ class TestEP4StressEpargne:
         assert r['statut_rag'] in ('VERT', 'AMBRE', 'ROUGE')
         assert r['ratio_base'] > 0
         assert len(r['scenarios']) == 5
-        assert r['erreur'] is None
+        assert r.get('erreur') is None  # clé absente du dict success — comportement normal
 
     # T2 — Ratio base = actifs / encours × 100
     def test_t2_ratio_base_calcul(self, agent):
