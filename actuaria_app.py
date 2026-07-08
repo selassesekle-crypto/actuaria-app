@@ -2758,6 +2758,75 @@ def page_analyse():
                     "categorie": cat_p, "primes": primes_p
                 }
 
+                # ── Tables d'expérience propriétaires (optionnel) ─────────────
+                if besoin in ["tables", "prov_prev", "report_prev"]:
+                    with st.expander("📊 Importer des tables d'expérience propriétaires (optionnel)", expanded=False):
+                        st.caption(
+                            "Substituez les références BCAC 2019 / TD 88-90 par vos tables internes. "
+                            "Formats acceptés : CSV (séparateur , ou ;) et Excel (.xlsx)."
+                        )
+                        _tc_type = st.selectbox(
+                            "Type de table",
+                            ["incidence_itt", "maintien_itt", "mortalite_ip"],
+                            format_func=lambda x: {
+                                "incidence_itt": "Incidence ITT (Q_AI par âge et CSP)",
+                                "maintien_itt":  "Maintien ITT (TD par âge d'entrée et durée)",
+                                "mortalite_ip":  "Mortalité / Passage IP (qx par âge)",
+                            }[x],
+                            key="p_tc_type",
+                        )
+                        # Template téléchargeable
+                        try:
+                            from direction_sante_prevoyance.services.sp_tables_import import get_template
+                            _tpl_csv = get_template(_tc_type)
+                            st.download_button(
+                                f"⬇️ Télécharger template {_tc_type}.csv",
+                                data=_tpl_csv,
+                                file_name=f"template_{_tc_type}.csv",
+                                mime="text/csv",
+                                key=f"p_tc_tpl_{_tc_type}",
+                            )
+                        except Exception:
+                            pass
+
+                        _tc_fichier = st.file_uploader(
+                            "Charger votre table",
+                            type=["csv", "xlsx", "xls"],
+                            key="p_tc_fichier",
+                        )
+                        if _tc_fichier is not None:
+                            try:
+                                from direction_sante_prevoyance.services.sp_tables_import import charger_table
+                                _tc_res = charger_table(_tc_fichier, _tc_type)
+                                if _tc_res["success"]:
+                                    st.success(
+                                        f"✅ Table chargée — {_tc_res['rapport']['nb_ages']} âges, "
+                                        f"plage {_tc_res['rapport']['plage_ages']}"
+                                    )
+                                    for _w in _tc_res.get("avertissements", []):
+                                        st.warning(_w)
+                                    # Stocker en session pour transmission au run
+                                    if "tables_client_sp" not in st.session_state:
+                                        st.session_state["tables_client_sp"] = {}
+                                    st.session_state["tables_client_sp"][_tc_type] = _tc_res
+                                else:
+                                    st.error(f"❌ {_tc_res['erreur']}")
+                                    if "tables_client_sp" in st.session_state:
+                                        st.session_state["tables_client_sp"].pop(_tc_type, None)
+                            except Exception as _e_tc:
+                                st.error(f"Erreur import table : {_e_tc}")
+                        # Afficher les tables déjà chargées
+                        _tc_loaded = st.session_state.get("tables_client_sp", {})
+                        if _tc_loaded:
+                            st.markdown(f"<div style='font-size:0.78rem;color:{OR};margin-top:6px;'>Tables chargées :</div>", unsafe_allow_html=True)
+                            for _tk, _tv in _tc_loaded.items():
+                                st.markdown(
+                                    f"<div style='font-size:0.75rem;color:#aaa;'>✔ {_tk} — "
+                                    f"{_tv['rapport']['plage_ages']} — "
+                                    f"{_tv['meta']['horodatage_import']}</div>",
+                                    unsafe_allow_html=True,
+                                )
+
             else:
                 st.info("Paramètres spécifiques à cet agent — disponibles prochainement.")
                 st.session_state["analyse_params"] = {}
@@ -3412,8 +3481,10 @@ def _executer_analyse(besoin, direction, equipe, client):
 
                 if besoin in ["tables","prov_prev","report_prev"]:
                     from direction_sante_prevoyance.prevoyance.p2_tables_morbidite.agent import AgentP2TablesMorbidite
+                    _tables_client_p2 = st.session_state.get("tables_client_sp", None) or None
                     _r_p2 = AgentP2TablesMorbidite(audit_path=_tmp, verbose=False).run(
                         result_p1=_r_p1,
+                        tables_client=_tables_client_p2,
                         generer_graphiques=False,
                     )
                     resultats["principal"] = _r_p2
