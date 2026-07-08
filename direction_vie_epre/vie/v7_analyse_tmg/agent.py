@@ -24,9 +24,8 @@ print("Usage : agent_v7 = AgentV7AnalyseTMG()")
 print("        result_v7 = agent_v7.run(tranches_tmg=[{'tmg':0.035,'pm':20e6,'duree':10}])")
 
 # Tables de mortalité officielles — Arrêté du 27 juillet 2006
-from direction_vie_epre.services.tables_mortalite_officielles import (
-    calculer_annuite_viagere, REFERENCE_REGLEMENTAIRE,
-)
+# Tables de mortalité officielles importées si nécessaire dans les sous-méthodes
+# (V7 n'utilise pas directement les tables — analyse par TMG de portefeuille)
 
 
 class AgentV7AnalyseTMG:
