@@ -3,7 +3,7 @@ ActuarIA — Agent V1 : Nour — Tarification Décès Vie
 Direction Vie & EP-RE | Manager : Sven | Directeur : Paul
 
 Tarification des contrats d'assurance décès :
-→ Primes pures avec tables TH0002 / TF0002
+→ Primes pures avec tables TH0002 / TF0002 (arrêté du 27 juillet 2006)
 → Primes commerciales avec chargements
 → Réserves prospectives (méthode prospective)
 → Validation hypothèses + graphiques auto-explicatifs
@@ -21,42 +21,23 @@ logging.basicConfig(level=logging.INFO,
     datefmt='%Y-%m-%d %H:%M:%S')
 
 print("Agent V1 — Tarification Décès ActuarIA v1.0")
-print("Tables : TH0002 · TF0002 · TGHF05H · TGHF05F")
+print(f"Tables officielles : TH0002 · TF0002 — {REFERENCE_REGLEMENTAIRE}")
 print("Usage : agent_v1 = AgentV1TarificationDeces()")
 print("        result_v1 = agent_v1.run(age=40, sexe='H', duree=20)")
 
 
-# ─── TABLES DE MORTALITÉ SIMPLIFIÉES ──────────────────────────────────────────
-# qx annuels TH0002 (Hommes) et TF0002 (Femmes) — valeurs représentatives
-QX_TH0002 = {
-    20: 0.000680, 25: 0.000730, 30: 0.000860, 35: 0.001180,
-    40: 0.001800, 45: 0.002980, 50: 0.005040, 55: 0.008640,
-    60: 0.014500, 65: 0.023800, 70: 0.038500, 75: 0.062100,
-    80: 0.099800, 85: 0.159000, 90: 0.240000, 95: 0.340000,
-    100: 1.000000,
-}
-
-QX_TF0002 = {
-    20: 0.000310, 25: 0.000330, 30: 0.000410, 35: 0.000610,
-    40: 0.000990, 45: 0.001640, 50: 0.002750, 55: 0.004600,
-    60: 0.007800, 65: 0.013100, 70: 0.022200, 75: 0.037800,
-    80: 0.064800, 85: 0.108000, 90: 0.171000, 95: 0.258000,
-    100: 1.000000,
-}
+# ─── TABLES DE MORTALITÉ OFFICIELLES ─────────────────────────────────────────
+# Arrêté du 27 juillet 2006 (JORF n°184 du 10 août 2006)
+# Module centralisé — source unique de vérité pour toute la direction Vie
+from direction_vie_epre.services.tables_mortalite_officielles import (
+    QX_TH0002, QX_TF0002, get_qx, construire_lx, TABLES_DISPONIBLES,
+    REFERENCE_REGLEMENTAIRE,
+)
 
 
 def _interpoler_qx(tables: dict, age: int) -> float:
-    """Interpolation linéaire des qx entre les âges de la table."""
-    ages = sorted(tables.keys())
-    if age >= ages[-1]:
-        return 1.0
-    if age <= ages[0]:
-        return tables[ages[0]]
-    for i in range(len(ages) - 1):
-        if ages[i] <= age < ages[i+1]:
-            t = (age - ages[i]) / (ages[i+1] - ages[i])
-            return tables[ages[i]] * (1-t) + tables[ages[i+1]] * t
-    return 1.0
+    """Délègue au module officiel — valeur exacte age par age (0-110)."""
+    return tables.get(max(0, min(age, 110)), 1.0)
 
 
 class AgentV1TarificationDeces:
