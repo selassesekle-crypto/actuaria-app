@@ -255,12 +255,13 @@ class AgentEP7OptimisationPB:
         """Évalue toutes les contraintes pour un taux candidat."""
         pb_servie = pm * tx
 
-        # C_L132 : PB servie ≥ 85% produits financiers
-        c_l132_ok = (pb_servie >= pb_min * 0.99)  # tolérance 1%
-
-        # PPB finale après distribution
+        # PPB portée en réserve : complément pour atteindre le minimum L132-29
         pb_portee_ppb = max(0, prod_fi * 0.85 - pb_servie)
         ppb_finale    = ppb_stock + pb_portee_ppb
+
+        # C_L132 : PB servie + PB portée en PPB ≥ 85% produits financiers (Art. L132-29)
+        # La PPB est comptabilisée comme PB différée — elle satisfait la contrainte
+        c_l132_ok = (pb_servie + pb_portee_ppb >= pb_min * 0.99)  # tolérance 1%
 
         # C_PPB : PPB finale ≤ 10% PM (C2023-10)
         c_ppb_ok = (ppb_finale <= pm * 0.10)
