@@ -30,13 +30,36 @@ class AgentV4ParticipationBenefices:
 
     def run(self,pm_total=50_000_000,rendement_actifs=0.04,taux_technique=0.025,
             ppb_initiale=0,reserve_capi=0,tx_servi_cible=0.03,
+            fonds_propres_investis=None,  # Montant des FP investis dans le portefeuille actif
+                                          # Permet le calcul des produits financiers NETS
+                                          # conformément à Art. L132-29 (déduction FP propres)
+                                          # Si None : produits bruts (approx. conservative)
             chargements=0.008,generer_graphiques=True) -> Dict:
         audit_id=f"V4_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         logger=self.logger
         if self.verbose: logger.info(f"[{audit_id}] Agent V4 démarré | PM={pm_total/1e6:.1f}M€ | Rend={rendement_actifs*100:.2f}%")
         try:
             # ── Produits financiers ───────────────────────────────────────────
-            produits_financiers=pm_total*rendement_actifs
+            # Art. L132-29 : base = produits financiers NETS de la rémunération
+            # des actifs propres (fonds propres investis dans le portefeuille).
+            produits_financiers_bruts = pm_total * rendement_actifs
+            if fonds_propres_investis is not None and fonds_propres_investis > 0:
+                # Actifs totaux ≈ PM + FP investis (structure bilan simplifiée)
+                actifs_totaux = pm_total + fonds_propres_investis
+                # Part des produits attribuable aux assurés (hors rémunération FP)
+                ratio_pm_actifs = pm_total / max(actifs_totaux, 1)
+                produits_financiers = produits_financiers_bruts * ratio_pm_actifs
+                remuneration_fp = produits_financiers_bruts * (1 - ratio_pm_actifs)
+                self.logger.info(
+                    f"Produits financiers nets = {produits_financiers/1e3:.0f}k€ "
+                    f"(bruts {produits_financiers_bruts/1e3:.0f}k€ − "
+                    f"rémunération FP {remuneration_fp/1e3:.0f}k€) — Art. L132-29"
+                )
+            else:
+                # Approximation conservative : produits bruts
+                # (surévalue légèrement la PB min — sécurité pour l'assuré)
+                produits_financiers = produits_financiers_bruts
+                remuneration_fp = None
 
             # ── Bénéfice technique ────────────────────────────────────────────
             charges_techniques=pm_total*taux_technique
@@ -45,11 +68,7 @@ class AgentV4ParticipationBenefices:
             # ── PB réglementaire minimale (Art. L132-29) ─────────────────────
             # Art. L132-29 §1 : au moins 85% des produits financiers nets
             #   et 90% des bénéfices techniques doivent être attribués aux assurés.
-            # SIMPLIFICATION DOCUMENTÉE : les produits financiers sont calculés
-            #   sur l'intégralité des PM (pm_total × rendement_actifs).
-            #   En production, il faudrait déduire la rémunération des actifs propres
-            #   (fonds propres hors PM) — non disponible dans ce contexte de pré-calcul.
-            #   Cette approximation est conservative (surévalue légèrement la PB min).
+            # produits_financiers = nets si fonds_propres_investis fourni, bruts sinon.
             pb_fin_min=max(0, produits_financiers * 0.85)
             pb_tech_min=max(0, benefice_technique * 0.90)
             pb_reglementaire_min=pb_fin_min + pb_tech_min
@@ -67,7 +86,9 @@ class AgentV4ParticipationBenefices:
             ppb_ok=ppb_finale <= ppb_max_reglementaire
 
             # ── Réserve de capitalisation ──────────────────────────────────────
-            rc_dotation=max(0, produits_financiers * 0.05)
+            # Réserve de capitalisation : dotée sur les produits bruts
+            # (les plus-values obligataires bénéficient à tous les investisseurs)
+            rc_dotation=max(0, produits_financiers_bruts * 0.05)
             rc_finale=reserve_capi + rc_dotation
 
             # ── Taux servi aux assurés ─────────────────────────────────────────
@@ -75,7 +96,7 @@ class AgentV4ParticipationBenefices:
             spread=tx_servi_cible - taux_technique
 
             # ── Bénéfice global ───────────────────────────────────────────────
-            benefice_global=produits_financiers - pb_servie - rc_dotation
+            benefice_global=produits_financiers_bruts - pb_servie - rc_dotation
 
             # Évolution PPB sur 8 ans (reprises linéaires)
             ppb_evol=[ppb_finale * max(0, 1-t/8) for t in range(9)]
@@ -105,6 +126,9 @@ class AgentV4ParticipationBenefices:
                 'statut_rag':'VERT' if val_hyp['statut_global']!='ROUGE' else 'AMBRE',
                 'pm_total':pm_total,'rendement_actifs':rendement_actifs,
                 'produits_financiers':round(produits_financiers,2),
+                'produits_financiers_bruts':round(produits_financiers_bruts,2),
+                'remuneration_fp_deduite':round(remuneration_fp,2) if remuneration_fp is not None else None,
+                'mode_produits_financiers':'nets (Art.L132-29)' if fonds_propres_investis else 'bruts (approx. conservative)',
                 'pb_reglementaire_min':round(pb_reglementaire_min,2),
                 'pb_servie':round(pb_servie,2),
                 'pb_portee_ppb':round(pb_portee_ppb,2),
