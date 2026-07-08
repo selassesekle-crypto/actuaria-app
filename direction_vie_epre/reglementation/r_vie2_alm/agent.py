@@ -33,6 +33,7 @@ class AgentRVIE2RSRSFCRVie:
 
     def run(self, scr_vie=5_000_000, fonds_propres=12_000_000,
             be_vie=45_000_000, pm_total=50_000_000,
+            risk_adjustment_pct=0.08,  # RA = 8% du BE par défaut (à passer depuis R-VIE1)
             ratio_scr_n1=200.0, generer_graphiques=True) -> Dict:
         audit_id = f"RVIE2_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         logger = self.logger
@@ -45,7 +46,10 @@ class AgentRVIE2RSRSFCRVie:
             ratio_mcr_n   = fonds_propres / max(mcr_vie, 1) * 100
             variation_scr = ratio_scr_n - ratio_scr_n1
 
-            tp_vie  = be_vie * 1.08
+            # TP Vie S2 = BE + Risk Adjustment (paramètre, pas coefficient fixe)
+            # risk_adjustment_pct = RA / BE (ex: 8% = valeur typique marché)
+            # Idéalement fourni par R-VIE1 Éric via result_rvie1
+            tp_vie  = be_vie * (1 + risk_adjustment_pct)
             ratio_tp_be = tp_vie / max(be_vie, 1)
 
             # ── Structure SFCR — Sections A à E ──────────────────────────────
