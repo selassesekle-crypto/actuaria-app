@@ -393,10 +393,13 @@ class AgentEP4StressEpargne:
             c1_conseil = "Renforcer les actifs avant tout stress"
 
         # C2 — Post-choc longévité
-        ratio_longevite = next((s.get('ratio_couverture', ratio_base*0.9)
-                               for s in (scenarios if isinstance(scenarios, list) else [])
-                               if 'longev' in str(s.get('nom_scenario','longev')).lower()),
-                              ratio_base * 0.88)
+        # La clé réelle dans le dict scénario est 'ratio_stresse' (calculée dans run())
+        # Le nom du scénario longévité contient 'longev' dans s.get('nom')
+        ratio_longevite = next(
+            (s['ratio_stresse'] for s in (scenarios if isinstance(scenarios, list) else [])
+             if 'longev' in str(s.get('nom', '')).lower() and 'ratio_stresse' in s),
+            ratio_base * 0.88
+        )
         if ratio_longevite >= 100:
             c2_statut = VERT; c2_msg = f"Post-longévité = {ratio_longevite:.1f}% ≥ 100% ✅"
             c2_conseil = "Résistant au choc longévité +20%"
@@ -408,8 +411,12 @@ class AgentEP4StressEpargne:
             c2_conseil = "Plan de redressement longévité — choc EIOPA non absorbé"
 
         # C3 — Post-choc combiné
-        ratios = [s.get('ratio_couverture', ratio_base*0.8) for s in (scenarios if isinstance(scenarios,list) else [])]
-        ratio_combine = min(ratios) if ratios else ratio_base * 0.75
+        # La clé réelle est 'ratio_stresse' — on filtre les scénarios valides
+        ratios_stresses = [
+            s['ratio_stresse'] for s in (scenarios if isinstance(scenarios, list) else [])
+            if 'ratio_stresse' in s
+        ]
+        ratio_combine = min(ratios_stresses) if ratios_stresses else ratio_base * 0.75
         if ratio_combine >= 100:
             c3_statut = VERT; c3_msg = f"Pire scénario = {ratio_combine:.1f}% ≥ 100% ✅"
             c3_conseil = "EP-RE résilient dans tous les scénarios"
