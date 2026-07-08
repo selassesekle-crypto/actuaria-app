@@ -164,6 +164,14 @@ class AgentEP5ReportingEpargne:
                 )
             else:
                 result['graphiques'] = {}
+            # ── Validation formelle du rapport (scorecard EP5) ────────
+            result['validation_ep5']        = self._valider_reporting(
+                kpis, rapports_disponibles, statut_rag, actuaire_resp
+            )
+            result['graphiques_validation'] = self._graphiques_validation_ep5(
+                result['validation_ep5']
+            ) if generer_graphiques and PLOTLY_OK else {}
+
             self._sauvegarder(audit_id, result)
             if self.verbose:
                 self._afficher(result)
@@ -173,6 +181,164 @@ class AgentEP5ReportingEpargne:
         except Exception as e:
             self.logger.error(f"ERREUR EP5 : {e}", exc_info=True)
             return {'success': False, 'erreur': str(e), 'audit_id': audit_id}
+
+    # ─── VALIDATION FORMELLE DU RAPPORT ──────────────────────────────────
+    def _valider_reporting(
+        self,
+        kpis:               Dict,
+        rapports:           List[Dict],
+        statut_rag:         str,
+        actuaire_resp:      str,
+    ) -> Dict:
+        """
+        Scorecard de validation du rapport EP5.
+
+        C1 — Complétude des KPIs
+             Les 4 KPIs essentiels sont présents : DBO_IAS19, pm_totale,
+             cotisation_annuelle, ratio_base. Un rapport signé sans ces
+             données est inacceptable devant l'ACPR et le CA.
+
+        C2 — Couverture réglementaire
+             Les 4 rapports réglementaires requis sont présents avec
+             leur référence juridique. Un rapport sans référence = rouge.
+
+        C3 — Traçabilité actuaire responsable
+             Le champ actuaire_resp est renseigné et non générique.
+             Un rapport signé 'Actuaire FIAF' sans nom nominatif
+             n'est pas défendable devant le Comité d'Audit.
+        """
+        # C1 — Complétude des KPIs essentiels
+        KPI_ESSENTIELS = ['DBO_IAS19', 'pm_totale', 'cotisation_annuelle', 'ratio_base']
+        kpis_presents  = [k for k in KPI_ESSENTIELS if k in kpis]
+        nb_kpis        = len(kpis_presents)
+        if nb_kpis == len(KPI_ESSENTIELS):
+            c1_s = 'VERT'
+            c1_m = f"4/4 KPIs essentiels présents ✅"
+            c1_c = "Rapport complet — tous les indicateurs clés sont disponibles"
+        elif nb_kpis >= 2:
+            manquants = [k for k in KPI_ESSENTIELS if k not in kpis]
+            c1_s = 'AMBRE'
+            c1_m = f"{nb_kpis}/{len(KPI_ESSENTIELS)} KPIs présents — manquants : {', '.join(manquants)} ⚠️"
+            c1_c = "Alimenter les agents manquants (EP1/EP2/EP3/EP4) avant signature"
+        else:
+            c1_s = 'ROUGE'
+            c1_m = f"{nb_kpis}/{len(KPI_ESSENTIELS)} KPIs présents ❌ — rapport insuffisant"
+            c1_c = "Rapport non signable — exécuter la chaîne EP1→EP4 complète"
+
+        # C2 — Couverture réglementaire (tous les rapports ont une référence juridique)
+        nb_rapports       = len(rapports)
+        rapports_ref      = [r for r in rapports if r.get('reference', '').strip()]
+        nb_avec_ref       = len(rapports_ref)
+        if nb_rapports >= 4 and nb_avec_ref == nb_rapports:
+            c2_s = 'VERT'
+            c2_m = f"{nb_rapports} rapports réglementaires — 100% avec référence juridique ✅"
+            c2_c = "Couverture réglementaire complète — défendable devant l'ACPR"
+        elif nb_avec_ref >= nb_rapports * 0.75:
+            sans_ref = [r['nom'] for r in rapports if not r.get('reference', '').strip()]
+            c2_s = 'AMBRE'
+            c2_m = f"{nb_avec_ref}/{nb_rapports} rapports avec référence juridique ⚠️"
+            c2_c = f"Ajouter la référence réglementaire sur : {', '.join(sans_ref[:2])}"
+        else:
+            c2_s = 'ROUGE'
+            c2_m = f"{nb_avec_ref}/{nb_rapports} rapports avec référence juridique ❌"
+            c2_c = "Rapport non conforme — chaque rapport doit citer sa base légale"
+
+        # C3 — Traçabilité actuaire responsable
+        # Un nom nominatif est requis (pas de valeur générique par défaut)
+        VALEURS_GENERIQUES = {'Actuaire FIAF', 'Actuaire', 'N/A', '', 'TBD'}
+        if actuaire_resp and actuaire_resp.strip() not in VALEURS_GENERIQUES:
+            c3_s = 'VERT'
+            c3_m = f"Actuaire responsable identifié : {actuaire_resp} ✅"
+            c3_c = "Traçabilité nominative conforme aux exigences du Comité d'Audit"
+        elif actuaire_resp and actuaire_resp.strip():
+            c3_s = 'AMBRE'
+            c3_m = f"Actuaire responsable générique : '{actuaire_resp}' ⚠️"
+            c3_c = "Remplacer par le nom nominatif de l'actuaire signataire avant dépôt"
+        else:
+            c3_s = 'ROUGE'
+            c3_m = "Actuaire responsable non renseigné ❌"
+            c3_c = "Rapport non signable — renseigner actuaire_resp avec le nom nominatif"
+
+        sts = [c1_s, c2_s, c3_s]
+        sg  = 'ROUGE' if 'ROUGE' in sts else 'AMBRE' if 'AMBRE' in sts else 'VERT'
+        return {
+            'c1_kpis': {
+                'nb_presents':   nb_kpis,
+                'nb_requis':     len(KPI_ESSENTIELS),
+                'kpis_presents': kpis_presents,
+                'statut':        c1_s, 'message': c1_m, 'conseil': c1_c,
+                'titre_graphique': f"{'✅' if c1_s=='VERT' else '⚠️' if c1_s=='AMBRE' else '❌'} KPIs — {nb_kpis}/{len(KPI_ESSENTIELS)} essentiels présents",
+            },
+            'c2_reglementaire': {
+                'nb_rapports':    nb_rapports,
+                'nb_avec_ref':    nb_avec_ref,
+                'statut':         c2_s, 'message': c2_m, 'conseil': c2_c,
+                'titre_graphique': f"{'✅' if c2_s=='VERT' else '⚠️' if c2_s=='AMBRE' else '❌'} Réglementation — {nb_avec_ref}/{nb_rapports} rapports référencés",
+            },
+            'c3_tracabilite': {
+                'actuaire':  actuaire_resp,
+                'statut':    c3_s, 'message': c3_m, 'conseil': c3_c,
+                'titre_graphique': f"{'✅' if c3_s=='VERT' else '⚠️' if c3_s=='AMBRE' else '❌'} Traçabilité actuaire — {actuaire_resp or 'Non renseigné'}",
+            },
+            'statut_global': sg,
+            'conclusion': {
+                'VERT':  '✅ Rapport EP5 validé — KPIs complets, couverture réglementaire et traçabilité conformes',
+                'AMBRE': '⚠️ Rapport EP5 acceptable — compléter les points signalés avant signature',
+                'ROUGE': '❌ Rapport EP5 non signable — insuffisances bloquantes à corriger',
+            }[sg],
+        }
+
+    def _graphiques_validation_ep5(self, val: Dict) -> Dict:
+        """Scorecard graphique de validation du rapport EP5."""
+        if not PLOTLY_OK:
+            return {}
+        NAVY='#0F2E52'; NAVY_L='#1B3A5C'; BLANC='#F0F4F8'; GRIS='#8A9AB0'
+        VERT='#2ECC71'; ROUGE='#E74C3C'; AMBRE='#F39C12'
+        graphiques = {}
+        try:
+            items = [
+                ('C1 — Complétude KPIs essentiels',    val['c1_kpis']['statut'],
+                 val['c1_kpis']['message'],            val['c1_kpis']['conseil']),
+                ('C2 — Couverture réglementaire',      val['c2_reglementaire']['statut'],
+                 val['c2_reglementaire']['message'],   val['c2_reglementaire']['conseil']),
+                ('C3 — Traçabilité actuaire nominatif',val['c3_tracabilite']['statut'],
+                 val['c3_tracabilite']['message'],     val['c3_tracabilite']['conseil']),
+            ]
+            fig = go.Figure()
+            for nom, statut, msg, conseil in items:
+                c = VERT if statut == 'VERT' else AMBRE if statut == 'AMBRE' else ROUGE
+                i = '✅' if statut == 'VERT' else '⚠️' if statut == 'AMBRE' else '❌'
+                s = 1.0 if statut == 'VERT' else 0.5 if statut == 'AMBRE' else 0.0
+                fig.add_trace(go.Bar(
+                    x=[s], y=[nom], orientation='h', marker_color=c, width=0.5,
+                    text=f"{i} {statut}", textposition='outside',
+                    textfont=dict(color=c, size=10),
+                    hovertemplate=f"<b>{nom}</b><br>{msg}<br>💡 {conseil}<extra></extra>",
+                    showlegend=False,
+                ))
+            sg = val['statut_global']
+            cg = VERT if sg == 'VERT' else AMBRE if sg == 'AMBRE' else ROUGE
+            fig.update_layout(
+                paper_bgcolor=NAVY, plot_bgcolor=NAVY_L,
+                font=dict(family='Inter', color=BLANC, size=11),
+                margin=dict(l=16, r=16, t=60, b=50), height=260,
+                title=dict(
+                    text=f"Scorecard Rapport EP5 — {val['conclusion']}",
+                    font=dict(color=cg, size=10), x=0.01
+                ),
+                xaxis=dict(range=[0, 1.6], visible=False),
+                yaxis=dict(tickfont=dict(color=BLANC, size=10), showgrid=False),
+                barmode='overlay',
+                annotations=[dict(
+                    text="💡 3 ✅ = rapport EP5 validé, signable et transmissible à l'ACPR et au CA.",
+                    xref='paper', yref='paper', x=0.01, y=-0.22,
+                    font=dict(color=GRIS, size=9), showarrow=False,
+                )],
+            )
+            graphiques['scorecard_ep5'] = fig
+        except Exception as e:
+            self.logger.warning(f"Scorecard EP5 : {e}")
+        return graphiques
 
     def _generer_graphiques_ep5(self, rapports) -> Dict:
         if not PLOTLY_OK: return {}
