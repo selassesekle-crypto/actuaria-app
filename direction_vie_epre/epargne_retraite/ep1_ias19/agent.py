@@ -268,6 +268,7 @@ class AgentEP1EngagementsRetraite:
                 'audit_id':            audit_id,
                 'iboxx_audit':         iboxx_audit,
                 'sous_branche':        sous_branche,
+                'sources':             {'parametres': 'saisie manuelle'},
                 'statut_rag':          statut_rag,
                 'parametres': {
                     'effectif':            effectif,
