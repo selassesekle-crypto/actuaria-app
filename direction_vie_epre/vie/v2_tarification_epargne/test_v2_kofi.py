@@ -109,3 +109,39 @@ class TestV2TarificationEpargneVie:
         assert abs(r['be_vie'] - expected_be) < 1.0, (
             f"be_vie={r['be_vie']} ≠ capital×E_xn={expected_be}"
         )
+
+    # T9 — B2 : TMG détecté et tracé dans le dict retour
+    def test_t9_tmg_tracé(self, agent):
+        """Le TMG doit être enregistré et le flag underwater levé si TMG > taux_technique."""
+        # TMG = 3% > taux_technique = 2.5% → underwater
+        r = agent.run(age=45, sexe='H', duree=20, capital=100_000,
+                      taux_technique=0.025, tmg=0.03, generer_graphiques=False)
+        assert r['success'] is True
+        assert 'tmg' in r
+        assert r['tmg']['valeur'] == 0.03
+        assert r['tmg']['underwater'] is True, "TMG 3% > taux 2.5% doit être underwater"
+        # Le taux garanti doit être max(taux_technique, tmg) = 3%
+        assert r['tmg']['taux_garanti'] == 0.03
+
+    # T10 — B2 : types de contrats distincts
+    def test_t10_types_contrats_distincts(self, agent):
+        """Les 4 types doivent produire des primes différentes."""
+        params = dict(age=45, sexe='H', duree=20, capital=100_000,
+                      taux_technique=0.025, generer_graphiques=False)
+        r_cd = agent.run(type_contrat='capital_differe', **params)
+        r_rx = agent.run(type_contrat='rente', **params)
+        r_mx = agent.run(type_contrat='mixte', **params)
+        r_ms = agent.run(type_contrat='multisupport', **params)
+
+        for r in [r_cd, r_rx, r_mx, r_ms]:
+            assert r['success'] is True
+            assert r['prime_pure']['annuelle'] > 0
+
+        # Mixte doit être plus cher que capital différé (ajoute une garantie décès)
+        assert r_mx['prime_pure']['annuelle'] > r_cd['prime_pure']['annuelle'], (
+            "Prime mixte doit être > capital différé (garantie décès incluse)"
+        )
+        # Multisupport ne garanti pas la survie → prime différente du capital différé
+        assert r_ms['prime_pure']['annuelle'] != r_cd['prime_pure']['annuelle'], (
+            "Prime multisupport doit différer du capital différé (pas d'actualisation viag."
+        )
