@@ -30,11 +30,37 @@ class AgentV5QRTVie:
 
     def run(self,pm_total=50_000_000,scr_vie=5_000_000,fonds_propres=12_000_000,
             be_vie=45_000_000,risk_adjustment=2_000_000,ppb=1_500_000,
-            nb_contrats=10_000,generer_graphiques=True) -> Dict:
+            nb_contrats=10_000,generer_graphiques=True,
+            result_v3=None,    # Optional[Dict] — alimente be_vie et pm_total depuis V3 Amélie
+            result_rvie1=None, # Optional[Dict] — alimente scr_vie depuis R-VIE1 Éric
+            result_v4=None,    # Optional[Dict] — alimente ppb depuis V4 Théo
+            ) -> Dict:
         audit_id=f"V5_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         logger=self.logger
         if self.verbose: logger.info(f"[{audit_id}] Agent V5 démarré | PM={pm_total/1e6:.1f}M€ | SCR Vie={scr_vie/1e6:.1f}M€")
         try:
+            # ── Alimentation depuis la chaîne actuarielle (si disponible) ────
+            # V3 Amélie → be_vie + pm_total
+            sources = {}
+            if result_v3 and result_v3.get('success'):
+                be_vie   = result_v3.get('pm_prospective', be_vie)
+                pm_total = result_v3.get('pm_prospective', pm_total)
+                sources['be_vie'] = 'V3 Amélie (pm_prospective)'
+                sources['pm_total'] = 'V3 Amélie (pm_prospective)'
+                logger.info(f"[{audit_id}] be_vie alimenté depuis V3 Amélie : {be_vie/1e6:.2f}M€")
+
+            # R-VIE1 Éric → scr_vie
+            if result_rvie1 and result_rvie1.get('success'):
+                scr_vie = result_rvie1.get('scr_vie_total', scr_vie)
+                sources['scr_vie'] = 'R-VIE1 Éric (scr_vie_total)'
+                logger.info(f"[{audit_id}] scr_vie alimenté depuis R-VIE1 Éric : {scr_vie/1e6:.2f}M€")
+
+            # V4 Théo → ppb
+            if result_v4 and result_v4.get('success'):
+                ppb = result_v4.get('ppb_finale', ppb)
+                sources['ppb'] = 'V4 Théo (ppb_finale)'
+                logger.info(f"[{audit_id}] ppb alimenté depuis V4 Théo : {ppb/1e3:.0f}k€")
+
             # ── QRT S.12 — Provisions Vie ─────────────────────────────────────
             tp_vie = be_vie + risk_adjustment
             ratio_tp_be = tp_vie / max(be_vie, 1)
@@ -109,6 +135,7 @@ class AgentV5QRTVie:
             return {
                 'success':True,'agent':'V5 Nia',
                 'statut_rag':'VERT' if val_hyp['statut_global']!='ROUGE' else 'AMBRE',
+                'sources':sources,  # traçabilité des données d'entrée
                 'qrt_s12':qrt_s12,'qrt_s23':qrt_s23,
                 'rapport_actuariel':rapport_actuariel,
                 'ratio_scr_pct':round(ratio_scr,1),
