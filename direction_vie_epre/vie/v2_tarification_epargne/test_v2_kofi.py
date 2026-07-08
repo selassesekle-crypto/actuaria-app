@@ -30,7 +30,11 @@ class TestV2TarificationEpargneVie:
         assert r['prime_pure']['annuelle'] > 0
         assert r['rente_viagere']['mensuelle'] > 0
         assert len(r['valeurs_rachat']) == 20
-        assert r['erreur'] is None
+        assert r.get('erreur') is None  # clé absente du dict success — comportement normal
+        # A5 : be_vie = capital × E_xn doit être présent dans le retour
+        assert 'be_vie' in r
+        assert r['be_vie'] > 0
+        assert r['be_vie'] <= 100_000  # be_vie ≤ capital (E_xn ≤ 1)
 
     # T2 — Valeurs de rachat non négatives sur toute la durée
     def test_t2_rachats_non_negatifs(self, agent):
@@ -90,3 +94,18 @@ class TestV2TarificationEpargneVie:
             assert r['prime_pure']['annuelle'] >= 0
         else:
             assert r['erreur'] is not None
+
+    # T8 — A5 : be_vie présent et cohérent avec capital × E_xn
+    def test_t8_be_vie_coherent(self, agent):
+        r = agent.run(age=45, sexe='H', duree=20, capital=100_000,
+                      taux_technique=0.025, generer_graphiques=False)
+        assert r['success'] is True
+        assert 'be_vie' in r, "be_vie absent du dict retour — A5 non appliqué"
+        # be_vie = capital × E_xn = capital × v^n × n_px
+        # Doit être positif et inférieur au capital (actualisation + survie)
+        assert 0 < r['be_vie'] < 100_000
+        # be_vie == capital × E_xn (vérifié via la clé prime_pure.E_xn)
+        expected_be = round(100_000 * r['prime_pure']['E_xn'], 2)
+        assert abs(r['be_vie'] - expected_be) < 1.0, (
+            f"be_vie={r['be_vie']} ≠ capital×E_xn={expected_be}"
+        )
