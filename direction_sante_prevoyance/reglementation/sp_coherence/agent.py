@@ -240,8 +240,8 @@ class AgentSPCoherence:
     def _na(self, nom: str, agents_requis: str) -> Dict:
         """Retourne un contrôle N/A si les agents requis sont absents."""
         return {
-            "id": nom, "libelle": f"{nom} — N/A",
-            "ok": None, "statut": "N/A",
+            "id": nom, "libelle": f"{nom} — Non exécuté",
+            "ok": None, "statut": "AMBRE",
             "detail": f"Agents requis absents : {agents_requis}",
             "valeur_a": None, "valeur_b": None, "ecart": None,
         }
