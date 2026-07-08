@@ -1,0 +1,13 @@
+{
+  "annee_evaluation": 2024,
+  "methodes": {
+    "chain_ladder": 53663.0,
+    "bornhuetter_ferguson": 50773.0,
+    "cape_cod": 42925.0
+  },
+  "provision_retenue": 49120.0,
+  "provision_prudente": 56920.0,
+  "cv_inter_methodes": 9.24,
+  "elr_cape_cod": 0.799918,
+  "statut": "Phase 3B complete"
+}
