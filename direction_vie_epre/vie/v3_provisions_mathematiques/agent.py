@@ -22,21 +22,14 @@ print("Méthodes : Prospective · Rétrospective · Rachat · Réduction")
 print("Usage : agent_v3 = AgentV3ProvisionsMathematiques()")
 print("        result_v3 = agent_v3.run(age=50, duree=20, t_ecoule=10)")
 
-QX_TH0002={20:0.000680,25:0.000730,30:0.000860,35:0.001180,40:0.001800,
-           45:0.002980,50:0.005040,55:0.008640,60:0.014500,65:0.023800,
-           70:0.038500,75:0.062100,80:0.099800,85:0.159000,90:0.240000,95:0.340000,100:1.0}
-QX_TF0002={20:0.000310,25:0.000330,30:0.000410,35:0.000610,40:0.000990,
-           45:0.001640,50:0.002750,55:0.004600,60:0.007800,65:0.013100,
-           70:0.022200,75:0.037800,80:0.064800,85:0.108000,90:0.171000,95:0.258000,100:1.0}
+# Tables de mortalité officielles — Arrêté du 27 juillet 2006
+from direction_vie_epre.services.tables_mortalite_officielles import (
+    QX_TH0002, QX_TF0002, REFERENCE_REGLEMENTAIRE,
+)
 
-def _qx(t,a):
-    ag=sorted(t.keys())
-    if a>=ag[-1]: return 1.0
-    if a<=ag[0]: return t[ag[0]]
-    for i in range(len(ag)-1):
-        if ag[i]<=a<ag[i+1]:
-            r=(a-ag[i])/(ag[i+1]-ag[i]); return t[ag[i]]*(1-r)+t[ag[i+1]]*r
-    return 1.0
+def _qx(t, a):
+    """Retourne le qx officiel exact pour l'âge donné (0-110)."""
+    return t.get(max(0, min(a, 110)), 1.0)
 
 class AgentV3ProvisionsMathematiques:
     def __init__(self,models_path="models",audit_path="audit",verbose=True):
