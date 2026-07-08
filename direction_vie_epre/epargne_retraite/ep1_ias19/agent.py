@@ -94,6 +94,9 @@ class AgentEP1EngagementsRetraite:
         salaire_moyen:       float = 45_000,
         anciennete_moyenne:  float = 12,
         taux_actu:           float = 0.035,
+        taux_iboxx_reference:float = None,   # Taux iBoxx EUR AA à la date de clôture (IAS 19.83)
+                                              # Si None : validation sur plage historique uniquement
+        source_taux:         str   = "Non renseignée",  # Ex: "iBoxx EUR Corp AA 15Y, 31/12/2024"
         taux_revalorisation: float = 0.020,
         taux_rotation:       float = 0.050,
         taux_prestation:     float = 0.015,
@@ -141,6 +144,33 @@ class AgentEP1EngagementsRetraite:
         t_debut  = datetime.now()
         audit_id = f"EP1_{t_debut.strftime('%Y%m%d_%H%M%S')}"
         self.logger.info(f"[{audit_id}] Agent EP1 démarré")
+
+        # ── Validation taux iBoxx (IAS 19.83) ────────────────────────────
+        # IAS 19.83 : le taux doit être déterminé par référence aux
+        # obligations d'entreprises de haute qualité (iBoxx EUR Corp AA)
+        iboxx_audit = {
+            "taux_actu_utilise":      round(taux_actu * 100, 3),
+            "taux_iboxx_reference":   round(taux_iboxx_reference * 100, 3) if taux_iboxx_reference else None,
+            "source_taux":            source_taux,
+            "ecart_vs_iboxx_bp":      None,
+            "conformite_iboxx":       "Non vérifiable — iBoxx non fourni",
+            "alerte":                 None,
+        }
+        if taux_iboxx_reference is not None:
+            ecart_bp = (taux_actu - taux_iboxx_reference) * 10_000
+            iboxx_audit["ecart_vs_iboxx_bp"] = round(ecart_bp, 1)
+            if abs(ecart_bp) <= 25:
+                iboxx_audit["conformite_iboxx"] = f"✅ Écart = {ecart_bp:+.1f}bp ≤ 25bp — conforme IAS 19.83"
+            elif abs(ecart_bp) <= 50:
+                iboxx_audit["conformite_iboxx"] = f"⚠️ Écart = {ecart_bp:+.1f}bp ∈ [25,50]bp — justification requise"
+                iboxx_audit["alerte"] = "Documenter l'écart dans la note annexe IAS 19"
+            else:
+                iboxx_audit["conformite_iboxx"] = f"❌ Écart = {ecart_bp:+.1f}bp > 50bp — non conforme IAS 19.83"
+                iboxx_audit["alerte"] = "Taux à corriger avant publication des états financiers"
+            self.logger.info(
+                f"[{audit_id}] iBoxx ref={taux_iboxx_reference*100:.3f}% | "
+                f"taux_actu={taux_actu*100:.3f}% | écart={ecart_bp:+.1f}bp"
+            )
 
         try:
             # ── Annuités viagères officielles ──────────────────────────────
@@ -236,6 +266,7 @@ class AgentEP1EngagementsRetraite:
             result = {
                 'success':             True,
                 'audit_id':            audit_id,
+                'iboxx_audit':         iboxx_audit,
                 'sous_branche':        sous_branche,
                 'statut_rag':          statut_rag,
                 'parametres': {
