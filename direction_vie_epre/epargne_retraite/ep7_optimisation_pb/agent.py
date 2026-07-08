@@ -61,7 +61,7 @@ class AgentEP7OptimisationPB:
     def run(
         self,
         pm_total:          float = 50_000_000,
-        rendement_actifs:  float =       0.04,
+        rendement_actifs:  object =      0.04,  # float OU List[float] (courbe de rendement)
         taux_technique:    float =      0.025,
         fonds_propres:     float =  8_000_000,
         scr_vie:           float =  5_000_000,
@@ -71,6 +71,8 @@ class AgentEP7OptimisationPB:
         scr_cible_pct:     float =      150.0,
         spread_min:        float =      0.005,
         precision_bp:      float =      0.001,
+        taux_sorties_annuel: float = 0.05,   # Taux de sorties PM/an (prestations+rachats)
+                                              # Permet la projection PM dynamique sur l'horizon PPB
         result_ep3:        Optional[Dict] = None,
         result_ep4:        Optional[Dict] = None,
         result_ep1:        Optional[Dict] = None,
@@ -120,7 +122,18 @@ class AgentEP7OptimisationPB:
         audit_id = f"EP7_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         logger = self.logger
         if self.verbose:
-            logger.info(f"[{audit_id}] Agent EP7 démarré | PM={pm_total/1e6:.1f}M€ | Rend={rendement_actifs*100:.2f}%")
+            logger.info(f"[{audit_id}] Agent EP7 démarré | PM={pm_total/1e6:.1f}M€")
+
+        # ── Courbe de rendements (scalaire ou liste) ──────────────────────
+        if isinstance(rendement_actifs, (int, float)):
+            courbe_rend = [float(rendement_actifs)] * ppb_horizon_ans
+        else:
+            courbe_rend = list(rendement_actifs)
+            if len(courbe_rend) < ppb_horizon_ans:
+                courbe_rend += [courbe_rend[-1]] * (ppb_horizon_ans - len(courbe_rend))
+            else:
+                courbe_rend = courbe_rend[:ppb_horizon_ans]
+        rendement_actifs_ref = courbe_rend[0]  # rendement de référence pour l'optimisation
 
         try:
             # ── Alimentation depuis la chaîne ─────────────────────────────────
@@ -148,13 +161,13 @@ class AgentEP7OptimisationPB:
                     sources['dbo_ep1'] = f"EP1 Henri : DBO = {dbo/1e6:.1f}M€"
 
             # ── PARAMÈTRES FINANCIERS ──────────────────────────────────────────
-            produits_financiers = pm_total * rendement_actifs
+            produits_financiers = pm_total * rendement_actifs_ref
             pb_legale_min       = produits_financiers * 0.85  # Art. L132-29
 
             # Borne inférieure = max(TMG contractuel, TMG + spread_min)
             tx_min = max(taux_technique, taux_technique + spread_min, tmg_max)
-            # Borne supérieure = rendement actifs (ne peut pas distribuer plus)
-            tx_max = rendement_actifs
+            # Borne supérieure = rendement actifs de référence (t=0)
+            tx_max = rendement_actifs_ref
 
             if tx_min >= tx_max:
                 tx_optimal = tx_min
@@ -194,32 +207,39 @@ class AgentEP7OptimisationPB:
                 }
 
             # ── PROJECTION PPB PLURIANNUELLE C2023-10 ────────────────────────
-            # Vérifier que le stock PPB ne dépasse pas 10% PM sur 8 ans
-            # C2023-10 ACPR : la PPB est une réserve temporaire — elle doit
-            # être redistribuée dans un délai raisonnable (max 8 ans)
+            # PM projetée dynamiquement : PM(t+1) = PM(t) × (1 - taux_sorties)
+            # Produits financiers(t) = PM(t) × rendement(t) — réalistes sur l'horizon
+            # C2023-10 ACPR : la PPB doit être redistribuée dans les 8 ans
             ppb_projection = []
             ppb_courant = ppb_stock
-            seuil_ppb   = pm_total * 0.10
+            pm_courant  = pm_total  # PM projetée dynamiquement
             for an in range(1, ppb_horizon_ans + 1):
-                # PB portée en PPB à chaque exercice
-                pb_portee = max(0, produits_financiers * 0.85 - pm_total * tx_optimal)
-                # La PPB croît des dotations et diminue par reprises obligatoires
+                rend_an = courbe_rend[an - 1]  # rendement de l'année an
+                # Produits financiers de l'année sur la PM courante
+                prod_fi_an = pm_courant * rend_an
+                # PB portée en PPB = max(0, PB minimale L132-29 − PB servie)
+                pb_portee = max(0, prod_fi_an * 0.85 - pm_courant * tx_optimal)
+                seuil_ppb = pm_courant * 0.10  # 10% de la PM courante (C2023-10)
                 ppb_courant = ppb_courant + pb_portee
                 depasse = ppb_courant > seuil_ppb
                 if depasse:
-                    # Reprise obligatoire pour respecter le plafond
                     reprise = ppb_courant - seuil_ppb
                     ppb_courant = seuil_ppb
                 else:
                     reprise = 0.0
                 ppb_projection.append({
-                    'annee':        an,
-                    'ppb_stock':    round(ppb_courant, 0),
-                    'pb_portee':    round(pb_portee, 0),
-                    'reprise':      round(reprise, 0),
-                    'pct_pm':       round(ppb_courant / max(pm_total, 1) * 100, 2),
-                    'plafond_ok':   not depasse,
+                    'annee':           an,
+                    'pm_courant':      round(pm_courant, 0),
+                    'rendement_an':    round(rend_an, 4),
+                    'prod_fi_an':      round(prod_fi_an, 0),
+                    'ppb_stock':       round(ppb_courant, 0),
+                    'pb_portee':       round(pb_portee, 0),
+                    'reprise':         round(reprise, 0),
+                    'pct_pm':          round(ppb_courant / max(pm_courant, 1) * 100, 2),
+                    'plafond_ok':      not depasse,
                 })
+                # PM diminue des sorties (prestations + rachats)
+                pm_courant = max(0, pm_courant * (1 - taux_sorties_annuel))
             nb_annees_hors_plafond = sum(1 for p in ppb_projection if not p['plafond_ok'])
             ppb_pct_max = max(p['pct_pm'] for p in ppb_projection) if ppb_projection else 0
 
@@ -228,9 +248,9 @@ class AgentEP7OptimisationPB:
 
             commentaire = (
                 f"{'✅' if statut_rag=='VERT' else '⚠️'} Optimisation PB — "
-                f"PM {pm_total/1e6:.1f}M€ | Rendement {rendement_actifs*100:.2f}%.\n"
+                f"PM {pm_total/1e6:.1f}M€ | Rendement ref {rendement_actifs_ref*100:.2f}%.\n"
                 f"Taux PB optimal : {tx_optimal*100:.3f}% "
-                f"(vs TMG {taux_technique*100:.2f}% / rend. {rendement_actifs*100:.2f}%).\n"
+                f"(vs TMG {taux_technique*100:.2f}% / rend. ref {rendement_actifs_ref*100:.2f}%).\n"
                 f"PB servie : {eval_opt['pb_servie']/1e3:.0f}k€ | "
                 f"PPB finale : {eval_opt['ppb_finale']/1e3:.0f}k€.\n"
                 f"Ratio SCR post-distribution : {eval_opt['ratio_scr']:.1f}% "
