@@ -90,3 +90,44 @@ class TestEP1EngagementsRetraite:
         # +50bp → DBO baisse ; -50bp → DBO monte
         assert dbo_up < dbo, f"DBO choc+50bp doit être < DBO centrale"
         assert dbo_down > dbo, f"DBO choc-50bp doit être > DBO centrale"
+
+    # T8 — B1 : annuités viagères calculées automatiquement depuis tables officielles
+    def test_t8_annuites_officielles_auto(self, agent):
+        """Sans annuites_viageres fourni, EP1 doit calculer depuis TH0002."""
+        from direction_vie_epre.services.tables_mortalite_officielles import calculer_annuite_viagere
+        r = agent.run(effectif=100, taux_actu=0.035, age_retraite=65,
+                      sexe='H', generer_graphiques=False)
+        assert r['success'] is True
+        # annuites_utilisees doit être calculé automatiquement
+        a_officielle = calculer_annuite_viagere(age=65, taux=0.035, sexe='H')
+        assert abs(r['ias19']['annuites_utilisees'] - a_officielle) < 0.001, (
+            f"Annuité utilisée={r['ias19']['annuites_utilisees']:.4f} "
+            f"≠ officielle={a_officielle:.4f}"
+        )
+
+    # T9 — B1 : PUC individuel avec DataFrame
+    def test_t9_puc_individuel(self, agent):
+        """EP1 doit calculer la DBO salarié par salarié si effectifs_df fourni."""
+        import pandas as pd
+        # 5 salariés avec profils différents
+        df = pd.DataFrame({
+            'age':        [35, 42, 50, 55, 60],
+            'anciennete': [8,  12, 20, 25, 30],
+            'salaire':    [38000, 45000, 55000, 60000, 52000],
+            'sexe':       ['H', 'F', 'H', 'H', 'F'],
+        })
+        r = agent.run(
+            effectifs_df=df,
+            taux_actu=0.035,
+            taux_revalorisation=0.02,
+            taux_prestation=0.015,
+            age_retraite=65,
+            generer_graphiques=False
+        )
+        assert r['success'] is True
+        # effectif doit correspondre au nb de lignes du DataFrame
+        assert r['parametres']['effectif'] == 5
+        # DBO doit être positive
+        assert r['ias19']['dbo_total'] > 0
+        # Âge moyen cohérent
+        assert abs(r['parametres']['age_moyen'] - 48.4) < 0.1
