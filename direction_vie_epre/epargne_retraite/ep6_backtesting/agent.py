@@ -66,6 +66,11 @@ class AgentEP6Backtesting:
         hypotheses_n1: Optional[Dict] = None,
         observations_n: Optional[Dict] = None,
         dbo_debut_n: float = 10_000_000,
+        effectifs: Optional[list] = None,
+        # Optionnel — liste de participants pour sensibilités IAS 19 individuelles.
+        # Chaque élément : {'age': int, 'age_retraite': int, 'poids_dbo': float}
+        # poids_dbo = part de la DBO totale portée par ce participant (0 à 1).
+        # Si absent : sensibilités fixes par bp (comportement originel).
         result_ep1: Optional[Dict] = None,
         generer_graphiques: bool = True,
     ) -> Dict:
@@ -127,14 +132,33 @@ class AgentEP6Backtesting:
                 }
 
             # ── SENSIBILITÉS PAR PARAMÈTRE ────────────────────────────────────
-            # Sensibilité approximative de la DBO à chaque paramètre
-            # (variation de la DBO pour un écart de 1 point de base)
+            # Si effectifs fournis : sensibilité au taux d'actualisation calculée
+            # individuellement via la duration modifiée de chaque participant.
+            # d_i = (age_retraite_i - age_i) / (1 + taux_actu) [IAS 19 §83]
+            # Sensibilité globale = Σ poids_dbo_i × d_i × 10_000 (en bp)
+            taux_actu_courant = hypotheses_n1.get('taux_actu', 0.035)
+            if effectifs and len(effectifs) > 0:
+                sensib_taux_actu = 0.0
+                for p in effectifs:
+                    age_i         = p.get('age', 45)
+                    age_retraite_i= p.get('age_retraite', 65)
+                    poids_i       = p.get('poids_dbo', 1.0 / len(effectifs))
+                    d_i           = (age_retraite_i - age_i) / max(1 + taux_actu_courant, 0.01)
+                    sensib_taux_actu += poids_i * d_i * 10_000  # en bp
+                # Signe négatif : hausse taux → DBO baisse
+                sensib_taux_actu = -sensib_taux_actu
+                source_sensib = 'Durée individuelle IAS 19 (effectifs fournis)'
+                logger.info(f"[{audit_id}] Sensibilité taux (individuelle) = {sensib_taux_actu:.1f} bp/bp")
+            else:
+                sensib_taux_actu = -25.0  # valeur fixe par défaut
+                source_sensib = 'Sensibilité fixe par défaut (fournir effectifs pour la version individuelle)'
+
             sensibilites = {
-                'taux_mortalite':     -5.0,   # qx ↑ 1bp → DBO ↓ 5 bp (impact faible, car mortalité avant retraite)
-                'taux_rotation':      -8.0,   # rotation ↑ 1bp → DBO ↓ 8 bp (droits non acquis partent)
-                'taux_revalorisation': 15.0,  # revalo ↑ 1bp → DBO ↑ 15 bp (salaire final plus élevé)
-                'taux_actu':          -25.0,  # taux actu ↑ 1bp → DBO ↓ 25 bp (actualisation plus forte)
-                'taux_rendement':      0.0,   # rendement actifs n'impacte pas la DBO directement
+                'taux_mortalite':     -5.0,   # qx ↑ 1bp → DBO ↓ 5 bp
+                'taux_rotation':      -8.0,   # rotation ↑ 1bp → DBO ↓ 8 bp
+                'taux_revalorisation': 15.0,  # revalo ↑ 1bp → DBO ↑ 15 bp
+                'taux_actu':          sensib_taux_actu,  # calculée ou fixe
+                'taux_rendement':      0.0,
             }
 
             labels_param = {
@@ -236,6 +260,7 @@ class AgentEP6Backtesting:
                 'gain_actuariel':     round(gain_actuariel, 0),
                 'perte_actuarielle':  round(perte_actuarielle, 0),
                 'ecarts':             ecarts,
+                'source_sensibilites':source_sensib,
                 'sources':            sources,
                 'commentaire':        commentaire,
                 'audit_id':           audit_id,
