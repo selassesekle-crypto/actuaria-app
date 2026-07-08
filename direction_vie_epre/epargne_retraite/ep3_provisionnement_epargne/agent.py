@@ -30,7 +30,7 @@ logging.basicConfig(
 # AGENT EP3 — PROVISIONNEMENT ÉPARGNE
 # ══════════════════════════════════════════════════════════════════════════════
 
-class AgentEP3ProvisionnemntEpargne:
+class AgentEP3ProvissionnementEpargne:
     """
     Agent EP3 — Provisionnement des contrats épargne-retraite.
 
@@ -51,8 +51,8 @@ class AgentEP3ProvisionnemntEpargne:
 
     def __init__(
         self,
-        models_path: str = '/content/drive/MyDrive/ActuarIA/models',
-        audit_path:  str = '/content/drive/MyDrive/ActuarIA/audit',
+        models_path: str = '/tmp/actuaria/models',
+        audit_path:  str = '/tmp/actuaria/audit',
         verbose:     bool = True
     ):
         self.models_path = Path(models_path)
@@ -177,7 +177,7 @@ class AgentEP3ProvisionnemntEpargne:
                 result.get('provisions',{}).get('pm_calculee', 0),
                 result.get('provisions',{}).get('ppb_total', 0),
                 result.get('provisions',{}).get('pm_encours', 0),
-                result.get('provisions',{}).get('taux_ppb_pct', 100) + 100)
+                result.get('provisions',{}).get('taux_ppb_pct', 100.0))
             result['graphiques_validation'] = self._graphiques_validation_prov_epre(result['validation_ep3'])
             return result
 
@@ -404,5 +404,5 @@ class AgentEP3ProvisionnemntEpargne:
 
 if __name__ == '__main__':
     print("Agent EP3 — Provisionnement Épargne ActuarIA v1.0")
-    print("Usage : agent_ep3 = AgentEP3ProvisionnemntEpargne()")
+    print("Usage : agent_ep3 = AgentEP3ProvissionnementEpargne()")
     print("        result_ep3 = agent_ep3.run(encours_total=50_000_000)")
