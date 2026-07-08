@@ -43,7 +43,13 @@ class AgentV4ParticipationBenefices:
             benefice_technique=produits_financiers-charges_techniques
 
             # ── PB réglementaire minimale (Art. L132-29) ─────────────────────
-            # 85% des produits financiers nets + 90% du bénéfice technique
+            # Art. L132-29 §1 : au moins 85% des produits financiers nets
+            #   et 90% des bénéfices techniques doivent être attribués aux assurés.
+            # SIMPLIFICATION DOCUMENTÉE : les produits financiers sont calculés
+            #   sur l'intégralité des PM (pm_total × rendement_actifs).
+            #   En production, il faudrait déduire la rémunération des actifs propres
+            #   (fonds propres hors PM) — non disponible dans ce contexte de pré-calcul.
+            #   Cette approximation est conservative (surévalue légèrement la PB min).
             pb_fin_min=max(0, produits_financiers * 0.85)
             pb_tech_min=max(0, benefice_technique * 0.90)
             pb_reglementaire_min=pb_fin_min + pb_tech_min
