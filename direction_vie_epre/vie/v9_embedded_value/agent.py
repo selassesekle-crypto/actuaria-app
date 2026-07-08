@@ -309,12 +309,12 @@ class AgentV9EmbeddedValue:
         fonds_propres_req_ref = max(va_coc, 0)
         if ane >= fonds_propres_req_ref:
             e1_s = 'VERT'
-            e1_m = f"ANE = {ane/1e6:.2f}M€ ≥ 0 ✅"
-            e1_c = "Bilan solvable — actifs couvrent les provisions économiques"
+            e1_m = f"ANE = {ane/1e6:.2f}M€ ≥ VA CoC ({fonds_propres_req_ref/1e6:.2f}M€) ✅"
+            e1_c = "Bilan solvable — actifs couvrent provisions + coût du capital"
         elif ane >= 0:
             e1_s = 'AMBRE'
-            e1_m = f"ANE = {ane/1e6:.2f}M€ ≥ 0 mais faible ⚠️"
-            e1_c = "Marge de solvabilité limitée — surveiller en cas de stress"
+            e1_m = f"ANE = {ane/1e6:.2f}M€ ≥ 0 mais < VA CoC ({fonds_propres_req_ref/1e6:.2f}M€) ⚠️"
+            e1_c = "Solvable mais CoC non couvert — renforcer les actifs ou réduire le SCR"
         else:
             e1_s = 'ROUGE'
             e1_m = f"ANE = {ane/1e6:.2f}M€ < 0 ❌"
