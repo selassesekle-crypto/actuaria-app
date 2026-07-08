@@ -20,12 +20,6 @@ logging.basicConfig(level=logging.INFO,
     format='%(asctime)s | actuaria.v1 | %(levelname)s | %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S')
 
-print("Agent V1 — Tarification Décès ActuarIA v1.0")
-print(f"Tables officielles : TH0002 · TF0002 — {REFERENCE_REGLEMENTAIRE}")
-print("Usage : agent_v1 = AgentV1TarificationDeces()")
-print("        result_v1 = agent_v1.run(age=40, sexe='H', duree=20)")
-
-
 # ─── TABLES DE MORTALITÉ OFFICIELLES ─────────────────────────────────────────
 # Arrêté du 27 juillet 2006 (JORF n°184 du 10 août 2006)
 # Module centralisé — source unique de vérité pour toute la direction Vie
@@ -33,6 +27,11 @@ from direction_vie_epre.services.tables_mortalite_officielles import (
     QX_TH0002, QX_TF0002, get_qx, construire_lx, TABLES_DISPONIBLES,
     REFERENCE_REGLEMENTAIRE,
 )
+
+print("Agent V1 — Tarification Décès ActuarIA v1.0")
+print(f"Tables officielles : TH0002 · TF0002 — {REFERENCE_REGLEMENTAIRE}")
+print("Usage : agent_v1 = AgentV1TarificationDeces()")
+print("        result_v1 = agent_v1.run(age=40, sexe='H', duree=20)")
 
 
 def _interpoler_qx(tables: dict, age: int) -> float:
