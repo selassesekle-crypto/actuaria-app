@@ -87,3 +87,32 @@ class TestV5QRTVie:
         assert r['ratio_scr_pct'] == 0
         val = r['validation_qrt']
         assert val['c2_scr']['statut'] == 'ROUGE'
+
+    # T8 — A7 : chaîne actuarielle V3 → R-VIE1 → V4 → V5 complète
+    def test_t8_chaine_actuarielle_complete(self, agent):
+        result_v3_mock   = {'success': True, 'pm_prospective': 40_000_000}
+        result_rvie1_mock = {'success': True, 'scr_vie_total': 4_500_000}
+        result_v4_mock   = {'success': True, 'ppb_finale': 800_000}
+
+        r = agent.run(
+            fonds_propres=12_000_000,
+            risk_adjustment=2_000_000,
+            nb_contrats=10_000,
+            result_v3=result_v3_mock,
+            result_rvie1=result_rvie1_mock,
+            result_v4=result_v4_mock,
+            generer_graphiques=False
+        )
+        assert r['success'] is True
+
+        # Vérifier que les inputs ont bien été récupérés depuis la chaîne
+        assert r['qrt_s12']['be_vie'] == 40_000_000, "be_vie non alimenté depuis V3"
+        assert r['qrt_s12']['pm_total'] == 40_000_000, "pm_total non alimenté depuis V3"
+        assert r['qrt_s23']['scr_vie'] == 4_500_000, "scr_vie non alimenté depuis R-VIE1"
+        assert r['qrt_s12']['ppb'] == 800_000, "ppb non alimenté depuis V4"
+
+        # Vérifier la traçabilité des sources
+        assert 'sources' in r
+        assert r['sources'].get('be_vie') == 'V3 Amélie (pm_prospective)'
+        assert r['sources'].get('scr_vie') == 'R-VIE1 Éric (scr_vie_total)'
+        assert r['sources'].get('ppb') == 'V4 Théo (ppb_finale)'
