@@ -31,7 +31,7 @@
 ║       Alerter si écart > 20% (signal retarification)                       ║
 ║                                                                              ║
 ║  RÉFÉRENCES :                                                                ║
-║    BCAC 2019 — Bureau Commun des Assurances Collectives                    ║
+║    BCAC 2019 — Référence par défaut (import tables client disponible)       ║
 ║    TD 88-90  — Tables de maintien INSEE/BCAC 1988-1990                     ║
 ║    TH 00-02  — Tables de mortalité réglementaires INSEE/BCAC               ║
 ║    EIOPA RFR — Art.77 Directive S2 (taux actualisation)                    ║
@@ -87,10 +87,18 @@ LAYOUT_BASE = dict(
 # TABLES ACTUARIELLES SP — DONNÉES BRUTES
 # ══════════════════════════════════════════════════════════════════════════════
 
-# ── BCAC 2019 — Taux ITT annuels par âge et CSP ───────────────────────────────
-# Source : BCAC — Statistiques arrêts de travail 2019
+# ── BCAC 2019 — TAUX ITT PAR ÂGE ET CSP (VALEURS DE RÉFÉRENCE PAR DÉFAUT) ──
+# Source : BCAC (Bureau Commun des Assurances Collectives) — édition 2019.
 # Format : age → (taux_cadre, taux_non_cadre)
-# Note : taux annuels d'entrée en ITT, population active salariée France
+# Taux annuels d'entrée en ITT, population active salariée France.
+#
+# IMPORTANT : BCAC est une association professionnelle (accès réservé aux
+# membres assureurs/IP). Ces valeurs (édition 2019) sont des références de
+# marché. Les éditions 2020-2023 peuvent présenter des écarts post-COVID.
+#
+# RECOMMANDATION CLIENTS : Fournir tables_client via sp_tables_import pour
+# substituer ces valeurs par vos propres tables d'expérience BCAC 2023,
+# données groupe ou tables maison. ActuarIA s'adapte à vos données.
 _BCAC_2019_RAW = {
     20: (0.019, 0.032), 21: (0.020, 0.033), 22: (0.020, 0.034), 23: (0.021, 0.035),
     24: (0.021, 0.036), 25: (0.022, 0.037), 26: (0.022, 0.038), 27: (0.023, 0.039),
@@ -175,6 +183,9 @@ class AgentSPTablesBiometriques:
 
     # Tables disponibles pour le paramètre `table`
     TABLES_DISPONIBLES = ["BCAC2019", "TD8890", "TH0002"]
+    # Note : ces tables sont des références par défaut (BCAC 2019).
+    # Pour utiliser vos tables propriétaires (BCAC 2023, données groupe),
+    # passer tables_client=charger_table(...) dans run().
 
     def __init__(self, audit_path: str = "audit", verbose: bool = True):
         self.audit_path = Path(audit_path)
