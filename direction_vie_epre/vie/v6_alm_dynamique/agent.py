@@ -65,7 +65,7 @@ class AgentV6ALMDynamique:
         self,
         pm_initiale:        float = 50_000_000,
         actif_initiale:     float = 55_000_000,
-        rendement_actifs:   float = 0.04,
+        rendement_actifs:   object = 0.04,  # float OU List[float] (courbe de rendement)
         taux_technique_pm:  float = 0.025,
         duration_actif:     float = 7.0,
         duration_passif:    float = 10.0,
@@ -131,6 +131,22 @@ class AgentV6ALMDynamique:
         if self.verbose:
             logger.info(f"[{audit_id}] Agent V6 démarré | PM={pm_initiale/1e6:.1f}M€ | horizon={horizon}ans")
 
+        # ── Résolution de la courbe de rendements ─────────────────────────
+        # rendement_actifs peut être un scalaire (float) ou une courbe (List[float]).
+        # Si scalaire → on l'étend sur tout l'horizon (comportement originel).
+        # Si liste → on l'utilise année par année (rendements différenciés).
+        if isinstance(rendement_actifs, (int, float)):
+            courbe_rendements = [float(rendement_actifs)] * horizon
+        else:
+            # Compléter ou tronquer la liste à la longueur de l'horizon
+            courbe_rendements = list(rendement_actifs)
+            if len(courbe_rendements) < horizon:
+                # Prolonger avec le dernier rendement connu
+                courbe_rendements += [courbe_rendements[-1]] * (horizon - len(courbe_rendements))
+            else:
+                courbe_rendements = courbe_rendements[:horizon]
+        rendement_actifs_ref = courbe_rendements[0]  # pour les calculs de stress (t=0)
+
         try:
             # ── Alimentation depuis la chaîne actuarielle ─────────────────────
             sources = {}
@@ -166,6 +182,8 @@ class AgentV6ALMDynamique:
             taux_rachats_effectif = max(0.005, min(0.20, taux_rachats_effectif))  # borne [0.5%, 20%]
 
             for t in range(1, horizon + 1):
+                # Rendement de l'actif pour cette année (courbe ou scalaire)
+                rend_t = courbe_rendements[t - 1]
                 # Sorties déterministes (prestations) : indépendantes du taux
                 prestations_t = pm_t * taux_prestations
                 # Sorties comportementales (rachats) : ajustées selon l'attractivité
@@ -176,8 +194,9 @@ class AgentV6ALMDynamique:
                 pm_t_new = pm_t * (1 + taux_technique_pm) - sorties_t
                 pm_t_new = max(pm_t_new, 0)
 
-                # Actif fin de période = Actif × (1 + rendement) - sorties
-                actif_t_new = actif_t * (1 + rendement_actifs) - sorties_t
+                # Actif fin de période = Actif × (1 + rendement_t) - sorties
+                # rend_t = rendement de l'année t (courbe ou scalaire étendu)
+                actif_t_new = actif_t * (1 + rend_t) - sorties_t
                 actif_t_new = max(actif_t_new, 0)
 
                 # Ratio de couverture actifs / PM
@@ -191,6 +210,7 @@ class AgentV6ALMDynamique:
 
                 projection.append({
                     'annee':        t,
+                    'rendement_t':  round(rend_t, 4),
                     'pm':           round(pm_t_new, 0),
                     'actif':        round(actif_t_new, 0),
                     'sorties':      round(sorties_t, 0),
@@ -221,6 +241,7 @@ class AgentV6ALMDynamique:
             delta_taux_baisse = +0.02  # -200bp en valeur absolue
 
             # Impact choc hausse +200bp : actif BAISSE (D × A × Δtaux), PM peu impactée
+            # Stress calculé sur le rendement de référence (t=0)
             impact_actif_hausse = -actif_initiale * duration_actif * delta_taux_hausse
             # PM monte légèrement (actualisation au TMG reste fixe) → approximation nulle
             impact_pm_hausse    = 0
@@ -317,6 +338,7 @@ class AgentV6ALMDynamique:
                 'nb_annees_deficit':    nb_annees_negative,
                 'ratio_couv_final':     round(ratio_couv_final, 4),
                 'sources':              sources,
+                'courbe_rendements':    courbe_rendements,
                 'commentaire':          commentaire,
                 'audit_id':             audit_id,
                 'graphiques':           graphiques,
