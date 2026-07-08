@@ -38,6 +38,7 @@ class AgentV2TarificationEpargneVie:
 
     def run(self,age=45,sexe="H",duree=20,capital=100_000,
             type_contrat="capital_differe",taux_technique=0.025,
+            tmg=None,              # Taux Minimum Garanti — None = pas de TMG (max 0.5% ACPR 2023)
             taux_frais=0.008,chargement_pct=0.15,generer_graphiques=True) -> Dict:
         audit_id=f"V2_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         logger=self.logger
@@ -45,7 +46,25 @@ class AgentV2TarificationEpargneVie:
         try:
             table_qx=QX_TH0002 if sexe.upper()=="H" else QX_TF0002
             table_nm="TH0002" if sexe.upper()=="H" else "TF0002"
-            v=1/(1+taux_technique)
+
+            # ── TMG — Taux Minimum Garanti ────────────────────────────────
+            # Depuis l'arrêté du 28 août 2023 : TMG max 0.50% pour nouvelles
+            # souscriptions (Art. A132-1 Code des assurances)
+            TMG_MAX_ACPR_2023 = 0.005
+            tmg_effectif = tmg if tmg is not None else 0.0
+            if tmg_effectif > TMG_MAX_ACPR_2023:
+                logger.warning(
+                    f"[{audit_id}] ⚠️ TMG = {tmg_effectif*100:.2f}% > seuil ACPR 2023 "
+                    f"({TMG_MAX_ACPR_2023*100:.2f}%) — contrat ancien ou non conforme"
+                )
+            # Le taux d'actualisation garanti = max(taux_technique, tmg_effectif)
+            taux_garanti = max(taux_technique, tmg_effectif)
+            v=1/(1+taux_garanti)
+
+            # ── Indicateur TMG underwater ─────────────────────────────────
+            # Un contrat est 'underwater' si TMG > rendement actifs attendu
+            # (approximé par taux_technique comme proxy du rendement obligataire)
+            tmg_underwater = tmg_effectif > taux_technique if tmg is not None else False
 
             # Probabilités de survie
             qx_s=[_qx(table_qx,age+t) for t in range(duree+20)]
@@ -54,15 +73,43 @@ class AgentV2TarificationEpargneVie:
 
             t_px=lx[:duree+1]
 
-            # ── Capital différé (survie) ───────────────────────────────────────
-            # E_x:n = v^n * n_px
+            # ── Capital différé : E_x:n = v^n × n_px ────────────────────────
             E_xn = (v**duree) * t_px[duree]
-
-            # Annuité certaine de versement (äx:n)
+            # Annuité de versement des primes (äx:n)
             a_xn = sum(t_px[k]*(v**k) for k in range(duree))
 
-            # Prime pure annuelle
-            prime_pure_an = capital * E_xn / max(a_xn, 1e-10)
+            # ── Calculs distincts par type de contrat ─────────────────────
+            if type_contrat == "capital_differe":
+                # Survie pure : cotisation = capital × E_xn / äx:n
+                prime_pure_an = capital * E_xn / max(a_xn, 1e-10)
+
+            elif type_contrat == "rente":
+                # Rente viagère différée : cotisation = rente_annuelle × ä_x|n / äx:n
+                # où ä_x|n = annuité viagère différée de n ans
+                # = E_xn × a_viager (calculé ci-dessous)
+                # Prime provisoire — recalculée après a_viager
+                prime_pure_an = capital * E_xn / max(a_xn, 1e-10)
+
+            elif type_contrat == "mixte":
+                # Contrat mixte : capital décès + capital survie
+                # A_x:n (assurance mixte) = A^1_x:n (décès) + E_x:n (survie)
+                # Calcul A^1_x:n = Σ k_qx × v^(k+1)
+                k_qx_deces = [t_px[k] * _qx(table_qx, age+k) for k in range(duree)]
+                A1_xn = sum(k_qx_deces[k] * (v**(k+1)) for k in range(duree))
+                A_mixte = A1_xn + E_xn  # assurance mixte
+                prime_pure_an = capital * A_mixte / max(a_xn, 1e-10)
+
+            elif type_contrat == "multisupport":
+                # Multisupport UC : pas de garantie décès — cotisation pure capitalisée
+                # Prime = capital_cible / facteur_capitalisation
+                # facteur = Σ (1+taux_technique)^k pour k=0..duree-1
+                facteur_uc = sum((1 + taux_technique)**k for k in range(duree))
+                prime_pure_an = capital / max(facteur_uc, 1)
+
+            else:
+                # Type inconnu → capital différé par défaut
+                prime_pure_an = capital * E_xn / max(a_xn, 1e-10)
+
             prime_pure_mois = prime_pure_an / 12
 
             # ── Rente viagère (si type=rente) ──────────────────────────────────
@@ -127,6 +174,8 @@ class AgentV2TarificationEpargneVie:
                 'table':table_nm,'age':age,'sexe':sexe,'duree':duree,
                 'statut_rag':'VERT' if val_hyp['statut_global']!='ROUGE' else 'AMBRE',
                 'be_vie':be_vie,
+                'tmg':{'valeur':tmg_effectif,'underwater':tmg_underwater,
+                       'max_acpr_2023':TMG_MAX_ACPR_2023,'taux_garanti':round(taux_garanti,4)},
                 'prime_pure':{'annuelle':round(prime_pure_an,2),'mensuelle':round(prime_pure_mois,2),'E_xn':round(E_xn,6),'a_xn':round(a_xn,4)},
                 'prime_commerciale':{'annuelle':round(prime_comm_an,2),'mensuelle':round(prime_comm_mois,2),'cag_pct':round(cag*100,2)},
                 'rente_viagere':{'mensuelle':round(rente_mensuelle,2),'annuelle':round(rente_mensuelle*12,2),'a_viager':round(a_viager,4)},
