@@ -3185,11 +3185,88 @@ def _executer_analyse(besoin, direction, equipe, client):
                 )
                 resultats["principal"] = r10
 
-            # ── IAS 19 — TODO Direction Vie/EP-RE ────────────────────────────
-            # ep1_ias19.py supprimé (racine obsolète) — sera dans direction_vie_epre/
+            # ── VIE PURE V1-V5 ──────────────────────────────────────────────
+            elif besoin in ["tarif_deces","tarif_epargne_vie","pm_vie","pb_vie","qrt_vie"]:
+                if besoin == "tarif_deces":
+                    from direction_vie_epre.vie.v1_tarification_deces.agent import AgentV1TarificationDeces
+                    _r_v = AgentV1TarificationDeces(audit_path=_tmp, verbose=False).run(
+                        age=params.get("age", 40), sexe=params.get("sexe", "H"),
+                        generer_graphiques=False,
+                    )
+                elif besoin == "tarif_epargne_vie":
+                    from direction_vie_epre.vie.v2_tarification_epargne.agent import AgentV2TarificationEpargne
+                    _r_v = AgentV2TarificationEpargne(audit_path=_tmp, verbose=False).run(
+                        age=params.get("age", 40), generer_graphiques=False,
+                    )
+                elif besoin == "pm_vie":
+                    from direction_vie_epre.vie.v3_provisions_mathematiques.agent import AgentV3ProvisionsMathematiques
+                    _r_v = AgentV3ProvisionsMathematiques(audit_path=_tmp, verbose=False).run(
+                        age=params.get("age", 40), generer_graphiques=False,
+                    )
+                elif besoin == "pb_vie":
+                    from direction_vie_epre.vie.v4_participation_benefices.agent import AgentV4ParticipationBenefices
+                    _r_v = AgentV4ParticipationBenefices(audit_path=_tmp, verbose=False).run(
+                        generer_graphiques=False,
+                    )
+                elif besoin == "qrt_vie":
+                    from direction_vie_epre.vie.v5_qrt_rapport.agent import AgentV5QRTVie
+                    _r_v = AgentV5QRTVie(audit_path=_tmp, verbose=False).run(
+                        generer_graphiques=False,
+                    )
+                resultats["principal"] = _r_v
+
+            # ── EP-RE EP1-EP5 ────────────────────────────────────────────────
             elif besoin == "ias19":
-                st.info("⏸ Agent IAS 19 en cours de migration vers Direction Vie/EP-RE — disponible prochainement")
-                resultats["principal"] = {"success": False, "erreur": "Agent IAS 19 en migration", "statut_rag": "AMBRE"}
+                from direction_vie_epre.epargne_retraite.ep1_ias19.agent import AgentEP1EngagementsRetraite
+                _r_ep = AgentEP1EngagementsRetraite(audit_path=_tmp, verbose=False).run(
+                    nb_actifs=params.get("nb_actifs", 100),
+                    salaire_moyen=params.get("salaire_moyen", 45000),
+                    generer_graphiques=False,
+                )
+                resultats["principal"] = _r_ep
+
+            elif besoin == "tarif" and equipe == "epre":
+                from direction_vie_epre.epargne_retraite.ep2_tarification_epargne.agent import AgentEP2TarificationEpargne
+                _r_ep = AgentEP2TarificationEpargne(audit_path=_tmp, verbose=False).run(
+                    age=params.get("age", 45), generer_graphiques=False,
+                )
+                resultats["principal"] = _r_ep
+
+            elif besoin == "prov" and equipe == "epre":
+                from direction_vie_epre.epargne_retraite.ep3_provisionnement_epargne.agent import AgentEP3ProvisionnemntEpargne
+                _r_ep = AgentEP3ProvisionnemntEpargne(audit_path=_tmp, verbose=False).run(
+                    generer_graphiques=False,
+                )
+                resultats["principal"] = _r_ep
+
+            elif besoin == "stress" and equipe == "epre":
+                from direction_vie_epre.epargne_retraite.ep4_stress_epargne.agent import AgentEP4StressEpargne
+                _r_ep = AgentEP4StressEpargne(audit_path=_tmp, verbose=False).run(
+                    generer_graphiques=False,
+                )
+                resultats["principal"] = _r_ep
+
+            elif besoin == "report" and equipe == "epre":
+                from direction_vie_epre.epargne_retraite.ep5_reporting.agent import AgentEP5ReportingEpargne
+                _r_ep = AgentEP5ReportingEpargne(audit_path=_tmp, verbose=False).run(
+                    generer_graphiques=False,
+                )
+                resultats["principal"] = _r_ep
+
+            # ── REGLEMENTATION VIE R-VIE1/R-VIE2 ───────────────────────────
+            elif besoin == "rvie1":
+                from direction_vie_epre.reglementation.r_vie1_ifrs17.agent import AgentRVie1QRTs26
+                _r_v = AgentRVie1QRTs26(audit_path=_tmp, verbose=False).run(
+                    generer_graphiques=False,
+                )
+                resultats["principal"] = _r_v
+
+            elif besoin == "rvie2":
+                from direction_vie_epre.reglementation.r_vie2_alm.agent import AgentRVie2RSRSFCR
+                _r_v = AgentRVie2RSRSFCR(audit_path=_tmp, verbose=False).run(
+                    generer_graphiques=False,
+                )
+                resultats["principal"] = _r_v
 
             # ── SANTÉ ────────────────────────────────────────────────────────
             elif besoin in ["tarif_sante","prov_sante","report_sante"]:
