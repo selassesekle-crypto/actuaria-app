@@ -249,9 +249,17 @@ class AgentV9EmbeddedValue:
             else:
                 facteur_actu_vnb = float(duree_moyenne) / 2
 
-            vnb = vnb_brut * facteur_actu_vnb / max(a_moy_vnb, 1)
+            # VNB = marge nette × annuité d'actualisation (MCEV §18)
+            # La marge nette (vnb_brut) est exprimée en € par période de prime.
+            # On l'actualise sur la durée résiduelle moyenne (a_moy_vnb).
+            # facteur_actu_vnb représente la VA d'une rente unitaire sur
+            # duree_moyenne/2 ans (horizon moyen des nouvelles souscriptions).
+            # Formule : VNB = vnb_brut × (a_moy_vnb / a_horizon_demi)
+            # soit   : VNB = (charg. - acq. - gestion_VA) × ä_x:n
+            # ä_x:n ici = a_moy_vnb (annuité sur durée complète)
+            vnb = vnb_brut * a_moy_vnb
             # Borne de cohérence : VNB ∈ [0, 20% des primes nouvelles]
-            # Un VNB > 20% est économiquement improbable (benchmark marché : 5-15%)
+            # Benchmark marché vie : 5-15% selon les produits
             vnb = min(max(vnb, 0), prime_commerciale_tot * 0.20)
 
             # ── DÉCOMPOSITION ΔEV (si ev_n1 fourni) ──────────────────────────
