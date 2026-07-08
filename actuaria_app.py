@@ -2165,6 +2165,7 @@ def page_analyse():
             "reglementation_nv": "🛡️ Équipe Réglementation",
         },
         "vie_epre": {
+            "vie_pure":          "💀 Équipe Vie Pure",
             "epre":              "💰 Équipe EP-RE",
             "reglementation_vie":"📋 Équipe Réglementation Vie",
         },
@@ -2222,6 +2223,13 @@ def page_analyse():
             "ifrs17":("📋 IFRS 17 PAA",                   "Thomas A11"),
             "alm":   ("⚖️ ALM & Liquidité",               "Aisha A12"),
         },
+        "vie_pure": {
+            "tarif_deces": ("💀 Tarification Décès & Vie",    "Nour V1 · TH0002/TF0002"),
+            "tarif_epargne_vie": ("💹 Tarification Épargne Vie",  "Kofi V2 · Capital différé"),
+            "pm_vie":      ("📐 Provisions Mathématiques",  "Amélie V3 · PM prospective"),
+            "pb_vie":      ("💸 Participation aux Bénéfices", "Théo V4 · PPB · L132-29"),
+            "qrt_vie":     ("📋 Rapport & QRT Vie",          "Nia V5 · QRT Vie"),
+        },
         "epre": {
             "ias19":  ("🏢 Engagements retraite IAS 19",  "Henri EP1"),
             "tarif":  ("💰 Tarification EP-RE",           "Salomé EP2"),
@@ -2231,6 +2239,8 @@ def page_analyse():
         },
         "reglementation_vie": {
             "mortalite": ("📉 Tables de mortalité & biométrie", "Yuki A14"),
+            "rvie1":     ("📋 IFRS 17 BBA/VFA Vie",              "Éric R-VIE1 · CSM"),
+            "rvie2":     ("⚖️ ALM Long Terme Vie",             "Camille R-VIE2 · Duration 15-25 ans"),
         },
         "sante": {
             "tarif_sante": ("💊 Tarification frais de santé",    "Léonie S1 · CCAM/NGAP"),
