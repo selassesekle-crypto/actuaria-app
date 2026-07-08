@@ -192,17 +192,19 @@ class AgentV6ALMDynamique:
             # Si positif : hausse taux → gain actif > perte passif → favorable
 
             # ── SCÉNARIOS STRESS TAUX EIOPA ───────────────────────────────────
-            choc_plus_200bp  = -0.02  # hausse taux → baisse valeur actifs
-            choc_moins_200bp = +0.02  # baisse taux → hausse valeur actifs + hausse PM
+            # Chocs EIOPA : Δtaux (en valeur absolue, toujours positif)
+            delta_taux_hausse = +0.02  # +200bp (hausse taux)
+            delta_taux_baisse = +0.02  # -200bp en valeur absolue
 
-            # Impact choc hausse : actif baisse, PM peu impactée à CT
-            impact_actif_hausse = actif_initiale * duration_actif * (-choc_plus_200bp)
+            # Impact choc hausse +200bp : actif BAISSE (D × A × Δtaux), PM peu impactée
+            impact_actif_hausse = -actif_initiale * duration_actif * delta_taux_hausse
             # PM monte légèrement (actualisation au TMG reste fixe) → approximation nulle
             impact_pm_hausse    = 0
             surplus_stress_hausse = (actif_initiale + impact_actif_hausse) - pm_initiale
 
             # Impact choc baisse : actif monte, PM monte aussi (actualisation taux bas)
-            impact_actif_baisse = actif_initiale * duration_actif * choc_moins_200bp
+            # Impact choc baisse -200bp : actif MONTE, PM MONTE aussi
+            impact_actif_baisse = +actif_initiale * duration_actif * delta_taux_baisse
             impact_pm_baisse    = pm_initiale * duration_passif * choc_moins_200bp
             surplus_stress_baisse = (
                 (actif_initiale + impact_actif_baisse) -
