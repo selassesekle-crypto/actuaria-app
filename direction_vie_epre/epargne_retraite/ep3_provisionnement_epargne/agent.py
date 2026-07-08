@@ -281,8 +281,8 @@ class AgentEP3ProvissionnementEpargne:
             pm_val    = encours_total
             # Utiliser l'actif réel passé en paramètre si disponible
             actifs_val = actifs_total if actifs_total is not None else encours_total * 1.05
-            ppb_v     = ppb_total if 'ppb_total' in dir() else encours_total * 0.02
-            rc_v      = reserve_capi_new if 'reserve_capi_new' in dir() else encours_total * 0.01
+            ppb_v     = ppb   # paramètre reçu = ppb_total depuis run()
+            rc_v      = rc    # paramètre reçu = reserve_capi_new depuis run()
             prov_tot  = pm_val + ppb_v + rc_v
 
             categories = ['PM', 'PPB', 'Reserve Cap.', 'Total prov.', 'Actifs']
