@@ -21,24 +21,14 @@ print("Contrats : Capital Différé · Rente Viagère · Mixte · Multisupport")
 print("Usage : agent_v2 = AgentV2TarificationEpargneVie()")
 print("        result_v2 = agent_v2.run(age=45, duree=20, capital=100000)")
 
-QX_TH0002 = {20:0.000680,25:0.000730,30:0.000860,35:0.001180,40:0.001800,
-             45:0.002980,50:0.005040,55:0.008640,60:0.014500,65:0.023800,
-             70:0.038500,75:0.062100,80:0.099800,85:0.159000,90:0.240000,
-             95:0.340000,100:1.0}
-QX_TF0002 = {20:0.000310,25:0.000330,30:0.000410,35:0.000610,40:0.000990,
-             45:0.001640,50:0.002750,55:0.004600,60:0.007800,65:0.013100,
-             70:0.022200,75:0.037800,80:0.064800,85:0.108000,90:0.171000,
-             95:0.258000,100:1.0}
+# Tables de mortalité officielles — Arrêté du 27 juillet 2006
+from direction_vie_epre.services.tables_mortalite_officielles import (
+    QX_TH0002, QX_TF0002, REFERENCE_REGLEMENTAIRE,
+)
 
-def _qx(tables,age):
-    ages=sorted(tables.keys())
-    if age>=ages[-1]: return 1.0
-    if age<=ages[0]: return tables[ages[0]]
-    for i in range(len(ages)-1):
-        if ages[i]<=age<ages[i+1]:
-            t=(age-ages[i])/(ages[i+1]-ages[i])
-            return tables[ages[i]]*(1-t)+tables[ages[i+1]]*t
-    return 1.0
+def _qx(tables, age):
+    """Retourne le qx officiel exact pour l'âge donné (0-110)."""
+    return tables.get(max(0, min(age, 110)), 1.0)
 
 class AgentV2TarificationEpargneVie:
     def __init__(self,models_path="models",audit_path="audit",verbose=True):
