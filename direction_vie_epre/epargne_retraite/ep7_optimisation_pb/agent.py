@@ -121,9 +121,6 @@ class AgentEP7OptimisationPB:
         """
         audit_id = f"EP7_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         logger = self.logger
-        if self.verbose:
-            logger.info(f"[{audit_id}] Agent EP7 démarré | PM={pm_total/1e6:.1f}M€")
-
         # ── Courbe de rendements (scalaire ou liste) ──────────────────────
         if isinstance(rendement_actifs, (int, float)):
             courbe_rend = [float(rendement_actifs)] * ppb_horizon_ans
@@ -159,6 +156,16 @@ class AgentEP7OptimisationPB:
                 dbo = result_ep1.get('ias19', {}).get('dbo_total', 0)
                 if dbo > 0:
                     sources['dbo_ep1'] = f"EP1 Henri : DBO = {dbo/1e6:.1f}M€"
+
+            # ── Log de démarrage après résolution de toutes les sources ──────
+            # Placé ICI — après result_ep3/ep4/ep1 — pour que la PM logée
+            # soit la valeur EFFECTIVE utilisée dans les calculs.
+            if self.verbose:
+                logger.info(
+                    f"[{audit_id}] Agent EP7 démarré | "
+                    f"PM effective = {pm_total/1e6:.1f}M€ | "
+                    f"Rendement ref = {rendement_actifs_ref*100:.2f}%"
+                )
 
             # ── PARAMÈTRES FINANCIERS ──────────────────────────────────────────
             produits_financiers = pm_total * rendement_actifs_ref
