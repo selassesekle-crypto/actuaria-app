@@ -294,7 +294,10 @@ class AgentEP1EngagementsRetraite:
             h1_conseil= "Taux trop bas — la DBO sera sous-estimée. Utiliser courbe OAT AA"
 
         # H2 — Sensibilité DBO à -100bp
-        impact_100bp = dbo * (taux_actu * 10)  # approximation : duration × ΔT
+        # Duration modifiée pour engagements retraite longs
+        # D_mod = 1 / taux_actu (approximation annuité, plafonnée à 25 ans)
+        _d_mod = min(1.0 / max(taux_actu, 0.01), 25.0)
+        impact_100bp = dbo * _d_mod * 0.01  # Impact -100bp = D_mod × 1% × DBO
         sensibilite_pct = abs(impact_100bp / max(dbo, 1)) * 100
 
         if sensibilite_pct <= 20:
