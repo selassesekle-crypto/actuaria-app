@@ -92,14 +92,22 @@ LAYOUT_BASE = dict(
 # =============================================================================
 
 # CTIP 2023 — Statistiques prévoyance collective
-# Source : CTIP, "La prévoyance collective en 2023"
-LR_CTIP_ITT_MARCHE = 0.68   # Loss Ratio ITT médiane marché
-LR_CTIP_ITT_MIN    = 0.55   # Seuil bas (portefeuilles jeunes)
-LR_CTIP_ITT_MAX    = 0.85   # Seuil haut (portefeuilles matures)
+# Source : CTIP, "La prévoyance collective en 2023" (rapport public, téléchargeable sur ctip.fr)
+# Le CTIP publie ses statistiques annuellement. Ces valeurs sont à jour (édition 2023).
+# LR ITT médiane marché = 68% — valeur de référence nationale tous secteurs.
+LR_CTIP_ITT_MARCHE = 0.68   # Loss Ratio ITT médiane marché (CTIP 2023 — public)
+LR_CTIP_ITT_MIN    = 0.55   # Seuil bas — portefeuilles jeunes / secteurs peu sinistres
+LR_CTIP_ITT_MAX    = 0.85   # Seuil haut — portefeuilles matures / secteurs sinistrogènes
 
-# Facteurs de développement de référence ITT (semestres)
+# Facteurs de développement de référence ITT (semestres) — VALEURS PAR DÉFAUT
 # Source : CTIP/BCAC 2019, pratique marché prévoyance collective
 # S0→S1 : 1.55, S1→S2 : 1.28, S2→S3 : 1.12, S3→S4 : 1.04, S4→S5 : 1.015
+#
+# NOTE : Ces cadences sont calibrées sur CTIP/BCAC 2019 (références publiques
+# disponibles). Les cadences réelles de votre portefeuille peuvent différer
+# selon le secteur, la tranche d'âge et la politique de gestion des arrêts.
+# Sur données réelles (triangle_itt fourni), Chain Ladder calcule les cadences
+# effectives du portefeuille — ces valeurs ne servent qu'en mode synthétique.
 FACTEURS_REFERENCE_ITT = [1.55, 1.28, 1.12, 1.04, 1.015]
 
 # SCR NSLT sous-catégorie 2 — Protection du revenu / ITT
@@ -784,7 +792,7 @@ class AgentP3ProvissionnementPrevoyance:
         infos: list,
     ) -> Dict:
         """
-        H3 — A priori BF vs LR CTIP 2023.
+        H3 — A priori BF vs LR CTIP 2023 (rapport public ctip.fr).
 
         Sources (par ordre de priorité) :
         1. LR manuel
