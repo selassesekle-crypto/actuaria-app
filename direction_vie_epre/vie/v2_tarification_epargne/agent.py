@@ -180,6 +180,7 @@ class AgentV2TarificationEpargneVie:
                 'prime_commerciale':{'annuelle':round(prime_comm_an,2),'mensuelle':round(prime_comm_mois,2),'cag_pct':round(cag*100,2)},
                 'rente_viagere':{'mensuelle':round(rente_mensuelle,2),'annuelle':round(rente_mensuelle*12,2),'a_viager':round(a_viager,4)},
                 'valeurs_rachat':rachats,
+                'sources':{'parametres': 'saisie manuelle'},
                 'commentaire':commentaire,'audit_id':audit_id,
                 'graphiques':graphiques,'validation_epv':val_hyp,'graphiques_validation':gv,'erreur':None,
             }
