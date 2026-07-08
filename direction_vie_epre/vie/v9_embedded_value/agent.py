@@ -80,6 +80,8 @@ class AgentV9EmbeddedValue:
         duree_moyenne:      int   =         15,
         primes_nouvelles:   float =  5_000_000,
         taux_chargement:    float =       0.15,
+        frais_acquisition_pct: float =    0.05,   # Frais d'acquisition sur primes nouvelles (ex: 5%)
+        frais_gestion_pct:  float =       0.008,  # Frais de gestion annuels sur encours (ex: 0.8%)
         ev_n1:              float =          0,
         result_v1:          Optional[Dict] = None,
         result_v2:          Optional[Dict] = None,
@@ -124,6 +126,13 @@ class AgentV9EmbeddedValue:
 
         taux_chargement : float
             Taux de chargement commercial (prime commerciale / prime pure − 1).
+
+        frais_acquisition_pct : float
+            Frais d'acquisition en % des primes nouvelles (commission réseau, ex: 5%).
+
+        frais_gestion_pct : float
+            Frais de gestion annuels sur encours (ex: 0.8% conforme marché vie).
+            Inclut les frais administratifs et informatiques alloués.
 
         ev_n1 : float
             Embedded Value de l'exercice précédent (pour calcul ΔEV).
@@ -197,20 +206,53 @@ class AgentV9EmbeddedValue:
             # ── EV — EMBEDDED VALUE ────────────────────────────────────────────
             ev = ane + vif
 
-            # ── VNB — VALUE OF NEW BUSINESS ───────────────────────────────────
-            # VNB ≈ Primes nouvelles × taux_marge_vnb
-            # où taux_marge_vnb ≈ taux_chargement × (1 − taux_rf^n)
-            # Approximation CEA : VNB ≈ primes_nettes × marge_sur_services × ä_moyenne
-            vnb_brut = primes_nouvelles * taux_chargement
-            # Actualisation sur durée résiduelle moyenne
+            # ── VNB — VALUE OF NEW BUSINESS (méthode MCEV §18) ───────────────
+            # VNB = VA des profits nets générés par les nouvelles souscriptions
+            #
+            # Décomposition de la marge nette sur prime commerciale :
+            #   Chargement brut          = primes × taux_chargement
+            #   Frais d'acquisition      = primes × frais_acquisition_pct
+            #   Frais de gestion (VA)    = pm_nouvelles × frais_gestion_pct × ä_moy
+            #   Marge nette              = Chargement - Acq. - Gestion
+            #
+            # Référence : CEA EV Principles §4.3 / AXA MCEV disclosure methodology
+
+            # Annuité actuarielle moyenne pour les nouvelles affaires
+            # (horizon moyen = duree_moyenne / 2 car souscriptions étalées)
             if taux_reference > 0:
-                facteur_vnb = (1 - (1 + taux_reference)**(-duree_moyenne / 2)) / taux_reference
+                a_moy_vnb = (1 - (1 + taux_reference)**(-duree_moyenne)) / taux_reference
             else:
-                facteur_vnb = duree_moyenne / 2
-            vnb = vnb_brut * facteur_vnb * marge_sur_services / max(taux_chargement, 0.01)
-            # Limiter à une plage raisonnable
-            vnb = min(vnb, primes_nouvelles * 0.30)  # max 30% des primes nouvelles
-            vnb = max(vnb, 0)
+                a_moy_vnb = float(duree_moyenne)
+
+            # PM moyenne des nouvelles affaires ≈ prime_pure × ä_moy
+            # Prime pure ≈ prime_commerciale / (1 + taux_chargement)
+            prime_commerciale_tot = primes_nouvelles
+            prime_pure_tot = prime_commerciale_tot / max(1 + taux_chargement, 1.01)
+            pm_nouvelles   = prime_pure_tot * a_moy_vnb  # PM générée par nouvelles affaires
+
+            # Chargement brut sur nouvelles affaires
+            chargement_brut = prime_commerciale_tot * taux_chargement / (1 + taux_chargement)
+
+            # Frais d'acquisition (coût de distribution)
+            frais_acq = prime_commerciale_tot * frais_acquisition_pct
+
+            # VA des frais de gestion futurs sur la PM des nouvelles affaires
+            frais_gest_va = pm_nouvelles * frais_gestion_pct
+
+            # VNB brut = chargement - frais acquisition - VA frais gestion
+            vnb_brut = chargement_brut - frais_acq - frais_gest_va
+
+            # Actualisation : les profits sont réalisés sur la durée du contrat
+            # → discountés au taux de référence
+            if taux_reference > 0:
+                facteur_actu_vnb = (1 - (1 + taux_reference)**(-duree_moyenne / 2)) / taux_reference
+            else:
+                facteur_actu_vnb = float(duree_moyenne) / 2
+
+            vnb = vnb_brut * facteur_actu_vnb / max(a_moy_vnb, 1)
+            # Borne de cohérence : VNB ∈ [0, 20% des primes nouvelles]
+            # Un VNB > 20% est économiquement improbable (benchmark marché : 5-15%)
+            vnb = min(max(vnb, 0), prime_commerciale_tot * 0.20)
 
             # ── DÉCOMPOSITION ΔEV (si ev_n1 fourni) ──────────────────────────
             delta_ev = ev - ev_n1 if ev_n1 > 0 else None
