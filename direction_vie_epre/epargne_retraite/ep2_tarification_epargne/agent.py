@@ -26,6 +26,11 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
+# Tables de mortalité officielles — Arrêté du 27 juillet 2006
+from direction_vie_epre.services.tables_mortalite_officielles import (
+    calculer_annuite_viagere, REFERENCE_REGLEMENTAIRE,
+)
+
 # ══════════════════════════════════════════════════════════════════════════════
 # AGENT EP2 — TARIFICATION ÉPARGNE-RETRAITE
 # ══════════════════════════════════════════════════════════════════════════════
@@ -78,7 +83,8 @@ class AgentEP2TarificationEpargne:
         taux_participation: float = 0.90,
         frais_gestion_pct:  float = 0.008,
         frais_acquisition_pct: float = 0.04,
-        annuites_65:        float = 14.0,
+        annuites_65:        float = None,   # None = calcul automatique depuis TH0002/TF0002 (arrêté 27/07/2006)
+        sexe:               str   = 'H',    # 'H' ou 'F' pour les tables TH0002/TF0002
         sous_branche:       str  = 'per',
         generer_graphiques: bool = True,
     ) -> Dict[str, Any]:
@@ -137,7 +143,18 @@ class AgentEP2TarificationEpargne:
                 pm_progressif[f'PM_an_{k}'] = round(float(pm), 0)
 
             # ── RENTE VIAGÈRE À LA SORTIE ─────────────────────────────────────
-            # Rente annuelle = Capital / ä_65
+            # ä_x calculé depuis les tables officielles TH0002/TF0002
+            # (arrêté du 27 juillet 2006) — ou valeur passée par l'utilisateur
+            if annuites_65 is None:
+                annuites_65 = calculer_annuite_viagere(
+                    age=age_retraite,
+                    taux=max(taux_technique, taux_marche * 0.5),
+                    sexe=sexe,
+                )
+                self.logger.info(
+                    f"[{audit_id}] Annuité viagère calculée depuis tables officielles "
+                    f"({REFERENCE_REGLEMENTAIRE[:40]}...) : ä_{age_retraite} = {annuites_65:.4f}"
+                )
             rente_annuelle  = capital_cible / max(annuites_65, 1)
             rente_mensuelle = rente_annuelle / 12
 
@@ -179,6 +196,7 @@ class AgentEP2TarificationEpargne:
                     'rente_mensuelle':           round(rente_mensuelle, 0),
                     'taux_remplacement_pct':     round(taux_rempl, 1),
                     'pb_estimee':                round(pb, 0),
+                    'annuites_utilisees':         round(annuites_65, 4),
                     'pm_progressif':             pm_progressif,
                 },
                 'commentaire': self._commenter(
