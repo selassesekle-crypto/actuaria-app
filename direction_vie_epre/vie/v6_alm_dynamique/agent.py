@@ -69,9 +69,10 @@ class AgentV6ALMDynamique:
         taux_technique_pm:  float = 0.025,
         duration_actif:     float = 7.0,
         duration_passif:    float = 10.0,
-        taux_sorties_annuel:float = 0.05,
+        taux_prestations:   float = 0.02,   # Sorties déterministes (décès, échéances, rentes)
+        taux_rachats:       float = 0.03,   # Rachats comportementaux (base, hors effet taux)
+        taux_sans_risque:   float = 0.03,   # Taux du marché pour ajustement comportemental rachats
         horizon:            int   = 10,
-        taux_sans_risque:   float = 0.03,
         result_v3:          Optional[Dict] = None,
         result_v4:          Optional[Dict] = None,
         result_rvie1:       Optional[Dict] = None,
@@ -103,9 +104,18 @@ class AgentV6ALMDynamique:
             Duration modifiée du passif vie (années).
             Typique contrats vie longue durée : 8-15 ans.
 
-        taux_sorties_annuel : float
-            Taux annuel de sorties du passif (rachats + prestations).
-            Typique : 3-8% des PM.
+        taux_prestations : float
+            Taux de sorties déterministes (décès, échéances, rentes viagères).
+            Indépendant du contexte de taux. Typique vie : 1-3% des PM/an.
+
+        taux_rachats : float
+            Taux de rachats comportementaux en année normale (base).
+            Ajusté dynamiquement si le taux servi < taux du marché.
+            Typique vie : 2-6% des PM/an selon la génération de contrats.
+
+        taux_sans_risque : float
+            Taux du marché de référence pour l'ajustement comportemental
+            des rachats (OAT 10 ans ou taux sans risque EIOPA).
 
         result_v3 : dict, optional
             Alimente pm_initiale depuis V3 Amélie.
@@ -145,9 +155,22 @@ class AgentV6ALMDynamique:
             pm_t    = pm_initiale
             actif_t = actif_initiale
 
+            # Sensibilité des rachats au taux servi vs marché
+            # Si taux_servi > marché : rachats réduits (fidélisation)
+            # Si taux_servi < marché : rachats amplifiés (concurrence)
+            # Coefficient de sensibilité : ±50% de variation pour ±200bp
+            SENSIBILITE_RACHATS = 25.0  # % de variation par 100bp d'écart
+            ecart_taux = taux_technique_pm - taux_sans_risque
+            ajust_comportemental = max(-0.50, min(0.50, ecart_taux * SENSIBILITE_RACHATS))
+            taux_rachats_effectif = taux_rachats * (1 - ajust_comportemental)
+            taux_rachats_effectif = max(0.005, min(0.20, taux_rachats_effectif))  # borne [0.5%, 20%]
+
             for t in range(1, horizon + 1):
-                # Sorties du passif (prestations + rachats)
-                sorties_t = pm_t * taux_sorties_annuel
+                # Sorties déterministes (prestations) : indépendantes du taux
+                prestations_t = pm_t * taux_prestations
+                # Sorties comportementales (rachats) : ajustées selon l'attractivité
+                rachats_t = pm_t * taux_rachats_effectif
+                sorties_t = prestations_t + rachats_t
 
                 # PM fin de période = PM début × (1 + taux_technique) - sorties
                 pm_t_new = pm_t * (1 + taux_technique_pm) - sorties_t
@@ -171,6 +194,8 @@ class AgentV6ALMDynamique:
                     'pm':           round(pm_t_new, 0),
                     'actif':        round(actif_t_new, 0),
                     'sorties':      round(sorties_t, 0),
+                    'prestations':  round(prestations_t, 0),
+                    'rachats':      round(rachats_t, 0),
                     'ratio_couv':   round(ratio_couv, 4),
                     'surplus':      round(surplus, 0),
                     'ratio_scr':    round(ratio_scr_t, 1),
@@ -281,6 +306,9 @@ class AgentV6ALMDynamique:
                 'ratio_couv_initial':   round(ratio_couv_initial, 4),
                 'surplus_initial':      round(surplus_initial, 0),
                 'duration_actif':       duration_actif,
+                'taux_rachats_effectif':round(taux_rachats_effectif, 4),
+                'taux_prestations':     taux_prestations,
+                'ajust_comportemental': round(ajust_comportemental, 4),
                 'duration_passif':      duration_passif,
                 'duration_gap':         round(duration_gap, 2),
                 'sensibilite_100bp':    round(sensibilite_surplus_100bp, 0),
