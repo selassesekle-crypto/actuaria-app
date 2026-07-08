@@ -70,8 +70,8 @@ class AgentEP1EngagementsRetraite:
 
     def __init__(
         self,
-        models_path: str = '/content/drive/MyDrive/ActuarIA/models',
-        audit_path:  str = '/content/drive/MyDrive/ActuarIA/audit',
+        models_path: str = '/tmp/actuaria/models',
+        audit_path:  str = '/tmp/actuaria/audit',
         verbose:     bool = True
     ):
         self.models_path = Path(models_path)
@@ -170,10 +170,11 @@ class AgentEP1EngagementsRetraite:
 
             # ── ACTUARIAL GAINS/LOSSES ────────────────────────────────────────
             # Gains/pertes actuariels si le taux change de ±50bp
-            dbo_choc_up   = dbo_total * (1 - 0.5 * (
-                ancienneté := duree_res / (1 + taux_actu) * 0.005
-            ))
-            dbo_choc_down = dbo_total * (1 + ancienneté)
+            # Duration modifiée approx : D_mod = duree_res / (1 + taux_actu)
+            # Impact ±50bp : ΔDBO = ±D_mod × 0.005 × DBO
+            duration_modifiee = duree_res / (1 + taux_actu)
+            dbo_choc_up   = dbo_total * (1 - duration_modifiee * 0.005)   # +50bp → DBO baisse
+            dbo_choc_down = dbo_total * (1 + duration_modifiee * 0.005)   # -50bp → DBO monte
 
             # ── CORRIDOR IAS 19 (méthode simplifiée) ─────────────────────────
             corridor_10pct = dbo_total * 0.10
