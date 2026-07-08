@@ -83,6 +83,12 @@ class AgentV9EmbeddedValue:
         frais_acquisition_pct: float =    0.05,   # Frais d'acquisition sur primes nouvelles (ex: 5%)
         frais_gestion_pct:  float =       0.008,  # Frais de gestion annuels sur encours (ex: 0.8%)
         ev_n1:              float =          0,
+        portefeuille:       Optional[list] = None,
+        # Optionnel — liste d'assurés pour VIF individuel (Catégorie B).
+        # Chaque élément : {'age': int, 'pm': float, 'duree': int,
+        #                   'marge': float, 'sexe': str}
+        # Si fourni : VIF = Σ VIF_i (calcul par assuré).
+        # Si absent : VIF scalaire sur pm_s2 × marge_sur_services (comportement originel).
         result_v1:          Optional[Dict] = None,
         result_v2:          Optional[Dict] = None,
         result_v3:          Optional[Dict] = None,
@@ -202,6 +208,53 @@ class AgentV9EmbeddedValue:
                 va_profits = profits_annuels * duree_moyenne
 
             vif = max(0, va_profits - va_coc)
+
+            # ── VIF INDIVIDUEL (si portefeuille fourni) ───────────────────────
+            # Catégorie B : calcul par assuré pour une précision MCEV
+            # VIF_i = pm_i × marge_i × ä_i (annuité sur durée résiduelle de l'assuré i)
+            # VA CoC_i = scr_i × (taux_coc - taux_ref) × ä_i
+            # avec scr_i ≈ pm_i × ratio_scr_pm (allocation proportionnelle)
+            if portefeuille and len(portefeuille) > 0:
+                ratio_scr_pm = scr_vie / max(pm_s2, 1)  # allocation SCR par € de PM
+                vif_individuel = 0.0
+                detail_portefeuille = []
+                for ass in portefeuille:
+                    age_i   = ass.get('age', 40)
+                    pm_i    = ass.get('pm', 0.0)
+                    duree_i = ass.get('duree', 15)
+                    marge_i = ass.get('marge', marge_sur_services)
+                    # Annuité viagère simplifiée sur duree_i au taux de référence
+                    if taux_reference > 0:
+                        a_i = (1 - (1 + taux_reference)**(-duree_i)) / taux_reference
+                    else:
+                        a_i = float(duree_i)
+                    # VIF brut de l'assuré i
+                    va_profits_i = pm_i * marge_i * a_i
+                    # CoC alloué à l'assuré i (proportionnel à sa PM)
+                    scr_i   = pm_i * ratio_scr_pm
+                    coc_ann_i = scr_i * (taux_coc - taux_reference)
+                    va_coc_i  = coc_ann_i * a_i if taux_reference > 0 else coc_ann_i * duree_i
+                    vif_i = max(0.0, va_profits_i - va_coc_i)
+                    vif_individuel += vif_i
+                    detail_portefeuille.append({
+                        'age': age_i, 'pm': round(pm_i, 0),
+                        'duree': duree_i, 'marge': round(marge_i, 4),
+                        'a_i': round(a_i, 4),
+                        'va_profits_i': round(va_profits_i, 0),
+                        'va_coc_i': round(va_coc_i, 0),
+                        'vif_i': round(vif_i, 0),
+                    })
+                # Remplacer le VIF scalaire par le VIF individuel
+                vif = vif_individuel
+                va_profits = sum(d['va_profits_i'] for d in detail_portefeuille)
+                va_coc     = sum(d['va_coc_i']     for d in detail_portefeuille)
+                sources['vif'] = f'VIF individuel ({len(portefeuille)} assurés)'
+                logger.info(
+                    f"[{audit_id}] VIF individuel = {vif/1e6:.2f}M€ "
+                    f"({len(portefeuille)} assurés)"
+                )
+            else:
+                detail_portefeuille = []  # calcul scalaire originel
 
             # ── EV — EMBEDDED VALUE ────────────────────────────────────────────
             ev = ane + vif
@@ -324,6 +377,7 @@ class AgentV9EmbeddedValue:
                     'levier_coc_pct':       round(levier_coc, 2),
                 },
                 'sources':            sources,
+                'detail_portefeuille':detail_portefeuille,
                 'commentaire':        commentaire,
                 'audit_id':           audit_id,
                 'graphiques':         graphiques,
