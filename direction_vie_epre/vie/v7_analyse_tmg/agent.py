@@ -188,10 +188,18 @@ class AgentV7AnalyseTMG:
                         break
                 # Choc absolu = taux_rf × facteur, planché à 1% (Art. 166 §3)
                 choc_absolu = max(taux_sans_risque * facteur_choc, 0.01)
-                # Duration modifiée selon Macaulay (approximation)
+                # Duration modifiée selon Macaulay
                 duration_mod = duree / max(1 + taux_sans_risque, 0.01)
-                # SCR taux = PM × D_mod × choc_absolu
-                scr_taux = pm * duration_mod * choc_absolu
+                # Convexité ≈ D_mod² / (1 + taux_rf) (approximation standard)
+                # Importante pour les longues durations (> 10 ans)
+                convexite = duration_mod ** 2 / max(1 + taux_sans_risque, 0.01)
+                # SCR taux = PM × (D_mod × Δr + ½ × convexité × Δr²)
+                # Terme de convexité : correction de second ordre (Art. 166)
+                # Toujours positif → le SCR réel est supérieur à l'approx. premier ordre
+                scr_taux = pm * (
+                    duration_mod * choc_absolu
+                    + 0.5 * convexite * choc_absolu ** 2
+                )
 
                 # Statut RAG de la tranche
                 if not underwater:
@@ -216,6 +224,9 @@ class AgentV7AnalyseTMG:
                     'ppb_allouee':        round(ppb_allouee, 0),
                     'annees_rupture':     round(annees_rupture, 1) if annees_rupture != float('inf') else None,
                     'scr_taux':           round(scr_taux, 0),
+                    'scr_taux_ordre1':    round(pm * duration_mod * choc_absolu, 0),
+                    'convexite':          round(convexite, 4),
+                    'gain_convexite':     round(pm * 0.5 * convexite * choc_absolu**2, 0),
                     'coussin_projection': coussin_projection,
                     'rag':                rag,
                 })
