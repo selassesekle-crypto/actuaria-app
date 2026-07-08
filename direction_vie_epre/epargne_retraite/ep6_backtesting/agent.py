@@ -153,9 +153,41 @@ class AgentEP6Backtesting:
                 sensib_taux_actu = -25.0  # valeur fixe par défaut
                 source_sensib = 'Sensibilité fixe par défaut (fournir effectifs pour la version individuelle)'
 
+            # ── Sensibilités mortalité et rotation ───────────────────────
+            # Si effectifs fournis : calculées individuellement via durée résiduelle
+            # Sensib. mortalité : Δ DBO / Δ qx ≈ -DBO × durée_résiduelle (IAS 19.145)
+            # Un décès avant retraite = droits perdus → DBO baisse
+            # Sensib. rotation : même logique (départ = droits non acquis pour Art. 39)
+            if effectifs and len(effectifs) > 0:
+                # Durée résiduelle pondérée = Σ poids_i × (age_retraite_i - age_i)
+                duree_res_ponderee = sum(
+                    p.get('poids_dbo', 1.0 / len(effectifs))
+                    * max(p.get('age_retraite', 65) - p.get('age', 45), 0)
+                    for p in effectifs
+                )
+                # Sensibilité mortalité = -durée_résiduelle_pondérée (en bp/bp)
+                # (chaque bp de qx supplémentaire = durée_res bp de DBO en moins)
+                sensib_mortalite = -duree_res_ponderee
+                # Sensibilité rotation = même approximation
+                # (un départ = même perte de droits futurs qu'un décès)
+                sensib_rotation  = -duree_res_ponderee * 0.6
+                # Facteur 0.6 : la rotation impacte moins que le décès car
+                # les droits acquis passés restent dus (vesting partiel Art. 39)
+                logger.info(
+                    f"[{audit_id}] Sensibilités individuelles — "
+                    f"mortalité={sensib_mortalite:.1f}bp/bp | "
+                    f"rotation={sensib_rotation:.1f}bp/bp | "
+                    f"durée résiduelle pondérée={duree_res_ponderee:.1f} ans"
+                )
+                source_sensib_mr = 'Durée résiduelle individuelle pondérée (effectifs fournis)'
+            else:
+                sensib_mortalite = -5.0   # valeur fixe : durée résiduelle ~5 ans implicite
+                sensib_rotation  = -8.0   # valeur fixe par défaut
+                source_sensib_mr = 'Sensibilités fixes par défaut (fournir effectifs pour calcul individuel)'
+
             sensibilites = {
-                'taux_mortalite':     -5.0,   # qx ↑ 1bp → DBO ↓ 5 bp
-                'taux_rotation':      -8.0,   # rotation ↑ 1bp → DBO ↓ 8 bp
+                'taux_mortalite':     sensib_mortalite,  # calculée ou fixe
+                'taux_rotation':      sensib_rotation,   # calculée ou fixe
                 'taux_revalorisation': 15.0,  # revalo ↑ 1bp → DBO ↑ 15 bp
                 'taux_actu':          sensib_taux_actu,  # calculée ou fixe
                 'taux_rendement':      0.0,
@@ -261,6 +293,7 @@ class AgentEP6Backtesting:
                 'perte_actuarielle':  round(perte_actuarielle, 0),
                 'ecarts':             ecarts,
                 'source_sensibilites':source_sensib,
+                'source_sensibilites_mr':source_sensib_mr,
                 'sources':            sources,
                 'commentaire':        commentaire,
                 'audit_id':           audit_id,
