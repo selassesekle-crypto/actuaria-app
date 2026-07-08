@@ -66,6 +66,7 @@ class AgentEP7OptimisationPB:
         fonds_propres:     float =  8_000_000,
         scr_vie:           float =  5_000_000,
         ppb_stock:         float =  1_500_000,
+        ppb_horizon_ans:   int   =          8,   # Horizon C2023-10 (8 ans)
         tmg_max:           float =      0.005,
         scr_cible_pct:     float =      150.0,
         spread_min:        float =      0.005,
@@ -99,6 +100,10 @@ class AgentEP7OptimisationPB:
 
         ppb_stock : float
             Stock de PPB disponible (€). Alimenté par EP3 si disponible.
+
+        ppb_horizon_ans : int
+            Horizon de suivi PPB selon C2023-10 ACPR (8 ans par défaut).
+            La PPB cumulée doit rester ≤ 10% × PM sur tout l'horizon.
 
         tmg_max : float
             TMG maximum contractuel à respecter (= taux_technique si régime récent).
@@ -188,6 +193,36 @@ class AgentEP7OptimisationPB:
                     'ratio_scr': round(ev['ratio_scr'], 1),
                 }
 
+            # ── PROJECTION PPB PLURIANNUELLE C2023-10 ────────────────────────
+            # Vérifier que le stock PPB ne dépasse pas 10% PM sur 8 ans
+            # C2023-10 ACPR : la PPB est une réserve temporaire — elle doit
+            # être redistribuée dans un délai raisonnable (max 8 ans)
+            ppb_projection = []
+            ppb_courant = ppb_stock
+            seuil_ppb   = pm_total * 0.10
+            for an in range(1, ppb_horizon_ans + 1):
+                # PB portée en PPB à chaque exercice
+                pb_portee = max(0, produits_financiers * 0.85 - pm_total * tx_optimal)
+                # La PPB croît des dotations et diminue par reprises obligatoires
+                ppb_courant = ppb_courant + pb_portee
+                depasse = ppb_courant > seuil_ppb
+                if depasse:
+                    # Reprise obligatoire pour respecter le plafond
+                    reprise = ppb_courant - seuil_ppb
+                    ppb_courant = seuil_ppb
+                else:
+                    reprise = 0.0
+                ppb_projection.append({
+                    'annee':        an,
+                    'ppb_stock':    round(ppb_courant, 0),
+                    'pb_portee':    round(pb_portee, 0),
+                    'reprise':      round(reprise, 0),
+                    'pct_pm':       round(ppb_courant / max(pm_total, 1) * 100, 2),
+                    'plafond_ok':   not depasse,
+                })
+            nb_annees_hors_plafond = sum(1 for p in ppb_projection if not p['plafond_ok'])
+            ppb_pct_max = max(p['pct_pm'] for p in ppb_projection) if ppb_projection else 0
+
             # ── RECOMMANDATION ────────────────────────────────────────────────
             statut_rag = 'VERT' if eval_opt['toutes_ok'] else 'AMBRE'
 
@@ -236,6 +271,9 @@ class AgentEP7OptimisationPB:
                 'produits_financiers': round(produits_financiers, 0),
                 'pb_legale_min':       round(pb_legale_min, 0),
                 'scr_cible_pct':       scr_cible_pct,
+                'ppb_projection':      ppb_projection,
+                'nb_annees_hors_plafond': nb_annees_hors_plafond,
+                'ppb_pct_max_horizon': round(ppb_pct_max, 2),
                 'sources':             sources,
                 'commentaire':         commentaire,
                 'audit_id':            audit_id,
