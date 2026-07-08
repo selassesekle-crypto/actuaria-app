@@ -171,13 +171,27 @@ class AgentV7AnalyseTMG:
                     coussin_courant = max(0, coussin_courant - cout_annuel)
                     coussin_projection.append(round(coussin_courant, 0))
 
-                # SCR taux garanti (stress EIOPA : baisse taux -200bp)
-                # Impact sur la PM quand les taux baissent :
-                # ΔSCR = PM × duration × choc_taux
-                # duration ≈ duree / (1 + taux_sans_risque)
+                # SCR taux garanti — chocs EIOPA différenciés par maturité
+                # Référence : Art. 166 Actes délégués S2 (UE) 2015/35
+                # Facteurs de choc à la BAISSE par bucket de maturité :
+                # (la baisse des taux aggrave le coût des TMG garantis)
+                CHOCS_BAISSE_EIOPA = [
+                    (1,  0.75), (2,  0.65), (3,  0.56),
+                    (5,  0.50), (7,  0.46), (10, 0.42),
+                    (15, 0.38), (20, 0.35), (30, 0.30),
+                ]
+                # Interpoler le facteur de choc pour la duration de la tranche
+                facteur_choc = 0.42  # défaut bucket 10 ans
+                for (mat, fac) in CHOCS_BAISSE_EIOPA:
+                    if duree <= mat:
+                        facteur_choc = fac
+                        break
+                # Choc absolu = taux_rf × facteur, planché à 1% (Art. 166 §3)
+                choc_absolu = max(taux_sans_risque * facteur_choc, 0.01)
+                # Duration modifiée selon Macaulay (approximation)
                 duration_mod = duree / max(1 + taux_sans_risque, 0.01)
-                choc_taux_eiopa = 0.02  # -200bp (choc standard EIOPA)
-                scr_taux = pm * duration_mod * choc_taux_eiopa
+                # SCR taux = PM × D_mod × choc_absolu
+                scr_taux = pm * duration_mod * choc_absolu
 
                 # Statut RAG de la tranche
                 if not underwater:
