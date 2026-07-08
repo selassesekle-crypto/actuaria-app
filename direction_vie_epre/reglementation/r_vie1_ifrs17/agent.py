@@ -157,6 +157,7 @@ class AgentRVIE1QRTVie:
                 'rachat_detail':rachat_detail,
                 'matrice_pos_def':is_pos_def,
                 'eigenvalues_min':round(float(np.min(eigenvalues)),4),
+                'sources':{'be_vie': 'saisie manuelle', 'pm_total': 'saisie manuelle', 'fonds_propres': 'saisie manuelle'},
                 'commentaire':commentaire, 'audit_id':audit_id,
                 'graphiques':graphiques,
                 'validation_rvie1':val_hyp,
