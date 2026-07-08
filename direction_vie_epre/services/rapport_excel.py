@@ -34,9 +34,8 @@ from typing import Dict, List, Optional, Any
 try:
     from openpyxl import Workbook
     from openpyxl.styles import (
-        Font, PatternFill, Alignment, Border, Side, numbers
+        Font, PatternFill, Alignment, Border, Side
     )
-    from openpyxl.styles.numbers import FORMAT_NUMBER_COMMA_SEP1
     from openpyxl.utils import get_column_letter
     from openpyxl.worksheet.worksheet import Worksheet
     OPENPYXL_OK = True
