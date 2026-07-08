@@ -174,6 +174,7 @@ class AgentEP2TarificationEpargne:
             result = {
                 'success':          True,
                 'audit_id':         audit_id,
+                'sources':          {'parametres': 'saisie manuelle'},
                 'type_contrat':     type_contrat,
                 'statut_rag':       statut_rag,
                 'parametres': {
