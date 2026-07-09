@@ -93,6 +93,13 @@ try:
 except ImportError:
     SHAP_OK = False
 
+try:
+    import optuna
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+    OPTUNA_OK = True
+except ImportError:
+    OPTUNA_OK = False
+
 # ── LOGGER ────────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
@@ -256,6 +263,7 @@ class AgentA4ML:
         col_exposition: str = 'exposition',
         calcul_shap:        bool = True,
         generer_graphiques: bool = True,
+        optuna_trials:      int  = 0,   # 0 = désactivé ; >0 = nb essais Optuna XGBoost
     ) -> Dict[str, Any]:
         """
         Pipeline ML complet.
