@@ -137,9 +137,8 @@ def _generer_tf0002() -> np.ndarray:
         0.80866860, 0.84193384, 0.87280907, 0.90098285, 0.92625030,  # 110-114
         1.00000000,  # 115-115
     ], dtype=float)
-# Tables de mortalite — importees depuis le service centralise
-# Source : direction_vie_epre/services/tables_mortalite_officielles.py
-from direction_vie_epre.services.tables_mortalite_officielles import (
+# Tables de mortalite — importees depuis core/ (transversal toutes directions)
+from core.tables_mortalite import (
     QX_TH0002 as _QX_TH0002_DICT,
     QX_TF0002 as _QX_TF0002_DICT,
     insee_qx_prospectif,
