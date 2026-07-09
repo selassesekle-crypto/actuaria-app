@@ -559,7 +559,8 @@ class AgentA5DeepLearning:
         device:  torch.device,
         n_epochs: int,
         batch_size: int,
-        lr: float
+        lr: float,
+        result_a3: Optional[Dict] = None,  # pour init GLM Wüthrich 2019
     ) -> Dict:
         """
         Calibre le CANN (Combined Actuarial Neural Network).
