@@ -1289,20 +1289,23 @@ class AgentA3GLM:
             return 0.0
 
         try:
-            # Tri par prédiction croissante
-            order   = np.argsort(y_pred)
-            y_true  = np.asarray(y_true)[order]
-            y_pred  = np.asarray(y_pred)[order]
+            # Tri par prédiction DÉCROISSANTE (convention actuarielle Lorenz)
+            # Les assurés les plus risqués (forte prédiction) arrivent en premier.
+            # → la courbe de Lorenz est au-dessus de la diagonale si le modèle
+            #   discrimine bien → AUC > 0.5 → Gini = 2×AUC - 1 > 0.
+            # Réf. : Frees & Valdez (1998), Mildenhall (1999).
+            order   = np.argsort(-np.asarray(y_pred, dtype=float))
+            y_ord   = np.asarray(y_true, dtype=float)[order]
 
-            n       = len(y_true)
-            total   = float(np.sum(y_true))
-            cum_obs = np.cumsum(y_true) / total
+            n       = len(y_ord)
+            total   = float(np.sum(y_ord))
+            cum_obs = np.cumsum(y_ord) / total
             cum_pop = np.arange(1, n + 1) / n
 
             # Aire sous la courbe de Lorenz (compatible NumPy 1.x et 2.x)
             _trapz  = getattr(np, 'trapezoid', None) or getattr(np, 'trapz', None)
-            auc     = _trapz(cum_obs, cum_pop)
-            gini    = 2.0 * float(auc) - 1.0
+            auc     = float(_trapz(cum_obs, cum_pop))
+            gini    = 2.0 * auc - 1.0
 
             return float(np.clip(gini, 0.0, 1.0))
 
