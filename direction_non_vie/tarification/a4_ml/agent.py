@@ -52,6 +52,8 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 
 import numpy as np
+# Compatibilité NumPy ≥ 2.0 : trapz → trapezoid
+_np_trapz = getattr(np, 'trapezoid', None) or getattr(np, 'trapz', None)
 import pandas as pd
 try:
     import plotly.graph_objects as go
@@ -927,7 +929,7 @@ class AgentA4ML:
             n       = len(y_true)
             cum_obs = np.cumsum(y_true) / np.sum(y_true)
             cum_pop = np.arange(1, n + 1) / n
-            auc     = np.trapezoid(cum_obs, cum_pop) if hasattr(np, "trapezoid") else np.trapz(cum_obs, cum_pop)
+            auc     = np.trapezoid(cum_obs, cum_pop) if hasattr(np, "trapezoid") else _np_trapz(cum_obs, cum_pop)
             return float(np.clip(2 * auc - 1, 0, 1))
         except Exception:
             return 0.0
