@@ -88,17 +88,28 @@ class TestA3GLM(unittest.TestCase):
         # ST5 — Relativités tarifaires exp(β) présentes et cohérentes
         rels = r.get('relativites_poisson', {})
         self.assertIsInstance(rels, dict)
-        self.assertGreater(len(rels), 0, "Aucune relativité calculée")
-        # Vérifier la structure d'au moins une relativité
-        first_rel = next(iter(rels.values()))
+        self.assertGreater(len(rels), 0,
+            "Aucune relativité — bonus_malus doit être retenu par le stepwise")
+        # Accès sécurisé : guard explicite avant iteration
+        rels_list = list(rels.items())
+        first_var, first_rel = rels_list[0]
         for key in ['beta', 'relativite', 'ic95_low', 'ic95_high', 'pvalue']:
             self.assertIn(key, first_rel, f"Clé '{key}' manquante dans relativités")
-        # Toutes les relativités exp(β) sont positives
+        # exp(β) strictement positif par construction mathématique
         for var, d in rels.items():
-            self.assertGreater(d['relativite'], 0,
-                f"Relativité négative pour '{var}' : {d['relativite']}")
-        print(f"    ST5 Relativités ✅ | {len(rels)} var(s) | "
-              f"ex: {list(rels.keys())[0]}={list(rels.values())[0]['relativite']:.3f}")
+            self.assertGreater(d['relativite'], 0.0,
+                f"Relativité nulle/négative pour '{var}' : {d['relativite']}")
+        # IC 95% cohérent : bas ≤ relativité ≤ haut
+        for var, d in rels.items():
+            self.assertLessEqual(d['ic95_low'], d['relativite'] + 1e-9,
+                f"IC bas > relativité pour '{var}'")
+            self.assertGreaterEqual(d['ic95_high'], d['relativite'] - 1e-9,
+                f"IC haut < relativité pour '{var}'")
+        print(
+            f"    ST5 Relativités ✅ | {len(rels)} var(s) | "
+            f"ex: {first_var}={first_rel['relativite']:.3f} "
+            f"[{first_rel['ic95_low']:.3f}, {first_rel['ic95_high']:.3f}]"
+        )
 
         # ST6 — Standard ActuarIA : clés obligatoires
         for key in ['excel_bytes', 'hypotheses', 'audit_trail']:
