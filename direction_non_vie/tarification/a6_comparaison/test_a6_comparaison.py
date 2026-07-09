@@ -149,13 +149,30 @@ class TestA6Comparaison(unittest.TestCase):
               f"C2={val['c2_ecart_gini']['statut']} "
               f"C3={val['c3_coherence']['statut']}")
 
-        # ST7 — Standard ActuarIA
-        for key in ['excel_bytes', 'hypotheses', 'audit_trail']:
+        # ST7 — Standard ActuarIA : toutes les clés de rapport vérifiées
+        for key in ['excel_bytes', 'word_bytes', 'html_bytes', 'hypotheses', 'audit_trail']:
             self.assertIn(key, r, f"Clé '{key}' manquante")
         self.assertIsInstance(r['excel_bytes'], bytes)
+        self.assertIsInstance(r['word_bytes'],  bytes)
+        self.assertIsInstance(r['html_bytes'],  bytes)
         self.assertIsInstance(r['audit_trail'], dict)
-        print(f"    ST7 Standard ActuarIA ✅ | excel={len(r['excel_bytes'])} bytes | "
-              f"audit={len(r['audit_trail'])} clés")
+        try:
+            from docx import Document  # noqa
+            DOCX_OK = True
+        except ImportError:
+            DOCX_OK = False
+        if DOCX_OK:
+            self.assertGreater(len(r['word_bytes']), 0,
+                "word_bytes vide — rapport Word non généré malgré python-docx")
+        self.assertGreater(len(r['html_bytes']), 500,
+            "html_bytes trop court — rapport HTML non généré")
+        print(
+            f"    ST7 Standard ActuarIA ✅ | "
+            f"excel={len(r['excel_bytes'])} b | "
+            f"word={len(r['word_bytes'])} b | "
+            f"html={len(r['html_bytes'])} b | "
+            f"audit={len(r['audit_trail'])} clés"
+        )
 
 
 if __name__ == '__main__':
