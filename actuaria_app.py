@@ -1468,18 +1468,90 @@ def page_dashboard():
                 ), use_container_width=True, key="dash_nv_orsa")
 
     with tab_vie:
-        st.markdown(f"<div style='font-size:0.82rem;color:{GRIS};margin-bottom:14px;'>Engagements de retraite, tarification et provisionnement Épargne-Retraite. Vie Pure en développement.</div>", unsafe_allow_html=True)
+        # ── Lire résultats réels si disponibles ─────────────────────────
+        _ar = st.session_state.get("agent_results") or {}
+        _r_ep1 = _ar.get("henri", {})
+        _r_ep2 = _ar.get("salome", {})
+        _r_ep3 = _ar.get("jinho", {})
+        _r_ep4 = _ar.get("claire", {})
+        _r_v5  = _ar.get("nia", {})
+        _ep1_ok = bool(_r_ep1.get("success"))
+        _ep3_ok = bool(_r_ep3.get("success"))
+        _ep4_ok = bool(_r_ep4.get("success"))
+        _v5_ok  = bool(_r_v5.get("success"))
+
+        _dbo   = (_r_ep1.get("ias19") or {}).get("dbo_total", 10_588_168)
+        _rente = (_r_ep2.get("tarification") or {}).get("rente_mensuelle", 595)
+        _pm_ep = (_r_ep3.get("provisions") or {}).get("pm_encours", 50_000_000)
+        _tc    = _r_ep3.get("taux_couverture_pct",
+                   (_r_ep3.get("provisions") or {}).get("taux_couverture_pct", 110.0))
+        _ratio_scr = _r_v5.get("ratio_scr_pct", 184.9)
+        _tp_be     = _r_v5.get("ratio_tp_be", 1.06)
+
+        if _ep1_ok or _ep3_ok or _v5_ok:
+            st.success("✅ Résultats Vie/EP-RE chargés — données réelles")
+        else:
+            st.info("💡 Lancez une analyse Vie Pure ou EP-RE pour afficher vos données réelles.")
+
         c1,c2,c3,c4 = st.columns(4)
-        with c1: st.metric("DBO IAS 19","10.6M€","méthode PUC")
-        with c2: st.metric("Rente viagère","595 €/mois","PER 30 ans")
-        with c3: st.metric("PM EP-RE","50M€","encours total")
-        with c4: st.metric("Ratio couverture","110%","avant chocs")
+        with c1:
+            dbo_str = f"{_dbo/1e6:.1f}M€" if _dbo >= 1e6 else f"{_dbo:,.0f}€"
+            st.metric("DBO IAS 19", dbo_str, "✅ Données réelles" if _ep1_ok else "méthode PUC [démo]")
+        with c2:
+            st.metric("Rente viagère", f"{_rente:,.0f} €/mois", "✅ Données réelles" if _ep1_ok else "PER [démo]")
+        with c3:
+            pm_str = f"{_pm_ep/1e6:.1f}M€" if _pm_ep >= 1e6 else f"{_pm_ep:,.0f}€"
+            st.metric("PM EP-RE", pm_str, "✅ Données réelles" if _ep3_ok else "encours total [démo]")
+        with c4:
+            tc_delta = "✅ Conforme ≥ 100%" if _tc >= 100 else "⚠️ Sous-couverture"
+            st.metric("Ratio couverture", f"{_tc:.1f}%", tc_delta if _ep3_ok else "avant chocs [démo]")
+
         col_a,col_b = st.columns(2)
         with col_a:
-            st.plotly_chart(fig_bar(["DBO","Service Cost×10","Interest Cost×10"],[10_588_168,2_850_000,3_705_850],"IAS 19 — DBO et charges (€)",[OR,BLEU,AMBRE]), use_container_width=True)
+            if _ep1_ok:
+                _ias = _r_ep1.get("ias19", {})
+                st.plotly_chart(fig_bar(
+                    ["DBO","Service Cost×10","Interest Cost×10"],
+                    [_dbo, _ias.get("service_cost",0)*10, _ias.get("interest_cost",0)*10],
+                    "IAS 19 — DBO et charges (€) [réel]", [OR,BLEU,AMBRE]
+                ), use_container_width=True, key="dash_vie_ias19")
+            else:
+                st.plotly_chart(fig_bar(
+                    ["DBO","Service Cost×10","Interest Cost×10"],
+                    [10_588_168,2_850_000,3_705_850],
+                    "IAS 19 — DBO et charges (€) [démo]", [OR,BLEU,AMBRE]
+                ), use_container_width=True, key="dash_vie_ias19_demo")
         with col_b:
-            st.plotly_chart(fig_bar(["Base","Longévité+20%","Taux bas","Rachats 40%","Fin.-20%"],[110,98.2,92.5,88.0,95.0],"Stress EP-RE — Ratio couverture (%)",[VERT,ROUGE,ROUGE,ROUGE,AMBRE]), use_container_width=True)
-        st.info("⏸️ Équipe Vie Pure en développement — Nour, Kofi, Amélie, Théo, Nia disponibles prochainement.")
+            if _ep4_ok and _r_ep4.get("scenarios"):
+                _sc = _r_ep4["scenarios"]
+                st.plotly_chart(fig_bar(
+                    [s.get("nom","?")[:18] for s in _sc],
+                    [s.get("ratio_stresse",100) for s in _sc],
+                    f"Stress EP-RE — Ratio couverture (%) [réel]",
+                    [VERT if s.get("ratio_stresse",100)>=100 else AMBRE if s.get("ratio_stresse",100)>=90 else ROUGE for s in _sc]
+                ), use_container_width=True, key="dash_vie_stress")
+            else:
+                st.plotly_chart(fig_bar(
+                    ["Base","Longévité+20%","Taux bas","Rachats 40%","Fin.-20%"],
+                    [110,98.2,92.5,88.0,95.0],
+                    "Stress EP-RE — Ratio couverture (%) [démo]",
+                    [VERT,ROUGE,ROUGE,ROUGE,AMBRE]
+                ), use_container_width=True, key="dash_vie_stress_demo")
+
+        if _v5_ok:
+            st.markdown(f"<div style='font-size:0.72rem;color:{OR};font-weight:700;margin:14px 0 8px;'>◆ Vie Pure — QRT S.12 & S.23</div>", unsafe_allow_html=True)
+            cv1,cv2,cv3 = st.columns(3)
+            with cv1: st.metric("Ratio TP/BE", f"{_tp_be:.4f}", "✅ [1.0–1.5]" if 1.0<=_tp_be<=1.5 else "⚠️ Hors seuil")
+            with cv2: st.metric("Ratio SCR", f"{_ratio_scr:.1f}%", "✅ ≥ 150%" if _ratio_scr>=150 else "⚠️ Surveiller")
+            with cv3:
+                _wb = _r_v5.get("word_bytes")
+                if _wb:
+                    st.download_button("⬇️ Rapport Word", _wb,
+                        file_name="rapport_vie.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        key="dl_v5_word_dash")
+        else:
+            st.info("⏸️ Lancez l'analyse Vie Pure (Nia V5) pour afficher les indicateurs S2 et télécharger le rapport.")
 
     with tab_sp:
         st.markdown(f"""
@@ -3779,6 +3851,8 @@ def _executer_analyse(besoin, direction, equipe, client):
                 "stress": "isabelle", "coherence": "marcus", "s2": "elena",
                 "ifrs17": "thomas", "alm": "aisha", "ias19": "henri",
                 "tarif": "salome", "prov": "jinho", "report": "omar",
+                "tarif_deces": "nour", "tarif_epargne_vie": "kofi",
+                "pm_vie": "amelie", "pb_vie": "theo", "qrt_vie": "nia",
                 "mortalite": "yuki", "tarif_sante": "leonie", "prov_sante": "selma",
                 "report_sante": "binta", "tarif_prev": "axel", "tables": "rayan",
                 "prov_prev": "elodie", "report_prev": "valentin",
