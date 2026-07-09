@@ -658,7 +658,7 @@ def page_accueil():
             paper_bgcolor=NAVY, showlegend=False,
             margin=dict(l=40,r=40,t=20,b=20), height=260,
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
@@ -983,7 +983,7 @@ def _vue_ensemble(ak):
                 "Gini par famille de modèles [démo]",[ROUGE,VERT,OR,GRIS]
             ), use_container_width=True, key="ve_gini")
     with col_b:
-        st.plotly_chart(fig_jauge(_scr_ve, f"Ratio SCR ({'réel' if _ar_ve.get('elena') else 'démo'}) (%)"), use_container_width=True, key="ve_scr")
+        st.plotly_chart(fig_jauge(_scr_ve, f"Ratio SCR ({'réel' if _ar_ve.get('elena') else 'démo'}) (%)"), width='stretch', key="ve_scr")
 
 def _dashboard_agent(ak):
     a    = AGENTS[ak]
@@ -1077,12 +1077,12 @@ def _dashboard_agent(ak):
         with c3: st.metric("σ Mack 1993","±45 000 €","IC 95%")
         col_a,col_b = st.columns(2)
         with col_a:
-            st.plotly_chart(fig_bar(["Chain Ladder","Mack 1993","BF","Cape Cod","Best Est."],[2_850_000,2_914_930,2_930_000,2_880_000,2_914_930],"Convergence 4 méthodes (€)",[OR,OR,OR,OR,VERT]), use_container_width=True)
+            st.plotly_chart(fig_bar(["Chain Ladder","Mack 1993","BF","Cape Cod","Best Est."],[2_850_000,2_914_930,2_930_000,2_880_000,2_914_930],"Convergence 4 méthodes (€)",[OR,OR,OR,OR,VERT]), width='stretch')
         with col_b:
             z=[[1000,1450,1680,1750],[1100,1580,1820,None],[1050,1500,None,None],[980,None,None,None]]
             fig=go.Figure(go.Heatmap(z=z,colorscale=[[0,"#1B3A5C"],[0.5,OR],[1,ROUGE]],showscale=False,hoverongaps=False))
             fig.update_layout(paper_bgcolor=NAVY,plot_bgcolor=NAVY_L,font=dict(color=BLANC,size=10),title=dict(text="Triangle de développement",font=dict(color=BLANC,size=12),x=0.01),margin=dict(l=16,r=16,t=44,b=16),height=260)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width='stretch')
     elif code == "A4":
         c1,c2,c3 = st.columns(3)
         with c1: st.metric("Gini XGBoost","0.2651","meilleur")
@@ -1090,7 +1090,7 @@ def _dashboard_agent(ak):
         with c3: st.metric("Overfit ratio","0.98","✅ Stable")
         col_a,col_b = st.columns(2)
         with col_a:
-            st.plotly_chart(fig_bar(["XGBoost","GBM","CatBoost","LightGBM","ElasticNet"],[0.2651,0.2542,0.2534,0.2481,0.2440],"Gini par modèle ML",[ROUGE,OR,OR,OR,VERT]), use_container_width=True)
+            st.plotly_chart(fig_bar(["XGBoost","GBM","CatBoost","LightGBM","ElasticNet"],[0.2651,0.2542,0.2534,0.2481,0.2440],"Gini par modèle ML",[ROUGE,OR,OR,OR,VERT]), width='stretch')
         with col_b:
             df=pd.DataFrame({"Modèle":["XGBoost","GBM","CatBoost","LightGBM","ElasticNet"],"Gini":[0.2651,0.2542,0.2534,0.2481,0.2440],"Overfit":[1.53,1.41,1.28,1.60,0.98],"Sélectionné":["","","","","⭐"]})
             st.dataframe(df, use_container_width=True, hide_index=True)
@@ -1101,15 +1101,15 @@ def _dashboard_agent(ak):
         with c3: st.metric("Ratio MCR","320.0%","✅ > 100%")
         col_a,col_b = st.columns(2)
         with col_a:
-            st.plotly_chart(fig_jauge(208.5,"Ratio SCR (%)"), use_container_width=True)
+            st.plotly_chart(fig_jauge(208.5,"Ratio SCR (%)"), width='stretch')
         with col_b:
-            st.plotly_chart(fig_bar(["SCR Souscr.","SCR Marché","SCR Opéra.","SCR Total"],[2_800_000,650_000,230_000,3_680_671],"Décomposition SCR (€)"), use_container_width=True)
+            st.plotly_chart(fig_bar(["SCR Souscr.","SCR Marché","SCR Opéra.","SCR Total"],[2_800_000,650_000,230_000,3_680_671],"Décomposition SCR (€)"), width='stretch')
     elif code == "A11":
         c1,c2,c3 = st.columns(3)
         with c1: st.metric("TP IFRS 17","3 992 344 €","PAA")
         with c2: st.metric("LRC","2 500 000 €","risque restant")
         with c3: st.metric("Ratio IFRS17/S2","1.370","✅ Cohérent")
-        st.plotly_chart(fig_bar(["Best Est. S2","Risk Adj.","LRC","TP IFRS17"],[2_914_930,350_000,727_414,3_992_344],"Composition TP IFRS 17 (€)",[BLEU,AMBRE,VERT,OR]), use_container_width=True)
+        st.plotly_chart(fig_bar(["Best Est. S2","Risk Adj.","LRC","TP IFRS17"],[2_914_930,350_000,727_414,3_992_344],"Composition TP IFRS 17 (€)",[BLEU,AMBRE,VERT,OR]), width='stretch')
     elif code == "A12":
         c1,c2,c3 = st.columns(3)
         with c1: st.metric("Duration actifs","3.50 ans","obligations")
@@ -1117,29 +1117,29 @@ def _dashboard_agent(ak):
         with c3: st.metric("LCR","1 173%","✅ Liquide")
         col_a,col_b = st.columns(2)
         with col_a:
-            st.plotly_chart(fig_bar(["Actifs","Passifs"],[3.5,1.6],"Duration (années)",[BLEU,AMBRE]), use_container_width=True)
+            st.plotly_chart(fig_bar(["Actifs","Passifs"],[3.5,1.6],"Duration (années)",[BLEU,AMBRE]), width='stretch')
         with col_b:
-            st.plotly_chart(fig_jauge(1173,"LCR (%)",r1=75,r2=100,max_v=1500), use_container_width=True)
+            st.plotly_chart(fig_jauge(1173,"LCR (%)",r1=75,r2=100,max_v=1500), width='stretch')
     elif code == "A3":
         c1,c2 = st.columns(2)
         with c1: st.metric("AIC Poisson","45 312","formule std")
         with c2: st.metric("Gini GLM","0.121","référence")
-        st.plotly_chart(fig_bar(["Poisson","Gamma","Tweedie"],[0.121,0.108,0.115],"Gini par GLM"), use_container_width=True)
+        st.plotly_chart(fig_bar(["Poisson","Gamma","Tweedie"],[0.121,0.108,0.115],"Gini par GLM"), width='stretch')
     elif code == "A5":
         c1,c2 = st.columns(2)
         with c1: st.metric("Gini CANN","0.2287","Wüthrich 2019")
         with c2: st.metric("Gini TabNet","0.2334","meilleur DL")
-        st.plotly_chart(fig_bar(["CANN","TabNet","ElasticNet","XGBoost"],[0.2287,0.2334,0.2440,0.2651],"DL vs ML vs GLM",[BLEU,BLEU,OR,VERT]), use_container_width=True)
+        st.plotly_chart(fig_bar(["CANN","TabNet","ElasticNet","XGBoost"],[0.2287,0.2334,0.2440,0.2651],"DL vs ML vs GLM",[BLEU,BLEU,OR,VERT]), width='stretch')
     elif code == "A6":
         c1,c2 = st.columns(2)
         with c1: st.metric("Score ElasticNet","0.8373","retenu")
         with c2: st.metric("Profil","Équilibré","multicritères")
-        st.plotly_chart(fig_bar(["ElasticNet","XGBoost","CatBoost","GLM"],[0.8373,0.7210,0.7050,0.6800],"Scores multicritères",[VERT,OR,OR,GRIS]), use_container_width=True)
+        st.plotly_chart(fig_bar(["ElasticNet","XGBoost","CatBoost","GLM"],[0.8373,0.7210,0.7050,0.6800],"Scores multicritères",[VERT,OR,OR,GRIS]), width='stretch')
     elif code == "A8":
         c1,c2 = st.columns(2)
         with c1: st.metric("SCR post-stress","375%","✅ Résistant")
         with c2: st.metric("ORSA 5 ans","✅ VERT","3 scénarios")
-        st.plotly_chart(fig_bar(["Base","Choc fréq.","Choc coût","NatCat","Combiné"],[375,310,295,280,245],"Ratio SCR après chocs EIOPA (%)",[VERT,OR,OR,AMBRE,ROUGE]), use_container_width=True)
+        st.plotly_chart(fig_bar(["Base","Choc fréq.","Choc coût","NatCat","Combiné"],[375,310,295,280,245],"Ratio SCR après chocs EIOPA (%)",[VERT,OR,OR,AMBRE,ROUGE]), width='stretch')
     elif code == "A9":
         st.markdown(f"""
 <div style="background:{NAVY_L};border:1px solid rgba(46,204,113,0.3);border-radius:10px;padding:16px;margin-bottom:14px;">
@@ -1160,7 +1160,7 @@ def _dashboard_agent(ak):
         with c1: st.metric("DBO","10 588 168 €","méthode PUC")
         with c2: st.metric("Service Cost","285 000 €","charge N")
         with c3: st.metric("Interest Cost","370 585 €","taux 3.5%")
-        st.plotly_chart(fig_bar(["Service Cost","Interest Cost","Charge totale N"],[285_000,370_585,655_585],"Décomposition charge IAS 19 (€)",[OR,BLEU,AMBRE]), use_container_width=True)
+        st.plotly_chart(fig_bar(["Service Cost","Interest Cost","Charge totale N"],[285_000,370_585,655_585],"Décomposition charge IAS 19 (€)",[OR,BLEU,AMBRE]), width='stretch')
     elif code == "EP2":
         c1,c2,c3 = st.columns(3)
         with c1: st.metric("Capital cible","100 000 €","PER 30 ans")
@@ -1175,7 +1175,7 @@ def _dashboard_agent(ak):
         c1,c2 = st.columns(2)
         with c1: st.metric("Ratio base","110%","avant chocs")
         with c2: st.metric("Post-longévité","98.2%","🔴 < 100%")
-        st.plotly_chart(fig_bar(["Base","Longévité+20%","Taux bas","Rachats 40%","Fin.-20%"],[110,98.2,92.5,88.0,95.0],"Ratio couverture avant/après chocs (%)",[VERT,ROUGE,ROUGE,ROUGE,AMBRE]), use_container_width=True)
+        st.plotly_chart(fig_bar(["Base","Longévité+20%","Taux bas","Rachats 40%","Fin.-20%"],[110,98.2,92.5,88.0,95.0],"Ratio couverture avant/après chocs (%)",[VERT,ROUGE,ROUGE,ROUGE,AMBRE]), width='stretch')
     elif code == "EP5":
         st.markdown(f"""
 <div style="background:{NAVY_L};border:1px solid rgba(201,168,76,0.2);border-radius:10px;padding:16px;">
@@ -1197,7 +1197,7 @@ def _dashboard_agent(ak):
         for q in qx[:-1]: survie.append(survie[-1]*(1-q))
         fig=go.Figure(go.Scatter(x=ages,y=[s*100 for s in survie],mode="lines",line=dict(color=OR,width=2.5),fill="tozeroy",fillcolor="rgba(201,168,76,0.08)",hovertemplate="Age %{x}<br>P(survie) : %{y:.1f}%<extra></extra>"))
         fig.update_layout(paper_bgcolor=NAVY,plot_bgcolor=NAVY_L,font=dict(family="Inter",color=BLANC,size=11),title=dict(text="Courbe de survie S(x) — TH0002 depuis 65 ans",font=dict(color=BLANC,size=12),x=0.01),margin=dict(l=16,r=16,t=44,b=16),height=260,xaxis=dict(title="Age",tickfont=dict(color=GRIS,size=9),showgrid=True,gridcolor="rgba(255,255,255,0.05)"),yaxis=dict(title="P(survie) %",tickfont=dict(color=GRIS,size=9),showgrid=True,gridcolor="rgba(255,255,255,0.05)"),showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     elif code == "A13":
         c1,c2,c3 = st.columns(3)
         with c1: st.metric("Agents tracés","46 / 46","100%")
@@ -1333,7 +1333,7 @@ def _validation_agent(ak):
                     _fig_v = _figs_val.get(_gnom)
                     if _fig_v is not None:
                         st.markdown(f"<div style='font-size:0.62rem;color:{OR};font-weight:700;margin:12px 0 4px;'>{_gtitle}</div>", unsafe_allow_html=True)
-                        st.plotly_chart(_fig_v, use_container_width=True, key=f"val_{_gnom}_{ak}")
+                        st.plotly_chart(_fig_v, width='stretch', key=f"val_{_gnom}_{ak}")
             except Exception as _ev_g:
                 st.warning(f"Graphiques non disponibles : {_ev_g}")
         elif not _tri_val:
@@ -1502,7 +1502,7 @@ def page_dashboard():
                     [VERT, OR, AMBRE, ROUGE]
                 ), use_container_width=True, key="dash_nv_boot")
             else:
-                st.plotly_chart(fig_jauge(208.5, "Ratio SCR Non-Vie (%) [démo]"), use_container_width=True, key="dash_nv_jauge")
+                st.plotly_chart(fig_jauge(208.5, "Ratio SCR Non-Vie (%) [démo]"), width='stretch', key="dash_nv_jauge")
         with col_d:
             if _a7_ok and _scr:
                 _scr_prov = _scr.get("scr_prov", _scr.get("scr_provisions", 0))
@@ -1652,7 +1652,7 @@ def page_dashboard():
         with c4: st.metric("LCR", f"{_lcr_r:,.0f}%", "✅ Très liquide" if _lcr_r >= 100 else "⚠️ < 100%")
         col_a,col_b = st.columns(2)
         with col_a:
-            st.plotly_chart(fig_jauge(_scr_r, f"Ratio SCR ({'réel' if _r10_ok else 'démo'}) (%)"), use_container_width=True, key="regl_scr_j")
+            st.plotly_chart(fig_jauge(_scr_r, f"Ratio SCR ({'réel' if _r10_ok else 'démo'}) (%)"), width='stretch', key="regl_scr_j")
         with col_b:
             st.plotly_chart(fig_bar(
                 ["SCR Souscr.","SCR Marché","SCR Opéra.","SCR Total"],
@@ -1668,7 +1668,7 @@ def page_dashboard():
                 [BLEU,AMBRE,VERT,OR]
             ), use_container_width=True, key="regl_ifrs_b")
         with col_d:
-            st.plotly_chart(fig_jauge(_lcr_r, f"LCR ({'réel' if _r12_ok else 'démo'}) (%)", r1=75, r2=100, max_v=1500), use_container_width=True, key="regl_lcr_j")
+            st.plotly_chart(fig_jauge(_lcr_r, f"LCR ({'réel' if _r12_ok else 'démo'}) (%)", r1=75, r2=100, max_v=1500), width='stretch', key="regl_lcr_j")
 
     with tab_ar:
         st.markdown(f"""
@@ -2102,7 +2102,7 @@ def page_dashboard():
                     for _gi, (_gk, _gfig) in enumerate(_ar_graphs.items()):
                         try:
                             with _ar_gcols[_gi % 2]:
-                                st.plotly_chart(_gfig, use_container_width=True, key=f"ar_g_{_gk}")
+                                st.plotly_chart(_gfig, width='stretch', key=f"ar_g_{_gk}")
                         except Exception:
                             pass
 
@@ -4308,7 +4308,7 @@ def page_resultats():
                         for _gk, _gjson in _s_graphs_json.items():
                             try:
                                 _gfig = _pio_d.from_json(_gjson)
-                                st.plotly_chart(_gfig, use_container_width=True,
+                                st.plotly_chart(_gfig, width='stretch',
                                                 key=f"sg_{_s_besoin}_{_gk}")
                             except Exception:
                                 pass
@@ -4593,7 +4593,7 @@ Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non 
         if _fig is not None:
             st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:16px 0 6px;'>{_gtit}</div>", unsafe_allow_html=True)
             try:
-                st.plotly_chart(_fig, use_container_width=True, key=f"res_{_gnom}")
+                st.plotly_chart(_fig, width='stretch', key=f"res_{_gnom}")
             except Exception as _ef:
                 st.warning(f"Graphique {_gtit} : {_ef}")
 
