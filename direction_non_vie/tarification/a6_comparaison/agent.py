@@ -258,12 +258,15 @@ class AgentA6Comparaison:
             _val_sel_ = self._valider_selection(classement, modele_production, backtest)
 
             # ── Standard ActuarIA — excel_bytes ──────────────────────────────
+            # _tmp_a6 inclut commentaire et courbes — disponibles à ce stade
             _tmp_a6 = {
                 'success': True, 'statut_rag': statut_rag,
                 'classement': classement, 'modele_production': modele_production,
                 'backtest': backtest, 'branche': sous_branche,
                 'validation_selection': _val_sel_,
                 'fiche_decision': fiche_decision, 'audit_id': audit_id,
+                'commentaire': commentaire,   # P7 : commentaire actuaire inclus
+                'courbes': courbes,
             }
             _excel_a6 = b''
             _word_a6  = b''
@@ -280,7 +283,7 @@ class AgentA6Comparaison:
                 try:
                     _rapports = generer_rapport_tarification(
                         result_a3=result_a3, result_a4=result_a4,
-                        result_a5=result_a5, result_a6=_tmp_a6,
+                        result_a6=_tmp_a6,
                         arrete=datetime.now().strftime('%d/%m/%Y'),
                         audit_id=audit_id, formats=['html','word'],
                     )
