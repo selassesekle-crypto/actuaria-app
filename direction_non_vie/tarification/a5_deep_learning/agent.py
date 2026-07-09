@@ -329,7 +329,7 @@ class AgentA5DeepLearning:
         result_a4:      Optional[Dict] = None,
         col_cible:      str = 'prime_pure',
         col_exposition: str = 'exposition',
-        n_epochs:       int = 50,
+        n_epochs:       int = 200,  # Early stopping actif — arrêt automatique
         batch_size:     int = 512,
         learning_rate:      float = 1e-3,
         generer_graphiques: bool  = True,
@@ -1493,7 +1493,14 @@ class AgentA5DeepLearning:
             h2_conseil= "Modèle trop complexe pour les données — simplifier l'architecture"
 
         # H3 — Apport du DL vs GLM de référence
-        gini_glm_ref = 0.121  # Gini GLM Poisson de référence freMTPL2
+        # Gini de référence GLM — dynamique depuis A3 ou défaut 0.10
+        gini_glm_ref = 0.10  # défaut neutre si A3 non fourni
+        if result_a3 and result_a3.get('success'):
+            gini_glm_ref = (
+                result_a3.get('metriques', {})
+                .get('poisson', {})
+                .get('gini', 0.10)
+            )
         gini_dl_max  = max(gini_cann, gini_tabnet, 0)
         gain_dl      = gini_dl_max - gini_glm_ref
 
