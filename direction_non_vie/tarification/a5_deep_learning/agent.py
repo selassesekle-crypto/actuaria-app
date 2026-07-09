@@ -387,7 +387,8 @@ class AgentA5DeepLearning:
             logger.info(f"[{audit_id}] Calibration CANN ({n_epochs} époques)")
             res_cann = self._calibrer_cann(
                 X_train, X_test, y_train, y_test,
-                feature_names, device, n_epochs, batch_size, learning_rate
+                feature_names, device, n_epochs, batch_size, learning_rate,
+                result_a3=result_a3
             )
             self.modeles['cann']   = res_cann['modele']
             self.metriques['cann'] = res_cann['metriques']
@@ -589,6 +590,32 @@ class AgentA5DeepLearning:
             n_features   = n_features,
             hidden_sizes = [64, 32]
         ).to(device)
+
+        # ── INITIALISATION DEPUIS COEFFICIENTS GLM A3 (Wüthrich 2019) ─────────
+        # Le vrai CANN part des β GLM → convergence plus rapide et interprétable.
+        # Réf. : Wüthrich & Merz (2019), "ANN for claims experience"
+        if result_a3 and result_a3.get('success') and TORCH_OK:
+            try:
+                modele_glm = result_a3.get('modeles', {}).get('poisson')
+                if modele_glm is not None and hasattr(modele_glm, 'params'):
+                    params_glm = modele_glm.params
+                    w_init = np.zeros(n_features, dtype=np.float32)
+                    for j, feat in enumerate(feature_names):
+                        if feat in params_glm.index:
+                            w_init[j] = float(params_glm[feat])
+                    bias_init = float(params_glm.get('const', 0.0))
+                    with torch.no_grad():
+                        modele.glm_layer.weight.copy_(
+                            torch.FloatTensor(w_init).unsqueeze(0).to(device)
+                        )
+                        modele.glm_layer.bias.copy_(
+                            torch.FloatTensor([bias_init]).to(device)
+                        )
+                    logger.info(
+                        f"CANN initialisé depuis GLM A3 (Wüthrich) | intercept={bias_init:.4f}"
+                    )
+            except Exception as e_init:
+                logger.warning(f"Init CANN depuis GLM échouée : {e_init}")
 
         # Optimizer Adam avec weight decay (régularisation L2)
         optimizer = optim.Adam(
