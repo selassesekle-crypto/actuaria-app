@@ -449,6 +449,27 @@ class AgentA4ML:
                 result_a3, rapport
             )
 
+            # ── Standard ActuarIA — excel_bytes ──────────────────────────────
+            _val_ml_tmp = self._valider_modele_ml(
+                classement,
+                self._monitoring_derive({}, gini_reference=gini_reference_a3),
+                X_train=X_train, X_test=X_test, y_test=y_test,
+            )
+            _excel_a4 = b''
+            if TARIF_EXCEL_OK:
+                try:
+                    _tmp_a4 = {
+                        'success': True, 'statut_rag': statut_rag,
+                        'classement': classement, 'branche': sous_branche,
+                        'shap_values': shap_summary, 'validation_ml': _val_ml_tmp,
+                        'rapport': rapport, 'audit_id': audit_id,
+                    }
+                    _excel_a4 = export_excel_a4(_tmp_a4, audit_id)
+                    if _excel_a4:
+                        logger.info(f"[{audit_id}] Excel A4 : {len(_excel_a4):,} bytes")
+                except Exception as e_xl:
+                    logger.warning(f"Excel A4 échoué : {e_xl}")
+
             # Sauvegarde
             self._sauvegarder_modeles(sous_branche, classement)
             self._sauvegarder_audit(
@@ -505,14 +526,10 @@ class AgentA4ML:
                 'y_test':          y_test,
                 'feature_names':   feature_names,
                 # ── Standard ActuarIA ─────────────────────────────────────────
-                'excel_bytes':     b'',   # généré ci-dessous après le dict
+                'excel_bytes':     _excel_a4,
                 'word_bytes':      b'',
                 'pdf_bytes':       b'',
-                'hypotheses':      self._valider_modele_ml(
-                                       classement,
-                                       self._monitoring_derive({}, gini_reference=gini_reference_a3),
-                                       X_train=X_train, X_test=X_test, y_test=y_test,
-                                   ),
+                'hypotheses':      _val_ml_tmp,
                 'audit_trail':     {
                     'agent': 'A4_ML', 'version': '1.0', 'audit_id': audit_id,
                     'timestamp': t_debut.isoformat(), 'branche': sous_branche,
