@@ -232,46 +232,75 @@ class BestEstimateS2:
             if len(reserves_val) > 1 else 0.0
         )
 
-        # ── 5. Percentiles — Mack (log-normale) puis Bootstrap si disponible ──
-        # Mack : approximation log-normale (QIS5 TP.5.26)
-        if sigma > 0 and be > 0:
-            cv_ln  = sigma / be
+        # ── 5. Percentiles — Incertitude composée (Option B) ──────────────────
+        #
+        # Approche : σ_total² = σ_Mack² + σ_modèle²
+        #
+        # σ_Mack   = incertitude stochastique (England & Verrall 2002 via Mack)
+        # σ_modèle = incertitude de modèle = std(réserves des méthodes incluses)
+        #            mesure la dispersion entre méthodes — EIOPA TP.5.22
+        #
+        # Cette approche est plus rigoureuse que d'utiliser les percentiles
+        # Bootstrap bruts (centrés sur BE_Bootstrap ≠ BE pondéré) et garantit
+        # P90 > BE pondéré même quand les méthodes divergent fortement.
+        #
+        # Références :
+        #   · EIOPA (2014) Guidelines TP.5.22 — risque de modèle
+        #   · Mack (1993) — σ stochastique
+        #   · England & Verrall (2002) — Bootstrap ODP comme alternative
+        #
+        _boot = n3.get('bootstrap', {})
+        _boot_ok = bool(_boot.get('be_bootstrap', 0) > 0)
+
+        # σ_modèle : std des réserves des méthodes incluses (pondérées par poids)
+        # Si une seule méthode → σ_modèle = 0 (pas de dispersion inter-méthodes)
+        reserves_val = [r for r, _ in methodes_incluses.values()]
+        sigma_modele = (
+            float(np.std(reserves_val, ddof=0))
+            if len(reserves_val) > 1 else 0.0
+        )
+
+        # σ_total composé — centré sur le BE pondéré
+        sigma_total_compose = float(np.sqrt(sigma ** 2 + sigma_modele ** 2))
+
+        # Percentiles log-normale centrés sur le BE pondéré (QIS5 TP.5.26)
+        # avec σ_total composé
+        if sigma_total_compose > 0 and be > 0:
+            cv_ln  = sigma_total_compose / be
             s2_ln  = np.log(1.0 + cv_ln ** 2)
             s_ln   = np.sqrt(s2_ln)
             m_ln   = np.log(be) - s2_ln / 2.0
 
-            p75_mack  = float(np.exp(m_ln + 0.6745 * s_ln))
-            p90_mack  = float(np.exp(m_ln + 1.2816 * s_ln))
-            p995_mack = float(np.exp(m_ln + 2.5758 * s_ln))
+            p75  = float(np.exp(m_ln + 0.6745 * s_ln))
+            p90  = float(np.exp(m_ln + 1.2816 * s_ln))
+            p995 = float(np.exp(m_ln + 2.5758 * s_ln))
+        else:
+            p75 = p90 = p995 = be
+
+        p75_source  = 'Incertitude composée (σ_Mack + σ_modèle)'
+        p90_source  = 'Incertitude composée (σ_Mack + σ_modèle)'
+        p995_source = 'Incertitude composée (σ_Mack + σ_modèle)'
+
+        # Percentiles Mack seul — centrés sur BE pondéré (pour affichage comparatif)
+        if sigma > 0 and be > 0:
+            cv_ln_m  = sigma / be
+            s2_ln_m  = np.log(1.0 + cv_ln_m ** 2)
+            s_ln_m   = np.sqrt(s2_ln_m)
+            m_ln_m   = np.log(be) - s2_ln_m / 2.0
+            p75_mack  = float(np.exp(m_ln_m + 0.6745 * s_ln_m))
+            p90_mack  = float(np.exp(m_ln_m + 1.2816 * s_ln_m))
+            p995_mack = float(np.exp(m_ln_m + 2.5758 * s_ln_m))
         else:
             p75_mack = p90_mack = p995_mack = be
 
-        # Bootstrap : utiliser les vrais percentiles simulés si disponibles
-        # (Bootstrap est plus fiable que Mack quand H4 rejetée)
-        _boot = n3.get('bootstrap', {})
-        _boot_ok = bool(_boot.get('be_bootstrap', 0) > 0)  # bootstrap_odp n'a pas de clé 'success'
-
-        if _boot_ok:
-            p75  = float(_boot.get('p75',  p75_mack))
-            p90  = float(_boot.get('p90',  p90_mack))
-            p995 = float(_boot.get('p99_5', p995_mack))
-            # Conserver Mack séparément pour affichage comparatif
-            p75_source  = 'Bootstrap ODP'
-            p90_source  = 'Bootstrap ODP'
-            p995_source = 'Bootstrap ODP'
-        else:
-            # Pas de Bootstrap → utiliser Mack
-            p75  = p75_mack
-            p90  = p90_mack
-            p995 = p995_mack
-            p75_source  = 'Mack 1993'
-            p90_source  = 'Mack 1993'
-            p995_source = 'Mack 1993'
-
-        # Stocker les deux séries pour affichage dans le rapport
+        # Stocker les deux séries pour affichage comparatif dans le rapport
         p75_mack_val  = p75_mack
         p90_mack_val  = p90_mack
         p995_mack_val = p995_mack
+
+        # Exposer σ_modèle et σ_total composé dans le dict retour
+        sigma_modele_val       = round(sigma_modele, 2)
+        sigma_total_compose_val = round(sigma_total_compose, 2)
 
         # ── 6. SCR provisions formule standard (Art. 105 S2) ──────────────────
         scr = self._calculer_scr(be, lob, cfg)
@@ -431,8 +460,10 @@ class BestEstimateS2:
             'reserve_p99_5_boot':    round(float(_boot.get('p99_5',p995_mack_val)),0) if _boot_ok else None,
             'source_percentiles':    p90_source,
 
-            # Incertitude Mack
+            # Incertitude composée (Option B — σ_Mack² + σ_modèle²)
             'sigma_mack':            round(sigma,  0),
+            'sigma_modele':          sigma_modele_val,
+            'sigma_total_compose':   sigma_total_compose_val,
             'cv_inter_methodes':     round(cv_inter, 2),
 
             # Méthodes
