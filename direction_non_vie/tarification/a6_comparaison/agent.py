@@ -293,11 +293,14 @@ class AgentA6Comparaison:
             for nom in ['poisson', 'gamma', 'tweedie']:
                 met = result_a3['metriques'].get(nom, {})
                 if met:
+                    # Récupérer les relativités tarifaires si disponibles (ajout A3)
+                    relativites = met.get('relativites', {})
                     catalogue.append({
                         'modele':          f"GLM_{nom.upper()}",
                         'famille':         'GLM',
                         'gini_test':       met.get('gini', 0),
                         'gini_train':      met.get('gini', 0),
+                        'relativites':     relativites,  # exp(β) par variable
                         'rmse_test':       met.get('rmse_test', 999),
                         'overfit_ratio':   1.0,
                         'nb_vars':         met.get('nb_vars_retenues', 0),
@@ -432,100 +435,229 @@ class AgentA6Comparaison:
         col_expo:  str
     ) -> Dict:
         """
-        Backtesting temporel sur les données historiques.
+        Backtesting temporel Walk-Forward + Test A/E global et par segment.
 
-        PRINCIPE :
-        ───────────
-        On simule la situation où on aurait calibré le modèle
-        sur les années N-2/N-1 et prédit sur l'année N.
+        WALK-FORWARD :
+        ─────────────
+        Pour chaque fenêtre glissante d'années disponibles :
+          - Train = toutes les années sauf la dernière
+          - Test  = dernière année
+        Mesure la stabilité du A/E dans le temps (pas seulement N-1 → N).
 
-        C'est le test de validation le plus réaliste en actuariat :
-        il reproduit les conditions réelles d'utilisation du modèle
-        (calibration sur le passé, prédiction sur le futur).
-
-        MÉTRIQUE PRINCIPALE : Test A/E
-        ─────────────────────────────────
-        A/E = Sinistres observés / Sinistres attendus
-        A/E ≈ 1.0 → modèle non biaisé
-        A/E < 1.0 → modèle sur-évalue le risque (primes trop élevées)
-        A/E > 1.0 → modèle sous-évalue le risque (primes insuffisantes)
+        TEST A/E PAR SEGMENT :
+        ──────────────────────
+        A/E = Observé / Attendu, calculé par :
+          - Tranche de prime (déciles)
+          - Zone géographique (si disponible)
+          - Tranche d'âge (si disponible)
+        Un A/E ∈ [0.90, 1.10] par segment = modèle non biaisé sur ce segment.
         """
         backtest = {
-            'methode':   'Split temporel par annee_souscription',
+            'methode':    'Walk-Forward temporel + A/E par segment',
             'disponible': False,
         }
 
-        # Vérifie si la colonne de date est disponible
+        if col_cible not in df.columns:
+            backtest['note'] = f"Colonne cible '{col_cible}' introuvable."
+            return backtest
+
+        # ── Détection colonne année ────────────────────────────────────────────
         col_annee = None
-        for c in ['annee_souscription', 'annee_survenance', 'annee']:
-            if c in df.columns:
-                col_annee = c
+        for candidate in ['annee_souscription', 'annee_survenance', 'annee']:
+            if candidate in df.columns:
+                col_annee = candidate
                 break
 
-        if col_annee is None or col_cible not in df.columns:
+        if col_annee is None:
+            # Fallback aléatoire — documenté clairement
             backtest['note'] = (
-                "Colonne de date introuvable. "
-                "Backtesting remplacé par validation aléatoire 80/20."
+                "Aucune colonne temporelle détectée. "
+                "Backtesting remplacé par split aléatoire 80/20. "
+                "Pour un backtesting temporel réel, ajouter une colonne "
+                "'annee_souscription' ou 'annee_survenance'."
             )
-            # Validation aléatoire comme fallback
-            df_train, df_test = train_test_split(df, test_size=0.2, random_state=42)
             backtest['split'] = 'aléatoire_80_20'
+            df_train, df_test = train_test_split(df, test_size=0.2, random_state=42)
             backtest['n_train'] = len(df_train)
             backtest['n_test']  = len(df_test)
-
-            if col_cible in df.columns:
-                moy_train = df_train[col_cible].mean()
-                moy_test  = df_test[col_cible].mean()
-                ae_ratio  = moy_test / max(moy_train, 1e-6)
-                backtest['ae_ratio']     = round(float(ae_ratio), 4)
-                backtest['moy_train']    = round(float(moy_train), 2)
-                backtest['moy_test']     = round(float(moy_test),  2)
-                backtest['disponible']   = True
-                backtest['interpretation'] = (
-                    'Non biaisé' if 0.95 <= ae_ratio <= 1.05 else
-                    'Sous-estimation' if ae_ratio > 1.05 else
-                    'Sur-estimation'
-                )
+            moy_train = float(df_train[col_cible].mean())
+            moy_test  = float(df_test[col_cible].mean())
+            ae_ratio  = moy_test / max(moy_train, 1e-6)
+            backtest['ae_ratio']       = round(ae_ratio, 4)
+            backtest['moy_train']      = round(moy_train, 2)
+            backtest['moy_test']       = round(moy_test, 2)
+            backtest['disponible']     = True
+            backtest['interpretation'] = (
+                '🟢 Non biaisé'       if 0.95 <= ae_ratio <= 1.05 else
+                '🟡 Légère déviation' if 0.90 <= ae_ratio <= 1.10 else
+                '🔴 Déviation majeure'
+            )
             return backtest
 
-        # Backtesting temporel réel
-        annees = sorted(df[col_annee].unique())
+        annees = sorted(df[col_annee].dropna().unique())
         if len(annees) < 2:
-            backtest['note'] = "Pas assez d'années pour le backtesting temporel."
+            backtest['note'] = "Pas assez d'années distinctes pour le walk-forward."
             return backtest
 
-        # Split : dernière année = test, le reste = train
-        annee_test  = annees[-1]
-        df_train    = df[df[col_annee] < annee_test]
-        df_test     = df[df[col_annee] == annee_test]
+        # ── WALK-FORWARD ──────────────────────────────────────────────────────
+        # Tester chaque fenêtre glissante : train = [a0..aN-1], test = aN
+        walk_forward = []
+        for idx in range(1, len(annees)):
+            annee_t = annees[idx]
+            df_tr   = df[df[col_annee] < annee_t]
+            df_te   = df[df[col_annee] == annee_t]
+            if len(df_te) < 50:
+                continue
+            m_tr = float(df_tr[col_cible].mean()) if len(df_tr) > 0 else 0
+            m_te = float(df_te[col_cible].mean())
+            ae   = round(m_te / max(m_tr, 1e-6), 4)
+            walk_forward.append({
+                'annee_test':  int(annee_t),
+                'n_train':     len(df_tr),
+                'n_test':      len(df_te),
+                'moy_train':   round(m_tr, 2),
+                'moy_test':    round(m_te, 2),
+                'ae_ratio':    ae,
+                'statut':      (
+                    'VERT'  if 0.95 <= ae <= 1.05 else
+                    'AMBRE' if 0.90 <= ae <= 1.10 else
+                    'ROUGE'
+                ),
+            })
 
-        if len(df_test) < 100:
-            backtest['note'] = f"Trop peu de contrats en {annee_test} pour backtester."
+        if not walk_forward:
+            backtest['note'] = "Aucune fenêtre walk-forward valide."
             return backtest
 
-        moy_train = df_train[col_cible].mean() if col_cible in df_train.columns else 0
-        moy_test  = df_test[col_cible].mean()  if col_cible in df_test.columns  else 0
-        ae_ratio  = moy_test / max(moy_train, 1e-6)
+        # A/E de la dernière fenêtre (N-1 → N)
+        derniere = walk_forward[-1]
+        ae_ratio = derniere['ae_ratio']
 
+        # Stabilité walk-forward : CV des A/E sur toutes les fenêtres
+        aes       = [w['ae_ratio'] for w in walk_forward]
+        ae_moyen  = float(np.mean(aes))
+        ae_cv     = float(np.std(aes) / max(ae_moyen, 1e-6))
+        n_rouge   = sum(1 for w in walk_forward if w['statut'] == 'ROUGE')
+
+        # ── TEST A/E PAR SEGMENT ──────────────────────────────────────────────
+        # Utiliser la dernière fenêtre (la plus réaliste)
+        annee_test = derniere['annee_test']
+        df_test_n  = df[df[col_annee] == annee_test]
+        df_train_n = df[df[col_annee] < annee_test]
+        moy_ref    = float(df_train_n[col_cible].mean()) if len(df_train_n) > 0 else 1.0
+
+        ae_par_segment = {}
+
+        # Segment 1 : déciles de la variable cible observée
+        try:
+            df_test_n = df_test_n.copy()
+            df_test_n['_decile'] = pd.qcut(
+                df_test_n[col_cible], q=5, labels=False, duplicates='drop'
+            )
+            ae_deciles = []
+            for d in sorted(df_test_n['_decile'].dropna().unique()):
+                sub = df_test_n[df_test_n['_decile'] == d]
+                ae_d = float(sub[col_cible].mean()) / max(moy_ref, 1e-6)
+                ae_deciles.append({
+                    'quintile': int(d) + 1,
+                    'n':        len(sub),
+                    'moy_obs':  round(float(sub[col_cible].mean()), 2),
+                    'ae_ratio': round(ae_d, 4),
+                    'statut':   'VERT' if 0.90 <= ae_d <= 1.10 else 'AMBRE' if 0.80 <= ae_d <= 1.20 else 'ROUGE',
+                })
+            ae_par_segment['quintiles_risque'] = ae_deciles
+        except Exception as e_q:
+            logger.debug(f"A/E quintiles échoué : {e_q}")
+
+        # Segment 2 : zone géographique (si disponible)
+        for col_zone in ['zone_geographique', 'zone', 'region', 'area']:
+            if col_zone in df_test_n.columns:
+                try:
+                    ae_zones = []
+                    for zone in df_test_n[col_zone].dropna().unique()[:8]:
+                        sub = df_test_n[df_test_n[col_zone] == zone]
+                        if len(sub) < 20:
+                            continue
+                        ae_z = float(sub[col_cible].mean()) / max(moy_ref, 1e-6)
+                        ae_zones.append({
+                            'zone':     str(zone),
+                            'n':        len(sub),
+                            'moy_obs':  round(float(sub[col_cible].mean()), 2),
+                            'ae_ratio': round(ae_z, 4),
+                            'statut':   'VERT' if 0.90 <= ae_z <= 1.10 else
+                                        'AMBRE' if 0.80 <= ae_z <= 1.20 else 'ROUGE',
+                        })
+                    if ae_zones:
+                        ae_par_segment['zones'] = ae_zones
+                except Exception as e_z:
+                    logger.debug(f"A/E zones échoué : {e_z}")
+                break
+
+        # Segment 3 : tranche d'âge (si disponible)
+        for col_age in ['age', 'age_conducteur', 'drimage']:
+            if col_age in df_test_n.columns:
+                try:
+                    bins  = [0, 25, 35, 45, 55, 65, 200]
+                    lbls  = ['<25', '25-34', '35-44', '45-54', '55-64', '65+']
+                    df_test_n = df_test_n.copy()
+                    df_test_n['_age_tranche'] = pd.cut(
+                        df_test_n[col_age], bins=bins, labels=lbls, right=False
+                    )
+                    ae_ages = []
+                    for tranche in lbls:
+                        sub = df_test_n[df_test_n['_age_tranche'] == tranche]
+                        if len(sub) < 20:
+                            continue
+                        ae_a = float(sub[col_cible].mean()) / max(moy_ref, 1e-6)
+                        ae_ages.append({
+                            'tranche':  tranche,
+                            'n':        len(sub),
+                            'moy_obs':  round(float(sub[col_cible].mean()), 2),
+                            'ae_ratio': round(ae_a, 4),
+                            'statut':   'VERT' if 0.90 <= ae_a <= 1.10 else
+                                        'AMBRE' if 0.80 <= ae_a <= 1.20 else 'ROUGE',
+                        })
+                    if ae_ages:
+                        ae_par_segment['tranches_age'] = ae_ages
+                except Exception as e_a:
+                    logger.debug(f"A/E âge échoué : {e_a}")
+                break
+
+        # ── BILAN ─────────────────────────────────────────────────────────────
         backtest.update({
-            'disponible':    True,
-            'annees_train':  [int(a) for a in annees[:-1]],
-            'annee_test':    int(annee_test),
-            'n_train':       len(df_train),
-            'n_test':        len(df_test),
-            'moy_train':     round(float(moy_train), 2),
-            'moy_test':      round(float(moy_test),  2),
-            'ae_ratio':      round(float(ae_ratio),  4),
+            'disponible':        True,
+            'split':             'walk_forward_temporel',
+            'col_annee':         col_annee,
+            'annees_disponibles':[int(a) for a in annees],
+            'annee_test':        int(annee_test),
+            'annees_train':      [int(a) for a in annees if a < annee_test],
+            'n_train':           derniere['n_train'],
+            'n_test':            derniere['n_test'],
+            'moy_train':         derniere['moy_train'],
+            'moy_test':          derniere['moy_test'],
+            'ae_ratio':          ae_ratio,
+            'ae_moyen_wf':       round(ae_moyen, 4),
+            'ae_cv_wf':          round(ae_cv, 4),
+            'n_fenetres':        len(walk_forward),
+            'n_fenetres_rouge':  n_rouge,
+            'walk_forward':      walk_forward,
+            'ae_par_segment':    ae_par_segment,
             'interpretation': (
                 '🟢 Non biaisé'       if 0.95 <= ae_ratio <= 1.05 else
                 '🟡 Légère déviation' if 0.90 <= ae_ratio <= 1.10 else
                 '🔴 Déviation majeure'
             ),
+            'stabilite_wf': (
+                '🟢 Stable'     if ae_cv <= 0.05 and n_rouge == 0 else
+                '🟡 Acceptable' if ae_cv <= 0.10 else
+                '🔴 Instable'
+            ),
         })
 
         logger.info(
-            f"Backtesting : A/E = {ae_ratio:.4f} | "
-            f"Train={len(df_train):,} | Test={len(df_test):,}"
+            f"Walk-forward : {len(walk_forward)} fenêtres | "
+            f"A/E N-1→N = {ae_ratio:.4f} | CV = {ae_cv:.4f} | "
+            f"Fenêtres ROUGE = {n_rouge}"
         )
 
         return backtest
@@ -705,10 +837,21 @@ class AgentA6Comparaison:
         )
 
         if backtest.get('disponible'):
+            wf_info = ""
+            if backtest.get('split') == 'walk_forward_temporel':
+                wf_info = (
+                    f"  Fenêtres WF      : {backtest.get('n_fenetres', 'N/A')} "
+                    f"({backtest.get('n_fenetres_rouge', 0)} ROUGE)\n"
+                    f"  Stabilité WF     : {backtest.get('stabilite_wf', 'N/A')}\n"
+                    f"  CV A/E WF        : {backtest.get('ae_cv_wf', 'N/A'):.4f}\n"
+                )
+            n_seg = len(backtest.get('ae_par_segment', {}))
             n1 += (
-                f"\nBACKTESTING TEMPOREL :\n"
+                f"\nBACKTESTING TEMPOREL ({backtest.get('split', 'N/A')}) :\n"
                 f"  A/E ratio        : {backtest.get('ae_ratio', 'N/A')}\n"
-                f"  Interprétation   : {backtest.get('interpretation', 'N/A')}"
+                f"  Interprétation   : {backtest.get('interpretation', 'N/A')}\n"
+                f"{wf_info}"
+                f"  A/E par segment  : {n_seg} segment(s) analysé(s)"
             )
 
         # ── NIVEAU 2 : DIAGNOSTIC ─────────────────────────────────────────────
