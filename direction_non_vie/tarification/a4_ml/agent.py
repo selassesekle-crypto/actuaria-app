@@ -480,6 +480,29 @@ class AgentA4ML:
                 except Exception as e_xl:
                     logger.warning(f"Excel A4 échoué : {e_xl}")
 
+            # ── Standard ActuarIA — word_bytes ───────────────────────────────
+            _word_a4 = b''
+            if TARIF_RAPPORT_OK_A4:
+                try:
+                    _rapports_a4 = _gen_rapport_a4(
+                        result_a3=result_a3,
+                        result_a4={
+                            'success': True, 'statut_rag': statut_rag,
+                            'classement': classement, 'branche': sous_branche,
+                            'metriques': self.metriques, 'shap_values': shap_summary,
+                            'commentaire': commentaire,
+                        },
+                        arrete=datetime.now().strftime('%d/%m/%Y'),
+                        audit_id=audit_id, formats=['html', 'word'],
+                    )
+                    _word_a4 = _rapports_a4.get('word_bytes', b'')
+                    if _word_a4:
+                        logger.info(
+                            f"[{audit_id}] Word A4 : {len(_word_a4):,} bytes")
+                except Exception as e_w4:
+                    logger.warning(
+                        f"[{audit_id}] Word A4 échoué (non bloquant) : {e_w4}")
+
             # Sauvegarde
             self._sauvegarder_modeles(sous_branche, classement)
             self._sauvegarder_audit(
