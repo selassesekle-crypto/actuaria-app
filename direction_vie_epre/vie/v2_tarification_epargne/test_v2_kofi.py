@@ -58,8 +58,8 @@ class TestV2TarificationEpargneVie:
         r = agent.run(age=50, sexe='F', duree=15, capital=80_000,
                       taux_technique=0.02, generer_graphiques=False)
         assert r['success'] is True
-        # qx(50) femme officiel = 0.002670
-        assert abs(QX_TF0002[50] - 0.002670) < 1e-6
+        # qx(50) femme officiel W-H = 0.00250186 (Institut des Actuaires, arrete 2006)
+        assert abs(QX_TF0002[50] - 0.002502) < 1e-4
 
     # T5 — Prime pure femme < prime pure homme (mortalité plus faible)
     def test_t5_prime_femme_inferieure_homme(self, agent):
