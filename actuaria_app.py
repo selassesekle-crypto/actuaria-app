@@ -3271,9 +3271,16 @@ def _executer_analyse(besoin, direction, equipe, client):
                         generer_graphiques=False,
                     )
                 elif besoin == "tarif_epargne_vie":
-                    from direction_vie_epre.vie.v2_tarification_epargne.agent import AgentV2TarificationEpargne
-                    _r_v = AgentV2TarificationEpargne(audit_path=_tmp, verbose=False).run(
-                        age=params.get("age", 40), generer_graphiques=False,
+                    from direction_vie_epre.vie.v2_tarification_epargne.agent import AgentV2TarificationEpargneVie
+                    _r_v = AgentV2TarificationEpargneVie(verbose=False).run(
+                        age=params.get("age", 45),
+                        sexe=params.get("sexe", "H"),
+                        duree=params.get("duree", 20),
+                        capital=params.get("capital", 80_000),
+                        type_contrat=params.get("type_contrat", "capital_differe"),
+                        taux_technique=params.get("taux_technique", 0.018),
+                        tmg=params.get("tmg", 0.0),
+                        generer_graphiques=False,
                     )
                 elif besoin == "pm_vie":
                     from direction_vie_epre.vie.v3_provisions_mathematiques.agent import AgentV3ProvisionsMathematiques
@@ -3295,9 +3302,16 @@ def _executer_analyse(besoin, direction, equipe, client):
             # ── EP-RE EP1-EP5 ────────────────────────────────────────────────
             elif besoin == "ias19":
                 from direction_vie_epre.epargne_retraite.ep1_ias19.agent import AgentEP1EngagementsRetraite
-                _r_ep = AgentEP1EngagementsRetraite(audit_path=_tmp, verbose=False).run(
-                    nb_actifs=params.get("nb_actifs", 100),
-                    salaire_moyen=params.get("salaire_moyen", 45000),
+                _r_ep = AgentEP1EngagementsRetraite(verbose=False).run(
+                    effectif=params.get("effectif", 500),
+                    salaire_moyen=params.get("salaire_moyen", 45_000),
+                    anciennete_moyenne=params.get("anciennete_moyenne", 10.0),
+                    taux_actu=params.get("taux_actu", 0.0385),
+                    taux_revalorisation=params.get("taux_revalorisation", 0.020),
+                    taux_rotation=params.get("taux_rotation", 0.050),
+                    age_moyen=params.get("age_moyen", 42.0),
+                    age_retraite=params.get("age_retraite", 65.0),
+                    sous_branche=params.get("sous_branche", "art39"),
                     generer_graphiques=False,
                 )
                 resultats["principal"] = _r_ep
@@ -3310,8 +3324,15 @@ def _executer_analyse(besoin, direction, equipe, client):
                 resultats["principal"] = _r_ep
 
             elif besoin == "prov" and equipe == "epre":
-                from direction_vie_epre.epargne_retraite.ep3_provisionnement_epargne.agent import AgentEP3ProvisionnemntEpargne
-                _r_ep = AgentEP3ProvisionnemntEpargne(audit_path=_tmp, verbose=False).run(
+                from direction_vie_epre.epargne_retraite.ep3_provisionnement_epargne.agent import AgentEP3ProvissionnementEpargne
+                _r_ep = AgentEP3ProvissionnementEpargne(verbose=False).run(
+                    encours_total=params.get("encours_total", 34_000_000),
+                    rente_moyenne=params.get("rente_moyenne", 1_200),
+                    age_moyen=params.get("age_moyen", 55.0),
+                    ppb_stock=params.get("ppb_stock", 1_000_000),
+                    reserve_capi_stock=params.get("reserve_capi_stock", 500_000),
+                    actifs_total=params.get("actifs_total", None),
+                    sous_branche=params.get("sous_branche", "per"),
                     generer_graphiques=False,
                 )
                 resultats["principal"] = _r_ep
@@ -3332,15 +3353,21 @@ def _executer_analyse(besoin, direction, equipe, client):
 
             # ── REGLEMENTATION VIE R-VIE1/R-VIE2 ───────────────────────────
             elif besoin == "rvie1":
-                from direction_vie_epre.reglementation.r_vie1_ifrs17.agent import AgentRVie1QRTs26
-                _r_v = AgentRVie1QRTs26(audit_path=_tmp, verbose=False).run(
+                from direction_vie_epre.reglementation.r_vie1_ifrs17.agent import AgentRVIE1QRTVie
+                _r_v = AgentRVIE1QRTVie(verbose=False).run(
+                    be_vie=params.get("be_vie", 272_000_000),
+                    pm_total=params.get("pm_total", 285_000_000),
                     generer_graphiques=False,
                 )
                 resultats["principal"] = _r_v
 
             elif besoin == "rvie2":
-                from direction_vie_epre.reglementation.r_vie2_alm.agent import AgentRVie2RSRSFCR
-                _r_v = AgentRVie2RSRSFCR(audit_path=_tmp, verbose=False).run(
+                from direction_vie_epre.reglementation.r_vie2_alm.agent import AgentRVIE2RSRSFCRVie
+                _r_v = AgentRVIE2RSRSFCRVie(verbose=False).run(
+                    scr_vie=params.get("scr_vie", 53_000_000),
+                    fonds_propres=params.get("fonds_propres", 98_000_000),
+                    be_vie=params.get("be_vie", 272_000_000),
+                    pm_total=params.get("pm_total", 285_000_000),
                     generer_graphiques=False,
                 )
                 resultats["principal"] = _r_v
