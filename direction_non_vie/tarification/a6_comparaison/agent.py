@@ -244,6 +244,9 @@ class AgentA6Comparaison:
             self._sauvegarder_audit(audit_id, sous_branche, rapport,
                                      statut_rag, t_debut)
 
+            # ── CALCUL VALIDATION SÉLECTION (avant Standard ActuarIA) ────────
+            _val_sel_ = self._valider_selection(classement, modele_production, backtest)
+
             # ── Standard ActuarIA — excel_bytes ──────────────────────────────
             _tmp_a6 = {
                 'success': True, 'statut_rag': statut_rag,
@@ -277,8 +280,7 @@ class AgentA6Comparaison:
                     modele_production, statut_rag, commentaire
                 )
 
-            # ── CALCUL VALIDATION SÉLECTION ───────────────────────────────────
-            _val_sel_ = self._valider_selection(classement, modele_production, backtest)
+            # _val_sel_ déjà calculé avant le bloc Standard ActuarIA
             _gv_sel_  = self._graphiques_validation_selection(
                 _val_sel_, classement) if generer_graphiques else {}
 
