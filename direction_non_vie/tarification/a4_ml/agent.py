@@ -468,7 +468,7 @@ class AgentA4ML:
                 'monitoring':      self._monitoring_derive(
                                        {m['modele']: m for m in classement[:1]}
                                        if classement else {},
-                                       gini_reference=0.2651,
+                                       gini_reference=gini_reference_a3,
                                    ),
                 'optimisation':    self._optimisation_tarifaire(
                                        classement[0].get('gini', 0.25)
@@ -476,15 +476,15 @@ class AgentA4ML:
                                    ),
                 'validation_ml':   self._valider_modele_ml(
                                        classement,
-                                       self._monitoring_derive({}, gini_reference=0.2651),
+                                       self._monitoring_derive({}, gini_reference=gini_reference_a3),
                                    ),
                 'graphiques_validation': self._graphiques_validation_ml(
                                        self._valider_modele_ml(
                                            classement,
-                                           self._monitoring_derive({}, gini_reference=0.2651),
+                                           self._monitoring_derive({}, gini_reference=gini_reference_a3),
                                        ),
                                        classement,
-                                       self._monitoring_derive({}, gini_reference=0.2651),
+                                       self._monitoring_derive({}, gini_reference=gini_reference_a3),
                                        self._optimisation_tarifaire(
                                            classement[0].get('gini', 0.25) if classement else 0.25,
                                        ),
