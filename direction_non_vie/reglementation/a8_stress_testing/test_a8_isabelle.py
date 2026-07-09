@@ -4,7 +4,8 @@ Tests A8 Isabelle v2.0 — Stress Testing & ORSA Non-Vie
 Commande : python test_a8_isabelle.py
 """
 import sys, unittest
-sys.path.insert(0, '/home/claude')
+import os as _os
+sys.path.insert(0, _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '../../../../')))
 
 # Données A7 synthétiques (structure exacte de AgentA7)
 A7_SYNTH = {
@@ -55,7 +56,7 @@ class TestA8StressTesting(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        from a8_stress_testing import AgentA8StressTesting
+        from direction_non_vie.reglementation.a8_stress_testing.agent import AgentA8StressTesting
         cls.agent = AgentA8StressTesting(
             models_path='/tmp', audit_path='/tmp', verbose=False
         )
