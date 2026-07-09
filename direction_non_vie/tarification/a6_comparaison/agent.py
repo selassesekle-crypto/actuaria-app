@@ -1479,7 +1479,8 @@ class AgentA6Comparaison:
 
         # C2 — Écart Gini entre modèles
         if classement and len(classement) >= 2:
-            ginis = [m.get('gini', 0) for m in classement]
+            # Clé correcte : 'gini_test' (pas 'gini')
+            ginis = [m.get('gini_test', m.get('gini', 0)) for m in classement]
             ecart_gini = max(ginis) - min(ginis)
             gini_max   = max(ginis)
             gini_min   = min(ginis)
@@ -1505,31 +1506,35 @@ class AgentA6Comparaison:
 
         # C3 — Cohérence modèle retenu
         if classement and modele_production:
-            # Vérifier que le modèle de production est dans le top 3
-            top3 = [m.get('modele', '') for m in classement[:3]]
-            in_top3 = modele_production in top3
+            # modele_production peut être un dict ou une string
+            if isinstance(modele_production, dict):
+                nom_prod = modele_production.get('modele', '')
+            else:
+                nom_prod = str(modele_production)
+            top3    = [m.get('modele', '') for m in classement[:3]]
+            in_top3 = nom_prod in top3
             score_retenu = next(
                 (m.get('score_global', 0) for m in classement
-                 if m.get('modele') == modele_production), 0
+                 if m.get('modele') == nom_prod), 0
             )
             rang = next(
                 (i+1 for i, m in enumerate(classement)
-                 if m.get('modele') == modele_production), 99
+                 if m.get('modele') == nom_prod), 99
             )
         else:
             in_top3, score_retenu, rang = False, 0, 99
 
         if in_top3 and score_retenu >= 0.70:
             c3_statut = "VERT"
-            c3_msg    = f"{modele_production} rang #{rang} · Score = {score_retenu:.4f} ≥ 0.70 ✅"
-            c3_conseil= f"Sélection cohérente — {modele_production} est le meilleur compromis multicritères"
+            c3_msg    = f"{nom_prod} rang #{rang} · Score = {score_retenu:.4f} ≥ 0.70 ✅"
+            c3_conseil= f"Sélection cohérente — {nom_prod} est le meilleur compromis multicritères"
         elif in_top3:
             c3_statut = "AMBRE"
-            c3_msg    = f"{modele_production} dans le top 3 mais score = {score_retenu:.4f} < 0.70 ⚠️"
+            c3_msg    = f"{nom_prod} dans le top 3 mais score = {score_retenu:.4f} < 0.70 ⚠️"
             c3_conseil= "Score limite — documenter les raisons du choix dans la fiche de décision"
         else:
             c3_statut = "ROUGE"
-            c3_msg    = f"{modele_production} hors top 3 (rang #{rang}) ❌"
+            c3_msg    = f"{nom_prod} hors top 3 (rang #{rang}) ❌"
             c3_conseil= "Revoir la sélection — le modèle retenu n'est pas le meilleur"
 
         statuts = [c1_statut, c2_statut, c3_statut]
