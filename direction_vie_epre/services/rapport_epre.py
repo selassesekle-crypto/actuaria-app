@@ -502,6 +502,7 @@ def export_html(
         ppb_ep= float(prov.get("ppb", prov.get("ppb_total", 0)) or 0)
         taux_c= float(ep3.get("taux_couverture_pct", 0) or 0)
         ratio_b= float(ep4.get("ratio_base", 0) or 0)
+        ratio_l= float(ep4.get("ratio_longevite", 0) or 0)
         ratio_c= float(ep4.get("ratio_combine", 0) or 0)
         tpb   = float(ep7.get("taux_pb_optimal", 0) or 0)
         scr_pb= float(ep7.get("ratio_scr_post_pb", 0) or 0)
@@ -765,6 +766,9 @@ def export_word(
         ppb_ep= float(prov.get("ppb", prov.get("ppb_total", 0)) or 0)
         taux_c= float(ep3.get("taux_couverture_pct", 0) or 0)
         ratio_b= float(ep4.get("ratio_base", 0) or 0)
+        ratio_l= float(ep4.get("ratio_longevite", 0) or 0)
+        ratio_c= float(ep4.get("ratio_combine", 0) or 0)
+        scr_pb = float(ep7.get("ratio_scr_post_pb", 0) or 0)
         avis  = ep4.get("avis_pa", ep3.get("avis_pa", "FAVORABLE AVEC RESERVE"))
         ecarts= ep6.get("ecarts", {}) or {}
 
