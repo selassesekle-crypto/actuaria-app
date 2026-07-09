@@ -131,11 +131,14 @@ class TestA6Comparaison(unittest.TestCase):
         else:
             print(f"    ST4 Backtesting ✅ | A/E={ae:.4f} (split={bt.get('split','?')})")
 
-        # ST5 — A/E par segment calculé (au moins 1 segment)
+        # ST5 — A/E par segment calculé
+        # Les données synthétiques ont annee_souscription + zone_geographique :
+        # en walk-forward, au moins 'quintiles_risque' doit être produit.
         segs = bt.get('ae_par_segment', {})
-        # On teste que la structure est présente (segments peuvent être vides
-        # si les colonnes zone/age ne sont pas dans les données)
         self.assertIsInstance(segs, dict)
+        if bt.get('split') == 'walk_forward_temporel' and bt.get('disponible'):
+            self.assertGreater(len(segs), 0,
+                "Au moins 1 segment A/E attendu avec annee_souscription dans les données")
         print(f"    ST5 A/E segments ✅ | {len(segs)} segment(s) : {list(segs.keys())}")
 
         # ST6 — Validation sélection C1/C2/C3
