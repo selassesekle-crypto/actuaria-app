@@ -192,7 +192,7 @@ class AgentP3ProvissionnementPrevoyance:
 
         try:
             # N1 — Extraction P1 + P2
-            src = self._extraire(result_p1, result_p2, taux_actualisation)
+            src = self._extraire(result_p1, result_p2, taux_actualisation, primes_par_an)
             self.logger.info(
                 f"[{aid}] P3 v{self.VERSION} | "
                 f"PA={src['primes_acquises']:,.0f}€ | "
@@ -370,8 +370,12 @@ class AgentP3ProvissionnementPrevoyance:
     #  N1 — EXTRACTION P1 + P2
     # =========================================================================
 
-    def _extraire(self, result_p1, result_p2, taux_act: float) -> Dict:
-        """Extrait et consolide les données de P1 Axel et P2 Rayan."""
+    def _extraire(self, result_p1, result_p2, taux_act: float,
+                  primes_par_an: Optional[np.ndarray] = None) -> Dict:
+        """Extrait et consolide les données de P1 Axel et P2 Rayan.
+        Si primes_par_an est fourni, utilise leur somme comme primes_acquises
+        du portefeuille (corrige le cas où result_p1 porte sur 1 assuré).
+        """
         if not result_p1 or not result_p1.get("success"):
             raise ValueError("result_p1 requis et success=True")
         if not result_p2 or not result_p2.get("success"):
@@ -379,8 +383,13 @@ class AgentP3ProvissionnementPrevoyance:
 
         p3 = result_p2.get("sorties_p3", {})
 
-        pa        = float(result_p1.get("primes_acquises",
-                    p3.get("primes_acquises", 500_000)))
+        # Si primes_par_an fourni → utiliser leur somme (portefeuille réel)
+        # Sinon → fallback result_p1 (1 assuré ou portefeuille aggrégé)
+        if primes_par_an is not None and len(primes_par_an) > 0:
+            pa = float(np.sum(primes_par_an))
+        else:
+            pa = float(result_p1.get("primes_acquises",
+                       p3.get("primes_acquises", 500_000)))
         nb        = int(p3.get("nb_assures", result_p1.get("nb_assures", 1)))
         sal       = float(p3.get("salaire_brut", result_p1.get("salaire_brut", 45_000)))
         taux_ip   = float(p3.get("taux_ip", 0.0028))
