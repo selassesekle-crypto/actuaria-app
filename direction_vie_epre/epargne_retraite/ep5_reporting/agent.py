@@ -6,6 +6,11 @@
 """
 
 import os, json, logging, warnings
+from direction_vie_epre.services.rapport_epre import (
+    export_html as _rapport_html_epre,
+    export_pdf  as _rapport_pdf_epre,
+    export_word as _rapport_word_epre,
+)
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -68,6 +73,14 @@ class AgentEP5ReportingEpargne:
         generer_graphiques: bool = True,
         date_arrete:   str   = None,
         sous_branche:  str   = 'per',
+        # Métadonnées rapport consolidé
+        ref_client:         str  = '',
+        arrete:             str  = '',
+        actuaire_nom:       str  = '',
+        actuaire_numero_ia: str  = '',
+        # Agents complémentaires EP-RE
+        result_ep6: dict = None,
+        result_ep7: dict = None,
     ) -> Dict[str, Any]:
         """
         Génère le rapport de synthèse épargne-retraite.
@@ -175,6 +188,39 @@ class AgentEP5ReportingEpargne:
             self._sauvegarder(audit_id, result)
             if self.verbose:
                 self._afficher(result)
+
+            # ── Rapports consolidés niveau A7 ──────────────────────────
+            _kw = dict(
+                result_ep1=result_ep1, result_ep2=result_ep2,
+                result_ep3=result_ep3, result_ep4=result_ep4,
+                result_ep6=result_ep6, result_ep7=result_ep7,
+                commentaire=result.get('commentaire',''),
+                ref_client=ref_client or client_nom,
+                arrete=arrete or date_arr,
+                audit_id=audit_id,
+                graphiques=result.get('graphiques') if generer_graphiques else None,
+                actuaire_nom=actuaire_nom or actuaire_resp,
+                actuaire_numero_ia=actuaire_numero_ia,
+            )
+            html_bytes = pdf_bytes = word_bytes = None
+            try:
+                _h = _rapport_html_epre(**_kw)
+                html_bytes = _h.encode('utf-8') if _h else None
+            except Exception as _e:
+                self.logger.warning(f'[{audit_id}] HTML EP5 : {_e}')
+            try:
+                pdf_bytes = _rapport_pdf_epre(**_kw)
+            except Exception as _e:
+                self.logger.warning(f'[{audit_id}] PDF EP5 : {_e}')
+            try:
+                _kw_w = {k: v for k, v in _kw.items() if k != 'graphiques'}
+                word_bytes = _rapport_word_epre(**_kw_w)
+            except Exception as _e:
+                self.logger.warning(f'[{audit_id}] Word EP5 : {_e}')
+
+            result['html_bytes']  = html_bytes
+            result['pdf_bytes']   = pdf_bytes
+            result['word_bytes']  = word_bytes
 
             return result
 
