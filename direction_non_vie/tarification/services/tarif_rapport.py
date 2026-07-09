@@ -253,10 +253,17 @@ def export_html(
         return '<tr>' + ''.join(f'<{tag}>{c}</{tag}>' for c in cells) + '</tr>'
 
     def _hyp_row(key, label, val_key='', val=''):
-        h = hyp3.get(key) or hyp4.get(key, {})
+        # Cherche dans hyp3 (GLM), puis hyp4 (ML) — clés toujours distinctes.
+        # Retourne '' si l'hypothèse n'a pas été calculée (pas de ligne vide dans le HTML).
+        h = hyp3.get(key) or hyp4.get(key) or {}
+        if not h:
+            return ''
         st = h.get('statut', '?')
-        return _row([label, f'<span class="badge-{st.lower()}">{s_emoji if st=="VERT" else _statut_emoji(st)} {st}</span>',
-                     str(h.get(val_key, val) or '—')[:60], str(h.get('conseil',''))[:80]])
+        em = _statut_emoji(st)
+        return _row([label,
+                     f'<span class="badge-{st.lower()}">{em} {st}</span>',
+                     str(h.get(val_key, val) or '—')[:60],
+                     str(h.get('conseil', ''))[:80]])
 
     html = f"""<!DOCTYPE html>
 <html lang="fr">
