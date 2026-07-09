@@ -504,6 +504,24 @@ class AgentA4ML:
                 'erreur':          None,
                 'y_test':          y_test,
                 'feature_names':   feature_names,
+                # ── Standard ActuarIA ─────────────────────────────────────────
+                'excel_bytes':     b'',   # généré ci-dessous après le dict
+                'word_bytes':      b'',
+                'pdf_bytes':       b'',
+                'hypotheses':      self._valider_modele_ml(
+                                       classement,
+                                       self._monitoring_derive({}, gini_reference=gini_reference_a3),
+                                       X_train=X_train, X_test=X_test, y_test=y_test,
+                                   ),
+                'audit_trail':     {
+                    'agent': 'A4_ML', 'version': '1.0', 'audit_id': audit_id,
+                    'timestamp': t_debut.isoformat(), 'branche': sous_branche,
+                    'statut_rag': statut_rag,
+                    'nb_modeles': len(classement),
+                    'modele_retenu': classement[0].get('modele','') if classement else '',
+                    'gini_retenu': classement[0].get('gini_test',0) if classement else 0,
+                    'optuna_active': optuna_trials > 0 and OPTUNA_OK,
+                },
             }
 
         except Exception as e:
