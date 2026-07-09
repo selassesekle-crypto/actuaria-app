@@ -1873,7 +1873,7 @@ class AgentA4ML:
             "gini_reference":       gini_reference,
             "gini_actuel":          gini_historique[-1],
             "variation_gini":       round(variation_gini, 4),
-            "variation_gini_pct":   round(variation_gini / gini_reference * 100, 1),
+            "variation_gini_pct":   round(variation_gini / max(gini_reference, 1e-6) * 100, 1),
             "statut_gini":          statut_gini,
             "gini_historique":      gini_historique,
             "mois_historique":      mois,
