@@ -337,8 +337,10 @@ class BestEstimateS2:
         h1_corr = n2.get('h1_independance', {}).get('corr_max', 0.0)
 
         # Recommandation H4 hétéroscédasticité
-        h4_ok = n2.get('h4_homogeneite', {}).get('ok', True)
-        h4_cv = n2.get('h4_homogeneite', {}).get('cv_variances', 0.0)
+        # Clé correcte : 'h4_homosc_bootstrap' (conforme n2_hypotheses.py L156)
+        # Sous-clé CV : 'cv_var' (conforme n2_hypotheses.py L678)
+        h4_ok = n2.get('h4_homosc_bootstrap', {}).get('ok', True)
+        h4_cv = n2.get('h4_homosc_bootstrap', {}).get('cv_var', 0.0)
         if not h4_ok:
             recommandations.append(
                 f"H4 Homogénéité rejetée (CV variances = {h4_cv:.2f}) — "
@@ -355,7 +357,6 @@ class BestEstimateS2:
             )
 
         # Recommandation Risk Margin
-        rm = n4_risk_margin if 'n4_risk_margin' in dir() else None
         recommandations.append(
             "Risk Margin S2 calculé par la méthode proportionnelle au BE (méthode 2 EIOPA, CoC 6%). "
             "Documenter la courbe EIOPA RFR utilisée dans la note méthodologique. "
