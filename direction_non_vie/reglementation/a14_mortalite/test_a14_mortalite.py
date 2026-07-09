@@ -10,10 +10,7 @@ import sys, os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../..")))
 
 import numpy as np
-try:
-    from agent import AgentA14Mortalite, TABLES_DISPONIBLES
-except ImportError:
-    from a14_mortalite import AgentA14Mortalite, TABLES_DISPONIBLES
+from direction_non_vie.reglementation.a14_mortalite.agent import AgentA14Mortalite, TABLES_DISPONIBLES
 
 # ── FIXTURES ──────────────────────────────────────────────────────────────────
 
