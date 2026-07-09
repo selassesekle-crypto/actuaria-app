@@ -3,8 +3,9 @@ Tests A11 Thomas v1.0 — 9 tests couvrant tous les modules IFRS 17 PAA
 Commande : python test_a11_thomas.py
 """
 import sys, unittest
-sys.path.insert(0, '/home/claude')
-from a11_ifrs17 import AgentA11IFRS17
+import os as _os
+sys.path.insert(0, _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '../../../../')))
+from direction_non_vie.reglementation.a11_ifrs17.agent import AgentA11IFRS17
 
 # ── Données de base ──────────────────────────────────────────────────────────
 A7 = {
