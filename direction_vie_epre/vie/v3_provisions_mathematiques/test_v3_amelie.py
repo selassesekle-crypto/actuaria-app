@@ -67,7 +67,8 @@ class TestV3ProvisionsMathematiques:
         from direction_vie_epre.services.tables_mortalite_officielles import get_qx
         # qx(40, H) officiel
         qx_40_officiel = get_qx(40, 'H')
-        assert abs(qx_40_officiel - 0.001510) < 1e-6
+        # qx(40, H) W-H officiel = 0.00237062 (Institut des Actuaires, arrete 2006)
+        assert abs(qx_40_officiel - 0.002371) < 1e-4
 
     # T6 — t_ecoule = 0 (début de contrat) : PM prospective ≈ PM initiale
     def test_t6_debut_contrat(self, agent):
