@@ -43,6 +43,12 @@ except ImportError:
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
+try:
+    from ..services.tarif_excel import export_excel_a6
+    TARIF_EXCEL_OK = True
+except ImportError:
+    TARIF_EXCEL_OK = False
+
 warnings.filterwarnings('ignore')
 logging.basicConfig(
     level=logging.INFO,
@@ -238,6 +244,33 @@ class AgentA6Comparaison:
             self._sauvegarder_audit(audit_id, sous_branche, rapport,
                                      statut_rag, t_debut)
 
+            # ── Standard ActuarIA — excel_bytes ──────────────────────────────
+            _tmp_a6 = {
+                'success': True, 'statut_rag': statut_rag,
+                'classement': classement, 'modele_production': modele_production,
+                'backtest': backtest, 'branche': sous_branche,
+                'validation_selection': _val_sel_,
+                'fiche_decision': fiche_decision, 'audit_id': audit_id,
+            }
+            _excel_a6 = b''
+            if TARIF_EXCEL_OK:
+                try:
+                    _excel_a6 = export_excel_a6(_tmp_a6, audit_id)
+                    if _excel_a6:
+                        logger.info(f"[{audit_id}] Excel A6 : {len(_excel_a6):,} bytes")
+                except Exception as e_xl:
+                    logger.warning(f"Excel A6 échoué : {e_xl}")
+
+            _audit_trail_a6 = {
+                'agent': 'A6_COMPARAISON', 'version': '1.0', 'audit_id': audit_id,
+                'timestamp': t_debut.isoformat(), 'branche': sous_branche,
+                'statut_rag': statut_rag,
+                'nb_modeles': len(classement),
+                'modele_production': modele_production.get('modele','') if modele_production else '',
+                'ae_ratio': backtest.get('ae_ratio', 0),
+                'stabilite_wf': backtest.get('stabilite_wf',''),
+            }
+
             if self.verbose:
                 self._afficher_rapport_console(
                     audit_id, sous_branche, classement,
@@ -266,6 +299,11 @@ class AgentA6Comparaison:
                 'commentaire':        commentaire,
                 'audit_id':           audit_id,
                 'erreur':             None,
+                'excel_bytes':        _excel_a6,
+                'word_bytes':         b'',
+                'pdf_bytes':          b'',
+                'hypotheses':         _val_sel_,
+                'audit_trail':        _audit_trail_a6,
             }
 
         except Exception as e:
