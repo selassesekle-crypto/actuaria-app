@@ -284,6 +284,19 @@ class AgentA4ML:
         audit_id     = f"A4_{t_debut.strftime('%Y%m%d_%H%M%S')}"
         sous_branche = result_a2.get('branche', 'inconnue')
 
+        # Gini de référence GLM — dynamique depuis A3 (priorité) ou défaut 0.25
+        # Évite le hardcodage freMTPL2 (0.2651) sur un autre portefeuille
+        gini_reference_a3 = 0.25  # défaut neutre si A3 non fourni
+        if result_a3 and result_a3.get('success'):
+            gini_reference_a3 = (
+                result_a3.get('metriques', {})
+                .get('poisson', {})
+                .get('gini', 0.25)
+            )
+            logger.info(
+                f"[{audit_id}] Gini GLM référence (A3) = {gini_reference_a3:.4f}"
+            )
+
         # Réinitialisation pour chaque appel
         self.modeles   = {}
         self.metriques = {}
@@ -327,6 +340,79 @@ class AgentA4ML:
             logger.info(f"[{audit_id}] Étape 3/4 : Classement et sélection")
             classement = self._classer_modeles(result_a3)
             rapport['etapes'].append('classement')
+
+            # ── OPTUNA — Optimisation hyperparamètres XGBoost (optionnel) ────
+            # Activé si optuna_trials > 0 et Optuna installé.
+            if optuna_trials > 0 and OPTUNA_OK and XGBOOST_OK:
+                try:
+                    import xgboost as xgb_local
+                    logger.info(
+                        f"[{audit_id}] Optuna : optimisation XGBoost ({optuna_trials} essais)"
+                    )
+
+                    def _objective(trial):
+                        params_trial = {
+                            'n_estimators':     trial.suggest_int('n_estimators', 100, 500),
+                            'max_depth':        trial.suggest_int('max_depth', 3, 6),
+                            'learning_rate':    trial.suggest_float('learning_rate', 0.01, 0.1, log=True),
+                            'subsample':        trial.suggest_float('subsample', 0.6, 1.0),
+                            'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
+                            'reg_alpha':        trial.suggest_float('reg_alpha', 1e-3, 1.0, log=True),
+                            'reg_lambda':       trial.suggest_float('reg_lambda', 0.1, 5.0, log=True),
+                            'random_state':     42,
+                            'verbosity':        0,
+                        }
+                        m = xgb_local.XGBRegressor(**params_trial)
+                        m.fit(X_train, y_train, sample_weight=w_train)
+                        pred = np.maximum(m.predict(X_test), 0)
+                        return -self._calculer_gini(y_test, pred)
+
+                    study = optuna.create_study(
+                        direction='minimize',
+                        sampler=optuna.samplers.TPESampler(seed=42)
+                    )
+                    study.optimize(_objective, n_trials=optuna_trials,
+                                   show_progress_bar=False)
+                    best_params = study.best_params
+                    best_params.update({'random_state': 42, 'verbosity': 0})
+
+                    # Recalibrer XGBoost avec les meilleurs paramètres
+                    m_opt = xgb_local.XGBRegressor(**best_params)
+                    m_opt.fit(X_train, y_train, sample_weight=w_train)
+                    pred_opt  = np.maximum(m_opt.predict(X_test), 0)
+                    gini_opt  = self._calculer_gini(y_test, pred_opt)
+                    rmse_opt  = float(np.sqrt(np.mean((y_test - pred_opt)**2)))
+                    of_opt    = gini_opt / max(
+                        self._calculer_gini(y_train, np.maximum(m_opt.predict(X_train), 0)),
+                        1e-6
+                    )
+
+                    # Remplacer l'entrée xgboost dans le classement
+                    classement = [m for m in classement if m.get('modele') != 'xgboost']
+                    classement.append({
+                        'modele':         'xgboost_optuna',
+                        'gini_test':      round(gini_opt, 4),
+                        'gini_train':     round(gini_opt / max(of_opt, 1e-6), 4),
+                        'overfit_ratio':  round(of_opt, 3),
+                        'rmse_test':      round(rmse_opt, 4),
+                        'mae_test':       round(float(np.mean(np.abs(y_test - pred_opt))), 4),
+                        'overfit_alerte': bool(of_opt < 0.85),
+                        'params_optuna':  best_params,
+                    })
+                    classement.sort(key=lambda x: x['gini_test'], reverse=True)
+                    self.modeles['xgboost_optuna'] = m_opt
+                    rapport['optuna_xgboost'] = {
+                        'trials':      optuna_trials,
+                        'best_gini':   round(gini_opt, 4),
+                        'best_params': best_params,
+                    }
+                    logger.info(
+                        f"[{audit_id}] Optuna XGBoost best Gini = {gini_opt:.4f}"
+                    )
+                except Exception as e_opt:
+                    logger.warning(
+                        f"[{audit_id}] Optuna échoué (non bloquant) : {e_opt}"
+                    )
 
             # ── ÉTAPE 4 : SHAP VALUES ─────────────────────────────────────────
             shap_summary = {}
