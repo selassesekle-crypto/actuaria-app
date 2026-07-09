@@ -19,6 +19,7 @@
 # =============================================================================
 
 import logging
+import math
 from typing import Dict, Any, List, Optional, Tuple
 
 import numpy as np
@@ -214,7 +215,6 @@ class HypothesesValidator:
 
         for j in range(m - 2):
             f_j, f_j1 = [], []
-            import math
             for i in range(n):
                 if j + 2 >= m:
                     continue
@@ -329,7 +329,6 @@ class HypothesesValidator:
 
         for j in range(m - 1):
             facteurs = []
-            import math
             for i in range(n):
                 if j + 1 >= m:
                     continue
@@ -622,7 +621,6 @@ class HypothesesValidator:
 
         for j in range(m - 1):
             facteurs, poids = [], []
-            import math
             for i in range(n):
                 if j + 1 >= m:
                     continue
@@ -752,15 +750,9 @@ class HypothesesValidator:
         if h1['ok'] and h2['ok']:
             if scores['mack_1993'] >= 70:
                 return 'mack_1993', (
-                    f"H1 et H2 validées → Chain Ladder approprié. "
-                    f"Mack 1993 retenu pour la quantification de l'incertitude S2 "
-                    f"(score = {scores['mack_1993']}/100)."
-                )
+                    f"H1 et H2 validées → Mack 1993 retenu : hypothèses satisfaites "                    f"et score de confiance suffisant ({scores['mack_1993']}/100). "                    f"Mack 1993 quantifie l'incertitude S2 sans biais."                )
             return 'chain_ladder', (
-                f"H1 et H2 validées → Chain Ladder retenu "
-                f"(score Mack = {scores['mack_1993']}/100 < 70, "
-                f"données insuffisantes pour Mack complet)."
-            )
+                f"H1 et H2 validées → Chain Ladder retenu. "                f"Score Mack = {scores['mack_1993']}/100 < 70 : "                f"triangle insuffisamment développé pour Mack complet, "                f"CL standard plus robuste."            )
 
         # Règle 3 : H1 rejetée + a priori BF fiable
         if not h1['ok'] and h3['score'] >= 60:
