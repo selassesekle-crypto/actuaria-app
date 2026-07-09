@@ -537,7 +537,7 @@ class AgentA4ML:
                 'feature_names':   feature_names,
                 # ── Standard ActuarIA ─────────────────────────────────────────
                 'excel_bytes':     _excel_a4,
-                'word_bytes':      b'',
+                'word_bytes':      _word_a4,
                 'pdf_bytes':       b'',
                 'hypotheses':      _val_ml_tmp,
                 'audit_trail':     {
