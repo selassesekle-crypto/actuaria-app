@@ -110,6 +110,18 @@ except ImportError:
     except ImportError:
         TARIF_EXCEL_OK = False
 
+try:
+    from .services.tarif_rapport import generer_rapport_tarification as _gen_rapport_a4
+    TARIF_RAPPORT_OK_A4 = True
+except ImportError:
+    try:
+        from direction_non_vie.tarification.services.tarif_rapport import (
+            generer_rapport_tarification as _gen_rapport_a4
+        )
+        TARIF_RAPPORT_OK_A4 = True
+    except ImportError:
+        TARIF_RAPPORT_OK_A4 = False
+
 # ── LOGGER ────────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
