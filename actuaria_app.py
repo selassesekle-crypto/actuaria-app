@@ -957,16 +957,33 @@ def _vue_ensemble(ak):
   <div style="font-size:0.65rem;color:{GRIS};text-transform:uppercase;margin-bottom:4px;">KPI principal</div>
   <div style="font-size:1.2rem;font-weight:700;color:{OR};">{a['kpi']}</div>
 </div>""", unsafe_allow_html=True)
+    _ar_ve  = st.session_state.get("agent_results") or {}
+    _be_ve  = ((_ar_ve.get("ibrahim") or {}).get("n4") or {}).get("best_estimate", 2_914_930)
+    _scr_ve = ((_ar_ve.get("elena")   or {}).get("capital") or {}).get("ratio_scr", 208.5)
+    _gin_ve = (((_ar_ve.get("priya")  or {}).get("classement") or [{}])[0]).get("gini", 0.2651)
+    _lcr_ve = ((_ar_ve.get("aisha")   or {}).get("lcr") or {}).get("lcr", 1173.0)
+    _be_str_ve = f"{_be_ve/1e6:.2f}M€" if _be_ve >= 1e6 else f"{_be_ve:,.0f}€"
     c1,c2,c3,c4 = st.columns(4)
-    with c1: st.metric("Best Estimate","2.91M€","CV 0.6%")
-    with c2: st.metric("Ratio SCR","208.5%","✅")
-    with c3: st.metric("Gini ML","0.2651","freMTPL2")
-    with c4: st.metric("LCR","1 173%","✅")
+    with c1: st.metric("Best Estimate", _be_str_ve, "✅ Réel" if _ar_ve.get("ibrahim") else "CV 0.6% [démo]")
+    with c2: st.metric("Ratio SCR", f"{_scr_ve:.1f}%", "✅" if _scr_ve >= 150 else "⚠️")
+    with c3: st.metric("Gini ML", f"{_gin_ve:.4f}", "✅ Réel" if _ar_ve.get("priya") else "freMTPL2 [démo]")
+    with c4: st.metric("LCR", f"{_lcr_ve:,.0f}%", "✅" if _lcr_ve >= 100 else "⚠️")
     col_a, col_b = st.columns(2)
     with col_a:
-        st.plotly_chart(fig_bar(["XGBoost","ElasticNet","CatBoost","GLM"],[0.2651,0.2440,0.2534,0.12],"Gini par famille de modèles",[ROUGE,VERT,OR,GRIS]), use_container_width=True)
+        _cl_ve = (_ar_ve.get("priya") or {}).get("classement", [])
+        if _cl_ve:
+            _top4 = _cl_ve[:4]
+            _g4 = [m.get("gini",0) for m in _top4]
+            _bst = max(_g4)
+            st.plotly_chart(fig_bar([m.get("modele","?") for m in _top4], _g4,
+                "Gini par modèle ML [réel]", [VERT if g==_bst else OR for g in _g4]
+            ), use_container_width=True, key="ve_gini")
+        else:
+            st.plotly_chart(fig_bar(["XGBoost","ElasticNet","CatBoost","GLM"],[0.2651,0.2440,0.2534,0.12],
+                "Gini par famille de modèles [démo]",[ROUGE,VERT,OR,GRIS]
+            ), use_container_width=True, key="ve_gini")
     with col_b:
-        st.plotly_chart(fig_jauge(208.5,"Ratio SCR (%)"), use_container_width=True)
+        st.plotly_chart(fig_jauge(_scr_ve, f"Ratio SCR ({'réel' if _ar_ve.get('elena') else 'démo'}) (%)"), use_container_width=True, key="ve_scr")
 
 def _dashboard_agent(ak):
     a    = AGENTS[ak]
@@ -1187,35 +1204,56 @@ def _dashboard_agent(ak):
         with c2: st.metric("Hash session","5BB15F63","SHA-256")
         with c3: st.metric("Conformité RGPD","✅","Art.30")
 
-    # Boutons rapport
+    # ── Boutons rapport — vrais bytes si disponibles ────────────────────────
     st.markdown("<hr>", unsafe_allow_html=True)
+    _r_btn = (st.session_state.get("agent_results") or {}).get(ak, {})
+    _xls_b = _r_btn.get("excel_bytes") if _r_btn else None
+    _pdf_b = _r_btn.get("pdf_bytes")   if _r_btn else None
+    _wrd_b = _r_btn.get("word_bytes")  if _r_btn else None
     col1,col2,col3 = st.columns(3)
     with col1:
-        if st.button("📄 Rapport PDF", use_container_width=True, key=f"pdf_{ak}"):
-            st.toast(f"✅ Rapport {a['prenom']} généré", icon="✅")
+        if _pdf_b:
+            st.download_button("📄 Rapport PDF", _pdf_b,
+                file_name=f"rapport_{ak}_{datetime.now().strftime('%Y%m%d')}.pdf",
+                mime="application/pdf", use_container_width=True, key=f"pdf_{ak}")
+        elif _wrd_b:
+            st.download_button("📄 Rapport Word", _wrd_b,
+                file_name=f"rapport_{ak}_{datetime.now().strftime('%Y%m%d')}.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                use_container_width=True, key=f"pdf_{ak}")
+        else:
+            if st.button("📄 Rapport (lancer analyse)", use_container_width=True, key=f"pdf_{ak}"):
+                nav_to("analyse")
     with col2:
-        if st.button("📊 Export Excel", use_container_width=True, key=f"xls_{ak}"):
-            st.toast("✅ Export Excel généré", icon="✅")
+        if _xls_b:
+            st.download_button("📊 Export Excel", _xls_b,
+                file_name=f"actuaria_{ak}_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True, key=f"xls_{ak}")
+        else:
+            if st.button("📊 Export Excel (lancer analyse)", use_container_width=True, key=f"xls_{ak}"):
+                nav_to("analyse")
     with col3:
-        if st.button("🔐 Audit Trail", use_container_width=True, key=f"aud_{ak}"):
-            # Génère un rapport d'audit JSON
-            audit = {
-                "agent": a["prenom"],
-                "code":  a["code"],
-                "date":  datetime.now().isoformat(),
-                "hash":  "5BB15F63",
-                "kpi":   a["kpi"],
-                "statut": a["statut"],
-                "rgpd_art30": "Conforme",
-            }
-            import json
-            st.download_button(
-                label="⬇️ Télécharger l'audit",
-                data=json.dumps(audit, indent=2, ensure_ascii=False),
-                file_name=f"audit_{ak}_{datetime.now().strftime('%Y%m%d')}.json",
-                mime="application/json",
-                key=f"dl_aud_{ak}",
-            )
+        import json as _jau, hashlib as _hl
+        _s = json.dumps(_r_btn, default=str, sort_keys=True) if _r_btn else datetime.now().isoformat()
+        _hash = _hl.sha256(_s.encode()).hexdigest()[:8].upper()
+        _audit = {
+            "agent": a["prenom"], "code": a["code"],
+            "date": datetime.now().isoformat(),
+            "hash_sha256": _hash,
+            "kpi": a["kpi"],
+            "statut_rag": _r_btn.get("statut_rag", a["statut"]) if _r_btn else a["statut"],
+            "donnees_reelles": bool(_r_btn and _r_btn.get("success")),
+            "rgpd_art30": "Conforme",
+        }
+        st.download_button(
+            label=f"🔐 Audit Trail ({_hash})",
+            data=_jau.dumps(_audit, indent=2, ensure_ascii=False),
+            file_name=f"audit_{ak}_{datetime.now().strftime('%Y%m%d')}.json",
+            mime="application/json",
+            use_container_width=True,
+            key=f"dl_aud_{ak}",
+        )
 
 def _validation_agent(ak):
     """Onglet Validation — hypothèses testées avec graphiques auto-explicatifs."""
@@ -1360,7 +1398,7 @@ def page_dashboard():
 <div style="margin-bottom:20px;">
   <div style="font-size:0.65rem;color:{OR};text-transform:uppercase;letter-spacing:0.12em;margin-bottom:4px;font-weight:700;">Tableau de bord général</div>
   <div style="font-family:'Playfair Display',serif;font-size:1.5rem;color:{BLANC};font-weight:700;">ActuarIA Dashboard</div>
-  <div style="font-size:0.78rem;color:{GRIS};margin-top:4px;">freMTPL2 — 678 013 contrats Auto France · {datetime.now().strftime('%d/%m/%Y')}</div>
+  <div style="font-size:0.78rem;color:{GRIS};margin-top:4px;">{(st.session_state.get('analyse_fichier_nom') or 'freMTPL2 — démo') + ' · ' + datetime.now().strftime('%d/%m/%Y')}</div>
 </div>""", unsafe_allow_html=True)
 
     tab_nv, tab_vie, tab_sp, tab_regl, tab_ar = st.tabs([
@@ -1428,12 +1466,23 @@ def page_dashboard():
                     [OR,OR,OR,OR,VERT]
                 ), use_container_width=True, key="dash_nv_prov_demo")
         with col_b:
-            st.plotly_chart(fig_bar(
-                ["XGBoost","GBM","CatBoost","LightGBM","ElasticNet"],
-                [0.2651,0.2542,0.2534,0.2481,0.2440],
-                "Tarification — Gini par modèle ML [démo]",
-                [ROUGE,OR,OR,OR,VERT]
-            ), use_container_width=True, key="dash_nv_tarif")
+            _r_a4_nv = (st.session_state.get("agent_results") or {}).get("priya", {})
+            if _r_a4_nv and _r_a4_nv.get("classement"):
+                _cl_nv = _r_a4_nv["classement"][:5]
+                _ginis_nv = [m.get("gini", 0) for m in _cl_nv]
+                _best_nv  = max(_ginis_nv)
+                st.plotly_chart(fig_bar(
+                    [m.get("modele","?") for m in _cl_nv], _ginis_nv,
+                    "Tarification — Gini par modèle ML [réel]",
+                    [VERT if g == _best_nv else OR for g in _ginis_nv]
+                ), use_container_width=True, key="dash_nv_tarif")
+            else:
+                st.plotly_chart(fig_bar(
+                    ["XGBoost","GBM","CatBoost","LightGBM","ElasticNet"],
+                    [0.2651,0.2542,0.2534,0.2481,0.2440],
+                    "Tarification — Gini par modèle ML [démo]",
+                    [ROUGE,OR,OR,OR,VERT]
+                ), use_container_width=True, key="dash_nv_tarif")
 
         col_c, col_d = st.columns(2)
         with col_c:
@@ -1569,21 +1618,54 @@ def page_dashboard():
 
     with tab_regl:
         st.markdown(f"<div style='font-size:0.82rem;color:{GRIS};margin-bottom:14px;'>Réglementation consolidée : Solvabilité 2, IFRS 17, ALM et Audit Trail.</div>", unsafe_allow_html=True)
+        _ar2 = st.session_state.get("agent_results") or {}
+        _r10 = _ar2.get("elena", {})
+        _r11 = _ar2.get("thomas", {})
+        _r12 = _ar2.get("aisha", {})
+        _r10_ok = bool(_r10.get("success"))
+        _r11_ok = bool(_r11.get("success"))
+        _r12_ok = bool(_r12.get("success"))
+        _scr_r = (_r10.get("capital") or {}).get("ratio_scr", 208.5)
+        _mcr_r = (_r10.get("capital") or {}).get("ratio_mcr", 320.0)
+        _tp_r  = (_r11.get("provisions") or {}).get("tp_ifrs17", 3_992_344)
+        _lcr_r = (_r12.get("lcr") or {}).get("lcr", 1173.0)
+        _scr_t = (_r10.get("scr") or {}).get("total", 3_680_671)
+        _scr_s = (_r10.get("scr") or {}).get("souscription", 2_800_000)
+        _scr_m = (_r10.get("scr") or {}).get("marche", 650_000)
+        _scr_o = (_r10.get("scr") or {}).get("operationnel", 230_000)
+        _be_s2 = (_r10.get("provisions") or {}).get("best_estimate", 2_914_930)
+        _ra_r  = (_r11.get("provisions") or {}).get("risk_adjustment", 350_000)
+        _lrc_r = (_r11.get("provisions") or {}).get("lrc", 727_414)
+        if _r10_ok or _r11_ok or _r12_ok:
+            st.success("✅ Résultats réglementation chargés — données réelles")
+        else:
+            st.info("💡 Lancez une analyse Solvabilité 2, IFRS 17 ou ALM pour afficher vos données réelles.")
         c1,c2,c3,c4 = st.columns(4)
-        with c1: st.metric("Ratio SCR","208.5%","✅ > 150%")
-        with c2: st.metric("Ratio MCR","320%","✅ > 100%")
-        with c3: st.metric("TP IFRS17","3.99M€","PAA · ratio 1.370")
-        with c4: st.metric("LCR","1 173%","✅ Très liquide")
+        with c1: st.metric("Ratio SCR", f"{_scr_r:.1f}%", "✅ > 150%" if _scr_r >= 150 else "⚠️ < 150%")
+        with c2: st.metric("Ratio MCR", f"{_mcr_r:.0f}%", "✅ > 100%" if _mcr_r >= 100 else "⚠️ < 100%")
+        with c3:
+            tp_str = f"{_tp_r/1e6:.2f}M€" if _tp_r >= 1e6 else f"{_tp_r:,.0f}€"
+            st.metric("TP IFRS17", tp_str, "PAA" + (" [réel]" if _r11_ok else " [démo]"))
+        with c4: st.metric("LCR", f"{_lcr_r:,.0f}%", "✅ Très liquide" if _lcr_r >= 100 else "⚠️ < 100%")
         col_a,col_b = st.columns(2)
         with col_a:
-            st.plotly_chart(fig_jauge(208.5,"Ratio SCR (%)"), use_container_width=True)
+            st.plotly_chart(fig_jauge(_scr_r, f"Ratio SCR ({'réel' if _r10_ok else 'démo'}) (%)"), use_container_width=True, key="regl_scr_j")
         with col_b:
-            st.plotly_chart(fig_bar(["SCR Souscr.","SCR Marché","SCR Opéra.","SCR Total"],[2_800_000,650_000,230_000,3_680_671],"Décomposition SCR — Formule standard EIOPA (€)"), use_container_width=True)
+            st.plotly_chart(fig_bar(
+                ["SCR Souscr.","SCR Marché","SCR Opéra.","SCR Total"],
+                [_scr_s, _scr_m, _scr_o, _scr_t],
+                f"Décomposition SCR EIOPA (€){' [réel]' if _r10_ok else ' [démo]'}",
+            ), use_container_width=True, key="regl_scr_b")
         col_c,col_d = st.columns(2)
         with col_c:
-            st.plotly_chart(fig_bar(["BE S2","Risk Adj.","LRC","TP IFRS17"],[2_914_930,350_000,727_414,3_992_344],"IFRS 17 PAA — Composition TP (€)",[BLEU,AMBRE,VERT,OR]), use_container_width=True)
+            st.plotly_chart(fig_bar(
+                ["BE S2","Risk Adj.","LRC","TP IFRS17"],
+                [_be_s2, _ra_r, _lrc_r, _tp_r],
+                f"IFRS 17 PAA — Composition TP (€){' [réel]' if _r11_ok else ' [démo]'}",
+                [BLEU,AMBRE,VERT,OR]
+            ), use_container_width=True, key="regl_ifrs_b")
         with col_d:
-            st.plotly_chart(fig_jauge(1173,"LCR (%)",r1=75,r2=100,max_v=1500), use_container_width=True)
+            st.plotly_chart(fig_jauge(_lcr_r, f"LCR ({'réel' if _r12_ok else 'démo'}) (%)", r1=75, r2=100, max_v=1500), use_container_width=True, key="regl_lcr_j")
 
     with tab_ar:
         st.markdown(f"""
