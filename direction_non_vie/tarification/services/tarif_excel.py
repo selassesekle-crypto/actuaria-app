@@ -93,11 +93,12 @@ def _section(ws, row, titre, n_cols=8):
                        end_row=row, end_column=n_cols)
     ws.row_dimensions[row].height = 20
 
-def _kpi(ws, row, label, value, statut=None, fmt=None):
-    _cell(ws, row, 1, label, bold=True, cf=NOIR, fill=GRIS_L)
+def _kpi(ws, row, label, value, statut=None, fmt=None, wrap=False):
+    _cell(ws, row, 1, label, bold=True, cf=NOIR, fill=GRIS_L, wrap=wrap)
     _col_w(ws, 1, 38)
-    _cell(ws, row, 2, value, bold=True, cf=NOIR, fill=None, ah="right", fmt=fmt)
-    _col_w(ws, 2, 22)
+    _cell(ws, row, 2, value, bold=True, cf=NOIR, fill=None, ah="left" if wrap else "right",
+          fmt=fmt, wrap=wrap)
+    _col_w(ws, 2, 50 if wrap else 22)
     if statut:
         txt = {"VERT": "✓ Conforme", "AMBRE": "△ À surveiller", "ROUGE": "✗ Attention"}.get(statut, statut)
         _cell(ws, row, 3, txt, bold=True, cf=BLANC,
