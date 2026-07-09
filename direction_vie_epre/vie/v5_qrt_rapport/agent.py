@@ -10,6 +10,11 @@ Reporting réglementaire Vie (Solvabilité 2) :
 """
 
 import numpy as np, logging, os, json
+from direction_vie_epre.services.rapport_vie import (
+    export_html as _rapport_html_vie,
+    export_pdf  as _rapport_pdf_vie,
+    export_word as _rapport_word_vie,
+)
 from datetime import datetime
 from typing import Dict
 
@@ -34,6 +39,14 @@ class AgentV5QRTVie:
             result_v3=None,    # Optional[Dict] — alimente be_vie et pm_total depuis V3 Amélie
             result_rvie1=None, # Optional[Dict] — alimente scr_vie depuis R-VIE1 Éric
             result_v4=None,    # Optional[Dict] — alimente ppb depuis V4 Théo
+            # Agents complémentaires pour rapport consolidé
+            result_v6=None, result_v7=None, result_v8=None, result_v9=None,
+            result_rvie2=None,
+            result_ep1=None, result_ep3=None, result_ep4=None,
+            result_ep6=None, result_ep7=None,
+            # Métadonnées rapport
+            ref_client='', arrete='',
+            actuaire_nom='', actuaire_numero_ia='',
             ) -> Dict:
         audit_id=f"V5_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         logger=self.logger
@@ -132,6 +145,44 @@ class AgentV5QRTVie:
             self._sauvegarder({'agent':'V5 Nia','qrt_s12':qrt_s12,'qrt_s23':qrt_s23,
                                'rapport_actuariel':rapport_actuariel}, audit_id)
 
+            # ── Rapports consolidés niveau A7 ─────────────────────────────────
+            _kw = dict(
+                result_v3=result_v3, result_v6=result_v6, result_v7=result_v7,
+                result_v8=result_v8, result_v9=result_v9,
+                result_v5={
+                    'success':True,
+                    'statut_rag':'VERT' if val_hyp['statut_global']!='ROUGE' else 'AMBRE',
+                    'tp_vie':round(tp_vie,2), 'be_vie':round(be_vie,2),
+                    'ratio_tp_be':round(ratio_tp_be,4),
+                    'ratio_scr_pct':round(ratio_scr,1),
+                    'ratio_mcr_pct':round(ratio_mcr,1),
+                    'avis_pa':avis_pa,
+                    'conseil_global':rapport_actuariel.get('avis',''),
+                    'recommandations':rapport_actuariel.get('recommandations',[]),
+                },
+                result_rvie1=result_rvie1, result_rvie2=result_rvie2,
+                result_ep1=result_ep1, result_ep3=result_ep3, result_ep4=result_ep4,
+                result_ep6=result_ep6, result_ep7=result_ep7,
+                commentaire=commentaire, ref_client=ref_client, arrete=arrete,
+                audit_id=audit_id,
+                graphiques=graphiques if generer_graphiques else None,
+                actuaire_nom=actuaire_nom, actuaire_numero_ia=actuaire_numero_ia,
+            )
+            html_bytes = pdf_bytes = word_bytes = None
+            try:
+                _h = _rapport_html_vie(**_kw)
+                html_bytes = _h.encode('utf-8') if _h else None
+            except Exception as _e:
+                logger.warning(f'[{audit_id}] HTML V5 : {_e}')
+            try:
+                pdf_bytes = _rapport_pdf_vie(**_kw)
+            except Exception as _e:
+                logger.warning(f'[{audit_id}] PDF V5 : {_e}')
+            try:
+                word_bytes = _rapport_word_vie(**_kw)
+            except Exception as _e:
+                logger.warning(f'[{audit_id}] Word V5 : {_e}')
+
             return {
                 'success':True,'agent':'V5 Nia',
                 'statut_rag':'VERT' if val_hyp['statut_global']!='ROUGE' else 'AMBRE',
@@ -142,7 +193,9 @@ class AgentV5QRTVie:
                 'ratio_mcr_pct':round(ratio_mcr,1),
                 'ratio_tp_be':round(ratio_tp_be,4),
                 'commentaire':commentaire,'audit_id':audit_id,
-                'graphiques':graphiques,'validation_qrt':val_hyp,'graphiques_validation':gv,'erreur':None,
+                'graphiques':graphiques,'validation_qrt':val_hyp,'graphiques_validation':gv,
+                'html_bytes':html_bytes,'pdf_bytes':pdf_bytes,'word_bytes':word_bytes,
+                'erreur':None,
             }
         except Exception as e:
             logger.error(f"[{audit_id}] ERREUR : {e}", exc_info=True)
