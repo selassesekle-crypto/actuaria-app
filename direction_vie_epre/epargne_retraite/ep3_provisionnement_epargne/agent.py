@@ -144,11 +144,19 @@ class AgentEP3ProvissionnementEpargne:
             _actifs_reel = actifs_total if actifs_total is not None else provisions_total * 1.05
             taux_couverture = _actifs_reel / max(provisions_total, 1) * 100
 
-            statut_rag = (
-                'VERT'  if ecart_pm <= 10 and taux_ppb >= 0 else
-                'AMBRE' if ecart_pm <= 20 else
-                'ROUGE'
-            )
+            # Statut RAG basé sur couverture actifs ET cohérence PM
+            # L'écart PM calculée/déclarée peut être grand quand encours_total
+            # est fourni directement (portefeuille) vs PM théorique (contrat type).
+            # On pondère : couverture actifs est le critère réglementaire principal.
+            if taux_couverture >= 100 and ecart_pm <= 20:
+                statut_rag = 'VERT'
+            elif taux_couverture >= 90 and ecart_pm <= 30:
+                statut_rag = 'AMBRE'
+            elif taux_couverture >= 100 and ecart_pm <= 50:
+                # Couverture suffisante même si PM calculée diverge (données portefeuille)
+                statut_rag = 'AMBRE'
+            else:
+                statut_rag = 'ROUGE'
 
             result = {
                 'success':      True,
@@ -174,6 +182,12 @@ class AgentEP3ProvissionnementEpargne:
                     encours_total, ppb_total, reserve_capi_new,
                     taux_ppb, ecart_pm, statut_rag
                 ),
+                # Clés exposées à la racine pour accès direct par EP4/EP5
+                'taux_couverture_pct': round(taux_couverture, 2),
+                'actifs_total':        round(_actifs_reel, 0),
+                'provisions_total':    round(provisions_total, 0),
+                'pm_encours':          round(encours_total, 0),
+                'ppb':                 round(ppb_total, 0),
             }
 
             if generer_graphiques and PLOTLY_OK:
