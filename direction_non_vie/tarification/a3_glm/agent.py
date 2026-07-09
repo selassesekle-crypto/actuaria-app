@@ -1284,25 +1284,30 @@ class AgentA3GLM:
         """
         if len(y_true) == 0 or len(y_pred) == 0:
             return 0.0
+        if np.sum(y_true) == 0:
+            # Aucun sinistre sur la période de test — Gini incalculable
+            return 0.0
 
         try:
             # Tri par prédiction croissante
             order   = np.argsort(y_pred)
-            y_true  = y_true[order]
-            y_pred  = y_pred[order]
+            y_true  = np.asarray(y_true)[order]
+            y_pred  = np.asarray(y_pred)[order]
 
             n       = len(y_true)
-            cum_obs = np.cumsum(y_true) / np.sum(y_true)
+            total   = float(np.sum(y_true))
+            cum_obs = np.cumsum(y_true) / total
             cum_pop = np.arange(1, n + 1) / n
 
-            # Aire sous la courbe de Lorenz (compatible NumPy ≥ 2.0)
+            # Aire sous la courbe de Lorenz (compatible NumPy 1.x et 2.x)
             _trapz  = getattr(np, 'trapezoid', None) or getattr(np, 'trapz', None)
             auc     = _trapz(cum_obs, cum_pop)
-            gini    = 2 * auc - 1
+            gini    = 2.0 * float(auc) - 1.0
 
-            return float(np.clip(gini, 0, 1))
+            return float(np.clip(gini, 0.0, 1.0))
 
-        except Exception:
+        except Exception as e_gini:
+            logger.debug(f"_calculer_gini échoué : {e_gini}")
             return 0.0
 
     def _calculer_metriques_globales(
@@ -2091,8 +2096,12 @@ class AgentA3GLM:
                     deciles = np.array_split(
                         res_pearson[np.argsort(mu_hat)], n_q
                     )
+                    # CV normalisé par std global — robuste quand moyenne ≈ 0
+                    # (les résidus de Pearson sont centrés, donc mean ≈ 0 par
+                    # construction, ce qui rendrait CV = std/|mean| explosif)
+                    std_global = float(np.std(res_pearson)) or 1.0
                     cv_par_decile = [
-                        float(np.std(d) / max(abs(np.mean(d)), 1e-6))
+                        float(np.std(d) / std_global)
                         for d in deciles if len(d) > 5
                     ]
                     cv_max = float(np.max(cv_par_decile)) if cv_par_decile else 0.20
