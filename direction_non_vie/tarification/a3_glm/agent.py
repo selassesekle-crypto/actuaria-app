@@ -1295,8 +1295,9 @@ class AgentA3GLM:
             cum_obs = np.cumsum(y_true) / np.sum(y_true)
             cum_pop = np.arange(1, n + 1) / n
 
-            # Aire sous la courbe de Lorenz (méthode des trapèzes)
-            auc     = _np_trapz(cum_obs, cum_pop)
+            # Aire sous la courbe de Lorenz (compatible NumPy ≥ 2.0)
+            _trapz  = getattr(np, 'trapezoid', None) or getattr(np, 'trapz', None)
+            auc     = _trapz(cum_obs, cum_pop)
             gini    = 2 * auc - 1
 
             return float(np.clip(gini, 0, 1))
