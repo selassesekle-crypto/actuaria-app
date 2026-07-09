@@ -179,7 +179,8 @@ class AgentV5QRTVie:
             except Exception as _e:
                 logger.warning(f'[{audit_id}] PDF V5 : {_e}')
             try:
-                word_bytes = _rapport_word_vie(**_kw)
+                _kw_word = {k: v for k, v in _kw.items() if k != 'graphiques'}
+                word_bytes = _rapport_word_vie(**_kw_word)
             except Exception as _e:
                 logger.warning(f'[{audit_id}] Word V5 : {_e}')
 
