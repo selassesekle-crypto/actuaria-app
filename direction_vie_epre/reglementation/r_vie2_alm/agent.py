@@ -10,6 +10,11 @@ Rapports réglementaires Pilier 3 Solvabilité 2 :
 """
 
 import numpy as np, logging, os, json
+from direction_vie_epre.services.rapport_rvie2 import (
+    export_html as _rapport_html_rvie2,
+    export_pdf  as _rapport_pdf_rvie2,
+    export_word as _rapport_word_rvie2,
+)
 from datetime import datetime
 from typing import Dict
 
@@ -34,7 +39,12 @@ class AgentRVIE2RSRSFCRVie:
     def run(self, scr_vie=5_000_000, fonds_propres=12_000_000,
             be_vie=45_000_000, pm_total=50_000_000,
             risk_adjustment_pct=0.08,  # RA = 8% du BE par défaut (à passer depuis R-VIE1)
-            ratio_scr_n1=200.0, generer_graphiques=True) -> Dict:
+            ratio_scr_n1=200.0, generer_graphiques=True,
+            # Métadonnées rapport et agents complémentaires
+            ref_client='', arrete='',
+            actuaire_nom='', actuaire_numero_ia='',
+            result_v5=None, result_rvie1=None,
+            ) -> Dict:
         audit_id = f"RVIE2_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         logger = self.logger
         if self.verbose:
@@ -144,6 +154,40 @@ class AgentRVIE2RSRSFCRVie:
                 'agent':'R-VIE2 Camille','sfcr':sfcr,'rsr':rsr,
                 'ratio_scr':ratio_scr_n,'avis_fa':avis_fa}, audit_id)
 
+            # ── Rapports consolidés RSR/SFCR niveau A7 ──────────────────
+            _kw = dict(
+                result_rvie2={
+                    'success':True, 'statut_rag':'VERT' if ratio_scr_n>=150 else 'AMBRE' if ratio_scr_n>=100 else 'ROUGE',
+                    'ratio_scr_pct':round(ratio_scr_n,1), 'ratio_scr_n1':round(ratio_scr_n1,1),
+                    'ratio_mcr_pct':round(ratio_mcr_n,1), 'ratio_tp_be':round(ratio_tp_be,4),
+                    'variation_scr_pp':round(variation_scr,1),
+                    'fonds_propres':fonds_propres, 'sfcr':sfcr, 'rsr':rsr, 'avis_fa':avis_fa,
+                    'conseil_global':commentaire,
+                },
+                result_v5=result_v5,
+                result_rvie1=result_rvie1,
+                commentaire=commentaire,
+                ref_client=ref_client, arrete=arrete,
+                audit_id=audit_id,
+                graphiques=graphiques if generer_graphiques else None,
+                actuaire_nom=actuaire_nom, actuaire_numero_ia=actuaire_numero_ia,
+            )
+            html_bytes = pdf_bytes = word_bytes = None
+            try:
+                _h = _rapport_html_rvie2(**_kw)
+                html_bytes = _h.encode('utf-8') if _h else None
+            except Exception as _e:
+                logger.warning(f'[{audit_id}] HTML R-VIE2 : {_e}')
+            try:
+                pdf_bytes = _rapport_pdf_rvie2(**_kw)
+            except Exception as _e:
+                logger.warning(f'[{audit_id}] PDF R-VIE2 : {_e}')
+            try:
+                _kw_w = {k: v for k, v in _kw.items() if k != 'graphiques'}
+                word_bytes = _rapport_word_rvie2(**_kw_w)
+            except Exception as _e:
+                logger.warning(f'[{audit_id}] Word R-VIE2 : {_e}')
+
             return {
                 'success':True, 'agent':'R-VIE2 Camille',
                 'statut_rag':'VERT' if ratio_scr_n >= 150 else 'AMBRE' if ratio_scr_n >= 100 else 'ROUGE',
@@ -158,6 +202,7 @@ class AgentRVIE2RSRSFCRVie:
                 'graphiques':graphiques,
                 'validation_rvie2':val_hyp,
                 'graphiques_validation':gv,
+                'html_bytes':html_bytes,'pdf_bytes':pdf_bytes,'word_bytes':word_bytes,
                 'erreur':None,
             }
         except Exception as e:
