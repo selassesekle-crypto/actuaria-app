@@ -8,18 +8,25 @@ import pandas as pd
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../')))
 
 
-def _make_r_a2(n=500):
-    """Result A2 synthétique avec données freMTPL2-like pour GLM."""
+def _make_r_a2(n=2000):
+    """Result A2 synthétique avec données freMTPL2-like pour GLM.
+    n=2000 et bonus_malus fortement discriminant pour garantir
+    qu'au moins 1 variable est retenue par le stepwise backward.
+    """
     np.random.seed(42)
-    exposition = np.random.uniform(0.1, 1.0, n)
-    nb_sin     = np.random.poisson(0.08 * exposition, n).astype(float)
+    exposition  = np.random.uniform(0.1, 1.0, n)
+    # bonus_malus dans [50, 350] — effet multiplicatif fort sur la fréquence
+    bonus_malus = np.random.uniform(50, 350, n)
+    # lambda proportionnel au bonus_malus : fort signal actuariel
+    lam = 0.04 * exposition * (bonus_malus / 100.0)
+    nb_sin     = np.random.poisson(lam, n).astype(float)
     cout       = np.where(nb_sin > 0, np.random.gamma(2, 400, n), 0.0)
     df = pd.DataFrame({
         'nb_sinistres':         nb_sin,
         'cout_total_sinistres': cout,
         'exposition':           exposition,
         'age':                  np.random.randint(18, 75, n).astype(float),
-        'bonus_malus':          np.random.uniform(50, 350, n),
+        'bonus_malus':          bonus_malus,
         'puissance_fiscale':    np.random.randint(4, 15, n).astype(float),
         'densite_population':   np.random.uniform(10, 5000, n),
         'log_exposition':       np.log(np.maximum(exposition, 1e-6)),
@@ -71,10 +78,11 @@ class TestA3GLM(unittest.TestCase):
         print(f"    ST3 Gini Poisson ✅ | Gini={gini_p:.4f}")
 
         # ST4 — Stepwise backward : au moins 1 variable retenue
+        # (n=2000 avec bonus_malus fortement discriminant garantit la sélection)
         vars_ret = met['poisson'].get('vars_retenues', [])
         self.assertIsInstance(vars_ret, list)
         self.assertGreater(len(vars_ret), 0,
-            "Aucune variable retenue par le stepwise backward")
+            "Aucune variable retenue — vérifier la puissance statistique des données")
         print(f"    ST4 Stepwise ✅ | {len(vars_ret)} var(s) retenue(s) : {vars_ret[:3]}")
 
         # ST5 — Relativités tarifaires exp(β) présentes et cohérentes
