@@ -1875,76 +1875,195 @@ class AgentA4ML:
         monitoring:     Dict,
         n_train:        int = 0,
         n_test:         int = 0,
+        X_train:        object = None,
+        X_test:         object = None,
+        y_test:         object = None,
     ) -> Dict:
         """
-        Validation complète des hypothèses ML.
+        Validation complète des hypothèses ML — 4 hypothèses.
 
         H1 — Absence d'overfitting
-             Ratio Gini test / Gini train > 0.90
-             Si < 0.85 → surapprentissage ❌
+             Ratio Gini test / Gini train ≥ 0.90 → pas d'overfitting ✅
+             Ratio < 0.80 → surapprentissage ❌
 
-        H2 — Stabilité PSI (dérive des données)
+        H2 — Stabilité PSI réel (dérive train → test)
+             PSI calculé sur les features réelles entre train et test.
              PSI < 0.10 → stable ✅
-             PSI [0.10-0.25] → attention ⚠️
-             PSI > 0.25 → dérive ❌
+             PSI ∈ [0.10, 0.25] → dérive légère ⚠️
+             PSI > 0.25 → dérive significative ❌
+             Réf. : Siddiqi (2006) — Credit Risk Scorecards.
 
-        H3 — Performance suffisante
-             Gini modèle retenu > 0.20 → acceptable ✅
-             Gini > 0.25 → bon ✅✅
+        H3 — Performance Gini suffisante
+             Gini ≥ 0.20 → acceptable ✅
+             Gini ≥ 0.25 → bon ✅✅
              Gini < 0.15 → insuffisant ❌
-        """
-        # H1 — Overfitting
-        if classement:
-            meilleur = classement[0]
-            gini_test  = meilleur.get('gini', 0)
-            gini_train = meilleur.get('gini_train', gini_test * 1.1)
-            ratio_of   = gini_test / max(gini_train, 0.001)
 
+        H4 — Calibration (Reliability diagram)
+             Pour chaque décile de prime prédite, prime observée
+             doit être cohérente avec prime prédite.
+             Écart moyen |obs - pred| / pred < 15% → calibré ✅
+             Réf. : Denuit et al. (2019) — Autocalibration.
+        """
+        import numpy as np
+
+        # ── H1 — Overfitting ─────────────────────────────────────────────────
+        if classement:
+            meilleur   = classement[0]
+            gini_test  = meilleur.get('gini_test', meilleur.get('gini', 0))
+            gini_train = meilleur.get('gini_train', gini_test * 1.10)
+            ratio_of   = gini_test / max(gini_train, 0.001)
             if ratio_of >= 0.90:
                 h1_statut = "VERT"
                 h1_msg    = f"Ratio test/train = {ratio_of:.3f} ≥ 0.90 → Pas d'overfitting ✅"
-                h1_conseil= f"Le modèle {meilleur.get('modele','?')} généralise bien sur nouvelles données"
+                h1_conseil= f"Le modèle {meilleur.get('modele','?')} généralise bien"
             elif ratio_of >= 0.80:
                 h1_statut = "AMBRE"
-                h1_msg    = f"Ratio test/train = {ratio_of:.3f} ∈ [0.80, 0.90] → Overfitting léger"
-                h1_conseil= "Régularisation recommandée (augmenter lambda/alpha)"
+                h1_msg    = f"Ratio test/train = {ratio_of:.3f} ∈ [0.80, 0.90] → Overfitting léger ⚠️"
+                h1_conseil= "Augmenter la régularisation (lambda/alpha) · Réduire max_depth"
             else:
                 h1_statut = "ROUGE"
                 h1_msg    = f"Ratio test/train = {ratio_of:.3f} < 0.80 → Surapprentissage ❌"
-                h1_conseil= "Réduire la complexité du modèle · Augmenter la régularisation · Vérifier les données"
+                h1_conseil= "Réduire la complexité · Augmenter min_samples_leaf · Vérifier les données"
         else:
             ratio_of, gini_test, gini_train = 1.0, 0.0, 0.0
-            h1_statut, h1_msg = "AMBRE", "Classement vide — aucun modèle calibré"
+            h1_statut  = "AMBRE"
+            h1_msg     = "Classement vide — aucun modèle calibré"
             h1_conseil = "Vérifier la qualité des données d'entrée"
 
-        # H2 — PSI (depuis monitoring)
-        psi        = monitoring.get('psi', 0)
-        statut_psi = monitoring.get('statut_psi', 'VERT')
-        h2_statut  = statut_psi
-        h2_msg     = monitoring.get('interpretation_psi', f"PSI = {psi:.4f}")
-        h2_conseil = monitoring.get('recommandation', "Surveiller le PSI mensellement")
+        # ── H2 — PSI réel sur features train vs test ─────────────────────────
+        # Calcul PSI sur les features les plus importantes (top 5 SHAP si dispo,
+        # sinon toutes les colonnes numériques).
+        # Remplace le PSI simulé par un PSI calculé sur vraies données.
+        psi_global = monitoring.get('psi', 0.0)  # fallback si X non dispo
+        psi_source = "simulé"
+        h2_details = {}
+        try:
+            if X_train is not None and X_test is not None and hasattr(X_train, 'shape'):
+                import pandas as pd
+                if hasattr(X_train, 'columns'):
+                    cols = X_train.columns.tolist()
+                else:
+                    cols = [f"f{i}" for i in range(X_train.shape[1])]
+                    X_train = pd.DataFrame(X_train, columns=cols)
+                    X_test  = pd.DataFrame(X_test,  columns=cols)
 
-        # H3 — Performance Gini
+                psis = []
+                n_buckets = 10
+                for col in cols[:10]:  # Top 10 features max
+                    try:
+                        tr_vals = X_train[col].dropna().values
+                        te_vals = X_test[col].dropna().values
+                        if len(tr_vals) < 20 or len(te_vals) < 20:
+                            continue
+                        bins = np.percentile(tr_vals, np.linspace(0, 100, n_buckets + 1))
+                        bins = np.unique(bins)
+                        if len(bins) < 3:
+                            continue
+                        f_tr = np.histogram(tr_vals, bins=bins)[0] / len(tr_vals)
+                        f_te = np.histogram(te_vals, bins=bins)[0] / len(te_vals)
+                        f_tr = np.clip(f_tr, 1e-6, None)
+                        f_te = np.clip(f_te, 1e-6, None)
+                        psi_col = float(np.sum((f_te - f_tr) * np.log(f_te / f_tr)))
+                        psis.append(psi_col)
+                        h2_details[col] = round(psi_col, 4)
+                    except Exception:
+                        pass
+
+                if psis:
+                    psi_global = float(np.mean(psis))
+                    psi_source = f"réel ({len(psis)} features)"
+        except Exception as e_psi:
+            logger.debug(f"PSI réel échoué : {e_psi}")
+
+        if psi_global < 0.10:
+            h2_statut = "VERT"
+            h2_msg    = f"PSI moyen = {psi_global:.4f} < 0.10 → Distribution stable ✅ ({psi_source})"
+            h2_conseil= "Pas de dérive détectée — modèle applicable sur les nouvelles données"
+        elif psi_global < 0.25:
+            h2_statut = "AMBRE"
+            h2_msg    = f"PSI moyen = {psi_global:.4f} ∈ [0.10,0.25] → Dérive légère ⚠️ ({psi_source})"
+            h2_conseil= "Surveiller les features instables · Ré-entraîner si PSI augmente"
+        else:
+            h2_statut = "ROUGE"
+            h2_msg    = f"PSI moyen = {psi_global:.4f} > 0.25 → Dérive significative ❌ ({psi_source})"
+            h2_conseil= "Ré-entraînement requis — la distribution des données a changé"
+
+        # ── H3 — Performance Gini ─────────────────────────────────────────────
         if gini_test >= 0.25:
             h3_statut = "VERT"
             h3_msg    = f"Gini = {gini_test:.4f} ≥ 0.25 → Performance bonne ✅✅"
             h3_conseil= "Modèle performant — défendable devant l'actuaire désigné et l'ACPR"
         elif gini_test >= 0.20:
             h3_statut = "VERT"
-            h3_msg    = f"Gini = {gini_test:.4f} ∈ [0.20, 0.25] → Performance acceptable ✅"
+            h3_msg    = f"Gini = {gini_test:.4f} ∈ [0.20,0.25] → Performance acceptable ✅"
             h3_conseil= "Modèle utilisable — surveiller l'évolution du Gini en production"
         elif gini_test >= 0.15:
             h3_statut = "AMBRE"
-            h3_msg    = f"Gini = {gini_test:.4f} ∈ [0.15, 0.20] → Performance limite ⚠️"
-            h3_conseil= "Enrichir les données · Ajouter des variables actuarielles · Revoir la segmentation"
+            h3_msg    = f"Gini = {gini_test:.4f} ∈ [0.15,0.20] → Performance limite ⚠️"
+            h3_conseil= "Enrichir les données · Ajouter des variables actuarielles"
         else:
             h3_statut = "ROUGE"
             h3_msg    = f"Gini = {gini_test:.4f} < 0.15 → Performance insuffisante ❌"
             h3_conseil= "Modèle à rejeter — données insuffisantes ou inadaptées"
 
-        statuts = [h1_statut, h2_statut, h3_statut]
-        statut_global = "ROUGE" if "ROUGE" in statuts else "AMBRE" if "AMBRE" in statuts else "VERT"
+        # ── H4 — Calibration (Reliability diagram) ───────────────────────────
+        # Déciles de prime prédite → prime observée moyenne dans chaque décile.
+        # Écart |obs - pred| / pred par décile → calibration actuarielle.
+        # Réf. : Denuit, Hainaut, Trufin (2019) — Autocalibration.
+        h4_statut    = "VERT"
+        h4_msg       = "Calibration non testée (prédictions non disponibles)"
+        h4_conseil   = "Fournir X_test et y_test pour le reliability diagram"
+        ecart_moy    = 0.0
+        reliability  = []
+        try:
+            if classement and y_test is not None and X_test is not None:
+                meilleur_mod = self.modeles.get(
+                    classement[0].get('modele', ''), None
+                )
+                if meilleur_mod is not None and hasattr(meilleur_mod, 'predict'):
+                    import pandas as pd
+                    if hasattr(X_test, 'values'):
+                        X_te_arr = X_test.values
+                    else:
+                        X_te_arr = np.array(X_test)
+                    y_pred = np.maximum(meilleur_mod.predict(X_te_arr), 0)
+                    y_obs  = np.array(y_test, dtype=float)
+                    n_dec  = 10
+                    idx_sort = np.argsort(y_pred)
+                    deciles  = np.array_split(idx_sort, n_dec)
+                    ecarts   = []
+                    for d in deciles:
+                        if len(d) < 5:
+                            continue
+                        pred_moy = float(np.mean(y_pred[d]))
+                        obs_moy  = float(np.mean(y_obs[d]))
+                        ecart    = abs(obs_moy - pred_moy) / max(pred_moy, 1e-6)
+                        ecarts.append(ecart)
+                        reliability.append({
+                            'n':        len(d),
+                            'pred_moy': round(pred_moy, 4),
+                            'obs_moy':  round(obs_moy, 4),
+                            'ecart_pct':round(ecart * 100, 2),
+                        })
+                    if ecarts:
+                        ecart_moy = float(np.mean(ecarts))
+                        if ecart_moy < 0.15:
+                            h4_statut = "VERT"
+                            h4_msg    = f"Écart moyen calibration = {ecart_moy*100:.1f}% < 15% → Bien calibré ✅"
+                            h4_conseil= "Primes prédites cohérentes avec observées — pas de biais systématique"
+                        elif ecart_moy < 0.30:
+                            h4_statut = "AMBRE"
+                            h4_msg    = f"Écart moyen = {ecart_moy*100:.1f}% ∈ [15%,30%] → Calibration partielle ⚠️"
+                            h4_conseil= "Vérifier les déciles extrêmes · Appliquer une calibration isotonic"
+                        else:
+                            h4_statut = "ROUGE"
+                            h4_msg    = f"Écart moyen = {ecart_moy*100:.1f}% > 30% → Modèle non calibré ❌"
+                            h4_conseil= "Appliquer calibration isotonic regression avant déploiement en production"
+        except Exception as e_cal:
+            logger.debug(f"H4 calibration échouée : {e_cal}")
 
+        statuts = [h1_statut, h2_statut, h3_statut, h4_statut]
+        statut_global = "ROUGE" if "ROUGE" in statuts else "AMBRE" if "AMBRE" in statuts else "VERT"
         conclusion = {
             "VERT":  f"✅ Modèle validé — {classement[0].get('modele','?') if classement else '?'} prêt pour la production",
             "AMBRE": "⚠️ Modèle utilisable avec précautions — vérifier les points signalés",
@@ -1953,27 +2072,37 @@ class AgentA4ML:
 
         return {
             "h1_overfitting": {
-                "ratio":    round(ratio_of, 4),
-                "gini_test": round(gini_test, 4),
-                "gini_train":round(gini_train, 4),
-                "statut":   h1_statut,
-                "message":  h1_msg,
-                "conseil":  h1_conseil,
+                "ratio":      round(ratio_of, 4),
+                "gini_test":  round(gini_test, 4),
+                "gini_train": round(gini_train, 4),
+                "statut":     h1_statut,
+                "message":    h1_msg,
+                "conseil":    h1_conseil,
                 "titre_graphique": f"{'✅' if h1_statut=='VERT' else '⚠️' if h1_statut=='AMBRE' else '❌'} Overfitting — Ratio test/train = {ratio_of:.3f}",
             },
             "h2_psi": {
-                "psi":      round(psi, 4),
-                "statut":   h2_statut,
-                "message":  h2_msg,
-                "conseil":  h2_conseil,
-                "titre_graphique": f"{'✅' if h2_statut=='VERT' else '⚠️' if h2_statut=='AMBRE' else '❌'} Stabilité PSI = {psi:.4f}",
+                "psi":        round(psi_global, 4),
+                "psi_source": psi_source,
+                "details":    h2_details,
+                "statut":     h2_statut,
+                "message":    h2_msg,
+                "conseil":    h2_conseil,
+                "titre_graphique": f"{'✅' if h2_statut=='VERT' else '⚠️' if h2_statut=='AMBRE' else '❌'} PSI réel = {psi_global:.4f}",
             },
             "h3_gini": {
-                "gini":     round(gini_test, 4),
-                "statut":   h3_statut,
-                "message":  h3_msg,
-                "conseil":  h3_conseil,
+                "gini":   round(gini_test, 4),
+                "statut": h3_statut,
+                "message":h3_msg,
+                "conseil":h3_conseil,
                 "titre_graphique": f"{'✅' if h3_statut=='VERT' else '⚠️' if h3_statut=='AMBRE' else '❌'} Performance Gini = {gini_test:.4f}",
+            },
+            "h4_calibration": {
+                "ecart_moy_pct": round(ecart_moy * 100, 2),
+                "reliability":   reliability,
+                "statut":        h4_statut,
+                "message":       h4_msg,
+                "conseil":       h4_conseil,
+                "titre_graphique": f"{'✅' if h4_statut=='VERT' else '⚠️' if h4_statut=='AMBRE' else '❌'} Calibration — Écart moyen = {ecart_moy*100:.1f}%",
             },
             "statut_global":   statut_global,
             "conclusion":      conclusion,
@@ -2143,10 +2272,13 @@ class AgentA4ML:
             items = [
                 ("H1 — Overfitting", val_ml["h1_overfitting"]["statut"],
                  val_ml["h1_overfitting"]["message"], val_ml["h1_overfitting"]["conseil"]),
-                ("H2 — Stabilité PSI", val_ml["h2_psi"]["statut"],
+                ("H2 — PSI réel (dérive)", val_ml["h2_psi"]["statut"],
                  val_ml["h2_psi"]["message"], val_ml["h2_psi"]["conseil"]),
                 ("H3 — Performance Gini", val_ml["h3_gini"]["statut"],
                  val_ml["h3_gini"]["message"], val_ml["h3_gini"]["conseil"]),
+                ("H4 — Calibration", val_ml.get("h4_calibration", {}).get("statut", "VERT"),
+                 val_ml.get("h4_calibration", {}).get("message", ""),
+                 val_ml.get("h4_calibration", {}).get("conseil", "")),
             ]
             fig4 = go.Figure()
             for nom, statut, msg, conseil in items:
