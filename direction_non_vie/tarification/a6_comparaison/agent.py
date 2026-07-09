@@ -44,6 +44,16 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
 try:
+    from .services.tarif_rapport import generer_rapport_tarification
+    TARIF_RAPPORT_OK = True
+except ImportError:
+    try:
+        from direction_non_vie.tarification.services.tarif_rapport import generer_rapport_tarification
+        TARIF_RAPPORT_OK = True
+    except ImportError:
+        TARIF_RAPPORT_OK = False
+
+try:
     from ..services.tarif_excel import export_excel_a6
     TARIF_EXCEL_OK = True
 except ImportError:
@@ -256,6 +266,9 @@ class AgentA6Comparaison:
                 'fiche_decision': fiche_decision, 'audit_id': audit_id,
             }
             _excel_a6 = b''
+            _word_a6  = b''
+            _html_a6  = b''
+            _pdf_a6   = b''
             if TARIF_EXCEL_OK:
                 try:
                     _excel_a6 = export_excel_a6(_tmp_a6, audit_id)
@@ -263,6 +276,22 @@ class AgentA6Comparaison:
                         logger.info(f"[{audit_id}] Excel A6 : {len(_excel_a6):,} bytes")
                 except Exception as e_xl:
                     logger.warning(f"Excel A6 échoué : {e_xl}")
+            if TARIF_RAPPORT_OK:
+                try:
+                    _rapports = generer_rapport_tarification(
+                        result_a3=result_a3, result_a4=result_a4,
+                        result_a5=result_a5, result_a6=_tmp_a6,
+                        arrete=datetime.now().strftime('%d/%m/%Y'),
+                        audit_id=audit_id, formats=['html','word'],
+                    )
+                    _html_a6 = _rapports.get('html_bytes', b'')
+                    _word_a6 = _rapports.get('word_bytes', b'')
+                    if _word_a6:
+                        logger.info(f"[{audit_id}] Word A6 : {len(_word_a6):,} bytes")
+                    if _html_a6:
+                        logger.info(f"[{audit_id}] HTML A6 : {len(_html_a6):,} bytes")
+                except Exception as e_rp:
+                    logger.warning(f"Rapport A6 échoué : {e_rp}")
 
             _audit_trail_a6 = {
                 'agent': 'A6_COMPARAISON', 'version': '1.0', 'audit_id': audit_id,
@@ -302,8 +331,9 @@ class AgentA6Comparaison:
                 'audit_id':           audit_id,
                 'erreur':             None,
                 'excel_bytes':        _excel_a6,
-                'word_bytes':         b'',
-                'pdf_bytes':          b'',
+                'html_bytes':         _html_a6,
+                'word_bytes':         _word_a6,
+                'pdf_bytes':          _pdf_a6,
                 'hypotheses':         _val_sel_,
                 'audit_trail':        _audit_trail_a6,
             }
