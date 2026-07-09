@@ -89,6 +89,12 @@ except ImportError:
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import train_test_split
 
+try:
+    from ..services.tarif_excel import export_excel_a3
+    TARIF_EXCEL_OK = True
+except ImportError:
+    TARIF_EXCEL_OK = False
+
 warnings.filterwarnings('ignore')
 
 # ── LOGGER ────────────────────────────────────────────────────────────────────
@@ -412,6 +418,38 @@ class AgentA3GLM:
             relativites_poisson = res_poisson.get('relativites', {})
             relativites_gamma   = res_gamma.get('relativites',   {})
 
+            # ── Standard ActuarIA — excel_bytes + audit_trail ────────────────
+            _tmp = {
+                'success': True, 'statut_rag': statut_rag,
+                'metriques': self.metriques, 'branche': sous_branche,
+                'relativites_poisson': relativites_poisson,
+                'relativites_gamma':   relativites_gamma,
+                'validation_glm': _val_glm_, 'audit_id': audit_id,
+            }
+            excel_bytes = b''
+            if TARIF_EXCEL_OK:
+                try:
+                    excel_bytes = export_excel_a3(_tmp, audit_id)
+                    if excel_bytes:
+                        logger.info(f"[{audit_id}] Excel A3 : {len(excel_bytes):,} bytes")
+                except Exception as e_xl:
+                    logger.warning(f"Excel A3 échoué : {e_xl}")
+
+            audit_trail_a3 = {
+                'agent': 'A3_GLM', 'version': '1.0', 'audit_id': audit_id,
+                'timestamp': t_debut.isoformat(), 'branche': sous_branche,
+                'statut_rag': statut_rag,
+                'nb_obs_train': res_poisson.get('metriques',{}).get('nb_obs_train', 0),
+                'nb_obs_test':  res_poisson.get('metriques',{}).get('nb_obs_test', 0),
+                'gini_poisson': self.metriques.get('poisson',{}).get('gini', 0),
+                'aic_poisson':  self.metriques.get('poisson',{}).get('aic', 0),
+                'vars_retenues':self.metriques.get('poisson',{}).get('vars_retenues', []),
+                'statut_h1': _val_glm_.get('h1_poisson',{}).get('statut',''),
+                'statut_h2': _val_glm_.get('h2_homosc',{}).get('statut',''),
+                'statut_h3': _val_glm_.get('h3_ajustement',{}).get('statut',''),
+                'statut_h4': _val_glm_.get('h4_stabilite',{}).get('statut',''),
+            }
+
             return {
                 'success':      True,
                 'dataframe':    df,
@@ -433,6 +471,11 @@ class AgentA3GLM:
                 # ── RELATIVITÉS TARIFAIRES (sortie commerciale) ──────────────
                 'relativites_poisson': relativites_poisson,
                 'relativites_gamma':   relativites_gamma,
+                'excel_bytes':  excel_bytes,
+                'word_bytes':   b'',
+                'pdf_bytes':    b'',
+                'hypotheses':   _val_glm_,
+                'audit_trail':  audit_trail_a3,
             }
 
         except Exception as e:
