@@ -1201,7 +1201,10 @@ def _dashboard_agent(ak):
     elif code == "A13":
         c1,c2,c3 = st.columns(3)
         with c1: st.metric("Agents tracés","46 / 46","100%")
-        with c2: st.metric("Hash session","5BB15F63","SHA-256")
+        with c2:
+            import hashlib as _hl13
+            _h13 = _hl13.sha256(str(st.session_state.get("agent_results",{})).encode()).hexdigest()[:8].upper()
+            st.metric("Hash session", _h13, "SHA-256 [session]")
         with c3: st.metric("Conformité RGPD","✅","Art.30")
 
     # ── Boutons rapport — vrais bytes si disponibles ────────────────────────
