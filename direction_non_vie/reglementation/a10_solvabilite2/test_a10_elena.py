@@ -3,8 +3,9 @@ Tests A10 Elena v2.0 DÉFINITIVE — 9 tests couvrant tous les modules v2
 Commande : python test_a10_elena.py
 """
 import sys, unittest
-sys.path.insert(0, '/home/claude')
-from a10_solvabilite2 import AgentA10Solvabilite2, MCR_PLANCHER_ABS
+import os as _os
+sys.path.insert(0, _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '../../../../')))
+from direction_non_vie.reglementation.a10_solvabilite2.agent import AgentA10Solvabilite2, MCR_PLANCHER_ABS
 
 A7_BASE = {
     'best_estimate':{'best_estimate':7_000_000.0,'sigma_mack':400_000.0,'cv_inter_methodes':8.0,'nb_methodes_convergentes':5},
