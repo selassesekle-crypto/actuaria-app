@@ -2373,6 +2373,9 @@ class AgentA3GLM:
                  val_glm["h2_homosc"]["message"], val_glm["h2_homosc"]["conseil"]),
                 ("H3 — Qualité ajustement Gini", val_glm["h3_ajustement"]["statut"],
                  val_glm["h3_ajustement"]["message"], val_glm["h3_ajustement"]["conseil"]),
+                ("H4 — Stabilité relativités", val_glm.get("h4_stabilite", {}).get("statut", "VERT"),
+                 val_glm.get("h4_stabilite", {}).get("message", ""),
+                 val_glm.get("h4_stabilite", {}).get("conseil", "")),
             ]
             fig4 = go.Figure()
             for nom, statut, msg, conseil in items:
