@@ -16,7 +16,7 @@
 
 import sys
 import traceback
-from a9_coherence import AgentA9Coherence
+from direction_non_vie.reglementation.a9_coherence.agent import AgentA9Coherence
 
 # ── Fixtures communes ─────────────────────────────────────────────────────────
 
