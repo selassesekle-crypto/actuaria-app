@@ -3,8 +3,9 @@ Tests A12 Aisha v1.0 — 9 tests couvrant tous les modules ALM
 Commande : python test_a12_aisha.py
 """
 import sys, unittest
-sys.path.insert(0, '/home/claude')
-from a12_alm import AgentA12ALM
+import os as _os
+sys.path.insert(0, _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '../../../../')))
+from direction_non_vie.reglementation.a12_alm.agent import AgentA12ALM
 
 A10_BASE = {
     'provisions':{'best_estimate':6_000_000.0,'risk_margin':230_000.0,'tp_s2':6_230_000.0},
