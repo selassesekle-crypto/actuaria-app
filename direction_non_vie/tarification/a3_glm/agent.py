@@ -93,7 +93,11 @@ try:
     from ..services.tarif_excel import export_excel_a3
     TARIF_EXCEL_OK = True
 except ImportError:
-    TARIF_EXCEL_OK = False
+    try:
+        from direction_non_vie.tarification.services.tarif_excel import export_excel_a3
+        TARIF_EXCEL_OK = True
+    except ImportError:
+        TARIF_EXCEL_OK = False
 
 warnings.filterwarnings('ignore')
 
