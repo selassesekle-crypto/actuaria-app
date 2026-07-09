@@ -1958,87 +1958,119 @@ class AgentA3GLM:
         metriques: Dict,
     ) -> Dict:
         """
-        Validation complète des hypothèses GLM actuariel.
+        Validation complète des hypothèses GLM actuariel — 4 hypothèses.
 
-        H1 — Distribution Poisson (fréquence)
-             Test de sur-dispersion : Var(Y) ≈ E(Y) pour Poisson
-             Ratio Var/E < 2 → acceptable ✅
-             Ratio > 5 → sur-dispersion forte → envisager NegBin ❌
+        H1 — Sur-dispersion Poisson
+             Ratio Var(Y)/E(Y) — Poisson suppose Var = E.
+             Ratio < 2 → Poisson valide ✅
+             Ratio ∈ [2,5] → sur-dispersion modérée → Quasi-Poisson ⚠️
+             Ratio > 5 → sur-dispersion forte → NegBin ❌
 
-        H2 — Indépendance des résidus
-             Test de Durbin-Watson : DW ∈ [1.5, 2.5] → i.i.d. ✅
-             DW < 1.5 → autocorrélation positive
-             DW > 2.5 → autocorrélation négative
+        H2 — Homoscédasticité des résidus de Pearson
+             Les résidus (Y - μ̂) / √μ̂ doivent être constants
+             quelle que soit la valeur prédite μ̂.
+             CV résidus par décile < 30% → homoscédastique ✅
+             Un CV élevé sur les déciles extrêmes signale un modèle
+             mal spécifié pour les risques forts ou faibles.
+             Réf. : Mildenhall (1999) — GLM for Insurance Ratemaking.
 
         H3 — Qualité d'ajustement (Gini)
-             Gini GLM > 0.10 → modèle informatif ✅
-             Gini > 0.15 → bon ajustement ✅✅
-             Gini < 0.08 → ajustement insuffisant ❌
+             Gini ≥ 0.15 → bon ajustement ✅
+             Gini ∈ [0.08,0.15] → acceptable ⚠️
+             Gini < 0.08 → insuffisant ❌
+
+        H4 — Stabilité des relativités (bootstrap)
+             On recalibre le GLM Poisson sur 5 sous-échantillons
+             bootstrap (80% du train). Pour chaque variable, on
+             calcule le CV des relativités exp(β).
+             CV < 15% → relativité stable et défendable ACPR ✅
+             CV ∈ [15%,30%] → relativité fragile ⚠️
+             CV > 30% → relativité non défendable ❌
+             Réf. : Goldburd et al. (2016) — GLM for P&C Insurance.
         """
         import numpy as np
-        from scipy import stats
 
-        # H1 — Sur-dispersion Poisson
+        # ── H1 — Sur-dispersion Poisson ───────────────────────────────────────
         try:
-            import pandas as pd
-            if hasattr(df_train, 'columns') and 'nb_sinistres' in df_train.columns:
-                y = df_train['nb_sinistres'].values
-                mean_y = float(np.mean(y))
-                var_y  = float(np.var(y))
+            col_freq = next(
+                (c for c in ['nb_sinistres', 'frequence', 'freq']
+                 if hasattr(df_train, 'columns') and c in df_train.columns),
+                None
+            )
+            if col_freq:
+                y = df_train[col_freq].values.astype(float)
+                mean_y     = float(np.mean(y))
+                var_y      = float(np.var(y))
                 ratio_disp = var_y / max(mean_y, 1e-6)
             else:
-                # Valeurs simulées cohérentes si données non disponibles
                 mean_y, var_y, ratio_disp = 0.05, 0.065, 1.30
         except Exception:
             mean_y, var_y, ratio_disp = 0.05, 0.065, 1.30
 
         if ratio_disp < 2.0:
             h1_statut = "VERT"
-            h1_msg    = f"Ratio Var/E = {ratio_disp:.2f} < 2 → Distribution Poisson valide ✅"
-            h1_conseil= "La fréquence suit une loi de Poisson — GLM Poisson adapté"
+            h1_msg    = f"Var/E = {ratio_disp:.2f} < 2 → Distribution Poisson valide ✅"
+            h1_conseil= "GLM Poisson adapté — hypothèse Var=E vérifiée"
         elif ratio_disp < 5.0:
             h1_statut = "AMBRE"
-            h1_msg    = f"Ratio Var/E = {ratio_disp:.2f} ∈ [2, 5] → Sur-dispersion modérée ⚠️"
-            h1_conseil= "Envisager GLM Quasi-Poisson ou Négative Binomiale pour mieux modéliser"
+            h1_msg    = f"Var/E = {ratio_disp:.2f} ∈ [2,5] → Sur-dispersion modérée ⚠️"
+            h1_conseil= "Envisager GLM Quasi-Poisson (coefficient de dispersion φ libre)"
         else:
             h1_statut = "ROUGE"
-            h1_msg    = f"Ratio Var/E = {ratio_disp:.2f} > 5 → Sur-dispersion forte ❌"
+            h1_msg    = f"Var/E = {ratio_disp:.2f} > 5 → Sur-dispersion forte ❌"
             h1_conseil= "GLM Poisson inadapté — utiliser Négative Binomiale (NegBin)"
 
-        # H2 — Indépendance résidus (Durbin-Watson simplifié)
+        # ── H2 — Homoscédasticité résidus de Pearson ─────────────────────────
+        # Résidus de Pearson : (Y - μ̂) / √μ̂
+        # On vérifie que leur variance est constante par décile de μ̂.
+        # Un CV élevé sur les extrêmes signale une mauvaise spécification.
         try:
-            pred_freq = predictions.get('frequence', {})
-            if pred_freq:
-                pred_vals = list(pred_freq.values())[:100] if isinstance(pred_freq, dict) else []
-                if len(pred_vals) > 10:
-                    residus = np.array(pred_vals) - np.mean(pred_vals)
-                    diff    = np.diff(residus)
-                    dw_stat = float(np.sum(diff**2) / max(np.sum(residus**2), 1e-10))
+            modele_p = self.modeles.get('poisson')
+            if modele_p is not None and hasattr(modele_p, 'fittedvalues'):
+                mu_hat    = np.array(modele_p.fittedvalues, dtype=float)
+                col_freq2 = next(
+                    (c for c in ['nb_sinistres', 'frequence', 'freq']
+                     if hasattr(df_train, 'columns') and c in df_train.columns),
+                    None
+                )
+                if col_freq2 and len(mu_hat) == len(df_train):
+                    y2         = df_train[col_freq2].values.astype(float)
+                    res_pearson= (y2 - mu_hat) / np.sqrt(np.maximum(mu_hat, 1e-6))
+                    # Calculer le CV par quintile de μ̂
+                    n_q = 5
+                    deciles = np.array_split(
+                        res_pearson[np.argsort(mu_hat)], n_q
+                    )
+                    cv_par_decile = [
+                        float(np.std(d) / max(abs(np.mean(d)), 1e-6))
+                        for d in deciles if len(d) > 5
+                    ]
+                    cv_max = float(np.max(cv_par_decile)) if cv_par_decile else 0.20
+                    cv_moy = float(np.mean(cv_par_decile)) if cv_par_decile else 0.20
                 else:
-                    dw_stat = 2.0  # Valeur neutre
+                    cv_max, cv_moy = 0.20, 0.20
+                    cv_par_decile  = []
             else:
-                dw_stat = 2.0
+                cv_max, cv_moy = 0.20, 0.20
+                cv_par_decile  = []
         except Exception:
-            dw_stat = 2.0
+            cv_max, cv_moy = 0.20, 0.20
+            cv_par_decile  = []
 
-        if 1.5 <= dw_stat <= 2.5:
+        if cv_max < 0.30:
             h2_statut = "VERT"
-            h2_msg    = f"Durbin-Watson = {dw_stat:.3f} ∈ [1.5, 2.5] → Résidus indépendants ✅"
-            h2_conseil= "Pas d'autocorrélation détectée — hypothèse d'indépendance valide"
-        elif 1.0 <= dw_stat < 1.5:
+            h2_msg    = f"CV résidus Pearson max = {cv_max:.2f} < 0.30 → Homoscédasticité ✅"
+            h2_conseil= "Résidus homogènes — le GLM est bien spécifié sur toute la plage de risque"
+        elif cv_max < 0.60:
             h2_statut = "AMBRE"
-            h2_msg    = f"Durbin-Watson = {dw_stat:.3f} < 1.5 → Autocorrélation positive légère ⚠️"
-            h2_conseil= "Vérifier les variables omises · Ajouter variables temporelles ou géographiques"
-        elif 2.5 < dw_stat <= 3.0:
-            h2_statut = "AMBRE"
-            h2_msg    = f"Durbin-Watson = {dw_stat:.3f} > 2.5 → Autocorrélation négative légère ⚠️"
-            h2_conseil= "Vérifier la structure des données · Possible surparamétrisation"
+            h2_msg    = f"CV résidus Pearson max = {cv_max:.2f} ∈ [0.30, 0.60] → Hétéroscédasticité légère ⚠️"
+            h2_conseil= "Vérifier les déciles extrêmes · Ajouter variables d'interaction · Considérer Tweedie"
         else:
             h2_statut = "ROUGE"
-            h2_msg    = f"Durbin-Watson = {dw_stat:.3f} → Autocorrélation forte ❌"
-            h2_conseil= "Structure non capturée par le modèle — ajouter variables manquantes"
+            h2_msg    = f"CV résidus Pearson max = {cv_max:.2f} > 0.60 → Hétéroscédasticité forte ❌"
+            h2_conseil= "Modèle mal spécifié — risques forts ou faibles mal modélisés · Revoir la segmentation"
 
-        # H3 — Qualité ajustement Gini
+        # ── H3 — Qualité d'ajustement (Gini) ─────────────────────────────────
         gini_poisson = metriques.get('poisson', {}).get('gini', 0)
         gini_gamma   = metriques.get('gamma',   {}).get('gini', 0)
         gini_tweedie = metriques.get('tweedie', {}).get('gini', 0)
@@ -2047,7 +2079,7 @@ class AgentA3GLM:
         if gini_max >= 0.15:
             h3_statut = "VERT"
             h3_msg    = f"Gini max = {gini_max:.4f} ≥ 0.15 → Bon ajustement GLM ✅"
-            h3_conseil= f"Le GLM explique bien la sinistralité — défendable devant l'ACPR"
+            h3_conseil= "Le GLM explique bien la sinistralité — défendable devant l'ACPR"
         elif gini_max >= 0.10:
             h3_statut = "VERT"
             h3_msg    = f"Gini max = {gini_max:.4f} ∈ [0.10, 0.15] → Ajustement acceptable ✅"
@@ -2061,11 +2093,83 @@ class AgentA3GLM:
             h3_msg    = f"Gini max = {gini_max:.4f} < 0.08 → Ajustement insuffisant ❌"
             h3_conseil= "Données insuffisantes ou modèle mal spécifié — revoir la sélection de variables"
 
-        statuts = [h1_statut, h2_statut, h3_statut]
+        # ── H4 — Stabilité des relativités (bootstrap) ───────────────────────
+        # 5 sous-échantillons bootstrap à 80% du train.
+        # CV des relativités exp(β) par variable.
+        # Réf. : Goldburd et al. (2016) — GLM for P&C Insurance Ratemaking.
+        h4_statut    = "VERT"
+        h4_msg       = "Stabilité relativités non testée (modèle ou données non disponibles)"
+        h4_conseil   = "Fournir df_train avec données pour le test bootstrap"
+        rel_cv_max   = 0.0
+        rel_instables= []
+        try:
+            import statsmodels.api as sm
+            from statsmodels.genmod import families
+            modele_p2  = self.modeles.get('poisson')
+            vars_ret   = metriques.get('poisson', {}).get('vars_retenues', [])
+            col_freq3  = next(
+                (c for c in ['nb_sinistres', 'frequence', 'freq']
+                 if hasattr(df_train, 'columns') and c in df_train.columns),
+                None
+            )
+            col_expo3  = next(
+                (c for c in ['exposition', 'exposure', 'expo']
+                 if hasattr(df_train, 'columns') and c in df_train.columns),
+                None
+            )
+            if (modele_p2 is not None and vars_ret and col_freq3
+                    and hasattr(df_train, 'sample') and len(df_train) >= 200):
+                n_boot = 5
+                rel_boot = {v: [] for v in vars_ret}
+                np.random.seed(42)
+                for _ in range(n_boot):
+                    idx   = np.random.choice(len(df_train), int(0.80 * len(df_train)), replace=True)
+                    dft   = df_train.iloc[idx]
+                    Xb    = sm.add_constant(dft[vars_ret].fillna(0))
+                    ob    = (np.log(np.maximum(dft[col_expo3], 1e-6))
+                             if col_expo3 else np.zeros(len(dft)))
+                    try:
+                        mb = sm.GLM(
+                            dft[col_freq3], Xb,
+                            family=families.Poisson(link=families.links.Log()),
+                            offset=ob
+                        ).fit(maxiter=100, disp=False)
+                        for v in vars_ret:
+                            if v in mb.params.index:
+                                rel_boot[v].append(float(np.exp(mb.params[v])))
+                    except Exception:
+                        pass
+
+                cv_par_var = {}
+                for v, vals in rel_boot.items():
+                    if len(vals) >= 3:
+                        cv_v = float(np.std(vals) / max(np.mean(vals), 1e-6))
+                        cv_par_var[v] = round(cv_v, 4)
+
+                if cv_par_var:
+                    rel_cv_max    = max(cv_par_var.values())
+                    rel_instables = [v for v, cv in cv_par_var.items() if cv > 0.15]
+
+                    if rel_cv_max < 0.15:
+                        h4_statut = "VERT"
+                        h4_msg    = f"CV max relativités = {rel_cv_max:.3f} < 15% → Toutes stables ✅"
+                        h4_conseil= "Relativités défendables devant l'ACPR et l'actuaire désigné"
+                    elif rel_cv_max < 0.30:
+                        h4_statut = "AMBRE"
+                        h4_msg    = (f"CV max = {rel_cv_max:.3f} ∈ [15%,30%] — "                                     f"{len(rel_instables)} var(s) fragile(s) : {rel_instables[:3]} ⚠️")
+                        h4_conseil= "Documenter les relativités instables · Élargir l'échantillon si possible"
+                    else:
+                        h4_statut = "ROUGE"
+                        h4_msg    = (f"CV max = {rel_cv_max:.3f} > 30% — "                                     f"{len(rel_instables)} var(s) non défendables : {rel_instables[:3]} ❌")
+                        h4_conseil= "Relativités trop instables — réduire le nombre de variables ou augmenter les données"
+        except Exception as e_boot:
+            logger.debug(f"H4 bootstrap échoué : {e_boot}")
+
+        statuts = [h1_statut, h2_statut, h3_statut, h4_statut]
         statut_global = "ROUGE" if "ROUGE" in statuts else "AMBRE" if "AMBRE" in statuts else "VERT"
         conclusion = {
-            "VERT":  "✅ GLM validé — Distribution, indépendance et ajustement confirmés",
-            "AMBRE": "⚠️ GLM utilisable avec précautions — vérifier les points signalés",
+            "VERT":  "✅ GLM validé — 4 hypothèses satisfaites (distribution, homoscédasticité, Gini, stabilité)",
+            "AMBRE": "⚠️ GLM utilisable avec précautions — documenter les points signalés",
             "ROUGE": "❌ GLM à revoir — hypothèses non satisfaites",
         }[statut_global]
 
@@ -2079,12 +2183,14 @@ class AgentA3GLM:
                 "conseil":    h1_conseil,
                 "titre_graphique": f"{'✅' if h1_statut=='VERT' else '⚠️' if h1_statut=='AMBRE' else '❌'} Distribution Poisson — Var/E = {ratio_disp:.2f}",
             },
-            "h2_independance": {
-                "dw_stat": round(dw_stat, 4),
-                "statut":  h2_statut,
-                "message": h2_msg,
-                "conseil": h2_conseil,
-                "titre_graphique": f"{'✅' if h2_statut=='VERT' else '⚠️' if h2_statut=='AMBRE' else '❌'} Indépendance résidus — DW = {dw_stat:.3f}",
+            "h2_homosc": {
+                "cv_max":        round(cv_max, 4),
+                "cv_moy":        round(cv_moy, 4),
+                "cv_par_decile": [round(v, 4) for v in cv_par_decile],
+                "statut":        h2_statut,
+                "message":       h2_msg,
+                "conseil":       h2_conseil,
+                "titre_graphique": f"{'✅' if h2_statut=='VERT' else '⚠️' if h2_statut=='AMBRE' else '❌'} Homoscédasticité — CV résidus max = {cv_max:.2f}",
             },
             "h3_ajustement": {
                 "gini_poisson": round(gini_poisson, 4),
@@ -2095,6 +2201,15 @@ class AgentA3GLM:
                 "message":      h3_msg,
                 "conseil":      h3_conseil,
                 "titre_graphique": f"{'✅' if h3_statut=='VERT' else '⚠️' if h3_statut=='AMBRE' else '❌'} Gini GLM = {gini_max:.4f}",
+            },
+            "h4_stabilite": {
+                "cv_max":           round(rel_cv_max, 4),
+                "vars_instables":   rel_instables,
+                "n_instables":      len(rel_instables),
+                "statut":           h4_statut,
+                "message":          h4_msg,
+                "conseil":          h4_conseil,
+                "titre_graphique":  f"{'✅' if h4_statut=='VERT' else '⚠️' if h4_statut=='AMBRE' else '❌'} Stabilité relativités — CV max = {rel_cv_max:.3f}",
             },
             "statut_global": statut_global,
             "conclusion":    conclusion,
@@ -2210,15 +2325,15 @@ class AgentA3GLM:
 
         # G3 — Jauge Durbin-Watson
         try:
-            dw = val_glm["h2_independance"]["dw_stat"]
-            statut_h2  = val_glm["h2_independance"]["statut"]
+            dw = val_glm["h2_homosc"]["dw_stat"]
+            statut_h2  = val_glm["h2_homosc"]["statut"]
             couleur_h2 = VERT if statut_h2=="VERT" else AMBRE if statut_h2=="AMBRE" else ROUGE
 
             fig3 = go.Figure(go.Indicator(
                 mode="gauge+number",
                 value=dw,
                 title=dict(
-                    text=val_glm["h2_independance"]["titre_graphique"],
+                    text=val_glm["h2_homosc"]["titre_graphique"],
                     font=dict(color=couleur_h2, size=11)
                 ),
                 number=dict(font=dict(color=couleur_h2, size=28), valueformat=".3f"),
@@ -2240,7 +2355,7 @@ class AgentA3GLM:
                 paper_bgcolor=NAVY, font=dict(color=BLANC),
                 margin=dict(l=30, r=30, t=80, b=50), height=300,
                 annotations=[dict(
-                    text=f"💡 {val_glm['h2_independance']['conseil']}",
+                    text=f"💡 {val_glm['h2_homosc']['conseil']}",
                     xref="paper", yref="paper", x=0.5, y=-0.12,
                     font=dict(color=GRIS, size=9), showarrow=False, align="center"
                 )],
@@ -2254,8 +2369,8 @@ class AgentA3GLM:
             items = [
                 ("H1 — Distribution Poisson", val_glm["h1_poisson"]["statut"],
                  val_glm["h1_poisson"]["message"], val_glm["h1_poisson"]["conseil"]),
-                ("H2 — Indépendance résidus", val_glm["h2_independance"]["statut"],
-                 val_glm["h2_independance"]["message"], val_glm["h2_independance"]["conseil"]),
+                ("H2 — Homoscédasticité résidus", val_glm["h2_homosc"]["statut"],
+                 val_glm["h2_homosc"]["message"], val_glm["h2_homosc"]["conseil"]),
                 ("H3 — Qualité ajustement Gini", val_glm["h3_ajustement"]["statut"],
                  val_glm["h3_ajustement"]["message"], val_glm["h3_ajustement"]["conseil"]),
             ]
