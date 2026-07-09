@@ -408,6 +408,10 @@ class AgentA3GLM:
                 self.metriques,
             ) if generer_graphiques else {}
 
+            # Extraire les relativités Poisson pour exposition facile en aval
+            relativites_poisson = res_poisson.get('relativites', {})
+            relativites_gamma   = res_gamma.get('relativites',   {})
+
             return {
                 'success':      True,
                 'dataframe':    df,
@@ -426,6 +430,9 @@ class AgentA3GLM:
                 'df_train':     df_train,
                 'df_test':      df_test,
                 'vars_pred':    vars_pred,
+                # ── RELATIVITÉS TARIFAIRES (sortie commerciale) ──────────────
+                'relativites_poisson': relativites_poisson,
+                'relativites_gamma':   relativites_gamma,
             }
 
         except Exception as e:
@@ -707,11 +714,41 @@ class AgentA3GLM:
             'frequence_pred':   round(float(pred_test.mean()), 4),
         }
 
+        # ── RELATIVITÉS TARIFAIRES exp(β) ─────────────────────────────────────
+        # Sortie commerciale standard d'un GLM actuariel.
+        # Interprétation : une relativité de 1.25 signifie +25% de sinistralité
+        # par rapport à la modalité de référence (intercept).
+        # Source : Mildenhall (1999), Actuarial GLM review standards.
+        relativites = {}
+        try:
+            params  = modele_final.params
+            conf    = modele_final.conf_int()
+            pvalues = modele_final.pvalues
+            for var in vars_actives:
+                if var in params.index:
+                    beta    = float(params[var])
+                    ci_low  = float(conf.loc[var, 0])
+                    ci_high = float(conf.loc[var, 1])
+                    relativites[var] = {
+                        'beta':         round(beta,          4),
+                        'relativite':   round(float(np.exp(beta)),    4),
+                        'ic95_low':     round(float(np.exp(ci_low)),  4),
+                        'ic95_high':    round(float(np.exp(ci_high)), 4),
+                        'pvalue':       round(float(pvalues[var]),    4),
+                        'significatif': bool(float(pvalues[var]) <= 0.05),
+                        'sens':         'aggravant' if beta > 0 else 'allegant',
+                    }
+        except Exception as e_rel:
+            logger.warning(f"Calcul relativités Poisson échoué : {e_rel}")
+
+        metriques['relativites'] = relativites
+
         return {
-            'modele':    modele_final,
-            'metriques': metriques,
-            'vars':      vars_actives,
-            'pred_test': pred_test,
+            'modele':      modele_final,
+            'metriques':   metriques,
+            'vars':        vars_actives,
+            'pred_test':   pred_test,
+            'relativites': relativites,
         }
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -886,11 +923,37 @@ class AgentA3GLM:
                                 if len(pred_test) > 0 else 0.0,
         }
 
+        # ── RELATIVITÉS TARIFAIRES exp(β) Gamma ──────────────────────────────
+        relativites_gamma = {}
+        try:
+            params_g  = modele_final.params
+            conf_g    = modele_final.conf_int()
+            pvalues_g = modele_final.pvalues
+            for var in vars_actives:
+                if var in params_g.index:
+                    beta_g    = float(params_g[var])
+                    ci_low_g  = float(conf_g.loc[var, 0])
+                    ci_high_g = float(conf_g.loc[var, 1])
+                    relativites_gamma[var] = {
+                        'beta':         round(beta_g,                      4),
+                        'relativite':   round(float(np.exp(beta_g)),       4),
+                        'ic95_low':     round(float(np.exp(ci_low_g)),     4),
+                        'ic95_high':    round(float(np.exp(ci_high_g)),    4),
+                        'pvalue':       round(float(pvalues_g[var]),       4),
+                        'significatif': bool(float(pvalues_g[var]) <= 0.05),
+                        'sens':         'aggravant' if beta_g > 0 else 'allegant',
+                    }
+        except Exception as e_relg:
+            logger.warning(f"Calcul relativités Gamma échoué : {e_relg}")
+
+        metriques['relativites'] = relativites_gamma
+
         return {
-            'modele':    modele_final,
-            'metriques': metriques,
-            'vars':      vars_actives,
-            'pred_test': pred_test,
+            'modele':      modele_final,
+            'metriques':   metriques,
+            'vars':        vars_actives,
+            'pred_test':   pred_test,
+            'relativites': relativites_gamma,
         }
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -1596,6 +1659,84 @@ class AgentA3GLM:
 
         except Exception as e:
             logger.warning(f"G1 coefficients échoué : {e}")
+
+        # ── G1b : RELATIVITÉS TARIFAIRES exp(β) — Barres horizontales ─────────
+        # Sortie commerciale : visualisation des relativités par variable.
+        # La barre représente exp(β) — référence = 1.0 (trait vertical).
+        # Rouge = aggravant (relativité > 1), Vert = allégant (< 1).
+        try:
+            modele_p = res_poisson.get('modele')
+            rels_p   = res_poisson.get('relativites', {})
+            if modele_p is not None and rels_p:
+                vars_r  = [v for v in rels_p]
+                rel_v   = [rels_p[v]['relativite']  for v in vars_r]
+                ic_low  = [rels_p[v]['ic95_low']    for v in vars_r]
+                ic_high = [rels_p[v]['ic95_high']   for v in vars_r]
+                colors_r= [ROUGE if r > 1 else VERT for r in rel_v]
+                errors_r= [abs(h - r) for r, h in zip(rel_v, ic_high)]
+
+                # Tri par relativité décroissante
+                ordre_r = sorted(range(len(rel_v)), key=lambda i: rel_v[i], reverse=True)
+                vars_r  = [vars_r[i]   for i in ordre_r]
+                rel_v   = [rel_v[i]    for i in ordre_r]
+                ic_low  = [ic_low[i]   for i in ordre_r]
+                ic_high = [ic_high[i]  for i in ordre_r]
+                colors_r= [colors_r[i] for i in ordre_r]
+                errors_r= [errors_r[i] for i in ordre_r]
+
+                fig_rel = go.Figure()
+                fig_rel.add_trace(go.Bar(
+                    x             = rel_v,
+                    y             = vars_r,
+                    orientation   = 'h',
+                    marker_color  = colors_r,
+                    marker_line   = dict(color=NAVY, width=1),
+                    width         = 0.6,
+                    opacity       = 0.88,
+                    error_x       = dict(
+                        type      = 'data',
+                        array     = errors_r,
+                        color     = BLANC,
+                        thickness = 1.5,
+                        width     = 5,
+                    ),
+                    text          = [f"{r:.3f}" for r in rel_v],
+                    textposition  = 'outside',
+                    textfont      = dict(color=BLANC, size=9),
+                    hovertemplate = (
+                        "<b>%{y}</b><br>"
+                        "Relativité exp(β) : <b>%{x:.4f}</b><br>"
+                        "IC 95% : [" +
+                        "<br>Rouge = aggravant · Vert = allégant"
+                        "<extra></extra>"
+                    ),
+                ))
+                fig_rel.add_vline(
+                    x=1.0, line_color=OR, line_width=1.5, line_dash='dot',
+                    annotation_text='Référence = 1.0',
+                    annotation_font=dict(color=OR, size=9),
+                )
+                layout_rel = dict(**LAYOUT_BASE)
+                layout_rel.update(dict(
+                    title=dict(
+                        text='📊 Relativités tarifaires GLM Poisson — exp(β) avec IC 95%',
+                        font=dict(color=BLANC, size=13), x=0.01,
+                    ),
+                    xaxis=dict(
+                        title=dict(text='Relativité exp(β) — référence = 1.0',
+                                   font=dict(color=GRIS, size=10)),
+                        showgrid=True,
+                        gridcolor='rgba(255,255,255,0.05)',
+                        tickfont=dict(color=GRIS, size=10),
+                    ),
+                    yaxis=dict(tickfont=dict(color=BLANC, size=9), showgrid=False),
+                    height=max(280, len(vars_r) * 28 + 100),
+                ))
+                fig_rel.update_layout(**layout_rel)
+                graphiques['relativites_poisson'] = fig_rel
+
+        except Exception as e:
+            logger.warning(f"G1b relativités échoué : {e}")
 
         # ── G2 : RÉSIDUS DE DÉVIANCE — Scatter ───────────────────────────────
         try:
