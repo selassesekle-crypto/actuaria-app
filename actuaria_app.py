@@ -2694,7 +2694,7 @@ def page_analyse():
                     })
 
         # ── Cas paramètres manuels ────────────────────────────────────────
-        elif besoin in ["stress","coherence","s2","ifrs17","alm","ias19","tarif","prov","stress","report","report_sante","prov_sante","tables","prov_prev","report_prev"]:
+        elif besoin in ["stress","coherence","s2","ifrs17","alm","ias19","tarif","prov","stress","report","report_sante","prov_sante","tables","prov_prev","report_prev","tarif_deces","tarif_epargne_vie","pm_vie","pb_vie","qrt_vie"]:
             st.markdown(f"<div style='font-size:0.78rem;color:{BLANC};margin-bottom:10px;'>✏️ <strong>Saisie des paramètres :</strong> Les agents de réglementation n'ont pas besoin de fichier — renseignez les paramètres clés ci-dessous.</div>", unsafe_allow_html=True)
 
             if besoin in ["s2","ifrs17","alm","coherence"]:
@@ -2826,6 +2826,151 @@ def page_analyse():
                                     f"{_tv['meta']['horodatage_import']}</div>",
                                     unsafe_allow_html=True,
                                 )
+
+            elif besoin == "tarif_deces":
+                st.markdown(f'<div style="font-size:0.78rem;color:{BLANC};margin-bottom:10px;">✏️ <strong>Nour V1 — Tarification Décès</strong> · Tables TH0002/TF0002</div>', unsafe_allow_html=True)
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    age_v1 = st.number_input("Âge assuré (ans)", value=42, min_value=18, max_value=75, step=1, key="p_v1_age")
+                    sexe_v1 = st.selectbox("Sexe", ["H","F"], key="p_v1_sexe")
+                with c2:
+                    duree_v1 = st.number_input("Durée contrat (ans)", value=20, min_value=1, max_value=40, step=1, key="p_v1_duree")
+                    capital_v1 = st.number_input("Capital décès (€)", value=150_000, step=10_000, key="p_v1_cap")
+                with c3:
+                    taux_v1 = st.number_input("Taux technique (%)", value=2.50, step=0.25, key="p_v1_taux")
+                    charg_v1 = st.number_input("Chargement (%)", value=20.0, step=1.0, key="p_v1_charg")
+                st.session_state["analyse_params"] = {
+                    "age": age_v1, "sexe": sexe_v1, "duree": duree_v1,
+                    "capital_deces": capital_v1, "taux_technique": taux_v1/100,
+                    "chargement_pct": charg_v1/100,
+                }
+
+            elif besoin == "tarif_epargne_vie":
+                st.markdown(f'<div style="font-size:0.78rem;color:{BLANC};margin-bottom:10px;">✏️ <strong>Kofi V2 — Tarification Épargne Vie</strong> · Capital différé · Rentes · Multisupport</div>', unsafe_allow_html=True)
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    age_v2 = st.number_input("Âge assuré (ans)", value=45, min_value=18, max_value=70, step=1, key="p_v2_age")
+                    sexe_v2 = st.selectbox("Sexe", ["H","F"], key="p_v2_sexe")
+                    duree_v2 = st.number_input("Durée (ans)", value=20, min_value=5, max_value=40, step=1, key="p_v2_duree")
+                with c2:
+                    capital_v2 = st.number_input("Capital cible (€)", value=80_000, step=5_000, key="p_v2_cap")
+                    type_v2 = st.selectbox("Type contrat", ["capital_differe","rente_immediate","rente_differee","mixte"], key="p_v2_type")
+                with c3:
+                    taux_v2 = st.number_input("Taux technique (%)", value=1.80, step=0.10, key="p_v2_taux")
+                    tmg_v2 = st.number_input("TMG (%)", value=0.0, step=0.25, key="p_v2_tmg")
+                st.session_state["analyse_params"] = {
+                    "age": age_v2, "sexe": sexe_v2, "duree": duree_v2,
+                    "capital": capital_v2, "type_contrat": type_v2,
+                    "taux_technique": taux_v2/100, "tmg": tmg_v2/100 if tmg_v2 > 0 else 0.0,
+                }
+
+            elif besoin == "pm_vie":
+                st.markdown(f'<div style="font-size:0.78rem;color:{BLANC};margin-bottom:10px;">✏️ <strong>Amélie V3 — Provisions Mathématiques Vie</strong> · PM prospective & rétrospective</div>', unsafe_allow_html=True)
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    age_v3 = st.number_input("Âge actuel (ans)", value=50, min_value=18, max_value=80, step=1, key="p_v3_age")
+                    sexe_v3 = st.selectbox("Sexe", ["H","F"], key="p_v3_sexe")
+                with c2:
+                    duree_v3 = st.number_input("Durée totale (ans)", value=20, min_value=5, max_value=40, step=1, key="p_v3_duree")
+                    ecoule_v3 = st.number_input("Durée écoulée (ans)", value=10, min_value=0, max_value=39, step=1, key="p_v3_ecoule")
+                with c3:
+                    capital_v3 = st.number_input("Capital assuré (€)", value=80_000, step=5_000, key="p_v3_cap")
+                    prime_v3 = st.number_input("Prime annuelle (€)", value=3_200, step=100, key="p_v3_prime")
+                    taux_v3 = st.number_input("Taux technique (%)", value=2.50, step=0.25, key="p_v3_taux")
+                st.session_state["analyse_params"] = {
+                    "age": age_v3, "sexe": sexe_v3, "duree": duree_v3,
+                    "t_ecoule": ecoule_v3, "capital": capital_v3,
+                    "prime_annuelle": float(prime_v3), "taux_technique": taux_v3/100,
+                }
+
+            elif besoin == "pb_vie":
+                st.markdown(f'<div style="font-size:0.78rem;color:{BLANC};margin-bottom:10px;">✏️ <strong>Théo V4 — Participation aux Bénéfices</strong> · Art. L132-29 · PPB · C2023-10</div>', unsafe_allow_html=True)
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    pm_v4 = st.number_input("PM totale portefeuille (M€)", value=285.0, step=10.0, key="p_v4_pm") * 1_000_000
+                    rend_v4 = st.number_input("Rendement actifs (%)", value=3.20, step=0.10, key="p_v4_rend")
+                with c2:
+                    taux_tech_v4 = st.number_input("Taux technique moyen (%)", value=1.80, step=0.10, key="p_v4_tt")
+                    ppb_ini_v4 = st.number_input("PPB initiale (M€)", value=8.4, step=0.5, key="p_v4_ppb") * 1_000_000
+                with c3:
+                    tx_servi_v4 = st.number_input("Taux servi cible (%)", value=2.60, step=0.10, key="p_v4_servi")
+                    fp_inv_v4 = st.number_input("FP investis (M€)", value=25.0, step=1.0, key="p_v4_fp") * 1_000_000
+                st.session_state["analyse_params"] = {
+                    "pm_total": pm_v4, "rendement_actifs": rend_v4/100,
+                    "taux_technique": taux_tech_v4/100, "ppb_initiale": ppb_ini_v4,
+                    "tx_servi_cible": tx_servi_v4/100, "fonds_propres_investis": fp_inv_v4,
+                }
+
+            elif besoin == "qrt_vie":
+                st.markdown(f'<div style="font-size:0.78rem;color:{BLANC};margin-bottom:10px;">✏️ <strong>Nia V5 — QRT Vie & Rapport Actuariel</strong> · QRT S.12 · S.23 · Rapport consolidé</div>', unsafe_allow_html=True)
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    pm_v5 = st.number_input("PM totale (M€)", value=285.0, step=10.0, key="p_v5_pm") * 1_000_000
+                    be_v5 = st.number_input("BE Vie S2 (M€)", value=272.0, step=5.0, key="p_v5_be") * 1_000_000
+                with c2:
+                    scr_v5 = st.number_input("SCR Vie (M€)", value=53.0, step=1.0, key="p_v5_scr") * 1_000_000
+                    fp_v5 = st.number_input("Fonds propres (M€)", value=98.0, step=5.0, key="p_v5_fp") * 1_000_000
+                with c3:
+                    ra_v5 = st.number_input("Risk Adjustment (M€)", value=16.3, step=0.5, key="p_v5_ra") * 1_000_000
+                    nb_c_v5 = st.number_input("Nb contrats", value=42_000, step=1_000, key="p_v5_nb")
+                    ref_cli_v5 = st.text_input("Nom client", value="Mutuelle Vie Atlantique", key="p_v5_cli")
+                st.session_state["analyse_params"] = {
+                    "pm_total": pm_v5, "be_vie": be_v5, "scr_vie": scr_v5,
+                    "fonds_propres": fp_v5, "risk_adjustment": ra_v5,
+                    "nb_contrats": int(nb_c_v5), "ref_client": ref_cli_v5,
+                }
+
+            elif besoin == "tarif" and equipe == "epre":
+                st.markdown(f'<div style="font-size:0.78rem;color:{BLANC};margin-bottom:10px;">✏️ <strong>Salomé EP2 — Tarification EP-RE</strong> · PER · Art.39 · Art.83</div>', unsafe_allow_html=True)
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    type_ep2 = st.selectbox("Type contrat", ["PER","art39","art83"], key="p_ep2_type")
+                    age_ep2 = st.number_input("Âge entrée (ans)", value=35, min_value=18, max_value=60, step=1, key="p_ep2_age")
+                with c2:
+                    cap_ep2 = st.number_input("Capital cible retraite (€)", value=120_000, step=5_000, key="p_ep2_cap")
+                    age_ret_ep2 = st.number_input("Âge retraite (ans)", value=65, min_value=60, max_value=70, step=1, key="p_ep2_aret")
+                with c3:
+                    rend_ep2 = st.number_input("Rendement marché (%)", value=3.20, step=0.10, key="p_ep2_rend")
+                    part_ep2 = st.number_input("Taux participation (%)", value=90.0, step=5.0, key="p_ep2_part")
+                st.session_state["analyse_params"] = {
+                    "type_contrat": type_ep2, "age_entree": age_ep2,
+                    "capital_cible": cap_ep2, "age_retraite": age_ret_ep2,
+                    "taux_marche": rend_ep2/100, "taux_participation": part_ep2/100,
+                }
+
+            elif besoin == "prov" and equipe == "epre":
+                st.markdown(f'<div style="font-size:0.78rem;color:{BLANC};margin-bottom:10px;">✏️ <strong>Jin-Ho EP3 — Provisionnement EP-RE</strong> · PM · PPB · Réserve capitalisation · Art. R342-14</div>', unsafe_allow_html=True)
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    enc_ep3 = st.number_input("Encours PM (M€)", value=34.0, step=1.0, key="p_ep3_enc") * 1_000_000
+                    rente_ep3 = st.number_input("Rente moyenne (€/mois)", value=1_450, step=50, key="p_ep3_rente")
+                with c2:
+                    age_ep3 = st.number_input("Âge moyen (ans)", value=55, min_value=40, max_value=75, step=1, key="p_ep3_age")
+                    ppb_ep3 = st.number_input("PPB stock (M€)", value=2.1, step=0.1, key="p_ep3_ppb") * 1_000_000
+                with c3:
+                    actifs_ep3 = st.number_input("Actifs totaux (M€)", value=36.8, step=0.5, key="p_ep3_actifs") * 1_000_000
+                    rc_ep3 = st.number_input("Réserve capitalisation (M€)", value=0.85, step=0.1, key="p_ep3_rc") * 1_000_000
+                    sbr_ep3 = st.selectbox("Sous-branche", ["per","art39","art83"], key="p_ep3_sbr")
+                st.session_state["analyse_params"] = {
+                    "encours_total": enc_ep3, "rente_moyenne": rente_ep3,
+                    "age_moyen": float(age_ep3), "ppb_stock": ppb_ep3,
+                    "actifs_total": actifs_ep3, "reserve_capi_stock": rc_ep3,
+                    "sous_branche": sbr_ep3,
+                }
+
+            elif besoin in ["stress","report"] and equipe == "epre":
+                st.markdown(f'<div style="font-size:0.78rem;color:{BLANC};margin-bottom:10px;">✏️ <strong>{"Claire EP4 — Stress Tests" if besoin == "stress" else "Omar/Noé EP5 — Rapport ACPR/DARES"}</strong></div>', unsafe_allow_html=True)
+                c1, c2 = st.columns(2)
+                with c1:
+                    enc_ep4 = st.number_input("Encours PM (M€)", value=34.0, step=1.0, key="p_ep4_enc") * 1_000_000
+                    actifs_ep4 = st.number_input("Actifs totaux (M€)", value=36.8, step=0.5, key="p_ep4_act") * 1_000_000
+                with c2:
+                    sbr_ep4 = st.selectbox("Sous-branche", ["per","art39","art83"], key="p_ep4_sbr")
+                    cli_ep4 = st.text_input("Nom client", value="Mutuelle Vie Atlantique", key="p_ep4_cli")
+                st.session_state["analyse_params"] = {
+                    "encours_total": enc_ep4, "actifs_total": actifs_ep4,
+                    "sous_branche": sbr_ep4, "ref_client": cli_ep4,
+                }
 
             else:
                 st.info("Paramètres spécifiques à cet agent — disponibles prochainement.")
