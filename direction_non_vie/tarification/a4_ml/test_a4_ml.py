@@ -175,6 +175,90 @@ class TestA4FiltreGenre(unittest.TestCase):
         print(f"    B1-A4 Genre numérique filtré ✅ | features={features}")
 
 
+class TestAntiFuiteFamilleCible(unittest.TestCase):
+    """
+    Anti-fuite de données — variables dérivées de la sinistralité (audit V8).
+
+    Le correctif V7 (BLOQUANT #2) a fait calculer prime_pure par A2. Effet de
+    bord détecté par l'audit V8 : prime_pure (= cout/exposition) atteignait la
+    matrice X des modèles fréquence/coût → data leakage (Gini fréquence 0,91
+    vs 0,20). Ce test verrouille l'exclusion de toute la famille cible, à deux
+    niveaux : (1) unitaire sur filtrer_famille_cible, (2) intégration A2→A4
+    avec borne de vraisemblance sur le Gini.
+    """
+
+    def test_unitaire_filtrer_famille_cible(self):
+        from direction_non_vie.tarification.services.conformite_reglementaire import (
+            filtrer_famille_cible,
+        )
+        feats = [
+            'age', 'bonus_malus', 'puissance_fiscale',        # légitimes → gardées
+            'prime_pure', 'cout_total_sinistres', 'nb_sinistres',  # famille cible
+            'log_prime_pure', 'log_cout_total_sinistres',     # variantes log
+            'lambda_freq_annuel', 'cout_moyen_attendu',       # variantes
+        ]
+        out = filtrer_famille_cible(feats, contexte='test')
+        for interdite in ['prime_pure', 'cout_total_sinistres', 'nb_sinistres',
+                          'log_prime_pure', 'log_cout_total_sinistres',
+                          'lambda_freq_annuel', 'cout_moyen_attendu']:
+            self.assertNotIn(interdite, out,
+                f"'{interdite}' (dérivée sinistralité) doit être exclue des features")
+        for legitime in ['age', 'bonus_malus', 'puissance_fiscale']:
+            self.assertIn(legitime, out,
+                f"'{legitime}' (facteur tarifaire a priori) ne doit PAS être exclu")
+        print(f"    AF1 Filtre unitaire ✅ | gardées={out}")
+
+    def test_integration_a2_a4_pas_de_fuite_prime_pure(self):
+        """Pipeline A2→A4 réel : prime_pure (calculée par A2) ne doit pas
+        entrer dans la matrice X quand la cible est la fréquence, et le Gini
+        doit rester actuariellement plausible (borne anti-fuite)."""
+        from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
+        from direction_non_vie.tarification.a4_ml.agent import AgentA4ML
+        np.random.seed(11)
+        n = 3000
+        expo = np.random.uniform(0.1, 1.0, n)
+        bm   = np.random.uniform(50, 350, n)
+        nb   = np.random.poisson(0.06 * expo * (bm / 100.0), n).astype(float)
+        cout = np.where(nb > 0, np.random.gamma(2, 500, n), 0.0)
+        df = pd.DataFrame({
+            'id_contrat': range(n), 'nb_sinistres': nb,
+            'cout_total_sinistres': cout, 'exposition': expo,
+            'age': np.random.randint(18, 80, n).astype(float), 'bonus_malus': bm,
+            'puissance_fiscale': np.random.randint(4, 15, n).astype(float),
+            'annee_souscription': np.random.choice([2020, 2021, 2022, 2023], n),
+        })
+        r_a1 = {'success': True, 'dataframe': df, 'branche': 'auto',
+                'statut_rag': 'VERT', 'score_qual': 95.0,
+                'qualite': {'taux_completude': 99.0, 'taux_doublons': 0.0,
+                            'nb_lignes': n, 'nb_colonnes': len(df.columns),
+                            'score_global': 95.0, 'colonnes': df.columns.tolist(),
+                            'expo_ok_pct': 100.0},
+                'hash_md5': 'x', 'rapport': {'etapes': [], 'alertes': []},
+                'commentaire': 'OK', 'audit_id': 'A1', 'client_id': None, 'erreur': None}
+        a2 = AgentA2Preprocessing(audit_path='/tmp', verbose=False)
+        r2 = a2.run(result_a1=r_a1)
+        self.assertIn('prime_pure', r2['dataframe'].columns,
+            "A2 doit calculer prime_pure (contrat de données V7 B2)")
+
+        a4 = AgentA4ML(models_path='/tmp', audit_path='/tmp', verbose=False)
+        feats = a4._preparer_donnees(r2['dataframe'].copy(), 'auto',
+                                     'nb_sinistres', 'exposition')[-1]
+        self.assertNotIn('prime_pure', feats,
+            "FUITE : prime_pure ne doit jamais être une feature (cible=fréquence)")
+        self.assertFalse(any('cout' in f for f in feats),
+            f"FUITE : variable de coût dans les features : {feats}")
+        print(f"    AF2 Pas de fuite dans X ✅ | features={feats}")
+
+        r4 = a4.run(result_a2=r2, calcul_shap=False, generer_graphiques=False,
+                    col_cible='nb_sinistres')
+        best = r4['classement'][0]
+        gini = best.get('gini_test', 0)
+        self.assertLess(gini, 0.60,
+            f"Gini fréquence auto = {gini:.4f} ≥ 0,60 — irréaliste, signature "
+            f"de fuite de données (régression de l'anomalie V8 ?)")
+        print(f"    AF3 Gini plausible ✅ | best={best['modele']} Gini={gini:.4f} (< 0,60)")
+
+
 if __name__ == '__main__':
     print("="*65)
     print("  TESTS A4 ML v1.0 — MACHINE LEARNING ×8 MODÈLES")

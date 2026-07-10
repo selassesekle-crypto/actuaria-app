@@ -129,10 +129,10 @@ except ImportError:
 # une colonne 'sexe' numérique atteignait la matrice de features des
 # modèles ML, potentiellement retenus en production par A6).
 try:
-    from .services.conformite_reglementaire import filtrer_genre
+    from .services.conformite_reglementaire import filtrer_genre, filtrer_famille_cible
 except ImportError:
     from direction_non_vie.tarification.services.conformite_reglementaire import (
-        filtrer_genre
+        filtrer_genre, filtrer_famille_cible
     )
 
 # ── LOGGER ────────────────────────────────────────────────────────────────────
@@ -824,6 +824,18 @@ class AgentA4ML:
         # la matrice X des modèles ML — et A6 peut retenir un tel modèle en
         # production. Réf. : Arrêt CJUE C-236/09 (Test-Achats).
         feature_names = filtrer_genre(
+            feature_names, contexte='A4 — sélection features ML', logger_agent=logger
+        )
+
+        # ── FILTRE ANTI-FUITE (audit V8 BLOQUANT) ─────────────────────────────
+        # COLS_A_EXCLURE_ML retirait déjà nb_sinistres et cout_total_sinistres,
+        # mais PAS prime_pure (commentée « cible » et non exclue). Depuis que
+        # A2 calcule prime_pure automatiquement (correctif V7 B2), prime_pure
+        # atteignait donc la matrice X quand la cible est la fréquence ou le
+        # coût → data leakage (Gini fréquence 0,91 vs 0,20, prouvé par
+        # exécution). On centralise l'exclusion de toute la famille cible.
+        # La cible reste lue via df[col_cible] : l'exclure des features est sûr.
+        feature_names = filtrer_famille_cible(
             feature_names, contexte='A4 — sélection features ML', logger_agent=logger
         )
 

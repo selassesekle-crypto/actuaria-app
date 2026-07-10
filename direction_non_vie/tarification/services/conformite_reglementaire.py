@@ -75,3 +75,77 @@ def filtrer_genre(
             f"Réf. : Arrêt CJUE C-236/09 (Test-Achats)."
         )
     return apres
+
+
+# ── Variables « famille cible » — anti-fuite de données ───────────────────────
+# Créé suite à l'audit V8 (anomalie BLOQUANTE) : le correctif de l'audit V7
+# (BLOQUANT #2) a fait calculer automatiquement 'prime_pure' par A2 pour
+# réparer le contrat de données du walk-forward. Effet de bord : 'prime_pure'
+# (= cout_total_sinistres / exposition) — donc une grandeur DÉRIVÉE de la
+# sinistralité observée — s'est mise à circuler comme FEATURE dans A4/A5
+# (quand la cible est la fréquence ou le coût) et dans le walk-forward d'A6.
+# Conséquence prouvée par exécution : Gini fréquence auto = 0,91 AVEC
+# prime_pure vs 0,20 SANS — signature nette de data leakage. Ces variables
+# sont par ailleurs INCONNUES au moment de tarifer un contrat neuf : un
+# modèle entraîné dessus est sur-ajusté ET non déployable.
+#
+# Même maladie que la fuite genre, autre symptôme : « certaines colonnes ne
+# doivent JAMAIS être des features ». On centralise donc ici aussi, pour
+# immuniser par construction tout agent de sélection de features présent ou
+# futur (A3/A4/A5/A6). La cible reste lue via df[col_cible] (accès direct,
+# indépendant de la liste de features) : l'exclusion ne casse donc jamais
+# l'usage légitime de prime_pure/nb_sinistres/cout comme VARIABLE CIBLE.
+COLS_FAMILLE_CIBLE = [
+    'prime_pure', 'prime_pure_obs', 'prime_pure_annuelle',
+    'prime_commerciale',
+    'cout_total_sinistres', 'cout_moyen_attendu', 'cout_moyen',
+    'nb_sinistres', 'nb_sinistres_rc', 'nb_sinistres_dommages',
+    'lambda_freq', 'lambda_freq_annuel',
+    'charge_annuelle_eur', 'charge_ij_annuelle_eur',
+]
+
+# Racines pour capturer les variantes dérivées (log_*, *_obs, *_annuel...)
+# sans lister chaque combinaison. Précis : aucun facteur tarifaire a priori
+# légitime (age, bonus_malus, puissance, zone...) ne contient ces racines.
+COLS_FAMILLE_CIBLE_STEMS = [
+    'prime_pure', 'cout_total_sinistres', 'cout_moyen',
+    'lambda_freq', 'nb_sinistres',
+]
+
+
+def _est_derivee_sinistralite(nom: str) -> bool:
+    """True si le nom de colonne est une grandeur dérivée de la sinistralité
+    observée (famille cible), y compris ses variantes log_/_obs/_annuel."""
+    base = nom[4:] if nom.startswith('log_') else nom
+    if base in COLS_FAMILLE_CIBLE or nom in COLS_FAMILLE_CIBLE:
+        return True
+    return any(stem in nom for stem in COLS_FAMILLE_CIBLE_STEMS)
+
+
+def filtrer_famille_cible(
+    feature_names: List[str],
+    contexte: str = '',
+    logger_agent: Optional[logging.Logger] = None,
+) -> List[str]:
+    """
+    Retire de la liste de features toute grandeur dérivée de la sinistralité
+    observée (prime_pure, cout_total_sinistres, nb_sinistres, et variantes) —
+    prévention du data leakage (audit V8).
+
+    À appeler par tout agent qui construit une matrice X à partir des colonnes
+    d'un DataFrame preprocessé (A4, A5, walk-forward d'A6). N'affecte JAMAIS la
+    variable cible, qui est lue séparément via df[col_cible].
+
+    Retourne la liste filtrée (nouvel objet, ne modifie pas l'original).
+    """
+    _log = logger_agent or logger
+    apres = [f for f in feature_names if not _est_derivee_sinistralite(f)]
+    supprimees = set(feature_names) - set(apres)
+    if supprimees:
+        _log.warning(
+            f"[CONFORMITE REGLEMENTAIRE] Variable(s) {sorted(supprimees)} "
+            f"exclue(s) de la sélection de features — grandeur(s) dérivée(s) "
+            f"de la sinistralité (prévention data leakage)"
+            f"{' (' + contexte + ')' if contexte else ''}."
+        )
+    return apres

@@ -46,10 +46,10 @@ from sklearn.preprocessing import StandardScaler
 # PyTorch, mais la logique de sélection est identique à celle d'A4,
 # vérifiée empiriquement).
 try:
-    from .services.conformite_reglementaire import filtrer_genre
+    from .services.conformite_reglementaire import filtrer_genre, filtrer_famille_cible
 except ImportError:
     from direction_non_vie.tarification.services.conformite_reglementaire import (
-        filtrer_genre
+        filtrer_genre, filtrer_famille_cible
     )
 
 # Export Excel (audit V7 MINEUR #2) — A5 était le seul agent sans export
@@ -647,6 +647,14 @@ class AgentA5DeepLearning:
         # (0/1) ou pré-encodée ('sexe_enc') pouvait donc atteindre la
         # matrice X du CANN/TabNet. Réf. : Arrêt CJUE C-236/09 (Test-Achats).
         feature_names = filtrer_genre(
+            feature_names, contexte='A5 — sélection features DL', logger_agent=logger
+        )
+
+        # ── FILTRE ANTI-FUITE (audit V8 BLOQUANT) ─────────────────────────────
+        # Même trou que A4 : prime_pure (dérivée de la sinistralité, calculée
+        # par A2 depuis le correctif V7 B2) pouvait atteindre la matrice X du
+        # CANN/TabNet. On exclut toute la famille cible via le module partagé.
+        feature_names = filtrer_famille_cible(
             feature_names, contexte='A5 — sélection features DL', logger_agent=logger
         )
 

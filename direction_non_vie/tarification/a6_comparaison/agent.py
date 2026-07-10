@@ -84,6 +84,14 @@ try:
 except ImportError:
     TARIF_EXCEL_OK = False
 
+# Filtre anti-fuite partagé (audit V8) — même source que A3/A4/A5.
+try:
+    from ..services.conformite_reglementaire import filtrer_famille_cible
+except ImportError:
+    from direction_non_vie.tarification.services.conformite_reglementaire import (
+        filtrer_famille_cible
+    )
+
 warnings.filterwarnings('ignore')
 logging.basicConfig(
     level=logging.INFO,
@@ -844,6 +852,16 @@ class AgentA6Comparaison:
                     and df_tr[c].isnull().sum() == 0
                     and df_tr[c].std() > 0
                 ]
+                # ── FILTRE ANTI-FUITE (audit V8 BLOQUANT) ─────────────────────
+                # Sans ce filtre, _cols_num retenait TOUTE colonne numérique
+                # sauf la cible — donc cout_total_sinistres/nb_sinistres/
+                # prime_pure selon la cible → data leakage (gini_wf ≈ 0,96
+                # avec cible=prime_pure, cout_total_sinistres en feature).
+                # Même exclusion partagée que A4/A5. La cible reste lue via
+                # df_tr[col_cible], indépendamment de _cols_num.
+                _cols_num = filtrer_famille_cible(
+                    _cols_num, contexte='A6 — walk-forward', logger_agent=logger
+                )
                 if _cols_num and col_cible in df_tr.columns:
                     X_tr = df_tr[_cols_num].fillna(0).values
                     y_tr = df_tr[col_cible].values
