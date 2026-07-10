@@ -219,17 +219,24 @@ class AgentA6Comparaison:
         audit_id     = f"A6_{t_debut.strftime('%Y%m%d_%H%M%S')}"
         sous_branche = result_a2.get('branche', 'inconnue')
 
-        # Application du profil de pondération
-        global POIDS_CRITERES
+        # ── Application du profil de pondération — VARIABLE LOCALE ──────────
+        # FIX (audit V4) : l'ancienne implémentation mutait une variable
+        # globale de module (`global POIDS_CRITERES`), créant un risque de
+        # race condition dès lors que plusieurs requêtes s'exécutent en
+        # parallèle (ex. déploiement FastAPI concurrent) — deux appels avec
+        # des profils différents pouvaient se marcher dessus et l'un des
+        # deux calculerait son score avec les poids de l'autre. La
+        # pondération est désormais strictement locale à cet appel et
+        # transmise explicitement en paramètre aux méthodes qui en ont besoin.
         if poids_custom:
-            POIDS_CRITERES = poids_custom
+            poids_actifs = poids_custom
             logger.info(f"Profil personnalisé appliqué : {poids_custom}")
         elif profil in PROFILS_PONDERATION:
-            POIDS_CRITERES = PROFILS_PONDERATION[profil]
-            logger.info(f"Profil '{profil}' appliqué : {POIDS_CRITERES}")
+            poids_actifs = PROFILS_PONDERATION[profil]
+            logger.info(f"Profil '{profil}' appliqué : {poids_actifs}")
         else:
             logger.warning(f"Profil '{profil}' inconnu — profil 'equilibre' utilisé")
-            POIDS_CRITERES = PROFILS_PONDERATION['equilibre']
+            poids_actifs = PROFILS_PONDERATION['equilibre']
 
         logger.info(f"[{audit_id}] Agent A6 Comparaison démarré")
 
@@ -246,7 +253,7 @@ class AgentA6Comparaison:
 
             # ── ÉTAPE 2 : SCORE MULTICRITÈRES ─────────────────────────────────
             logger.info("Étape 2/5 : Score multicritères")
-            catalogue = self._calculer_scores_multicriteres(catalogue)
+            catalogue = self._calculer_scores_multicriteres(catalogue, poids_actifs)
             rapport['etapes'].append('score_multicriteres')
 
             # ── ÉTAPE 3 : CLASSEMENT FINAL ────────────────────────────────────
@@ -535,7 +542,8 @@ class AgentA6Comparaison:
 
     def _calculer_scores_multicriteres(
         self,
-        catalogue: List[Dict]
+        catalogue: List[Dict],
+        poids:     Dict[str, float],
     ) -> List[Dict]:
         """
         Calcule le score global multicritères pour chaque modèle.
@@ -602,10 +610,10 @@ class AgentA6Comparaison:
             # pas une performance absolue de 96%.
             # Réf. : ACPR-2022-P-01 §4.3 — documentation des critères de sélection.
             score_global = (
-                POIDS_CRITERES['gini']             * s_gini
-                + POIDS_CRITERES['stabilite']      * s_stab
-                + POIDS_CRITERES['interpretabilite'] * s_inter
-                + POIDS_CRITERES['rmse']            * s_rmse
+                poids['gini']             * s_gini
+                + poids['stabilite']      * s_stab
+                + poids['interpretabilite'] * s_inter
+                + poids['rmse']            * s_rmse
             )
 
             modele['score_gini']            = round(s_gini,  4)
