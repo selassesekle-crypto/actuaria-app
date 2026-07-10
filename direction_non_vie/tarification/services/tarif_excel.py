@@ -682,3 +682,208 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
     except Exception as e:
         logger.error(f"export_excel_a6 échoué : {e}", exc_info=True)
         return b''
+
+
+# =============================================================================
+#  EXPORT A1 — INGESTION
+#  4 onglets : Synthèse · Qualité & Aberrants · Coercition Types · Audit Trail
+# =============================================================================
+
+def export_excel_a1(result_a1: Dict, audit_id: str = "") -> bytes:
+    """Génère le rapport Excel A1 Ingestion (4 onglets). Retourne bytes ou b''."""
+    if not OPENPYXL_OK or not result_a1 or not result_a1.get('success'):
+        return b''
+    try:
+        wb  = Workbook()
+        now = datetime.now().strftime("%d/%m/%Y %H:%M")
+        aid = audit_id or result_a1.get('audit_id', 'N/A')
+        qualite = result_a1.get('qualite', {})
+        rapport = result_a1.get('rapport', {})
+        coercition = rapport.get('coercition_types', {})
+
+        # ── Onglet 1 : Synthèse ───────────────────────────────────────────────
+        ws1 = wb.active
+        ws1.title = "1-Synthèse"
+        _bandeau(ws1, "Rapport Ingestion & Validation", "Synthèse qualité des données",
+                 "A1 — Ingestion", aid, now)
+        r = 7
+        _section(ws1, r, "▶ QUALITÉ DES DONNÉES"); r += 1
+        _kpi(ws1, r, "Score global qualité", round(qualite.get('score_global', 0), 1),
+             statut=result_a1.get('statut_rag'), fmt=FMT_DEC4); r += 1
+        _kpi(ws1, r, "Nb lignes", qualite.get('nb_lignes', 0), fmt=FMT_NB); r += 1
+        _kpi(ws1, r, "Nb colonnes", qualite.get('nb_colonnes', 0), fmt=FMT_NB); r += 1
+        _kpi(ws1, r, "Taux complétude", qualite.get('taux_completude', 0) / 100, fmt=FMT_PCT); r += 1
+        _kpi(ws1, r, "Nb doublons", qualite.get('nb_doublons', 0), fmt=FMT_NB); r += 1
+        _kpi(ws1, r, "Taux doublons", qualite.get('taux_doublons', 0) / 100, fmt=FMT_PCT); r += 1
+        _kpi(ws1, r, "Exposition conforme [0,1]", qualite.get('expo_ok_pct', 0) / 100, fmt=FMT_PCT); r += 1
+        _kpi(ws1, r, "Nb types d'anomalies détectées", qualite.get('nb_types_aberrants', 0),
+             statut="VERT" if qualite.get('nb_types_aberrants', 0) == 0 else "AMBRE",
+             fmt=FMT_NB); r += 1
+
+        # ── Onglet 2 : Qualité & Aberrants ────────────────────────────────────
+        # Réf. : Commission Tarification IA France (2019) §4.2
+        ws2 = wb.create_sheet("2-Aberrants")
+        _bandeau(ws2, "Valeurs Aberrantes", "Contrôles actuariels — IA France §4.2",
+                 "A1 — Validation Qualité", aid, now)
+        r = 7
+        _section(ws2, r, "▶ ANOMALIES DÉTECTÉES"); r += 1
+        aberrants = qualite.get('aberrants', {})
+        if aberrants:
+            for col, txt in [(1, "Type d'anomalie", 30), (2, "Nombre de valeurs", 18)]:
+                _header(ws2, r, col, txt, width=txt if isinstance(txt, int) else 20)
+            r += 1
+            for cle, val in aberrants.items():
+                _cell(ws2, r, 1, cle.replace('_', ' ').title(), cf=NOIR, fill=GRIS_L)
+                _cell(ws2, r, 2, val, cf=NOIR, ah="right", fmt=FMT_NB)
+                r += 1
+            r += 1
+        else:
+            _kpi(ws2, r, "Statut", "✓ Aucune anomalie détectée", statut="VERT"); r += 1
+            r += 1
+
+        _section(ws2, r, "▶ ALERTES DÉTAILLÉES"); r += 1
+        for alerte in qualite.get('alertes_aberrants', []):
+            _cell(ws2, r, 1, f"• {alerte}", cf=NOIR, wrap=True)
+            ws2.merge_cells(start_row=r, start_column=1, end_row=r, end_column=6)
+            ws2.row_dimensions[r].height = 30
+            r += 1
+        if not qualite.get('alertes_aberrants'):
+            _kpi(ws2, r, "Alertes", "Aucune", statut="VERT"); r += 1
+
+        # ── Onglet 3 : Coercition de Types ────────────────────────────────────
+        ws3 = wb.create_sheet("3-Coercition Types")
+        _bandeau(ws3, "Coercition de Types", "Forçage explicite des types de données",
+                 "A1 — Coercition", aid, now)
+        r = 7
+        _section(ws3, r, "▶ COLONNES FORCÉES"); r += 1
+        cols_forcees = coercition.get('colonnes_forcees', [])
+        if cols_forcees:
+            _kpi(ws3, r, "Nb colonnes forcées", len(cols_forcees), fmt=FMT_NB); r += 1
+            r += 1
+            for col, txt in [(1, "Colonne", 30), (2, "Valeurs perdues", 18)]:
+                _header(ws3, r, col, txt, width=20)
+            r += 1
+            for col_nom in cols_forcees:
+                n_perdu = coercition.get('nb_valeurs_perdues', {}).get(col_nom, 0)
+                _cell(ws3, r, 1, col_nom, cf=NOIR, fill=GRIS_L)
+                _cell(ws3, r, 2, n_perdu, cf=NOIR, ah="right", fmt=FMT_NB)
+                r += 1
+        else:
+            _kpi(ws3, r, "Statut", "✓ Aucune coercition nécessaire (types déjà corrects)",
+                 statut="VERT"); r += 1
+        r += 1
+        _section(ws3, r, "▶ ALERTES"); r += 1
+        for alerte in coercition.get('alertes', []):
+            _cell(ws3, r, 1, f"• {alerte}", cf=NOIR, wrap=True)
+            ws3.merge_cells(start_row=r, start_column=1, end_row=r, end_column=6)
+            ws3.row_dimensions[r].height = 30
+            r += 1
+        if not coercition.get('alertes'):
+            _kpi(ws3, r, "Alertes", "Aucune", statut="VERT"); r += 1
+
+        # ── Onglet 4 : Audit Trail ─────────────────────────────────────────────
+        ws4 = wb.create_sheet("4-Audit Trail")
+        _bandeau(ws4, "Audit Trail", "Traçabilité ACPR — Agent A1 Ingestion",
+                 "A1 — Audit", aid, now)
+        r = 7
+        _section(ws4, r, "▶ INFORMATIONS AUDIT"); r += 1
+        _kpi(ws4, r, "Audit ID", aid); r += 1
+        _kpi(ws4, r, "Date", now); r += 1
+        _kpi(ws4, r, "Agent", "A1 — Ingestion & Validation"); r += 1
+        _kpi(ws4, r, "Branche", result_a1.get('branche', 'N/A')); r += 1
+        _kpi(ws4, r, "Statut RAG", result_a1.get('statut_rag', 'N/A'),
+             statut=result_a1.get('statut_rag')); r += 1
+        _kpi(ws4, r, "Hash MD5", result_a1.get('hash_md5', 'N/A')); r += 1
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        return buf.getvalue()
+
+    except Exception as e:
+        logger.error(f"export_excel_a1 échoué : {e}", exc_info=True)
+        return b''
+
+
+# =============================================================================
+#  EXPORT A2 — PREPROCESSING
+#  3 onglets : Synthèse · Data Dictionnaire · Audit Trail
+# =============================================================================
+
+def export_excel_a2(result_a2: Dict, audit_id: str = "") -> bytes:
+    """Génère le rapport Excel A2 Preprocessing (3 onglets). Retourne bytes ou b''."""
+    if not OPENPYXL_OK or not result_a2 or not result_a2.get('success'):
+        return b''
+    try:
+        wb  = Workbook()
+        now = datetime.now().strftime("%d/%m/%Y %H:%M")
+        aid = audit_id or result_a2.get('audit_id', 'N/A')
+        rapport = result_a2.get('rapport', {})
+        data_dict = result_a2.get('data_dictionnaire', {})
+
+        # ── Onglet 1 : Synthèse ───────────────────────────────────────────────
+        ws1 = wb.active
+        ws1.title = "1-Synthèse"
+        _bandeau(ws1, "Rapport Preprocessing", "Synthèse des transformations",
+                 "A2 — Preprocessing", aid, now)
+        r = 7
+        _section(ws1, r, "▶ TRANSFORMATIONS APPLIQUÉES"); r += 1
+        _kpi(ws1, r, "Statut RAG", result_a2.get('statut_rag', 'N/A'),
+             statut=result_a2.get('statut_rag')); r += 1
+        _kpi(ws1, r, "Branche", result_a2.get('branche', 'N/A')); r += 1
+        _kpi(ws1, r, "Étapes exécutées",
+             ', '.join(rapport.get('etapes', [])), wrap=True); r += 1
+        if rapport.get('alertes'):
+            r += 1
+            _section(ws1, r, "▶ ALERTES"); r += 1
+            for alerte in rapport.get('alertes', []):
+                _cell(ws1, r, 1, f"• {alerte}", cf=NOIR, wrap=True)
+                ws1.merge_cells(start_row=r, start_column=1, end_row=r, end_column=6)
+                ws1.row_dimensions[r].height = 30
+                r += 1
+
+        # ── Onglet 2 : Data Dictionnaire ───────────────────────────────────────
+        # Réf. : ACPR-2022-P-01 §3.2 — traçabilité des variables dérivées
+        ws2 = wb.create_sheet("2-Data Dictionnaire")
+        _bandeau(ws2, "Data Dictionnaire", "Traçabilité des variables dérivées — ACPR-2022-P-01 §3.2",
+                 "A2 — Traçabilité", aid, now)
+        r = 7
+        _section(ws2, r, "▶ VARIABLES DÉRIVÉES DOCUMENTÉES"); r += 1
+        headers = ['Variable', 'Source', 'Opération', 'Usage', 'Justification']
+        widths  = [26, 26, 34, 22, 50]
+        for ci, (h, w) in enumerate(zip(headers, widths), 1):
+            _header(ws2, r, ci, h, width=w)
+        r += 1
+        for var_nom, meta in data_dict.items():
+            source = meta.get('source', '')
+            source_txt = ', '.join(source) if isinstance(source, list) else str(source)
+            _cell(ws2, r, 1, var_nom, cf=NOIR, fill=GRIS_L, bold=True)
+            _cell(ws2, r, 2, source_txt, cf=NOIR, wrap=True)
+            _cell(ws2, r, 3, meta.get('operation', ''), cf=NOIR, wrap=True)
+            _cell(ws2, r, 4, meta.get('usage', ''), cf=NOIR)
+            _cell(ws2, r, 5, meta.get('justification', ''), cf=NOIR, wrap=True)
+            ws2.row_dimensions[r].height = 45
+            r += 1
+        if not data_dict:
+            _kpi(ws2, r, "Statut", "Aucune variable dérivée documentée", statut="AMBRE"); r += 1
+
+        # ── Onglet 3 : Audit Trail ─────────────────────────────────────────────
+        ws3 = wb.create_sheet("3-Audit Trail")
+        _bandeau(ws3, "Audit Trail", "Traçabilité ACPR — Agent A2 Preprocessing",
+                 "A2 — Audit", aid, now)
+        r = 7
+        _section(ws3, r, "▶ INFORMATIONS AUDIT"); r += 1
+        _kpi(ws3, r, "Audit ID", aid); r += 1
+        _kpi(ws3, r, "Date", now); r += 1
+        _kpi(ws3, r, "Agent", "A2 — Preprocessing & Feature Engineering"); r += 1
+        _kpi(ws3, r, "Branche", result_a2.get('branche', 'N/A')); r += 1
+        _kpi(ws3, r, "Statut RAG", result_a2.get('statut_rag', 'N/A'),
+             statut=result_a2.get('statut_rag')); r += 1
+        _kpi(ws3, r, "Nb variables dérivées tracées", len(data_dict), fmt=FMT_NB); r += 1
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        return buf.getvalue()
+
+    except Exception as e:
+        logger.error(f"export_excel_a2 échoué : {e}", exc_info=True)
+        return b''
