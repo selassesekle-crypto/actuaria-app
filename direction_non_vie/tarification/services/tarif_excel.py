@@ -557,6 +557,20 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
         _bandeau(ws3, "Backtesting Walk-Forward", "Test A/E global et par segment",
                  "A6 — Backtesting", aid, now)
         r = 7
+        # ── Résumé recalibration (IA France 2019 §3.2.5) ──────────────────────
+        _section(ws3, r, "▶ RECALIBRATION DU MODÈLE (backtesting réel)"); r += 1
+        _kpi(ws3, r, "Modèle recalibré par fenêtre",
+             backtest.get('modele_recalibre') or "Non disponible",
+             statut="VERT" if backtest.get('modele_recalibre') else "AMBRE"); r += 1
+        if backtest.get('gini_wf_moyen') is not None:
+            _kpi(ws3, r, "Gini walk-forward moyen (recalibré)",
+                 round(backtest.get('gini_wf_moyen', 0), 4), fmt=FMT_DEC4); r += 1
+        _kpi(ws3, r, "Référence méthodologique",
+             "Commission Tarification IA France (2019) §3.2.5 — "
+             "«Le backtesting doit évaluer la robustesse prédictive du modèle "
+             "sur des données hors-échantillon temporellement cohérentes.»",
+             wrap=True); r += 1
+        r += 1
         _section(ws3, r, "▶ WALK-FORWARD TEMPOREL"); r += 1
         if backtest.get('walk_forward'):
             for col, txt, w in [(1,"Année test",14),(2,"N train",12),(3,"N test",10),
@@ -620,6 +634,20 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
             for k, v in fiche.items():
                 if isinstance(v, str):
                     _kpi(ws4, r, k.replace('_',' ').title(), v, wrap=True); r += 1
+        # ── Gouvernance du profil de pondération (ACPR-2022-P-01 §4.3) ────────
+        _section(ws4, r, "▶ GOUVERNANCE — PROFIL DE PONDÉRATION"); r += 1
+        _gov = audit_trail.get('gouvernance_ok')
+        _kpi(ws4, r, "Profil retenu",
+             audit_trail.get('profil_ponderation', 'N/A')); r += 1
+        _kpi(ws4, r, "Environnement", audit_trail.get('environnement', 'N/A')); r += 1
+        _kpi(ws4, r, "Validé par",
+             audit_trail.get('profil_valide_par') or "⚠ NON VALIDÉ",
+             statut="VERT" if audit_trail.get('profil_valide_par') else "AMBRE"); r += 1
+        _kpi(ws4, r, "Gouvernance conforme",
+             "✓ Oui" if _gov else "✗ Non — validation actuarielle requise",
+             statut="VERT" if _gov else "AMBRE"); r += 1
+        r += 1
+
         _section(ws4, r, "▶ DÉCISION FINALE"); r += 1
         _kpi(ws4, r, "Décision", "À VALIDER PAR L'ACTUAIRE RESPONSABLE",
              statut="AMBRE"); r += 1
