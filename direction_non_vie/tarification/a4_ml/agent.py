@@ -767,7 +767,7 @@ class AgentA4ML:
 
         modeles_a_calibrer = [
             ('gbm',              self._creer_gbm,           True),
-            ('xgboost',          self._creer_xgboost,        True),
+            ('xgboost',          lambda: self._creer_xgboost(col_cible), True),
             ('xgboost_tweedie',  self._creer_xgboost_tweedie,True),
             ('lightgbm',         self._creer_lightgbm,       True),
             ('catboost',         self._creer_catboost,        True),
@@ -820,15 +820,31 @@ class AgentA4ML:
         """
         return GradientBoostingRegressor(**HYPERPARAMS['gbm'])
 
-    def _creer_xgboost(self):
+    def _creer_xgboost(self, col_cible: str = 'nb_sinistres'):
         """
         XGBoost — implémentation optimisée du gradient boosting.
         Ajoute la régularisation L1/L2 et le traitement natif des NaN.
         Standard de l'industrie en data science actuarielle.
+
+        GARDE-FOU (miroir R2 — recommandation P4 certification v3) :
+        Si col_cible est une variable de comptage (Poisson), on utilise
+        l'objective natif 'count:poisson' au lieu de 'reg:squarederror'
+        (défaut XGBoost). L'erreur quadratique n'est pas adaptée aux
+        comptages entiers avec masse en 0 — la déviance Poisson pénalise
+        correctement les sous/sur-estimations sur ce type de variable.
+        Réf. : XGBoost docs — objective='count:poisson' ;
+               Agresti (2015) §7 (même principe que le garde-fou R2 ElasticNet).
         """
         if not XGBOOST_OK:
             raise ImportError("XGBoost non installé : !pip install xgboost")
-        return xgb.XGBRegressor(**HYPERPARAMS['xgboost'])
+        params = dict(HYPERPARAMS['xgboost'])
+        if col_cible in COLS_COMPTAGE:
+            params['objective'] = 'count:poisson'
+            logger.info(
+                f"[XGBoost] objective='count:poisson' activé "
+                f"(col_cible='{col_cible}' ∈ COLS_COMPTAGE)."
+            )
+        return xgb.XGBRegressor(**params)
 
     def _creer_lightgbm(self):
         """
