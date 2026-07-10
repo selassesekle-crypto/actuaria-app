@@ -260,6 +260,104 @@ class TestA6GouvernancePlafond(unittest.TestCase):
               f"validé_par={at.get('profil_valide_par')} | statut={r['statut_rag']}")
 
 
+
+
+class TestA6GiniWalkForwardSentinelles(unittest.TestCase):
+    """
+    Sentinelles anti-régression — Gini walk-forward (audit V6).
+
+    Deux bugs réels ont été découverts par exécution effective du walk-forward
+    avec un modèle ML réel en tête de classement (jamais fait avant l'audit
+    V5→V6, car les tests précédents ne poussaient jamais ce chemin jusqu'au
+    bout) :
+      (a) np.trapz supprimé sous numpy ≥ 2.0 → AttributeError absorbée
+          silencieusement par le except Exception englobant → gini_wf_moyen
+          restait toujours None, sans aucune alerte visible dans les rapports.
+      (b) Le signe de la formule était inversé (1-2·AUC au lieu de 2·AUC-1) :
+          un prédicteur PARFAIT obtenait un Gini fortement NÉGATIF, et un
+          prédicteur ANTI-CORRÉLÉ un Gini fortement POSITIF — l'exact inverse
+          de la convention actuarielle standard.
+
+    Ces deux bugs étaient dans une formule inline (a6_comparaison/agent.py,
+    bloc de calcul du Gini walk-forward) jamais exercée bout-en-bout avant
+    l'exécution réelle d'un walk-forward avec XGBoost/LightGBM en tête —
+    exactement le type de défaut « marche sur le chemin testé, échoue en
+    silence sur le chemin voisin » que les cycles d'audit successifs (V4,
+    V5) demandaient explicitement de traquer.
+
+    Ce test reproduit isolément la formule pour verrouiller son comportement,
+    indépendamment de la disponibilité de XGBoost/LightGBM dans l'environnement
+    d'exécution des tests (qui peuvent ne pas être installés en CI).
+    """
+
+    @staticmethod
+    def _gini_walk_forward(y_te, pred_te):
+        """Reproduction exacte de la formule corrigée (a6_comparaison/agent.py)."""
+        if y_te.sum() > 0 and pred_te.std() > 0:
+            _trapz_fn = np.trapezoid if hasattr(np, 'trapezoid') else np.trapz
+            ordre = np.argsort(-pred_te)
+            y_sorted = y_te[ordre]
+            lorenz = np.cumsum(y_sorted) / max(y_te.sum(), 1e-9)
+            return round(float(2 * _trapz_fn(lorenz, np.linspace(0, 1, len(lorenz))) - 1), 4)
+        return None
+
+    def test_sentinelle_numpy_2x_pas_de_none(self):
+        """SENT1 — Sous numpy actuel (2.x dans cet environnement si applicable),
+        le Gini walk-forward ne doit JAMAIS être None pour des données valides
+        (régression du bug np.trapz supprimé)."""
+        np.random.seed(0)
+        y_te = np.random.exponential(100, 300)
+        pred_te = np.random.exponential(100, 300)
+        gini = self._gini_walk_forward(y_te, pred_te)
+        self.assertIsNotNone(
+            gini,
+            "Gini walk-forward est None — régression possible du bug "
+            "np.trapz (supprimé sous numpy ≥ 2.0, audit V6 bug #1)."
+        )
+        print(f"    SENT1 Pas de None sous numpy {np.__version__} ✅ | Gini={gini}")
+
+    def test_sentinelle_signe_predicteur_parfait(self):
+        """SENT2 — Un prédicteur PARFAIT (mêmes valeurs que l'observé, même
+        ordre) doit produire un Gini walk-forward FORTEMENT POSITIF —
+        régression du bug de signe (audit V6 bug #2) sinon."""
+        np.random.seed(1)
+        y_te = np.random.exponential(100, 300)
+        gini_parfait = self._gini_walk_forward(y_te, y_te.copy())
+        self.assertGreater(
+            gini_parfait, 0.5,
+            f"Prédicteur parfait donne Gini={gini_parfait} — devrait être "
+            f"fortement positif. Régression du bug de signe (audit V6 #2) ?"
+        )
+        print(f"    SENT2 Prédicteur parfait → Gini fortement positif ✅ | {gini_parfait}")
+
+    def test_sentinelle_signe_predicteur_anticorrele(self):
+        """SENT3 — Un prédicteur ANTI-CORRÉLÉ (ordre inversé) doit produire
+        un Gini walk-forward FORTEMENT NÉGATIF."""
+        np.random.seed(2)
+        y_te = np.random.exponential(100, 300)
+        pred_anti = -y_te
+        gini_anti = self._gini_walk_forward(y_te, pred_anti)
+        self.assertLess(
+            gini_anti, -0.5,
+            f"Prédicteur anti-corrélé donne Gini={gini_anti} — devrait être "
+            f"fortement négatif. Régression du bug de signe (audit V6 #2) ?"
+        )
+        print(f"    SENT3 Prédicteur anti-corrélé → Gini fortement négatif ✅ | {gini_anti}")
+
+    def test_sentinelle_predicteur_aleatoire_proche_zero(self):
+        """SENT4 — Un prédicteur indépendant de l'observé doit produire un
+        Gini walk-forward proche de zéro (garde-fou complémentaire de calibrage)."""
+        np.random.seed(3)
+        y_te = np.random.exponential(100, 500)
+        pred_alea = np.random.exponential(100, 500)
+        gini_alea = self._gini_walk_forward(y_te, pred_alea)
+        self.assertLess(
+            abs(gini_alea), 0.2,
+            f"Prédicteur aléatoire donne Gini={gini_alea} — devrait être proche de 0."
+        )
+        print(f"    SENT4 Prédicteur aléatoire → Gini proche de 0 ✅ | {gini_alea}")
+
+
 if __name__ == '__main__':
     print("="*65)
     print("  TESTS A6 COMPARAISON v1.0 — SÉLECTION FINALE")
