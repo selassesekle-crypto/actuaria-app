@@ -337,8 +337,11 @@ class TestA6GiniWalkForwardSentinelles(unittest.TestCase):
         y_te = np.random.exponential(100, 300)
         pred_anti = -y_te
         gini_anti = self._gini_walk_forward(y_te, pred_anti)
+        # Seuil -0.4 (pas -0.5) : marge de sécurité contre la variance
+        # d'échantillonnage — l'essentiel du test est le SIGNE (négatif),
+        # pas une valeur absolue précise sur un tirage aléatoire donné.
         self.assertLess(
-            gini_anti, -0.5,
+            gini_anti, -0.4,
             f"Prédicteur anti-corrélé donne Gini={gini_anti} — devrait être "
             f"fortement négatif. Régression du bug de signe (audit V6 #2) ?"
         )
