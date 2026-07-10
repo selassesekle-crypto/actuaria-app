@@ -8,6 +8,24 @@
 
 ## ✅ COMPLÉTÉ
 
+### Audit V4 — Équipe Tarification Non-Vie (résiduels post-certification v3)
+
+5 points IMPORTANT identifiés par l'audit V4 (rapport certificateur indépendant, 10/07/2026) — **tous corrigés et validés numériquement** :
+
+| # | Point | SHA | Validation |
+|---|---|---|---|
+| 1 | Filet genre A3 (CJUE C-236/09) — inconditionnel, ne dépend plus du nom de branche | `0633dfac` | 3/3 scénarios testés, y compris branche non reconnue |
+| 2 | DATA_DICTIONNAIRE — 13 interactions manquantes, génération auto depuis INTERACTIONS | `43cfd52e` | 16/16 vérifications, synchronisation garantie par construction |
+| 3 | `POIDS_CRITERES` global mutable — variable locale, race condition éliminée | `82f60384` | Test 2 threads simultanés, isolation confirmée |
+| 5 | Bühlmann-Straub σ²_intra — formule dimensionnellement incohérente corrigée (σ²_intra=μ_marché, Bühlmann-Gisler 2005 §4.2) | `493fbfa5` | Sous-estimation ~275× quantifiée puis corrigée, Z_moyen 0.97→0.61 sur cas réaliste |
+| 6 | CANN non conforme Wüthrich — GLM Tweedie réellement gelé (`requires_grad=False`), résiduel init à zéro, offset exposition | `85ccaaf6` + fix `bffe201d` | Vérification numérique CANN(époque0)≡GLM : écart 1e-6 |
+
+**Décision actée sur le CANN (point #6)** : réparation complète (Option A) plutôt que requalification, car le temps était disponible pour le faire correctement. Le CANN est désormais un vrai CANN au sens Wüthrich & Merz (2019) — les coefficients extractibles de `glm_layer` sont strictement identiques au GLM Tweedie audité par A3, gelés pendant tout l'entraînement. Fallback honnête (`glm_gele=False`, logué clairement) si `result_a3` non fourni.
+
+**Tests : 6/6 sur toute la direction après chaque correction.**
+
+## ✅ COMPLÉTÉ
+
 ### Direction Non-Vie — Tarification (A1–A6) — CERTIFIÉE v3 (90/100)
 
 **Trajectoire de certification : v1 (66/100) → v2 (84/100, sous conditions) → v3 (90/100, CERTIFIÉE)**
