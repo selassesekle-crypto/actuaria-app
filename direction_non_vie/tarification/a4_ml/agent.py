@@ -1153,6 +1153,14 @@ class AgentA4ML:
         """Calcule le coefficient de Gini (même méthode que A3)."""
         if len(y_true) == 0:
             return 0.0
+        # Audit V7 MINEUR : garde manquant — A3 possède ce garde depuis
+        # l'origine, A4 ne l'avait pas. Sans lui, np.sum(y_true) == 0
+        # (aucun sinistre sur l'échantillon test) produit une division
+        # 0/0 → nan silencieux (numpy ne lève pas d'exception sur ce cas,
+        # donc le except Exception ci-dessous ne l'attrapait pas non
+        # plus) — confirmé par exécution lors de l'audit V7.
+        if np.sum(y_true) == 0:
+            return 0.0
         try:
             order   = np.argsort(y_pred)[::-1]  # Décroissant — les plus risqués d'abord
             y_true  = y_true[order]
