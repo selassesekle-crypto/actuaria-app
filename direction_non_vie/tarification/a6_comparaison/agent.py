@@ -318,6 +318,7 @@ class AgentA6Comparaison:
                 modele_production, classement,
                 profil_valide_par=profil_valide_par,
                 environnement=environnement,
+                backtest=backtest,
             )
             commentaire = self._commenter_actuaire_senior(
                 classement, modele_production, sous_branche,
@@ -1164,28 +1165,37 @@ class AgentA6Comparaison:
         classement:         List[Dict],
         profil_valide_par:  Optional[str] = None,
         environnement:      str = 'production',
+        backtest:           Optional[Dict] = None,
     ) -> str:
         """
         Statut RAG basé sur le score global du modèle de production.
         VERT  : score ≥ 0.60 ET gini ≥ 0.15 ET gouvernance validée
+                ET validation temporelle disponible
         AMBRE : score ≥ 0.40 OU gini ≥ 0.05 OU gouvernance non validée
+                OU validation temporelle indisponible
         ROUGE : score < 0.40 ET gini < 0.05
 
         GOUVERNANCE (ACPR-2022-P-01 §4.3 — Recommandation P5 v3) :
         En environnement='production', le choix du profil de pondération
         (Gini/Stabilité/Interprétabilité/RMSE) doit être validé par un
         actuaire nommément identifié avant déploiement. Sans validation
-        (profil_valide_par=None), le statut est plafonné à AMBRE — le
-        modèle reste utilisable mais signale l'absence de validation
-        formelle du choix méthodologique de sélection.
+        (profil_valide_par=None), le statut est plafonné à AMBRE.
 
         DÉFAUT FAIL-SAFE (audit V4 point #10) : `environnement='production'`
-        par défaut — PAS 'developpement'. Un appel qui omet ce paramètre
-        est traité comme production tant qu'il n'est pas explicitement
-        déclaré comme développement. Avant ce correctif, le défaut
-        'developpement' rendait le contrôle de gouvernance silencieusement
-        contournable par simple omission du paramètre — sans action
-        malveillante, juste en ne le renseignant jamais.
+        par défaut — PAS 'developpement'.
+
+        VALIDATION TEMPORELLE OBLIGATOIRE (audit V7 BLOQUANT #2) : avant ce
+        correctif, cette méthode ne recevait même pas `backtest` en
+        paramètre — elle ne pouvait donc PHYSIQUEMENT PAS savoir si le
+        walk-forward avait tourné. Conséquence concrète : la cible par
+        défaut d'A6 (prime_pure) n'étant jamais produite par A2, le
+        backtest se désactivait silencieusement
+        (backtest['disponible']=False), et un modèle pouvait être certifié
+        VERT sans qu'aucune validation temporelle n'ait été effectuée —
+        exactement le type de certification que ce standard est censé
+        empêcher. Même logique fail-safe que la gouvernance : en
+        environnement='production', l'absence de backtest disponible
+        plafonne désormais le statut à AMBRE.
         """
         score = modele_production.get('score_global', 0)
         gini  = modele_production.get('gini_test',   0)
@@ -1201,7 +1211,21 @@ class AgentA6Comparaison:
                 "Réf. : ACPR-2022-P-01 §4.3."
             )
 
-        if score >= 0.60 and gini >= 0.15 and _gouvernance_ok:
+        # Validation temporelle : blocage VERT si backtest indisponible
+        # en production (audit V7 BLOQUANT #2).
+        _backtest_ok = not (
+            environnement == 'production'
+            and not (backtest or {}).get('disponible', False)
+        )
+        if not _backtest_ok:
+            logger.warning(
+                "[VALIDATION TEMPORELLE] backtest['disponible']=False en "
+                "environnement 'production' — aucun walk-forward n'a "
+                "effectivement tourné. Statut plafonné à AMBRE. "
+                f"Raison : {(backtest or {}).get('note', 'non renseignée')}."
+            )
+
+        if score >= 0.60 and gini >= 0.15 and _gouvernance_ok and _backtest_ok:
             return 'VERT'
         elif score >= 0.40 or gini >= 0.05:
             return 'AMBRE'
