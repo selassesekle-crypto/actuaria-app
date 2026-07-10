@@ -969,7 +969,8 @@ class AgentA6Comparaison:
             'n_fenetres':        len(walk_forward),
             'n_fenetres_rouge':  n_rouge,
             'gini_wf_moyen':     gini_wf_moyen,
-            'modele_recalibre':  _modele_nom if _peut_recalibrer else None,
+            'modele_recalibre':  _modele_reel_recalibre,
+            'modele_recalibre_fidele': _recalibration_est_fidele,
             'walk_forward':      walk_forward,
             'ae_par_segment':    ae_par_segment,
             'interpretation': (
