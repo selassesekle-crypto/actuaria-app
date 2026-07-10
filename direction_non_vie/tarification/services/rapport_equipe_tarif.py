@@ -98,6 +98,31 @@ def _collecter_statuts(results: Dict[str, Dict]) -> Dict[str, str]:
     }
 
 
+def _md_to_html_light(txt: str) -> str:
+    """
+    Conversion Markdown minimal → HTML — réutilisée pour afficher le
+    commentaire actuariel déjà généré par A6 (rapport_modeles_tarif.py),
+    SANS effectuer de nouvel appel à l'API Claude.
+    """
+    import re as _re
+    if not txt:
+        return ''
+    txt = _re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', txt)
+    txt = _re.sub(r'\*(.+?)\*', r'<em>\1</em>', txt)
+    txt = _re.sub(r'^§(\d+)\s*[—\-–]\s*(.+)$', r'<h4 class="s-head">§\1 — \2</h4>', txt, flags=_re.MULTILINE)
+    txt = _re.sub(r'^###\s+(.+)$', r'<h5>\1</h5>', txt, flags=_re.MULTILINE)
+    txt = _re.sub(r'^-\s+(.+)$', r'<li>\1</li>', txt, flags=_re.MULTILINE)
+    txt = _re.sub(r'(<li>.*</li>\n?)+', r'<ul>\g<0></ul>', txt)
+    paragraphs = []
+    for line in txt.split('\n'):
+        line = line.strip()
+        if not line or line.startswith('<h') or line.startswith('<ul') or line.startswith('<li'):
+            paragraphs.append(line)
+        else:
+            paragraphs.append(f'<p>{line}</p>')
+    return '\n'.join(paragraphs)
+
+
 # =============================================================================
 #  EXCEL — Rapport consolidé équipe
 # =============================================================================
