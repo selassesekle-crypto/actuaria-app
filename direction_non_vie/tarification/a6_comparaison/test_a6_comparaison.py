@@ -264,7 +264,7 @@ class TestA6GouvernancePlafond(unittest.TestCase):
 
 class TestA6GiniWalkForwardSentinelles(unittest.TestCase):
     """
-    Sentinelles anti-régression — Gini walk-forward (audit V6).
+    Sentinelles anti-régression — Gini walk-forward (audit V6, puis V7 MINEUR #3).
 
     Deux bugs réels ont été découverts par exécution effective du walk-forward
     avec un modèle ML réel en tête de classement (jamais fait avant l'audit
@@ -278,28 +278,21 @@ class TestA6GiniWalkForwardSentinelles(unittest.TestCase):
           prédicteur ANTI-CORRÉLÉ un Gini fortement POSITIF — l'exact inverse
           de la convention actuarielle standard.
 
-    Ces deux bugs étaient dans une formule inline (a6_comparaison/agent.py,
-    bloc de calcul du Gini walk-forward) jamais exercée bout-en-bout avant
-    l'exécution réelle d'un walk-forward avec XGBoost/LightGBM en tête —
-    exactement le type de défaut « marche sur le chemin testé, échoue en
-    silence sur le chemin voisin » que les cycles d'audit successifs (V4,
-    V5) demandaient explicitement de traquer.
-
-    Ce test reproduit isolément la formule pour verrouiller son comportement,
-    indépendamment de la disponibilité de XGBoost/LightGBM dans l'environnement
-    d'exécution des tests (qui peuvent ne pas être installés en CI).
+    AUDIT V7 MINEUR #3 : ce test appelait initialement une COPIE de la
+    formule plutôt que le chemin de code réel — risque de divergence future
+    si l'un des deux était modifié sans l'autre (exactement le type de piège
+    que les audits successifs demandent de traquer, ironiquement présent
+    dans le test destiné à s'en protéger). Corrigé en appelant directement
+    AgentA6Comparaison._gini_lorenz(), désormais la source UNIQUE utilisée
+    à la fois par le code de production (_backtesting_temporel) et par ce
+    test — plus aucune copie possible.
     """
 
     @staticmethod
     def _gini_walk_forward(y_te, pred_te):
-        """Reproduction exacte de la formule corrigée (a6_comparaison/agent.py)."""
-        if y_te.sum() > 0 and pred_te.std() > 0:
-            _trapz_fn = np.trapezoid if hasattr(np, 'trapezoid') else np.trapz
-            ordre = np.argsort(-pred_te)
-            y_sorted = y_te[ordre]
-            lorenz = np.cumsum(y_sorted) / max(y_te.sum(), 1e-9)
-            return round(float(2 * _trapz_fn(lorenz, np.linspace(0, 1, len(lorenz))) - 1), 4)
-        return None
+        """Appelle directement le code réel — plus une reproduction."""
+        from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
+        return AgentA6Comparaison._gini_lorenz(y_te, pred_te)
 
     def test_sentinelle_numpy_2x_pas_de_none(self):
         """SENT1 — Sous numpy actuel (2.x dans cet environnement si applicable),
