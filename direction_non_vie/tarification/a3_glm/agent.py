@@ -2891,11 +2891,25 @@ class AgentA3GLM:
                 primes = np.asarray(_prime_arr)
                 expos  = df[col_expo].values
 
-                # Bandwidth conservé à ≈ 111 km (valeur équivalente à
-                # l'ancien h=1° à l'équateur) — même largeur de lissage,
-                # seule la métrique de distance et l'algorithme changent.
+                # Bandwidth RÉDUIT de 111 km à 15 km (audit V4 point #13,
+                # révision suite à test de charge). L'ancienne valeur
+                # (héritée d'un "1°" jamais reconverti en km réels) lissait
+                # quasiment à l'échelle du pays entier — deux contrats à
+                # 300 km l'un de l'autre recevaient encore un poids non
+                # négligeable dans le calcul de l'autre. Ce n'est pas du
+                # lissage géographique local, c'est une quasi-moyenne
+                # nationale : la granularité utile pour une tarification
+                # territoriale (ville/agglomération) est de l'ordre de
+                # quelques dizaines de km, pas de la centaine.
+                # Effet secondaire bénéfique : un bandwidth réaliste rend
+                # aussi le BallTree effectivement rapide (peu de voisins
+                # par requête), alors qu'un bandwidth de 111 km incluait
+                # une fraction significative du portefeuille dans le rayon
+                # de troncature à 3σ pour toute zone urbaine dense —
+                # annulant une bonne part du gain de complexité de l'arbre
+                # spatial. Valeur ajustable selon la densité du portefeuille.
                 EARTH_RADIUS_KM = 6371.0088  # rayon terrestre moyen (IUGG)
-                h_km = 111.0
+                h_km = 15.0
 
                 coords_rad = np.radians(np.column_stack([lats, lons]))
                 tree = BallTree(coords_rad, metric='haversine')
