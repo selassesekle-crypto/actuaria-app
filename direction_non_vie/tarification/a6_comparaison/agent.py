@@ -832,18 +832,40 @@ class AgentA6Comparaison:
                         modele_wf.fit(X_tr, y_tr)
                     # Prédire sur la fenêtre test
                     pred_te = np.maximum(modele_wf.predict(X_te), 0)
-                    # Gini walk-forward
+                    # Gini walk-forward — audit V6 #2 : DEUX bugs corrigés ici,
+                    # tous deux dans cette formule inline jamais exercée
+                    # bout-en-bout avant l'audit V5→V6 (exécution réelle avec
+                    # XGBoost/LightGBM en tête de classement) :
+                    #   (a) np.trapz n'existe plus sous numpy ≥ 2.0
+                    #       (AttributeError, absorbée silencieusement par le
+                    #       except Exception ci-dessous → gini_wf restait
+                    #       toujours None sans aucune alerte visible) ;
+                    #   (b) le signe était inversé : 1-2·AUC au lieu de
+                    #       2·AUC-1, ce qui donnait un Gini fortement NÉGATIF
+                    #       pour un prédicteur parfait et positif pour un
+                    #       anti-corrélé — l'inverse de la convention.
+                    # Le helper Gini correct de cette même classe (méthode de
+                    # génération des courbes de validation, ~L1054) utilise
+                    # déjà le bon pattern : fn = np.trapezoid si disponible
+                    # sinon np.trapz, et 2*auc-1. On applique ici la même
+                    # formule, numpy-2-safe et au bon signe.
                     if y_te.sum() > 0 and pred_te.std() > 0:
+                        _trapz_fn = np.trapezoid if hasattr(np, 'trapezoid') else np.trapz
                         ordre = np.argsort(-pred_te)
                         y_sorted = y_te[ordre]
                         lorenz = np.cumsum(y_sorted) / max(y_te.sum(), 1e-9)
                         gini_wf = round(
-                            float(1 - 2 * np.trapz(lorenz,
-                                  np.linspace(0, 1, len(lorenz)))),
+                            float(2 * _trapz_fn(lorenz,
+                                  np.linspace(0, 1, len(lorenz))) - 1),
                             4
                         )
             except Exception as e_wf:
-                logger.debug(f"Recalibration WF {annee_t} échouée : {e_wf}")
+                # Passé de logger.debug à logger.warning (audit V6) : une
+                # exception dans la recalibration WF est une erreur de code
+                # potentielle (comme le bug np.trapz ci-dessus l'a montré),
+                # pas un cas limite anodin de données — elle ne doit plus
+                # pouvoir disparaître silencieusement en niveau debug.
+                logger.warning(f"Recalibration WF {annee_t} échouée : {e_wf}")
 
             walk_forward.append({
                 'annee_test':         int(annee_t),
