@@ -677,8 +677,13 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
         _kpi(ws5, r, "Nb modèles comparés", len(classement), fmt=FMT_NB); r += 1
         _kpi(ws5, r, "Modèle production",
              modele_prod.get('modele','') if modele_prod else 'N/A'); r += 1
-        _kpi(ws5, r, "A/E ratio final", round(backtest.get('ae_ratio',0),4),
-             fmt=FMT_DEC4); r += 1
+        # Audit V4 point #11 — défaut 0 trompeur : un A/E ratio non calculé
+        # (backtest indisponible) affichait "0.0000", indiscernable d'un
+        # vrai A/E=0 (résultat en soi alarmant en usage réel). "N/A" lève
+        # toute ambiguïté d'interprétation pour l'actuaire lecteur.
+        _kpi(ws5, r, "A/E ratio final",
+             round(backtest.get('ae_ratio', 0), 4) if backtest.get('disponible') else "N/A",
+             fmt=FMT_DEC4 if backtest.get('disponible') else None); r += 1
 
         buf = io.BytesIO()
         wb.save(buf)
