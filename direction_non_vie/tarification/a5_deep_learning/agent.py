@@ -547,6 +547,25 @@ class AgentA5DeepLearning:
             _gv_dl_  = self._graphiques_validation_dl(
                 _val_dl_, classement, self.metriques) if generer_graphiques else {}
 
+            # ── Standard ActuarIA — excel_bytes (audit V7 MINEUR #2) ──────────
+            # A5 était le seul agent sans export Excel. Même pattern défensif
+            # que les autres agents : échec de l'export n'interrompt jamais
+            # le pipeline (log warning, excel_bytes reste b'').
+            _excel_a5 = b''
+            if TARIF_EXCEL_OK_A5:
+                try:
+                    _tmp_a5 = {
+                        'success': True, 'statut_rag': statut_rag,
+                        'classement': classement, 'branche': sous_branche,
+                        'metriques': self.metriques, 'validation_dl': _val_dl_,
+                        'audit_id': audit_id,
+                    }
+                    _excel_a5 = export_excel_a5(_tmp_a5, audit_id)
+                    if _excel_a5:
+                        logger.info(f"[{audit_id}] Excel A5 : {len(_excel_a5):,} bytes")
+                except Exception as e_xl5:
+                    logger.warning(f"Excel A5 échoué : {e_xl5}")
+
             return {
                 'success':             True,
                 'dataframe':           df,
@@ -565,6 +584,7 @@ class AgentA5DeepLearning:
                 'erreur':              None,
                 'historique_cann':     res_cann.get('historique', []),
                 'historique_tabnet':   res_tabnet.get('historique', []),
+                'excel_bytes':         _excel_a5,
             }
 
         except Exception as e:
