@@ -37,6 +37,16 @@ from typing import Dict, Any, Optional, List, Tuple
 import numpy as np
 import pandas as pd
 
+try:
+    from ..services.tarif_excel import export_excel_a1
+    TARIF_EXCEL_OK_A1 = True
+except ImportError:
+    try:
+        from direction_non_vie.tarification.services.tarif_excel import export_excel_a1
+        TARIF_EXCEL_OK_A1 = True
+    except ImportError:
+        TARIF_EXCEL_OK_A1 = False
+
 warnings.filterwarnings('ignore')
 logging.basicConfig(
     level=logging.INFO,
