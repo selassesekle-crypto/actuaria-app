@@ -53,6 +53,19 @@ except ImportError:
     except ImportError:
         TARIF_RAPPORT_OK = False
 
+# Fabrique de modèles ML (audit V4 reco #7) — permet de recalibrer le
+# MODÈLE RÉELLEMENT RETENU dans le walk-forward, au lieu d'un proxy
+# GradientBoostingRegressor générique quel que soit le modèle affiché.
+try:
+    from ..a4_ml.agent import creer_modele_ml_pour_nom
+    CREER_MODELE_ML_OK = True
+except ImportError:
+    try:
+        from direction_non_vie.tarification.a4_ml.agent import creer_modele_ml_pour_nom
+        CREER_MODELE_ML_OK = True
+    except ImportError:
+        CREER_MODELE_ML_OK = False
+
 try:
     from .services.rapport_equipe_tarif import generer_rapport_equipe_tarification
     RAPPORT_EQUIPE_OK = True
