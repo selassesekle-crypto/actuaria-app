@@ -397,8 +397,9 @@ def export_excel_a4(result_a4: Dict, audit_id: str = "") -> bytes:
 
 
 # =============================================================================
-#  EXPORT A6 — COMPARAISON FINALE
-#  5 onglets : Synthèse · Classement final · Backtesting A/E · Fiche décision · Audit
+#  EXPORT A5 — DEEP LEARNING (CANN Wüthrich + TabNet)
+#  4 onglets : Synthèse · Classement · Fidélité CANN Wüthrich · Audit
+#  Audit V7 MINEUR #2 — A5 était le seul agent sans export Excel.
 # =============================================================================
 
 def export_excel_a5(result_a5: Dict, audit_id: str = "") -> bytes:
