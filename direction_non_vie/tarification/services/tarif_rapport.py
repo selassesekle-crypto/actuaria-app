@@ -128,6 +128,11 @@ def _construire_contexte_tarif(
     aic_p  = m_poi.get('aic', 0)
     vars_r = m_poi.get('vars_retenues', [])
 
+    # Modules avancés P2 (A3) et gouvernance (A6)
+    cred6 = result_a3.get('credibilite', {}) if result_a3 else {}
+    geo6  = result_a3.get('lissage_geo', {}) if result_a3 else {}
+    at6   = result_a6.get('audit_trail', {}) if result_a6 else {}
+
     lines = [
         f"DOSSIER TARIFICATION — {branche.upper()} — Arrêté {arrete}",
         "",
@@ -150,6 +155,27 @@ def _construire_contexte_tarif(
     ]
     for var, d in list(rels.items())[:5]:
         lines.append(f"  {var} : exp(β)={d.get('relativite',0):.4f} | p={d.get('pvalue',0):.4f} | {d.get('sens','')} | sig={'oui' if d.get('significatif') else 'non'}")
+
+    # === CRÉDIBILITÉ BÜHLMANN-STRAUB (P2) ===
+    lines += ["", "=== CRÉDIBILITÉ BÜHLMANN-STRAUB ==="]
+    if cred6.get('appliquee'):
+        lines.append(
+            f"Appliquée : k={cred6.get('k',0):.4f} | Z_moyen={cred6.get('z_moyen',0):.4f} "
+            f"| n_groupes={cred6.get('n_groupes',0)} | colonne={cred6.get('col_groupe','—')}"
+        )
+    else:
+        lines.append(f"Non applicable : {cred6.get('raison', '—')}")
+
+    # === LISSAGE GÉOGRAPHIQUE (P2) ===
+    lines += ["", "=== LISSAGE GÉOGRAPHIQUE ==="]
+    if geo6.get('applique'):
+        lines.append(
+            f"Appliqué : méthode={geo6.get('methode','—')} | n_zones={geo6.get('n_zones',0)} "
+            f"| source={geo6.get('source_prime','—')}"
+        )
+    else:
+        lines.append(f"Non applicable : {geo6.get('raison', '—')}")
+
     lines += [
         "",
         "=== ML — MODÈLE RETENU ===",
@@ -162,11 +188,18 @@ def _construire_contexte_tarif(
         f"H3 Gini : {hyp4.get('h3_gini',{}).get('statut','?')} | Gini={hyp4.get('h3_gini',{}).get('gini','—')}",
         f"H4 Calibration : {hyp4.get('h4_calibration',{}).get('statut','?')} | écart moy={hyp4.get('h4_calibration',{}).get('ecart_moy_pct','—')}%",
         "",
-        "=== BACKTESTING A/E ===",
+        "=== BACKTESTING A/E (walk-forward recalibré) ===",
         f"A/E ratio : {bt6.get('ae_ratio','—')} | {bt6.get('interpretation','—')}",
         f"Walk-forward : {bt6.get('n_fenetres','—')} fenêtres | stabilité={bt6.get('stabilite_wf','—')} | CV={bt6.get('ae_cv_wf','—')}",
+        f"Modèle recalibré par fenêtre : {bt6.get('modele_recalibre','—')} | Gini WF moyen={bt6.get('gini_wf_moyen','—')}",
         "",
-        "Rédige le commentaire actuariel complet en 7 sections.",
+        "=== GOUVERNANCE DU PROFIL DE PONDÉRATION ===",
+        f"Profil retenu : {at6.get('profil_ponderation','—')} | Environnement={at6.get('environnement','—')}",
+        f"Validé par : {at6.get('profil_valide_par') or 'NON VALIDÉ'} | Conforme={at6.get('gouvernance_ok','—')}",
+        "",
+        "Rédige le commentaire actuariel complet en 7 sections, en intégrant "
+        "la crédibilité, le lissage géographique et la gouvernance du profil "
+        "si ces éléments sont pertinents pour la branche analysée.",
     ]
     return '\n'.join(lines)
 
