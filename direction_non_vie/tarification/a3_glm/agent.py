@@ -2830,11 +2830,18 @@ class AgentA3GLM:
         # Récupérer les prédictions depuis le dict predictions (arrays numpy)
         # Priorité : prime_pure > prime_pure_tweedie > frequence_annuelle
         # Fallback : fréquence brute observée (col_freq / exposition)
-        _prime_arr = (
-            predictions.get('prime_pure')
-            or predictions.get('prime_pure_tweedie')
-            or predictions.get('frequence_annuelle')
-        )
+        # FIX (découvert lors du test de charge n=70000, audit V4 point #13) :
+        # l'ancien enchaînement de `or` levait ValueError dès que la première
+        # clé non-None contenait un tableau numpy de plus d'un élément
+        # ("truth value of an array... is ambiguous") — la vérité d'un
+        # tableau à plusieurs éléments n'est pas définie pour Python. Ce bug
+        # ne se déclenchait pas sur les petits jeux de test antérieurs, où
+        # 'prime_pure' était souvent absent du dict (GLM intercept seul).
+        _prime_arr = predictions.get('prime_pure')
+        if _prime_arr is None:
+            _prime_arr = predictions.get('prime_pure_tweedie')
+        if _prime_arr is None:
+            _prime_arr = predictions.get('frequence_annuelle')
         _source_prime = 'prediction_glm'
         if _prime_arr is None or len(_prime_arr) == 0:
             # Fallback actuariel : taux brut observé = nb_sinistres / exposition
