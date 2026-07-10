@@ -430,15 +430,17 @@ class AgentA2Preprocessing:
                 )
 
             return {
-                'success':     True,
-                'dataframe':   df,
-                'branche':     sous_branche,
-                'statut_rag':  statut_rag,
-                'rapport':     rapport,
-                'parametres':  self.parametres,
-                'commentaire': commentaire,
-                'audit_id':    audit_id,
-                'erreur':      None,
+                'success':           True,
+                'dataframe':         df,
+                'branche':           sous_branche,
+                'statut_rag':        statut_rag,
+                'rapport':           rapport,
+                'parametres':        self.parametres,
+                'commentaire':       commentaire,
+                'audit_id':          audit_id,
+                'erreur':            None,
+                # Traçabilité des variables dérivées — ACPR-2022-P-01 §3.2
+                'data_dictionnaire': DATA_DICTIONNAIRE,
             }
 
         except Exception as e:
