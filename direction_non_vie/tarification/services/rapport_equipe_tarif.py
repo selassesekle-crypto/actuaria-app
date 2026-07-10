@@ -156,70 +156,9 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
         statuts = _collecter_statuts(results)
         statut_global = _statut_global(list(statuts.values()))
 
-        def _font(bold=False, color=BLANC_HEX, size=10, italic=False):
-            return Font(name="Arial", bold=bold, color=color, size=size, italic=italic)
-        def _fill(hex_color):
-            return PatternFill("solid", fgColor=hex_color)
-        def _border():
-            side = Side(style="thin", color="CCCCCC")
-            return Border(left=side, right=side, top=side, bottom=side)
-        def _align(h="left", v="center", wrap=False):
-            return Alignment(horizontal=h, vertical=v, wrap_text=wrap)
-        def _statut_fill(statut: str) -> str:
-            return {"VERT": VERT_HEX, "AMBRE": AMBRE_HEX, "ROUGE": ROUGE_HEX}.get(
-                (statut or '').upper(), GRIS_HEX)
-        def _col_w(ws, col, width):
-            ws.column_dimensions[get_column_letter(col)].width = width
-        def _cell(ws, row, col, val, bold=False, cf=BLANC_HEX, fill=None,
-                  ah="left", fmt=None, border=True, wrap=False):
-            c = ws.cell(row=row, column=col, value=val)
-            c.font = _font(bold=bold, color=cf)
-            c.alignment = _align(h=ah, wrap=wrap)
-            if fill:
-                c.fill = _fill(fill)
-            if border:
-                c.border = _border()
-            if fmt:
-                c.number_format = fmt
-            return c
-        def _header(ws, row, col, text, width=18):
-            _cell(ws, row, col, text, bold=True, cf=BLANC_HEX, fill=NAVY_HEX, ah="center")
-            _col_w(ws, col, width)
-        def _section(ws, row, titre, n_cols=8):
-            c = ws.cell(row=row, column=1, value=f"  {titre}")
-            c.font = _font(bold=True, color=GOLD_HEX, size=11)
-            c.fill = _fill(NAVY_HEX)
-            c.alignment = _align(h="left")
-            c.border = _border()
-            if n_cols > 1:
-                ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=n_cols)
-            ws.row_dimensions[row].height = 20
-        def _kpi(ws, row, label, value, statut=None, fmt=None, wrap=False):
-            _cell(ws, row, 1, label, bold=True, cf=NOIR_HEX, fill=GRIS_L_HEX, wrap=wrap)
-            _col_w(ws, 1, 38)
-            _cell(ws, row, 2, value, bold=True, cf=NOIR_HEX,
-                  ah="left" if wrap else "right", fmt=fmt, wrap=wrap)
-            _col_w(ws, 2, 50 if wrap else 22)
-            if statut:
-                txt = {"VERT": "✓ Conforme", "AMBRE": "△ À surveiller",
-                       "ROUGE": "✗ Attention"}.get(statut, statut)
-                _cell(ws, row, 3, txt, bold=True, cf=BLANC_HEX,
-                      fill=_statut_fill(statut), ah="center")
-                _col_w(ws, 3, 18)
-        def _bandeau(ws, titre, sous_titre, agent, aid, date_str, n_cols=8):
-            for r_, (txt, sz, bold) in enumerate([
-                (f"ActuarIA — {titre}", 14, True),
-                (sous_titre, 11, False),
-                (f"Agent : {agent}", 10, False),
-                (f"Arrêté : {date_str}", 9, False),
-                (f"Audit ID : {aid}", 9, False),
-            ], 1):
-                c = ws.cell(row=r_, column=1, value=txt)
-                c.font = _font(bold=bold, color=GOLD_HEX if bold else BLANC_HEX, size=sz)
-                c.fill = _fill(NAVY_HEX)
-                c.alignment = _align(h="left")
-                ws.merge_cells(start_row=r_, start_column=1, end_row=r_, end_column=n_cols)
-            ws.row_dimensions[1].height = 32
+        # Fonctions _font/_fill/_border/_align/_statut_fill/_col_w/_cell/
+        # _header/_section/_kpi/_bandeau importées de excel_helpers.py
+        # (audit V4 point #12 — anciennement redéfinies ici à l'identique).
 
         wb = Workbook()
 
