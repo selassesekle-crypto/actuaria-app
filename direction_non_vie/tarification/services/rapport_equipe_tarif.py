@@ -726,11 +726,18 @@ def export_word_equipe(results: Dict[str, Dict], branche: str = '',
         doc.add_paragraph(f"Modèle de production retenu : {prod.get('modele','N/A')}")
         _score_txt_eq = f"{prod.get('score_global'):.4f}" if 'score_global' in prod else '—'
         doc.add_paragraph(f"Score global : {_score_txt_eq}")
+        # Audit V7 IMPORTANT #1 : qualification du score composite, absente
+        # du livrable avant ce correctif (ne figurait que dans un
+        # commentaire de code, jamais vue par le client). Pattern
+        # add_run()/.italic identique à celui déjà utilisé plus bas dans
+        # ce même fichier (note "Commentaire généré par A6").
         p_score_note = doc.add_paragraph()
-        _run(p_score_note,
-             "  ↳ Score relatif au meilleur modèle du profil de pondération "
-             "retenu (≈1,0000 = meilleur) — pas une performance absolue.",
-             sz=8, italic=True) if '_run' in dir() else None
+        r_score_note = p_score_note.add_run(
+            "  ↳ Score relatif au meilleur modèle du profil de pondération "
+            "retenu (≈1,0000 = meilleur) — pas une performance absolue."
+        )
+        r_score_note.italic = True
+        r_score_note.font.size = Pt(8)
         doc.add_paragraph(f"Gini walk-forward moyen (recalibré) : {bt6.get('gini_wf_moyen','—')}")
         doc.add_paragraph(f"Profil de pondération retenu : {at6.get('profil_ponderation','N/A')}")
         doc.add_paragraph(f"Validé par : {at6.get('profil_valide_par') or '⚠ NON VALIDÉ'}")
