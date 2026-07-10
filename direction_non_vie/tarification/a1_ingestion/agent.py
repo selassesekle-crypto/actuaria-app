@@ -322,6 +322,31 @@ class AgentA1Ingestion:
                     statut_rag, score_qual, commentaire, client_id
                 )
 
+            # ── Audit trail — traçabilité ACPR ────────────────────────────────
+            _audit_trail_a1 = {
+                'agent': 'A1_INGESTION', 'version': '2.0', 'audit_id': audit_id,
+                'timestamp': t_debut.isoformat(), 'branche': sous_branche,
+                'statut_rag': statut_rag,
+                'score_qualite': score_qual,
+                'nb_types_aberrants': qualite.get('nb_types_aberrants', 0),
+                'colonnes_forcees': rapport.get('coercition_types', {}).get('colonnes_forcees', []),
+                'hash_md5': hash_md5,
+            }
+
+            _tmp_a1 = {
+                'success': True, 'statut_rag': statut_rag, 'branche': sous_branche,
+                'qualite': qualite, 'rapport': rapport, 'audit_id': audit_id,
+                'hash_md5': hash_md5, 'commentaire': commentaire,
+            }
+            _excel_a1 = b''
+            if TARIF_EXCEL_OK_A1:
+                try:
+                    _excel_a1 = export_excel_a1(_tmp_a1, audit_id)
+                    if _excel_a1:
+                        logger.info(f"[{audit_id}] Excel A1 : {len(_excel_a1):,} bytes")
+                except Exception as e_xl:
+                    logger.warning(f"Excel A1 échoué : {e_xl}")
+
             return {
                 'success':      True,
                 'dataframe':    df,
@@ -335,6 +360,10 @@ class AgentA1Ingestion:
                 'audit_id':     audit_id,
                 'client_id':    client_id,
                 'erreur':       None,
+                'excel_bytes':  _excel_a1,
+                'word_bytes':   b'',
+                'pdf_bytes':    b'',
+                'audit_trail':  _audit_trail_a1,
             }
 
         except Exception as e:
