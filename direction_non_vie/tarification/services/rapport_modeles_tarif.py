@@ -441,7 +441,9 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
             f"<strong>{d.get('relativite',0):.4f}</strong>",
             f"{d.get('ic95_low',0):.4f}",
             f"{d.get('ic95_high',0):.4f}",
-            f"{d.get('pvalue',0):.4f}",
+            # Audit V7 IMPORTANT : garde NA — était toujours affiché "0.0000"
+            # (indiscernable d'une vraie p-value nulle) si la clé était absente.
+            f"{d.get('pvalue'):.4f}" if 'pvalue' in d else '—',
             '✓' if d.get('significatif') else '·',
             f'<span style="{sens_col};font-weight:600">{d.get("sens","")}</span>',
         ])
@@ -464,7 +466,11 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
         html += f'<td class="right">{m.get("gini_test",0):.4f}</td>'
         html += f'<td class="right">{m.get("rmse_test",0):.4f}</td>'
         html += f'<td class="right">{m.get("overfit_ratio",0):.3f}</td>'
-        html += f'<td class="right">{m.get("score_global",0):.4f}</td>'
+        # Audit V7 IMPORTANT : garde NA — était toujours affiché "0.0000".
+        html += (
+            f'<td class="right">{m.get("score_global"):.4f}</td>'
+            if 'score_global' in m else '<td class="right">—</td>'
+        )
         html += f'<td class="center">{star}</td></tr>\n'
     html += """    </table>
   </div>
@@ -538,15 +544,22 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
 """
     if prod:
         prod_col = _statut_col((result_a6 or {}).get('statut_rag','AMBRE'))
+        _score_txt = f"{prod.get('score_global'):.4f}" if 'score_global' in prod else '—'
         html += f"""
     <div class="kpi-grid">
       <div class="kpi"><div class="kpi-label">Modèle retenu</div><div class="kpi-value" style="font-size:15px;color:{NAVY}">{prod.get('modele','—')}</div></div>
       <div class="kpi"><div class="kpi-label">Famille</div><div class="kpi-value" style="font-size:15px;">{prod.get('famille','—')}</div></div>
-      <div class="kpi"><div class="kpi-label">Score global</div><div class="kpi-value">{prod.get('score_global',0):.4f}</div></div>
+      <div class="kpi"><div class="kpi-label">Score global</div><div class="kpi-value">{_score_txt}</div></div>
       <div class="kpi"><div class="kpi-label">Gini test</div><div class="kpi-value">{prod.get('gini_test',0):.4f}</div></div>
       <div class="kpi"><div class="kpi-label">Overfit ratio</div><div class="kpi-value">{prod.get('overfit_ratio',0):.3f}</div></div>
       <div class="kpi"><div class="kpi-label">Interprétabilité</div><div class="kpi-value">{prod.get('interpretabilite',0):.2f}/1.0</div></div>
     </div>
+    <p style="margin-top:8px; font-size:10px; color:{SLATE}; font-style:italic;">
+      ✦ Le « Score global » est une normalisation RELATIVE au meilleur
+      modèle du profil de pondération retenu (le meilleur modèle vaut
+      toujours ≈ 1,0000) — ce n'est PAS une mesure de performance absolue
+      en pourcentage. Réf. : audit V7, recommandation IMPORTANT #1.
+    </p>
 """
     if val6:
         html += """
