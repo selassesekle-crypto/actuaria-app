@@ -354,6 +354,88 @@ class TestA6GiniWalkForwardSentinelles(unittest.TestCase):
         print(f"    SENT4 Prédicteur aléatoire → Gini proche de 0 ✅ | {gini_alea}")
 
 
+
+
+class TestA6ValidationTemporelleObligatoire(unittest.TestCase):
+    """
+    Verrou anti-régression — audit V7 anomalie BLOQUANTE B2 (volet A6).
+
+    _calculer_statut_rag ne recevait même pas `backtest` en paramètre
+    avant l'audit V7 — elle ne pouvait donc physiquement pas savoir si
+    le walk-forward avait tourné. Un modèle pouvait être certifié VERT
+    sans qu'aucune validation temporelle n'ait été effectuée, dès lors
+    que la cible par défaut (prime_pure) était absente des données
+    (ce qui était systématiquement le cas avant le correctif A2 — B2
+    volet A2, testé séparément dans test_a2_preprocessing.py).
+
+    Ce test appelle directement _calculer_statut_rag avec un backtest
+    explicitement indisponible, en défense en profondeur — même si le
+    correctif A2 venait à régresser un jour, ce garde-fou resterait actif.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
+        cls.agent = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp', verbose=False)
+
+    def test_backtest_indisponible_plafonne_a_ambre_en_production(self):
+        # Modèle de production avec un score/gini excellents — devrait
+        # normalement donner VERT si seul le score comptait.
+        modele_excellent = {'score_global': 0.95, 'gini_test': 0.30}
+        classement = [modele_excellent]
+        backtest_indisponible = {
+            'disponible': False,
+            'note': "Colonne cible 'prime_pure' introuvable.",
+        }
+
+        statut = self.agent._calculer_statut_rag(
+            modele_excellent, classement,
+            profil_valide_par='Actuaire Test',  # gouvernance OK — isole le test
+            environnement='production',
+            backtest=backtest_indisponible,
+        )
+        self.assertNotEqual(
+            statut, 'VERT',
+            "RÉGRESSION BLOQUANTE (audit V7 B2) — statut VERT délivré "
+            "malgré backtest['disponible']=False en production. La "
+            "validation temporelle n'est plus obligatoire pour un VERT."
+        )
+        print(f"    B2-A6 Backtest indisponible → statut plafonné ✅ : {statut}")
+
+    def test_backtest_disponible_permet_vert(self):
+        """Contrôle positif : un backtest disponible ne doit PAS bloquer
+        un VERT par ailleurs mérité (le garde-fou ne doit pas être trop
+        large et plafonner en permanence)."""
+        modele_excellent = {'score_global': 0.95, 'gini_test': 0.30}
+        classement = [modele_excellent]
+        backtest_disponible = {'disponible': True, 'ae_ratio': 1.02}
+
+        statut = self.agent._calculer_statut_rag(
+            modele_excellent, classement,
+            profil_valide_par='Actuaire Test',
+            environnement='production',
+            backtest=backtest_disponible,
+        )
+        self.assertEqual(statut, 'VERT',
+            "Un backtest disponible avec un modèle excellent et une "
+            "gouvernance validée devrait permettre VERT — garde-fou trop large ?")
+        print(f"    B2-A6 Backtest disponible → VERT accessible ✅ : {statut}")
+
+    def test_backtest_absent_du_dict_ne_plante_pas(self):
+        """Robustesse : backtest=None (paramètre non transmis par un
+        appelant plus ancien) ne doit pas lever d'exception."""
+        modele = {'score_global': 0.95, 'gini_test': 0.30}
+        try:
+            statut = self.agent._calculer_statut_rag(
+                modele, [modele], profil_valide_par='Test',
+                environnement='production', backtest=None,
+            )
+        except Exception as e:
+            self.fail(f"_calculer_statut_rag a levé une exception avec backtest=None : {e}")
+        self.assertIn(statut, ['VERT', 'AMBRE', 'ROUGE'])
+        print(f"    B2-A6 backtest=None géré sans exception ✅ : {statut}")
+
+
 if __name__ == '__main__':
     print("="*65)
     print("  TESTS A6 COMPARAISON v1.0 — SÉLECTION FINALE")
