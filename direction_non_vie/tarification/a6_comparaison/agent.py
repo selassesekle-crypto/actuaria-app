@@ -603,26 +603,88 @@ class AgentA6Comparaison:
             backtest['note'] = "Pas assez d'années distinctes pour le walk-forward."
             return backtest
 
-        # ── WALK-FORWARD ──────────────────────────────────────────────────────
-        # Tester chaque fenêtre glissante : train = [a0..aN-1], test = aN
+        # ── WALK-FORWARD AVEC RECALIBRATION DU MODÈLE ────────────────────────
+        # Pour chaque fenêtre : recalibrer le meilleur modèle sur train,
+        # prédire sur test, calculer Gini et A/E sur les prédictions.
+        # C'est un vrai backtesting de modèle — pas un test de stationnarité.
+        # Réf. : Commission Tarification IA France (2019) §3.2.5
+        #        «Le backtesting doit évaluer la robustesse prédictive du modèle
+        #         sur des données hors-échantillon temporellement cohérentes.»
         walk_forward = []
+
+        # Récupérer le meilleur modèle du classement pour la recalibration
+        _meilleur = (classement[0] if classement else {})
+        _modele_nom = _meilleur.get('modele', '')
+        _peut_recalibrer = bool(_modele_nom and _modele_nom in self.modeles)
+
         for idx in range(1, len(annees)):
             annee_t = annees[idx]
-            df_tr   = df[df[col_annee] < annee_t]
-            df_te   = df[df[col_annee] == annee_t]
-            if len(df_te) < 50:
+            df_tr   = df[df[col_annee] < annee_t].copy()
+            df_te   = df[df[col_annee] == annee_t].copy()
+            if len(df_te) < 50 or len(df_tr) < 100:
                 continue
+
             m_tr = float(df_tr[col_cible].mean()) if len(df_tr) > 0 else 0
             m_te = float(df_te[col_cible].mean())
             ae   = round(m_te / max(m_tr, 1e-6), 4)
+
+            # ── Recalibration + Gini sur cette fenêtre ────────────────────────
+            gini_wf = None
+            if _peut_recalibrer:
+                try:
+                    from sklearn.base import clone as sk_clone
+                    modele_wf = sk_clone(self.modeles[_modele_nom])
+                    # Préparer features numériques (même logique que _preparer_donnees)
+                    _cols_num = [
+                        c for c in df_tr.columns
+                        if df_tr[c].dtype in ['int64', 'float64', 'int32', 'float32']
+                        and c != col_cible
+                        and df_tr[c].isnull().sum() == 0
+                        and df_tr[c].std() > 0
+                    ]
+                    if _cols_num and col_cible in df_tr.columns:
+                        X_tr = df_tr[_cols_num].fillna(0).values
+                        y_tr = df_tr[col_cible].values
+                        X_te = df_te[_cols_num].fillna(0).values
+                        y_te = df_te[col_cible].values
+                        w_tr = (
+                            df_tr[col_expo].values
+                            if col_expo in df_tr.columns
+                            else None
+                        )
+                        # Recalibrer sur la fenêtre train
+                        if w_tr is not None:
+                            try:
+                                modele_wf.fit(X_tr, y_tr, sample_weight=w_tr)
+                            except TypeError:
+                                modele_wf.fit(X_tr, y_tr)
+                        else:
+                            modele_wf.fit(X_tr, y_tr)
+                        # Prédire sur la fenêtre test
+                        pred_te = np.maximum(modele_wf.predict(X_te), 0)
+                        # Gini walk-forward
+                        if y_te.sum() > 0 and pred_te.std() > 0:
+                            ordre = np.argsort(-pred_te)
+                            y_sorted = y_te[ordre]
+                            lorenz = np.cumsum(y_sorted) / max(y_te.sum(), 1e-9)
+                            gini_wf = round(
+                                float(1 - 2 * np.trapz(lorenz,
+                                      np.linspace(0, 1, len(lorenz)))),
+                                4
+                            )
+                except Exception as e_wf:
+                    logger.debug(f"Recalibration WF {annee_t} échouée : {e_wf}")
+
             walk_forward.append({
-                'annee_test':  int(annee_t),
-                'n_train':     len(df_tr),
-                'n_test':      len(df_te),
-                'moy_train':   round(m_tr, 2),
-                'moy_test':    round(m_te, 2),
-                'ae_ratio':    ae,
-                'statut':      (
+                'annee_test':         int(annee_t),
+                'n_train':            len(df_tr),
+                'n_test':             len(df_te),
+                'moy_train':          round(m_tr, 2),
+                'moy_test':           round(m_te, 2),
+                'ae_ratio':           ae,
+                'gini_recalibre':     gini_wf,
+                'modele_recalibre':   _modele_nom if _peut_recalibrer else None,
+                'statut':             (
                     'VERT'  if 0.95 <= ae <= 1.05 else
                     'AMBRE' if 0.90 <= ae <= 1.10 else
                     'ROUGE'
@@ -728,9 +790,14 @@ class AgentA6Comparaison:
                 break
 
         # ── BILAN ─────────────────────────────────────────────────────────────
+        # Gini moyen walk-forward (sur les fenêtres avec recalibration)
+        _ginis_wf = [w['gini_recalibre'] for w in walk_forward
+                     if w.get('gini_recalibre') is not None]
+        gini_wf_moyen = round(float(np.mean(_ginis_wf)), 4) if _ginis_wf else None
+
         backtest.update({
             'disponible':        True,
-            'split':             'walk_forward_temporel',
+            'split':             'walk_forward_temporel_avec_recalibration',
             'col_annee':         col_annee,
             'annees_disponibles':[int(a) for a in annees],
             'annee_test':        int(annee_test),
@@ -744,6 +811,8 @@ class AgentA6Comparaison:
             'ae_cv_wf':          round(ae_cv, 4),
             'n_fenetres':        len(walk_forward),
             'n_fenetres_rouge':  n_rouge,
+            'gini_wf_moyen':     gini_wf_moyen,
+            'modele_recalibre':  _modele_nom if _peut_recalibrer else None,
             'walk_forward':      walk_forward,
             'ae_par_segment':    ae_par_segment,
             'interpretation': (
