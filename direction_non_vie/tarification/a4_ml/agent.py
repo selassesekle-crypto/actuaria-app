@@ -176,6 +176,84 @@ def _famille_modele_ml(nom: str) -> str:
     sans mise à jour immédiate de FAMILLES_MODELES_ML)."""
     return FAMILLES_MODELES_ML.get(nom.lower(), 'Autre ML')
 
+
+def creer_modele_ml_pour_nom(nom: str, col_cible: str = 'nb_sinistres'):
+    """
+    Fabrique un modèle ML frais (non entraîné) à partir de son nom.
+
+    Audit V4 recommandation #7 : réutilisé par A6 pour la recalibration
+    walk-forward sur le MODÈLE RÉELLEMENT RETENU, plutôt qu'un proxy
+    GradientBoostingRegressor générique toujours instancié quel que soit
+    le modèle affiché comme recalibré (bug confirmé — le rapport affichait
+    'modele_recalibre': <nom réel> alors qu'un GBM avait été utilisé en
+    coulisses, indépendamment de ce nom).
+
+    Centralise ici la logique déjà présente dans les méthodes
+    `_creer_*` de AgentA4ML (qui ne dépendent d'aucun état d'instance —
+    seul `col_cible` influe sur le choix objective/famille) pour éviter
+    toute divergence entre la fabrique utilisée par A4 et celle utilisée
+    par A6 pour la recalibration.
+
+    Lève ImportError si la librairie du modèle demandé n'est pas
+    installée, ValueError si le nom n'est pas reconnu (ex. référence
+    GLM du classement — non recalibrable via cette fabrique sklearn).
+    """
+    nom_l = nom.lower()
+
+    if nom_l == 'gbm':
+        return GradientBoostingRegressor(**HYPERPARAMS['gbm'])
+
+    if nom_l == 'xgboost':
+        if not XGBOOST_OK:
+            raise ImportError("XGBoost non installé : !pip install xgboost")
+        params = dict(HYPERPARAMS['xgboost'])
+        if col_cible in COLS_COMPTAGE:
+            params['objective'] = 'count:poisson'
+        return xgb.XGBRegressor(**params)
+
+    if nom_l == 'xgboost_tweedie':
+        if not XGBOOST_OK:
+            raise ImportError("XGBoost non installé : !pip install xgboost")
+        params = dict(HYPERPARAMS['xgboost'])
+        params['objective']              = 'reg:tweedie'
+        params['tweedie_variance_power'] = 1.5
+        return xgb.XGBRegressor(**params)
+
+    if nom_l == 'lightgbm':
+        if not LIGHTGBM_OK:
+            raise ImportError("LightGBM non installé : !pip install lightgbm")
+        return lgb.LGBMRegressor(**HYPERPARAMS['lightgbm'])
+
+    if nom_l == 'catboost':
+        if not CATBOOST_OK:
+            raise ImportError("CatBoost non installé : !pip install catboost")
+        return CatBoostRegressor(**HYPERPARAMS['catboost'])
+
+    if nom_l == 'random_forest':
+        return RandomForestRegressor(**HYPERPARAMS['random_forest'])
+
+    if nom_l == 'elasticnet':
+        if col_cible in COLS_COMPTAGE:
+            return PoissonRegressor(
+                alpha=HYPERPARAMS['elasticnet']['alpha'],
+                max_iter=HYPERPARAMS['elasticnet']['max_iter'],
+            )
+        return Pipeline([
+            ('scaler',     StandardScaler()),
+            ('elasticnet', ElasticNet(**HYPERPARAMS['elasticnet']))
+        ])
+
+    if nom_l == 'quantile_50':
+        return QuantileRegressor(**HYPERPARAMS['quantile_50'])
+
+    if nom_l == 'quantile_90':
+        return QuantileRegressor(**HYPERPARAMS['quantile_90'])
+
+    raise ValueError(
+        f"Modèle '{nom}' non reconnu pour recalibration walk-forward "
+        f"(fabrique sklearn — les références GLM ne sont pas couvertes)."
+    )
+
 # Hyperparamètres par défaut — calibrés pour les données actuarielles FR
 # Justification : ces paramètres sont des points de départ raisonnables
 # pour des portefeuilles de 50-100k contrats. Optuna peut les affiner.
