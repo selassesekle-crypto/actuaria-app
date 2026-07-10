@@ -567,18 +567,43 @@ class AgentA3GLM:
 
         logger.info(f"Variables candidates GLM : {len(vars_pred)}")
 
-        # Split train/test reproductible (seed fixe = 42)
-        # Justification : seed fixe pour l'audit trail et la reproductibilité
-        df_train, df_test = train_test_split(
-            df,
-            test_size   = 1 - TRAIN_SIZE,
-            random_state= 42,
-            shuffle     = True
+        # ── SPLIT TEMPOREL (R1 — Commission Tarification IA France 2019 §3.2.4) ──
+        # La validation doit être temporelle : les données les plus récentes
+        # constituent le jeu de test, les plus anciennes le jeu d'entraînement.
+        # Un split aléatoire mélange des observations futures dans l'entraînement
+        # et produit un optimisme artificiel du Gini (data leakage temporel).
+        # Réf. : Commission Tarification IA France (2019) §3.2.4
+        #        «Validation temporelle obligatoire pour les modèles de tarification»
+        _col_temp = next(
+            (c for c in ['annee_souscription', 'date_souscription', 'annee', 'year']
+             if c in df.columns),
+            None
         )
-        # Reset index — évite l'erreur "indices not aligned" de statsmodels
-        # statsmodels exige que endog et exog aient les mêmes index
-        df_train = df_train.reset_index(drop=True)
-        df_test  = df_test.reset_index(drop=True)
+        if _col_temp is not None:
+            # Tri par année croissante — les 80% anciens = train, 20% récents = test
+            df_sorted = df.sort_values(_col_temp).reset_index(drop=True)
+            n_train   = int(len(df_sorted) * TRAIN_SIZE)
+            df_train  = df_sorted.iloc[:n_train].reset_index(drop=True)
+            df_test   = df_sorted.iloc[n_train:].reset_index(drop=True)
+            logger.info(
+                f"[R1] Split TEMPOREL sur '{_col_temp}' : "
+                f"train={len(df_train):,} ({df_train[_col_temp].min()}–"
+                f"{df_train[_col_temp].max()}) | "
+                f"test={len(df_test):,} ({df_test[_col_temp].min()}–"
+                f"{df_test[_col_temp].max()})"
+            )
+        else:
+            # Fallback aléatoire documenté si colonne temporelle absente
+            logger.warning(
+                "[R1] Colonne temporelle absente (annee_souscription, etc.). "
+                "Fallback sur split aléatoire seed=42. "
+                "Réf. : Commission Tarification IA France (2019) §3.2.4."
+            )
+            df_train, df_test = train_test_split(
+                df, test_size=1 - TRAIN_SIZE, random_state=42, shuffle=True
+            )
+            df_train = df_train.reset_index(drop=True)
+            df_test  = df_test.reset_index(drop=True)
 
         return df_train, df_test, vars_pred
 
