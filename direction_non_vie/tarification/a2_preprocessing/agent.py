@@ -218,6 +218,55 @@ STRATEGIES_IMPUTATION = {
 # CLASSE PRINCIPALE : AGENT A2 PREPROCESSING
 # ══════════════════════════════════════════════════════════════════════════════
 
+# DATA DICTIONNAIRE — Traçabilité des variables dérivées
+# Exigence : IA France §4.1 ; ACPR-2022-P-01 §3.2
+DATA_DICTIONNAIRE = {
+    'log_cout_total_sinistres': {
+        'source': 'cout_total_sinistres',
+        'operation': 'log1p(max(x, 0))',
+        'justification': (
+            'Distribution log-normale des couts de sinistres. '
+            'Ameliore calibration GLM Gamma. '
+            'Ref. : Haberman & Renshaw (1996) ASTIN Bulletin.'
+        ),
+        'usage': 'GLM Gamma (cout moyen)',
+    },
+    'age_carre': {
+        'source': 'age', 'operation': 'age ** 2',
+        'justification': (
+            'Effet U-shape de age sur sinistralite : '
+            '<25 ans et >70 ans sinistralite elevee. '
+            'Ref. : ACPR statistiques sinistralite RC Auto France (2022).'
+        ),
+        'usage': 'GLM Poisson RC Auto',
+    },
+    'risque_historique': {
+        'source': ['bonus_malus', 'antecedents_sinistres_n1'],
+        'operation': 'bonus_malus * (1 + antecedents_sinistres_n1)',
+        'justification': 'Double signal de sinistralite passee.',
+        'usage': 'GLM Poisson RC Auto',
+    },
+    'km_par_an_normalise': {
+        'source': ['kilometrage_annuel', 'exposition'],
+        'operation': 'kilometrage_annuel / max(exposition, 0.01)',
+        'justification': 'Kilometrage annualise = exposition kilometrique reelle.',
+        'usage': 'GLM Poisson RC Auto',
+    },
+    'jeune_conducteur': {
+        'source': 'age', 'operation': '(age < 25).astype(int)',
+        'justification': 'Sinistralite <25 ans : 2.5x moyenne. Ref. : ACPR (2022).',
+        'usage': 'GLM Poisson RC Auto',
+    },
+    'log_exposition': {
+        'source': 'exposition', 'operation': 'log(max(exposition, 1e-6))',
+        'justification': (
+            'Offset GLM Poisson. Annualise la frequence. '
+            'Ref. : McCullagh & Nelder (1989) §6.3.'
+        ),
+        'usage': 'GLM Poisson (offset)',
+    },
+}
+
 class AgentA2Preprocessing:
     """
     Agent A2 — Preprocessing & Feature Engineering.
