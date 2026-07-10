@@ -511,13 +511,25 @@ class AgentA1Ingestion:
     # ══════════════════════════════════════════════════════════════════════════
 
     def _valider_qualite(self, df: pd.DataFrame) -> Dict:
-        """Calcule les métriques de qualité du DataFrame."""
+        """
+        Calcule les métriques de qualité du DataFrame.
+
+        Contrôles effectués :
+        1. Complétude (valeurs manquantes)
+        2. Doublons
+        3. Exposition ∈ [0, 1]
+        4. Valeurs aberrantes actuarielles (exigence IA France §4.2)
+           - Sinistres : nb_sinistres ≥ 0, cout_total_sinistres ≥ 0
+           - Âge conducteur : 16 ≤ age ≤ 99 (Code de la route Art. R.221-1)
+           - Exposition : 0 < exposition ≤ 1 (fraction d'année)
+           - Montants : prime_pure > 0 si disponible
+        """
         n = len(df)
 
-        # Complétude
+        # ── 1. Complétude ──────────────────────────────────────────────────────
         taux_complet = (1 - df.isnull().mean()).mean() * 100
 
-        # Doublons
+        # ── 2. Doublons ────────────────────────────────────────────────────────
         cols_id = [c for c in df.columns if 'id' in c.lower() or 'pol' in c.lower()]
         if cols_id:
             nb_doublons = df.duplicated(subset=[cols_id[0]]).sum()
@@ -525,29 +537,96 @@ class AgentA1Ingestion:
             nb_doublons = df.duplicated().sum()
         taux_doublons = nb_doublons / max(n, 1) * 100
 
-        # Exposition
+        # ── 3. Exposition ∈ [0, 1] ────────────────────────────────────────────
         if 'exposition' in df.columns:
             expo_ok = (df['exposition'].between(0, 1)).mean() * 100
         else:
             expo_ok = 100.0
 
-        # Score global
+        # ── 4. Valeurs aberrantes actuarielles ────────────────────────────────
+        # Réf. : IA France (2019) §4.2 — «validation des données en entrée»
+        aberrants = {}
+        alertes_aberrants = []
+
+        # 4a. Sinistres négatifs — impossible physiquement
+        for col_sin in ['nb_sinistres', 'nb_sinistres_rc', 'nb_sinistres_dommages']:
+            if col_sin in df.columns:
+                n_neg = int((df[col_sin] < 0).sum())
+                if n_neg > 0:
+                    aberrants[col_sin + '_negatifs'] = n_neg
+                    alertes_aberrants.append(
+                        f"{col_sin} : {n_neg} valeur(s) négative(s) — impossible."
+                    )
+
+        # 4b. Coûts négatifs
+        for col_cout in ['cout_total_sinistres', 'cout_moyen_attendu',
+                         'prime_pure', 'prime_commerciale']:
+            if col_cout in df.columns:
+                n_neg = int((df[col_cout] < 0).sum())
+                if n_neg > 0:
+                    aberrants[col_cout + '_negatifs'] = n_neg
+                    alertes_aberrants.append(
+                        f"{col_cout} : {n_neg} valeur(s) négative(s)."
+                    )
+
+        # 4c. Âge hors plage réglementaire [16, 99]
+        # Réf. : Code de la route Art. R.221-1 (permis B dès 17 ans AAC)
+        for col_age in ['age', 'age_conducteur']:
+            if col_age in df.columns:
+                n_age = int((~df[col_age].between(16, 99)).sum())
+                if n_age > 0:
+                    aberrants[col_age + '_hors_plage'] = n_age
+                    alertes_aberrants.append(
+                        f"{col_age} : {n_age} valeur(s) hors [16, 99]. "
+                        f"Min={df[col_age].min():.0f} Max={df[col_age].max():.0f}."
+                    )
+
+        # 4d. Exposition strictement positive
+        if 'exposition' in df.columns:
+            n_expo_nul = int((df['exposition'] <= 0).sum())
+            if n_expo_nul > 0:
+                aberrants['exposition_nulle_ou_negative'] = n_expo_nul
+                alertes_aberrants.append(
+                    f"exposition : {n_expo_nul} valeur(s) ≤ 0 — "
+                    "biais GLM Poisson via l'offset log(exposition)."
+                )
+
+        # 4e. Incohérence nb_sinistres > 0 ET cout = 0
+        if 'nb_sinistres' in df.columns and 'cout_total_sinistres' in df.columns:
+            n_incoh = int(
+                ((df['nb_sinistres'] > 0) & (df['cout_total_sinistres'] == 0)).sum()
+            )
+            if n_incoh > 0:
+                aberrants['incoh_sin_sans_cout'] = n_incoh
+                alertes_aberrants.append(
+                    f"{n_incoh} contrat(s) avec sinistres mais coût = 0 "
+                    "— biais GLM Gamma."
+                )
+
+        # ── Score global — intègre la qualité actuarielle ─────────────────────
+        # Pénalité aberrants : -5 points par type d'anomalie, max -20
+        penalite_aberrants = min(len(aberrants) * 5.0, 20.0)
         score = min(
-            taux_complet * 0.50
-            + (100 - taux_doublons) * 0.30
-            + expo_ok * 0.20,
+            taux_complet * 0.45
+            + (100 - taux_doublons) * 0.25
+            + expo_ok * 0.15
+            + (100 - penalite_aberrants) * 0.15,
             100.0
         )
 
         return {
-            'nb_lignes':        n,
-            'nb_colonnes':      len(df.columns),
-            'taux_completude':  round(taux_complet, 2),
-            'nb_doublons':      int(nb_doublons),
-            'taux_doublons':    round(taux_doublons, 2),
-            'expo_ok_pct':      round(expo_ok, 2),
-            'score_global':     round(score, 2),
-            'colonnes':         df.columns.tolist(),
+            'nb_lignes':           n,
+            'nb_colonnes':         len(df.columns),
+            'taux_completude':     round(taux_complet, 2),
+            'nb_doublons':         int(nb_doublons),
+            'taux_doublons':       round(taux_doublons, 2),
+            'expo_ok_pct':         round(expo_ok, 2),
+            'score_global':        round(score, 2),
+            'colonnes':            df.columns.tolist(),
+            # Valeurs aberrantes actuarielles — IA France §4.2
+            'aberrants':           aberrants,
+            'nb_types_aberrants':  len(aberrants),
+            'alertes_aberrants':   alertes_aberrants,
         }
 
     def _calculer_hash(self, df: pd.DataFrame) -> str:
