@@ -271,7 +271,9 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
             for m in cl4[:8]:
                 _cell(ws4, r, 1, m.get('modele',''), cf=NOIR_HEX, fill=GRIS_L_HEX)
                 _cell(ws4, r, 2, round(m.get('gini_test',0),4), cf=NOIR_HEX, ah="right", fmt=FMT_DEC4)
-                _cell(ws4, r, 3, round(m.get('score_global',0),4), cf=NOIR_HEX, ah="right", fmt=FMT_DEC4)
+                # Audit V7 IMPORTANT : garde NA — 'N/A' si absent, jamais 0.0000.
+                _cell(ws4, r, 3, round(m.get('score_global'),4) if 'score_global' in m else 'N/A',
+                      cf=NOIR_HEX, ah="right", fmt=FMT_DEC4 if 'score_global' in m else None)
                 _cell(ws4, r, 4, round(m.get('overfit_ratio',0),3), cf=NOIR_HEX, ah="right", fmt=FMT_DEC4)
                 r += 1
         r += 1
@@ -289,7 +291,12 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
         at6  = r6.get('audit_trail', {})
         _section(ws5, r, "▶ MODÈLE DE PRODUCTION RETENU"); r += 1
         _kpi(ws5, r, "Modèle", prod.get('modele', 'N/A')); r += 1
-        _kpi(ws5, r, "Score global", round(prod.get('score_global', 0), 4), fmt=FMT_DEC4); r += 1
+        _kpi(ws5, r, "Score global",
+             round(prod.get('score_global'), 4) if 'score_global' in prod else 'N/A',
+             fmt=FMT_DEC4 if 'score_global' in prod else None); r += 1
+        _kpi(ws5, r, "  ↳ Nature du score",
+             "Relatif au meilleur modèle du profil (≈1,0000 = meilleur) — "
+             "pas une performance absolue.", wrap=True); r += 1
         _kpi(ws5, r, "Gini test", round(prod.get('gini_test', 0), 4), fmt=FMT_DEC4); r += 1
         r += 1
         _section(ws5, r, "▶ BACKTESTING WALK-FORWARD (recalibré)"); r += 1
@@ -427,9 +434,11 @@ def export_html_equipe(results: Dict[str, Dict], branche: str = '',
         <table>{_row(['Modèle ML','Gini','Score','Overfit'], header=True)}
         """
         for m in cl4[:8]:
+            # Audit V7 IMPORTANT : garde NA cohérent avec les autres formats.
             section_a3_a5 += _row([
                 m.get('modele',''), f"{m.get('gini_test',0):.4f}",
-                f"{m.get('score_global',0):.4f}", f"{m.get('overfit_ratio',0):.3f}"
+                f"{m.get('score_global'):.4f}" if 'score_global' in m else '—',
+                f"{m.get('overfit_ratio',0):.3f}"
             ])
         section_a3_a5 += '</table>'
 
@@ -437,13 +446,18 @@ def export_html_equipe(results: Dict[str, Dict], branche: str = '',
         prod = r6.get('modele_production', {})
         bt6  = r6.get('backtest', {})
         at6  = r6.get('audit_trail', {})
+        _score_txt6 = f"{prod.get('score_global'):.4f}" if 'score_global' in prod else '—'
         section_a6 = f"""
         <div class="kpi-grid">
           <div class="kpi"><b>Modèle retenu</b><br>{prod.get('modele','N/A')}</div>
-          <div class="kpi"><b>Score global</b><br>{prod.get('score_global',0):.4f}</div>
+          <div class="kpi"><b>Score global</b><br>{_score_txt6}</div>
           <div class="kpi"><b>Gini WF moyen</b><br>{bt6.get('gini_wf_moyen') if bt6.get('gini_wf_moyen') is not None else '—'}</div>
           <div class="kpi"><b>A/E ratio</b><br>{bt6.get('ae_ratio','—')}</div>
         </div>
+        <p style="font-size:10px;color:#8A9BB0;font-style:italic;margin-top:4px;">
+          ✦ Score global : normalisation relative au meilleur modèle du
+          profil retenu — pas une performance absolue. Réf. audit V7.
+        </p>
         <table>{_row(['Gouvernance','Valeur'], header=True)}
           {_row(['Profil retenu', at6.get('profil_ponderation','N/A')])}
           {_row(['Validé par', at6.get('profil_valide_par') or '⚠ NON VALIDÉ'])}
@@ -700,7 +714,8 @@ def export_word_equipe(results: Dict[str, Dict], branche: str = '',
                 row = tbl4.add_row().cells
                 row[0].text = m.get('modele','')
                 row[1].text = f"{m.get('gini_test',0):.4f}"
-                row[2].text = f"{m.get('score_global',0):.4f}"
+                # Audit V7 IMPORTANT : garde NA cohérent avec les autres formats.
+                row[2].text = f"{m.get('score_global'):.4f}" if 'score_global' in m else '—'
                 row[3].text = f"{m.get('overfit_ratio',0):.3f}"
 
         # §5 — Décision finale
@@ -709,7 +724,13 @@ def export_word_equipe(results: Dict[str, Dict], branche: str = '',
         bt6  = r6.get('backtest', {})
         at6  = r6.get('audit_trail', {})
         doc.add_paragraph(f"Modèle de production retenu : {prod.get('modele','N/A')}")
-        doc.add_paragraph(f"Score global : {prod.get('score_global',0):.4f}")
+        _score_txt_eq = f"{prod.get('score_global'):.4f}" if 'score_global' in prod else '—'
+        doc.add_paragraph(f"Score global : {_score_txt_eq}")
+        p_score_note = doc.add_paragraph()
+        _run(p_score_note,
+             "  ↳ Score relatif au meilleur modèle du profil de pondération "
+             "retenu (≈1,0000 = meilleur) — pas une performance absolue.",
+             sz=8, italic=True) if '_run' in dir() else None
         doc.add_paragraph(f"Gini walk-forward moyen (recalibré) : {bt6.get('gini_wf_moyen','—')}")
         doc.add_paragraph(f"Profil de pondération retenu : {at6.get('profil_ponderation','N/A')}")
         doc.add_paragraph(f"Validé par : {at6.get('profil_valide_par') or '⚠ NON VALIDÉ'}")
