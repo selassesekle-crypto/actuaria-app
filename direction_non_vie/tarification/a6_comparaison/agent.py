@@ -301,7 +301,7 @@ class AgentA6Comparaison:
                 statut_rag, backtest
             )
 
-            self._sauvegarder_rapport(sous_branche, classement, modele_production)
+            self._sauvegarder_rapport(sous_branche, classement, modele_production, poids_actifs)
             self._sauvegarder_audit(audit_id, sous_branche, rapport,
                                      statut_rag, t_debut)
 
@@ -1023,7 +1023,8 @@ class AgentA6Comparaison:
         self,
         sous_branche:     str,
         classement:       List[Dict],
-        modele_production: Dict
+        modele_production: Dict,
+        poids_actifs:     Dict[str, float] = None,
     ) -> None:
         """Sauvegarde le rapport de comparaison en JSON."""
         rapport_json = {
@@ -1037,7 +1038,7 @@ class AgentA6Comparaison:
                  if not isinstance(v, (np.ndarray, pd.DataFrame))}
                 for m in classement
             ],
-            'poids_criteres':     poids_actifs,
+            'poids_criteres':     poids_actifs or {},
         }
         chemin = self.models_path / f"a6_comparaison_{sous_branche}.json"
         try:
