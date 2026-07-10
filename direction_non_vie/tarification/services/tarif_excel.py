@@ -494,6 +494,7 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
         backtest     = result_a6.get('backtest', {})
         val_sel      = result_a6.get('validation_selection', {})
         fiche        = result_a6.get('fiche_decision', {})
+        audit_trail  = result_a6.get('audit_trail', {})
 
         # ── Onglet 1 : Synthèse ───────────────────────────────────────────────
         ws1 = wb.active
