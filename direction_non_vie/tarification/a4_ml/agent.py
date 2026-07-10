@@ -934,8 +934,15 @@ class AgentA4ML:
         gini_train = self._calculer_gini(y_train, pred_train)
         gini_test  = self._calculer_gini(y_test,  pred_test)
 
-        # Overfit ratio
-        overfit = gini_train / max(gini_test, 1e-6)
+        # Overfit ratio : Gini_train / Gini_test
+        # Si gini_train = 0 (modèle non discriminant sur train, ex. PoissonRegressor
+        # sur données synthétiques simples), on retourne 1.0 (neutre) pour éviter
+        # un ratio nul trompeur. Un ratio nul ne signifie pas l'absence d'overfitting
+        # — il signifie que le modèle n'a pas appris sur train non plus.
+        if gini_train <= 0:
+            overfit = 1.0   # Neutre — modèle non discriminant sur train
+        else:
+            overfit = gini_train / max(gini_test, 1e-6)
 
         # RMSE pondéré par l'exposition
         rmse_test = np.sqrt(
