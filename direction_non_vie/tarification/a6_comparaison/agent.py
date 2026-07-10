@@ -313,7 +313,7 @@ class AgentA6Comparaison:
             # Réf. : ACPR-2022-P-01 §4.3 — les critères de sélection du modèle
             # doivent être documentés et justifiés dans l'audit trail.
             _nom_profil_retenu = next(
-                (k for k, v in PROFILS_PONDERATION.items() if v == POIDS_CRITERES),
+                (k for k, v in PROFILS_PONDERATION.items() if v == poids_actifs),
                 'personnalise'
             )
             _audit_trail_a6 = {
@@ -332,10 +332,10 @@ class AgentA6Comparaison:
                     environnement == 'production' and profil_valide_par is None
                 ),
                 'poids_criteres': {
-                    'gini':            POIDS_CRITERES['gini'],
-                    'stabilite':       POIDS_CRITERES['stabilite'],
-                    'interpretabilite': POIDS_CRITERES['interpretabilite'],
-                    'rmse':            POIDS_CRITERES['rmse'],
+                    'gini':            poids_actifs['gini'],
+                    'stabilite':       poids_actifs['stabilite'],
+                    'interpretabilite': poids_actifs['interpretabilite'],
+                    'rmse':            poids_actifs['rmse'],
                 },
                 'note_score_global': (
                     "Score composite [0,1] = combinaison pondérée de 4 dimensions "
@@ -1037,7 +1037,7 @@ class AgentA6Comparaison:
                  if not isinstance(v, (np.ndarray, pd.DataFrame))}
                 for m in classement
             ],
-            'poids_criteres':     POIDS_CRITERES,
+            'poids_criteres':     poids_actifs,
         }
         chemin = self.models_path / f"a6_comparaison_{sous_branche}.json"
         try:
