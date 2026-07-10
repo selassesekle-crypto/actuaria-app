@@ -68,7 +68,7 @@ SHAs v3 : A1=da1993ca · A2=2cd096ee · A3=6a5f2e95 · A4=2e05908f · A5=4ec08c4
 | Export XBRL QRT S.25.01 | Le QRT JSON ne peut pas être soumis à l'ACPR. Format XBRL requis (taxonomie EIOPA v2.8.0). | Élevé | Instruction ACPR 2016-I-22 ; Règlement 2015/2452/UE |
 | LRC test IFRS 17 §47–52 | Test de suffisance des primes absent dans A11. Bloquant pour premier reporting IFRS 17. | Moyen | IFRS 17 §47–52 |
 | Transition IFRS 17 §C3–C22 | Approche rétrospective / juste valeur absente. A11 inutilisable pour premier rapport IFRS 17. | Élevé | IFRS 17 §C3–C22 |
-| `temperature=0` API Claude | Non-déterminisme LLM dans les commentaires actuariels. Rapport S2 non reproductible. | Très faible | GL EIOPA ORSA GL 56 |
+| `temperature=0` API Claude | ⚠️ **Systémique — 11 appels API Claude sur toute la plateforme.** ✅ Corrigé : Tarification NV (`tarif_rapport.py`, SHA `55ef025b`) — `claude-sonnet-5` + `temperature=0`. ❌ Restant (modèle obsolète `claude-sonnet-4-6`, pas de `temperature`) : A7 Provisionnement (`n5_rapport.py`), Vie/EP-RE (`rapport_vie.py`, `rapport_epre.py`, `rapport_rvie2.py`), Santé-Prévoyance (`rapport_prevoyance/agent.py`, `rapport_sante/agent.py`, `sp_rapport_prevoyance.py`, `sp_rapport_sante.py`), `core/managers_directeurs.py`, `actuaria_app.py`. | Très faible par fichier — 10 fichiers | GL EIOPA ORSA GL 56 |
 | Mention limitation réglementaire | Toutes les sorties doivent porter "Outil d'aide — validation actuaire désigné obligatoire". | Très faible | Normes professionnelles IA France §3.2 |
 
 ### P1 — Important (avant certification interne)
