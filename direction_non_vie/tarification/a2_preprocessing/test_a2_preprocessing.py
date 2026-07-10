@@ -90,6 +90,53 @@ class TestA2Preprocessing(unittest.TestCase):
         print(f"    ST7 Commentaire ✅ | {len(r['commentaire'])} chars")
 
 
+
+
+class TestA2PrimePureCalculee(unittest.TestCase):
+    """
+    Verrou anti-régression — audit V7 anomalie BLOQUANTE B2 (volet A2).
+
+    'prime_pure' était référencée comme cible attendue par A3/A4/A6, mais
+    JAMAIS produite par A2 (sauf déjà présente dans les données brutes,
+    rarissime pour une grandeur dérivée). Conséquence : en invocation par
+    défaut d'A6 (col_cible='prime_pure'), le walk-forward se désactivait
+    silencieusement — B2. Corrigé en calculant automatiquement prime_pure
+    (cout_total_sinistres / exposition) quand absente.
+
+    Ce test verrouille ce calcul contre toute régression future — sans
+    lui, le contrat de données A2→A6 serait à nouveau rompu en silence.
+    """
+
+    def test_prime_pure_calculee_si_absente(self):
+        from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
+        agent = AgentA2Preprocessing(audit_path='/tmp', verbose=False)
+        r_a1 = _make_r_a1(500)  # fixture existante : cout_total_sinistres +
+                                 # exposition présentes, PAS prime_pure
+        self.assertNotIn('prime_pure', r_a1['dataframe'].columns,
+                         "Pré-requis du test : prime_pure ne doit pas être "
+                         "déjà présente dans la fixture brute")
+        r = agent.run(result_a1=r_a1)
+
+        self.assertTrue(r['success'], f"Erreur : {r.get('erreur')}")
+        self.assertIn(
+            'prime_pure', r['dataframe'].columns,
+            "RÉGRESSION BLOQUANTE (audit V7 B2) — 'prime_pure' n'est plus "
+            "calculée automatiquement. Le contrat de données A2→A6 est "
+            "à nouveau rompu : le walk-forward d'A6 se désactivera "
+            "silencieusement en invocation par défaut."
+        )
+        # Cohérence de la formule : prime_pure = coût / exposition
+        df = r['dataframe']
+        attendu = df['cout_total_sinistres'] / df['exposition'].clip(lower=1e-6)
+        import numpy as np
+        self.assertTrue(
+            np.allclose(df['prime_pure'], attendu, rtol=1e-4),
+            "prime_pure calculée ne correspond pas à cout_total_sinistres/exposition"
+        )
+        print(f"    B2-A2 prime_pure calculée automatiquement ✅ | "
+              f"moyenne={df['prime_pure'].mean():.2f}")
+
+
 if __name__ == '__main__':
     print("="*65)
     print("  TESTS A2 PREPROCESSING v1.0")
