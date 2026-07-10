@@ -90,6 +90,7 @@ except ImportError:
 # Sklearn pour les métriques complémentaires
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import train_test_split
+from sklearn.neighbors import BallTree
 
 try:
     from ..services.tarif_excel import export_excel_a3
@@ -2862,35 +2863,73 @@ class AgentA3GLM:
             }
 
         # ── Mode A : Krigeage Nadaraya-Watson (GPS disponible) ───────────────
+        # CORRECTIF (audit V4 point #13) — deux défauts corrigés :
+        #
+        # 1. DISTANCE NON-MÉTRIQUE : l'implémentation précédente calculait
+        #    d² = (Δlat)² + (Δlon)², traitant 1° de latitude et 1° de
+        #    longitude comme des distances égales. C'est faux : en France
+        #    métropolitaine (~47°N), 1° de longitude ≈ 76 km alors que
+        #    1° de latitude ≈ 111 km (quasi constant). Le noyau gaussien
+        #    était donc elliptique dans l'espace réel — anisotrope, avec
+        #    une distorsion d'environ ×1,46 selon l'axe est-ouest — et
+        #    le biais empirait avec la latitude (facteur cos(lat)).
+        #    Corrigé par distance haversine (great-circle), isotrope et
+        #    exacte sur la sphère terrestre.
+        #
+        # 2. O(n²) NON SCALABLE : la boucle calculait une distance à TOUS
+        #    les autres points pour chaque point (paire complète), ce qui
+        #    devient prohibitif au-delà de quelques milliers de contrats
+        #    (≈ 5 000 000 000 opérations pour 70 000 contrats). Corrigé
+        #    par un arbre spatial (BallTree, métrique haversine native)
+        #    qui restreint la recherche aux points à moins de 3σ de
+        #    distance (au-delà, le poids gaussien est négligeable),
+        #    ramenant la complexité à O(n log n).
         if has_gps:
             try:
-                lats   = df['latitude'].values
-                lons   = df['longitude'].values
+                lats   = df['latitude'].values.astype(float)
+                lons   = df['longitude'].values.astype(float)
                 primes = np.asarray(_prime_arr)
                 expos  = df[col_expo].values
 
-                # Bandwidth h = 1° ≈ 111 km (paramètre de lissage)
-                h = 1.0
+                # Bandwidth conservé à ≈ 111 km (valeur équivalente à
+                # l'ancien h=1° à l'équateur) — même largeur de lissage,
+                # seule la métrique de distance et l'algorithme changent.
+                EARTH_RADIUS_KM = 6371.0088  # rayon terrestre moyen (IUGG)
+                h_km = 111.0
+
+                coords_rad = np.radians(np.column_stack([lats, lons]))
+                tree = BallTree(coords_rad, metric='haversine')
+
+                # Troncature à 3σ : au-delà, exp(-9/2) ≈ 0.01% du poids
+                # maximal — négligeable, et évite de scanner tout le jeu
+                # de données pour chaque point.
+                rayon_recherche_rad = (3 * h_km) / EARTH_RADIUS_KM
+                voisins_idx, voisins_dist_rad = tree.query_radius(
+                    coords_rad, r=rayon_recherche_rad, return_distance=True
+                )
 
                 lissees = np.zeros(len(df))
                 for idx in range(len(df)):
-                    d2 = (lats - lats[idx])**2 + (lons - lons[idx])**2
-                    w  = np.exp(-d2 / (2 * h**2)) * expos
+                    idxs     = voisins_idx[idx]
+                    dist_km  = voisins_dist_rad[idx] * EARTH_RADIUS_KM
+                    w        = np.exp(-(dist_km ** 2) / (2 * h_km ** 2)) * expos[idxs]
+                    w_sum    = w.sum()
                     lissees[idx] = (
-                        np.dot(w, primes) / max(w.sum(), 1e-9)
+                        np.dot(w, primes[idxs]) / max(w_sum, 1e-9)
                     )
 
                 return {
                     'applique':    True,
-                    'methode':     'krigeage_nadaraya_watson',
+                    'methode':     'krigeage_nadaraya_watson_haversine',
                     'source_prime': _source_prime,
                     'col_geo':     'latitude+longitude',
                     'n_zones':     len(df),
-                    'bandwidth_h': h,
+                    'bandwidth_h': h_km,
                     'prime_lissee_moy': round(float(lissees.mean()), 6),
                     'reference': (
                         "Nadaraya (1964) ; Watson (1964) ; "
-                        "Gelfand et al. (2010) Handbook of Spatial Statistics"
+                        "Gelfand et al. (2010) Handbook of Spatial Statistics ; "
+                        "distance haversine (great-circle) via BallTree scikit-learn"
                     ),
                 }
             except Exception as e_gps:
