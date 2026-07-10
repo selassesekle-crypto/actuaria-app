@@ -277,6 +277,37 @@ DATA_DICTIONNAIRE = {
     },
 }
 
+# ── GÉNÉRATION AUTOMATIQUE — variables d'interaction (correctif audit V4) ────
+# Les entrées ci-dessus documentent les variables dérivées "simples". Les
+# variables d'interaction créées par _feature_engineering (bloc
+# "INTERACTIONS GÉNÉRIQUES") suivent le nommage 'inter_{col1}_{col2}' et
+# n'étaient PAS documentées dans DATA_DICTIONNAIRE, créant un écart de
+# traçabilité (ACPR-2022-P-01 §3.2) identifié lors de l'audit V4.
+#
+# Plutôt que de dupliquer manuellement chaque entrée (risque de nouveau
+# désalignement si INTERACTIONS évolue), les entrées sont générées
+# automatiquement à partir du dict INTERACTIONS lui-même — la traçabilité
+# est donc garantie de rester synchrone avec le code qui crée réellement
+# les colonnes, par construction.
+for _branche_key, _paires in INTERACTIONS.items():
+    for _col1, _col2 in _paires:
+        _nom_var = f"inter_{_col1}_{_col2}"
+        if _nom_var not in DATA_DICTIONNAIRE:
+            DATA_DICTIONNAIRE[_nom_var] = {
+                'source': [_col1, _col2],
+                'operation': f"{_col1} * {_col2}",
+                'justification': (
+                    f"Variable d'interaction générée automatiquement pour la "
+                    f"sous-branche '{_branche_key}'. Capture un effet non-additif "
+                    f"entre '{_col1}' et '{_col2}' que le GLM log-linéaire seul "
+                    f"ne peut pas modéliser. Créée uniquement si les deux "
+                    f"colonnes source existent et sont numériques (voir "
+                    f"_feature_engineering, bloc INTERACTIONS GÉNÉRIQUES)."
+                ),
+                'usage': f"GLM / ML — sous-branche '{_branche_key}'",
+            }
+del _branche_key, _paires, _col1, _col2, _nom_var  # nettoyage namespace module
+
 class AgentA2Preprocessing:
     """
     Agent A2 — Preprocessing & Feature Engineering.
