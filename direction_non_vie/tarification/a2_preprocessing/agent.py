@@ -1120,6 +1120,33 @@ class AgentA2Preprocessing:
         """
         features_nouvelles = []
 
+        # ── CONTRAT DE DONNÉES : prime_pure (audit V7 BLOQUANT #2) ────────────
+        # AVANT ce correctif, 'prime_pure' était référencée comme cible
+        # attendue par A3 (COLS_A_EXCLURE), A4 et A6 (col_cible par défaut),
+        # mais JAMAIS produite par A2 — sauf si déjà présente dans les
+        # données brutes en entrée (rarissime : c'est une grandeur dérivée,
+        # pas un champ SI habituel). Conséquence concrète : en invocation
+        # par défaut d'A6 (col_cible='prime_pure' non précisé), le
+        # walk-forward se désactivait SILENCIEUSEMENT
+        # (backtest['disponible']=False sans lever d'erreur), et le statut
+        # RAG pouvait rester VERT sans qu'aucune validation temporelle
+        # n'ait tourné — c'est le second bloquant de l'audit V7.
+        #
+        # Calculée ici si absente et si les deux composantes existent,
+        # avec la même formule que celle historiquement injectée
+        # manuellement dans les fixtures de test (masquant jusqu'ici la
+        # rupture de contrat) : prime pure = coût total / exposition.
+        if ('prime_pure' not in df.columns
+                and 'cout_total_sinistres' in df.columns
+                and 'exposition' in df.columns):
+            _expo_safe = np.maximum(df['exposition'], 1e-6)
+            df['prime_pure'] = df['cout_total_sinistres'] / _expo_safe
+            logger.info(
+                "'prime_pure' calculée automatiquement "
+                "(cout_total_sinistres / exposition) — absente des données "
+                "brutes en entrée. Réf. : audit V7 BLOQUANT #2."
+            )
+
         # ── VARIABLES COMMUNES ────────────────────────────────────────────────
 
         # 1. Log des variables de coût et capital
