@@ -64,7 +64,7 @@ except ImportError:
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
-from sklearn.linear_model import ElasticNet, QuantileRegressor
+from sklearn.linear_model import ElasticNet, QuantileRegressor, PoissonRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 
@@ -230,6 +230,19 @@ COLS_EXCLURE_SHAP = ['const', 'intercept']
 # CLASSE PRINCIPALE : AGENT A4 ML
 # ══════════════════════════════════════════════════════════════════════════════
 
+# Variables cibles de type comptage (distribution Poisson)
+# Si col_cible appartient à cette liste ET ElasticNet est actif,
+# le garde-fou R2 remplace ElasticNet par PoissonRegressor.
+# Réf. : Agresti (2015), Foundations of Linear and Generalized Linear Models §7.
+COLS_COMPTAGE = {
+    'nb_sinistres',
+    'nb_contrats',
+    'nb_victimes',
+    'nb_recours',
+    'sinistre_count',
+    'count',
+}
+
 class AgentA4ML:
     """
     Agent A4 — Tarification Machine Learning ×8.
@@ -338,6 +351,19 @@ class AgentA4ML:
 
         if not result_a2.get('success', False):
             return self._erreur("L'agent A2 a échoué.", audit_id)
+
+        # ── GARDE-FOU R2 : cohérence col_cible / famille de modèle ───────────
+        # Si la variable cible est un comptage (distribution Poisson) et
+        # qu'ElasticNet est sélectionné, on bascule sur PoissonRegressor.
+        # ElasticNet minimise l'erreur quadratique — inadapté aux comptages.
+        # Réf. : Agresti (2015), Foundations of Linear and GLM §7.
+        _col_cible_est_comptage = col_cible in COLS_COMPTAGE
+        if _col_cible_est_comptage:
+            logger.warning(
+                f"[GARDE-FOU R2] col_cible='{col_cible}' est une variable de "
+                f"comptage (Poisson). ElasticNet remplacé par PoissonRegressor. "
+                f"Réf. : Agresti (2015) §7."
+            )
 
         df      = result_a2['dataframe'].copy()
         rapport = {'etapes': [], 'alertes': [], 'modeles_testes': []}
@@ -698,7 +724,7 @@ class AgentA4ML:
             ('xgboost_tweedie',  self._creer_xgboost_tweedie,True),
             ('lightgbm',         self._creer_lightgbm,       True),
             ('catboost',         self._creer_catboost,        True),
-            ('elasticnet',       self._creer_elasticnet,      False),
+            ('elasticnet',       lambda: self._creer_elasticnet(col_cible), False),
         ]
 
         for nom, creer_fn, supporte_weights in modeles_a_calibrer:
@@ -803,18 +829,28 @@ class AgentA4ML:
         """
         return RandomForestRegressor(**HYPERPARAMS['random_forest'])
 
-    def _creer_elasticnet(self):
+    def _creer_elasticnet(self, col_cible: str = 'nb_sinistres'):
         """
         ElasticNet — régression pénalisée L1 + L2.
         Combine LASSO (sélection de variables) et Ridge (stabilité).
-        Avantage : modèle linéaire régularisé, comparable au GLM.
-        Utilisé dans un Pipeline avec StandardScaler obligatoire.
 
-        Justification du Pipeline :
+        GARDE-FOU R2 (Agresti 2015 §7) :
+        Si col_cible est une variable de comptage (Poisson), ElasticNet
+        est inadapté (minimise l'erreur quadratique sur des entiers).
+        Dans ce cas, on retourne PoissonRegressor à la place.
+
+        Justification du Pipeline ElasticNet :
         ElasticNet minimise ||y - Xβ||² + α×(L1 + L2)
         Les coefficients β dépendent de l'échelle de X.
         Sans normalisation, les variables avec grande variance dominent.
         """
+        if col_cible in COLS_COMPTAGE:
+            # Variable de comptage → PoissonRegressor (famille Poisson)
+            return PoissonRegressor(
+                alpha=HYPERPARAMS['elasticnet']['alpha'],
+                max_iter=HYPERPARAMS['elasticnet']['max_iter'],
+            )
+        # Variable continue → ElasticNet standard dans Pipeline normalisé
         return Pipeline([
             ('scaler',     StandardScaler()),
             ('elasticnet', ElasticNet(**HYPERPARAMS['elasticnet']))
