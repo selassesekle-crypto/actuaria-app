@@ -178,6 +178,88 @@ class TestA6Comparaison(unittest.TestCase):
         )
 
 
+
+
+class TestA6GouvernancePlafond(unittest.TestCase):
+    """
+    Plafond de gouvernance du profil de pondération — ACPR-2022-P-01 §4.3.
+
+    Audit V4 point #14 : ce test aurait immédiatement détecté le bug
+    corrigé au point #10 (défaut environnement='developpement' rendait
+    le contrôle silencieusement contournable par simple omission du
+    paramètre, sans action malveillante). Il protège contre toute
+    régression future sur ce mécanisme fail-safe.
+
+    Réf. : Saltzer & Schroeder (1975), fail-safe defaults.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
+        cls.agent = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp', verbose=False)
+        cls.r_a2  = _make_r_a2_avec_annee(800)
+        cls.r_a3  = _make_r_a3()
+        cls.r_a4  = _make_r_a4()
+
+    def test_gouvernance_omission_totale_plafonne(self):
+        """GOUV1 — Aucun paramètre de gouvernance précisé (le scénario
+        exact dénoncé par l'audit V4) → le statut ne doit JAMAIS être VERT,
+        et environnement doit valoir 'production' par défaut (fail-safe)."""
+        r = self.agent.run(
+            result_a2=self.r_a2, result_a3=self.r_a3, result_a4=self.r_a4,
+            result_a5=None, generer_graphiques=False,
+            generer_rapport_equipe=False,
+            # Ni environnement=, ni profil_valide_par= volontairement omis
+        )
+        self.assertTrue(r['success'], f"Erreur : {r.get('erreur')}")
+        at = r.get('audit_trail', {})
+        self.assertEqual(at.get('environnement'), 'production',
+            "Défaut fail-safe rompu : environnement doit être 'production' "
+            "par défaut, pas 'developpement' (régression du fix V4 point #10 ?)")
+        self.assertFalse(at.get('gouvernance_ok'),
+            "gouvernance_ok=True sans validateur en 'production' — "
+            "le plafond de gouvernance est contournable (régression !)")
+        self.assertNotEqual(r['statut_rag'], 'VERT',
+            "Statut VERT obtenu malgré l'absence totale de validation "
+            "de gouvernance — le contrôle est contourné par omission.")
+        print(f"    GOUV1 Omission plafonnée ✅ | statut={r['statut_rag']} | "
+              f"environnement={at.get('environnement')} | "
+              f"gouvernance_ok={at.get('gouvernance_ok')}")
+
+    def test_gouvernance_developpement_non_bloquant(self):
+        """GOUV2 — environnement='developpement' explicite → le contrôle
+        ne doit PAS être bloquant (usage de développement/test légitime)."""
+        r = self.agent.run(
+            result_a2=self.r_a2, result_a3=self.r_a3, result_a4=self.r_a4,
+            result_a5=None, generer_graphiques=False,
+            generer_rapport_equipe=False,
+            environnement='developpement',
+        )
+        self.assertTrue(r['success'], f"Erreur : {r.get('erreur')}")
+        at = r.get('audit_trail', {})
+        self.assertTrue(at.get('gouvernance_ok'),
+            "gouvernance_ok=False en environnement='developpement' explicite "
+            "— le contrôle ne devrait pas être bloquant hors production")
+        print(f"    GOUV2 Dev non bloquant ✅ | gouvernance_ok={at.get('gouvernance_ok')}")
+
+    def test_gouvernance_production_avec_validateur(self):
+        """GOUV3 — Production + profil_valide_par renseigné → gouvernance
+        conforme, VERT redevient atteignable (si les autres critères le sont)."""
+        r = self.agent.run(
+            result_a2=self.r_a2, result_a3=self.r_a3, result_a4=self.r_a4,
+            result_a5=None, generer_graphiques=False,
+            generer_rapport_equipe=False,
+            environnement='production', profil_valide_par='Actuaire Test',
+        )
+        self.assertTrue(r['success'], f"Erreur : {r.get('erreur')}")
+        at = r.get('audit_trail', {})
+        self.assertTrue(at.get('gouvernance_ok'),
+            "gouvernance_ok=False malgré profil_valide_par renseigné en production")
+        self.assertEqual(at.get('profil_valide_par'), 'Actuaire Test')
+        print(f"    GOUV3 Production validée ✅ | "
+              f"validé_par={at.get('profil_valide_par')} | statut={r['statut_rag']}")
+
+
 if __name__ == '__main__':
     print("="*65)
     print("  TESTS A6 COMPARAISON v1.0 — SÉLECTION FINALE")
