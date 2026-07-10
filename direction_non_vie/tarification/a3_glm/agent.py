@@ -2578,14 +2578,14 @@ class AgentA3GLM:
 
         Formule :
             Z_i = n_i / (n_i + k)
-            k   = σ²_entre / σ²_intra
+            k   = σ²_intra / σ²_entre
             Prime_crédibilisée_i = Z_i × μ_obs_i + (1 - Z_i) × μ_marché
 
         où :
             μ_obs_i  = taux de sinistralité observé du groupe i
             μ_marché = prime pure GLM (prédiction)
             n_i      = exposition pondérée du groupe i (en véhicules-années)
-            σ²_intra = variance intra-groupe (Poisson → E[Y]/n)
+            σ²_intra = composante de variance de processus (Poisson → μ_marché)
             σ²_entre = variance inter-groupes (estimée par méthode des moments)
 
         Colonnes requises pour activation :
@@ -2648,15 +2648,23 @@ class AgentA3GLM:
             grp['n_sin'].sum() / max(grp['n_expo'].sum(), 1e-9)
         )
 
-        # ── Estimation k = σ²_entre / σ²_intra ──────────────────────────────
-        # σ²_intra : variance Poisson intra-groupe = μ_obs / n_expo
-        # (estimateur non-biaisé pour données Poisson)
-        sigma2_intra_moy = float(
-            np.average(
-                grp['mu_obs'] / np.maximum(grp['n_expo'], 1e-9),
-                weights=grp['n_expo']
-            )
-        )
+        # ── Estimation k = σ²_intra / σ²_entre ──────────────────────────────
+        # σ²_intra : composante de variance de processus (within variance).
+        # CORRECTIF (audit V4) : l'estimateur précédent — moyenne pondérée
+        # de (μ_obs_i / n_i) — était dimensionnellement incohérent avec
+        # σ²_entre (unité [taux/exposition] au lieu de [taux²]×[exposition]
+        # requise). Vérifié par simulation Poisson à paramètres connus :
+        # l'ancien estimateur sous-évaluait σ²_intra d'un facteur ~100-300×,
+        # ce qui gonflait artificiellement Z (Z≈0.98-0.99 même pour de
+        # petites flottes de 10-40 véhicules), annulant l'effet protecteur
+        # de la crédibilité sur les petits échantillons bruités.
+        #
+        # Sous hypothèse Poisson, Var(X_ij|Θ_i) = λ(Θ_i)/w_ij implique
+        # σ²(Θ_i) = λ(Θ_i), donc σ²_intra = E[σ²(Θ)] = E[λ(Θ)] = μ_marché.
+        # C'est la simplification standard pour la crédibilité Poisson.
+        # Réf. : Bühlmann & Gisler (2005), "A Course in Credibility Theory
+        # and Its Applications", §4.2 (cas particulier Poisson-Bühlmann-Straub).
+        sigma2_intra_moy = float(mu_marche)
 
         # σ²_entre : variance inter-groupes (estimateur Bühlmann-Straub)
         # σ²_entre = [Σ n_i(μ_i - μ_marché)² - (N-1)σ²_intra] / (N_total - Σn²_i/N_total)
