@@ -52,6 +52,18 @@ except ImportError:
         filtrer_genre
     )
 
+# Export Excel (audit V7 MINEUR #2) — A5 était le seul agent sans export
+# Excel. export_excel_a5 suit le même gabarit que les autres agents.
+try:
+    from .services.tarif_excel import export_excel_a5
+    TARIF_EXCEL_OK_A5 = True
+except ImportError:
+    try:
+        from direction_non_vie.tarification.services.tarif_excel import export_excel_a5
+        TARIF_EXCEL_OK_A5 = True
+    except ImportError:
+        TARIF_EXCEL_OK_A5 = False
+
 warnings.filterwarnings('ignore')
 
 try:
