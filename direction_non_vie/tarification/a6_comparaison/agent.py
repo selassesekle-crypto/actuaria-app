@@ -379,6 +379,39 @@ class AgentA6Comparaison:
                 except Exception as e_rp:
                     logger.warning(f"Rapport A6 échoué : {e_rp}")
 
+            # ── Rapport consolidé équipe (dashboard A1 → A6) ──────────────────
+            # Réutilise le commentaire actuariel déjà généré par A6 ci-dessus
+            # (_tmp_a6['commentaire']) — AUCUN nouvel appel Claude API.
+            # Réf. : décision session — séparation rapport technique (narration
+            # IA) / rapport équipe (dashboard factuel, sans narration dupliquée).
+            _rapport_equipe = {
+                'excel_bytes': b'', 'html_bytes': b'',
+                'word_bytes':  b'', 'pdf_bytes':  b'',
+            }
+            if generer_rapport_equipe and RAPPORT_EQUIPE_OK:
+                try:
+                    _results_equipe = {
+                        'a1': result_a1, 'a2': result_a2, 'a3': result_a3,
+                        'a4': result_a4, 'a5': result_a5,
+                        'a6': _tmp_a6,  # inclut commentaire, audit_trail, backtest
+                    }
+                    _rapport_equipe = generer_rapport_equipe_tarification(
+                        _results_equipe,
+                        branche=sous_branche,
+                        arrete=datetime.now().strftime('%d/%m/%Y'),
+                        audit_id=audit_id,
+                        formats=formats_equipe or ['excel', 'html', 'word', 'pdf'],
+                    )
+                    logger.info(
+                        f"[{audit_id}] Rapport équipe : "
+                        f"Excel={len(_rapport_equipe.get('excel_bytes',b'')):,}b "
+                        f"HTML={len(_rapport_equipe.get('html_bytes',b'')):,}b "
+                        f"Word={len(_rapport_equipe.get('word_bytes',b'')):,}b "
+                        f"PDF={len(_rapport_equipe.get('pdf_bytes',b'')):,}b"
+                    )
+                except Exception as e_eq:
+                    logger.warning(f"Rapport équipe échoué : {e_eq}")
+
 
 
             if self.verbose:
