@@ -81,14 +81,16 @@ SHAs v3 : A1=da1993ca · A2=2cd096ee · A3=6a5f2e95 · A4=2e05908f · A5=4ec08c4
 | Coefficients MCR par LoB | MCR mono-LoB actuel. Multi-LoB requis pour portefeuilles mixtes. | Moyen | Annexe XVIII Rgt 2015/35 |
 | ORSA conformité GL EIOPA 56–58 | Vérifier les 3 sections obligatoires et l'horizon 3–5 ans dans A8. | Moyen | GL EIOPA 56–58 |
 
-### P1bis — Résiduels mineurs Tarification v3 (non bloquants, 90 jours)
+### P1bis — Résiduels mineurs Tarification v3 — STATUT
 
-| Item | Description | Effort | Agent |
-|---|---|---|---|
-| Forçage de types A1 | Coercition explicite `pd.to_numeric`/`pd.to_datetime` avec `errors='coerce'` + logging avant validation qualité. | 1 jour | A1 |
-| XGBoost objective Poisson | `xgb.XGBRegressor(objective='count:poisson')` si `col_cible ∈ COLS_COMPTAGE`, miroir du garde-fou R2. | 2h | A4 |
-| Gouvernance profil A6 | Paramètre `profil_valide_par: Optional[str] = None` dans `run()`, statut plafonné AMBRE si None en production. | 3h + décision organisationnelle | A6 |
-| Test non-discrimination proxy | Corrélation entre variables retenues et proxies de critères interdits (ex. code postal / origine). Nécessite données externes INSEE. | 3–5 jours | A2/A3 |
+| Item | Description | Statut | Agent | SHA |
+|---|---|---|---|---|
+| Forçage de types A1 | `_forcer_types()` avec `pd.to_numeric`/`pd.to_datetime` `errors='coerce'`, alertes journalisées, exposé dans `rapport['coercition_types']`. | ✅ FAIT | A1 | `541f7aa2` |
+| XGBoost objective Poisson | `_creer_xgboost(col_cible)` bascule sur `objective='count:poisson'` si `col_cible ∈ COLS_COMPTAGE` (miroir garde-fou R2). | ✅ FAIT | A4 | `6b17bd60` |
+| Gouvernance profil A6 | `profil_valide_par` + `environnement` dans `run()`. Statut plafonné AMBRE si `environnement='production'` et `profil_valide_par=None`. Journalisé dans `audit_trail`. | ✅ FAIT | A6 | `948cd5a1` |
+| Test non-discrimination proxy | Corrélation variables retenues / proxies de critères interdits (ex. code postal). | ⛔ BLOQUÉ | A2/A3 | — |
+
+**Note sur le point bloqué :** le test de non-discrimination proxy nécessite une source de données externe (INSEE ou équivalent) que le projet n'a pas. L'implémenter sur données synthétiques donnerait un faux sentiment de conformité sans valeur de détection réelle. Reste inscrit au chantier P4 (données réelles), à traiter une fois une source de référence identifiée et son usage validé juridiquement (RGPD — données sensibles proxy).
 
 ### P2 — Amélioration (après validation Vie/EP-RE et SP sur données réelles)
 
