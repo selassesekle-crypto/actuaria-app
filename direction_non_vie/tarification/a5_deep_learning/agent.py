@@ -534,15 +534,21 @@ class AgentA5DeepLearning:
         X = df[feature_names].fillna(0).values
         y = df[col_cible].values.astype(np.float32)
 
-        # Normalisation StandardScaler
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X).astype(np.float32)
-        self.scalers['standard'] = scaler
-
-        # Split 80/20
-        X_train, X_test, y_train, y_test = train_test_split(
-            X_scaled, y, test_size=0.20, random_state=42
+        # Split 80/20 — AVANT la normalisation pour éviter tout data leakage
+        # Ref : Kaufman et al. (2012), ACM TKDD 6(4) — «Leakage in Data Mining»
+        # Le StandardScaler doit être ajusté uniquement sur X_train,
+        # puis appliqué à X_test sans recalcul des statistiques.
+        # Un fit_transform(X) avant le split contaminerait X_test avec les
+        # statistiques (moyenne, std) des données d'entraînement.
+        X_raw_train, X_raw_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.20, random_state=42
         )
+
+        # Normalisation StandardScaler — ajusté sur train, appliqué sur test
+        scaler = StandardScaler()
+        X_train = scaler.fit_transform(X_raw_train).astype(np.float32)
+        X_test  = scaler.transform(X_raw_test).astype(np.float32)
+        self.scalers['standard'] = scaler
 
         return X_train, X_test, y_train, y_test, feature_names
 
