@@ -29,13 +29,31 @@ logger = logging.getLogger('actuaria.tarif.rapport_equipe')
 
 try:
     from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-    from openpyxl.utils import get_column_letter
-    OPENPYXL_OK = True
 except ImportError:
-    OPENPYXL_OK = False
+    pass
 
-# ── Palette ActuarIA (identique à rapport_modeles_tarif.py / tarif_excel.py) ─
+# ── Helpers Excel partagés — audit V4 point #12 ──────────────────────────────
+# Palette (_HEX) et fonctions factorisées dans excel_helpers.py (source
+# unique, éliminait une duplication avec tarif_excel.py).
+try:
+    from .excel_helpers import (
+        OPENPYXL_OK, NAVY_HEX, GOLD_HEX, VERT_HEX, AMBRE_HEX, ROUGE_HEX,
+        GRIS_HEX, GRIS_L_HEX, NOIR_HEX, BLANC_HEX,
+        FMT_EUR, FMT_PCT, FMT_DEC4, FMT_NB,
+        _font, _fill, _border, _align, _statut_fill, _col_w,
+        _cell, _header, _section, _kpi, _bandeau,
+    )
+except ImportError:
+    from direction_non_vie.tarification.services.excel_helpers import (
+        OPENPYXL_OK, NAVY_HEX, GOLD_HEX, VERT_HEX, AMBRE_HEX, ROUGE_HEX,
+        GRIS_HEX, GRIS_L_HEX, NOIR_HEX, BLANC_HEX,
+        FMT_EUR, FMT_PCT, FMT_DEC4, FMT_NB,
+        _font, _fill, _border, _align, _statut_fill, _col_w,
+        _cell, _header, _section, _kpi, _bandeau,
+    )
+
+# ── Palette ActuarIA — variantes HTML/Word (avec '#', non factorisées :
+# ── absentes de tarif_excel.py, propres à ce module) ─────────────────────────
 NAVY      = '#0F2E52'
 NAVY_MID  = '#1B3A5C'
 GOLD      = '#C9A84C'
@@ -47,20 +65,6 @@ SLATE     = '#8A9BB0'
 BG        = '#F5F7FA'
 WHITE     = '#FFFFFF'
 TEXT      = '#1C2B3A'
-
-NAVY_HEX  = "0F2E52"
-GOLD_HEX  = "C9A84C"
-VERT_HEX  = "2ECC71"
-AMBRE_HEX = "F39C12"
-ROUGE_HEX = "E74C3C"
-GRIS_HEX  = "8A9AB0"
-GRIS_L_HEX= "EAF0F6"
-NOIR_HEX  = "1A1A1A"
-BLANC_HEX = "F0F4F8"
-
-FMT_EUR  = '# ##0 €;-# ##0 €'
-FMT_PCT  = '0.00%'
-FMT_DEC4 = '0.0000'
 FMT_NB   = '# ##0'
 
 
