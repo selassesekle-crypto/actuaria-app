@@ -39,6 +39,19 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 from sklearn.preprocessing import StandardScaler
 
+# Module de conformité partagé (audit V7 BLOQUANT #1) — A5 n'avait AUCUN
+# filtre genre avant ce correctif, avec exactement la même logique de
+# sélection de features qu'A4 (fuite confirmée par analogie et lecture ;
+# exécution DL bloquée dans l'environnement d'audit V7 par l'absence de
+# PyTorch, mais la logique de sélection est identique à celle d'A4,
+# vérifiée empiriquement).
+try:
+    from .services.conformite_reglementaire import filtrer_genre
+except ImportError:
+    from direction_non_vie.tarification.services.conformite_reglementaire import (
+        filtrer_genre
+    )
+
 warnings.filterwarnings('ignore')
 
 try:
@@ -595,6 +608,15 @@ class AgentA5DeepLearning:
             and df[c].isnull().sum() == 0
             and df[c].std() > 0
         ]
+
+        # ── FILTRE GENRE (audit V7 BLOQUANT #1) ───────────────────────────────
+        # A5 n'avait auparavant AUCUNE exclusion des variables de genre —
+        # même trou que celui corrigé dans A4. Une colonne 'sexe' numérique
+        # (0/1) ou pré-encodée ('sexe_enc') pouvait donc atteindre la
+        # matrice X du CANN/TabNet. Réf. : Arrêt CJUE C-236/09 (Test-Achats).
+        feature_names = filtrer_genre(
+            feature_names, contexte='A5 — sélection features DL', logger_agent=logger
+        )
 
         # ── SPLIT TEMPOREL (R1 — Commission Tarification IA France 2019 §3.2.4) ──
         # Même approche que A3/A4 : tri temporel avant extraction de X.
