@@ -614,6 +614,11 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
     <div class="section-body">{section_audit}</div>
   </div>
 
+  <div class="section">
+    <div class="section-head">§7 — Commentaire Actuariel de Référence (A6)</div>
+    <div class="section-body narration">{section_commentaire}</div>
+  </div>
+
   <div class="footer">
     ActuarIA · Équipe Tarification Non-Vie · {branche_f.replace('_',' ').title()} · Arrêté {arr} · {now} · CONFIDENTIEL
   </div>
