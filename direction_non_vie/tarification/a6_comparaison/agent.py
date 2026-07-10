@@ -447,6 +447,8 @@ class AgentA6Comparaison:
                 'pdf_bytes':          _pdf_a6,
                 'hypotheses':         _val_sel_,
                 'audit_trail':        _audit_trail_a6,
+                # Rapport consolidé équipe A1→A6 (dashboard, sans narration IA dupliquée)
+                'rapport_equipe':     _rapport_equipe,
             }
 
         except Exception as e:
