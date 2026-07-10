@@ -1085,7 +1085,7 @@ class AgentA6Comparaison:
         modele_production:  Dict,
         classement:         List[Dict],
         profil_valide_par:  Optional[str] = None,
-        environnement:      str = 'developpement',
+        environnement:      str = 'production',
     ) -> str:
         """
         Statut RAG basé sur le score global du modèle de production.
@@ -1100,6 +1100,14 @@ class AgentA6Comparaison:
         (profil_valide_par=None), le statut est plafonné à AMBRE — le
         modèle reste utilisable mais signale l'absence de validation
         formelle du choix méthodologique de sélection.
+
+        DÉFAUT FAIL-SAFE (audit V4 point #10) : `environnement='production'`
+        par défaut — PAS 'developpement'. Un appel qui omet ce paramètre
+        est traité comme production tant qu'il n'est pas explicitement
+        déclaré comme développement. Avant ce correctif, le défaut
+        'developpement' rendait le contrôle de gouvernance silencieusement
+        contournable par simple omission du paramètre — sans action
+        malveillante, juste en ne le renseignant jamais.
         """
         score = modele_production.get('score_global', 0)
         gini  = modele_production.get('gini_test',   0)
