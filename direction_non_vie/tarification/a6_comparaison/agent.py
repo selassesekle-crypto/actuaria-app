@@ -296,6 +296,13 @@ class AgentA6Comparaison:
                 except Exception as e_rp:
                     logger.warning(f"Rapport A6 échoué : {e_rp}")
 
+            # Profil de pondération retenu — journalisé pour traçabilité ACPR
+            # Réf. : ACPR-2022-P-01 §4.3 — les critères de sélection du modèle
+            # doivent être documentés et justifiés dans l'audit trail.
+            _nom_profil_retenu = next(
+                (k for k, v in PROFILS_PONDERATION.items() if v == POIDS_CRITERES),
+                'personnalise'
+            )
             _audit_trail_a6 = {
                 'agent': 'A6_COMPARAISON', 'version': '1.0', 'audit_id': audit_id,
                 'timestamp': t_debut.isoformat(), 'branche': sous_branche,
@@ -304,6 +311,21 @@ class AgentA6Comparaison:
                 'modele_production': modele_production.get('modele','') if modele_production else '',
                 'ae_ratio': backtest.get('ae_ratio', 0),
                 'stabilite_wf': backtest.get('stabilite_wf',''),
+                # R5 — Traçabilité du profil de pondération (ACPR-2022-P-01 §4.3)
+                'profil_ponderation': _nom_profil_retenu,
+                'poids_criteres': {
+                    'gini':            POIDS_CRITERES['gini'],
+                    'stabilite':       POIDS_CRITERES['stabilite'],
+                    'interpretabilite': POIDS_CRITERES['interpretabilite'],
+                    'rmse':            POIDS_CRITERES['rmse'],
+                },
+                'note_score_global': (
+                    "Score composite [0,1] = combinaison pondérée de 4 dimensions "
+                    "normalisées (Gini, Stabilité, Interprétabilité, RMSE). "
+                    "N'est PAS un R² ni un Gini absolu. "
+                    "Profil retenu : " + _nom_profil_retenu + ". "
+                    "Réf. : ACPR-2022-P-01 §4.3."
+                ),
             }
 
             if self.verbose:
@@ -481,7 +503,16 @@ class AgentA6Comparaison:
             s_rmse = min_rmse / max(modele['rmse_test'], 1e-6)
             s_rmse = min(s_rmse, 1.0)
 
-            # Score global pondéré
+            # Score global composite — ATTENTION : ce score n'est PAS un R² ni un Gini.
+            # C'est une combinaison pondérée de 4 dimensions normalisées [0,1] :
+            #   · Gini       (discrimination)      : poids = 40%
+            #   · Stabilité  (walk-forward)        : poids = 30%
+            #   · Interpré.  (SHAP / lisibilité)   : poids = 20%
+            #   · RMSE       (précision absolue)   : poids = 10%
+            # Les poids dépendent du profil sélectionné (voir PROFILS_PONDERATION).
+            # Un score de 0.96 signifie 96% du score maximum possible dans ce profil,
+            # pas une performance absolue de 96%.
+            # Réf. : ACPR-2022-P-01 §4.3 — documentation des critères de sélection.
             score_global = (
                 POIDS_CRITERES['gini']             * s_gini
                 + POIDS_CRITERES['stabilite']      * s_stab
