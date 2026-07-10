@@ -54,6 +54,18 @@ except ImportError:
         TARIF_RAPPORT_OK = False
 
 try:
+    from .services.rapport_equipe_tarif import generer_rapport_equipe_tarification
+    RAPPORT_EQUIPE_OK = True
+except ImportError:
+    try:
+        from direction_non_vie.tarification.services.rapport_equipe_tarif import (
+            generer_rapport_equipe_tarification
+        )
+        RAPPORT_EQUIPE_OK = True
+    except ImportError:
+        RAPPORT_EQUIPE_OK = False
+
+try:
     from ..services.tarif_excel import export_excel_a6
     TARIF_EXCEL_OK = True
 except ImportError:
@@ -154,6 +166,7 @@ class AgentA6Comparaison:
     def run(
         self,
         result_a2:   Dict[str, Any],
+        result_a1:   Optional[Dict] = None,
         result_a3:   Optional[Dict] = None,
         result_a4:   Optional[Dict] = None,
         result_a5:   Optional[Dict] = None,
@@ -165,15 +178,30 @@ class AgentA6Comparaison:
         aide_decision:       bool = True,
         profil_valide_par:   Optional[str] = None,
         environnement:       str = 'developpement',
+        generer_rapport_equipe: bool = True,
+        formats_equipe:      Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Pipeline de comparaison et validation finale.
+
+        result_a1 : dict, optionnel
+            Résultat de l'agent A1 (qualité des données). Utilisé uniquement
+            pour enrichir le rapport consolidé équipe (§2 — Qualité données).
 
         profil_valide_par : str, optionnel
             Nom/identifiant de l'actuaire ayant validé le profil de
             pondération. Si None ET environnement='production', le statut
             est plafonné à AMBRE (gouvernance ACPR-2022-P-01 §4.3).
             Réf. : Recommandation P5 — Certification actuarielle v3.
+
+        generer_rapport_equipe : bool
+            Si True (défaut), génère le rapport consolidé équipe A1→A6
+            (dashboard de gouvernance). Réutilise le commentaire actuariel
+            déjà produit par A6 — n'effectue AUCUN nouvel appel Claude API.
+
+        formats_equipe : list, optionnel
+            Formats du rapport équipe : sous-liste de ['excel','html','word','pdf'].
+            Défaut : tous les 4 formats.
 
         environnement : str
             'developpement' (défaut) ou 'production'. Détermine si le
