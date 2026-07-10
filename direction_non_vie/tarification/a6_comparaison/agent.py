@@ -219,7 +219,7 @@ class AgentA6Comparaison:
 
             # ── ÉTAPE 4 : BACKTESTING TEMPOREL ───────────────────────────────
             logger.info("Étape 4/5 : Backtesting temporel")
-            backtest = self._backtesting_temporel(df, col_cible, col_expo)
+            backtest = self._backtesting_temporel(df, col_cible, col_expo, classement=classement)
             rapport['etapes'].append('backtesting')
             rapport['backtest'] = backtest
 
@@ -534,9 +534,10 @@ class AgentA6Comparaison:
 
     def _backtesting_temporel(
         self,
-        df:        pd.DataFrame,
-        col_cible: str,
-        col_expo:  str
+        df:         pd.DataFrame,
+        col_cible:  str,
+        col_expo:   str,
+        classement: list = None,
     ) -> Dict:
         """
         Backtesting temporel Walk-Forward + Test A/E global et par segment.
@@ -614,6 +615,7 @@ class AgentA6Comparaison:
 
         # Récupérer le meilleur modèle du classement pour la recalibration
         _meilleur = (classement[0] if classement else {})
+        classement = classement or []
         _modele_nom = _meilleur.get('modele', '')
         _peut_recalibrer = bool(_modele_nom and _modele_nom in self.modeles)
 
