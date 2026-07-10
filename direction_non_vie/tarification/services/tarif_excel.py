@@ -571,6 +571,11 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
              "«Le backtesting doit évaluer la robustesse prédictive du modèle "
              "sur des données hors-échantillon temporellement cohérentes.»",
              wrap=True); r += 1
+        _kpi(ws3, r, "Statut de la référence ci-dessus",
+             "⚠ Référence de travail — non vérifiée formellement par recherche "
+             "documentaire. À valider par la Commission Tarification IA France "
+             "avant toute diffusion externe (ACPR).",
+             statut="AMBRE", wrap=True); r += 1
         r += 1
         _section(ws3, r, "▶ WALK-FORWARD TEMPOREL"); r += 1
         if backtest.get('walk_forward'):
@@ -722,10 +727,17 @@ def export_excel_a1(result_a1: Dict, audit_id: str = "") -> bytes:
 
         # ── Onglet 2 : Qualité & Aberrants ────────────────────────────────────
         # Réf. : Commission Tarification IA France (2019) §4.2
+        # ⚠ Référence non vérifiée formellement (audit V4) — voir caveat KPI
+        # inséré en corps de feuille ci-dessous.
         ws2 = wb.create_sheet("2-Aberrants")
         _bandeau(ws2, "Valeurs Aberrantes", "Contrôles actuariels — IA France §4.2",
                  "A1 — Validation Qualité", aid, now)
         r = 7
+        _kpi(ws2, r, "Référence méthodologique (§4.2)",
+             "⚠ Référence de travail — non vérifiée formellement. "
+             "À valider par la Commission Tarification IA France avant "
+             "toute diffusion externe (ACPR).",
+             statut="AMBRE", wrap=True); r += 1
         _section(ws2, r, "▶ ANOMALIES DÉTECTÉES"); r += 1
         aberrants = qualite.get('aberrants', {})
         if aberrants:
@@ -843,10 +855,17 @@ def export_excel_a2(result_a2: Dict, audit_id: str = "") -> bytes:
 
         # ── Onglet 2 : Data Dictionnaire ───────────────────────────────────────
         # Réf. : ACPR-2022-P-01 §3.2 — traçabilité des variables dérivées
+        # ⚠ Référence non vérifiée formellement (audit V4) — voir caveat KPI
+        # inséré en corps de feuille ci-dessous.
         ws2 = wb.create_sheet("2-Data Dictionnaire")
         _bandeau(ws2, "Data Dictionnaire", "Traçabilité des variables dérivées — ACPR-2022-P-01 §3.2",
                  "A2 — Traçabilité", aid, now)
         r = 7
+        _kpi(ws2, r, "Référence méthodologique (§3.2)",
+             "⚠ Référence de travail — non vérifiée formellement. "
+             "À valider par la Commission Tarification IA France avant "
+             "toute diffusion externe (ACPR).",
+             statut="AMBRE", wrap=True); r += 1
         _section(ws2, r, "▶ VARIABLES DÉRIVÉES DOCUMENTÉES"); r += 1
         headers = ['Variable', 'Source', 'Opération', 'Usage', 'Justification']
         widths  = [26, 26, 34, 22, 50]
