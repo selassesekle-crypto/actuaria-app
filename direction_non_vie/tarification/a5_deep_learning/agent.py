@@ -531,20 +531,32 @@ class AgentA5DeepLearning:
             and df[c].std() > 0
         ]
 
+        # ── SPLIT TEMPOREL (R1 — Commission Tarification IA France 2019 §3.2.4) ──
+        # Même approche que A3/A4 : tri temporel avant extraction de X.
+        _col_temp = next(
+            (c for c in ['annee_souscription', 'date_souscription', 'annee', 'year']
+             if c in df.columns),
+            None
+        )
+        if _col_temp is not None:
+            df = df.sort_values(_col_temp).reset_index(drop=True)
+
         X = df[feature_names].fillna(0).values
         y = df[col_cible].values.astype(np.float32)
 
-        # Split 80/20 — AVANT la normalisation pour éviter tout data leakage
-        # Ref : Kaufman et al. (2012), ACM TKDD 6(4) — «Leakage in Data Mining»
-        # Le StandardScaler doit être ajusté uniquement sur X_train,
-        # puis appliqué à X_test sans recalcul des statistiques.
-        # Un fit_transform(X) avant le split contaminerait X_test avec les
-        # statistiques (moyenne, std) des données d'entraînement.
-        X_raw_train, X_raw_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.20, random_state=42
-        )
+        # Coupure temporelle (80/20) ou aléatoire si colonne absente
+        # Kaufman et al. (2012) : le split doit précéder toute normalisation.
+        if _col_temp is not None:
+            n_train = int(len(X) * 0.80)
+            X_raw_train, X_raw_test = X[:n_train],  X[n_train:]
+            y_train,     y_test     = y[:n_train],  y[n_train:]
+        else:
+            X_raw_train, X_raw_test, y_train, y_test = train_test_split(
+                X, y, test_size=0.20, random_state=42
+            )
 
         # Normalisation StandardScaler — ajusté sur train, appliqué sur test
+        # Réf. : Kaufman et al. (2012), ACM TKDD 6(4) — «Leakage in Data Mining»
         scaler = StandardScaler()
         X_train = scaler.fit_transform(X_raw_train).astype(np.float32)
         X_test  = scaler.transform(X_raw_test).astype(np.float32)
