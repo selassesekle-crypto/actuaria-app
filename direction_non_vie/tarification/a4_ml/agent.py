@@ -152,6 +152,30 @@ COLS_A_EXCLURE_ML = [
     # Colonnes object non encodées
 ]
 
+# Regroupement des modèles ML par famille méthodologique — audit V4 point #11.
+# Utilisé pour peupler la clé 'famille' du classement (absente jusqu'ici,
+# colonne vide dans l'export Excel A4 et dans le classement retourné par
+# _classer_modeles ; seul A6, dans son agrégat indépendant, la renseignait).
+FAMILLES_MODELES_ML = {
+    'gbm':             'Arbres / Boosting',
+    'xgboost':         'Arbres / Boosting',
+    'xgboost_optuna':  'Arbres / Boosting',
+    'xgboost_tweedie': 'Arbres / Boosting',
+    'lightgbm':        'Arbres / Boosting',
+    'catboost':        'Arbres / Boosting',
+    'random_forest':   'Arbres / Bagging',
+    'elasticnet':      'Linéaire régularisé',
+    'quantile_50':     'Régression quantile',
+    'quantile_90':     'Régression quantile',
+}
+
+
+def _famille_modele_ml(nom: str) -> str:
+    """Retourne la famille méthodologique d'un modèle ML, ou 'Autre ML' si
+    le nom n'est pas reconnu (garde-fou pour tout modèle ajouté ultérieurement
+    sans mise à jour immédiate de FAMILLES_MODELES_ML)."""
+    return FAMILLES_MODELES_ML.get(nom.lower(), 'Autre ML')
+
 # Hyperparamètres par défaut — calibrés pour les données actuarielles FR
 # Justification : ces paramètres sont des points de départ raisonnables
 # pour des portefeuilles de 50-100k contrats. Optuna peut les affiner.
