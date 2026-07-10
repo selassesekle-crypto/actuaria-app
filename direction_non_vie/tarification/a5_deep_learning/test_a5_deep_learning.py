@@ -134,6 +134,58 @@ class TestA5DeepLearning(unittest.TestCase):
               f"best={best.get('modele','?')} Gini={best.get('gini_test',0):.4f}")
 
 
+
+
+def _make_r_a2_avec_genre_numerique(n=400):
+    """Fixture avec une colonne 'sexe' numérique (0/1) — même cas concret
+    que le test équivalent d'A4 (audit V7 anomalie B1)."""
+    np.random.seed(7)
+    exposition = np.random.uniform(0.1, 1.0, n)
+    nb_sin     = np.random.poisson(0.08 * exposition, n).astype(float)
+    cout       = np.where(nb_sin > 0, np.random.gamma(2, 400, n), 0.0)
+    df = pd.DataFrame({
+        'nb_sinistres':         nb_sin,
+        'cout_total_sinistres': cout,
+        'exposition':           exposition,
+        'age':                  np.random.randint(18, 75, n).astype(float),
+        'bonus_malus':          np.random.uniform(50, 350, n),
+        'sexe':                 np.random.choice([0, 1], n),  # genre numérique
+        'prime_pure':           cout * exposition,
+    })
+    return {'success': True, 'dataframe': df, 'branche': 'auto',
+            'statut_rag': 'VERT', 'parametres': {}, 'rapport': {},
+            'commentaire': 'OK', 'audit_id': 'A2_TEST_GENRE', 'erreur': None}
+
+
+class TestA5FiltreGenre(unittest.TestCase):
+    """
+    Verrou anti-régression — audit V7 anomalie BLOQUANTE B1 (même trou
+    que A4 : A5 utilisait une logique de sélection de features identique,
+    sans aucun filtre genre, avant l'audit V7).
+    """
+
+    def test_genre_numerique_absent_des_features(self):
+        if not TORCH_OK:
+            self.skipTest("PyTorch non installé — filtre vérifié par lecture "
+                           "de code lors de l'audit V7 (logique identique à A4, "
+                           "elle-même vérifiée empiriquement).")
+        from direction_non_vie.tarification.a5_deep_learning.agent import AgentA5DeepLearning
+        agent = AgentA5DeepLearning(models_path='/tmp', audit_path='/tmp', verbose=False)
+        r_a2 = _make_r_a2_avec_genre_numerique(400)
+        r_a3 = _make_r_a3()
+        r = agent.run(result_a2=r_a2, result_a3=r_a3,
+                      n_epochs=3, batch_size=64, generer_graphiques=False)
+
+        self.assertTrue(r['success'], f"Erreur : {r.get('erreur')}")
+        features = r.get('rapport', {}).get('feature_names', [])
+        self.assertNotIn(
+            'sexe', features,
+            "RÉGRESSION BLOQUANTE (audit V7 B1) — la colonne 'sexe' "
+            "numérique est présente dans les features du modèle DL."
+        )
+        print(f"    B1-A5 Genre numérique filtré ✅ | features={features}")
+
+
 if __name__ == '__main__':
     print("="*65)
     print("  TESTS A5 DEEP LEARNING v1.0 — CANN + TabNet")
