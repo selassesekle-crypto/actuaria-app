@@ -135,6 +135,19 @@ COLS_A_EXCLURE = [
     'charge_annuelle_eur', 'charge_ij_annuelle_eur',
 ]
 
+# Filet de sécurité redondant — défense en profondeur (audit V4)
+# A2 exclut déjà 'sexe' de l'encodage pour les branches auto
+# (COLS_INTERDITES_PAR_BRANCHE), mais A3 sélectionne aussi des variables
+# de façon autonome (fallback L588 : toutes colonnes numériques si
+# sous-branche non reconnue ; auto-détection L606 : colonnes '_enc' non
+# listées). Si des données arrivent pré-encodées hors du pipeline A2
+# standard (ex. 'sexe' déjà numérique 0/1, ou 'sexe_enc' fourni par un
+# client), ce filet empêche leur entrée dans la matrice X du GLM.
+# Réf. : Arrêt CJUE C-236/09 (Test-Achats, 1er mars 2011).
+COLS_INTERDITES_PAR_BRANCHE_A3 = {
+    'auto': ['sexe', 'sexe_enc', 'genre', 'genre_enc', 'gender'],
+}
+
 # Seuil de significativité pour la sélection des variables
 # Justification : seuil classique en statistique (α = 5%)
 # Un coefficient avec p-value > 0.05 n'est pas significativement
