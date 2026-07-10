@@ -256,7 +256,11 @@ class AgentA6Comparaison:
                 )
 
             # Rapport final
-            statut_rag  = self._calculer_statut_rag(modele_production, classement)
+            statut_rag  = self._calculer_statut_rag(
+                modele_production, classement,
+                profil_valide_par=profil_valide_par,
+                environnement=environnement,
+            )
             commentaire = self._commenter_actuaire_senior(
                 classement, modele_production, sous_branche,
                 statut_rag, backtest
@@ -325,6 +329,11 @@ class AgentA6Comparaison:
                 'stabilite_wf': backtest.get('stabilite_wf',''),
                 # R5 — Traçabilité du profil de pondération (ACPR-2022-P-01 §4.3)
                 'profil_ponderation': _nom_profil_retenu,
+                'profil_valide_par':  profil_valide_par,
+                'environnement':      environnement,
+                'gouvernance_ok':     not (
+                    environnement == 'production' and profil_valide_par is None
+                ),
                 'poids_criteres': {
                     'gini':            POIDS_CRITERES['gini'],
                     'stabilite':       POIDS_CRITERES['stabilite'],
