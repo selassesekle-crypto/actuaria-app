@@ -603,8 +603,32 @@ class AgentA3GLM:
                 include=['int64', 'float64']
             ).columns.tolist()
 
+        # ── FILET DE SÉCURITÉ RÉGLEMENTAIRE (défense en profondeur, audit V4) ──
+        # Exclusion des colonnes interdites par sous-branche, en plus du
+        # filtrage déjà fait en amont par A2. Protège contre :
+        #  (a) le fallback ci-dessus qui prend TOUTES les colonnes numériques
+        #      si sous_branche n'est pas reconnue dans VARS_GLM ;
+        #  (b) des données arrivant pré-encodées hors du pipeline A2 standard.
+        # Réf. : Arrêt CJUE C-236/09 (Test-Achats, 1er mars 2011).
+        cols_interdites_actives = set()
+        for branche_key, cols_interdites in COLS_INTERDITES_PAR_BRANCHE_A3.items():
+            if branche_key in sous_branche or sous_branche in branche_key:
+                cols_interdites_actives.update(cols_interdites)
+        if cols_interdites_actives:
+            _avant = set(vars_prioritaires)
+            vars_prioritaires = [
+                v for v in vars_prioritaires if v not in cols_interdites_actives
+            ]
+            _supprimees = _avant & cols_interdites_actives
+            if _supprimees:
+                logger.warning(
+                    f"[CONFORMITE REGLEMENTAIRE] Variable(s) {sorted(_supprimees)} "
+                    f"exclue(s) de la sélection GLM pour sous-branche "
+                    f"'{sous_branche}'. Réf. : Arrêt CJUE C-236/09 (Test-Achats)."
+                )
+
         # Filtrage : variables qui existent ET sont numériques
-        cols_exclure = set(COLS_A_EXCLURE)
+        cols_exclure = set(COLS_A_EXCLURE) | cols_interdites_actives
         vars_pred = [
             v for v in vars_prioritaires
             if v in df.columns
