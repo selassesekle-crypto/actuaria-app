@@ -323,7 +323,10 @@ class AgentA4ML:
 
         calcul_shap : bool
             Si True, calcule les SHAP values sur le meilleur modèle.
-            Peut être désactivé pour accélérer si SHAP non installé.
+            AVERTISSEMENT : si SHAP n'est pas installé et calcul_shap=True,
+            le statut est plafonné à AMBRE (interprétabilité non vérifiée).
+            Réf. : ACPR-2022-P-01 §4.3 ; AI Act 2025 Art. 13.
+            Pour désactiver explicitement : calcul_shap=False.
         """
         t_debut      = datetime.now()
         audit_id     = f"A4_{t_debut.strftime('%Y%m%d_%H%M%S')}"
@@ -484,6 +487,21 @@ class AgentA4ML:
                 rapport['etapes'].append('shap')
             else:
                 rapport['etapes'].append('shap_skipped')
+                # ── Alerte SHAP absent (ACPR-2022-P-01 §4.3 / AI Act 2025 Art.13) ──
+                # Si l'utilisateur a demandé SHAP (calcul_shap=True) mais que
+                # le package n'est pas installé, on signale une alerte réglementaire.
+                # Un modèle ML sans interprétabilité vérifiée ne peut pas obtenir
+                # le statut VERT en contexte réglementaire.
+                _shap_requis_absent = calcul_shap and not SHAP_OK
+                if _shap_requis_absent:
+                    _msg_shap = (
+                        "[SHAP ABSENT] Interprétabilité non calculée. "
+                        "Statut plafonné à AMBRE. "
+                        "Installer : pip install shap. "
+                        "Réf. : ACPR-2022-P-01 §4.3 ; AI Act 2025 Art. 13."
+                    )
+                    rapport['alertes'].append(_msg_shap)
+                    logger.warning(_msg_shap)
 
             # ── GRAPHIQUES v3 ─────────────────────────────────────────────
             graphiques = {}
@@ -494,7 +512,11 @@ class AgentA4ML:
                 )
 
             # Commentaire actuaire sénior
-            statut_rag  = self._calculer_statut_rag(classement, result_a3)
+            statut_rag  = self._calculer_statut_rag(
+                classement, result_a3,
+                shap_absent=rapport.get('alertes', []) != []
+                and any('SHAP ABSENT' in a for a in rapport.get('alertes', []))
+            )
             commentaire = self._commenter_actuaire_senior(
                 classement, sous_branche, statut_rag,
                 result_a3, rapport
@@ -1209,15 +1231,20 @@ class AgentA4ML:
 
     def _calculer_statut_rag(
         self,
-        classement: List[Dict],
-        result_a3:  Optional[Dict]
+        classement:   List[Dict],
+        result_a3:    Optional[Dict],
+        shap_absent:  bool = False,
     ) -> str:
         """
         Statut RAG basé sur le meilleur Gini ML vs GLM.
 
         VERT  : Meilleur ML améliore le GLM de >5% ET pas d'overfitting
-        AMBRE : Amélioration < 5% OU overfitting détecté
+                ET interprétabilité SHAP disponible
+        AMBRE : Amélioration < 5% OU overfitting OU SHAP absent
         ROUGE : Aucun modèle ML ne bat le GLM
+
+        Réf. : ACPR-2022-P-01 §4.3 — interprétabilité obligatoire
+               AI Act 2025 Art. 13 — transparence systèmes IA haut risque
         """
         if not classement:
             return 'ROUGE'
@@ -1243,7 +1270,9 @@ class AgentA4ML:
         # Overfitting sur le meilleur modèle
         overfitting = classement_ml[0].get('overfit_alerte', False)
 
-        if amelioration > 0.05 and not overfitting:
+        # SHAP absent → plafond AMBRE (interprétabilité non vérifiée)
+        # Réf. : ACPR-2022-P-01 §4.3 ; AI Act 2025 Art. 13
+        if amelioration > 0.05 and not overfitting and not shap_absent:
             return 'VERT'
         elif amelioration > 0 or (amelioration <= 0 and meilleur_gini_ml > 0.10):
             return 'AMBRE'
