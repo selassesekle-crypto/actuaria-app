@@ -56,6 +56,7 @@ import logging
 import warnings
 from datetime import datetime
 from pathlib import Path
+import copy
 from typing import Dict, Any, List, Optional, Tuple
 
 import numpy as np
@@ -155,6 +156,16 @@ VARS_CATEGORIELLES = {
         'label':      ['csp', 'garanties_souscrites'],
         'ordinale':   [],
     },
+}
+
+# Colonnes interdites par sous-branche — conformité réglementaire
+# Arrêt CJUE C-236/09 du 1er mars 2011 (Test-Achats) :
+# Le genre (sexe) est interdit comme critère de tarification en RC Auto
+# depuis le 21 décembre 2012. Transposé en droit français par la loi
+# du 1er juillet 2012. Risque de sanction ACPR si variable présente
+# dans la matrice X d'un modèle de tarification RC Auto.
+COLS_INTERDITES_PAR_BRANCHE = {
+    'auto': ['sexe'],   # RC Auto : genre interdit — CJUE C-236/09
 }
 
 # Variables d'interaction à créer par sous-branche
@@ -804,7 +815,17 @@ class AgentA2Preprocessing:
         config_encod = None
         for key in VARS_CATEGORIELLES:
             if key in sous_branche or sous_branche in key:
-                config_encod = VARS_CATEGORIELLES[key]
+                # Copie profonde pour ne pas modifier le dict source
+                config_encod = copy.deepcopy(VARS_CATEGORIELLES[key])
+                # Appliquer les exclusions réglementaires par branche
+                # (ex : sexe interdit en RC Auto — Arrêt CJUE C-236/09)
+                for branche_key, cols_interdites in COLS_INTERDITES_PAR_BRANCHE.items():
+                    if branche_key in sous_branche or sous_branche in branche_key:
+                        for col_interdite in cols_interdites:
+                            if col_interdite in config_encod.get('one_hot', []):
+                                config_encod['one_hot'].remove(col_interdite)
+                                logger.warning(
+                                    f"[CONFORMITE REGLEMENTAIRE] Variable '{col_interdite}' "                                    f"exclue de la matrice X pour sous-branche "                                    f"'{sous_branche}'. "                                    f"Référence : Arrêt CJUE C-236/09 (Test-Achats) "                                    f"— genre interdit en tarification RC Auto "                                    f"depuis le 21/12/2012."                                )
                 break
 
         if config_encod is None:
