@@ -274,6 +274,18 @@ class AgentA1Ingestion:
                     )
                     logger.info(f"Suggestions mapping : {suggestions}")
 
+            # ── ÉTAPE 2bis : COERCITION DE TYPES ─────────────────────────────
+            # Force les colonnes numériques/date attendues à leur type correct.
+            # Sans cette étape, une colonne 'age' lue comme chaîne depuis un
+            # CSV mal formaté passerait silencieusement en aval.
+            # errors='coerce' transforme les valeurs non convertibles en NaN
+            # (détectées ensuite par le contrôle de complétude).
+            df, rapport_coercition = self._forcer_types(df)
+            rapport['etapes'].append('coercition_types')
+            rapport['coercition_types'] = rapport_coercition
+            if rapport_coercition.get('alertes'):
+                rapport['alertes'].extend(rapport_coercition['alertes'])
+
             # ── ÉTAPE 3 : VALIDATION QUALITÉ ─────────────────────────────────
             qualite = self._valider_qualite(df)
             rapport['etapes'].append('validation_qualite')
@@ -509,6 +521,80 @@ class AgentA1Ingestion:
     # ══════════════════════════════════════════════════════════════════════════
     # VALIDATION QUALITÉ
     # ══════════════════════════════════════════════════════════════════════════
+
+    def _forcer_types(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict]:
+        """
+        Coercition explicite des types de données.
+
+        Force les colonnes numériques et date attendues à leur type correct,
+        avec errors='coerce' : les valeurs non convertibles deviennent NaN
+        (détectées ensuite par le contrôle de complétude de _valider_qualite).
+
+        Sans cette étape, une colonne 'age' lue comme chaîne de caractères
+        depuis un CSV mal formaté (ex. "trente-cinq" au lieu de 35) passerait
+        silencieusement en aval, faussant tout contrôle de plage numérique.
+
+        Réf. : Recommandation P3 — Certification actuarielle v3 (10/07/2026).
+        """
+        rapport = {'colonnes_forcees': [], 'nb_valeurs_perdues': {}, 'alertes': []}
+
+        # Colonnes numériques attendues (fréquence, coût, exposition, âge...)
+        cols_numeriques = [
+            'age', 'age_conducteur', 'age_entree', 'bonus_malus',
+            'nb_sinistres', 'nb_sinistres_rc', 'nb_sinistres_dommages',
+            'cout_total_sinistres', 'cout_moyen_attendu',
+            'prime_pure', 'prime_commerciale', 'exposition',
+            'kilometrage_annuel', 'valeur_venale', 'ca_annuel_eur',
+            'puissance_fiscale', 'surface_m2',
+        ]
+        for col in cols_numeriques:
+            if col in df.columns and not pd.api.types.is_numeric_dtype(df[col]):
+                n_avant = df[col].notna().sum()
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+                n_apres = df[col].notna().sum()
+                n_perdu = n_avant - n_apres
+                rapport['colonnes_forcees'].append(col)
+                if n_perdu > 0:
+                    rapport['nb_valeurs_perdues'][col] = int(n_perdu)
+                    rapport['alertes'].append(
+                        f"Coercition '{col}' → numérique : {n_perdu} valeur(s) "
+                        f"non convertible(s) transformée(s) en NaN."
+                    )
+                    logger.warning(
+                        f"[Coercition types] '{col}' : {n_perdu} valeurs "
+                        f"perdues lors de la conversion numérique."
+                    )
+
+        # Colonnes date attendues
+        cols_date = [
+            'date_souscription', 'date_survenance',
+            'date_mouvement', 'date_evaluation',
+        ]
+        for col in cols_date:
+            if col in df.columns and not pd.api.types.is_datetime64_any_dtype(df[col]):
+                n_avant = df[col].notna().sum()
+                df[col] = pd.to_datetime(df[col], errors='coerce')
+                n_apres = df[col].notna().sum()
+                n_perdu = n_avant - n_apres
+                rapport['colonnes_forcees'].append(col)
+                if n_perdu > 0:
+                    rapport['nb_valeurs_perdues'][col] = int(n_perdu)
+                    rapport['alertes'].append(
+                        f"Coercition '{col}' → date : {n_perdu} valeur(s) "
+                        f"non convertible(s) transformée(s) en NaT."
+                    )
+                    logger.warning(
+                        f"[Coercition types] '{col}' : {n_perdu} valeurs "
+                        f"perdues lors de la conversion date."
+                    )
+
+        if rapport['colonnes_forcees']:
+            logger.info(
+                f"[Coercition types] {len(rapport['colonnes_forcees'])} "
+                f"colonne(s) forcée(s) : {rapport['colonnes_forcees']}"
+            )
+
+        return df, rapport
 
     def _valider_qualite(self, df: pd.DataFrame) -> Dict:
         """
