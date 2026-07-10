@@ -683,6 +683,22 @@ class AgentA4ML:
         if len(feature_names) == 0:
             raise ValueError("Aucune feature numérique disponible pour ML.")
 
+        # ── SPLIT TEMPOREL (R1 — Commission Tarification IA France 2019 §3.2.4) ──
+        # Tri du DataFrame avant extraction de X pour garantir que la coupure
+        # temporelle s'applique bien (les 80% anciens = train, 20% récents = test).
+        _col_temp = next(
+            (c for c in ['annee_souscription', 'date_souscription', 'annee', 'year']
+             if c in df.columns),
+            None
+        )
+        if _col_temp is not None:
+            df = df.sort_values(_col_temp).reset_index(drop=True)
+            logger.info(f"[R1] Tri temporel sur '{_col_temp}' avant split ML.")
+        else:
+            logger.warning(
+                "[R1] Colonne temporelle absente — fallback split aléatoire seed=42."
+            )
+
         X = df[feature_names].fillna(0).values
         y = df[col_cible].values
 
@@ -692,13 +708,20 @@ class AgentA4ML:
         else:
             weights = np.ones(len(df))
 
-        # Split train/test — même seed que A3 pour comparabilité
-        X_train, X_test, y_train, y_test, w_train, w_test = train_test_split(
-            X, y, weights,
-            test_size    = 0.20,
-            random_state = 42,
-            shuffle      = True
-        )
+        # Split temporel : coupure à 80% si tri temporel, sinon aléatoire
+        if _col_temp is not None:
+            n_train = int(len(X) * 0.80)
+            X_train, X_test   = X[:n_train],       X[n_train:]
+            y_train, y_test   = y[:n_train],       y[n_train:]
+            w_train, w_test   = weights[:n_train], weights[n_train:]
+            logger.info(
+                f"[R1] Split TEMPOREL ML : train={n_train:,} | test={len(X)-n_train:,}"
+            )
+        else:
+            X_train, X_test, y_train, y_test, w_train, w_test = train_test_split(
+                X, y, weights,
+                test_size=0.20, random_state=42, shuffle=True
+            )
 
         return X_train, X_test, y_train, y_test, w_train, w_test, feature_names
 
