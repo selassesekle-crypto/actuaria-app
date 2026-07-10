@@ -759,7 +759,8 @@ def export_word(
                 f"{d.get('relativite',0):.4f}",
                 f"{d.get('ic95_low',0):.4f}",
                 f"{d.get('ic95_high',0):.4f}",
-                f"{d.get('pvalue',0):.4f}",
+                # Audit V7 IMPORTANT : garde NA cohérent avec le HTML.
+                f"{d.get('pvalue'):.4f}" if 'pvalue' in d else '—',
                 'Oui' if d.get('significatif') else 'Non',
                 d.get('sens',''),
             ])
@@ -770,9 +771,10 @@ def export_word(
 
         # ── §3 : CLASSEMENT ML ───────────────────────────────────────────────
         _h('3. Classement ML — Grille Multicritères'); _sep()
+        # Audit V7 IMPORTANT : garde NA cohérent avec le HTML.
         rows_ml = [[str(i), m.get('modele',''), m.get('famille',''),
                     f"{m.get('gini_test',0):.4f}", f"{m.get('overfit_ratio',0):.3f}",
-                    f"{m.get('score_global',0):.4f}"]
+                    f"{m.get('score_global'):.4f}" if 'score_global' in m else '—']
                    for i, m in enumerate(cl4[:10], 1)]
         if rows_ml:
             _tbl(['#','Modèle','Famille','Gini test','Overfit','Score'],
@@ -828,13 +830,26 @@ def export_word(
         _h('6. Modèle de Production Retenu'); _sep()
         if prod:
             p_col = VR if statut=='VERT' else AR if statut=='AMBRE' else RgR
+            _score_txt = f"{prod.get('score_global'):.4f}" if 'score_global' in prod else '—'
             _tbl(['Attribut','Valeur','Attribut','Valeur'],
                  [['Modèle retenu', prod.get('modele','—'), 'Famille', prod.get('famille','—')],
-                  ['Score global', f"{prod.get('score_global',0):.4f}",
+                  ['Score global', _score_txt,
                    'Gini test', f"{prod.get('gini_test',0):.4f}"],
                   ['Overfit ratio', f"{prod.get('overfit_ratio',0):.3f}",
                    'Interprétabilité', f"{prod.get('interpretabilite',0):.2f}/1.0"]],
                  ws=[4.0,4.0,4.0,4.0])
+            # Audit V7 IMPORTANT #1 : qualification du score composite —
+            # normalisation RELATIVE au meilleur modèle du profil retenu
+            # (le meilleur vaut toujours ≈ 1,0000), PAS une performance
+            # absolue. Absente du livrable avant ce correctif (ne figurait
+            # que dans un commentaire de code, jamais vue par le client).
+            p = doc.add_paragraph()
+            _run(p,
+                 "✦ Le « Score global » est une normalisation relative au "
+                 "meilleur modèle du profil de pondération retenu (le "
+                 "meilleur modèle vaut toujours ≈ 1,0000) — ce n'est pas "
+                 "une mesure de performance absolue en pourcentage.",
+                 sz=9, italic=True)
         doc.add_page_break()
 
         # ── §7 : COMMENTAIRE ACTUARIEL ───────────────────────────────────────
