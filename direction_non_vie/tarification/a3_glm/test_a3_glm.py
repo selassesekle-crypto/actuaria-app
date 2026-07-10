@@ -133,6 +133,124 @@ class TestA3GLM(unittest.TestCase):
               f"nulle={m_p['deviance_nulle']:.2f} | pseudo-R²={m_p.get('pseudo_r2',0):.4f}")
 
 
+
+
+def _make_r_a2_credibilite(n_groupes=30, n_par_groupe=60):
+    """
+    Result A2 avec structure de groupe (id_flotte) et λ connu par groupe,
+    conçu spécifiquement pour valider numériquement la crédibilité
+    Bühlmann-Straub — audit V4 point #14 (aucun test dédié n'existait
+    avant ce correctif, alors que le point #5 de l'audit avait révélé
+    un bug quantifié de ~275× sur l'estimateur σ²_intra).
+
+    λ_i ~ Gamma(shape=4, scale=0.025) — hétérogénéité inter-groupes connue
+    et contrôlée par construction (moyenne théorique ≈ 0.10).
+    """
+    np.random.seed(7)
+    lambda_vrai = np.random.gamma(shape=4, scale=0.025, size=n_groupes)
+    flottes = [f'F{i:03d}' for i in range(n_groupes)]
+
+    id_flotte_list, expo_list, nb_sin_list = [], [], []
+    for f, lam in zip(flottes, lambda_vrai):
+        expo_f = np.random.uniform(0.3, 1.0, n_par_groupe)
+        nb_sin_f = np.random.poisson(lam * expo_f)
+        id_flotte_list.extend([f] * n_par_groupe)
+        expo_list.extend(expo_f)
+        nb_sin_list.extend(nb_sin_f)
+
+    n = n_groupes * n_par_groupe
+    nb_sin = np.array(nb_sin_list, dtype=float)
+    expo   = np.array(expo_list, dtype=float)
+    cout   = np.where(nb_sin > 0, np.random.gamma(2, 400, n), 0.0)
+
+    df = pd.DataFrame({
+        'nb_sinistres':         nb_sin,
+        'cout_total_sinistres': cout,
+        'exposition':           expo,
+        'age':                  np.random.randint(18, 75, n).astype(float),
+        'bonus_malus':          np.random.uniform(50, 350, n),
+        'prime_pure':           cout * expo,
+        'id_flotte':            id_flotte_list,
+    })
+    return {
+        'success': True, 'dataframe': df, 'branche': 'auto',
+        'statut_rag': 'VERT', 'parametres': {}, 'rapport': {},
+        'commentaire': 'OK', 'audit_id': 'A2_TEST_CRED', 'erreur': None,
+    }, lambda_vrai
+
+
+class TestA3CredibiliteBuhlmannStraub(unittest.TestCase):
+    """
+    Crédibilité Bühlmann-Straub — validation numérique à paramètres connus.
+
+    Audit V4 point #14 : ce test aurait immédiatement détecté le bug
+    corrigé au point #5 (σ²_intra sous-estimé d'un facteur ~275×,
+    provoquant Z≈1 même pour des petites flottes — annulant l'effet
+    protecteur de la crédibilité). Il protège contre toute régression
+    future sur ce mécanisme.
+
+    Réf. : Bühlmann & Gisler (2005), "A Course in Credibility Theory
+    and Its Applications", §4.2 (cas particulier Poisson-Bühlmann-Straub).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from direction_non_vie.tarification.a3_glm.agent import AgentA3GLM
+        cls.agent = AgentA3GLM(models_path='/tmp', audit_path='/tmp', verbose=False)
+        cls.r_a2, cls.lambda_vrai = _make_r_a2_credibilite(n_groupes=30, n_par_groupe=60)
+        cls.r = cls.agent.run(result_a2=cls.r_a2, generer_graphiques=False)
+
+    def test_credibilite(self):
+        r = self.r
+        self.assertTrue(r['success'], f"Erreur : {r.get('erreur')}")
+
+        cred = r.get('credibilite', {})
+        self.assertTrue(cred.get('appliquee'), "Crédibilité B-S non appliquée")
+        print(f"    CRED1 Appliquée ✅ | n_groupes={cred.get('n_groupes')}")
+
+        # CRED2 — σ²_intra doit être égal à μ_marché (Bühlmann-Gisler §4.2),
+        # PAS à une moyenne pondérée de (μ_obs_i/n_i) — c'était le bug V4.
+        mu_marche    = cred.get('mu_marche', 0)
+        sigma2_intra = cred.get('sigma2_intra', 0)
+        self.assertAlmostEqual(
+            sigma2_intra, mu_marche, delta=max(mu_marche * 0.01, 1e-6),
+            msg=(
+                f"σ²_intra ({sigma2_intra}) doit être ≈ μ_marché ({mu_marche}) "
+                "sous hypothèse Poisson — régression possible sur le fix V4 point #5."
+            )
+        )
+        print(f"    CRED2 σ²_intra=μ_marché ✅ | {sigma2_intra:.6f} ≈ {mu_marche:.6f}")
+
+        # CRED3 — k doit être strictement positif et d'un ordre de grandeur
+        # cohérent avec les paramètres simulés (garde-fou contre un nouveau
+        # bug dimensionnel qui donnerait un k proche de 0 ou aberrant).
+        k = cred.get('k', 0)
+        self.assertGreater(k, 0.1, f"k trop faible ({k}) — sur-crédibilisation suspecte")
+        self.assertLess(k, 1000, f"k excessif ({k}) — sous-crédibilisation suspecte")
+        print(f"    CRED3 k cohérent ✅ | k={k:.4f}")
+
+        # CRED4 — Z_moyen ne doit PAS être quasi-systématiquement proche de 1.
+        # C'était le symptôme concret du bug V4 : même les petites flottes
+        # recevaient un facteur de crédibilité ≈1 (aucune protection).
+        z_moyen = cred.get('z_moyen', 0)
+        self.assertLess(z_moyen, 0.95,
+            f"Z_moyen={z_moyen:.4f} trop proche de 1 — la crédibilité ne "
+            "ramène plus les groupes vers le marché (régression du bug V4 ?)")
+        self.assertGreater(z_moyen, 0.05,
+            f"Z_moyen={z_moyen:.4f} trop proche de 0 — sur-lissage suspect")
+        print(f"    CRED4 Z_moyen protecteur ✅ | Z_moyen={z_moyen:.4f}")
+
+        # CRED5 — Cohérence de la formule : k = σ²_intra / σ²_entre
+        # (la docstring était inversée avant le fix V4 point #5 — ce test
+        # vérifie la relation numérique réelle, pas seulement la docstring).
+        sigma2_entre = cred.get('sigma2_entre', 0)
+        if sigma2_entre > 1e-12:
+            k_recalcule = sigma2_intra / sigma2_entre
+            self.assertAlmostEqual(k, k_recalcule, delta=max(k * 0.01, 1e-6),
+                msg="k renvoyé incohérent avec σ²_intra/σ²_entre")
+        print(f"    CRED5 Formule k=σ²_intra/σ²_entre cohérente ✅")
+
+
 if __name__ == '__main__':
     print("="*65)
     print("  TESTS A3 GLM v1.0 — TARIFICATION POISSON/GAMMA/TWEEDIE")
