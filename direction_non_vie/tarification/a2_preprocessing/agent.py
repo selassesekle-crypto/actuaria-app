@@ -63,6 +63,16 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
 
+try:
+    from ..services.tarif_excel import export_excel_a2
+    TARIF_EXCEL_OK_A2 = True
+except ImportError:
+    try:
+        from direction_non_vie.tarification.services.tarif_excel import export_excel_a2
+        TARIF_EXCEL_OK_A2 = True
+    except ImportError:
+        TARIF_EXCEL_OK_A2 = False
+
 warnings.filterwarnings('ignore')
 
 # ── LOGGER ────────────────────────────────────────────────────────────────────
@@ -478,6 +488,29 @@ class AgentA2Preprocessing:
                     statut_rag, commentaire
                 )
 
+            # ── Audit trail — traçabilité ACPR ────────────────────────────────
+            _audit_trail_a2 = {
+                'agent': 'A2_PREPROCESSING', 'version': '1.0', 'audit_id': audit_id,
+                'timestamp': datetime.now().isoformat(), 'branche': sous_branche,
+                'statut_rag': statut_rag,
+                'nb_variables_derivees_tracees': len(DATA_DICTIONNAIRE),
+                'etapes': rapport.get('etapes', []),
+            }
+
+            _tmp_a2 = {
+                'success': True, 'statut_rag': statut_rag, 'branche': sous_branche,
+                'rapport': rapport, 'audit_id': audit_id, 'commentaire': commentaire,
+                'data_dictionnaire': DATA_DICTIONNAIRE,
+            }
+            _excel_a2 = b''
+            if TARIF_EXCEL_OK_A2:
+                try:
+                    _excel_a2 = export_excel_a2(_tmp_a2, audit_id)
+                    if _excel_a2:
+                        logger.info(f"[{audit_id}] Excel A2 : {len(_excel_a2):,} bytes")
+                except Exception as e_xl:
+                    logger.warning(f"Excel A2 échoué : {e_xl}")
+
             return {
                 'success':           True,
                 'dataframe':         df,
@@ -490,6 +523,10 @@ class AgentA2Preprocessing:
                 'erreur':            None,
                 # Traçabilité des variables dérivées — ACPR-2022-P-01 §3.2
                 'data_dictionnaire': DATA_DICTIONNAIRE,
+                'excel_bytes':       _excel_a2,
+                'word_bytes':        b'',
+                'pdf_bytes':         b'',
+                'audit_trail':       _audit_trail_a2,
             }
 
         except Exception as e:
