@@ -614,10 +614,13 @@ class AgentA6Comparaison:
         walk_forward = []
 
         # Récupérer le meilleur modèle du classement pour la recalibration
-        _meilleur = (classement[0] if classement else {})
+        # A6 ne stocke pas self.modeles (contrairement à A4) — on instancie
+        # un GBM sklearn comme proxy de recalibration sur chaque fenêtre.
+        # Ce modèle est recalibré from scratch sur chaque train temporel.
         classement = classement or []
-        _modele_nom = _meilleur.get('modele', '')
-        _peut_recalibrer = bool(_modele_nom and _modele_nom in self.modeles)
+        _meilleur = (classement[0] if classement else {})
+        _modele_nom = _meilleur.get('modele', 'gbm')
+        _peut_recalibrer = True  # Toujours possible via GBM sklearn
 
         for idx in range(1, len(annees)):
             annee_t = annees[idx]
@@ -634,8 +637,13 @@ class AgentA6Comparaison:
             gini_wf = None
             if _peut_recalibrer:
                 try:
-                    from sklearn.base import clone as sk_clone
-                    modele_wf = sk_clone(self.modeles[_modele_nom])
+                    from sklearn.ensemble import GradientBoostingRegressor
+                    # GBM sklearn comme proxy de recalibration walk-forward
+                    # (A6 ne stocke pas les objets modèles calibrés par A4)
+                    modele_wf = GradientBoostingRegressor(
+                        n_estimators=100, max_depth=3,
+                        learning_rate=0.05, random_state=42,
+                    )
                     # Préparer features numériques (même logique que _preparer_donnees)
                     _cols_num = [
                         c for c in df_tr.columns
