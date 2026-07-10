@@ -208,7 +208,28 @@ def _construire_contexte_tarif(
 # actuariels réglementaires. Réf. : GL EIOPA ORSA GL 56 (déterminisme des
 # processus de calcul S2) ; ACPR-2022-P-01 (auditabilité des sorties IA).
 # NE PAS utiliser temperature > 0 pour cet appel : un rapport S2 doit être
-# reproductible à l'identique sur les mêmes données d'entrée.
+# reproductible sur les mêmes données d'entrée.
+#
+# ⚠ PRÉCISION IMPORTANTE (audit V4, axe d'amélioration continue) :
+# cette reproductibilité est STATISTIQUE, pas garantie BIT-À-BIT.
+# `temperature=0` rend le tirage du prochain token déterministe (probabilité
+# maximale à chaque étape, pas d'échantillonnage aléatoire) et la version du
+# modèle est figée par une chaîne de caractères exacte ('claude-sonnet-5'),
+# mais l'inférence des grands modèles de langage n'offre pas de garantie
+# formelle de reproductibilité bit-exacte d'une exécution à l'autre :
+# des variations d'infrastructure côté fournisseur (répartition de charge
+# sur des accélérateurs différents, effets d'arrondi flottant liés au
+# batching concurrent d'autres requêtes, mises à jour internes du service
+# non annoncées par un changement de nom de modèle) peuvent en théorie
+# produire un texte différent sur les mêmes données d'entrée, même si en
+# pratique les écarts observés sont rarissimes et mineurs à `temperature=0`.
+#
+# Conséquence pour l'usage réglementaire : le commentaire narratif généré
+# doit être traité comme une AIDE À LA RÉDACTION, relue et validée par
+# l'actuaire responsable avant diffusion — jamais comme une sortie de
+# calcul déterministe au même titre que les modèles GLM/ML eux-mêmes
+# (qui, eux, sont reproductibles bit-à-bit sur la même version de
+# statsmodels/scikit-learn et les mêmes données).
 CLAUDE_MODEL_TARIF = 'claude-sonnet-5'
 CLAUDE_TEMPERATURE_TARIF = 0
 
