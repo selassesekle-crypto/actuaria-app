@@ -44,11 +44,11 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
 try:
-    from .services.tarif_rapport import generer_rapport_tarification
+    from .services.rapport_modeles_tarif import generer_rapport_tarification
     TARIF_RAPPORT_OK = True
 except ImportError:
     try:
-        from direction_non_vie.tarification.services.tarif_rapport import generer_rapport_tarification
+        from direction_non_vie.tarification.services.rapport_modeles_tarif import generer_rapport_tarification
         TARIF_RAPPORT_OK = True
     except ImportError:
         TARIF_RAPPORT_OK = False
