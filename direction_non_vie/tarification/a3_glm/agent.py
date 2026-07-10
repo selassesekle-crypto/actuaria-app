@@ -401,7 +401,8 @@ class AgentA3GLM:
             # Sur données synthétiques → lissage par voisinage catégoriel.
             # Réf. : Gelfand et al. (2010) Handbook of Spatial Statistics
             lissage_geo = self._lissage_geographique(
-                df, self.predictions, col_exposition
+                df, self.predictions, col_exposition,
+                col_freq=col_frequence,
             )
             rapport['etapes'].append(
                 'lissage_geographique'
@@ -2718,6 +2719,7 @@ class AgentA3GLM:
         df:          pd.DataFrame,
         predictions: Dict[str, Any],
         col_expo:    str,
+        col_freq:    str = 'nb_sinistres',
     ) -> Dict[str, Any]:
         """
         Lissage géographique des primes par zone.
@@ -2774,19 +2776,32 @@ class AgentA3GLM:
 
         # Récupérer les prédictions depuis le dict predictions (arrays numpy)
         # Priorité : prime_pure > prime_pure_tweedie > frequence_annuelle
+        # Fallback : fréquence brute observée (col_freq / exposition)
         _prime_arr = (
             predictions.get('prime_pure')
             or predictions.get('prime_pure_tweedie')
             or predictions.get('frequence_annuelle')
         )
+        _source_prime = 'prediction_glm'
         if _prime_arr is None or len(_prime_arr) == 0:
-            return {
-                'applique': False,
-                'raison': (
-                    "Prédictions GLM non disponibles pour le lissage "
-                    "(prime_pure, prime_pure_tweedie, frequence_annuelle absentes)."
-                ),
-            }
+            # Fallback actuariel : taux brut observé = nb_sinistres / exposition
+            # Utilisé quand le GLM est un modèle intercept seul (0 variables retenues)
+            if col_freq in df.columns and col_expo in df.columns:
+                _expo_safe = np.maximum(df[col_expo].values, 1e-6)
+                _prime_arr = df[col_freq].values / _expo_safe
+                _source_prime = 'taux_brut_observe'
+                logger.info(
+                    f"[Lissage géo] Fallback sur taux brut observé "
+                    f"(GLM intercept seul — 0 variables retenues)."
+                )
+            else:
+                return {
+                    'applique': False,
+                    'raison': (
+                        "Prédictions GLM et taux brut indisponibles. "
+                        f"Colonnes requises : '{col_freq}', '{col_expo}'."
+                    ),
+                }
 
         if col_expo not in df.columns:
             return {
@@ -2816,6 +2831,7 @@ class AgentA3GLM:
                 return {
                     'applique':    True,
                     'methode':     'krigeage_nadaraya_watson',
+                    'source_prime': _source_prime,
                     'col_geo':     'latitude+longitude',
                     'n_zones':     len(df),
                     'bandwidth_h': h,
@@ -2860,6 +2876,7 @@ class AgentA3GLM:
             return {
                 'applique':          True,
                 'methode':           'lissage_categoriel_proxy',
+                'source_prime':      _source_prime,
                 'col_geo':           col_geo,
                 'n_zones':           int(n_zones),
                 'mu_global':         round(mu_global, 6),
