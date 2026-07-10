@@ -729,8 +729,8 @@ def export_excel_a1(result_a1: Dict, audit_id: str = "") -> bytes:
         _section(ws2, r, "▶ ANOMALIES DÉTECTÉES"); r += 1
         aberrants = qualite.get('aberrants', {})
         if aberrants:
-            for col, txt in [(1, "Type d'anomalie", 30), (2, "Nombre de valeurs", 18)]:
-                _header(ws2, r, col, txt, width=txt if isinstance(txt, int) else 20)
+            for col, txt, w in [(1, "Type d'anomalie", 30), (2, "Nombre de valeurs", 18)]:
+                _header(ws2, r, col, txt, width=w)
             r += 1
             for cle, val in aberrants.items():
                 _cell(ws2, r, 1, cle.replace('_', ' ').title(), cf=NOIR, fill=GRIS_L)
