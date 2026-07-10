@@ -118,6 +118,63 @@ class TestA4ML(unittest.TestCase):
         print(f"    ST7 Scores ✅ | tous dans [0,1] | meilleur score={best.get('score_global',0):.4f}")
 
 
+
+
+def _make_r_a2_avec_genre_numerique(n=600):
+    """Fixture avec une colonne 'sexe' numérique (0/1) — le cas concret
+    prouvé par exécution lors de l'audit V7 (extraction SI réelle typique,
+    contrairement à une colonne déjà encodée/catégorielle)."""
+    np.random.seed(7)
+    exposition = np.random.uniform(0.1, 1.0, n)
+    nb_sin     = np.random.poisson(0.08 * exposition, n).astype(float)
+    cout       = np.where(nb_sin > 0, np.random.gamma(2, 400, n), 0.0)
+    df = pd.DataFrame({
+        'nb_sinistres':         nb_sin,
+        'cout_total_sinistres': cout,
+        'exposition':           exposition,
+        'age':                  np.random.randint(18, 75, n).astype(float),
+        'bonus_malus':          np.random.uniform(50, 350, n),
+        'sexe':                 np.random.choice([0, 1], n),  # genre numérique
+        'prime_pure':           cout * exposition,
+    })
+    return {'success': True, 'dataframe': df, 'branche': 'auto',
+            'statut_rag': 'VERT', 'parametres': {}, 'rapport': {},
+            'commentaire': 'OK', 'audit_id': 'A2_TEST_GENRE', 'erreur': None}
+
+
+class TestA4FiltreGenre(unittest.TestCase):
+    """
+    Verrou anti-régression — audit V7 anomalie BLOQUANTE B1.
+
+    A4 n'avait AUCUN filtre genre avant l'audit V7 : une colonne 'sexe'
+    numérique (0/1) — le format typique d'une extraction SI réelle,
+    par opposition à une colonne déjà catégorielle/encodée — atteignait
+    la matrice de features des modèles ML, potentiellement retenus en
+    production par A6. Prouvé par exécution lors de l'audit V7, corrigé
+    via le module partagé services/conformite_reglementaire.py.
+
+    Ce test verrouille la correction contre toute régression future.
+    """
+
+    def test_genre_numerique_absent_des_features(self):
+        from direction_non_vie.tarification.a4_ml.agent import AgentA4ML
+        agent = AgentA4ML(models_path='/tmp', audit_path='/tmp', verbose=False)
+        r_a2 = _make_r_a2_avec_genre_numerique(600)
+        r_a3 = _make_r_a3()
+        r = agent.run(result_a2=r_a2, result_a3=r_a3,
+                      calcul_shap=False, generer_graphiques=False)
+
+        self.assertTrue(r['success'], f"Erreur : {r.get('erreur')}")
+        features = r.get('rapport', {}).get('feature_names', [])
+        self.assertNotIn(
+            'sexe', features,
+            "RÉGRESSION BLOQUANTE (audit V7 B1) — la colonne 'sexe' "
+            "numérique est présente dans les features du modèle ML. "
+            "Vérifier l'appel à filtrer_genre() dans _preparer_donnees."
+        )
+        print(f"    B1-A4 Genre numérique filtré ✅ | features={features}")
+
+
 if __name__ == '__main__':
     print("="*65)
     print("  TESTS A4 ML v1.0 — MACHINE LEARNING ×8 MODÈLES")
