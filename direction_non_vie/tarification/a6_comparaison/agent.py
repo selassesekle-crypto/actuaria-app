@@ -160,12 +160,24 @@ class AgentA6Comparaison:
         col_cible:   str = 'prime_pure',
         col_expo:    str = 'exposition',
         profil:      str = 'equilibre',
-        poids_custom:       Optional[Dict] = None,
-        generer_graphiques: bool = True,
-        aide_decision:      bool = True,
+        poids_custom:        Optional[Dict] = None,
+        generer_graphiques:  bool = True,
+        aide_decision:       bool = True,
+        profil_valide_par:   Optional[str] = None,
+        environnement:       str = 'developpement',
     ) -> Dict[str, Any]:
         """
         Pipeline de comparaison et validation finale.
+
+        profil_valide_par : str, optionnel
+            Nom/identifiant de l'actuaire ayant validé le profil de
+            pondération. Si None ET environnement='production', le statut
+            est plafonné à AMBRE (gouvernance ACPR-2022-P-01 §4.3).
+            Réf. : Recommandation P5 — Certification actuarielle v3.
+
+        environnement : str
+            'developpement' (défaut) ou 'production'. Détermine si le
+            contrôle profil_valide_par est bloquant.
 
         ÉTAPES :
         1. Agrégation de tous les résultats A3/A4/A5
@@ -975,19 +987,40 @@ class AgentA6Comparaison:
 
     def _calculer_statut_rag(
         self,
-        modele_production: Dict,
-        classement:        List[Dict]
+        modele_production:  Dict,
+        classement:         List[Dict],
+        profil_valide_par:  Optional[str] = None,
+        environnement:      str = 'developpement',
     ) -> str:
         """
         Statut RAG basé sur le score global du modèle de production.
-        VERT  : score ≥ 0.60 ET gini ≥ 0.15
-        AMBRE : score ≥ 0.40 OU gini ≥ 0.05
+        VERT  : score ≥ 0.60 ET gini ≥ 0.15 ET gouvernance validée
+        AMBRE : score ≥ 0.40 OU gini ≥ 0.05 OU gouvernance non validée
         ROUGE : score < 0.40 ET gini < 0.05
+
+        GOUVERNANCE (ACPR-2022-P-01 §4.3 — Recommandation P5 v3) :
+        En environnement='production', le choix du profil de pondération
+        (Gini/Stabilité/Interprétabilité/RMSE) doit être validé par un
+        actuaire nommément identifié avant déploiement. Sans validation
+        (profil_valide_par=None), le statut est plafonné à AMBRE — le
+        modèle reste utilisable mais signale l'absence de validation
+        formelle du choix méthodologique de sélection.
         """
         score = modele_production.get('score_global', 0)
         gini  = modele_production.get('gini_test',   0)
 
-        if score >= 0.60 and gini >= 0.15:
+        # Gouvernance : blocage VERT si profil non validé en production
+        _gouvernance_ok = not (
+            environnement == 'production' and profil_valide_par is None
+        )
+        if not _gouvernance_ok:
+            logger.warning(
+                "[GOUVERNANCE] profil_valide_par=None en environnement "
+                "'production'. Statut plafonné à AMBRE. "
+                "Réf. : ACPR-2022-P-01 §4.3."
+            )
+
+        if score >= 0.60 and gini >= 0.15 and _gouvernance_ok:
             return 'VERT'
         elif score >= 0.40 or gini >= 0.05:
             return 'AMBRE'
