@@ -102,6 +102,15 @@ except ImportError:
     except ImportError:
         TARIF_EXCEL_OK = False
 
+# Module de conformité partagé (audit V7 BLOQUANT #1) — source unique de
+# COLS_GENRE_INTERDITES désormais aussi utilisée par A4 et A5.
+try:
+    from ..services.conformite_reglementaire import COLS_GENRE_INTERDITES
+except ImportError:
+    from direction_non_vie.tarification.services.conformite_reglementaire import (
+        COLS_GENRE_INTERDITES
+    )
+
 warnings.filterwarnings('ignore')
 
 # ── LOGGER ────────────────────────────────────────────────────────────────────
@@ -136,28 +145,12 @@ COLS_A_EXCLURE = [
     'charge_annuelle_eur', 'charge_ij_annuelle_eur',
 ]
 
-# Filet de sécurité redondant — défense en profondeur (audit V4)
-# A2 exclut déjà 'sexe' de l'encodage pour les branches auto
-# (COLS_INTERDITES_PAR_BRANCHE), mais A3 sélectionne aussi des variables
-# de façon autonome (fallback L588 : toutes colonnes numériques si
-# sous-branche non reconnue ; auto-détection L606 : colonnes '_enc' non
-# listées). Si des données arrivent pré-encodées hors du pipeline A2
-# standard (ex. 'sexe' déjà numérique 0/1, ou 'sexe_enc' fourni par un
-# client), ce filet empêche leur entrée dans la matrice X du GLM.
-#
-# INCONDITIONNEL (pas de scoping par sous_branche) : l'arrêt CJUE C-236/09
-# (Test-Achats, 1er mars 2011) porte sur la Directive 2004/113/CE et
-# s'applique aux primes et prestations d'assurance en général, pas
-# seulement à l'assurance auto. Un scoping par nom de sous-branche serait
-# lui-même une faille si la sous-branche est mal nommée ou non reconnue
-# (cas testé et confirmé lors de l'audit V4 : une sous-branche non
-# détectée par VARS_GLM déclenche le fallback L600 sans aucune protection
-# si le filtre est conditionné au nom de la branche). Le genre n'a par
-# ailleurs aucune justification actuarielle valide comme facteur de
-# tarification dans un GLM, quelle que soit la branche.
-COLS_GENRE_INTERDITES = [
-    'sexe', 'sexe_enc', 'genre', 'genre_enc', 'gender', 'gender_enc',
-]
+# COLS_GENRE_INTERDITES est désormais importée du module partagé
+# services/conformite_reglementaire.py (audit V7 BLOQUANT #1) — la même
+# liste est maintenant utilisée par A4 et A5, qui n'avaient auparavant
+# AUCUN filtre genre (fuite confirmée par exécution lors de l'audit V7 :
+# une colonne genre numérique atteignait la matrice de features des
+# modèles ML/DL, potentiellement retenus en production par A6).
 
 # Seuil de significativité pour la sélection des variables
 # Justification : seuil classique en statistique (α = 5%)
