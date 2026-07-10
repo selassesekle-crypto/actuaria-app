@@ -177,7 +177,7 @@ class AgentA6Comparaison:
         generer_graphiques:  bool = True,
         aide_decision:       bool = True,
         profil_valide_par:   Optional[str] = None,
-        environnement:       str = 'developpement',
+        environnement:       str = 'production',
         generer_rapport_equipe: bool = True,
         formats_equipe:      Optional[List[str]] = None,
     ) -> Dict[str, Any]:
@@ -204,8 +204,18 @@ class AgentA6Comparaison:
             Défaut : tous les 4 formats.
 
         environnement : str
-            'developpement' (défaut) ou 'production'. Détermine si le
-            contrôle profil_valide_par est bloquant.
+            'production' (DÉFAUT — fail-safe, audit V4 point #10) ou
+            'developpement'. Détermine si le contrôle profil_valide_par
+            est bloquant (plafond AMBRE si non validé).
+
+            Le défaut est volontairement 'production', pas 'developpement' :
+            un appelant qui OUBLIE de préciser l'environnement doit tomber
+            sur le comportement le plus restrictif, jamais l'inverse.
+            Réf. : Saltzer & Schroeder (1975), "The Protection of
+            Information in Computer Systems", principe des fail-safe
+            defaults. Pour un usage de développement/test sans le
+            plafonnement de gouvernance, préciser explicitement
+            environnement='developpement'.
 
         ÉTAPES :
         1. Agrégation de tous les résultats A3/A4/A5
