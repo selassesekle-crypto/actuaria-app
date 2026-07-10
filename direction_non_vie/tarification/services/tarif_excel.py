@@ -760,8 +760,8 @@ def export_excel_a1(result_a1: Dict, audit_id: str = "") -> bytes:
         if cols_forcees:
             _kpi(ws3, r, "Nb colonnes forcées", len(cols_forcees), fmt=FMT_NB); r += 1
             r += 1
-            for col, txt in [(1, "Colonne", 30), (2, "Valeurs perdues", 18)]:
-                _header(ws3, r, col, txt, width=20)
+            for col, txt, w in [(1, "Colonne", 30), (2, "Valeurs perdues", 18)]:
+                _header(ws3, r, col, txt, width=w)
             r += 1
             for col_nom in cols_forcees:
                 n_perdu = coercition.get('nb_valeurs_perdues', {}).get(col_nom, 0)
