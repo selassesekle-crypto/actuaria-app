@@ -824,10 +824,21 @@ class AgentA6Comparaison:
                         else None
                     )
                     # Recalibrer sur la fenêtre train
+                    #
+                    # Bug découvert lors des tests V7 (session de suivi de
+                    # l'audit) : un Pipeline sklearn (ex. ElasticNet, qui
+                    # est enveloppé dans Pipeline([StandardScaler, ElasticNet])
+                    # par la fabrique creer_modele_ml_pour_nom) lève ValueError
+                    # — PAS TypeError — quand sample_weight est passé
+                    # directement à Pipeline.fit() sans le préfixe
+                    # 'stepname__'. L'except TypeError seul laissait donc
+                    # cette ValueError remonter jusqu'au handler englobant,
+                    # qui annulait TOUTE la fenêtre (Gini inclus) au lieu de
+                    # simplement refaire un fit sans pondération.
                     if w_tr is not None:
                         try:
                             modele_wf.fit(X_tr, y_tr, sample_weight=w_tr)
-                        except TypeError:
+                        except (TypeError, ValueError):
                             modele_wf.fit(X_tr, y_tr)
                     else:
                         modele_wf.fit(X_tr, y_tr)
