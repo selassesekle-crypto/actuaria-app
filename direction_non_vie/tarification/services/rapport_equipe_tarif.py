@@ -785,6 +785,44 @@ def export_word_equipe(results: Dict[str, Dict], branche: str = '',
             row[1].text = res.get('audit_id','N/A')
             row[2].text = res.get('statut_rag','N/A')
 
+        # §7 — Commentaire actuariel de référence (A6)
+        # Réutilise le commentaire déjà généré par A6 — AUCUN nouvel appel API.
+        # Cohérence avec export_html_equipe (même contenu, formats différents).
+        doc.add_heading("§7 — Commentaire Actuariel de Référence (A6)", level=1).runs[0].font.color.rgb = NR
+        commentaire_a6 = r6.get('commentaire', '')
+        if commentaire_a6:
+            sections_n = re.split(r'(?=§\d+\s*[—\-–])', commentaire_a6.strip())
+            for sec in sections_n:
+                sec = sec.strip()
+                if not sec:
+                    continue
+                lignes = sec.split('\n', 1)
+                if lignes[0]:
+                    ph = doc.add_paragraph()
+                    rh = ph.add_run(lignes[0].strip())
+                    rh.bold = True; rh.font.size = Pt(10); rh.font.color.rgb = GR
+                if len(lignes) > 1:
+                    for ln in lignes[1].split('\n'):
+                        ln = ln.strip()
+                        if ln:
+                            pl = doc.add_paragraph()
+                            pl.paragraph_format.left_indent = Cm(0.3)
+                            rl = pl.add_run(ln)
+                            rl.font.size = Pt(9); rl.font.color.rgb = NR
+            p_note = doc.add_paragraph()
+            r_note = p_note.add_run(
+                "✦ Commentaire généré par A6 — voir le rapport détaillé A6 "
+                "(Word/HTML) pour l'analyse complète en 7 sections."
+            )
+            r_note.font.size = Pt(7); r_note.italic = True; r_note.font.color.rgb = GrR
+        else:
+            p_nc = doc.add_paragraph()
+            r_nc = p_nc.add_run(
+                "Commentaire non disponible — exécuter A6 avec "
+                "generer_graphiques=True pour le générer."
+            )
+            r_nc.italic = True; r_nc.font.size = Pt(9)
+
         doc.add_paragraph()
         footer = doc.add_paragraph()
         footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
