@@ -260,6 +260,73 @@ def export_excel_a3(result_a3: Dict, audit_id: str = "") -> bytes:
              ', '.join(result_a3.get('metriques',{}).get('poisson',{}).get('vars_retenues', [])),
              wrap=True); r += 1
 
+        # ── Onglet 6 : Crédibilité Bühlmann-Straub & Lissage Géographique ────
+        # Réf. : Bühlmann & Straub (1970) ASTIN Bulletin ; Gelfand et al. (2010)
+        cred = result_a3.get('credibilite', {})
+        geo  = result_a3.get('lissage_geo', {})
+        ws6 = wb.create_sheet("6-Crédibilité & Géo")
+        _bandeau(ws6, "Crédibilité & Lissage Géo", "Modules avancés P2 — Agent A3 GLM",
+                 "A3 — Bühlmann-Straub / Krigeage", aid, now)
+        r = 7
+        _section(ws6, r, "▶ CRÉDIBILITÉ BÜHLMANN-STRAUB"); r += 1
+        if cred.get('appliquee'):
+            _kpi(ws6, r, "Statut", "✓ Appliquée", statut="VERT"); r += 1
+            _kpi(ws6, r, "Colonne de groupe", cred.get('col_groupe', 'N/A')); r += 1
+            _kpi(ws6, r, "Nombre de groupes", cred.get('n_groupes', 0), fmt=FMT_NB); r += 1
+            _kpi(ws6, r, "Facteur k (σ²intra/σ²entre)", round(cred.get('k', 0), 4), fmt=FMT_DEC4); r += 1
+            _kpi(ws6, r, "Z moyen", round(cred.get('z_moyen', 0), 4), fmt=FMT_DEC4); r += 1
+            _kpi(ws6, r, "Z min — Z max",
+                 f"{cred.get('z_min',0):.4f} — {cred.get('z_max',0):.4f}"); r += 1
+            _kpi(ws6, r, "μ marché (taux global)", round(cred.get('mu_marche', 0), 6), fmt=FMT_DEC4); r += 1
+            _kpi(ws6, r, "σ²intra", round(cred.get('sigma2_intra', 0), 8), fmt=FMT_DEC4); r += 1
+            _kpi(ws6, r, "σ²entre", round(cred.get('sigma2_entre', 0), 8), fmt=FMT_DEC4); r += 1
+            r += 1
+            _section(ws6, r, "▶ PRIMES CRÉDIBILISÉES PAR GROUPE (top 20)"); r += 1
+            headers = ['Groupe', 'Exposition', 'Taux observé', 'Z', 'Prime crédibilisée']
+            for ci, h in enumerate(headers, 1):
+                _header(ws6, r, ci, h, width=20)
+            r += 1
+            for ligne in cred.get('primes_par_groupe', [])[:20]:
+                vals = list(ligne.values())
+                for ci, v in enumerate(vals, 1):
+                    _cell(ws6, r, ci, v, ah="center")
+                r += 1
+            r += 1
+            _kpi(ws6, r, "Référence", cred.get('reference', ''), wrap=True); r += 1
+        else:
+            _kpi(ws6, r, "Statut", "○ Non applicable", statut="AMBRE"); r += 1
+            _kpi(ws6, r, "Raison", cred.get('raison', 'N/A'), wrap=True); r += 1
+
+        r += 2
+        _section(ws6, r, "▶ LISSAGE GÉOGRAPHIQUE"); r += 1
+        if geo.get('applique'):
+            _kpi(ws6, r, "Statut", "✓ Appliqué", statut="VERT"); r += 1
+            _kpi(ws6, r, "Méthode", geo.get('methode', 'N/A')); r += 1
+            _kpi(ws6, r, "Colonne géographique", geo.get('col_geo', 'N/A')); r += 1
+            _kpi(ws6, r, "Nombre de zones", geo.get('n_zones', 0), fmt=FMT_NB); r += 1
+            _kpi(ws6, r, "Source de la prime", geo.get('source_prime', 'N/A')); r += 1
+            if 'mu_global' in geo:
+                _kpi(ws6, r, "μ global", round(geo.get('mu_global', 0), 6), fmt=FMT_DEC4); r += 1
+            if 'bandwidth_h' in geo:
+                _kpi(ws6, r, "Bandwidth h (krigeage)", geo.get('bandwidth_h', 0), fmt=FMT_DEC4); r += 1
+            r += 1
+            if geo.get('zones'):
+                _section(ws6, r, "▶ PRIMES LISSÉES PAR ZONE"); r += 1
+                headers = ['Zone', 'N obs', 'Exposition', 'Prime moy.', 'Z géo', 'Prime lissée']
+                for ci, h in enumerate(headers, 1):
+                    _header(ws6, r, ci, h, width=20)
+                r += 1
+                for ligne in geo.get('zones', [])[:20]:
+                    vals = list(ligne.values())
+                    for ci, v in enumerate(vals, 1):
+                        _cell(ws6, r, ci, v, ah="center")
+                    r += 1
+                r += 1
+            _kpi(ws6, r, "Référence", geo.get('reference', ''), wrap=True); r += 1
+        else:
+            _kpi(ws6, r, "Statut", "○ Non applicable", statut="AMBRE"); r += 1
+            _kpi(ws6, r, "Raison", geo.get('raison', 'N/A'), wrap=True); r += 1
+
         buf = io.BytesIO()
         wb.save(buf)
         return buf.getvalue()
