@@ -390,7 +390,8 @@ class AgentA4ML:
             logger.info(f"[{audit_id}] Étape 2/4 : Calibration ×8 modèles")
             self._calibrer_tous_modeles(
                 X_train, X_test, y_train, y_test,
-                w_train, w_test, rapport
+                w_train, w_test, rapport,
+                col_cible=col_cible,
             )
             rapport['etapes'].append('calibration')
 
@@ -731,13 +732,14 @@ class AgentA4ML:
 
     def _calibrer_tous_modeles(
         self,
-        X_train: np.ndarray,
-        X_test:  np.ndarray,
-        y_train: np.ndarray,
-        y_test:  np.ndarray,
-        w_train: np.ndarray,
-        w_test:  np.ndarray,
-        rapport: Dict
+        X_train:   np.ndarray,
+        X_test:    np.ndarray,
+        y_train:   np.ndarray,
+        y_test:    np.ndarray,
+        w_train:   np.ndarray,
+        w_test:    np.ndarray,
+        rapport:   Dict,
+        col_cible: str = 'nb_sinistres',
     ) -> None:
         """Calibre séquentiellement les 8 modèles ML."""
 
