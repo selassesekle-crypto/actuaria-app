@@ -516,7 +516,9 @@ class AgentA5DeepLearning:
 
             # ── CALCUL VALIDATION DL ──────────────────────────────────────────
             _val_dl_ = self._valider_hypotheses_dl(
-                classement, self.metriques, n_epochs if 'n_epochs' in dir() else 50)
+                classement, self.metriques,
+                n_epochs if 'n_epochs' in dir() else 50,
+                result_a3=result_a3)
             _gv_dl_  = self._graphiques_validation_dl(
                 _val_dl_, classement, self.metriques) if generer_graphiques else {}
 
@@ -1656,6 +1658,7 @@ class AgentA5DeepLearning:
         classement:  list,
         metriques:   Dict,
         n_epochs:    int = 0,
+        result_a3:   Optional[Dict] = None,
     ) -> Dict:
         """
         Validation complète des hypothèses Deep Learning actuariel.
