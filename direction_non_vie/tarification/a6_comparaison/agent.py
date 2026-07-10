@@ -273,46 +273,8 @@ class AgentA6Comparaison:
             # ── CALCUL VALIDATION SÉLECTION (avant Standard ActuarIA) ────────
             _val_sel_ = self._valider_selection(classement, modele_production, backtest)
 
-            # ── Standard ActuarIA — excel_bytes ──────────────────────────────
-            # _tmp_a6 inclut commentaire et courbes — disponibles à ce stade
-            _tmp_a6 = {
-                'success': True, 'statut_rag': statut_rag,
-                'classement': classement, 'modele_production': modele_production,
-                'backtest': backtest, 'branche': sous_branche,
-                'validation_selection': _val_sel_,
-                'fiche_decision': fiche_decision, 'audit_id': audit_id,
-                'commentaire': commentaire,   # P7 : commentaire actuaire inclus
-                'courbes': courbes,
-            }
-            _excel_a6 = b''
-            _word_a6  = b''
-            _html_a6  = b''
-            _pdf_a6   = b''
-            if TARIF_EXCEL_OK:
-                try:
-                    _excel_a6 = export_excel_a6(_tmp_a6, audit_id)
-                    if _excel_a6:
-                        logger.info(f"[{audit_id}] Excel A6 : {len(_excel_a6):,} bytes")
-                except Exception as e_xl:
-                    logger.warning(f"Excel A6 échoué : {e_xl}")
-            if TARIF_RAPPORT_OK:
-                try:
-                    _rapports = generer_rapport_tarification(
-                        result_a3=result_a3, result_a4=result_a4,
-                        result_a6=_tmp_a6,
-                        arrete=datetime.now().strftime('%d/%m/%Y'),
-                        audit_id=audit_id, formats=['html','word'],
-                    )
-                    _html_a6 = _rapports.get('html_bytes', b'')
-                    _word_a6 = _rapports.get('word_bytes', b'')
-                    if _word_a6:
-                        logger.info(f"[{audit_id}] Word A6 : {len(_word_a6):,} bytes")
-                    if _html_a6:
-                        logger.info(f"[{audit_id}] HTML A6 : {len(_html_a6):,} bytes")
-                except Exception as e_rp:
-                    logger.warning(f"Rapport A6 échoué : {e_rp}")
-
-            # Profil de pondération retenu — journalisé pour traçabilité ACPR
+            # ── Audit trail — construit AVANT _tmp_a6 pour être exposé dans ──
+            # les exports Excel/Word/HTML (gouvernance, profil, score composite).
             # Réf. : ACPR-2022-P-01 §4.3 — les critères de sélection du modèle
             # doivent être documentés et justifiés dans l'audit trail.
             _nom_profil_retenu = next(
@@ -348,6 +310,48 @@ class AgentA6Comparaison:
                     "Réf. : ACPR-2022-P-01 §4.3."
                 ),
             }
+
+            # ── Standard ActuarIA — excel_bytes ──────────────────────────────
+            # _tmp_a6 inclut commentaire, courbes ET audit_trail — disponibles ici
+            _tmp_a6 = {
+                'success': True, 'statut_rag': statut_rag,
+                'classement': classement, 'modele_production': modele_production,
+                'backtest': backtest, 'branche': sous_branche,
+                'validation_selection': _val_sel_,
+                'fiche_decision': fiche_decision, 'audit_id': audit_id,
+                'commentaire': commentaire,   # P7 : commentaire actuaire inclus
+                'courbes': courbes,
+                'audit_trail': _audit_trail_a6,  # Gouvernance exposée aux exports
+            }
+            _excel_a6 = b''
+            _word_a6  = b''
+            _html_a6  = b''
+            _pdf_a6   = b''
+            if TARIF_EXCEL_OK:
+                try:
+                    _excel_a6 = export_excel_a6(_tmp_a6, audit_id)
+                    if _excel_a6:
+                        logger.info(f"[{audit_id}] Excel A6 : {len(_excel_a6):,} bytes")
+                except Exception as e_xl:
+                    logger.warning(f"Excel A6 échoué : {e_xl}")
+            if TARIF_RAPPORT_OK:
+                try:
+                    _rapports = generer_rapport_tarification(
+                        result_a3=result_a3, result_a4=result_a4,
+                        result_a6=_tmp_a6,
+                        arrete=datetime.now().strftime('%d/%m/%Y'),
+                        audit_id=audit_id, formats=['html','word'],
+                    )
+                    _html_a6 = _rapports.get('html_bytes', b'')
+                    _word_a6 = _rapports.get('word_bytes', b'')
+                    if _word_a6:
+                        logger.info(f"[{audit_id}] Word A6 : {len(_word_a6):,} bytes")
+                    if _html_a6:
+                        logger.info(f"[{audit_id}] HTML A6 : {len(_html_a6):,} bytes")
+                except Exception as e_rp:
+                    logger.warning(f"Rapport A6 échoué : {e_rp}")
+
+
 
             if self.verbose:
                 self._afficher_rapport_console(
