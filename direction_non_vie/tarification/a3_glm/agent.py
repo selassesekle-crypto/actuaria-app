@@ -2722,6 +2722,9 @@ class AgentA3GLM:
         """
         Lissage géographique des primes par zone.
 
+        Le paramètre `predictions` est le dict retourné par _calculer_predictions,
+        avec les clés 'prime_pure', 'frequence_annuelle', 'prime_pure_tweedie'.
+
         Deux modes selon les données disponibles :
 
         Mode A — Krigeage spatial (données réelles avec GPS/IRIS) :
@@ -2769,17 +2772,20 @@ class AgentA3GLM:
                 ),
             }
 
-        prime_pure_col = 'prime_pure_pred'
-        if prime_pure_col not in df.columns:
-            # Utiliser les prédictions Poisson si prime_pure absente
-            prime_pure_col = next(
-                (k for k in ['lambda_freq_pred', 'freq_pred'] if k in df.columns),
-                None
-            )
-        if prime_pure_col is None:
+        # Récupérer les prédictions depuis le dict predictions (arrays numpy)
+        # Priorité : prime_pure > prime_pure_tweedie > frequence_annuelle
+        _prime_arr = (
+            predictions.get('prime_pure')
+            or predictions.get('prime_pure_tweedie')
+            or predictions.get('frequence_annuelle')
+        )
+        if _prime_arr is None or len(_prime_arr) == 0:
             return {
                 'applique': False,
-                'raison': "Prédictions GLM non disponibles pour le lissage.",
+                'raison': (
+                    "Prédictions GLM non disponibles pour le lissage "
+                    "(prime_pure, prime_pure_tweedie, frequence_annuelle absentes)."
+                ),
             }
 
         if col_expo not in df.columns:
@@ -2791,9 +2797,9 @@ class AgentA3GLM:
         # ── Mode A : Krigeage Nadaraya-Watson (GPS disponible) ───────────────
         if has_gps:
             try:
-                lats  = df['latitude'].values
-                lons  = df['longitude'].values
-                primes = df[prime_pure_col].values
+                lats   = df['latitude'].values
+                lons   = df['longitude'].values
+                primes = np.asarray(_prime_arr)
                 expos  = df[col_expo].values
 
                 # Bandwidth h = 1° ≈ 111 km (paramètre de lissage)
@@ -2829,10 +2835,13 @@ class AgentA3GLM:
         )
 
         try:
-            grp = df.groupby(col_geo).agg(
-                prime_moy = (prime_pure_col, 'mean'),
+            # Joindre _prime_arr au DataFrame pour l'agrégation
+            _df_geo = df[[col_geo, col_expo]].copy()
+            _df_geo['_prime'] = np.asarray(_prime_arr)
+            grp = _df_geo.groupby(col_geo).agg(
+                prime_moy = ('_prime', 'mean'),
                 expo_tot  = (col_expo, 'sum'),
-                n_obs     = (prime_pure_col, 'count'),
+                n_obs     = ('_prime', 'count'),
             ).reset_index()
 
             mu_global = float(
