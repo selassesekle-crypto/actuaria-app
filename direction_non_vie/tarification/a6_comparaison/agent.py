@@ -745,26 +745,40 @@ class AgentA6Comparaison:
         # couverte par cette fabrique sklearn, librairie manquante...),
         # on retombe sur un proxy GBM, mais le nom affiché le dit
         # explicitement — plus de nom trompeur.
+        # ── Extraction du nom réel de modèle (audit V4 reco #7 — bug résiduel) ──
+        # A6 préfixe systématiquement les noms dans son propre agrégat
+        # (_agreger_resultats) : 'gbm' devient 'ML_GBM', 'poisson' devient
+        # 'GLM_POISSON', etc. La fabrique creer_modele_ml_pour_nom attend le
+        # nom BRUT d'A4 ('gbm', pas 'ML_GBM') — sans cette extraction, le
+        # chemin de recalibration fidèle ne se déclenche JAMAIS en pratique
+        # (toujours un repli silencieux sur le proxy, malgré le correctif),
+        # ce qui a été détecté lors d'une relecture de contrôle post-fix.
+        # Seuls les modèles préfixés 'ML_' sont éligibles à cette fabrique
+        # sklearn — les 'GLM_*' et 'DL_*' tombent volontairement en proxy.
         classement = classement or []
         _meilleur = (classement[0] if classement else {})
-        _modele_nom = _meilleur.get('modele', 'gbm')
+        _modele_nom_brut = _meilleur.get('modele', 'ML_GBM')
+        if _modele_nom_brut.upper().startswith('ML_'):
+            _modele_nom = _modele_nom_brut[3:].lower()  # 'ML_GBM' → 'gbm'
+        else:
+            _modele_nom = _modele_nom_brut  # GLM_*/DL_* — non couvert, proxy direct
         _modele_reel_recalibre = None  # nom effectivement utilisé, jamais menteur
         _recalibration_est_fidele = False
 
         if CREER_MODELE_ML_OK:
             try:
                 _test_modele = creer_modele_ml_pour_nom(_modele_nom, col_cible)
-                _modele_reel_recalibre  = _modele_nom
+                _modele_reel_recalibre  = _modele_nom_brut
                 _recalibration_est_fidele = True
             except (ImportError, ValueError) as e_fabrique:
                 logger.warning(
-                    f"[Walk-forward] Impossible de recalibrer '{_modele_nom}' "
+                    f"[Walk-forward] Impossible de recalibrer '{_modele_nom_brut}' "
                     f"({e_fabrique}) — repli sur proxy GBM générique, "
                     f"étiqueté explicitement comme tel dans le rapport."
                 )
-                _modele_reel_recalibre = f"{_modele_nom} → proxy GBM ({e_fabrique})"
+                _modele_reel_recalibre = f"{_modele_nom_brut} → proxy GBM ({e_fabrique})"
         else:
-            _modele_reel_recalibre = f"{_modele_nom} → proxy GBM (fabrique A4 indisponible)"
+            _modele_reel_recalibre = f"{_modele_nom_brut} → proxy GBM (fabrique A4 indisponible)"
 
         for idx in range(1, len(annees)):
             annee_t = annees[idx]
