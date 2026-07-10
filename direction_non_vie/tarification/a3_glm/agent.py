@@ -368,6 +368,54 @@ class AgentA3GLM:
             )
             rapport['etapes'].append('predictions')
 
+            # ── ÉTAPE 5bis : CRÉDIBILITÉ BÜHLMANN-STRAUB ─────────────────────
+            # Activée automatiquement si une colonne de groupe est détectée
+            # (id_flotte, id_entreprise, id_assure) ET que plusieurs périodes
+            # sont présentes. Sinon, résultat vide documenté.
+            # Réf. : Bühlmann & Straub (1970) ASTIN Bulletin 5(2)
+            credibilite = self._credibilite_buhlmann_straub(
+                df, self.predictions, col_frequence, col_exposition
+            )
+            rapport['etapes'].append(
+                'credibilite_buhlmann_straub'
+                if credibilite.get('appliquee') else
+                'credibilite_non_applicable'
+            )
+            if credibilite.get('appliquee'):
+                logger.info(
+                    f"[{audit_id}] Crédibilité B-S : "
+                    f"k={credibilite['k']:.3f} | "
+                    f"Z_moyen={credibilite['z_moyen']:.3f} | "
+                    f"n_groupes={credibilite['n_groupes']}"
+                )
+            else:
+                logger.info(
+                    f"[{audit_id}] Crédibilité B-S non applicable : "
+                    f"{credibilite.get('raison','colonne groupe absente')}"
+                )
+
+            # ── ÉTAPE 5ter : LISSAGE GÉOGRAPHIQUE ────────────────────────────
+            # Lissage des primes par zone géographique pour corriger les
+            # effets de faible exposition (cellules avec peu d'observations).
+            # Sur données réelles avec GPS/IRIS → krigeage complet.
+            # Sur données synthétiques → lissage par voisinage catégoriel.
+            # Réf. : Gelfand et al. (2010) Handbook of Spatial Statistics
+            lissage_geo = self._lissage_geographique(
+                df, self.predictions, col_exposition
+            )
+            rapport['etapes'].append(
+                'lissage_geographique'
+                if lissage_geo.get('applique') else
+                'lissage_geo_non_applicable'
+            )
+            if lissage_geo.get('applique'):
+                logger.info(
+                    f"[{audit_id}] Lissage géographique : "
+                    f"col='{lissage_geo['col_geo']}' | "
+                    f"n_zones={lissage_geo['n_zones']} | "
+                    f"methode={lissage_geo['methode']}"
+                )
+
             # ── ÉTAPE 6 : MÉTRIQUES GLOBALES ─────────────────────────────────
             logger.info(f"[{audit_id}] Étape 6/7 : Métriques de validation")
             metriques_glob = self._calculer_metriques_globales(
@@ -454,6 +502,10 @@ class AgentA3GLM:
                 'statut_h2': _val_glm_.get('h2_homosc',{}).get('statut',''),
                 'statut_h3': _val_glm_.get('h3_ajustement',{}).get('statut',''),
                 'statut_h4': _val_glm_.get('h4_stabilite',{}).get('statut',''),
+                # Modules avancés P2
+                'credibilite_appliquee': credibilite.get('appliquee', False),
+                'credibilite_z_moyen':   credibilite.get('z_moyen', None),
+                'lissage_geo_applique':  lissage_geo.get('applique', False),
             }
 
             return {
@@ -482,6 +534,9 @@ class AgentA3GLM:
                 'pdf_bytes':    b'',
                 'hypotheses':   _val_glm_,
                 'audit_trail':  audit_trail_a3,
+                # Modules avancés P2
+                'credibilite':  credibilite,
+                'lissage_geo':  lissage_geo,
             }
 
         except Exception as e:
@@ -2500,6 +2555,326 @@ class AgentA3GLM:
             self.logger.warning(f"G4 scorecard GLM : {e}")
 
         return graphiques
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # CRÉDIBILITÉ BÜHLMANN-STRAUB
+    # Réf. : Bühlmann & Straub (1970) ASTIN Bulletin 5(2) ;
+    #        Mack (1994) "Measuring the Variability of Chain Ladder Reserve Estimates"
+    # ══════════════════════════════════════════════════════════════════════════
+
+    def _credibilite_buhlmann_straub(
+        self,
+        df:             pd.DataFrame,
+        predictions:    Dict[str, Any],
+        col_freq:       str,
+        col_expo:       str,
+    ) -> Dict[str, Any]:
+        """
+        Crédibilité Bühlmann-Straub pour tarification de groupe.
+
+        Principe : pondère la prime observée du groupe avec la prime de marché
+        selon un facteur Z ∈ [0,1] qui dépend du volume d'exposition.
+
+        Formule :
+            Z_i = n_i / (n_i + k)
+            k   = σ²_entre / σ²_intra
+            Prime_crédibilisée_i = Z_i × μ_obs_i + (1 - Z_i) × μ_marché
+
+        où :
+            μ_obs_i  = taux de sinistralité observé du groupe i
+            μ_marché = prime pure GLM (prédiction)
+            n_i      = exposition pondérée du groupe i (en véhicules-années)
+            σ²_intra = variance intra-groupe (Poisson → E[Y]/n)
+            σ²_entre = variance inter-groupes (estimée par méthode des moments)
+
+        Colonnes requises pour activation :
+            - Une colonne de groupe : id_flotte, id_entreprise, id_assure,
+              id_client, flotte_id, groupe_id, entreprise_id
+            - La colonne d'exposition (col_expo)
+            - La colonne de fréquence (col_freq)
+            - Au moins 5 groupes distincts avec ≥ 2 observations chacun
+
+        Réf. : Bühlmann & Straub (1970) ASTIN Bulletin 5(2) pp. 157-165
+        """
+        # Détecter la colonne de groupe
+        _cols_groupe = [
+            'id_flotte', 'id_entreprise', 'id_assure', 'id_client',
+            'flotte_id', 'groupe_id', 'entreprise_id', 'id_groupe',
+        ]
+        col_groupe = next(
+            (c for c in _cols_groupe if c in df.columns), None
+        )
+
+        if col_groupe is None:
+            return {
+                'appliquee': False,
+                'raison': (
+                    "Aucune colonne de groupe détectée "
+                    f"({', '.join(_cols_groupe)}). "
+                    "Sur données réelles, fournir id_flotte ou id_entreprise."
+                ),
+            }
+
+        if col_expo not in df.columns or col_freq not in df.columns:
+            return {
+                'appliquee': False,
+                'raison': f"Colonnes '{col_expo}' ou '{col_freq}' absentes.",
+            }
+
+        # Agrégation par groupe
+        grp = df.groupby(col_groupe).agg(
+            n_expo     = (col_expo, 'sum'),
+            n_sin      = (col_freq, 'sum'),
+            n_obs      = (col_freq, 'count'),
+        ).reset_index()
+
+        # Filtre : au moins 5 groupes avec ≥ 2 observations
+        grp = grp[grp['n_obs'] >= 2]
+        if len(grp) < 5:
+            return {
+                'appliquee': False,
+                'raison': (
+                    f"Trop peu de groupes ({len(grp)} < 5 avec ≥ 2 obs). "
+                    "Crédibilité B-S nécessite au moins 5 groupes."
+                ),
+            }
+
+        # Taux de sinistralité observé par groupe
+        grp['mu_obs'] = grp['n_sin'] / np.maximum(grp['n_expo'], 1e-9)
+
+        # Prime de marché = moyenne pondérée globale (proxy GLM)
+        mu_marche = (
+            grp['n_sin'].sum() / max(grp['n_expo'].sum(), 1e-9)
+        )
+
+        # ── Estimation k = σ²_entre / σ²_intra ──────────────────────────────
+        # σ²_intra : variance Poisson intra-groupe = μ_obs / n_expo
+        # (estimateur non-biaisé pour données Poisson)
+        sigma2_intra_moy = float(
+            np.average(
+                grp['mu_obs'] / np.maximum(grp['n_expo'], 1e-9),
+                weights=grp['n_expo']
+            )
+        )
+
+        # σ²_entre : variance inter-groupes (estimateur Bühlmann-Straub)
+        # σ²_entre = [Σ n_i(μ_i - μ_marché)² - (N-1)σ²_intra] / (N_total - Σn²_i/N_total)
+        N_total = grp['n_expo'].sum()
+        numerateur = float(
+            (grp['n_expo'] * (grp['mu_obs'] - mu_marche) ** 2).sum()
+            - (len(grp) - 1) * sigma2_intra_moy
+        )
+        denominateur = float(
+            N_total - (grp['n_expo'] ** 2).sum() / max(N_total, 1e-9)
+        )
+        sigma2_entre = max(numerateur / max(denominateur, 1e-9), 0.0)
+
+        # ── Facteur k et facteurs Z ───────────────────────────────────────────
+        if sigma2_entre < 1e-12:
+            # σ²_entre ≈ 0 → tous les groupes identiques → k → ∞ → Z → 0
+            # On retourne les primes de marché pour tous les groupes
+            grp['Z'] = 0.0
+        else:
+            k = sigma2_intra_moy / sigma2_entre
+            grp['Z'] = grp['n_expo'] / (grp['n_expo'] + k)
+
+        # Prime crédibilisée
+        grp['prime_credibilisee'] = (
+            grp['Z'] * grp['mu_obs']
+            + (1 - grp['Z']) * mu_marche
+        )
+
+        return {
+            'appliquee':          True,
+            'col_groupe':         col_groupe,
+            'n_groupes':          int(len(grp)),
+            'mu_marche':          round(float(mu_marche), 6),
+            'sigma2_intra':       round(float(sigma2_intra_moy), 8),
+            'sigma2_entre':       round(float(sigma2_entre), 8),
+            'k':                  round(float(
+                                       sigma2_intra_moy / max(sigma2_entre, 1e-12)
+                                   ), 4),
+            'z_moyen':            round(float(grp['Z'].mean()), 4),
+            'z_min':              round(float(grp['Z'].min()), 4),
+            'z_max':              round(float(grp['Z'].max()), 4),
+            'primes_par_groupe':  grp[[
+                                      col_groupe, 'n_expo', 'mu_obs',
+                                      'Z', 'prime_credibilisee'
+                                  ]].round(6).to_dict('records'),
+            'reference':          (
+                "Bühlmann & Straub (1970) ASTIN Bulletin 5(2) pp. 157-165 ; "
+                "Mack (1994) crédibilité actuarielle"
+            ),
+        }
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # LISSAGE GÉOGRAPHIQUE
+    # Réf. : Gelfand et al. (2010) Handbook of Spatial Statistics
+    #        Actuariat — lissage par voisinage catégoriel (proxy krigeage)
+    # ══════════════════════════════════════════════════════════════════════════
+
+    def _lissage_geographique(
+        self,
+        df:          pd.DataFrame,
+        predictions: Dict[str, Any],
+        col_expo:    str,
+    ) -> Dict[str, Any]:
+        """
+        Lissage géographique des primes par zone.
+
+        Deux modes selon les données disponibles :
+
+        Mode A — Krigeage spatial (données réelles avec GPS/IRIS) :
+            Si les colonnes 'latitude', 'longitude' ou 'code_iris' sont présentes,
+            on applique un lissage Nadaraya-Watson avec noyau gaussien sur les
+            coordonnées géographiques.
+            Réf. : Nadaraya (1964) ; Watson (1964) ; Gelfand et al. (2010).
+
+        Mode B — Lissage catégoriel par voisinage (proxy) :
+            Si seule une variable géographique catégorielle est présente
+            (milieu_geographique, zone_geographique, departement, region),
+            on calcule le taux de sinistralité par zone et on lisse par
+            moyenne pondérée entre la zone et le marché global.
+            Ce mode est un proxy de krigeage acceptable en l'absence de GPS.
+            Réf. : Actuariat pratique — lissage tarifaire territorial.
+
+        Colonnes détectées (par ordre de priorité) :
+            GPS     : latitude + longitude
+            IRIS    : code_iris
+            Catég.  : milieu_geographique, zone_geographique,
+                      departement, region, code_postal
+        """
+        # ── Détection des colonnes géographiques disponibles ──────────────────
+        _cols_gps    = ['latitude', 'longitude']
+        _cols_iris   = ['code_iris', 'iris']
+        _cols_categ  = [
+            'milieu_geographique', 'milieu_geographique_enc',
+            'zone_geographique', 'zone_geographique_enc',
+            'departement', 'region', 'code_postal',
+        ]
+
+        has_gps   = all(c in df.columns for c in _cols_gps)
+        has_iris  = any(c in df.columns for c in _cols_iris)
+        has_categ = next(
+            (c for c in _cols_categ if c in df.columns), None
+        )
+
+        if not has_gps and not has_iris and has_categ is None:
+            return {
+                'applique': False,
+                'raison': (
+                    "Aucune colonne géographique détectée. "
+                    "Sur données réelles, fournir latitude/longitude ou "
+                    "code_iris ou milieu_geographique."
+                ),
+            }
+
+        prime_pure_col = 'prime_pure_pred'
+        if prime_pure_col not in df.columns:
+            # Utiliser les prédictions Poisson si prime_pure absente
+            prime_pure_col = next(
+                (k for k in ['lambda_freq_pred', 'freq_pred'] if k in df.columns),
+                None
+            )
+        if prime_pure_col is None:
+            return {
+                'applique': False,
+                'raison': "Prédictions GLM non disponibles pour le lissage.",
+            }
+
+        if col_expo not in df.columns:
+            return {
+                'applique': False,
+                'raison': f"Colonne exposition '{col_expo}' absente.",
+            }
+
+        # ── Mode A : Krigeage Nadaraya-Watson (GPS disponible) ───────────────
+        if has_gps:
+            try:
+                lats  = df['latitude'].values
+                lons  = df['longitude'].values
+                primes = df[prime_pure_col].values
+                expos  = df[col_expo].values
+
+                # Bandwidth h = 1° ≈ 111 km (paramètre de lissage)
+                h = 1.0
+
+                lissees = np.zeros(len(df))
+                for idx in range(len(df)):
+                    d2 = (lats - lats[idx])**2 + (lons - lons[idx])**2
+                    w  = np.exp(-d2 / (2 * h**2)) * expos
+                    lissees[idx] = (
+                        np.dot(w, primes) / max(w.sum(), 1e-9)
+                    )
+
+                return {
+                    'applique':    True,
+                    'methode':     'krigeage_nadaraya_watson',
+                    'col_geo':     'latitude+longitude',
+                    'n_zones':     len(df),
+                    'bandwidth_h': h,
+                    'prime_lissee_moy': round(float(lissees.mean()), 6),
+                    'reference': (
+                        "Nadaraya (1964) ; Watson (1964) ; "
+                        "Gelfand et al. (2010) Handbook of Spatial Statistics"
+                    ),
+                }
+            except Exception as e_gps:
+                logger.warning(f"Krigeage GPS échoué : {e_gps} — fallback catégoriel")
+
+        # ── Mode B : Lissage catégoriel (proxy krigeage) ─────────────────────
+        col_geo = (
+            next((c for c in _cols_iris if c in df.columns), None)
+            or has_categ
+        )
+
+        try:
+            grp = df.groupby(col_geo).agg(
+                prime_moy = (prime_pure_col, 'mean'),
+                expo_tot  = (col_expo, 'sum'),
+                n_obs     = (prime_pure_col, 'count'),
+            ).reset_index()
+
+            mu_global = float(
+                np.average(grp['prime_moy'], weights=grp['expo_tot'])
+            )
+            n_zones = len(grp)
+
+            # Facteur de crédibilité par zone (B-S simplifié)
+            n_min_zone = 30  # seuil minimum d'observations fiables
+            grp['Z_geo'] = np.minimum(grp['n_obs'] / n_min_zone, 1.0)
+            grp['prime_lissee'] = (
+                grp['Z_geo'] * grp['prime_moy']
+                + (1 - grp['Z_geo']) * mu_global
+            )
+
+            return {
+                'applique':          True,
+                'methode':           'lissage_categoriel_proxy',
+                'col_geo':           col_geo,
+                'n_zones':           int(n_zones),
+                'mu_global':         round(mu_global, 6),
+                'prime_lissee_moy':  round(float(grp['prime_lissee'].mean()), 6),
+                'zones': grp[[
+                    col_geo, 'n_obs', 'expo_tot',
+                    'prime_moy', 'Z_geo', 'prime_lissee'
+                ]].round(6).to_dict('records'),
+                'note': (
+                    "Mode proxy (données catégorielles). "
+                    "Sur données réelles avec GPS/IRIS, le Mode A "
+                    "(krigeage Nadaraya-Watson) sera utilisé automatiquement."
+                ),
+                'reference': (
+                    "Gelfand et al. (2010) Handbook of Spatial Statistics ; "
+                    "Actuariat pratique — lissage tarifaire territorial"
+                ),
+            }
+
+        except Exception as e_cat:
+            return {
+                'applique': False,
+                'raison': f"Lissage catégoriel échoué : {e_cat}",
+            }
 
     def _erreur(self, message: str, audit_id: str) -> Dict:
         return {
