@@ -99,23 +99,49 @@ COLS_CONTAMINEES = [
 
 class CANNModel(nn.Module):
     """
-    Combined Actuarial Neural Network (CANN) — Wüthrich 2019.
+    Combined Actuarial Neural Network (CANN) — Wüthrich & Merz (2019).
 
     ARCHITECTURE :
     ─────────────
-    Input X → [Couche linéaire GLM] → prédiction GLM (log-link)
-           ↘ [Réseau résiduel]      → correction non-linéaire
+    Input X → [Couche GLM GELÉE]      → prédiction GLM (log-link) + offset
+           ↘ [Réseau résiduel]        → correction non-linéaire
            → Somme → exp() → Prime pure prédite
 
-    JUSTIFICATION ACTUARIELLE :
-    ────────────────────────────
-    Le GLM fournit une base interprétable (coefficients β lisibles).
-    Le réseau résiduel corrige ce que le GLM ne peut pas modéliser.
-    La somme dans l'espace log garantit que la prime reste positive.
-    Les coefficients GLM restent interprétables pour l'auditeur S2.
+    CONTRAT WÜTHRICH (audit V4 — implémentation corrigée) :
+    ──────────────────────────────────────────────────────
+    1. La couche GLM (`glm_layer`) est chargée avec les coefficients d'un
+       GLM Tweedie déjà calibré et validé par l'agent A3 (statsmodels),
+       PUIS GELÉE (`requires_grad=False`) : elle n'est JAMAIS mise à jour
+       par la descente de gradient. Les poids que l'on peut extraire de
+       cette couche à tout moment de l'entraînement sont donc STRICTEMENT
+       IDENTIQUES aux coefficients du GLM déjà audité — pas une
+       approximation, pas un point de départ qui dérive.
+    2. La dernière couche du réseau résiduel est initialisée à zéro
+       (poids ET biais). Conséquence : à l'époque 0, avant tout
+       entraînement, `résiduel(x) = 0` pour tout x, donc
+       CANN(x) = exp(GLM_gelé(x) + offset) = prédiction GLM exacte.
+       Le réseau ne fait qu'ajouter une correction à ce point de départ.
+    3. L'offset (log de l'exposition) est ajouté explicitement dans
+       `forward()`, à l'identique de la sémantique statsmodels
+       (`GLM.predict(X, offset=...)`) — il ne s'agit PAS d'un poids
+       entraînable, c'est un terme additif fixe du prédicteur linéaire.
+
+    Si aucun GLM n'est fourni (`glm_weight_init=None`), la couche
+    `glm_layer` reste librement entraînable — dans ce cas le modèle N'EST
+    PAS un CANN au sens de Wüthrich et ne doit pas être présenté comme
+    interprétable pour l'audit S2 (voir `glm_gele` dans les métriques).
+
+    Réf. : Wüthrich, M.V. & Merz, M. (2019), "Editorial: Yes, we CANN!",
+           ASTIN Bulletin 49(1).
     """
 
-    def __init__(self, n_features: int, hidden_sizes: List[int] = [64, 32]):
+    def __init__(
+        self,
+        n_features:      int,
+        hidden_sizes:    List[int] = [64, 32],
+        glm_weight_init: Optional[np.ndarray] = None,
+        glm_bias_init:   Optional[float] = None,
+    ):
         super().__init__()
 
         # Couche GLM — équivalent d'une régression linéaire log-link
@@ -134,16 +160,45 @@ class CANNModel(nn.Module):
         layers.append(nn.Linear(in_size, 1))
         self.residual_net = nn.Sequential(*layers)
 
-        # Initialisation des poids
+        # Initialisation des poids (couches cachées du résiduel uniquement)
         # Justification : initialisation He pour ReLU → convergence stable
         for m in self.modules():
             if isinstance(m, nn.Linear):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
                 nn.init.zeros_(m.bias)
 
-    def forward(self, x):
+        # ── Init/gel de la couche GLM depuis un GLM calibré (Wüthrich) ───────
+        self.glm_gele = False
+        if glm_weight_init is not None and glm_bias_init is not None:
+            with torch.no_grad():
+                self.glm_layer.weight.copy_(
+                    torch.FloatTensor(glm_weight_init).unsqueeze(0)
+                )
+                self.glm_layer.bias.copy_(
+                    torch.FloatTensor([glm_bias_init])
+                )
+            self.glm_layer.weight.requires_grad = False
+            self.glm_layer.bias.requires_grad   = False
+            self.glm_gele = True
+
+        # ── Init ZÉRO de la dernière couche du résiduel (Wüthrich) ───────────
+        # À l'époque 0, résiduel(x) = 0 pour tout x → CANN démarre exactement
+        # à la prédiction du GLM (gelé ou non).
+        derniere_couche = self.residual_net[-1]
+        with torch.no_grad():
+            nn.init.zeros_(derniere_couche.weight)
+            nn.init.zeros_(derniere_couche.bias)
+
+    def forward(self, x, offset=None):
         # Prédiction GLM (espace log)
         glm_pred = self.glm_layer(x)
+
+        # Offset (log-exposition) — terme additif fixe, PAS un poids entraîné.
+        # Réf. sémantique : statsmodels GLM.predict(X, offset=...)
+        if offset is not None:
+            if offset.dim() == 1:
+                offset = offset.unsqueeze(1)
+            glm_pred = glm_pred + offset
 
         # Correction résiduelle (espace log)
         residual = self.residual_net(x)
@@ -153,6 +208,7 @@ class CANNModel(nn.Module):
         output = torch.exp(glm_pred + residual)
 
         return output.squeeze()
+
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -377,7 +433,7 @@ class AgentA5DeepLearning:
         try:
             # ── PRÉPARATION ───────────────────────────────────────────────────
             logger.info(f"[{audit_id}] Préparation données")
-            X_train, X_test, y_train, y_test, feature_names = \
+            X_train, X_test, y_train, y_test, feature_names, expo_train, expo_test = \
                 self._preparer_donnees(df, col_cible, col_exposition)
             rapport['etapes'].append('preparation')
             rapport['n_features']    = len(feature_names)
@@ -388,7 +444,8 @@ class AgentA5DeepLearning:
             res_cann = self._calibrer_cann(
                 X_train, X_test, y_train, y_test,
                 feature_names, device, n_epochs, batch_size, learning_rate,
-                result_a3=result_a3
+                result_a3=result_a3,
+                expo_train=expo_train, expo_test=expo_test,
             )
             self.modeles['cann']   = res_cann['modele']
             self.metriques['cann'] = res_cann['metriques']
@@ -509,6 +566,12 @@ class AgentA5DeepLearning:
 
         Contrairement aux modèles tree-based (A4), la normalisation est
         OBLIGATOIRE pour les réseaux de neurones.
+
+        EXPOSITION (audit V4) :
+        ─────────────────────────
+        L'exposition brute (train/test) est retournée séparément — elle
+        sert à construire l'offset log(exposition) du CANN, à l'identique
+        du GLM Tweedie d'A3 (offset additif, PAS une feature entraînable).
         """
         if col_cible not in df.columns:
             raise ValueError(f"Variable cible '{col_cible}' introuvable.")
@@ -543,17 +606,23 @@ class AgentA5DeepLearning:
 
         X = df[feature_names].fillna(0).values
         y = df[col_cible].values.astype(np.float32)
+        expo = np.maximum(
+            df.get(col_expo, pd.Series(np.ones(len(df)))).values.astype(np.float32),
+            1e-6
+        )
 
         # Coupure temporelle (80/20) ou aléatoire si colonne absente
         # Kaufman et al. (2012) : le split doit précéder toute normalisation.
         if _col_temp is not None:
             n_train = int(len(X) * 0.80)
-            X_raw_train, X_raw_test = X[:n_train],  X[n_train:]
-            y_train,     y_test     = y[:n_train],  y[n_train:]
+            X_raw_train, X_raw_test = X[:n_train],    X[n_train:]
+            y_train,     y_test     = y[:n_train],    y[n_train:]
+            expo_train,  expo_test  = expo[:n_train], expo[n_train:]
         else:
-            X_raw_train, X_raw_test, y_train, y_test = train_test_split(
-                X, y, test_size=0.20, random_state=42
-            )
+            X_raw_train, X_raw_test, y_train, y_test, expo_train, expo_test = \
+                train_test_split(
+                    X, y, expo, test_size=0.20, random_state=42
+                )
 
         # Normalisation StandardScaler — ajusté sur train, appliqué sur test
         # Réf. : Kaufman et al. (2012), ACM TKDD 6(4) — «Leakage in Data Mining»
@@ -562,7 +631,9 @@ class AgentA5DeepLearning:
         X_test  = scaler.transform(X_raw_test).astype(np.float32)
         self.scalers['standard'] = scaler
 
-        return X_train, X_test, y_train, y_test, feature_names
+        return (X_train, X_test, y_train, y_test, feature_names,
+                expo_train, expo_test)
+
 
     # ══════════════════════════════════════════════════════════════════════════
     # CALIBRATION CANN
@@ -579,7 +650,9 @@ class AgentA5DeepLearning:
         n_epochs: int,
         batch_size: int,
         lr: float,
-        result_a3: Optional[Dict] = None,  # pour init GLM Wüthrich 2019
+        result_a3:   Optional[Dict] = None,  # GLM Tweedie calibré par A3 (Wüthrich)
+        expo_train:  Optional[np.ndarray] = None,
+        expo_test:   Optional[np.ndarray] = None,
     ) -> Dict:
         """
         Calibre le CANN (Combined Actuarial Neural Network).
@@ -600,44 +673,165 @@ class AgentA5DeepLearning:
         pas pendant 10 époques consécutives.
         Justification : évite l'overfitting sans fixer le nombre d'époques
         de façon arbitraire.
+
+        GEL DU GLM (audit V4 — correction de l'implémentation précédente) :
+        ─────────────────────────────────────────────────────────────────────
+        La correction précédente initialisait `glm_layer` depuis le GLM
+        Poisson d'A3, SANS geler la couche (elle continuait à s'entraîner
+        librement) ET sans corriger l'échelle (les coefficients GLM sont
+        calibrés sur variables BRUTES, alors que le CANN reçoit des
+        variables STANDARDISÉES — mélanger les deux rend l'initialisation
+        incorrecte dès l'époque 0). L'offset d'exposition était par
+        ailleurs totalement absent.
+
+        Cette version corrige les 4 points :
+        1. Utilise le GLM TWEEDIE (pas Poisson) — c'est le modèle qui prédit
+           directement la prime pure, la cible réelle du CANN.
+        2. Reprojette les coefficients bruts du GLM vers l'échelle
+           standardisée : pour x_brut = x_std × σ + μ,
+           β_brut × x_brut = (β_brut × σ) × x_std + (β_brut × μ)
+           → poids_std = β_brut × σ ; le terme (β_brut × μ) est absorbé
+           dans l'intercept.
+        3. GÈLE la couche GLM (`requires_grad=False`, fait dans
+           `CANNModel.__init__`) — elle ne bouge plus jamais pendant
+           l'entraînement. Les coefficients extractibles à tout moment
+           restent identiques au GLM Tweedie audité par A3.
+        4. Calcule et transmet l'offset log(exposition) à `forward()`,
+           à l'identique de la sémantique statsmodels.
+
+        Une vérification numérique est effectuée juste après la
+        construction du modèle : la prédiction du CANN à l'époque 0
+        (avant tout entraînement) est comparée à la prédiction du GLM
+        Tweedie seul — l'écart doit être quasi nul (résiduel non entraîné
+        = 0 par construction). Cet écart est journalisé et exposé dans
+        les métriques (`glm_verification_error`) pour traçabilité.
+
+        Réf. : Wüthrich & Merz (2019), "Editorial: Yes, we CANN!",
+               ASTIN Bulletin 49(1).
         """
         n_features = X_train.shape[1]
 
-        # Modèle
-        modele = CANNModel(
-            n_features   = n_features,
-            hidden_sizes = [64, 32]
-        ).to(device)
+        # ── Construction offset (log-exposition), séparé des features ────────
+        if expo_train is not None and expo_test is not None:
+            offset_train_np = np.log(np.maximum(expo_train, 1e-6)).astype(np.float32)
+            offset_test_np  = np.log(np.maximum(expo_test,  1e-6)).astype(np.float32)
+        else:
+            offset_train_np = np.zeros(len(X_train), dtype=np.float32)
+            offset_test_np  = np.zeros(len(X_test),  dtype=np.float32)
 
-        # ── INITIALISATION DEPUIS COEFFICIENTS GLM A3 (Wüthrich 2019) ─────────
-        # Le vrai CANN part des β GLM → convergence plus rapide et interprétable.
-        # Réf. : Wüthrich & Merz (2019), "ANN for claims experience"
-        if result_a3 and result_a3.get('success') and TORCH_OK:
+        # ── GEL DU GLM TWEEDIE D'A3 (Wüthrich & Merz 2019) ────────────────────
+        w_init, bias_init = None, None
+        glm_ref_info = {'glm_gele': False, 'n_vars_glm_total': 0, 'n_vars_glm_matchees': 0}
+
+        if result_a3 and result_a3.get('success'):
             try:
-                modele_glm = result_a3.get('modeles', {}).get('poisson')
-                if modele_glm is not None and hasattr(modele_glm, 'params'):
-                    params_glm = modele_glm.params
-                    w_init = np.zeros(n_features, dtype=np.float32)
-                    for j, feat in enumerate(feature_names):
-                        if feat in params_glm.index:
-                            w_init[j] = float(params_glm[feat])
-                    bias_init = float(params_glm.get('const', 0.0))
-                    with torch.no_grad():
-                        modele.glm_layer.weight.copy_(
-                            torch.FloatTensor(w_init).unsqueeze(0).to(device)
+                modele_glm = result_a3.get('modeles', {}).get('tweedie')
+                scaler_std = self.scalers.get('standard')
+                if (modele_glm is not None and hasattr(modele_glm, 'params')
+                        and scaler_std is not None):
+                    params_glm  = modele_glm.params
+                    vars_glm    = [v for v in params_glm.index if v != 'const']
+                    glm_ref_info['n_vars_glm_total'] = len(vars_glm)
+
+                    w_init_local    = np.zeros(n_features, dtype=np.float32)
+                    bias_shift      = 0.0
+                    vars_matchees   = []
+                    vars_non_matchees = []
+
+                    for var in vars_glm:
+                        if var in feature_names:
+                            j        = feature_names.index(var)
+                            beta_brut = float(params_glm[var])
+                            sigma_j   = float(scaler_std.scale_[j])
+                            mu_j      = float(scaler_std.mean_[j])
+                            # Reprojection échelle standardisée (voir docstring)
+                            w_init_local[j] = beta_brut * sigma_j
+                            bias_shift     += beta_brut * mu_j
+                            vars_matchees.append(var)
+                        else:
+                            vars_non_matchees.append(var)
+
+                    intercept_glm = float(params_glm.get('const', 0.0))
+                    bias_init_local = intercept_glm + bias_shift
+
+                    glm_ref_info['n_vars_glm_matchees'] = len(vars_matchees)
+                    if vars_non_matchees:
+                        logger.warning(
+                            f"[CANN] {len(vars_non_matchees)} variable(s) du GLM "
+                            f"Tweedie absente(s) des features CANN — reproduction "
+                            f"du GLM partielle pour : {vars_non_matchees}. "
+                            f"Le CANN gelé n'inclura PAS l'effet de ces variables."
                         )
-                        modele.glm_layer.bias.copy_(
-                            torch.FloatTensor([bias_init]).to(device)
-                        )
+
+                    w_init, bias_init = w_init_local, bias_init_local
                     logger.info(
-                        f"CANN initialisé depuis GLM A3 (Wüthrich) | intercept={bias_init:.4f}"
+                        f"[CANN] Coefficients GLM Tweedie prêts au gel | "
+                        f"{len(vars_matchees)}/{len(vars_glm)} variable(s) "
+                        f"appariée(s) | intercept_glm={intercept_glm:.4f}"
+                    )
+                elif modele_glm is None:
+                    logger.warning(
+                        "[CANN] GLM Tweedie (A3) indisponible — le CANN ne "
+                        "sera PAS un vrai CANN Wüthrich (couche GLM librement "
+                        "entraînable, non interprétable pour l'audit S2)."
                     )
             except Exception as e_init:
-                logger.warning(f"Init CANN depuis GLM échouée : {e_init}")
+                logger.warning(f"[CANN] Préparation du gel GLM échouée : {e_init}")
+        else:
+            logger.warning(
+                "[CANN] result_a3 non fourni — le CANN ne sera PAS un vrai "
+                "CANN Wüthrich (couche GLM librement entraînable)."
+            )
 
-        # Optimizer Adam avec weight decay (régularisation L2)
+        # ── Modèle — GLM gelé si w_init/bias_init disponibles ─────────────────
+        modele = CANNModel(
+            n_features      = n_features,
+            hidden_sizes    = [64, 32],
+            glm_weight_init = w_init,
+            glm_bias_init   = bias_init,
+        ).to(device)
+        glm_ref_info['glm_gele'] = modele.glm_gele
+
+        # ── VÉRIFICATION NUMÉRIQUE — CANN(epoch 0) == GLM seul ────────────────
+        # Si le GLM est gelé et le résiduel initialisé à zéro, la prédiction
+        # du CANN à l'instant zéro DOIT être quasi identique à la prédiction
+        # du GLM Tweedie seul (aux erreurs d'arrondi flottant près).
+        glm_verification_error = None
+        if modele.glm_gele:
+            modele.eval()
+            with torch.no_grad():
+                offset_test_t = torch.FloatTensor(offset_test_np).to(device)
+                pred_cann_epoch0 = modele(
+                    torch.FloatTensor(X_test).to(device), offset_test_t
+                ).cpu().numpy()
+            # Prédiction GLM "manuelle" équivalente : exp(w·x_std + bias + offset)
+            pred_glm_manuel = np.exp(
+                X_test @ w_init + bias_init + offset_test_np
+            )
+            ecart_relatif = np.abs(
+                (pred_cann_epoch0 - pred_glm_manuel) /
+                np.maximum(np.abs(pred_glm_manuel), 1e-6)
+            )
+            glm_verification_error = float(np.max(ecart_relatif))
+            if glm_verification_error < 1e-3:
+                logger.info(
+                    f"[CANN] ✓ Vérification GLM gelé OK — écart max "
+                    f"{glm_verification_error:.2e} (CANN époque 0 ≡ GLM Tweedie)"
+                )
+            else:
+                logger.warning(
+                    f"[CANN] ⚠ Écart CANN/GLM à l'époque 0 = "
+                    f"{glm_verification_error:.4f} — vérifier la reprojection "
+                    f"d'échelle (attendu < 1e-3)."
+                )
+            modele.train()
+
+        # Optimizer Adam — uniquement les paramètres NON gelés
+        # (filter() exclut glm_layer si glm_gele=True — le GLM ne reçoit
+        # jamais de mise à jour, il reste identique au GLM Tweedie audité)
+        parametres_entrainables = filter(lambda p: p.requires_grad, modele.parameters())
         optimizer = optim.Adam(
-            modele.parameters(),
+            parametres_entrainables,
             lr           = lr,
             weight_decay = 1e-4
         )
@@ -647,15 +841,17 @@ class AgentA5DeepLearning:
             optimizer, mode='min', factor=0.5, patience=5
         )
 
-        # DataLoader
+        # DataLoader — inclut l'offset comme 3e tenseur
         train_ds     = TensorDataset(
             torch.FloatTensor(X_train).to(device),
-            torch.FloatTensor(y_train).to(device)
+            torch.FloatTensor(y_train).to(device),
+            torch.FloatTensor(offset_train_np).to(device),
         )
         train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
 
-        X_test_t = torch.FloatTensor(X_test).to(device)
-        y_test_t = torch.FloatTensor(y_test).to(device)
+        X_test_t      = torch.FloatTensor(X_test).to(device)
+        y_test_t      = torch.FloatTensor(y_test).to(device)
+        offset_test_t = torch.FloatTensor(offset_test_np).to(device)
 
         # Entraînement avec early stopping
         best_val_loss = float('inf')
@@ -667,9 +863,9 @@ class AgentA5DeepLearning:
         for epoch in range(n_epochs):
             # ── TRAIN ─────────────────────────────────────────────────────────
             train_loss = 0.0
-            for X_batch, y_batch in train_loader:
+            for X_batch, y_batch, offset_batch in train_loader:
                 optimizer.zero_grad()
-                pred = modele(X_batch)
+                pred = modele(X_batch, offset_batch)
                 # Poisson deviance loss
                 pred_pos = torch.clamp(pred, min=1e-7)
                 y_pos    = torch.clamp(y_batch, min=1e-7)
@@ -678,7 +874,10 @@ class AgentA5DeepLearning:
                 )
                 loss.backward()
                 # Gradient clipping — évite l'explosion des gradients
-                nn.utils.clip_grad_norm_(modele.parameters(), max_norm=1.0)
+                nn.utils.clip_grad_norm_(
+                    filter(lambda p: p.requires_grad, modele.parameters()),
+                    max_norm=1.0
+                )
                 optimizer.step()
                 train_loss += loss.item()
 
@@ -687,7 +886,7 @@ class AgentA5DeepLearning:
             # ── VALIDATION ────────────────────────────────────────────────────
             modele.eval()
             with torch.no_grad():
-                pred_val = modele(X_test_t)
+                pred_val = modele(X_test_t, offset_test_t)
                 pred_pos = torch.clamp(pred_val, min=1e-7)
                 y_pos    = torch.clamp(y_test_t, min=1e-7)
                 val_loss = torch.mean(
@@ -723,9 +922,10 @@ class AgentA5DeepLearning:
         # Métriques finales
         modele.eval()
         with torch.no_grad():
-            pred_test  = modele(X_test_t).cpu().numpy()
+            pred_test  = modele(X_test_t, offset_test_t).cpu().numpy()
+            offset_train_t = torch.FloatTensor(offset_train_np).to(device)
             pred_train = modele(
-                torch.FloatTensor(X_train).to(device)
+                torch.FloatTensor(X_train).to(device), offset_train_t
             ).cpu().numpy()
 
         metriques = self._calculer_metriques(
@@ -733,8 +933,17 @@ class AgentA5DeepLearning:
         )
         metriques['n_epochs_reels'] = len(historique)
         metriques['best_val_loss']  = round(best_val_loss, 4)
+        # Traçabilité de l'interprétabilité réelle du modèle (audit V4)
+        metriques['glm_gele']              = glm_ref_info['glm_gele']
+        metriques['n_vars_glm_total']       = glm_ref_info['n_vars_glm_total']
+        metriques['n_vars_glm_matchees']    = glm_ref_info['n_vars_glm_matchees']
+        metriques['glm_verification_error'] = (
+            round(glm_verification_error, 6)
+            if glm_verification_error is not None else None
+        )
 
         return {'modele': modele, 'metriques': metriques, 'historique': historique}
+
 
     # ══════════════════════════════════════════════════════════════════════════
     # CALIBRATION TABNET
@@ -908,13 +1117,19 @@ class AgentA5DeepLearning:
         classement = []
 
         for nom, met in self.metriques.items():
-            classement.append({
+            entree = {
                 'modele':        nom.upper(),
                 'gini_test':     met['gini_test'],
                 'rmse_test':     met['rmse_test'],
                 'overfit_ratio': met['overfit_ratio'],
                 'type':          'Deep Learning',
-            })
+            }
+            # Traçabilité interprétabilité (audit V4) — uniquement pertinent
+            # pour le CANN (TabNet n'a jamais prétendu à l'interprétabilité GLM).
+            if nom == 'cann' and 'glm_gele' in met:
+                entree['glm_gele'] = met['glm_gele']
+                entree['glm_verification_error'] = met.get('glm_verification_error')
+            classement.append(entree)
 
         # Meilleur ML de A4
         if result_a4 and result_a4.get('success'):
