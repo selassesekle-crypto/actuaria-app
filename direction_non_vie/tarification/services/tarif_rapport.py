@@ -288,7 +288,13 @@ def export_html(
     bt6   = (result_a6 or {}).get('backtest', {})
     prod  = (result_a6 or {}).get('modele_production', {})
     val6  = (result_a6 or {}).get('validation_selection', {})
-    at    = (result_a3 or result_a4 or result_a6 or {}).get('audit_trail', {})
+    # Priorité A6 (le plus complet — gouvernance + WF recalibré) > A4 > A3
+    at    = (
+        (result_a6 or {}).get('audit_trail')
+        or (result_a4 or {}).get('audit_trail')
+        or (result_a3 or {}).get('audit_trail')
+        or {}
+    )
 
     def _row(cells, header=False):
         tag = 'th' if header else 'td'
@@ -605,7 +611,13 @@ def export_word(
         hyp4   = (result_a4 or {}).get('hypotheses', {})
         bt6    = (result_a6 or {}).get('backtest', {})
         prod   = (result_a6 or {}).get('modele_production', {})
-        at     = (result_a3 or result_a4 or result_a6 or {}).get('audit_trail', {})
+        # Priorité A6 (le plus complet — gouvernance + WF recalibré) > A4 > A3
+        at     = (
+            (result_a6 or {}).get('audit_trail')
+            or (result_a4 or {}).get('audit_trail')
+            or (result_a3 or {}).get('audit_trail')
+            or {}
+        )
 
         narration, n_src = _narration_claude(result_a3, result_a4, result_a6, branche, arr)
 
