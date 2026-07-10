@@ -825,7 +825,13 @@ class AgentA2Preprocessing:
                             if col_interdite in config_encod.get('one_hot', []):
                                 config_encod['one_hot'].remove(col_interdite)
                                 logger.warning(
-                                    f"[CONFORMITE REGLEMENTAIRE] Variable '{col_interdite}' "                                    f"exclue de la matrice X pour sous-branche "                                    f"'{sous_branche}'. "                                    f"Référence : Arrêt CJUE C-236/09 (Test-Achats) "                                    f"— genre interdit en tarification RC Auto "                                    f"depuis le 21/12/2012."                                )
+                                    f"[CONFORMITE REGLEMENTAIRE] "
+                                    f"Variable '{col_interdite}' exclue de la "
+                                    f"matrice X pour sous-branche '{sous_branche}'. "
+                                    f"Réf. : Arrêt CJUE C-236/09 (Test-Achats) "
+                                    f"— genre interdit en tarification RC Auto "
+                                    f"depuis le 21/12/2012."
+                                )
                 break
 
         if config_encod is None:
