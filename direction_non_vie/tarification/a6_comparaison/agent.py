@@ -732,14 +732,39 @@ class AgentA6Comparaison:
         #         sur des données hors-échantillon temporellement cohérentes.»
         walk_forward = []
 
-        # Récupérer le meilleur modèle du classement pour la recalibration
-        # A6 ne stocke pas self.modeles (contrairement à A4) — on instancie
-        # un GBM sklearn comme proxy de recalibration sur chaque fenêtre.
-        # Ce modèle est recalibré from scratch sur chaque train temporel.
+        # ── Recalibration sur le MODÈLE RÉELLEMENT RETENU (audit V4 reco #7) ──
+        # AVANT : un GradientBoostingRegressor générique était TOUJOURS
+        # instancié, quel que soit le modèle affiché dans 'modele_recalibre'
+        # — le rapport pouvait donc afficher "elasticnet" alors qu'un GBM
+        # avait réellement tourné en coulisses. Trompeur pour l'actuaire
+        # lecteur, qui croit valider la stabilité du modèle sélectionné.
+        #
+        # APRÈS : on tente de recalibrer le VRAI type de modèle retenu via
+        # creer_modele_ml_pour_nom (fabrique partagée avec A4 — mêmes
+        # hyperparamètres). Si ce n'est pas possible (référence GLM non
+        # couverte par cette fabrique sklearn, librairie manquante...),
+        # on retombe sur un proxy GBM, mais le nom affiché le dit
+        # explicitement — plus de nom trompeur.
         classement = classement or []
         _meilleur = (classement[0] if classement else {})
         _modele_nom = _meilleur.get('modele', 'gbm')
-        _peut_recalibrer = True  # Toujours possible via GBM sklearn
+        _modele_reel_recalibre = None  # nom effectivement utilisé, jamais menteur
+        _recalibration_est_fidele = False
+
+        if CREER_MODELE_ML_OK:
+            try:
+                _test_modele = creer_modele_ml_pour_nom(_modele_nom, col_cible)
+                _modele_reel_recalibre  = _modele_nom
+                _recalibration_est_fidele = True
+            except (ImportError, ValueError) as e_fabrique:
+                logger.warning(
+                    f"[Walk-forward] Impossible de recalibrer '{_modele_nom}' "
+                    f"({e_fabrique}) — repli sur proxy GBM générique, "
+                    f"étiqueté explicitement comme tel dans le rapport."
+                )
+                _modele_reel_recalibre = f"{_modele_nom} → proxy GBM ({e_fabrique})"
+        else:
+            _modele_reel_recalibre = f"{_modele_nom} → proxy GBM (fabrique A4 indisponible)"
 
         for idx in range(1, len(annees)):
             annee_t = annees[idx]
@@ -754,55 +779,57 @@ class AgentA6Comparaison:
 
             # ── Recalibration + Gini sur cette fenêtre ────────────────────────
             gini_wf = None
-            if _peut_recalibrer:
-                try:
+            try:
+                # Une instance FRAÎCHE à chaque fenêtre — jamais réentraînée
+                # sur l'état d'une fenêtre précédente.
+                if _recalibration_est_fidele:
+                    modele_wf = creer_modele_ml_pour_nom(_modele_nom, col_cible)
+                else:
                     from sklearn.ensemble import GradientBoostingRegressor
-                    # GBM sklearn comme proxy de recalibration walk-forward
-                    # (A6 ne stocke pas les objets modèles calibrés par A4)
                     modele_wf = GradientBoostingRegressor(
                         n_estimators=100, max_depth=3,
                         learning_rate=0.05, random_state=42,
                     )
-                    # Préparer features numériques (même logique que _preparer_donnees)
-                    _cols_num = [
-                        c for c in df_tr.columns
-                        if df_tr[c].dtype in ['int64', 'float64', 'int32', 'float32']
-                        and c != col_cible
-                        and df_tr[c].isnull().sum() == 0
-                        and df_tr[c].std() > 0
-                    ]
-                    if _cols_num and col_cible in df_tr.columns:
-                        X_tr = df_tr[_cols_num].fillna(0).values
-                        y_tr = df_tr[col_cible].values
-                        X_te = df_te[_cols_num].fillna(0).values
-                        y_te = df_te[col_cible].values
-                        w_tr = (
-                            df_tr[col_expo].values
-                            if col_expo in df_tr.columns
-                            else None
-                        )
-                        # Recalibrer sur la fenêtre train
-                        if w_tr is not None:
-                            try:
-                                modele_wf.fit(X_tr, y_tr, sample_weight=w_tr)
-                            except TypeError:
-                                modele_wf.fit(X_tr, y_tr)
-                        else:
+                # Préparer features numériques (même logique que _preparer_donnees)
+                _cols_num = [
+                    c for c in df_tr.columns
+                    if df_tr[c].dtype in ['int64', 'float64', 'int32', 'float32']
+                    and c != col_cible
+                    and df_tr[c].isnull().sum() == 0
+                    and df_tr[c].std() > 0
+                ]
+                if _cols_num and col_cible in df_tr.columns:
+                    X_tr = df_tr[_cols_num].fillna(0).values
+                    y_tr = df_tr[col_cible].values
+                    X_te = df_te[_cols_num].fillna(0).values
+                    y_te = df_te[col_cible].values
+                    w_tr = (
+                        df_tr[col_expo].values
+                        if col_expo in df_tr.columns
+                        else None
+                    )
+                    # Recalibrer sur la fenêtre train
+                    if w_tr is not None:
+                        try:
+                            modele_wf.fit(X_tr, y_tr, sample_weight=w_tr)
+                        except TypeError:
                             modele_wf.fit(X_tr, y_tr)
-                        # Prédire sur la fenêtre test
-                        pred_te = np.maximum(modele_wf.predict(X_te), 0)
-                        # Gini walk-forward
-                        if y_te.sum() > 0 and pred_te.std() > 0:
-                            ordre = np.argsort(-pred_te)
-                            y_sorted = y_te[ordre]
-                            lorenz = np.cumsum(y_sorted) / max(y_te.sum(), 1e-9)
-                            gini_wf = round(
-                                float(1 - 2 * np.trapz(lorenz,
-                                      np.linspace(0, 1, len(lorenz)))),
-                                4
-                            )
-                except Exception as e_wf:
-                    logger.debug(f"Recalibration WF {annee_t} échouée : {e_wf}")
+                    else:
+                        modele_wf.fit(X_tr, y_tr)
+                    # Prédire sur la fenêtre test
+                    pred_te = np.maximum(modele_wf.predict(X_te), 0)
+                    # Gini walk-forward
+                    if y_te.sum() > 0 and pred_te.std() > 0:
+                        ordre = np.argsort(-pred_te)
+                        y_sorted = y_te[ordre]
+                        lorenz = np.cumsum(y_sorted) / max(y_te.sum(), 1e-9)
+                        gini_wf = round(
+                            float(1 - 2 * np.trapz(lorenz,
+                                  np.linspace(0, 1, len(lorenz)))),
+                            4
+                        )
+            except Exception as e_wf:
+                logger.debug(f"Recalibration WF {annee_t} échouée : {e_wf}")
 
             walk_forward.append({
                 'annee_test':         int(annee_t),
@@ -812,7 +839,8 @@ class AgentA6Comparaison:
                 'moy_test':           round(m_te, 2),
                 'ae_ratio':           ae,
                 'gini_recalibre':     gini_wf,
-                'modele_recalibre':   _modele_nom if _peut_recalibrer else None,
+                'modele_recalibre':   _modele_reel_recalibre,
+                'modele_recalibre_fidele': _recalibration_est_fidele,
                 'statut':             (
                     'VERT'  if 0.95 <= ae <= 1.05 else
                     'AMBRE' if 0.90 <= ae <= 1.10 else
