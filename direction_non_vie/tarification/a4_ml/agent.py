@@ -124,6 +124,17 @@ except ImportError:
     except ImportError:
         TARIF_RAPPORT_OK_A4 = False
 
+# Module de conformité partagé (audit V7 BLOQUANT #1) — A4 n'avait AUCUN
+# filtre genre avant ce correctif (fuite confirmée par exécution réelle :
+# une colonne 'sexe' numérique atteignait la matrice de features des
+# modèles ML, potentiellement retenus en production par A6).
+try:
+    from .services.conformite_reglementaire import filtrer_genre
+except ImportError:
+    from direction_non_vie.tarification.services.conformite_reglementaire import (
+        filtrer_genre
+    )
+
 # ── LOGGER ────────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
@@ -804,6 +815,17 @@ class AgentA4ML:
             and df[c].isnull().sum() == 0
             and df[c].std() > 0
         ]
+
+        # ── FILTRE GENRE (audit V7 BLOQUANT #1) ───────────────────────────────
+        # A4 n'avait auparavant AUCUNE exclusion des variables de genre —
+        # contrairement à A3 (GLM), qui applique COLS_GENRE_INTERDITES de
+        # façon inconditionnelle depuis l'audit V4. Une colonne 'sexe'
+        # numérique (0/1) ou pré-encodée ('sexe_enc') pouvait donc atteindre
+        # la matrice X des modèles ML — et A6 peut retenir un tel modèle en
+        # production. Réf. : Arrêt CJUE C-236/09 (Test-Achats).
+        feature_names = filtrer_genre(
+            feature_names, contexte='A4 — sélection features ML', logger_agent=logger
+        )
 
         if len(feature_names) == 0:
             raise ValueError("Aucune feature numérique disponible pour ML.")
