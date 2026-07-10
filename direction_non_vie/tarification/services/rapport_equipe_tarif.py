@@ -521,6 +521,21 @@ def export_html_equipe(results: Dict[str, Dict], branche: str = '',
             ])
         section_audit += '</table>'
 
+        # Section 7 — Commentaire actuariel de référence (A6)
+        # Réutilise le commentaire déjà généré par A6 (rapport_modeles_tarif.py)
+        # AUCUN nouvel appel à l'API Claude n'est effectué ici.
+        commentaire_a6 = r6.get('commentaire', '')
+        if commentaire_a6:
+            section_commentaire = (
+                _md_to_html_light(commentaire_a6)
+                + '<p style="margin-top:12px; font-size:10px; color:#8A9BB0; '
+                  'font-style:italic;">✦ Commentaire généré par A6 — voir le '
+                  'rapport détaillé A6 (Word/HTML) pour l\'analyse complète en 7 sections.</p>'
+            )
+        else:
+            section_commentaire = '<p><em>Commentaire non disponible — exécuter A6 avec ' \
+                                   'generer_graphiques=True pour le générer.</em></p>'
+
         html = f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
