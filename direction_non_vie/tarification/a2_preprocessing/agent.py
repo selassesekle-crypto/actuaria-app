@@ -170,10 +170,19 @@ VARS_CATEGORIELLES = {
 
 # Colonnes interdites par sous-branche — conformité réglementaire
 # Arrêt CJUE C-236/09 du 1er mars 2011 (Test-Achats) :
-# Le genre (sexe) est interdit comme critère de tarification en RC Auto
-# depuis le 21 décembre 2012. Transposé en droit français par la loi
-# du 1er juillet 2012. Risque de sanction ACPR si variable présente
-# dans la matrice X d'un modèle de tarification RC Auto.
+# Le genre (sexe) est interdit comme critère de tarification en assurance
+# depuis le 21 décembre 2012 (date d'application de l'arrêt).
+# Risque de sanction ACPR si variable présente dans la matrice X d'un
+# modèle de tarification RC Auto.
+#
+# ⚠ NOTE (audit V4, 10/07/2026) : la référence de transposition en droit
+# français ("loi du 1er juillet 2012") n'a pas pu être vérifiée par une
+# recherche documentaire formelle dans cette session — à confirmer par
+# la Commission Tarification IA France ou un juriste spécialisé avant
+# toute communication externe citant précisément ce texte de loi.
+# L'arrêt CJUE C-236/09 et sa date d'application (21/12/2012) reposent
+# sur une base documentaire plus robuste (jurisprudence largement citée
+# dans la littérature assurantielle européenne).
 COLS_INTERDITES_PAR_BRANCHE = {
     'auto': ['sexe'],   # RC Auto : genre interdit — CJUE C-236/09
 }
