@@ -8,7 +8,10 @@
 
 ## ✅ COMPLÉTÉ
 
-### Direction Non-Vie — Tarification (A1–A6)
+### Direction Non-Vie — Tarification (A1–A6) — CERTIFIÉE v3 (90/100)
+
+**Trajectoire de certification : v1 (66/100) → v2 (84/100, sous conditions) → v3 (90/100, CERTIFIÉE)**
+SHAs v3 : A1=da1993ca · A2=2cd096ee · A3=6a5f2e95 · A4=2e05908f · A5=4ec08c4d · A6=9e0e9fc2
 
 | Item | Statut | SHA final | Référence |
 |---|---|---|---|
@@ -77,6 +80,15 @@
 | Bootstrap ODP ≥ 2000 simulations | 300 sim insuffisantes pour P99.5 SCR (±20% d'incertitude). | Faible | England & Verrall (2002) §5.3 |
 | Coefficients MCR par LoB | MCR mono-LoB actuel. Multi-LoB requis pour portefeuilles mixtes. | Moyen | Annexe XVIII Rgt 2015/35 |
 | ORSA conformité GL EIOPA 56–58 | Vérifier les 3 sections obligatoires et l'horizon 3–5 ans dans A8. | Moyen | GL EIOPA 56–58 |
+
+### P1bis — Résiduels mineurs Tarification v3 (non bloquants, 90 jours)
+
+| Item | Description | Effort | Agent |
+|---|---|---|---|
+| Forçage de types A1 | Coercition explicite `pd.to_numeric`/`pd.to_datetime` avec `errors='coerce'` + logging avant validation qualité. | 1 jour | A1 |
+| XGBoost objective Poisson | `xgb.XGBRegressor(objective='count:poisson')` si `col_cible ∈ COLS_COMPTAGE`, miroir du garde-fou R2. | 2h | A4 |
+| Gouvernance profil A6 | Paramètre `profil_valide_par: Optional[str] = None` dans `run()`, statut plafonné AMBRE si None en production. | 3h + décision organisationnelle | A6 |
+| Test non-discrimination proxy | Corrélation entre variables retenues et proxies de critères interdits (ex. code postal / origine). Nécessite données externes INSEE. | 3–5 jours | A2/A3 |
 
 ### P2 — Amélioration (après validation Vie/EP-RE et SP sur données réelles)
 
