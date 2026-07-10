@@ -113,11 +113,11 @@ except ImportError:
         TARIF_EXCEL_OK = False
 
 try:
-    from .services.tarif_rapport import generer_rapport_tarification as _gen_rapport_a4
+    from .services.rapport_modeles_tarif import generer_rapport_tarification as _gen_rapport_a4
     TARIF_RAPPORT_OK_A4 = True
 except ImportError:
     try:
-        from direction_non_vie.tarification.services.tarif_rapport import (
+        from direction_non_vie.tarification.services.rapport_modeles_tarif import (
             generer_rapport_tarification as _gen_rapport_a4
         )
         TARIF_RAPPORT_OK_A4 = True
