@@ -6,13 +6,15 @@ Direction Non-Vie · Équipe Tarification — Vue d'ensemble A1 → A6
 Consolide les résultats des 6 agents en un rapport de synthèse unique,
 destiné à l'actuaire responsable et à la Direction pour validation finale.
 
-Structure du rapport (6 sections) :
+Structure du rapport (7 sections) :
   §1 — Page de garde : statuts RAG des 6 agents en un coup d'œil
   §2 — Qualité des données (A1)
   §3 — Preprocessing & Feature Engineering (A2)
   §4 — Tarification : GLM vs ML vs DL (A3/A4/A5) + Crédibilité + Lissage géo
   §5 — Décision finale (A6) : modèle retenu, backtesting, gouvernance
   §6 — Audit trail consolidé
+  §7 — Commentaire actuariel de référence (réutilise le commentaire A6,
+       aucun nouvel appel API Claude)
 
 Auteur   : ActuarIA v1.0
 Version  : 1.0.0
