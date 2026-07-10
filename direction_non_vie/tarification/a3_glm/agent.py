@@ -143,10 +143,20 @@ COLS_A_EXCLURE = [
 # listées). Si des données arrivent pré-encodées hors du pipeline A2
 # standard (ex. 'sexe' déjà numérique 0/1, ou 'sexe_enc' fourni par un
 # client), ce filet empêche leur entrée dans la matrice X du GLM.
-# Réf. : Arrêt CJUE C-236/09 (Test-Achats, 1er mars 2011).
-COLS_INTERDITES_PAR_BRANCHE_A3 = {
-    'auto': ['sexe', 'sexe_enc', 'genre', 'genre_enc', 'gender'],
-}
+#
+# INCONDITIONNEL (pas de scoping par sous_branche) : l'arrêt CJUE C-236/09
+# (Test-Achats, 1er mars 2011) porte sur la Directive 2004/113/CE et
+# s'applique aux primes et prestations d'assurance en général, pas
+# seulement à l'assurance auto. Un scoping par nom de sous-branche serait
+# lui-même une faille si la sous-branche est mal nommée ou non reconnue
+# (cas testé et confirmé lors de l'audit V4 : une sous-branche non
+# détectée par VARS_GLM déclenche le fallback L600 sans aucune protection
+# si le filtre est conditionné au nom de la branche). Le genre n'a par
+# ailleurs aucune justification actuarielle valide comme facteur de
+# tarification dans un GLM, quelle que soit la branche.
+COLS_GENRE_INTERDITES = [
+    'sexe', 'sexe_enc', 'genre', 'genre_enc', 'gender', 'gender_enc',
+]
 
 # Seuil de significativité pour la sélection des variables
 # Justification : seuil classique en statistique (α = 5%)
@@ -604,31 +614,28 @@ class AgentA3GLM:
             ).columns.tolist()
 
         # ── FILET DE SÉCURITÉ RÉGLEMENTAIRE (défense en profondeur, audit V4) ──
-        # Exclusion des colonnes interdites par sous-branche, en plus du
-        # filtrage déjà fait en amont par A2. Protège contre :
+        # Exclusion inconditionnelle du genre, en plus du filtrage déjà fait
+        # en amont par A2. Protège contre :
         #  (a) le fallback ci-dessus qui prend TOUTES les colonnes numériques
         #      si sous_branche n'est pas reconnue dans VARS_GLM ;
-        #  (b) des données arrivant pré-encodées hors du pipeline A2 standard.
+        #  (b) des données arrivant pré-encodées hors du pipeline A2 standard ;
+        #  (c) une sous-branche mal nommée qui échapperait à un filtre scopé
+        #      par nom de branche (cas testé et confirmé lors de l'audit V4).
         # Réf. : Arrêt CJUE C-236/09 (Test-Achats, 1er mars 2011).
-        cols_interdites_actives = set()
-        for branche_key, cols_interdites in COLS_INTERDITES_PAR_BRANCHE_A3.items():
-            if branche_key in sous_branche or sous_branche in branche_key:
-                cols_interdites_actives.update(cols_interdites)
-        if cols_interdites_actives:
-            _avant = set(vars_prioritaires)
-            vars_prioritaires = [
-                v for v in vars_prioritaires if v not in cols_interdites_actives
-            ]
-            _supprimees = _avant & cols_interdites_actives
-            if _supprimees:
-                logger.warning(
-                    f"[CONFORMITE REGLEMENTAIRE] Variable(s) {sorted(_supprimees)} "
-                    f"exclue(s) de la sélection GLM pour sous-branche "
-                    f"'{sous_branche}'. Réf. : Arrêt CJUE C-236/09 (Test-Achats)."
-                )
+        _avant_genre = set(vars_prioritaires)
+        vars_prioritaires = [
+            v for v in vars_prioritaires if v not in COLS_GENRE_INTERDITES
+        ]
+        _supprimees_genre = _avant_genre & set(COLS_GENRE_INTERDITES)
+        if _supprimees_genre:
+            logger.warning(
+                f"[CONFORMITE REGLEMENTAIRE] Variable(s) {sorted(_supprimees_genre)} "
+                f"exclue(s) de la sélection GLM (sous-branche '{sous_branche}'). "
+                f"Réf. : Arrêt CJUE C-236/09 (Test-Achats)."
+            )
 
         # Filtrage : variables qui existent ET sont numériques
-        cols_exclure = set(COLS_A_EXCLURE) | cols_interdites_actives
+        cols_exclure = set(COLS_A_EXCLURE) | set(COLS_GENRE_INTERDITES)
         vars_pred = [
             v for v in vars_prioritaires
             if v in df.columns
