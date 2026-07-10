@@ -1071,6 +1071,7 @@ class AgentA4ML:
 
             classement.append({
                 'modele':          nom,
+                'famille':         _famille_modele_ml(nom),
                 'gini_test':       met['gini_test'],
                 'gini_train':      met['gini_train'],
                 'overfit_ratio':   met['overfit_ratio'],
@@ -1085,6 +1086,7 @@ class AgentA4ML:
             gini_glm = result_a3['metriques'].get('poisson', {}).get('gini', 0)
             classement.append({
                 'modele':         'GLM Poisson (référence A3)',
+                'famille':        'GLM',
                 'gini_test':      gini_glm,
                 'gini_train':     gini_glm,
                 'overfit_ratio':  1.0,
