@@ -401,6 +401,137 @@ def export_excel_a4(result_a4: Dict, audit_id: str = "") -> bytes:
 #  5 onglets : Synthèse · Classement final · Backtesting A/E · Fiche décision · Audit
 # =============================================================================
 
+def export_excel_a5(result_a5: Dict, audit_id: str = "") -> bytes:
+    """
+    Génère le rapport Excel A5 Deep Learning (4 onglets). Retourne bytes ou b''.
+
+    Audit V7 MINEUR #2 : A5 était le SEUL agent de la direction Tarification
+    sans export Excel (aucune fonction export_excel_a5 n'existait, et A5 ne
+    référençait aucun export dans son propre run()). Incohérence architecturale
+    signalée par l'audit V7 catégorie F — corrigée ici en suivant le même
+    gabarit que export_excel_a4 (4 onglets au lieu de 5 : pas de SHAP, non
+    calculé pour les modèles Deep Learning).
+    """
+    if not OPENPYXL_OK or not result_a5 or not result_a5.get('success'):
+        return b''
+    try:
+        wb  = Workbook()
+        now = datetime.now().strftime("%d/%m/%Y %H:%M")
+        aid = audit_id or result_a5.get('audit_id', 'N/A')
+        val = result_a5.get('validation_dl', {})
+        classement = result_a5.get('classement', [])
+        metriques  = result_a5.get('metriques', {})
+
+        # ── Onglet 1 : Synthèse ───────────────────────────────────────────────
+        ws1 = wb.active
+        ws1.title = "1-Synthèse"
+        _bandeau(ws1, "Rapport Tarification Deep Learning", "CANN Wüthrich + TabNet",
+                 "A5 — Deep Learning", aid, now)
+        r = 7
+        _section(ws1, r, "▶ MODÈLE SÉLECTIONNÉ"); r += 1
+        if classement:
+            best = classement[0]
+            _kpi(ws1, r, "Modèle retenu",    best.get('modele', 'N/A')); r += 1
+            _kpi(ws1, r, "Gini test",         round(best.get('gini_test', 0), 4), fmt=FMT_DEC4); r += 1
+            _kpi(ws1, r, "RMSE test",         round(best.get('rmse_test', 0), 4), fmt=FMT_DEC4); r += 1
+            _kpi(ws1, r, "Overfit ratio",     round(best.get('overfit_ratio', 0), 3)); r += 2
+
+        _section(ws1, r, "▶ STATUT VALIDATION"); r += 1
+        statut = val.get('statut_global', 'N/A')
+        _kpi(ws1, r, "Statut global",  statut, statut=statut); r += 1
+        _kpi(ws1, r, "Conclusion",     val.get('conclusion', ''), wrap=True); r += 1
+
+        # ── Onglet 2 : Classement CANN / TabNet ────────────────────────────────
+        ws2 = wb.create_sheet("2-Classement CANN-TabNet")
+        _bandeau(ws2, "Classement des modèles Deep Learning", "CANN (Wüthrich) vs TabNet",
+                 "A5 — Comparaison", aid, now)
+        r = 7
+        _section(ws2, r, "▶ CLASSEMENT"); r += 1
+        for col, txt, w in [(1,"#",6),(2,"Modèle",20),(3,"Type",18),
+                             (4,"Gini test",14),(5,"RMSE test",14),
+                             (6,"Overfit ratio",16),(7,"GLM gelé",12)]:
+            _header(ws2, r, col, txt, w)
+        r += 1
+        for rank, m in enumerate(classement, 1):
+            bg = GRIS_L if rank % 2 == 0 else None
+            glm_gele_txt = (
+                '✓ Oui' if m.get('glm_gele') else
+                ('✗ Non' if 'glm_gele' in m else '—')
+            )
+            vals = [rank, m.get('modele',''), m.get('type',''),
+                    round(m.get('gini_test',0),4), round(m.get('rmse_test',0),4),
+                    round(m.get('overfit_ratio',0),3), glm_gele_txt]
+            fmts = [None,None,None,FMT_DEC4,FMT_DEC4,FMT_DEC4,None]
+            for j, (v, f) in enumerate(zip(vals, fmts), 1):
+                _cell(ws2, r, j, v, cf=NOIR, fill=bg, fmt=f,
+                      ah="right" if isinstance(v,(int,float)) else "left",
+                      bold=(rank==1))
+            r += 1
+
+        # ── Onglet 3 : Fidélité CANN Wüthrich ──────────────────────────────────
+        # Spécifique à A5 (n'existe dans aucun autre agent) : traçabilité du
+        # gel de la couche GLM et de la vérification numérique d'équivalence
+        # CANN(époque 0) ≡ GLM Tweedie — le cœur de la promesse Wüthrich
+        # (interprétabilité S2 préservée malgré le résiduel non-linéaire).
+        ws3 = wb.create_sheet("3-Fidélité CANN Wüthrich")
+        _bandeau(ws3, "Fidélité CANN Wüthrich (2019)", "Gel GLM + résiduel init zéro",
+                 "A5 — CANN", aid, now)
+        r = 7
+        met_cann = metriques.get('cann', {})
+        _section(ws3, r, "▶ GEL DE LA COUCHE GLM (offset non-entraînable)"); r += 1
+        glm_gele = met_cann.get('glm_gele')
+        _kpi(ws3, r, "GLM gelé", '✓ Oui' if glm_gele else '✗ Non — CANN non conforme Wüthrich',
+             statut='VERT' if glm_gele else 'ROUGE'); r += 1
+        if 'n_vars_glm_matchees' in met_cann:
+            n_match = met_cann.get('n_vars_glm_matchees', 0)
+            n_total = met_cann.get('n_vars_glm_total', 0)
+            _kpi(ws3, r, "Variables GLM appariées",
+                 f"{n_match} / {n_total}",
+                 statut='VERT' if n_match == n_total and n_total > 0 else 'AMBRE'); r += 1
+        if 'glm_verification_error' in met_cann:
+            err = met_cann.get('glm_verification_error')
+            _kpi(ws3, r, "Écart vérification CANN(ép.0) vs GLM",
+                 f"{err:.2e}" if err is not None else 'N/A',
+                 statut='VERT' if (err is not None and err < 1e-3) else 'AMBRE'); r += 1
+        r += 1
+        _section(ws3, r, "▶ RÉFÉRENCE MÉTHODOLOGIQUE"); r += 1
+        _kpi(ws3, r, "Référence",
+             "Wüthrich (2019), 'Neural Networks Applied to Chain-Ladder Reserving' "
+             "— principe de gel GLM adapté à la tarification (offset + résiduel).",
+             wrap=True); r += 1
+
+        # ── Onglet 4 : Audit Trail ──────────────────────────────────────────────
+        ws4 = wb.create_sheet("4-Audit Trail")
+        _bandeau(ws4, "Audit Trail", "Traçabilité ACPR — Agent A5 Deep Learning",
+                 "A5 — Audit", aid, now)
+        r = 7
+        _section(ws4, r, "▶ INFORMATIONS AUDIT"); r += 1
+        _kpi(ws4, r, "Audit ID",       aid); r += 1
+        _kpi(ws4, r, "Date",           now); r += 1
+        _kpi(ws4, r, "Agent",          "A5 — Deep Learning (CANN + TabNet)"); r += 1
+        _kpi(ws4, r, "Branche",        result_a5.get('branche', 'N/A')); r += 1
+        _kpi(ws4, r, "Statut RAG",     result_a5.get('statut_rag', 'N/A'),
+             statut=result_a5.get('statut_rag')); r += 1
+        _kpi(ws4, r, "Nb modèles",     len(classement), fmt=FMT_NB); r += 1
+        if classement:
+            _kpi(ws4, r, "Modèle retenu", classement[0].get('modele','')); r += 1
+            _kpi(ws4, r, "Gini retenu",   round(classement[0].get('gini_test',0),4),
+                 fmt=FMT_DEC4); r += 1
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        return buf.getvalue()
+
+    except Exception as e:
+        logger.error(f"export_excel_a5 échoué : {e}", exc_info=True)
+        return b''
+
+
+# =============================================================================
+#  EXPORT A6 — COMPARAISON FINALE
+#  5 onglets : Synthèse · Classement final · Backtesting A/E · Fiche décision · Audit
+# =============================================================================
+
 def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
     """Génère le rapport Excel A6 Comparaison (5 onglets). Retourne bytes ou b''."""
     if not OPENPYXL_OK or not result_a6 or not result_a6.get('success'):
