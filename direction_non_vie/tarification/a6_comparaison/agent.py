@@ -652,6 +652,37 @@ class AgentA6Comparaison:
     # ÉTAPE 4 : BACKTESTING TEMPOREL
     # ══════════════════════════════════════════════════════════════════════════
 
+    @staticmethod
+    def _gini_lorenz(y_true: np.ndarray, y_pred: np.ndarray) -> Optional[float]:
+        """
+        Gini walk-forward — formule canonique unique (audit V7 MINEUR #3).
+
+        Extrait de la boucle _backtesting_temporel pour être appelée à la
+        fois par le code de production ET par les tests (TestA6GiniWalk
+        ForwardSentinelles) — élimine le risque qu'une correction de bug
+        (ex. audit V6 : np.trapz supprimé sous numpy≥2.0, signe inversé)
+        soit appliquée à la formule réelle sans être répercutée sur la
+        copie testée par les sentinelles, ou inversement.
+
+        Convention : tri décroissant par prédiction (les plus risqués
+        d'abord), Gini = 2·AUC(Lorenz) − 1. Un modèle parfaitement
+        discriminant donne un Gini proche de 1 (positif) ; un modèle
+        anti-corrélé donne un Gini proche de -1 (négatif).
+
+        Retourne None si le calcul n'est pas possible (pas de sinistre
+        dans l'échantillon, ou prédiction constante).
+        """
+        if y_true.sum() <= 0 or y_pred.std() <= 0:
+            return None
+        _trapz_fn = np.trapezoid if hasattr(np, 'trapezoid') else np.trapz
+        ordre     = np.argsort(-y_pred)
+        y_sorted  = y_true[ordre]
+        lorenz    = np.cumsum(y_sorted) / max(y_true.sum(), 1e-9)
+        return round(
+            float(2 * _trapz_fn(lorenz, np.linspace(0, 1, len(lorenz))) - 1),
+            4
+        )
+
     def _backtesting_temporel(
         self,
         df:         pd.DataFrame,
@@ -844,33 +875,17 @@ class AgentA6Comparaison:
                         modele_wf.fit(X_tr, y_tr)
                     # Prédire sur la fenêtre test
                     pred_te = np.maximum(modele_wf.predict(X_te), 0)
-                    # Gini walk-forward — audit V6 #2 : DEUX bugs corrigés ici,
-                    # tous deux dans cette formule inline jamais exercée
-                    # bout-en-bout avant l'audit V5→V6 (exécution réelle avec
-                    # XGBoost/LightGBM en tête de classement) :
-                    #   (a) np.trapz n'existe plus sous numpy ≥ 2.0
-                    #       (AttributeError, absorbée silencieusement par le
-                    #       except Exception ci-dessous → gini_wf restait
-                    #       toujours None sans aucune alerte visible) ;
-                    #   (b) le signe était inversé : 1-2·AUC au lieu de
-                    #       2·AUC-1, ce qui donnait un Gini fortement NÉGATIF
-                    #       pour un prédicteur parfait et positif pour un
-                    #       anti-corrélé — l'inverse de la convention.
-                    # Le helper Gini correct de cette même classe (méthode de
-                    # génération des courbes de validation, ~L1054) utilise
-                    # déjà le bon pattern : fn = np.trapezoid si disponible
-                    # sinon np.trapz, et 2*auc-1. On applique ici la même
-                    # formule, numpy-2-safe et au bon signe.
-                    if y_te.sum() > 0 and pred_te.std() > 0:
-                        _trapz_fn = np.trapezoid if hasattr(np, 'trapezoid') else np.trapz
-                        ordre = np.argsort(-pred_te)
-                        y_sorted = y_te[ordre]
-                        lorenz = np.cumsum(y_sorted) / max(y_te.sum(), 1e-9)
-                        gini_wf = round(
-                            float(2 * _trapz_fn(lorenz,
-                                  np.linspace(0, 1, len(lorenz))) - 1),
-                            4
-                        )
+                    # Gini walk-forward — audit V6 #2, puis audit V7 MINEUR #3.
+                    # V6 avait corrigé deux bugs (np.trapz supprimé sous
+                    # numpy≥2.0, signe inversé) directement dans cette formule
+                    # inline. L'audit V7 a relevé que le test-sentinelle qui
+                    # protège ces deux bugs testait une COPIE de la formule,
+                    # pas ce chemin de code réel — risque de divergence future
+                    # si l'un des deux était modifié sans l'autre. Corrigé en
+                    # extrayant le calcul dans _gini_lorenz(), désormais
+                    # appelée ICI ET par le test — une seule formule, jamais
+                    # deux versions qui peuvent diverger.
+                    gini_wf = self._gini_lorenz(y_te, pred_te)
             except Exception as e_wf:
                 # Passé de logger.debug à logger.warning (audit V6) : une
                 # exception dans la recalibration WF est une erreur de code
