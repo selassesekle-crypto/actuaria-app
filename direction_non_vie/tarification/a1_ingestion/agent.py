@@ -161,6 +161,12 @@ SEUILS_QUALITE = {
     'completude_ambre': 95.0,
     'doublons_rouge':    5.0,
     'doublons_ambre':    1.0,
+    # Audit V4 point #9 — avant ce correctif, les aberrants actuariels
+    # (§4.2) pénalisaient le score_global (jusqu'à -3 pts) mais n'avaient
+    # AUCUN impact sur le statut RAG affiché, qui ne dépendait que de la
+    # complétude et des doublons. Un fichier avec sinistres négatifs, âges
+    # impossibles ou exposition nulle pouvait obtenir VERT.
+    'aberrants_taux_rouge': 5.0,  # % de lignes affectées par 1 type → ROUGE
 }
 
 
@@ -768,11 +774,39 @@ class AgentA1Ingestion:
     # ══════════════════════════════════════════════════════════════════════════
 
     def _calculer_statut_rag(self, qualite: Dict) -> str:
+        """
+        Statut RAG basé sur complétude, doublons ET aberrants actuariels.
+
+        AVANT (audit V4 point #9) : seuls la complétude et les doublons
+        déterminaient le statut. Les aberrants actuariels détectés en
+        §4 (sinistres négatifs, âges impossibles, exposition nulle,
+        incohérences sinistre/coût) ne pesaient que sur score_global
+        (max -3 pts sur 100) sans jamais empêcher un statut VERT.
+
+        APRÈS : la présence d'au moins un type d'anomalie plafonne le
+        statut à AMBRE. Si un type d'anomalie affecte plus de
+        `aberrants_taux_rouge` % des lignes, le statut passe à ROUGE —
+        une proportion significative de données actuariellement
+        impossibles ne peut pas être couverte par un simple avertissement.
+        """
         c = qualite['taux_completude']
         d = qualite['taux_doublons']
-        if c < SEUILS_QUALITE['completude_rouge'] or d > SEUILS_QUALITE['doublons_rouge']:
+        n = max(qualite.get('nb_lignes', 1), 1)
+        aberrants = qualite.get('aberrants', {})
+        n_types_aberrants = qualite.get('nb_types_aberrants', 0)
+        # Taux du type d'anomalie le plus fréquent (évite le double-comptage
+        # d'une même ligne affectée par plusieurs contrôles simultanément)
+        taux_aberrant_max = (
+            max(aberrants.values()) / n * 100 if aberrants else 0.0
+        )
+
+        if (c < SEUILS_QUALITE['completude_rouge']
+                or d > SEUILS_QUALITE['doublons_rouge']
+                or taux_aberrant_max > SEUILS_QUALITE['aberrants_taux_rouge']):
             return 'ROUGE'
-        elif c < SEUILS_QUALITE['completude_ambre'] or d > SEUILS_QUALITE['doublons_ambre']:
+        elif (c < SEUILS_QUALITE['completude_ambre']
+                or d > SEUILS_QUALITE['doublons_ambre']
+                or n_types_aberrants > 0):
             return 'AMBRE'
         return 'VERT'
 
