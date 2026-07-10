@@ -171,6 +171,14 @@ def _construire_contexte_tarif(
     return '\n'.join(lines)
 
 
+# Modèle et température figés — reproductibilité obligatoire des commentaires
+# actuariels réglementaires. Réf. : GL EIOPA ORSA GL 56 (déterminisme des
+# processus de calcul S2) ; ACPR-2022-P-01 (auditabilité des sorties IA).
+# NE PAS utiliser temperature > 0 pour cet appel : un rapport S2 doit être
+# reproductible à l'identique sur les mêmes données d'entrée.
+CLAUDE_MODEL_TARIF = 'claude-sonnet-5'
+CLAUDE_TEMPERATURE_TARIF = 0
+
 def _narration_claude(result_a3, result_a4, result_a6, branche, arrete) -> Tuple[str, str]:
     try:
         import anthropic
@@ -186,7 +194,8 @@ def _narration_claude(result_a3, result_a4, result_a6, branche, arrete) -> Tuple
         client = anthropic.Anthropic(api_key=api_key)
         ctx = _construire_contexte_tarif(result_a3, result_a4, result_a6, branche, arrete)
         resp = client.messages.create(
-            model='claude-sonnet-4-6', max_tokens=6000,
+            model=CLAUDE_MODEL_TARIF, max_tokens=6000,
+            temperature=CLAUDE_TEMPERATURE_TARIF,
             system=SYSTEM_PROMPT_TARIF,
             messages=[{'role': 'user', 'content': ctx}],
         )
@@ -505,7 +514,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
     html += narr_html
     html += f"""
     <p style="margin-top:12px; font-size:10px; color:{SLATE}; font-style:italic;">
-      ✦ {f'Narration générée par ActuarIA Intelligence (claude-sonnet-4-6)' if n_src=='claude_api' else f'Source : {n_src}'}
+      ✦ {f'Narration générée par ActuarIA Intelligence ({CLAUDE_MODEL_TARIF})' if n_src=='claude_api' else f'Source : {n_src}'}
     </p>
   </div>
 </div>
