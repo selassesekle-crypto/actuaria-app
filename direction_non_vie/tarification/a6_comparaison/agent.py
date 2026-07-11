@@ -1298,8 +1298,49 @@ class AgentA6Comparaison:
                 "Statut plafonné à AMBRE en environnement 'production'."
             )
 
+        # ── RÉSULTAT DU WALK-FORWARD (audit V10, BLOQUANT B2) ─────────────────
+        # Le gate vérifiait que le walk-forward avait EU LIEU (`disponible`) et
+        # qu'il portait sur le bon modèle (`modele_recalibre_fidele`) — mais
+        # JAMAIS qu'il avait RÉUSSI. Il ignorait intégralement gini_wf_moyen,
+        # ae_ratio, ae_cv_wf, n_fenetres_rouge et stabilite_wf.
+        # Prouvé par exécution : un modèle avec A/E = 0,45 (sous-tarification de
+        # 55 %), toutes les fenêtres en ROUGE, stabilité « 🔴 Instable » et même
+        # gini_wf_moyen = None (aucune métrique produite) était certifié VERT.
+        # Un contrôle dont on ne lit pas le résultat n'est pas un contrôle.
+        #
+        # Seuils : ceux qu'A6 s'applique déjà à lui-même dans son interprétation
+        # du backtest (l.754-756) — 0,95-1,05 « non biaisé », 0,90-1,10 « légère
+        # déviation ». On exige donc, pour un VERT en production, que le A/E
+        # reste au moins dans la bande de légère déviation, qu'une métrique de
+        # discrimination ait bien été produite, et que la stabilité inter-fenêtres
+        # ne soit pas rouge.
+        _bt = backtest or {}
+        _wf_resultat_ok = True
+        _wf_motif = ''
+        if environnement == 'production' and _bt.get('disponible', False):
+            _gini_wf = _bt.get('gini_wf_moyen')
+            _ae      = _bt.get('ae_ratio')
+            _stab    = str(_bt.get('stabilite_wf', ''))
+            if _gini_wf is None:
+                _wf_resultat_ok = False
+                _wf_motif = ("aucune métrique de discrimination produite "
+                             "(gini_wf_moyen=None) — le walk-forward n'a rien validé")
+            elif _ae is None or not (0.90 <= float(_ae) <= 1.10):
+                _wf_resultat_ok = False
+                _wf_motif = (f"A/E walk-forward = {_ae} hors bande acceptable "
+                             f"[0,90 ; 1,10] — biais de tarification systématique")
+            elif '🔴' in _stab:
+                _wf_resultat_ok = False
+                _wf_motif = f"stabilité inter-fenêtres dégradée ({_stab})"
+        if not _wf_resultat_ok:
+            logger.warning(
+                f"[VALIDATION TEMPORELLE] Le walk-forward a tourné mais son "
+                f"RÉSULTAT est insuffisant : {_wf_motif}. "
+                f"Statut plafonné à AMBRE en environnement 'production'."
+            )
+
         if (score >= 0.60 and gini >= 0.15 and _gouvernance_ok
-                and _backtest_ok and _wf_fidele_ok):
+                and _backtest_ok and _wf_fidele_ok and _wf_resultat_ok):
             return 'VERT'
         elif score >= 0.40 or gini >= 0.05:
             return 'AMBRE'

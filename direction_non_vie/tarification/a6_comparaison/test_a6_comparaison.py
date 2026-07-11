@@ -417,6 +417,13 @@ class TestA6ValidationTemporelleObligatoire(unittest.TestCase):
         backtest_disponible = {
             'disponible': True, 'ae_ratio': 1.02,
             'modele_recalibre_fidele': True,   # modèle ML réellement recalibré
+            # ⚠ Fixture complétée le 11/07/2026 (audit V10, BLOQUANT B2) : le
+            # gate exige désormais que le walk-forward ait non seulement EU LIEU,
+            # mais RÉUSSI — il lit gini_wf_moyen et stabilite_wf. Sans ces
+            # champs, la fixture décrivait un walk-forward dont on ne savait
+            # rien du résultat. Prémisse incomplète, pas fausse.
+            'gini_wf_moyen': 0.28, 'stabilite_wf': '🟢 Stable',
+            'n_fenetres_rouge': 0,
         }
 
         statut = self.agent._calculer_statut_rag(
@@ -539,6 +546,136 @@ class TestAntiFuiteGenreWalkForwardV9(unittest.TestCase):
             f"contaminait encore le walk-forward")
         print(f"    V9-5 Genre absent du walk-forward A6 ✅ | "
               f"statut={r6['statut_rag']} gini_wf={gini_wf:.4f}")
+
+
+class TestAuditV10_B2_GateLitLeResultat(unittest.TestCase):
+    """
+    AUDIT V10 — BLOQUANT B2. Doit échouer sur le code d'avant correctif.
+
+    Le gate RAG vérifiait que le walk-forward avait EU LIEU ('disponible') et
+    qu'il portait sur le bon modèle ('modele_recalibre_fidele') — mais jamais
+    qu'il avait RÉUSSI. Il ignorait gini_wf_moyen, ae_ratio, ae_cv_wf,
+    n_fenetres_rouge et stabilite_wf.
+
+    Un contrôle dont on ne lit pas le résultat n'est pas un contrôle.
+    """
+
+    def setUp(self):
+        from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
+        self.agent = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp',
+                                        verbose=False)
+        self.modele = {'score_global': 0.82, 'gini_test': 0.31}
+
+    def _statut(self, backtest, environnement='production'):
+        return self.agent._calculer_statut_rag(
+            self.modele, [self.modele], profil_valide_par='Actuaire Test',
+            environnement=environnement, backtest=backtest)
+
+    def test_walk_forward_catastrophique_ne_peut_pas_etre_vert(self):
+        """A/E = 0,45 (sous-tarification de 55 %), toutes fenêtres ROUGE,
+        stabilité instable → certifié VERT avant correctif."""
+        bt = {'disponible': True, 'modele_recalibre_fidele': True,
+              'gini_wf_moyen': 0.01, 'ae_ratio': 0.45, 'ae_cv_wf': 0.62,
+              'n_fenetres_rouge': 4, 'stabilite_wf': '🔴 Instable'}
+        statut = self._statut(bt)
+        self.assertNotEqual(statut, 'VERT',
+            "Un walk-forward avec A/E=0,45 et toutes fenêtres ROUGE ne peut pas "
+            "fonder une certification VERT.")
+        print(f"    V10-B2a Walk-forward catastrophique → {statut} ✅")
+
+    def test_walk_forward_sans_metrique_ne_peut_pas_etre_vert(self):
+        """gini_wf_moyen = None : aucune métrique produite — le walk-forward
+        n'a rien validé du tout. C'est la signature exacte du bug V6."""
+        bt = {'disponible': True, 'modele_recalibre_fidele': True,
+              'gini_wf_moyen': None, 'ae_ratio': 0.00, 'ae_cv_wf': 0.0,
+              'n_fenetres_rouge': 4, 'stabilite_wf': '🔴 Instable'}
+        statut = self._statut(bt)
+        self.assertNotEqual(statut, 'VERT',
+            "gini_wf_moyen=None : aucune validation temporelle effective.")
+        print(f"    V10-B2b Walk-forward sans métrique → {statut} ✅")
+
+    def test_walk_forward_impeccable_reste_vert(self):
+        """Contrôle négatif indispensable : le garde-fou ne doit pas plafonner
+        en permanence."""
+        bt = {'disponible': True, 'modele_recalibre_fidele': True,
+              'gini_wf_moyen': 0.29, 'ae_ratio': 1.00, 'ae_cv_wf': 0.01,
+              'n_fenetres_rouge': 0, 'stabilite_wf': '🟢 Stable'}
+        self.assertEqual(self._statut(bt), 'VERT',
+            "Un walk-forward impeccable doit permettre VERT — garde-fou trop large.")
+        print(f"    V10-B2c Walk-forward impeccable → VERT ✅")
+
+
+class TestAuditV10_B3_ExcelCoherentAvecGate(unittest.TestCase):
+    """
+    AUDIT V10 — BLOQUANT B3. Doit échouer sur le code d'avant correctif.
+
+    tarif_excel.py calculait : statut = "VERT" if backtest.get('modele_recalibre').
+    Or 'modele_recalibre' est une CHAÎNE, y compris quand elle vaut
+    "GLM_POISSON → proxy GBM (...)" — qui est truthy. Le livrable Excel
+    estampillait donc « ✓ Conforme » en VERT sur la ligne annonçant une
+    recalibration sur proxy, pendant que le gate RAG plafonnait à AMBRE.
+    Le rapport client contredisait la certification.
+    """
+
+    def test_excel_signale_la_recalibration_sur_proxy(self):
+        """Test COMPORTEMENTAL (et non textuel) : on génère un vrai classeur
+        Excel et on vérifie ce que l'actuaire y lit réellement.
+
+        Avant correctif : aucun avertissement, et la ligne « Modèle recalibré »
+        était estampillée VERT (« ✓ Conforme ») parce que la chaîne
+        "GLM_POISSON → proxy GBM (...)" est truthy — pendant que le gate RAG
+        plafonnait à AMBRE. Le livrable contredisait la certification.
+
+        NB : un test qui grep le code source est fragile (il peut matcher un
+        commentaire). On teste la SORTIE, pas le texte du programme.
+        """
+        import io
+        from openpyxl import load_workbook
+        from direction_non_vie.tarification.services.tarif_excel import export_excel_a6
+
+        def _texte_du_classeur(backtest):
+            res = {
+                'success': True, 'audit_id': 'TEST', 'branche': 'auto',
+                'statut_rag': 'AMBRE',
+                'classement': [{'modele': 'GLM_POISSON', 'famille': 'GLM',
+                                'gini_test': 0.30, 'rmse_test': 1.0,
+                                'overfit_ratio': 1.0, 'interpretabilite': 1.0,
+                                'score_global': 1.0}],
+                'modele_production': {'modele': 'GLM_POISSON', 'famille': 'GLM',
+                                      'score_global': 1.0, 'gini_test': 0.30,
+                                      'overfit_ratio': 1.0, 'interpretabilite': 1.0},
+                'backtest': backtest, 'validation_selection': {}, 'fiche_decision': {},
+                'audit_trail': {},
+            }
+            b = export_excel_a6(res, audit_id='TEST')
+            self.assertGreater(len(b), 1000, "L'export Excel a échoué (0 octet)")
+            wb = load_workbook(io.BytesIO(b))
+            ws = wb["3-Backtesting AE"]
+            return " ".join(str(c.value) for row in ws.iter_rows() for c in row
+                            if c.value is not None)
+
+        # (a) Walk-forward sur PROXY → l'actuaire doit être averti.
+        txt_proxy = _texte_du_classeur({
+            'disponible': True,
+            'modele_recalibre': 'GLM_POISSON → proxy GBM (fabrique sklearn)',
+            'modele_recalibre_fidele': False,
+            'ae_ratio': 1.02, 'gini_wf_moyen': 0.18, 'walk_forward': [],
+        })
+        self.assertIn("Portée de la validation temporelle", txt_proxy,
+            "Le rapport doit AVERTIR que la recalibration n'a pas porté sur le "
+            "modèle de production.")
+        self.assertIn("AUTRE modèle", txt_proxy)
+
+        # (b) Walk-forward FIDÈLE → pas d'avertissement parasite.
+        txt_fidele = _texte_du_classeur({
+            'disponible': True, 'modele_recalibre': 'ML_XGBOOST',
+            'modele_recalibre_fidele': True,
+            'ae_ratio': 1.01, 'gini_wf_moyen': 0.28, 'walk_forward': [],
+        })
+        self.assertNotIn("Portée de la validation temporelle", txt_fidele,
+            "Aucun avertissement ne doit apparaître quand la recalibration est "
+            "fidèle (garde-fou trop large).")
+        print("    V10-B3 Excel avertit sur proxy, se tait si fidèle ✅")
 
 
 if __name__ == '__main__':

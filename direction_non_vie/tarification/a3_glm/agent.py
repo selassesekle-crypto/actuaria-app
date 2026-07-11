@@ -214,21 +214,12 @@ VARS_GLM = {
         'antecedents_sinistres_3ans',
         'secteur_activite_enc', 'type_garantie_enc',
     ],
-    'vie_individuelle': [
-        'age_entree', 'age_entree_carre', 'fumeur',
-        'duree_contrat_ans', 'taux_technique',
-        'type_produit_enc',
-    ],
-    'prevoyance_collective': [
-        'age', 'age_carre', 'franchise_ij_jours',
-        'categorie_sociopro_enc', 'secteur_activite_enc',
-        'taux_remplacement',
-    ],
-    'sante_collective': [
-        'age', 'age_carre',
-        'niveau_couverture_enc', 'secteur_activite_enc',
-        'garantie_optique', 'garantie_dentaire',
-    ],
+    # ⚠ Sous-branches vie_individuelle / prevoyance_collective / sante_collective
+    # RETIRÉES le 11/07/2026 (audit V10 — résidu de périmètre). Le nettoyage de
+    # périmètre avait porté sur A1 et A2, mais A3 conservait ces configurations :
+    # elles étaient encore ATTEIGNABLES (le matching de sous-branche est un `in`
+    # bidirectionnel sans garde-fou) alors que A1 rejette désormais toute branche
+    # hors Non-Vie. A3 est un agent de la Direction Non-Vie : auto · MRH · RC Pro.
 }
 
 
@@ -634,14 +625,10 @@ class AgentA3GLM:
         )
 
         # ── FILET ANTI-FUITE (défense en profondeur) ──────────────────────────
-        # COLS_A_EXCLURE (ci-dessous) est une liste NOIRE de noms exacts : elle
-        # couvre nb_sinistres / cout_total_sinistres / prime_pure, mais pas les
-        # grandeurs de sinistralité aux noms imprévus qu'un fichier client peut
-        # contenir (montant_sinistres, cout_medecine, sinistre_*...). Ces
-        # colonnes entreraient dans le GLM via le FALLBACK ci-dessus, qui prend
-        # TOUTES les colonnes numériques quand la sous-branche n'est pas
-        # reconnue. Même faille que celle corrigée dans A4/A5/A6 (audits V8/V9).
-        # On applique donc ici le même filtre partagé.
+        # Un premier passage de conformité est appliqué ici sur la liste de
+        # variables candidates. ⚠ Il ne suffit PAS à lui seul : le code plus bas
+        # enrichit encore la liste (colonnes *_enc). Le filtre DÉCISIF est celui
+        # appliqué à la liste FINALE `vars_pred` (voir plus bas, audit V10 B1).
 
         # Filtrage : variables qui existent ET sont numériques
         cols_exclure = set(COLS_A_EXCLURE)
@@ -667,6 +654,35 @@ class AgentA3GLM:
             and '_enc' in c  # Colonnes encodées par A2
         ]
         vars_pred.extend(cols_num_disponibles[:10])  # Limite à 10 supplémentaires
+
+        # ══════════════════════════════════════════════════════════════════════
+        #  CONFORMITÉ — FILTRE APPLIQUÉ À LA LISTE FINALE (audit V10, BLOQUANT B1)
+        # ══════════════════════════════════════════════════════════════════════
+        # ⚠ NE JAMAIS DÉPLACER CET APPEL NI AJOUTER DE COLONNE APRÈS LUI.
+        #
+        # Le filtre de conformité était appliqué plus haut, à `vars_prioritaires`
+        # — mais le bloc ci-dessus RÉINJECTAIT ensuite toute colonne `*_enc` du
+        # DataFrame, gardé par la seule liste noire statique COLS_A_EXCLURE (qui
+        # ne contient AUCUNE variable de genre). Le filtre était donc
+        # intégralement contourné vingt lignes après son propre appel.
+        #
+        # Prouvé par exécution (audit V10) : un fichier client contenant une
+        # colonne 'titre' (M./Mme — la civilité, proxy parfait du genre) était
+        # encodé par A2 en 'titre_enc', réinjecté ici, et retenu par le GLM avec
+        # β = −0,476 (p = 5,5e-13) — soit un écart de tarif de 37,9 % entre
+        # hommes et femmes. Variable légalement prohibée (CJUE C-236/09).
+        #
+        # LEÇON : un filtre de conformité doit s'appliquer au DERNIER MOMENT
+        # POSSIBLE, sur la liste effectivement utilisée pour construire la
+        # matrice X — jamais sur une liste intermédiaire qu'un code ultérieur
+        # peut enrichir. C'est le même défaut, dans sa forme la plus pure, que
+        # celui qui hante ce module depuis six cycles : « une règle correcte à
+        # un endroit, contournée ailleurs ».
+        vars_pred = filtrer_features(
+            vars_pred,
+            contexte=f"A3 — matrice de conception GLM (sous-branche '{sous_branche}')",
+            logger_agent=logger,
+        )
 
         if len(vars_pred) == 0:
             raise ValueError(

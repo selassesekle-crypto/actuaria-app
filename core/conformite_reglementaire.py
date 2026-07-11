@@ -85,8 +85,14 @@ COLS_GENRE_INTERDITES = [
 # puissance_fiscale, zone_geographique, carburant, etc. — aucun ne contient
 # ces racines).
 COLS_GENRE_STEMS = [
-    'sex', 'genre', 'gender', 'civilite', 'titre_civil',
+    'sex', 'genre', 'gender', 'civilite', 'titre_civil', 'titre',
+    'prenom', 'madame', 'monsieur', 'is_male', 'is_female',
 ]
+# ⚠ 'titre' ajouté le 11/07/2026 (audit V10, BLOQUANT B1) : un fichier client
+# contenant une colonne 'titre' (M./Mme — la civilité, proxy PARFAIT du genre)
+# était encodé par A2 en 'titre_enc', qui atteignait ensuite la matrice de
+# conception du GLM. La racine 'titre_civil' était trop spécifique pour le
+# capturer. Aucun facteur tarifaire légitime ne contient ces racines.
 
 
 def _est_variable_genre(nom: str) -> bool:
@@ -204,13 +210,34 @@ def _est_derivee_sinistralite(nom: str) -> bool:
     """True si le nom de colonne est une grandeur dérivée de la sinistralité
     de la PÉRIODE OBSERVÉE (famille cible), y compris ses variantes
     log_/_obs/_annuel. Les variables d'expérience passée explicitement
-    listées dans COLS_FAMILLE_CIBLE_EXCEPTIONS sont préservées."""
-    if nom in COLS_FAMILLE_CIBLE_EXCEPTIONS:
+    listées dans COLS_FAMILLE_CIBLE_EXCEPTIONS sont préservées.
+
+    ⚠ CORRECTIONS (audit V10, 11/07/2026) :
+    · INSENSIBILITÉ À LA CASSE. La comparaison était sensible à la casse, là où
+      filtrer_genre ne l'était pas : 'MONTANT_SINISTRES' (majuscules — cas
+      courant dans les extractions SI mainframe) passait le filtre. Asymétrie
+      corrigée : les deux filtres se comportent désormais de la même façon.
+    · INTERACTIONS AVEC L'EXPÉRIENCE PASSÉE. A2 génère des interactions du type
+      'inter_bonus_malus_antecedents_sinistres_n1' — parfaitement légitimes
+      (la sinistralité N-1 est connue à la souscription : c'est le fondement du
+      bonus-malus). Elles étaient exclues à tort parce que la racine 'sinistre'
+      y apparaît. On neutralise les noms d'exceptions AVANT de chercher les
+      racines de sinistralité observée.
+    """
+    n = nom.lower()
+    exceptions = [e.lower() for e in COLS_FAMILLE_CIBLE_EXCEPTIONS]
+    if n in exceptions:
         return False
-    base = nom[4:] if nom.startswith('log_') else nom
-    if base in COLS_FAMILLE_CIBLE or nom in COLS_FAMILLE_CIBLE:
+    # Neutraliser les variables d'expérience passée (légitimes) avant de
+    # chercher une racine de sinistralité OBSERVÉE dans le reste du nom.
+    reste = n
+    for e in exceptions:
+        reste = reste.replace(e, '')
+    base = n[4:] if n.startswith('log_') else n
+    if (base in [c.lower() for c in COLS_FAMILLE_CIBLE]
+            or n in [c.lower() for c in COLS_FAMILLE_CIBLE]):
         return True
-    return any(stem in nom for stem in COLS_FAMILLE_CIBLE_STEMS)
+    return any(stem in reste for stem in COLS_FAMILLE_CIBLE_STEMS)
 
 
 def filtrer_famille_cible(

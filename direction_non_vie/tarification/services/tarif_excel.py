@@ -612,9 +612,26 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
         r = 7
         # ── Résumé recalibration (IA France 2019 §3.2.5) ──────────────────────
         _section(ws3, r, "▶ RECALIBRATION DU MODÈLE (backtesting réel)"); r += 1
+        # ⚠ AUDIT V10 (BLOQUANT B3) : le statut était calculé par
+        #   statut="VERT" if backtest.get('modele_recalibre') else "AMBRE"
+        # Or 'modele_recalibre' est une CHAÎNE — y compris quand elle vaut
+        # "GLM_POISSON → proxy GBM (...)", qui est truthy. Le livrable Excel
+        # estampillait donc « ✓ Conforme » en VERT sur la ligne même qui
+        # annonçait une recalibration sur proxy, pendant que le gate RAG, lui,
+        # plafonnait à AMBRE. Le rapport client contredisait la certification.
+        # On lit désormais le FLAG booléen de fidélité, seule source de vérité.
+        _wf_fidele = bool(backtest.get('modele_recalibre_fidele', False))
         _kpi(ws3, r, "Modèle recalibré par fenêtre",
              backtest.get('modele_recalibre') or "Non disponible",
-             statut="VERT" if backtest.get('modele_recalibre') else "AMBRE"); r += 1
+             statut=("VERT" if _wf_fidele
+                     else ("AMBRE" if backtest.get('modele_recalibre') else "ROUGE"))); r += 1
+        if not _wf_fidele and backtest.get('modele_recalibre'):
+            _kpi(ws3, r, "⚠ Portée de la validation temporelle",
+                 "La recalibration walk-forward n'a PAS porté sur le modèle de "
+                 "production (repli sur proxy GBM) : la stabilité temporelle "
+                 "mesurée est celle d'un AUTRE modèle. Ne vaut pas validation "
+                 "du modèle retenu.",
+                 statut="AMBRE"); r += 1
         if backtest.get('gini_wf_moyen') is not None:
             _kpi(ws3, r, "Gini walk-forward moyen (recalibré)",
                  round(backtest.get('gini_wf_moyen', 0), 4), fmt=FMT_DEC4); r += 1

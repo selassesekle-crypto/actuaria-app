@@ -303,6 +303,75 @@ class TestConformiteA3(unittest.TestCase):
         print(f"    A3-CONF Genre et sinistralité exclus du GLM ✅ | vars={vars_glm}")
 
 
+class TestAuditV10_B1_ContournementA3(unittest.TestCase):
+    """
+    AUDIT V10 — BLOQUANT B1. Ce test DOIT échouer sur le code d'avant correctif.
+
+    A3 appelait filtrer_features() sur `vars_prioritaires`, puis un bloc situé
+    vingt lignes plus bas RÉINJECTAIT toute colonne `*_enc` du DataFrame, gardé
+    par la seule liste noire statique COLS_A_EXCLURE (sans aucune variable de
+    genre). Le filtre était donc intégralement contourné.
+
+    Prouvé par le certificateur V10 : un fichier client contenant une colonne
+    'titre' (M./Mme — civilité, proxy parfait du genre) était encodé par A2 en
+    'titre_enc', réinjecté, et retenu par le GLM avec β = −0,476 (p = 5,5e-13),
+    soit 37,9 % d'écart de tarif entre hommes et femmes. CJUE C-236/09.
+
+    ⚠ Le test de conformité A3 précédent n'injectait QUE des colonnes numériques
+    sans '_enc' dans le nom : il ne pouvait structurellement pas exercer le
+    chemin vulnérable. Un test de non-régression qui ne peut pas échouer sur le
+    code bogué ne prouve rien. Celui-ci porte une colonne '_enc' prohibée.
+    """
+
+    def test_colonne_enc_prohibee_n_atteint_pas_le_glm(self):
+        from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
+        from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
+        from direction_non_vie.tarification.a3_glm.agent import AgentA3GLM
+        rng = np.random.default_rng(42)
+        N = 6000
+        age = rng.integers(18, 85, N)
+        bm = np.clip(rng.normal(0.9, 0.2, N), 0.5, 3.5)
+        sexe = rng.choice(['M', 'F'], N)
+        # Effet de risque VOLONTAIREMENT injecté dans le genre : le GLM a donc
+        # un intérêt statistique à retenir la civilité s'il y a accès.
+        lam = 0.10 * np.exp(0.5 * (age < 25) + 0.4 * np.log(bm) + 0.35 * (sexe == 'M'))
+        nb = rng.poisson(lam)
+        df = pd.DataFrame({
+            'id_contrat': [f'C{i:06d}' for i in range(N)],
+            'annee_souscription': rng.choice([2021, 2022, 2023, 2024], N),
+            'exposition': np.clip(rng.beta(5, 1, N), 0.05, 1.0),
+            'age': age, 'bonus_malus': bm,
+            'anciennete_permis': np.clip(age - 18, 0, None),
+            'puissance_fiscale': rng.integers(4, 15, N),
+            'csp': rng.choice(['Cadre', 'Employe', 'Retraite'], N),
+            'usage': rng.choice(['Prive', 'Pro'], N),
+            'antecedents_sinistres_n1': rng.poisson(0.15, N),
+            # ⚠ colonnes prohibées, noms 100 % réalistes en SI d'assureur :
+            'titre': np.where(sexe == 'M', 'M.', 'Mme'),        # proxy genre
+            'sinistralite_categorie': rng.choice(['Faible', 'Forte'], N),  # fuite
+            'nb_sinistres': nb,
+            'cout_total_sinistres': np.where(nb > 0, rng.gamma(2, 1200, N), 0.),
+        })
+        a1 = AgentA1Ingestion(audit_path='/tmp', verbose=False)
+        a2 = AgentA2Preprocessing(audit_path='/tmp', verbose=False)
+        a3 = AgentA3GLM(models_path='/tmp', audit_path='/tmp', verbose=False)
+        r2 = a2.run(result_a1=a1.run(branche='non_vie', dataframe=df))
+
+        r3 = a3.run(result_a2=r2, generer_graphiques=False)
+        self.assertTrue(r3['success'], f"A3 a échoué : {r3.get('erreur')}")
+        vars_glm = r3['metriques']['poisson'].get('vars_retenues', [])
+
+        genre = [v for v in vars_glm
+                 if 'titre' in v.lower() or 'sexe' in v.lower() or 'genre' in v.lower()]
+        self.assertEqual(genre, [],
+            f"FUITE GENRE dans la matrice de conception du GLM : {genre} "
+            f"(CJUE C-236/09 — variable légalement prohibée en tarification)")
+        fuite = [v for v in vars_glm if 'sinistral' in v.lower()]
+        self.assertEqual(fuite, [],
+            f"FUITE DE DONNÉES dans le GLM : {fuite}")
+        print(f"    V10-B1 Colonne *_enc prohibée écartée du GLM ✅ | vars={vars_glm}")
+
+
 if __name__ == '__main__':
     print("="*65)
     print("  TESTS A3 GLM v1.0 — TARIFICATION POISSON/GAMMA/TWEEDIE")
