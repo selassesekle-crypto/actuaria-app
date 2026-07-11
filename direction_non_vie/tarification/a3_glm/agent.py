@@ -111,7 +111,8 @@ except ImportError:
 # 'civilite' entrait dans le GLM. A3 appelle désormais filtrer_genre(),
 # comme A2/A4/A5/A6 : une seule implémentation, pour tous.
 from core.conformite_reglementaire import (
-    filtrer_features, filtrer_genre, filtrer_famille_cible, COLS_GENRE_INTERDITES
+    construire_matrice_x, filtrer_features, filtrer_genre,
+    filtrer_famille_cible, COLS_GENRE_INTERDITES,
 )
 
 warnings.filterwarnings('ignore')
@@ -678,11 +679,17 @@ class AgentA3GLM:
         # peut enrichir. C'est le même défaut, dans sa forme la plus pure, que
         # celui qui hante ce module depuis six cycles : « une règle correcte à
         # un endroit, contournée ailleurs ».
-        vars_pred = filtrer_features(
+        # construire_matrice_x() retourne un objet MatriceX IMMUABLE : plus aucun
+        # code ne peut enrichir la liste après filtrage (le bloc de réinjection
+        # des *_enc ci-dessus lèverait désormais une AttributeError). Le BLOQUANT
+        # B1 de l'audit V10 est devenu littéralement inécrivable.
+        _mx = construire_matrice_x(
             vars_pred,
             contexte=f"A3 — matrice de conception GLM (sous-branche '{sous_branche}')",
             logger_agent=logger,
         )
+        self.exclusions_conformite = _mx.exclusions   # remontée dans les rapports
+        vars_pred = list(_mx)
 
         if len(vars_pred) == 0:
             raise ValueError(

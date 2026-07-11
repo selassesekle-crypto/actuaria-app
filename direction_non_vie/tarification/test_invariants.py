@@ -257,6 +257,151 @@ class TestInvariant_LivrablesCoherentsAvecLeGate(unittest.TestCase):
         print("    INV-4b 5 cas dégradés avertis · walk-forward sain silencieux ✅")
 
 
+class TestInvariant_MatriceXNonContournable(unittest.TestCase):
+    """
+    INVARIANT N°5 — Le contournement de la conformité doit être IMPOSSIBLE,
+    pas seulement interdit.
+
+    Six cycles ont produit six variantes du même défaut : le filtre est correct,
+    et il est contourné ailleurs. Le pire (BLOQUANT B1, audit V10) : A3 appelait
+    le filtre, puis réinjectait des colonnes brutes vingt lignes plus bas — le
+    GLM tarifait la civilité (37,9 % d'écart H/F).
+
+    MatriceX rend ce code littéralement inécrivable : la liste de features
+    conforme est un TUPLE IMMUABLE, instanciable uniquement par le module de
+    conformité.
+    """
+
+    def test_matricex_ne_peut_pas_etre_instanciee_directement(self):
+        from core.conformite_reglementaire import MatriceX
+        with self.assertRaises(TypeError):
+            MatriceX(['sexe'], {}, 'contournement')
+        print("    INV-5a MatriceX non instanciable hors du module de conformité ✅")
+
+    def test_matricex_est_immuable(self):
+        from core.conformite_reglementaire import construire_matrice_x
+        mx = construire_matrice_x(['age', 'bonus_malus', 'titre_enc'],
+                                  contexte='test')
+        # Reproduction exacte du geste qui a produit le BLOQUANT B1 :
+        with self.assertRaises(AttributeError):
+            mx.features.extend(['titre_enc'])
+        with self.assertRaises(AttributeError):
+            mx._features = ('sexe',)
+        self.assertNotIn('titre_enc', list(mx))
+        print("    INV-5b MatriceX immuable — la réinjection post-filtre (B1) "
+              "lève AttributeError ✅")
+
+    def test_matricex_trace_ses_exclusions_avec_un_motif(self):
+        """Une exclusion silencieuse est un défaut en soi : c'est ce silence qui
+        a rendu le BLOQUANT B5 si coûteux (antecedents_sinistres_3ans détruit,
+        −17,4 % de Gini, sans que rien ne l'indique nulle part)."""
+        from core.conformite_reglementaire import construire_matrice_x
+        mx = construire_matrice_x(
+            ['age', 'sexe', 'montant_sinistres', 'colonne_inconnue_xyz'],
+            contexte='test')
+        excl = mx.exclusions
+        self.assertIn('sexe', excl)
+        self.assertIn('C-236/09', excl['sexe'])
+        self.assertIn('montant_sinistres', excl)
+        self.assertIn('fuite', excl['montant_sinistres'].lower())
+        self.assertIn('colonne_inconnue_xyz', excl)
+        self.assertIn('liste blanche', excl['colonne_inconnue_xyz'])
+        print("    INV-5c Chaque exclusion porte son motif réglementaire ✅")
+
+    def test_tous_les_agents_passent_par_construire_matrice_x(self):
+        """Aucun agent ne doit construire une matrice X autrement."""
+        import inspect
+        from direction_non_vie.tarification.a3_glm import agent as a3
+        from direction_non_vie.tarification.a4_ml import agent as a4
+        from direction_non_vie.tarification.a5_deep_learning import agent as a5
+        from direction_non_vie.tarification.a6_comparaison import agent as a6
+        for mod in (a3, a4, a5, a6):
+            with self.subTest(agent=mod.__name__):
+                src = inspect.getsource(mod)
+                self.assertIn('construire_matrice_x', src,
+                    f"{mod.__name__} ne passe pas par construire_matrice_x() : "
+                    f"sa matrice X n'est pas certifiée conforme.")
+        print("    INV-5d A3 · A4 · A5 · A6 : tous passent par "
+              "construire_matrice_x() ✅")
+
+
+class TestInvariant_GateLitToutesLesFenetres(unittest.TestCase):
+    """
+    INVARIANT N°6 — Le gate doit exploiter TOUT ce que le backtest calcule.
+
+    'ae_ratio' ne porte que sur la DERNIÈRE fenêtre walk-forward (a6:938-939).
+    A6 calcule aussi 'ae_moyen_wf' et 'n_fenetres_rouge' — mais le gate ne les
+    lisait pas : un modèle avec 3 fenêtres ROUGE sur 4 restait VERT au seul
+    motif que la dernière année était bonne (angle mort signalé à l'audit V11).
+    """
+
+    def setUp(self):
+        from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
+        self.agent = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp',
+                                        verbose=False)
+        self.modele = {'score_global': 0.82, 'gini_test': 0.31}
+
+    def _statut(self, bt):
+        return self.agent._calculer_statut_rag(
+            self.modele, [self.modele], profil_valide_par='X',
+            environnement='production', backtest=bt)
+
+    def test_fenetres_rouges_anterieures_bloquent_le_vert(self):
+        bt = {'disponible': True, 'modele_recalibre_fidele': True,
+              'gini_wf_moyen': 0.25, 'ae_ratio': 1.02,   # dernière fenêtre : bonne
+              'ae_moyen_wf': 0.78, 'n_fenetres_rouge': 3,
+              'stabilite_wf': '🟡 Moyen'}
+        self.assertNotEqual(self._statut(bt), 'VERT',
+            "3 fenêtres ROUGE sur 4 : le modèle a échoué la validation temporelle "
+            "sur trois exercices. La dernière année ne rachète pas les autres.")
+        print("    INV-6a 3 fenêtres ROUGE → VERT refusé ✅")
+
+    def test_ae_moyen_hors_bande_bloque_le_vert(self):
+        bt = {'disponible': True, 'modele_recalibre_fidele': True,
+              'gini_wf_moyen': 0.25, 'ae_ratio': 1.05,
+              'ae_moyen_wf': 0.85, 'n_fenetres_rouge': 0,
+              'stabilite_wf': '🟡 Moyen'}
+        self.assertNotEqual(self._statut(bt), 'VERT',
+            "A/E moyen 0,85 sur l'ensemble des fenêtres = biais persistant.")
+        print("    INV-6b A/E moyen hors bande → VERT refusé ✅")
+
+    def test_walk_forward_sain_reste_vert(self):
+        """Contrôle négatif : le garde-fou ne doit pas plafonner en permanence."""
+        bt = {'disponible': True, 'modele_recalibre_fidele': True,
+              'gini_wf_moyen': 0.28, 'ae_ratio': 1.01,
+              'ae_moyen_wf': 1.01, 'n_fenetres_rouge': 0,
+              'stabilite_wf': '🟢 Stable'}
+        self.assertEqual(self._statut(bt), 'VERT')
+        print("    INV-6c Walk-forward sain → VERT accessible ✅")
+
+    def test_gate_et_rapports_disent_la_meme_chose(self):
+        """Le gate et la source unique d'avertissement ne doivent JAMAIS
+        diverger : un livrable qui contredit la certification, c'est le
+        BLOQUANT B3 (audit V10)."""
+        cas = [
+            {'disponible': True, 'modele_recalibre_fidele': True,
+             'gini_wf_moyen': 0.28, 'ae_ratio': 1.01, 'ae_moyen_wf': 1.01,
+             'n_fenetres_rouge': 0, 'stabilite_wf': '🟢 Stable'},
+            {'disponible': True, 'modele_recalibre_fidele': True,
+             'gini_wf_moyen': 0.25, 'ae_ratio': 1.02, 'ae_moyen_wf': 0.78,
+             'n_fenetres_rouge': 3, 'stabilite_wf': '🟡 Moyen'},
+            {'disponible': True, 'modele_recalibre_fidele': False,
+             'gini_wf_moyen': 0.25, 'ae_ratio': 1.00, 'ae_moyen_wf': 1.00,
+             'n_fenetres_rouge': 0, 'stabilite_wf': '🟢 Stable'},
+            {'disponible': False},
+        ]
+        for i, bt in enumerate(cas):
+            with self.subTest(cas=i):
+                gate_vert = self._statut(bt) == 'VERT'
+                rapport_silencieux = avertissement_walk_forward(bt) is None
+                self.assertEqual(gate_vert, rapport_silencieux,
+                    f"Cas {i} : le gate dit {'VERT' if gate_vert else 'pas VERT'} "
+                    f"mais le rapport "
+                    f"{'ne dit rien' if rapport_silencieux else 'avertit'} — "
+                    f"le livrable contredit la certification.")
+        print("    INV-6d Gate et rapports strictement alignés (4 cas) ✅")
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("  TESTS D'INVARIANTS — le code se contredit-il lui-même ?")

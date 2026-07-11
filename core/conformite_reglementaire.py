@@ -534,6 +534,8 @@ def avertissement_walk_forward(backtest: Optional[dict]) -> Optional[str]:
 
     gini_wf = bt.get('gini_wf_moyen')
     ae      = bt.get('ae_ratio')
+    ae_moy  = bt.get('ae_moyen_wf')
+    n_rouge = bt.get('n_fenetres_rouge', 0) or 0
     stab    = str(bt.get('stabilite_wf', ''))
     if gini_wf is None:
         return ("⚠ VALIDATION TEMPORELLE SANS RÉSULTAT — le walk-forward a "
@@ -543,8 +545,154 @@ def avertissement_walk_forward(backtest: Optional[dict]) -> Optional[str]:
         return (f"⚠ BIAIS DE TARIFICATION — A/E walk-forward = {ae}, hors de la "
                 f"bande acceptable [0,90 ; 1,10]. Le modèle sur- ou "
                 f"sous-tarifie systématiquement hors échantillon.")
+    # ⚠ 'ae_ratio' ne porte que sur la DERNIÈRE fenêtre. Un modèle peut avoir
+    # échoué plusieurs exercices et rester acceptable sur la dernière année :
+    # ces deux critères lisent TOUTES les fenêtres (audit V11).
+    if n_rouge > 0:
+        return (f"⚠ ÉCHEC SUR {n_rouge} EXERCICE(S) — {n_rouge} fenêtre(s) "
+                f"walk-forward en ROUGE. Le modèle a échoué la validation "
+                f"temporelle sur au moins un exercice passé, même si la dernière "
+                f"année est satisfaisante.")
+    if ae_moy is not None and not (0.90 <= float(ae_moy) <= 1.10):
+        return (f"⚠ BIAIS PERSISTANT — A/E moyen sur toutes les fenêtres = "
+                f"{ae_moy}, hors bande acceptable [0,90 ; 1,10].")
     if '🔴' in stab:
         return (f"⚠ INSTABILITÉ TEMPORELLE — stabilité inter-fenêtres : {stab}. "
                 f"Les performances du modèle varient fortement d'un exercice à "
                 f"l'autre.")
     return None
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  MatriceX — RENDRE LE CONTOURNEMENT IMPOSSIBLE, PAS SEULEMENT INTERDIT
+# ══════════════════════════════════════════════════════════════════════════════
+# Créé le 11/07/2026, sur recommandation du certificateur indépendant (audit V10).
+#
+# LE PROBLÈME QUE CELA RÉSOUT
+# Six cycles d'audit ont produit six variantes du MÊME défaut : le filtre de
+# conformité est correct, et il est contourné ailleurs.
+#   · V7  — filtre présent dans A3, absent d'A4/A5.
+#   · V8  — filtre absent du walk-forward d'A6.
+#   · V9  — filtre contourné par le one-hot, puis par l'encodage automatique.
+#   · V10 — filtre appelé dans A3, puis NEUTRALISÉ vingt lignes plus bas par un
+#           bloc qui réinjectait les colonnes *_enc dans la liste déjà filtrée.
+#           Résultat : le GLM tarifait la civilité (37,9 % d'écart H/F).
+#
+# Tant que `filtrer_features()` reste UNE FONCTION QU'ON PEUT OUBLIER D'APPELER
+# — ou dont on peut modifier le résultat après coup — un septième chemin
+# apparaîtra. Le certificateur l'a écrit sans détour : « rends le contournement
+# impossible ».
+#
+# LA SOLUTION
+# Une liste de features conforme n'est plus une `list` que n'importe quel code
+# peut enrichir : c'est un objet MatriceX
+#   · INSTANCIABLE UNIQUEMENT par ce module (jeton privé) — un agent ne peut pas
+#     en fabriquer une sans passer par le filtre ;
+#   · IMMUABLE (tuple) — `vars_pred.extend(colonnes_brutes)` lève désormais une
+#     AttributeError au lieu de rouvrir silencieusement une faille. Le BLOQUANT
+#     B1 de l'audit V10 aurait été impossible à écrire.
+#   · TRAÇANTE — elle transporte la liste des colonnes exclues et pourquoi, ce
+#     qui permet aux rapports d'en informer l'actuaire. C'est la réponse au
+#     silence qui a rendu le BLOQUANT B5 si coûteux : `antecedents_sinistres_3ans`
+#     (le facteur central de la RC Pro) était détruit sans que rien ne l'indique
+#     dans aucun livrable.
+
+class MatriceX:
+    """
+    Liste de features CERTIFIÉE CONFORME, immuable.
+
+    Ne peut pas être construite directement : passer par `construire_matrice_x()`,
+    qui applique liste blanche → filtre genre → filtre anti-fuite.
+
+        mx = construire_matrice_x(df.columns, contexte='A3 — GLM')
+        X  = df[list(mx)]           # itérable, indexable
+        mx.exclusions                # ce qui a été écarté, et pourquoi
+
+    Toute tentative de modification après construction échoue — c'est le but.
+    """
+    __slots__ = ('_features', '_exclusions', '_contexte')
+    _JETON = object()   # sentinelle privée : seul ce module y a accès
+
+    def __init__(self, features, exclusions, contexte, _jeton=None):
+        if _jeton is not MatriceX._JETON:
+            raise TypeError(
+                "MatriceX ne peut pas être instanciée directement — c'est "
+                "délibéré. Utilisez core.conformite_reglementaire."
+                "construire_matrice_x(), qui applique les filtres de conformité "
+                "(CJUE C-236/09 · anti data leakage). Contourner ce point de "
+                "passage a produit six anomalies bloquantes en six cycles d'audit."
+            )
+        object.__setattr__(self, '_features', tuple(features))
+        object.__setattr__(self, '_exclusions', dict(exclusions))
+        object.__setattr__(self, '_contexte', contexte)
+
+    # ── Lecture seule ────────────────────────────────────────────────────────
+    @property
+    def features(self):
+        """Tuple des features conformes (immuable — .extend() n'existe pas)."""
+        return self._features
+
+    @property
+    def exclusions(self):
+        """{colonne: motif} — ce qui a été écarté et pourquoi. À REMONTER DANS
+        LES RAPPORTS : une exclusion silencieuse est un défaut en soi (V11/B5)."""
+        return dict(self._exclusions)
+
+    @property
+    def contexte(self):
+        return self._contexte
+
+    def __iter__(self):     return iter(self._features)
+    def __len__(self):      return len(self._features)
+    def __contains__(self, x): return x in self._features
+    def __getitem__(self, i):  return self._features[i]
+    def __repr__(self):
+        return (f"MatriceX({len(self._features)} features conformes, "
+                f"{len(self._exclusions)} exclues — {self._contexte})")
+
+    # ── Immuabilité stricte ──────────────────────────────────────────────────
+    def __setattr__(self, *a):
+        raise AttributeError(
+            "MatriceX est immuable. Ajouter une colonne à une matrice déjà "
+            "filtrée est précisément le BLOQUANT B1 de l'audit V10 (le GLM "
+            "tarifait la civilité). Reconstruire via construire_matrice_x()."
+        )
+    __delattr__ = __setattr__
+
+
+def construire_matrice_x(
+    colonnes,
+    contexte: str = '',
+    logger_agent: Optional[logging.Logger] = None,
+    facteurs_supplementaires: Optional[List[str]] = None,
+) -> MatriceX:
+    """
+    SEUL point de construction d'une matrice de features conforme.
+
+    Applique liste blanche → filtre genre → filtre anti-fuite, et retourne un
+    objet MatriceX immuable qui trace aussi ce qui a été exclu, et pourquoi.
+
+    ⚠ À appeler au DERNIER MOMENT, sur les colonnes effectivement candidates.
+    """
+    candidates = [str(c) for c in colonnes]
+    conformes = filtrer_features(
+        candidates, contexte=contexte, logger_agent=logger_agent,
+        facteurs_supplementaires=facteurs_supplementaires,
+    )
+    # Motif d'exclusion, par ordre de priorité réglementaire.
+    exclusions = {}
+    autorises_extra = {f.lower() for f in (facteurs_supplementaires or [])}
+    for c in candidates:
+        if c in conformes:
+            continue
+        if _est_variable_genre(c):
+            exclusions[c] = "genre ou proxy de genre — CJUE C-236/09 (Test-Achats)"
+        elif _est_derivee_sinistralite(c):
+            exclusions[c] = ("dérivée de la sinistralité observée — fuite de "
+                             "données (inconnue au moment de tarifer)")
+        elif not (est_facteur_autorise(c) or c.lower() in autorises_extra):
+            exclusions[c] = ("non déclarée comme facteur tarifaire légitime "
+                             "(liste blanche) — à déclarer si elle est valide")
+        else:
+            exclusions[c] = "exclue par le filtre de conformité"
+    return MatriceX(conformes, exclusions, contexte, _jeton=MatriceX._JETON)

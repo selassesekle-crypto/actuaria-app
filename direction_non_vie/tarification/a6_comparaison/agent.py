@@ -89,7 +89,9 @@ except ImportError:
 # filtrer_famille_cible ; l'audit V9 (BLOQUANT) a prouvé qu'une colonne
 # genre pré-encodée (scénario V7) traversait donc intacte jusqu'à la
 # recalibration walk-forward.
-from core.conformite_reglementaire import filtrer_features, filtrer_genre, filtrer_famille_cible
+from core.conformite_reglementaire import (
+    construire_matrice_x, filtrer_features, filtrer_genre, filtrer_famille_cible,
+)
 
 warnings.filterwarnings('ignore')
 logging.basicConfig(
@@ -860,9 +862,9 @@ class AgentA6Comparaison:
                 # (variable prohibée CJUE C-236/09, et incohérence de features avec
                 # le modèle réellement entraîné par A4/A5 sans genre).
                 # La cible reste lue via df_tr[col_cible], indépendamment de _cols_num.
-                _cols_num = filtrer_features(
+                _cols_num = list(construire_matrice_x(
                     _cols_num, contexte='A6 — walk-forward', logger_agent=logger
-                )
+                ))
                 if _cols_num and col_cible in df_tr.columns:
                     X_tr = df_tr[_cols_num].fillna(0).values
                     y_tr = df_tr[col_cible].values
@@ -1319,7 +1321,9 @@ class AgentA6Comparaison:
         _wf_motif = ''
         if environnement == 'production' and _bt.get('disponible', False):
             _gini_wf = _bt.get('gini_wf_moyen')
-            _ae      = _bt.get('ae_ratio')
+            _ae      = _bt.get('ae_ratio')          # ⚠ DERNIÈRE fenêtre seulement
+            _ae_moy  = _bt.get('ae_moyen_wf')       # moyenne sur TOUTES les fenêtres
+            _n_rouge = _bt.get('n_fenetres_rouge', 0) or 0
             _stab    = str(_bt.get('stabilite_wf', ''))
             if _gini_wf is None:
                 _wf_resultat_ok = False
@@ -1327,8 +1331,28 @@ class AgentA6Comparaison:
                              "(gini_wf_moyen=None) — le walk-forward n'a rien validé")
             elif _ae is None or not (0.90 <= float(_ae) <= 1.10):
                 _wf_resultat_ok = False
-                _wf_motif = (f"A/E walk-forward = {_ae} hors bande acceptable "
-                             f"[0,90 ; 1,10] — biais de tarification systématique")
+                _wf_motif = (f"A/E walk-forward (dernière fenêtre) = {_ae} hors bande "
+                             f"acceptable [0,90 ; 1,10] — biais de tarification "
+                             f"systématique")
+            # ── ANGLE MORT RÉSIDUEL DU GATE (audit V11) ───────────────────────
+            # 'ae_ratio' ne porte que sur la DERNIÈRE fenêtre (a6:938-939). Un
+            # modèle pouvait donc avoir 3 fenêtres ROUGE sur 4 et rester VERT,
+            # au seul motif que la dernière année était bonne. Or A6 calcule
+            # déjà 'ae_moyen_wf' et 'n_fenetres_rouge' — il ne les lisait
+            # simplement pas. Même maladie que B2, un cran plus fin : le
+            # contrôle existe, son résultat n'est pas exploité.
+            # Un VERT de production atteste la stabilité du modèle DANS LE
+            # TEMPS : une seule fenêtre en échec la contredit.
+            elif _n_rouge > 0:
+                _wf_resultat_ok = False
+                _wf_motif = (f"{_n_rouge} fenêtre(s) walk-forward en ROUGE : le "
+                             f"modèle a échoué la validation temporelle sur au "
+                             f"moins un exercice, même si la dernière année est "
+                             f"bonne")
+            elif _ae_moy is not None and not (0.90 <= float(_ae_moy) <= 1.10):
+                _wf_resultat_ok = False
+                _wf_motif = (f"A/E MOYEN sur toutes les fenêtres = {_ae_moy}, hors "
+                             f"bande acceptable [0,90 ; 1,10] — biais persistant")
             elif '🔴' in _stab:
                 _wf_resultat_ok = False
                 _wf_motif = f"stabilité inter-fenêtres dégradée ({_stab})"

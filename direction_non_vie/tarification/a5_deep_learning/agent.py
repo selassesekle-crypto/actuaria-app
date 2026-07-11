@@ -45,7 +45,9 @@ from sklearn.preprocessing import StandardScaler
 # exécution DL bloquée dans l'environnement d'audit V7 par l'absence de
 # PyTorch, mais la logique de sélection est identique à celle d'A4,
 # vérifiée empiriquement).
-from core.conformite_reglementaire import filtrer_features, filtrer_genre, filtrer_famille_cible
+from core.conformite_reglementaire import (
+    construire_matrice_x, filtrer_features, filtrer_genre, filtrer_famille_cible,
+)
 
 # Export Excel (audit V7 MINEUR #2) — A5 était le seul agent sans export
 # Excel. export_excel_a5 suit le même gabarit que les autres agents.
@@ -641,14 +643,12 @@ class AgentA5DeepLearning:
         # même trou que celui corrigé dans A4. Une colonne 'sexe' numérique
         # (0/1) ou pré-encodée ('sexe_enc') pouvait donc atteindre la
         # matrice X du CANN/TabNet. Réf. : Arrêt CJUE C-236/09 (Test-Achats).
-        feature_names = filtrer_features(
+        # ── MATRICE X CONFORME (immuable) — voir A4 pour le détail ────────────
+        _mx = construire_matrice_x(
             feature_names, contexte='A5 — sélection features DL', logger_agent=logger
         )
-
-        # ── FILTRE ANTI-FUITE (audit V8 BLOQUANT) ─────────────────────────────
-        # Même trou que A4 : prime_pure (dérivée de la sinistralité, calculée
-        # par A2 depuis le correctif V7 B2) pouvait atteindre la matrice X du
-        # CANN/TabNet. On exclut toute la famille cible via le module partagé.
+        self.exclusions_conformite = _mx.exclusions
+        feature_names = list(_mx)
 
         # ── SPLIT TEMPOREL (R1 — Commission Tarification IA France 2019 §3.2.4) ──
         # Même approche que A3/A4 : tri temporel avant extraction de X.

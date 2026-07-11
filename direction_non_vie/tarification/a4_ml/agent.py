@@ -128,7 +128,9 @@ except ImportError:
 # filtre genre avant ce correctif (fuite confirmée par exécution réelle :
 # une colonne 'sexe' numérique atteignait la matrice de features des
 # modèles ML, potentiellement retenus en production par A6).
-from core.conformite_reglementaire import filtrer_features, filtrer_genre, filtrer_famille_cible
+from core.conformite_reglementaire import (
+    construire_matrice_x, filtrer_features, filtrer_genre, filtrer_famille_cible,
+)
 
 # ── LOGGER ────────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -818,18 +820,17 @@ class AgentA4ML:
         # numérique (0/1) ou pré-encodée ('sexe_enc') pouvait donc atteindre
         # la matrice X des modèles ML — et A6 peut retenir un tel modèle en
         # production. Réf. : Arrêt CJUE C-236/09 (Test-Achats).
-        feature_names = filtrer_features(
+        # ── MATRICE X CONFORME (immuable) ─────────────────────────────────────
+        # construire_matrice_x() applique liste blanche → filtre genre → filtre
+        # anti-fuite, et retourne un objet IMMUABLE : aucun code ne peut enrichir
+        # la liste après filtrage (BLOQUANT B1, audit V10, devenu inécrivable).
+        # Elle trace aussi les exclusions, remontées ensuite dans les rapports —
+        # une exclusion silencieuse est un défaut en soi (BLOQUANT B5, audit V11).
+        _mx = construire_matrice_x(
             feature_names, contexte='A4 — sélection features ML', logger_agent=logger
         )
-
-        # ── FILTRE ANTI-FUITE (audit V8 BLOQUANT) ─────────────────────────────
-        # COLS_A_EXCLURE_ML retirait déjà nb_sinistres et cout_total_sinistres,
-        # mais PAS prime_pure (commentée « cible » et non exclue). Depuis que
-        # A2 calcule prime_pure automatiquement (correctif V7 B2), prime_pure
-        # atteignait donc la matrice X quand la cible est la fréquence ou le
-        # coût → data leakage (Gini fréquence 0,91 vs 0,20, prouvé par
-        # exécution). On centralise l'exclusion de toute la famille cible.
-        # La cible reste lue via df[col_cible] : l'exclure des features est sûr.
+        self.exclusions_conformite = _mx.exclusions
+        feature_names = list(_mx)
 
         if len(feature_names) == 0:
             raise ValueError("Aucune feature numérique disponible pour ML.")
