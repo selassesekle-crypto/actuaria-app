@@ -84,12 +84,16 @@ try:
 except ImportError:
     TARIF_EXCEL_OK = False
 
-# Filtre anti-fuite partagé (audit V8) — même source que A3/A4/A5.
+# Filtres anti-fuite / conformité partagés (audit V8 + V9) — même source
+# que A3/A4/A5. Historique : le walk-forward n'appliquait que
+# filtrer_famille_cible ; l'audit V9 (BLOQUANT) a prouvé qu'une colonne
+# genre pré-encodée (scénario V7) traversait donc intacte jusqu'à la
+# recalibration walk-forward.
 try:
-    from ..services.conformite_reglementaire import filtrer_famille_cible
+    from ..services.conformite_reglementaire import filtrer_genre, filtrer_famille_cible
 except ImportError:
     from direction_non_vie.tarification.services.conformite_reglementaire import (
-        filtrer_famille_cible
+        filtrer_genre, filtrer_famille_cible
     )
 
 warnings.filterwarnings('ignore')
@@ -852,13 +856,18 @@ class AgentA6Comparaison:
                     and df_tr[c].isnull().sum() == 0
                     and df_tr[c].std() > 0
                 ]
-                # ── FILTRE ANTI-FUITE (audit V8 BLOQUANT) ─────────────────────
-                # Sans ce filtre, _cols_num retenait TOUTE colonne numérique
-                # sauf la cible — donc cout_total_sinistres/nb_sinistres/
-                # prime_pure selon la cible → data leakage (gini_wf ≈ 0,96
-                # avec cible=prime_pure, cout_total_sinistres en feature).
-                # Même exclusion partagée que A4/A5. La cible reste lue via
-                # df_tr[col_cible], indépendamment de _cols_num.
+                # ── FILTRES ANTI-FUITE / CONFORMITÉ (audit V8 BLOQUANT + V9 BLOQUANT) ──
+                # V8 : sans filtrer_famille_cible, _cols_num retenait TOUTE colonne
+                # numérique sauf la cible — data leakage (gini_wf ≈ 0,96 avec
+                # cible=prime_pure, cout_total_sinistres en feature).
+                # V9 : filtrer_genre manquait ici — une colonne sexe pré-encodée
+                # traversait A2 intacte et entrait dans la recalibration walk-forward
+                # (variable prohibée CJUE C-236/09, et incohérence de features avec
+                # le modèle réellement entraîné par A4/A5 sans genre).
+                # La cible reste lue via df_tr[col_cible], indépendamment de _cols_num.
+                _cols_num = filtrer_genre(
+                    _cols_num, contexte='A6 — walk-forward', logger_agent=logger
+                )
                 _cols_num = filtrer_famille_cible(
                     _cols_num, contexte='A6 — walk-forward', logger_agent=logger
                 )

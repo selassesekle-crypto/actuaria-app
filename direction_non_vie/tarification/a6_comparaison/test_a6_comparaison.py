@@ -436,6 +436,63 @@ class TestA6ValidationTemporelleObligatoire(unittest.TestCase):
         print(f"    B2-A6 backtest=None géré sans exception ✅ : {statut}")
 
 
+class TestAntiFuiteGenreWalkForwardV9(unittest.TestCase):
+    """
+    Audit de clôture V9 (BLOQUANT 4.2 / B3, deux certificateurs convergents) —
+    le walk-forward d'A6 n'appliquait que filtrer_famille_cible, jamais
+    filtrer_genre : une colonne sexe pré-encodée (scénario V7) traversait A2
+    intacte et entrait dans la recalibration walk-forward.
+    """
+
+    def test_sexe_preencode_absent_du_walk_forward(self):
+        from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
+        from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
+        from direction_non_vie.tarification.a3_glm.agent import AgentA3GLM
+        from direction_non_vie.tarification.a4_ml.agent import AgentA4ML
+        from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
+        np.random.seed(9)
+        n = 4000
+        expo = np.random.uniform(.1, 1, n)
+        bm = np.random.uniform(50, 350, n)
+        sexe = np.random.binomial(1, 0.5, n).astype(float)
+        nb = np.random.poisson(.06 * expo * bm / 100, n).astype(float)
+        cout = np.where(nb > 0, np.random.gamma(2, 500, n), 0.)
+        df = pd.DataFrame({
+            'id_contrat': range(n), 'nb_sinistres': nb,
+            'cout_total_sinistres': cout, 'exposition': expo,
+            'age': np.random.randint(18, 80, n).astype(float),
+            'bonus_malus': bm, 'sexe': sexe,
+            'puissance_fiscale': np.random.randint(4, 15, n).astype(float),
+            'annee_souscription': np.random.choice(
+                [2019, 2020, 2021, 2022, 2023], n),
+        })
+        a1 = AgentA1Ingestion(audit_path='/tmp', verbose=False)
+        a2 = AgentA2Preprocessing(audit_path='/tmp', verbose=False)
+        a3 = AgentA3GLM(models_path='/tmp', audit_path='/tmp', verbose=False)
+        a4 = AgentA4ML(models_path='/tmp', audit_path='/tmp', verbose=False)
+        a6 = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp', verbose=False)
+        r1 = a1.run(branche='non_vie', dataframe=df)
+        r2 = a2.run(result_a1=r1)
+        self.assertEqual(str(r2['dataframe']['sexe'].dtype), 'float64',
+            "Ce test présuppose que 'sexe' survit intact (numérique) à A2 en auto")
+        r3 = a3.run(result_a2=r2, generer_graphiques=False)
+        r4 = a4.run(result_a2=r2, result_a3=r3, calcul_shap=False,
+                    generer_graphiques=False)
+        r6 = a6.run(result_a2=r2, result_a3=r3, result_a4=r4, result_a5=None,
+                    generer_graphiques=False, generer_rapport_equipe=False,
+                    environnement='production', profil_valide_par='Test V9')
+        bt = r6['backtest']
+        self.assertTrue(bt.get('disponible'),
+            "Backtest doit rester disponible (pas de régression B2)")
+        gini_wf = bt.get('gini_wf_moyen')
+        self.assertIsNotNone(gini_wf)
+        self.assertLess(gini_wf, 0.60,
+            f"gini_wf = {gini_wf} — plausibilité douteuse si le genre "
+            f"contaminait encore le walk-forward")
+        print(f"    V9-5 Genre absent du walk-forward A6 ✅ | "
+              f"statut={r6['statut_rag']} gini_wf={gini_wf:.4f}")
+
+
 if __name__ == '__main__':
     print("="*65)
     print("  TESTS A6 COMPARAISON v1.0 — SÉLECTION FINALE")

@@ -29,7 +29,7 @@ from typing import List, Optional
 
 logger = logging.getLogger('actuaria.tarif.conformite')
 
-# ── Colonnes interdites — INCONDITIONNEL ──────────────────────────────────────
+# ── Colonnes/racines interdites — INCONDITIONNEL ──────────────────────────────
 # Pas de scoping par sous-branche : un scoping par nom de branche serait
 # lui-même une faille si la sous-branche est mal nommée ou non reconnue
 # (cas testé et confirmé lors de l'audit V4 : une sous-branche non détectée
@@ -41,6 +41,31 @@ COLS_GENRE_INTERDITES = [
     'sexe', 'sexe_enc', 'genre', 'genre_enc', 'gender', 'gender_enc',
 ]
 
+# Racines (correspondance par sous-chaîne, insensible à la casse) — ajoutées
+# suite à l'audit V9 (double BLOQUANT). L'égalité stricte précédente ne
+# capturait que 6 noms exacts et laissait passer : (a) les colonnes filles du
+# one-hot encodé par A2 pour TOUTES les sous-branches sauf 'auto' (sexe_M,
+# sexe_F — prouvé par exécution : ces colonnes atteignaient directement la
+# matrice d'entraînement d'A4 en branche MRH, pas seulement un scénario
+# walk-forward) ; (b) les variantes de casse (Sexe, SEXE) et de langue (sex) ;
+# (c) le proxy direct de genre que constitue la civilité (M./Mme).
+# Vérifié sur le vocabulaire de colonnes réellement produit par A1/A2/A4/A5 :
+# aucune collision avec un facteur tarifaire légitime (age, bonus_malus,
+# puissance_fiscale, zone_geographique, carburant, etc. — aucun ne contient
+# ces racines).
+COLS_GENRE_STEMS = [
+    'sex', 'genre', 'gender', 'civilite', 'titre_civil',
+]
+
+
+def _est_variable_genre(nom: str) -> bool:
+    """True si le nom de colonne est une variable de genre ou un proxy direct
+    (civilité), y compris ses formes dérivées (one-hot, casse, langue)."""
+    n = nom.lower()
+    if n in COLS_GENRE_INTERDITES:
+        return True
+    return any(stem in n for stem in COLS_GENRE_STEMS)
+
 
 def filtrer_genre(
     feature_names: List[str],
@@ -48,9 +73,13 @@ def filtrer_genre(
     logger_agent: Optional[logging.Logger] = None,
 ) -> List[str]:
     """
-    Retire toute colonne de genre d'une liste de noms de features,
-    en journalisant explicitement (niveau WARNING) toute suppression
-    effective — traçabilité requise pour l'audit ACPR.
+    Retire toute colonne de genre (ou proxy direct de genre) d'une liste de
+    noms de features, en journalisant explicitement (niveau WARNING) toute
+    suppression effective — traçabilité requise pour l'audit ACPR.
+
+    Correspondance par racine, insensible à la casse (audit V9) : capture
+    aussi bien les colonnes brutes (sexe, Sexe, gender) que leurs dérivées
+    one-hot (sexe_M, sexe_F, genre_H) et le proxy civilité (civilite_Mme).
 
     Paramètres
     ----------
@@ -64,9 +93,8 @@ def filtrer_genre(
     Retourne la liste filtrée (nouvel objet, ne modifie pas l'original).
     """
     _log = logger_agent or logger
-    avant = set(feature_names)
-    apres = [f for f in feature_names if f not in COLS_GENRE_INTERDITES]
-    supprimees = avant - set(apres)
+    apres = [f for f in feature_names if not _est_variable_genre(f)]
+    supprimees = set(feature_names) - set(apres)
     if supprimees:
         _log.warning(
             f"[CONFORMITE REGLEMENTAIRE] Variable(s) {sorted(supprimees)} "
@@ -105,17 +133,49 @@ COLS_FAMILLE_CIBLE = [
 ]
 
 # Racines pour capturer les variantes dérivées (log_*, *_obs, *_annuel...)
-# sans lister chaque combinaison. Précis : aucun facteur tarifaire a priori
-# légitime (age, bonus_malus, puissance, zone...) ne contient ces racines.
+# sans lister chaque combinaison. Élargies suite à l'audit V9 (BLOQUANT) :
+# les racines initiales (V8) ne couvraient que le cas qui les a motivées
+# (auto/prime_pure) — en branche santé, A2 produit des grandeurs de
+# sinistralité OBSERVÉE sous des noms entièrement différents (sinistre_*,
+# total_sinistres_sante, cout_hospitalisation...) qui ne partageaient aucune
+# des 5 racines V8 et atteignaient donc la matrice X. Preuve par exécution :
+# Gini fréquence santé 0,8093 avec ces colonnes vs 0,0725 sans (+0,74) —
+# même signature que la fuite V8 (0,91 vs 0,20).
+# 'sinistre' et 'cout_' sont volontairement larges (vérifié sur tout le
+# vocabulaire de colonnes du module : aucun facteur tarifaire a priori
+# légitime n'en contient) pour couvrir aussi les postes/variantes futurs
+# sans nécessiter un nouveau correctif à chaque nouveau nom.
 COLS_FAMILLE_CIBLE_STEMS = [
     'prime_pure', 'cout_total_sinistres', 'cout_moyen',
     'lambda_freq', 'nb_sinistres',
+    'sinistre', 'cout_', 'part_hospit',
+]
+
+# Exceptions explicites — variables dont le nom contient une racine ci-dessus
+# mais qui sont des facteurs tarifaires a priori LÉGITIMES : sinistralité
+# PASSÉE (N-1, antécédents), connue au moment de la souscription d'un contrat
+# neuf — par opposition à la sinistralité de la PÉRIODE OBSERVÉE que la
+# cible cherche à prédire. C'est la même distinction actuarielle que celle
+# qui fonde le bonus-malus. Élargir 'sinistre'/'cout_' en racines (ci-dessus)
+# sans cette liste d'exceptions aurait exclu à tort ces variables — c'est
+# le faux positif identifié par l'audit V9 (constat 4.4).
+# Toute nouvelle variable d'expérience passée (ex. futurs agents A7+
+# provisionnement) doit être ajoutée ici explicitement plutôt que de relâcher
+# une racine — préserve la traçabilité ACPR de ce qui est autorisé et
+# pourquoi.
+COLS_FAMILLE_CIBLE_EXCEPTIONS = [
+    'antecedents_sinistres_n1',   # variable réelle produite par A2 (l.1183+)
+    'nb_sinistres_anterieurs',    # nom plausible côté client — même sémantique
 ]
 
 
 def _est_derivee_sinistralite(nom: str) -> bool:
     """True si le nom de colonne est une grandeur dérivée de la sinistralité
-    observée (famille cible), y compris ses variantes log_/_obs/_annuel."""
+    de la PÉRIODE OBSERVÉE (famille cible), y compris ses variantes
+    log_/_obs/_annuel. Les variables d'expérience passée explicitement
+    listées dans COLS_FAMILLE_CIBLE_EXCEPTIONS sont préservées."""
+    if nom in COLS_FAMILLE_CIBLE_EXCEPTIONS:
+        return False
     base = nom[4:] if nom.startswith('log_') else nom
     if base in COLS_FAMILLE_CIBLE or nom in COLS_FAMILLE_CIBLE:
         return True

@@ -259,6 +259,137 @@ class TestAntiFuiteFamilleCible(unittest.TestCase):
         print(f"    AF3 Gini plausible ✅ | best={best['modele']} Gini={gini:.4f} (< 0,60)")
 
 
+class TestAntiFuiteV9(unittest.TestCase):
+    """
+    Audit de clôture V9 (deux certificateurs indépendants, convergents) —
+    verrouille les deux angles morts que les tests AF existants (branche
+    auto uniquement) ne couvraient pas :
+    (a) fuite de sinistralité en branche santé, noms hors des racines V8 ;
+    (b) fuite de genre via les colonnes filles du one-hot A2 (branches
+        non-auto), au-delà du match exact de filtrer_genre.
+    """
+
+    def test_filtre_genre_variantes_adverses(self):
+        """filtrer_genre doit capturer casse, one-hot, civilité — pas
+        seulement les 6 noms exacts d'origine (audit V9, ex-IMPORTANT 4.3
+        reclassé BLOQUANT après preuve d'atteinte de la matrice X réelle)."""
+        from direction_non_vie.tarification.services.conformite_reglementaire import (
+            filtrer_genre,
+        )
+        adverses = ['sexe', 'Sexe', 'SEXE', 'sex', 'genre', 'gender',
+                    'sexe_enc', 'sexe_m', 'sexe_f', 'genre_H', 'genre_F',
+                    'civilite', 'civilite_Mme', 'titre_civilite']
+        out = filtrer_genre(adverses, contexte='test')
+        self.assertEqual(out, [], f"Variables de genre non filtrées : {out}")
+        legitimes = filtrer_genre(['age', 'bonus_malus', 'puissance_fiscale'])
+        self.assertEqual(len(legitimes), 3, "Facteurs tarifaires légitimes exclus à tort")
+        print(f"    V9-1 Filtre genre élargi ✅ | 14 variantes adverses toutes exclues")
+
+    def test_integration_a2_a4_genre_one_hot_mrh(self):
+        """Reproduction exacte de la fuite prouvée par les deux certificateurs
+        V9 : sexe encodé en one-hot (sexe_m/sexe_f) par A2 pour la branche
+        MRH atteint directement la matrice X d'A4 (pas seulement A6)."""
+        from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
+        from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
+        from direction_non_vie.tarification.a4_ml.agent import AgentA4ML
+        np.random.seed(5)
+        n = 2000
+        df = pd.DataFrame({
+            'id_contrat': range(n),
+            'nb_sinistres': np.random.poisson(0.1, n).astype(float),
+            'cout_total_sinistres': np.random.gamma(2, 300, n),
+            'exposition': np.random.uniform(0.2, 1, n),
+            'sexe': np.random.choice(['M', 'F'], n),
+            'age': np.random.randint(20, 80, n).astype(float),
+            'capital_assure_biens_eur': np.random.uniform(50000, 300000, n),
+            'type_logement': np.random.choice(['appartement', 'maison'], n),
+            'statut_occupation': np.random.choice(['proprietaire', 'locataire'], n),
+            'zone_geographique': np.random.choice(list('ABCDE'), n),
+            'annee_souscription': np.random.choice([2021, 2022, 2023], n),
+        })
+        a1 = AgentA1Ingestion(audit_path='/tmp', verbose=False)
+        a2 = AgentA2Preprocessing(audit_path='/tmp', verbose=False)
+        a4 = AgentA4ML(models_path='/tmp', audit_path='/tmp', verbose=False)
+        r1 = a1.run(branche='non_vie', dataframe=df)
+        r2 = a2.run(result_a1=r1)
+        cols_sexe_a2 = [c for c in r2['dataframe'].columns if 'sexe' in c.lower()]
+        self.assertIn('sexe_m', cols_sexe_a2,
+            "Ce test présuppose l'encodage one-hot de sexe par A2 en MRH — "
+            "si ce nom a changé, adapter le test plutôt que le supprimer")
+        feats = a4._preparer_donnees(
+            r2['dataframe'].copy(), r1.get('sous_branche', 'mrh'),
+            'nb_sinistres', 'exposition'
+        )[-1]
+        genre_dans_X = [c for c in feats if 'sexe' in c.lower()]
+        self.assertEqual(genre_dans_X, [],
+            f"FUITE GENRE : {genre_dans_X} dans la matrice X d'A4 (branche MRH)")
+        print(f"    V9-2 Pas de fuite genre one-hot (MRH) ✅ | features={feats}")
+
+    def test_integration_a2_a4_fuite_sinistralite_sante(self):
+        """Reproduction de la fuite de sinistralité en branche santé (noms
+        hors des racines V8 : sinistre_*, cout_{poste}, total_sinistres_sante,
+        part_hospit) — borne de vraisemblance sur le Gini fréquence."""
+        from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
+        from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
+        from direction_non_vie.tarification.a4_ml.agent import AgentA4ML
+        np.random.seed(7)
+        n = 3000
+        lat = np.random.gamma(2, 1, n)
+        cout_med = lat * np.random.uniform(80, 150, n)
+        cout_pharma = lat * np.random.uniform(40, 90, n)
+        cout_hosp = lat * np.random.uniform(200, 600, n) * np.random.binomial(1, 0.15, n)
+        cout_dent = lat * np.random.uniform(30, 80, n)
+        cout_opt = lat * np.random.uniform(20, 60, n)
+        nb_sin = np.random.poisson(0.15 * lat, n).astype(float)
+        df = pd.DataFrame({
+            'id_contrat': range(n), 'nb_sinistres': nb_sin,
+            'cout_total_sinistres': cout_med + cout_pharma + cout_hosp + cout_dent + cout_opt,
+            'exposition': np.random.uniform(0.3, 1, n),
+            'age': np.random.randint(18, 75, n).astype(float),
+            'cout_medecine': cout_med, 'cout_pharmacie': cout_pharma,
+            'cout_hospitalisation': cout_hosp, 'cout_dentaire': cout_dent,
+            'cout_optique': cout_opt,
+            'nb_actes_medecine': np.random.poisson(3, n).astype(float),
+            'regime_securite_sociale': np.random.choice(['general', 'agricole'], n),
+            'formule_sante': np.random.choice(['base', 'confort', 'premium'], n),
+            'annee_souscription': np.random.choice([2021, 2022, 2023], n),
+        })
+        a1 = AgentA1Ingestion(audit_path='/tmp', verbose=False)
+        a2 = AgentA2Preprocessing(audit_path='/tmp', verbose=False)
+        a4 = AgentA4ML(models_path='/tmp', audit_path='/tmp', verbose=False)
+        r1 = a1.run(branche='non_vie', dataframe=df)
+        r2 = a2.run(result_a1=r1)
+        sb = r1.get('sous_branche') or 'sante_individuelle'
+        feats = a4._preparer_donnees(r2['dataframe'].copy(), sb,
+                                     'nb_sinistres', 'exposition')[-1]
+        fuite = [c for c in feats
+                 if any(s in c.lower() for s in ['sinistre', 'cout_', 'part_hospit'])]
+        self.assertEqual(fuite, [],
+            f"FUITE SANTÉ : {fuite} dans la matrice X (sous_branche={sb})")
+
+        r4 = a4.run(result_a2=r2, calcul_shap=False, generer_graphiques=False,
+                    col_cible='nb_sinistres')
+        gini = r4['classement'][0].get('gini_test', 0)
+        self.assertLess(gini, 0.60,
+            f"Gini fréquence santé = {gini:.4f} ≥ 0,60 — signature de fuite "
+            f"(régression de l'anomalie V9 4.1/B4 ?)")
+        print(f"    V9-3 Pas de fuite santé ✅ | Gini={gini:.4f} (< 0,60)")
+
+    def test_faux_positifs_preserves(self):
+        """L'élargissement des racines anti-fuite (V9) ne doit pas exclure
+        à tort les variables d'expérience passée (connues à la souscription)."""
+        from direction_non_vie.tarification.services.conformite_reglementaire import (
+            filtrer_famille_cible,
+        )
+        legitimes = ['nb_sinistres_anterieurs', 'antecedents_sinistres_n1',
+                     'risque_historique', 'age', 'bonus_malus']
+        out = filtrer_famille_cible(legitimes, contexte='test')
+        self.assertEqual(sorted(out), sorted(legitimes),
+            f"Faux positif : variable(s) légitime(s) exclue(s) à tort : "
+            f"{set(legitimes) - set(out)}")
+        print(f"    V9-4 Faux positifs préservés ✅ | {out}")
+
+
 if __name__ == '__main__':
     print("="*65)
     print("  TESTS A4 ML v1.0 — MACHINE LEARNING ×8 MODÈLES")
