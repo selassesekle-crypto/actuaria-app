@@ -22,6 +22,7 @@ Version  : 1.0.0
 
 from __future__ import annotations
 import io, logging, re
+from core.conformite_reglementaire import avertissement_walk_forward
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
@@ -300,7 +301,14 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
         _kpi(ws5, r, "Gini test", round(prod.get('gini_test', 0), 4), fmt=FMT_DEC4); r += 1
         r += 1
         _section(ws5, r, "▶ BACKTESTING WALK-FORWARD (recalibré)"); r += 1
-        _kpi(ws5, r, "Modèle recalibré", bt6.get('modele_recalibre', 'N/A')); r += 1
+        _kpi(ws5, r, "Modèle recalibré", bt6.get('modele_recalibre', 'N/A'),
+             statut=("VERT" if bt6.get('modele_recalibre_fidele') else "AMBRE")); r += 1
+        # Source UNIQUE partagée avec Excel A6 / Word / HTML (audit V11 — le
+        # correctif V10 B3 n'avait été appliqué qu'à l'export Excel d'A6).
+        _avert_wf6 = avertissement_walk_forward(bt6)
+        if _avert_wf6:
+            _kpi(ws5, r, "⚠ Portée de la validation", _avert_wf6,
+                 statut="AMBRE", wrap=True); r += 1
         if bt6.get('gini_wf_moyen') is not None:
             _kpi(ws5, r, "Gini WF moyen", round(bt6.get('gini_wf_moyen', 0), 4), fmt=FMT_DEC4); r += 1
         _kpi(ws5, r, "A/E ratio", round(bt6.get('ae_ratio', 0), 4), fmt=FMT_DEC4); r += 1

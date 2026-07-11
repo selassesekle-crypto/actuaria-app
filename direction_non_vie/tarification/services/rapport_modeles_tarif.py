@@ -21,6 +21,7 @@ Version  : 1.0.0
 
 from __future__ import annotations
 import base64, io, logging, os, re
+from core.conformite_reglementaire import avertissement_walk_forward
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
@@ -192,6 +193,11 @@ def _construire_contexte_tarif(
         f"A/E ratio : {bt6.get('ae_ratio','—')} | {bt6.get('interpretation','—')}",
         f"Walk-forward : {bt6.get('n_fenetres','—')} fenêtres | stabilité={bt6.get('stabilite_wf','—')} | CV={bt6.get('ae_cv_wf','—')}",
         f"Modèle recalibré par fenêtre : {bt6.get('modele_recalibre','—')} | Gini WF moyen={bt6.get('gini_wf_moyen','—')}",
+        # Audit V11 : sans cette ligne, le modèle de narration ignorait que la
+        # validation temporelle avait pu porter sur un AUTRE modèle que celui
+        # retenu — et rédigeait un commentaire faussement rassurant.
+        (avertissement_walk_forward(bt6) or
+         "Validation temporelle : porte bien sur le modèle de production."),
         "",
         "=== GOUVERNANCE DU PROFIL DE PONDÉRATION ===",
         f"Profil retenu : {at6.get('profil_ponderation','—')} | Environnement={at6.get('environnement','—')}",

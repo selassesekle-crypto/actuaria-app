@@ -203,6 +203,13 @@ COLS_FAMILLE_CIBLE_STEMS = [
 COLS_FAMILLE_CIBLE_EXCEPTIONS = [
     'antecedents_sinistres_n1',   # variable réelle produite par A2 (l.1183+)
     'nb_sinistres_anterieurs',    # nom plausible côté client — même sémantique
+    'antecedents_sinistres_3ans', # facteur central RC Pro, déclaré par A3
+    # ⚠ Ces variables portent sur la sinistralité PASSÉE (N-1, 3 dernières
+    # années), connue au moment de souscrire un contrat neuf — par opposition à
+    # la sinistralité de la PÉRIODE OBSERVÉE que la cible cherche à prédire.
+    # C'est la distinction actuarielle qui fonde le bonus-malus et toute la
+    # tarification d'expérience. Les exclure serait un contresens : ce ne sont
+    # pas des fuites, ce sont les meilleurs prédicteurs légitimes disponibles.
 ]
 
 
@@ -308,6 +315,17 @@ FACTEURS_TARIFAIRES_AUTORISES = {
     'exposition', 'log_exposition',
     # Expérience PASSÉE — légitime (connue à la souscription : fonde le B/M)
     'antecedents_sinistres_n1', 'nb_sinistres_anterieurs', 'risque_historique',
+    'antecedents_sinistres_3ans',
+    # ⚠ 'antecedents_sinistres_3ans' ajouté le 11/07/2026 (audit V11, BLOQUANT
+    # B5). C'est LE facteur tarifaire central de la RC Pro (β = +0,43,
+    # p = 7,8e-24, relativité 1,536 par sinistre antérieur), et il est DÉCLARÉ
+    # par A3 lui-même dans VARS_GLM['rcpro'] — mais il était absent de cette
+    # liste blanche, donc détruit en silence : −17,4 % de pouvoir discriminant
+    # du GLM RC Pro. Comme 'antecedents_sinistres_n1', il porte sur la
+    # sinistralité PASSÉE (3 dernières années, connue à la souscription) : ce
+    # n'est pas une fuite, c'est le fondement même de la tarification
+    # d'expérience. Il figure aussi à ce titre dans
+    # COLS_FAMILLE_CIBLE_EXCEPTIONS.
     # ── Auto ──────────────────────────────────────────────────────────────────
     'bonus_malus', 'coefficient_reduction_majoration', 'anciennete_permis',
     'puissance_fiscale', 'puissance', 'valeur_venale', 'kilometrage_annuel',
@@ -317,6 +335,7 @@ FACTEURS_TARIFAIRES_AUTORISES = {
     'surface_m2', 'type_logement', 'statut_occupation', 'etage', 'nb_pieces',
     'annee_construction', 'alarme', 'capital_assure_biens_eur',
     'age_logement', 'dependances',
+    'double_vitrage', 'garantie_vol',   # déclarés par VARS_GLM['mrh'] (audit V11)
     # ── RC Pro ────────────────────────────────────────────────────────────────
     'ca_annuel_eur', 'nb_salaries', 'secteur_activite', 'forme_juridique',
     'anciennete_entreprise_ans', 'type_garantie', 'effectif',
@@ -448,6 +467,12 @@ def filtrer_features(
 
     Tout agent de TOUTE direction construisant une matrice X doit appeler
     cette fonction — et elle seule.
+
+    ⚠ À APPELER AU DERNIER MOMENT POSSIBLE, sur la liste effectivement utilisée
+    pour construire la matrice X — jamais sur une liste intermédiaire qu'un code
+    ultérieur pourrait enrichir. L'audit V10 a démontré (BLOQUANT B1) qu'un
+    filtre appliqué à une liste intermédiaire peut être intégralement contourné
+    vingt lignes plus bas.
     """
     f = selectionner_features_autorisees(
         feature_names, contexte=contexte, logger_agent=logger_agent,
@@ -456,3 +481,70 @@ def filtrer_features(
     f = filtrer_genre(f, contexte=contexte, logger_agent=logger_agent)
     f = filtrer_famille_cible(f, contexte=contexte, logger_agent=logger_agent)
     return f
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  PORTÉE DE LA VALIDATION TEMPORELLE — source unique pour TOUS les livrables
+# ══════════════════════════════════════════════════════════════════════════════
+# Créé le 11/07/2026 (audit V11). Le correctif de l'audit V10 (BLOQUANT B3) —
+# avertir l'actuaire quand le walk-forward n'a pas porté sur le modèle de
+# production — n'avait été appliqué qu'à l'export Excel d'A6. Word, HTML et le
+# rapport d'équipe continuaient d'afficher la chaîne brute « GLM → proxy GBM »
+# sans le moindre avertissement : le motif « corrigé à un endroit, non propagé
+# ailleurs » se reproduisait pour la SIXIÈME fois.
+#
+# Remède structurel : une SEULE fonction dit la vérité sur la portée de la
+# validation temporelle, et TOUS les livrables l'appellent. Il devient impossible
+# qu'un format de rapport diverge des autres — ou du gate de certification.
+
+def avertissement_walk_forward(backtest: Optional[dict]) -> Optional[str]:
+    """
+    Retourne l'avertissement à afficher dans TOUT livrable (Excel, Word, HTML,
+    rapport d'équipe, prompt de narration) lorsque la validation temporelle ne
+    vaut PAS validation du modèle de production — ou None s'il n'y a rien à
+    signaler.
+
+    Trois situations distinctes, trois messages :
+      · backtest indisponible          → aucune validation temporelle du tout ;
+      · recalibration sur proxy        → validation d'un AUTRE modèle ;
+      · résultat insuffisant           → validation menée, mais échouée.
+
+    ⚠ Ne JAMAIS déduire le statut d'un livrable de la véracité (truthiness) du
+    champ 'modele_recalibre' : c'est une CHAÎNE, et « GLM → proxy GBM (...) »
+    est truthy. C'était le BLOQUANT B3 de l'audit V10 : l'Excel estampillait
+    « ✓ Conforme » en VERT sur la ligne annonçant une recalibration sur proxy.
+    """
+    bt = backtest or {}
+
+    if not bt.get('disponible', False):
+        return (
+            "⚠ AUCUNE VALIDATION TEMPORELLE — le backtesting walk-forward n'a "
+            "pas pu être exécuté. La stabilité du modèle dans le temps n'est "
+            f"PAS établie. Motif : {bt.get('note', 'non renseigné')}."
+        )
+
+    if not bt.get('modele_recalibre_fidele', False):
+        return (
+            "⚠ PORTÉE DE LA VALIDATION TEMPORELLE — la recalibration "
+            "walk-forward n'a PAS porté sur le modèle de production "
+            f"({bt.get('modele_recalibre', 'proxy')}) : la stabilité temporelle "
+            "mesurée est celle d'un AUTRE modèle. Ne vaut pas validation du "
+            "modèle retenu."
+        )
+
+    gini_wf = bt.get('gini_wf_moyen')
+    ae      = bt.get('ae_ratio')
+    stab    = str(bt.get('stabilite_wf', ''))
+    if gini_wf is None:
+        return ("⚠ VALIDATION TEMPORELLE SANS RÉSULTAT — le walk-forward a "
+                "tourné mais n'a produit aucune métrique de discrimination "
+                "(Gini indisponible). Il ne valide rien.")
+    if ae is None or not (0.90 <= float(ae) <= 1.10):
+        return (f"⚠ BIAIS DE TARIFICATION — A/E walk-forward = {ae}, hors de la "
+                f"bande acceptable [0,90 ; 1,10]. Le modèle sur- ou "
+                f"sous-tarifie systématiquement hors échantillon.")
+    if '🔴' in stab:
+        return (f"⚠ INSTABILITÉ TEMPORELLE — stabilité inter-fenêtres : {stab}. "
+                f"Les performances du modèle varient fortement d'un exercice à "
+                f"l'autre.")
+    return None

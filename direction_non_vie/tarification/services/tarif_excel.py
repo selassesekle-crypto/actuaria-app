@@ -12,6 +12,7 @@ ONGLETS PAR AGENT :
 """
 
 import io
+from core.conformite_reglementaire import avertissement_walk_forward
 import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Any
@@ -620,18 +621,17 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
         # annonçait une recalibration sur proxy, pendant que le gate RAG, lui,
         # plafonnait à AMBRE. Le rapport client contredisait la certification.
         # On lit désormais le FLAG booléen de fidélité, seule source de vérité.
+        # Source UNIQUE de vérité sur la portée de la validation temporelle,
+        # partagée par Excel, Word, HTML et le rapport d'équipe (audit V11).
+        _avert_wf = avertissement_walk_forward(backtest)
         _wf_fidele = bool(backtest.get('modele_recalibre_fidele', False))
         _kpi(ws3, r, "Modèle recalibré par fenêtre",
              backtest.get('modele_recalibre') or "Non disponible",
              statut=("VERT" if _wf_fidele
                      else ("AMBRE" if backtest.get('modele_recalibre') else "ROUGE"))); r += 1
-        if not _wf_fidele and backtest.get('modele_recalibre'):
-            _kpi(ws3, r, "⚠ Portée de la validation temporelle",
-                 "La recalibration walk-forward n'a PAS porté sur le modèle de "
-                 "production (repli sur proxy GBM) : la stabilité temporelle "
-                 "mesurée est celle d'un AUTRE modèle. Ne vaut pas validation "
-                 "du modèle retenu.",
-                 statut="AMBRE"); r += 1
+        if _avert_wf:
+            _kpi(ws3, r, "⚠ Portée de la validation temporelle", _avert_wf,
+                 statut="AMBRE", wrap=True); r += 1
         if backtest.get('gini_wf_moyen') is not None:
             _kpi(ws3, r, "Gini walk-forward moyen (recalibré)",
                  round(backtest.get('gini_wf_moyen', 0), 4), fmt=FMT_DEC4); r += 1

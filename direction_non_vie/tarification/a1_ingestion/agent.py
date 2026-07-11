@@ -147,7 +147,22 @@ MOTS_CLES_DETECTION = {
     'auto': ['auto', 'vehicule', 'voiture', 'conducteur', 'bonus_malus',
              'bonusmalus', 'puissance', 'vehpower', 'drimage', 'vehgas'],
     'mrh':  ['mrh', 'habitation', 'logement', 'surface', 'locataire'],
-    'rcpro':['rcpro', 'rc_pro', 'responsabilite', 'professionnel'],
+    # ⚠ AUDIT V11 (BLOQUANT B4) : le vocabulaire RC Pro se limitait à
+    # ['rcpro', 'rc_pro', 'responsabilite', 'professionnel'] — or AUCUNE des 8
+    # colonnes que A2 et A3 déclarent pour la RC Pro (nb_salaries,
+    # secteur_activite, forme_juridique, type_garantie, ca_annuel_eur,
+    # anciennete_entreprise_ans, antecedents_sinistres_3ans) ne contient l'un de
+    # ces mots. Un portefeuille RC Pro réel n'était donc JAMAIS détecté : il
+    # retombait sur le repli, était étiqueté 'non' (voir plus bas), et A2/A3
+    # basculaient sur leurs configurations génériques. Toute la spécialisation
+    # RC Pro — pourtant écrite et maintenue — était du CODE MORT.
+    # Le vocabulaire est désormais aligné sur les colonnes réellement déclarées.
+    # ⚠ Un test d'invariant (test_a1_ingestion.py) vérifie désormais que chaque
+    # sous-branche possède au moins une colonne déclarée qui déclenche sa propre
+    # détection — pour qu'une telle divergence ne puisse plus jamais s'installer.
+    'rcpro': ['rcpro', 'rc_pro', 'responsabilite', 'professionnel',
+              'nb_salaries', 'salaries', 'secteur_activite', 'forme_juridique',
+              'ca_annuel', 'anciennete_entreprise', 'effectif', 'siret', 'siren'],
 }
 # Sous-branches Vie, Santé, Prévoyance et Épargne RETIRÉES (11/07/2026).
 # A1 est un agent de la Direction NON-VIE et n'ingère que du Non-Vie
@@ -497,7 +512,19 @@ class AgentA1Ingestion:
         df:      pd.DataFrame,
         branche: str
     ) -> str:
-        """Détecte automatiquement la sous-branche."""
+        """Détecte automatiquement la sous-branche Non-Vie (auto · MRH · RC Pro).
+
+        ⚠ AUDIT V11 (B4) : le repli était `branche.split('_')[0]`, qui pour
+        branche='non_vie' produisait la sous-branche **'non'** — une valeur qui
+        n'existe dans AUCUNE configuration (ni VARS_CATEGORIELLES, ni VARS_GLM,
+        ni INTERACTIONS). A2 et A3 basculaient alors silencieusement sur leurs
+        fallbacks génériques, sans que personne ne soit averti que la
+        spécialisation de sous-branche avait été perdue.
+        Le repli renvoie désormais 'auto' (la sous-branche Non-Vie par défaut,
+        et de loin la plus fréquente) en JOURNALISANT explicitement l'échec de
+        détection, pour que l'actuaire sache qu'une configuration par défaut a
+        été appliquée à son portefeuille.
+        """
         cols_lower = [c.lower() for c in df.columns]
         scores     = {k: 0 for k in MOTS_CLES_DETECTION}
 
@@ -509,7 +536,15 @@ class AgentA1Ingestion:
         meilleur = max(scores, key=scores.get)
         if scores[meilleur] > 0:
             return meilleur
-        return branche.split('_')[0] if '_' in branche else branche
+
+        logger.warning(
+            "[DETECTION SOUS-BRANCHE] Aucune sous-branche Non-Vie reconnue "
+            f"(auto/MRH/RC Pro) à partir des colonnes fournies : {list(df.columns)[:12]}… "
+            "Repli sur la configuration 'auto' par défaut. Les variables et "
+            "interactions spécifiques à la sous-branche réelle du portefeuille "
+            "ne seront donc PAS appliquées — vérifiez le mapping de colonnes."
+        )
+        return 'auto'
 
     # ══════════════════════════════════════════════════════════════════════════
     # MAPPING COLONNES CLIENT
