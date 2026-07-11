@@ -163,15 +163,31 @@ class TestWalkForwardFideleReel(unittest.TestCase):
         print(f"    A3 XGBoost-Tweedie (underscore) fidèle ✅ | "
               f"recalibré={bt['modele_recalibre']}")
 
-    def test_A4_controle_negatif_glm_retombe_en_proxy(self):
-        """Un GLM_* ne doit PAS être marqué fidèle : la fabrique sklearn ne le
-        couvre pas → proxy honnêtement étiqueté (jamais un fidèle menteur)."""
+    def test_A4_le_glm_est_recalibre_fidelement(self):
+        """⚠ PRÉMISSE INVERSÉE (audit V14).
+
+        Ce test s'appelait `test_A4_controle_negatif_glm_retombe_en_proxy` et
+        vérifiait qu'un GLM_* n'était PAS marqué fidèle — il ASSERTAIT LE BUG
+        COMME UNE FONCTIONNALITÉ. À l'époque, c'était cohérent : la fabrique
+        sklearn ne couvrait pas les GLM, et le seul comportement honnête était
+        d'étiqueter le proxy comme tel.
+
+        Mais personne n'avait tiré la conséquence : puisque le gate d'A6 exige
+        `modele_recalibre_fidele` pour accorder un VERT, un GLM ne pouvait
+        JAMAIS être certifié. Le modèle de référence de la Non-Vie —
+        interprétable, auditable, attendu par l'ACPR — était structurellement
+        exclu de la certification, et l'incitation poussait vers la boîte noire.
+
+        La fabrique reconstruit désormais les GLM (statsmodels : même famille,
+        même lien, même offset). Le GLM DOIT être recalibré fidèlement.
+        """
         bt = self._run_wf("GLM_POISSON")
-        self.assertFalse(bt.get("modele_recalibre_fidele"),
-                         "GLM_POISSON marqué 'fidèle' — la fabrique ne devrait "
-                         "pas le couvrir (défaut silencieux !)")
-        self.assertIn("proxy", str(bt.get("modele_recalibre", "")).lower())
-        print(f"    A4 GLM→proxy (contrôle négatif) ✅ | "
+        self.assertTrue(bt.get("modele_recalibre_fidele"),
+                        f"GLM_POISSON n'est PAS recalibré fidèlement "
+                        f"({bt.get('modele_recalibre')}) : il ne pourra jamais "
+                        f"être certifié VERT, quelle que soit sa qualité.")
+        self.assertNotIn("proxy", str(bt.get("modele_recalibre", "")).lower())
+        print(f"    A4 GLM recalibré FIDÈLEMENT ✅ | "
               f"recalibré={bt['modele_recalibre']}")
 
     def test_A5_convention_signe_gini_walk_forward(self):

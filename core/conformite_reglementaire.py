@@ -696,9 +696,11 @@ class MatriceX:
 
     Toute tentative de modification après construction échoue — c'est le but.
     """
-    __slots__ = ('_features', '_exclusions', '_contexte', '_alertes')
+    __slots__ = ('_features', '_exclusions', '_contexte', '_alertes',
+                 '_controle_effet_execute')
 
-    def __init__(self, features, exclusions, contexte, _jeton=None, alertes=None):
+    def __init__(self, features, exclusions, contexte, _jeton=None, alertes=None,
+                 controle_effet_execute=True):
         # ⚠ AUDIT V12 (I6) — le jeton était un ATTRIBUT DE CLASSE public
         # (MatriceX._JETON), et la docstring affirmait « seul ce module y a
         # accès ». C'ÉTAIT FAUX : MatriceX([...], _jeton=MatriceX._JETON)
@@ -725,6 +727,8 @@ class MatriceX:
         object.__setattr__(self, '_exclusions', dict(exclusions))
         object.__setattr__(self, '_contexte', contexte)
         object.__setattr__(self, '_alertes', dict(alertes or {}))
+        object.__setattr__(self, '_controle_effet_execute',
+                           bool(controle_effet_execute))
 
     # ── Lecture seule ────────────────────────────────────────────────────────
     @property
@@ -746,6 +750,18 @@ class MatriceX:
         bien sur le passé, ou est-elle mal étiquetée ?).
         Constat I5 : ce qui n'est que dans les logs n'existe pas."""
         return dict(self._alertes)
+
+    @property
+    def controle_effet_execute(self):
+        """Le garde-fou n°4 (contrôle par l'effet — le SEUL indépendant des noms)
+        a-t-il réellement tourné ? Faux si df/col_cible n'ont pas été fournis.
+
+        ⚠ À REMONTER DANS LES RAPPORTS (I7, audit V14) : le WARNING existait dans
+        les logs, mais l'objet n'en portait aucune trace — donc rien n'atteignait
+        l'actuaire. Or ce module écrit lui-même : « ce qui n'est que dans les logs
+        n'existe pas ». Une matrice X construite sans ce contrôle n'offre que des
+        garde-fous par le NOM, structurellement insuffisants (audit V12)."""
+        return self._controle_effet_execute
 
     @property
     def contexte(self):
@@ -813,6 +829,7 @@ def construire_matrice_x(
     cibles = ([col_cible] if isinstance(col_cible, str)
               else list(col_cible or []))
 
+    controle_effet_execute = not (df is None or not cibles)
     if df is None or not cibles:
         # ⚠ LE GARDE-FOU NE DOIT JAMAIS SE DÉSACTIVER EN SILENCE.
         # `df` et `col_cible` sont techniquement optionnels — un agent peut donc
@@ -865,7 +882,8 @@ def construire_matrice_x(
         else:
             exclusions[c] = "exclue par le filtre de conformité"
     return MatriceX(conformes, exclusions, contexte, _jeton=_JETON,
-                    alertes=alertes_experience)
+                    alertes=alertes_experience,
+                    controle_effet_execute=controle_effet_execute)
 
 
 def synthese_exclusions(exclusions: Optional[dict]) -> Optional[str]:

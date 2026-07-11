@@ -1037,6 +1037,146 @@ class TestInvariant_GardeFouJamaisSilencieux(unittest.TestCase):
               "vérifier ✅")
 
 
+class TestInvariant_LeSystemeAccepteCeQuIlDoitAccepter(unittest.TestCase):
+    """
+    INVARIANT N°14 — LA LEÇON QUE HUIT CYCLES ONT MANQUÉE.
+
+    ═══ Formulée par le certificateur V14 ═══
+
+        « On a beaucoup vérifié que le système REFUSE ce qu'il doit refuser.
+          Personne n'a vérifié qu'il ACCEPTE ce qu'il doit accepter.
+          Un contrôle qui refuse tout est aussi inutile qu'un contrôle qui
+          accepte tout — et bien plus difficile à repérer, parce qu'il donne
+          l'apparence de la rigueur. »
+
+    Ce qu'il a trouvé : UN GLM NE POUVAIT JAMAIS ÊTRE CERTIFIÉ VERT. Jamais.
+    La fabrique du walk-forward ne connaissait que sklearn ; pour un GLM elle
+    levait ValueError → repli sur proxy → modele_recalibre_fidele = False → le
+    gate plafonnait à AMBRE. Structurellement, définitivement.
+
+    Un GLM PARFAIT (score 0,95 · Gini 0,32 · A/E 1,00 · 0 fenêtre rouge ·
+    gouvernance validée) sortait AMBRE. Le même modèle en ML sortait VERT.
+
+    Conséquences, au-delà du bug :
+      · la plateforme ne pouvait pas certifier son LIVRABLE PRINCIPAL — le GLM
+        est le modèle de référence de la Non-Vie, interprétable et attendu par
+        l'ACPR ;
+      · l'incitation était INVERSÉE : pour obtenir un VERT, l'actuaire devait
+        choisir une boîte noire. Une plateforme de conformité qui pénalise le
+        modèle interprétable prend le problème à l'envers ;
+      · l'AMBRE devenait une couleur SANS INFORMATION : un GLM sain et un modèle
+        à Gini 0,91 (fuite probable) sortaient tous deux AMBRE.
+
+    Et c'est le pire genre de défaut : celui qui se déguise en rigueur.
+    """
+
+    def test_chaque_famille_de_modele_peut_etre_recalibree_fidelement(self):
+        """La condition NÉCESSAIRE au VERT : le walk-forward doit savoir
+        reconstruire le modèle retenu. Sans cela, aucun VERT n'est atteignable,
+        quelle que soit la qualité du modèle."""
+        from direction_non_vie.tarification.a4_ml.agent import creer_modele_ml_pour_nom
+        FAMILLES = [
+            ('GLM_POISSON', 'GLM de fréquence — modèle de référence Non-Vie'),
+            ('GLM_TWEEDIE', 'GLM de prime pure'),
+            ('GLM_GAMMA',   'GLM de coût moyen'),
+            ('gbm',         'Gradient Boosting'),
+            ('xgboost',     'XGBoost'),
+        ]
+        for nom, description in FAMILLES:
+            with self.subTest(modele=nom):
+                try:
+                    m = creer_modele_ml_pour_nom(nom, 'nb_sinistres')
+                except ValueError as e:
+                    self.fail(
+                        f"'{nom}' ({description}) n'est PAS recalibrable par le "
+                        f"walk-forward : {e}. Conséquence : "
+                        f"modele_recalibre_fidele = False → le gate plafonne à "
+                        f"AMBRE → ce modèle ne peut JAMAIS être certifié VERT, "
+                        f"quelle que soit sa qualité.")
+                self.assertTrue(hasattr(m, 'fit') and hasattr(m, 'predict'))
+        print("    INV-14a Les 3 familles de GLM + les modèles ML sont "
+              "recalibrables fidèlement ✅")
+
+    def test_un_glm_parfait_obtient_un_VERT(self):
+        """Contrôle POSITIF — celui qui manquait. Un modèle irréprochable, dont
+        le walk-forward est fidèle et impeccable, DOIT pouvoir être certifié."""
+        from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
+        a6 = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp',
+                                verbose=False)
+        bt_impeccable = {
+            'disponible': True, 'modele_recalibre_fidele': True,
+            'modele_recalibre': 'GLM_POISSON',
+            'gini_wf_moyen': 0.30, 'ae_ratio': 1.00, 'ae_moyen_wf': 1.00,
+            'n_fenetres_rouge': 0, 'stabilite_wf': '🟢 Stable',
+        }
+        glm_parfait = {'score_global': 0.95, 'gini_test': 0.32}
+        statut = a6._calculer_statut_rag(
+            glm_parfait, [glm_parfait], profil_valide_par='Actuaire responsable',
+            environnement='production', backtest=bt_impeccable)
+        self.assertEqual(statut, 'VERT',
+            "Un GLM PARFAIT (score 0,95 · Gini 0,32 · A/E 1,00 · 0 fenêtre rouge "
+            "· gouvernance validée) doit obtenir un VERT. S'il ne le peut pas, la "
+            "plateforme ne peut pas certifier son livrable principal — et "
+            "l'incitation est inversée vers la boîte noire.")
+        print("    INV-14b Un GLM parfait obtient un VERT ✅")
+
+    def test_le_pipeline_reel_certifie_un_glm_sain(self):
+        """Bout-en-bout : A1 → A6 sur un portefeuille auto SAIN où le GLM gagne.
+        Le walk-forward doit être FIDÈLE (plus de proxy) et le statut VERT."""
+        from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
+        from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
+        from direction_non_vie.tarification.a3_glm.agent import AgentA3GLM
+        from direction_non_vie.tarification.a4_ml.agent import AgentA4ML
+        from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
+        # ⚠ Portefeuille SUFFISAMMENT GRAND et à signal net : sur un échantillon
+        # trop petit, le walk-forward est bruité (une fenêtre en ROUGE suffit à
+        # plafonner à AMBRE — et c'est le comportement CORRECT du gate). Ma
+        # première fixture (N=10 000) produisait A/E = 1,10 sur la dernière
+        # fenêtre : le test échouait, mais le code avait raison.
+        rng = np.random.default_rng(3)
+        N = 12000
+        age = rng.integers(18, 85, N)
+        bm = np.clip(rng.normal(.9, .2, N), .5, 3.5)
+        expo = np.clip(rng.beta(5, 1, N), .2, 1.)
+        nb = rng.poisson(0.25 * np.exp(0.9 * np.log(bm) + 0.7 * (age < 25)) * expo)
+        df = pd.DataFrame({
+            'id_contrat': range(N),
+            'annee_souscription': rng.choice([2019, 2020, 2021, 2022, 2023], N),
+            'exposition': expo, 'age': age.astype(float), 'bonus_malus': bm,
+            'anciennete_permis': np.clip(age - 18, 0, None).astype(float),
+            'puissance_fiscale': rng.integers(4, 15, N).astype(float),
+            'age_vehicule': rng.integers(0, 20, N).astype(float),
+            'carburant': rng.choice(['Essence', 'Diesel'], N),
+            'usage': rng.choice(['Prive', 'Pro'], N),
+            'nb_sinistres': nb.astype(float),
+            'cout_total_sinistres': np.where(nb > 0, rng.gamma(2, 1200, N), 0.),
+        })
+        a1 = AgentA1Ingestion(audit_path='/tmp', verbose=False)
+        a2 = AgentA2Preprocessing(audit_path='/tmp', verbose=False)
+        r2 = a2.run(result_a1=a1.run(branche='non_vie', dataframe=df))
+        r3 = AgentA3GLM(models_path='/tmp', audit_path='/tmp',
+                        verbose=False).run(result_a2=r2, generer_graphiques=False)
+        r4 = AgentA4ML(models_path='/tmp', audit_path='/tmp', verbose=False).run(
+            result_a2=r2, result_a3=r3, calcul_shap=False, generer_graphiques=False)
+        r6 = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp',
+                                verbose=False).run(
+            result_a2=r2, result_a3=r3, result_a4=r4, result_a5=None,
+            col_cible='nb_sinistres', generer_graphiques=False,
+            generer_rapport_equipe=False, environnement='production',
+            profil_valide_par='Actuaire')
+        bt = r6['backtest']
+        self.assertTrue(bt.get('modele_recalibre_fidele'),
+            f"Le walk-forward est retombé sur un proxy "
+            f"({bt.get('modele_recalibre')}) : le modèle retenu "
+            f"({r6['modele_production']['modele']}) n'est pas recalibrable.")
+        self.assertEqual(r6['statut_rag'], 'VERT',
+            f"Un portefeuille auto SAIN doit pouvoir être certifié. "
+            f"Statut={r6['statut_rag']}, modèle={r6['modele_production']['modele']}, "
+            f"A/E={bt.get('ae_ratio')}, fenêtres rouges={bt.get('n_fenetres_rouge')}.")
+        print(f"    INV-14c Pipeline réel : {r6['modele_production']['modele']} "
+              f"certifié VERT, walk-forward fidèle ✅")
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("  TESTS D'INVARIANTS — le code se contredit-il lui-même ?")

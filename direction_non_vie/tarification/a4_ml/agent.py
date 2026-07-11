@@ -255,10 +255,129 @@ def creer_modele_ml_pour_nom(nom: str, col_cible: str = 'nb_sinistres'):
     if nom_l == 'quantile_90':
         return QuantileRegressor(**HYPERPARAMS['quantile_90'])
 
+    # ══════════════════════════════════════════════════════════════════════════
+    #  GLM — RECALIBRATION WALK-FORWARD FIDÈLE (audit V14, BLOQUANT)
+    # ══════════════════════════════════════════════════════════════════════════
+    # Découverte du certificateur V14, et c'est une faille que HUIT cycles
+    # d'audit n'avaient pas vue — moi compris :
+    #
+    #   UN GLM NE POUVAIT JAMAIS ÊTRE CERTIFIÉ VERT. JAMAIS.
+    #
+    # Cette fabrique ne savait construire que des modèles sklearn. Pour un GLM,
+    # elle levait ValueError → le walk-forward retombait sur un proxy GBM →
+    # modele_recalibre_fidele = False → le gate d'A6 plafonnait à AMBRE.
+    # Structurellement. Un GLM PARFAIT (score 0,95 · Gini 0,32 · A/E 1,00 ·
+    # 0 fenêtre rouge · gouvernance validée) sortait AMBRE ; le même modèle en
+    # ML sortait VERT.
+    #
+    # Les conséquences dépassent le bug :
+    #   · la plateforme ne pouvait pas certifier son LIVRABLE PRINCIPAL — le GLM
+    #     est le modèle de référence de la Non-Vie : interprétable, auditable,
+    #     attendu par l'ACPR ;
+    #   · l'incitation était INVERSÉE : pour obtenir un VERT, l'actuaire devait
+    #     choisir une boîte noire. Une plateforme de conformité qui pénalise le
+    #     modèle interprétable et récompense la boîte noire prend le problème à
+    #     l'envers — et à rebours de la Commission Tarification IA France 2019
+    #     qu'elle cite en référence ;
+    #   · l'AMBRE devenait une couleur SANS INFORMATION : un GLM sain et un
+    #     modèle à Gini 0,91 (fuite probable) sortaient tous deux AMBRE.
+    #
+    # LA LEÇON, et elle vaut pour tout le module :
+    #   « On a beaucoup vérifié que le système REFUSE ce qu'il doit refuser.
+    #     Personne n'a vérifié qu'il ACCEPTE ce qu'il doit accepter. Un contrôle
+    #     qui refuse tout est aussi inutile qu'un contrôle qui accepte tout — et
+    #     bien plus difficile à repérer, parce qu'il donne l'apparence de la
+    #     rigueur. »
+    if nom_l in ('poisson', 'glm_poisson', 'gamma', 'glm_gamma',
+                 'tweedie', 'glm_tweedie'):
+        famille = nom_l.replace('glm_', '')
+        return _GLMWalkForward(famille=famille, col_cible=col_cible)
+
     raise ValueError(
-        f"Modèle '{nom}' non reconnu pour recalibration walk-forward "
-        f"(fabrique sklearn — les références GLM ne sont pas couvertes)."
+        f"Modèle '{nom}' non reconnu pour recalibration walk-forward."
     )
+
+
+class _GLMWalkForward:
+    """
+    Adaptateur statsmodels à interface sklearn (fit / predict), pour recalibrer
+    FIDÈLEMENT un GLM dans le walk-forward d'A6 — au lieu du proxy GBM.
+
+    Reproduit la spécification actuarielle d'A3 :
+      · Poisson  → offset = log(exposition)   (modèle de FRÉQUENCE)
+      · Tweedie  → offset = log(exposition), var_power = 1,5  (PRIME PURE)
+      · Gamma    → var_weights = exposition   (modèle de COÛT MOYEN)
+
+    ⚠ HONNÊTETÉ SUR LA FIDÉLITÉ : le GLM Gamma modélise la sévérité et n'est
+    défini que sur des cibles STRICTEMENT POSITIVES. Si la cible du walk-forward
+    contient des zéros (portefeuille avec contrats non sinistrés — le cas
+    normal), un Gamma ne peut PAS être recalibré fidèlement. Dans ce cas on lève
+    une erreur explicite plutôt que de substituer une autre famille en douce :
+    une recalibration infidèle doit être DITE, pas maquillée. A6 retombera alors
+    sur le proxy, l'étiquettera comme tel, et plafonnera à AMBRE — ce qui est le
+    comportement correct.
+    """
+
+    def __init__(self, famille: str = 'poisson', col_cible: str = 'nb_sinistres'):
+        self.famille = famille
+        self.col_cible = col_cible
+        self._res = None
+        self._n_features = None
+
+    def _design(self, X):
+        import statsmodels.api as sm
+        X = np.asarray(X, dtype=float)
+        return sm.add_constant(X, has_constant='add')
+
+    def fit(self, X, y, sample_weight=None):
+        import statsmodels.api as sm
+        y = np.asarray(y, dtype=float)
+        Xc = self._design(X)
+        self._n_features = Xc.shape[1]
+
+        expo = None
+        if sample_weight is not None:
+            expo = np.maximum(np.asarray(sample_weight, dtype=float), 1e-9)
+
+        if self.famille == 'poisson':
+            fam = sm.families.Poisson()
+            offset = np.log(expo) if expo is not None else None
+            self._res = sm.GLM(y, Xc, family=fam, offset=offset).fit(
+                maxiter=200, disp=False)
+
+        elif self.famille == 'tweedie':
+            fam = sm.families.Tweedie(var_power=1.5, link=sm.families.links.Log())
+            offset = np.log(expo) if expo is not None else None
+            self._res = sm.GLM(y, Xc, family=fam, offset=offset).fit(
+                maxiter=200, disp=False)
+
+        elif self.famille == 'gamma':
+            if np.any(y <= 0):
+                # Voir la docstring : on le DIT, on ne le maquille pas.
+                raise ValueError(
+                    "GLM Gamma non recalibrable fidèlement : la cible "
+                    f"'{self.col_cible}' contient des valeurs nulles ou "
+                    "négatives (le Gamma modélise la sévérité, définie sur les "
+                    "seuls contrats sinistrés)."
+                )
+            fam = sm.families.Gamma(link=sm.families.links.Log())
+            self._res = sm.GLM(y, Xc, family=fam, var_weights=expo).fit(
+                maxiter=200, disp=False)
+        else:
+            raise ValueError(f"Famille GLM inconnue : {self.famille}")
+        return self
+
+    def predict(self, X):
+        if self._res is None:
+            raise RuntimeError("_GLMWalkForward.predict() avant fit().")
+        Xc = self._design(X)
+        # Prédiction de la moyenne SANS offset : le walk-forward compare des
+        # moyennes par contrat, et l'exposition de la fenêtre test est déjà
+        # prise en compte par le calcul du A/E en aval.
+        return np.asarray(self._res.predict(Xc), dtype=float)
+
+    def __repr__(self):
+        return f"_GLMWalkForward(famille={self.famille!r})"
 
 # Hyperparamètres par défaut — calibrés pour les données actuarielles FR
 # Justification : ces paramètres sont des points de départ raisonnables

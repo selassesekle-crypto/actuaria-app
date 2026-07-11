@@ -822,8 +822,15 @@ class AgentA6Comparaison:
         # chemin de recalibration fidèle ne se déclenche JAMAIS en pratique
         # (toujours un repli silencieux sur le proxy, malgré le correctif),
         # ce qui a été détecté lors d'une relecture de contrôle post-fix.
-        # Seuls les modèles préfixés 'ML_' sont éligibles à cette fabrique
-        # sklearn — les 'GLM_*' et 'DL_*' tombent volontairement en proxy.
+        # ⚠ MISE À JOUR (audit V14) : les 'GLM_*' sont désormais RECALIBRABLES
+        # FIDÈLEMENT (fabrique statsmodels — voir _GLMWalkForward dans A4). Ils ne
+        # tombent plus en proxy, et un GLM peut donc enfin être certifié VERT.
+        # Auparavant, le GLM — modèle de référence de la Non-Vie, interprétable et
+        # attendu par l'ACPR — ne pouvait STRUCTURELLEMENT jamais l'être : la
+        # fabrique levait ValueError, le proxy prenait le relais, et le gate
+        # plafonnait à AMBRE. L'incitation était inversée : pour obtenir un VERT,
+        # il fallait choisir une boîte noire.
+        # Les 'DL_*' restent en proxy (réseaux de neurones : pas de fabrique).
         classement = classement or []
         _meilleur = (classement[0] if classement else {})
         _modele_nom_brut = _meilleur.get('modele', 'ML_GBM')
