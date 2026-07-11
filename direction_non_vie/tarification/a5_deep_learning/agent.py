@@ -45,9 +45,7 @@ from sklearn.preprocessing import StandardScaler
 # exécution DL bloquée dans l'environnement d'audit V7 par l'absence de
 # PyTorch, mais la logique de sélection est identique à celle d'A4,
 # vérifiée empiriquement).
-from core.conformite_reglementaire import (
-    construire_matrice_x, filtrer_features, filtrer_genre, filtrer_famille_cible,
-)
+from core.conformite_reglementaire import construire_matrice_x
 
 # Export Excel (audit V7 MINEUR #2) — A5 était le seul agent sans export
 # Excel. export_excel_a5 suit le même gabarit que les autres agents.
@@ -1161,7 +1159,25 @@ class AgentA5DeepLearning:
             cum_pop = np.arange(1, n+1) / n
             fn      = np.trapezoid if hasattr(np, 'trapezoid') else np.trapz
             auc     = fn(cum_obs, cum_pop)
-            return float(np.clip(2*auc-1, 0, 1))
+            # ⚠ AUTO-AUDIT (11/07/2026) — NE PAS ÉCRÊTER LE GINI À ZÉRO.
+            # L'écrêtage np.clip(gini, 0.0, 1.0) rendait INVISIBLE le cas le plus
+            # dangereux qui soit en tarification : un Gini NÉGATIF, c'est-à-dire
+            # un modèle ANTI-SÉLECTIF — il fait payer MOINS les mauvais risques.
+            # Un Gini réel de −0,50 était rapporté « 0,0000 », donc indiscernable
+            # d'un modèle simplement non discriminant. Or les deux situations
+            # n'ont rien à voir : la seconde est inutile, la première est
+            # ruineuse (anti-sélection = spirale de sélection adverse).
+            # On rapporte désormais la valeur VRAIE, bornée à [−1, 1], et on
+            # alerte explicitement en cas d'anti-sélection.
+            gini = float(np.clip(2 * auc - 1, -1.0, 1.0))
+            if gini < 0:
+                logger.warning(
+                    f"[ANTI-SÉLECTION] Gini NÉGATIF ({gini:.4f}) — le modèle "
+                    f"discrimine À L'ENVERS : il attribue les primes les plus "
+                    f"faibles aux risques les plus élevés. Modèle INUTILISABLE "
+                    f"en l'état, quelle que soit sa performance par ailleurs."
+                )
+            return gini
         except Exception:
             return 0.0
 

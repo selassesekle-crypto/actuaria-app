@@ -110,10 +110,7 @@ except ImportError:
 # une colonne 'sexe_M' pré-encodée par le client, 'Sexe', 'sex' ou
 # 'civilite' entrait dans le GLM. A3 appelle désormais filtrer_genre(),
 # comme A2/A4/A5/A6 : une seule implémentation, pour tous.
-from core.conformite_reglementaire import (
-    construire_matrice_x, filtrer_features, filtrer_genre,
-    filtrer_famille_cible, COLS_GENRE_INTERDITES,
-)
+from core.conformite_reglementaire import construire_matrice_x
 
 warnings.filterwarnings('ignore')
 
@@ -624,17 +621,13 @@ class AgentA3GLM:
         # une colonne 'sexe_M' pré-encodée par le client, 'Sexe', 'sex' ou
         # 'civilite' entrait dans le GLM — prouvé par exécution. A3 appelle
         # désormais la fonction partagée, comme A2/A4/A5/A6.
-        vars_prioritaires = filtrer_features(
-            vars_prioritaires,
-            contexte=f"A3 — sélection GLM (sous-branche '{sous_branche}')",
-            logger_agent=logger,
-        )
-
-        # ── FILET ANTI-FUITE (défense en profondeur) ──────────────────────────
-        # Un premier passage de conformité est appliqué ici sur la liste de
-        # variables candidates. ⚠ Il ne suffit PAS à lui seul : le code plus bas
-        # enrichit encore la liste (colonnes *_enc). Le filtre DÉCISIF est celui
-        # appliqué à la liste FINALE `vars_pred` (voir plus bas, audit V10 B1).
+        # ⚠ AUCUN FILTRE DE CONFORMITÉ ICI — c'est délibéré.
+        # Un filtre intermédiaire figurait à cet endroit. Il n'était PAS décisif :
+        # le code plus bas enrichit encore la liste (colonnes *_enc), et c'est
+        # exactement ainsi que le BLOQUANT B1 (audit V10) est né — deux filtres,
+        # un seul décisif, et personne ne savait lequel. La conformité est
+        # appliquée UNE SEULE FOIS, à la liste FINALE, via construire_matrice_x()
+        # (voir plus bas). Un seul point de passage, impossible à contourner.
 
         # Filtrage : variables qui existent ET sont numériques
         cols_exclure = set(COLS_A_EXCLURE)
@@ -1469,7 +1462,25 @@ class AgentA3GLM:
             auc     = float(_trapz(cum_obs, cum_pop))
             gini    = 2.0 * auc - 1.0
 
-            return float(np.clip(gini, 0.0, 1.0))
+            # ⚠ AUTO-AUDIT (11/07/2026) — NE PAS ÉCRÊTER LE GINI À ZÉRO.
+            # L'écrêtage np.clip(gini, 0.0, 1.0) rendait INVISIBLE le cas le plus
+            # dangereux qui soit en tarification : un Gini NÉGATIF, c'est-à-dire
+            # un modèle ANTI-SÉLECTIF — il fait payer MOINS les mauvais risques.
+            # Un Gini réel de −0,50 était rapporté « 0,0000 », donc indiscernable
+            # d'un modèle simplement non discriminant. Or les deux situations
+            # n'ont rien à voir : la seconde est inutile, la première est
+            # ruineuse (anti-sélection = spirale de sélection adverse).
+            # On rapporte désormais la valeur VRAIE, bornée à [−1, 1], et on
+            # alerte explicitement en cas d'anti-sélection.
+            gini = float(np.clip(gini, -1.0, 1.0))
+            if gini < 0:
+                logger.warning(
+                    f"[ANTI-SÉLECTION] Gini NÉGATIF ({gini:.4f}) — le modèle "
+                    f"discrimine À L'ENVERS : il attribue les primes les plus "
+                    f"faibles aux risques les plus élevés. Modèle INUTILISABLE "
+                    f"en l'état, quelle que soit sa performance par ailleurs."
+                )
+            return gini
 
         except Exception as e_gini:
             logger.debug(f"_calculer_gini échoué : {e_gini}")

@@ -67,13 +67,25 @@ class TestA3GLM(unittest.TestCase):
             self.assertGreater(m.get('aic', 0), 0)
             # Gini présent uniquement si données test suffisantes
             if 'gini' in m:
-                self.assertGreaterEqual(m['gini'], 0.0)
+                # ⚠ Borne INFÉRIEURE portée de 0,0 à −1,0 (auto-audit 11/07/2026).
+                # Cette assertion encodait l'ANCIEN comportement : le Gini était
+                # écrêté à [0, 1], ce qui masquait le cas le plus dangereux —
+                # un Gini NÉGATIF, c'est-à-dire un modèle ANTI-SÉLECTIF (il fait
+                # payer moins les mauvais risques). Le Gini est désormais rapporté
+                # à sa valeur vraie ; sur cette fixture synthétique de petite
+                # taille, il vaut ≈ −0,05 : du bruit autour de zéro, le GLM n'y
+                # ayant quasiment aucun signal à capter. C'est une information
+                # honnête, pas une régression — et le gate d'A6 rend désormais un
+                # Gini négatif DISQUALIFIANT (ROUGE).
+                self.assertGreaterEqual(m['gini'], -1.0)
                 self.assertLessEqual(m['gini'], 1.0)
         print(f"    ST2 3 GLM calibrés ✅ | Poisson AIC={met['poisson'].get('aic',0):.0f} "              f"Gini={'oui' if 'gini' in met['poisson'] else 'N/A (peu sinistres)'}")
 
-        # ST3 — Gini Poisson calculé et positif
+        # ST3 — Gini Poisson calculé et dans les bornes actuarielles [−1, 1]
+        # (borne inférieure portée de 0,0 à −1,0 — voir ST2 : l'écrêtage à zéro
+        #  masquait l'anti-sélection, le cas le plus dangereux en tarification)
         gini_p = met['poisson'].get('gini', 0)
-        self.assertGreaterEqual(gini_p, 0.0)
+        self.assertGreaterEqual(gini_p, -1.0)
         self.assertLessEqual(gini_p, 1.0)
         print(f"    ST3 Gini Poisson ✅ | Gini={gini_p:.4f}")
 

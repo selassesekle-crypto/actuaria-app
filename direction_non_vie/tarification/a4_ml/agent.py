@@ -128,9 +128,7 @@ except ImportError:
 # filtre genre avant ce correctif (fuite confirmée par exécution réelle :
 # une colonne 'sexe' numérique atteignait la matrice de features des
 # modèles ML, potentiellement retenus en production par A6).
-from core.conformite_reglementaire import (
-    construire_matrice_x, filtrer_features, filtrer_genre, filtrer_famille_cible,
-)
+from core.conformite_reglementaire import construire_matrice_x
 
 # ── LOGGER ────────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -1178,7 +1176,25 @@ class AgentA4ML:
             cum_obs = np.cumsum(y_true) / np.sum(y_true)
             cum_pop = np.arange(1, n + 1) / n
             auc     = np.trapezoid(cum_obs, cum_pop) if hasattr(np, "trapezoid") else _np_trapz(cum_obs, cum_pop)
-            return float(np.clip(2 * auc - 1, 0, 1))
+            # ⚠ AUTO-AUDIT (11/07/2026) — NE PAS ÉCRÊTER LE GINI À ZÉRO.
+            # L'écrêtage np.clip(gini, 0.0, 1.0) rendait INVISIBLE le cas le plus
+            # dangereux qui soit en tarification : un Gini NÉGATIF, c'est-à-dire
+            # un modèle ANTI-SÉLECTIF — il fait payer MOINS les mauvais risques.
+            # Un Gini réel de −0,50 était rapporté « 0,0000 », donc indiscernable
+            # d'un modèle simplement non discriminant. Or les deux situations
+            # n'ont rien à voir : la seconde est inutile, la première est
+            # ruineuse (anti-sélection = spirale de sélection adverse).
+            # On rapporte désormais la valeur VRAIE, bornée à [−1, 1], et on
+            # alerte explicitement en cas d'anti-sélection.
+            gini = float(np.clip(2 * auc - 1, -1.0, 1.0))
+            if gini < 0:
+                logger.warning(
+                    f"[ANTI-SÉLECTION] Gini NÉGATIF ({gini:.4f}) — le modèle "
+                    f"discrimine À L'ENVERS : il attribue les primes les plus "
+                    f"faibles aux risques les plus élevés. Modèle INUTILISABLE "
+                    f"en l'état, quelle que soit sa performance par ailleurs."
+                )
+            return gini
         except Exception:
             return 0.0
 

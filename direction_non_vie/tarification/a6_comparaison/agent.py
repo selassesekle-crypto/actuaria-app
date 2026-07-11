@@ -89,9 +89,7 @@ except ImportError:
 # filtrer_famille_cible ; l'audit V9 (BLOQUANT) a prouvé qu'une colonne
 # genre pré-encodée (scénario V7) traversait donc intacte jusqu'à la
 # recalibration walk-forward.
-from core.conformite_reglementaire import (
-    construire_matrice_x, filtrer_features, filtrer_genre, filtrer_famille_cible,
-)
+from core.conformite_reglementaire import construire_matrice_x
 
 warnings.filterwarnings('ignore')
 logging.basicConfig(
@@ -1389,6 +1387,21 @@ class AgentA6Comparaison:
         if (score >= 0.60 and gini >= 0.15 and _gouvernance_ok
                 and _backtest_ok and _wf_fidele_ok and _wf_resultat_ok):
             return 'VERT'
+        # ── ANTI-SÉLECTION : DISQUALIFIANT (auto-audit 11/07/2026) ────────────
+        # Un Gini NÉGATIF signifie que le modèle discrimine À L'ENVERS : il
+        # attribue les primes les plus faibles aux risques les plus élevés.
+        # C'est le pire résultat possible en tarification — pire qu'un modèle
+        # nul, car il organise activement l'anti-sélection. Il ne peut donc pas
+        # ressortir en AMBRE au motif que son « score composite » est correct :
+        # le score est relatif au meilleur modèle du profil, et si TOUS les
+        # modèles sont anti-sélectifs, le meilleur d'entre eux vaut quand même
+        # ≈ 1,0. Un tel modèle est ROUGE, sans discussion.
+        if gini < 0:
+            logger.warning(
+                f"[ANTI-SÉLECTION] Gini du modèle de production = {gini:.4f} < 0 : "
+                f"le modèle discrimine à l'envers. Statut forcé à ROUGE."
+            )
+            return 'ROUGE'
         elif score >= 0.40 or gini >= 0.05:
             return 'AMBRE'
         return 'ROUGE'

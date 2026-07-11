@@ -31,6 +31,7 @@ vérifier que le reste du système l'honore.
 Origine : recommandation du certificateur indépendant, audit V11.
 """
 import sys, os, unittest
+import numpy as np
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
 from core.conformite_reglementaire import (
@@ -470,6 +471,76 @@ class TestInvariant_ExclusionsRemonteesDansLesLivrables(unittest.TestCase):
         self.assertIn('amputé', txt)
         print("    INV-7c Un facteur détruit est désormais VISIBLE dans le "
               "rapport (B5 ne peut plus être silencieux) ✅")
+
+
+class TestInvariant_AntiSelectionVisibleEtDisqualifiante(unittest.TestCase):
+    """
+    INVARIANT N°8 — Un modèle ANTI-SÉLECTIF ne doit jamais passer inaperçu.
+
+    Trouvé par auto-audit (11/07/2026). A3, A4 et A5 écrêtaient le Gini à
+    [0, 1] : un Gini réel de −0,50 était rapporté « 0,0000 ». Or les deux
+    situations n'ont rien à voir —
+      · Gini = 0    → modèle inutile (aucune discrimination) ;
+      · Gini = −0,50 → modèle RUINEUX : il attribue les primes les plus faibles
+        aux risques les plus élevés, organisant activement l'anti-sélection.
+    Et A6 (walk-forward), lui, n'écrêtait pas : la règle différait selon
+    l'endroit — encore une fois.
+
+    Le Gini est désormais rapporté à sa valeur vraie, borné à [−1, 1], et un
+    Gini négatif est DISQUALIFIANT (ROUGE), quel que soit le score composite —
+    lequel est relatif au meilleur modèle du profil, et vaut donc ≈ 1,0 même si
+    TOUS les modèles sont anti-sélectifs.
+    """
+
+    def setUp(self):
+        from direction_non_vie.tarification.a3_glm.agent import AgentA3GLM
+        from direction_non_vie.tarification.a4_ml.agent import AgentA4ML
+        from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
+        self.a3 = AgentA3GLM(models_path='/tmp', audit_path='/tmp', verbose=False)
+        self.a4 = AgentA4ML(models_path='/tmp', audit_path='/tmp', verbose=False)
+        self.a6 = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp',
+                                     verbose=False)
+        self.y = np.array([0., 0., 1., 1., 2., 3.])
+        self.pred_antiselectif = np.array([9., 8., 7., 3., 2., 1.])
+        self.pred_discriminant = np.array([1., 2., 3., 7., 8., 9.])
+
+    def test_le_gini_negatif_n_est_plus_masque(self):
+        for nom, agent in [('A3', self.a3), ('A4', self.a4)]:
+            with self.subTest(agent=nom):
+                g = agent._calculer_gini(self.y, self.pred_antiselectif)
+                self.assertLess(g, 0,
+                    f"{nom} rapporte {g} pour un modèle anti-sélectif : "
+                    f"l'écrêtage masque le défaut le plus dangereux qui soit.")
+                self.assertGreaterEqual(g, -1.0)
+        print("    INV-8a Gini négatif rapporté à sa valeur vraie (plus d'écrêtage) ✅")
+
+    def test_le_gini_positif_reste_correct(self):
+        """Contrôle négatif : la correction ne doit pas dégrader le cas normal."""
+        for nom, agent in [('A3', self.a3), ('A4', self.a4)]:
+            with self.subTest(agent=nom):
+                g = agent._calculer_gini(self.y, self.pred_discriminant)
+                self.assertGreater(g, 0)
+                self.assertLessEqual(g, 1.0)
+        print("    INV-8b Gini positif inchangé ✅")
+
+    def test_anti_selection_est_disqualifiante(self):
+        bt = {'disponible': True, 'modele_recalibre_fidele': True,
+              'gini_wf_moyen': 0.2, 'ae_ratio': 1.0, 'ae_moyen_wf': 1.0,
+              'n_fenetres_rouge': 0, 'stabilite_wf': '🟢 Stable'}
+        # Score composite EXCELLENT mais modèle anti-sélectif → ROUGE.
+        m = {'score_global': 0.99, 'gini_test': -0.30}
+        statut = self.a6._calculer_statut_rag(
+            m, [m], profil_valide_par='X', environnement='production', backtest=bt)
+        self.assertEqual(statut, 'ROUGE',
+            "Un modèle anti-sélectif est ROUGE, quel que soit son score composite "
+            "(qui est RELATIF au meilleur modèle du profil, et vaut donc ≈1,0 "
+            "même si tous les modèles discriminent à l'envers).")
+        # Contrôle négatif : un bon modèle reste VERT.
+        m_bon = {'score_global': 0.99, 'gini_test': 0.30}
+        self.assertEqual(self.a6._calculer_statut_rag(
+            m_bon, [m_bon], profil_valide_par='X', environnement='production',
+            backtest=bt), 'VERT')
+        print("    INV-8c Anti-sélection → ROUGE · bon modèle → VERT ✅")
 
 
 if __name__ == '__main__':
