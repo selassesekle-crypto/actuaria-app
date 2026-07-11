@@ -1,27 +1,58 @@
 """
-ActuarIA — Conformité réglementaire partagée (Direction Non-Vie · Tarification)
+ActuarIA — core/conformite_reglementaire.py
+Conformité réglementaire — MODULE TRANSVERSAL PLATEFORME
 
-Module créé suite à l'audit V7 (anomalie BLOQUANTE #1) : le filtre
-d'exclusion des variables de genre (CJUE C-236/09, arrêt Test-Achats du
-1er mars 2011) était implémenté de façon inconditionnelle dans A3 (GLM)
-uniquement — A4 (Machine Learning) et A5 (Deep Learning) n'avaient AUCUN
-filtre de ce type. Une colonne de genre numérique (ex. sexe=0/1,
-sexe_enc, fournie telle quelle par un client ou pré-encodée hors du
-pipeline standard A2) pouvait donc atteindre la matrice de features des
-modèles ML/DL — et A6 peut retenir un tel modèle en production, ce que
-l'audit V7 a démontré par exécution réelle.
+⚠ SOURCE UNIQUE, POUR LES TROIS DIRECTIONS.
+Ce module doit être importé par TOUT agent, de TOUTE direction (Non-Vie,
+Vie/EP-RE, Santé-Prévoyance), qui construit une matrice de features à partir
+de données client. Il ne doit jamais être dupliqué ni réimplémenté localement.
 
-Cause racine identifiée par l'audit : une règle de conformité correcte
-à un endroit (A3), jamais propagée ailleurs. Ce module est la réponse
-structurelle recommandée : une SOURCE UNIQUE de la liste des variables
-interdites, partagée par tous les agents qui sélectionnent des features
-(A3, A4, A5), pour éliminer par construction le risque de propagation
-partielle d'un futur correctif de conformité — le même principe déjà
-appliqué à la mise en forme Excel (excel_helpers.py, audit V4 point #12).
+Pourquoi au niveau plateforme (promu depuis
+direction_non_vie/tarification/services/ le 11/07/2026) :
 
-Réf. : Arrêt CJUE C-236/09 (Test-Achats, 1er mars 2011), Directive
-2004/113/CE — s'applique aux primes et prestations d'assurance en
-général, pas seulement à l'assurance auto.
+  Le mode de défaillance DOMINANT de ce codebase, documenté sur six cycles
+  d'audit (V4 → V9), est toujours le même : « une règle de conformité correcte
+  à un endroit, jamais propagée ailleurs ».
+    · V7 : filtre genre présent dans A3, absent d'A4 et A5 → BLOQUANT.
+    · V8 : filtre anti-fuite absent du walk-forward d'A6 → BLOQUANT.
+    · V9 : filtre genre par égalité stricte, contourné par le one-hot d'A2
+           (sexe_m/sexe_f) hors branche auto → BLOQUANT.
+    · V9+ : filtre genre contourné une seconde fois par l'encodage label
+           automatique de repli d'A2 (sexe_enc) → trouvé en exécution.
+
+  La conclusion pratique est nette : la mutualisation des règles de conformité
+  est la SEULE protection qui tienne. Les directions sont autonomes sur leurs
+  pipelines de données et leur logique métier — mais PAS sur la conformité
+  réglementaire, qui est une propriété de la plateforme entière. Trois copies
+  d'un filtre genre, ce sont trois endroits à corriger à chaque évolution
+  ACPR/CJUE, et l'un d'eux sera oublié : l'historique ci-dessus le prouve.
+
+  ⚠ ÉTAT AU 11/07/2026 : les directions Vie/EP-RE et Santé-Prévoyance
+  n'appliquent AUCUN filtre de conformité (ni genre, ni anti-fuite). Elles ne
+  sont pas exposées aujourd'hui parce que leurs agents de tarification sont
+  PARAMÉTRIQUES (ils ne construisent pas de matrice X à partir de données
+  client). Dès qu'un agent de ces directions tarifera sur données réelles, il
+  DEVRA importer ce module. Test-Achats s'applique à toute l'assurance, et le
+  risque de fuite de données est structurellement plus élevé encore en
+  provisionnement (triangles de sinistralité).
+
+Deux familles de règles y sont centralisées :
+
+  1. GENRE (filtrer_genre) — CJUE C-236/09, arrêt Test-Achats du 1er mars 2011,
+     Directive 2004/113/CE. Interdit comme critère de tarification en assurance
+     depuis le 21 décembre 2012, POUR TOUTE BRANCHE (pas seulement la RC Auto).
+
+  2. FAMILLE CIBLE (filtrer_famille_cible) — prévention du data leakage : toute
+     grandeur dérivée de la sinistralité de la période observée est interdite
+     comme feature (elle est de toute façon inconnue au moment de tarifer un
+     contrat neuf). Les variables d'expérience PASSÉE (N-1, antécédents), elles,
+     restent légitimes — c'est la distinction qui fonde le bonus-malus.
+
+Usage :
+    from core.conformite_reglementaire import filtrer_genre, filtrer_famille_cible
+
+    feature_names = filtrer_genre(feature_names, contexte='A4 — features ML')
+    feature_names = filtrer_famille_cible(feature_names, contexte='A4 — features ML')
 """
 
 import logging

@@ -102,14 +102,17 @@ except ImportError:
     except ImportError:
         TARIF_EXCEL_OK = False
 
-# Module de conformité partagé (audit V7 BLOQUANT #1) — source unique de
-# COLS_GENRE_INTERDITES désormais aussi utilisée par A4 et A5.
-try:
-    from ..services.conformite_reglementaire import COLS_GENRE_INTERDITES
-except ImportError:
-    from direction_non_vie.tarification.services.conformite_reglementaire import (
-        COLS_GENRE_INTERDITES
-    )
+# Module de conformité PLATEFORME — source unique pour les trois directions.
+# ⚠ A3 utilisait auparavant la seule constante COLS_GENRE_INTERDITES avec un
+# test d'appartenance strict (v not in COLS_GENRE_INTERDITES). Il ne
+# bénéficiait donc PAS de l'élargissement du filtre (audit V9 : racines,
+# insensibilité à la casse, colonnes filles du one-hot, proxy civilité) —
+# une colonne 'sexe_M' pré-encodée par le client, 'Sexe', 'sex' ou
+# 'civilite' entrait dans le GLM. A3 appelle désormais filtrer_genre(),
+# comme A2/A4/A5/A6 : une seule implémentation, pour tous.
+from core.conformite_reglementaire import (
+    filtrer_genre, filtrer_famille_cible, COLS_GENRE_INTERDITES
+)
 
 warnings.filterwarnings('ignore')
 
@@ -146,7 +149,7 @@ COLS_A_EXCLURE = [
 ]
 
 # COLS_GENRE_INTERDITES est désormais importée du module partagé
-# services/conformite_reglementaire.py (audit V7 BLOQUANT #1) — la même
+# core/conformite_reglementaire.py (audit V7 BLOQUANT #1) — la même
 # liste est maintenant utilisée par A4 et A5, qui n'avaient auparavant
 # AUCUN filtre genre (fuite confirmée par exécution lors de l'audit V7 :
 # une colonne genre numérique atteignait la matrice de features des
@@ -616,20 +619,37 @@ class AgentA3GLM:
         #  (c) une sous-branche mal nommée qui échapperait à un filtre scopé
         #      par nom de branche (cas testé et confirmé lors de l'audit V4).
         # Réf. : Arrêt CJUE C-236/09 (Test-Achats, 1er mars 2011).
-        _avant_genre = set(vars_prioritaires)
-        vars_prioritaires = [
-            v for v in vars_prioritaires if v not in COLS_GENRE_INTERDITES
-        ]
-        _supprimees_genre = _avant_genre & set(COLS_GENRE_INTERDITES)
-        if _supprimees_genre:
-            logger.warning(
-                f"[CONFORMITE REGLEMENTAIRE] Variable(s) {sorted(_supprimees_genre)} "
-                f"exclue(s) de la sélection GLM (sous-branche '{sous_branche}'). "
-                f"Réf. : Arrêt CJUE C-236/09 (Test-Achats)."
-            )
+        #
+        # ⚠ CORRECTION (11/07/2026) : ce filtre utilisait un test d'appartenance
+        # STRICT à COLS_GENRE_INTERDITES (6 noms exacts). A3 ne bénéficiait donc
+        # pas de l'élargissement du filtre décidé après l'audit V9 (racines,
+        # insensibilité à la casse, colonnes filles du one-hot, proxy civilité) :
+        # une colonne 'sexe_M' pré-encodée par le client, 'Sexe', 'sex' ou
+        # 'civilite' entrait dans le GLM — prouvé par exécution. A3 appelle
+        # désormais la fonction partagée, comme A2/A4/A5/A6.
+        vars_prioritaires = filtrer_genre(
+            vars_prioritaires,
+            contexte=f"A3 — sélection GLM (sous-branche '{sous_branche}')",
+            logger_agent=logger,
+        )
+
+        # ── FILET ANTI-FUITE (défense en profondeur) ──────────────────────────
+        # COLS_A_EXCLURE (ci-dessous) est une liste NOIRE de noms exacts : elle
+        # couvre nb_sinistres / cout_total_sinistres / prime_pure, mais pas les
+        # grandeurs de sinistralité aux noms imprévus qu'un fichier client peut
+        # contenir (montant_sinistres, cout_medecine, sinistre_*...). Ces
+        # colonnes entreraient dans le GLM via le FALLBACK ci-dessus, qui prend
+        # TOUTES les colonnes numériques quand la sous-branche n'est pas
+        # reconnue. Même faille que celle corrigée dans A4/A5/A6 (audits V8/V9).
+        # On applique donc ici le même filtre partagé.
+        vars_prioritaires = filtrer_famille_cible(
+            vars_prioritaires,
+            contexte=f"A3 — sélection GLM (sous-branche '{sous_branche}')",
+            logger_agent=logger,
+        )
 
         # Filtrage : variables qui existent ET sont numériques
-        cols_exclure = set(COLS_A_EXCLURE) | set(COLS_GENRE_INTERDITES)
+        cols_exclure = set(COLS_A_EXCLURE)
         vars_pred = [
             v for v in vars_prioritaires
             if v in df.columns

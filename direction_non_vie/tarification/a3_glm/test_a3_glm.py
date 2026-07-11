@@ -251,6 +251,58 @@ class TestA3CredibiliteBuhlmannStraub(unittest.TestCase):
         print(f"    CRED5 Formule k=σ²_intra/σ²_entre cohérente ✅")
 
 
+class TestConformiteA3(unittest.TestCase):
+    """
+    A3 utilisait un test d'appartenance STRICT à COLS_GENRE_INTERDITES
+    (6 noms exacts) au lieu de la fonction partagée filtrer_genre(). Il ne
+    bénéficiait donc pas de l'élargissement du filtre (racines, casse,
+    one-hot, civilité) décidé après l'audit V9 : une colonne 'sexe_M'
+    pré-encodée par le client entrait dans le GLM — prouvé par exécution
+    (11/07/2026). Par ailleurs, son chemin de repli (toutes les colonnes
+    numériques quand la sous-branche n'est pas reconnue) n'était protégé
+    contre la fuite de données que par une liste noire de noms exacts.
+    Les deux filtres partagés du module plateforme sont désormais appliqués.
+    """
+
+    def test_genre_preencode_et_sinistralite_brute_exclus_du_glm(self):
+        from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
+        from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
+        from direction_non_vie.tarification.a3_glm.agent import AgentA3GLM
+        np.random.seed(4)
+        n = 3000
+        expo = np.random.uniform(.1, 1, n)
+        bm = np.random.uniform(50, 350, n)
+        sexe_M = np.random.binomial(1, 0.5, n).astype(float)
+        nb = np.random.poisson(.06 * expo * (bm / 100) * (1 + 0.8 * sexe_M), n).astype(float)
+        df = pd.DataFrame({
+            'id_contrat': range(n), 'nb_sinistres': nb,
+            'cout_total_sinistres': np.where(nb > 0, np.random.gamma(2, 500, n), 0.),
+            'exposition': expo,
+            'age': np.random.randint(18, 80, n).astype(float),
+            'bonus_malus': bm,
+            'sexe_M': sexe_M,                                    # genre pré-encodé
+            'Sexe': np.random.binomial(1, .5, n).astype(float),  # variante de casse
+            'montant_sinistres': np.where(nb > 0, np.random.gamma(2, 400, n), 0.),
+            'puissance_fiscale': np.random.randint(4, 15, n).astype(float),
+            'annee_souscription': np.random.choice([2020, 2021, 2022, 2023], n),
+        })
+        a1 = AgentA1Ingestion(audit_path='/tmp', verbose=False)
+        a2 = AgentA2Preprocessing(audit_path='/tmp', verbose=False)
+        a3 = AgentA3GLM(models_path='/tmp', audit_path='/tmp', verbose=False)
+        r3 = a3.run(result_a2=a2.run(result_a1=a1.run(branche='non_vie', dataframe=df)),
+                    generer_graphiques=False)
+        self.assertTrue(r3['success'])
+        vars_glm = r3['metriques']['poisson'].get('vars_retenues', [])
+        genre = [v for v in vars_glm if 'sexe' in v.lower() or 'genre' in v.lower()]
+        self.assertEqual(genre, [],
+            f"FUITE GENRE dans le GLM (CJUE C-236/09) : {genre}")
+        fuite = [v for v in vars_glm
+                 if 'sinistre' in v.lower() or 'cout_' in v.lower()]
+        self.assertEqual(fuite, [],
+            f"FUITE DE DONNÉES dans le GLM : {fuite}")
+        print(f"    A3-CONF Genre et sinistralité exclus du GLM ✅ | vars={vars_glm}")
+
+
 if __name__ == '__main__':
     print("="*65)
     print("  TESTS A3 GLM v1.0 — TARIFICATION POISSON/GAMMA/TWEEDIE")

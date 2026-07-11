@@ -45,12 +45,7 @@ from sklearn.preprocessing import StandardScaler
 # exécution DL bloquée dans l'environnement d'audit V7 par l'absence de
 # PyTorch, mais la logique de sélection est identique à celle d'A4,
 # vérifiée empiriquement).
-try:
-    from .services.conformite_reglementaire import filtrer_genre, filtrer_famille_cible
-except ImportError:
-    from direction_non_vie.tarification.services.conformite_reglementaire import (
-        filtrer_genre, filtrer_famille_cible
-    )
+from core.conformite_reglementaire import filtrer_genre, filtrer_famille_cible
 
 # Export Excel (audit V7 MINEUR #2) — A5 était le seul agent sans export
 # Excel. export_excel_a5 suit le même gabarit que les autres agents.

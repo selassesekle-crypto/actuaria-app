@@ -76,12 +76,7 @@ except ImportError:
 # Filtre de conformité partagé (source unique avec A3/A4/A5/A6) — audit V9.
 # Appliqué inconditionnellement aux configs d'encodage : le genre ne doit
 # jamais être encodé, quelle que soit la sous-branche (CJUE C-236/09).
-try:
-    from ..services.conformite_reglementaire import filtrer_genre
-except ImportError:
-    from direction_non_vie.tarification.services.conformite_reglementaire import (
-        filtrer_genre
-    )
+from core.conformite_reglementaire import filtrer_genre
 
 warnings.filterwarnings('ignore')
 

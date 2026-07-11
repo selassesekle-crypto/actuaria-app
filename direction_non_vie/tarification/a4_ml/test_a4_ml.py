@@ -151,7 +151,7 @@ class TestA4FiltreGenre(unittest.TestCase):
     par opposition à une colonne déjà catégorielle/encodée — atteignait
     la matrice de features des modèles ML, potentiellement retenus en
     production par A6. Prouvé par exécution lors de l'audit V7, corrigé
-    via le module partagé services/conformite_reglementaire.py.
+    via le module plateforme core/conformite_reglementaire.py.
 
     Ce test verrouille la correction contre toute régression future.
     """
@@ -188,7 +188,7 @@ class TestAntiFuiteFamilleCible(unittest.TestCase):
     """
 
     def test_unitaire_filtrer_famille_cible(self):
-        from direction_non_vie.tarification.services.conformite_reglementaire import (
+        from core.conformite_reglementaire import (
             filtrer_famille_cible,
         )
         feats = [
@@ -273,7 +273,7 @@ class TestAntiFuiteV9(unittest.TestCase):
         """filtrer_genre doit capturer casse, one-hot, civilité — pas
         seulement les 6 noms exacts d'origine (audit V9, ex-IMPORTANT 4.3
         reclassé BLOQUANT après preuve d'atteinte de la matrice X réelle)."""
-        from direction_non_vie.tarification.services.conformite_reglementaire import (
+        from core.conformite_reglementaire import (
             filtrer_genre,
         )
         adverses = ['sexe', 'Sexe', 'SEXE', 'sex', 'genre', 'gender',
@@ -423,7 +423,7 @@ class TestAntiFuiteV9(unittest.TestCase):
     def test_faux_positifs_preserves(self):
         """L'élargissement des racines anti-fuite (V9) ne doit pas exclure
         à tort les variables d'expérience passée (connues à la souscription)."""
-        from direction_non_vie.tarification.services.conformite_reglementaire import (
+        from core.conformite_reglementaire import (
             filtrer_famille_cible,
         )
         legitimes = ['nb_sinistres_anterieurs', 'antecedents_sinistres_n1',

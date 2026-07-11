@@ -89,12 +89,7 @@ except ImportError:
 # filtrer_famille_cible ; l'audit V9 (BLOQUANT) a prouvé qu'une colonne
 # genre pré-encodée (scénario V7) traversait donc intacte jusqu'à la
 # recalibration walk-forward.
-try:
-    from ..services.conformite_reglementaire import filtrer_genre, filtrer_famille_cible
-except ImportError:
-    from direction_non_vie.tarification.services.conformite_reglementaire import (
-        filtrer_genre, filtrer_famille_cible
-    )
+from core.conformite_reglementaire import filtrer_genre, filtrer_famille_cible
 
 warnings.filterwarnings('ignore')
 logging.basicConfig(

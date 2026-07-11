@@ -128,12 +128,7 @@ except ImportError:
 # filtre genre avant ce correctif (fuite confirmée par exécution réelle :
 # une colonne 'sexe' numérique atteignait la matrice de features des
 # modèles ML, potentiellement retenus en production par A6).
-try:
-    from .services.conformite_reglementaire import filtrer_genre, filtrer_famille_cible
-except ImportError:
-    from direction_non_vie.tarification.services.conformite_reglementaire import (
-        filtrer_genre, filtrer_famille_cible
-    )
+from core.conformite_reglementaire import filtrer_genre, filtrer_famille_cible
 
 # ── LOGGER ────────────────────────────────────────────────────────────────────
 logging.basicConfig(
