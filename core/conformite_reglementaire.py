@@ -682,7 +682,7 @@ def construire_matrice_x(
     logger_agent: Optional[logging.Logger] = None,
     facteurs_supplementaires: Optional[List[str]] = None,
     df=None,
-    col_cible: Optional[str] = None,
+    col_cible=None,
 ) -> MatriceX:
     """
     SEUL point de construction d'une matrice de features conforme.
@@ -711,12 +711,18 @@ def construire_matrice_x(
     )
 
     # ── GARDE-FOU N°4 : CONTRÔLE PAR L'EFFET (audit V12) ──────────────────────
+    # `col_cible` accepte UNE cible (str) ou PLUSIEURS (liste) : le GLM d'A3 en a
+    # deux (fréquence ET coût moyen), et une fuite peut viser l'une ou l'autre.
+    # Un SEUL appel suffit donc — le point de passage reste unique.
     fuites_effet = {}
-    if df is not None and col_cible:
-        fuites_effet = detecter_fuites_par_effet(
-            df, conformes, col_cible,
-            logger_agent=logger_agent,
-        )
+    cibles = ([col_cible] if isinstance(col_cible, str)
+              else list(col_cible or []))
+    if df is not None and cibles:
+        for _cible in cibles:
+            f = detecter_fuites_par_effet(
+                df, conformes, _cible, logger_agent=logger_agent,
+            )
+            fuites_effet.update(f)
         if fuites_effet:
             conformes = [c for c in conformes if c not in fuites_effet]
     # Motif d'exclusion, par ordre de priorité réglementaire.
@@ -728,7 +734,7 @@ def construire_matrice_x(
         if c in fuites_effet:
             exclusions[c] = (
                 f"FUITE DÉTECTÉE PAR L'EFFET — corrélation de {fuites_effet[c]} "
-                f"avec la cible '{col_cible}'. Aucun facteur tarifaire légitime "
+                f"avec la cible {cibles}. Aucun facteur tarifaire légitime "
                 f"n'atteint ce niveau : cette variable EST la cible déguisée, et "
                 f"n'existe pas encore au moment de tarifer un contrat neuf."
             )

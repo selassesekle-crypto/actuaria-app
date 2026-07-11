@@ -269,9 +269,14 @@ class TestInvariant_MatriceXNonContournable(unittest.TestCase):
     le filtre, puis réinjectait des colonnes brutes vingt lignes plus bas — le
     GLM tarifait la civilité (37,9 % d'écart H/F).
 
-    MatriceX rend ce code littéralement inécrivable : la liste de features
-    conforme est un TUPLE IMMUABLE, instanciable uniquement par le module de
-    conformité.
+    MatriceX rend le geste ACCIDENTEL impossible : la liste de features conforme
+    est un TUPLE IMMUABLE, non instanciable hors du module de conformité.
+
+    ⚠ Portée réelle (audit V12) : la liste est reconvertie en `list` pour les
+    modèles, donc un code délibéré pourrait encore l'enrichir. MatriceX empêche
+    l'accident et rend le contournement VISIBLE en revue — elle ne le rend pas
+    impossible. Le garde-fou qui, lui, ne se contourne pas est le contrôle par
+    l'EFFET (INV-9) : il ne dépend d'aucune convention de code.
     """
 
     def test_matricex_ne_peut_pas_etre_instanciee_directement(self):

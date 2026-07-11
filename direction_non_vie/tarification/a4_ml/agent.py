@@ -823,12 +823,17 @@ class AgentA4ML:
         # numérique (0/1) ou pré-encodée ('sexe_enc') pouvait donc atteindre
         # la matrice X des modèles ML — et A6 peut retenir un tel modèle en
         # production. Réf. : Arrêt CJUE C-236/09 (Test-Achats).
-        # ── MATRICE X CONFORME (immuable) ─────────────────────────────────────
-        # construire_matrice_x() applique liste blanche → filtre genre → filtre
-        # anti-fuite, et retourne un objet IMMUABLE : aucun code ne peut enrichir
-        # la liste après filtrage (BLOQUANT B1, audit V10, devenu inécrivable).
-        # Elle trace aussi les exclusions, remontées ensuite dans les rapports —
-        # une exclusion silencieuse est un défaut en soi (BLOQUANT B5, audit V11).
+        # ── MATRICE X CONFORME — QUATRE GARDE-FOUS ────────────────────────────
+        # construire_matrice_x() enchaîne : liste blanche → filtre genre → filtre
+        # anti-fuite (par le NOM) → contrôle par l'EFFET (corrélation avec la
+        # cible ≥ 0,80 → fuite, quel que soit le nom — audit V12).
+        # Elle retourne un objet IMMUABLE : le geste exact qui a produit le
+        # BLOQUANT B1 (enrichir la liste après filtrage) lève une AttributeError.
+        # ⚠ La liste est reconvertie en `list` juste après (les modèles en ont
+        # besoin) : l'immuabilité empêche l'accident, pas la volonté. NE RIEN
+        # AJOUTER APRÈS CET APPEL.
+        # Elle trace aussi les exclusions, remontées dans les rapports — une
+        # exclusion silencieuse est un défaut en soi (BLOQUANT B5, audit V11).
         _mx = construire_matrice_x(
             feature_names, contexte='A4 — sélection features ML', logger_agent=logger,
             df=df, col_cible=col_cible,   # garde-fou n°4 : contrôle par l'EFFET

@@ -614,20 +614,12 @@ class AgentA3GLM:
         #      par nom de branche (cas testé et confirmé lors de l'audit V4).
         # Réf. : Arrêt CJUE C-236/09 (Test-Achats, 1er mars 2011).
         #
-        # ⚠ CORRECTION (11/07/2026) : ce filtre utilisait un test d'appartenance
-        # STRICT à COLS_GENRE_INTERDITES (6 noms exacts). A3 ne bénéficiait donc
-        # pas de l'élargissement du filtre décidé après l'audit V9 (racines,
-        # insensibilité à la casse, colonnes filles du one-hot, proxy civilité) :
-        # une colonne 'sexe_M' pré-encodée par le client, 'Sexe', 'sex' ou
-        # 'civilite' entrait dans le GLM — prouvé par exécution. A3 appelle
-        # désormais la fonction partagée, comme A2/A4/A5/A6.
         # ⚠ AUCUN FILTRE DE CONFORMITÉ ICI — c'est délibéré.
         # Un filtre intermédiaire figurait à cet endroit. Il n'était PAS décisif :
         # le code plus bas enrichit encore la liste (colonnes *_enc), et c'est
         # exactement ainsi que le BLOQUANT B1 (audit V10) est né — deux filtres,
         # un seul décisif, et personne ne savait lequel. La conformité est
-        # appliquée UNE SEULE FOIS, à la liste FINALE, via construire_matrice_x()
-        # (voir plus bas). Un seul point de passage, impossible à contourner.
+        # appliquée UNE SEULE FOIS, à la liste FINALE (voir plus bas).
 
         # Filtrage : variables qui existent ET sont numériques
         cols_exclure = set(COLS_A_EXCLURE)
@@ -677,10 +669,19 @@ class AgentA3GLM:
         # peut enrichir. C'est le même défaut, dans sa forme la plus pure, que
         # celui qui hante ce module depuis six cycles : « une règle correcte à
         # un endroit, contournée ailleurs ».
-        # construire_matrice_x() retourne un objet MatriceX IMMUABLE : plus aucun
-        # code ne peut enrichir la liste après filtrage (le bloc de réinjection
-        # des *_enc ci-dessus lèverait désormais une AttributeError). Le BLOQUANT
-        # B1 de l'audit V10 est devenu littéralement inécrivable.
+        # construire_matrice_x() retourne un objet MatriceX IMMUABLE : le geste
+        # exact qui a produit B1 (mx.features.extend(colonnes_brutes)) lève
+        # désormais une AttributeError.
+        #
+        # ⚠ HONNÊTETÉ SUR LA PORTÉE DE CETTE PROTECTION (audit V12) : la liste est
+        # reconvertie en `list` juste après (les modèles en ont besoin). Un code
+        # ultérieur POURRAIT donc encore l'enrichir — l'immuabilité empêche
+        # l'accident, pas la volonté. Aucun code ne le fait aujourd'hui (vérifié),
+        # et le contrat est explicite ci-dessus : NE RIEN AJOUTER APRÈS CET APPEL.
+        # La défense qui, elle, ne se contourne pas est le contrôle par l'EFFET
+        # (garde-fou n°4) : une variable qui fuite se trahit par sa corrélation
+        # avec la cible, même si elle a traversé tous les filtres nominaux et même
+        # si quelqu'un la réinjecte à la main.
         _mx = construire_matrice_x(
             vars_pred,
             contexte=f"A3 — matrice de conception GLM (sous-branche '{sous_branche}')",
@@ -688,19 +689,13 @@ class AgentA3GLM:
             # ⚠ df + col_cible = GARDE-FOU N°4 (contrôle par l'EFFET, audit V12).
             # Sans eux, seuls les contrôles par le NOM protègent — et l'audit V12
             # a démontré qu'ils sont structurellement insuffisants.
-            df=df, col_cible=col_freq,
+            # Le GLM d'A3 a DEUX cibles (fréquence ET coût moyen) : une fuite peut
+            # viser l'une ou l'autre. On les passe toutes les deux, en UN SEUL
+            # appel — le point de passage de la conformité reste unique.
+            df=df, col_cible=[col_freq, col_cout],
         )
-        # ⚠ Le GLM d'A3 a DEUX cibles (fréquence ET coût moyen) : une fuite peut
-        # viser l'une ou l'autre. On repasse donc le contrôle par l'effet sur la
-        # cible coût, et on fusionne les exclusions.
-        _mx_cout = construire_matrice_x(
-            list(_mx),
-            contexte=f"A3 — contrôle par l'effet sur la cible coût ('{col_cout}')",
-            logger_agent=logger,
-            df=df, col_cible=col_cout,
-        )
-        self.exclusions_conformite = {**_mx.exclusions, **_mx_cout.exclusions}
-        vars_pred = list(_mx_cout)
+        self.exclusions_conformite = _mx.exclusions   # remontée dans les rapports
+        vars_pred = list(_mx)
 
         if len(vars_pred) == 0:
             raise ValueError(
