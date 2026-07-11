@@ -696,3 +696,60 @@ def construire_matrice_x(
         else:
             exclusions[c] = "exclue par le filtre de conformité"
     return MatriceX(conformes, exclusions, contexte, _jeton=MatriceX._JETON)
+
+
+def synthese_exclusions(exclusions: Optional[dict]) -> Optional[str]:
+    """
+    SOURCE UNIQUE — texte à afficher dans TOUT livrable (Excel, Word, HTML,
+    rapport d'équipe) pour informer l'actuaire des colonnes écartées de la
+    matrice X, et pourquoi. Retourne None s'il n'y a rien à signaler.
+
+    Pourquoi c'est indispensable (audit V11, constat I5) :
+    une exclusion SILENCIEUSE est un défaut en soi. Le BLOQUANT B5 l'a démontré
+    au prix fort : 'antecedents_sinistres_3ans' — LE facteur tarifaire central
+    de la RC Pro (β = +0,43, relativité 1,536) — était détruit par la liste
+    blanche, coûtant 17,4 % du pouvoir discriminant du GLM. Aucun rapport ne le
+    mentionnait : seul un WARNING de log, que personne ne lit.
+
+    Trois motifs, trois niveaux de gravité pour l'actuaire lecteur :
+      · genre / proxy de genre  → exclusion OBLIGATOIRE (CJUE C-236/09). RAS.
+      · dérivée de sinistralité → exclusion OBLIGATOIRE (fuite). RAS.
+      · non déclarée en liste blanche → ⚠ À VÉRIFIER : si la variable est un
+        facteur tarifaire légitime, elle doit être déclarée, sinon le modèle est
+        amputé en silence. C'est le seul motif qui appelle une ACTION.
+    """
+    exc = exclusions or {}
+    if not exc:
+        return None
+
+    genre = sorted(c for c, m in exc.items() if 'C-236/09' in m)
+    fuite = sorted(c for c, m in exc.items() if 'fuite' in m.lower())
+    a_verifier = sorted(c for c, m in exc.items() if 'liste blanche' in m)
+    autres = sorted(c for c in exc
+                    if c not in genre and c not in fuite and c not in a_verifier)
+
+    lignes = []
+    if a_verifier:
+        lignes.append(
+            f"⚠ ACTION REQUISE — {len(a_verifier)} colonne(s) écartée(s) de la "
+            f"matrice X car NON DÉCLARÉE(S) comme facteur tarifaire légitime : "
+            f"{', '.join(a_verifier)}. Si l'une d'elles est un facteur valide de "
+            f"votre portefeuille, le modèle en est amputé — déclarez-la "
+            f"(FACTEURS_TARIFAIRES_AUTORISES) et relancez la tarification."
+        )
+    if genre:
+        lignes.append(
+            f"✔ {len(genre)} colonne(s) exclue(s) au titre de l'interdiction du "
+            f"genre en tarification — CJUE C-236/09 (Test-Achats) : "
+            f"{', '.join(genre)}. Exclusion obligatoire, aucune action."
+        )
+    if fuite:
+        lignes.append(
+            f"✔ {len(fuite)} colonne(s) exclue(s) comme dérivée(s) de la "
+            f"sinistralité observée (fuite de données — inconnues au moment de "
+            f"tarifer un contrat neuf) : {', '.join(fuite)}. Exclusion "
+            f"obligatoire, aucune action."
+        )
+    if autres:
+        lignes.append(f"· Autres exclusions : {', '.join(autres)}.")
+    return "\n".join(lignes)

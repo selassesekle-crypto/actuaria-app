@@ -22,7 +22,9 @@ Version  : 1.0.0
 
 from __future__ import annotations
 import io, logging, re
-from core.conformite_reglementaire import avertissement_walk_forward
+from core.conformite_reglementaire import (
+    avertissement_walk_forward, synthese_exclusions,
+)
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
@@ -312,6 +314,13 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
         if bt6.get('gini_wf_moyen') is not None:
             _kpi(ws5, r, "Gini WF moyen", round(bt6.get('gini_wf_moyen', 0), 4), fmt=FMT_DEC4); r += 1
         _kpi(ws5, r, "A/E ratio", round(bt6.get('ae_ratio', 0), 4), fmt=FMT_DEC4); r += 1
+        r += 1
+        _synth_exc6 = synthese_exclusions(r6.get('exclusions_conformite')
+                                          if isinstance(r6, dict) else None)
+        if _synth_exc6:
+            _kpi(ws5, r, "⚠ Colonnes écartées de la matrice X", _synth_exc6,
+                 statut=("AMBRE" if "ACTION REQUISE" in _synth_exc6 else "VERT"),
+                 wrap=True); r += 1
         r += 1
         _section(ws5, r, "▶ GOUVERNANCE"); r += 1
         _kpi(ws5, r, "Profil retenu", at6.get('profil_ponderation', 'N/A')); r += 1

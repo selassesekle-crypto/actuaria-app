@@ -21,7 +21,9 @@ Version  : 1.0.0
 
 from __future__ import annotations
 import base64, io, logging, os, re
-from core.conformite_reglementaire import avertissement_walk_forward
+from core.conformite_reglementaire import (
+    avertissement_walk_forward, synthese_exclusions,
+)
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
@@ -198,6 +200,10 @@ def _construire_contexte_tarif(
         # retenu — et rédigeait un commentaire faussement rassurant.
         (avertissement_walk_forward(bt6) or
          "Validation temporelle : porte bien sur le modèle de production."),
+        "",
+        "=== COLONNES ÉCARTÉES DE LA MATRICE X (conformité) ===",
+        (synthese_exclusions(result_a6.get('exclusions_conformite') if result_a6 else None)
+         or "Aucune colonne écartée : toutes les variables candidates sont conformes."),
         "",
         "=== GOUVERNANCE DU PROFIL DE PONDÉRATION ===",
         f"Profil retenu : {at6.get('profil_ponderation','—')} | Environnement={at6.get('environnement','—')}",

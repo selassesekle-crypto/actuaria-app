@@ -380,6 +380,19 @@ class AgentA6Comparaison:
             }
 
             # ── Standard ActuarIA — excel_bytes ──────────────────────────────
+            # ── EXCLUSIONS DE CONFORMITÉ (audit V11 / constat I5) ────────────
+            # Agrégat des colonnes écartées par MatriceX chez A3/A4/A5, avec le
+            # motif réglementaire de chacune. DOIT être calculé AVANT _tmp_a6 :
+            # c'est ce dict-là qui alimente les TROIS exports (Excel, Word, HTML).
+            # Une exclusion silencieuse est un défaut en soi — c'est ce silence
+            # qui a rendu le BLOQUANT B5 si coûteux (le facteur central de la RC
+            # Pro détruit, −17,4 % de Gini, sans que rien ne l'indique).
+            _exclusions_conformite = {}
+            for _r_src in (result_a3, result_a4, result_a5):
+                if isinstance(_r_src, dict):
+                    _exclusions_conformite.update(
+                        _r_src.get('exclusions_conformite') or {})
+
             # _tmp_a6 inclut commentaire, courbes ET audit_trail — disponibles ici
             _tmp_a6 = {
                 'success': True, 'statut_rag': statut_rag,
@@ -390,6 +403,7 @@ class AgentA6Comparaison:
                 'commentaire': commentaire,   # P7 : commentaire actuaire inclus
                 'courbes': courbes,
                 'audit_trail': _audit_trail_a6,  # Gouvernance exposée aux exports
+                'exclusions_conformite': _exclusions_conformite,
             }
             _excel_a6 = b''
             _word_a6  = b''
@@ -464,6 +478,7 @@ class AgentA6Comparaison:
             _gv_sel_  = self._graphiques_validation_selection(
                 _val_sel_, classement) if generer_graphiques else {}
 
+
             return {
                 'success':            True,
                 'dataframe':          df,
@@ -472,6 +487,14 @@ class AgentA6Comparaison:
                 'classement':         classement,
                 'modele_production':  modele_production,
                 'backtest':           backtest,
+                # ── EXCLUSIONS DE CONFORMITÉ (audit V11 / constat I5) ─────────
+                # Agrégat des colonnes écartées par MatriceX chez A3, A4 et A5,
+                # avec le motif réglementaire de chaque exclusion. Remontées dans
+                # les livrables : une exclusion silencieuse est un défaut en soi.
+                # C'est ce silence qui a rendu le BLOQUANT B5 si coûteux —
+                # 'antecedents_sinistres_3ans', LE facteur de la RC Pro, était
+                # détruit (−17,4 % de Gini) sans qu'aucun rapport ne l'indique.
+                'exclusions_conformite': _exclusions_conformite,
                 'courbes':            courbes,
                 'graphiques':            graphiques,
                 'validation_selection':  _val_sel_,

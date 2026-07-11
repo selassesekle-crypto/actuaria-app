@@ -402,6 +402,76 @@ class TestInvariant_GateLitToutesLesFenetres(unittest.TestCase):
         print("    INV-6d Gate et rapports strictement alignés (4 cas) ✅")
 
 
+class TestInvariant_ExclusionsRemonteesDansLesLivrables(unittest.TestCase):
+    """
+    INVARIANT N°7 — Une exclusion ne doit JAMAIS être silencieuse.
+
+    Constat I5 du certificateur (audit V11) : les colonnes écartées de la matrice
+    X n'apparaissaient dans AUCUN livrable — seulement dans un WARNING de log,
+    que personne ne lit. C'est ce silence qui a rendu le BLOQUANT B5 si coûteux :
+    'antecedents_sinistres_3ans', LE facteur tarifaire de la RC Pro, était
+    détruit (−17,4 % de Gini) sans que rien ne l'indique à l'actuaire.
+
+    Une exclusion de genre ou de sinistralité est obligatoire — mais une colonne
+    écartée parce qu'elle n'est pas DÉCLARÉE peut être un facteur parfaitement
+    légitime : l'actuaire doit le savoir pour le déclarer.
+    """
+
+    def test_les_trois_livrables_appellent_la_source_unique(self):
+        import inspect
+        from direction_non_vie.tarification.services import (
+            tarif_excel, rapport_equipe_tarif, rapport_modeles_tarif,
+        )
+        for module in (tarif_excel, rapport_equipe_tarif, rapport_modeles_tarif):
+            with self.subTest(module=module.__name__):
+                self.assertIn('synthese_exclusions', inspect.getsource(module),
+                    f"{module.__name__} ne remonte pas les exclusions de "
+                    f"conformité : un facteur tarifaire peut être détruit en "
+                    f"silence (BLOQUANT B5).")
+        print("    INV-7a Excel · Word/HTML · rapport d'équipe : exclusions "
+              "remontées ✅")
+
+    def test_la_synthese_distingue_action_requise_et_exclusion_obligatoire(self):
+        from core.conformite_reglementaire import (
+            synthese_exclusions, construire_matrice_x,
+        )
+        # Une colonne non déclarée = peut-être un facteur légitime → ACTION.
+        mx = construire_matrice_x(['age', 'mon_facteur_metier_rare'],
+                                  contexte='test')
+        txt = synthese_exclusions(mx.exclusions)
+        self.assertIsNotNone(txt)
+        self.assertIn('ACTION REQUISE', txt)
+        self.assertIn('mon_facteur_metier_rare', txt)
+
+        # Genre et sinistralité = exclusions obligatoires → PAS d'action.
+        mx2 = construire_matrice_x(['age', 'sexe', 'montant_sinistres'],
+                                   contexte='test')
+        txt2 = synthese_exclusions(mx2.exclusions)
+        self.assertNotIn('ACTION REQUISE', txt2)
+        self.assertIn('C-236/09', txt2)
+
+        # Rien à signaler → silence.
+        self.assertIsNone(synthese_exclusions({}))
+        print("    INV-7b La synthèse distingue action requise / exclusion "
+              "obligatoire ✅")
+
+    def test_le_scenario_B5_serait_desormais_visible(self):
+        """Reproduction du BLOQUANT B5 : si un facteur déclaré venait à être
+        détruit, l'actuaire DOIT le voir dans le rapport."""
+        from core.conformite_reglementaire import (
+            synthese_exclusions, construire_matrice_x,
+        )
+        mx = construire_matrice_x(
+            ['nb_salaries', 'un_facteur_non_declare_critique'], contexte='RC Pro')
+        txt = synthese_exclusions(mx.exclusions)
+        self.assertIsNotNone(txt,
+            "Un facteur écarté doit produire un message visible dans le rapport.")
+        self.assertIn('un_facteur_non_declare_critique', txt)
+        self.assertIn('amputé', txt)
+        print("    INV-7c Un facteur détruit est désormais VISIBLE dans le "
+              "rapport (B5 ne peut plus être silencieux) ✅")
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("  TESTS D'INVARIANTS — le code se contredit-il lui-même ?")

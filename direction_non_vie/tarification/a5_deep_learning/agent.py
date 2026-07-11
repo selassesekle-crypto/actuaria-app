@@ -565,6 +565,11 @@ class AgentA5DeepLearning:
 
             return {
                 'success':             True,
+                # Exclusions de conformité tracées par MatriceX (audit V11 / I5) :
+                # une exclusion silencieuse est un défaut en soi — c'est ce silence
+                # qui a rendu le BLOQUANT B5 si coûteux (facteur central de la RC Pro
+                # détruit, −17,4 % de Gini, sans que rien ne l'indique nulle part).
+                'exclusions_conformite': getattr(self, 'exclusions_conformite', {}),
                 'dataframe':           df,
                 'branche':             sous_branche,
                 'statut_rag':          statut_rag,

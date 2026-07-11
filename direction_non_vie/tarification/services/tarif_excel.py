@@ -12,7 +12,9 @@ ONGLETS PAR AGENT :
 """
 
 import io
-from core.conformite_reglementaire import avertissement_walk_forward
+from core.conformite_reglementaire import (
+    avertissement_walk_forward, synthese_exclusions,
+)
 import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Any
@@ -750,6 +752,14 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
         # (backtest indisponible) affichait "0.0000", indiscernable d'un
         # vrai A/E=0 (résultat en soi alarmant en usage réel). "N/A" lève
         # toute ambiguïté d'interprétation pour l'actuaire lecteur.
+        # ── EXCLUSIONS DE CONFORMITÉ (audit V11 / I5) ────────────────────────
+        # Une exclusion silencieuse est un défaut en soi : c'est ce silence qui a
+        # rendu le BLOQUANT B5 si coûteux. Source UNIQUE partagée avec Word/HTML.
+        _synth_exc = synthese_exclusions(result_a6.get('exclusions_conformite'))
+        if _synth_exc:
+            _kpi(ws5, r, "Colonnes écartées de la matrice X", _synth_exc,
+                 statut=("AMBRE" if "ACTION REQUISE" in _synth_exc else "VERT"),
+                 wrap=True); r += 1
         _kpi(ws5, r, "A/E ratio final",
              round(backtest.get('ae_ratio', 0), 4) if backtest.get('disponible') else "N/A",
              fmt=FMT_DEC4 if backtest.get('disponible') else None); r += 1

@@ -731,6 +731,11 @@ class AgentA4ML:
                 'erreur':          None,
                 'y_test':          y_test,
                 'feature_names':   feature_names,
+                # Exclusions de conformité tracées par MatriceX (audit V11 / I5) :
+                # une exclusion silencieuse est un défaut en soi — c'est ce silence
+                # qui a rendu le BLOQUANT B5 si coûteux (facteur central de la RC Pro
+                # détruit, −17,4 % de Gini, sans que rien ne l'indique nulle part).
+                'exclusions_conformite': getattr(self, 'exclusions_conformite', {}),
                 # ── Standard ActuarIA ─────────────────────────────────────────
                 'excel_bytes':     _excel_a4,
                 'word_bytes':      _word_a4,
