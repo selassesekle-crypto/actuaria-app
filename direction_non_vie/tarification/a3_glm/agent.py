@@ -111,7 +111,7 @@ except ImportError:
 # 'civilite' entrait dans le GLM. A3 appelle désormais filtrer_genre(),
 # comme A2/A4/A5/A6 : une seule implémentation, pour tous.
 from core.conformite_reglementaire import (
-    filtrer_genre, filtrer_famille_cible, COLS_GENRE_INTERDITES
+    filtrer_features, filtrer_genre, filtrer_famille_cible, COLS_GENRE_INTERDITES
 )
 
 warnings.filterwarnings('ignore')
@@ -627,7 +627,7 @@ class AgentA3GLM:
         # une colonne 'sexe_M' pré-encodée par le client, 'Sexe', 'sex' ou
         # 'civilite' entrait dans le GLM — prouvé par exécution. A3 appelle
         # désormais la fonction partagée, comme A2/A4/A5/A6.
-        vars_prioritaires = filtrer_genre(
+        vars_prioritaires = filtrer_features(
             vars_prioritaires,
             contexte=f"A3 — sélection GLM (sous-branche '{sous_branche}')",
             logger_agent=logger,
@@ -642,11 +642,6 @@ class AgentA3GLM:
         # TOUTES les colonnes numériques quand la sous-branche n'est pas
         # reconnue. Même faille que celle corrigée dans A4/A5/A6 (audits V8/V9).
         # On applique donc ici le même filtre partagé.
-        vars_prioritaires = filtrer_famille_cible(
-            vars_prioritaires,
-            contexte=f"A3 — sélection GLM (sous-branche '{sous_branche}')",
-            logger_agent=logger,
-        )
 
         # Filtrage : variables qui existent ET sont numériques
         cols_exclure = set(COLS_A_EXCLURE)

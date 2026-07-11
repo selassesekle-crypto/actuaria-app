@@ -89,7 +89,7 @@ except ImportError:
 # filtrer_famille_cible ; l'audit V9 (BLOQUANT) a prouvé qu'une colonne
 # genre pré-encodée (scénario V7) traversait donc intacte jusqu'à la
 # recalibration walk-forward.
-from core.conformite_reglementaire import filtrer_genre, filtrer_famille_cible
+from core.conformite_reglementaire import filtrer_features, filtrer_genre, filtrer_famille_cible
 
 warnings.filterwarnings('ignore')
 logging.basicConfig(
@@ -860,10 +860,7 @@ class AgentA6Comparaison:
                 # (variable prohibée CJUE C-236/09, et incohérence de features avec
                 # le modèle réellement entraîné par A4/A5 sans genre).
                 # La cible reste lue via df_tr[col_cible], indépendamment de _cols_num.
-                _cols_num = filtrer_genre(
-                    _cols_num, contexte='A6 — walk-forward', logger_agent=logger
-                )
-                _cols_num = filtrer_famille_cible(
+                _cols_num = filtrer_features(
                     _cols_num, contexte='A6 — walk-forward', logger_agent=logger
                 )
                 if _cols_num and col_cible in df_tr.columns:
@@ -1273,7 +1270,36 @@ class AgentA6Comparaison:
                 f"Raison : {(backtest or {}).get('note', 'non renseignée')}."
             )
 
-        if score >= 0.60 and gini >= 0.15 and _gouvernance_ok and _backtest_ok:
+        # ── FIDÉLITÉ DE LA RECALIBRATION WALK-FORWARD (audit interne 11/07/2026) ──
+        # Le walk-forward ne sait recalibrer que les modèles ML (fabrique sklearn
+        # creer_modele_ml_pour_nom). Quand le modèle retenu en production est un
+        # GLM_* ou un DL_*, il retombe sur un PROXY GBM — honnêtement étiqueté
+        # dans le rapport (correctif V4), mais cela signifie que la validation
+        # temporelle a porté sur un modèle DIFFÉRENT de celui qui part en
+        # production. Or le GLM est très fréquemment le modèle retenu.
+        # Le flag 'modele_recalibre_fidele' existait déjà dans le dict backtest,
+        # mais le gate ne le vérifiait pas : A6 pouvait donc certifier VERT sur
+        # la foi d'une validation temporelle portant sur un autre modèle — même
+        # classe de défaut que le BLOQUANT B2 de l'audit V7 (contrôle correct,
+        # mais non câblé dans la décision).
+        # On ne peut pas certifier un modèle de production sur la stabilité
+        # temporelle d'un autre modèle : plafond AMBRE.
+        _wf_fidele_ok = not (
+            environnement == 'production'
+            and (backtest or {}).get('disponible', False)
+            and not (backtest or {}).get('modele_recalibre_fidele', False)
+        )
+        if not _wf_fidele_ok:
+            logger.warning(
+                "[VALIDATION TEMPORELLE] La recalibration walk-forward n'a PAS "
+                "porté sur le modèle de production "
+                f"({(backtest or {}).get('modele_recalibre', 'proxy')}) : la "
+                "stabilité temporelle mesurée est celle d'un modèle différent. "
+                "Statut plafonné à AMBRE en environnement 'production'."
+            )
+
+        if (score >= 0.60 and gini >= 0.15 and _gouvernance_ok
+                and _backtest_ok and _wf_fidele_ok):
             return 'VERT'
         elif score >= 0.40 or gini >= 0.05:
             return 'AMBRE'

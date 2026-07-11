@@ -128,7 +128,7 @@ except ImportError:
 # filtre genre avant ce correctif (fuite confirmée par exécution réelle :
 # une colonne 'sexe' numérique atteignait la matrice de features des
 # modèles ML, potentiellement retenus en production par A6).
-from core.conformite_reglementaire import filtrer_genre, filtrer_famille_cible
+from core.conformite_reglementaire import filtrer_features, filtrer_genre, filtrer_famille_cible
 
 # ── LOGGER ────────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -818,7 +818,7 @@ class AgentA4ML:
         # numérique (0/1) ou pré-encodée ('sexe_enc') pouvait donc atteindre
         # la matrice X des modèles ML — et A6 peut retenir un tel modèle en
         # production. Réf. : Arrêt CJUE C-236/09 (Test-Achats).
-        feature_names = filtrer_genre(
+        feature_names = filtrer_features(
             feature_names, contexte='A4 — sélection features ML', logger_agent=logger
         )
 
@@ -830,9 +830,6 @@ class AgentA4ML:
         # coût → data leakage (Gini fréquence 0,91 vs 0,20, prouvé par
         # exécution). On centralise l'exclusion de toute la famille cible.
         # La cible reste lue via df[col_cible] : l'exclure des features est sûr.
-        feature_names = filtrer_famille_cible(
-            feature_names, contexte='A4 — sélection features ML', logger_agent=logger
-        )
 
         if len(feature_names) == 0:
             raise ValueError("Aucune feature numérique disponible pour ML.")

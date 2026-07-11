@@ -474,6 +474,49 @@ class TestAntiFuiteV9(unittest.TestCase):
             "L'encodage doit continuer de fonctionner pour les variables légitimes")
         print("    V9-7 Encodage automatique ne recrée pas le genre ✅")
 
+    def test_liste_blanche_bloque_les_18_fuites_de_l_audit_interne(self):
+        """LISTE BLANCHE (11/07/2026) — le garde-fou structurel.
+
+        L'audit interne a démontré que les listes NOIRES ne peuvent pas être
+        exhaustives : 11 noms de sinistralité (loss_ratio, burning_cost,
+        frequence_observee, montant_regle...) et 7 proxys de genre (prenom,
+        civilite, is_male...) — tous parfaitement réalistes dans un fichier
+        client — passaient au travers. Chaque correctif de liste noire n'a fait
+        que déplacer la frontière.
+
+        filtrer_features() inverse la charge de la preuve : seule une colonne
+        DÉCLARÉE facteur tarifaire légitime entre dans X ; l'inconnu est exclu
+        par défaut (fail-safe) et journalisé (transparence ACPR)."""
+        from core.conformite_reglementaire import filtrer_features
+        fuites_sinistralite = [
+            'loss_ratio', 'taux_S_sur_P', 'ratio_sp', 'frequence_observee',
+            'severite_observee', 'charge_totale', 'montant_regle',
+            'indemnite_versee', 'provision_dossier', 'burning_cost',
+            'sinistralite_n',
+        ]
+        proxys_genre = ['prenom', 'titre', 'madame', 'mr_mme', 'is_male',
+                        'homme_femme', 'f_h', 'civilite', 'sexe_M', 'Sexe']
+        out = filtrer_features(fuites_sinistralite + proxys_genre, contexte='test')
+        self.assertEqual(out, [],
+            f"Colonnes non déclarées passant la liste blanche : {out}")
+
+        # Contrôle négatif indispensable : la liste blanche ne doit pas écarter
+        # les facteurs tarifaires réellement produits par le pipeline A2.
+        legitimes = [
+            'age', 'bonus_malus', 'puissance_fiscale', 'age_carre',
+            'jeune_conducteur', 'senior_conducteur', 'vehicule_recent',
+            'age_x_bonus_malus', 'inter_age_bonus_malus', 'log_exposition',
+            'carburant_diesel', 'zone_geographique_enc', 'densite_population',
+            'antecedents_sinistres_n1', 'nb_sinistres_anterieurs',
+            'statut_occupation_locataire', 'surface_m2',
+        ]
+        out2 = filtrer_features(legitimes, contexte='test')
+        perdus = [c for c in legitimes if c not in out2]
+        self.assertEqual(perdus, [],
+            f"Facteurs tarifaires légitimes écartés à tort : {perdus}")
+        print(f"    LB Liste blanche : 21 fuites bloquées, "
+              f"{len(out2)}/{len(legitimes)} facteurs légitimes conservés ✅")
+
 
 if __name__ == '__main__':
     print("="*65)

@@ -403,12 +403,21 @@ class TestA6ValidationTemporelleObligatoire(unittest.TestCase):
         print(f"    B2-A6 Backtest indisponible → statut plafonné ✅ : {statut}")
 
     def test_backtest_disponible_permet_vert(self):
-        """Contrôle positif : un backtest disponible ne doit PAS bloquer
-        un VERT par ailleurs mérité (le garde-fou ne doit pas être trop
-        large et plafonner en permanence)."""
+        """Contrôle positif : un backtest disponible ET FIDÈLE ne doit PAS
+        bloquer un VERT par ailleurs mérité (le garde-fou ne doit pas être
+        trop large et plafonner en permanence).
+
+        ⚠ Fixture complétée le 11/07/2026 : le backtest doit désormais aussi
+        déclarer 'modele_recalibre_fidele'. Un walk-forward "disponible" mais
+        recalibré sur un PROXY (cas des modèles GLM_*/DL_*, non couverts par la
+        fabrique sklearn) ne valide pas le modèle de production — voir le test
+        suivant. La prémisse de ce test était incomplète, pas fausse."""
         modele_excellent = {'score_global': 0.95, 'gini_test': 0.30}
         classement = [modele_excellent]
-        backtest_disponible = {'disponible': True, 'ae_ratio': 1.02}
+        backtest_disponible = {
+            'disponible': True, 'ae_ratio': 1.02,
+            'modele_recalibre_fidele': True,   # modèle ML réellement recalibré
+        }
 
         statut = self.agent._calculer_statut_rag(
             modele_excellent, classement,
@@ -417,9 +426,48 @@ class TestA6ValidationTemporelleObligatoire(unittest.TestCase):
             backtest=backtest_disponible,
         )
         self.assertEqual(statut, 'VERT',
-            "Un backtest disponible avec un modèle excellent et une "
+            "Un backtest disponible ET fidèle avec un modèle excellent et une "
             "gouvernance validée devrait permettre VERT — garde-fou trop large ?")
-        print(f"    B2-A6 Backtest disponible → VERT accessible ✅ : {statut}")
+        print(f"    B2-A6 Backtest disponible + fidèle → VERT accessible ✅ : {statut}")
+
+    def test_walk_forward_non_fidele_plafonne_a_ambre(self):
+        """Audit interne (11/07/2026) : le walk-forward ne sait recalibrer que
+        les modèles ML (fabrique sklearn). Quand le modèle retenu en production
+        est un GLM_* ou un DL_*, il retombe sur un PROXY GBM — honnêtement
+        étiqueté, mais la stabilité temporelle mesurée est alors celle d'un
+        AUTRE modèle que celui qui part en production. Or le GLM est très
+        fréquemment le modèle retenu.
+
+        Le flag 'modele_recalibre_fidele' existait dans le dict backtest, mais
+        le gate RAG ne le vérifiait pas : VERT restait possible sur la foi d'une
+        validation portant sur un autre modèle. Même classe de défaut que le
+        BLOQUANT B2 (V7) : contrôle correct, mais non câblé dans la décision."""
+        modele_excellent = {'score_global': 0.95, 'gini_test': 0.30}
+        backtest_proxy = {
+            'disponible': True, 'ae_ratio': 1.02,
+            'modele_recalibre': 'GLM_POISSON → proxy GBM',
+            'modele_recalibre_fidele': False,
+        }
+        statut = self.agent._calculer_statut_rag(
+            modele_excellent, [modele_excellent],
+            profil_valide_par='Actuaire Test',
+            environnement='production',
+            backtest=backtest_proxy,
+        )
+        self.assertNotEqual(statut, 'VERT',
+            "Un walk-forward recalibré sur un PROXY ne valide pas le modèle de "
+            "production : VERT ne doit pas être accordé en production.")
+        self.assertEqual(statut, 'AMBRE')
+
+        # En développement, ce n'est pas bloquant.
+        statut_dev = self.agent._calculer_statut_rag(
+            modele_excellent, [modele_excellent],
+            profil_valide_par=None, environnement='developpement',
+            backtest=backtest_proxy,
+        )
+        self.assertEqual(statut_dev, 'VERT',
+            "Le plafond ne doit s'appliquer qu'en production.")
+        print(f"    WF-FID Walk-forward proxy → AMBRE en prod ✅ / VERT en dev ✅")
 
     def test_backtest_absent_du_dict_ne_plante_pas(self):
         """Robustesse : backtest=None (paramètre non transmis par un

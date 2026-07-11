@@ -240,3 +240,192 @@ def filtrer_famille_cible(
             f"{' (' + contexte + ')' if contexte else ''}."
         )
     return apres
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  LISTE BLANCHE — LE GARDE-FOU STRUCTUREL
+# ══════════════════════════════════════════════════════════════════════════════
+# Pourquoi une liste blanche EN PLUS des deux listes noires ci-dessus :
+#
+# Les listes noires (genre, famille cible) ne peuvent PAS être exhaustives, et
+# l'historique le prouve à chaque cycle : chaque audit trouve de nouveaux noms
+# qui passent au travers. Audit interne du 11/07/2026, sur des noms de colonnes
+# parfaitement réalistes dans un fichier client d'assureur :
+#   · sinistralité NON capturée par la liste noire : loss_ratio, taux_S_sur_P,
+#     ratio_sp, frequence_observee, severite_observee, charge_totale,
+#     montant_regle, indemnite_versee, provision_dossier, burning_cost,
+#     sinistralite_n  → 11 fuites potentielles.
+#   · proxys de genre NON capturés : prenom, titre, madame, mr_mme, is_male,
+#     homme_femme, f_h  → 7 variables prohibées potentielles.
+# Chaque correctif de liste noire n'a fait que déplacer la frontière.
+#
+# La liste blanche inverse la charge de la preuve : une colonne n'entre dans la
+# matrice X que si elle est DÉCLARÉE comme facteur tarifaire légitime. Tout ce
+# qui est inconnu est exclu PAR DÉFAUT (fail-safe) et JOURNALISÉ (transparence :
+# l'actuaire voit ce qui a été écarté et peut déclarer une variable manquante).
+#
+# Les deux listes noires sont CONSERVÉES en défense en profondeur : une variable
+# qui passerait la liste blanche (ex. par un préfixe partagé) reste bloquée si
+# elle est genrée ou dérivée de la sinistralité.
+
+# Facteurs tarifaires légitimes — Direction Non-Vie (auto · MRH · RC Pro).
+# Toute direction qui utilisera ce module devra déclarer ses propres facteurs.
+FACTEURS_TARIFAIRES_AUTORISES = {
+    # ── Communs ───────────────────────────────────────────────────────────────
+    'age', 'csp', 'zone_geographique', 'densite_population',
+    'milieu_geographique', 'region', 'departement', 'code_postal',
+    'latitude', 'longitude',
+    'anciennete_client', 'anciennete_contrat', 'nb_contrats',
+    'fractionnement', 'mode_paiement', 'canal_distribution',
+    # Exposition / offset (jamais prédicteur, mais doit traverser les filtres)
+    'exposition', 'log_exposition',
+    # Expérience PASSÉE — légitime (connue à la souscription : fonde le B/M)
+    'antecedents_sinistres_n1', 'nb_sinistres_anterieurs', 'risque_historique',
+    # ── Auto ──────────────────────────────────────────────────────────────────
+    'bonus_malus', 'coefficient_reduction_majoration', 'anciennete_permis',
+    'puissance_fiscale', 'puissance', 'valeur_venale', 'kilometrage_annuel',
+    'age_vehicule', 'annee_mise_circulation', 'carburant', 'marque_vehicule',
+    'modele_vehicule', 'usage', 'garantie', 'type_conduite', 'parking',
+    # ── MRH ───────────────────────────────────────────────────────────────────
+    'surface_m2', 'type_logement', 'statut_occupation', 'etage', 'nb_pieces',
+    'annee_construction', 'alarme', 'capital_assure_biens_eur',
+    'age_logement', 'dependances',
+    # ── RC Pro ────────────────────────────────────────────────────────────────
+    'ca_annuel_eur', 'nb_salaries', 'secteur_activite', 'forme_juridique',
+    'anciennete_entreprise_ans', 'type_garantie', 'effectif',
+    # ── Indicateurs DÉRIVÉS générés par A2 (_feature_engineering) ─────────────
+    # Recensés exhaustivement sur le code d'A2 au 11/07/2026. Ils dérivent tous
+    # d'un facteur autorisé ci-dessus (age, age_vehicule, kilometrage, surface...)
+    # mais leur nom ne permet pas de le déduire mécaniquement — ils doivent donc
+    # être déclarés. ⚠ Tout NOUVEAU dérivé ajouté à A2 devra être déclaré ici,
+    # sans quoi il sera écarté de la matrice X (et journalisé : le WARNING de
+    # selectionner_features_autorisees le rendra visible immédiatement).
+    'jeune_conducteur', 'senior_conducteur',
+    'vehicule_recent', 'vehicule_ancien',
+    'logement_ancien', 'valeur_mobilier', 'valeur_par_m2',
+    'km_par_an_normalise',
+}
+
+# Préfixes de features DÉRIVÉES générées par A2 à partir d'un facteur autorisé.
+# Une dérivée n'est acceptée que si sa BASE est elle-même autorisée (ex.
+# 'age_carre' ← 'age' ; 'carburant_diesel' ← 'carburant' ; 'zone_geographique_enc'
+# ← 'zone_geographique'). Cela évite de devoir déclarer chaque nom généré.
+PREFIXES_DERIVEES = ('log_', 'inter_')
+SUFFIXES_DERIVEES = ('_enc', '_carre', '_log')
+
+
+def _base_facteur(nom: str) -> str:
+    """Ramène une feature dérivée à son facteur de base présumé."""
+    n = nom.lower()
+    for p in PREFIXES_DERIVEES:
+        if n.startswith(p):
+            n = n[len(p):]
+    for s in SUFFIXES_DERIVEES:
+        if n.endswith(s):
+            n = n[: -len(s)]
+    return n
+
+
+def est_facteur_autorise(nom: str) -> bool:
+    """
+    True si la colonne est (ou dérive d')un facteur tarifaire déclaré légitime.
+
+    Accepte :
+      · le facteur lui-même            ('age', 'bonus_malus')
+      · ses dérivées connues           ('age_carre', 'log_exposition')
+      · ses colonnes filles one-hot    ('carburant_diesel' ← 'carburant')
+      · les interactions entre facteurs autorisés ('inter_age_bonus_malus')
+      · les indicateurs binaires dérivés ('jeune_conducteur' ← déclaré)
+    """
+    n = nom.lower()
+    if n in FACTEURS_TARIFAIRES_AUTORISES:
+        return True
+    base = _base_facteur(n)
+    if base in FACTEURS_TARIFAIRES_AUTORISES:
+        return True
+    # Interaction : 'inter_a_b' / 'a_x_b' — autorisée si TOUS les facteurs
+    # qui la composent sont eux-mêmes autorisés.
+    if base.startswith('inter_') or '_x_' in base:
+        corps = base[6:] if base.startswith('inter_') else base
+        for f1 in FACTEURS_TARIFAIRES_AUTORISES:
+            if corps.startswith(f1):
+                reste = corps[len(f1):].lstrip('_').replace('x_', '', 1).lstrip('_')
+                if reste in FACTEURS_TARIFAIRES_AUTORISES:
+                    return True
+    # Colonne fille d'un one-hot / label : 'carburant_diesel' ← 'carburant'.
+    # On exige que le facteur autorisé soit un préfixe SUIVI d'un '_' pour
+    # éviter les collisions accidentelles ('agent_...' ne dérive pas de 'age').
+    for f in FACTEURS_TARIFAIRES_AUTORISES:
+        if base.startswith(f + '_'):
+            return True
+    return False
+
+
+def selectionner_features_autorisees(
+    feature_names: List[str],
+    contexte: str = '',
+    logger_agent: Optional[logging.Logger] = None,
+    facteurs_supplementaires: Optional[List[str]] = None,
+) -> List[str]:
+    """
+    LISTE BLANCHE — ne conserve que les facteurs tarifaires déclarés légitimes.
+
+    Toute colonne inconnue est EXCLUE par défaut (fail-safe) et JOURNALISÉE en
+    WARNING (transparence ACPR : l'actuaire voit exactement ce qui a été écarté
+    et peut déclarer une variable manquante via `facteurs_supplementaires` ou en
+    l'ajoutant à FACTEURS_TARIFAIRES_AUTORISES).
+
+    À utiliser en PREMIER, avant filtrer_genre / filtrer_famille_cible, qui
+    restent appliqués ensuite en défense en profondeur.
+
+    Paramètres
+    ----------
+    facteurs_supplementaires : facteurs propres à un portefeuille client,
+        déclarés explicitement par l'actuaire. Étend la liste blanche pour cet
+        appel uniquement (ne modifie pas la source de vérité).
+    """
+    _log = logger_agent or logger
+    autorises_extra = {f.lower() for f in (facteurs_supplementaires or [])}
+    apres = [
+        f for f in feature_names
+        if est_facteur_autorise(f) or f.lower() in autorises_extra
+    ]
+    exclues = [f for f in feature_names if f not in apres]
+    if exclues:
+        _log.warning(
+            f"[CONFORMITE REGLEMENTAIRE — LISTE BLANCHE] "
+            f"{len(exclues)} colonne(s) NON déclarée(s) comme facteur tarifaire "
+            f"légitime, exclue(s) de la matrice X par défaut (fail-safe) : "
+            f"{sorted(exclues)}"
+            f"{' (' + contexte + ')' if contexte else ''}. "
+            f"Si l'une d'elles est un facteur tarifaire valide, la déclarer "
+            f"dans FACTEURS_TARIFAIRES_AUTORISES (core/conformite_reglementaire.py) "
+            f"ou via le paramètre facteurs_supplementaires."
+        )
+    return apres
+
+
+def filtrer_features(
+    feature_names: List[str],
+    contexte: str = '',
+    logger_agent: Optional[logging.Logger] = None,
+    facteurs_supplementaires: Optional[List[str]] = None,
+) -> List[str]:
+    """
+    POINT D'ENTRÉE UNIQUE de la conformité sur une liste de features.
+
+    Enchaîne les trois garde-fous, dans cet ordre :
+      1. LISTE BLANCHE  — seuls les facteurs tarifaires déclarés passent ;
+      2. filtrer_genre  — défense en profondeur (CJUE C-236/09) ;
+      3. filtrer_famille_cible — défense en profondeur (anti data leakage).
+
+    Tout agent de TOUTE direction construisant une matrice X doit appeler
+    cette fonction — et elle seule.
+    """
+    f = selectionner_features_autorisees(
+        feature_names, contexte=contexte, logger_agent=logger_agent,
+        facteurs_supplementaires=facteurs_supplementaires,
+    )
+    f = filtrer_genre(f, contexte=contexte, logger_agent=logger_agent)
+    f = filtrer_famille_cible(f, contexte=contexte, logger_agent=logger_agent)
+    return f
