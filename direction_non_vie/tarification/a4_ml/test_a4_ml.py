@@ -286,9 +286,18 @@ class TestAntiFuiteV9(unittest.TestCase):
         print(f"    V9-1 Filtre genre élargi ✅ | 14 variantes adverses toutes exclues")
 
     def test_integration_a2_a4_genre_one_hot_mrh(self):
-        """Reproduction exacte de la fuite prouvée par les deux certificateurs
-        V9 : sexe encodé en one-hot (sexe_m/sexe_f) par A2 pour la branche
-        MRH atteint directement la matrice X d'A4 (pas seulement A6)."""
+        """Reproduction de la fuite prouvée par les deux certificateurs V9 :
+        sexe encodé en one-hot (sexe_m/sexe_f) par A2 pour la branche MRH
+        atteignait directement la matrice X d'A4.
+
+        Depuis le nettoyage de périmètre (11/07/2026), la correction est
+        désormais à DEUX niveaux :
+        (1) à la source — 'sexe' ne figure dans AUCUNE config d'encodage de
+            A2, et filtrer_genre est appliqué inconditionnellement à
+            l'encodage : A2 ne produit donc plus de colonne sexe_* ;
+        (2) en défense en profondeur — même si une colonne de genre entrait
+            par une autre voie (fichier client pré-encodé), A4 la filtre.
+        Ce test verrouille les deux."""
         from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
         from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
         from direction_non_vie.tarification.a4_ml.agent import AgentA4ML
@@ -312,23 +321,38 @@ class TestAntiFuiteV9(unittest.TestCase):
         a4 = AgentA4ML(models_path='/tmp', audit_path='/tmp', verbose=False)
         r1 = a1.run(branche='non_vie', dataframe=df)
         r2 = a2.run(result_a1=r1)
-        cols_sexe_a2 = [c for c in r2['dataframe'].columns if 'sexe' in c.lower()]
-        self.assertIn('sexe_m', cols_sexe_a2,
-            "Ce test présuppose l'encodage one-hot de sexe par A2 en MRH — "
-            "si ce nom a changé, adapter le test plutôt que le supprimer")
+
+        # (1) Correction à la source : A2 ne doit produire AUCUNE colonne
+        #     dérivée du genre (plus de one-hot sexe_m/sexe_f).
+        cols_encodees_genre = [c for c in r2['dataframe'].columns
+                               if c.lower() not in ('sexe',)
+                               and ('sexe' in c.lower() or 'genre' in c.lower())]
+        self.assertEqual(cols_encodees_genre, [],
+            f"A2 encode encore le genre : {cols_encodees_genre} "
+            f"(le genre ne doit figurer dans aucune config d'encodage)")
+
+        # (2) Défense en profondeur : rien de genré n'atteint la matrice X.
         feats = a4._preparer_donnees(
             r2['dataframe'].copy(), r1.get('sous_branche', 'mrh'),
             'nb_sinistres', 'exposition'
         )[-1]
-        genre_dans_X = [c for c in feats if 'sexe' in c.lower()]
+        genre_dans_X = [c for c in feats
+                        if 'sexe' in c.lower() or 'genre' in c.lower()]
         self.assertEqual(genre_dans_X, [],
             f"FUITE GENRE : {genre_dans_X} dans la matrice X d'A4 (branche MRH)")
-        print(f"    V9-2 Pas de fuite genre one-hot (MRH) ✅ | features={feats}")
+        print(f"    V9-2 Genre ni encodé par A2 ni présent dans X ✅ | features={feats}")
 
-    def test_integration_a2_a4_fuite_sinistralite_sante(self):
-        """Reproduction de la fuite de sinistralité en branche santé (noms
-        hors des racines V8 : sinistre_*, cout_{poste}, total_sinistres_sante,
-        part_hospit) — borne de vraisemblance sur le Gini fréquence."""
+    def test_integration_a2_a4_colonnes_sinistralite_brutes_client(self):
+        """Défense en profondeur : un fichier client Non-Vie peut contenir des
+        colonnes de sinistralité BRUTES (cout_medecine, cout_hospitalisation,
+        montant_sinistres...). Depuis le nettoyage de périmètre (11/07/2026),
+        A2 ne génère plus lui-même d'agrégats santé — mais ces colonnes brutes
+        restent numériques et atteindraient la matrice X sans le filtre
+        anti-fuite. Ce test verrouille ce chemin, qui est celui qui SUBSISTE
+        après le retrait du code mort.
+
+        Origine : audit V9 (BLOQUANT) — Gini fréquence 0,8093 avec ces
+        colonnes vs 0,0725 sans (+0,74), même signature que la fuite V8."""
         from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
         from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
         from direction_non_vie.tarification.a4_ml.agent import AgentA4ML
@@ -338,42 +362,63 @@ class TestAntiFuiteV9(unittest.TestCase):
         cout_med = lat * np.random.uniform(80, 150, n)
         cout_pharma = lat * np.random.uniform(40, 90, n)
         cout_hosp = lat * np.random.uniform(200, 600, n) * np.random.binomial(1, 0.15, n)
-        cout_dent = lat * np.random.uniform(30, 80, n)
-        cout_opt = lat * np.random.uniform(20, 60, n)
         nb_sin = np.random.poisson(0.15 * lat, n).astype(float)
         df = pd.DataFrame({
             'id_contrat': range(n), 'nb_sinistres': nb_sin,
-            'cout_total_sinistres': cout_med + cout_pharma + cout_hosp + cout_dent + cout_opt,
+            'cout_total_sinistres': cout_med + cout_pharma + cout_hosp,
             'exposition': np.random.uniform(0.3, 1, n),
             'age': np.random.randint(18, 75, n).astype(float),
+            'bonus_malus': np.random.uniform(50, 350, n),
+            # Colonnes de sinistralité brutes fournies par le client :
             'cout_medecine': cout_med, 'cout_pharmacie': cout_pharma,
-            'cout_hospitalisation': cout_hosp, 'cout_dentaire': cout_dent,
-            'cout_optique': cout_opt,
-            'nb_actes_medecine': np.random.poisson(3, n).astype(float),
-            'regime_securite_sociale': np.random.choice(['general', 'agricole'], n),
-            'formule_sante': np.random.choice(['base', 'confort', 'premium'], n),
+            'cout_hospitalisation': cout_hosp,
+            'montant_sinistres': cout_med + cout_pharma,
             'annee_souscription': np.random.choice([2021, 2022, 2023], n),
         })
         a1 = AgentA1Ingestion(audit_path='/tmp', verbose=False)
         a2 = AgentA2Preprocessing(audit_path='/tmp', verbose=False)
         a4 = AgentA4ML(models_path='/tmp', audit_path='/tmp', verbose=False)
         r1 = a1.run(branche='non_vie', dataframe=df)
+        self.assertTrue(r1['success'], f"A1 doit accepter du Non-Vie : {r1.get('erreur')}")
         r2 = a2.run(result_a1=r1)
-        sb = r1.get('sous_branche') or 'sante_individuelle'
-        feats = a4._preparer_donnees(r2['dataframe'].copy(), sb,
+        feats = a4._preparer_donnees(r2['dataframe'].copy(), 'auto',
                                      'nb_sinistres', 'exposition')[-1]
         fuite = [c for c in feats
                  if any(s in c.lower() for s in ['sinistre', 'cout_', 'part_hospit'])]
         self.assertEqual(fuite, [],
-            f"FUITE SANTÉ : {fuite} dans la matrice X (sous_branche={sb})")
+            f"FUITE : colonnes de sinistralité brutes dans la matrice X : {fuite}")
 
         r4 = a4.run(result_a2=r2, calcul_shap=False, generer_graphiques=False,
                     col_cible='nb_sinistres')
         gini = r4['classement'][0].get('gini_test', 0)
         self.assertLess(gini, 0.60,
-            f"Gini fréquence santé = {gini:.4f} ≥ 0,60 — signature de fuite "
-            f"(régression de l'anomalie V9 4.1/B4 ?)")
-        print(f"    V9-3 Pas de fuite santé ✅ | Gini={gini:.4f} (< 0,60)")
+            f"Gini fréquence = {gini:.4f} ≥ 0,60 — signature de fuite "
+            f"(régression de l'anomalie V9 ?)")
+        print(f"    V9-3 Colonnes sinistralité brutes filtrées ✅ | Gini={gini:.4f} (< 0,60)")
+
+    def test_a1_rejette_branche_hors_perimetre(self):
+        """Nettoyage de périmètre (11/07/2026) : A1 est un agent de la
+        Direction Non-Vie. Les branches Vie et Santé-Prévoyance doivent être
+        rejetées explicitement (fail loudly), et non traitées silencieusement
+        avec une configuration Non-Vie inadaptée."""
+        from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
+        a1 = AgentA1Ingestion(audit_path='/tmp', verbose=False)
+        df = pd.DataFrame({
+            'id_contrat': range(50),
+            'nb_sinistres': np.zeros(50),
+            'cout_total_sinistres': np.zeros(50),
+            'exposition': np.ones(50),
+            'age': np.full(50, 40.0),
+        })
+        for branche_hs in ['sante_prevoyance', 'vie']:
+            r = a1.run(branche=branche_hs, dataframe=df)
+            self.assertFalse(r['success'],
+                f"A1 doit REJETER la branche '{branche_hs}' (hors périmètre Non-Vie)")
+            self.assertEqual(r['statut_rag'], 'ROUGE')
+            self.assertIn('hors périmètre', r['erreur'])
+        r_ok = a1.run(branche='non_vie', dataframe=df)
+        self.assertTrue(r_ok['success'], "A1 doit continuer d'accepter 'non_vie'")
+        print("    V9-6 A1 rejette Vie/SP, accepte Non-Vie ✅")
 
     def test_faux_positifs_preserves(self):
         """L'élargissement des racines anti-fuite (V9) ne doit pas exclure
@@ -388,6 +433,46 @@ class TestAntiFuiteV9(unittest.TestCase):
             f"Faux positif : variable(s) légitime(s) exclue(s) à tort : "
             f"{set(legitimes) - set(out)}")
         print(f"    V9-4 Faux positifs préservés ✅ | {out}")
+
+    def test_a2_encodage_automatique_ne_recree_pas_le_genre(self):
+        """Chemin de contournement découvert en exécution (11/07/2026) :
+        A2 possède un encodage LABEL AUTOMATIQUE de repli pour toute colonne
+        'object' non configurée explicitement. Ce chemin recréait 'sexe_enc'
+        alors même que 'sexe' avait été retiré de toutes les configs
+        d'encodage — contournant intégralement le filtre genre basé sur la
+        config. Distinct de la voie one-hot identifiée par l'audit V9, et
+        couvert par aucun test jusqu'ici."""
+        from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
+        from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
+        np.random.seed(3)
+        n = 800
+        df = pd.DataFrame({
+            'id_contrat': range(n),
+            'nb_sinistres': np.random.poisson(0.1, n).astype(float),
+            'cout_total_sinistres': np.random.gamma(2, 300, n),
+            'exposition': np.random.uniform(0.2, 1, n),
+            'age': np.random.randint(20, 80, n).astype(float),
+            'bonus_malus': np.random.uniform(50, 350, n),
+            # Genre sous forme texte — passera par l'encodage automatique
+            # s'il n'est pas explicitement filtré :
+            'sexe': np.random.choice(['M', 'F'], n),
+            'carburant': np.random.choice(['Diesel', 'Regular'], n),
+            'annee_souscription': np.random.choice([2021, 2022, 2023], n),
+        })
+        a1 = AgentA1Ingestion(audit_path='/tmp', verbose=False)
+        a2 = AgentA2Preprocessing(audit_path='/tmp', verbose=False)
+        r2 = a2.run(result_a1=a1.run(branche='non_vie', dataframe=df))
+        derivees_genre = [c for c in r2['dataframe'].columns
+                          if c.lower() != 'sexe'
+                          and ('sexe' in c.lower() or 'genre' in c.lower())]
+        self.assertEqual(derivees_genre, [],
+            f"A2 a recréé une variable de genre encodée : {derivees_genre} "
+            f"(l'encodage automatique de repli doit filtrer le genre)")
+        # Contrôle négatif : une variable catégorielle légitime est bien encodée
+        self.assertTrue(
+            any('carburant' in c for c in r2['dataframe'].columns),
+            "L'encodage doit continuer de fonctionner pour les variables légitimes")
+        print("    V9-7 Encodage automatique ne recrée pas le genre ✅")
 
 
 if __name__ == '__main__':

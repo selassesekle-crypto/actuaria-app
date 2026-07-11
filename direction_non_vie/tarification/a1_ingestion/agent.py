@@ -148,11 +148,19 @@ MOTS_CLES_DETECTION = {
              'bonusmalus', 'puissance', 'vehpower', 'drimage', 'vehgas'],
     'mrh':  ['mrh', 'habitation', 'logement', 'surface', 'locataire'],
     'rcpro':['rcpro', 'rc_pro', 'responsabilite', 'professionnel'],
-    'vie':  ['vie', 'deces', 'capital', 'prime_unique', 'taux_technique'],
-    'sante':['sante', 'maladie', 'ij', 'hospitalisation', 'optique'],
-    'prevoyance': ['prevoyance', 'invalidite', 'incapacite', 'iaptd'],
-    'epargne': ['epargne', 'retraite', 'per', 'art39', 'art83', 'encours'],
 }
+# Sous-branches Vie, Santé, Prévoyance et Épargne RETIRÉES (11/07/2026).
+# A1 est un agent de la Direction NON-VIE et n'ingère que du Non-Vie
+# (auto · MRH · RC Pro). L'architecture initiale faisait de A1/A2 un
+# « service data » mutualisé des trois directions ; elle a été abandonnée
+# au profit de directions pleinement autonomes, chacune dotée de son
+# propre traitement de données.
+
+# Branches acceptées par cet agent — toute autre valeur est rejetée
+# explicitement (fail loudly) plutôt que traitée silencieusement avec une
+# configuration inadaptée. Empêche qu'un portefeuille Vie ou Santé soit
+# ingéré par erreur dans le pipeline de tarification Non-Vie.
+BRANCHES_SUPPORTEES = ('non_vie',)
 
 FORMATS_SUPPORTES = ['.csv', '.xlsx', '.xls', '.parquet', '.json', '.txt']
 
@@ -231,7 +239,10 @@ class AgentA1Ingestion:
         Paramètres
         ──────────
         branche : str
-            'non_vie' | 'vie' | 'sante_prevoyance'
+            'non_vie' — seule valeur acceptée (Direction Non-Vie :
+            auto · MRH · RC Pro). Toute autre branche est rejetée :
+            les directions Vie/EP-RE et Santé-Prévoyance sont autonomes
+            et disposent de leur propre traitement de données.
 
         fichier : str
             Nom du fichier de données (avec extension).
@@ -250,12 +261,45 @@ class AgentA1Ingestion:
 
         rapport = {'etapes': [], 'alertes': [], 'mapping_applique': False}
 
+        # ── GARDE-FOU DE PÉRIMÈTRE (11/07/2026) ───────────────────────────────
+        # A1 est un agent de la Direction Non-Vie. Les directions Vie/EP-RE et
+        # Santé-Prévoyance sont autonomes et disposent de leur propre service
+        # de données : elles ne doivent plus passer par A1/A2. On échoue
+        # explicitement plutôt que de traiter silencieusement un portefeuille
+        # hors périmètre avec une configuration Non-Vie inadaptée.
+        if branche not in BRANCHES_SUPPORTEES:
+            _msg = (
+                f"Branche '{branche}' hors périmètre. A1 est un agent de la "
+                f"Direction NON-VIE et n'accepte que {list(BRANCHES_SUPPORTEES)}. "
+                f"Les directions Vie/EP-RE et Santé-Prévoyance disposent de leur "
+                f"propre traitement de données depuis leur passage en autonomie."
+            )
+            logger.error(f"[{audit_id}] {_msg}")
+            return {
+                'success':    False,
+                'dataframe':  pd.DataFrame(),
+                'branche':    branche,
+                'statut_rag': 'ROUGE',
+                'score_qual': 0,
+                'audit_id':   audit_id,
+                'erreur':     _msg,
+                'commentaire': f"❌ ERREUR A1 : {_msg}",
+            }
+
         try:
             # ── ÉTAPE 1 : CHARGEMENT ──────────────────────────────────────────
             # Si un DataFrame est fourni directement → on saute le chargement
             # fichier. Permet l'utilisation depuis Streamlit, FastAPI, etc.
             if dataframe is not None:
-                import pandas as pd
+                # NOTE (11/07/2026) : un 'import pandas as pd' LOCAL figurait
+                # ici. Python le traitait comme une liaison locale valable pour
+                # TOUTE la fonction run() — masquant le pd importé au niveau du
+                # module (l.38). Conséquence : toute référence à pd située
+                # avant cette ligne, ou exécutée en mode fichier (dataframe=None,
+                # l'import local n'ayant alors jamais lieu), levait un
+                # UnboundLocalError — y compris le bloc except final qui
+                # construit pd.DataFrame() pour son dict d'erreur. L'import
+                # local, redondant, est supprimé.
                 if not isinstance(dataframe, pd.DataFrame):
                     raise ValueError("Le paramètre 'dataframe' doit être un pd.DataFrame.")
                 df = dataframe.copy()

@@ -73,6 +73,16 @@ except ImportError:
     except ImportError:
         TARIF_EXCEL_OK_A2 = False
 
+# Filtre de conformité partagé (source unique avec A3/A4/A5/A6) — audit V9.
+# Appliqué inconditionnellement aux configs d'encodage : le genre ne doit
+# jamais être encodé, quelle que soit la sous-branche (CJUE C-236/09).
+try:
+    from ..services.conformite_reglementaire import filtrer_genre
+except ImportError:
+    from direction_non_vie.tarification.services.conformite_reglementaire import (
+        filtrer_genre
+    )
+
 warnings.filterwarnings('ignore')
 
 # ── LOGGER ────────────────────────────────────────────────────────────────────
@@ -96,7 +106,7 @@ logger = logging.getLogger('actuaria.a2')
 # unique biaise l'estimation des paramètres du GLM Gamma.
 # Valeurs calibrées sur les statistiques du marché français (FFA 2022).
 SEUILS_WINSOR = {
-    # Non-Vie
+    # Non-Vie (auto · MRH · RC Pro) — seul périmètre de cet agent
     'prime_pure':             (0.01, 0.99),  # Clip au P1-P99
     'prime_commerciale':      (0.01, 0.99),
     'cout_total_sinistres':   (0.00, 0.99),  # Pas de borne inférieure (0 est valide)
@@ -104,30 +114,39 @@ SEUILS_WINSOR = {
     'valeur_venale':          (0.01, 0.99),
     'kilometrage_annuel':     (0.01, 0.99),
     'ca_annuel_eur':          (0.01, 0.99),
-    # Vie
-    'prime_pure_annuelle':    (0.01, 0.99),
-    'capital_assure_deces_eur': (0.01, 0.99),
-    'provision_mathematique': (0.01, 0.99),
-    # Santé-Prévoyance
-    'charge_annuelle_eur':    (0.00, 0.99),
-    'ij_journaliere_eur':     (0.01, 0.99),
-    'charge_ij_annuelle_eur': (0.00, 0.99),
 }
 
-# Variables catégorielles par sous-branche
+# Variables catégorielles par sous-branche — PÉRIMÈTRE NON-VIE UNIQUEMENT
+# (auto · MRH · RC Pro). Les sous-branches Vie/Épargne-Retraite et
+# Santé-Prévoyance ont été RETIRÉES : chaque direction est désormais
+# autonome et dispose de son propre service de données. A1/A2 sont des
+# agents de la Direction Non-Vie et ne traitent que du Non-Vie.
+#
 # Ces variables seront encodées selon la méthode appropriée
 # Justification : l'encodage WoE est préféré pour les GLM car il
 # préserve la relation monotone avec la variable cible.
 # Le One-Hot est utilisé pour les variables à faible cardinalité (< 5 modalités).
+#
+# ⚠ 'sexe' NE FIGURE VOLONTAIREMENT DANS AUCUNE LISTE D'ENCODAGE.
+# Historique (audit V9, BLOQUANT) : 'sexe' était présent dans la config
+# one_hot de toutes les sous-branches, et n'était retiré que pour 'auto'
+# via un scoping par nom de branche. En MRH, l'encodage produisait donc
+# sexe_m/sexe_f, colonnes qui atteignaient directement la matrice X d'A4
+# (prouvé par exécution). Le genre est interdit en tarification pour TOUTE
+# branche d'assurance (CJUE C-236/09), pas seulement en RC Auto : il n'a
+# donc rien à faire dans une config d'encodage, quelle qu'elle soit.
+# Défense en profondeur : filtrer_genre() est en outre appliqué
+# inconditionnellement à l'encodage (voir _encoder) et à la sélection de
+# features d'A3/A4/A5/A6.
 VARS_CATEGORIELLES = {
     'auto': {
-        'one_hot':    ['sexe', 'garantie', 'carburant'],
+        'one_hot':    ['garantie', 'carburant'],
         'label':      ['csp', 'marque_vehicule', 'usage',
                        'milieu_geographique'],
         'ordinale':   [],
     },
     'mrh': {
-        'one_hot':    ['sexe', 'statut_occupation', 'type_logement'],
+        'one_hot':    ['statut_occupation', 'type_logement'],
         'label':      ['csp', 'zone_geographique'],
         'ordinale':   [],
     },
@@ -136,44 +155,13 @@ VARS_CATEGORIELLES = {
         'label':      ['secteur_activite'],
         'ordinale':   [],
     },
-    'vie_individuelle': {
-        'one_hot':    ['sexe', 'fumeur', 'etat_sante_entree'],
-        'label':      ['type_produit', 'csp', 'periodicite_prime'],
-        'ordinale':   [],
-    },
-    'vie_collective': {
-        'one_hot':    ['sexe'],
-        'label':      ['secteur_activite', 'type_contrat'],
-        'ordinale':   [],
-    },
-    'sante_collective': {
-        'one_hot':    ['sexe', 'niveau_couverture'],
-        'label':      ['secteur_activite'],
-        'ordinale':   [],
-    },
-    'sante_individuelle': {
-        'one_hot':    ['sexe', 'formule_sante'],
-        'label':      ['regime_securite_sociale', 'antecedents_medicaux'],
-        'ordinale':   [],
-    },
-    'prevoyance_collective': {
-        'one_hot':    ['sexe', 'categorie_sociopro'],
-        'label':      ['secteur_activite', 'statut_invalidite'],
-        'ordinale':   [],
-    },
-    'prevoyance_individuelle': {
-        'one_hot':    ['sexe'],
-        'label':      ['csp', 'garanties_souscrites'],
-        'ordinale':   [],
-    },
 }
 
-# Colonnes interdites par sous-branche — conformité réglementaire
-# Arrêt CJUE C-236/09 du 1er mars 2011 (Test-Achats) :
-# Le genre (sexe) est interdit comme critère de tarification en assurance
-# depuis le 21 décembre 2012 (date d'application de l'arrêt).
-# Risque de sanction ACPR si variable présente dans la matrice X d'un
-# modèle de tarification RC Auto.
+# Conformité — genre interdit en tarification
+# Arrêt CJUE C-236/09 du 1er mars 2011 (Test-Achats) : le genre (sexe) est
+# interdit comme critère de tarification en assurance depuis le 21 décembre
+# 2012 (date d'application de l'arrêt). Risque de sanction ACPR si la variable
+# est présente dans la matrice X d'un modèle de tarification.
 #
 # ⚠ NOTE (audit V4, 10/07/2026) : la référence de transposition en droit
 # français ("loi du 1er juillet 2012") n'a pas pu être vérifiée par une
@@ -183,9 +171,15 @@ VARS_CATEGORIELLES = {
 # L'arrêt CJUE C-236/09 et sa date d'application (21/12/2012) reposent
 # sur une base documentaire plus robuste (jurisprudence largement citée
 # dans la littérature assurantielle européenne).
-COLS_INTERDITES_PAR_BRANCHE = {
-    'auto': ['sexe'],   # RC Auto : genre interdit — CJUE C-236/09
-}
+#
+# ⚠ CHANGEMENT (audit V9, BLOQUANT) : l'ancien dictionnaire
+# COLS_INTERDITES_PAR_BRANCHE = {'auto': ['sexe']} conditionnait la protection
+# au NOM de la sous-branche — exactement l'anti-pattern que le module de
+# conformité partagé condamne, et qui laissait le genre s'encoder en MRH,
+# Vie, Santé et Prévoyance. Il est remplacé par l'application
+# INCONDITIONNELLE de filtrer_genre() à toute config d'encodage (voir
+# _encoder), quelle que soit la branche. Source unique : services/
+# conformite_reglementaire.py, partagée avec A3/A4/A5/A6.
 
 # Variables d'interaction à créer par sous-branche
 # Justification actuarielle :
@@ -209,14 +203,7 @@ INTERACTIONS = {
         ('ca_annuel_eur', 'nb_salaries'), # Taille entreprise
         ('secteur_activite', 'anciennete_entreprise_ans'),  # Expérience sectorielle
     ],
-    'vie_individuelle': [
-        ('age_entree', 'fumeur'),         # Âge × tabac = mortalité accrue
-        ('age_entree', 'duree_contrat_ans'),  # Âge × durée = exposition totale
-    ],
-    'prevoyance_collective': [
-        ('age', 'categorie_sociopro'),    # Âge × catégorie = risque arrêt
-        ('secteur_activite', 'age'),      # BTP senior = très exposé
-    ],
+    # Vie / Prévoyance retirées (11/07/2026) — hors périmètre Non-Vie.
 }
 
 # Stratégies d'imputation par type de variable
@@ -945,21 +932,6 @@ class AgentA2Preprocessing:
             if key in sous_branche or sous_branche in key:
                 # Copie profonde pour ne pas modifier le dict source
                 config_encod = copy.deepcopy(VARS_CATEGORIELLES[key])
-                # Appliquer les exclusions réglementaires par branche
-                # (ex : sexe interdit en RC Auto — Arrêt CJUE C-236/09)
-                for branche_key, cols_interdites in COLS_INTERDITES_PAR_BRANCHE.items():
-                    if branche_key in sous_branche or sous_branche in branche_key:
-                        for col_interdite in cols_interdites:
-                            if col_interdite in config_encod.get('one_hot', []):
-                                config_encod['one_hot'].remove(col_interdite)
-                                logger.warning(
-                                    f"[CONFORMITE REGLEMENTAIRE] "
-                                    f"Variable '{col_interdite}' exclue de la "
-                                    f"matrice X pour sous-branche '{sous_branche}'. "
-                                    f"Réf. : Arrêt CJUE C-236/09 (Test-Achats) "
-                                    f"— genre interdit en tarification RC Auto "
-                                    f"depuis le 21/12/2012."
-                                )
                 break
 
         if config_encod is None:
@@ -969,6 +941,23 @@ class AgentA2Preprocessing:
                 f"Pas de configuration d'encodage pour '{sous_branche}'. "
                 "Encodage automatique basique appliqué."
             )
+
+        # ── CONFORMITÉ : EXCLUSION INCONDITIONNELLE DU GENRE ──────────────────
+        # Appliqué à TOUTES les listes d'encodage, quelle que soit la
+        # sous-branche (audit V9). Remplace l'ancien scoping par nom de branche
+        # (COLS_INTERDITES_PAR_BRANCHE = {'auto': ['sexe']}), qui laissait le
+        # genre s'encoder en one-hot dès que la branche n'était pas 'auto' —
+        # produisant sexe_m/sexe_f jusque dans la matrice X d'A4 (prouvé par
+        # exécution en MRH). Le genre est prohibé pour TOUTE branche
+        # d'assurance (CJUE C-236/09), pas seulement la RC Auto.
+        # Source unique partagée avec A3/A4/A5/A6 : filtrer_genre().
+        for _methode in ('one_hot', 'label', 'ordinale'):
+            if config_encod.get(_methode):
+                config_encod[_methode] = filtrer_genre(
+                    config_encod[_methode],
+                    contexte=f"A2 — encodage {_methode} (sous-branche '{sous_branche}')",
+                    logger_agent=logger,
+                )
 
         # ── LABEL ENCODING ────────────────────────────────────────────────────
         for col in config_encod.get('label', []):
@@ -1036,7 +1025,22 @@ class AgentA2Preprocessing:
 
         # ── ENCODAGE AUTOMATIQUE DES COLONNES OBJECT RESTANTES ───────────────
         # Pour les colonnes catégorielles non configurées explicitement
+        #
+        # ⚠ CONFORMITÉ (découvert en exécution, 11/07/2026) : ce repli encodait
+        # TOUTE colonne object restante — y compris 'sexe', qui ressortait en
+        # 'sexe_enc' alors même qu'elle avait été retirée de toutes les configs
+        # d'encodage. Ce chemin contournait donc intégralement le filtre genre
+        # basé sur la config (VARS_CATEGORIELLES). Il est distinct de la voie
+        # one-hot identifiée par l'audit V9, et n'était couvert par aucun test.
+        # Le filtre partagé filtrer_genre() est désormais appliqué ici aussi :
+        # aucune colonne de genre ne peut être encodée, par quelque voie que
+        # ce soit (CJUE C-236/09).
         cols_object = df.select_dtypes(include=['object']).columns.tolist()
+        cols_object = filtrer_genre(
+            cols_object,
+            contexte="A2 — encodage automatique des colonnes object restantes",
+            logger_agent=logger,
+        )
         cols_a_exclure = ['id_contrat', 'id_assure', 'id_salarie',
                            'id_beneficiaire', 'id_adherent', 'date_souscription',
                            'date_survenance', 'date_mouvement', 'date_evaluation']
@@ -1240,122 +1244,35 @@ class AgentA2Preprocessing:
                     'age_logement', 'logement_ancien'
                 ])
 
-        # ── VARIABLES SPÉCIFIQUES VIE ─────────────────────────────────────────
-        elif 'vie' in sous_branche or 'art' in sous_branche:
-
-            # Durée résiduelle du contrat
-            if 'age_entree' in df.columns and 'duree_contrat_ans' in df.columns:
-                df['age_terme'] = df['age_entree'] + df['duree_contrat_ans']
-                df['duree_residuelle'] = np.maximum(
-                    df['duree_contrat_ans'] - 5, 0  # Estimation si pas ancienneté
-                )
-                features_nouvelles.extend(['age_terme', 'duree_residuelle'])
-
-            # Rapport capital / prime (levier d'assurance)
-            if 'capital_assure_deces_eur' in df.columns and \
-               'prime_pure_annuelle' in df.columns:
-                df['levier_assurance'] = (
-                    df['capital_assure_deces_eur'] /
-                    np.maximum(df['prime_pure_annuelle'], 1)
-                )
-                features_nouvelles.append('levier_assurance')
-
-        # ── VARIABLES SPÉCIFIQUES SANTÉ ──────────────────────────────────────
-        elif 'sante' in sous_branche:
-
-            # Consommation médicale par poste (si données sinistres détaillées)
-            # Utilisée par S1 Léonie pour la tarification par poste
-            postes = ['medecine','pharmacie','hospitalisation','dentaire','optique']
-            for poste in postes:
-                col_cout  = f'cout_{poste}'
-                col_freq  = f'freq_{poste}'
-                col_nb    = f'nb_actes_{poste}'
-                if col_cout in df.columns:
-                    df[f'sinistre_{poste}'] = df[col_cout]
-                    features_nouvelles.append(f'sinistre_{poste}')
-                if col_nb in df.columns and col_cout in df.columns:
-                    df[f'cout_moyen_{poste}'] = (
-                        df[col_cout] / np.maximum(df[col_nb], 1)
-                    )
-                    features_nouvelles.append(f'cout_moyen_{poste}')
-
-            # Ratio hospit / total (indicateur anti-sélection)
-            if 'cout_hospitalisation' in df.columns:
-                total_cols = [c for c in df.columns if c.startswith('cout_')]
-                if len(total_cols) > 1:
-                    df['total_sinistres_sante'] = df[total_cols].sum(axis=1)
-                    df['part_hospit'] = (
-                        df['cout_hospitalisation'] /
-                        np.maximum(df['total_sinistres_sante'], 1)
-                    ).clip(0, 1)
-                    features_nouvelles.extend(['total_sinistres_sante','part_hospit'])
-
-            # Facteur d'âge santé (sinistralité croît avec l'âge)
-            if 'age' in df.columns:
-                df['facteur_age_sante'] = (
-                    0.7 + (df['age'] - 30) * 0.015
-                ).clip(0.5, 2.5)
-                features_nouvelles.append('facteur_age_sante')
-
-            # Ancienneté contrat santé (fidélisation)
-            if 'annee_adhesion' in df.columns:
-                annee_courante = pd.Timestamp.now().year
-                df['anciennete_sante'] = annee_courante - df['annee_adhesion']
-                features_nouvelles.append('anciennete_sante')
-
-        # ── VARIABLES SPÉCIFIQUES PRÉVOYANCE ─────────────────────────────────
-        elif 'prevoyance' in sous_branche:
-
-            # Taux de remplacement IJ / salaire
-            # Mesure le niveau de couverture prévoyance
-            if 'ij_journaliere_eur' in df.columns and \
-               'salaire_annuel_ref' in df.columns:
-                df['taux_remplacement'] = (
-                    df['ij_journaliere_eur'] * 365 /
-                    np.maximum(df['salaire_annuel_ref'], 1)
-                )
-                df['taux_remplacement'] = df['taux_remplacement'].clip(0, 1)
-                features_nouvelles.append('taux_remplacement')
-
-            # Durée d'arrêt ITT (utilisée par P2 Rayan pour les tables Markov)
-            if 'date_debut_arret' in df.columns and 'date_fin_arret' in df.columns:
-                df['duree_arret_jours'] = (
-                    pd.to_datetime(df['date_fin_arret']) -
-                    pd.to_datetime(df['date_debut_arret'])
-                ).dt.days.clip(0, 1825)   # max 5 ans
-                features_nouvelles.append('duree_arret_jours')
-            elif 'duree_arret_jours' in df.columns:
-                df['duree_arret_jours'] = df['duree_arret_jours'].clip(0, 1825)
-
-            # Flag dossier ouvert (utilisé par P3 Élodie pour la PSAP)
-            if 'statut_dossier' in df.columns:
-                df['flag_dossier_ouvert'] = (
-                    df['statut_dossier'].str.lower().isin(
-                        ['ouvert','en_cours','actif','open']
-                    ).astype(int)
-                )
-                features_nouvelles.append('flag_dossier_ouvert')
-            elif 'date_cloture' in df.columns:
-                df['flag_dossier_ouvert'] = df['date_cloture'].isna().astype(int)
-                features_nouvelles.append('flag_dossier_ouvert')
-
-            # Catégorie socioprofessionnelle (factor de risque ITT BCAC)
-            if 'categorie_sociopro' in df.columns:
-                csp_map = {'ouvrier':1.35,'employe':1.0,'cadre':0.75,'cadre_sup':0.60}
-                df['facteur_csp_itt'] = (
-                    df['categorie_sociopro'].str.lower()
-                    .map(csp_map).fillna(1.0)
-                )
-                features_nouvelles.append('facteur_csp_itt')
-
-            # Ancienneté en invalidité (pour PM rentes long terme P3)
-            if 'date_debut_invalidite' in df.columns:
-                annee_courante = pd.Timestamp.now().year
-                df['anciennete_invalidite_ans'] = (
-                    annee_courante -
-                    pd.to_datetime(df['date_debut_invalidite']).dt.year
-                ).clip(0, 40)
-                features_nouvelles.append('anciennete_invalidite_ans')
+        # ── SOUS-BRANCHES VIE / SANTÉ / PRÉVOYANCE : RETIRÉES ─────────────────
+        # Les blocs de feature engineering Vie, Santé et Prévoyance ont été
+        # supprimés de cet agent (nettoyage de périmètre, 11/07/2026).
+        #
+        # Historique : A1/A2 avaient été conçus comme le « service data »
+        # mutualisé des trois directions (Non-Vie, Vie/EP-RE,
+        # Santé-Prévoyance). Cette architecture a été abandonnée : chaque
+        # direction est désormais AUTONOME et dispose de son propre
+        # traitement de données. Les variables produites ici pour les autres
+        # directions (sinistre_{poste}, total_sinistres_sante, part_hospit,
+        # levier_assurance, taux_remplacement, duree_arret_jours,
+        # flag_dossier_ouvert, facteur_csp_itt...) n'étaient plus consommées
+        # par aucun agent : S1/S2 (Santé), P1-P3 (Prévoyance) et V1-V5
+        # (Vie/EP-RE) sont paramétriques ou disposent de leur propre pipeline.
+        #
+        # Ce code mort n'était pas neutre : il constituait une surface
+        # d'exposition réglementaire non auditée. L'audit V9 y a trouvé une
+        # anomalie BLOQUANTE — les agrégats de sinistralité santé
+        # (total_sinistres_sante, part_hospit, sinistre_{poste}) fuyaient dans
+        # la matrice X d'A4/A5 (Gini fréquence 0,81 vs 0,07 sans fuite).
+        # Retirer le code mort supprime la cause à la racine.
+        #
+        # ⚠ Le filtre anti-fuite (filtrer_famille_cible) reste néanmoins
+        # INDISPENSABLE en aval : un fichier client Non-Vie peut contenir des
+        # colonnes de sinistralité brutes (montant_sinistres, cout_*...) qui
+        # atteindraient la matrice X sans passer par ce bloc. La défense en
+        # profondeur au niveau de la sélection de features est conservée.
+        #
+        # Périmètre de cet agent : Non-Vie uniquement (auto · MRH · RC Pro).
 
         # ── INTERACTIONS GÉNÉRIQUES ───────────────────────────────────────────
         # Création des interactions définies dans INTERACTIONS

@@ -3676,12 +3676,17 @@ def _executer_analyse(besoin, direction, equipe, client):
 
             # ── SANTÉ ────────────────────────────────────────────────────────
             elif besoin in ["tarif_sante","prov_sante","report_sante"]:
-                if df is not None:
-                    from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
-                    from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
-                    r1 = AgentA1Ingestion(audit_path=_tmp, verbose=False).run(dataframe=df, branche="sante_prevoyance")
-                    r2 = AgentA2Preprocessing(audit_path=_tmp, verbose=False).run(r1)
-                    resultats["r2"] = r2
+                # NOTE (11/07/2026) : l'appel à A1/A2 (Direction Non-Vie) a été
+                # RETIRÉ de ce chemin. Vestige de l'architecture initiale où
+                # A1/A2 servaient de « service data » mutualisé aux trois
+                # directions. Cette architecture est abandonnée : la Direction
+                # Santé-Prévoyance est autonome. Le résultat r2 était calculé
+                # ici puis n'était consommé par AUCUN agent SP (S1/S2 sont
+                # paramétriques) — code tournant dans le vide, et surface
+                # d'exposition réglementaire non auditée (l'audit V9 y a trouvé
+                # une fuite de données bloquante sur les agrégats santé).
+                # Le pipeline de données propre à la Direction SP prend le
+                # relais lorsqu'il est branché sur données réelles.
 
                 if besoin == "tarif_sante":
                     from direction_sante_prevoyance.sante.s1_tarification.agent import AgentS1TarificationSante
