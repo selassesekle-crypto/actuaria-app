@@ -830,7 +830,8 @@ class AgentA4ML:
         # Elle trace aussi les exclusions, remontées ensuite dans les rapports —
         # une exclusion silencieuse est un défaut en soi (BLOQUANT B5, audit V11).
         _mx = construire_matrice_x(
-            feature_names, contexte='A4 — sélection features ML', logger_agent=logger
+            feature_names, contexte='A4 — sélection features ML', logger_agent=logger,
+            df=df, col_cible=col_cible,   # garde-fou n°4 : contrôle par l'EFFET
         )
         self.exclusions_conformite = _mx.exclusions
         feature_names = list(_mx)

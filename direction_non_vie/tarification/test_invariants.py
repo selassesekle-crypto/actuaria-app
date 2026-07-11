@@ -32,6 +32,7 @@ Origine : recommandation du certificateur indépendant, audit V11.
 """
 import sys, os, unittest
 import numpy as np
+import pandas as pd
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
 from core.conformite_reglementaire import (
@@ -541,6 +542,168 @@ class TestInvariant_AntiSelectionVisibleEtDisqualifiante(unittest.TestCase):
             m_bon, [m_bon], profil_valide_par='X', environnement='production',
             backtest=bt), 'VERT')
         print("    INV-8c Anti-sélection → ROUGE · bon modèle → VERT ✅")
+
+
+class TestInvariant_ControleParLEffet(unittest.TestCase):
+    """
+    INVARIANT N°9 — Une fuite doit être détectée par son EFFET, pas par son nom.
+
+    Sept cycles ont durci des listes de noms ; sept fois, le cycle suivant a
+    trouvé le nom qui passait au travers. Le dernier en date (BLOQUANT B6,
+    audit V12) : 'garantie_montant_regle' — le montant réglé au titre de la
+    garantie, colonne parfaitement standard d'une extraction jointe aux
+    sinistres — traversait les TROIS filtres nominaux via le préfixe
+    'garantie_' (car 'garantie' est un facteur légitime). Gini 0,0709 → 0,9222
+    (+1201 %). Et le walk-forward, contaminé par la même fuite, la CONFIRMAIT
+    au lieu de la détecter.
+
+    Le contrôle par l'effet ne dépend d'aucun nom : il attrape les fuites que
+    personne n'a encore imaginées. C'est le seul garde-fou qui ne repose pas sur
+    l'imagination de celui qui l'écrit.
+    """
+
+    def test_une_fuite_est_detectee_quel_que_soit_son_nom(self):
+        from core.conformite_reglementaire import construire_matrice_x
+        rng = np.random.default_rng(99)
+        n = 3000
+        cout = np.where(rng.poisson(.2, n) > 0, rng.gamma(2, 1200, n), 0.)
+        df = pd.DataFrame({
+            'age': rng.integers(18, 80, n).astype(float),
+            'bonus_malus': rng.uniform(.5, 3.5, n),
+            'nb_sinistres': (cout > 0).astype(float),
+            # ⚠ Trois fuites aux noms INSOUPÇONNABLES, qui passent tous les
+            # filtres NOMINAUX (préfixe d'un facteur autorisé) :
+            'garantie_montant_regle': cout,
+            'usage_loss_ratio': cout / 1000.,
+            'age_burning_cost': cout * 2,
+        })
+        candidates = ['age', 'bonus_malus', 'garantie_montant_regle',
+                      'usage_loss_ratio', 'age_burning_cost']
+        mx = construire_matrice_x(candidates, contexte='test',
+                                  df=df, col_cible='nb_sinistres')
+        for fuite in ['garantie_montant_regle', 'usage_loss_ratio',
+                      'age_burning_cost']:
+            self.assertNotIn(fuite, list(mx),
+                f"'{fuite}' fuit dans la matrice X : le contrôle par l'effet "
+                f"n'a pas fonctionné.")
+            self.assertIn(fuite, mx.exclusions)
+            self.assertIn("EFFET", mx.exclusions[fuite])
+        # Contrôle négatif indispensable : aucun facteur légitime écarté.
+        self.assertIn('age', list(mx))
+        self.assertIn('bonus_malus', list(mx))
+        print("    INV-9a 3 fuites à noms insoupçonnables détectées par l'effet ✅")
+
+    def test_aucun_faux_positif_sur_les_facteurs_legitimes(self):
+        """Le garde-fou ne doit pas écarter de vrais facteurs tarifaires.
+        Aucun ne corrèle à 0,80+ avec la sinistralité : le bonus-malus, meilleur
+        prédicteur de l'auto, plafonne autour de 0,30."""
+        from core.conformite_reglementaire import detecter_fuites_par_effet
+        rng = np.random.default_rng(3)
+        n = 4000
+        expo = np.clip(rng.beta(5, 1, n), .05, 1.)
+        bm = np.clip(rng.normal(.9, .2, n), .5, 3.5)
+        age = rng.integers(18, 85, n)
+        nb = rng.poisson(expo * .10 * np.exp(.4*np.log(bm) + .5*(age < 25)))
+        df = pd.DataFrame({
+            'nb_sinistres': nb.astype(float), 'exposition': expo,
+            'age': age.astype(float), 'bonus_malus': bm,
+            'puissance_fiscale': rng.integers(4, 15, n).astype(float),
+            'antecedents_sinistres_n1': rng.poisson(.15, n).astype(float),
+        })
+        feats = ['age', 'bonus_malus', 'puissance_fiscale',
+                 'antecedents_sinistres_n1']
+        fuites = detecter_fuites_par_effet(df, feats, 'nb_sinistres')
+        self.assertEqual(fuites, {},
+            f"Faux positif : facteur(s) légitime(s) écarté(s) — {fuites}")
+        print("    INV-9b Aucun faux positif sur les facteurs légitimes ✅")
+
+    def test_tous_les_agents_fournissent_les_donnees_au_controle(self):
+        """Sans df ET col_cible, le contrôle par l'effet est INERTE : seuls les
+        contrôles par le nom protègent — et l'audit V12 a démontré qu'ils sont
+        structurellement insuffisants.
+
+        Analyse par AST (et non par regex) : on inspecte les VRAIS appels de
+        fonction, pas les mentions du nom dans les commentaires. Un test fragile
+        ne prouve rien — la première version de ce test capturait les
+        occurrences en commentaire et échouait à tort."""
+        import ast, inspect
+        from direction_non_vie.tarification.a3_glm import agent as a3
+        from direction_non_vie.tarification.a4_ml import agent as a4
+        from direction_non_vie.tarification.a5_deep_learning import agent as a5
+        from direction_non_vie.tarification.a6_comparaison import agent as a6
+
+        for mod in (a3, a4, a5, a6):
+            with self.subTest(agent=mod.__name__):
+                arbre = ast.parse(inspect.getsource(mod))
+                appels = [
+                    n for n in ast.walk(arbre)
+                    if isinstance(n, ast.Call)
+                    and isinstance(n.func, ast.Name)
+                    and n.func.id == 'construire_matrice_x'
+                ]
+                self.assertTrue(appels,
+                    f"{mod.__name__} : aucun appel à construire_matrice_x().")
+                for appel in appels:
+                    kw = {k.arg for k in appel.keywords}
+                    self.assertIn('df', kw,
+                        f"{mod.__name__} (ligne {appel.lineno}) appelle "
+                        f"construire_matrice_x SANS df : le contrôle par l'effet "
+                        f"est inerte.")
+                    self.assertIn('col_cible', kw,
+                        f"{mod.__name__} (ligne {appel.lineno}) appelle "
+                        f"construire_matrice_x SANS col_cible : le contrôle par "
+                        f"l'effet est inerte.")
+        print("    INV-9c Les 4 agents alimentent le contrôle par l'effet "
+              "(df + col_cible) — vérifié par AST ✅")
+
+    def test_gini_implausible_plafonne_a_ambre(self):
+        """Pendant du contrôle par l'effet, au niveau du RÉSULTAT : même une
+        fuite qui aurait traversé tous les filtres se trahit par une performance
+        impossible. Les deux fuites bloquantes affichaient 0,91 (V8) et 0,92
+        (V12) ; la littérature situe les GLM de fréquence auto entre 0,15 et
+        0,35."""
+        from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
+        a6 = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp',
+                                verbose=False)
+        bt = {'disponible': True, 'modele_recalibre_fidele': True,
+              'gini_wf_moyen': 0.30, 'ae_ratio': 1.0, 'ae_moyen_wf': 1.0,
+              'n_fenetres_rouge': 0, 'stabilite_wf': '🟢 Stable'}
+        m_fuite = {'score_global': 0.99, 'gini_test': 0.92}   # signature de fuite
+        self.assertNotEqual(
+            a6._calculer_statut_rag(m_fuite, [m_fuite], profil_valide_par='X',
+                                    environnement='production', backtest=bt),
+            'VERT',
+            "Un Gini de 0,92 en fréquence Non-Vie est actuariellement "
+            "impossible : c'est une fuite, pas un exploit.")
+        m_ok = {'score_global': 0.99, 'gini_test': 0.32}      # bon modèle réel
+        self.assertEqual(
+            a6._calculer_statut_rag(m_ok, [m_ok], profil_valide_par='X',
+                                    environnement='production', backtest=bt),
+            'VERT', "Un Gini de 0,32 est excellent et plausible — VERT accessible.")
+        print("    INV-9d Gini implausible (0,92) → AMBRE · Gini réaliste (0,32) "
+              "→ VERT ✅")
+
+
+class TestInvariant_JetonMatriceXPrive(unittest.TestCase):
+    """
+    INVARIANT N°10 — Le jeton de MatriceX ne doit pas être exposé sur la classe.
+
+    Constat I6 (audit V12) : _JETON était un ATTRIBUT DE CLASSE public, et la
+    docstring affirmait « seul ce module y a accès ». C'était FAUX :
+        MatriceX([...], _jeton=MatriceX._JETON)
+    fonctionnait parfaitement. Une garantie qu'on affirme sans l'avoir vérifiée
+    est pire qu'une absence de garantie : elle endort la vigilance.
+    """
+
+    def test_le_jeton_n_est_pas_exposé_sur_la_classe(self):
+        from core.conformite_reglementaire import MatriceX
+        self.assertFalse(hasattr(MatriceX, '_JETON'),
+            "MatriceX._JETON est public : MatriceX([...], _jeton=MatriceX._JETON) "
+            "permet de forger une matrice non conforme.")
+        with self.assertRaises(TypeError):
+            MatriceX(['sexe'], {}, 'contournement',
+                     _jeton=getattr(MatriceX, '_JETON', None))
+        print("    INV-10 Jeton non exposé sur la classe ✅")
 
 
 if __name__ == '__main__':

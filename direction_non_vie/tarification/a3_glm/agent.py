@@ -685,9 +685,22 @@ class AgentA3GLM:
             vars_pred,
             contexte=f"A3 — matrice de conception GLM (sous-branche '{sous_branche}')",
             logger_agent=logger,
+            # ⚠ df + col_cible = GARDE-FOU N°4 (contrôle par l'EFFET, audit V12).
+            # Sans eux, seuls les contrôles par le NOM protègent — et l'audit V12
+            # a démontré qu'ils sont structurellement insuffisants.
+            df=df, col_cible=col_freq,
         )
-        self.exclusions_conformite = _mx.exclusions   # remontée dans les rapports
-        vars_pred = list(_mx)
+        # ⚠ Le GLM d'A3 a DEUX cibles (fréquence ET coût moyen) : une fuite peut
+        # viser l'une ou l'autre. On repasse donc le contrôle par l'effet sur la
+        # cible coût, et on fusionne les exclusions.
+        _mx_cout = construire_matrice_x(
+            list(_mx),
+            contexte=f"A3 — contrôle par l'effet sur la cible coût ('{col_cout}')",
+            logger_agent=logger,
+            df=df, col_cible=col_cout,
+        )
+        self.exclusions_conformite = {**_mx.exclusions, **_mx_cout.exclusions}
+        vars_pred = list(_mx_cout)
 
         if len(vars_pred) == 0:
             raise ValueError(

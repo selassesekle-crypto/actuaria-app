@@ -89,7 +89,9 @@ except ImportError:
 # filtrer_famille_cible ; l'audit V9 (BLOQUANT) a prouvé qu'une colonne
 # genre pré-encodée (scénario V7) traversait donc intacte jusqu'à la
 # recalibration walk-forward.
-from core.conformite_reglementaire import construire_matrice_x
+from core.conformite_reglementaire import (
+    construire_matrice_x, gini_est_plausible, GINI_PLAUSIBLE_MAX_FREQUENCE,
+)
 
 warnings.filterwarnings('ignore')
 logging.basicConfig(
@@ -884,7 +886,12 @@ class AgentA6Comparaison:
                 # le modèle réellement entraîné par A4/A5 sans genre).
                 # La cible reste lue via df_tr[col_cible], indépendamment de _cols_num.
                 _cols_num = list(construire_matrice_x(
-                    _cols_num, contexte='A6 — walk-forward', logger_agent=logger
+                    _cols_num, contexte='A6 — walk-forward', logger_agent=logger,
+                    # ⚠ CRUCIAL : sans le contrôle par l'effet ici, le
+                    # walk-forward est contaminé par la MÊME fuite que le modèle
+                    # et la CONFIRME au lieu de la détecter (audit V12 : Gini_WF
+                    # 0,92 · A/E 0,99 · 0 fenêtre rouge sur un modèle fuité).
+                    df=df_tr, col_cible=col_cible,
                 ))
                 if _cols_num and col_cible in df_tr.columns:
                     X_tr = df_tr[_cols_num].fillna(0).values
@@ -1384,8 +1391,33 @@ class AgentA6Comparaison:
                 f"Statut plafonné à AMBRE en environnement 'production'."
             )
 
+        # ── PLAFOND DE VRAISEMBLANCE DU GINI (audit V12) ──────────────────────
+        # Un Gini de fréquence > 0,60 sur un portefeuille Non-Vie n'est pas un
+        # exploit : c'est une ALERTE. La littérature situe les GLM de fréquence
+        # auto entre 0,15 et 0,35 ; 0,50 est déjà exceptionnel. Les DEUX fuites
+        # bloquantes de l'histoire de ce module affichaient 0,91 (V8, prime_pure)
+        # et 0,92 (V12, garantie_montant_regle) — contre 0,20 et 0,07 une fois
+        # corrigées.
+        # Ce garde-fou est le pendant, au niveau du RÉSULTAT, du contrôle par
+        # l'effet appliqué au niveau des FEATURES : même une fuite qui aurait
+        # traversé tous les filtres se trahit par une performance impossible.
+        # Il ne dépend d'aucun nom de colonne — donc il attrapera aussi les
+        # fuites que personne n'a encore imaginées.
+        _gini_plausible = gini_est_plausible(gini, cible_est_frequence=True)
+        if not _gini_plausible:
+            logger.warning(
+                f"[VRAISEMBLANCE] Gini = {gini:.4f} > {GINI_PLAUSIBLE_MAX_FREQUENCE} "
+                f"— performance actuariellement IMPLAUSIBLE pour un modèle de "
+                f"fréquence Non-Vie. L'hypothèse la plus probable n'est pas "
+                f"« excellent modèle » mais FUITE DE DONNÉES : une variable "
+                f"connaissant déjà la sinistralité s'est glissée dans la matrice X. "
+                f"Statut plafonné à AMBRE — vérifier les features avant tout "
+                f"déploiement."
+            )
+
         if (score >= 0.60 and gini >= 0.15 and _gouvernance_ok
-                and _backtest_ok and _wf_fidele_ok and _wf_resultat_ok):
+                and _backtest_ok and _wf_fidele_ok and _wf_resultat_ok
+                and _gini_plausible):
             return 'VERT'
         # ── ANTI-SÉLECTION : DISQUALIFIANT (auto-audit 11/07/2026) ────────────
         # Un Gini NÉGATIF signifie que le modèle discrimine À L'ENVERS : il

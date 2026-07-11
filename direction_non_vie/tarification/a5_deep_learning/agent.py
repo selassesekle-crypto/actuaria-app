@@ -648,7 +648,8 @@ class AgentA5DeepLearning:
         # matrice X du CANN/TabNet. Réf. : Arrêt CJUE C-236/09 (Test-Achats).
         # ── MATRICE X CONFORME (immuable) — voir A4 pour le détail ────────────
         _mx = construire_matrice_x(
-            feature_names, contexte='A5 — sélection features DL', logger_agent=logger
+            feature_names, contexte='A5 — sélection features DL', logger_agent=logger,
+            df=df, col_cible=col_cible,   # garde-fou n°4 : contrôle par l'EFFET
         )
         self.exclusions_conformite = _mx.exclusions
         feature_names = list(_mx)

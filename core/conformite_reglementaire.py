@@ -597,6 +597,9 @@ def avertissement_walk_forward(backtest: Optional[dict]) -> Optional[str]:
 #     (le facteur central de la RC Pro) était détruit sans que rien ne l'indique
 #     dans aucun livrable.
 
+_JETON = object()   # sentinelle de module — non exposée sur la classe (audit V12/I6)
+
+
 class MatriceX:
     """
     Liste de features CERTIFIÉE CONFORME, immuable.
@@ -611,10 +614,23 @@ class MatriceX:
     Toute tentative de modification après construction échoue — c'est le but.
     """
     __slots__ = ('_features', '_exclusions', '_contexte')
-    _JETON = object()   # sentinelle privée : seul ce module y a accès
 
     def __init__(self, features, exclusions, contexte, _jeton=None):
-        if _jeton is not MatriceX._JETON:
+        # ⚠ AUDIT V12 (I6) — le jeton était un ATTRIBUT DE CLASSE public
+        # (MatriceX._JETON), et la docstring affirmait « seul ce module y a
+        # accès ». C'ÉTAIT FAUX : MatriceX([...], _jeton=MatriceX._JETON)
+        # fonctionnait parfaitement. Le jeton est désormais une sentinelle de
+        # MODULE, non exposée sur la classe.
+        #
+        # HONNÊTETÉ SUR LA PORTÉE DE CETTE PROTECTION : Python n'offre pas de
+        # privé strict. Quelqu'un qui importe _JETON depuis ce module peut
+        # toujours forger une MatriceX. Ce garde-fou ne rend pas le
+        # contournement IMPOSSIBLE — il le rend DÉLIBÉRÉ, VISIBLE en revue de
+        # code, et impossible par accident. C'est tout ce qu'un langage
+        # dynamique permet, et il faut le dire plutôt que le prétendre.
+        # La défense qui, elle, ne se contourne pas est le contrôle par l'EFFET
+        # (detecter_fuites_par_effet) : il ne dépend d'aucune convention.
+        if _jeton is not _JETON:
             raise TypeError(
                 "MatriceX ne peut pas être instanciée directement — c'est "
                 "délibéré. Utilisez core.conformite_reglementaire."
@@ -665,12 +681,26 @@ def construire_matrice_x(
     contexte: str = '',
     logger_agent: Optional[logging.Logger] = None,
     facteurs_supplementaires: Optional[List[str]] = None,
+    df=None,
+    col_cible: Optional[str] = None,
 ) -> MatriceX:
     """
     SEUL point de construction d'une matrice de features conforme.
 
-    Applique liste blanche → filtre genre → filtre anti-fuite, et retourne un
-    objet MatriceX immuable qui trace aussi ce qui a été exclu, et pourquoi.
+    QUATRE garde-fous, dont le dernier ne dépend d'aucun nom :
+      1. LISTE BLANCHE           — seuls les facteurs déclarés passent ;
+      2. FILTRE GENRE            — CJUE C-236/09 ;
+      3. FILTRE ANTI-FUITE       — grandeurs de sinistralité (par le nom) ;
+      4. CONTRÔLE PAR L'EFFET    — corrélation avec la cible ≥ 0,80 → fuite,
+                                   QUEL QUE SOIT LE NOM (audit V12).
+
+    ⚠ FOURNIR `df` ET `col_cible` DÈS QUE POSSIBLE. Sans eux, le garde-fou n°4
+    ne peut pas s'exécuter, et seuls les contrôles par le nom protègent — or
+    l'audit V12 a démontré qu'ils sont structurellement insuffisants :
+    'garantie_montant_regle' (le montant réglé au titre de la garantie, colonne
+    standard d'une extraction jointe aux sinistres) traversait les trois filtres
+    nominaux via le préfixe 'garantie_' et faisait passer le Gini de 0,0709 à
+    0,9222. Le contrôle par l'effet, lui, l'attrape sans connaître son nom.
 
     ⚠ À appeler au DERNIER MOMENT, sur les colonnes effectivement candidates.
     """
@@ -679,13 +709,30 @@ def construire_matrice_x(
         candidates, contexte=contexte, logger_agent=logger_agent,
         facteurs_supplementaires=facteurs_supplementaires,
     )
+
+    # ── GARDE-FOU N°4 : CONTRÔLE PAR L'EFFET (audit V12) ──────────────────────
+    fuites_effet = {}
+    if df is not None and col_cible:
+        fuites_effet = detecter_fuites_par_effet(
+            df, conformes, col_cible,
+            logger_agent=logger_agent,
+        )
+        if fuites_effet:
+            conformes = [c for c in conformes if c not in fuites_effet]
     # Motif d'exclusion, par ordre de priorité réglementaire.
     exclusions = {}
     autorises_extra = {f.lower() for f in (facteurs_supplementaires or [])}
     for c in candidates:
         if c in conformes:
             continue
-        if _est_variable_genre(c):
+        if c in fuites_effet:
+            exclusions[c] = (
+                f"FUITE DÉTECTÉE PAR L'EFFET — corrélation de {fuites_effet[c]} "
+                f"avec la cible '{col_cible}'. Aucun facteur tarifaire légitime "
+                f"n'atteint ce niveau : cette variable EST la cible déguisée, et "
+                f"n'existe pas encore au moment de tarifer un contrat neuf."
+            )
+        elif _est_variable_genre(c):
             exclusions[c] = "genre ou proxy de genre — CJUE C-236/09 (Test-Achats)"
         elif _est_derivee_sinistralite(c):
             exclusions[c] = ("dérivée de la sinistralité observée — fuite de "
@@ -695,7 +742,7 @@ def construire_matrice_x(
                              "(liste blanche) — à déclarer si elle est valide")
         else:
             exclusions[c] = "exclue par le filtre de conformité"
-    return MatriceX(conformes, exclusions, contexte, _jeton=MatriceX._JETON)
+    return MatriceX(conformes, exclusions, contexte, _jeton=_JETON)
 
 
 def synthese_exclusions(exclusions: Optional[dict]) -> Optional[str]:
@@ -753,3 +800,127 @@ def synthese_exclusions(exclusions: Optional[dict]) -> Optional[str]:
     if autres:
         lignes.append(f"· Autres exclusions : {', '.join(autres)}.")
     return "\n".join(lignes)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  CONTRÔLE PAR L'EFFET — LA FIN DE LA COURSE AUX NOMS DE COLONNES
+# ══════════════════════════════════════════════════════════════════════════════
+# Créé le 11/07/2026, sur recommandation du certificateur indépendant (audit V12).
+#
+# POURQUOI LES CONTRÔLES PAR LE NOM ONT ÉCHOUÉ — SEPT FOIS
+# Chaque cycle a durci une liste de noms, et chaque cycle suivant a trouvé le nom
+# qui passait au travers :
+#   V7  'sexe' absent d'A4/A5          V9  'sexe_m' (one-hot)
+#   V8  'prime_pure'                   V9  'total_sinistres_sante'
+#   V10 'titre_enc' (civilité)         V11 'antecedents_sinistres_3ans' (faux positif)
+#   V12 'garantie_montant_regle'  ← passe la liste blanche via le préfixe 'garantie_'
+#       (le montant réglé au titre de la garantie — colonne parfaitement standard
+#        d'une extraction jointe aux sinistres). Gini 0,0709 → 0,9222 (+1201 %).
+#
+# Une liste noire ne peut pas être exhaustive. Une liste blanche par PRÉFIXE ne
+# peut pas l'être non plus : 'garantie' est un facteur légitime, donc
+# 'garantie_<n_importe_quoi>' est accepté. Et il FAUT accepter 'carburant_diesel'
+# (colonne fille d'un one-hot). Le nom, à lui seul, ne permet pas de trancher.
+#
+# LA SOLUTION : NE PLUS REGARDER LE NOM, MAIS L'EFFET
+# Une variable qui fuite se trahit par sa CORRÉLATION avec la cible — quel que
+# soit son nom, y compris celui que personne n'a encore imaginé. Aucun facteur
+# tarifaire légitime ne corrèle à 0,80+ avec la sinistralité d'un contrat :
+# le bonus-malus, meilleur prédicteur de l'auto, plafonne autour de 0,10-0,30.
+# Une corrélation de 0,90 n'est pas un bon modèle : c'est la cible déguisée.
+#
+# Ce contrôle attrape 'garantie_montant_regle', 'prime_pure', 'loss_ratio' ET
+# ceux que personne n'a encore inventés. C'est le seul garde-fou qui ne dépende
+# pas de l'imagination de celui qui l'écrit.
+
+SEUIL_CORRELATION_FUITE = 0.80
+# Corrélation de Spearman (sur les rangs) : robuste aux relations non linéaires
+# et aux distributions très asymétriques de la sinistralité. Au-delà de ce seuil,
+# la variable EST la cible (ou une transformation monotone de celle-ci).
+
+# Bornes de vraisemblance actuarielle du Gini — Non-Vie.
+# Littérature : un GLM de fréquence auto se situe entre 0,15 et 0,35 ; 0,50 est
+# déjà exceptionnel. Au-delà de 0,60, l'hypothèse la plus probable n'est pas
+# « excellent modèle » mais « fuite de données ». Réf. : le BLOQUANT V8 affichait
+# 0,91 ; le BLOQUANT V12, 0,92.
+GINI_PLAUSIBLE_MAX_FREQUENCE = 0.60
+
+
+def detecter_fuites_par_effet(
+    df,
+    feature_names: List[str],
+    col_cible: str,
+    cols_exemptees: Optional[List[str]] = None,
+    seuil: float = SEUIL_CORRELATION_FUITE,
+    logger_agent: Optional[logging.Logger] = None,
+) -> dict:
+    """
+    Détecte les fuites de données par leur EFFET, non par leur nom.
+
+    Retourne {colonne: corrélation} pour toute feature dont la corrélation de
+    Spearman avec la cible dépasse `seuil` en valeur absolue — c'est-à-dire toute
+    variable qui « connaît » déjà la réponse.
+
+    Ce contrôle est INDÉPENDANT du nom de la colonne : il attrape les fuites que
+    personne n'a imaginées, ce qu'aucune liste ne peut faire.
+
+    cols_exemptees : colonnes structurellement corrélées à la cible sans être des
+        fuites — typiquement l'exposition (un contrat exposé 12 mois a
+        mécaniquement plus de sinistres qu'un contrat exposé 1 mois). Elle sert
+        d'offset, pas de prédicteur.
+    """
+    _log = logger_agent or logger
+    exemptees = set(cols_exemptees or []) | {
+        'exposition', 'log_exposition', col_cible,
+    }
+    fuites = {}
+    if col_cible not in getattr(df, 'columns', []):
+        return fuites
+    try:
+        import numpy as _np
+        y = df[col_cible].astype(float)
+        if float(y.std()) == 0.0:
+            return fuites   # cible constante : corrélation indéfinie
+        rang_y = y.rank()
+        for c in feature_names:
+            if c in exemptees or c not in df.columns:
+                continue
+            try:
+                x = df[c].astype(float)
+                if float(x.std()) == 0.0:
+                    continue
+                rho = float(rang_y.corr(x.rank()))   # Spearman
+                if rho == rho and abs(rho) >= seuil:  # (rho == rho) exclut NaN
+                    fuites[c] = round(rho, 4)
+            except (TypeError, ValueError):
+                continue
+    except Exception as e:   # pragma: no cover
+        _log.warning(f"[ANTI-FUITE PAR L'EFFET] Contrôle non exécuté : {e}")
+        return {}
+
+    if fuites:
+        _log.warning(
+            f"[ANTI-FUITE PAR L'EFFET] {len(fuites)} variable(s) écartée(s) — "
+            f"corrélation avec la cible '{col_cible}' ≥ {seuil} : {fuites}. "
+            f"Aucun facteur tarifaire légitime n'atteint ce niveau (le "
+            f"bonus-malus, meilleur prédicteur de l'auto, plafonne vers 0,30). "
+            f"Une telle variable EST la cible déguisée : elle n'existe pas encore "
+            f"au moment de tarifer un contrat neuf."
+        )
+    return fuites
+
+
+def gini_est_plausible(gini: Optional[float],
+                       cible_est_frequence: bool = True) -> bool:
+    """
+    Le Gini est-il actuariellement plausible, ou trahit-il une fuite ?
+
+    Un Gini de fréquence > 0,60 sur un portefeuille Non-Vie n'est pas un exploit :
+    c'est une alerte. Les deux fuites bloquantes de l'histoire de ce module
+    affichaient 0,91 (V8) et 0,92 (V12), contre 0,20 et 0,07 une fois corrigées.
+    """
+    if gini is None:
+        return True   # rien à juger ici (traité par le gate de disponibilité)
+    if not cible_est_frequence:
+        return True
+    return float(gini) <= GINI_PLAUSIBLE_MAX_FREQUENCE
