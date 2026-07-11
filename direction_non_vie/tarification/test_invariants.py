@@ -568,35 +568,70 @@ class TestInvariant_ControleParLEffet(unittest.TestCase):
     """
 
     def test_une_fuite_est_detectee_quel_que_soit_son_nom(self):
-        from core.conformite_reglementaire import construire_matrice_x
+        """⚠ Ce test doit exercer le CONTRÔLE PAR L'EFFET, et lui seul.
+
+        Première version : j'y avais mis 'garantie_montant_regle'. Mauvais choix —
+        depuis que la règle de préfixe rejette les suffixes métriques, cette
+        colonne est arrêtée par le NOM, et le test ne prouvait plus rien sur
+        l'effet (il vérifiait la défense en profondeur, pas le garde-fou visé).
+
+        Le seul cas qui isole vraiment le contrôle par l'effet est une colonne
+        dont le NOM est IRRÉPROCHABLE — un facteur tarifaire déclaré, qui passe
+        les trois filtres nominaux — mais dont les DONNÉES sont la cible. C'est
+        un cas parfaitement réaliste : un client qui remplit mal une colonne, un
+        mapping erroné, une jointure qui ramène la sinistralité dans un champ
+        anodin. Aucune liste de noms ne peut l'attraper. L'effet, si.
+        """
+        from core.conformite_reglementaire import (
+            construire_matrice_x, est_facteur_autorise,
+        )
         rng = np.random.default_rng(99)
         n = 3000
-        cout = np.where(rng.poisson(.2, n) > 0, rng.gamma(2, 1200, n), 0.)
+        nb = rng.poisson(.3, n).astype(float)
         df = pd.DataFrame({
             'age': rng.integers(18, 80, n).astype(float),
             'bonus_malus': rng.uniform(.5, 3.5, n),
-            'nb_sinistres': (cout > 0).astype(float),
-            # ⚠ Trois fuites aux noms INSOUPÇONNABLES, qui passent tous les
-            # filtres NOMINAUX (préfixe d'un facteur autorisé) :
-            'garantie_montant_regle': cout,
-            'usage_loss_ratio': cout / 1000.,
-            'age_burning_cost': cout * 2,
+            'nb_sinistres': nb,
+            # ⚠ Nom PARFAITEMENT légitime (facteur déclaré en liste blanche),
+            #    mais les données SONT la cible : c'est une fuite invisible au nom.
+            'densite_population': nb * 1000 + rng.normal(0, .01, n),
         })
-        candidates = ['age', 'bonus_malus', 'garantie_montant_regle',
-                      'usage_loss_ratio', 'age_burning_cost']
-        mx = construire_matrice_x(candidates, contexte='test',
-                                  df=df, col_cible='nb_sinistres')
-        for fuite in ['garantie_montant_regle', 'usage_loss_ratio',
-                      'age_burning_cost']:
-            self.assertNotIn(fuite, list(mx),
-                f"'{fuite}' fuit dans la matrice X : le contrôle par l'effet "
-                f"n'a pas fonctionné.")
-            self.assertIn(fuite, mx.exclusions)
-            self.assertIn("EFFET", mx.exclusions[fuite])
-        # Contrôle négatif indispensable : aucun facteur légitime écarté.
+        self.assertTrue(est_facteur_autorise('densite_population'),
+            "Ce test suppose que 'densite_population' passe les filtres NOMINAUX "
+            "— c'est tout son intérêt.")
+
+        mx = construire_matrice_x(
+            ['age', 'bonus_malus', 'densite_population'],
+            contexte='test', df=df, col_cible='nb_sinistres')
+
+        self.assertNotIn('densite_population', list(mx),
+            "Une fuite au nom irréprochable a atteint la matrice X : le contrôle "
+            "par l'effet n'a pas fonctionné. Aucune liste de noms ne peut "
+            "attraper ce cas.")
+        self.assertIn('EFFET', mx.exclusions['densite_population'],
+            "L'exclusion doit être attribuée au contrôle par l'EFFET.")
+        # Contrôle négatif : les facteurs légitimes sont conservés.
         self.assertIn('age', list(mx))
         self.assertIn('bonus_malus', list(mx))
-        print("    INV-9a 3 fuites à noms insoupçonnables détectées par l'effet ✅")
+        print("    INV-9a Fuite au nom IRRÉPROCHABLE détectée par l'effet ✅")
+
+    def test_les_fuites_a_suffixe_metrique_sont_bloquees_par_le_nom(self):
+        """Défense en profondeur (BLOQUANT B6) : même sans données, une colonne
+        dont le suffixe porte un mot métrique ne doit pas passer la liste
+        blanche. 'garantie' est un facteur légitime — 'garantie_montant_regle'
+        ne l'est pas."""
+        from core.conformite_reglementaire import construire_matrice_x
+        fuites = ['garantie_montant_regle', 'usage_loss_ratio',
+                  'age_burning_cost', 'csp_cout_sinistre']
+        mx = construire_matrice_x(fuites + ['age', 'carburant_diesel'],
+                                  contexte='test')   # SANS données
+        for f in fuites:
+            self.assertNotIn(f, list(mx),
+                f"'{f}' passe la liste blanche par la règle de préfixe (B6).")
+        # Contrôle négatif : les vraies colonnes filles de one-hot passent.
+        self.assertIn('carburant_diesel', list(mx))
+        self.assertIn('age', list(mx))
+        print("    INV-9e Fuites à suffixe métrique bloquées par le NOM aussi ✅")
 
     def test_aucun_faux_positif_sur_les_facteurs_legitimes(self):
         """Le garde-fou ne doit pas écarter de vrais facteurs tarifaires.
@@ -709,6 +744,72 @@ class TestInvariant_JetonMatriceXPrive(unittest.TestCase):
             MatriceX(['sexe'], {}, 'contournement',
                      _jeton=getattr(MatriceX, '_JETON', None))
         print("    INV-10 Jeton non exposé sur la classe ✅")
+
+
+class TestInvariant_ExperiencePasseeEtEchecBruyant(unittest.TestCase):
+    """
+    INVARIANT N°11 — Deux défauts trouvés en RELISANT le code (pas en l'exécutant).
+
+    (a) MIROIR EXACT DU BLOQUANT B5. COLS_FAMILLE_CIBLE_EXCEPTIONS était une
+        LISTE DE NOMS EXACTS : seuls trois noms d'expérience passée étaient
+        exemptés. Toute autre variable de sinistralité PASSÉE — pourtant le
+        meilleur prédicteur légitime qui existe, et le fondement du bonus-malus —
+        était DÉTRUITE comme une fuite : cout_total_sinistres_anterieurs,
+        charge_sinistres_n1, historique_sinistres_3ans, nb_sinistres_passes…
+        Et pire que B5 : leur motif d'exclusion aurait été « obligatoire, aucune
+        action » — l'actuaire n'aurait même pas été invité à réagir.
+        Remplacé par une RÈGLE DE PRINCIPE (marqueurs de passé), avec le contrôle
+        par l'effet en filet.
+
+    (b) ÉCHEC SILENCIEUX DU GARDE-FOU PRINCIPAL. detecter_fuites_par_effet
+        retournait {} en cas d'erreur — « aucune fuite trouvée », indiscernable
+        de « le contrôle n'a pas tourné ». C'est le motif exact du bug V6.
+        Un contrôle dont on ne vérifie pas l'exécution n'est pas un contrôle.
+    """
+
+    def test_la_sinistralite_passee_est_preservee(self):
+        from core.conformite_reglementaire import filtrer_famille_cible
+        passees = [
+            'antecedents_sinistres_n1', 'nb_sinistres_anterieurs',
+            'antecedents_sinistres_3ans', 'cout_total_sinistres_anterieurs',
+            'sinistres_anterieurs_5ans', 'charge_sinistres_n1',
+            'nb_sinistres_passes', 'historique_sinistres_3ans',
+            'montant_sinistres_anterieurs',
+        ]
+        conservees = filtrer_famille_cible(passees, contexte='test')
+        detruites = set(passees) - set(conservees)
+        self.assertEqual(detruites, set(),
+            f"Variables d'expérience PASSÉE détruites comme des fuites : "
+            f"{sorted(detruites)}. Elles sont connues à la souscription — c'est "
+            f"le fondement même de la tarification d'expérience.")
+        print("    INV-11a Les 9 variables d'expérience passée sont préservées ✅")
+
+    def test_la_sinistralite_observee_reste_exclue(self):
+        """Contrôle négatif : la règle de passé ne doit pas ouvrir de brèche."""
+        from core.conformite_reglementaire import filtrer_famille_cible
+        fuites = ['cout_total_sinistres', 'prime_pure', 'montant_sinistres',
+                  'nb_sinistres', 'total_sinistres_sante', 'sinistre_medecine']
+        self.assertEqual(filtrer_famille_cible(fuites, contexte='test'), [],
+            "Une grandeur de la période OBSERVÉE passe le filtre.")
+        print("    INV-11b La sinistralité de la période observée reste exclue ✅")
+
+    def test_l_echec_du_controle_par_l_effet_est_bruyant(self):
+        """Le garde-fou principal ne doit JAMAIS se désactiver en silence."""
+        from core.conformite_reglementaire import (
+            construire_matrice_x, EchecControleEffet,
+        )
+
+        class DataFrameCasse:
+            columns = ['nb_sinistres']
+            def __getitem__(self, k):
+                raise RuntimeError("extraction SI corrompue")
+
+        with self.assertRaises(EchecControleEffet,
+                msg="L'échec du contrôle par l'effet doit LEVER, jamais "
+                    "retourner « aucune fuite » — c'est le bug V6."):
+            construire_matrice_x(['age'], contexte='test',
+                                 df=DataFrameCasse(), col_cible='nb_sinistres')
+        print("    INV-11c L'échec du contrôle par l'effet est bruyant ✅")
 
 
 if __name__ == '__main__':

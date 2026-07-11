@@ -213,6 +213,41 @@ COLS_FAMILLE_CIBLE_EXCEPTIONS = [
 ]
 
 
+# ── Marqueurs d'EXPÉRIENCE PASSÉE ────────────────────────────────────────────
+# Trouvé par relecture (auto-audit, 11/07/2026) — MIROIR EXACT DU BLOQUANT B5.
+# COLS_FAMILLE_CIBLE_EXCEPTIONS était une LISTE DE NOMS EXACTS : seuls trois noms
+# étaient exemptés. Toute autre variable d'expérience passée était donc DÉTRUITE
+# comme si c'était une fuite :
+#   cout_total_sinistres_anterieurs · charge_sinistres_n1 · nb_sinistres_passes
+#   historique_sinistres_3ans · montant_sinistres_anterieurs · sinistres_anterieurs_5ans
+# Et pire que B5 : leur motif d'exclusion aurait été « dérivée de sinistralité —
+# exclusion OBLIGATOIRE, aucune action », donc l'actuaire n'aurait même pas été
+# invité à réagir. Une amputation silencieuse ET présentée comme normale.
+#
+# C'est, une fois de plus, la maladie de ce module : une liste de noms exacts ne
+# peut pas être exhaustive. On la remplace par une RÈGLE DE PRINCIPE — la
+# distinction actuarielle qui fonde toute la tarification d'expérience :
+#
+#     sinistralité de la PÉRIODE OBSERVÉE  → c'est la cible → FUITE
+#     sinistralité PASSÉE (N-1, antécédents) → connue à la souscription → LÉGITIME
+#
+# Un nom portant un marqueur de passé désigne la seconde. Et si une variable
+# ainsi nommée se révélait tout de même être la cible déguisée, le CONTRÔLE PAR
+# L'EFFET la rattraperait (corrélation ≥ 0,80) : la règle de nom donne le sens,
+# l'effet donne la vérité.
+MARQUEURS_EXPERIENCE_PASSEE = (
+    'anterieur', 'antecedent', 'historique', 'precedent',
+    '_passe', '_n1', '_n2', '_n3', '_3ans', '_5ans',
+)
+
+
+def _est_experience_passee(nom: str) -> bool:
+    """True si le nom désigne de la sinistralité PASSÉE (connue à la
+    souscription d'un contrat neuf) et non celle de la période observée."""
+    n = nom.lower()
+    return any(m in n for m in MARQUEURS_EXPERIENCE_PASSEE)
+
+
 def _est_derivee_sinistralite(nom: str) -> bool:
     """True si le nom de colonne est une grandeur dérivée de la sinistralité
     de la PÉRIODE OBSERVÉE (famille cible), y compris ses variantes
@@ -232,11 +267,16 @@ def _est_derivee_sinistralite(nom: str) -> bool:
       racines de sinistralité observée.
     """
     n = nom.lower()
+    # ── RÈGLE DE PRINCIPE : la sinistralité PASSÉE n'est pas une fuite ────────
+    # (voir MARQUEURS_EXPERIENCE_PASSEE ci-dessus — remplace l'ancienne liste de
+    #  noms exacts, qui détruisait 6 variables légitimes sur les 9 testées).
+    # Le contrôle par l'EFFET reste le filet : si une variable ainsi nommée est
+    # en réalité la cible déguisée, sa corrélation la trahira.
+    if _est_experience_passee(n):
+        return False
     exceptions = [e.lower() for e in COLS_FAMILLE_CIBLE_EXCEPTIONS]
     if n in exceptions:
         return False
-    # Neutraliser les variables d'expérience passée (légitimes) avant de
-    # chercher une racine de sinistralité OBSERVÉE dans le reste du nom.
     reste = n
     for e in exceptions:
         reste = reste.replace(e, '')
@@ -372,6 +412,22 @@ def _base_facteur(nom: str) -> str:
     return n
 
 
+# Mots qui désignent une GRANDEUR MONÉTAIRE ou de SINISTRALITÉ, jamais une
+# modalité de facteur tarifaire. Ajoutés après le BLOQUANT B6 (audit V12) :
+# la règle de préfixe ci-dessous acceptait N'IMPORTE QUEL suffixe derrière un
+# facteur autorisé, si bien que 'garantie_montant_regle' (le montant réglé au
+# titre de la garantie — colonne standard d'une extraction jointe aux sinistres)
+# passait la liste blanche, 'garantie' étant un facteur légitime.
+# Gini 0,0709 → 0,9222.
+# Une colonne fille de one-hot porte une MODALITÉ ('carburant_diesel',
+# 'type_logement_maison', 'statut_occupation_locataire') — jamais un montant.
+MOTS_METRIQUES_INTERDITS = (
+    'montant', 'cout', 'charge', 'sinistre', 'sinistralite', 'ratio', 'loss',
+    'burning', 'prime', 'indemnite', 'provision', 'regle', 'frequence',
+    'severite', 'perte',
+)
+
+
 def est_facteur_autorise(nom: str) -> bool:
     """
     True si la colonne est (ou dérive d')un facteur tarifaire déclaré légitime.
@@ -382,6 +438,17 @@ def est_facteur_autorise(nom: str) -> bool:
       · ses colonnes filles one-hot    ('carburant_diesel' ← 'carburant')
       · les interactions entre facteurs autorisés ('inter_age_bonus_malus')
       · les indicateurs binaires dérivés ('jeune_conducteur' ← déclaré)
+
+    ⚠ LIMITE CONNUE, ET C'EST IMPORTANT DE L'ÉCRIRE : la règle de préfixe
+    (facteur autorisé + '_' + suffixe) ne peut pas, par le seul nom, distinguer
+    une MODALITÉ de one-hot ('carburant_diesel') d'une grandeur arbitraire
+    ('garantie_montant_regle'). C'est ce qui a produit le BLOQUANT B6 (V12).
+    Deux garde-fous s'y ajoutent donc :
+      1. le suffixe ne doit contenir aucun MOT MÉTRIQUE (montant, coût, charge,
+         sinistre, ratio…) — une modalité n'est jamais un montant ;
+      2. surtout, le CONTRÔLE PAR L'EFFET (detecter_fuites_par_effet), qui ne
+         dépend d'aucun nom et rattrape ce que celui-ci ne peut pas trancher.
+    Le nom ne suffit pas et ne suffira jamais : il donne le sens, pas la vérité.
     """
     n = nom.lower()
     if n in FACTEURS_TARIFAIRES_AUTORISES:
@@ -391,8 +458,13 @@ def est_facteur_autorise(nom: str) -> bool:
         return True
     # Interaction : 'inter_a_b' / 'a_x_b' — autorisée si TOUS les facteurs
     # qui la composent sont eux-mêmes autorisés.
-    if base.startswith('inter_') or '_x_' in base:
-        corps = base[6:] if base.startswith('inter_') else base
+    # ⚠ BUG LATENT trouvé en relecture (11/07/2026) : la condition testait
+    # `base.startswith('inter_')`, or _base_facteur() a DÉJÀ retiré le préfixe
+    # 'inter_'. Cette branche était donc MORTE pour tous les noms 'inter_*' —
+    # ils ne passaient que par hasard, via la règle de préfixe plus bas. On teste
+    # désormais le nom d'origine.
+    if n.startswith('inter_') or '_x_' in base:
+        corps = base
         for f1 in FACTEURS_TARIFAIRES_AUTORISES:
             if corps.startswith(f1):
                 reste = corps[len(f1):].lstrip('_').replace('x_', '', 1).lstrip('_')
@@ -400,9 +472,20 @@ def est_facteur_autorise(nom: str) -> bool:
                     return True
     # Colonne fille d'un one-hot / label : 'carburant_diesel' ← 'carburant'.
     # On exige que le facteur autorisé soit un préfixe SUIVI d'un '_' pour
-    # éviter les collisions accidentelles ('agent_...' ne dérive pas de 'age').
+    # éviter les collisions accidentelles ('agent_...' ne dérive pas de 'age') —
+    # ET que le suffixe soit une MODALITÉ plausible, c'est-à-dire qu'il ne porte
+    # aucun mot métrique (BLOQUANT B6 : 'garantie_montant_regle' passait ici).
     for f in FACTEURS_TARIFAIRES_AUTORISES:
         if base.startswith(f + '_'):
+            suffixe = base[len(f) + 1:]
+            # ⚠ Ne PAS frapper l'expérience PASSÉE : 'bonus_malus_antecedents_
+            # sinistres_n1' (interaction légitime générée par A2) a un suffixe
+            # contenant 'sinistre'. Le rejeter recréerait exactement le BLOQUANT
+            # B5 — c'est ce qu'a fait ma première version, et l'invariant INV-1c
+            # l'a attrapée immédiatement.
+            if (any(m in suffixe for m in MOTS_METRIQUES_INTERDITS)
+                    and not _est_experience_passee(suffixe)):
+                continue   # 'garantie_montant_regle' → suffixe 'montant_regle'
             return True
     return False
 
@@ -840,9 +923,28 @@ def synthese_exclusions(exclusions: Optional[dict]) -> Optional[str]:
 # pas de l'imagination de celui qui l'écrit.
 
 SEUIL_CORRELATION_FUITE = 0.80
-# Corrélation de Spearman (sur les rangs) : robuste aux relations non linéaires
-# et aux distributions très asymétriques de la sinistralité. Au-delà de ce seuil,
-# la variable EST la cible (ou une transformation monotone de celle-ci).
+# DEUX mesures, et on déclenche si l'UNE OU L'AUTRE dépasse le seuil.
+#
+# 1. Corrélation de SPEARMAN (rangs) — robuste aux relations non linéaires.
+#
+# 2. GINI NORMALISÉ — indispensable, et voici pourquoi (trouvé en RELECTURE, sur
+#    un cas que Spearman RATAIT) :
+#    une cible de comptage de sinistres est massivement EX ÆQUO (environ 75 % de
+#    zéros en auto). Les rangs de la cible sont donc écrasés, alors que ceux d'une
+#    variable continue ne le sont pas — et la corrélation de Spearman s'en trouve
+#    mécaniquement DILUÉE. Mesuré : une fuite PARFAITE (la cible plus un bruit
+#    infinitésimal) plafonne à rho = 0,55-0,77 sur une cible de Poisson. Autrement
+#    dit, le seuil de 0,80 ne pouvait JAMAIS se déclencher sur ce cas — pourtant
+#    le plus fréquent en assurance. Erreur de calibration de ma part, corrigée.
+#
+#    Le Gini normalisé — Gini(y trié par x) divisé par Gini(y trié par y) — mesure
+#    la part du pouvoir discriminant MAXIMAL que la variable capte à elle seule.
+#    Il est insensible à la structure d'ex aequo, et c'est la métrique actuarielle
+#    standard. Mesuré sur les mêmes données :
+#         fuites    : 1,00 / 0,99 / 1,00
+#         legitimes : 0,03 / 0,04 / 0,05 / 0,10
+#    La séparation est nette. Une variable qui capte à elle seule 80 % du pouvoir
+#    discriminant maximal n'est pas un facteur tarifaire : c'est la cible.
 
 # Bornes de vraisemblance actuarielle du Gini — Non-Vie.
 # Littérature : un GLM de fréquence auto se situe entre 0,15 et 0,35 ; 0,50 est
@@ -850,6 +952,17 @@ SEUIL_CORRELATION_FUITE = 0.80
 # « excellent modèle » mais « fuite de données ». Réf. : le BLOQUANT V8 affichait
 # 0,91 ; le BLOQUANT V12, 0,92.
 GINI_PLAUSIBLE_MAX_FREQUENCE = 0.60
+
+
+class EchecControleEffet(RuntimeError):
+    """Le contrôle anti-fuite par l'effet n'a pas pu s'exécuter.
+
+    Levée plutôt qu'avalée : ce contrôle est le garde-fou principal contre les
+    fuites de données, et le seul qui ne dépende d'aucun nom de colonne. Son
+    échec silencieux (return {} = « aucune fuite ») serait indiscernable d'un
+    succès — c'est précisément le motif du bug V6. L'appelant doit décider :
+    échouer, ou poursuivre en le SIGNALANT. Jamais l'ignorer.
+    """
 
 
 def detecter_fuites_par_effet(
@@ -883,11 +996,30 @@ def detecter_fuites_par_effet(
     if col_cible not in getattr(df, 'columns', []):
         return fuites
     try:
-        import numpy as _np
+        import numpy as np
         y = df[col_cible].astype(float)
         if float(y.std()) == 0.0:
             return fuites   # cible constante : corrélation indéfinie
         rang_y = y.rank()
+        y_arr = y.to_numpy(dtype=float)
+        _trapz = getattr(np, 'trapezoid', None) or getattr(np, 'trapz')
+
+        def _gini_trie_par(x_arr):
+            # Gini de la cible lorsqu'on trie les contrats par la variable x.
+            ordre = np.argsort(-x_arr)
+            y_ord = y_arr[ordre]
+            total = float(y_ord.sum())
+            if total <= 0:
+                return 0.0
+            cum_y = np.cumsum(y_ord) / total
+            cum_pop = np.arange(1, len(y_ord) + 1) / len(y_ord)
+            return float(2.0 * _trapz(cum_y, cum_pop) - 1.0)
+
+        # Plafond : le Gini obtenu en triant par la cible ELLE-MÊME. C'est le
+        # pouvoir discriminant MAXIMAL atteignable sur ces données — et c'est ce
+        # qui rend la mesure insensible aux ex aequo de la cible.
+        gini_parfait = _gini_trie_par(y_arr)
+
         for c in feature_names:
             if c in exemptees or c not in df.columns:
                 continue
@@ -895,19 +1027,40 @@ def detecter_fuites_par_effet(
                 x = df[c].astype(float)
                 if float(x.std()) == 0.0:
                     continue
-                rho = float(rang_y.corr(x.rank()))   # Spearman
-                if rho == rho and abs(rho) >= seuil:  # (rho == rho) exclut NaN
-                    fuites[c] = round(rho, 4)
+                rho = float(rang_y.corr(x.rank()))            # Spearman
+                rho = 0.0 if rho != rho else abs(rho)          # NaN -> 0
+                g_norm = 0.0
+                if gini_parfait > 1e-9:
+                    g_norm = abs(_gini_trie_par(x.to_numpy(dtype=float))
+                                 / gini_parfait)
+                signal = max(rho, g_norm)
+                if signal >= seuil:
+                    fuites[c] = {'spearman': round(rho, 4),
+                                 'gini_normalise': round(g_norm, 4)}
             except (TypeError, ValueError):
                 continue
     except Exception as e:   # pragma: no cover
-        _log.warning(f"[ANTI-FUITE PAR L'EFFET] Contrôle non exécuté : {e}")
-        return {}
+        # ⚠ ÉCHEC VISIBLE, JAMAIS SILENCIEUX (relecture, 11/07/2026).
+        # Ce bloc retournait {} — c'est-à-dire « aucune fuite trouvée », un
+        # résultat INDISCERNABLE de « le contrôle n'a pas tourné ». Or c'est
+        # notre garde-fou principal, et le seul qui ne dépende d'aucun nom : le
+        # voir se désactiver en silence, c'est exactement le bug V6 (np.trapz
+        # avalé, Gini walk-forward toujours None, personne ne le sait).
+        # Un contrôle dont on ne vérifie pas l'exécution n'est pas un contrôle.
+        # On lève une exception dédiée : l'appelant DOIT décider quoi en faire,
+        # il ne peut plus l'ignorer par construction.
+        _log.error(
+            f"[ANTI-FUITE PAR L'EFFET] ÉCHEC DU CONTRÔLE — {type(e).__name__}: {e}. "
+            f"Le garde-fou principal contre les fuites de données n'a PAS pu "
+            f"s'exécuter. Ne pas poursuivre comme si tout allait bien."
+        )
+        raise EchecControleEffet(str(e)) from e
 
     if fuites:
         _log.warning(
             f"[ANTI-FUITE PAR L'EFFET] {len(fuites)} variable(s) écartée(s) — "
-            f"corrélation avec la cible '{col_cible}' ≥ {seuil} : {fuites}. "
+            f"signal (Spearman OU Gini normalisé) avec la cible '{col_cible}' "
+            f"≥ {seuil} : {fuites}. "
             f"Aucun facteur tarifaire légitime n'atteint ce niveau (le "
             f"bonus-malus, meilleur prédicteur de l'auto, plafonne vers 0,30). "
             f"Une telle variable EST la cible déguisée : elle n'existe pas encore "
