@@ -23,7 +23,7 @@ Version  : 1.0.0
 from __future__ import annotations
 import io, logging, re
 from core.conformite_reglementaire import (
-    avertissement_walk_forward, synthese_exclusions,
+    avertissement_walk_forward, synthese_exclusions, synthese_alertes_experience,
 )
 from datetime import datetime
 from typing import Dict, List, Optional, Any
@@ -321,6 +321,11 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
             _kpi(ws5, r, "⚠ Colonnes écartées de la matrice X", _synth_exc6,
                  statut=("AMBRE" if "ACTION REQUISE" in _synth_exc6 else "VERT"),
                  wrap=True); r += 1
+        _synth_alert6 = synthese_alertes_experience(
+            r6.get('alertes_conformite') if isinstance(r6, dict) else None)
+        if _synth_alert6:
+            _kpi(ws5, r, "ℹ Sinistralité passée conservée — à vérifier",
+                 _synth_alert6, statut="AMBRE", wrap=True); r += 1
         r += 1
         _section(ws5, r, "▶ GOUVERNANCE"); r += 1
         _kpi(ws5, r, "Profil retenu", at6.get('profil_ponderation', 'N/A')); r += 1

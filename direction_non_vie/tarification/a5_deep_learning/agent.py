@@ -568,6 +568,7 @@ class AgentA5DeepLearning:
                 # qui a rendu le BLOQUANT B5 si coûteux (facteur central de la RC Pro
                 # détruit, −17,4 % de Gini, sans que rien ne l'indique nulle part).
                 'exclusions_conformite': getattr(self, 'exclusions_conformite', {}),
+                'alertes_conformite': getattr(self, 'alertes_conformite', {}),
                 'dataframe':           df,
                 'branche':             sous_branche,
                 'statut_rag':          statut_rag,
@@ -652,6 +653,7 @@ class AgentA5DeepLearning:
             df=df, col_cible=col_cible,   # garde-fou n°4 : contrôle par l'EFFET
         )
         self.exclusions_conformite = _mx.exclusions
+        self.alertes_conformite = _mx.alertes
         feature_names = list(_mx)
 
         # ── SPLIT TEMPOREL (R1 — Commission Tarification IA France 2019 §3.2.4) ──

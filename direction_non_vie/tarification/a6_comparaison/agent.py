@@ -388,10 +388,13 @@ class AgentA6Comparaison:
             # qui a rendu le BLOQUANT B5 si coûteux (le facteur central de la RC
             # Pro détruit, −17,4 % de Gini, sans que rien ne l'indique).
             _exclusions_conformite = {}
+            _alertes_conformite = {}
             for _r_src in (result_a3, result_a4, result_a5):
                 if isinstance(_r_src, dict):
                     _exclusions_conformite.update(
                         _r_src.get('exclusions_conformite') or {})
+                    _alertes_conformite.update(
+                        _r_src.get('alertes_conformite') or {})
 
             # _tmp_a6 inclut commentaire, courbes ET audit_trail — disponibles ici
             _tmp_a6 = {
@@ -404,6 +407,7 @@ class AgentA6Comparaison:
                 'courbes': courbes,
                 'audit_trail': _audit_trail_a6,  # Gouvernance exposée aux exports
                 'exclusions_conformite': _exclusions_conformite,
+                'alertes_conformite': _alertes_conformite,
             }
             _excel_a6 = b''
             _word_a6  = b''
@@ -495,6 +499,7 @@ class AgentA6Comparaison:
                 # 'antecedents_sinistres_3ans', LE facteur de la RC Pro, était
                 # détruit (−17,4 % de Gini) sans qu'aucun rapport ne l'indique.
                 'exclusions_conformite': _exclusions_conformite,
+                'alertes_conformite': _alertes_conformite,
                 'courbes':            courbes,
                 'graphiques':            graphiques,
                 'validation_selection':  _val_sel_,

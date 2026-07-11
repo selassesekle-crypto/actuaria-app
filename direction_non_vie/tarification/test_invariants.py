@@ -980,6 +980,63 @@ class TestInvariant_LeControleNeDoitPasCasserLaTarificationDExperience(unittest.
         print("    INV-12b Les fuites de la période observée restent exclues ✅")
 
 
+class TestInvariant_GardeFouJamaisSilencieux(unittest.TestCase):
+    """
+    INVARIANT N°13 — Deux silences qui restaient, comblés.
+
+    (a) Le contrôle par l'effet peut être DÉSACTIVÉ : `df` et `col_cible` sont
+        techniquement optionnels. Un agent qui les omet perd le SEUL garde-fou
+        qui ne dépende d'aucun nom de colonne — et rien ne le signalait. Une
+        désactivation silencieuse est indiscernable d'un contrôle qui n'a rien
+        trouvé : c'est le motif du bug V6 et du BLOQUANT B2.
+
+    (b) L'alerte d'expérience passée (BLOQUANT B7) n'existait que dans les LOGS.
+        Or « ce qui n'est que dans les logs n'existe pas » — c'est le constat I5,
+        et c'est ce silence qui a rendu B5 si coûteux. L'actuaire doit lire, dans
+        le LIVRABLE, qu'un facteur à signal 0,89 a été conservé et pourquoi.
+    """
+
+    def test_l_absence_de_donnees_desactive_le_controle_et_le_dit(self):
+        import logging as _lg
+        from core.conformite_reglementaire import construire_matrice_x
+        logger = _lg.getLogger('actuaria.tarif.conformite')
+        with self.assertLogs(logger, level='WARNING') as capture:
+            construire_matrice_x(['age', 'bonus_malus'], contexte='sans données')
+        messages = "\n".join(capture.output)
+        self.assertIn('NON EXÉCUTÉ', messages,
+            "La désactivation du garde-fou n°4 doit être ANNONCÉE. Sans cela, "
+            "elle est indiscernable d'un contrôle qui n'a rien trouvé.")
+        print("    INV-13a Le garde-fou désactivé le dit bruyamment ✅")
+
+    def test_l_alerte_d_experience_remonte_dans_les_livrables(self):
+        import inspect
+        from direction_non_vie.tarification.services import (
+            tarif_excel, rapport_equipe_tarif, rapport_modeles_tarif,
+        )
+        for module in (tarif_excel, rapport_equipe_tarif, rapport_modeles_tarif):
+            with self.subTest(module=module.__name__):
+                self.assertIn('synthese_alertes_experience',
+                              inspect.getsource(module),
+                    f"{module.__name__} ne remonte pas l'alerte d'expérience "
+                    f"passée : l'actuaire ne saura pas qu'un facteur à signal "
+                    f"fort a été conservé, ni qu'il doit vérifier qu'il porte "
+                    f"bien sur le passé.")
+        print("    INV-13b Les 3 livrables remontent l'alerte d'expérience ✅")
+
+    def test_le_message_dit_a_l_actuaire_quoi_verifier(self):
+        from core.conformite_reglementaire import synthese_alertes_experience
+        txt = synthese_alertes_experience(
+            {'antecedents_sinistres_3ans': {'spearman': 0.76,
+                                            'gini_normalise': 0.89}})
+        self.assertIsNotNone(txt)
+        self.assertIn('CONSERVÉES', txt)
+        self.assertIn('Bühlmann', txt)      # explique POURQUOI c'est normal
+        self.assertIn('mapping', txt)       # dit QUOI vérifier
+        self.assertIsNone(synthese_alertes_experience({}))
+        print("    INV-13c Le message explique pourquoi c'est normal ET quoi "
+              "vérifier ✅")
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("  TESTS D'INVARIANTS — le code se contredit-il lui-même ?")

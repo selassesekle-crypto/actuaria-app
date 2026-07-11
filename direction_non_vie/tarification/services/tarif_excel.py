@@ -13,7 +13,7 @@ ONGLETS PAR AGENT :
 
 import io
 from core.conformite_reglementaire import (
-    avertissement_walk_forward, synthese_exclusions,
+    avertissement_walk_forward, synthese_exclusions, synthese_alertes_experience,
 )
 import logging
 from datetime import datetime
@@ -760,6 +760,14 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
             _kpi(ws5, r, "Colonnes écartées de la matrice X", _synth_exc,
                  statut=("AMBRE" if "ACTION REQUISE" in _synth_exc else "VERT"),
                  wrap=True); r += 1
+        # Alertes d'expérience passée conservée (audit V13 / B7). Ce n'est pas une
+        # exclusion : c'est une VÉRIFICATION demandée à l'actuaire. Ce qui n'est
+        # que dans les logs n'existe pas (constat I5).
+        _synth_alertes = synthese_alertes_experience(
+            result_a6.get('alertes_conformite'))
+        if _synth_alertes:
+            _kpi(ws5, r, "Sinistralité passée conservée — à vérifier",
+                 _synth_alertes, statut="AMBRE", wrap=True); r += 1
         _kpi(ws5, r, "A/E ratio final",
              round(backtest.get('ae_ratio', 0), 4) if backtest.get('disponible') else "N/A",
              fmt=FMT_DEC4 if backtest.get('disponible') else None); r += 1

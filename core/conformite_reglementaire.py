@@ -696,9 +696,9 @@ class MatriceX:
 
     Toute tentative de modification après construction échoue — c'est le but.
     """
-    __slots__ = ('_features', '_exclusions', '_contexte')
+    __slots__ = ('_features', '_exclusions', '_contexte', '_alertes')
 
-    def __init__(self, features, exclusions, contexte, _jeton=None):
+    def __init__(self, features, exclusions, contexte, _jeton=None, alertes=None):
         # ⚠ AUDIT V12 (I6) — le jeton était un ATTRIBUT DE CLASSE public
         # (MatriceX._JETON), et la docstring affirmait « seul ce module y a
         # accès ». C'ÉTAIT FAUX : MatriceX([...], _jeton=MatriceX._JETON)
@@ -724,6 +724,7 @@ class MatriceX:
         object.__setattr__(self, '_features', tuple(features))
         object.__setattr__(self, '_exclusions', dict(exclusions))
         object.__setattr__(self, '_contexte', contexte)
+        object.__setattr__(self, '_alertes', dict(alertes or {}))
 
     # ── Lecture seule ────────────────────────────────────────────────────────
     @property
@@ -736,6 +737,15 @@ class MatriceX:
         """{colonne: motif} — ce qui a été écarté et pourquoi. À REMONTER DANS
         LES RAPPORTS : une exclusion silencieuse est un défaut en soi (V11/B5)."""
         return dict(self._exclusions)
+
+    @property
+    def alertes(self):
+        """{colonne: signal} — variables d'expérience PASSÉE CONSERVÉES malgré un
+        signal fort. À REMONTER DANS LES RAPPORTS : ce n'est pas une exclusion,
+        c'est une VÉRIFICATION demandée à l'actuaire (la variable porte-t-elle
+        bien sur le passé, ou est-elle mal étiquetée ?).
+        Constat I5 : ce qui n'est que dans les logs n'existe pas."""
+        return dict(self._alertes)
 
     @property
     def contexte(self):
@@ -797,15 +807,38 @@ def construire_matrice_x(
     # `col_cible` accepte UNE cible (str) ou PLUSIEURS (liste) : le GLM d'A3 en a
     # deux (fréquence ET coût moyen), et une fuite peut viser l'une ou l'autre.
     # Un SEUL appel suffit donc — le point de passage reste unique.
+    _log = logger_agent or logger
     fuites_effet = {}
+    alertes_experience = {}
     cibles = ([col_cible] if isinstance(col_cible, str)
               else list(col_cible or []))
-    if df is not None and cibles:
+
+    if df is None or not cibles:
+        # ⚠ LE GARDE-FOU NE DOIT JAMAIS SE DÉSACTIVER EN SILENCE.
+        # `df` et `col_cible` sont techniquement optionnels — un agent peut donc
+        # les omettre, et le contrôle par l'effet (le SEUL qui ne dépende d'aucun
+        # nom de colonne) ne tourne alors PAS. Sans cet avertissement, cette
+        # désactivation serait indiscernable d'un contrôle qui n'a rien trouvé :
+        # c'est très exactement le motif du bug V6 et du BLOQUANT B2.
+        # Un contrôle dont on ne vérifie pas l'exécution n'est pas un contrôle.
+        _log.warning(
+            f"[ANTI-FUITE PAR L'EFFET — NON EXÉCUTÉ] "
+            f"construire_matrice_x() appelée SANS df et/ou SANS col_cible"
+            f"{' (' + contexte + ')' if contexte else ''}. Le garde-fou n°4 — le "
+            f"seul qui ne dépende d'aucun nom de colonne — N'A PAS TOURNÉ. Seuls "
+            f"les contrôles par le nom protègent cette matrice X, et l'audit V12 "
+            f"a démontré qu'ils sont structurellement insuffisants "
+            f"('garantie_montant_regle' : Gini 0,0709 → 0,9222). "
+            f"Fournissez df= et col_cible=."
+        )
+    else:
         for _cible in cibles:
-            f = detecter_fuites_par_effet(
+            f, alertes = detecter_fuites_par_effet(
                 df, conformes, _cible, logger_agent=logger_agent,
+                retourner_alertes=True,
             )
             fuites_effet.update(f)
+            alertes_experience.update(alertes)
         if fuites_effet:
             conformes = [c for c in conformes if c not in fuites_effet]
     # Motif d'exclusion, par ordre de priorité réglementaire.
@@ -831,7 +864,8 @@ def construire_matrice_x(
                              "(liste blanche) — à déclarer si elle est valide")
         else:
             exclusions[c] = "exclue par le filtre de conformité"
-    return MatriceX(conformes, exclusions, contexte, _jeton=_JETON)
+    return MatriceX(conformes, exclusions, contexte, _jeton=_JETON,
+                    alertes=alertes_experience)
 
 
 def synthese_exclusions(exclusions: Optional[dict]) -> Optional[str]:
@@ -972,7 +1006,8 @@ def detecter_fuites_par_effet(
     cols_exemptees: Optional[List[str]] = None,
     seuil: float = SEUIL_CORRELATION_FUITE,
     logger_agent: Optional[logging.Logger] = None,
-) -> dict:
+    retourner_alertes: bool = False,
+):
     """
     Détecte les fuites de données par leur EFFET, non par leur nom.
 
@@ -995,12 +1030,13 @@ def detecter_fuites_par_effet(
     fuites = {}
     signaux_experience = {}   # expérience passée à signal fort : informer, pas exclure
     if col_cible not in getattr(df, 'columns', []):
-        return fuites
+        return (fuites, signaux_experience) if retourner_alertes else fuites
     try:
         import numpy as np
         y = df[col_cible].astype(float)
         if float(y.std()) == 0.0:
-            return fuites   # cible constante : corrélation indéfinie
+            # cible constante : corrélation indéfinie
+            return (fuites, signaux_experience) if retourner_alertes else fuites
         rang_y = y.rank()
         y_arr = y.to_numpy(dtype=float)
         _trapz = getattr(np, 'trapezoid', None) or getattr(np, 'trapz')
@@ -1125,7 +1161,7 @@ def detecter_fuites_par_effet(
             f"Une telle variable EST la cible déguisée : elle n'existe pas encore "
             f"au moment de tarifer un contrat neuf."
         )
-    return fuites
+    return (fuites, signaux_experience) if retourner_alertes else fuites
 
 
 def gini_est_plausible(gini: Optional[float],
@@ -1142,3 +1178,45 @@ def gini_est_plausible(gini: Optional[float],
     if not cible_est_frequence:
         return True
     return float(gini) <= GINI_PLAUSIBLE_MAX_FREQUENCE
+
+
+def synthese_alertes_experience(alertes: Optional[dict]) -> Optional[str]:
+    """
+    SOURCE UNIQUE — texte à afficher dans TOUT livrable lorsque des variables
+    d'expérience passée ont été CONSERVÉES malgré un signal très fort.
+
+    Ce n'est PAS une exclusion : c'est une VÉRIFICATION demandée à l'actuaire.
+
+    Pourquoi (BLOQUANT B7, audit V13) : sur un portefeuille à forte fréquence ou
+    forte hétérogénéité (flotte, RC Pro, grands risques), la sinistralité passée
+    corrèle très fortement avec celle de l'année N — c'est NORMAL, c'est
+    l'hétérogénéité persistante, et c'est le fondement de la crédibilité de
+    Bühlmann-Straub. Ces variables sont donc conservées : ce sont les meilleurs
+    prédicteurs légitimes qui existent.
+
+    MAIS un signal aussi fort peut aussi trahir une colonne MAL ÉTIQUETÉE —
+    nommée « antérieure » et remplie, par erreur de mapping, avec la période
+    observée. Seul l'actuaire peut trancher. Il faut donc le lui DIRE, dans le
+    livrable — pas seulement dans un log que personne ne lit (constat I5).
+    """
+    a = alertes or {}
+    if not a:
+        return None
+    details = ", ".join(
+        f"{c} (Gini normalisé {v.get('gini_normalise')})" if isinstance(v, dict)
+        else f"{c} ({v})"
+        for c, v in sorted(a.items())
+    )
+    return (
+        f"ℹ À VÉRIFIER — {len(a)} variable(s) de sinistralité PASSÉE conservée(s) "
+        f"malgré un signal très élevé avec la cible : {details}. "
+        f"Ce n'est PAS une anomalie : sur un portefeuille à forte fréquence ou "
+        f"forte hétérogénéité (flotte, RC Pro, grands risques), la sinistralité "
+        f"passée est fortement corrélée à celle de l'année en cours — c'est "
+        f"l'hétérogénéité persistante, le fondement de la crédibilité de "
+        f"Bühlmann-Straub, et ce sont les meilleurs prédicteurs légitimes qui "
+        f"existent. Ces variables ont donc été CONSERVÉES. "
+        f"⚠ Vérifiez néanmoins qu'elles portent bien sur des exercices PASSÉS, et "
+        f"non — par erreur de mapping — sur la période observée : dans ce second "
+        f"cas, il s'agirait d'une fuite de données et le modèle serait invalide."
+    )

@@ -734,6 +734,7 @@ class AgentA4ML:
                 # qui a rendu le BLOQUANT B5 si coûteux (facteur central de la RC Pro
                 # détruit, −17,4 % de Gini, sans que rien ne l'indique nulle part).
                 'exclusions_conformite': getattr(self, 'exclusions_conformite', {}),
+                'alertes_conformite': getattr(self, 'alertes_conformite', {}),
                 # ── Standard ActuarIA ─────────────────────────────────────────
                 'excel_bytes':     _excel_a4,
                 'word_bytes':      _word_a4,
@@ -839,6 +840,7 @@ class AgentA4ML:
             df=df, col_cible=col_cible,   # garde-fou n°4 : contrôle par l'EFFET
         )
         self.exclusions_conformite = _mx.exclusions
+        self.alertes_conformite = _mx.alertes
         feature_names = list(_mx)
 
         if len(feature_names) == 0:

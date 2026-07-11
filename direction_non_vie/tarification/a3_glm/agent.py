@@ -549,6 +549,7 @@ class AgentA3GLM:
                 # qui a rendu le BLOQUANT B5 si coûteux (facteur central de la RC Pro
                 # détruit, −17,4 % de Gini, sans que rien ne l'indique nulle part).
                 'exclusions_conformite': getattr(self, 'exclusions_conformite', {}),
+                'alertes_conformite': getattr(self, 'alertes_conformite', {}),
                 # Modules avancés P2
                 'credibilite':  credibilite,
                 'lissage_geo':  lissage_geo,
@@ -694,7 +695,8 @@ class AgentA3GLM:
             # appel — le point de passage de la conformité reste unique.
             df=df, col_cible=[col_freq, col_cout],
         )
-        self.exclusions_conformite = _mx.exclusions   # remontée dans les rapports
+        self.exclusions_conformite = _mx.exclusions
+        self.alertes_conformite = _mx.alertes   # remontée dans les rapports
         vars_pred = list(_mx)
 
         if len(vars_pred) == 0:
