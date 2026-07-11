@@ -36,6 +36,7 @@ import pandas as pd
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
 from core.conformite_reglementaire import (
+    _est_experience_passee,
     filtrer_features, filtrer_genre, filtrer_famille_cible,
     est_facteur_autorise, avertissement_walk_forward,
 )
@@ -62,18 +63,80 @@ class TestInvariant_ConfigsSurviventAuFiltre(unittest.TestCase):
     """
 
     def test_vars_glm_survivent_toutes(self):
+        """⚠ TESTE LE POINT D'ENTRÉE RÉEL — construire_matrice_x() AVEC DONNÉES.
+
+        BLOQUANT B7 (audit V13). Cet invariant appelait `filtrer_features()`,
+        qui n'enchaîne que TROIS garde-fous. Le point d'entrée réel des agents
+        est `construire_matrice_x()`, qui en compte QUATRE — le dernier étant le
+        contrôle par l'effet, lequel exige `df` et `col_cible`. L'invariant était
+        donc STRUCTURELLEMENT AVEUGLE au garde-fou le plus récent : il n'a pas vu
+        que celui-ci détruisait `antecedents_sinistres_3ans` sur 4 régimes
+        actuariels réalistes sur 9 (Gini 0,4245 → −0,0105).
+
+        C'est, à l'identique, la leçon du BLOQUANT B1 : « un contrôle appliqué à
+        un intermédiaire n'est pas un contrôle ». Elle vaut aussi pour les TESTS.
+        Un invariant qui n'exerce pas le chemin de production ne prouve rien.
+
+        On teste donc sur PLUSIEURS RÉGIMES DE FRÉQUENCE — car c'est la fréquence
+        qui fait basculer la corrélation de la sinistralité passée, et un test sur
+        le seul portefeuille auto de masse ne l'aurait jamais montré.
+        """
+        from core.conformite_reglementaire import construire_matrice_x
+
+        # Régimes actuariels réalistes : de l'auto de masse aux grands risques.
+        REGIMES = [
+            ('auto de masse',   0.10, 0.5),
+            ('MRH',             0.08, 0.8),
+            ('RC Pro PME',      0.30, 1.2),
+            ('flotte 30 véh.',  4.00, 1.0),   # ← détruisait l'expérience (B7)
+            ('grands risques',  0.50, 2.5),   # ← idem
+        ]
         for sous_branche, variables in VARS_GLM.items():
-            with self.subTest(sous_branche=sous_branche):
-                conservees = set(filtrer_features(list(variables)))
-                detruites = set(variables) - conservees
-                self.assertEqual(detruites, set(),
-                    f"VARS_GLM['{sous_branche}'] déclare {sorted(detruites)}, "
-                    f"que filtrer_features() DÉTRUIT. Le GLM sera amputé de ces "
-                    f"facteurs, en silence. Soit la variable est légitime et doit "
-                    f"être déclarée dans FACTEURS_TARIFAIRES_AUTORISES, soit elle "
-                    f"est prohibée et ne doit pas figurer dans VARS_GLM.")
+            for nom_regime, lam0, sigma in REGIMES:
+                with self.subTest(sous_branche=sous_branche, regime=nom_regime):
+                    rng = np.random.default_rng(5)
+                    n = 4000
+                    theta = np.exp(rng.normal(0, sigma, n))
+                    expo = np.clip(rng.beta(5, 1, n), .05, 1.)
+                    lam = lam0 * theta
+                    df = pd.DataFrame({
+                        'nb_sinistres': rng.poisson(lam * expo).astype(float),
+                        'exposition': expo,
+                    })
+                    # Toutes les variables déclarées, avec des données plausibles.
+                    # ⚠ Les facteurs tarifaires ordinaires sont générés
+                    # INDÉPENDAMMENT de θ. Ma première version les construisait
+                    # comme `bruit + 0.1*θ` : en régime « grands risques »
+                    # (σ = 2,5), θ = exp(N(0, 2,5)) a une variance telle que le
+                    # terme en θ écrasait tout — CHAQUE variable devenait un proxy
+                    # du risque, donc une fuite par construction, et le test
+                    # échouait à tort. Mon erreur de fixture, pas un défaut du code.
+                    # Les variables d'expérience passée, elles, sont bien tirées
+                    # du même θ — mais SANS FUITE : tirage de Poisson indépendant,
+                    # conditionnellement à θ (elles portent sur les années passées).
+                    for v in variables:
+                        if v in df.columns:
+                            continue
+                        if _est_experience_passee(v):
+                            df[v] = rng.poisson(3 * lam).astype(float)
+                        else:
+                            df[v] = rng.normal(0, 1, n)
+
+                    mx = construire_matrice_x(
+                        list(variables), contexte=f'INV-1a {nom_regime}',
+                        df=df, col_cible='nb_sinistres',
+                    )
+                    detruites = set(variables) - set(mx)
+                    self.assertEqual(detruites, set(),
+                        f"[{nom_regime}, fréquence {lam0}] "
+                        f"VARS_GLM['{sous_branche}'] déclare {sorted(detruites)}, "
+                        f"que le pipeline de conformité RÉEL détruit. "
+                        f"Motif(s) : "
+                        f"{ {k: v for k, v in mx.exclusions.items() if k in detruites} }. "
+                        f"Le GLM sera amputé de ces facteurs, en silence.")
         print(f"    INV-1a VARS_GLM : {sum(len(v) for v in VARS_GLM.values())} "
-              f"variables déclarées, toutes conservées ✅")
+              f"variables × 5 régimes de fréquence, via le pipeline RÉEL "
+              f"(construire_matrice_x + données) ✅")
 
     def test_encodages_declares_survivent(self):
         """Les colonnes produites par l'encodage déclaré d'A2 (label → *_enc,
@@ -810,6 +873,111 @@ class TestInvariant_ExperiencePasseeEtEchecBruyant(unittest.TestCase):
             construire_matrice_x(['age'], contexte='test',
                                  df=DataFrameCasse(), col_cible='nb_sinistres')
         print("    INV-11c L'échec du contrôle par l'effet est bruyant ✅")
+
+
+class TestInvariant_LeControleNeDoitPasCasserLaTarificationDExperience(unittest.TestCase):
+    """
+    INVARIANT N°12 — CE QUE LE CONTRÔLE NE DOIT JAMAIS CASSER.
+
+    ═══ LA LEÇON DE FOND DE TREIZE CYCLES, formulée par le certificateur V13 ═══
+
+        « Chaque garde-fou est ajouté avec l'invariant qu'il doit SATISFAIRE,
+          jamais avec celui qu'il ne doit pas VIOLER. Écris désormais deux
+          invariants avant chaque contrôle : ce qu'il doit attraper, et ce qu'il
+          ne doit jamais casser. Le second est toujours le plus dur à formuler —
+          et c'est toujours lui qui manque. »
+
+    C'est exactement ce qui s'est produit avec le contrôle par l'effet : j'avais
+    écrit l'invariant « il attrape les fuites » (INV-9), jamais l'invariant « il
+    ne détruit pas la tarification d'expérience ». Résultat, BLOQUANT B7 : sur
+    une flotte (4,2 sinistres/an), le facteur d'expérience déclaré par A3 était
+    détruit, et le GLM livré passait d'un Gini de 0,4245 à −0,0105 — il ne
+    discriminait plus rien.
+
+    Le critère n'est pas la CORRÉLATION, c'est l'ANTÉRIORITÉ : une variable est
+    admissible si et seulement si sa valeur est connue à la DATE D'EFFET du
+    contrat. La corrélation n'est qu'un symptôme — et sur un portefeuille à forte
+    hétérogénéité, elle est le symptôme de la crédibilité de Bühlmann-Straub,
+    pas d'une fuite.
+    """
+
+    def test_la_sinistralite_passee_survit_a_TOUS_les_regimes_de_frequence(self):
+        """Sans fuite par construction : les sinistres de N−1 et de N sont deux
+        tirages de Poisson INDÉPENDANTS conditionnellement au risque intrinsèque
+        θ du contrat. Toute corrélation observée est de l'hétérogénéité pure."""
+        from core.conformite_reglementaire import construire_matrice_x
+
+        REGIMES = [
+            ('auto de masse',          0.10, 0.5),
+            ('auto forte hétérogén.',  0.10, 1.0),
+            ('MRH',                    0.08, 0.8),
+            ('RC Pro PME',             0.30, 1.2),
+            ('RC Pro grands comptes',  0.50, 1.8),
+            ('flotte 10 véhicules',    1.50, 1.0),
+            ('flotte 30 véhicules',    4.00, 1.0),
+            ('flotte + hétérogénéité', 2.00, 1.5),
+            ('grands risques',         0.50, 2.5),
+        ]
+        for nom, lam0, sigma in REGIMES:
+            with self.subTest(regime=nom):
+                rng = np.random.default_rng(5)
+                n = 6000
+                theta = np.exp(rng.normal(0, sigma, n))
+                expo = np.clip(rng.beta(5, 1, n), .05, 1.)
+                lam = lam0 * theta
+                df = pd.DataFrame({
+                    'age': rng.integers(18, 85, n).astype(float),
+                    'bonus_malus': np.clip(rng.normal(.9, .2, n), .5, 3.5),
+                    'exposition': expo,
+                    # PASSÉ : tirage indépendant du même θ → AUCUNE fuite.
+                    'antecedents_sinistres_3ans': rng.poisson(3 * lam).astype(float),
+                    'antecedents_sinistres_n1': rng.poisson(lam).astype(float),
+                    # CIBLE (année N)
+                    'nb_sinistres': rng.poisson(lam * expo).astype(float),
+                })
+                mx = construire_matrice_x(
+                    ['age', 'bonus_malus', 'antecedents_sinistres_3ans',
+                     'antecedents_sinistres_n1'],
+                    contexte=f'INV-12 {nom}', df=df, col_cible='nb_sinistres',
+                )
+                for facteur in ('antecedents_sinistres_3ans',
+                                'antecedents_sinistres_n1'):
+                    self.assertIn(facteur, list(mx),
+                        f"[{nom}] '{facteur}' DÉTRUIT par le contrôle par l'effet "
+                        f"— alors qu'il n'y a AUCUNE fuite (tirages de Poisson "
+                        f"indépendants conditionnellement à θ). La corrélation "
+                        f"vient de l'hétérogénéité persistante : c'est le "
+                        f"FONDEMENT de la crédibilité de Bühlmann-Straub, que ce "
+                        f"module implémente lui-même (A3._credibilite_buhlmann_"
+                        f"straub). L'antériorité est le critère, pas la corrélation.")
+        print("    INV-12a Sinistralité passée conservée sur les 9 régimes "
+              "actuariels (auto de masse → grands risques) ✅")
+
+    def test_mais_les_vraies_fuites_restent_exclues(self):
+        """Contrôle négatif indispensable : l'exemption de l'expérience passée
+        ne doit pas rouvrir la porte aux grandeurs de la PÉRIODE OBSERVÉE."""
+        from core.conformite_reglementaire import construire_matrice_x
+        rng = np.random.default_rng(13)
+        n = 5000
+        expo = np.clip(rng.beta(5, 1, n), .1, 1.)
+        nb = rng.poisson(2.0 * expo).astype(float)
+        cout = np.where(nb > 0, rng.gamma(2, 3000, n), 0.)
+        df = pd.DataFrame({
+            'nb_sinistres': nb, 'exposition': expo,
+            'age': rng.integers(18, 85, n).astype(float),
+            'prime_pure': cout / np.maximum(expo, .01),
+            'garantie_montant_regle': cout,
+            'densite_population': nb * 1000 + rng.normal(0, .01, n),
+        })
+        mx = construire_matrice_x(
+            ['age', 'prime_pure', 'garantie_montant_regle', 'densite_population'],
+            contexte='INV-12', df=df, col_cible='nb_sinistres')
+        for fuite in ('prime_pure', 'garantie_montant_regle',
+                      'densite_population'):
+            self.assertNotIn(fuite, list(mx),
+                f"'{fuite}' (période OBSERVÉE) atteint la matrice X.")
+        self.assertIn('age', list(mx))
+        print("    INV-12b Les fuites de la période observée restent exclues ✅")
 
 
 if __name__ == '__main__':

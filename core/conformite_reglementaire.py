@@ -993,6 +993,7 @@ def detecter_fuites_par_effet(
         'exposition', 'log_exposition', col_cible,
     }
     fuites = {}
+    signaux_experience = {}   # expérience passée à signal fort : informer, pas exclure
     if col_cible not in getattr(df, 'columns', []):
         return fuites
     try:
@@ -1034,9 +1035,52 @@ def detecter_fuites_par_effet(
                     g_norm = abs(_gini_trie_par(x.to_numpy(dtype=float))
                                  / gini_parfait)
                 signal = max(rho, g_norm)
-                if signal >= seuil:
-                    fuites[c] = {'spearman': round(rho, 4),
-                                 'gini_normalise': round(g_norm, 4)}
+                if signal < seuil:
+                    continue
+                # ═══════════════════════════════════════════════════════════════
+                #  L'ANTÉRIORITÉ EST LE CRITÈRE — PAS LA CORRÉLATION
+                # ═══════════════════════════════════════════════════════════════
+                # BLOQUANT B7 (audit V13). Ma prémisse — écrite noir sur blanc
+                # dans ce module — était : « aucun facteur tarifaire légitime ne
+                # corrèle à 0,80+ avec la sinistralité ». ELLE EST FAUSSE dès que
+                # la fréquence monte.
+                #
+                # Sur une flotte de transport (4,2 sinistres/an/contrat), les
+                # sinistres des 3 années PASSÉES corrèlent à 0,93 avec ceux de
+                # l'année N — et il n'y a AUCUNE FUITE : ce sont deux tirages
+                # de Poisson indépendants conditionnellement au risque
+                # intrinsèque θ du contrat. La corrélation vient de
+                # l'HÉTÉROGÉNÉITÉ PERSISTANTE — c'est-à-dire du fondement même
+                # de la théorie de la crédibilité de Bühlmann-Straub, que ce
+                # module implémente par ailleurs (A3._credibilite_buhlmann_straub).
+                #
+                # Mon contrôle détruisait donc le meilleur prédicteur légitime
+                # qui existe, sur 4 régimes actuariels réalistes sur 9 :
+                #     GLM avec le facteur d'expérience : Gini  0,4245
+                #     GLM réellement livré             : Gini −0,0105  (!)
+                # Le modèle livré ne discriminait plus rien — il était même
+                # légèrement ANTI-SÉLECTIF. Et le rapport disait à l'actuaire
+                # « exclusion obligatoire, aucune action », mettant le facteur
+                # d'expérience sur le même plan que prime_pure. Pire que le
+                # silence : une INSTRUCTION ERRONÉE.
+                #
+                # LA BONNE QUESTION n'est pas « cette variable connaît-elle la
+                # réponse ? » mais « la connaît-elle AVANT QU'ELLE N'EXISTE ? ».
+                # La corrélation est un SYMPTÔME ; l'antériorité est le CRITÈRE.
+                # Une variable est admissible si et seulement si sa valeur est
+                # connue à la DATE D'EFFET du contrat.
+                #
+                # On n'exclut donc JAMAIS une variable d'expérience passée sur la
+                # foi de sa corrélation. On la signale — parce qu'un signal très
+                # fort peut aussi trahir une colonne MAL ÉTIQUETÉE (nommée
+                # « antérieure » mais remplie avec la période observée), et cela,
+                # l'actuaire seul peut le trancher.
+                if _est_experience_passee(c):
+                    signaux_experience[c] = {'spearman': round(rho, 4),
+                                             'gini_normalise': round(g_norm, 4)}
+                    continue
+                fuites[c] = {'spearman': round(rho, 4),
+                             'gini_normalise': round(g_norm, 4)}
             except (TypeError, ValueError):
                 continue
     except Exception as e:   # pragma: no cover
@@ -1055,6 +1099,21 @@ def detecter_fuites_par_effet(
             f"s'exécuter. Ne pas poursuivre comme si tout allait bien."
         )
         raise EchecControleEffet(str(e)) from e
+
+    if signaux_experience:
+        _log.warning(
+            f"[EXPÉRIENCE PASSÉE — SIGNAL FORT, CONSERVÉE] "
+            f"{len(signaux_experience)} variable(s) de sinistralité PASSÉE "
+            f"présentent un signal élevé avec la cible '{col_cible}' : "
+            f"{signaux_experience}. C'est NORMAL et ATTENDU sur un portefeuille à "
+            f"forte fréquence ou forte hétérogénéité (flotte, RC Pro, grands "
+            f"risques) : c'est l'hétérogénéité persistante, le fondement même de "
+            f"la crédibilité de Bühlmann-Straub. Ces variables sont CONSERVÉES — "
+            f"elles sont connues à la date d'effet du contrat, et ce sont les "
+            f"meilleurs prédicteurs légitimes qui existent. "
+            f"⚠ Vérifiez toutefois qu'elles portent bien sur le PASSÉ et non, par "
+            f"erreur de mapping, sur la période observée."
+        )
 
     if fuites:
         _log.warning(
