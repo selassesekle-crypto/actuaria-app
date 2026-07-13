@@ -792,6 +792,7 @@ def construire_matrice_x(
     facteurs_supplementaires: Optional[List[str]] = None,
     df=None,
     col_cible=None,
+    plan=None,
 ) -> MatriceX:
     """
     SEUL point de construction d'une matrice de features conforme.
@@ -802,6 +803,18 @@ def construire_matrice_x(
       3. FILTRE ANTI-FUITE       — grandeurs de sinistralité (par le nom) ;
       4. CONTRÔLE PAR L'EFFET    — corrélation avec la cible ≥ 0,80 → fuite,
                                    QUEL QUE SOIT LE NOM (audit V12).
+
+    ── LISTE BLANCHE DÉCLARATIVE (étape 4 du plan d'exécution) ──────────────
+    Si `plan` (un PlanTarifaire signé) est fourni, la liste blanche n'est plus
+    une constante codée (FACTEURS_TARIFAIRES_AUTORISES) mais « déclaré dans le
+    plan signé » : `c in plan.colonnes_produites()`. Et les exemptions du
+    contrôle par l'effet deviennent `plan.facteurs_anteriorite()` — plus de
+    devinette. Les garde-fous 2·3·4 restent INCHANGÉS et NON contournables par
+    le plan : un actuaire qui déclarerait `sexe` (INV-3) ou `prime_pure` (INV-4)
+    est quand même bloqué. Le plan AUTORISE, il ne DISPENSE pas.
+
+    Sans `plan`, on conserve le comportement historique (liste blanche codée +
+    facteurs_supplementaires) pour les appelants non encore migrés.
 
     ⚠ FOURNIR `df` ET `col_cible` DÈS QUE POSSIBLE. Sans eux, le garde-fou n°4
     ne peut pas s'exécuter, et seuls les contrôles par le nom protègent — or
@@ -814,16 +827,33 @@ def construire_matrice_x(
     ⚠ À appeler au DERNIER MOMENT, sur les colonnes effectivement candidates.
     """
     candidates = [str(c) for c in colonnes]
-    conformes = filtrer_features(
-        candidates, contexte=contexte, logger_agent=logger_agent,
-        facteurs_supplementaires=facteurs_supplementaires,
-    )
+
+    # ── ① LISTE BLANCHE + ② GENRE + ③ FUITE PAR LE NOM ────────────────────────
+    _log = logger_agent or logger
+    declarees = None
+    cols_exemptees_effet = None
+    if plan is not None:
+        # DÉCLARATIVE : n'est légitime que ce que le plan SIGNÉ annonce. Les
+        # garde-fous 2·3 restent appliqués — non contournables par le plan.
+        declarees = set(plan.colonnes_produites())
+        cols_exemptees_effet = list(plan.facteurs_anteriorite())
+        conformes = [c for c in candidates if c in declarees]
+        conformes = filtrer_genre(conformes, contexte=contexte,
+                                  logger_agent=logger_agent)             # ② INV-3
+        conformes = filtrer_famille_cible(conformes, contexte=contexte,
+                                          logger_agent=logger_agent)     # ③ (par le nom)
+    else:
+        # Rétrocompat : liste blanche codée + facteurs_supplementaires. Chemin
+        # des appelants (A3/A4/A5/A6) non encore migrés vers le plan déclaratif.
+        conformes = filtrer_features(
+            candidates, contexte=contexte, logger_agent=logger_agent,
+            facteurs_supplementaires=facteurs_supplementaires,
+        )
 
     # ── GARDE-FOU N°4 : CONTRÔLE PAR L'EFFET (audit V12) ──────────────────────
     # `col_cible` accepte UNE cible (str) ou PLUSIEURS (liste) : le GLM d'A3 en a
     # deux (fréquence ET coût moyen), et une fuite peut viser l'une ou l'autre.
     # Un SEUL appel suffit donc — le point de passage reste unique.
-    _log = logger_agent or logger
     fuites_effet = {}
     alertes_experience = {}
     cibles = ([col_cible] if isinstance(col_cible, str)
@@ -852,6 +882,7 @@ def construire_matrice_x(
         for _cible in cibles:
             f, alertes = detecter_fuites_par_effet(
                 df, conformes, _cible, logger_agent=logger_agent,
+                cols_exemptees=cols_exemptees_effet,   # plan.facteurs_anteriorite()
                 retourner_alertes=True,
             )
             fuites_effet.update(f)
@@ -876,7 +907,10 @@ def construire_matrice_x(
         elif _est_derivee_sinistralite(c):
             exclusions[c] = ("dérivée de la sinistralité observée — fuite de "
                              "données (inconnue au moment de tarifer)")
-        elif not (est_facteur_autorise(c) or c.lower() in autorises_extra):
+        elif declarees is not None and c not in declarees:
+            exclusions[c] = ("non déclarée dans le plan de tarification signé "
+                             "(liste blanche) — à déclarer si elle est valide")
+        elif declarees is None and not (est_facteur_autorise(c) or c.lower() in autorises_extra):
             exclusions[c] = ("non déclarée comme facteur tarifaire légitime "
                              "(liste blanche) — à déclarer si elle est valide")
         else:

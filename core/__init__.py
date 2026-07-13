@@ -11,6 +11,7 @@ from .conformite_reglementaire import (
     COLS_FAMILLE_CIBLE_STEMS,
     COLS_FAMILLE_CIBLE_EXCEPTIONS,
 )
+from .plan_tarifaire import PlanTarifaire, Facteur
 from .tables_mortalite  import (
     QX_TH0002, QX_TF0002, QX_INSEE_H, QX_INSEE_F,
     get_qx, construire_lx,
@@ -22,6 +23,8 @@ from .tables_mortalite  import (
 
 __all__ = [
     'BaseAgent', 'AuditTrail', 'AgentRafael',
+    # Plan tarifaire — LA SOURCE UNIQUE du contrat A2→A3→conformité
+    'PlanTarifaire', 'Facteur',
     # Conformité réglementaire — SOURCE UNIQUE pour les trois directions
     'filtrer_genre', 'filtrer_famille_cible',
     'COLS_GENRE_INTERDITES', 'COLS_GENRE_STEMS',

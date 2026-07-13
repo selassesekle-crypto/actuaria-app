@@ -78,6 +78,12 @@ except ImportError:
 # jamais être encodé, quelle que soit la sous-branche (CJUE C-236/09).
 from core.conformite_reglementaire import filtrer_genre
 
+# Plan de tarification déclaratif — LA SOURCE UNIQUE du contrat A2→A3 (étape 2).
+# fit()/transform() (plus bas) sont pilotés par le plan et produisent EXACTEMENT
+# plan.colonnes_produites() — le même _slug et les mêmes suffixes que ceux
+# qu'annonce le plan, sinon le contrat A2→A3 redevient implicite.
+from core.plan_tarifaire import PlanTarifaire, Facteur, _slug, _SUFFIXE_TRANSFO
+
 warnings.filterwarnings('ignore')
 
 # ── LOGGER ────────────────────────────────────────────────────────────────────
@@ -554,6 +560,163 @@ class AgentA2Preprocessing:
         except Exception as e:
             logger.error(f"[{audit_id}] ERREUR : {e}", exc_info=True)
             return self._erreur(str(e), audit_id)
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # fit / transform — LE PIVOT (étape 2 du plan d'exécution)
+    # ══════════════════════════════════════════════════════════════════════════
+    # `run()` fait tout en une passe : c'est ce qui rend le scoring impossible.
+    # fit() apprend UNIQUEMENT sur le portefeuille d'apprentissage (modalités,
+    # médianes d'imputation, bornes de winsorisation) ; transform() applique les
+    # MÊMES paramètres — utilisable sur 1 contrat comme sur 1 million. Deux effets :
+    #   1. transform sur un contrat neuf  → débloque tarifer() (INV-7) ;
+    #   2. l'assert final EST INV-1        → le contrat A2→A3 se vérifie à chaque appel.
+    #
+    # Piège V9 payé cher : on ne RECALCULE JAMAIS les modalités dans transform.
+    # Une modalité absente d'un contrat neuf → colonne one-hot à 0 ; une modalité
+    # INCONNUE → on lève, on n'ignore pas (les échecs silencieux ont trop coûté).
+
+    _WINSOR_Q = (0.01, 0.99)   # bornes de winsorisation des features continues
+
+    def fit(self, df: pd.DataFrame, plan: "PlanTarifaire") -> "AgentA2Preprocessing":
+        """Apprend les paramètres de preprocessing SUR CE PORTEFEUILLE, à partir
+        du plan signé. Fige : modalités, médianes d'imputation, bornes de
+        winsorisation, modes catégoriels. Retourne self (chaînable)."""
+        manquantes = plan.valider_contre(df.columns)
+        if manquantes:
+            raise ValueError(
+                f"Fichier client incomplet pour le plan '{plan.lob}' : colonnes "
+                f"manquantes {manquantes}.")
+
+        self._plan = plan
+        self._medianes: Dict[str, float] = {}
+        self._bornes:   Dict[str, Tuple[float, float]] = {}
+        self._modes:    Dict[str, Any] = {}
+        self._codes_label: Dict[str, Dict[str, int]] = {}
+
+        for f in plan.facteurs:
+            col = f.nom
+            if f.type in ("continu", "binaire"):
+                serie = pd.to_numeric(df[col], errors="coerce")
+                self._medianes[col] = float(serie.median())
+                if f.type == "continu":
+                    q_inf, q_sup = self._WINSOR_Q
+                    self._bornes[col] = (float(serie.quantile(q_inf)),
+                                         float(serie.quantile(q_sup)))
+            else:  # catégoriel (one_hot ou label)
+                serie = df[col].astype("object")
+                mode = serie.mode()
+                self._modes[col] = mode.iloc[0] if len(mode) else None
+                if f.encodage == "label":
+                    # Mapping modalité → code. Déclaré dans le plan → ordre du
+                    # plan (déterministe, opposable) ; sinon appris (unique trié).
+                    modalites = (list(f.modalites) if f.modalites
+                                 else sorted(serie.dropna().astype(str).unique()))
+                    self._codes_label[col] = {str(m): i for i, m in enumerate(modalites)}
+        return self
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Applique les MÊMES paramètres appris par fit(). Produit EXACTEMENT
+        plan.colonnes_produites() — ou lève. L'assert final EST INV-1."""
+        if getattr(self, "_plan", None) is None:
+            raise RuntimeError("transform() appelé avant fit(). Appelez d'abord "
+                               "fit(df_apprentissage, plan).")
+        plan = self._plan
+        out = df.copy()
+
+        # ── Pré-passe : imputation + winsorisation (paramètres FIGÉS par fit) ────
+        for f in plan.facteurs:
+            col = f.nom
+            if col not in out.columns:
+                continue
+            if f.type in ("continu", "binaire"):
+                serie = pd.to_numeric(out[col], errors="coerce")
+                if col in self._medianes:
+                    serie = serie.fillna(self._medianes[col])
+                if f.type == "continu" and col in self._bornes:
+                    lo, hi = self._bornes[col]
+                    serie = serie.clip(lower=lo, upper=hi)
+                out[col] = serie.astype(float)
+            else:
+                if self._modes.get(col) is not None:
+                    out[col] = out[col].astype("object").fillna(self._modes[col])
+
+        # ── Production des colonnes déclarées, facteur par facteur ──────────────
+        for f in plan.facteurs:
+            self._appliquer_facteur(out, f)
+
+        # ── Interactions : inter_{a}_{b} = a * b (a, b = noms sources) ──────────
+        for a, b in plan.interactions:
+            for c in (a, b):
+                if c not in out.columns:
+                    raise ValueError(
+                        f"Interaction ({a}×{b}) : colonne source '{c}' absente.")
+            out[f"inter_{a}_{b}"] = (pd.to_numeric(out[a], errors="coerce")
+                                     * pd.to_numeric(out[b], errors="coerce")).astype(float)
+
+        # ── INV-1 : on produit EXACTEMENT ce que le plan annonce ────────────────
+        attendues = set(plan.colonnes_produites())
+        manquantes = attendues - set(out.columns)
+        assert not manquantes, (
+            f"INV-1 rompu : transform n'a pas produit {sorted(manquantes)}. "
+            f"Le contrat A2→A3 est brisé.")
+        return out
+
+    def _appliquer_facteur(self, out: pd.DataFrame, f: "Facteur") -> None:
+        """Produit, dans `out`, les colonnes que `f.colonnes_produites()` annonce.
+        Le nom de chaque colonne vient du MÊME _slug / _SUFFIXE_TRANSFO que le
+        plan — le contrat A2→A3 est donc littéralement la même fonction."""
+        col = f.nom
+        if f.type == "binaire":
+            out[col] = pd.to_numeric(out[col], errors="coerce").astype(float)
+
+        elif f.type == "continu":
+            # La colonne de base existe déjà (imputée/winsorisée). On n'ajoute que
+            # l'éventuelle transformée déclarée.
+            if f.transformation:
+                col_t = _SUFFIXE_TRANSFO[f.transformation].format(col)
+                out[col_t] = self._transformer(out[col], f.transformation)
+
+        elif f.encodage == "label":
+            codes = self._codes_label.get(col)
+            if codes is None:   # fit n'a pas vu ce facteur (df incohérent)
+                raise RuntimeError(f"Label '{col}' non appris par fit().")
+            vals = out[col].astype("object").astype(str)
+            self._verifier_modalites_connues(f, vals, set(codes.keys()))
+            out[f"{col}_enc"] = vals.map(codes).astype(float)
+
+        elif f.encodage == "one_hot":
+            ref = f.reference or f.modalites[0]
+            declarees = {str(m) for m in f.modalites}
+            vals = out[col].astype("object").astype(str)
+            self._verifier_modalites_connues(f, vals, declarees)
+            for m in f.modalites:
+                if m == ref:          # modalité de référence : pas de colonne
+                    continue
+                out[f"{col}_{_slug(m)}"] = (vals == str(m)).astype(float)
+
+    @staticmethod
+    def _transformer(serie: pd.Series, transformation: str) -> pd.Series:
+        x = pd.to_numeric(serie, errors="coerce")
+        if transformation == "log":
+            return np.log1p(x.clip(lower=0)).astype(float)
+        if transformation == "carre":
+            return (x ** 2).astype(float)
+        if transformation == "racine":
+            return np.sqrt(x.clip(lower=0)).astype(float)
+        raise ValueError(f"Transformation inconnue : '{transformation}'.")
+
+    @staticmethod
+    def _verifier_modalites_connues(f: "Facteur", vals: pd.Series,
+                                    declarees: set) -> None:
+        """Piège V9 : une modalité INCONNUE → lever, ne pas l'ignorer. Une
+        modalité déclarée mais absente de ce lot → simple colonne à 0 (permis)."""
+        inconnues = set(vals.dropna().unique()) - declarees
+        if inconnues:
+            raise ValueError(
+                f"Facteur '{f.nom}' : modalité(s) INCONNUE(S) {sorted(inconnues)} "
+                f"— non déclarée(s) dans le plan (modalités figées : "
+                f"{sorted(declarees)}). On lève plutôt que de produire une colonne "
+                f"one-hot/label silencieusement fausse (piège V9).")
 
     # ══════════════════════════════════════════════════════════════════════════
     # ÉTAPE 1 : IMPUTATION

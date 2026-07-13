@@ -1,0 +1,38 @@
+# ActuarIA — Plan de tarification AUTO. Reproduit l'ancienne config codée en dur
+# (VARS_GLM / VARS_CATEGORIELLES / INTERACTIONS) en UNE SEULE déclaration signée.
+lob: auto
+version: "1.0"
+auteur: "S. Sekle, IA"
+exposition: exposition
+cible_frequence: nb_sinistres
+cible_cout: cout_total_sinistres
+famille_severite: gamma
+facteurs:
+  - {nom: age,                       type: continu, transformation: carre}
+  - {nom: bonus_malus,               type: continu}
+  - {nom: anciennete_permis,         type: continu}
+  - {nom: puissance_fiscale,         type: continu}
+  - {nom: age_vehicule,              type: continu}
+  - {nom: valeur_venale,             type: continu, transformation: log}
+  - nom: garantie
+    type: categoriel
+    encodage: one_hot
+    modalites: [Tiers, TousRisques]
+    reference: Tiers
+  - nom: carburant
+    type: categoriel
+    encodage: one_hot
+    modalites: [Essence, Diesel, Electrique]
+    reference: Essence
+  - nom: csp
+    type: categoriel
+    encodage: label
+    modalites: [Cadre, Employe, Retraite]
+  - nom: usage
+    type: categoriel
+    encodage: label
+    modalites: [Prive, Pro]
+  - {nom: antecedents_sinistres_n1,  type: continu, anteriorite: true,
+     commentaire: "Connue a la souscription — exemptee du controle par l'effet"}
+interactions:
+  - [age, bonus_malus]
