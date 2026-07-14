@@ -1,2 +1,11 @@
 __pycache__/
 *.pyc
+
+# --- Artefacts d'entrainement ML/DL generes localement (hygiene) ---
+# catboost ecrit ce dossier de logs a CHAQUE fit dans le CWD (confirme empiriquement).
+catboost_info/
+# Preventif : torch peut ecrire ces dossiers si la compilation JIT (torch_extensions)
+# ou le debug torch.compile sont actives ; par defaut ils vont dans ~/.cache (hors repo).
+torch_extensions/
+torch_compile_debug/
+# shap : verifie, n'ecrit aucun cache dans le repo (utilise ~/.cache si besoin).
