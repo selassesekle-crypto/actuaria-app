@@ -1,0 +1,19 @@
+# ActuarIA -- dependances OPTIONNELLES (installation SEPAREE, non requises).
+# Le code les importe en try/except et FONCTIONNE SANS ELLES : le pipeline
+# complet A1->A6 reste operationnel, seuls les modeles / fonctions concernes
+# sont desactives. A installer EN PLUS du coeur :
+#   pip install -r requirements-optional.txt
+#
+# Ce qui est perdu si une lib est absente :
+#   xgboost / lightgbm / catboost : modeles ML boostes. A4 conserve gbm,
+#       elasticnet et random_forest (scikit-learn pur) et saute les absents.
+#   torch : toute la branche Deep Learning (agent A5) se desactive proprement.
+#   shap  : explicabilite SHAP des modeles ML (parametre calcul_shap sans effet).
+#   optuna: optimisation des hyperparametres XGBoost (repli sur params par defaut).
+
+xgboost>=2.0.0
+lightgbm>=4.0.0
+catboost>=1.2.0
+torch>=2.0.0
+shap>=0.43.0
+optuna>=3.0.0
