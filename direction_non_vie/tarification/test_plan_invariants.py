@@ -130,8 +130,10 @@ RCPRO = PlanTarifaire.depuis_dict({
         {"nom": "nb_salaries",                "type": "continu"},
         {"nom": "anciennete_entreprise_ans",  "type": "continu"},
         {"nom": "antecedents_sinistres_3ans", "type": "continu", "anteriorite": True},
-        {"nom": "secteur_activite", "type": "categoriel", "encodage": "label",
-         "modalites": ["BTP", "Conseil", "Commerce", "Industrie"]},
+        # secteur_activite : one_hot (CORRECTIF de modélisation — était label, une
+        # variable nominale que le label-encoding écrasait). Cf. rcpro.yaml.
+        {"nom": "secteur_activite", "type": "categoriel", "encodage": "one_hot",
+         "modalites": ["Conseil", "BTP", "Commerce", "Industrie"], "reference": "Conseil"},
         {"nom": "type_garantie", "type": "categoriel", "encodage": "one_hot",
          "modalites": ["Base", "Etendue"], "reference": "Base"},
         # AJOUT DE MODÉLISATION (nouveau facteur, cf. rcpro.yaml).

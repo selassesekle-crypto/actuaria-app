@@ -152,8 +152,13 @@ VARS_CATEGORIELLES = {
         'ordinale':   [],
     },
     'rcpro': {
-        'one_hot':    ['forme_juridique', 'type_garantie'],
-        'label':      ['secteur_activite'],
+        # secteur_activite deplace de 'label' vers 'one_hot' (CORRECTIF DE
+        # MODELISATION, cf. plans/rcpro.yaml) : variable NOMINALE, le label-encoding
+        # ecrasait le signal secteur (BTP 2,5x Conseil devenu invisible). Ce
+        # changement corrige le chemin A2.run() de l'app pour qu'il produise les
+        # memes colonnes one-hot que le plan (evite un decalage silencieux A2/A3).
+        'one_hot':    ['forme_juridique', 'type_garantie', 'secteur_activite'],
+        'label':      [],
         'ordinale':   [],
     },
 }

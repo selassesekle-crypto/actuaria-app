@@ -15,10 +15,21 @@ facteurs:
   - {nom: anciennete_entreprise_ans,  type: continu}
   - {nom: antecedents_sinistres_3ans, type: continu, anteriorite: true,
      commentaire: "Sinistralite des 3 dernieres annees — connue a la souscription"}
+  # ══════════════════════════════════════════════════════════════════════════
+  #  CORRECTIF DE MODELISATION (choix d'encodage ERRONE herite de l'ancien code).
+  #  secteur_activite est NOMINALE (BTP/Conseil/Commerce/Industrie : aucun ordre
+  #  de risque naturel). L'ancien VARS_CATEGORIELLES la label-encodait -> le GLM
+  #  ajustait UNE seule pente lineaire sur des codes arbitraires 0/1/2/3, ce qui
+  #  ECRASAIT le signal : preuve mesuree, BTP 2,5x Conseil dans les donnees mais
+  #  coefficient label ~0,96/cran, secteur quasi invisible. Passee en ONE_HOT
+  #  (comme forme_juridique, dont le contraste l'a prouve) : chaque secteur a sa
+  #  propre relativite. CORRECTION, pas un ajout.
+  # ══════════════════════════════════════════════════════════════════════════
   - nom: secteur_activite
     type: categoriel
-    encodage: label                          # -> secteur_activite_enc (REEL)
-    modalites: [BTP, Conseil, Commerce, Industrie]
+    encodage: one_hot
+    modalites: [Conseil, BTP, Commerce, Industrie]
+    reference: Conseil                        # baseline = secteur le moins risque
   - nom: type_garantie
     type: categoriel
     encodage: one_hot                         # remplace la morte type_garantie_enc
