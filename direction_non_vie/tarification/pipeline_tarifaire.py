@@ -18,6 +18,7 @@ Rien ici ne « sait » ce qu'est une voiture ou un chantier : tout vient du plan
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -125,23 +126,46 @@ class TarifNonVie:
         }, index=df.index)
 
     def tarifer(self, contrat: dict, exposition: float = 1.0) -> dict:
-        """« Tarifez-moi ce contrat. » Le livrable qui vend (étape 5)."""
-        df = pd.DataFrame([{**contrat, self.plan.exposition: exposition}])
-        Xc = self._design(df)
-        freq = float(self._taux_frequence(Xc)[0])
-        cout = float(self.glm_cout.predict(Xc)[0])
-        prime_pure = self.coefficient_equilibre * (freq * cout + self.ecretement) * exposition
-        ch = self.chargements
-        pc = (prime_pure * (1 + ch["frais"]) * (1 + ch["marge"])
-              / (1 - ch["commission"]))
-        return {
-            "frequence_annuelle": round(freq, 5),
-            "cout_moyen": round(cout, 2),
-            "prime_pure": round(prime_pure, 2),
-            "prime_commerciale_ht": round(pc, 2),
-            "prime_ttc": round(pc * (1 + ch["taxes"]), 2),
-            "plan": self.plan.empreinte(),   # traçabilité ACPR
-        }
+        """« Tarifez-moi ce contrat. » Le livrable qui vend (étape 5).
+
+        CONTRAT DE SORTIE STABLE, directement consommable par une API REST/JSON :
+          · toutes les valeurs sont NATIVES (bool / float / str) — jamais de
+            numpy.float64 ni de type pandas (casts float() explicites) ;
+          · une erreur est CAPTURÉE et renvoyée en {success: False, erreur: ...},
+            jamais propagée brute — aligné sur la convention {success, ..., erreur}
+            des agents A1..A6 du projet ;
+          · success / plan_empreinte / date_calcul sont TOUJOURS présents (succès
+            comme erreur) : la réponse reste tracée même en cas d'échec.
+        """
+        date_calcul = datetime.now(timezone.utc).isoformat()   # ISO 8601 (UTC)
+        empreinte = self.plan.empreinte()
+        try:
+            df = pd.DataFrame([{**contrat, self.plan.exposition: exposition}])
+            Xc = self._design(df)
+            freq = float(self._taux_frequence(Xc)[0])
+            cout = float(self.glm_cout.predict(Xc)[0])
+            prime_pure = (self.coefficient_equilibre
+                          * (freq * cout + self.ecretement) * float(exposition))
+            ch = self.chargements
+            pc = (prime_pure * (1 + ch["frais"]) * (1 + ch["marge"])
+                  / (1 - ch["commission"]))
+            return {
+                "success": True,
+                "frequence_annuelle": round(freq, 5),
+                "cout_moyen": round(cout, 2),
+                "prime_pure": round(prime_pure, 2),
+                "prime_commerciale_ht": round(pc, 2),
+                "prime_ttc": round(pc * (1 + ch["taxes"]), 2),
+                "plan_empreinte": empreinte,          # traçabilité ACPR (ex-clé 'plan')
+                "date_calcul": date_calcul,
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "erreur": str(e),
+                "plan_empreinte": empreinte,
+                "date_calcul": date_calcul,
+            }
 
     def grille(self, variable: str) -> pd.DataFrame:
         """Relativités exportables (ce que l'assureur met dans son SI)."""

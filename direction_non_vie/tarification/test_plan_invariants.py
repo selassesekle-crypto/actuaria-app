@@ -22,6 +22,7 @@ qui a produit B5, B7 et B9.
 Discipline : chaque invariant est d'abord exécuté sur le code ACTUEL et doit
 ÉCHOUER (sauf INV-3 et INV-4, contrôles négatifs qui passent d'emblée).
 """
+import json
 import os
 import sys
 import unittest
@@ -622,21 +623,26 @@ class TestINV7_TariferReproduitLeModele(unittest.TestCase):
             self.assertAlmostEqual(p["prime_pure"], attendu, places=2,
                 msg=f"tarifer(contrat {i}).prime_pure={p['prime_pure']} ≠ "
                     f"portefeuille {attendu}")
-            self.assertEqual(p["plan"], AUTO.empreinte())   # traçabilité ACPR
+            self.assertEqual(p["plan_empreinte"], AUTO.empreinte())   # traçabilité ACPR
             self.assertGreater(p["prime_ttc"], p["prime_commerciale_ht"])
         print("    INV-7b tarifer() (livrable) reproduit la prime au centime + "
               "empreinte du plan ✅")
 
-    def test_transform_leve_sur_modalite_inconnue(self):
+    def test_modalite_inconnue_est_capturee_pas_ignoree(self):
         """La consistance de INV-7 repose sur le piège V9 : une modalité inconnue
-        au scoring lève, elle n'est jamais silencieusement ignorée."""
-        with self.assertRaises(ValueError):
-            self.tarif.tarifer({
-                "age": 40, "bonus_malus": 0.9, "anciennete_permis": 20,
-                "puissance_fiscale": 6, "age_vehicule": 5, "valeur_venale": 12000,
-                "garantie": "TousRisques", "carburant": "Hydrogene",  # ← inconnue
-                "csp": "Cadre", "usage": "Prive", "antecedents_sinistres_n1": 0})
-        print("    INV-7c modalité inconnue au scoring → lève (jamais silencieux) ✅")
+        au scoring n'est JAMAIS silencieusement ignorée. Depuis le contrat de
+        sortie stable (API), elle est CAPTURÉE — success:False + erreur nommant la
+        modalité fautive — plutôt que propagée en exception brute."""
+        res = self.tarif.tarifer({
+            "age": 40, "bonus_malus": 0.9, "anciennete_permis": 20,
+            "puissance_fiscale": 6, "age_vehicule": 5, "valeur_venale": 12000,
+            "garantie": "TousRisques", "carburant": "Hydrogene",  # ← inconnue
+            "csp": "Cadre", "usage": "Prive", "antecedents_sinistres_n1": 0})
+        self.assertEqual(res["success"], False)
+        self.assertIn("Hydrogene", res["erreur"])   # la modalité fautive est nommée
+        self.assertIsInstance(json.dumps(res), str)  # l'erreur reste sérialisable
+        print("    INV-7c modalité inconnue → capturée (success:False, erreur "
+              "nommant la modalité), jamais silencieuse ✅")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -713,9 +719,9 @@ class TestINV9_DecennaleParYamlSeul(unittest.TestCase):
         })
         self.assertGreater(p['prime_ttc'], 0,
             "La décennale ne se tarife pas par YAML seul — l'architecture n'y est pas.")
-        self.assertEqual(p['plan'], plan.empreinte())   # opposable : l'empreinte du YAML
+        self.assertEqual(p['plan_empreinte'], plan.empreinte())   # opposable : empreinte du YAML
         print(f"    INV-9 décennale tarifée par YAML seul : prime_ttc="
-              f"{p['prime_ttc']} € (empreinte {p['plan']}) ✅")
+              f"{p['prime_ttc']} € (empreinte {p['plan_empreinte']}) ✅")
 
     def test_le_moteur_ne_contient_aucune_connaissance_decennale(self):
         """La preuve que « sans toucher au code » est vraie : aucun fichier du
@@ -761,6 +767,63 @@ class TestINV9_DecennaleParYamlSeul(unittest.TestCase):
         self.assertGreater(p_dec['prime_ttc'], 0)
         print(f"    INV-9c même moteur : auto={p_auto['prime_ttc']} € · "
               f"décennale={p_dec['prime_ttc']} € (aucune branche LoB) ✅")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  CONTRAT DE SORTIE de tarifer() — VERROU pour une future API REST/JSON
+# ═══════════════════════════════════════════════════════════════════════════════
+class TestContratSortieJSON(unittest.TestCase):
+    """
+    tarifer() renvoie un contrat de sortie STABLE et directement consommable par
+    une API REST/JSON — en cas de SUCCÈS comme d'ERREUR (l'exception est capturée,
+    jamais propagée brute). Ce test fige le contrat : il casse si quelqu'un
+    réintroduit un numpy.float64, oublie un cast float(), ou renomme/retire
+    success / plan_empreinte / date_calcul.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from direction_non_vie.tarification.pipeline_tarifaire import pipeline_complet
+        cls.tarif = pipeline_complet(portefeuille_auto(n=3000), AUTO)
+
+    @staticmethod
+    def _contrat_valide():
+        return {"age": 35, "bonus_malus": 0.9, "anciennete_permis": 15,
+                "puissance_fiscale": 6, "age_vehicule": 5, "valeur_venale": 13000,
+                "garantie": "TousRisques", "carburant": "Diesel", "csp": "Cadre",
+                "usage": "Prive", "antecedents_sinistres_n1": 0}
+
+    def test_succes_est_json_serialisable_et_trace(self):
+        res = self.tarif.tarifer(self._contrat_valide(), exposition=1.0)
+        rendu = json.dumps(res)                    # lève si un type n'est pas natif
+        self.assertIsInstance(rendu, str)
+        self.assertEqual(res["success"], True)
+        self.assertIn("plan_empreinte", res)
+        self.assertIn("date_calcul", res)
+        self.assertEqual(res["plan_empreinte"], AUTO.empreinte())
+        for k, v in res.items():                   # aucun numpy/pandas caché
+            self.assertEqual(type(v).__module__, "builtins",
+                             f"clé '{k}' de type non natif {type(v)}")
+        print("    CONTRAT succès : json.dumps OK · success/plan_empreinte/"
+              "date_calcul présents · 100% natif ✅")
+
+    def test_erreur_est_capturee_et_json_serialisable(self):
+        # contrat AMPUTÉ d'une colonne requise → tarifer() capture l'exception
+        incomplet = self._contrat_valide()
+        del incomplet["garantie"]
+        res = self.tarif.tarifer(incomplet, exposition=1.0)
+        rendu = json.dumps(res)                     # doit réussir aussi sur l'erreur
+        self.assertIsInstance(rendu, str)
+        self.assertEqual(res["success"], False)
+        self.assertIn("erreur", res)
+        self.assertIsInstance(res["erreur"], str)
+        self.assertIn("plan_empreinte", res)
+        self.assertIn("date_calcul", res)
+        for k, v in res.items():
+            self.assertEqual(type(v).__module__, "builtins",
+                             f"clé '{k}' de type non natif {type(v)}")
+        print("    CONTRAT erreur : exception capturée → {success:False, erreur} "
+              "json-sérialisable et tracé ✅")
 
 
 if __name__ == '__main__':
