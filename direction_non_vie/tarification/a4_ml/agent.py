@@ -139,6 +139,36 @@ logging.basicConfig(
 logger = logging.getLogger('actuaria.a4')
 
 
+# ── Alignement A4 sur le plan signé (migration progressive, UN LoB À LA FOIS) ──
+# Historiquement A4 sélectionnait ses features en DATA-DRIVEN : toutes les
+# colonnes numériques d'A2, filtrées par l'ANCIENNE liste blanche
+# FACTEURS_TARIFAIRES_AUTORISES — donc un SUR-ensemble de plan.colonnes_produites()
+# (sources brutes gardées à côté des dérivées, 2ᵉ dummies, interactions auto d'A2).
+# Le GLM (A3) concourait donc sur une liste curatée par l'actuaire et ML/DL sur
+# une liste plus large : comparaison A6 non « à armes égales ». On passe désormais
+# le PLAN à construire_matrice_x pour que les 3 familles partagent EXACTEMENT
+# plan.colonnes_produites(). Déployé LoB par LoB : _LOBS_ALIGNES_PLAN s'étend à
+# mesure que chaque LoB est vérifié empiriquement (même discipline qu'A3).
+_RACINE_PROJET_A4 = os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__)))))
+_LOBS_ALIGNES_PLAN = frozenset({'mrh'})   # auto/rcpro : à venir, un LoB à la fois
+
+
+def _charger_plan_lob(sous_branche):
+    """PlanTarifaire du LoB s'il est aligné sur le plan, sinon None (repli sur
+    l'ancien chemin FACTEURS_TARIFAIRES_AUTORISES). Repli jamais silencieux."""
+    if sous_branche not in _LOBS_ALIGNES_PLAN:
+        return None
+    try:
+        from core.plan_tarifaire import PlanTarifaire as _PlanTarifaire
+        return _PlanTarifaire.depuis_yaml(
+            os.path.join(_RACINE_PROJET_A4, 'plans', f'{sous_branche}.yaml'))
+    except Exception as _e:   # pragma: no cover — repli explicite
+        logger.warning("[A4 plan] plans/%s.yaml indisponible (%s) — repli data-driven "
+                       "(FACTEURS_TARIFAIRES_AUTORISES).", sous_branche, _e)
+        return None
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # CONSTANTES DE CONFIGURATION
 # ══════════════════════════════════════════════════════════════════════════════
@@ -954,8 +984,10 @@ class AgentA4ML:
         # AJOUTER APRÈS CET APPEL.
         # Elle trace aussi les exclusions, remontées dans les rapports — une
         # exclusion silencieuse est un défaut en soi (BLOQUANT B5, audit V11).
+        _plan_lob = _charger_plan_lob(sous_branche)   # plan signé si LoB aligné, sinon None
         _mx = construire_matrice_x(
-            feature_names, contexte='A4 — sélection features ML', logger_agent=logger,
+            feature_names, plan=_plan_lob,
+            contexte='A4 — sélection features ML', logger_agent=logger,
             df=df, col_cible=col_cible,   # garde-fou n°4 : contrôle par l'EFFET
         )
         self.exclusions_conformite = _mx.exclusions

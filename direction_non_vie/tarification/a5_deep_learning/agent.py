@@ -96,6 +96,32 @@ logging.basicConfig(
 )
 logger = logging.getLogger('actuaria.a5')
 
+
+# ── Alignement A5 sur le plan signé (migration progressive, UN LoB À LA FOIS) ──
+# Même correctif que A4 : A5 sélectionnait ses features en DATA-DRIVEN (toutes
+# colonnes numériques d'A2 ∩ FACTEURS_TARIFAIRES_AUTORISES), soit un SUR-ensemble
+# de plan.colonnes_produites(). On passe désormais le PLAN à construire_matrice_x
+# pour que GLM (A3), ML (A4) et DL (A5) partagent EXACTEMENT la même curation.
+# Déployé LoB par LoB via _LOBS_ALIGNES_PLAN (même discipline qu'A3/A4).
+_RACINE_PROJET_A5 = os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__)))))
+_LOBS_ALIGNES_PLAN = frozenset({'mrh'})   # auto/rcpro : à venir, un LoB à la fois
+
+
+def _charger_plan_lob(sous_branche):
+    """PlanTarifaire du LoB s'il est aligné sur le plan, sinon None (repli sur
+    l'ancien chemin FACTEURS_TARIFAIRES_AUTORISES). Repli jamais silencieux."""
+    if sous_branche not in _LOBS_ALIGNES_PLAN:
+        return None
+    try:
+        from core.plan_tarifaire import PlanTarifaire as _PlanTarifaire
+        return _PlanTarifaire.depuis_yaml(
+            os.path.join(_RACINE_PROJET_A5, 'plans', f'{sous_branche}.yaml'))
+    except Exception as _e:   # pragma: no cover — repli explicite
+        logger.warning("[A5 plan] plans/%s.yaml indisponible (%s) — repli data-driven "
+                       "(FACTEURS_TARIFAIRES_AUTORISES).", sous_branche, _e)
+        return None
+
 # ── COLONNES À EXCLURE ────────────────────────────────────────────────────────
 COLS_A_EXCLURE = [
     'id_contrat', 'id_assure', 'id_salarie', 'id_beneficiaire', 'id_adherent',
@@ -454,7 +480,7 @@ class AgentA5DeepLearning:
             # ── PRÉPARATION ───────────────────────────────────────────────────
             logger.info(f"[{audit_id}] Préparation données")
             X_train, X_test, y_train, y_test, feature_names, expo_train, expo_test = \
-                self._preparer_donnees(df, col_cible, col_exposition)
+                self._preparer_donnees(df, sous_branche, col_cible, col_exposition)
             rapport['etapes'].append('preparation')
             rapport['n_features']    = len(feature_names)
             rapport['feature_names'] = feature_names
@@ -598,9 +624,10 @@ class AgentA5DeepLearning:
 
     def _preparer_donnees(
         self,
-        df:        pd.DataFrame,
-        col_cible: str,
-        col_expo:  str
+        df:           pd.DataFrame,
+        sous_branche: str,
+        col_cible:    str,
+        col_expo:     str
     ) -> Tuple:
         """
         Prépare et normalise les données pour PyTorch.
@@ -648,8 +675,10 @@ class AgentA5DeepLearning:
         # (0/1) ou pré-encodée ('sexe_enc') pouvait donc atteindre la
         # matrice X du CANN/TabNet. Réf. : Arrêt CJUE C-236/09 (Test-Achats).
         # ── MATRICE X CONFORME (immuable) — voir A4 pour le détail ────────────
+        _plan_lob = _charger_plan_lob(sous_branche)   # plan signé si LoB aligné, sinon None
         _mx = construire_matrice_x(
-            feature_names, contexte='A5 — sélection features DL', logger_agent=logger,
+            feature_names, plan=_plan_lob,
+            contexte='A5 — sélection features DL', logger_agent=logger,
             df=df, col_cible=col_cible,   # garde-fou n°4 : contrôle par l'EFFET
         )
         self.exclusions_conformite = _mx.exclusions
