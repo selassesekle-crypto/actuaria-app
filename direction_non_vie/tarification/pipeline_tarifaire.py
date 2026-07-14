@@ -272,11 +272,18 @@ def pipeline_complet(portefeuille: pd.DataFrame, plan: PlanTarifaire,
     prime_grave_unitaire = charge_grave / float(expo.sum()) if float(expo.sum()) > 0 else 0.0
 
     # ── GLM COÛT MOYEN — FAMILLE DÉCLARÉE DANS LE PLAN ──────────────────────
-    mask = (y_freq > 0).to_numpy()
+    # On ajuste la sévérité là où un COÛT est OBSERVÉ (cout_ecrete > 0), pas
+    # seulement là où un sinistre est COMPTÉ (count > 0). Sur données réelles
+    # (freMTPL2) ~9 100 contrats ont ClaimNb > 0 SANS montant enregistré : leur
+    # sévérité vaudrait 0 et casserait le GLM Gamma. La FRÉQUENCE, elle, garde
+    # tous les contrats (le comptage est observé). Sur données synthétiques où
+    # cout > 0 ⇔ count > 0, ce masque est STRICTEMENT identique à l'ancien —
+    # INV-7 et INV-8 restent donc inchangés.
+    mask = ((cout_ecrete > 0) & (y_freq > 0)).to_numpy()
     if mask.any():
-        sev = (cout_ecrete[mask] / y_freq[mask].to_numpy()).astype(float)
+        sev = (cout_ecrete.to_numpy()[mask] / y_freq.to_numpy()[mask]).astype(float)
         glm_cout = ajuster_glm_cout(Xc[mask], sev, plan.famille_severite)
-    else:   # aucun sinistre : coût moyen constant nul (dégénéré mais défini)
+    else:   # aucun coût observé : coût moyen constant (dégénéré mais défini)
         glm_cout = ajuster_glm_cout(Xc.iloc[:1], pd.Series([1.0]),
                                     plan.famille_severite)
 

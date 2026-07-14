@@ -1,0 +1,40 @@
+# ActuarIA — Plan AUTO sur DONNÉES RÉELLES freMTPL2 (OpenML 41214 + 41215).
+# Les noms de facteurs correspondent EXACTEMENT aux colonnes du dataset — aucun
+# renommage. Si le moteur tarife ce plan sans qu'on touche à core/plan_tarifaire
+# ni à aucun agent, la philosophie déclarative est validée sur données réelles.
+#
+# cible_cout : colonne CONSTRUITE par la jointure freMTPL2sev (Σ ClaimAmount par
+# IDpol), nommée ClaimAmountTotal — c'est une CIBLE, pas un facteur renommé.
+lob: auto_fr_reel
+version: "1.0"
+auteur: "S. Sekle, IA — freMTPL2"
+exposition: Exposure
+cible_frequence: ClaimNb
+cible_cout: ClaimAmountTotal
+famille_severite: gamma      # comme l'ancien A3 (Gamma), pour une comparaison equitable
+facteurs:
+  - {nom: DrivAge,    type: continu}
+  - {nom: VehPower,   type: continu}
+  - {nom: VehAge,     type: continu}
+  - {nom: BonusMalus, type: continu}
+  - {nom: Density,    type: continu, transformation: log}   # tres asymetrique (urbain/rural)
+  - nom: Area
+    type: categoriel
+    encodage: label
+    modalites: [A, B, C, D, E, F]        # ordinale (densite croissante)
+  - nom: VehGas
+    type: categoriel
+    encodage: one_hot
+    modalites: [Regular, Diesel]
+    reference: Regular
+  - nom: VehBrand
+    type: categoriel
+    encodage: one_hot
+    modalites: [B1, B2, B3, B4, B5, B6, B10, B11, B12, B13, B14]
+    reference: B1
+  - nom: Region
+    type: categoriel
+    encodage: one_hot
+    modalites: [R11, R21, R22, R23, R24, R25, R26, R31, R41, R42, R43,
+                R52, R53, R54, R72, R73, R74, R82, R83, R91, R93, R94]
+    reference: R11
