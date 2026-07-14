@@ -24,10 +24,15 @@ facteurs:
     encodage: one_hot
     modalites: [Essence, Diesel, Electrique]
     reference: Essence
+  # CORRECTIF DE MODELISATION (encodage errone, meme classe que secteur_activite) :
+  # csp est NOMINALE. En label [Cadre=0,Employe=1,Retraite=2] le GLM INVERSAIT le
+  # classement (Employe, le plus risque, sortait moins risque que Cadre). Passee en
+  # ONE_HOT -> chaque CSP a sa relativite. Verite terrain : Employe > Cadre > Retraite.
   - nom: csp
     type: categoriel
-    encodage: label
+    encodage: one_hot
     modalites: [Cadre, Employe, Retraite]
+    reference: Cadre
   - nom: usage
     type: categoriel
     encodage: label

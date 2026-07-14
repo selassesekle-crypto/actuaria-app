@@ -57,8 +57,10 @@ AUTO = PlanTarifaire.depuis_dict({
          "modalites": ["Tiers", "TousRisques"], "reference": "Tiers"},
         {"nom": "carburant",            "type": "categoriel", "encodage": "one_hot",
          "modalites": ["Essence", "Diesel", "Electrique"], "reference": "Essence"},
-        {"nom": "csp",                  "type": "categoriel", "encodage": "label",
-         "modalites": ["Cadre", "Employe", "Retraite"]},
+        # csp : one_hot (CORRECTIF — était label, nominale, le label inversait
+        # Cadre/Employe). usage reste label : binaire (2 modalités) → label ≡ one-hot.
+        {"nom": "csp",                  "type": "categoriel", "encodage": "one_hot",
+         "modalites": ["Cadre", "Employe", "Retraite"], "reference": "Cadre"},
         {"nom": "usage",                "type": "categoriel", "encodage": "label",
          "modalites": ["Prive", "Pro"]},
         {"nom": "antecedents_sinistres_n1", "type": "continu", "anteriorite": True,

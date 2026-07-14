@@ -141,9 +141,11 @@ SEUILS_WINSOR = {
 # features d'A3/A4/A5/A6.
 VARS_CATEGORIELLES = {
     'auto': {
-        'one_hot':    ['garantie', 'carburant'],
-        'label':      ['csp', 'marque_vehicule', 'usage',
-                       'milieu_geographique'],
+        # csp deplace 'label' -> 'one_hot' (CORRECTIF, cf. plans/auto.yaml) : variable
+        # NOMINALE, le label INVERSAIT le classement Cadre/Employe. Aligne le chemin
+        # A2.run() de l'app sur le plan (evite un decalage silencieux A2/A3).
+        'one_hot':    ['garantie', 'carburant', 'csp'],
+        'label':      ['marque_vehicule', 'usage', 'milieu_geographique'],
         'ordinale':   [],
     },
     'mrh': {
