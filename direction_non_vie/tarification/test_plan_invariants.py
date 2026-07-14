@@ -122,8 +122,9 @@ MRH = PlanTarifaire.depuis_dict({
     ],
 })
 
-# RC Pro — sur-ensemble strict des 4 réelles + forme_juridique en AJOUT DE
-# MODÉLISATION (facteur jamais consommé par l'ancien VARS_GLM). Miroir de rcpro.yaml.
+# RC Pro — sur-ensemble strict des 4 réelles + forme_juridique ET ca_annuel_eur
+# en AJOUTS DE MODÉLISATION (facteurs jamais consommés par l'ancien VARS_GLM).
+# Miroir de rcpro.yaml.
 RCPRO = PlanTarifaire.depuis_dict({
     "lob": "rcpro", "version": "1.0", "auteur": "S. Sekle, IA",
     "exposition": "exposition",
@@ -132,6 +133,10 @@ RCPRO = PlanTarifaire.depuis_dict({
         {"nom": "nb_salaries",                "type": "continu"},
         {"nom": "anciennete_entreprise_ans",  "type": "continu"},
         {"nom": "antecedents_sinistres_3ans", "type": "continu", "anteriorite": True},
+        # AJOUT DE MODÉLISATION — chiffre d'affaires (facteur RC Pro standard,
+        # jamais consommé par l'ancien VARS_GLM). transformation:log -> produit
+        # ca_annuel_eur + log_ca_annuel_eur. Miroir de rcpro.yaml.
+        {"nom": "ca_annuel_eur", "type": "continu", "transformation": "log"},
         # secteur_activite : one_hot (CORRECTIF de modélisation — était label, une
         # variable nominale que le label-encoding écrasait). Cf. rcpro.yaml.
         {"nom": "secteur_activite", "type": "categoriel", "encodage": "one_hot",

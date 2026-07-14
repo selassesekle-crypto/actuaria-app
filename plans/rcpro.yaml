@@ -2,7 +2,9 @@
 # Reproduit VARS_GLM['rcpro'] en SUR-ENSEMBLE STRICT des 4 facteurs REELS. La
 # seule "perte", type_garantie_enc, etait une reference MORTE : A2 declare
 # type_garantie en one_hot -> produit type_garantie_base/_etendue, jamais _enc.
-# RC Pro n'a AUCUN indicateur derive (pas de branche 'rcpro' dans A2).
+# RC Pro n'a pas d'indicateur _calculer_indicateurs_derives (pas de branche
+# 'rcpro' dans A2) ; le seul derive est log_ca_annuel_eur, produit par la
+# transformation:log du facteur ca_annuel_eur (mecanisme de facteur, voir plus bas).
 lob: rcpro
 version: "1.0"
 auteur: "S. Sekle, IA"
@@ -15,6 +17,23 @@ facteurs:
   - {nom: anciennete_entreprise_ans,  type: continu}
   - {nom: antecedents_sinistres_3ans, type: continu, anteriorite: true,
      commentaire: "Sinistralite des 3 dernieres annees — connue a la souscription"}
+  # ══════════════════════════════════════════════════════════════════════════
+  #  AJOUT DE MODELISATION — decision actuarielle NOUVELLE (PAS une correction de
+  #  contrat, PAS un sur-ensemble strict). Le chiffre d'affaires (ca_annuel_eur)
+  #  est un facteur RC Pro STANDARD : la taille de l'entreprise gouverne son
+  #  exposition en responsabilite. A2 le produit deja (brut + log_ca_annuel_eur)
+  #  et A4/A5 l'utilisaient en data-driven, mais l'ancien VARS_GLM['rcpro'] ne l'a
+  #  JAMAIS consomme : meme empreinte "encode mais jamais consomme" que
+  #  forme_juridique (b108129) — l'empreinte d'un OUBLI, pas d'un choix.
+  #  Neutre sur le portefeuille synthetique de reference (qui n'a AUCUN effet CA),
+  #  mais si le CA est un vrai facteur il porte un signal FORT : mesure sur un
+  #  portefeuille ou le CA drive le risque -> +0,09 de Gini hors-echantillon,
+  #  dAIC -2625. On le declare en LOG (transformation:log, comme valeur_venale
+  #  pour l'auto) : grandeur monetaire etalee sur plusieurs ordres de grandeur.
+  #  Produit ca_annuel_eur ET log_ca_annuel_eur. Grace a l'alignement A3/A4/A5 sur
+  #  le plan (a47ab37), ce facteur atteint AUTOMATIQUEMENT les 3 familles.
+  # ══════════════════════════════════════════════════════════════════════════
+  - {nom: ca_annuel_eur, type: continu, transformation: log}
   # ══════════════════════════════════════════════════════════════════════════
   #  CORRECTIF DE MODELISATION (choix d'encodage ERRONE herite de l'ancien code).
   #  secteur_activite est NOMINALE (BTP/Conseil/Commerce/Industrie : aucun ordre
