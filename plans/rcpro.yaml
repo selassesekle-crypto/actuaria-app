@@ -1,0 +1,42 @@
+# ActuarIA — Plan de tarification RC Pro (Responsabilite Civile Professionnelle).
+# Reproduit VARS_GLM['rcpro'] en SUR-ENSEMBLE STRICT des 4 facteurs REELS. La
+# seule "perte", type_garantie_enc, etait une reference MORTE : A2 declare
+# type_garantie en one_hot -> produit type_garantie_base/_etendue, jamais _enc.
+# RC Pro n'a AUCUN indicateur derive (pas de branche 'rcpro' dans A2).
+lob: rcpro
+version: "1.0"
+auteur: "S. Sekle, IA"
+exposition: exposition
+cible_frequence: nb_sinistres
+cible_cout: cout_total_sinistres
+famille_severite: gamma
+facteurs:
+  - {nom: nb_salaries,                type: continu}
+  - {nom: anciennete_entreprise_ans,  type: continu}
+  - {nom: antecedents_sinistres_3ans, type: continu, anteriorite: true,
+     commentaire: "Sinistralite des 3 dernieres annees — connue a la souscription"}
+  - nom: secteur_activite
+    type: categoriel
+    encodage: label                          # -> secteur_activite_enc (REEL)
+    modalites: [BTP, Conseil, Commerce, Industrie]
+  - nom: type_garantie
+    type: categoriel
+    encodage: one_hot                         # remplace la morte type_garantie_enc
+    modalites: [Base, Etendue]
+    reference: Base
+  # ══════════════════════════════════════════════════════════════════════════
+  #  AJOUT DE MODELISATION — decision actuarielle NOUVELLE (PAS un sur-ensemble
+  #  strict). forme_juridique etait one-hot encodee par A2 (VARS_CATEGORIELLES)
+  #  mais JAMAIS consommee par VARS_GLM['rcpro'] : encodee mais inutilisee —
+  #  l'empreinte d'un OUBLI, pas d'un choix (un choix delibere aurait aussi retire
+  #  l'encodage). C'est un facteur RC Pro standard : la forme juridique (EI/SARL/
+  #  SAS/SA) porte un signal de taille, gouvernance et exposition en responsabilite.
+  #  On la declare explicitement : le plan devient le choix DELIBERE de l'actuaire,
+  #  plus la reconduction d'un oubli. Facteur jamais utilise auparavant qui ENTRE
+  #  EN JEU — visible comme tel dans l'historique (commit distinct).
+  # ══════════════════════════════════════════════════════════════════════════
+  - nom: forme_juridique
+    type: categoriel
+    encodage: one_hot
+    modalites: [SARL, SAS, SA, EI]
+    reference: SARL

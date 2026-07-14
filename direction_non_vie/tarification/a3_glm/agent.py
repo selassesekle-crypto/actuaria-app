@@ -221,14 +221,18 @@ VARS_GLM = {
 }
 
 # ── VARS_GLM DÉRIVÉ DES PLANS SIGNÉS (étape 3 du plan d'exécution) ────────────
-# Plus de listes codées en dur pour auto et MRH : leurs variables GLM sont
-# EXACTEMENT plan.colonnes_produites() de plans/<lob>.yaml — un sur-ensemble
-# STRICT des facteurs RÉELS des anciennes listes. Les seules « pertes » étaient
-# des références MORTES (label '*_enc' que A2 ne produit jamais, car il déclare
-# ces colonnes en one_hot) : auto perdait 'garantie_enc'/'carburant_enc', MRH
-# perdait 'type_logement_enc'/'statut_occupation_enc' — c'était le bug
-# « variables perdues ». A2 produit déjà toutes ces colonnes (one-hot + dérivées) :
-# A3 ne les ignore plus. Calculé UNE FOIS au chargement du module, jamais à
+# Plus de listes codées en dur pour les 3 LoB Non-Vie (auto, MRH, RC Pro) : leurs
+# variables GLM sont EXACTEMENT plan.colonnes_produites() de plans/<lob>.yaml — un
+# sur-ensemble STRICT des facteurs RÉELS des anciennes listes. Les seules « pertes »
+# étaient des références MORTES (label '*_enc' que A2 ne produit jamais, car il
+# déclare ces colonnes en one_hot) : auto perdait 'garantie_enc'/'carburant_enc',
+# MRH 'type_logement_enc'/'statut_occupation_enc', RC Pro 'type_garantie_enc' —
+# c'était le bug « variables perdues ». A2 produit déjà toutes ces colonnes
+# (one-hot + dérivées) : A3 ne les ignore plus. Chaque LoB a été vérifiée
+# EMPIRIQUEMENT (ses colonnes mortes ne sont pas celles des autres). RC Pro ajoute
+# en outre 'forme_juridique' — un facteur encodé par A2 mais jamais consommé par
+# l'ancien VARS_GLM (un oubli) : c'est un AJOUT DE MODÉLISATION délibéré, pas une
+# simple reproduction. Calculé UNE FOIS au chargement du module, jamais à
 # l'exécution de run(). Repli VISIBLE (log) par LoB si son plan est indisponible.
 #
 # TODO (ticket en attente, hors cycle) : quand un fichier client n'a pas la source
@@ -238,7 +242,7 @@ VARS_GLM = {
 # source. À affiner séparément.
 _RACINE_PROJET = os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.dirname(os.path.abspath(__file__)))))
-for _lob in ('auto', 'mrh'):
+for _lob in ('auto', 'mrh', 'rcpro'):
     try:
         from core.plan_tarifaire import PlanTarifaire as _PlanTarifaire
         _chemin_plan = os.path.join(_RACINE_PROJET, 'plans', f'{_lob}.yaml')

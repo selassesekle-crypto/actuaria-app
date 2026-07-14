@@ -120,6 +120,26 @@ MRH = PlanTarifaire.depuis_dict({
     ],
 })
 
+# RC Pro — sur-ensemble strict des 4 réelles + forme_juridique en AJOUT DE
+# MODÉLISATION (facteur jamais consommé par l'ancien VARS_GLM). Miroir de rcpro.yaml.
+RCPRO = PlanTarifaire.depuis_dict({
+    "lob": "rcpro", "version": "1.0", "auteur": "S. Sekle, IA",
+    "exposition": "exposition",
+    "cible_frequence": "nb_sinistres", "cible_cout": "cout_total_sinistres",
+    "facteurs": [
+        {"nom": "nb_salaries",                "type": "continu"},
+        {"nom": "anciennete_entreprise_ans",  "type": "continu"},
+        {"nom": "antecedents_sinistres_3ans", "type": "continu", "anteriorite": True},
+        {"nom": "secteur_activite", "type": "categoriel", "encodage": "label",
+         "modalites": ["BTP", "Conseil", "Commerce", "Industrie"]},
+        {"nom": "type_garantie", "type": "categoriel", "encodage": "one_hot",
+         "modalites": ["Base", "Etendue"], "reference": "Base"},
+        # AJOUT DE MODÉLISATION (nouveau facteur, cf. rcpro.yaml).
+        {"nom": "forme_juridique", "type": "categoriel", "encodage": "one_hot",
+         "modalites": ["SARL", "SAS", "SA", "EI"], "reference": "SARL"},
+    ],
+})
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  FIXTURES — portefeuilles SAINS (signal actuariel net, aucune fuite)
@@ -222,6 +242,31 @@ def portefeuille_mrh(n=3000, seed=3):
         'type_logement': rng.choice(['Maison', 'Appartement'], n),
         'valeur_mobilier': np.clip(rng.normal(25000, 10000, n), 2000, None),
         'annee_construction': annee,
+        'nb_sinistres': nb, 'cout_total_sinistres': cout,
+    })
+
+
+def portefeuille_rcpro(n=3000, seed=5):
+    """Portefeuille RC Pro sain — colonnes SOURCES brutes (aucune dérivée : RC Pro
+    n'a pas de branche derivée dans A2)."""
+    rng = np.random.default_rng(seed)
+    nb_sal = rng.integers(1, 200, n).astype(float)
+    secteur = rng.choice(['BTP', 'Conseil', 'Commerce', 'Industrie'], n)
+    forme = rng.choice(['SARL', 'SAS', 'SA', 'EI'], n, p=[0.4, 0.3, 0.1, 0.2])
+    ant = rng.poisson(0.3, n).astype(float)
+    expo = np.clip(rng.beta(5, 1, n), 0.1, 1.0)
+    lin = (-1.7 + 0.003 * nb_sal + 0.4 * ant
+           + 0.3 * (secteur == 'BTP').astype(float)
+           + 0.2 * (forme == 'EI').astype(float))
+    nb = rng.poisson(np.exp(lin) * expo).astype(float)
+    cout = np.where(nb > 0, rng.gamma(2.0, 4000.0, n), 0.0)
+    return pd.DataFrame({
+        'exposition': expo, 'nb_salaries': nb_sal,
+        'anciennete_entreprise_ans': rng.integers(0, 30, n).astype(float),
+        'antecedents_sinistres_3ans': ant,
+        'ca_annuel_eur': np.clip(rng.lognormal(13, 1, n), 50000, None),
+        'secteur_activite': secteur, 'type_garantie': rng.choice(['Base', 'Etendue'], n),
+        'forme_juridique': forme,
         'nb_sinistres': nb, 'cout_total_sinistres': cout,
     })
 
@@ -950,6 +995,55 @@ class TestMRH_PlanDeclaratif(unittest.TestCase):
             "age_logement ne suit pas datetime.now().year (2024 encore codé en dur ?)")
         print(f"    MRH age_logement = {annee} − annee_construction (année "
               f"dynamique, plus de 2024 codé en dur) ✅")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RC Pro — 3e LoB par plan déclaratif + AJOUT DE MODÉLISATION (forme_juridique)
+# ═══════════════════════════════════════════════════════════════════════════════
+class TestRCPro_PlanDeclaratif(unittest.TestCase):
+    """
+    RC Pro tarifée par plan déclaratif — sur-ensemble STRICT des 4 facteurs RÉELS
+    de VARS_GLM['rcpro'] (la ref morte type_garantie_enc remplacée par le vrai
+    one-hot). RC Pro n'a AUCUNE dérivée (aucune modif d'A2). PLUS un AJOUT DE
+    MODÉLISATION distinct : forme_juridique, jamais consommé par l'ancien code
+    (encodé par A2 mais absent de VARS_GLM — un oubli), désormais déclaré.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from direction_non_vie.tarification.pipeline_tarifaire import pipeline_complet
+        cls.df = portefeuille_rcpro(n=3000)
+        cls.tarif = pipeline_complet(cls.df, RCPRO)
+
+    def test_transform_produit_les_colonnes_du_plan(self):
+        X = _a2().fit(self.df, RCPRO).transform(self.df)
+        manquantes = set(RCPRO.colonnes_produites()) - set(X.columns)
+        self.assertEqual(manquantes, set(),
+            f"RC Pro INV-1 rompu : colonnes manquantes {sorted(manquantes)}")
+        print(f"    RC Pro INV-1 : {len(RCPRO.colonnes_produites())} colonnes du "
+              f"plan toutes produites par transform ✅")
+
+    def test_forme_juridique_entre_dans_le_modele(self):
+        """L'AJOUT DE MODÉLISATION : forme_juridique (jamais consommé avant) est
+        maintenant une colonne du plan ET une feature conforme du GLM."""
+        cols_fj = [c for c in RCPRO.colonnes_produites()
+                   if c.startswith('forme_juridique_')]
+        self.assertTrue(cols_fj, "forme_juridique n'a produit aucune colonne")
+        self.assertTrue(set(cols_fj) <= set(self.tarif.features),
+            "forme_juridique déclaré mais écarté des features conformes du GLM")
+        print(f"    RC Pro forme_juridique (ajout de modélisation) dans le modèle : "
+              f"{cols_fj} ✅")
+
+    def test_tarifer_rcpro_json(self):
+        res = self.tarif.tarifer({
+            'nb_salaries': 25, 'anciennete_entreprise_ans': 8,
+            'antecedents_sinistres_3ans': 0, 'ca_annuel_eur': 1_200_000,
+            'secteur_activite': 'Conseil', 'type_garantie': 'Etendue',
+            'forme_juridique': 'SAS'})
+        self.assertEqual(res['success'], True)
+        self.assertGreater(res['prime_ttc'], 0)
+        self.assertIsInstance(json.dumps(res), str)
+        print(f"    RC Pro tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
 
 
 if __name__ == '__main__':
