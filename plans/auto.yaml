@@ -34,5 +34,21 @@ facteurs:
     modalites: [Prive, Pro]
   - {nom: antecedents_sinistres_n1,  type: continu, anteriorite: true,
      commentaire: "Connue a la souscription — exemptee du controle par l'effet"}
+  # ── Colonnes DÉRIVÉES, calculées automatiquement par A2 (mêmes formules que
+  # l'ancien _feature_engineering). Le plan les déclare comme facteurs ordinaires :
+  # il n'a pas à savoir COMMENT elles sont calculées, seulement qu'elles existent.
+  - {nom: jeune_conducteur,          type: binaire, commentaire: "A2 : age < 25"}
+  - {nom: senior_conducteur,         type: binaire, commentaire: "A2 : age > 70"}
+  - {nom: vehicule_recent,           type: binaire, commentaire: "A2 : age_vehicule < 3"}
+  - {nom: vehicule_ancien,           type: binaire, commentaire: "A2 : age_vehicule > 10"}
+  - {nom: risque_historique,         type: continu,
+     commentaire: "A2 : bonus_malus * (1 + antecedents_sinistres_n1)"}
+  - {nom: km_par_an_normalise,       type: continu,
+     commentaire: "A2 : kilometrage_annuel / max(exposition, 0.01)"}
+  # ── Milieu géographique : label ordinaire (source client, comme csp/usage).
+  - nom: milieu_geographique
+    type: categoriel
+    encodage: label
+    modalites: [Urbain, Periurbain, Rural]
 interactions:
   - [age, bonus_malus]

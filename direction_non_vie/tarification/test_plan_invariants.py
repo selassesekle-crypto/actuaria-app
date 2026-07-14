@@ -63,6 +63,16 @@ AUTO = PlanTarifaire.depuis_dict({
          "modalites": ["Prive", "Pro"]},
         {"nom": "antecedents_sinistres_n1", "type": "continu", "anteriorite": True,
          "commentaire": "Connue a la souscription — exemptee du controle par l'effet"},
+        # Colonnes DÉRIVÉES (calculées par A2, mêmes formules que _feature_engineering),
+        # déclarées comme facteurs ordinaires — cf. plans/auto.yaml.
+        {"nom": "jeune_conducteur",     "type": "binaire"},
+        {"nom": "senior_conducteur",    "type": "binaire"},
+        {"nom": "vehicule_recent",      "type": "binaire"},
+        {"nom": "vehicule_ancien",      "type": "binaire"},
+        {"nom": "risque_historique",    "type": "continu"},
+        {"nom": "km_par_an_normalise",  "type": "continu"},
+        {"nom": "milieu_geographique",  "type": "categoriel", "encodage": "label",
+         "modalites": ["Urbain", "Periurbain", "Rural"]},
     ],
     "interactions": [["age", "bonus_malus"]],
 })
@@ -106,6 +116,10 @@ def portefeuille_auto(n=4000, seed=1):
     csp = rng.choice(['Cadre', 'Employe', 'Retraite'], n)
     usage = rng.choice(['Prive', 'Pro'], n, p=[0.8, 0.2])
     antecedents = rng.poisson(0.15, n).astype(float)
+    # Colonnes SOURCES BRUTES des indicateurs dérivés du groupe B (A2 calcule
+    # ensuite km_par_an_normalise et milieu_geographique_enc).
+    kilometrage_annuel = np.clip(rng.normal(12000, 4000, n), 1000, None)
+    milieu_geographique = rng.choice(['Urbain', 'Periurbain', 'Rural'], n, p=[0.5, 0.3, 0.2])
     expo = np.clip(rng.beta(5, 1, n), 0.1, 1.0)
     lin = (-2.1
            + 0.9 * np.log(bonus_malus)
@@ -124,6 +138,8 @@ def portefeuille_auto(n=4000, seed=1):
         'valeur_venale': valeur_venale, 'garantie': garantie,
         'carburant': carburant, 'csp': csp, 'usage': usage,
         'antecedents_sinistres_n1': antecedents,
+        'kilometrage_annuel': kilometrage_annuel,
+        'milieu_geographique': milieu_geographique,
         'nb_sinistres': nb, 'cout_total_sinistres': cout,
     })
 
@@ -617,7 +633,9 @@ class TestINV7_TariferReproduitLeModele(unittest.TestCase):
     def test_tarifer_livrable_reproduit_au_centime(self):
         for i in (0, 42, 1500, 3999):
             row = self.df.iloc[i]
-            contrat = {f.nom: row[f.nom] for f in AUTO.facteurs}
+            # Contrat = colonnes SOURCES BRUTES du portefeuille (A2 dérive
+            # jeune_conducteur, km_par_an_normalise… — elles ne sont pas saisies).
+            contrat = row.to_dict()
             p = self.tarif.tarifer(contrat, exposition=float(row["exposition"]))
             attendu = round(float(self.pred["prime_pure"].iloc[i]), 2)
             self.assertAlmostEqual(p["prime_pure"], attendu, places=2,
@@ -637,7 +655,8 @@ class TestINV7_TariferReproduitLeModele(unittest.TestCase):
             "age": 40, "bonus_malus": 0.9, "anciennete_permis": 20,
             "puissance_fiscale": 6, "age_vehicule": 5, "valeur_venale": 12000,
             "garantie": "TousRisques", "carburant": "Hydrogene",  # ← inconnue
-            "csp": "Cadre", "usage": "Prive", "antecedents_sinistres_n1": 0})
+            "csp": "Cadre", "usage": "Prive", "antecedents_sinistres_n1": 0,
+            "kilometrage_annuel": 12000, "milieu_geographique": "Urbain"})
         self.assertEqual(res["success"], False)
         self.assertIn("Hydrogene", res["erreur"])   # la modalité fautive est nommée
         self.assertIsInstance(json.dumps(res), str)  # l'erreur reste sérialisable
@@ -758,7 +777,8 @@ class TestINV9_DecennaleParYamlSeul(unittest.TestCase):
         p_auto = t_auto.tarifer({'age': 40, 'bonus_malus': 0.9, 'anciennete_permis': 20,
             'puissance_fiscale': 6, 'age_vehicule': 5, 'valeur_venale': 12000,
             'garantie': 'TousRisques', 'carburant': 'Diesel', 'csp': 'Cadre',
-            'usage': 'Prive', 'antecedents_sinistres_n1': 0})
+            'usage': 'Prive', 'antecedents_sinistres_n1': 0,
+            'kilometrage_annuel': 12000, 'milieu_geographique': 'Urbain'})
         p_dec = t_dec.tarifer({'montant_travaux_eur': 500_000, 'nb_lots': 3,
             'anciennete_entreprise_ans': 8, 'type_ouvrage': 'Maison',
             'qualification_entreprise': 'Qualibat', 'nature_marche': 'Public',
@@ -791,7 +811,8 @@ class TestContratSortieJSON(unittest.TestCase):
         return {"age": 35, "bonus_malus": 0.9, "anciennete_permis": 15,
                 "puissance_fiscale": 6, "age_vehicule": 5, "valeur_venale": 13000,
                 "garantie": "TousRisques", "carburant": "Diesel", "csp": "Cadre",
-                "usage": "Prive", "antecedents_sinistres_n1": 0}
+                "usage": "Prive", "antecedents_sinistres_n1": 0,
+                "kilometrage_annuel": 12000, "milieu_geographique": "Urbain"}
 
     def test_succes_est_json_serialisable_et_trace(self):
         res = self.tarif.tarifer(self._contrat_valide(), exposition=1.0)

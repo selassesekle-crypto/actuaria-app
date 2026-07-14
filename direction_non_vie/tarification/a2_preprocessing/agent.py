@@ -577,10 +577,37 @@ class AgentA2Preprocessing:
 
     _WINSOR_Q = (0.01, 0.99)   # bornes de winsorisation des features continues
 
+    def _calculer_indicateurs_derives(self, out: pd.DataFrame) -> pd.DataFrame:
+        """Indicateurs auto DÉRIVÉS — calculés automatiquement à partir d'autres
+        colonnes, avec les MÊMES formules et seuils que l'ancien
+        A2._feature_engineering (25/70 ans, 3/10 ans, bonus_malus×(1+antécédents),
+        km/exposition). Ce ne sont PAS des facteurs saisis par le client : le plan
+        les déclare ensuite comme facteurs binaire/continu ordinaires, sans avoir à
+        savoir COMMENT ils sont calculés — seulement qu'ils existent en sortie de
+        transform(). Chaque calcul est GARDÉ par la présence de ses sources."""
+        if "bonus_malus" in out.columns and "antecedents_sinistres_n1" in out.columns:
+            out["risque_historique"] = (
+                pd.to_numeric(out["bonus_malus"], errors="coerce")
+                * (1 + pd.to_numeric(out["antecedents_sinistres_n1"], errors="coerce")))
+        if "kilometrage_annuel" in out.columns and "exposition" in out.columns:
+            out["km_par_an_normalise"] = (
+                pd.to_numeric(out["kilometrage_annuel"], errors="coerce")
+                / np.maximum(pd.to_numeric(out["exposition"], errors="coerce"), 0.01))
+        if "age" in out.columns:
+            _age = pd.to_numeric(out["age"], errors="coerce")
+            out["jeune_conducteur"] = (_age < 25).astype(int)
+            out["senior_conducteur"] = (_age > 70).astype(int)
+        if "age_vehicule" in out.columns:
+            _av = pd.to_numeric(out["age_vehicule"], errors="coerce")
+            out["vehicule_recent"] = (_av < 3).astype(int)
+            out["vehicule_ancien"] = (_av > 10).astype(int)
+        return out
+
     def fit(self, df: pd.DataFrame, plan: "PlanTarifaire") -> "AgentA2Preprocessing":
         """Apprend les paramètres de preprocessing SUR CE PORTEFEUILLE, à partir
         du plan signé. Fige : modalités, médianes d'imputation, bornes de
         winsorisation, modes catégoriels. Retourne self (chaînable)."""
+        df = self._calculer_indicateurs_derives(df.copy())   # dérivées AVANT validation
         manquantes = plan.valider_contre(df.columns)
         if manquantes:
             raise ValueError(
@@ -622,6 +649,7 @@ class AgentA2Preprocessing:
                                "fit(df_apprentissage, plan).")
         plan = self._plan
         out = df.copy()
+        self._calculer_indicateurs_derives(out)   # dérivées d'abord (comme dans fit)
 
         # ── Pré-passe : imputation + winsorisation (paramètres FIGÉS par fit) ────
         for f in plan.facteurs:
