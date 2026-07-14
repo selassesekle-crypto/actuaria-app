@@ -3423,6 +3423,20 @@ def _executer_analyse(besoin, direction, equipe, client):
                     from direction_non_vie.tarification.a3_glm.agent import AgentA3GLM
                     r3 = AgentA3GLM(audit_path=_tmp, verbose=False).run(r2, generer_graphiques=False)
                     resultats["principal"] = r3
+                    # ── BASCULE : chemin déclaratif (plan signé) EN PARALLÈLE ──────
+                    # Calculé À CÔTÉ de l'ancien r3 (aucun changement d'affichage,
+                    # aucun st.* nouveau) — permet la comparaison ancien/nouveau. Le
+                    # plan restitue les 15 colonnes déclarées ; l'ancien A3 en perd 9
+                    # (VARS_GLM vs _enc). Sous garde : une incompatibilité de colonnes
+                    # est enregistrée, jamais fatale pour la page.
+                    try:
+                        from core.plan_tarifaire import PlanTarifaire
+                        from direction_non_vie.tarification.pipeline_tarifaire import pipeline_complet
+                        _plan_auto = PlanTarifaire.depuis_yaml(os.path.join(
+                            os.path.dirname(__file__), "plans", "auto.yaml"))
+                        resultats["tarif_plan"] = pipeline_complet(r1["dataframe"], _plan_auto)
+                    except Exception as _e_plan:
+                        resultats["tarif_plan_erreur"] = f"{type(_e_plan).__name__}: {_e_plan}"
                 elif besoin == "prime_ml":
                     from direction_non_vie.tarification.a4_ml.agent import AgentA4ML
                     r4 = AgentA4ML(audit_path=_tmp, verbose=False).run(r2, generer_graphiques=False, calcul_shap=False)
