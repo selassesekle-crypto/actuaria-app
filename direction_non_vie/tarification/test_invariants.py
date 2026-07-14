@@ -1086,6 +1086,18 @@ class TestInvariant_LeSystemeAccepteCeQuIlDoitAccepter(unittest.TestCase):
             with self.subTest(modele=nom):
                 try:
                     m = creer_modele_ml_pour_nom(nom, 'nb_sinistres')
+                except ImportError as e:
+                    # Librairie OPTIONNELLE absente de CET environnement
+                    # (xgboost/lightgbm/catboost). Ce n'est PAS un defaut de la
+                    # fabrique de recalibration : le pipeline reel
+                    # (A4._calibrer_tous_modeles) saute gracieusement ces modeles
+                    # dans un try/except. Un modele non installe ne peut ni etre
+                    # certifie ni infirmer l'invariant — qui porte sur la
+                    # RECALIBRABILITE PAR CONCEPTION, pas sur l'inventaire local
+                    # des paquets. On SKIP (ni erreur ni echec trompeur).
+                    self.skipTest(
+                        f"'{nom}' ({description}) : librairie absente ({e}) — "
+                        f"skip. Le pipeline reel degrade gracieusement (A4).")
                 except ValueError as e:
                     self.fail(
                         f"'{nom}' ({description}) n'est PAS recalibrable par le "
