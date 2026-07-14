@@ -96,6 +96,30 @@ DECENNALE = PlanTarifaire.depuis_dict({
     ],
 })
 
+# MRH — sur-ensemble strict de l'ancien VARS_GLM['mrh'] (miroir de plans/mrh.yaml).
+MRH = PlanTarifaire.depuis_dict({
+    "lob": "mrh", "version": "1.0", "auteur": "S. Sekle, IA",
+    "exposition": "exposition",
+    "cible_frequence": "nb_sinistres", "cible_cout": "cout_total_sinistres",
+    "facteurs": [
+        {"nom": "surface_m2",     "type": "continu"},
+        {"nom": "etage",          "type": "continu"},
+        {"nom": "alarme",         "type": "binaire"},
+        {"nom": "double_vitrage", "type": "binaire"},
+        {"nom": "garantie_vol",   "type": "binaire"},
+        {"nom": "zone_geographique", "type": "categoriel", "encodage": "label",
+         "modalites": ["Urbaine", "Periurbaine", "Rurale"]},
+        {"nom": "statut_occupation", "type": "categoriel", "encodage": "one_hot",
+         "modalites": ["Proprietaire", "Locataire"], "reference": "Proprietaire"},
+        {"nom": "type_logement",  "type": "categoriel", "encodage": "one_hot",
+         "modalites": ["Maison", "Appartement"], "reference": "Maison"},
+        # Dérivées calculées par A2 (mêmes formules que _feature_engineering).
+        {"nom": "valeur_par_m2",  "type": "continu"},
+        {"nom": "age_logement",   "type": "continu"},
+        {"nom": "logement_ancien", "type": "binaire"},
+    ],
+})
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  FIXTURES — portefeuilles SAINS (signal actuariel net, aucune fuite)
@@ -170,6 +194,34 @@ def portefeuille_decennale(n=4000, seed=2):
         'anciennete_entreprise_ans': anciennete, 'type_ouvrage': type_ouvrage,
         'qualification_entreprise': qualif, 'nature_marche': nature,
         'sinistres_3ans_anterieurs': sin_ant,
+        'nb_sinistres': nb, 'cout_total_sinistres': cout,
+    })
+
+
+def portefeuille_mrh(n=3000, seed=3):
+    """Portefeuille MRH sain — colonnes SOURCES brutes ; A2 dérive valeur_par_m2,
+    age_logement, logement_ancien."""
+    rng = np.random.default_rng(seed)
+    surface = np.clip(rng.normal(80, 30, n), 15, None)
+    statut = rng.choice(['Proprietaire', 'Locataire'], n, p=[0.6, 0.4])
+    annee = rng.integers(1950, 2020, n)
+    expo = np.clip(rng.beta(5, 1, n), 0.1, 1.0)
+    lin = (-2.4 + 0.004 * (2026 - annee)
+           + 0.3 * (statut == 'Locataire').astype(float)
+           - 0.002 * surface)
+    nb = rng.poisson(np.exp(lin) * expo).astype(float)
+    cout = np.where(nb > 0, rng.gamma(2.0, 1500.0, n), 0.0)
+    return pd.DataFrame({
+        'exposition': expo, 'surface_m2': surface,
+        'etage': rng.integers(0, 10, n).astype(float),
+        'alarme': rng.integers(0, 2, n).astype(float),
+        'double_vitrage': rng.integers(0, 2, n).astype(float),
+        'garantie_vol': rng.integers(0, 2, n).astype(float),
+        'zone_geographique': rng.choice(['Urbaine', 'Periurbaine', 'Rurale'], n),
+        'statut_occupation': statut,
+        'type_logement': rng.choice(['Maison', 'Appartement'], n),
+        'valeur_mobilier': np.clip(rng.normal(25000, 10000, n), 2000, None),
+        'annee_construction': annee,
         'nb_sinistres': nb, 'cout_total_sinistres': cout,
     })
 
@@ -845,6 +897,59 @@ class TestContratSortieJSON(unittest.TestCase):
                              f"clé '{k}' de type non natif {type(v)}")
         print("    CONTRAT erreur : exception capturée → {success:False, erreur} "
               "json-sérialisable et tracé ✅")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  MRH — 2e LoB tarifée par plan déclaratif (sur-ensemble strict de VARS_GLM['mrh'])
+# ═══════════════════════════════════════════════════════════════════════════════
+class TestMRH_PlanDeclaratif(unittest.TestCase):
+    """
+    MRH tarifée par le plan déclaratif — sur-ensemble STRICT de l'ancien
+    VARS_GLM['mrh'] (0 perte réelle : les 2 références mortes type_logement_enc /
+    statut_occupation_enc, remplacées par les vrais one-hot). Même méthode que
+    l'auto, LoB différente : la vérification empirique a confirmé ses spécificités
+    propres (colonnes mortes différentes, année de référence corrigée).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from direction_non_vie.tarification.pipeline_tarifaire import pipeline_complet
+        cls.df = portefeuille_mrh(n=3000)
+        cls.tarif = pipeline_complet(cls.df, MRH)
+
+    def test_transform_produit_les_colonnes_du_plan(self):
+        X = _a2().fit(self.df, MRH).transform(self.df)
+        manquantes = set(MRH.colonnes_produites()) - set(X.columns)
+        self.assertEqual(manquantes, set(),
+            f"MRH INV-1 rompu : colonnes manquantes {sorted(manquantes)}")
+        print(f"    MRH INV-1 : {len(MRH.colonnes_produites())} colonnes du plan "
+              f"toutes produites par transform ✅")
+
+    def test_tarifer_mrh_json(self):
+        res = self.tarif.tarifer({
+            'surface_m2': 75, 'etage': 2, 'alarme': 1, 'double_vitrage': 1,
+            'garantie_vol': 1, 'zone_geographique': 'Urbaine',
+            'statut_occupation': 'Locataire', 'type_logement': 'Appartement',
+            'valeur_mobilier': 30000, 'annee_construction': 1990})
+        self.assertEqual(res['success'], True)
+        self.assertGreater(res['prime_ttc'], 0)
+        self.assertIsInstance(json.dumps(res), str)
+        print(f"    MRH tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+
+    def test_age_logement_suit_l_annee_d_execution(self):
+        """Correctif du bug « 2024 codé en dur » : age_logement = année COURANTE −
+        annee_construction. Le test calcule l'attendu avec LA MÊME fonction
+        datetime.now().year — vrai quel que soit l'an où il tourne (et il
+        échouerait si le code figeait encore 2024)."""
+        from datetime import datetime
+        X = _a2().fit(self.df, MRH).transform(self.df)
+        annee = datetime.now().year
+        attendu = annee - self.df['annee_construction'].astype(int).to_numpy()
+        obtenu = X['age_logement'].astype(int).to_numpy()
+        self.assertTrue((obtenu == attendu).all(),
+            "age_logement ne suit pas datetime.now().year (2024 encore codé en dur ?)")
+        print(f"    MRH age_logement = {annee} − annee_construction (année "
+              f"dynamique, plus de 2024 codé en dur) ✅")
 
 
 if __name__ == '__main__':

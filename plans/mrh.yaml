@@ -1,0 +1,41 @@
+# ActuarIA — Plan de tarification MRH (Multirisque Habitation). Reproduit
+# l'ancienne config codée en dur (VARS_GLM/VARS_CATEGORIELLES) en UNE declaration
+# signee, en SUR-ENSEMBLE STRICT des 9 facteurs REELS de VARS_GLM['mrh'].
+# Les 2 "pertes" (type_logement_enc, statut_occupation_enc) etaient des references
+# MORTES : A2 declare ces colonnes en one_hot, donc produit type_logement_maison/
+# _appartement et statut_occupation_proprietaire/_locataire, jamais les *_enc.
+lob: mrh
+version: "1.0"
+auteur: "S. Sekle, IA"
+exposition: exposition
+cible_frequence: nb_sinistres
+cible_cout: cout_total_sinistres
+famille_severite: gamma
+facteurs:
+  # ── Colonnes SOURCES brutes ─────────────────────────────────────────────
+  - {nom: surface_m2,        type: continu}
+  - {nom: etage,             type: continu}
+  - {nom: alarme,            type: binaire}
+  - {nom: double_vitrage,    type: binaire}
+  - {nom: garantie_vol,      type: binaire}
+  - nom: zone_geographique
+    type: categoriel
+    encodage: label                          # -> zone_geographique_enc (REEL)
+    modalites: [Urbaine, Periurbaine, Rurale]
+  - nom: statut_occupation
+    type: categoriel
+    encodage: one_hot                         # remplace la morte statut_occupation_enc
+    modalites: [Proprietaire, Locataire]
+    reference: Proprietaire
+  - nom: type_logement
+    type: categoriel
+    encodage: one_hot                         # remplace la morte type_logement_enc
+    modalites: [Maison, Appartement]
+    reference: Maison
+  # ── Colonnes DERIVEES, calculees automatiquement par A2 (memes formules que
+  # _feature_engineering), declarees comme facteurs ordinaires.
+  - {nom: valeur_par_m2,     type: continu,
+     commentaire: "A2 : valeur_mobilier / max(surface_m2, 1)"}
+  - {nom: age_logement,      type: continu,
+     commentaire: "A2 : datetime.now().year - annee_construction (annee dynamique)"}
+  - {nom: logement_ancien,   type: binaire, commentaire: "A2 : age_logement > 50"}

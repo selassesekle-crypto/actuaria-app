@@ -220,31 +220,33 @@ VARS_GLM = {
     # hors Non-Vie. A3 est un agent de la Direction Non-Vie : auto · MRH · RC Pro.
 }
 
-# ── VARS_GLM['auto'] DÉRIVÉ DU PLAN SIGNÉ (étape 3 du plan d'exécution) ────────
-# Plus de liste codée en dur : les variables du GLM auto sont EXACTEMENT
-# plan.colonnes_produites() de plans/auto.yaml. C'est un sur-ensemble strict des
-# 17 facteurs RÉELS de l'ancienne liste ; les 2 seules « pertes »,
-# 'garantie_enc'/'carburant_enc', étaient des références MORTES (A2 a toujours
-# produit les one-hot 'garantie_tousrisques'/'carburant_diesel' — c'était le bug
-# « 9 variables perdues »). A2 produit déjà toutes ces colonnes : A3 n'ignore
-# donc plus la garantie ni le carburant. Calculé UNE FOIS au chargement du module,
-# jamais à l'exécution de run(). Repli VISIBLE (log) si le plan est indisponible.
+# ── VARS_GLM DÉRIVÉ DES PLANS SIGNÉS (étape 3 du plan d'exécution) ────────────
+# Plus de listes codées en dur pour auto et MRH : leurs variables GLM sont
+# EXACTEMENT plan.colonnes_produites() de plans/<lob>.yaml — un sur-ensemble
+# STRICT des facteurs RÉELS des anciennes listes. Les seules « pertes » étaient
+# des références MORTES (label '*_enc' que A2 ne produit jamais, car il déclare
+# ces colonnes en one_hot) : auto perdait 'garantie_enc'/'carburant_enc', MRH
+# perdait 'type_logement_enc'/'statut_occupation_enc' — c'était le bug
+# « variables perdues ». A2 produit déjà toutes ces colonnes (one-hot + dérivées) :
+# A3 ne les ignore plus. Calculé UNE FOIS au chargement du module, jamais à
+# l'exécution de run(). Repli VISIBLE (log) par LoB si son plan est indisponible.
 #
-# TODO (ticket en attente, hors de ce cycle) : quand un fichier client n'a pas
-# 'kilometrage_annuel'/'milieu_geographique', valider_contre() signale la colonne
-# DÉRIVÉE 'km_par_an_normalise' plutôt que la source brute 'kilometrage_annuel'.
-# Message actionnable en forme, mais imprécis sur cette source. À affiner à part.
-try:
-    from core.plan_tarifaire import PlanTarifaire as _PlanTarifaire
-    _CHEMIN_PLAN_AUTO = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(
-            os.path.dirname(os.path.abspath(__file__))))),
-        'plans', 'auto.yaml')
-    VARS_GLM['auto'] = list(_PlanTarifaire.depuis_yaml(_CHEMIN_PLAN_AUTO).colonnes_produites())
-except Exception as _e_plan_auto:   # pragma: no cover — repli jamais silencieux
-    logger.warning(
-        "[VARS_GLM] plans/auto.yaml indisponible (%s) — repli sur la liste codée. "
-        "VARS_GLM['auto'] n'est PAS dérivé du plan.", _e_plan_auto)
+# TODO (ticket en attente, hors cycle) : quand un fichier client n'a pas la source
+# brute d'une dérivée (kilometrage_annuel, valeur_mobilier, annee_construction…),
+# valider_contre() signale la colonne DÉRIVÉE (km_par_an_normalise, valeur_par_m2,
+# age_logement) plutôt que la source brute. Actionnable en forme, imprécis sur la
+# source. À affiner séparément.
+_RACINE_PROJET = os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__)))))
+for _lob in ('auto', 'mrh'):
+    try:
+        from core.plan_tarifaire import PlanTarifaire as _PlanTarifaire
+        _chemin_plan = os.path.join(_RACINE_PROJET, 'plans', f'{_lob}.yaml')
+        VARS_GLM[_lob] = list(_PlanTarifaire.depuis_yaml(_chemin_plan).colonnes_produites())
+    except Exception as _e_plan:   # pragma: no cover — repli jamais silencieux
+        logger.warning(
+            "[VARS_GLM] plans/%s.yaml indisponible (%s) — repli sur la liste codée. "
+            "VARS_GLM['%s'] n'est PAS dérivé du plan.", _lob, _e_plan, _lob)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

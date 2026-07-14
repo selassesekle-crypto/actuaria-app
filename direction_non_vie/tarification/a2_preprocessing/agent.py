@@ -601,6 +601,21 @@ class AgentA2Preprocessing:
             _av = pd.to_numeric(out["age_vehicule"], errors="coerce")
             out["vehicule_recent"] = (_av < 3).astype(int)
             out["vehicule_ancien"] = (_av > 10).astype(int)
+        # ── MRH (mêmes formules que _feature_engineering) ────────────────────
+        if "valeur_mobilier" in out.columns and "surface_m2" in out.columns:
+            out["valeur_par_m2"] = (
+                pd.to_numeric(out["valeur_mobilier"], errors="coerce")
+                / np.maximum(pd.to_numeric(out["surface_m2"], errors="coerce"), 1))
+        if "annee_construction" in out.columns:
+            # ⚠ CORRECTIF DE BUG (trouvé pendant la migration MRH) : l'ancien A2
+            # codait l'année de référence EN DUR (2024) — un bug de CALENDRIER qui
+            # se dégradait d'un an chaque année (age_logement faux de +1 an à
+            # chaque nouvel an sur les mêmes données). On utilise désormais
+            # l'année d'EXÉCUTION : age_logement est toujours à jour, jamais périmé.
+            _annee_ref = datetime.now().year
+            out["age_logement"] = (_annee_ref
+                                   - pd.to_numeric(out["annee_construction"], errors="coerce"))
+            out["logement_ancien"] = (out["age_logement"] > 50).astype(int)
         return out
 
     def fit(self, df: pd.DataFrame, plan: "PlanTarifaire") -> "AgentA2Preprocessing":
@@ -1423,7 +1438,12 @@ class AgentA2Preprocessing:
 
             # Ancienneté du logement (risque DDO et électrique)
             if 'annee_construction' in df.columns:
-                annee_courante = 2024
+                # ⚠ CORRECTIF DE BUG (migration MRH) : l'année de référence était
+                # codée EN DUR (2024) — bug de calendrier qui se dégradait d'un an
+                # chaque année. Année d'exécution -> age_logement toujours à jour.
+                # Identique au correctif de _calculer_indicateurs_derives : les
+                # DEUX chemins (run() historique ET fit/transform) sont corrigés.
+                annee_courante = datetime.now().year
                 df['age_logement'] = annee_courante - df['annee_construction']
                 df['logement_ancien'] = (df['age_logement'] > 50).astype(int)
                 features_nouvelles.extend([
