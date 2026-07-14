@@ -105,7 +105,7 @@ logger = logging.getLogger('actuaria.a5')
 # Déployé LoB par LoB via _LOBS_ALIGNES_PLAN (même discipline qu'A3/A4).
 _RACINE_PROJET_A5 = os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.dirname(os.path.abspath(__file__)))))
-_LOBS_ALIGNES_PLAN = frozenset({'mrh'})   # auto/rcpro : à venir, un LoB à la fois
+_LOBS_ALIGNES_PLAN = frozenset({'mrh', 'auto'})   # rcpro : à venir, un LoB à la fois
 
 
 def _charger_plan_lob(sous_branche):
