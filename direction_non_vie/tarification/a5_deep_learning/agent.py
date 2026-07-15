@@ -616,6 +616,7 @@ class AgentA5DeepLearning:
                 'alertes_modele':      _alertes_modele,
                 'dataframe':           df,
                 'branche':             sous_branche,
+                'col_cible':           col_cible,   # cible sur laquelle CES modeles DL sont ajustes (A6 filtre dessus)
                 'statut_rag':          statut_rag,
                 'modeles':             self.modeles,
                 'metriques':           self.metriques,

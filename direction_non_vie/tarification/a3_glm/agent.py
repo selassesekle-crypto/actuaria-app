@@ -373,6 +373,12 @@ class AgentA3GLM:
             )
             self.modeles['poisson']     = res_poisson['modele']
             self.metriques['poisson']   = res_poisson['metriques']
+            # CONTRAT GLM -> CIBLE (source unique, reutilisee par A6 pour ne
+            # comparer QUE des modeles ajustes sur la MEME cible) : Poisson =
+            # FREQUENCE (col_frequence, venue du plan), Gamma = SEVERITE (cout
+            # moyen par sinistre), Tweedie = PRIME PURE directe. Chaque agent
+            # DECLARE la cible de ses modeles dans sa sortie ; A6 ne redefinit rien.
+            self.metriques['poisson']['cible'] = col_frequence
             rapport['etapes'].append('glm_poisson')
             logger.info(
                 f"Poisson | AIC={res_poisson['metriques']['aic']:.1f} | "
@@ -386,6 +392,7 @@ class AgentA3GLM:
             )
             self.modeles['gamma']   = res_gamma['modele']
             self.metriques['gamma'] = res_gamma['metriques']
+            self.metriques['gamma']['cible'] = 'cout_moyen'   # severite (cout par sinistre)
             rapport['etapes'].append('glm_gamma')
             logger.info(
                 f"Gamma | AIC={res_gamma['metriques']['aic']:.1f} | "
@@ -400,6 +407,7 @@ class AgentA3GLM:
             )
             self.modeles['tweedie']   = res_tweedie['modele']
             self.metriques['tweedie'] = res_tweedie['metriques']
+            self.metriques['tweedie']['cible'] = 'prime_pure'   # prime pure directe
             rapport['etapes'].append('glm_tweedie')
 
             # ── ÉTAPE 5 : PRÉDICTIONS ─────────────────────────────────────────

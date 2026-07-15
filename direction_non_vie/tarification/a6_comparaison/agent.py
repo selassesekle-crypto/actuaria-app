@@ -276,12 +276,26 @@ class AgentA6Comparaison:
         rapport = {'etapes': [], 'alertes': []}
 
         try:
-            # ── ÉTAPE 1 : AGRÉGATION ──────────────────────────────────────────
+            # ── ÉTAPE 1 : AGRÉGATION (filtrée sur la cible d'A6) ──────────────
             logger.info("Étape 1/5 : Agrégation des résultats")
-            catalogue = self._agreger_resultats(result_a3, result_a4, result_a5)
+            catalogue, exclusions_cible = self._agreger_resultats(
+                result_a3, result_a4, result_a5, col_cible=col_cible
+            )
             rapport['etapes'].append('agregation')
             rapport['nb_modeles'] = len(catalogue)
-            logger.info(f"{len(catalogue)} modèles agrégés")
+            rapport['exclusions_cible'] = exclusions_cible
+            logger.info(f"{len(catalogue)} modèles agrégés (cible='{col_cible}')")
+            if exclusions_cible:
+                # Surfacé, jamais silencieux : on trace chaque modèle écarté pour
+                # cible non conforme (même exigence que exclusions_conformite).
+                logger.warning(
+                    f"{len(exclusions_cible)} modèle(s) écarté(s) de la comparaison "
+                    f"— cible ≠ '{col_cible}' : "
+                    + ", ".join(
+                        f"{x['modele']}(cible={x['cible_modele']})"
+                        for x in exclusions_cible
+                    )
+                )
 
             # ── ÉTAPE 2 : SCORE MULTICRITÈRES ─────────────────────────────────
             logger.info("Étape 2/5 : Score multicritères")
@@ -411,6 +425,7 @@ class AgentA6Comparaison:
                 'exclusions_conformite': _exclusions_conformite,
                 'alertes_conformite': _alertes_conformite,
                 'alertes_modele': _alertes_modele,
+                'exclusions_cible': exclusions_cible,
             }
             _excel_a6 = b''
             _word_a6  = b''
@@ -504,6 +519,10 @@ class AgentA6Comparaison:
                 'exclusions_conformite': _exclusions_conformite,
                 'alertes_conformite': _alertes_conformite,
                 'alertes_modele':     _alertes_modele,
+                # Modèles écartés de la comparaison pour cible non conforme
+                # (fréquence vs coût vs prime pure). Surfacé comme les exclusions
+                # de conformité : un écart silencieux est un défaut en soi.
+                'exclusions_cible':   exclusions_cible,
                 'courbes':            courbes,
                 'graphiques':            graphiques,
                 'validation_selection':  _val_sel_,
@@ -536,10 +555,24 @@ class AgentA6Comparaison:
         result_a3: Optional[Dict],
         result_a4: Optional[Dict],
         result_a5: Optional[Dict],
-    ) -> List[Dict]:
+        col_cible: Optional[str] = None,
+    ) -> Tuple[List[Dict], List[Dict]]:
         """
         Agrège tous les résultats des agents A3, A4, A5 en un catalogue unifié.
-        Chaque modèle devient une entrée avec ses métriques standardisées.
+        Chaque modèle devient une entrée avec ses métriques standardisées ET la
+        CIBLE sur laquelle il a été ajusté — cible DÉCLARÉE par l'agent producteur
+        (A3 : metriques[nom]['cible'] ; A4/A5 : result['col_cible']). A6 ne
+        redéfinit AUCUNE cible : il lit ce que chaque agent déclare.
+
+        Si ``col_cible`` est fourni, le catalogue est FILTRÉ : on ne garde que les
+        modèles ajustés sur CETTE cible. Comparer un Gini de fréquence à un Gini de
+        prime pure n'a aucun sens — c'était le bug de mélange de cibles (un
+        GLM_POISSON de fréquence pouvait « gagner » un classement coût). Les
+        modèles écartés ne sont JAMAIS supprimés en silence : ils sont renvoyés à
+        part (exclusions_cible) et surfacés dans le résultat, même principe que
+        exclusions_conformite.
+
+        Retour : (catalogue_retenu, exclusions_cible).
         """
         catalogue = []
 
@@ -553,6 +586,7 @@ class AgentA6Comparaison:
                     catalogue.append({
                         'modele':          f"GLM_{nom.upper()}",
                         'famille':         'GLM',
+                        'cible':           met.get('cible'),   # déclarée par A3 (poisson=freq, gamma=cout_moyen, tweedie=prime_pure)
                         'gini_test':       met.get('gini', 0),
                         'gini_train':      met.get('gini', 0),
                         'relativites':     relativites,  # exp(β) par variable
@@ -565,10 +599,12 @@ class AgentA6Comparaison:
 
         # ── RÉSULTATS A4 (ML) ─────────────────────────────────────────────────
         if result_a4 and result_a4.get('success'):
+            _cible_a4 = result_a4.get('col_cible')   # cible commune à tous les modèles A4
             for nom, met in result_a4.get('metriques', {}).items():
                 catalogue.append({
                     'modele':          f"ML_{nom.upper()}",
                     'famille':         'ML',
+                    'cible':           _cible_a4,
                     'gini_test':       met.get('gini_test', 0),
                     'gini_train':      met.get('gini_train', 0),
                     'rmse_test':       met.get('rmse_test', 999),
@@ -580,10 +616,12 @@ class AgentA6Comparaison:
 
         # ── RÉSULTATS A5 (DL) ─────────────────────────────────────────────────
         if result_a5 and result_a5.get('success'):
+            _cible_a5 = result_a5.get('col_cible')   # cible commune à tous les modèles A5
             for nom, met in result_a5.get('metriques', {}).items():
                 catalogue.append({
                     'modele':          f"DL_{nom.upper()}",
                     'famille':         'Deep Learning',
+                    'cible':           _cible_a5,
                     'gini_test':       met.get('gini_test', 0),
                     'gini_train':      met.get('gini_train', 0),
                     'rmse_test':       met.get('rmse_test', 999),
@@ -600,7 +638,40 @@ class AgentA6Comparaison:
                 "Vérifiez que A3, A4 ou A5 ont bien tourné."
             )
 
-        return catalogue
+        # ── FILTRE PAR CIBLE : ne comparer QUE des modèles sur la MÊME cible ──
+        # Sans filtre, un GLM_POISSON (fréquence) pouvait être classé dans une
+        # comparaison de coût — son Gini de fréquence face à des Gini de prime
+        # pure : mélange de cibles, comparaison invalide. On garde les modèles
+        # dont la cible == col_cible ; les autres sont ÉCARTÉS et SURFACÉS
+        # (jamais supprimés en silence). Si col_cible est None (appel legacy sans
+        # cible), on ne filtre pas — rétro-compatible.
+        exclusions_cible: List[Dict] = []
+        if col_cible is not None:
+            retenus = []
+            for e in catalogue:
+                c = e.get('cible')
+                if c == col_cible:
+                    retenus.append(e)
+                else:
+                    exclusions_cible.append({
+                        'modele':         e['modele'],
+                        'famille':        e['famille'],
+                        'agent_source':   e['agent_source'],
+                        'cible_modele':   c,          # cible réelle du modèle (None = indéterminée)
+                        'cible_attendue': col_cible,
+                        'raison': ('cible_indeterminee' if c is None
+                                   else 'cible_differente'),
+                    })
+            catalogue = retenus
+
+        if not catalogue:
+            raise ValueError(
+                f"Aucun modèle ajusté sur la cible '{col_cible}'. "
+                f"{len(exclusions_cible)} modèle(s) écarté(s) pour cible non conforme. "
+                "Vérifiez qu'A3/A4/A5 ont été lancés sur la même cible qu'A6."
+            )
+
+        return catalogue, exclusions_cible
 
     # ══════════════════════════════════════════════════════════════════════════
     # ÉTAPE 2 : SCORE MULTICRITÈRES

@@ -840,6 +840,7 @@ class AgentA4ML:
                 'success':         True,
                 'dataframe':       df,
                 'branche':         sous_branche,
+                'col_cible':       col_cible,   # cible sur laquelle CES modeles ML sont ajustes (A6 filtre dessus)
                 'statut_rag':      statut_rag,
                 'modeles':         self.modeles,
                 'metriques':       self.metriques,
