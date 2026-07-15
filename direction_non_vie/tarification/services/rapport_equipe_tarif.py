@@ -24,6 +24,7 @@ from __future__ import annotations
 import io, logging, re
 from core.conformite_reglementaire import (
     avertissement_walk_forward, synthese_exclusions, synthese_alertes_experience,
+    synthese_modele_dl,
 )
 from datetime import datetime
 from typing import Dict, List, Optional, Any
@@ -334,6 +335,17 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
         _kpi(ws5, r, "Environnement", at6.get('environnement', 'N/A')); r += 1
         _kpi(ws5, r, "Conforme", "✓ Oui" if at6.get('gouvernance_ok') else "✗ Non",
              statut="VERT" if at6.get('gouvernance_ok') else "AMBRE"); r += 1
+        # Validation humaine d'un modèle Deep Learning en production (2026-07) —
+        # source UNIQUE partagée avec Excel A6 / Word / HTML. Ne s'affiche que si
+        # le modèle retenu est un DL ; sinon rien (pas de bruit).
+        _synth_dl6 = synthese_modele_dl(
+            r6.get('modele_production') if isinstance(r6, dict) else None,
+            r6.get('valide_par_actuaire_dl') if isinstance(r6, dict) else None,
+            at6.get('timestamp'))
+        if _synth_dl6:
+            _kpi(ws5, r, "Modèle Deep Learning — validation actuarielle", _synth_dl6,
+                 statut=("AMBRE" if "ACTION REQUISE" in _synth_dl6 else "VERT"),
+                 wrap=True); r += 1
 
         # ── Onglet 6 : Audit trail consolidé ──────────────────────────────────
         ws6 = wb.create_sheet("6-Audit Trail Consolidé")

@@ -977,6 +977,50 @@ def synthese_exclusions(exclusions: Optional[dict]) -> Optional[str]:
     return "\n".join(lignes)
 
 
+def synthese_modele_dl(modele_production: Optional[dict],
+                       valide_par: Optional[str],
+                       date_validation: Optional[str] = None) -> Optional[str]:
+    """
+    SOURCE UNIQUE — texte à afficher dans TOUT livrable (Excel, Word, HTML,
+    rapport d'équipe) quand le modèle retenu en production appartient à la
+    famille Deep Learning. Retourne None sinon (aucune ligne à afficher).
+
+    Pourquoi (garde-fou délibéré, 2026-07) : un modèle Deep Learning (CANN,
+    TabNet) est une boîte noire. Même sain et bien ancré, sa mise en production
+    demande une VALIDATION ACTUARIELLE HUMAINE explicite — délibérée, indépendante
+    de tout garde-fou automatique (fidélité de recalibration walk-forward, ancrage
+    du CANN). Ce qui n'est que dans un champ technique n'existe pas pour l'actuaire
+    qui relit le dossier plus tard : la validation (ou son absence) doit être
+    VISIBLE dans le rapport, au même titre que les exclusions de conformité.
+
+    La trace « validé » est purement FACTUELLE — qui a validé, et quand — au même
+    titre que profil_valide_par ailleurs dans le système. Elle ne qualifie PAS ce
+    que la validation engage (pas de mention de responsabilité juridique). La date
+    RÉUTILISE l'horodatage du dossier (audit_trail['timestamp']) — aucune date
+    n'est générée ici.
+
+    Deux états :
+      · non validé (valide_par=None) → ⚠ ACTION REQUISE.
+      · validé (valide_par=nom)      → ✔ trace factuelle (qui / quand).
+    """
+    mp = modele_production or {}
+    if str(mp.get('famille', '')) != 'Deep Learning':
+        return None
+    nom = mp.get('modele', 'Deep Learning')
+    if valide_par:
+        # Date lisible JJ/MM/AAAA à partir de l'horodatage EXISTANT du dossier
+        # (ISO 'AAAA-MM-JJThh:mm:ss'). On ne génère aucune date : on réutilise.
+        _jour = str(date_validation or '').split('T')[0]     # 'AAAA-MM-JJ'
+        _p = _jour.split('-')
+        _date = f"{_p[2]}/{_p[1]}/{_p[0]}" if len(_p) == 3 else _jour
+        _le = f" le {_date}" if _date else ""
+        return (f"✔ Modèle Deep Learning retenu en production ({nom}) — "
+                f"validé par « {valide_par} »{_le}.")
+    return (f"⚠ ACTION REQUISE — modèle Deep Learning retenu en production ({nom}) : "
+            f"validation actuarielle humaine requise avant déploiement, quel que soit "
+            f"le statut RAG. Renseigner valide_par_actuaire_dl (nom de l'actuaire).")
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  CONTRÔLE PAR L'EFFET — LA FIN DE LA COURSE AUX NOMS DE COLONNES
 # ══════════════════════════════════════════════════════════════════════════════

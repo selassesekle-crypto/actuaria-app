@@ -23,6 +23,7 @@ from __future__ import annotations
 import base64, io, logging, os, re
 from core.conformite_reglementaire import (
     avertissement_walk_forward, synthese_exclusions, synthese_alertes_experience,
+    synthese_modele_dl,
 )
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
@@ -208,6 +209,12 @@ def _construire_contexte_tarif(
         "=== SINISTRALITÉ PASSÉE CONSERVÉE (à vérifier par l'actuaire) ===",
         (synthese_alertes_experience(result_a6.get('alertes_conformite') if result_a6 else None)
          or "Aucune variable d'expérience passée à signal atypique."),
+        "",
+        "=== MODÈLE DEEP LEARNING EN PRODUCTION (validation humaine) ===",
+        (synthese_modele_dl(result_a6.get('modele_production') if result_a6 else None,
+                            result_a6.get('valide_par_actuaire_dl') if result_a6 else None,
+                            at6.get('timestamp'))
+         or "Aucun modèle Deep Learning retenu : pas de validation humaine spécifique requise."),
         "",
         "=== GOUVERNANCE DU PROFIL DE PONDÉRATION ===",
         f"Profil retenu : {at6.get('profil_ponderation','—')} | Environnement={at6.get('environnement','—')}",

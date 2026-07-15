@@ -14,6 +14,7 @@ ONGLETS PAR AGENT :
 import io
 from core.conformite_reglementaire import (
     avertissement_walk_forward, synthese_exclusions, synthese_alertes_experience,
+    synthese_modele_dl,
 )
 import logging
 from datetime import datetime
@@ -759,6 +760,16 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
         if _synth_exc:
             _kpi(ws5, r, "Colonnes écartées de la matrice X", _synth_exc,
                  statut=("AMBRE" if "ACTION REQUISE" in _synth_exc else "VERT"),
+                 wrap=True); r += 1
+        # ── MODÈLE DEEP LEARNING EN PRODUCTION — validation humaine (2026-07) ─
+        # Même exigence de visibilité qu'une exclusion : un DL en production ne
+        # doit pas être un fait invisible à l'actuaire qui relit le dossier.
+        _synth_dl = synthese_modele_dl(result_a6.get('modele_production'),
+                                       result_a6.get('valide_par_actuaire_dl'),
+                                       audit_trail.get('timestamp'))
+        if _synth_dl:
+            _kpi(ws5, r, "Modèle Deep Learning — validation actuarielle", _synth_dl,
+                 statut=("AMBRE" if "ACTION REQUISE" in _synth_dl else "VERT"),
                  wrap=True); r += 1
         # Alertes d'expérience passée conservée (audit V13 / B7). Ce n'est pas une
         # exclusion : c'est une VÉRIFICATION demandée à l'actuaire. Ce qui n'est

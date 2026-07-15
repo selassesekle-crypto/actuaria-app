@@ -200,6 +200,7 @@ class AgentA6Comparaison:
         aide_decision:       bool = True,
         profil_valide_par:   Optional[str] = None,
         environnement:       str = 'production',
+        valide_par_actuaire_dl: Optional[str] = None,
         generer_rapport_equipe: bool = True,
         formats_equipe:      Optional[List[str]] = None,
     ) -> Dict[str, Any]:
@@ -342,6 +343,7 @@ class AgentA6Comparaison:
                 profil_valide_par=profil_valide_par,
                 environnement=environnement,
                 backtest=backtest,
+                valide_par_actuaire_dl=valide_par_actuaire_dl,
             )
             commentaire = self._commenter_actuaire_senior(
                 classement, modele_production, sous_branche,
@@ -375,6 +377,10 @@ class AgentA6Comparaison:
                 'profil_ponderation': _nom_profil_retenu,
                 'profil_valide_par':  profil_valide_par,
                 'environnement':      environnement,
+                # Validation humaine d'un modèle Deep Learning en production
+                # (garde-fou délibéré) : nom de l'actuaire validateur, ou None.
+                # Tracé ici ET rendu dans les 3 rapports via synthese_modele_dl.
+                'valide_par_actuaire_dl': valide_par_actuaire_dl,
                 'gouvernance_ok':     not (
                     environnement == 'production' and profil_valide_par is None
                 ),
@@ -412,6 +418,18 @@ class AgentA6Comparaison:
                         _r_src.get('alertes_conformite') or {})
                     _alertes_modele.extend(_r_src.get('alertes_modele') or [])
 
+            # ── ALERTE A6 : modèle Deep Learning retenu en production ─────────
+            # Garde-fou DÉLIBÉRÉ (point 1), distinct du plafond wf-fidélité
+            # incident. Logique isolée dans _alerte_dl_production() pour être
+            # testable sans rejouer tout un run. L'alerte « requise » se tait une
+            # fois valide_par_actuaire_dl renseigné (l'action est faite) ; la
+            # validation reste tracée dans audit_trail ET rendue dans les 3
+            # rapports (synthese_modele_dl).
+            _alerte_dl = self._alerte_dl_production(
+                modele_production, valide_par_actuaire_dl)
+            if _alerte_dl:
+                _alertes_modele.append(_alerte_dl)
+
             # _tmp_a6 inclut commentaire, courbes ET audit_trail — disponibles ici
             _tmp_a6 = {
                 'success': True, 'statut_rag': statut_rag,
@@ -426,6 +444,7 @@ class AgentA6Comparaison:
                 'alertes_conformite': _alertes_conformite,
                 'alertes_modele': _alertes_modele,
                 'exclusions_cible': exclusions_cible,
+                'valide_par_actuaire_dl': valide_par_actuaire_dl,
             }
             _excel_a6 = b''
             _word_a6  = b''
@@ -523,6 +542,7 @@ class AgentA6Comparaison:
                 # (fréquence vs coût vs prime pure). Surfacé comme les exclusions
                 # de conformité : un écart silencieux est un défaut en soi.
                 'exclusions_cible':   exclusions_cible,
+                'valide_par_actuaire_dl': valide_par_actuaire_dl,
                 'courbes':            courbes,
                 'graphiques':            graphiques,
                 'validation_selection':  _val_sel_,
@@ -1322,6 +1342,31 @@ class AgentA6Comparaison:
     # STATUT RAG & COMMENTAIRES
     # ══════════════════════════════════════════════════════════════════════════
 
+    @staticmethod
+    def _alerte_dl_production(
+        modele_production:      Optional[Dict],
+        valide_par_actuaire_dl: Optional[str],
+    ) -> Optional[Dict]:
+        """
+        Garde-fou DÉLIBÉRÉ (point 1) : dès qu'un modèle de la famille Deep
+        Learning est retenu en production SANS validation actuarielle humaine
+        explicite, renvoie l'alerte à surfacer dans ALERTES_MODELE — sinon None.
+        L'alerte « requise » se tait une fois valide_par_actuaire_dl renseigné
+        (l'action est faite) ; la validation reste, elle, tracée dans audit_trail
+        et rendue dans les rapports (synthese_modele_dl). Isolé pour testabilité.
+        """
+        mp = modele_production or {}
+        if str(mp.get('famille', '')) != 'Deep Learning' or valide_par_actuaire_dl:
+            return None
+        return {
+            'modele': mp.get('modele', 'DL'),
+            'severite': 'AMBRE',
+            'code': 'dl_validation_humaine_requise',
+            'message': "Modele Deep Learning retenu en production - validation "
+                       "actuarielle humaine requise avant deploiement, quel que "
+                       "soit le statut RAG.",
+        }
+
     def _calculer_statut_rag(
         self,
         modele_production:  Dict,
@@ -1329,6 +1374,7 @@ class AgentA6Comparaison:
         profil_valide_par:  Optional[str] = None,
         environnement:      str = 'production',
         backtest:           Optional[Dict] = None,
+        valide_par_actuaire_dl: Optional[str] = None,
     ) -> str:
         """
         Statut RAG basé sur le score global du modèle de production.
@@ -1438,6 +1484,34 @@ class AgentA6Comparaison:
                 "probable : GLM Tweedie (A3) indisponible. Statut plafonné à AMBRE."
             )
 
+        # ── CONFIRMATION HUMAINE D'UN MODÈLE DEEP LEARNING (garde-fou délibéré) ─
+        # Indépendant, PAR CONCEPTION, du plafond wf-fidélité (_wf_fidele_ok) : même
+        # si demain le walk-forward sait recalibrer fidèlement un DL
+        # (modele_recalibre_fidele=True), un modèle de la famille Deep Learning
+        # retenu en production reste une boîte noire dont le déploiement exige une
+        # validation actuarielle humaine explicite. Fail-safe comme profil_valide_par :
+        # valide_par_actuaire_dl=None par défaut → plafond AMBRE tant qu'un actuaire
+        # n'a pas nommément confirmé.
+        # DISTINCT de _cann_ancre_ok : celui-ci vise un CANN DÉGRADÉ (non
+        # interprétable) ; ici le DL peut être parfaitement sain (CANN bien ancré,
+        # TabNet) — le motif est l'exigence de confirmation humaine, pas un défaut du
+        # modèle. Les deux plafonds se déclenchent indépendamment (cf. le cas d'un
+        # CANN dégradé MAIS confirmé : _dl_confirme_ok repasse True, _cann_ancre_ok
+        # reste False — la confirmation humaine ne blanchit pas la non-interprétabilité).
+        _dl_confirme_ok = not (
+            environnement == 'production'
+            and str(modele_production.get('famille', '')) == 'Deep Learning'
+            and not valide_par_actuaire_dl
+        )
+        if not _dl_confirme_ok:
+            logger.warning(
+                "[CONFIRMATION DL] Le modèle de production est un modèle Deep "
+                f"Learning ({modele_production.get('modele', 'DL')}) : validation "
+                "actuarielle humaine explicite requise (valide_par_actuaire_dl) "
+                "avant tout VERT, indépendamment de la fidélité de recalibration "
+                "walk-forward. Statut plafonné à AMBRE."
+            )
+
         # ── RÉSULTAT DU WALK-FORWARD (audit V10, BLOQUANT B2) ─────────────────
         # Le gate vérifiait que le walk-forward avait EU LIEU (`disponible`) et
         # qu'il portait sur le bon modèle (`modele_recalibre_fidele`) — mais
@@ -1527,7 +1601,7 @@ class AgentA6Comparaison:
 
         if (score >= 0.60 and gini >= 0.15 and _gouvernance_ok
                 and _backtest_ok and _wf_fidele_ok and _wf_resultat_ok
-                and _gini_plausible and _cann_ancre_ok):
+                and _gini_plausible and _cann_ancre_ok and _dl_confirme_ok):
             return 'VERT'
         # ── ANTI-SÉLECTION : DISQUALIFIANT (auto-audit 11/07/2026) ────────────
         # Un Gini NÉGATIF signifie que le modèle discrimine À L'ENVERS : il
