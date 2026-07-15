@@ -611,6 +611,32 @@ class TestInvariant_AntiSelectionVisibleEtDisqualifiante(unittest.TestCase):
             backtest=bt), 'VERT')
         print("    INV-8c Anti-sélection → ROUGE · bon modèle → VERT ✅")
 
+    def test_cann_non_ancre_plafonne_a_ambre(self):
+        """Un CANN NON ancré (glm_gele=False) retenu en production n'est pas un
+        vrai CANN Wüthrich : sa couche GLM est librement entraînable, donc il
+        n'est PAS interprétable (audit S2). Le livrer en le présentant comme un
+        CANN interprétable est un défaut de gouvernance de MÊME CLASSE que la
+        recalibration infidèle → le gate doit plafonner à AMBRE. Un CANN ancré
+        (glm_gele=True) impeccable, lui, reste certifiable VERT (le plafond ne
+        doit se déclencher QUE sur le mode dégradé)."""
+        bt = {'disponible': True, 'modele_recalibre_fidele': True,
+              'gini_wf_moyen': 0.2, 'ae_ratio': 1.0, 'ae_moyen_wf': 1.0,
+              'n_fenetres_rouge': 0, 'stabilite_wf': '🟢 Stable'}
+        base = {'modele': 'DL_CANN', 'score_global': 0.95, 'gini_test': 0.30}
+        # Tout est parfait SAUF l'ancrage du GLM → plafond AMBRE.
+        degrade = {**base, 'glm_gele': False}
+        self.assertEqual(self.a6._calculer_statut_rag(
+            degrade, [degrade], profil_valide_par='X', environnement='production',
+            backtest=bt), 'AMBRE',
+            "CANN non ancré (glm_gele=False) retenu en production → AMBRE.")
+        # Contrôle : le CANN ancré, toutes choses égales, reste VERT.
+        ancre = {**base, 'glm_gele': True}
+        self.assertEqual(self.a6._calculer_statut_rag(
+            ancre, [ancre], profil_valide_par='X', environnement='production',
+            backtest=bt), 'VERT',
+            "CANN ancré (glm_gele=True) impeccable → VERT (pas de faux plafond).")
+        print("    INV-8d CANN non ancré → AMBRE · CANN ancré → VERT ✅")
+
 
 class TestInvariant_ControleParLEffet(unittest.TestCase):
     """

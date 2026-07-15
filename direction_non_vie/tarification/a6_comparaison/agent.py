@@ -389,12 +389,14 @@ class AgentA6Comparaison:
             # Pro détruit, −17,4 % de Gini, sans que rien ne l'indique).
             _exclusions_conformite = {}
             _alertes_conformite = {}
+            _alertes_modele = []
             for _r_src in (result_a3, result_a4, result_a5):
                 if isinstance(_r_src, dict):
                     _exclusions_conformite.update(
                         _r_src.get('exclusions_conformite') or {})
                     _alertes_conformite.update(
                         _r_src.get('alertes_conformite') or {})
+                    _alertes_modele.extend(_r_src.get('alertes_modele') or [])
 
             # _tmp_a6 inclut commentaire, courbes ET audit_trail — disponibles ici
             _tmp_a6 = {
@@ -408,6 +410,7 @@ class AgentA6Comparaison:
                 'audit_trail': _audit_trail_a6,  # Gouvernance exposée aux exports
                 'exclusions_conformite': _exclusions_conformite,
                 'alertes_conformite': _alertes_conformite,
+                'alertes_modele': _alertes_modele,
             }
             _excel_a6 = b''
             _word_a6  = b''
@@ -500,6 +503,7 @@ class AgentA6Comparaison:
                 # détruit (−17,4 % de Gini) sans qu'aucun rapport ne l'indique.
                 'exclusions_conformite': _exclusions_conformite,
                 'alertes_conformite': _alertes_conformite,
+                'alertes_modele':     _alertes_modele,
                 'courbes':            courbes,
                 'graphiques':            graphiques,
                 'validation_selection':  _val_sel_,
@@ -587,6 +591,7 @@ class AgentA6Comparaison:
                     'nb_vars':         0,
                     'agent_source':    'A5',
                     'interpretabilite': INTERPRETABILITE.get(nom, 0.7),
+                    'glm_gele':        met.get('glm_gele'),   # CANN : True/False ; TabNet : None
                 })
 
         if not catalogue:
@@ -1340,6 +1345,28 @@ class AgentA6Comparaison:
                 "Statut plafonné à AMBRE en environnement 'production'."
             )
 
+        # ── ANCRAGE DU CANN (Wüthrich) — audit 2026-07 ────────────────────────
+        # Un CANN dont la couche GLM n'est PAS gelée (glm_gele=False) n'est pas un
+        # vrai CANN : c'est un réseau libre, NON interprétable (audit S2 / ACPR).
+        # Il survient quand A3 ne fournit pas de GLM Tweedie et qu'A5 tourne quand
+        # même — A5 le signalait en log + métrique, mais le gate ne le lisait pas.
+        # Livrer ce CANN dégradé en production, présenté comme un CANN
+        # interprétable, est un défaut de gouvernance de MÊME CLASSE que la
+        # recalibration infidèle : on ne certifie pas un modèle non interprétable.
+        # Plafond AMBRE si le modèle de PRODUCTION est ce CANN non ancré.
+        _cann_ancre_ok = not (
+            environnement == 'production'
+            and str(modele_production.get('modele', '')).upper().endswith('CANN')
+            and modele_production.get('glm_gele') is False
+        )
+        if not _cann_ancre_ok:
+            logger.warning(
+                "[INTERPRÉTABILITÉ] Le modèle de production est un CANN NON ancré "
+                "(glm_gele=False) : couche GLM librement entraînable, ce n'est pas "
+                "un CANN Wüthrich et il n'est pas interprétable (audit S2). Cause "
+                "probable : GLM Tweedie (A3) indisponible. Statut plafonné à AMBRE."
+            )
+
         # ── RÉSULTAT DU WALK-FORWARD (audit V10, BLOQUANT B2) ─────────────────
         # Le gate vérifiait que le walk-forward avait EU LIEU (`disponible`) et
         # qu'il portait sur le bon modèle (`modele_recalibre_fidele`) — mais
@@ -1429,7 +1456,7 @@ class AgentA6Comparaison:
 
         if (score >= 0.60 and gini >= 0.15 and _gouvernance_ok
                 and _backtest_ok and _wf_fidele_ok and _wf_resultat_ok
-                and _gini_plausible):
+                and _gini_plausible and _cann_ancre_ok):
             return 'VERT'
         # ── ANTI-SÉLECTION : DISQUALIFIANT (auto-audit 11/07/2026) ────────────
         # Un Gini NÉGATIF signifie que le modèle discrimine À L'ENVERS : il

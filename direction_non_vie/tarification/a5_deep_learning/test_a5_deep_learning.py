@@ -169,6 +169,29 @@ class TestA5DeepLearning(unittest.TestCase):
         print(f"    ST7 Classement ✅ | {len(classement)} modèles | "
               f"best={best.get('modele','?')} Gini={best.get('gini_test',0):.4f}")
 
+    def test_cann_non_ancre_surface_une_alerte(self):
+        """Mode DÉGRADÉ : si A3 ne fournit pas de GLM Tweedie (r_a3 modeles={}),
+        le CANN tourne sans ancrage (glm_gele=False) — ce n'est pas un vrai CANN
+        Wüthrich. A5 doit le SURFACER dans son resultat (alertes_modele), pas
+        seulement en log — c'est ce qui permet a A6 de plafonner le gate."""
+        if not TORCH_OK:
+            self.skipTest("PyTorch absent")
+        from direction_non_vie.tarification.a5_deep_learning.agent import AgentA5DeepLearning
+        agent = AgentA5DeepLearning(models_path='/tmp', audit_path='/tmp', verbose=False)
+        r_a2 = _make_r_a2(4000)
+        r_a3 = _make_r_a3()               # SANS df -> modeles={} -> AUCUN ancrage
+        np.random.seed(1); torch.manual_seed(1)
+        r = agent.run(result_a2=r_a2, result_a3=r_a3, col_cible='nb_sinistres',
+                      n_epochs=5, batch_size=128, generer_graphiques=False)
+        self.assertFalse(r['metriques']['cann'].get('glm_gele', True),
+            "CANN sans GLM d'ancrage doit avoir glm_gele=False (mode degrade).")
+        alertes = r.get('alertes_modele', [])
+        self.assertTrue(
+            any(a.get('code') == 'cann_glm_non_ancre' for a in alertes),
+            "A5 doit surfacer l'alerte CANN non ancre dans alertes_modele "
+            "(pas seulement un WARNING en log que personne ne lit).")
+        print(f"    B2-A5 Mode dégradé surfacé → {len(alertes)} alerte(s) modèle ✅")
+
 
 
 

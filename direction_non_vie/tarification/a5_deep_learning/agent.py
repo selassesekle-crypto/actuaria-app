@@ -587,6 +587,24 @@ class AgentA5DeepLearning:
                 except Exception as e_xl5:
                     logger.warning(f"Excel A5 échoué : {e_xl5}")
 
+            # ── ALERTE MODÈLE : CANN non ancré (glm_gele=False) ───────────────
+            # Surfacée dans le RÉSULTAT, pas seulement en log (personne ne lit
+            # les logs). Si le CANN a tourné sans GLM Tweedie d'A3, sa couche GLM
+            # reste librement entraînable : ce n'est PAS un CANN Wüthrich, il
+            # n'est pas interprétable (audit S2). A6 lit ce flag pour plafonner
+            # le gate global (même logique que la recalibration infidèle).
+            _alertes_modele = []
+            _met_cann = self.metriques.get('cann', {})
+            if 'gini_test' in _met_cann and not _met_cann.get('glm_gele', False):
+                _alertes_modele.append({
+                    'modele': 'CANN', 'severite': 'AMBRE',
+                    'code': 'cann_glm_non_ancre',
+                    'message': "CANN NON ancre (glm_gele=False) : couche GLM "
+                               "librement entrainable, ce n'est pas un CANN "
+                               "Wuthrich, non interpretable (audit S2). Cause : "
+                               "GLM Tweedie (A3) absent/indisponible.",
+                })
+
             return {
                 'success':             True,
                 # Exclusions de conformité tracées par MatriceX (audit V11 / I5) :
@@ -595,6 +613,7 @@ class AgentA5DeepLearning:
                 # détruit, −17,4 % de Gini, sans que rien ne l'indique nulle part).
                 'exclusions_conformite': getattr(self, 'exclusions_conformite', {}),
                 'alertes_conformite': getattr(self, 'alertes_conformite', {}),
+                'alertes_modele':      _alertes_modele,
                 'dataframe':           df,
                 'branche':             sous_branche,
                 'statut_rag':          statut_rag,
