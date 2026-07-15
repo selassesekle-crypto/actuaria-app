@@ -16,11 +16,22 @@ famille_severite: gamma
 facteurs:
   # valeur_marchandise — grandeur monetaire etalee sur plusieurs ordres de grandeur,
   # declaree en LOG (meme mecanisme que auto/valeur_venale, rcpro/ca_annuel_eur,
-  # decennale/montant_travaux_eur : produit le brut ET log_valeur_marchandise).
-  # Pilote surtout la SEVERITE.
+  # decennale/montant_travaux_eur : produit le brut ET log_valeur_marchandise ; le
+  # GLM charge le signal sur le log, le brut est inerte). Pilote surtout la SEVERITE.
+  # ⚠ PRIOR OUVERT (valeur -> FREQUENCE) : la verification synthetique injecte un
+  # +freq MILD (attractivite au vol des marchandises de valeur). L'effet SEVERITE
+  # est incontestable ; l'effet FREQUENCE est notre hypothese, A CONFIRMER sur vraie
+  # donnee cargo (meme reserve que montant->frequence en decennale). Ne pas traiter
+  # le synthetique comme une preuve.
   - {nom: valeur_marchandise, type: continu, transformation: log}
   # mode_transport — NOMINAL : profils de peril distincts (mer=mouille/avarie
   # commune, air=vol/valeur, route=accident/vol), aucun axe monotone -> one_hot.
+  # ⚠ PRIOR OUVERT (ordre de FREQUENCE des modes) : la verification synthetique
+  # injecte Routier=baseline, Maritime au-dessus, Aerien en dessous. Mais le VOL
+  # ROUTIER est un driver de sinistralite MAJEUR en transport reel : l'ordre vrai
+  # des frequences par mode peut NE PAS refleter cet ordre injecte. A CONFIRMER sur
+  # vraie donnee marche (les relativites one-hot recouvrees ne valent que sur le
+  # portefeuille synthetique).
   - nom: mode_transport
     type: categoriel
     encodage: one_hot
@@ -55,8 +66,15 @@ facteurs:
   # police ; nb_expeditions_an est alors une CARACTERISTIQUE de risque (volume),
   # PAS la base d'exposition — sinon double-comptage avec exposition (parente B9).
   # Le garde-fou B9 ne bloque que la colonne 'exposition' declaree : ce choix est
-  # ACTUARIEL, pas moteur. Coefficient attendu fortement positif (volume).
-  - {nom: nb_expeditions_an, type: continu}
+  # ACTUARIEL, pas moteur.
+  # DECLARE EN LOG (transformation:log) car le volume est ~PROPORTIONNEL (chaque
+  # expedition ~ un tirage de risque). La verification synthetique (2026-07-15) l'a
+  # montre sur la plage 5->500 : le LINEAIRE aplatit le bas (5->20 : x1,04 recouvre
+  # vs x3,25 vrai) et sous-recouvre partout (5->500 : x6 vs x50) ; le LOG restitue
+  # le milieu de plage quasi exactement (20->400 : x12,5 vs x12,8 vrai) et corrige
+  # fortement le reste. Produit nb_expeditions_an ET log_nb_expeditions_an (le GLM
+  # charge le signal sur le log ; meme mecanisme brut+log que les grandeurs monetaires).
+  - {nom: nb_expeditions_an, type: continu, transformation: log}
   # sinistres_2ans_anterieurs — anteriorite legitime, connue a la souscription,
   # exemptee du controle par l'effet (comme les autres LoB).
   - {nom: sinistres_2ans_anterieurs, type: continu, anteriorite: true,
