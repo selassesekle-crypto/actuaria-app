@@ -1,0 +1,63 @@
+# ActuarIA — Plan de tarification TRANSPORT DE MARCHANDISES (assurance cargo /
+# marchandises transportees). LoB INEDITE : le moteur ne l'a JAMAIS vue, aucune
+# ligne de code ne la mentionne. Ce seul fichier doit suffire a la tarifer — LE
+# test de verite du chantier declaratif (aucune ligne de core/ ni d'agent
+# touchee). Plan signe, versionne, opposable.
+lob: marchandises_transportees
+version: "1.0"
+auteur: "S. Sekle, IA"
+exposition: exposition
+cible_frequence: nb_sinistres
+cible_cout: cout_total_sinistres
+# Queue lourde possible (perte totale de gros lots de valeur) : gamma par defaut,
+# l'ecretement de pipeline_complet borne les graves. lognormal/inverse_gaussienne
+# declarables ici si la vraie donnee montre une queue qui le justifie.
+famille_severite: gamma
+facteurs:
+  # valeur_marchandise — grandeur monetaire etalee sur plusieurs ordres de grandeur,
+  # declaree en LOG (meme mecanisme que auto/valeur_venale, rcpro/ca_annuel_eur,
+  # decennale/montant_travaux_eur : produit le brut ET log_valeur_marchandise).
+  # Pilote surtout la SEVERITE.
+  - {nom: valeur_marchandise, type: continu, transformation: log}
+  # mode_transport — NOMINAL : profils de peril distincts (mer=mouille/avarie
+  # commune, air=vol/valeur, route=accident/vol), aucun axe monotone -> one_hot.
+  - nom: mode_transport
+    type: categoriel
+    encodage: one_hot
+    modalites: [Routier, Maritime, Aerien]
+    reference: Routier
+  # zone_destination — ordre de risque plausible (UE<Hors_UE<Zone_risque) mais pas
+  # de pas uniforme -> one_hot (chaque zone sa relativite, plus sur que label).
+  - nom: zone_destination
+    type: categoriel
+    encodage: one_hot
+    modalites: [UE, Hors_UE, Zone_risque]
+    reference: UE
+  # nature_marchandise — NOMINALE, one_hot OBLIGATOIRE. Lecon csp/secteur_activite
+  # (2026-07) : risque multi-dimensionnel NON-monotone (electronique=vol,
+  # perissable=avarie/delai, dangereuse=catastrophe, fragile=casse). Un label
+  # ajusterait UNE pente sur des codes arbitraires et ECRASERAIT/INVERSERAIT le
+  # signal. One_hot = chaque nature sa relativite propre.
+  - nom: nature_marchandise
+    type: categoriel
+    encodage: one_hot
+    modalites: [General, Electronique, Perissable, Dangereuse, Fragile]
+    reference: General
+  # emballage — qualite d'emballage/conditionnement, un des tout premiers
+  # predicteurs de DOMMAGE en transport. one_hot (ordinal defendable, one_hot plus sur).
+  - nom: emballage
+    type: categoriel
+    encodage: one_hot
+    modalites: [Standard, Renforce, Conteneur]
+    reference: Standard
+  # nb_expeditions_an — facteur de VOLUME. CONTRAT SEMANTIQUE (montage a) :
+  # nb_sinistres est compte PAR ANNEE-POLICE et exposition = fraction d'annee-
+  # police ; nb_expeditions_an est alors une CARACTERISTIQUE de risque (volume),
+  # PAS la base d'exposition — sinon double-comptage avec exposition (parente B9).
+  # Le garde-fou B9 ne bloque que la colonne 'exposition' declaree : ce choix est
+  # ACTUARIEL, pas moteur. Coefficient attendu fortement positif (volume).
+  - {nom: nb_expeditions_an, type: continu}
+  # sinistres_2ans_anterieurs — anteriorite legitime, connue a la souscription,
+  # exemptee du controle par l'effet (comme les autres LoB).
+  - {nom: sinistres_2ans_anterieurs, type: continu, anteriorite: true,
+     commentaire: "Sinistralite des 2 dernieres annees — connue a la souscription"}
