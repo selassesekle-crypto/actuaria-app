@@ -25,6 +25,7 @@ from core.conformite_reglementaire import (
     avertissement_walk_forward, synthese_exclusions, synthese_alertes_experience,
     synthese_modele_dl,
 )
+from core.qualite_donnees import synthese_qualite_donnees
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
@@ -215,6 +216,10 @@ def _construire_contexte_tarif(
                             result_a6.get('valide_par_actuaire_dl') if result_a6 else None,
                             at6.get('timestamp'))
          or "Aucun modèle Deep Learning retenu : pas de validation humaine spécifique requise."),
+        "",
+        "=== QUALITÉ DES DONNÉES (traitements de la couche générique, chemin déclaratif) ===",
+        (synthese_qualite_donnees(result_a6.get('rapport_qualite') if result_a6 else None)
+         or "Aucun traitement de qualité de données à signaler (ou couche non exécutée sur ce chemin)."),
         "",
         "=== GOUVERNANCE DU PROFIL DE PONDÉRATION ===",
         f"Profil retenu : {at6.get('profil_ponderation','—')} | Environnement={at6.get('environnement','—')}",

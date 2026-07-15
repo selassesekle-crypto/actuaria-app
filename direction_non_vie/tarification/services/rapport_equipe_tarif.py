@@ -26,6 +26,7 @@ from core.conformite_reglementaire import (
     avertissement_walk_forward, synthese_exclusions, synthese_alertes_experience,
     synthese_modele_dl,
 )
+from core.qualite_donnees import synthese_qualite_donnees
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
@@ -345,6 +346,15 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
         if _synth_dl6:
             _kpi(ws5, r, "Modèle Deep Learning — validation actuarielle", _synth_dl6,
                  statut=("AMBRE" if "ACTION REQUISE" in _synth_dl6 else "VERT"),
+                 wrap=True); r += 1
+        # Qualité des données (couche générique, chemin déclaratif) — source UNIQUE
+        # partagée avec Excel A6 / Word / HTML. Rien affiché si la couche n'a pas tourné.
+        _synth_q6 = synthese_qualite_donnees(
+            r6.get('rapport_qualite') if isinstance(r6, dict) else None)
+        if _synth_q6:
+            _kpi(ws5, r, "Qualité des données — traitements appliqués", _synth_q6,
+                 statut=("AMBRE" if ("EXCLUE" in _synth_q6 or "SIGNALEE" in _synth_q6
+                                     or "BLOQUE" in _synth_q6) else "VERT"),
                  wrap=True); r += 1
 
         # ── Onglet 6 : Audit trail consolidé ──────────────────────────────────

@@ -16,6 +16,7 @@ from core.conformite_reglementaire import (
     avertissement_walk_forward, synthese_exclusions, synthese_alertes_experience,
     synthese_modele_dl,
 )
+from core.qualite_donnees import synthese_qualite_donnees
 import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Any
@@ -770,6 +771,16 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
         if _synth_dl:
             _kpi(ws5, r, "Modèle Deep Learning — validation actuarielle", _synth_dl,
                  statut=("AMBRE" if "ACTION REQUISE" in _synth_dl else "VERT"),
+                 wrap=True); r += 1
+        # ── QUALITÉ DES DONNÉES (couche générique, chemin déclaratif) ─────────
+        # Lignes exclues (impossible) / corrigées (implausible) / signalées
+        # (ambigu) + escalade validée : jamais un traitement silencieux. None
+        # (donc rien affiché) si la couche n'a pas tourné (ex. chemin agent A6).
+        _synth_q = synthese_qualite_donnees(result_a6.get('rapport_qualite'))
+        if _synth_q:
+            _kpi(ws5, r, "Qualité des données — traitements appliqués", _synth_q,
+                 statut=("AMBRE" if ("EXCLUE" in _synth_q or "SIGNALEE" in _synth_q
+                                     or "BLOQUE" in _synth_q) else "VERT"),
                  wrap=True); r += 1
         # Alertes d'expérience passée conservée (audit V13 / B7). Ce n'est pas une
         # exclusion : c'est une VÉRIFICATION demandée à l'actuaire. Ce qui n'est

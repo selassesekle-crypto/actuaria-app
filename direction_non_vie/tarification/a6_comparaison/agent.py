@@ -201,6 +201,10 @@ class AgentA6Comparaison:
         profil_valide_par:   Optional[str] = None,
         environnement:       str = 'production',
         valide_par_actuaire_dl: Optional[str] = None,
+        # RapportQualite (core/qualite_donnees.py) du chemin déclaratif
+        # (pipeline_complet). A6 ne l'UTILISE pas — il le fait TRANSITER vers les
+        # 3 rapports (synthese_qualite_donnees), même mécanisme que le champ DL.
+        rapport_qualite:     Optional[Any] = None,
         generer_rapport_equipe: bool = True,
         formats_equipe:      Optional[List[str]] = None,
     ) -> Dict[str, Any]:
@@ -445,6 +449,7 @@ class AgentA6Comparaison:
                 'alertes_modele': _alertes_modele,
                 'exclusions_cible': exclusions_cible,
                 'valide_par_actuaire_dl': valide_par_actuaire_dl,
+                'rapport_qualite': rapport_qualite,
             }
             _excel_a6 = b''
             _word_a6  = b''
@@ -543,6 +548,7 @@ class AgentA6Comparaison:
                 # de conformité : un écart silencieux est un défaut en soi.
                 'exclusions_cible':   exclusions_cible,
                 'valide_par_actuaire_dl': valide_par_actuaire_dl,
+                'rapport_qualite':    rapport_qualite,
                 'courbes':            courbes,
                 'graphiques':            graphiques,
                 'validation_selection':  _val_sel_,
