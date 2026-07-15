@@ -28,6 +28,7 @@ from statsmodels.genmod import families as _families
 
 from core.plan_tarifaire import PlanTarifaire
 from core.conformite_reglementaire import construire_matrice_x
+from core.qualite_donnees import controler_qualite, QualiteBloquante
 from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
 
 # Chargements par défaut (auto). Déclarables dans le plan (étape 6) ; ici en
@@ -101,6 +102,10 @@ class TarifNonVie:
     ecretement: float = 0.0           # prime de graves unitaire (étape 6)
     coefficient_equilibre: float = 1.0  # k (INV-8)
     chargements: Dict[str, float] = field(default_factory=lambda: dict(CHARGEMENTS_DEFAUT))
+    # Rapport de la couche qualité (exclusions/corrections/signalements) — surfacé
+    # dans les livrables, jamais un traitement silencieux. None si la couche n'a
+    # pas tourné (ex. appelée hors pipeline_complet).
+    rapport_qualite: Optional[Any] = None
 
     # ── Prédiction interne, partagée par tarifer() et le portefeuille (INV-7) ──
     def _design(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -256,12 +261,24 @@ def pipeline_complet(portefeuille: pd.DataFrame, plan: PlanTarifaire,
                      chargements: Optional[dict] = None,
                      quantile_ecretement: float = 0.995,
                      equilibrer: bool = True,
+                     qualite_validee_par: Optional[str] = None,
                      models_path: str = "/tmp/actuaria",
                      audit_path: str = "/tmp/actuaria") -> TarifNonVie:
     """Ajuste le tarif complet à partir du seul plan signé. Aucune connaissance
     métier codée : A2 (fit/transform), conformité déclarative, GLM fréquence,
     GLM coût (famille du plan), écrêtement + équilibre (étape 6)."""
-    df = portefeuille.copy()
+    # ── QUALITÉ DE DONNÉES (générique, pilotée par le plan) — AVANT A2.fit ───
+    # Jamais d'exclusion/correction SILENCIEUSE : exclut les lignes impossibles
+    # (règle 1), corrige les implausibles établies (règle 2, exposition>1→1.0),
+    # signale les ambiguës (règle 3), et BLOQUE si une anomalie touche ≥ 5 % des
+    # lignes sans confirmation actuarielle nominative (règle 4). Court-circuité
+    # jusqu'ici : le chemin déclaratif ne passe pas par A1. A2 reçoit un df PROPRE.
+    rapport_qualite = controler_qualite(
+        portefeuille, plan, qualite_validee_par=qualite_validee_par,
+        horodatage=datetime.now().isoformat())
+    if rapport_qualite.bloque:
+        raise QualiteBloquante(rapport_qualite)      # arrêt loud, jamais silencieux
+    df = rapport_qualite.dataframe_propre
     col_freq, col_cout, col_expo = (plan.cible_frequence, plan.cible_cout,
                                     plan.exposition)
 
@@ -315,7 +332,8 @@ def pipeline_complet(portefeuille: pd.DataFrame, plan: PlanTarifaire,
         plan=plan, a2=a2, glm_frequence=glm_freq, glm_cout=glm_cout,
         features=features, ecretement=prime_grave_unitaire,
         coefficient_equilibre=1.0,
-        chargements=dict(chargements or CHARGEMENTS_DEFAUT))
+        chargements=dict(chargements or CHARGEMENTS_DEFAUT),
+        rapport_qualite=rapport_qualite)
 
     # ── Coefficient d'ÉQUILIBRE technique k (INV-8) ─────────────────────────
     # k = Σ charge observée / Σ (prime_pure prédite). Après ce calage, la prime

@@ -129,6 +129,12 @@ class PlanTarifaire:
     # Famille du GLM de coût moyen — déclarée, plus codée en dur dans A3.
     # Défaut "gamma" : aucune LoB existante ne change de comportement.
     famille_severite: FamilleSeverite = "gamma"
+    # Colonne identifiant de contrat/police (optionnelle). Si déclarée, la couche
+    # qualité (core/qualite_donnees.py) dédoublonne PAR CET IDENTIFIANT (règle 1,
+    # exclusion sans discussion) ; sinon un doublon de LIGNE entière reste ambigu
+    # (règle 3, signalé et laissé). Purement un RÔLE de données — jamais un facteur
+    # tarifaire (n'entre pas dans colonnes_produites()).
+    identifiant_contrat: Optional[str] = None
 
     def __post_init__(self):
         # ── GARDE B9 (offset) : l'exposition n'est JAMAIS un prédicteur ─────────
@@ -211,6 +217,7 @@ class PlanTarifaire:
             "exposition": self.exposition,
             "cibles": [self.cible_frequence, self.cible_cout],
             "famille_severite": self.famille_severite,
+            "identifiant_contrat": self.identifiant_contrat,
             "facteurs": [
                 {"nom": f.nom, "type": f.type, "encodage": f.encodage,
                  "transformation": f.transformation, "modalites": f.modalites,
@@ -243,6 +250,7 @@ class PlanTarifaire:
             interactions=tuple(tuple(i) for i in d.get("interactions", [])),
             auteur=d.get("auteur", ""), version=str(d.get("version", "1.0")),
             famille_severite=d.get("famille_severite", "gamma"),
+            identifiant_contrat=d.get("identifiant_contrat"),
         )
 
     @classmethod
