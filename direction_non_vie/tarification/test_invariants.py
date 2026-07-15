@@ -622,20 +622,29 @@ class TestInvariant_AntiSelectionVisibleEtDisqualifiante(unittest.TestCase):
         bt = {'disponible': True, 'modele_recalibre_fidele': True,
               'gini_wf_moyen': 0.2, 'ae_ratio': 1.0, 'ae_moyen_wf': 1.0,
               'n_fenetres_rouge': 0, 'stabilite_wf': '🟢 Stable'}
-        base = {'modele': 'DL_CANN', 'score_global': 0.95, 'gini_test': 0.30}
-        # Tout est parfait SAUF l'ancrage du GLM → plafond AMBRE.
+        # MÀJ prémisse (garde-fou confirmation DL, 2026-07) : la fixture porte
+        # désormais famille='Deep Learning' (réalité de la prod), et les contrôles
+        # renseignent valide_par_actuaire_dl='X' pour ISOLER _cann_ancre_ok du
+        # nouveau plafond de confirmation DL — sinon les deux se superposeraient et
+        # ce test ne prouverait plus rien sur l'ancrage seul. Ce n'était pas un
+        # choix de ses auteurs, c'était un angle mort sur la confirmation humaine.
+        base = {'modele': 'DL_CANN', 'famille': 'Deep Learning',
+                'score_global': 0.95, 'gini_test': 0.30}
+        # DL confirmé → tout est parfait SAUF glm_gele → plafond AMBRE par
+        # _cann_ancre_ok, et lui seul.
         degrade = {**base, 'glm_gele': False}
         self.assertEqual(self.a6._calculer_statut_rag(
             degrade, [degrade], profil_valide_par='X', environnement='production',
-            backtest=bt), 'AMBRE',
-            "CANN non ancré (glm_gele=False) retenu en production → AMBRE.")
-        # Contrôle : le CANN ancré, toutes choses égales, reste VERT.
+            backtest=bt, valide_par_actuaire_dl='X'), 'AMBRE',
+            "CANN non ancré (glm_gele=False) → AMBRE, même DL confirmé "
+            "(le motif d'ancrage est indépendant de la confirmation humaine).")
+        # Contrôle : le CANN ancré ET confirmé, toutes choses égales, reste VERT.
         ancre = {**base, 'glm_gele': True}
         self.assertEqual(self.a6._calculer_statut_rag(
             ancre, [ancre], profil_valide_par='X', environnement='production',
-            backtest=bt), 'VERT',
-            "CANN ancré (glm_gele=True) impeccable → VERT (pas de faux plafond).")
-        print("    INV-8d CANN non ancré → AMBRE · CANN ancré → VERT ✅")
+            backtest=bt, valide_par_actuaire_dl='X'), 'VERT',
+            "CANN ancré (glm_gele=True) impeccable ET confirmé → VERT.")
+        print("    INV-8d CANN non ancré → AMBRE · CANN ancré (confirmé) → VERT ✅")
 
     def test_le_garde_fou_ancrage_ne_vise_que_le_cann(self):
         """Le plafond _cann_ancre_ok ne cible QUE le CANN non ancré. Un TabNet
@@ -647,28 +656,149 @@ class TestInvariant_AntiSelectionVisibleEtDisqualifiante(unittest.TestCase):
         bt = {'disponible': True, 'modele_recalibre_fidele': True,
               'gini_wf_moyen': 0.2, 'ae_ratio': 1.0, 'ae_moyen_wf': 1.0,
               'n_fenetres_rouge': 0, 'stabilite_wf': '🟢 Stable'}
-        # (1) TabNet sain (pas de glm_gele → None), impeccable → VERT, PAS de plafond.
-        tabnet = {'modele': 'DL_TABNET', 'score_global': 0.95, 'gini_test': 0.30}
+        # MÀJ prémisse (garde-fou confirmation DL, 2026-07) : les TabNet portent
+        # désormais famille='Deep Learning' + valide_par_actuaire_dl='X', pour que
+        # ce test isole bien _cann_ancre_ok (le nouveau plafond DL est satisfait
+        # par la confirmation). Sans quoi un TabNet sain serait plafonné à AMBRE
+        # par la confirmation manquante, et non par l'ancrage — hors sujet ici.
+        # (1) TabNet sain (pas de glm_gele → None), impeccable ET confirmé → VERT.
+        tabnet = {'modele': 'DL_TABNET', 'famille': 'Deep Learning',
+                  'score_global': 0.95, 'gini_test': 0.30}
         self.assertEqual(self.a6._calculer_statut_rag(
             tabnet, [tabnet], profil_valide_par='X', environnement='production',
-            backtest=bt), 'VERT',
-            "Un TabNet sain en production ne doit PAS être plafonné : il n'a pas "
-            "de couche GLM à geler, le garde-fou d'ancrage ne le concerne pas.")
+            backtest=bt, valide_par_actuaire_dl='X'), 'VERT',
+            "Un TabNet sain (confirmé) ne doit PAS être plafonné par l'ancrage : "
+            "il n'a pas de couche GLM à geler, le garde-fou d'ancrage ne le concerne pas.")
         # (2) Borne NOM : même un modèle DL portant fortuitement glm_gele=False,
-        #     s'il n'est PAS un CANN, ne déclenche pas le plafond.
-        tabnet_faux = {'modele': 'DL_TABNET', 'score_global': 0.95,
-                       'gini_test': 0.30, 'glm_gele': False}
+        #     s'il n'est PAS un CANN, ne déclenche pas le plafond d'ancrage.
+        tabnet_faux = {'modele': 'DL_TABNET', 'famille': 'Deep Learning',
+                       'score_global': 0.95, 'gini_test': 0.30, 'glm_gele': False}
         self.assertEqual(self.a6._calculer_statut_rag(
             tabnet_faux, [tabnet_faux], profil_valide_par='X',
-            environnement='production', backtest=bt), 'VERT',
-            "Le garde-fou vise le NOM 'CANN' : un non-CANN avec glm_gele=False "
-            "fortuit ne doit pas être plafonné.")
-        # (3) Un GLM sain (aucun glm_gele) reste VERT.
-        glm = {'modele': 'GLM_POISSON', 'score_global': 0.95, 'gini_test': 0.30}
+            environnement='production', backtest=bt, valide_par_actuaire_dl='X'), 'VERT',
+            "Le garde-fou d'ancrage vise le NOM 'CANN' : un non-CANN avec "
+            "glm_gele=False fortuit ne doit pas être plafonné par l'ancrage.")
+        # (3) Un GLM sain (aucun glm_gele, pas DL) reste VERT — ni ancrage ni
+        #     confirmation DL ne le concernent.
+        glm = {'modele': 'GLM_POISSON', 'famille': 'GLM',
+               'score_global': 0.95, 'gini_test': 0.30}
         self.assertEqual(self.a6._calculer_statut_rag(
             glm, [glm], profil_valide_par='X', environnement='production',
             backtest=bt), 'VERT')
-        print("    INV-8e Garde-fou ancrage → SEULEMENT le CANN (TabNet/GLM restent VERT) ✅")
+        print("    INV-8e Garde-fou ancrage → SEULEMENT le CANN (TabNet confirmé/GLM restent VERT) ✅")
+
+
+class TestInvariant_ConfirmationHumaineDL(unittest.TestCase):
+    """
+    INVARIANT — Un modèle Deep Learning ne part JAMAIS en production sans
+    validation actuarielle humaine explicite (garde-fou DÉLIBÉRÉ, 2026-07).
+
+    Observé empiriquement : sur un portefeuille à structure non-linéaire (un
+    single-index diagonal que ni le GLM ni les arbres ne captent bien), un CANN
+    BIEN ANCRÉ (glm_gele=True) gagne LÉGITIMEMENT le classement de fréquence —
+    Gini ~0,48 contre ~0,28 pour le GLM et ~0,49 pour le meilleur arbre. Il était
+    déjà plafonné à AMBRE, mais PAR ACCIDENT : le walk-forward ne sait pas
+    recalibrer un DL, se rabat sur un proxy GBM, et le plafond wf-fidélité se
+    déclenche. Cet accident se lèverait le jour où un DL deviendrait recalibrable
+    fidèlement — et plus rien n'exigerait alors de confirmation humaine.
+
+    Ce garde-fou-ci est DÉLIBÉRÉ et INDÉPENDANT : un DL en production reste
+    plafonné AMBRE tant qu'un actuaire ne l'a pas nommément confirmé
+    (valide_par_actuaire_dl), quel que soit l'état de la fidélité de recalibration.
+    Il est aussi DISTINCT du plafond CANN dégradé (_cann_ancre_ok) : confirmer
+    humainement un DL ne blanchit pas un CANN non interprétable.
+    """
+
+    def setUp(self):
+        from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
+        self.a6 = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp',
+                                     verbose=False)
+        # Walk-forward PARFAITEMENT SAIN et — crucial — FIDÈLE
+        # (modele_recalibre_fidele=True) : on simule le futur où l'accident de
+        # recalibration DL serait corrigé, pour prouver que le nouveau plafond
+        # n'en dépend pas.
+        self.bt_sain_fidele = {
+            'disponible': True, 'modele_recalibre_fidele': True,
+            'gini_wf_moyen': 0.42, 'ae_ratio': 1.01, 'ae_moyen_wf': 1.0,
+            'n_fenetres_rouge': 0, 'stabilite_wf': '🟢 Stable'}
+
+    def test_dl_gagnant_reste_ambre_meme_si_recalibration_fidele(self):
+        """LE cas observé : un CANN bien ancré (glm_gele=True, famille DL) qui
+        gagne, avec un walk-forward SAIN et FIDÈLE (modele_recalibre_fidele=True)
+        — donc SANS l'accident wf. Non confirmé → AMBRE. C'est la preuve que le
+        plafond ne dépend PAS de l'accident de recalibration."""
+        cann = {'modele': 'DL_CANN', 'famille': 'Deep Learning', 'glm_gele': True,
+                'score_global': 0.93, 'gini_test': 0.4765}
+        statut = self.a6._calculer_statut_rag(
+            cann, [cann], profil_valide_par='X', environnement='production',
+            backtest=self.bt_sain_fidele)   # valide_par_actuaire_dl NON fourni (None)
+        self.assertNotEqual(statut, 'VERT',
+            "Un DL en production NON confirmé doit rester plafonné, même avec un "
+            "walk-forward sain ET fidèle — garde-fou délibéré, pas effet de bord.")
+        self.assertEqual(statut, 'AMBRE',
+            "Le seul motif de plafond ici est la confirmation DL manquante → AMBRE.")
+        # Contrôle positif : la confirmation nominative lève CE plafond → VERT.
+        statut_confirme = self.a6._calculer_statut_rag(
+            cann, [cann], profil_valide_par='X', environnement='production',
+            backtest=self.bt_sain_fidele, valide_par_actuaire_dl='Actuaire responsable')
+        self.assertEqual(statut_confirme, 'VERT',
+            "Une fois le DL nommément confirmé, rien d'autre ne le plafonne → VERT.")
+        print("    INV-DL1 CANN ancré gagnant → AMBRE non confirmé / VERT confirmé "
+              "(indépendant de la fidélité wf) ✅")
+
+    def test_confirmation_dl_ne_blanchit_pas_un_cann_degrade(self):
+        """Indépendance des deux plafonds : un CANN DÉGRADÉ (glm_gele=False),
+        même CONFIRMÉ par un actuaire, reste AMBRE — _cann_ancre_ok se déclenche
+        pour un motif (non-interprétabilité) orthogonal à la confirmation humaine.
+        Confirmer un DL ne peut pas blanchir une boîte noire non interprétable."""
+        degrade = {'modele': 'DL_CANN', 'famille': 'Deep Learning', 'glm_gele': False,
+                   'score_global': 0.93, 'gini_test': 0.30}
+        statut = self.a6._calculer_statut_rag(
+            degrade, [degrade], profil_valide_par='X', environnement='production',
+            backtest=self.bt_sain_fidele, valide_par_actuaire_dl='Actuaire responsable')
+        self.assertEqual(statut, 'AMBRE',
+            "CANN dégradé CONFIRMÉ → toujours AMBRE : la confirmation DL lève son "
+            "propre plafond mais PAS celui de l'ancrage (motifs indépendants).")
+        print("    INV-DL2 CANN dégradé confirmé → AMBRE (plafonds indépendants) ✅")
+
+    def test_l_alerte_dl_surface_et_se_tait_une_fois_confirmee(self):
+        """Point 1 — l'alerte ALERTES_MODELE : présente (code dédié) dès qu'un DL
+        est retenu SANS confirmation ; ABSENTE une fois confirmé (action faite).
+        Un modèle non-DL ne l'émet jamais. Testé sur la logique isolée
+        (_alerte_dl_production) ET le texte rapport (synthese_modele_dl)."""
+        from core.conformite_reglementaire import synthese_modele_dl
+        cann = {'modele': 'DL_CANN', 'famille': 'Deep Learning', 'glm_gele': True,
+                'score_global': 0.93, 'gini_test': 0.4765}
+        glm  = {'modele': 'GLM_POISSON', 'famille': 'GLM',
+                'score_global': 0.93, 'gini_test': 0.30}
+        # DL non confirmé → alerte présente, code dédié, sévérité AMBRE.
+        a = self.a6._alerte_dl_production(cann, None)
+        self.assertIsNotNone(a)
+        self.assertEqual(a['code'], 'dl_validation_humaine_requise')
+        self.assertEqual(a['severite'], 'AMBRE')
+        self.assertIn('validation actuarielle humaine requise', a['message'])
+        # DL confirmé → alerte TUE.
+        self.assertIsNone(self.a6._alerte_dl_production(cann, 'Actuaire responsable'),
+            "Une fois confirmé, l'alerte « requise » ne doit plus être émise.")
+        # Non-DL → jamais cette alerte.
+        self.assertIsNone(self.a6._alerte_dl_production(glm, None))
+        # Le texte rapport (source unique, visible dans Excel/Word/HTML) reflète
+        # les DEUX états — c'est ce que l'actuaire relira dans le dossier.
+        txt_requis = synthese_modele_dl(cann, None)
+        self.assertIn('ACTION REQUISE', txt_requis)
+        txt_valide = synthese_modele_dl(cann, 'Actuaire responsable')
+        self.assertIn('validé par', txt_valide)
+        self.assertIn('Actuaire responsable', txt_valide)
+        self.assertNotIn('responsabilité', txt_valide,
+            "Trace FACTUELLE (qui/quand) : aucune mention de responsabilité juridique.")
+        # La date RÉUTILISE l'horodatage EXISTANT (audit_trail['timestamp'], ISO) et
+        # est reformatée JJ/MM/AAAA — aucune date n'est générée par le libellé.
+        txt_date = synthese_modele_dl(cann, 'Actuaire responsable', '2026-07-15T18:53:39')
+        self.assertIn('le 15/07/2026', txt_date)
+        self.assertIsNone(synthese_modele_dl(glm, None),
+            "Un modèle non-DL ne produit aucune ligne DL dans les rapports.")
+        print("    INV-DL3 Alerte DL surface (non confirmé) / se tait (confirmé) + "
+              "rapport reflète les deux états ✅")
 
 
 class TestInvariant_ControleParLEffet(unittest.TestCase):
