@@ -10,6 +10,20 @@ cible_cout: cout_total_sinistres
 # Famille du GLM de coût moyen — déclarée, plus codée en dur (gamma par défaut).
 famille_severite: gamma
 facteurs:
+  # ── montant_travaux_eur — grandeur monetaire, declaree en LOG ──────────────
+  #  MECANISME brut+log IDENTIQUE a rcpro/ca_annuel_eur et auto/valeur_venale :
+  #  transformation:log => colonnes_produites() emet DEUX colonnes, le brut
+  #  (montant_travaux_eur) ET le log (log_montant_travaux_eur). Comportement
+  #  VOULU du plan (meme code colonnes_produites(), aucune branche par LoB), pas
+  #  un doublon accidentel. Le GLM charge le signal sur le LOG ; le brut ressort
+  #  a coefficient ~0 (colinearite attendue variable/son-log) — colonne inerte,
+  #  pas nuisible.
+  #  ⚠ PRIOR OUVERT (montant -> FREQUENCE) : sur le portefeuille SYNTHETIQUE de
+  #  reference, montant eleve => frequence ET severite plus hautes (notre
+  #  hypothese). L'effet SEVERITE est incontestable ; l'effet FREQUENCE (nombre
+  #  de sinistres par chantier) est un prior A CONFIRMER sur VRAIES donnees
+  #  dommage-ouvrage — la taille pourrait ne jouer que sur la severite. Ne pas
+  #  traiter le synthetique comme une preuve (meme reserve que MRH/RC Pro).
   - {nom: montant_travaux_eur,       type: continu, transformation: log}
   - {nom: nb_lots,                   type: continu}
   - {nom: anciennete_entreprise_ans, type: continu}
