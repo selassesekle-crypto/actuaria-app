@@ -14,26 +14,55 @@ except ImportError:
     TORCH_OK = False
 
 
-def _make_r_a2(n=400):
+def _make_r_a2(n=4000):
+    # Portefeuille synthetique REPRODUCTIBLE (seed numpy) et ASSEZ GRAND pour que
+    # le Gini du DL soit mesure sur assez de sinistres (~128 au pli test a n=4000).
+    # L'ancienne version (n=400, ~34 sin. au test, SANS signal) mesurait du bruit
+    # -> test_a5 instable (TabNet negatif ~2 fois sur 4). Diagnostic etape 3 :
+    # la taille fixe la stabilite, le signal fixe le sens de la mesure.
     np.random.seed(42)
-    exposition = np.random.uniform(0.1, 1.0, n)
-    nb_sin     = np.random.poisson(0.08 * exposition, n).astype(float)
-    cout       = np.where(nb_sin > 0, np.random.gamma(2, 400, n), 0.0)
+    exposition  = np.random.uniform(0.1, 1.0, n)
+    age         = np.random.randint(18, 75, n).astype(float)
+    bonus_malus = np.random.uniform(50, 350, n)
+    puissance   = np.random.randint(4, 15, n).astype(float)
+    # SIGNAL reel : sans lui la frequence ne depend d'AUCUNE feature (l'ancien
+    # 0.08*exposition) et le vrai Gini vaut ~0 -> l'assertion testerait du bruit.
+    # Jeune + malus eleve -> plus de sinistres (structure actuarielle standard).
+    lam         = 0.18 * np.exp(0.6 * (age < 25) + 0.004 * (bonus_malus - 100))
+    nb_sin      = np.random.poisson(lam * exposition).astype(float)
+    cout        = np.where(nb_sin > 0, np.random.gamma(2, 400, n), 0.0)
     df = pd.DataFrame({
         'nb_sinistres':         nb_sin,
         'cout_total_sinistres': cout,
         'exposition':           exposition,
-        'age':                  np.random.randint(18, 75, n).astype(float),
-        'bonus_malus':          np.random.uniform(50, 350, n),
-        'puissance_fiscale':    np.random.randint(4, 15, n).astype(float),
-        'prime_pure':           cout * exposition,
+        'age':                  age,
+        'bonus_malus':          bonus_malus,
+        'puissance_fiscale':    puissance,
+        'prime_pure':           cout / np.maximum(exposition, 0.01),
     })
     return {'success': True, 'dataframe': df, 'branche': 'auto',
             'statut_rag': 'VERT', 'parametres': {}, 'rapport': {},
             'commentaire': 'OK', 'audit_id': 'A2_TEST', 'erreur': None}
 
 
-def _make_r_a3():
+def _make_r_a3(df=None):
+    # ANCRAGE GLM (Wuthrich) : si df fourni, on fitte un vrai GLM Tweedie de
+    # FREQUENCE (nb_sinistres ~ features, offset=log expo) place dans
+    # modeles['tweedie']. A5 GELE alors la couche GLM du CANN (glm_gele=True) ->
+    # CANN tourne dans son MODE REEL, pas le fallback degenere (couche GLM
+    # librement entrainable) qui donnait un Gini instable/negatif. On modelise la
+    # FREQUENCE car l'archi CANN (exp + offset log-expo) est un modele de
+    # comptage : l'offset n'est coherent que pour cette cible (une ancre sur
+    # prime_pure, exposure-independante, degrade au contraire le CANN).
+    modeles = {}
+    if df is not None:
+        import statsmodels.api as sm
+        feats = ['age', 'bonus_malus', 'puissance_fiscale']
+        modeles['tweedie'] = sm.GLM(
+            df['nb_sinistres'], sm.add_constant(df[feats]),
+            family=sm.families.Tweedie(var_power=1.5, link=sm.families.links.Log()),
+            offset=np.log(np.maximum(df['exposition'].to_numpy(), 1e-6)),
+        ).fit(maxiter=100)
     return {
         'success': True, 'branche': 'auto', 'statut_rag': 'VERT',
         'metriques': {
@@ -41,7 +70,7 @@ def _make_r_a3():
                         'vars_retenues': ['age', 'bonus_malus'],
                         'nb_obs_train': 320, 'nb_obs_test': 80},
         },
-        'modeles': {},  # modele Poisson absent → init CANN aléatoire (fallback)
+        'modeles': modeles,
         'relativites_poisson': {}, 'relativites_gamma': {},
         'validation_glm': {'statut_global': 'VERT'},
         'excel_bytes': b'', 'word_bytes': b'', 'pdf_bytes': b'',
@@ -56,12 +85,19 @@ class TestA5DeepLearning(unittest.TestCase):
     def setUpClass(cls):
         from direction_non_vie.tarification.a5_deep_learning.agent import AgentA5DeepLearning
         cls.agent  = AgentA5DeepLearning(models_path='/tmp', audit_path='/tmp', verbose=False)
-        cls.r_a2   = _make_r_a2(400)
-        cls.r_a3   = _make_r_a3()
+        cls.r_a2   = _make_r_a2(4000)
+        cls.r_a3   = _make_r_a3(cls.r_a2['dataframe'])   # avec ANCRAGE GLM (mode reel du CANN)
         if TORCH_OK:
+            # REPRODUCTIBILITE : seed numpy (portefeuille, deja dans _make_r_a2)
+            # ET seed torch (init des poids + shuffle du DataLoader). A5 n'en fixe
+            # AUCUN -> sans ces lignes le Gini differe a chaque execution. Un test
+            # doit etre deterministe, pas "probablement dans la bonne fourchette".
+            np.random.seed(1)
+            torch.manual_seed(1)
             cls.r = cls.agent.run(
                 result_a2=cls.r_a2, result_a3=cls.r_a3,
-                n_epochs=5, batch_size=64, generer_graphiques=False
+                col_cible='nb_sinistres',   # FREQUENCE : offset log-expo coherent (cf. _make_r_a3)
+                n_epochs=30, batch_size=128, generer_graphiques=False
             )
         else:
             # Sans PyTorch → l'agent retourne une erreur documentée
