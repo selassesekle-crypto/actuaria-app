@@ -637,6 +637,39 @@ class TestInvariant_AntiSelectionVisibleEtDisqualifiante(unittest.TestCase):
             "CANN ancré (glm_gele=True) impeccable → VERT (pas de faux plafond).")
         print("    INV-8d CANN non ancré → AMBRE · CANN ancré → VERT ✅")
 
+    def test_le_garde_fou_ancrage_ne_vise_que_le_cann(self):
+        """Le plafond _cann_ancre_ok ne cible QUE le CANN non ancré. Un TabNet
+        sain retenu en production ne doit JAMAIS être plafonné par ce garde-fou :
+        il n'a aucune notion d'ancrage GLM (glm_gele absent/None), ce n'est pas
+        sa nature. Idem GLM/ML. Sinon on pénaliserait à tort un modèle valide.
+        Le garde-fou est borné par (a) le NOM se terminant par 'CANN' et (b)
+        glm_gele IS False (explicite) — on teste les deux bornes."""
+        bt = {'disponible': True, 'modele_recalibre_fidele': True,
+              'gini_wf_moyen': 0.2, 'ae_ratio': 1.0, 'ae_moyen_wf': 1.0,
+              'n_fenetres_rouge': 0, 'stabilite_wf': '🟢 Stable'}
+        # (1) TabNet sain (pas de glm_gele → None), impeccable → VERT, PAS de plafond.
+        tabnet = {'modele': 'DL_TABNET', 'score_global': 0.95, 'gini_test': 0.30}
+        self.assertEqual(self.a6._calculer_statut_rag(
+            tabnet, [tabnet], profil_valide_par='X', environnement='production',
+            backtest=bt), 'VERT',
+            "Un TabNet sain en production ne doit PAS être plafonné : il n'a pas "
+            "de couche GLM à geler, le garde-fou d'ancrage ne le concerne pas.")
+        # (2) Borne NOM : même un modèle DL portant fortuitement glm_gele=False,
+        #     s'il n'est PAS un CANN, ne déclenche pas le plafond.
+        tabnet_faux = {'modele': 'DL_TABNET', 'score_global': 0.95,
+                       'gini_test': 0.30, 'glm_gele': False}
+        self.assertEqual(self.a6._calculer_statut_rag(
+            tabnet_faux, [tabnet_faux], profil_valide_par='X',
+            environnement='production', backtest=bt), 'VERT',
+            "Le garde-fou vise le NOM 'CANN' : un non-CANN avec glm_gele=False "
+            "fortuit ne doit pas être plafonné.")
+        # (3) Un GLM sain (aucun glm_gele) reste VERT.
+        glm = {'modele': 'GLM_POISSON', 'score_global': 0.95, 'gini_test': 0.30}
+        self.assertEqual(self.a6._calculer_statut_rag(
+            glm, [glm], profil_valide_par='X', environnement='production',
+            backtest=bt), 'VERT')
+        print("    INV-8e Garde-fou ancrage → SEULEMENT le CANN (TabNet/GLM restent VERT) ✅")
+
 
 class TestInvariant_ControleParLEffet(unittest.TestCase):
     """
