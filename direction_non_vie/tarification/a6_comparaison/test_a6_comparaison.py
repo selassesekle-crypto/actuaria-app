@@ -34,13 +34,17 @@ def _make_r_a3():
     return {
         'success': True, 'branche': 'auto', 'statut_rag': 'VERT',
         'metriques': {
-            'poisson':  {'gini': 0.18, 'aic': 1200, 'vars_retenues': ['age','bonus_malus'],
+            # Chaque GLM DÉCLARE sa cible (contrat A3, source unique) — A6 filtre
+            # dessus : on ne compare jamais un Gini de fréquence à un Gini de
+            # prime pure. Poisson=fréquence, Gamma=coût moyen, Tweedie=prime pure.
+            'poisson':  {'gini': 0.18, 'cible': 'nb_sinistres', 'aic': 1200,
+                         'vars_retenues': ['age','bonus_malus'],
                          'nb_obs_train': 640, 'nb_obs_test': 160,
                          'relativites': {'age': {'relativite': 1.05, 'beta': 0.05,
                                                   'ic95_low': 1.01, 'ic95_high': 1.09,
                                                   'pvalue': 0.02, 'significatif': True, 'sens': 'aggravant'}}},
-            'gamma':    {'gini': 0.12, 'aic': 980},
-            'tweedie':  {'gini': 0.15, 'aic': 1050},
+            'gamma':    {'gini': 0.12, 'cible': 'cout_moyen', 'aic': 980},
+            'tweedie':  {'gini': 0.15, 'cible': 'prime_pure', 'aic': 1050},
         },
         'relativites_poisson': {'age': {'relativite': 1.05, 'beta': 0.05,
                                          'ic95_low': 1.01, 'ic95_high': 1.09,
@@ -55,6 +59,9 @@ def _make_r_a3():
 def _make_r_a4():
     return {
         'success': True, 'branche': 'auto', 'statut_rag': 'VERT',
+        # A4 DÉCLARE la cible commune de ses modèles ML (contrat A4) — ici
+        # 'prime_pure', cohérente avec le col_cible des tests A6 ci-dessous.
+        'col_cible': 'prime_pure',
         'classement': [
             {'modele': 'xgboost', 'famille': 'ML', 'gini_test': 0.22, 'gini_train': 0.24,
              'overfit_ratio': 0.92, 'rmse_test': 0.12, 'mae_test': 0.08,
@@ -69,7 +76,15 @@ def _make_r_a4():
              'overfit_ratio': 1.00, 'rmse_test': 0.14, 'mae_test': 0.10,
              'overfit_alerte': False, 'score_global': 0.72, 'interpretabilite': 1.00},
         ],
-        'metriques': {}, 'shap_values': {}, 'monitoring': {}, 'modele_production': {},
+        # metriques : ce que A6 lit réellement pour agréger les modèles A4 (le
+        # 'classement' ci-dessus n'est PAS consommé par A6). Modèles ML ajustés
+        # sur 'prime_pure', cohérents avec col_cible ci-dessus.
+        'metriques': {
+            'xgboost':    {'gini_test': 0.22, 'gini_train': 0.24, 'overfit_ratio': 0.92, 'rmse_test': 0.12},
+            'lightgbm':   {'gini_test': 0.21, 'gini_train': 0.23, 'overfit_ratio': 0.91, 'rmse_test': 0.13},
+            'elasticnet': {'gini_test': 0.16, 'gini_train': 0.17, 'overfit_ratio': 0.94, 'rmse_test': 0.15},
+        },
+        'shap_values': {}, 'monitoring': {}, 'modele_production': {},
         'validation_ml': {}, 'excel_bytes': b'', 'hypotheses': {}, 'audit_trail': {},
         'erreur': None,
     }
