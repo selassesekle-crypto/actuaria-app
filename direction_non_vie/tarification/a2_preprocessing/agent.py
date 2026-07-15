@@ -61,7 +61,6 @@ from typing import Dict, Any, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder
 
 try:
     from ..services.tarif_excel import export_excel_a2
@@ -1089,6 +1088,56 @@ class AgentA2Preprocessing:
     # ÉTAPE 4 : ENCODAGE
     # ══════════════════════════════════════════════════════════════════════════
 
+    def _modalites_label_plan(self, sous_branche: str) -> Dict[str, List[str]]:
+        """Ordre des modalités des facteurs LABEL déclarés dans le plan de la
+        branche — le plan fait AUTORITÉ (comme A2.transform, qui utilise déjà
+        f.modalites). {} si branche sans plan. Évite le tri alphabétique de
+        sklearn LabelEncoder, non-monotone et divergent (ex. zone Urbaine=3 vs 0).
+        Matching EXACT de la branche (le motif flou 'lob in sous_branche' a été
+        éliminé au refactor du plan — ne pas le réintroduire)."""
+        if sous_branche not in ('auto', 'mrh', 'rcpro'):
+            return {}
+        racine = os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.dirname(os.path.abspath(__file__)))))
+        try:
+            plan = PlanTarifaire.depuis_yaml(
+                os.path.join(racine, 'plans', f'{sous_branche}.yaml'))
+            return {f.nom: [str(m) for m in f.modalites]
+                    for f in plan.facteurs
+                    if getattr(f, 'encodage', None) == 'label' and f.modalites}
+        except Exception as _e:   # pragma: no cover — repli explicite
+            logger.warning("[A2 label] plan %s indisponible (%s) — repli tri "
+                           "déterministe, INCONNU en fin.", sous_branche, _e)
+            return {}
+
+    def _appliquer_label(self, df: pd.DataFrame, col: str, mode: str,
+                         ordre_plan: Optional[List[str]]) -> bool:
+        """Label-encode `col` dans l'ordre du PLAN si déclaré (ordre_plan), sinon
+        en ordre trié déterministe. INCONNU placé EN FIN (code n), jamais en 0.
+        Remplace sklearn LabelEncoder (tri alphabétique) qui divergeait de
+        A2.transform et rendait l'encodage de production non-monotone. Retourne
+        True si encodé, False si les paramètres de scoring manquent."""
+        col_enc = f"{col}_enc"
+        if mode == 'train':
+            if ordre_plan:
+                classes = [str(m) for m in ordre_plan]
+            else:
+                observes = [m for m in df[col].fillna('INCONNU').astype(str).unique()
+                            if m != 'INCONNU']
+                classes = sorted(observes)
+            classes = list(dict.fromkeys(classes)) + ['INCONNU']   # dédup + INCONNU EN FIN
+            self.parametres['encodeurs'][col] = {'type': 'label', 'classes': classes}
+        else:
+            enc = self.parametres['encodeurs'].get(col)
+            if enc is None:
+                return False
+            classes = enc['classes']
+        mapping = {m: i for i, m in enumerate(classes)}
+        inconnu = mapping['INCONNU']
+        vals = df[col].fillna('INCONNU').astype(str)
+        df[col_enc] = vals.map(lambda x: mapping.get(x, inconnu)).astype(float)
+        return True
+
     def _encoder(
         self,
         df: pd.DataFrame,
@@ -1167,41 +1216,20 @@ class AgentA2Preprocessing:
                     logger_agent=logger,
                 )
 
-        # ── LABEL ENCODING ────────────────────────────────────────────────────
+        # Ordre des modalités LABEL déclaré par le plan (fait AUTORITÉ) — comme
+        # A2.transform. Sans cela A2.run triait alphabétiquement (LabelEncoder)
+        # + INCONNU en 0 : encodage NON-MONOTONE et DIVERGENT de A2.transform
+        # (ex. zone Urbaine=3 en prod vs Urbaine=0 en déclaratif → coef GLM de
+        # signe opposé). Le plan fait autorité (cf. csp/secteur, calendrier).
+        plan_modalites = self._modalites_label_plan(sous_branche)
+
+        # ── LABEL ENCODING — ordre du plan, INCONNU en fin (code n) ───────────
         for col in config_encod.get('label', []):
             if col not in df.columns:
                 continue
-
-            col_enc = f"{col}_enc"
-
-            if mode == 'train':
-                le = LabelEncoder()
-                # Ajout d'une catégorie 'INCONNU' pour les nouvelles modalités
-                valeurs_uniques = list(df[col].fillna('INCONNU').unique())
-                if 'INCONNU' not in valeurs_uniques:
-                    valeurs_uniques.append('INCONNU')
-                le.fit(valeurs_uniques)
-                self.parametres['encodeurs'][col] = {
-                    'type':     'label',
-                    'classes':  list(le.classes_),
-                }
-            else:
-                # Récupération de l'encodeur sauvegardé
-                enc_params = self.parametres['encodeurs'].get(col)
-                if enc_params is None:
-                    continue
-                le = LabelEncoder()
-                le.classes_ = np.array(enc_params['classes'])
-
-            # Application : les valeurs inconnues → 'INCONNU'
-            df_col = df[col].fillna('INCONNU').astype(str)
-            classes_connues = set(le.classes_)
-            df_col = df_col.apply(
-                lambda x: x if x in classes_connues else 'INCONNU'
-            )
-            df[col_enc] = le.transform(df_col)
-            stats['cols_label_encodees'].append(col)
-            stats['nouvelles_colonnes'].append(col_enc)
+            if self._appliquer_label(df, col, mode, plan_modalites.get(col)):
+                stats['cols_label_encodees'].append(col)
+                stats['nouvelles_colonnes'].append(f"{col}_enc")
 
         # ── ONE-HOT ENCODING ──────────────────────────────────────────────────
         for col in config_encod.get('one_hot', []):
@@ -1268,29 +1296,12 @@ class AgentA2Preprocessing:
             # Encodage label automatique pour les autres colonnes object
             nb_modalites = df[col].nunique()
             if nb_modalites <= 30:  # Limite raisonnable
-                if mode == 'train':
-                    le = LabelEncoder()
-                    valeurs = df[col].fillna('INCONNU').astype(str).unique()
-                    le.fit(list(valeurs) + ['INCONNU'])
-                    self.parametres['encodeurs'][col] = {
-                        'type':    'label_auto',
-                        'classes': list(le.classes_),
-                    }
-                else:
-                    enc_params = self.parametres['encodeurs'].get(col)
-                    if enc_params is None:
-                        continue
-                    le = LabelEncoder()
-                    le.classes_ = np.array(enc_params['classes'])
-
-                df_col_auto = df[col].fillna('INCONNU').astype(str)
-                classes_connues = set(le.classes_)
-                df_col_auto = df_col_auto.apply(
-                    lambda x: x if x in classes_connues else 'INCONNU'
-                )
-                df[col_enc] = le.transform(df_col_auto)
-                stats['cols_label_encodees'].append(f"{col}(auto)")
-                stats['nouvelles_colonnes'].append(col_enc)
+                # Colonne HORS plan (auto-détectée) : pas d'ordre déclaré -> tri
+                # déterministe, INCONNU en fin (même mécanisme que le bloc label
+                # ci-dessus ; plus de LabelEncoder alphabétique).
+                if self._appliquer_label(df, col, mode, plan_modalites.get(col)):
+                    stats['cols_label_encodees'].append(f"{col}(auto)")
+                    stats['nouvelles_colonnes'].append(col_enc)
 
         logger.info(
             f"Encodage : {len(stats['cols_label_encodees'])} label · "
