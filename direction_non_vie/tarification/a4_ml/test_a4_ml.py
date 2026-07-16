@@ -6,6 +6,14 @@ import sys, os, unittest
 import numpy as np
 import pandas as pd
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../')))
+from core.plan_tarifaire import PlanTarifaire
+
+# Phase 1 : A4.run() et _preparer_donnees reçoivent le PLAN signé. Fixtures auto
+# (freMTPL2-like) → plan auto ; le test genre MRH (V9-2) → plan mrh. Restreint les
+# features à plan.colonnes_produites(), exactement comme _charger_plan_lob avant.
+_RACINE = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+_PLAN_AUTO = PlanTarifaire.depuis_yaml(os.path.join(_RACINE, 'plans', 'auto.yaml'))
+_PLAN_MRH  = PlanTarifaire.depuis_yaml(os.path.join(_RACINE, 'plans', 'mrh.yaml'))
 
 
 def _make_r_a2(n=600):
@@ -55,7 +63,7 @@ class TestA4ML(unittest.TestCase):
         cls.r_a2  = _make_r_a2(600)
         cls.r_a3  = _make_r_a3()
         cls.r     = cls.agent.run(
-            result_a2=cls.r_a2, result_a3=cls.r_a3,
+            result_a2=cls.r_a2, result_a3=cls.r_a3, plan=_PLAN_AUTO,
             calcul_shap=False, generer_graphiques=False
         )
 
@@ -161,7 +169,7 @@ class TestA4FiltreGenre(unittest.TestCase):
         agent = AgentA4ML(models_path='/tmp', audit_path='/tmp', verbose=False)
         r_a2 = _make_r_a2_avec_genre_numerique(600)
         r_a3 = _make_r_a3()
-        r = agent.run(result_a2=r_a2, result_a3=r_a3,
+        r = agent.run(result_a2=r_a2, result_a3=r_a3, plan=_PLAN_AUTO,
                       calcul_shap=False, generer_graphiques=False)
 
         self.assertTrue(r['success'], f"Erreur : {r.get('erreur')}")
@@ -242,15 +250,15 @@ class TestAntiFuiteFamilleCible(unittest.TestCase):
 
         a4 = AgentA4ML(models_path='/tmp', audit_path='/tmp', verbose=False)
         feats = a4._preparer_donnees(r2['dataframe'].copy(), 'auto',
-                                     'nb_sinistres', 'exposition')[-1]
+                                     'nb_sinistres', 'exposition', _PLAN_AUTO)[-1]
         self.assertNotIn('prime_pure', feats,
             "FUITE : prime_pure ne doit jamais être une feature (cible=fréquence)")
         self.assertFalse(any('cout' in f for f in feats),
             f"FUITE : variable de coût dans les features : {feats}")
         print(f"    AF2 Pas de fuite dans X ✅ | features={feats}")
 
-        r4 = a4.run(result_a2=r2, calcul_shap=False, generer_graphiques=False,
-                    col_cible='nb_sinistres')
+        r4 = a4.run(result_a2=r2, plan=_PLAN_AUTO, calcul_shap=False,
+                    generer_graphiques=False, col_cible='nb_sinistres')
         best = r4['classement'][0]
         gini = best.get('gini_test', 0)
         self.assertLess(gini, 0.60,
@@ -334,7 +342,7 @@ class TestAntiFuiteV9(unittest.TestCase):
         # (2) Défense en profondeur : rien de genré n'atteint la matrice X.
         feats = a4._preparer_donnees(
             r2['dataframe'].copy(), r1.get('sous_branche', 'mrh'),
-            'nb_sinistres', 'exposition'
+            'nb_sinistres', 'exposition', _PLAN_MRH
         )[-1]
         genre_dans_X = [c for c in feats
                         if 'sexe' in c.lower() or 'genre' in c.lower()]
@@ -382,14 +390,14 @@ class TestAntiFuiteV9(unittest.TestCase):
         self.assertTrue(r1['success'], f"A1 doit accepter du Non-Vie : {r1.get('erreur')}")
         r2 = a2.run(result_a1=r1)
         feats = a4._preparer_donnees(r2['dataframe'].copy(), 'auto',
-                                     'nb_sinistres', 'exposition')[-1]
+                                     'nb_sinistres', 'exposition', _PLAN_AUTO)[-1]
         fuite = [c for c in feats
                  if any(s in c.lower() for s in ['sinistre', 'cout_', 'part_hospit'])]
         self.assertEqual(fuite, [],
             f"FUITE : colonnes de sinistralité brutes dans la matrice X : {fuite}")
 
-        r4 = a4.run(result_a2=r2, calcul_shap=False, generer_graphiques=False,
-                    col_cible='nb_sinistres')
+        r4 = a4.run(result_a2=r2, plan=_PLAN_AUTO, calcul_shap=False,
+                    generer_graphiques=False, col_cible='nb_sinistres')
         gini = r4['classement'][0].get('gini_test', 0)
         self.assertLess(gini, 0.60,
             f"Gini fréquence = {gini:.4f} ≥ 0,60 — signature de fuite "

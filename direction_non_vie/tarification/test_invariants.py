@@ -1240,7 +1240,8 @@ class TestInvariant_LeSystemeAccepteCeQuIlDoitAccepter(unittest.TestCase):
                         verbose=False).run(result_a2=r2, plan=_plan_auto,
                                            generer_graphiques=False)
         r4 = AgentA4ML(models_path='/tmp', audit_path='/tmp', verbose=False).run(
-            result_a2=r2, result_a3=r3, calcul_shap=False, generer_graphiques=False)
+            result_a2=r2, result_a3=r3, plan=_plan_auto, calcul_shap=False,
+            generer_graphiques=False)
         r6 = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp',
                                 verbose=False).run(
             result_a2=r2, result_a3=r3, result_a4=r4, result_a5=None,

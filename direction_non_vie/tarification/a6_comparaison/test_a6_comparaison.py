@@ -552,7 +552,7 @@ class TestAntiFuiteGenreWalkForwardV9(unittest.TestCase):
         self.assertEqual(str(r2['dataframe']['sexe'].dtype), 'float64',
             "Ce test présuppose que 'sexe' survit intact (numérique) à A2 en auto")
         r3 = a3.run(result_a2=r2, plan=_PLAN_AUTO, generer_graphiques=False)
-        r4 = a4.run(result_a2=r2, result_a3=r3, calcul_shap=False,
+        r4 = a4.run(result_a2=r2, result_a3=r3, plan=_PLAN_AUTO, calcul_shap=False,
                     generer_graphiques=False)
         r6 = a6.run(result_a2=r2, result_a3=r3, result_a4=r4, result_a5=None,
                     generer_graphiques=False, generer_rapport_equipe=False,

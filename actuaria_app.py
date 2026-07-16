@@ -3444,7 +3444,13 @@ def _executer_analyse(besoin, direction, equipe, client):
                         resultats["tarif_plan_erreur"] = f"{type(_e_plan).__name__}: {_e_plan}"
                 elif besoin == "prime_ml":
                     from direction_non_vie.tarification.a4_ml.agent import AgentA4ML
-                    r4 = AgentA4ML(audit_path=_tmp, verbose=False).run(r2, generer_graphiques=False, calcul_shap=False)
+                    from core.plan_tarifaire import PlanTarifaire
+                    # Phase 1 : A4 restreint ses features à plan.colonnes_produites().
+                    # Cette page tarife en auto (même plan que prime_glm).
+                    _plan_auto = PlanTarifaire.depuis_yaml(os.path.join(
+                        os.path.dirname(__file__), "plans", "auto.yaml"))
+                    r4 = AgentA4ML(audit_path=_tmp, verbose=False).run(
+                        r2, plan=_plan_auto, generer_graphiques=False, calcul_shap=False)
                     resultats["principal"] = r4
                 elif besoin == "prime_dl":
                     from direction_non_vie.tarification.a5_deep_learning.agent import AgentA5DeepLearning

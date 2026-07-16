@@ -129,6 +129,7 @@ except ImportError:
 # une colonne 'sexe' numérique atteignait la matrice de features des
 # modèles ML, potentiellement retenus en production par A6).
 from core.conformite_reglementaire import construire_matrice_x
+from core.plan_tarifaire import PlanTarifaire
 
 # ── LOGGER ────────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -139,34 +140,15 @@ logging.basicConfig(
 logger = logging.getLogger('actuaria.a4')
 
 
-# ── Alignement A4 sur le plan signé (migration progressive, UN LoB À LA FOIS) ──
-# Historiquement A4 sélectionnait ses features en DATA-DRIVEN : toutes les
-# colonnes numériques d'A2, filtrées par l'ANCIENNE liste blanche
-# FACTEURS_TARIFAIRES_AUTORISES — donc un SUR-ensemble de plan.colonnes_produites()
-# (sources brutes gardées à côté des dérivées, 2ᵉ dummies, interactions auto d'A2).
-# Le GLM (A3) concourait donc sur une liste curatée par l'actuaire et ML/DL sur
-# une liste plus large : comparaison A6 non « à armes égales ». On passe désormais
-# le PLAN à construire_matrice_x pour que les 3 familles partagent EXACTEMENT
-# plan.colonnes_produites(). Déployé LoB par LoB : _LOBS_ALIGNES_PLAN s'étend à
-# mesure que chaque LoB est vérifié empiriquement (même discipline qu'A3).
-_RACINE_PROJET_A4 = os.path.dirname(os.path.dirname(os.path.dirname(
-    os.path.dirname(os.path.abspath(__file__)))))
-_LOBS_ALIGNES_PLAN = frozenset({'mrh', 'auto', 'rcpro'})   # 3 LoB Non-Vie alignes sur le plan
-
-
-def _charger_plan_lob(sous_branche):
-    """PlanTarifaire du LoB s'il est aligné sur le plan, sinon None (repli sur
-    l'ancien chemin FACTEURS_TARIFAIRES_AUTORISES). Repli jamais silencieux."""
-    if sous_branche not in _LOBS_ALIGNES_PLAN:
-        return None
-    try:
-        from core.plan_tarifaire import PlanTarifaire as _PlanTarifaire
-        return _PlanTarifaire.depuis_yaml(
-            os.path.join(_RACINE_PROJET_A4, 'plans', f'{sous_branche}.yaml'))
-    except Exception as _e:   # pragma: no cover — repli explicite
-        logger.warning("[A4 plan] plans/%s.yaml indisponible (%s) — repli data-driven "
-                       "(FACTEURS_TARIFAIRES_AUTORISES).", sous_branche, _e)
-        return None
+# ── Alignement A4 sur le plan signé (Phase 1) ─────────────────────────────────
+# Plus de _LOBS_ALIGNES_PLAN ni de chargement de plan EN INTERNE : A4.run() reçoit
+# le PLAN signé et le transmet à construire_matrice_x, dont la liste blanche =
+# plan.colonnes_produites(). Les 3 familles (GLM/ML/DL) partagent EXACTEMENT les
+# mêmes colonnes ; le GLM ne concourt plus contre une liste ML plus large.
+# Historiquement A4 sélectionnait ses features en DATA-DRIVEN (toutes colonnes
+# numériques d'A2, filtrées par l'ANCIENNE FACTEURS_TARIFAIRES_AUTORISES) : un
+# sur-ensemble du plan, déployé LoB par LoB via un frozenset. C'est désormais
+# universel et explicite. Plan absent → erreur propre (voir run()), jamais de repli.
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -555,6 +537,7 @@ class AgentA4ML:
         result_a3:      Optional[Dict[str, Any]] = None,
         col_cible:      str = 'nb_sinistres',
         col_exposition: str = 'exposition',
+        plan:           Optional[PlanTarifaire] = None,   # Phase 1 : plan signé explicite
         calcul_shap:        bool = True,
         generer_graphiques: bool = True,
         optuna_trials:      int  = 0,   # 0 = désactivé ; >0 = nb essais Optuna XGBoost
@@ -612,6 +595,16 @@ class AgentA4ML:
         if not result_a2.get('success', False):
             return self._erreur("L'agent A2 a échoué.", audit_id)
 
+        # Phase 1 : A4 restreint ses features à plan.colonnes_produites() via
+        # construire_matrice_x — plus de _LOBS_ALIGNES_PLAN. Plan absent → erreur
+        # propre, JAMAIS de repli silencieux.
+        if plan is None:
+            return self._erreur(
+                "A4.run exige un plan (PlanTarifaire) : les features ML sont "
+                "restreintes à plan.colonnes_produites() (Phase 1, _LOBS_ALIGNES_PLAN "
+                "supprimé). Fournissez plan=PlanTarifaire.depuis_yaml('plans/<lob>.yaml').",
+                audit_id)
+
         # ── GARDE-FOU R2 : cohérence col_cible / famille de modèle ───────────
         # Si la variable cible est un comptage (distribution Poisson) et
         # qu'ElasticNet est sélectionné, on bascule sur PoissonRegressor.
@@ -633,7 +626,7 @@ class AgentA4ML:
             logger.info(f"[{audit_id}] Étape 1/4 : Préparation données")
             X_train, X_test, y_train, y_test, \
             w_train, w_test, feature_names = self._preparer_donnees(
-                df, sous_branche, col_cible, col_exposition
+                df, sous_branche, col_cible, col_exposition, plan
             )
             rapport['etapes'].append('preparation')
             rapport['nb_features']   = len(feature_names)
@@ -914,7 +907,8 @@ class AgentA4ML:
         df:           pd.DataFrame,
         sous_branche: str,
         col_cible:    str,
-        col_expo:     str
+        col_expo:     str,
+        plan:         PlanTarifaire,
     ) -> Tuple:
         """
         Prépare X, y, weights pour les modèles ML.
@@ -985,9 +979,8 @@ class AgentA4ML:
         # AJOUTER APRÈS CET APPEL.
         # Elle trace aussi les exclusions, remontées dans les rapports — une
         # exclusion silencieuse est un défaut en soi (BLOQUANT B5, audit V11).
-        _plan_lob = _charger_plan_lob(sous_branche)   # plan signé si LoB aligné, sinon None
         _mx = construire_matrice_x(
-            feature_names, plan=_plan_lob,
+            feature_names, plan=plan,   # Phase 1 : liste blanche = plan.colonnes_produites()
             contexte='A4 — sélection features ML', logger_agent=logger,
             df=df, col_cible=col_cible,   # garde-fou n°4 : contrôle par l'EFFET
         )

@@ -150,7 +150,8 @@ def run_lob(nom, df, marqueurs_attendus):
         r3 = AgentA3GLM(models_path=TMP, audit_path=TMP, verbose=False).run(
             result_a2=r2, plan=plan, generer_graphiques=False)
         r4 = AgentA4ML(models_path=TMP, audit_path=TMP, verbose=False).run(
-            result_a2=r2, result_a3=r3, calcul_shap=False, generer_graphiques=False)
+            result_a2=r2, result_a3=r3, plan=plan, calcul_shap=False,
+            generer_graphiques=False)
         r6 = AgentA6Comparaison(models_path=TMP, audit_path=TMP, verbose=False).run(
             result_a2=r2, result_a3=r3, result_a4=r4, result_a5=None,
             col_cible="nb_sinistres", generer_graphiques=False,
