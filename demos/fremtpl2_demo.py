@@ -149,7 +149,7 @@ def etape6(train, plan, tarif):
     a1 = AgentA1Ingestion(audit_path=CACHE, verbose=False)
     a2 = AgentA2Preprocessing(audit_path=CACHE, verbose=False)
     r3 = AgentA3GLM(audit_path=CACHE, verbose=False).run(
-        a2.run(a1.run(dataframe=old, branche="non_vie")), plan=plan,
+        a2.run(a1.run(dataframe=old, branche="non_vie", sous_branche="auto")), plan=plan,
         generer_graphiques=False)
     base_freq = float(np.exp(r3["modeles"]["poisson"].params.get("const", 0.0)))
     base_cout = float(r3["metriques"]["gamma"]["cout_moyen_pred"])

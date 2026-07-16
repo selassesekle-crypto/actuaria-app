@@ -1232,7 +1232,8 @@ class TestInvariant_LeSystemeAccepteCeQuIlDoitAccepter(unittest.TestCase):
         })
         a1 = AgentA1Ingestion(audit_path='/tmp', verbose=False)
         a2 = AgentA2Preprocessing(audit_path='/tmp', verbose=False)
-        r2 = a2.run(result_a1=a1.run(branche='non_vie', dataframe=df))
+        r2 = a2.run(result_a1=a1.run(branche='non_vie', sous_branche='auto',
+                                     dataframe=df))
         from core.plan_tarifaire import PlanTarifaire
         _plan_auto = PlanTarifaire.depuis_yaml(
             os.path.join(os.path.dirname(__file__), '..', '..', 'plans', 'auto.yaml'))

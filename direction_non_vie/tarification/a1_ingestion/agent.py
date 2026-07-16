@@ -10,15 +10,17 @@
 ║  • Suggestions automatiques de colonnes similaires                         ║
 ║  • Portabilité totale (Drive → AWS → OVHcloud → local)                    ║
 ║                                                                              ║
-║  USAGE STANDARD :                                                            ║
+║  USAGE STANDARD (sous_branche DÉCLARÉE — A1 ne la devine plus) :            ║
 ║  agent_a1 = AgentA1Ingestion()                                             ║
-║  result_a1 = agent_a1.run(branche='non_vie', fichier='contrats.parquet')  ║
+║  result_a1 = agent_a1.run(branche='non_vie', sous_branche='auto',         ║
+║                           fichier='contrats.parquet')                      ║
 ║                                                                              ║
 ║  USAGE AVEC CLIENT :                                                         ║
 ║  result_a1 = agent_a1.run(                                                 ║
-║      branche   = 'non_vie',                                                ║
-║      fichier   = 'contrats_client.xlsx',                                   ║
-║      client_id = 'client_xyz',                                             ║
+║      branche      = 'non_vie',                                             ║
+║      sous_branche = 'auto',                                                ║
+║      fichier      = 'contrats_client.xlsx',                                ║
+║      client_id    = 'client_xyz',                                          ║
 ║  )                                                                          ║
 ║                                                                              ║
 ║  AUTEUR    : ActuarIA v2.0                                                   ║
@@ -139,37 +141,20 @@ SYNONYMES_COLONNES = {
 }
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# DÉTECTION DES BRANCHES
-# ══════════════════════════════════════════════════════════════════════════════
-
-MOTS_CLES_DETECTION = {
-    'auto': ['auto', 'vehicule', 'voiture', 'conducteur', 'bonus_malus',
-             'bonusmalus', 'puissance', 'vehpower', 'drimage', 'vehgas'],
-    'mrh':  ['mrh', 'habitation', 'logement', 'surface', 'locataire'],
-    # ⚠ AUDIT V11 (BLOQUANT B4) : le vocabulaire RC Pro se limitait à
-    # ['rcpro', 'rc_pro', 'responsabilite', 'professionnel'] — or AUCUNE des 8
-    # colonnes que A2 et A3 déclarent pour la RC Pro (nb_salaries,
-    # secteur_activite, forme_juridique, type_garantie, ca_annuel_eur,
-    # anciennete_entreprise_ans, antecedents_sinistres_3ans) ne contient l'un de
-    # ces mots. Un portefeuille RC Pro réel n'était donc JAMAIS détecté : il
-    # retombait sur le repli, était étiqueté 'non' (voir plus bas), et A2/A3
-    # basculaient sur leurs configurations génériques. Toute la spécialisation
-    # RC Pro — pourtant écrite et maintenue — était du CODE MORT.
-    # Le vocabulaire est désormais aligné sur les colonnes réellement déclarées.
-    # ⚠ Un test d'invariant (test_a1_ingestion.py) vérifie désormais que chaque
-    # sous-branche possède au moins une colonne déclarée qui déclenche sa propre
-    # détection — pour qu'une telle divergence ne puisse plus jamais s'installer.
-    'rcpro': ['rcpro', 'rc_pro', 'responsabilite', 'professionnel',
-              'nb_salaries', 'salaries', 'secteur_activite', 'forme_juridique',
-              'ca_annuel', 'anciennete_entreprise', 'effectif', 'siret', 'siren'],
-}
-# Sous-branches Vie, Santé, Prévoyance et Épargne RETIRÉES (11/07/2026).
-# A1 est un agent de la Direction NON-VIE et n'ingère que du Non-Vie
-# (auto · MRH · RC Pro). L'architecture initiale faisait de A1/A2 un
-# « service data » mutualisé des trois directions ; elle a été abandonnée
-# au profit de directions pleinement autonomes, chacune dotée de son
-# propre traitement de données.
+# ── Sous-branche : DÉCLARÉE, plus détectée (Phase 1) ──────────────────────────
+# MOTS_CLES_DETECTION et _detecter_sous_branche SUPPRIMÉS. A1 ne devine plus la
+# LoB : l'actuaire la déclare (run(sous_branche=...)), et le plan signé fait
+# autorité en aval (A3/A4/A5). L'ancien repli étiquetait 'auto' par défaut quand
+# aucun mot-clé ne matchait — silencieux pour l'aval — et il était de toute façon
+# structurellement incapable de reconnaître une LoB neuve (décennale,
+# marchandises transportées) : c'était le BLOQUANT B4 de l'audit V11 (RC Pro
+# jamais détectée, sa spécialisation étant du code mort). A1 accepte désormais
+# TOUTE sous-branche déclarée : c'est le plan qui la valide, pas un dict codé.
+#
+# Le périmètre Non-Vie reste gardé par BRANCHES_SUPPORTEES ci-dessous : les
+# sous-branches Vie/Santé/Prévoyance/Épargne avaient été retirées le 11/07/2026
+# (A1/A2 ne sont plus un « service data » mutualisé — les directions Vie/EP-RE et
+# Santé-Prévoyance sont autonomes et ont leur propre traitement de données).
 
 # Branches acceptées par cet agent — toute autre valeur est rejetée
 # explicitement (fail loudly) plutôt que traitée silencieusement avec une
@@ -205,16 +190,18 @@ class AgentA1Ingestion:
 
     EXEMPLE D'UTILISATION :
     ─────────────────────────
-    # Usage standard
+    # Usage standard — sous_branche DÉCLARÉE par l'actuaire (A1 ne devine plus)
     agent_a1 = AgentA1Ingestion()
-    result_a1 = agent_a1.run(branche='non_vie', fichier='contrats.parquet')
+    result_a1 = agent_a1.run(branche='non_vie', sous_branche='auto',
+                             fichier='contrats.parquet')
 
     # Usage avec client réel
     agent_a1 = AgentA1Ingestion()
     result_a1 = agent_a1.run(
-        branche   = 'non_vie',
-        fichier   = 'contrats_client.xlsx',
-        client_id = 'assurance_xyz',
+        branche      = 'non_vie',
+        sous_branche = 'auto',
+        fichier      = 'contrats_client.xlsx',
+        client_id    = 'assurance_xyz',
     )
     """
 
@@ -244,6 +231,7 @@ class AgentA1Ingestion:
     def run(
         self,
         branche:   str = 'non_vie',
+        sous_branche: str = None,   # Phase 1 : déclarée par l'actuaire, plus devinée
         fichier:   str = 'contrats_auto_70k.parquet',
         client_id: str = None,
         dataframe  = None,
@@ -258,6 +246,14 @@ class AgentA1Ingestion:
             auto · MRH · RC Pro). Toute autre branche est rejetée :
             les directions Vie/EP-RE et Santé-Prévoyance sont autonomes
             et disposent de leur propre traitement de données.
+
+        sous_branche : str
+            Sous-branche DÉCLARÉE par l'actuaire : 'auto', 'mrh', 'rcpro',
+            'decennale', 'marchandises_transportees'… A1 ne la DEVINE plus
+            (Phase 1 : MOTS_CLES_DETECTION supprimé). Obligatoire — absente,
+            l'agent échoue proprement plutôt que d'étiqueter par défaut.
+            Propagée telle quelle dans result['branche'], que A2 transmet à
+            A3/A4/A5 ; le plan signé fait autorité en aval.
 
         fichier : str
             Nom du fichier de données (avec extension).
@@ -301,6 +297,28 @@ class AgentA1Ingestion:
                 'commentaire': f"❌ ERREUR A1 : {_msg}",
             }
 
+        # ── PHASE 1 : LA SOUS-BRANCHE EST DÉCLARÉE, PLUS DEVINÉE ──────────────
+        # A1 ne détecte plus (MOTS_CLES_DETECTION supprimé) : l'actuaire déclare
+        # sa LoB. Absente → erreur propre, JAMAIS de repli : l'ancien repli
+        # étiquetait 'auto' par défaut, en silence pour tout l'aval.
+        if not sous_branche:
+            _msg = (
+                "A1.run exige sous_branche (ex. 'auto', 'mrh', 'rcpro', "
+                "'decennale') : A1 ne détecte plus la sous-branche (Phase 1, "
+                "MOTS_CLES_DETECTION supprimé). L'actuaire la déclare explicitement."
+            )
+            logger.error(f"[{audit_id}] {_msg}")
+            return {
+                'success':    False,
+                'dataframe':  pd.DataFrame(),
+                'branche':    branche,
+                'statut_rag': 'ROUGE',
+                'score_qual': 0,
+                'audit_id':   audit_id,
+                'erreur':     _msg,
+                'commentaire': f"❌ ERREUR A1 : {_msg}",
+            }
+
         try:
             # ── ÉTAPE 1 : CHARGEMENT ──────────────────────────────────────────
             # Si un DataFrame est fourni directement → on saute le chargement
@@ -318,13 +336,12 @@ class AgentA1Ingestion:
                 if not isinstance(dataframe, pd.DataFrame):
                     raise ValueError("Le paramètre 'dataframe' doit être un pd.DataFrame.")
                 df = dataframe.copy()
-                sous_branche = self._detecter_sous_branche(df, branche)
                 rapport['etapes'].append('dataframe_direct')
-                logger.info(f"DataFrame direct : {df.shape} | sous-branche : {sous_branche}")
+                logger.info(f"DataFrame direct : {df.shape} | sous-branche déclarée : {sous_branche}")
             else:
-                df, sous_branche = self._charger_fichier(fichier, branche)
+                df = self._charger_fichier(fichier, branche)
                 rapport['etapes'].append('chargement')
-                logger.info(f"Chargé : {df.shape} | sous-branche détectée : {sous_branche}")
+                logger.info(f"Chargé : {df.shape} | sous-branche déclarée : {sous_branche}")
 
             # ── ÉTAPE 2 : MAPPING COLONNES CLIENT ────────────────────────────
             if client_id:
@@ -479,9 +496,9 @@ class AgentA1Ingestion:
                 f"Branches cherchées : {branches_ordre}"
             )
 
-        # Détection sous-branche
-        sous_branche = self._detecter_sous_branche(df, branche)
-        return df, sous_branche
+        # Phase 1 : plus de détection ici — la sous-branche est déclarée par
+        # l'actuaire et portée par run(). _charger_fichier ne fait que charger.
+        return df
 
     def _lire_fichier(self, chemin: Path, nom_onglet: str = None) -> pd.DataFrame:
         """Lit un fichier selon son extension."""
@@ -507,44 +524,11 @@ class AgentA1Ingestion:
         else:
             raise ValueError(f"Format non supporté : {ext}")
 
-    def _detecter_sous_branche(
-        self,
-        df:      pd.DataFrame,
-        branche: str
-    ) -> str:
-        """Détecte automatiquement la sous-branche Non-Vie (auto · MRH · RC Pro).
-
-        ⚠ AUDIT V11 (B4) : le repli était `branche.split('_')[0]`, qui pour
-        branche='non_vie' produisait la sous-branche **'non'** — une valeur qui
-        n'existe dans AUCUNE configuration (ni VARS_CATEGORIELLES, ni VARS_GLM,
-        ni INTERACTIONS). A2 et A3 basculaient alors silencieusement sur leurs
-        fallbacks génériques, sans que personne ne soit averti que la
-        spécialisation de sous-branche avait été perdue.
-        Le repli renvoie désormais 'auto' (la sous-branche Non-Vie par défaut,
-        et de loin la plus fréquente) en JOURNALISANT explicitement l'échec de
-        détection, pour que l'actuaire sache qu'une configuration par défaut a
-        été appliquée à son portefeuille.
-        """
-        cols_lower = [c.lower() for c in df.columns]
-        scores     = {k: 0 for k in MOTS_CLES_DETECTION}
-
-        for sous_br, mots in MOTS_CLES_DETECTION.items():
-            for mot in mots:
-                if any(mot in col for col in cols_lower):
-                    scores[sous_br] += 1
-
-        meilleur = max(scores, key=scores.get)
-        if scores[meilleur] > 0:
-            return meilleur
-
-        logger.warning(
-            "[DETECTION SOUS-BRANCHE] Aucune sous-branche Non-Vie reconnue "
-            f"(auto/MRH/RC Pro) à partir des colonnes fournies : {list(df.columns)[:12]}… "
-            "Repli sur la configuration 'auto' par défaut. Les variables et "
-            "interactions spécifiques à la sous-branche réelle du portefeuille "
-            "ne seront donc PAS appliquées — vérifiez le mapping de colonnes."
-        )
-        return 'auto'
+    # (_detecter_sous_branche SUPPRIMÉE en Phase 1 : A1 ne devine plus la LoB.
+    #  Elle scorait les colonnes contre MOTS_CLES_DETECTION et, à défaut de tout
+    #  mot-clé, repliait sur 'auto' avec un WARNING — un étiquetage par défaut
+    #  invisible pour l'aval, et incapable par construction de reconnaître une LoB
+    #  neuve. La sous-branche est désormais DÉCLARÉE : run(sous_branche=...).)
 
     # ══════════════════════════════════════════════════════════════════════════
     # MAPPING COLONNES CLIENT
@@ -1091,8 +1075,10 @@ if __name__ == '__main__':
     print()
     print("Usage standard :")
     print("  agent_a1 = AgentA1Ingestion()")
-    print("  result_a1 = agent_a1.run(branche='non_vie', fichier='contrats.parquet')")
+    print("  result_a1 = agent_a1.run(branche='non_vie', sous_branche='auto',")
+    print("                           fichier='contrats.parquet')")
     print()
     print("Usage avec client réel :")
     print("  creer_mapping_client('client_xyz', {'NUM_POL': 'id_contrat', ...})")
-    print("  result_a1 = agent_a1.run(branche='non_vie', fichier='data.xlsx', client_id='client_xyz')")
+    print("  result_a1 = agent_a1.run(branche='non_vie', sous_branche='auto',")
+    print("                           fichier='data.xlsx', client_id='client_xyz')")

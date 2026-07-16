@@ -547,7 +547,7 @@ class TestAntiFuiteGenreWalkForwardV9(unittest.TestCase):
         a3 = AgentA3GLM(models_path='/tmp', audit_path='/tmp', verbose=False)
         a4 = AgentA4ML(models_path='/tmp', audit_path='/tmp', verbose=False)
         a6 = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp', verbose=False)
-        r1 = a1.run(branche='non_vie', dataframe=df)
+        r1 = a1.run(branche='non_vie', sous_branche='auto', dataframe=df)
         r2 = a2.run(result_a1=r1)
         self.assertEqual(str(r2['dataframe']['sexe'].dtype), 'float64',
             "Ce test présuppose que 'sexe' survit intact (numérique) à A2 en auto")

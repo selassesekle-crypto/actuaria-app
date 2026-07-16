@@ -327,7 +327,7 @@ class TestAntiFuiteV9(unittest.TestCase):
         a1 = AgentA1Ingestion(audit_path='/tmp', verbose=False)
         a2 = AgentA2Preprocessing(audit_path='/tmp', verbose=False)
         a4 = AgentA4ML(models_path='/tmp', audit_path='/tmp', verbose=False)
-        r1 = a1.run(branche='non_vie', dataframe=df)
+        r1 = a1.run(branche='non_vie', sous_branche='mrh', dataframe=df)
         r2 = a2.run(result_a1=r1)
 
         # (1) Correction à la source : A2 ne doit produire AUCUNE colonne
@@ -386,7 +386,7 @@ class TestAntiFuiteV9(unittest.TestCase):
         a1 = AgentA1Ingestion(audit_path='/tmp', verbose=False)
         a2 = AgentA2Preprocessing(audit_path='/tmp', verbose=False)
         a4 = AgentA4ML(models_path='/tmp', audit_path='/tmp', verbose=False)
-        r1 = a1.run(branche='non_vie', dataframe=df)
+        r1 = a1.run(branche='non_vie', sous_branche='auto', dataframe=df)
         self.assertTrue(r1['success'], f"A1 doit accepter du Non-Vie : {r1.get('erreur')}")
         r2 = a2.run(result_a1=r1)
         feats = a4._preparer_donnees(r2['dataframe'].copy(), 'auto',
@@ -419,12 +419,14 @@ class TestAntiFuiteV9(unittest.TestCase):
             'age': np.full(50, 40.0),
         })
         for branche_hs in ['sante_prevoyance', 'vie']:
-            r = a1.run(branche=branche_hs, dataframe=df)
+            # sous_branche VALIDE : on isole ainsi le rejet de la BRANCHE
+            # (le garde-fou de périmètre s'exécute avant le contrôle sous_branche).
+            r = a1.run(branche=branche_hs, sous_branche='auto', dataframe=df)
             self.assertFalse(r['success'],
                 f"A1 doit REJETER la branche '{branche_hs}' (hors périmètre Non-Vie)")
             self.assertEqual(r['statut_rag'], 'ROUGE')
             self.assertIn('hors périmètre', r['erreur'])
-        r_ok = a1.run(branche='non_vie', dataframe=df)
+        r_ok = a1.run(branche='non_vie', sous_branche='auto', dataframe=df)
         self.assertTrue(r_ok['success'], "A1 doit continuer d'accepter 'non_vie'")
         print("    V9-6 A1 rejette Vie/SP, accepte Non-Vie ✅")
 
@@ -469,7 +471,8 @@ class TestAntiFuiteV9(unittest.TestCase):
         })
         a1 = AgentA1Ingestion(audit_path='/tmp', verbose=False)
         a2 = AgentA2Preprocessing(audit_path='/tmp', verbose=False)
-        r2 = a2.run(result_a1=a1.run(branche='non_vie', dataframe=df))
+        r2 = a2.run(result_a1=a1.run(branche='non_vie', sous_branche='auto',
+                                     dataframe=df))
         derivees_genre = [c for c in r2['dataframe'].columns
                           if c.lower() != 'sexe'
                           and ('sexe' in c.lower() or 'genre' in c.lower())]

@@ -34,7 +34,9 @@ class TestA1Ingestion(unittest.TestCase):
         from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
         cls.agent = AgentA1Ingestion(audit_path='/tmp', verbose=False)
         cls.df    = _df_auto(500)
-        cls.r     = cls.agent.run(branche='non_vie', dataframe=cls.df)
+        # Phase 1 : la sous-branche est DÉCLARÉE par l'actuaire (A1 ne devine plus).
+        cls.r     = cls.agent.run(branche='non_vie', sous_branche='auto',
+                                  dataframe=cls.df)
 
     def test_a1(self):
         r = self.r
@@ -62,11 +64,17 @@ class TestA1Ingestion(unittest.TestCase):
         self.assertGreater(qualite['taux_completude'], 0)
         print(f"    ST3 Qualité ✅ | score={score:.1f}/100 | complétude={qualite['taux_completude']:.1f}%")
 
-        # ST4 — Détection sous-branche Auto (via colonnes freMTPL2)
+        # ST4 — Sous-branche DÉCLARÉE par l'actuaire, propagée telle quelle.
+        # ⚠ PRÉMISSE MISE À JOUR (Phase 1) : ce test vérifiait la DÉTECTION
+        # automatique (MOTS_CLES_DETECTION, supprimé). A1 ne devine plus la LoB —
+        # il la reçoit. On vérifie donc qu'il la propage SANS la réinterpréter :
+        # c'est cette valeur que A2 transmet à A3/A4/A5 (result_a2['branche']).
         branche = r['branche']
         self.assertIsInstance(branche, str)
         self.assertGreater(len(branche), 0)
-        print(f"    ST4 Branche ✅ | détectée='{branche}'")
+        self.assertEqual(branche, 'auto',
+            "A1 doit propager la sous-branche déclarée, sans la réinterpréter.")
+        print(f"    ST4 Sous-branche déclarée ✅ | propagée='{branche}'")
 
         # ST5 — Hash MD5 calculé et non vide
         hash_md5 = r['hash_md5']

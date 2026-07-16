@@ -144,7 +144,7 @@ def run_lob(nom, df, marqueurs_attendus):
           f"{int(df['nb_sinistres'].sum()):,} sinistres)\n{'=' * 72}")
     try:
         r1 = AgentA1Ingestion(audit_path=TMP, verbose=False).run(
-            branche="non_vie", dataframe=df)
+            branche="non_vie", sous_branche=nom, dataframe=df)
         r2 = AgentA2Preprocessing(audit_path=TMP, verbose=False).run(result_a1=r1)
         plan = PlanTarifaire.depuis_yaml(os.path.join(RACINE, "plans", f"{nom}.yaml"))
         r3 = AgentA3GLM(models_path=TMP, audit_path=TMP, verbose=False).run(
@@ -171,7 +171,10 @@ def run_lob(nom, df, marqueurs_attendus):
     bt = r6.get("backtest", {})
     cols = list(r2["dataframe"].columns)
 
-    print(f"  détection sous-branche      : {detected} "
+    # Phase 1 : plus de DÉTECTION (A1 reçoit sous_branche). Ce contrôle vérifie
+    # désormais la PROPAGATION : la LoB déclarée à A1 doit ressortir intacte d'A2
+    # (c'est result_a2['branche'] que lisent A3/A4/A5).
+    print(f"  sous-branche déclarée → A2  : {detected} "
           f"{'✓' if detected == nom else '✗ (attendu ' + nom + ')'}")
     print(f"  success A2/A3/A4 + A6 statut : {succes}")
     print(f"  A3 GLM Poisson              : Gini={met.get('gini', float('nan')):.4f}")

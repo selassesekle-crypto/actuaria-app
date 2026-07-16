@@ -3405,7 +3405,9 @@ def _executer_analyse(besoin, direction, equipe, client):
                 from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
 
                 a1 = AgentA1Ingestion(audit_path=_tmp, verbose=False)
-                r1 = a1.run(dataframe=df, branche="non_vie")
+                # Phase 1 : A1 ne devine plus la LoB — elle est déclarée. Cette
+                # page tarife en auto (les 3 chemins prime chargent plans/auto.yaml).
+                r1 = a1.run(dataframe=df, branche="non_vie", sous_branche="auto")
                 if not r1["success"]:
                     st.error(f"❌ A1 Amara : {r1['erreur']}")
                     return
