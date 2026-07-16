@@ -6,6 +6,12 @@ import sys, os, unittest
 import numpy as np
 import pandas as pd
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../')))
+from core.plan_tarifaire import PlanTarifaire
+
+# Phase 1 : A5.run() reçoit le PLAN signé (features restreintes à
+# plan.colonnes_produites()). Fixtures auto → plan auto.
+_RACINE = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+_PLAN_AUTO = PlanTarifaire.depuis_yaml(os.path.join(_RACINE, 'plans', 'auto.yaml'))
 
 try:
     import torch
@@ -95,14 +101,14 @@ class TestA5DeepLearning(unittest.TestCase):
             np.random.seed(1)
             torch.manual_seed(1)
             cls.r = cls.agent.run(
-                result_a2=cls.r_a2, result_a3=cls.r_a3,
+                result_a2=cls.r_a2, result_a3=cls.r_a3, plan=_PLAN_AUTO,
                 col_cible='nb_sinistres',   # FREQUENCE : offset log-expo coherent (cf. _make_r_a3)
                 n_epochs=30, batch_size=128, generer_graphiques=False
             )
         else:
             # Sans PyTorch → l'agent retourne une erreur documentée
             cls.r = cls.agent.run(
-                result_a2=cls.r_a2, result_a3=cls.r_a3,
+                result_a2=cls.r_a2, result_a3=cls.r_a3, plan=_PLAN_AUTO,
                 generer_graphiques=False
             )
 
@@ -181,7 +187,7 @@ class TestA5DeepLearning(unittest.TestCase):
         r_a2 = _make_r_a2(4000)
         r_a3 = _make_r_a3()               # SANS df -> modeles={} -> AUCUN ancrage
         np.random.seed(1); torch.manual_seed(1)
-        r = agent.run(result_a2=r_a2, result_a3=r_a3, col_cible='nb_sinistres',
+        r = agent.run(result_a2=r_a2, result_a3=r_a3, plan=_PLAN_AUTO, col_cible='nb_sinistres',
                       n_epochs=5, batch_size=128, generer_graphiques=False)
         self.assertFalse(r['metriques']['cann'].get('glm_gele', True),
             "CANN sans GLM d'ancrage doit avoir glm_gele=False (mode degrade).")
@@ -232,7 +238,7 @@ class TestA5FiltreGenre(unittest.TestCase):
         agent = AgentA5DeepLearning(models_path='/tmp', audit_path='/tmp', verbose=False)
         r_a2 = _make_r_a2_avec_genre_numerique(400)
         r_a3 = _make_r_a3()
-        r = agent.run(result_a2=r_a2, result_a3=r_a3,
+        r = agent.run(result_a2=r_a2, result_a3=r_a3, plan=_PLAN_AUTO,
                       n_epochs=3, batch_size=64, generer_graphiques=False)
 
         self.assertTrue(r['success'], f"Erreur : {r.get('erreur')}")

@@ -3454,7 +3454,13 @@ def _executer_analyse(besoin, direction, equipe, client):
                     resultats["principal"] = r4
                 elif besoin == "prime_dl":
                     from direction_non_vie.tarification.a5_deep_learning.agent import AgentA5DeepLearning
-                    r5 = AgentA5DeepLearning(audit_path=_tmp, verbose=False).run(r2, n_epochs=10, generer_graphiques=False)
+                    from core.plan_tarifaire import PlanTarifaire
+                    # Phase 1 : A5 restreint ses features à plan.colonnes_produites().
+                    # Cette page tarife en auto (même plan que prime_glm/prime_ml).
+                    _plan_auto = PlanTarifaire.depuis_yaml(os.path.join(
+                        os.path.dirname(__file__), "plans", "auto.yaml"))
+                    r5 = AgentA5DeepLearning(audit_path=_tmp, verbose=False).run(
+                        r2, plan=_plan_auto, n_epochs=10, generer_graphiques=False)
                     resultats["principal"] = r5
                 elif besoin == "selection":
                     from direction_non_vie.tarification.a3_glm.agent import AgentA3GLM
