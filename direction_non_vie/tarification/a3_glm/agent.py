@@ -111,7 +111,10 @@ except ImportError:
 # 'civilite' entrait dans le GLM. A3 appelle désormais filtrer_genre(),
 # comme A2/A4/A5/A6 : une seule implémentation, pour tous.
 from core.conformite_reglementaire import construire_matrice_x
-from core.plan_tarifaire import PlanTarifaire
+from core.plan_tarifaire import (
+    PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
+    alerte_modele_ampute,
+)
 
 warnings.filterwarnings('ignore')
 
@@ -429,6 +432,22 @@ class AgentA3GLM:
                 )
 
             statut_rag  = self._calculer_statut_rag(metriques_glob)
+
+            # ── MODÈLE AMPUTÉ → PLAFOND AMBRE ─────────────────────────────────
+            # Le plan DÉCLARE ce qui est nécessaire ; si les données ne portent
+            # pas une de ses colonnes, le GLM est calibré SANS ce facteur. On
+            # PLAFONNE (jamais on ne bloque), comme le garde-fou DL. Comparaison
+            # sur df.columns (disponibilité en DONNÉES) et non sur vars_pred
+            # post-garde-fous : une colonne écartée par le filtre genre/fuite,
+            # c'est le contrôle qui FONCTIONNE (INV-3/INV-4), pas une amputation.
+            _ampute = verifier_completude_plan(plan, df.columns)
+            _alertes_modele = []
+            _al = alerte_modele_ampute(_ampute, 'GLM')
+            if _al:
+                _alertes_modele.append(_al)
+                logger.warning("[PLAN INCOMPLET] %s", _al['message'])
+            statut_rag = plafonner_statut_si_ampute(statut_rag, _ampute)
+
             commentaire = self._commenter_actuaire_senior(
                 rapport, sous_branche, statut_rag,
                 res_poisson, res_gamma, res_tweedie,
@@ -532,6 +551,11 @@ class AgentA3GLM:
                 # détruit, −17,4 % de Gini, sans que rien ne l'indique nulle part).
                 'exclusions_conformite': getattr(self, 'exclusions_conformite', {}),
                 'alertes_conformite': getattr(self, 'alertes_conformite', {}),
+                # Modèle amputé (colonnes du plan absentes des données) : alerte
+                # explicite + plafond AMBRE. A6 agrège déjà 'alertes_modele'
+                # depuis r3/r4/r5 et la route vers les 3 livrables.
+                'alertes_modele':   _alertes_modele,
+                'modele_ampute':    _ampute,
                 # Modules avancés P2
                 'credibilite':  credibilite,
                 'lissage_geo':  lissage_geo,

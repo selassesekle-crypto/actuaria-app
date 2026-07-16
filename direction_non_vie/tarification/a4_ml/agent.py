@@ -129,7 +129,10 @@ except ImportError:
 # une colonne 'sexe' numérique atteignait la matrice de features des
 # modèles ML, potentiellement retenus en production par A6).
 from core.conformite_reglementaire import construire_matrice_x
-from core.plan_tarifaire import PlanTarifaire
+from core.plan_tarifaire import (
+    PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
+    alerte_modele_ampute,
+)
 
 # ── LOGGER ────────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -767,6 +770,19 @@ class AgentA4ML:
                 shap_absent=rapport.get('alertes', []) != []
                 and any('SHAP ABSENT' in a for a in rapport.get('alertes', []))
             )
+
+            # ── MODÈLE AMPUTÉ → PLAFOND AMBRE (cf. A3, même source unique) ────
+            # Comparaison sur df.columns (disponibilité en DONNÉES), pas sur la
+            # liste post-garde-fous : une colonne écartée par le filtre genre ou
+            # anti-fuite, c'est le contrôle qui fonctionne, pas une amputation.
+            _ampute = verifier_completude_plan(plan, df.columns)
+            _alertes_modele = []
+            _al = alerte_modele_ampute(_ampute, 'ML')
+            if _al:
+                _alertes_modele.append(_al)
+                logger.warning("[PLAN INCOMPLET] %s", _al['message'])
+            statut_rag = plafonner_statut_si_ampute(statut_rag, _ampute)
+
             commentaire = self._commenter_actuaire_senior(
                 classement, sous_branche, statut_rag,
                 result_a3, rapport
@@ -878,6 +894,10 @@ class AgentA4ML:
                 # détruit, −17,4 % de Gini, sans que rien ne l'indique nulle part).
                 'exclusions_conformite': getattr(self, 'exclusions_conformite', {}),
                 'alertes_conformite': getattr(self, 'alertes_conformite', {}),
+                # Modèle amputé (colonnes du plan absentes des données) : alerte
+                # explicite + plafond AMBRE. A6 agrège déjà 'alertes_modele'.
+                'alertes_modele':  _alertes_modele,
+                'modele_ampute':   _ampute,
                 # ── Standard ActuarIA ─────────────────────────────────────────
                 'excel_bytes':     _excel_a4,
                 'word_bytes':      _word_a4,

@@ -268,6 +268,74 @@ class PlanTarifaire:
         return sorted(requis - set(colonnes_df))
 
 
+def verifier_completude_plan(plan: "PlanTarifaire",
+                             colonnes_df: Sequence[str]) -> dict:
+    """Le modèle est-il AMPUTÉ ? Compare ce que le plan DÉCLARE à ce que les
+    données PORTENT réellement. SOURCE UNIQUE, appelée par A3/A4/A5 (qui
+    plafonnent leur propre statut) et par A6 (qui plafonne son gate).
+
+    ⚠ La comparaison porte sur les colonnes DISPONIBLES EN DONNÉES, pas sur la
+    liste post-garde-fous. Deux pertes distinctes qu'il ne faut jamais confondre :
+      · colonne déclarée ABSENTE des données  → le modèle est amputé (ICI) ;
+      · colonne écartée par un garde-fou (genre/fuite/effet) → le garde-fou
+        FONCTIONNE (cf. INV-3/INV-4 : un plan qui déclare 'sexe' doit se la voir
+        retirer). C'est déjà rapporté par exclusions_conformite, et plafonner
+        là-dessus reviendrait à punir le contrôle de faire son travail.
+    Un plan qui déclare un facteur illégal est un défaut de PLAN, pas une
+    amputation : autre défaut, autre remède.
+    """
+    attendues = list(plan.colonnes_produites())
+    dispo     = set(colonnes_df)
+    presentes = [c for c in attendues if c in dispo]
+    manquantes = [c for c in attendues if c not in dispo]
+    return {
+        'plan':                plan.lob,
+        'n_attendues':         len(attendues),
+        'n_presentes':         len(presentes),
+        'colonnes_manquantes': manquantes,
+        'ampute':              bool(manquantes),
+    }
+
+
+def plafonner_statut_si_ampute(statut: str, rapport) -> str:
+    """Un modèle AMPUTÉ ne peut pas être certifié VERT, quelle que soit la
+    qualité de son Gini ou de son walk-forward. On PLAFONNE à AMBRE — on ne
+    bloque JAMAIS : même logique que le garde-fou DL (valide_par_actuaire_dl).
+
+    Ne remonte jamais un statut : AMBRE et ROUGE sont laissés tels quels. Pas de
+    seuil — une SEULE colonne manquante suffit. Un plan signé déclare ce qui est
+    NÉCESSAIRE, pas un surplus optionnel : le BLOQUANT B5 l'a prouvé au prix fort
+    (un seul facteur détruit, antecedents_sinistres_3ans → −17,4 % de Gini).
+    Hiérarchiser les facteurs pour se donner un seuil reviendrait à inventer une
+    information que le plan ne porte pas.
+    """
+    if statut == 'VERT' and rapport and rapport.get('ampute'):
+        return 'AMBRE'
+    return statut
+
+
+def alerte_modele_ampute(rapport, modele: str) -> Optional[dict]:
+    """Entrée `alertes_modele` normalisée (source unique du libellé), au format
+    déjà agrégé par A6 depuis result_a3/a4/a5 et rendu dans les 3 livrables.
+    None si le plan est honoré : rien n'est alors signalé."""
+    if not rapport or not rapport.get('ampute'):
+        return None
+    manq = rapport['colonnes_manquantes']
+    return {
+        'modele': modele,
+        'severite': 'AMBRE',
+        'code': 'plan_incomplet_modele_ampute',
+        'message': (
+            f"Modele AMPUTE : {len(manq)} colonne(s) declaree(s) au plan "
+            f"'{rapport['plan']}' sont ABSENTES des donnees "
+            f"({rapport['n_presentes']}/{rapport['n_attendues']} presentes) : "
+            f"{', '.join(manq)}. {modele} est calibre SANS ces facteurs. Statut "
+            f"plafonne a AMBRE : un modele ampute ne peut pas etre certifie VERT, "
+            f"quelle que soit la qualite du Gini. Verifiez le mapping de colonnes."
+        ),
+    }
+
+
 def synthese_colonnes_plan_manquantes(rapport) -> Optional[str]:
     """SOURCE UNIQUE du libellé « colonnes du plan non produites », partagée par
     l'Excel A6, le rapport équipe et le Word/HTML — comme

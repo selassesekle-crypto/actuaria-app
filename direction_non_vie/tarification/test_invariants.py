@@ -75,6 +75,126 @@ from core.conformite_reglementaire import (
 #  la sélection explicite du plan et n'est plus dérivable d'un dict codé en dur.)
 
 
+class TestInvariant_ModeleAmputeJamaisVert(unittest.TestCase):
+    """
+    INVARIANT — un modèle AMPUTÉ ne peut pas être certifié VERT.
+
+    Le plan signé DÉCLARE ce qui est nécessaire à la tarification. Si les données
+    ne portent pas une de ses colonnes, le modèle est calibré SANS ce facteur :
+    il ne peut plus être présenté comme conforme au plan, quelle que soit la
+    qualité de son Gini. On PLAFONNE à AMBRE — on ne bloque jamais (même logique
+    que le garde-fou DL : valide_par_actuaire_dl).
+
+    Pourquoi AUCUN seuil : le BLOQUANT B5 l'a prouvé au prix fort — UN seul
+    facteur détruit (antecedents_sinistres_3ans) coûtait −17,4 % de Gini. Se
+    donner un seuil supposerait de hiérarchiser les facteurs, information que le
+    plan ne porte pas : il déclare une nécessité, pas une priorité.
+
+    ⚠ Ce test est DISCRIMINANT par construction : le portefeuille, la graine et
+    donc le Gini sont IDENTIQUES dans les deux passes — seule l'amputation
+    change. Sans cela, il « passerait » sur un portefeuille dont le Gini est de
+    toute façon sous le seuil VERT, et ne prouverait rien (leçon B2/B7 : un test
+    qui ne peut pas échouer sur le code bogué ne prouve rien).
+    """
+
+    def _portefeuille_auto_vert(self, N=12000):
+        """Signal FORT : ce portefeuille atteint VERT quand le plan est honoré.
+        Mêmes facteurs que la fixture d'INV-14c (tous ceux de plans/auto.yaml)."""
+        rng = np.random.default_rng(3)
+        age = rng.integers(18, 85, N)
+        bm = np.clip(rng.normal(.9, .2, N), .5, 3.5)
+        expo = np.clip(rng.beta(5, 1, N), .2, 1.)
+        nb = rng.poisson(0.25 * np.exp(0.9 * np.log(bm) + 0.7 * (age < 25)) * expo)
+        return pd.DataFrame({
+            'id_contrat': range(N),
+            'annee_souscription': rng.choice([2019, 2020, 2021, 2022, 2023], N),
+            'exposition': expo, 'age': age.astype(float), 'bonus_malus': bm,
+            'anciennete_permis': np.clip(age - 18, 0, None).astype(float),
+            'puissance_fiscale': rng.integers(4, 15, N).astype(float),
+            'age_vehicule': rng.integers(0, 20, N).astype(float),
+            'carburant': rng.choice(['Essence', 'Diesel'], N),
+            'usage': rng.choice(['Prive', 'Pro'], N),
+            'csp': rng.choice(['Cadre', 'Employe', 'Retraite'], N),
+            'milieu_geographique': rng.choice(['Urbain', 'Rural'], N),
+            'garantie': rng.choice(['Tiers', 'TousRisques'], N),
+            'valeur_venale': rng.uniform(5000, 40000, N),
+            'kilometrage_annuel': rng.uniform(5000, 30000, N),
+            'antecedents_sinistres_n1': rng.poisson(0.15, N).astype(float),
+            'nb_sinistres': nb.astype(float),
+            'cout_total_sinistres': np.where(nb > 0, rng.gamma(2, 1200, N), 0.),
+        })
+
+    def _a3(self, df, plan):
+        from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
+        from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
+        from direction_non_vie.tarification.a3_glm.agent import AgentA3GLM
+        r1 = AgentA1Ingestion(audit_path='/tmp', verbose=False).run(
+            branche='non_vie', sous_branche='auto', dataframe=df)
+        r2 = AgentA2Preprocessing(audit_path='/tmp', verbose=False).run(
+            result_a1=r1, plan=plan)
+        return AgentA3GLM(models_path='/tmp', audit_path='/tmp', verbose=False).run(
+            result_a2=r2, plan=plan, generer_graphiques=False)
+
+    def test_amputation_plafonne_le_statut_a_ambre_sur_le_pipeline_reel(self):
+        from core.plan_tarifaire import PlanTarifaire
+        plan = PlanTarifaire.depuis_yaml(
+            os.path.join(os.path.dirname(__file__), '..', '..', 'plans', 'auto.yaml'))
+        df = self._portefeuille_auto_vert()
+
+        # (1) Plan HONORÉ → le système DOIT pouvoir certifier VERT (sinon le
+        #     plafond serait trop large et ce test ne prouverait rien).
+        r_ok = self._a3(df, plan)
+        self.assertTrue(r_ok['success'], f"Erreur : {r_ok.get('erreur')}")
+        self.assertFalse(r_ok['modele_ampute']['ampute'])
+        self.assertEqual(r_ok['statut_rag'], 'VERT',
+            "Plan honoré + Gini suffisant doit rester certifiable VERT — sinon "
+            "le plafond « modèle amputé » est trop large.")
+        self.assertEqual(r_ok['alertes_modele'], [])
+
+        # (2) MÊME portefeuille, MÊME graine, amputé d'UN facteur déclaré.
+        r_amp = self._a3(df.drop(columns=['csp']), plan)
+        self.assertTrue(r_amp['success'],
+            "L'amputation PLAFONNE, elle ne BLOQUE pas : A3 doit aboutir.")
+        self.assertTrue(r_amp['modele_ampute']['ampute'])
+        self.assertEqual(r_amp['statut_rag'], 'AMBRE',
+            "Modèle AMPUTÉ (colonne déclarée au plan absente des données) : le "
+            "statut DOIT être plafonné à AMBRE, quelle que soit la qualité du Gini.")
+
+        # (3) Le test est DISCRIMINANT : Gini identique, verdict différent.
+        g_ok = r_ok['metriques']['poisson']['gini']
+        g_amp = r_amp['metriques']['poisson']['gini']
+        self.assertAlmostEqual(g_ok, g_amp, places=3,
+            msg="Prémisse du test : le Gini doit être inchangé pour que la "
+                "SEULE variable explicative du verdict soit l'amputation.")
+
+        # (4) L'écart est SURFACÉ, pas seulement plafonné (« ce qui n'est que
+        #     dans les logs n'existe pas »).
+        codes = [a['code'] for a in r_amp['alertes_modele']]
+        self.assertIn('plan_incomplet_modele_ampute', codes)
+        self.assertEqual(sorted(r_amp['modele_ampute']['colonnes_manquantes']),
+                         ['csp_employe', 'csp_retraite'])
+        print(f"    INV-AMP Modèle amputé jamais VERT ✅ | Gini identique "
+              f"{g_ok:.4f} | honoré={r_ok['statut_rag']} → amputé={r_amp['statut_rag']}")
+
+    def test_le_plafond_ne_remonte_jamais_un_statut(self):
+        """Contrôle négatif : plafonner, c'est DÉGRADER. AMBRE/ROUGE restent."""
+        from core.plan_tarifaire import plafonner_statut_si_ampute
+        sain = {'ampute': False}
+        ampute = {'ampute': True, 'colonnes_manquantes': ['x']}
+        for statut in ('VERT', 'AMBRE', 'ROUGE'):
+            self.assertEqual(plafonner_statut_si_ampute(statut, sain), statut,
+                "Plan honoré : le statut ne doit pas bouger.")
+        self.assertEqual(plafonner_statut_si_ampute('VERT', ampute), 'AMBRE')
+        self.assertEqual(plafonner_statut_si_ampute('AMBRE', ampute), 'AMBRE')
+        self.assertEqual(plafonner_statut_si_ampute('ROUGE', ampute), 'ROUGE',
+            "Le plafond ne doit JAMAIS remonter un ROUGE en AMBRE.")
+        # Défaut non plafonnant : sans information, on ne dégrade pas.
+        self.assertEqual(plafonner_statut_si_ampute('VERT', None), 'VERT',
+            "Information absente → aucun plafond : on ne dégrade que sur une "
+            "information POSITIVE d'amputation.")
+        print("    INV-AMP2 Le plafond dégrade, ne remonte jamais ✅")
+
+
 class TestInvariant_ConformiteNonContournable(unittest.TestCase):
     """
     INVARIANT N°3 — Les garde-fous de conformité sont cohérents entre eux.
@@ -1189,6 +1309,16 @@ class TestInvariant_LeSystemeAccepteCeQuIlDoitAccepter(unittest.TestCase):
         bm = np.clip(rng.normal(.9, .2, N), .5, 3.5)
         expo = np.clip(rng.beta(5, 1, N), .2, 1.)
         nb = rng.poisson(0.25 * np.exp(0.9 * np.log(bm) + 0.7 * (age < 25)) * expo)
+        # ⚠ FIXTURE COMPLÉTÉE (Phase 2) : ce test est le CONTRÔLE POSITIF — il
+        # prouve que le système accepte ce qu'il DOIT accepter. Depuis que les
+        # agents plafonnent à AMBRE un modèle AMPUTÉ (colonne déclarée au plan
+        # absente des données), un GLM « sain » suppose aussi un plan HONORÉ :
+        # un portefeuille incomplet est désormais légitimement AMBRE. La fixture
+        # porte donc TOUS les facteurs de plans/auto.yaml. Prémisse complétée,
+        # pas faussée — même geste que pour la fixture B2 du gate (audit V10).
+        # Les dérivées (risque_historique, km_par_an_normalise, jeune/senior_
+        # conducteur, vehicule_recent/ancien) sont calculées par A2 à partir de
+        # ces sources : on ne les fournit pas, on fournit ce qui les produit.
         df = pd.DataFrame({
             'id_contrat': range(N),
             'annee_souscription': rng.choice([2019, 2020, 2021, 2022, 2023], N),
@@ -1198,6 +1328,12 @@ class TestInvariant_LeSystemeAccepteCeQuIlDoitAccepter(unittest.TestCase):
             'age_vehicule': rng.integers(0, 20, N).astype(float),
             'carburant': rng.choice(['Essence', 'Diesel'], N),
             'usage': rng.choice(['Prive', 'Pro'], N),
+            'csp': rng.choice(['Cadre', 'Employe', 'Retraite'], N),
+            'milieu_geographique': rng.choice(['Urbain', 'Rural'], N),
+            'garantie': rng.choice(['Tiers', 'TousRisques'], N),
+            'valeur_venale': rng.uniform(5000, 40000, N),
+            'kilometrage_annuel': rng.uniform(5000, 30000, N),
+            'antecedents_sinistres_n1': rng.poisson(0.15, N).astype(float),
             'nb_sinistres': nb.astype(float),
             'cout_total_sinistres': np.where(nb > 0, rng.gamma(2, 1200, N), 0.),
         })

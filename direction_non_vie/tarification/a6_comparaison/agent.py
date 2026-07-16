@@ -347,12 +347,22 @@ class AgentA6Comparaison:
                 )
 
             # Rapport final
+            # Amputation du plan : relevée à l'identique par A3/A4/A5 (chacun
+            # vérifie SON plan contre SES données). On prend la première info
+            # disponible — si les trois divergent, c'est que les agents n'ont pas
+            # reçu le même plan, et chaque alerte est de toute façon remontée
+            # individuellement dans _alertes_modele.
+            _modele_ampute = next(
+                (r.get('modele_ampute') for r in (result_a3, result_a4, result_a5)
+                 if isinstance(r, dict) and r.get('modele_ampute')), None)
+
             statut_rag  = self._calculer_statut_rag(
                 modele_production, classement,
                 profil_valide_par=profil_valide_par,
                 environnement=environnement,
                 backtest=backtest,
                 valide_par_actuaire_dl=valide_par_actuaire_dl,
+                modele_ampute=_modele_ampute,
             )
             commentaire = self._commenter_actuaire_senior(
                 classement, modele_production, sous_branche,
@@ -1392,6 +1402,7 @@ class AgentA6Comparaison:
         environnement:      str = 'production',
         backtest:           Optional[Dict] = None,
         valide_par_actuaire_dl: Optional[str] = None,
+        modele_ampute:      Optional[Dict] = None,
     ) -> str:
         """
         Statut RAG basé sur le score global du modèle de production.
@@ -1529,6 +1540,27 @@ class AgentA6Comparaison:
                 "walk-forward. Statut plafonné à AMBRE."
             )
 
+        # ── MODÈLE AMPUTÉ (colonnes du plan absentes des données) ─────────────
+        # Le plan signé DÉCLARE ce qui est nécessaire. Si les données ne portent
+        # pas une de ses colonnes, les modèles sont calibrés SANS ce facteur : on
+        # ne certifie pas VERT un modèle amputé, quelle que soit la qualité du
+        # Gini ou du walk-forward. Plafond AMBRE, jamais bloquant — même logique
+        # que les garde-fous DL ci-dessus. AUCUN SEUIL : une seule colonne suffit
+        # (BLOQUANT B5 : un facteur détruit = −17,4 % de Gini).
+        # ⚠ DÉFAUT NON PLAFONNANT : si l'information est absente (modele_ampute
+        # None — appel direct du gate, agents antérieurs), on NE plafonne PAS. On
+        # ne dégrade que sur une information POSITIVE d'amputation ; inventer une
+        # amputation faute de donnée serait un faux signal.
+        _plan_complet_ok = not (modele_ampute or {}).get('ampute', False)
+        if not _plan_complet_ok:
+            logger.warning(
+                "[PLAN INCOMPLET] Modele de production AMPUTE : "
+                f"{len((modele_ampute or {}).get('colonnes_manquantes', []))} "
+                f"colonne(s) declaree(s) au plan "
+                f"'{(modele_ampute or {}).get('plan', '?')}' absente(s) des "
+                "donnees. Statut plafonne a AMBRE."
+            )
+
         # ── RÉSULTAT DU WALK-FORWARD (audit V10, BLOQUANT B2) ─────────────────
         # Le gate vérifiait que le walk-forward avait EU LIEU (`disponible`) et
         # qu'il portait sur le bon modèle (`modele_recalibre_fidele`) — mais
@@ -1618,7 +1650,8 @@ class AgentA6Comparaison:
 
         if (score >= 0.60 and gini >= 0.15 and _gouvernance_ok
                 and _backtest_ok and _wf_fidele_ok and _wf_resultat_ok
-                and _gini_plausible and _cann_ancre_ok and _dl_confirme_ok):
+                and _gini_plausible and _cann_ancre_ok and _dl_confirme_ok
+                and _plan_complet_ok):
             return 'VERT'
         # ── ANTI-SÉLECTION : DISQUALIFIANT (auto-audit 11/07/2026) ────────────
         # Un Gini NÉGATIF signifie que le modèle discrimine À L'ENVERS : il

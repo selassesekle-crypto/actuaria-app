@@ -46,7 +46,10 @@ from sklearn.preprocessing import StandardScaler
 # PyTorch, mais la logique de sélection est identique à celle d'A4,
 # vérifiée empiriquement).
 from core.conformite_reglementaire import construire_matrice_x
-from core.plan_tarifaire import PlanTarifaire
+from core.plan_tarifaire import (
+    PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
+    alerte_modele_ampute,
+)
 
 # Export Excel (audit V7 MINEUR #2) — A5 était le seul agent sans export
 # Excel. export_excel_a5 suit le même gabarit que les autres agents.
@@ -603,6 +606,17 @@ class AgentA5DeepLearning:
                                "GLM Tweedie (A3) absent/indisponible.",
                 })
 
+            # ── MODÈLE AMPUTÉ → PLAFOND AMBRE (cf. A3/A4, même source unique) ─
+            # Indépendant, par conception, du plafond d'ancrage CANN ci-dessus :
+            # un CANN parfaitement ancré peut être amputé, et inversement. Les
+            # deux alertes coexistent alors — aucune ne blanchit l'autre.
+            _ampute = verifier_completude_plan(plan, df.columns)
+            _al_amp = alerte_modele_ampute(_ampute, 'DL')
+            if _al_amp:
+                _alertes_modele.append(_al_amp)
+                logger.warning("[PLAN INCOMPLET] %s", _al_amp['message'])
+            statut_rag = plafonner_statut_si_ampute(statut_rag, _ampute)
+
             return {
                 'success':             True,
                 # Exclusions de conformité tracées par MatriceX (audit V11 / I5) :
@@ -612,6 +626,7 @@ class AgentA5DeepLearning:
                 'exclusions_conformite': getattr(self, 'exclusions_conformite', {}),
                 'alertes_conformite': getattr(self, 'alertes_conformite', {}),
                 'alertes_modele':      _alertes_modele,
+                'modele_ampute':       _ampute,
                 'dataframe':           df,
                 'branche':             sous_branche,
                 'col_cible':           col_cible,   # cible sur laquelle CES modeles DL sont ajustes (A6 filtre dessus)
