@@ -106,10 +106,13 @@ class TestA5DeepLearning(unittest.TestCase):
                 n_epochs=30, batch_size=128, generer_graphiques=False
             )
         else:
-            # Sans PyTorch → l'agent retourne une erreur documentée
+            # Sans PyTorch → l'agent retourne une erreur documentée. col_cible est
+            # fourni quand même : le contrôle torch s'exécute AVANT celui de la
+            # cible, mais faire reposer un test sur l'ORDRE des garde-fous serait
+            # un piège — on déclare, comme partout ailleurs.
             cls.r = cls.agent.run(
                 result_a2=cls.r_a2, result_a3=cls.r_a3, plan=_PLAN_AUTO,
-                generer_graphiques=False
+                col_cible='nb_sinistres', generer_graphiques=False
             )
 
     def test_a5(self):
@@ -238,7 +241,11 @@ class TestA5FiltreGenre(unittest.TestCase):
         agent = AgentA5DeepLearning(models_path='/tmp', audit_path='/tmp', verbose=False)
         r_a2 = _make_r_a2_avec_genre_numerique(400)
         r_a3 = _make_r_a3()
+        # col_cible EXPLICITE : ce test héritait du défaut 'prime_pure' — il
+        # exerçait donc le CANN sur une cible incohérente avec son offset
+        # log(exposition). Le défaut a été supprimé (piège), la cible est déclarée.
         r = agent.run(result_a2=r_a2, result_a3=r_a3, plan=_PLAN_AUTO,
+                      col_cible='nb_sinistres',
                       n_epochs=3, batch_size=64, generer_graphiques=False)
 
         self.assertTrue(r['success'], f"Erreur : {r.get('erreur')}")

@@ -419,7 +419,7 @@ class AgentA5DeepLearning:
         result_a2:      Dict[str, Any],
         result_a3:      Optional[Dict] = None,
         result_a4:      Optional[Dict] = None,
-        col_cible:      str = 'prime_pure',
+        col_cible:      Optional[str] = None,   # Phase 2 : OBLIGATOIRE (cf. run())
         col_exposition: str = 'exposition',
         plan:           Optional[PlanTarifaire] = None,   # Phase 1 : plan signé explicite
         n_epochs:       int = 200,  # Early stopping actif — arrêt automatique
@@ -432,6 +432,16 @@ class AgentA5DeepLearning:
 
         Paramètres
         ──────────
+        col_cible : str
+            OBLIGATOIRE — la cible sur laquelle CES modèles DL sont ajustés.
+            Ex. 'nb_sinistres' (fréquence) ou 'cout_moyen' (sévérité).
+            ⚠ Le défaut historique était 'prime_pure' : INCOHÉRENT avec
+            l'architecture du CANN, et jamais utilisé par les appelants (tous
+            passaient 'nb_sinistres') — sauf la page prime_dl de l'app, qui
+            héritait donc du défaut. Un défaut que personne n'utilise et qui
+            contredit l'architecture est un piège : il est supprimé. Absent →
+            erreur propre, comme plan=.
+
         n_epochs : int
             Nombre d'époques d'entraînement.
             50 époques = bon compromis vitesse/performance sur Colab CPU.
@@ -468,6 +478,24 @@ class AgentA5DeepLearning:
                 "A5.run exige un plan (PlanTarifaire) : les features DL sont "
                 "restreintes à plan.colonnes_produites() (Phase 1, _LOBS_ALIGNES_PLAN "
                 "supprimé). Fournissez plan=PlanTarifaire.depuis_yaml('plans/<lob>.yaml').",
+                audit_id)
+
+        # ── LA CIBLE EST DÉCLARÉE, PAS HÉRITÉE D'UN DÉFAUT ───────────────────
+        # Le défaut historique 'prime_pure' contredisait l'architecture du CANN :
+        # celui-ci est exp(GLM_gelé(x) + offset·log(exposition)) — un modèle de
+        # COMPTAGE. La prime pure est exposure-INDÉPENDANTE : l'offset y est non
+        # seulement inutile, il est faux, et il dégrade l'ancrage. Aucun appelant
+        # n'utilisait ce défaut (tous passaient 'nb_sinistres') — SAUF la page
+        # prime_dl de l'app, qui en héritait silencieusement et faisait donc
+        # tourner le CANN sur une cible que son archi ne supporte pas.
+        # Un défaut que personne n'utilise et qui contredit l'architecture est un
+        # piège, pas une commodité : il est supprimé.
+        if not col_cible:
+            return self._erreur(
+                "A5.run exige col_cible : la cible des modèles DL est DÉCLARÉE, "
+                "jamais héritée d'un défaut (l'ancien défaut 'prime_pure' était "
+                "incohérent avec l'offset log(exposition) du CANN). Ex. "
+                "col_cible='nb_sinistres' (fréquence) ou 'cout_moyen' (sévérité).",
                 audit_id)
 
         df      = result_a2['dataframe'].copy()

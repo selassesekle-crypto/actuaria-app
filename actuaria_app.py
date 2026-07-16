@@ -3453,8 +3453,17 @@ def _executer_analyse(besoin, direction, equipe, client):
                 elif besoin == "prime_dl":
                     from direction_non_vie.tarification.a5_deep_learning.agent import AgentA5DeepLearning
                     # _plan_auto : chargé une seule fois plus haut, partagé avec A2.
+                    # ⚠ CORRECTIF : cette page n'indiquait AUCUNE cible et héritait
+                    # donc du défaut d'A5, 'prime_pure' — or le CANN est
+                    # exp(GLM_gelé + offset·log(expo)), un modèle de COMPTAGE : la
+                    # prime pure est exposure-indépendante, l'offset y est faux et
+                    # dégrade l'ancrage. La page tarifait donc en DL sur une cible
+                    # que l'architecture ne supporte pas. La cible est désormais
+                    # DÉCLARÉE (et le défaut d'A5 a été supprimé, pour que le
+                    # prochain appelant ne puisse plus tomber dans le même piège).
                     r5 = AgentA5DeepLearning(audit_path=_tmp, verbose=False).run(
-                        r2, plan=_plan_auto, n_epochs=10, generer_graphiques=False)
+                        r2, plan=_plan_auto, col_cible="nb_sinistres",
+                        n_epochs=10, generer_graphiques=False)
                     resultats["principal"] = r5
                 elif besoin == "selection":
                     from direction_non_vie.tarification.a3_glm.agent import AgentA3GLM
