@@ -27,6 +27,7 @@ from core.conformite_reglementaire import (
     synthese_modele_dl,
 )
 from core.qualite_donnees import synthese_qualite_donnees
+from core.plan_tarifaire import synthese_colonnes_plan_manquantes
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
@@ -356,6 +357,13 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
                  statut=("AMBRE" if ("EXCLUE" in _synth_q6 or "SIGNALEE" in _synth_q6
                                      or "BLOQUE" in _synth_q6) else "VERT"),
                  wrap=True); r += 1
+        # Colonnes du plan non produites (fichier client incomplet → modèle
+        # amputé) — source UNIQUE partagée avec Excel A6 / Word / HTML.
+        _synth_cp6 = synthese_colonnes_plan_manquantes(
+            r6.get('colonnes_plan_manquantes') if isinstance(r6, dict) else None)
+        if _synth_cp6:
+            _kpi(ws5, r, "Colonnes du plan non produites — modèle amputé",
+                 _synth_cp6, statut="AMBRE", wrap=True); r += 1
 
         # ── Onglet 6 : Audit trail consolidé ──────────────────────────────────
         ws6 = wb.create_sheet("6-Audit Trail Consolidé")

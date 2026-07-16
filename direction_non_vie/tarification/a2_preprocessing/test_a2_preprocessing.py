@@ -6,6 +6,13 @@ import sys, os, unittest
 import numpy as np
 import pandas as pd
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../')))
+from core.plan_tarifaire import PlanTarifaire
+
+# Phase 2 : A2.run() reçoit le PLAN signé — l'encodage (one-hot vs label, ordre des
+# modalités), les transformations et les interactions en sont dérivés.
+# Fixtures auto → plan auto.
+_RACINE = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+_PLAN_AUTO = PlanTarifaire.depuis_yaml(os.path.join(_RACINE, 'plans', 'auto.yaml'))
 
 
 def _make_r_a1(n=500):
@@ -20,7 +27,11 @@ def _make_r_a1(n=500):
         'bonus_malus':          np.random.uniform(50, 350, n),
         'puissance_fiscale':    np.random.randint(4, 15, n),
         'zone_geographique':    np.random.choice(['A','B','C','D','E','F'], n),
-        'carburant':            np.random.choice(['Regular','Diesel'], n),
+        # 'Essence' et non 'Regular' : les modalités du plan (plans/auto.yaml)
+        # font AUTORITÉ depuis la Phase 2. 'Regular' est une valeur freMTPL2 que
+        # l'ancien encodage automatique avalait en silence ; le plan déclare
+        # [Essence, Diesel, Electrique] et une modalité inconnue lève (piège V9).
+        'carburant':            np.random.choice(['Essence','Diesel'], n),
         'age_vehicule':         np.random.randint(0, 20, n),
         'densite_population':   np.random.uniform(10, 5000, n),
     })
@@ -45,7 +56,7 @@ class TestA2Preprocessing(unittest.TestCase):
         from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
         cls.agent  = AgentA2Preprocessing(audit_path='/tmp', verbose=False)
         cls.r_a1   = _make_r_a1(500)
-        cls.r      = cls.agent.run(result_a1=cls.r_a1)
+        cls.r      = cls.agent.run(result_a1=cls.r_a1, plan=_PLAN_AUTO)
 
     def test_a2(self):
         r = self.r
@@ -115,7 +126,7 @@ class TestA2PrimePureCalculee(unittest.TestCase):
         self.assertNotIn('prime_pure', r_a1['dataframe'].columns,
                          "Pré-requis du test : prime_pure ne doit pas être "
                          "déjà présente dans la fixture brute")
-        r = agent.run(result_a1=r_a1)
+        r = agent.run(result_a1=r_a1, plan=_PLAN_AUTO)
 
         self.assertTrue(r['success'], f"Erreur : {r.get('erreur')}")
         self.assertIn(

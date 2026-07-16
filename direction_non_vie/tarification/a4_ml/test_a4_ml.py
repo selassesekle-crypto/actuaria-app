@@ -244,7 +244,7 @@ class TestAntiFuiteFamilleCible(unittest.TestCase):
                 'hash_md5': 'x', 'rapport': {'etapes': [], 'alertes': []},
                 'commentaire': 'OK', 'audit_id': 'A1', 'client_id': None, 'erreur': None}
         a2 = AgentA2Preprocessing(audit_path='/tmp', verbose=False)
-        r2 = a2.run(result_a1=r_a1)
+        r2 = a2.run(result_a1=r_a1, plan=_PLAN_AUTO)
         self.assertIn('prime_pure', r2['dataframe'].columns,
             "A2 doit calculer prime_pure (contrat de données V7 B2)")
 
@@ -319,16 +319,22 @@ class TestAntiFuiteV9(unittest.TestCase):
             'sexe': np.random.choice(['M', 'F'], n),
             'age': np.random.randint(20, 80, n).astype(float),
             'capital_assure_biens_eur': np.random.uniform(50000, 300000, n),
-            'type_logement': np.random.choice(['appartement', 'maison'], n),
-            'statut_occupation': np.random.choice(['proprietaire', 'locataire'], n),
-            'zone_geographique': np.random.choice(list('ABCDE'), n),
+            # Casse EXACTE du plan mrh : le plan fait autorité (Phase 2), et une
+            # modalité inconnue lève — 'maison' ≠ 'Maison'. L'ancien encodage
+            # automatique masquait ce désalignement fixture/plan.
+            'type_logement': np.random.choice(['Appartement', 'Maison'], n),
+            'statut_occupation': np.random.choice(['Proprietaire', 'Locataire'], n),
+            # Modalités du plan mrh (Phase 2 : le plan fait autorité). 'A'..'E'
+            # était avalé en silence par l'ancien encodage automatique.
+            'zone_geographique': np.random.choice(['Urbaine', 'Periurbaine',
+                                                   'Rurale'], n),
             'annee_souscription': np.random.choice([2021, 2022, 2023], n),
         })
         a1 = AgentA1Ingestion(audit_path='/tmp', verbose=False)
         a2 = AgentA2Preprocessing(audit_path='/tmp', verbose=False)
         a4 = AgentA4ML(models_path='/tmp', audit_path='/tmp', verbose=False)
         r1 = a1.run(branche='non_vie', sous_branche='mrh', dataframe=df)
-        r2 = a2.run(result_a1=r1)
+        r2 = a2.run(result_a1=r1, plan=_PLAN_MRH)
 
         # (1) Correction à la source : A2 ne doit produire AUCUNE colonne
         #     dérivée du genre (plus de one-hot sexe_m/sexe_f).
@@ -388,7 +394,7 @@ class TestAntiFuiteV9(unittest.TestCase):
         a4 = AgentA4ML(models_path='/tmp', audit_path='/tmp', verbose=False)
         r1 = a1.run(branche='non_vie', sous_branche='auto', dataframe=df)
         self.assertTrue(r1['success'], f"A1 doit accepter du Non-Vie : {r1.get('erreur')}")
-        r2 = a2.run(result_a1=r1)
+        r2 = a2.run(result_a1=r1, plan=_PLAN_AUTO)
         feats = a4._preparer_donnees(r2['dataframe'].copy(), 'auto',
                                      'nb_sinistres', 'exposition', _PLAN_AUTO)[-1]
         fuite = [c for c in feats
@@ -466,13 +472,15 @@ class TestAntiFuiteV9(unittest.TestCase):
             # Genre sous forme texte — passera par l'encodage automatique
             # s'il n'est pas explicitement filtré :
             'sexe': np.random.choice(['M', 'F'], n),
-            'carburant': np.random.choice(['Diesel', 'Regular'], n),
+            # Modalités du plan auto (Phase 2) : 'Regular' (valeur freMTPL2)
+            # n'est pas déclarée — une modalité inconnue lève (piège V9).
+            'carburant': np.random.choice(['Diesel', 'Essence'], n),
             'annee_souscription': np.random.choice([2021, 2022, 2023], n),
         })
         a1 = AgentA1Ingestion(audit_path='/tmp', verbose=False)
         a2 = AgentA2Preprocessing(audit_path='/tmp', verbose=False)
         r2 = a2.run(result_a1=a1.run(branche='non_vie', sous_branche='auto',
-                                     dataframe=df))
+                                     dataframe=df), plan=_PLAN_AUTO)
         derivees_genre = [c for c in r2['dataframe'].columns
                           if c.lower() != 'sexe'
                           and ('sexe' in c.lower() or 'genre' in c.lower())]

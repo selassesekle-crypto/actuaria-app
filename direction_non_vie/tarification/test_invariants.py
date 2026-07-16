@@ -44,55 +44,26 @@ from core.conformite_reglementaire import (
 # A1 (MOTS_CLES_DETECTION, BRANCHES_SUPPORTEES) : imports retirés en Phase 1 avec la
 # classe TestInvariant_DetectionCoherenteAvecConfigs qui les exerçait (A1 ne devine
 # plus la LoB).
-from direction_non_vie.tarification.a2_preprocessing.agent import (
-    VARS_CATEGORIELLES, INTERACTIONS,
-)
+# A2 (VARS_CATEGORIELLES, INTERACTIONS) : imports retirés en Phase 2 avec la classe
+# TestInvariant_ConfigsSurviventAuFiltre qui les exerçait (A2 dérive désormais son
+# encodage et ses interactions du plan signé).
 # VARS_GLM supprimé en Phase 1 : A3 dérive les variables de plan.colonnes_produites().
 
 
-class TestInvariant_ConfigsSurviventAuFiltre(unittest.TestCase):
-    """
-    INVARIANT N°1 — Le code ne doit pas détruire ce qu'il déclare lui-même.
-
-    Toute variable qu'un agent DÉCLARE comme facteur tarifaire (VARS_GLM,
-    VARS_CATEGORIELLES, INTERACTIONS) doit survivre à filtrer_features().
-    Sinon, l'agent construit un modèle amputé — en silence.
-
-    C'est cet invariant qui a révélé le BLOQUANT B5 de l'audit V11 :
-    'antecedents_sinistres_3ans' (VARS_GLM['rcpro']) et 'double_vitrage'
-    (VARS_GLM['mrh']) étaient DÉTRUITS par la liste blanche.
-    """
-
-    # (test_vars_glm_survivent_toutes SUPPRIMÉ en Phase 1 : sa prémisse était le
-    #  dict VARS_GLM codé en dur, supprimé. L'invariant « un facteur déclaré
-    #  survit au pipeline de conformité RÉEL » est couvert, côté plan, par INV-2
-    #  dans test_plan_invariants.py — et la protection contre B7 est désormais
-    #  STRUCTURELLE : le plan déclare l'antériorité, construire_matrice_x l'exempte.)
-
-    def test_encodages_declares_survivent(self):
-        """Les colonnes produites par l'encodage déclaré d'A2 (label → *_enc,
-        one-hot → base_modalite) doivent survivre au filtre."""
-        for sous_branche, cfg in VARS_CATEGORIELLES.items():
-            with self.subTest(sous_branche=sous_branche):
-                derivees = ([f"{c}_enc" for c in cfg.get('label', [])]
-                            + [f"{c}_modalite" for c in cfg.get('one_hot', [])])
-                detruites = set(derivees) - set(filtrer_features(derivees))
-                self.assertEqual(detruites, set(),
-                    f"VARS_CATEGORIELLES['{sous_branche}'] produira {sorted(detruites)}, "
-                    f"que filtrer_features() DÉTRUIT.")
-        print("    INV-1b Encodages déclarés par A2 : tous conservés ✅")
-
-    def test_interactions_declarees_survivent(self):
-        """A2 génère 'inter_{a}_{b}' et '{a}_x_{b}' à partir d'INTERACTIONS."""
-        for sous_branche, paires in INTERACTIONS.items():
-            with self.subTest(sous_branche=sous_branche):
-                noms = ([f"inter_{a}_{b}" for a, b in paires]
-                        + [f"{a}_x_{b}" for a, b in paires])
-                detruites = set(noms) - set(filtrer_features(noms))
-                self.assertEqual(detruites, set(),
-                    f"INTERACTIONS['{sous_branche}'] produira {sorted(detruites)}, "
-                    f"que filtrer_features() DÉTRUIT.")
-        print("    INV-1c Interactions déclarées par A2 : toutes conservées ✅")
+# (TestInvariant_ConfigsSurviventAuFiltre SUPPRIMÉE — sa dernière raison d'être a
+#  disparu avec les dicts qu'elle itérait. Historique de l'INVARIANT N°1 : « le code
+#  ne doit pas détruire ce qu'il déclare lui-même » — c'est lui qui avait révélé le
+#  BLOQUANT B5 de l'audit V11 (antecedents_sinistres_3ans et double_vitrage détruits
+#  par la liste blanche). Ses trois tests sont morts avec leurs prémisses :
+#    · INV-1a (test_vars_glm_survivent_toutes) — Phase 1, VARS_GLM supprimé ;
+#    · INV-1b (test_encodages_declares_survivent) — Phase 2, VARS_CATEGORIELLES ;
+#    · INV-1c (test_interactions_declarees_survivent) — Phase 2, INTERACTIONS.
+#  L'invariant lui-même n'est PAS perdu, il est mieux gardé : côté plan, INV-1
+#  (test_plan_invariants) vérifie que A2.transform produit EXACTEMENT
+#  plan.colonnes_produites() — l'assert est dans le code de production, pas dans un
+#  test — et INV-2 vérifie que construire_matrice_x n'en détruit aucune. Un facteur
+#  déclaré ne peut donc plus être détruit en silence : le contrat est vérifié à
+#  CHAQUE appel, plus seulement quand la suite tourne.)
 
 
 # (TestInvariant_DetectionCoherenteAvecConfigs SUPPRIMÉE en Phase 1 : l'invariant
@@ -1232,11 +1203,11 @@ class TestInvariant_LeSystemeAccepteCeQuIlDoitAccepter(unittest.TestCase):
         })
         a1 = AgentA1Ingestion(audit_path='/tmp', verbose=False)
         a2 = AgentA2Preprocessing(audit_path='/tmp', verbose=False)
-        r2 = a2.run(result_a1=a1.run(branche='non_vie', sous_branche='auto',
-                                     dataframe=df))
         from core.plan_tarifaire import PlanTarifaire
         _plan_auto = PlanTarifaire.depuis_yaml(
             os.path.join(os.path.dirname(__file__), '..', '..', 'plans', 'auto.yaml'))
+        r2 = a2.run(result_a1=a1.run(branche='non_vie', sous_branche='auto',
+                                     dataframe=df), plan=_plan_auto)
         r3 = AgentA3GLM(models_path='/tmp', audit_path='/tmp',
                         verbose=False).run(result_a2=r2, plan=_plan_auto,
                                            generer_graphiques=False)

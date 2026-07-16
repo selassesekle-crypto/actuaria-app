@@ -17,6 +17,7 @@ from core.conformite_reglementaire import (
     synthese_modele_dl,
 )
 from core.qualite_donnees import synthese_qualite_donnees
+from core.plan_tarifaire import synthese_colonnes_plan_manquantes
 import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Any
@@ -782,6 +783,15 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
                  statut=("AMBRE" if ("EXCLUE" in _synth_q or "SIGNALEE" in _synth_q
                                      or "BLOQUE" in _synth_q) else "VERT"),
                  wrap=True); r += 1
+        # ── COLONNES DU PLAN NON PRODUITES (modèle amputé) ────────────────────
+        # Un fichier client incomplet fait tourner les modèles SANS certains
+        # facteurs déclarés. Même discipline que ci-dessus : jamais silencieux.
+        # None (rien affiché) si le plan a été honoré intégralement.
+        _synth_cp = synthese_colonnes_plan_manquantes(
+            result_a6.get('colonnes_plan_manquantes'))
+        if _synth_cp:
+            _kpi(ws5, r, "Colonnes du plan non produites — modèle amputé",
+                 _synth_cp, statut="AMBRE", wrap=True); r += 1
         # Alertes d'expérience passée conservée (audit V13 / B7). Ce n'est pas une
         # exclusion : c'est une VÉRIFICATION demandée à l'actuaire. Ce qui n'est
         # que dans les logs n'existe pas (constat I5).

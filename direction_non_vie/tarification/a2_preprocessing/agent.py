@@ -135,83 +135,44 @@ SEUILS_WINSOR = {
 # (prouvé par exécution). Le genre est interdit en tarification pour TOUTE
 # branche d'assurance (CJUE C-236/09), pas seulement en RC Auto : il n'a
 # donc rien à faire dans une config d'encodage, quelle qu'elle soit.
-# Défense en profondeur : filtrer_genre() est en outre appliqué
-# inconditionnellement à l'encodage (voir _encoder) et à la sélection de
-# features d'A3/A4/A5/A6.
-VARS_CATEGORIELLES = {
-    'auto': {
-        # csp deplace 'label' -> 'one_hot' (CORRECTIF, cf. plans/auto.yaml) : variable
-        # NOMINALE, le label INVERSAIT le classement Cadre/Employe. Aligne le chemin
-        # A2.run() de l'app sur le plan (evite un decalage silencieux A2/A3).
-        'one_hot':    ['garantie', 'carburant', 'csp'],
-        'label':      ['marque_vehicule', 'usage', 'milieu_geographique'],
-        'ordinale':   [],
-    },
-    'mrh': {
-        'one_hot':    ['statut_occupation', 'type_logement'],
-        'label':      ['csp', 'zone_geographique'],
-        'ordinale':   [],
-    },
-    'rcpro': {
-        # secteur_activite deplace de 'label' vers 'one_hot' (CORRECTIF DE
-        # MODELISATION, cf. plans/rcpro.yaml) : variable NOMINALE, le label-encoding
-        # ecrasait le signal secteur (BTP 2,5x Conseil devenu invisible). Ce
-        # changement corrige le chemin A2.run() de l'app pour qu'il produise les
-        # memes colonnes one-hot que le plan (evite un decalage silencieux A2/A3).
-        'one_hot':    ['forme_juridique', 'type_garantie', 'secteur_activite'],
-        'label':      [],
-        'ordinale':   [],
-    },
-}
+# Depuis la Phase 2, ce constat est devenu STRUCTUREL : il n'y a plus de config
+# d'encodage du tout — seul le plan déclare, et aucun plan ne déclare le genre
+# (voir le bloc ci-dessous). Défense en profondeur inchangée : filtrer_genre()
+# reste appliqué, non contournable, à la sélection de features d'A3/A4/A5/A6.
 
-# Conformité — genre interdit en tarification
-# Arrêt CJUE C-236/09 du 1er mars 2011 (Test-Achats) : le genre (sexe) est
-# interdit comme critère de tarification en assurance depuis le 21 décembre
-# 2012 (date d'application de l'arrêt). Risque de sanction ACPR si la variable
-# est présente dans la matrice X d'un modèle de tarification.
+# ── Encodage et interactions : DÉCLARÉS PAR LE PLAN (Phase 2) ─────────────────
+# VARS_CATEGORIELLES et INTERACTIONS SUPPRIMÉS — c'étaient les deux dernières
+# listes codées en dur du pipeline. A2.run() reçoit le PLAN signé et produit les
+# colonnes qu'il déclare, via _appliquer_facteur() : LA MÊME fonction que
+# fit()/transform(). Le chemin agent et le chemin déclaratif partagent donc
+# littéralement l'autorité d'encodage (one_hot vs label, ordre des modalités,
+# transformations, interactions) — plus de 3ᵉ implémentation, plus de décalage
+# silencieux A2/A3, et une LoB inédite (décennale, marchandises) est encodée
+# correctement sans toucher une ligne de code.
+#
+# CONFORMITÉ — genre interdit en tarification (CJUE C-236/09, Test-Achats,
+# 01/03/2011, applicable depuis le 21/12/2012 ; risque de sanction ACPR si la
+# variable atteint la matrice X). ⚠ Le mécanisme de protection a CHANGÉ avec
+# cette étape et il est plus fort qu'avant :
+#   - AVANT : filtrer_genre() était appliqué à la config d'encodage (_encoder).
+#     Historiquement, un COLS_INTERDITES_PAR_BRANCHE = {'auto': ['sexe']}
+#     conditionnait même la protection au NOM de la sous-branche (audit V9,
+#     BLOQUANT) — l'anti-pattern que le module de conformité condamne.
+#   - MAINTENANT : A2.run n'encode QUE les facteurs déclarés au plan. Aucun plan
+#     ne déclare le genre, donc aucune colonne de genre n'est encodée — la
+#     protection est STRUCTURELLE, plus conditionnelle. Le repli d'encodage
+#     automatique des colonnes 'object' non configurées (qui recréait 'sexe_enc'
+#     par contournement) a disparu avec _encoder.
+#   - DÉFENSE EN PROFONDEUR inchangée : filtrer_genre() reste appliqué, NON
+#     contournable, dans construire_matrice_x() côté A3/A4/A5/A6 — y compris si
+#     un plan déclarait le genre (INV-3 le prouve). Source unique :
+#     core/conformite_reglementaire.py.
 #
 # ⚠ NOTE (audit V4, 10/07/2026) : la référence de transposition en droit
 # français ("loi du 1er juillet 2012") n'a pas pu être vérifiée par une
-# recherche documentaire formelle dans cette session — à confirmer par
-# la Commission Tarification IA France ou un juriste spécialisé avant
-# toute communication externe citant précisément ce texte de loi.
-# L'arrêt CJUE C-236/09 et sa date d'application (21/12/2012) reposent
-# sur une base documentaire plus robuste (jurisprudence largement citée
-# dans la littérature assurantielle européenne).
-#
-# ⚠ CHANGEMENT (audit V9, BLOQUANT) : l'ancien dictionnaire
-# COLS_INTERDITES_PAR_BRANCHE = {'auto': ['sexe']} conditionnait la protection
-# au NOM de la sous-branche — exactement l'anti-pattern que le module de
-# conformité partagé condamne, et qui laissait le genre s'encoder en MRH,
-# Vie, Santé et Prévoyance. Il est remplacé par l'application
-# INCONDITIONNELLE de filtrer_genre() à toute config d'encodage (voir
-# _encoder), quelle que soit la branche. Source unique : services/
-# conformite_reglementaire.py, partagée avec A3/A4/A5/A6.
-
-# Variables d'interaction à créer par sous-branche
-# Justification actuarielle :
-# Ces interactions capturent des effets non-linéaires que le GLM seul
-# ne peut pas modéliser. Ex : l'effet de l'âge sur la sinistralité
-# est différent selon le niveau de bonus-malus.
-# Ces variables seront utilisées par les modèles ML (A4) principalement.
-INTERACTIONS = {
-    'auto': [
-        ('age', 'bonus_malus'),           # Jeune + mauvais BM = très sinistrogène
-        ('puissance_fiscale', 'age'),     # Puissance élevée chez jeune = risque max
-        ('kilometrage_annuel', 'usage'),  # Km × usage = exposition réelle
-        ('bonus_malus', 'antecedents_sinistres_n1'),  # Double signal sinistralité
-    ],
-    'mrh': [
-        ('surface_m2', 'type_logement'),  # Surface × type = valeur assurée
-        ('etage', 'zone_geographique'),   # Étage × zone = risque vol/DDO
-        ('annee_construction', 'alarme'), # Ancien sans alarme = risque élevé
-    ],
-    'rcpro': [
-        ('ca_annuel_eur', 'nb_salaries'), # Taille entreprise
-        ('secteur_activite', 'anciennete_entreprise_ans'),  # Expérience sectorielle
-    ],
-    # Vie / Prévoyance retirées (11/07/2026) — hors périmètre Non-Vie.
-}
+# recherche documentaire formelle — à confirmer par la Commission Tarification
+# IA France ou un juriste avant toute communication externe la citant. L'arrêt
+# CJUE C-236/09 et sa date d'application reposent sur une base plus robuste.
 
 # Stratégies d'imputation par type de variable
 # Justification :
@@ -280,36 +241,40 @@ DATA_DICTIONNAIRE = {
     },
 }
 
-# ── GÉNÉRATION AUTOMATIQUE — variables d'interaction (correctif audit V4) ────
-# Les entrées ci-dessus documentent les variables dérivées "simples". Les
-# variables d'interaction créées par _feature_engineering (bloc
-# "INTERACTIONS GÉNÉRIQUES") suivent le nommage 'inter_{col1}_{col2}' et
-# n'étaient PAS documentées dans DATA_DICTIONNAIRE, créant un écart de
-# traçabilité (ACPR-2022-P-01 §3.2) identifié lors de l'audit V4.
+# ── TRAÇABILITÉ DES INTERACTIONS — désormais PILOTÉE PAR LE PLAN (Phase 2) ───
+# Les entrées ci-dessus documentent les variables dérivées "simples" (statiques,
+# calculées par _calculer_indicateurs_derives). Les variables d'interaction
+# 'inter_{a}_{b}' n'étaient PAS documentées avant l'audit V4 (écart de
+# traçabilité ACPR-2022-P-01 §3.2) ; elles l'étaient ensuite par une boucle sur
+# le dict INTERACTIONS, codé en dur.
 #
-# Plutôt que de dupliquer manuellement chaque entrée (risque de nouveau
-# désalignement si INTERACTIONS évolue), les entrées sont générées
-# automatiquement à partir du dict INTERACTIONS lui-même — la traçabilité
-# est donc garantie de rester synchrone avec le code qui crée réellement
-# les colonnes, par construction.
-for _branche_key, _paires in INTERACTIONS.items():
-    for _col1, _col2 in _paires:
-        _nom_var = f"inter_{_col1}_{_col2}"
-        if _nom_var not in DATA_DICTIONNAIRE:
-            DATA_DICTIONNAIRE[_nom_var] = {
-                'source': [_col1, _col2],
-                'operation': f"{_col1} * {_col2}",
-                'justification': (
-                    f"Variable d'interaction générée automatiquement pour la "
-                    f"sous-branche '{_branche_key}'. Capture un effet non-additif "
-                    f"entre '{_col1}' et '{_col2}' que le GLM log-linéaire seul "
-                    f"ne peut pas modéliser. Créée uniquement si les deux "
-                    f"colonnes source existent et sont numériques (voir "
-                    f"_feature_engineering, bloc INTERACTIONS GÉNÉRIQUES)."
-                ),
-                'usage': f"GLM / ML — sous-branche '{_branche_key}'",
-            }
-del _branche_key, _paires, _col1, _col2, _nom_var  # nettoyage namespace module
+# INTERACTIONS ayant disparu, cette boucle de module aussi : les entrées sont
+# générées À L'EXÉCUTION à partir de plan.interactions, dans run() (voir
+# _dictionnaire_avec_interactions). La traçabilité reste donc synchrone PAR
+# CONSTRUCTION avec ce qui crée réellement les colonnes — et elle couvre
+# désormais TOUTE LoB déclarée (décennale, marchandises…), plus seulement les
+# trois qui étaient codées en dur.
+
+
+def _dictionnaire_avec_interactions(plan: "PlanTarifaire") -> Dict[str, Any]:
+    """DATA_DICTIONNAIRE + une entrée par interaction DÉCLARÉE au plan.
+    Source unique de la traçabilité ACPR-2022-P-01 §3.2 des colonnes dérivées."""
+    dico = dict(DATA_DICTIONNAIRE)
+    for _a, _b in plan.interactions:
+        dico.setdefault(f"inter_{_a}_{_b}", {
+            'source': [_a, _b],
+            'operation': f"{_a} * {_b}",
+            'justification': (
+                f"Variable d'interaction DÉCLARÉE par le plan signé "
+                f"'{plan.lob}'. Capture un effet non-additif entre '{_a}' et "
+                f"'{_b}' que le GLM log-linéaire seul ne peut pas modéliser. "
+                f"Produite par A2 si les deux colonnes source existent ; son "
+                f"absence est rapportée dans 'colonnes_plan_manquantes'."
+            ),
+            'usage': f"GLM / ML / DL — plan '{plan.lob}'",
+        })
+    return dico
+
 
 class AgentA2Preprocessing:
     """
@@ -397,7 +362,8 @@ class AgentA2Preprocessing:
         result_a1: Dict[str, Any],
         cible_frequence: str = 'nb_sinistres',
         cible_cout:      str = 'cout_total_sinistres',
-        mode:            str = 'train'
+        mode:            str = 'train',
+        plan: Optional["PlanTarifaire"] = None,   # Phase 2 : plan signé explicite
     ) -> Dict[str, Any]:
         """
         Pipeline complet de preprocessing.
@@ -442,6 +408,18 @@ class AgentA2Preprocessing:
                 "lancer A2.", audit_id
             )
 
+        # Phase 2 : l'encodage et les interactions sont DÉCLARÉS par le plan
+        # signé (VARS_CATEGORIELLES/INTERACTIONS supprimés). Plan absent →
+        # erreur propre, JAMAIS de repli : un repli réintroduirait exactement le
+        # décalage silencieux A2/A3 que ce refactor supprime.
+        if plan is None:
+            return self._erreur(
+                "A2.run exige un plan (PlanTarifaire) : l'encodage (one-hot vs "
+                "label, ordre des modalités), les transformations et les "
+                "interactions sont dérivés du plan signé (Phase 2, "
+                "VARS_CATEGORIELLES/INTERACTIONS supprimés). Fournissez "
+                "plan=PlanTarifaire.depuis_yaml('plans/<lob>.yaml').", audit_id)
+
         df = result_a1['dataframe'].copy()
         self.parametres['sous_branche'] = sous_branche
         self.parametres['timestamp']    = t_debut.isoformat()
@@ -474,17 +452,20 @@ class AgentA2Preprocessing:
             rapport['etapes'].append('exposition')
             rapport['transformations']['exposition'] = stats_expo
 
-            # ── ÉTAPE 4 : ENCODAGE ────────────────────────────────────────────
-            logger.info(f"[{audit_id}] Étape 4/6 : Encodage variables catégorielles")
-            df, stats_encod = self._encoder(df, sous_branche, mode)
-            rapport['etapes'].append('encodage')
-            rapport['transformations']['encodage'] = stats_encod
+            # ── ÉTAPE 4 : CONTRAT DE DONNÉES — prime_pure (HORS plan) ─────────
+            # prime_pure n'est PAS un facteur tarifaire : c'est une grandeur de
+            # la famille cible, exclue des modèles par le garde-fou anti-fuite.
+            # Elle reste produite par le pipeline (contrat V7 B2), pas par le plan.
+            df = self._calculer_prime_pure(df)
 
-            # ── ÉTAPE 5 : FEATURE ENGINEERING ────────────────────────────────
-            logger.info(f"[{audit_id}] Étape 5/6 : Feature engineering métier")
-            df, features_new = self._feature_engineering(df, sous_branche)
-            rapport['etapes'].append('feature_engineering')
-            rapport['features_creees'] = features_new
+            # ── ÉTAPE 5 : COLONNES DÉCLARÉES PAR LE PLAN ──────────────────────
+            logger.info(f"[{audit_id}] Étape 5/6 : Encodage + features (plan "
+                        f"'{plan.lob}')")
+            df, stats_plan = self._appliquer_plan(df, plan)
+            rapport['etapes'].append('plan')
+            rapport['transformations']['encodage'] = stats_plan['encodage']
+            rapport['features_creees'] = stats_plan['colonnes_produites']
+            rapport['colonnes_plan_manquantes'] = stats_plan['manquantes']
 
             # ── ÉTAPE 6 : VALIDATION FINALE ───────────────────────────────────
             logger.info(f"[{audit_id}] Étape 6/6 : Validation finale")
@@ -523,18 +504,22 @@ class AgentA2Preprocessing:
                 )
 
             # ── Audit trail — traçabilité ACPR ────────────────────────────────
+            # Traçabilité ACPR §3.2 : dérivées statiques + interactions du PLAN.
+            _dico_a2 = _dictionnaire_avec_interactions(plan)
+
             _audit_trail_a2 = {
                 'agent': 'A2_PREPROCESSING', 'version': '1.0', 'audit_id': audit_id,
                 'timestamp': datetime.now().isoformat(), 'branche': sous_branche,
                 'statut_rag': statut_rag,
-                'nb_variables_derivees_tracees': len(DATA_DICTIONNAIRE),
+                'nb_variables_derivees_tracees': len(_dico_a2),
+                'plan_lob': plan.lob,
                 'etapes': rapport.get('etapes', []),
             }
 
             _tmp_a2 = {
                 'success': True, 'statut_rag': statut_rag, 'branche': sous_branche,
                 'rapport': rapport, 'audit_id': audit_id, 'commentaire': commentaire,
-                'data_dictionnaire': DATA_DICTIONNAIRE,
+                'data_dictionnaire': _dico_a2,
             }
             _excel_a2 = b''
             if TARIF_EXCEL_OK_A2:
@@ -555,8 +540,13 @@ class AgentA2Preprocessing:
                 'commentaire':       commentaire,
                 'audit_id':          audit_id,
                 'erreur':            None,
+                # ── RAPPORT EXPLICITE : colonnes du plan NON produites ────────
+                # Visible dans le dict de retour, pas seulement en log ("ce qui
+                # n'est que dans les logs n'existe pas"). A6 le relaie jusqu'aux
+                # 3 livrables, comme rapport_qualite et alertes_modele.
+                'colonnes_plan_manquantes': stats_plan['manquantes'],
                 # Traçabilité des variables dérivées — ACPR-2022-P-01 §3.2
-                'data_dictionnaire': DATA_DICTIONNAIRE,
+                'data_dictionnaire': _dico_a2,
                 'excel_bytes':       _excel_a2,
                 'word_bytes':        b'',
                 'pdf_bytes':         b'',
@@ -623,6 +613,100 @@ class AgentA2Preprocessing:
                                    - pd.to_numeric(out["annee_construction"], errors="coerce"))
             out["logement_ancien"] = (out["age_logement"] > 50).astype(int)
         return out
+
+    def _calculer_prime_pure(self, df: pd.DataFrame) -> pd.DataFrame:
+        """CONTRAT DE DONNÉES — prime_pure (audit V7 BLOQUANT #2). HORS PLAN.
+
+        prime_pure n'est PAS un facteur tarifaire : c'est une grandeur de la
+        FAMILLE CIBLE (coût / exposition), que le garde-fou anti-fuite exclut des
+        matrices X. Elle n'a donc rien à faire dans un plan — mais A3/A4/A6 la
+        référencent comme cible par défaut. AVANT le correctif V7, elle était
+        attendue mais JAMAIS produite : en invocation par défaut d'A6
+        (col_cible='prime_pure'), le walk-forward se désactivait SILENCIEUSEMENT
+        (backtest['disponible']=False, sans erreur) et le statut RAG pouvait
+        rester VERT sans qu'aucune validation temporelle n'ait tourné.
+
+        Même formule qu'à l'origine : prime pure = coût total / exposition.
+        (Bloc extrait tel quel de l'ancien _feature_engineering, supprimé en
+        Phase 2 — le calcul est inchangé, seul son point d'appel a bougé.)
+        """
+        if ('prime_pure' not in df.columns
+                and 'cout_total_sinistres' in df.columns
+                and 'exposition' in df.columns):
+            _expo_safe = np.maximum(df['exposition'], 1e-6)
+            df['prime_pure'] = df['cout_total_sinistres'] / _expo_safe
+            logger.info(
+                "'prime_pure' calculée automatiquement "
+                "(cout_total_sinistres / exposition) — absente des données "
+                "brutes en entrée. Réf. : audit V7 BLOQUANT #2."
+            )
+        return df
+
+    def _appliquer_plan(
+        self, df: pd.DataFrame, plan: "PlanTarifaire"
+    ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+        """Chemin AGENT : produit les colonnes DÉCLARÉES par le plan, pour les
+        facteurs dont la colonne source est PRÉSENTE. Tout ce qui n'a pas pu être
+        produit est RAPPORTÉ — jamais tu.
+
+        Réutilise _appliquer_facteur() : le chemin agent et le chemin déclaratif
+        (fit/transform) partagent LITTÉRALEMENT la même autorité d'encodage
+        (one-hot vs label, ordre des modalités, transformations). Fin de la
+        troisième implémentation, et fin du décalage silencieux A2/A3.
+
+        DIFFÉRENCE ASSUMÉE avec transform() : celui-ci EXIGE un fichier complet
+        (fit → valider_contre lève) et garantit INV-1. run() sert aussi des
+        portefeuilles partiels (diagnostic, tests de garde-fou) : il rapporte
+        l'écart au lieu de refuser. DÉCIDER de tarifer malgré un plan incomplet
+        n'est pas le métier du préprocessing — c'est celui d'A3/A6.
+        """
+        df = self._calculer_indicateurs_derives(df)
+
+        # Codes label : ORDRE DU PLAN (autorité), comme fit(). Surtout PAS l'ordre
+        # alphabétique de sklearn : il avait inversé le signal zone/milieu (254c959).
+        self._codes_label = {}
+        for f in plan.facteurs:
+            if (f.nom in df.columns and f.type not in ("continu", "binaire")
+                    and f.encodage == "label"):
+                mods = (list(f.modalites) if f.modalites
+                        else sorted(df[f.nom].dropna().astype(str).unique()))
+                self._codes_label[f.nom] = {str(m): i for i, m in enumerate(mods)}
+
+        facteurs_absents: List[str] = []
+        encodage: Dict[str, str] = {}
+        for f in plan.facteurs:
+            if f.nom not in df.columns:
+                facteurs_absents.append(f.nom)
+                continue
+            self._appliquer_facteur(df, f)   # modalité INCONNUE → lève (piège V9)
+            if f.type not in ("continu", "binaire"):
+                encodage[f.nom] = f.encodage
+
+        # Interactions DÉCLARÉES : inter_{a}_{b} = a * b (mêmes noms que transform)
+        for a, b in plan.interactions:
+            if a in df.columns and b in df.columns:
+                df[f"inter_{a}_{b}"] = (pd.to_numeric(df[a], errors="coerce")
+                                        * pd.to_numeric(df[b], errors="coerce")).astype(float)
+
+        attendues     = list(plan.colonnes_produites())
+        produites     = [c for c in attendues if c in df.columns]
+        non_produites = [c for c in attendues if c not in df.columns]
+        if non_produites:
+            logger.warning(
+                "[PLAN '%s'] %d colonne(s) déclarée(s) NON produite(s) : %s — "
+                "facteur(s) source absent(s) du fichier client : %s. Les modèles "
+                "tourneront SANS ces facteurs. Écart remonté dans "
+                "result['colonnes_plan_manquantes'], jusqu'aux livrables.",
+                plan.lob, len(non_produites), non_produites, facteurs_absents)
+        return df, {
+            'encodage':           encodage,
+            'colonnes_produites': produites,
+            'manquantes': {
+                'plan':                  plan.lob,
+                'facteurs_absents':      facteurs_absents,
+                'colonnes_non_produites': non_produites,
+            },
+        }
 
     def fit(self, df: pd.DataFrame, plan: "PlanTarifaire") -> "AgentA2Preprocessing":
         """Apprend les paramètres de preprocessing SUR CE PORTEFEUILLE, à partir
@@ -1085,447 +1169,24 @@ class AgentA2Preprocessing:
         return df, stats
 
     # ══════════════════════════════════════════════════════════════════════════
-    # ÉTAPE 4 : ENCODAGE
+    # ÉTAPES 4-5 (ex-ENCODAGE / FEATURE ENGINEERING) — SUPPRIMÉES EN PHASE 2
     # ══════════════════════════════════════════════════════════════════════════
-
-    def _modalites_label_plan(self, sous_branche: str) -> Dict[str, List[str]]:
-        """Ordre des modalités des facteurs LABEL déclarés dans le plan de la
-        branche — le plan fait AUTORITÉ (comme A2.transform, qui utilise déjà
-        f.modalites). {} si branche sans plan. Évite le tri alphabétique de
-        sklearn LabelEncoder, non-monotone et divergent (ex. zone Urbaine=3 vs 0).
-        Matching EXACT de la branche (le motif flou 'lob in sous_branche' a été
-        éliminé au refactor du plan — ne pas le réintroduire)."""
-        if sous_branche not in ('auto', 'mrh', 'rcpro'):
-            return {}
-        racine = os.path.dirname(os.path.dirname(os.path.dirname(
-            os.path.dirname(os.path.abspath(__file__)))))
-        try:
-            plan = PlanTarifaire.depuis_yaml(
-                os.path.join(racine, 'plans', f'{sous_branche}.yaml'))
-            return {f.nom: [str(m) for m in f.modalites]
-                    for f in plan.facteurs
-                    if getattr(f, 'encodage', None) == 'label' and f.modalites}
-        except Exception as _e:   # pragma: no cover — repli explicite
-            logger.warning("[A2 label] plan %s indisponible (%s) — repli tri "
-                           "déterministe, INCONNU en fin.", sous_branche, _e)
-            return {}
-
-    def _appliquer_label(self, df: pd.DataFrame, col: str, mode: str,
-                         ordre_plan: Optional[List[str]]) -> bool:
-        """Label-encode `col` dans l'ordre du PLAN si déclaré (ordre_plan), sinon
-        en ordre trié déterministe. INCONNU placé EN FIN (code n), jamais en 0.
-        Remplace sklearn LabelEncoder (tri alphabétique) qui divergeait de
-        A2.transform et rendait l'encodage de production non-monotone. Retourne
-        True si encodé, False si les paramètres de scoring manquent."""
-        col_enc = f"{col}_enc"
-        if mode == 'train':
-            if ordre_plan:
-                classes = [str(m) for m in ordre_plan]
-            else:
-                observes = [m for m in df[col].fillna('INCONNU').astype(str).unique()
-                            if m != 'INCONNU']
-                classes = sorted(observes)
-            classes = list(dict.fromkeys(classes)) + ['INCONNU']   # dédup + INCONNU EN FIN
-            self.parametres['encodeurs'][col] = {'type': 'label', 'classes': classes}
-        else:
-            enc = self.parametres['encodeurs'].get(col)
-            if enc is None:
-                return False
-            classes = enc['classes']
-        mapping = {m: i for i, m in enumerate(classes)}
-        inconnu = mapping['INCONNU']
-        vals = df[col].fillna('INCONNU').astype(str)
-        df[col_enc] = vals.map(lambda x: mapping.get(x, inconnu)).astype(float)
-        return True
-
-    def _encoder(
-        self,
-        df: pd.DataFrame,
-        sous_branche: str,
-        mode: str
-    ) -> Tuple[pd.DataFrame, Dict]:
-        """
-        Encodage des variables catégorielles.
-
-        MÉTHODES UTILISÉES :
-        ─────────────────────
-
-        1. LABEL ENCODING (variables à haute cardinalité)
-        ──────────────────────────────────────────────────
-        Utilisé pour : CSP, marque véhicule, secteur activité
-        Justification : pour les variables avec de nombreuses modalités,
-        le One-Hot encoding crée trop de colonnes et introduit de la
-        multicolinéarité dans le GLM. Le Label Encoding attribue un
-        entier à chaque modalité.
-
-        ⚠️ ATTENTION : Le Label Encoding est acceptable pour les modèles
-        ML (arbres de décision, boosting) car ils ne supposent pas
-        d'ordre entre les modalités. Pour le GLM pur, le Weight of
-        Evidence (WoE) serait plus rigoureux mais nécessite la variable
-        cible — on l'implémente ici comme option avancée.
-
-        2. ONE-HOT ENCODING (variables à faible cardinalité ≤ 5)
-        ──────────────────────────────────────────────────────────
-        Utilisé pour : sexe (M/F), fumeur (0/1), garantie (3 niveaux)
-        Justification : faible cardinalité → pas d'explosion de dimensions.
-        Crée une colonne binaire par modalité.
-
-        3. VARIABLES BINAIRES (déjà 0/1)
-        ──────────────────────────────────
-        Pas de transformation nécessaire — déjà encodées.
-        Vérification uniquement que les valeurs sont bien 0 ou 1.
-        """
-        stats = {
-            'cols_label_encodees':   [],
-            'cols_onehot_encodees':  [],
-            'cols_binaires_ok':      [],
-            'nouvelles_colonnes':    [],
-        }
-
-        # Récupération de la configuration d'encodage pour cette sous-branche
-        # Recherche par correspondance partielle du nom de sous-branche
-        config_encod = None
-        for key in VARS_CATEGORIELLES:
-            if key in sous_branche or sous_branche in key:
-                # Copie profonde pour ne pas modifier le dict source
-                config_encod = copy.deepcopy(VARS_CATEGORIELLES[key])
-                break
-
-        if config_encod is None:
-            # Pas de configuration spécifique → encodage automatique
-            config_encod = {'one_hot': [], 'label': [], 'ordinale': []}
-            logger.warning(
-                f"Pas de configuration d'encodage pour '{sous_branche}'. "
-                "Encodage automatique basique appliqué."
-            )
-
-        # ── CONFORMITÉ : EXCLUSION INCONDITIONNELLE DU GENRE ──────────────────
-        # Appliqué à TOUTES les listes d'encodage, quelle que soit la
-        # sous-branche (audit V9). Remplace l'ancien scoping par nom de branche
-        # (COLS_INTERDITES_PAR_BRANCHE = {'auto': ['sexe']}), qui laissait le
-        # genre s'encoder en one-hot dès que la branche n'était pas 'auto' —
-        # produisant sexe_m/sexe_f jusque dans la matrice X d'A4 (prouvé par
-        # exécution en MRH). Le genre est prohibé pour TOUTE branche
-        # d'assurance (CJUE C-236/09), pas seulement la RC Auto.
-        # Source unique partagée avec A3/A4/A5/A6 : filtrer_genre().
-        for _methode in ('one_hot', 'label', 'ordinale'):
-            if config_encod.get(_methode):
-                config_encod[_methode] = filtrer_genre(
-                    config_encod[_methode],
-                    contexte=f"A2 — encodage {_methode} (sous-branche '{sous_branche}')",
-                    logger_agent=logger,
-                )
-
-        # Ordre des modalités LABEL déclaré par le plan (fait AUTORITÉ) — comme
-        # A2.transform. Sans cela A2.run triait alphabétiquement (LabelEncoder)
-        # + INCONNU en 0 : encodage NON-MONOTONE et DIVERGENT de A2.transform
-        # (ex. zone Urbaine=3 en prod vs Urbaine=0 en déclaratif → coef GLM de
-        # signe opposé). Le plan fait autorité (cf. csp/secteur, calendrier).
-        plan_modalites = self._modalites_label_plan(sous_branche)
-
-        # ── LABEL ENCODING — ordre du plan, INCONNU en fin (code n) ───────────
-        for col in config_encod.get('label', []):
-            if col not in df.columns:
-                continue
-            if self._appliquer_label(df, col, mode, plan_modalites.get(col)):
-                stats['cols_label_encodees'].append(col)
-                stats['nouvelles_colonnes'].append(f"{col}_enc")
-
-        # ── ONE-HOT ENCODING ──────────────────────────────────────────────────
-        for col in config_encod.get('one_hot', []):
-            if col not in df.columns:
-                continue
-
-            if mode == 'train':
-                # Calcul des modalités
-                modalites = sorted(df[col].fillna('INCONNU').unique().tolist())
-                self.parametres['encodeurs'][f"{col}_oh"] = {
-                    'type':      'one_hot',
-                    'modalites': modalites,
-                }
-            else:
-                enc_params = self.parametres['encodeurs'].get(f"{col}_oh")
-                if enc_params is None:
-                    continue
-                modalites = enc_params['modalites']
-
-            # Création des colonnes binaires
-            for modalite in modalites:
-                col_new = f"{col}_{str(modalite).lower().replace(' ', '_')}"
-                df[col_new] = (
-                    df[col].fillna('INCONNU').astype(str) == str(modalite)
-                ).astype(int)
-                stats['nouvelles_colonnes'].append(col_new)
-
-            stats['cols_onehot_encodees'].append(col)
-
-        # ── ENCODAGE AUTOMATIQUE DES COLONNES OBJECT RESTANTES ───────────────
-        # Pour les colonnes catégorielles non configurées explicitement
-        #
-        # ⚠ CONFORMITÉ (découvert en exécution, 11/07/2026) : ce repli encodait
-        # TOUTE colonne object restante — y compris 'sexe', qui ressortait en
-        # 'sexe_enc' alors même qu'elle avait été retirée de toutes les configs
-        # d'encodage. Ce chemin contournait donc intégralement le filtre genre
-        # basé sur la config (VARS_CATEGORIELLES). Il est distinct de la voie
-        # one-hot identifiée par l'audit V9, et n'était couvert par aucun test.
-        # Le filtre partagé filtrer_genre() est désormais appliqué ici aussi :
-        # aucune colonne de genre ne peut être encodée, par quelque voie que
-        # ce soit (CJUE C-236/09).
-        cols_object = df.select_dtypes(include=['object']).columns.tolist()
-        cols_object = filtrer_genre(
-            cols_object,
-            contexte="A2 — encodage automatique des colonnes object restantes",
-            logger_agent=logger,
-        )
-        cols_a_exclure = ['id_contrat', 'id_assure', 'id_salarie',
-                           'id_beneficiaire', 'id_adherent', 'date_souscription',
-                           'date_survenance', 'date_mouvement', 'date_evaluation']
-
-        for col in cols_object:
-            if col in cols_a_exclure:
-                continue
-            if col in config_encod.get('label', []):
-                continue
-            if col in config_encod.get('one_hot', []):
-                continue
-
-            col_enc = f"{col}_enc"
-            if col_enc in df.columns:
-                continue
-
-            # Encodage label automatique pour les autres colonnes object
-            nb_modalites = df[col].nunique()
-            if nb_modalites <= 30:  # Limite raisonnable
-                # Colonne HORS plan (auto-détectée) : pas d'ordre déclaré -> tri
-                # déterministe, INCONNU en fin (même mécanisme que le bloc label
-                # ci-dessus ; plus de LabelEncoder alphabétique).
-                if self._appliquer_label(df, col, mode, plan_modalites.get(col)):
-                    stats['cols_label_encodees'].append(f"{col}(auto)")
-                    stats['nouvelles_colonnes'].append(col_enc)
-
-        logger.info(
-            f"Encodage : {len(stats['cols_label_encodees'])} label · "
-            f"{len(stats['cols_onehot_encodees'])} one-hot"
-        )
-
-        return df, stats
-
-    # ══════════════════════════════════════════════════════════════════════════
-    # ÉTAPE 5 : FEATURE ENGINEERING
-    # ══════════════════════════════════════════════════════════════════════════
-
-    def _feature_engineering(
-        self,
-        df: pd.DataFrame,
-        sous_branche: str
-    ) -> Tuple[pd.DataFrame, List[str]]:
-        """
-        Création des variables dérivées et d'interaction.
-
-        LOGIQUE ACTUARIELLE :
-        ──────────────────────
-        Les variables d'interaction capturent des effets non-linéaires
-        que le GLM seul ne peut pas modéliser car il suppose une relation
-        log-linéaire entre les prédicteurs et la fréquence.
-
-        Ex : âge × bonus_malus
-        Un conducteur de 20 ans avec BM=1.0 est moins risqué qu'un
-        conducteur de 20 ans avec BM=2.5 — mais pas de façon additive.
-        L'interaction multipliée capture cet effet.
-
-        Les variables dérivées transforment les variables brutes en
-        indicateurs plus parlants pour le modèle :
-        Ex : log(valeur_venale) → distribution plus symétrique
-             âge² → capture l'effet U-shape de l'âge sur la sinistralité
-
-        VARIABLES CRÉÉES PAR SOUS-BRANCHE :
-        Voir dictionnaire INTERACTIONS en tête de fichier.
-        """
-        features_nouvelles = []
-
-        # ── CONTRAT DE DONNÉES : prime_pure (audit V7 BLOQUANT #2) ────────────
-        # AVANT ce correctif, 'prime_pure' était référencée comme cible
-        # attendue par A3 (COLS_A_EXCLURE), A4 et A6 (col_cible par défaut),
-        # mais JAMAIS produite par A2 — sauf si déjà présente dans les
-        # données brutes en entrée (rarissime : c'est une grandeur dérivée,
-        # pas un champ SI habituel). Conséquence concrète : en invocation
-        # par défaut d'A6 (col_cible='prime_pure' non précisé), le
-        # walk-forward se désactivait SILENCIEUSEMENT
-        # (backtest['disponible']=False sans lever d'erreur), et le statut
-        # RAG pouvait rester VERT sans qu'aucune validation temporelle
-        # n'ait tourné — c'est le second bloquant de l'audit V7.
-        #
-        # Calculée ici si absente et si les deux composantes existent,
-        # avec la même formule que celle historiquement injectée
-        # manuellement dans les fixtures de test (masquant jusqu'ici la
-        # rupture de contrat) : prime pure = coût total / exposition.
-        if ('prime_pure' not in df.columns
-                and 'cout_total_sinistres' in df.columns
-                and 'exposition' in df.columns):
-            _expo_safe = np.maximum(df['exposition'], 1e-6)
-            df['prime_pure'] = df['cout_total_sinistres'] / _expo_safe
-            logger.info(
-                "'prime_pure' calculée automatiquement "
-                "(cout_total_sinistres / exposition) — absente des données "
-                "brutes en entrée. Réf. : audit V7 BLOQUANT #2."
-            )
-
-        # ── VARIABLES COMMUNES ────────────────────────────────────────────────
-
-        # 1. Log des variables de coût et capital
-        # Justification : les distributions de coûts sont log-normales.
-        # Le log les rend plus symétriques et améliore la calibration du GLM Gamma.
-        vars_log = [
-            'cout_total_sinistres', 'prime_pure', 'prime_commerciale',
-            'valeur_venale', 'ca_annuel_eur', 'capital_assure_deces_eur',
-            'encours_cumule_eur', 'salaire_annuel', 'salaire_annuel_ref',
-            'engagement_ias19', 'charge_annuelle_eur',
-        ]
-        for col in vars_log:
-            if col in df.columns:
-                col_log = f"log_{col}"
-                # +1 pour éviter log(0) sur les contrats sans sinistre
-                df[col_log] = np.log1p(df[col].clip(lower=0))
-                features_nouvelles.append(col_log)
-
-        # 2. Âge² — capture l'effet U-shape de l'âge
-        # Justification : la sinistralité est élevée chez les très jeunes
-        # (<25 ans) et les seniors (>70 ans). L'effet est quadratique.
-        # Sans âge², le GLM supposerait une relation log-linéaire simple.
-        for col_age in ['age', 'age_entree']:
-            if col_age in df.columns:
-                df[f'{col_age}_carre'] = df[col_age] ** 2
-                features_nouvelles.append(f'{col_age}_carre')
-
-        # ── VARIABLES SPÉCIFIQUES AUTO ────────────────────────────────────────
-        if 'auto' in sous_branche:
-
-            # Taux de sinistralité observé N-1 (proxy du risque historique)
-            # BM × antécédents = double signal de sinistralité passée
-            if 'bonus_malus' in df.columns and \
-               'antecedents_sinistres_n1' in df.columns:
-                df['risque_historique'] = (
-                    df['bonus_malus'] * (1 + df['antecedents_sinistres_n1'])
-                )
-                features_nouvelles.append('risque_historique')
-
-            # Kilométrage normalisé par l'exposition
-            # = exposition kilométrique réelle annualisée
-            if 'kilometrage_annuel' in df.columns and \
-               'exposition' in df.columns:
-                df['km_par_an_normalise'] = (
-                    df['kilometrage_annuel'] /
-                    np.maximum(df['exposition'], 0.01)
-                )
-                features_nouvelles.append('km_par_an_normalise')
-
-            # Indicateur jeune conducteur (< 25 ans)
-            # Justification : les <25 ans ont une sinistralité 2.5× supérieure
-            # à la moyenne (source : ACPR, statistiques sinistralité FR 2022)
-            if 'age' in df.columns:
-                df['jeune_conducteur'] = (df['age'] < 25).astype(int)
-                df['senior_conducteur'] = (df['age'] > 70).astype(int)
-                features_nouvelles.extend([
-                    'jeune_conducteur', 'senior_conducteur'
-                ])
-
-            # Interaction âge × bonus-malus
-            if 'age' in df.columns and 'bonus_malus' in df.columns:
-                df['age_x_bonus_malus'] = df['age'] * df['bonus_malus']
-                features_nouvelles.append('age_x_bonus_malus')
-
-            # Véhicule récent (< 3 ans) — généralement Tous Risques
-            if 'age_vehicule' in df.columns:
-                df['vehicule_recent'] = (df['age_vehicule'] < 3).astype(int)
-                df['vehicule_ancien']  = (df['age_vehicule'] > 10).astype(int)
-                features_nouvelles.extend([
-                    'vehicule_recent', 'vehicule_ancien'
-                ])
-
-        # ── VARIABLES SPÉCIFIQUES MRH ─────────────────────────────────────────
-        elif 'mrh' in sous_branche:
-
-            # Densité de valeur (valeur mobilier par m²)
-            # Proxy de la concentration du risque
-            if 'valeur_mobilier' in df.columns and 'surface_m2' in df.columns:
-                df['valeur_par_m2'] = (
-                    df['valeur_mobilier'] /
-                    np.maximum(df['surface_m2'], 1)
-                )
-                features_nouvelles.append('valeur_par_m2')
-
-            # Ancienneté du logement (risque DDO et électrique)
-            if 'annee_construction' in df.columns:
-                # ⚠ CORRECTIF DE BUG (migration MRH) : l'année de référence était
-                # codée EN DUR (2024) — bug de calendrier qui se dégradait d'un an
-                # chaque année. Année d'exécution -> age_logement toujours à jour.
-                # Identique au correctif de _calculer_indicateurs_derives : les
-                # DEUX chemins (run() historique ET fit/transform) sont corrigés.
-                annee_courante = datetime.now().year
-                df['age_logement'] = annee_courante - df['annee_construction']
-                df['logement_ancien'] = (df['age_logement'] > 50).astype(int)
-                features_nouvelles.extend([
-                    'age_logement', 'logement_ancien'
-                ])
-
-        # ── SOUS-BRANCHES VIE / SANTÉ / PRÉVOYANCE : RETIRÉES ─────────────────
-        # Les blocs de feature engineering Vie, Santé et Prévoyance ont été
-        # supprimés de cet agent (nettoyage de périmètre, 11/07/2026).
-        #
-        # Historique : A1/A2 avaient été conçus comme le « service data »
-        # mutualisé des trois directions (Non-Vie, Vie/EP-RE,
-        # Santé-Prévoyance). Cette architecture a été abandonnée : chaque
-        # direction est désormais AUTONOME et dispose de son propre
-        # traitement de données. Les variables produites ici pour les autres
-        # directions (sinistre_{poste}, total_sinistres_sante, part_hospit,
-        # levier_assurance, taux_remplacement, duree_arret_jours,
-        # flag_dossier_ouvert, facteur_csp_itt...) n'étaient plus consommées
-        # par aucun agent : S1/S2 (Santé), P1-P3 (Prévoyance) et V1-V5
-        # (Vie/EP-RE) sont paramétriques ou disposent de leur propre pipeline.
-        #
-        # Ce code mort n'était pas neutre : il constituait une surface
-        # d'exposition réglementaire non auditée. L'audit V9 y a trouvé une
-        # anomalie BLOQUANTE — les agrégats de sinistralité santé
-        # (total_sinistres_sante, part_hospit, sinistre_{poste}) fuyaient dans
-        # la matrice X d'A4/A5 (Gini fréquence 0,81 vs 0,07 sans fuite).
-        # Retirer le code mort supprime la cause à la racine.
-        #
-        # ⚠ Le filtre anti-fuite (filtrer_famille_cible) reste néanmoins
-        # INDISPENSABLE en aval : un fichier client Non-Vie peut contenir des
-        # colonnes de sinistralité brutes (montant_sinistres, cout_*...) qui
-        # atteindraient la matrice X sans passer par ce bloc. La défense en
-        # profondeur au niveau de la sélection de features est conservée.
-        #
-        # Périmètre de cet agent : Non-Vie uniquement (auto · MRH · RC Pro).
-
-        # ── INTERACTIONS GÉNÉRIQUES ───────────────────────────────────────────
-        # Création des interactions définies dans INTERACTIONS
-        interactions_config = None
-        for key in INTERACTIONS:
-            if key in sous_branche or sous_branche in key:
-                interactions_config = INTERACTIONS[key]
-                break
-
-        if interactions_config:
-            for col1, col2 in interactions_config:
-                if col1 in df.columns and col2 in df.columns:
-                    # Normalisation avant interaction pour éviter
-                    # l'explosion des valeurs numériques
-                    v1 = df[col1]
-                    v2 = df[col2]
-                    # Seulement si les deux sont numériques
-                    if (v1.dtype in ['int64', 'float64'] and
-                            v2.dtype in ['int64', 'float64']):
-                        col_inter = f"inter_{col1}_{col2}"
-                        df[col_inter] = v1 * v2
-                        features_nouvelles.append(col_inter)
-
-        logger.info(
-            f"Feature engineering : {len(features_nouvelles)} "
-            f"variable(s) créée(s)"
-        )
-
-        return df, features_nouvelles
+    # _encoder(), _feature_engineering(), _modalites_label_plan() et
+    # _appliquer_label() sont SUPPRIMÉS : ils formaient la TROISIÈME
+    # implémentation de l'encodage, et la dernière à décider du one-hot/label
+    # depuis une liste codée en dur (VARS_CATEGORIELLES / INTERACTIONS).
+    # run() appelle désormais _calculer_prime_pure() (contrat V7 B2, hors plan)
+    # puis _appliquer_plan(), qui réutilise _appliquer_facteur() — la MÊME
+    # autorité d'encodage que le chemin déclaratif fit/transform.
+    #
+    # Ce qui disparaît avec eux, sans regret :
+    #   - le repli d'encodage LABEL AUTOMATIQUE des colonnes 'object' non
+    #     configurées, qui recréait 'sexe_enc' en contournant le filtre genre ;
+    #   - 'age_x_bonus_malus', doublon PARFAIT (corr +1,000) de l'interaction
+    #     déclarée 'inter_age_bonus_malus', prouvé sans signal out-of-sample
+    #     lors de l'alignement A4 ;
+    #   - les variantes de nommage '{a}_x_{b}' des interactions.
+    # prime_pure est PRÉSERVÉE (contrat de données V7 B2) : _calculer_prime_pure().
 
     # ══════════════════════════════════════════════════════════════════════════
     # ÉTAPE 6 : VALIDATION FINALE

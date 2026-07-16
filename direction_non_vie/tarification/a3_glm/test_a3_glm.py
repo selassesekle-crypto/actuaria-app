@@ -328,7 +328,8 @@ class TestConformiteA3(unittest.TestCase):
         a2 = AgentA2Preprocessing(audit_path='/tmp', verbose=False)
         a3 = AgentA3GLM(models_path='/tmp', audit_path='/tmp', verbose=False)
         r3 = a3.run(result_a2=a2.run(result_a1=a1.run(
-                        branche='non_vie', sous_branche='auto', dataframe=df)),
+                        branche='non_vie', sous_branche='auto', dataframe=df),
+                        plan=_PLAN_AUTO),
                     plan=_PLAN_AUTO, generer_graphiques=False)
         self.assertTrue(r3['success'])
         vars_glm = r3['metriques']['poisson'].get('vars_retenues', [])
@@ -395,7 +396,7 @@ class TestAuditV10_B1_ContournementA3(unittest.TestCase):
         a2 = AgentA2Preprocessing(audit_path='/tmp', verbose=False)
         a3 = AgentA3GLM(models_path='/tmp', audit_path='/tmp', verbose=False)
         r2 = a2.run(result_a1=a1.run(branche='non_vie', sous_branche='auto',
-                                     dataframe=df))
+                                     dataframe=df), plan=_PLAN_AUTO)
 
         r3 = a3.run(result_a2=r2, plan=_PLAN_AUTO, generer_graphiques=False)
         self.assertTrue(r3['success'], f"A3 a échoué : {r3.get('erreur')}")

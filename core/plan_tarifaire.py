@@ -266,3 +266,35 @@ class PlanTarifaire:
         """Contrôle de recevabilité du fichier client. Retourne les manquants."""
         requis = set(self.colonnes_sources()) | set(self.colonnes_obligatoires())
         return sorted(requis - set(colonnes_df))
+
+
+def synthese_colonnes_plan_manquantes(rapport) -> Optional[str]:
+    """SOURCE UNIQUE du libellé « colonnes du plan non produites », partagée par
+    l'Excel A6, le rapport équipe et le Word/HTML — comme
+    synthese_qualite_donnees() pour la qualité de données.
+
+    `rapport` est le dict porté par result_a2['colonnes_plan_manquantes'] (et
+    relayé par A6). Retourne None si le plan a été honoré intégralement : rien
+    n'est alors affiché dans les livrables.
+
+    Pourquoi ce libellé existe : A2.run produit les colonnes déclarées pour les
+    facteurs PRÉSENTS et ignore les autres — un fichier client incomplet donne
+    donc un modèle AMPUTÉ. Tant que cet écart n'était que dans les logs, il
+    n'existait pas : sur une LoB neuve, le GLM tournait sans ses facteurs
+    majeurs sans que personne ne le voie.
+    """
+    if not rapport:
+        return None
+    non_produites = rapport.get("colonnes_non_produites") or []
+    if not non_produites:
+        return None
+    absents = rapport.get("facteurs_absents") or []
+    txt = (f"⚠ MODELE AMPUTE — plan '{rapport.get('plan', '?')}' : "
+           f"{len(non_produites)} colonne(s) declaree(s) NON produite(s) : "
+           f"{', '.join(non_produites)}.")
+    if absents:
+        txt += (f" Facteur(s) source absent(s) du fichier client : "
+                f"{', '.join(absents)}.")
+    txt += (" Les modeles GLM/ML/DL tournent SANS ces facteurs — verifiez le "
+            "mapping de colonnes avant d'exploiter ce tarif.")
+    return txt

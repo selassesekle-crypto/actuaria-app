@@ -143,10 +143,11 @@ def run_lob(nom, df, marqueurs_attendus):
     print(f"\n{'=' * 72}\n  LoB = {nom.upper()}  ({len(df):,} contrats, "
           f"{int(df['nb_sinistres'].sum()):,} sinistres)\n{'=' * 72}")
     try:
+        plan = PlanTarifaire.depuis_yaml(os.path.join(RACINE, "plans", f"{nom}.yaml"))
         r1 = AgentA1Ingestion(audit_path=TMP, verbose=False).run(
             branche="non_vie", sous_branche=nom, dataframe=df)
-        r2 = AgentA2Preprocessing(audit_path=TMP, verbose=False).run(result_a1=r1)
-        plan = PlanTarifaire.depuis_yaml(os.path.join(RACINE, "plans", f"{nom}.yaml"))
+        r2 = AgentA2Preprocessing(audit_path=TMP, verbose=False).run(
+            result_a1=r1, plan=plan)
         r3 = AgentA3GLM(models_path=TMP, audit_path=TMP, verbose=False).run(
             result_a2=r2, plan=plan, generer_graphiques=False)
         r4 = AgentA4ML(models_path=TMP, audit_path=TMP, verbose=False).run(

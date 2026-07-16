@@ -255,6 +255,11 @@ class AgentA6Comparaison:
         t_debut      = datetime.now()
         audit_id     = f"A6_{t_debut.strftime('%Y%m%d_%H%M%S')}"
         sous_branche = result_a2.get('branche', 'inconnue')
+        # Écart plan → données, relevé par A2 : lu À LA SOURCE (A6 reçoit déjà
+        # result_a2) et relayé aux 3 livrables, comme rapport_qualite. Un fichier
+        # client incomplet ampute le modèle : ce qui n'est que dans les logs
+        # n'existe pas.
+        _cols_plan_manquantes = (result_a2 or {}).get('colonnes_plan_manquantes')
 
         # ── Application du profil de pondération — VARIABLE LOCALE ──────────
         # FIX (audit V4) : l'ancienne implémentation mutait une variable
@@ -450,6 +455,7 @@ class AgentA6Comparaison:
                 'exclusions_cible': exclusions_cible,
                 'valide_par_actuaire_dl': valide_par_actuaire_dl,
                 'rapport_qualite': rapport_qualite,
+                'colonnes_plan_manquantes': _cols_plan_manquantes,
             }
             _excel_a6 = b''
             _word_a6  = b''
@@ -549,6 +555,11 @@ class AgentA6Comparaison:
                 'exclusions_cible':   exclusions_cible,
                 'valide_par_actuaire_dl': valide_par_actuaire_dl,
                 'rapport_qualite':    rapport_qualite,
+                # Colonnes DÉCLARÉES au plan que A2 n'a pas pu produire (fichier
+                # client incomplet) → modèle amputé. Lu à la SOURCE dans
+                # result_a2 : contrairement à rapport_qualite (produit par aucun
+                # agent, donc transitant par un paramètre), A6 reçoit déjà A2.
+                'colonnes_plan_manquantes': _cols_plan_manquantes,
                 'courbes':            courbes,
                 'graphiques':            graphiques,
                 'validation_selection':  _val_sel_,

@@ -3403,17 +3403,22 @@ def _executer_analyse(besoin, direction, equipe, client):
             elif besoin in ["prime_glm","prime_ml","prime_dl","selection"]:
                 from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
                 from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
+                from core.plan_tarifaire import PlanTarifaire
+
+                # Phase 1/2 : la LoB est DÉCLARÉE et le PLAN SIGNÉ pilote tout le
+                # pipeline (encodage A2, variables A3/A4/A5). Cette page tarife en
+                # auto : un seul chargement, partagé par les 4 chemins 'besoin'.
+                _plan_auto = PlanTarifaire.depuis_yaml(os.path.join(
+                    os.path.dirname(__file__), "plans", "auto.yaml"))
 
                 a1 = AgentA1Ingestion(audit_path=_tmp, verbose=False)
-                # Phase 1 : A1 ne devine plus la LoB — elle est déclarée. Cette
-                # page tarife en auto (les 3 chemins prime chargent plans/auto.yaml).
                 r1 = a1.run(dataframe=df, branche="non_vie", sous_branche="auto")
                 if not r1["success"]:
                     st.error(f"❌ A1 Amara : {r1['erreur']}")
                     return
 
                 a2 = AgentA2Preprocessing(audit_path=_tmp, verbose=False)
-                r2 = a2.run(r1)
+                r2 = a2.run(r1, plan=_plan_auto)
                 if not r2["success"]:
                     st.error(f"❌ A2 Kenji : {r2['erreur']}")
                     return
@@ -3423,12 +3428,7 @@ def _executer_analyse(besoin, direction, equipe, client):
 
                 if besoin == "prime_glm":
                     from direction_non_vie.tarification.a3_glm.agent import AgentA3GLM
-                    from core.plan_tarifaire import PlanTarifaire
-                    # Phase 1 : A3 dérive ses variables du PLAN signé. Cette page tarife
-                    # en auto (le chemin déclaratif ci-dessous chargeait déjà
-                    # plans/auto.yaml) — même plan, chargé une seule fois, ici.
-                    _plan_auto = PlanTarifaire.depuis_yaml(os.path.join(
-                        os.path.dirname(__file__), "plans", "auto.yaml"))
+                    # _plan_auto : chargé une seule fois plus haut, partagé avec A2.
                     r3 = AgentA3GLM(audit_path=_tmp, verbose=False).run(
                         r2, plan=_plan_auto, generer_graphiques=False)
                     resultats["principal"] = r3
@@ -3446,21 +3446,13 @@ def _executer_analyse(besoin, direction, equipe, client):
                         resultats["tarif_plan_erreur"] = f"{type(_e_plan).__name__}: {_e_plan}"
                 elif besoin == "prime_ml":
                     from direction_non_vie.tarification.a4_ml.agent import AgentA4ML
-                    from core.plan_tarifaire import PlanTarifaire
-                    # Phase 1 : A4 restreint ses features à plan.colonnes_produites().
-                    # Cette page tarife en auto (même plan que prime_glm).
-                    _plan_auto = PlanTarifaire.depuis_yaml(os.path.join(
-                        os.path.dirname(__file__), "plans", "auto.yaml"))
+                    # _plan_auto : chargé une seule fois plus haut, partagé avec A2.
                     r4 = AgentA4ML(audit_path=_tmp, verbose=False).run(
                         r2, plan=_plan_auto, generer_graphiques=False, calcul_shap=False)
                     resultats["principal"] = r4
                 elif besoin == "prime_dl":
                     from direction_non_vie.tarification.a5_deep_learning.agent import AgentA5DeepLearning
-                    from core.plan_tarifaire import PlanTarifaire
-                    # Phase 1 : A5 restreint ses features à plan.colonnes_produites().
-                    # Cette page tarife en auto (même plan que prime_glm/prime_ml).
-                    _plan_auto = PlanTarifaire.depuis_yaml(os.path.join(
-                        os.path.dirname(__file__), "plans", "auto.yaml"))
+                    # _plan_auto : chargé une seule fois plus haut, partagé avec A2.
                     r5 = AgentA5DeepLearning(audit_path=_tmp, verbose=False).run(
                         r2, plan=_plan_auto, n_epochs=10, generer_graphiques=False)
                     resultats["principal"] = r5

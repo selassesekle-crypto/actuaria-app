@@ -26,6 +26,7 @@ from core.conformite_reglementaire import (
     synthese_modele_dl,
 )
 from core.qualite_donnees import synthese_qualite_donnees
+from core.plan_tarifaire import synthese_colonnes_plan_manquantes
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
@@ -220,6 +221,11 @@ def _construire_contexte_tarif(
         "=== QUALITÉ DES DONNÉES (traitements de la couche générique, chemin déclaratif) ===",
         (synthese_qualite_donnees(result_a6.get('rapport_qualite') if result_a6 else None)
          or "Aucun traitement de qualité de données à signaler (ou couche non exécutée sur ce chemin)."),
+        "",
+        "=== COLONNES DU PLAN NON PRODUITES (modèle amputé) ===",
+        (synthese_colonnes_plan_manquantes(
+            result_a6.get('colonnes_plan_manquantes') if result_a6 else None)
+         or "Aucune : toutes les colonnes déclarées au plan ont été produites."),
         "",
         "=== GOUVERNANCE DU PROFIL DE PONDÉRATION ===",
         f"Profil retenu : {at6.get('profil_ponderation','—')} | Environnement={at6.get('environnement','—')}",
