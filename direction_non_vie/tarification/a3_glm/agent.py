@@ -115,6 +115,7 @@ from core.plan_tarifaire import (
     PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
     alerte_modele_ampute,
 )
+from core.severite import construire_cible_severite
 
 warnings.filterwarnings('ignore')
 
@@ -333,7 +334,8 @@ class AgentA3GLM:
             # ── ÉTAPE 3 : GLM GAMMA (COÛT MOYEN) ─────────────────────────────
             logger.info(f"[{audit_id}] Étape 3/7 : GLM Gamma (coût moyen)")
             res_gamma = self._calibrer_gamma(
-                df_train, df_test, vars_pred, col_cout
+                df_train, df_test, vars_pred, col_cout,
+                col_frequence, col_exposition
             )
             self.modeles['gamma']   = res_gamma['modele']
             self.metriques['gamma'] = res_gamma['metriques']
@@ -973,7 +975,9 @@ class AgentA3GLM:
         df_train:  pd.DataFrame,
         df_test:   pd.DataFrame,
         vars_pred: List[str],
-        col_cout:  str
+        col_cout:  str,
+        col_freq:  str,
+        col_expo:  str,
     ) -> Dict:
         """
         Calibre le GLM Gamma pour la modélisation du coût moyen.
@@ -1005,21 +1009,47 @@ class AgentA3GLM:
         • Coefficient de variation constant (var/mean² = cst)
         • Fonction de lien log → prime toujours positive
         """
-        logger.info("Calibration GLM Gamma — filtrage sur sinistres > 0")
+        logger.info("Calibration GLM Gamma — cible de sévérité (source unique)")
 
         if col_cout not in df_train.columns:
             raise ValueError(f"Variable coût '{col_cout}' introuvable.")
 
-        # Filtrage sur les sinistres > 0
-        # CRUCIAL : le GLM Gamma ne peut pas modéliser des coûts nuls
-        mask_train = df_train[col_cout] > 0
-        mask_test  = df_test[col_cout]  > 0
+        # ── CIBLE DE SÉVÉRITÉ — SOURCE UNIQUE (core/severite.py) ──────────────
+        # ⚠ CORRECTIF DE MODÉLISATION. Cette méthode ajustait
+        # `df_sin_train[col_cout]` — le coût TOTAL — en le déclarant 'cout_moyen',
+        # sans écrêtement, avec un masque `cout > 0`. Le chemin déclaratif
+        # (pipeline_complet), lui, ajuste cout_ecrete/nb : la même grandeur portait
+        # DEUX définitions contradictoires.
+        #
+        # Le coût TOTAL mélange sévérité et FRÉQUENCE (3 sinistres ≈ 3× le total).
+        # Mesuré sur décennale 100k (structure causale connue) : le coefficient de
+        # `montant` absorbait AUSSI l'effet fréquence, pente surestimée, prédiction
+        # hors échantillon des sinistrés effondrée à 32 178 € au lieu de 36 797 €
+        # (−12,6 % ; vérité DGP 36 772 €) → Σ primes / Σ charge = 0,85 : A3
+        # SOUS-TARIFIAIT de 15 %. Le seuil d'écrêtement est APPRIS sur le train et
+        # APPLIQUÉ au test — jamais recalculé (piège V9).
+        cible_tr = construire_cible_severite(
+            df_train[col_cout], df_train[col_freq], df_train[col_expo])
+        cible_te = construire_cible_severite(
+            df_test[col_cout], df_test[col_freq], df_test[col_expo],
+            seuil=cible_tr.seuil_ecretement)
 
-        df_sin_train = df_train[mask_train].copy().reset_index(drop=True)
-        df_sin_test  = df_test[mask_test].copy().reset_index(drop=True)
+        df_sin_train = df_train[cible_tr.masque].copy().reset_index(drop=True)
+        df_sin_test  = df_test[cible_te.masque].copy().reset_index(drop=True)
+        y_sev_train  = pd.Series(cible_tr.severite, index=df_sin_train.index)
+        y_sev_test   = pd.Series(cible_te.severite, index=df_sin_test.index)
 
-        nb_sin_train = int(mask_train.sum())
-        nb_sin_test  = int(mask_test.sum())
+        # Charge grave mutualisée — RÉINJECTÉE dans la prime pure par
+        # _calculer_predictions. Sans elle, on écrêterait les graves du prix mais
+        # pas de la réalité.
+        self.prime_grave_unitaire = cible_tr.prime_grave_unitaire
+        logger.info(
+            f"Sévérité : {cible_tr.n_retenus:,} contrats retenus | seuil écrêtement "
+            f"{cible_tr.seuil_ecretement:,.0f} € | {cible_tr.n_graves} grave(s) | "
+            f"prime grave unitaire {cible_tr.prime_grave_unitaire:,.2f} €/expo")
+
+        nb_sin_train = cible_tr.n_retenus
+        nb_sin_test  = cible_te.n_retenus
 
         logger.info(
             f"Contrats avec sinistres : train={nb_sin_train:,} | "
@@ -1047,7 +1077,7 @@ class AgentA3GLM:
 
             try:
                 modele = sm.GLM(
-                    df_sin_train[col_cout],
+                    y_sev_train,
                     X_train,
                     family=families.Gamma(link=families.links.Log())
                 ).fit(maxiter=200, disp=False)
@@ -1085,7 +1115,7 @@ class AgentA3GLM:
                 pd.DataFrame({'i': np.ones(len(df_sin_train))})
             )
             modele_final = sm.GLM(
-                df_sin_train[col_cout], X_int,
+                y_sev_train, X_int,
                 family=families.Gamma(link=families.links.Log())
             ).fit(maxiter=200, disp=False)
             vars_actives = []
@@ -1105,15 +1135,15 @@ class AgentA3GLM:
         except Exception:
             pred_test = np.full(
                 len(df_sin_test),
-                df_sin_train[col_cout].mean()
+                float(y_sev_train.mean())
             )
 
         rmse = np.sqrt(mean_squared_error(
-            df_sin_test[col_cout], pred_test
+            y_sev_test, pred_test
         )) if nb_sin_test > 0 else 0.0
 
         gini = self._calculer_gini(
-            df_sin_test[col_cout].values, pred_test.values
+            y_sev_test.values, pred_test.values
         ) if nb_sin_test > 0 else 0.0
 
         metriques = {
@@ -1131,7 +1161,7 @@ class AgentA3GLM:
             'vars_exclues':     vars_exclues,
             'nb_obs_train':     nb_sin_train,
             'nb_obs_test':      nb_sin_test,
-            'cout_moyen_obs':   round(float(df_sin_train[col_cout].mean()), 2),
+            'cout_moyen_obs':   round(float(y_sev_train.mean()), 2),
             'cout_moyen_pred':  round(float(pred_test.mean()), 2)
                                 if len(pred_test) > 0 else 0.0,
         }
@@ -1396,10 +1426,16 @@ class AgentA3GLM:
                         self.metriques['gamma']['cout_moyen_obs']
                     )
 
-        # Prime pure = fréquence annuelle × coût moyen
+        # ── PRIME PURE = fréquence annuelle × coût PAR SINISTRE + graves ──────
+        # Le terme de graves n'est pas un ajustement cosmétique : c'est la charge
+        # ÉCRÊTÉE du Gamma, remise dans le tarif. L'omettre reviendrait à écrêter
+        # les sinistres graves du PRIX mais pas de la RÉALITÉ — le tarif
+        # sous-estimerait alors la charge de tout l'écrêtement. Même formule que
+        # pipeline_complet : (freq × cout + ecretement).
         if 'frequence_annuelle' in predictions and 'cout_moyen' in predictions:
             predictions['prime_pure'] = (
                 predictions['frequence_annuelle'] * predictions['cout_moyen']
+                + getattr(self, 'prime_grave_unitaire', 0.0)
             )
 
         # Prédictions Tweedie (prime pure directe)

@@ -105,12 +105,35 @@ logger = logging.getLogger('actuaria.a2')
 # par la valeur du 99ème percentile. Cela évite qu'un sinistre catastrophique
 # unique biaise l'estimation des paramètres du GLM Gamma.
 # Valeurs calibrées sur les statistiques du marché français (FFA 2022).
+# ⚠ ON NE WINSORISE JAMAIS UNE CIBLE — CORRECTIF DE MODÉLISATION.
+# Ce dict contenait 'cout_total_sinistres' (0.00, 0.99), 'prime_pure',
+# 'prime_commerciale' et 'cout_moyen_attendu' : des grandeurs de la FAMILLE CIBLE
+# (cf. filtrer_famille_cible, core/conformite_reglementaire.py), écrasées à leur
+# centile 99 avant même qu'A3 ne les voie.
+#
+# Winsoriser un FACTEUR est légitime : c'est de la robustesse, la variable
+# explicative reste ce qu'elle est. Winsoriser une CIBLE DÉTRUIT LA CHARGE :
+# l'excédent n'est pas mis de côté, il disparaît. Mesuré sur décennale 100k —
+# cout_total_sinistres : max 341 997 € → 55 662 €, moyenne des sinistrés
+# 39 630 € → 32 669 € : 17,6 % de la charge EFFACÉE, en silence. A3 ne voyait
+# jamais les vrais coûts et sous-tarifiait de 15 % (Σ primes / Σ charge = 0,85).
+# Le chemin déclaratif y échappait (A2.transform ne winsorise que les facteurs du
+# plan) : la même grandeur avait donc deux traitements contradictoires.
+#
+# Le traitement CORRECT des sinistres graves est l'écrêtement AVEC RÉINJECTION :
+# on clippe pour que quelques graves ne pilotent pas les relativités, et on
+# remet l'excédent dans le tarif (prime_grave_unitaire). C'est exactement ce que
+# fait construire_cible_severite (core/severite.py), désormais utilisé par A3 ET
+# par pipeline_complet. Écrêter sans réinjecter, c'est écrêter les graves du
+# PRIX mais pas de la RÉALITÉ.
+#
+# ⚠ RESTE À TRAITER (reliquat de Phase 2, hors périmètre de ce correctif) : les
+# trois entrées ci-dessous sont des FACTEURS, et c'est une liste codée en dur
+# SPÉCIFIQUE À UNE LoB (valeur_venale/kilometrage_annuel = auto ; ca_annuel_eur
+# = rcpro). A2.fit/transform winsorise déjà les facteurs GÉNÉRIQUEMENT, depuis le
+# plan (_WINSOR_Q). Cette liste doit disparaître comme VARS_CATEGORIELLES et
+# INTERACTIONS avant elle.
 SEUILS_WINSOR = {
-    # Non-Vie (auto · MRH · RC Pro) — seul périmètre de cet agent
-    'prime_pure':             (0.01, 0.99),  # Clip au P1-P99
-    'prime_commerciale':      (0.01, 0.99),
-    'cout_total_sinistres':   (0.00, 0.99),  # Pas de borne inférieure (0 est valide)
-    'cout_moyen_attendu':     (0.01, 0.99),
     'valeur_venale':          (0.01, 0.99),
     'kilometrage_annuel':     (0.01, 0.99),
     'ca_annuel_eur':          (0.01, 0.99),

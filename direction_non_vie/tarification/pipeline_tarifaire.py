@@ -29,6 +29,7 @@ from statsmodels.genmod import families as _families
 from core.plan_tarifaire import PlanTarifaire
 from core.conformite_reglementaire import construire_matrice_x
 from core.qualite_donnees import controler_qualite, QualiteBloquante
+from core.severite import construire_cible_severite
 from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
 
 # Chargements par défaut (auto). Déclarables dans le plan (étape 6) ; ici en
@@ -303,27 +304,22 @@ def pipeline_complet(portefeuille: pd.DataFrame, plan: PlanTarifaire,
                       family=_families.Poisson(link=_families.links.Log()),
                       offset=np.log(expo)).fit(maxiter=200, disp=False)
 
-    # ── Écrêtement des graves (étape 6) : la charge grave est réintégrée en
-    #    charge MOYENNE sur tout le portefeuille, pas au contrat ──────────────
+    # ── CIBLE DE SÉVÉRITÉ — SOURCE UNIQUE (core/severite.py) ────────────────
+    # Cible (cout_ecrete/nb), masque (coût OBSERVÉ) et écrêtement des graves
+    # sont indissociables : ils sont donc définis À UN SEUL ENDROIT, partagé
+    # avec A3. Les séparer est exactement ce qui avait laissé les deux chemins
+    # diverger — A3 ajustait le coût TOTAL en l'appelant 'cout_moyen'.
+    # La charge grave est réintégrée en charge MOYENNE sur tout le portefeuille
+    # (prime_grave_unitaire), pas au contrat.
     cout_total = pd.to_numeric(X[col_cout], errors="coerce").astype(float).fillna(0.0)
-    seuil = float(cout_total[cout_total > 0].quantile(quantile_ecretement)) \
-        if (cout_total > 0).any() else 0.0
-    cout_ecrete = cout_total.clip(upper=seuil) if seuil > 0 else cout_total
-    charge_grave = float((cout_total - cout_ecrete).sum())
-    prime_grave_unitaire = charge_grave / float(expo.sum()) if float(expo.sum()) > 0 else 0.0
+    cible_sev = construire_cible_severite(
+        cout_total, y_freq, expo, quantile_ecretement=quantile_ecretement)
+    prime_grave_unitaire = cible_sev.prime_grave_unitaire
 
     # ── GLM COÛT MOYEN — FAMILLE DÉCLARÉE DANS LE PLAN ──────────────────────
-    # On ajuste la sévérité là où un COÛT est OBSERVÉ (cout_ecrete > 0), pas
-    # seulement là où un sinistre est COMPTÉ (count > 0). Sur données réelles
-    # (freMTPL2) ~9 100 contrats ont ClaimNb > 0 SANS montant enregistré : leur
-    # sévérité vaudrait 0 et casserait le GLM Gamma. La FRÉQUENCE, elle, garde
-    # tous les contrats (le comptage est observé). Sur données synthétiques où
-    # cout > 0 ⇔ count > 0, ce masque est STRICTEMENT identique à l'ancien —
-    # INV-7 et INV-8 restent donc inchangés.
-    mask = ((cout_ecrete > 0) & (y_freq > 0)).to_numpy()
-    if mask.any():
-        sev = (cout_ecrete.to_numpy()[mask] / y_freq.to_numpy()[mask]).astype(float)
-        glm_cout = ajuster_glm_cout(Xc[mask], sev, plan.famille_severite)
+    if cible_sev.n_retenus:
+        glm_cout = ajuster_glm_cout(Xc[cible_sev.masque], cible_sev.severite,
+                                    plan.famille_severite)
     else:   # aucun coût observé : coût moyen constant (dégénéré mais défini)
         glm_cout = ajuster_glm_cout(Xc.iloc[:1], pd.Series([1.0]),
                                     plan.famille_severite)
