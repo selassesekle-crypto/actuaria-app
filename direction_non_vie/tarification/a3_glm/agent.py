@@ -111,6 +111,7 @@ except ImportError:
 # 'civilite' entrait dans le GLM. A3 appelle désormais filtrer_genre(),
 # comme A2/A4/A5/A6 : une seule implémentation, pour tous.
 from core.conformite_reglementaire import construire_matrice_x
+from core.plan_tarifaire import PlanTarifaire
 
 warnings.filterwarnings('ignore')
 
@@ -172,85 +173,16 @@ TWEEDIE_P = 1.5
 # un GLM robuste, 14 000 en test permettent une validation fiable
 TRAIN_SIZE = 0.80
 
-# Variables prédictives prioritaires par sous-branche
-# Ce sont les variables actuariellement justifiées pour la tarification
-# Elles seront testées en premier dans la sélection stepwise
-VARS_GLM = {
-    'auto': [
-        # Variables assuré — impact sur le risque conducteur
-        'age',                      # Effet U-shape (jeunes + seniors)
-        'age_carre',                # Capture la non-linéarité
-        'bonus_malus',              # Principal prédicteur de sinistralité
-        'anciennete_permis',        # Expérience de conduite
-        # Variables véhicule
-        'puissance_fiscale',        # Corrélé à la vitesse
-        'age_vehicule',             # Vétusté du véhicule
-        'valeur_venale',            # Impact sur le coût moyen
-        # Variables encodées
-        'csp_enc',                  # Catégorie socio-professionnelle
-        'milieu_geographique_enc',  # Urbain/Rural/Urbain dense
-        'garantie_enc',             # RC/Tiers/Tous risques
-        'carburant_enc',            # Type de motorisation
-        'usage_enc',                # Usage du véhicule
-        # Features créées par A2
-        'risque_historique',        # BM × antécédents
-        'jeune_conducteur',         # Indicateur < 25 ans
-        'senior_conducteur',        # Indicateur > 70 ans
-        'vehicule_recent',          # Véhicule < 3 ans
-        'vehicule_ancien',          # Véhicule > 10 ans
-        'km_par_an_normalise',      # Exposition kilométrique
-        'antecedents_sinistres_n1', # Sinistres année précédente
-    ],
-    'mrh': [
-        'surface_m2', 'age_logement', 'logement_ancien',
-        'valeur_par_m2', 'etage', 'alarme', 'double_vitrage',
-        'zone_geographique_enc', 'type_logement_enc',
-        'statut_occupation_enc', 'garantie_vol',
-    ],
-    'rcpro': [
-        'nb_salaries', 'anciennete_entreprise_ans',
-        'antecedents_sinistres_3ans',
-        'secteur_activite_enc', 'type_garantie_enc',
-    ],
-    # ⚠ Sous-branches vie_individuelle / prevoyance_collective / sante_collective
-    # RETIRÉES le 11/07/2026 (audit V10 — résidu de périmètre). Le nettoyage de
-    # périmètre avait porté sur A1 et A2, mais A3 conservait ces configurations :
-    # elles étaient encore ATTEIGNABLES (le matching de sous-branche est un `in`
-    # bidirectionnel sans garde-fou) alors que A1 rejette désormais toute branche
-    # hors Non-Vie. A3 est un agent de la Direction Non-Vie : auto · MRH · RC Pro.
-}
+# Variables prédictives GLM (Phase 1) : plus de liste codée en dur ni de
+# dérivation au chargement du module. A3.run() reçoit le PLAN signé
+# (PlanTarifaire) et dérive ses variables candidates de plan.colonnes_produites()
+# À LA VOLÉE. Plan absent/corrompu → erreur propre (voir run()), jamais de repli.
 
-# ── VARS_GLM DÉRIVÉ DES PLANS SIGNÉS (étape 3 du plan d'exécution) ────────────
-# Plus de listes codées en dur pour les 3 LoB Non-Vie (auto, MRH, RC Pro) : leurs
-# variables GLM sont EXACTEMENT plan.colonnes_produites() de plans/<lob>.yaml — un
-# sur-ensemble STRICT des facteurs RÉELS des anciennes listes. Les seules « pertes »
-# étaient des références MORTES (label '*_enc' que A2 ne produit jamais, car il
-# déclare ces colonnes en one_hot) : auto perdait 'garantie_enc'/'carburant_enc',
-# MRH 'type_logement_enc'/'statut_occupation_enc', RC Pro 'type_garantie_enc' —
-# c'était le bug « variables perdues ». A2 produit déjà toutes ces colonnes
-# (one-hot + dérivées) : A3 ne les ignore plus. Chaque LoB a été vérifiée
-# EMPIRIQUEMENT (ses colonnes mortes ne sont pas celles des autres). RC Pro ajoute
-# en outre 'forme_juridique' — un facteur encodé par A2 mais jamais consommé par
-# l'ancien VARS_GLM (un oubli) : c'est un AJOUT DE MODÉLISATION délibéré, pas une
-# simple reproduction. Calculé UNE FOIS au chargement du module, jamais à
-# l'exécution de run(). Repli VISIBLE (log) par LoB si son plan est indisponible.
-#
 # TODO (ticket en attente, hors cycle) : quand un fichier client n'a pas la source
 # brute d'une dérivée (kilometrage_annuel, valeur_mobilier, annee_construction…),
 # valider_contre() signale la colonne DÉRIVÉE (km_par_an_normalise, valeur_par_m2,
 # age_logement) plutôt que la source brute. Actionnable en forme, imprécis sur la
 # source. À affiner séparément.
-_RACINE_PROJET = os.path.dirname(os.path.dirname(os.path.dirname(
-    os.path.dirname(os.path.abspath(__file__)))))
-for _lob in ('auto', 'mrh', 'rcpro'):
-    try:
-        from core.plan_tarifaire import PlanTarifaire as _PlanTarifaire
-        _chemin_plan = os.path.join(_RACINE_PROJET, 'plans', f'{_lob}.yaml')
-        VARS_GLM[_lob] = list(_PlanTarifaire.depuis_yaml(_chemin_plan).colonnes_produites())
-    except Exception as _e_plan:   # pragma: no cover — repli jamais silencieux
-        logger.warning(
-            "[VARS_GLM] plans/%s.yaml indisponible (%s) — repli sur la liste codée. "
-            "VARS_GLM['%s'] n'est PAS dérivé du plan.", _lob, _e_plan, _lob)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -316,6 +248,7 @@ class AgentA3GLM:
         col_frequence:      str = 'nb_sinistres',
         col_cout:           str = 'cout_total_sinistres',
         col_exposition:     str = 'exposition',
+        plan:               Optional[PlanTarifaire] = None,   # Phase 1 : plan signé explicite
         generer_graphiques: bool = True,
     ) -> Dict[str, Any]:
         """
@@ -341,6 +274,15 @@ class AgentA3GLM:
         if not result_a2.get('success', False):
             return self._erreur("L'agent A2 a échoué.", audit_id)
 
+        # Phase 1 : A3 dérive ses variables du PLAN signé — plus de VARS_GLM codé.
+        # Plan absent/corrompu → erreur propre, JAMAIS de repli silencieux (le
+        # repli réintroduirait la désynchronisation liste/plan que le refactor a tuée).
+        if plan is None:
+            return self._erreur(
+                "A3.run exige un plan (PlanTarifaire) : les variables GLM sont "
+                "dérivées de plan.colonnes_produites() (Phase 1, VARS_GLM supprimé). "
+                "Fournissez plan=PlanTarifaire.depuis_yaml('plans/<lob>.yaml').", audit_id)
+
         if not STATSMODELS_OK:
             return self._erreur(
                 "statsmodels non installé. "
@@ -354,7 +296,7 @@ class AgentA3GLM:
             # ── ÉTAPE 1 : PRÉPARATION ─────────────────────────────────────────
             logger.info(f"[{audit_id}] Étape 1/7 : Préparation données")
             df_train, df_test, vars_pred = self._preparer_donnees(
-                df, sous_branche, col_frequence, col_cout, col_exposition
+                df, sous_branche, col_frequence, col_cout, col_exposition, plan
             )
             rapport['etapes'].append('preparation')
             rapport['variables']['predictives'] = vars_pred
@@ -609,7 +551,8 @@ class AgentA3GLM:
         sous_branche: str,
         col_freq:     str,
         col_cout:     str,
-        col_expo:     str
+        col_expo:     str,
+        plan:         PlanTarifaire,
     ) -> Tuple[pd.DataFrame, pd.DataFrame, List[str]]:
         """
         Prépare les données pour la calibration GLM.
@@ -632,18 +575,10 @@ class AgentA3GLM:
         mais 56 000 contrats en train garantissent des estimations stables.
         Les 14 000 contrats en test permettent une validation fiable du Gini.
         """
-        # Sélection des variables candidates
-        vars_prioritaires = []
-        for key in VARS_GLM:
-            if key in sous_branche or sous_branche in key:
-                vars_prioritaires = VARS_GLM[key]
-                break
-
-        # Si pas de config spécifique → toutes les variables numériques
-        if not vars_prioritaires:
-            vars_prioritaires = df.select_dtypes(
-                include=['int64', 'float64']
-            ).columns.tolist()
+        # Sélection des variables candidates : dérivées À LA VOLÉE du PLAN signé
+        # (Phase 1) — plus de VARS_GLM codé en dur ni de matching flou de
+        # sous-branche. plan.colonnes_produites() est le contrat A2→A3 (INV-1).
+        vars_prioritaires = list(plan.colonnes_produites())
 
         # ── FILET DE SÉCURITÉ RÉGLEMENTAIRE (défense en profondeur, audit V4) ──
         # Exclusion inconditionnelle du genre, en plus du filtrage déjà fait
@@ -724,7 +659,7 @@ class AgentA3GLM:
         # avec la cible, même si elle a traversé tous les filtres nominaux et même
         # si quelqu'un la réinjecte à la main.
         _mx = construire_matrice_x(
-            vars_pred,
+            vars_pred, plan=plan,   # Phase 1 : liste blanche = plan.colonnes_produites()
             contexte=f"A3 — matrice de conception GLM (sous-branche '{sous_branche}')",
             logger_agent=logger,
             # ⚠ df + col_cible = GARDE-FOU N°4 (contrôle par l'EFFET, audit V12).

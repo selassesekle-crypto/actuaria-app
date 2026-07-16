@@ -36,17 +36,18 @@ import pandas as pd
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
 from core.conformite_reglementaire import (
-    _est_experience_passee,
     filtrer_features, filtrer_genre, filtrer_famille_cible,
     est_facteur_autorise, avertissement_walk_forward,
 )
-from direction_non_vie.tarification.a1_ingestion.agent import (
-    MOTS_CLES_DETECTION, BRANCHES_SUPPORTEES,
-)
+# _est_experience_passee : import retiré en Phase 1 (n'était utilisé que par le
+# test_vars_glm_survivent_toutes supprimé).
+# A1 (MOTS_CLES_DETECTION, BRANCHES_SUPPORTEES) : imports retirés en Phase 1 avec la
+# classe TestInvariant_DetectionCoherenteAvecConfigs qui les exerçait (A1 ne devine
+# plus la LoB).
 from direction_non_vie.tarification.a2_preprocessing.agent import (
     VARS_CATEGORIELLES, INTERACTIONS,
 )
-from direction_non_vie.tarification.a3_glm.agent import VARS_GLM
+# VARS_GLM supprimé en Phase 1 : A3 dérive les variables de plan.colonnes_produites().
 
 
 class TestInvariant_ConfigsSurviventAuFiltre(unittest.TestCase):
@@ -62,81 +63,11 @@ class TestInvariant_ConfigsSurviventAuFiltre(unittest.TestCase):
     (VARS_GLM['mrh']) étaient DÉTRUITS par la liste blanche.
     """
 
-    def test_vars_glm_survivent_toutes(self):
-        """⚠ TESTE LE POINT D'ENTRÉE RÉEL — construire_matrice_x() AVEC DONNÉES.
-
-        BLOQUANT B7 (audit V13). Cet invariant appelait `filtrer_features()`,
-        qui n'enchaîne que TROIS garde-fous. Le point d'entrée réel des agents
-        est `construire_matrice_x()`, qui en compte QUATRE — le dernier étant le
-        contrôle par l'effet, lequel exige `df` et `col_cible`. L'invariant était
-        donc STRUCTURELLEMENT AVEUGLE au garde-fou le plus récent : il n'a pas vu
-        que celui-ci détruisait `antecedents_sinistres_3ans` sur 4 régimes
-        actuariels réalistes sur 9 (Gini 0,4245 → −0,0105).
-
-        C'est, à l'identique, la leçon du BLOQUANT B1 : « un contrôle appliqué à
-        un intermédiaire n'est pas un contrôle ». Elle vaut aussi pour les TESTS.
-        Un invariant qui n'exerce pas le chemin de production ne prouve rien.
-
-        On teste donc sur PLUSIEURS RÉGIMES DE FRÉQUENCE — car c'est la fréquence
-        qui fait basculer la corrélation de la sinistralité passée, et un test sur
-        le seul portefeuille auto de masse ne l'aurait jamais montré.
-        """
-        from core.conformite_reglementaire import construire_matrice_x
-
-        # Régimes actuariels réalistes : de l'auto de masse aux grands risques.
-        REGIMES = [
-            ('auto de masse',   0.10, 0.5),
-            ('MRH',             0.08, 0.8),
-            ('RC Pro PME',      0.30, 1.2),
-            ('flotte 30 véh.',  4.00, 1.0),   # ← détruisait l'expérience (B7)
-            ('grands risques',  0.50, 2.5),   # ← idem
-        ]
-        for sous_branche, variables in VARS_GLM.items():
-            for nom_regime, lam0, sigma in REGIMES:
-                with self.subTest(sous_branche=sous_branche, regime=nom_regime):
-                    rng = np.random.default_rng(5)
-                    n = 4000
-                    theta = np.exp(rng.normal(0, sigma, n))
-                    expo = np.clip(rng.beta(5, 1, n), .05, 1.)
-                    lam = lam0 * theta
-                    df = pd.DataFrame({
-                        'nb_sinistres': rng.poisson(lam * expo).astype(float),
-                        'exposition': expo,
-                    })
-                    # Toutes les variables déclarées, avec des données plausibles.
-                    # ⚠ Les facteurs tarifaires ordinaires sont générés
-                    # INDÉPENDAMMENT de θ. Ma première version les construisait
-                    # comme `bruit + 0.1*θ` : en régime « grands risques »
-                    # (σ = 2,5), θ = exp(N(0, 2,5)) a une variance telle que le
-                    # terme en θ écrasait tout — CHAQUE variable devenait un proxy
-                    # du risque, donc une fuite par construction, et le test
-                    # échouait à tort. Mon erreur de fixture, pas un défaut du code.
-                    # Les variables d'expérience passée, elles, sont bien tirées
-                    # du même θ — mais SANS FUITE : tirage de Poisson indépendant,
-                    # conditionnellement à θ (elles portent sur les années passées).
-                    for v in variables:
-                        if v in df.columns:
-                            continue
-                        if _est_experience_passee(v):
-                            df[v] = rng.poisson(3 * lam).astype(float)
-                        else:
-                            df[v] = rng.normal(0, 1, n)
-
-                    mx = construire_matrice_x(
-                        list(variables), contexte=f'INV-1a {nom_regime}',
-                        df=df, col_cible='nb_sinistres',
-                    )
-                    detruites = set(variables) - set(mx)
-                    self.assertEqual(detruites, set(),
-                        f"[{nom_regime}, fréquence {lam0}] "
-                        f"VARS_GLM['{sous_branche}'] déclare {sorted(detruites)}, "
-                        f"que le pipeline de conformité RÉEL détruit. "
-                        f"Motif(s) : "
-                        f"{ {k: v for k, v in mx.exclusions.items() if k in detruites} }. "
-                        f"Le GLM sera amputé de ces facteurs, en silence.")
-        print(f"    INV-1a VARS_GLM : {sum(len(v) for v in VARS_GLM.values())} "
-              f"variables × 5 régimes de fréquence, via le pipeline RÉEL "
-              f"(construire_matrice_x + données) ✅")
+    # (test_vars_glm_survivent_toutes SUPPRIMÉ en Phase 1 : sa prémisse était le
+    #  dict VARS_GLM codé en dur, supprimé. L'invariant « un facteur déclaré
+    #  survit au pipeline de conformité RÉEL » est couvert, côté plan, par INV-2
+    #  dans test_plan_invariants.py — et la protection contre B7 est désormais
+    #  STRUCTURELLE : le plan déclare l'antériorité, construire_matrice_x l'exempte.)
 
     def test_encodages_declares_survivent(self):
         """Les colonnes produites par l'encodage déclaré d'A2 (label → *_enc,
@@ -164,66 +95,13 @@ class TestInvariant_ConfigsSurviventAuFiltre(unittest.TestCase):
         print("    INV-1c Interactions déclarées par A2 : toutes conservées ✅")
 
 
-class TestInvariant_DetectionCoherenteAvecConfigs(unittest.TestCase):
-    """
-    INVARIANT N°2 — Une sous-branche configurée doit être détectable.
-
-    Si A2 et A3 déclarent une configuration pour une sous-branche, alors le
-    vocabulaire de détection d'A1 doit pouvoir la reconnaître — sinon cette
-    configuration est du CODE MORT, et les portefeuilles concernés sont traités
-    avec une configuration générique, en silence.
-
-    C'est cet invariant qui a révélé le BLOQUANT B4 de l'audit V11 :
-    MOTS_CLES_DETECTION['rcpro'] n'avait AUCUNE intersection avec les 8 colonnes
-    que A2/A3 déclarent pour la RC Pro. Un portefeuille RC Pro réel était
-    étiqueté 'non' — une sous-branche qui n'existe nulle part.
-    """
-
-    def test_chaque_sous_branche_est_detectable_par_ses_propres_colonnes(self):
-        for sous_branche in VARS_GLM:
-            with self.subTest(sous_branche=sous_branche):
-                self.assertIn(sous_branche, MOTS_CLES_DETECTION,
-                    f"A3 configure '{sous_branche}' mais A1 ne sait pas la détecter.")
-                mots = MOTS_CLES_DETECTION[sous_branche]
-                cfg = VARS_CATEGORIELLES.get(sous_branche, {})
-                colonnes = (set(VARS_GLM[sous_branche])
-                            | set(cfg.get('one_hot', []))
-                            | set(cfg.get('label', [])))
-                declencheuses = [c for c in colonnes
-                                 if any(m in c.lower() for m in mots)]
-                self.assertTrue(declencheuses,
-                    f"AUCUNE des {len(colonnes)} colonnes déclarées pour "
-                    f"'{sous_branche}' ne déclenche sa propre détection "
-                    f"(mots-clés : {mots}). Un portefeuille '{sous_branche}' réel "
-                    f"ne sera JAMAIS reconnu : toute cette configuration est du "
-                    f"code mort.")
-        print(f"    INV-2a Les {len(VARS_GLM)} sous-branches configurées sont "
-              f"détectables par leurs propres colonnes ✅")
-
-    def test_pas_de_config_orpheline(self):
-        """Symétrique : A1 ne doit pas savoir détecter une sous-branche que
-        personne ne configure (résidu de périmètre)."""
-        for sous_branche in MOTS_CLES_DETECTION:
-            with self.subTest(sous_branche=sous_branche):
-                self.assertIn(sous_branche, VARS_GLM,
-                    f"A1 détecte '{sous_branche}' mais A3 ne la configure pas — "
-                    f"résidu de périmètre (Vie/Santé/Prévoyance ?).")
-        print("    INV-2b Aucune sous-branche détectable sans configuration ✅")
-
-    def test_perimetre_non_vie_strict(self):
-        """Aucun résidu Vie / Santé / Prévoyance dans les configurations."""
-        interdits = ('vie', 'sante', 'prevoyance', 'epargne', 'retraite')
-        for nom, cfg in [('MOTS_CLES_DETECTION', MOTS_CLES_DETECTION),
-                         ('VARS_GLM', VARS_GLM),
-                         ('VARS_CATEGORIELLES', VARS_CATEGORIELLES),
-                         ('INTERACTIONS', INTERACTIONS)]:
-            for sous_branche in cfg:
-                self.assertFalse(
-                    any(i in sous_branche.lower() for i in interdits),
-                    f"{nom} contient '{sous_branche}' — hors périmètre Non-Vie. "
-                    f"Les directions Vie/EP-RE et Santé-Prévoyance sont autonomes.")
-        self.assertEqual(tuple(BRANCHES_SUPPORTEES), ('non_vie',))
-        print("    INV-2c Périmètre strictement Non-Vie (auto · MRH · RC Pro) ✅")
+# (TestInvariant_DetectionCoherenteAvecConfigs SUPPRIMÉE en Phase 1 : l'invariant
+#  N°2 « une sous-branche configurée doit être détectable par A1 » n'a plus d'objet.
+#  A1 ne DEVINE plus la LoB (fin de MOTS_CLES_DETECTION) : l'actuaire sélectionne
+#  explicitement le plan. Il ne peut donc plus exister de configuration « non
+#  détectable » ni de « config orpheline ». Le périmètre Non-Vie strict (ex-INV-2c :
+#  BRANCHES_SUPPORTEES == ('non_vie',), aucun résidu Vie/Santé) reste garanti par
+#  la sélection explicite du plan et n'est plus dérivable d'un dict codé en dur.)
 
 
 class TestInvariant_ConformiteNonContournable(unittest.TestCase):
@@ -1355,8 +1233,12 @@ class TestInvariant_LeSystemeAccepteCeQuIlDoitAccepter(unittest.TestCase):
         a1 = AgentA1Ingestion(audit_path='/tmp', verbose=False)
         a2 = AgentA2Preprocessing(audit_path='/tmp', verbose=False)
         r2 = a2.run(result_a1=a1.run(branche='non_vie', dataframe=df))
+        from core.plan_tarifaire import PlanTarifaire
+        _plan_auto = PlanTarifaire.depuis_yaml(
+            os.path.join(os.path.dirname(__file__), '..', '..', 'plans', 'auto.yaml'))
         r3 = AgentA3GLM(models_path='/tmp', audit_path='/tmp',
-                        verbose=False).run(result_a2=r2, generer_graphiques=False)
+                        verbose=False).run(result_a2=r2, plan=_plan_auto,
+                                           generer_graphiques=False)
         r4 = AgentA4ML(models_path='/tmp', audit_path='/tmp', verbose=False).run(
             result_a2=r2, result_a3=r3, calcul_shap=False, generer_graphiques=False)
         r6 = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp',

@@ -3421,19 +3421,24 @@ def _executer_analyse(besoin, direction, equipe, client):
 
                 if besoin == "prime_glm":
                     from direction_non_vie.tarification.a3_glm.agent import AgentA3GLM
-                    r3 = AgentA3GLM(audit_path=_tmp, verbose=False).run(r2, generer_graphiques=False)
+                    from core.plan_tarifaire import PlanTarifaire
+                    # Phase 1 : A3 dérive ses variables du PLAN signé. Cette page tarife
+                    # en auto (le chemin déclaratif ci-dessous chargeait déjà
+                    # plans/auto.yaml) — même plan, chargé une seule fois, ici.
+                    _plan_auto = PlanTarifaire.depuis_yaml(os.path.join(
+                        os.path.dirname(__file__), "plans", "auto.yaml"))
+                    r3 = AgentA3GLM(audit_path=_tmp, verbose=False).run(
+                        r2, plan=_plan_auto, generer_graphiques=False)
                     resultats["principal"] = r3
-                    # ── BASCULE : chemin déclaratif (plan signé) EN PARALLÈLE ──────
-                    # Calculé À CÔTÉ de l'ancien r3 (aucun changement d'affichage,
-                    # aucun st.* nouveau) — permet la comparaison ancien/nouveau. Le
-                    # plan restitue les 15 colonnes déclarées ; l'ancien A3 en perd 9
-                    # (VARS_GLM vs _enc). Sous garde : une incompatibilité de colonnes
-                    # est enregistrée, jamais fatale pour la page.
+                    # ── COMPARAISON : chemin déclaratif (pipeline_complet) EN PARALLÈLE ─
+                    # Calculé À CÔTÉ de r3 (aucun changement d'affichage, aucun st.*
+                    # nouveau). Depuis la Phase 1, r3 (chemin agent A2→A3) est LUI AUSSI
+                    # piloté par le plan : les deux chemins partagent plans/auto.yaml et
+                    # ses colonnes. Ce calcul parallèle compare donc les deux
+                    # ORCHESTRATIONS (agent vs déclaratif), non plus VARS_GLM vs plan.
+                    # Sous garde : toute incompatibilité est enregistrée, jamais fatale.
                     try:
-                        from core.plan_tarifaire import PlanTarifaire
                         from direction_non_vie.tarification.pipeline_tarifaire import pipeline_complet
-                        _plan_auto = PlanTarifaire.depuis_yaml(os.path.join(
-                            os.path.dirname(__file__), "plans", "auto.yaml"))
                         resultats["tarif_plan"] = pipeline_complet(r1["dataframe"], _plan_auto)
                     except Exception as _e_plan:
                         resultats["tarif_plan_erreur"] = f"{type(_e_plan).__name__}: {_e_plan}"

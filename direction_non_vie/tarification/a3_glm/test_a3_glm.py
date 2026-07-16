@@ -6,6 +6,16 @@ import sys, os, unittest
 import numpy as np
 import pandas as pd
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../')))
+from core.plan_tarifaire import PlanTarifaire
+
+# Phase 1 : A3.run() reçoit le PLAN signé et en dérive ses variables candidates
+# (plan.colonnes_produites()). Ces fixtures sont toutes de type auto (freMTPL2-like)
+# → plan auto. Le plan restreint les candidates aux colonnes qu'il produit : les
+# colonnes absentes du plan sont IGNORÉES — exactement comme VARS_GLM['auto'] (qui
+# en était dérivé) le faisait avant la Phase 1.
+_PLAN_AUTO = PlanTarifaire.depuis_yaml(os.path.join(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')),
+    'plans', 'auto.yaml'))
 
 
 def _make_r_a2(n=2000):
@@ -47,7 +57,8 @@ class TestA3GLM(unittest.TestCase):
         from direction_non_vie.tarification.a3_glm.agent import AgentA3GLM
         cls.agent = AgentA3GLM(models_path='/tmp', audit_path='/tmp', verbose=False)
         cls.r_a2  = _make_r_a2(500)
-        cls.r     = cls.agent.run(result_a2=cls.r_a2, generer_graphiques=False)
+        cls.r     = cls.agent.run(result_a2=cls.r_a2, plan=_PLAN_AUTO,
+                                  generer_graphiques=False)
 
     def test_a3(self):
         r = self.r
@@ -210,7 +221,8 @@ class TestA3CredibiliteBuhlmannStraub(unittest.TestCase):
         from direction_non_vie.tarification.a3_glm.agent import AgentA3GLM
         cls.agent = AgentA3GLM(models_path='/tmp', audit_path='/tmp', verbose=False)
         cls.r_a2, cls.lambda_vrai = _make_r_a2_credibilite(n_groupes=30, n_par_groupe=60)
-        cls.r = cls.agent.run(result_a2=cls.r_a2, generer_graphiques=False)
+        cls.r = cls.agent.run(result_a2=cls.r_a2, plan=_PLAN_AUTO,
+                              generer_graphiques=False)
 
     def test_credibilite(self):
         r = self.r
@@ -274,6 +286,20 @@ class TestConformiteA3(unittest.TestCase):
     numériques quand la sous-branche n'est pas reconnue) n'était protégé
     contre la fuite de données que par une liste noire de noms exacts.
     Les deux filtres partagés du module plateforme sont désormais appliqués.
+
+    ⚠ MISE À JOUR PHASE 1 — mécanisme RÉELLEMENT exercé par ce test.
+    Le « chemin de repli » évoqué ci-dessus N'EXISTE PLUS : A3.run() exige un
+    plan signé et dérive ses candidates de plan.colonnes_produites() — plus de
+    sous-branche à deviner, plus de repli « toutes colonnes numériques ». Une
+    colonne genre BRUTE et pré-encodée absente du plan — 'sexe_M' ici — est donc
+    écartée par la LISTE BLANCHE DU PLAN, EN AMONT de filtrer_genre. Ce test
+    vérifie désormais cette exclusion par liste blanche ; ses assertions (aucune
+    variable genre ni sinistralité dans le GLM) restent exactes et pertinentes.
+    L'élargissement de filtrer_genre lui-même — le cas où une colonne prohibée
+    PEUT encore devenir candidate — est exercé là où ce risque subsiste : la
+    réinjection d'une colonne '*_enc' (test V10-B1 ci-dessous : 'titre_enc' →
+    filtrer_genre) et les contrôles non contournables de construire_matrice_x
+    (INV-3 / INV-3b / INV-4 dans test_invariants.py).
     """
 
     def test_genre_preencode_et_sinistralite_brute_exclus_du_glm(self):
@@ -302,7 +328,7 @@ class TestConformiteA3(unittest.TestCase):
         a2 = AgentA2Preprocessing(audit_path='/tmp', verbose=False)
         a3 = AgentA3GLM(models_path='/tmp', audit_path='/tmp', verbose=False)
         r3 = a3.run(result_a2=a2.run(result_a1=a1.run(branche='non_vie', dataframe=df)),
-                    generer_graphiques=False)
+                    plan=_PLAN_AUTO, generer_graphiques=False)
         self.assertTrue(r3['success'])
         vars_glm = r3['metriques']['poisson'].get('vars_retenues', [])
         genre = [v for v in vars_glm if 'sexe' in v.lower() or 'genre' in v.lower()]
@@ -369,7 +395,7 @@ class TestAuditV10_B1_ContournementA3(unittest.TestCase):
         a3 = AgentA3GLM(models_path='/tmp', audit_path='/tmp', verbose=False)
         r2 = a2.run(result_a1=a1.run(branche='non_vie', dataframe=df))
 
-        r3 = a3.run(result_a2=r2, generer_graphiques=False)
+        r3 = a3.run(result_a2=r2, plan=_PLAN_AUTO, generer_graphiques=False)
         self.assertTrue(r3['success'], f"A3 a échoué : {r3.get('erreur')}")
         vars_glm = r3['metriques']['poisson'].get('vars_retenues', [])
 

@@ -54,6 +54,7 @@ from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preproc
 from direction_non_vie.tarification.a3_glm.agent import AgentA3GLM
 from direction_non_vie.tarification.a4_ml.agent import AgentA4ML
 from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
+from core.plan_tarifaire import PlanTarifaire  # Phase 1 : A3 reçoit le plan signé
 
 TMP = os.path.join(tempfile.gettempdir(), "actuaria_demo_3lob")
 ANNEES = [2019, 2020, 2021, 2022, 2023]
@@ -145,8 +146,9 @@ def run_lob(nom, df, marqueurs_attendus):
         r1 = AgentA1Ingestion(audit_path=TMP, verbose=False).run(
             branche="non_vie", dataframe=df)
         r2 = AgentA2Preprocessing(audit_path=TMP, verbose=False).run(result_a1=r1)
+        plan = PlanTarifaire.depuis_yaml(os.path.join(RACINE, "plans", f"{nom}.yaml"))
         r3 = AgentA3GLM(models_path=TMP, audit_path=TMP, verbose=False).run(
-            result_a2=r2, generer_graphiques=False)
+            result_a2=r2, plan=plan, generer_graphiques=False)
         r4 = AgentA4ML(models_path=TMP, audit_path=TMP, verbose=False).run(
             result_a2=r2, result_a3=r3, calcul_shap=False, generer_graphiques=False)
         r6 = AgentA6Comparaison(models_path=TMP, audit_path=TMP, verbose=False).run(

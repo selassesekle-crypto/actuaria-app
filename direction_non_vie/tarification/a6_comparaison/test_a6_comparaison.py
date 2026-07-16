@@ -6,6 +6,12 @@ import sys, os, unittest
 import numpy as np
 import pandas as pd
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../')))
+from core.plan_tarifaire import PlanTarifaire
+
+# Phase 1 : A3.run() reçoit le PLAN signé. Fixtures auto → plan auto.
+_PLAN_AUTO = PlanTarifaire.depuis_yaml(os.path.join(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')),
+    'plans', 'auto.yaml'))
 
 
 def _make_r_a2_avec_annee(n=800):
@@ -545,7 +551,7 @@ class TestAntiFuiteGenreWalkForwardV9(unittest.TestCase):
         r2 = a2.run(result_a1=r1)
         self.assertEqual(str(r2['dataframe']['sexe'].dtype), 'float64',
             "Ce test présuppose que 'sexe' survit intact (numérique) à A2 en auto")
-        r3 = a3.run(result_a2=r2, generer_graphiques=False)
+        r3 = a3.run(result_a2=r2, plan=_PLAN_AUTO, generer_graphiques=False)
         r4 = a4.run(result_a2=r2, result_a3=r3, calcul_shap=False,
                     generer_graphiques=False)
         r6 = a6.run(result_a2=r2, result_a3=r3, result_a4=r4, result_a5=None,
