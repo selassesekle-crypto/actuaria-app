@@ -1,0 +1,49 @@
+# ActuarIA — Plan de tarification RC GENERALE (Responsabilite Civile Generale
+# d'entreprise : dommages corporels/materiels causes aux TIERS du fait de
+# l'exploitation, des locaux, des produits). Distincte de la RC Pro (faute
+# professionnelle / E&O) : ici l'exploitation et les produits. LoB INEDITE. Opposable.
+lob: rc_generale
+version: "1.0"
+auteur: "S. Sekle, IA"
+exposition: exposition
+cible_frequence: nb_sinistres
+cible_cout: cout_total_sinistres
+famille_severite: gamma
+facteurs:
+  # chiffre_affaires_eur — base d'exposition PRIMAIRE en RC Generale (plus
+  # d'exploitation = plus de contacts tiers = plus de mise en cause). LOG (comme
+  # rcpro/ca_annuel_eur). Pour la RC, CA->FREQUENCE est standard (moins debattu
+  # qu'ailleurs) ; on garde neanmoins la reserve synthetique habituelle.
+  - {nom: chiffre_affaires_eur, type: continu, transformation: log}
+  # effectif — nombre de salaries : intensite operationnelle / main-d'oeuvre en
+  # contact tiers. LOG (1 -> plusieurs centaines). ⚠ COLINEARITE mild avec le CA
+  # (deux proxys de taille) : on garde les deux (revenu vs main-d'oeuvre) ; le
+  # brut+log gere et la verif confirme l'identifiabilite.
+  - {nom: effectif, type: continu, transformation: log}
+  # secteur_activite — NOMINAL : le risque RC varie enormement (BTP=corporel
+  # chantier, Evenementiel=foule, Services=faible). one_hot obligatoire.
+  - nom: secteur_activite
+    type: categoriel
+    encodage: one_hot
+    modalites: [Services, Commerce, Industrie, Evenementiel, BTP]
+    reference: Services
+  # anciennete_entreprise_ans — entreprise etablie : procedures rodees => moins de
+  # mises en cause. Continu (comme rcpro).
+  - {nom: anciennete_entreprise_ans, type: continu}
+  # sous_traitance — recours a la sous-traitance : chaines de responsabilite
+  # diluees/complexes => +freq et +severite (recours en cascade). Binaire.
+  - {nom: sous_traitance, type: binaire}
+  # couverture_produits — exposition RC PRODUITS : Aucune / France / Export. one_hot
+  # (profils distincts). ⚠ PRIOR OUVERT (queue Export) : l'export (rappels,
+  # contentieux de masse, notamment US) porte une queue de SEVERITE lourde mais
+  # DIFFICILE A CALIBRER ; la verif injecte un +severite Export dont l'AMPLITUDE
+  # vraie exige de la donnee RC produits reelle. A CONFIRMER (meme statut que
+  # mode_transport en cargo).
+  - nom: couverture_produits
+    type: categoriel
+    encodage: one_hot
+    modalites: [Aucune, France, Export]
+    reference: Aucune
+  # sinistres_3ans_anterieurs — anteriorite legitime, exemptee du controle par l'effet.
+  - {nom: sinistres_3ans_anterieurs, type: continu, anteriorite: true,
+     commentaire: "Sinistralite RC des 3 dernieres annees — connue a la souscription"}

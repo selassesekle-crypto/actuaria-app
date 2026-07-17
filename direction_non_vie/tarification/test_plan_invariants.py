@@ -1178,6 +1178,63 @@ class TestMRP_PlanDeclaratif(unittest.TestCase):
         print(f"    MRP tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
 
 
+def portefeuille_rcg(n=3000, seed=31):
+    """RC Générale — colonnes SOURCES ; A2 dérive log_chiffre_affaires_eur et
+    log_effectif. LoB inédite, aucune branche A2."""
+    rng = np.random.default_rng(seed)
+    sect = rng.choice(['Services', 'Commerce', 'Industrie', 'Evenementiel', 'BTP'], n)
+    sst = rng.integers(0, 2, n).astype(float)
+    prod = rng.choice(['Aucune', 'France', 'Export'], n, p=[.45, .40, .15])
+    sin3 = rng.poisson(0.3, n).astype(float)
+    expo = np.clip(rng.beta(5, 1, n), 0.1, 1.0)
+    lin = (-1.8 + 0.85 * (sect == 'BTP') + 0.25 * sst + 0.3 * sin3
+           + 0.3 * (prod == 'Export'))
+    nb = rng.poisson(np.exp(lin) * expo).astype(float)
+    cout = np.where(nb > 0, rng.gamma(2.0, 6000.0, n), 0.0)
+    return pd.DataFrame({
+        'exposition': expo,
+        'chiffre_affaires_eur': np.clip(rng.lognormal(np.log(500000), 1.0, n), 20000, None),
+        'effectif': np.clip(np.round(rng.lognormal(np.log(15), 0.9, n)), 1, None),
+        'secteur_activite': sect, 'anciennete_entreprise_ans': rng.uniform(0, 40, n),
+        'sous_traitance': sst, 'couverture_produits': prod,
+        'sinistres_3ans_anterieurs': sin3,
+        'nb_sinistres': nb, 'cout_total_sinistres': cout,
+    })
+
+
+class TestRCGenerale_PlanDeclaratif(unittest.TestCase):
+    """RC Générale — LoB INÉDITE tarifée par le seul plans/rc_generale.yaml.
+    Distincte de la RC Pro (faute professionnelle/E&O) : ici l'exploitation et les
+    produits. CA = exposition primaire ; couverture_produits Export = queue de
+    sévérité (prior ouvert, comme mode_transport en cargo)."""
+
+    @classmethod
+    def setUpClass(cls):
+        from direction_non_vie.tarification.pipeline_tarifaire import pipeline_complet
+        cls.plan = PlanTarifaire.depuis_yaml(
+            os.path.join(_RACINE, 'plans', 'rc_generale.yaml'))
+        cls.df = portefeuille_rcg(n=3000)
+        cls.tarif = pipeline_complet(cls.df, cls.plan)
+
+    def test_transform_produit_les_colonnes_du_plan(self):
+        X = _a2().fit(self.df, self.plan).transform(self.df)
+        manquantes = set(self.plan.colonnes_produites()) - set(X.columns)
+        self.assertEqual(manquantes, set(),
+            f"RC Générale INV-1 rompu : colonnes manquantes {sorted(manquantes)}")
+        print(f"    RC Générale INV-1 : {len(self.plan.colonnes_produites())} colonnes "
+              f"du plan toutes produites par transform ✅")
+
+    def test_tarifer_rcg_json(self):
+        res = self.tarif.tarifer({
+            'chiffre_affaires_eur': 600000, 'effectif': 20, 'secteur_activite': 'BTP',
+            'anciennete_entreprise_ans': 10, 'sous_traitance': 1,
+            'couverture_produits': 'Export', 'sinistres_3ans_anterieurs': 0})
+        self.assertEqual(res['success'], True)
+        self.assertGreater(res['prime_ttc'], 0)
+        self.assertIsInstance(json.dumps(res), str)
+        print(f"    RC Générale tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("  LES 9 INVARIANTS DU PLAN — le code honore-t-il la spec ?")
