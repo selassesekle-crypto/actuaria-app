@@ -97,6 +97,56 @@ class ResultatAgents:
     def success(self) -> bool:
         return bool(self.a3.get("success")) and self.frequence.a6 is not None
 
+    def resume(self) -> Dict[str, Any]:
+        """Vue JSON-SÉRIALISABLE des deux arbitrages — le livrable d'audit.
+
+        Même contrat que tarifer() : 100 % types natifs, json.dumps() ne lève
+        jamais, y compris sur un échec. Les objets lourds (dataframes, modèles
+        sklearn/torch, bytes Excel) restent dans ResultatAgents mais N'ENTRENT PAS
+        ici : ce résumé est fait pour être TRACÉ et TRANSMIS, pas pour rejouer le
+        pipeline. C'est pourquoi ResultatAgents lui-même n'est pas sérialisable —
+        et n'a pas à l'être : il porte de quoi travailler, resume() de quoi rendre
+        compte.
+        """
+        def _f(x):
+            return float(x) if isinstance(x, (int, float, np.floating)) else None
+
+        def _arb(a: "ArbitrageCible") -> Dict[str, Any]:
+            r6 = a.a6 or {}
+            return {
+                "cible":       a.cible,
+                "statut_rag":  a.statut_rag,
+                "n_candidats": int(a.n_candidats),
+                "erreur":      a.erreur,
+                "modele_production": (r6.get("modele_production") or {}).get("modele"),
+                "classement": [
+                    {"modele":   str(c.get("modele")),
+                     "famille":  str(c.get("famille")),
+                     "cible":    str(c.get("cible")),
+                     "gini_test":    _f(c.get("gini_test")),
+                     "score_global": _f(c.get("score_global"))}
+                    for c in (r6.get("classement") or [])
+                ],
+                "exclusions_cible": [
+                    {"modele":       str(e.get("modele")),
+                     "cible_modele": str(e.get("cible_modele")),
+                     "raison":       str(e.get("raison"))}
+                    for e in (r6.get("exclusions_cible") or [])
+                ],
+                "alertes_modele": [str(x.get("code"))
+                                   for x in (r6.get("alertes_modele") or [])],
+            }
+
+        return {
+            "success":        bool(self.success),
+            "audit_id":       self.audit_id,
+            "date_calcul":    datetime.now().isoformat(),
+            "plan_lob":       self.plan.lob,
+            "plan_empreinte": self.plan.empreinte(),
+            "frequence":      _arb(self.frequence),
+            "cout":           _arb(self.cout),
+        }
+
 
 def _vue_sinistres(result_a2: Dict[str, Any], plan: PlanTarifaire) -> Dict[str, Any]:
     """Vue SINISTRÉS de result_a2, prête pour un entraînement sur la sévérité.
