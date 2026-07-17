@@ -1,0 +1,59 @@
+# ActuarIA — Plan de tarification RISQUES AGRICOLES (assurance d'exploitation
+# agricole : recoltes/grele, batiments et materiel, cheptel, RC agricole). LoB
+# multi-peril INEDITE. Frequence = sinistres (grele, perte, casse) ; severite =
+# cout par sinistre. Plan signe, opposable.
+lob: risques_agricoles
+version: "1.0"
+auteur: "S. Sekle, IA"
+exposition: exposition
+cible_frequence: nb_sinistres
+cible_cout: cout_total_sinistres
+# Queue lourde possible (grele generalisee, perte totale de cheptel) : gamma par
+# defaut, ecretement q0.995 borne les graves. lognormal/inverse_gaussienne
+# declarables si la vraie donnee montre une queue plus lourde.
+famille_severite: gamma
+facteurs:
+  # surface_exploitation_ha — taille de l'exploitation (hectares), grandeur de
+  # VOLUME etalee (petite ferme -> grande exploitation cerealiere) => LOG. Pilote
+  # la FREQUENCE (plus de surface = plus de surface exposee a la grele/aleas).
+  # ⚠ CONTRAT/PRIOR OUVERT (facteur de volume vs base d'exposition) : ici
+  # exposition = fraction d'annee-police et surface_exploitation_ha est une
+  # CARACTERISTIQUE de volume. En assurance recolte REELLE, l'exposition est
+  # souvent en HECTARE-ANNEES (surface x duree) ou en valeur assuree : ce choix est
+  # ACTUARIEL, a trancher (meme arbitrage que taille_flotte/nb_logements).
+  - {nom: surface_exploitation_ha, type: continu, transformation: log}
+  # type_production — NOMINAL : profils de peril tres distincts (viticulture =
+  # grele/gel, elevage = maladie/mortalite, grandes cultures = climat, maraichage).
+  # Aucun ordre naturel => one_hot obligatoire (lecon csp/secteur).
+  # ⚠ PRIOR OUVERT (ordre de FREQUENCE) : la verif injecte viticulture au-dessus,
+  # puis maraichage/elevage, grandes cultures baseline. L'ordre reel depend des
+  # PERILS COUVERTS par la police (recolte seule vs multi-peril ferme complete).
+  # A CONFIRMER sur vraie donnee agricole.
+  - nom: type_production
+    type: categoriel
+    encodage: one_hot
+    modalites: [Grandes_cultures, Elevage, Viticulture, Maraichage, Polyculture]
+    reference: Grandes_cultures
+  # valeur_assuree_eur — valeur assuree (batiments + materiel + cheptel/stock),
+  # grandeur monetaire => LOG. Pilote la SEVERITE (montant a indemniser).
+  # ⚠ CHOIX ASSUME (valeur -> FREQUENCE) : effet DELIBEREMENT NON injecte. La
+  # valeur assuree ne change pas la frequence des aleas climatiques ; elle pilote
+  # le COUT par sinistre. A mesurer sur vraie donnee.
+  - {nom: valeur_assuree_eur, type: continu, transformation: log}
+  # exposition_grele — ORDINAL de risque grele (Faible < Moyenne < Forte) : la grele
+  # est LE peril majeur en agricole. label DANS L'ORDRE DU PLAN = gradient croissant
+  # (Faible=0 -> Forte=2), coef POSITIF attendu (comme MRP/zone, PJ/niveau).
+  - nom: exposition_grele
+    type: categoriel
+    encodage: label
+    modalites: [Faible, Moyenne, Forte]
+  # filet_anti_grele — filets pare-grele installes : mitigent directement le peril
+  # #1. Facteur protecteur (-frequence grele). Binaire.
+  - {nom: filet_anti_grele, type: binaire}
+  # irrigation — presence d'irrigation : mitige le risque secheresse (-frequence
+  # perte de recolte). Facteur protecteur d'un AUTRE peril. Binaire.
+  - {nom: irrigation, type: binaire}
+  # sinistres_climatiques_3ans — anteriorite legitime (sinistralite climatique
+  # passee), connue a la souscription, exemptee du controle par l'effet.
+  - {nom: sinistres_climatiques_3ans, type: continu, anteriorite: true,
+     commentaire: "Sinistres climatiques des 3 dernieres annees — connu a la souscription"}

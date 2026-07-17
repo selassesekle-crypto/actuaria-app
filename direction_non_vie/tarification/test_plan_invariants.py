@@ -1413,6 +1413,69 @@ class TestMultirisqueImmeuble_PlanDeclaratif(unittest.TestCase):
         print(f"    Multirisque immeuble tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+#  LOT 3 (Phase 4, DERNIER) — 2 LoB INÉDITES : risques agricoles, D&O. Clôt la
+#  Phase 4 (8 LoB déclaratives sur 8). Mêmes garanties : INV-1 sur l'artefact YAML
+#  réel + smoke tarifer(), chaîne 100 % déclarative, aucune connaissance moteur.
+# ═══════════════════════════════════════════════════════════════════════════════
+def portefeuille_agri(n=3000, seed=71):
+    """Risques agricoles — colonnes SOURCES ; A2 dérive log_surface_exploitation_ha
+    et log_valeur_assuree_eur. LoB inédite, aucune branche A2."""
+    rng = np.random.default_rng(seed)
+    typ = rng.choice(['Grandes_cultures', 'Elevage', 'Viticulture', 'Maraichage', 'Polyculture'],
+                     n, p=[.35, .25, .15, .10, .15])
+    grele = rng.choice(['Faible', 'Moyenne', 'Forte'], n, p=[.35, .40, .25])
+    gcode = np.select([grele == 'Moyenne', grele == 'Forte'], [1., 2.], 0.)
+    filet = rng.integers(0, 2, n).astype(float)
+    irrig = rng.integers(0, 2, n).astype(float)
+    sin3 = rng.poisson(0.4, n).astype(float)
+    surface = np.clip(rng.lognormal(np.log(60), 0.9, n), 2, None)
+    expo = np.clip(rng.beta(5, 1, n), 0.1, 1.0)
+    lin = (-1.7 + 0.50 * (np.log(surface) - np.log(60)) + 0.55 * (typ == 'Viticulture')
+           + 0.40 * gcode - 0.30 * filet - 0.25 * irrig + 0.30 * sin3)
+    nb = rng.poisson(np.exp(lin) * expo).astype(float)
+    cout = np.where(nb > 0, rng.gamma(2.0, 4000.0, n), 0.0)
+    return pd.DataFrame({
+        'exposition': expo, 'surface_exploitation_ha': surface, 'type_production': typ,
+        'valeur_assuree_eur': np.clip(rng.lognormal(np.log(200000), 0.8, n), 10000, None),
+        'exposition_grele': grele, 'filet_anti_grele': filet, 'irrigation': irrig,
+        'sinistres_climatiques_3ans': sin3,
+        'nb_sinistres': nb, 'cout_total_sinistres': cout,
+    })
+
+
+class TestRisquesAgricoles_PlanDeclaratif(unittest.TestCase):
+    """Risques agricoles — LoB multi-péril INÉDITE tarifée par le seul
+    plans/risques_agricoles.yaml (surface en volume-log ; exposition_grele en label
+    ordinal ; valeur → sévérité seule)."""
+
+    @classmethod
+    def setUpClass(cls):
+        from direction_non_vie.tarification.pipeline_tarifaire import pipeline_complet
+        cls.plan = PlanTarifaire.depuis_yaml(
+            os.path.join(_RACINE, 'plans', 'risques_agricoles.yaml'))
+        cls.df = portefeuille_agri(n=3000)
+        cls.tarif = pipeline_complet(cls.df, cls.plan)
+
+    def test_transform_produit_les_colonnes_du_plan(self):
+        X = _a2().fit(self.df, self.plan).transform(self.df)
+        manquantes = set(self.plan.colonnes_produites()) - set(X.columns)
+        self.assertEqual(manquantes, set(),
+            f"Risques agricoles INV-1 rompu : colonnes manquantes {sorted(manquantes)}")
+        print(f"    Risques agricoles INV-1 : {len(self.plan.colonnes_produites())} "
+              f"colonnes du plan toutes produites par transform ✅")
+
+    def test_tarifer_agri_json(self):
+        res = self.tarif.tarifer({
+            'surface_exploitation_ha': 80, 'type_production': 'Viticulture',
+            'valeur_assuree_eur': 250000, 'exposition_grele': 'Forte',
+            'filet_anti_grele': 0, 'irrigation': 1, 'sinistres_climatiques_3ans': 1})
+        self.assertEqual(res['success'], True)
+        self.assertGreater(res['prime_ttc'], 0)
+        self.assertIsInstance(json.dumps(res), str)
+        print(f"    Risques agricoles tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("  LES 9 INVARIANTS DU PLAN — le code honore-t-il la spec ?")
