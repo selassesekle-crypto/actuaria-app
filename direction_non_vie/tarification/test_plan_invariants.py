@@ -1235,6 +1235,68 @@ class TestRCGenerale_PlanDeclaratif(unittest.TestCase):
         print(f"    RC Générale tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+#  LOT 2 (Phase 4) — 3 LoB INÉDITES de plus, mêmes garanties (INV-1 sur l'artefact
+#  YAML réel + smoke tarifer(), chaîne 100 % déclarative, aucune connaissance moteur).
+# ═══════════════════════════════════════════════════════════════════════════════
+def portefeuille_pj(n=3000, seed=41):
+    """Protection juridique — colonnes SOURCES ; A2 dérive log_seuil_intervention_eur
+    et log_plafond_garantie_eur (transformation:log ; LoB inédite, aucune branche A2)."""
+    rng = np.random.default_rng(seed)
+    tsous = rng.choice(['Particulier', 'Profession_liberale', 'Entreprise'], n, p=[.55, .25, .20])
+    dom = rng.choice(['Consommation', 'Travail', 'Voisinage', 'Immobilier', 'Contractuel'], n)
+    niveau = rng.choice(['Base', 'Intermediaire', 'Etendue'], n)
+    ncode = np.select([niveau == 'Intermediaire', niveau == 'Etendue'], [1., 2.], 0.)
+    med = rng.integers(0, 2, n).astype(float)
+    ant = rng.poisson(0.3, n).astype(float)
+    expo = np.clip(rng.beta(5, 1, n), 0.1, 1.0)
+    lin = (-1.6 + 0.55 * (tsous == 'Entreprise') + 0.40 * (dom == 'Travail')
+           + 0.35 * ncode - 0.20 * med + 0.30 * ant)
+    nb = rng.poisson(np.exp(lin) * expo).astype(float)
+    cout = np.where(nb > 0, rng.gamma(2.0, 1500.0, n), 0.0)
+    return pd.DataFrame({
+        'exposition': expo, 'type_souscripteur': tsous, 'domaine_principal': dom,
+        'niveau_couverture': niveau,
+        'seuil_intervention_eur': np.clip(rng.lognormal(np.log(300), 0.5, n), 50, None),
+        'plafond_garantie_eur': np.clip(rng.lognormal(np.log(15000), 0.6, n), 1000, None),
+        'mediation_prealable': med, 'antecedents_litiges_2ans': ant,
+        'nb_sinistres': nb, 'cout_total_sinistres': cout,
+    })
+
+
+class TestProtectionJuridique_PlanDeclaratif(unittest.TestCase):
+    """Protection juridique — LoB INÉDITE tarifée par le seul
+    plans/protection_juridique.yaml (niveau_couverture en label ordinal d'étendue ;
+    seuil_intervention = paramètre de produit assumé comme facteur −fréquence)."""
+
+    @classmethod
+    def setUpClass(cls):
+        from direction_non_vie.tarification.pipeline_tarifaire import pipeline_complet
+        cls.plan = PlanTarifaire.depuis_yaml(
+            os.path.join(_RACINE, 'plans', 'protection_juridique.yaml'))
+        cls.df = portefeuille_pj(n=3000)
+        cls.tarif = pipeline_complet(cls.df, cls.plan)
+
+    def test_transform_produit_les_colonnes_du_plan(self):
+        X = _a2().fit(self.df, self.plan).transform(self.df)
+        manquantes = set(self.plan.colonnes_produites()) - set(X.columns)
+        self.assertEqual(manquantes, set(),
+            f"Protection juridique INV-1 rompu : colonnes manquantes {sorted(manquantes)}")
+        print(f"    Protection juridique INV-1 : {len(self.plan.colonnes_produites())} "
+              f"colonnes du plan toutes produites par transform ✅")
+
+    def test_tarifer_pj_json(self):
+        res = self.tarif.tarifer({
+            'type_souscripteur': 'Entreprise', 'domaine_principal': 'Travail',
+            'niveau_couverture': 'Etendue', 'seuil_intervention_eur': 300,
+            'plafond_garantie_eur': 20000, 'mediation_prealable': 0,
+            'antecedents_litiges_2ans': 0})
+        self.assertEqual(res['success'], True)
+        self.assertGreater(res['prime_ttc'], 0)
+        self.assertIsInstance(json.dumps(res), str)
+        print(f"    Protection juridique tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("  LES 9 INVARIANTS DU PLAN — le code honore-t-il la spec ?")

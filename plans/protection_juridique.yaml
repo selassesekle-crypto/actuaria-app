@@ -1,0 +1,64 @@
+# ActuarIA — Plan de tarification PROTECTION JURIDIQUE (assurance des frais de
+# defense/recours dans un litige : honoraires d'avocat, frais d'expertise et de
+# procedure). Frequence = litiges ouverts ; severite = frais par dossier. LoB
+# INEDITE : aucune ligne de moteur ne la mentionne. Plan signe, opposable.
+lob: protection_juridique
+version: "1.0"
+auteur: "S. Sekle, IA"
+exposition: exposition
+cible_frequence: nb_sinistres
+cible_cout: cout_total_sinistres
+# Queue moderee (un gros contentieux plafonne au plafond de garantie) : gamma par
+# defaut, ecretement q0.995 borne les graves.
+famille_severite: gamma
+facteurs:
+  # type_souscripteur — NOMINAL : profils de litige tres distincts (particulier =
+  # conso/voisinage/travail ; profession liberale ; entreprise = commercial/
+  # contractuel). Aucun axe monotone => one_hot obligatoire (lecon csp/secteur).
+  # ⚠ PRIOR OUVERT (ordre de FREQUENCE) : la verif injecte Particulier=baseline,
+  # Profession_liberale au-dessus, Entreprise le plus haut. L'ordre reel depend
+  # FORTEMENT du mix produit (une PJ conso grand-public peut sur-sinistrer sur les
+  # particuliers). A CONFIRMER sur vraie donnee PJ.
+  - nom: type_souscripteur
+    type: categoriel
+    encodage: one_hot
+    modalites: [Particulier, Profession_liberale, Entreprise]
+    reference: Particulier
+  # domaine_principal — NOMINAL : le domaine dominant du risque (conso, travail,
+  # voisinage, immobilier, contractuel) porte des frequences ET des couts de
+  # dossier distincts (prud'hommes et immobilier = dossiers lourds). one_hot.
+  # NB : une police PJ couvre en general PLUSIEURS domaines ; modeliser un domaine
+  # PRINCIPAL est une simplification assumee (a raffiner sur vraie donnee).
+  - nom: domaine_principal
+    type: categoriel
+    encodage: one_hot
+    modalites: [Consommation, Travail, Voisinage, Immobilier, Contractuel]
+    reference: Consommation
+  # niveau_couverture — ORDINAL d'etendue (Base < Intermediaire < Etendue) : plus
+  # de domaines couverts => plus de litiges reclamables. label DANS L'ORDRE DU PLAN
+  # = gradient croissant (Base=0 -> Etendue=2), coef POSITIF attendu (comme
+  # MRP/zone_geographique).
+  - nom: niveau_couverture
+    type: categoriel
+    encodage: label
+    modalites: [Base, Intermediaire, Etendue]
+  # seuil_intervention_eur — seuil minimal de litige pour declencher la garantie,
+  # grandeur monetaire => LOG. Effet -FREQUENCE (les petits litiges sous le seuil
+  # ne sont pas couverts).
+  # ⚠ CHOIX DEBATTABLE : c'est un PARAMETRE DE PRODUIT (proche d'une franchise),
+  # pas une caracteristique de risque intrinseque du souscripteur. L'inclure comme
+  # facteur -frequence melange design produit et risque assure — meme nature que
+  # la franchise deliberement ECARTEE en MRP. A trancher (facteur de risque, ou
+  # variable de structure a sortir du GLM ?).
+  - {nom: seuil_intervention_eur, type: continu, transformation: log}
+  # plafond_garantie_eur — plafond de prise en charge par dossier, grandeur
+  # monetaire => LOG. Pilote la SEVERITE (les contrats a haut plafond couvrent des
+  # dossiers plus lourds : selection).
+  - {nom: plafond_garantie_eur, type: continu, transformation: log}
+  # mediation_prealable — clause de mediation/reglement amiable prealable : reduit
+  # la frequence des procedures formelles ET leur cout. Facteur protecteur. Binaire.
+  - {nom: mediation_prealable, type: binaire}
+  # antecedents_litiges_2ans — anteriorite legitime, connue a la souscription,
+  # exemptee du controle par l'effet (comme les sinistres anterieurs des autres LoB).
+  - {nom: antecedents_litiges_2ans, type: continu, anteriorite: true,
+     commentaire: "Litiges des 2 dernieres annees — connu a la souscription"}
