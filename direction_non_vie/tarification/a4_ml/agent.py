@@ -1098,7 +1098,7 @@ class AgentA4ML:
         rapport:   Dict,
         col_cible: str = 'nb_sinistres',
     ) -> None:
-        """Calibre séquentiellement les 8 modèles ML."""
+        """Calibre séquentiellement les 6 modèles ML de la boucle ci-dessous."""
 
         modeles_a_calibrer = [
             ('gbm',              self._creer_gbm,           True),
@@ -1184,15 +1184,6 @@ class AgentA4ML:
         creer_modele_ml_pour_nom() (fabrique = SOURCE UNIQUE A4/A6)."""
         return creer_modele_ml_pour_nom('catboost')
 
-    def _creer_random_forest(self):
-        """
-        Forêt Aléatoire — ensemble d'arbres indépendants.
-        Avantage : très robuste à l'overfitting, variance faible.
-        Inconvénient : moins performant que le boosting en Gini.
-        Utile comme modèle de référence stable.
-        """
-        return RandomForestRegressor(**HYPERPARAMS['random_forest'])
-
     def _creer_lineaire_regularise(self, col_cible: str = 'nb_sinistres'):
         """Linéaire régularisé — DÉLÈGUE à creer_modele_ml_pour_nom().
 
@@ -1211,23 +1202,6 @@ class AgentA4ML:
         β dépend de l'échelle de X, et la pénalité (L1+L2 ou L2) aussi.
         """
         return creer_modele_ml_pour_nom('lineaire_regularise', col_cible)
-
-    def _creer_quantile_50(self):
-        """
-        Régression Quantile P50 — estimation de la médiane.
-        Robuste aux outliers contrairement à la régression ordinaire.
-        La prime pure médiane est moins sensible aux sinistres graves.
-        """
-        return QuantileRegressor(**HYPERPARAMS['quantile_50'])
-
-    def _creer_quantile_90(self):
-        """
-        Régression Quantile P90 — estimation prudente.
-        Utile pour la tarification prudente (prime chargée).
-        La prime P90 couvre 90% des scénarios de sinistralité.
-        Recommandée pour les contrats exposés (BTP, RC décennale).
-        """
-        return QuantileRegressor(**HYPERPARAMS['quantile_90'])
 
     # ══════════════════════════════════════════════════════════════════════════
     # MÉTRIQUES
