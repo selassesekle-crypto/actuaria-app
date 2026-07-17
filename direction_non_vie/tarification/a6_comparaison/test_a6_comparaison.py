@@ -75,7 +75,7 @@ def _make_r_a4():
             {'modele': 'lightgbm', 'famille': 'ML', 'gini_test': 0.21, 'gini_train': 0.23,
              'overfit_ratio': 0.91, 'rmse_test': 0.13, 'mae_test': 0.09,
              'overfit_alerte': False, 'score_global': 0.75, 'interpretabilite': 0.60},
-            {'modele': 'elasticnet', 'famille': 'ML', 'gini_test': 0.16, 'gini_train': 0.17,
+            {'modele': 'lineaire_regularise', 'famille': 'ML', 'gini_test': 0.16, 'gini_train': 0.17,
              'overfit_ratio': 0.94, 'rmse_test': 0.15, 'mae_test': 0.11,
              'overfit_alerte': False, 'score_global': 0.70, 'interpretabilite': 0.85},
             {'modele': 'GLM_POISSON', 'famille': 'GLM', 'gini_test': 0.18, 'gini_train': 0.18,
@@ -88,7 +88,7 @@ def _make_r_a4():
         'metriques': {
             'xgboost':    {'gini_test': 0.22, 'gini_train': 0.24, 'overfit_ratio': 0.92, 'rmse_test': 0.12},
             'lightgbm':   {'gini_test': 0.21, 'gini_train': 0.23, 'overfit_ratio': 0.91, 'rmse_test': 0.13},
-            'elasticnet': {'gini_test': 0.16, 'gini_train': 0.17, 'overfit_ratio': 0.94, 'rmse_test': 0.15},
+            'lineaire_regularise': {'gini_test': 0.16, 'gini_train': 0.17, 'overfit_ratio': 0.94, 'rmse_test': 0.15},
         },
         'shap_values': {}, 'monitoring': {}, 'modele_production': {},
         'validation_ml': {}, 'excel_bytes': b'', 'hypotheses': {}, 'audit_trail': {},

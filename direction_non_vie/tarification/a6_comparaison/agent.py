@@ -144,7 +144,7 @@ INTERPRETABILITE = {
     'lightgbm':       0.60,
     'catboost':        0.60,
     'random_forest':  0.55,
-    'elasticnet':     0.85,   # Linéaire régularisé
+    'lineaire_regularise': 0.85,   # Poisson ridge (comptage) ou ElasticNet (continu)
     'quantile_50':    0.80,
     'quantile_90':    0.80,
 }
@@ -2207,7 +2207,7 @@ class AgentA6Comparaison:
         justif_regl.append("Conformité S2 Pilier 1 : modèle validé sur données de test indépendantes")
         justif_regl.append("AI Act 2025 Art. 13 : " + (
             "✅ Modèle linéaire — exigences d'explicabilité satisfaites"
-            if 'GLM' in fam_prod.upper() or 'elasticnet' in nom_prod.lower()
+            if 'GLM' in fam_prod.upper() or 'lineaire_regularise' in nom_prod.lower()
             else "⚠️ Modèle ML/DL — prévoir une note d'explicabilité (SHAP values)"
         ))
         justif_regl.append(f"IFRS 17 : prime pure utilisée pour Best Estimate — cohérence avec A7 à vérifier")

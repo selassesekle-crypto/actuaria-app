@@ -16,7 +16,7 @@
 ║  3. LightGBM    — Light Gradient Boosting Machine (Microsoft)               ║
 ║  4. CatBoost    — Categorical Boosting (Yandex)                             ║
 ║  5. RandomForest— Forêt aléatoire (Breiman 2001)                            ║
-║  6. ElasticNet  — Régression pénalisée L1+L2                                ║
+║  6. Lineaire regularise — ElasticNet (continu) / Poisson ridge (comptage)   ║
 ║  7. GAM         — Generalized Additive Model                                ║
 ║  8. RégQuantile — Régression Quantile (P50, P75, P90)                       ║
 ║                                                                              ║
@@ -185,7 +185,7 @@ FAMILLES_MODELES_ML = {
     'lightgbm':        'Arbres / Boosting',
     'catboost':        'Arbres / Boosting',
     'random_forest':   'Arbres / Bagging',
-    'elasticnet':      'Linéaire régularisé',
+    'lineaire_regularise': 'Linéaire régularisé',
     'quantile_50':     'Régression quantile',
     'quantile_90':     'Régression quantile',
 }
@@ -253,7 +253,7 @@ def creer_modele_ml_pour_nom(nom: str, col_cible: str = 'nb_sinistres'):
     if nom_l == 'random_forest':
         return RandomForestRegressor(**HYPERPARAMS['random_forest'])
 
-    if nom_l == 'elasticnet':
+    if nom_l == 'lineaire_regularise':
         if col_cible in COLS_COMPTAGE:
             # ⚠ CORRECTIF. Cette branche retournait un PoissonRegressor NU, sans
             # le StandardScaler que la branche continue possède — alors que le
@@ -274,13 +274,13 @@ def creer_modele_ml_pour_nom(nom: str, col_cible: str = 'nb_sinistres'):
             return Pipeline([
                 ('scaler',  StandardScaler()),
                 ('poisson', PoissonRegressor(
-                    alpha=HYPERPARAMS['elasticnet']['alpha'],
-                    max_iter=HYPERPARAMS['elasticnet']['max_iter'],
+                    alpha=HYPERPARAMS['lineaire_regularise']['alpha'],
+                    max_iter=HYPERPARAMS['lineaire_regularise']['max_iter'],
                 )),
             ])
         return Pipeline([
             ('scaler',     StandardScaler()),
-            ('elasticnet', ElasticNet(**HYPERPARAMS['elasticnet']))
+            ('elasticnet', ElasticNet(**HYPERPARAMS['lineaire_regularise']))
         ])
 
     if nom_l == 'quantile_50':
@@ -465,7 +465,7 @@ HYPERPARAMS = {
         'n_jobs':        -1,       # Parallélisation automatique
         'random_state':   42,
     },
-    'elasticnet': {
+    'lineaire_regularise': {
         'alpha':          0.01,    # Régularisation faible
         'l1_ratio':       0.5,     # Mix L1+L2 équilibré
         'max_iter':       2000,
@@ -966,11 +966,12 @@ class AgentA4ML:
         La pondération par l'exposition simule l'effet d'un offset
         pour les algorithmes qui ne supportent pas d'offset natif.
 
-        NORMALISATION (ElasticNet uniquement) :
-        ────────────────────────────────────────
-        ElasticNet est sensible à l'échelle des variables.
-        On utilise StandardScaler dans un Pipeline sklearn
-        pour normaliser les features avant la régression pénalisée.
+        NORMALISATION (modèles LINÉAIRES uniquement) :
+        ──────────────────────────────────────────────
+        Tout linéaire régularisé est sensible à l'échelle des variables —
+        ElasticNet (cible continue) comme Poisson ridge (cible de comptage) :
+        β dépend de l'échelle de X, et la pénalité aussi. On utilise donc
+        StandardScaler dans un Pipeline sklearn, dans les DEUX cas.
         Les modèles tree-based (GBM, RF, XGBoost) n'ont pas besoin
         de normalisation car ils utilisent des seuils de coupure.
         """
@@ -1105,7 +1106,7 @@ class AgentA4ML:
             ('xgboost_tweedie',  self._creer_xgboost_tweedie,True),
             ('lightgbm',         self._creer_lightgbm,       True),
             ('catboost',         self._creer_catboost,        True),
-            ('elasticnet',       lambda: self._creer_elasticnet(col_cible), False),
+            ('lineaire_regularise', lambda: self._creer_lineaire_regularise(col_cible), False),
         ]
 
         for nom, creer_fn, supporte_weights in modeles_a_calibrer:
@@ -1226,7 +1227,7 @@ class AgentA4ML:
         """
         return RandomForestRegressor(**HYPERPARAMS['random_forest'])
 
-    def _creer_elasticnet(self, col_cible: str = 'nb_sinistres'):
+    def _creer_lineaire_regularise(self, col_cible: str = 'nb_sinistres'):
         """Linéaire régularisé — DÉLÈGUE à creer_modele_ml_pour_nom().
 
         ⚠ Cette méthode DUPLIQUAIT la fabrique, alors que celle-ci affirme dans
@@ -1243,7 +1244,7 @@ class AgentA4ML:
         famille Poisson. Le StandardScaler, lui, est requis dans les DEUX cas :
         β dépend de l'échelle de X, et la pénalité (L1+L2 ou L2) aussi.
         """
-        return creer_modele_ml_pour_nom('elasticnet', col_cible)
+        return creer_modele_ml_pour_nom('lineaire_regularise', col_cible)
 
     def _creer_quantile_50(self):
         """
@@ -2890,7 +2891,7 @@ class AgentA4ML:
 
 if __name__ == '__main__':
     print("Agent A4 — ML ×8 Tarification ActuarIA v1.0")
-    print("Modèles v2 : GBM · XGBoost · XGBoost Tweedie · LightGBM · CatBoost · ElasticNet")
+    print("Modèles v2 : GBM · XGBoost · XGBoost Tweedie · LightGBM · CatBoost · Linéaire régularisé")
     print("Usage   : %run 'chemin/a4_ml.py'")
     print("          agent_a4 = AgentA4ML()")
     print("          result_a4 = agent_a4.run(result_a2, result_a3=result_a3)")
