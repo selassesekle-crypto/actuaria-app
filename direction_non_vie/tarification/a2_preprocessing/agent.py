@@ -133,11 +133,6 @@ logger = logging.getLogger('actuaria.a2')
 # = rcpro). A2.fit/transform winsorise déjà les facteurs GÉNÉRIQUEMENT, depuis le
 # plan (_WINSOR_Q). Cette liste doit disparaître comme VARS_CATEGORIELLES et
 # INTERACTIONS avant elle.
-SEUILS_WINSOR = {
-    'valeur_venale':          (0.01, 0.99),
-    'kilometrage_annuel':     (0.01, 0.99),
-    'ca_annuel_eur':          (0.01, 0.99),
-}
 
 # Variables catégorielles par sous-branche — PÉRIMÈTRE NON-VIE UNIQUEMENT
 # (auto · MRH · RC Pro). Les sous-branches Vie/Épargne-Retraite et
@@ -463,11 +458,12 @@ class AgentA2Preprocessing:
             rapport['etapes'].append('imputation')
             rapport['transformations']['imputation'] = stats_imput
 
-            # ── ÉTAPE 2 : WINSORISATION ───────────────────────────────────────
-            logger.info(f"[{audit_id}] Étape 2/6 : Winsorisation outliers")
-            df, stats_winsor = self._winsoriser(df, mode)
-            rapport['etapes'].append('winsorisation')
-            rapport['transformations']['winsorisation'] = stats_winsor
+            # ── ÉTAPE 2 (ex-WINSORISATION) — DÉPLACÉE dans _appliquer_plan ────
+            # La winsorisation est désormais pilotée par le PLAN et s'exécute
+            # APRÈS le calcul des dérivées (comme dans fit/transform), donc à
+            # l'étape 5. Elle ne peut pas rester ici : les dérivées n'existent
+            # pas encore, et c'est exactement pour ça qu'elles n'étaient JAMAIS
+            # écrêtées côté agent alors que le déclaratif les traitait.
 
             # ── ÉTAPE 3 : EXPOSITION ──────────────────────────────────────────
             logger.info(f"[{audit_id}] Étape 3/6 : Calcul/validation exposition")
@@ -486,6 +482,8 @@ class AgentA2Preprocessing:
                         f"'{plan.lob}')")
             df, stats_plan = self._appliquer_plan(df, plan)
             rapport['etapes'].append('plan')
+            rapport['etapes'].append('winsorisation')
+            rapport['transformations']['winsorisation'] = stats_plan['winsorisation']
             rapport['transformations']['encodage'] = stats_plan['encodage']
             rapport['features_creees'] = stats_plan['colonnes_produites']
             rapport['colonnes_plan_manquantes'] = stats_plan['manquantes']
@@ -685,6 +683,39 @@ class AgentA2Preprocessing:
         """
         df = self._calculer_indicateurs_derives(df)
 
+        # ── WINSORISATION PILOTÉE PAR LE PLAN ────────────────────────────────
+        # MÊME _WINSOR_Q que fit/transform : une seule définition des bornes,
+        # pour les deux chemins. Et APRÈS les dérivées, comme transform.
+        #
+        # ⚠ Remplace SEUILS_WINSOR, la DERNIÈRE liste codée en dur du pipeline
+        # (valeur_venale/kilometrage_annuel = auto ; ca_annuel_eur = rcpro).
+        # L'écart qu'elle laissait était béant : sur auto, fit/transform écrêtait
+        # 9 facteurs continus, A2.run UN SEUL (valeur_venale) — plus
+        # kilometrage_annuel, qui n'est même pas un facteur du plan (seul son
+        # dérivé km_par_an_normalise l'est). Et les dérivées (risque_historique,
+        # km_par_an_normalise) n'étaient JAMAIS écrêtées côté agent, puisque
+        # l'ancienne étape 2 s'exécutait avant leur calcul. Le plan décide
+        # désormais, des deux côtés, pour toute LoB — y compris celles qu'aucune
+        # liste ne connaissait.
+        winsorisees: Dict[str, Any] = {}
+        q_inf, q_sup = self._WINSOR_Q
+        for f in plan.facteurs:
+            if f.type != 'continu' or f.nom not in df.columns:
+                continue
+            serie = pd.to_numeric(df[f.nom], errors='coerce')
+            lo, hi = float(serie.quantile(q_inf)), float(serie.quantile(q_sup))
+            n_ecretees = int(((serie < lo) | (serie > hi)).sum())
+            if n_ecretees:
+                df[f.nom] = serie.clip(lower=lo, upper=hi)
+                winsorisees[f.nom] = {
+                    'borne_inf': round(lo, 4), 'borne_sup': round(hi, 4),
+                    'n_valeurs_ecretees': n_ecretees,
+                }
+        if winsorisees:
+            logger.info(f"Winsorisation (plan '{plan.lob}') : "
+                        f"{len(winsorisees)} facteur(s) continu(s) écrêté(s) "
+                        f"aux quantiles {q_inf}/{q_sup}")
+
         # Codes label : ORDRE DU PLAN (autorité), comme fit(). Surtout PAS l'ordre
         # alphabétique de sklearn : il avait inversé le signal zone/milieu (254c959).
         self._codes_label = {}
@@ -723,6 +754,7 @@ class AgentA2Preprocessing:
                 plan.lob, len(non_produites), non_produites, facteurs_absents)
         return df, {
             'encodage':           encodage,
+            'winsorisation':      winsorisees,
             'colonnes_produites': produites,
             'manquantes': {
                 'plan':                  plan.lob,
@@ -1005,86 +1037,9 @@ class AgentA2Preprocessing:
     # ÉTAPE 2 : WINSORISATION
     # ══════════════════════════════════════════════════════════════════════════
 
-    def _winsoriser(
-        self,
-        df: pd.DataFrame,
-        mode: str
-    ) -> Tuple[pd.DataFrame, Dict]:
-        """
-        Winsorisation des variables numériques pour traiter les outliers.
-
-        MÉTHODE ACTUARIELLE :
-        ──────────────────────
-        La Winsorisation remplace les valeurs extrêmes par les percentiles
-        définis dans SEUILS_WINSOR.
-
-        Ex : prime_pure avec seuils (0.01, 0.99)
-        → Toute prime < P1 est remplacée par P1
-        → Toute prime > P99 est remplacée par P99
-
-        JUSTIFICATION :
-        Un sinistre de 10 millions d'euros dans un portefeuille auto
-        de particuliers est très probablement une erreur de saisie ou
-        un cas exceptionnel qui biaiserait fortement le GLM Gamma.
-        La Winsorisation le remplace par le 99ème percentile sans
-        supprimer la ligne (on conserve toute l'information).
-
-        IMPORTANT : Les bornes sont calculées sur les données
-        d'entraînement (mode='train') et réutilisées en prédiction
-        (mode='predict') pour éviter le data leakage.
-        """
-        stats = {'colonnes_winsorisees': {}}
-
-        for col, (p_inf, p_sup) in SEUILS_WINSOR.items():
-            # Vérifie que la colonne existe dans le DataFrame
-            if col not in df.columns:
-                continue
-
-            # Ne winsorise que les colonnes numériques
-            if df[col].dtype not in ['int64', 'float64', 'int32', 'float32']:
-                continue
-
-            serie = df[col].dropna()
-            if len(serie) == 0:
-                continue
-
-            if mode == 'train':
-                # Calcul des bornes sur les données d'entraînement
-                borne_inf = serie.quantile(p_inf) if p_inf > 0 else serie.min()
-                borne_sup = serie.quantile(p_sup)
-                self.parametres['winsor_bounds'][col] = {
-                    'borne_inf': float(borne_inf),
-                    'borne_sup': float(borne_sup),
-                    'p_inf':     p_inf,
-                    'p_sup':     p_sup,
-                }
-            else:
-                # Récupération des bornes pré-calculées
-                bounds = self.parametres['winsor_bounds'].get(col)
-                if bounds is None:
-                    continue
-                borne_inf = bounds['borne_inf']
-                borne_sup = bounds['borne_sup']
-
-            # Application de la Winsorisation
-            nb_avant_inf = (df[col] < borne_inf).sum()
-            nb_avant_sup = (df[col] > borne_sup).sum()
-
-            df[col] = df[col].clip(lower=borne_inf, upper=borne_sup)
-
-            nb_modifies = int(nb_avant_inf + nb_avant_sup)
-            if nb_modifies > 0:
-                stats['colonnes_winsorisees'][col] = {
-                    'nb_modifies': nb_modifies,
-                    'pct_modifies': round(nb_modifies / len(df) * 100, 3),
-                    'borne_inf':   round(float(borne_inf), 2),
-                    'borne_sup':   round(float(borne_sup), 2),
-                }
-
-        nb_cols_winsor = len(stats['colonnes_winsorisees'])
-        logger.info(f"Winsorisation : {nb_cols_winsor} colonne(s) traitée(s)")
-
-        return df, stats
+    # (_winsoriser SUPPRIMÉE avec SEUILS_WINSOR — Phase 2, dernière liste codée.
+    #  La winsorisation est desormais PILOTÉE PAR LE PLAN, dans _appliquer_plan,
+    #  avec le MÊME _WINSOR_Q que fit/transform et APRÈS le calcul des dérivées.)
 
     # ══════════════════════════════════════════════════════════════════════════
     # ÉTAPE 3 : EXPOSITION
