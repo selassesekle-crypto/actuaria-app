@@ -1,0 +1,52 @@
+# ActuarIA — Plan de tarification BRIS DE MACHINE (dommages soudains et
+# accidentels a une machine/equipement : defaillance electrique/mecanique, erreur
+# d'exploitation). Frequence = pannes ; severite = reparation/remplacement par
+# panne. LoB INEDITE. Plan signe, opposable.
+lob: bris_machine
+version: "1.0"
+auteur: "S. Sekle, IA"
+exposition: exposition
+cible_frequence: nb_sinistres
+cible_cout: cout_total_sinistres
+# Queue lourde possible (destruction totale d'une machine de forte valeur) : gamma
+# par defaut, ecretement q0.995 borne les graves. inverse_gaussienne/lognormal
+# declarables si la vraie donnee montre une queue plus lourde.
+famille_severite: gamma
+facteurs:
+  # valeur_machine_eur — valeur assuree de la machine, grandeur monetaire => LOG.
+  # Pilote la SEVERITE (reparation/remplacement ~ proportionnels a la valeur).
+  # ⚠ CHOIX ASSUME (valeur -> FREQUENCE) : effet DELIBEREMENT NON injecte. En bris
+  # de machine le signe valeur->frequence est ambigu (machine complexe/chere = plus
+  # de pannes, MAIS mieux entretenue = moins) : on ne tranche pas sur synthetique,
+  # on laisse la valeur piloter la seule SEVERITE. A mesurer sur vraie donnee.
+  - {nom: valeur_machine_eur, type: continu, transformation: log}
+  # age_machine_ans — machine agee : usure => +FREQUENCE (pannes). Continu.
+  - {nom: age_machine_ans, type: continu}
+  # type_machine — NOMINAL : profils de panne tres distincts (production, levage,
+  # froid, informatique, energie). Aucun ordre naturel => one_hot obligatoire.
+  - nom: type_machine
+    type: categoriel
+    encodage: one_hot
+    modalites: [Production, Levage, Froid, Informatique, Energie]
+    reference: Production
+  # heures_fonctionnement_an — intensite d'utilisation, grandeur de VOLUME => LOG
+  # (chaque heure ~ une exposition au risque de panne, ~proportionnel).
+  # ⚠ CONTRAT/PRIOR OUVERT (intensite vs base d'exposition) : ici exposition =
+  # fraction d'annee-police et heures_fonctionnement_an est une CARACTERISTIQUE
+  # d'intensite. En bris de machine reel, les MACHINE-HEURES sont souvent la vraie
+  # base d'exposition — meme arbitrage que taille_flotte en flotte auto. A trancher.
+  - {nom: heures_fonctionnement_an, type: continu, transformation: log}
+  # maintenance_preventive — programme de maintenance preventive : reduit fortement
+  # la frequence des pannes. Facteur protecteur majeur. Binaire.
+  - {nom: maintenance_preventive, type: binaire}
+  # environnement — NOMINAL : milieu d'exploitation (interieur controle, exterieur
+  # expose, chantier severe). Profils de contrainte distincts (poussiere, meteo,
+  # mobilite) => one_hot.
+  - nom: environnement
+    type: categoriel
+    encodage: one_hot
+    modalites: [Interieur, Exterieur, Chantier]
+    reference: Interieur
+  # sinistres_2ans_anterieurs — anteriorite legitime, exemptee du controle par l'effet.
+  - {nom: sinistres_2ans_anterieurs, type: continu, anteriorite: true,
+     commentaire: "Pannes des 2 dernieres annees — connu a la souscription"}

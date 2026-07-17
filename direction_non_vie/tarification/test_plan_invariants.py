@@ -1297,6 +1297,63 @@ class TestProtectionJuridique_PlanDeclaratif(unittest.TestCase):
         print(f"    Protection juridique tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
 
 
+def portefeuille_bris(n=3000, seed=51):
+    """Bris de machine — colonnes SOURCES ; A2 dérive log_valeur_machine_eur et
+    log_heures_fonctionnement_an. LoB inédite, aucune branche A2."""
+    rng = np.random.default_rng(seed)
+    typ = rng.choice(['Production', 'Levage', 'Froid', 'Informatique', 'Energie'],
+                     n, p=[.35, .15, .20, .15, .15])
+    maint = rng.integers(0, 2, n).astype(float)
+    env = rng.choice(['Interieur', 'Exterieur', 'Chantier'], n, p=[.5, .3, .2])
+    sin2 = rng.poisson(0.35, n).astype(float)
+    expo = np.clip(rng.beta(5, 1, n), 0.1, 1.0)
+    lin = (-1.7 + 0.30 * (typ == 'Froid') + 0.50 * (env == 'Chantier')
+           - 0.35 * maint + 0.30 * sin2)
+    nb = rng.poisson(np.exp(lin) * expo).astype(float)
+    cout = np.where(nb > 0, rng.gamma(2.0, 3000.0, n), 0.0)
+    return pd.DataFrame({
+        'exposition': expo,
+        'valeur_machine_eur': np.clip(rng.lognormal(np.log(50000), 0.8, n), 2000, None),
+        'age_machine_ans': rng.uniform(0, 25, n), 'type_machine': typ,
+        'heures_fonctionnement_an': np.clip(rng.lognormal(np.log(2000), 0.6, n), 100, None),
+        'maintenance_preventive': maint, 'environnement': env,
+        'sinistres_2ans_anterieurs': sin2,
+        'nb_sinistres': nb, 'cout_total_sinistres': cout,
+    })
+
+
+class TestBrisMachine_PlanDeclaratif(unittest.TestCase):
+    """Bris de machine — LoB INÉDITE tarifée par le seul plans/bris_machine.yaml
+    (heures_fonctionnement en intensité-log ; valeur → sévérité seule, effet
+    fréquence délibérément non modélisé)."""
+
+    @classmethod
+    def setUpClass(cls):
+        from direction_non_vie.tarification.pipeline_tarifaire import pipeline_complet
+        cls.plan = PlanTarifaire.depuis_yaml(
+            os.path.join(_RACINE, 'plans', 'bris_machine.yaml'))
+        cls.df = portefeuille_bris(n=3000)
+        cls.tarif = pipeline_complet(cls.df, cls.plan)
+
+    def test_transform_produit_les_colonnes_du_plan(self):
+        X = _a2().fit(self.df, self.plan).transform(self.df)
+        manquantes = set(self.plan.colonnes_produites()) - set(X.columns)
+        self.assertEqual(manquantes, set(),
+            f"Bris de machine INV-1 rompu : colonnes manquantes {sorted(manquantes)}")
+        print(f"    Bris de machine INV-1 : {len(self.plan.colonnes_produites())} "
+              f"colonnes du plan toutes produites par transform ✅")
+
+    def test_tarifer_bris_json(self):
+        res = self.tarif.tarifer({
+            'valeur_machine_eur': 50000, 'age_machine_ans': 8, 'type_machine': 'Levage',
+            'heures_fonctionnement_an': 2500, 'maintenance_preventive': 1,
+            'environnement': 'Chantier', 'sinistres_2ans_anterieurs': 0})
+        self.assertEqual(res['success'], True)
+        self.assertGreater(res['prime_ttc'], 0)
+        self.assertIsInstance(json.dumps(res), str)
+        print(f"    Bris de machine tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("  LES 9 INVARIANTS DU PLAN — le code honore-t-il la spec ?")
