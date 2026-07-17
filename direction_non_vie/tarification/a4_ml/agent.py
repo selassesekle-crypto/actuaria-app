@@ -1148,75 +1148,41 @@ class AgentA4ML:
     # ── CRÉATEURS DE MODÈLES ──────────────────────────────────────────────────
 
     def _creer_gbm(self):
+        """Gradient Boosting Machine (sklearn) — DÉLÈGUE à creer_modele_ml_pour_nom().
+
+        Fabrique = SOURCE UNIQUE : A4 (entraînement) et A6 (recalibration
+        walk-forward) construisent désormais LE MÊME modèle. La duplication avait
+        déjà produit une divergence silencieuse sur l'ElasticNet (scaler corrigé
+        d'un seul côté) ; cf. _creer_lineaire_regularise.
         """
-        Gradient Boosting Machine (sklearn).
-        Modèle de boosting séquentiel — chaque arbre corrige les erreurs
-        du précédent. Robuste et interprétable via feature importance.
-        """
-        return GradientBoostingRegressor(**HYPERPARAMS['gbm'])
+        return creer_modele_ml_pour_nom('gbm')
 
     def _creer_xgboost(self, col_cible: str = 'nb_sinistres'):
-        """
-        XGBoost — implémentation optimisée du gradient boosting.
-        Ajoute la régularisation L1/L2 et le traitement natif des NaN.
-        Standard de l'industrie en data science actuarielle.
+        """XGBoost — DÉLÈGUE à creer_modele_ml_pour_nom() (fabrique = SOURCE UNIQUE
+        A4/A6).
 
-        GARDE-FOU (miroir R2 — recommandation P4 certification v3) :
-        Si col_cible est une variable de comptage (Poisson), on utilise
-        l'objective natif 'count:poisson' au lieu de 'reg:squarederror'
-        (défaut XGBoost). L'erreur quadratique n'est pas adaptée aux
-        comptages entiers avec masse en 0 — la déviance Poisson pénalise
-        correctement les sous/sur-estimations sur ce type de variable.
-        Réf. : XGBoost docs — objective='count:poisson' ;
-               Agresti (2015) §7 (même principe que le garde-fou R2 ElasticNet).
+        Le GARDE-FOU R2 (miroir P4 certification v3 ; Agresti 2015 §7) est porté
+        par la fabrique : sur une cible de COMPTAGE (col_cible ∈ COLS_COMPTAGE), la
+        déviance quadratique est inadaptée aux entiers à masse en 0 → objective
+        'count:poisson'. Même logique que le garde-fou ElasticNet.
         """
-        if not XGBOOST_OK:
-            raise ImportError("XGBoost non installé : !pip install xgboost")
-        params = dict(HYPERPARAMS['xgboost'])
-        if col_cible in COLS_COMPTAGE:
-            params['objective'] = 'count:poisson'
-            logger.info(
-                f"[XGBoost] objective='count:poisson' activé "
-                f"(col_cible='{col_cible}' ∈ COLS_COMPTAGE)."
-            )
-        return xgb.XGBRegressor(**params)
+        return creer_modele_ml_pour_nom('xgboost', col_cible)
 
     def _creer_lightgbm(self):
-        """
-        LightGBM — boosting feuille par feuille (leaf-wise).
-        Plus rapide que XGBoost sur les gros volumes (>50k lignes).
-        Avantage : gestion native des variables catégorielles.
-        """
-        if not LIGHTGBM_OK:
-            raise ImportError("LightGBM non installé : !pip install lightgbm")
-        return lgb.LGBMRegressor(**HYPERPARAMS['lightgbm'])
+        """LightGBM (boosting leaf-wise) — DÉLÈGUE à creer_modele_ml_pour_nom()
+        (fabrique = SOURCE UNIQUE A4/A6)."""
+        return creer_modele_ml_pour_nom('lightgbm')
 
     def _creer_xgboost_tweedie(self):
-        """
-        XGBoost Tweedie — optimisé pour la prime pure.
-        Utilise la déviance Tweedie comme fonction de perte.
-        Mieux adapté que l'erreur quadratique pour modéliser
-        une variable avec masse en 0 et queue lourde (prime pure).
-        Justification : cohérent avec le GLM Tweedie de A3.
-        """
-        try:
-            import xgboost as xgb_local
-        except ImportError:
-            raise ImportError("XGBoost non installé : !pip install xgboost")
-        params = dict(HYPERPARAMS['xgboost'])
-        params['objective']              = 'reg:tweedie'
-        params['tweedie_variance_power'] = 1.5
-        return xgb_local.XGBRegressor(**params)
+        """XGBoost Tweedie (objective reg:tweedie, variance_power=1.5 — cohérent
+        avec le GLM Tweedie d'A3, adapté à une cible à masse en 0 et queue lourde)
+        — DÉLÈGUE à creer_modele_ml_pour_nom() (fabrique = SOURCE UNIQUE A4/A6)."""
+        return creer_modele_ml_pour_nom('xgboost_tweedie')
 
     def _creer_catboost(self):
-        """
-        CatBoost — boosting optimisé pour les variables catégorielles.
-        Avantage sur les données actuarielles : gère nativement
-        les variables CSP, garantie, secteur sans encodage préalable.
-        """
-        if not CATBOOST_OK:
-            raise ImportError("CatBoost non installé : !pip install catboost")
-        return CatBoostRegressor(**HYPERPARAMS['catboost'])
+        """CatBoost (boosting, gère nativement les catégorielles) — DÉLÈGUE à
+        creer_modele_ml_pour_nom() (fabrique = SOURCE UNIQUE A4/A6)."""
+        return creer_modele_ml_pour_nom('catboost')
 
     def _creer_random_forest(self):
         """
