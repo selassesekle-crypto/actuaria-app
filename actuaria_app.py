@@ -3467,7 +3467,11 @@ def _executer_analyse(besoin, direction, equipe, client):
                     resultats["principal"] = r5
                 elif besoin == "selection":
                     from direction_non_vie.tarification.a3_glm.agent import AgentA3GLM
-                    r3 = AgentA3GLM(audit_path=_tmp, verbose=False).run(r2, generer_graphiques=False)
+                    # _plan_auto : chargé une seule fois plus haut, partagé avec A2
+                    # (même migration que prime_glm — A3.run exige le plan depuis la
+                    # Phase 1, sinon erreur propre : cette page renvoyait cette erreur).
+                    r3 = AgentA3GLM(audit_path=_tmp, verbose=False).run(
+                        r2, plan=_plan_auto, generer_graphiques=False)
                     if besoin == "selection":
                         from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
                         r6 = AgentA6Comparaison(audit_path=_tmp, verbose=False).run(r2, result_a3=r3, generer_graphiques=False, aide_decision=True)
