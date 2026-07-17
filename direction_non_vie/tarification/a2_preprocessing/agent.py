@@ -259,6 +259,31 @@ DATA_DICTIONNAIRE = {
     },
 }
 
+
+def _sources_brutes(colonnes):
+    """Traduit des colonnes DÉRIVÉES vers la/les colonne(s) SOURCE(s) BRUTE(s) que
+    le fichier client doit réellement fournir.
+
+    A2 CALCULE les dérivées (km_par_an_normalise ← kilometrage_annuel) : le client
+    ne fournit JAMAIS la dérivée. Sans cette traduction, valider_contre() signale
+    'km_par_an_normalise' — une colonne que le client ne peut pas produire. On
+    remonte à la source via DATA_DICTIONNAIRE (source unique du lien dérivée→source),
+    RÉCURSIVEMENT (logement_ancien → age_logement → annee_construction), en
+    préservant l'ordre et sans doublon. Une colonne sans entrée 'source' (déjà une
+    source brute) est laissée telle quelle.
+    """
+    resolues = []
+    for c in colonnes:
+        entree = DATA_DICTIONNAIRE.get(c)
+        if entree and entree.get('source'):
+            src = entree['source']
+            src = [src] if isinstance(src, str) else list(src)
+            resolues.extend(_sources_brutes(src))
+        else:
+            resolues.append(c)
+    vu = set()
+    return [x for x in resolues if not (x in vu or vu.add(x))]
+
 # ── TRAÇABILITÉ DES INTERACTIONS — désormais PILOTÉE PAR LE PLAN (Phase 2) ───
 # Les entrées ci-dessus documentent les variables dérivées "simples" (statiques,
 # calculées par _calculer_indicateurs_derives). Les variables d'interaction
@@ -770,9 +795,15 @@ class AgentA2Preprocessing:
         df = self._calculer_indicateurs_derives(df.copy())   # dérivées AVANT validation
         manquantes = plan.valider_contre(df.columns)
         if manquantes:
+            # Nommer la SOURCE BRUTE, pas la dérivée : le client fournit
+            # kilometrage_annuel, pas km_par_an_normalise (qu'A2 calcule). Sans ça,
+            # le message désigne une colonne que le client ne peut pas produire.
+            sources = [s for s in _sources_brutes(manquantes) if s not in df.columns]
+            detail = ("" if sources == list(manquantes)
+                      else f" (dérivée(s) non calculable(s) : {list(manquantes)})")
             raise ValueError(
-                f"Fichier client incomplet pour le plan '{plan.lob}' : colonnes "
-                f"manquantes {manquantes}.")
+                f"Fichier client incomplet pour le plan '{plan.lob}' : source(s) "
+                f"manquante(s) {sources}.{detail}")
 
         self._plan = plan
         self._medianes: Dict[str, float] = {}

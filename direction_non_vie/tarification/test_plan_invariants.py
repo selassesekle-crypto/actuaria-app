@@ -1536,6 +1536,28 @@ class TestResponsabiliteDirigeants_PlanDeclaratif(unittest.TestCase):
         print(f"    D&O tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
 
 
+class TestValiderContre_SourceBrute(unittest.TestCase):
+    """valider_contre() via A2.fit — quand la SOURCE BRUTE d'une dérivée manque
+    (kilometrage_annuel, source de km_par_an_normalise que A2 calcule), le message
+    d'erreur nomme la SOURCE que le client peut fournir, pas la dérivée qu'il ne
+    peut pas produire. Le plus ancien ticket de la liste des suivis notés."""
+
+    def test_message_nomme_la_source_brute_pas_la_derivee(self):
+        df = portefeuille_auto(n=500).drop(columns=['kilometrage_annuel'])
+        with self.assertRaises(ValueError) as ctx:
+            _a2().fit(df, AUTO)
+        msg = str(ctx.exception)
+        # La SOURCE brute est nommée (l'ancien message ne la contenait pas).
+        self.assertIn('kilometrage_annuel', msg,
+            f"le message doit nommer la source brute kilometrage_annuel : {msg}")
+        # La dérivée n'est plus présentée comme une SOURCE manquante (au plus en
+        # détail « dérivée non calculable »).
+        self.assertNotIn("source(s) manquante(s) ['km_par_an_normalise'", msg,
+            f"la dérivée ne doit pas être présentée comme une source : {msg}")
+        print("    valider_contre : source brute nommée (kilometrage_annuel), pas "
+              "la dérivée km_par_an_normalise ✅")
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("  LES 9 INVARIANTS DU PLAN — le code honore-t-il la spec ?")
