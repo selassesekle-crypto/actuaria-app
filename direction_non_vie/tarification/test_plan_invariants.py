@@ -1119,6 +1119,65 @@ class TestFlotteAutomobile_PlanDeclaratif(unittest.TestCase):
         print(f"    Flotte tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
 
 
+def portefeuille_mrp(n=3000, seed=21):
+    """MRP — colonnes SOURCES ; A2 dérive les log (surface/contenu/CA). LoB inédite,
+    aucune branche A2 (contrairement à la MRH, sa sœur habitation)."""
+    rng = np.random.default_rng(seed)
+    sect = rng.choice(['Bureau', 'Commerce', 'Artisanat', 'Restauration', 'Industrie'], n)
+    pinc = rng.integers(0, 2, n).astype(float)
+    zone = rng.choice(['Rurale', 'Periurbaine', 'Urbaine'], n)
+    sin3 = rng.poisson(0.35, n).astype(float)
+    expo = np.clip(rng.beta(5, 1, n), 0.1, 1.0)
+    lin = (-1.7 + 0.75 * (sect == 'Restauration') - 0.3 * pinc + 0.25 * sin3
+           + 0.3 * np.select([zone == 'Periurbaine', zone == 'Urbaine'], [1., 2.], 0.))
+    nb = rng.poisson(np.exp(lin) * expo).astype(float)
+    cout = np.where(nb > 0, rng.gamma(2.0, 4000.0, n), 0.0)
+    return pd.DataFrame({
+        'exposition': expo,
+        'surface_locaux_m2': np.clip(rng.lognormal(np.log(120), 0.9, n), 15, None),
+        'valeur_contenu_eur': np.clip(rng.lognormal(np.log(80000), 1.0, n), 3000, None),
+        'chiffre_affaires_eur': np.clip(rng.lognormal(np.log(400000), 0.9, n), 20000, None),
+        'anciennete_batiment_ans': rng.uniform(0, 60, n), 'secteur_activite': sect,
+        'protection_incendie': pinc, 'protection_vol': rng.integers(0, 2, n).astype(float),
+        'zone_geographique': zone, 'sinistres_3ans_anterieurs': sin3,
+        'nb_sinistres': nb, 'cout_total_sinistres': cout,
+    })
+
+
+class TestMRP_PlanDeclaratif(unittest.TestCase):
+    """MRP (multirisque professionnelle) — LoB INÉDITE tarifée par le seul
+    plans/multirisque_professionnelle.yaml (surface en log ; zone_geographique en
+    label ordinal de risque vol, Rurale=0 → Urbaine=2)."""
+
+    @classmethod
+    def setUpClass(cls):
+        from direction_non_vie.tarification.pipeline_tarifaire import pipeline_complet
+        cls.plan = PlanTarifaire.depuis_yaml(
+            os.path.join(_RACINE, 'plans', 'multirisque_professionnelle.yaml'))
+        cls.df = portefeuille_mrp(n=3000)
+        cls.tarif = pipeline_complet(cls.df, cls.plan)
+
+    def test_transform_produit_les_colonnes_du_plan(self):
+        X = _a2().fit(self.df, self.plan).transform(self.df)
+        manquantes = set(self.plan.colonnes_produites()) - set(X.columns)
+        self.assertEqual(manquantes, set(),
+            f"MRP INV-1 rompu : colonnes manquantes {sorted(manquantes)}")
+        print(f"    MRP INV-1 : {len(self.plan.colonnes_produites())} colonnes du "
+              f"plan toutes produites par transform ✅")
+
+    def test_tarifer_mrp_json(self):
+        res = self.tarif.tarifer({
+            'surface_locaux_m2': 150, 'valeur_contenu_eur': 90000,
+            'chiffre_affaires_eur': 450000, 'anciennete_batiment_ans': 25,
+            'secteur_activite': 'Restauration', 'protection_incendie': 1,
+            'protection_vol': 1, 'zone_geographique': 'Urbaine',
+            'sinistres_3ans_anterieurs': 0})
+        self.assertEqual(res['success'], True)
+        self.assertGreater(res['prime_ttc'], 0)
+        self.assertIsInstance(json.dumps(res), str)
+        print(f"    MRP tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("  LES 9 INVARIANTS DU PLAN — le code honore-t-il la spec ?")

@@ -1,0 +1,52 @@
+# ActuarIA — Plan de tarification MULTIRISQUE PROFESSIONNELLE (MRP : locaux
+# professionnels — commerce/bureau/atelier : incendie, degat des eaux, vol, bris,
+# pertes d'exploitation). Version PRO de la MRH. LoB INEDITE. Plan signe, opposable.
+lob: multirisque_professionnelle
+version: "1.0"
+auteur: "S. Sekle, IA"
+exposition: exposition
+cible_frequence: nb_sinistres
+cible_cout: cout_total_sinistres
+famille_severite: gamma
+facteurs:
+  # surface_locaux_m2 — taille des locaux : plus de surface => plus d'exposition
+  # (incendie/degat des eaux/vol). Etalee sur plusieurs ordres (kiosque 20 m2 ->
+  # entrepot 5000 m2) => LOG. ⚠ Choix LOG (vs lineaire comme MRH/surface_m2 sur
+  # l'habitation, plage plus etroite) : justifie par l'etalement PRO. Signal sur log.
+  - {nom: surface_locaux_m2, type: continu, transformation: log}
+  # valeur_contenu_eur — valeur du contenu (materiel/stock/agencement), grandeur
+  # monetaire => LOG. Pilote la SEVERITE (montant a indemniser) et +freq VOL.
+  - {nom: valeur_contenu_eur, type: continu, transformation: log}
+  # chiffre_affaires_eur — intensite d'activite (comme rcpro/ca_annuel_eur) => LOG.
+  # ⚠ PRIOR OUVERT (CA -> FREQUENCE) : la verif injecte +freq (plus d'activite =
+  # plus d'incidents : passage, manutention) ET +severite (pertes d'exploitation).
+  # L'effet SEVERITE/BI est clair ; l'effet FREQUENCE est notre hypothese, A
+  # CONFIRMER sur vraie donnee MRP (meme reserve que montant->freq decennale/transport).
+  - {nom: chiffre_affaires_eur, type: continu, transformation: log}
+  # anciennete_batiment_ans — batiment ancien : reseaux/electricite vetustes =>
+  # +freq (degat des eaux, incendie electrique). Continu SAISI (pas derive : LoB
+  # inedite sans branche A2, contrairement a MRH/age_logement).
+  - {nom: anciennete_batiment_ans, type: continu}
+  # secteur_activite — NOMINAL, profils de peril tres distincts (Restauration=feu
+  # de cuisine, Bureau=faible, Artisanat=machines/outils). one_hot obligatoire.
+  - nom: secteur_activite
+    type: categoriel
+    encodage: one_hot
+    modalites: [Bureau, Commerce, Artisanat, Restauration, Industrie]
+    reference: Bureau
+  # protection_incendie — extincteurs/detection/sprinkler : reduit freq ET severite
+  # incendie. Facteur protecteur majeur. Binaire.
+  - {nom: protection_incendie, type: binaire}
+  # protection_vol — alarme/protection mecanique : reduit la freq vol. Binaire.
+  - {nom: protection_vol, type: binaire}
+  # zone_geographique — ORDINALE de risque VOL (rural < periurbain < urbain).
+  # label DANS L'ORDRE DU PLAN = gradient croissant (Rurale=0 -> Urbaine=2) =>
+  # coef label POSITIF attendu. Meme encodage que MRH/zone_geographique (ordre
+  # inverse pour rendre le gradient explicite et positif).
+  - nom: zone_geographique
+    type: categoriel
+    encodage: label
+    modalites: [Rurale, Periurbaine, Urbaine]
+  # sinistres_3ans_anterieurs — anteriorite legitime, exemptee du controle par l'effet.
+  - {nom: sinistres_3ans_anterieurs, type: continu, anteriorite: true,
+     commentaire: "Sinistralite locaux des 3 dernieres annees — connue a la souscription"}
