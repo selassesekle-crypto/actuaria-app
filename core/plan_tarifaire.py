@@ -31,6 +31,8 @@ import json
 from dataclasses import dataclass, field
 from typing import Literal, Optional, Sequence
 
+from core.derivations import sources_brutes
+
 TypeFacteur = Literal["continu", "categoriel", "binaire"]
 Encodage = Literal["one_hot", "label", "aucun"]
 Transformation = Literal["log", "carre", "racine"]
@@ -181,6 +183,23 @@ class PlanTarifaire:
 
     def colonnes_obligatoires(self) -> tuple[str, ...]:
         return (self.exposition, self.cible_frequence, self.cible_cout)
+
+    def colonnes_attendues(self) -> tuple[str, ...]:
+        """Colonnes que le fichier client doit RÉELLEMENT fournir, en noms de
+        SOURCE BRUTE.
+
+        Diffère de `colonnes_sources()` (qui renvoie `f.nom`) pour les facteurs
+        DÉRIVÉS : le client livre `kilometrage_annuel`, A2 en calcule
+        `km_par_an_normalise`. C'est le référentiel des cibles de mapping valides
+        (core.mapping_client) et de la couverture (« futures amputées »).
+        Résolution récursive via core.derivations (source unique dérivée→source).
+        """
+        cols: list[str] = list(self.colonnes_obligatoires())
+        if self.identifiant_contrat:
+            cols.append(self.identifiant_contrat)
+        cols.extend(sources_brutes([f.nom for f in self.facteurs]))
+        vu: set = set()
+        return tuple(x for x in cols if not (x in vu or vu.add(x)))
 
     def facteurs_anteriorite(self) -> tuple[str, ...]:
         """Variables exemptées du contrôle par l'effet (critère V14)."""

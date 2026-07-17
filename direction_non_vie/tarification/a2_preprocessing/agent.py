@@ -260,29 +260,13 @@ DATA_DICTIONNAIRE = {
 }
 
 
-def _sources_brutes(colonnes):
-    """Traduit des colonnes DÉRIVÉES vers la/les colonne(s) SOURCE(s) BRUTE(s) que
-    le fichier client doit réellement fournir.
-
-    A2 CALCULE les dérivées (km_par_an_normalise ← kilometrage_annuel) : le client
-    ne fournit JAMAIS la dérivée. Sans cette traduction, valider_contre() signale
-    'km_par_an_normalise' — une colonne que le client ne peut pas produire. On
-    remonte à la source via DATA_DICTIONNAIRE (source unique du lien dérivée→source),
-    RÉCURSIVEMENT (logement_ancien → age_logement → annee_construction), en
-    préservant l'ordre et sans doublon. Une colonne sans entrée 'source' (déjà une
-    source brute) est laissée telle quelle.
-    """
-    resolues = []
-    for c in colonnes:
-        entree = DATA_DICTIONNAIRE.get(c)
-        if entree and entree.get('source'):
-            src = entree['source']
-            src = [src] if isinstance(src, str) else list(src)
-            resolues.extend(_sources_brutes(src))
-        else:
-            resolues.append(c)
-    vu = set()
-    return [x for x in resolues if not (x in vu or vu.add(x))]
+# La relation dérivée→source vit désormais dans core.derivations (SOURCE UNIQUE,
+# partagée par le plan — colonnes_attendues() — et le moteur de mapping). A2 y
+# DÉLÈGUE : fin du couplage à DATA_DICTIONNAIRE, qui n'en documentait que 3 des 9
+# (la table core est complète). Effet de bord VOULU : valider_contre() nomme
+# désormais AUSSI valeur_mobilier / annee_construction (mrh), pas seulement les 3
+# dérivées auto documentées — le correctif du #4 était partiel, il est complété.
+from core.derivations import sources_brutes as _sources_brutes
 
 # ── TRAÇABILITÉ DES INTERACTIONS — désormais PILOTÉE PAR LE PLAN (Phase 2) ───
 # Les entrées ci-dessus documentent les variables dérivées "simples" (statiques,
