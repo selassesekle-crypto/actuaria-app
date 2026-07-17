@@ -255,10 +255,29 @@ def creer_modele_ml_pour_nom(nom: str, col_cible: str = 'nb_sinistres'):
 
     if nom_l == 'elasticnet':
         if col_cible in COLS_COMPTAGE:
-            return PoissonRegressor(
-                alpha=HYPERPARAMS['elasticnet']['alpha'],
-                max_iter=HYPERPARAMS['elasticnet']['max_iter'],
-            )
+            # ⚠ CORRECTIF. Cette branche retournait un PoissonRegressor NU, sans
+            # le StandardScaler que la branche continue possède — alors que le
+            # principe était ÉNONCÉ juste à côté : « les coefficients β dépendent
+            # de l'échelle de X ; sans normalisation, les variables à grande
+            # variance dominent ». Il valait pour les DEUX branches : la pénalité
+            # L2 de PoissonRegressor est tout aussi dépendante de l'échelle.
+            #
+            # L'effet n'était pas une dégradation, c'était un ÉCHEC MUET. Sur
+            # décennale (montant_travaux_eur jusqu'à 1,7 M€, rapport d'échelle
+            # 1 734 823x entre features), L-BFGS s'arrêtait à n_iter=1 et
+            # prédisait une CONSTANTE (pred_std=0.000000) — Gini 0,0224 — SANS
+            # lever le moindre avertissement de convergence. Le « modèle » n'était
+            # que l'intercept. Avec le scaler : Gini 0,2205, convergé en 8
+            # itérations. Sur auto : n_iter=2000 (plafond atteint) → 15.
+            # Les arbres (GBM/XGB/LGBM/CatBoost) sont invariants d'échelle : ils
+            # n'ont jamais été concernés, ce qui a masqué le défaut.
+            return Pipeline([
+                ('scaler',  StandardScaler()),
+                ('poisson', PoissonRegressor(
+                    alpha=HYPERPARAMS['elasticnet']['alpha'],
+                    max_iter=HYPERPARAMS['elasticnet']['max_iter'],
+                )),
+            ])
         return Pipeline([
             ('scaler',     StandardScaler()),
             ('elasticnet', ElasticNet(**HYPERPARAMS['elasticnet']))
@@ -1208,31 +1227,23 @@ class AgentA4ML:
         return RandomForestRegressor(**HYPERPARAMS['random_forest'])
 
     def _creer_elasticnet(self, col_cible: str = 'nb_sinistres'):
-        """
-        ElasticNet — régression pénalisée L1 + L2.
-        Combine LASSO (sélection de variables) et Ridge (stabilité).
+        """Linéaire régularisé — DÉLÈGUE à creer_modele_ml_pour_nom().
 
-        GARDE-FOU R2 (Agresti 2015 §7) :
-        Si col_cible est une variable de comptage (Poisson), ElasticNet
-        est inadapté (minimise l'erreur quadratique sur des entiers).
-        Dans ce cas, on retourne PoissonRegressor à la place.
+        ⚠ Cette méthode DUPLIQUAIT la fabrique, alors que celle-ci affirme dans
+        son propre docstring « centraliser ici la logique déjà présente dans les
+        méthodes _creer_* … pour éviter toute divergence entre la fabrique
+        utilisée par A4 et celle utilisée par A6 ». La centralisation avait été
+        écrite mais A4 n'y avait jamais été migré : A4 entraînait via _creer_*, A6
+        recalibrait le walk-forward via la fabrique. Deux implémentations du même
+        modèle — le décalage n'attendait qu'une divergence pour se manifester, et
+        le correctif du scaler l'aurait produite (corrigé d'un côté seulement).
 
-        Justification du Pipeline ElasticNet :
-        ElasticNet minimise ||y - Xβ||² + α×(L1 + L2)
-        Les coefficients β dépendent de l'échelle de X.
-        Sans normalisation, les variables avec grande variance dominent.
+        GARDE-FOU R2 (Agresti 2015 §7) — porté par la fabrique : sur une cible de
+        COMPTAGE, minimiser l'erreur quadratique sur des entiers est inadapté →
+        famille Poisson. Le StandardScaler, lui, est requis dans les DEUX cas :
+        β dépend de l'échelle de X, et la pénalité (L1+L2 ou L2) aussi.
         """
-        if col_cible in COLS_COMPTAGE:
-            # Variable de comptage → PoissonRegressor (famille Poisson)
-            return PoissonRegressor(
-                alpha=HYPERPARAMS['elasticnet']['alpha'],
-                max_iter=HYPERPARAMS['elasticnet']['max_iter'],
-            )
-        # Variable continue → ElasticNet standard dans Pipeline normalisé
-        return Pipeline([
-            ('scaler',     StandardScaler()),
-            ('elasticnet', ElasticNet(**HYPERPARAMS['elasticnet']))
-        ])
+        return creer_modele_ml_pour_nom('elasticnet', col_cible)
 
     def _creer_quantile_50(self):
         """
