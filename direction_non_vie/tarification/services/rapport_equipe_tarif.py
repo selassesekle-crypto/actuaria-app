@@ -28,6 +28,7 @@ from core.conformite_reglementaire import (
 )
 from core.qualite_donnees import synthese_qualite_donnees
 from core.plan_tarifaire import synthese_colonnes_plan_manquantes
+from core.mapping_client import synthese_mapping
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
@@ -364,6 +365,13 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
         if _synth_cp6:
             _kpi(ws5, r, "Colonnes du plan non produites — modèle amputé",
                  _synth_cp6, statut="AMBRE", wrap=True); r += 1
+        # Mapping client (couche 2) — renommage du fichier avant A1. Même
+        # source-unique partagée avec Excel A6 / Word / HTML. Rien si pas de mapping.
+        _synth_map6 = synthese_mapping(
+            r6.get('rapport_mapping') if isinstance(r6, dict) else None)
+        if _synth_map6:
+            _kpi(ws5, r, "Mapping client appliqué", _synth_map6,
+                 statut=("AMBRE" if "⚠" in _synth_map6 else "VERT"), wrap=True); r += 1
 
         # ── Onglet 6 : Audit trail consolidé ──────────────────────────────────
         ws6 = wb.create_sheet("6-Audit Trail Consolidé")

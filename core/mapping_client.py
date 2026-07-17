@@ -34,7 +34,7 @@ from core.plan_tarifaire import PlanTarifaire
 __all__ = [
     "MappingClient", "RapportMapping", "MappingIncoherent",
     "charger_mapping", "valider_mapping", "appliquer_mapping",
-    "preparer_fichier_client",
+    "preparer_fichier_client", "synthese_mapping",
 ]
 
 
@@ -93,7 +93,8 @@ class MappingClient:
 class RapportMapping:
     client: str
     plan:   str
-    n_renommees: int
+    n_renommees:         int
+    n_colonnes_attendues: int                     # total des colonnes d'entrée du plan
     colonnes_client_non_mappees: Tuple[str, ...]  # présentes mais NON consommées → candidates
     colonnes_plan_non_couvertes: Tuple[str, ...]  # attendues absentes après renommage → futures amputées
     correspondances_mortes:      Tuple[str, ...]  # clé du mapping absente du fichier client
@@ -104,11 +105,44 @@ class RapportMapping:
             "client":  self.client,
             "plan":    self.plan,
             "n_renommees": int(self.n_renommees),
+            "n_colonnes_attendues": int(self.n_colonnes_attendues),
             "colonnes_client_non_mappees": list(self.colonnes_client_non_mappees),
             "colonnes_plan_non_couvertes": list(self.colonnes_plan_non_couvertes),
             "correspondances_mortes":      list(self.correspondances_mortes),
             "ampute_previsionnel": bool(self.colonnes_plan_non_couvertes),
         }
+
+
+def synthese_mapping(rapport: Optional[RapportMapping]) -> Optional[str]:
+    """SOURCE UNIQUE du libellé « mapping client appliqué », partagée par l'Excel
+    A6, le rapport équipe et le Word/HTML — même mécanisme que
+    synthese_qualite_donnees() et synthese_colonnes_plan_manquantes().
+
+    Retourne None si AUCUN mapping n'a été appliqué (chemin sans mapping = la
+    plupart des appels) : rien n'est alors affiché dans les livrables (rétro-compat).
+    Le préfixe ⚠ signale à l'appelant (Excel/équipe) qu'un point mérite AMBRE.
+    """
+    if rapport is None:
+        return None
+    lignes = [
+        f"Mapping client '{rapport.client}' → plan '{rapport.plan}' : "
+        f"{rapport.n_renommees}/{rapport.n_colonnes_attendues} colonne(s) attendue(s) renommee(s)."
+    ]
+    if rapport.colonnes_plan_non_couvertes:
+        lignes.append(
+            f"⚠ {len(rapport.colonnes_plan_non_couvertes)} colonne(s) du plan NON "
+            f"couverte(s) — MODELE AMPUTE : {', '.join(rapport.colonnes_plan_non_couvertes)}.")
+    if rapport.correspondances_mortes:
+        lignes.append(
+            f"⚠ {len(rapport.correspondances_mortes)} correspondance(s) MORTE(s) "
+            f"(cle absente du fichier — mapping perime ?) : "
+            f"{', '.join(rapport.correspondances_mortes)}.")
+    if rapport.colonnes_client_non_mappees:
+        lignes.append(
+            f"{len(rapport.colonnes_client_non_mappees)} colonne(s) client NON mappee(s) "
+            f"(candidates a devenir facteurs) : "
+            f"{', '.join(rapport.colonnes_client_non_mappees)}.")
+    return " ".join(lignes)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -166,6 +200,7 @@ def appliquer_mapping(df: pd.DataFrame, mapping: MappingClient, plan: PlanTarifa
 
     rapport = RapportMapping(
         client=mapping.client, plan=plan.lob, n_renommees=len(vivantes),
+        n_colonnes_attendues=len(attendues),
         colonnes_client_non_mappees=tuple(
             c for c in df_renomme.columns if c not in attendues),
         colonnes_plan_non_couvertes=tuple(

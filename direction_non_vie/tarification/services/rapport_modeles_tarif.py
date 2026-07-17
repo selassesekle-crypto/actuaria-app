@@ -27,6 +27,7 @@ from core.conformite_reglementaire import (
 )
 from core.qualite_donnees import synthese_qualite_donnees
 from core.plan_tarifaire import synthese_colonnes_plan_manquantes
+from core.mapping_client import synthese_mapping
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
@@ -182,6 +183,13 @@ def _construire_contexte_tarif(
     else:
         lines.append(f"Non applicable : {geo6.get('raison', '—')}")
 
+    # Mapping client (couche 2) — section CONDITIONNELLE (rien si aucun mapping,
+    # contrairement aux sections qualité/colonnes qui affichent un repli). Même
+    # source-unique partagée avec Excel A6 / rapport équipe.
+    _synth_map6 = synthese_mapping(result_a6.get('rapport_mapping') if result_a6 else None)
+    _lignes_map6 = (["=== MAPPING CLIENT (renommage du fichier avant tarification) ===",
+                     _synth_map6, ""] if _synth_map6 else [])
+
     lines += [
         "",
         "=== ML — MODÈLE RETENU ===",
@@ -227,6 +235,7 @@ def _construire_contexte_tarif(
             result_a6.get('colonnes_plan_manquantes') if result_a6 else None)
          or "Aucune : toutes les colonnes déclarées au plan ont été produites."),
         "",
+        *_lignes_map6,
         "=== GOUVERNANCE DU PROFIL DE PONDÉRATION ===",
         f"Profil retenu : {at6.get('profil_ponderation','—')} | Environnement={at6.get('environnement','—')}",
         f"Validé par : {at6.get('profil_valide_par') or 'NON VALIDÉ'} | Conforme={at6.get('gouvernance_ok','—')}",

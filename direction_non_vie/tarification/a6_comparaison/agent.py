@@ -205,6 +205,11 @@ class AgentA6Comparaison:
         # (pipeline_complet). A6 ne l'UTILISE pas — il le fait TRANSITER vers les
         # 3 rapports (synthese_qualite_donnees), même mécanisme que le champ DL.
         rapport_qualite:     Optional[Any] = None,
+        # RapportMapping (core/mapping_client.py) produit AVANT A1 par le mapping
+        # du fichier client. A6 ne l'UTILISE pas non plus — il le TRANSITE vers les
+        # 3 rapports (synthese_mapping), exactement comme rapport_qualite. None sur
+        # la quasi-totalité des appels (pas de mapping) → rien affiché.
+        rapport_mapping:     Optional[Any] = None,
         generer_rapport_equipe: bool = True,
         formats_equipe:      Optional[List[str]] = None,
     ) -> Dict[str, Any]:
@@ -465,6 +470,7 @@ class AgentA6Comparaison:
                 'exclusions_cible': exclusions_cible,
                 'valide_par_actuaire_dl': valide_par_actuaire_dl,
                 'rapport_qualite': rapport_qualite,
+                'rapport_mapping': rapport_mapping,
                 'colonnes_plan_manquantes': _cols_plan_manquantes,
             }
             _excel_a6 = b''
@@ -565,6 +571,9 @@ class AgentA6Comparaison:
                 'exclusions_cible':   exclusions_cible,
                 'valide_par_actuaire_dl': valide_par_actuaire_dl,
                 'rapport_qualite':    rapport_qualite,
+                # RapportMapping du renommage client (avant A1) — transité comme
+                # rapport_qualite (produit par aucun agent). None = pas de mapping.
+                'rapport_mapping':    rapport_mapping,
                 # Colonnes DÉCLARÉES au plan que A2 n'a pas pu produire (fichier
                 # client incomplet) → modèle amputé. Lu à la SOURCE dans
                 # result_a2 : contrairement à rapport_qualite (produit par aucun

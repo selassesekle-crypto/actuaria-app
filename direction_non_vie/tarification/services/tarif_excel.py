@@ -18,6 +18,7 @@ from core.conformite_reglementaire import (
 )
 from core.qualite_donnees import synthese_qualite_donnees
 from core.plan_tarifaire import synthese_colonnes_plan_manquantes
+from core.mapping_client import synthese_mapping
 import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Any
@@ -792,6 +793,13 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
         if _synth_cp:
             _kpi(ws5, r, "Colonnes du plan non produites — modèle amputé",
                  _synth_cp, statut="AMBRE", wrap=True); r += 1
+
+        # Mapping client (couche 2) — renommage du fichier avant A1. Même
+        # mécanisme source-unique. Rien affiché si aucun mapping n'a été appliqué.
+        _synth_map = synthese_mapping(result_a6.get('rapport_mapping'))
+        if _synth_map:
+            _kpi(ws5, r, "Mapping client appliqué", _synth_map,
+                 statut=("AMBRE" if "⚠" in _synth_map else "VERT"), wrap=True); r += 1
         # Alertes d'expérience passée conservée (audit V13 / B7). Ce n'est pas une
         # exclusion : c'est une VÉRIFICATION demandée à l'actuaire. Ce qui n'est
         # que dans les logs n'existe pas (constat I5).

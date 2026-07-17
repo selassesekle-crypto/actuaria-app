@@ -141,6 +141,49 @@ class TestMappingClient(unittest.TestCase):
         self.assertNotIn('km_par_an_normalise', AUTO.colonnes_attendues())
         print("    MAP-9 (B1) kilometrage_annuel cible valide, km_par_an_normalise non ✅")
 
+    # ── couche 2 : câblage aux livrables ────────────────────────────────────
+    def test_10_synthese_mapping(self):
+        """Le libellé source-unique montre les 5 éléments ; None → None (rétro-compat)."""
+        from core.mapping_client import synthese_mapping
+        self.assertIsNone(synthese_mapping(None))
+        partiel = MappingClient(client="ClientTest", plan="auto.yaml",
+            correspondances={'DUREE_EXPO': 'exposition', 'NB_SINISTRES': 'nb_sinistres',
+                             'COUT_SINISTRES': 'cout_total_sinistres', 'AGE_CONDUCTEUR': 'age',
+                             'COLONNE_MORTE': 'bonus_malus'})
+        _df, rap = appliquer_mapping(_fichier_client(n=50), partiel, AUTO)
+        self.assertEqual(rap.n_colonnes_attendues, 16)
+        self.assertEqual(rap.synthese()['n_colonnes_attendues'], 16)
+        txt = synthese_mapping(rap)
+        for attendu in ("ClientTest", "auto", "/16", "MODELE AMPUTE", "MORTE", "candidate"):
+            self.assertIn(attendu, txt, f"'{attendu}' absent du libellé : {txt}")
+        print("    MAP-10 synthese_mapping : client/plan/X-sur-N/amputé/morte/candidate ✅")
+
+    def test_11_a6_transite_rapport_mapping(self):
+        """A6.run TRANSITE rapport_mapping dans son résultat (→ 3 livrables), et
+        exerce le rendu (export Excel/Word appelle synthese_mapping). None sinon."""
+        from direction_non_vie.tarification.a4_ml.test_a4_ml import _make_r_a2, _make_r_a3
+        from direction_non_vie.tarification.a4_ml.agent import AgentA4ML
+        from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
+        from core.mapping_client import synthese_mapping
+        r2, r3 = _make_r_a2(600), _make_r_a3()
+        r4 = AgentA4ML(models_path='/tmp', audit_path='/tmp', verbose=False).run(
+            result_a2=r2, result_a3=r3, plan=AUTO, calcul_shap=False, generer_graphiques=False)
+        _df, rap = appliquer_mapping(_fichier_client(n=50),
+            MappingClient(client="C", plan="auto.yaml",
+                          correspondances={'DUREE_EXPO': 'exposition'}), AUTO)
+        r6 = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp', verbose=False).run(
+            result_a2=r2, result_a3=r3, result_a4=r4, rapport_mapping=rap,
+            col_cible='nb_sinistres',   # A4 s'entraîne sur la fréquence par défaut
+            generer_graphiques=False, generer_rapport_equipe=False, aide_decision=False)
+        self.assertTrue(r6.get('success'), f"A6 doit réussir : {r6.get('erreur')}")
+        self.assertIs(r6.get('rapport_mapping'), rap)
+        self.assertIsNotNone(synthese_mapping(r6.get('rapport_mapping')))
+        r6b = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp', verbose=False).run(
+            result_a2=r2, result_a3=r3, result_a4=r4, col_cible='nb_sinistres',
+            generer_graphiques=False, generer_rapport_equipe=False, aide_decision=False)
+        self.assertIsNone(r6b.get('rapport_mapping'))   # rétro-compat
+        print("    MAP-11 A6 transite rapport_mapping (None sans mapping) ✅")
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

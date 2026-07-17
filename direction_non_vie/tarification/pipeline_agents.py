@@ -181,6 +181,7 @@ def pipeline_agents(
     environnement: str = "production",
     profil_valide_par: Optional[str] = None,
     valide_par_actuaire_dl: Optional[str] = None,
+    rapport_mapping: Optional[Any] = None,
     n_epochs_dl: int = 200,
     batch_size_dl: int = 512,
     calcul_shap: bool = True,
@@ -243,6 +244,7 @@ def pipeline_agents(
             col_cible=cible, environnement=environnement,
             profil_valide_par=profil_valide_par,
             valide_par_actuaire_dl=valide_par_actuaire_dl,
+            rapport_mapping=rapport_mapping,
             generer_graphiques=generer_graphiques, generer_rapport_equipe=False)
         return ArbitrageCible(cible=cible, a4=r4, a5=r5, a6=r6,
                               statut_rag=r6.get("statut_rag"),
