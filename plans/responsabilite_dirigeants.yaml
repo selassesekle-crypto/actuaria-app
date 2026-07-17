@@ -1,0 +1,62 @@
+# ActuarIA — Plan de tarification RESPONSABILITE DES DIRIGEANTS (D&O : mise en
+# cause PERSONNELLE des dirigeants pour faute de gestion, manquement fiduciaire,
+# action reglementaire ou actionnariale). Frequence = reclamations/actions ;
+# severite = defense + transaction par dossier (queue LOURDE). LoB INEDITE. Opposable.
+lob: responsabilite_dirigeants
+version: "1.0"
+auteur: "S. Sekle, IA"
+exposition: exposition
+cible_frequence: nb_sinistres
+cible_cout: cout_total_sinistres
+# Queue TRES lourde (class action securities, dossier US) : gamma par defaut +
+# ecretement q0.995. inverse_gaussienne/lognormal declarables si la vraie donnee
+# D&O montre une queue plus lourde (probable sur ce risque).
+famille_severite: gamma
+facteurs:
+  # chiffre_affaires_eur — taille de l'entreprise, base d'exposition PRIMAIRE en D&O
+  # (plus grande = plus de parties prenantes, plus de contentieux). LOG.
+  # ⚠ CHOIX ASSUME (CA -> FREQUENCE ET SEVERITE) : en D&O la taille pilote les DEUX
+  # (plus d'actions ET des dossiers plus lourds) — les deux effets sont injectes,
+  # c'est standard sur ce risque (moins debattu qu'ailleurs).
+  - {nom: chiffre_affaires_eur, type: continu, transformation: log}
+  # forme_juridique — NOMINAL : la COTATION est le premier driver D&O (une SA cotee
+  # subit le contentieux boursier/actionnarial, sans commune mesure avec une SARL).
+  # one_hot obligatoire.
+  - nom: forme_juridique
+    type: categoriel
+    encodage: one_hot
+    modalites: [SARL, SAS, SA, SA_cotee]
+    reference: SARL
+  # secteur_activite — NOMINAL : certains secteurs sont procéduriers (finance,
+  # sante/pharma, tech, immobilier). one_hot.
+  - nom: secteur_activite
+    type: categoriel
+    encodage: one_hot
+    modalites: [Autre, Finance, Sante, Technologie, Immobilier]
+    reference: Autre
+  # zone_activite — NOMINAL : l'exposition INTERNATIONALE (surtout US : class
+  # actions, SEC) porte une queue de SEVERITE lourde. one_hot.
+  # ⚠ PRIOR OUVERT (queue International) : la verif injecte un +severite fort pour
+  # International, mais l'AMPLITUDE vraie du contentieux US est DIFFICILE A CALIBRER
+  # (meme statut que couverture_produits Export en RC Generale, mode_transport en
+  # cargo). A CONFIRMER sur vraie donnee D&O.
+  - nom: zone_activite
+    type: categoriel
+    encodage: one_hot
+    modalites: [Nationale, Europe, International]
+    reference: Nationale
+  # situation_financiere — ORDINAL de detresse (Saine < Fragile < Difficile) : une
+  # entreprise en difficulte concentre les mises en cause (cessation de paiements
+  # => responsabilite des dirigeants). label DANS L'ORDRE DU PLAN = gradient de
+  # risque croissant (Saine=0 -> Difficile=2), coef POSITIF attendu.
+  - nom: situation_financiere
+    type: categoriel
+    encodage: label
+    modalites: [Saine, Fragile, Difficile]
+  # plafond_garantie_eur — plafond de garantie, grandeur monetaire => LOG. Pilote la
+  # SEVERITE (les contrats a haut plafond couvrent des dossiers plus lourds : selection).
+  - {nom: plafond_garantie_eur, type: continu, transformation: log}
+  # antecedents_litiges_3ans — anteriorite legitime (mises en cause passees des
+  # dirigeants), connue a la souscription, exemptee du controle par l'effet.
+  - {nom: antecedents_litiges_3ans, type: continu, anteriorite: true,
+     commentaire: "Mises en cause des dirigeants sur 3 ans — connu a la souscription"}
