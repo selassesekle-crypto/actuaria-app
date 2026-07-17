@@ -1,0 +1,53 @@
+# ActuarIA — Plan de tarification MULTIRISQUE IMMEUBLE (assurance de l'IMMEUBLE
+# entier — copropriete / bailleur : parties communes et structure ; incendie,
+# degat des eaux, tempete, RC, bris de glace). Distincte de la MRH (un logement)
+# et de la MRP (locaux d'une entreprise) : ici le BATIMENT. LoB INEDITE. Opposable.
+lob: multirisque_immeuble
+version: "1.0"
+auteur: "S. Sekle, IA"
+exposition: exposition
+cible_frequence: nb_sinistres
+cible_cout: cout_total_sinistres
+famille_severite: gamma
+facteurs:
+  # surface_totale_m2 — surface developpee de l'immeuble, grandeur de taille etalee
+  # (petit immeuble -> grande copro) => LOG. Pilote la FREQUENCE (plus de surface =
+  # plus de sources de sinistre : canalisations, parties communes).
+  # ⚠ CHOIX ASSUME (surface -> SEVERITE) : effet DELIBEREMENT NON injecte cote cout.
+  # La taille de l'immeuble multiplie le NOMBRE de sinistres, pas le cout PAR
+  # sinistre (un degat des eaux ne coute pas plus cher dans un grand immeuble). La
+  # surface pilote la frequence ; la valeur pilote la severite.
+  - {nom: surface_totale_m2, type: continu, transformation: log}
+  # valeur_reconstruction_eur — valeur de reconstruction, grandeur monetaire => LOG.
+  # Pilote la SEVERITE (cout de remise en etat/reconstruction).
+  # ⚠ COLINEARITE mild avec surface_totale_m2 (deux proxys de taille) : on garde les
+  # deux (surface = frequence, valeur = severite, prix/m2 les separe) ; la verif
+  # confirme l'identifiabilite (comme CA/effectif en RC Generale).
+  - {nom: valeur_reconstruction_eur, type: continu, transformation: log}
+  # age_immeuble_ans — immeuble ancien : reseaux/toiture/electricite vetustes =>
+  # +FREQUENCE (degat des eaux, incendie electrique). Continu SAISI (LoB inedite,
+  # aucune branche A2 ; contrairement a MRH/age_logement qui derive de l'annee).
+  - {nom: age_immeuble_ans, type: continu}
+  # type_immeuble — NOMINAL : usage dominant (habitation, mixte, commercial,
+  # tertiaire) => profils de peril distincts. one_hot obligatoire.
+  - nom: type_immeuble
+    type: categoriel
+    encodage: one_hot
+    modalites: [Habitation, Mixte, Commercial, Tertiaire]
+    reference: Habitation
+  # materiau_construction — NOMINAL : le materiau gouverne la propagation du feu et
+  # le risque structurel (ossature bois >> beton). one_hot obligatoire.
+  - nom: materiau_construction
+    type: categoriel
+    encodage: one_hot
+    modalites: [Beton, Brique, Pierre, Ossature_bois]
+    reference: Beton
+  # presence_commerce_rdc — commerce en rez-de-chaussee : augmente le risque
+  # incendie/vol de l'immeuble. +freq ET +severite. Binaire.
+  - {nom: presence_commerce_rdc, type: binaire}
+  # protection_incendie — detection/extincteurs/colonne seche : reduit freq ET
+  # severite incendie. Facteur protecteur. Binaire.
+  - {nom: protection_incendie, type: binaire}
+  # sinistres_2ans_anterieurs — anteriorite legitime, exemptee du controle par l'effet.
+  - {nom: sinistres_2ans_anterieurs, type: continu, anteriorite: true,
+     commentaire: "Sinistralite immeuble des 2 dernieres annees — connue a la souscription"}

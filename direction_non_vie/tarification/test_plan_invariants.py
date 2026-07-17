@@ -1354,6 +1354,65 @@ class TestBrisMachine_PlanDeclaratif(unittest.TestCase):
         print(f"    Bris de machine tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
 
 
+def portefeuille_immeuble(n=3000, seed=61):
+    """Multirisque immeuble — colonnes SOURCES ; A2 dérive log_surface_totale_m2 et
+    log_valeur_reconstruction_eur. LoB inédite, aucune branche A2."""
+    rng = np.random.default_rng(seed)
+    surface = np.clip(rng.lognormal(np.log(1500), 0.8, n), 100, None)
+    valeur = surface * np.clip(rng.lognormal(np.log(1800), 0.5, n), 200, None)
+    typ = rng.choice(['Habitation', 'Mixte', 'Commercial', 'Tertiaire'], n, p=[.5, .2, .15, .15])
+    mat = rng.choice(['Beton', 'Brique', 'Pierre', 'Ossature_bois'], n, p=[.45, .25, .20, .10])
+    comm = rng.integers(0, 2, n).astype(float)
+    pinc = rng.integers(0, 2, n).astype(float)
+    sin2 = rng.poisson(0.5, n).astype(float)
+    expo = np.clip(rng.beta(5, 1, n), 0.1, 1.0)
+    lin = (-1.4 + 0.40 * (np.log(surface) - np.log(1500)) + 0.40 * (mat == 'Ossature_bois')
+           + 0.30 * comm - 0.30 * pinc + 0.30 * sin2)
+    nb = rng.poisson(np.exp(lin) * expo).astype(float)
+    cout = np.where(nb > 0, rng.gamma(2.0, 4500.0, n), 0.0)
+    return pd.DataFrame({
+        'exposition': expo, 'surface_totale_m2': surface, 'valeur_reconstruction_eur': valeur,
+        'age_immeuble_ans': rng.uniform(0, 90, n), 'type_immeuble': typ,
+        'materiau_construction': mat, 'presence_commerce_rdc': comm,
+        'protection_incendie': pinc, 'sinistres_2ans_anterieurs': sin2,
+        'nb_sinistres': nb, 'cout_total_sinistres': cout,
+    })
+
+
+class TestMultirisqueImmeuble_PlanDeclaratif(unittest.TestCase):
+    """Multirisque immeuble — LoB INÉDITE tarifée par le seul
+    plans/multirisque_immeuble.yaml. Distincte de la MRH (un logement) et de la MRP
+    (locaux d'entreprise) : ici le BÂTIMENT. surface → fréquence, valeur → sévérité
+    (colinéaires ~0.85, séparés par le prix/m² ; identifiabilité vérifiée)."""
+
+    @classmethod
+    def setUpClass(cls):
+        from direction_non_vie.tarification.pipeline_tarifaire import pipeline_complet
+        cls.plan = PlanTarifaire.depuis_yaml(
+            os.path.join(_RACINE, 'plans', 'multirisque_immeuble.yaml'))
+        cls.df = portefeuille_immeuble(n=3000)
+        cls.tarif = pipeline_complet(cls.df, cls.plan)
+
+    def test_transform_produit_les_colonnes_du_plan(self):
+        X = _a2().fit(self.df, self.plan).transform(self.df)
+        manquantes = set(self.plan.colonnes_produites()) - set(X.columns)
+        self.assertEqual(manquantes, set(),
+            f"Multirisque immeuble INV-1 rompu : colonnes manquantes {sorted(manquantes)}")
+        print(f"    Multirisque immeuble INV-1 : {len(self.plan.colonnes_produites())} "
+              f"colonnes du plan toutes produites par transform ✅")
+
+    def test_tarifer_immeuble_json(self):
+        res = self.tarif.tarifer({
+            'surface_totale_m2': 2000, 'valeur_reconstruction_eur': 3600000,
+            'age_immeuble_ans': 40, 'type_immeuble': 'Commercial',
+            'materiau_construction': 'Ossature_bois', 'presence_commerce_rdc': 1,
+            'protection_incendie': 1, 'sinistres_2ans_anterieurs': 0})
+        self.assertEqual(res['success'], True)
+        self.assertGreater(res['prime_ttc'], 0)
+        self.assertIsInstance(json.dumps(res), str)
+        print(f"    Multirisque immeuble tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("  LES 9 INVARIANTS DU PLAN — le code honore-t-il la spec ?")
