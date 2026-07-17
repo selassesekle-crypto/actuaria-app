@@ -1,0 +1,23 @@
+# ActuarIA — EXEMPLE de mapping client (Phase 5). Renomme les colonnes d'un
+# fichier client vers les noms ATTENDUS par plans/auto.yaml. Sert aussi de fixture.
+# Zéro logique métier : que du renommage. Le sens des colonnes reste porté par le
+# plan (age = facteur continu, carburant = one-hot, etc.).
+client: "Exemple Assurances (démonstration)"
+plan: "auto.yaml"
+correspondances:
+  AGE_CONDUCTEUR:  age
+  COEFF_BM:        bonus_malus
+  ANC_PERMIS:      anciennete_permis
+  PUISSANCE_CV:    puissance_fiscale
+  AGE_VEHICULE:    age_vehicule
+  VALEUR_VENALE:   valeur_venale
+  FORMULE:         garantie
+  ENERGIE:         carburant
+  CSP_CONDUCTEUR:  csp
+  USAGE_VEHICULE:  usage
+  SIN_ANNEE_N1:    antecedents_sinistres_n1
+  ZONE_GEO:        milieu_geographique
+  KILOMETRAGE_AN:  kilometrage_annuel   # ← source brute ; A2 en dérive km_par_an_normalise
+  DUREE_EXPO:      exposition
+  NB_SINISTRES:    nb_sinistres
+  COUT_SINISTRES:  cout_total_sinistres
