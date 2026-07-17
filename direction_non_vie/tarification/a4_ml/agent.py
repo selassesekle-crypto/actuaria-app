@@ -541,6 +541,7 @@ class AgentA4ML:
         col_cible:      str = 'nb_sinistres',
         col_exposition: str = 'exposition',
         plan:           Optional[PlanTarifaire] = None,   # Phase 1 : plan signé explicite
+        ponderer_par_exposition: bool = True,
         calcul_shap:        bool = True,
         generer_graphiques: bool = True,
         optuna_trials:      int  = 0,   # 0 = désactivé ; >0 = nb essais Optuna XGBoost
@@ -629,7 +630,8 @@ class AgentA4ML:
             logger.info(f"[{audit_id}] Étape 1/4 : Préparation données")
             X_train, X_test, y_train, y_test, \
             w_train, w_test, feature_names = self._preparer_donnees(
-                df, sous_branche, col_cible, col_exposition, plan
+                df, sous_branche, col_cible, col_exposition, plan,
+                ponderer_par_exposition
             )
             rapport['etapes'].append('preparation')
             rapport['nb_features']   = len(feature_names)
@@ -929,6 +931,7 @@ class AgentA4ML:
         col_cible:    str,
         col_expo:     str,
         plan:         PlanTarifaire,
+        ponderer_par_exposition: bool = True,
     ) -> Tuple:
         """
         Prépare X, y, weights pour les modèles ML.
@@ -1030,8 +1033,15 @@ class AgentA4ML:
         X = df[feature_names].fillna(0).values
         y = df[col_cible].values
 
-        # Poids = exposition (pondération actuarielle)
-        if col_expo in df.columns:
+        # ── PONDÉRATION — exposition pour la FRÉQUENCE, aucune pour la SÉVÉRITÉ ─
+        # L'exposition pondère un COMPTAGE : un contrat observé 6 mois porte deux
+        # fois moins d'information sur la fréquence qu'un contrat observé 1 an.
+        # Pour la SÉVÉRITÉ, c'est FAUX : le coût d'un sinistre ne dépend pas de la
+        # durée d'observation du contrat — c'est le sens même de la décomposition
+        # E[S] = E[N] × E[C|N>0]. Le chemin déclaratif (pipeline_complet) ne
+        # pondère d'ailleurs pas son GLM de coût. Poids uniformes ≡ sample_weight
+        # None pour tout estimateur sklearn.
+        if ponderer_par_exposition and col_expo in df.columns:
             weights = np.maximum(df[col_expo].values, 1e-6)
         else:
             weights = np.ones(len(df))

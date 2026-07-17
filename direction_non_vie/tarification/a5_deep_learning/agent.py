@@ -422,6 +422,7 @@ class AgentA5DeepLearning:
         col_cible:      Optional[str] = None,   # Phase 2 : OBLIGATOIRE (cf. run())
         col_exposition: str = 'exposition',
         plan:           Optional[PlanTarifaire] = None,   # Phase 1 : plan signé explicite
+        modeles:        Tuple[str, ...] = ('cann', 'tabnet'),
         n_epochs:       int = 200,  # Early stopping actif — arrêt automatique
         batch_size:     int = 512,
         learning_rate:      float = 1e-3,
@@ -515,20 +516,37 @@ class AgentA5DeepLearning:
             rapport['feature_names'] = feature_names
 
             # ── CANN ──────────────────────────────────────────────────────────
-            logger.info(f"[{audit_id}] Calibration CANN ({n_epochs} époques)")
-            res_cann = self._calibrer_cann(
-                X_train, X_test, y_train, y_test,
-                feature_names, device, n_epochs, batch_size, learning_rate,
-                result_a3=result_a3,
-                expo_train=expo_train, expo_test=expo_test,
-            )
-            self.modeles['cann']   = res_cann['modele']
-            self.metriques['cann'] = res_cann['metriques']
-            rapport['etapes'].append('cann')
-            logger.info(
-                f"CANN | Gini={res_cann['metriques']['gini_test']:.4f} | "
-                f"RMSE={res_cann['metriques']['rmse_test']:.2f}"
-            )
+            # ⚠ Le CANN n'est PAS calibrable sur toute cible. Son architecture est
+            # exp(GLM_gelé(x) + offset·log(exposition)) : un modèle de COMPTAGE.
+            # Sur une cible de SÉVÉRITÉ (coût par sinistre), l'offset d'exposition
+            # est faux — le coût d'un sinistre ne dépend pas de la durée
+            # d'observation. L'appelant l'exclut alors via modeles=('tabnet',).
+            # TabNet, réseau tabulaire générique, n'a pas cette contrainte.
+            res_cann = {}
+            if 'cann' in modeles:
+                logger.info(f"[{audit_id}] Calibration CANN ({n_epochs} époques)")
+                res_cann = self._calibrer_cann(
+                    X_train, X_test, y_train, y_test,
+                    feature_names, device, n_epochs, batch_size, learning_rate,
+                    result_a3=result_a3,
+                    expo_train=expo_train, expo_test=expo_test,
+                )
+                self.modeles['cann']   = res_cann['modele']
+                self.metriques['cann'] = res_cann['metriques']
+                rapport['etapes'].append('cann')
+                logger.info(
+                    f"CANN | Gini={res_cann['metriques']['gini_test']:.4f} | "
+                    f"RMSE={res_cann['metriques']['rmse_test']:.2f}"
+                )
+            else:
+                logger.info(
+                    f"[{audit_id}] CANN NON calibré : exclu par l'appelant "
+                    f"(modeles={modeles}) — son offset log(exposition) est une "
+                    f"construction de modèle de comptage, incompatible avec la "
+                    f"cible '{col_cible}'.")
+                rapport['alertes'].append(
+                    f"CANN non calibré : exclu pour la cible '{col_cible}' "
+                    f"(offset log-exposition incompatible).")
 
             # ── TABNET ────────────────────────────────────────────────────────
             logger.info(f"[{audit_id}] Calibration TabNet ({n_epochs} époques)")
@@ -1398,8 +1416,10 @@ class AgentA5DeepLearning:
         result_a4:    Optional[Dict]
     ) -> str:
         emoji  = {'VERT': '🟢', 'AMBRE': '🟡', 'ROUGE': '🔴'}[statut_rag]
-        m_cann = res_cann['metriques']
-        m_tab  = res_tabnet['metriques']
+        # res_cann peut être VIDE : le CANN est exclu des cibles de sévérité
+        # (offset log-exposition incompatible). On le DIT, on ne l'invente pas.
+        m_cann = res_cann.get('metriques') or {}
+        m_tab  = res_tabnet.get('metriques') or {}
 
         # Gini de référence
         gini_glm = 0
@@ -1412,12 +1432,19 @@ class AgentA5DeepLearning:
             if ml_only:
                 gini_ml = ml_only[0]['gini_test']
 
-        n1 = (
-            f"{emoji} DEEP LEARNING — {statut_rag}\n"
-            f"Sous-branche : {sous_branche}\n\n"
+        _l_cann = (
             f"CANN   : Gini={m_cann['gini_test']:.4f} | "
             f"RMSE={m_cann['rmse_test']:.2f} | "
             f"Époques={m_cann.get('n_epochs_reels', 'N/A')}\n"
+            if m_cann else
+            "CANN   : NON calibré — exclu de cette cible (son offset "
+            "log(exposition) est une construction de modèle de comptage, "
+            "incompatible avec la sévérité).\n"
+        )
+        n1 = (
+            f"{emoji} DEEP LEARNING — {statut_rag}\n"
+            f"Sous-branche : {sous_branche}\n\n"
+            f"{_l_cann}"
             f"TabNet : Gini={m_tab['gini_test']:.4f} | "
             f"RMSE={m_tab['rmse_test']:.2f} | "
             f"Époques={m_tab.get('n_epochs_reels', 'N/A')}\n\n"
@@ -1426,7 +1453,8 @@ class AgentA5DeepLearning:
             f"  Meilleur ML (A4) : {gini_ml:.4f}"
         )
 
-        best_dl_gini = max(m_cann['gini_test'], m_tab['gini_test'])
+        # Max sur les modèles RÉELLEMENT calibrés (le CANN peut être exclu).
+        best_dl_gini = max([m['gini_test'] for m in (m_cann, m_tab) if m] or [0.0])
 
         if statut_rag == 'VERT':
             n2 = (
