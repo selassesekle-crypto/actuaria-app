@@ -1055,6 +1055,70 @@ class TestRCPro_PlanDeclaratif(unittest.TestCase):
         print(f"    RC Pro tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+#  LOT 1 (Phase 4) — 3 LoB INÉDITES tarifées par le SEUL plans/<lob>.yaml.
+#  INV-1 vérifié sur l'ARTEFACT RÉEL (depuis_yaml, pas un miroir depuis_dict) : le
+#  test échoue si le YAML expédié cesse de produire une seule de ses colonnes.
+#  Chaîne 100 % déclarative (pipeline_complet, GLM pur), aucune connaissance LoB
+#  dans le moteur — comme décennale/transport.
+# ═══════════════════════════════════════════════════════════════════════════════
+def portefeuille_flotte(n=3000, seed=11):
+    """Flotte auto — colonnes SOURCES ; A2 dérive log_taille_flotte et
+    log_valeur_moyenne_vehicule (transformation:log ; LoB inédite, aucune branche A2)."""
+    rng = np.random.default_rng(seed)
+    taille = rng.integers(1, 80, n).astype(float)
+    typ = rng.choice(['VL', 'VUL', 'PL', 'Mixte'], n, p=[.55, .25, .12, .08])
+    tele = rng.integers(0, 2, n).astype(float)
+    sin2 = rng.poisson(0.4, n).astype(float)
+    expo = np.clip(rng.beta(5, 1, n), 0.1, 1.0)
+    lin = (-1.8 + 0.8 * (np.log(taille) - np.log(20)) + 0.45 * (typ == 'PL')
+           + 0.25 * sin2 - 0.25 * tele)
+    nb = rng.poisson(np.exp(lin) * expo).astype(float)
+    cout = np.where(nb > 0, rng.gamma(2.0, 2500.0, n), 0.0)
+    return pd.DataFrame({
+        'exposition': expo, 'taille_flotte': taille,
+        'valeur_moyenne_vehicule': np.clip(rng.lognormal(np.log(18000), 0.6, n), 3000, None),
+        'age_moyen_flotte': rng.uniform(1, 15, n),
+        'puissance_moyenne': rng.uniform(60, 200, n), 'type_flotte': typ,
+        'secteur_activite': rng.choice(['Services', 'Commerce', 'BTP', 'Transport'], n),
+        'zone_circulation': rng.choice(['Urbaine', 'Periurbaine', 'Rurale'], n),
+        'telematique': tele, 'sinistres_2ans_anterieurs': sin2,
+        'nb_sinistres': nb, 'cout_total_sinistres': cout,
+    })
+
+
+class TestFlotteAutomobile_PlanDeclaratif(unittest.TestCase):
+    """Flotte auto — LoB INÉDITE tarifée par le seul plans/flotte_automobile.yaml
+    (taille_flotte en VOLUME-log, comme nb_expeditions_an en cargo)."""
+
+    @classmethod
+    def setUpClass(cls):
+        from direction_non_vie.tarification.pipeline_tarifaire import pipeline_complet
+        cls.plan = PlanTarifaire.depuis_yaml(
+            os.path.join(_RACINE, 'plans', 'flotte_automobile.yaml'))
+        cls.df = portefeuille_flotte(n=3000)
+        cls.tarif = pipeline_complet(cls.df, cls.plan)
+
+    def test_transform_produit_les_colonnes_du_plan(self):
+        X = _a2().fit(self.df, self.plan).transform(self.df)
+        manquantes = set(self.plan.colonnes_produites()) - set(X.columns)
+        self.assertEqual(manquantes, set(),
+            f"Flotte INV-1 rompu : colonnes manquantes {sorted(manquantes)}")
+        print(f"    Flotte INV-1 : {len(self.plan.colonnes_produites())} colonnes du "
+              f"plan toutes produites par transform ✅")
+
+    def test_tarifer_flotte_json(self):
+        res = self.tarif.tarifer({
+            'taille_flotte': 20, 'valeur_moyenne_vehicule': 18000,
+            'age_moyen_flotte': 6, 'puissance_moyenne': 120, 'type_flotte': 'VUL',
+            'secteur_activite': 'Transport', 'zone_circulation': 'Periurbaine',
+            'telematique': 1, 'sinistres_2ans_anterieurs': 0})
+        self.assertEqual(res['success'], True)
+        self.assertGreater(res['prime_ttc'], 0)
+        self.assertIsInstance(json.dumps(res), str)
+        print(f"    Flotte tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("  LES 9 INVARIANTS DU PLAN — le code honore-t-il la spec ?")

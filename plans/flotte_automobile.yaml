@@ -1,0 +1,64 @@
+# ActuarIA — Plan de tarification FLOTTE AUTOMOBILE (assurance de flotte : parc de
+# vehicules d'une entreprise sous police unique). LoB INEDITE : aucune ligne de
+# code ne la mentionne. Ce seul fichier doit suffire a la tarifer. Plan signe,
+# versionne, opposable.
+lob: flotte_automobile
+version: "1.0"
+auteur: "S. Sekle, IA"
+exposition: exposition
+cible_frequence: nb_sinistres
+cible_cout: cout_total_sinistres
+# Queue lourde possible (carambolage PL, incendie de parc) : gamma par defaut,
+# l'ecretement de pipeline_complet borne les graves. lognormal/inverse_gaussienne
+# declarables ici si la vraie donnee montre une queue qui le justifie.
+famille_severite: gamma
+facteurs:
+  # taille_flotte — VOLUME (nombre de vehicules). Chaque vehicule ~ un tirage de
+  # risque => ~proportionnel => LOG (meme mecanisme que transport/nb_expeditions_an ;
+  # produit taille_flotte ET log_taille_flotte, signal sur le log, brut inerte).
+  # ⚠ CONTRAT/PRIOR OUVERT (facteur de risque vs base d'exposition) : ici
+  # nb_sinistres est compte PAR ANNEE-POLICE, exposition = fraction d'annee-police,
+  # et taille_flotte est une CARACTERISTIQUE de volume — PAS la base d'exposition
+  # (sinon double-comptage avec exposition, parente B9). En tarif flotte REEL
+  # l'exposition est souvent en VEHICULE-ANNEES (taille x duree) : ce choix est
+  # ACTUARIEL, A TRANCHER sur vraie donnee. La verif synthetique injecte un +freq
+  # ~proportionnel au log ; ne pas la traiter comme une preuve.
+  - {nom: taille_flotte, type: continu, transformation: log}
+  # valeur_moyenne_vehicule — grandeur monetaire (valeur unitaire moyenne du parc),
+  # LOG. Pilote surtout la SEVERITE (reparation/remplacement) et un +freq VOL mild.
+  - {nom: valeur_moyenne_vehicule, type: continu, transformation: log}
+  # age_moyen_flotte — parc ancien : usure => +freq (panne/accident), valeur moindre
+  # => -severite. ⚠ Le SIGNE sur la FREQUENCE est ouvert (un parc neuf tres sollicite
+  # peut sur-sinistrer) ; l'effet -severite est plus clair. Continu.
+  - {nom: age_moyen_flotte, type: continu}
+  # puissance_moyenne — CV moyens du parc : puissance => vitesse => +freq ET +severite.
+  - {nom: puissance_moyenne, type: continu}
+  # type_flotte — NOMINAL : profils de peril distincts (VL=trajets/parking,
+  # VUL=livraison urbaine, PL=carambolage/marchandise, Mixte). Lecon csp/secteur :
+  # un label ecraserait/inverserait le signal => one_hot obligatoire.
+  - nom: type_flotte
+    type: categoriel
+    encodage: one_hot
+    modalites: [VL, VUL, PL, Mixte]
+    reference: VL
+  # secteur_activite — NOMINAL (intensite d'usage : Transport roule beaucoup,
+  # Services peu). one_hot (chaque secteur sa relativite).
+  - nom: secteur_activite
+    type: categoriel
+    encodage: one_hot
+    modalites: [Services, Commerce, BTP, Transport]
+    reference: Services
+  # zone_circulation — geographie NON-monotone (freq up en urbain par densite,
+  # severite up en rural par vitesse) => one_hot, plus sur qu'un label.
+  - nom: zone_circulation
+    type: categoriel
+    encodage: one_hot
+    modalites: [Urbaine, Periurbaine, Rurale]
+    reference: Urbaine
+  # telematique — boitier telematique / suivi conducteur installe : reduit la
+  # frequence (comportement). Facteur protecteur moderne. Binaire.
+  - {nom: telematique, type: binaire}
+  # sinistres_2ans_anterieurs — anteriorite legitime, connue a la souscription,
+  # exemptee du controle par l'effet.
+  - {nom: sinistres_2ans_anterieurs, type: continu, anteriorite: true,
+     commentaire: "Sinistralite flotte des 2 dernieres annees — connue a la souscription"}
