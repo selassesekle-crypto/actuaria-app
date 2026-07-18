@@ -1789,6 +1789,63 @@ class TestAssistance_PlanDeclaratif(unittest.TestCase):
         print(f"    Assistance tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
 
 
+def portefeuille_ia(n=3000, seed=131):
+    """Individuelle accidents — colonnes SOURCES ; A2 dérive log_capital_garanti_eur
+    et encode pratique_sportive (label ordinal). LoB inédite, aucune branche A2."""
+    rng = np.random.default_rng(seed)
+    prof = rng.choice(['Sedentaire', 'Manuel', 'Risque'], n, p=[.50, .35, .15])
+    sport = rng.choice(['Aucune', 'Loisir', 'Intensif', 'Extreme'], n, p=[.35, .40, .20, .05])
+    scode = np.select([sport == 'Loisir', sport == 'Intensif', sport == 'Extreme'], [1., 2., 3.], 0.)
+    deux_roues = rng.integers(0, 2, n).astype(float)
+    deces = rng.integers(0, 2, n).astype(float)
+    ant = rng.poisson(0.25, n).astype(float)
+    expo = np.clip(rng.beta(5, 1, n), 0.1, 1.0)
+    lin = (-2.0 + 0.60 * (prof == 'Risque') + 0.35 * scode + 0.45 * deux_roues + 0.35 * ant)
+    nb = rng.poisson(np.exp(lin) * expo).astype(float)
+    cout = np.where(nb > 0, rng.gamma(2.0, 8000.0, n), 0.0)
+    return pd.DataFrame({
+        'exposition': expo, 'age_assure': rng.uniform(18, 75, n),
+        'profession_categorie': prof, 'pratique_sportive': sport,
+        'conducteur_2roues': deux_roues,
+        'capital_garanti_eur': np.clip(rng.lognormal(np.log(150000), 0.7, n), 10000, None),
+        'couverture_deces': deces, 'antecedents_accidents_3ans': ant,
+        'nb_sinistres': nb, 'cout_total_sinistres': cout,
+    })
+
+
+class TestIndividuelleAccidents_PlanDeclaratif(unittest.TestCase):
+    """Individuelle accidents (garantie des accidents de la vie : dommages
+    corporels / invalidité / décès) — LoB INÉDITE tarifée par le seul
+    plans/individuelle_accidents.yaml."""
+
+    @classmethod
+    def setUpClass(cls):
+        from direction_non_vie.tarification.pipeline_tarifaire import pipeline_complet
+        cls.plan = PlanTarifaire.depuis_yaml(
+            os.path.join(_RACINE, 'plans', 'individuelle_accidents.yaml'))
+        cls.df = portefeuille_ia(n=3000)
+        cls.tarif = pipeline_complet(cls.df, cls.plan)
+
+    def test_transform_produit_les_colonnes_du_plan(self):
+        X = _a2().fit(self.df, self.plan).transform(self.df)
+        manquantes = set(self.plan.colonnes_produites()) - set(X.columns)
+        self.assertEqual(manquantes, set(),
+            f"Individuelle accidents INV-1 rompu : colonnes manquantes {sorted(manquantes)}")
+        print(f"    Individuelle accidents INV-1 : {len(self.plan.colonnes_produites())} colonnes "
+              f"du plan toutes produites par transform ✅")
+
+    def test_tarifer_ia_json(self):
+        res = self.tarif.tarifer({
+            'age_assure': 40, 'profession_categorie': 'Risque',
+            'pratique_sportive': 'Extreme', 'conducteur_2roues': 1,
+            'capital_garanti_eur': 300000, 'couverture_deces': 1,
+            'antecedents_accidents_3ans': 0})
+        self.assertEqual(res['success'], True)
+        self.assertGreater(res['prime_ttc'], 0)
+        self.assertIsInstance(json.dumps(res), str)
+        print(f"    Individuelle accidents tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("  LES 9 INVARIANTS DU PLAN — le code honore-t-il la spec ?")

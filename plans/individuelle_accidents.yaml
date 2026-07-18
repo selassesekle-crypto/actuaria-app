@@ -1,0 +1,48 @@
+# ActuarIA — Plan de tarification INDIVIDUELLE ACCIDENTS (garantie des accidents
+# de la vie : dommages corporels / invalidite / deces d'une personne assuree du
+# fait d'un accident de la vie privee). Le cout = capital x taux d'invalidite.
+# LoB INEDITE. Plan signe, opposable.
+lob: individuelle_accidents
+version: "1.0"
+auteur: "S. Sekle, IA"
+exposition: exposition
+cible_frequence: nb_sinistres
+cible_cout: cout_total_sinistres
+# Queue lourde possible (invalidite permanente lourde / deces = capital plein) :
+# gamma par defaut + ecretement q0.995.
+famille_severite: gamma
+facteurs:
+  # age_assure — l'age est un facteur LEGAL en non-vie (a la difference du SEXE,
+  # banni CJUE C-236/09). Pilote la sinistralite accidentelle.
+  # ⚠ SIGNE/FORME OUVERTS : la sinistralite accidentelle est en U (jeunes = sport,
+  # ages = chutes). Un facteur LINEAIRE est une simplification ; la verif injecte
+  # un +freq mild (chutes des ages). Une declaration en 'carre' serait defendable
+  # sur vraie donnee. A confirmer.
+  - {nom: age_assure, type: continu}
+  # profession_categorie — NOMINALE (sedentaire / manuel / a risque) : le risque
+  # d'accident varie fortement selon le metier. one_hot obligatoire.
+  - nom: profession_categorie
+    type: categoriel
+    encodage: one_hot
+    modalites: [Sedentaire, Manuel, Risque]
+    reference: Sedentaire
+  # pratique_sportive — ORDINAL de risque (Aucune < Loisir < Intensif < Extreme) :
+  # gradient de risque accidentel clair. label DANS L'ORDRE DU PLAN, coef POSITIF.
+  - nom: pratique_sportive
+    type: categoriel
+    encodage: label
+    modalites: [Aucune, Loisir, Intensif, Extreme]
+  # conducteur_2roues — conduit un 2-roues motorise : facteur d'accident majeur.
+  # +frequence. Binaire.
+  - {nom: conducteur_2roues, type: binaire}
+  # capital_garanti_eur — capital assure, grandeur monetaire => LOG. Pilote la
+  # SEVERITE (l'indemnite = capital x taux d'invalidite).
+  - {nom: capital_garanti_eur, type: continu, transformation: log}
+  # couverture_deces — la garantie deces est incluse : ajoute l'issue la plus grave
+  # (capital plein). +severite. Binaire.
+  # NB : c'est un modificateur de COUVERTURE plus qu'un facteur de risque du profil ;
+  # il eleve mecaniquement la severite. Assume.
+  - {nom: couverture_deces, type: binaire}
+  # antecedents_accidents_3ans — anteriorite legitime, exemptee du controle par l'effet.
+  - {nom: antecedents_accidents_3ans, type: continu, anteriorite: true,
+     commentaire: "Accidents des 3 dernieres annees — connu a la souscription"}
