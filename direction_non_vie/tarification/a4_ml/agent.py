@@ -199,6 +199,22 @@ def _famille_modele_ml(nom: str) -> str:
 
 
 def creer_modele_ml_pour_nom(nom: str, col_cible: str = 'nb_sinistres'):
+    """Fabrique un modèle ML frais, ENVELOPPÉ pour l'offset d'exposition.
+
+    SOURCE UNIQUE A4/A6. Sur une cible de COMPTAGE (col_cible ∈ COLS_COMPTAGE),
+    l'estimateur est enveloppé dans `_ModeleFrequenceExposition` (taux+poids :
+    fit sur y/expo pondéré par expo ; predict rend le TAUX λ(X), l'espérance de
+    sinistres d'un contrat = predict × expo). Le GLM (`_GLMWalkForward`) porte
+    déjà son propre offset log(expo) et n'est JAMAIS enveloppé. La fabrication
+    nue (inchangée) est dans `_fabriquer_estimateur_nu`.
+    """
+    modele = _fabriquer_estimateur_nu(nom, col_cible)
+    if isinstance(modele, _GLMWalkForward):
+        return modele                       # le GLM porte déjà son offset log(expo)
+    return _envelopper_frequence(modele, col_cible)
+
+
+def _fabriquer_estimateur_nu(nom: str, col_cible: str = 'nb_sinistres'):
     """
     Fabrique un modèle ML frais (non entraîné) à partir de son nom.
 
@@ -412,6 +428,77 @@ class _GLMWalkForward:
 
     def __repr__(self):
         return f"_GLMWalkForward(famille={self.famille!r})"
+
+
+class _ModeleFrequenceExposition:
+    """Enveloppe un estimateur de FRÉQUENCE (cible de comptage) pour traiter
+    l'exposition comme un OFFSET actuariel via la reformulation TAUX+POIDS, au
+    lieu d'un sample_weight appliqué au comptage brut (qui déréglait le NIVEAU du
+    prix — pas le rang — cf. le diagnostic offset ML : Σprédit/Σréel ~1,02).
+
+    Mécanisme (UNIFORME sur tous les modèles, loss INCHANGÉE) :
+      · fit(X, y, sample_weight=expo) apprend la cible y/expo pondérée par expo.
+        La propriété des moindres carrés pondérés calibre l'agrégat
+        (Σ comptages prédits == Σ réel) sous TOUTE loss à moyenne pondérée —
+        déviance Poisson (xgboost, PoissonRegressor) comme erreur quadratique
+        (gbm, lightgbm, catboost) — SANS changer la loss (mesuré : forcer Poisson
+        effondrait le Gini de lightgbm de −24 %).
+      · predict(X) rend le TAUX λ(X) = E[N | X, expo=1]. L'espérance de sinistres
+        d'un contrat = predict(X) × expo. Aligne les modèles ML sur
+        `_GLMWalkForward.predict`, qui rend déjà le taux.
+
+    Actif UNIQUEMENT sur cible de comptage (la fabrique n'enveloppe PAS la cible
+    COÛT : la sévérité ne dépend pas de l'exposition — décomposition
+    E[S] = E[N] × E[C|N>0]). Sans sample_weight (ou poids uniformes), la
+    reformulation est neutre (y/1 == y), donc le chemin coût est inchangé.
+
+    NB : xgboost_tweedie est enveloppé comme les autres, mais sa sous-tarification
+    résiduelle (~−9 %) vient de sa FAMILLE de loi (Tweedie sur un comptage), pas
+    de l'exposition — chantier distinct, hors de ce correctif.
+    """
+
+    def __init__(self, base):
+        self.base = base
+
+    def fit(self, X, y, sample_weight=None):
+        X = np.asarray(X, dtype=float)
+        y = np.asarray(y, dtype=float)
+        if sample_weight is None:
+            self.base.fit(X, y)             # pas d'exposition : reformulation neutre
+            return self
+        expo = np.maximum(np.asarray(sample_weight, dtype=float), 1e-9)
+        taux = y / expo
+        if isinstance(self.base, Pipeline):
+            # sklearn : le poids va à l'estimateur FINAL, pas au StandardScaler
+            etape = self.base.steps[-1][0]
+            self.base.fit(X, taux, **{f"{etape}__sample_weight": expo})
+        else:
+            self.base.fit(X, taux, sample_weight=expo)
+        return self
+
+    def predict(self, X):
+        return np.asarray(self.base.predict(np.asarray(X, dtype=float)), dtype=float)
+
+    def __getattr__(self, nom):
+        # Délégation d'attribut vers l'estimateur nu (SHAP dé-enveloppe
+        # explicitement via .base). Le garde-fou sur les dunders évite de
+        # détourner le protocole pickle/copy.
+        if nom.startswith('__') and nom.endswith('__'):
+            raise AttributeError(nom)
+        return getattr(self.base, nom)
+
+    def __repr__(self):
+        return f"_ModeleFrequenceExposition({self.base!r})"
+
+
+def _envelopper_frequence(modele, col_cible: str):
+    """Enveloppe le modèle pour l'offset d'exposition SI la cible est un comptage
+    (COLS_COMPTAGE) ; sinon (cible COÛT) le rend nu — la sévérité ne se pondère
+    pas par l'exposition."""
+    if col_cible in COLS_COMPTAGE:
+        return _ModeleFrequenceExposition(modele)
+    return modele
+
 
 # Hyperparamètres par défaut — calibrés pour les données actuarielles FR
 # Justification : ces paramètres sont des points de départ raisonnables
@@ -1114,8 +1201,12 @@ class AgentA4ML:
             try:
                 modele = creer_fn()
 
-                # Calibration avec ou sans pondération
-                if supporte_weights:
+                # Calibration avec ou sans pondération. Sur cible de COMPTAGE, le
+                # modèle est enveloppé (_ModeleFrequenceExposition) : on lui passe
+                # TOUJOURS l'exposition en sample_weight — y compris le Pipeline
+                # linéaire (supporte_weights=False), car l'enveloppe route le poids
+                # vers l'étape finale et reformule en taux+poids.
+                if supporte_weights or col_cible in COLS_COMPTAGE:
                     modele.fit(X_train, y_train, sample_weight=w_train)
                 else:
                     modele.fit(X_train, y_train)
@@ -1235,7 +1326,16 @@ class AgentA4ML:
                → Si > 1.15 → surparamétrage → alerte AMBRE
                → Si > 1.30 → surparamétrage sévère → alerte ROUGE
         """
-        # Gini train et test
+        # ── OFFSET D'EXPOSITION (correctif calibration ML) ────────────────────
+        # predict() rend le TAUX λ(X) sur cible de comptage (enveloppe
+        # _ModeleFrequenceExposition) ; l'espérance au niveau comptage = taux ×
+        # exposition. Pour le COÛT, w=1 donc pred_count == pred (inchangé).
+        # Gini sur le TAUX (rang de risque, stable) ; RMSE/MAE/déviance/moyenne
+        # sur le COMPTAGE prédit (comparable à la cible y).
+        pred_count_train = pred_train * w_train
+        pred_count_test  = pred_test  * w_test
+
+        # Gini train et test — sur le taux (rang de risque)
         gini_train = self._calculer_gini(y_train, pred_train)
         gini_test  = self._calculer_gini(y_test,  pred_test)
 
@@ -1249,23 +1349,23 @@ class AgentA4ML:
         else:
             overfit = gini_train / max(gini_test, 1e-6)
 
-        # RMSE pondéré par l'exposition
+        # RMSE pondéré par l'exposition — sur le comptage prédit (taux × expo)
         rmse_test = np.sqrt(
-            np.average((y_test - pred_test)**2, weights=w_test)
+            np.average((y_test - pred_count_test)**2, weights=w_test)
         )
         rmse_train = np.sqrt(
-            np.average((y_train - pred_train)**2, weights=w_train)
+            np.average((y_train - pred_count_train)**2, weights=w_train)
         )
 
-        # MAE test
+        # MAE test — sur le comptage prédit
         mae_test = np.average(
-            np.abs(y_test - pred_test), weights=w_test
+            np.abs(y_test - pred_count_test), weights=w_test
         )
 
         # Déviance de Poisson (pour les modèles de fréquence)
         # Justification : la déviance Poisson est la métrique naturelle
-        # pour évaluer un modèle de comptage (nb_sinistres)
-        pred_pos = np.maximum(pred_test, 1e-8)
+        # pour évaluer un modèle de comptage (nb_sinistres) — sur le comptage prédit
+        pred_pos = np.maximum(pred_count_test, 1e-8)
         y_pos    = np.maximum(y_test, 1e-8)
         try:
             deviance_poisson = 2 * np.mean(
@@ -1283,8 +1383,8 @@ class AgentA4ML:
             'mae_test':          round(float(mae_test), 4),
             'deviance_poisson':  round(float(deviance_poisson), 4)
                                  if not np.isnan(deviance_poisson) else None,
-            'pred_mean':         round(float(pred_test.mean()), 4),
-            'pred_std':          round(float(pred_test.std()),  4),
+            'pred_mean':         round(float(pred_count_test.mean()), 4),
+            'pred_std':          round(float(pred_count_test.std()),  4),
             'obs_mean':          round(float(y_test.mean()),    4),
         }
 
@@ -1435,6 +1535,9 @@ class AgentA4ML:
             return {'erreur': f'Modèle {nom_modele} non trouvé'}
 
         modele  = self.modeles[nom_modele]
+        # Sur cible de comptage, le modèle est enveloppé (_ModeleFrequenceExposition) ;
+        # SHAP (TreeExplainer/LinearExplainer) doit voir l'estimateur NU.
+        modele  = getattr(modele, 'base', modele)
         n_shap  = min(1000, len(X_test))
         X_shap  = X_test[:n_shap]
 
