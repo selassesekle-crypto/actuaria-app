@@ -1,0 +1,57 @@
+# ActuarIA — Plan de tarification ASSISTANCE (services d'urgence : depannage auto,
+# assistance habitation, rapatriement voyage, aide sante a domicile). HAUTE
+# frequence, severite generalement faible (beaucoup de petites interventions),
+# sauf le rapatriement. LoB INEDITE. Plan signe, opposable.
+lob: assistance
+version: "1.0"
+auteur: "S. Sekle, IA"
+exposition: exposition
+cible_frequence: nb_sinistres
+cible_cout: cout_total_sinistres
+# Queue moderee (rapatriement medical lointain = poste isole), gamma par defaut +
+# ecretement q0.995.
+famille_severite: gamma
+facteurs:
+  # type_assistance — NOMINAL : domaines aux profils tres distincts (auto =
+  # depannage frequent, voyage = rare mais rapatriement couteux, sante = aide a
+  # domicile). Aucun ordre monotone => one_hot obligatoire.
+  # ⚠ PRIOR OUVERT (ordre de FREQUENCE) : la verif prend Auto = baseline (haute
+  # frequence de panne). L'ordre reel depend du MIX PRODUIT. A confirmer.
+  - nom: type_assistance
+    type: categoriel
+    encodage: one_hot
+    modalites: [Auto, Habitation, Voyage, Sante]
+    reference: Auto
+  # niveau_couverture — ORDINAL d'etendue (Base < Confort < Premium) : plus de
+  # prestations couvertes => plus d'interventions reclamables. label DANS L'ORDRE
+  # DU PLAN = gradient croissant, coef POSITIF attendu (comme MRP/zone).
+  - nom: niveau_couverture
+    type: categoriel
+    encodage: label
+    modalites: [Base, Confort, Premium]
+  # zone_couverture — NOMINALE (France / Europe / Monde) : la portee geographique
+  # augmente la frequence ET la severite (rapatriement lointain). one_hot.
+  - nom: zone_couverture
+    type: categoriel
+    encodage: one_hot
+    modalites: [France, Europe, Monde]
+    reference: France
+  # age_souscripteur — l'age est un facteur LEGAL en non-vie (a la difference du
+  # SEXE, banni CJUE C-236/09 et bloque par le garde-fou genre). Ici il pilote la
+  # composante sante/rapatriement.
+  # ⚠ SIGNE OUVERT sur la FREQUENCE : age eleve => plus d'assistance sante MAIS
+  # moins de pannes auto ; le NET depend du mix produit. La verif injecte un +freq
+  # mild ; a confirmer.
+  - {nom: age_souscripteur, type: continu}
+  # composition_foyer — nombre de beneficiaires couverts : chaque personne ~ une
+  # exposition supplementaire => +frequence. Continu. (Caracteristique de volume,
+  # PAS la base d'exposition — l'exposition reste l'annee-police.)
+  - {nom: composition_foyer, type: continu}
+  # plafond_intervention_eur — plafond par intervention, grandeur monetaire => LOG.
+  # Pilote la SEVERITE (les contrats a haut plafond couvrent les interventions
+  # couteuses : rapatriement).
+  - {nom: plafond_intervention_eur, type: continu, transformation: log}
+  # sinistres_2ans_anterieurs — anteriorite legitime (interventions passees),
+  # exemptee du controle par l'effet.
+  - {nom: sinistres_2ans_anterieurs, type: continu, anteriorite: true,
+     commentaire: "Interventions d'assistance des 2 dernieres annees — connu a la souscription"}

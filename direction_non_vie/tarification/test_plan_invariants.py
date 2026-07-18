@@ -1733,6 +1733,62 @@ class TestRCProduit_PlanDeclaratif(unittest.TestCase):
         print(f"    RC produit tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
 
 
+def portefeuille_assistance(n=3000, seed=121):
+    """Assistance — colonnes SOURCES ; A2 dérive log_plafond_intervention_eur et
+    encode niveau_couverture (label ordinal). LoB inédite, aucune branche A2."""
+    rng = np.random.default_rng(seed)
+    typ = rng.choice(['Auto', 'Habitation', 'Voyage', 'Sante'], n, p=[.35, .30, .15, .20])
+    niveau = rng.choice(['Base', 'Confort', 'Premium'], n, p=[.40, .35, .25])
+    ncode = np.select([niveau == 'Confort', niveau == 'Premium'], [1., 2.], 0.)
+    zone = rng.choice(['France', 'Europe', 'Monde'], n, p=[.55, .30, .15])
+    sin2 = rng.poisson(0.5, n).astype(float)
+    expo = np.clip(rng.beta(5, 1, n), 0.1, 1.0)
+    lin = (-1.3 + 0.30 * ncode + 0.10 * (zone == 'Europe') + 0.20 * (zone == 'Monde')
+           + 0.25 * sin2 - 0.35 * (typ == 'Voyage'))
+    nb = rng.poisson(np.exp(lin) * expo).astype(float)
+    cout = np.where(nb > 0, rng.gamma(2.0, 800.0, n), 0.0)
+    return pd.DataFrame({
+        'exposition': expo, 'type_assistance': typ, 'niveau_couverture': niveau,
+        'zone_couverture': zone, 'age_souscripteur': rng.uniform(18, 80, n),
+        'composition_foyer': rng.integers(1, 6, n).astype(float),
+        'plafond_intervention_eur': np.clip(rng.lognormal(np.log(5000), 0.6, n), 500, None),
+        'sinistres_2ans_anterieurs': sin2,
+        'nb_sinistres': nb, 'cout_total_sinistres': cout,
+    })
+
+
+class TestAssistance_PlanDeclaratif(unittest.TestCase):
+    """Assistance (prestations en nature : dépannage auto, assistance habitation,
+    rapatriement, aide à domicile) — LoB INÉDITE tarifée par le seul
+    plans/assistance.yaml. Haute fréquence, sévérité modérée."""
+
+    @classmethod
+    def setUpClass(cls):
+        from direction_non_vie.tarification.pipeline_tarifaire import pipeline_complet
+        cls.plan = PlanTarifaire.depuis_yaml(
+            os.path.join(_RACINE, 'plans', 'assistance.yaml'))
+        cls.df = portefeuille_assistance(n=3000)
+        cls.tarif = pipeline_complet(cls.df, cls.plan)
+
+    def test_transform_produit_les_colonnes_du_plan(self):
+        X = _a2().fit(self.df, self.plan).transform(self.df)
+        manquantes = set(self.plan.colonnes_produites()) - set(X.columns)
+        self.assertEqual(manquantes, set(),
+            f"Assistance INV-1 rompu : colonnes manquantes {sorted(manquantes)}")
+        print(f"    Assistance INV-1 : {len(self.plan.colonnes_produites())} colonnes "
+              f"du plan toutes produites par transform ✅")
+
+    def test_tarifer_assistance_json(self):
+        res = self.tarif.tarifer({
+            'type_assistance': 'Voyage', 'niveau_couverture': 'Premium',
+            'zone_couverture': 'Monde', 'age_souscripteur': 45, 'composition_foyer': 3,
+            'plafond_intervention_eur': 10000, 'sinistres_2ans_anterieurs': 0})
+        self.assertEqual(res['success'], True)
+        self.assertGreater(res['prime_ttc'], 0)
+        self.assertIsInstance(json.dumps(res), str)
+        print(f"    Assistance tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("  LES 9 INVARIANTS DU PLAN — le code honore-t-il la spec ?")
