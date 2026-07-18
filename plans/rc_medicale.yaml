@@ -1,0 +1,53 @@
+# ActuarIA — Plan de tarification RC MEDICALE (responsabilite civile medicale :
+# mise en cause d'un praticien/etablissement de sante pour faute medicale ;
+# dommages corporels aux patients). Queue LOURDE (indemnisations corporelles).
+# LoB INEDITE. Plan signe, opposable.
+lob: rc_medicale
+version: "1.0"
+auteur: "S. Sekle, IA"
+exposition: exposition
+cible_frequence: nb_sinistres
+cible_cout: cout_total_sinistres
+# Queue tres lourde (deces/handicap lourd = indemnisation massive) : gamma par
+# defaut + ecretement q0.995. inverse_gaussienne/lognormal declarables si la vraie
+# donnee RC medicale montre une queue plus lourde (probable sur ce risque).
+famille_severite: gamma
+facteurs:
+  # specialite_medicale — NOMINALE : LE premier driver (chirurgie/anesthesie =
+  # risque majeur corporel, psychiatrie = faible). Aucun ordre monotone (profils
+  # de peril distincts) => one_hot obligatoire (lecon csp/secteur).
+  - nom: specialite_medicale
+    type: categoriel
+    encodage: one_hot
+    modalites: [Generaliste, Chirurgie, Anesthesie, Radiologie, Psychiatrie]
+    reference: Generaliste
+  # type_exercice — NOMINAL (liberal / hospitalier / clinique privee) : exposition
+  # et regime de responsabilite distincts. one_hot.
+  - nom: type_exercice
+    type: categoriel
+    encodage: one_hot
+    modalites: [Liberal, Hospitalier, Clinique]
+    reference: Liberal
+  # actes_par_an — VOLUME (nombre d'actes/interventions par an). Chaque acte ~ un
+  # tirage de risque => ~proportionnel => LOG (meme mecanisme que taille_flotte).
+  # ⚠ CONTRAT/PRIOR OUVERT (volume vs base d'exposition) : ici exposition = fraction
+  # d'annee-police et actes_par_an est une CARACTERISTIQUE de volume. En RC medicale
+  # REELLE, l'exposition est souvent l'ACTE (ou le lit/jour) : ce choix est
+  # ACTUARIEL, a trancher (meme arbitrage que taille_flotte/heures_fonctionnement).
+  - {nom: actes_par_an, type: continu, transformation: log}
+  # anciennete_diplome_ans — experience du praticien : rode => moins d'erreurs.
+  # ⚠ Le SIGNE sur la FREQUENCE est OUVERT (l'experience reduit l'erreur, MAIS une
+  # carriere longue accumule aussi l'exposition aux mises en cause). La verif injecte
+  # un -freq mild ; a confirmer sur vraie donnee. Continu.
+  - {nom: anciennete_diplome_ans, type: continu}
+  # formation_continue — participation reguliere a la formation continue / gestion
+  # des risques : reduit la frequence des erreurs. Facteur protecteur. Binaire.
+  - {nom: formation_continue, type: binaire}
+  # plafond_garantie_eur — plafond de garantie, grandeur monetaire => LOG. Pilote la
+  # SEVERITE (les contrats a haut plafond couvrent les dossiers corporels lourds).
+  - {nom: plafond_garantie_eur, type: continu, transformation: log}
+  # antecedents_sinistres_5ans — anteriorite legitime sur 5 ANS (la sinistralite RC
+  # medicale est rare mais persistante), connue a la souscription, exemptee du
+  # controle par l'effet.
+  - {nom: antecedents_sinistres_5ans, type: continu, anteriorite: true,
+     commentaire: "Mises en cause du praticien sur 5 ans — connu a la souscription"}

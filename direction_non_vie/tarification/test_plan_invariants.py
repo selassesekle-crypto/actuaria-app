@@ -1558,6 +1558,65 @@ class TestValiderContre_SourceBrute(unittest.TestCase):
               "la dérivée km_par_an_normalise ✅")
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+#  LOT 4 — 3 LoB INÉDITES de plus (RC médicale, perte d'exploitation, RC produit).
+#  Mêmes garanties : INV-1 sur l'artefact YAML réel + smoke tarifer().
+# ═══════════════════════════════════════════════════════════════════════════════
+def portefeuille_medicale(n=3000, seed=91):
+    """RC médicale — colonnes SOURCES ; A2 dérive log_actes_par_an et
+    log_plafond_garantie_eur. LoB inédite, aucune branche A2."""
+    rng = np.random.default_rng(seed)
+    spec = rng.choice(['Generaliste', 'Chirurgie', 'Anesthesie', 'Radiologie', 'Psychiatrie'],
+                      n, p=[.35, .15, .10, .20, .20])
+    exer = rng.choice(['Liberal', 'Hospitalier', 'Clinique'], n, p=[.50, .30, .20])
+    form = rng.integers(0, 2, n).astype(float)
+    ant5 = rng.poisson(0.2, n).astype(float)
+    expo = np.clip(rng.beta(5, 1, n), 0.1, 1.0)
+    lin = (-2.2 + 0.85 * (spec == 'Chirurgie') + 0.70 * (spec == 'Anesthesie')
+           - 0.25 * form + 0.35 * ant5)
+    nb = rng.poisson(np.exp(lin) * expo).astype(float)
+    cout = np.where(nb > 0, rng.gamma(2.0, 30000.0, n), 0.0)
+    return pd.DataFrame({
+        'exposition': expo, 'specialite_medicale': spec, 'type_exercice': exer,
+        'actes_par_an': np.clip(rng.lognormal(np.log(1500), 0.7, n), 50, None),
+        'anciennete_diplome_ans': rng.uniform(0, 40, n), 'formation_continue': form,
+        'plafond_garantie_eur': np.clip(rng.lognormal(np.log(3000000), 0.6, n), 100000, None),
+        'antecedents_sinistres_5ans': ant5,
+        'nb_sinistres': nb, 'cout_total_sinistres': cout,
+    })
+
+
+class TestRCMedicale_PlanDeclaratif(unittest.TestCase):
+    """RC médicale — LoB INÉDITE tarifée par le seul plans/rc_medicale.yaml
+    (spécialité = 1er driver ; actes_par_an en volume-log ; queue lourde corporelle)."""
+
+    @classmethod
+    def setUpClass(cls):
+        from direction_non_vie.tarification.pipeline_tarifaire import pipeline_complet
+        cls.plan = PlanTarifaire.depuis_yaml(
+            os.path.join(_RACINE, 'plans', 'rc_medicale.yaml'))
+        cls.df = portefeuille_medicale(n=3000)
+        cls.tarif = pipeline_complet(cls.df, cls.plan)
+
+    def test_transform_produit_les_colonnes_du_plan(self):
+        X = _a2().fit(self.df, self.plan).transform(self.df)
+        manquantes = set(self.plan.colonnes_produites()) - set(X.columns)
+        self.assertEqual(manquantes, set(),
+            f"RC médicale INV-1 rompu : colonnes manquantes {sorted(manquantes)}")
+        print(f"    RC médicale INV-1 : {len(self.plan.colonnes_produites())} colonnes "
+              f"du plan toutes produites par transform ✅")
+
+    def test_tarifer_medicale_json(self):
+        res = self.tarif.tarifer({
+            'specialite_medicale': 'Chirurgie', 'type_exercice': 'Clinique',
+            'actes_par_an': 2000, 'anciennete_diplome_ans': 10, 'formation_continue': 1,
+            'plafond_garantie_eur': 5000000, 'antecedents_sinistres_5ans': 0})
+        self.assertEqual(res['success'], True)
+        self.assertGreater(res['prime_ttc'], 0)
+        self.assertIsInstance(json.dumps(res), str)
+        print(f"    RC médicale tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("  LES 9 INVARIANTS DU PLAN — le code honore-t-il la spec ?")
