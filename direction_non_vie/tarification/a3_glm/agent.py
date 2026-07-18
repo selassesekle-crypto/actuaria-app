@@ -1218,7 +1218,14 @@ class AgentA3GLM:
         FORMULATION MATHÉMATIQUE :
         ───────────────────────────
         Y_i ~ Tweedie(μ_i, φ, p)  avec p ∈ (1, 2)
-        log(μ_i) = log(e_i) + β_0 + β_1 X_1i + ... + β_p X_pi
+        log(μ_i) = β_0 + β_1 X_1i + ... + β_p X_pi
+
+        PAS D'OFFSET : la cible est DÉJÀ le taux annualisé (cout/expo). Ajouter
+        offset=log(expo) appliquerait l'exposition DEUX FOIS → la prime pure
+        prédite deviendrait proportionnelle à l'exposition (mesuré : même contrat
+        expo 1.0 vs 0.5 → prime ×2), alors qu'elle en est indépendante. Forme
+        standard = « cible=coût + offset » OU « cible=taux sans offset », pas les
+        deux. On garde cible=taux (annualisée par A2), donc PAS d'offset.
 
         DISTRIBUTION TWEEDIE :
         ───────────────────────
@@ -1261,10 +1268,6 @@ class AgentA3GLM:
             df_test[col_cout] / expo_test.values
         ).clip(lower=0)
 
-        # Offset log(exposition)
-        offset_train = np.log(expo_train.values)
-        offset_test  = np.log(expo_test.values)
-
         # Sélection variables
         vars_actives = [v for v in vars_pred if v in df_train.columns]
         modele_final = None
@@ -1286,7 +1289,6 @@ class AgentA3GLM:
                         link=families.links.Log(),
                         var_power=TWEEDIE_P
                     ),
-                    offset=offset_train
                 ).fit(maxiter=200, disp=False)
 
                 pvalues   = modele.pvalues.drop('const', errors='ignore')
@@ -1322,7 +1324,6 @@ class AgentA3GLM:
                     link=families.links.Log(),
                     var_power=TWEEDIE_P
                 ),
-                offset=offset_train
             ).fit(maxiter=200, disp=False)
             vars_actives = []
 
@@ -1337,7 +1338,7 @@ class AgentA3GLM:
             )
 
         try:
-            pred_test = modele_final.predict(X_test, offset=offset_test)
+            pred_test = modele_final.predict(X_test)
         except Exception:
             pred_test = np.full(len(df_test), df_train[col_target_tweedie].mean())
 
