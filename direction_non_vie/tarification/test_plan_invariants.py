@@ -1846,6 +1846,63 @@ class TestIndividuelleAccidents_PlanDeclaratif(unittest.TestCase):
         print(f"    Individuelle accidents tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
 
 
+def portefeuille_gli(n=3000, seed=141):
+    """GLI — colonnes SOURCES ; A2 dérive log_loyer_mensuel_eur. LoB inédite,
+    aucune branche A2."""
+    rng = np.random.default_rng(seed)
+    contrat = rng.choice(['CDI', 'CDD', 'Independant', 'Etudiant', 'Retraite'],
+                         n, p=[.55, .15, .12, .10, .08])
+    zone = rng.choice(['Detendue', 'Normale', 'Tendue'], n, p=[.25, .45, .30])
+    caution = rng.integers(0, 2, n).astype(float)
+    ant = rng.poisson(0.2, n).astype(float)
+    effort = rng.uniform(20, 45, n)
+    expo = np.clip(rng.beta(5, 1, n), 0.1, 1.0)
+    lin = (-2.1 + 0.04 * (effort - 32) + 0.50 * (contrat == 'Independant')
+           + 0.60 * (contrat == 'Etudiant') - 0.35 * caution + 0.45 * ant)
+    nb = rng.poisson(np.exp(lin) * expo).astype(float)
+    cout = np.where(nb > 0, rng.gamma(2.0, 4000.0, n), 0.0)
+    return pd.DataFrame({
+        'exposition': expo, 'taux_effort_pct': effort, 'type_contrat_tenant': contrat,
+        'loyer_mensuel_eur': np.clip(rng.lognormal(np.log(900), 0.5, n), 200, None),
+        'anciennete_bail_mois': rng.uniform(0, 120, n), 'zone_locative': zone,
+        'caution_solidaire': caution, 'antecedents_impayes_2ans': ant,
+        'nb_sinistres': nb, 'cout_total_sinistres': cout,
+    })
+
+
+class TestGarantieLoyersImpayes_PlanDeclaratif(unittest.TestCase):
+    """Garantie loyers impayés (GLI : protège le bailleur contre les impayés du
+    locataire + frais de contentieux / expulsion) — LoB INÉDITE tarifée par le
+    seul plans/garantie_loyers_impayes.yaml. Basse fréquence."""
+
+    @classmethod
+    def setUpClass(cls):
+        from direction_non_vie.tarification.pipeline_tarifaire import pipeline_complet
+        cls.plan = PlanTarifaire.depuis_yaml(
+            os.path.join(_RACINE, 'plans', 'garantie_loyers_impayes.yaml'))
+        cls.df = portefeuille_gli(n=3000)
+        cls.tarif = pipeline_complet(cls.df, cls.plan)
+
+    def test_transform_produit_les_colonnes_du_plan(self):
+        X = _a2().fit(self.df, self.plan).transform(self.df)
+        manquantes = set(self.plan.colonnes_produites()) - set(X.columns)
+        self.assertEqual(manquantes, set(),
+            f"GLI INV-1 rompu : colonnes manquantes {sorted(manquantes)}")
+        print(f"    GLI INV-1 : {len(self.plan.colonnes_produites())} colonnes "
+              f"du plan toutes produites par transform ✅")
+
+    def test_tarifer_gli_json(self):
+        res = self.tarif.tarifer({
+            'taux_effort_pct': 38, 'type_contrat_tenant': 'Etudiant',
+            'loyer_mensuel_eur': 1200, 'anciennete_bail_mois': 6,
+            'zone_locative': 'Tendue', 'caution_solidaire': 0,
+            'antecedents_impayes_2ans': 0})
+        self.assertEqual(res['success'], True)
+        self.assertGreater(res['prime_ttc'], 0)
+        self.assertIsInstance(json.dumps(res), str)
+        print(f"    GLI tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("  LES 9 INVARIANTS DU PLAN — le code honore-t-il la spec ?")

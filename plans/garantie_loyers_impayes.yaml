@@ -1,0 +1,49 @@
+# ActuarIA — Plan de tarification GARANTIE LOYERS IMPAYES (GLI : protege le
+# bailleur contre les loyers impayes du locataire, + frais de contentieux /
+# expulsion). Le cout = loyer x nombre de mois d'impaye + frais. Frequence = defaut
+# de paiement. LoB INEDITE. Plan signe, opposable.
+lob: garantie_loyers_impayes
+version: "1.0"
+auteur: "S. Sekle, IA"
+exposition: exposition
+cible_frequence: nb_sinistres
+cible_cout: cout_total_sinistres
+famille_severite: gamma
+facteurs:
+  # taux_effort_pct — taux d'effort (loyer / revenus du locataire, en %) : LE premier
+  # driver de defaut (plus le loyer pese, plus le risque d'impaye est haut). Continu.
+  # Pilote la FREQUENCE. (Les assureurs GLI plafonnent souvent ce taux ~33 %.)
+  - {nom: taux_effort_pct, type: continu}
+  # type_contrat_tenant — NOMINAL : la stabilite d'emploi gouverne la solvabilite
+  # (CDI = stable, CDD/independant/etudiant = plus fragile). one_hot obligatoire.
+  - nom: type_contrat_tenant
+    type: categoriel
+    encodage: one_hot
+    modalites: [CDI, CDD, Independant, Etudiant, Retraite]
+    reference: CDI
+  # loyer_mensuel_eur — loyer mensuel, grandeur monetaire => LOG. Pilote la SEVERITE
+  # (la perte = loyer x nombre de mois d'impaye + frais).
+  # ⚠ CHOIX ASSUME (loyer -> FREQUENCE) : effet DELIBEREMENT NON injecte. Le poids
+  # du loyer sur le defaut est deja porte par taux_effort_pct ; injecter aussi le
+  # loyer en frequence double-compterait le fardeau. Le loyer pilote la seule SEVERITE.
+  - {nom: loyer_mensuel_eur, type: continu, transformation: log}
+  # anciennete_bail_mois — anciennete du bail : un locataire qui paie depuis
+  # longtemps fait moins defaut (effet de selection/rodage). -frequence. Continu.
+  - {nom: anciennete_bail_mois, type: continu}
+  # zone_locative — NOMINALE (marche detendu / normal / tendu) : en zone TENDUE,
+  # l'expulsion est plus longue => plus de mois d'impaye. +frequence et surtout
+  # +severite. one_hot.
+  # ⚠ PRIOR OUVERT (severite zone tendue via duree d'expulsion) : effet reel mais
+  # d'AMPLITUDE difficile a calibrer sur synthetique. A confirmer sur vraie donnee.
+  - nom: zone_locative
+    type: categoriel
+    encodage: one_hot
+    modalites: [Detendue, Normale, Tendue]
+    reference: Normale
+  # caution_solidaire — presence d'une caution solidaire (garant) : reduit le risque
+  # d'impaye (un tiers paie). Facteur protecteur (-frequence). Binaire.
+  - {nom: caution_solidaire, type: binaire}
+  # antecedents_impayes_2ans — anteriorite legitime (impayes passes du locataire),
+  # exemptee du controle par l'effet.
+  - {nom: antecedents_impayes_2ans, type: continu, anteriorite: true,
+     commentaire: "Impayes du locataire sur 2 ans — connu a la souscription"}
