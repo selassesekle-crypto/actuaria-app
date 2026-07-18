@@ -1674,6 +1674,65 @@ class TestPerteExploitation_PlanDeclaratif(unittest.TestCase):
         print(f"    Perte d'exploitation tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
 
 
+def portefeuille_produit(n=3000, seed=111):
+    """RC produit — colonnes SOURCES ; A2 dérive log_chiffre_affaires_eur,
+    log_volume_unites_an, log_plafond_garantie_eur. LoB inédite, aucune branche A2."""
+    rng = np.random.default_rng(seed)
+    typ = rng.choice(['Industriel', 'Alimentaire', 'Pharmaceutique', 'Jouet', 'Cosmetique'],
+                     n, p=[.30, .25, .10, .15, .20])
+    zone = rng.choice(['France', 'Europe', 'International'], n, p=[.50, .35, .15])
+    cert = rng.integers(0, 2, n).astype(float)
+    ant = rng.poisson(0.3, n).astype(float)
+    ca = np.clip(rng.lognormal(np.log(800000), 1.0, n), 20000, None)
+    expo = np.clip(rng.beta(5, 1, n), 0.1, 1.0)
+    lin = (-1.9 + 0.45 * (typ == 'Jouet') + 0.40 * (typ == 'Alimentaire')
+           + 0.35 * (zone == 'International') - 0.30 * cert + 0.40 * ant)
+    nb = rng.poisson(np.exp(lin) * expo).astype(float)
+    cout = np.where(nb > 0, rng.gamma(2.0, 25000.0, n), 0.0)
+    return pd.DataFrame({
+        'exposition': expo, 'chiffre_affaires_eur': ca, 'type_produit': typ,
+        'zone_distribution': zone,
+        'volume_unites_an': np.clip(ca / np.clip(rng.lognormal(np.log(20), 0.8, n), 1, None), 10, None),
+        'certification_qualite': cert,
+        'plafond_garantie_eur': np.clip(rng.lognormal(np.log(2000000), 0.6, n), 100000, None),
+        'antecedents_rappels_3ans': ant,
+        'nb_sinistres': nb, 'cout_total_sinistres': cout,
+    })
+
+
+class TestRCProduit_PlanDeclaratif(unittest.TestCase):
+    """RC produit (dommages aux tiers du fait d'un produit défectueux) — LoB
+    INÉDITE tarifée par le seul plans/rc_produit.yaml. Distincte de la RC Générale
+    (exploitation) : ici le PRODUIT. Queue lourde (rappels, contentieux US)."""
+
+    @classmethod
+    def setUpClass(cls):
+        from direction_non_vie.tarification.pipeline_tarifaire import pipeline_complet
+        cls.plan = PlanTarifaire.depuis_yaml(
+            os.path.join(_RACINE, 'plans', 'rc_produit.yaml'))
+        cls.df = portefeuille_produit(n=3000)
+        cls.tarif = pipeline_complet(cls.df, cls.plan)
+
+    def test_transform_produit_les_colonnes_du_plan(self):
+        X = _a2().fit(self.df, self.plan).transform(self.df)
+        manquantes = set(self.plan.colonnes_produites()) - set(X.columns)
+        self.assertEqual(manquantes, set(),
+            f"RC produit INV-1 rompu : colonnes manquantes {sorted(manquantes)}")
+        print(f"    RC produit INV-1 : {len(self.plan.colonnes_produites())} colonnes "
+              f"du plan toutes produites par transform ✅")
+
+    def test_tarifer_produit_json(self):
+        res = self.tarif.tarifer({
+            'chiffre_affaires_eur': 1000000, 'type_produit': 'Pharmaceutique',
+            'zone_distribution': 'International', 'volume_unites_an': 50000,
+            'certification_qualite': 1, 'plafond_garantie_eur': 3000000,
+            'antecedents_rappels_3ans': 0})
+        self.assertEqual(res['success'], True)
+        self.assertGreater(res['prime_ttc'], 0)
+        self.assertIsInstance(json.dumps(res), str)
+        print(f"    RC produit tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+
+
 if __name__ == '__main__':
     print("=" * 70)
     print("  LES 9 INVARIANTS DU PLAN — le code honore-t-il la spec ?")

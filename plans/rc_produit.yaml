@@ -1,0 +1,52 @@
+# ActuarIA — Plan de tarification RC PRODUIT (responsabilite civile du fait des
+# produits : dommages corporels/materiels causes aux TIERS par un produit
+# defectueux). Distincte de la RC Generale (exploitation) : ici le PRODUIT. Queue
+# LOURDE (rappels, contentieux de masse, US). LoB INEDITE. Opposable.
+lob: rc_produit
+version: "1.0"
+auteur: "S. Sekle, IA"
+exposition: exposition
+cible_frequence: nb_sinistres
+cible_cout: cout_total_sinistres
+famille_severite: gamma
+facteurs:
+  # chiffre_affaires_eur — base d'exposition PRIMAIRE (plus de produits vendus =
+  # plus de mises en cause). LOG. Pilote frequence ET severite (grandes entreprises,
+  # dossiers plus lourds).
+  - {nom: chiffre_affaires_eur, type: continu, transformation: log}
+  # type_produit — NOMINAL : profils de peril tres distincts (alimentaire =
+  # contamination, pharmaceutique = queue lourde, jouet = securite enfant/rappels,
+  # cosmetique, industriel B2B). one_hot obligatoire.
+  - nom: type_produit
+    type: categoriel
+    encodage: one_hot
+    modalites: [Industriel, Alimentaire, Pharmaceutique, Jouet, Cosmetique]
+    reference: Industriel
+  # zone_distribution — NOMINAL : l'exposition INTERNATIONALE (surtout US : class
+  # actions, dommages punitifs) porte une queue de SEVERITE lourde. one_hot.
+  # ⚠ PRIOR OUVERT (queue International) : la verif injecte un +severite fort pour
+  # International, mais l'AMPLITUDE vraie du contentieux US produit est DIFFICILE A
+  # CALIBRER (meme statut que zone_activite Export en D&O, couverture_produits Export
+  # en RC Generale, mode_transport en cargo). A CONFIRMER sur vraie donnee.
+  - nom: zone_distribution
+    type: categoriel
+    encodage: one_hot
+    modalites: [France, Europe, International]
+    reference: France
+  # volume_unites_an — VOLUME (unites produites/vendues par an). Chaque unite ~ un
+  # risque de defaut => ~proportionnel => LOG.
+  # ⚠ DEBATTABLE : (1) volume vs base d'exposition (comme taille_flotte) ; (2)
+  # COLINEARITE mild avec le CA (deux proxys de taille : chiffre d'affaires =
+  # revenu, unites = quantite ; ils divergent pour un produit cher bas-volume vs bon
+  # marche haut-volume). On garde les deux ; la verif confirme l'identifiabilite.
+  - {nom: volume_unites_an, type: continu, transformation: log}
+  # certification_qualite — systeme qualite certifie (ISO 9001, HACCP...) : reduit
+  # la frequence des defauts. Facteur protecteur. Binaire.
+  - {nom: certification_qualite, type: binaire}
+  # plafond_garantie_eur — plafond de garantie, grandeur monetaire => LOG. Pilote la
+  # SEVERITE (les contrats a haut plafond couvrent rappels/contentieux de masse).
+  - {nom: plafond_garantie_eur, type: continu, transformation: log}
+  # antecedents_rappels_3ans — anteriorite legitime (rappels/mises en cause passes
+  # sur 3 ans), exemptee du controle par l'effet.
+  - {nom: antecedents_rappels_3ans, type: continu, anteriorite: true,
+     commentaire: "Rappels produit / mises en cause sur 3 ans — connu a la souscription"}
