@@ -501,28 +501,28 @@ class AgentA1Ingestion:
         return df
 
     def _lire_fichier(self, chemin: Path, nom_onglet: str = None) -> pd.DataFrame:
-        """Lit un fichier selon son extension."""
+        """Lit un fichier selon son EXTENSION (jamais son contenu). Une extension
+        inconnue lève une erreur PROPRE nommant les formats acceptés — jamais un
+        crash pandas cryptique. Formats : voir FORMATS_SUPPORTES."""
         ext = chemin.suffix.lower()
         if ext == '.parquet':
-            return pd.read_parquet(chemin)
-        elif ext in ['.xlsx', '.xls']:
-            return pd.read_excel(chemin, engine='openpyxl', sheet_name=nom_onglet)
-        elif ext == '.csv':
-            # Détection automatique du séparateur
-            for sep in [',', ';', '\t', '|']:
-                try:
-                    df = pd.read_csv(chemin, sep=sep, nrows=5)
-                    if df.shape[1] > 1:
-                        return pd.read_csv(chemin, sep=sep)
-                except Exception:
-                    continue
-            return pd.read_csv(chemin)
-        elif ext == '.json':
+            return pd.read_parquet(chemin)                     # exige pyarrow/fastparquet
+        if ext in ('.xlsx', '.xls'):
+            # sheet_name : la PREMIÈRE feuille par défaut (0). ⚠ sheet_name=None
+            # rendrait un DICT de toutes les feuilles, pas un DataFrame (ancien
+            # bug). Le moteur est laissé à pandas : openpyxl pour .xlsx, xlrd pour
+            # .xls (forcer 'openpyxl' cassait .xls).
+            return pd.read_excel(
+                chemin, sheet_name=(nom_onglet if nom_onglet is not None else 0))
+        if ext in ('.csv', '.txt'):
+            # sep=None + engine='python' : pandas DÉTECTE le séparateur (, ; \t)
+            # via csv.Sniffer. .txt est traité comme un CSV (détection identique).
+            return pd.read_csv(chemin, sep=None, engine='python')
+        if ext == '.json':
             return pd.read_json(chemin)
-        elif ext == '.txt':
-            return pd.read_csv(chemin, sep='\t')
-        else:
-            raise ValueError(f"Format non supporté : {ext}")
+        raise ValueError(
+            f"format non supporté : {ext} — formats acceptés : "
+            f"{', '.join(e.lstrip('.') for e in FORMATS_SUPPORTES)}.")
 
     # (_detecter_sous_branche SUPPRIMÉE en Phase 1 : A1 ne devine plus la LoB.
     #  Elle scorait les colonnes contre MOTS_CLES_DETECTION et, à défaut de tout

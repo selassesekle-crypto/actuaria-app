@@ -96,6 +96,95 @@ class TestA1Ingestion(unittest.TestCase):
         print(f"    ST7 Qualité données propres ✅ | score={score:.1f} ≥ 70")
 
 
+class TestA1MultiFormat(unittest.TestCase):
+    """A1 — chargement multi-format par EXTENSION. Le DataFrame lu doit être
+    identique quelle que soit la source (csv/txt/xlsx/json/parquet) ; une extension
+    inconnue → erreur propre nommant les formats acceptés."""
+
+    @classmethod
+    def setUpClass(cls):
+        import tempfile
+        from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
+        cls.agent = AgentA1Ingestion(base_path='/tmp', audit_path='/tmp', verbose=False)
+        cls.tmp = tempfile.mkdtemp(prefix='a1_fmt_')
+        rng = np.random.default_rng(0)
+        cls.ref = pd.DataFrame({
+            'id_contrat': list(range(10)),
+            'age':        rng.integers(18, 75, 10),
+            'prime':      rng.uniform(100, 900, 10).round(2),
+            'zone':       rng.choice(['A', 'B', 'C'], 10),
+        })
+
+    def _lu(self, nom):
+        from pathlib import Path
+        return self.agent._lire_fichier(Path(os.path.join(self.tmp, nom)))
+
+    def _assert_identique(self, nom, **kw):
+        pd.testing.assert_frame_equal(self._lu(nom), self.ref, check_dtype=False, **kw)
+
+    def test_fmt_csv_virgule(self):
+        self.ref.to_csv(os.path.join(self.tmp, 'a.csv'), index=False, sep=',')
+        self._assert_identique('a.csv')
+        print("    A1-FMT csv (,) → identique ✅")
+
+    def test_fmt_csv_pointvirgule(self):       # séparateur DÉTECTÉ (sep=None)
+        self.ref.to_csv(os.path.join(self.tmp, 'b.csv'), index=False, sep=';')
+        self._assert_identique('b.csv')
+        print("    A1-FMT csv (;) détecté → identique ✅")
+
+    def test_fmt_txt_tabulation(self):         # .txt traité comme csv, sép. détecté
+        self.ref.to_csv(os.path.join(self.tmp, 'c.txt'), index=False, sep='\t')
+        self._assert_identique('c.txt')
+        print("    A1-FMT txt (tab) détecté → identique ✅")
+
+    def test_fmt_xlsx(self):
+        self.ref.to_excel(os.path.join(self.tmp, 'd.xlsx'), index=False)
+        self._assert_identique('d.xlsx')       # corrige l'ancien bug sheet_name=None (dict)
+        print("    A1-FMT xlsx → identique (plus de dict) ✅")
+
+    def test_fmt_json(self):
+        self.ref.to_json(os.path.join(self.tmp, 'e.json'))          # orient='columns'
+        self._assert_identique('e.json', check_like=True)          # ordre colonnes indifférent
+        print("    A1-FMT json → identique ✅")
+
+    def test_fmt_xls_route_vers_excel(self):
+        """.xls est SUPPORTÉ (routé vers read_excel) ; le lire exige xlrd (absent
+        ici). On vérifie qu'il n'est PAS rejeté comme « format non supporté »."""
+        with open(os.path.join(self.tmp, 'f.xls'), 'wb') as fh:
+            fh.write(b'\xd0\xcf\x11\xe0 fake xls')
+        try:
+            self._lu('f.xls')
+        except ValueError as e:
+            self.assertNotIn('format non supporté', str(e).lower(),
+                             ".xls ne doit PAS être rejeté comme format non supporté")
+        except Exception:
+            pass   # read_excel a tenté (xlrd absent / contenu invalide) → routé = supporté
+        print("    A1-FMT xls routé vers read_excel (supporté ; exige xlrd) ✅")
+
+    def test_fmt_parquet(self):
+        try:
+            import pyarrow  # noqa: F401
+        except ImportError:
+            try:
+                import fastparquet  # noqa: F401
+            except ImportError:
+                self.skipTest("pyarrow/fastparquet absents — round-trip parquet non testable ici")
+        self.ref.to_parquet(os.path.join(self.tmp, 'g.parquet'))
+        self._assert_identique('g.parquet')
+        print("    A1-FMT parquet → identique ✅")
+
+    def test_fmt_inconnu_erreur_propre(self):
+        open(os.path.join(self.tmp, 'h.xyz'), 'w').close()
+        with self.assertRaises(ValueError) as ctx:
+            self._lu('h.xyz')
+        msg = str(ctx.exception).lower()
+        self.assertIn('.xyz', msg)
+        self.assertIn('format non supporté', msg)
+        for fmt in ('csv', 'xlsx', 'xls', 'json', 'txt', 'parquet'):
+            self.assertIn(fmt, msg)            # la liste des formats acceptés
+        print("    A1-FMT inconnu (.xyz) → erreur propre + liste des formats ✅")
+
+
 if __name__ == '__main__':
     print("="*65)
     print("  TESTS A1 INGESTION v1.0")
