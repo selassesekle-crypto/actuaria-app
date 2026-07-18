@@ -1,13 +1,15 @@
 """
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║  ACTUARIA — ORCHESTRATEUR DU CHEMIN AGENT : LES DEUX MOITIÉS DU TARIF        ║
+║  ACTUARIA — ORCHESTRATEUR DU CHEMIN AGENT : LES TROIS CIBLES DU TARIF        ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
 ║                                                                              ║
-║  A1 → A2 → A3, puis DEUX arbitrages complets — un par cible :                ║
+║  A1 → A2 → A3, puis TROIS arbitrages complets — un par cible :               ║
 ║                                                                              ║
-║    FRÉQUENCE : A4(freq) → A5(freq, CANN+TabNet) → A6(freq)                   ║
-║    COÛT      : A4(cout_moyen, sinistrés, sans poids)                         ║
-║                → A5(cout_moyen, TabNet SEUL) → A6(cout_moyen)                ║
+║    FRÉQUENCE  : A4(freq) → A5(freq, CANN+TabNet) → A6(freq)                  ║
+║    COÛT       : A4(cout_moyen, sinistrés, sans poids)                        ║
+║                 → A5(cout_moyen, TabNet SEUL) → A6(cout_moyen)               ║
+║    PRIME PURE : A4(prime_pure, portefeuille ENTIER, sans poids)              ║
+║                 → A5(prime_pure, TabNet SEUL) → A6(prime_pure)               ║
 ║                                                                              ║
 ║  POURQUOI CE MODULE EXISTE                                                   ║
 ║  ─────────────────────────                                                   ║
@@ -61,13 +63,20 @@ from direction_non_vie.tarification.a4_ml.agent import AgentA4ML
 from direction_non_vie.tarification.a5_deep_learning.agent import AgentA5DeepLearning
 from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
 
-__all__ = ["ArbitrageCible", "ResultatAgents", "pipeline_agents", "CIBLE_COUT"]
+__all__ = ["ArbitrageCible", "ResultatAgents", "pipeline_agents", "CIBLE_COUT",
+           "CIBLE_PRIME_PURE"]
 
 # Nom de la cible de sévérité. DOIT être exactement celui que le GLM Gamma d'A3
 # déclare (metriques['gamma']['cible']) : c'est sur cette chaîne que le filtre de
 # cible d'A6 apparie les modèles. Une divergence ici et le Gamma serait écarté de
 # son propre arbitrage.
 CIBLE_COUT = "cout_moyen"
+
+# Nom de la cible de PRIME PURE DIRECTE. DOIT être exactement celui que le GLM
+# Tweedie d'A3 déclare (metriques['tweedie']['cible']='prime_pure') ET la colonne
+# que A2 produit (_calculer_prime_pure : cout_total/expo, taux annualisé, HORS
+# plan). Même contrat d'appariement de cible côté A6 que CIBLE_COUT.
+CIBLE_PRIME_PURE = "prime_pure"
 
 
 @dataclass(frozen=True)
@@ -84,13 +93,18 @@ class ArbitrageCible:
 
 @dataclass(frozen=True)
 class ResultatAgents:
-    """Les DEUX moitiés du tarif, dans un objet unique."""
+    """Les TROIS cibles du tarif, dans un objet unique : FRÉQUENCE et COÛT (dont
+    le produit = prime pure par décomposition E[S]=E[N]×E[C|N>0]), et la PRIME
+    PURE DIRECTE (route alternative Tweedie sur tout le portefeuille). Le tarif
+    primaire reste fréquence×coût ; la prime pure directe est un CHALLENGEUR
+    additif (d'où `.success` qui ne dépend que d'A3 + fréquence)."""
     plan:       PlanTarifaire
     a1:         Dict[str, Any]
     a2:         Dict[str, Any]
     a3:         Dict[str, Any]
     frequence:  ArbitrageCible
     cout:       ArbitrageCible
+    prime_pure: ArbitrageCible
     audit_id:   str
 
     @property
@@ -145,6 +159,7 @@ class ResultatAgents:
             "plan_empreinte": self.plan.empreinte(),
             "frequence":      _arb(self.frequence),
             "cout":           _arb(self.cout),
+            "prime_pure":     _arb(self.prime_pure),
         }
 
 
@@ -190,17 +205,18 @@ def pipeline_agents(
     audit_path: str = "/tmp",
     verbose: bool = False,
 ) -> ResultatAgents:
-    """Enchaîne A1→A6 sur les DEUX cibles et rend les deux arbitrages.
+    """Enchaîne A1→A6 sur les TROIS cibles et rend les trois arbitrages.
 
     `sous_branche` est DÉCLARÉE (A1 ne devine plus la LoB) ; `plan` est le plan
-    signé, autorité de bout en bout. Les agents DL/ML sont appelés DEUX FOIS —
+    signé, autorité de bout en bout. Les agents DL/ML sont appelés TROIS FOIS —
     une fois par cible — plutôt que refactorés en multi-cibles : A6 arbitre déjà
     une cible par appel, et le résultat de chaque agent porte UNE `col_cible`
     que le filtre de cible d'A6 apparie. Le grain existant est le bon.
 
-    L'arbitrage COÛT peut échouer là où la FRÉQUENCE réussit (trop peu de
-    sinistres pour entraîner) : c'est rendu dans `cout.erreur`, jamais masqué,
-    et n'empêche pas la fréquence d'aboutir.
+    Un arbitrage peut échouer là où un autre réussit (COÛT : trop peu de
+    sinistres ; PRIME PURE : donnée dégénérée) : c'est rendu dans `<cible>.erreur`,
+    jamais masqué, et n'empêche pas les autres d'aboutir. `.success` ne dépend que
+    d'A3 + fréquence (le tarif primaire reste fréquence×coût).
     """
     t0 = datetime.now()
     audit_id = f"AGENTS_{t0.strftime('%Y%m%d_%H%M%S')}"
@@ -226,7 +242,9 @@ def pipeline_agents(
         msg = f"A3 a échoué : {r3.get('erreur')}"
         return ResultatAgents(plan=plan, a1=r1, a2=r2, a3=r3,
                               frequence=_echec(plan.cible_frequence, msg),
-                              cout=_echec(CIBLE_COUT, msg), audit_id=audit_id)
+                              cout=_echec(CIBLE_COUT, msg),
+                              prime_pure=_echec(CIBLE_PRIME_PURE, msg),
+                              audit_id=audit_id)
 
     def _arbitrer(cible, r2_cible, *, modeles_dl, ponderer) -> ArbitrageCible:
         """Une cible : A4 → A5 → A6. Les échecs sont rendus, jamais masqués."""
@@ -270,5 +288,30 @@ def pipeline_agents(
             cout = _arbitrer(CIBLE_COUT, r2_cout,
                              modeles_dl=("tabnet",), ponderer=False)
 
+    # ── CIBLE 3 : PRIME PURE DIRECTE — portefeuille ENTIER, sans poids, TabNet ─
+    # La prime pure (cout/expo, taux annualisé produit par A2 HORS plan) est une
+    # cible Tweedie : masse en 0 (non-sinistrés) + queue. On l'entraîne sur TOUT
+    # le portefeuille — PAS la vue sinistrés : ici la masse en 0 EST le signal
+    # (fréquence × sévérité en un seul modèle). ponderer=False : la cible est déjà
+    # annualisée, donc exposure-INDÉPENDANTE (même raison qui exclut le CANN, dont
+    # l'offset log-expo est une construction de comptage). Concurrent GLM = le
+    # Tweedie d'A3 (cible='prime_pure'). PAS de seuil <100 : le portefeuille entier
+    # fournit toujours des lignes ; le signal (fonction du nombre de sinistrés) est
+    # évalué par le RAG d'A6. Enveloppé comme le coût : un échec est DIT, pas masqué.
+    if CIBLE_PRIME_PURE not in r2["dataframe"].columns:
+        prime_pure = _echec(
+            CIBLE_PRIME_PURE,
+            f"Colonne '{CIBLE_PRIME_PURE}' absente d'A2 (contrat de données V7 B2 "
+            f"rompu — _calculer_prime_pure).")
+    else:
+        try:
+            prime_pure = _arbitrer(CIBLE_PRIME_PURE, r2,
+                                   modeles_dl=("tabnet",), ponderer=False)
+        except Exception as e:      # pragma: no cover — donnée dégénérée
+            prime_pure = _echec(
+                CIBLE_PRIME_PURE,
+                f"Prime pure non modélisable : {type(e).__name__}: {e}")
+
     return ResultatAgents(plan=plan, a1=r1, a2=r2, a3=r3,
-                          frequence=frequence, cout=cout, audit_id=audit_id)
+                          frequence=frequence, cout=cout,
+                          prime_pure=prime_pure, audit_id=audit_id)

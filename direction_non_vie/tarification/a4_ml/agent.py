@@ -355,7 +355,7 @@ class _GLMWalkForward:
 
     Reproduit la spécification actuarielle d'A3 :
       · Poisson  → offset = log(exposition)   (modèle de FRÉQUENCE)
-      · Tweedie  → offset = log(exposition), var_power = 1,5  (PRIME PURE)
+      · Tweedie  → var_power = 1,5, PAS d'offset (cible=taux cout/expo)  (PRIME PURE)
       · Gamma    → var_weights = exposition   (modèle de COÛT MOYEN)
 
     ⚠ HONNÊTETÉ SUR LA FIDÉLITÉ : le GLM Gamma modélise la sévérité et n'est
@@ -396,10 +396,12 @@ class _GLMWalkForward:
                 maxiter=200, disp=False)
 
         elif self.famille == 'tweedie':
+            # PAS D'OFFSET (cf. correctif A3 _calibrer_tweedie, commit 0d2b9c2) :
+            # la cible prime pure est DÉJÀ le taux (cout/expo). Ajouter
+            # offset=log(expo) double-compterait l'exposition (prime prédite ∝ expo,
+            # au lieu d'exposure-indépendante). Même rationale que le GLM Tweedie d'A3.
             fam = sm.families.Tweedie(var_power=1.5, link=sm.families.links.Log())
-            offset = np.log(expo) if expo is not None else None
-            self._res = sm.GLM(y, Xc, family=fam, offset=offset).fit(
-                maxiter=200, disp=False)
+            self._res = sm.GLM(y, Xc, family=fam).fit(maxiter=200, disp=False)
 
         elif self.famille == 'gamma':
             if np.any(y <= 0):

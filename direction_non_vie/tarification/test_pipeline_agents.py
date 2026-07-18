@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 
 from core.plan_tarifaire import PlanTarifaire
 from direction_non_vie.tarification.pipeline_agents import (
-    pipeline_agents, ResultatAgents, ArbitrageCible, CIBLE_COUT,
+    pipeline_agents, ResultatAgents, ArbitrageCible, CIBLE_COUT, CIBLE_PRIME_PURE,
 )
 
 try:
@@ -97,12 +97,12 @@ class TestPipelineAgents(unittest.TestCase):
         cls.df = _portefeuille_auto(5000)
         cls.res = _lancer(cls.df)
 
-    def test_les_deux_arbitrages_sont_rendus(self):
+    def test_les_trois_arbitrages_sont_rendus(self):
         r = self.res
         self.assertIsInstance(r, ResultatAgents)
         self.assertTrue(r.a3.get('success'), f"A3 : {r.a3.get('erreur')}")
 
-        for arb in (r.frequence, r.cout):
+        for arb in (r.frequence, r.cout, r.prime_pure):
             with self.subTest(cible=arb.cible):
                 self.assertIsInstance(arb, ArbitrageCible)
                 self.assertIsNone(arb.erreur,
@@ -114,18 +114,23 @@ class TestPipelineAgents(unittest.TestCase):
                     (arb.a6.get('modele_production') or {}).get('modele'),
                     f"Aucun modèle de production sur '{arb.cible}'.")
 
-        # Les cibles sont bien DISTINCTES — sinon on arbitrerait deux fois la même.
+        # Les TROIS cibles sont DISTINCTES — sinon on arbitrerait deux fois la même.
         self.assertEqual(r.frequence.cible, _PLAN_AUTO.cible_frequence)
         self.assertEqual(r.cout.cible, CIBLE_COUT)
+        self.assertEqual(r.prime_pure.cible, CIBLE_PRIME_PURE)
 
-        # Le COÛT est réellement challengé : c'est toute la raison d'être du module.
-        # Avant l'orchestrateur, il n'avait qu'un candidat (le GLM Gamma d'A3).
+        # COÛT et PRIME PURE réellement challengés — plusieurs candidats chacun.
+        # Avant l'orchestrateur : le coût n'avait qu'un candidat (GLM Gamma d'A3),
+        # la prime pure directe n'était PAS challengée du tout (aucun A4/A5 dessus).
         self.assertGreater(r.cout.n_candidats, 1,
-            "L'arbitrage COÛT n'a qu'un candidat : A4/A5 ne concourent pas sur le "
-            "coût, la moitié du tarif n'est de nouveau plus challengée.")
-        print(f"    PA-1 Deux arbitrages ✅ | freq={r.frequence.statut_rag} "
-              f"({r.frequence.n_candidats} candidats) · cout={r.cout.statut_rag} "
-              f"({r.cout.n_candidats} candidats)")
+            "L'arbitrage COÛT n'a qu'un candidat : A4/A5 ne concourent pas.")
+        self.assertGreater(r.prime_pure.n_candidats, 1,
+            "L'arbitrage PRIME PURE n'a qu'un candidat : A4/A5 ne concourent pas "
+            "contre le Tweedie d'A3.")
+        print(f"    PA-1 Trois arbitrages ✅ | freq={r.frequence.statut_rag} "
+              f"({r.frequence.n_candidats}) · cout={r.cout.statut_rag} "
+              f"({r.cout.n_candidats}) · prime_pure={r.prime_pure.statut_rag} "
+              f"({r.prime_pure.n_candidats})")
 
     def test_cann_present_en_frequence_absent_en_cout(self):
         """RÈGLE ACTUARIELLE : le CANN est exp(GLM_gelé + offset·log(exposition)),
@@ -133,6 +138,7 @@ class TestPipelineAgents(unittest.TestCase):
         le sens même de E[S] = E[N] × E[C|N>0]. L'offset y serait faux."""
         m_freq = set((self.res.frequence.a5 or {}).get('metriques', {}))
         m_cout = set((self.res.cout.a5 or {}).get('metriques', {}))
+        m_pp   = set((self.res.prime_pure.a5 or {}).get('metriques', {}))
 
         self.assertIn('cann', m_freq,
             "Le CANN doit concourir sur la FRÉQUENCE : son offset log-exposition "
@@ -144,7 +150,13 @@ class TestPipelineAgents(unittest.TestCase):
         self.assertIn('tabnet', m_cout,
             "TabNet doit rester : c'est un réseau tabulaire générique, sans "
             "contrainte d'exposition.")
-        print(f"    PA-2 CANN freq={sorted(m_freq)} · cout={sorted(m_cout)} ✅")
+        self.assertNotIn('cann', m_pp,
+            "RÉGRESSION : le CANN a été calibré sur la PRIME PURE. Son offset "
+            "log(exposition) est une construction de comptage, incompatible avec "
+            "une cible déjà annualisée (exposure-indépendante).")
+        self.assertIn('tabnet', m_pp)
+        print(f"    PA-2 CANN freq={sorted(m_freq)} · cout={sorted(m_cout)} · "
+              f"prime_pure={sorted(m_pp)} ✅")
 
     def test_le_cout_tourne_sur_les_sinistres_seulement(self):
         """RÈGLE ACTUARIELLE : la sévérité est E[coût | sinistre]. S'entraîner sur
@@ -182,7 +194,7 @@ class TestPipelineAgents(unittest.TestCase):
         self.assertTrue(res['success'])
         self.assertIn('plan_empreinte', res)
         self.assertIn('date_calcul', res)
-        for cible in ('frequence', 'cout'):
+        for cible in ('frequence', 'cout', 'prime_pure'):
             with self.subTest(cible=cible):
                 self.assertIn(res[cible]['statut_rag'], ['VERT', 'AMBRE', 'ROUGE'])
                 self.assertTrue(res[cible]['classement'])
