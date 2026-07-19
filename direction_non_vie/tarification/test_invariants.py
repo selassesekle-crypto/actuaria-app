@@ -1353,6 +1353,11 @@ class TestInvariant_LeSystemeAccepteCeQuIlDoitAccepter(unittest.TestCase):
         r6 = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp',
                                 verbose=False).run(
             result_a2=r2, result_a3=r3, result_a4=r4, result_a5=None,
+            # plan= transmis (comme l'orchestrateur, correctif C2) : sans lui,
+            # ce test flagship n'exerçait PAS le chemin plan-dépendant — ni la
+            # normalisation Gini par exposition (V15 #3), ni le gating lift
+            # fréquence (ajout D) ne s'activaient (plan is None → _est_freq faux).
+            plan=_plan_auto,
             col_cible='nb_sinistres', generer_graphiques=False,
             generer_rapport_equipe=False, environnement='production',
             profil_valide_par='Actuaire')
