@@ -61,6 +61,13 @@ try:
     PLOTLY_OK = True
 except ImportError:
     PLOTLY_OK = False
+
+# Graphiques V3 (charte partagée core/charts_tarif) — import gardé, optionnel.
+try:
+    from core.charts_tarif import chart_shap_summary
+    _CHARTS_V3_OK = True
+except Exception:
+    _CHARTS_V3_OK = False
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
@@ -873,6 +880,17 @@ class AgentA4ML:
                 graphiques = self._generer_graphiques(
                     y_test, classement, feature_names
                 )
+            # Graphique SHAP V3 (charte core/charts_tarif) — OPTIONNEL : pas de
+            # SHAP (package absent / calcul_shap=False) → chart non produit.
+            if (generer_graphiques and PLOTLY_OK and _CHARTS_V3_OK
+                    and isinstance(shap_summary, dict)
+                    and shap_summary.get('importance_globale')):
+                try:
+                    graphiques['chart_shap_summary'] = chart_shap_summary(
+                        shap_summary['importance_globale'],
+                        titre='Importance SHAP — meilleur modèle ML')
+                except Exception as e:
+                    logger.debug(f"chart_shap_summary non produit : {e}")
 
             # Commentaire actuaire sénior
             statut_rag  = self._calculer_statut_rag(
@@ -2779,7 +2797,7 @@ class AgentA4ML:
             fig1.update_layout(**l1)
             graphiques["overfitting_train_test"] = fig1
         except Exception as e:
-            self.logger.warning(f"G1 overfitting : {e}")
+            logger.warning(f"G1 overfitting : {e}")
 
         # G2 — PSI évolution + seuils
         try:
@@ -2827,7 +2845,7 @@ class AgentA4ML:
             fig2.update_layout(**l2)
             graphiques["monitoring_gini"] = fig2
         except Exception as e:
-            self.logger.warning(f"G2 monitoring : {e}")
+            logger.warning(f"G2 monitoring : {e}")
 
         # G3 — Optimisation tarifaire CA/contrats
         try:
@@ -2863,7 +2881,7 @@ class AgentA4ML:
             fig3.update_layout(**l3)
             graphiques["optimisation_tarifaire"] = fig3
         except Exception as e:
-            self.logger.warning(f"G3 optimisation : {e}")
+            logger.warning(f"G3 optimisation : {e}")
 
         # G4 — Scorecard validation ML
         try:
@@ -2911,7 +2929,7 @@ class AgentA4ML:
             fig4.update_layout(**l4)
             graphiques["scorecard_validation_ml"] = fig4
         except Exception as e:
-            self.logger.warning(f"G4 scorecard ML : {e}")
+            logger.warning(f"G4 scorecard ML : {e}")
 
         return graphiques
 

@@ -73,6 +73,14 @@ try:
 except ImportError:
     PLOTLY_OK = False
 
+# Graphiques V3 (charte partagée core/charts_tarif) — import gardé, optionnel.
+try:
+    from core.charts_tarif import (
+        chart_relativites_glm, chart_residus_qq, chart_distribution_predictions)
+    _CHARTS_V3_OK = True
+except Exception:
+    _CHARTS_V3_OK = False
+
 # Statsmodels — bibliothèque de référence pour les GLM actuariels
 # Justification : statsmodels implémente les GLM selon la théorie statistique
 # classique (famille exponentielle, fonction de lien, déviance).
@@ -432,6 +440,9 @@ class AgentA3GLM:
                     res_poisson, res_gamma, res_tweedie,
                     col_frequence, col_cout, col_exposition
                 )
+            # Graphiques V3 (charte partagée) — ajoutés au même dict, OPTIONNELS.
+            if generer_graphiques and PLOTLY_OK and _CHARTS_V3_OK:
+                self._charts_tarif_v3(graphiques, res_poisson)
 
             statut_rag  = self._calculer_statut_rag(metriques_glob)
 
@@ -1808,6 +1819,38 @@ class AgentA3GLM:
     # GRAPHIQUES v2 — Style PowerBI/Bloomberg
     # ══════════════════════════════════════════════════════════════════════════
 
+    def _charts_tarif_v3(self, graphiques: dict, res_poisson: dict) -> None:
+        """Ajoute les graphiques V3 (core/charts_tarif) au dict `graphiques`.
+        Chaque figure est OPTIONNELLE : données manquantes → chart non produit,
+        le run continue (même pattern que synthese_mapping : absence = silence)."""
+        # Relativités exp(β) du Poisson (fréquence)
+        try:
+            rel = (res_poisson or {}).get('relativites')
+            if rel:
+                graphiques['chart_relativites_glm'] = chart_relativites_glm(
+                    rel, titre='Relativités GLM Poisson  exp(β)')
+        except Exception as e:
+            logger.debug(f"chart_relativites_glm non produit : {e}")
+        # QQ-plot des résidus de Pearson du Poisson
+        try:
+            mp = self.modeles.get('poisson')
+            rp = getattr(mp, 'resid_pearson', None) if mp is not None else None
+            if rp is not None:
+                graphiques['chart_residus_qq'] = chart_residus_qq(
+                    np.asarray(rp, dtype=float))
+        except Exception as e:
+            logger.debug(f"chart_residus_qq non produit : {e}")
+        # Distribution des fréquences prédites
+        try:
+            freq = (self.predictions or {}).get('frequence_annuelle')
+            if freq is not None and len(freq):
+                graphiques['chart_distribution_predictions'] = \
+                    chart_distribution_predictions(
+                        freq, unite='',
+                        titre='Distribution des fréquences prédites')
+        except Exception as e:
+            logger.debug(f"chart_distribution_predictions non produit : {e}")
+
     def _generer_graphiques(
         self,
         df_train:      pd.DataFrame,
@@ -2597,7 +2640,7 @@ class AgentA3GLM:
             fig1.update_layout(**l1)
             graphiques["gini_comparaison_glm"] = fig1
         except Exception as e:
-            self.logger.warning(f"G1 Gini GLM : {e}")
+            logger.warning(f"G1 Gini GLM : {e}")
 
         # G2 — Jauge sur-dispersion Poisson
         try:
@@ -2638,7 +2681,7 @@ class AgentA3GLM:
             )
             graphiques["sur_dispersion_poisson"] = fig2
         except Exception as e:
-            self.logger.warning(f"G2 Poisson : {e}")
+            logger.warning(f"G2 Poisson : {e}")
 
         # G3 — Jauge Durbin-Watson
         try:
@@ -2679,7 +2722,7 @@ class AgentA3GLM:
             )
             graphiques["durbin_watson"] = fig3
         except Exception as e:
-            self.logger.warning(f"G3 DW : {e}")
+            logger.warning(f"G3 DW : {e}")
 
         # G4 — Scorecard validation GLM
         try:
@@ -2727,7 +2770,7 @@ class AgentA3GLM:
             fig4.update_layout(**l4)
             graphiques["scorecard_validation_glm"] = fig4
         except Exception as e:
-            self.logger.warning(f"G4 scorecard GLM : {e}")
+            logger.warning(f"G4 scorecard GLM : {e}")
 
         return graphiques
 

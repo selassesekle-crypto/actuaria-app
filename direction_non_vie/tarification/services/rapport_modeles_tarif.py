@@ -49,6 +49,22 @@ BG        = '#F5F7FA'
 WHITE     = '#FFFFFF'
 TEXT      = '#1C2B3A'
 
+# ── Graphiques V3 (core/charts_tarif) — rendu HTML natif interactif ─────────────
+# plotly.js chargé UNE FOIS en CDN dans le <head> ; chaque figure rendue via
+# to_html(include_plotlyjs=False). Import gardé : si plotly/charts absents, les
+# figures sont simplement omises (rétro-compatible, comme synthese_mapping).
+try:
+    import plotly.offline as _po
+    from core.charts_tarif import CONFIG_PLOTLY as _CFG_PLOTLY
+    _PLOTLYJS_CDN = (
+        f'<script src="https://cdn.plot.ly/plotly-{_po.get_plotlyjs_version()}'
+        f'.min.js" charset="utf-8"></script>')
+    _CHARTS_HTML_OK = True
+except Exception:
+    _CFG_PLOTLY = {'displayModeBar': False}
+    _PLOTLYJS_CDN = ''
+    _CHARTS_HTML_OK = False
+
 # ── Helpers formatage ─────────────────────────────────────────────────────────
 def _f(v, dec=0) -> str:
     if v is None: return '—'
@@ -360,6 +376,37 @@ def export_html(
         or {}
     )
 
+    # ── Figures V3 (core/charts_tarif) — OPTIONNELLES (absente → rien affiché) ──
+    _figs_html = []
+    if _CHARTS_HTML_OK:
+        for _src, _key, _lbl in [
+            (result_a3, 'chart_relativites_glm',          'Relativités GLM Poisson  exp(β)'),
+            (result_a3, 'chart_residus_qq',               'QQ-plot des résidus de Pearson'),
+            (result_a3, 'chart_distribution_predictions', 'Distribution des fréquences prédites'),
+            (result_a4, 'chart_shap_summary',             'Importance SHAP — meilleur modèle ML'),
+            (result_a6, 'chart_lift_decile',              'Lift par décile de risque prédit'),
+            (result_a6, 'chart_lorenz_gini',              'Courbe de Lorenz & Gini'),
+            (result_a6, 'chart_walkforward_ae',           'Backtesting walk-forward A/E'),
+        ]:
+            _fig = ((_src or {}).get('graphiques', {}) or {}).get(_key)
+            if _fig is None:
+                continue
+            try:
+                _frag = _fig.to_html(full_html=False, include_plotlyjs=False,
+                                     config=_CFG_PLOTLY)
+                _figs_html.append(
+                    f'<div style="margin:16px 0;"><div style="color:{GOLD_L};'
+                    f'font-weight:600;font-size:13px;margin-bottom:6px;">{_lbl}</div>'
+                    f'{_frag}</div>')
+            except Exception as _e:
+                logger.debug(f"Figure {_key} non rendue : {_e}")
+    _plotly_cdn = _PLOTLYJS_CDN if _figs_html else ''
+    _section_figures = (
+        '<!-- FIGURES V3 --><div class="section"><div class="section-head">'
+        'Graphiques de validation</div><div class="section-body">'
+        + ''.join(_figs_html) + '</div></div>'
+    ) if _figs_html else ''
+
     def _row(cells, header=False):
         tag = 'th' if header else 'td'
         return '<tr>' + ''.join(f'<{tag}>{c}</{tag}>' for c in cells) + '</tr>'
@@ -383,6 +430,7 @@ def export_html(
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Rapport Tarification — ActuarIA</title>
+{_plotly_cdn}
 <style>
 :root {{
   --navy:{NAVY}; --navy-mid:{NAVY_MID}; --gold:{GOLD}; --gold-l:{GOLD_L};
@@ -621,7 +669,9 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
     html += """
   </div>
 </div>
-
+"""
+    html += _section_figures
+    html += """
 <!-- §7 COMMENTAIRE ACTUARIEL -->
 <div class="section">
   <div class="section-head">§7 — Commentaire Actuariel</div>

@@ -2071,7 +2071,7 @@ class AgentA5DeepLearning:
             fig1.update_layout(**l1)
             graphiques["convergence_loss"] = fig1
         except Exception as e:
-            self.logger.warning(f"G1 convergence : {e}")
+            logger.warning(f"G1 convergence : {e}")
 
         # G2 — Comparaison Gini DL vs GLM vs ML
         try:
@@ -2116,7 +2116,7 @@ class AgentA5DeepLearning:
             fig2.update_layout(**l2)
             graphiques["comparaison_dl_glm"] = fig2
         except Exception as e:
-            self.logger.warning(f"G2 comparaison : {e}")
+            logger.warning(f"G2 comparaison : {e}")
 
         # G3 — Jauge surapprentissage
         try:
@@ -2158,7 +2158,7 @@ class AgentA5DeepLearning:
             )
             graphiques["jauge_surapprentissage"] = fig3
         except Exception as e:
-            self.logger.warning(f"G3 surapprentissage : {e}")
+            logger.warning(f"G3 surapprentissage : {e}")
 
         # G4 — Scorecard validation DL
         try:
@@ -2203,7 +2203,7 @@ class AgentA5DeepLearning:
             fig4.update_layout(**l4)
             graphiques["scorecard_validation_dl"] = fig4
         except Exception as e:
-            self.logger.warning(f"G4 scorecard DL : {e}")
+            logger.warning(f"G4 scorecard DL : {e}")
 
         return graphiques
 

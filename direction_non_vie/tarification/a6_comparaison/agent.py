@@ -40,6 +40,14 @@ try:
     PLOTLY_OK = True
 except ImportError:
     PLOTLY_OK = False
+
+# Graphiques V3 (charte partagée core/charts_tarif) — import gardé, optionnel.
+try:
+    from core.charts_tarif import (
+        chart_lift_decile, chart_lorenz_gini, chart_walkforward_ae)
+    _CHARTS_V3_OK = True
+except Exception:
+    _CHARTS_V3_OK = False
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
@@ -348,6 +356,9 @@ class AgentA6Comparaison:
                 graphiques = self._generer_graphiques(
                     classement, modele_production, profil
                 )
+            # Graphiques V3 (charte partagée) — ajoutés au même dict, OPTIONNELS.
+            if generer_graphiques and PLOTLY_OK and _CHARTS_V3_OK:
+                self._charts_tarif_v3(graphiques, backtest, courbes)
 
             # ── AIDE À LA DÉCISION v3 ─────────────────────────────────────────
             fiche_decision = {}
@@ -470,6 +481,8 @@ class AgentA6Comparaison:
                 'fiche_decision': fiche_decision, 'audit_id': audit_id,
                 'commentaire': commentaire,   # P7 : commentaire actuaire inclus
                 'courbes': courbes,
+                'graphiques': graphiques,     # figures V3 (ÉTAPE 2) → rapport HTML
+
                 'audit_trail': _audit_trail_a6,  # Gouvernance exposée aux exports
                 'exclusions_conformite': _exclusions_conformite,
                 'alertes_conformite': _alertes_conformite,
@@ -1969,6 +1982,37 @@ class AgentA6Comparaison:
     # GRAPHIQUES v3 + AIDE À LA DÉCISION
     # ══════════════════════════════════════════════════════════════════════════
 
+    def _charts_tarif_v3(self, graphiques: dict, backtest: dict, courbes: dict) -> None:
+        """Ajoute les graphiques V3 (core/charts_tarif) au dict `graphiques`.
+        Chaque figure est OPTIONNELLE : données manquantes (pas de backtest, pas
+        de lift fréquence…) → chart non produit, le run continue (pattern
+        synthese_mapping : absence = silence)."""
+        bt = backtest or {}
+        cb = courbes or {}
+        # Lift par décile (vrai lift walk-forward de D)
+        try:
+            dec = bt.get('lift_deciles_wf')
+            if dec:
+                graphiques['chart_lift_decile'] = chart_lift_decile(
+                    dec, bt.get('lift_ratio'))
+        except Exception as e:
+            logger.debug(f"chart_lift_decile non produit : {e}")
+        # Courbe de Lorenz + aire de Gini
+        try:
+            lz = cb.get('lorenz') or {}
+            if lz.get('x') and lz.get('y'):
+                graphiques['chart_lorenz_gini'] = chart_lorenz_gini(
+                    lz['x'], lz['y'], cb.get('gini_observe'))
+        except Exception as e:
+            logger.debug(f"chart_lorenz_gini non produit : {e}")
+        # Backtesting walk-forward A/E par fenêtre
+        try:
+            wf = bt.get('walk_forward')
+            if wf:
+                graphiques['chart_walkforward_ae'] = chart_walkforward_ae(wf)
+        except Exception as e:
+            logger.debug(f"chart_walkforward_ae non produit : {e}")
+
     def _generer_graphiques(
         self,
         classement:       List[Dict],
@@ -2600,7 +2644,7 @@ class AgentA6Comparaison:
             fig1.update_layout(**l1)
             graphiques["scores_multicriteres"] = fig1
         except Exception as e:
-            self.logger.warning(f"G1 scores : {e}")
+            logger.warning(f"G1 scores : {e}")
 
         # G2 — Gini par modèle avec écart
         try:
@@ -2646,7 +2690,7 @@ class AgentA6Comparaison:
             fig2.update_layout(**l2)
             graphiques["gini_comparaison"] = fig2
         except Exception as e:
-            self.logger.warning(f"G2 Gini : {e}")
+            logger.warning(f"G2 Gini : {e}")
 
         # G3 — Radar multicritères pour le modèle retenu
         try:
@@ -2698,7 +2742,7 @@ class AgentA6Comparaison:
             )
             graphiques["radar_modele_retenu"] = fig3
         except Exception as e:
-            self.logger.warning(f"G3 radar : {e}")
+            logger.warning(f"G3 radar : {e}")
 
         # G4 — Scorecard validation sélection
         try:
@@ -2743,7 +2787,7 @@ class AgentA6Comparaison:
             fig4.update_layout(**l4)
             graphiques["scorecard_selection"] = fig4
         except Exception as e:
-            self.logger.warning(f"G4 scorecard : {e}")
+            logger.warning(f"G4 scorecard : {e}")
 
         return graphiques
 
