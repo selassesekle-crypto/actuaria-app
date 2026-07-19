@@ -255,9 +255,90 @@ class TestPipelineAgentsSansSinistre(unittest.TestCase):
               f"refusé, fréquence aboutit ({res.frequence.n_candidats} candidats)")
 
 
+@unittest.skipUnless(TORCH_OK, "PyTorch absent — A5 ne peut pas être exercé")
+class TestINV14LineageWalkForward(unittest.TestCase):
+    """INV-14 lineage — LE VERROU du chantier post-audit V15. Sur un vrai pipeline
+    auto, le modèle recalibré du walk-forward a la MÊME spécification que la
+    production : features ⊆ plan.colonnes_produites() SANS extra (correctif V15 #2),
+    même famille NON-proxy et fidélité rapportée True (V15 #4), et Gini WF normalisé
+    par l'exposition sur la fréquence (V15 #3). Tombe si l'un des correctifs régresse
+    (exposition réintroduite en covariable, fidélité cassée, normalisation retirée)."""
+
+    @classmethod
+    def setUpClass(cls):
+        import direction_non_vie.tarification.a6_comparaison.agent as a6mod
+        cls._wf_features = []   # features de chaque appel WF de construire_matrice_x
+        cls._gini_expo = []     # expo non-None ? à chaque _gini_lorenz
+        _cmx = a6mod.construire_matrice_x
+        _gini_fn = a6mod.AgentA6Comparaison._gini_lorenz
+
+        def _spy_cmx(fn, *a, **k):
+            r = _cmx(fn, *a, **k)
+            if 'walk-forward' in str(k.get('contexte', '')):
+                cls._wf_features.append(list(r))
+            return r
+
+        def _spy_gini(y_true, y_pred, expo=None):
+            cls._gini_expo.append(expo is not None)
+            return _gini_fn(y_true, y_pred, expo=expo)
+
+        a6mod.construire_matrice_x = _spy_cmx
+        a6mod.AgentA6Comparaison._gini_lorenz = staticmethod(_spy_gini)
+        try:
+            cls.res = _lancer(_portefeuille_auto(5000))
+        finally:
+            a6mod.construire_matrice_x = _cmx
+            a6mod.AgentA6Comparaison._gini_lorenz = staticmethod(_gini_fn)
+        cls.bt = cls.res.frequence.a6['backtest']
+        cls.prod = set(_PLAN_AUTO.colonnes_produites())
+
+    def test_1_features_wf_sous_ensemble_sans_extra(self):
+        """C2 — features du WF ⊆ plan.colonnes_produites(), AUCUNE en trop
+        (sous-ensemble strict toléré : un facteur constant sur la fenêtre est écarté)."""
+        self.assertTrue(self._wf_features,
+            "Aucun appel walk-forward capturé — le backtesting n'a pas tourné.")
+        en_trop = set()
+        for feats in self._wf_features:
+            en_trop |= (set(feats) - self.prod)
+            self.assertNotIn('exposition', feats,
+                "exposition RÉINTRODUITE comme covariable du WF — régression V15 #2.")
+            self.assertNotIn('log_exposition', feats)
+        self.assertEqual(en_trop, set(),
+            f"Le WF recalibre sur des features HORS production {sorted(en_trop)} — "
+            f"régression du correctif V15 #2 (lineage rompu).")
+        print(f"    INV14-1 features WF ⊆ production, 0 en trop ✅ | "
+              f"{len(self._wf_features[0])}/{len(self.prod)} (sous-ensemble toléré)")
+
+    def test_2_famille_recalibree_non_proxy(self):
+        """C4 — modèle recalibré de la MÊME famille que la production
+        (GLM_POISSON → _GLMWalkForward('poisson')), jamais un proxy GBM."""
+        recal = str(self.bt.get('modele_recalibre', ''))
+        prod_mod = (self.res.frequence.a6.get('modele_production') or {}).get('modele')
+        self.assertNotIn('proxy', recal.lower(),
+            f"Le WF a recalibré un PROXY ({recal}) au lieu de la famille de production.")
+        self.assertEqual(recal, prod_mod,
+            f"Modèle recalibré ({recal}) ≠ production ({prod_mod}) — famille divergente.")
+        print(f"    INV14-2 famille recalibrée == production ✅ | {recal}")
+
+    def test_3_fidelite_rapportee_vraie(self):
+        """C4 — modele_recalibre_fidele == True sur un pipeline SAIN (le garde-fou
+        features ne dégrade pas à tort)."""
+        self.assertIs(self.bt.get('modele_recalibre_fidele'), True,
+            "modele_recalibre_fidele=False sur un pipeline sain — C4 dégrade à tort.")
+        print(f"    INV14-3 fidélité rapportée True ✅")
+
+    def test_4_gini_wf_normalise_par_exposition(self):
+        """C3 — le Gini WF de la fréquence reçoit l'exposition (y/expo), pas None."""
+        self.assertTrue(any(self._gini_expo),
+            "Aucun _gini_lorenz n'a reçu d'exposition — normalisation y/expo de la "
+            "fréquence (correctif V15 #3) inactive.")
+        print(f"    INV14-4 Gini WF fréquence normalisé y/expo ✅ | "
+              f"{sum(self._gini_expo)}/{len(self._gini_expo)} appels avec expo")
+
+
 if __name__ == '__main__':
     print("=" * 65)
-    print("  TESTS pipeline_agents — orchestrateur 2 cibles")
+    print("  TESTS pipeline_agents — orchestrateur 3 cibles")
     print("=" * 65)
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(unittest.TestLoader().loadTestsFromModule(__import__('__main__')))
