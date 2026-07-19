@@ -827,7 +827,8 @@ class AgentA6Comparaison:
     # ══════════════════════════════════════════════════════════════════════════
 
     @staticmethod
-    def _gini_lorenz(y_true: np.ndarray, y_pred: np.ndarray) -> Optional[float]:
+    def _gini_lorenz(y_true: np.ndarray, y_pred: np.ndarray,
+                     expo: Optional[np.ndarray] = None) -> Optional[float]:
         """
         Gini walk-forward — formule canonique unique (audit V7 MINEUR #3).
 
@@ -845,13 +846,22 @@ class AgentA6Comparaison:
 
         Retourne None si le calcul n'est pas possible (pas de sinistre
         dans l'échantillon, ou prédiction constante).
+
+        expo (correctif V15 #3) : si fournie, l'observation accumulée est le TAUX
+        observé y_true/expo — homogène au taux prédit y_pred — au lieu du comptage
+        brut (sinon un contrat à forte exposition biaise la courbe de Lorenz).
+        None → comptage brut (rétro-compat). À ne fournir QUE pour une cible de
+        COMPTAGE (fréquence) : pour une sévérité ou une prime pure (déjà un taux),
+        y_true est déjà homogène à y_pred.
         """
         if y_true.sum() <= 0 or y_pred.std() <= 0:
             return None
+        obs = (y_true if expo is None
+               else y_true / np.maximum(np.asarray(expo, dtype=float), 1e-9))
         _trapz_fn = np.trapezoid if hasattr(np, 'trapezoid') else np.trapz
         ordre     = np.argsort(-y_pred)
-        y_sorted  = y_true[ordre]
-        lorenz    = np.cumsum(y_sorted) / max(y_true.sum(), 1e-9)
+        obs_sorted = obs[ordre]
+        lorenz    = np.cumsum(obs_sorted) / max(obs.sum(), 1e-9)
         return round(
             float(2 * _trapz_fn(lorenz, np.linspace(0, 1, len(lorenz))) - 1),
             4
@@ -1054,6 +1064,11 @@ class AgentA6Comparaison:
                         if col_expo in df_tr.columns
                         else None
                     )
+                    w_te = (
+                        df_te[col_expo].values
+                        if col_expo in df_te.columns
+                        else None
+                    )
                     # Recalibrer sur la fenêtre train
                     #
                     # Bug découvert lors des tests V7 (session de suivi de
@@ -1085,7 +1100,12 @@ class AgentA6Comparaison:
                     # extrayant le calcul dans _gini_lorenz(), désormais
                     # appelée ICI ET par le test — une seule formule, jamais
                     # deux versions qui peuvent diverger.
-                    gini_wf = self._gini_lorenz(y_te, pred_te)
+                    # correctif V15 #3 : normaliser par l'exposition UNIQUEMENT
+                    # pour la fréquence (y=comptage, pred=taux). Coût (sévérité) et
+                    # prime pure (déjà un taux) : y déjà homogène à pred → pas d'expo.
+                    _est_freq = plan is not None and col_cible == plan.cible_frequence
+                    gini_wf = self._gini_lorenz(
+                        y_te, pred_te, expo=w_te if _est_freq else None)
             except Exception as e_wf:
                 # Passé de logger.debug à logger.warning (audit V6) : une
                 # exception dans la recalibration WF est une erreur de code

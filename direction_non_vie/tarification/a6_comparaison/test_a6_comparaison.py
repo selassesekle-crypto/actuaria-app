@@ -374,6 +374,25 @@ class TestA6GiniWalkForwardSentinelles(unittest.TestCase):
         )
         print(f"    SENT4 Prédicteur aléatoire → Gini proche de 0 ✅ | {gini_alea}")
 
+    def test_sentinelle_normalisation_par_exposition(self):
+        """SENT5 — correctif V15 #3 : avec exposition, l'observation accumulée est
+        le TAUX y/expo (== Gini calculé sur y/expo), pas le comptage brut. Sinon
+        un contrat à forte exposition (donc plus de sinistres à risque égal) biaise
+        la courbe de Lorenz. Garde le mécanisme, source unique = le code réel."""
+        from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
+        rng  = np.random.default_rng(7)
+        rate = rng.exponential(0.5, 500)
+        expo = rng.uniform(0.1, 1.0, 500)
+        y    = rng.poisson(rate * expo).astype(float)     # comptage proportionnel au taux x expo
+        pred = rate                                        # le modele predit le taux
+        g_expo = AgentA6Comparaison._gini_lorenz(y, pred, expo=expo)
+        g_taux = AgentA6Comparaison._gini_lorenz(y / expo, pred)   # taux observe, brut
+        g_brut = AgentA6Comparaison._gini_lorenz(y, pred)          # ancien comportement (comptage brut)
+        self.assertIsNotNone(g_expo)
+        self.assertAlmostEqual(g_expo, g_taux, places=4,
+            msg="Gini avec expo doit accumuler y/expo (== Gini sur y/expo brut).")
+        print(f"    SENT5 y/expo applique ✅ | expo={g_expo} (==taux {g_taux}) vs brut {g_brut}")
+
 
 
 
