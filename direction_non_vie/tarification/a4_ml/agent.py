@@ -2605,8 +2605,11 @@ class AgentA4ML:
         # Déciles de prime prédite → prime observée moyenne dans chaque décile.
         # Écart |obs - pred| / pred par décile → calibration actuarielle.
         # Réf. : Denuit, Hainaut, Trufin (2019) — Autocalibration.
-        h4_statut    = "VERT"
-        h4_msg       = "Calibration non testée (prédictions non disponibles)"
+        # Défaut = AMBRE, PAS vert : une calibration non testée n'est pas une
+        # calibration validée (correctif faux-vert H4). La branche testée
+        # ci-dessous fixe VERT/AMBRE/ROUGE selon l'écart réel.
+        h4_statut    = "AMBRE"
+        h4_msg       = "Calibration NON testée (X_test/y_test absents) — à vérifier ⚠️"
         h4_conseil   = "Fournir X_test et y_test pour le reliability diagram"
         ecart_moy    = 0.0
         reliability  = []
