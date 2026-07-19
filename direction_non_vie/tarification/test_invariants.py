@@ -1429,6 +1429,40 @@ class TestInvariant_LeSystemeAccepteCeQuIlDoitAccepter(unittest.TestCase):
             "global du GLM Poisson.")
         print(f"    C-cap A3-H5 déviance ROUGE → {statut} (pas VERT) ✅")
 
+    def test_lift_frequence_rouge_bloque_le_vert(self):
+        """Ajout D — un lift de FRÉQUENCE ROUGE (< 2.0, modèle qui ne sépare pas
+        les risques) plafonne à AMBRE. Le lift coût/prime pure NE plafonne PAS
+        (seuil calé sur la fréquence uniquement). AMBRE ne plafonne pas non plus."""
+        from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
+        a6 = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp', verbose=False)
+        base = {'disponible': True, 'modele_recalibre_fidele': True,
+                'modele_recalibre': 'GLM_POISSON', 'gini_wf_moyen': 0.30,
+                'ae_ratio': 1.00, 'ae_moyen_wf': 1.00, 'n_fenetres_rouge': 0,
+                'stabilite_wf': '🟢 Stable'}
+        modele = {'score_global': 0.95, 'gini_test': 0.32}
+        # (1) Lift de FRÉQUENCE ROUGE → plafonné
+        bt1 = {**base, 'lift_statut': 'ROUGE', 'lift_ratio': 1.4,
+               'lift_cible_frequence': True}
+        self.assertNotEqual(
+            a6._calculer_statut_rag(modele, [modele], profil_valide_par='X',
+                environnement='production', backtest=bt1), 'VERT',
+            "Lift de fréquence ROUGE (< 2.0) doit plafonner à AMBRE.")
+        # (2) Lift ROUGE mais cible NON-fréquence (coût) → NON plafonné
+        bt2 = {**base, 'lift_statut': 'ROUGE', 'lift_ratio': 1.3,
+               'lift_cible_frequence': False}
+        self.assertEqual(
+            a6._calculer_statut_rag(modele, [modele], profil_valide_par='X',
+                environnement='production', backtest=bt2), 'VERT',
+            "Lift coût ROUGE ne doit PAS plafonner (seuil calé fréquence).")
+        # (3) Lift de fréquence AMBRE (cas INV-14c, ~2.5) → NON plafonné
+        bt3 = {**base, 'lift_statut': 'AMBRE', 'lift_ratio': 2.5,
+               'lift_cible_frequence': True}
+        self.assertEqual(
+            a6._calculer_statut_rag(modele, [modele], profil_valide_par='X',
+                environnement='production', backtest=bt3), 'VERT',
+            "Lift de fréquence AMBRE (2.0–3.0, modèle sain) ne plafonne pas.")
+        print("    D-cap lift : freq ROUGE→AMBRE · coût ROUGE→VERT · freq AMBRE→VERT ✅")
+
 
 if __name__ == '__main__':
     print("=" * 70)

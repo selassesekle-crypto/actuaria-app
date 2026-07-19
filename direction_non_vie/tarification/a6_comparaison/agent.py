@@ -562,6 +562,8 @@ class AgentA6Comparaison:
                 'classement':         classement,
                 'modele_production':  modele_production,
                 'backtest':           backtest,
+                'lift_ratio':         backtest.get('lift_ratio'),
+                'lift_statut':        backtest.get('lift_statut'),
                 # ── EXCLUSIONS DE CONFORMITÉ (audit V11 / constat I5) ─────────
                 # Agrégat des colonnes écartées par MatriceX chez A3, A4 et A5,
                 # avec le motif réglementaire de chaque exclusion. Remontées dans
@@ -1017,6 +1019,15 @@ class AgentA6Comparaison:
         # boucle si le WF recalibre sur des features hors production.
         _recalibration_est_fidele = _modele_construit_par_nom
 
+        # ── LIFT / SEGMENTATION PAR DÉCILE (ajout D) ──────────────────────────
+        # Piggyback WF : accumuler (prédiction, obs) hors-échantillon sur toutes
+        # les fenêtres, puis (après la boucle) trier par prédiction et déciler.
+        # Normalisation par exposition comme le Gini (V15 #3) : fréquence →
+        # obs = comptage/exposition (taux) ; coût & prime pure → obs = y.
+        _est_freq_cible = plan is not None and col_cible == plan.cible_frequence
+        _lift_pred = []
+        _lift_obs  = []
+
         for idx in range(1, len(annees)):
             annee_t = annees[idx]
             df_tr   = df[df[col_annee] < annee_t].copy()
@@ -1134,6 +1145,13 @@ class AgentA6Comparaison:
                     _est_freq = plan is not None and col_cible == plan.cible_frequence
                     gini_wf = self._gini_lorenz(
                         y_te, pred_te, expo=w_te if _est_freq else None)
+                    # Accumulation lift (ajout D) — mêmes unités que le Gini.
+                    _obs_lift = np.asarray(y_te, dtype=float)
+                    if _est_freq_cible and w_te is not None:
+                        _obs_lift = _obs_lift / np.maximum(
+                            np.asarray(w_te, dtype=float), 1e-9)
+                    _lift_pred.append(np.asarray(pred_te, dtype=float))
+                    _lift_obs.append(_obs_lift)
             except Exception as e_wf:
                 # Passé de logger.debug à logger.warning (audit V6) : une
                 # exception dans la recalibration WF est une erreur de code
@@ -1263,6 +1281,30 @@ class AgentA6Comparaison:
                      if w.get('gini_recalibre') is not None]
         gini_wf_moyen = round(float(np.mean(_ginis_wf)), 4) if _ginis_wf else None
 
+        # ── LIFT RATIO (ajout D) — décile haut-risque / décile bas-risque ─────
+        # Poolé sur toutes les fenêtres AVANT décilage (≫ points/décile → bien
+        # plus stable qu'un lift par fenêtre : mesuré par-fenêtre 1.94–3.24,
+        # poolé 2.55 sur le même portefeuille auto sain). Aléatoire → ~1 ;
+        # modèle sain de fréquence → ~2.5. Complément « à l'endroit » du Gini.
+        lift_ratio  = None
+        lift_statut = None
+        if _lift_pred:
+            _p_all = np.concatenate(_lift_pred)
+            _o_all = np.concatenate(_lift_obs)
+            _fini  = np.isfinite(_p_all) & np.isfinite(_o_all)
+            _p_all, _o_all = _p_all[_fini], _o_all[_fini]
+            # 10 déciles exigent assez de points ET une prédiction non dégénérée.
+            if len(_p_all) >= 100 and float(np.std(_p_all)) > 1e-12:
+                _o_tri   = _o_all[np.argsort(_p_all)]
+                _deciles = [d for d in np.array_split(_o_tri, 10) if len(d) > 0]
+                if len(_deciles) >= 2:
+                    _d_bas  = float(np.mean(_deciles[0]))   # prédiction la + basse
+                    _d_haut = float(np.mean(_deciles[-1]))  # prédiction la + haute
+                    lift_ratio  = round(_d_haut / max(_d_bas, 1e-6), 4)
+                    lift_statut = ('VERT'  if lift_ratio >= 3.0 else
+                                   'AMBRE' if lift_ratio >= 2.0 else
+                                   'ROUGE')
+
         backtest.update({
             'disponible':        True,
             'split':             'walk_forward_temporel_avec_recalibration',
@@ -1280,6 +1322,9 @@ class AgentA6Comparaison:
             'n_fenetres':        len(walk_forward),
             'n_fenetres_rouge':  n_rouge,
             'gini_wf_moyen':     gini_wf_moyen,
+            'lift_ratio':          lift_ratio,
+            'lift_statut':         lift_statut,
+            'lift_cible_frequence': _est_freq_cible,
             'modele_recalibre':  _modele_reel_recalibre,
             'modele_recalibre_fidele': _recalibration_est_fidele,
             'walk_forward':      walk_forward,
@@ -1556,6 +1601,34 @@ class AgentA6Comparaison:
                 "Statut plafonné à AMBRE en environnement 'production'."
             )
 
+        # ── POUVOIR DISCRIMINANT — LIFT PAR DÉCILE (ajout D) ──────────────────
+        # Le WF a poolé le lift décile-10/décile-1 du modèle de production
+        # hors-échantillon. Un lift ROUGE (< 2.0) sur la FRÉQUENCE signale un
+        # tarif qui ne suit pas le risque — la prime ne sépare pas les profils,
+        # même si le Gini global paraît acceptable. Plafond AMBRE en production.
+        #
+        # LIMITÉ À LA FRÉQUENCE (lift_cible_frequence) — décision étayée par la
+        # mesure : le seuil 2.0 est calé sur la fréquence (auto sain → lift poolé
+        # ~2.5, plancher aléatoire ~1.1). La SÉVÉRITÉ (coût) et la prime pure ont
+        # un lift atteignable structurellement plus bas (coût par sinistre bien
+        # plus bruité → ~1.3 même pour un bon Gamma). Appliquer 2.0 au coût
+        # plafonnerait à tort des modèles de sévérité sains. Le lift coût/prime
+        # pure reste CALCULÉ et EXPOSÉ (informatif), mais ne plafonne pas le VERT
+        # — même prudence que A3-H2 : pas de seuil hors domaine de calibration.
+        # À caler séparément sur données réelles de coût.
+        _lift_statut = (backtest or {}).get('lift_statut')
+        _lift_ok = not (
+            environnement == 'production'
+            and (backtest or {}).get('lift_cible_frequence', False)
+            and _lift_statut == 'ROUGE'
+        )
+        if not _lift_ok:
+            logger.warning(
+                f"[POUVOIR DISCRIMINANT] Lift walk-forward de FRÉQUENCE ROUGE "
+                f"(ratio={(backtest or {}).get('lift_ratio')}, décile-10/décile-1 "
+                f"< 2.0) : le modèle de production ne sépare pas les risques. "
+                f"Statut plafonné à AMBRE en environnement 'production'.")
+
         # ── ANCRAGE DU CANN (Wüthrich) — audit 2026-07 ────────────────────────
         # Un CANN dont la couche GLM n'est PAS gelée (glm_gele=False) n'est pas un
         # vrai CANN : c'est un réseau libre, NON interprétable (audit S2 / ACPR).
@@ -1747,7 +1820,7 @@ class AgentA6Comparaison:
         if (score >= 0.60 and gini >= 0.15 and _gouvernance_ok
                 and _backtest_ok and _wf_fidele_ok and _wf_resultat_ok
                 and _gini_plausible and _cann_ancre_ok and _dl_confirme_ok
-                and _plan_complet_ok and _hypotheses_ok):
+                and _plan_complet_ok and _hypotheses_ok and _lift_ok):
             return 'VERT'
         # ── ANTI-SÉLECTION : DISQUALIFIANT (auto-audit 11/07/2026) ────────────
         # Un Gini NÉGATIF signifie que le modèle discrimine À L'ENVERS : il
