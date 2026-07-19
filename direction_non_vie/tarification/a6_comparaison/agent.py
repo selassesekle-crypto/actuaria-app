@@ -192,6 +192,11 @@ class AgentA6Comparaison:
         result_a3:   Optional[Dict] = None,
         result_a4:   Optional[Dict] = None,
         result_a5:   Optional[Dict] = None,
+        # Plan signé = autorité des features. Passé, le walk-forward recalibre sur
+        # plan.colonnes_produites() (comme A3/A4/A5) au lieu de « toutes les colonnes
+        # numériques » → le modèle recalibré a la MÊME spécification que la production
+        # (correctif V15 #2). None → repli sur l'ancien comportement (rétro-compat).
+        plan:        Optional[Any] = None,
         col_cible:   str = 'prime_pure',
         col_expo:    str = 'exposition',
         profil:      str = 'equilibre',
@@ -327,7 +332,7 @@ class AgentA6Comparaison:
 
             # ── ÉTAPE 4 : BACKTESTING TEMPOREL ───────────────────────────────
             logger.info("Étape 4/5 : Backtesting temporel")
-            backtest = self._backtesting_temporel(df, col_cible, col_expo, classement=classement)
+            backtest = self._backtesting_temporel(df, col_cible, col_expo, classement=classement, plan=plan)
             rapport['etapes'].append('backtesting')
             rapport['backtest'] = backtest
 
@@ -858,6 +863,7 @@ class AgentA6Comparaison:
         col_cible:  str,
         col_expo:   str,
         classement: list = None,
+        plan:       Optional[Any] = None,
     ) -> Dict:
         """
         Backtesting temporel Walk-Forward + Test A/E global et par segment.
@@ -1030,7 +1036,8 @@ class AgentA6Comparaison:
                 # le modèle réellement entraîné par A4/A5 sans genre).
                 # La cible reste lue via df_tr[col_cible], indépendamment de _cols_num.
                 _cols_num = list(construire_matrice_x(
-                    _cols_num, contexte='A6 — walk-forward', logger_agent=logger,
+                    _cols_num, plan=plan,   # correctif V15 #2 : plan = autorité des features du WF
+                    contexte='A6 — walk-forward', logger_agent=logger,
                     # ⚠ CRUCIAL : sans le contrôle par l'effet ici, le
                     # walk-forward est contaminé par la MÊME fuite que le modèle
                     # et la CONFIRME au lieu de la détecter (audit V12 : Gini_WF

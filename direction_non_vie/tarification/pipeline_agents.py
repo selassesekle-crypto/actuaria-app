@@ -259,7 +259,7 @@ def pipeline_agents(
         r6 = AgentA6Comparaison(**_a).run(
             result_a2=r2_cible, result_a3=r3, result_a4=r4,
             result_a5=r5 if r5.get("success") else None,
-            col_cible=cible, environnement=environnement,
+            col_cible=cible, plan=plan, environnement=environnement,
             profil_valide_par=profil_valide_par,
             valide_par_actuaire_dl=valide_par_actuaire_dl,
             rapport_mapping=rapport_mapping,
