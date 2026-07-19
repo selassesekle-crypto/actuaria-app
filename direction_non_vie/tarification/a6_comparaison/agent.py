@@ -1288,6 +1288,7 @@ class AgentA6Comparaison:
         # modèle sain de fréquence → ~2.5. Complément « à l'endroit » du Gini.
         lift_ratio  = None
         lift_statut = None
+        lift_deciles_wf = None   # phase graphiques : 10 déciles obs. pour chart_lift_decile
         if _lift_pred:
             _p_all = np.concatenate(_lift_pred)
             _o_all = np.concatenate(_lift_obs)
@@ -1304,6 +1305,9 @@ class AgentA6Comparaison:
                     lift_statut = ('VERT'  if lift_ratio >= 3.0 else
                                    'AMBRE' if lift_ratio >= 2.0 else
                                    'ROUGE')
+                    # phase graphiques : moyenne observée par décile (bas→haut
+                    # risque prédit) — alimente chart_lift_decile (vrai lift WF).
+                    lift_deciles_wf = [round(float(np.mean(d)), 6) for d in _deciles]
 
         backtest.update({
             'disponible':        True,
@@ -1324,6 +1328,7 @@ class AgentA6Comparaison:
             'gini_wf_moyen':     gini_wf_moyen,
             'lift_ratio':          lift_ratio,
             'lift_statut':         lift_statut,
+            'lift_deciles_wf':     lift_deciles_wf,
             'lift_cible_frequence': _est_freq_cible,
             'modele_recalibre':  _modele_reel_recalibre,
             'modele_recalibre_fidele': _recalibration_est_fidele,
