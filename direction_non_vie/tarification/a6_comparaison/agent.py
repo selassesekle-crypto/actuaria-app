@@ -1793,17 +1793,16 @@ class AgentA6Comparaison:
         # non câblé). Une hypothèse plafonnante en ROUGE plafonne à AMBRE.
         # NE SONT PAS plafonnantes :
         #  · A3-H3 / A4-H3 (Gini) : déjà couvertes par le gate (pas de doublon) ;
-        #  · A3-H4 (stabilité bootstrap) : informative seulement ;
-        #  · A3-H2 (homoscédasticité) : ⚠ EXCLUE PARCE QUE LE CONTRÔLE EST CASSÉ,
-        #    PAS parce qu'elle serait sans importance. Sa métrique
-        #    std(résidus quintile)/std_global vaut ≈1.0 pour un modèle
-        #    HOMOSCÉDASTIQUE, alors que le seuil VERT exige <0.30 : inatteignable.
-        #    Elle flague ROUGE quasiment TOUT modèle (mesuré 1.03) → la câbler
-        #    rendrait le GLM de fréquence jamais-VERT (régression du correctif V14
-        #    « un GLM peut enfin être certifié »). À RÉPARER séparément (vraie
-        #    mesure d'homoscédasticité), PUIS câbler.
+        #  · A3-H4 (stabilité bootstrap) : informative seulement.
+        # A3-H2 (homoscédasticité) : RÉINTÉGRÉE aux plafonnantes — sa métrique
+        # était CASSÉE (ancien std_quintile/std_global < 0.30 inatteignable → ROUGE
+        # sur TOUT modèle sain, mesuré 1.03) ; réparée en ratio de variance max/min
+        # entre quintiles de μ̂ (VERT<2.0), qui vaut ~1.07 sur un GLM sain (mesuré)
+        # et ne monte qu'en cas d'hétéroscédasticité réelle. Réparée → elle rejoint
+        # les plafonnantes comme prévu (contrôle de spécification du GLM).
         _HYP_PLAFONNANTES = [
             (hypotheses_glm, 'h1_poisson'),
+            (hypotheses_glm, 'h2_homosc'),     # réintégrée (métrique réparée : ratio de variance)
             (hypotheses_glm, 'h5_deviance'),   # ajout C — déviance résiduelle / df
             (hypotheses_ml,  'h1_overfitting'),
             (hypotheses_ml,  'h2_psi'),

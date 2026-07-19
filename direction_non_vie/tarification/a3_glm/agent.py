@@ -2244,9 +2244,9 @@ class AgentA3GLM:
              Ratio > 5 → sur-dispersion forte → NegBin ❌
 
         H2 — Homoscédasticité des résidus de Pearson
-             Les résidus (Y - μ̂) / √μ̂ doivent être constants
-             quelle que soit la valeur prédite μ̂.
-             CV résidus par décile < 30% → homoscédastique ✅
+             Les résidus (Y - μ̂) / √μ̂ doivent avoir une VARIANCE
+             constante quelle que soit la valeur prédite μ̂.
+             Ratio variance max/min entre quintiles de μ̂ < 2.0 → homoscédastique ✅
              Un CV élevé sur les déciles extrêmes signale un modèle
              mal spécifié pour les risques forts ou faibles.
              Réf. : Mildenhall (1999) — GLM for Insurance Ratemaking.
@@ -2297,59 +2297,64 @@ class AgentA3GLM:
             h1_msg    = f"Var/E = {ratio_disp:.2f} > 5 → Sur-dispersion forte ❌"
             h1_conseil= "GLM Poisson inadapté — utiliser Négative Binomiale (NegBin)"
 
-        # ── H2 — Homoscédasticité résidus de Pearson ─────────────────────────
-        # Résidus de Pearson : (Y - μ̂) / √μ̂
-        # On vérifie que leur variance est constante par décile de μ̂.
-        # Un CV élevé sur les extrêmes signale une mauvaise spécification.
+        # ── H2 — Homoscédasticité des résidus de Pearson ─────────────────────
+        # Résidus de Pearson (Y−μ̂)/√μ̂ : sous une spécification Poisson CORRECTE
+        # ils ont une variance ≈ 1 sur TOUTE la plage de μ̂ (V(μ)=μ pour Poisson →
+        # résidu standardisé à variance unitaire). On teste l'HÉTÉROSCÉDASTICITÉ =
+        # leur variance VARIE-T-ELLE selon le niveau de risque ? Métrique = ratio
+        # var_max/var_min entre 5 quintiles de μ̂ (EFFET DE TAILLE, sans dimension,
+        # INSENSIBLE À N — contrairement à un test de significativité type
+        # Breusch-Pagan dont la p-valeur → 0 sur les grands portefeuilles
+        # actuariels et flaguerait ROUGE tout modèle). Bon modèle : variances
+        # ≈ [1,1,1,1,1] → ratio ≈ 1 (mesuré auto sain 1.07) ; sur-dispersion
+        # sévère → ~2.9 (AMBRE).
+        # ⚠ ANCIENNE métrique max(std_quintile/std_global) < 0.30 : CASSÉE —
+        #   valait ≈1.0 pour un modèle HOMOSCÉDASTIQUE (chaque quintile a std ≈
+        #   std_global), seuil <0.30 INATTEIGNABLE → ROUGE sur TOUT modèle.
         try:
             modele_p = self.modeles.get('poisson')
             if modele_p is not None and hasattr(modele_p, 'fittedvalues'):
-                mu_hat    = np.array(modele_p.fittedvalues, dtype=float)
-                col_freq2 = next(
-                    (c for c in ['nb_sinistres', 'frequence', 'freq']
-                     if hasattr(df_train, 'columns') and c in df_train.columns),
-                    None
-                )
-                if col_freq2 and len(mu_hat) == len(df_train):
-                    y2         = df_train[col_freq2].values.astype(float)
-                    res_pearson= (y2 - mu_hat) / np.sqrt(np.maximum(mu_hat, 1e-6))
-                    # Calculer le CV par quintile de μ̂
-                    n_q = 5
-                    deciles = np.array_split(
-                        res_pearson[np.argsort(mu_hat)], n_q
-                    )
-                    # CV normalisé par std global — robuste quand moyenne ≈ 0
-                    # (les résidus de Pearson sont centrés, donc mean ≈ 0 par
-                    # construction, ce qui rendrait CV = std/|mean| explosif)
-                    std_global = float(np.std(res_pearson)) or 1.0
-                    cv_par_decile = [
-                        float(np.std(d) / std_global)
-                        for d in deciles if len(d) > 5
-                    ]
-                    cv_max = float(np.max(cv_par_decile)) if cv_par_decile else 0.20
-                    cv_moy = float(np.mean(cv_par_decile)) if cv_par_decile else 0.20
+                mu_hat      = np.asarray(modele_p.fittedvalues, dtype=float)
+                res_pearson = np.asarray(getattr(modele_p, 'resid_pearson', []),
+                                         dtype=float)
+                if res_pearson.size != mu_hat.size:
+                    # repli : recalcul manuel depuis la cible d'entraînement
+                    col_freq2 = next(
+                        (c for c in ['nb_sinistres', 'frequence', 'freq']
+                         if hasattr(df_train, 'columns') and c in df_train.columns),
+                        None)
+                    res_pearson = (
+                        (df_train[col_freq2].values.astype(float) - mu_hat)
+                        / np.sqrt(np.maximum(mu_hat, 1e-6))
+                        if col_freq2 and len(mu_hat) == len(df_train)
+                        else np.array([]))
+                if res_pearson.size >= 50:
+                    quintiles = [
+                        d for d in np.array_split(res_pearson[np.argsort(mu_hat)], 5)
+                        if len(d) > 5]
+                    var_par_quintile = [float(np.var(d)) for d in quintiles]
+                    ratio_variance = (
+                        max(var_par_quintile) / max(min(var_par_quintile), 1e-9)
+                        if len(var_par_quintile) >= 2 else 1.0)
                 else:
-                    cv_max, cv_moy = 0.20, 0.20
-                    cv_par_decile  = []
+                    ratio_variance, var_par_quintile = 1.0, []
             else:
-                cv_max, cv_moy = 0.20, 0.20
-                cv_par_decile  = []
+                ratio_variance, var_par_quintile = 1.0, []
         except Exception:
-            cv_max, cv_moy = 0.20, 0.20
-            cv_par_decile  = []
+            ratio_variance, var_par_quintile = 1.0, []
 
-        if cv_max < 0.30:
+        if ratio_variance < 2.0:
             h2_statut = "VERT"
-            h2_msg    = f"CV résidus Pearson max = {cv_max:.2f} < 0.30 → Homoscédasticité ✅"
-            h2_conseil= "Résidus homogènes — le GLM est bien spécifié sur toute la plage de risque"
-        elif cv_max < 0.60:
+            h2_msg    = f"Ratio variance résidus Pearson (max/min quintiles) = {ratio_variance:.2f} < 2.0 → Homoscédasticité ✅"
+            h2_conseil= "Dispersion homogène entre bandes de risque — le GLM est bien spécifié sur toute la plage"
+        elif ratio_variance < 3.0:
             h2_statut = "AMBRE"
-            h2_msg    = f"CV résidus Pearson max = {cv_max:.2f} ∈ [0.30, 0.60] → Hétéroscédasticité légère ⚠️"
-            h2_conseil= "Vérifier les déciles extrêmes · Ajouter variables d'interaction · Considérer Tweedie"
+            h2_msg    = f"Ratio variance résidus Pearson (max/min quintiles) = {ratio_variance:.2f} ∈ [2.0, 3.0) → Hétéroscédasticité légère ⚠️"
+            h2_conseil= "La dispersion varie selon le risque — vérifier les bandes extrêmes · interactions · Tweedie"
         else:
             h2_statut = "ROUGE"
-            h2_msg    = f"CV résidus Pearson max = {cv_max:.2f} > 0.60 → Hétéroscédasticité forte ❌"
-            h2_conseil= "Modèle mal spécifié — risques forts ou faibles mal modélisés · Revoir la segmentation"
+            h2_msg    = f"Ratio variance résidus Pearson (max/min quintiles) = {ratio_variance:.2f} ≥ 3.0 → Hétéroscédasticité forte ❌"
+            h2_conseil= "Variance résiduelle très inégale entre risques forts et faibles — revoir la spécification / segmentation"
 
         # ── H3 — Qualité d'ajustement (Gini) ─────────────────────────────────
         gini_poisson = metriques.get('poisson', {}).get('gini', 0)
@@ -2490,13 +2495,12 @@ class AgentA3GLM:
                 "titre_graphique": f"{'✅' if h1_statut=='VERT' else '⚠️' if h1_statut=='AMBRE' else '❌'} Distribution Poisson — Var/E = {ratio_disp:.2f}",
             },
             "h2_homosc": {
-                "cv_max":        round(cv_max, 4),
-                "cv_moy":        round(cv_moy, 4),
-                "cv_par_decile": [round(v, 4) for v in cv_par_decile],
+                "ratio_variance":   round(ratio_variance, 4),
+                "var_par_quintile": [round(v, 4) for v in var_par_quintile],
                 "statut":        h2_statut,
                 "message":       h2_msg,
                 "conseil":       h2_conseil,
-                "titre_graphique": f"{'✅' if h2_statut=='VERT' else '⚠️' if h2_statut=='AMBRE' else '❌'} Homoscédasticité — CV résidus max = {cv_max:.2f}",
+                "titre_graphique": f"{'✅' if h2_statut=='VERT' else '⚠️' if h2_statut=='AMBRE' else '❌'} Homoscédasticité — ratio variance max/min = {ratio_variance:.2f}",
             },
             "h3_ajustement": {
                 "gini_poisson": round(gini_poisson, 4),

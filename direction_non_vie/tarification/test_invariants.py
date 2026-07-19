@@ -1394,8 +1394,8 @@ class TestInvariant_LeSystemeAccepteCeQuIlDoitAccepter(unittest.TestCase):
 
     def test_hypotheses_saines_le_vert_reste_accessible(self):
         """Correctif B — contrôle NÉGATIF : aucune plafonnante ROUGE → VERT reste
-        accessible. Vérifie aussi que A3-H2 ROUGE (EXCLUE car métrique cassée) et
-        A4-H4 AMBRE (AMBRE ne plafonne pas) ne bloquent PAS."""
+        accessible. Vérifie aussi qu'A4-H4 AMBRE (AMBRE ne plafonne pas) ne bloque
+        PAS. (A3-H2, jadis EXCLUE car cassée, est RÉINTÉGRÉE et saine ici.)"""
         from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
         a6 = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp', verbose=False)
         bt = {'disponible': True, 'modele_recalibre_fidele': True,
@@ -1407,14 +1407,33 @@ class TestInvariant_LeSystemeAccepteCeQuIlDoitAccepter(unittest.TestCase):
             modele, [modele], profil_valide_par='X', environnement='production',
             backtest=bt,
             hypotheses_glm={'h1_poisson': {'statut': 'VERT'},
-                            'h2_homosc': {'statut': 'ROUGE'}},   # EXCLUE (cassée)
+                            'h2_homosc': {'statut': 'VERT'}},   # réintégrée, saine
             hypotheses_ml={'h1_overfitting': {'statut': 'VERT'},
                            'h2_psi': {'statut': 'VERT'},
                            'h4_calibration': {'statut': 'AMBRE'}})  # AMBRE ne plafonne pas
         self.assertEqual(statut, 'VERT',
-            "Hypothèses saines : A3-H2 ROUGE est EXCLUE (métrique cassée) et A4-H4 "
-            "AMBRE n'est pas plafonnant → VERT doit rester accessible.")
-        print(f"    B-cap saines → VERT ✅ (A3-H2 ROUGE exclue · A4-H4 AMBRE OK)")
+            "Hypothèses saines (A3-H2 réintégrée=VERT) et A4-H4 AMBRE n'est pas "
+            "plafonnant → VERT doit rester accessible.")
+        print(f"    B-cap saines → VERT ✅ (A3-H2 réintégrée VERT · A4-H4 AMBRE OK)")
+
+    def test_h2_homoscedasticite_rouge_bloque_le_vert(self):
+        """Correctif A3-H2 — la métrique d'homoscédasticité réparée (ratio de
+        variance max/min entre quintiles) REJOINT les plafonnantes : un h2_homosc
+        ROUGE plafonne à AMBRE, comme les autres hypothèses de spécification GLM."""
+        from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
+        a6 = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp', verbose=False)
+        bt = {'disponible': True, 'modele_recalibre_fidele': True,
+              'modele_recalibre': 'GLM_POISSON', 'gini_wf_moyen': 0.30,
+              'ae_ratio': 1.00, 'ae_moyen_wf': 1.00, 'n_fenetres_rouge': 0,
+              'stabilite_wf': '🟢 Stable'}
+        modele = {'score_global': 0.95, 'gini_test': 0.32}
+        statut = a6._calculer_statut_rag(
+            modele, [modele], profil_valide_par='X', environnement='production',
+            backtest=bt, hypotheses_glm={'h2_homosc': {'statut': 'ROUGE'}})
+        self.assertNotEqual(statut, 'VERT',
+            "A3-H2 (homoscédasticité) ROUGE doit plafonner à AMBRE — la métrique "
+            "réparée est désormais câblée dans les plafonnantes.")
+        print(f"    A3-H2-cap homoscédasticité ROUGE → {statut} (pas VERT) ✅")
 
     def test_h5_deviance_rouge_bloque_le_vert(self):
         """Ajout C — A3-H5 (déviance résiduelle / df) est PLAFONNANTE : ROUGE

@@ -152,7 +152,7 @@ def export_excel_a3(result_a3: Dict, audit_id: str = "") -> bytes:
         r = 7
         hyp_map = [
             ("h1_poisson",  "H1 — Sur-dispersion Poisson",         "ratio_disp"),
-            ("h2_homosc",   "H2 — Homoscédasticité résidus",       "cv_max"),
+            ("h2_homosc",   "H2 — Homoscédasticité résidus",       "ratio_variance"),
             ("h3_ajustement","H3 — Qualité ajustement (Gini)",     "gini_max"),
             ("h4_stabilite","H4 — Stabilité relativités bootstrap","cv_max"),
         ]

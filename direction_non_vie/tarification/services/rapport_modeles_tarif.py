@@ -154,7 +154,7 @@ def _construire_contexte_tarif(
         "",
         "=== HYPOTHÈSES GLM ===",
         f"H1 Sur-dispersion : {hyp3.get('h1_poisson',{}).get('statut','?')} | Var/E={hyp3.get('h1_poisson',{}).get('ratio_disp','—')}",
-        f"H2 Homoscédasticité : {hyp3.get('h2_homosc',{}).get('statut','?')} | CV max={hyp3.get('h2_homosc',{}).get('cv_max','—')}",
+        f"H2 Homoscédasticité : {hyp3.get('h2_homosc',{}).get('statut','?')} | Ratio var={hyp3.get('h2_homosc',{}).get('ratio_variance','—')}",
         f"H3 Gini : {hyp3.get('h3_ajustement',{}).get('statut','?')} | Gini max={hyp3.get('h3_ajustement',{}).get('gini_max','—')}",
         f"H4 Stabilité relativités : {hyp3.get('h4_stabilite',{}).get('statut','?')} | CV max={hyp3.get('h4_stabilite',{}).get('cv_max','—')} | Instables={hyp3.get('h4_stabilite',{}).get('vars_instables',[])}",
         "",
@@ -527,7 +527,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
       <tr><th>Hypothèse</th><th>Statut</th><th>Valeur</th><th>Conseil</th></tr>
 """
     html += _hyp_row('h1_poisson','H1 — Sur-dispersion Poisson','ratio_disp')
-    html += _hyp_row('h2_homosc','H2 — Homoscédasticité résidus Pearson','cv_max')
+    html += _hyp_row('h2_homosc','H2 — Homoscédasticité résidus Pearson','ratio_variance')
     html += _hyp_row('h3_ajustement','H3 — Qualité ajustement (Gini)','gini_max')
     html += _hyp_row('h4_stabilite','H4 — Stabilité relativités bootstrap','cv_max')
     html += _hyp_row('h1_overfitting','H1 ML — Overfitting','ratio')
