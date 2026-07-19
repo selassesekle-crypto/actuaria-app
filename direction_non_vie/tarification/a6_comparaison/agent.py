@@ -987,13 +987,19 @@ class AgentA6Comparaison:
         else:
             _modele_nom = _modele_nom_brut  # GLM_*/DL_* — non couvert, proxy direct
         _modele_reel_recalibre = None  # nom effectivement utilisé, jamais menteur
-        _recalibration_est_fidele = False
+        # FAMILLE (correctif V15 #4) : « construit par nom » EST le contrôle de
+        # famille — un nom buildable donne la MÊME famille que la production
+        # (GLM_POISSON→_GLMWalkForward(poisson), ML_GBM→GBM) ; un nom NON buildable
+        # (DL_*, lib manquante) retombe en proxy GBM = famille DIFFÉRENTE. Ce flag
+        # pilote build-vs-proxy ; la fidélité RAPPORTÉE le complète par le contrôle
+        # de FEATURES (dans la boucle ci-dessous).
+        _modele_construit_par_nom = False
 
         if CREER_MODELE_ML_OK:
             try:
                 _test_modele = creer_modele_ml_pour_nom(_modele_nom, col_cible)
                 _modele_reel_recalibre  = _modele_nom_brut
-                _recalibration_est_fidele = True
+                _modele_construit_par_nom = True
             except (ImportError, ValueError) as e_fabrique:
                 logger.warning(
                     f"[Walk-forward] Impossible de recalibrer '{_modele_nom_brut}' "
@@ -1003,6 +1009,11 @@ class AgentA6Comparaison:
                 _modele_reel_recalibre = f"{_modele_nom_brut} → proxy GBM ({e_fabrique})"
         else:
             _modele_reel_recalibre = f"{_modele_nom_brut} → proxy GBM (fabrique A4 indisponible)"
+
+        # Fidélité RAPPORTÉE (correctif V15 #4) = famille (construit par nom) ET
+        # spec de FEATURES. Initialisée à la fidélité de famille ; DÉGRADÉE dans la
+        # boucle si le WF recalibre sur des features hors production.
+        _recalibration_est_fidele = _modele_construit_par_nom
 
         for idx in range(1, len(annees)):
             annee_t = annees[idx]
@@ -1020,7 +1031,7 @@ class AgentA6Comparaison:
             try:
                 # Une instance FRAÎCHE à chaque fenêtre — jamais réentraînée
                 # sur l'état d'une fenêtre précédente.
-                if _recalibration_est_fidele:
+                if _modele_construit_par_nom:
                     modele_wf = creer_modele_ml_pour_nom(_modele_nom, col_cible)
                 else:
                     from sklearn.ensemble import GradientBoostingRegressor
@@ -1054,6 +1065,21 @@ class AgentA6Comparaison:
                     # 0,92 · A/E 0,99 · 0 fenêtre rouge sur un modèle fuité).
                     df=df_tr, col_cible=col_cible,
                 ))
+                # correctif V15 #4 — FIDÉLITÉ DE SPÉCIFICATION (features) : le WF
+                # recalibre-t-il sur les MÊMES features que la production ?
+                # Production = plan.colonnes_produites(). Features EN TROP (hors
+                # plan) = spec différente → recalibration NON fidèle (rapportée),
+                # même si construite par nom. On ne dégrade que sur preuve POSITIVE :
+                # sans plan (non vérifiable) ou sur un SOUS-ensemble (facteur constant
+                # sur la fenêtre, écarté légitimement) → PAS de dégradation.
+                if plan is not None and _recalibration_est_fidele:
+                    _en_trop = set(_cols_num) - set(plan.colonnes_produites())
+                    if _en_trop:
+                        _recalibration_est_fidele = False
+                        logger.warning(
+                            f"[FIDÉLITÉ WF] Recalibration NON fidèle : features hors "
+                            f"production {sorted(_en_trop)} — spec différente de "
+                            f"plan.colonnes_produites(). Statut plafonné à AMBRE.")
                 if _cols_num and col_cible in df_tr.columns:
                     X_tr = df_tr[_cols_num].fillna(0).values
                     y_tr = df_tr[col_cible].values
