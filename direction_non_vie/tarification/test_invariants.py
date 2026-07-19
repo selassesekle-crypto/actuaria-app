@@ -1411,6 +1411,24 @@ class TestInvariant_LeSystemeAccepteCeQuIlDoitAccepter(unittest.TestCase):
             "AMBRE n'est pas plafonnant → VERT doit rester accessible.")
         print(f"    B-cap saines → VERT ✅ (A3-H2 ROUGE exclue · A4-H4 AMBRE OK)")
 
+    def test_h5_deviance_rouge_bloque_le_vert(self):
+        """Ajout C — A3-H5 (déviance résiduelle / df) est PLAFONNANTE : ROUGE
+        (déviance/df > 2.0 → mauvais ajustement global du Poisson) plafonne à AMBRE."""
+        from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
+        a6 = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp', verbose=False)
+        bt = {'disponible': True, 'modele_recalibre_fidele': True,
+              'modele_recalibre': 'GLM_POISSON', 'gini_wf_moyen': 0.30,
+              'ae_ratio': 1.00, 'ae_moyen_wf': 1.00, 'n_fenetres_rouge': 0,
+              'stabilite_wf': '🟢 Stable'}
+        modele = {'score_global': 0.95, 'gini_test': 0.32}
+        statut = a6._calculer_statut_rag(
+            modele, [modele], profil_valide_par='X', environnement='production',
+            backtest=bt, hypotheses_glm={'h5_deviance': {'statut': 'ROUGE'}})
+        self.assertNotEqual(statut, 'VERT',
+            "A3-H5 (déviance) ROUGE doit plafonner à AMBRE — mauvais ajustement "
+            "global du GLM Poisson.")
+        print(f"    C-cap A3-H5 déviance ROUGE → {statut} (pas VERT) ✅")
+
 
 if __name__ == '__main__':
     print("=" * 70)

@@ -140,11 +140,13 @@ class TestA3GLM(unittest.TestCase):
         self.assertIsInstance(r['excel_bytes'], bytes)
         self.assertIsInstance(r['audit_trail'], dict)
         hyp = r['hypotheses']
-        for hkey in ['h1_poisson', 'h2_homosc', 'h3_ajustement', 'h4_stabilite']:
+        for hkey in ['h1_poisson', 'h2_homosc', 'h3_ajustement', 'h4_stabilite',
+                     'h5_deviance']:
             self.assertIn(hkey, hyp, f"Hypothèse '{hkey}' manquante")
         print(f"    ST6 Standard ActuarIA ✅ | excel={len(r['excel_bytes'])} bytes | "
               f"H1={hyp['h1_poisson']['statut']} H2={hyp['h2_homosc']['statut']} "
-              f"H3={hyp['h3_ajustement']['statut']} H4={hyp['h4_stabilite']['statut']}")
+              f"H3={hyp['h3_ajustement']['statut']} H4={hyp['h4_stabilite']['statut']} "
+              f"H5={hyp['h5_deviance']['statut']}")
 
         # ST7 — Cohérence AIC : Poisson AIC > 0, déviance nulle > déviance
         m_p = met['poisson']

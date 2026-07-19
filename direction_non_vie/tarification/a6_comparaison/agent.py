@@ -1721,7 +1721,6 @@ class AgentA6Comparaison:
         # NE SONT PAS plafonnantes :
         #  · A3-H3 / A4-H3 (Gini) : déjà couvertes par le gate (pas de doublon) ;
         #  · A3-H4 (stabilité bootstrap) : informative seulement ;
-        #  · A3-H5 (déviance) : câblée dans l'ajout C, pas ici ;
         #  · A3-H2 (homoscédasticité) : ⚠ EXCLUE PARCE QUE LE CONTRÔLE EST CASSÉ,
         #    PAS parce qu'elle serait sans importance. Sa métrique
         #    std(résidus quintile)/std_global vaut ≈1.0 pour un modèle
@@ -1732,6 +1731,7 @@ class AgentA6Comparaison:
         #    mesure d'homoscédasticité), PUIS câbler.
         _HYP_PLAFONNANTES = [
             (hypotheses_glm, 'h1_poisson'),
+            (hypotheses_glm, 'h5_deviance'),   # ajout C — déviance résiduelle / df
             (hypotheses_ml,  'h1_overfitting'),
             (hypotheses_ml,  'h2_psi'),
             (hypotheses_ml,  'h4_calibration'),

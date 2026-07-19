@@ -2446,10 +2446,35 @@ class AgentA3GLM:
         except Exception as e_boot:
             logger.debug(f"H4 bootstrap échoué : {e_boot}")
 
-        statuts = [h1_statut, h2_statut, h3_statut, h4_statut]
+        # ── H5 — Déviance résiduelle (ajustement global du GLM Poisson) ───────
+        # deviance / df_resid ≈ 1 pour un Poisson bien ajusté ; > 1 signale une
+        # sur-dispersion / mauvaise spécification GLOBALE (complément de H1, qui ne
+        # regarde que Var/E des données brutes, avant modèle).
+        try:
+            mp5 = self.modeles.get('poisson')
+            ratio_dev = (float(mp5.deviance) / max(float(mp5.df_resid), 1e-6)
+                         if (mp5 is not None and hasattr(mp5, 'deviance')
+                             and hasattr(mp5, 'df_resid')) else None)
+        except Exception:
+            ratio_dev = None
+        _dev_disp = f"{ratio_dev:.2f}" if ratio_dev is not None else "N/A"
+        if ratio_dev is None:
+            h5_statut, h5_msg = "AMBRE", "Déviance résiduelle non calculable (GLM Poisson absent) ⚠️"
+            h5_conseil = "Vérifier l'ajustement du GLM Poisson"
+        elif ratio_dev < 1.5:
+            h5_statut, h5_msg = "VERT", f"déviance/df = {_dev_disp} < 1.5 → bon ajustement global ✅"
+            h5_conseil = "Ajustement satisfaisant — pas de sur-dispersion résiduelle"
+        elif ratio_dev < 2.0:
+            h5_statut, h5_msg = "AMBRE", f"déviance/df = {_dev_disp} ∈ [1.5,2.0] → ajustement partiel ⚠️"
+            h5_conseil = "Envisager des interactions ou un Quasi-Poisson (φ libre)"
+        else:
+            h5_statut, h5_msg = "ROUGE", f"déviance/df = {_dev_disp} > 2.0 → mauvais ajustement ❌"
+            h5_conseil = "Sur-dispersion forte — NegBin ou variables manquantes"
+
+        statuts = [h1_statut, h2_statut, h3_statut, h4_statut, h5_statut]
         statut_global = "ROUGE" if "ROUGE" in statuts else "AMBRE" if "AMBRE" in statuts else "VERT"
         conclusion = {
-            "VERT":  "✅ GLM validé — 4 hypothèses satisfaites (distribution, homoscédasticité, Gini, stabilité)",
+            "VERT":  "✅ GLM validé — 5 hypothèses satisfaites (distribution, homoscédasticité, Gini, stabilité, déviance)",
             "AMBRE": "⚠️ GLM utilisable avec précautions — documenter les points signalés",
             "ROUGE": "❌ GLM à revoir — hypothèses non satisfaites",
         }[statut_global]
@@ -2491,6 +2516,13 @@ class AgentA3GLM:
                 "message":          h4_msg,
                 "conseil":          h4_conseil,
                 "titre_graphique":  f"{'✅' if h4_statut=='VERT' else '⚠️' if h4_statut=='AMBRE' else '❌'} Stabilité relativités — CV max = {rel_cv_max:.3f}",
+            },
+            "h5_deviance": {
+                "ratio_deviance_df": round(ratio_dev, 3) if ratio_dev is not None else None,
+                "statut":            h5_statut,
+                "message":           h5_msg,
+                "conseil":           h5_conseil,
+                "titre_graphique":   f"{'✅' if h5_statut=='VERT' else '⚠️' if h5_statut=='AMBRE' else '❌'} Déviance/df = {_dev_disp}",
             },
             "statut_global": statut_global,
             "conclusion":    conclusion,
