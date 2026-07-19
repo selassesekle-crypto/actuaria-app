@@ -373,6 +373,8 @@ class AgentA6Comparaison:
                 backtest=backtest,
                 valide_par_actuaire_dl=valide_par_actuaire_dl,
                 modele_ampute=_modele_ampute,
+                hypotheses_glm=(result_a3 or {}).get('hypotheses'),
+                hypotheses_ml=(result_a4 or {}).get('hypotheses'),
             )
             commentaire = self._commenter_actuaire_senior(
                 classement, modele_production, sous_branche,
@@ -1465,6 +1467,8 @@ class AgentA6Comparaison:
         backtest:           Optional[Dict] = None,
         valide_par_actuaire_dl: Optional[str] = None,
         modele_ampute:      Optional[Dict] = None,
+        hypotheses_glm:     Optional[Dict] = None,   # r3['hypotheses'] (A3 GLM)
+        hypotheses_ml:      Optional[Dict] = None,   # r4['hypotheses'] (A4 ML)
     ) -> str:
         """
         Statut RAG basé sur le score global du modèle de production.
@@ -1710,10 +1714,40 @@ class AgentA6Comparaison:
                 f"déploiement."
             )
 
+        # ── PLAFOND HYPOTHÈSES DE MODÉLISATION (A3 GLM + A4 ML) ────────────────
+        # Les hypothèses de validation étaient CALCULÉES et rapportées mais jamais
+        # LUES par la décision — même classe de défaut que B2 (contrôle correct,
+        # non câblé). Une hypothèse plafonnante en ROUGE plafonne à AMBRE.
+        # NE SONT PAS plafonnantes :
+        #  · A3-H3 / A4-H3 (Gini) : déjà couvertes par le gate (pas de doublon) ;
+        #  · A3-H4 (stabilité bootstrap) : informative seulement ;
+        #  · A3-H5 (déviance) : câblée dans l'ajout C, pas ici ;
+        #  · A3-H2 (homoscédasticité) : ⚠ EXCLUE PARCE QUE LE CONTRÔLE EST CASSÉ,
+        #    PAS parce qu'elle serait sans importance. Sa métrique
+        #    std(résidus quintile)/std_global vaut ≈1.0 pour un modèle
+        #    HOMOSCÉDASTIQUE, alors que le seuil VERT exige <0.30 : inatteignable.
+        #    Elle flague ROUGE quasiment TOUT modèle (mesuré 1.03) → la câbler
+        #    rendrait le GLM de fréquence jamais-VERT (régression du correctif V14
+        #    « un GLM peut enfin être certifié »). À RÉPARER séparément (vraie
+        #    mesure d'homoscédasticité), PUIS câbler.
+        _HYP_PLAFONNANTES = [
+            (hypotheses_glm, 'h1_poisson'),
+            (hypotheses_ml,  'h1_overfitting'),
+            (hypotheses_ml,  'h2_psi'),
+            (hypotheses_ml,  'h4_calibration'),
+        ]
+        _hyp_rouges = [k for (d, k) in _HYP_PLAFONNANTES
+                       if (d or {}).get(k, {}).get('statut') == 'ROUGE']
+        _hypotheses_ok = not (environnement == 'production' and _hyp_rouges)
+        if not _hypotheses_ok:
+            logger.warning(
+                f"[HYPOTHÈSES] Hypothèse(s) de modélisation en ROUGE {_hyp_rouges} "
+                f"— statut plafonné à AMBRE en environnement 'production'.")
+
         if (score >= 0.60 and gini >= 0.15 and _gouvernance_ok
                 and _backtest_ok and _wf_fidele_ok and _wf_resultat_ok
                 and _gini_plausible and _cann_ancre_ok and _dl_confirme_ok
-                and _plan_complet_ok):
+                and _plan_complet_ok and _hypotheses_ok):
             return 'VERT'
         # ── ANTI-SÉLECTION : DISQUALIFIANT (auto-audit 11/07/2026) ────────────
         # Un Gini NÉGATIF signifie que le modèle discrimine À L'ENVERS : il

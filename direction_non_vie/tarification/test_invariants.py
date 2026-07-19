@@ -1368,6 +1368,49 @@ class TestInvariant_LeSystemeAccepteCeQuIlDoitAccepter(unittest.TestCase):
         print(f"    INV-14c Pipeline réel : {r6['modele_production']['modele']} "
               f"certifié VERT, walk-forward fidèle ✅")
 
+    def test_hypothese_plafonnante_rouge_bloque_le_vert(self):
+        """Correctif B — une hypothèse de modélisation PLAFONNANTE en ROUGE (ici
+        A4-H1 overfitting) plafonne à AMBRE un modèle par ailleurs impeccable.
+        Les hypothèses étaient calculées mais jamais lues par la décision."""
+        from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
+        a6 = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp', verbose=False)
+        bt = {'disponible': True, 'modele_recalibre_fidele': True,
+              'modele_recalibre': 'GLM_POISSON', 'gini_wf_moyen': 0.30,
+              'ae_ratio': 1.00, 'ae_moyen_wf': 1.00, 'n_fenetres_rouge': 0,
+              'stabilite_wf': '🟢 Stable'}
+        modele = {'score_global': 0.95, 'gini_test': 0.32}
+        statut = a6._calculer_statut_rag(
+            modele, [modele], profil_valide_par='X', environnement='production',
+            backtest=bt, hypotheses_ml={'h1_overfitting': {'statut': 'ROUGE'}})
+        self.assertNotEqual(statut, 'VERT',
+            "Une hypothèse de modélisation PLAFONNANTE en ROUGE (A4-H1) doit "
+            "empêcher le VERT — sinon le contrôle est calculé mais non câblé (B2).")
+        print(f"    B-cap A4-H1 ROUGE → {statut} (pas VERT) ✅")
+
+    def test_hypotheses_saines_le_vert_reste_accessible(self):
+        """Correctif B — contrôle NÉGATIF : aucune plafonnante ROUGE → VERT reste
+        accessible. Vérifie aussi que A3-H2 ROUGE (EXCLUE car métrique cassée) et
+        A4-H4 AMBRE (AMBRE ne plafonne pas) ne bloquent PAS."""
+        from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
+        a6 = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp', verbose=False)
+        bt = {'disponible': True, 'modele_recalibre_fidele': True,
+              'modele_recalibre': 'GLM_POISSON', 'gini_wf_moyen': 0.30,
+              'ae_ratio': 1.00, 'ae_moyen_wf': 1.00, 'n_fenetres_rouge': 0,
+              'stabilite_wf': '🟢 Stable'}
+        modele = {'score_global': 0.95, 'gini_test': 0.32}
+        statut = a6._calculer_statut_rag(
+            modele, [modele], profil_valide_par='X', environnement='production',
+            backtest=bt,
+            hypotheses_glm={'h1_poisson': {'statut': 'VERT'},
+                            'h2_homosc': {'statut': 'ROUGE'}},   # EXCLUE (cassée)
+            hypotheses_ml={'h1_overfitting': {'statut': 'VERT'},
+                           'h2_psi': {'statut': 'VERT'},
+                           'h4_calibration': {'statut': 'AMBRE'}})  # AMBRE ne plafonne pas
+        self.assertEqual(statut, 'VERT',
+            "Hypothèses saines : A3-H2 ROUGE est EXCLUE (métrique cassée) et A4-H4 "
+            "AMBRE n'est pas plafonnant → VERT doit rester accessible.")
+        print(f"    B-cap saines → VERT ✅ (A3-H2 ROUGE exclue · A4-H4 AMBRE OK)")
+
 
 if __name__ == '__main__':
     print("=" * 70)
