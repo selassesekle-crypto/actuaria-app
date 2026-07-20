@@ -129,56 +129,10 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         # Tail factor : en général proche de 1.00 pour auto matériel
         "tail_factor_max_alerte": 1.02,
 
-        # Tail factor — Guide IA 2023 (pratique professionnelle française)
-        "risque_long":              True,  # Transport = risque long, seuil 1.05
-        "tail_seuil_stabilisation": 1.05,   # seuil de stabilisation LDF
+        # Tail factor — Guide IA 2023 : RC Auto Matériel = risque court (< 5 ans)
+        "risque_long":              False,  # risque court → tail_factor forcé à 1.0
+        "tail_seuil_stabilisation": 1.01,   # inerte tant que risque_long=False
         "ratio_c0_primes":          0.45,   # RC Auto Mat. — règlement rapide
-
-        # Tail factor — Guide IA 2023 (pratique professionnelle française)
-        "risque_long":              True,  # RC Médicale = risque très long (20-30 ans)
-        "tail_seuil_stabilisation": 1.10,   # seuil de stabilisation LDF
-
-        # Tail factor — Guide IA 2023 (pratique professionnelle française)
-        "risque_long":              True,  # RC Générale = risque long, seuil 1.05
-        "tail_seuil_stabilisation": 1.05,   # seuil de stabilisation LDF
-
-        # Tail factor — Guide IA 2023 (pratique professionnelle française)
-        "risque_long":              False,  # MRH = risque court (< 4 ans)
-        "tail_seuil_stabilisation": 1.01,   # seuil de stabilisation LDF
-
-        # Tail factor — Guide IA 2023 (pratique professionnelle française)
-        "risque_long":              True,  # RC Auto Corporels = risque long (15-25 ans)
-        "tail_seuil_stabilisation": 1.10,   # seuil de stabilisation LDF
-
-        # Tail factor — Guide IA 2023 : applicable uniquement si risque long
-        # ET coefficients non stabilisés (dernier LDF > tail_seuil_stabilisation)
-        "risque_long":              True,  # Transport = risque long (8 ans)
-                                                        "tail_seuil_stabilisation": 1.05,  # LDF < 1.05 = développement très faible = stabilisé
-
-        # Tail factor — Guide IA 2023 : applicable uniquement si risque long
-        # ET coefficients non stabilisés (dernier LDF > tail_seuil_stabilisation)
-        "risque_long":              True,  # RC Médicale = risque très long (20-30 ans)
-        "tail_seuil_stabilisation": 1.03,  # dernier LDF min pour appliquer tail
-
-        # Tail factor — Guide IA 2023 : applicable uniquement si risque long
-        # ET coefficients non stabilisés (dernier LDF > tail_seuil_stabilisation)
-        "risque_long":              True,  # RC Générale = risque long (10-15 ans)
-        "tail_seuil_stabilisation": 1.02,  # dernier LDF min pour appliquer tail
-
-        # Tail factor — Guide IA 2023 : applicable uniquement si risque long
-        # ET coefficients non stabilisés (dernier LDF > tail_seuil_stabilisation)
-        "risque_long":              False,  # MRH = risque court (< 4 ans)
-        "tail_seuil_stabilisation": 1.01,  # dernier LDF min pour appliquer tail
-
-        # Tail factor — Guide IA 2023 : applicable uniquement si risque long
-        # ET coefficients non stabilisés (dernier LDF > tail_seuil_stabilisation)
-        "risque_long":              True,  # RC Auto Corporels = risque long (15-25 ans)
-        "tail_seuil_stabilisation": 1.03,  # dernier LDF min pour appliquer tail
-
-        # Tail factor — Guide IA 2023 : applicable uniquement si risque long
-        # ET coefficients non stabilisés (dernier LDF > tail_seuil_stabilisation)
-        "risque_long":              False,  # RC Auto Matériel = risque court (< 5 ans)
-        "tail_seuil_stabilisation": 1.01,  # dernier LDF min pour appliquer tail
     },
 
     # ── RC Automobile — corporels (queue très longue) ─────────────────────────
@@ -251,10 +205,9 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
 
         "tail_factor_max_alerte": 1.01,
 
-        # Tail factor — Guide IA 2023 (pratique professionnelle française)
-        "risque_long":              False,  # MRH = risque court (< 4 ans)
+        # Tail factor — Guide IA 2023 : MRH = risque court (< 4 ans)
+        "risque_long":              False,
         "tail_seuil_stabilisation": 1.01,
-        "ratio_c0_primes":          0.52,   # Incendie — règlement rapide
         "ratio_c0_primes":          0.55,   # MRH — règlement rapide
     },
 
@@ -509,19 +462,11 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
 
         "tail_factor_max_alerte": 1.05,
 
-        # Tail factor — Guide IA 2023 (pratique professionnelle française)
-        "risque_long":              True,   # Générique = prudence maximale
+        # Tail factor — Guide IA 2023 : générique = branche inconnue, traitée
+        # comme risque long par prudence. tail_seuil = 1.02 retenu (pas 1.10).
+        "risque_long":              True,   # prudence maximale
         "tail_seuil_stabilisation": 1.02,   # LDF < 1.02 = développement quasi nul
         "ratio_c0_primes":          0.35,   # Générique — FFA Non-Vie
-
-        # Tail factor — Guide IA 2023 : generique traité comme risque long par prudence
-        "risque_long":              True,   # par prudence
-                "tail_seuil_stabilisation": 1.1,  # prudence maximale — branche inconnue
-
-        # Tail factor — Guide IA 2023 : applicable uniquement si risque long
-        # ET coefficients non stabilisés (dernier LDF > tail_seuil_stabilisation)
-        "risque_long":              True,  # Générique = prudence, traité comme risque long
-        "tail_seuil_stabilisation": 1.02,  # dernier LDF min pour appliquer tail
     },
     # =========================================================================
     #  5.b — INCENDIE & DOMMAGES AUX BIENS (hors MRH)

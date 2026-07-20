@@ -25,6 +25,9 @@ from direction_non_vie.provisionnement.a7_provisionnement.n3.chain_ladder import
 from direction_non_vie.provisionnement.a7_provisionnement.n3.mack import mack_1993
 from direction_non_vie.provisionnement.a7_provisionnement.n3.clark import clark_ldf
 from direction_non_vie.provisionnement.a7_provisionnement.n3.bootstrap_odp import bootstrap_odp
+from direction_non_vie.provisionnement.a7_provisionnement.config.lob_config import (
+    get_lob_config, list_lobs,
+)
 
 
 # =============================================================================
@@ -183,6 +186,57 @@ class T4_Bootstrap_RAA(unittest.TestCase):
         bo = bootstrap_odp(RAA, rc['facteurs'], n_sim=3000, seed=99)
         self.assertTrue(18_836 <= bo['std_bootstrap'] <= 34_982)
         print(f"    OK T6 Bootstrap RAA : std = {bo['std_bootstrap']:,.0f} EUR (Mack 26 909)")
+
+
+# =============================================================================
+#  CONFIG LoB — snapshot des valeurs effectives (anti-régression clés dupliquées)
+# =============================================================================
+
+# Valeurs effectives capturées AVANT le nettoyage des clés dupliquées de
+# lob_config.py (3 blocs contenaient des clés définies plusieurs fois, Python
+# gardant la dernière). Ce snapshot verrouille le comportement : toute édition
+# qui change accidentellement une de ces valeurs fait échouer T7.
+_LOB_REFERENCE = {
+    'accidents_corporels':         {'risque_long': False, 'tail_seuil_stabilisation': 1.02, 'ratio_c0_primes': 0.4},
+    'catastrophes_naturelles':     {'risque_long': False, 'tail_seuil_stabilisation': 1.02, 'ratio_c0_primes': 0.45},
+    'construction':                {'risque_long': True,  'tail_seuil_stabilisation': 1.1,  'ratio_c0_primes': 0.04},
+    'credit_caution':              {'risque_long': True,  'tail_seuil_stabilisation': 1.05, 'ratio_c0_primes': 0.15},
+    'dommage_corporel_individuel': {'risque_long': True,  'tail_seuil_stabilisation': 1.05, 'ratio_c0_primes': 0.2},
+    'generique':                   {'risque_long': True,  'tail_seuil_stabilisation': 1.02, 'ratio_c0_primes': 0.35},
+    'incendie_dommages':           {'risque_long': False, 'tail_seuil_stabilisation': 1.01, 'ratio_c0_primes': None},
+    'marine_aviation_transport':   {'risque_long': True,  'tail_seuil_stabilisation': 1.05, 'ratio_c0_primes': 0.25},
+    'mrh':                         {'risque_long': False, 'tail_seuil_stabilisation': 1.01, 'ratio_c0_primes': 0.55},
+    'protection_juridique':        {'risque_long': False, 'tail_seuil_stabilisation': 1.01, 'ratio_c0_primes': 0.4},
+    'rc_auto_corporels':           {'risque_long': True,  'tail_seuil_stabilisation': 1.1,  'ratio_c0_primes': 0.08},
+    'rc_auto_materiel':            {'risque_long': False, 'tail_seuil_stabilisation': 1.01, 'ratio_c0_primes': 0.45},
+    'rc_generale':                 {'risque_long': True,  'tail_seuil_stabilisation': 1.05, 'ratio_c0_primes': 0.18},
+    'rc_medicale':                 {'risque_long': True,  'tail_seuil_stabilisation': 1.1,  'ratio_c0_primes': 0.06},
+    'transport':                   {'risque_long': True,  'tail_seuil_stabilisation': 1.05, 'ratio_c0_primes': 0.25},
+}
+
+
+class T7_LobConfig_Snapshot(unittest.TestCase):
+    """Verrouille les valeurs effectives des blocs LoB (anti-régression B8)."""
+
+    def test_lob_config_valeurs_effectives(self):
+        """get_lob_config() renvoie les valeurs effectives attendues pour toutes les LoB."""
+        # L'ensemble des LoB ne doit pas changer sans mise à jour de la référence
+        lobs_config = set(list_lobs()) | {'generique'}
+        self.assertEqual(
+            set(_LOB_REFERENCE), lobs_config,
+            "Ensemble des LoB modifié — mettre à jour _LOB_REFERENCE.",
+        )
+        # Chaque valeur sensible doit correspondre à la valeur effective d'origine
+        for lob, attendu in _LOB_REFERENCE.items():
+            cfg = get_lob_config(lob)
+            for cle, val in attendu.items():
+                self.assertEqual(
+                    cfg.get(cle), val,
+                    f"{lob}.{cle} = {cfg.get(cle)!r}, attendu {val!r} "
+                    f"(valeur effective d'avant nettoyage B8).",
+                )
+        print(f"    OK T7 lob_config : {len(_LOB_REFERENCE)} LoB verrouillées "
+              f"(risque_long / tail_seuil_stabilisation / ratio_c0_primes)")
 
 
 if __name__ == '__main__':
