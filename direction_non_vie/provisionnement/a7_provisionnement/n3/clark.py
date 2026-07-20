@@ -345,6 +345,13 @@ def _calculer_resultats(
     reserve_totale = float(np.sum(ibnr_par_annee[annee_base:]))
 
     # ── Intervalles de confiance 95% sur les ultimates ────────────────────────
+    # IC = ultimate ± 1.96 × se(U_i), se(U_i) issu de la Hessienne de la
+    # log-vraisemblance de Poisson. L'ultime = U_i (paramètre MLE, cf. correctif
+    # B3), donc se_ult = se_U[i] — PAS × tail_factor (U_i est déjà l'asymptote).
+    # ⚠️ LIMITE STRUCTURELLE (non corrigée ici) : cet IC ne couvre que
+    # l'incertitude de PARAMÈTRE à l'échelle Poisson. Il SOUS-ESTIME l'intervalle
+    # de prédiction de Clark (2003) car il omet la surdispersion σ² (Var = σ²·μ)
+    # et la variance de processus. Correction = travail séparé.
     ic_95 = []
     if hess_inv is not None:
         try:
@@ -352,7 +359,7 @@ def _calculer_resultats(
             se_U = np.sqrt(np.maximum(var_params[2:], 0.0))
             z95  = 1.96
             for i in range(n):
-                se_ult = se_U[i] * tail_factor
+                se_ult = se_U[i]
                 ic_95.append((
                     round(max(ultimates[i] - z95 * se_ult, 0), 0),
                     round(ultimates[i] + z95 * se_ult, 0),
