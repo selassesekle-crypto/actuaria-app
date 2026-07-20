@@ -324,14 +324,16 @@ def _calculer_resultats(
         # % développé = G(t_{last_j}) pour cette année
         pct = float(G[last_j]) * 100.0
 
-        # IBNR = U_i × (1 - G(t_{last_j})) × tail
-        # En fait : IBNR = U_i × tail - obs_last
-        # Clark : U_i = ultimate sans queue, donc IBNR = U_i / G(t_last) - obs
-        # Mais ici U_i est l'ultimate direct (G va vers 1)
-        ibnr_i      = u_i * tail_factor - obs_last
+        # U_i (paramètre MLE) EST déjà l'ultime à l'infini : à l'optimum,
+        # U_i = obs_i / G(t_last_i) et G(∞) = 1. Le développement au-delà de la
+        # dernière colonne (le "tail") est donc DÉJÀ contenu dans U_i.
+        # IBNR_i = U_i - dernière observation cumulée. NE PAS multiplier par
+        # tail_factor (qui reste calculé pour l'affichage/diagnostic) : cela
+        # compterait le tail une seconde fois.
+        ibnr_i      = u_i - obs_last
         ibnr_brut_i = ibnr_i  # valeur brute avant troncature à 0
 
-        ultimates.append(u_i * tail_factor)
+        ultimates.append(u_i)
         ibnr_par_annee.append(max(ibnr_i, 0.0))  # tronqué : provision ≥ 0
         ibnr_brut_par_annee.append(round(ibnr_brut_i, 0))  # brut : signal sur-développement
         pct_developpe.append(pct)
@@ -339,8 +341,8 @@ def _calculer_resultats(
     # Sur-développement : années où IBNR brut < 0 → ultimate Clark < cumul observé
     n_sur_dev = sum(1 for v in ibnr_brut_par_annee if v < 0)
 
-    # Réserve totale depuis annee_base
-    reserve_totale = float(np.sum(ibnr_par_annee[annee_base - 1:]))
+    # Réserve totale depuis annee_base — aligné sur CL/Mack/BF/CC (exclut l'année 0)
+    reserve_totale = float(np.sum(ibnr_par_annee[annee_base:]))
 
     # ── Intervalles de confiance 95% sur les ultimates ────────────────────────
     ic_95 = []

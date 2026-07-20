@@ -146,18 +146,18 @@ class T2_Mack_RAA(unittest.TestCase):
 class T3_Clark_GenIns(unittest.TestCase):
     """Clark 2003 sur GenIns : IBNR de l'année totalement développée."""
 
-    @unittest.expectedFailure
     def test_clark_annee0_developpee(self):
         """L'année 0 est totalement développée -> IBNR ~ tail seul (quelques milliers).
 
-        ÉCHEC ATTENDU — bug B3 (double comptage du tail, clark.py:331-334) :
-        l'ultime affiché = U_i × tail alors que le paramètre MLE U_i EST déjà
-        l'ultime à l'infini. L'année 0 reçoit ~59 904 EUR d'IBNR au lieu de
-        ~7 500 EUR (tail seul). Correctif : IBNR = U_i - obs_last (sans × tail).
-        Ce test passera au vert une fois B3 corrigé -> RETIRER alors ce marqueur.
+        Vérifie le correctif B3 (clark.py, _calculer_resultats) : le paramètre
+        MLE U_i EST déjà l'ultime à l'infini (G->1), donc IBNR_i = U_i - obs_last
+        (sans re-multiplier par tail_factor, qui reste calculé pour le diagnostic).
+        Avant correctif, l'année 0 recevait ~59 904 EUR d'IBNR (double comptage
+        du tail) au lieu de ~7 546 EUR (tail résiduel seul).
         """
         r = clark_ldf(GENINS)
         self.assertLess(r['ibnr_par_annee'][0], 10_000)
+        print(f"    OK T5 Clark GenIns : IBNR annee 0 = {r['ibnr_par_annee'][0]:,.0f} EUR")
 
 
 # =============================================================================
