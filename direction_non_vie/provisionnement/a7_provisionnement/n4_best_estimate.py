@@ -146,6 +146,11 @@ class BestEstimateS2:
                 'mack': (mack_res, 50),
                 'bornhuetter_ferguson': (bf_res, 50),
             }
+            # Les retirer des exclues : elles viennent d'être forcées dans les
+            # incluses (sinon elles figureraient dans les deux listes).
+            for _m in ('mack', 'bornhuetter_ferguson'):
+                if _m in methodes_exclues:
+                    del methodes_exclues[_m]
             logger.warning(
                 "BE N4 : toutes les méthodes exclues (score < seuil). "
                 "Fallback sur Mack + BF avec score=50."
@@ -378,7 +383,7 @@ class BestEstimateS2:
             )
 
         # Recommandation Clark aberrant
-        clark = n3.get('clark_ldf', {})
+        clark = n3.get('clark', {})
         if clark.get('aberrant'):
             recommandations.append(
                 "Clark LDF produit un résultat aberrant — méthode exclue de la pondération. "
