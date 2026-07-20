@@ -160,11 +160,17 @@ def calculer_fitted_et_residus(
     # r_ij = (C_obs[i,j] - C_fit[i,j]) / sqrt(C_fit[i,j])
     # Calculés pour j ≥ 1 uniquement (colonne 0 = paramètre libre)
 
+    # ODP England-Verrall : résidu de Pearson sur l'INCRÉMENT. Dénominateur =
+    # sqrt(m_ij), m_ij = C[i,j-1]×(f_j-1) = C_fit[i,j] - C[i,j-1] (incrément
+    # ajusté). Le numérateur (C[i,j]-C_fit[i,j]) vaut déjà inc_obs - inc_fit.
     cellules  = []    # (i, j) des cellules incluses
     for i in range(n):
         for j in range(1, m):
             if i + j < n and C_fit[i, j] > 0 and C[i, j] > 0:
-                r = (C[i, j] - C_fit[i, j]) / np.sqrt(C_fit[i, j])
+                m_ij = C_fit[i, j] - C[i, j - 1]        # incrément ajusté (fitted)
+                if m_ij <= 0:
+                    continue                            # incrément ≤ 0 → cellule exclue
+                r = (C[i, j] - C_fit[i, j]) / np.sqrt(m_ij)
                 residus[i, j] = r
                 cellules.append((i, j))
 
@@ -193,12 +199,12 @@ def calculer_fitted_et_residus(
     # φ = Σ r²_ij_brut / df  (avant ajustement)
     # Représente la sur-dispersion moyenne par cellule.
 
-    # Résidus de Pearson bruts : r_ij = (C_ij - C_fit_ij) / sqrt(C_fit_ij)
-    # φ = Σr²/df (England & Verrall 2002) — en unités de C, sert à scaler les simulations
+    # Résidus de Pearson bruts sur l'incrément (même dénominateur que ci-dessus) :
+    # r_ij = (C_ij - C_fit_ij) / sqrt(m_ij),  m_ij = C_fit[i,j] - C[i,j-1].
+    # φ = Σr²/df (England & Verrall 2002) — sert à scaler le bruit de processus.
     r_bruts = np.array([
-        (C[i, j] - C_fit[i, j]) / np.sqrt(C_fit[i, j])
+        (C[i, j] - C_fit[i, j]) / np.sqrt(C_fit[i, j] - C[i, j - 1])
         for (i, j) in cellules
-        if C_fit[i, j] > 0
     ])
     phi = float(np.sum(r_bruts ** 2) / max(df, 1))
 
@@ -283,18 +289,23 @@ def bootstrap_odp(
         idx      = np.random.randint(0, len(res_arr), size=(n, m))
         res_boot = res_arr[idx]
 
-        # ── 3b. Pseudo-triangle C* ────────────────────────────────────────────
-        # C*[i,j] = C_fit[i,j] + r*_ij × sqrt(C_fit[i,j])
-        # Si C* < 0 → utiliser C_fit (garde-fou)
+        # ── 3b. Pseudo-triangle C* — perturber les INCRÉMENTS puis re-cumuler ──
+        # E&V 2002 : inc* = m_fit + r*_ij × sqrt(m_fit), puis C*[i,j] = C*[i,j-1] + inc*.
+        # m_fit = C[i,j-1]×(f_j-1) = C_fit[i,j] - C[i,j-1] (même incrément que les résidus).
         C_star = np.zeros((n, m))
         for i in range(n):
             C_star[i, 0] = max(C[i, 0], 1.0)   # colonne 0 = observée
             for j in range(1, m):
                 if i + j < n and C_fit[i, j] > 0:
-                    val = C_fit[i, j] + res_boot[i, j] * np.sqrt(C_fit[i, j])
-                    C_star[i, j] = max(val, C_fit[i, j] * 0.01)
-                    # Forcer la cumulativité
-                    C_star[i, j] = max(C_star[i, j], C_star[i, j-1])
+                    m_fit = C_fit[i, j] - C[i, j - 1]        # incrément ajusté (fitted)
+                    if m_fit > 0:
+                        inc_star = max(
+                            m_fit + res_boot[i, j] * np.sqrt(m_fit),
+                            m_fit * 0.01,               # garde-fou : incrément > 0
+                        )
+                    else:
+                        inc_star = 0.0
+                    C_star[i, j] = C_star[i, j - 1] + inc_star   # re-cumul
 
         # ── 3c. Facteurs CL sur le pseudo-triangle ────────────────────────────
         # f*_j = Σ C*[i,j+1] / Σ C*[i,j]  (volume-weighted)
@@ -307,11 +318,11 @@ def bootstrap_odp(
                     den += C_star[i, j]
             f_star[j] = max(num / max(den, 1e-10), 1.0)
 
-        # ── 3d. Projection avec bruit de processus ────────────────────────────
-        # Pour chaque cellule future (i+j ≥ n) :
-        #   C_proj[i,j] = C_proj[i,j-1] × f*_j + ε_ij
-        # où ε_ij ~ Normal(0, sqrt(φ × C_proj[i,j-1] × f*_j))
-        # (approximation normale du modèle ODP)
+        # ── 3d. Projection avec bruit de processus sur l'INCRÉMENT ─────────────
+        # E&V 2002 : l'incrément futur suit ODP(mean=inc_mean, φ) avec
+        #   inc_mean = C_proj[i,j-1] × (f*_j - 1)   (l'incrément attendu, pas le cumulé)
+        #   Var(inc) = φ × inc_mean  (approximation normale)
+        #   C_proj[i,j] = C_proj[i,j-1] + inc_sim   (on AJOUTE l'incrément)
 
         reserve_b = 0.0
         for i in range(annee_base, n):
@@ -320,21 +331,30 @@ def bootstrap_odp(
 
             for j in range(k_i, m - 1):
                 if j < len(f_star):
-                    mean_next = c_val * f_star[j]
-                    # Bruit de processus ODP
-                    if phi > 0 and mean_next > 0:
-                        std_proc  = np.sqrt(phi * mean_next)
-                        c_val     = max(
-                            mean_next + np.random.normal(0, std_proc),
-                            mean_next * 0.01
+                    inc_mean = c_val * (f_star[j] - 1.0)   # incrément attendu
+                    # Bruit de processus ODP sur l'incrément
+                    if phi > 0 and inc_mean > 0:
+                        std_proc = np.sqrt(phi * inc_mean)
+                        inc_sim  = max(
+                            inc_mean + np.random.normal(0, std_proc),
+                            inc_mean * 0.01,
                         )
                     else:
-                        c_val = mean_next
+                        inc_sim = max(inc_mean, 0.0)
+                    c_val = c_val + inc_sim   # cumul += incrément simulé
 
             ibnr_b = max(c_val - last_diag[i], 0.0)
             reserve_b += ibnr_b
 
         reserves_sim[b] = reserve_b
+
+    # ── 3e. Recentrage England-Verrall ────────────────────────────────────────
+    # Le bootstrap estime la DISPERSION autour de l'estimateur analytique CL
+    # (reserve_ref), non une moyenne biaisée par les troncatures (max(...,·×0.01)
+    # et max(·-last_diag, 0)) sur triangles très volatils. On décale la
+    # distribution pour que sa moyenne = reserve_ref — invariant en écart-type.
+    biais        = float(np.mean(reserves_sim)) - reserve_ref
+    reserves_sim = reserves_sim - biais
 
     # ── 4. Distribution et statistiques ──────────────────────────────────────
     be_boot  = float(np.mean(reserves_sim))

@@ -167,7 +167,6 @@ class T3_Clark_GenIns(unittest.TestCase):
 class T4_Bootstrap_RAA(unittest.TestCase):
     """Bootstrap ODP sur RAA : la prediction-error doit être cohérente avec Mack."""
 
-    @unittest.expectedFailure
     def test_bootstrap_coherence_mack_raa(self):
         """std bootstrap ODP ~ S.E. Mack (England & Verrall 2002 <-> Mack 1993).
 
@@ -175,15 +174,15 @@ class T4_Bootstrap_RAA(unittest.TestCase):
         proche de l'erreur-type de Mack (26 909 pour RAA). Fenêtre ±30% :
         [18 836 ; 34 982].
 
-        ÉCHEC ATTENDU — bug B2 (bootstrap_odp.py) : résidus de Pearson et facteur
-        de sur-dispersion calculés sur les CUMULÉS (au lieu des incréments E&V),
-        bruit de processus sur le cumulé, pas de tail. std actuel ~103 647 pour RAA
-        (seed=99), largement hors fenêtre.
-        Ce test passera au vert une fois B2 corrigé -> RETIRER alors ce marqueur.
+        Vérifie le correctif B2 (bootstrap_odp.py) : résidus de Pearson, pseudo-
+        triangle et bruit de processus portés sur les INCRÉMENTS (ODP England-
+        Verrall) au lieu des cumulés, + recentrage de la distribution sur la
+        réserve CL. Avant correctif, std ~103 647 pour RAA (seed=99, +285%).
         """
         rc = chain_ladder(RAA, tail_force=1.0)
         bo = bootstrap_odp(RAA, rc['facteurs'], n_sim=3000, seed=99)
         self.assertTrue(18_836 <= bo['std_bootstrap'] <= 34_982)
+        print(f"    OK T6 Bootstrap RAA : std = {bo['std_bootstrap']:,.0f} EUR (Mack 26 909)")
 
 
 if __name__ == '__main__':
