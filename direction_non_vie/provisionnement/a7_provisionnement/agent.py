@@ -301,7 +301,7 @@ class AgentA7Provisionnement:
             # N4 — BEST ESTIMATE S2 + SCR
             # =================================================================
             if self.verbose:
-                logger.info("N4 — Best Estimate S2 + SCR provisions")
+                logger.info("N4 — Best Estimate (réserve brute) + SCR provisions")
 
             # Back-testing boni/mali (calculé ici avec C_calc)
             try:
@@ -377,7 +377,7 @@ class AgentA7Provisionnement:
 
                 # 5. Message enrichi (BE + SCR + RM + PT recalculés)
                 n4['message'] = (
-                    f"BE S2 final = {_be_final:,.0f}€ "
+                    f"BE brut final = {_be_final:,.0f}€ "
                     f"(attritional {_be_attrit:,.0f}€ + grands sinistres {_rgs:,.0f}€) · "
                     f"LLT appliqué — {n_grands_sinistres} grand(s) sinistre(s) · "
                     f"méthode grands : {methode_grands} · "

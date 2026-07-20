@@ -567,12 +567,13 @@ def _s5_best_estimate(n4: Dict) -> str:
     statut = n4.get('statut', 'AMBRE')
 
     lignes = [
-        f"BEST ESTIMATE S2 (Art. 77 Directive S2) : {_e(be)}",
+        f"BEST ESTIMATE — RÉSERVE BRUTE (Art. 77 ; actualisation S2 par A10) : {_e(be)}",
         "",
-        f"Le Best Estimate est la valeur attendue de la distribution des "
-        f"flux futurs de règlement de sinistres, calculée comme la moyenne "
-        f"pondérée des méthodes retenues. Il est conforme à l'Art. 77 de "
-        f"la Directive Solvabilité II.",
+        f"Le Best Estimate est la valeur attendue des flux futurs de règlement "
+        f"de sinistres, moyenne pondérée des méthodes retenues. Il s'agit d'une "
+        f"réserve BRUTE (non actualisée) : l'actualisation à la courbe RFR EIOPA "
+        f"— la valeur actuelle au sens de l'Art. 77 — est opérée en aval par "
+        f"A10 (Solvabilité 2).",
         "",
         f"Distribution log-normale calibrée (QIS5 TP.5.26) :",
         f"  • Provision prudentielle P75  : {_e(p75)}  (+{_p((p75/max(be,1)-1)*100)} vs BE)",
@@ -787,7 +788,7 @@ def _s8_recommandations(n1: Dict, n2: Dict, n3: Dict, n4: Dict, lob: str) -> str
     # Actions selon statut
     if statut == 'VERT':
         lignes += [
-            f"1. Inscrire {_e(be)} au bilan S2 (provision technique brute, Art. 77).",
+            f"1. Transmettre {_e(be)} (réserve brute) à A10 pour actualisation avant inscription au bilan S2 (Art. 77).",
             f"2. Retenir {_e(p90)} pour le calcul du SCR provisions "
             f"   (stress test P90, formule standard Art. 105).",
             f"3. SCR provisions calculé : {_e(scr_prov)}.",
@@ -1804,7 +1805,7 @@ def generer_commentaire(
         f" Branche : {lob_label}",
         f" Référence : {ref_client}" if ref_client else "",
         f" Statut global : {_statut_txt(statut)}",
-        f" Best Estimate S2 : {_e(be)}",
+        f" Best Estimate (brut) : {_e(be)}",
         "═" * 70,
         "",
     ]
@@ -1815,7 +1816,7 @@ def generer_commentaire(
         "§2 — QUALITÉ DES DONNÉES":          s2,
         "§3 — VALIDATION DES HYPOTHÈSES":    s3,
         "§4 — ANALYSE DES MÉTHODES":         s4,
-        "§5 — BEST ESTIMATE S2 (Art. 77)":   s5,
+        "§5 — BEST ESTIMATE (réserve brute, Art. 77)": s5,
         "§6 — INCERTITUDE DE RÉSERVE":       s6,
         "§7 — SCR PROVISIONS (Art. 105 S2)": s7,
         "§8 — RECOMMANDATIONS":              s8,

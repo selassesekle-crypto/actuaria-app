@@ -6,7 +6,10 @@
 #  Références réglementaires
 #  -------------------------
 #  Directive Solvabilité II (2009/138/CE), Art. 77 :
-#    Best Estimate = espérance de la valeur actuelle des flux futurs
+#    Best Estimate = espérance de la valeur actuelle des flux futurs.
+#    ⚠️ A7 calcule ici la RÉSERVE BRUTE (non actualisée). L'actualisation à la
+#    courbe RFR EIOPA — la « valeur actuelle » au sens de l'Art. 77 — est opérée
+#    en aval par A10 (Solvabilité 2) et A11 (IFRS 17, à son propre taux).
 #
 #  Règlement Délégué (UE) 2015/35, Art. 105 :
 #    SCR provisions Non-Vie = formule standard par LoB
@@ -18,7 +21,7 @@
 #  Formules implémentées
 #  ---------------------
 #
-#  Best Estimate (Art. 77)
+#  Best Estimate — réserve brute (Art. 77 ; actualisation S2 en aval, A10)
 #  ────────────────────────
 #  Combinaison pondérée des méthodes actuarielles validées :
 #
@@ -65,7 +68,8 @@ logger = logging.getLogger('actuaria.a7')
 
 class BestEstimateS2:
     """
-    Calcule le Best Estimate S2 conforme Art. 77 avec :
+    Calcule le Best Estimate — réserve BRUTE, avant actualisation (la valeur
+    actuelle S2 au sens de l'Art. 77 est produite en aval par A10) — avec :
       · Sélection des méthodes validées (score ≥ seuil_score)
       · Poids dynamiques proportionnels aux scores N2
       · Percentiles log-normale (QIS5 TP.5.26)
@@ -84,7 +88,7 @@ class BestEstimateS2:
         **kwargs,
     ) -> Dict:
         """
-        Calcule le Best Estimate S2 et le SCR provisions.
+        Calcule le Best Estimate (réserve brute, avant actualisation) et le SCR.
 
         Parameters
         ----------
@@ -223,8 +227,8 @@ class BestEstimateS2:
         if total_poids > 0:
             poids = {m: round(v / total_poids, 4) for m, v in poids.items()}
 
-        # ── 3. Best Estimate (Art. 77) ────────────────────────────────────────
-        # BE = Σ w_m × R_m
+        # ── 3. Best Estimate — réserve brute (Art. 77 ; actualisation aval A10) ──
+        # BE = Σ w_m × R_m  (réserve brute non actualisée)
         be = float(sum(
             poids[m] * r
             for m, (r, _) in methodes_incluses.items()
@@ -434,7 +438,7 @@ class BestEstimateS2:
         elif statut == 'AMBRE' or not h1_ok:
             avis_actuariel = 'FAVORABLE SOUS RÉSERVE — points de vigilance à documenter'
         else:
-            avis_actuariel = "FAVORABLE — Best Estimate conforme aux exigences Solvabilité 2"
+            avis_actuariel = "FAVORABLE — Best Estimate (réserve brute) robuste ; actualisation S2 opérée en aval (A10)"
 
         # ── 9. Jugement actuariel documenté ───────────────────────────────────
         jugement = self._documenter_jugement(
@@ -443,7 +447,7 @@ class BestEstimateS2:
         )
 
         msg = (
-            f"BE S2 = {be:,.0f}€ · P90 = {p90:,.0f}€ · "
+            f"BE brut = {be:,.0f}€ · P90 = {p90:,.0f}€ · "
             f"CV = {cv_inter:.1f}% · σ = {sigma:,.0f}€ · "
             f"SCR_prov = {scr['scr_provisions']:,.0f}€"
         )
@@ -784,7 +788,7 @@ class BestEstimateS2:
             f"  Méthode recommandée   : {methode_rec}",
             f"  Justification         : {raison_rec}",
             "",
-            "3. BEST ESTIMATE S2 (Art. 77)",
+            "3. BEST ESTIMATE — RÉSERVE BRUTE (Art. 77 ; actualisation S2 par A10)",
             "─" * 40,
             f"  BE retenu         : {be:>16,.0f} €",
             f"  Provision P75     : {n3['mack'].get('reserve_p75', 0):>16,.0f} €",

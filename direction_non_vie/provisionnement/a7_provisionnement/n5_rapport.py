@@ -980,7 +980,7 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         + methode.replace('_', ' ').replace('bornhuetter ferguson', 'Bornhuetter-Ferguson').title()
         + '</div></div>'
 
-        '<div class="garde-kpi"><div class="kpi-label">Best Estimate S2</div>'
+        '<div class="garde-kpi"><div class="kpi-label">Best Estimate (brut)</div>'
         '<div class="kpi-value highlight">' + _f(BE) + '</div></div>'
 
         '<div class="garde-kpi"><div class="kpi-label">SCR Provisions</div>'
@@ -1010,9 +1010,9 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     b['kpi_grid'] = (
         '<div class="kpi-grid">'
         '<div class="kpi-card">'
-        '<div class="kpi-card-label">Best Estimate S2</div>'
+        '<div class="kpi-card-label">Best Estimate (brut)</div>'
         '<div class="kpi-card-value">' + _f(BE) + '</div>'
-        '<div class="kpi-card-sub">Art. 77 Directive S2</div>'
+        '<div class="kpi-card-sub">Réserve avant actualisation — S2 par A10</div>'
         '</div>'
         '<div class="kpi-card">'
         '<div class="kpi-card-label">σ Mack total</div>'
@@ -1089,7 +1089,7 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         )
     tbl += (
         '<tr class="highlight-gold">'
-        '<td class="label" style="color:var(--navy);">⭐ Best Estimate S2</td>'
+        '<td class="label" style="color:var(--navy);">⭐ Best Estimate (brut)</td>'
         '<td class="right" style="color:var(--navy);"><span class="mono">' + _f(BE) + '</span></td>'
         '<td class="center">100\u202f%</td>'
         '<td class="center">—</td>'
@@ -1168,9 +1168,9 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         '<table class="premium"><thead><tr>'
         '<th>Composante</th><th class="center">Valeur</th><th>Référence réglementaire</th>'
         '</tr></thead><tbody>'
-        '<tr><td class="label">Best Estimate S2</td>'
+        '<tr><td class="label">Best Estimate (brut)</td>'
         '<td class="center"><span class="mono">' + _f(BE) + '</span></td>'
-        '<td>Art. 77 — Directive Solvabilité 2</td></tr>'
+        '<td>Réserve brute — actualisation S2 en aval (A10)</td></tr>'
         '<tr><td class="label">Facteur σ EIOPA</td>'
         '<td class="center"><span class="mono">' + sigma_eiopa + '</span></td>'
         '<td>' + lob + ' — Annexe II, Règlement 2015/35</td></tr>'
@@ -1875,7 +1875,7 @@ def export_word(n1, n2, n3, n4,
 
         _h('1. Synthèse exécutive'); _sep()
         _tbl(['Indicateur','Valeur','Indicateur','Valeur'],
-             [['Best Estimate S2',_f(BE),'σ Mack total',_f(SIG)],
+             [['Best Estimate (brut)',_f(BE),'σ Mack total',_f(SIG)],
               ['Provision P75',_f(P75),'CV inter-méthodes',_pct(CV)],
               ['Provision P90',_f(P90),'SCR Provisions',_f(SCP)],
               ['Provision P99.5',_f(P99),'Ratio SCR/BE',_pct(SCR)]],ws=[4.5,3.5,4.5,3.5])
@@ -1889,7 +1889,7 @@ def export_word(n1, n2, n3, n4,
               ['Bornhuetter-Ferguson',_f(bf.get('reserve_totale')),_pct(pw.get('bornhuetter_ferguson',0)*100),'—','✓ Inclus'],
               ['Cape Cod',_f(cc.get('reserve_totale')),_pct(pw.get('cape_cod',0)*100),
                str(n2.get('scores_confiance',{}).get('cape_cod','—')),'✓ Inclus'],
-              ['BEST ESTIMATE S2',_f(BE),'100 %','—','→ Bilan S2']],ws=[4.5,3.5,2.5,2.5,3.0])
+              ['BEST ESTIMATE (brut)',_f(BE),'100 %','—','→ A10 (actualisation)']],ws=[4.5,3.5,2.5,2.5,3.0])
         doc.add_page_break()
 
         _h('3. Validation des hypothèses actuarielles'); _sep()
@@ -1903,7 +1903,7 @@ def export_word(n1, n2, n3, n4,
 
         _h('4. SCR Provisions — Art. 105 S2'); _sep()
         _tbl(['Composante','Valeur','Référence'],
-             [['Best Estimate S2',_f(BE),'Art. 77 S2'],
+             [['Best Estimate (brut)',_f(BE),'Art. 77 — avant actualisation'],
               ['Facteur σ EIOPA','0,10 à 0,11','Annexe II, Rèegt 2015/35'],
               ['SCR Provisions',_f(SCP),'3 × σ × BE'],
               ['Ratio SCR/BE',_pct(SCR),'< 35 %']],ws=[4.5,3.5,8.0])
