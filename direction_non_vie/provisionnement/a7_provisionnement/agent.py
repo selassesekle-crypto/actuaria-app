@@ -332,12 +332,57 @@ class AgentA7Provisionnement:
                 n4['n_grands_sinistres']         = n_grands_sinistres
                 n4['methode_grands']             = methode_grands
                 n4['llt_applique']               = True
-                # Recalculer le message
+
+                # ── B5 : recalcul des agrégats S2 sur le BE final (post-LLT) ───
+                # Le σ de réserve (incertitude du processus) est indépendant du
+                # niveau LLT — seul le BE change. Sans ce recalcul, SCR / percentiles
+                # / RM / PT restaient calculés sur l'attritional → PT S2 < BE_final
+                # (aberrant sous Solvabilité 2).
+
+                # 1. SCR formule standard (Art. 105) : 3 × σ_eiopa × BE_final
+                _sig_eiopa = float(n4['scr']['sigma_eiopa'])
+                _scr_old   = float(n4['scr']['scr_provisions'])
+                _scr_new   = 3.0 * _sig_eiopa * _be_final
+                _ratio_scr = _scr_new / max(_be_final, 1e-9)
+                n4['scr']['scr_provisions'] = round(_scr_new, 0)
+                n4['scr']['ratio_scr_be']   = round(_ratio_scr, 4)
+                n4['scr']['message'] = (
+                    f"SCR_prov = 3 × {_sig_eiopa:.0%} × {_be_final:,.0f}€ "
+                    f"= {_scr_new:,.0f}€ (ratio SCR/BE = {_ratio_scr:.1%})"
+                )
+                n4['scr_prov'] = n4['scr']['scr_provisions']
+
+                # 2. Percentiles log-normale (QIS5 TP.5.26) recentrés sur BE_final,
+                #    σ inchangé (σ_total composé, comme les percentiles d'origine).
+                #    Les variantes _mack / _boot restent sur l'attritional (transparence).
+                _sig_pct = float(n4.get('sigma_total_compose') or n4.get('sigma_mack') or 0.0)
+                if _sig_pct > 0 and _be_final > 0:
+                    _cv    = _sig_pct / _be_final
+                    _s2_ln = float(np.log(1.0 + _cv ** 2))
+                    _s_ln  = float(np.sqrt(_s2_ln))
+                    _m_ln  = float(np.log(_be_final) - _s2_ln / 2.0)
+                    n4['reserve_p75']   = round(float(np.exp(_m_ln + 0.6745 * _s_ln)), 0)
+                    n4['reserve_p90']   = round(float(np.exp(_m_ln + 1.2816 * _s_ln)), 0)
+                    n4['reserve_p99_5'] = round(float(np.exp(_m_ln + 2.5758 * _s_ln)), 0)
+
+                # 3. Risk Margin proportionnel au SCR (mêmes facteurs cumulés,
+                #    taux et courbe RFR — seul le niveau SCR change).
+                _ratio_rm = _scr_new / max(_scr_old, 1e-9)
+                _rm_new   = float(n4.get('risk_margin', 0.0)) * _ratio_rm
+                n4['risk_margin'] = round(_rm_new, 0)
+                n4['ratio_rm_be'] = round(_rm_new / max(_be_final, 1e-9) * 100.0, 2)
+
+                # 4. Provisions techniques S2 = BE_final + RM  (doit être ≥ BE_final)
+                n4['provisions_techniques_s2'] = round(_be_final + _rm_new, 0)
+
+                # 5. Message enrichi (BE + SCR + RM + PT recalculés)
                 n4['message'] = (
                     f"BE S2 final = {_be_final:,.0f}€ "
                     f"(attritional {_be_attrit:,.0f}€ + grands sinistres {_rgs:,.0f}€) · "
                     f"LLT appliqué — {n_grands_sinistres} grand(s) sinistre(s) · "
-                    f"méthode grands : {methode_grands}"
+                    f"méthode grands : {methode_grands} · "
+                    f"SCR_prov = {_scr_new:,.0f}€ · RM = {_rm_new:,.0f}€ · "
+                    f"PT S2 = {n4['provisions_techniques_s2']:,.0f}€"
                 )
                 if self.verbose:
                     logger.info(
