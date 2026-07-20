@@ -1799,6 +1799,7 @@ def export_word(n1, n2, n3, n4,
         CV  = float(n4.get('cv_inter_methodes',0) or 0)
         SCP = float(sc.get('scr_provisions', sc.get('scr_prov', BE*0.30)) if sc else BE*0.30)
         SCR = SCP/BE*100 if BE else 0
+        SIG_EIOPA = _s(sc.get('sigma_eiopa', '0,10') if sc else '0,10')  # dynamique — cf. version HTML (L1166)
 
         doc = Document()
         for s in doc.sections:
@@ -1904,7 +1905,7 @@ def export_word(n1, n2, n3, n4,
         _h('4. SCR Provisions — Art. 105 S2'); _sep()
         _tbl(['Composante','Valeur','Référence'],
              [['Best Estimate (brut)',_f(BE),'Art. 77 — avant actualisation'],
-              ['Facteur σ EIOPA','0,10 à 0,11','Annexe II, Rèegt 2015/35'],
+              ['Facteur σ EIOPA',SIG_EIOPA,'Annexe II, Rgt 2015/35'],
               ['SCR Provisions',_f(SCP),'3 × σ × BE'],
               ['Ratio SCR/BE',_pct(SCR),'< 35 %']],ws=[4.5,3.5,8.0])
         doc.add_page_break()

@@ -402,7 +402,7 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
     # ── Transport (LoB 6 S2 — sous-catégorie marine_aviation_transport) ────────
     "transport": {
         "label":            "Transport",
-        "sigma_eiopa":      SIGMA_EIOPA["marine_aviation_transport"],  # 0.12 — S2 LoB 6
+        "sigma_eiopa":      SIGMA_EIOPA["marine_aviation_transport"],  # 0.14 — S2 LoB 6 (valeur marine_aviation_transport)
         "lob_eiopa":        "marine_aviation_transport",
 
         "queue_attendue_ans": 8,
