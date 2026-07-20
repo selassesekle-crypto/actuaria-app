@@ -348,11 +348,11 @@ def calculer_variance_totale(
             if U_i <= 0 or U_l <= 0:
                 continue
 
-            k_l = min(n - l - 1, m - 1)   # dernière colonne connue de l
+            k_i = min(n - i - 1, m - 1)   # dernière colonne connue de l'année ANCIENNE i (queue commune)
 
-            # Σ_{j=k_l}^{m-2} σ²_j / (f̂²_j × W_j)
+            # Σ_{j=k_i}^{m-2} σ²_j / (f̂²_j × W_j)
             s = 0.0
-            for j in range(k_l, m - 1):
+            for j in range(k_i, m - 1):
                 if j >= len(facteurs) or j >= len(sigma2):
                     break
                 f_j = float(facteurs[j])

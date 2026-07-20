@@ -125,18 +125,18 @@ class T2_Mack_RAA(unittest.TestCase):
         self.assertAlmostEqual(mk['reserve_best_estimate'], 52_135, delta=1)
         print(f"    OK T3 Mack RAA : reserve = {mk['reserve_best_estimate']:,.0f} EUR")
 
-    @unittest.expectedFailure
     def test_mack_se_raa(self):
         """Erreur-type Mack RAA = 26 909 (Mack 1993 / R ChainLadder).
 
-        ÉCHEC ATTENDU — bug B1 (terme croisé, mack.py:355) : la borne
-        d'agrégation du terme de covariance utilise k_l (année récente) au lieu
-        de k_i (année ancienne), sur-comptant la covariance. Valeur actuelle du
-        code : ~42 873 (+59% vs 26 909). Correctif : range(k_l, m-1) -> range(k_i, m-1).
-        Ce test passera au vert une fois B1 corrigé -> RETIRER alors ce marqueur.
+        Vérifie le correctif B1 (terme croisé, calculer_variance_totale) : la
+        borne d'agrégation du terme de covariance entre années i<l démarre à
+        k_i (année ancienne = queue de développement commune), et non k_l
+        (année récente). Avant correctif, la plage trop large sur-comptait la
+        covariance -> sigma_total ~42 873 (+59% vs la référence 26 909).
         """
         _, mk = self._mack_raa()
         self.assertAlmostEqual(mk['sigma_total'], 26_909, delta=5)
+        print(f"    OK T4 Mack RAA : sigma_total = {mk['sigma_total']:,.0f} EUR")
 
 
 # =============================================================================
