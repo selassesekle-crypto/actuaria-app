@@ -687,7 +687,7 @@ def _ong8_comparatif(wb, n4, resultats_precedents=None):
         ("Best Estimate S2 (€)",    be_n,    be_nm1,    FMT_NB),
         ("Provision P90 (€)",       p90_n,   p90_nm1,   FMT_NB),
         ("Incertitude Mack σ (€)",  sigma_n, sigma_nm1, FMT_NB),
-        ("CV inter-méthodes (%)",   cv_n,    cv_nm1,    None),
+        ("CV inter-méthodes",       cv_n/100, cv_nm1/100, FMT_PCT),
     ]
 
     for i, (lbl, vn, vnm1, fmt) in enumerate(indicateurs):
@@ -709,7 +709,7 @@ def _ong8_comparatif(wb, n4, resultats_precedents=None):
             (lbl,      None),
             (vn,       fmt or FMT_NB),
             (vnm1,     fmt or FMT_NB),
-            (delta_abs, FMT_NB if fmt else None),
+            (delta_abs, fmt or FMT_NB),
             (delta_pct, FMT_PCT),
         ]):
             c = ws.cell(row=3+i, column=j+1, value=val)

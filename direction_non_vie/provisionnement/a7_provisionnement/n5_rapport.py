@@ -1116,7 +1116,7 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         '<td class="right">' + ('<span class="mono">' + _f(P75_boot) + '</span>' if _boot_dispo else '<span style="color:var(--slate)">—</span>') + '</td>'
         '<td class="right">' + ('<span class="mono">' + _f(P90_boot) + '</span>' if _boot_dispo else '<span style="color:var(--slate)">—</span>') + '</td>'
         '<td class="right">' + ('<span class="mono">' + _f(P99_boot) + '</span>' if _boot_dispo else '<span style="color:var(--slate)">—</span>') + '</td>'
-        '<td class="center">' + _pct(CV) + '</td></tr>'
+        '<td class="center">' + _pct(n3.get('bootstrap', {}).get('cv_bootstrap', 0) * 100) + '</td></tr>'
         '</tbody></table>'
     )
     b['tableau_incertitude'] = tbl_i

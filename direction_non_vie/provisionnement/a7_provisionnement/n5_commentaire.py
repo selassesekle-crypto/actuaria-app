@@ -1631,7 +1631,7 @@ def _narration_comparatif(n4: Dict, resultats_precedents: Optional[Dict]) -> str
     if cv_nm1 > 0:
         delta_cv = cv_n - cv_nm1
         lignes.append(
-            f"CV méthodes   : {_p(cv_n/100)} vs {_p(cv_nm1/100)} arrêté N-1 "
+            f"CV méthodes   : {_p(cv_n)} vs {_p(cv_nm1)} arrêté N-1 "
             f"({'amélioration' if delta_cv < 0 else 'dégradation'} de la convergence)"
         )
 
