@@ -201,7 +201,7 @@ STRUCTURE OBLIGATOIRE EN 7 SECTIONS :
 def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: str) -> str:
     cl    = n3.get('chain_ladder', {});  mk  = n3.get('mack', {})
     bf    = n3.get('bf', {});            cc  = n3.get('cape_cod', {})
-    clark = n3.get('clark', {});         bz  = n3.get('barnett_zehnwirth', {})
+    clark = n3.get('clark', {});         bz  = n3.get('glm_apc', {})
     bt    = n3.get('backtesting', {});   sc  = n4.get('scr', {})
     h1    = n2.get('h1_independance', {}); h2 = n2.get('h2_stabilite', {})
     h3    = n2.get('h3_apriori_bf', {});  h4  = n2.get('h4_homosc_bootstrap', {})
@@ -249,10 +249,11 @@ def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: s
         f"N-1: {bt.get('n_rouge_n1', 0)} rouge / {bt.get('n_ambre_n1', 0)} ambre | N-2: {bt.get('n_rouge_n2', 0)} rouge / {bt.get('n_ambre_n2', 0)} ambre",
         f"Message: {str(bt.get('message', ''))[:300]}",
         "",
-        "=== EFFETS CALENDAIRE ===",
+        "=== EFFETS CALENDAIRE (GLM POISSON APC) ===",
         f"Statut={bz.get('statut', '—')} | Sig.={bz.get('n_effets_significatifs', 0)}/{bz.get('n_diagonales_evaluees', 0)}",
-        f"GLM BZ réserve corrigée={_f(bz.get('reserve_bz', 0))} | "
-        f"effets {'SIGNIFICATIFS p<0,0001' if bz.get('cal_significatif') else 'non significatifs'}",
+        f"Réserve GLM APC={_f(bz.get('reserve_apc', 0))} (= chain-ladder par MLE) | "
+        f"test calendaire {'SIGNIFICATIF' if bz.get('cal_significatif') else 'non significatif'} "
+        f"(F quasi-Poisson, p={bz.get('p_calendaire', '—')})",
         f"Diagonales anormales: {', '.join(bz.get('diagonales_anormales', [])) or 'Aucune'}",
         f"Recommandation: {bz.get('recommandation', '—')}",
         "",
@@ -918,7 +919,7 @@ table.premium tbody td .mono { font-family: 'JetBrains Mono', monospace; font-si
 def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, audit_id, methode, statut, graphiques_html, actuaire_nom='', actuaire_numero_ia='') -> Dict:
     cl    = n3.get('chain_ladder', {});  mk  = n3.get('mack', {})
     bf    = n3.get('bf', {});            cc  = n3.get('cape_cod', {})
-    clark = n3.get('clark', {});         bz  = n3.get('barnett_zehnwirth', {})
+    clark = n3.get('clark', {});         bz  = n3.get('glm_apc', {})
     bt    = n3.get('backtesting', {});   sc  = n4.get('scr', {})
     h1    = n2.get('h1_independance', {}); h2 = n2.get('h2_stabilite', {})
     h3    = n2.get('h3_apriori_bf', {});  h4  = n2.get('h4_homosc_bootstrap', {})
@@ -1077,12 +1078,12 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
             '<td class="center" style="font-size:7.5pt;color:var(--slate);">AIC = ' + aic_disp + '</td>'
             '<td class="center"><span class="badge badge-excl">⊘ Exclu</span></td></tr>'
         )
-    if bz.get('glm_disponible') and bz.get('reserve_bz'):
-        _p_bz = bz.get('p_calendrier', 1)
+    if bz.get('glm_disponible') and bz.get('reserve_apc'):
+        _p_bz = bz.get('p_calendaire', 1) or 1
         _p_bz_txt = 'p\u202f&lt;\u202f0,0001' if _p_bz < 0.0001 else f'p\u202f=\u202f{_p_bz:.4f}'
         tbl += (
-            '<tr><td class="label">Barnett-Zehnwirth (GLM)</td>'
-            '<td class="right"><span class="mono">' + _f(bz.get('reserve_bz')) + '</span></td>'
+            '<tr><td class="label">GLM Poisson APC (= CL)</td>'
+            '<td class="right"><span class="mono">' + _f(bz.get('reserve_apc')) + '</span></td>'
             '<td class="center">—</td>'
             '<td class="center" style="font-size:7.5pt;color:var(--slate);">' + _p_bz_txt + '</td>'
             '<td class="center"><span class="badge badge-excl" style="background:rgba(74,144,226,0.15);color:#4A90E2;">ℹ️ Informatif</span></td></tr>'
@@ -1265,16 +1266,37 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     b['bt_note'] = '<div class="bt-note">' + _bt_note_txt + '</div>' if _bt_note_txt else ''
 
     # ── SECTION 6 : EFFETS CALENDAIRE ────────────────────────────────────────
-    n_sig = int(bz.get('n_effets_significatifs', 0))
+    n_sig    = int(bz.get('n_effets_significatifs', 0))
+    _glm_ok  = bz.get('glm_disponible', False)
+    _cal_sig = bz.get('cal_significatif', False)
     bz_items = ''
     if n_sig == 0:
-        bz_items = (
-            '<div class="bz-item bz-ok">'
-            '<span class="bz-year" style="color:var(--vert);">✓ OK</span>'
-            '<div class="bz-bar"><div class="bz-fill" style="width:0%;background:var(--vert);"></div></div>'
-            '<span class="bz-pct" style="color:var(--vert);">Aucun effet significatif</span>'
-            '</div>'
-        )
+        if not _glm_ok:
+            # FIX 2 : test indisponible -> ne jamais afficher "aucun effet".
+            bz_items = (
+                '<div class="bz-item bz-info">'
+                '<span class="bz-year" style="color:var(--cyan);">n/d</span>'
+                '<div class="bz-bar"><div class="bz-fill" style="width:0%;background:var(--cyan);"></div></div>'
+                '<span class="bz-pct" style="color:var(--cyan);">Test calendaire indisponible</span>'
+                '</div>'
+            )
+        elif _cal_sig:
+            # FIX 1 : F global significatif mais aucune diagonale isolee dominante (effet diffus).
+            bz_items = (
+                '<div class="bz-item bz-warn">'
+                '<span class="bz-year" style="color:var(--orange);">Diffus</span>'
+                '<div class="bz-bar"><div class="bz-fill" style="width:60%;background:var(--orange);"></div></div>'
+                '<span class="bz-pct" style="color:var(--orange);">Effet calendaire global réparti (aucune diagonale isolée dominante)</span>'
+                '</div>'
+            )
+        else:
+            bz_items = (
+                '<div class="bz-item bz-ok">'
+                '<span class="bz-year" style="color:var(--vert);">&#10003; OK</span>'
+                '<div class="bz-bar"><div class="bz-fill" style="width:0%;background:var(--vert);"></div></div>'
+                '<span class="bz-pct" style="color:var(--vert);">Aucun effet significatif</span>'
+                '</div>'
+            )
     else:
         forts   = [e for e in bz.get('effets_calendaire', []) if e.get('significatif') and e.get('niveau') in ('FORT', 'MODÉRÉ')]
         faibles = [e for e in bz.get('effets_calendaire', []) if e.get('significatif') and e.get('niveau') == 'FAIBLE']
@@ -1302,22 +1324,23 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
             )
     b['bz_items'] = bz_items
 
-    # ── Résultats GLM BZ (Niveau 2) ──────────────────────────────────────────
+    # -- Resultats GLM Poisson APC (test calendaire F quasi-Poisson) --
     glm_dispo  = bz.get('glm_disponible', False)
-    p_cal      = bz.get('p_calendrier')
+    p_cal      = bz.get('p_calendaire')
     cal_sig    = bz.get('cal_significatif')
-    aic_red    = bz.get('aic_reduit')
-    aic_ful    = bz.get('aic_complet')
-    res_bz     = bz.get('reserve_bz')
-    lr_stat    = bz.get('lr_stat')
+    F_cal      = bz.get('F_calendaire')
+    phi_disp   = bz.get('phi_dispersion')
+    ddl_cal    = bz.get('ddl_calendaire')
+    res_apc    = bz.get('reserve_apc')
 
     if glm_dispo and p_cal is not None:
-        _cal_col  = 'var(--rouge)' if cal_sig else 'var(--vert)'
-        _p_fmt    = 'p\u202f&lt;\u202f0,0001' if p_cal < 0.0001 else f'p\u202f=\u202f{p_cal:.4f}'.replace('.', ',')
-        _cal_txt  = ('Effets calendaires significatifs au seuil 1\u202f% (' + _p_fmt + ')'
-                     if cal_sig else 'Effets calendaires non significatifs (' + _p_fmt + ')')
-        # AIC : delta = réduction de l'AIC avec les effets calendaires
-        _delta_aic = round(aic_red - aic_ful, 0) if aic_red and aic_ful else None
+        _cal_col  = 'var(--orange)' if cal_sig else 'var(--vert)'
+        _p_fmt    = 'p &lt; 0,0001' if p_cal < 0.0001 else ('p = ' + f'{p_cal:.4f}'.replace('.', ','))
+        _cal_txt  = ('Effet calendaire significatif au seuil 5 % (' + _p_fmt + ')'
+                     if cal_sig else 'Effet calendaire non significatif (' + _p_fmt + ')')
+        _stat_fmt = (('F = ' + f'{F_cal:.2f}'.replace('.', ',') + ' (ddl = ' + str(ddl_cal) + ')')
+                     if F_cal is not None else '-')
+        _phi_fmt  = (f'{phi_disp:,.0f}'.replace(',', ' ') if phi_disp else '-')
         b['bz_glm'] = (
             '<div class="section-body" style="margin-top:24px;padding:20px 28px;'
             'background:var(--navy-mid, #0D2137);border-radius:8px;'
@@ -1325,33 +1348,32 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
 
             '<div style="font-size:7.5pt;font-weight:700;color:var(--gold);'
             'text-transform:uppercase;letter-spacing:1.5px;margin-bottom:16px;">'
-            '◆ GLM Barnett-Zehnwirth — Test du rapport de vraisemblance</div>'
+            '&#9670; GLM Poisson APC &mdash; Test F quasi-Poisson (effet calendaire)</div>'
 
             '<table style="width:100%;border-collapse:collapse;font-size:8.5pt;"><tbody>'
             '<tr style="border-bottom:1px solid rgba(255,255,255,0.08);">'
-            '<td style="padding:8px 0;color:var(--slate);width:55%;">Conclusion du test LR</td>'
+            '<td style="padding:8px 0;color:var(--slate);width:55%;">Conclusion du test F</td>'
             '<td style="padding:8px 0;font-weight:700;color:' + _cal_col + ';">' + _cal_txt + '</td>'
             '</tr>'
             '<tr style="border-bottom:1px solid rgba(255,255,255,0.08);">'
-            '<td style="padding:8px 0;color:var(--slate);">Réduction AIC (avec vs sans effets calendaires)</td>'
-            '<td style="padding:8px 0;"><span class="mono" style="color:var(--white);">'
-            + (f'\u2212\u202f{_delta_aic:,.0f}'.replace(',', '\u202f') if _delta_aic else '—') +
-            '</span><span style="color:var(--slate);font-size:7.5pt;"> (meilleur ajustement)</span></td>'
+            '<td style="padding:8px 0;color:var(--slate);">Statistique de test</td>'
+            '<td style="padding:8px 0;"><span class="mono" style="color:var(--white);">' + _stat_fmt + '</span>'
+            '<span style="color:var(--slate);font-size:7.5pt;"> &mdash; &#966; = ' + _phi_fmt + ' (sur-dispersion Poisson)</span></td>'
             '</tr>'
-            + ('<tr><td style="padding:8px 0;color:var(--slate);">Réserve BZ corrigée des effets calendaires</td>'
+            + ('<tr><td style="padding:8px 0;color:var(--slate);">Réserve GLM APC (âge-cohorte)</td>'
                '<td style="padding:8px 0;"><span class="mono" style="color:var(--gold);font-weight:700;">'
-               + _f(res_bz) +
-               '</span><span style="color:var(--slate);font-size:7.5pt;"> — à titre informatif, '
-               'nécessite jugement actuariel (Guide IA 2023)</span></td></tr>'
-               if res_bz else '') +
+               + _f(res_apc) +
+               '</span><span style="color:var(--slate);font-size:7.5pt;"> &mdash; = chain-ladder par MLE '
+               '(Renshaw-Verrall 1998) ; le calendaire n’est pas projeté</span></td></tr>'
+               if res_apc else '') +
             '</tbody></table>'
 
             '<div style="margin-top:12px;font-size:7.5pt;color:var(--slate);'
             'border-top:1px solid rgba(255,255,255,0.06);padding-top:10px;">'
-            'Modèle GLM Poisson avec effets cohorte, développement et calendrier '
-            '(Barnett &amp; Zehnwirth, 1998 — CAS Forum). '
-            'H\u2080\u202f: les effets calendaires sont nuls — '
-            'rejet\u00e9 si p\u202f<\u202f0,05.</div>'
+            'GLM Poisson cross-classifié âge-période-cohorte (Renshaw &amp; Verrall 1998). '
+            'H&#8320; : effets calendaires nuls &mdash; test F quasi-Poisson (LR / &#966;), rejeté si p &lt; 0,05. '
+            'Le test capte la courbure (chocs, changements de régime) ; une inflation '
+            'constante est non identifiable sur le triangle seul (VERT ne l’exclut pas).</div>'
             '</div>'
         )
     else:
@@ -1364,7 +1386,7 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         '<div class="recommandation-box" style="margin-top:20px;">'
         '<div class="reco-icon" style="color:var(--cyan);">↗</div>'
         '<div>'
-        '<div class="reco-label">Recommandation Barnett-Zehnwirth</div>'
+        '<div class="reco-label">Recommandation GLM Poisson APC</div>'
         '<div class="reco-value">' + bz_reco_val + '</div>'
         '<div class="reco-text">' + bz_reco_txt + '</div>'
         '</div>'
@@ -1681,7 +1703,7 @@ def export_html(
             + '\n</div>\n<div class="section-divider"></div>\n\n'
 
             # Section 6
-            '<div class="section-header"><span class="section-num">06</span><span class="section-titre">Effets calendaires — Barnett-Zehnwirth (1998)</span></div>\n'
+            '<div class="section-header"><span class="section-num">06</span><span class="section-titre">Effets calendaires — GLM Poisson APC (Renshaw-Verrall 1998)</span></div>\n'
             '<div class="section-body">\n'
             '<div class="bz-grid">' + b['bz_items'] + '</div>\n'
             + b.get('bz_glm', '') + '\n'
@@ -1800,7 +1822,7 @@ def export_word(n1, n2, n3, n4,
         cl  = n3.get('chain_ladder',{});  mk = n3.get('mack',{})
         bf  = n3.get('bf',{});            cc = n3.get('cape_cod',{})
         sc  = n4.get('scr',{});           pw = n4.get('poids',{})
-        bt  = n3.get('backtesting',{});   bz = n3.get('barnett_zehnwirth',{})
+        bt  = n3.get('backtesting',{});   bz = n3.get('glm_apc',{})
         h1  = n2.get('h1_independance',{}); h2 = n2.get('h2_stabilite',{})
         h3  = n2.get('h3_apriori_bf',{});  h4  = n2.get('h4_homosc_bootstrap',{})
 
@@ -1940,7 +1962,7 @@ def export_word(n1, n2, n3, n4,
         _run(p,' | N-2 : '+str(bt.get('n_rouge_n2',0))+' rouge / '+str(bt.get('n_ambre_n2',0))+' ambre',sz=9,col=NR)
         doc.add_page_break()
 
-        _h('6. Effets calendaire — Barnett-Zehnwirth (1998)'); _sep()
+        _h('6. Effets calendaire — GLM Poisson APC (Renshaw-Verrall 1998)'); _sep()
         n_sig_w = int(bz.get('n_effets_significatifs',0))
         if n_sig_w == 0:
             p=doc.add_paragraph(); _run(p,'✅ Aucun effet calendaire significatif.',sz=9,col=VR)

@@ -25,6 +25,9 @@ from direction_non_vie.provisionnement.a7_provisionnement.n3.chain_ladder import
 from direction_non_vie.provisionnement.a7_provisionnement.n3.mack import mack_1993
 from direction_non_vie.provisionnement.a7_provisionnement.n3.clark import clark_ldf
 from direction_non_vie.provisionnement.a7_provisionnement.n3.bootstrap_odp import bootstrap_odp
+from direction_non_vie.provisionnement.a7_provisionnement.n3.glm_apc_poisson import (
+    glm_apc_poisson, STATSMODELS_OK as _APC_SM_OK,
+)
 from direction_non_vie.provisionnement.a7_provisionnement.config.lob_config import (
     get_lob_config, list_lobs,
 )
@@ -290,6 +293,97 @@ class T8_Exports(unittest.TestCase):
         n = len(self.r.get('word_bytes', b''))
         self.assertGreater(n, 0, "export_word a produit 0 bytes — régression d'export ?")
         print(f"    OK T8 Word : {n:,} bytes")
+
+
+# =============================================================================
+#  GLM POISSON APC (Renshaw-Verrall) — réserve = CL + test calendaire F quasi-Poisson
+#  Remplace l'ancien module mal nommé/mal calibré 'barnett_zehnwirth'.
+# =============================================================================
+
+def _genins_transforme(fn):
+    """GenIns cumulé après transformation fn(i, j, incrément) des incréments."""
+    n = len(_INC_GENINS)
+    C = np.zeros((n, n))
+    for i, row in enumerate(_INC_GENINS):
+        C[i, :len(row)] = np.cumsum([fn(i, j, row[j]) for j in range(len(row))])
+    return C
+
+
+def _triangle_separable():
+    """Triangle séparable a_i × b_j — aucun effet calendaire par construction."""
+    b = np.array([0.30, 0.25, 0.18, 0.10, 0.06, 0.04, 0.03, 0.02, 0.01, 0.01])
+    a = np.array([1000, 1100, 1250, 1300, 1400, 1500, 1600, 1750, 1800, 1900.0])
+    n = 10
+    C = np.zeros((n, n))
+    for i in range(n):
+        C[i, :n-i] = np.cumsum([a[i]*b[j]*(1.0 + 0.03*(((i*7 + j*3) % 5) - 2)) for j in range(n-i)])
+    return C
+
+
+@unittest.skipUnless(_APC_SM_OK, "statsmodels non installé")
+class T9_GLM_APC(unittest.TestCase):
+    """GLM Poisson âge-période-cohorte (Renshaw-Verrall 1998).
+
+    Deux garanties, toutes deux mesurées :
+      · RÉSERVE âge-cohorte = chain-ladder (théorème Renshaw-Verrall) ;
+      · TEST calendaire F quasi-Poisson : calme sur triangle propre ET sur
+        inflation CONSTANTE (non identifiable sur le triangle seul — la
+        signaler serait un faux positif) ; significatif sur une COURBURE
+        injectée (oscillation, choc de dernière diagonale).
+    """
+
+    def test_reserve_apc_egale_cl_genins(self):
+        """Réserve GLM âge-cohorte = réserve chain-ladder GenIns (Renshaw-Verrall)."""
+        r = glm_apc_poisson(GENINS, annee_debut=2010, annee_base=1)
+        self.assertTrue(r.get('success'), r.get('erreur'))
+        res = r['reserve_apc']
+        self.assertAlmostEqual(res / 18680856.0, 1.0, delta=0.005,
+            msg=f"réserve APC = {res:,.0f}, attendu ~18 680 856 (= CL)")
+        self.assertFalse(r['reserve_fallback_cl'], "fallback CL non attendu sur GenIns")
+        print(f"    OK T9 réserve APC GenIns = {res:,.0f} (= CL)")
+
+    def test_reserve_apc_egale_cl_separable(self):
+        """Sur un triangle séparable, réserve APC = réserve chain-ladder."""
+        C = _triangle_separable()
+        cl = chain_ladder(C, tail_force=1.0)
+        cl_res = cl.get('reserve_best_estimate', cl.get('reserve', cl.get('reserve_totale')))
+        r = glm_apc_poisson(C, annee_debut=2010, annee_base=1)
+        self.assertAlmostEqual(r['reserve_apc'] / cl_res, 1.0, delta=0.005,
+            msg=f"APC={r['reserve_apc']:,.0f} vs CL={cl_res:,.0f}")
+        print(f"    OK T9 réserve APC séparable = {r['reserve_apc']:,.0f} (= CL {cl_res:,.0f})")
+
+    def test_calendaire_calme_sur_genins_brut(self):
+        """GenIns brut (sans choc calendaire connu) : non significatif → VERT."""
+        r = glm_apc_poisson(GENINS, annee_debut=2010)
+        self.assertFalse(r['cal_significatif'], f"faux positif (p={r['p_calendaire']})")
+        self.assertEqual(r['statut'], 'VERT')
+        print(f"    OK T9 GenIns brut : VERT (p={r['p_calendaire']})")
+
+    def test_inflation_constante_non_signalee(self):
+        """Oracle d'honnêteté : une inflation CONSTANTE (non identifiable sur le
+        triangle seul) NE doit PAS être signalée — sinon faux positif."""
+        C = _genins_transforme(lambda i, j, x: x * (1.10 ** (i + j)))
+        r = glm_apc_poisson(C, annee_debut=2010)
+        self.assertFalse(r['cal_significatif'],
+            f"inflation constante signalée à tort (p={r['p_calendaire']})")
+        self.assertEqual(r['statut'], 'VERT')
+        print(f"    OK T9 inflation constante 10%/an : VERT (correct, p={r['p_calendaire']})")
+
+    def test_courbure_oscillation_detectee(self):
+        """Oscillation ±30 % par diagonale (courbure pure) : significatif → AMBRE."""
+        C = _genins_transforme(lambda i, j, x: x * 1.30 if (i + j) % 2 == 0 else x * 0.70)
+        r = glm_apc_poisson(C, annee_debut=2010)
+        self.assertTrue(r['cal_significatif'], f"oscillation non détectée (p={r['p_calendaire']})")
+        self.assertEqual(r['statut'], 'AMBRE')
+        print(f"    OK T9 oscillation ±30% : AMBRE (p={r['p_calendaire']})")
+
+    def test_choc_derniere_diagonale_detecte(self):
+        """Choc ×2 sur la dernière diagonale (biais BE direct) : significatif → AMBRE."""
+        C = _genins_transforme(lambda i, j, x: x * 2.0 if (i + j) == 9 else x)
+        r = glm_apc_poisson(C, annee_debut=2010)
+        self.assertTrue(r['cal_significatif'], f"choc non détecté (p={r['p_calendaire']})")
+        self.assertEqual(r['statut'], 'AMBRE')
+        print(f"    OK T9 choc dernière diagonale ×2 : AMBRE (p={r['p_calendaire']})")
 
 
 if __name__ == '__main__':

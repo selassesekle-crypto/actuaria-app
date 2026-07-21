@@ -362,8 +362,8 @@ class BestEstimateS2:
             )
 
         # Recommandation effets calendaire si dispo
-        bz_statut_val = n3.get('barnett_zehnwirth', {}).get('statut', '')
-        if bz_statut_val in ('ROUGE', 'AMBRE'):
+        bz_statut_val = n3.get('glm_apc', {}).get('statut', '')
+        if bz_statut_val == 'AMBRE':   # le GLM APC n'emet que VERT/AMBRE (pas de ROUGE)
             recommandations.append(
                 "Effets calendaire détectés — documenter la cause (inflation, changement législatif) "
                 "dans la note méthodologique S2."

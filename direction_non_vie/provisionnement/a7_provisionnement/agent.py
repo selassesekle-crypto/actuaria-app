@@ -58,7 +58,7 @@ from .n3.bootstrap_odp import bootstrap_odp
 from .n3.munich_cl    import munich_cl
 from .n3.backtesting  import calculer_backtesting
 from .n3.clark               import clark_ldf
-from .n3.barnett_zehnwirth   import barnett_zehnwirth
+from .n3.glm_apc_poisson     import glm_apc_poisson
 
 logger = logging.getLogger('actuaria.a7')
 
@@ -309,12 +309,12 @@ class AgentA7Provisionnement:
             except Exception as _ebt:
                 logger.warning(f"Back-testing ignoré : {_ebt}")
                 n3['backtesting'] = {}
-            # Effets calendaire Barnett-Zehnwirth
+            # Effet calendaire — GLM Poisson APC (Renshaw-Verrall)
             try:
-                n3['barnett_zehnwirth'] = barnett_zehnwirth(C_calc, annee_debut=annee_debut, annee_base=annee_base_reserve)
-            except Exception as _ebz:
-                logger.warning(f"Barnett-Zehnwirth ignoré : {_ebz}")
-                n3['barnett_zehnwirth'] = {}
+                n3['glm_apc'] = glm_apc_poisson(C_calc, annee_debut=annee_debut, annee_base=annee_base_reserve)
+            except Exception as _eapc:
+                logger.warning(f"GLM Poisson APC ignoré : {_eapc}")
+                n3['glm_apc'] = {}
             # Année début pour labels calendaires (G14)
             if annee_debut:
                 n3['annee_debut_triangle'] = annee_debut
@@ -700,7 +700,7 @@ class AgentA7Provisionnement:
             'tail_factor':     tail_info,
             'backtesting':     {},
             'clark':           clark_ldf(C) if C is not None and C.shape[0] >= 4 else {'success': False, 'disponible': False},
-            'barnett_zehnwirth': {},
+            'glm_apc':         {},
         }
 
     # =========================================================================
