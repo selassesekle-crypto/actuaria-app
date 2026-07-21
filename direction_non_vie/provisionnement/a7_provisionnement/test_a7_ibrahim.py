@@ -28,6 +28,13 @@ from direction_non_vie.provisionnement.a7_provisionnement.n3.bootstrap_odp impor
 from direction_non_vie.provisionnement.a7_provisionnement.config.lob_config import (
     get_lob_config, list_lobs,
 )
+from direction_non_vie.provisionnement.a7_provisionnement.agent import AgentA7Provisionnement
+
+try:
+    import docx as _docx  # noqa: F401  (python-docx — requis pour T8 export_word)
+    _DOCX_OK = True
+except Exception:
+    _DOCX_OK = False
 
 
 # =============================================================================
@@ -237,6 +244,52 @@ class T7_LobConfig_Snapshot(unittest.TestCase):
                 )
         print(f"    OK T7 lob_config : {len(_LOB_REFERENCE)} LoB verrouillées "
               f"(risque_long / tail_seuil_stabilisation / ratio_c0_primes)")
+
+
+# =============================================================================
+#  LIVRABLES — les exports produisent des bytes (anti-régression exports)
+# =============================================================================
+
+class T8_Exports(unittest.TestCase):
+    """Les livrables produisent des bytes sur le chemin par défaut (sans resultats_precedents).
+
+    Ce test aurait attrapé la régression du Lot 1 (commit e94793d) : cv_nm1/100
+    plantait sur None quand resultats_precedents est absent, faisant retomber
+    tout export_excel à 0 bytes. Cette régression est restée invisible 2 lots
+    pour deux raisons — TOUTES DEUX distinctes de « le code avale les erreurs »
+    (le fail-loud logger.error + exc_info existait déjà dans les except des
+    exports) :
+      (1) aucun test n'exerçait export_excel / export_word — comblé ici ;
+      (2) les scripts de vérification faisaient logging.disable(CRITICAL), qui
+          masquait le logger.error déjà présent. En run agent réel l'erreur
+          était bien loggée à ERROR.
+    D'où ce test : il échoue si un export retombe à 0 bytes, quel que soit
+    l'état du logging.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        # Agent réel sur GenIns, SANS resultats_precedents (le chemin par défaut
+        # qui avait planté au Lot 1). Sorties réelles réutilisées pour les deux
+        # asserts — plus robuste qu'un n3/n4 mocké qui divergerait du réel.
+        cls.r = AgentA7Provisionnement(verbose=False).run(
+            source=GENINS, lob='generique', n_sim_bootstrap=300,
+            generer_word=True, generer_pdf_flag=False, generer_graphiques=False,
+        )
+
+    def test_export_excel_produit_bytes(self):
+        """export_excel produit > 0 bytes (openpyxl installé) — cf. régression Lot 1."""
+        self.assertTrue(self.r.get('success'), self.r.get('erreur'))
+        n = len(self.r.get('excel_bytes', b''))
+        self.assertGreater(n, 0, "export_excel a produit 0 bytes — régression d'export ?")
+        print(f"    OK T8 Excel : {n:,} bytes")
+
+    @unittest.skipUnless(_DOCX_OK, "python-docx non installé")
+    def test_export_word_produit_bytes(self):
+        """export_word produit > 0 bytes (si python-docx disponible)."""
+        n = len(self.r.get('word_bytes', b''))
+        self.assertGreater(n, 0, "export_word a produit 0 bytes — régression d'export ?")
+        print(f"    OK T8 Word : {n:,} bytes")
 
 
 if __name__ == '__main__':
