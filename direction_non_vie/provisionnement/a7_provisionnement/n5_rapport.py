@@ -1405,7 +1405,10 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
                 '<tr><td style="padding:6px 0;color:var(--slate);">' + _s(r.get('annee_label')) + '</td>'
                 '<td style="padding:6px 0;text-align:right;"><span class="mono" style="color:'
                 + ('var(--orange)' if r.get('significatif') else 'var(--slate)') + ';">'
-                + ('%+.1f %%/an' % float(r.get('delta_pct_par_an', 0))) + '</span></td>'
+                + ('%+.1f %%/an' % float(r.get('delta_pct_par_an', 0)))
+                + ((' <span style="font-weight:400;color:var(--slate);">[%+.1f %% ; %+.1f %%]</span>'
+                    % (r['ic95_pct_par_an'][0], r['ic95_pct_par_an'][1])) if r.get('ic95_pct_par_an') else '')
+                + '</span></td>'
                 '<td style="padding:6px 0 6px 16px;color:var(--slate);font-size:7.5pt;">p = '
                 + ('%.4f' % float(r.get('p_value', 1))) + (' (significatif)' if r.get('significatif') else ' (non sig.)')
                 + '</td></tr>'

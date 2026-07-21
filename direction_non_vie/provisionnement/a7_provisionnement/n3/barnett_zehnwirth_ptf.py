@@ -254,19 +254,35 @@ def _test_bloc(modele, cols: List[str]) -> Dict:
 def _details_ruptures(modele, cols: List[str], annee_debut: int,
                       k_bonferroni: int, est_calendaire: bool = True) -> List[Dict]:
     """
-    Détail par rupture : pente (Δ log), %/an, SE, t-stat, p (Bonferroni).
+    Détail par rupture : pente (Δ log), %/an, IC 95 %, SE, t-stat, p (Bonferroni).
     Calendaire → champ 'annee' (int) + 'annee_label' en ANNÉES ; développement
     → 'annee'=None + label 'd=…' (période de développement, pas une année).
+
+    'ic95_pct_par_an' = IC 95 % du CHANGEMENT de pente, en %/an (mêmes bornes log
+    que le coef, transformées exp()−1 comme delta_pct_par_an). Basé sur le t de
+    Student (statsmodels conf_int, use_t par défaut, df = df_resid) — plus honnête
+    que z=1,96 sur petits triangles. IC PAR RUPTURE (α=0,05), NON Bonferroni :
+    pour k≥2 ruptures il peut donc ne pas coïncider avec 'significatif' (Bonferroni).
     """
     out = []
+    ci_all = None
+    try:
+        ci_all = modele.conf_int(alpha=0.05)   # IC t-Student (OLS/WLS use_t par défaut)
+    except Exception as e:
+        logger.warning(f"BZ-PTF : conf_int indisponible ({e}) — IC omis.")
     for name in cols:
         idx = int(name.split('t')[-1]) if name.startswith('cal_t') else int(name.split('_')[-1])
         coef = float(modele.params[name])
         p_adj = min(1.0, float(modele.pvalues[name]) * max(k_bonferroni, 1))
+        ic95 = None
+        if ci_all is not None and name in ci_all.index:
+            lo = float(ci_all.loc[name].iloc[0]); hi = float(ci_all.loc[name].iloc[1])
+            ic95 = (round((float(np.exp(lo)) - 1.0) * 100, 2), round((float(np.exp(hi)) - 1.0) * 100, 2))
         item = {
             'rupture_t':        idx,
             'delta_log':        round(coef, 4),
             'delta_pct_par_an': round((np.exp(coef) - 1.0) * 100, 2),
+            'ic95_pct_par_an':  ic95,
             'se':               round(float(modele.bse[name]), 4),
             't_stat':           round(float(modele.tvalues[name]), 3),
             'p_value':          round(p_adj, 6),

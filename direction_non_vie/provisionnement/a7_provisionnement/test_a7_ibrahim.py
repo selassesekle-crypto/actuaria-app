@@ -448,8 +448,13 @@ class T10_BZ_PTF(unittest.TestCase):
         # pente injectée (log) +0.1133 dans l'IC 95 % de l'estimé
         self.assertLess(abs(det['delta_log'] - self.R), 1.96 * det['se'] + 1e-3,
                         f"pente injectée hors IC : est={det['delta_log']} se={det['se']}")
+        # IC 95 % explicite en %/an : doit contenir le +12 % injecté
+        self.assertIsNotNone(det['ic95_pct_par_an'], "ic95_pct_par_an absent")
+        _ic_inf, _ic_sup = det['ic95_pct_par_an']
+        self.assertLessEqual(_ic_inf, 12.0)
+        self.assertGreaterEqual(_ic_sup, 12.0)
         print(f"    OK T10 kink t0=5 : AMBRE p={r['p_bloc_calendaire']}, "
-              f"pente {det['delta_pct_par_an']:+.1f}%/an (injecté +12 %)")
+              f"pente {det['delta_pct_par_an']:+.1f}%/an IC95=[{_ic_inf:+.1f} ; {_ic_sup:+.1f}] (injecté +12 %)")
 
     def test_rupture_developpement_detectee(self):
         """Rupture de tendance DÉVELOPPEMENT à d0=4 (déclarée) → détectée."""
