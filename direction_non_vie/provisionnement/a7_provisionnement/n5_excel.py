@@ -438,16 +438,41 @@ def _ong4_methodes(wb, n3, n4):
     c_p.border    = _border_thin()
     c_p.alignment = _align(h='center')
 
-    # Bloc percentiles Mack
-    _titre_section(ws, row_be+2, 1, "Distribution log-normale Mack (QIS5 TP.5.26)", 4)
+    # Bloc phare — distribution log-normale composée (percentiles retenus)
+    _titre_section(ws, row_be+2, 1, "Distribution log-normale — incertitude composée (σ Mack ⊕ σ modèle)", 4)
     pcts = [
-        ("P75 — Provision prudentielle",  n4['reserve_p75']),
-        ("P90 — Stress test S2",          n4['reserve_p90']),
-        ("P99.5 — SCR provisions",        n4['reserve_p99_5']),
-        ("σ Mack",                        n4['sigma_mack']),
+        ("P75 — Provision prudentielle (composé)", n4['reserve_p75']),
+        ("P90 — Provision stress test (composé)",  n4['reserve_p90']),
+        ("P99.5 — SCR provisions (composé)",       n4['reserve_p99_5']),
+        ("σ composé",                              n4.get('sigma_total_compose', n4['sigma_mack'])),
     ]
     for i, (lbl, val) in enumerate(pcts):
         _kpi(ws, row_be+3+i, 1, lbl, val, FMT_NB)
+
+    # Bloc diagnostic — décomposition de l'incertitude (4 approches, colonne Centre)
+    _mk = n3.get('mack', {}); _bo = n3.get('bootstrap', {})
+    row_diag = row_be + 3 + len(pcts) + 1
+    _titre_section(ws, row_diag, 1,
+                   "Diagnostic — décomposition de l'incertitude (outil analytique interne, non destiné au bilan)", 4)
+    for j, h in enumerate(["Approche", "P90 (€)", "σ (€)", "Centre"]):
+        _header(ws, row_diag+1, j+1, h)
+    diag_rows = [
+        ("Incertitude composée (retenue)", n4['reserve_p90'],             n4.get('sigma_total_compose', 0), "BE pondéré"),
+        ("Mack recentré",                  n4.get('reserve_p90_mack', 0), n4.get('sigma_mack', 0),          "BE pondéré"),
+        ("Mack natif",                     _mk.get('reserve_p90', 0),     _mk.get('sigma_total', 0),        "réserve Mack"),
+        ("Bootstrap ODP",                  _bo.get('p90', 0),             _bo.get('std_bootstrap', 0),      "réserve Bootstrap"),
+    ]
+    for i, (appr, p90v, sigv, centre) in enumerate(diag_rows):
+        r   = row_diag + 2 + i
+        bgd = BLANC if i % 2 == 0 else GRIS_CLAIR
+        for j, (val, fmt) in enumerate([(appr, None), (p90v, FMT_NB), (sigv, FMT_NB), (centre, None)]):
+            c = ws.cell(row=r, column=j+1, value=val)
+            c.font      = _font(size=10)
+            c.fill      = _fill(bgd)
+            c.alignment = _align(h='left' if j in (0, 3) else 'right')
+            c.border    = _border_thin()
+            if fmt and isinstance(val, (int, float)):
+                c.number_format = fmt
 
 
 # =============================================================================
@@ -458,20 +483,18 @@ def _ong5_ibnr(wb, n3):
     ws = wb.create_sheet("5. IBNR par année")
     ws.sheet_view.showGridLines = False
 
-    _titre_section(ws, 1, 1, "IBNR par année de survenance — Comparaison méthodes", 7)
-    hdrs = ["Année", "IBNR CL (€)", "IBNR Mack (€)", "IBNR BF (€)",
+    _titre_section(ws, 1, 1, "IBNR par année de survenance — Comparaison méthodes", 6)
+    hdrs = ["Année", "IBNR CL (€)", "IBNR BF (€)",
             "IBNR CC (€)", "Ultimate CL (€)", "% Développé"]
-    widths = [10, 16, 16, 16, 16, 18, 14]
+    widths = [10, 16, 16, 16, 18, 14]
     for j, (h, w) in enumerate(zip(hdrs, widths)):
         _header(ws, 2, j+1, h, width=w)
 
     cl   = n3['chain_ladder']
-    mack = n3['mack']
     bf   = n3['bf']
     cc   = n3['cape_cod']
 
     ibnr_cl   = cl.get('ibnr_par_annee', [])
-    ibnr_mack = [0.0] * len(ibnr_cl)  # Mack = même BE que CL
     ibnr_bf   = bf.get('ibnr_par_annee', [])
     ibnr_cc   = cc.get('ibnr_par_annee', [])
     ult_cl    = cl.get('ultimates', [])
@@ -483,14 +506,13 @@ def _ong5_ibnr(wb, n3):
         vals = [
             f"An. {i}",
             ibnr_cl[i] if i < len(ibnr_cl) else 0,
-            ibnr_mack[i] if i < len(ibnr_mack) else 0,
             ibnr_bf[i]  if i < len(ibnr_bf)  else 0,
             ibnr_cc[i]  if i < len(ibnr_cc)  else 0,
             ult_cl[i]   if i < len(ult_cl)   else 0,
             pct_dev[i]  if i < len(pct_dev)  else 0,
         ]
-        fmts = [None, FMT_NB, FMT_NB, FMT_NB, FMT_NB, FMT_NB, FMT_PCT]
-        tot_cl += vals[1]; tot_bf += vals[3]; tot_cc += vals[4]
+        fmts = [None, FMT_NB, FMT_NB, FMT_NB, FMT_NB, FMT_PCT]
+        tot_cl += vals[1]; tot_bf += vals[2]; tot_cc += vals[3]
 
         for j, (val, fmt) in enumerate(zip(vals, fmts)):
             c = ws.cell(row=3+i, column=j+1, value=val)
@@ -504,7 +526,7 @@ def _ong5_ibnr(wb, n3):
     # Ligne total
     row_tot = 3 + len(ibnr_cl)
     for j, (val, fmt) in enumerate([
-        ("TOTAL", None), (tot_cl, FMT_NB), (None, None),
+        ("TOTAL", None), (tot_cl, FMT_NB),
         (tot_bf, FMT_NB), (tot_cc, FMT_NB), (None, None), (None, None)
     ]):
         c = ws.cell(row=row_tot, column=j+1, value=val)
@@ -514,6 +536,15 @@ def _ong5_ibnr(wb, n3):
         c.alignment = _align(h='right' if j > 0 else 'left')
         if fmt and val:
             c.number_format = fmt
+
+    # Note bas de table (F2) : colonne « IBNR Mack » retirée car redondante
+    note = ws.cell(row=row_tot + 2, column=1,
+                   value="Note : Mack (1993) reprend les ultimates du Chain Ladder — "
+                         "l'IBNR par année est identique à la colonne CL. "
+                         "L'incertitude σ Mack figure en section Diagnostic (onglet Méthodes).")
+    note.font      = _font(size=9, italic=True, color=BLEU_SOFT)
+    note.alignment = _align(wrap=True)
+    ws.merge_cells(start_row=row_tot + 2, start_column=1, end_row=row_tot + 2, end_column=6)
 
 
 # =============================================================================
@@ -687,7 +718,7 @@ def _ong8_comparatif(wb, n4, resultats_precedents=None):
         ("Best Estimate S2 (€)",    be_n,    be_nm1,    FMT_NB),
         ("Provision P90 (€)",       p90_n,   p90_nm1,   FMT_NB),
         ("Incertitude Mack σ (€)",  sigma_n, sigma_nm1, FMT_NB),
-        ("CV inter-méthodes",       cv_n/100, cv_nm1/100, FMT_PCT),
+        ("CV inter-méthodes",       cv_n/100, (cv_nm1/100 if cv_nm1 is not None else None), FMT_PCT),
     ]
 
     for i, (lbl, vn, vnm1, fmt) in enumerate(indicateurs):

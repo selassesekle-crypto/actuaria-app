@@ -575,7 +575,7 @@ def _s5_best_estimate(n4: Dict) -> str:
         f"— la valeur actuelle au sens de l'Art. 77 — est opérée en aval par "
         f"A10 (Solvabilité 2).",
         "",
-        f"Distribution log-normale calibrée (QIS5 TP.5.26) :",
+        f"Distribution log-normale composée (σ Mack ⊕ σ modèle) — percentiles retenus (QIS5 TP.5.26) :",
         f"  • Provision prudentielle P75  : {_e(p75)}  (+{_p((p75/max(be,1)-1)*100)} vs BE)",
         f"  • Provision stress test P90   : {_e(p90)}  (+{_p((p90/max(be,1)-1)*100)} vs BE)",
         f"  • Provision extrême P99.5     : {_e(p995)} (+{_p((p995/max(be,1)-1)*100)} vs BE)",
@@ -618,67 +618,57 @@ def _s5_best_estimate(n4: Dict) -> str:
 # =============================================================================
 
 def _s6_incertitude(n3: Dict, n4: Dict) -> str:
-    mack  = n3.get('mack', {})
-    boot  = n3.get('bootstrap', {})
-    sigma = mack.get('sigma_total', 0)
-    be    = n4.get('best_estimate', 0)
-    cv_m  = mack.get('cv_pct', 0)
+    mack = n3.get('mack', {})
+    boot = n3.get('bootstrap', {})
 
-    p90_mack = mack.get('reserve_p90', 0)
-    p995_mack= mack.get('reserve_p99_5', 0)
-    p90_boot = boot.get('p90', 0)
-    p995_boot= boot.get('p99_5', 0)
+    p90_compose  = n4.get('reserve_p90', 0)
+    sig_compose  = n4.get('sigma_total_compose', n4.get('sigma_mack', 0))
+    p90_mack_re  = n4.get('reserve_p90_mack', p90_compose)
+    sig_mack     = n4.get('sigma_mack', 0)
+    p90_mack_nat = mack.get('reserve_p90', 0)
+    sig_mack_nat = mack.get('sigma_total', 0)
+    p90_boot     = boot.get('p90', 0)
+    p995_boot    = boot.get('p99_5', 0)
+    p995_mack    = mack.get('reserve_p99_5', 0)
+    sig_boot     = boot.get('std_bootstrap', 0)
+    boot_ok      = boot.get('be_bootstrap', 0) > 0
 
     lignes = [
-        f"L'incertitude de réserve est quantifiée par deux approches "
-        f"complémentaires :",
+        "DIAGNOSTIC — décomposition de l'incertitude "
+        "(outil analytique interne, non destiné au bilan)",
         "",
-        f"1. MACK (1993) — Approche analytique distribution-free",
-        f"   σ total = {_e(sigma)} (CV = {_p(cv_m)})",
-        f"   La formule de Mack décompose l'incertitude en erreur de "
-        f"   paramètre (instabilité des facteurs) et erreur de processus "
-        f"   (variabilité inhérente des sinistres). Les termes croisés "
-        f"   entre années de survenance sont inclus conformément au "
-        f"   Theorem 3 de Mack (1993).",
-        f"   P90  = {_e(p90_mack)}   (quantile log-normale, QIS5 TP.5.26)",
-        f"   P99.5= {_e(p995_mack)}  (VaR 99.5% — SCR provisions)",
+        "Le Best Estimate retient le P90 composé (incertitude composée "
+        "σ Mack ⊕ σ modèle). L'incertitude se décompose selon plusieurs "
+        "approches : Mack (1993), distribution-free, sépare l'erreur de paramètre "
+        "et de processus (termes croisés inclus, Theorem 3) ; le Bootstrap ODP "
+        "(England & Verrall 2002) simule les scénarios de développement. Les quatre "
+        "lignes ci-dessous diffèrent par le σ et/ou le point de centrage — "
+        "à titre de contrôle :",
+        "",
+        f"  • Incertitude composée (retenue) : P90 = {_e(p90_compose)} — "
+        f"σ composé {_e(sig_compose)}, centré sur le BE pondéré.",
+        f"  • Mack recentré : P90 = {_e(p90_mack_re)} — "
+        f"σ Mack {_e(sig_mack)}, centré sur le BE pondéré.",
+        f"  • Mack natif : P90 = {_e(p90_mack_nat)} — "
+        f"σ Mack {_e(sig_mack_nat)}, centré sur la réserve Mack.",
     ]
+    if boot_ok:
+        lignes.append(
+            f"  • Bootstrap ODP : P90 = {_e(p90_boot)} — "
+            f"σ bootstrap {_e(sig_boot)}, centré sur la réserve Bootstrap."
+        )
+    else:
+        lignes.append("  • Bootstrap ODP : non disponible sur ce triangle.")
 
-    if boot.get('be_bootstrap', 0) > 0:
-        cv_boot = boot.get('cv_bootstrap', 0) * 100
-        n_sim   = boot.get('n_simulations', 0)
-        lignes += [
-            "",
-            f"2. BOOTSTRAP ODP — Approche de simulation ({n_sim:,} simulations)",
-            f"   BE Bootstrap = {_e(boot.get('be_bootstrap',0))} "
-            f"   (CV = {_p(cv_boot)})",
-            f"   Le Bootstrap ODP (England & Verrall 2002) simule "
-            f"   {n_sim:,} scénarios de développement par rééchantillonnage "
-            f"   des résidus de Pearson sur le triangle complet. Il capture "
-            f"   à la fois l'erreur de paramètre (via pseudo-triangles) et "
-            f"   l'erreur de processus (via bruit ODP sur les projections).",
-            f"   IC 95%  : [{_e(boot.get('ic_95_inf',0))} ; {_e(boot.get('ic_95_sup',0))}]",
-            f"   P90     : {_e(p90_boot)}",
-            f"   P99.5   : {_e(p995_boot)}",
-        ]
-
-        if p995_mack > 0 and p995_boot > 0:
-            ecart_p995 = abs(p995_mack - p995_boot) / max(p995_mack, 1e-9) * 100
-            if ecart_p995 > 15:
-                lignes.append(
-                    f"   SIGNAL : L'écart entre P99.5 Mack ({_e(p995_mack)}) "
-                    f"   et P99.5 Bootstrap ({_e(p995_boot)}) est de {_p(ecart_p995)}. "
-                    f"   Cet écart peut refléter une non-normalité de la distribution "
-                    f"   ou une hétéroscédasticité des résidus. "
-                    f"   L'approche la plus prudente pour le SCR est de retenir "
-                    f"   le maximum des deux."
-                )
-            else:
-                lignes.append(
-                    f"   Les deux approches convergent sur le P99.5 "
-                    f"   (écart = {_p(ecart_p995)}), ce qui renforce la "
-                    f"   fiabilité de l'estimation stochastique."
-                )
+    if p995_mack > 0 and p995_boot > 0:
+        ecart_p995 = abs(p995_mack - p995_boot) / max(p995_mack, 1e-9) * 100
+        if ecart_p995 > 15:
+            lignes += [
+                "",
+                f"SIGNAL : écart P99.5 Mack ({_e(p995_mack)}) vs Bootstrap "
+                f"({_e(p995_boot)}) de {_p(ecart_p995)} — possible non-normalité "
+                f"ou hétéroscédasticité. Pour le SCR, retenir le maximum des deux.",
+            ]
 
     return "\n".join(lignes)
 

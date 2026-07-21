@@ -1002,9 +1002,9 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         '</div>'
         if n4.get('risk_margin', 0) > 0
         else '<div class="kpi-card">'
-        '<div class="kpi-card-label">Provision P99,5</div>'
-        '<div class="kpi-card-value">' + _f(P99_mack) + '</div>'
-        '<div class="kpi-card-sub">P90 Mack : ' + _f(P90_mack) + '</div>'
+        '<div class="kpi-card-label">Provision P99,5 (composé)</div>'
+        '<div class="kpi-card-value">' + _f(P99) + '</div>'
+        '<div class="kpi-card-sub">P90 (composé) : ' + _f(P90) + '</div>'
         '</div>'
     )
     b['kpi_grid'] = (
@@ -1098,26 +1098,39 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     )
     b['tableau_methodes'] = tbl
 
-    # Tableau incertitude
-    cv_mack = SIG / BE * 100 if BE else 0
+    # Table diagnostic — décomposition de l'incertitude (4 lignes, colonne Centre)
+    _mk = n3.get('mack', {}); _bo = n3.get('bootstrap', {})
+    P90_natif      = float(_mk.get('reserve_p90', 0) or 0)
+    SIG_COMPOSE    = float(n4.get('sigma_total_compose', SIG) or SIG)
+    SIG_MACK       = float(n4.get('sigma_mack', SIG) or SIG)
+    SIG_MACK_NATIF = float(_mk.get('sigma_total', SIG) or SIG)
+    STD_BOOT       = float(_bo.get('std_bootstrap', 0) or 0)
+    _bp90 = ('<span class="mono">' + _f(P90_boot) + '</span>') if _boot_dispo else '<span style="color:var(--slate)">—</span>'
+    _bsig = ('<span class="mono">' + _f(STD_BOOT) + '</span>')  if _boot_dispo else '<span style="color:var(--slate)">—</span>'
     tbl_i = (
         '<table class="premium"><thead><tr>'
-        '<th>Approche</th><th class="right">BE</th><th class="right">P75</th>'
-        '<th class="right">P90</th><th class="right">P99,5</th><th class="center">CV</th>'
+        '<th>Approche</th><th class="right">P90</th><th class="right">σ</th><th>Centre</th>'
         '</tr></thead><tbody>'
-        '<tr><td class="label">Mack 1993 (analytique)</td>'
-        '<td class="right"><span class="mono">' + _f(BE) + '</span></td>'
-        '<td class="right"><span class="mono">' + _f(P75_mack) + '</span></td>'
+        '<tr class="highlight-gold"><td class="label">Incertitude composée (retenue)</td>'
+        '<td class="right"><span class="mono">' + _f(P90) + '</span></td>'
+        '<td class="right"><span class="mono">' + _f(SIG_COMPOSE) + '</span></td>'
+        '<td>BE pondéré</td></tr>'
+        '<tr><td class="label">Mack recentré</td>'
         '<td class="right"><span class="mono">' + _f(P90_mack) + '</span></td>'
-        '<td class="right"><span class="mono">' + _f(P99_mack) + '</span></td>'
-        '<td class="center">' + _pct(cv_mack) + '</td></tr>'
-        '<tr><td class="label">Bootstrap ODP (5\u202f000 sim.)</td>'
-        '<td class="right"><span class="mono">' + _f(n3.get('bootstrap', {}).get('be_bootstrap', BE)) + '</span></td>'
-        '<td class="right">' + ('<span class="mono">' + _f(P75_boot) + '</span>' if _boot_dispo else '<span style="color:var(--slate)">—</span>') + '</td>'
-        '<td class="right">' + ('<span class="mono">' + _f(P90_boot) + '</span>' if _boot_dispo else '<span style="color:var(--slate)">—</span>') + '</td>'
-        '<td class="right">' + ('<span class="mono">' + _f(P99_boot) + '</span>' if _boot_dispo else '<span style="color:var(--slate)">—</span>') + '</td>'
-        '<td class="center">' + _pct(n3.get('bootstrap', {}).get('cv_bootstrap', 0) * 100) + '</td></tr>'
+        '<td class="right"><span class="mono">' + _f(SIG_MACK) + '</span></td>'
+        '<td>BE pondéré</td></tr>'
+        '<tr><td class="label">Mack natif</td>'
+        '<td class="right"><span class="mono">' + _f(P90_natif) + '</span></td>'
+        '<td class="right"><span class="mono">' + _f(SIG_MACK_NATIF) + '</span></td>'
+        '<td>réserve Mack</td></tr>'
+        '<tr><td class="label">Bootstrap ODP</td>'
+        '<td class="right">' + _bp90 + '</td>'
+        '<td class="right">' + _bsig + '</td>'
+        '<td>réserve Bootstrap</td></tr>'
         '</tbody></table>'
+        '<p style="font-size:8pt;color:var(--slate);font-style:italic;margin-top:6px;">'
+        'Ces valeurs diffèrent par le σ (Mack seul / composé / bootstrap) et/ou le point de '
+        'centrage (colonne Centre). Le livrable retient le P90 composé.</p>'
     )
     b['tableau_incertitude'] = tbl_i
     b['graph_ibnr']      = graphiques_html.get('g4_ibnr', '')
@@ -1635,7 +1648,7 @@ def export_html(
             '<div class="section-header"><span class="section-num">02</span><span class="section-titre">Résultats par méthode actuarielle</span></div>\n'
             '<div class="section-body">\n'
             + b['tableau_methodes']
-            + '<div class="table-section-title">Incertitude stochastique — Bootstrap ODP &amp; Mack 1993</div>\n'
+            + '<div class="table-section-title">Diagnostic — décomposition de l\'incertitude (outil analytique interne, non destiné au bilan)</div>\n'
             + b['tableau_incertitude']
             + _wrap_graph(b['graph_heatmap'], 'Triangle de développement cumulé')
             + _wrap_graph(b['graph_ibnr'], 'IBNR par année de survenance')
@@ -1877,9 +1890,16 @@ def export_word(n1, n2, n3, n4,
         _h('1. Synthèse exécutive'); _sep()
         _tbl(['Indicateur','Valeur','Indicateur','Valeur'],
              [['Best Estimate (brut)',_f(BE),'σ Mack total',_f(SIG)],
-              ['Provision P75',_f(P75),'CV inter-méthodes',_pct(CV)],
-              ['Provision P90',_f(P90),'SCR Provisions',_f(SCP)],
-              ['Provision P99.5',_f(P99),'Ratio SCR/BE',_pct(SCR)]],ws=[4.5,3.5,4.5,3.5])
+              ['P75 (composé)',_f(P75),'CV inter-méthodes',_pct(CV)],
+              ['P90 (composé)',_f(P90),'SCR Provisions',_f(SCP)],
+              ['P99.5 (composé)',_f(P99),'Ratio SCR/BE',_pct(SCR)]],ws=[4.5,3.5,4.5,3.5])
+
+        _h("Diagnostic — décomposition de l'incertitude (outil analytique interne, non destiné au bilan)"); _sep()
+        _tbl(['Approche','P90','σ','Centre'],
+             [['Incertitude composée (retenue)',_f(P90),_f(n4.get('sigma_total_compose',SIG)),'BE pondéré'],
+              ['Mack recentré',_f(n4.get('reserve_p90_mack',P90)),_f(n4.get('sigma_mack',SIG)),'BE pondéré'],
+              ['Mack natif',_f(mk.get('reserve_p90',0)),_f(mk.get('sigma_total',SIG)),'réserve Mack'],
+              ['Bootstrap ODP',_f(n3.get('bootstrap',{}).get('p90',0)),_f(n3.get('bootstrap',{}).get('std_bootstrap',0)),'réserve Bootstrap']],ws=[5.0,3.0,3.0,3.0])
         doc.add_page_break()
 
         _h('2. Résultats par méthode actuarielle'); _sep()
