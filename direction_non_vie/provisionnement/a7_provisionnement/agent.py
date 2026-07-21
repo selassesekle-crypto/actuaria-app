@@ -59,6 +59,7 @@ from .n3.munich_cl    import munich_cl
 from .n3.backtesting  import calculer_backtesting
 from .n3.clark               import clark_ldf
 from .n3.glm_apc_poisson     import glm_apc_poisson
+from .n3.barnett_zehnwirth_ptf import barnett_zehnwirth_ptf
 
 logger = logging.getLogger('actuaria.a7')
 
@@ -315,6 +316,13 @@ class AgentA7Provisionnement:
             except Exception as _eapc:
                 logger.warning(f"GLM Poisson APC ignoré : {_eapc}")
                 n3['glm_apc'] = {}
+            # Détection tendances/ruptures — Barnett-Zehnwirth PTF (étape 2a, diagnostic)
+            # Sans ruptures déclarées : le scan propose des candidats, rien n'est testé.
+            try:
+                n3['bz_ptf'] = barnett_zehnwirth_ptf(C_calc, annee_debut=annee_debut)
+            except Exception as _eptf:
+                logger.warning(f"Barnett-Zehnwirth PTF ignoré : {_eptf}")
+                n3['bz_ptf'] = {}
             # Année début pour labels calendaires (G14)
             if annee_debut:
                 n3['annee_debut_triangle'] = annee_debut
@@ -701,6 +709,7 @@ class AgentA7Provisionnement:
             'backtesting':     {},
             'clark':           clark_ldf(C) if C is not None and C.shape[0] >= 4 else {'success': False, 'disponible': False},
             'glm_apc':         {},
+            'bz_ptf':          {},
         }
 
     # =========================================================================

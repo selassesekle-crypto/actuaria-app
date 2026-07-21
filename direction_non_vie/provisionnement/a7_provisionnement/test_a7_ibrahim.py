@@ -28,6 +28,9 @@ from direction_non_vie.provisionnement.a7_provisionnement.n3.bootstrap_odp impor
 from direction_non_vie.provisionnement.a7_provisionnement.n3.glm_apc_poisson import (
     glm_apc_poisson, STATSMODELS_OK as _APC_SM_OK,
 )
+from direction_non_vie.provisionnement.a7_provisionnement.n3.barnett_zehnwirth_ptf import (
+    barnett_zehnwirth_ptf, STATSMODELS_OK as _PTF_SM_OK,
+)
 from direction_non_vie.provisionnement.a7_provisionnement.config.lob_config import (
     get_lob_config, list_lobs,
 )
@@ -384,6 +387,102 @@ class T9_GLM_APC(unittest.TestCase):
         self.assertTrue(r['cal_significatif'], f"choc non détecté (p={r['p_calendaire']})")
         self.assertEqual(r['statut'], 'AMBRE')
         print(f"    OK T9 choc dernière diagonale ×2 : AMBRE (p={r['p_calendaire']})")
+
+
+# =============================================================================
+#  BARNETT-ZEHNWIRTH PTF log-normal — ÉTAPE 2a (détection tendances/ruptures)
+#  Triangles synthétiques à tendances CONNUES (seed fixe, reproductibles).
+# =============================================================================
+
+def _make_cum_ptf(cal_fn, devfn=None, seed=7):
+    """Triangle cumulé log-normal à tendances connues (oracles B&Z PTF).
+
+    Incréments p_wd = exp(niveau_w + dev(d) + calendaire(w+d) + N(0, 0.20)).
+    """
+    n = 10
+    A = 12.0 + 0.05*np.arange(n)
+    G = (lambda d: -0.45*d) if devfn is None else devfn
+    C = np.zeros((n, n))
+    np.random.seed(seed)
+    for w in range(n):
+        incs = [np.exp(A[w] + G(d) + cal_fn(w+d) + np.random.normal(0, 0.20)) for d in range(n-w)]
+        C[w, :n-w] = np.cumsum(incs)
+    return C
+
+
+@unittest.skipUnless(_PTF_SM_OK, "statsmodels non installé")
+class T10_BZ_PTF(unittest.TestCase):
+    """B&Z PTF log-normal (2a) : détecte les CHANGEMENTS de tendance, pas
+    l'inflation constante (mur d'identifiabilité). Tendances injectées connues."""
+
+    R = float(np.log(1.12))    # +12 %/an en log
+
+    def test_clean_pas_de_fausse_rupture(self):
+        """Triangle propre + rupture déclarée en année 2010+5=2015 → NON sig (VERT)."""
+        r = barnett_zehnwirth_ptf(_make_cum_ptf(lambda t: 0.0), ruptures_calendaires=[2015], annee_debut=2010)
+        self.assertTrue(r['disponible'], r.get('message'))
+        self.assertFalse(r['calendaire_significatif'], f"faux positif p={r['p_bloc_calendaire']}")
+        self.assertEqual(r['statut'], 'VERT')
+        print(f"    OK T10 clean : VERT (p={r['p_bloc_calendaire']})")
+
+    def test_inflation_constante_non_identifiable(self):
+        """Oracle d'IDENTIFIABILITÉ : inflation CONSTANTE (absorbée par âge+dev)
+        → NON détectée. Miroir de l'étape 1 : B&Z n'échappe pas au mur."""
+        r = barnett_zehnwirth_ptf(_make_cum_ptf(lambda t: self.R * t), ruptures_calendaires=[2015], annee_debut=2010)
+        self.assertFalse(r['calendaire_significatif'],
+                         f"inflation constante signalée à tort p={r['p_bloc_calendaire']}")
+        self.assertEqual(r['statut'], 'VERT')
+        print(f"    OK T10 inflation constante : NON détectée (p={r['p_bloc_calendaire']}) — mur d'identifiabilité")
+
+    def test_rupture_kink_detectee_localisee_pente(self):
+        """Rupture calendaire à t0=5, +12 %/an → détectée (AMBRE), pente dans l'IC."""
+        r = barnett_zehnwirth_ptf(_make_cum_ptf(lambda t: self.R * max(0, t-5)),
+                                  ruptures_calendaires=[2015], annee_debut=2010)
+        self.assertTrue(r['calendaire_significatif'], f"rupture manquée p={r['p_bloc_calendaire']}")
+        self.assertEqual(r['statut'], 'AMBRE')
+        self.assertLess(r['p_bloc_calendaire'], 0.05)
+        det = r['ruptures_calendaires_testees'][0]
+        self.assertTrue(det['significatif'])
+        self.assertEqual(det['rupture_t'], 5)
+        self.assertEqual(det['annee'], 2015)          # rapporté en ANNÉE, pas en indice
+        # pente injectée (log) +0.1133 dans l'IC 95 % de l'estimé
+        self.assertLess(abs(det['delta_log'] - self.R), 1.96 * det['se'] + 1e-3,
+                        f"pente injectée hors IC : est={det['delta_log']} se={det['se']}")
+        print(f"    OK T10 kink t0=5 : AMBRE p={r['p_bloc_calendaire']}, "
+              f"pente {det['delta_pct_par_an']:+.1f}%/an (injecté +12 %)")
+
+    def test_rupture_developpement_detectee(self):
+        """Rupture de tendance DÉVELOPPEMENT à d0=4 (déclarée) → détectée."""
+        def dev(d): return (-0.30*d) if d <= 4 else (-0.30*4 - 0.70*(d-4))
+        r = barnett_zehnwirth_ptf(_make_cum_ptf(lambda t: 0.0, devfn=dev), ruptures_dev=[4], annee_debut=2010)
+        self.assertTrue(r['disponible'])
+        det = r['ruptures_dev_testees'][0]
+        self.assertTrue(det['significatif'], f"rupture dev manquée p={det['p_value']}")
+        print(f"    OK T10 rupture dev d=4 : delta_log={det['delta_log']} (injecté -0.40), p={det['p_value']}")
+
+    def test_genins_pas_de_fausse_rupture(self):
+        """Contrôle données réelles (PAS une référence de réserve) : pas de fausse rupture."""
+        r = barnett_zehnwirth_ptf(GENINS, ruptures_calendaires=[1993], annee_debut=1988)
+        self.assertTrue(r['disponible'])
+        self.assertFalse(r['calendaire_significatif'])
+        print(f"    OK T10 GenIns : VERT (p={r['p_bloc_calendaire']})")
+
+    def test_raa_negatif_exclu_pas_de_crash(self):
+        """RAA (a des incréments négatifs) : négatif exclu + flag, pas de crash, calme."""
+        r = barnett_zehnwirth_ptf(RAA, ruptures_calendaires=[1986], annee_debut=1981)
+        self.assertTrue(r['disponible'])
+        self.assertGreaterEqual(r['n_exclues'], 1)
+        self.assertFalse(r['calendaire_significatif'])
+        print(f"    OK T10 RAA : {r['n_exclues']} négatif exclu, VERT (pas de crash)")
+
+    def test_trop_de_negatifs_non_fiable(self):
+        """> 10 % d'incréments ≤ 0 → disponible=False (log-normal inadapté)."""
+        Cbad = GENINS.copy().astype(float)
+        for i in range(6):
+            Cbad[i, 2] = Cbad[i, 1] - 1.0
+        r = barnett_zehnwirth_ptf(Cbad, annee_debut=1988)
+        self.assertFalse(r['disponible'])
+        print(f"    OK T10 négatifs>10% : disponible=False ({r['n_exclues']}/{r['n_obs']})")
 
 
 if __name__ == '__main__':

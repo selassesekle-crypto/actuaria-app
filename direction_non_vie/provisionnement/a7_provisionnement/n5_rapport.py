@@ -1393,6 +1393,65 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         '</div>'
     )
 
+    # -- Sous-section : Barnett-Zehnwirth PTF (detection tendances/ruptures, etape 2a) --
+    ptf = n3.get('bz_ptf', {})
+    if ptf and ptf.get('disponible'):
+        _p_rc   = ptf.get('ruptures_calendaires_testees', [])
+        _p_scan = ptf.get('ruptures_candidates_scan', [])
+        _p_sig  = ptf.get('calendaire_significatif')
+        _p_col  = 'var(--orange)' if _p_sig else 'var(--vert)'
+        if _p_rc:
+            _p_rows = ''.join(
+                '<tr><td style="padding:6px 0;color:var(--slate);">' + _s(r.get('annee_label')) + '</td>'
+                '<td style="padding:6px 0;text-align:right;"><span class="mono" style="color:'
+                + ('var(--orange)' if r.get('significatif') else 'var(--slate)') + ';">'
+                + ('%+.1f %%/an' % float(r.get('delta_pct_par_an', 0))) + '</span></td>'
+                '<td style="padding:6px 0 6px 16px;color:var(--slate);font-size:7.5pt;">p = '
+                + ('%.4f' % float(r.get('p_value', 1))) + (' (significatif)' if r.get('significatif') else ' (non sig.)')
+                + '</td></tr>'
+                for r in _p_rc)
+            _p_rcbloc = ('<table style="width:100%;border-collapse:collapse;font-size:8.5pt;margin-top:8px;">'
+                         '<tbody>' + _p_rows + '</tbody></table>')
+        else:
+            _p_rcbloc = ('<div style="font-size:8pt;color:var(--slate);margin-top:6px;">'
+                         'Aucune rupture declaree par l\'actuaire (mode semi-manuel) ; '
+                         'le scan ci-dessous propose des candidats a examiner.</div>')
+        _p_scantxt = ', '.join(_s(c.get('annee_label')) + ' (t = ' + ('%.1f' % float(c.get('t_stat', 0))) + ')'
+                               for c in _p_scan) or 'aucun'
+        _p_sigb = ptf.get('sigma_par_bande')
+        _p_sigtxt = (('sigma par bande dev = ' + ', '.join(str(v) for v in _p_sigb.values()))
+                     if _p_sigb else ('sigma constante = ' + str(ptf.get('sigma_constante'))))
+        b['ptf_block'] = (
+            '<div class="section-body" style="margin-top:20px;padding:20px 28px;'
+            'background:var(--navy-mid, #0D2137);border-radius:8px;border:1px solid rgba(212,175,55,0.25);">'
+            '<div style="font-size:7.5pt;font-weight:700;color:var(--gold);text-transform:uppercase;'
+            'letter-spacing:1.5px;margin-bottom:12px;">'
+            '&#9670; Barnett-Zehnwirth PTF (log-normal) &mdash; Tendances &amp; ruptures</div>'
+            '<div style="font-size:8.5pt;font-weight:700;color:' + _p_col + ';">'
+            + ('Rupture calendaire significative detectee.' if _p_sig
+               else 'Aucune rupture calendaire significative confirmee.') + '</div>'
+            + _p_rcbloc +
+            '<div style="font-size:8pt;color:var(--slate);margin-top:10px;">'
+            'Candidats de rupture (scan diagnostic, <b>non</b> testes ni retenus) : ' + _p_scantxt + '. '
+            + _p_sigtxt + '.</div>'
+            '<div style="margin-top:10px;font-size:7.5pt;color:var(--slate);'
+            'border-top:1px solid rgba(255,255,255,0.06);padding-top:8px;">'
+            'Detection log-normale (B&amp;Z 2000) &mdash; complete le test F du GLM APC '
+            '(plus puissante sur tendances moderees, localise les ruptures). Ruptures semi-manuelles. '
+            '&#9888; B&amp;Z detecte les <b>changements</b> de tendance, pas une inflation <b>constante</b> '
+            '(non identifiable sur le triangle seul). Aucune reserve produite (etape 2a).</div>'
+            '</div>'
+        )
+    elif ptf and (not ptf.get('disponible')) and ptf.get('message'):
+        b['ptf_block'] = (
+            '<div class="section-body" style="margin-top:20px;padding:14px 20px;'
+            'background:var(--cyan-pale);border-left:3px solid var(--cyan);border-radius:4px;">'
+            '<div style="font-size:8pt;color:var(--slate);">&#9670; Barnett-Zehnwirth PTF : '
+            + _s(ptf.get('message')) + '</div></div>'
+        )
+    else:
+        b['ptf_block'] = ''
+
     # ── SECTION 7 : COMMENTAIRE ACTUARIEL ────────────────────────────────────
     try:
         narration_html = _md_to_html(narration)
@@ -1708,6 +1767,7 @@ def export_html(
             '<div class="bz-grid">' + b['bz_items'] + '</div>\n'
             + b.get('bz_glm', '') + '\n'
             + b['bz_reco_box']
+            + b.get('ptf_block', '')
             + '\n</div>\n<div class="section-divider"></div>\n\n'
 
             # Section 7 — COMMENTAIRE COMPLET
