@@ -112,23 +112,23 @@ class BestEstimateS2:
 
         # ── Réserves par méthode ──────────────────────────────────────────────
         cl_res   = n3['chain_ladder']['reserve_totale']
-        mack_res = n3['mack']['reserve_best_estimate']
         bf_res   = n3['bf']['reserve_totale']
         cc_res   = n3['cape_cod']['reserve_totale']
         sigma    = n3['mack']['sigma_total']
         boot     = n3.get('bootstrap', {})
 
-        # Clé 'mack_1993' dans les scores → mapper vers 'mack'
+        # Mack RETIRÉ du point estimate du BE : son point = celui du Chain Ladder
+        # (Mack = CL + σ ; réserve identique par construction, mack consomme les
+        # facteurs du CL). L'inclure comme méthode pondérée double-compterait le CL.
+        # Mack reste utilisé pour la VOLATILITÉ (sigma, n3['mack']['sigma_total']).
         score_map = {
             'chain_ladder':         scores.get('chain_ladder', 70),
-            'mack':                 scores.get('mack_1993', scores.get('mack', 70)),
             'bornhuetter_ferguson': scores.get('bornhuetter_ferguson', 70),
             'cape_cod':             scores.get('cape_cod', 70),
         }
 
         methodes_dispo = {
             'chain_ladder':         cl_res,
-            'mack':                 mack_res,
             'bornhuetter_ferguson': bf_res,
             'cape_cod':             cc_res,
         }
@@ -144,20 +144,20 @@ class BestEstimateS2:
             else:
                 methodes_exclues[m]  = (r, s)
 
-        # Garde-fou : si tout exclu → garder Mack et BF par défaut
+        # Garde-fou : si tout exclu → garder Chain Ladder et BF par défaut
         if not methodes_incluses:
             methodes_incluses = {
-                'mack': (mack_res, 50),
+                'chain_ladder': (cl_res, 50),
                 'bornhuetter_ferguson': (bf_res, 50),
             }
             # Les retirer des exclues : elles viennent d'être forcées dans les
             # incluses (sinon elles figureraient dans les deux listes).
-            for _m in ('mack', 'bornhuetter_ferguson'):
+            for _m in ('chain_ladder', 'bornhuetter_ferguson'):
                 if _m in methodes_exclues:
                     del methodes_exclues[_m]
             logger.warning(
                 "BE N4 : toutes les méthodes exclues (score < seuil). "
-                "Fallback sur Mack + BF avec score=50."
+                "Fallback sur Chain Ladder + BF avec score=50."
             )
 
         # Forcer l'inclusion de la méthode recommandée par N2
@@ -166,7 +166,7 @@ class BestEstimateS2:
         _rec_map_check = {
             'bornhuetter_ferguson': 'bornhuetter_ferguson',
             'bf': 'bornhuetter_ferguson',
-            'mack': 'mack', 'mack_1993': 'mack',
+            'mack': 'chain_ladder', 'mack_1993': 'chain_ladder',  # remap : point Mack = CL
             'chain_ladder': 'chain_ladder',
             'cape_cod': 'cape_cod',
         }
@@ -193,8 +193,8 @@ class BestEstimateS2:
         _rec_map = {
             'bornhuetter_ferguson': 'bornhuetter_ferguson',
             'bf': 'bornhuetter_ferguson',
-            'mack': 'mack',
-            'mack_1993': 'mack',
+            'mack': 'chain_ladder',       # remap : point Mack = CL (garde le forçage 50% sur CL)
+            'mack_1993': 'chain_ladder',
             'chain_ladder': 'chain_ladder',
             'cape_cod': 'cape_cod',
         }

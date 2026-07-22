@@ -399,8 +399,9 @@ def _ong4_methodes(wb, n3, n4):
     for i, (nom, res, key, detail, note) in enumerate(rows):
         inc  = key in methodes_inc
         poid = poids.get(key, 0)
+        _mack = (key == 'mack')   # Mack : volatilité (σ), non pondérée dans le BE (point = CL)
         bg   = 'EAF3DE' if inc else GRIS_CLAIR
-        st   = '✅ Incluse' if inc else '❌ Exclue'
+        st   = 'σ (volatilité)' if _mack else ('✅ Incluse' if inc else '❌ Exclue')
         st_c = VERT_S2 if inc else ROUGE_S2
 
         vals = [nom, res, poid, st, detail, note]

@@ -1032,6 +1032,9 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
 
     # ── SECTION 2 : MÉTHODES ─────────────────────────────────────────────────
     def _badge_statut(m_name, pw_val):
+        if 'Mack' in m_name:   # Mack = volatilité (σ), non pondérée dans le BE (point = CL)
+            return ('<span class="badge badge-excl" style="background:rgba(74,144,226,0.15);'
+                    'color:#4A90E2;">σ (volatilité)</span>')
         if pw_val > 0:
             return '<span class="badge badge-ok">✓ Inclus</span>'
         return '<span class="badge badge-excl">⊘ Exclu</span>'
@@ -1991,7 +1994,7 @@ def export_word(n1, n2, n3, n4,
         _tbl(['Méthode','Réserve IBNR','Poids BE','Score','Statut'],
              [['Chain Ladder',_f(cl.get('reserve_totale')),_pct(pw.get('chain_ladder',0)*100),
                str(n2.get('scores_confiance',{}).get('chain_ladder','—')),'✓ Inclus'],
-              ['Mack 1993',_f(mk.get('reserve_best_estimate')),_pct(pw.get('mack',0)*100),'—','✓ Inclus'],
+              ['Mack 1993',_f(mk.get('reserve_best_estimate')),_pct(pw.get('mack',0)*100),'—','σ (volatilité)'],
               ['Bornhuetter-Ferguson',_f(bf.get('reserve_totale')),_pct(pw.get('bornhuetter_ferguson',0)*100),'—','✓ Inclus'],
               ['Cape Cod',_f(cc.get('reserve_totale')),_pct(pw.get('cape_cod',0)*100),
                str(n2.get('scores_confiance',{}).get('cape_cod','—')),'✓ Inclus'],

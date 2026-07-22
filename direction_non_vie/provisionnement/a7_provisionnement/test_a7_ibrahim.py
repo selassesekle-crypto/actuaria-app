@@ -490,5 +490,48 @@ class T10_BZ_PTF(unittest.TestCase):
         print(f"    OK T10 négatifs>10% : disponible=False ({r['n_exclues']}/{r['n_obs']})")
 
 
+# =============================================================================
+#  BE — Mack retiré du point estimate (double-comptage CL) — Lot A
+# =============================================================================
+
+def _make_mack_recommande(seed=2, noise=0.01):
+    """Triangle propre (H1/H2 forts) où Mack est RECOMMANDÉ par N2 (score ≥ 70).
+    Sert à vérifier le remap : le point CL garde le forçage 50 %, Mack non pondéré."""
+    np.random.seed(seed)
+    n = 10
+    expo = np.linspace(1000, 2000, n)
+    patt = np.array([0.30, 0.22, 0.16, 0.11, 0.08, 0.05, 0.035, 0.02, 0.015, 0.01])
+    C = np.zeros((n, n))
+    for i in range(n):
+        C[i, :n-i] = np.cumsum([expo[i]*patt[j]*(1 + np.random.normal(0, noise)) for j in range(n-i)])
+    return C
+
+
+class T11_BE_Mack_Retire(unittest.TestCase):
+    """Mack retiré de la pondération du BE (son point = celui du CL, double-comptage).
+    Traitement 'remap' : quand Mack est recommandé, le point CL est pondéré (forçage
+    50 %) ; 'mack' n'apparaît plus comme méthode pondérée séparée."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.r = AgentA7Provisionnement(verbose=False).run(
+            source=_make_mack_recommande(), lob='generique', n_sim_bootstrap=100,
+            generer_word=False, generer_pdf_flag=False, generer_graphiques=False)
+
+    def test_mack_recommande_mais_non_pondere(self):
+        r = self.r
+        self.assertTrue(r.get('success'), r.get('erreur'))
+        rec = r['n2']['methode_recommandee']
+        self.assertIn(rec, ('mack', 'mack_1993'),
+                      f"précondition du test : Mack doit être recommandé ici (rec={rec})")
+        poids = r['n4'].get('poids', {})
+        # Mack n'est plus une méthode pondérée
+        self.assertNotIn('mack', poids, f"Mack ne doit plus être pondéré (poids={poids})")
+        # le point CL garde le forçage POIDS_MIN_REC = 0.50 (remap mack→chain_ladder)
+        self.assertAlmostEqual(poids.get('chain_ladder', 0.0), 0.50, places=4,
+                               msg=f"point CL doit garder 50 % (poids={poids})")
+        print(f"    OK T11 : Mack recommandé mais non pondéré — poids CL={poids.get('chain_ladder')} (remap)")
+
+
 if __name__ == '__main__':
     unittest.main()
