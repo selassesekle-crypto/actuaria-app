@@ -121,7 +121,7 @@ class HypothesesValidator:
 
         # ── Méthode recommandée ───────────────────────────────────────────────
         methode_rec, raison_rec = self._recommander_methode(
-            scores, h1, h2, h3, n, cfg_lob
+            scores, h1, h2, h3, n
         )
 
         # ── Variante CL retenue (CORRECTION BUG v4.0) ─────────────────────────
@@ -723,7 +723,6 @@ class HypothesesValidator:
         h2:      Dict,
         h3:      Dict,
         n:       int,
-        cfg_lob: Dict,
     ) -> Tuple[str, str]:
         """
         Recommande la méthode principale avec justification explicite.
@@ -734,10 +733,8 @@ class HypothesesValidator:
         3. H1 rejetée + H3 fiable → Bornhuetter-Ferguson
         4. H1 rejetée + H3 peu fiable → Cape Cod
         5. H2 rejetée seule → Bornhuetter-Ferguson
-        6. Fallback → meilleur score
-
-        La config LoB peut surcharger la méthode par défaut via
-        'methode_par_defaut' (non obligatoire).
+        6. Fallback → Chain Ladder (INATTEIGNABLE par construction : R2-R5
+           couvrent toutes les combinaisons H1×H2)
         """
         # Règle 1 : trop peu de données
         if n < 5:
@@ -779,11 +776,12 @@ class HypothesesValidator:
                 f"Bornhuetter-Ferguson recommandé pour sa robustesse."
             )
 
-        # Règle 6 : fallback sur meilleur score
-        best = max(scores, key=lambda k: scores[k])
-        return best, (
-            f"Méthode sélectionnée sur score de confiance maximum : "
-            f"{best} = {scores[best]}/100."
+        # Règle 6 : fallback terminal — INATTEIGNABLE par construction. R2-R5
+        # couvrent toutes les combinaisons H1×H2 (H1∧H2→R2 ; ¬H1→R3/R4 ; ¬H2→R5).
+        # Défaut SÛR = chain_ladder (jamais 'bootstrap_odp' via max(scores), que N4
+        # ne sait pas pondérer dans le BE).
+        return 'chain_ladder', (
+            "Fallback sécurisé (inatteignable par construction) — Chain Ladder par défaut."
         )
 
     # =========================================================================

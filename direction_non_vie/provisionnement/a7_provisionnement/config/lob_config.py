@@ -111,7 +111,6 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
 
         # Méthodes prioritaires (ordre de confiance décroissant)
         "methodes_prioritaires": ["chain_ladder", "mack_1993", "bootstrap_odp"],
-        "methode_par_defaut":    "chain_ladder",
 
         # Munich CL : non pertinent sans triangle engagé fiable
         "munich_cl_disponible": False,
@@ -151,7 +150,6 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "methodes_prioritaires": [
             "mack_1993", "bornhuetter_ferguson", "bootstrap_odp", "chain_ladder"
         ],
-        "methode_par_defaut": "mack_1993",
         "munich_cl_disponible": True,
 
         "lr_marche_reference":  0.85,
@@ -188,7 +186,6 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "h1_seuil_corr":    0.45,
 
         "methodes_prioritaires": ["chain_ladder", "bootstrap_odp", "mack_1993"],
-        "methode_par_defaut":    "chain_ladder",
         "munich_cl_disponible":  False,
 
         "lr_marche_reference":  0.68,
@@ -226,7 +223,6 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "methodes_prioritaires": [
             "bornhuetter_ferguson", "cape_cod", "mack_1993", "bootstrap_odp"
         ],
-        "methode_par_defaut": "bornhuetter_ferguson",
         "munich_cl_disponible": True,
 
         "lr_marche_reference":  0.78,
@@ -265,7 +261,6 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "methodes_prioritaires": [
             "bornhuetter_ferguson", "mack_1993", "cape_cod", "bootstrap_odp"
         ],
-        "methode_par_defaut": "bornhuetter_ferguson",
         "munich_cl_disponible": True,
 
         "lr_marche_reference":  0.92,
@@ -306,7 +301,6 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "methodes_prioritaires": [
             "bornhuetter_ferguson", "cape_cod", "mack_1993"
         ],
-        "methode_par_defaut": "bornhuetter_ferguson",
         "munich_cl_disponible": False,
 
         "lr_marche_reference":  0.88,
@@ -345,7 +339,6 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "methodes_prioritaires": [
             "bornhuetter_ferguson", "cape_cod", "mack_1993", "bootstrap_odp"
         ],
-        "methode_par_defaut": "bornhuetter_ferguson",
         "munich_cl_disponible": False,
 
         "lr_marche_reference":  0.82,
@@ -382,7 +375,6 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "methodes_prioritaires": [
             "chain_ladder", "mack_1993", "bornhuetter_ferguson", "bootstrap_odp"
         ],
-        "methode_par_defaut": "chain_ladder",
         "munich_cl_disponible": False,
 
         "lr_marche_reference":  0.70,
@@ -414,7 +406,6 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "methodes_prioritaires": [
             "bornhuetter_ferguson", "cape_cod", "mack_1993", "bootstrap_odp"
         ],
-        "methode_par_defaut": "bornhuetter_ferguson",
         "munich_cl_disponible": False,
 
         "lr_marche_reference":  0.82,
@@ -449,7 +440,6 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
             "chain_ladder", "mack_1993", "bornhuetter_ferguson",
             "cape_cod", "bootstrap_odp"
         ],
-        "methode_par_defaut": "chain_ladder",
         "munich_cl_disponible": False,
 
         "lr_marche_reference":  None,
@@ -481,7 +471,6 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "h2_seuil_derive":  0.20,
         "h1_seuil_corr":    0.50,
         "methodes_prioritaires": ["chain_ladder", "bornhuetter_ferguson", "bootstrap_odp"],
-        "methode_par_defaut": "chain_ladder",
         "munich_cl_disponible": False,
         "lr_marche_reference":  0.68,
         "lr_marche_source":     "Marché français FFSA — Dommages aux biens",
@@ -508,7 +497,6 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "h2_seuil_derive":  0.20,
         "h1_seuil_corr":    0.50,
         "methodes_prioritaires": ["chain_ladder", "bornhuetter_ferguson", "bootstrap_odp"],
-        "methode_par_defaut": "chain_ladder",
         "munich_cl_disponible": False,
         "lr_marche_reference":  0.72,
         "lr_marche_source":     "Marché français — Protection Juridique",
@@ -536,7 +524,6 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "h2_seuil_derive":  0.35,
         "h1_seuil_corr":    0.40,
         "methodes_prioritaires": ["bornhuetter_ferguson", "cape_cod", "chain_ladder"],
-        "methode_par_defaut": "bornhuetter_ferguson",
         "munich_cl_disponible": False,
         "lr_marche_reference":  None,
         "lr_marche_source":     "Référence CCR/MRN par événement",
@@ -565,7 +552,6 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "h2_seuil_derive":  0.30,
         "h1_seuil_corr":    0.45,
         "methodes_prioritaires": ["bornhuetter_ferguson", "cape_cod", "chain_ladder"],
-        "methode_par_defaut": "bornhuetter_ferguson",
         "munich_cl_disponible": False,
         "lr_marche_reference":  None,
         "lr_marche_source":     "À calibrer par secteur — corrélation cycle économique",
@@ -594,7 +580,6 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "h2_seuil_derive":  0.20,
         "h1_seuil_corr":    0.50,
         "methodes_prioritaires": ["bornhuetter_ferguson", "chain_ladder", "mack_1993", "bootstrap_odp"],
-        "methode_par_defaut": "bornhuetter_ferguson",
         "munich_cl_disponible": False,
         "lr_marche_reference":  0.75,
         "lr_marche_source":     "Marché français — GAV / Accident scolaire (estimation)",
