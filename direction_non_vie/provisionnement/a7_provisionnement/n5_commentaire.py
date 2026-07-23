@@ -36,6 +36,8 @@ import logging
 from datetime import datetime
 from typing import Dict, Optional
 
+from .n4_best_estimate import s2_non_calculable, MSG_S2_NON_CALCULABLE
+
 logger = logging.getLogger('actuaria.a7')
 
 
@@ -559,6 +561,24 @@ def _s4_methodes(n3: Dict, n4: Dict) -> str:
 
 def _s5_best_estimate(n4: Dict) -> str:
     be     = n4.get('best_estimate', 0)
+
+    # BE négatif (reprise nette) → percentiles / SCR / RM / PT non définis : on
+    # affiche le message unique au lieu de chiffres trompeurs (les valeurs ont été
+    # neutralisées à 0 en amont uniquement pour la sûreté du formatage).
+    if s2_non_calculable(n4):
+        return "\n".join([
+            f"BEST ESTIMATE — RÉSERVE BRUTE (Art. 77 ; actualisation S2 par A10) : {_e(be)}",
+            "",
+            MSG_S2_NON_CALCULABLE,
+            "",
+            "Le Best Estimate est négatif : les méthodes retenues projettent, en net, "
+            "une REPRISE de provision (recours / sur-développement) supérieure aux "
+            "charges à payer restantes. Aucun percentile log-normal, SCR (3×σ×BE), "
+            "Risk Margin ni provision technique S2 n'est défini sur cette base. "
+            "L'actuaire désigné doit statuer sur la réalité de la reprise avant "
+            "toute inscription au bilan.",
+        ])
+
     p75    = n4.get('reserve_p75', 0)
     p90    = n4.get('reserve_p90', 0)
     p995   = n4.get('reserve_p99_5', 0)

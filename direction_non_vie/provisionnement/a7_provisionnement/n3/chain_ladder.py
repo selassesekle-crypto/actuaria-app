@@ -796,20 +796,23 @@ def chain_ladder(
     pct_dev = calculer_pct_developpe(C, f_cum)
 
     # ── 5. Ultimates et IBNR (helper de projection partagé) ────────────────────
-    # U_i = C[i, k_i] × f_{k_i} × ... × f_{m-2} × tail. Le point estimate reste
-    # l'IBNR PLANCHERÉ (comportement historique) ; le helper expose aussi l'IBNR
-    # brut (recours), non consommé ici — branchement au lot IBNR-B.
+    # U_i = C[i, k_i] × f_{k_i} × ... × f_{m-2} × tail. Lot IBNR-B : le point
+    # estimate de la réserve est désormais l'IBNR BRUT (recours / sur-développement
+    # CONSERVÉS, plus de plancher à 0 par année). Le plancher historique reste
+    # exposé pour comparaison (reserve_plancher / écart).
     _proj     = projeter_ultimates(C, facteurs, tail_factor=tail['tail_factor'],
                                    annee_base=annee_base_reserve)
     ultimates = _proj['ultimate']
-    ibnr      = _proj['ibnr_plancher']
+    ibnr      = _proj['ibnr_brut']            # BRUT — chiffre de référence honnête
     last_diag = _proj['last_diag']
 
-    # ── 6. Réserve totale ─────────────────────────────────────────────────────
-    # Par défaut : Σ IBNR_{i=1}^{n-1} (exclure i=0 supposée développée)
-    # Paramétrable via annee_base_reserve
-    idx_base       = max(0, min(annee_base_reserve, n - 1))
-    reserve_totale = float(np.sum(ibnr[idx_base:]))
+    # ── 6. Réserve totale (brute) + signalement des reprises ───────────────────
+    # Par défaut : Σ IBNR_{i=1}^{n-1} (exclure i=0 supposée développée).
+    idx_base         = max(0, min(annee_base_reserve, n - 1))
+    reserve_totale   = _proj['reserve_brute']             # = Σ ibnr_brut[idx_base:]
+    reserve_plancher = _proj['reserve_plancher']          # ancien chiffre (comparaison)
+    n_annees_reprise = _proj['n_annees_reprise']
+    ecart_plancher   = reserve_plancher - reserve_totale  # ce que l'ancien plancher masquait
 
     # ── 7. Résumé ─────────────────────────────────────────────────────────────
     msg = (
@@ -823,6 +826,11 @@ def chain_ladder(
             f" | ⚠️ {len(facteurs_sous_1)} facteur(s) < 1.0 conservé(s) "
             f"(recours/subrogation) aux colonnes "
             f"{[j for j, _ in facteurs_sous_1]}"
+        )
+    if n_annees_reprise:
+        msg += (
+            f" | ⚠️ {n_annees_reprise} année(s) en reprise (recours/sur-développement) "
+            f"— écart {ecart_plancher:,.0f}€ vs l'ancien plancher"
         )
     logger.info(msg)
 
@@ -838,13 +846,20 @@ def chain_ladder(
 
         # Résultats
         'ultimates':            [round(float(u), 2) for u in ultimates],
+        # ibnr_par_annee = BRUT (recours/reprises conservés) ; ibnr_brut_par_annee
+        # est l'alias explicite (nommage cohérent avec Clark) ; n_annees_reprise et
+        # reserve_plancher signalent l'écart vs l'ancien comportement plancheré.
         'ibnr_par_annee':       [round(float(v), 2) for v in ibnr],
+        'ibnr_brut_par_annee':  [round(float(v), 2) for v in ibnr],
+        'n_annees_reprise':     n_annees_reprise,
         'last_diagonale':       [round(float(d), 2) for d in last_diag],
         'pct_developpe':        [round(float(p), 4) for p in pct_dev],
 
         # Réserve
         'reserve_totale':       round(reserve_totale, 2),
         'reserve_best_estimate': round(reserve_totale, 2),
+        'reserve_brute':        round(reserve_totale, 2),     # = reserve_totale (chiffre honnête)
+        'reserve_plancher':     round(reserve_plancher, 2),   # ancien plancher (comparaison)
         'annee_base_reserve':   idx_base,
 
         # Métadonnées

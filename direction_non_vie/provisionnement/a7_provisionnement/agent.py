@@ -37,7 +37,7 @@ import numpy as np
 # ── Imports modules A7 ───────────────────────────────────────────────────────
 from direction_non_vie.services.nv_triangle_validator import TriangleValidator
 from .n2_hypotheses     import HypothesesValidator
-from .n4_best_estimate  import BestEstimateS2, garde_fou_be_negatif
+from .n4_best_estimate  import BestEstimateS2, garde_fou_be_negatif, s2_non_calculable
 from .n5_graphiques     import generer_graphiques
 from .n5_commentaire    import generer_commentaire
 from .n5_excel          import export_excel
@@ -349,7 +349,6 @@ class AgentA7Provisionnement:
 
                 # 1. SCR formule standard (Art. 105) : 3 × σ_eiopa × BE_final
                 _sig_eiopa = float(n4['scr']['sigma_eiopa'])
-                _scr_old   = float(n4['scr']['scr_provisions'])
                 _scr_new   = 3.0 * _sig_eiopa * _be_final
                 _ratio_scr = _scr_new / max(_be_final, 1e-9)
                 n4['scr']['scr_provisions'] = round(_scr_new, 0)
@@ -373,15 +372,23 @@ class AgentA7Provisionnement:
                     n4['reserve_p90']   = round(float(np.exp(_m_ln + 1.2816 * _s_ln)), 0)
                     n4['reserve_p99_5'] = round(float(np.exp(_m_ln + 2.5758 * _s_ln)), 0)
 
-                # 3. Risk Margin proportionnel au SCR (mêmes facteurs cumulés,
-                #    taux et courbe RFR — seul le niveau SCR change).
-                _ratio_rm = _scr_new / max(_scr_old, 1e-9)
-                _rm_new   = float(n4.get('risk_margin', 0.0)) * _ratio_rm
-                n4['risk_margin'] = round(_rm_new, 0)
-                n4['ratio_rm_be'] = round(_rm_new / max(_be_final, 1e-9) * 100.0, 2)
+                # 3. Risk Margin RECALCULÉE À NEUF sur le BE final, via la MÊME
+                #    formule que N4 (_calculer_risk_margin : CoC × Σ SCR(t) actualisés,
+                #    même run-off f_cum, même courbe RFR). La RM étant LINÉAIRE en SCR
+                #    (donc en BE), ce recalcul vaut EXACTEMENT l'ancienne proratisation
+                #    RM×(SCR_final/SCR_attritionnel) quand l'attritionnel est positif —
+                #    et il reste CORRECT quand N4 a nullé la RM attritionnelle (BE
+                #    attritionnel < 0) : il repart du BE final (> 0) et de son SCR.
+                _scr_final = {**n4['scr'], 'scr_provisions': _scr_new}
+                _f_cum_llt = n3.get('chain_ladder', {}).get('facteurs_cumules', [])
+                _rm_data   = self._be._calculer_risk_margin(
+                    _be_final, _scr_final, _f_cum_llt, courbe_rfr)
+                _rm_new    = float(_rm_data['risk_margin'])
+                n4['risk_margin'] = _rm_data['risk_margin']
+                n4['ratio_rm_be'] = _rm_data['ratio_rm_be']
 
                 # 4. Provisions techniques S2 = BE_final + RM  (doit être ≥ BE_final)
-                n4['provisions_techniques_s2'] = round(_be_final + _rm_new, 0)
+                n4['provisions_techniques_s2'] = _rm_data['provisions_techniques_s2']
 
                 # 5. Message enrichi (BE + SCR + RM + PT recalculés)
                 n4['message'] = (
@@ -412,6 +419,13 @@ class AgentA7Provisionnement:
                     n4['be_negatif']               = True
                     n4.setdefault('alertes', []).insert(0, _garde['message'])
                     n4['message']                  = _garde['message']
+                else:
+                    # BE final > 0 : si N4 avait signalé l'attritional négatif (avant
+                    # ajout des grands sinistres), les agrégats S2 recalculés ci-dessus
+                    # sur _be_final > 0 sont valides → on lève le drapeau et l'alerte.
+                    if n4.pop('be_negatif', None):
+                        n4['alertes'] = [a for a in n4.get('alertes', [])
+                                         if 'BE brut négatif' not in str(a)]
                 if self.verbose:
                     logger.info(
                         f"LLT | BE_final={_be_final:,.0f}€ "
@@ -432,6 +446,23 @@ class AgentA7Provisionnement:
                         f"N4 OK | BE={n4['best_estimate']:,.0f}€ | "
                         f"agrégats S2 non calculables (BE négatif — revue actuaire)"
                     )
+
+            # ── Livrables : neutraliser les None AVANT N5 (point unique) ──────
+            # Un BE négatif rend les agrégats S2 non calculables (None côté N4).
+            # Les 4 générateurs N5 (commentaire / rapport / Excel / graphiques)
+            # formatent et calculent sur ces clés (~40 points d'usage) : aucun
+            # None ne doit les atteindre. On neutralise ICI, en UN seul endroit,
+            # tout en CONSERVANT be_negatif — les sections N5 s'en servent pour
+            # afficher MSG_S2_NON_CALCULABLE au lieu de chiffres trompeurs.
+            if s2_non_calculable(n4):
+                for _k in ('reserve_p75', 'reserve_p90', 'reserve_p99_5',
+                           'risk_margin', 'provisions_techniques_s2',
+                           'ratio_rm_be', 'scr_prov'):
+                    if n4.get(_k) is None:
+                        n4[_k] = 0
+                if n4.get('scr', {}).get('scr_provisions') is None:
+                    n4['scr']['scr_provisions'] = 0
+                    n4['scr']['ratio_scr_be']   = 0
 
             # =================================================================
             # N5 — LIVRABLES

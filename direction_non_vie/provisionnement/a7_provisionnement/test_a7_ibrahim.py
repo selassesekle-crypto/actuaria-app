@@ -30,7 +30,7 @@ from direction_non_vie.provisionnement.a7_provisionnement.n3.munich_cl import (
 )
 from direction_non_vie.services.nv_triangle_projection import projeter_ultimates
 from direction_non_vie.provisionnement.a7_provisionnement.n4_best_estimate import (
-    garde_fou_be_negatif,
+    garde_fou_be_negatif, BestEstimateS2,
 )
 from direction_non_vie.provisionnement.a7_provisionnement.n3.glm_apc_poisson import (
     glm_apc_poisson, STATSMODELS_OK as _APC_SM_OK,
@@ -786,6 +786,148 @@ class T16_GardeFou_BE_Negatif(unittest.TestCase):
                       'reserve_p99_5', 'risk_margin', 'ratio_rm_be', 'provisions_techniques_s2'):
                 self.assertIsNone(g[k], f"{k} doit être None (non calculable)")
         print("    OK T16b garde_fou_be_negatif : BE ≤ 0 → ROUGE + agrégats S2 = None")
+
+
+# =============================================================================
+#  IBNR-B — Chain Ladder bascule sur le brut + garde-fou N4 chemin primaire
+# =============================================================================
+
+# Triangle 6×6 à reprise (3 facteurs de dév < 1) : réserve encore positive mais
+# 3 années en reprise. Oracles calculés par le code (impact analysis).
+_TRI_RECOURS_FORT = np.array([[1000., 2000., 2500., 2400., 2350., 2300.],
+                              [1100., 2100., 2600., 2450., 2380.,    0.],
+                              [1050., 2050., 2550., 2420.,    0.,    0.],
+                              [1200., 2200., 2650.,    0.,    0.,    0.],
+                              [1150., 2150.,    0.,    0.,    0.,    0.],
+                              [1080.,    0.,    0.,    0.,    0.,    0.]])
+# Triangle TOUT décroissant → réserve CL brute NÉGATIVE (releases dominants).
+_TRI_TOUT_DECROISSANT = np.array([[1000., 900., 850., 820., 810., 805.],
+                                  [1100., 990., 940., 910., 895.,   0.],
+                                  [1050., 945., 895., 870.,   0.,   0.],
+                                  [1200.,1080.,1030.,   0.,   0.,   0.],
+                                  [1150.,1035.,   0.,   0.,   0.,   0.],
+                                  [1080.,   0.,   0.,   0.,   0.,   0.]])
+
+
+class T17_N4_GardeFou_CheminPrimaire(unittest.TestCase):
+    """Lot IBNR-B Partie 1 — garde-fou BE négatif câblé sur le SCR PRIMAIRE de N4
+    (calculer(), chemin SANS grands sinistres) : un BE pondéré < 0 déclenche ROUGE
+    + agrégats S2 = None, sans passer par le bloc LLT d'agent.py."""
+
+    def _n2_n3(self):
+        r = AgentA7Provisionnement(verbose=False).run(
+            source=GENINS, generer_word=False, generer_pdf_flag=False, generer_graphiques=False)
+        return r['n2'], r['n3'], np.array(r['triangle'])
+
+    def test_be_negatif_chemin_primaire_declenche_garde_fou(self):
+        n2, n3, C = self._n2_n3()
+        # CL fortement négatif (reprise nette), BF/CC = 0 (exclus car r==0) → CL seule
+        # incluse → be = réserve CL < 0.
+        n3['chain_ladder']['reserve_totale'] = -5_000_000.0
+        n3['bf']['reserve_totale']       = 0.0
+        n3['cape_cod']['reserve_totale'] = 0.0
+        n4 = BestEstimateS2().calculer(n2, n3, C)
+        self.assertLess(n4['best_estimate'], 0)
+        self.assertTrue(n4.get('be_negatif'))
+        self.assertEqual(n4['statut'], 'ROUGE')
+        for k, v in (('scr_provisions', n4['scr']['scr_provisions']), ('scr_prov', n4['scr_prov']),
+                     ('risk_margin', n4['risk_margin']), ('pt_s2', n4['provisions_techniques_s2']),
+                     ('reserve_p75', n4['reserve_p75']), ('reserve_p90', n4['reserve_p90'])):
+            self.assertIsNone(v, f"{k} doit être None (non calculable)")
+        self.assertIn('non calculables', n4['message'])
+        print("    OK T17a N4 chemin primaire : BE négatif → ROUGE + agrégats S2 None")
+
+    def test_filtre_inclut_reserve_negative_exclut_zero(self):
+        n2, n3, C = self._n2_n3()
+        n3['chain_ladder']['reserve_totale'] = -1_000_000.0   # reprise
+        n3['bf']['reserve_totale']       = 0.0                 # échec (r==0)
+        n3['cape_cod']['reserve_totale'] = 0.0
+        n4 = BestEstimateS2().calculer(n2, n3, C)
+        self.assertIn('chain_ladder', n4['methodes_incluses'])            # r<0 inclus
+        self.assertNotIn('bornhuetter_ferguson', n4['methodes_incluses']) # r==0 exclu
+        print("    OK T17b filtre N4 : réserve négative incluse, r==0 exclu")
+
+
+class T18_CL_Bascule_Brut(unittest.TestCase):
+    """Lot IBNR-B Partie 2 — Chain Ladder bascule sur l'IBNR BRUT : la réserve
+    reflète les reprises (recours), avec signalement honnête. Mack hérite du brut."""
+
+    def test_recours_reserve_brute_et_signalement(self):
+        r = chain_ladder(_TRI_RECOURS_FORT, tail_force=1.0)
+        self.assertEqual(r['reserve_totale'], r['reserve_brute'])
+        self.assertLess(r['reserve_brute'], r['reserve_plancher'])       # honnête < plancher
+        self.assertEqual(r['n_annees_reprise'], 3)
+        self.assertTrue(any(v < 0 for v in r['ibnr_par_annee']))         # reprises conservées
+        self.assertIn('reprise', r['message'])
+        self.assertAlmostEqual(r['reserve_plancher'] - r['reserve_brute'], 406.93, places=1)
+        print(f"    OK T18a CL recours : brut={r['reserve_brute']:.0f} < plancher={r['reserve_plancher']:.0f} ({r['n_annees_reprise']} reprises)")
+
+    def test_tout_decroissant_reserve_negative(self):
+        r = chain_ladder(_TRI_TOUT_DECROISSANT, tail_force=1.0)
+        self.assertLess(r['reserve_totale'], 0)                          # honnête, peut être < 0
+        self.assertEqual(r['reserve_totale'], r['reserve_brute'])
+        print(f"    OK T18b CL tout décroissant : réserve brute = {r['reserve_brute']:.0f} < 0 (honnête)")
+
+    def test_mack_herite_du_brut(self):
+        rc = chain_ladder(_TRI_RECOURS_FORT, tail_force=1.0)
+        mk = mack_1993(_TRI_RECOURS_FORT, facteurs=rc['facteurs'], facteurs_indiv=rc['facteurs_indiv'],
+                       ultimates_cl=np.array(rc['ultimates']), ibnr_cl=np.array(rc['ibnr_par_annee']),
+                       annee_base=1)
+        self.assertAlmostEqual(mk['reserve_best_estimate'], rc['reserve_brute'], places=1)
+        self.assertGreater(mk['sigma_total'], 0)                         # σ (variance) intact
+        print(f"    OK T18c Mack hérite du brut : réserve Mack = {mk['reserve_best_estimate']:.0f} = CL brut, σ intact")
+
+    def test_sans_reprise_brut_egale_plancher(self):
+        r = chain_ladder(GENINS)
+        self.assertEqual(r['n_annees_reprise'], 0)
+        self.assertAlmostEqual(r['reserve_brute'], r['reserve_plancher'], places=2)
+        self.assertAlmostEqual(r['reserve_totale'], 18_680_856, delta=1)  # T1 intact
+        print("    OK T18d CL sans reprise : brut == plancher, réserve GenIns intacte")
+
+
+class T19_BE_Negatif_Livrables_Et_RM(unittest.TestCase):
+    """Lot IBNR-B (correctif) — un BE négatif traverse TOUT le pipeline jusqu'au
+    rapport sans crash, en affichant 'non calculable' ; et en cas de RÉCUPÉRATION
+    (attritionnel < 0 mais BE final > 0 après grands sinistres) la Risk Margin est
+    RECALCULÉE à neuf sur le BE final — un vrai chiffre, jamais 0 par défaut."""
+
+    def _run(self, **kw):
+        return AgentA7Provisionnement(verbose=False).run(
+            generer_word=False, generer_pdf_flag=False, generer_graphiques=False, **kw)
+
+    def test_be_negatif_rapport_complet_sans_crash(self):
+        # mode_declare='cumule' : le triangle décroissant est pris tel quel (sinon N1
+        # le détecte comme incrémental et le cumule) → BE pondéré négatif.
+        r = self._run(source=_TRI_TOUT_DECROISSANT, mode_declare='cumule')
+        self.assertTrue(r['success'], r.get('erreur'))
+        n4 = r['n4']
+        self.assertLess(n4['best_estimate'], 0)
+        self.assertTrue(n4.get('be_negatif'))
+        self.assertEqual(n4['statut'], 'ROUGE')
+        self.assertIn('NON CALCULABLES', r.get('commentaire') or '')
+        print("    OK T19a BE négatif : rapport complet produit, 'non calculable' affiché")
+
+    def test_recuperation_risk_margin_reelle_pas_zero(self):
+        r = self._run(source=_TRI_TOUT_DECROISSANT, mode_declare='cumule',
+                      reserve_grands_sinistres=5000.0, n_grands_sinistres=3)
+        self.assertTrue(r['success'], r.get('erreur'))
+        n4 = r['n4']
+        self.assertLess(n4['be_attritional'], 0)     # attritionnel négatif
+        self.assertGreater(n4['best_estimate'], 0)   # BE final positif (récupération)
+        self.assertFalse(n4.get('be_negatif'))       # drapeau levé
+        self.assertGreater(n4['risk_margin'], 0)     # RM RÉELLE, pas 0 par défaut
+        self.assertGreater(n4['scr']['scr_provisions'], 0)
+        self.assertAlmostEqual(n4['provisions_techniques_s2'],
+                               n4['best_estimate'] + n4['risk_margin'], delta=1.5)
+        print(f"    OK T19b récupération : RM={n4['risk_margin']:.0f} réelle (pas 0), PT = BE + RM")
+
+    def test_llt_normal_rm_inchangee(self):
+        # Non-régression : le recalcul à neuf donne EXACTEMENT la même RM que
+        # l'ancienne proratisation (la RM est linéaire en SCR, donc en BE).
+        r = self._run(source=GENINS, reserve_grands_sinistres=2_000_000.0, n_grands_sinistres=2)
+        self.assertTrue(r['success'], r.get('erreur'))
+        self.assertAlmostEqual(r['n4']['risk_margin'], 2_728_439, delta=1)
+        print("    OK T19c LLT normal : RM = 2 728 439 inchangée (recalcul ≡ proratisation)")
 
 
 if __name__ == '__main__':

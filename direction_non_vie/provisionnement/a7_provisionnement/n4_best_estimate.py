@@ -93,6 +93,25 @@ def garde_fou_be_negatif(be_final: float) -> Optional[Dict]:
     }
 
 
+# Message UNIQUE affiché par les livrables N5 quand les agrégats S2 ne sont pas
+# calculables (BE négatif). Source unique — ne pas dupliquer dans N5.
+MSG_S2_NON_CALCULABLE = (
+    "Agrégats S2 NON CALCULABLES — Best Estimate négatif (reprise nette) : SCR, "
+    "Risk Margin, provisions techniques et percentiles ne sont pas définis sur un "
+    "BE négatif. Revue actuaire impérative avant toute inscription au bilan."
+)
+
+
+def s2_non_calculable(n4: Dict) -> bool:
+    """True si les agrégats S2 (SCR / Risk Margin / PT / percentiles) sont non
+    calculables parce que le Best Estimate est négatif (cf. garde_fou_be_negatif).
+
+    Les générateurs N5 (commentaire, rapport, Excel, graphiques) doivent alors
+    afficher MSG_S2_NON_CALCULABLE AU LIEU des chiffres : aucune valeur None ne
+    doit atteindre un formatage ou un calcul. Source UNIQUE partagée par les 4."""
+    return bool(n4.get('be_negatif'))
+
+
 class BestEstimateS2:
     """
     Calcule le Best Estimate — réserve BRUTE, avant actualisation (la valeur
@@ -166,7 +185,10 @@ class BestEstimateS2:
 
         for m, r in methodes_dispo.items():
             s = score_map.get(m, 70)
-            if s >= seuil_score and r > 0:
+            # r != 0 (fini) : une réserve NÉGATIVE (reprise / recours net) est une
+            # donnée VALIDE et doit entrer dans le BE ; seuls les vrais échecs
+            # (r == 0 par dégénérescence, ou NaN) sont exclus.
+            if s >= seuil_score and np.isfinite(r) and r != 0:
                 methodes_incluses[m] = (r, s)
             else:
                 methodes_exclues[m]  = (r, s)
@@ -202,7 +224,7 @@ class BestEstimateS2:
             # La méthode recommandée a été exclue par le seuil de score
             # On la force avec un score de 70 (score de référence)
             reserve_rec = methodes_dispo.get(methode_rec_norm_check, 0)
-            if reserve_rec > 0:
+            if np.isfinite(reserve_rec) and reserve_rec != 0:
                 methodes_incluses[methode_rec_norm_check] = (reserve_rec, 70)
                 if methode_rec_norm_check in methodes_exclues:
                     del methodes_exclues[methode_rec_norm_check]
@@ -480,7 +502,7 @@ class BestEstimateS2:
         )
         logger.info(msg)
 
-        return {
+        resultat = {
             # Best Estimate
             'best_estimate':         round(be,     0),
 
@@ -538,6 +560,31 @@ class BestEstimateS2:
             'scr_prov':              scr['scr_provisions'],
             'methode_facteurs':      methode_rec,
         }
+
+        # ── 10. Garde-fou TOTAL — BE pondéré <= 0 (reprise nette) ──────────────
+        # Chemin PRIMAIRE (sans grands sinistres) : si le BE est négatif, les
+        # agrégats S2 (SCR = 3σ×BE, ratio, RM, PT, percentiles log-normaux) sont
+        # non calculables → marqueurs None + statut ROUGE, jamais de plancher
+        # silencieux. Le bloc LLT d'agent.py applique le même garde-fou sur le BE
+        # final post-grands-sinistres. Dormant tant que les méthodes planchent.
+        _garde = garde_fou_be_negatif(be)
+        if _garde is not None:
+            resultat['scr']['scr_provisions']    = None
+            resultat['scr']['ratio_scr_be']      = None
+            resultat['scr']['message']           = _garde['message']
+            resultat['scr_prov']                 = None
+            resultat['reserve_p75']              = None
+            resultat['reserve_p90']              = None
+            resultat['reserve_p99_5']            = None
+            resultat['risk_margin']              = None
+            resultat['provisions_techniques_s2'] = None
+            resultat['ratio_rm_be']              = None
+            resultat['statut']                   = 'ROUGE'
+            resultat['be_negatif']               = True
+            resultat['alertes']    = [_garde['message']] + list(resultat.get('alertes', []))
+            resultat['message']                  = _garde['message']
+
+        return resultat
 
     # =========================================================================
     #  SCR PROVISIONS FORMULE STANDARD (Art. 105 S2)
