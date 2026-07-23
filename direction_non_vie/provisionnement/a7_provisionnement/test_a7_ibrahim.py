@@ -27,9 +27,14 @@ from direction_non_vie.provisionnement.a7_provisionnement.n3.clark import clark_
 from direction_non_vie.provisionnement.a7_provisionnement.n3.bootstrap_odp import bootstrap_odp
 from direction_non_vie.provisionnement.a7_provisionnement.n3.glm_apc_poisson import (
     glm_apc_poisson, STATSMODELS_OK as _APC_SM_OK,
+    _to_long as _glm_to_long, FLOOR_Y as _GLM_FLOOR_Y,   # T12 : preuve d'équivalence increments_positifs
 )
 from direction_non_vie.provisionnement.a7_provisionnement.n3.barnett_zehnwirth_ptf import (
     barnett_zehnwirth_ptf, STATSMODELS_OK as _PTF_SM_OK,
+    _to_long_log as _bz_to_long_log,                     # T12 : preuve d'équivalence increments_positifs
+)
+from direction_non_vie.services.nv_triangle_negatifs import (
+    signaler_negatifs, increments_positifs,
 )
 from direction_non_vie.provisionnement.a7_provisionnement.config.lob_config import (
     get_lob_config, list_lobs,
@@ -531,6 +536,97 @@ class T11_BE_Mack_Retire(unittest.TestCase):
         self.assertAlmostEqual(poids.get('chain_ladder', 0.0), 0.50, places=4,
                                msg=f"point CL doit garder 50 % (poids={poids})")
         print(f"    OK T11 : Mack recommandé mais non pondéré — poids CL={poids.get('chain_ladder')} (remap)")
+
+
+# =============================================================================
+#  NÉGATIFS — outils partagés signaler_negatifs / increments_positifs (Lot 1)
+# =============================================================================
+
+# Triangle synthétique 4×4 à négatifs CONNUS (oracles calculés à la main) :
+#   · cumulé négatif   : (2,1) = -20
+#   · inversions (>5%) : (0,2) 150→140, (1,1) 100→90, (2,1) 100→-20
+#   · incréments ≤ 0   : (0,2)=-10, (1,1)=-10, (2,1)=-120  → 3/10 = 30 %
+_TRI_NEG = np.array([[100., 150., 140., 200.],
+                     [100.,  90., 120.,   0.],
+                     [100., -20.,   0.,   0.],
+                     [ 50.,   0.,   0.,   0.]])
+
+
+def _increments_long(res, C):
+    """Incréments du helper en zone connue (i+j<n), ordre i-externe/j-interne
+    — même parcours que _to_long / _to_long_log, pour comparer terme à terme."""
+    n, m = C.shape
+    Y, masque = res['Y'], res['masque']
+    return [(float(Y[i, j]), bool(masque[i, j]))
+            for i in range(n) for j in range(m) if i + j < n]
+
+
+class T12_Negatifs_Helpers(unittest.TestCase):
+    """Lot 1 — outils partagés de gestion des négatifs. signaler_negatifs détecte
+    sans transformer ; increments_positifs reproduit EXACTEMENT B&Z (plancher=None)
+    et GLM APC (plancher=FLOOR_Y). Aucune méthode N3 n'est encore branchée dessus."""
+
+    # ── signaler_negatifs ─────────────────────────────────────────────────────
+    def test_signaler_synthetique(self):
+        r = signaler_negatifs(_TRI_NEG)
+        self.assertEqual(r['n_neg'], 1)
+        self.assertEqual(r['cellules_neg'], [(2, 1)])
+        self.assertAlmostEqual(r['frac_neg'], 0.10, places=6)          # 1 / 10 cellules connues
+        self.assertEqual(r['n_inversions'], 3)
+        self.assertEqual(r['cellules_inversions'], [(0, 2), (1, 1), (2, 1)])
+        self.assertAlmostEqual(r['frac_inversions'], 0.50, places=6)   # 3 / 6 transitions
+        print("    OK T12a signaler_negatifs : 1 négatif + 3 inversions détectés")
+
+    def test_signaler_raa_genins_cumule_propre(self):
+        # RAA a un incrément négatif (15599→15496) mais AUCUN cumulé négatif, et sa
+        # baisse (0,66 %) est sous la tolérance 5 % → rien à signaler ICI. C'est
+        # increments_positifs (niveau incrément) qui l'attrape, pas signaler_negatifs.
+        for nom, C in (("RAA", RAA), ("GENINS", GENINS)):
+            r = signaler_negatifs(C)
+            self.assertEqual(r['n_neg'], 0, nom)
+            self.assertEqual(r['n_inversions'], 0, nom)
+        print("    OK T12b signaler_negatifs : RAA/GenIns cumulé propre (0 négatif, 0 inversion)")
+
+    def test_signaler_ne_modifie_pas_C(self):
+        C = _TRI_NEG.copy()
+        avant = C.copy()
+        signaler_negatifs(C)
+        self.assertTrue(np.array_equal(C, avant), "signaler_negatifs a modifié C")
+        print("    OK T12c signaler_negatifs : C strictement inchangé")
+
+    # ── increments_positifs : reproduction EXACTE de B&Z et GLM APC ───────────
+    def test_increments_none_reproduit_bz(self):
+        for nom, C in (("SYNTH", _TRI_NEG), ("RAA", RAA), ("GENINS", GENINS)):
+            bz = _bz_to_long_log(C)
+            ip = increments_positifs(C, plancher=None)
+            self.assertEqual(ip['cellules_exclues'], bz['cellules_exclues'], nom)
+            self.assertEqual(ip['n_exclues'], bz['n_exclues'], nom)
+            self.assertEqual(ip['n_obs'], bz['n_obs'], nom)
+            log_util = [float(np.log(y)) for y, mk in _increments_long(ip, C) if mk]
+            self.assertEqual(len(log_util), len(bz['y']), nom)
+            self.assertTrue(np.allclose(log_util, bz['y']), nom)
+        print("    OK T12d increments_positifs(None) == B&Z _to_long_log (exact)")
+
+    def test_increments_plancher_reproduit_glm(self):
+        for nom, C in (("SYNTH", _TRI_NEG), ("RAA", RAA), ("GENINS", GENINS)):
+            glm = _glm_to_long(C)
+            ip = increments_positifs(C, plancher=_GLM_FLOOR_Y)
+            Y_util = [y for y, _ in _increments_long(ip, C)]
+            self.assertEqual(len(Y_util), len(glm['Y']), nom)
+            self.assertTrue(np.allclose(Y_util, glm['Y']), nom)
+        print(f"    OK T12e increments_positifs(FLOOR_Y={_GLM_FLOOR_Y}) == GLM APC _to_long (exact)")
+
+    def test_increments_raa_un_negatif(self):
+        ip = increments_positifs(RAA, plancher=None)
+        self.assertEqual(ip['n_exclues'], 1)
+        self.assertEqual(ip['cellules_exclues'], [(1, 6)])
+        print("    OK T12f increments_positifs : RAA = 1 incrément négatif exclu (1,6)")
+
+    def test_increments_gate_disponible(self):
+        self.assertFalse(increments_positifs(_TRI_NEG, plancher=None)['disponible'])  # 30 % > 10 %
+        self.assertTrue(increments_positifs(RAA, plancher=None)['disponible'])        # 1,8 %
+        self.assertTrue(increments_positifs(GENINS, plancher=None)['disponible'])     # 0 %
+        print("    OK T12g increments_positifs : gate disponible (30% KO, RAA/GenIns OK)")
 
 
 if __name__ == '__main__':
