@@ -28,6 +28,7 @@
 
 import json
 import logging
+import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -38,7 +39,11 @@ import numpy as np
 from direction_non_vie.services.nv_triangle_validator import TriangleValidator
 from .n2_hypotheses     import HypothesesValidator
 from .n4_best_estimate  import BestEstimateS2, garde_fou_be_negatif, s2_non_calculable
-from .n5_graphiques     import generer_graphiques
+# Alias VOLONTAIRE — ne pas « nettoyer » : `generer_graphiques` est aussi un
+# PARAMÈTRE public de run() (compatibilité ancienne API, cf. plus bas). Sans
+# alias, le paramètre (un bool) masque la fonction dans le corps de run() et
+# l'appel lève TypeError: 'bool' object is not callable → aucun graphique.
+from .n5_graphiques     import generer_graphiques as _generer_graphiques
 from .n5_commentaire    import generer_commentaire
 from .n5_excel          import export_excel
 from .n5_rapport        import export_word, export_pdf
@@ -94,7 +99,7 @@ class AgentA7Provisionnement:
     --------------------------------------------------
     success, statut_rag, audit_id, erreur
     n1, n2, n3, n4
-    graphiques, commentaire
+    graphiques, graphiques_erreur (None si OK), commentaire
     excel_bytes, word_bytes, pdf_bytes, audit_trail
     — compatibilité ancienne API —
     chain_ladder, mack, bf, cape_cod, bootstrap, munich_cl
@@ -470,14 +475,22 @@ class AgentA7Provisionnement:
             if self.verbose:
                 logger.info("N5 — Génération livrables")
 
-            # Graphiques Plotly
-            graphiques_dict = {}
+            # Graphiques Plotly — un échec ne fait pas tomber le run, mais il est
+            # REMONTÉ dans le résultat (graphiques_erreur) : sans ça un « succès
+            # dégradé » sans aucun graphique reste invisible côté appelant.
+            graphiques_dict   = {}
+            graphiques_erreur = None
             if gen_g:
                 try:
-                    graphiques_dict = generer_graphiques(C_calc, n2, n3, n4)
-                    logger.info(f"N5 — {len(graphiques_dict)}/12 graphiques générés : {list(graphiques_dict.keys())}")
+                    graphiques_dict = _generer_graphiques(C_calc, n2, n3, n4)
+                    if graphiques_dict:
+                        logger.info(f"N5 — {len(graphiques_dict)} graphiques générés : "
+                                    f"{list(graphiques_dict.keys())}")
+                    else:
+                        graphiques_erreur = "aucun graphique produit (générateur silencieux)"
+                        logger.error(f"N5 graphiques : {graphiques_erreur}")
                 except Exception as e:
-                    import traceback
+                    graphiques_erreur = f"{type(e).__name__} : {e}"
                     logger.error(f"N5 graphiques ECHEC : {e}\n{traceback.format_exc()}")
                     graphiques_dict = {}
 
@@ -592,6 +605,7 @@ class AgentA7Provisionnement:
 
                 # ── Livrables ───────────────────────────────────────────
                 'graphiques':   graphiques_dict,
+                'graphiques_erreur': graphiques_erreur,   # None si OK
                 'commentaire':  commentaire,
                 'excel_bytes':  excel_bytes,
                 'word_bytes':   word_bytes,    # ← NOUVEAU v5.0
@@ -633,6 +647,7 @@ class AgentA7Provisionnement:
                 'word_bytes':  b'',
                 'pdf_bytes':   b'',
                 'graphiques':  {},
+                'graphiques_erreur': 'run interrompu avant N5',
                 'n1': {}, 'n2': {}, 'n3': {}, 'n4': {},
             }
 

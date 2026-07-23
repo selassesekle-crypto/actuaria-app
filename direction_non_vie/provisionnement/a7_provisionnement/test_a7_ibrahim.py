@@ -930,5 +930,86 @@ class T19_BE_Negatif_Livrables_Et_RM(unittest.TestCase):
         print("    OK T19c LLT normal : RM = 2 728 439 inchangée (recalcul ≡ proratisation)")
 
 
+# =============================================================================
+#  GRAPHIQUES — réellement produits par run() (bug du paramètre masquant)
+# =============================================================================
+
+class T20_Graphiques_Reellement_Produits(unittest.TestCase):
+    """Lot graphiques — `run(generer_graphiques=True)` doit produire de VRAIES
+    figures, pas seulement « ne pas planter ».
+
+    Le bug : le paramètre `generer_graphiques: bool` de run() masquait la fonction
+    importée du même nom → `TypeError: 'bool' object is not callable`, avalé par le
+    except → run en succès dégradé avec 0 graphique, indéfiniment. Les tests
+    existants passaient tous `generer_graphiques=False` : personne n'exerçait le
+    chemin nominal. C'est ce test qui aurait attrapé le bug dès le premier jour.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.r = AgentA7Provisionnement(verbose=False).run(
+            source=GENINS, n_sim_bootstrap=300,
+            generer_graphiques=True, generer_word=False, generer_pdf_flag=False)
+
+    def test_graphiques_reellement_produits(self):
+        """Le cœur : des figures existent, et ce sont bien des figures Plotly."""
+        self.assertTrue(self.r.get('success'), self.r.get('erreur'))
+        g = self.r.get('graphiques') or {}
+        self.assertGreater(len(g), 0,
+                           "0 graphique alors que generer_graphiques=True — "
+                           "la fonction est-elle masquée par le paramètre ?")
+        self.assertIn('g1_heatmap', g)          # au moins le triangle de base
+        self.assertTrue(all(hasattr(f, 'to_html') for f in g.values()),
+                        "les valeurs doivent être des go.Figure, pas des placeholders")
+        print(f"    OK T20a graphiques : {len(g)}/14 réellement produits")
+
+    def test_echec_graphiques_remonte_dans_le_resultat(self):
+        """Un échec N5 ne doit plus être un « succès dégradé » invisible."""
+        self.assertIsNone(self.r.get('graphiques_erreur'),
+                          f"erreur graphiques : {self.r.get('graphiques_erreur')}")
+        # Chemin d'échec : le générateur lève → run reste en succès MAIS le
+        # résultat porte la trace de l'échec.
+        import direction_non_vie.provisionnement.a7_provisionnement.agent as _ag
+        _vrai = _ag._generer_graphiques
+        try:
+            _ag._generer_graphiques = lambda *a, **k: (_ for _ in ()).throw(
+                RuntimeError('boom'))
+            r = AgentA7Provisionnement(verbose=False).run(
+                source=GENINS, n_sim_bootstrap=300,
+                generer_graphiques=True, generer_word=False, generer_pdf_flag=False)
+        finally:
+            _ag._generer_graphiques = _vrai
+        self.assertTrue(r['success'])                     # comportement global inchangé
+        self.assertEqual(r['graphiques'], {})
+        self.assertIn('boom', r['graphiques_erreur'])     # mais l'échec est visible
+        print("    OK T20b échec N5 : run en succès, mais graphiques_erreur renseigné")
+
+    def test_flags_desactivent_toujours(self):
+        """Les deux drapeaux (nouveau et alias de compat) coupent bien la génération."""
+        for kw in ({'generer_graphiques': False}, {'generer_graphiques_flag': False}):
+            r = AgentA7Provisionnement(verbose=False).run(
+                source=GENINS, n_sim_bootstrap=300,
+                generer_word=False, generer_pdf_flag=False, **kw)
+            self.assertEqual(r.get('graphiques'), {}, f"{kw} n'a pas désactivé")
+            self.assertIsNone(r.get('graphiques_erreur'), f"{kw} : faux positif d'erreur")
+        print("    OK T20c les deux drapeaux désactivent, sans fausse alerte")
+
+    def test_aucun_parametre_ne_masque_une_fonction_du_module(self):
+        """Garde-fou GÉNÉRIQUE : aucun paramètre de run() ne doit porter le nom
+        d'un callable importé/défini dans agent.py. Attrape toute récidive de
+        cette classe de bug, pas seulement l'occurrence corrigée."""
+        import inspect
+        import direction_non_vie.provisionnement.a7_provisionnement.agent as _ag
+        callables_module = {n for n, v in vars(_ag).items()
+                            if callable(v) and not n.startswith('__')}
+        params = set(inspect.signature(AgentA7Provisionnement.run).parameters)
+        collisions = sorted(params & callables_module)
+        self.assertEqual(collisions, [],
+                         f"paramètre(s) masquant un callable du module : {collisions}")
+        # L'API publique reste inchangée : le paramètre historique existe toujours.
+        self.assertIn('generer_graphiques', params)
+        print("    OK T20d aucun masquage nom-de-paramètre / callable du module")
+
+
 if __name__ == '__main__':
     unittest.main()
