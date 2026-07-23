@@ -77,6 +77,9 @@ from typing import Dict, Optional, Tuple
 import numpy as np
 
 from direction_non_vie.services.nv_triangle_projection import projeter_ultimates
+# Source UNIQUE des facteurs de développement dans A7 : Munich avait sa propre
+# copie, restée bloquée sur l'ancien plancher f ≥ 1 après son retrait du Lot 2.
+from .chain_ladder import calculer_facteurs
 
 logger = logging.getLogger('actuaria.a7')
 
@@ -165,27 +168,6 @@ def valider_prerequis(
         pass  # Détection circularité non bloquante
 
     return True, "Prérequis Munich CL satisfaits."
-
-
-# =============================================================================
-#  FACTEURS CL STANDARD SUR UN TRIANGLE
-# =============================================================================
-
-def _facteurs_cl(C: np.ndarray) -> np.ndarray:
-    """
-    Facteurs CL volume-weighted standard sur un triangle.
-    f_j = Σ C[i,j+1] / Σ C[i,j]  (zone connue)
-    """
-    n, m     = C.shape
-    facteurs = np.ones(m - 1)
-    for j in range(m - 1):
-        num = den = 0.0
-        for i in range(n):
-            if i + j + 1 < n and C[i, j] > 0 and C[i, j+1] > 0:
-                num += C[i, j+1]
-                den += C[i, j]
-        facteurs[j] = max(num / max(den, 1e-10), 1.0)
-    return facteurs
 
 
 # =============================================================================
@@ -342,8 +324,12 @@ def munich_cl(
     n, m = C_P.shape
 
     # ── 2. Facteurs CL standard ───────────────────────────────────────────────
-    f_P = _facteurs_cl(C_P)
-    f_E = _facteurs_cl(C_E)
+    # Source unique (chain_ladder) : un facteur < 1 (recours/subrogation) est
+    # conservé tel quel. Il se propage aux λ, aux ratios prédits q̂ et aux
+    # facteurs ajustés f* — ces derniers restent bornés à 1.0 plus bas (verrou
+    # distinct, décision séparée).
+    f_P, _ = calculer_facteurs(C_P)
+    f_E, _ = calculer_facteurs(C_E)
 
     # ── 3. Coefficients λ (Quarg-Mack 2004) ──────────────────────────────────
     lam_P, lam_E, Q_moy_vec = _calculer_lambda(C_P, C_E, f_P, f_E, lambda_max=lambda_max)

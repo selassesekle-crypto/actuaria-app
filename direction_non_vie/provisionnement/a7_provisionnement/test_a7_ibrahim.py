@@ -21,12 +21,15 @@ sys.path.insert(0, _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '.
 
 import numpy as np
 
-from direction_non_vie.provisionnement.a7_provisionnement.n3.chain_ladder import chain_ladder
+from direction_non_vie.provisionnement.a7_provisionnement.n3.chain_ladder import (
+    chain_ladder, calculer_facteurs,
+)
 from direction_non_vie.provisionnement.a7_provisionnement.n3.mack import mack_1993
 from direction_non_vie.provisionnement.a7_provisionnement.n3.clark import clark_ldf
 from direction_non_vie.provisionnement.a7_provisionnement.n3.bootstrap_odp import bootstrap_odp
 from direction_non_vie.provisionnement.a7_provisionnement.n3.munich_cl import (
     munich_cl, valider_prerequis,
+    _calculer_lambda as _mcl_lambda,        # T21 : chaîne λ depuis la source unique
 )
 from direction_non_vie.services.nv_triangle_projection import projeter_ultimates
 from direction_non_vie.provisionnement.a7_provisionnement.n4_best_estimate import (
@@ -1030,6 +1033,120 @@ class T20_Graphiques_Reellement_Produits(unittest.TestCase):
         # L'API publique reste inchangée : le paramètre historique existe toujours.
         self.assertIn('generer_graphiques', params)
         print("    OK T20d aucun masquage nom-de-paramètre / callable du module")
+
+
+# =============================================================================
+#  MUNICH CL — SOURCE UNIQUE DES FACTEURS (Lot C1)
+# =============================================================================
+
+# Paire à RECOURS simple : le payé ET l'engagé décroissent en fin de dév.
+_MCL_REC_P = np.array([[100., 180., 230., 205.],
+                       [120., 200., 250.,   0.],
+                       [110., 190.,   0.,   0.],
+                       [130.,   0.,   0.,   0.]])
+_MCL_REC_E = np.array([[160., 220., 250., 235.],
+                       [200., 250., 275.,   0.],
+                       [175., 235.,   0.,   0.],
+                       [210.,   0.,   0.,   0.]])
+
+# Paire 7×7 conçue pour exercer la CHAÎNE λ : en colonne 1, une année massivement
+# en reprise tire le facteur agrégé sous 1, mais 4 années croissantes survivent au
+# filtre des incréments négatifs de _calculer_lambda — donc λ est réellement
+# ré-estimé à partir du facteur honnête (et non du facteur écrasé à 1.0).
+_MCL_LAM_P = np.array([[6000., 9000., 4000., 4100., 4150., 4200., 4250.],
+                       [ 200.,  360.,  470.,  520.,  545.,  560.,    0.],
+                       [ 220.,  400.,  530.,  590.,  615.,    0.,    0.],
+                       [ 240.,  455.,  600.,  665.,    0.,    0.,    0.],
+                       [ 260.,  500.,  660.,    0.,    0.,    0.,    0.],
+                       [ 280.,  540.,    0.,    0.,    0.,    0.,    0.],
+                       [ 300.,    0.,    0.,    0.,    0.,    0.,    0.]])
+_MCL_LAM_E = np.array([[8000.,10500., 5200., 5100., 5050., 5000., 4980.],
+                       [ 300.,  470.,  560.,  600.,  615.,  625.,    0.],
+                       [ 360.,  540.,  650.,  690.,  705.,    0.,    0.],
+                       [ 330.,  580.,  720.,  760.,    0.,    0.,    0.],
+                       [ 420.,  660.,  790.,    0.,    0.,    0.,    0.],
+                       [ 400.,  700.,    0.,    0.,    0.,    0.,    0.],
+                       [ 470.,    0.,    0.,    0.,    0.,    0.,    0.]])
+
+
+class T21_Munich_Source_Unique_Facteurs(unittest.TestCase):
+    """Lot C1 — Munich avait sa PROPRE copie du calcul des facteurs, restée bloquée
+    sur le plancher f ≥ 1 retiré de chain_ladder au Lot 2 (mesuré : 0.8913 côté
+    partagé contre 1.0000 côté copie). La copie est supprimée : une seule source
+    dans A7. Ce lot ne touche NI le plancher f* ≥ 1 (verrou 2) NI le plancher IBNR
+    final (verrou 3) — décisions séparées."""
+
+    def test_copie_privee_supprimee(self):
+        """Propreté : la copie n'est pas contournée, elle n'existe plus."""
+        from direction_non_vie.provisionnement.a7_provisionnement.n3 import munich_cl as _m
+        self.assertFalse(hasattr(_m, '_facteurs_cl'),
+                         "la copie privée _facteurs_cl doit avoir disparu du module")
+        print("    OK T21a source unique : _facteurs_cl supprimée de munich_cl")
+
+    def test_facteurs_exposes_identiques_a_la_source_partagee(self):
+        """Sur triangle sain ET à recours, Munich expose exactement les facteurs
+        de chain_ladder — plus aucune divergence possible entre les deux."""
+        for nom, P, E in (('sain',    _MCL_PAYE,  _MCL_ENG_SAIN),
+                          ('recours', _MCL_REC_P, _MCL_REC_E)):
+            r = munich_cl(P, E, annee_base=0)
+            for lbl, C, cle in (('payé',   P, 'facteurs_cl_paye'),
+                                ('engagé', E, 'facteurs_cl_engage')):
+                attendu = [round(float(v), 4) for v in calculer_facteurs(C)[0]]
+                self.assertEqual(r[cle], attendu, f"{nom}/{lbl} : facteurs divergents")
+        print("    OK T21b facteurs Munich == chain_ladder.calculer_facteurs (sain + recours)")
+
+    def test_facteur_sous_1_desormais_conserve(self):
+        """Le plancher a bien disparu : un facteur de recours n'est plus écrasé."""
+        r = munich_cl(_MCL_REC_P, _MCL_REC_E, annee_base=0)
+        self.assertAlmostEqual(r['facteurs_cl_paye'][2],   0.8913, places=4)  # était 1.0
+        self.assertAlmostEqual(r['facteurs_cl_engage'][2], 0.9400, places=4)  # était 1.0
+        print("    OK T21c recours : f_payé=0.8913 et f_engagé=0.9400 conservés (étaient 1.0)")
+
+    def test_chaine_lambda_estimee_depuis_la_source_honnete(self):
+        """CHAÎNE COMPLÈTE — les facteurs entrent dans les résidus de λ
+        (munich_cl.py, r_P = C[i,j+1]/C[i,j] − f[j]). On vérifie que λ est estimé
+        à partir des facteurs HONNÊTES, et que ce choix est bien discriminant :
+        les facteurs planchés donnent un λ différent."""
+        P, E = _MCL_LAM_P, _MCL_LAM_E
+        f_P, f_E = calculer_facteurs(P)[0], calculer_facteurs(E)[0]
+        self.assertLess(min(f_P), 1.0, "la fixture doit exercer un facteur < 1")
+
+        lam_honnete = _mcl_lambda(P, E, f_P, f_E)
+        lam_planche = _mcl_lambda(P, E, np.maximum(f_P, 1.0), np.maximum(f_E, 1.0))
+        # le cas est bien discriminant (sinon le test ne prouverait rien)
+        self.assertFalse(np.allclose(lam_honnete[1], lam_planche[1]),
+                         "fixture non discriminante : λ identique dans les deux cas")
+
+        r = munich_cl(P, E, annee_base=0)
+        for cle, idx in (('lambda_P', 0), ('lambda_E', 1)):
+            obtenu = [float(v) for v in r[cle]]
+            np.testing.assert_allclose(obtenu, lam_honnete[idx], atol=1e-4,
+                                       err_msg=f"{cle} n'est pas estimé depuis la source unique")
+        self.assertFalse(np.allclose([float(v) for v in r['lambda_E']],
+                                     lam_planche[1], atol=1e-4),
+                         "λ_E correspond encore aux facteurs planchés")
+        print(f"    OK T21d chaîne λ : λ_E[1]={r['lambda_E'][1]} (honnête) "
+              f"≠ {round(float(lam_planche[1][1]), 4)} (planché)")
+
+    def test_triangle_sain_strictement_inchange(self):
+        """Non-régression : sans aucun facteur < 1, la chaîne Munich complète est
+        identique à l'avant-lot (valeurs relevées avant modification)."""
+        r = munich_cl(_MCL_PAYE, _MCL_ENG_SAIN, annee_base=0)
+        self.assertEqual(r['facteurs_cl_paye'],     [1.7273, 1.2632, 1.1304])
+        self.assertEqual(r['lambda_P'],             [2.0, 0.0, 0.0])
+        self.assertEqual(r['facteurs_munich_paye'], [2.1106, 1.2632, 1.1304])
+        self.assertAlmostEqual(r['be_munich_paye'], 375.71, places=2)
+        self.assertAlmostEqual(r['be_cl_paye'],     304.55, places=2)
+        print("    OK T21e triangle sain : chaîne Munich identique bit à bit")
+
+    def test_verrous_2_et_3_intacts(self):
+        """Ce lot ne touche NI f* ≥ 1 NI le plancher IBNR — garde-fou de périmètre."""
+        r = munich_cl(_MCL_REC_P, _MCL_REC_E, annee_base=0)
+        self.assertTrue(all(f >= 1.0 for f in r['facteurs_munich_paye']),
+                        "verrou 2 (f* ≥ 1) doit rester en place dans ce lot")
+        self.assertTrue(all(v >= 0.0 for v in r['ibnr_munich_paye']),
+                        "verrou 3 (plancher IBNR) doit rester en place dans ce lot")
+        print("    OK T21f périmètre : verrous f*≥1 et plancher IBNR toujours en place")
 
 
 if __name__ == '__main__':
