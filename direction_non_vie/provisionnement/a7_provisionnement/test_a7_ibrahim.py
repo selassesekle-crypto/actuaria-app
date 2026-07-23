@@ -25,6 +25,9 @@ from direction_non_vie.provisionnement.a7_provisionnement.n3.chain_ladder import
 from direction_non_vie.provisionnement.a7_provisionnement.n3.mack import mack_1993
 from direction_non_vie.provisionnement.a7_provisionnement.n3.clark import clark_ldf
 from direction_non_vie.provisionnement.a7_provisionnement.n3.bootstrap_odp import bootstrap_odp
+from direction_non_vie.provisionnement.a7_provisionnement.n3.munich_cl import (
+    munich_cl, valider_prerequis,
+)
 from direction_non_vie.provisionnement.a7_provisionnement.n3.glm_apc_poisson import (
     glm_apc_poisson, STATSMODELS_OK as _APC_SM_OK,
     _to_long as _glm_to_long, FLOOR_Y as _GLM_FLOOR_Y,   # T12 : preuve d'équivalence increments_positifs
@@ -670,6 +673,57 @@ class T13_CL_Recours_Facteur_Sous_1(unittest.TestCase):
         self.assertEqual(rg['facteurs_sous_1'], [])
         self.assertAlmostEqual(rg['reserve_totale'], 18680856, delta=1)  # T1 inchangé
         print("    OK T13b CL : RAA/GenIns aucun facteur < 1.0 (pas de faux signalement, réserve intacte)")
+
+
+# =============================================================================
+#  MUNICH CL — contrôle de cohérence C_engagé ≥ C_payé (Lot 3)
+# =============================================================================
+
+# Payé cumulé 4×4 (zone connue i+j ≤ 3).
+_MCL_PAYE = np.array([[100., 180., 230., 260.],
+                      [120., 200., 250.,   0.],
+                      [110., 190.,   0.,   0.],
+                      [130.,   0.,   0.,   0.]])
+# Engagé SAIN : ≥ payé partout, ratios variés (passe aussi le test de circularité).
+_MCL_ENG_SAIN = np.array([[160., 220., 250., 265.],
+                          [200., 250., 275.,   0.],
+                          [175., 235.,   0.,   0.],
+                          [210.,   0.,   0.,   0.]])
+
+
+class T14_Munich_Coherence_Negatifs(unittest.TestCase):
+    """Lot 3 — le contrôle C_engagé ≥ C_payé ne saute plus les cellules où l'une
+    des valeurs est ≤ 0 : un engagé négatif (payé positif) est désormais DÉTECTÉ
+    comme violation au lieu d'échapper au test (angle mort corrigé)."""
+
+    def test_engage_sain_pas_de_violation(self):
+        ok, msg = valider_prerequis(_MCL_PAYE, _MCL_ENG_SAIN)
+        self.assertTrue(ok, msg)
+        print("    OK T14a Munich sain : prérequis satisfaits (aucune violation)")
+
+    def test_engage_negatif_detecte(self):
+        # 2 cellules engagé < 0 avec payé > 0 → 25 % du triangle → désactivé.
+        # (Avec l'ancien garde > 0, ces cellules étaient ignorées → 0 violation.)
+        eng = _MCL_ENG_SAIN.copy(); eng[1, 1] = -30.; eng[2, 0] = -20.
+        ok, msg = valider_prerequis(_MCL_PAYE, eng)
+        self.assertFalse(ok, "un engagé négatif (payé positif) doit être détecté")
+        self.assertIn('incohérent', msg)
+        print("    OK T14b Munich engagé négatif : violation détectée → désactivé")
+
+    def test_cellule_vide_pas_de_faux_positif(self):
+        # Cellule (2,1) payé = 0 ET engagé = 0 (non remplie) → aucune violation.
+        pay = _MCL_PAYE.copy();     pay[2, 1] = 0.
+        eng = _MCL_ENG_SAIN.copy(); eng[2, 1] = 0.
+        ok, _ = valider_prerequis(pay, eng)
+        self.assertTrue(ok, "une cellule vide (0,0) ne doit pas déclencher de faux positif")
+        print("    OK T14c Munich cellule vide : pas de faux positif")
+
+    def test_munich_cl_end_to_end(self):
+        # Le fix se propage au consommateur réel munich_cl().
+        self.assertTrue(munich_cl(_MCL_PAYE, _MCL_ENG_SAIN).get('disponible'))
+        eng = _MCL_ENG_SAIN.copy(); eng[1, 1] = -30.; eng[2, 0] = -20.
+        self.assertFalse(munich_cl(_MCL_PAYE, eng).get('disponible'))
+        print("    OK T14d Munich end-to-end : sain disponible, engagé négatif désactivé")
 
 
 if __name__ == '__main__':

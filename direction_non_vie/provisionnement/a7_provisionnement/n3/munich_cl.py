@@ -111,13 +111,16 @@ def valider_prerequis(
             f"λ non estimable avec < 4 observations. Munich CL désactivé."
         )
 
-    # Vérifier que engagé ≥ payé sur la zone connue
+    # Vérifier que engagé ≥ payé sur la zone connue (Quarg-Mack : C_E >= C_P).
+    # Le contrôle porte sur TOUTES les cellules connues, SANS garde > 0 : un
+    # engagé ≤ 0 avec un payé positif est une vraie incohérence et ne doit pas
+    # échapper au test. Une cellule non remplie (payé = engagé = 0) ne déclenche
+    # rien (0 > 0 est faux).
     n_violations = 0
     for i in range(n):
         for j in range(min(m, n - i)):
-            if C_P[i, j] > 0 and C_E[i, j] > 0:
-                if C_P[i, j] > C_E[i, j] * (1.0 + tolerance_ep):  # Quarg-Mack : C_E >= C_P
-                    n_violations += 1
+            if C_P[i, j] > C_E[i, j] * (1.0 + tolerance_ep):
+                n_violations += 1
 
     pct_violations = n_violations / max(n * m // 2, 1)
     if pct_violations > 0.20:
