@@ -28,6 +28,10 @@ from direction_non_vie.provisionnement.a7_provisionnement.n3.bootstrap_odp impor
 from direction_non_vie.provisionnement.a7_provisionnement.n3.munich_cl import (
     munich_cl, valider_prerequis,
 )
+from direction_non_vie.services.nv_triangle_projection import projeter_ultimates
+from direction_non_vie.provisionnement.a7_provisionnement.n4_best_estimate import (
+    garde_fou_be_negatif,
+)
 from direction_non_vie.provisionnement.a7_provisionnement.n3.glm_apc_poisson import (
     glm_apc_poisson, STATSMODELS_OK as _APC_SM_OK,
     _to_long as _glm_to_long, FLOOR_Y as _GLM_FLOOR_Y,   # T12 : preuve d'équivalence increments_positifs
@@ -724,6 +728,64 @@ class T14_Munich_Coherence_Negatifs(unittest.TestCase):
         eng = _MCL_ENG_SAIN.copy(); eng[1, 1] = -30.; eng[2, 0] = -20.
         self.assertFalse(munich_cl(_MCL_PAYE, eng).get('disponible'))
         print("    OK T14d Munich end-to-end : sain disponible, engagé négatif désactivé")
+
+
+# =============================================================================
+#  IBNR-A — Helper de projection partagé + garde-fou BE négatif (fondations)
+# =============================================================================
+
+# Triangle 3×3 + facteurs avec RECOURS en dev 1→2 (f[1]=0.9 < 1). Oracles calculés
+# à la main : année 1 → IBNR brut = 210×0.9 − 210 = −21 (reprise) ; année 2 →
+# 120×1.8×0.9 − 120 = +74.4.
+_TRI_PROJ = np.array([[100., 200., 180.],
+                      [110., 210.,   0.],
+                      [120.,   0.,   0.]])
+_FAC_PROJ = np.array([1.8, 0.9])
+
+
+class T15_Projection_Helper(unittest.TestCase):
+    """Fondation 1 — projeter_ultimates expose l'IBNR brut (reprises < 0) ET
+    plancheré (max(·,0)), sans décider lequel utiliser. Non branché ici."""
+
+    def test_brut_vs_plancher_et_agregats(self):
+        p = projeter_ultimates(_TRI_PROJ, _FAC_PROJ, tail_factor=1.0, annee_base=1)
+        self.assertAlmostEqual(p['ibnr_brut'][1], -21.0, places=6)      # reprise conservée dans le brut
+        self.assertAlmostEqual(p['ibnr_plancher'][1], 0.0, places=6)    # reprise écrasée dans le plancher
+        self.assertAlmostEqual(p['ibnr_brut'][2], 74.4, places=6)
+        self.assertTrue(np.allclose(p['ibnr_plancher'], np.maximum(p['ibnr_brut'], 0.0)))
+        self.assertAlmostEqual(p['reserve_brute'], 53.4, places=6)      # -21 + 74.4
+        self.assertAlmostEqual(p['reserve_plancher'], 74.4, places=6)   # 0 + 74.4
+        self.assertEqual(p['n_annees_reprise'], 1)
+        print("    OK T15a projeter_ultimates : brut (reprise -21) vs plancher (0), agrégats OK")
+
+    def test_tail_factor_applique(self):
+        p0 = projeter_ultimates(_TRI_PROJ, _FAC_PROJ, tail_factor=1.0)
+        p1 = projeter_ultimates(_TRI_PROJ, _FAC_PROJ, tail_factor=1.10)
+        self.assertAlmostEqual(p1['ultimate'][2], p0['ultimate'][2] * 1.10, places=6)
+        print("    OK T15b projeter_ultimates : tail_factor appliqué")
+
+
+class T16_GardeFou_BE_Negatif(unittest.TestCase):
+    """Fondation 2 — garde-fou TOTAL : un BE final ≤ 0 rend les agrégats S2 non
+    calculables (SCR/RM/PT/percentiles absurdes), signalé ROUGE, jamais plancheré
+    en silence. Testé isolément (dormant en production tant que BE > 0)."""
+
+    def test_be_positif_pas_de_garde(self):
+        self.assertIsNone(garde_fou_be_negatif(1500.0))
+        self.assertIsNone(garde_fou_be_negatif(0.01))
+        print("    OK T16a garde_fou_be_negatif : BE > 0 → None (calcul normal)")
+
+    def test_be_negatif_ou_nul_declenche_rouge(self):
+        for be in (-100.0, 0.0):
+            g = garde_fou_be_negatif(be)
+            self.assertIsNotNone(g, f"BE={be} doit déclencher le garde-fou")
+            self.assertEqual(g['statut'], 'ROUGE')
+            self.assertTrue(g['be_negatif'])
+            self.assertIn('non calculables', g['message'])
+            for k in ('scr_provisions', 'ratio_scr_be', 'reserve_p75', 'reserve_p90',
+                      'reserve_p99_5', 'risk_margin', 'ratio_rm_be', 'provisions_techniques_s2'):
+                self.assertIsNone(g[k], f"{k} doit être None (non calculable)")
+        print("    OK T16b garde_fou_be_negatif : BE ≤ 0 → ROUGE + agrégats S2 = None")
 
 
 if __name__ == '__main__':

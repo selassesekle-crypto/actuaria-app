@@ -74,6 +74,9 @@ import logging
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
+
+from direction_non_vie.services.nv_triangle_projection import projeter_ultimates
+
 try:
     from scipy.optimize import curve_fit as _curve_fit
 except ImportError:
@@ -792,36 +795,15 @@ def chain_ladder(
     # ── 4. % développé ────────────────────────────────────────────────────────
     pct_dev = calculer_pct_developpe(C, f_cum)
 
-    # ── 5. Ultimates et IBNR ──────────────────────────────────────────────────
-    #
-    # Pour chaque année i :
-    #   k_i = min(n-i-1, m-1)  ← dernière colonne connue
-    #   U_i = C[i, k_i] × f_{k_i} × ... × f_{m-2} × tail
-    #
-    # Implémentation : multiplier C[i, k_i] par les facteurs restants.
-    # On utilise les facteurs individuels (pas les cumulés) pour éviter
-    # les erreurs d'arrondi sur les très petits/grands triangles.
-
-    ultimates  = np.zeros(n)
-    ibnr       = np.zeros(n)
-    last_diag  = np.array([
-        float(C[i, min(n - i - 1, m - 1)]) for i in range(n)
-    ])
-
-    for i in range(n):
-        k_i = min(n - i - 1, m - 1)    # dernière colonne connue
-        val = float(C[i, k_i])
-
-        # Multiplier par les facteurs restants f_{k_i}, ..., f_{m-2}
-        for j in range(k_i, m - 1):
-            if j < len(facteurs):
-                val *= facteurs[j]
-
-        # Appliquer le tail
-        val *= tail['tail_factor']
-
-        ultimates[i] = val
-        ibnr[i]      = max(val - last_diag[i], 0.0)
+    # ── 5. Ultimates et IBNR (helper de projection partagé) ────────────────────
+    # U_i = C[i, k_i] × f_{k_i} × ... × f_{m-2} × tail. Le point estimate reste
+    # l'IBNR PLANCHERÉ (comportement historique) ; le helper expose aussi l'IBNR
+    # brut (recours), non consommé ici — branchement au lot IBNR-B.
+    _proj     = projeter_ultimates(C, facteurs, tail_factor=tail['tail_factor'],
+                                   annee_base=annee_base_reserve)
+    ultimates = _proj['ultimate']
+    ibnr      = _proj['ibnr_plancher']
+    last_diag = _proj['last_diag']
 
     # ── 6. Réserve totale ─────────────────────────────────────────────────────
     # Par défaut : Σ IBNR_{i=1}^{n-1} (exclure i=0 supposée développée)

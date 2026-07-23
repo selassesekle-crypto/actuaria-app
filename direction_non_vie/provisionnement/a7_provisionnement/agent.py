@@ -37,7 +37,7 @@ import numpy as np
 # ── Imports modules A7 ───────────────────────────────────────────────────────
 from direction_non_vie.services.nv_triangle_validator import TriangleValidator
 from .n2_hypotheses     import HypothesesValidator
-from .n4_best_estimate  import BestEstimateS2
+from .n4_best_estimate  import BestEstimateS2, garde_fou_be_negatif
 from .n5_graphiques     import generer_graphiques
 from .n5_commentaire    import generer_commentaire
 from .n5_excel          import export_excel
@@ -392,6 +392,26 @@ class AgentA7Provisionnement:
                     f"SCR_prov = {_scr_new:,.0f}€ · RM = {_rm_new:,.0f}€ · "
                     f"PT S2 = {n4['provisions_techniques_s2']:,.0f}€"
                 )
+
+                # 6. Garde-fou TOTAL : BE final <= 0 (reprise nette) → agrégats S2
+                # non calculables (SCR/RM/PT/percentiles absurdes sur un BE négatif).
+                # Signalé ROUGE, jamais plancheré en silence. Dormant tant que BE > 0
+                # (aujourd'hui : _be_attrit >= 0 et _rgs > 0 → _be_final > 0).
+                _garde = garde_fou_be_negatif(_be_final)
+                if _garde is not None:
+                    n4['scr']['scr_provisions']    = _garde['scr_provisions']
+                    n4['scr']['ratio_scr_be']      = _garde['ratio_scr_be']
+                    n4['scr']['message']           = _garde['message']
+                    n4['scr_prov']                 = _garde['scr_provisions']
+                    n4['reserve_p75']              = _garde['reserve_p75']
+                    n4['reserve_p90']              = _garde['reserve_p90']
+                    n4['reserve_p99_5']            = _garde['reserve_p99_5']
+                    n4['risk_margin']              = _garde['risk_margin']
+                    n4['ratio_rm_be']              = _garde['ratio_rm_be']
+                    n4['provisions_techniques_s2'] = _garde['provisions_techniques_s2']
+                    n4['be_negatif']               = True
+                    n4.setdefault('alertes', []).insert(0, _garde['message'])
+                    n4['message']                  = _garde['message']
                 if self.verbose:
                     logger.info(
                         f"LLT | BE_final={_be_final:,.0f}€ "
@@ -400,12 +420,18 @@ class AgentA7Provisionnement:
                     )
 
             if self.verbose:
-                logger.info(
-                    f"N4 OK | BE={n4['best_estimate']:,.0f}€ "
-                    f"P90={n4['reserve_p90']:,.0f}€ "
-                    f"CV={n4['cv_inter_methodes']:.1f}% "
-                    f"SCR={n4['scr']['scr_provisions']:,.0f}€"
-                )
+                if n4.get('reserve_p90') is not None and n4['scr'].get('scr_provisions') is not None:
+                    logger.info(
+                        f"N4 OK | BE={n4['best_estimate']:,.0f}€ "
+                        f"P90={n4['reserve_p90']:,.0f}€ "
+                        f"CV={n4['cv_inter_methodes']:.1f}% "
+                        f"SCR={n4['scr']['scr_provisions']:,.0f}€"
+                    )
+                else:
+                    logger.info(
+                        f"N4 OK | BE={n4['best_estimate']:,.0f}€ | "
+                        f"agrégats S2 non calculables (BE négatif — revue actuaire)"
+                    )
 
             # =================================================================
             # N5 — LIVRABLES

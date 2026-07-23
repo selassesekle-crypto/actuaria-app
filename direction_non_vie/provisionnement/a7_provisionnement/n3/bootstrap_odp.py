@@ -106,6 +106,7 @@ from typing import Dict, List, Optional
 import numpy as np
 
 from direction_non_vie.services.nv_triangle_negatifs import increments_positifs
+from direction_non_vie.services.nv_triangle_projection import projeter_ultimates
 
 logger = logging.getLogger('actuaria.a7')
 
@@ -436,17 +437,10 @@ def _reserve_cl_simple(
     facteurs:   np.ndarray,
     annee_base: int = 1,
 ) -> float:
-    """Calcule la réserve CL simple (sans tail) pour référence Bootstrap."""
-    n, m   = C.shape
-    reserve = 0.0
-    for i in range(annee_base, n):
-        k_i = min(n - i - 1, m - 1)
-        val = float(C[i, k_i])
-        for j in range(k_i, m - 1):
-            if j < len(facteurs):
-                val *= facteurs[j]
-        reserve += max(val - float(C[i, k_i]), 0.0)
-    return reserve
+    """Réserve CL simple (sans tail) pour référence Bootstrap — via le helper de
+    projection partagé, IBNR plancheré (comportement historique inchangé)."""
+    proj = projeter_ultimates(C, facteurs, tail_factor=1.0)
+    return float(np.sum(proj['ibnr_plancher'][annee_base:]))
 
 
 def _resultat_degrade(reserve_ref: float, n_sim: int) -> Dict:

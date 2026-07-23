@@ -76,6 +76,8 @@ from typing import Dict, Optional, Tuple
 
 import numpy as np
 
+from direction_non_vie.services.nv_triangle_projection import projeter_ultimates
+
 logger = logging.getLogger('actuaria.a7')
 
 
@@ -392,21 +394,10 @@ def munich_cl(
 
     # ── 5. Projections MCL et CL ──────────────────────────────────────────────
     def projeter(C, facteurs):
-        """Projette les ultimates et IBNR."""
-        ult  = np.zeros(n)
-        ibnr = np.zeros(n)
-        ld   = np.array([
-            float(C[i, min(n - i - 1, m - 1)]) for i in range(n)
-        ])
-        for i in range(n):
-            k_i = min(n - i - 1, m - 1)
-            val = float(C[i, k_i])
-            for j in range(k_i, m - 1):
-                if j < len(facteurs):
-                    val *= facteurs[j]
-            ult[i]  = val
-            ibnr[i] = max(val - ld[i], 0.0)
-        return ult, ibnr, ld
+        """Projette ultimates et IBNR via le helper de projection partagé
+        (tail=1.0). IBNR plancheré — comportement historique inchangé."""
+        p = projeter_ultimates(C, facteurs, tail_factor=1.0)
+        return p['ultimate'], p['ibnr_plancher'], p['last_diag']
 
     ult_mp, ibnr_mp, ld_P = projeter(C_P, f_star_P)
     ult_me, ibnr_me, ld_E = projeter(C_E, f_star_E)

@@ -66,6 +66,33 @@ from .config.rfr_eiopa  import get_taux_rfr, DATE_COURBE, get_courbe_embarquee
 logger = logging.getLogger('actuaria.a7')
 
 
+def garde_fou_be_negatif(be_final: float) -> Optional[Dict]:
+    """Garde-fou TOTAL : si le Best Estimate final est <= 0 (reprise nette), les
+    agrégats S2 deviennent mathématiquement absurdes — SCR = 3σ×BE devient négatif,
+    le ratio SCR/max(BE,1e-9) explose, la log-normale des percentiles n'est pas
+    définie. Retourne alors un descriptif ROUGE + marqueurs 'non calculable' (None) ;
+    retourne None si BE > 0 (l'appelant calcule normalement).
+
+    Le BE négatif n'est JAMAIS écrasé en silence (aucun plancher caché) : il est
+    signalé pour revue actuarielle. Le point estimate BE lui-même reste tel quel."""
+    if be_final > 0:
+        return None
+    return {
+        'be_negatif':               True,
+        'statut':                   'ROUGE',
+        'message': ("BE brut négatif — reprise nette, SCR/RM non calculables sur "
+                    "BE négatif, revue actuaire impérative."),
+        'scr_provisions':           None,
+        'ratio_scr_be':             None,
+        'reserve_p75':              None,
+        'reserve_p90':              None,
+        'reserve_p99_5':            None,
+        'risk_margin':              None,
+        'ratio_rm_be':              None,
+        'provisions_techniques_s2': None,
+    }
+
+
 class BestEstimateS2:
     """
     Calcule le Best Estimate — réserve BRUTE, avant actualisation (la valeur
