@@ -105,6 +105,8 @@ from typing import Dict, List, Optional
 
 import numpy as np
 
+from direction_non_vie.services.nv_triangle_negatifs import increments_positifs
+
 logger = logging.getLogger('actuaria.a7')
 
 
@@ -379,6 +381,12 @@ def bootstrap_odp(
     )
     logger.info(msg)
 
+    # Reporting partagé des incréments ≤ 0 (increments_positifs) — informationnel :
+    # l'exclusion PROPRE de Bootstrap porte sur l'incrément FITTÉ (m_ij ≤ 0,
+    # calculer_fitted_et_residus) et n'est PAS modifiée. On expose seulement le
+    # comptage sur les incréments OBSERVÉS.
+    ip_neg = increments_positifs(C, plancher=None)
+
     return {
         # Statistiques centrales
         'be_bootstrap':   round(be_boot,  2),
@@ -410,6 +418,12 @@ def bootstrap_odp(
         'statut':         statut,
         'methode':        'Bootstrap ODP — England & Verrall (2002)',
         'message':        msg,
+        'increments_non_positifs': {
+            'n_exclues':        ip_neg['n_exclues'],
+            'cellules_exclues': ip_neg['cellules_exclues'],
+            'frac_exclue':      ip_neg['frac_exclue'],
+            'disponible':       ip_neg['disponible'],
+        },
     }
 
 

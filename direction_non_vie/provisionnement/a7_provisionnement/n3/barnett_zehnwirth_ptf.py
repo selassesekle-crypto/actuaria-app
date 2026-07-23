@@ -51,6 +51,10 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
+from direction_non_vie.services.nv_triangle_negatifs import (
+    increments_positifs, FRAC_NEG_MAX_DEFAUT,
+)
+
 try:
     import pandas as pd
     import statsmodels.api as sm
@@ -66,7 +70,6 @@ logger = logging.getLogger('actuaria.a7.n3.bz_ptf')
 # =============================================================================
 
 SEUIL_P = 0.05                 # significativité d'une rupture
-FRAC_NEG_MAX = 0.10            # au-delà → B&Z non fiable (log-normal inadapté)
 N_BANDES = 3                   # bandes de développement pour σ²_d (early/mid/late)
 MIN_POINTS_BANDE = 4           # sinon repli sur σ² constante
 N_CANDIDATS_SCAN = 3           # nb de ruptures candidates rapportées (non injectées)
@@ -81,29 +84,24 @@ def _to_long_log(C: np.ndarray) -> Dict:
     """
     Triangle cumulé → incréments observés en log.
 
-    Cellule (i,j) observée ⟺ i+j ≤ n-1. Incrément p = C[i,j] − C[i,j-1].
-    Les incréments ≤ 0 sont EXCLUS (le log ne les tolère pas), listés dans
-    'cellules_exclues'. Aucun offset silencieux.
+    La politique de positivité (exclusion des incréments ≤ 0 / non finis, comptage
+    et disponibilité) est déléguée à increments_positifs(plancher=None) — source
+    unique. Ici on n'ajoute que la transformation log sur les cellules retenues.
     """
+    ip = increments_positifs(C, plancher=None)
+    Y, masque = ip['Y'], ip['masque']
     n, m = C.shape
     w, d, t, y = [], [], [], []
-    exclues = []
-    n_obs = 0
     for i in range(n):
         for j in range(m):
-            if i + j > n - 1:
-                continue
-            n_obs += 1
-            prev = float(C[i, j-1]) if j > 0 else 0.0
-            p = float(C[i, j]) - prev
-            if p <= 0 or not np.isfinite(p):
-                exclues.append((i, j))
-                continue
-            w.append(i); d.append(j); t.append(i + j); y.append(float(np.log(p)))
+            if masque[i, j]:
+                w.append(i); d.append(j); t.append(i + j)
+                y.append(float(np.log(Y[i, j])))
     return {
         'w': np.array(w, dtype=int), 'd': np.array(d, dtype=int),
         't': np.array(t, dtype=int), 'y': np.array(y, dtype=float),
-        'cellules_exclues': exclues, 'n_exclues': len(exclues), 'n_obs': n_obs,
+        'cellules_exclues': ip['cellules_exclues'], 'n_exclues': ip['n_exclues'],
+        'n_obs': ip['n_obs'], 'frac_exclue': ip['frac_exclue'], 'disponible': ip['disponible'],
     }
 
 
@@ -384,15 +382,15 @@ def barnett_zehnwirth_ptf(
         dat = _to_long_log(C)
 
         # ── Garde-fou incréments négatifs (log-normal inadapté) ──────────────
-        frac_neg = dat['n_exclues'] / max(dat['n_obs'], 1)
-        if frac_neg > FRAC_NEG_MAX:
+        # Disponibilité décidée par increments_positifs (seuil FRAC_NEG_MAX_DEFAUT).
+        if not dat['disponible']:
             return {
                 'success': True, 'disponible': False, 'statut': 'VERT',
                 'cellules_exclues': dat['cellules_exclues'], 'n_exclues': dat['n_exclues'],
                 'n_obs': dat['n_obs'],
                 'message': (f"B&Z non fiable : {dat['n_exclues']}/{dat['n_obs']} incréments "
-                            f"≤ 0 ({frac_neg:.0%} > {FRAC_NEG_MAX:.0%}) — le log-normal est "
-                            f"structurellement inadapté aux triangles à négatifs nombreux."),
+                            f"≤ 0 ({dat['frac_exclue']:.0%} > {FRAC_NEG_MAX_DEFAUT:.0%}) — le log-normal "
+                            f"est structurellement inadapté aux triangles à négatifs nombreux."),
                 'erreur': None,
             }
 

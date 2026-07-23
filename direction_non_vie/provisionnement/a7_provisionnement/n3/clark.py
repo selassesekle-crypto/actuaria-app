@@ -21,6 +21,8 @@ from __future__ import annotations
 import logging
 import numpy as np
 
+from direction_non_vie.services.nv_triangle_negatifs import increments_positifs
+
 logger = logging.getLogger('actuaria.a7.clark')
 
 try:
@@ -693,10 +695,21 @@ def clark_ldf(
     t_dense = np.linspace(0, t[-1] * 1.5, 100)
     g_courbe = _g(t_dense, float(best['omega']), float(best['theta']), courbe_choisie)
 
+    # Reporting partagé des incréments ≤ 0 (increments_positifs) — informationnel :
+    # l'estimateur MLE de Clark n'est PAS modifié (il gère les incréments dans sa
+    # vraisemblance). On ne fait qu'exposer le comptage / la liste / la disponibilité.
+    ip_neg = increments_positifs(C, plancher=None)
+
     return {
         'success':           True,
         'disponible':        True,
         'aberrant':          clark_aberrant,
+        'increments_non_positifs': {
+            'n_exclues':        ip_neg['n_exclues'],
+            'cellules_exclues': ip_neg['cellules_exclues'],
+            'frac_exclue':      ip_neg['frac_exclue'],
+            'disponible':       ip_neg['disponible'],
+        },
 
         # Modèle sélectionné
         'courbe_choisie':    courbe_choisie,

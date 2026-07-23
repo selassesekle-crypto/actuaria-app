@@ -49,6 +49,8 @@ from typing import Dict, List, Optional
 
 import numpy as np
 
+from direction_non_vie.services.nv_triangle_negatifs import increments_positifs
+
 try:
     from scipy import stats as sp_stats
     SCIPY_OK = True
@@ -102,28 +104,25 @@ def _to_long(C: np.ndarray) -> Dict[str, list]:
     """
     Triangle cumulé → incréments observés en format long.
 
-    Cellule (i, j) observée ⟺ i + j ≤ n − 1 (triangle supérieur).
       w (cohorte / année de survenance)  = i
       d (développement)                  = j
       t (calendrier / diagonale)         = i + j
-      Y (incrément)                      = C[i,j] − C[i,j-1]   (C[i,-1] = 0)
+      Y (incrément plafonné)             = max(C[i,j] − C[i,j-1], FLOOR_Y)
 
-    Renvoie des colonnes parallèles + un drapeau incréments négatifs.
+    Le plafonnement des incréments ≤ 0 (Poisson exige Y > 0) est délégué à
+    increments_positifs(plancher=FLOOR_Y) — source unique. 'incr_negatifs'
+    signale qu'au moins un incrément ≤ 0 a été plafonné.
     """
+    ip = increments_positifs(C, plancher=FLOOR_Y)
+    Ym, masque = ip['Y'], ip['masque']
     n, m = C.shape
     Y, w, d, t = [], [], [], []
-    neg = False
     for i in range(n):
         for j in range(m):
-            if i + j > n - 1:
-                continue
-            prev = float(C[i, j-1]) if j > 0 else 0.0
-            inc  = float(C[i, j]) - prev
-            if inc < 0:
-                neg = True
-            Y.append(max(inc, FLOOR_Y))
-            w.append(str(i)); d.append(str(j)); t.append(str(i + j))
-    return {'Y': Y, 'w': w, 'd': d, 't': t, 'incr_negatifs': neg}
+            if masque[i, j]:
+                Y.append(float(Ym[i, j]))
+                w.append(str(i)); d.append(str(j)); t.append(str(i + j))
+    return {'Y': Y, 'w': w, 'd': d, 't': t, 'incr_negatifs': ip['n_exclues'] > 0}
 
 
 def _design(cols: Dict[str, list], noms: List[str]) -> 'pd.DataFrame':
