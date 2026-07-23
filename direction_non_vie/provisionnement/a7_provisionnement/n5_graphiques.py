@@ -3,12 +3,12 @@
 #  n5_graphiques.py  —  Graphiques Plotly (style dashboard ActuarIA)
 # =============================================================================
 #
-#  12 graphiques professionnels :
+#  14 graphiques professionnels :
 #
 #  G1  — Heatmap triangle de développement (zone connue + projection)
 #  G2  — Courbes de cadence cumulées par année (style image fournie)
 #  G3  — Facteurs CL avec bande ±2σ et coloration outliers
-#  G4  — IBNR par année (barplot horizontal, dégradé couleur)
+#  G4  — IBNR par année (barres verticales + courbe cumulée, dégradé couleur)
 #  G5  — Convergence des méthodes + BE S2 + IC Mack
 #  G6  — Distribution Bootstrap (histogramme + P50/P90/P99.5)
 #  G7  — SCR par composante (donut, style image fournie)
@@ -17,6 +17,8 @@
 #  G10 — H3 LR a priori par année mature vs référence marché
 #  G11 — Ultimates projetés vs dernière diagonale
 #  G12 — Sensibilités du BE (tornado chart)
+#  G13 — Paiements cumulés par année de survenance
+#  G14 — Back-testing : boni/mali de liquidation
 #
 #  Palette ActuarIA
 #  ─────────────────
@@ -401,6 +403,28 @@ def g4_ibnr_par_annee(n3: Dict) -> 'go.Figure':
     vals   = [max(float(v), 0) for v in ibnr]
     max_v  = max(vals) if vals else 1
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # ⚠️ TEMPORAIRE — GARDE ANTI-PLANTAGE, PAS LA VRAIE CORRECTION.
+    #
+    # Ce graphique affiche encore l'IBNR PLANCHÉ (le max(v, 0) ci-dessus) alors
+    # que sa source, chain_ladder['ibnr_par_annee'], est BRUTE depuis le Lot
+    # IBNR-B (be6f880) : les années en reprise (recours/subrogation) s'affichent
+    # à 0 et le cumul tracé dépasse reserve_totale (mesuré : 1 483 affiché contre
+    # 1 076 réel sur un triangle à recours).
+    #
+    # Cas limite : sur un portefeuille ENTIÈREMENT en reprise, tous les vals
+    # tombent à 0 → max_v = 0 → division par zéro dans le dégradé ci-dessous, et
+    # le graphique ne se rendait pas du tout. La garde neutralise CE PLANTAGE
+    # uniquement — un rapport qui ne se génère pas est plus grave qu'un
+    # graphique en retard sur sa donnée.
+    #
+    # La vraie correction (barres négatives, dégradé sur |v|, cumul aligné sur
+    # reserve_totale) est prévue au chantier « rapport », en même temps que les
+    # graphiques Munich / Bootstrap / Clark, pour les traiter d'un seul bloc.
+    # ─────────────────────────────────────────────────────────────────────────
+    if max_v <= 0:
+        max_v = 1.0
+
     # Dégradé Or → Rouge selon magnitude
     colors = [
         f'rgba({int(201 + 46*(v/max_v))},{int(168 - 168*(v/max_v))},{int(76 - 76*(v/max_v))},0.85)'
@@ -466,9 +490,8 @@ def g4_ibnr_par_annee(n3: Dict) -> 'go.Figure':
                 rangemode='tozero',
             ),
             yaxis2=dict(
-                title="IBNR cumulé (€)",
+                title=dict(text="IBNR cumulé (€)", font=dict(color=BLEU)),
                 tickfont=dict(color=BLEU, size=9),
-                titlefont=dict(color=BLEU),
                 overlaying='y',
                 side='right',
                 showgrid=False,
@@ -1458,7 +1481,7 @@ def generer_graphiques(
     n4:             Dict,
 ) -> Dict:
     """
-    Génère les 12 graphiques ActuarIA.
+    Génère les 14 graphiques ActuarIA.
 
     Parameters
     ----------
@@ -1470,7 +1493,10 @@ def generer_graphiques(
     Returns
     -------
     dict {nom: go.Figure} — chaque graphique accessible par clé.
-    Graphiques échoués → absents du dict (avec warning logger).
+    Deux causes d'absence, distinguées dans les logs :
+      · échec réel        → absent + logger.warning
+      · pas de données    → absent + listé en info (garde légitime, ex. pas
+                            d'historique de back-testing, BE ≤ 0 pour le SCR)
     """
     if not PLOTLY_OK:
         logger.warning("Plotly non disponible — graphiques non générés")
@@ -1500,13 +1526,18 @@ def generer_graphiques(
         ('g14_backtesting',    lambda: g14_backtesting(n3, annee_debut=n3.get('annee_debut_triangle'))),
     ]
 
+    sans_donnees = []
     for nom, fn in specs:
         try:
             fig = fn()
             if fig is not None:
                 g[nom] = fig
+            else:
+                sans_donnees.append(nom)      # garde légitime, pas un échec
         except Exception as e:
             logger.warning(f"Graphique {nom} échoué : {e}")
 
-    logger.info(f"Graphiques générés : {len(g)}/12")
+    if sans_donnees:
+        logger.info(f"Graphiques sans données (ignorés) : {sans_donnees}")
+    logger.info(f"Graphiques générés : {len(g)}/{len(specs)}")
     return g

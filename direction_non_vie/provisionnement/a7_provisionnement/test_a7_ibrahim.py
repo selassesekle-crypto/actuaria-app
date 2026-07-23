@@ -955,10 +955,15 @@ class T20_Graphiques_Reellement_Produits(unittest.TestCase):
         """Le cœur : des figures existent, et ce sont bien des figures Plotly."""
         self.assertTrue(self.r.get('success'), self.r.get('erreur'))
         g = self.r.get('graphiques') or {}
-        self.assertGreater(len(g), 0,
-                           "0 graphique alors que generer_graphiques=True — "
-                           "la fonction est-elle masquée par le paramètre ?")
-        self.assertIn('g1_heatmap', g)          # au moins le triangle de base
+        # 14/14 et non « au moins un » : GenIns alimente les 14 graphiques (aucune
+        # garde « pas de données » ne s'y déclenche — vérifié). C'est ce verrou qui
+        # empêche un graphique de retomber silencieusement sans test rouge.
+        attendus = ['g1_heatmap', 'g2_cadences', 'g3_facteurs_cl', 'g4_ibnr',
+                    'g5_convergence', 'g6_bootstrap', 'g7_scr', 'g8_h1', 'g9_h2',
+                    'g10_h3', 'g11_ultimates', 'g12_sensibilites', 'g13_paiements',
+                    'g14_backtesting']
+        self.assertEqual(sorted(g), sorted(attendus),
+                         f"manquant(s) : {[k for k in attendus if k not in g]}")
         self.assertTrue(all(hasattr(f, 'to_html') for f in g.values()),
                         "les valeurs doivent être des go.Figure, pas des placeholders")
         print(f"    OK T20a graphiques : {len(g)}/14 réellement produits")
@@ -983,6 +988,22 @@ class T20_Graphiques_Reellement_Produits(unittest.TestCase):
         self.assertEqual(r['graphiques'], {})
         self.assertIn('boom', r['graphiques_erreur'])     # mais l'échec est visible
         print("    OK T20b échec N5 : run en succès, mais graphiques_erreur renseigné")
+
+    def test_g4_ibnr_ne_plante_plus_sur_portefeuille_en_reprise(self):
+        """Garde anti-plantage : sur un portefeuille ENTIÈREMENT en reprise, tous
+        les IBNR planchés valent 0 → max_v = 0 → division par zéro, et g4_ibnr ne
+        se rendait pas. On vérifie seulement qu'il se GÉNÈRE — pas qu'il affiche
+        le bon chiffre : il montre encore l'IBNR planché, la refonte est prévue
+        au chantier « rapport »."""
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_graphiques import (
+            g4_ibnr_par_annee)
+        cl = chain_ladder(_TRI_TOUT_DECROISSANT, tail_force=1.0)
+        # le cas dégénéré est bien exercé : aucun IBNR strictement positif
+        self.assertTrue(all(v <= 0 for v in cl['ibnr_par_annee']))
+        fig = g4_ibnr_par_annee({'chain_ladder': cl})
+        self.assertIsNotNone(fig, "g4_ibnr doit se générer, même planché à zéro")
+        self.assertTrue(hasattr(fig, 'to_html'))
+        print("    OK T20e g4_ibnr : portefeuille en reprise → figure générée, plus de crash")
 
     def test_flags_desactivent_toujours(self):
         """Les deux drapeaux (nouveau et alias de compat) coupent bien la génération."""
