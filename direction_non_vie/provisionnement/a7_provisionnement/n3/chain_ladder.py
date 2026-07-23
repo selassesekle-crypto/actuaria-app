@@ -184,15 +184,9 @@ def calculer_facteurs(
             )
             facteurs[j] = float(np.average(arr, weights=w))
 
-        # Contrainte : facteur ≥ 1.0
-        # Un triangle cumulé ne peut que croître (ou stagner).
-        # Un facteur < 1.0 signifie une inversion dans les données.
-        if facteurs[j] < 1.0:
-            logger.warning(
-                f"Facteur j={j} = {facteurs[j]:.4f} < 1.0 "
-                f"— forcé à 1.0 (inversion dans le triangle)"
-            )
-            facteurs[j] = 1.0
+        # Un facteur < 1.0 (recours / subrogation légitime) est CONSERVÉ tel quel
+        # — jamais écrasé. Le signalement (position + valeur) est assuré par
+        # chain_ladder() dans son rapport (champ 'facteurs_sous_1').
 
     return facteurs, facteurs_ind
 
@@ -763,6 +757,17 @@ def chain_ladder(
     # ── 1. Facteurs de développement ──────────────────────────────────────────
     facteurs, facteurs_ind = calculer_facteurs(C, methode)
 
+    # Facteurs < 1.0 (recours / subrogation) : CONSERVÉS et signalés (jamais
+    # écrasés). Signal agrégé par colonne (≠ signaler_negatifs, qui porte sur
+    # les cellules du triangle).
+    facteurs_sous_1 = [[int(j), round(float(facteurs[j]), 6)]
+                       for j in range(len(facteurs)) if facteurs[j] < 1.0]
+    if facteurs_sous_1:
+        logger.warning(
+            f"Chain Ladder : {len(facteurs_sous_1)} facteur(s) < 1.0 conservé(s) "
+            f"(recours/subrogation) — colonnes/valeurs {facteurs_sous_1}"
+        )
+
     # ── 2. Tail factor ────────────────────────────────────────────────────────
     if tail_force is not None:
         # Tail pré-calculé par agent.py — pas de recalcul interne
@@ -831,6 +836,12 @@ def chain_ladder(
         f"tail={tail['tail_factor']:.4f} | "
         f"{n}×{m} | base={idx_base}"
     )
+    if facteurs_sous_1:
+        msg += (
+            f" | ⚠️ {len(facteurs_sous_1)} facteur(s) < 1.0 conservé(s) "
+            f"(recours/subrogation) aux colonnes "
+            f"{[j for j, _ in facteurs_sous_1]}"
+        )
     logger.info(msg)
 
     return {
@@ -838,6 +849,7 @@ def chain_ladder(
         'facteurs':             [round(float(f), 6) for f in facteurs],
         'facteurs_cumules':     [round(float(f), 6) for f in f_cum],
         'facteurs_indiv':       facteurs_ind,
+        'facteurs_sous_1':      facteurs_sous_1,   # [[colonne, valeur], ...] recours conservés
 
         # Tail
         'tail_factor':          tail,

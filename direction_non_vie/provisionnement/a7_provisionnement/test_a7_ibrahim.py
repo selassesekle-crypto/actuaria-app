@@ -629,5 +629,48 @@ class T12_Negatifs_Helpers(unittest.TestCase):
         print("    OK T12g increments_positifs : gate disponible (30% KO, RAA/GenIns OK)")
 
 
+# =============================================================================
+#  CHAIN LADDER — facteur < 1.0 (recours) conservé et signalé (Lot 2)
+# =============================================================================
+
+# Triangle 6×6 avec un RECOURS en développement 2→3 (Σ colonne 3 < Σ colonne 2)
+# → facteur de colonne j=2 < 1.0. Les autres colonnes restent > 1.0.
+_TRI_RECOURS = np.array([[1000., 1500., 1800., 1700., 1750., 1780.],
+                         [1100., 1600., 1900., 1750., 1800.,    0.],
+                         [1050., 1550., 1850., 1720.,    0.,    0.],
+                         [1200., 1650., 1950.,    0.,    0.,    0.],
+                         [1150., 1580.,    0.,    0.,    0.,    0.],
+                         [1080.,    0.,    0.,    0.,    0.,    0.]])
+
+
+class T13_CL_Recours_Facteur_Sous_1(unittest.TestCase):
+    """Lot 2 — le plancher facteur<1.0→1.0 est retiré : un recours/subrogation qui
+    fait descendre un facteur de colonne sous 1.0 est CONSERVÉ et SIGNALÉ, jamais
+    écrasé. Les oracles CL/Mack (facteurs tous >1) restent intacts (T1/T3/T4)."""
+
+    def test_facteur_recours_conserve_et_signale(self):
+        r = chain_ladder(_TRI_RECOURS)
+        fac = r['facteurs']
+        # colonne j=2 : recours → facteur < 1.0, CONSERVÉ (plus forcé à 1.0)
+        self.assertLess(fac[2], 1.0, f"facteur col.2 doit être < 1.0 (facteurs={fac})")
+        # signalé dans le champ structuré
+        fs1 = r['facteurs_sous_1']
+        self.assertEqual(len(fs1), 1, f"exactement 1 facteur < 1.0 attendu (fs1={fs1})")
+        self.assertEqual(fs1[0][0], 2, "la colonne signalée doit être j=2")
+        self.assertLess(fs1[0][1], 1.0)
+        self.assertAlmostEqual(fs1[0][1], fac[2], places=6, msg="valeur signalée == facteur conservé")
+        # signalé dans le message lisible
+        self.assertIn('facteur(s) < 1.0', r['message'])
+        print(f"    OK T13a CL recours : facteur col.2 = {fac[2]:.4f} conservé + signalé {fs1}")
+
+    def test_pas_de_faux_signalement_sur_oracles(self):
+        # RAA et GenIns n'ont AUCUN facteur de colonne < 1.0 → champ vide, réserve intacte
+        self.assertEqual(chain_ladder(RAA, tail_force=1.0)['facteurs_sous_1'], [])
+        rg = chain_ladder(GENINS)
+        self.assertEqual(rg['facteurs_sous_1'], [])
+        self.assertAlmostEqual(rg['reserve_totale'], 18680856, delta=1)  # T1 inchangé
+        print("    OK T13b CL : RAA/GenIns aucun facteur < 1.0 (pas de faux signalement, réserve intacte)")
+
+
 if __name__ == '__main__':
     unittest.main()
