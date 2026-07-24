@@ -76,9 +76,10 @@
 #    a. Rééchantillonner les résidus ajustés avec remise :
 #       r*_ij ~ Uniforme({r_ij_adj})
 #
-#    b. Reconstruire un pseudo-triangle :
-#       C*[i,j] = C_fit[i,j] + r*_ij × sqrt(C_fit[i,j])
-#       (annuler si C* < 0 → remplacer par C_fit)
+#    b. Reconstruire un pseudo-triangle par les INCRÉMENTS (E&V 2002, correctif B2) :
+#       inc*_ij = m_fit + r*_ij × sqrt(m_fit),  m_fit = C_fit[i,j] − C[i,j−1]
+#       garde ODP : inc*_ij ≥ m_fit × 0.01 (incrément > 0), puis
+#       C*[i,j] = C*[i,j−1] + inc*_ij
 #
 #    c. Recalculer les facteurs CL sur le pseudo-triangle :
 #       f*_j = Σ C*[i,j+1] / Σ C*[i,j]
@@ -311,7 +312,13 @@ def bootstrap_odp(
                     C_star[i, j] = C_star[i, j - 1] + inc_star   # re-cumul
 
         # ── 3c. Facteurs CL sur le pseudo-triangle ────────────────────────────
-        # f*_j = Σ C*[i,j+1] / Σ C*[i,j]  (volume-weighted)
+        # f*_j = Σ C*[i,j+1] / Σ C*[i,j]  (volume-weighted). Copie inline VOLONTAIRE :
+        # la source partagée calculer_facteurs coûte +54% dans cette boucle chaude
+        # (elle construit les facteurs individuels), pour un gain nul — mesuré.
+        # PAS de plancher f* ≥ 1 : le pseudo-triangle est monotone croissant par
+        # construction (incréments planchés > 0 en 3b), donc num ≥ den et f*_j ≥ 1
+        # de toute façon. L'ancien max(…, 1.0) était mort (0 / 24 000 simulations) —
+        # retiré au Lot D2. Cf. la note « garde d'incrément » en 3d.
         f_star = np.ones(m - 1)
         for j in range(m - 1):
             num = den = 0.0
@@ -319,7 +326,7 @@ def bootstrap_odp(
                 if i + j + 1 < n and C_star[i, j] > 0 and C_star[i, j+1] > 0:
                     num += C_star[i, j+1]
                     den += C_star[i, j]
-            f_star[j] = max(num / max(den, 1e-10), 1.0)
+            f_star[j] = num / max(den, 1e-10)
 
         # ── 3d. Projection avec bruit de processus sur l'INCRÉMENT ─────────────
         # E&V 2002 : l'incrément futur suit ODP(mean=inc_mean, φ) avec
@@ -335,7 +342,14 @@ def bootstrap_odp(
             for j in range(k_i, m - 1):
                 if j < len(f_star):
                     inc_mean = c_val * (f_star[j] - 1.0)   # incrément attendu
-                    # Bruit de processus ODP sur l'incrément
+                    # ⚠️ GARDE D'INCRÉMENT ODP — À NE JAMAIS RETIRER, ≠ verrou recours.
+                    # Le bruit de processus Normal(0, √(φ·inc_mean)) peut rendre
+                    # l'incrément négatif, ce qui est IMPOSSIBLE pour un ODP (loi ≥ 0).
+                    # Le plancher inc_mean×0.01 tronque cette queue gauche pour
+                    # respecter la non-négativité du MODÈLE. Ce n'est PAS un masque de
+                    # recours (les cellules recours sont déjà exclues en amont, m_ij≤0
+                    # dans calculer_fitted_et_residus) : le retirer injecterait des
+                    # négatifs parasites dans un modèle à incréments positifs. Idem 3b.
                     if phi > 0 and inc_mean > 0:
                         std_proc = np.sqrt(phi * inc_mean)
                         inc_sim  = max(
@@ -346,16 +360,19 @@ def bootstrap_odp(
                         inc_sim = max(inc_mean, 0.0)
                     c_val = c_val + inc_sim   # cumul += incrément simulé
 
-            ibnr_b = max(c_val - last_diag[i], 0.0)
+            # PAS de plancher IBNR ≥ 0 : la garde d'incrément ci-dessus rend c_val
+            # monotone croissant, donc c_val ≥ last_diag[i] par construction. L'ancien
+            # max(…, 0.0) était mort (0 / 24 000 simulations) — retiré au Lot D2.
+            ibnr_b = c_val - last_diag[i]
             reserve_b += ibnr_b
 
         reserves_sim[b] = reserve_b
 
     # ── 3e. Recentrage England-Verrall ────────────────────────────────────────
     # Le bootstrap estime la DISPERSION autour de l'estimateur analytique CL
-    # (reserve_ref), non une moyenne biaisée par les troncatures (max(...,·×0.01)
-    # et max(·-last_diag, 0)) sur triangles très volatils. On décale la
-    # distribution pour que sa moyenne = reserve_ref — invariant en écart-type.
+    # (reserve_ref = réserve BRUTE depuis D1), non une moyenne biaisée par les
+    # gardes d'incrément (max(…, ·×0.01), 3b/3d) sur triangles très volatils. On
+    # décale la distribution pour que sa moyenne = reserve_ref — invariant en σ.
     biais        = float(np.mean(reserves_sim)) - reserve_ref
     reserves_sim = reserves_sim - biais
 
@@ -437,10 +454,13 @@ def _reserve_cl_simple(
     facteurs:   np.ndarray,
     annee_base: int = 1,
 ) -> float:
-    """Réserve CL simple (sans tail) pour référence Bootstrap — via le helper de
-    projection partagé, IBNR plancheré (comportement historique inchangé)."""
+    """Réserve CL simple (sans tail) — cible de recentrage E&V. IBNR BRUT (D1) :
+    le recentrage vise l'estimateur CL honnête (recours conservés), cohérent avec
+    chain_ladder post-Lot B (1076 et non 1483 sur un triangle à recours fort).
+    Ne concerne QUE la cible ; le rééchantillonnage et le pseudo-triangle sont
+    indépendants de cette fonction."""
     proj = projeter_ultimates(C, facteurs, tail_factor=1.0)
-    return float(np.sum(proj['ibnr_plancher'][annee_base:]))
+    return float(np.sum(proj['ibnr_brut'][annee_base:]))
 
 
 def _resultat_degrade(reserve_ref: float, n_sim: int) -> Dict:

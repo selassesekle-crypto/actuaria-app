@@ -1267,5 +1267,53 @@ class T23_Munich_Verrou3_Retire_IBNR_Brut(unittest.TestCase):
         print("    OK T23c recours : 1 reprise/triangle, IBNR brut<0 exposé + alerte reprise")
 
 
+class T24_Bootstrap_Recentrage_Brut(unittest.TestCase):
+    """Lot D — Bootstrap ODP. D1 : le recentrage England-Verrall vise désormais la
+    réserve CL BRUTE (chiffre honnête post-Lot B) et non l'ancien plancher. D2 : les
+    deux mécanismes morts (f* ≥ 1, IBNR ≥ 0/sim) sont retirés — no-op numérique
+    prouvé. Les gardes d'incrément (contrainte ODP) restent, intactes."""
+
+    def test_d1_recentrage_sur_le_brut_recours(self):
+        """D1 : sur RECOURS_FORT, be_bootstrap reflète le brut (~1076) et non
+        l'ancien plancher (~1483). Recentrage exact : be == réserve CL brute."""
+        f  = calculer_facteurs(_TRI_RECOURS_FORT, 'standard')[0]
+        rc = chain_ladder(_TRI_RECOURS_FORT, tail_force=1.0)
+        bo = bootstrap_odp(_TRI_RECOURS_FORT, f, n_sim=3000, seed=42)
+        self.assertAlmostEqual(bo['be_bootstrap'], rc['reserve_brute'], delta=0.01)  # recentrage exact
+        self.assertAlmostEqual(bo['be_bootstrap'], 1075.80, delta=0.5)                # brut
+        self.assertGreater(rc['reserve_plancher'] - bo['be_bootstrap'], 400)          # ~407 sous le plancher
+        print(f"    OK T24a D1 recentrage brut : be_bootstrap={bo['be_bootstrap']:.0f} "
+              f"(= CL brut {rc['reserve_brute']:.0f}, ancien plancher {rc['reserve_plancher']:.0f})")
+
+    def test_d1_recentrage_est_un_decalage_std_invariant(self):
+        """Le recentrage est un décalage pur : changer la cible (brut vs plancher)
+        déplace be_bootstrap d'exactement l'écart, σ STRICTEMENT invariant."""
+        import direction_non_vie.provisionnement.a7_provisionnement.n3.bootstrap_odp as _bo
+        f = calculer_facteurs(_TRI_RECOURS_FORT, 'standard')[0]
+        _orig = _bo._reserve_cl_simple
+        try:
+            _bo._reserve_cl_simple = lambda C, fa, ab=1: 1076.0
+            r_brut = bootstrap_odp(_TRI_RECOURS_FORT, f, n_sim=3000, seed=42)
+            _bo._reserve_cl_simple = lambda C, fa, ab=1: 1483.0
+            r_plan = bootstrap_odp(_TRI_RECOURS_FORT, f, n_sim=3000, seed=42)
+        finally:
+            _bo._reserve_cl_simple = _orig
+        self.assertAlmostEqual(r_brut['be_bootstrap'], 1076.0, delta=0.01)
+        self.assertAlmostEqual(r_plan['be_bootstrap'], 1483.0, delta=0.01)
+        self.assertEqual(r_brut['std_bootstrap'], r_plan['std_bootstrap'])   # σ invariant au décalage
+        print(f"    OK T24b décalage pur : be 1076 vs 1483, σ identique = {r_brut['std_bootstrap']:.2f}")
+
+    def test_d2_retrait_morts_no_op_bit_exact(self):
+        """D2 : le retrait des deux mécanismes morts ne change RIEN. Sur GENINS
+        (sain, D1 aussi no-op car brut == plancher), la distribution entière est
+        identique aux valeurs d'avant le lot (be ET σ, seed/n_sim figés)."""
+        f  = calculer_facteurs(GENINS, 'standard')[0]
+        bo = bootstrap_odp(GENINS, f, n_sim=3000, seed=42)
+        self.assertAlmostEqual(bo['be_bootstrap'],  18_680_855.61, delta=0.5)
+        self.assertAlmostEqual(bo['std_bootstrap'],  3_061_803.46, delta=1.0)
+        self.assertAlmostEqual(bo['p99_5'],         27_173_015.67, delta=1.0)
+        print("    OK T24c D2 no-op : GENINS be/σ/P99.5 identiques à l'avant-lot")
+
+
 if __name__ == '__main__':
     unittest.main()
