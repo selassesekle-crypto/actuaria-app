@@ -1139,14 +1139,86 @@ class T21_Munich_Source_Unique_Facteurs(unittest.TestCase):
         self.assertAlmostEqual(r['be_cl_paye'],     304.55, places=2)
         print("    OK T21e triangle sain : chaîne Munich identique bit à bit")
 
-    def test_verrous_2_et_3_intacts(self):
-        """Ce lot ne touche NI f* ≥ 1 NI le plancher IBNR — garde-fou de périmètre."""
+    def test_verrou_3_intact_verrou_2_retire(self):
+        """Garde-fou de périmètre, mis à jour au Lot C2 : le verrou 2 (f* ≥ 1) est
+        désormais RETIRÉ — un f* < 1 est conservé sur le recours — tandis que le
+        verrou 3 (plancher IBNR) reste en place (il tombera au lot suivant)."""
         r = munich_cl(_MCL_REC_P, _MCL_REC_E, annee_base=0)
-        self.assertTrue(all(f >= 1.0 for f in r['facteurs_munich_paye']),
-                        "verrou 2 (f* ≥ 1) doit rester en place dans ce lot")
+        self.assertTrue(any(f < 1.0 for f in r['facteurs_munich_paye']),
+                        "verrou 2 retiré (C2) : un f* < 1 doit être conservé sur le recours")
         self.assertTrue(all(v >= 0.0 for v in r['ibnr_munich_paye']),
                         "verrou 3 (plancher IBNR) doit rester en place dans ce lot")
-        print("    OK T21f périmètre : verrous f*≥1 et plancher IBNR toujours en place")
+        print("    OK T21f périmètre : verrou 2 retiré (C2), plancher IBNR toujours en place")
+
+
+class T22_Munich_Verrou2_Retire(unittest.TestCase):
+    """Lot C2 — le forçage f* ≥ 1.0 est retiré : les facteurs Munich ajustés < 1
+    (recours/subrogation) sont CONSERVÉS et signalés (facteurs_munich_sous_1_*),
+    avec une garde résiduelle uniquement contre le cas dégénéré f* ≤ 0."""
+
+    def test_sain_no_op(self):
+        """(a) Portefeuille sain : aucun f* < 1 → retrait du verrou = no-op exact.
+        be_munich inchangé, listes de signalement vides."""
+        r = munich_cl(_MCL_PAYE, _MCL_ENG_SAIN, annee_base=1)
+        self.assertTrue(all(f >= 1.0 for f in r['facteurs_munich_paye']))
+        self.assertTrue(all(f >= 1.0 for f in r['facteurs_munich_engage']))
+        self.assertEqual(r['facteurs_munich_sous_1_paye'], [])
+        self.assertEqual(r['facteurs_munich_sous_1_engage'], [])
+        self.assertEqual(r['facteurs_degeneres_paye'], [])
+        self.assertEqual(r['facteurs_degeneres_engage'], [])
+        self.assertAlmostEqual(r['be_munich_paye'],   375.71, delta=0.01)
+        self.assertAlmostEqual(r['be_munich_engage'], 250.13, delta=0.01)
+        print("    OK T22a sain : retrait du verrou = no-op (be_munich 375.71/250.13, rien signalé)")
+
+    def test_recours_f_star_sous_1_conserve_et_signale(self):
+        """(b) Recours : f* < 1 conservé et signalé ; be_munich reflète l'effet
+        mesuré dans l'investigation (verrou 3 encore actif : 266.59→202.83 payé,
+        195.22→156.81 engagé)."""
+        r = munich_cl(_MCL_REC_P, _MCL_REC_E, annee_base=1)
+        # colonne 2 : f* payé 0.8913 et engagé 0.94 conservés (étaient forcés à 1.0)
+        self.assertEqual(r['facteurs_munich_sous_1_paye'],   [[2, 0.891304]])
+        self.assertEqual(r['facteurs_munich_sous_1_engage'], [[2, 0.94]])
+        self.assertAlmostEqual(r['facteurs_munich_paye'][2],   0.8913, places=4)
+        self.assertAlmostEqual(r['facteurs_munich_engage'][2], 0.94,   places=4)
+        # effet chiffré exact (verrou 3 toujours en place)
+        self.assertAlmostEqual(r['be_munich_paye'],   202.83, delta=0.01)
+        self.assertAlmostEqual(r['be_munich_engage'], 156.81, delta=0.01)
+        self.assertIn('f* < 1.0 conservé', r['message'])
+        self.assertEqual(r['facteurs_degeneres_paye'], [])   # pas de dégénérescence
+        print("    OK T22b recours : f*<1 conservé/signalé, be_munich 202.83/156.81 (−63.76/−38.41)")
+
+    def test_garde_f_star_negatif_repli_cl(self):
+        """(c) Garde résiduelle f* ≤ 0 : jamais atteinte naturellement (min 0.67 sur
+        12 000 paires). Exercée ARTIFICIELLEMENT en forçant λ = 50 (monkeypatch)
+        pour saturer l'ajustement → f* ≤ 0 → repli sur le facteur CL (toujours > 0)."""
+        from direction_non_vie.provisionnement.a7_provisionnement.n3 import munich_cl as _m
+        _orig = _m._calculer_lambda
+
+        def _fake_lambda(C_P, C_E, f_P, f_E, lambda_max=2.0):
+            n, mm = C_P.shape
+            # λ énorme + Q_moy=0 → le code recalcule le vrai Q volumique (l.356-361)
+            return np.full(mm - 1, 50.0), np.full(mm - 1, 50.0), np.zeros(mm - 1)
+
+        _m._calculer_lambda = _fake_lambda
+        try:
+            r = munich_cl(_MCL_REC_P, _MCL_REC_E, annee_base=1)
+        finally:
+            _m._calculer_lambda = _orig
+
+        # la garde a sauté (f* aurait été ≤ 0 sur la colonne 2)
+        self.assertTrue(r['facteurs_degeneres_paye'] or r['facteurs_degeneres_engage'],
+                        "la garde f* ≤ 0 aurait dû se déclencher avec λ = 50")
+        self.assertTrue(any(v <= 0 for v, in
+                            [(x[1],) for x in r['facteurs_degeneres_paye']]))
+        # repli propre : aucun f* projeté ≤ 0
+        self.assertTrue(all(f > 0 for f in r['facteurs_munich_paye']))
+        self.assertTrue(all(f > 0 for f in r['facteurs_munich_engage']))
+        # le repli vaut bien le facteur CL non ajusté sur la cellule dégénérée
+        j0 = r['facteurs_degeneres_paye'][0][0]
+        self.assertAlmostEqual(r['facteurs_munich_paye'][j0],
+                               r['facteurs_cl_paye'][j0], places=4)
+        print(f"    OK T22c garde f*≤0 : dégénérescence {r['facteurs_degeneres_paye']} "
+              f"→ repli CL, tous f* > 0")
 
 
 if __name__ == '__main__':

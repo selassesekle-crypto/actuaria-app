@@ -345,6 +345,10 @@ def munich_cl(
 
     f_star_P = f_P.copy()
     f_star_E = f_E.copy()
+    # f* ≤ 0 rabattu sur le facteur CL (garde défensive, cf. boucle) — jamais
+    # observé en pratique (min 0.67 sur 12 000 paires testées).
+    facteurs_degeneres_paye:   list = []
+    facteurs_degeneres_engage: list = []
 
     idx = np.arange(n)
     for j in range(m - 1):
@@ -375,8 +379,52 @@ def munich_cl(
         adj_P = lam_P[j] * (q_hat_P - Q_moy)
         adj_E = lam_E[j] * (Q_moy   - q_hat_E)
 
-        f_star_P[j] = max(f_P[j] + adj_P, 1.0)
-        f_star_E[j] = max(f_E[j] + adj_E, 1.0)
+        # Facteur ajusté CONSERVÉ tel quel, y compris < 1.0 (recours/subrogation).
+        # Le forçage historique max(…, 1.0) est retiré (Lot C2) : sur une colonne
+        # en recours λ vaut 0 (les incréments négatifs sont écartés du calcul des
+        # λ, l.233), donc f* = f_CL, et max(f_CL, 1.0) ré-appliquait EXACTEMENT le
+        # plancher du verrou 1 déjà retiré au Lot C1 — annulant sa correction. Les
+        # f* < 1 sont désormais conservés et signalés (facteurs_munich_sous_1_*).
+        #
+        # Garde résiduelle UNIQUEMENT contre le cas dégénéré f* ≤ 0 (ultime nul ou
+        # négatif) : jamais observé en pratique (f* min 0.67 sur 12 000 paires),
+        # garde purement défensive. Repli = facteur CL non ajusté (borné > 0 par
+        # construction de calculer_facteurs) → l'ajustement Munich est annulé pour
+        # cette seule cellule, exactement comme si λ y valait 0.
+        f_P_adj = f_P[j] + adj_P
+        f_E_adj = f_E[j] + adj_E
+        if f_P_adj <= 0.0:
+            f_star_P[j] = f_P[j]
+            facteurs_degeneres_paye.append([int(j), round(float(f_P_adj), 6)])
+        else:
+            f_star_P[j] = f_P_adj
+        if f_E_adj <= 0.0:
+            f_star_E[j] = f_E[j]
+            facteurs_degeneres_engage.append([int(j), round(float(f_E_adj), 6)])
+        else:
+            f_star_E[j] = f_E_adj
+
+    # ── Facteurs f* < 1.0 conservés (recours) — signalés, jamais forcés ────────
+    # Même politique que chain_ladder ('facteurs_sous_1', Lot 2).
+    facteurs_munich_sous_1_paye = [
+        [int(j), round(float(f_star_P[j]), 6)]
+        for j in range(len(f_star_P)) if f_star_P[j] < 1.0
+    ]
+    facteurs_munich_sous_1_engage = [
+        [int(j), round(float(f_star_E[j]), 6)]
+        for j in range(len(f_star_E)) if f_star_E[j] < 1.0
+    ]
+    if facteurs_munich_sous_1_paye or facteurs_munich_sous_1_engage:
+        logger.warning(
+            f"Munich CL : f* < 1.0 conservé(s) (recours/subrogation) — "
+            f"payé {facteurs_munich_sous_1_paye}, engagé {facteurs_munich_sous_1_engage}"
+        )
+    if facteurs_degeneres_paye or facteurs_degeneres_engage:
+        logger.warning(
+            f"Munich CL : garde f* ≤ 0 déclenchée (cas dégénéré, jamais vu en "
+            f"pratique) — repli sur le facteur CL — "
+            f"payé {facteurs_degeneres_paye}, engagé {facteurs_degeneres_engage}"
+        )
 
     # ── 5. Projections MCL et CL ──────────────────────────────────────────────
     def projeter(C, facteurs):
@@ -418,6 +466,12 @@ def munich_cl(
         f"engagé_MCL={R_me:,.0f}€ · "
         f"convergence={convergence:+.1f} pts"
     )
+    if facteurs_munich_sous_1_paye or facteurs_munich_sous_1_engage:
+        msg += (
+            f" | ⚠️ f* < 1.0 conservé(s) (recours) — colonnes payé "
+            f"{[j for j, _ in facteurs_munich_sous_1_paye]}, engagé "
+            f"{[j for j, _ in facteurs_munich_sous_1_engage]}"
+        )
     logger.info(msg)
 
     # Compter les incréments négatifs (P et E) pour audit
@@ -461,6 +515,13 @@ def munich_cl(
         'facteurs_cl_engage': [round(float(f), 4) for f in f_E],
         'facteurs_munich_paye':   [round(float(f), 4) for f in f_star_P],
         'facteurs_munich_engage': [round(float(f), 4) for f in f_star_E],
+
+        # Facteurs f* < 1.0 conservés (recours) : [[colonne, valeur], ...]
+        'facteurs_munich_sous_1_paye':   facteurs_munich_sous_1_paye,
+        'facteurs_munich_sous_1_engage': facteurs_munich_sous_1_engage,
+        # f* ≤ 0 rabattus sur le CL (garde défensive, jamais vu en pratique)
+        'facteurs_degeneres_paye':   facteurs_degeneres_paye,
+        'facteurs_degeneres_engage': facteurs_degeneres_engage,
 
         # IBNR par année
         'ibnr_munich_paye':   [round(float(v), 2) for v in ibnr_mp],
