@@ -311,8 +311,9 @@ def _calculer_resultats(
 
     # ── Ultimates et IBNR ─────────────────────────────────────────────────────
     ultimates            = []
-    ibnr_par_annee       = []
-    ibnr_brut_par_annee  = []  # IBNR avant troncature — signal sur-développement
+    ibnr_par_annee       = []   # PLANCHÉ à 0 (provision ≥ 0) — affichage historique
+    ibnr_brut_raw        = []   # brut float (peut être < 0) — base de la réserve
+    ibnr_brut_par_annee  = []   # brut arrondi — signal sur-développement exposé
     pct_developpe        = []
 
     for i in range(n):
@@ -332,19 +333,23 @@ def _calculer_resultats(
         # IBNR_i = U_i - dernière observation cumulée. NE PAS multiplier par
         # tail_factor (qui reste calculé pour l'affichage/diagnostic) : cela
         # compterait le tail une seconde fois.
-        ibnr_i      = u_i - obs_last
-        ibnr_brut_i = ibnr_i  # valeur brute avant troncature à 0
+        ibnr_i = u_i - obs_last
 
         ultimates.append(u_i)
-        ibnr_par_annee.append(max(ibnr_i, 0.0))  # tronqué : provision ≥ 0
-        ibnr_brut_par_annee.append(round(ibnr_brut_i, 0))  # brut : signal sur-développement
+        ibnr_par_annee.append(max(ibnr_i, 0.0))    # planché : provision ≥ 0
+        ibnr_brut_raw.append(ibnr_i)               # brut : sur-développement conservé
+        ibnr_brut_par_annee.append(round(ibnr_i, 0))
         pct_developpe.append(pct)
 
     # Sur-développement : années où IBNR brut < 0 → ultimate Clark < cumul observé
-    n_sur_dev = sum(1 for v in ibnr_brut_par_annee if v < 0)
+    n_sur_dev = sum(1 for v in ibnr_brut_raw if v < 0)
 
-    # Réserve totale depuis annee_base — aligné sur CL/Mack/BF/CC (exclut l'année 0)
-    reserve_totale = float(np.sum(ibnr_par_annee[annee_base:]))
+    # Réserve totale depuis annee_base — sur l'IBNR BRUT (sur-développement conservé),
+    # cohérent avec CL/Munich/Bootstrap post-chantier IBNR. Quasi-no-op en pratique :
+    # Clark ajuste une courbe monotone croissante, donc l'ultime fitté dépasse le
+    # cumul observé sauf sur des années quasi-mûres (souvent l'année 0, exclue de la
+    # réserve). L'IBNR PLANCHÉ reste exposé séparément via ibnr_par_annee.
+    reserve_totale = float(np.sum(ibnr_brut_raw[annee_base:]))
 
     # ── Intervalles de confiance 95% sur les ultimates ────────────────────────
     # IC = ultimate ± 1.96 × se(U_i), se(U_i) issu de la Hessienne de la
@@ -428,18 +433,6 @@ def clark_ldf(
     g_t2_min:       Optional[float]       = None,
 ) -> Dict:
     """
-    Paramètres supplémentaires
-    --------------------------
-    calculer_ic : bool
-        Si True (défaut), calcule la Hessienne numérique et les IC 95%
-        sur les ultimates. Coûteux sur grands triangles (O(n³)) —
-        mettre à False si seule la réserve centrale est nécessaire.
-    g_t2_min : float, optional
-        Seuil G(t=2) en dessous duquel Clark est déclaré aberrant.
-        Par défaut : CLARK_G_T2_MIN (0.10). À ajuster par LoB :
-        RC Médicale / Construction → 0.03, RC Générale → 0.05.
-    """
-    """
     Méthode de Clark (2003) — LDF Curve-Fitting par Maximum de Vraisemblance.
 
     Parameters
@@ -453,17 +446,29 @@ def clark_ldf(
         Courbes à tester : 'loglogistique' et/ou 'weibull'.
     annee_base : int
         Première année incluse dans la réserve totale.
+    calculer_ic : bool
+        Si True (défaut), calcule la Hessienne numérique et les IC 95%
+        sur les ultimates. Coûteux sur grands triangles (O(n³)) —
+        mettre à False si seule la réserve centrale est nécessaire.
+    g_t2_min : float, optional
+        Seuil G(t=2) en dessous duquel Clark est déclaré aberrant.
+        Par défaut : CLARK_G_T2_MIN (0.10). À ajuster par LoB :
+        RC Médicale / Construction → 0.03, RC Générale → 0.05.
 
     Returns
     -------
-    Dict standard A7 Ibrahim avec les clés :
-        success, disponible, aberrant, courbe_choisie, omega, theta,
-        ultimates, ibnr_par_annee, reserve_totale, reserve_be_clark,
-        ibnr_brut_par_annee  — IBNR avant troncature à 0 (< 0 = sur-développement)
-        n_sur_developpement  — nombre d'années où ultimate Clark < cumul observé
-        tail_factor, pct_developpe, ic_95, aic_loglogistique, aic_weibull,
-        ll_loglogistique, ll_weibull, residus, converge, message, erreur,
-        aic_optimal, g_courbe, periodes_arr
+    Dict standard A7 Ibrahim. Clés effectivement présentes :
+        success, disponible, aberrant, erreur, message
+        courbe_choisie, omega, theta, elr, converge
+        ultimates, ic_95, pct_developpe, tail_factor
+        ibnr_par_annee       — IBNR par année, PLANCHÉ à 0 (provision ≥ 0)
+        ibnr_brut_par_annee  — IBNR brut, < 0 si sur-développement (ultime < cumul)
+        n_sur_developpement  — nombre d'années où l'IBNR brut est < 0
+        reserve_totale       — Σ IBNR BRUT depuis annee_base (recours conservés)
+        reserve_be_clark     — alias de reserve_totale
+        aic_loglogistique, aic_weibull, ll_loglogistique, ll_weibull,
+        aic_optimal, ll_optimal, residus, n_params, n_obs,
+        increments_non_positifs, periodes_arr, g_courbe
     """
     # ── Vérifications préliminaires ───────────────────────────────────────────
     if not SCIPY_OK:
@@ -718,9 +723,11 @@ def clark_ldf(
         'elr':               best['U'],  # alias ELR = U_i (ultimates paramétriques)
 
         # Résultats actuariels
-        'ultimates':         best['ultimates'],
-        'ibnr_par_annee':    best['ibnr_par_annee'],
-        'reserve_totale':    reserve_totale,
+        'ultimates':           best['ultimates'],
+        'ibnr_par_annee':      best['ibnr_par_annee'],        # PLANCHÉ à 0
+        'ibnr_brut_par_annee': best['ibnr_brut_par_annee'],   # brut < 0 = sur-développement
+        'n_sur_developpement': best['n_sur_developpement'],   # nb années ultime < cumul
+        'reserve_totale':    reserve_totale,                  # Σ IBNR brut (recours conservés)
         'reserve_be_clark':  reserve_totale,  # alias
         'tail_factor':       tail_factor,
         'pct_developpe':     best['pct_developpe'],

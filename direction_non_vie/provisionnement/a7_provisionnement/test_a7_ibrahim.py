@@ -1315,5 +1315,47 @@ class T24_Bootstrap_Recentrage_Brut(unittest.TestCase):
         print("    OK T24c D2 no-op : GENINS be/σ/P99.5 identiques à l'avant-lot")
 
 
+class T25_Clark_IBNR_Brut_Expose(unittest.TestCase):
+    """Lot E — Clark expose le signal honnête (ibnr_brut_par_annee,
+    n_sur_developpement) jusque-là CALCULÉ mais jamais transmis (docstring
+    mensongère), et la réserve bascule sur le brut. DERNIER lot du chantier IBNR."""
+
+    def test_signal_brut_present_et_coherent(self):
+        """(a) Les deux clés promises par la docstring sont désormais réellement
+        présentes et cohérentes. GENINS et recours : Clark lisse tout (courbe
+        monotone), aucun sur-développement → brut == planché année par année."""
+        for nom, C in [('GENINS', GENINS), ('RECOURS_FORT', _TRI_RECOURS_FORT)]:
+            r = clark_ldf(C, annee_base=1)
+            self.assertIn('ibnr_brut_par_annee', r, f"{nom} : clé absente")
+            self.assertIn('n_sur_developpement', r, f"{nom} : clé absente")
+            self.assertEqual(len(r['ibnr_brut_par_annee']), len(r['ibnr_par_annee']))
+            self.assertEqual(r['n_sur_developpement'], 0)
+            self.assertEqual(r['ibnr_brut_par_annee'], r['ibnr_par_annee'])  # pas de sur-dev
+        print("    OK T25a signal brut exposé et cohérent (GENINS, recours : n_sur_dev=0)")
+
+    def test_sur_developpement_expose_le_negatif(self):
+        """(b) RAA année 0 sur-développe (ultime MLE < cumul observé) : le brut
+        expose la valeur négative (~ -92) alors que le champ planché reste 0, et
+        n_sur_developpement compte l'année."""
+        r = clark_ldf(RAA, annee_base=1)
+        self.assertEqual(r['ibnr_par_annee'][0], 0.0)                 # planché à 0
+        self.assertLess(r['ibnr_brut_par_annee'][0], 0)               # brut < 0 (robuste)
+        self.assertAlmostEqual(r['ibnr_brut_par_annee'][0], -92.0, delta=5.0)  # valeur mesurée
+        self.assertGreaterEqual(r['n_sur_developpement'], 1)
+        print(f"    OK T25b sur-développement : RAA an.0 brut={r['ibnr_brut_par_annee'][0]:.0f} "
+              f"(planché {r['ibnr_par_annee'][0]:.0f}), n_sur_dev={r['n_sur_developpement']}")
+
+    def test_reserve_brute_no_op_hors_sur_developpement(self):
+        """(c) Là où aucune année de réserve ne sur-développe (cas quasi général),
+        reserve_totale (brut) == réserve planchée — bascule sans effet. Ancré GENINS."""
+        r = clark_ldf(GENINS, annee_base=1)
+        brut = np.array(r['ibnr_brut_par_annee'], dtype=float)
+        res_planchee = float(np.sum(np.maximum(brut, 0.0)[1:]))
+        self.assertAlmostEqual(r['reserve_totale'], res_planchee, delta=2.0)   # no-op
+        self.assertAlmostEqual(r['reserve_totale'], 17_740_889, delta=2.0)     # ancrage
+        self.assertEqual(r['reserve_totale'], r['reserve_be_clark'])            # alias
+        print(f"    OK T25c réserve brute == planchée hors sur-dev : {r['reserve_totale']:,.0f}")
+
+
 if __name__ == '__main__':
     unittest.main()
