@@ -324,10 +324,10 @@ def munich_cl(
     n, m = C_P.shape
 
     # ── 2. Facteurs CL standard ───────────────────────────────────────────────
-    # Source unique (chain_ladder) : un facteur < 1 (recours/subrogation) est
-    # conservé tel quel. Il se propage aux λ, aux ratios prédits q̂ et aux
-    # facteurs ajustés f* — ces derniers restent bornés à 1.0 plus bas (verrou
-    # distinct, décision séparée).
+    # Source unique (chain_ladder, Lot C1) : un facteur < 1 (recours/subrogation)
+    # est conservé tel quel. Il se propage aux λ, aux ratios prédits q̂, aux
+    # facteurs ajustés f* (verrou 1.0 retiré au Lot C2) et jusqu'à l'IBNR brut
+    # (plancher retiré au Lot C3) — plus aucun plancher n'écrase les reprises.
     f_P, _ = calculer_facteurs(C_P)
     f_E, _ = calculer_facteurs(C_E)
 
@@ -426,23 +426,34 @@ def munich_cl(
             f"payé {facteurs_degeneres_paye}, engagé {facteurs_degeneres_engage}"
         )
 
-    # ── 5. Projections MCL et CL ──────────────────────────────────────────────
-    def projeter(C, facteurs):
-        """Projette ultimates et IBNR via le helper de projection partagé
-        (tail=1.0). IBNR plancheré — comportement historique inchangé."""
-        p = projeter_ultimates(C, facteurs, tail_factor=1.0)
-        return p['ultimate'], p['ibnr_plancher'], p['last_diag']
+    # ── 5. Projections MCL et CL — IBNR BRUT (Lot C3 : dernier plancher retiré) ─
+    # Les trois verrous IBNR de Munich sont désormais tous levés : facteurs libres
+    # (verrou 1, Lot C1) → f* libre (verrou 2, Lot C2) → IBNR brut (verrou 3, ce
+    # lot). La chaîne reflète pleinement les reprises (recours/subrogation) ; les
+    # années en reprise ne sont plus écrasées à 0. Le helper calcule aussi l'IBNR
+    # plancheré, conservé pour mesurer l'écart vs l'ancien comportement.
+    p_mp = projeter_ultimates(C_P, f_star_P, tail_factor=1.0, annee_base=annee_base)
+    p_me = projeter_ultimates(C_E, f_star_E, tail_factor=1.0, annee_base=annee_base)
+    p_cp = projeter_ultimates(C_P, f_P,      tail_factor=1.0, annee_base=annee_base)
+    p_ce = projeter_ultimates(C_E, f_E,      tail_factor=1.0, annee_base=annee_base)
 
-    ult_mp, ibnr_mp, ld_P = projeter(C_P, f_star_P)
-    ult_me, ibnr_me, ld_E = projeter(C_E, f_star_E)
-    ult_cp, ibnr_cp, _    = projeter(C_P, f_P)
-    ult_ce, ibnr_ce, _    = projeter(C_E, f_E)
+    ibnr_mp = p_mp['ibnr_brut']
+    ibnr_me = p_me['ibnr_brut']
 
-    # Réserves
-    R_mp = float(np.sum(ibnr_mp[annee_base:]))
-    R_me = float(np.sum(ibnr_me[annee_base:]))
-    R_cp = float(np.sum(ibnr_cp[annee_base:]))
-    R_ce = float(np.sum(ibnr_ce[annee_base:]))
+    # Réserves BRUTES (recours nets compris) — chiffre de référence honnête.
+    # CL de référence (R_cp, R_ce) aussi en brut : l'écart % compare brut vs brut.
+    R_mp = p_mp['reserve_brute']
+    R_me = p_me['reserve_brute']
+    R_cp = p_cp['reserve_brute']
+    R_ce = p_ce['reserve_brute']
+
+    # Signalement des reprises — même schéma que chain_ladder (Lot B).
+    n_reprise_P      = p_mp['n_annees_reprise']
+    n_reprise_E      = p_me['n_annees_reprise']
+    reserve_planch_P = p_mp['reserve_plancher']
+    reserve_planch_E = p_me['reserve_plancher']
+    ecart_planch_P   = reserve_planch_P - R_mp   # ≥ 0 : ce que le plancher masquait
+    ecart_planch_E   = reserve_planch_E - R_me
 
     ecart_P = (R_mp - R_cp) / max(R_cp, 1e-9) * 100.0
     ecart_E = (R_me - R_ce) / max(R_ce, 1e-9) * 100.0
@@ -471,6 +482,12 @@ def munich_cl(
             f" | ⚠️ f* < 1.0 conservé(s) (recours) — colonnes payé "
             f"{[j for j, _ in facteurs_munich_sous_1_paye]}, engagé "
             f"{[j for j, _ in facteurs_munich_sous_1_engage]}"
+        )
+    if n_reprise_P or n_reprise_E:
+        msg += (
+            f" | ⚠️ payé {n_reprise_P} année(s) en reprise (écart "
+            f"{ecart_planch_P:,.0f}€ vs plancher), engagé {n_reprise_E} "
+            f"année(s) (écart {ecart_planch_E:,.0f}€)"
         )
     logger.info(msg)
 
@@ -523,9 +540,19 @@ def munich_cl(
         'facteurs_degeneres_paye':   facteurs_degeneres_paye,
         'facteurs_degeneres_engage': facteurs_degeneres_engage,
 
-        # IBNR par année
+        # IBNR par année (BRUT depuis le Lot C3 — recours conservés, peut être < 0)
         'ibnr_munich_paye':   [round(float(v), 2) for v in ibnr_mp],
         'ibnr_munich_engage': [round(float(v), 2) for v in ibnr_me],
+
+        # Reprises (recours/subrogation) — schéma chain_ladder (Lot B)
+        'ibnr_brut_par_annee_paye':   [round(float(v), 2) for v in p_mp['ibnr_brut']],
+        'ibnr_brut_par_annee_engage': [round(float(v), 2) for v in p_me['ibnr_brut']],
+        'n_annees_reprise_paye':   n_reprise_P,
+        'n_annees_reprise_engage': n_reprise_E,
+        'reserve_brute_paye':      round(R_mp, 2),
+        'reserve_brute_engage':    round(R_me, 2),
+        'reserve_plancher_paye':   round(reserve_planch_P, 2),
+        'reserve_plancher_engage': round(reserve_planch_E, 2),
 
         # Métadonnées
         'statut':    statut,

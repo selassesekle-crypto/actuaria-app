@@ -1139,16 +1139,16 @@ class T21_Munich_Source_Unique_Facteurs(unittest.TestCase):
         self.assertAlmostEqual(r['be_cl_paye'],     304.55, places=2)
         print("    OK T21e triangle sain : chaîne Munich identique bit à bit")
 
-    def test_verrou_3_intact_verrou_2_retire(self):
-        """Garde-fou de périmètre, mis à jour au Lot C2 : le verrou 2 (f* ≥ 1) est
-        désormais RETIRÉ — un f* < 1 est conservé sur le recours — tandis que le
-        verrou 3 (plancher IBNR) reste en place (il tombera au lot suivant)."""
+    def test_verrous_2_et_3_retires_chantier_complet(self):
+        """État FINAL du chantier Munich (Lot C3) : les trois verrous IBNR sont
+        tous levés. Sur le recours, un f* < 1 est conservé (verrou 2, C2) ET l'IBNR
+        d'une année en reprise est < 0 (verrou 3, C3) — plus aucun plancher."""
         r = munich_cl(_MCL_REC_P, _MCL_REC_E, annee_base=0)
         self.assertTrue(any(f < 1.0 for f in r['facteurs_munich_paye']),
-                        "verrou 2 retiré (C2) : un f* < 1 doit être conservé sur le recours")
-        self.assertTrue(all(v >= 0.0 for v in r['ibnr_munich_paye']),
-                        "verrou 3 (plancher IBNR) doit rester en place dans ce lot")
-        print("    OK T21f périmètre : verrou 2 retiré (C2), plancher IBNR toujours en place")
+                        "verrou 2 retiré : un f* < 1 doit être conservé sur le recours")
+        self.assertTrue(any(v < 0.0 for v in r['ibnr_munich_paye']),
+                        "verrou 3 retiré : l'IBNR d'une année en reprise doit être < 0")
+        print("    OK T21f chantier Munich complet : verrous 1+2+3 tous levés (f*<1 et IBNR<0)")
 
 
 class T22_Munich_Verrou2_Retire(unittest.TestCase):
@@ -1171,21 +1171,18 @@ class T22_Munich_Verrou2_Retire(unittest.TestCase):
         print("    OK T22a sain : retrait du verrou = no-op (be_munich 375.71/250.13, rien signalé)")
 
     def test_recours_f_star_sous_1_conserve_et_signale(self):
-        """(b) Recours : f* < 1 conservé et signalé ; be_munich reflète l'effet
-        mesuré dans l'investigation (verrou 3 encore actif : 266.59→202.83 payé,
-        195.22→156.81 engagé)."""
+        """(b) Recours — le vrai sujet de C2 : un f* < 1 (ajusté) est CONSERVÉ et
+        SIGNALÉ, jamais forcé à 1.0. La valeur chiffrée de be_munich relève du Lot
+        C3 (verrou 3, plancher IBNR) et est vérifiée par T23 — pas ici."""
         r = munich_cl(_MCL_REC_P, _MCL_REC_E, annee_base=1)
         # colonne 2 : f* payé 0.8913 et engagé 0.94 conservés (étaient forcés à 1.0)
         self.assertEqual(r['facteurs_munich_sous_1_paye'],   [[2, 0.891304]])
         self.assertEqual(r['facteurs_munich_sous_1_engage'], [[2, 0.94]])
         self.assertAlmostEqual(r['facteurs_munich_paye'][2],   0.8913, places=4)
         self.assertAlmostEqual(r['facteurs_munich_engage'][2], 0.94,   places=4)
-        # effet chiffré exact (verrou 3 toujours en place)
-        self.assertAlmostEqual(r['be_munich_paye'],   202.83, delta=0.01)
-        self.assertAlmostEqual(r['be_munich_engage'], 156.81, delta=0.01)
         self.assertIn('f* < 1.0 conservé', r['message'])
         self.assertEqual(r['facteurs_degeneres_paye'], [])   # pas de dégénérescence
-        print("    OK T22b recours : f*<1 conservé/signalé, be_munich 202.83/156.81 (−63.76/−38.41)")
+        print("    OK T22b recours : f*<1 (ajusté) conservé et signalé (valeur → T23)")
 
     def test_garde_f_star_negatif_repli_cl(self):
         """(c) Garde résiduelle f* ≤ 0 : jamais atteinte naturellement (min 0.67 sur
@@ -1219,6 +1216,55 @@ class T22_Munich_Verrou2_Retire(unittest.TestCase):
                                r['facteurs_cl_paye'][j0], places=4)
         print(f"    OK T22c garde f*≤0 : dégénérescence {r['facteurs_degeneres_paye']} "
               f"→ repli CL, tous f* > 0")
+
+
+class T23_Munich_Verrou3_Retire_IBNR_Brut(unittest.TestCase):
+    """Lot C3 — dernier verrou IBNR de Munich levé : la projection utilise l'IBNR
+    BRUT. be_munich reflète PLEINEMENT la reprise (recours), avec le signalement
+    ibnr_brut_par_annee / n_annees_reprise / reserve_brute / reserve_plancher
+    (même schéma que chain_ladder, Lot B). Ferme le chantier Munich CL."""
+
+    def test_sain_no_op(self):
+        """(a) Sain : aucune reprise → brut == plancher → be_munich inchangé."""
+        r = munich_cl(_MCL_PAYE, _MCL_ENG_SAIN, annee_base=1)
+        self.assertEqual(r['n_annees_reprise_paye'], 0)
+        self.assertEqual(r['n_annees_reprise_engage'], 0)
+        self.assertEqual(r['reserve_brute_paye'], r['reserve_plancher_paye'])
+        self.assertTrue(all(v >= 0 for v in r['ibnr_munich_paye']))
+        self.assertAlmostEqual(r['be_munich_paye'],   375.71, delta=0.01)
+        self.assertAlmostEqual(r['be_munich_engage'], 250.13, delta=0.01)
+        print("    OK T23a sain : pas de reprise, brut == plancher, be_munich inchangé")
+
+    def test_recours_be_munich_reflete_pleinement_la_reprise(self):
+        """(b) Recours : be_munich PLEIN (verrou 3 retiré). Avant ce lot :
+        202.83 / 156.81 (plancher). Après : 175.66 / 140.31 (brut). L'ancien
+        plancher reste exposé pour l'écart."""
+        r = munich_cl(_MCL_REC_P, _MCL_REC_E, annee_base=1)
+        self.assertAlmostEqual(r['be_munich_paye'],   175.66, delta=0.01)
+        self.assertAlmostEqual(r['be_munich_engage'], 140.31, delta=0.01)
+        # headline == réserve brute
+        self.assertAlmostEqual(r['be_munich_paye'],   r['reserve_brute_paye'],   places=2)
+        self.assertAlmostEqual(r['be_munich_engage'], r['reserve_brute_engage'], places=2)
+        # l'ancien plancher (== be_munich d'avant C3) est exposé et strictement > brut
+        self.assertAlmostEqual(r['reserve_plancher_paye'],   202.83, delta=0.01)
+        self.assertAlmostEqual(r['reserve_plancher_engage'], 156.81, delta=0.01)
+        self.assertGreater(r['reserve_plancher_paye'], r['reserve_brute_paye'])
+        print(f"    OK T23b recours : be_munich_paye {r['be_munich_paye']} plein "
+              f"(plancher {r['reserve_plancher_paye']}), be_munich_engage {r['be_munich_engage']}")
+
+    def test_recours_signalement_ibnr_brut(self):
+        """(c) Recours : 1 année en reprise par triangle, IBNR brut < 0 exposé et
+        cohérent avec ibnr_munich_*, alerte de reprise dans le message."""
+        r = munich_cl(_MCL_REC_P, _MCL_REC_E, annee_base=1)
+        self.assertEqual(r['n_annees_reprise_paye'], 1)
+        self.assertEqual(r['n_annees_reprise_engage'], 1)
+        # ibnr_brut_par_annee_* == ibnr_munich_* (source unique, tous deux bruts)
+        self.assertEqual(r['ibnr_brut_par_annee_paye'],   r['ibnr_munich_paye'])
+        self.assertEqual(r['ibnr_brut_par_annee_engage'], r['ibnr_munich_engage'])
+        self.assertTrue(any(v < 0 for v in r['ibnr_brut_par_annee_paye']),
+                        "l'année en reprise doit avoir un IBNR brut < 0")
+        self.assertIn('en reprise', r['message'])
+        print("    OK T23c recours : 1 reprise/triangle, IBNR brut<0 exposé + alerte reprise")
 
 
 if __name__ == '__main__':
