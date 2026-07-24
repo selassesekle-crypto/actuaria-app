@@ -232,7 +232,10 @@ class TriangleValidator:
             if path.suffix.lower() in ('.xlsx', '.xls', '.xlsm'):
                 if nom_onglet:
                     rapport['infos'].append(f"Onglet selectionne : '{nom_onglet}'")
-                return pd.read_excel(path, sheet_name=nom_onglet)
+                # sheet_name=None rendrait un DICT de toutes les feuilles, pas un
+                # DataFrame : sans onglet nomme, on lit la PREMIERE feuille (0).
+                return pd.read_excel(
+                    path, sheet_name=(nom_onglet if nom_onglet is not None else 0))
             if path.suffix.lower() in ('.csv', '.txt'):
                 for sep in (',', ';', '\t', '|'):
                     try:
@@ -250,7 +253,9 @@ class TriangleValidator:
             if name.lower().endswith(('.xlsx', '.xls')):
                 if nom_onglet:
                     rapport['infos'].append(f"Onglet selectionne (upload) : '{nom_onglet}'")
-                return pd.read_excel(source, sheet_name=nom_onglet)
+                # Meme piege que pour un chemin : sans onglet nomme -> feuille 0.
+                return pd.read_excel(
+                    source, sheet_name=(nom_onglet if nom_onglet is not None else 0))
             source.seek(0)
             return pd.read_csv(source)
         except Exception as e:
