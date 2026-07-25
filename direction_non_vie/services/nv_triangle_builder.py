@@ -980,6 +980,7 @@ class NVTriangleBuilder:
         schema_mapping  : Optional[Dict] = None,
         mode_declare    : str            = 'auto',
         nom_onglet      : Optional[str]  = None,
+        annee_min_paiements : Optional[int] = None,
     ) -> Dict:
         """
         Construit le triangle des charges engagées pour Munich Chain Ladder.
@@ -1006,6 +1007,9 @@ class NVTriangleBuilder:
         schema_mapping : mapping colonnes client → noms standard
         mode_declare   : 'auto' | 'cumule' | 'non_cumule' | 'individuel'
         nom_onglet     : nom de l'onglet si fichier multi-onglets
+        annee_min_paiements : année de survenance de la ligne 0 de C_paiements.
+                         Transmise au cas 3 (individuel) pour aligner les provisions
+                         sur la bonne année et alerter en cas de désalignement.
 
         Returns
         -------
@@ -1067,9 +1071,10 @@ class NVTriangleBuilder:
                     # ── Format 3 : données individuelles dossier par dossier ──
                     # Charge[i,j] = paiements cumulés + évaluations dossiers ouverts
                     C_engage = self._construire_engage_depuis_individuels(
-                        df_charges  = df_charges,
-                        C_paiements = C_paiements,
-                        rapport     = rapport,
+                        df_charges          = df_charges,
+                        C_paiements         = C_paiements,
+                        rapport             = rapport,
+                        annee_min_paiements = annee_min_paiements,
                     )
                     format_detecte = 'donnees_individuelles'
                     rapport['infos'].append(
@@ -1127,11 +1132,103 @@ class NVTriangleBuilder:
                 'erreur':          str(e),
             }
 
+    # Statuts de dossier reconnus. Tout ce qui n'est dans NI l'un NI l'autre est
+    # « non reconnu » : conservé (jamais d'exclusion silencieuse) mais signalé.
+    _STATUTS_FERMES  = frozenset({
+        'clos', 'close', 'closed', 'ferme', 'fermé', 'fermee', 'fermée',
+        'termine', 'terminé', 'settled', 'regle', 'réglé', 'reglee', 'réglée',
+    })
+    _STATUTS_OUVERTS = frozenset({
+        'ouvert', 'ouverte', 'open', 'en_cours', 'encours', 'en cours',
+        'actif', 'active', 'pending', 'rouvert', 'reouvert', 'réouvert',
+    })
+    _COLONNES_STATUT = ('statut', 'status', 'etat', 'état', 'state')
+
+    def _filtrer_dossiers_fermes(
+        self,
+        df_charges : pd.DataFrame,
+        col_eval   : str,
+        rapport    : Dict,
+    ) -> pd.DataFrame:
+        """
+        Écarte les dossiers dont le statut indique explicitement une clôture.
+
+        Principe unique appliqué aux quatre situations : on n'exclut QUE sur un
+        statut fermé RECONNU, et aucune situation n'est traitée en silence.
+
+          1. Aucune colonne de statut       → rien exclu   + alerte (hypothèse posée)
+          2. Statut fermé reconnu           → EXCLU        + alerte (compte)
+          3. Statut fermé + provision ≠ 0   → EXCLU        + alerte de CONTRADICTION
+                                                             (compte + montant écarté)
+          4. Statut non reconnu (typo, code
+             métier, valeur vide, NaN)      → CONSERVÉ     + alerte (valeurs vues)
+
+        Un dossier clos ne porte plus de charge à terminaison : sa provision
+        résiduelle serait une donnée périmée qui gonflerait l'engagé. À l'inverse,
+        exclure sur un statut qu'on ne comprend pas ferait disparaître une provision
+        réelle — d'où l'inclusion par défaut au cas 4.
+
+        Returns
+        -------
+        pd.DataFrame : df_charges sans les dossiers fermés reconnus.
+        """
+        col_statut = next(
+            (c for c in df_charges.columns if c in self._COLONNES_STATUT), None)
+
+        # ── Cas 1 : pas de colonne de statut ──────────────────────────────────
+        if col_statut is None:
+            rapport['alertes'].append(
+                "⚠️ Aucune colonne de statut détectée : tous les dossiers sont traités "
+                "comme ouverts (aucune exclusion). L'engagé suppose que les évaluations "
+                "fournies sont les provisions restantes — 0 pour un dossier déjà clos."
+            )
+            return df_charges
+
+        valeurs   = df_charges[col_statut].astype(str).str.strip().str.lower()
+        est_ferme = valeurs.isin(self._STATUTS_FERMES)
+
+        # ── Cas 4 : statuts ni fermés ni ouverts reconnus ─────────────────────
+        non_reconnus = ~est_ferme & ~valeurs.isin(self._STATUTS_OUVERTS)
+        if bool(non_reconnus.any()):
+            echantillon = sorted(set(df_charges.loc[non_reconnus, col_statut]
+                                     .astype(str).str.strip()))[:5]
+            rapport['alertes'].append(
+                f"⚠️ {int(non_reconnus.sum())} dossier(s) au statut NON RECONNU "
+                f"{echantillon} — CONSERVÉS (traités comme ouverts) pour ne pas écarter "
+                f"une provision réelle. Vérifier ces valeurs : une faute de frappe sur un "
+                f"statut fermé le rendrait invisible au filtre."
+            )
+
+        n_fermes = int(est_ferme.sum())
+        if n_fermes == 0:
+            return df_charges
+
+        # ── Cas 3 : contradiction statut fermé / provision non nulle ─────────
+        contradictoires = est_ferme & (df_charges[col_eval] != 0)
+        n_contradictoires = int(contradictoires.sum())
+        if n_contradictoires > 0:
+            montant_ecarte = float(df_charges.loc[contradictoires, col_eval].sum())
+            rapport['alertes'].append(
+                f"⚠️ {n_contradictoires} dossier(s) marqué(s) fermé(s) mais avec une "
+                f"provision NON NULLE ({montant_ecarte:,.0f} au total) — incohérence de "
+                f"la source, VÉRIFICATION REQUISE. Ces dossiers sont exclus (cohérent "
+                f"avec le statut fermé) : si ces provisions sont réelles, corriger le "
+                f"statut ou les évaluations dans le fichier."
+            )
+
+        # ── Cas 2 : exclusion effective ──────────────────────────────────────
+        rapport['alertes'].append(
+            f"⚠️ {n_fermes} dossier(s) au statut fermé exclu(s) du calcul des provisions "
+            f"engagées (un dossier clos ne porte plus de charge à terminaison)."
+        )
+        return df_charges[~est_ferme]
+
     def _construire_engage_depuis_individuels(
         self,
         df_charges  : pd.DataFrame,
         C_paiements : np.ndarray,
         rapport     : Dict,
+        annee_min_paiements : Optional[int] = None,
     ) -> np.ndarray:
         """
         Construit le triangle des charges engagées depuis des données
@@ -1149,14 +1246,25 @@ class NVTriangleBuilder:
 
         Parameters
         ----------
-        df_charges  : DataFrame avec colonnes (annee_survenance, evaluation_courante)
-                      et optionnellement (sinistre_id, statut)
-        C_paiements : triangle des paiements cumulés (référence dimensions)
-        rapport     : dict pour logging
+        df_charges  : DataFrame avec colonnes (annee_survenance, evaluation_courante).
+                      Colonne 'statut' OPTIONNELLE — le filtrage est délégué à
+                      _filtrer_dossiers_fermes(), qui n'exclut QUE sur un statut fermé
+                      RECONNU et signale les quatre situations (colonne absente, fermé,
+                      fermé à provision non nulle, statut non reconnu). Aucune ne passe
+                      en silence ; voir sa docstring pour le détail.
+        C_paiements : triangle des paiements cumulés (référence dimensions).
+        rapport     : dict pour logging.
+        annee_min_paiements : année de survenance de la LIGNE 0 de C_paiements. Fournie,
+                      les provisions sont alignées sur la BONNE année (et non
+                      positionnellement) et une ALERTE signale les provisions visant des
+                      années absentes du triangle des paiements. Si None (défaut),
+                      l'alignement est supposé positionnel et NE PEUT PAS être vérifié —
+                      une alerte le dit, car un décalage d'années produirait un engagé
+                      silencieusement faux.
 
         Returns
         -------
-        np.ndarray : triangle des charges engagées (mêmes dimensions que C_paiements)
+        np.ndarray : triangle des charges engagées (mêmes dimensions que C_paiements).
         """
         n, m = C_paiements.shape
 
@@ -1184,13 +1292,43 @@ class NVTriangleBuilder:
             )
             return C_paiements.copy()
 
-        # Agréger les évaluations par année de survenance
+        # Copie défensive : ne pas muter le DataFrame de l'appelant.
+        df_charges = df_charges.copy()
         df_charges[col_surv] = pd.to_numeric(df_charges[col_surv], errors='coerce')
         df_charges[col_eval] = pd.to_numeric(df_charges[col_eval], errors='coerce').fillna(0)
 
-        eval_par_annee = df_charges.groupby(col_surv)[col_eval].sum().to_dict()
+        df_charges = self._filtrer_dossiers_fermes(df_charges, col_eval, rapport)
 
-        annee_min = int(df_charges[col_surv].min())
+        eval_par_annee = df_charges.groupby(col_surv)[col_eval].sum().to_dict()
+        if not eval_par_annee:
+            rapport['alertes'].append(
+                "⚠️ Aucune provision individuelle exploitable (dossiers tous fermés ou "
+                "évaluations nulles) — charges engagées = paiements."
+            )
+            return C_paiements.copy()
+
+        # ── Année de base : aligner les provisions sur les lignes de C_paiements ──
+        # C_paiements est une matrice nue (sans axe d'années). Si annee_min_paiements
+        # est fournie, on aligne sur la BONNE année ; sinon on ne peut que supposer un
+        # alignement positionnel — un décalage passerait alors inaperçu (d'où l'alerte).
+        if annee_min_paiements is not None:
+            annee_min = int(annee_min_paiements)
+            _annees_paie = set(range(annee_min, annee_min + n))
+            _hors = sorted(int(a) for a, v in eval_par_annee.items()
+                           if v > 0 and int(a) not in _annees_paie)
+            if _hors:
+                rapport['alertes'].append(
+                    f"⚠️ Provision(s) pour année(s) {_hors} absente(s) du triangle des "
+                    f"paiements ({annee_min}–{annee_min + n - 1}) — ignorée(s). Paiements "
+                    f"et provisions doivent couvrir le même périmètre d'années."
+                )
+        else:
+            annee_min = int(df_charges[col_surv].min())
+            rapport['alertes'].append(
+                "⚠️ Axe des années des paiements non fourni (annee_min_paiements) : "
+                "l'alignement des provisions est supposé positionnel et NE PEUT PAS être "
+                "vérifié — un décalage d'années produirait un engagé silencieusement faux."
+            )
 
         # Construire le triangle des charges
         # Base = triangle des paiements (copie)
