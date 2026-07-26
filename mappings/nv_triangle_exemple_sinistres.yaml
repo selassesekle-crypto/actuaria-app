@@ -1,0 +1,21 @@
+# =============================================================================
+#  Exemple de mapping A7 — tableau de SINISTRES (Bloc II, module nv_triangle_mapping)
+#
+#  Renomme les colonnes du fichier client vers le vocabulaire canonique A7.
+#  Une seule table peut fournir DEUX triangles : ici REGLEMENTS_CUM (paiements)
+#  ET CHARGE_TOTALE (charges) → n'importe quelle méthode N3 pourra tourner sur
+#  l'un OU l'autre, et Munich CL sur les deux ensemble.
+#
+#  Cibles valides (sinistres) : annee_survenance, annee_developpement,
+#  annee_paiement, montant_paye, montant_charge, evaluation_courante.
+# =============================================================================
+
+client: "EXEMPLE_RC_corporelle"
+kind:   "sinistres"
+
+correspondances:
+  ANNEE_SURV:      annee_survenance
+  DEV:             annee_developpement
+  REGLEMENTS_CUM:  montant_paye         # brique 1 — paiements
+  CHARGE_TOTALE:   montant_charge       # brique 2 — charges (ouvre la base « charges »)
+  PROV_DOSSIER:    evaluation_courante  # brique 3 — provisions dossier à l'arrêté
