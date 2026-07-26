@@ -148,6 +148,62 @@ class T2_Trois_Briques(unittest.TestCase):
         print("    OK T2e provisions seules : non fatal, rien de constructible seul")
 
 
+class T2b_Table_Tout_En_Un(unittest.TestCase):
+    """Table « tout en un » — sinistres ET une colonne de primes dans le MÊME
+    tableau. Le passthrough retenait toutes les colonnes reconnues sans filtrer
+    par kind : la colonne prime était proposée en cible d'un mapping sinistres
+    (et inversement) → la validation levait alors que rien n'est anormal."""
+
+    # une ligne par sinistre/période + la prime de l'année, répétée
+    DF = pd.DataFrame({
+        'annee_survenance': [2020, 2020, 2021],
+        'dev':              [0, 1, 0],
+        'paid':             [100.0, 150.0, 120.0],
+        'incurred':         [180.0, 175.0, 200.0],
+        'prime':            [5000.0, 5000.0, 5200.0],
+    })
+
+    def test_passthrough_sinistres_ignore_la_prime(self):
+        """kind='sinistres' : la colonne prime est ignorée, pas fatale."""
+        df_r, rap = preparer_tableau(self.DF, None, kind='sinistres')
+        self.assertEqual(set(rap.champs_couverts),
+                         {'annee_survenance', 'annee_developpement',
+                          'montant_paye', 'montant_charge'})
+        self.assertIn('prime', rap.colonnes_client_non_mappees)
+        self.assertNotIn('prime', df_r.columns[df_r.columns.isin(CHAMPS_SINISTRES)])
+        self.assertTrue(rap.peut_construire_paiements)
+        self.assertTrue(rap.peut_construire_charges)
+        print("    OK T2f tout-en-un / sinistres : prime ignorée, 2 bases constructibles")
+
+    def test_passthrough_primes_ignore_les_colonnes_sinistres(self):
+        """kind='primes' sur LA MÊME table : symétrique, les colonnes de
+        sinistres sont ignorées."""
+        _, rap = preparer_tableau(self.DF, None, kind='primes')
+        self.assertEqual(set(rap.champs_couverts), {'annee_survenance', 'prime'})
+        for col in ('dev', 'paid', 'incurred'):
+            self.assertIn(col, rap.colonnes_client_non_mappees)
+        print("    OK T2g tout-en-un / primes : colonnes sinistres ignorées")
+
+    def test_double_passe_sur_la_meme_table(self):
+        """Effet direct du correctif : la même table se lit en sinistres PUIS en
+        primes, chaque passe ne voyant que son vocabulaire."""
+        _, r_sin = preparer_tableau(self.DF, None, kind='sinistres')
+        _, r_pri = preparer_tableau(self.DF, None, kind='primes')
+        self.assertIn('montant_paye', r_sin.champs_couverts)
+        self.assertNotIn('prime', r_sin.champs_couverts)
+        self.assertIn('prime', r_pri.champs_couverts)
+        self.assertNotIn('montant_paye', r_pri.champs_couverts)
+        print("    OK T2h double passe : sinistres puis primes sur la même table")
+
+    def test_mapping_explicite_inchange(self):
+        """Non-régression : le correctif ne touche QUE le passthrough. Un mapping
+        EXPLICITE visant 'prime' en kind='sinistres' doit toujours LEVER."""
+        with self.assertRaises(MappingTriangleIncoherent):
+            appliquer_mapping_triangle(self.DF, _schema(
+                {'annee_survenance': 'annee_survenance', 'prime': 'prime'}))
+        print("    OK T2i mapping explicite hors vocabulaire : lève toujours")
+
+
 class T3_Desambiguisation(unittest.TestCase):
     """Payé / charge / évaluation ne se confondent plus ; l'ambigu est signalé."""
 

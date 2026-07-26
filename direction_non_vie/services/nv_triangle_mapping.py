@@ -207,6 +207,16 @@ class RapportMappingTriangle:
         }
 
 
+def _catalogue(kind: str) -> frozenset:
+    """Vocabulaire canonique applicable à un kind — SOURCE UNIQUE.
+
+    Seul 'primes' ouvre le vocabulaire des primes ; toute autre valeur relève des
+    sinistres, même convention que _lever_si_inexploitable (sans cette source
+    unique, les deux divergeaient sur un kind inattendu).
+    """
+    return CHAMPS_PRIMES if kind == 'primes' else CHAMPS_SINISTRES
+
+
 def _capacites_depuis_champs(champs: set) -> Dict[str, bool]:
     """Les trois booléens de capacité à partir des champs canoniques présents.
 
@@ -239,7 +249,7 @@ def valider_mapping_triangle(schema: TriangleSchema) -> Tuple[str, ...]:
     Retourne le tuple des colonnes client dont la cible était AMBIGUË (rattachée
     par défaut) — vide si aucune. Ne lève PAS sur l'ambiguïté : elle est signalée.
     """
-    catalogue = CHAMPS_SINISTRES if schema.kind == 'sinistres' else CHAMPS_PRIMES
+    catalogue = _catalogue(schema.kind)
 
     cibles: List[str] = []
     ambigues: List[str] = []
@@ -306,7 +316,7 @@ def appliquer_mapping_triangle(
             f"double {collisions}.")
 
     df_renomme = df.rename(columns=vivantes)
-    catalogue = CHAMPS_SINISTRES if schema.kind == 'sinistres' else CHAMPS_PRIMES
+    catalogue = _catalogue(schema.kind)
     champs_couverts = sorted(set(df_renomme.columns) & catalogue)
 
     _lever_si_inexploitable(schema.kind, set(champs_couverts))
@@ -345,10 +355,18 @@ def preparer_tableau(
     # Passthrough : reconnaissance par nom (aucun mapping fourni). Une colonne
     # AMBIGUË garde son nom comme cible pour que la validation la signale ; un
     # synonyme clair est pré-résolu vers son champ canonique.
+    #
+    # FILTRE PAR KIND — une colonne reconnue HORS du vocabulaire demandé est
+    # ignorée, pas proposée en cible : sur une table « tout en un » (sinistres +
+    # une colonne de primes), la reconnaître puis la soumettre à la validation
+    # faisait lever alors qu'il n'y a rien d'anormal. Effet direct : la même table
+    # peut être lue en 'sinistres' PUIS en 'primes', chaque passe ignorant ce qui
+    # ne la concerne pas.
+    catalogue = _catalogue(kind)
     correspondances: Dict[str, str] = {}
     for col in df.columns:
         canon, ambigu = _reconnaitre(col)
-        if canon is not None:
+        if canon is not None and canon in catalogue:
             correspondances[str(col)] = _normaliser(col) if ambigu else canon
     if not correspondances:
         _lever_si_inexploitable(kind, set())   # aucune colonne reconnue → lève
