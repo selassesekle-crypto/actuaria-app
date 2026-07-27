@@ -70,6 +70,40 @@ from .n3.barnett_zehnwirth_ptf import barnett_zehnwirth_ptf
 logger = logging.getLogger('actuaria.a7')
 
 
+def _provisions_dossier(n1_rapport: Dict, triangle_reference: str,
+                        annee_base: int, n1: Dict) -> Optional[float]:
+    """Σ(charges à date − payé à date) sur les années de réserve, ou None.
+
+    None dès que la base de projection est les PAIEMENTS : le BE est alors déjà
+    `ultime − payé`, il n'y a rien à réintégrer (comportement historique intact).
+
+    En base CHARGES, les méthodes N3 rendent l'IBNR pur — il manque les
+    provisions dossier, comprises dans les charges mais pas encore payées.
+    L'écart est lu sur ce que la façade a DÉJÀ construit (`charges` et
+    `diagonale_paiements` de TrianglesConstruits) : aucun recalcul ici.
+    Renvoie None si les paiements manquent — la façade a alors déjà alerté que
+    le BE serait l'IBNR pur, et un chiffre inventé serait pire que rien.
+    """
+    if triangle_reference != 'charges':
+        return None
+    prep = n1_rapport.get('preparation')
+    tri = getattr(prep, 'triangles', None)
+    if tri is None or tri.charges is None or tri.diagonale_paiements is None:
+        n1['alertes'].append(
+            "⚠️ Base 'charges' sans triangle de paiements : provisions dossier "
+            "non réintégrables — le Best Estimate reste l'IBNR PUR, sous-estimé.")
+        return None
+    n, m = tri.charges.shape
+    diag_charges = np.array(
+        [float(tri.charges[i, min(n - i - 1, m - 1)]) for i in range(n)])
+    idx = max(0, min(int(annee_base), n - 1))
+    provisions = float(np.sum(diag_charges[idx:] - tri.diagonale_paiements[idx:]))
+    n1['infos'].append(
+        f"Base 'charges' : {provisions:,.0f}€ de provisions dossier réintégrées "
+        f"au Best Estimate (BE = IBNR pur + provisions dossier).")
+    return provisions
+
+
 class AgentA7Provisionnement:
     """
     Agent A7 Ibrahim — Provisionnement actuariel Non-Vie.
@@ -145,6 +179,7 @@ class AgentA7Provisionnement:
         arrete:           str           = '',
         resultats_precedents: Optional[Dict] = None,
         # ── Options ───────────────────────────────────────────────────────────
+        triangle_reference: str        = 'paiements',  # 'paiements' | 'charges'
         courbe_rfr:       object        = None,   # Courbe EIOPA RFR (dict rfr_eiopa)
         n_sim_bootstrap:  int           = 5000,
         seed:             int           = 42,
@@ -167,6 +202,11 @@ class AgentA7Provisionnement:
         Pipeline complet N1 → N2 → N3 → N4 → N5.
 
         Tous les paramètres sont optionnels sauf source.
+
+        `triangle_reference` choisit le triangle que les méthodes projettent :
+        'paiements' (défaut) ou 'charges'. En base 'charges', les réserves N3
+        sont l'IBNR PUR ; les provisions dossier sont réintégrées au BE en N4
+        pour retrouver la grandeur S2 `ultime − payé`. Cf. `_provisions_dossier`.
         """
         t_debut  = datetime.now()
         audit_id = f"A7_{t_debut.strftime('%Y%m%d_%H%M%S')}"
@@ -214,7 +254,7 @@ class AgentA7Provisionnement:
                 chemin_mapping     = schema_mapping,   # dict {standard: fichier} accepté
                 mode_paiements     = mode_declare,
                 mode_charges       = 'auto',
-                triangle_reference = 'paiements',      # câblé au lot 8b
+                triangle_reference = triangle_reference,
                 lob                = lob,
                 annee_debut        = annee_debut,
             )
@@ -341,11 +381,23 @@ class AgentA7Provisionnement:
             if annee_debut:
                 n3['annee_debut_triangle'] = annee_debut
 
-            n4 = self._be.calculer(n2, n3, C_calc, lob=lob, courbe_rfr=courbe_rfr)
+            # ── Base CHARGES : provisions dossier à réintégrer au BE ──────────
+            # Les méthodes N3 rendent `ultime − charges à date` (IBNR pur) quand
+            # elles tournent sur les charges. Le BE S2 est `ultime − PAYÉ à date`.
+            # L'écart est exactement Σ(charges à date − payé à date), que la
+            # façade fournit déjà : rien n'est recalculé ici. Cf. n4 § 3bis.
+            _prov_dossier = _provisions_dossier(
+                n1_rapport, triangle_reference, annee_base_reserve, n1)
+
+            n4 = self._be.calculer(n2, n3, C_calc, lob=lob, courbe_rfr=courbe_rfr,
+                                   provisions_dossier=_prov_dossier)
 
             # ── Réintégration grands sinistres (LLT) ──────────────────────────
             if reserve_grands_sinistres is not None and reserve_grands_sinistres > 0:
                 _rgs = float(reserve_grands_sinistres)
+                # `be_attritional` devient le pivot de la décomposition N4 :
+                # be_ibnr_pur + provisions_dossier == be_attritional, et
+                # best_estimate == be_attritional + reserve_grands_sinistres.
                 _be_attrit = float(n4['best_estimate'])
                 _be_final  = _be_attrit + _rgs
                 n4['best_estimate']              = round(_be_final, 0)

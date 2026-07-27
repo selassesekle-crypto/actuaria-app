@@ -131,6 +131,7 @@ class BestEstimateS2:
         C:            np.ndarray,
         lob:          str   = 'generique',
         seuil_score:  int   = 60,
+        provisions_dossier: Optional[float] = None,
         **kwargs,
     ) -> Dict:
         """
@@ -148,10 +149,17 @@ class BestEstimateS2:
             Ligne d'activité — pilote σ(LoB) EIOPA pour le SCR.
         seuil_score : int
             Score minimum pour inclure une méthode dans le BE (défaut 60).
+        provisions_dossier : float, optionnel
+            Σ(charges à date − payé à date), à fournir UNIQUEMENT quand les
+            méthodes N3 ont tourné sur un triangle de CHARGES : leurs réserves
+            sont alors l'IBNR pur, et il manque au BE les provisions dossier.
+            None (défaut) = base paiements, aucune correction — cf. § 3bis.
 
         Returns
         -------
-        dict conforme standard ActuarIA.
+        dict conforme standard ActuarIA. `best_estimate` est le BE S2 complet ;
+        `be_ibnr_pur` et `provisions_dossier` en donnent la décomposition (en
+        base paiements, `be_ibnr_pur == best_estimate` et les provisions sont 0).
         """
         scores = n2.get('scores_confiance', {})
         cfg    = get_lob_config(lob)
@@ -282,6 +290,33 @@ class BestEstimateS2:
             poids[m] * r
             for m, (r, _) in methodes_incluses.items()
         ))
+
+        # ── 3bis. BASE CHARGES : réintégration des provisions dossier ──────────
+        #
+        # ⚠️ CORRECTION RÉGLEMENTAIRE. Les méthodes N3 calculent toutes
+        # `IBNR = ultime − dernière diagonale DU TRIANGLE QU'ON LEUR A PASSÉ`.
+        # Sur un triangle de CHARGES, cette diagonale est la charge à date, donc
+        # chaque R_m — et donc `be` — vaut l'IBNR PUR : il MANQUE les provisions
+        # dossier, déjà comprises dans les charges mais pas encore payées. Or le
+        # Best Estimate S2 (Art. 77) est l'ensemble des flux FUTURS, soit
+        # `ultime − PAYÉ à date`.
+        #
+        #     ultime − payé  =  (ultime − charges)  +  (charges − payé)
+        #     réserve totale =      IBNR pur        + provisions dossier
+        #
+        # Exemple : ultime 300, charge 270, payé 50
+        #     sans correction : 300 − 270 =  30   ← IBNR pur, BE sous-estimé
+        #     avec correction :  30 + 220 = 250   ← correct (220 = 270 − 50)
+        #
+        # La correction est ADDITIVE et UNIFORME : un seul point suffit, aucune
+        # des 9 méthodes N3 n'est touchée. Elle est placée AVANT tout ce qui
+        # dérive de `be` (σ composé, percentiles, SCR, RM, PT), qui devient donc
+        # correct automatiquement.
+        #
+        # `provisions_dossier=None` (défaut) = base paiements : AUCUN changement.
+        be_ibnr_pur = be
+        if provisions_dossier:
+            be += float(provisions_dossier)
 
         # ── 4. CV inter-méthodes ──────────────────────────────────────────────
         reserves_val = [r for r, _ in methodes_incluses.values()]
@@ -505,6 +540,17 @@ class BestEstimateS2:
         resultat = {
             # Best Estimate
             'best_estimate':         round(be,     0),
+
+            # Décomposition en base CHARGES — exposée pour qu'aucun lecteur ne
+            # confonde les réserves PAR MÉTHODE (qui restent l'IBNR pur sur un
+            # triangle de charges) avec le BE total. En base paiements,
+            # provisions_dossier vaut 0 et be_ibnr_pur == best_estimate.
+            # ATTENTION : la somme des deux reconstitue le BE ATTRITIONNEL, celui
+            # que N4 calcule. Si l'appelant réintègre ensuite des grands sinistres
+            # (LLT), il écrase `best_estimate` et conserve le pivot dans
+            # `be_attritional` — c'est à lui que la décomposition se compare.
+            'be_ibnr_pur':           round(be_ibnr_pur, 0),
+            'provisions_dossier':    round(float(provisions_dossier or 0.0), 0),
 
             # Percentiles log-normale (QIS5 TP.5.26)
             'reserve_p75':           round(p75,    0),
