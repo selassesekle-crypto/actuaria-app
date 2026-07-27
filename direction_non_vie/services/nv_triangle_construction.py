@@ -206,12 +206,16 @@ def _axe_developpement(df: pd.DataFrame) -> pd.Series:
         "'annee_paiement' dans le tableau. Impossible de developper un triangle.")
 
 
-def _pivot_long(df: pd.DataFrame, mesure: str,
-                rapport: Dict) -> Tuple[np.ndarray, int]:
+def _pivot_long(df: pd.DataFrame, mesure: str, rapport: Dict,
+                annees_reference: Optional[Tuple[int, int, int]] = None
+                ) -> Tuple[np.ndarray, int]:
     """Tableau long → matrice INCRÉMENTALE (survenance × développement).
 
     Les montants NÉGATIFS traversent tels quels et sont signalés : un recours est
     une donnée valide (décision Bloc I). Aucun .abs(), aucun plancher.
+
+    `annees_reference = (annee_min, n_annees, n_dev)` IMPOSE le repère au lieu de
+    le déduire des seules lignes reçues — cf. construire_depuis_long.
     """
     if 'annee_survenance' not in df.columns:
         raise ConstructionImpossible(
@@ -226,7 +230,8 @@ def _pivot_long(df: pd.DataFrame, mesure: str,
     }).dropna(subset=['surv', 'dev'])
     travail['val'] = travail['val'].fillna(0.0)
     travail = travail[travail['dev'] >= 0]
-    if travail.empty:
+
+    if travail.empty and annees_reference is None:
         raise ConstructionImpossible(
             f"aucune ligne exploitable pour la mesure '{mesure}' "
             "(annee de survenance ou developpement manquants).")
@@ -237,31 +242,67 @@ def _pivot_long(df: pd.DataFrame, mesure: str,
             f"⚠️ {n_neg} montant(s) négatif(s) sur '{mesure}' — CONSERVÉS "
             f"(recours/subrogation : donnée valide, jamais transformée).")
 
-    annee_min = int(travail['surv'].min())
-    n_annees  = int(travail['surv'].max()) - annee_min + 1
-    n_dev     = int(travail['dev'].max()) + 1
-    inc = np.zeros((n_annees, max(n_dev, n_annees)))
+    if annees_reference is not None:
+        annee_min, n_annees, n_dev = (int(v) for v in annees_reference)
+        if travail.empty:
+            # Groupe VIDE sur repère imposé : cas NOMINAL (ex. aucun sinistre
+            # au-dessus du seuil LLT) → matrice de zéros, jamais une exception.
+            rapport['infos'].append(
+                f"Aucune ligne pour '{mesure}' — triangle de zéros sur le repère "
+                f"imposé ({annee_min}, {n_annees}×{n_dev}).")
+    else:
+        annee_min = int(travail['surv'].min())
+        n_annees  = int(travail['surv'].max()) - annee_min + 1
+        n_dev     = max(int(travail['dev'].max()) + 1, n_annees)
+
+    inc = np.zeros((n_annees, n_dev))
+    hors = 0
     for surv, dev, val in travail[['surv', 'dev', 'val']].itertuples(index=False):
         i, j = int(surv) - annee_min, int(dev)
-        if 0 <= i < inc.shape[0] and 0 <= j < inc.shape[1]:
+        if 0 <= i < n_annees and 0 <= j < n_dev:
             inc[i, j] += float(val)
+        else:
+            hors += 1
+    if hors > 0:
+        rapport['alertes'].append(
+            f"⚠️ {hors} ligne(s) de '{mesure}' hors du repère imposé "
+            f"({annee_min}–{annee_min + n_annees - 1}, {n_dev} périodes) — IGNORÉE(S).")
     return inc, annee_min
 
 
 def construire_depuis_long(df: pd.DataFrame, mesure: str,
-                           rapport: Optional[Dict] = None
+                           rapport: Optional[Dict] = None,
+                           annees_reference: Optional[Tuple[int, int, int]] = None
                            ) -> Tuple[np.ndarray, int]:
     """Tableau long → triangle CUMULÉ + année de la ligne 0.
 
     Pivot par (survenance, développement), puis cumul et masquage de la zone
     future. Aucune transformation des négatifs.
+
+    `annees_reference = (annee_min, n_annees, n_dev)` — REPÈRE IMPOSÉ. Sans lui,
+    le repère est déduit des seules lignes reçues, ce qui est correct pour un
+    portefeuille entier mais FAUX pour un sous-ensemble : deux sous-ensembles d'un
+    même portefeuille (attritionnel / grands sinistres) obtiendraient des repères
+    différents, le sous-ensemble perdrait les années de survenance où il n'a aucun
+    sinistre, et la zone connue rétrécirait (le masquage `i+j >= n` utilise le n
+    LOCAL). Les triangles ne seraient alors ni comparables ni recombinables.
+
+    ⚠️ CONTRAT POUR LA FAÇADE (module 7) : après une séparation (module 5), elle
+    DOIT passer aux DEUX constructions le repère de la SOURCE COMPLÈTE — obtenu
+    d'un premier appel sans repère sur la table entière. C'est ce qui garantit
+    `C_attritionnel + C_grands = C_total` et un attritionnel couvrant toutes les
+    années du portefeuille.
+
+    Un groupe VIDE avec repère imposé est un cas NOMINAL (triangle de zéros), pas
+    une erreur : un seuil qui ne capture aucun sinistre est une situation normale.
     """
     rapport = rapport if rapport is not None else {'alertes': [], 'infos': []}
-    inc, annee_min = _pivot_long(df, mesure, rapport)
+    inc, annee_min = _pivot_long(df, mesure, rapport, annees_reference)
     C = _cumuler_et_masquer(inc)
     rapport['infos'].append(
         f"Triangle '{mesure}' construit : {C.shape[0]} années "
-        f"({annee_min}→{annee_min + C.shape[0] - 1}), {C.shape[1]} périodes.")
+        f"({annee_min}→{annee_min + C.shape[0] - 1}), {C.shape[1]} périodes"
+        f"{' [repère imposé]' if annees_reference is not None else ''}.")
     return C, annee_min
 
 
@@ -451,8 +492,9 @@ def _normaliser_primes(primes, n_annees: int, rapport: Dict) -> Optional[np.ndar
 # =============================================================================
 #  5. LE DISPATCHER
 # =============================================================================
-def _preparer_base(source, mode: str, mesure: str, libelle: str,
-                   rapport: Dict) -> Tuple[Optional[np.ndarray], Optional[int]]:
+def _preparer_base(source, mode: str, mesure: str, libelle: str, rapport: Dict,
+                   annees_reference: Optional[Tuple[int, int, int]] = None
+                   ) -> Tuple[Optional[np.ndarray], Optional[int]]:
     """Une base (paiements OU charges) → triangle cumulé + année de la ligne 0.
 
     Décide du cas d'entrée : un DataFrame portant 'annee_survenance' est un
@@ -464,7 +506,7 @@ def _preparer_base(source, mode: str, mesure: str, libelle: str,
 
     est_long = isinstance(source, pd.DataFrame) and 'annee_survenance' in source.columns
     if mode == 'brut' or (mode == 'auto' and est_long):
-        return construire_depuis_long(source, mesure, rapport)
+        return construire_depuis_long(source, mesure, rapport, annees_reference)
 
     M = np.asarray(source.values if isinstance(source, pd.DataFrame) else source,
                    dtype=float)
@@ -487,7 +529,8 @@ def _preparer_base(source, mode: str, mesure: str, libelle: str,
 
 
 def _preparer_charges(charges, mode: str, C_paie: Optional[np.ndarray],
-                      annee_min: Optional[int], rapport: Dict
+                      annee_min: Optional[int], rapport: Dict,
+                      annees_reference: Optional[Tuple[int, int, int]] = None
                       ) -> Tuple[Optional[np.ndarray], Optional[int]]:
     """Les charges par l'un des DEUX chemins, selon ce que porte la source.
 
@@ -500,7 +543,8 @@ def _preparer_charges(charges, mode: str, C_paie: Optional[np.ndarray],
     est_long = (isinstance(charges, pd.DataFrame)
                 and 'annee_survenance' in charges.columns)
     if charges is None or not est_long or 'montant_charge' in charges.columns:
-        return _preparer_base(charges, mode, 'montant_charge', 'Charges', rapport)
+        return _preparer_base(charges, mode, 'montant_charge', 'Charges', rapport,
+                              annees_reference)
 
     if C_paie is None:
         raise ConstructionImpossible(
@@ -547,6 +591,7 @@ def construire_triangles(
     mode_charges: str = 'auto',
     base_reference: str = 'paiements',
     annee_min: Optional[int] = None,
+    annees_reference: Optional[Tuple[int, int, int]] = None,
 ) -> TrianglesConstruits:
     """Construit les DEUX triangles disponibles et rend un TrianglesConstruits.
 
@@ -572,6 +617,11 @@ def construire_triangles(
     l'alignement par année est impossible et le module refuse plutôt que de poser
     les provisions au hasard.
 
+    `annees_reference = (annee_min, n_annees, n_dev)` : REPÈRE IMPOSÉ pour les
+    tableaux longs — indispensable quand on construit un SOUS-ENSEMBLE (après une
+    séparation LLT) pour qu'il garde toutes les années du portefeuille et reste
+    recombinable. Cf. construire_depuis_long pour le contrat de la façade.
+
     LÈVE ConstructionImpossible si aucun triangle n'est constructible, si une
     cumulativité ambiguë n'est pas déclarée, ou si une dérivation est demandée
     sans axe d'années connu.
@@ -583,12 +633,13 @@ def construire_triangles(
             f"(attendu 'paiements' ou 'charges').")
 
     C_paie, annee_min_paie = _preparer_base(
-        paiements, mode_paiements, 'montant_paye', 'Paiements', rapport)
+        paiements, mode_paiements, 'montant_paye', 'Paiements', rapport,
+        annees_reference)
     if annee_min_paie is not None:
         annee_min = annee_min_paie      # déduite du long : prioritaire sur l'argument
 
     C_charges, annee_min_ch = _preparer_charges(
-        charges, mode_charges, C_paie, annee_min, rapport)
+        charges, mode_charges, C_paie, annee_min, rapport, annees_reference)
     if annee_min is None:
         annee_min = annee_min_ch
 

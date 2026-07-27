@@ -292,6 +292,62 @@ class T5_Primes(unittest.TestCase):
         print("    OK T5e vecteur de primes trop court : complété + signalé")
 
 
+class T7_Repere_Annees_Impose(unittest.TestCase):
+    """Option A — `annees_reference` impose le repère au lieu de le déduire.
+
+    Sans repère, un SOUS-ENSEMBLE perd les années où il n'a aucun sinistre et sa
+    zone connue rétrécit (le masquage `i+j >= n` utilise le n LOCAL) : deux
+    sous-ensembles d'un même portefeuille deviennent ni comparables ni
+    recombinables. Le repère imposé règle les deux à la fois.
+    """
+
+    def test_non_regression_sans_repere(self):
+        """Le nouveau paramètre ne change RIEN quand il n'est pas fourni."""
+        sans = construire_depuis_long(LONG_PAIE, 'montant_paye')
+        avec_none = construire_depuis_long(LONG_PAIE, 'montant_paye', None, None)
+        np.testing.assert_allclose(sans[0], avec_none[0])
+        self.assertEqual(sans[1], avec_none[1])
+        # et par le dispatcher
+        r1 = construire_triangles(paiements=LONG_PAIE)
+        r2 = construire_triangles(paiements=LONG_PAIE, annees_reference=None)
+        np.testing.assert_allclose(r1.paiements, r2.paiements)
+        print("    OK T7a non-régression : sans repère, comportement identique")
+
+    def test_repere_impose_conserve_les_annees_absentes(self):
+        """Un sous-ensemble ne couvrant qu'une année garde tout le repère."""
+        sous = LONG_PAIE[LONG_PAIE['annee_survenance'] == 2021]
+        sans, amin_sans = construire_depuis_long(sous, 'montant_paye')
+        self.assertEqual(sans.shape[0], 1)          # une seule ligne : 2021
+        self.assertEqual(amin_sans, 2021)
+        avec, amin_avec = construire_depuis_long(
+            sous, 'montant_paye', None, (2020, 3, 3))
+        self.assertEqual(avec.shape, (3, 3))        # les 3 années du portefeuille
+        self.assertEqual(amin_avec, 2020)
+        self.assertAlmostEqual(avec[0].sum(), 0.0)  # 2020 : aucun sinistre → zéros
+        self.assertAlmostEqual(avec[1, 0], 120.0)   # 2021 sur SA ligne
+        print("    OK T7b repère imposé : 3 années conservées, 2021 bien placée")
+
+    def test_groupe_vide_est_nominal(self):
+        """Cas NOMINAL (ex. seuil LLT ne capturant personne) : triangle de zéros,
+        PAS d'exception. Sans repère, la même table vide lève."""
+        vide = LONG_PAIE.iloc[0:0]
+        with self.assertRaises(ConstructionImpossible):
+            construire_depuis_long(vide, 'montant_paye')          # sans repère
+        C, amin = construire_depuis_long(vide, 'montant_paye', None, (2020, 3, 3))
+        self.assertEqual(C.shape, (3, 3))
+        self.assertAlmostEqual(float(C.sum()), 0.0)
+        self.assertEqual(amin, 2020)
+        print("    OK T7c groupe vide + repère : triangle de zéros, aucune exception")
+
+    def test_lignes_hors_repere_ignorees_et_signalees(self):
+        """Une ligne hors du repère imposé est ignorée — mais jamais en silence."""
+        rapport = {'alertes': [], 'infos': []}
+        C, _ = construire_depuis_long(LONG_PAIE, 'montant_paye', rapport, (2020, 2, 3))
+        self.assertEqual(C.shape, (2, 3))           # 2022 hors repère
+        self.assertTrue(any('hors du repère' in a for a in rapport['alertes']))
+        print("    OK T7d ligne hors repère : ignorée + alertée")
+
+
 class T6_Garde_Fous_Et_Forme(unittest.TestCase):
     """Erreurs propres et contrat de sortie."""
 

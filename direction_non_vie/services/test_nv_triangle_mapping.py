@@ -259,6 +259,27 @@ class T5_Forme(unittest.TestCase):
             self.assertIn(cle, s)
         print("    OK T5a synthese() json-sérialisable, clés de capacité présentes")
 
+    def test_sinistre_id_canonique_et_sans_regression(self):
+        """`sinistre_id` ajouté au vocabulaire (prérequis de la séparation LLT :
+        le seuil porte sur le coût TOTAL d'un sinistre, donc il faut pouvoir
+        regrouper ses lignes). Vérifie aussi qu'il ne perturbe RIEN : il n'est ni
+        une mesure ni un axe, donc il ne change aucune capacité."""
+        self.assertIn('sinistre_id', CHAMPS_SINISTRES)
+        self.assertNotIn('sinistre_id', CHAMPS_PRIMES)     # sans objet côté primes
+        # reconnu par ses synonymes
+        for brut in ('claim_id', 'id_sinistre', 'num_sinistre', 'SINISTRE_ID'):
+            self.assertIn('sinistre_id', capacites([brut])['champs_reconnus'], brut)
+        # NON-RÉGRESSION : sa présence ne change aucune capacité
+        sans = capacites(['annee_survenance', 'dev', 'paid'])
+        avec = capacites(['claim_id', 'annee_survenance', 'dev', 'paid'])
+        for cle in ('peut_construire_paiements', 'peut_construire_charges',
+                    'peut_deriver_charges'):
+            self.assertEqual(sans[cle], avec[cle], cle)
+        # et il n'est PAS une mesure : seul, il ne rend rien constructible
+        seul = capacites(['claim_id', 'annee_survenance', 'dev'])
+        self.assertFalse(seul['peut_construire_paiements'])
+        print("    OK T5c sinistre_id canonique, reconnu, sans effet sur les capacités")
+
     def test_vocabulaire_desambigue(self):
         # la désambiguïsation EST le point : payé et charge sont deux champs distincts
         self.assertIn('montant_paye', CHAMPS_SINISTRES)

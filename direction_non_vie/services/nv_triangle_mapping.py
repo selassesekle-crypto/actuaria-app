@@ -62,9 +62,14 @@ __all__ = [
 _AXES = ('annee_developpement', 'annee_paiement')
 # ── Mesures : les trois briques ──────────────────────────────────────────────
 _MESURES = ('montant_paye', 'montant_charge', 'evaluation_courante')
+# ── Identifiant de dossier : facultatif pour construire un triangle, mais
+#  INDISPENSABLE à la séparation par seuil (LLT). Le seuil porte sur le coût
+#  TOTAL d'un sinistre : sans identifiant, un dossier réglé en plusieurs
+#  versements serait jugé ligne à ligne et passerait sous le seuil.
+_IDENTIFIANT = 'sinistre_id'
 
 CHAMPS_SINISTRES: frozenset = frozenset(
-    {'annee_survenance'} | set(_AXES) | set(_MESURES))
+    {'annee_survenance', _IDENTIFIANT} | set(_AXES) | set(_MESURES))
 CHAMPS_PRIMES:    frozenset = frozenset({'annee_survenance', 'prime'})
 _CANONIQUES:      frozenset = CHAMPS_SINISTRES | CHAMPS_PRIMES
 
@@ -74,6 +79,8 @@ _CANONIQUES:      frozenset = CHAMPS_SINISTRES | CHAMPS_PRIMES
 #  explicite : passthrough et capacites(). Un mapping YAML explicite reste
 #  prioritaire et cible directement le champ canonique.
 SYNONYMES: Dict[str, Tuple[str, ...]] = {
+    'sinistre_id':         ('sinistre_id', 'claim_id', 'id_sinistre', 'num_sinistre',
+                            'numero_sinistre', 'claimid', 'claim_number', 'id_claim'),
     'annee_survenance':    ('annee_survenance', 'survenance', 'ay', 'accident_year',
                             'annee_sinistre', 'origin_year', 'loss_year', 'annee', 'year'),
     'annee_developpement': ('annee_developpement', 'dev', 'development', 'lag',
