@@ -60,7 +60,8 @@ from direction_non_vie.services.nv_triangle_construction import (
 from direction_non_vie.services.nv_triangle_diagnostics import diagnostiquer_triangle
 from direction_non_vie.services.nv_triangle_io import lire_source
 from direction_non_vie.services.nv_triangle_mapping import (
-    RapportMappingTriangle, preparer_tableau,
+    RapportMappingTriangle, TriangleSchema, appliquer_mapping_triangle,
+    preparer_tableau,
 )
 from direction_non_vie.services.nv_triangle_separation import (
     SeparationLLT, avertir_si_agregat, separer_par_seuil,
@@ -131,15 +132,42 @@ def _etape_lecture(source, nom_onglet: Optional[str], rapport: Dict,
     return lu['brut']
 
 
-def _etape_mapping(brut, chemin_mapping: Optional[str], kind: str, rapport: Dict,
+def _schema_depuis_dict(mapping: Dict[str, str], kind: str) -> TriangleSchema:
+    """Convertit le `schema_mapping` historique en TriangleSchema du module 2.
+
+    ⚠️ LES DEUX CONVENTIONS SONT INVERSES, et s'y tromper mismapperait les
+    colonnes en silence :
+      · agent.py / validator : {nom_STANDARD: nom_dans_le_FICHIER}
+        ex. {'montant': 'cout_total', 'annee_survenance': 'ay'}
+      · module 2             : {nom_CLIENT: champ_CANONIQUE}
+        ex. {'cout_total': 'montant_paye', 'ay': 'annee_survenance'}
+    On inverse donc le dict. Les noms standard hérités et ambigus (`montant`)
+    sont résolus par le module 2 lui-même, avec son alerte d'ambiguïté.
+    """
+    return TriangleSchema(kind=kind, source='(schema_mapping)',
+                          correspondances={str(fichier): str(standard)
+                                           for standard, fichier in mapping.items()})
+
+
+def _etape_mapping(brut, chemin_mapping, kind: str, rapport: Dict,
                    libelle: str) -> Tuple[Any, Optional[RapportMappingTriangle]]:
     """Étape B — délègue au module 2. Une MATRICE est positionnelle : aucun
-    mapping de colonnes n'a de sens, on la laisse passer."""
+    mapping de colonnes n'a de sens, on la laisse passer.
+
+    `chemin_mapping` accepte un chemin YAML, un DICT `{standard: fichier}`
+    (convention historique d'agent.py, cf. _schema_depuis_dict), ou None
+    (passthrough par reconnaissance de noms).
+    """
     if not isinstance(brut, pd.DataFrame):
         rapport['etapes'][f'mapping_{libelle}'] = 'ignore (matrice positionnelle)'
         return brut, None
-    df, rap = preparer_tableau(brut, chemin_mapping, kind=kind)
-    rapport['etapes'][f'mapping_{libelle}'] = 'ok'
+    if isinstance(chemin_mapping, dict):
+        df, rap = appliquer_mapping_triangle(
+            brut, _schema_depuis_dict(chemin_mapping, kind))
+        rapport['etapes'][f'mapping_{libelle}'] = 'ok (schema_mapping)'
+    else:
+        df, rap = preparer_tableau(brut, chemin_mapping, kind=kind)
+        rapport['etapes'][f'mapping_{libelle}'] = 'ok'
     if rap is not None:
         for col in rap.mesures_ambigues:
             rapport['alertes'].append(
@@ -238,6 +266,21 @@ def _absorber(rapport: Dict, source: Dict, etape: str) -> None:
             rapport[cle].append(f"[{etape}] {message}")
 
 
+def _mode_resolu(retenus: TrianglesConstruits, mode_paiements: str) -> str:
+    """Mode RÉELLEMENT retenu, pour le champ `mode_detecte` des livrables.
+
+    Rapporter 'auto' serait une perte d'information : l'ancien N1 affichait la
+    cumulativité DÉTECTÉE. On redemande donc le verdict à la source unique
+    (delegation, pas duplication — même politique que le contrôle C1).
+    """
+    if mode_paiements != 'auto' or retenus.reference is None:
+        return mode_paiements
+    from direction_non_vie.services.nv_triangle_construction import (
+        detecter_cumulativite,
+    )
+    return detecter_cumulativite(retenus.reference)
+
+
 def _finaliser_rapport(rapport: Dict, retenus: TrianglesConstruits,
                        mode_paiements: str) -> None:
     """Statut global + les clés de forme qu'`agent.py` consomme (cf. adaptateur).
@@ -253,7 +296,7 @@ def _finaliser_rapport(rapport: Dict, retenus: TrianglesConstruits,
         rapport['statut'] = 'AMBRE' if rapport['alertes'] else 'VERT'
     rapport.update({'taille': f"{retenus.n_annees}×{retenus.n_dev}",
                     'n_annees': retenus.n_annees, 'n_dev': retenus.n_dev,
-                    'mode_detecte': mode_paiements})
+                    'mode_detecte': _mode_resolu(retenus, mode_paiements)})
 
 
 # =============================================================================

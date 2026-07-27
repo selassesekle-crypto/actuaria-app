@@ -5,7 +5,8 @@
 #
 #  Pipeline complet N1 → N2 → N3 → N4 → N5 :
 #
-#  N1 — Ingestion & validation (n1_ingestion.TriangleValidator)
+#  N1 — Ingestion & validation (services.nv_triangle, façade du Bloc II :
+#       lire → mapper → séparer → construire → diagnostiquer)
 #  N2 — Hypothèses H1/H2/H3/H4 (n2_hypotheses.HypothesesValidator)
 #  N3 — Méthodes actuarielles (n3/chain_ladder, mack, bf_cape_cod,
 #                               bootstrap_odp, munich_cl)
@@ -36,7 +37,7 @@ from typing import Dict, List, Optional
 import numpy as np
 
 # ── Imports modules A7 ───────────────────────────────────────────────────────
-from direction_non_vie.services.nv_triangle_validator import TriangleValidator
+from direction_non_vie.services.nv_triangle import preparer_pour_agent
 from .n2_hypotheses     import HypothesesValidator
 from .n4_best_estimate  import BestEstimateS2, garde_fou_be_negatif, s2_non_calculable
 # Alias VOLONTAIRE — ne pas « nettoyer » : `generer_graphiques` est aussi un
@@ -118,8 +119,7 @@ class AgentA7Provisionnement:
         self.models_path.mkdir(parents=True, exist_ok=True)
         self.audit_path.mkdir(parents=True, exist_ok=True)
 
-        # Sous-modules
-        self._tv  = TriangleValidator(verbose=verbose)
+        # Sous-modules (N1 est désormais la façade nv_triangle, sans état)
         self._hv  = HypothesesValidator()
         self._be  = BestEstimateS2()
 
@@ -202,12 +202,21 @@ class AgentA7Provisionnement:
             if self.verbose:
                 logger.info("N1 — Ingestion & validation")
 
-            C, C_engage, primes_norm, n1_rapport = self._tv.charger(
-                source          = source,
-                mode            = mode_declare,
-                triangle_engage = triangle_engage,
-                primes          = primes,
-                schema_mapping  = schema_mapping,
+            # Façade nv_triangle (Bloc II) : lire → mapper → séparer → construire
+            # → diagnostiquer. Remplace TriangleValidator, dont la branche
+            # triangle_engage forçait le mode 'cumule' SANS détection — un engagé
+            # fourni en incrémental était utilisé tel quel, silencieusement faux.
+            # mode_charges='auto' ferme ce trou (détection à trois états).
+            C, C_engage, primes_norm, n1_rapport = preparer_pour_agent(
+                source,
+                source_charges     = triangle_engage,
+                primes             = primes,
+                chemin_mapping     = schema_mapping,   # dict {standard: fichier} accepté
+                mode_paiements     = mode_declare,
+                mode_charges       = 'auto',
+                triangle_reference = 'paiements',      # câblé au lot 8b
+                lob                = lob,
+                annee_debut        = annee_debut,
             )
 
             n, m = C.shape
