@@ -29,6 +29,25 @@ from typing import Dict, List, Optional, Tuple
 logger = logging.getLogger('actuaria.diagnostics')
 
 
+def _verdict_cumulativite(C: np.ndarray) -> str:
+    """'cumule' | 'incremental' | 'ambigu' — délégué à la SOURCE UNIQUE.
+
+    `detecter_cumulativite` (nv_triangle_construction) porte déjà cette logique à
+    trois états ; la recopier ici recréerait exactement le risque de dérive qu'on
+    a éliminé ailleurs. Import DIFFÉRÉ : ce module reste importable seul (il n'a
+    besoin que de numpy), et un environnement sans le module de construction
+    dégrade proprement en 'ambigu' — le cas prudent, qui n'accuse jamais à tort.
+    """
+    try:
+        from direction_non_vie.services.nv_triangle_construction import (
+            detecter_cumulativite,
+        )
+    except Exception as e:                      # dégradation propre, jamais un crash
+        logger.warning("detecter_cumulativite indisponible (%s) — verdict 'ambigu'.", e)
+        return 'ambigu'
+    return detecter_cumulativite(C)
+
+
 def diagnostiquer_triangle(
     C           : np.ndarray,
     annee_debut : Optional[int] = None,
@@ -128,7 +147,25 @@ def diagnostiquer_triangle(
 # =============================================================================
 
 def _ctrl_monotonie(C, n, m, annee_debut) -> Dict:
-    """C1 — Les valeurs cumulées sont croissantes sur chaque ligne."""
+    """C1 — Les valeurs cumulées décroissent-elles, et si oui pourquoi ?
+
+    Le VERDICT est délégué à detecter_cumulativite() (module de construction) —
+    SOURCE UNIQUE de cette logique, jamais recopiée ici. Ce contrôle n'ajoute que
+    l'énumération cellule par cellule, qui est un besoin d'affichage propre au
+    diagnostic.
+
+    Trois cas, là où l'ancienne version n'en voyait qu'un :
+      · 'cumule'      → VERT   : rien ne décroît au-delà du bruit d'arrondi.
+      · 'ambigu'      → AMBRE  : décroissances MODÉRÉES ou PARTIELLES — signature
+                        d'un RECOURS / subrogation, parfaitement légitime sur un
+                        cumulé (le chantier IBNR l'a établi pour toutes les
+                        méthodes). L'ancienne version criait « vérifier le
+                        format » et retirait 15 points à une donnée SAINE : dès
+                        2 % de recours elle comptait 24 violations sur un 10×10.
+      · 'incremental' → ROUGE  : décroissances FORTES et GÉNÉRALISÉES avec
+                        première colonne dominante — le triangle ressemble à des
+                        incréments bruts, c'est-à-dire une vraie erreur de format.
+    """
     pts_max = 15
     violations = []
 
@@ -151,20 +188,25 @@ def _ctrl_monotonie(C, n, m, annee_debut) -> Dict:
             'message': f"✅ Toutes les lignes sont croissantes — triangle cumulé cohérent.",
             'detail': [],
         }
-    elif len(violations) <= 2:
-        return {
-            'code': 'C1', 'libelle': 'Monotonie cumulée',
-            'statut': 'AMBRE', 'points': 8,
-            'message': f"⚠️ {len(violations)} violation(s) de monotonie — anomalie mineure.",
-            'detail': violations[:3],
-        }
-    else:
+
+    if _verdict_cumulativite(C) == 'incremental':
         return {
             'code': 'C1', 'libelle': 'Monotonie cumulée',
             'statut': 'ROUGE', 'points': 0,
-            'message': f"🔴 {len(violations)} violations — triangle peut ne pas être cumulé. Vérifier le format (A vs B).",
+            'message': (f"🔴 {len(violations)} décroissances fortes et généralisées — "
+                        f"le triangle ressemble à des INCRÉMENTS bruts. Vérifier le "
+                        f"format (cumulé vs incrémental) avant tout calcul."),
             'detail': violations[:5],
         }
+
+    return {
+        'code': 'C1', 'libelle': 'Monotonie cumulée',
+        'statut': 'AMBRE', 'points': 12,
+        'message': (f"⚠️ {len(violations)} décroissance(s) modérée(s) — cohérent avec "
+                    f"un RECOURS / subrogation légitime sur un triangle cumulé. "
+                    f"À confirmer si ce n'était pas attendu."),
+        'detail': violations[:5],
+    }
 
 
 def _ctrl_diagonales_manquantes(C, n, m, annee_debut) -> Dict:

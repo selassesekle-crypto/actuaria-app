@@ -206,34 +206,46 @@ class T5_Statut_Decouple_Du_Diagnostic(unittest.TestCase):
 
     def test_recours_legitime_non_degrade_par_le_diagnostic(self):
         """TEST OBLIGATOIRE — un triangle à recours LÉGITIME traverse la façade
-        et ressort avec un statut NON dégradé par le diagnostic. Le contrôle C1
-        du module 6 a un défaut connu (toute baisse > 1 % = violation, ROUGE dès
-        3) : sans le découplage, une donnée saine serait pénalisée."""
+        sans être dégradé.
+
+        Deux protections indépendantes le garantissent désormais, et ce test
+        vérifie les DEUX :
+          · le correctif C1 (module 6) ne prend plus un recours pour une erreur
+            de format — il sort AMBRE informatif, plus ROUGE ;
+          · le DÉCOUPLAGE — même si le diagnostic se dégradait, il ne colorerait
+            pas le statut global (vérifié séparément ci-dessous).
+        """
         p = preparer_triangles(_TRI_RECOURS_FORT, mode_paiements='cumule')
-        # le diagnostic voit bien un problème (C1 sur le recours)…
         diag = p.diagnostics['paiements']
         c1 = next(c for c in diag['controles'] if c['code'] == 'C1')
-        self.assertEqual(c1['statut'], 'ROUGE')             # le faux positif connu
-        # …mais le statut global n'en tient PAS compte
+        self.assertEqual(c1['statut'], 'AMBRE')             # correctif C1 : plus ROUGE
+        self.assertIn('RECOURS', c1['message'])
+        self.assertEqual(diag['statut'], 'VERT')            # score remonté à 90
         self.assertEqual(p.rapport['statut'], 'VERT')
-        self.assertEqual(p.diagnostic_statut_le_plus_severe, diag['statut'])
-        print(f"    OK T5a recours légitime : C1 ROUGE mais statut global "
-              f"{p.rapport['statut']} (découplé)")
+        print(f"    OK T5a recours légitime : C1 {c1['statut']} (corrigé), "
+              f"diagnostic {diag['statut']}, statut global {p.rapport['statut']}")
 
-    def test_diagnostic_statut_expose_mais_non_consomme(self):
-        p = preparer_triangles(_TRI_RECOURS_FORT, mode_paiements='cumule')
-        self.assertIn(p.diagnostic_statut_le_plus_severe, ('VERT', 'AMBRE', 'ROUGE'))
-        # le champ existe, mais aucune corrélation forcée avec le statut global
-        self.assertIn('diagnostic_statut_le_plus_severe', p.synthese())
-        print(f"    OK T5b diagnostic_statut_le_plus_severe = "
-              f"{p.diagnostic_statut_le_plus_severe}, exposé sans être consommé")
+    def test_diagnostic_degrade_ne_colore_pas_le_statut(self):
+        """LE découplage, exercé sur un cas où le diagnostic EST dégradé : un
+        triangle 3×3 est trop court (C4 ROUGE, score 78 = AMBRE), pourtant le run
+        lui-même est propre — le statut global reste VERT."""
+        p = preparer_triangles(LONG)
+        diag = p.diagnostics['paiements']
+        self.assertEqual(diag['statut'], 'AMBRE')            # diagnostic dégradé…
+        self.assertTrue(any(c['statut'] == 'ROUGE' for c in diag['controles']))
+        self.assertEqual(p.rapport['statut'], 'VERT')        # …statut NON coloré
+        self.assertEqual(p.diagnostic_statut_le_plus_severe, 'AMBRE')
+        print("    OK T5b diagnostic AMBRE (C4 ROUGE) mais statut global VERT — découplé")
 
     def test_alertes_diagnostic_visibles_dans_le_rapport(self):
-        """Découplé ≠ caché : le diagnostic reste intégralement visible."""
-        p = preparer_triangles(_TRI_RECOURS_FORT, mode_paiements='cumule')
-        self.assertTrue(any('[diagnostic]' in i for i in p.rapport['infos']))
+        """Découplé ≠ caché : un contrôle ROUGE reste intégralement visible."""
+        p = preparer_triangles(LONG)
+        infos = [i for i in p.rapport['infos'] if '[diagnostic]' in i]
+        self.assertTrue(infos)
+        self.assertIn('C4', infos[0])
         self.assertIn('paiements', p.diagnostics)
-        print("    OK T5c alertes de diagnostic présentes dans le rapport (visibles)")
+        self.assertIn('diagnostic_statut_le_plus_severe', p.synthese())
+        print("    OK T5c contrôle ROUGE visible dans le rapport (découplé ≠ caché)")
 
 
 class T6_Adaptateur_Agent(unittest.TestCase):
