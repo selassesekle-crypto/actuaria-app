@@ -453,10 +453,10 @@ class BestEstimateS2:
                 "dans la note méthodologique S2."
             )
 
-        # H1 rejetée → déjà dans "Point de vigilance" section 08
-        # On ne la duplique pas ici pour éviter la redondance
-        h1_ok  = n2.get('h1_independance', {}).get('ok', True)
-        h1_corr = n2.get('h1_independance', {}).get('corr_max', 0.0)
+        # H1 rejetée → déjà dans "Point de vigilance" section 08, on ne la
+        # duplique pas ici. (Les deux lectures de `h1_independance` qui vivaient
+        # à cet endroit étaient mortes : `h1_corr` n'était jamais utilisée et
+        # `h1_ok` était réassignée à l'identique plus bas, là où elle sert.)
 
         # Recommandation H4 hétéroscédasticité
         # Clé correcte : 'h4_homosc_bootstrap' (conforme n2_hypotheses.py L156)

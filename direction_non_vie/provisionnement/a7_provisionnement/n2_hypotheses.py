@@ -19,12 +19,14 @@
 # =============================================================================
 
 import logging
-import math
 from typing import Dict, Any, List, Optional, Tuple
 
 import numpy as np
 
 from .config.lob_config import get_lob_config
+# Reconstruction des facteurs individuels : SOURCE UNIQUE. Les trois boucles
+# identiques qui vivaient ici (H1, H2, H4) ont été remplacées par cet appel.
+from .n2_hypotheses_clm import facteurs_individuels
 
 logger = logging.getLogger('actuaria.a7')
 
@@ -33,9 +35,15 @@ class HypothesesValidator:
     """
     Valide les 4 hypothèses actuarielles AVANT tout calcul de méthode.
 
-    H1 — Indépendance des années de survenance (Mack 1993)
+    H1 — Corrélation entre facteurs de développement consécutifs
          Test de Spearman sur les facteurs individuels entre colonnes
          consécutives. Si corrélation significative → CL et Mack biaisés.
+         ⚠️ NE TESTE PAS l'indépendance des années de survenance, contrairement
+         à ce que son ancien libellé affirmait : une corrélation entre facteurs
+         de colonnes voisines ne dit rien d'un effet propre à une année de
+         survenance ou à une année calendaire. Ce contrôle-là est CLM-H1
+         (`n2_hypotheses_clm`), qui applique le test des signes par diagonale
+         de l'annexe 9.d du guide IA 2023.
 
     H2 — Stabilité des facteurs dans le temps
          CV des facteurs par colonne et dérive temporelle (anciens vs récents).
@@ -172,7 +180,7 @@ class HypothesesValidator:
         return logger.isEnabledFor(logging.INFO)
 
     # =========================================================================
-    #  H1 : INDÉPENDANCE DES ANNÉES DE SURVENANCE
+    #  H1 : CORRÉLATION ENTRE FACTEURS DE DÉVELOPPEMENT CONSÉCUTIFS
     # =========================================================================
 
     def _tester_h1_independance(
@@ -183,15 +191,22 @@ class HypothesesValidator:
         cfg_lob:  Dict,
     ) -> Dict:
         """
-        Test de Mack (1993) — indépendance des années de survenance.
+        Corrélation entre facteurs de développement consécutifs.
 
         Principe : pour chaque paire de colonnes consécutives (j, j+1),
         calculer la corrélation de Spearman entre les vecteurs de facteurs
         individuels f[i,j] = C[i,j+1]/C[i,j].
 
-        Si les facteurs d'une colonne sont corrélés avec ceux de la suivante,
-        cela signifie que certaines années de survenance ont un comportement
-        systématiquement différent — hypothèse d'indépendance de Mack violée.
+        ⚠️ CE QUE CE TEST NE FAIT PAS. Il s'intitulait « indépendance des années
+        de survenance » et affirmait qu'une corrélation révélait « des années de
+        survenance au comportement systématiquement différent » : c'est faux. Une
+        corrélation entre facteurs de colonnes voisines mesure la dépendance
+        sérielle du DÉVELOPPEMENT, pas un effet propre à une année. Le contrôle
+        d'indépendance des années — test des signes par diagonale de l'annexe 9.d
+        du guide IA 2023 — est CLM-H1, dans `n2_hypotheses_clm`.
+
+        Le nom de la clé de sortie (`h1_independance`) est conservé : il est lu
+        par n4 et les livrables, et le renommer déborderait du périmètre.
 
         Seuil d'alerte : |corr_moy| > h1_seuil_corr (depuis lob_config).
         H1 rejetée si : corr_moy > seuil ET au moins 2 colonnes significatives
@@ -213,19 +228,17 @@ class HypothesesValidator:
         corrs    = []
         details  = []
 
+        # Facteurs reconstruits par la SOURCE UNIQUE (n2_hypotheses_clm), plus
+        # par une boucle locale : cf. `facteurs_individuels`.
+        colonnes = facteurs_individuels(C)
+
         for j in range(m - 2):
-            f_j, f_j1 = [], []
-            for i in range(n):
-                if j + 2 >= m:
-                    continue
-                cij  = float(C[i, j])
-                cij1 = float(C[i, j+1])
-                cij2 = float(C[i, j+2])
-                if (cij > 0 and cij1 > 0 and cij2 > 0
-                        and not math.isnan(cij) and not math.isnan(cij1)
-                        and not math.isnan(cij2)):
-                    f_j.append(cij1 / cij)
-                    f_j1.append(cij2 / cij1)
+            # Appariement sur l'année i : une paire n'existe que si les trois
+            # cellules C[i,j], C[i,j+1], C[i,j+2] sont exploitables — c'est
+            # exactement l'intersection des deux colonnes de facteurs.
+            suivants = {i: f for i, f, _ in colonnes[j + 1]}
+            f_j  = [f for i, f, _ in colonnes[j] if i in suivants]
+            f_j1 = [suivants[i] for i, _, _ in colonnes[j] if i in suivants]
 
             if len(f_j) >= 4:
                 corr, pval = spearmanr(f_j, f_j1)
@@ -327,17 +340,10 @@ class HypothesesValidator:
         derive_cols  = []
         details      = []
 
+        colonnes = facteurs_individuels(C)          # source unique
+
         for j in range(m - 1):
-            facteurs = []
-            for i in range(n):
-                if j + 1 >= m:
-                    continue
-                cij  = float(C[i, j])
-                cij1 = float(C[i, j+1])
-                if (cij > 0 and cij1 > 0
-                        and not math.isnan(cij)
-                        and not math.isnan(cij1)):
-                    facteurs.append(cij1 / cij)
+            facteurs = [f for _, f, _ in colonnes[j]]
 
             if len(facteurs) >= 3:
                 arr = np.array(facteurs)
@@ -619,18 +625,11 @@ class HypothesesValidator:
         n, m            = C.shape
         var_cols: List  = []
 
+        colonnes = facteurs_individuels(C)          # source unique
+
         for j in range(m - 1):
-            facteurs, poids = [], []
-            for i in range(n):
-                if j + 1 >= m:
-                    continue
-                cij  = float(C[i, j])
-                cij1 = float(C[i, j+1])
-                if (cij > 0 and cij1 > 0
-                        and not math.isnan(cij)
-                        and not math.isnan(cij1)):
-                    facteurs.append(cij1 / cij)
-                    poids.append(cij)
+            facteurs = [f for _, f, _ in colonnes[j]]
+            poids    = [c for _, _, c in colonnes[j]]
 
             if len(facteurs) >= 3:
                 arr  = np.array(facteurs)
