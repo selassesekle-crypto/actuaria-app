@@ -191,6 +191,7 @@ class AgentA7Provisionnement:
         triangle                        = None,
         result_a2                       = None,
         mode_declare:     str           = 'auto',
+        ultime_apriori: Optional[np.ndarray] = None,  # charge ultime a priori (BF 1972)
         taux_bf_manuel: Optional[float] = None,   # alias lr_bf_manuel
         generer_graphiques: bool        = True,    # alias generer_graphiques_flag
         annee_debut:      Optional[int]  = None,   # année calendaire de la 1ère ligne
@@ -358,6 +359,7 @@ class AgentA7Provisionnement:
                 primes         = primes_norm,
                 methode_cl     = methode_cl_retenue,
                 lr_bf_manuel   = lr_bf_manuel,
+                ultime_apriori = ultime_apriori,
                 annee_base     = annee_base_reserve,
                 n_sim_bootstrap= max(200, n_sim_bootstrap),
                 seed           = seed,
@@ -774,6 +776,7 @@ class AgentA7Provisionnement:
         primes:          Optional[np.ndarray],
         methode_cl:      str,
         lr_bf_manuel:    Optional[float],
+        ultime_apriori:  Optional[np.ndarray],
         annee_base:      int,
         n_sim_bootstrap: int,
         seed:            int,
@@ -823,17 +826,20 @@ class AgentA7Provisionnement:
         )
 
         # ── Bornhuetter-Ferguson ──────────────────────────────────────────────
+        # `primes` est ici la MESURE D'EXPOSITION. Le paramètre amont s'appelle
+        # encore `primes` par héritage, mais BF et Cape Cod acceptent toute
+        # mesure de volume (contrats, capitaux assurés…) — cf. leur en-tête.
         r_bf = bornhuetter_ferguson(
             C              = C,
             pct_dev        = pct_dev,
             last_diag      = ld,
             ultimates_cl   = ult_cl,
-            primes         = primes,
+            exposition     = primes,
+            ultime_apriori = ultime_apriori,
             lr_manuel      = lr_bf_manuel,
             annee_base     = annee_base,
             lr_reference   = cfg_lob.get('lr_marche_reference'),
             lr_reference_src = cfg_lob.get('lr_marche_source', ''),
-            ratio_c0_primes  = cfg_lob.get('ratio_c0_primes', 0.35),
         )
 
         # ── Cape Cod ──────────────────────────────────────────────────────────
@@ -841,8 +847,7 @@ class AgentA7Provisionnement:
             C              = C,
             pct_dev        = pct_dev,
             last_diag      = ld,
-            ultimates_cl   = ult_cl,
-            primes         = primes,
+            exposition     = primes,
             annee_base     = annee_base,
             lr_reference   = cfg_lob.get('lr_marche_reference'),
             lr_reference_src = cfg_lob.get('lr_marche_source', ''),

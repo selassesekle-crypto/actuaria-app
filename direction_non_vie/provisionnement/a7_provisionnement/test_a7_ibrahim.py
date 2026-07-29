@@ -247,22 +247,29 @@ class T4_Bootstrap_RAA(unittest.TestCase):
 # lob_config.py (3 blocs contenaient des clés définies plusieurs fois, Python
 # gardant la dernière). Ce snapshot verrouille le comportement : toute édition
 # qui change accidentellement une de ces valeurs fait échouer T7.
+#
+# CLÉ RETIRÉE — lot BF/Cape Cod : `ratio_c0_primes`. Elle ne servait qu'au proxy
+# de primes fictives de Bornhuetter-Ferguson (`C[i,0] / ratio`), supprimé avec la
+# règle d'exposition obligatoire. Ses 14 définitions LoB n'avaient plus aucun
+# consommateur. Une configuration morte est plus trompeuse qu'un code mort : elle
+# ressemble à un réglage, et un actuaire aurait pu croire ajuster un comportement
+# qui n'existe plus. Le snapshot garde tout son rôle sur les clés restantes.
 _LOB_REFERENCE = {
-    'accidents_corporels':         {'risque_long': False, 'tail_seuil_stabilisation': 1.02, 'ratio_c0_primes': 0.4},
-    'catastrophes_naturelles':     {'risque_long': False, 'tail_seuil_stabilisation': 1.02, 'ratio_c0_primes': 0.45},
-    'construction':                {'risque_long': True,  'tail_seuil_stabilisation': 1.1,  'ratio_c0_primes': 0.04},
-    'credit_caution':              {'risque_long': True,  'tail_seuil_stabilisation': 1.05, 'ratio_c0_primes': 0.15},
-    'dommage_corporel_individuel': {'risque_long': True,  'tail_seuil_stabilisation': 1.05, 'ratio_c0_primes': 0.2},
-    'generique':                   {'risque_long': True,  'tail_seuil_stabilisation': 1.02, 'ratio_c0_primes': 0.35},
-    'incendie_dommages':           {'risque_long': False, 'tail_seuil_stabilisation': 1.01, 'ratio_c0_primes': None},
-    'marine_aviation_transport':   {'risque_long': True,  'tail_seuil_stabilisation': 1.05, 'ratio_c0_primes': 0.25},
-    'mrh':                         {'risque_long': False, 'tail_seuil_stabilisation': 1.01, 'ratio_c0_primes': 0.55},
-    'protection_juridique':        {'risque_long': False, 'tail_seuil_stabilisation': 1.01, 'ratio_c0_primes': 0.4},
-    'rc_auto_corporels':           {'risque_long': True,  'tail_seuil_stabilisation': 1.1,  'ratio_c0_primes': 0.08},
-    'rc_auto_materiel':            {'risque_long': False, 'tail_seuil_stabilisation': 1.01, 'ratio_c0_primes': 0.45},
-    'rc_generale':                 {'risque_long': True,  'tail_seuil_stabilisation': 1.05, 'ratio_c0_primes': 0.18},
-    'rc_medicale':                 {'risque_long': True,  'tail_seuil_stabilisation': 1.1,  'ratio_c0_primes': 0.06},
-    'transport':                   {'risque_long': True,  'tail_seuil_stabilisation': 1.05, 'ratio_c0_primes': 0.25},
+    'accidents_corporels':         {'risque_long': False, 'tail_seuil_stabilisation': 1.02},
+    'catastrophes_naturelles':     {'risque_long': False, 'tail_seuil_stabilisation': 1.02},
+    'construction':                {'risque_long': True,  'tail_seuil_stabilisation': 1.1},
+    'credit_caution':              {'risque_long': True,  'tail_seuil_stabilisation': 1.05},
+    'dommage_corporel_individuel': {'risque_long': True,  'tail_seuil_stabilisation': 1.05},
+    'generique':                   {'risque_long': True,  'tail_seuil_stabilisation': 1.02},
+    'incendie_dommages':           {'risque_long': False, 'tail_seuil_stabilisation': 1.01},
+    'marine_aviation_transport':   {'risque_long': True,  'tail_seuil_stabilisation': 1.05},
+    'mrh':                         {'risque_long': False, 'tail_seuil_stabilisation': 1.01},
+    'protection_juridique':        {'risque_long': False, 'tail_seuil_stabilisation': 1.01},
+    'rc_auto_corporels':           {'risque_long': True,  'tail_seuil_stabilisation': 1.1},
+    'rc_auto_materiel':            {'risque_long': False, 'tail_seuil_stabilisation': 1.01},
+    'rc_generale':                 {'risque_long': True,  'tail_seuil_stabilisation': 1.05},
+    'rc_medicale':                 {'risque_long': True,  'tail_seuil_stabilisation': 1.1},
+    'transport':                   {'risque_long': True,  'tail_seuil_stabilisation': 1.05},
 }
 
 
@@ -287,7 +294,7 @@ class T7_LobConfig_Snapshot(unittest.TestCase):
                     f"(valeur effective d'avant nettoyage B8).",
                 )
         print(f"    OK T7 lob_config : {len(_LOB_REFERENCE)} LoB verrouillées "
-              f"(risque_long / tail_seuil_stabilisation / ratio_c0_primes)")
+              f"(risque_long / tail_seuil_stabilisation)")
 
 
 # =============================================================================
@@ -987,8 +994,14 @@ class T19_BE_Negatif_Livrables_Et_RM(unittest.TestCase):
         # elle aussi, inchangée.
         r = self._run(source=GENINS, reserve_grands_sinistres=2_000_000.0, n_grands_sinistres=2)
         self.assertTrue(r['success'], r.get('erreur'))
-        self.assertAlmostEqual(r['n4']['risk_margin'], 3_012_464, delta=1)
-        print("    OK T19c LLT normal : RM = 3 012 464 (recalcul ≡ proratisation)")
+        #
+        # CONSTANTE MISE À JOUR UNE TROISIÈME FOIS — lot BF/Cape Cod :
+        # 3 012 464 → 2 705 961. La Risk Margin est linéaire en SCR, donc en BE ;
+        # le BE GenIns passe de 21 023 363 à 18 680 856 parce que BF et Cape Cod
+        # ne tournent plus sans mesure d'exposition. La relation testée — recalcul
+        # à neuf ≡ proratisation — n'a toujours pas bougé.
+        self.assertAlmostEqual(r['n4']['risk_margin'], 2_705_961, delta=1)
+        print("    OK T19c LLT normal : RM = 2 705 961 (recalcul ≡ proratisation)")
 
 
 # =============================================================================

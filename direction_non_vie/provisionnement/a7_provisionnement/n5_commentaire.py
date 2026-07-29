@@ -36,6 +36,7 @@ import logging
 from datetime import datetime
 from typing import Dict, Optional
 
+from .n3.bf_cape_cod import libelle_loss_ratio
 from .n4_best_estimate import s2_non_calculable, MSG_S2_NON_CALCULABLE
 
 logger = logging.getLogger('actuaria.a7')
@@ -436,8 +437,8 @@ def _s4_methodes(n3: Dict, n4: Dict) -> str:
         f"Quatre méthodes actuarielles ont été calculées :",
         f"  • Chain Ladder ({cl.get('methode','').split('(')[1].rstrip(')') if '(' in cl.get('methode','') else 'standard'}) : {_e(cl_r)}",
         f"  • Mack 1993 (stochastique)                         : {_e(mk_r)}",
-        f"  • Bornhuetter-Ferguson (LR={_p(bf.get('lr_apriori',0)*100)}, {bf.get('source_lr','—')}) : {_e(bf_r)}",
-        f"  • Cape Cod (LR_CC={_p(cc.get('lr_cape_cod',0)*100)})                    : {_e(cc_r)}",
+        f"  • Bornhuetter-Ferguson (LR={libelle_loss_ratio(bf)}, {bf.get('source_lr','—')}) : {_e(bf_r)}",
+        f"  • Cape Cod (LR_CC={libelle_loss_ratio(cc, 'lr_cape_cod')})                    : {_e(cc_r)}",
         "",
     ]
 
@@ -1063,7 +1064,7 @@ def _lob_rc_generale(n1, n2, n3, n4):
     n_ann = n1.get('n_annees', 0)
     h1_ok = n2.get('h1_independance', {}).get('ok', True)
     h2_ok = n2.get('h2_stabilite', {}).get('ok', True)
-    bf_lr = n3.get('bf', {}).get('lr_apriori', 0)
+    bf_lr = n3.get('bf', {}).get('lr_apriori') or 0.0
     be    = n4.get('best_estimate', 0)
     tail  = n3.get('chain_ladder', {}).get('tail_factor', {})
     tail_val = tail.get('tail_factor', 1.0) if isinstance(tail, dict) else 1.0
@@ -1157,7 +1158,7 @@ def _lob_rc_generale(n1, n2, n3, n4):
 def _lob_rc_auto_corporels(n1, n2, n3, n4):
     n_ann    = n1.get('n_annees', 0)
     h1_ok    = n2.get('h1_independance', {}).get('ok', True)
-    bf_lr    = n3.get('bf', {}).get('lr_apriori', 0)
+    bf_lr    = n3.get('bf', {}).get('lr_apriori') or 0.0
     tail     = n3.get('chain_ladder', {}).get('tail_factor', {})
     tail_val = tail.get('tail_factor', 1.0) if isinstance(tail, dict) else 1.0
     p995     = n4.get('reserve_p99_5', 0)
@@ -1269,7 +1270,7 @@ def _lob_rc_medicale(n1, n2, n3, n4):
     tail_val = tail.get('tail_factor', 1.0) if isinstance(tail, dict) else 1.0
     be       = n4.get('best_estimate', 0)
     p90      = n4.get('reserve_p90', 0)
-    bf_lr    = n3.get('bf', {}).get('lr_apriori', 0)
+    bf_lr    = n3.get('bf', {}).get('lr_apriori') or 0.0
 
     contexte = (
         "SPÉCIFICITÉS RC MÉDICALE : "

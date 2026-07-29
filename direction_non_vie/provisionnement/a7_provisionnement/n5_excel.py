@@ -26,6 +26,10 @@ from typing import Dict, Optional
 
 import numpy as np
 
+# Formatage du loss ratio : source unique, pour qu'une méthode non calculée
+# n'apparaisse jamais comme un loss ratio de 0 %.
+from .n3.bf_cape_cod import libelle_loss_ratio
+
 logger = logging.getLogger('actuaria.a7')
 
 try:
@@ -389,9 +393,9 @@ def _ong4_methodes(wb, n3, n4):
         ('Mack 1993 (stochastique)', n3['mack']['reserve_best_estimate'],  'mack',
          f"σ={n3['mack']['sigma_total']:,.0f}€", f"CV={n3['mack']['cv_pct']:.1f}%"),
         ('Bornhuetter-Ferguson',   n3['bf']['reserve_totale'],             'bornhuetter_ferguson',
-         f"LR={n3['bf']['lr_apriori']:.1%}", n3['bf']['source_lr']),
+         f"LR={libelle_loss_ratio(n3['bf'])}", n3['bf']['source_lr']),
         ('Cape Cod',               n3['cape_cod']['reserve_totale'],       'cape_cod',
-         f"LR_CC={n3['cape_cod']['lr_cape_cod']:.1%}", n3['cape_cod']['source_exposition']),
+         f"LR_CC={libelle_loss_ratio(n3['cape_cod'], 'lr_cape_cod')}", n3['cape_cod']['source_exposition']),
         ('Bootstrap ODP',          n3['bootstrap'].get('be_bootstrap',0), 'bootstrap_odp',
          f"φ={n3['bootstrap'].get('phi',0):.4f}", f"n={n3['bootstrap'].get('n_simulations',0):,}"),
     ]

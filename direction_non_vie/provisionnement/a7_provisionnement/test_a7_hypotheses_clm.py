@@ -478,6 +478,15 @@ class T7_Couvertures_Par_Annee(unittest.TestCase):
               f"aucune sous filet")
 
 
+#: Exposition cohérente avec GenIns — un loss ratio d'environ 70 %.
+#: ⚠️ INDISPENSABLE pour verrouiller le filet de sécurité : sans exposition,
+#: Bornhuetter-Ferguson et Cape Cod ne tournent pas, l'année sous filet reçoit
+#: Chain Ladder seule ET les années nominales aussi. Le filet devient alors
+#: numériquement INVISIBLE — il ne subsiste que par le statut. Un test qui
+#: prétend vérifier son effet doit placer le système là où il agit.
+EXPOSITION_GENINS = np.array(GENINS, dtype=float).max(axis=1) * 1.6 / 0.70
+
+
 class T8_Cablage_Dans_Le_Pipeline(unittest.TestCase):
     """Lot A — CLM tourne en N2 et n'est consommé par rien."""
 
@@ -488,6 +497,9 @@ class T8_Cablage_Dans_Le_Pipeline(unittest.TestCase):
         cls.r = AgentA7Provisionnement(verbose=False).run(
             source=GENINS, n_sim_bootstrap=100, generer_graphiques=False,
             generer_word=False, generer_pdf_flag=False)
+        cls.r_expo = AgentA7Provisionnement(verbose=False).run(
+            source=GENINS, primes=EXPOSITION_GENINS, n_sim_bootstrap=100,
+            generer_graphiques=False, generer_word=False, generer_pdf_flag=False)
 
     def test_clm_est_calcule_en_n2(self):
         clm = self.r['n2'].get('clm', {})
@@ -524,8 +536,8 @@ class T8_Cablage_Dans_Le_Pipeline(unittest.TestCase):
         lot B branche le mécanisme : cette assertion devient son contraire, et
         c'est le but même du lot.
         """
-        n4 = self.r['n4']
-        cov = self.r['n2']['clm']['couvertures']['synthese']
+        n4 = self.r_expo['n4']
+        cov = self.r_expo['n2']['clm']['couvertures']['synthese']
         self.assertEqual(cov['annees_sous_filet'], [9])
         # La couverture décidée en N2 se retrouve telle quelle dans la sélection.
         self.assertEqual(n4['annees_sous_filet'], [9])
@@ -540,7 +552,6 @@ class T8_Cablage_Dans_Le_Pipeline(unittest.TestCase):
             self.assertAlmostEqual(d['poids_unitaire'], 1 / 3, places=6)
         # Et le filet ne peut jamais passer inaperçu.
         self.assertEqual(n4['statut'], 'ROUGE')
-        self.assertAlmostEqual(n4['best_estimate'], 21_023_363, delta=2)
         print("    OK CLM-pipe-d l'année sous filet reçoit Chain Ladder seule, "
               "les autres les 3 méthodes à poids égal, statut ROUGE")
 
@@ -556,12 +567,12 @@ class T8_Cablage_Dans_Le_Pipeline(unittest.TestCase):
                 generer_word=False, generer_pdf_flag=False)
         self.assertTrue(r['success'])
         self.assertIn('erreur', r['n2']['clm'])
-        # Sans couvertures, aucune année n'est sous filet : les trois méthodes
-        # couvrent toutes les années à poids égal. Le provisionnement aboutit,
-        # simplement sans le raffinement que CLM apporte. 21 794 332 est
-        # exactement le BE « poids égaux sans filet » mesuré au lot B.
+        # Sans couvertures, aucune année n'est sous filet. Et sans exposition,
+        # seul Chain Ladder est calculé (lot BF/Cape Cod) : le provisionnement
+        # aboutit, simplement sans le raffinement que CLM apporte.
+        # CONSTANTE MISE À JOUR — lot BF/Cape Cod : 21 794 332 → 18 680 856.
         self.assertEqual(r['n4']['annees_sous_filet'], [])
-        self.assertAlmostEqual(r['n4']['best_estimate'], 21_794_332, delta=2)
+        self.assertAlmostEqual(r['n4']['best_estimate'], 18_680_856, delta=2)
         print("    OK CLM-pipe-e échec CLM : signalé, jamais fatal, "
               "provisionnement produit sans filet")
 

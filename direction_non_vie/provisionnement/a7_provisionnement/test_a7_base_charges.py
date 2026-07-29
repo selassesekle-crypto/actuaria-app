@@ -170,7 +170,14 @@ class T3_Non_Regression(unittest.TestCase):
         # année par année, avec des poids égaux entre méthodes admises. Effets
         # isolés sur GenIns : poids égaux +98 841, puis filet sur l'année 9
         # (motif NON VALIDÉE) −770 968.
-        self.assertAlmostEqual(n4['best_estimate'], 21_023_363, delta=2)  # oracle
+        # CONSTANTE MISE À JOUR — lot BF/Cape Cod : 21 023 363 → 18 680 856.
+        # Sans mesure d'exposition, Bornhuetter-Ferguson et Cape Cod refusent
+        # désormais de produire un chiffre plutôt que d'en inventer un (proxy de
+        # primes fictives pour BF, exposition = ultime Chain Ladder pour Cape Cod,
+        # cette dernière donnant EXACTEMENT Chain Ladder). Le Best Estimate se
+        # réduit donc à la seule réserve Chain Ladder. Ce n'est pas une perte de
+        # précision : le chiffre a cessé d'être gonflé par un doublon.
+        self.assertAlmostEqual(n4['best_estimate'], 18_680_856, delta=2)  # oracle
         print(f"    OK 8b-i run base paiements : BE = {n4['best_estimate']:,.0f} inchangé")
 
     def test_triangle_reference_expose_dans_run(self):
@@ -288,8 +295,15 @@ class T4_Bout_En_Bout(unittest.TestCase):
         # mécanisme de sélection). Ce que ce test vérifie — qu'un triangle de
         # charges NON désigné comme référence ne change rien — n'a jamais dépendu
         # de la valeur elle-même.
+        # CONSTANTE MISE À JOUR — lot BF/Cape Cod : 21 023 363 → 18 680 856.
+        # Sans mesure d'exposition, Bornhuetter-Ferguson et Cape Cod refusent
+        # désormais de produire un chiffre plutôt que d'en inventer un (proxy de
+        # primes fictives pour BF, exposition = ultime Chain Ladder pour Cape Cod,
+        # cette dernière donnant EXACTEMENT Chain Ladder). Le Best Estimate se
+        # réduit donc à la seule réserve Chain Ladder. Ce n'est pas une perte de
+        # précision : le chiffre a cessé d'être gonflé par un doublon.
         self.assertAlmostEqual(
-            self.r_paie['n4']['best_estimate'], 21_023_363, delta=2)
+            self.r_paie['n4']['best_estimate'], 18_680_856, delta=2)
         self.assertAlmostEqual(self.r_paie['n4']['provisions_dossier'], 0.0, delta=0.5)
         print("    OK 8b-n charges fournies mais base paiements : BE inchange")
 

@@ -134,6 +134,7 @@ _METHODE_FILET = 'chain_ladder'
 
 def _admissibilite_globale(
     n2:             Dict,
+    n3:             Dict,
     methodes_dispo: Dict[str, float],
     seuil_score:    int,
 ) -> Tuple[Dict[str, float], Dict[str, Tuple[float, int]]]:
@@ -146,14 +147,22 @@ def _admissibilite_globale(
       ATTENTE DE SON PROPRE AUDIT : les anciennes H1, H2 et H4 ont quitté ce
       calcul (elles prétendaient mesurer ce que CLM mesure désormais), H3 est
       la seule à décrire quelque chose que CLM ne couvre pas.
-    · Une réserve nulle ou non finie reste un échec de calcul, pas un jugement.
+    · Une méthode qui s'est déclarée NON CALCULÉE (`disponible = False`) est
+      écartée d'emblée. C'est le cas de Bornhuetter-Ferguson et de Cape Cod
+      quand aucune mesure d'exposition n'est fournie : elles refusent de
+      produire un chiffre plutôt que d'en inventer un. Le test porte sur ce
+      drapeau et NON sur une réserve nulle — une réserve nulle peut être un
+      résultat parfaitement légitime.
+    · Une réserve non finie reste un échec de calcul, pas un jugement.
     """
     scores = n2.get('scores_confiance', {})
     admises: Dict[str, float] = {}
     exclues: Dict[str, Tuple[float, int]] = {}
     for m, r in methodes_dispo.items():
         score = 100 if m == _METHODE_FILET else int(scores.get(m, 70))
-        if not np.isfinite(r) or r == 0:
+        if not n3.get(_CLES_N3[m], {}).get('disponible', True):
+            exclues[m] = (r, score)
+        elif not np.isfinite(r) or r == 0:
             exclues[m] = (r, score)
         elif score < seuil_score:
             exclues[m] = (r, score)
@@ -195,7 +204,7 @@ def selectionner_et_agreger(
     méthodes sont admises partout, `Σ_i Σ_m w·R[m,i] = Σ_m w·R[m]` — le résultat
     se réduit exactement à une moyenne pondérée des totaux.
     """
-    admises, exclues = _admissibilite_globale(n2, methodes_dispo, seuil_score)
+    admises, exclues = _admissibilite_globale(n2, n3, methodes_dispo, seuil_score)
 
     ibnr = {}
     for m in list(admises):
@@ -477,6 +486,16 @@ class BestEstimateS2:
             statut = 'ROUGE'
         elif selection['annees_sous_filet']:
             statut = 'ROUGE'
+
+        # UN BEST ESTIMATE MONO-MÉTHODE NE PEUT PAS SORTIR EN VERT.
+        # Avec une seule méthode, `cv_inter` vaut 0 par construction — l'absence
+        # de dispersion viendrait alors mécaniquement valider le résultat, alors
+        # qu'elle traduit exactement l'inverse : aucune méthode indépendante ne
+        # vient le corroborer. C'est le cas dès qu'aucune mesure d'exposition
+        # n'est fournie, Bornhuetter-Ferguson et Cape Cod refusant alors de
+        # produire un chiffre.
+        if len(methodes_incluses) < 2 and statut == 'VERT':
+            statut = 'AMBRE'
 
         # ── 9. Jugement actuariel (alertes, recommandations, avis) ───────────
         alertes_jugement = []
