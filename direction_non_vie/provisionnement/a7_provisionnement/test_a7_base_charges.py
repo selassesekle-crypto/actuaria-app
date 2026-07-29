@@ -27,7 +27,9 @@ from direction_non_vie.provisionnement.a7_provisionnement.agent import (
 from direction_non_vie.provisionnement.a7_provisionnement.n4_best_estimate import (
     BestEstimateS2,
 )
-from direction_non_vie.provisionnement.a7_provisionnement.test_a7_ibrahim import GENINS
+from direction_non_vie.provisionnement.a7_provisionnement.test_a7_ibrahim import (
+    GENINS, _forcer_reserve,
+)
 from direction_non_vie.services.nv_triangle import preparer_triangles
 
 # Triangles où l'ANNÉE 1 porte exactement l'exemple : payé 50, charge 270.
@@ -50,10 +52,15 @@ class T1_Exemple_De_Reference(unittest.TestCase):
             generer_graphiques=False, generer_word=False, generer_pdf_flag=False)
         cls.n2, cls.C = r['n2'], np.array(r['triangle'])
         cls.n3 = r['n3']
-        # une seule méthode incluse, à 30 : le BE pondéré vaut donc exactement 30
-        cls.n3['chain_ladder']['reserve_totale'] = 30.0
-        cls.n3['bf']['reserve_totale'] = 0.0        # r == 0 → exclue par le filtre
-        cls.n3['cape_cod']['reserve_totale'] = 0.0
+        # Une seule méthode incluse, à 30 : le BE vaut donc exactement 30.
+        #
+        # LEVIER MIS À JOUR — lot B : N4 agrège ANNÉE PAR ANNÉE et lit désormais
+        # `ibnr_par_annee`, l'admissibilité restant jugée sur `reserve_totale`.
+        # Forcer le seul total ne commanderait plus le résultat. `_forcer_reserve`
+        # impose les deux, cohérents entre eux — l'invariant que verrouille T24.
+        _forcer_reserve(cls.n3['chain_ladder'], 30.0)
+        _forcer_reserve(cls.n3['bf'],            0.0)   # r == 0 → exclue
+        _forcer_reserve(cls.n3['cape_cod'],      0.0)
 
     def test_sans_correction_be_vaut_l_ibnr_pur(self):
         """LE BUG : en base charges sans correction, le BE reste l'IBNR pur."""
@@ -157,7 +164,13 @@ class T3_Non_Regression(unittest.TestCase):
         # sous-estimées de 3 à 5 %, d'où +2,02 % sur le BE. L'invariant testé ici
         # (base paiements ⇒ provisions_dossier = 0 et be_ibnr_pur == BE) est
         # intact ; seule la valeur épinglée était périmée.
-        self.assertAlmostEqual(n4['best_estimate'], 20_997_282, delta=2)  # oracle
+        #
+        # CONSTANTE MISE À JOUR À NOUVEAU — lot B : 20 997 282 → 21 023 363. Le
+        # mécanisme de sélection repose désormais sur la couverture du motif,
+        # année par année, avec des poids égaux entre méthodes admises. Effets
+        # isolés sur GenIns : poids égaux +98 841, puis filet sur l'année 9
+        # (motif NON VALIDÉE) −770 968.
+        self.assertAlmostEqual(n4['best_estimate'], 21_023_363, delta=2)  # oracle
         print(f"    OK 8b-i run base paiements : BE = {n4['best_estimate']:,.0f} inchangé")
 
     def test_triangle_reference_expose_dans_run(self):
@@ -270,12 +283,13 @@ class T4_Bout_En_Bout(unittest.TestCase):
     def test_base_paiements_identique_a_un_run_sans_charges(self):
         """Fournir un triangle de charges sans le désigner comme référence ne
         change RIEN au résultat : la correction est bien conditionnée."""
-        # CONSTANTE MISE À JOUR — lot « décalage f_cum » : 20 580 806 → 20 997 282,
-        # même cause qu'en T3 (BF et Cape Cod redressés). Ce que ce test vérifie —
-        # qu'un triangle de charges NON désigné comme référence ne change rien —
-        # ne dépend pas de la valeur elle-même.
+        # CONSTANTE MISE À JOUR DEUX FOIS — lot « décalage f_cum » (20 580 806 →
+        # 20 997 282, BF et Cape Cod redressés) puis lot B (→ 21 023 363, nouveau
+        # mécanisme de sélection). Ce que ce test vérifie — qu'un triangle de
+        # charges NON désigné comme référence ne change rien — n'a jamais dépendu
+        # de la valeur elle-même.
         self.assertAlmostEqual(
-            self.r_paie['n4']['best_estimate'], 20_997_282, delta=2)
+            self.r_paie['n4']['best_estimate'], 21_023_363, delta=2)
         self.assertAlmostEqual(self.r_paie['n4']['provisions_dossier'], 0.0, delta=0.5)
         print("    OK 8b-n charges fournies mais base paiements : BE inchange")
 

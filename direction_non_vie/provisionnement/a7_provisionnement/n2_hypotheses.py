@@ -124,20 +124,19 @@ class HypothesesValidator:
         # ── H4 : Homoscédasticité ─────────────────────────────────────────────
         h4 = self._tester_h4_homosc(C, alertes, infos)
 
-        # ── Scores de confiance par méthode ───────────────────────────────────
-        scores = self._calculer_scores(h1, h2, h3, h4, n)
+        # ── Scores de confiance — BF et Cape Cod seulement (cf. _calculer_scores)
+        scores = self._calculer_scores(h3)
 
         # ── Méthode recommandée ───────────────────────────────────────────────
-        methode_rec, raison_rec = self._recommander_methode(
-            scores, h1, h2, h3, n
-        )
+        methode_rec, raison_rec = self._recommander_methode(h1, h2, h3, n)
 
-        # ── Variante CL retenue (CORRECTION BUG v4.0) ─────────────────────────
-        # En v4.0, 'methode_cl_retenue' était absent du dict retourné,
-        # forçant agent.py à recalculer via _choisir_methode_cl() avec une
-        # logique différente → incohérence silencieuse N2/N4.
-        # En v5.0 : calculé ici, exposé dans le dict, utilisé directement en N3.
-        methode_cl, raison_cl = self._choisir_variante_cl(h1, h2, n)
+        # ── Variante CL : RECOMMANDÉE, plus imposée (lot B) ────────────────────
+        # La réserve se calcule désormais sur l'estimateur STANDARD par défaut —
+        # celui pour lequel les hypothèses sont testées (CLM) et pour lequel la
+        # volatilité de Mack est définie. La recommandation reste calculée et
+        # exposée ; l'activer est une décision d'actuaire, via `methode_cl`.
+        variante_recommandee, raison_cl = self._choisir_variante_cl(h1, h2)
+        methode_cl = 'standard'
 
         # ── Alertes spécifiques à la LoB ──────────────────────────────────────
         for alerte_lob in cfg_lob.get('alertes_specifiques', []):
@@ -164,7 +163,13 @@ class HypothesesValidator:
             'h4_homosc_bootstrap':   h4,
             'scores_confiance':      scores,
             'methode_recommandee':   methode_rec,
-            'methode_cl_retenue':    methode_cl,    # ← CORRECTION BUG v4.0
+            # Toujours 'standard' sauf choix explicite de l'actuaire en amont :
+            # la réserve se calcule sur l'estimateur de Mack (cf. lot B).
+            'methode_cl_retenue':      methode_cl,
+            # La bascule que le système AURAIT faite automatiquement avant le
+            # lot B — exposée pour que l'actuaire puisse la retenir en connaissance
+            # de cause, jamais appliquée d'office.
+            'variante_cl_recommandee': variante_recommandee,
             'raison_recommandation': raison_rec,
             'raison_cl':             raison_cl,
             'statut_global':         statut,
@@ -684,31 +689,39 @@ class HypothesesValidator:
     #  SCORES DE CONFIANCE PAR MÉTHODE
     # =========================================================================
 
-    def _calculer_scores(
-        self,
-        h1: Dict, h2: Dict, h3: Dict, h4: Dict, n: int,
-    ) -> Dict[str, int]:
+    def _calculer_scores(self, h3: Dict) -> Dict[str, int]:
         """
-        Score de confiance 0–100 pour chaque méthode actuarielle.
-        Basé sur les hypothèses qui la sous-tendent directement.
+        Score de confiance 0–100 des méthodes reposant sur un A PRIORI EXOGÈNE.
 
-        Chain Ladder   : dépend de H1 (50%) + H2 (50%)
-        Mack 1993      : dépend de H1 (50%) + H2 (30%) + H4 (20%)
-        BF             : dépend de H1 (20%) + H2 (20%) + H3 (60%)
-        Cape Cod       : dépend de H1 (30%) + H2 (30%) + H3 (40%)
-        Bootstrap ODP  : dépend de H1 (30%) + H2 (30%) + H4 (40%)
+        CE QUI A QUITTÉ CE CALCUL AU LOT B — les anciennes H1, H2 et H4.
+        ─────────────────────────────────────────────────────────────────
+        · H1 prétendait mesurer l'indépendance des années de survenance ; elle
+          mesure en réalité une corrélation entre facteurs de développement
+          consécutifs, et pesait 50 % du score de Chain Ladder. Ce que le nom
+          annonçait, c'est CLM-H1 qui le teste (test des signes par diagonale).
+        · H2 est un critère de CHOIX DE MÉTHODE (dispersion, dérive), pas une
+          hypothèse de Mack. Elle alimente désormais une RECOMMANDATION de
+          variante, jamais une exclusion.
+        · H4 ne gatait rien : ses deux seuls destinataires (`mack_1993` et
+          `bootstrap_odp`) n'étaient lus nulle part. Retrait sans effet.
 
-        Bonus taille : +0.5 par année supplémentaire au-delà de 5 (max +10).
+        L'admissibilité de Chain Ladder ne passe plus par un score : elle est
+        décidée par la couverture du motif (CLM-H2), année par année, en N4.
+
+        CE QUI RESTE — H3, la qualité de l'a priori de Bornhuetter-Ferguson et
+        de Cape Cod. C'est une hypothèse qui LEUR EST PROPRE et que CLM ne
+        couvre pas : CLM porte sur le motif de développement, partagé ; H3 porte
+        sur le loss ratio a priori, exogène.
+
+        ⚠️ EN ATTENTE DE SON PROPRE AUDIT. H3 n'a pas encore été confrontée à la
+        littérature comme CLM-H1..H4 l'ont été au guide de l'Institut des
+        Actuaires. Elle est conservée telle quelle, faute de mieux, jusqu'au lot
+        d'audit de BF et Cape Cod.
         """
-        s1, s2, s3, s4 = h1['score'], h2['score'], h3['score'], h4['score']
-        bonus = min(10, (n - 5) * 0.5) if n > 5 else 0
-
+        s3 = int(h3.get('score', 70))
         return {
-            'chain_ladder':         int(min(100, s1*0.50 + s2*0.50 + bonus)),
-            'mack_1993':            int(min(100, s1*0.50 + s2*0.30 + s4*0.20 + bonus)),
-            'bornhuetter_ferguson': int(min(100, s1*0.20 + s2*0.20 + s3*0.60)),
-            'cape_cod':             int(min(100, s1*0.30 + s2*0.30 + s3*0.40)),
-            'bootstrap_odp':        int(min(100, s1*0.30 + s2*0.30 + s4*0.40)),
+            'bornhuetter_ferguson': int(min(100, s3)),
+            'cape_cod':             int(min(100, s3)),
         }
 
     # =========================================================================
@@ -717,7 +730,6 @@ class HypothesesValidator:
 
     def _recommander_methode(
         self,
-        scores:  Dict,
         h1:      Dict,
         h2:      Dict,
         h3:      Dict,
@@ -726,14 +738,26 @@ class HypothesesValidator:
         """
         Recommande la méthode principale avec justification explicite.
 
+        ⚠️ PUREMENT INFORMATIF DEPUIS LE LOT B. Cette recommandation ne force
+        plus l'inclusion d'une méthode dans le Best Estimate et ne lui accorde
+        plus de poids minimum : la sélection se décide sur la couverture du
+        motif, année par année, et les méthodes admises sont pondérées à égalité.
+        Elle reste affichée comme un avis de lecture du triangle.
+
         Règles de décision (par ordre de priorité) :
         1. Triangle trop petit (n < 5) → Cape Cod
-        2. H1 + H2 validées → Mack 1993 si score ≥ 70, sinon Chain Ladder
+        2. H1 + H2 validées → Chain Ladder
         3. H1 rejetée + H3 fiable → Bornhuetter-Ferguson
         4. H1 rejetée + H3 peu fiable → Cape Cod
         5. H2 rejetée seule → Bornhuetter-Ferguson
         6. Fallback → Chain Ladder (INATTEIGNABLE par construction : R2-R5
            couvrent toutes les combinaisons H1×H2)
+
+        La règle 2 arbitrait auparavant entre « Mack 1993 » et Chain Ladder sur
+        un score de méthode. Deux raisons de ne plus le faire : ce score a
+        disparu (il reposait sur les anciennes H1/H2/H4), et surtout le point
+        estimate de Mack EST celui de Chain Ladder — les présenter comme deux
+        recommandations distinctes n'avait pas de sens.
         """
         # Règle 1 : trop peu de données
         if n < 5:
@@ -744,11 +768,11 @@ class HypothesesValidator:
 
         # Règle 2 : H1 + H2 validées
         if h1['ok'] and h2['ok']:
-            if scores['mack_1993'] >= 70:
-                return 'mack_1993', (
-                    f"H1 et H2 validées → Mack 1993 retenu : hypothèses satisfaites "                    f"et score de confiance suffisant ({scores['mack_1993']}/100). "                    f"Mack 1993 quantifie l'incertitude S2 sans biais."                )
             return 'chain_ladder', (
-                f"H1 et H2 validées → Chain Ladder retenu. "                f"Score Mack = {scores['mack_1993']}/100 < 70 : "                f"triangle insuffisamment développé pour Mack complet, "                f"CL standard plus robuste."            )
+                "H1 et H2 validées → Chain Ladder retenu : les facteurs de "
+                "développement sont exploitables tels quels. Mack 1993 en fournit "
+                "la volatilité, son estimation centrale étant identique."
+            )
 
         # Règle 3 : H1 rejetée + a priori BF fiable
         if not h1['ok'] and h3['score'] >= 60:
@@ -791,7 +815,6 @@ class HypothesesValidator:
         self,
         h1:  Dict,
         h2:  Dict,
-        n:   int,
     ) -> Tuple[str, str]:
         """
         Choisit la variante de Chain Ladder à utiliser en N3.
@@ -806,12 +829,36 @@ class HypothesesValidator:
         En v5.0 : calculé ici, exposé dans le dict retourné par valider(),
         utilisé directement dans agent.py. Source unique de vérité.
 
+        ⚠️ CETTE FONCTION NE DÉCIDE PLUS — ELLE RECOMMANDE.
+        --------------------------------------------------
+        Jusqu'au lot B, sa sortie pilotait directement le calcul de la réserve :
+        un CV élevé faisait basculer TOUTES les colonnes sur un autre estimateur,
+        automatiquement et en silence. Trois raisons de ne plus le faire :
+
+        · Le déclencheur est un SYMPTÔME, pas un diagnostic. Mesuré sur le
+          triangle RAA : `cv_moy` = 31,5 % vient d'UNE colonne à 150 %, elle-même
+          due à UNE cellule (C[1,0] = 106 contre 1 000-5 700 ailleurs) qui produit
+          un facteur de 40,4 face à une médiane de 4,26. La bonne réponse est
+          d'examiner ce point, pas de changer d'estimateur partout.
+        · Le remède était GLOBAL pour un problème LOCAL : la bascule touchait
+          aussi les colonnes à CV de 5 %, où l'estimateur de Mack est optimal.
+        · Elle rompait EN SILENCE le lien avec la théorie : σ, la MSEP et les
+          percentiles de Mack sont dérivés POUR l'estimateur pondéré volume.
+          Conséquence mesurée : l'oracle RAA d'A7 valait 54 059 / 27 022, quand
+          Mack et le guide publient 52 135 / 26 909.
+
+        Désormais la recommandation est EXPOSÉE (`variante_cl_recommandee`), et
+        le choix appartient à l'actuaire via le paramètre `methode_cl` de run(),
+        informé par le diagnostic CLM colonne par colonne.
+
         Variantes disponibles
         ---------------------
-        'standard'        : facteur pondéré volume — optimal si H1+H2 validées.
+        'standard'        : facteur pondéré volume — estimateur de Mack (1993).
                             f_j = Σ C[i,j+1] / Σ C[i,j]
-        'volume_weighted' : identique à standard (alias explicite).
-                            Préféré si dérive temporelle ou H1 rejetée seule.
+        'volume_weighted' : ⚠️ PAS un alias de standard, contrairement à ce que
+                            cette docstring affirmait. Il pondère par √C[i,j] et
+                            non par C[i,j]. Mesuré sur RAA : f₀ = 4,347 contre
+                            2,999, réserve 63 500 contre 52 135, soit +22 %.
         'mediane'         : médiane des facteurs individuels par colonne.
                             Robuste aux outliers, insensible au volume.
                             Préféré si CV > seuil élevé.

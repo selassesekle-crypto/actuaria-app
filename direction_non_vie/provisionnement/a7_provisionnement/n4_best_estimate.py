@@ -112,6 +112,161 @@ def s2_non_calculable(n4: Dict) -> bool:
     return bool(n4.get('be_negatif'))
 
 
+# =============================================================================
+#  SÉLECTION PAR ANNÉE DE SURVENANCE  (lot B — remplace le gate par score)
+# =============================================================================
+
+#: Les trois méthodes qui construisent le Best Estimate, avec la clé sous
+#: laquelle N3 expose leur IBNR par année. Elles CONSOMMENT TOUTES LE MÊME MOTIF
+#: de développement — prouvé au correctif f_cum, qui a déplacé BF de +2,2 % et
+#: Cape Cod de +3,2 % sans toucher Chain Ladder. Une colonne de facteurs
+#: invalidée les frappe donc ensemble : c'est pourquoi la couverture du motif
+#: est une propriété de l'ANNÉE, pas de la méthode.
+_CLES_N3 = {
+    'chain_ladder':         'chain_ladder',
+    'bornhuetter_ferguson': 'bf',
+    'cape_cod':             'cape_cod',
+}
+
+#: Méthode du filet de sécurité : celle qui ne suppose aucun a priori exogène.
+_METHODE_FILET = 'chain_ladder'
+
+
+def _admissibilite_globale(
+    n2:             Dict,
+    methodes_dispo: Dict[str, float],
+    seuil_score:    int,
+) -> Tuple[Dict[str, float], Dict[str, Tuple[float, int]]]:
+    """Quelles méthodes sont admissibles AVANT même de regarder les années.
+
+    · Chain Ladder est toujours admissible : elle ne repose sur aucun a priori
+      exogène, et c'est elle qui porte le filet de sécurité.
+    · Bornhuetter-Ferguson et Cape Cod restent jugées sur l'ancienne H3 —
+      la qualité de l'a priori. C'EST UNE HYPOTHÈSE QUI LEUR EST PROPRE, EN
+      ATTENTE DE SON PROPRE AUDIT : les anciennes H1, H2 et H4 ont quitté ce
+      calcul (elles prétendaient mesurer ce que CLM mesure désormais), H3 est
+      la seule à décrire quelque chose que CLM ne couvre pas.
+    · Une réserve nulle ou non finie reste un échec de calcul, pas un jugement.
+    """
+    scores = n2.get('scores_confiance', {})
+    admises: Dict[str, float] = {}
+    exclues: Dict[str, Tuple[float, int]] = {}
+    for m, r in methodes_dispo.items():
+        score = 100 if m == _METHODE_FILET else int(scores.get(m, 70))
+        if not np.isfinite(r) or r == 0:
+            exclues[m] = (r, score)
+        elif score < seuil_score:
+            exclues[m] = (r, score)
+        else:
+            admises[m] = float(r)
+    return admises, exclues
+
+
+def selectionner_et_agreger(
+    n2:             Dict,
+    n3:             Dict,
+    methodes_dispo: Dict[str, float],
+    seuil_score:    int,
+) -> Dict[str, Any]:
+    """Best Estimate agrégé ANNÉE PAR ANNÉE selon la couverture du motif.
+
+        BE = Σ_i Σ_m w[m,i] · R[m,i]      avec Σ_m w[m,i] = 1 pour chaque i
+
+    RÈGLE PAR ANNÉE
+    ---------------
+    · `couverture_motif[i]` NON VALIDÉE → FILET : Chain Ladder seule pour cette
+      année, et le statut passe au ROUGE. Les hypothèses qui fondent un
+      coefficient de passage sont démenties sur le parcours de cette année : on
+      ne prétend pas la couvrir par une moyenne de trois méthodes qui reposent
+      toutes sur ce même coefficient.
+    · Chain Ladder elle-même incalculable pour l'année → aucune projection n'a
+      de sens : l'année sort de l'agrégation et un ROUGE DUR est levé, appelant
+      une évaluation dossier par dossier.
+    · Sinon → toutes les méthodes globalement admises, À POIDS ÉGAL.
+
+    POURQUOI DES POIDS ÉGAUX — décision assumée, pas une formule calibrée. La
+    pondération précédente (`score/Σscores`, plus un plancher de 50 % à la
+    méthode dite recommandée) n'avait aucun fondement théorique : ni le guide de
+    l'Institut des Actuaires ni Mack ne disent comment pondérer plusieurs
+    méthodes entre elles. Des poids égaux disent honnêtement « aucune base pour
+    préférer l'une » ; une formule donnait l'apparence d'une calibration.
+
+    IDENTITÉ VÉRIFIABLE : si aucune année n'est sous filet et que les mêmes
+    méthodes sont admises partout, `Σ_i Σ_m w·R[m,i] = Σ_m w·R[m]` — le résultat
+    se réduit exactement à une moyenne pondérée des totaux.
+    """
+    admises, exclues = _admissibilite_globale(n2, methodes_dispo, seuil_score)
+
+    ibnr = {}
+    for m in list(admises):
+        valeurs = n3.get(_CLES_N3[m], {}).get('ibnr_par_annee')
+        if valeurs is None:
+            exclues[m] = (methodes_dispo[m], 0)
+            del admises[m]
+        else:
+            ibnr[m] = np.asarray(valeurs, dtype=float)
+
+    annee_base = int(n3.get('chain_ladder', {}).get('annee_base_reserve', 1))
+    couverture = {a['annee']: a for a in
+                  n2.get('clm', {}).get('couvertures', {}).get('annees', [])}
+
+    be = 0.0
+    detail: List[Dict[str, Any]] = []
+    contribution: Dict[str, float] = {m: 0.0 for m in admises}
+    n_annees = max((len(v) for v in ibnr.values()), default=0)
+
+    for i in range(annee_base, n_annees):
+        motif = couverture.get(i, {}).get('couverture_motif', 'NON TESTABLE')
+        sous_filet = motif == 'NON VALIDÉE'
+        candidates = ([_METHODE_FILET] if sous_filet else list(admises))
+        retenues = [m for m in candidates
+                    if m in ibnr and np.isfinite(ibnr[m][i])]
+
+        if not retenues:
+            detail.append({'annee': i, 'motif': motif, 'methodes': [],
+                           'sous_filet': sous_filet, 'rouge_dur': True,
+                           'contribution': 0.0})
+            continue
+
+        poids_i = 1.0 / len(retenues)          # POIDS ÉGAL — choix assumé
+        contrib_annee = 0.0
+        for m in retenues:
+            part = poids_i * float(ibnr[m][i])
+            contribution[m] = contribution.get(m, 0.0) + part
+            contrib_annee += part
+        be += contrib_annee
+        detail.append({'annee': i, 'motif': motif, 'methodes': retenues,
+                       'sous_filet': sous_filet, 'rouge_dur': False,
+                       'poids_unitaire': round(poids_i, 6),
+                       'contribution': round(contrib_annee, 2)})
+
+    utilisees = sorted({m for d in detail for m in d['methodes']})
+    for m in list(admises):
+        if m not in utilisees:
+            exclues[m] = (methodes_dispo[m], 0)
+
+    # `poids` = part EFFECTIVE de chaque méthode dans le BE final. Les poids
+    # varient d'une année à l'autre ; publier un poids nominal unique serait
+    # trompeur. Cette part-là, elle, décrit ce qui s'est réellement passé.
+    poids = ({m: round(contribution[m] / be, 4) for m in utilisees}
+             if abs(be) > 1e-9 else {m: round(1.0 / max(len(utilisees), 1), 4)
+                                     for m in utilisees})
+
+    scores = n2.get('scores_confiance', {})
+    return {
+        'best_estimate':     float(be),
+        'methodes_incluses': {m: (methodes_dispo[m],
+                                  100 if m == _METHODE_FILET
+                                  else int(scores.get(m, 70)))
+                              for m in utilisees},
+        'methodes_exclues':  exclues,
+        'poids':             poids,
+        'annees':            detail,
+        'annees_sous_filet': [d['annee'] for d in detail if d['sous_filet']],
+        'annees_rouge_dur':  [d['annee'] for d in detail if d['rouge_dur']],
+    }
+
+
 class BestEstimateS2:
     """
     Calcule le Best Estimate — réserve BRUTE, avant actualisation (la valeur
@@ -161,8 +316,7 @@ class BestEstimateS2:
         `be_ibnr_pur` et `provisions_dossier` en donnent la décomposition (en
         base paiements, `be_ibnr_pur == best_estimate` et les provisions sont 0).
         """
-        scores = n2.get('scores_confiance', {})
-        cfg    = get_lob_config(lob)
+        cfg = get_lob_config(lob)
 
         # ── Réserves par méthode ──────────────────────────────────────────────
         cl_res   = n3['chain_ladder']['reserve_totale']
@@ -175,121 +329,18 @@ class BestEstimateS2:
         # (Mack = CL + σ ; réserve identique par construction, mack consomme les
         # facteurs du CL). L'inclure comme méthode pondérée double-compterait le CL.
         # Mack reste utilisé pour la VOLATILITÉ (sigma, n3['mack']['sigma_total']).
-        score_map = {
-            'chain_ladder':         scores.get('chain_ladder', 70),
-            'bornhuetter_ferguson': scores.get('bornhuetter_ferguson', 70),
-            'cape_cod':             scores.get('cape_cod', 70),
-        }
-
         methodes_dispo = {
             'chain_ladder':         cl_res,
             'bornhuetter_ferguson': bf_res,
             'cape_cod':             cc_res,
         }
 
-        # ── 1. Sélection des méthodes validées ────────────────────────────────
-        methodes_incluses: Dict[str, Tuple[float, int]] = {}
-        methodes_exclues:  Dict[str, Tuple[float, int]] = {}
-
-        for m, r in methodes_dispo.items():
-            s = score_map.get(m, 70)
-            # r != 0 (fini) : une réserve NÉGATIVE (reprise / recours net) est une
-            # donnée VALIDE et doit entrer dans le BE ; seuls les vrais échecs
-            # (r == 0 par dégénérescence, ou NaN) sont exclus.
-            if s >= seuil_score and np.isfinite(r) and r != 0:
-                methodes_incluses[m] = (r, s)
-            else:
-                methodes_exclues[m]  = (r, s)
-
-        # Garde-fou : si tout exclu → garder Chain Ladder et BF par défaut
-        if not methodes_incluses:
-            methodes_incluses = {
-                'chain_ladder': (cl_res, 50),
-                'bornhuetter_ferguson': (bf_res, 50),
-            }
-            # Les retirer des exclues : elles viennent d'être forcées dans les
-            # incluses (sinon elles figureraient dans les deux listes).
-            for _m in ('chain_ladder', 'bornhuetter_ferguson'):
-                if _m in methodes_exclues:
-                    del methodes_exclues[_m]
-            logger.warning(
-                "BE N4 : toutes les méthodes exclues (score < seuil). "
-                "Fallback sur Chain Ladder + BF avec score=50."
-            )
-
-        # Forcer l'inclusion de la méthode recommandée par N2
-        # même si son score est bas (le jugement actuariel prime sur le score mécanique)
-        methode_rec_check = n2.get('methode_recommandee', '').lower().replace(' ', '_')
-        _rec_map_check = {
-            'bornhuetter_ferguson': 'bornhuetter_ferguson',
-            'bf': 'bornhuetter_ferguson',
-            'mack': 'chain_ladder', 'mack_1993': 'chain_ladder',  # remap : point Mack = CL
-            'chain_ladder': 'chain_ladder',
-            'cape_cod': 'cape_cod',
-        }
-        methode_rec_norm_check = _rec_map_check.get(methode_rec_check, '')
-        if methode_rec_norm_check and methode_rec_norm_check not in methodes_incluses:
-            # La méthode recommandée a été exclue par le seuil de score
-            # On la force avec un score de 70 (score de référence)
-            reserve_rec = methodes_dispo.get(methode_rec_norm_check, 0)
-            if np.isfinite(reserve_rec) and reserve_rec != 0:
-                methodes_incluses[methode_rec_norm_check] = (reserve_rec, 70)
-                if methode_rec_norm_check in methodes_exclues:
-                    del methodes_exclues[methode_rec_norm_check]
-                logger.info(
-                    f"BE N4 : méthode recommandée '{methode_rec_norm_check}' "
-                    f"forcée dans les incluses malgré score bas."
-                )
-
-        # ── 2. Poids dynamiques — méthode recommandée dominante ──────────────
-        # Si une méthode est recommandée par N2 (ex: BF car H1 rejetée),
-        # elle reçoit un poids minimum de 50% pour refléter le jugement actuariel.
-        # Les autres méthodes se partagent le reste proportionnellement à leurs scores.
-        methode_rec = n2.get('methode_recommandee', '')
-        # Normaliser le nom de la méthode recommandée
-        _rec_map = {
-            'bornhuetter_ferguson': 'bornhuetter_ferguson',
-            'bf': 'bornhuetter_ferguson',
-            'mack': 'chain_ladder',       # remap : point Mack = CL (garde le forçage 50% sur CL)
-            'mack_1993': 'chain_ladder',
-            'chain_ladder': 'chain_ladder',
-            'cape_cod': 'cape_cod',
-        }
-        methode_rec_norm = _rec_map.get(methode_rec.lower().replace(' ','_'), '')
-
-        total_scores = sum(s for _, s in methodes_incluses.values())
-        poids_bruts = {
-            m: s / max(total_scores, 1)
-            for m, (_, s) in methodes_incluses.items()
-        }
-
-        # Appliquer bonus méthode recommandée si présente dans les incluses
-        if methode_rec_norm and methode_rec_norm in methodes_incluses:
-            POIDS_MIN_REC = 0.50  # Poids minimum garanti à la méthode recommandée
-            poids_rec     = max(poids_bruts.get(methode_rec_norm, 0), POIDS_MIN_REC)
-            reste         = 1.0 - poids_rec
-            autres        = {m: v for m, v in poids_bruts.items() if m != methode_rec_norm}
-            total_autres  = sum(autres.values())
-            poids = {methode_rec_norm: round(poids_rec, 4)}
-            if total_autres > 0:
-                for m, v in autres.items():
-                    poids[m] = round(v / total_autres * reste, 4)
-            else:
-                poids = {methode_rec_norm: 1.0}
-        else:
-            poids = {m: round(v, 4) for m, v in poids_bruts.items()}
-
-        # Normaliser pour que la somme = 1.0 exactement
-        total_poids = sum(poids.values())
-        if total_poids > 0:
-            poids = {m: round(v / total_poids, 4) for m, v in poids.items()}
-
-        # ── 3. Best Estimate — réserve brute (Art. 77 ; actualisation aval A10) ──
-        # BE = Σ w_m × R_m  (réserve brute non actualisée)
-        be = float(sum(
-            poids[m] * r
-            for m, (r, _) in methodes_incluses.items()
-        ))
+        # ── 1-3. Sélection PAR ANNÉE et Best Estimate ─────────────────────────
+        selection = selectionner_et_agreger(n2, n3, methodes_dispo, seuil_score)
+        methodes_incluses = selection['methodes_incluses']
+        methodes_exclues  = selection['methodes_exclues']
+        poids             = selection['poids']
+        be                = selection['best_estimate']
 
         # ── 3bis. BASE CHARGES : réintégration des provisions dossier ──────────
         #
@@ -417,6 +468,14 @@ class BestEstimateS2:
         elif cv_inter < 15.0:
             statut = 'AMBRE'
         else:
+            statut = 'ROUGE'
+
+        # Le filet de sécurité force le ROUGE — il ne peut JAMAIS passer
+        # inaperçu. C'est ce qui remplace l'ancien garde-fou, qui repliait
+        # silencieusement sur Chain Ladder + BF avec un score forcé à 50.
+        if selection['annees_rouge_dur']:
+            statut = 'ROUGE'
+        elif selection['annees_sous_filet']:
             statut = 'ROUGE'
 
         # ── 9. Jugement actuariel (alertes, recommandations, avis) ───────────
@@ -570,10 +629,17 @@ class BestEstimateS2:
             'sigma_total_compose':   sigma_total_compose_val,
             'cv_inter_methodes':     round(cv_inter, 2),
 
-            # Méthodes
+            # Méthodes — `poids` est la part EFFECTIVE de chaque méthode dans le
+            # BE, et non un poids nominal : les pondérations varient d'une année
+            # à l'autre, publier un chiffre unique serait trompeur.
             'methodes_incluses':     list(methodes_incluses.keys()),
             'methodes_exclues':      list(methodes_exclues.keys()),
             'poids':                 poids,
+
+            # Sélection par année de survenance (lot B)
+            'selection_par_annee':   selection['annees'],
+            'annees_sous_filet':     selection['annees_sous_filet'],
+            'annees_rouge_dur':      selection['annees_rouge_dur'],
 
             # SCR formule standard
             'scr':                   scr,

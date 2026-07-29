@@ -113,6 +113,29 @@ GENINS = _triangle_genins()
 RAA    = _triangle_raa()
 
 
+def _forcer_reserve(bloc: dict, total: float, annee_base: int = 1) -> None:
+    """Impose une réserve à un bloc de méthode N3, EN GARDANT LA COHÉRENCE.
+
+    Depuis le lot B, N4 agrège année par année : il lit `ibnr_par_annee`, tandis
+    que l'admissibilité d'une méthode se juge encore sur `reserve_totale`. Forcer
+    l'un sans l'autre laisserait le test piloter une grandeur qui ne commande
+    plus rien — c'est exactement ce qui a fait tomber T17 et les oracles de base
+    charges au lot B, sans qu'aucun d'eux ne soit faux pour autant.
+
+    Le montant est porté par la dernière année, les précédentes mises à zéro :
+    peu importe la répartition, seule compte la somme, et l'invariant
+    `reserve_totale == Σ ibnr_par_annee[annee_base:]` est respecté (T24).
+    """
+    n = len(bloc.get('ibnr_par_annee') or [0.0])
+    valeurs = [0.0] * n
+    if n > annee_base:
+        valeurs[-1] = float(total)
+    bloc['ibnr_par_annee'] = valeurs
+    if 'ibnr_brut_par_annee' in bloc:
+        bloc['ibnr_brut_par_annee'] = list(valeurs)
+    bloc['reserve_totale'] = float(total)
+
+
 # =============================================================================
 #  CHAIN LADDER — oracle GenIns (VERT)
 # =============================================================================
@@ -533,19 +556,32 @@ class T11_BE_Mack_Retire(unittest.TestCase):
             source=_make_mack_recommande(), lob='generique', n_sim_bootstrap=100,
             generer_word=False, generer_pdf_flag=False, generer_graphiques=False)
 
-    def test_mack_recommande_mais_non_pondere(self):
+    def test_mack_non_pondere_dans_le_be(self):
+        """Mack n'entre JAMAIS dans la pondération du Best Estimate.
+
+        Son estimation centrale est celle de Chain Ladder (Mack = CL + σ, il
+        consomme les mêmes facteurs) : l'inclure comme méthode pondérée
+        double-compterait le Chain Ladder. C'est la protection posée au commit
+        6e2e66e, et elle reste entière.
+
+        DEUX ASSERTIONS RETIRÉES AU LOT B, parce que ce qu'elles vérifiaient a
+        été supprimé, pas parce qu'elles échouaient :
+        · la précondition `methode_recommandee ∈ ('mack','mack_1993')` — la
+          recommandation ne renvoie plus « mack », justement parce que son point
+          estimate EST celui de Chain Ladder ;
+        · le poids de 0,50 sur Chain Ladder — il venait du plancher
+          `POIDS_MIN_REC` accordé à la méthode recommandée, mécanisme remplacé
+          par des poids égaux entre méthodes admises.
+        """
         r = self.r
         self.assertTrue(r.get('success'), r.get('erreur'))
-        rec = r['n2']['methode_recommandee']
-        self.assertIn(rec, ('mack', 'mack_1993'),
-                      f"précondition du test : Mack doit être recommandé ici (rec={rec})")
         poids = r['n4'].get('poids', {})
-        # Mack n'est plus une méthode pondérée
-        self.assertNotIn('mack', poids, f"Mack ne doit plus être pondéré (poids={poids})")
-        # le point CL garde le forçage POIDS_MIN_REC = 0.50 (remap mack→chain_ladder)
-        self.assertAlmostEqual(poids.get('chain_ladder', 0.0), 0.50, places=4,
-                               msg=f"point CL doit garder 50 % (poids={poids})")
-        print(f"    OK T11 : Mack recommandé mais non pondéré — poids CL={poids.get('chain_ladder')} (remap)")
+        for interdit in ('mack', 'mack_1993'):
+            self.assertNotIn(interdit, poids,
+                             f"Mack ne doit jamais être pondéré (poids={poids})")
+        self.assertIn('chain_ladder', poids,
+                      f"le point de Mack passe par Chain Ladder (poids={poids})")
+        print(f"    OK T11 : Mack non pondéré, son point porté par CL (poids={poids})")
 
 
 # =============================================================================
@@ -826,9 +862,14 @@ class T17_N4_GardeFou_CheminPrimaire(unittest.TestCase):
         n2, n3, C = self._n2_n3()
         # CL fortement négatif (reprise nette), BF/CC = 0 (exclus car r==0) → CL seule
         # incluse → be = réserve CL < 0.
-        n3['chain_ladder']['reserve_totale'] = -5_000_000.0
-        n3['bf']['reserve_totale']       = 0.0
-        n3['cape_cod']['reserve_totale'] = 0.0
+        #
+        # LEVIER MIS À JOUR — lot B : N4 agrège désormais ANNÉE PAR ANNÉE, donc
+        # il lit `ibnr_par_annee` et non plus `reserve_totale`. Forcer le seul
+        # total ne commande plus rien. On force les deux, cohérents entre eux —
+        # c'est précisément l'invariant que T24 verrouille désormais.
+        _forcer_reserve(n3['chain_ladder'], -5_000_000.0)
+        _forcer_reserve(n3['bf'],                    0.0)
+        _forcer_reserve(n3['cape_cod'],              0.0)
         n4 = BestEstimateS2().calculer(n2, n3, C)
         self.assertLess(n4['best_estimate'], 0)
         self.assertTrue(n4.get('be_negatif'))
@@ -938,10 +979,56 @@ class T19_BE_Negatif_Livrables_Et_RM(unittest.TestCase):
         # CE QUE CE TEST VÉRIFIE N'A PAS CHANGÉ — la relation recalcul ≡
         # proratisation reste exacte (écart mesuré 0,13 € après correctif) ;
         # seule la valeur épinglée était périmée.
+        #
+        # CONSTANTE MISE À JOUR À NOUVEAU — lot B : 3 009 051 → 3 012 464. La RM
+        # est linéaire en SCR, donc en BE ; le BE GenIns passe de 20 997 282 à
+        # 21 023 363 sous l'effet du nouveau mécanisme de sélection (poids égaux
+        # +98 841, puis filet sur l'année 9 −770 968). La relation testée est,
+        # elle aussi, inchangée.
         r = self._run(source=GENINS, reserve_grands_sinistres=2_000_000.0, n_grands_sinistres=2)
         self.assertTrue(r['success'], r.get('erreur'))
-        self.assertAlmostEqual(r['n4']['risk_margin'], 3_009_051, delta=1)
-        print("    OK T19c LLT normal : RM = 3 009 051 (recalcul ≡ proratisation)")
+        self.assertAlmostEqual(r['n4']['risk_margin'], 3_012_464, delta=1)
+        print("    OK T19c LLT normal : RM = 3 012 464 (recalcul ≡ proratisation)")
+
+
+# =============================================================================
+#  INVARIANT DE COHÉRENCE — total vs décomposition par année
+# =============================================================================
+
+class T24_Reserve_Totale_Egale_Somme_Par_Annee(unittest.TestCase):
+    """`reserve_totale` doit toujours valoir `Σ ibnr_par_annee[annee_base:]`.
+
+    POURQUOI CE VERROU EXISTE. Depuis le lot B, N4 juge l'ADMISSIBILITÉ d'une
+    méthode sur `reserve_totale` (finie, non nulle) mais calcule le MONTANT sur
+    `ibnr_par_annee`. Les deux grandeurs sont donc toutes les deux vivantes, pour
+    des usages différents. Si elles divergeaient, l'admissibilité serait décidée
+    sur un chiffre et le Best Estimate produit sur un autre, sans que rien ne le
+    signale.
+
+    Ce n'est pas une crainte théorique : trois tests sont tombés au lot B parce
+    qu'ils forçaient `reserve_totale` sans toucher `ibnr_par_annee`, et le
+    système a continué sans broncher. Ce test transforme ce piège en garde-fou.
+    """
+
+    def test_les_trois_methodes_du_be_reconcilient(self):
+        for nom, source in (('GenIns', GENINS), ('RAA', RAA)):
+            r = AgentA7Provisionnement(verbose=False).run(
+                source=source, n_sim_bootstrap=200, generer_graphiques=False,
+                generer_word=False, generer_pdf_flag=False)
+            self.assertTrue(r['success'], r.get('erreur'))
+            base = int(r['n3']['chain_ladder'].get('annee_base_reserve', 1))
+            for cle, libelle in (('chain_ladder', 'Chain Ladder'),
+                                 ('bf', 'Bornhuetter-Ferguson'),
+                                 ('cape_cod', 'Cape Cod')):
+                bloc = r['n3'][cle]
+                somme = float(np.sum(bloc['ibnr_par_annee'][base:]))
+                self.assertAlmostEqual(
+                    somme, float(bloc['reserve_totale']), delta=0.05,
+                    msg=(f"{nom} / {libelle} : la décomposition par année "
+                         f"({somme:,.2f}) ne réconcilie pas avec le total "
+                         f"({bloc['reserve_totale']:,.2f})"))
+        print("    OK T24 : reserve_totale == Σ ibnr_par_annee sur CL, BF et "
+              "Cape Cod (GenIns et RAA)")
 
 
 # =============================================================================

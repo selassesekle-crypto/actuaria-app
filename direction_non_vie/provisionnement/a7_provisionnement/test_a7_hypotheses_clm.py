@@ -516,18 +516,33 @@ class T8_Cablage_Dans_Le_Pipeline(unittest.TestCase):
         self.assertNotIn('methode_cl', src)
         print("    OK CLM-pipe-c estimateur standard imposé, pas de circularité")
 
-    def test_aucune_consommation_par_le_calcul(self):
-        """VERROU DU LOT A — les couvertures existent mais ne pilotent rien :
-        la sélection des méthodes reste celle des scores."""
+    def test_les_couvertures_pilotent_la_selection(self):
+        """VERROU DU LOT B — l'inverse exact de celui du lot A.
+
+        Au lot A ce test vérifiait qu'une année sous filet NE changeait PAS le
+        Best Estimate, les couvertures étant exposées sans être consommées. Le
+        lot B branche le mécanisme : cette assertion devient son contraire, et
+        c'est le but même du lot.
+        """
         n4 = self.r['n4']
-        self.assertEqual(set(n4['methodes_incluses']),
-                         {'chain_ladder', 'bornhuetter_ferguson', 'cape_cod'})
-        self.assertNotIn('couverture', str(n4.keys()))
         cov = self.r['n2']['clm']['couvertures']['synthese']
         self.assertEqual(cov['annees_sous_filet'], [9])
-        self.assertAlmostEqual(n4['best_estimate'], 20_997_282, delta=2)
-        print("    OK CLM-pipe-d une année est sous filet, le BE ne bouge pas "
-              "— rien ne consomme encore les couvertures")
+        # La couverture décidée en N2 se retrouve telle quelle dans la sélection.
+        self.assertEqual(n4['annees_sous_filet'], [9])
+        sous_filet = [d for d in n4['selection_par_annee'] if d['sous_filet']]
+        self.assertEqual(len(sous_filet), 1)
+        self.assertEqual(sous_filet[0]['methodes'], ['chain_ladder'])
+        self.assertEqual(sous_filet[0]['motif'], NON_VALIDEE)
+        # Les autres années gardent les trois méthodes, à poids égal.
+        nominales = [d for d in n4['selection_par_annee'] if not d['sous_filet']]
+        for d in nominales:
+            self.assertEqual(len(d['methodes']), 3)
+            self.assertAlmostEqual(d['poids_unitaire'], 1 / 3, places=6)
+        # Et le filet ne peut jamais passer inaperçu.
+        self.assertEqual(n4['statut'], 'ROUGE')
+        self.assertAlmostEqual(n4['best_estimate'], 21_023_363, delta=2)
+        print("    OK CLM-pipe-d l'année sous filet reçoit Chain Ladder seule, "
+              "les autres les 3 méthodes à poids égal, statut ROUGE")
 
     def test_ne_leve_jamais(self):
         """Un échec de vérification ne doit pas empêcher un provisionnement."""
@@ -541,8 +556,14 @@ class T8_Cablage_Dans_Le_Pipeline(unittest.TestCase):
                 generer_word=False, generer_pdf_flag=False)
         self.assertTrue(r['success'])
         self.assertIn('erreur', r['n2']['clm'])
-        self.assertAlmostEqual(r['n4']['best_estimate'], 20_997_282, delta=2)
-        print("    OK CLM-pipe-e échec CLM : signalé, jamais fatal, BE intact")
+        # Sans couvertures, aucune année n'est sous filet : les trois méthodes
+        # couvrent toutes les années à poids égal. Le provisionnement aboutit,
+        # simplement sans le raffinement que CLM apporte. 21 794 332 est
+        # exactement le BE « poids égaux sans filet » mesuré au lot B.
+        self.assertEqual(r['n4']['annees_sous_filet'], [])
+        self.assertAlmostEqual(r['n4']['best_estimate'], 21_794_332, delta=2)
+        print("    OK CLM-pipe-e échec CLM : signalé, jamais fatal, "
+              "provisionnement produit sans filet")
 
 
 if __name__ == '__main__':
