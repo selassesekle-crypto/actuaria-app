@@ -150,7 +150,14 @@ class T3_Non_Regression(unittest.TestCase):
         n4 = r['n4']
         self.assertAlmostEqual(n4['provisions_dossier'], 0.0, delta=0.5)
         self.assertAlmostEqual(n4['be_ibnr_pur'], n4['best_estimate'], delta=1.0)
-        self.assertAlmostEqual(n4['best_estimate'], 20_580_806, delta=2)  # oracle
+        # CONSTANTE MISE À JOUR — lot « décalage f_cum » : 20 580 806 → 20 997 282.
+        # Le BE est la moyenne pondérée CL / BF / Cape Cod. CL est inchangé, mais
+        # BF et Cape Cod consomment `pct_developpe`, lui-même dérivé des facteurs
+        # cumulés qui omettaient le dernier facteur : leurs réserves étaient
+        # sous-estimées de 3 à 5 %, d'où +2,02 % sur le BE. L'invariant testé ici
+        # (base paiements ⇒ provisions_dossier = 0 et be_ibnr_pur == BE) est
+        # intact ; seule la valeur épinglée était périmée.
+        self.assertAlmostEqual(n4['best_estimate'], 20_997_282, delta=2)  # oracle
         print(f"    OK 8b-i run base paiements : BE = {n4['best_estimate']:,.0f} inchangé")
 
     def test_triangle_reference_expose_dans_run(self):
@@ -263,8 +270,12 @@ class T4_Bout_En_Bout(unittest.TestCase):
     def test_base_paiements_identique_a_un_run_sans_charges(self):
         """Fournir un triangle de charges sans le désigner comme référence ne
         change RIEN au résultat : la correction est bien conditionnée."""
+        # CONSTANTE MISE À JOUR — lot « décalage f_cum » : 20 580 806 → 20 997 282,
+        # même cause qu'en T3 (BF et Cape Cod redressés). Ce que ce test vérifie —
+        # qu'un triangle de charges NON désigné comme référence ne change rien —
+        # ne dépend pas de la valeur elle-même.
         self.assertAlmostEqual(
-            self.r_paie['n4']['best_estimate'], 20_580_806, delta=2)
+            self.r_paie['n4']['best_estimate'], 20_997_282, delta=2)
         self.assertAlmostEqual(self.r_paie['n4']['provisions_dossier'], 0.0, delta=0.5)
         print("    OK 8b-n charges fournies mais base paiements : BE inchange")
 

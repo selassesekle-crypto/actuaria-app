@@ -927,10 +927,21 @@ class T19_BE_Negatif_Livrables_Et_RM(unittest.TestCase):
     def test_llt_normal_rm_inchangee(self):
         # Non-régression : le recalcul à neuf donne EXACTEMENT la même RM que
         # l'ancienne proratisation (la RM est linéaire en SCR, donc en BE).
+        #
+        # CONSTANTE MISE À JOUR — lot « décalage f_cum » : 2 728 439 → 3 009 051.
+        # `calculer_facteurs_cumules` rendait un tableau d'une case trop courte et
+        # n'y multipliait jamais le dernier facteur. Le profil d'écoulement de la
+        # Risk Margin (pct_res[j] = 1/f_cum[j]) perdait donc une colonne, ce qui
+        # raccourcissait la durée d'écoulement et sous-estimait la RM.
+        # Décomposition mesurée : +8,29 % (profil corrigé) puis +2,02 % (hausse
+        # du BE, la RM étant linéaire en SCR donc en BE).
+        # CE QUE CE TEST VÉRIFIE N'A PAS CHANGÉ — la relation recalcul ≡
+        # proratisation reste exacte (écart mesuré 0,13 € après correctif) ;
+        # seule la valeur épinglée était périmée.
         r = self._run(source=GENINS, reserve_grands_sinistres=2_000_000.0, n_grands_sinistres=2)
         self.assertTrue(r['success'], r.get('erreur'))
-        self.assertAlmostEqual(r['n4']['risk_margin'], 2_728_439, delta=1)
-        print("    OK T19c LLT normal : RM = 2 728 439 inchangée (recalcul ≡ proratisation)")
+        self.assertAlmostEqual(r['n4']['risk_margin'], 3_009_051, delta=1)
+        print("    OK T19c LLT normal : RM = 3 009 051 (recalcul ≡ proratisation)")
 
 
 # =============================================================================

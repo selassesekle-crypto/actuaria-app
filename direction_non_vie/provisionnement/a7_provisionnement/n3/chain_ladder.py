@@ -217,16 +217,22 @@ def calculer_facteurs_cumules(
 
     Returns
     -------
-    f_cum : np.ndarray  shape (m-1,)
-        f_cum[j] = facteur cumulé depuis la colonne j jusqu'à ultime.
-        f_cum[-1] = tail_factor (colonne finale).
+    f_cum : np.ndarray  shape (m,)
+        UNE CASE PAR COLONNE DU TRIANGLE — il y a m colonnes pour m-1 facteurs.
+        f_cum[j] = facteur cumulé depuis la colonne j jusqu'à ultime
+                 = f_j × f_{j+1} × ... × f_{m-2} × tail
+        f_cum[m-1] = tail_factor : depuis la DERNIÈRE colonne il ne reste que
+                     la queue, tous les facteurs observés ayant été consommés.
     """
-    m     = len(facteurs)
-    f_cum = np.ones(m)
+    # Nommage : `n_f` = nombre de FACTEURS (m-1), distinct du m du triangle.
+    # Les confondre revient à perdre une case, donc à ne jamais multiplier le
+    # dernier facteur — tous les F_j en sortiraient divisés par lui.
+    n_f   = len(facteurs)
+    f_cum = np.ones(n_f + 1)
 
-    # Partir de la droite (colonne la plus développée)
-    f_cum[m - 1] = tail_factor
-    for j in range(m - 2, -1, -1):
+    # Partir de la droite : depuis la dernière colonne, seule la queue reste.
+    f_cum[n_f] = tail_factor
+    for j in range(n_f - 1, -1, -1):
         f_cum[j] = facteurs[j] * f_cum[j + 1]
 
     return f_cum
@@ -688,7 +694,10 @@ def calculer_pct_developpe(
     Parameters
     ----------
     C : np.ndarray  shape (n, m)
-    f_cum : np.ndarray  shape (m-1,)
+    f_cum : np.ndarray  shape (m,)
+        Une case par colonne — cf. calculer_facteurs_cumules. L'année i=0,
+        dont la dernière colonne connue est m-1, a donc bien un pct = 1/tail
+        et non 1.0 : la queue lui reste à courir comme aux autres.
 
     Returns
     -------
