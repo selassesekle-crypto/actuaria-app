@@ -15,8 +15,8 @@ import numpy as np
 from direction_non_vie.provisionnement.a7_provisionnement.n2_hypotheses_clm import (
     A_JUSTIFIER, NON_TESTABLE, NON_VALIDEE, VALIDEE,
     _esperance_variance_Z, clm_h1_effet_calendaire, clm_h2_existence_facteurs,
-    clm_h3_structure_variance, clm_h4_incertitude_queue, facteurs_individuels,
-    verifier_hypotheses_clm,
+    clm_h3_structure_variance, clm_h4_incertitude_queue, couvertures_par_annee,
+    facteurs_individuels, verifier_hypotheses_clm,
 )
 from direction_non_vie.provisionnement.a7_provisionnement.n3.chain_ladder import (
     calculer_facteurs, calculer_tail_factor_multi,
@@ -377,6 +377,172 @@ class T6_Point_D_Entree(unittest.TestCase):
             self.assertNotIn(interdit, noms,
                              f"'{interdit}' : ce module ne doit tirer aucune conséquence")
         print("    OK CLM-entrée verrou de périmètre : aucune conséquence tirée")
+
+
+class T7_Couvertures_Par_Annee(unittest.TestCase):
+    """La traduction des verdicts par colonne en deux couvertures par année."""
+
+    def _couvertures(self, C):
+        return couvertures_par_annee(C, {
+            'CLM-H1': clm_h1_effet_calendaire(C),
+            'CLM-H2': clm_h2_existence_facteurs(C),
+            'CLM-H3': clm_h3_structure_variance(C),
+            'CLM-H4': clm_h4_incertitude_queue(
+                C, tail_info={'tail_factor': 1.0, 'comparaison_methodes': {}},
+                facteurs=calculer_facteurs(C, 'standard')[0])})
+
+    def test_annee_la_plus_ancienne_ne_traverse_aucune_colonne(self):
+        """Un triangle carré : l'année 0 est entièrement développée, plus aucun
+        facteur ne la concerne — son motif est validé sans objet."""
+        C = np.array(GENINS, dtype=float)
+        a0 = self._couvertures(C)['annees'][0]
+        self.assertEqual(a0['colonnes_traversees'], [])
+        self.assertEqual(a0['couverture_motif'], VALIDEE)
+        print("    OK CLM-cov-a année la plus ancienne : aucune colonne traversée")
+
+    def test_annee_la_plus_jeune_traverse_tout(self):
+        C = np.array(GENINS, dtype=float)
+        n, m = C.shape
+        a9 = self._couvertures(C)['annees'][n - 1]
+        self.assertEqual(a9['colonnes_traversees'], list(range(0, m - 1)))
+        print("    OK CLM-cov-b année la plus jeune : traverse tout le motif")
+
+    def test_une_colonne_non_validee_ne_touche_que_les_annees_exposees(self):
+        """ORACLE MESURÉ — sur GenIns comme sur RAA, la colonne 0 est NON
+        VALIDÉE et n'atteint que l'année la plus jeune, la seule dont le
+        parcours la contient."""
+        for nom, T in (('GenIns', GENINS), ('RAA', RAA)):
+            with self.subTest(triangle=nom):
+                C = np.array(T, dtype=float)
+                n, _ = C.shape
+                cov = self._couvertures(C)
+                ko = [d['colonne'] for d in clm_h2_existence_facteurs(C).detail
+                      if d.get('statut') == NON_VALIDEE]
+                self.assertEqual(ko, [0])
+                self.assertEqual(cov['synthese']['annees_sous_filet'], [n - 1])
+        print("    OK CLM-cov-c colonne 0 non validée → seule l'année la plus "
+              "jeune sous filet (GenIns et RAA)")
+
+    def test_la_queue_touche_toutes_les_annees(self):
+        """CLM-H4 est global : une queue non validée dégrade la volatilité de
+        TOUTES les années, y compris la plus ancienne."""
+        G = np.array(GENINS, dtype=float)
+        f, _ = calculer_facteurs(G, 'standard')
+        ti = calculer_tail_factor_multi(f, risque_long=True,
+                                        tail_seuil_stabilisation=1.0001)
+        h4 = clm_h4_incertitude_queue(G, tail_info=ti, facteurs=f)
+        self.assertEqual(h4.statut, NON_VALIDEE)
+        cov = couvertures_par_annee(G, {
+            'CLM-H2': clm_h2_existence_facteurs(G),
+            'CLM-H3': clm_h3_structure_variance(G), 'CLM-H4': h4})
+        for a in cov['annees']:
+            self.assertEqual(a['couverture_volatilite'], NON_VALIDEE)
+        print("    OK CLM-cov-d queue non validée : volatilité dégradée sur "
+              "TOUTES les années, y compris l'année 0")
+
+    def test_motif_et_volatilite_ne_se_contaminent_pas(self):
+        """LE VERROU DE LA DISTINCTION — une queue non validée ne doit RIEN
+        faire au motif : elle ne touche pas la réserve, seulement ce que Mack
+        publie autour."""
+        G = np.array(GENINS, dtype=float)
+        f, _ = calculer_facteurs(G, 'standard')
+        h2, h3 = clm_h2_existence_facteurs(G), clm_h3_structure_variance(G)
+        sans = couvertures_par_annee(G, {
+            'CLM-H2': h2, 'CLM-H3': h3,
+            'CLM-H4': clm_h4_incertitude_queue(
+                G, tail_info={'tail_factor': 1.0, 'comparaison_methodes': {}},
+                facteurs=f)})
+        avec = couvertures_par_annee(G, {
+            'CLM-H2': h2, 'CLM-H3': h3,
+            'CLM-H4': clm_h4_incertitude_queue(
+                G, tail_info=calculer_tail_factor_multi(
+                    f, risque_long=True, tail_seuil_stabilisation=1.0001),
+                facteurs=f)})
+        motifs_sans = [a['couverture_motif'] for a in sans['annees']]
+        motifs_avec = [a['couverture_motif'] for a in avec['annees']]
+        self.assertEqual(motifs_sans, motifs_avec)
+        self.assertNotEqual([a['couverture_volatilite'] for a in sans['annees']],
+                            [a['couverture_volatilite'] for a in avec['annees']])
+        print("    OK CLM-cov-e motif intact quand seule la volatilité tombe")
+
+    def test_non_testable_ne_degrade_ni_ne_valide(self):
+        """Une colonne sans assez d'observations est une absence d'information,
+        pas un échec : elle ne doit pas faire basculer une année sous filet."""
+        cov = self._couvertures(np.array(GENINS, dtype=float))
+        non_testables = [a for a in cov['annees']
+                         if a['couverture_motif'] == NON_TESTABLE]
+        self.assertTrue(non_testables)
+        for a in non_testables:
+            self.assertFalse(a['filet_requis'])
+        print(f"    OK CLM-cov-f {len(non_testables)} année(s) NON TESTABLE : "
+              f"aucune sous filet")
+
+
+class T8_Cablage_Dans_Le_Pipeline(unittest.TestCase):
+    """Lot A — CLM tourne en N2 et n'est consommé par rien."""
+
+    @classmethod
+    def setUpClass(cls):
+        from direction_non_vie.provisionnement.a7_provisionnement.agent import (
+            AgentA7Provisionnement)
+        cls.r = AgentA7Provisionnement(verbose=False).run(
+            source=GENINS, n_sim_bootstrap=100, generer_graphiques=False,
+            generer_word=False, generer_pdf_flag=False)
+
+    def test_clm_est_calcule_en_n2(self):
+        clm = self.r['n2'].get('clm', {})
+        self.assertEqual(set(clm.get('hypotheses', {})),
+                         {'CLM-H1', 'CLM-H2', 'CLM-H3', 'CLM-H4'})
+        self.assertIn('annees', clm.get('couvertures', {}))
+        print("    OK CLM-pipe-a CLM-H1..H4 et les couvertures produits en N2")
+
+    def test_expose_dans_les_livrables_en_resume(self):
+        """Visible par l'actuaire, sans alourdir l'audit du détail par colonne."""
+        n2r = self.r['audit_trail']['n2_resume']
+        self.assertEqual(set(n2r['clm_hypotheses']),
+                         {'CLM-H1', 'CLM-H2', 'CLM-H3', 'CLM-H4'})
+        self.assertIn('annees_sous_filet', n2r['clm_couvertures'])
+        import json
+        self.assertLess(len(json.dumps(n2r['clm_hypotheses'])), 4000)
+        print("    OK CLM-pipe-b exposé en résumé dans l'audit, détail non persisté")
+
+    def test_estimateur_standard_impose(self):
+        """CLM teste les hypothèses de Mack : l'estimateur doit être le
+        volume-weighted, quelle que soit la variante retenue par N2."""
+        import ast, inspect
+        from direction_non_vie.provisionnement.a7_provisionnement import agent as mod
+        src = inspect.getsource(mod.AgentA7Provisionnement._verifier_clm)
+        self.assertIn("'standard'", src)
+        self.assertNotIn('methode_cl', src)
+        print("    OK CLM-pipe-c estimateur standard imposé, pas de circularité")
+
+    def test_aucune_consommation_par_le_calcul(self):
+        """VERROU DU LOT A — les couvertures existent mais ne pilotent rien :
+        la sélection des méthodes reste celle des scores."""
+        n4 = self.r['n4']
+        self.assertEqual(set(n4['methodes_incluses']),
+                         {'chain_ladder', 'bornhuetter_ferguson', 'cape_cod'})
+        self.assertNotIn('couverture', str(n4.keys()))
+        cov = self.r['n2']['clm']['couvertures']['synthese']
+        self.assertEqual(cov['annees_sous_filet'], [9])
+        self.assertAlmostEqual(n4['best_estimate'], 20_997_282, delta=2)
+        print("    OK CLM-pipe-d une année est sous filet, le BE ne bouge pas "
+              "— rien ne consomme encore les couvertures")
+
+    def test_ne_leve_jamais(self):
+        """Un échec de vérification ne doit pas empêcher un provisionnement."""
+        from unittest.mock import patch
+        from direction_non_vie.provisionnement.a7_provisionnement.agent import (
+            AgentA7Provisionnement)
+        with patch('direction_non_vie.provisionnement.a7_provisionnement.agent'
+                   '.verifier_hypotheses_clm', side_effect=RuntimeError('boum')):
+            r = AgentA7Provisionnement(verbose=False).run(
+                source=GENINS, n_sim_bootstrap=100, generer_graphiques=False,
+                generer_word=False, generer_pdf_flag=False)
+        self.assertTrue(r['success'])
+        self.assertIn('erreur', r['n2']['clm'])
+        self.assertAlmostEqual(r['n4']['best_estimate'], 20_997_282, delta=2)
+        print("    OK CLM-pipe-e échec CLM : signalé, jamais fatal, BE intact")
 
 
 if __name__ == '__main__':

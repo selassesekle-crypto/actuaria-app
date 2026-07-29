@@ -817,6 +817,100 @@ def _agreger_par_colonne(
 
 
 # =============================================================================
+#  COUVERTURE PAR ANNÉE DE SURVENANCE
+# =============================================================================
+
+_ORDRE_SEVERITE = {NON_TESTABLE: 0, VALIDEE: 1, A_JUSTIFIER: 2, NON_VALIDEE: 3}
+
+
+def _pire_statut(statuts: Sequence[str]) -> str:
+    """Le plus sévère l'emporte. NON TESTABLE = absence d'information, il ne
+    dégrade rien mais ne valide rien non plus."""
+    connus = [s for s in statuts if s in _ORDRE_SEVERITE]
+    if not connus:
+        return NON_TESTABLE
+    return max(connus, key=lambda s: _ORDRE_SEVERITE[s])
+
+
+def couvertures_par_annee(
+    C:          np.ndarray,
+    hypotheses: Dict[str, ResultatHypothese],
+) -> Dict[str, Any]:
+    """Traduit les verdicts par colonne / global en DEUX couvertures par année.
+
+    RÈGLE DE PROPAGATION. Une année `i` projette à travers les colonnes
+    `j = k_i … m−2`, où `k_i = min(n−i−1, m−1)` est sa dernière colonne connue.
+    Elle est donc exposée à TOUTES les colonnes de son avenir :
+
+        couverture_motif[i]      = pire des CLM-H2 sur j ∈ [k_i, m−2]
+        couverture_volatilite[i] = pire de (CLM-H3 sur ces mêmes colonnes,
+                                            CLM-H4 — global, la queue vaut
+                                            pour toutes les années)
+
+    Conséquence actuariellement juste : les années JEUNES sont exposées à tout
+    le motif, les ANCIENNES à sa seule queue. L'année la plus ancienne d'un
+    triangle carré ne traverse aucune colonne — son motif est validé sans objet,
+    et seule la queue peut encore l'affecter.
+
+    ⚠️ DEUX COUVERTURES SÉPARÉES, JAMAIS CONFONDUES. Le motif porte sur la
+    RÉSERVE : il concerne les trois méthodes qui construisent le Best Estimate,
+    puisqu'elles consomment toutes les mêmes facteurs. La volatilité porte sur
+    ce que Mack publie AUTOUR de la réserve : un échec n'y touche pas le point
+    estimate, seulement les percentiles.
+
+    ⚠️ CE QUE CETTE FONCTION NE FAIT PAS. Elle DÉCRIT la couverture, elle
+    n'exclut rien et ne pondère rien. Le second volet du filet de sécurité —
+    « même Chain Ladder ne se calcule pas » — n'est pas décidable ici : il exige
+    de connaître les réserves, qui n'existent qu'en N3. Il appartient au niveau
+    qui les possède.
+    """
+    n, m = C.shape
+    h2 = hypotheses.get('CLM-H2')
+    h3 = hypotheses.get('CLM-H3')
+    h4 = hypotheses.get('CLM-H4')
+
+    par_colonne_h2 = {d['colonne']: d.get('statut', NON_TESTABLE)
+                      for d in (h2.detail if h2 else ()) if 'colonne' in d}
+    par_colonne_h3 = {d['colonne']: d.get('statut', NON_TESTABLE)
+                      for d in (h3.detail if h3 else ()) if 'colonne' in d}
+    statut_h4 = h4.statut if h4 else NON_TESTABLE
+
+    annees: List[Dict[str, Any]] = []
+    for i in range(n):
+        k_i = min(n - i - 1, m - 1)
+        traversees = list(range(k_i, m - 1))
+        if traversees:
+            motif = _pire_statut([par_colonne_h2.get(j, NON_TESTABLE)
+                                  for j in traversees])
+            vol_motif = _pire_statut([par_colonne_h3.get(j, NON_TESTABLE)
+                                      for j in traversees])
+        else:
+            # Année entièrement développée : plus aucun facteur à traverser.
+            motif, vol_motif = VALIDEE, VALIDEE
+        volatilite = _pire_statut([vol_motif, statut_h4])
+        annees.append({
+            'annee':                 i,
+            'derniere_colonne_connue': k_i,
+            'colonnes_traversees':   traversees,
+            'couverture_motif':      motif,
+            'couverture_volatilite': volatilite,
+            'filet_requis':          motif == NON_VALIDEE,
+        })
+
+    compte = lambda cle, val: sum(1 for a in annees if a[cle] == val)
+    return {
+        'annees': annees,
+        'synthese': {
+            'motif_non_validees':      compte('couverture_motif', NON_VALIDEE),
+            'motif_a_justifier':       compte('couverture_motif', A_JUSTIFIER),
+            'volatilite_non_validees': compte('couverture_volatilite', NON_VALIDEE),
+            'volatilite_a_justifier':  compte('couverture_volatilite', A_JUSTIFIER),
+            'annees_sous_filet':       [a['annee'] for a in annees if a['filet_requis']],
+        },
+    }
+
+
+# =============================================================================
 #  POINT D'ENTRÉE
 # =============================================================================
 
@@ -841,14 +935,11 @@ def verifier_hypotheses_clm(
     h4 = clm_h4_incertitude_queue(C, tail_info=tail_info, facteurs=facteurs,
                                   annee_base=annee_base)
     resultats = {r.code: r for r in (h1, h2, h3, h4)}
-
-    def _pire(codes: Sequence[str]) -> str:
-        ordre = {NON_VALIDEE: 3, A_JUSTIFIER: 2, VALIDEE: 1, NON_TESTABLE: 0}
-        return max((resultats[c].statut for c in codes),
-                   key=lambda s: ordre.get(s, 0))
+    _pire = lambda codes: _pire_statut([resultats[c].statut for c in codes])
 
     return {
         'hypotheses':  {code: r.synthese() for code, r in resultats.items()},
+        'couvertures': couvertures_par_annee(C, resultats),
         'chain_ladder': {'hypotheses': ['CLM-H1', 'CLM-H2'],
                          'statut_le_plus_severe': _pire(['CLM-H1', 'CLM-H2'])},
         'mack':         {'hypotheses': ['CLM-H1', 'CLM-H2', 'CLM-H3', 'CLM-H4'],

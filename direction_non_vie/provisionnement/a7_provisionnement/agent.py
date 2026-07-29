@@ -39,6 +39,7 @@ import numpy as np
 # ── Imports modules A7 ───────────────────────────────────────────────────────
 from direction_non_vie.services.nv_triangle import preparer_pour_agent
 from .n2_hypotheses     import HypothesesValidator
+from .n2_hypotheses_clm import verifier_hypotheses_clm
 from .n4_best_estimate  import BestEstimateS2, garde_fou_be_negatif, s2_non_calculable
 # Alias VOLONTAIRE — ne pas « nettoyer » : `generer_graphiques` est aussi un
 # PARAMÈTRE public de run() (compatibilité ancienne API, cf. plus bas). Sans
@@ -289,9 +290,28 @@ class AgentA7Provisionnement:
             # N2 — HYPOTHÈSES
             # =================================================================
             if self.verbose:
-                logger.info("N2 — Validation hypothèses H1/H2/H3/H4")
+                logger.info("N2 — Validation hypothèses H1/H2/H3/H4 + CLM-H1..H4")
 
             n2 = self._hv.valider(C_calc, primes=primes_norm, lob=lob, lr_manuel=lr_bf_manuel)
+
+            # ── CLM-H1..H4 : les hypothèses propres à Chain Ladder et Mack ────
+            # Elles doivent être disponibles AU NIVEAU OÙ LA SÉLECTION SE DÉCIDE,
+            # donc ici et non en N3 comme le test calendaire vivait jusqu'alors.
+            #
+            # ⚠️ L'ESTIMATEUR EST IMPOSÉ, PAS CHOISI. CLM teste les hypothèses de
+            # Mack, qui sont énoncées pour l'estimateur volume-weighted
+            # (`E(C[i,j+1]|C[i,j]) = λ_j·C[i,j]` avec `λ̂_j = ΣC[i,j+1]/ΣC[i,j]`).
+            # Les tester sur une variante médiane ou écrêtée reviendrait à
+            # valider un autre modèle que celui décrit par la théorie. C'est
+            # aussi ce qui lève la circularité : `methode_cl_retenue` est produit
+            # PAR N2, il ne peut donc pas conditionner un calcul qui s'y déroule.
+            #
+            # ⚠️ INCOHÉRENCE HÉRITÉE, SIGNALÉE ET NON CORRIGÉE ICI : si N3 retient
+            # ensuite une variante (mesuré : 'mediane' sur le triangle RAA), les
+            # hypothèses auront été vérifiées sur un estimateur différent de celui
+            # qui produit la réserve. Le choix de variante dépend de l'ancienne H2,
+            # elle-même destinée à être remplacée — à traiter au lot suivant.
+            n2['clm'] = self._verifier_clm(C_calc, cfg_lob, annee_base_reserve)
 
             # CORRECTION BUG v4.0 :
             # methode_cl_retenue est maintenant dans n2 directement
@@ -716,6 +736,37 @@ class AgentA7Provisionnement:
     #  N3 — ORCHESTRATEUR DES MÉTHODES
     # =========================================================================
 
+    def _verifier_clm(
+        self,
+        C:          np.ndarray,
+        cfg_lob:    Dict,
+        annee_base: int,
+    ) -> Dict:
+        """CLM-H1..H4 sur l'estimateur STANDARD, avec sa propre queue.
+
+        Les facteurs et la queue sont recalculés ici plutôt que repris de N3 :
+        N3 tourne APRÈS N2 et sur la variante choisie par N2. Ce n'est donc pas
+        un doublon mais deux grandeurs distinctes — l'estimateur de référence de
+        Mack d'un côté, celui effectivement retenu de l'autre. Quand la variante
+        retenue est 'standard', le cas courant, les deux coïncident.
+
+        Ne LÈVE JAMAIS : un échec de vérification ne doit pas empêcher un
+        provisionnement de se produire. Il est signalé, pas fatal.
+        """
+        try:
+            facteurs, _ = calculer_facteurs(C, 'standard')
+            tail_info = calculer_tail_factor(
+                facteurs,
+                lob_tail_max_alerte      = cfg_lob.get('tail_factor_max_alerte', 1.05),
+                risque_long              = cfg_lob.get('risque_long', True),
+                tail_seuil_stabilisation = cfg_lob.get('tail_seuil_stabilisation', 1.02),
+            )
+            return verifier_hypotheses_clm(
+                C, tail_info=tail_info, facteurs=facteurs, annee_base=annee_base)
+        except Exception as e:
+            logger.warning(f"CLM-H1..H4 non calculées : {e}")
+            return {'erreur': str(e), 'hypotheses': {}, 'couvertures': {}}
+
     def _calculer_n3(
         self,
         C:               np.ndarray,
@@ -891,6 +942,15 @@ class AgentA7Provisionnement:
                 'methode_recommandee': n2.get('methode_recommandee'),
                 'statut_global':      n2.get('statut_global'),
                 'scores':             n2.get('scores_confiance', {}),
+                # CLM-H1..H4 — EXPOSÉES, CONSOMMÉES PAR RIEN. Elles sont
+                # visibles par l'actuaire dès maintenant ; le mécanisme de
+                # sélection continue de reposer sur les scores ci-dessus.
+                'clm_hypotheses':     {c: {'statut': h['statut'],
+                                           'message': h['message']}
+                                       for c, h in n2.get('clm', {})
+                                       .get('hypotheses', {}).items()},
+                'clm_couvertures':    n2.get('clm', {})
+                                        .get('couvertures', {}).get('synthese', {}),
             },
             'n3_resume': {
                 'cl':          n3['chain_ladder']['reserve_totale'],
