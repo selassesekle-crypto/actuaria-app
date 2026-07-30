@@ -26,6 +26,7 @@ import numpy as np
 # Source UNIQUE d'affichage des hypothèses de BF et Cape Cod : une hypothèse non
 # évaluée y ressort NON TESTABLE, jamais en valeur par défaut.
 from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
+from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
 
 logger = logging.getLogger('actuaria.a7.rapport')
 
@@ -213,7 +214,6 @@ def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: s
     clark = n3.get('clark', {});         bz  = n3.get('glm_apc', {})
     bt    = n3.get('backtesting', {});   sc  = n4.get('scr', {})
     h1    = n2.get('h1_independance', {}); h2 = n2.get('h2_stabilite', {})
-    h4  = n2.get('h4_homosc_bootstrap', {})
     pw    = n4.get('poids', {})
     BE  = float(n4.get('best_estimate', 0) or 0)
     SIG = float(mk.get('sigma_total', 0) or 0)
@@ -238,7 +238,8 @@ def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: s
         f"Loss ratio a priori : {libelle_loss_ratio(n3.get('bf', {}))} (source : {n3.get('bf', {}).get('source_lr', '—')}) — UNIQUE, produit par N3.",
         *[f"{l['libelle']} : {l['statut']} | {l['message'][:160]}"
           for l in lignes_hypotheses_bfcc(n2)],
-        f"H4 Homoscédasticité : {'VALIDÉE' if h4.get('ok') else 'REJETÉE'} | phi={h4.get('phi', '—')} | score={h4.get('score', '—')}/100",
+        *[f"{l['libelle']} : {l['statut']} | {l['message'][:160]}"
+          for l in lignes_hypotheses_bootstrap(n2)],
         "",
         "=== RÉSULTATS ===",
         f"Chain Ladder : {_f(cl.get('reserve_totale'))} | poids={_pct(pw.get('chain_ladder', 0)*100)}",
@@ -932,7 +933,6 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     clark = n3.get('clark', {});         bz  = n3.get('glm_apc', {})
     bt    = n3.get('backtesting', {});   sc  = n4.get('scr', {})
     h1    = n2.get('h1_independance', {}); h2 = n2.get('h2_stabilite', {})
-    h4  = n2.get('h4_homosc_bootstrap', {})
     pw    = n4.get('poids', {})
 
     BE  = float(n4.get('best_estimate', 0) or 0)
@@ -1156,7 +1156,6 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     for label, h, code in [
         ('H1 — Indépendance des facteurs', h1, 'H1'),
         ('H2 — Stabilité des facteurs', h2, 'H2'),
-        ('H4 — Homoscédasticité Bootstrap ODP', h4, 'H4'),
     ]:
         if not h:
             continue
@@ -1176,7 +1175,11 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         )
     # BFCC-H1..H5 — statut motivé, SANS score : ces hypothèses n'en produisent
     # aucun. Afficher « Score — / 100 » serait moins clair que ne rien afficher.
-    for ligne in lignes_hypotheses_bfcc(n2):
+    # BOOT-H1..H4 — idem. La carte « H4 — Homoscédasticité Bootstrap ODP »
+    # affichait un score sur 100 calculé sur le CV des variances des
+    # facteurs de développement, rouge sur les trois triangles de référence.
+    for ligne in (list(lignes_hypotheses_bfcc(n2))
+                  + list(lignes_hypotheses_bootstrap(n2))):
         cls = ('hyp-ok' if ligne['statut'] == 'VALIDÉE'
                else 'hyp-warn' if ligne['statut'] != 'NON VALIDÉE' else 'hyp-warn')
         hyp_cards += (
@@ -1926,7 +1929,6 @@ def export_word(n1, n2, n3, n4,
         sc  = n4.get('scr',{});           pw = n4.get('poids',{})
         bt  = n3.get('backtesting',{});   bz = n3.get('glm_apc',{})
         h1  = n2.get('h1_independance',{}); h2 = n2.get('h2_stabilite',{})
-        h4  = n2.get('h4_homosc_bootstrap',{})
 
         BE  = float(n4.get('best_estimate',0) or 0)
         SIG = float(mk.get('sigma_total',0) or 0)
@@ -2039,11 +2041,12 @@ def export_word(n1, n2, n3, n4,
 
         _h('3. Validation des hypothèses actuarielles'); _sep()
         rows_h=[]
-        for lbl,h in [('H1 Indépendance',h1),('H2 Stabilité',h2),('H4 Homoscédasticité',h4)]:
+        for lbl,h in [('H1 Indépendance',h1),('H2 Stabilité',h2)]:
             if not h: continue
             ok=bool(h.get('ok',True))
             rows_h.append([lbl,'VALIDÉE' if ok else 'REJETÉE',str(h.get('score','—'))+'/100',str(h.get('message',''))[:80]])
-        for ligne in lignes_hypotheses_bfcc(n2):
+        for ligne in (list(lignes_hypotheses_bfcc(n2))
+                      + list(lignes_hypotheses_bootstrap(n2))):
             rows_h.append([ligne['libelle'][:38], ligne['statut'], '—',
                            ligne['message'][:80]])
         if rows_h: _tbl(['Hypothèse','Résultat','Score','Message'],rows_h,ws=[4.0,2.5,2.0,7.5])

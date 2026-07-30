@@ -29,7 +29,9 @@ import numpy as np
 # Formatage du loss ratio : source unique, pour qu'une méthode non calculée
 # n'apparaisse jamais comme un loss ratio de 0 %.
 from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
+from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
 from .n3.bf_cape_cod import libelle_loss_ratio
+from .n3.bootstrap_odp import libelle_incertitude
 
 logger = logging.getLogger('actuaria.a7')
 
@@ -221,7 +223,6 @@ def _ong1_synthese(wb, n1, n2, n3, n4, ref_client, date_str):
     for i, (key, lbl) in enumerate([
         ('h1_independance','H1 Indépendance'),
         ('h2_stabilite','H2 Stabilité'),
-        ('h4_homosc_bootstrap','H4 Homoscédasticité'),
     ]):
         h = n2.get(key, {})
         _kpi(ws, 24+i, 1, lbl, h.get('score', 0), None,
@@ -230,10 +231,20 @@ def _ong1_synthese(wb, n1, n2, n3, n4, ref_client, date_str):
     _bfcc = lignes_hypotheses_bfcc(n2)
     _pire = next((l for l in _bfcc if l['statut'] == 'NON VALIDÉE'),
                  next((l for l in _bfcc if l['statut'] == 'À JUSTIFIER'), None))
-    _kpi(ws, 27, 1, "BF / Cape Cod",
+    _kpi(ws, 26, 1, "BF / Cape Cod",
          f"{_pire['code']} {_pire['statut']}" if _pire else "H1-H5 OK",
          None, 'ROUGE' if (_pire and _pire['statut'] == 'NON VALIDÉE')
                 else 'AMBRE' if _pire else 'VERT')
+    # Synthèse BOOT sur le même modèle. La ligne qui occupait cette place
+    # affichait le score de l'ancienne H4 — un `/100` calculé sur le CV des
+    # variances des facteurs, rouge sur les trois triangles de référence.
+    _boot = lignes_hypotheses_bootstrap(n2)
+    _pb   = next((l for l in _boot if l['statut'] == 'NON VALIDÉE'),
+                 next((l for l in _boot if l['statut'] == 'À JUSTIFIER'), None))
+    _kpi(ws, 27, 1, "Bootstrap ODP",
+         f"{_pb['code']} {_pb['statut']}" if _pb else "H1-H4 OK",
+         None, 'ROUGE' if (_pb and _pb['statut'] == 'NON VALIDÉE')
+                else 'AMBRE' if _pb else 'VERT')
 
     # Bloc triangle
     _titre_section(ws, 29, 1, "DONNÉES", 6)
@@ -405,7 +416,8 @@ def _ong4_methodes(wb, n3, n4):
         ('Cape Cod',               n3['cape_cod']['reserve_totale'],       'cape_cod',
          f"LR_CC={libelle_loss_ratio(n3['cape_cod'], 'lr_cape_cod')}", n3['cape_cod']['source_exposition']),
         ('Bootstrap ODP',          n3['bootstrap'].get('be_bootstrap',0), 'bootstrap_odp',
-         f"φ={n3['bootstrap'].get('phi',0):.4f}", f"n={n3['bootstrap'].get('n_simulations',0):,}"),
+         f"φ={libelle_incertitude(n3['bootstrap'], 'phi')}",
+         f"n={n3['bootstrap'].get('n_simulations',0):,}"),
     ]
 
     for i, (nom, res, key, detail, note) in enumerate(rows):
@@ -577,7 +589,6 @@ def _ong6_hypotheses(wb, n2):
     hyps = [
         ('h1_independance',     'H1 — Indépendance des années (Spearman)'),
         ('h2_stabilite',        'H2 — Stabilité des facteurs (CV + dérive)'),
-        ('h4_homosc_bootstrap', 'H4 — Homoscédasticité Bootstrap ODP'),
     ]
     rangs = []
     for key, lbl in hyps:
@@ -594,6 +605,14 @@ def _ong6_hypotheses(wb, n2):
     # BFCC-H1..H5 — statut motivé, sans score : ces hypothèses n'en produisent
     # aucun, et en afficher un fabriqué serait le défaut qu'on vient de retirer.
     for ligne in lignes_hypotheses_bfcc(n2):
+        rangs.append((ligne['libelle'], ligne['statut'], '—',
+                      ligne['source'], ligne['message'][:200], ligne['ok']))
+
+    # BOOT-H1..H4 — même traitement. La ligne « H4 — Homoscédasticité Bootstrap
+    # ODP » qui figurait plus haut portait un score sur 100 tiré du CV des
+    # variances des facteurs de développement : ni le φ du Bootstrap, ni un
+    # score que quiconque lisait.
+    for ligne in lignes_hypotheses_bootstrap(n2):
         rangs.append((ligne['libelle'], ligne['statut'], '—',
                       ligne['source'], ligne['message'][:200], ligne['ok']))
 

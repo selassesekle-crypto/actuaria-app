@@ -624,8 +624,13 @@ def libelle_incertitude(bloc: Dict, cle: str = 'std_bootstrap') -> str:
     valeur = bloc.get(cle)
     if valeur is None:
         return '—'
-    return (f"{float(valeur):.1%}" if cle.startswith('cv_')
-            else f"{float(valeur):,.0f}")
+    if cle.startswith('cv_'):
+        return f"{float(valeur):.1%}"
+    # φ n'est pas un montant : il vaut 5,26·10⁴ sur GenIns et 0,33 sur un
+    # triangle de faible volume. Un format monétaire l'écrirait « 0 ».
+    if cle == 'phi':
+        return f"{float(valeur):,.4g}"
+    return f"{float(valeur):,.0f}"
 
 
 def _resultat_degrade(reserve_ref: float, n_sim: int,

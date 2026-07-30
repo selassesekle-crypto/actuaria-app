@@ -1,7 +1,32 @@
 # =============================================================================
 #  ActuarIA — Agent A7 Ibrahim
-#  n2_hypotheses.py  —  Niveau 2 : Validation des hypothèses H1/H2/H4
+#  n2_hypotheses.py  —  Niveau 2 : Validation des hypothèses H1/H2
 # =============================================================================
+#
+#  ⚠️ CE MODULE NE CALCULE PLUS AUCUN φ — ET N'EN CALCULERA PLUS JAMAIS.
+#  ──────────────────────────────────────────────────────────────────
+#  L'ancienne H4 « homoscédasticité » vivait ici et produisait un second facteur
+#  de sur-dispersion, concurrent de celui du Bootstrap ODP. Elle a été supprimée,
+#  pas déplacée, pour trois défauts mesurés :
+#
+#  · Elle ne mesurait pas ce qu'elle nommait. Son « φ » était la moyenne des
+#    variances pondérées des FACTEURS DE DÉVELOPPEMENT ; le φ du Bootstrap est
+#    la sur-dispersion des RÉSIDUS DE PEARSON des incréments. Deux grandeurs
+#    sans rapport, dans des unités différentes — écart mesuré de 662× sur RAA à
+#    843 268× sur GenIns. Exactement la pathologie des deux loss ratios, en pire.
+#  · Elle criait au loup sur TOUS les triangles de référence. CV des variances
+#    2,12 · 2,40 · 1,31, tous au-dessus de son seuil de 1,0 : elle publiait
+#    « Bootstrap ODP non fiable » sur GenIns, RAA et Recours indifféremment.
+#  · Elle ne gatait rien. Son `ok` était affiché par douze sites et lu par aucune
+#    décision : ni les percentiles, ni le Best Estimate, ni le SCR n'en
+#    dépendaient. Une alerte réglementaire sans conséquence est un bruit.
+#
+#  L'hypothèse d'homogénéité de φ est réelle — England & Verrall (2002) supposent
+#  UN φ pour tout le triangle — et elle est désormais testée là où le φ existe :
+#  BOOT-H3 dans `n2_hypotheses_bootstrap`, sur les résidus du Bootstrap lui-même,
+#  par corrélation de rang calibrée sur nulle paramétrique. Il n'y a plus qu'UN
+#  SEUL φ dans le système, celui du Bootstrap, et un verrou de test interdit à ce
+#  module d'en publier un second.
 #
 #  ⚠️ CE MODULE NE CALCULE PLUS AUCUN LOSS RATIO.
 #  ─────────────────────────────────────────────
@@ -34,7 +59,6 @@
 #
 #  Références :
 #    · Mack (1993) — ASTIN Bulletin 23(2) : hypothèses H1-H3
-#    · England & Verrall (2002) : H4 homoscédasticité Bootstrap ODP
 #    · Spearman (1904) : test de rang pour H1
 #
 # =============================================================================
@@ -45,8 +69,8 @@ from typing import Dict, Any, List, Tuple
 import numpy as np
 
 from .config.lob_config import get_lob_config
-# Reconstruction des facteurs individuels : SOURCE UNIQUE. Les trois boucles
-# identiques qui vivaient ici (H1, H2, H4) ont été remplacées par cet appel.
+# Reconstruction des facteurs individuels : SOURCE UNIQUE. Les boucles
+# identiques qui vivaient ici (H1, H2) ont été remplacées par cet appel.
 from .n2_hypotheses_clm import facteurs_individuels
 
 logger = logging.getLogger('actuaria.a7')
@@ -70,9 +94,9 @@ class HypothesesValidator:
          CV des facteurs par colonne et dérive temporelle (anciens vs récents).
          Seuils paramétrés par LoB (depuis lob_config).
 
-    H4 — Homoscédasticité (England & Verrall 2002)
-         Variance des résidus pondérés homogène entre colonnes.
-         Condition nécessaire pour la validité du Bootstrap ODP.
+    L'homoscédasticité du Bootstrap ODP N'EST PLUS ICI : elle est devenue
+    BOOT-H3 (`n2_hypotheses_bootstrap`), qui l'évalue sur les résidus du
+    Bootstrap au lieu des facteurs de développement. Cf. en-tête du module.
 
     Correction critique v5.0
     ------------------------
@@ -94,7 +118,7 @@ class HypothesesValidator:
         lob:       str = 'generique',
     ) -> Dict[str, Any]:
         """
-        Lance les tests H1, H2 et H4 et retourne un rapport structuré.
+        Lance les tests H1 et H2 et retourne un rapport structuré.
 
         Parameters
         ----------
@@ -111,7 +135,7 @@ class HypothesesValidator:
         Returns
         -------
         dict avec :
-            h1_independance, h2_stabilite, h4_homosc_bootstrap
+            h1_independance, h2_stabilite
             methode_recommandee     : str  — méthode principale conseillée
             methode_cl_retenue      : str  — variante CL à utiliser en N3
                                       ('standard'|'mediane'|'trimmed_mean'|
@@ -133,9 +157,6 @@ class HypothesesValidator:
 
         # ── H2 : Stabilité (seuils depuis lob_config) ────────────────────────
         h2 = self._tester_h2_stabilite(C, alertes, infos, cfg_lob)
-
-        # ── H4 : Homoscédasticité ─────────────────────────────────────────────
-        h4 = self._tester_h4_homosc(C, alertes, infos)
 
         # ── Méthode recommandée ───────────────────────────────────────────────
         methode_rec, raison_rec = self._recommander_methode(h1, h2, n)
@@ -178,7 +199,6 @@ class HypothesesValidator:
         return {
             'h1_independance':       h1,
             'h2_stabilite':          h2,
-            'h4_homosc_bootstrap':   h4,
             'methode_recommandee':   methode_rec,
             # Toujours 'standard' sauf choix explicite de l'actuaire en amont :
             # la réserve se calcule sur l'estimateur de Mack (cf. lot B).
@@ -450,90 +470,6 @@ class HypothesesValidator:
             'seuil_derive': seuil_derive,
             'message':     message,
             'details':     details,
-        }
-
-    # =========================================================================
-    #  H4 : HOMOSCÉDASTICITÉ (Bootstrap ODP)
-    # =========================================================================
-
-    def _tester_h4_homosc(
-        self,
-        C:       np.ndarray,
-        alertes: List,
-        infos:   List,
-    ) -> Dict:
-        """
-        Homoscédasticité des résidus — condition du Bootstrap ODP.
-
-        Référence : England & Verrall (2002), Insurance: Mathematics and Economics.
-
-        Principe : tester si la variance des résidus pondérés est homogène
-        entre colonnes. Pour chaque colonne j, calculer la variance pondérée :
-
-            Var_j = Σ_i w_ij × (f_ij - f̄_j)²  /  Σ_i w_ij
-            avec w_ij = C[i,j] (pondération volume)
-
-        Si CV(Var_j) < 1.0 : homoscédasticité acceptable.
-
-        Le facteur de sur-dispersion φ est la moyenne de Var_j — il est
-        utilisé par le Bootstrap ODP pour calibrer les résidus de Pearson.
-        """
-        n, m            = C.shape
-        var_cols: List  = []
-
-        colonnes = facteurs_individuels(C)          # source unique
-
-        for j in range(m - 1):
-            facteurs = [f for _, f, _ in colonnes[j]]
-            poids    = [c for _, _, c in colonnes[j]]
-
-            if len(facteurs) >= 3:
-                arr  = np.array(facteurs)
-                w    = np.array(poids)
-                moy  = np.average(arr, weights=w)
-                var  = np.average((arr - moy) ** 2, weights=w)
-                var_cols.append(float(var))
-
-        if len(var_cols) < 3:
-            return {
-                'ok':     True,
-                'score':  75,
-                'phi':    0.0,
-                'cv_var': 0.0,
-                'message': "H4 non testable — moins de 3 colonnes disponibles",
-            }
-
-        var_arr = np.array(var_cols)
-        cv_var  = float(np.std(var_arr) / max(np.mean(var_arr), 1e-12))
-        phi     = float(np.mean(var_arr))
-
-        ok    = cv_var < 1.0
-        score = max(0, int((1 - cv_var / 2.0) * 100))
-
-        if not ok:
-            alertes.append(
-                f"🟡 H4 Homoscédasticité : CV variances = {cv_var:.2f} > 1.0 "
-                f"→ Bootstrap ODP moins fiable. "
-                f"Interpréter les percentiles P90/P99.5 avec prudence."
-            )
-            message = (
-                f"H4 HÉTÉROSCÉDASTICITÉ détectée — CV variances = {cv_var:.2f}. "
-                f"La variance des résidus n'est pas stable entre colonnes. "
-                f"Bootstrap ODP fournit des intervalles approximatifs."
-            )
-        else:
-            infos.append(f"✅ H4 Homoscédasticité validée (CV var={cv_var:.2f}, φ={phi:.6f})")
-            message = (
-                f"H4 VALIDÉE — CV variances = {cv_var:.2f} < 1.0, "
-                f"φ={phi:.6f}. Bootstrap ODP fiable."
-            )
-
-        return {
-            'ok':     ok,
-            'score':  score,
-            'phi':    round(phi,    6),
-            'cv_var': round(cv_var, 3),
-            'message': message,
         }
 
     # =========================================================================

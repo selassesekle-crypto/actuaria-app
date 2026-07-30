@@ -63,6 +63,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from .config.lob_config import get_lob_config, get_sigma_eiopa, CORRELATION_EIOPA
+from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
 from .config.rfr_eiopa  import (get_taux_rfr, DATE_COURBE,
                                 get_courbe_embarquee, diagnostic_peremption)
 
@@ -520,7 +521,18 @@ class BestEstimateS2:
         # `disponible` d'abord : un Bootstrap NON CALCULÉ publie un point
         # estimate (la réserve Chain Ladder de référence, légitime) mais AUCUN
         # percentile. Lire les siens donnerait des None aux variantes `_boot`.
-        _boot_ok = bool(_boot.get('disponible', True)) and bool(
+        #
+        # `percentiles_publiables` ensuite — SEULE CONSÉQUENCE GATANTE de
+        # BOOT-H1..H4. Le Bootstrap ODP ne figure pas dans `_CLES_N3` : il ne
+        # pèse pas dans le Best Estimate, il en mesure la dispersion. Rejeter ses
+        # hypothèses ne peut donc retirer qu'un LIVRABLE — les percentiles
+        # `reserve_p*_boot` — jamais une méthode. Le BE, le SCR et la Risk Margin
+        # sont rigoureusement inchangés, et c'est vérifié par test.
+        # Absent (module non exécuté) → True : ne pas avoir jugé n'est pas juger
+        # défavorablement.
+        _boot_hyp_ok = bool(n2.get('bootstrap_hyp', {})
+                              .get('percentiles_publiables', True))
+        _boot_ok = _boot_hyp_ok and bool(_boot.get('disponible', True)) and bool(
             (_boot.get('be_bootstrap') or 0) > 0
             and _boot.get('p90') is not None)
 
@@ -587,7 +599,7 @@ class BestEstimateS2:
 
         # ── 8. Sensibilités ───────────────────────────────────────────────────
         sensibilites = self._calculer_sensibilites(
-            methodes_incluses, poids, boot, be
+            methodes_incluses, poids, boot, be, _boot_ok
         )
 
         # ── 8. Statut ─────────────────────────────────────────────────────────
@@ -705,17 +717,26 @@ class BestEstimateS2:
         # à cet endroit étaient mortes : `h1_corr` n'était jamais utilisée et
         # `h1_ok` était réassignée à l'identique plus bas, là où elle sert.)
 
-        # Recommandation H4 hétéroscédasticité
-        # Clé correcte : 'h4_homosc_bootstrap' (conforme n2_hypotheses.py L156)
-        # Sous-clé CV : 'cv_var' (conforme n2_hypotheses.py L678)
-        h4_ok = n2.get('h4_homosc_bootstrap', {}).get('ok', True)
-        h4_cv = n2.get('h4_homosc_bootstrap', {}).get('cv_var', 0.0)
-        if not h4_ok:
-            recommandations.append(
-                f"H4 Homogénéité rejetée (CV variances = {h4_cv:.2f}) — "
-                "Bootstrap ODP non fiable sur ce triangle. "
-                "Percentiles P99/P99.5 à interpréter avec prudence pour le Risk Margin S2."
-            )
+        # Hypothèses du Bootstrap ODP — BOOT-H1..H4.
+        #
+        # ⚠️ CE QUI A REMPLACÉ L'ANCIENNE RECOMMANDATION H4, ET POURQUOI.
+        # Elle lisait `n2['h4_homosc_bootstrap']['cv_var']`, le coefficient de
+        # variation des variances des FACTEURS de développement, et annonçait
+        # « Bootstrap ODP non fiable » dès qu'il dépassait 1,0 — ce qui était le
+        # cas sur les TROIS triangles de référence (2,12 · 2,40 · 1,31). Une
+        # alerte qui se déclenche partout n'informe nulle part, et celle-ci
+        # portait en plus sur une grandeur sans rapport avec la sur-dispersion
+        # des résidus. Ici, le verdict vient du φ du Bootstrap lui-même, et il a
+        # une conséquence : les percentiles ne sont pas publiés.
+        for ligne in lignes_hypotheses_bootstrap(n2):
+            if ligne['statut'] == 'NON VALIDÉE' and ligne['critique']:
+                recommandations.append(
+                    f"{ligne['libelle']} — NON VALIDÉE. Les percentiles "
+                    f"Bootstrap (P75/P90/P99.5) ne sont pas publiés. Le Best "
+                    f"Estimate est INCHANGÉ : le Bootstrap ne pèse pas dans sa "
+                    f"pondération, il en mesure la dispersion. Retenir "
+                    f"l'incertitude de Mack (σ) pour le SCR provisions."
+                )
 
         # Recommandation Clark aberrant
         clark = n3.get('clark', {})
@@ -1065,6 +1086,7 @@ class BestEstimateS2:
         poids:             Dict,
         boot:              Dict,
         be:                float,
+        boot_ok:           bool = True,
     ) -> Dict:
         """
         Analyse de sensibilité du BE aux hypothèses clés.
@@ -1097,12 +1119,26 @@ class BestEstimateS2:
                               for k in autres)
                 sensibilites[f'sans_{m_exclu}'] = round(be_sans, 0)
 
-        # Fourchette Bootstrap
-        if boot.get('be_bootstrap', 0) > 0:
-            sensibilites['boot_ic_inf'] = round(boot.get('ic_95_inf', be * 0.85), 0)
-            sensibilites['boot_ic_sup'] = round(boot.get('ic_95_sup', be * 1.15), 0)
-            sensibilites['boot_p90']    = round(boot.get('p90', be * 1.10), 0)
-            sensibilites['boot_p99_5']  = round(boot.get('p99_5', be * 1.30), 0)
+        # Fourchette Bootstrap — MÊME PORTE QUE LES PERCENTILES PUBLIÉS.
+        # `boot_ok` porte à la fois la disponibilité du Bootstrap et le verdict
+        # de BOOT-H1..H4 : retirer `reserve_p90_boot` du livrable tout en le
+        # republiant ici sous un autre nom n'aurait aucun sens. Le défaut d'un
+        # `.get(clé, défaut)` mérite d'être noté : ces clés EXISTENT et valent
+        # `None` quand le Bootstrap est dégradé, si bien que le défaut ne se
+        # déclenchait jamais et que `round(None, 0)` levait un TypeError.
+        if boot_ok and (boot.get('be_bootstrap') or 0) > 0:
+            sensibilites['boot_ic_inf'] = round(float(
+                boot.get('ic_95_inf') if boot.get('ic_95_inf') is not None
+                else be * 0.85), 0)
+            sensibilites['boot_ic_sup'] = round(float(
+                boot.get('ic_95_sup') if boot.get('ic_95_sup') is not None
+                else be * 1.15), 0)
+            sensibilites['boot_p90'] = round(float(
+                boot.get('p90') if boot.get('p90') is not None
+                else be * 1.10), 0)
+            sensibilites['boot_p99_5'] = round(float(
+                boot.get('p99_5') if boot.get('p99_5') is not None
+                else be * 1.30), 0)
 
         return sensibilites
 
@@ -1134,7 +1170,6 @@ class BestEstimateS2:
         raison_cl   = n2.get('raison_cl', '')
         h1          = n2.get('h1_independance', {})
         h2          = n2.get('h2_stabilite', {})
-        h4          = n2.get('h4_homosc_bootstrap', {})
         bfcc        = n2.get('bfcc', {}).get('hypotheses', {})
         lob_label   = cfg.get('label', 'Non précisée')
         date_str    = datetime.now().strftime('%d/%m/%Y')
@@ -1174,10 +1209,6 @@ class BestEstimateS2:
             f"CV={h2.get('cv_moy', 0):.1%}  "
             f"dérive={h2.get('derive_moy', 0):.1%}  "
             f"score={h2.get('score', 0)}/100",
-            f"  H4 Homoscédasticité: "
-            f"{'✅ VALIDÉE' if h4.get('ok') else '⚠️ REJETÉE':15s} "
-            f"φ={h4.get('phi', 0):.6f}  "
-            f"score={h4.get('score', 0)}/100",
             "",
             "   Bornhuetter-Ferguson et Cape Cod — hypothèses propres :",
         ] + [
@@ -1185,6 +1216,14 @@ class BestEstimateS2:
             f"{bfcc[code].get('statut', 'NON TESTABLE')}"
             for code in ('BFCC-H1', 'BFCC-H2', 'BFCC-H3', 'BFCC-H4', 'BFCC-H5')
             if code in bfcc
+        ] + [
+            "",
+            "   Bootstrap ODP — hypothèses propres :",
+        ] + [
+            f"  {l['code']} {l['libelle'].split('— ', 1)[-1]:42.42s} {l['statut']}"
+            + ("   ⚠️ percentiles retirés"
+               if l['statut'] == 'NON VALIDÉE' and l['critique'] else "")
+            for l in lignes_hypotheses_bootstrap(n2)
         ] + [
             "",
             f"  Méthode CL retenue    : {n2.get('methode_cl_retenue', '—')}",

@@ -1014,7 +1014,6 @@ def _dashboard_agent(ak):
         _hyp_map = {
             "H1 — Indépendance":     _n2.get("h1_independance", {}),
             "H2 — Stabilité":        _n2.get("h2_stabilite", {}),
-            "H4 — Homoscédasticité": _n2.get("h4_homosc_bootstrap", {}),
         }
         if any(_hyp_map.values()):
             st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:10px 0 6px;'>◆ Hypothèses validées</div>", unsafe_allow_html=True)
@@ -1287,7 +1286,6 @@ def _validation_agent(ak):
     _hyp_map_val = {
         "H1 — Indépendance (Mack)": _n2_val.get("h1_independance", {}),
         "H2 — Stabilité facteurs":   _n2_val.get("h2_stabilite", {}),
-        "H4 — Homoscédasticité ODP": _n2_val.get("h4_homosc_bootstrap", {}),
     }
 
     if any(v for v in _hyp_map_val.values() if isinstance(v, dict) and v):
@@ -4403,8 +4401,12 @@ def page_resultats():
         {"Méthode": "📐 Mack 1993 (IC 95%)",        "Réserve (€)": f"{mack.get('reserve_best_estimate',0):,.0f}", "Poids BE": f"{poids.get('mack',0)*100:.0f}%",          "Statut": "✅"},
         {"Méthode": "⚖️ Bornhuetter-Ferguson",      "Réserve (€)": f"{bf.get('reserve_totale',0):,.0f}",          "Poids BE": f"{poids.get('bornhuetter_ferguson', poids.get('bf',0))*100:.0f}%", "Statut": "✅"},
         {"Méthode": "🌊 Cape Cod",                  "Réserve (€)": f"{cc_r.get('reserve_totale',0):,.0f}",        "Poids BE": f"{poids.get('cape_cod',0)*100:.0f}%",       "Statut": "✅"},
-        {"Méthode": "🎲 Bootstrap ODP (BE)",       "Réserve (€)": f"{boot.get('be_bootstrap', boot.get('p50',0)):,.0f}", "Poids BE": "—", "Statut": "✅" if boot.get('be_bootstrap', boot.get('p50',0)) > 0 else "—"},
-        {"Méthode": "🎲 Bootstrap ODP (P90)",       "Réserve (€)": f"{boot.get('p90',0):,.0f}",                   "Poids BE": "—",                                         "Statut": "✅" if boot.get('p90',0) > 0 else "—"},
+        # `.get(clé, défaut)` NE PROTÈGE PAS ICI : ces clés EXISTENT et valent
+        # None quand le Bootstrap est dégradé, si bien que le défaut ne se
+        # déclenche jamais et que le format lève un TypeError. `or 0` teste la
+        # valeur, pas la présence de la clé.
+        {"Méthode": "🎲 Bootstrap ODP (BE)",       "Réserve (€)": f"{(boot.get('be_bootstrap') or boot.get('p50') or 0):,.0f}", "Poids BE": "—", "Statut": "✅" if (boot.get('be_bootstrap') or boot.get('p50') or 0) > 0 else "—"},
+        {"Méthode": "🎲 Bootstrap ODP (P90)",       "Réserve (€)": f"{(boot.get('p90') or 0):,.0f}",                   "Poids BE": "—",                                         "Statut": "✅" if (boot.get('p90') or 0) > 0 else "—"},
         # Munich CL produit DEUX réserves — payé et engagé — et aucune clé
         # 'be_munich'. La lecture précédente affichait donc « 0 € ✅ » dès que la
         # méthode était disponible : un chiffre faux avec une coche verte.
@@ -4696,12 +4698,10 @@ Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non 
 
     h1 = n2.get("h1_independance", {})
     h2 = n2.get("h2_stabilite", {})
-    h4 = n2.get("h4_homosc_bootstrap", {})
 
     for cle, h, label in [
         ("H1", h1, "Indépendance des années"),
         ("H2", h2, "Stabilité des facteurs"),
-        ("H4", h4, "Homoscédasticité Bootstrap"),
     ]:
         if h:
             ok  = h.get("ok", True)
@@ -4722,11 +4722,17 @@ Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non 
               white-space:pre-wrap;word-break:break-word;">{msg}</div>
 </div>""", unsafe_allow_html=True)
 
-    # ── BFCC-H1..H5 : hypothèses propres à BF et Cape Cod ────────────────────
-    # Statut motivé, sans score : elles n'en produisent aucun.
+    # ── BFCC-H1..H5 et BOOT-H1..H4 : hypothèses propres aux méthodes ─────────
+    # Statut motivé, sans score : elles n'en produisent aucun. La carte
+    # « H4 — Homoscédasticité Bootstrap » qui figurait au-dessus en affichait
+    # un, calculé sur le CV des variances des facteurs de développement — sans
+    # rapport avec le φ du Bootstrap, et rouge sur les trois triangles de
+    # référence. Elle est remplacée par BOOT-H1..H4, rendues ici.
     from direction_non_vie.provisionnement.a7_provisionnement.n2_hypotheses_bfcc import (
         lignes_hypotheses_bfcc as _lignes_bfcc)
-    for _l in _lignes_bfcc(n2):
+    from direction_non_vie.provisionnement.a7_provisionnement.n2_hypotheses_bootstrap import (
+        lignes_hypotheses_bootstrap as _lignes_boot)
+    for _l in list(_lignes_bfcc(n2)) + list(_lignes_boot(n2)):
         _sc = (VERT if _l["statut"] == "VALIDÉE"
                else ROUGE if _l["statut"] == "NON VALIDÉE" else AMBRE)
         _ic = ("✅" if _l["statut"] == "VALIDÉE"

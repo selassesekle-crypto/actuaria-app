@@ -41,6 +41,7 @@ from direction_non_vie.services.nv_triangle import preparer_pour_agent
 from .n2_hypotheses     import HypothesesValidator
 from .n2_hypotheses_clm  import verifier_hypotheses_clm
 from .n2_hypotheses_bfcc import verifier_hypotheses_bfcc
+from .n2_hypotheses_bootstrap import verifier_hypotheses_bootstrap
 from .n4_best_estimate  import BestEstimateS2, garde_fou_be_negatif, s2_non_calculable
 # Alias VOLONTAIRE — ne pas « nettoyer » : `generer_graphiques` est aussi un
 # PARAMÈTRE public de run() (compatibilité ancienne API, cf. plus bas). Sans
@@ -521,6 +522,12 @@ class AgentA7Provisionnement:
             # deux points d'entrée pour un seul jeu d'hypothèses.
             n2['bfcc'] = self._verifier_bfcc(n2, n3, primes_norm, cfg_lob)
 
+            # ── BOOT-H1..H4 : les hypothèses propres au Bootstrap ODP ─────────
+            # ⚠️ APRÈS N3 POUR LA MÊME RAISON QUE BFCC : BOOT-H4 juge les
+            # incréments que le Bootstrap a RÉELLEMENT exclus, et BOOT-H3
+            # l'ajustement dont il a tiré ses percentiles.
+            n2['bootstrap_hyp'] = self._verifier_bootstrap(n2, n3, C_calc)
+
             # ── Base CHARGES : provisions dossier à réintégrer au BE ──────────
             # Les méthodes N3 rendent `ultime − charges à date` (IBNR pur) quand
             # elles tournent sur les charges. Le BE S2 est `ultime − PAYÉ à date`.
@@ -906,6 +913,34 @@ class AgentA7Provisionnement:
             return {'erreur': str(e), 'hypotheses': {}, 'statuts': {},
                     'couverture_cadence': {}, 'recoupement_lr': {}}
 
+    def _verifier_bootstrap(self, n2: Dict, n3: Dict, C: np.ndarray) -> Dict:
+        """BOOT-H1..H4 — les hypothèses propres au Bootstrap ODP.
+
+        BOOT-H1 reprend le verdict CLM-H1 et BOOT-H2 celui du GLM Poisson APC :
+        l'indépendance que demande l'ODP est celle de Chain Ladder, et le modèle
+        croisé `x_i · y_j` est exactement celui que le GLM ajuste. Rien n'est
+        recalculé, et le φ testé est CELUI DU BOOTSTRAP — il n'en existe plus
+        qu'un seul dans le système.
+
+        Ne LÈVE JAMAIS, pour la même raison que `_verifier_clm` et
+        `_verifier_bfcc`. Le repli publie `percentiles_publiables = True` : ne
+        pas avoir pu juger n'est pas juger défavorablement, et un échec de
+        vérification ne doit pas retirer un livrable par effet de bord.
+        """
+        try:
+            return verifier_hypotheses_bootstrap(
+                C         = C,
+                facteurs  = n3.get('facteurs_bootstrap', n3.get('facteurs', [])),
+                bootstrap = n3.get('bootstrap', {}),
+                clm_h1    = n2.get('clm', {}).get('hypotheses', {}).get('CLM-H1'),
+                glm_apc   = n3.get('glm_apc', {}),
+            )
+        except Exception as e:
+            logger.warning(f"BOOT-H1..H4 non calculées : {e}")
+            return {'erreur': str(e), 'hypotheses': {}, 'statuts': {},
+                    'phi_par_axe': {}, 'phi_global': None,
+                    'percentiles_publiables': True}
+
     def _calculer_n3(
         self,
         C:               np.ndarray,
@@ -1031,6 +1066,11 @@ class AgentA7Provisionnement:
         return {
             'methode_cl':      methode_cl,
             'facteurs':        [float(f) for f in facteurs],
+            # Les facteurs que le Bootstrap a RÉELLEMENT employés — toujours les
+            # standard, indépendants de la variante CL retenue. Publiés pour que
+            # BOOT-H3 teste l'ajustement qui a produit les percentiles, et non un
+            # autre : le lien était implicite, il devient explicite.
+            'facteurs_bootstrap': [float(f) for f in f_std],
             'facteurs_cumules': [float(f) for f in f_cum],
             'facteurs_indiv':  facteurs_indiv,
             'pct_developpe':   [float(p) for p in pct_dev],
@@ -1092,7 +1132,11 @@ class AgentA7Provisionnement:
                 # Le loss ratio a priori vient de N3, son unique propriétaire.
                 'lr_apriori':         n3.get('bf', {}).get('lr_apriori'),
                 'lr_apriori_source':  n3.get('bf', {}).get('source_lr'),
-                'h4_phi':             n2['h4_homosc_bootstrap'].get('phi'),
+                # φ VIENT DU BOOTSTRAP, ET DE NULLE PART AILLEURS. L'ancienne
+                # `h4_phi` publiée ici était la moyenne des variances des
+                # facteurs de développement — sans rapport avec la sur-dispersion
+                # des résidus, et fausse de 662× à 843 268× selon le triangle.
+                'phi_bootstrap':      n3.get('bootstrap', {}).get('phi'),
                 'methode_cl_retenue': n2.get('methode_cl_retenue'),
                 'methode_recommandee': n2.get('methode_recommandee'),
                 'statut_global':      n2.get('statut_global'),
@@ -1104,6 +1148,15 @@ class AgentA7Provisionnement:
                                            'message': h['message']}
                                        for c, h in n2.get('bfcc', {})
                                        .get('hypotheses', {}).items()},
+                'boot_hypotheses':    {c: {'statut': h['statut'],
+                                           'message': h['message']}
+                                       for c, h in n2.get('bootstrap_hyp', {})
+                                       .get('hypotheses', {}).items()},
+                # La conséquence, tracée : ce qui a retiré les percentiles.
+                'boot_percentiles_publiables': n2.get('bootstrap_hyp', {})
+                                                 .get('percentiles_publiables'),
+                'boot_graine_calibration':     n2.get('bootstrap_hyp', {})
+                                                 .get('graine_calibration'),
                 'clm_couvertures':    n2.get('clm', {})
                                         .get('couvertures', {}).get('synthese', {}),
             },

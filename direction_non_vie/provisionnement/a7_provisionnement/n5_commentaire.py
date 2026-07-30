@@ -37,6 +37,7 @@ from datetime import datetime
 from typing import Dict, Optional
 
 from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
+from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
 from .n3.bf_cape_cod import libelle_loss_ratio
 from .n4_best_estimate import s2_non_calculable, MSG_S2_NON_CALCULABLE
 
@@ -190,7 +191,6 @@ def _s2_qualite(n1: Dict) -> str:
 def _s3_hypotheses(n2: Dict) -> str:
     h1  = n2.get('h1_independance',     {})
     h2  = n2.get('h2_stabilite',        {})
-    h4  = n2.get('h4_homosc_bootstrap', {})
     rec = n2.get('methode_recommandee', '—')
     rcl = n2.get('raison_cl', '')
     rr  = n2.get('raison_recommandation', '')
@@ -309,36 +309,24 @@ def _s3_hypotheses(n2: Dict) -> str:
     if recoupement.get('comparable'):
         lignes.append(recoupement['message'])
 
-    # ── H4 ────────────────────────────────────────────────────────────────────
-    h4_ok = h4.get('ok', True)
-    phi   = h4.get('phi', 0)
-    cv_v  = h4.get('cv_var', 0)
+    # ── BOOT-H1..H4 : les hypothèses propres au Bootstrap ODP ────────────────
+    # SOURCE UNIQUE `lignes_hypotheses_bootstrap`. L'ancienne H4 était mise en
+    # forme ici même, avec ses `.get(clé, 0)` : la clé disparue, ce bloc aurait
+    # écrit « φ = 0,000000 » et « CV = 0,00 » — une dispersion nulle et une
+    # hypothèse validée, c'est-à-dire l'inverse d'un silence honnête.
+    lignes.append("")
+    lignes.append("HYPOTHÈSES PROPRES AU BOOTSTRAP ODP (England & Verrall 2002) :")
+    for ligne in lignes_hypotheses_bootstrap(n2):
+        lignes.append(f"{ligne['libelle']} : {ligne['statut']}")
+        lignes.append(ligne['message'])
 
-    lignes.append(
-        f"H4 — HOMOSCÉDASTICITÉ (Bootstrap ODP) : "
-        f"{'VALIDÉE' if h4_ok else 'HÉTÉROSCÉDASTICITÉ DÉTECTÉE'} "
-        f"[score {h4.get('score',0)}/100]"
-    )
-
-    lignes.append(
-        f"Le facteur de sur-dispersion φ = {phi:.6f} "
-        f"et le CV des variances est de {cv_v:.2f}. "
-    )
-
-    if h4_ok:
+    if not (n2.get('bootstrap_hyp', {}).get('percentiles_publiables', True)):
         lignes.append(
-            f"La variance des résidus est homogène entre colonnes (CV < 1.0). "
-            f"Le modèle Bootstrap ODP (England & Verrall 2002) est "
-            f"applicable — les résidus de Pearson sont rééchantillonnables "
-            f"de façon fiable. Les percentiles P90 et P99.5 sont robustes."
-        )
-    else:
-        lignes.append(
-            f"L'hétéroscédasticité détectée signifie que la variance des "
-            f"résidus n'est pas constante entre colonnes. Le Bootstrap ODP "
-            f"est moins fiable dans ce contexte — les intervalles de confiance "
-            f"doivent être interprétés avec prudence. "
-            f"Privilégier l'incertitude Mack (σ) pour le SCR provisions."
+            "CONSÉQUENCE — les percentiles Bootstrap (P75/P90/P99.5) ne sont "
+            "pas publiés. Le Best Estimate, le SCR et la marge de risque sont "
+            "INCHANGÉS : le Bootstrap ODP ne figure pas dans la pondération du "
+            "Best Estimate, il en mesure la dispersion. L'incertitude retenue "
+            "reste celle de Mack (σ)."
         )
 
     lignes += [

@@ -40,6 +40,8 @@ from typing import Dict, List, Optional
 
 import numpy as np
 
+from .n2_hypotheses_bootstrap import libelle_phi_par_axe
+
 logger = logging.getLogger('actuaria.a7')
 
 try:
@@ -650,7 +652,7 @@ def g5_convergence_methodes(n3: Dict, n4: Dict) -> 'go.Figure':
 #  G6 — DISTRIBUTION BOOTSTRAP ODP
 # =============================================================================
 
-def g6_distribution_bootstrap(n3: Dict) -> 'go.Figure':
+def g6_distribution_bootstrap(n3: Dict, n2: Optional[Dict] = None) -> 'go.Figure':
     """
     Histogramme de la distribution Bootstrap ODP avec :
     · P50 (médiane) · P75 · P90 · P99.5 (SCR)
@@ -707,13 +709,20 @@ def g6_distribution_bootstrap(n3: Dict) -> 'go.Figure':
             )
 
     cv = (boot.get('cv_bootstrap') or 0) * 100
+    # φ est un SEUL nombre pour tout le triangle — c'est l'hypothèse même du
+    # modèle ODP. L'afficher seul laisse croire qu'elle est acquise ; BOOT-H3
+    # sait si elle tient, et `phi_par_axe` sait où elle ne tient pas. Le
+    # sous-titre est vide, et non « 0 → 0 », quand la carte n'existe pas.
+    sous_titre = libelle_phi_par_axe(n2)
     fig.update_layout(
         **_layout(
             title=dict(
                 text=(
                     f"Bootstrap ODP — Distribution des réserves "
                     f"({boot.get('n_simulations', len(dist)):,} simulations · "
-                    f"CV={cv:.1f}% · φ={boot.get('phi') or 0:.4f})"
+                    f"CV={cv:.1f}% · φ={boot.get('phi') or 0:.4g})"
+                    + (f"<br><span style='font-size:9px'>{sous_titre}</span>"
+                       if sous_titre else '')
                 ),
                 font=dict(color=OR, size=12),
                 x=0.01,
@@ -1522,7 +1531,7 @@ def generer_graphiques(
         ('g3_facteurs_cl',    lambda: g3_facteurs_cl(n3)),
         ('g4_ibnr',           lambda: g4_ibnr_par_annee(n3)),
         ('g5_convergence',    lambda: g5_convergence_methodes(n3, n4)),
-        ('g6_bootstrap',      lambda: g6_distribution_bootstrap(n3)),
+        ('g6_bootstrap',      lambda: g6_distribution_bootstrap(n3, n2)),
         ('g7_scr',            lambda: g7_scr_donut(n4)),
         ('g8_h1',             lambda: g8_h1_independance(n2)),
         ('g9_h2',             lambda: g9_h2_stabilite(C, n3)),
