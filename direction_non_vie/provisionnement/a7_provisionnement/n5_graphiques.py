@@ -983,27 +983,35 @@ def g9_h2_stabilite(C: np.ndarray, n3: Dict) -> 'go.Figure':
 
 
 # =============================================================================
-#  G10 — H3 LR A PRIORI PAR ANNÉE MATURE
+#  G10 — LOSS RATIO A PRIORI BF (BFCC-H4)
 # =============================================================================
 
 def g10_h3_lr_apriori(n2: Dict, n3: Dict) -> 'go.Figure':
     """
-    Loss Ratio par année mature vs LR a priori retenu vs référence marché.
-    Beaucoup plus informatif que la simple barre unique de v4.0.
+    Loss Ratio par année vs LR a priori retenu vs référence marché.
+
+    ⚠️ LIT LE LOSS RATIO DE N3, SON UNIQUE PROPRIÉTAIRE. Ce graphique lisait
+    `n2['h3_apriori_bf']`, dont le loss ratio était calculé sur la dernière
+    cellule OBSERVÉE et non sur l'ultime, et pouvait provenir d'un proxy inventé
+    quand aucune prime n'était fournie. Le verdict affiché est celui de BFCC-H4.
+
+    Rend None si Bornhuetter-Ferguson n'a pas été calculée : un graphique de loss
+    ratio sans loss ratio afficherait des zéros, c'est-à-dire un chiffre faux.
     """
     if not PLOTLY_OK:
         return None
-    h3  = n2.get('h3_apriori_bf', {})
-    lr  = h3.get('lr_apriori', 0)
-    lr_ref = h3.get('lr_reference')
-    ok  = h3.get('ok', True)
-    src = h3.get('source', '')
+    bf = n3.get('bf', {})
+    if not bf.get('disponible') or bf.get('lr_apriori') is None:
+        return None
+    h4  = n2.get('bfcc', {}).get('hypotheses', {}).get('BFCC-H4', {})
+    lr  = float(bf.get('lr_apriori') or 0.0)
+    lr_ref = (h4.get('extras') or {}).get('lr_reference')
+    statut = str(h4.get('statut', 'NON TESTABLE'))
+    ok  = statut == 'VALIDÉE'
+    src = str(bf.get('source_lr', ''))
 
-    # LR BF par année (depuis BF n3)
-    mu_arr  = n3.get('bf', {}).get('mu_par_annee', [])
-    ibnr_bf = n3.get('bf', {}).get('ibnr_par_annee', [])
-    ult_bf  = n3.get('bf', {}).get('ultimates', [])
-    ult_cl  = n3.get('chain_ladder', {}).get('ultimates', [])
+    mu_arr = bf.get('mu_par_annee', [])
+    ult_bf = bf.get('ultimates', [])
 
     n = max(len(mu_arr), 1)
     x = [f"Année {i}" for i in range(n)]
@@ -1050,11 +1058,10 @@ def g10_h3_lr_apriori(n2: Dict, n3: Dict) -> 'go.Figure':
     # Plage acceptable [30%, 150%]
     fig.add_hrect(y0=30, y1=150, fillcolor='rgba(46,204,113,0.04)', line_width=0)
 
-    titre_statut = '✅ VALIDÉ' if ok else '⚠️ À VÉRIFIER'
     fig.update_layout(
         **_layout(
             title=dict(
-                text=f"H3 Loss Ratio a priori BF — {titre_statut}",
+                text=f"Loss ratio a priori BF — BFCC-H4 {statut}",
                 font=dict(color=VERT if ok else AMBRE, size=13),
                 x=0.01,
             ),

@@ -1014,7 +1014,6 @@ def _dashboard_agent(ak):
         _hyp_map = {
             "H1 — Indépendance":     _n2.get("h1_independance", {}),
             "H2 — Stabilité":        _n2.get("h2_stabilite", {}),
-            "H3 — A priori BF":      _n2.get("h3_apriori_bf", {}),
             "H4 — Homoscédasticité": _n2.get("h4_homosc_bootstrap", {}),
         }
         if any(_hyp_map.values()):
@@ -1288,7 +1287,6 @@ def _validation_agent(ak):
     _hyp_map_val = {
         "H1 — Indépendance (Mack)": _n2_val.get("h1_independance", {}),
         "H2 — Stabilité facteurs":   _n2_val.get("h2_stabilite", {}),
-        "H3 — A priori BF":          _n2_val.get("h3_apriori_bf", {}),
         "H4 — Homoscédasticité ODP": _n2_val.get("h4_homosc_bootstrap", {}),
     }
 
@@ -4671,13 +4669,11 @@ Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non 
 
     h1 = n2.get("h1_independance", {})
     h2 = n2.get("h2_stabilite", {})
-    h3 = n2.get("h3_apriori_bf", {})
     h4 = n2.get("h4_homosc_bootstrap", {})
 
     for cle, h, label in [
         ("H1", h1, "Indépendance des années"),
         ("H2", h2, "Stabilité des facteurs"),
-        ("H3", h3, "Qualité a priori BF"),
         ("H4", h4, "Homoscédasticité Bootstrap"),
     ]:
         if h:
@@ -4697,6 +4693,25 @@ Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non 
   {f'<div style="font-size:0.72rem;color:{GRIS};margin-bottom:4px;">{details}</div>' if details else ''}
   <div style="font-size:0.76rem;color:{BLANC};line-height:1.7;
               white-space:pre-wrap;word-break:break-word;">{msg}</div>
+</div>""", unsafe_allow_html=True)
+
+    # ── BFCC-H1..H5 : hypothèses propres à BF et Cape Cod ────────────────────
+    # Statut motivé, sans score : elles n'en produisent aucun.
+    from direction_non_vie.provisionnement.a7_provisionnement.n2_hypotheses_bfcc import (
+        lignes_hypotheses_bfcc as _lignes_bfcc)
+    for _l in _lignes_bfcc(n2):
+        _sc = (VERT if _l["statut"] == "VALIDÉE"
+               else ROUGE if _l["statut"] == "NON VALIDÉE" else AMBRE)
+        _ic = ("✅" if _l["statut"] == "VALIDÉE"
+               else "❌" if _l["statut"] == "NON VALIDÉE" else "⚠️")
+        st.markdown(f"""
+<div style="background:{NAVY_L};border-left:3px solid {_sc};border-radius:6px;
+            padding:12px 16px;margin-bottom:8px;width:100%;box-sizing:border-box;">
+  <div style="font-size:0.78rem;color:{_sc};font-weight:700;margin-bottom:4px;">
+    {_ic} {_l['libelle']} &nbsp;<span style="font-weight:400;font-size:0.72rem;">{_l['statut']}</span>
+  </div>
+  <div style="font-size:0.76rem;color:{BLANC};line-height:1.7;
+              white-space:pre-wrap;word-break:break-word;">{_l['message']}</div>
 </div>""", unsafe_allow_html=True)
 
     st.markdown("<hr>", unsafe_allow_html=True)

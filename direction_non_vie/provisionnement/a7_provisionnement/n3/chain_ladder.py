@@ -84,6 +84,12 @@ except ImportError:
 
 logger = logging.getLogger('actuaria.a7')
 
+#: Tolérance des comparaisons de cadence — purement numérique. Elle absorbe
+#: l'erreur d'arrondi d'un produit de facteurs, jamais un écart actuariel : la
+#: plus petite violation observée sur les triangles de référence vaut 2,6·10⁻²,
+#: soit onze ordres de grandeur au-dessus.
+_EPS_CADENCE = 1e-9
+
 
 # =============================================================================
 #  CALCUL DES FACTEURS DE DÉVELOPPEMENT
@@ -676,12 +682,78 @@ def calculer_tail_factor_multi(
 #  % DÉVELOPPÉ PAR ANNÉE
 # =============================================================================
 
+def pct_developpe_brut(
+    C:     np.ndarray,
+    f_cum: np.ndarray,
+) -> np.ndarray:
+    """
+    Cadence de développement par année d'origine, SANS écrêtage.
+
+        α[i] = 1 / F_{k_i}
+
+    Identique à `calculer_pct_developpe` à ceci près qu'elle ne borne PAS le
+    résultat à [0, 1]. C'est la grandeur sur laquelle porte l'hypothèse (H2) du
+    guide de l'Institut des Actuaires (§2.c.ii p18-19), qui exige un vecteur de
+    développement compris entre 0 et 1, à éléments consécutifs croissants et
+    valant 1 à l'ultime.
+
+    ⚠️ POURQUOI DEUX FONCTIONS PLUTÔT QU'UN PARAMÈTRE. L'écrêtage de
+    `calculer_pct_developpe` protège l'arithmétique aval et doit rester : sans
+    lui, `1 − α` devient négatif et BF produit un IBNR de signe arbitraire. Mais
+    il EFFACE la violation au lieu de la signaler — une année à recours ressort
+    « 100 % développée ». Les deux besoins sont réels et contradictoires : on
+    calcule sur la valeur écrêtée, on JUGE sur la valeur brute. Aucune des deux
+    n'est recalculée séparément, celle-ci étant la source de l'autre.
+
+    Mesuré sur les triangles de référence : brut == écrêté sur GenIns et RAA
+    (aucune année touchée) ; 1 année sur 6 écrasée sur le triangle à recours,
+    3 sur 6 sur le recours fort, 5 sur 6 sur le triangle tout décroissant.
+    """
+    n, m = C.shape
+    pct  = np.ones(n)
+
+    for i in range(n):
+        k = min(n - i - 1, m - 1)   # dernière colonne connue
+        if k < len(f_cum) and f_cum[k] > 0:
+            pct[i] = 1.0 / f_cum[k]
+        else:
+            pct[i] = 1.0
+
+    return pct
+
+
+def cadence_admissible(pct_brut: np.ndarray) -> np.ndarray:
+    """Masque des années dont la cadence satisfait l'hypothèse (H2) du guide.
+
+    Le guide (§2.c.ii p18-19, figure 21) impose au vecteur de développement
+    d'être compris entre 0 et 1 ET d'avoir ses éléments consécutifs croissants.
+    Indexé par année d'origine, « croissant en développement » se lit
+    DÉCROISSANT en indice : l'année 0 est la plus mature, donc α[0] ≥ α[1] ≥ …
+
+    Une année est inadmissible si α > 1 (elle est « plus que développée », ce qui
+    n'a pas de sens) ou si elle rompt cette décroissance — les deux symptômes
+    d'un cumulé qui redescend, c'est-à-dire d'un recours ou d'une reprise.
+
+    ⚠️ CRITÈRE BINAIRE, SANS ZONE GRISE. La condition du guide est une inégalité,
+    pas un test statistique : lui inventer un seuil de tolérance reviendrait à
+    ajouter un jugement là où la source n'en laisse pas.
+    """
+    a = np.asarray(pct_brut, dtype=float)
+    n = len(a)
+    ok = np.isfinite(a) & (a > 0.0) & (a <= 1.0 + _EPS_CADENCE)
+    for i in range(n - 1):
+        # α[i] doit dominer α[i+1] : l'année plus ancienne est la plus développée.
+        if ok[i] and ok[i + 1] and a[i] < a[i + 1] - _EPS_CADENCE:
+            ok[i + 1] = False
+    return ok
+
+
 def calculer_pct_developpe(
     C:     np.ndarray,
     f_cum: np.ndarray,
 ) -> np.ndarray:
     """
-    Pourcentage développé pour chaque année de survenance.
+    Pourcentage développé pour chaque année de survenance, borné à [0, 1].
 
         pct_dev[i] = 1 / F_{k_i}
 
@@ -690,6 +762,11 @@ def calculer_pct_developpe(
 
     Interprétation : pct_dev[i] = fraction des sinistres déjà payés.
     L'IBNR BF = primes × LR × (1 - pct_dev[i]).
+
+    ⚠️ L'ÉCRÊTAGE EST UN GARDE-FOU ARITHMÉTIQUE, PAS UN VERDICT. Les années qu'il
+    ramène à 1.0 sont exactement celles que l'hypothèse (H2) du guide déclare
+    inadmissibles — cf. `pct_developpe_brut` et `cadence_admissible`, qui
+    permettent de les signaler au lieu de les taire.
 
     Parameters
     ----------
@@ -704,17 +781,7 @@ def calculer_pct_developpe(
     pct : np.ndarray  shape (n,)
         Valeurs dans [0, 1]. 1.0 = totalement développé.
     """
-    n, m = C.shape
-    pct  = np.ones(n)
-
-    for i in range(n):
-        k = min(n - i - 1, m - 1)   # dernière colonne connue
-        if k < len(f_cum) and f_cum[k] > 0:
-            pct[i] = 1.0 / f_cum[k]
-        else:
-            pct[i] = 1.0
-
-    return np.clip(pct, 0.0, 1.0)
+    return np.clip(pct_developpe_brut(C, f_cum), 0.0, 1.0)
 
 
 # =============================================================================

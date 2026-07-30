@@ -1059,19 +1059,30 @@ class T20_Graphiques_Reellement_Produits(unittest.TestCase):
     chemin nominal. C'est ce test qui aurait attrapé le bug dès le premier jour.
     """
 
+    #: UNE EXPOSITION EST FOURNIE, et c'est indispensable au sujet du test.
+    #: `g10` porte le loss ratio a priori de Bornhuetter-Ferguson. Depuis le lot
+    #: BFCC, il rend None quand BF n'a pas été calculée — faute d'exposition, il
+    #: n'y a pas de loss ratio, et en afficher un de 0 % serait le chiffre faux
+    #: que ce lot supprime. Sans exposition, le verrou 14/14 ne pourrait donc
+    #: plus être tenu, et l'affaiblir en 13/14 aurait retiré à `g10` toute
+    #: surveillance. Un test qui vérifie que les graphiques sortent doit placer
+    #: le système là où ils sortent tous.
+    EXPOSITION = np.array(GENINS, dtype=float).max(axis=1) * 1.6 / 0.70
+
     @classmethod
     def setUpClass(cls):
         cls.r = AgentA7Provisionnement(verbose=False).run(
-            source=GENINS, n_sim_bootstrap=300,
+            source=GENINS, primes=cls.EXPOSITION, n_sim_bootstrap=300,
             generer_graphiques=True, generer_word=False, generer_pdf_flag=False)
 
     def test_graphiques_reellement_produits(self):
         """Le cœur : des figures existent, et ce sont bien des figures Plotly."""
         self.assertTrue(self.r.get('success'), self.r.get('erreur'))
         g = self.r.get('graphiques') or {}
-        # 14/14 et non « au moins un » : GenIns alimente les 14 graphiques (aucune
-        # garde « pas de données » ne s'y déclenche — vérifié). C'est ce verrou qui
-        # empêche un graphique de retomber silencieusement sans test rouge.
+        # 14/14 et non « au moins un » : GenIns muni d'une exposition alimente
+        # les 14 graphiques (aucune garde « pas de données » ne s'y déclenche —
+        # vérifié). C'est ce verrou qui empêche un graphique de retomber
+        # silencieusement sans test rouge.
         attendus = ['g1_heatmap', 'g2_cadences', 'g3_facteurs_cl', 'g4_ibnr',
                     'g5_convergence', 'g6_bootstrap', 'g7_scr', 'g8_h1', 'g9_h2',
                     'g10_h3', 'g11_ultimates', 'g12_sensibilites', 'g13_paiements',

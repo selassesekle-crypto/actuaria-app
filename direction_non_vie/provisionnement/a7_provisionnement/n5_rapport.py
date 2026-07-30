@@ -23,6 +23,10 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 import numpy as np
 
+# Source UNIQUE d'affichage des hypothèses de BF et Cape Cod : une hypothèse non
+# évaluée y ressort NON TESTABLE, jamais en valeur par défaut.
+from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
+
 logger = logging.getLogger('actuaria.a7.rapport')
 
 # ── Palette ───────────────────────────────────────────────────────────────────
@@ -204,7 +208,7 @@ def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: s
     clark = n3.get('clark', {});         bz  = n3.get('glm_apc', {})
     bt    = n3.get('backtesting', {});   sc  = n4.get('scr', {})
     h1    = n2.get('h1_independance', {}); h2 = n2.get('h2_stabilite', {})
-    h3    = n2.get('h3_apriori_bf', {});  h4  = n2.get('h4_homosc_bootstrap', {})
+    h4  = n2.get('h4_homosc_bootstrap', {})
     pw    = n4.get('poids', {})
     BE  = float(n4.get('best_estimate', 0) or 0)
     SIG = float(mk.get('sigma_total', 0) or 0)
@@ -226,8 +230,9 @@ def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: s
         f"H1 Indépendance : {'VALIDÉE' if h1.get('ok') else 'REJETÉE'} | corr_moy={h1.get('corr_moy', '—')} | score={h1.get('score', '—')}/100",
         f"  Message : {str(h1.get('message', ''))[:200]}",
         f"H2 Stabilité : {'VALIDÉE' if h2.get('ok') else 'REJETÉE'} | CV={h2.get('cv_moy', '—')} | score={h2.get('score', '—')}/100",
-        f"H3 A priori BF : {'VALIDÉE' if h3.get('ok') else 'REJETÉE'} | LR_REEL={h3.get('lr_apriori', '—')} | LR_PROXY={h3.get('lr_proxy', '—')} | score={h3.get('score', '—')}/100",
-        "  IMPORTANT: Si LR_REEL est fourni par l'utilisateur (valeur numérique, pas —), citer ce LR dans le commentaire, pas le LR proxy.",
+        f"Loss ratio a priori : {libelle_loss_ratio(n3.get('bf', {}))} (source : {n3.get('bf', {}).get('source_lr', '—')}) — UNIQUE, produit par N3.",
+        *[f"{l['libelle']} : {l['statut']} | {l['message'][:160]}"
+          for l in lignes_hypotheses_bfcc(n2)],
         f"H4 Homoscédasticité : {'VALIDÉE' if h4.get('ok') else 'REJETÉE'} | phi={h4.get('phi', '—')} | score={h4.get('score', '—')}/100",
         "",
         "=== RÉSULTATS ===",
@@ -922,7 +927,7 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     clark = n3.get('clark', {});         bz  = n3.get('glm_apc', {})
     bt    = n3.get('backtesting', {});   sc  = n4.get('scr', {})
     h1    = n2.get('h1_independance', {}); h2 = n2.get('h2_stabilite', {})
-    h3    = n2.get('h3_apriori_bf', {});  h4  = n2.get('h4_homosc_bootstrap', {})
+    h4  = n2.get('h4_homosc_bootstrap', {})
     pw    = n4.get('poids', {})
 
     BE  = float(n4.get('best_estimate', 0) or 0)
@@ -1040,10 +1045,10 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         return '<span class="badge badge-excl">⊘ Exclu</span>'
 
     rows_m = [
-        ('Chain Ladder',         cl.get('reserve_totale'),         pw.get('chain_ladder', 0),         n2.get('scores_confiance', {}).get('chain_ladder', '—')),
+        ('Chain Ladder',         cl.get('reserve_totale'),         pw.get('chain_ladder', 0),         '—'),
         ('Mack 1993',            mk.get('reserve_best_estimate'),  pw.get('mack', 0),                 '—'),
         ('Bornhuetter-Ferguson', bf.get('reserve_totale'),         pw.get('bornhuetter_ferguson', 0), '—'),
-        ('Cape Cod',             cc.get('reserve_totale'),         pw.get('cape_cod', 0),             n2.get('scores_confiance', {}).get('cape_cod', '—')),
+        ('Cape Cod',             cc.get('reserve_totale'),         pw.get('cape_cod', 0),             '—'),
     ]
     tbl = (
         '<table class="premium"><thead><tr>'
@@ -1146,7 +1151,6 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     for label, h, code in [
         ('H1 — Indépendance des facteurs', h1, 'H1'),
         ('H2 — Stabilité des facteurs', h2, 'H2'),
-        ('H3 — A priori BF / Cape Cod', h3, 'H3'),
         ('H4 — Homoscédasticité Bootstrap ODP', h4, 'H4'),
     ]:
         if not h:
@@ -1163,6 +1167,20 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
             '<div class="hyp-score">' + lbl + ' · Score ' + score + ' / 100</div>'
             '</div>'
             '<div class="hyp-text">' + msg + '</div>'
+            '</div>'
+        )
+    # BFCC-H1..H5 — statut motivé, SANS score : ces hypothèses n'en produisent
+    # aucun. Afficher « Score — / 100 » serait moins clair que ne rien afficher.
+    for ligne in lignes_hypotheses_bfcc(n2):
+        cls = ('hyp-ok' if ligne['statut'] == 'VALIDÉE'
+               else 'hyp-warn' if ligne['statut'] != 'NON VALIDÉE' else 'hyp-warn')
+        hyp_cards += (
+            '<div class="hyp-card ' + cls + '">'
+            '<div class="hyp-label">'
+            '<div class="hyp-code">' + _s(ligne['libelle']) + '</div>'
+            '<div class="hyp-score">' + _s(ligne['statut']) + '</div>'
+            '</div>'
+            '<div class="hyp-text">' + _s(ligne['message']) + '</div>'
             '</div>'
         )
     b['hyp_cards'] = hyp_cards
@@ -1890,7 +1908,7 @@ def export_word(n1, n2, n3, n4,
         sc  = n4.get('scr',{});           pw = n4.get('poids',{})
         bt  = n3.get('backtesting',{});   bz = n3.get('glm_apc',{})
         h1  = n2.get('h1_independance',{}); h2 = n2.get('h2_stabilite',{})
-        h3  = n2.get('h3_apriori_bf',{});  h4  = n2.get('h4_homosc_bootstrap',{})
+        h4  = n2.get('h4_homosc_bootstrap',{})
 
         BE  = float(n4.get('best_estimate',0) or 0)
         SIG = float(mk.get('sigma_total',0) or 0)
@@ -1993,20 +2011,23 @@ def export_word(n1, n2, n3, n4,
         _h('2. Résultats par méthode actuarielle'); _sep()
         _tbl(['Méthode','Réserve IBNR','Poids BE','Score','Statut'],
              [['Chain Ladder',_f(cl.get('reserve_totale')),_pct(pw.get('chain_ladder',0)*100),
-               str(n2.get('scores_confiance',{}).get('chain_ladder','—')),'✓ Inclus'],
+               '—','✓ Inclus'],
               ['Mack 1993',_f(mk.get('reserve_best_estimate')),_pct(pw.get('mack',0)*100),'—','σ (volatilité)'],
               ['Bornhuetter-Ferguson',_f(bf.get('reserve_totale')),_pct(pw.get('bornhuetter_ferguson',0)*100),'—','✓ Inclus'],
               ['Cape Cod',_f(cc.get('reserve_totale')),_pct(pw.get('cape_cod',0)*100),
-               str(n2.get('scores_confiance',{}).get('cape_cod','—')),'✓ Inclus'],
+               '—','✓ Inclus'],
               ['BEST ESTIMATE (brut)',_f(BE),'100 %','—','→ A10 (actualisation)']],ws=[4.5,3.5,2.5,2.5,3.0])
         doc.add_page_break()
 
         _h('3. Validation des hypothèses actuarielles'); _sep()
         rows_h=[]
-        for lbl,h in [('H1 Indépendance',h1),('H2 Stabilité',h2),('H3 A priori BF',h3),('H4 Homoscédasticité',h4)]:
+        for lbl,h in [('H1 Indépendance',h1),('H2 Stabilité',h2),('H4 Homoscédasticité',h4)]:
             if not h: continue
             ok=bool(h.get('ok',True))
             rows_h.append([lbl,'VALIDÉE' if ok else 'REJETÉE',str(h.get('score','—'))+'/100',str(h.get('message',''))[:80]])
+        for ligne in lignes_hypotheses_bfcc(n2):
+            rows_h.append([ligne['libelle'][:38], ligne['statut'], '—',
+                           ligne['message'][:80]])
         if rows_h: _tbl(['Hypothèse','Résultat','Score','Message'],rows_h,ws=[4.0,2.5,2.0,7.5])
         doc.add_page_break()
 

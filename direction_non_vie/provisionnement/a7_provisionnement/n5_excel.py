@@ -28,6 +28,7 @@ import numpy as np
 
 # Formatage du loss ratio : source unique, pour qu'une méthode non calculée
 # n'apparaisse jamais comme un loss ratio de 0 %.
+from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
 from .n3.bf_cape_cod import libelle_loss_ratio
 
 logger = logging.getLogger('actuaria.a7')
@@ -220,12 +221,19 @@ def _ong1_synthese(wb, n1, n2, n3, n4, ref_client, date_str):
     for i, (key, lbl) in enumerate([
         ('h1_independance','H1 Indépendance'),
         ('h2_stabilite','H2 Stabilité'),
-        ('h3_apriori_bf','H3 A priori BF'),
         ('h4_homosc_bootstrap','H4 Homoscédasticité'),
     ]):
         h = n2.get(key, {})
         _kpi(ws, 24+i, 1, lbl, h.get('score', 0), None,
              'VERT' if h.get('ok') else 'ROUGE')
+    # Synthèse BFCC en une ligne : le pire des cinq statuts, et son code.
+    _bfcc = lignes_hypotheses_bfcc(n2)
+    _pire = next((l for l in _bfcc if l['statut'] == 'NON VALIDÉE'),
+                 next((l for l in _bfcc if l['statut'] == 'À JUSTIFIER'), None))
+    _kpi(ws, 27, 1, "BF / Cape Cod",
+         f"{_pire['code']} {_pire['statut']}" if _pire else "H1-H5 OK",
+         None, 'ROUGE' if (_pire and _pire['statut'] == 'NON VALIDÉE')
+                else 'AMBRE' if _pire else 'VERT')
 
     # Bloc triangle
     _titre_section(ws, 29, 1, "DONNÉES", 6)
@@ -569,23 +577,29 @@ def _ong6_hypotheses(wb, n2):
     hyps = [
         ('h1_independance',     'H1 — Indépendance des années (Spearman)'),
         ('h2_stabilite',        'H2 — Stabilité des facteurs (CV + dérive)'),
-        ('h3_apriori_bf',       'H3 — A priori BF (Loss Ratio)'),
         ('h4_homosc_bootstrap', 'H4 — Homoscédasticité Bootstrap ODP'),
     ]
-    for i, (key, lbl) in enumerate(hyps):
+    rangs = []
+    for key, lbl in hyps:
         h   = n2.get(key, {})
         ok  = h.get('ok', True)
-        bg  = 'EAF3DE' if ok else 'FCEBEB'
-        sc  = h.get('score', 0)
-        msg = h.get('message', '—')[:200]
-
         seuil_txt = '—'
         if key == 'h1_independance':
             seuil_txt = f"{h.get('seuil_utilise', 0.50):.2f}"
         elif key == 'h2_stabilite':
             seuil_txt = f"CV<{h.get('seuil_cv',0.15):.0%} dérive<{h.get('seuil_derive',0.20):.0%}"
+        rangs.append((lbl, '✅ OUI' if ok else '❌ NON', h.get('score', 0),
+                      seuil_txt, str(h.get('message', '—'))[:200], ok))
 
-        vals = [lbl, '✅ OUI' if ok else '❌ NON', sc, seuil_txt, msg]
+    # BFCC-H1..H5 — statut motivé, sans score : ces hypothèses n'en produisent
+    # aucun, et en afficher un fabriqué serait le défaut qu'on vient de retirer.
+    for ligne in lignes_hypotheses_bfcc(n2):
+        rangs.append((ligne['libelle'], ligne['statut'], '—',
+                      ligne['source'], ligne['message'][:200], ligne['ok']))
+
+    for i, (lbl, verdict, sc, seuil_txt, msg, ok) in enumerate(rangs):
+        bg = 'EAF3DE' if ok else 'FCEBEB'
+        vals = [lbl, verdict, sc, seuil_txt, msg]
         for j, val in enumerate(vals):
             c = ws.cell(row=3+i, column=j+1, value=val)
             c.font      = _font(

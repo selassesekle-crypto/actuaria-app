@@ -1,14 +1,35 @@
 # =============================================================================
 #  ActuarIA — Agent A7 Ibrahim
-#  n2_hypotheses.py  —  Niveau 2 : Validation des hypothèses H1/H2/H3/H4
+#  n2_hypotheses.py  —  Niveau 2 : Validation des hypothèses H1/H2/H4
 # =============================================================================
+#
+#  ⚠️ CE MODULE NE CALCULE PLUS AUCUN LOSS RATIO.
+#  ─────────────────────────────────────────────
+#  L'ancienne H3 « qualité de l'a priori BF » vivait ici et produisait un second
+#  loss ratio, concurrent de celui de N3. Trois défauts mesurés l'ont fait
+#  supprimer, pas déplacer :
+#
+#  · Elle divisait `C[i, dernière colonne connue]` par la prime — donc le PAYÉ À
+#    DATE, pas l'ultime, contre la figure 14 du guide de l'Institut des Actuaires
+#    qui rapporte la CHARGE ULTIME à la prime acquise. Biais systématiquement
+#    baissier : −9,08 % sur GenIns, −4,39 % sur RAA.
+#  · Son score valait `100 − CV×200`, c'est-à-dire la seule dispersion. Le
+#    contrôle de plage était calculé dans `ok`… que la sélection ne lisait jamais.
+#    Mesuré : un loss ratio de 364,7 % obtenait 81/100 et passait la gate.
+#  · Sans primes, elle fabriquait un loss ratio par `C[i,0] / 0.30` — jumeau du
+#    proxy `/0.35` supprimé de N3 au lot précédent, avec une constante inventée
+#    DIFFÉRENTE. Sur GenIns, il publiait « LR = 398,9 % » dans le rapport pendant
+#    que Bornhuetter-Ferguson y annonçait « non calculée ».
+#
+#  Le loss ratio a désormais UN SEUL propriétaire, N3, et c'est celui-là que
+#  BFCC-H4 juge (`n2_hypotheses_bfcc`). `scores_confiance` disparaît avec lui :
+#  après le lot B il n'alimentait plus que BF et Cape Cod, depuis cette seule H3.
 #
 #  Corrections v5.0 vs v4.0 :
 #    · Bug methode_cl_retenue corrigé : valider() expose maintenant
 #      'methode_cl_retenue' directement dans le dict retourné,
 #      calculée via _choisir_variante_cl() cohérente avec methode_recommandee
 #    · Seuils H2 dynamiques depuis lob_config (plus de 15% codé en dur)
-#    · H3 proxy documenté explicitement comme approximation sans primes
 #    · _choisir_variante_cl() séparée et documentée (5 cas + fallback)
 #
 #  Références :
@@ -19,7 +40,7 @@
 # =============================================================================
 
 import logging
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Tuple
 
 import numpy as np
 
@@ -33,7 +54,7 @@ logger = logging.getLogger('actuaria.a7')
 
 class HypothesesValidator:
     """
-    Valide les 4 hypothèses actuarielles AVANT tout calcul de méthode.
+    Valide les hypothèses actuarielles AVANT tout calcul de méthode.
 
     H1 — Corrélation entre facteurs de développement consécutifs
          Test de Spearman sur les facteurs individuels entre colonnes
@@ -48,10 +69,6 @@ class HypothesesValidator:
     H2 — Stabilité des facteurs dans le temps
          CV des facteurs par colonne et dérive temporelle (anciens vs récents).
          Seuils paramétrés par LoB (depuis lob_config).
-
-    H3 — Qualité de l'a priori BF
-         Cohérence du Loss Ratio a priori avec les années matures du triangle.
-         Si pas de primes : estimation proxy documentée comme approximation.
 
     H4 — Homoscédasticité (England & Verrall 2002)
          Variance des résidus pondérés homogène entre colonnes.
@@ -74,28 +91,27 @@ class HypothesesValidator:
     def valider(
         self,
         C:         np.ndarray,
-        primes:    Optional[np.ndarray] = None,
         lob:       str = 'generique',
-        lr_manuel: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
-        Lance tous les tests H1-H4 et retourne un rapport structuré.
+        Lance les tests H1, H2 et H4 et retourne un rapport structuré.
 
         Parameters
         ----------
         C : np.ndarray
             Triangle cumulé (n × m).
-        primes : np.ndarray, optional
-            Vecteur des primes acquises par année de survenance.
         lob : str
             Ligne d'activité — pilote les seuils H2 depuis lob_config.
             Défaut : 'generique' (seuils standards CV=15%, dérive=20%).
 
+        Les paramètres `primes` et `lr_manuel` ont disparu : ils ne servaient
+        qu'à l'ancienne H3, qui calculait ici un second loss ratio concurrent de
+        celui de N3 (cf. en-tête du module). N2 n'a plus besoin de l'exposition.
+
         Returns
         -------
         dict avec :
-            h1_independance, h2_stabilite, h3_apriori_bf, h4_homosc_bootstrap
-            scores_confiance        : dict score 0-100 par méthode
+            h1_independance, h2_stabilite, h4_homosc_bootstrap
             methode_recommandee     : str  — méthode principale conseillée
             methode_cl_retenue      : str  — variante CL à utiliser en N3
                                       ('standard'|'mediane'|'trimmed_mean'|
@@ -118,17 +134,11 @@ class HypothesesValidator:
         # ── H2 : Stabilité (seuils depuis lob_config) ────────────────────────
         h2 = self._tester_h2_stabilite(C, alertes, infos, cfg_lob)
 
-        # ── H3 : A priori BF ─────────────────────────────────────────────────
-        h3 = self._tester_h3_apriori(C, primes, alertes, infos, cfg_lob, lr_manuel=lr_manuel)
-
         # ── H4 : Homoscédasticité ─────────────────────────────────────────────
         h4 = self._tester_h4_homosc(C, alertes, infos)
 
-        # ── Scores de confiance — BF et Cape Cod seulement (cf. _calculer_scores)
-        scores = self._calculer_scores(h3)
-
         # ── Méthode recommandée ───────────────────────────────────────────────
-        methode_rec, raison_rec = self._recommander_methode(h1, h2, h3, n)
+        methode_rec, raison_rec = self._recommander_methode(h1, h2, n)
 
         # ── Variante CL : RECOMMANDÉE, plus imposée (lot B) ────────────────────
         # La réserve se calcule désormais sur l'estimateur STANDARD par défaut —
@@ -153,15 +163,13 @@ class HypothesesValidator:
         if self.verbose_log:
             logger.info(
                 f"N2 — statut={statut} | methode_rec={methode_rec} | "
-                f"methode_cl={methode_cl} | scores={scores}"
+                f"methode_cl={methode_cl}"
             )
 
         return {
             'h1_independance':       h1,
             'h2_stabilite':          h2,
-            'h3_apriori_bf':         h3,
             'h4_homosc_bootstrap':   h4,
-            'scores_confiance':      scores,
             'methode_recommandee':   methode_rec,
             # Toujours 'standard' sauf choix explicite de l'actuaire en amont :
             # la réserve se calcule sur l'estimateur de Mack (cf. lot B).
@@ -436,172 +444,6 @@ class HypothesesValidator:
         }
 
     # =========================================================================
-    #  H3 : QUALITÉ DE L'A PRIORI BF
-    # =========================================================================
-
-    def _tester_h3_apriori(
-        self,
-        C:         np.ndarray,
-        primes:    Optional[np.ndarray],
-        alertes:   List,
-        infos:     List,
-        cfg_lob:   Dict,
-        lr_manuel: Optional[float] = None,
-    ) -> Dict:
-        """
-        Qualité de l'a priori Bornhuetter-Ferguson.
-
-        Avec primes fournies (recommandé)
-        ----------------------------------
-        LR_i = C[i, last_j] / primes[i]  sur les années les plus matures.
-        Vérifier : 0.30 < LR_moy < 1.50 et CV_LR < 25%.
-
-        Sans primes (proxy)
-        -------------------
-        LR_proxy = C[i, last_j] / (C[i, 0] / 0.30)
-        ⚠️ APPROXIMATION : suppose que le ratio primes/sinistres initiaux = 0.30.
-        Cette hypothèse est fragile — valeur de référence FFA Non-Vie.
-        À utiliser uniquement pour orienter le calcul, jamais pour le bilan S2.
-
-        LR de référence marché (depuis lob_config) utilisé pour validation.
-        """
-        n, m       = C.shape
-        nb_matures = min(5, n // 2) if n >= 6 else min(3, n - 1)
-        # Cas 0 : LR manuel prioritaire sur proxy et primes
-        if lr_manuel is not None and lr_manuel > 0:
-            ok    = 0.20 < lr_manuel < 2.0
-            score = 85 if ok else 40
-            msg   = (
-                f"H3 A priori : LR fourni manuellement = {lr_manuel:.1%} "
-                f"({'dans' if ok else 'hors'} plage [20%-200%]). "
-                f"Source : jugement actuariel - a documenter dans la note methodologique S2."
-            )
-            if not ok:
-                alertes.append(f"H3 A priori : LR manuel = {lr_manuel:.1%} hors plage. Verifier la coherence.")
-            else:
-                infos.append(msg)
-            return {
-                'ok': ok, 'score': score,
-                'lr_apriori': round(lr_manuel, 4),
-                'lr_std': 0.0, 'cv_lr': 0.0,
-                'source': 'manuel', 'lr_manuel': lr_manuel,
-                'message': msg,
-            }
-
-
-        lr_ref     = cfg_lob.get('lr_marche_reference')
-        lr_src     = cfg_lob.get('lr_marche_source', '—')
-
-        # ── Cas 1 : primes fournies ───────────────────────────────────────────
-        if primes is not None and len(primes) >= nb_matures:
-            lr_annees = []
-            for i in range(nb_matures):
-                p      = float(primes[i])
-                last_j = min(n - i - 1, m - 1)
-                u      = float(C[i, last_j])
-                if p > 0 and u > 0:
-                    lr_annees.append(u / p)
-
-            if lr_annees:
-                lr_moy = float(np.mean(lr_annees))
-                lr_std = float(np.std(lr_annees, ddof=1)) if len(lr_annees) > 1 else 0.0
-                cv_lr  = lr_std / max(lr_moy, 1e-9)
-
-                ok_lr  = 0.30 < lr_moy < 1.50
-                ok_cv  = cv_lr < 0.25
-                ok     = ok_lr and ok_cv
-                score  = max(0, min(100, int(100 - cv_lr * 200)))
-
-                # Comparer avec LR de référence marché
-                if lr_ref and abs(lr_moy - lr_ref) > 0.20:
-                    alertes.append(
-                        f"🟡 H3 A priori : LR calculé = {lr_moy:.1%} vs "
-                        f"référence marché = {lr_ref:.1%} ({lr_src}). "
-                        f"Ecart > 20 pts — vérifier la cohérence."
-                    )
-
-                if not ok_lr:
-                    alertes.append(
-                        f"⚠️ H3 A priori BF : LR = {lr_moy:.1%} hors plage "
-                        f"[30%–150%] — vérifier les primes fournies."
-                    )
-                if not ok_cv:
-                    alertes.append(
-                        f"🟡 H3 A priori : CV du LR = {cv_lr:.1%} > 25% "
-                        f"— a priori hétérogène entre années matures."
-                    )
-
-                if ok:
-                    infos.append(
-                        f"✅ H3 A priori validé — LR={lr_moy:.1%} "
-                        f"(CV={cv_lr:.1%}, {nb_matures} années matures)"
-                    )
-
-                return {
-                    'ok':         ok,
-                    'score':      score,
-                    'lr_apriori': round(lr_moy, 4),
-                    'lr_std':     round(lr_std, 4),
-                    'cv_lr':      round(cv_lr,  4),
-                    'nb_matures': nb_matures,
-                    'source':     'primes_fournies',
-                    'lr_reference': lr_ref,
-                    'message': (
-                        f"H3 {'VALIDÉE' if ok else 'À VÉRIFIER'} — "
-                        f"LR a priori = {lr_moy:.1%} "
-                        f"(CV={cv_lr:.1%}, {nb_matures} années matures, "
-                        f"source : primes_fournies)."
-                    ),
-                }
-
-        # ── Cas 2 : sans primes — proxy documenté ─────────────────────────────
-        # ⚠️ HYPOTHÈSE PROXY : sinistres initiaux ≈ 30% des primes (FFA Non-Vie)
-        # Cette hypothèse est documentée et flaggée — ne pas utiliser pour S2.
-        lr_proxy_list = []
-        for i in range(nb_matures):
-            last_j = min(n - i - 1, m - 1)
-            c0     = float(C[i, 0])
-            cu     = float(C[i, last_j])
-            if c0 > 0 and cu > 0:
-                # prime_estimee = sinistres_initiaux / 0.30
-                # (hypothèse : SR initial ≈ 30%)
-                prime_proxy = c0 / 0.30
-                lr_proxy_list.append(cu / prime_proxy)
-
-        lr_proxy = float(np.mean(lr_proxy_list)) if lr_proxy_list else 0.75
-        ok       = 0.20 < lr_proxy < 2.0
-        score    = 60   # score réduit car proxy sans primes
-
-        alertes.append(
-            f"ℹ️ H3 A priori : aucune prime fournie — LR estimé par proxy "
-            f"(hypothèse : sinistres_initiaux ≈ 30% des primes). "
-            f"LR proxy = {lr_proxy:.1%}. "
-            f"⚠️ Approximation — fournir les primes pour un a priori fiable."
-        )
-
-        if lr_ref:
-            infos.append(
-                f"Référence marché disponible : {lr_ref:.1%} ({lr_src})"
-            )
-
-        return {
-            'ok':         ok,
-            'score':      score,
-            'lr_apriori': round(lr_proxy, 4),
-            'lr_std':     0.0,
-            'cv_lr':      0.0,
-            'nb_matures': nb_matures,
-            'source':     'proxy_sans_primes',
-            'lr_reference': lr_ref,
-            'message': (
-                f"H3 ESTIMÉE (proxy sans primes) — "
-                f"LR proxy = {lr_proxy:.1%} "
-                f"(hypothèse SR initial = 30%). "
-                f"⚠️ Approximation — fournir les primes pour valider."
-            ),
-        }
-
-    # =========================================================================
     #  H4 : HOMOSCÉDASTICITÉ (Bootstrap ODP)
     # =========================================================================
 
@@ -686,45 +528,6 @@ class HypothesesValidator:
         }
 
     # =========================================================================
-    #  SCORES DE CONFIANCE PAR MÉTHODE
-    # =========================================================================
-
-    def _calculer_scores(self, h3: Dict) -> Dict[str, int]:
-        """
-        Score de confiance 0–100 des méthodes reposant sur un A PRIORI EXOGÈNE.
-
-        CE QUI A QUITTÉ CE CALCUL AU LOT B — les anciennes H1, H2 et H4.
-        ─────────────────────────────────────────────────────────────────
-        · H1 prétendait mesurer l'indépendance des années de survenance ; elle
-          mesure en réalité une corrélation entre facteurs de développement
-          consécutifs, et pesait 50 % du score de Chain Ladder. Ce que le nom
-          annonçait, c'est CLM-H1 qui le teste (test des signes par diagonale).
-        · H2 est un critère de CHOIX DE MÉTHODE (dispersion, dérive), pas une
-          hypothèse de Mack. Elle alimente désormais une RECOMMANDATION de
-          variante, jamais une exclusion.
-        · H4 ne gatait rien : ses deux seuls destinataires (`mack_1993` et
-          `bootstrap_odp`) n'étaient lus nulle part. Retrait sans effet.
-
-        L'admissibilité de Chain Ladder ne passe plus par un score : elle est
-        décidée par la couverture du motif (CLM-H2), année par année, en N4.
-
-        CE QUI RESTE — H3, la qualité de l'a priori de Bornhuetter-Ferguson et
-        de Cape Cod. C'est une hypothèse qui LEUR EST PROPRE et que CLM ne
-        couvre pas : CLM porte sur le motif de développement, partagé ; H3 porte
-        sur le loss ratio a priori, exogène.
-
-        ⚠️ EN ATTENTE DE SON PROPRE AUDIT. H3 n'a pas encore été confrontée à la
-        littérature comme CLM-H1..H4 l'ont été au guide de l'Institut des
-        Actuaires. Elle est conservée telle quelle, faute de mieux, jusqu'au lot
-        d'audit de BF et Cape Cod.
-        """
-        s3 = int(h3.get('score', 70))
-        return {
-            'bornhuetter_ferguson': int(min(100, s3)),
-            'cape_cod':             int(min(100, s3)),
-        }
-
-    # =========================================================================
     #  MÉTHODE RECOMMANDÉE
     # =========================================================================
 
@@ -732,7 +535,6 @@ class HypothesesValidator:
         self,
         h1:      Dict,
         h2:      Dict,
-        h3:      Dict,
         n:       int,
     ) -> Tuple[str, str]:
         """
@@ -747,11 +549,20 @@ class HypothesesValidator:
         Règles de décision (par ordre de priorité) :
         1. Triangle trop petit (n < 5) → Cape Cod
         2. H1 + H2 validées → Chain Ladder
-        3. H1 rejetée + H3 fiable → Bornhuetter-Ferguson
-        4. H1 rejetée + H3 peu fiable → Cape Cod
-        5. H2 rejetée seule → Bornhuetter-Ferguson
-        6. Fallback → Chain Ladder (INATTEIGNABLE par construction : R2-R5
+        3. H1 rejetée → Bornhuetter-Ferguson
+        4. H2 rejetée seule → Bornhuetter-Ferguson
+        5. Fallback → Chain Ladder (INATTEIGNABLE par construction : R2-R4
            couvrent toutes les combinaisons H1×H2)
+
+        LES DEUX ANCIENNES RÈGLES « H1 rejetée » SONT FUSIONNÉES. Elles
+        arbitraient entre Bornhuetter-Ferguson et Cape Cod sur le score de
+        l'ancienne H3, supprimée avec le loss ratio de N2. Reconstruire cet
+        arbitrage ici est impossible ET indésirable : impossible parce que le
+        loss ratio n'existe qu'après N3, indésirable parce que ce qui départage
+        réellement les deux méthodes — la provenance de l'a priori et la
+        stabilité du loss ratio — est désormais l'objet de BFCC-H4 et BFCC-H5,
+        avec un verdict motivé plutôt qu'un score. La recommandation dit donc ce
+        qu'elle sait : l'a priori exogène vaut mieux ici que le seul triangle.
 
         La règle 2 arbitrait auparavant entre « Mack 1993 » et Chain Ladder sur
         un score de méthode. Deux raisons de ne plus le faire : ce score a
@@ -774,24 +585,17 @@ class HypothesesValidator:
                 "la volatilité, son estimation centrale étant identique."
             )
 
-        # Règle 3 : H1 rejetée + a priori BF fiable
-        if not h1['ok'] and h3['score'] >= 60:
+        # Règle 3 : H1 rejetée
+        if not h1['ok']:
             return 'bornhuetter_ferguson', (
                 f"H1 REJETÉE (corr_moy={h1['corr_moy']:.2f}) → CL biaisé. "
-                f"Bornhuetter-Ferguson recommandé : ancrage sur a priori indépendant "
-                f"des corrélations du triangle "
-                f"(score H3 = {h3['score']}/100)."
+                f"Bornhuetter-Ferguson recommandé : ancrage sur un a priori "
+                f"extérieur aux corrélations du triangle. Sa recevabilité — "
+                f"provenance de l'a priori, stabilité du loss ratio — est jugée "
+                f"par BFCC-H4 et BFCC-H5, après N3."
             )
 
-        # Règle 4 : H1 rejetée + a priori peu fiable
-        if not h1['ok'] and h3['score'] < 60:
-            return 'cape_cod', (
-                f"H1 REJETÉE (corr_moy={h1['corr_moy']:.2f}) et a priori BF peu fiable "
-                f"(score H3 = {h3['score']}/100 < 60). "
-                f"Cape Cod recommandé : estime le LR directement depuis les données."
-            )
-
-        # Règle 5 : H2 rejetée seule
+        # Règle 4 : H2 rejetée seule
         if not h2['ok']:
             return 'bornhuetter_ferguson', (
                 f"H2 REJETÉE (CV={h2['cv_moy']:.1%}, dérive={h2['derive_moy']:.1%}) "
@@ -799,8 +603,8 @@ class HypothesesValidator:
                 f"Bornhuetter-Ferguson recommandé pour sa robustesse."
             )
 
-        # Règle 6 : fallback terminal — INATTEIGNABLE par construction. R2-R5
-        # couvrent toutes les combinaisons H1×H2 (H1∧H2→R2 ; ¬H1→R3/R4 ; ¬H2→R5).
+        # Règle 5 : fallback terminal — INATTEIGNABLE par construction. R2-R4
+        # couvrent toutes les combinaisons H1×H2 (H1∧H2→R2 ; ¬H1→R3 ; ¬H2→R4).
         # Défaut SÛR = chain_ladder (jamais 'bootstrap_odp' via max(scores), que N4
         # ne sait pas pondérer dans le BE).
         return 'chain_ladder', (

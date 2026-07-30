@@ -39,7 +39,8 @@ import numpy as np
 # ── Imports modules A7 ───────────────────────────────────────────────────────
 from direction_non_vie.services.nv_triangle import preparer_pour_agent
 from .n2_hypotheses     import HypothesesValidator
-from .n2_hypotheses_clm import verifier_hypotheses_clm
+from .n2_hypotheses_clm  import verifier_hypotheses_clm
+from .n2_hypotheses_bfcc import verifier_hypotheses_bfcc
 from .n4_best_estimate  import BestEstimateS2, garde_fou_be_negatif, s2_non_calculable
 # Alias VOLONTAIRE — ne pas « nettoyer » : `generer_graphiques` est aussi un
 # PARAMÈTRE public de run() (compatibilité ancienne API, cf. plus bas). Sans
@@ -57,6 +58,8 @@ from .n3.chain_ladder  import (
     calculer_facteurs_cumules,
     calculer_tail_factor,
     calculer_pct_developpe,
+    pct_developpe_brut,
+    cadence_admissible,
     chain_ladder,
 )
 from .n3.mack         import mack_1993
@@ -293,7 +296,7 @@ class AgentA7Provisionnement:
             if self.verbose:
                 logger.info("N2 — Validation hypothèses H1/H2/H3/H4 + CLM-H1..H4")
 
-            n2 = self._hv.valider(C_calc, primes=primes_norm, lob=lob, lr_manuel=lr_bf_manuel)
+            n2 = self._hv.valider(C_calc, lob=lob)
 
             # ── CLM-H1..H4 : les hypothèses propres à Chain Ladder et Mack ────
             # Elles doivent être disponibles AU NIVEAU OÙ LA SÉLECTION SE DÉCIDE,
@@ -402,6 +405,17 @@ class AgentA7Provisionnement:
             # Année début pour labels calendaires (G14)
             if annee_debut:
                 n3['annee_debut_triangle'] = annee_debut
+
+            # ── BFCC-H1..H5 : les hypothèses propres à BF et Cape Cod ─────────
+            # ⚠️ APRÈS N3, ET C'EST VOULU. BFCC-H4 juge le loss ratio a priori
+            # QUE N3 EMPLOIE RÉELLEMENT, BFCC-H5 les loss ratios par année qu'il
+            # implique : une hypothèse qui porte sur un résultat ne peut pas être
+            # évaluée avant lui. C'est la contrepartie assumée d'avoir donné à N3
+            # la propriété unique du loss ratio — l'alternative aurait été d'en
+            # recalculer un second en N2, c'est-à-dire le défaut qu'on supprime.
+            # BFCC-H1 et BFCC-H2 pourraient tourner plus tôt ; les séparer ferait
+            # deux points d'entrée pour un seul jeu d'hypothèses.
+            n2['bfcc'] = self._verifier_bfcc(n2, n3, primes_norm, cfg_lob)
 
             # ── Base CHARGES : provisions dossier à réintégrer au BE ──────────
             # Les méthodes N3 rendent `ultime − charges à date` (IBNR pur) quand
@@ -769,6 +783,43 @@ class AgentA7Provisionnement:
             logger.warning(f"CLM-H1..H4 non calculées : {e}")
             return {'erreur': str(e), 'hypotheses': {}, 'couvertures': {}}
 
+    def _verifier_bfcc(
+        self,
+        n2:      Dict,
+        n3:      Dict,
+        primes:  Optional[np.ndarray],
+        cfg_lob: Dict,
+    ) -> Dict:
+        """BFCC-H1..H5 — les hypothèses propres à BF et Cape Cod.
+
+        BFCC-H1 reprend le verdict CLM-H1 et BFCC-H3 celui du GLM Poisson APC :
+        le guide énonce l'hypothèse d'indépendance identique à celle de Chain
+        Ladder (§2.c.ii p18), et le test F calendaire du GLM ajuste exactement le
+        modèle croisé α_j × β_i que suppose (H2). Rien n'est recalculé.
+
+        Ne LÈVE JAMAIS, pour la même raison que `_verifier_clm` : un échec de
+        vérification est signalé, il n'interrompt pas un provisionnement. Le dict
+        de repli garde les clés que N4 lit, qui traitent alors chaque année comme
+        non jugée — donc sans exclusion.
+        """
+        try:
+            return verifier_hypotheses_bfcc(
+                pct_brut     = n3.get('pct_developpe_brut', []),
+                cadence_ok   = n3.get('cadence_admissible', []),
+                bf           = n3.get('bf', {}),
+                cape_cod     = n3.get('cape_cod', {}),
+                clm_h1       = n2.get('clm', {}).get('hypotheses', {}).get('CLM-H1'),
+                glm_apc      = n3.get('glm_apc', {}),
+                ultimates_cl = n3.get('chain_ladder', {}).get('ultimates'),
+                exposition   = primes,
+                lr_reference = cfg_lob.get('lr_marche_reference'),
+                lr_reference_src = cfg_lob.get('lr_marche_source', ''),
+            )
+        except Exception as e:
+            logger.warning(f"BFCC-H1..H5 non calculées : {e}")
+            return {'erreur': str(e), 'hypotheses': {}, 'statuts': {},
+                    'couverture_cadence': {}, 'recoupement_lr': {}}
+
     def _calculer_n3(
         self,
         C:               np.ndarray,
@@ -797,8 +848,15 @@ class AgentA7Provisionnement:
         )
 
         # ── Facteurs cumulés + % développé ────────────────────────────────────
-        f_cum   = calculer_facteurs_cumules(facteurs, tail_info['tail_factor'])
-        pct_dev = calculer_pct_developpe(C, f_cum)
+        # Deux lectures de la même cadence : `pct_dev` est ÉCRÊTÉE à [0,1] et
+        # sert au CALCUL — sans quoi `1 − α` change de signe et BF produit un
+        # IBNR arbitraire ; `pct_brut` ne l'est pas et sert au JUGEMENT, car
+        # l'écrêtage ramène à 1 exactement les années que l'hypothèse (H2) du
+        # guide déclare inadmissibles, et les ferait passer pour développées.
+        f_cum    = calculer_facteurs_cumules(facteurs, tail_info['tail_factor'])
+        pct_dev  = calculer_pct_developpe(C, f_cum)
+        pct_brut = pct_developpe_brut(C, f_cum)
+        cadence_ok = cadence_admissible(pct_brut)
 
         # ── Chain Ladder ──────────────────────────────────────────────────────
         r_cl = chain_ladder(
@@ -840,6 +898,7 @@ class AgentA7Provisionnement:
             annee_base     = annee_base,
             lr_reference   = cfg_lob.get('lr_marche_reference'),
             lr_reference_src = cfg_lob.get('lr_marche_source', ''),
+            cadence_ok     = cadence_ok,
         )
 
         # ── Cape Cod ──────────────────────────────────────────────────────────
@@ -851,6 +910,7 @@ class AgentA7Provisionnement:
             annee_base     = annee_base,
             lr_reference   = cfg_lob.get('lr_marche_reference'),
             lr_reference_src = cfg_lob.get('lr_marche_source', ''),
+            cadence_ok     = cadence_ok,
         )
 
         # ── Bootstrap ODP ─────────────────────────────────────────────────────
@@ -888,6 +948,8 @@ class AgentA7Provisionnement:
             'facteurs_cumules': [float(f) for f in f_cum],
             'facteurs_indiv':  facteurs_indiv,
             'pct_developpe':   [float(p) for p in pct_dev],
+            'pct_developpe_brut': [float(p) for p in pct_brut],
+            'cadence_admissible': [bool(b) for b in cadence_ok],
             'chain_ladder':    r_cl,
             'mack':            r_mack,
             'bf':              r_bf,
@@ -941,18 +1003,20 @@ class AgentA7Provisionnement:
                 'h1_corr_moy':        n2['h1_independance'].get('corr_moy'),
                 'h2_ok':              n2['h2_stabilite']['ok'],
                 'h2_cv_moy':          n2['h2_stabilite'].get('cv_moy'),
-                'h3_lr':              n2['h3_apriori_bf'].get('lr_apriori'),
+                # Le loss ratio a priori vient de N3, son unique propriétaire.
+                'lr_apriori':         n3.get('bf', {}).get('lr_apriori'),
+                'lr_apriori_source':  n3.get('bf', {}).get('source_lr'),
                 'h4_phi':             n2['h4_homosc_bootstrap'].get('phi'),
                 'methode_cl_retenue': n2.get('methode_cl_retenue'),
                 'methode_recommandee': n2.get('methode_recommandee'),
                 'statut_global':      n2.get('statut_global'),
-                'scores':             n2.get('scores_confiance', {}),
-                # CLM-H1..H4 — EXPOSÉES, CONSOMMÉES PAR RIEN. Elles sont
-                # visibles par l'actuaire dès maintenant ; le mécanisme de
-                # sélection continue de reposer sur les scores ci-dessus.
                 'clm_hypotheses':     {c: {'statut': h['statut'],
                                            'message': h['message']}
                                        for c, h in n2.get('clm', {})
+                                       .get('hypotheses', {}).items()},
+                'bfcc_hypotheses':    {c: {'statut': h['statut'],
+                                           'message': h['message']}
+                                       for c, h in n2.get('bfcc', {})
                                        .get('hypotheses', {}).items()},
                 'clm_couvertures':    n2.get('clm', {})
                                         .get('couvertures', {}).get('synthese', {}),

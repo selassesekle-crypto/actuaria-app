@@ -36,6 +36,7 @@ import logging
 from datetime import datetime
 from typing import Dict, Optional
 
+from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
 from .n3.bf_cape_cod import libelle_loss_ratio
 from .n4_best_estimate import s2_non_calculable, MSG_S2_NON_CALCULABLE
 
@@ -189,7 +190,6 @@ def _s2_qualite(n1: Dict) -> str:
 def _s3_hypotheses(n2: Dict) -> str:
     h1  = n2.get('h1_independance',     {})
     h2  = n2.get('h2_stabilite',        {})
-    h3  = n2.get('h3_apriori_bf',       {})
     h4  = n2.get('h4_homosc_bootstrap', {})
     rec = n2.get('methode_recommandee', '—')
     rcl = n2.get('raison_cl', '')
@@ -294,70 +294,20 @@ def _s3_hypotheses(n2: Dict) -> str:
 
     lignes.append("")
 
-    # ── H3 ────────────────────────────────────────────────────────────────────
-    h3_ok  = h3.get('ok', True)
-    lr     = h3.get('lr_apriori', 0)
-    src    = h3.get('source', '—')
-    cv_lr  = h3.get('cv_lr', 0)
-    lr_ref = h3.get('lr_reference')
-    nb_mat = h3.get('nb_matures', 0)
+    # ── BFCC-H1..H5 — les hypothèses propres à BF et Cape Cod ─────────────────
+    # L'ancienne « H3 a priori BF » vivait ici. Elle lisait `n2['h3_apriori_bf']`,
+    # dont le loss ratio était calculé sur la dernière cellule OBSERVÉE et non
+    # sur l'ultime, et pouvait provenir d'un proxy inventé quand aucune prime
+    # n'était fournie. Les cinq verdicts la remplacent, sur le loss ratio que N3
+    # emploie réellement.
+    lignes.append("HYPOTHÈSES PROPRES À BORNHUETTER-FERGUSON ET CAPE COD")
+    for ligne in lignes_hypotheses_bfcc(n2):
+        lignes.append(f"{ligne['libelle']} : {ligne['statut']}")
+        lignes.append(ligne['message'])
 
-    src_desc = {
-        'primes_fournies':    f"calculé sur {nb_mat} années matures avec primes réelles",
-        'manuel':             "fourni manuellement par l'actuaire (jugement expert)",
-        'proxy_sans_primes':  "estimé par proxy sans primes (approximation — voir alerte)",
-        'defaut':             "valeur par défaut (primes manquantes)",
-    }.get(src, src)
-
-    lignes.append(
-        f"H3 — A PRIORI BORNHUETTER-FERGUSON : "
-        f"{'VALIDÉ' if h3_ok else 'A VÉRIFIER'} [score {h3.get('score',0)}/100]"
-    )
-
-    lignes.append(
-        f"Le Loss Ratio a priori retenu est de {_p(lr*100)} ({src_desc}). "
-    )
-
-    if src == 'proxy_sans_primes':
-        lignes.append(
-            f"ATTENTION : en l'absence de primes acquises, le LR a priori "
-            f"est estimé par un proxy basé sur les sinistres initiaux "
-            f"(hypothèse SR initial = 35% des primes, FFA Non-Vie). "
-            f"Cette approximation introduit une circularité avec le CL "
-            f"et peut biaiser les résultats BF. Il est fortement recommandé "
-            f"de fournir les primes acquises pour un calcul conforme S2."
-        )
-    elif cv_lr and cv_lr > 0.15:
-        lignes.append(
-            f"Le CV du LR sur les années matures est de {_p(cv_lr*100)}, "
-            f"ce qui révèle une certaine hétérogénéité du Loss Ratio historique. "
-            f"Cela peut refléter des années atypiques (CAT NAT, sinistres sériels) "
-            f"ou une évolution structurelle du portefeuille."
-        )
-    else:
-        lignes.append(
-            f"Le LR est stable sur les {nb_mat} années matures analysées"
-            f"{f' (CV={_p(cv_lr*100)})' if cv_lr else ''}. "
-            f"L'a priori BF est de bonne qualité."
-        )
-
-    if lr_ref:
-        ecart_lr = abs(lr - lr_ref) * 100
-        if ecart_lr > 20:
-            lignes.append(
-                f"SIGNAL : le LR calculé ({_p(lr*100)}) s'écarte de "
-                f"{ecart_lr:.0f} pts de la référence marché "
-                f"({_p(lr_ref*100)}). Cet écart mérite investigation — "
-                f"il peut refléter une spécificité légitime du portefeuille "
-                f"ou une donnée aberrante."
-            )
-        else:
-            lignes.append(
-                f"Le LR calculé est cohérent avec la référence marché "
-                f"({_p(lr_ref*100)}) — écart de seulement {ecart_lr:.0f} pts."
-            )
-
-    lignes.append("")
+    recoupement = n2.get('bfcc', {}).get('recoupement_lr', {})
+    if recoupement.get('comparable'):
+        lignes.append(recoupement['message'])
 
     # ── H4 ────────────────────────────────────────────────────────────────────
     h4_ok = h4.get('ok', True)
@@ -842,10 +792,24 @@ def _s8_recommandations(n1: Dict, n2: Dict, n3: Dict, n4: Dict, lob: str) -> str
             "• H2 rejetée : analyser la cause de l'instabilité des facteurs "
             "(évolution du mix, pratiques de règlement, inflation)."
         )
-    if h3_src == 'proxy_sans_primes':
+    # BRANCHE RÉPARÉE, ELLE NE POUVAIT PAS SE DÉCLENCHER. Elle comparait
+    # `source_lr`, produit par N3, à `'proxy_sans_primes'` — une valeur de
+    # l'ancienne H3 de N2 que N3 n'a jamais émise. La recommandation la plus
+    # utile à l'actuaire ne sortait donc jamais. Les sources réelles sont
+    # 'manuel', 'ultime_apriori', 'matures', 'refuse' et 'non calculée'.
+    if h3_src in ('refuse', 'non calculée', ''):
         lignes.append(
-            "• Fournir les primes acquises pour le prochain arrêté — "
-            "le LR proxy actuel est une approximation."
+            "• Fournir une mesure d'exposition, ou un loss ratio a priori "
+            "(tarification, plan à moyen terme, benchmark de marché, jugement "
+            "d'expert — guide IA 2023 §2.b.i p14) : Bornhuetter-Ferguson n'a "
+            "pas pu être calculée, le Best Estimate perd un avis indépendant."
+        )
+    elif h3_src == 'matures':
+        lignes.append(
+            "• Le loss ratio a priori est dérivé des ultimes Chain Ladder : "
+            "Bornhuetter-Ferguson corrige la répartition entre années sans "
+            "corriger le niveau. Un loss ratio exogène rendrait au Best "
+            "Estimate un second avis sur le niveau."
         )
 
     tail_v = n3.get('chain_ladder', {}).get('tail_factor', {})

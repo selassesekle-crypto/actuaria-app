@@ -23,13 +23,15 @@
 #
 #  Best Estimate — réserve brute (Art. 77 ; actualisation S2 en aval, A10)
 #  ────────────────────────
-#  Combinaison pondérée des méthodes actuarielles validées :
+#  Combinaison des méthodes actuarielles admises, ANNÉE PAR ANNÉE :
 #
-#      BE = Σ_{m ∈ M_inc} w_m × R_m
+#      BE = Σ_i Σ_{m ∈ M_inc(i)} w[m,i] × R[m,i]     avec Σ_m w[m,i] = 1
 #
-#  où  M_inc  = méthodes avec score ≥ seuil_score (défaut 60)
-#      w_m    = s_m / Σ s_k   (poids proportionnels aux scores N2)
-#      R_m    = réserve estimée par la méthode m
+#  où  M_inc(i) = méthodes admises pour l'année i — cf. `selectionner_et_agreger`
+#      w[m,i]   = 1 / |M_inc(i)|   (POIDS ÉGAUX, choix assumé : ni le guide de
+#                 l'Institut des Actuaires ni Mack ne disent comment pondérer
+#                 plusieurs méthodes entre elles)
+#      R[m,i]   = IBNR de l'année i estimé par la méthode m
 #
 #  Percentiles log-normale (QIS5 TP.5.26)
 #  ────────────────────────────────────────
@@ -132,21 +134,91 @@ _CLES_N3 = {
 _METHODE_FILET = 'chain_ladder'
 
 
+#: Hypothèses BFCC dont un verdict NON VALIDÉE écarte GLOBALEMENT une méthode.
+#: BFCC-H2 n'y figure PAS : elle se juge année par année (cf.
+#: `couverture_cadence`), une seule année à recours ne disqualifiant pas les
+#: autres. BFCC-H1 et BFCC-H3 non plus : la première est reprise de CLM-H1, que
+#: le guide traite en signalement et non en rejet ; la seconde est descriptive.
+_HYPOTHESES_BLOQUANTES = {
+    'bornhuetter_ferguson': ('BFCC-H4',),
+    'cape_cod':             ('BFCC-H5',),
+}
+
+
+def _hypotheses_a_justifier(n2: Dict, methodes_incluses: Dict) -> List[str]:
+    """Hypothèses BFCC en À JUSTIFIER qui portent sur une méthode RETENUE.
+
+    Le filtre par méthode est essentiel : une hypothèse à justifier sur une
+    méthode déjà écartée du Best Estimate n'a plus de conséquence sur lui, et
+    plafonner son statut pour cela reviendrait à sanctionner deux fois.
+
+    ⚠️ UNE HYPOTHÈSE À `critique_pour` VIDE NE PLAFONNE RIEN. C'est le sens même
+    du champ : elle est DESCRIPTIVE, aucune méthode n'est invalidée si elle tombe.
+    C'est le cas de BFCC-H3, qui republie le test calendaire du GLM Poisson APC
+    sans lui donner d'effet décisionnel dans ce lot.
+    """
+    hyps = n2.get('bfcc', {}).get('hypotheses', {})
+    return sorted(
+        code for code, h in hyps.items()
+        if h.get('statut') == 'À JUSTIFIER'
+        and any(m in methodes_incluses for m in (h.get('critique_pour') or []))
+    )
+
+
+#: Formulé en CONSÉQUENCE et en action possible, pas en reproche : l'a priori
+#: dérivé est l'une des cinq voies du guide (§2.b.i p14), pas une faute.
+MSG_NIVEAU_ANCRE_CL = (
+    "🟡 Le NIVEAU du Best Estimate remonte entièrement à Chain Ladder : aucune "
+    "méthode retenue n'apporte d'estimation du niveau extérieure au triangle. "
+    "Bornhuetter-Ferguson, dont l'a priori est ici dérivé des ultimes matures, "
+    "corrige la répartition entre années sans en corriger le niveau. Fournir un "
+    "loss ratio a priori (tarification, plan à moyen terme, benchmark de marché, "
+    "jugement d'expert — guide IA 2023 §2.b.i p14) ou une charge ultime a priori "
+    "donnerait au Best Estimate un second avis indépendant."
+)
+
+
+def _niveau_ancre_sur_chain_ladder(n3: Dict, methodes_incluses: Dict) -> bool:
+    """Le NIVEAU du Best Estimate remonte-t-il entièrement à Chain Ladder ?
+
+    Vrai quand aucune méthode retenue n'apporte d'estimation du niveau qui soit
+    extérieure au triangle :
+      · Chain Ladder, par définition, n'en apporte pas ;
+      · Bornhuetter-Ferguson n'en apporte que si son a priori est EXOGÈNE —
+        loss ratio fourni (`manuel`) ou charge ultime fournie (`ultime_apriori`).
+        Dérivé des ultimes matures (`matures`), il est une lecture de Chain
+        Ladder de plus.
+      · Cape Cod, elle, estime son loss ratio sur le rapport entre sinistres
+        observés et EXPOSITION FOURNIE : sa présence suffit à sortir de l'ancrage.
+
+    Ce n'est pas un jugement sur la qualité de BF — l'a priori dérivé est l'une
+    des cinq voies du guide (§2.b.i p14) — mais sur ce que la moyenne des
+    méthodes couvre réellement.
+    """
+    if not methodes_incluses:
+        return False
+    if 'cape_cod' in methodes_incluses:
+        return False
+    if 'bornhuetter_ferguson' in methodes_incluses:
+        source = str(n3.get('bf', {}).get('source_lr', ''))
+        if source in ('manuel', 'ultime_apriori'):
+            return False
+    return True
+
+
 def _admissibilite_globale(
     n2:             Dict,
     n3:             Dict,
     methodes_dispo: Dict[str, float],
-    seuil_score:    int,
-) -> Tuple[Dict[str, float], Dict[str, Tuple[float, int]]]:
+) -> Tuple[Dict[str, float], Dict[str, Tuple[float, str]]]:
     """Quelles méthodes sont admissibles AVANT même de regarder les années.
 
     · Chain Ladder est toujours admissible : elle ne repose sur aucun a priori
       exogène, et c'est elle qui porte le filet de sécurité.
-    · Bornhuetter-Ferguson et Cape Cod restent jugées sur l'ancienne H3 —
-      la qualité de l'a priori. C'EST UNE HYPOTHÈSE QUI LEUR EST PROPRE, EN
-      ATTENTE DE SON PROPRE AUDIT : les anciennes H1, H2 et H4 ont quitté ce
-      calcul (elles prétendaient mesurer ce que CLM mesure désormais), H3 est
-      la seule à décrire quelque chose que CLM ne couvre pas.
+    · Bornhuetter-Ferguson et Cape Cod sont jugées sur les hypothèses QUI LEUR
+      SONT PROPRES — BFCC-H4 pour la provenance et la plausibilité du loss ratio
+      a priori, BFCC-H5 pour sa stabilité dans le temps. Un statut NON VALIDÉE
+      écarte la méthode ; À JUSTIFIER la conserve et plafonne le statut du BE.
     · Une méthode qui s'est déclarée NON CALCULÉE (`disponible = False`) est
       écartée d'emblée. C'est le cas de Bornhuetter-Ferguson et de Cape Cod
       quand aucune mesure d'exposition n'est fournie : elles refusent de
@@ -154,30 +226,68 @@ def _admissibilite_globale(
       drapeau et NON sur une réserve nulle — une réserve nulle peut être un
       résultat parfaitement légitime.
     · Une réserve non finie reste un échec de calcul, pas un jugement.
+
+    ⚠️ PLUS AUCUN SCORE. `scores_confiance` a disparu avec l'ancienne H3 qui
+    l'alimentait seule. Ce qu'il apportait — un nombre sur 100 comparé à un
+    seuil — était une apparence de calibration : il ne dépendait que du
+    coefficient de variation du loss ratio, ignorait le contrôle de plage
+    pourtant calculé à côté, et laissait passer un loss ratio de 364,7 % avec
+    81/100. Un statut motivé dit la même chose sans prétendre la mesurer.
+
+    POURQUOI BFCC-H5 BLOQUE CAPE COD ET PAS BORNHUETTER-FERGUSON. Cape Cod met
+    en commun UN loss ratio unique sur toutes les années d'origine (Bühlmann &
+    Straub 1983) : une dérive le rend trop bas pour les années récentes, celles
+    qui portent l'essentiel de la réserve. L'a priori de BF est par année — la
+    dérive s'y corrige par un recalage « as-if », elle ne l'invalide pas.
     """
-    scores = n2.get('scores_confiance', {})
+    statuts  = n2.get('bfcc', {}).get('statuts', {})
     admises: Dict[str, float] = {}
-    exclues: Dict[str, Tuple[float, int]] = {}
+    exclues: Dict[str, Tuple[float, str]] = {}
     for m, r in methodes_dispo.items():
-        score = 100 if m == _METHODE_FILET else int(scores.get(m, 70))
+        bloquantes = [h for h in _HYPOTHESES_BLOQUANTES.get(m, ())
+                      if statuts.get(h) == 'NON VALIDÉE']
         if not n3.get(_CLES_N3[m], {}).get('disponible', True):
-            exclues[m] = (r, score)
+            exclues[m] = (r, 'non calculée')
         elif not np.isfinite(r) or r == 0:
-            exclues[m] = (r, score)
-        elif score < seuil_score:
-            exclues[m] = (r, score)
+            exclues[m] = (r, 'réserve nulle ou non finie')
+        elif bloquantes:
+            exclues[m] = (r, ' et '.join(bloquantes) + ' NON VALIDÉE')
         else:
             admises[m] = float(r)
     return admises, exclues
+
+
+def _methodes_de_lannee(
+    i:          int,
+    admises:    Dict[str, float],
+    ibnr:       Dict[str, np.ndarray],
+    sous_filet: bool,
+    cadence_ko: bool,
+) -> List[str]:
+    """Méthodes retenues pour l'année `i`, après les deux retraits par année.
+
+    · FILET (motif non validé) → Chain Ladder seule : les hypothèses qui fondent
+      un coefficient de passage sont démenties sur le parcours de cette année.
+    · CADENCE non admissible → Bornhuetter-Ferguson et Cape Cod partent, Chain
+      Ladder reste. Retrait CIBLÉ et non filet : ce n'est pas le motif de
+      développement qui est en cause, c'est la forme de ces deux méthodes, qui
+      multiplient `1 − α` par un a priori et ne peuvent donc rendre qu'un zéro
+      là où le cumulé redescend.
+
+    Les deux se composent : sous filet, Chain Ladder survit dans les deux cas.
+    """
+    candidates = [_METHODE_FILET] if sous_filet else list(admises)
+    if cadence_ko:
+        candidates = [m for m in candidates if m not in _HYPOTHESES_BLOQUANTES]
+    return [m for m in candidates if m in ibnr and np.isfinite(ibnr[m][i])]
 
 
 def selectionner_et_agreger(
     n2:             Dict,
     n3:             Dict,
     methodes_dispo: Dict[str, float],
-    seuil_score:    int,
 ) -> Dict[str, Any]:
-    """Best Estimate agrégé ANNÉE PAR ANNÉE selon la couverture du motif.
+    """Best Estimate agrégé ANNÉE PAR ANNÉE selon les couvertures.
 
         BE = Σ_i Σ_m w[m,i] · R[m,i]      avec Σ_m w[m,i] = 1 pour chaque i
 
@@ -188,6 +298,13 @@ def selectionner_et_agreger(
       coefficient de passage sont démenties sur le parcours de cette année : on
       ne prétend pas la couvrir par une moyenne de trois méthodes qui reposent
       toutes sur ce même coefficient.
+    · `couverture_cadence[i]` NON VALIDÉE → Bornhuetter-Ferguson et Cape Cod
+      SEULES sont retirées de cette année, Chain Ladder la porte. La cadence y
+      dépasse 1 : le cumulé redescend, et les deux méthodes qui multiplient
+      `1 − α` par un a priori ne peuvent structurellement y rendre qu'un zéro
+      là où Chain Ladder rend la reprise. CE N'EST PAS LE FILET — le motif de
+      développement n'est pas en cause, la seule forme de BF et Cape Cod l'est.
+      Le statut ne passe donc pas au ROUGE de ce seul fait.
     · Chain Ladder elle-même incalculable pour l'année → aucune projection n'a
       de sens : l'année sort de l'agrégation et un ROUGE DUR est levé, appelant
       une évaluation dossier par dossier.
@@ -204,13 +321,13 @@ def selectionner_et_agreger(
     méthodes sont admises partout, `Σ_i Σ_m w·R[m,i] = Σ_m w·R[m]` — le résultat
     se réduit exactement à une moyenne pondérée des totaux.
     """
-    admises, exclues = _admissibilite_globale(n2, n3, methodes_dispo, seuil_score)
+    admises, exclues = _admissibilite_globale(n2, n3, methodes_dispo)
 
     ibnr = {}
     for m in list(admises):
         valeurs = n3.get(_CLES_N3[m], {}).get('ibnr_par_annee')
         if valeurs is None:
-            exclues[m] = (methodes_dispo[m], 0)
+            exclues[m] = (methodes_dispo[m], "aucun IBNR par année publié")
             del admises[m]
         else:
             ibnr[m] = np.asarray(valeurs, dtype=float)
@@ -218,6 +335,7 @@ def selectionner_et_agreger(
     annee_base = int(n3.get('chain_ladder', {}).get('annee_base_reserve', 1))
     couverture = {a['annee']: a for a in
                   n2.get('clm', {}).get('couvertures', {}).get('annees', [])}
+    cadence = n2.get('bfcc', {}).get('couverture_cadence', {})
 
     be = 0.0
     detail: List[Dict[str, Any]] = []
@@ -227,14 +345,13 @@ def selectionner_et_agreger(
     for i in range(annee_base, n_annees):
         motif = couverture.get(i, {}).get('couverture_motif', 'NON TESTABLE')
         sous_filet = motif == 'NON VALIDÉE'
-        candidates = ([_METHODE_FILET] if sous_filet else list(admises))
-        retenues = [m for m in candidates
-                    if m in ibnr and np.isfinite(ibnr[m][i])]
+        cadence_ko = cadence.get(i) == 'NON VALIDÉE'
+        retenues = _methodes_de_lannee(i, admises, ibnr, sous_filet, cadence_ko)
 
         if not retenues:
             detail.append({'annee': i, 'motif': motif, 'methodes': [],
-                           'sous_filet': sous_filet, 'rouge_dur': True,
-                           'contribution': 0.0})
+                           'sous_filet': sous_filet, 'cadence_ko': cadence_ko,
+                           'rouge_dur': True, 'contribution': 0.0})
             continue
 
         poids_i = 1.0 / len(retenues)          # POIDS ÉGAL — choix assumé
@@ -245,14 +362,16 @@ def selectionner_et_agreger(
             contrib_annee += part
         be += contrib_annee
         detail.append({'annee': i, 'motif': motif, 'methodes': retenues,
-                       'sous_filet': sous_filet, 'rouge_dur': False,
+                       'sous_filet': sous_filet, 'cadence_ko': cadence_ko,
+                       'rouge_dur': False,
                        'poids_unitaire': round(poids_i, 6),
                        'contribution': round(contrib_annee, 2)})
 
     utilisees = sorted({m for d in detail for m in d['methodes']})
     for m in list(admises):
         if m not in utilisees:
-            exclues[m] = (methodes_dispo[m], 0)
+            exclues[m] = (methodes_dispo[m],
+                          "retirée de toutes les années par la couverture")
 
     # `poids` = part EFFECTIVE de chaque méthode dans le BE final. Les poids
     # varient d'une année à l'autre ; publier un poids nominal unique serait
@@ -261,17 +380,14 @@ def selectionner_et_agreger(
              if abs(be) > 1e-9 else {m: round(1.0 / max(len(utilisees), 1), 4)
                                      for m in utilisees})
 
-    scores = n2.get('scores_confiance', {})
     return {
         'best_estimate':     float(be),
-        'methodes_incluses': {m: (methodes_dispo[m],
-                                  100 if m == _METHODE_FILET
-                                  else int(scores.get(m, 70)))
-                              for m in utilisees},
+        'methodes_incluses': {m: float(methodes_dispo[m]) for m in utilisees},
         'methodes_exclues':  exclues,
         'poids':             poids,
         'annees':            detail,
         'annees_sous_filet': [d['annee'] for d in detail if d['sous_filet']],
+        'annees_cadence_ko': [d['annee'] for d in detail if d['cadence_ko']],
         'annees_rouge_dur':  [d['annee'] for d in detail if d['rouge_dur']],
     }
 
@@ -280,8 +396,8 @@ class BestEstimateS2:
     """
     Calcule le Best Estimate — réserve BRUTE, avant actualisation (la valeur
     actuelle S2 au sens de l'Art. 77 est produite en aval par A10) — avec :
-      · Sélection des méthodes validées (score ≥ seuil_score)
-      · Poids dynamiques proportionnels aux scores N2
+      · Sélection des méthodes admises, année par année (couvertures CLM + BFCC)
+      · Poids égaux entre méthodes admises — choix assumé, pas une calibration
       · Percentiles log-normale (QIS5 TP.5.26)
       · SCR provisions formule standard (Art. 105 S2)
       · Sensibilités aux hypothèses clés
@@ -294,7 +410,6 @@ class BestEstimateS2:
         n3:           Dict,
         C:            np.ndarray,
         lob:          str   = 'generique',
-        seuil_score:  int   = 60,
         provisions_dossier: Optional[float] = None,
         **kwargs,
     ) -> Dict:
@@ -304,15 +419,13 @@ class BestEstimateS2:
         Parameters
         ----------
         n2 : dict
-            Résultats de HypothesesValidator.valider() — scores, statuts H1-H4.
+            Résultats N2 — hypothèses H1/H2/H4, couvertures CLM et BFCC.
         n3 : dict
             Résultats des méthodes actuarielles N3 — réserves par méthode.
         C : np.ndarray
             Triangle cumulé (pour calculs complémentaires).
         lob : str
             Ligne d'activité — pilote σ(LoB) EIOPA pour le SCR.
-        seuil_score : int
-            Score minimum pour inclure une méthode dans le BE (défaut 60).
         provisions_dossier : float, optionnel
             Σ(charges à date − payé à date), à fournir UNIQUEMENT quand les
             méthodes N3 ont tourné sur un triangle de CHARGES : leurs réserves
@@ -345,7 +458,7 @@ class BestEstimateS2:
         }
 
         # ── 1-3. Sélection PAR ANNÉE et Best Estimate ─────────────────────────
-        selection = selectionner_et_agreger(n2, n3, methodes_dispo, seuil_score)
+        selection = selectionner_et_agreger(n2, n3, methodes_dispo)
         methodes_incluses = selection['methodes_incluses']
         methodes_exclues  = selection['methodes_exclues']
         poids             = selection['poids']
@@ -379,7 +492,7 @@ class BestEstimateS2:
             be += float(provisions_dossier)
 
         # ── 4. CV inter-méthodes ──────────────────────────────────────────────
-        reserves_val = [r for r, _ in methodes_incluses.values()]
+        reserves_val = list(methodes_incluses.values())
         cv_inter = (
             float(np.std(reserves_val) / max(np.mean(reserves_val), 1e-9) * 100)
             if len(reserves_val) > 1 else 0.0
@@ -407,7 +520,7 @@ class BestEstimateS2:
 
         # σ_modèle : std des réserves des méthodes incluses (pondérées par poids)
         # Si une seule méthode → σ_modèle = 0 (pas de dispersion inter-méthodes)
-        reserves_val = [r for r, _ in methodes_incluses.values()]
+        reserves_val = list(methodes_incluses.values())
         sigma_modele = (
             float(np.std(reserves_val, ddof=0))
             if len(reserves_val) > 1 else 0.0
@@ -497,9 +610,53 @@ class BestEstimateS2:
         if len(methodes_incluses) < 2 and statut == 'VERT':
             statut = 'AMBRE'
 
+        # UN BEST ESTIMATE DONT LE NIVEAU REMONTE ENTIÈREMENT À CHAIN LADDER
+        # NE PEUT PAS SORTIR EN VERT NON PLUS. Même principe, une marche plus
+        # loin : plusieurs méthodes peuvent figurer au résultat sans qu'aucune
+        # n'apporte d'avis INDÉPENDANT sur le niveau. C'est le cas quand le loss
+        # ratio a priori de Bornhuetter-Ferguson est dérivé des ultimes Chain
+        # Ladder (`source_lr = 'matures'`) et que Cape Cod est absente : BF
+        # corrige alors l'ALLOCATION entre années — il y substitue l'exposition,
+        # ce qui est un apport réel — mais hérite intégralement du NIVEAU.
+        # Mesuré sur GenIns : ultimes Chain Ladder matures +10 % déplacent la
+        # réserve BF de +10,0 %. Moyenner les deux ne couvre alors aucun risque
+        # de niveau, et le `cv_inter` faible qui en résulte le dirait à tort.
+        niveau_ancre_cl = _niveau_ancre_sur_chain_ladder(n3, methodes_incluses)
+        if statut == 'VERT' and niveau_ancre_cl:
+            statut = 'AMBRE'
+
+        # UNE HYPOTHÈSE « À JUSTIFIER » NE PEUT PAS COEXISTER AVEC UN VERT.
+        # Le statut à trois états n'aurait aucun sens si son état intermédiaire
+        # n'avait aucune conséquence : À JUSTIFIER conserve la méthode — c'est là
+        # sa différence avec NON VALIDÉE — mais demande une justification, et un
+        # Best Estimate présenté comme VERT dispenserait de la donner.
+        a_justifier = _hypotheses_a_justifier(n2, methodes_incluses)
+        if statut == 'VERT' and a_justifier:
+            statut = 'AMBRE'
+
         # ── 9. Jugement actuariel (alertes, recommandations, avis) ───────────
         alertes_jugement = []
         recommandations  = []
+
+        if niveau_ancre_cl:
+            alertes_jugement.append(MSG_NIVEAU_ANCRE_CL)
+
+        if a_justifier:
+            alertes_jugement.append(
+                f"🟡 Hypothèses à justifier avant validation : "
+                f"{', '.join(a_justifier)} — les méthodes concernées restent "
+                f"retenues, mais le Best Estimate ne peut pas sortir en VERT "
+                f"sans que l'écart soit expliqué dans la note méthodologique.")
+
+        if selection['annees_cadence_ko']:
+            alertes_jugement.append(
+                f"⚠️ Années {selection['annees_cadence_ko']} : cumulé "
+                f"décroissant (recours, subrogation ou reprise de provision). "
+                f"Bornhuetter-Ferguson et Cape Cod ne peuvent structurellement "
+                f"pas y représenter une reprise — ils y rendraient zéro. CES "
+                f"ANNÉES SONT PORTÉES PAR CHAIN LADDER SEULE, qui projette le "
+                f"cumulé tel qu'il est. Hypothèse (H2) du guide IA 2023, "
+                f"§2.c.ii p18-19.")
 
         # Reprendre les alertes de N2
         for a in n2.get('alertes', []):
@@ -658,7 +815,11 @@ class BestEstimateS2:
             # Sélection par année de survenance (lot B)
             'selection_par_annee':   selection['annees'],
             'annees_sous_filet':     selection['annees_sous_filet'],
+            # Années dont la cadence a retiré BF et Cape Cod — SANS elle,
+            # l'actuaire voyait le Best Estimate changer sans savoir où.
+            'annees_cadence_ko':     selection['annees_cadence_ko'],
             'annees_rouge_dur':      selection['annees_rouge_dur'],
+            'hypotheses_a_justifier': a_justifier,
 
             # SCR formule standard
             'scr':                   scr,
@@ -888,6 +1049,14 @@ class BestEstimateS2:
         Tests :
         · Exclusion de chaque méthode tour à tour
         · Fourchette Bootstrap (IC 95%)
+
+        ⚠️ REPONDÉRATION SUR LES POIDS EFFECTIFS, PLUS SUR LES SCORES. Cette
+        fonction renormalisait `score / Σ scores` — une pondération que le Best
+        Estimate lui-même avait cessé d'appliquer au lot B, qui lui a substitué
+        des poids égaux par année. La sensibilité décrivait donc un BE qui
+        n'existait plus, et le paramètre `poids` — la part EFFECTIVE de chaque
+        méthode dans le résultat publié — était reçu puis ignoré. Il sert
+        désormais : on retire une méthode et l'on renormalise ce qui reste.
         """
         sensibilites: Dict[str, float] = {}
 
@@ -895,9 +1064,14 @@ class BestEstimateS2:
         for m_exclu in methodes_incluses:
             autres = {k: v for k, v in methodes_incluses.items() if k != m_exclu}
             if autres:
-                tot_s    = sum(s for _, s in autres.values())
-                p_autres = {k: s / max(tot_s, 1) for k, (_, s) in autres.items()}
-                be_sans  = sum(p_autres[k] * autres[k][0] for k in autres)
+                poids_autres = {k: float(poids.get(k, 1.0 / len(autres)))
+                                for k in autres}
+                total = sum(poids_autres.values())
+                if total <= 0:                     # poids tous nuls : équipartition
+                    poids_autres = {k: 1.0 / len(autres) for k in autres}
+                    total = 1.0
+                be_sans = sum(poids_autres[k] / total * float(autres[k])
+                              for k in autres)
                 sensibilites[f'sans_{m_exclu}'] = round(be_sans, 0)
 
         # Fourchette Bootstrap
@@ -937,8 +1111,8 @@ class BestEstimateS2:
         raison_cl   = n2.get('raison_cl', '')
         h1          = n2.get('h1_independance', {})
         h2          = n2.get('h2_stabilite', {})
-        h3          = n2.get('h3_apriori_bf', {})
         h4          = n2.get('h4_homosc_bootstrap', {})
+        bfcc        = n2.get('bfcc', {}).get('hypotheses', {})
         lob_label   = cfg.get('label', 'Non précisée')
         date_str    = datetime.now().strftime('%d/%m/%Y')
         sigma       = n3['mack']['sigma_total']
@@ -954,16 +1128,14 @@ class BestEstimateS2:
             "─" * 40,
         ]
 
-        for m, (r, s) in incluses.items():
+        for m, r in incluses.items():
             lignes.append(
                 f"  ✅ {m.replace('_', ' ').title():30s} "
-                f"réserve={r:>14,.0f}€  poids={poids.get(m, 0):.0%}  "
-                f"score={s}/100"
+                f"réserve={float(r):>14,.0f}€  poids={poids.get(m, 0):.0%}"
             )
-        for m, (r, s) in exclues.items():
+        for m, (r, motif) in exclues.items():
             lignes.append(
-                f"  ❌ {m.replace('_', ' ').title():30s} "
-                f"exclu  (score={s}/100 < seuil)"
+                f"  ❌ {m.replace('_', ' ').title():30s} exclue — {motif}"
             )
 
         lignes += [
@@ -979,14 +1151,18 @@ class BestEstimateS2:
             f"CV={h2.get('cv_moy', 0):.1%}  "
             f"dérive={h2.get('derive_moy', 0):.1%}  "
             f"score={h2.get('score', 0)}/100",
-            f"  H3 A priori BF    : "
-            f"{'✅ VALIDÉE' if h3.get('ok') else '⚠️ ESTIMÉE':15s} "
-            f"LR={h3.get('lr_apriori', 0):.1%}  "
-            f"source={h3.get('source', '—')}",
             f"  H4 Homoscédasticité: "
             f"{'✅ VALIDÉE' if h4.get('ok') else '⚠️ REJETÉE':15s} "
             f"φ={h4.get('phi', 0):.6f}  "
             f"score={h4.get('score', 0)}/100",
+            "",
+            "   Bornhuetter-Ferguson et Cape Cod — hypothèses propres :",
+        ] + [
+            f"  {code} {bfcc[code].get('libelle', ''):42.42s} "
+            f"{bfcc[code].get('statut', 'NON TESTABLE')}"
+            for code in ('BFCC-H1', 'BFCC-H2', 'BFCC-H3', 'BFCC-H4', 'BFCC-H5')
+            if code in bfcc
+        ] + [
             "",
             f"  Méthode CL retenue    : {n2.get('methode_cl_retenue', '—')}",
             f"  Justification CL      : {raison_cl}",
