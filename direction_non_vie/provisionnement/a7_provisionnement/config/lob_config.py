@@ -355,7 +355,16 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
 
     # ── Accidents Corporels (LoB 1 S2 — GAV, accident scolaire, individuelle) ──
     "accidents_corporels": {
-        "label":            "Accidents Corporels",
+        "label":            "Accidents Corporels — queue COURTE (6 ans)",
+        # ⚠️ MÊME LoB SOLVABILITÉ II QUE `dommage_corporel_individuel`, MÊME σ :
+        # ce qui distingue les deux n'est pas le segment réglementaire mais le
+        # RÉGIME DE QUEUE. Ici `risque_long = False`. Se tromper entre les deux
+        # change le facteur de queue, donc l'ultime — et rien ne le signalait,
+        # les deux libellés étant quasi identiques. Cf. `distinction`.
+        "distinction":      "queue courte, risque_long=False — sinistres se "
+                            "dénouant rapidement (GAV, accident scolaire). Pour "
+                            "un dénouement long avec rentes potentielles, "
+                            "utiliser 'dommage_corporel_individuel'.",
         "sigma_eiopa":      SIGMA_EIOPA["accidents_corporels"],  # 0.085 — S2 LoB 1
         "lob_eiopa":        "accidents_corporels",
 
@@ -559,7 +568,13 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
     #  Guide IA 2023 p.55-56 — Risque moyen, rentes potentielles
     # =========================================================================
     "dommage_corporel_individuel": {
-        "label":            "Dommage Corporel Individuel",
+        "label":            "Dommage Corporel Individuel — queue LONGUE (7 ans)",
+        # ⚠️ MÊME LoB SOLVABILITÉ II QUE `accidents_corporels`, MÊME σ — cf. le
+        # commentaire là-bas. Ici `risque_long = True`, ce qui change le facteur
+        # de queue et donc l'ultime.
+        "distinction":      "queue longue, risque_long=True — dénouement lent, "
+                            "rentes potentielles, inflation judiciaire. Pour un "
+                            "dénouement rapide, utiliser 'accidents_corporels'.",
         "sigma_eiopa":      SIGMA_EIOPA["accidents_corporels"],  # 0.085 — Annexe II EIOPA
         "lob_eiopa":        "accidents_corporels",
         "queue_attendue_ans": 7,

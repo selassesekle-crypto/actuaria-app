@@ -108,6 +108,110 @@ def _provisions_dossier(n1_rapport: Dict, triangle_reference: str,
     return provisions
 
 
+def etiquette_methode_grands(methodes_incluses) -> tuple:
+    """Code et libellé de la méthode RÉELLEMENT employée sur les grands sinistres.
+
+    ⚠️ DÉDUITE DU RÉSULTAT, JAMAIS SUPPOSÉE. L'application annonçait « bf_auto »
+    dès qu'elle lançait un calcul automatique sur le triangle des grands
+    sinistres, sans vérifier ce que ce calcul avait retenu. Or elle ne lui fournit
+    aucune exposition : depuis que Bornhuetter-Ferguson et Cape Cod refusent de
+    tourner sans elle, ce Best Estimate ne repose que sur Chain Ladder. Une
+    réserve grands sinistres portait donc un nom de méthode faux dans un dossier
+    destiné à l'ACPR.
+
+    ⚠️ ELLE VIT ICI, ET NON DANS L'APPLICATION, POUR ÊTRE TESTABLE. `streamlit`
+    n'est pas installé dans l'environnement de test : la gate ne peut pas importer
+    `actuaria_app.py`, donc aucune fonction qui y réside n'est couverte. C'est
+    précisément pourquoi les deux affichages faux de ce lot ont survécu si
+    longtemps. Toute logique de l'application qui mérite un test doit descendre
+    dans un module importable.
+
+    Renvoie l'un des codes que `run(methode_grands=…)` accepte.
+    """
+    inc = set(methodes_incluses or ())
+    if 'bornhuetter_ferguson' in inc:
+        autres = sorted(inc - {'bornhuetter_ferguson'})
+        return 'bf_auto', ('Bornhuetter-Ferguson'
+                           + (f" + {', '.join(autres)}" if autres else ''))
+    if inc:
+        return 'cl_separe', 'Chain Ladder sur triangle séparé'
+    return 'manuel', 'aucune méthode retenue — saisie manuelle requise'
+
+
+#: Taille en deçà de laquelle un export binaire n'est PAS un livrable. Un
+#: classeur openpyxl vide pèse ~5 ko, un .docx vide ~10 ko : à 512 octets on est
+#: certain de tenir un repli, pas un document. Le seuil ne sert qu'à transformer
+#: un « 0 octet » silencieux en anomalie déclarée — il ne juge pas la qualité.
+_TAILLE_MIN_LIVRABLE = 512
+
+
+#: Bibliothèque optionnelle dont chaque export binaire dépend. Vérifiée AVANT
+#: l'appel, et non attrapée après : `export_word` et `export_pdf` rattrapent
+#: `ImportError` en interne et rendent `b''`, si bien qu'une bibliothèque absente
+#: y ressort indistinguable d'un bug. Les sonder ici évite de les modifier —
+#: l'application les appelle directement, hors de tout mécanisme d'agent.
+_DEPENDANCE_LIVRABLE = {'excel': 'openpyxl', 'word': 'docx', 'pdf': 'weasyprint'}
+
+
+def _dependance_absente(nom: str) -> Optional[str]:
+    """Nom de la bibliothèque manquante pour ce livrable, ou None."""
+    module = _DEPENDANCE_LIVRABLE.get(nom)
+    if not module:
+        return None
+    import importlib.util
+    try:
+        if importlib.util.find_spec(module) is None:
+            return module
+    except (ImportError, ValueError):
+        return module
+    return None
+
+
+def _produire_livrable(nom: str, fabrique, **kwargs):
+    """Produit un export binaire et rend `(octets, erreur)` — jamais un silence.
+
+    ⚠️ POURQUOI CETTE FONCTION EXISTE. Les trois exports binaires attrapaient
+    chacun leur exception, journalisaient un avertissement et rendaient `b''`.
+    Le résultat de `run()` n'en portait AUCUNE trace : un Excel vide et un Excel
+    absent étaient indistinguables pour l'appelant, et surtout un BUG d'export
+    était indistinguable d'une BIBLIOTHÈQUE MANQUANTE. Mesuré : la gate entière
+    est passée à 596 tests au vert avec le rapport HTML cassé, et `export_pdf`
+    n'était couvert par aucun test.
+
+    Les graphiques, eux, remontaient déjà leur échec dans `graphiques_erreur`
+    depuis le lot T20. Cette fonction étend simplement cette discipline aux
+    trois autres : un livrable dégradé est DÉCLARÉ, jamais deviné.
+
+    Trois issues distinguées, et c'est le point :
+      · `(octets, None)`                       — livrable produit ;
+      · `(b'', 'dependance_absente: …')`       — bibliothèque optionnelle
+        manquante : ce n'est PAS un défaut du code, l'appelant peut le dire
+        à l'utilisateur en clair ;
+      · `(b'', 'echec: TypeError …')` ou `'vide: N octets'` — anomalie réelle.
+    """
+    manquante = _dependance_absente(nom)
+    if manquante:
+        logger.warning(f"N5 {nom} non produit : {manquante} n'est pas installé.")
+        return b'', f"dependance_absente: {manquante}"
+
+    try:
+        octets = fabrique(**kwargs) or b''
+    except ImportError as e:                       # dépendance de second rang
+        logger.error(f"N5 {nom} : dépendance absente — {e}")
+        return b'', f"dependance_absente: {e}"
+    except Exception as e:
+        logger.error(f"N5 {nom} ECHEC : {e}\n{traceback.format_exc()}")
+        return b'', f"echec: {type(e).__name__} : {e}"
+
+    if len(octets) < _TAILLE_MIN_LIVRABLE:
+        # La fabrique a rattrapé son propre échec en interne et rendu un repli.
+        # Sans ce contrôle, elle passerait pour un succès.
+        logger.error(f"N5 {nom} : {len(octets)} octets — repli, pas un livrable")
+        return octets, f"vide: {len(octets)} octets"
+    logger.info(f"N5 {nom} : {len(octets):,} octets")
+    return octets, None
+
+
 class AgentA7Provisionnement:
     """
     Agent A7 Ibrahim — Provisionnement actuariel Non-Vie.
@@ -591,70 +695,44 @@ class AgentA7Provisionnement:
                     logger.error(f"N5 graphiques ECHEC : {e}\n{traceback.format_exc()}")
                     graphiques_dict = {}
 
-            # Commentaire actuariel
+            # Commentaire actuariel — AUCUN except : un échec ici doit faire
+            # tomber le run bruyamment. C'est le seul livrable dont le contenu
+            # est irremplaçable, et un commentaire vide passerait inaperçu.
             commentaire = generer_commentaire(
                 n1=n1, n2=n2, n3=n3, n4=n4,
                 lob=lob, lob_label=lob_label,
                 ref_client=ref_client,
             )
 
-            # Excel
-            try:
-                excel_bytes = export_excel(
-                    C            = C_calc,
-                    n1           = n1,
-                    n2           = n2,
-                    n3           = n3,
-                    n4           = n4,
-                    ref_client   = ref_client,
-                    arrete       = arrete,
-                    resultats_precedents = resultats_precedents,
-                )
-            except Exception as e:
-                logger.warning(f"N5 Excel échoué : {e}")
-                excel_bytes = b''
+            # ── Les trois exports binaires, via UN SEUL mécanisme ──────────────
+            # Ils avalaient chacun leur échec dans un `logger.warning` et
+            # rendaient des octets vides. Le résultat n'en portait AUCUNE trace :
+            # l'appelant ne pouvait pas distinguer « bibliothèque absente » de
+            # « bug d'export ». Cf. `_produire_livrable`.
+            excel_bytes, err_xl = _produire_livrable(
+                'excel', export_excel,
+                C=C_calc, n1=n1, n2=n2, n3=n3, n4=n4, ref_client=ref_client,
+                arrete=arrete, resultats_precedents=resultats_precedents)
 
-            # Word
-            word_bytes = b''
+            word_bytes, err_wd = (b'', None)
             if generer_word:
-                try:
-                    word_bytes = export_word(
-                        n1          = n1,
-                        n2          = n2,
-                        n3          = n3,
-                        n4          = n4,
-                        commentaire = commentaire,
-                        graphiques  = graphiques_dict,
-                        ref_client  = ref_client,
-                        arrete      = arrete,
-                        audit_id    = audit_id,
-                        lob_label   = lob_label,
-                    )
-                    if self.verbose:
-                        logger.info(f"N5 Word : {len(word_bytes):,} bytes")
-                except Exception as e:
-                    logger.warning(f"N5 Word échoué : {e}")
+                word_bytes, err_wd = _produire_livrable(
+                    'word', export_word,
+                    n1=n1, n2=n2, n3=n3, n4=n4, commentaire=commentaire,
+                    graphiques=graphiques_dict, ref_client=ref_client,
+                    arrete=arrete, audit_id=audit_id, lob_label=lob_label)
 
-            # PDF
-            pdf_bytes = b''
+            pdf_bytes, err_pdf = (b'', None)
             if generer_pdf_flag:
-                try:
-                    pdf_bytes = export_pdf(
-                        n1          = n1,
-                        n2          = n2,
-                        n3          = n3,
-                        n4          = n4,
-                        commentaire = commentaire,
-                        graphiques  = graphiques_dict,
-                        ref_client  = ref_client,
-                        arrete      = arrete,
-                        audit_id    = audit_id,
-                        lob_label   = lob_label,
-                    )
-                    if self.verbose:
-                        logger.info(f"N5 PDF : {len(pdf_bytes):,} bytes")
-                except Exception as e:
-                    logger.warning(f"N5 PDF échoué : {e}")
+                pdf_bytes, err_pdf = _produire_livrable(
+                    'pdf', export_pdf,
+                    n1=n1, n2=n2, n3=n3, n4=n4, commentaire=commentaire,
+                    graphiques=graphiques_dict, ref_client=ref_client,
+                    arrete=arrete, audit_id=audit_id, lob_label=lob_label)
+
+            livrables_erreurs = {k: v for k, v in (
+                ('graphiques', graphiques_erreur), ('excel', err_xl),
+                ('word', err_wd), ('pdf', err_pdf)) if v}
 
             # Audit trail
             audit = self._audit_trail(
@@ -707,6 +785,11 @@ class AgentA7Provisionnement:
                 'excel_bytes':  excel_bytes,
                 'word_bytes':   word_bytes,    # ← NOUVEAU v5.0
                 'pdf_bytes':    pdf_bytes,     # ← NOUVEAU v5.0
+                # Un livrable dégradé est DÉCLARÉ ici, jamais deviné : dict vide
+                # si les quatre sont sortis. Une valeur commençant par
+                # `dependance_absente:` dit une bibliothèque manquante — pas un
+                # défaut du code ; `echec:` ou `vide:` disent une anomalie réelle.
+                'livrables_erreurs': livrables_erreurs,
                 'audit_trail':  audit,
 
                 # ── Compatibilité ancienne API v4.0 ─────────────────────
@@ -745,6 +828,9 @@ class AgentA7Provisionnement:
                 'pdf_bytes':   b'',
                 'graphiques':  {},
                 'graphiques_erreur': 'run interrompu avant N5',
+                'livrables_erreurs': {k: 'run interrompu avant N5'
+                                      for k in ('graphiques', 'excel',
+                                                'word', 'pdf')},
                 'n1': {}, 'n2': {}, 'n3': {}, 'n4': {},
             }
 

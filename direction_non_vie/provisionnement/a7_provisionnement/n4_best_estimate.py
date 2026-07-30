@@ -63,7 +63,8 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 from .config.lob_config import get_lob_config, get_sigma_eiopa, CORRELATION_EIOPA
-from .config.rfr_eiopa  import get_taux_rfr, DATE_COURBE, get_courbe_embarquee
+from .config.rfr_eiopa  import (get_taux_rfr, DATE_COURBE,
+                                get_courbe_embarquee, diagnostic_peremption)
 
 logger = logging.getLogger('actuaria.a7')
 
@@ -638,6 +639,12 @@ class BestEstimateS2:
         alertes_jugement = []
         recommandations  = []
 
+        # PÉREMPTION DE LA COURBE DES TAUX — remontée en alerte, pas seulement
+        # journalisée. Elle actualise la Risk Margin, qui entre au bilan.
+        _per = risk_margin_data.get('peremption_courbe') or {}
+        if _per.get('statut') in ('AMBRE', 'ROUGE'):
+            alertes_jugement.append(_per['message'])
+
         if niveau_ancre_cl:
             alertes_jugement.append(MSG_NIVEAU_ANCRE_CL)
 
@@ -829,6 +836,10 @@ class BestEstimateS2:
             'provisions_techniques_s2': risk_margin_data.get('provisions_techniques_s2', round(be, 0)),
             'ratio_rm_be':              risk_margin_data.get('ratio_rm_be', 0),
             'date_courbe_rfr':          risk_margin_data.get('date_courbe_rfr', '—'),
+            # Diagnostic de péremption REMONTÉ jusqu'ici : la date seule ne dit
+            # pas si la courbe est encore valable, et c'est elle qui actualise
+            # la Risk Margin inscrite au bilan.
+            'peremption_courbe':        risk_margin_data.get('peremption_courbe'),
             'tableau_run_off':          risk_margin_data.get('tableau_run_off', []),
             'message_rm':               risk_margin_data.get('message', ''),
 
@@ -958,6 +969,7 @@ class BestEstimateS2:
                 'ratio_rm_be':              0.0,
                 'coc':                      COC,
                 'date_courbe_rfr':          DATE_COURBE,
+                'peremption_courbe':        diagnostic_peremption(),
                 'tableau_run_off':          [],
                 'message':                  'Risk Margin non calculable — données insuffisantes.',
             }
@@ -1015,7 +1027,8 @@ class BestEstimateS2:
 
         risk_margin = round(rm_sum, 0)
         pt_s2       = round(be_0 + risk_margin, 0)
-        ratio_rm_be = round(risk_margin / be_0 * 100, 2)
+        ratio_rm_be  = round(risk_margin / be_0 * 100, 2)
+        _diag_courbe = diagnostic_peremption()
 
         return {
             'risk_margin':              risk_margin,
@@ -1023,12 +1036,17 @@ class BestEstimateS2:
             'ratio_rm_be':              ratio_rm_be,
             'coc':                      COC,
             'date_courbe_rfr':          DATE_COURBE,
+            # La péremption de la courbe voyage AVEC la Risk Margin qu'elle
+            # actualise : sans ça, l'âge de la courbe n'atteignait aucun livrable.
+            'peremption_courbe':        _diag_courbe,
             'tableau_run_off':          tableau,
             'message': (
                 f"Risk Margin = {risk_margin:,.0f}€ ({ratio_rm_be:.1f}% du BE). "
                 f"Provisions Techniques S2 = {pt_s2:,.0f}€. "
                 f"CoC=6%, courbe EIOPA RFR EUR du {DATE_COURBE}. "
                 f"Méthode proportionnelle au BE (méthode 2 EIOPA, Art. 77 §5)."
+                + ('' if _diag_courbe['statut'] == 'VERT'
+                   else ' ' + _diag_courbe['message'])
             ),
         }
 

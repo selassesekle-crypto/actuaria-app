@@ -283,7 +283,8 @@ class NVTriangleBuilder:
                             rapport['alertes'].append(
                                 f"ℹ️ Aucun LLT fourni — séparation grands sinistres non effectuée. "
                                 f"LLT suggéré : {llt_suggere:,.0f} € (P95 des montants). "
-                                f"Fournissez llt= pour activer la séparation (Guide IA 2023 §3.2)."
+                                f"Fournissez llt= pour activer la séparation "
+                                f"(Guide IA 2023 §4.c « Les sinistres graves », p36-37)."
                             )
 
             else:
@@ -789,7 +790,17 @@ class NVTriangleBuilder:
         Recommande la méthode de traitement des grands sinistres selon
         leur volume, conformément aux bonnes pratiques actuarielles.
 
-        Référence : Guide IA 2023 §3.2 + pratique marché.
+        ⚠️ CES SEUILS SONT DU JUGEMENT, PAS DU GUIDE. La citation « §3.2 » qui
+        figurait ici ne correspond à AUCUNE section du guide de l'Institut des
+        Actuaires, dont la numérotation est en lettres. Les sinistres graves y
+        sont traités en §4.c p36-37 — et le §4.c.iv y recommande l'inverse de ce
+        que fait cette fonction : « les sinistres graves sont expertisés, ils ne
+        sont donc pas projetés avec les méthodes classiques », avec trois mailles
+        distinctes (attritionnelle, grave, exceptionnelle). Les seuils ci-dessous
+        relèvent donc de la pratique de marché et restent CONTESTÉS.
+
+        Référence : Guide IA 2023 §4.c p36-37 (contexte) + pratique de marché
+        (les seuils eux-mêmes).
 
         Seuils :
           · ≥ 50  : Chain Ladder sur triangle séparé (volume statistique suffisant)

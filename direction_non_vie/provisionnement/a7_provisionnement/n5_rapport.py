@@ -29,6 +29,11 @@ from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
 
 logger = logging.getLogger('actuaria.a7.rapport')
 
+#: Marqueur en tête du repli d'`export_html`. Un commentaire HTML : invisible à
+#: l'écran, détectable par le code. Il permet de distinguer une page d'erreur
+#: d'un rapport, ce que ni la taille ni la validité du HTML ne permettent.
+MARQUEUR_ECHEC_RAPPORT = '<!--ACTUARIA-RAPPORT-ECHEC-->'
+
 # ── Palette ───────────────────────────────────────────────────────────────────
 NAVY      = '#0B1E3D'
 NAVY_MID  = '#132844'
@@ -1841,7 +1846,14 @@ def export_html(
 
     except Exception as e:
         logger.error(f'export_html échoué : {e}', exc_info=True)
-        return '<html><body><h1>Erreur : ' + str(e) + '</h1></body></html>'
+        # Le repli porte un MARQUEUR reconnaissable. Sans lui, cette page d'erreur
+        # est un HTML valide qu'un appelant ne distingue pas d'un rapport : c'est
+        # ainsi qu'un import manquant a produit 88 octets pendant que la gate
+        # entière passait au vert. `export_pdf`, qui appelle cette fonction,
+        # refuse désormais de mettre en page un repli — il en aurait fait un PDF
+        # volumineux et parfaitement valide de la page d'erreur.
+        return (MARQUEUR_ECHEC_RAPPORT + '<html><body><h1>Erreur : '
+                + str(e) + '</h1></body></html>')
 
 
 # =============================================================================
@@ -1857,6 +1869,12 @@ def export_pdf(n1=None, n2=None, n3=None, n4=None,
         from weasyprint import HTML as WH
         html = export_html(n1, n2, n3, n4, commentaire, ref_client, arrete, audit_id, lob_label, graphiques,
                            actuaire_nom=actuaire_nom, actuaire_numero_ia=actuaire_numero_ia)
+        if html.startswith(MARQUEUR_ECHEC_RAPPORT):
+            # Mettre en page ce repli produirait un PDF volumineux et valide
+            # d'une page d'erreur — indétectable par une vérification de taille.
+            raise RuntimeError(
+                "export_html a rendu son repli d'échec — PDF non produit "
+                "plutôt qu'un PDF de la page d'erreur.")
         pdf  = WH(string=html).write_pdf()
         logger.info(f'PDF : {len(pdf):,} bytes')
         return pdf

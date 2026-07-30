@@ -8,9 +8,12 @@
 #  Méthode : Taux spot sans VA (Volatility Adjustment), sans CRA
 #  Réf.    : Art. 77 Directive Solvabilité 2 + Règlement Délégué 2015/35
 #
-#  ⚠️  MISE À JOUR REQUISE : cette courbe doit être mise à jour
-#      trimestriellement depuis https://www.eiopa.europa.eu/
-#      tools-and-data/risk-free-interest-rate-term-structures_en
+#  ⚠️  MISE À JOUR REQUISE : cette courbe doit être mise à jour depuis
+#      https://www.eiopa.europa.eu/tools-and-data/
+#      risk-free-interest-rate-term-structures_en
+#      EIOPA publie MENSUELLEMENT (et non trimestriellement, comme l'affirmait
+#      cet en-tête). Sa péremption n'est plus laissée à la vigilance du lecteur :
+#      `diagnostic_peremption()` la mesure et la remonte dans `erreur`.
 #
 #  Utilisation :
 #      from config.rfr_eiopa import get_taux_rfr, DATE_COURBE
@@ -180,13 +183,88 @@ def get_courbe_depuis_excel(fichier_bytes: bytes) -> dict:
         }
 
 
-def get_courbe_embarquee() -> dict:
-    """Retourne la courbe EIOPA embarquée (Q1 2025) comme dict standard."""
+#: Au-delà de ce délai, la courbe embarquée est SIGNALÉE comme périmée. EIOPA
+#: publie ses structures par terme MENSUELLEMENT ; un trimestre de retard reste
+#: usuel entre deux arrêtés, un an ne l'est pas.
+MOIS_ALERTE_PEREMPTION  = 3
+MOIS_ROUGE_PEREMPTION   = 12
+
+
+def age_courbe_mois(date_valorisation=None) -> float:
+    """Âge de la courbe embarquée en mois, à la date de valorisation.
+
+    `None` = aujourd'hui. Le paramètre existe pour qu'un arrêté passé soit jugé
+    à SA date et non à celle du calcul — un arrêté du 31/12/2025 recalculé en
+    2027 ne doit pas déclarer sa courbe périmée à tort.
+    """
+    from datetime import date, datetime
+    if date_valorisation is None:
+        ref = date.today()
+    elif isinstance(date_valorisation, str):
+        ref = datetime.strptime(date_valorisation[:10], '%Y-%m-%d').date()
+    else:
+        ref = date_valorisation
+    courbe = datetime.strptime(DATE_COURBE, '%Y-%m-%d').date()
+    return (ref - courbe).days / 30.4375
+
+
+def diagnostic_peremption(date_valorisation=None) -> dict:
+    """Statut de péremption de la courbe embarquée — VERT / AMBRE / ROUGE.
+
+    ⚠️ POURQUOI CE DIAGNOSTIC EXISTE, ET POURQUOI LA COURBE N'EST PAS MISE À JOUR
+    ICI. La courbe embarquée date du 31/03/2025 et servait par DÉFAUT sans que
+    rien ne signale son âge : `get_courbe_embarquee` déclarait même
+    `'erreur': None`, comme si une courbe de Q1 2025 employée en 2026 allait de
+    soi. Or la Risk Margin entre au bilan (PT S2 = BE + RM), et elle actualise
+    sur cette courbe.
+
+    LES TAUX N'ONT PAS ÉTÉ REMPLACÉS À DESSEIN : la courbe EIOPA en vigueur n'est
+    pas accessible depuis ce dépôt, et inventer trente taux « plausibles »
+    produirait un chiffre réglementaire fabriqué — exactement ce que ce module ne
+    doit pas faire. Le mécanisme d'apport existe déjà et reste la bonne réponse :
+    `get_courbe_depuis_excel` charge le fichier EIOPA officiel, et
+    `get_courbe_taux_plat` accepte un taux assumé par l'actuaire. Ce diagnostic
+    rend simplement le défaut VISIBLE au lieu de le laisser silencieux.
+    """
+    mois = age_courbe_mois(date_valorisation)
+    if mois >= MOIS_ROUGE_PEREMPTION:
+        statut = 'ROUGE'
+        message = (
+            f"⚠️ COURBE DES TAUX PÉRIMÉE — la courbe EIOPA embarquée date du "
+            f"{DATE_COURBE}, soit {mois:.0f} mois. La Risk Margin et toute "
+            f"actualisation en découlent et ne sont pas à jour. Importer la "
+            f"courbe EIOPA en vigueur (fichier officiel) ou saisir un taux "
+            f"assumé avant toute inscription au bilan.")
+    elif mois >= MOIS_ALERTE_PEREMPTION:
+        statut = 'AMBRE'
+        message = (
+            f"🟡 La courbe EIOPA embarquée date du {DATE_COURBE}, soit "
+            f"{mois:.0f} mois. EIOPA publie mensuellement — vérifier qu'elle "
+            f"correspond bien à la date d'arrêté retenue.")
+    else:
+        statut = 'VERT'
+        message = (f"Courbe EIOPA du {DATE_COURBE} ({mois:.0f} mois) — à jour "
+                   f"pour l'arrêté retenu.")
+    return {'statut': statut, 'age_mois': round(mois, 1),
+            'date_courbe': DATE_COURBE, 'message': message,
+            'seuil_ambre_mois': MOIS_ALERTE_PEREMPTION,
+            'seuil_rouge_mois': MOIS_ROUGE_PEREMPTION}
+
+
+def get_courbe_embarquee(date_valorisation=None) -> dict:
+    """Retourne la courbe EIOPA embarquée comme dict standard.
+
+    ⚠️ `erreur` N'EST PLUS INCONDITIONNELLEMENT `None`. Elle porte le message de
+    péremption dès que la courbe a dépassé le seuil — c'est ce champ que les
+    appelants lisent déjà, donc le signal remonte sans qu'aucun d'eux change.
+    """
+    diag = diagnostic_peremption(date_valorisation)
     return {
         'type':    'embarquee',
         'taux_fn': get_taux_rfr,
         'source':  SOURCE,
         'date':    DATE_COURBE,
         'label':   f'Courbe EIOPA embarquée ({DATE_COURBE})',
-        'erreur':  None,
+        'peremption': diag,
+        'erreur':  None if diag['statut'] == 'VERT' else diag['message'],
     }

@@ -149,6 +149,15 @@ class HypothesesValidator:
         methode_cl = 'standard'
 
         # ── Alertes spécifiques à la LoB ──────────────────────────────────────
+        # Ce qui DISTINGUE la LoB retenue d'une voisine presque homonyme, quand
+        # elle en a une. `accidents_corporels` et `dommage_corporel_individuel`
+        # partagent la LoB Solvabilité II et le σ, mais pas le régime de queue :
+        # se tromper change le facteur de queue, donc l'ultime, et rien ne le
+        # disait. La configuration le sait — l'actuaire doit le lire.
+        if cfg_lob.get('distinction'):
+            infos.append(f"ℹ️ [{cfg_lob['label']}] LoB retenue : "
+                         f"{cfg_lob['distinction']}")
+
         for alerte_lob in cfg_lob.get('alertes_specifiques', []):
             infos.append(f"ℹ️ [{cfg_lob['label']}] {alerte_lob}")
 

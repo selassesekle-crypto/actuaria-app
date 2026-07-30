@@ -1886,6 +1886,11 @@ def page_dashboard():
                     try:
                         from direction_non_vie.services.nv_triangle_builder import NVTriangleBuilder
                         from direction_non_vie.provisionnement.a7_provisionnement import AgentA7Provisionnement
+                        # Étiquette de méthode DÉDUITE du résultat : elle vit dans A7
+                        # pour être testable — la gate ne peut pas importer ce fichier,
+                        # streamlit n'y étant pas installé.
+                        from direction_non_vie.provisionnement.a7_provisionnement.agent import (
+                            etiquette_methode_grands)
                         import os as _os_a7r
 
                         _tmp_ar = "/tmp/actuaria"
@@ -1935,7 +1940,7 @@ def page_dashboard():
                                         f"<b style='color:{AMBRE};'>⚠️ {_n_grands} grand(s) sinistre(s) détecté(s)</b><br>"
                                         f"<span style='color:{BLANC};font-size:0.78rem;'>"
                                         f"Volume insuffisant pour CL séparé (n&lt;20). "
-                                        f"Saisissez la réserve dossier par dossier ci-dessous (Guide IA 2023 §3.2).</span>"
+                                        f"Saisissez la réserve dossier par dossier ci-dessous (Guide IA 2023 §4.c.iv p37, qui recommande l'expertise dossier par dossier plutot que la projection).</span>"
                                         f"</div>",
                                         unsafe_allow_html=True
                                     )
@@ -1947,8 +1952,15 @@ def page_dashboard():
                                     )
                                     _methode_gs = "developpement_individuel"
                                 elif _tri_grands is not None and _n_grands >= 20:
-                                    # BF automatique sur triangle grands sinistres
-                                    st.info(f"🔄 {_n_grands} grands sinistres — calcul BF automatique sur triangle séparé.")
+                                    # ⚠️ L'ÉTIQUETTE EST DÉDUITE DU RÉSULTAT, PLUS
+                                    # SUPPOSÉE. Cette branche annonçait « BF auto »
+                                    # sans jamais fournir d'exposition : depuis que
+                                    # BF et Cape Cod refusent de tourner sans elle,
+                                    # la réserve produite est du CHAIN LADDER PUR.
+                                    # Une réserve grands sinistres portait donc un
+                                    # nom de méthode faux dans un dossier ACPR.
+                                    st.info(f"🔄 {_n_grands} grands sinistres — "
+                                            f"calcul automatique sur triangle séparé.")
                                     try:
                                         _r7_gs = AgentA7Provisionnement(
                                             audit_path=_tmp_ar, models_path=_tmp_ar, verbose=False
@@ -1960,10 +1972,18 @@ def page_dashboard():
                                         )
                                         if _r7_gs.get("success"):
                                             _reserve_gs = float(_r7_gs.get("n4",{}).get("best_estimate",0))
-                                            _methode_gs = "bf_auto"
-                                            st.success(f"✅ Réserve grands sinistres : {_reserve_gs:,.0f}€ (BF auto)")
+                                            _inc_gs  = _r7_gs.get("n4", {}).get("methodes_incluses", [])
+                                            _methode_gs, _lbl_gs = etiquette_methode_grands(_inc_gs)
+                                            st.success(f"✅ Réserve grands sinistres : "
+                                                       f"{_reserve_gs:,.0f}€ ({_lbl_gs})")
+                                            if _methode_gs == "cl_separe":
+                                                st.caption(
+                                                    "ℹ️ Aucune exposition n'étant fournie pour le "
+                                                    "triangle des grands sinistres, Bornhuetter-Ferguson "
+                                                    "et Cape Cod ne sont pas calculées : cette réserve "
+                                                    "repose sur Chain Ladder seule.")
                                     except Exception as _e_gs:
-                                        st.warning(f"⚠️ Calcul BF grands sinistres échoué : {_e_gs}. Saisie manuelle.")
+                                        st.warning(f"⚠️ Calcul grands sinistres échoué : {_e_gs}. Saisie manuelle.")
 
                             _a7_ar  = AgentA7Provisionnement(
                                 audit_path=_tmp_ar, models_path=_tmp_ar, verbose=False
@@ -2714,7 +2734,7 @@ def page_analyse():
                         help="Sinistres ≥ LLT sont traités séparément du triangle attritional. "
                              "Laisser à 0 pour utiliser le triangle global sans séparation. "
                              "Applicable uniquement sur données individuelles (pas sur triangle cumulé). "
-                             "Guide IA 2023 §3.2 — Homogénéité des données.",
+                             "Guide IA 2023 §4.c — Les sinistres graves, p36-37.",
                     )
                     if _llt > 0:
                         st.info(f"✅ LLT activé : {_llt:,.0f} € — séparation attritional/grands sinistres")
@@ -4385,7 +4405,14 @@ def page_resultats():
         {"Méthode": "🌊 Cape Cod",                  "Réserve (€)": f"{cc_r.get('reserve_totale',0):,.0f}",        "Poids BE": f"{poids.get('cape_cod',0)*100:.0f}%",       "Statut": "✅"},
         {"Méthode": "🎲 Bootstrap ODP (BE)",       "Réserve (€)": f"{boot.get('be_bootstrap', boot.get('p50',0)):,.0f}", "Poids BE": "—", "Statut": "✅" if boot.get('be_bootstrap', boot.get('p50',0)) > 0 else "—"},
         {"Méthode": "🎲 Bootstrap ODP (P90)",       "Réserve (€)": f"{boot.get('p90',0):,.0f}",                   "Poids BE": "—",                                         "Statut": "✅" if boot.get('p90',0) > 0 else "—"},
-        {"Méthode": "🇩🇪 Munich CL",               "Réserve (€)": f"{munich.get('be_munich',0):,.0f}" if munich.get('disponible') else "N/A",  "Poids BE": "—", "Statut": "✅" if munich.get('disponible') else "ℹ️"},
+        # Munich CL produit DEUX réserves — payé et engagé — et aucune clé
+        # 'be_munich'. La lecture précédente affichait donc « 0 € ✅ » dès que la
+        # méthode était disponible : un chiffre faux avec une coche verte.
+        {"Méthode": "🇩🇪 Munich CL (payé / engagé)",
+         "Réserve (€)": (f"{munich.get('be_munich_paye',0):,.0f}"
+                         f" / {munich.get('be_munich_engage',0):,.0f}")
+                        if munich.get('disponible') else "N/A",
+         "Poids BE": "—", "Statut": "✅" if munich.get('disponible') else "ℹ️"},
         {"Méthode": "📐 Clark (LDF)",             "Réserve (€)": f"{n3.get('clark',{}).get('reserve_be_clark',0):,.0f}" if n3.get('clark',{}).get('disponible') else "N/A", "Poids BE": "—", "Statut": "✅" if n3.get('clark',{}).get('disponible') else "ℹ️"},
         {"Méthode": "⭐ BEST ESTIMATE S2",          "Réserve (€)": f"{be_val:,.0f}",                              "Poids BE": "100%",                                      "Statut": "→ Bilan S2"},
     ]
