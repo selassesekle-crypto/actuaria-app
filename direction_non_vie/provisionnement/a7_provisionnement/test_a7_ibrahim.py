@@ -219,24 +219,40 @@ class T3_Clark_GenIns(unittest.TestCase):
 # =============================================================================
 
 class T4_Bootstrap_RAA(unittest.TestCase):
-    """Bootstrap ODP sur RAA : la prediction-error doit être cohérente avec Mack."""
+    """Bootstrap ODP sur RAA : garde-fou de dérive sur la dispersion."""
 
-    def test_bootstrap_coherence_mack_raa(self):
-        """std bootstrap ODP ~ S.E. Mack (England & Verrall 2002 <-> Mack 1993).
+    def test_bootstrap_dispersion_ordre_de_grandeur(self):
+        """DÉTECTEUR DE DÉRIVE, PAS CERTIFICATION D'UNE VALEUR.
 
-        Sur un même triangle, la prediction-error du bootstrap ODP doit être
-        proche de l'erreur-type de Mack (26 909 pour RAA). Fenêtre ±30% :
-        [18 836 ; 34 982].
+        ⚠️ LA PRÉMISSE PRÉCÉDENTE EST ABANDONNÉE. Ce test exigeait « σ bootstrap
+        ≈ σ Mack », fenêtre ±30 % autour de 26 909. Rien ne soutient cette
+        égalité : Mack et le modèle sur-dispersé de Poisson ne sont pas le même
+        modèle, et l'exemple Bootstrap publié par le guide de l'Institut des
+        Actuaires (§3.c.ii p30, fig. 30) donne 13 923 sur CE MÊME triangle, face
+        à son propre Mack à 26 909 — un facteur 1,93. La bande d'origine
+        encodait donc une hypothèse que sa propre source contredit.
 
-        Vérifie le correctif B2 (bootstrap_odp.py) : résidus de Pearson, pseudo-
-        triangle et bruit de processus portés sur les INCRÉMENTS (ODP England-
-        Verrall) au lieu des cumulés, + recentrage de la distribution sur la
-        réserve CL. Avant correctif, std ~103 647 pour RAA (seed=99, +285%).
+        ⚠️ ET ELLE NE S'ANCRE PAS DAVANTAGE SUR LE GUIDE. Un exemple publié peut
+        être imprécis ; l'ériger en norme reviendrait à ajuster le modèle sur des
+        chiffres qu'on ne contrôle pas. La bande ci-dessous est donc LARGE — un
+        facteur 2 de part et d'autre — et n'a qu'un rôle : attraper une dérive de
+        modèle. Elle aurait attrapé les 33 395 d'avant l'audit (+128 %) comme les
+        103 647 d'avant le correctif B2.
+
+        LA VALIDATION RÉELLE VIT AILLEURS — `test_a7_bootstrap.py`, verrous 1 et
+        2 : le triangle ajusté doit reproduire la diagonale observée, et sur des
+        données engendrées par un modèle ODP dont on fixe soi-même les
+        paramètres, la sur-dispersion injectée doit être retrouvée. Ces
+        verrous-là ne citent aucune source externe.
         """
         rc = chain_ladder(RAA, tail_force=1.0)
         bo = bootstrap_odp(RAA, rc['facteurs'], n_sim=3000, seed=99)
-        self.assertTrue(18_836 <= bo['std_bootstrap'] <= 34_982)
-        print(f"    OK T6 Bootstrap RAA : std = {bo['std_bootstrap']:,.0f} EUR (Mack 26 909)")
+        self.assertTrue(
+            7_000 <= bo['std_bootstrap'] <= 28_000,
+            f"σ = {bo['std_bootstrap']:,.0f} hors de l'ordre de grandeur attendu "
+            f"— dérive de modèle probable")
+        print(f"    OK T6 Bootstrap RAA : std = {bo['std_bootstrap']:,.0f} EUR "
+              f"(exemple publié du guide : 13 923 ; Mack : 26 909)")
 
 
 # =============================================================================
@@ -1426,15 +1442,32 @@ class T24_Bootstrap_Recentrage_Brut(unittest.TestCase):
         print(f"    OK T24b décalage pur : be 1076 vs 1483, σ identique = {r_brut['std_bootstrap']:.2f}")
 
     def test_d2_retrait_morts_no_op_bit_exact(self):
-        """D2 : le retrait des deux mécanismes morts ne change RIEN. Sur GENINS
-        (sain, D1 aussi no-op car brut == plancher), la distribution entière est
-        identique aux valeurs d'avant le lot (be ET σ, seed/n_sim figés)."""
+        """Gel bit à bit de la distribution GENINS (seed/n_sim figés).
+
+        Rôle d'origine, INTACT : vérifier que le retrait des deux mécanismes
+        morts du lot D2 ne change rien. Rôle depuis : tout écart sur ces trois
+        constantes signale un changement de modèle, et doit être expliqué.
+
+        ⚠️ DEUX CONSTANTES SUR TROIS ONT ÉTÉ RE-BASÉES au lot « audit modèle
+        Bootstrap ». L'ajustement passe de la forme AVANT — `Ĉ[i,j] = C[i,j−1] ×
+        f̂_j`, qui est la prédiction à un pas de MACK — à la récursion ARRIÈRE
+        d'England & Verrall, seule conforme au modèle croisé sur-dispersé de
+        Poisson. La sur-dispersion φ tombe de 103 872 à 52 601 sur ce triangle,
+        d'où une dispersion moindre :
+            std   3 061 803,46 → 2 531 687,49   (−17,31 %)
+            P99,5 27 173 015,67 → 26 076 506,36 (−4,04 %)
+        LE POINT ESTIMATE, LUI, NE BOUGE PAS D'UN CENTIME — 18 680 855,61 avant
+        comme après : le recentrage l'aligne sur la réserve Chain Ladder, que ce
+        lot n'a pas touchée. C'est la meilleure preuve que le correctif porte sur
+        la seule dispersion.
+        """
         f  = calculer_facteurs(GENINS, 'standard')[0]
         bo = bootstrap_odp(GENINS, f, n_sim=3000, seed=42)
         self.assertAlmostEqual(bo['be_bootstrap'],  18_680_855.61, delta=0.5)
-        self.assertAlmostEqual(bo['std_bootstrap'],  3_061_803.46, delta=1.0)
-        self.assertAlmostEqual(bo['p99_5'],         27_173_015.67, delta=1.0)
-        print("    OK T24c D2 no-op : GENINS be/σ/P99.5 identiques à l'avant-lot")
+        self.assertAlmostEqual(bo['std_bootstrap'],  2_531_687.49, delta=1.0)
+        self.assertAlmostEqual(bo['p99_5'],         26_076_506.36, delta=1.0)
+        print("    OK T24c gel GENINS : be inchangé, σ/P99.5 re-basés sur "
+              "l'ajustement England & Verrall")
 
 
 class T25_Clark_IBNR_Brut_Expose(unittest.TestCase):

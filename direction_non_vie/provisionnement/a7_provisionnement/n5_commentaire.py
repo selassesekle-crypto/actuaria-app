@@ -469,13 +469,18 @@ def _s4_methodes(n3: Dict, n4: Dict) -> str:
     lignes.append("")
 
     # ── Bootstrap ────────────────────────────────────────────────────────────
-    be_boot  = boot.get('be_bootstrap', 0)
-    cv_boot  = boot.get('cv_bootstrap', 0) * 100
-    p995     = boot.get('p99_5', 0)
-    phi      = boot.get('phi', 0)
+    # `or 0` sur chaque grandeur d'incertitude : depuis l'audit modèle, un
+    # Bootstrap NON CALCULÉ les rend à None au lieu de fabriquer des zéros —
+    # un CV de 0 % se lirait « aucune incertitude ». Le garde `boot_dispo`
+    # décide de l'affichage ; les valeurs ne sont lues que s'il est vrai.
+    boot_dispo = boot.get('disponible', True)
+    be_boot  = boot.get('be_bootstrap', 0) or 0
+    cv_boot  = (boot.get('cv_bootstrap') or 0) * 100
+    p995     = boot.get('p99_5') or 0
+    phi      = boot.get('phi') or 0
     n_sim    = boot.get('n_simulations', 0)
 
-    if be_boot > 0:
+    if be_boot > 0 and boot_dispo:
         ecart_mack_boot = abs(mk_r - be_boot) / max(mk_r, 1e-9) * 100
         lignes.append(
             f"BOOTSTRAP ODP (England & Verrall 2002 — {n_sim:,} simulations) : "
@@ -601,8 +606,8 @@ def _s6_incertitude(n3: Dict, n4: Dict) -> str:
     p90_boot     = boot.get('p90', 0)
     p995_boot    = boot.get('p99_5', 0)
     p995_mack    = mack.get('reserve_p99_5', 0)
-    sig_boot     = boot.get('std_bootstrap', 0)
-    boot_ok      = boot.get('be_bootstrap', 0) > 0
+    sig_boot     = boot.get('std_bootstrap') or 0
+    boot_ok      = bool(boot.get('disponible', True)) and (boot.get('be_bootstrap', 0) or 0) > 0
 
     lignes = [
         "DIAGNOSTIC — décomposition de l'incertitude "

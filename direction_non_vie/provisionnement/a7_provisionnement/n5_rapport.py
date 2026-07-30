@@ -2023,7 +2023,7 @@ def export_word(n1, n2, n3, n4,
              [['Incertitude composée (retenue)',_f(P90),_f(n4.get('sigma_total_compose',SIG)),'BE pondéré'],
               ['Mack recentré',_f(n4.get('reserve_p90_mack',P90)),_f(n4.get('sigma_mack',SIG)),'BE pondéré'],
               ['Mack natif',_f(mk.get('reserve_p90',0)),_f(mk.get('sigma_total',SIG)),'réserve Mack'],
-              ['Bootstrap ODP',_f(n3.get('bootstrap',{}).get('p90',0)),_f(n3.get('bootstrap',{}).get('std_bootstrap',0)),'réserve Bootstrap']],ws=[5.0,3.0,3.0,3.0])
+              ['Bootstrap ODP',_f(n3.get('bootstrap',{}).get('p90') or 0),_f(n3.get('bootstrap',{}).get('std_bootstrap') or 0),'réserve Bootstrap']],ws=[5.0,3.0,3.0,3.0])
         doc.add_page_break()
 
         _h('2. Résultats par méthode actuarielle'); _sep()

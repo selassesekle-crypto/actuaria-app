@@ -517,7 +517,12 @@ class BestEstimateS2:
         #   · England & Verrall (2002) — Bootstrap ODP comme alternative
         #
         _boot = n3.get('bootstrap', {})
-        _boot_ok = bool(_boot.get('be_bootstrap', 0) > 0)
+        # `disponible` d'abord : un Bootstrap NON CALCULÉ publie un point
+        # estimate (la réserve Chain Ladder de référence, légitime) mais AUCUN
+        # percentile. Lire les siens donnerait des None aux variantes `_boot`.
+        _boot_ok = bool(_boot.get('disponible', True)) and bool(
+            (_boot.get('be_bootstrap') or 0) > 0
+            and _boot.get('p90') is not None)
 
         # σ_modèle : std des réserves des méthodes incluses (pondérées par poids)
         # Si une seule méthode → σ_modèle = 0 (pas de dispersion inter-méthodes)

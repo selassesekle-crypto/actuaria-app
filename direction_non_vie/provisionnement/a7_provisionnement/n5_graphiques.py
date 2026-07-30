@@ -706,14 +706,14 @@ def g6_distribution_bootstrap(n3: Dict) -> 'go.Figure':
                 annotation_position='top right' if lbl in ('P99.5 (SCR)',) else 'top left',
             )
 
-    cv = boot.get('cv_bootstrap', 0) * 100
+    cv = (boot.get('cv_bootstrap') or 0) * 100
     fig.update_layout(
         **_layout(
             title=dict(
                 text=(
                     f"Bootstrap ODP — Distribution des réserves "
                     f"({boot.get('n_simulations', len(dist)):,} simulations · "
-                    f"CV={cv:.1f}% · φ={boot.get('phi', 0):.4f})"
+                    f"CV={cv:.1f}% · φ={boot.get('phi') or 0:.4f})"
                 ),
                 font=dict(color=OR, size=12),
                 x=0.01,

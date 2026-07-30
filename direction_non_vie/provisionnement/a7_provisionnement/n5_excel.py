@@ -473,7 +473,7 @@ def _ong4_methodes(wb, n3, n4):
         ("Incertitude composée (retenue)", n4['reserve_p90'],             n4.get('sigma_total_compose', 0), "BE pondéré"),
         ("Mack recentré",                  n4.get('reserve_p90_mack', 0), n4.get('sigma_mack', 0),          "BE pondéré"),
         ("Mack natif",                     _mk.get('reserve_p90', 0),     _mk.get('sigma_total', 0),        "réserve Mack"),
-        ("Bootstrap ODP",                  _bo.get('p90', 0),             _bo.get('std_bootstrap', 0),      "réserve Bootstrap"),
+        ("Bootstrap ODP",                  _bo.get('p90') or 0,           _bo.get('std_bootstrap') or 0,      "réserve Bootstrap"),
     ]
     for i, (appr, p90v, sigv, centre) in enumerate(diag_rows):
         r   = row_diag + 2 + i
@@ -656,8 +656,8 @@ def _ong7_bootstrap(wb, n3):
     be_boot = boot.get('be_bootstrap', 0)
     rows = [
         ("BE Bootstrap (moyenne)",    be_boot,                  0,           "Espérance distribution simulée"),
-        ("Écart-type σ",              boot.get('std_bootstrap',0), None,     "Incertitude totale Bootstrap"),
-        ("CV Bootstrap",              boot.get('cv_bootstrap',0), None,      "Coefficient de variation"),
+        ("Écart-type σ",              boot.get('std_bootstrap') or 0, None,  "Incertitude totale Bootstrap"),
+        ("CV Bootstrap",              boot.get('cv_bootstrap') or 0, None,   "Coefficient de variation"),
         ("IC 95% — Borne inférieure", boot.get('ic_95_inf',0),  None,        "Percentile 2.5%"),
         ("IC 95% — Borne supérieure", boot.get('ic_95_sup',0),  None,        "Percentile 97.5%"),
         ("P50 — Médiane",             boot.get('p50',0),         None,       "50ème percentile"),
