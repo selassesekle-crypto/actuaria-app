@@ -1063,6 +1063,24 @@ class AgentA7Provisionnement:
                 'methode':    'Munich Chain Ladder (Quarg & Mack 2004)',
             }
 
+        # ── Clark LDF ─────────────────────────────────────────────────────────
+        # Appelé ici, comme toute autre méthode, et non en ligne dans le dict de
+        # retour : c'est ce qui l'empêchait de recevoir `annee_base`. Il était la
+        # SEULE méthode à retomber sur son propre défaut, donc à calculer sa
+        # réserve sur une base d'années différente des cinq autres dès que
+        # l'appelant s'écartait de annee_base_reserve=1.
+        if C is not None and C.shape[0] >= 4:
+            r_clark = clark_ldf(C, annee_base=annee_base)
+        else:
+            r_clark = {
+                'success':    False,
+                'disponible': False,
+                'statut':     'INFO',
+                'message':    'Clark LDF non calculé — triangle de moins de '
+                              '4 années.',
+                'methode':    'Clark LDF Curve-Fitting (2003)',
+            }
+
         return {
             'methode_cl':      methode_cl,
             'facteurs':        [float(f) for f in facteurs],
@@ -1084,7 +1102,7 @@ class AgentA7Provisionnement:
             'munich_cl':       r_munich,
             'tail_factor':     tail_info,
             'backtesting':     {},
-            'clark':           clark_ldf(C) if C is not None and C.shape[0] >= 4 else {'success': False, 'disponible': False},
+            'clark':           r_clark,
             'glm_apc':         {},
             'bz_ptf':          {},
         }

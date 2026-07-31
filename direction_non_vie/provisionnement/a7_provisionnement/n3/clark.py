@@ -3,18 +3,35 @@
 #  clark.py  —  Méthode de Clark (2003) — LDF Curve-Fitting par MLE ODP
 #
 #  Implémentation fidèle à Clark (2003) :
-#  · Modèle : Y_{i,j} ~ ODP avec μ_{i,j} = U_i × p_j(θ, β/ω)
+#  · Modèle : Y_{i,j} ~ ODP avec μ_{i,j} = U_i × p_j(ω, θ)
 #  · Courbes : log-logistique ET Weibull
-#  · Estimation : MLE via scipy (BFGS) avec Hessienne approchée
-#  · Sélection : AIC entre les deux courbes
+#  · Estimation : MLE via scipy (L-BFGS-B) avec Hessienne numérique
+#  · Sélection : Weibull PRIORITAIRE si sa queue est raisonnable, AIC en repli
 #  · Tail factor : 1 / G(t_last)
-#  · IC 95% sur les ultimates via matrice de covariance BFGS
+#  · IC 95% : variance de PARAMÈTRE (σ²·H⁻¹) + variance de PROCESSUS (σ²·R)
+#
+#  ⚠️ LA SÉLECTION N'EST PAS FAITE PAR L'AIC, malgré ce que l'AIC laisse
+#  attendre. La log-logistique gagne presque toujours en vraisemblance (elle a
+#  une queue plus lourde, donc plus de liberté pour absorber les derniers
+#  points), mais elle extrapole agressivement au-delà de la dernière colonne
+#  observée — précisément là où l'on n'a aucune donnée pour la contredire.
+#  Weibull est donc retenue par défaut, l'AIC ne servant que de repli quand
+#  Weibull échoue ou produit une queue > CLARK_TAIL_MAX. Les deux AIC restent
+#  publiés pour que l'écart soit visible et contestable.
+#
+#  ⚠️ CLARK NE SAIT PAS REPRÉSENTER UN RECOURS. G(t) est monotone croissante
+#  par construction : aucun jeu de paramètres ne peut faire redescendre le
+#  cumulé. Sur un triangle où les encaissements de recours font passer un
+#  facteur de développement sous 1, l'ajustement produit une réserve gonflée
+#  sans le signaler. Ce module DÉCLARE donc cette incompatibilité et retient
+#  sa réserve (cf. `structure_monotone`) plutôt que de publier un chiffre que
+#  rien dans la sortie ne permettrait de mettre en doute.
 #
 #  Interface publique : clark_ldf(C, periodes, annee_base)
 #  Retourne le dict standard A7 Ibrahim (compatible n4_best_estimate.py)
 #
 #  Auteur  : ActuarIA v5.0
-#  Version : 2.0.0  (réécriture sur base Clark 2003)
+#  Version : 2.1.0  (IC complet + verdict de structure)
 # =============================================================================
 
 from __future__ import annotations
@@ -22,6 +39,7 @@ import logging
 import numpy as np
 
 from direction_non_vie.services.nv_triangle_negatifs import increments_positifs
+from .chain_ladder import calculer_facteurs
 
 logger = logging.getLogger('actuaria.a7.clark')
 
@@ -50,10 +68,17 @@ CLARK_G_T2_MIN          = 0.10
 # Minimum d'observations pour un MLE fiable : n_obs >= n + CLARK_DF_MIN
 CLARK_DF_MIN            = 3
 
-# Hessienne calculée uniquement si convergence propre (res.success)
-# → évite un calcul O(n²) coûteux sur des solutions instables
-CLARK_HESSIENNE_SI_CONVERGENCE = True
+# Tail factor au-delà duquel la queue est signalée sans écarter la méthode
+CLARK_TAIL_ALERTE       = 1.20
 
+# Quantile normal bilatéral à 95 %
+Z95                     = 1.959964
+
+# Un facteur de développement agrégé strictement sous ce seuil signe une
+# REPRISE (recours, subrogation, annulation) que la courbe monotone croissante
+# de Clark ne peut pas représenter. Seuil à 1.0 exactement : ce n'est pas une
+# tolérance statistique mais une impossibilité de forme.
+CLARK_FACTEUR_REPRISE   = 1.0
 
 
 # =============================================================================
@@ -135,8 +160,7 @@ def _neg_loglik_odp(
     if omega <= 0 or theta <= 0 or np.any(U <= 0):
         return 1e12
 
-    n, m = Y.shape
-    if len(U) != n:
+    if len(U) != Y.shape[0]:
         return 1e12
 
     # Incréments théoriques (communs à toutes les années)
@@ -172,12 +196,51 @@ def _neg_loglik_odp(
 #  ESTIMATION MLE
 # =============================================================================
 
+def _hessienne_inverse(
+    params: np.ndarray,
+    Y:      np.ndarray,
+    t:      np.ndarray,
+    courbe: str,
+    mask:   np.ndarray,
+) -> Optional[np.ndarray]:
+    """
+    Inverse de la Hessienne numérique de la log-vraisemblance de POISSON.
+
+    ⚠️ Ce n'est PAS encore la matrice de covariance des paramètres. Clark
+    (2003) écrit la vraisemblance ODP comme ℓ_ODP = ℓ_Poisson / σ² ; sa
+    Hessienne vaut donc H_Poisson / σ², et la covariance σ² · H_Poisson⁻¹.
+    Le facteur σ² est appliqué par `_calculer_resultats`, pas ici.
+    """
+    try:
+        from scipy.optimize import approx_fprime
+        n_p   = len(params)
+        eps_h = 1e-4 * np.maximum(np.abs(params), 1.0)
+        H_num = np.zeros((n_p, n_p))
+        for ki in range(n_p):
+            e_ki = np.zeros(n_p)
+            e_ki[ki] = eps_h[ki]
+            g_plus  = approx_fprime(params + e_ki, _neg_loglik_odp,
+                                    eps_h * 1e-2, Y, t, courbe, mask)
+            g_minus = approx_fprime(params - e_ki, _neg_loglik_odp,
+                                    eps_h * 1e-2, Y, t, courbe, mask)
+            H_num[ki] = (g_plus - g_minus) / (2.0 * eps_h[ki])
+
+        H_sym   = 0.5 * (H_num + H_num.T)
+        eigvals = np.linalg.eigvalsh(H_sym)
+        if np.min(eigvals) <= 0:                       # régularisation
+            H_sym += np.eye(n_p) * max(-np.min(eigvals) + 1e-6, 1e-6)
+        h_inv = np.linalg.inv(H_sym)
+        return None if np.any(np.diag(h_inv) < 0) else h_inv
+    except Exception as e:
+        logger.debug(f'Clark ({courbe}) : Hessienne non calculable — {e}')
+        return None
+
+
 def _estimer_parametres(
     Y:           np.ndarray,
     t:           np.ndarray,
     mask:        np.ndarray,
     courbe:      str,
-    n_multi:     int  = 4,
     calculer_ic: bool = True,
 ) -> Tuple[Optional[np.ndarray], float, bool, Optional[np.ndarray]]:
     """
@@ -199,7 +262,8 @@ def _estimer_parametres(
         row_valid = Y[i, mask[i]]
         U_init_s1[i] = max(float(np.sum(row_valid)) * 1.1, 1.0) if len(row_valid) > 0 else 1.0
 
-    # Stratégie 2 : obs_last / G(t_last) — Copilot / Clark (2003) recommandé
+    # Stratégie 2 : obs_last / G(t_last) — l'initialisation recommandée par
+    # Clark (2003), qui part de l'ultime implicite de chaque année.
     # Calcul de G(t_last_i) avec une courbe "rough" (paramètres médians de la grille)
     def _U_init_from_G(omega_0: float, theta_0: float) -> np.ndarray:
         U = np.zeros(n)
@@ -212,17 +276,16 @@ def _estimer_parametres(
 
     best_ll     = -np.inf
     best_params = None
-    best_hinv   = None
     converge    = False
 
     # Grille de points de départ pour omega et theta
-    omega_starts = [0.5, 1.0, 2.0, 3.0][:n_multi]
-    theta_starts = [t[m // 2], t[m // 3], t[-2], 2.0]
+    omega_starts = [0.5, 1.0, 2.0, 3.0]
+    theta_starts = [t[m // 2], t[m // 3]]
 
     bounds = [(1e-4, 10.0), (1e-2, t[-1] * 5.0)] + [(1.0, None)] * n
 
     for omega_0 in omega_starts:
-        for theta_0 in theta_starts[:2]:
+        for theta_0 in theta_starts:
             # Tester les deux stratégies d'initialisation
             for U_init_base in [_U_init_from_G(omega_0, theta_0), U_init_s1]:
                 # Multi-start sur U_i : ×0.9, ×1.0, ×1.1
@@ -245,37 +308,17 @@ def _estimer_parametres(
                                 best_ll     = ll_cur
                                 best_params = res.x.copy()
                                 converge    = res.success
-                                # Hessienne numérique — seulement si demandée ET convergence propre
-                                # (O(n³) évaluations de LL — coûteux sur 30×30)
-                                if calculer_ic and converge:
-                                  try:
-                                    from scipy.optimize import approx_fprime
-                                    p_opt = best_params
-                                    n_p   = len(p_opt)
-                                    eps_h = 1e-4 * np.maximum(np.abs(p_opt), 1.0)
-                                    H_num = np.zeros((n_p, n_p))
-                                    for ki in range(n_p):
-                                        e_ki = np.zeros(n_p); e_ki[ki] = eps_h[ki]
-                                        g_plus  = approx_fprime(p_opt + e_ki, _neg_loglik_odp,
-                                                                 eps_h * 1e-2, Y, t, courbe, mask)
-                                        g_minus = approx_fprime(p_opt - e_ki, _neg_loglik_odp,
-                                                                 eps_h * 1e-2, Y, t, courbe, mask)
-                                        H_num[ki] = (g_plus - g_minus) / (2.0 * eps_h[ki])
-                                    # Symétriser et inverser
-                                    H_sym = 0.5 * (H_num + H_num.T)
-                                    # Régularisation si mal conditionné
-                                    eigvals = np.linalg.eigvalsh(H_sym)
-                                    if np.min(eigvals) <= 0:
-                                        H_sym += np.eye(n_p) * max(-np.min(eigvals) + 1e-6, 1e-6)
-                                    best_hinv = np.linalg.inv(H_sym)
-                                    # Vérifier que les variances sont positives
-                                    if np.any(np.diag(best_hinv) < 0):
-                                        best_hinv = None
-                                  except Exception:
-                                    best_hinv = None
                     except Exception as e:
                         logger.debug(f'Clark optim ({courbe}, ω={omega_0:.1f}, θ={theta_0:.1f}) : {e}')
                         continue
+
+    # Hessienne UNE SEULE FOIS, sur l'optimum retenu — et seulement si la
+    # convergence est propre : l'inverse d'une Hessienne prise sur une solution
+    # instable ne mesure rien. Elle était auparavant recalculée à chaque
+    # amélioration du multi-départ, soit jusqu'à 48 fois pour un seul résultat.
+    best_hinv = None
+    if calculer_ic and converge and best_params is not None:
+        best_hinv = _hessienne_inverse(best_params, Y, t, courbe, mask)
 
     return best_params, best_ll, converge, best_hinv
 
@@ -292,9 +335,11 @@ def _calculer_resultats(
     courbe:  str,
     hess_inv: Optional[np.ndarray],
     annee_base: int,
+    mask:    np.ndarray,    # cellules effectivement ajustées par le MLE
+    n_params: int,
 ) -> Dict:
     """
-    Calcule ultimates, IBNR, tail factor, IC 95% et statistiques.
+    Calcule ultimates, IBNR, tail factor, σ², IC 95% et statistiques.
     """
     n, m = C.shape
     omega = float(params[0])
@@ -351,49 +396,90 @@ def _calculer_resultats(
     # réserve). L'IBNR PLANCHÉ reste exposé séparément via ibnr_par_annee.
     reserve_totale = float(np.sum(ibnr_brut_raw[annee_base:]))
 
-    # ── Intervalles de confiance 95% sur les ultimates ────────────────────────
-    # IC = ultimate ± 1.96 × se(U_i), se(U_i) issu de la Hessienne de la
-    # log-vraisemblance de Poisson. L'ultime = U_i (paramètre MLE, cf. correctif
-    # B3), donc se_ult = se_U[i] — PAS × tail_factor (U_i est déjà l'asymptote).
-    # ⚠️ LIMITE STRUCTURELLE (non corrigée ici) : cet IC ne couvre que
-    # l'incertitude de PARAMÈTRE à l'échelle Poisson. Il SOUS-ESTIME l'intervalle
-    # de prédiction de Clark (2003) car il omet la surdispersion σ² (Var = σ²·μ)
-    # et la variance de processus. Correction = travail séparé.
-    ic_95 = []
-    if hess_inv is not None:
-        try:
-            var_params = np.diag(hess_inv)
-            se_U = np.sqrt(np.maximum(var_params[2:], 0.0))
-            z95  = 1.96
-            for i in range(n):
-                se_ult = se_U[i]
-                ic_95.append((
-                    round(max(ultimates[i] - z95 * se_ult, 0), 0),
-                    round(ultimates[i] + z95 * se_ult, 0),
-                ))
-        except Exception:
-            ic_95 = [(None, None)] * n
-    else:
-        ic_95 = [(None, None)] * n
-
-    # ── Résidus de Pearson (qualité d'ajustement) ─────────────────────────────
+    # ── Résidus de Pearson — SUR LES CELLULES RÉELLEMENT AJUSTÉES ────────────
+    # Le masque du MLE exclut les incréments négatifs ; le χ² doit porter sur
+    # exactement le même ensemble, sinon σ² = χ²/df diviserait une somme sur un
+    # ensemble par un degré de liberté compté sur un autre.
     mu = np.outer(U, p)  # (n, m)
-    residus_list = []
-    for i in range(n):
-        for j in range(m):
-            if not np.isnan(Y[i, j]) and mu[i, j] > 0:
-                r = (Y[i, j] - mu[i, j]) / np.sqrt(mu[i, j])
-                residus_list.append(r)
+    residus_list = [
+        (Y[i, j] - mu[i, j]) / np.sqrt(mu[i, j])
+        for i in range(n) for j in range(m)
+        if mask[i, j] and mu[i, j] > 0
+    ]
 
-    residus_arr = np.array(residus_list)
+    residus_arr = np.array(residus_list) if residus_list else np.array([0.0])
+    chi2 = float(np.sum(residus_arr ** 2))
+    n_obs_fit = int(len(residus_list))
+    df = n_obs_fit - n_params
+
     residus_stats = {
-        'n':          len(residus_arr),
+        'n':          n_obs_fit,
         'mean':       round(float(np.mean(residus_arr)), 4),
         'std':        round(float(np.std(residus_arr)), 4),
         'min':        round(float(np.min(residus_arr)), 4),
         'max':        round(float(np.max(residus_arr)), 4),
-        'chi2_stat':  round(float(np.sum(residus_arr**2)), 4),
+        'chi2_stat':  round(chi2, 4),
     }
+
+    # ── σ² : sur-dispersion ODP (Clark 2003, χ² de Pearson mis à l'échelle) ───
+    # C'est le pendant exact du φ du Bootstrap ODP : même modèle Var = σ²·μ,
+    # deux estimateurs indépendants. Ils doivent différer — les ajustements
+    # diffèrent — mais pas d'un ordre de grandeur ; l'écart est un diagnostic.
+    sigma2 = float(chi2 / df) if df > 0 else None
+
+    # ── Intervalles de prédiction 95% sur les ultimates ───────────────────────
+    # Clark (2003) : Var(R) = variance de PROCESSUS + variance de PARAMÈTRE.
+    #   · processus : Var = σ²·R_i          (modèle ODP, Var = σ²·μ)
+    #   · paramètre : σ²·H⁻¹                (ℓ_ODP = ℓ_Poisson/σ² ⇒ la Hessienne
+    #                                        de Poisson doit être remise à
+    #                                        l'échelle par σ²)
+    # L'ultime observé = payé à date (connu) + réserve, donc l'intervalle sur
+    # l'ultime EST l'intervalle sur la réserve, translaté d'une constante.
+    ic_95:      List[Tuple] = []
+    se_param:   List        = []
+    se_process: List        = []
+    se_totale:  List        = []
+    se_reserve_totale = None
+    cv_reserve        = None
+
+    if hess_inv is not None and sigma2 is not None and sigma2 > 0:
+        try:
+            h_uu   = np.asarray(hess_inv)[2:, 2:]          # bloc des U_i
+            var_par = sigma2 * np.maximum(np.diag(h_uu), 0.0)
+            for i in range(n):
+                v_par = float(var_par[i])
+                v_pro = float(sigma2 * max(ibnr_brut_raw[i], 0.0))
+                v_tot = v_par + v_pro
+                se_i  = float(np.sqrt(v_tot))
+                se_param.append(round(float(np.sqrt(v_par)), 2))
+                se_process.append(round(float(np.sqrt(v_pro)), 2))
+                se_totale.append(round(se_i, 2))
+                ic_95.append((
+                    round(max(ultimates[i] - Z95 * se_i, 0), 0),
+                    round(ultimates[i] + Z95 * se_i, 0),
+                ))
+
+            # Total : la variance de paramètre de Σ U_i fait intervenir les
+            # COVARIANCES, pas seulement la diagonale — les ultimates partagent
+            # ω et θ, donc leurs erreurs sont corrélées. La variance de
+            # processus, elle, s'additionne (incréments indépendants).
+            sl        = slice(annee_base, n)
+            var_p_tot = sigma2 * float(np.sum(h_uu[sl, sl]))
+            var_q_tot = sigma2 * float(sum(max(v, 0.0) for v in ibnr_brut_raw[annee_base:]))
+            v_tot     = max(var_p_tot, 0.0) + max(var_q_tot, 0.0)
+            se_reserve_totale = round(float(np.sqrt(v_tot)), 2)
+            if reserve_totale > 0:
+                cv_reserve = round(se_reserve_totale / reserve_totale * 100.0, 2)
+        except Exception as e:                              # pragma: no cover
+            logger.debug(f'Clark : IC non calculable — {e}')
+            ic_95 = [(None, None)] * n
+            se_param = se_process = se_totale = [None] * n
+            se_reserve_totale = cv_reserve = None
+    else:
+        ic_95      = [(None, None)] * n
+        se_param   = [None] * n
+        se_process = [None] * n
+        se_totale  = [None] * n
 
     return {
         'omega':           round(omega, 4),
@@ -407,6 +493,13 @@ def _calculer_resultats(
         'tail_factor':     round(tail_factor, 6),
         'pct_developpe':   [round(p, 1) for p in pct_developpe],
         'ic_95':           ic_95,
+        'se_parametre':    se_param,
+        'se_processus':    se_process,
+        'se_totale':       se_totale,
+        'se_reserve_totale': se_reserve_totale,
+        'cv_reserve':      cv_reserve,
+        'sigma2':          round(sigma2, 4) if sigma2 is not None else None,
+        'df':              df,
         'residus':         residus_stats,
     }
 
@@ -418,6 +511,87 @@ def _calculer_resultats(
 def _aic(ll: float, n_params: int) -> float:
     """AIC = 2k - 2ℓ (Clark 2003)."""
     return 2.0 * n_params - 2.0 * ll
+
+
+# =============================================================================
+#  VERDICT DE STRUCTURE — Clark peut-il représenter CE triangle ?
+# =============================================================================
+
+def _verdict_structure_monotone(C: np.ndarray) -> Dict:
+    """
+    Verdict de STRUCTURE, à ne pas confondre avec la qualité de l'ajustement.
+
+    G(t) est monotone croissante pour les deux courbes de Clark (2003) :
+    log-logistique et Weibull valent 0 en 0 et 1 à l'infini, sans jamais
+    redescendre. Le cumulé ajusté U_i·G(t_j) ne peut donc PAS décroître en j.
+
+    Un facteur de développement agrégé strictement sous 1 décrit exactement
+    l'inverse : un triangle qui redescend, parce que des recours ou des
+    subrogations sont encaissés. Aucun couple (ω, θ) ne peut reproduire cela —
+    ce n'est pas un mauvais ajustement, c'est une impossibilité de forme.
+    L'optimiseur ne le signale pas : il rend le moins mauvais ajustement
+    croissant, donc une réserve mécaniquement gonflée.
+
+    ⚠️ CE N'EST PAS `n_sur_developpement`. Ce compteur-là compare l'ultime
+    ajusté au dernier cumul observé ; sur un triangle à recours il reste à
+    ZÉRO, puisque la courbe croissante place précisément l'ultime au-dessus du
+    cumul pour toutes les années. Il constate une conséquence quand elle est
+    visible ; il ne voit pas la cause.
+
+    Returns
+    -------
+    Dict : compatible, testable, colonnes_reprise, facteurs_reprise,
+           facteur_min, message
+    """
+    vide = {
+        'compatible':       True,
+        'testable':         False,
+        'colonnes_reprise': [],
+        'facteurs_reprise': [],
+        'facteur_min':      None,
+        'message':          'Structure non testable — facteurs de développement '
+                            'indisponibles.',
+    }
+    try:
+        facteurs = np.asarray(calculer_facteurs(C, 'standard')[0], dtype=float)
+    except Exception as e:                                   # pragma: no cover
+        logger.debug(f'Clark : verdict de structure non calculable — {e}')
+        return vide
+
+    if facteurs.size == 0 or not np.all(np.isfinite(facteurs)):
+        return vide
+
+    idx = [int(j) for j in np.where(facteurs < CLARK_FACTEUR_REPRISE)[0]]
+    val = [round(float(facteurs[j]), 4) for j in idx]
+
+    if not idx:
+        return {
+            'compatible':       True,
+            'testable':         True,
+            'colonnes_reprise': [],
+            'facteurs_reprise': [],
+            'facteur_min':      round(float(np.min(facteurs)), 4),
+            'message':          'Structure compatible — aucun facteur de '
+                                'développement sous 1.',
+        }
+
+    detail = ' ; '.join(f'colonne {j}→{j + 1} : {f:.4f}' for j, f in zip(idx, val))
+    return {
+        'compatible':       False,
+        'testable':         True,
+        'colonnes_reprise': idx,
+        'facteurs_reprise': val,
+        'facteur_min':      round(float(np.min(facteurs)), 4),
+        'message': (
+            f"⚠️ Clark inapplicable — {len(idx)} facteur(s) de développement "
+            f"sous 1 ({detail}). Le triangle redescend (recours ou "
+            f"subrogation) ; les courbes de Clark sont monotones croissantes "
+            f"et ne peuvent pas représenter une reprise. Réserve NON PUBLIÉE : "
+            f"l'ajustement serait mécaniquement gonflé, sans qu'aucun autre "
+            f"indicateur de la méthode ne le signale. Utiliser Chain Ladder, "
+            f"qui accepte les facteurs sous 1."
+        ),
+    }
 
 
 # =============================================================================
@@ -441,7 +615,10 @@ def clark_ldf(
         Triangle des paiements CUMULÉS (n × m), zone connue i+j < n.
         Cas supportés : n=m (carré), n>m (court), n<m (long, rare).
     periodes : list[float], optional
-        Périodes de développement en mois. Défaut : [12, 24, 36, ...].
+        Âges de développement, strictement croissants. Défaut : [1, 2, ..., m],
+        soit des ANNÉES — θ s'interprète alors en années. Les deux courbes ne
+        dépendent que du rapport t/θ : changer d'unité (mois plutôt qu'années)
+        ne change pas l'ajustement, seulement la lecture de θ.
     courbes : list[str]
         Courbes à tester : 'loglogistique' et/ou 'weibull'.
     annee_base : int
@@ -452,20 +629,35 @@ def clark_ldf(
         mettre à False si seule la réserve centrale est nécessaire.
     g_t2_min : float, optional
         Seuil G(t=2) en dessous duquel Clark est déclaré aberrant.
-        Par défaut : CLARK_G_T2_MIN (0.10). À ajuster par LoB :
-        RC Médicale / Construction → 0.03, RC Générale → 0.05.
+        Par défaut : CLARK_G_T2_MIN (0.10). Les branches à développement très
+        long (RC Médicale, Construction) justifieraient un seuil plus bas,
+        mais AUCUNE configuration de LoB ne le fixe aujourd'hui : ce paramètre
+        existe et fonctionne, il n'est simplement jamais renseigné en amont.
 
     Returns
     -------
     Dict standard A7 Ibrahim. Clés effectivement présentes :
-        success, disponible, aberrant, erreur, message
-        courbe_choisie, omega, theta, elr, converge
-        ultimates, ic_95, pct_developpe, tail_factor
+        success, disponible, aberrant, statut, erreur, message
+        courbe_choisie, omega, theta, converge
+        ultimates, pct_developpe, tail_factor
+        structure_monotone   — verdict de FORME : la courbe croissante de Clark
+                               peut-elle représenter ce triangle ? (cf.
+                               `_verdict_structure_monotone`)
         ibnr_par_annee       — IBNR par année, PLANCHÉ à 0 (provision ≥ 0)
         ibnr_brut_par_annee  — IBNR brut, < 0 si sur-développement (ultime < cumul)
         n_sur_developpement  — nombre d'années où l'IBNR brut est < 0
-        reserve_totale       — Σ IBNR BRUT depuis annee_base (recours conservés)
+        reserve_totale       — Σ IBNR BRUT depuis annee_base, ou None si la
+                               structure est incompatible (recours)
         reserve_be_clark     — alias de reserve_totale
+        reserve_brute        — la même somme, TOUJOURS renseignée, pour l'audit
+        sigma2               — sur-dispersion ODP σ² = χ²/df, pendant du φ du
+                               Bootstrap ODP : deux estimateurs indépendants du
+                               même paramètre, à confronter
+        df                   — degrés de liberté du χ² (cellules ajustées − k)
+        ic_95                — intervalle de PRÉDICTION 95 % sur les ultimates
+        se_parametre, se_processus, se_totale   — décomposition par année
+        se_reserve_totale    — se de la réserve agrégée, COVARIANCES comprises
+        cv_reserve           — se_reserve_totale / réserve, en %
         aic_loglogistique, aic_weibull, ll_loglogistique, ll_weibull,
         aic_optimal, ll_optimal, residus, n_params, n_obs,
         increments_non_positifs, periodes_arr, g_courbe
@@ -528,21 +720,16 @@ def clark_ldf(
             if j > m - 1 - i:
                 C_float[i, j] = np.nan
 
-    # Pas de normalisation — la LL ODP n'est pas invariante à l'échelle
-    # (Copilot AI / Clark 2003 : travailler sur les données brutes)
-    scale = 1.0  # conservé pour compatibilité rescaling U_i
-    C_norm = C_float
-
-    Y_norm = np.full_like(C_norm, np.nan)
-    Y_norm[:, 0] = C_norm[:, 0]
+    # Pas de normalisation : la log-vraisemblance ODP n'est pas invariante à
+    # l'échelle (Clark 2003 travaille sur les montants bruts).
+    Y = np.full_like(C_float, np.nan)
+    Y[:, 0] = C_float[:, 0]
     for j in range(1, m):
-        Y_norm[:, j] = C_norm[:, j] - C_norm[:, j - 1]
-
-    Y = Y_norm
+        Y[:, j] = C_float[:, j] - C_float[:, j - 1]
 
     # Vérification monotonicité : C[i,j] doit être croissant en j
     # (incréments négatifs = annulations/corrections — Clark invalide)
-    _n_neg = int(np.sum(Y_norm[~np.isnan(Y_norm)] < 0))
+    _n_neg = int(np.sum(Y[~np.isnan(Y)] < 0))
     if _n_neg > 0:
         logger.warning(
             f'Clark : {_n_neg} incrément(s) négatif(s) détecté(s) — '
@@ -551,7 +738,7 @@ def clark_ldf(
 
     # Masque : cellules effectivement observées (non NaN et non négatif)
     # Les incréments négatifs sont exclus — ils violent H1 de Clark (2003)
-    mask = ~np.isnan(Y) & ~np.isnan(C_norm) & (Y >= 0)
+    mask = ~np.isnan(Y) & ~np.isnan(C_float) & (Y >= 0)
 
     n_obs = int(mask.sum())
     if n_obs < (n + CLARK_DF_MIN):  # besoin d'au moins n+CLARK_DF_MIN observations
@@ -562,11 +749,10 @@ def clark_ldf(
         }
 
     # ── Estimation MLE pour chaque courbe ────────────────────────────────────
-    # Seed fixe pour reproductibilité des résultats entre deux appels identiques.
-    # Impact : les perturbations aléatoires de U_init (×0.9/1.0/1.1) sont
-    # déterministes. Ne pas modifier sans adapter les tests de non-régression.
-    np.random.seed(42)
-
+    # Aucun tirage aléatoire ici : le multi-départ balaie une grille FIXE
+    # (ω × θ × stratégie d'initialisation × facteur d'échelle). Il n'y a donc
+    # aucune graine à poser — celle qui figurait ici ne gouvernait rien et
+    # réécrivait l'état global de np.random pour tout l'appelant.
     resultats_courbes = {}
     ll_par_courbe     = {}
     aic_par_courbe    = {}
@@ -583,10 +769,8 @@ def clark_ldf(
                 continue
 
             aic = _aic(ll, n_params)
-            # Rescaler les U_i vers les valeurs originales
-            params_rescaled      = params.copy()
-            params_rescaled[2:] *= scale
-            res = _calculer_resultats(C_float, Y_norm, t, params_rescaled, courbe, hinv, annee_base)
+            res = _calculer_resultats(C_float, Y, t, params, courbe, hinv,
+                                      annee_base, mask, n_params)
             res['converge'] = conv
             res['ll']       = round(ll, 2)
             res['aic']      = round(aic, 2)
@@ -603,11 +787,11 @@ def clark_ldf(
             aic_par_courbe[courbe] = None
 
     # ── Sélection de la courbe ────────────────────────────────────────────────
-    # Clark (2003) recommande Weibull comme courbe de référence sur triangles
-    # annuels réguliers. La log-logistique est plus flexible mais extrapole
-    # agressivement la queue → résultats aberrants sur triangles longs.
-    # Règle : Weibull en priorité si convergé et tail raisonnable (< 1.5)
-    #         Log-logistique si Weibull échoue ou tail > 1.5
+    # ⚠️ CE N'EST PAS L'AIC QUI TRANCHE (cf. en-tête du module). La
+    # log-logistique gagne presque toujours en vraisemblance mais extrapole sa
+    # queue là où aucune donnée ne peut la contredire ; Weibull est donc
+    # prioritaire tant que sa queue reste sous CLARK_TAIL_MAX. L'AIC ne sert
+    # qu'en repli, et les deux valeurs restent publiées pour être contestables.
     courbes_ok = {c: aic for c, aic in aic_par_courbe.items() if aic is not None}
 
     if not courbes_ok:
@@ -619,7 +803,8 @@ def clark_ldf(
 
     # Priorité à Weibull si tail raisonnable
     wb_ok = ('weibull' in resultats_courbes
-             and float(resultats_courbes['weibull'].get('tail_factor', 99)) < 1.5)
+             and float(resultats_courbes['weibull'].get('tail_factor', 99))
+             < CLARK_TAIL_MAX)
     if wb_ok:
         courbe_choisie = 'weibull'
     else:
@@ -635,33 +820,36 @@ def clark_ldf(
     reserve_totale = float(best['reserve_totale'])
     tail_factor    = float(best['tail_factor'])
 
-    # ── Validation de cohérence ───────────────────────────────────────────────
-    # Calculer la somme des dernières diagonales comme référence
-    # (last_diag_sum supprimé — critère 5×diagonale retiré au profit
-    #  des critères actuariels : tail, G(t2), convergence)
-
     # ── Critères d'aberration actuariellement justifiés ──────────────────
-    # 1. Tail factor > 1.5 : queue irréaliste quelle que soit la LoB
-    # 2. G(t_min) < 3% : triangle trop peu développé à la 1ère période
-    #    → MLE mal conditionné, ultimates extrapolés massivement
-    # 3. Non-convergence : le MLE n'a pas trouvé de minimum stable
+    # Les motifs SONT le critère : `clark_aberrant` se déduit de la liste, il
+    # n'est plus calculé en parallèle. Une méthode ne peut donc plus être
+    # écartée sans que la phrase qui l'explique soit produite — c'est
+    # exactement ce qui arrivait quand le seuil affiché (0.10 en dur) et le
+    # seuil testé (g_t2_min, paramétrable) divergeaient.
     # NB : AIC absolu non utilisé (dépend de l'échelle des données)
     # NB : ratio Clark/CL non utilisé (circulaire)
     _omega_best  = float(best.get('omega', 1.0))
     _theta_best  = float(best.get('theta', 1.0))
     _g_t2_min    = g_t2_min if g_t2_min is not None else CLARK_G_T2_MIN
-    # G(t=1) et G(t=2) pour évaluer le conditionnement du MLE
-    # Seuil G(t=2) < 10% plus robuste que G(t=1) < 3% :
-    # - G(t=1) < 3% peut être normal sur triangles longs (20×20+)
-    # - G(t=2) < 10% signifie que même à 2 ans, le triangle est très peu
-    #   développé → MLE mal conditionné sur les années récentes
-    G_at_t1 = float(_g(np.array([t[0]]), _omega_best, _theta_best, courbe_choisie)[0])
-    G_at_t2 = float(_g(np.array([t[min(1, m-1)]]), _omega_best, _theta_best, courbe_choisie)[0])
-    clark_aberrant = (
-        tail_factor > CLARK_TAIL_MAX         # queue irréaliste quelle que soit la LoB
-        or G_at_t2 < _g_t2_min               # MLE mal conditionné (< _g_t2_min à t=2)
-        or not best.get('converge', True)    # MLE non convergé
-    )
+    # Seuil sur G(t=2) plutôt que sur G(t=1) : G(t=1) faible peut être normal
+    # sur un triangle long (20×20+), alors qu'un développement encore
+    # négligeable à 2 ans signe un MLE mal conditionné sur les années récentes.
+    G_at_t2 = float(_g(np.array([t[min(1, m - 1)]]), _omega_best, _theta_best,
+                       courbe_choisie)[0])
+
+    _raison: List[str] = []
+    if tail_factor > CLARK_TAIL_MAX:
+        _raison.append(f'tail factor = {tail_factor:.3f} '
+                       f'(> {CLARK_TAIL_MAX} — queue irréaliste)')
+    if G_at_t2 < _g_t2_min:
+        _raison.append(f'G(t=2) = {G_at_t2:.3f} (< {_g_t2_min:.0%} — '
+                       f'MLE mal conditionné sur années récentes)')
+    if not best.get('converge', True):
+        _raison.append('MLE non convergé')
+    clark_aberrant = bool(_raison)
+
+    # ── Verdict de STRUCTURE : Clark peut-il seulement représenter ce triangle ?
+    structure = _verdict_structure_monotone(C)
 
     # ── Message actuariel ─────────────────────────────────────────────────────
     # ΔAIC entre les deux courbes (comparaison relative — pas en absolu)
@@ -669,32 +857,37 @@ def clark_ldf(
     if aic_ll is not None and aic_wb is not None:
         _delta_aic = round(aic_ll - aic_wb, 1)  # négatif si log-log meilleure
 
-    if clark_aberrant:
-        _raison = []
-        if tail_factor > CLARK_TAIL_MAX:
-            _raison.append(f'tail factor = {tail_factor:.3f} (> {CLARK_TAIL_MAX} — queue irréaliste)')
-        if G_at_t2 < 0.10:
-            _raison.append(f'G(t=2) = {G_at_t2:.3f} (< {_g_t2_min:.0%} — MLE mal conditionné sur années récentes)')
-        if not best.get('converge', True):
-            _raison.append('MLE non convergé')
+    if not structure['compatible']:
+        statut  = 'ROUGE'
+        message = structure['message']
+    elif clark_aberrant:
+        statut  = 'ROUGE'
         message = (
             f"⚠️ Clark {courbe_choisie} écarté — "
             f"{' ; '.join(_raison)}. "
             f"Méthode non retenue dans la pondération."
         )
-    elif tail_factor > 1.20:
+    elif tail_factor > CLARK_TAIL_ALERTE:
+        statut  = 'AMBRE'
         message = (
             f"Clark {courbe_choisie} sélectionné. "
             f"Queue notable : tail = {tail_factor:.3f}. "
             f"Résultat à titre informatif — vérifier le développement tardif."
         )
     else:
+        statut  = 'VERT'
         message = (
             f"Clark {courbe_choisie} sélectionné. "
             f"Tail factor = {tail_factor:.4f}. "
             + (f"\u0394AIC Weibull vs Log-log = {_delta_aic:+.0f}. " if _delta_aic else '')
             + "Ajustement satisfaisant."
         )
+
+    # La réserve n'est PAS publiée quand la courbe ne peut pas représenter le
+    # triangle : un nombre sans avertissement se compare à Chain Ladder, et rien
+    # dans la sortie ne permettrait de le mettre en doute. Même traitement que
+    # les percentiles du Bootstrap quand BOOT-H3 ou BOOT-H4 sont rejetées.
+    reserve_publiee = None if not structure['compatible'] else reserve_totale
 
     # ── Courbe G(t) pour graphique ────────────────────────────────────────────
     t_dense = np.linspace(0, t[-1] * 1.5, 100)
@@ -716,22 +909,34 @@ def clark_ldf(
             'disponible':       ip_neg['disponible'],
         },
 
+        'statut':            statut,
+        'structure_monotone': structure,
+
         # Modèle sélectionné
         'courbe_choisie':    courbe_choisie,
         'omega':             best['omega'],
         'theta':             best['theta'],
-        'elr':               best['U'],  # alias ELR = U_i (ultimates paramétriques)
 
         # Résultats actuariels
         'ultimates':           best['ultimates'],
         'ibnr_par_annee':      best['ibnr_par_annee'],        # PLANCHÉ à 0
         'ibnr_brut_par_annee': best['ibnr_brut_par_annee'],   # brut < 0 = sur-développement
         'n_sur_developpement': best['n_sur_developpement'],   # nb années ultime < cumul
-        'reserve_totale':    reserve_totale,                  # Σ IBNR brut (recours conservés)
-        'reserve_be_clark':  reserve_totale,  # alias
+        'reserve_totale':    reserve_publiee,   # None si structure incompatible
+        'reserve_be_clark':  reserve_publiee,   # alias
+        'reserve_brute':     reserve_totale,    # toujours renseignée, pour l'audit
         'tail_factor':       tail_factor,
         'pct_developpe':     best['pct_developpe'],
+
+        # Incertitude — Clark (2003) : processus + paramètre, mis à l'échelle σ²
         'ic_95':             best['ic_95'],
+        'se_parametre':      best['se_parametre'],
+        'se_processus':      best['se_processus'],
+        'se_totale':         best['se_totale'],
+        'se_reserve_totale': best['se_reserve_totale'],
+        'cv_reserve':        best['cv_reserve'],
+        'sigma2':            best['sigma2'],
+        'df':                best['df'],
 
         # Comparaison des courbes
         'aic_loglogistique': round(aic_ll, 2) if aic_ll is not None else None,

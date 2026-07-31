@@ -738,9 +738,22 @@ class BestEstimateS2:
                     f"l'incertitude de Mack (σ) pour le SCR provisions."
                 )
 
-        # Recommandation Clark aberrant
+        # Recommandation Clark — deux causes DISTINCTES, deux messages distincts.
+        # L'incompatibilité de structure n'est pas un ajustement raté : c'est
+        # une impossibilité de forme, que la queue soit raisonnable ou non.
         clark = n3.get('clark', {})
-        if clark.get('aberrant'):
+        _ck_struct = clark.get('structure_monotone') or {}
+        if _ck_struct.get('testable') and not _ck_struct.get('compatible', True):
+            _cols = _ck_struct.get('facteurs_reprise') or []
+            recommandations.append(
+                "Clark LDF inapplicable sur ce triangle — "
+                f"{len(_cols)} facteur(s) de développement sous 1 "
+                f"(minimum {_ck_struct.get('facteur_min')}). Les courbes de Clark "
+                "sont monotones croissantes et ne peuvent pas représenter un "
+                "recours : la réserve n'est pas publiée. Chain Ladder, qui "
+                "accepte les facteurs sous 1, reste applicable."
+            )
+        elif clark.get('aberrant'):
             recommandations.append(
                 "Clark LDF produit un résultat aberrant — méthode exclue de la pondération. "
                 "Vérifier la structure du triangle et la longueur de la queue de développement."

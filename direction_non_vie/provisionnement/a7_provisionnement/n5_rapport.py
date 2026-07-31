@@ -246,7 +246,9 @@ def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: s
         f"Mack 1993 : {_f(mk.get('reserve_best_estimate'))} | poids={_pct(pw.get('mack', 0)*100)}",
         f"BF : {_f(bf.get('reserve_totale'))} | poids={_pct(pw.get('bornhuetter_ferguson', 0)*100)}",
         f"Cape Cod : {_f(cc.get('reserve_totale'))} | poids={_pct(pw.get('cape_cod', 0)*100)}",
-        f"Clark LDF : {_f(clark.get('reserve_be_clark'))} | courbe={clark.get('courbe_choisie', '—')} | AIC={clark.get('aic_optimal', '—')}",
+        f"Clark LDF : {_f(clark.get('reserve_be_clark'))} | courbe={clark.get('courbe_choisie', '—')} | AIC={clark.get('aic_optimal', '—')}"
+        + ('' if (clark.get('structure_monotone') or {}).get('compatible', True)
+           else ' | NON PUBLIEE : structure incompatible (facteur de developpement < 1)'),
         f"BEST ESTIMATE S2 : {_f(BE)} | CV={_pct(CV)}",
         "",
         "=== INCERTITUDE ===",
@@ -1084,11 +1086,19 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
                 aic_disp = aic_val
         else:
             aic_disp = '—'
+        # Réserve retenue quand la courbe croissante de Clark ne peut pas
+        # représenter le triangle : la colonne de détail porte le motif, sinon
+        # un tiret se lirait comme une donnée manquante.
+        _ck_struct = clark.get('structure_monotone') or {}
+        _ck_detail = (
+            'Structure incompatible — facteur(s) de développement sous 1'
+            if not _ck_struct.get('compatible', True) else 'AIC = ' + aic_disp
+        )
         tbl += (
             '<tr><td class="label">Clark LDF (' + _s(clark.get('courbe_choisie')).title() + ')</td>'
             '<td class="right"><span class="mono">' + _f(clark.get('reserve_be_clark')) + '</span></td>'
             '<td class="center">—</td>'
-            '<td class="center" style="font-size:7.5pt;color:var(--slate);">AIC = ' + aic_disp + '</td>'
+            '<td class="center" style="font-size:7.5pt;color:var(--slate);">' + _ck_detail + '</td>'
             '<td class="center"><span class="badge badge-excl">⊘ Exclu</span></td></tr>'
         )
     if bz.get('glm_disponible') and bz.get('reserve_apc'):

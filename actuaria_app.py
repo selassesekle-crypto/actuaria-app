@@ -4396,6 +4396,19 @@ def page_resultats():
     # ── TABLEAU TOUTES MÉTHODES ───────────────────────────────────────────────
     st.markdown(f"<div style='font-size:0.62rem;color:{OR};text-transform:uppercase;font-weight:700;margin:8px 0;'>◆ Résultats de toutes les méthodes actuarielles</div>", unsafe_allow_html=True)
 
+    # Clark retient sa réserve quand sa courbe monotone croissante ne peut pas
+    # représenter le triangle (recours) : la case doit dire pourquoi, jamais
+    # afficher 0 ni planter sur un None.
+    _ck = n3.get('clark', {}) or {}
+    if not _ck.get('disponible'):
+        _clark_reserve_txt, _clark_statut_txt = "N/A", "ℹ️"
+    elif _ck.get('reserve_be_clark') is None:
+        _clark_reserve_txt = "Non publiée — structure incompatible"
+        _clark_statut_txt  = "⛔"
+    else:
+        _clark_reserve_txt = f"{_ck['reserve_be_clark']:,.0f}"
+        _clark_statut_txt  = "✅"
+
     rows = [
         {"Méthode": "🔗 Chain Ladder",              "Réserve (€)": f"{cl.get('reserve_totale',0):,.0f}",          "Poids BE": f"{poids.get('chain_ladder',0)*100:.0f}%", "Statut": "✅"},
         {"Méthode": "📐 Mack 1993 (IC 95%)",        "Réserve (€)": f"{mack.get('reserve_best_estimate',0):,.0f}", "Poids BE": f"{poids.get('mack',0)*100:.0f}%",          "Statut": "✅"},
@@ -4415,7 +4428,7 @@ def page_resultats():
                          f" / {munich.get('be_munich_engage',0):,.0f}")
                         if munich.get('disponible') else "N/A",
          "Poids BE": "—", "Statut": "✅" if munich.get('disponible') else "ℹ️"},
-        {"Méthode": "📐 Clark (LDF)",             "Réserve (€)": f"{n3.get('clark',{}).get('reserve_be_clark',0):,.0f}" if n3.get('clark',{}).get('disponible') else "N/A", "Poids BE": "—", "Statut": "✅" if n3.get('clark',{}).get('disponible') else "ℹ️"},
+        {"Méthode": "📐 Clark (LDF)",             "Réserve (€)": _clark_reserve_txt, "Poids BE": "—", "Statut": _clark_statut_txt},
         {"Méthode": "⭐ BEST ESTIMATE S2",          "Réserve (€)": f"{be_val:,.0f}",                              "Poids BE": "100%",                                      "Statut": "→ Bilan S2"},
     ]
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
