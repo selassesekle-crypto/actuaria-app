@@ -30,6 +30,7 @@ import numpy as np
 # n'apparaisse jamais comme un loss ratio de 0 %.
 from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
 from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
+from .n2_hypotheses_munich import lignes_hypotheses_munich
 from .n3.bf_cape_cod import libelle_loss_ratio
 from .n3.bootstrap_odp import libelle_incertitude
 # Source UNIQUE d'affichage de Munich CL — la même que HTML et Word.
@@ -606,9 +607,12 @@ def _ong6_hypotheses(wb, n2):
 
     # BFCC-H1..H5 — statut motivé, sans score : ces hypothèses n'en produisent
     # aucun, et en afficher un fabriqué serait le défaut qu'on vient de retirer.
+    # ⚠️ PLUS DE TRONCATURE À 200. Cinq messages sur quatorze y perdaient leur
+    # justification — dont la mention MCL-H4, qui porte les seuls chiffres du
+    # bloc. Une cellule Excel accepte 32 767 caractères.
     for ligne in lignes_hypotheses_bfcc(n2):
         rangs.append((ligne['libelle'], ligne['statut'], '—',
-                      ligne['source'], ligne['message'][:200], ligne['ok']))
+                      ligne['source'], ligne['message'], ligne['ok']))
 
     # BOOT-H1..H4 — même traitement. La ligne « H4 — Homoscédasticité Bootstrap
     # ODP » qui figurait plus haut portait un score sur 100 tiré du CV des
@@ -616,7 +620,14 @@ def _ong6_hypotheses(wb, n2):
     # score que quiconque lisait.
     for ligne in lignes_hypotheses_bootstrap(n2):
         rangs.append((ligne['libelle'], ligne['statut'], '—',
-                      ligne['source'], ligne['message'][:200], ligne['ok']))
+                      ligne['source'], ligne['message'], ligne['ok']))
+
+    # MCL-H1..H5 — même traitement. MCL-H4 y figure en MENTION : NON TESTABLE
+    # assumé, puissance mesurée 13-17 %, biais possible 20 %. Elle ne peut pas
+    # ressortir verte, et c'est le sujet.
+    for ligne in lignes_hypotheses_munich(n2):
+        rangs.append((ligne['libelle'], ligne['statut'], '—',
+                      ligne['source'], ligne['message'], ligne['ok']))
 
     for i, (lbl, verdict, sc, seuil_txt, msg, ok) in enumerate(rangs):
         bg = 'EAF3DE' if ok else 'FCEBEB'

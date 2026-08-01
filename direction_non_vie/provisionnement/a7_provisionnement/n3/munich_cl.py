@@ -118,6 +118,34 @@ logger = logging.getLogger('actuaria.a7')
 #: que 2 — pour la BONNE raison, mesurée sur les données et non déduite de n.
 MCL_PAIRES_MIN = 5
 
+#: Seuils de circularité — MESURÉS, ne plus les déplacer au jugé.
+#:
+#: Le CV des ratios engagé/payé sépare deux populations : des charges dossier
+#: réellement indépendantes du règlement, et des charges recalculées depuis les
+#: provisions actuarielles (auquel cas Munich CL n'a rien à exploiter, il lirait
+#: le reflet du payé). Calibration sur vérité connue, 80 tirages par scénario :
+#:
+#:   scénario                                      CV médian   < 0,02   < 0,025
+#:   CIRCULAIRE strict (E = P × 1,35)                 0,0000    100 %     100 %
+#:   CIRCULAIRE + arrondi comptable 0,5 %             0,0050    100 %     100 %
+#:   CIRCULAIRE + bruit 2 %                           0,0199     51 %      99 %
+#:   LÉGITIME provision dossier, dispersion 10 %      0,0258      1 %      31 %
+#:   LÉGITIME provision dossier, dispersion 25 %      0,0646      0 %       0 %
+#:
+#: Le seuil BLOQUANT 0,02 est confirmé : il attrape toute la circularité franche
+#: pour 1 % de fausse alarme sur un portefeuille légitime.
+#:
+#: ⚠️ LE SEUIL D'ALERTE ÉTAIT À 0,05 ET IL ÉTAIT FAUX : il se déclenchait sur
+#: 100 % des portefeuilles légitimes à 10 % de dispersion. Une alerte qui sonne
+#: toujours n'informe de rien — c'est la pathologie de l'ancienne H4 du
+#: Bootstrap. Ramené à 0,025.
+#:
+#: LIMITE ASSUMÉE : les deux populations SE RECOUVRENT dans cette bande —
+#: circulaire-bruité q95 = 0,0233, légitime-10 % q05 = 0,0223. Aucun seuil ne
+#: les sépare proprement ; 0,025 est le point de croisement, pas une frontière.
+MCL_CV_BLOQUANT = 0.02
+MCL_CV_ALERTE   = 0.025
+
 #: Nombre minimal d'observations dans une colonne pour que σ_j et ρ_j soient
 #: définis (variance à ddof=1).
 MCL_OBS_COLONNE_MIN = 2
@@ -269,8 +297,9 @@ def valider_prerequis(
     # ── Détection de circularité (Quarg & Mack 2004) ─────────────────────────
     # Métrique : coefficient de variation (CV) des ratios C_E/C_P.
     # Si engage = payé × constante → CV ≈ 0 → circularité certaine.
-    # Un triangle indépendant a des ratios variables (CV > 0.05) car
-    # l'IBNR varie selon la cohorte et l'ancienneté des dossiers.
+    # Un triangle indépendant a des ratios variables car l'IBNR varie selon la
+    # cohorte et l'ancienneté des dossiers. Seuils calibrés sur vérité connue :
+    # cf. MCL_CV_BLOQUANT / MCL_CV_ALERTE.
     try:
         _ratios = []
         for _i in range(n):
@@ -280,17 +309,19 @@ def valider_prerequis(
         if len(_ratios) >= 6:
             _r = np.array(_ratios)
             _cv = float(np.std(_r) / np.mean(_r)) if np.mean(_r) > 0 else 0.0
-            if _cv < 0.02:
+            if _cv < MCL_CV_BLOQUANT:
                 return False, (
-                    f'CIRCULARITE DETECTEE — CV des ratios engagé/payé = {_cv:.4f} < 0.02. '
+                    f'CIRCULARITE DETECTEE — CV des ratios engagé/payé = '
+                    f'{_cv:.4f} < {MCL_CV_BLOQUANT}. '
                     f'Les charges engagées sont proportionnelles aux paiements (ratio quasi-constant). '
                     f'Elles semblent calculées depuis les provisions actuarielles. '
                     f'Munich CL désactivé (Quarg & Mack 2004). '
                     f'Utilisez des évaluations dossier par dossier indépendantes des provisions.'
                 )
-            elif _cv < 0.05:
+            elif _cv < MCL_CV_ALERTE:
                 return True, (
-                    f'⚠️ CV faible des ratios engagé/payé = {_cv:.4f} (seuil alerte 0.05). '
+                    f'⚠️ CV faible des ratios engagé/payé = {_cv:.4f} '
+                    f'(seuil alerte {MCL_CV_ALERTE}). '
                     f'Vérifiez que les charges engagées sont indépendantes des provisions. '
                     f'Munich CL activé sous réserve de validation actuaire.'
                 )

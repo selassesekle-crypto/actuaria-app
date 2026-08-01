@@ -27,6 +27,7 @@ import numpy as np
 # évaluée y ressort NON TESTABLE, jamais en valeur par défaut.
 from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
 from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
+from .n2_hypotheses_munich import lignes_hypotheses_munich
 # Source UNIQUE d'affichage de Munich CL, partagée par HTML, Word et Excel.
 from .n3.munich_cl import lignes_munich_rapport
 
@@ -1398,8 +1399,12 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     # BOOT-H1..H4 — idem. La carte « H4 — Homoscédasticité Bootstrap ODP »
     # affichait un score sur 100 calculé sur le CV des variances des
     # facteurs de développement, rouge sur les trois triangles de référence.
+    # MCL-H1..H5 rejoignent BFCC et BOOT : mêmes cartes, même convention de
+    # statut. MCL-H4 y figure comme MENTION (NON TESTABLE assumé, cf. son
+    # message) — elle ne peut pas être verte, on ne sait pas la tester.
     for ligne in (list(lignes_hypotheses_bfcc(n2))
-                  + list(lignes_hypotheses_bootstrap(n2))):
+                  + list(lignes_hypotheses_bootstrap(n2))
+                  + list(lignes_hypotheses_munich(n2))):
         cls = ('hyp-ok' if ligne['statut'] == 'VALIDÉE'
                else 'hyp-warn' if ligne['statut'] != 'NON VALIDÉE' else 'hyp-warn')
         hyp_cards += (
@@ -2296,11 +2301,19 @@ def export_word(n1, n2, n3, n4,
             if not h: continue
             ok=bool(h.get('ok',True))
             rows_h.append([lbl,'VALIDÉE' if ok else 'REJETÉE',str(h.get('score','—'))+'/100',str(h.get('message',''))[:80]])
+        # ⚠️ PLUS DE TRONCATURE. Les messages étaient coupés à 80 caractères et
+        # les libellés à 38 : sur les 14 lignes d'un dossier avec Munich, 14
+        # messages et 13 libellés étaient rognés en pleine phrase (médiane 170
+        # caractères, maximum 532). Un rapport réglementaire peut se permettre
+        # une ligne haute ; il ne peut pas se permettre une justification
+        # coupée à « Cette hypothèse n'es ». La colonne Score, toujours « — »
+        # pour ces lignes, cède sa largeur au message.
         for ligne in (list(lignes_hypotheses_bfcc(n2))
-                      + list(lignes_hypotheses_bootstrap(n2))):
-            rows_h.append([ligne['libelle'][:38], ligne['statut'], '—',
-                           ligne['message'][:80]])
-        if rows_h: _tbl(['Hypothèse','Résultat','Score','Message'],rows_h,ws=[4.0,2.5,2.0,7.5])
+                      + list(lignes_hypotheses_bootstrap(n2))
+                      + list(lignes_hypotheses_munich(n2))):
+            rows_h.append([ligne['libelle'], ligne['statut'], '—',
+                           ligne['message']])
+        if rows_h: _tbl(['Hypothèse','Résultat','Score','Message'],rows_h,ws=[4.5,2.5,1.2,7.8])
         doc.add_page_break()
 
         _h('4. SCR Provisions — Art. 105 S2'); _sep()

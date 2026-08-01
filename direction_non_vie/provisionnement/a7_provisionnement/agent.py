@@ -42,6 +42,7 @@ from .n2_hypotheses     import HypothesesValidator
 from .n2_hypotheses_clm  import verifier_hypotheses_clm
 from .n2_hypotheses_bfcc import verifier_hypotheses_bfcc
 from .n2_hypotheses_bootstrap import verifier_hypotheses_bootstrap
+from .n2_hypotheses_munich import MESSAGE_H4, verifier_hypotheses_munich
 from .n4_best_estimate  import BestEstimateS2, garde_fou_be_negatif, s2_non_calculable
 # Alias VOLONTAIRE — ne pas « nettoyer » : `generer_graphiques` est aussi un
 # PARAMÈTRE public de run() (compatibilité ancienne API, cf. plus bas). Sans
@@ -528,6 +529,13 @@ class AgentA7Provisionnement:
             # l'ajustement dont il a tiré ses percentiles.
             n2['bootstrap_hyp'] = self._verifier_bootstrap(n2, n3, C_calc)
 
+            # ── MCL-H1..H5 : les hypothèses propres à Munich CL ───────────────
+            # ⚠️ APRÈS N3 POUR LA MÊME RAISON : MCL-H5 juge la circularité que
+            # `valider_prerequis` a RÉELLEMENT constatée, pas celle qu'il aurait
+            # pu constater. Et MCL-H1/H3 portent sur les DEUX triangles — seule
+            # méthode d'A7 dans ce cas.
+            n2['munich_hyp'] = self._verifier_munich(n3, C_calc, C_engage)
+
             # ── Base CHARGES : provisions dossier à réintégrer au BE ──────────
             # Les méthodes N3 rendent `ultime − charges à date` (IBNR pur) quand
             # elles tournent sur les charges. Le BE S2 est `ultime − PAYÉ à date`.
@@ -940,6 +948,27 @@ class AgentA7Provisionnement:
             return {'erreur': str(e), 'hypotheses': {}, 'statuts': {},
                     'phi_par_axe': {}, 'phi_global': None,
                     'percentiles_publiables': True}
+
+    def _verifier_munich(self, n3: Dict, C_P: np.ndarray,
+                         C_E: Optional[np.ndarray]) -> Dict:
+        """MCL-H1..H5 — les hypothèses propres à Munich Chain Ladder.
+
+        MCL-H1 et MCL-H3 rejouent CLM-H1 et CLM-H3 SUR LES DEUX TRIANGLES : ces
+        fonctions sont pures, et l'agent ne les appliquait qu'au payé alors que
+        Munich lit les deux. MCL-H5 lit ce que `valider_prerequis` a décidé.
+        MCL-H4 ne teste rien — c'est une mention, cf. l'en-tête du module.
+
+        Ne LÈVE JAMAIS, pour la même raison que `_verifier_clm`, `_verifier_bfcc`
+        et `_verifier_bootstrap`. Le repli publie `reserve_publiable = True` :
+        ne pas avoir pu juger n'est pas juger défavorablement.
+        """
+        try:
+            return verifier_hypotheses_munich(
+                C_P=C_P, C_E=C_E, munich=n3.get('munich_cl', {}))
+        except Exception as e:
+            logger.warning(f"MCL-H1..H5 non calculées : {e}")
+            return {'erreur': str(e), 'hypotheses': {}, 'statuts': {},
+                    'mention_h4': MESSAGE_H4, 'reserve_publiable': True}
 
     def _calculer_n3(
         self,
