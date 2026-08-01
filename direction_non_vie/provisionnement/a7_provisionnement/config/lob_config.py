@@ -14,52 +14,85 @@
 #    · longueur de queue attendue (en années)
 #    · méthodes actuarielles prioritaires
 #    · alertes spécifiques à la branche
-#    · facteurs EIOPA pour le SCR provisions (Art. 105 S2)
+#    · le SEGMENT officiel Solvabilité II dont elle relève (cf. SEGMENTS_S2)
 #    · LR marché de référence (source FFA/FFSA)
 #
 # =============================================================================
 
-from typing import Dict, Any
+from typing import Any, Dict, NamedTuple, Tuple
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  CONSTANTES EIOPA — Facteurs de volatilité SCR provisions Non-Vie
-#  Source : Annexe II du Règlement Délégué (UE) 2015/35, Art. 105
-#  σ(LoB) utilisé dans : SCR_prov(LoB) = 3 × σ(LoB) × BE(LoB)
+#  LES SEGMENTS OFFICIELS — Règlement délégué (UE) 2015/35
+#
+#  SOURCE, RECOPIÉE MOT À MOT. Texte consolidé au 02.08.2022, CELEX
+#  02015R0035-20220802 : Annexe II page 389 (non-vie, 12 segments) et Annexe
+#  XIV page 430 (santé non-SLT, 4 segments). Les deux tableaux portent le
+#  marqueur ▼M6 = Règlement délégué (UE) 2019/981 du 8 mars 2019.
+#
+#  LES ARTICLES QUI S'APPLIQUENT — ET CE N'EST PAS L'ARTICLE 105 :
+#    · Art. 115 : SCR(primes et réserve, non-vie) = 3 × σ_nl × V_nl
+#    · Art. 116 : les mesures de volume V_prime et V_réserve
+#    · Art. 117 : le σ du segment, à partir de σ_prime et σ_réserve
+#  L'article 105 DU RÈGLEMENT DÉLÉGUÉ porte sur le calcul simplifié du risque
+#  de spread des entreprises captives : il n'a rien à voir. La confusion vient
+#  de l'article 105 de la DIRECTIVE 2009/138/CE, qui décrit les modules du SCR.
+#
+#  POURQUOI A7 N'UTILISE QUE σ_RÉSERVE. L'article 117(2) donne
+#
+#      σ_s = √(σ_p²·V_p² + σ_p·V_p·σ_r·V_r + σ_r²·V_r²) / (V_p + V_r)
+#
+#  A7 provisionne des sinistres DÉJÀ SURVENUS : il n'y a pas de prime future,
+#  donc V_prime = 0 et l'expression se réduit EXACTEMENT à σ_réserve. A7 n'a
+#  donc besoin que d'UN σ par segment, et c'est bien celui de la réserve — ce
+#  n'est pas une simplification, c'est la formule standard sur son périmètre.
+#  σ_prime est conservé ici parce qu'il figure au texte et qu'il fonde A10,
+#  qui calcule le module complet primes + réserve.
+#
+#  ⚠️ PÉRIMÈTRE DE V_RÉSERVE. L'article 116(6) définit la mesure de volume du
+#  risque de réserve comme la meilleure estimation des provisions pour
+#  sinistres à payer « après déduction des montants recouvrables au titre des
+#  contrats de réassurance et des véhicules de titrisation ». Le Best Estimate
+#  d'A7 est BRUT de réassurance (étiquetage posé au commit 244f3e6) : le SCR
+#  publié est donc un MAJORANT sur cet axe. La cession n'est pas dans le
+#  périmètre d'A7 — A10 opère en aval.
 # ─────────────────────────────────────────────────────────────────────────────
-SIGMA_EIOPA: Dict[str, float] = {
-    # LoB 1 — Frais médicaux
-    "frais_medicaux":               0.07,  # Annexe II — Maladie frais médicaux
-    # LoB 2 — Protection du revenu
-    "protection_revenu":            0.10,
-    # LoB 3 — Indemnisation des travailleurs
-    "indemnisation_travailleurs":   0.11,
-    # LoB 4 — RC Auto (corporels et matériels)
-    "rc_auto":                      0.11,  # Annexe II — Auto RC
-    # LoB 5 — Auto (dommages)
-    "auto_dommages":                0.09,  # Annexe II Règlement 2015/35 — LoB Auto dommages
-    # LoB 6 — Marine, aviation, transport
-    "marine_aviation_transport":    0.14,  # Annexe II — Aviation (plus conservateur : Transport=0.12, Maritime=0.12, Aviation=0.14)
-    # LoB 7 — Incendie et autres dommages aux biens (MRH, RC Générale courte)
-    "incendie_dommages":            0.10,
-    # LoB 8 — RC Générale (hors auto)
-    "rc_generale":                  0.12,  # Annexe II — RC générale
-    # LoB 9 — Crédit et cautionnement
-    "credit_cautionnement":         0.21,  # Annexe II Règlement 2015/35 — LoB Crédit & caution
-    # LoB 10 — Protection juridique
-    "protection_juridique":         0.07,  # Annexe II Règlement 2015/35 — LoB Protection juridique
-    # LoB 11 — Assistance
-    "assistance":                   0.08,  # Annexe II Règlement 2015/35 — LoB Assistance
-    # LoB 12 — Pertes pécuniaires diverses
-    "pertes_pecuniaires":           0.12,  # Annexe II — Pertes pécuniaires diverses
-    # CAT Naturelles — σ spécifique (fichier officiel EIOPA)
-    "cat_nat":                      0.25,  # Annexe II — CAT naturelles
-    # Accidents corporels individuels
-    "accidents_corporels":          0.085, # Annexe II — Accidents corporels
-    # LoB spécifiques France
-    "rc_auto_corporels":            0.11,  # Annexe II — Auto RC (corporels)
-    "rc_medicale":                  0.14,  # Annexe II — RC professionnelle
-    "rc_decennale":                 0.14,  # Annexe II — RC professionnelle (Construction décennale)
-    "mrh":                          0.10,   # Multirisque Habitation
+
+class SegmentS2(NamedTuple):
+    """Un segment des annexes II ou XIV du Règlement délégué (UE) 2015/35.
+
+    La provenance est portée par la DONNÉE, pas par un commentaire : c'est la
+    leçon du lot B10-a. Avant lui, quinze valeurs sur dix-huit étaient fausses
+    tout en étant commentées « Annexe II », et deux citaient un segment qui
+    n'existe pas (« CAT naturelles », « Accidents corporels »).
+    """
+    annexe:          str    # 'II' (non-vie) ou 'XIV' (santé non-SLT)
+    numero:          int    # numéro du segment DANS son annexe
+    libelle:         str    # libellé officiel, abrégé
+    lignes_annexe_i: str    # lignes d'activité qui composent le segment
+    sigma_prime:     float  # non employé par A7 (V_prime = 0) — sert à A10
+    sigma_reserve:   float  # ← le seul que A7 emploie, cf. ci-dessus
+
+
+#: Clé = (annexe, numéro de segment). Recopie littérale du texte consolidé.
+SEGMENTS_S2: Dict[Tuple[str, int], SegmentS2] = {
+    # ── Annexe II — engagements NON-VIE (page 389) ───────────────────────────
+    ('II',  1): SegmentS2('II',  1, "RC automobile",                     "4 et 16",  0.10,  0.09),
+    ('II',  2): SegmentS2('II',  2, "Autre assurance des véhicules",     "5 et 17",  0.08,  0.08),
+    ('II',  3): SegmentS2('II',  3, "Maritime, aérienne et transport",   "6 et 18",  0.15,  0.11),
+    ('II',  4): SegmentS2('II',  4, "Incendie et autres dommages aux biens", "7 et 19", 0.08, 0.10),
+    ('II',  5): SegmentS2('II',  5, "RC générale",                       "8 et 20",  0.14,  0.11),
+    ('II',  6): SegmentS2('II',  6, "Crédit et cautionnement",           "9 et 21",  0.19,  0.172),
+    ('II',  7): SegmentS2('II',  7, "Protection juridique",              "10 et 22", 0.083, 0.055),
+    ('II',  8): SegmentS2('II',  8, "Assistance",                        "11 et 23", 0.064, 0.22),
+    ('II',  9): SegmentS2('II',  9, "Pertes pécuniaires diverses",       "12 et 24", 0.13,  0.20),
+    ('II', 10): SegmentS2('II', 10, "Réassurance accidents non prop.",   "26",       0.17,  0.20),
+    ('II', 11): SegmentS2('II', 11, "Réassurance MAT non prop.",         "27",       0.17,  0.20),
+    ('II', 12): SegmentS2('II', 12, "Réassurance dommages non prop.",    "28",       0.17,  0.20),
+    # ── Annexe XIV — engagements SANTÉ NON-SLT (page 430) ────────────────────
+    ('XIV', 1): SegmentS2('XIV', 1, "Frais médicaux",                    "1 et 13",  0.05,  0.057),
+    ('XIV', 2): SegmentS2('XIV', 2, "Protection du revenu",              "2 et 14",  0.085, 0.14),
+    ('XIV', 3): SegmentS2('XIV', 3, "Indemnisation des travailleurs",    "3 et 15",  0.096, 0.11),
+    ('XIV', 4): SegmentS2('XIV', 4, "Réassurance santé non prop.",       "25",       0.17,  0.17),
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -96,8 +129,10 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
     # ── RC Automobile — matériels (queue courte) ──────────────────────────────
     "rc_auto_materiel": {
         "label":            "RC Automobile — Dommages Matériels",
-        "sigma_eiopa":      SIGMA_EIOPA["auto_dommages"],
-        "lob_eiopa":        "auto_dommages",
+        # « RC Automobile » = responsabilité civile : le dommage matériel visé
+        # est celui causé AU TIERS, donc ligne d'activité 4, segment II-1 —
+        # et non le segment II-2, qui couvre les dommages au véhicule assuré.
+        "segment_s2":       ('II', 1),
 
         # Longueur de développement attendue
         "queue_attendue_ans": 5,
@@ -136,8 +171,7 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
     # ── RC Automobile — corporels (queue très longue) ─────────────────────────
     "rc_auto_corporels": {
         "label":            "RC Automobile — Corporels",
-        "sigma_eiopa":      SIGMA_EIOPA["rc_auto_corporels"],
-        "lob_eiopa":        "rc_auto",
+        "segment_s2":       ('II', 1),
 
         "queue_attendue_ans": 20,
 
@@ -173,8 +207,7 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
     # ── MRH — Multirisque Habitation (queue courte) ───────────────────────────
     "mrh": {
         "label":            "Multirisque Habitation (MRH)",
-        "sigma_eiopa":      SIGMA_EIOPA["mrh"],
-        "lob_eiopa":        "incendie_dommages",
+        "segment_s2":       ('II', 4),
 
         "queue_attendue_ans": 4,
 
@@ -208,8 +241,7 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
     # ── RC Générale (queue moyenne) ───────────────────────────────────────────
     "rc_generale": {
         "label":            "Responsabilité Civile Générale",
-        "sigma_eiopa":      SIGMA_EIOPA["rc_generale"],
-        "lob_eiopa":        "rc_generale",
+        "segment_s2":       ('II', 5),
 
         "queue_attendue_ans": 12,
 
@@ -244,8 +276,9 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
     # ── RC Médicale (queue très longue) ───────────────────────────────────────
     "rc_medicale": {
         "label":            "Responsabilité Civile Médicale",
-        "sigma_eiopa":      SIGMA_EIOPA["rc_medicale"],
-        "lob_eiopa":        "rc_generale",
+        # La « RC professionnelle » n'est pas un segment : l'annexe II range la
+        # responsabilité civile médicale dans la RC générale (ligne 8).
+        "segment_s2":       ('II', 5),
 
         "queue_attendue_ans": 25,
 
@@ -283,8 +316,9 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
     # ── Construction — RC Décennale / DO (queue longue) ──────────────────────
     "construction": {
         "label":            "Construction — RC Décennale / Dommages-Ouvrage",
-        "sigma_eiopa":      SIGMA_EIOPA["rc_decennale"],
-        "lob_eiopa":        "rc_generale",
+        # La décennale est de la responsabilité civile : segment II-5, comme la
+        # RC médicale. Il n'existe pas de segment « construction ».
+        "segment_s2":       ('II', 5),
 
         "queue_attendue_ans": 15,
 
@@ -321,8 +355,11 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
     # ── Marine / Aviation / Transport ─────────────────────────────────────────
     "marine_aviation_transport": {
         "label":            "Marine, Aviation et Transport",
-        "sigma_eiopa":      SIGMA_EIOPA["marine_aviation_transport"],
-        "lob_eiopa":        "marine_aviation_transport",
+        # UN SEUL segment officiel couvre les trois : II-3 « maritime, aérienne
+        # et transport ». Le commentaire retiré ici inventait trois
+        # sous-segments (Transport 0,12 / Maritime 0,12 / Aviation 0,14) dont
+        # aucun ne figure à l'annexe II.
+        "segment_s2":       ('II', 3),
 
         "queue_attendue_ans": 8,
 
@@ -365,8 +402,13 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
                             "dénouant rapidement (GAV, accident scolaire). Pour "
                             "un dénouement long avec rentes potentielles, "
                             "utiliser 'dommage_corporel_individuel'.",
-        "sigma_eiopa":      SIGMA_EIOPA["accidents_corporels"],  # 0.085 — S2 LoB 1
-        "lob_eiopa":        "accidents_corporels",
+        # CLÉ FANTÔME TRANCHÉE (lot B10-a). Le σ de 0,085 était commenté
+        # « Annexe II — Accidents corporels » : ce segment N'EXISTE PAS. Les
+        # garanties d'atteinte corporelle relèvent de la santé non-SLT, et le
+        # segment retenu est XIV-2 « protection du revenu » plutôt que XIV-1
+        # « frais médicaux », par cohérence avec `dommage_corporel_individuel`
+        # qui partage ce segment et sert des rentes.
+        "segment_s2":       ('XIV', 2),
 
         "queue_attendue_ans": 6,
 
@@ -395,8 +437,7 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
     # ── Transport (LoB 6 S2 — sous-catégorie marine_aviation_transport) ────────
     "transport": {
         "label":            "Transport",
-        "sigma_eiopa":      SIGMA_EIOPA["marine_aviation_transport"],  # 0.14 — S2 LoB 6 (valeur marine_aviation_transport)
-        "lob_eiopa":        "marine_aviation_transport",
+        "segment_s2":       ('II', 3),
 
         "queue_attendue_ans": 8,
 
@@ -426,8 +467,7 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
     # ── Générique (fallback si lob non spécifié) ──────────────────────────────
     "generique": {
         "label":            "Branche Non-Vie Générique",
-        "sigma_eiopa":      SIGMA_EIOPA["rc_generale"],
-        "lob_eiopa":        "rc_generale",
+        "segment_s2":       ('II', 5),
 
         "queue_attendue_ans": 10,
 
@@ -463,8 +503,7 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
     # =========================================================================
     "incendie_dommages": {
         "label":            "Incendie & Dommages aux Biens",
-        "sigma_eiopa":      SIGMA_EIOPA["incendie_dommages"],
-        "lob_eiopa":        "incendie_dommages",
+        "segment_s2":       ('II', 4),
         "queue_attendue_ans": 5,
         "h2_seuil_cv":      0.15,
         "h2_seuil_derive":  0.20,
@@ -489,8 +528,7 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
     # =========================================================================
     "protection_juridique": {
         "label":            "Protection Juridique",
-        "sigma_eiopa":      SIGMA_EIOPA["protection_juridique"],
-        "lob_eiopa":        "protection_juridique",
+        "segment_s2":       ('II', 7),
         "queue_attendue_ans": 8,
         "h2_seuil_cv":      0.15,
         "h2_seuil_derive":  0.20,
@@ -515,8 +553,21 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
     # =========================================================================
     "catastrophes_naturelles": {
         "label":            "Catastrophes Naturelles (Cat-Nat)",
-        "sigma_eiopa":      SIGMA_EIOPA["cat_nat"],       # 0.25 — Annexe II EIOPA
-        "lob_eiopa":        "incendie_dommages",
+        # ⚠️ CLÉ FANTÔME TRANCHÉE (lot B10-a) — ET C'EST LA PLUS GROSSE BAISSE
+        # DU LOT. Le σ valait 0,25, commenté « Annexe II — CAT naturelles » :
+        # ce segment N'EXISTE PAS, et le 0,25 n'avait aucune source. Le risque
+        # de RÉSERVE d'un portefeuille cat-nat, c'est-à-dire l'incertitude sur
+        # les sinistres DÉJÀ SURVENUS, est celui du segment II-4 comme pour
+        # tout dommage aux biens : 10 %. Le SCR de cette LoB baisse de 60 %.
+        #
+        # CE QUE CE σ NE COUVRE PAS, ET QUI EXPLIQUE POURQUOI IL PARAÎT FAIBLE :
+        # le risque de catastrophe proprement dit — la survenance d'événements
+        # FUTURS — est un module distinct du SCR (art. 119 et suivants, annexes
+        # V, VI et X). A7 provisionne, il ne le calcule pas et n'a pas à le
+        # calculer. Le SCR affiché par A7 sur cette branche n'est donc PAS la
+        # charge en capital totale d'un portefeuille cat-nat : il lui manque le
+        # module catastrophe, qui relève d'A10.
+        "segment_s2":       ('II', 4),
         "queue_attendue_ans": 7,
         "h2_seuil_cv":      0.25,
         "h2_seuil_derive":  0.35,
@@ -542,8 +593,7 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
     # =========================================================================
     "credit_caution": {
         "label":            "Crédit / Caution",
-        "sigma_eiopa":      SIGMA_EIOPA["credit_cautionnement"],
-        "lob_eiopa":        "credit_cautionnement",
+        "segment_s2":       ('II', 6),
         "queue_attendue_ans": 12,
         "h2_seuil_cv":      0.20,
         "h2_seuil_derive":  0.30,
@@ -575,8 +625,7 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "distinction":      "queue longue, risque_long=True — dénouement lent, "
                             "rentes potentielles, inflation judiciaire. Pour un "
                             "dénouement rapide, utiliser 'accidents_corporels'.",
-        "sigma_eiopa":      SIGMA_EIOPA["accidents_corporels"],  # 0.085 — Annexe II EIOPA
-        "lob_eiopa":        "accidents_corporels",
+        "segment_s2":       ('XIV', 2),
         "queue_attendue_ans": 7,
         "h2_seuil_cv":      0.15,
         "h2_seuil_derive":  0.20,
@@ -596,6 +645,38 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
     },
 
 }
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  LE σ EST DÉRIVÉ DE LA TABLE, JAMAIS SAISI
+#
+#  C'est ce qui rend impossible la dérive qui a rendu ce lot nécessaire. Avant
+#  lui, chaque LoB portait DEUX champs qui disaient la même chose — `lob_eiopa`
+#  (un texte) et `sigma_eiopa` (un nombre) — et ils se contredisaient sur trois
+#  LoB sur quinze : `catastrophes_naturelles` déclarait relever d'incendie tout
+#  en prenant un σ de 0,25 sans source, `rc_medicale` et `construction`
+#  déclaraient la RC générale tout en prenant 0,14 au lieu de son σ. Un seul
+#  champ subsiste désormais, `segment_s2`, et le nombre en découle.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _appliquer_table_officielle() -> None:
+    """Injecte `sigma_eiopa` dans chaque LoB à partir de son segment officiel.
+
+    Lève KeyError au chargement du module si une LoB désigne un segment qui
+    n'existe pas — un mauvais rattachement ne peut donc pas atteindre un
+    livrable.
+    """
+    for cle, cfg in LOB_CONFIG.items():
+        seg = cfg.get("segment_s2")
+        if seg not in SEGMENTS_S2:
+            raise KeyError(
+                f"LoB '{cle}' : segment {seg!r} absent des annexes II et XIV "
+                f"du Règlement délégué (UE) 2015/35."
+            )
+        cfg["sigma_eiopa"] = SEGMENTS_S2[seg].sigma_reserve
+
+
+_appliquer_table_officielle()
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  FONCTIONS UTILITAIRES
@@ -631,9 +712,35 @@ def get_lob_config(lob: str) -> Dict[str, Any]:
     return cfg
 
 
+def get_segment_s2(lob: str) -> SegmentS2:
+    """Le segment officiel dont relève la LoB — annexe, numéro, libellé, σ.
+
+    C'est l'accesseur qui porte la traçabilité : il rend disponible jusqu'aux
+    livrables l'annexe et le numéro de segment, et pas seulement le chiffre.
+    """
+    return SEGMENTS_S2[get_lob_config(lob)["segment_s2"]]
+
+
+def reference_s2(lob: str) -> str:
+    """Référence à citer dans un livrable : « Annexe XIV, segment 2 — ... ».
+
+    Les rapports affichaient « Annexe II » EN DUR, ce qui devenait faux dès
+    qu'une LoB relevait de la santé non-SLT (annexe XIV). Cette fonction est
+    la seule source de cette mention.
+    """
+    seg = get_segment_s2(lob)
+    return (f"Annexe {seg.annexe}, segment {seg.numero} — {seg.libelle} "
+            f"(Rgt délégué (UE) 2015/35)")
+
+
 def get_sigma_eiopa(lob: str) -> float:
     """
-    Retourne le facteur de volatilité σ(LoB) EIOPA pour le calcul SCR.
+    Retourne σ(réserve) du segment Solvabilité II dont relève la LoB.
+
+    C'est bien l'écart type du risque de RÉSERVE, et non celui du risque de
+    primes : l'article 117(2) fait tendre σ_s vers σ_réserve quand la mesure
+    de volume des primes est nulle, ce qui est le cas d'un agent qui
+    provisionne des sinistres déjà survenus. Cf. l'en-tête de SEGMENTS_S2.
 
     Parameters
     ----------
@@ -643,10 +750,9 @@ def get_sigma_eiopa(lob: str) -> float:
     Returns
     -------
     float
-        σ(LoB) tel que SCR_prov(LoB) = 3 × σ(LoB) × BE(LoB)
+        σ(LoB) tel que SCR_prov(LoB) = 3 × σ(LoB) × BE(LoB) — art. 115.
     """
-    cfg = get_lob_config(lob)
-    return cfg["sigma_eiopa"]
+    return get_segment_s2(lob).sigma_reserve
 
 
 def list_lobs() -> list:

@@ -183,7 +183,7 @@ PAS de tableaux Markdown. PAS de blockquotes >. Sépare les sections par une lig
 1. LANGUE : Français professionnel. Anglais uniquement pour les termes consacrés.
 2. RIGUEUR : Chaque affirmation est justifiée par les données fournies.
 3. CHIFFRES : En euros avec séparateurs (ex : 2\u202f526\u202f597\u202f€). Pourcentages avec une décimale.
-4. RÉFÉRENCES : Art. 77 S2, Art. 105 S2, Guide IA 2023, Mack 1993, Clark 2003.
+4. RÉFÉRENCES : Art. 77 S2, Art. 115 S2, Guide IA 2023, Mack 1993, Clark 2003.
 5. ALERTES : Ne jamais minimiser. Présenter avec l'implication réelle pour le bilan S2.
 6. CAUSALITÉ : H1 rejetée (corr=0.52) → CL biaisé → BF retenu → impact X\u202f€ sur BE.
 7. INCERTITUDE : Toujours quantifier via CV ou intervalles de confiance.
@@ -1446,7 +1446,10 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     )
 
     # ── SECTION 4 : SCR ───────────────────────────────────────────────────────
-    sigma_eiopa = _s(sc.get('sigma_eiopa', '0,10') if sc else '0,10')  # depuis n4['scr']['sigma_eiopa']
+    # En pourcentage et à la décimale : deux segments ont un σ à trois chiffres
+    # significatifs (protection juridique 5,5 %, crédit 17,2 %) que l'affichage
+    # brut du flottant rendait illisible.
+    sigma_eiopa = _pct(float(sc.get('sigma_eiopa') or 0) * 100) if sc else '—'
     b['tableau_scr'] = (
         '<table class="premium"><thead><tr>'
         '<th>Composante</th><th class="center">Valeur</th><th>Référence réglementaire</th>'
@@ -1456,10 +1459,10 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         '<td>Réserve brute — actualisation S2 en aval (A10)</td></tr>'
         '<tr><td class="label">Facteur σ EIOPA</td>'
         '<td class="center"><span class="mono">' + sigma_eiopa + '</span></td>'
-        '<td>' + lob + ' — Annexe II, Règlement 2015/35</td></tr>'
+        '<td>' + lob + ' — ' + _s(sc.get('reference_s2', 'Annexes II / XIV, Règlement 2015/35') if sc else 'Annexes II / XIV, Règlement 2015/35') + '</td></tr>'
         '<tr><td class="label">SCR Provisions</td>'
         '<td class="center"><span class="mono" style="color:var(--rouge);font-weight:700;">' + _f(SCP) + '</span></td>'
-        '<td>SCR = 3 × σ(LoB) × BE — Art. 105</td></tr>'
+        '<td>SCR = 3 × σ(LoB) × BE — Art. 115</td></tr>'
         '<tr class="highlight-gold"><td class="label">Ratio SCR / BE</td>'
         '<td class="center" style="color:var(--rouge);font-weight:700;"><span class="mono">' + _pct(SCR) + '</span></td>'
         '<td>Cible pratique marché : &lt; 35\u202f%</td></tr>'
@@ -2022,7 +2025,7 @@ def export_html(
             + '\n</div>\n<div class="section-divider"></div>\n\n'
 
             # Section 4
-            '<div class="section-header"><span class="section-num">04</span><span class="section-titre">SCR Provisions — Art. 105 Solvabilité 2</span></div>\n'
+            '<div class="section-header"><span class="section-num">04</span><span class="section-titre">SCR Provisions — Art. 115 Règlement délégué 2015/35</span></div>\n'
             '<div class="section-body">\n'
             + b['tableau_scr']
             + '\n</div>\n<div class="section-divider"></div>\n\n'
@@ -2184,7 +2187,11 @@ def export_word(n1, n2, n3, n4,
         CV  = float(n4.get('cv_inter_methodes',0) or 0)
         SCP = float(sc.get('scr_provisions', sc.get('scr_prov', BE*0.30)) if sc else BE*0.30)
         SCR = SCP/BE*100 if BE else 0
-        SIG_EIOPA = _s(sc.get('sigma_eiopa', '0,10') if sc else '0,10')  # dynamique — cf. version HTML (L1166)
+        # En pourcentage et à la décimale : deux segments ont un σ à trois
+        # chiffres significatifs (protection juridique 5,5 %, crédit 17,2 %).
+        SIG_EIOPA = _pct(float(sc.get('sigma_eiopa') or 0) * 100) if sc else '—'
+        REF_S2 = _s(sc.get('reference_s2', 'Annexes II / XIV, Rgt 2015/35')
+                    if sc else 'Annexes II / XIV, Rgt 2015/35')
 
         doc = Document()
         for s in doc.sections:
@@ -2316,11 +2323,11 @@ def export_word(n1, n2, n3, n4,
         if rows_h: _tbl(['Hypothèse','Résultat','Score','Message'],rows_h,ws=[4.5,2.5,1.2,7.8])
         doc.add_page_break()
 
-        _h('4. SCR Provisions — Art. 105 S2'); _sep()
+        _h('4. SCR Provisions — Art. 115 Rgt délégué (UE) 2015/35'); _sep()
         _tbl(['Composante','Valeur','Référence'],
              [['Best Estimate (brut)',_f(BE),'Art. 77 — avant actualisation'],
-              ['Facteur σ EIOPA',SIG_EIOPA,'Annexe II, Rgt 2015/35'],
-              ['SCR Provisions',_f(SCP),'3 × σ × BE'],
+              ['Facteur σ — risque de réserve',SIG_EIOPA,REF_S2],
+              ['SCR Provisions',_f(SCP),'3 × σ × BE — Art. 115'],
               ['Ratio SCR/BE',_pct(SCR),'< 35 %']],ws=[4.5,3.5,8.0])
         doc.add_page_break()
 

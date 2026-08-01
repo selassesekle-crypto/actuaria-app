@@ -11,8 +11,20 @@
 #    courbe RFR EIOPA — la « valeur actuelle » au sens de l'Art. 77 — est opérée
 #    en aval par A10 (Solvabilité 2) et A11 (IFRS 17, à son propre taux).
 #
-#  Règlement Délégué (UE) 2015/35, Art. 105 :
-#    SCR provisions Non-Vie = formule standard par LoB
+#    ⚠️ BRUTE AU SECOND SENS AUSSI : brute de RÉASSURANCE. Cela a une
+#    conséquence sur le SCR, et elle est chiffrable. L'Art. 116(6) du
+#    Règlement délégué définit la mesure de volume du risque de réserve
+#    comme la meilleure estimation des provisions pour sinistres à payer
+#    « après déduction des montants recouvrables au titre des contrats de
+#    réassurance et des véhicules de titrisation ». Le SCR publié ici
+#    s'applique donc à une assiette PLUS LARGE que celle du texte : c'est un
+#    MAJORANT, d'autant plus élevé que la cession est importante. La
+#    réassurance n'est pas dans le périmètre d'A7 — A10 opère en aval.
+#
+#  Règlement Délégué (UE) 2015/35, Art. 115 à 117 :
+#    SCR provisions Non-Vie = formule standard par segment
+#    (l'Art. 105 DU RÈGLEMENT porte sur le risque de spread des captives —
+#     la confusion venait de l'Art. 105 de la DIRECTIVE 2009/138/CE)
 #
 #  EIOPA Guidelines on valuation of technical provisions (2014) :
 #    TP.5.26 — distribution log-normale pour IBNR
@@ -41,7 +53,7 @@
 #      μ_LN = ln(BE) - σ²_LN / 2
 #      P_α  = exp(μ_LN + z_α × σ_LN)
 #
-#  SCR provisions formule standard (Art. 105 S2)
+#  SCR provisions formule standard (Art. 115 Rgt délégué 2015/35)
 #  ───────────────────────────────────────────────
 #  Pour une seule LoB :
 #
@@ -51,8 +63,14 @@
 #
 #      SCR_NL = √(Σ_{i,j} ρ_{ij} × SCR_i × SCR_j)
 #
-#  où σ(LoB) est le facteur de volatilité EIOPA (Annexe II, Rgt 2015/35)
-#  et ρ_{ij} la corrélation entre LoB i et j (Annexe IV, Rgt 2015/35).
+#  où σ(LoB) est l'écart type du risque de RÉSERVE du segment (annexe II pour
+#  le non-vie, annexe XIV pour la santé non-SLT) et ρ_{ij} la corrélation
+#  entre LoB i et j (Annexe IV, Rgt 2015/35).
+#
+#  Le σ est celui de la réserve et non celui des primes parce que l'Art. 117(2)
+#  se réduit exactement à σ_réserve quand la mesure de volume des primes est
+#  nulle — c'est le cas d'un agent qui provisionne des sinistres survenus.
+#  Démonstration et source dans l'en-tête de `config/lob_config.py`.
 #
 # =============================================================================
 
@@ -62,7 +80,8 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
-from .config.lob_config import get_lob_config, get_sigma_eiopa, CORRELATION_EIOPA
+from .config.lob_config import (get_lob_config, get_sigma_eiopa, reference_s2,
+                                CORRELATION_EIOPA)
 from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
 from .config.rfr_eiopa  import (get_taux_rfr, DATE_COURBE,
                                 get_courbe_embarquee, diagnostic_peremption)
@@ -401,7 +420,7 @@ class BestEstimateS2:
       · Sélection des méthodes admises, année par année (couvertures CLM + BFCC)
       · Poids égaux entre méthodes admises — choix assumé, pas une calibration
       · Percentiles log-normale (QIS5 TP.5.26)
-      · SCR provisions formule standard (Art. 105 S2)
+      · SCR provisions formule standard (Art. 115 S2)
       · Sensibilités aux hypothèses clés
       · Jugement actuariel documenté (style rapport ORSA)
     """
@@ -586,7 +605,7 @@ class BestEstimateS2:
         sigma_modele_val       = round(sigma_modele, 2)
         sigma_total_compose_val = round(sigma_total_compose, 2)
 
-        # ── 6. SCR provisions formule standard (Art. 105 S2) ──────────────────
+        # ── 6. SCR provisions formule standard (Art. 115 S2) ──────────────────
         scr = self._calculer_scr(be, lob, cfg)
 
         # ── 7. Risk Margin S2 (Art. 77 §5) ───────────────────────────────────
@@ -929,7 +948,7 @@ class BestEstimateS2:
         return resultat
 
     # =========================================================================
-    #  SCR PROVISIONS FORMULE STANDARD (Art. 105 S2)
+    #  SCR PROVISIONS FORMULE STANDARD (Art. 115 S2)
     # =========================================================================
 
     def _calculer_scr(
@@ -941,12 +960,23 @@ class BestEstimateS2:
         """
         SCR provisions formule standard pour une LoB unique.
 
-        Art. 105(2) Règlement Délégué 2015/35 :
+        Art. 115 du Règlement Délégué (UE) 2015/35 :
 
             SCR_prov(LoB) = 3 × σ(LoB) × BE(LoB)
 
-        σ(LoB) = facteur de volatilité EIOPA (Annexe II, Rgt 2015/35).
-        Le facteur 3 correspond au quantile 99.5% d'une loi normale.
+        σ(LoB) = écart type du risque de RÉSERVE du segment (art. 117 ; valeurs
+        à l'annexe II pour le non-vie, à l'annexe XIV pour la santé non-SLT).
+        Le facteur 3 correspond au quantile 99,5 % d'une loi normale.
+
+        ⚠️ CE N'EST PAS L'ARTICLE 105. L'art. 105 du Règlement délégué porte
+        sur le calcul simplifié du risque de spread des entreprises captives.
+        C'est l'art. 105 de la DIRECTIVE 2009/138/CE qui décrit les modules du
+        SCR ; la formule est à l'art. 115 du Règlement.
+
+        ⚠️ LE BE EST BRUT. L'art. 116(6) définit la mesure de volume du risque
+        de réserve nette des montants recouvrables au titre de la réassurance,
+        alors que le BE d'A7 est brut : le SCR publié est un MAJORANT sur cet
+        axe. La cession relève d'A10, en aval.
 
         Pour plusieurs LoB : agrégation avec matrice corrélation EIOPA.
         Ici, calcul mono-LoB — l'agrégation multi-LoB est prévue
@@ -954,7 +984,7 @@ class BestEstimateS2:
 
         Returns
         -------
-        dict avec scr_provisions, sigma_eiopa, lob, methode.
+        dict avec scr_provisions, sigma_eiopa, reference_s2, lob, methode.
         """
         sigma_eiopa  = get_sigma_eiopa(lob)
         scr_prov     = 3.0 * sigma_eiopa * be
@@ -968,9 +998,16 @@ class BestEstimateS2:
             'ratio_scr_be':     round(ratio,        4),
             'lob':              lob,
             'lob_label':        cfg.get('label', lob),
-            'methode':          'Formule standard Art. 105 S2 (Rgt 2015/35)',
+            # La traçabilité voyage AVEC le résultat : les livrables citaient
+            # « Annexe II » en dur, ce qui devient faux dès qu'une LoB relève
+            # de la santé non-SLT (annexe XIV).
+            'reference_s2':     reference_s2(lob),
+            'methode':          'Formule standard Art. 115 (Rgt délégué (UE) 2015/35)',
             'message': (
-                f"SCR_prov = 3 × {sigma_eiopa:.0%} × {be:,.0f}€ "
+                # .1% et non .0% : deux segments ont un σ à trois chiffres
+                # significatifs (protection juridique 5,5 %, crédit 17,2 %) que
+                # l'arrondi à l'entier faisait disparaître.
+                f"SCR_prov = 3 × {sigma_eiopa:.1%} × {be:,.0f}€ "
                 f"= {scr_prov:,.0f}€ "
                 f"(ratio SCR/BE = {ratio:.1%})"
             ),
@@ -1254,7 +1291,7 @@ class BestEstimateS2:
             f"  CV inter-méthodes : {cv:>15.1f} %"
             f"  {'(acceptable)' if cv < 5 else '(à surveiller)' if cv < 15 else '(élevé)'}",
             "",
-            "4. SCR PROVISIONS (Art. 105 S2)",
+            "4. SCR PROVISIONS (Art. 115 S2)",
             "─" * 40,
             f"  {scr['message']}",
             f"  Ratio SCR/BE      : {scr['ratio_scr_be']:.1%}",

@@ -650,7 +650,7 @@ def _s7_scr(n4: Dict) -> str:
     ratio    = scr.get('ratio_scr_be', 0)
 
     lignes = [
-        f"SCR PROVISIONS — FORMULE STANDARD (Art. 105 Règlement 2015/35)",
+        f"SCR PROVISIONS — FORMULE STANDARD (Art. 115 Règlement 2015/35)",
         "",
         f"Pour la branche {lob_lbl} :",
         f"  SCR_prov = 3 × σ(LoB) × BE",
@@ -660,9 +660,9 @@ def _s7_scr(n4: Dict) -> str:
         "",
         f"Le facteur 3 correspond au quantile 99.5% d'une loi normale "
         f"standardisée, conformément à la calibration EIOPA.",
-        f"Le facteur σ(LoB) = {_p(sigma_e*100)} est le facteur de volatilité "
-        f"réglementaire EIOPA pour cette branche "
-        f"(Annexe II, Règlement Délégué UE 2015/35).",
+        f"Le facteur σ(LoB) = {_p(sigma_e*100)} est l'écart type réglementaire "
+        f"du risque de RÉSERVE du segment dont relève cette branche "
+        f"— {scr.get('reference_s2', 'annexes II / XIV, Règlement Délégué UE 2015/35')}.",
         "",
         f"IMPORTANT : Le SCR calculé ici est le SCR provisions isolé "
         f"(une seule LoB). L'agrégation avec les autres LoB se fait "
@@ -744,7 +744,7 @@ def _s8_recommandations(n1: Dict, n2: Dict, n3: Dict, n4: Dict, lob: str) -> str
         lignes += [
             f"1. Transmettre {_e(be)} (réserve brute) à A10 pour actualisation avant inscription au bilan S2 (Art. 77).",
             f"2. Retenir {_e(p90)} pour le calcul du SCR provisions "
-            f"   (stress test P90, formule standard Art. 105).",
+            f"   (stress test P90, formule standard Art. 115).",
             f"3. SCR provisions calculé : {_e(scr_prov)}.",
             f"4. Documenter la méthodologie et les hypothèses dans le rapport "
             f"   actuaire désigné.",
@@ -1786,7 +1786,7 @@ def generer_commentaire(
         "§4 — ANALYSE DES MÉTHODES":         s4,
         "§5 — BEST ESTIMATE (réserve brute, Art. 77)": s5,
         "§6 — INCERTITUDE DE RÉSERVE":       s6,
-        "§7 — SCR PROVISIONS (Art. 105 S2)": s7,
+        "§7 — SCR PROVISIONS (Art. 115 S2)": s7,
         "§8 — RECOMMANDATIONS":              s8,
     }
 

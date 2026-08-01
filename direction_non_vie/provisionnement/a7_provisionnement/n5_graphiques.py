@@ -813,8 +813,8 @@ def g7_scr_donut(n4: Dict) -> 'go.Figure':
             height=380,
             title=dict(
                 text=(
-                    f"SCR provisions — Formule standard Art. 105 S2 · "
-                    f"σ(LoB)={scr.get('sigma_eiopa',0):.0%} · "
+                    f"SCR provisions — Formule standard Art. 115 S2 · "
+                    f"σ(LoB)={scr.get('sigma_eiopa',0):.1%} · "
                     f"{scr.get('lob_label','—')}"
                 ),
                 font=dict(color=OR, size=12),

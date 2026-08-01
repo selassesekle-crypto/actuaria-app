@@ -1057,8 +1057,23 @@ class T19_BE_Negatif_Livrables_Et_RM(unittest.TestCase):
         # le BE GenIns passe de 21 023 363 à 18 680 856 parce que BF et Cape Cod
         # ne tournent plus sans mesure d'exposition. La relation testée — recalcul
         # à neuf ≡ proratisation — n'a toujours pas bougé.
-        self.assertAlmostEqual(r['n4']['risk_margin'], 2_705_961, delta=1)
-        print("    OK T19c LLT normal : RM = 2 705 961 (recalcul ≡ proratisation)")
+        #
+        # CONSTANTE MISE À JOUR UNE QUATRIÈME FOIS — lot B10-a :
+        # 2 705 961 → 2 480 464. ET POUR LA PREMIÈRE FOIS CE N'EST PAS LE BE
+        # QUI BOUGE — il vaut toujours 18 680 856. C'est σ.
+        # Le test tourne en `lob='generique'`, rattachée au segment II-5
+        # « RC générale ». Son écart type de risque de RÉSERVE vaut 11 % au
+        # Règlement délégué (UE) 2015/35, annexe II p.389 (texte consolidé au
+        # 02.08.2022) ; A7 en portait 12 %, sans source. La Risk Margin étant
+        # linéaire en SCR, donc en σ, le rapport attendu est exactement 11/12 :
+        #     2 705 961 × 11 / 12 = 2 480 464,25  →  2 480 464
+        # et c'est la valeur mesurée, à l'euro.
+        # LA RELATION TESTÉE N'A TOUJOURS PAS BOUGÉ — recalcul à neuf ≡
+        # proratisation ; seule son entrée a été corrigée. Les σ sont désormais
+        # épinglés à leur segment officiel par test_a7_sigma_s2.py, qui rend
+        # une nouvelle dérive silencieuse impossible.
+        self.assertAlmostEqual(r['n4']['risk_margin'], 2_480_464, delta=1)
+        print("    OK T19c LLT normal : RM = 2 480 464 (recalcul ≡ proratisation)")
 
 
 # =============================================================================

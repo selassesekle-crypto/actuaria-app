@@ -10,7 +10,7 @@
 #  N2 — Hypothèses H1/H2/H3/H4 (n2_hypotheses.HypothesesValidator)
 #  N3 — Méthodes actuarielles (n3/chain_ladder, mack, bf_cape_cod,
 #                               bootstrap_odp, munich_cl)
-#  N4 — Best Estimate S2 + SCR Art.105 (n4_best_estimate.BestEstimateS2)
+#  N4 — Best Estimate S2 + SCR Art.115 (n4_best_estimate.BestEstimateS2)
 #  N5 — Livrables (graphiques, commentaire, Excel, Word, PDF)
 #
 #  Interface publique inchangée vs v4.0 :
@@ -568,7 +568,7 @@ class AgentA7Provisionnement:
                 # / RM / PT restaient calculés sur l'attritional → PT S2 < BE_final
                 # (aberrant sous Solvabilité 2).
 
-                # 1. SCR formule standard (Art. 105) : 3 × σ_eiopa × BE_final
+                # 1. SCR formule standard (Art. 115) : 3 × σ_eiopa × BE_final
                 _sig_eiopa = float(n4['scr']['sigma_eiopa'])
                 _scr_new   = 3.0 * _sig_eiopa * _be_final
                 _ratio_scr = _scr_new / max(_be_final, 1e-9)

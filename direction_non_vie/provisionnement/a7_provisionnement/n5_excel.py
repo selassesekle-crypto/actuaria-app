@@ -12,7 +12,7 @@
 #  6. Validation hypothèses — H1/H2/H3/H4 avec statuts colorés
 #  7. Bootstrap ODP         — percentiles + distribution (stats)
 #  8. Comparatif N-1/N      — variation BE / IBNR / LR entre arrêtés
-#  9. SCR formule standard  — Art. 105 S2 avec facteurs EIOPA
+#  9. SCR formule standard  — Art. 115 S2 avec facteurs EIOPA
 # 10. Sensibilités          — tornado des impacts sur BE
 #
 #  Style : palette Navy/Gold ActuarIA, polices Arial, formats €/%
@@ -193,7 +193,7 @@ def _ong1_synthese(wb, n1, n2, n3, n4, ref_client, date_str):
         _kpi(ws, 4+i, 1, lbl, val, fmt, st)
 
     # Bloc SCR
-    _titre_section(ws, 11, 1, "SCR PROVISIONS (Art. 105 S2)", 6)
+    _titre_section(ws, 11, 1, "SCR PROVISIONS (Art. 115 S2)", 6)
     scr = n4.get('scr', {})
     _kpi(ws, 12, 1, "SCR Provisions",            scr.get('scr_provisions', 0), FMT_NB)
     _kpi(ws, 13, 1, "Facteur σ(LoB) EIOPA",     scr.get('sigma_eiopa', 0),   FMT_PCT2)
@@ -858,7 +858,7 @@ def _ong9_scr(wb, n4):
     ws.sheet_view.showGridLines = False
 
     scr = n4.get('scr', {})
-    _titre_section(ws, 1, 1, "SCR Provisions — Formule standard Art. 105 Règlement Délégué (UE) 2015/35", 4)
+    _titre_section(ws, 1, 1, "SCR Provisions — Formule standard Art. 115 Règlement Délégué (UE) 2015/35", 4)
 
     # Bloc calcul
     _titre_section(ws, 3, 1, "CALCUL SCR PROVISIONS (LoB unique)", 4)
@@ -869,9 +869,11 @@ def _ong9_scr(wb, n4):
 
     rows_scr = [
         ("Best Estimate (BE)",          n4.get('best_estimate',0),        FMT_NB,    "Art. 77 Directive S2",         "Espérance flux futurs"),
-        ("Facteur σ(LoB) EIOPA",        scr.get('sigma_eiopa',0),         FMT_PCT2,  "Annexe II Rgt 2015/35",        "Volatilité réglementaire LoB"),
-        ("Facteur multiplicatif",        3.0,                              "0.0",     "Art. 105(2) Rgt 2015/35",      "Quantile 99.5% loi normale"),
-        ("SCR_prov = 3 × σ × BE",       scr.get('scr_provisions',0),      FMT_NB,    "Art. 105 S2",                  "Exigence de capital provisions"),
+        # La source du σ est celle du RÉSULTAT, plus une constante : elle vaut
+        # « Annexe XIV » pour une LoB de santé non-SLT, où « Annexe II » mentait.
+        ("Facteur σ(LoB) — réserve",    scr.get('sigma_eiopa',0),         FMT_PCT2,  scr.get('reference_s2','Annexes II / XIV Rgt 2015/35'), "Écart type risque de réserve, art. 117"),
+        ("Facteur multiplicatif",        3.0,                              "0.0",     "Art. 115 Rgt 2015/35",         "Quantile 99.5% loi normale"),
+        ("SCR_prov = 3 × σ × BE",       scr.get('scr_provisions',0),      FMT_NB,    "Art. 115 Rgt 2015/35",         "Exigence de capital provisions"),
         ("Ratio SCR/BE",                scr.get('ratio_scr_be',0),         FMT_PCT,   "Indicateur de pilotage",       ""),
         ("Branche (LoB)",               scr.get('lob_label','—'),          None,      "Classification EIOPA",         ""),
         ("Méthode",                     scr.get('methode','—'),             None,      "Règlement Délégué 2015/35",    ""),

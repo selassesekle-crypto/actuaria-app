@@ -322,8 +322,12 @@ class T5_LoB_Distinguables(unittest.TestCase):
     def test_elles_diffèrent_bien_sur_le_regime_de_queue(self):
         a, b = (get_lob_config(k) for k in self.PAIRE)
         self.assertNotEqual(a['risque_long'], b['risque_long'])
-        self.assertEqual(a['lob_eiopa'], b['lob_eiopa'],
-                         "même LoB Solvabilité II — la différence est la queue")
+        # `lob_eiopa` (texte libre) a fusionné avec `sigma_eiopa` dans un champ
+        # unique `segment_s2` au lot B10-a : les deux se contredisaient sur
+        # trois LoB sur quinze. L'intention du test est inchangée, elle est
+        # seulement exprimée sur le segment officiel plutôt que sur un libellé.
+        self.assertEqual(a['segment_s2'], b['segment_s2'],
+                         "même segment Solvabilité II — la différence est la queue")
         self.assertEqual(a['sigma_eiopa'], b['sigma_eiopa'])
         print(f"    OK LIV-17 même LoB S2 et même σ, risque_long "
               f"{a['risque_long']} contre {b['risque_long']}")
