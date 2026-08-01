@@ -1240,42 +1240,72 @@ class T21_Munich_Source_Unique_Facteurs(unittest.TestCase):
         self.assertAlmostEqual(r['facteurs_cl_engage'][2], 0.9400, places=4)  # était 1.0
         print("    OK T21c recours : f_payé=0.8913 et f_engagé=0.9400 conservés (étaient 1.0)")
 
-    def test_chaine_lambda_estimee_depuis_la_source_honnete(self):
-        """CHAÎNE COMPLÈTE — les facteurs entrent dans les résidus de λ
-        (munich_cl.py, r_P = C[i,j+1]/C[i,j] − f[j]). On vérifie que λ est estimé
-        à partir des facteurs HONNÊTES, et que ce choix est bien discriminant :
-        les facteurs planchés donnent un λ différent."""
+    def test_chaine_lambda_scalaire_poole_sur_le_triangle(self):
+        """CHAÎNE COMPLÈTE — λ est un SCALAIRE poolé, et les cellules en reprise
+        sont écartées de SON ESTIMATION sans quitter la PROJECTION.
+
+        ⚠️ LEVIER CHANGÉ À LA RECONSTRUCTION. Ce test comparait auparavant un λ
+        estimé sur facteurs honnêtes à un λ estimé sur facteurs planchés, en les
+        injectant dans `_calculer_lambda(C_P, C_E, f_P, f_E)`. Les facteurs ne
+        sont plus un paramètre : Quarg & Mack les estiment colonne par colonne
+        sur l'intersection exploitable, à l'intérieur du calcul. Le SUJET
+        survit — λ ne doit rien devoir à un plancher — mais il se vérifie
+        désormais sur la séparation estimation / projection.
+        """
         P, E = _MCL_LAM_P, _MCL_LAM_E
-        f_P, f_E = calculer_facteurs(P)[0], calculer_facteurs(E)[0]
+        f_P, _ = calculer_facteurs(P)
         self.assertLess(min(f_P), 1.0, "la fixture doit exercer un facteur < 1")
 
-        lam_honnete = _mcl_lambda(P, E, f_P, f_E)
-        lam_planche = _mcl_lambda(P, E, np.maximum(f_P, 1.0), np.maximum(f_E, 1.0))
-        # le cas est bien discriminant (sinon le test ne prouverait rien)
-        self.assertFalse(np.allclose(lam_honnete[1], lam_planche[1]),
-                         "fixture non discriminante : λ identique dans les deux cas")
+        lam_P, lam_E, stats, diag = _mcl_lambda(np.asarray(P, float),
+                                                np.asarray(E, float))
+        # λ est un scalaire par côté, pas un vecteur par colonne
+        self.assertIsInstance(lam_P, float)
+        self.assertIsInstance(lam_E, float)
+        self.assertGreaterEqual(diag['n_paires'], 5)
 
+        # la CELLULE en reprise est écartée de l'estimation de λ — pas toute la
+        # colonne : les autres années de cette colonne restent exploitables.
+        j_rec = int(np.argmin(f_P))
+        i_rec = next(i for i in range(np.asarray(P).shape[0])
+                     if np.asarray(P, float)[i, j_rec + 1] < np.asarray(P, float)[i, j_rec])
+        self.assertIn(j_rec, stats,
+                      "la colonne entière ne doit pas être perdue")
+        self.assertNotIn(i_rec, stats[j_rec]['idx'],
+                         "la cellule en reprise ne doit pas nourrir λ")
+        # ...mais le facteur < 1 arrive bien jusqu'au résultat publié
         r = munich_cl(P, E, annee_base=0)
-        for cle, idx in (('lambda_P', 0), ('lambda_E', 1)):
-            obtenu = [float(v) for v in r[cle]]
-            np.testing.assert_allclose(obtenu, lam_honnete[idx], atol=1e-4,
-                                       err_msg=f"{cle} n'est pas estimé depuis la source unique")
-        self.assertFalse(np.allclose([float(v) for v in r['lambda_E']],
-                                     lam_planche[1], atol=1e-4),
-                         "λ_E correspond encore aux facteurs planchés")
-        print(f"    OK T21d chaîne λ : λ_E[1]={r['lambda_E'][1]} (honnête) "
-              f"≠ {round(float(lam_planche[1][1]), 4)} (planché)")
+        self.assertAlmostEqual(r['lambda_P'], lam_P, places=4)
+        self.assertAlmostEqual(r['lambda_E'], lam_E, places=4)
+        self.assertTrue(any(f < 1.0 for f in r['facteurs_munich_paye']),
+                        "le facteur < 1 doit survivre a la projection")
+        print(f"    OK T21d chaîne λ : scalaire {r['lambda_P']:+.4f} sur "
+              f"{diag['n_paires']} paires, colonne {j_rec} écartée de l'estimation")
 
-    def test_triangle_sain_strictement_inchange(self):
-        """Non-régression : sans aucun facteur < 1, la chaîne Munich complète est
-        identique à l'avant-lot (valeurs relevées avant modification)."""
+    def test_triangle_sain_chaine_complete(self):
+        """Chaîne Munich complète sur un triangle sain.
+
+        ⚠️ ORACLES RENOUVELÉS À LA RECONSTRUCTION Quarg & Mack. Les anciens
+        (λ_P = [2.0, 0.0, 0.0], f* = [2.1106, …], be = 375.71) venaient d'un
+        modèle dont l'audit a prouvé qu'il n'était pas Munich Chain Ladder :
+        λ y était estimé colonne par colonne sur 3 points, borné à [0, 2] — le
+        2.0 est un PLAFOND ATTEINT, pas une estimation — et l'ajustement ne
+        dépendait pas de l'année de survenance.
+
+        Le Chain Ladder de référence, lui, est INCHANGÉ : c'est la preuve que
+        la reconstruction n'a pas débordé de Munich.
+        """
         r = munich_cl(_MCL_PAYE, _MCL_ENG_SAIN, annee_base=0)
+        # inchangés — chain-ladder pur
         self.assertEqual(r['facteurs_cl_paye'],     [1.7273, 1.2632, 1.1304])
-        self.assertEqual(r['lambda_P'],             [2.0, 0.0, 0.0])
-        self.assertEqual(r['facteurs_munich_paye'], [2.1106, 1.2632, 1.1304])
-        self.assertAlmostEqual(r['be_munich_paye'], 375.71, places=2)
         self.assertAlmostEqual(r['be_cl_paye'],     304.55, places=2)
-        print("    OK T21e triangle sain : chaîne Munich identique bit à bit")
+        # λ est désormais un SCALAIRE, poolé sur toutes les paires
+        self.assertIsInstance(r['lambda_P'], float)
+        self.assertAlmostEqual(r['lambda_P'], -0.8563, places=4)
+        self.assertAlmostEqual(r['lambda_E'],  0.9604, places=4)
+        self.assertEqual(r['diagnostic_lambda']['n_paires'], 5)
+        self.assertEqual(r['facteurs_munich_paye'], [1.7295, 1.2636, 1.1304])
+        self.assertAlmostEqual(r['be_munich_paye'], 306.39, places=2)
+        print("    OK T21e triangle sain : chaîne Munich Quarg & Mack complète")
 
     def test_verrous_2_et_3_retires_chantier_complet(self):
         """État FINAL du chantier Munich (Lot C3) : les trois verrous IBNR sont
@@ -1304,9 +1334,10 @@ class T22_Munich_Verrou2_Retire(unittest.TestCase):
         self.assertEqual(r['facteurs_munich_sous_1_engage'], [])
         self.assertEqual(r['facteurs_degeneres_paye'], [])
         self.assertEqual(r['facteurs_degeneres_engage'], [])
-        self.assertAlmostEqual(r['be_munich_paye'],   375.71, delta=0.01)
-        self.assertAlmostEqual(r['be_munich_engage'], 250.13, delta=0.01)
-        print("    OK T22a sain : retrait du verrou = no-op (be_munich 375.71/250.13, rien signalé)")
+        # oracles renouveles a la reconstruction Quarg & Mack (etaient 375.71 / 250.13)
+        self.assertAlmostEqual(r['be_munich_paye'],   306.39, delta=0.01)
+        self.assertAlmostEqual(r['be_munich_engage'], 180.27, delta=0.01)
+        print("    OK T22a sain : retrait du verrou = no-op (be_munich 306.39/180.27, rien signalé)")
 
     def test_recours_f_star_sous_1_conserve_et_signale(self):
         """(b) Recours — le vrai sujet de C2 : un f* < 1 (ajusté) est CONSERVÉ et
@@ -1323,16 +1354,23 @@ class T22_Munich_Verrou2_Retire(unittest.TestCase):
         print("    OK T22b recours : f*<1 (ajusté) conservé et signalé (valeur → T23)")
 
     def test_garde_f_star_negatif_repli_cl(self):
-        """(c) Garde résiduelle f* ≤ 0 : jamais atteinte naturellement (min 0.67 sur
-        12 000 paires). Exercée ARTIFICIELLEMENT en forçant λ = 50 (monkeypatch)
-        pour saturer l'ajustement → f* ≤ 0 → repli sur le facteur CL (toujours > 0)."""
+        """(c) Garde résiduelle f* ≤ 0, désormais AU NIVEAU DE LA CELLULE.
+
+        ⚠️ LEVIER CHANGÉ À LA RECONSTRUCTION : `_calculer_lambda` rend
+        maintenant (λ_P scalaire, λ_I scalaire, stats par colonne, diagnostic),
+        et la garde s'applique à la cellule (i,j) et non plus à toute la
+        colonne — un seul couple année/colonne retombe sur le facteur Chain
+        Ladder, les autres gardent leur ajustement. Le SUJET est intact : un
+        crochet ≤ 0 ne doit jamais produire d'ultime nul ou négatif.
+
+        Exercée ARTIFICIELLEMENT (λ = −50) : jamais atteinte naturellement.
+        """
         from direction_non_vie.provisionnement.a7_provisionnement.n3 import munich_cl as _m
         _orig = _m._calculer_lambda
 
-        def _fake_lambda(C_P, C_E, f_P, f_E, lambda_max=2.0):
-            n, mm = C_P.shape
-            # λ énorme + Q_moy=0 → le code recalcule le vrai Q volumique (l.356-361)
-            return np.full(mm - 1, 50.0), np.full(mm - 1, 50.0), np.zeros(mm - 1)
+        def _fake_lambda(C_P, C_E):
+            _, _, stats, diag = _orig(C_P, C_E)
+            return -50.0, -50.0, stats, diag
 
         _m._calculer_lambda = _fake_lambda
         try:
@@ -1340,20 +1378,28 @@ class T22_Munich_Verrou2_Retire(unittest.TestCase):
         finally:
             _m._calculer_lambda = _orig
 
-        # la garde a sauté (f* aurait été ≤ 0 sur la colonne 2)
+        # la garde a sauté sur au moins une cellule
         self.assertTrue(r['facteurs_degeneres_paye'] or r['facteurs_degeneres_engage'],
-                        "la garde f* ≤ 0 aurait dû se déclencher avec λ = 50")
-        self.assertTrue(any(v <= 0 for v, in
-                            [(x[1],) for x in r['facteurs_degeneres_paye']]))
-        # repli propre : aucun f* projeté ≤ 0
+                        "la garde f* ≤ 0 aurait dû se déclencher avec λ = -50")
+        # chaque entrée est [i, j, valeur] et la valeur piégée est bien ≤ 0
+        for entree in r['facteurs_degeneres_paye'] + r['facteurs_degeneres_engage']:
+            self.assertEqual(len(entree), 3, "signalement attendu : [i, j, valeur]")
+            self.assertLessEqual(entree[2], 0.0)
+        # repli propre : aucun f* implicite ≤ 0
         self.assertTrue(all(f > 0 for f in r['facteurs_munich_paye']))
         self.assertTrue(all(f > 0 for f in r['facteurs_munich_engage']))
-        # le repli vaut bien le facteur CL non ajusté sur la cellule dégénérée
-        j0 = r['facteurs_degeneres_paye'][0][0]
-        self.assertAlmostEqual(r['facteurs_munich_paye'][j0],
-                               r['facteurs_cl_paye'][j0], places=4)
-        print(f"    OK T22c garde f*≤0 : dégénérescence {r['facteurs_degeneres_paye']} "
-              f"→ repli CL, tous f* > 0")
+        # le repli vaut le facteur CL non ajusté — vérifié SUR LA CELLULE, seule
+        # maille où la garde agit désormais.
+        for cle_cell, cle_cl, degen in (
+                ('facteurs_munich_paye_cellule',   'facteurs_cl_paye',
+                 r['facteurs_degeneres_paye']),
+                ('facteurs_munich_engage_cellule', 'facteurs_cl_engage',
+                 r['facteurs_degeneres_engage'])):
+            for i, j, _ in degen:
+                self.assertAlmostEqual(r[cle_cell][i][j], r[cle_cl][j], places=4,
+                                       msg=f"cellule ({i},{j}) : repli CL attendu")
+        print(f"    OK T22c garde f*≤0 : {len(r['facteurs_degeneres_paye'])} cellule(s) "
+              f"payé + {len(r['facteurs_degeneres_engage'])} engagé → repli CL")
 
 
 class T23_Munich_Verrou3_Retire_IBNR_Brut(unittest.TestCase):
@@ -1369,23 +1415,26 @@ class T23_Munich_Verrou3_Retire_IBNR_Brut(unittest.TestCase):
         self.assertEqual(r['n_annees_reprise_engage'], 0)
         self.assertEqual(r['reserve_brute_paye'], r['reserve_plancher_paye'])
         self.assertTrue(all(v >= 0 for v in r['ibnr_munich_paye']))
-        self.assertAlmostEqual(r['be_munich_paye'],   375.71, delta=0.01)
-        self.assertAlmostEqual(r['be_munich_engage'], 250.13, delta=0.01)
-        print("    OK T23a sain : pas de reprise, brut == plancher, be_munich inchangé")
+        # oracles renouveles a la reconstruction Quarg & Mack (etaient 375.71 / 250.13)
+        self.assertAlmostEqual(r['be_munich_paye'],   306.39, delta=0.01)
+        self.assertAlmostEqual(r['be_munich_engage'], 180.27, delta=0.01)
+        print("    OK T23a sain : pas de reprise, brut == plancher")
 
     def test_recours_be_munich_reflete_pleinement_la_reprise(self):
         """(b) Recours : be_munich PLEIN (verrou 3 retiré). Avant ce lot :
         202.83 / 156.81 (plancher). Après : 175.66 / 140.31 (brut). L'ancien
         plancher reste exposé pour l'écart."""
         r = munich_cl(_MCL_REC_P, _MCL_REC_E, annee_base=1)
-        self.assertAlmostEqual(r['be_munich_paye'],   175.66, delta=0.01)
-        self.assertAlmostEqual(r['be_munich_engage'], 140.31, delta=0.01)
+        # oracles renouveles a la reconstruction Quarg & Mack (etaient 175.66 / 140.31)
+        self.assertAlmostEqual(r['be_munich_paye'],   121.00, delta=0.01)
+        self.assertAlmostEqual(r['be_munich_engage'],  78.35, delta=0.01)
         # headline == réserve brute
         self.assertAlmostEqual(r['be_munich_paye'],   r['reserve_brute_paye'],   places=2)
         self.assertAlmostEqual(r['be_munich_engage'], r['reserve_brute_engage'], places=2)
         # l'ancien plancher (== be_munich d'avant C3) est exposé et strictement > brut
-        self.assertAlmostEqual(r['reserve_plancher_paye'],   202.83, delta=0.01)
-        self.assertAlmostEqual(r['reserve_plancher_engage'], 156.81, delta=0.01)
+        # etaient 202.83 / 156.81
+        self.assertAlmostEqual(r['reserve_plancher_paye'],   148.18, delta=0.01)
+        self.assertAlmostEqual(r['reserve_plancher_engage'],  94.85, delta=0.01)
         self.assertGreater(r['reserve_plancher_paye'], r['reserve_brute_paye'])
         print(f"    OK T23b recours : be_munich_paye {r['be_munich_paye']} plein "
               f"(plancher {r['reserve_plancher_paye']}), be_munich_engage {r['be_munich_engage']}")

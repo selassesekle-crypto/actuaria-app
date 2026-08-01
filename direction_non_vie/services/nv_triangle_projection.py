@@ -66,10 +66,8 @@ def projeter_ultimates(
     n, m = C.shape
     facteurs = np.asarray(facteurs, dtype=float)
 
-    ultimate      = np.zeros(n)
-    last_diag     = np.zeros(n)
-    ibnr_brut     = np.zeros(n)
-    ibnr_plancher = np.zeros(n)
+    ultimate  = np.zeros(n)
+    last_diag = np.zeros(n)
 
     for i in range(n):
         k_i = min(n - i - 1, m - 1)
@@ -80,10 +78,36 @@ def projeter_ultimates(
                 val *= float(facteurs[j])
         val *= tail_factor
 
-        last_diag[i]     = ld
-        ultimate[i]      = val
-        ibnr_brut[i]     = val - ld
-        ibnr_plancher[i] = max(val - ld, 0.0)
+        last_diag[i] = ld
+        ultimate[i]  = val
+
+    # IBNR, réserve et décompte des reprises : une seule définition, partagée
+    # avec Munich CL dont la projection ne passe pas par un vecteur de facteurs.
+    return comptabiliser(ultimate, last_diag, annee_base=annee_base)
+
+
+def comptabiliser(
+    ultimate:   np.ndarray,
+    last_diag:  np.ndarray,
+    *,
+    annee_base: int = 1,
+) -> Dict:
+    """Comptabilité IBNR / réserve, à partir d'ultimes DÉJÀ projetés.
+
+    Extrait de `projeter_ultimates` pour que Munich CL — dont la projection
+    est récursive et conjointe, donc incompatible avec un vecteur de facteurs —
+    partage EXACTEMENT les mêmes conventions de comptage : IBNR brut sans
+    plancher, réserve depuis `annee_base`, décompte des années en reprise.
+
+    Les deux appelants passent par ici : il n'existe qu'une seule définition de
+    « réserve » dans A7.
+    """
+    ultimate  = np.asarray(ultimate,  dtype=float)
+    last_diag = np.asarray(last_diag, dtype=float)
+    n         = len(ultimate)
+
+    ibnr_brut     = ultimate - last_diag
+    ibnr_plancher = np.maximum(ibnr_brut, 0.0)
 
     idx = max(0, min(int(annee_base), n - 1))
     return {

@@ -21,53 +21,79 @@
 #  Le CL standard ignore cette corrélation → divergence systématique entre
 #  projections payé et engagé.
 #
-#  Principe MCL
-#  ------------
-#  Pour chaque colonne j, les facteurs payé et engagé sont ajustés :
+#  Principe MCL — L'AJUSTEMENT EST PAR CELLULE, PAS PAR COLONNE
+#  ------------------------------------------------------------
+#  Chaque année de survenance reçoit son PROPRE facteur, selon SA position de
+#  règlement. Une année qui a moins payé que la moyenne, relativement à ce qui
+#  lui est reproché, doit rattraper : son facteur payé futur est révisé à la
+#  hausse. C'est tout le mécanisme, et il ne peut pas s'exprimer par un facteur
+#  unique appliqué à toutes les années.
 #
-#    f*_P[j] = f_P[j] + λ_P[j] × (Q_moy[j] - q̂_P[j])
-#    f*_E[j] = f_E[j] + λ_E[j] × (Q_moy[j] - q̂_E[j])
+#      P[i,j+1] = P[i,j] · [ f^P_j + λ_P · (σ^P_j / ρ^Q⁻¹_j) · (I[i,j]/P[i,j] − q⁻¹_j) ]
+#      I[i,j+1] = I[i,j] · [ f^I_j + λ_I · (σ^I_j / ρ^Q_j)   · (P[i,j]/I[i,j] − q_j)   ]
 #
-#  où  f_P[j], f_E[j] = facteurs CL standard payé/engagé
-#      λ_P[j], λ_E[j] = coefficients de régression (corrélation résidus)
-#      Q_moy[j]        = ratio payé/engagé moyen à la colonne j
-#      q̂_P[j]         = ratio Q prédit par le facteur payé seul
-#      q̂_E[j]         = ratio Q prédit par le facteur engagé seul
+#  ⚠️ LE CÔTÉ PAYÉ EST CONDITIONNÉ SUR Q⁻¹ = I/P, PAS SUR Q = P/I. Ce n'est pas
+#  un détail de notation : le signe de la corrélation en dépend. Une année qui
+#  paie lentement a Q bas et des facteurs payés futurs hauts — corrélation
+#  NÉGATIVE en Q, POSITIVE en Q⁻¹. Mesuré sur vérité connue : −1,000 contre
+#  +0,997. L'implémentation antérieure régressait sur Q puis bornait λ à [0, 2],
+#  ce qui ramenait systématiquement λ_P à zéro : Munich rendait Chain Ladder à
+#  la virgule près (réserve 1 775 contre 1 775, convergence +0,00 pt, sur un
+#  triangle construit pour qu'il ait tout à corriger).
 #
 #  Formules exactes Quarg-Mack 2004
 #  ----------------------------------
 #
-#  Facteurs CL standard (volume-weighted) :
+#  Facteurs et écarts-types résiduels (Mack), pour les DEUX triangles :
 #
-#      f_P[j] = Σ C_P[i,j+1] / Σ C_P[i,j]
-#      f_E[j] = Σ C_E[i,j+1] / Σ C_E[i,j]
+#      f^P_j     = Σ P[i,j+1] / Σ P[i,j]
+#      (σ^P_j)²  = 1/(k−1) · Σ P[i,j] · (P[i,j+1]/P[i,j] − f^P_j)²
 #
-#  Ratio de règlement :
-#      Q[i,j] = C_P[i,j] / C_E[i,j]    (si C_E[i,j] > 0)
+#  Ratios moyens et leurs écarts-types résiduels. Les pondérations ne sont pas
+#  symétriques et c'est voulu : Q = P/I a une variance conditionnelle en 1/I —
+#  on pondère par I ; Q⁻¹ = I/P varie en 1/P — on pondère par P.
 #
-#  Coefficients λ (Quarg-Mack 2004, eq. 4.2 et 4.3) :
+#      q_j        = Σ P[i,j] / Σ I[i,j]
+#      q⁻¹_j      = Σ I[i,j] / Σ P[i,j]
+#      (ρ^Q_j)²   = 1/(k−1) · Σ I[i,j] · (P[i,j]/I[i,j] − q_j)²
+#      (ρ^Q⁻¹_j)² = 1/(k−1) · Σ P[i,j] · (I[i,j]/P[i,j] − q⁻¹_j)²
 #
-#      λ_P[j] = Cov(r_P[i,j], r_Q[i,j]) / Var(r_Q[i,j])
-#      λ_E[j] = Cov(r_E[i,j], r_Q[i,j]) / Var(r_Q[i,j])
+#  Résidus STANDARDISÉS — sans dimension, ce qui autorise le pooling :
 #
-#  où r_P, r_E, r_Q sont les résidus normalisés des régressions respectives.
+#      Res(F^P[i,j]) = (P[i,j+1]/P[i,j] − f^P_j) / σ^P_j   · √P[i,j]
+#      Res(Q⁻¹[i,j]) = (I[i,j]/P[i,j]   − q⁻¹_j) / ρ^Q⁻¹_j · √P[i,j]
+#
+#  λ SCALAIRE, régression par l'origine sur TOUTES les paires du triangle :
+#
+#      λ_P = Σ Res(F^P)·Res(Q⁻¹) / Σ Res(Q⁻¹)²
+#      λ_I = Σ Res(F^I)·Res(Q)   / Σ Res(Q)²
+#
+#  Un λ par côté, pas un par colonne : une colonne fournit 3 à 7 observations,
+#  le triangle entier en fournit n(n−1)/2.
+#
+#  AUCUN ÉCRÊTAGE DE λ
+#  -------------------
+#  La standardisation lui donne une échelle : λ est une grandeur de type
+#  corrélation. Mesuré sur sept jeux (vérité connue de 0 % à 20 % de bruit,
+#  plus les triangles de référence) : λ ∈ [−0,856 ; +0,999], et λ ≈ corr dans
+#  chaque cas. Le cap [0, 2] de l'implémentation antérieure portait sur une
+#  pente BRUTE sans échelle — d'où un λ de 3,26 mesuré, écrêté à 2,0. Un λ
+#  négatif est une information, pas une anomalie à taire.
+#  Le seul garde-fou survivant porte sur le RÉSULTAT : si le crochet devient
+#  ≤ 0 sur une cellule, cette cellule seule retombe sur f^P_j non ajusté.
 #
 #  Conditions d'activation
 #  -----------------------
-#  Munich CL nécessite :
 #    1. Triangle engagé fourni et de même dimension que le payé
-#    2. C_E[i,j] ≥ C_P[i,j] pour tout i,j  (engagé ≥ payé)
-#    3. Au moins 4 années de survenance (sinon λ non estimable)
-#    4. Q[i,j] ∈ [0,1] pour la majorité des cellules
+#    2. C_E[i,j] ≥ C_P[i,j] sur la majorité des cellules (⇔ Q ≤ 1)
+#    3. Assez de PAIRES exploitables pour estimer λ (cf. MCL_PAIRES_MIN)
 #
-#  Si ces conditions ne sont pas remplies → méthode désactivée avec message.
-#
-#  Note sur la v4.0
-#  ----------------
-#  En v4.0, λ était cappé arbitrairement à 0.30 sans justification.
-#  En v5.0 : λ estimé par régression conforme Quarg-Mack 2004, sans cap.
-#  Un cap de sécurité [0, 2.0] est appliqué uniquement pour éviter les
-#  instabilités numériques sur petits triangles.
+#  ⚠️ La condition « au moins 4 années » a disparu, et sa disparition est une
+#  conséquence directe du λ scalaire : elle se justifiait par « λ non estimable
+#  avec < 4 observations », ce qui valait quand λ s'estimait COLONNE PAR
+#  COLONNE. Un λ poolé s'estime sur les paires du triangle entier ; le seuil
+#  porte donc désormais sur ce qui est réellement nécessaire — le nombre de
+#  paires — et il est vérifié sur les données, pas déduit de la forme.
 #
 # =============================================================================
 
@@ -76,12 +102,25 @@ from typing import Dict, Optional, Tuple
 
 import numpy as np
 
-from direction_non_vie.services.nv_triangle_projection import projeter_ultimates
+from direction_non_vie.services.nv_triangle_projection import (
+    comptabiliser, projeter_ultimates)
 # Source UNIQUE des facteurs de développement dans A7 : Munich avait sa propre
 # copie, restée bloquée sur l'ancien plancher f ≥ 1 après son retrait du Lot 2.
 from .chain_ladder import calculer_facteurs
 
 logger = logging.getLogger('actuaria.a7')
+
+#: Nombre minimal de PAIRES (i,j) exploitables pour estimer λ. Une régression
+#: par l'origine sur moins de cinq points est gouvernée par n'importe laquelle
+#: d'entre elles. Cinq est aussi ce que fournit exactement un triangle 4×4
+#: (colonnes 0 et 1 : 3 + 2 paires), donc ce seuil préserve le comportement
+#: historique sur les carrés de 4 tout en rejetant un 3×3 — qui n'en fournit
+#: que 2 — pour la BONNE raison, mesurée sur les données et non déduite de n.
+MCL_PAIRES_MIN = 5
+
+#: Nombre minimal d'observations dans une colonne pour que σ_j et ρ_j soient
+#: définis (variance à ddof=1).
+MCL_OBS_COLONNE_MIN = 2
 
 
 # =============================================================================
@@ -110,10 +149,17 @@ def valider_prerequis(
         )
 
     n, m = C_P.shape
-    if n < 4:
+    # ⚠️ Le seuil « au moins 4 années » a disparu. Il se justifiait par « λ non
+    # estimable avec < 4 observations », ce qui valait quand λ s'estimait
+    # COLONNE PAR COLONNE. Avec un λ scalaire poolé, ce qui compte est le
+    # nombre de PAIRES du triangle entier — vérifié sur les données par
+    # `_calculer_lambda` (MCL_PAIRES_MIN), pas déduit de la forme ici. Ne reste
+    # que la borne structurelle : sous 3 années, aucune colonne ne fournit les
+    # deux observations dont σ_j et ρ_j ont besoin.
+    if n < 3:
         return False, (
-            f"Triangle trop petit ({n} années) — "
-            f"λ non estimable avec < 4 observations. Munich CL désactivé."
+            f"Triangle trop petit ({n} années) — aucune colonne ne fournit "
+            f"{MCL_OBS_COLONNE_MIN} observations. Munich CL désactivé."
         )
 
     # Vérifier que engagé ≥ payé sur la zone connue (Quarg-Mack : C_E >= C_P).
@@ -141,7 +187,6 @@ def valider_prerequis(
     # Un triangle indépendant a des ratios variables (CV > 0.05) car
     # l'IBNR varie selon la cohorte et l'ancienneté des dossiers.
     try:
-        # numpy déjà importé comme np en tête de fichier
         _ratios = []
         for _i in range(n):
             for _j in range(min(m, n - _i)):
@@ -174,100 +219,199 @@ def valider_prerequis(
 #  COEFFICIENTS λ  (Quarg-Mack 2004, eq. 4.2–4.3)
 # =============================================================================
 
+def _statistiques_colonne(
+    C_P: np.ndarray,
+    C_E: np.ndarray,
+    j:   int,
+) -> Optional[Dict]:
+    """Facteurs, ratios et écarts-types résiduels de la colonne j.
+
+    Tout est calculé sur l'INTERSECTION des cellules exploitables des deux
+    triangles : les résidus doivent être centrés sur le facteur estimé sur les
+    mêmes cellules, sinon la régression par l'origine hérite d'un biais.
+
+    Les incréments négatifs sont écartés : la vraisemblance de Quarg & Mack
+    suppose des développements croissants, et un facteur < 1 fausse à la fois
+    σ_j et la corrélation. Le triangle les conserve par ailleurs — c'est
+    l'estimation de λ qui les exclut, pas la projection.
+    """
+    n, _ = C_P.shape
+    idx = [
+        i for i in range(n)
+        if i + j + 1 < n
+        and C_P[i, j] > 0 and C_P[i, j + 1] > 0
+        and C_E[i, j] > 0 and C_E[i, j + 1] > 0
+        and C_P[i, j + 1] >= C_P[i, j] and C_E[i, j + 1] >= C_E[i, j]
+    ]
+    k = len(idx)
+    if k < MCL_OBS_COLONNE_MIN:
+        return None
+
+    SP  = sum(C_P[i, j]     for i in idx)
+    SP1 = sum(C_P[i, j + 1] for i in idx)
+    SE  = sum(C_E[i, j]     for i in idx)
+    SE1 = sum(C_E[i, j + 1] for i in idx)
+    if min(SP, SP1, SE, SE1) <= 0:
+        return None
+
+    f_P = SP1 / SP
+    f_E = SE1 / SE
+    q     = SP / SE      # Q   = payé / engagé
+    q_inv = SE / SP      # Q⁻¹ = engagé / payé
+
+    # σ_j : dispersion résiduelle des facteurs, pondérée par le volume (Mack).
+    s2_P = sum(C_P[i, j] * (C_P[i, j+1]/C_P[i, j] - f_P) ** 2 for i in idx) / (k - 1)
+    s2_E = sum(C_E[i, j] * (C_E[i, j+1]/C_E[i, j] - f_E) ** 2 for i in idx) / (k - 1)
+    # ρ_j : dispersion résiduelle des ratios. Pondérations ASYMÉTRIQUES —
+    # Var(Q) ∝ 1/I donc poids I ; Var(Q⁻¹) ∝ 1/P donc poids P.
+    r2_Q  = sum(C_E[i, j] * (C_P[i, j]/C_E[i, j] - q)     ** 2 for i in idx) / (k - 1)
+    r2_Qi = sum(C_P[i, j] * (C_E[i, j]/C_P[i, j] - q_inv) ** 2 for i in idx) / (k - 1)
+
+    if min(s2_P, s2_E, r2_Q, r2_Qi) <= 0:
+        return None      # colonne dégénérée : aucun signal exploitable
+
+    return {
+        'j': j, 'idx': idx, 'k': k,
+        'f_P': f_P, 'f_E': f_E, 'q': q, 'q_inv': q_inv,
+        'sig_P': float(np.sqrt(s2_P)), 'sig_E': float(np.sqrt(s2_E)),
+        'rho_Q': float(np.sqrt(r2_Q)), 'rho_Qi': float(np.sqrt(r2_Qi)),
+    }
+
+
 def _calculer_lambda(
-    C_P:        np.ndarray,
-    C_E:        np.ndarray,
-    f_P:        np.ndarray,
-    f_E:        np.ndarray,
-    lambda_max: float = 2.0,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    C_P: np.ndarray,
+    C_E: np.ndarray,
+) -> Tuple[Optional[float], Optional[float], Dict[int, Dict], Dict]:
+    """λ_P et λ_I — SCALAIRES, poolés sur toutes les paires du triangle.
+
+    Régression par l'origine sur résidus standardisés (Quarg & Mack 2004) :
+
+        λ_P = Σ Res(F^P)·Res(Q⁻¹) / Σ Res(Q⁻¹)²
+        λ_I = Σ Res(F^I)·Res(Q)   / Σ Res(Q)²
+
+    ⚠️ LE CÔTÉ PAYÉ RÉGRESSE SUR Q⁻¹ = I/P. Sur Q = P/I la corrélation change
+    de signe (mesuré : −1,000 contre +0,997 sur vérité connue), et un λ borné
+    par le bas à zéro devient alors identiquement nul.
+
+    AUCUN ÉCRÊTAGE : la standardisation donne à λ une échelle de corrélation
+    (mesuré λ ≈ corr sur sept jeux, |λ| ≤ 0,999).
+
+    Returns
+    -------
+    (lam_P, lam_E, stats_par_colonne, diagnostic)
+    lam_* valent None si les paires exploitables sont trop peu nombreuses.
     """
-    Estime λ_P[j], λ_E[j] et Q_moy_vec[j] par régression OLS pondérée.
-    Q_moy_vec est retourné pour éviter le recalcul dans munich_cl (Gemini §3).
-
-    Pour chaque colonne j :
-
-    Résidus payé   : r_P[i,j] = C_P[i,j+1]/C_P[i,j] - f_P[j]
-    Résidus engagé : r_E[i,j] = C_E[i,j+1]/C_E[i,j] - f_E[j]
-    Résidus ratio  : r_Q[i,j] = Q[i,j] - Q_moy[j]
-                     où Q[i,j] = C_P[i,j]/C_E[i,j]
-
-    λ_P[j] = Cov(r_P[i,j], r_Q[i,j]) / Var(r_Q[i,j])
-    λ_E[j] = Cov(r_E[i,j], r_Q[i,j]) / Var(r_Q[i,j])
-
-    Cap de sécurité : λ ∈ [0, 2.0] (stabilité numérique)
-    """
-    n, m = C_P.shape
-
-    lam_P    = np.zeros(m - 1)
-    lam_E    = np.zeros(m - 1)
-    Q_moy_vec = np.zeros(m - 1)  # Q_moy volumique par colonne
+    _, m = C_P.shape
+    stats: Dict[int, Dict] = {}
+    res_P: list = []      # (Res(F^P), Res(Q⁻¹))
+    res_E: list = []      # (Res(F^I), Res(Q))
 
     for j in range(m - 1):
-        r_P_j, r_E_j, r_Q_j = [], [], []
-
-        # ── Q_moy volumique (Quarg & Mack eq. 3.3) ──────────────────────
-        # Q̄[j] = Σ C_P[i,j] / Σ C_E[i,j]  (ratio des sommes, pas moyenne arithmétique)
-        sum_CP = sum_CE = 0.0
-        for i in range(n):
-            if i + j + 1 < n:
-                cp = C_P[i, j]; ce = C_E[i, j]
-                if cp > 0 and ce > 0:
-                    sum_CP += cp; sum_CE += ce
-
-        if sum_CE < 1e-10 or sum_CP < 1e-10:
+        st = _statistiques_colonne(C_P, C_E, j)
+        if st is None:
             continue
+        stats[j] = st
+        for i in st['idx']:
+            p, p1 = C_P[i, j], C_P[i, j + 1]
+            e, e1 = C_E[i, j], C_E[i, j + 1]
+            w_P, w_E = float(np.sqrt(p)), float(np.sqrt(e))
+            res_P.append((
+                (p1 / p - st['f_P']) / st['sig_P']  * w_P,
+                (e / p - st['q_inv']) / st['rho_Qi'] * w_P,
+            ))
+            res_E.append((
+                (e1 / e - st['f_E']) / st['sig_E'] * w_E,
+                (p / e - st['q'])    / st['rho_Q'] * w_E,
+            ))
 
-        Q_moy = sum_CP / sum_CE  # volumique — conforme Quarg & Mack eq. 3.3
-        Q_moy_vec[j] = Q_moy      # stocké pour munich_cl (évite recalcul)
+    n_paires = len(res_P)
+    diag = {'n_paires': n_paires, 'colonnes_exploitees': sorted(stats)}
+    if n_paires < MCL_PAIRES_MIN:
+        return None, None, stats, diag
 
-        # ── Résidus pondérés (Quarg & Mack eq. 3.1 — Gauss-Markov) ─────
-        # Var(F_P[i,j]) = σ²/C_P[i,j] → pondération par sqrt(C_P[i,j])
-        # Filtrer les incréments négatifs (biais sur la régression)
-        for i in range(n):
-            if i + j + 1 < n:
-                cp  = C_P[i, j]; cp1 = C_P[i, j+1]
-                ce  = C_E[i, j]; ce1 = C_E[i, j+1]
-                if cp > 0 and cp1 > 0 and ce > 0 and ce1 > 0:
-                    # Filtrer incréments négatifs
-                    if cp1 < cp or ce1 < ce:
-                        logger.warning(
-                            f'MCL _calculer_lambda : incrément négatif ignoré '
-                            f'i={i} j={j} (cp={cp:.0f}→{cp1:.0f} ce={ce:.0f}→{ce1:.0f})'
-                        )
-                        continue
-                    # Résidus pondérés par sqrt(charge) — Mack eq. 3.1
-                    w_P = float(np.sqrt(cp))
-                    w_E = float(np.sqrt(ce))
-                    r_P_j.append((cp1/cp - f_P[j]) * w_P)
-                    r_E_j.append((ce1/ce - f_E[j]) * w_E)
-                    r_Q_j.append((cp/ce  - Q_moy)  * w_P)
+    def _pente(paires):
+        a = np.asarray(paires, dtype=float)
+        y, x = a[:, 0], a[:, 1]
+        sxx = float(np.sum(x * x))
+        if sxx <= 0:
+            return None, None
+        pente = float(np.sum(x * y) / sxx)
+        corr = (float(np.corrcoef(x, y)[0, 1])
+                if np.std(x) > 0 and np.std(y) > 0 else None)
+        return pente, corr
 
-        if len(r_Q_j) < 3:
-            continue
+    lam_P, corr_P = _pente(res_P)
+    lam_E, corr_E = _pente(res_E)
+    diag['correlation_P'] = corr_P
+    diag['correlation_E'] = corr_E
 
-        r_P_arr = np.array(r_P_j)
-        r_E_arr = np.array(r_E_j)
-        r_Q_arr = np.array(r_Q_j)
-
-        var_Q = float(np.var(r_Q_arr, ddof=1))
-        if var_Q < 1e-12:
-            # Ratio constant → pas de corrélation exploitable
+    # λ n'est PAS écrêté. Un |λ| > 1 signalerait un défaut de standardisation,
+    # pas un triangle atypique : on le dit, on ne le corrige pas en silence.
+    for nom, lam in (('λ_P', lam_P), ('λ_I', lam_E)):
+        if lam is not None and abs(lam) > 1.0:
             logger.warning(
-                f'Munich CL : Var(r_Q) ≈ 0 colonne j={j} — '
-                f'ratio Q constant, pas de corrélation exploitable. '
-                f'λ_P[{j}] = λ_E[{j}] = 0.'
+                f'Munich CL : {nom} = {lam:.4f}, |{nom}| > 1 sur résidus '
+                f'standardisés — vérifier la standardisation.'
             )
-            continue
+    return lam_P, lam_E, stats, diag
 
-        cov_P = float(np.cov(r_P_arr, r_Q_arr, ddof=1)[0, 1])
-        cov_E = float(np.cov(r_E_arr, r_Q_arr, ddof=1)[0, 1])
 
-        # Cap λ ∈ [0, lambda_max] — Quarg-Mack ne cappe pas mais nécessaire en pratique
-        lam_P[j] = float(np.clip(cov_P / var_Q, 0.0, lambda_max))
-        lam_E[j] = float(np.clip(cov_E / var_Q, 0.0, lambda_max))
+def _projeter_conjointement(
+    C_P:   np.ndarray,
+    C_E:   np.ndarray,
+    f_P:   np.ndarray,
+    f_E:   np.ndarray,
+    stats: Dict[int, Dict],
+    lam_P: float,
+    lam_E: float,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, list, list]:
+    """Complète les DEUX carrés, chaque triangle nourrissant l'autre.
 
-    return lam_P, lam_E, Q_moy_vec
+    C'est ici que Munich CL cesse d'être Chain Ladder : le facteur appliqué
+    dépend de (i,j), via le ratio OBSERVÉ de l'année i à la colonne j. Les deux
+    triangles avancent ensemble parce que le pas payé a besoin de l'engagé à la
+    même cellule, et réciproquement.
+
+    `projeter_ultimates` reste intouché : il prend un VECTEUR de facteurs et
+    sert Chain Ladder, Clark et le Bootstrap, qui n'ont pas ce besoin. La
+    comptabilité, elle, est partagée (`comptabiliser`).
+    """
+    n, m = C_P.shape
+    P = np.array(C_P, dtype=float, copy=True)
+    E = np.array(C_E, dtype=float, copy=True)
+    fc_P = np.full((n, m - 1), np.nan)
+    fc_E = np.full((n, m - 1), np.nan)
+    deg_P: list = []
+    deg_E: list = []
+
+    for i in range(n):
+        for j in range(n - i - 1, m - 1):
+            p, e = P[i, j], E[i, j]
+            base_P = float(f_P[j]) if j < len(f_P) else 1.0
+            base_E = float(f_E[j]) if j < len(f_E) else 1.0
+            st = stats.get(j)
+
+            if st is None or p <= 0 or e <= 0:
+                # colonne sans statistique exploitable : Munich se tait et
+                # laisse le facteur Chain Ladder, pour cette cellule.
+                a_P, a_E = base_P, base_E
+            else:
+                a_P = st['f_P'] + lam_P * (st['sig_P'] / st['rho_Qi']) * (e / p - st['q_inv'])
+                a_E = st['f_E'] + lam_E * (st['sig_E'] / st['rho_Q'])  * (p / e - st['q'])
+
+            if a_P <= 0.0:
+                deg_P.append([int(i), int(j), round(float(a_P), 6)])
+                a_P = base_P
+            if a_E <= 0.0:
+                deg_E.append([int(i), int(j), round(float(a_E), 6)])
+                a_E = base_E
+
+            fc_P[i, j] = a_P
+            fc_E[i, j] = a_E
+            P[i, j + 1] = p * a_P
+            E[i, j + 1] = e * a_E
+
+    return P, E, fc_P, fc_E, deg_P, deg_E
 
 
 # =============================================================================
@@ -279,7 +423,6 @@ def munich_cl(
     C_E:          Optional[np.ndarray],
     annee_base:   int   = 1,
     tolerance_ep: float = 0.05,
-    lambda_max:   float = 2.0,
 ) -> Dict:
 
     """
@@ -331,78 +474,40 @@ def munich_cl(
     f_P, _ = calculer_facteurs(C_P)
     f_E, _ = calculer_facteurs(C_E)
 
-    # ── 3. Coefficients λ (Quarg-Mack 2004) ──────────────────────────────────
-    lam_P, lam_E, Q_moy_vec = _calculer_lambda(C_P, C_E, f_P, f_E, lambda_max=lambda_max)
+    # ── 3. Coefficients λ — SCALAIRES, poolés (Quarg-Mack 2004) ──────────────
+    lam_P, lam_E, stats_col, diag_lam = _calculer_lambda(C_P, C_E)
+    if lam_P is None or lam_E is None:
+        msg = (
+            f"λ non estimable — {diag_lam['n_paires']} paire(s) exploitable(s) "
+            f"pour un minimum de {MCL_PAIRES_MIN}. Munich CL désactivé."
+        )
+        logger.info(f"Munich CL désactivé : {msg}")
+        return {
+            'disponible': False,
+            'statut':     'INFO',
+            'message':    msg,
+            'methode':    'Munich Chain Ladder (Quarg & Mack 2004)',
+            'diagnostic_lambda': diag_lam,
+        }
 
-    # ── 4. Facteurs Munich ajustés ────────────────────────────────────────────
-    #
-    # f*_P[j] = f_P[j] + λ_P[j] × (Q_moy[j] - q̂_P[j])
-    # f*_E[j] = f_E[j] + λ_E[j] × (Q_moy[j] - q̂_E[j])
-    #
-    # où Q_moy[j] = ratio moyen payé/engagé à la colonne j
-    #    q̂_P[j]  = Q_moy[j] × f_P[j] / f_E[j]  (ratio prédit CL payé)
-    #    q̂_E[j]  = Q_moy[j] × f_E[j] / f_P[j]  (ratio prédit CL engagé)
+    # ── 4. Projection CONJOINTE, facteur par cellule ─────────────────────────
+    P_proj, E_proj, fc_P, fc_E, facteurs_degeneres_paye, facteurs_degeneres_engage = (
+        _projeter_conjointement(C_P, C_E, f_P, f_E, stats_col, lam_P, lam_E))
 
-    f_star_P = f_P.copy()
-    f_star_E = f_E.copy()
-    # f* ≤ 0 rabattu sur le facteur CL (garde défensive, cf. boucle) — jamais
-    # observé en pratique (min 0.67 sur 12 000 paires testées).
-    facteurs_degeneres_paye:   list = []
-    facteurs_degeneres_engage: list = []
-
-    idx = np.arange(n)
-    for j in range(m - 1):
-        if f_E[j] <= 0 or f_P[j] <= 0:
-            continue
-
-        # Q_moy issu de _calculer_lambda — pas de recalcul (Gemini §3)
-        Q_moy = Q_moy_vec[j]
-        if Q_moy <= 0:
-            # Fallback vectorisé si Q_moy non calculé (colonnes courtes)
-            masque_j = (C_P[:, j] > 0) & (C_E[:, j] > 0) & (idx + j < n)
-            sp = float(np.sum(C_P[masque_j, j]))
-            se = float(np.sum(C_E[masque_j, j]))
-            Q_moy = sp / max(se, 1e-10)
-
-        # q̂_P[j] = Q_moy × f_P[j] / f_E[j]  (Quarg & Mack eq. 4.4)
-        q_hat_P = Q_moy * f_P[j] / max(f_E[j], 1e-10)
-
-        # q̂_E[j] = Q_moy × f_E[j] / f_P[j]  (même Q, ratio prédit CL engagé)
-        # NB : Quarg & Mack raisonnent toujours sur Q = P/E, pas sur Q* = E/P
-        q_hat_E = Q_moy * f_E[j] / max(f_P[j], 1e-10)
-
-        # Facteurs ajustés — Quarg & Mack eq. 4.4 :
-        # f*_P[j] = f_P[j] + λ_P[j] × (q̂_P[j] - Q_moy)
-        # f*_E[j] = f_E[j] + λ_E[j] × (Q_moy - q̂_E[j])
-        # Signe f*_P : si f_P>f_E → q̂_P>Q_moy → adj_P>0 → f*_P hausse
-        # Signe f*_E : si f_E<f_P → q̂_E<Q_moy → adj_E>0 → f*_E hausse
-        adj_P = lam_P[j] * (q_hat_P - Q_moy)
-        adj_E = lam_E[j] * (Q_moy   - q_hat_E)
-
-        # Facteur ajusté CONSERVÉ tel quel, y compris < 1.0 (recours/subrogation).
-        # Le forçage historique max(…, 1.0) est retiré (Lot C2) : sur une colonne
-        # en recours λ vaut 0 (les incréments négatifs sont écartés du calcul des
-        # λ, l.233), donc f* = f_CL, et max(f_CL, 1.0) ré-appliquait EXACTEMENT le
-        # plancher du verrou 1 déjà retiré au Lot C1 — annulant sa correction. Les
-        # f* < 1 sont désormais conservés et signalés (facteurs_munich_sous_1_*).
-        #
-        # Garde résiduelle UNIQUEMENT contre le cas dégénéré f* ≤ 0 (ultime nul ou
-        # négatif) : jamais observé en pratique (f* min 0.67 sur 12 000 paires),
-        # garde purement défensive. Repli = facteur CL non ajusté (borné > 0 par
-        # construction de calculer_facteurs) → l'ajustement Munich est annulé pour
-        # cette seule cellule, exactement comme si λ y valait 0.
-        f_P_adj = f_P[j] + adj_P
-        f_E_adj = f_E[j] + adj_E
-        if f_P_adj <= 0.0:
-            f_star_P[j] = f_P[j]
-            facteurs_degeneres_paye.append([int(j), round(float(f_P_adj), 6)])
-        else:
-            f_star_P[j] = f_P_adj
-        if f_E_adj <= 0.0:
-            f_star_E[j] = f_E[j]
-            facteurs_degeneres_engage.append([int(j), round(float(f_E_adj), 6)])
-        else:
-            f_star_E[j] = f_E_adj
+    # Facteur de colonne IMPLICITE, reconstruit depuis le carré projeté :
+    # Σ_i P*[i,j+1] / Σ_i P*[i,j]. C'est la seule lecture « par colonne » qui
+    # ait un sens quand l'ajustement est par cellule — et elle reste comparable
+    # au facteur Chain Ladder affiché à côté.
+    f_star_P = np.array([
+        (float(np.sum(P_proj[:, j + 1])) / float(np.sum(P_proj[:, j])))
+        if float(np.sum(P_proj[:, j])) > 0 else float(f_P[j])
+        for j in range(m - 1)
+    ])
+    f_star_E = np.array([
+        (float(np.sum(E_proj[:, j + 1])) / float(np.sum(E_proj[:, j])))
+        if float(np.sum(E_proj[:, j])) > 0 else float(f_E[j])
+        for j in range(m - 1)
+    ])
 
     # ── Facteurs f* < 1.0 conservés (recours) — signalés, jamais forcés ────────
     # Même politique que chain_ladder ('facteurs_sous_1', Lot 2).
@@ -432,8 +537,13 @@ def munich_cl(
     # lot). La chaîne reflète pleinement les reprises (recours/subrogation) ; les
     # années en reprise ne sont plus écrasées à 0. Le helper calcule aussi l'IBNR
     # plancheré, conservé pour mesurer l'écart vs l'ancien comportement.
-    p_mp = projeter_ultimates(C_P, f_star_P, tail_factor=1.0, annee_base=annee_base)
-    p_me = projeter_ultimates(C_E, f_star_E, tail_factor=1.0, annee_base=annee_base)
+    # Munich : ultimes issus de la projection CONJOINTE, comptabilisés par le
+    # helper partagé — une seule définition de « réserve » dans A7.
+    _last = np.array([float(C_P[i, min(n - i - 1, m - 1)]) for i in range(n)])
+    _lastE = np.array([float(C_E[i, min(n - i - 1, m - 1)]) for i in range(n)])
+    p_mp = comptabiliser(P_proj[:, m - 1], _last,  annee_base=annee_base)
+    p_me = comptabiliser(E_proj[:, m - 1], _lastE, annee_base=annee_base)
+    # Chain Ladder de référence : projection classique par vecteur de facteurs.
     p_cp = projeter_ultimates(C_P, f_P,      tail_factor=1.0, annee_base=annee_base)
     p_ce = projeter_ultimates(C_E, f_E,      tail_factor=1.0, annee_base=annee_base)
 
@@ -458,15 +568,41 @@ def munich_cl(
     ecart_P = (R_mp - R_cp) / max(R_cp, 1e-9) * 100.0
     ecart_E = (R_me - R_ce) / max(R_ce, 1e-9) * 100.0
 
-    # Convergence : MCL réduit l'écart payé vs engagé
-    ecart_cl  = abs(R_cp - R_ce) / max(R_cp, 1e-9) * 100.0
-    ecart_mcl = abs(R_mp - R_me) / max(R_mp, 1e-9) * 100.0
-    convergence = ecart_cl - ecart_mcl   # > 0 = MCL réduit l'écart
+    # ── Convergence — SUR LES ULTIMES, pas sur les réserves ───────────────────
+    # ⚠️ Deux réserves ne peuvent PAS converger : celle du payé se mesure depuis
+    # le payé-à-date, celle de l'engagé depuis l'engagé-à-date. Ce sont deux
+    # bases différentes, l'écart entre elles subsiste même quand les ultimes
+    # coïncident parfaitement. Ce que Quarg & Mack rapprochent, ce sont les
+    # ULTIMES — deux estimations de la MÊME quantité.
+    # Mesuré sur vérité connue : l'écart des ultimes tombe de 9,29 % à 1,98 %
+    # (convergence +7,31 pts) là où l'ancienne métrique sur réserves annonçait
+    # −9,67 pts, soit le signe opposé à la réalité.
+    def _ecart_ultimes(u_p: np.ndarray, u_e: np.ndarray) -> float:
+        idx = max(0, min(int(annee_base), n - 1))
+        a, b = np.asarray(u_p)[idx:], np.asarray(u_e)[idx:]
+        ok_i = np.abs(b) > 1e-9
+        if not ok_i.any():
+            return 0.0
+        return float(np.mean(np.abs(a[ok_i] - b[ok_i]) / np.abs(b[ok_i]))) * 100.0
 
-    # Statut
-    if abs(ecart_P) < 5.0:
+    ecart_cl_ult  = _ecart_ultimes(p_cp['ultimate'], p_ce['ultimate'])
+    ecart_mcl_ult = _ecart_ultimes(p_mp['ultimate'], p_me['ultimate'])
+    convergence   = ecart_cl_ult - ecart_mcl_ult   # > 0 = MCL rapproche
+
+    # Écarts de RÉSERVES, conservés à titre descriptif — bases différentes,
+    # à ne pas lire comme une convergence.
+    ecart_cl  = abs(R_cp - R_ce) / max(abs(R_cp), 1e-9) * 100.0
+    ecart_mcl = abs(R_mp - R_me) / max(abs(R_mp), 1e-9) * 100.0
+
+    # ── Statut : la méthode tient-elle SA PROPRE promesse ? ───────────────────
+    # L'ancien statut jugeait l'écart Munich/Chain-Ladder : plus Munich
+    # s'écartait de CL, plus il était rouge. C'est l'inverse du sens — s'écarter
+    # de CL est sa raison d'être. Sur vérité connue, Munich 3,6 fois plus juste
+    # que CL ressortait ROUGE. Le statut porte désormais sur la convergence des
+    # ultimes, c'est-à-dire sur ce que Quarg & Mack promettent.
+    if convergence > 1.0:
         statut = 'VERT'
-    elif abs(ecart_P) < 15.0:
+    elif convergence >= -1.0:
         statut = 'AMBRE'
     else:
         statut = 'ROUGE'
@@ -475,7 +611,9 @@ def munich_cl(
         f"Munich CL : payé_MCL={R_mp:,.0f}€ "
         f"({'+' if ecart_P >= 0 else ''}{ecart_P:.1f}% vs CL payé) · "
         f"engagé_MCL={R_me:,.0f}€ · "
-        f"convergence={convergence:+.1f} pts"
+        f"λ_P={lam_P:+.3f} λ_I={lam_E:+.3f} sur {diag_lam['n_paires']} paires · "
+        f"écart des ultimes {ecart_cl_ult:.1f}% → {ecart_mcl_ult:.1f}% "
+        f"(convergence {convergence:+.1f} pts)"
     )
     if facteurs_munich_sous_1_paye or facteurs_munich_sous_1_engage:
         msg += (
@@ -519,13 +657,30 @@ def munich_cl(
         # Écarts
         'ecart_pct_paye':     round(ecart_P, 2),
         'ecart_pct_engage':   round(ecart_E, 2),
+        # Écarts de RÉSERVES — descriptifs. Bases différentes (payé-à-date vs
+        # engagé-à-date) : ne PAS les lire comme une convergence.
         'ecart_cl_paye_engage': round(ecart_cl,  2),
         'ecart_mcl_paye_engage': round(ecart_mcl, 2),
+        # Écarts d'ULTIMES — deux estimations de la MÊME quantité. C'est là que
+        # la convergence se mesure, et ce que `convergence_pts` rapporte.
+        'ecart_cl_ultimes':   round(ecart_cl_ult,  2),
+        'ecart_mcl_ultimes':  round(ecart_mcl_ult, 2),
         'convergence_pts':    round(convergence,  2),
 
-        # Coefficients λ par colonne
-        'lambda_P':           [round(float(l), 4) for l in lam_P],
-        'lambda_E':           [round(float(l), 4) for l in lam_E],
+        # Coefficients λ — SCALAIRES depuis la reconstruction (un par côté,
+        # poolé sur toutes les paires), plus jamais un vecteur par colonne.
+        'lambda_P':           round(float(lam_P), 4),
+        'lambda_E':           round(float(lam_E), 4),
+        'diagnostic_lambda':  diag_lam,
+
+        # Facteur appliqué à CHAQUE cellule (n, m-1) — le cœur de Munich CL.
+        # NaN sur la zone déjà connue, qui n'est pas projetée.
+        'facteurs_munich_paye_cellule':   [
+            [None if np.isnan(v) else round(float(v), 6) for v in ligne]
+            for ligne in fc_P],
+        'facteurs_munich_engage_cellule': [
+            [None if np.isnan(v) else round(float(v), 6) for v in ligne]
+            for ligne in fc_E],
 
         # Facteurs
         'facteurs_cl_paye':   [round(float(f), 4) for f in f_P],
@@ -559,10 +714,14 @@ def munich_cl(
         'methode':   'Munich Chain Ladder (Quarg & Mack 2004)',
         'message':   msg,
         'conseil': (
-            "Écart MCL/CL faible — CL suffisant."
-            if abs(ecart_P) < 5.0 else
-            "Écart MCL/CL significatif — sur/sous-provisionnement dossier possible."
-            if abs(ecart_P) < 15.0 else
-            "Écart MCL/CL élevé — révision approfondie des dossiers recommandée."
+            "Munich rapproche nettement les ultimes payé et engagé : la "
+            "corrélation entre règlement et charge dossier porte de "
+            "l'information que Chain Ladder ignore."
+            if convergence > 1.0 else
+            "Munich ne déplace presque pas les ultimes : payé et engagé se "
+            "développent déjà de façon cohérente, Chain Ladder suffit."
+            if convergence >= -1.0 else
+            "Munich ÉLOIGNE les ultimes payé et engagé — vérifier la cohérence "
+            "du triangle engagé avant d'exploiter ce résultat."
         ),
     }
