@@ -768,13 +768,41 @@ class T14_Munich_Coherence_Negatifs(unittest.TestCase):
         print("    OK T14a Munich sain : prérequis satisfaits (aucune violation)")
 
     def test_engage_negatif_detecte(self):
-        # 2 cellules engagé < 0 avec payé > 0 → 25 % du triangle → désactivé.
-        # (Avec l'ancien garde > 0, ces cellules étaient ignorées → 0 violation.)
-        eng = _MCL_ENG_SAIN.copy(); eng[1, 1] = -30.; eng[2, 0] = -20.
+        """Un engagé négatif (payé positif) est détecté comme violation.
+
+        ⚠️ FIXTURE REDIMENSIONNÉE au correctif du dénominateur. Elle portait 2
+        violations et son commentaire annonçait « 25 % du triangle » — chiffre
+        issu de l'ancien dénominateur `n*m//2`, qui valait 8 pour un 4×4 dont
+        la zone connue compte 10 cellules. Le vrai taux était 20 %, et le seuil
+        étant « PLUS de 20 % », il ne le franchissait pas : le rejet reposait
+        sur un comptage faux. Trois violations (30 %) exercent le sujet sans
+        dépendre d'un arrondi de dénominateur.
+        """
+        eng = _MCL_ENG_SAIN.copy()
+        eng[1, 1] = -30.; eng[2, 0] = -20.; eng[0, 2] = -10.
         ok, msg = valider_prerequis(_MCL_PAYE, eng)
         self.assertFalse(ok, "un engagé négatif (payé positif) doit être détecté")
         self.assertIn('incohérent', msg)
-        print("    OK T14b Munich engagé négatif : violation détectée → désactivé")
+        self.assertIn('3 cellules', msg)
+        # le pourcentage rapporte les violations aux cellules CONNUES (10), et
+        # ne peut donc plus depasser 100 %
+        self.assertIn('30%', msg.replace(' ', ''))
+        print("    OK T14b Munich engagé négatif : 3 violations = 30 % → désactivé")
+
+    def test_pourcentage_rapporte_aux_cellules_connues(self):
+        """Le taux de violation ne peut pas dépasser 100 %.
+
+        ⚠️ ORACLE HISTORIQUE : `n*m//2` sous-estimait la zone connue d'un
+        triangle carré (n²/2 au lieu de n(n+1)/2). Un 4×4 dont TOUTES les
+        cellules violent affichait « 112 % du triangle ».
+        """
+        # payé et engagé permutés : la violation est maximale
+        ok, msg = valider_prerequis(_MCL_ENG_SAIN, _MCL_PAYE)
+        self.assertFalse(ok)
+        pct = int(msg.split('(')[1].split('%')[0])
+        self.assertLessEqual(pct, 100, f"taux impossible : {pct} %")
+        self.assertEqual(pct, 90)   # 9 violations sur 10 cellules connues
+        print(f"    OK T14b2 taux de violation borné : {pct} % (était 112 %)")
 
     def test_cellule_vide_pas_de_faux_positif(self):
         # Cellule (2,1) payé = 0 ET engagé = 0 (non remplie) → aucune violation.
@@ -785,11 +813,24 @@ class T14_Munich_Coherence_Negatifs(unittest.TestCase):
         print("    OK T14c Munich cellule vide : pas de faux positif")
 
     def test_munich_cl_end_to_end(self):
-        # Le fix se propage au consommateur réel munich_cl().
+        """Le contrôle de cohérence se propage au consommateur réel.
+
+        ⚠️ FIXTURE REDIMENSIONNÉE, ET LE MOTIF EST DÉSORMAIS VÉRIFIÉ. Avec 2
+        violations, ce test passait par ACCIDENT après le correctif du
+        dénominateur : les prérequis acceptaient (20 %, seuil « plus de 20 % »)
+        et Munich était désactivé pour une raison sans rapport — λ non
+        estimable, les cellules négatives ayant vidé l'intersection. Un test
+        qui vérifie un booléen sans vérifier sa cause ne prouve rien.
+        """
         self.assertTrue(munich_cl(_MCL_PAYE, _MCL_ENG_SAIN).get('disponible'))
-        eng = _MCL_ENG_SAIN.copy(); eng[1, 1] = -30.; eng[2, 0] = -20.
-        self.assertFalse(munich_cl(_MCL_PAYE, eng).get('disponible'))
-        print("    OK T14d Munich end-to-end : sain disponible, engagé négatif désactivé")
+        eng = _MCL_ENG_SAIN.copy()
+        eng[1, 1] = -30.; eng[2, 0] = -20.; eng[0, 2] = -10.
+        r = munich_cl(_MCL_PAYE, eng)
+        self.assertFalse(r.get('disponible'))
+        self.assertIn('incohérent', r.get('message', ''),
+                      "doit être désactivé POUR INCOHÉRENCE, pas pour une "
+                      "autre raison qui masquerait le sujet du test")
+        print("    OK T14d Munich end-to-end : désactivé pour incohérence (motif vérifié)")
 
 
 # =============================================================================

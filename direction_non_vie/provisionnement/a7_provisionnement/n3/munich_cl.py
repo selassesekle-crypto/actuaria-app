@@ -127,6 +127,84 @@ MCL_OBS_COLONNE_MIN = 2
 #  VALIDATION DES PRÉREQUIS
 # =============================================================================
 
+#: Message rendu quand tout va bien. Nommé pour que `munich_cl` distingue « rien
+#: à signaler » d'une ALERTE non bloquante, sans comparer une chaîne au jugé.
+MSG_PREREQUIS_OK = "Prérequis Munich CL satisfaits."
+
+
+def lignes_munich_rapport(n3: Optional[Dict]) -> list:
+    """Munich CL prêt à afficher — SOURCE UNIQUE des trois formats.
+
+    HTML, Word et Excel lisent cette liste, pas le dict brut. C'est la leçon du
+    lot Clark : un calcul juste qui n'atteint qu'un format n'est réparé qu'au
+    tiers. Munich n'apparaissait d'ailleurs dans AUCUN des trois — ni
+    `n5_rapport.py`, ni `n5_excel.py` ne le mentionnaient.
+
+    Rend une liste de (libellé, valeur, commentaire). Valeurs déjà formatées :
+    aucun consommateur n'a à décider quoi faire d'un None, et une méthode
+    indisponible dit POURQUOI au lieu d'afficher zéro.
+    """
+    m = (n3 or {}).get('munich_cl') or {}
+    if not m:
+        return []
+    if not m.get('disponible'):
+        return [('Munich Chain Ladder', 'Non disponible',
+                 str(m.get('message', 'Méthode non exécutée.')))]
+
+    def _e(v):
+        return '—' if v is None else f'{float(v):,.0f}'.replace(',', ' ') + ' €'
+
+    def _p(v, dec=2):
+        return '—' if v is None else f'{float(v):+.{dec}f}'
+
+    lignes = [
+        ('Réserve Munich — payé',    _e(m.get('be_munich_paye')),
+         f"Chain Ladder payé : {_e(m.get('be_cl_paye'))}"),
+        ('Réserve Munich — engagé',  _e(m.get('be_munich_engage')),
+         f"Chain Ladder engagé : {_e(m.get('be_cl_engage'))}"),
+        ('λ payé (Quarg & Mack)',    _p(m.get('lambda_P'), 4),
+         f"estimé sur {(m.get('diagnostic_lambda') or {}).get('n_paires', '—')} "
+         f"paires du triangle, non écrêté"),
+        ('λ engagé',                 _p(m.get('lambda_E'), 4),
+         'régression par l’origine sur résidus standardisés'),
+        ('Écart des ultimes — Chain Ladder',
+         '—' if m.get('ecart_cl_ultimes') is None else f"{m['ecart_cl_ultimes']:.2f} %",
+         'moyenne |ultime payé − ultime engagé| / ultime engagé'),
+        ('Écart des ultimes — Munich',
+         '—' if m.get('ecart_mcl_ultimes') is None else f"{m['ecart_mcl_ultimes']:.2f} %",
+         'ce que la méthode promet de réduire'),
+        ('Convergence',              _p(m.get('convergence_pts')) + ' pts',
+         'sur les ULTIMES — deux réserves ne convergent pas, '
+         'elles ne partent pas de la même base'),
+    ]
+    if m.get('alerte_prerequis'):
+        lignes.append(('⚠️ Alerte prérequis', 'Circularité suspectée',
+                       str(m['alerte_prerequis'])))
+    n_neg = (m.get('n_increments_negatifs_paye') or 0) + \
+            (m.get('n_increments_negatifs_engage') or 0)
+    if n_neg:
+        lignes.append(('Incréments négatifs (zone connue)', str(n_neg),
+                       'écartés de l’estimation de λ, conservés dans la projection'))
+    return lignes
+
+
+def _compter_increments_negatifs(C: np.ndarray) -> int:
+    """Incréments négatifs de la ZONE CONNUE seulement (i + j < n).
+
+    La zone inconnue vaut 0 : la diff entre la dernière valeur observée et ce
+    zéro n'est pas un incrément, c'est le bord du triangle.
+    """
+    C = np.asarray(C, dtype=float)
+    n, m = C.shape
+    return int(sum(
+        1
+        for i in range(n)
+        for j in range(1, min(m, n - i))
+        if np.isfinite(C[i, j]) and np.isfinite(C[i, j - 1])
+        and C[i, j] - C[i, j - 1] < 0
+    ))
+
+
 def valider_prerequis(
     C_P:          np.ndarray,
     C_E:          np.ndarray,
@@ -168,12 +246,19 @@ def valider_prerequis(
     # échapper au test. Une cellule non remplie (payé = engagé = 0) ne déclenche
     # rien (0 > 0 est faux).
     n_violations = 0
+    n_connues    = 0
     for i in range(n):
         for j in range(min(m, n - i)):
+            n_connues += 1
             if C_P[i, j] > C_E[i, j] * (1.0 + tolerance_ep):
                 n_violations += 1
 
-    pct_violations = n_violations / max(n * m // 2, 1)
+    # ⚠️ Le dénominateur est le nombre de cellules RÉELLEMENT PARCOURUES, pas
+    # une approximation. L'ancien `n*m//2` sous-estimait la zone connue d'un
+    # triangle carré (n²/2 au lieu de n(n+1)/2) et pouvait donc afficher plus
+    # de 100 % — mesuré : « 112 % du triangle » sur un 4×4 (9 violations
+    # rapportées à 8 cellules supposées, quand il y en a 10).
+    pct_violations = n_violations / max(n_connues, 1)
     if pct_violations > 0.20:
         return False, (
             f"{n_violations} cellules où payé > engagé×{1.0+tolerance_ep:.0%} "
@@ -212,7 +297,7 @@ def valider_prerequis(
     except Exception:
         pass  # Détection circularité non bloquante
 
-    return True, "Prérequis Munich CL satisfaits."
+    return True, MSG_PREREQUIS_OK
 
 
 # =============================================================================
@@ -461,8 +546,19 @@ def munich_cl(
             'disponible': False,
             'statut':     'INFO',
             'message':    msg_prereq,
+            'alerte_prerequis': msg_prereq,
             'methode':    'Munich Chain Ladder (Quarg & Mack 2004)',
         }
+
+    # ⚠️ L'ALERTE NON BLOQUANTE ÉTAIT PERDUE. Entre CV 0,02 et 0,05, la
+    # détection de circularité rend `(True, message d'alerte)` — un doute
+    # sérieux sur l'indépendance des charges dossier vis-à-vis des provisions.
+    # `msg_prereq` n'était ensuite jamais relu quand ok=True : l'avertissement
+    # ne figurait NULLE PART dans la sortie. Mesuré à CV = 0,0275 / 0,0366 /
+    # 0,0458 : trois fois muet. Il est désormais publié et joint au message.
+    alerte_prerequis = None if msg_prereq == MSG_PREREQUIS_OK else msg_prereq
+    if alerte_prerequis:
+        logger.warning(f"Munich CL — alerte prérequis : {alerte_prerequis}")
 
     n, m = C_P.shape
 
@@ -627,13 +723,17 @@ def munich_cl(
             f"{ecart_planch_P:,.0f}€ vs plancher), engagé {n_reprise_E} "
             f"année(s) (écart {ecart_planch_E:,.0f}€)"
         )
+    if alerte_prerequis:
+        msg += f" | {alerte_prerequis}"
     logger.info(msg)
 
-    # Compter les incréments négatifs (P et E) pour audit
-    _inc_P = np.diff(np.where(np.isnan(C_P), 0, C_P), axis=1)
-    _inc_E = np.diff(np.where(np.isnan(C_E), 0, C_E), axis=1)
-    n_neg_P = int(np.sum(_inc_P[~np.isnan(_inc_P)] < 0))
-    n_neg_E = int(np.sum(_inc_E[~np.isnan(_inc_E)] < 0))
+    # Compter les incréments négatifs (P et E) pour audit — SUR LA ZONE CONNUE.
+    # ⚠️ L'ancien comptage faisait `np.diff` sur TOUT le tableau : le passage de
+    # la dernière valeur connue au zéro de la zone inconnue fabriquait un
+    # « incrément négatif » par ligne. Mesuré : 3 fictifs sur les triangles 4×4
+    # de référence, 6 sur le 7×7, soit un compte gonflé de moitié à 100 %.
+    n_neg_P = _compter_increments_negatifs(C_P)
+    n_neg_E = _compter_increments_negatifs(C_E)
     if n_neg_P > 0 or n_neg_E > 0:
         logger.warning(
             f'Munich CL : {n_neg_P} incrément(s) payé négatif(s), '
@@ -711,6 +811,9 @@ def munich_cl(
 
         # Métadonnées
         'statut':    statut,
+        # Alerte de prérequis NON BLOQUANTE (circularité suspectée) — None quand
+        # tout va bien. Autrefois calculée puis jetée.
+        'alerte_prerequis': alerte_prerequis,
         'methode':   'Munich Chain Ladder (Quarg & Mack 2004)',
         'message':   msg,
         'conseil': (

@@ -27,6 +27,8 @@ import numpy as np
 # évaluée y ressort NON TESTABLE, jamais en valeur par défaut.
 from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
 from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
+# Source UNIQUE d'affichage de Munich CL, partagée par HTML, Word et Excel.
+from .n3.munich_cl import lignes_munich_rapport
 
 logger = logging.getLogger('actuaria.a7.rapport')
 
@@ -1351,6 +1353,20 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
             '</tbody></table>', 1)
     b['tableau_incertitude'] = tbl_i
     b['tableau_clark_ic']    = _bloc_clark_incertitude(n2, n3)
+
+    # Munich CL — n'apparaissait dans AUCUN des trois formats de livrable
+    # (ni ce module pour HTML/Word, ni n5_excel). Seule méthode à exploiter
+    # les deux triangles, et la seule totalement invisible.
+    _lig_mcl = lignes_munich_rapport(n3)
+    b['tableau_munich'] = ('' if not _lig_mcl else (
+        '<table class="premium"><thead><tr>'
+        '<th>Indicateur</th><th class="right">Valeur</th><th>Lecture</th>'
+        '</tr></thead><tbody>'
+        + ''.join('<tr><td class="label">' + _s(a) + '</td>'
+                  '<td class="right"><span class="mono">' + _s(v) + '</span></td>'
+                  '<td style="font-size:8pt;color:var(--slate);">' + _s(c) + '</td></tr>'
+                  for a, v, c in _lig_mcl)
+        + '</tbody></table>'))
     b['graph_ibnr']      = graphiques_html.get('g4_ibnr', '')
     b['graph_heatmap']   = graphiques_html.get('g1_heatmap', '')
     b['graph_bootstrap'] = graphiques_html.get('g6_bootstrap', '')
@@ -1985,6 +2001,9 @@ def export_html(
             + (('<div class="table-section-title">Clark LDF (2003) — intervalle '
                 'de prédiction, décomposé processus / paramètre</div>\n'
                 + b['tableau_clark_ic']) if b.get('tableau_clark_ic') else '')
+            + (('<div class="table-section-title">Munich Chain Ladder '
+                '(Quarg &amp; Mack 2004) — rapprochement payé / engagé</div>\n'
+                + b['tableau_munich']) if b.get('tableau_munich') else '')
             + _wrap_graph(b['graph_heatmap'], 'Triangle de développement cumulé')
             + _wrap_graph(b['graph_ibnr'], 'IBNR par année de survenance')
             + _wrap_graph(b['graph_bootstrap'], 'Distribution Bootstrap ODP — Quantiles de réserve')
@@ -2258,6 +2277,17 @@ def export_word(n1, n2, n3, n4,
               ['Cape Cod',_f(cc.get('reserve_totale')),_pct(pw.get('cape_cod',0)*100),
                '—','✓ Inclus'],
               ['BEST ESTIMATE (brut)',_f(BE),'100 %','—','→ A10 (actualisation)']],ws=[4.5,3.5,2.5,2.5,3.0])
+
+        # Munich CL — MÊME SOURCE que le HTML et l'Excel. Le lot Clark avait
+        # commencé par ne câbler que le HTML ; Munich n'était dans aucun des
+        # trois. Les trois lisent désormais `lignes_munich_rapport`.
+        _lignes_mcl = lignes_munich_rapport(n3)
+        if _lignes_mcl:
+            _h('Munich Chain Ladder (Quarg & Mack 2004) — rapprochement payé / engagé',
+               lv=2)
+            _tbl(['Indicateur', 'Valeur', 'Lecture'],
+                 [[a, v, c] for a, v, c in _lignes_mcl], ws=[5.0, 3.5, 7.5])
+
         doc.add_page_break()
 
         _h('3. Validation des hypothèses actuarielles'); _sep()

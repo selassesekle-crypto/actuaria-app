@@ -32,6 +32,8 @@ from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
 from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
 from .n3.bf_cape_cod import libelle_loss_ratio
 from .n3.bootstrap_odp import libelle_incertitude
+# Source UNIQUE d'affichage de Munich CL — la même que HTML et Word.
+from .n3.munich_cl import lignes_munich_rapport
 
 logger = logging.getLogger('actuaria.a7')
 
@@ -724,6 +726,39 @@ def _ong7_bootstrap(wb, n3):
 #  ONGLET 8 — COMPARATIF N-1/N
 # =============================================================================
 
+def _ong_munich(wb, n3):
+    """Onglet Munich CL — la seule méthode qui exploite les DEUX triangles, et
+    la seule qui n'apparaissait dans aucun format de livrable.
+
+    Lit `lignes_munich_rapport`, exactement comme le HTML et le Word : une
+    méthode ne doit pas raconter trois histoires selon le fichier ouvert.
+    """
+    lignes = lignes_munich_rapport(n3)
+    if not lignes:
+        return
+    ws = wb.create_sheet("11. Munich CL")
+    ws.sheet_view.showGridLines = False
+
+    _titre_section(ws, 1, 1,
+                   "Munich Chain Ladder — Quarg & Mack (2004) | "
+                   "rapprochement payé / engagé", 3)
+    for j, (h, w) in enumerate(zip(["Indicateur", "Valeur", "Lecture"],
+                                   [40, 20, 72])):
+        _header(ws, 2, j + 1, h, width=w)
+
+    for i, (libelle, valeur, lecture) in enumerate(lignes):
+        alerte = str(libelle).startswith('⚠')
+        bg = 'FDE9E7' if alerte else (BLANC if i % 2 == 0 else GRIS_CLAIR)
+        for j, v in enumerate((libelle, valeur, lecture)):
+            c = ws.cell(row=3 + i, column=j + 1, value=v)
+            c.font      = _font(bold=(j == 0 or alerte), size=10)
+            c.fill      = _fill(bg)
+            c.border    = _border_thin()
+            c.alignment = _align(h='right' if j == 1 else 'left', wrap=(j == 2))
+
+    ws.freeze_panes = 'A3'
+
+
 def _ong8_comparatif(wb, n4, resultats_precedents=None):
     ws = wb.create_sheet("8. Comparatif N-1 N")
     ws.sheet_view.showGridLines = False
@@ -1008,6 +1043,7 @@ def export_excel(
         _ong8_comparatif(wb, n4, resultats_precedents)
         _ong9_scr(wb, n4)
         _ong10_sensibilites(wb, n4)
+        _ong_munich(wb, n3)      # silencieux si Munich n'a pas tourné
 
         # Activer l'onglet Synthèse par défaut
         wb.active = wb["1. Synthèse"]
