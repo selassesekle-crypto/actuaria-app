@@ -19,23 +19,17 @@
 #
 # =============================================================================
 
-from typing import Any, Dict, NamedTuple, Tuple
+from typing import Any, Dict
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  LES SEGMENTS OFFICIELS — Règlement délégué (UE) 2015/35
+#  LES SEGMENTS OFFICIELS — TABLE PARTAGÉE, PAS UNE COPIE
 #
-#  SOURCE, RECOPIÉE MOT À MOT. Texte consolidé au 02.08.2022, CELEX
-#  02015R0035-20220802 : Annexe II page 389 (non-vie, 12 segments) et Annexe
-#  XIV page 430 (santé non-SLT, 4 segments). Les deux tableaux portent le
-#  marqueur ▼M6 = Règlement délégué (UE) 2019/981 du 8 mars 2019.
-#
-#  LES ARTICLES QUI S'APPLIQUENT — ET CE N'EST PAS L'ARTICLE 105 :
-#    · Art. 115 : SCR(primes et réserve, non-vie) = 3 × σ_nl × V_nl
-#    · Art. 116 : les mesures de volume V_prime et V_réserve
-#    · Art. 117 : le σ du segment, à partir de σ_prime et σ_réserve
-#  L'article 105 DU RÈGLEMENT DÉLÉGUÉ porte sur le calcul simplifié du risque
-#  de spread des entreprises captives : il n'a rien à voir. La confusion vient
-#  de l'article 105 de la DIRECTIVE 2009/138/CE, qui décrit les modules du SCR.
+#  La table des écarts types réglementaires vit désormais dans
+#  `direction_non_vie/reglementation/segments_s2.py`, avec sa source et ses
+#  articles. Elle y a été DÉPLACÉE au lot B10-b, parce qu'A10 en détenait sa
+#  propre copie et que les deux avaient divergé : A7 avait 3 valeurs justes
+#  sur 18, A10 en avait 5 sur 22. Une copie par agent est le mécanisme même
+#  de la dérive ; un référentiel réglementaire n'appartient à aucun agent.
 #
 #  POURQUOI A7 N'UTILISE QUE σ_RÉSERVE. L'article 117(2) donne
 #
@@ -45,8 +39,7 @@ from typing import Any, Dict, NamedTuple, Tuple
 #  donc V_prime = 0 et l'expression se réduit EXACTEMENT à σ_réserve. A7 n'a
 #  donc besoin que d'UN σ par segment, et c'est bien celui de la réserve — ce
 #  n'est pas une simplification, c'est la formule standard sur son périmètre.
-#  σ_prime est conservé ici parce qu'il figure au texte et qu'il fonde A10,
-#  qui calcule le module complet primes + réserve.
+#  A10, qui calcule le module complet primes + réserve, emploie les deux.
 #
 #  ⚠️ PÉRIMÈTRE DE V_RÉSERVE. L'article 116(6) définit la mesure de volume du
 #  risque de réserve comme la meilleure estimation des provisions pour
@@ -57,43 +50,8 @@ from typing import Any, Dict, NamedTuple, Tuple
 #  périmètre d'A7 — A10 opère en aval.
 # ─────────────────────────────────────────────────────────────────────────────
 
-class SegmentS2(NamedTuple):
-    """Un segment des annexes II ou XIV du Règlement délégué (UE) 2015/35.
-
-    La provenance est portée par la DONNÉE, pas par un commentaire : c'est la
-    leçon du lot B10-a. Avant lui, quinze valeurs sur dix-huit étaient fausses
-    tout en étant commentées « Annexe II », et deux citaient un segment qui
-    n'existe pas (« CAT naturelles », « Accidents corporels »).
-    """
-    annexe:          str    # 'II' (non-vie) ou 'XIV' (santé non-SLT)
-    numero:          int    # numéro du segment DANS son annexe
-    libelle:         str    # libellé officiel, abrégé
-    lignes_annexe_i: str    # lignes d'activité qui composent le segment
-    sigma_prime:     float  # non employé par A7 (V_prime = 0) — sert à A10
-    sigma_reserve:   float  # ← le seul que A7 emploie, cf. ci-dessus
-
-
-#: Clé = (annexe, numéro de segment). Recopie littérale du texte consolidé.
-SEGMENTS_S2: Dict[Tuple[str, int], SegmentS2] = {
-    # ── Annexe II — engagements NON-VIE (page 389) ───────────────────────────
-    ('II',  1): SegmentS2('II',  1, "RC automobile",                     "4 et 16",  0.10,  0.09),
-    ('II',  2): SegmentS2('II',  2, "Autre assurance des véhicules",     "5 et 17",  0.08,  0.08),
-    ('II',  3): SegmentS2('II',  3, "Maritime, aérienne et transport",   "6 et 18",  0.15,  0.11),
-    ('II',  4): SegmentS2('II',  4, "Incendie et autres dommages aux biens", "7 et 19", 0.08, 0.10),
-    ('II',  5): SegmentS2('II',  5, "RC générale",                       "8 et 20",  0.14,  0.11),
-    ('II',  6): SegmentS2('II',  6, "Crédit et cautionnement",           "9 et 21",  0.19,  0.172),
-    ('II',  7): SegmentS2('II',  7, "Protection juridique",              "10 et 22", 0.083, 0.055),
-    ('II',  8): SegmentS2('II',  8, "Assistance",                        "11 et 23", 0.064, 0.22),
-    ('II',  9): SegmentS2('II',  9, "Pertes pécuniaires diverses",       "12 et 24", 0.13,  0.20),
-    ('II', 10): SegmentS2('II', 10, "Réassurance accidents non prop.",   "26",       0.17,  0.20),
-    ('II', 11): SegmentS2('II', 11, "Réassurance MAT non prop.",         "27",       0.17,  0.20),
-    ('II', 12): SegmentS2('II', 12, "Réassurance dommages non prop.",    "28",       0.17,  0.20),
-    # ── Annexe XIV — engagements SANTÉ NON-SLT (page 430) ────────────────────
-    ('XIV', 1): SegmentS2('XIV', 1, "Frais médicaux",                    "1 et 13",  0.05,  0.057),
-    ('XIV', 2): SegmentS2('XIV', 2, "Protection du revenu",              "2 et 14",  0.085, 0.14),
-    ('XIV', 3): SegmentS2('XIV', 3, "Indemnisation des travailleurs",    "3 et 15",  0.096, 0.11),
-    ('XIV', 4): SegmentS2('XIV', 4, "Réassurance santé non prop.",       "25",       0.17,  0.17),
-}
+from ....reglementation.segments_s2 import (  # noqa: F401  (ré-export)
+    SegmentS2, SEGMENTS_S2, libelle_reference, verifier_rattachements)
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  MATRICE DE CORRÉLATION EIOPA Non-Vie 12×12
@@ -665,14 +623,10 @@ def _appliquer_table_officielle() -> None:
     n'existe pas — un mauvais rattachement ne peut donc pas atteindre un
     livrable.
     """
-    for cle, cfg in LOB_CONFIG.items():
-        seg = cfg.get("segment_s2")
-        if seg not in SEGMENTS_S2:
-            raise KeyError(
-                f"LoB '{cle}' : segment {seg!r} absent des annexes II et XIV "
-                f"du Règlement délégué (UE) 2015/35."
-            )
-        cfg["sigma_eiopa"] = SEGMENTS_S2[seg].sigma_reserve
+    verifier_rattachements({c: g["segment_s2"] for c, g in LOB_CONFIG.items()},
+                           origine="A7 LOB_CONFIG")
+    for cfg in LOB_CONFIG.values():
+        cfg["sigma_eiopa"] = SEGMENTS_S2[cfg["segment_s2"]].sigma_reserve
 
 
 _appliquer_table_officielle()
@@ -725,12 +679,10 @@ def reference_s2(lob: str) -> str:
     """Référence à citer dans un livrable : « Annexe XIV, segment 2 — ... ».
 
     Les rapports affichaient « Annexe II » EN DUR, ce qui devenait faux dès
-    qu'une LoB relevait de la santé non-SLT (annexe XIV). Cette fonction est
-    la seule source de cette mention.
+    qu'une LoB relevait de la santé non-SLT (annexe XIV). Le libellé est
+    fabriqué par le module partagé, pour qu'A7 et A10 citent à l'identique.
     """
-    seg = get_segment_s2(lob)
-    return (f"Annexe {seg.annexe}, segment {seg.numero} — {seg.libelle} "
-            f"(Rgt délégué (UE) 2015/35)")
+    return libelle_reference(get_lob_config(lob)["segment_s2"])
 
 
 def get_sigma_eiopa(lob: str) -> float:

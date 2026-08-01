@@ -20,13 +20,35 @@
 ║                                                                              ║
 ║  VERSION : 2.0 DÉFINITIVE — 19/06/2026                                     ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
+
+ÉTAT DES SOURCES RÉGLEMENTAIRES (lot B10-b)
+───────────────────────────────────────────
+VÉRIFIÉ contre le Règlement délégué (UE) 2015/35 consolidé au 02.08.2022 :
+  · les écarts types σ_prime et σ_réserve — annexes II p.389 et XIV p.430,
+    désormais DÉRIVÉS de `reglementation/segments_s2.py` et non plus saisis ;
+  · la combinaison σ_s de `_scr_fs` — article 117(2), terme croisé compris ;
+  · la matrice de corrélation entre segments — annexe IV, conformément au
+    renvoi de l'article 117(1)(c). Citation d'origine JUSTE, conservée.
+
+NON VÉRIFIÉ, ET SIGNALÉ COMME TEL — la source n'était plus disponible à la
+clôture du lot, et une citation qu'on ne peut pas remonter ne doit pas passer
+pour une citation vérifiée :
+  · « Risk Margin duration-based Art. 58 » : la marge de risque est définie à
+    l'article 77(5) de la DIRECTIVE 2009/138/CE, que cite A7 ; le renvoi à un
+    article 58 n'a pas pu être confronté au texte ;
+  · « bornes 40 %-200 % » sur le σ client : les paramètres propres à
+    l'entreprise relèvent d'un régime d'approbation dédié, non confronté ici ;
+  · les facteurs catastrophe `F_CAT_LOB`, isolés à cet effet — cf. leur bloc.
 """
 
 import json, logging, warnings
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Tuple   # Any/List/Optional etaient importes sans usage
 import numpy as np
+
+from ..segments_s2 import (SEGMENTS_S2, libelle_reference,
+                           verifier_rattachements)
 
 try:
     import plotly.graph_objects as go
@@ -50,34 +72,87 @@ LAYOUT_BASE = dict(paper_bgcolor=NAVY, plot_bgcolor=NAVY_L,
     margin=dict(l=16,r=16,t=60,b=60), height=320,
     hoverlabel=dict(bgcolor=NAVY_LL, bordercolor=OR, font_size=12, font_color=BLANC))
 
-# ── Paramètres EIOPA ─────────────────────────────────────────────────────────
-SIGMA_LOB = {
-    'rc_auto':             {'sigma_prem':0.10,'sigma_res':0.09,'f_cat':0.15},
-    'auto_autre':          {'sigma_prem':0.08,'sigma_res':0.08,'f_cat':0.10},
-    'incendie':            {'sigma_prem':0.08,'sigma_res':0.11,'f_cat':0.25},
-    'mrh':                 {'sigma_prem':0.07,'sigma_res':0.10,'f_cat':0.25},
-    'rc_generale':         {'sigma_prem':0.13,'sigma_res':0.11,'f_cat':0.15},
-    'construction':        {'sigma_prem':0.12,'sigma_res':0.19,'f_cat':0.20},
-    'transport':           {'sigma_prem':0.13,'sigma_res':0.13,'f_cat':0.15},
-    'credit':              {'sigma_prem':0.21,'sigma_res':0.19,'f_cat':0.10},
-    'assistance':          {'sigma_prem':0.09,'sigma_res':0.11,'f_cat':0.08},
-    'protection_juridique':{'sigma_prem':0.07,'sigma_res':0.12,'f_cat':0.05},
-    'pertes_pecuniaires':  {'sigma_prem':0.13,'sigma_res':0.20,'f_cat':0.15},
-    'autres':              {'sigma_prem':0.13,'sigma_res':0.17,'f_cat':0.15},
-    # Branches longues — sigma calibres EIOPA Annexe II
-    'rc_medicale':         {'sigma_prem':0.13,'sigma_res':0.11,'f_cat':0.15},
-    'corporels_graves':    {'sigma_prem':0.13,'sigma_res':0.11,'f_cat':0.15},
-    # Branches supplementaires lob_config.py (nomenclature A7)
-    'catastrophes_naturelles':   {'sigma_prem':0.10,'sigma_res':0.20,'f_cat':0.50},
-    'marine_aviation_transport': {'sigma_prem':0.13,'sigma_res':0.13,'f_cat':0.15},
-    'incendie_dommages':         {'sigma_prem':0.08,'sigma_res':0.11,'f_cat':0.25},
-    'credit_caution':            {'sigma_prem':0.21,'sigma_res':0.19,'f_cat':0.10},
-    'dommage_corporel_individuel':{'sigma_prem':0.13,'sigma_res':0.11,'f_cat':0.15},
-    'rc_auto_materiel':          {'sigma_prem':0.10,'sigma_res':0.09,'f_cat':0.15},
-    'rc_auto_corporels':         {'sigma_prem':0.10,'sigma_res':0.09,'f_cat':0.15},
-    'generique':                 {'sigma_prem':0.13,'sigma_res':0.17,'f_cat':0.15},
+# ── Écarts types réglementaires ──────────────────────────────────────────────
+#
+#  LES σ NE SONT PLUS SAISIS ICI. Ils sont DÉRIVÉS de la table partagée
+#  `direction_non_vie/reglementation/segments_s2.py`, qui porte la source
+#  (Règlement délégué (UE) 2015/35 consolidé au 02.08.2022, annexe II p.389
+#  et annexe XIV p.430) et les articles applicables.
+#
+#  POURQUOI CE LOT A EXISTÉ (B10-b). A10 détenait sa propre copie de cette
+#  table et A7 la sienne ; elles avaient divergé sans que rien ne le voie.
+#  Sur 22 entrées, A10 n'avait que 7 σ_prime et 9 σ_réserve justes, et
+#  SEULEMENT 5 justes sur les DEUX colonnes. Pire, A10 se contredisait
+#  lui-même : le segment II-4 « incendie » recevait trois σ différents selon
+#  qu'on l'appelait `mrh` (0,07/0,10), `incendie` (0,08/0,11) ou
+#  `catastrophes_naturelles` (0,10/0,20), et le segment II-5 « RC générale »
+#  en recevait trois aussi. Le même segment réglementaire ne peut pas avoir
+#  trois écarts types : c'est désormais structurellement impossible.
+#
+#  A10 EMPLOIE LES DEUX COLONNES, contrairement à A7. Il calcule le module
+#  COMPLET primes + réserve de l'article 117(2) — cf. `_scr_souscription`.
+#
+#  ⚠️ LE COMMENTAIRE « sigma calibres EIOPA Annexe II » PORTÉ PAR LES
+#  BRANCHES LONGUES ÉTAIT FAUX : 0,13/0,11 n'est le couple d'aucun segment
+#  de l'annexe II (la RC générale y vaut 0,14/0,11).
+SEGMENT_PAR_LOB: Dict[str, Tuple[str, int]] = {
+    'rc_auto':                   ('II',  1),
+    'rc_auto_materiel':          ('II',  1),
+    'rc_auto_corporels':         ('II',  1),
+    'auto_autre':                ('II',  2),
+    'transport':                 ('II',  3),
+    'marine_aviation_transport': ('II',  3),
+    'incendie':                  ('II',  4),
+    'incendie_dommages':         ('II',  4),
+    'mrh':                       ('II',  4),
+    # Le risque de RÉSERVE d'un portefeuille cat-nat est celui de tout dommage
+    # aux biens. Le risque de CATASTROPHE proprement dit — les événements
+    # futurs — est un module distinct (art. 119 et suivants) : cf. `f_cat`.
+    'catastrophes_naturelles':   ('II',  4),
+    'rc_generale':               ('II',  5),
+    # Ni « construction » ni « RC professionnelle » ne sont des segments :
+    # la décennale et la RC médicale relèvent de la RC générale (ligne 8).
+    'construction':              ('II',  5),
+    'rc_medicale':               ('II',  5),
+    # ⚠️ `corporels_graves` et `dommage_corporel_individuel` se ressemblent
+    # mais ne relèvent PAS du même segment, et c'est délibéré. Le premier est
+    # une CATÉGORIE DE SINISTRES au sein de la responsabilité civile — c'est
+    # ainsi que CORR_LOB le traite déjà, en le corrélant à rc_generale et
+    # rc_medicale. Le second est un PRODUIT vendu à un particulier, qui sert
+    # des rentes : santé non-SLT, comme dans A7 (lot B10-a).
+    'corporels_graves':          ('II',  5),
+    'dommage_corporel_individuel': ('XIV', 2),
+    'credit':                    ('II',  6),
+    'credit_caution':            ('II',  6),
+    'protection_juridique':      ('II',  7),
+    'assistance':                ('II',  8),
+    'pertes_pecuniaires':        ('II',  9),
+    # Repli quand la branche n'est pas reconnue : RC générale, comme la LoB
+    # `generique` d'A7. Ce n'est PAS une valeur réglementaire, c'est un choix.
+    'generique':                 ('II',  5),
 }
-SIGMA_DEFAULT = {'sigma_prem':0.10,'sigma_res':0.11,'f_cat':0.15}
+
+#  ⚠️ CE QUI SUIT N'EST PAS DANS LES ANNEXES II ET XIV, ET N'EST PAS VÉRIFIÉ.
+#  Le facteur catastrophe est appliqué comme `f_cat × V_primes`, alors que le
+#  module catastrophe non-vie du Règlement délégué (art. 119 et suivants) a
+#  une tout autre structure. Ces valeurs n'ont pas de source identifiée dans
+#  le dépôt et n'ont PAS pu être confrontées au texte dans le lot B10-b, qui
+#  porte sur les écarts types. Elles sont conservées TELLES QUELLES et isolées
+#  ici pour que la frontière de provenance soit visible : au-dessus, le texte ;
+#  ici, des valeurs à auditer.
+F_CAT_LOB: Dict[str, float] = {
+    'rc_auto': 0.15, 'rc_auto_materiel': 0.15, 'rc_auto_corporels': 0.15,
+    'auto_autre': 0.10, 'transport': 0.15, 'marine_aviation_transport': 0.15,
+    'incendie': 0.25, 'incendie_dommages': 0.25, 'mrh': 0.25,
+    'catastrophes_naturelles': 0.50, 'rc_generale': 0.15, 'construction': 0.20,
+    'rc_medicale': 0.15, 'corporels_graves': 0.15,
+    'dommage_corporel_individuel': 0.15, 'credit': 0.10, 'credit_caution': 0.10,
+    'protection_juridique': 0.05, 'assistance': 0.08, 'pertes_pecuniaires': 0.15,
+    'generique': 0.15,
+}
+
+#: Construit au chargement à partir de SEGMENT_PAR_LOB — cf. `_construire_sigma_lob`.
+SIGMA_LOB: Dict[str, Dict[str, float]] = {}
 
 CORR_LOB = {
     # Correlations EIOPA — Annexe IV Reglement Delegue 2015/35
@@ -180,6 +255,36 @@ BRANCHE_MAP = {
     'dommage_corporel':            'dommage_corporel_individuel',
     'generique':                   'generique',
 }
+
+
+def _construire_sigma_lob() -> None:
+    """Remplit SIGMA_LOB depuis la table officielle, au chargement du module.
+
+    Trois contrôles y sont faits, et chacun LÈVE plutôt que de laisser passer
+    une valeur silencieusement fausse — c'est ce qui manquait :
+      1. tout segment désigné existe bien aux annexes II ou XIV ;
+      2. toute branche atteignable par BRANCHE_MAP a un rattachement ;
+      3. tout rattachement a son facteur catastrophe.
+    Le contrôle 2 est la raison pour laquelle cette fonction est appelée ICI
+    et non plus haut : elle a besoin de BRANCHE_MAP.
+    """
+    verifier_rattachements(SEGMENT_PAR_LOB, origine="A10 SEGMENT_PAR_LOB")
+    orphelines = sorted(set(BRANCHE_MAP.values()) - set(SEGMENT_PAR_LOB))
+    if orphelines:
+        raise KeyError(f"A10 : branches atteignables sans segment S2 : {orphelines}")
+    sans_cat = sorted(set(SEGMENT_PAR_LOB) - set(F_CAT_LOB))
+    if sans_cat:
+        raise KeyError(f"A10 : branches sans facteur catastrophe : {sans_cat}")
+    for cle, segment in SEGMENT_PAR_LOB.items():
+        seg = SEGMENTS_S2[segment]
+        SIGMA_LOB[cle] = {'sigma_prem': seg.sigma_prime,
+                          'sigma_res':  seg.sigma_reserve,
+                          'f_cat':      F_CAT_LOB[cle],
+                          'segment_s2': segment,
+                          'reference_s2': libelle_reference(segment)}
+
+
+_construire_sigma_lob()
 
 PD_MAP = {'AAA':0.001,'AA':0.001,'A':0.003,'BBB':0.010,'BB':0.050}
 
@@ -359,7 +464,12 @@ class AgentA10Solvabilite2:
         def norm(nom):
             return BRANCHE_MAP.get(nom.lower().replace(' ','_').replace('-','_'),'rc_auto')
         def sigma(nom):
-            return SIGMA_LOB.get(nom, SIGMA_DEFAULT)
+            # Indexation DIRECTE, sans repli : `norm` ne rend qu'une cible de
+            # BRANCHE_MAP, et `_construire_sigma_lob` lève au chargement si une
+            # cible n'a pas de segment. L'ancien `SIGMA_DEFAULT` (0,10/0,11,
+            # sans source) était donc inatteignable — un repli mort qui
+            # ressemblait à un garde-fou.
+            return SIGMA_LOB[nom]
         if branches:
             res=[]; be_f=sum(b.get('be',0) for b in branches)
             for b in branches:
@@ -482,10 +592,18 @@ class AgentA10Solvabilite2:
             sp=sigma_ov[n]['sigma_prem'] if sigma_ov and n in sigma_ov else b['sigma_prem']
             sr=sigma_ov[n]['sigma_res']  if sigma_ov and n in sigma_ov else b['sigma_res']
             Vp=b['primes'] if b['primes']>0 else b['be']*0.80; Vr=b['be']; Vt=Vp+Vr
+            # Art. 117(2) : le terme croise porte le coefficient 1 du texte
+            # (ecrit ici 2 x 0,5, soit une correlation implicite de 0,5 entre
+            # risque de primes et risque de reserve).
             sc=np.sqrt((sp*Vp)**2+2*0.5*(sp*Vp)*(sr*Vr)+(sr*Vr)**2)/max(Vt,1)
             sp_b=3*sp*Vp; sr_b=3*sr*Vr; spr=3*sc*Vt; cat=b['f_cat']*Vp; lap=0.005*Vp
             par.append({'nom':n,'scr_prem':sp_b,'scr_res':sr_b,'scr_pr':spr,
-                'scr_cat':cat,'scr_lapse':lap,'sigma_net':sc,'Vp':Vp,'Vr':Vr})
+                'scr_cat':cat,'scr_lapse':lap,'sigma_net':sc,'Vp':Vp,'Vr':Vr,
+                # La provenance voyage AVEC le resultat : quelle annexe, quel
+                # segment, et quels sigma ont reellement servi.
+                'segment_s2':SIGMA_LOB[n]['segment_s2'],
+                'reference_s2':SIGMA_LOB[n]['reference_s2'],
+                'sigma_prem':sp,'sigma_res':sr})
             sp_tot+=sp_b; sr_tot+=sr_b; sc_tot+=cat
         if len(branches)==1:
             b0=par[0]
@@ -516,7 +634,7 @@ class AgentA10Solvabilite2:
         for b in branches:
             n=b['nom']
             if n not in sc: continue
-            se=SIGMA_LOB.get(n,SIGMA_DEFAULT)
+            se=SIGMA_LOB[n]   # n vient de `norm()` : toujours présent (cf. sigma())
             sp=sc[n].get('sigma_prem',se['sigma_prem']); sr=sc[n].get('sigma_res',se['sigma_res'])
             if not (0.40<=sp/max(se['sigma_prem'],0.001)<=2.00):
                 self.logger.warning(f"σ_prem {n} hors plage → EIOPA"); sp=se['sigma_prem']
