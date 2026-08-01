@@ -20,7 +20,7 @@
 from __future__ import annotations
 import base64, io, logging, os, re
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 import numpy as np
 
 # Source UNIQUE d'affichage des hypothèses de BF et Cape Cod : une hypothèse non
@@ -73,12 +73,6 @@ def _lob(code: str) -> str:
         return 'Branche Non-Vie'
     c = str(code).lower().strip().replace(' ', '_')
     return LOB_LABELS.get(c, code.replace('_', ' ').title())
-
-def _lob_short(code: str) -> str:
-    """Version courte pour la page de garde."""
-    full = _lob(code)
-    return full.split(' — ')[0] if ' — ' in full else full
-
 
 # =============================================================================
 #  LOGO SVG
@@ -929,6 +923,186 @@ table.premium tbody td .mono { font-family: 'JetBrains Mono', monospace; font-si
 #  CONSTRUCTION DES BLOCS HTML
 # =============================================================================
 
+#: Quantile normal unilatéral à 90 % — même approximation normale que l'IC 95 %
+#: de Clark (ultime ± 1,96·se). Publier le P90 sur une autre base que l'IC
+#: reviendrait à faire cohabiter deux lois dans le même bloc.
+Z90 = 1.281552
+
+
+def _bloc_clark_incertitude(n2: Dict, n3: Dict) -> str:
+    """Intervalle de prédiction de Clark (2003), décomposé année par année.
+
+    Ce bloc existe parce que le correctif de couverture — l'IC passait de 30,8 %
+    à 97,0 % une fois le facteur σ² appliqué à la Hessienne — produisait des
+    clés (`ic_95`, `sigma2`, `se_parametre`, `se_processus`, `se_totale`,
+    `se_reserve_totale`, `cv_reserve`) que RIEN n'affichait. Un intervalle
+    réparé mais invisible ne vaut pas mieux qu'un intervalle faux.
+    """
+    clark = (n3 or {}).get('clark') or {}
+    if not clark.get('disponible'):
+        return ''
+
+    struct = clark.get('structure_monotone') or {}
+    if not struct.get('compatible', True):
+        # La réserve n'est pas publiée : un intervalle autour d'elle ne le sera
+        # pas davantage. On dit pourquoi plutôt que de laisser un vide.
+        return (
+            '<p style="font-size:8.5pt;color:var(--slate);font-style:italic;">'
+            'Intervalle de prédiction non publié — ' + _s(struct.get('message'))
+            + '</p>')
+
+    ic     = clark.get('ic_95') or []
+    se_par = clark.get('se_parametre') or []
+    se_pro = clark.get('se_processus') or []
+    se_tot = clark.get('se_totale') or []
+    ibnr   = clark.get('ibnr_brut_par_annee') or []
+    if not ic or ic[0][0] is None or not se_tot or se_tot[0] is None:
+        return (
+            '<p style="font-size:8.5pt;color:var(--slate);font-style:italic;">'
+            'Intervalle de prédiction non calculé — la Hessienne de la '
+            'log-vraisemblance n\'a pas pu être inversée sur ce triangle '
+            '(convergence du MLE insuffisante).</p>')
+
+    an0 = n2.get('annee_debut') if isinstance(n2, dict) else None
+    try:
+        an0 = int(an0)
+    except (TypeError, ValueError):
+        an0 = None
+
+    lignes = ''
+    for i in range(min(len(ic), len(se_tot), len(ibnr))):
+        lo, hi = ic[i]
+        etiq = str(an0 + i) if an0 is not None else f'Année {i + 1}'
+        lignes += (
+            '<tr><td class="label">' + etiq + '</td>'
+            '<td class="right"><span class="mono">' + _f(ibnr[i]) + '</span></td>'
+            '<td class="right"><span class="mono">' + _f(se_par[i] if i < len(se_par) else None) + '</span></td>'
+            '<td class="right"><span class="mono">' + _f(se_pro[i] if i < len(se_pro) else None) + '</span></td>'
+            '<td class="right"><span class="mono">' + _f(se_tot[i]) + '</span></td>'
+            '<td class="center" style="font-size:8pt;"><span class="mono">'
+            + _f(lo) + ' — ' + _f(hi) + '</span></td></tr>'
+        )
+
+    se_r = clark.get('se_reserve_totale')
+    cv   = clark.get('cv_reserve')
+    lignes += (
+        '<tr class="highlight-gold"><td class="label" style="color:var(--navy);">'
+        'TOTAL (réserve)</td>'
+        '<td class="right" style="color:var(--navy);"><span class="mono">'
+        + _f(clark.get('reserve_brute')) + '</span></td>'
+        '<td class="center" colspan="2" style="font-size:8pt;color:var(--navy-light);">'
+        'covariances comprises</td>'
+        '<td class="right" style="color:var(--navy);"><span class="mono">'
+        + _f(se_r) + '</span></td>'
+        '<td class="center" style="color:var(--navy);">CV = '
+        + (_pct(cv) if cv is not None else '—') + '</td></tr>'
+    )
+
+    s2  = clark.get('sigma2')
+    df  = clark.get('df')
+    phi = ((n3 or {}).get('bootstrap') or {}).get('phi')
+    recoupement = ''
+    if s2 and phi:
+        rap = max(s2, phi) / min(s2, phi)
+        recoupement = (
+            ' Le Bootstrap ODP estime la même sur-dispersion à '
+            + f'{phi:,.4f}'.replace(',', ' ')
+            + f" — rapport ×{rap:.2f}. Deux ajustements différents du "
+              "même paramètre : ils diffèrent légitimement, un écart d'un "
+              "ordre de grandeur signalerait en revanche que l'un des deux "
+              "ne mesure pas ce qu'il annonce."
+        )
+
+    return (
+        '<table class="premium"><thead><tr>'
+        '<th>Survenance</th><th class="right">IBNR</th>'
+        '<th class="right">se paramètre</th><th class="right">se processus</th>'
+        '<th class="right">se totale</th><th class="center">IC 95 %</th>'
+        '</tr></thead><tbody>' + lignes + '</tbody></table>'
+        '<p style="font-size:8pt;color:var(--slate);font-style:italic;margin-top:6px;">'
+        'Clark (2003) décompose Var(R) en variance de PROCESSUS (σ²·R, aléa des '
+        'paiements futurs) et variance de PARAMÈTRE (σ²·H⁻¹, incertitude sur la '
+        'courbe et les ultimes). Le total agrégé fait intervenir les covariances : '
+        'les ultimes partagent ω et θ, leurs erreurs sont corrélées. '
+        + (f'σ² = {s2:,.4f}'.replace(',', ' ') if s2 else 'σ² non estimé')
+        + (f' sur {df} degrés de liberté.' if df else '.')
+        + recoupement +
+        '</p>'
+    )
+
+
+def lignes_clark_rapport(n2: Dict, n3: Dict) -> List[Dict[str, str]]:
+    """Les hypothèses de Clark, PRÉSENTÉES — pas gouvernées.
+
+    ⚠️ AUCUN VERDICT N'EST CRÉÉ ICI, et c'est le point. Une investigation
+    dédiée a mesuré qu'un test d'adéquation de la courbe de Clark — statistique
+    de restriction emboîtée, calibrée sur vérité connue, parfaitement juste
+    (5,0 % de fausses alarmes au seuil 5 %) et écrasamment puissante (statistique
+    ×112 entre une vraie courbe de Clark et une cadence bimodale) — n'a AUCUNE
+    relation avec l'erreur de réserve : ρ de Spearman = −0,001 sur 135 triangles
+    (p = 0,993), erreur médiane 5,01 % contre 5,41 %. Publier un statut
+    VALIDÉE / NON VALIDÉE là-dessus aurait recréé l'ancienne H4 : une alarme
+    juste sur une grandeur qui ne commande rien.
+
+    Ce que ces lignes rendent, ce sont donc des FAITS déjà calculés ailleurs :
+    la précondition de forme (`structure_monotone`, n3), ce que le masque du MLE
+    a réellement retiré (`increments_exclus_mle`, n3), et le verdict
+    d'indépendance déjà rendu par CLM-H1 (n2), republié tel quel.
+    """
+    clark = (n3 or {}).get('clark') or {}
+    if not clark.get('disponible'):
+        return []
+
+    lignes: List[Dict[str, str]] = []
+
+    struct = clark.get('structure_monotone') or {}
+    if struct.get('testable'):
+        compat = bool(struct.get('compatible', True))
+        lignes.append({
+            'libelle': 'Clark — Représentabilité par une courbe monotone',
+            'etat':    'Compatible' if compat else 'Incompatible',
+            'ok':      'oui' if compat else 'non',
+            'texte':   _s(struct.get('message')),
+        })
+
+    exc = clark.get('increments_exclus_mle') or {}
+    if 'n_exclues' in exc:
+        n_ex = int(exc.get('n_exclues', 0))
+        n_ze = int(exc.get('zeros_conserves', 0))
+        txt = (
+            f"L'ajustement porte sur {clark.get('n_obs', '—')} cellules. "
+            + (f"{n_ex} incrément(s) strictement négatif(s) retiré(s) "
+               f"({exc.get('frac_exclue', 0):.1%} des cellules connues) : le "
+               f"modèle de Poisson sur-dispersé n'est pas défini pour une "
+               f"espérance négative."
+               if n_ex else
+               "Aucun incrément négatif : le modèle de Poisson sur-dispersé "
+               "s'applique tel quel.")
+            + (f" {n_ze} incrément(s) nul(s) CONSERVÉ(s) — le terme de "
+               f"vraisemblance vaut alors −μ, parfaitement défini."
+               if n_ze else "")
+        )
+        lignes.append({
+            'libelle': 'Clark — Positivité des incréments ajustés',
+            'etat':    'Aucune exclusion' if not n_ex else f'{n_ex} exclue(s)',
+            'ok':      'oui' if not n_ex else 'non',
+            'texte':   txt,
+        })
+
+    h1 = ((n2 or {}).get('clm') or {}).get('hypotheses', {}).get('CLM-H1') or {}
+    if h1.get('statut'):
+        lignes.append({
+            'libelle': 'Clark — Indépendance des incréments (repris de CLM-H1)',
+            'etat':    _s(h1.get('statut')),
+            'ok':      'oui' if h1.get('statut') == 'VALIDÉE' else 'non',
+            'texte':   ("Clark (2003) suppose les incréments indépendants, "
+                        "exactement comme Chain Ladder. Verdict repris sans "
+                        "recalcul : " + _s(h1.get('message'))),
+        })
+
+    return lignes
+
+
 def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, audit_id, methode, statut, graphiques_html, actuaire_nom='', actuaire_numero_ia='') -> Dict:
     cl    = n3.get('chain_ladder', {});  mk  = n3.get('mack', {})
     bf    = n3.get('bf', {});            cc  = n3.get('cape_cod', {})
@@ -1156,7 +1330,27 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         'Ces valeurs diffèrent par le σ (Mack seul / composé / bootstrap) et/ou le point de '
         'centrage (colonne Centre). Le livrable retient le P90 composé.</p>'
     )
+    # Clark porte lui aussi une incertitude, construite autrement : variance de
+    # PROCESSUS + variance de PARAMÈTRE (Clark 2003), là où Mack agrège des σ_j
+    # et le Bootstrap rééchantillonne. Elle manquait à ce tableau alors qu'elle
+    # est calculée depuis le correctif de couverture (30,8 % → 97,0 %).
+    # ⚠️ On s'appuie sur la réserve PUBLIÉE, pas sur `reserve_brute` : quand la
+    # structure du triangle est incompatible avec une courbe monotone, Clark
+    # retient sa réserve — faire apparaître son incertitude ici la republierait
+    # par la bande, au milieu de Mack et du Bootstrap.
+    _ck_se  = clark.get('se_reserve_totale')
+    _ck_res = clark.get('reserve_be_clark')
+    if clark.get('disponible') and _ck_se and _ck_res is not None:
+        _ck_p90 = float(_ck_res) + Z90 * float(_ck_se)
+        tbl_i = tbl_i.replace(
+            '</tbody></table>',
+            '<tr><td class="label">Clark LDF (paramètre + processus)</td>'
+            '<td class="right"><span class="mono">' + _f(_ck_p90) + '</span></td>'
+            '<td class="right"><span class="mono">' + _f(_ck_se) + '</span></td>'
+            '<td>réserve Clark</td></tr>'
+            '</tbody></table>', 1)
     b['tableau_incertitude'] = tbl_i
+    b['tableau_clark_ic']    = _bloc_clark_incertitude(n2, n3)
     b['graph_ibnr']      = graphiques_html.get('g4_ibnr', '')
     b['graph_heatmap']   = graphiques_html.get('g1_heatmap', '')
     b['graph_bootstrap'] = graphiques_html.get('g6_bootstrap', '')
@@ -1199,6 +1393,21 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
             '<div class="hyp-score">' + _s(ligne['statut']) + '</div>'
             '</div>'
             '<div class="hyp-text">' + _s(ligne['message']) + '</div>'
+            '</div>'
+        )
+    # Clark — PRÉSENTATION, pas gouvernance. Ces cartes n'affichent aucun
+    # statut VALIDÉE / NON VALIDÉE : elles rendent des faits déjà calculés
+    # (cf. `lignes_clark_rapport`, qui documente pourquoi aucun verdict
+    # d'adéquation de courbe n'est produit).
+    for ligne in lignes_clark_rapport(n2, n3):
+        hyp_cards += (
+            '<div class="hyp-card ' + ('hyp-ok' if ligne['ok'] == 'oui'
+                                       else 'hyp-warn') + '">'
+            '<div class="hyp-label">'
+            '<div class="hyp-code">' + _s(ligne['libelle']) + '</div>'
+            '<div class="hyp-score">' + _s(ligne['etat']) + '</div>'
+            '</div>'
+            '<div class="hyp-text">' + _s(ligne['texte']) + '</div>'
             '</div>'
         )
     b['hyp_cards'] = hyp_cards
@@ -1773,6 +1982,9 @@ def export_html(
             + b['tableau_methodes']
             + '<div class="table-section-title">Diagnostic — décomposition de l\'incertitude (outil analytique interne, non destiné au bilan)</div>\n'
             + b['tableau_incertitude']
+            + (('<div class="table-section-title">Clark LDF (2003) — intervalle '
+                'de prédiction, décomposé processus / paramètre</div>\n'
+                + b['tableau_clark_ic']) if b.get('tableau_clark_ic') else '')
             + _wrap_graph(b['graph_heatmap'], 'Triangle de développement cumulé')
             + _wrap_graph(b['graph_ibnr'], 'IBNR par année de survenance')
             + _wrap_graph(b['graph_bootstrap'], 'Distribution Bootstrap ODP — Quantiles de réserve')
@@ -1984,7 +2196,6 @@ def export_word(n1, n2, n3, n4,
             pBdr.append(bo); pPr.append(pBdr)
 
         def _tbl(heads, rows, ws=None):
-            from docx.enum.table import WD_ALIGN_VERTICAL
             t=doc.add_table(rows=1+len(rows), cols=len(heads)); t.style='Table Grid'
             for i,hd in enumerate(heads):
                 c=t.rows[0].cells[i]; _bg(c,'0B1E3D')

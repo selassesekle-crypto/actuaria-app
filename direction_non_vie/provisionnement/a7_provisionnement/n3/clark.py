@@ -659,8 +659,14 @@ def clark_ldf(
         se_reserve_totale    — se de la réserve agrégée, COVARIANCES comprises
         cv_reserve           — se_reserve_totale / réserve, en %
         aic_loglogistique, aic_weibull, ll_loglogistique, ll_weibull,
-        aic_optimal, ll_optimal, residus, n_params, n_obs,
-        increments_non_positifs, periodes_arr, g_courbe
+        aic_optimal, ll_optimal, residus, n_params, n_obs, periodes_arr, g_courbe
+        increments_exclus_mle    — ce que le MASQUE DU MLE a retiré (Y < 0),
+                               avec `zeros_conserves` compté à part. À employer
+                               pour décrire l'ajustement de Clark.
+        increments_non_positifs  — convention du service partagé (p ≤ 0, zéros
+                               COMPRIS), pour recouper avec B&Z et le GLM APC.
+                               Les deux comptes diffèrent dès qu'un incrément
+                               est nul : ce n'est pas une redondance.
     """
     # ── Vérifications préliminaires ───────────────────────────────────────────
     if not SCIPY_OK:
@@ -740,12 +746,36 @@ def clark_ldf(
     # Les incréments négatifs sont exclus — ils violent H1 de Clark (2003)
     mask = ~np.isnan(Y) & ~np.isnan(C_float) & (Y >= 0)
 
+    # ── Journal EXACT de ce que le masque a retiré ────────────────────────────
+    # ⚠️ NE PAS CONFONDRE AVEC `increments_non_positifs`. Le service partagé
+    # `increments_positifs` applique la convention `p <= 0` — ZÉROS COMPRIS —
+    # parce que Barnett-Zehnwirth et le GLM APC en ont besoin (un log(0) n'existe
+    # pas). Le masque de Clark, lui, teste `Y >= 0` : un incrément NUL est
+    # parfaitement légitime pour la vraisemblance de Poisson, dont le terme
+    # vaut alors `0·log(μ) − μ = −μ`. Les deux comptes diffèrent donc dès qu'un
+    # incrément est exactement nul — mesuré : sur un triangle construit avec un
+    # seul zéro, le MLE conserve ses 15 cellules et le service en annonce 1
+    # exclue. Publier l'un pour l'autre ferait dire à Clark qu'il a écarté une
+    # cellule qu'il a gardée.
+    _connue     = ~np.isnan(Y) & ~np.isnan(C_float)
+    _cel_neg    = [(int(i), int(j)) for i, j in zip(*np.where(_connue & (Y < 0)))]
+    _n_connue   = int(_connue.sum())
+    increments_exclus_mle = {
+        'n_exclues':        len(_cel_neg),
+        'cellules_exclues': _cel_neg,
+        'frac_exclue':      round(len(_cel_neg) / _n_connue, 6) if _n_connue else 0.0,
+        'zeros_conserves':  int((_connue & (Y == 0)).sum()),
+        'n_cellules_connues': _n_connue,
+    }
+
     n_obs = int(mask.sum())
     if n_obs < (n + CLARK_DF_MIN):  # besoin d'au moins n+CLARK_DF_MIN observations
         return {
             'success': False, 'disponible': False,
+            'statut':  'INFO',
             'erreur':  f'Observations insuffisantes ({n_obs}) pour {n} années.',
             'message': 'Données insuffisantes pour Clark.',
+            'increments_exclus_mle': increments_exclus_mle,
         }
 
     # ── Estimation MLE pour chaque courbe ────────────────────────────────────
@@ -902,12 +932,17 @@ def clark_ldf(
         'success':           True,
         'disponible':        True,
         'aberrant':          clark_aberrant,
+        # Convention du service PARTAGE (p <= 0, zeros compris) — sert au
+        # recoupement avec B&Z et le GLM APC, PAS a decrire ce que Clark a fait.
         'increments_non_positifs': {
             'n_exclues':        ip_neg['n_exclues'],
             'cellules_exclues': ip_neg['cellules_exclues'],
             'frac_exclue':      ip_neg['frac_exclue'],
             'disponible':       ip_neg['disponible'],
         },
+        # Ce que le masque du MLE a REELLEMENT retire (Y < 0). Seule clé à
+        # employer pour parler de l'ajustement de Clark.
+        'increments_exclus_mle': increments_exclus_mle,
 
         'statut':            statut,
         'structure_monotone': structure,

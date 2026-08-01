@@ -358,5 +358,124 @@ class TestClarkStructurel(unittest.TestCase):
                         f"— rapport x{ratio:.1f}")
 
 
+# =============================================================================
+#  COMPTAGE DES EXCLUSIONS ET RESTITUTION DANS LE RAPPORT
+# =============================================================================
+
+#: Triangle CONSTRUIT pour porter un incrément exactement NUL en (2,2) et aucun
+#: incrément négatif. C'est le seul cas qui sépare les deux conventions.
+_TRI_ZERO = np.array([
+    [1000., 1600., 1900., 2050., 2100.],
+    [1100., 1750., 2080., 2240.,    0.],
+    [1200., 1900., 1900.,    0.,    0.],   # incrément NUL en (2,2)
+    [1300., 2050.,    0.,    0.,    0.],
+    [1400.,    0.,    0.,    0.,    0.],
+])
+
+
+class TestClarkComptageExclusions(unittest.TestCase):
+    """`increments_exclus_mle` doit décrire le MASQUE, rien d'autre."""
+
+    def test_c17_le_zero_est_conserve_et_compte_a_part(self):
+        """⚠️ ORACLE : le masque teste `Y >= 0`, le service partagé `p <= 0`.
+
+        Sur ce triangle construit, le MLE garde ses 15 cellules — le terme de
+        vraisemblance d'un incrément nul vaut −μ, parfaitement défini — alors
+        que `increments_non_positifs` en annonce 1 exclue. Publier l'un pour
+        l'autre ferait dire à Clark qu'il a écarté une cellule qu'il a gardée.
+        """
+        r = _fit(_TRI_ZERO, annee_base=1, calculer_ic=False)
+        self.assertTrue(r['success'], r.get('erreur'))
+        exc = r['increments_exclus_mle']
+        self.assertEqual(exc['n_exclues'], 0)
+        self.assertEqual(exc['zeros_conserves'], 1)
+        self.assertEqual(exc['cellules_exclues'], [])
+        self.assertEqual(r['n_obs'], exc['n_cellules_connues'])
+        # la clé du service partagé, elle, en compte bien 1 — et c'est correct
+        self.assertEqual(r['increments_non_positifs']['n_exclues'], 1)
+
+    def test_c18_comptage_exact_des_negatifs(self):
+        """Le compte doit retrouver exactement ce que le masque a retiré."""
+        for nom, tri, attendu in (('GenIns', GENINS, 0), ('RAA', RAA, 1),
+                                  ('Recours', _TRI_RECOURS, 3)):
+            with self.subTest(triangle=nom):
+                r = _fit(tri, annee_base=1, calculer_ic=False)
+                exc = r['increments_exclus_mle']
+                self.assertEqual(exc['n_exclues'], attendu)
+                self.assertEqual(len(exc['cellules_exclues']), attendu)
+                self.assertEqual(r['n_obs'],
+                                 exc['n_cellules_connues'] - attendu)
+
+
+class TestClarkRestitutionRapport(unittest.TestCase):
+    """Le rapport montre-t-il ce que le modèle calcule ?
+
+    ⚠️ AUCUN VERDICT D'ADÉQUATION DE COURBE N'EST TESTÉ ICI, et c'est délibéré.
+    Une investigation dédiée a mesuré qu'une telle statistique — juste (5,0 % de
+    fausses alarmes à 5 %) et écrasamment puissante (×112) — n'a AUCUNE relation
+    avec l'erreur de réserve : ρ = −0,001 sur 135 triangles. Ce lot est de
+    l'affichage, pas de la gouvernance.
+    """
+
+    def test_c19_lignes_rapport_sur_triangle_sain(self):
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
+            lignes_clark_rapport)
+        n3 = {'clark': _fit(GENINS, annee_base=1, calculer_ic=False)}
+        n2 = {'clm': {'hypotheses': {'CLM-H1': {
+            'statut': 'VALIDÉE', 'message': 'peu importe'}}}}
+        lignes = lignes_clark_rapport(n2, n3)
+        self.assertEqual(len(lignes), 3)
+        self.assertEqual(lignes[0]['etat'], 'Compatible')
+        self.assertEqual(lignes[1]['etat'], 'Aucune exclusion')
+        self.assertEqual(lignes[2]['etat'], 'VALIDÉE')
+        # aucun statut de gouvernance n'est fabriqué
+        for l in lignes:
+            self.assertNotIn(l['etat'], ('NON VALIDÉE', 'À JUSTIFIER',
+                                         'NON TESTABLE'))
+
+    def test_c20_lignes_rapport_sur_triangle_a_recours(self):
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
+            lignes_clark_rapport)
+        n3 = {'clark': _fit(_TRI_RECOURS, annee_base=1, calculer_ic=False)}
+        lignes = lignes_clark_rapport({}, n3)
+        self.assertEqual(lignes[0]['etat'], 'Incompatible')
+        self.assertEqual(lignes[0]['ok'], 'non')
+        self.assertEqual(lignes[1]['etat'], '3 exclue(s)')
+        # CLM-H1 absent : la ligne ne doit pas être inventée
+        self.assertEqual(len(lignes), 2)
+
+    def test_c21_le_bloc_ic_est_rendu_et_se_tait_quand_il_le_doit(self):
+        """L'IC réparé (30,8 % → 97,0 %) doit être VISIBLE, et se taire quand
+        la réserve n'est pas publiée."""
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
+            _bloc_clark_incertitude)
+        html = _bloc_clark_incertitude({}, {'clark': _fit(GENINS, annee_base=1,
+                                                          calculer_ic=True)})
+        for motif in ('se paramètre', 'se processus', 'TOTAL (réserve)', 'σ²'):
+            self.assertIn(motif, html)
+
+        html_rec = _bloc_clark_incertitude(
+            {}, {'clark': _fit(_TRI_RECOURS, annee_base=1, calculer_ic=True)})
+        self.assertIn('non publié', html_rec)
+        self.assertNotIn('<table', html_rec)
+
+    def test_c22_rapport_complet_contient_le_bloc(self):
+        """Bout en bout : un vrai rapport HTML porte l'intervalle de Clark."""
+        from direction_non_vie.provisionnement.a7_provisionnement.agent import (
+            AgentA7Provisionnement)
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
+            export_html, MARQUEUR_ECHEC_RAPPORT)
+        r = AgentA7Provisionnement(verbose=False).run(
+            source=np.asarray(GENINS, float), mode_declare='cumule',
+            generer_graphiques=False, generer_word=False,
+            generer_pdf_flag=False, n_sim_bootstrap=200, seed=42)
+        html = export_html(n1=r.get('n1', {}), n2=r['n2'], n3=r['n3'],
+                           n4=r['n4'])
+        self.assertNotIn(MARQUEUR_ECHEC_RAPPORT, html)
+        self.assertIn('intervalle de prédiction, décomposé', html)
+        self.assertIn('Clark LDF (paramètre + processus)', html)
+        self.assertIn('Positivité des incréments ajustés', html)
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
