@@ -32,6 +32,8 @@ from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
 from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
 from .n2_hypotheses_munich import lignes_hypotheses_munich
 from .n3.bf_cape_cod import libelle_loss_ratio
+# Source UNIQUE d'affichage de Benktander, partagee avec HTML et Word.
+from .n3.benktander import lignes_benktander_rapport
 from .n3.bootstrap_odp import libelle_incertitude
 # Source UNIQUE d'affichage de Munich CL — la même que HTML et Word.
 from .n3.munich_cl import lignes_munich_rapport
@@ -422,14 +424,29 @@ def _ong4_methodes(wb, n3, n4):
          f"φ={libelle_incertitude(n3['bootstrap'], 'phi')}",
          f"n={n3['bootstrap'].get('n_simulations',0):,}"),
     ]
+    # Benktander — INFORMATIF, poids nul par construction. Il est deja un
+    # melange de Chain Ladder et de BF : l'inclure au Best Estimate ferait
+    # peser Chain Ladder 44,2 % pour 25 % affiches.
+    _gb = n3.get('benktander') or {}
+    if _gb.get('disponible'):
+        rows.append(('Benktander (1976)', _gb.get('reserve_totale', 0.0),
+                     'benktander',
+                     f"α moyen = {_gb.get('alpha_moyen', 0):.4f}",
+                     'INFORMATIF — hors Best Estimate'))
 
     for i, (nom, res, key, detail, note) in enumerate(rows):
         inc  = key in methodes_inc
         poid = poids.get(key, 0)
-        _mack = (key == 'mack')   # Mack : volatilité (σ), non pondérée dans le BE (point = CL)
+        _mack = (key == 'mack')   # Mack : volatilité (σ), non pondérée dans le BE (point = CL)
+        # Benktander : ni incluse ni EXCLUE. Il est informatif PAR
+        # CONSTRUCTION -- l'etiqueter << Exclue >> en rouge le ferait
+        # passer pour une methode disqualifiee par une hypothese.
+        _gb_l = (key == 'benktander')
         bg   = 'EAF3DE' if inc else GRIS_CLAIR
-        st   = 'σ (volatilité)' if _mack else ('✅ Incluse' if inc else '❌ Exclue')
-        st_c = VERT_S2 if inc else ROUGE_S2
+        st   = ('σ (volatilité)' if _mack else
+                'ⓘ Informatif' if _gb_l else
+                ('✅ Incluse' if inc else '❌ Exclue'))
+        st_c = NAVY if _gb_l else (VERT_S2 if inc else ROUGE_S2)
 
         vals = [nom, res, poid, st, detail, note]
         fmts = [None, FMT_NB, FMT_PCT, None, None, None]

@@ -30,6 +30,8 @@ from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
 from .n2_hypotheses_munich import lignes_hypotheses_munich
 # Source UNIQUE d'affichage de Munich CL, partagée par HTML, Word et Excel.
 from .n3.munich_cl import lignes_munich_rapport
+# Source UNIQUE d'affichage de Benktander, partagee par HTML, Word et Excel.
+from .n3.benktander import lignes_benktander_rapport
 
 logger = logging.getLogger('actuaria.a7.rapport')
 
@@ -1252,6 +1254,21 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
             '<td class="center">' + s_txt + '</td>'
             '<td class="center">' + _badge_statut(nom, pds) + '</td></tr>'
         )
+    # Benktander — INFORMATIF, poids nul par construction : il est déjà un
+    # mélange de Chain Ladder et de BF, l'inclure au BE les compterait deux
+    # fois (Chain Ladder pèserait 44,2 % pour 25 % affichés).
+    _gb = n3.get('benktander', {})
+    if _gb.get('disponible'):
+        tbl += (
+            '<tr><td class="label">Benktander (1976)</td>'
+            '<td class="right"><span class="mono">'
+            + _f(_gb.get('reserve_totale')) + '</span></td>'
+            '<td class="center">—</td>'
+            '<td class="center">α = ' + _s(f"{_gb.get('alpha_moyen', 0):.4f}")
+            + '</td>'
+            '<td class="center"><span class="badge badge-excl">'
+            'ⓘ Informatif</span></td></tr>'
+        )
     # Clark
     if clark.get('disponible'):
         aic_val = str(clark.get('aic_optimal', '—'))
@@ -1359,6 +1376,17 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     # (ni ce module pour HTML/Word, ni n5_excel). Seule méthode à exploiter
     # les deux triangles, et la seule totalement invisible.
     _lig_mcl = lignes_munich_rapport(n3)
+    # Benktander — MEME SOURCE que le Word et l'Excel. Informatif : il ne
+    # figure pas au Best Estimate, il en mesure la sensibilite a la ponderation.
+    _lig_gb = lignes_benktander_rapport(n3, n4)
+    b['tableau_benktander'] = ('' if not _lig_gb else (
+        '<table class="premium"><thead><tr>'
+        '<th>Élément</th><th>Valeur</th>'
+        '</tr></thead><tbody>'
+        + ''.join('<tr><td class="label">' + _s(a) + '</td>'
+                  '<td>' + _s(v) + '</td></tr>' for a, v in _lig_gb)
+        + '</tbody></table>'))
+
     b['tableau_munich'] = ('' if not _lig_mcl else (
         '<table class="premium"><thead><tr>'
         '<th>Indicateur</th><th class="right">Valeur</th><th>Lecture</th>'
@@ -2012,6 +2040,9 @@ def export_html(
             + (('<div class="table-section-title">Munich Chain Ladder '
                 '(Quarg &amp; Mack 2004) — rapprochement payé / engagé</div>\n'
                 + b['tableau_munich']) if b.get('tableau_munich') else '')
+            + (('<div class="table-section-title">Benktander (1976) — mélange '
+                'par crédibilité, INFORMATIF (hors Best Estimate)</div>\n'
+                + b['tableau_benktander']) if b.get('tableau_benktander') else '')
             + _wrap_graph(b['graph_heatmap'], 'Triangle de développement cumulé')
             + _wrap_graph(b['graph_ibnr'], 'IBNR par année de survenance')
             + _wrap_graph(b['graph_bootstrap'], 'Distribution Bootstrap ODP — Quantiles de réserve')
@@ -2289,6 +2320,13 @@ def export_word(n1, n2, n3, n4,
               ['Cape Cod',_f(cc.get('reserve_totale')),_pct(pw.get('cape_cod',0)*100),
                '—','✓ Inclus'],
               ['BEST ESTIMATE (brut)',_f(BE),'100 %','—','→ A10 (actualisation)']],ws=[4.5,3.5,2.5,2.5,3.0])
+
+        # Benktander — MÊME SOURCE que le HTML et l'Excel, comme Munich.
+        _lg_gb = lignes_benktander_rapport(n3, n4)
+        if _lg_gb:
+            _h("Benktander (1976) — mélange par crédibilité, INFORMATIF")
+            _tbl(['Élément', 'Valeur'],
+                 [[_s(k), _s(v)] for k, v in _lg_gb], ws=[5.0, 11.0])
 
         # Munich CL — MÊME SOURCE que le HTML et l'Excel. Le lot Clark avait
         # commencé par ne câbler que le HTML ; Munich n'était dans aucun des

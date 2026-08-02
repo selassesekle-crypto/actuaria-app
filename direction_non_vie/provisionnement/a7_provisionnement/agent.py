@@ -66,6 +66,7 @@ from .n3.chain_ladder  import (
 )
 from .n3.mack         import mack_1993
 from .n3.bf_cape_cod  import bornhuetter_ferguson, cape_cod
+from .n3.benktander   import benktander
 from .n3.bootstrap_odp import bootstrap_odp
 from .n3.munich_cl    import munich_cl
 from .n3.backtesting  import calculer_backtesting
@@ -1051,6 +1052,23 @@ class AgentA7Provisionnement:
             cadence_ok     = cadence_ok,
         )
 
+        # ── Benktander (1976) ─────────────────────────────────────────────────
+        # Se déduit de Bornhuetter-Ferguson : `IBNR_GB = (1 − α) × U_BF` avec
+        # α = `pct_dev`, le tableau QUE BF VIENT DE RECEVOIR. Aucun recalcul,
+        # aucune entrée nouvelle — et l'indisponibilité de BF se propage
+        # mécaniquement, ce qui lui donne le même garde sans le réécrire.
+        #
+        # ⚠️ INFORMATIF. Benktander n'est PAS dans `_CLES_N3` et ne doit jamais
+        # y entrer : il EST déjà un mélange de Chain Ladder et de BF, l'ajouter
+        # au vivier pondéré ferait peser Chain Ladder 44,2 % pour 25 % affichés.
+        # Verrouillé par `test_a7_benktander.py`, sur l'arbre syntaxique.
+        r_gb = benktander(
+            pct_dev     = pct_dev,
+            last_diag   = ld,
+            resultat_bf = r_bf,
+            annee_base  = annee_base,
+        )
+
         # ── Cape Cod ──────────────────────────────────────────────────────────
         r_cc = cape_cod(
             C              = C,
@@ -1126,6 +1144,7 @@ class AgentA7Provisionnement:
             'chain_ladder':    r_cl,
             'mack':            r_mack,
             'bf':              r_bf,
+            'benktander':      r_gb,
             'cape_cod':        r_cc,
             'bootstrap':       r_boot,
             'munich_cl':       r_munich,
