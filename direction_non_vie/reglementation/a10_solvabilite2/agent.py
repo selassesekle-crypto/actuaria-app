@@ -253,6 +253,11 @@ BRANCHE_MAP = {
     'caution':                     'credit_caution',
     'dommage_corporel_individuel': 'dommage_corporel_individuel',
     'dommage_corporel':            'dommage_corporel_individuel',
+    # `accidents_corporels` est une LoB d'A7 qui ne figurait dans AUCUN
+    # BRANCHE_MAP : elle tombait donc au repli (`rc_auto` pour A10). A7 la
+    # rattache au segment XIV-2, comme `dommage_corporel_individuel` avec
+    # laquelle elle partage deja son sigma -- trou comble au lot B10-c.
+    'accidents_corporels':         'dommage_corporel_individuel',
     'generique':                   'generique',
 }
 

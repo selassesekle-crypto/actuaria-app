@@ -64,12 +64,7 @@
     "description": "Paramètres de la formule standard SCR Solvabilité 2 (Actes Délégués 2015/35/UE)",
     "date_reference": "2026-01-01",
     "scr_souscription_non_vie": {
-      "sigma_primes_rc_auto": 0.1,
-      "sigma_primes_incendie": 0.08,
-      "sigma_primes_rc_general": 0.11,
-      "sigma_reserves_rc_auto": 0.09,
-      "sigma_reserves_incendie": 0.1,
-      "sigma_reserves_rc_general": 0.11,
+      "_commentaire_sigma": "Les six ecarts types qui figuraient ici ont ete retires au lot B10-c : ils dupliquaient les annexes II et XIV du Reglement delegue (UE) 2015/35 et le doublon avait derive (sigma_primes_rc_general valait 0.11 au lieu de 0.14). La source unique est direction_non_vie/reglementation/segments_s2.py.",
       "facteur_catastrophe_vent": 0.1,
       "facteur_catastrophe_grele": 0.03,
       "facteur_catastrophe_inondation": 0.04

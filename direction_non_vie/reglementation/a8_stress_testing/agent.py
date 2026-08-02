@@ -19,12 +19,17 @@ FLUX OBLIGATOIRES :
 
 import numpy as np
 import logging
-import os
-import sys
-import json
+import json   # `os` et `sys` etaient importes sans aucun usage
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any
+
+from ..segments_s2 import SEGMENTS_S2, libelle_reference
+# La correspondance << nom metier -> segment officiel >> n'est PAS redefinie
+# ici : elle vit dans A10, agent de reference Solvabilite II, et A8 fait du
+# stress testing PAR-DESSUS ce calcul. Une troisieme copie divergerait comme
+# les deux precedentes -- c'est tout l'objet des lots B10-a a B10-c.
+from ..a10_solvabilite2.agent import BRANCHE_MAP, SEGMENT_PAR_LOB
 
 logging.basicConfig(
     level=logging.INFO,
@@ -69,13 +74,11 @@ def _charger_market_data() -> Dict:
         'rfr_10ans':     {'rfr_pct': 3.20, 'rfr_avec_va_pct': 3.55, 'ufr': 3.30, 'va': 0.35},
         'rfr_20ans':     {'rfr_pct': 3.30, 'rfr_avec_va_pct': 3.65},
         'scr_params':    {
+            # Les six sigma qui vivaient ici ONT ETE RETIRES (lot B10-c) : ils
+            # dupliquaient la table officielle, et le doublon avait derive
+            # (sigma_primes_rc_general valait 0,11 au lieu de 0,14). Les ecarts
+            # types viennent desormais de `reglementation/segments_s2.py`.
             'scr_souscription_non_vie': {
-                'sigma_primes_rc_auto': 0.10,
-                'sigma_primes_incendie': 0.08,
-                'sigma_primes_rc_general': 0.11,
-                'sigma_reserves_rc_auto': 0.09,
-                'sigma_reserves_incendie': 0.10,
-                'sigma_reserves_rc_general': 0.11,
                 'facteur_catastrophe_vent': 0.10,
                 'facteur_catastrophe_grele': 0.03,
                 'facteur_catastrophe_inondation': 0.04,
@@ -338,22 +341,45 @@ class AgentA8StressTesting:
         nv  = scr_params['scr_souscription_non_vie']
         mkt = scr_params['scr_marche']
 
-        # Sélection sigma selon branche
-        branche_lower = branche.lower() if branche else 'auto'
-        if 'incendie' in branche_lower or 'mrd' in branche_lower:
-            sigma_p = nv['sigma_primes_incendie']
-            sigma_r = nv['sigma_reserves_incendie']
-        elif 'rc' in branche_lower or 'corporel' in branche_lower:
-            sigma_p = nv['sigma_primes_rc_general']
-            sigma_r = nv['sigma_reserves_rc_general']
-        else:
-            sigma_p = nv['sigma_primes_rc_auto']
-            sigma_r = nv['sigma_reserves_rc_auto']
+        # ── Sélection σ : par le SEGMENT officiel, plus par sous-chaîne ───────
+        #
+        # L'ancien aiguillage cherchait des morceaux de texte dans le nom de la
+        # branche, et se trompait sur 13 des 17 noms qu'A7 lui transmet :
+        #   · `'rc' in 'rc_auto'` est VRAI  -> la RC automobile recevait le σ de
+        #     la RC générale (0,11/0,11 au lieu de 0,10/0,09) ;
+        #   · le test portait sur `'mrd'`, qui n'est le nom de rien -- la MRH
+        #     tombait donc dans le repli et recevait le σ de la RC auto ;
+        #   · `'corporel'` capturait `dommage_corporel_individuel`, qui relève
+        #     de la santé non-SLT, vers la RC générale ;
+        #   · protection juridique, crédit, transport, construction, cat-nat et
+        #     marine tombaient toutes dans le même repli.
+        # Résultat : dix-sept branches ne produisaient que TROIS couples de σ.
+        segment = SEGMENT_PAR_LOB[
+            BRANCHE_MAP.get(
+                (branche or 'auto').lower().replace(' ', '_').replace('-', '_'),
+                'generique')]
+        seg     = SEGMENTS_S2[segment]
+        sigma_p = seg.sigma_prime
+        sigma_r = seg.sigma_reserve
 
-        # SCR souscription (formule standard EIOPA)
+        # SCR souscription — expression de l'art. 117(2) du Règlement délégué
+        # (UE) 2015/35 : le terme croisé y porte le coefficient 1, écrit ici
+        # 2 × 0,5, soit une corrélation implicite de 0,5 entre primes et
+        # réserves.
+        #
+        # ⚠️ IL MANQUE LE FACTEUR 3 DE L'ARTICLE 115, ET CE N'EST PAS CORRIGÉ
+        # ICI. L'article 115 pose SCR = 3 × σ_nl × V_nl ; A8 s'arrête à
+        # σ_nl × V_nl. Mesuré contre A10 sur des entrées identiques : le
+        # rapport vaut exactement 3,0000. Ce module est donc à un tiers de sa
+        # valeur réglementaire, alors qu'il alimente `scr_total`, le ratio de
+        # couverture comparé à 100 % et la ligne R0010 du QRT S.25.01.
+        # C'est un défaut de FORMULE, distinct de la réconciliation des σ qui
+        # fait l'objet de ce lot, et il triplerait ce module : il attend un
+        # arbitrage explicite plutôt qu'une correction glissée dans un lot
+        # dont ce n'était pas le sujet.
         scr_primes   = sigma_p * prime
         scr_reserves = sigma_r * be
-        rho_pv       = 0.5  # corrélation primes/réserves EIOPA
+        rho_pv       = 0.5  # corrélation primes/réserves — art. 117(2)
         scr_souscr   = np.sqrt(
             scr_primes**2 + scr_reserves**2 + 2 * rho_pv * scr_primes * scr_reserves
         )
@@ -396,6 +422,9 @@ class AgentA8StressTesting:
             'scr_tail_factor':    round(scr_tail, 2),
             'sigma_primes':       sigma_p,
             'sigma_reserves':     sigma_r,
+            # La provenance voyage avec le resultat, comme dans A7 et A10.
+            'segment_s2':         segment,
+            'reference_s2':       libelle_reference(segment),
             'oat_calibrage':      round(oat_10ans * 100, 3),
             'rfr_calibrage':      round(rfr_10ans * 100, 3),
             'inflation_calibrage':round(inflation * 100, 2),
