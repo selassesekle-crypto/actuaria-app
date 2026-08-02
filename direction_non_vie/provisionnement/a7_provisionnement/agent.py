@@ -513,7 +513,7 @@ class AgentA7Provisionnement:
             if annee_debut:
                 n3['annee_debut_triangle'] = annee_debut
 
-            # ── BFCC-H1..H5 : les hypothèses propres à BF et Cape Cod ─────────
+            # ── BFCC-H1..H6 : les hypothèses propres à BF et Cape Cod ─────────
             # ⚠️ APRÈS N3, ET C'EST VOULU. BFCC-H4 juge le loss ratio a priori
             # QUE N3 EMPLOIE RÉELLEMENT, BFCC-H5 les loss ratios par année qu'il
             # implique : une hypothèse qui porte sur un résultat ne peut pas être
@@ -892,7 +892,7 @@ class AgentA7Provisionnement:
         primes:  Optional[np.ndarray],
         cfg_lob: Dict,
     ) -> Dict:
-        """BFCC-H1..H5 — les hypothèses propres à BF et Cape Cod.
+        """BFCC-H1..H6 — les hypothèses propres à BF et Cape Cod.
 
         BFCC-H1 reprend le verdict CLM-H1 et BFCC-H3 celui du GLM Poisson APC :
         le guide énonce l'hypothèse d'indépendance identique à celle de Chain
@@ -918,7 +918,7 @@ class AgentA7Provisionnement:
                 lr_reference_src = cfg_lob.get('lr_marche_source', ''),
             )
         except Exception as e:
-            logger.warning(f"BFCC-H1..H5 non calculées : {e}")
+            logger.warning(f"BFCC-H1..H6 non calculées : {e}")
             return {'erreur': str(e), 'hypotheses': {}, 'statuts': {},
                     'couverture_cadence': {}, 'recoupement_lr': {}}
 

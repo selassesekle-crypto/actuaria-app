@@ -383,9 +383,16 @@ def bfcc_h4_apriori(
     calculé puis jamais lu par la sélection. Mesuré sur GenIns : un loss ratio de
     364,7 % obtenait 81/100 et passait la gate, un loss ratio de 4,6 % aussi.
 
-    LES BORNES S'APPLIQUENT AUSSI AU LOSS RATIO FOURNI. L'actuaire assume son
-    chiffre, et sa provenance est meilleure ; un loss ratio de 900 % reste un
-    loss ratio de 900 %.
+    LES BORNES S'APPLIQUENT AUSSI AU LOSS RATIO FOURNI, ET C'EST DESORMAIS VRAI.
+    L'actuaire assume son chiffre, et sa provenance est meilleure ; un loss ratio
+    de 900 % reste un loss ratio de 900 %.
+
+    ⚠️ CETTE PHRASE A ETE FAUSSE JUSQU'AU LOT F1. `_loss_ratio_apriori` ecretait
+    le loss ratio manuel a la plage DURE *avant* de le rendre : il arrivait donc
+    toujours dans la plage, et cette hypothese ne pouvait JAMAIS l'ecarter.
+    Mesure : 900 % et 5 000 % rendaient la meme reserve, et BF restait au Best
+    Estimate dans les deux cas. Le jugement porte maintenant sur
+    `lr_apriori_brut`, la valeur AVANT ecretage ; l'ecretee ne sert qu'au calcul.
     """
     base = dict(code='BFCC-H4',
                 libelle="Provenance et plausibilité du loss ratio a priori",
@@ -404,7 +411,9 @@ def bfcc_h4_apriori(
     extras = {'source': source, 'provenance': PROVENANCES.get(source, source),
               'annees_retenues': retenues, 'annees_ecartees': ecartees,
               'cv': cv, 'fenetre': detail.get('fenetre'),
-              'lr_reference': lr_reference}
+              'lr_reference': lr_reference,
+              'lr_calcul': bf.get('lr_apriori'),
+              'ecrete': bool(bf.get('lr_ecrete', False))}
 
     # ── Le a priori a été refusé faute d'années exploitables ──────────────────
     if source == 'refuse':
@@ -439,7 +448,11 @@ def bfcc_h4_apriori(
                      "dérivé du triangle : l'a priori est pleinement exogène."),
             extras=extras)
 
-    lr = bf.get('lr_apriori')
+    # ⚠️ LA VALEUR JUGEE EST LA BRUTE, PAS CELLE QUI SERT AU CALCUL. `lr_apriori`
+    # est ecretee a la plage dure pour proteger l'arithmetique aval ; la juger
+    # reviendrait a ne jamais pouvoir la declarer hors plage. Repli sur
+    # `lr_apriori` si la cle brute manque — un resultat d'une version anterieure.
+    lr = bf.get('lr_apriori_brut', bf.get('lr_apriori'))
     if lr is None:
         return ResultatHypothese(
             **base, statut=NON_TESTABLE, valeur=None, critere=critere,
@@ -458,6 +471,8 @@ def bfcc_h4_apriori(
 
     message = (f"BFCC-H4 {statut} — loss ratio a priori = {lr:.1%}, "
                f"provenance : {provenance}."
+               + (f" Valeur ramenee a {float(bf.get('lr_apriori')):.1%} pour le "
+                  f"calcul (plage dure)." if bf.get('lr_ecrete') else "")
                + (f" À justifier : {' ; '.join(motifs)}." if motifs else ""))
 
     return ResultatHypothese(
@@ -591,6 +606,83 @@ def bfcc_h5_stabilite_lr(
 
 
 # =============================================================================
+#  BFCC-H6 — PLAUSIBILITÉ DU LOSS RATIO POOLÉ DE CAPE COD       ⚠️ critique
+# =============================================================================
+
+def bfcc_h6_plage_lr_poole(cape_cod: Dict, plage: tuple) -> ResultatHypothese:
+    """BFCC-H6 — le loss ratio poolé de Cape Cod est-il vraisemblable ?
+
+    POURQUOI UNE HYPOTHÈSE SÉPARÉE DE BFCC-H5, ET NON UN CRITÈRE DE PLUS.
+    BFCC-H5 teste une DÉRIVE — une pente, par régression et test de Student.
+    BFCC-H6 teste un NIVEAU — une appartenance à une plage. Les fondre dans un
+    verdict unique rendrait impossible de dire à l'actuaire LAQUELLE des deux
+    conditions a échoué, alors que les remèdes n'ont rien à voir : une dérive
+    invite à un recalage « as-if », un niveau aberrant à vérifier l'exposition.
+
+    CE QU'ELLE CORRIGE. Le contrôle de plage existait déjà dans `_loss_ratio_
+    cape_cod`, mais en ALERTE seulement : la valeur hors plage était écrêtée, la
+    réserve calculée dessus, et Cape Cod restait au Best Estimate à poids égal.
+    Mesuré sur GenIns avec une exposition multipliée par 60 : loss ratio réel
+    0,0294, ramené à 0,10, réserve gonflée de 17,5 M€ à 59,4 M€ — l'écrêtage,
+    présenté comme un garde-fou, fabriquait l'aberration. BFCC-H5 ne pouvait pas
+    le voir : multiplier l'exposition par une constante multiplie tous les loss
+    ratios annuels par la même constante, la pente relative et sa p-valeur sont
+    inchangées. Il fallait donc un second test, sur la grandeur que Cape Cod
+    emploie réellement.
+
+    VERDICT BINAIRE, SANS À JUSTIFIER. Comme BFCC-H2 : la condition est une
+    appartenance à un intervalle, pas un test statistique. Un loss ratio poolé
+    hors plage ne se justifie pas, il se corrige — en fournissant la bonne
+    exposition.
+    """
+    base = dict(code='BFCC-H6',
+                libelle="Plausibilité du loss ratio poolé",
+                source_critere=SOURCE_JUGEMENT,
+                critere=(f"loss ratio poolé dans "
+                         f"[{plage[0]:.0%} – {plage[1]:.0%}]"),
+                critique_pour=(CC,))
+
+    if not cape_cod or not cape_cod.get('disponible'):
+        return ResultatHypothese(
+            **base, statut=NON_TESTABLE, valeur=None,
+            message=("BFCC-H6 NON TESTABLE — Cape Cod n'a pas été calculée, il "
+                     "n'y a donc pas de loss ratio poolé à juger."),
+            extras={})
+
+    brut = cape_cod.get('lr_cape_cod_brut', cape_cod.get('lr_cape_cod'))
+    if brut is None:
+        return ResultatHypothese(
+            **base, statut=NON_TESTABLE, valeur=None,
+            message="BFCC-H6 NON TESTABLE — aucun loss ratio poolé publié.",
+            extras={})
+
+    brut     = float(brut)
+    retenu   = cape_cod.get('lr_cape_cod')
+    dans     = plage[0] <= brut <= plage[1]
+    statut   = VALIDEE if dans else NON_VALIDEE
+    message  = (
+        f"BFCC-H6 {statut} — loss ratio poolé = {brut:.1%}, "
+        + (f"dans la plage plausible [{plage[0]:.0%} – {plage[1]:.0%}]. "
+           "Le rapport entre les sinistres observés et l'exposition développée "
+           "est cohérent avec un portefeuille d'assurance."
+           if dans else
+           f"HORS de la plage plausible [{plage[0]:.0%} – {plage[1]:.0%}]. "
+           f"Ce rapport n'est pas celui d'un portefeuille d'assurance : "
+           f"l'exposition fournie est très probablement dans une autre unité "
+           f"ou d'un autre périmètre que les sinistres. La valeur serait "
+           f"ramenée à {float(retenu):.1%} pour le calcul — Cape Cod est "
+           f"écartée du Best Estimate plutôt que de publier une réserve "
+           f"bâtie sur une borne."))
+
+    return ResultatHypothese(
+        **base, statut=statut, valeur=round(brut, 6), message=message,
+        extras={'lr_brut': round(brut, 6),
+                'lr_calcul': retenu,
+                'ecrete': bool(cape_cod.get('lr_ecrete', False)),
+                'plage': list(plage)})
+
+
+# =============================================================================
 #  POINT D'ENTRÉE
 # =============================================================================
 
@@ -616,6 +708,7 @@ def verifier_hypotheses_bfcc(
     exactement le défaut que ce lot supprime.
     """
     from .n3.bf_cape_cod import (CV_LR_MAX, ECART_LR_REFERENCE,
+                                 LR_CC_PLAGE_ALERTE,
                                  LR_PLAGE_ALERTE, LR_PLAGE_DURE)
 
     h1 = bfcc_h1_independance(clm_h1)
@@ -624,8 +717,9 @@ def verifier_hypotheses_bfcc(
     h4 = bfcc_h4_apriori(bf, LR_PLAGE_ALERTE, LR_PLAGE_DURE, CV_LR_MAX,
                          ECART_LR_REFERENCE, lr_reference, lr_reference_src)
     h5 = bfcc_h5_stabilite_lr(ultimates_cl, exposition, cadence_ok)
+    h6 = bfcc_h6_plage_lr_poole(cape_cod, LR_CC_PLAGE_ALERTE)
 
-    hypotheses = {h.code: h for h in (h1, h2, h3, h4, h5)}
+    hypotheses = {h.code: h for h in (h1, h2, h3, h4, h5, h6)}
     return {
         'hypotheses':          {c: h.synthese() for c, h in hypotheses.items()},
         'couverture_cadence':  couverture_cadence_par_annee(h2),
@@ -640,7 +734,7 @@ def verifier_hypotheses_bfcc(
 # =============================================================================
 
 #: Ordre de présentation, fixe : il suit la numérotation, pas le résultat.
-CODES = ('BFCC-H1', 'BFCC-H2', 'BFCC-H3', 'BFCC-H4', 'BFCC-H5')
+CODES = ('BFCC-H1', 'BFCC-H2', 'BFCC-H3', 'BFCC-H4', 'BFCC-H5', 'BFCC-H6')
 
 LIBELLES = {
     'BFCC-H1': "BFCC-H1 — Indépendance des années d'origine",
@@ -648,11 +742,12 @@ LIBELLES = {
     'BFCC-H3': "BFCC-H3 — Structure multiplicative sans effet calendaire",
     'BFCC-H4': "BFCC-H4 — Provenance et plausibilité du loss ratio a priori",
     'BFCC-H5': "BFCC-H5 — Stabilité temporelle du loss ratio",
+    'BFCC-H6': "BFCC-H6 — Plausibilité du loss ratio poolé",
 }
 
 
 def lignes_hypotheses_bfcc(n2: Optional[Dict]) -> List[Dict[str, Any]]:
-    """Les cinq verdicts, prêts à afficher — commentaire, Excel, Word, rapport.
+    """Les six verdicts, prêts à afficher — commentaire, Excel, Word, rapport.
 
     SOURCE UNIQUE. Les quatre livrables affichaient auparavant l'ancienne H3
     chacun à sa façon, en lisant `n2['h3_apriori_bf']` ; cette clé a disparu avec

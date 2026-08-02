@@ -294,11 +294,11 @@ def _s3_hypotheses(n2: Dict) -> str:
 
     lignes.append("")
 
-    # ── BFCC-H1..H5 — les hypothèses propres à BF et Cape Cod ─────────────────
+    # ── BFCC-H1..H6 — les hypothèses propres à BF et Cape Cod ─────────────────
     # L'ancienne « H3 a priori BF » vivait ici. Elle lisait `n2['h3_apriori_bf']`,
     # dont le loss ratio était calculé sur la dernière cellule OBSERVÉE et non
     # sur l'ultime, et pouvait provenir d'un proxy inventé quand aucune prime
-    # n'était fournie. Les cinq verdicts la remplacent, sur le loss ratio que N3
+    # n'était fournie. Les six verdicts la remplacent, sur le loss ratio que N3
     # emploie réellement.
     lignes.append("HYPOTHÈSES PROPRES À BORNHUETTER-FERGUSON ET CAPE COD")
     for ligne in lignes_hypotheses_bfcc(n2):

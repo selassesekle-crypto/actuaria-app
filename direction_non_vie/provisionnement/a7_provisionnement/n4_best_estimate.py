@@ -160,9 +160,15 @@ _METHODE_FILET = 'chain_ladder'
 #: `couverture_cadence`), une seule année à recours ne disqualifiant pas les
 #: autres. BFCC-H1 et BFCC-H3 non plus : la première est reprise de CLM-H1, que
 #: le guide traite en signalement et non en rejet ; la seconde est descriptive.
+#: BFCC-H6 rejoint BFCC-H5 sur Cape Cod (lot F1) : la première teste une DÉRIVE
+#: du loss ratio, la seconde son NIVEAU. Deux conditions distinctes, deux
+#: remèdes distincts — un recalage « as-if » d'un côté, la vérification de
+#: l'exposition de l'autre. Le contrôle de niveau n'existait qu'en alerte, et
+#: la valeur hors plage était écrêtée puis utilisée : Cape Cod entrait au Best
+#: Estimate avec une réserve bâtie sur une borne.
 _HYPOTHESES_BLOQUANTES = {
     'bornhuetter_ferguson': ('BFCC-H4',),
-    'cape_cod':             ('BFCC-H5',),
+    'cape_cod':             ('BFCC-H5', 'BFCC-H6'),
 }
 
 

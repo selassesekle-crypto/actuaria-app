@@ -61,7 +61,7 @@
 #
 #  AUCUN BLOC D'HYPOTHÈSES PROPRE. Benktander ne suppose rien de plus que ses
 #  deux composantes : ses hypothèses sont l'union de CLM-H1..H4 (Chain Ladder)
-#  et BFCC-H1..H5 (Bornhuetter-Ferguson), déjà construites et gatantes. Le
+#  et BFCC-H1..H6 (Bornhuetter-Ferguson), déjà construites et gatantes. Le
 #  seul choix qui lui appartienne est celui de α = 1/CDF, qui n'est optimal
 #  que dans la bande mesurée ci-dessus : c'est une MENTION informative, pas
 #  une hypothèse à valider — cf. `MENTION_ALPHA`.

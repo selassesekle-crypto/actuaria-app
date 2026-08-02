@@ -1422,7 +1422,7 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
             '<div class="hyp-text">' + msg + '</div>'
             '</div>'
         )
-    # BFCC-H1..H5 — statut motivé, SANS score : ces hypothèses n'en produisent
+    # BFCC-H1..H6 — statut motivé, SANS score : ces hypothèses n'en produisent
     # aucun. Afficher « Score — / 100 » serait moins clair que ne rien afficher.
     # BOOT-H1..H4 — idem. La carte « H4 — Homoscédasticité Bootstrap ODP »
     # affichait un score sur 100 calculé sur le CV des variances des

@@ -55,7 +55,7 @@
 #
 #  ─────────────────────────────────────────────────────────────────────────────
 #  LES DEUX QUESTIONS D'HYPOTHÈSES QUE CE MODULE LAISSAIT OUVERTES SONT TRANCHÉES
-#  — elles ont leurs verdicts dans `n2_hypotheses_bfcc` (BFCC-H1..H5).
+#  — elles ont leurs verdicts dans `n2_hypotheses_bfcc` (BFCC-H1..H6).
 #
 #  1. LE LOSS RATIO DÉRIVÉ DE CHAIN LADDER N'EST PAS UNE FAUTE, C'EST UNE
 #     PROVENANCE. Le guide de l'Institut des Actuaires liste CINQ façons d'obtenir
@@ -134,11 +134,27 @@ def libelle_loss_ratio(bloc: Dict, cle: str = 'lr_apriori') -> str:
     SOURCE UNIQUE pour les livrables N5. Une méthode non calculée n'a PAS de
     loss ratio : afficher « 0,0 % » serait un chiffre faux, et c'est exactement
     le genre de silence que ce lot supprime. Elle affiche « non calculée ».
+
+    ⚠️ QUAND LA VALEUR A ÉTÉ ÉCRÊTÉE, LES DEUX SONT AFFICHÉES (lot F1). Publier
+    la seule valeur écrêtée revenait à annoncer « LR_CC = 10,0 % » là où le
+    rapport réellement observé valait 2,9 % — l'actuaire lisait la borne en
+    croyant lire une mesure. Les trois formats passent par ici, la correction
+    vaut donc pour le commentaire, l'Excel et le rapport HTML à la fois.
     """
     if not bloc.get('disponible', True):
         return 'non calculée'
     valeur = bloc.get(cle)
-    return '—' if valeur is None else f"{float(valeur):.1%}"
+    if valeur is None:
+        return '—'
+    # ⚠️ LE DRAPEAU FAIT FOI, PAS LA COMPARAISON DES DEUX NOMBRES. Ils sont
+    # publiés à des précisions différentes (4 et 6 décimales) : les comparer
+    # annonçait « 169,4 % (écrêté à 169,3 %) » sur un cas où RIEN n'avait été
+    # écrêté. `lr_ecrete` est posé à la source, sur les valeurs non arrondies.
+    brut = bloc.get(f'{cle}_brut')
+    if bloc.get('lr_ecrete') and brut is not None:
+        return (f"{float(brut):.1%} (écrêté à {float(valeur):.1%} "
+                f"pour le calcul)")
+    return f"{float(valeur):.1%}"
 
 
 def _exposition_valide(exposition, n: int) -> Optional[np.ndarray]:
@@ -278,10 +294,28 @@ def _loss_ratio_apriori(
     exploitables subsistent : refuser un chiffre vaut mieux que d'en fabriquer un.
     """
     if lr_manuel is not None:
-        lr = float(np.clip(lr_manuel, *LR_PLAGE_DURE))
-        infos.append(f"LR a priori fourni par l'actuaire : {lr:.1%}")
+        # ⚠️ LA VALEUR BRUTE EST CONSERVÉE ET PUBLIÉE — c'est elle que BFCC-H4
+        # juge. L'écrêtage ne sert qu'à protéger l'arithmétique aval : sans lui
+        # un loss ratio de 5 000 % produirait un IBNR sans rapport avec quoi que
+        # ce soit. Mais juger la valeur ÉCRÊTÉE la rendait toujours conforme à
+        # la plage dure, donc BFCC-H4 ne pouvait JAMAIS écarter un a priori
+        # manuel — mesuré : 900 % et 5 000 % rendaient la même réserve, et la
+        # méthode restait au Best Estimate dans les deux cas.
+        lr_brut = float(lr_manuel)
+        lr      = float(np.clip(lr_brut, *LR_PLAGE_DURE))
+        if lr != lr_brut:
+            alertes.append(
+                f"⚠️ BF : le loss ratio a priori fourni ({lr_brut:.1%}) sort de "
+                f"la plage dure [{LR_PLAGE_DURE[0]:.0%} – {LR_PLAGE_DURE[1]:.0%}] "
+                f"— il est ramené à {lr:.1%} POUR LE CALCUL, et BFCC-H4 juge la "
+                f"valeur brute.")
+        infos.append(f"LR a priori fourni par l'actuaire : {lr_brut:.1%}"
+                     + (f" (écrêté à {lr:.1%} pour le calcul)"
+                        if lr != lr_brut else ""))
         return lr, 'manuel', {'annees_retenues': [], 'ratios': [], 'cv': 0.0,
-                              'fenetre': 0, 'annees_ecartees': []}
+                              'fenetre': 0, 'annees_ecartees': [],
+                              'lr_brut': round(lr_brut, 6),
+                              'ecrete': lr != lr_brut}
 
     largeur = _fenetre_apriori(n, nb_annees_matures)
     admis   = _masque_admissible(cadence_ok, n)
@@ -313,6 +347,11 @@ def _loss_ratio_apriori(
     lr = float(np.mean(ratios))
     cv = float(np.std(ratios) / max(abs(lr), 1e-9)) if len(ratios) > 1 else 0.0
     detail['cv'] = round(cv, 6)
+    # Le loss ratio dérivé n'est PAS écrêté : `lr_brut` vaut ici `lr`. La clé est
+    # publiée quand même pour que BFCC-H4 lise toujours la même, quelle que soit
+    # la provenance — un `.get()` avec repli masquerait une absence.
+    detail['lr_brut'] = round(lr, 6)
+    detail['ecrete']  = False
     infos.append(f"LR a priori = {lr:.1%}, moyenne sur {len(ratios)} année(s) "
                  f"(CV = {cv:.1%}) — dérivé des ultimes Chain Ladder.")
     if ecartees:
@@ -464,6 +503,12 @@ def bornhuetter_ferguson(
     return {
         'disponible':            True,
         'lr_apriori':            lr_affiche,
+        # Valeur AVANT écrêtage — celle que BFCC-H4 juge. Elle diffère de
+        # `lr_apriori` uniquement quand l'actuaire a fourni un loss ratio hors
+        # de la plage dure ; `detail_lr['ecrete']` dit lequel des deux cas.
+        'lr_apriori_brut':       (None if not detail_lr else
+                                  detail_lr.get('lr_brut', lr_affiche)),
+        'lr_ecrete':             bool((detail_lr or {}).get('ecrete', False)),
         'source_lr':             source,
         'detail_lr':             detail_lr,
         'mu_par_annee':          [round(float(v), 2) for v in mu],
@@ -532,7 +577,7 @@ def _loss_ratio_cape_cod(
     lr_reference_src: str,
     alertes:          list,
     infos:            list,
-) -> Tuple[Optional[float], list, list]:
+) -> Tuple[Optional[float], list, list, Optional[float]]:
     """Loss ratio poolé de Cape Cod, et les années qui l'informent.
 
               Σ_i C[i, k_i]
@@ -544,7 +589,9 @@ def _loss_ratio_cape_cod(
     sinistres/exposition le plus fiable. `annee_base` délimite la RÉSERVE, pas
     l'information.
 
-    Renvoie `(None, …)` si l'exposition développée est nulle.
+    Renvoie `(lr_ecrete, retenues, ecartees, lr_BRUT)`, ou `(None, …)`
+    si l'exposition développée est nulle. La valeur brute est celle que
+    BFCC-H6 juge ; l'écrêtée est celle qui alimente le calcul.
     """
     retenues = [i for i in range(n)
                 if admis[i] and expo[i] > 0 and pct_dev[i] > 0]
@@ -555,18 +602,27 @@ def _loss_ratio_cape_cod(
     if den <= 0:
         alertes.append(
             "❌ Cape Cod : exposition développée nulle — loss ratio incalculable.")
-        return None, retenues, ecartees
+        return None, retenues, ecartees, None
     if ecartees:
         infos.append(f"Années {ecartees} écartées du loss ratio Cape Cod : "
                      f"cadence non admissible (hypothèse H2 du guide).")
 
-    lr_cc = num / den
-    if not (LR_CC_PLAGE_ALERTE[0] <= lr_cc <= LR_CC_PLAGE_ALERTE[1]):
+    # ⚠️ LA VALEUR BRUTE EST CONSERVÉE ET PUBLIÉE — c'est elle que BFCC-H6 juge.
+    # Ici la grandeur écrêtée est une MESURE, pas une saisie : l'écrêtage
+    # remplaçait un rapport calculé sur les données par une borne, et le résultat
+    # alimentait directement la réserve. Mesuré sur GenIns avec une exposition
+    # multipliée par 60 : loss ratio vrai 0,0294, ramené à 0,10, réserve gonflée
+    # de 17,5 M€ à 59,4 M€ — l'écrêtage, présenté comme un garde-fou, FABRIQUAIT
+    # l'aberration. Il reste nécessaire pour l'arithmétique aval, mais il ne juge
+    # plus rien : BFCC-H6 écarte désormais Cape Cod sur la valeur brute.
+    lr_cc_brut = num / den
+    if not (LR_CC_PLAGE_ALERTE[0] <= lr_cc_brut <= LR_CC_PLAGE_ALERTE[1]):
         alertes.append(
-            f"⚠️ Cape Cod : LR = {lr_cc:.1%}, hors de la plage plausible "
+            f"⚠️ Cape Cod : LR = {lr_cc_brut:.1%}, hors de la plage plausible "
             f"[{LR_CC_PLAGE_ALERTE[0]:.0%} – {LR_CC_PLAGE_ALERTE[1]:.0%}] "
-            f"— vérifier l'exposition fournie.")
-    lr_cc = float(np.clip(lr_cc, *LR_CC_PLAGE_ALERTE))
+            f"— vérifier l'exposition fournie. La valeur est ramenée dans la "
+            f"plage POUR LE CALCUL ; BFCC-H6 juge la valeur brute.")
+    lr_cc = float(np.clip(lr_cc_brut, *LR_CC_PLAGE_ALERTE))
 
     if lr_reference and abs(lr_cc - lr_reference) > ECART_LR_REFERENCE:
         alertes.append(
@@ -576,7 +632,8 @@ def _loss_ratio_cape_cod(
     infos.append(f"LR Cape Cod = {lr_cc:.1%} — sinistres observés "
                  f"{num:,.0f} € rapportés à l'exposition développée "
                  f"{den:,.0f} €, sur {len(retenues)} des {n} années d'origine.")
-    return lr_cc, retenues, ecartees
+    return lr_cc, retenues, ecartees, lr_cc_brut
+
 
 def cape_cod(
     C:                np.ndarray,
@@ -618,7 +675,7 @@ def cape_cod(
 
     # ── 1. Loss ratio Cape Cod — sur toutes les années d'origine ADMISSIBLES ──
     admis   = _masque_admissible(cadence_ok, n)
-    lr_cc, retenues, ecartees = _loss_ratio_cape_cod(
+    lr_cc, retenues, ecartees, lr_cc_brut = _loss_ratio_cape_cod(
         n, expo, pct_dev, last_diag, admis, lr_reference, lr_reference_src,
         alertes, infos)
     if lr_cc is None:
@@ -642,6 +699,9 @@ def cape_cod(
     return {
         'disponible':            True,
         'lr_cape_cod':           round(lr_cc, 4),
+        # Valeur AVANT ecretage — celle que BFCC-H6 juge.
+        'lr_cape_cod_brut':      round(lr_cc_brut, 6),
+        'lr_ecrete':             abs(lr_cc - lr_cc_brut) > 1e-12,
         'source_exposition':     'exposition_fournie',
         'annees_loss_ratio':     retenues,
         'annees_ecartees':       ecartees,

@@ -393,9 +393,22 @@ def calculer_tail_factor(
         logger.warning(f"Tail factor : régression échouée ({e}) → tail=1.0")
         tail = 1.0
 
-    # Clipper à [1.0, tail_max] — tail_max = min(lob_tail_max_alerte × 1.5, 1.50)
-    tail_max = min(lob_tail_max_alerte * 1.5, 1.50)
-    tail = float(np.clip(tail, 1.0, tail_max))
+    # ⚠️ LA VALEUR BRUTE EST CONSERVÉE ET PUBLIÉE (lot F1). L'écrêtage protège
+    # l'aval — un tail extrapolé sans borne multiplierait les ultimes sans
+    # limite — mais il RÉSUMAIT deux situations très différentes au même
+    # chiffre : mesuré, un dernier LDF de 1,25 et un de 3,00 ressortaient tous
+    # deux à 1,500000, donc la même majoration de réserve, sans que rien ne dise
+    # que la valeur avait été tronquée. Le statut, lui, était déjà calculé APRÈS
+    # l'écrêtage ; il reste ROUGE dans les deux cas, mais l'actuaire ne pouvait
+    # pas savoir de combien la queue avait été rabotée.
+    #
+    # ⚠️ C'EST CE CHEMIN-CI QUI SERT EN PRODUCTION. `agent._calculer_n3` appelle
+    # `calculer_tail_factor` puis passe le résultat à `chain_ladder(tail_force=…)`,
+    # qui court-circuite alors son propre calcul multi-méthodes.
+    tail_max  = min(lob_tail_max_alerte * 1.5, 1.50)
+    tail_brut = float(tail)
+    tail      = float(np.clip(tail_brut, 1.0, tail_max))
+    tail_ecrete = abs(tail - tail_brut) > 1e-12
 
     # Statut selon seuil LoB
     if tail >= lob_tail_max_alerte:
@@ -420,8 +433,17 @@ def calculer_tail_factor(
             f"Guide IA 2023 — régression log-linéaire (Mack 1993)."
         )
 
+    if tail_ecrete:
+        msg += (f" ⚠️ Valeur brute extrapolée = {tail_brut:.4f}, ramenée à "
+                f"{tail:.4f} par le plafond {tail_max:.4f} — la queue observée "
+                f"est plus lourde que ce que le résultat publie.")
+
     return {
         'tail_factor': round(tail, 6),
+        # Valeur AVANT plafonnement, et le drapeau qui dit si le plafond a mordu.
+        'tail_brut':   round(tail_brut, 6),
+        'tail_ecrete': tail_ecrete,
+        'tail_max':    round(tail_max, 6),
         'methode':     'régression exponentielle log-linéaire',
         'statut':      statut,
         'message':     msg,
@@ -607,11 +629,15 @@ def calculer_tail_factor_multi(
             aic      = _aic(residus, cfg['n_params'])
 
             # Extrapolation
+            # Même traitement que `calculer_tail_factor` (lot F1) : la valeur
+            # brute est conservée, pour que les deux chemins ne divergent pas.
             tail_raw = _extrapoler_tail(cfg['func'], k, popt)
             tail     = float(np.clip(tail_raw, 1.0, tail_max))
 
             resultats[nom] = {
                 'tail': tail, 'aic': aic,
+                'tail_brut': round(float(tail_raw), 6),
+                'tail_ecrete': abs(tail - tail_raw) > 1e-12,
                 'params': popt, 'label': cfg['label'],
                 'residus_mse': float(np.mean(residus ** 2)),
             }
@@ -635,9 +661,11 @@ def calculer_tail_factor_multi(
         fallback['aic_retenu'] = None
         return fallback
 
-    meilleure = min(valides, key=lambda k: valides[k]['aic'])
-    tail_final = valides[meilleure]['tail']
-    aic_final  = valides[meilleure]['aic']
+    meilleure   = min(valides, key=lambda k: valides[k]['aic'])
+    tail_final  = valides[meilleure]['tail']
+    aic_final   = valides[meilleure]['aic']
+    tail_brut   = valides[meilleure].get('tail_brut', tail_final)
+    tail_ecrete = bool(valides[meilleure].get('tail_ecrete', False))
 
     # ── Statut ────────────────────────────────────────────────────────────────
     if tail_final >= lob_tail_max_alerte:
@@ -667,8 +695,15 @@ def calculer_tail_factor_multi(
         f"+{(tail_final-1)*100:.2f}% de provisions au-delà de la dernière colonne."
     )
 
+    if tail_ecrete:
+        msg += (f" ⚠️ Valeur brute extrapolée = {tail_brut:.4f}, ramenée à "
+                f"{tail_final:.4f} par le plafond {tail_max:.4f}.")
+
     return {
         'tail_factor':          round(tail_final, 6),
+        'tail_brut':            round(tail_brut, 6),
+        'tail_ecrete':          tail_ecrete,
+        'tail_max':             round(tail_max, 6),
         'methode':              label_retenu,
         'methode_retenue':      meilleure,
         'comparaison_methodes': comparaison,

@@ -232,7 +232,7 @@ def _ong1_synthese(wb, n1, n2, n3, n4, ref_client, date_str):
         h = n2.get(key, {})
         _kpi(ws, 24+i, 1, lbl, h.get('score', 0), None,
              'VERT' if h.get('ok') else 'ROUGE')
-    # Synthèse BFCC en une ligne : le pire des cinq statuts, et son code.
+    # Synthèse BFCC en une ligne : le pire des six statuts, et son code.
     _bfcc = lignes_hypotheses_bfcc(n2)
     _pire = next((l for l in _bfcc if l['statut'] == 'NON VALIDÉE'),
                  next((l for l in _bfcc if l['statut'] == 'À JUSTIFIER'), None))
@@ -622,7 +622,7 @@ def _ong6_hypotheses(wb, n2):
         rangs.append((lbl, '✅ OUI' if ok else '❌ NON', h.get('score', 0),
                       seuil_txt, str(h.get('message', '—'))[:200], ok))
 
-    # BFCC-H1..H5 — statut motivé, sans score : ces hypothèses n'en produisent
+    # BFCC-H1..H6 — statut motivé, sans score : ces hypothèses n'en produisent
     # aucun, et en afficher un fabriqué serait le défaut qu'on vient de retirer.
     # ⚠️ PLUS DE TRONCATURE À 200. Cinq messages sur quatorze y perdaient leur
     # justification — dont la mention MCL-H4, qui porte les seuls chiffres du
