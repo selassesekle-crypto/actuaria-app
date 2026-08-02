@@ -70,8 +70,9 @@
       "facteur_catastrophe_inondation": 0.04
     },
     "scr_marche": {
-      "choc_taux_hausse_10ans": 0.48,
-      "choc_taux_baisse_10ans": -0.38,
+      "_commentaire_chocs_taux": "Renommes au lot B10-d avec le suffixe _relatif : ce sont des facteurs RELATIFS a appliquer au taux sans risque, comme choc_actions_type1 et choc_immobilier. Ils etaient lus comme des ecarts de taux ABSOLUS (48 points de pourcentage), ce qui donnait un SCR de taux valant 168 % du Best Estimate.",
+      "choc_taux_hausse_10ans_relatif": 0.48,
+      "choc_taux_baisse_10ans_relatif": -0.38,
       "choc_actions_type1": 0.39,
       "choc_actions_type2": 0.49,
       "choc_immobilier": 0.25,

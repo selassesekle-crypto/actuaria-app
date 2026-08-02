@@ -31,6 +31,15 @@ import numpy as np
 
 from direction_non_vie.reglementation.segments_s2 import SEGMENTS_S2
 from direction_non_vie.reglementation.a8_stress_testing import agent as A8
+from direction_non_vie.reglementation.a10_solvabilite2.agent import DURATION_LOB
+
+
+def _bloc_reference(nom):
+    """Lit le fichier de reference du depot — la source qu'A8 consomme."""
+    chemin = (Path(A8.__file__).resolve().parents[3]
+              / 'data' / 'marche' / 'reference_actuaria.json')
+    return json.load(io.open(chemin, encoding='utf-8'))[
+        'parametres_scr_standard'][nom]
 
 #: Ce que chaque nom transmis par A7 doit obtenir. Épinglé : un déplacement
 #: doit être un ACTE, pas un effet de bord d'une sous-chaîne.
@@ -222,50 +231,70 @@ class T3_Sorties(unittest.TestCase):
 #  4. LE DÉFAUT QUI RESTE — DOCUMENTÉ, PAS OUBLIÉ
 # =============================================================================
 
-class T4_Facteur_3_Article_115(unittest.TestCase):
-    """Le SCR souscription d'A8 vaut le TIERS de sa valeur réglementaire.
+class T4_Formule_Articles_115_Et_117(unittest.TestCase):
+    """Les trois corrections du lot B10-d.
 
-    L'article 115 pose SCR = 3 × σ_nl × V_nl ; A8 s'arrête à σ_nl × V_nl,
-    là où A10 applique bien le facteur 3. Ce défaut porte sur la FORMULE et
-    non sur les écarts types : il n'entre pas dans le périmètre du lot B10-c,
-    qui réconcilie les σ, et il triplerait ce module.
-
-    Le test ci-dessous est en `expectedFailure` — idiome déjà employé dans ce
-    dépôt pour documenter un défaut connu. Il échoue tant que le facteur 3
-    manque, et le jour où on le corrige il passera en « unexpected success »,
-    ce qui obligera à revenir ici.
+    Le facteur 3 de l'article 115 manquait — ce module valait le tiers de sa
+    valeur réglementaire. Il était documenté ici par un `expectedFailure`,
+    remplacé par les vérifications de conformité ci-dessous : le signal a
+    joué son rôle, il n'a plus lieu d'être.
     """
 
     def _termes(self, branche='rc_generale'):
         r = _run(branche)
         c = r['chocs_s2']
-        be = r['be_utilise']
         prime = c['scr_primes'] / c['sigma_primes']
-        return c, be, prime
+        return c, r['be_utilise'], prime
 
-    def test_le_rapport_a_la_formule_reglementaire_vaut_exactement_trois(self):
-        """Ce que la mesure DIT aujourd'hui — et qui n'est pas conforme."""
-        c, be, prime = self._termes()
-        sp, sr = c['sigma_primes'], c['sigma_reserves']
-        reglementaire = 3.0 * np.sqrt((sp * prime) ** 2
-                                      + (sp * prime) * (sr * be)
-                                      + (sr * be) ** 2)
-        self.assertAlmostEqual(reglementaire / c['scr_souscription'], 3.0,
-                               places=6)
-        a, b = (f"{v:,.0f}".replace(',', ' ')
-                for v in (c['scr_souscription'], reglementaire))
-        print(f"    OK SIG8-12 ecart mesure a l'art. 115 : facteur 3,000000 "
-              f"(A8 {a} contre {b})")
-
-    @unittest.expectedFailure
     def test_le_facteur_3_de_larticle_115_est_applique(self):
-        """DÉFAUT CONNU, NON CORRIGÉ — cf. la docstring de la classe."""
-        c, be, prime = self._termes()
-        sp, sr = c['sigma_primes'], c['sigma_reserves']
-        reglementaire = 3.0 * np.sqrt((sp * prime) ** 2
-                                      + (sp * prime) * (sr * be)
-                                      + (sr * be) ** 2)
-        self.assertAlmostEqual(c['scr_souscription'], reglementaire, delta=1.0)
+        """SCR = 3 × σ_nl × V_nl, et non σ_nl × V_nl."""
+        for branche in ('rc_generale', 'rc_auto', 'protection_juridique'):
+            c, be, prime = self._termes(branche)
+            sp, sr = c['sigma_primes'], c['sigma_reserves']
+            attendu = 3.0 * np.sqrt((sp * prime) ** 2 + (sp * prime) * (sr * be)
+                                    + (sr * be) ** 2)
+            self.assertAlmostEqual(c['scr_souscription'], attendu, delta=1.0,
+                                   msg=branche)
+        print("    OK SIG8-12 SCR souscription = 3 x racine(art. 117(2)) "
+              "sur 3 branches — art. 115")
+
+    def test_le_choc_de_taux_est_lu_comme_relatif(self):
+        """0,48 est un facteur relatif au taux, pas 48 points de pourcentage."""
+        r = _run('rc_auto')
+        c = r['chocs_s2']
+        rfr = c['rfr_calibrage'] / 100.0
+        choc = _bloc_reference('scr_marche')['choc_taux_hausse_10ans_relatif']
+        attendu = r['be_utilise'] * c['duration_passifs'] * choc * rfr
+        self.assertAlmostEqual(c['scr_taux_hausse'], attendu, delta=1.0)
+        print(f"    OK SIG8-13 choc de taux relatif : "
+              f"{c['scr_taux_hausse']:,.0f} EUR".replace(',', ' '))
+
+    def test_le_scr_de_taux_ne_depasse_plus_le_passif(self):
+        """Le garde-fou de bon sens : il valait 168 % du Best Estimate.
+
+        Une dette de duration quelques années ne peut pas perdre plus que sa
+        valeur sur un mouvement de taux. Ce test tombe si quelqu'un rebranche
+        une lecture absolue.
+        """
+        for branche in ('rc_auto', 'rc_medicale', 'construction'):
+            r = _run(branche)
+            part = r['chocs_s2']['scr_taux'] / r['be_utilise']
+            self.assertLess(part, 0.50,
+                            f"{branche} : SCR de taux a {part:.0%} du BE")
+        print("    OK SIG8-14 SCR de taux < 50 % du BE sur 3 branches "
+              "(il valait 168 %)")
+
+    def test_la_duration_vient_de_la_branche(self):
+        """Elle valait 3,5 ans en dur pour toutes les branches."""
+        vues = {}
+        for branche in ('rc_auto', 'mrh', 'rc_medicale', 'construction'):
+            c = _run(branche)['chocs_s2']
+            vues[branche] = c['duration_passifs']
+            self.assertEqual(c['duration_passifs'],
+                             DURATION_LOB[c['branche_normalisee']], branche)
+        self.assertGreaterEqual(len(set(vues.values())), 3,
+                                "la duration ne discrimine plus les branches")
+        print(f"    OK SIG8-15 duration par branche : {vues}")
 
 
 if __name__ == '__main__':

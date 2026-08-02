@@ -29,7 +29,7 @@ from ..segments_s2 import SEGMENTS_S2, libelle_reference
 # ici : elle vit dans A10, agent de reference Solvabilite II, et A8 fait du
 # stress testing PAR-DESSUS ce calcul. Une troisieme copie divergerait comme
 # les deux precedentes -- c'est tout l'objet des lots B10-a a B10-c.
-from ..a10_solvabilite2.agent import BRANCHE_MAP, SEGMENT_PAR_LOB
+from ..a10_solvabilite2.agent import BRANCHE_MAP, DURATION_LOB, SEGMENT_PAR_LOB
 
 logging.basicConfig(
     level=logging.INFO,
@@ -84,8 +84,11 @@ def _charger_market_data() -> Dict:
                 'facteur_catastrophe_inondation': 0.04,
             },
             'scr_marche': {
-                'choc_taux_hausse_10ans': 0.48,
-                'choc_taux_baisse_10ans': -0.38,
+                # RELATIFS au taux sans risque, comme les chocs actions et
+                # immobilier du meme bloc -- suffixe pose au lot B10-d parce
+                # qu'ils etaient lus comme des ecarts de taux ABSOLUS.
+                'choc_taux_hausse_10ans_relatif': 0.48,
+                'choc_taux_baisse_10ans_relatif': -0.38,
                 'choc_actions_type1': 0.39,
                 'choc_actions_type2': 0.49,
                 'choc_immobilier': 0.25,
@@ -337,6 +340,29 @@ class AgentA8StressTesting:
     ) -> Dict:
         """
         Calcule les sous-modules SCR calibrés sur les taux marché réels.
+
+        ┌───────────────────────────────────────────────────────────────────┐
+        │  CE QUI RESTE NON VÉRIFIÉ (lot B10-d)                             │
+        │                                                                   │
+        │  Le texte du Règlement délégué n'était plus disponible à la       │
+        │  clôture du lot. Les corrections apportées ici — facteur 3 de     │
+        │  l'art. 115, lecture relative des chocs de taux, duration par     │
+        │  branche — reposent toutes sur des incohérences INTERNES,         │
+        │  démontrables sans le texte. Les quatre points suivants, eux,     │
+        │  exigeraient le texte et n'ont donc PAS été touchés :             │
+        │                                                                   │
+        │   1. le taux du SCR opérationnel appliqué aux provisions (0,3 %)  │
+        │      contre 4 % appliqué aux primes — écart d'un facteur dix ;    │
+        │   2. le risque opérationnel est AGRÉGÉ par corrélation avec les   │
+        │      autres modules, là où la Directive l'ADDITIONNE au BSCR ;    │
+        │   3. `facteur_catastrophe_vent` appliqué aux primes, sans source  │
+        │      identifiée dans le dépôt ;                                   │
+        │   4. la matrice de corrélation 4×4 employée pour l'agrégation.    │
+        │                                                                   │
+        │  Aucun de ces quatre points n'est corrigé « au jugé » : une       │
+        │  valeur inventée serait indiscernable d'une valeur sourcée, ce    │
+        │  qui est précisément le défaut que le chantier B10 a corrigé.     │
+        └───────────────────────────────────────────────────────────────────┘
         """
         nv  = scr_params['scr_souscription_non_vie']
         mkt = scr_params['scr_marche']
@@ -354,46 +380,63 @@ class AgentA8StressTesting:
         #   · protection juridique, crédit, transport, construction, cat-nat et
         #     marine tombaient toutes dans le même repli.
         # Résultat : dix-sept branches ne produisaient que TROIS couples de σ.
-        segment = SEGMENT_PAR_LOB[
-            BRANCHE_MAP.get(
-                (branche or 'auto').lower().replace(' ', '_').replace('-', '_'),
-                'generique')]
+        cle_branche = BRANCHE_MAP.get(
+            (branche or 'auto').lower().replace(' ', '_').replace('-', '_'),
+            'generique')
+        segment = SEGMENT_PAR_LOB[cle_branche]
         seg     = SEGMENTS_S2[segment]
         sigma_p = seg.sigma_prime
         sigma_r = seg.sigma_reserve
 
-        # SCR souscription — expression de l'art. 117(2) du Règlement délégué
-        # (UE) 2015/35 : le terme croisé y porte le coefficient 1, écrit ici
-        # 2 × 0,5, soit une corrélation implicite de 0,5 entre primes et
-        # réserves.
+        # ── SCR souscription — art. 115 et 117(2) ────────────────────────────
         #
-        # ⚠️ IL MANQUE LE FACTEUR 3 DE L'ARTICLE 115, ET CE N'EST PAS CORRIGÉ
-        # ICI. L'article 115 pose SCR = 3 × σ_nl × V_nl ; A8 s'arrête à
-        # σ_nl × V_nl. Mesuré contre A10 sur des entrées identiques : le
-        # rapport vaut exactement 3,0000. Ce module est donc à un tiers de sa
-        # valeur réglementaire, alors qu'il alimente `scr_total`, le ratio de
-        # couverture comparé à 100 % et la ligne R0010 du QRT S.25.01.
-        # C'est un défaut de FORMULE, distinct de la réconciliation des σ qui
-        # fait l'objet de ce lot, et il triplerait ce module : il attend un
-        # arbitrage explicite plutôt qu'une correction glissée dans un lot
-        # dont ce n'était pas le sujet.
+        # Art. 117(2) donne l'expression sous la racine : le terme croisé y
+        # porte le coefficient 1, écrit ici 2 × 0,5, soit une corrélation
+        # implicite de 0,5 entre risque de primes et risque de réserve.
+        # Art. 115 pose ensuite SCR = 3 × σ_nl × V_nl, le facteur 3
+        # correspondant au quantile 99,5 % d'une loi normale.
+        #
+        # CE FACTEUR 3 MANQUAIT (corrigé au lot B10-d). A8 s'arrêtait à
+        # σ_nl × V_nl : ce module valait le TIERS de sa valeur réglementaire,
+        # alors qu'il alimente `scr_total`, le ratio de couverture comparé à
+        # 100 % et la ligne R0010 du QRT S.25.01. Preuve retenue : mesuré
+        # contre A10 sur des entrées identiques, le rapport valait exactement
+        # 3,0000 sur les trois branches testées.
         scr_primes   = sigma_p * prime
         scr_reserves = sigma_r * be
         rho_pv       = 0.5  # corrélation primes/réserves — art. 117(2)
-        scr_souscr   = np.sqrt(
+        scr_souscr   = 3.0 * np.sqrt(
             scr_primes**2 + scr_reserves**2 + 2 * rho_pv * scr_primes * scr_reserves
         )
 
         # SCR catastrophe (calibré selon branche)
+        # ⚠️ NON VÉRIFIÉ — cf. le bloc « CE QUI RESTE NON VÉRIFIÉ » en tête de
+        # `_chocs_s2` : ce facteur appliqué aux primes n'a pas de source
+        # identifiée et n'a pas pu être confronté au texte réglementaire.
         facteur_cat = nv.get('facteur_catastrophe_vent', 0.10)
         scr_cat     = facteur_cat * prime
 
-        # SCR marché taux (calibré sur OAT réel)
-        # Choc EIOPA = +/-x% du RFR en absolu
-        choc_taux_up   = mkt['choc_taux_hausse_10ans']
-        choc_taux_down = abs(mkt['choc_taux_baisse_10ans'])
-        # Impact sur le BE : sensibilité duration ≈ 3.5 ans
-        duration_passifs = 3.5
+        # ── SCR marché taux ──────────────────────────────────────────────────
+        #
+        # LES CHOCS SONT RELATIFS, PAS ABSOLUS (corrigé au lot B10-d). Ils
+        # étaient lus comme des écarts de taux absolus : 0,48 valait donc
+        # 48 POINTS de pourcentage, et `scr_taux` atteignait 168 % du Best
+        # Estimate — un SCR de taux supérieur au passif qu'il stresse est
+        # impossible. Le même dictionnaire porte `choc_actions_type1` et
+        # `choc_immobilier`, que le code lit bien comme relatifs : c'est
+        # l'incohérence qui a permis de trancher sans recourir au texte.
+        #
+        # ⚠️ LE PLANCHER RÉGLEMENTAIRE N'EST PAS APPLIQUÉ. Le choc de taux à
+        # la hausse est, en principe, borné par en bas par une hausse absolue
+        # minimale. Cette borne n'a PAS pu être confrontée au texte : elle
+        # n'est donc pas appliquée, plutôt qu'inventée. Conséquence : à taux
+        # bas, le SCR de taux publié ici est un MINORANT.
+        choc_taux_up   = mkt['choc_taux_hausse_10ans_relatif'] * rfr_10ans
+        choc_taux_down = abs(mkt['choc_taux_baisse_10ans_relatif']) * rfr_10ans
+        # Duration de la BRANCHE (corrigé au lot B10-d) : elle valait 3,5 ans
+        # en dur pour toutes les branches, alors qu'A10 en porte une par LoB —
+        # de 1,5 an pour l'assistance à 20 ans pour les corporels graves.
+        duration_passifs = DURATION_LOB.get(cle_branche, 4.0)
         scr_taux_up   = be * duration_passifs * choc_taux_up
         scr_taux_down = be * duration_passifs * choc_taux_down
         scr_taux      = max(scr_taux_up, scr_taux_down)
@@ -403,7 +446,11 @@ class AgentA8StressTesting:
         part_actions  = 0.10
         scr_actions   = be * part_actions * mkt['choc_actions_type1']
 
-        # SCR opérationnel (4% des primes ou 0.3% des provisions)
+        # SCR opérationnel
+        # ⚠️ NON VÉRIFIÉ — cf. le bloc en tête de `_chocs_s2`. Le taux appliqué
+        # aux provisions (0,3 %) est d'un ordre de grandeur inférieur à celui
+        # appliqué aux primes (4 %), ce qui est surprenant ; il n'a pas pu être
+        # confronté au texte. Il ne mord pas tant que la branche primes domine.
         scr_operationnel = max(0.04 * prime, 0.003 * be)
 
         # Ajustement tail factor sur SCR réserves
@@ -425,6 +472,8 @@ class AgentA8StressTesting:
             # La provenance voyage avec le resultat, comme dans A7 et A10.
             'segment_s2':         segment,
             'reference_s2':       libelle_reference(segment),
+            'branche_normalisee': cle_branche,
+            'duration_passifs':   duration_passifs,
             'oat_calibrage':      round(oat_10ans * 100, 3),
             'rfr_calibrage':      round(rfr_10ans * 100, 3),
             'inflation_calibrage':round(inflation * 100, 2),
