@@ -50,32 +50,28 @@ from typing import Any, Dict
 #  périmètre d'A7 — A10 opère en aval.
 # ─────────────────────────────────────────────────────────────────────────────
 
-from ....reglementation.segments_s2 import (  # noqa: F401  (ré-export)
+# ⚠️ IMPORT ABSOLU, ET C'EST STRUCTUREL (lot F2). La forme relative
+# `from ....reglementation.segments_s2` remontait QUATRE niveaux depuis
+# `direction_non_vie.provisionnement.a7_provisionnement.config`. Elle n'est
+# valide que si le paquet de tête est `direction_non_vie` — donc seulement
+# si la découverte des tests est lancée avec `-t .`. Sans lui, la racine
+# devenait `provisionnement`, l'import sortait du paquet de tête, et
+# `a7_provisionnement/__init__.py` échouait à l'import : la gate rendait
+# 455 tests au lieu de 798 EN ANNONÇANT « OK », tout A7 disparaissant en
+# silence. C'était le SEUL import à quatre points de `direction_non_vie`.
+# La forme absolue ne dépend plus de la racine de découverte.
+from direction_non_vie.reglementation.segments_s2 import (  # noqa: F401  (ré-export)
     SegmentS2, SEGMENTS_S2, libelle_reference, verifier_rattachements)
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  MATRICE DE CORRÉLATION EIOPA Non-Vie 12×12
-#  Source : Annexe IV, Règlement Délégué (UE) 2015/35
-#  Utilisée pour l'agrégation SCR_NL = sqrt(Σ_ij ρ_ij × SCR_i × SCR_j)
+#  ⚠️ LA MATRICE `CORRELATION_EIOPA` A ÉTÉ RETIRÉE (lot F2).
+#  Elle était définie ici, importée par `n4_best_estimate.py`, et lue par
+#  PERSONNE — ni dans A7, ni ailleurs dans le dépôt. Vérifié par ruff (F401),
+#  par vulture (90 %) et par un grep sur tout le dépôt : une seule occurrence
+#  restante, sa propre définition. A7 traite UNE branche à la fois, il n'a
+#  donc aucune agrégation inter-LoB à faire : la matrice de l'Annexe IV
+#  relève d'A10, qui agrège, et A10 a la sienne.
 # ─────────────────────────────────────────────────────────────────────────────
-# Ordre des LoB : 1=frais_med, 2=prot_rev, 3=ind_trav, 4=rc_auto,
-#                 5=auto_dom, 6=mat, 7=incendie, 8=rc_gen,
-#                 9=credit, 10=prot_jur, 11=assist, 12=pertes
-CORRELATION_EIOPA = [
-    # 1     2     3     4     5     6     7     8     9    10    11    12
-    [1.00, 0.50, 0.50, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25],  # 1
-    [0.50, 1.00, 0.50, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25],  # 2
-    [0.50, 0.50, 1.00, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25],  # 3
-    [0.25, 0.25, 0.25, 1.00, 0.50, 0.25, 0.25, 0.50, 0.25, 0.25, 0.25, 0.25],  # 4
-    [0.25, 0.25, 0.25, 0.50, 1.00, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25],  # 5
-    [0.25, 0.25, 0.25, 0.25, 0.25, 1.00, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25],  # 6
-    [0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 1.00, 0.25, 0.25, 0.25, 0.25, 0.25],  # 7
-    [0.25, 0.25, 0.25, 0.50, 0.25, 0.25, 0.25, 1.00, 0.50, 0.25, 0.25, 0.25],  # 8
-    [0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.50, 1.00, 0.25, 0.25, 0.25],  # 9
-    [0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 1.00, 0.25, 0.25],  # 10
-    [0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 1.00, 0.25],  # 11
-    [0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 0.25, 1.00],  # 12
-]
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  CONFIGURATION PAR BRANCHE

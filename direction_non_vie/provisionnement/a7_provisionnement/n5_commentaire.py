@@ -129,7 +129,6 @@ def _s1_contexte(n1: Dict, n2: Dict, n3: Dict, lob: str, lob_label: str) -> str:
 def _s2_qualite(n1: Dict) -> str:
     statut   = n1.get('statut', 'AMBRE')
     alertes  = n1.get('alertes', [])
-    infos    = n1.get('infos', [])
     taille   = n1.get('taille', '—')
     n_ann    = n1.get('n_annees', 0)
     n_dev    = n1.get('n_dev', 0)
@@ -191,7 +190,6 @@ def _s2_qualite(n1: Dict) -> str:
 def _s3_hypotheses(n2: Dict) -> str:
     h1  = n2.get('h1_independance',     {})
     h2  = n2.get('h2_stabilite',        {})
-    rec = n2.get('methode_recommandee', '—')
     rcl = n2.get('raison_cl', '')
     rr  = n2.get('raison_recommandation', '')
 
@@ -354,7 +352,6 @@ def _s4_methodes(n3: Dict, n4: Dict) -> str:
     mk_r  = mack.get('reserve_best_estimate', 0)
     bf_r  = bf.get('reserve_totale', 0)
     cc_r  = cc.get('reserve_totale', 0)
-    be    = n4.get('best_estimate', 0)
 
     methodes_all = {'Chain Ladder': cl_r, 'Mack 1993': mk_r, 'BF': bf_r, 'Cape Cod': cc_r}
     r_max  = max(methodes_all.values())
@@ -463,7 +460,6 @@ def _s4_methodes(n3: Dict, n4: Dict) -> str:
     # décide de l'affichage ; les valeurs ne sont lues que s'il est vrai.
     boot_dispo = boot.get('disponible', True)
     be_boot  = boot.get('be_bootstrap', 0) or 0
-    cv_boot  = (boot.get('cv_bootstrap') or 0) * 100
     p995     = boot.get('p99_5') or 0
     phi      = boot.get('phi') or 0
     n_sim    = boot.get('n_simulations', 0)
@@ -528,7 +524,6 @@ def _s5_best_estimate(n4: Dict) -> str:
     p995   = n4.get('reserve_p99_5', 0)
     sigma  = n4.get('sigma_mack', 0)
     cv     = n4.get('cv_inter_methodes', 0)
-    statut = n4.get('statut', 'AMBRE')
 
     lignes = [
         f"BEST ESTIMATE — RÉSERVE BRUTE (Art. 77 ; actualisation S2 par A10) : {_e(be)}",
@@ -859,8 +854,6 @@ def _lob_mrh(n1, n2, n3, n4):
     n_ann = n1.get('n_annees', 0)
     tail  = n3.get('chain_ladder', {}).get('tail_factor', {})
     tail_val = tail.get('tail_factor', 1.0) if isinstance(tail, dict) else 1.0
-    be    = n4.get('best_estimate', 0)
-    alertes_n1 = n1.get('alertes', [])
     h2_ok = n2.get('h2_stabilite', {}).get('ok', True)
     cv    = n2.get('h2_stabilite', {}).get('cv_moy', 0)
 
@@ -1022,7 +1015,6 @@ def _lob_rc_generale(n1, n2, n3, n4):
     h1_ok = n2.get('h1_independance', {}).get('ok', True)
     h2_ok = n2.get('h2_stabilite', {}).get('ok', True)
     bf_lr = n3.get('bf', {}).get('lr_apriori') or 0.0
-    be    = n4.get('best_estimate', 0)
     tail  = n3.get('chain_ladder', {}).get('tail_factor', {})
     tail_val = tail.get('tail_factor', 1.0) if isinstance(tail, dict) else 1.0
 
@@ -1225,8 +1217,6 @@ def _lob_rc_medicale(n1, n2, n3, n4):
     n_ann    = n1.get('n_annees', 0)
     tail     = n3.get('chain_ladder', {}).get('tail_factor', {})
     tail_val = tail.get('tail_factor', 1.0) if isinstance(tail, dict) else 1.0
-    be       = n4.get('best_estimate', 0)
-    p90      = n4.get('reserve_p90', 0)
     bf_lr    = n3.get('bf', {}).get('lr_apriori') or 0.0
 
     contexte = (
@@ -1333,7 +1323,6 @@ def _lob_construction(n1, n2, n3, n4):
     n_dev    = n1.get('n_dev', 0)
     tail     = n3.get('chain_ladder', {}).get('tail_factor', {})
     tail_val = tail.get('tail_factor', 1.0) if isinstance(tail, dict) else 1.0
-    alertes  = n1.get('alertes', [])
     h2_ok    = n2.get('h2_stabilite', {}).get('ok', True)
 
     contexte = (
@@ -1572,15 +1561,10 @@ def _narration_comparatif(n4: Dict, resultats_precedents: Optional[Dict]) -> str
     # Qualifier la variation
     if abs(delta_pct) < 3:
         qualif = "stable — variation dans les normes de révision trimestrielle"
-        signal = 'VERT'
     elif abs(delta_pct) < 10:
         qualif = "modérée — à documenter et expliquer dans le dossier actuariel"
-        signal = 'AMBRE'
     else:
         qualif = "SIGNIFICATIVE — analyse approfondie requise avant inscription au bilan"
-        signal = 'ROUGE'
-
-    direction = "hausse" if delta_be > 0 else "baisse"
 
     lignes = [
         f"COMPARATIF N-1/N : variation du Best Estimate",
@@ -1645,7 +1629,6 @@ def _narration_comparatif(n4: Dict, resultats_precedents: Optional[Dict]) -> str
 
 def _lob_generique(n1, n2, n3, n4):
     """Fallback — narration générique sans spécificité branche."""
-    lob_ref = _LR_MARCHE.get('rc_generale', ('78%', 'FFA Non-Vie 2024'))
     return {
         'contexte': (
             "Branche non identifiée spécifiquement dans la configuration ActuarIA. "

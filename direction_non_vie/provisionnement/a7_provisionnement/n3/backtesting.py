@@ -18,7 +18,7 @@
 
 from __future__ import annotations
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 import numpy as np
 
 logger = logging.getLogger('actuaria.a7.backtesting')

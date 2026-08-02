@@ -77,11 +77,13 @@ import numpy as np
 
 from direction_non_vie.services.nv_triangle_projection import projeter_ultimates
 
-try:
-    from scipy.optimize import curve_fit as _curve_fit
-except ImportError:
-    _curve_fit = None
-
+# ⚠️ Une garde `try: from scipy.optimize import curve_fit as _curve_fit /
+# except ImportError: _curve_fit = None` occupait cette place. `_curve_fit`
+# n'était lu NULLE PART (vulture, 90 %), et ruff ne pouvait pas la voir :
+# la branche `except` REBIND le nom, ce qui éteint sa règle F401. La garde
+# annonçait par ailleurs une optionalité fausse — `calculer_tail_factor_multi`
+# fait son propre `from scipy.optimize import curve_fit` SANS garde (l. 525),
+# et scipy est de toute façon une dépendance de CŒUR (requirements.txt).
 logger = logging.getLogger('actuaria.a7')
 
 #: Tolérance des comparaisons de cadence — purement numérique. Elle absorbe
@@ -969,7 +971,8 @@ def chain_ladder(
         # Réserve
         'reserve_totale':       round(reserve_totale, 2),
         'reserve_best_estimate': round(reserve_totale, 2),
-        'reserve_brute':        round(reserve_totale, 2),     # = reserve_totale (chiffre honnête)
+        # = reserve_totale : chiffre honnête, aucun plancher à cet étage.
+        'reserve_brute':        round(reserve_totale, 2),
         'reserve_plancher':     round(reserve_plancher, 2),   # ancien plancher (comparaison)
         'annee_base_reserve':   idx_base,
 

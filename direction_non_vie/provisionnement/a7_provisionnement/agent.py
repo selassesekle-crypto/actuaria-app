@@ -308,7 +308,14 @@ class AgentA7Provisionnement:
         reserve_grands_sinistres: Optional[float] = None,  # réserve LLT à ajouter au BE
         n_grands_sinistres: int          = 0,       # nombre de grands sinistres identifiés
         methode_grands: str              = 'manuel', # 'manuel' | 'bf_auto' | 'cl_separe'
-        **kwargs,
+        # ⚠️ PLUS DE `**kwargs` (lot F2), ET C'EST UN REFUS DÉLIBÉRÉ. La
+        # signature les avalait en silence : un appel `run(lr_manuel=9.0)` au
+        # lieu de `lr_bf_manuel=` s'exécutait sans rien dire et rendait un
+        # résultat calculé sur la valeur par défaut. Le défaut a été rencontré
+        # pour de vrai pendant le lot F1. Python lève désormais de lui-même
+        # `TypeError: run() got an unexpected keyword argument` — aucun code
+        # de validation à écrire, aucune liste à tenir à jour. `kwargs`
+        # n'était lu NULLE PART dans le corps de `run`.
     ) -> Dict:
         """
         Pipeline complet N1 → N2 → N3 → N4 → N5.

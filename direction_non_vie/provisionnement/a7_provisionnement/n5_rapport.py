@@ -32,6 +32,13 @@ from .n2_hypotheses_munich import lignes_hypotheses_munich
 from .n3.munich_cl import lignes_munich_rapport
 # Source UNIQUE d'affichage de Benktander, partagee par HTML, Word et Excel.
 from .n3.benktander import lignes_benktander_rapport
+# ⚠️ IMPORT MANQUANT, BUG DE PRODUCTION (lot F2, trouvé par ruff F821).
+# `_construire_contexte` appelle `libelle_loss_ratio` ligne 237 sans jamais
+# l'importer : l'appel levait `NameError`. Son unique appelant l'enveloppe
+# dans un `except Exception` qui journalise « Claude API indisponible » — le
+# commentaire actuariel par Claude n'a donc JAMAIS pu être produit, et le
+# message accusait l'API d'une panne qui était dans le code.
+from .n3.bf_cape_cod import libelle_loss_ratio
 
 logger = logging.getLogger('actuaria.a7.rapport')
 
@@ -1119,21 +1126,16 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     BE  = float(n4.get('best_estimate', 0) or 0)
     SIG = float(mk.get('sigma_total', 0) or 0)
     CV  = float(n4.get('cv_inter_methodes', 0) or 0)
-    P75 = float(n4.get('reserve_p75', 0) or 0)
     P90 = float(n4.get('reserve_p90', 0) or 0)
     P99 = float(n4.get('reserve_p99_5', 0) or 0)
     # Percentiles Mack et Bootstrap séparés
-    P75_mack = float(n4.get('reserve_p75_mack', P75) or P75)
     P90_mack = float(n4.get('reserve_p90_mack', P90) or P90)
-    P99_mack = float(n4.get('reserve_p99_5_mack', P99) or P99)
     P75_boot = n4.get('reserve_p75_boot')
     P90_boot = n4.get('reserve_p90_boot')
-    P99_boot = n4.get('reserve_p99_5_boot')
     _boot_dispo = P75_boot is not None and float(P75_boot or 0) > 0
     SCP = float(sc.get('scr_provisions', sc.get('scr_prov', BE * 0.30)) if sc else BE * 0.30)
     SCR = SCP / BE * 100 if BE else 0
 
-    s_col   = _statut_col(statut)
     s_label = _statut_label(statut)
     s_cls   = statut.lower()
 
@@ -1511,8 +1513,6 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     bt_statut = _s(bt.get('statut', 'AMBRE'))
     bt_col_cls = 'bt-card-' + bt_statut.lower() if bt_statut in ('ROUGE', 'AMBRE', 'VERT') else 'bt-card-navy'
     bt_score  = _s(bt.get('score_qualite', '—'))
-    n_mat     = int(bt.get('n_matures', bt.get('n_annees_matures', 0)))
-    n_tot     = int(bt.get('n_total', n_mat))
     # Recalculer depuis le tableau réel pour cohérence
     _bt_tab = bt.get('tableau', [])
     _SR, _SA = 15.0, 8.0
@@ -2146,7 +2146,10 @@ def export_html(
 def export_pdf(n1=None, n2=None, n3=None, n4=None,
                commentaire='', ref_client='', arrete='',
                audit_id='', lob_label='', graphiques=None,
-               actuaire_nom='', actuaire_numero_ia='', **kw) -> bytes:
+               actuaire_nom='', actuaire_numero_ia='') -> bytes:
+    # `**kw` retire (lot F2) : meme defaut que `run(**kwargs)`, meme remede.
+    # Il avalait tout parametre inconnu sans rien dire. Son unique appelant,
+    # `agent._produire_livrable`, ne passe que des parametres declares.
     n1=n1 or {}; n2=n2 or {}; n3=n3 or {}; n4=n4 or {}
     try:
         from weasyprint import HTML as WH

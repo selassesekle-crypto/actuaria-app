@@ -76,12 +76,15 @@
 
 import logging
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+# `Any` manquait alors que `Dict[str, Any]` est annoté deux fois (l. 316 et
+# 368). Sur Python 3.14 les annotations ne sont plus évaluées à la définition
+# (PEP 649) et rien ne plantait ; sur Python <= 3.13 le module levait
+# `NameError` DÈS L'IMPORT. Trouvé par ruff (F821), invisible à l'exécution.
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
-from .config.lob_config import (get_lob_config, get_sigma_eiopa, reference_s2,
-                                CORRELATION_EIOPA)
+from .config.lob_config import get_lob_config, get_sigma_eiopa, reference_s2
 from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
 from .config.rfr_eiopa  import (get_taux_rfr, DATE_COURBE,
                                 get_courbe_embarquee, diagnostic_peremption)
@@ -586,9 +589,7 @@ class BestEstimateS2:
         else:
             p75 = p90 = p995 = be
 
-        p75_source  = 'Incertitude composée (σ_Mack + σ_modèle)'
         p90_source  = 'Incertitude composée (σ_Mack + σ_modèle)'
-        p995_source = 'Incertitude composée (σ_Mack + σ_modèle)'
 
         # Percentiles Mack seul — centrés sur BE pondéré (pour affichage comparatif)
         if sigma > 0 and be > 0:
@@ -719,7 +720,9 @@ class BestEstimateS2:
             _raison_short = raison_rec[:300]
             if len(raison_rec) > 300 and '.' in _raison_short:
                 _raison_short = _raison_short[:_raison_short.rfind('.')+1]
-            recommandations.append(f"Méthode principale : {methode_rec.replace('_',' ').title()} — {_raison_short}")
+            recommandations.append(
+                f"Méthode principale : "
+                f"{methode_rec.replace('_',' ').title()} — {_raison_short}")
 
         # Recommandation back-testing si dispo
         bt_statut_val = n3.get('backtesting', {}).get('statut', '')
@@ -733,7 +736,8 @@ class BestEstimateS2:
         bz_statut_val = n3.get('glm_apc', {}).get('statut', '')
         if bz_statut_val == 'AMBRE':   # le GLM APC n'emet que VERT/AMBRE (pas de ROUGE)
             recommandations.append(
-                "Effets calendaire détectés — documenter la cause (inflation, changement législatif) "
+                "Effets calendaire détectés — documenter la cause "
+                "(inflation, changement législatif) "
                 "dans la note méthodologique S2."
             )
 
@@ -781,12 +785,14 @@ class BestEstimateS2:
         elif clark.get('aberrant'):
             recommandations.append(
                 "Clark LDF produit un résultat aberrant — méthode exclue de la pondération. "
-                "Vérifier la structure du triangle et la longueur de la queue de développement."
+                "Vérifier la structure du triangle et la longueur de la "
+                "queue de développement."
             )
 
         # Recommandation Risk Margin
         recommandations.append(
-            "Risk Margin S2 calculé par la méthode proportionnelle au BE (méthode 2 EIOPA, CoC 6%). "
+            "Risk Margin S2 calculé par la méthode proportionnelle au BE "
+            "(méthode 2 EIOPA, CoC 6%). "
             "Documenter la courbe EIOPA RFR utilisée dans la note méthodologique. "
             "Vérifier la cohérence avec le Risk Margin du dernier arrêté."
         )
@@ -796,7 +802,8 @@ class BestEstimateS2:
         if isinstance(tail_info, dict) and tail_info.get('tail_factor', 1.0) > 1.0:
             tail_val = tail_info.get('tail_factor', 1.0)
             recommandations.append(
-                f"Tail factor = {tail_val:.4f} appliqué (Guide IA 2023 — régression log-linéaire). "
+                f"Tail factor = {tail_val:.4f} appliqué "
+                f"(Guide IA 2023 — régression log-linéaire). "
                 "Justifier le seuil de stabilisation retenu dans la note méthodologique S2."
             )
 
@@ -828,7 +835,8 @@ class BestEstimateS2:
         elif statut == 'AMBRE' or not h1_ok:
             avis_actuariel = 'FAVORABLE SOUS RÉSERVE — points de vigilance à documenter'
         else:
-            avis_actuariel = "FAVORABLE — Best Estimate (réserve brute) robuste ; actualisation S2 opérée en aval (A10)"
+            avis_actuariel = ("FAVORABLE — Best Estimate (réserve brute) "
+                              "robuste ; actualisation S2 opérée en aval (A10)")
 
         # ── 9. Jugement actuariel documenté ───────────────────────────────────
         jugement = self._documenter_jugement(
@@ -865,9 +873,12 @@ class BestEstimateS2:
             'reserve_p75_mack':      round(p75_mack_val,  0),
             'reserve_p90_mack':      round(p90_mack_val,  0),
             'reserve_p99_5_mack':    round(p995_mack_val, 0),
-            'reserve_p75_boot':      round(float(_boot.get('p75',  p75_mack_val)), 0) if _boot_ok else None,
-            'reserve_p90_boot':      round(float(_boot.get('p90',  p90_mack_val)), 0) if _boot_ok else None,
-            'reserve_p99_5_boot':    round(float(_boot.get('p99_5',p995_mack_val)),0) if _boot_ok else None,
+            'reserve_p75_boot':      (round(float(_boot.get('p75', p75_mack_val)), 0)
+                                      if _boot_ok else None),
+            'reserve_p90_boot':      (round(float(_boot.get('p90', p90_mack_val)), 0)
+                                      if _boot_ok else None),
+            'reserve_p99_5_boot':    (round(float(_boot.get('p99_5', p995_mack_val)), 0)
+                                      if _boot_ok else None),
             'source_percentiles':    p90_source,
 
             # Incertitude composée (Option B — σ_Mack² + σ_modèle²)
@@ -897,7 +908,8 @@ class BestEstimateS2:
 
             # Risk Margin S2 (Art. 77 §5)
             'risk_margin':              risk_margin_data.get('risk_margin', 0),
-            'provisions_techniques_s2': risk_margin_data.get('provisions_techniques_s2', round(be, 0)),
+            'provisions_techniques_s2': risk_margin_data.get(
+                'provisions_techniques_s2', round(be, 0)),
             'ratio_rm_be':              risk_margin_data.get('ratio_rm_be', 0),
             'date_courbe_rfr':          risk_margin_data.get('date_courbe_rfr', '—'),
             # Diagnostic de péremption REMONTÉ jusqu'ici : la date seule ne dit
@@ -1053,28 +1065,35 @@ class BestEstimateS2:
                 'date_courbe_rfr':          DATE_COURBE,
                 'peremption_courbe':        diagnostic_peremption(),
                 'tableau_run_off':          [],
-                'message':                  'Risk Margin non calculable — données insuffisantes.',
+                'message': 'Risk Margin non calculable — données insuffisantes.',
             }
 
-        m      = len(f_cum)
         rm_sum = 0.0
         tableau = []
 
-        # f_cum est dans l'ordre [CDF_dernière_col, ..., CDF_1ère_col]
-        # CDF le plus grand en premier (période la moins développée)
-        # Pour le run-off : à l'année t, la proportion de BE résiduelle est
-        # approximée par la part des IBNR qui ne seront pas encore développés
-        # Méthode : utiliser les pct_developpe pour projeter le run-off
-        # pct_dev[i] = % développé de l'année i → IBNR[i] = BE[i] × (1 - pct_dev[i])
-        # À t=1 : les années qui se développent d'un pas → recalculer pct_dev
-        # 
-        # Simplification (méthode 2 EIOPA) : run-off proportionnel aux LDF
-        # BE(t) = BE(0) × facteur_run_off(t)
-        # facteur_run_off(t) = Σ_j [ 1/f_cum[max(0, m-1-j+t)] ] pour j=0..n
+        # PROFIL DE RUN-OFF RETENU — et il est un CHOIX, pas une donnée.
+        # `f_cum` est dans l'ordre [CDF_dernière_col, …, CDF_1ère_col]. On pose
+        # la part encore à développer à la colonne j, pct_résiduel[j] = 1/f_cum[j],
+        # puis :
         #
-        # Projection BE en run-off — méthode pct résiduel par CDF (décroissant)
-        # pct_résiduel[j] = 1/f_cum[j] → proportion encore à développer à la colonne j
-        # BE(t) = BE(0) × Σ_{j≥t} pct_résiduel[j] / Σ_j pct_résiduel[j]
+        #     BE(t) = BE(0) × Σ_{j≥t} pct_résiduel[j] / Σ_j pct_résiduel[j]
+        #
+        # et le SCR projeté proportionnellement au BE (méthode 2 de l'orientation
+        # EIOPA sur la Risk Margin).
+        #
+        # ⚠️ CE CHOIX PÈSE LOURD, ET LE CHIFFRE EST MESURÉ, PAS ESTIMÉ (lot F2).
+        # Sur GenIns, BE = 17 571 609 € : le profil ci-dessus rend une Risk
+        # Margin de 2 107 541 € (11,99 % du BE) ; un amortissement LINÉAIRE sur
+        # la même durée, tout aussi admissible au titre de la méthode 2, rend
+        # 1 582 906 € (9,01 % du BE) — soit **−24,9 %**. Le profil n'est donc
+        # pas un détail de mise en œuvre : il déplace le quart d'un poste de
+        # bilan, et c'est à ce titre qu'il est écrit ici plutôt que déduit du
+        # code par le lecteur.
+        #
+        # Deux esquisses de profils ABANDONNÉES occupaient cette place, dont une
+        # inachevée finissant sur un commentaire vide. Elles décrivaient des
+        # méthodes qui ne sont pas celle appliquée : les garder revenait à
+        # documenter le code par ce qu'il ne fait pas.
         pct_res  = [1.0 / max(float(f), 1.0) for f in f_cum]
         total_pr = max(sum(pct_res), 1e-10)
         m_rm     = len(pct_res)

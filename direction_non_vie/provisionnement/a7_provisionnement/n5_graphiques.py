@@ -46,7 +46,6 @@ logger = logging.getLogger('actuaria.a7')
 
 try:
     import plotly.graph_objects as go
-    import plotly.figure_factory as ff
     PLOTLY_OK = True
 except ImportError:
     PLOTLY_OK = False
@@ -396,7 +395,6 @@ def g4_ibnr_par_annee(n3: Dict) -> 'go.Figure':
     if not PLOTLY_OK:
         return None
     ibnr = n3.get('chain_ladder', {}).get('ibnr_par_annee', [])
-    ult  = n3.get('chain_ladder', {}).get('ultimates', [])
     if not ibnr:
         return None
 
@@ -767,9 +765,6 @@ def g7_scr_donut(n4: Dict) -> 'go.Figure':
     if be <= 0:
         return None
 
-    marge_p90  = max(p90  - be, 0)
-    marge_p995 = max(p995 - p90, 0)
-
     labels = ['Best Estimate', 'Marge P75-BE', 'Marge P90-P75', 'SCR (P99.5)']
     p75    = n4.get('reserve_p75', be)
     values = [
@@ -1102,7 +1097,6 @@ def g11_ultimates_vs_diagonale(n3: Dict) -> 'go.Figure':
         return None
 
     ult_cl   = n3.get('chain_ladder', {}).get('ultimates', [])
-    ult_mack = n3.get('mack',         {}).get('reserve_best_estimate', 0)
     ult_bf   = n3.get('bf',           {}).get('ultimates', [])
     ult_cc   = n3.get('cape_cod',     {}).get('ultimates', [])
     last_d   = n3.get('chain_ladder', {}).get('last_diagonale', [])
@@ -1519,7 +1513,6 @@ def generer_graphiques(
         return {}
 
     cl       = n3.get('chain_ladder', {})
-    facteurs = cl.get('facteurs', [])
     f_cum    = cl.get('facteurs_cumules', [])
     pct_dev  = cl.get('pct_developpe', [])
     methode  = cl.get('methode', 'Chain Ladder (standard)')

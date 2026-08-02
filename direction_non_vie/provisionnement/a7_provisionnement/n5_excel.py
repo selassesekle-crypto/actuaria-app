@@ -32,8 +32,6 @@ from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
 from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
 from .n2_hypotheses_munich import lignes_hypotheses_munich
 from .n3.bf_cape_cod import libelle_loss_ratio
-# Source UNIQUE d'affichage de Benktander, partagee avec HTML et Word.
-from .n3.benktander import lignes_benktander_rapport
 from .n3.bootstrap_odp import libelle_incertitude
 # Source UNIQUE d'affichage de Munich CL — la même que HTML et Word.
 from .n3.munich_cl import lignes_munich_rapport
@@ -41,10 +39,9 @@ from .n3.munich_cl import lignes_munich_rapport
 logger = logging.getLogger('actuaria.a7')
 
 try:
-    import openpyxl
     from openpyxl import Workbook
     from openpyxl.styles import (
-        Font, PatternFill, Alignment, Border, Side, numbers
+        Font, PatternFill, Alignment, Border, Side
     )
     from openpyxl.utils import get_column_letter
     OPENPYXL_OK = True
@@ -339,7 +336,6 @@ def _ong3_facteurs(wb, n3):
 
     facteurs   = n3['chain_ladder'].get('facteurs', [])
     f_cum      = n3['chain_ladder'].get('facteurs_cumules', [])
-    pct        = n3['chain_ladder'].get('pct_developpe', [])
     tail_info  = n3['chain_ladder'].get('tail_factor', {})
     tail_val   = tail_info.get('tail_factor', 1.0) if isinstance(tail_info, dict) else 1.0
 
