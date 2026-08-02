@@ -31,6 +31,37 @@ from ..segments_s2 import SEGMENTS_S2, libelle_reference
 # les deux precedentes -- c'est tout l'objet des lots B10-a a B10-c.
 from ..a10_solvabilite2.agent import BRANCHE_MAP, DURATION_LOB, SEGMENT_PAR_LOB
 
+# ── Constantes du Reglement delegue (UE) 2015/35 ─────────────────────────────
+#  Chacune porte son article : c'est la discipline posee par le chantier B10,
+#  ou quinze valeurs commentees << Annexe II >> n'y figuraient pas.
+
+#: Art. 166 par. 2 : << l'augmentation des taux d'interet sans risque de base a
+#: n'importe quelle echeance est d'AU MOINS UN POINT DE POURCENTAGE >>.
+PLANCHER_HAUSSE_TAUX = 0.01
+
+#: Art. 204 par. 3 et 4 : capital requis pour risque operationnel en NON-VIE,
+#: sur base des primes acquises et sur base des provisions techniques. Le
+#: coefficient 0,04 employe auparavant sur les primes est celui de la VIE.
+OP_TAUX_PRIMES_NON_VIE     = 0.03
+OP_TAUX_PROVISIONS_NON_VIE = 0.03
+
+#: Art. 204 par. 1 : SCR_operationnel = min(0,3 x BSCR ; Op) + 0,25 x Exp_ul,
+#: le second terme ne concernant que l'assurance vie en unites de compte.
+OP_PLAFOND_BSCR = 0.30
+
+#: Art. 114 par. 3 : matrice de correlation du module non-vie, dans l'ordre
+#: (primes et reserve, catastrophe, cessation).
+CORR_NON_VIE = np.array([[1.00, 0.25, 0.00],
+                         [0.25, 1.00, 0.00],
+                         [0.00, 0.00, 1.00]])
+
+#: Correlation entre le module non-vie et le module marche, au niveau du BSCR.
+#: ⚠️ CETTE VALEUR NE VIENT PAS DU REGLEMENT DELEGUE. L'art. 87 renvoie a
+#: l'ANNEXE IV DE LA DIRECTIVE 2009/138/CE, un document distinct dont nous ne
+#: disposons pas. La valeur 0,25 est celle qu'A8 employait deja : elle est
+#: CONSERVEE et signalee, plutot que remplacee par une valeur inventee.
+CORR_NON_VIE_MARCHE = 0.25
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s | actuaria.a8 | %(levelname)s | %(message)s',
@@ -87,8 +118,12 @@ def _charger_market_data() -> Dict:
                 # RELATIFS au taux sans risque, comme les chocs actions et
                 # immobilier du meme bloc -- suffixe pose au lot B10-d parce
                 # qu'ils etaient lus comme des ecarts de taux ABSOLUS.
-                'choc_taux_hausse_10ans_relatif': 0.48,
-                'choc_taux_baisse_10ans_relatif': -0.38,
+                # Valeurs du texte a l'echeance 10 ans : art. 166 par. 1 pour
+                # la hausse (42 %), art. 167 par. 1 pour la baisse (31 %).
+                # Elles valaient 48 % et 38 %, qui ne figurent a AUCUNE
+                # echeance des deux tables (lot B10-e).
+                'choc_taux_hausse_10ans_relatif': 0.42,
+                'choc_taux_baisse_10ans_relatif': -0.31,
                 'choc_actions_type1': 0.39,
                 'choc_actions_type2': 0.49,
                 'choc_immobilier': 0.25,
@@ -342,26 +377,42 @@ class AgentA8StressTesting:
         Calcule les sous-modules SCR calibrés sur les taux marché réels.
 
         ┌───────────────────────────────────────────────────────────────────┐
-        │  CE QUI RESTE NON VÉRIFIÉ (lot B10-d)                             │
+        │  ÉTAT DES SOURCES (lots B10-d et B10-e)                           │
         │                                                                   │
-        │  Le texte du Règlement délégué n'était plus disponible à la       │
-        │  clôture du lot. Les corrections apportées ici — facteur 3 de     │
-        │  l'art. 115, lecture relative des chocs de taux, duration par     │
-        │  branche — reposent toutes sur des incohérences INTERNES,         │
-        │  démontrables sans le texte. Les quatre points suivants, eux,     │
-        │  exigeraient le texte et n'ont donc PAS été touchés :             │
+        │  CONFRONTÉ AU TEXTE, article par article :                        │
+        │    · art. 115      facteur 3 du SCR primes et réserve ;           │
+        │    · art. 117(2)   combinaison σ_prime / σ_réserve ;              │
+        │    · art. 166/167  chocs de taux, valeurs à 10 ans, plancher de   │
+        │                    la hausse, baisse nulle à taux négatif ;       │
+        │    · art. 204      capital de base pour risque opérationnel et    │
+        │                    son plafond à 30 % du BSCR ;                   │
+        │    · art. 114      structure et matrice du module non-vie ;       │
+        │    · art. 87       agrégation du BSCR ;                           │
+        │    · annexes II et XIV, via `reglementation/segments_s2.py`.      │
         │                                                                   │
-        │   1. le taux du SCR opérationnel appliqué aux provisions (0,3 %)  │
-        │      contre 4 % appliqué aux primes — écart d'un facteur dix ;    │
-        │   2. le risque opérationnel est AGRÉGÉ par corrélation avec les   │
-        │      autres modules, là où la Directive l'ADDITIONNE au BSCR ;    │
-        │   3. `facteur_catastrophe_vent` appliqué aux primes, sans source  │
-        │      identifiée dans le dépôt ;                                   │
-        │   4. la matrice de corrélation 4×4 employée pour l'agrégation.    │
+        │  DEUX POINTS RESTENT HORS DE PORTÉE, ET POUR DES RAISONS QUI NE   │
+        │  SONT PAS LES MÊMES :                                             │
         │                                                                   │
-        │  Aucun de ces quatre points n'est corrigé « au jugé » : une       │
-        │  valeur inventée serait indiscernable d'une valeur sourcée, ce    │
-        │  qui est précisément le défaut que le chantier B10 a corrigé.     │
+        │   1. AUTRE DOCUMENT — la corrélation entre le module non-vie et   │
+        │      le module marché au niveau du BSCR. L'art. 87 renvoie à      │
+        │      l'ANNEXE IV DE LA DIRECTIVE 2009/138/CE, que nous n'avons    │
+        │      pas ; le Règlement délégué ne la contient pas. La valeur     │
+        │      0,25 déjà en place est conservée. Cf. `CORR_NON_VIE_MARCHE`. │
+        │                                                                   │
+        │   2. DONNÉES MANQUANTES, PAS SOURCE MANQUANTE — le module         │
+        │      catastrophe. L'art. 121 construit le risque de tempête sur   │
+        │      les SOMMES ASSURÉES PAR RÉGION, avec une matrice de          │
+        │      corrélation régionale (annexe V). A8 ne reçoit jamais        │
+        │      d'expositions par zone : `facteur_catastrophe_vent × primes` │
+        │      est un PROXY faute d'entrées, et le rester tant qu'on ne lui │
+        │      fournira pas ces expositions. Le connaître ne suffit pas ;   │
+        │      il faudrait alimenter l'agent. Même remarque pour le         │
+        │      sous-module cessation de l'art. 118, qui exige un calcul     │
+        │      contrat par contrat.                                         │
+        │                                                                   │
+        │  Aucun de ces points n'est comblé « au jugé » : une valeur        │
+        │  inventée serait indiscernable d'une valeur sourcée, ce qui est   │
+        │  précisément le défaut que le chantier B10 a corrigé.             │
         └───────────────────────────────────────────────────────────────────┘
         """
         nv  = scr_params['scr_souscription_non_vie']
@@ -426,13 +477,18 @@ class AgentA8StressTesting:
         # `choc_immobilier`, que le code lit bien comme relatifs : c'est
         # l'incohérence qui a permis de trancher sans recourir au texte.
         #
-        # ⚠️ LE PLANCHER RÉGLEMENTAIRE N'EST PAS APPLIQUÉ. Le choc de taux à
-        # la hausse est, en principe, borné par en bas par une hausse absolue
-        # minimale. Cette borne n'a PAS pu être confrontée au texte : elle
-        # n'est donc pas appliquée, plutôt qu'inventée. Conséquence : à taux
-        # bas, le SCR de taux publié ici est un MINORANT.
-        choc_taux_up   = mkt['choc_taux_hausse_10ans_relatif'] * rfr_10ans
-        choc_taux_down = abs(mkt['choc_taux_baisse_10ans_relatif']) * rfr_10ans
+        # LE PLANCHER DE L'ART. 166(2) EST APPLIQUÉ (lot B10-e). Il était
+        # documenté comme « non appliqué faute de source » ; le texte l'a
+        # fourni : la hausse vaut au moins UN POINT de pourcentage, quelle que
+        # soit l'échéance. À un taux sans risque de 3,2 % il ne mord pas
+        # (0,42 × 3,2 % = 1,34 pt) ; il mord en dessous de 2,38 %.
+        choc_taux_up = max(mkt['choc_taux_hausse_10ans_relatif'] * rfr_10ans,
+                           PLANCHER_HAUSSE_TAUX)
+        # Art. 167(2) : « pour les taux d'intérêt sans risque de base NÉGATIFS,
+        # la diminution est NULLE. » Une baisse relative appliquée à un taux
+        # négatif l'aurait rendu plus négatif encore, ce qui n'est pas le choc.
+        choc_taux_down = (abs(mkt['choc_taux_baisse_10ans_relatif']) * rfr_10ans
+                          if rfr_10ans > 0 else 0.0)
         # Duration de la BRANCHE (corrigé au lot B10-d) : elle valait 3,5 ans
         # en dur pour toutes les branches, alors qu'A10 en porte une par LoB —
         # de 1,5 an pour l'assistance à 20 ans pour les corporels graves.
@@ -446,12 +502,24 @@ class AgentA8StressTesting:
         part_actions  = 0.10
         scr_actions   = be * part_actions * mkt['choc_actions_type1']
 
-        # SCR opérationnel
-        # ⚠️ NON VÉRIFIÉ — cf. le bloc en tête de `_chocs_s2`. Le taux appliqué
-        # aux provisions (0,3 %) est d'un ordre de grandeur inférieur à celui
-        # appliqué aux primes (4 %), ce qui est surprenant ; il n'a pas pu être
-        # confronté au texte. Il ne mord pas tant que la branche primes domine.
-        scr_operationnel = max(0.04 * prime, 0.003 * be)
+        # ── Capital requis de base pour risque opérationnel — art. 204(2) ────
+        #
+        #     Op = max(Op_primes ; Op_provisions)
+        #
+        # Corrigé au lot B10-e sur le texte. Deux coefficients étaient faux :
+        #   · sur les primes, 0,04 était employé — c'est le coefficient de la
+        #     VIE (art. 204(3)) ; le non-vie est à 0,03 ;
+        #   · sur les provisions, 0,003 était employé au lieu de 0,03, soit un
+        #     ordre de grandeur en dessous (art. 204(4)).
+        # Ce n'est PAS encore le SCR opérationnel : l'art. 204(1) le plafonne
+        # à 30 % du BSCR, qui n'est connu qu'à l'agrégation. Cf. `_agreger_scr`.
+        #
+        # L'art. 204(4) précise que les provisions techniques s'entendent sans
+        # marge de risque et SANS déduction des montants recouvrables au titre
+        # de la réassurance : le Best Estimate brut d'A7 est donc la bonne
+        # assiette, ce qui n'était pas acquis d'avance.
+        op_base = max(OP_TAUX_PRIMES_NON_VIE * prime,
+                      OP_TAUX_PROVISIONS_NON_VIE * be)
 
         # Ajustement tail factor sur SCR réserves
         scr_tail = be * (tail_f - 1.0) * sigma_r
@@ -465,7 +533,22 @@ class AgentA8StressTesting:
             'scr_taux_hausse':    round(scr_taux_up, 2),
             'scr_taux_baisse':    round(scr_taux_down, 2),
             'scr_actions':        round(scr_actions, 2),
-            'scr_operationnel':   round(scr_operationnel, 2),
+            # `op_base` est le Op de l'art. 204(2), AVANT le plafond de 30 %
+            # du BSCR. `scr_operationnel` porte la valeur PLAFONNÉE, écrite
+            # par `_agreger_scr` — le plafond dépend du BSCR, qui dépend des
+            # autres modules : le calcul est en deux temps par construction.
+            'op_base':            round(op_base, 2),
+            'scr_operationnel':   round(op_base, 2),
+            # Art. 118 — sous-module cessation. NON CALCULABLE ICI, et ce
+            # n'est pas une lacune réglementaire : l'article demande la perte
+            # de fonds propres résultant de la cessation de 40 % des contrats
+            # « dans le cas desquels cette cessation a pour effet d'entraîner
+            # une augmentation des provisions techniques », déterminée CONTRAT
+            # PAR CONTRAT. A8 reçoit un Best Estimate agrégé, jamais des
+            # contrats. Le terme est donc NUL, et le SCR non-vie publié est un
+            # MINORANT sur cet axe. La matrice de l'art. 114 lui donnant une
+            # corrélation nulle avec les deux autres, il sort proprement.
+            'scr_cessation':      0.0,
             'scr_tail_factor':    round(scr_tail, 2),
             'sigma_primes':       sigma_p,
             'sigma_reserves':     sigma_r,
@@ -485,25 +568,50 @@ class AgentA8StressTesting:
 
     def _agreger_scr(self, chocs, fonds_propres, scr_params) -> Dict:
         """
-        Agrège les sous-modules SCR via la matrice de corrélation EIOPA.
-        Calcule le ratio SCR et MCR.
+        Agrège les sous-modules SCR selon la structure du Règlement délégué.
+
+        LA STRUCTURE ÉTAIT PLATE, ELLE EST À DEUX ÉTAGES (lot B10-e). Une
+        seule matrice 4×4 corrélait souscription, catastrophe, marché et
+        OPÉRATIONNEL. C'est faux à deux titres :
+
+          · l'art. 204(1) calcule le SCR opérationnel COMME UNE FONCTION du
+            BSCR — `min(0,3 × BSCR ; Op)` — il ne peut donc pas être une
+            composante du BSCR, ce serait circulaire. L'art. 103 de la
+            directive 2009/138/CE l'ADDITIONNE : SCR = BSCR + Adj + SCR_op ;
+          · l'art. 114 fait de la catastrophe un SOUS-module du risque de
+            souscription non-vie, avec sa propre matrice 3×3, et non un
+            module de même rang que le marché.
+
+        L'ajustement pour capacité d'absorption des pertes (art. 205, le
+        terme « Adj ») n'est pas calculé par A8 : il exige les impôts différés
+        et les provisions à participation, qu'il ne reçoit pas. Il est donc
+        nul, ce qui rend le SCR publié PRUDENT sur cet axe — l'ajustement est
+        négatif par construction.
         """
-        # Matrice corrélation EIOPA (souscription · catastrophe · marché · opérationnel)
-        corr = np.array([
-            [1.00, 0.25, 0.25, 0.00],  # souscription
-            [0.25, 1.00, 0.25, 0.00],  # catastrophe
-            [0.25, 0.25, 1.00, 0.25],  # marché (taux + actions)
-            [0.00, 0.00, 0.25, 1.00],  # opérationnel
-        ])
+        # ── Étage 1 : module non-vie — art. 114(2) et (3) ────────────────────
+        vec_nl = np.array([chocs['scr_souscription'],
+                           chocs['scr_catastrophe'],
+                           chocs['scr_cessation']])
+        scr_non_vie = float(np.sqrt(vec_nl @ CORR_NON_VIE @ vec_nl))
 
-        scr_vec = np.array([
-            chocs['scr_souscription'],
-            chocs['scr_catastrophe'],
-            chocs['scr_taux'] + chocs['scr_actions'],
-            chocs['scr_operationnel'],
-        ])
+        # ── Étage 2 : BSCR — art. 87 ─────────────────────────────────────────
+        scr_marche = chocs['scr_taux'] + chocs['scr_actions']
+        vec_bscr   = np.array([scr_non_vie, scr_marche])
+        corr_bscr  = np.array([[1.0, CORR_NON_VIE_MARCHE],
+                               [CORR_NON_VIE_MARCHE, 1.0]])
+        bscr = float(np.sqrt(vec_bscr @ corr_bscr @ vec_bscr))
 
-        scr_total = float(np.sqrt(scr_vec @ corr @ scr_vec))
+        # ── Étage 3 : SCR = BSCR + SCR_op — art. 204(1) et art. 103 Dir. ─────
+        scr_operationnel = min(OP_PLAFOND_BSCR * bscr, chocs['op_base'])
+        # Le plafond dépend du BSCR : la valeur définitive n'est connue qu'ici.
+        # On la réécrit dans `chocs` pour que les livrables en aval — QRT,
+        # allocation de capital, commentaire — lisent le montant retenu et non
+        # le Op non plafonné.
+        chocs['scr_operationnel'] = round(scr_operationnel, 2)
+
+        scr_total = bscr + scr_operationnel
+        scr_vec = np.array([chocs['scr_souscription'], chocs['scr_catastrophe'],
+                            scr_marche, scr_operationnel])
 
         # MCR
         mcr_params    = scr_params['mcr']
@@ -519,6 +627,13 @@ class AgentA8StressTesting:
 
         return {
             'scr_total':        round(scr_total, 2),
+            # Les deux étages sont publiés : sans eux, un lecteur ne peut pas
+            # refaire le calcul, l'opérationnel n'étant pas dans le BSCR.
+            'bscr':             round(bscr, 2),
+            'scr_non_vie':      round(scr_non_vie, 2),
+            'scr_marche':       round(scr_marche, 2),
+            'scr_operationnel': round(scr_operationnel, 2),
+            'op_plafonne':      scr_operationnel < chocs['op_base'] - 1e-9,
             'mcr':              round(mcr, 2),
             'ratio_scr_pct':    round(ratio_scr, 1),
             'ratio_mcr_pct':    round(ratio_mcr, 1),

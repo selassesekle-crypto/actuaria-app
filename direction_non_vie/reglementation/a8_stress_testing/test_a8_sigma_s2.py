@@ -297,5 +297,147 @@ class T4_Formule_Articles_115_Et_117(unittest.TestCase):
         print(f"    OK SIG8-15 duration par branche : {vues}")
 
 
+# =============================================================================
+#  5. RISQUE OPÉRATIONNEL — ARTICLE 204
+# =============================================================================
+
+class T5_Article_204(unittest.TestCase):
+    """Trois défauts corrigés au lot B10-e, tous sourcés."""
+
+    def test_les_coefficients_sont_ceux_du_non_vie(self):
+        """0,04 sur les primes était le coefficient de la VIE (art. 204(3))."""
+        self.assertAlmostEqual(A8.OP_TAUX_PRIMES_NON_VIE, 0.03)
+        self.assertAlmostEqual(A8.OP_TAUX_PROVISIONS_NON_VIE, 0.03)
+        r = _run('rc_auto')
+        c = r['chocs_s2']
+        prime = c['scr_primes'] / c['sigma_primes']
+        attendu = max(0.03 * prime, 0.03 * r['be_utilise'])
+        self.assertAlmostEqual(c['op_base'], round(attendu, 2), delta=1.0)
+        print(f"    OK SIG8-16 Op = max(3 % primes ; 3 % provisions) = "
+              f"{c['op_base']:,.0f} EUR".replace(',', ' '))
+
+    def test_le_coefficient_des_provisions_nest_plus_dix_fois_trop_bas(self):
+        """Il valait 0,003 pour 0,03 — un ordre de grandeur (art. 204(4))."""
+        r = _run('rc_auto')
+        c = r['chocs_s2']
+        self.assertAlmostEqual(A8.OP_TAUX_PROVISIONS_NON_VIE
+                               / A8.OP_TAUX_PRIMES_NON_VIE, 1.0, places=9,
+                               msg="les deux coefficients non-vie sont egaux")
+        self.assertGreater(0.03 * r['be_utilise'], 0.003 * r['be_utilise'] * 9)
+        print("    OK SIG8-17 coefficient provisions 0,003 -> 0,03 (art. 204(4))")
+
+    def test_le_plafond_de_trente_pourcent_du_bscr_est_applique(self):
+        """Art. 204(1) : SCR_op = min(0,3 x BSCR ; Op)."""
+        self.assertAlmostEqual(A8.OP_PLAFOND_BSCR, 0.30)
+        r = _run('rc_auto')
+        s, c = r['scr_total'], r['chocs_s2']
+        self.assertAlmostEqual(s['scr_operationnel'],
+                               min(0.30 * s['bscr'], c['op_base']), delta=1.0)
+        self.assertLessEqual(s['scr_operationnel'], 0.30 * s['bscr'] + 1e-6)
+        print(f"    OK SIG8-18 SCR_op = min(30 % x BSCR ; Op) = "
+              f"{s['scr_operationnel']:,.0f} (plafond mord : "
+              f"{s['op_plafonne']})".replace(',', ' '))
+
+
+# =============================================================================
+#  6. STRUCTURE D'AGRÉGATION — ARTICLES 114, 87 ET 103 DE LA DIRECTIVE
+# =============================================================================
+
+class T6_Structure_Agregation(unittest.TestCase):
+    """Une matrice 4×4 plate est devenue deux étages plus une addition."""
+
+    def test_le_module_non_vie_suit_la_matrice_de_larticle_114(self):
+        r = _run('rc_auto')
+        s, c = r['scr_total'], r['chocs_s2']
+        v = np.array([c['scr_souscription'], c['scr_catastrophe'],
+                      c['scr_cessation']])
+        attendu = float(np.sqrt(v @ A8.CORR_NON_VIE @ v))
+        self.assertAlmostEqual(s['scr_non_vie'], attendu, delta=1.0)
+        self.assertEqual(A8.CORR_NON_VIE[0][1], 0.25)
+        self.assertEqual(A8.CORR_NON_VIE[0][2], 0.00)
+        print(f"    OK SIG8-19 module non-vie art. 114 (3x3) = "
+              f"{s['scr_non_vie']:,.0f} EUR".replace(',', ' '))
+
+    def test_le_scr_operationnel_est_ADDITIONNE_et_non_correle(self):
+        """Art. 204(1) le calcule DEPUIS le BSCR : il ne peut pas y être.
+
+        C'est la preuve structurelle du lot : `SCR_op = min(0,3 x BSCR ; Op)`
+        serait circulaire si l'opérationnel était une composante du BSCR.
+        """
+        r = _run('rc_auto')
+        s = r['scr_total']
+        self.assertAlmostEqual(s['scr_total'],
+                               s['bscr'] + s['scr_operationnel'], delta=1.0)
+        self.assertGreater(s['scr_operationnel'], 0)
+        print(f"    OK SIG8-20 SCR = BSCR + SCR_op = {s['bscr']:,.0f} + "
+              f"{s['scr_operationnel']:,.0f} = {s['scr_total']:,.0f}"
+              .replace(',', ' '))
+
+    def test_le_bscr_nagrege_que_le_non_vie_et_le_marche(self):
+        r = _run('rc_auto')
+        s = r['scr_total']
+        v = np.array([s['scr_non_vie'], s['scr_marche']])
+        corr = np.array([[1.0, A8.CORR_NON_VIE_MARCHE],
+                         [A8.CORR_NON_VIE_MARCHE, 1.0]])
+        self.assertAlmostEqual(s['bscr'], float(np.sqrt(v @ corr @ v)),
+                               delta=1.0)
+        montant = f"{s['bscr']:,.0f}".replace(',', ' ')
+        print(f"    OK SIG8-21 BSCR art. 87 = {montant} EUR "
+              f"(correlation non-vie/marche {A8.CORR_NON_VIE_MARCHE} — "
+              f"annexe IV de la DIRECTIVE, autre document)")
+
+    def test_la_cessation_est_nulle_et_dite_comme_telle(self):
+        """Art. 118 : calcul contrat par contrat, hors des entrées d'A8."""
+        self.assertEqual(_run('rc_auto')['chocs_s2']['scr_cessation'], 0.0)
+        print("    OK SIG8-22 cessation art. 118 = 0 — donnees contrat par "
+              "contrat jamais recues ; le SCR non-vie est un MINORANT")
+
+
+# =============================================================================
+#  7. CHOCS DE TAUX — ARTICLES 166 ET 167
+# =============================================================================
+
+class T7_Articles_166_Et_167(unittest.TestCase):
+
+    def test_les_valeurs_sont_celles_des_tables_a_dix_ans(self):
+        m = _bloc_reference('scr_marche')
+        self.assertAlmostEqual(m['choc_taux_hausse_10ans_relatif'], 0.42)
+        self.assertAlmostEqual(m['choc_taux_baisse_10ans_relatif'], -0.31)
+        print("    OK SIG8-23 hausse 42 % (art. 166), baisse 31 % (art. 167) "
+              "— valaient 48 % et 38 %, absentes des deux tables")
+
+    def test_le_plancher_dun_point_est_applique(self):
+        """Art. 166(2) : la hausse vaut au moins un point de pourcentage."""
+        self.assertAlmostEqual(A8.PLANCHER_HAUSSE_TAUX, 0.01)
+        r = _run('rc_auto')
+        c = r['chocs_s2']
+        rfr = c['rfr_calibrage'] / 100.0
+        choc = _bloc_reference('scr_marche')['choc_taux_hausse_10ans_relatif']
+        attendu = (r['be_utilise'] * c['duration_passifs']
+                   * max(choc * rfr, 0.01))
+        self.assertAlmostEqual(c['scr_taux_hausse'], attendu, delta=1.0)
+        print(f"    OK SIG8-24 plancher +1 pt applique ; a RFR="
+              f"{rfr:.2%} il ne mord pas ({choc * rfr:.4f} > 0,0100), "
+              f"il mordrait sous {0.01 / choc:.2%}")
+
+    def test_la_baisse_est_nulle_a_taux_negatif(self):
+        """Art. 167(2), vérifié sur la fonction elle-même."""
+        agent = A8.AgentA8StressTesting(models_path='/tmp', audit_path='/tmp',
+                                        verbose=False)
+        params = {'scr_souscription_non_vie': {'facteur_catastrophe_vent': 0.10},
+                  'scr_marche': _bloc_reference('scr_marche')}
+        for rfr, attendu_nul in ((0.032, False), (-0.005, True)):
+            c = agent._chocs_s2(be=3_000_000.0, prime=5_000_000.0,
+                                p99_5=3_600_000.0, scr_params=params,
+                                oat_10ans=0.0365, rfr_10ans=rfr,
+                                inflation=0.024, branche='rc_auto',
+                                tail_f=1.037)
+            if attendu_nul:
+                self.assertEqual(c['scr_taux_baisse'], 0.0)
+            else:
+                self.assertGreater(c['scr_taux_baisse'], 0.0)
+        print("    OK SIG8-25 baisse nulle a taux negatif (art. 167(2))")
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
