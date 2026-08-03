@@ -77,7 +77,7 @@ class T1_Livrables_Declarent(unittest.TestCase):
     def test_un_livrable_vide_est_toujours_explique(self):
         """Aucun octet manquant sans motif — c'était exactement le trou."""
         for cle, nom in (('excel_bytes', 'excel'), ('word_bytes', 'word'),
-                         ('pdf_bytes', 'pdf')):
+                         ('html', 'html')):
             octets = self.r.get(cle, b'')
             if len(octets) >= _TAILLE_MIN_LIVRABLE:
                 continue
@@ -156,16 +156,26 @@ class T2_Rapport_HTML_Et_PDF(unittest.TestCase):
                                f"({len(html)} octets)")
             print(f"    OK LIV-7 aucun repli déclenché ({len(html):,} octets)")
 
-    def test_le_pdf_refuse_de_mettre_en_page_un_repli(self):
-        """Sinon : un PDF volumineux et valide de la page d'erreur."""
-        import direction_non_vie.provisionnement.a7_provisionnement.n5_rapport as mod
-        from unittest.mock import patch
-        with patch.object(mod, 'export_html',
-                          return_value=MARQUEUR_ECHEC_RAPPORT + '<html></html>'):
-            octets = mod.export_pdf(n1={}, n2={}, n3={}, n4={})
-        self.assertEqual(octets, b'',
-                         "export_pdf a mis en page un repli d'échec")
-        print("    OK LIV-8 export_pdf refuse le repli de export_html")
+    def test_un_repli_de_rapport_reste_trop_petit_pour_passer(self):
+        """⚠️ CE TEST VISAIT `export_pdf`, RETIRE AU LOT C1 (decision B).
+
+        Sa preoccupation survit et elle est intacte : `export_pdf` GONFLAIT le
+        repli d'echec en un PDF volumineux et parfaitement valide, ce qui
+        defaisait le controle de taille de `_produire_livrable`. Le PDF n'etant
+        plus genere, le repli reste une chaine courte -- et la garde le
+        rattrape. C'est ce que ce test verifie desormais : la protection tient
+        PAR CONSTRUCTION, non par un controle supplementaire.
+        """
+        import direction_non_vie.provisionnement.a7_provisionnement.agent as ag
+        repli = MARQUEUR_ECHEC_RAPPORT + '<html><body><h1>Erreur</h1></body></html>'
+        self.assertLess(
+            len(repli), ag._TAILLE_MIN_LIVRABLE,
+            "le repli d'echec doit rester sous le seuil qui le disqualifie")
+        octets, erreur = ag._produire_livrable('html', lambda **k: repli)
+        self.assertTrue(erreur, "un repli doit etre declare comme anomalie")
+        self.assertIn('vide', erreur)
+        print(f"    OK LIV-8 le repli d'echec ({len(repli)} car.) reste sous "
+              f"le seuil ({ag._TAILLE_MIN_LIVRABLE}) et est declare : {erreur}")
 
 
 # =============================================================================

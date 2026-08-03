@@ -22,7 +22,7 @@
 #    · schema_mapping    : mapping explicite des colonnes
 #    · arrete            : libellé arrêté pour le rapport
 #    · resultats_precedents : dict N-1 pour comparatif
-#    · word_bytes / pdf_bytes dans le dict retourné
+#    · word_bytes / html dans le dict retourné
 #    · n_sim_bootstrap   : défaut 5000 (recommandé EIOPA)
 #
 # =============================================================================
@@ -51,7 +51,7 @@ from .n4_best_estimate  import BestEstimateS2, garde_fou_be_negatif, s2_non_calc
 from .n5_graphiques     import generer_graphiques as _generer_graphiques
 from .n5_commentaire    import generer_commentaire
 from .n5_excel          import export_excel
-from .n5_rapport        import export_word, export_pdf
+from .n5_rapport        import export_word, export_html
 from .config.lob_config import get_lob_config
 
 # ── Imports méthodes N3 ───────────────────────────────────────────────────────
@@ -153,7 +153,7 @@ _TAILLE_MIN_LIVRABLE = 512
 #: `ImportError` en interne et rendent `b''`, si bien qu'une bibliothèque absente
 #: y ressort indistinguable d'un bug. Les sonder ici évite de les modifier —
 #: l'application les appelle directement, hors de tout mécanisme d'agent.
-_DEPENDANCE_LIVRABLE = {'excel': 'openpyxl', 'word': 'docx', 'pdf': 'weasyprint'}
+_DEPENDANCE_LIVRABLE = {'excel': 'openpyxl', 'word': 'docx'}
 
 
 def _dependance_absente(nom: str) -> Optional[str]:
@@ -246,7 +246,7 @@ class AgentA7Provisionnement:
     success, statut_rag, audit_id, erreur
     n1, n2, n3, n4
     graphiques, graphiques_erreur (None si OK), commentaire
-    excel_bytes, word_bytes, pdf_bytes, audit_trail
+    excel_bytes, word_bytes, html, audit_trail
     — compatibilité ancienne API —
     chain_ladder, mack, bf, cape_cod, bootstrap, munich_cl
     best_estimate, validation, tail_factor
@@ -296,7 +296,14 @@ class AgentA7Provisionnement:
         seed:             int           = 42,
         generer_graphiques_flag: bool   = True,
         generer_word:     bool          = True,
-        generer_pdf_flag: bool          = True,
+        generer_html:     bool          = True,
+        # ⚠️ DEPRECIE (lot C1, decision B). Le PDF n'est plus GENERE : il
+        # s'obtient par CONVERSION du Word ou du HTML. Ce parametre n'a plus
+        # aucun effet ; il n'est conserve que le temps que les appelants
+        # migrent vers `generer_html`, et il journalise un avertissement s'il
+        # vaut True. Le retirer aujourd'hui casserait des appels existants,
+        # `run()` refusant durement tout mot-cle inconnu depuis le lot F2.
+        generer_pdf_flag: bool          = False,
         # ── Compatibilité ancienne API ────────────────────────────────────────
         triangle                        = None,
         result_a2                       = None,
@@ -745,17 +752,28 @@ class AgentA7Provisionnement:
                     graphiques=graphiques_dict, ref_client=ref_client,
                     arrete=arrete, audit_id=audit_id, lob_label=lob_label)
 
-            pdf_bytes, err_pdf = (b'', None)
-            if generer_pdf_flag:
-                pdf_bytes, err_pdf = _produire_livrable(
-                    'pdf', export_pdf,
+            # ⚠️ LE HTML EST UNE SORTIE A PART ENTIERE (lot C1, decision B).
+            # Il n'existait que comme intermediaire technique d'`export_pdf` :
+            # `run()` ne le rendait pas, et personne ne pouvait le lire sans
+            # passer par un PDF qui, lui, exigeait weasyprint. Il est desormais
+            # produit et rendu comme l'Excel et le Word, par la meme fabrique.
+            html_txt, err_html = ('', None)
+            if generer_html:
+                html_txt, err_html = _produire_livrable(
+                    'html', export_html,
                     n1=n1, n2=n2, n3=n3, n4=n4, commentaire=commentaire,
                     graphiques=graphiques_dict, ref_client=ref_client,
                     arrete=arrete, audit_id=audit_id, lob_label=lob_label)
 
+            if generer_pdf_flag:
+                logger.warning(
+                    "generer_pdf_flag est DEPRECIE et sans effet : le PDF "
+                    "s'obtient desormais par conversion du Word ou du HTML. "
+                    "Utilisez generer_html.")
+
             livrables_erreurs = {k: v for k, v in (
                 ('graphiques', graphiques_erreur), ('excel', err_xl),
-                ('word', err_wd), ('pdf', err_pdf)) if v}
+                ('word', err_wd), ('html', err_html)) if v}
 
             # Audit trail
             audit = self._audit_trail(
@@ -807,7 +825,7 @@ class AgentA7Provisionnement:
                 'commentaire':  commentaire,
                 'excel_bytes':  excel_bytes,
                 'word_bytes':   word_bytes,    # ← NOUVEAU v5.0
-                'pdf_bytes':    pdf_bytes,     # ← NOUVEAU v5.0
+                'html':         html_txt,
                 # Un livrable dégradé est DÉCLARÉ ici, jamais deviné : dict vide
                 # si les quatre sont sortis. Une valeur commençant par
                 # `dependance_absente:` dit une bibliothèque manquante — pas un
@@ -848,7 +866,7 @@ class AgentA7Provisionnement:
                 'commentaire': f"ERREUR A7 : {str(e)}",
                 'excel_bytes': b'',
                 'word_bytes':  b'',
-                'pdf_bytes':   b'',
+                'html':        '',
                 'graphiques':  {},
                 'graphiques_erreur': 'run interrompu avant N5',
                 'livrables_erreurs': {k: 'run interrompu avant N5'

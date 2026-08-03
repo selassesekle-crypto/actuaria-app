@@ -153,13 +153,20 @@ class T3_Aucun_Parametre_Avale(unittest.TestCase):
         print("    OK F2-3 run() lève TypeError sur un mot-clé inconnu, "
               "sans **kwargs pour l'absorber")
 
-    def test_export_pdf_non_plus_n_avale_rien(self):
+    def test_export_html_non_plus_n_avale_rien(self):
+        """⚠️ CE TEST VISAIT `export_pdf`, RETIRE AU LOT C1 (decision B).
+
+        Son SUJET survit : un exportateur de livrable ne doit pas avaler en
+        silence un mot-cle inconnu. `export_html` a pris la place d'`export_pdf`
+        comme sortie imprimable de `run()`, le verrou le suit.
+        """
         from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
-            export_pdf)
-        var_kw = [p.name for p in inspect.signature(export_pdf).parameters.values()
+            export_html)
+        var_kw = [p.name for p in inspect.signature(export_html).parameters.values()
                   if p.kind is inspect.Parameter.VAR_KEYWORD]
-        self.assertEqual(var_kw, [], "`export_pdf` ré-avale les mots-clés inconnus")
-        print("    OK F2-4 export_pdf() n'avale plus les mots-clés inconnus")
+        self.assertEqual(var_kw, [],
+                         "`export_html` avale les mots-clés inconnus")
+        print("    OK F2-4 export_html() n'avale pas les mots-clés inconnus")
 
 
 # =============================================================================

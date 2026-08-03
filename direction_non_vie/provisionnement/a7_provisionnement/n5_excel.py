@@ -592,7 +592,7 @@ def _ong5_ibnr(wb, n3):
 #  ONGLET 6 — VALIDATION HYPOTHÈSES
 # =============================================================================
 
-def _ong6_hypotheses(wb, n2):
+def _ong6_hypotheses(wb, n2, n4):
     ws = wb.create_sheet("6. Hypothèses")
     ws.sheet_view.showGridLines = False
 
@@ -667,12 +667,27 @@ def _ong6_hypotheses(wb, n2):
         _kpi(ws, 9+i, 1, lbl, val, None,
              n2.get('statut_global') if lbl == "Statut global" else None)
 
-    # Alertes N2
-    alertes = n2.get('alertes', [])
+    # ⚠️ LES ALERTES DE JUGEMENT, PAS SEULEMENT CELLES DE N2 (lot C1).
+    # Cette feuille lisait `n2['alertes']` et elle seule. Or les alertes du
+    # JUGEMENT ACTUARIEL — péremption de la courbe des taux, niveau ancré sur
+    # Chain Ladder, hypothèses à justifier, et depuis le lot A2 le message du
+    # filet qui porte les 87,2 % du Best Estimate — vivent dans `n4['alertes']`.
+    # Aucune n'atteignait donc l'Excel, alors que le rapport HTML et le Word
+    # les affichaient : le même run disait deux choses différentes selon le
+    # format ouvert. N4 les reprend déjà toutes, N2 comprises.
+    alertes = n4.get('alertes') or n2.get('alertes', [])
     if alertes:
         _titre_section(ws, 13, 1, "ALERTES", 5)
+        # ⚠️ LES ACCENTS NE SONT PLUS MANGÉS (lot C1). Un
+        # `encode('ascii', 'ignore')` rendait « Années [9] : FILET DE SÉCURITÉ
+        # déclenché » en « Annes [9] : FILET DE SCURIT dclench ». openpyxl écrit
+        # de l'UTF-8 sans difficulté ; ce filtrage ne protégeait rien et rendait
+        # illisible le français. Seuls les caractères de contrôle et les emoji
+        # hors plan multilingue de base sont retirés, parce qu'Excel les rend
+        # par un carré vide.
         for i, a in enumerate(alertes[:6]):
-            clean = a.encode('ascii','ignore').decode('ascii').strip()
+            clean = ''.join(c for c in str(a)
+                            if c.isprintable() and ord(c) < 0x1F000).strip()
             c = ws.cell(row=14+i, column=1, value=clean)
             c.font      = _font(color=AMBRE_S2, size=9)
             c.fill      = _fill('FAEEDA')
@@ -1064,7 +1079,7 @@ def export_excel(
         _ong3_facteurs(wb, n3)
         _ong4_methodes(wb, n3, n4)
         _ong5_ibnr(wb, n3)
-        _ong6_hypotheses(wb, n2)
+        _ong6_hypotheses(wb, n2, n4)
         _ong7_bootstrap(wb, n3)
         _ong8_comparatif(wb, n4, resultats_precedents)
         _ong9_scr(wb, n4)
