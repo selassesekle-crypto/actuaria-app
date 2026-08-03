@@ -358,5 +358,151 @@ class T6_Consequence_Sur_Mack(unittest.TestCase):
               "intacts dans les deux branches")
 
 
+# =============================================================================
+#  T7 — LA TRACE STRUCTUREE : 87 % du BE etait sous hypothese en defaut
+# =============================================================================
+
+class T7_Trace_Gouvernance(unittest.TestCase):
+    """(!) CE QUE CE LOT REND VISIBLE, ET QUI NE L'ETAIT NULLE PART.
+
+    Avant A2, `annees_sous_filet` publiait un NUMERO D'ANNEE. L'actuaire
+    lisait « [9] » et un statut ROUGE, sans jamais savoir quelle hypothese
+    avait echoue, sur quelle colonne, ni ce que cela pesait.
+
+    Mesure sur GenIns : l'annee sous filet porte 26,3 % du Best Estimate, et
+    les quatre annees « a justifier » en portent 60,9 %. Ensemble, 87,2 % de
+    la provision reposait sur des annees dont une hypothese est en defaut,
+    et RIEN ne le disait.
+    """
+
+    _CHAMPS = ('annee', 'hypothese', 'statut', 'portee', 'statistique',
+               'valeur', 'seuil', 'consequence', 'methodes_retenues',
+               'contribution_eur', 'part_du_be')
+
+    def test_la_trace_porte_les_onze_champs_sur_chaque_entree(self):
+        r = _run(GENINS)
+        trace = r['n4']['trace_gouvernance']
+        self.assertTrue(trace, "GenIns doit produire une trace non vide")
+        for t in trace:
+            for champ in self._CHAMPS:
+                self.assertIn(champ, t, f"champ {champ} manquant")
+        print(f"    OK A2-1 trace de {len(trace)} entrees, "
+              f"{len(self._CHAMPS)} champs chacune")
+
+    def test_chaque_champ_est_source_jamais_redige(self):
+        """Les valeurs viennent du detail par colonne, pas d'un texte saisi."""
+        r = _run(GENINS)
+        detail = {d['colonne']: d for d in
+                  (r['n2']['clm']['hypotheses']['CLM-H2'].get('detail') or ())}
+        for t in r['n4']['trace_gouvernance']:
+            if t['hypothese'] != 'CLM-H2':
+                continue
+            j = int(t['portee'].split()[-1])
+            self.assertIn(j, detail, "la colonne citee doit exister")
+            self.assertEqual(t['valeur'], detail[j]['p_ordonnee'],
+                             "la p-valeur doit venir du detail, pas d'ailleurs")
+            self.assertEqual(t['statut'], detail[j]['statut'])
+        print("    OK A2-2 chaque entree CLM-H2 est tracable a sa colonne : "
+              "p-valeur et statut identiques a la source")
+
+    def test_le_poids_est_publie_et_c_est_le_point(self):
+        """Sans le poids, la trace est une curiosite ; avec, une information."""
+        r = _run(GENINS)
+        n4 = r['n4']
+        be = float(n4['best_estimate'])
+        filet = [t for t in n4['trace_gouvernance']
+                 if 'FILET' in t['consequence']]
+        signale = [t for t in n4['trace_gouvernance']
+                   if 'signalement' in t['consequence']]
+        self.assertTrue(filet and signale)
+        for t in n4['trace_gouvernance']:
+            self.assertAlmostEqual(t['part_du_be'],
+                                   t['contribution_eur'] / be, places=3)
+        part = sum(t['part_du_be'] for t in n4['trace_gouvernance'])
+        self.assertGreater(part, 0.80,
+                           "sur GenIns, plus de 80 % du BE est concerne")
+        print(f"    OK A2-3 GenIns : {len(filet)} annee(s) sous filet + "
+              f"{len(signale)} signalee(s) = {part:.1%} du Best Estimate")
+
+    def test_les_deux_mecanismes_par_annee_sont_traces(self):
+        """CLM-H2 (motif) et BFCC-H2 (cadence) — les deux, pas un seul."""
+        vus = set()
+        for tri in (GENINS, _TRI_RECOURS):
+            for t in _run(tri)['n4']['trace_gouvernance']:
+                vus.add(t['hypothese'])
+        self.assertEqual(vus, {'CLM-H2', 'BFCC-H2'})
+        print(f"    OK A2-4 les deux mecanismes par annee sont traces : "
+              f"{sorted(vus)}")
+
+    def test_un_scenario_sans_defaut_produit_une_trace_vide(self):
+        """La trace ne fabrique rien : pas de defaut, pas d'entree."""
+        r = _run(GENINS)
+        annees_ok = [d['annee'] for d in r['n4']['selection_par_annee']
+                     if d['motif'] not in ('À JUSTIFIER', 'NON VALIDÉE')
+                     and not d['cadence_ko']]
+        traces = {t['annee'] for t in r['n4']['trace_gouvernance']}
+        for a in annees_ok:
+            self.assertNotIn(a, traces,
+                             f"annee {a} sans defaut ne doit pas etre tracee")
+        print(f"    OK A2-5 les {len(annees_ok)} annees sans defaut ne "
+              f"produisent aucune entree")
+
+
+# =============================================================================
+#  T8 — LE PARADOXE DU FILET, NOMME
+# =============================================================================
+
+class T8_Message_Du_Paradoxe(unittest.TestCase):
+
+    @staticmethod
+    def _message_filet(r):
+        for a in r['n4'].get('alertes', []):
+            if 'FILET DE S' in str(a):
+                return str(a)
+        return None
+
+    def test_le_filet_produit_desormais_une_alerte(self):
+        """Avant A2 il forcait le ROUGE et ne disait RIEN."""
+        r = _run(GENINS)
+        self.assertTrue(r['n4']['annees_sous_filet'])
+        msg = self._message_filet(r)
+        self.assertIsNotNone(msg, "le filet doit produire une alerte")
+        print(f"    OK A2-6 le filet produit une alerte de {len(msg)} caracteres")
+
+    def test_l_alerte_nomme_le_paradoxe_et_le_justifie(self):
+        msg = self._message_filet(_run(GENINS))
+        self.assertIn("L'HYPOTHÈSE DE CETTE MÉTHODE QUI EST EN CAUSE", msg)
+        self.assertIn('moins mauvais choix', msg)
+        self.assertIn('a priori', msg)
+        print("    OK A2-7 l'alerte nomme le paradoxe ET donne la raison du "
+              "repli, sans le presenter comme satisfaisant")
+
+    def test_tous_les_chiffres_de_l_alerte_viennent_de_la_trace(self):
+        r = _run(GENINS)
+        msg = self._message_filet(r)
+        filet = [t for t in r['n4']['trace_gouvernance']
+                 if 'FILET' in t['consequence']]
+        eur = sum(t['contribution_eur'] for t in filet)
+        self.assertIn(f"{eur:,.0f}".replace(',', ' '), msg)
+        self.assertIn(filet[0]['hypothese'], msg)
+        self.assertIn(filet[0]['portee'], msg)
+        print("    OK A2-8 montant, hypothese et colonne de l'alerte "
+              "proviennent tous de la trace — rien n'est ecrit en dur")
+
+    def test_le_separateur_de_milliers_ne_mange_aucune_virgule(self):
+        """(!) CE DEFAUT S'EST PRODUIT SIX FOIS DANS CE DEPOT.
+
+        `.replace(',', ' ')` applique a la PHRASE transforme « p < 0,01 » en
+        « p < 0 01 » et « seule, soit » en « seule  soit ». Il ne doit toucher
+        que le nombre formate.
+        """
+        msg = self._message_filet(_run(GENINS))
+        self.assertIn('p < 0,01', msg, "la virgule du seuil a ete mangee")
+        self.assertIn('seule, soit', msg, "la virgule de ponctuation a saute")
+        self.assertNotIn('  ', msg, "double espace = virgule remplacee a tort")
+        print("    OK A2-9 aucune virgule mangee : « p < 0,01 » et "
+              "« seule, soit » intacts")
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

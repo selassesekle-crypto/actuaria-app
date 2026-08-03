@@ -198,6 +198,22 @@ PORTEURS_DE_CIBLE = {
 }
 
 
+#: Libellé lisible d'une méthode — la trace et les messages ne doivent pas
+#: publier une clé technique là où l'actuaire attend un nom. Source unique
+#: pour ce module ; la couche N5 aura la sienne au lot C.
+_LIBELLE_METHODE = {
+    'chain_ladder':         'Chain Ladder',
+    'bornhuetter_ferguson': 'Bornhuetter-Ferguson',
+    'cape_cod':             'Cape Cod',
+}
+
+#: Conséquences EFFECTIVEMENT appliquées, telles que la trace les nomme. Ce
+#: sont des constantes et non des chaînes écrites sur place : la trace doit
+#: pouvoir être filtrée par conséquence, pas seulement lue.
+_CONSEQ_FILET        = 'FILET — année portée par une seule méthode'
+_CONSEQ_SIGNALEMENT  = 'signalement — toutes les méthodes conservées'
+_CONSEQ_CADENCE      = 'retrait ciblé — Bornhuetter-Ferguson et Cape Cod'
+
 #: Méthode du filet de sécurité : celle qui ne suppose aucun a priori exogène.
 _METHODE_FILET = 'chain_ladder'
 
@@ -350,6 +366,91 @@ def _admissibilite_globale(
     return admises, exclues
 
 
+def _trace_gouvernance(
+    n2:        Dict,
+    detail:    List[Dict[str, Any]],
+    be:        float,
+) -> List[Dict[str, Any]]:
+    """Une entrée par (année, hypothèse en défaut) — TOUT est sourcé.
+
+    ⚠️ AUCUN CALCUL NEUF, UNE JOINTURE. Chaque champ est repris d'un endroit
+    qui l'a déjà produit et publié : le détail PAR COLONNE de CLM-H2
+    (`ordonnee`, `p_ordonnee`), les colonnes traversées par chaque année
+    (`couvertures`), et la contribution de l'année au Best Estimate calculée
+    par `selectionner_et_agreger`. Rien n'est saisi, rien n'est rédigé à la
+    main : c'est ce qui permet à la trace d'être opposable.
+
+    ⚠️ POURQUOI LES DEUX DERNIERS CHAMPS CHANGENT TOUT. Sans
+    `contribution_eur` et `part_du_be`, la trace dit « l'année 9 est sous
+    filet » — une curiosité. Avec, elle dit « 26,3 % de votre provision repose
+    sur une hypothèse démentie ». Mesuré sur GenIns : les années en défaut
+    portent 15 324 384 EUR, soit 87,2 % du Best Estimate, et RIEN dans les
+    livrables ne le disait avant ce lot.
+
+    Deux mécanismes par année produisent une entrée, et ce sont les deux seuls
+    qui aient aujourd'hui une conséquence par année :
+      · CLM-H2 via `couverture_motif` — le motif de développement ;
+      · BFCC-H2 via `couverture_cadence` — la cadence, qui retire BF et
+        Cape Cod sur l'année concernée.
+    """
+    clm  = n2.get('clm', {})
+    h2   = (clm.get('hypotheses', {}) or {}).get('CLM-H2', {}) or {}
+    par_colonne = {d.get('colonne'): d for d in (h2.get('detail') or ())}
+    couverture  = {a['annee']: a
+                   for a in (clm.get('couvertures', {}) or {}).get('annees', [])}
+    cadence     = (n2.get('bfcc', {}) or {}).get('couverture_cadence', {}) or {}
+
+    trace: List[Dict[str, Any]] = []
+    for d in detail:
+        i    = d['annee']
+        part = (d['contribution'] / be) if be else 0.0
+
+        # ── CLM-H2 : le motif de développement, colonne par colonne ─────────
+        if d['motif'] in ('À JUSTIFIER', 'NON VALIDÉE'):
+            traversees = (couverture.get(i, {}) or {}).get('colonnes_traversees', [])
+            # La colonne EN CAUSE est la pire de celles que l'année doit
+            # encore traverser — c'est elle qui a fixé la couverture.
+            pires = [par_colonne[j] for j in traversees
+                     if par_colonne.get(j, {}).get('statut') == d['motif']]
+            col = pires[0] if pires else {}
+            trace.append({
+                'annee':             i,
+                'hypothese':         'CLM-H2',
+                'statut':            d['motif'],
+                'portee':            (f"colonne {col.get('colonne')}"
+                                      if col else 'colonnes traversées'),
+                'statistique':       (
+                    f"ordonnée à l'origine = {col['ordonnee']:,.0f} €"
+                    .replace(',', ' ') if col.get('ordonnee') is not None
+                    else 'non publiée'),
+                'valeur':            col.get('p_ordonnee'),
+                'seuil':             ('p < 0,01' if d['motif'] == 'NON VALIDÉE'
+                                      else 'p < 0,05'),
+                'consequence':       (_CONSEQ_FILET if d['sous_filet']
+                                      else _CONSEQ_SIGNALEMENT),
+                'methodes_retenues': list(d['methodes']),
+                'contribution_eur':  round(float(d['contribution']), 2),
+                'part_du_be':        round(part, 4),
+            })
+
+        # ── BFCC-H2 : la cadence, qui retire BF et Cape Cod ─────────────────
+        if d['cadence_ko']:
+            trace.append({
+                'annee':             i,
+                'hypothese':         'BFCC-H2',
+                'statut':            str(cadence.get(i, 'NON VALIDÉE')),
+                'portee':            f"année {i}",
+                'statistique':       'cadence brute hors de [0 ; 1]',
+                'valeur':            None,
+                'seuil':             'appartenance à [0 ; 1], non écrêtée',
+                'consequence':       _CONSEQ_CADENCE,
+                'methodes_retenues': list(d['methodes']),
+                'contribution_eur':  round(float(d['contribution']), 2),
+                'part_du_be':        round(part, 4),
+            })
+    return trace
+
+
 def _methodes_de_lannee(
     i:          int,
     admises:    Dict[str, float],
@@ -369,6 +470,21 @@ def _methodes_de_lannee(
 
     Les deux se composent : sous filet, Chain Ladder survit dans les deux cas.
     """
+    # ⚠️ RÈGLE ÉCRITE GÉNÉRIQUEMENT, MAIS SA PORTÉE RÉELLE EST DITE (lot A2).
+    # Le filet désigne UNE méthode, lue dans `_METHODE_FILET` et non écrite en
+    # dur ici — la structure survivra donc à un changement de filet.
+    #
+    # MAIS AUJOURD'HUI CETTE MÉTHODE NE PEUT ÊTRE QUE CHAIN LADDER, et le taire
+    # serait pire que de ne pas généraliser. `_admissibilite_globale` l'énonce :
+    # « Chain Ladder est toujours admissible […] c'est elle qui porte le filet ».
+    # Les deux seules causes d'année mono-méthode y mènent mécaniquement : le
+    # filet pose `[_METHODE_FILET]`, et la cadence retire les deux clés de
+    # `_HYPOTHESES_BLOQUANTES` — Bornhuetter-Ferguson et Cape Cod. Mesuré sur
+    # les cinq scénarios de référence : les onze années mono-méthode sont TOUTES
+    # Chain Ladder, et c'est structurel, pas conjoncturel.
+    #
+    # Du code générique d'apparence qui masque un cas particulier est un piège :
+    # c'était exactement le drapeau `reserve_publiable` de MCL-H5.
     candidates = [_METHODE_FILET] if sous_filet else list(admises)
     if cadence_ko:
         candidates = [m for m in candidates if m not in _HYPOTHESES_BLOQUANTES]
@@ -498,6 +614,8 @@ def selectionner_et_agreger(
         'annees_volatilite_douteuse': [
             d['annee'] for d in detail
             if d['volatilite'] in ('À JUSTIFIER', 'NON VALIDÉE')],
+        # LA TRACE (lot A2) — une entrée par (année, hypothèse en défaut).
+        'trace_gouvernance': _trace_gouvernance(n2, detail, float(be)),
     }
 
 
@@ -792,6 +910,39 @@ class BestEstimateS2:
         if statut == 'VERT' and a_justifier:
             statut = 'AMBRE'
 
+        # ⚠️ ET LA COUVERTURE « À JUSTIFIER » PAR ANNÉE ? ELLE NE PEUT RIEN
+        # PLAFONNER, ET C'EST DÉMONTRÉ — ne pas rouvrir le sujet (lot A2).
+        #
+        # Le lot A2 devait ajouter ici un plafonnement du VERT par
+        # `couverture_motif == 'À JUSTIFIER'`. Il n'a pas été écrit parce qu'il
+        # ne peut JAMAIS être la règle décisive :
+        #
+        #   · `couvertures_par_annee` pose `k_i = min(n-i-1, m-1)` puis
+        #     `traversees = range(k_i, m-1)`. Pour l'année la PLUS RÉCENTE,
+        #     `k_i = 0` : elle traverse TOUTES les colonnes testées, et sa
+        #     couverture est donc le pire de toutes.
+        #   · `_agreger_par_colonne` — le verdict GLOBAL de CLM-H2 — applique
+        #     exactement la même règle : `if n_non … elif n_just …`.
+        #   · Donc `couverture_motif[année la plus récente]` EST le statut
+        #     global de CLM-H2, toujours.
+        #
+        # D'où deux cas, et deux seulement :
+        #   · une colonne À JUSTIFIER (aucune non validée) → global
+        #     À JUSTIFIER → `_hypotheses_a_justifier` plafonne DÉJÀ, juste
+        #     au-dessus, puisque CLM-H2 vise `chain_ladder`, toujours retenue ;
+        #   · une colonne NON VALIDÉE → l'année la plus récente passe sous
+        #     filet → le ROUGE est DÉJÀ forcé plus haut.
+        #
+        # Balayage de 48 triangles (bruit x terme additif x graine) : aucun cas
+        # où la couverture annuelle serait seule à parler. Ajouter ce
+        # plafonnement reviendrait à écrire une règle morte — c'était exactement
+        # le drapeau `reserve_publiable` de MCL-H5, retiré au lot précédent.
+        #
+        # Ce que le lot A2 a livré à la place se trouve dans
+        # `_trace_gouvernance` : ces années ne changent pas le statut, mais
+        # elles ne sont plus muettes. Sur GenIns, les quatre années « à
+        # justifier » portent 60,9 % du Best Estimate.
+
         # ── 9. Jugement actuariel (alertes, recommandations, avis) ───────────
         alertes_jugement = []
         recommandations  = []
@@ -811,6 +962,44 @@ class BestEstimateS2:
                 f"{', '.join(a_justifier)} — les méthodes concernées restent "
                 f"retenues, mais le Best Estimate ne peut pas sortir en VERT "
                 f"sans que l'écart soit expliqué dans la note méthodologique.")
+
+        # ⚠️ LE PARADOXE DU FILET, NOMMÉ. Jusqu'à ce lot, `annees_sous_filet`
+        # forçait le ROUGE et ne produisait AUCUNE alerte — l'actuaire lisait un
+        # statut sans jamais en apprendre la cause. Le modèle est celui de
+        # `annees_cadence_ko` juste en dessous, qui dit déjà ce genre de chose.
+        # Tout est GÉNÉRÉ depuis la trace : aucun chiffre n'est écrit ici.
+        _filet = [t for t in selection['trace_gouvernance']
+                  if t['consequence'] == _CONSEQ_FILET]
+        if _filet:
+            _part = sum(t['part_du_be'] for t in _filet)
+            _eur  = sum(t['contribution_eur'] for t in _filet)
+            _t0   = _filet[0]
+            _meth = sorted({_LIBELLE_METHODE.get(m, m)
+                            for t in _filet for m in t['methodes_retenues']})
+            # ⚠️ LE SÉPARATEUR DE MILLIERS NE TOUCHE QUE LE NOMBRE. Appliqué à
+            # la phrase, il mange les virgules de ponctuation — « p < 0,01 »
+            # devient « p < 0 01 ». Ce défaut s'est produit SIX fois dans ce
+            # dépôt ; il est cantonné ici à la seule valeur formatée.
+            _eur_txt  = f"{_eur:,.0f}".replace(',', ' ')
+            _part_txt = f"{_part * 100:.1f}".replace('.', ',')
+            alertes_jugement.append(
+                f"⚠️ Années {[t['annee'] for t in _filet]} : FILET DE SÉCURITÉ "
+                f"déclenché. L'hypothèse {_t0['hypothese']} est "
+                f"{_t0['statut'].lower()} sur la {_t0['portee']} "
+                f"({_t0['statistique']}, {_t0['seuil']}) que ces années doivent "
+                f"encore traverser. Elles sont portées par "
+                f"{' et '.join(_meth)} seule, soit "
+                f"{_eur_txt} € — {_part_txt} % du Best Estimate."
+                f" C'EST PRÉCISÉMENT L'HYPOTHÈSE DE CETTE MÉTHODE QUI EST EN "
+                f"CAUSE, ET ELLE EST POURTANT RETENUE. Ce n'est pas une "
+                f"contradiction : Bornhuetter-Ferguson et Cape Cod sont "
+                f"construites sur (1 − α) × a priori et ne peuvent rien "
+                f"représenter de fiable sur un motif de développement démenti, "
+                f"tandis que Chain Ladder projette le cumulé tel qu'il est "
+                f"observé. C'est le moins mauvais choix, pas un choix "
+                f"satisfaisant — le coefficient de passage retenu sur ces "
+                f"années demande une justification dans la note "
+                f"méthodologique.")
 
         if selection['annees_cadence_ko']:
             alertes_jugement.append(
@@ -1017,6 +1206,12 @@ class BestEstimateS2:
             # Sélection par année de survenance (lot B)
             'selection_par_annee':   selection['annees'],
             'annees_sous_filet':     selection['annees_sous_filet'],
+            # LA TRACE STRUCTURÉE (lot A2). `annees_sous_filet` publiait un
+            # NUMÉRO D'ANNÉE sans son motif : l'actuaire lisait « [9] » et un
+            # statut ROUGE, sans jamais savoir quelle hypothèse avait échoué,
+            # sur quelle colonne, ni ce que ça pesait. La trace répond aux
+            # trois questions, et elle est filtrable.
+            'trace_gouvernance':     selection['trace_gouvernance'],
             # Dispersion douteuse — publiée, jamais gatante (lot A1).
             'annees_volatilite_douteuse':
                 selection['annees_volatilite_douteuse'],
