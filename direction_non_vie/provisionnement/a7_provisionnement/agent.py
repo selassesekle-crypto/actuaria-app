@@ -967,8 +967,9 @@ class AgentA7Provisionnement:
         MCL-H4 ne teste rien — c'est une mention, cf. l'en-tête du module.
 
         Ne LÈVE JAMAIS, pour la même raison que `_verifier_clm`, `_verifier_bfcc`
-        et `_verifier_bootstrap`. Le repli publie `reserve_publiable = True` :
-        ne pas avoir pu juger n'est pas juger défavorablement.
+        et `_verifier_bootstrap`. Le repli ne publie AUCUN drapeau : MCL-H5 est
+        informative, la circularité étant déjà bloquée en amont par
+        `valider_prerequis` sur la même constante.
         """
         try:
             return verifier_hypotheses_munich(
@@ -976,7 +977,7 @@ class AgentA7Provisionnement:
         except Exception as e:
             logger.warning(f"MCL-H1..H5 non calculées : {e}")
             return {'erreur': str(e), 'hypotheses': {}, 'statuts': {},
-                    'mention_h4': MESSAGE_H4, 'reserve_publiable': True}
+                    'mention_h4': MESSAGE_H4}
 
     def _calculer_n3(
         self,

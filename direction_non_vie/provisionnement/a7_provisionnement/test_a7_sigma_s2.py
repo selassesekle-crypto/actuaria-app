@@ -23,14 +23,12 @@
 =============================================================================
 """
 
-import io
-import os
 import unittest
 
 import numpy as np
 
 from direction_non_vie.provisionnement.a7_provisionnement.config.lob_config import (
-    LOB_CONFIG, SEGMENTS_S2, SegmentS2, get_lob_config, get_segment_s2,
+    LOB_CONFIG, SEGMENTS_S2, get_lob_config, get_segment_s2,
     get_sigma_eiopa, reference_s2)
 
 # =============================================================================

@@ -521,7 +521,7 @@ class T8_Cablage_Dans_Le_Pipeline(unittest.TestCase):
     def test_estimateur_standard_impose(self):
         """CLM teste les hypothèses de Mack : l'estimateur doit être le
         volume-weighted, quelle que soit la variante retenue par N2."""
-        import ast, inspect
+        import inspect
         from direction_non_vie.provisionnement.a7_provisionnement import agent as mod
         src = inspect.getsource(mod.AgentA7Provisionnement._verifier_clm)
         self.assertIn("'standard'", src)

@@ -352,6 +352,24 @@ def mcl_h5_non_circularite(munich: Optional[Dict]) -> ResultatHypothese:
     ne recalcule rien. `alerte_prerequis` porte l'avertissement dans les deux
     régimes depuis le lot 2 ; il était auparavant perdu quand la méthode
     restait active.
+
+    ⚠️ OÙ CETTE HYPOTHÈSE APPORTE RÉELLEMENT QUELQUE CHOSE — et c'est une bande
+    étroite, qu'il faut connaître pour ne pas la croire redondante. Elle est
+    INFORMATIVE : elle ne retire jamais rien, la circularité franche étant déjà
+    bloquée en amont. Sa valeur tient tout entière dans l'intervalle
+
+        [MCL_CV_BLOQUANT ; MCL_CV_ALERTE[   =   [0,020 ; 0,025[
+
+    où `valider_prerequis` LAISSE PASSER — Munich est calculé et publié — et où
+    MCL-H5 est la SEULE à signaler quoi que ce soit. Hors de cette bande elle ne
+    fait que redire ce que la garde a déjà tranché.
+
+    Cette bande n'est pas théorique. La calibration en tête de `munich_cl.py`
+    (80 tirages par scénario, vérité connue) mesure qu'un portefeuille
+    CIRCULAIRE bruité à 2 % a un CV médian de 0,0199 : **la moitié de ces
+    portefeuilles franchissent la garde**, et seul MCL-H5 les voit. C'est
+    exactement le cas que le test `test_mh9_la_bande_ou_mcl_h5_parle_seule`
+    verrouille, sur un triangle dont le CV vaut 0,0223.
     """
     base = dict(code='MCL-H5',
                 libelle="Non-circularité du triangle engagé",
@@ -412,9 +430,18 @@ def verifier_hypotheses_munich(
     décidé, pas ce qu'il aurait pu décider. Même raison que BFCC, BOOT et le
     bloc Clark.
 
-    Rend aussi `reserve_publiable` — la conséquence, calculée ici parce qu'elle
-    se lit sur les statuts, mais APPLIQUÉE par qui possède la réserve. Le
-    module ne retire rien lui-même.
+    ⚠️ AUCUN DRAPEAU DE PUBLICATION ICI, ET C'EST DÉMONTRÉ. Ce bloc rendait un
+    `reserve_publiable = (MCL-H5 != NON VALIDÉE)`. Il était REDONDANT PAR
+    CONSTRUCTION : MCL-H5 est NON VALIDÉE si et seulement si
+    `CV < MCL_CV_BLOQUANT`, or c'est exactement la condition sous laquelle
+    `valider_prerequis` a DÉJÀ rendu Munich indisponible (`munich_cl.py`, même
+    constante, même comparaison). Le drapeau ne pouvait donc valoir False que
+    là où il n'y avait aucune réserve à retirer — et personne ne le lisait.
+
+    C'est la différence avec `percentiles_publiables` du Bootstrap, qui lui est
+    branché et utile : le Bootstrap PRODUIT ses percentiles quoi qu'il arrive, et
+    l'hypothèse décide s'ils sont opposables. MCL-H5, elle, juge en AVAL d'une
+    garde qui a déjà tranché.
     """
     h1 = mcl_h1_independance(C_P, C_E)
     h2 = mcl_h2_linearite(C_P, C_E)
@@ -428,7 +455,6 @@ def verifier_hypotheses_munich(
         'hypotheses': {c: r.synthese() for c, r in resultats.items()},
         'statuts':    {c: r.statut for c, r in resultats.items()},
         'mention_h4': MESSAGE_H4,
-        'reserve_publiable': h5.statut != NON_VALIDEE,
         'statut_le_plus_severe': _pire_statut([r.statut for r in resultats.values()]),
         'objets': resultats,
     }

@@ -176,7 +176,25 @@ _HYPOTHESES_BLOQUANTES = {
 
 
 def _hypotheses_a_justifier(n2: Dict, methodes_incluses: Dict) -> List[str]:
-    """Hypothèses BFCC en À JUSTIFIER qui portent sur une méthode RETENUE.
+    """Hypothèses en À JUSTIFIER qui portent sur une méthode RETENUE.
+
+    ⚠️ DEUX FAMILLES DEPUIS LE LOT A1, ET C'EST TOUT CE QUI PEUT L'ÊTRE. Ce
+    circuit ne lisait que BFCC : les verdicts de Chain Ladder et Mack n'avaient
+    donc AUCUN effet sur le statut, quel qu'il soit. CLM le rejoint.
+
+    Les deux autres familles NE PEUVENT PAS rejoindre ce circuit, et ce n'est
+    pas un oubli : le filtre exige qu'une cible de `critique_pour` figure dans
+    `methodes_incluses`, qui ne contient que les trois clés de `_CLES_N3`.
+    · BOOT-H3/H4 visent `percentiles_bootstrap` — elles ont DÉJÀ leur
+      conséquence propre, `percentiles_publiables`, appliquée l. 562.
+    · MCL-H5 vise `reserve_munich` — informative, la circularité étant bloquée
+      en amont par `valider_prerequis`.
+    · CLM-H3 vise `mack` seul, qui n'est pas dans `_CLES_N3` : elle est donc
+      DESCRIPTIVE ici, exactement comme BOOT-H3/H4 le seraient. Sa traduction
+      par année, `couverture_volatilite`, est désormais PUBLIÉE (l. ~420) au
+      lieu d'être calculée et jetée — mais elle ne gate rien, et lui donner un
+      effet demanderait de décider ce qu'un percentile Mack non opposable doit
+      produire. Ce n'est pas ce lot.
 
     Le filtre par méthode est essentiel : une hypothèse à justifier sur une
     méthode déjà écartée du Best Estimate n'a plus de conséquence sur lui, et
@@ -187,7 +205,8 @@ def _hypotheses_a_justifier(n2: Dict, methodes_incluses: Dict) -> List[str]:
     C'est le cas de BFCC-H3, qui republie le test calendaire du GLM Poisson APC
     sans lui donner d'effet décisionnel dans ce lot.
     """
-    hyps = n2.get('bfcc', {}).get('hypotheses', {})
+    hyps = dict(n2.get('bfcc', {}).get('hypotheses', {}))
+    hyps.update(n2.get('clm', {}).get('hypotheses', {}))
     return sorted(
         code for code, h in hyps.items()
         if h.get('statut') == 'À JUSTIFIER'
@@ -374,12 +393,20 @@ def selectionner_et_agreger(
 
     for i in range(annee_base, n_annees):
         motif = couverture.get(i, {}).get('couverture_motif', 'NON TESTABLE')
+        # `couverture_volatilite` est le pendant de `couverture_motif` pour la
+        # DISPERSION (CLM-H3 par colonne, durci par CLM-H4). Elle était calculée
+        # par `couvertures_par_annee` et lue par PERSONNE. Elle est désormais
+        # publiée. Elle ne gate rien : elle porte sur Mack, qui n'entre pas dans
+        # le Best Estimate — voir `_hypotheses_a_justifier`.
+        volatilite = couverture.get(i, {}).get('couverture_volatilite',
+                                               'NON TESTABLE')
         sous_filet = motif == 'NON VALIDÉE'
         cadence_ko = cadence.get(i) == 'NON VALIDÉE'
         retenues = _methodes_de_lannee(i, admises, ibnr, sous_filet, cadence_ko)
 
         if not retenues:
             detail.append({'annee': i, 'motif': motif, 'methodes': [],
+                           'volatilite': volatilite,
                            'sous_filet': sous_filet, 'cadence_ko': cadence_ko,
                            'rouge_dur': True, 'contribution': 0.0})
             continue
@@ -392,6 +419,7 @@ def selectionner_et_agreger(
             contrib_annee += part
         be += contrib_annee
         detail.append({'annee': i, 'motif': motif, 'methodes': retenues,
+                       'volatilite': volatilite,
                        'sous_filet': sous_filet, 'cadence_ko': cadence_ko,
                        'rouge_dur': False,
                        'poids_unitaire': round(poids_i, 6),
@@ -419,6 +447,13 @@ def selectionner_et_agreger(
         'annees_sous_filet': [d['annee'] for d in detail if d['sous_filet']],
         'annees_cadence_ko': [d['annee'] for d in detail if d['cadence_ko']],
         'annees_rouge_dur':  [d['annee'] for d in detail if d['rouge_dur']],
+        # Dispersion : publiée, jamais gatante. Une année y figure dès que
+        # CLM-H3/H4 doutent de la structure de variance SUR SON PARCOURS —
+        # l'écart-type de Mack et les percentiles qui en dérivent sont alors à
+        # lire avec prudence, la réserve centrale ne l'étant pas.
+        'annees_volatilite_douteuse': [
+            d['annee'] for d in detail
+            if d['volatilite'] in ('À JUSTIFIER', 'NON VALIDÉE')],
     }
 
 
@@ -897,6 +932,9 @@ class BestEstimateS2:
             # Sélection par année de survenance (lot B)
             'selection_par_annee':   selection['annees'],
             'annees_sous_filet':     selection['annees_sous_filet'],
+            # Dispersion douteuse — publiée, jamais gatante (lot A1).
+            'annees_volatilite_douteuse':
+                selection['annees_volatilite_douteuse'],
             # Années dont la cadence a retiré BF et Cape Cod — SANS elle,
             # l'actuaire voyait le Best Estimate changer sans savoir où.
             'annees_cadence_ko':     selection['annees_cadence_ko'],

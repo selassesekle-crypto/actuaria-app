@@ -34,7 +34,7 @@ from direction_non_vie.provisionnement.a7_provisionnement.n3.bootstrap_odp impor
     libelle_incertitude, _reserve_cl_simple, _resultat_degrade,
 )
 from direction_non_vie.provisionnement.a7_provisionnement.n3.chain_ladder import (
-    calculer_facteurs, chain_ladder,
+    calculer_facteurs,
 )
 from direction_non_vie.provisionnement.a7_provisionnement.test_a7_ibrahim import (
     GENINS, RAA, _TRI_RECOURS, _TRI_TOUT_DECROISSANT,

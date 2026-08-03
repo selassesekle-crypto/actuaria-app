@@ -269,15 +269,64 @@ class TestMunichHypothesesStructurel(unittest.TestCase):
             else:
                 self.assertEqual(cp, [], f"{code} ne doit rien gater")
 
-    def test_mh9_h5_gouverne_la_reserve_publiable(self):
-        h = self._bloc(_MCL_LAM_P, _MCL_LAM_E)
-        self.assertTrue(h['reserve_publiable'])
-        # engagé circulaire → H5 NON VALIDÉE → réserve non publiable
+    def test_mh9_la_bande_ou_mcl_h5_parle_seule(self):
+        """⚠️ CE TEST A ÉTÉ REFORMULÉ, ET LE POURQUOI COMPTE.
+
+        Il s'appelait `test_mh9_h5_gouverne_la_reserve_publiable` et vérifiait
+        qu'un drapeau `reserve_publiable` valait bien `False` quand MCL-H5
+        échouait. Il était vert et ne prouvait rien : ce drapeau n'était lu par
+        PERSONNE en production, et il était REDONDANT PAR CONSTRUCTION —
+        `MCL-H5 = NON VALIDÉE` ⟺ `CV < MCL_CV_BLOQUANT` ⟺ la garde
+        `valider_prerequis` a déjà rendu Munich indisponible, même constante,
+        même comparaison. Il ne pouvait valoir `False` que là où il n'y avait
+        aucune réserve à retirer. Il a été supprimé.
+
+        CE QUI COMPTE VRAIMENT, ET QUE CE TEST VÉRIFIE : il existe une bande
+        `[MCL_CV_BLOQUANT ; MCL_CV_ALERTE[` où la garde LAISSE PASSER — Munich
+        est calculé — et où MCL-H5 est la SEULE à signaler quelque chose. C'est
+        là, et seulement là, que l'hypothèse apporte une information que le
+        garde-fou ne donne pas. Cette bande n'est pas théorique : la calibration
+        en tête de `munich_cl.py` (80 tirages par scénario) mesure qu'un
+        portefeuille circulaire bruité à 2 % a un CV médian de 0,0199 — la
+        MOITIÉ de ces portefeuilles passent donc la garde, et seul MCL-H5 les
+        voit.
+        """
+        # ── 1. Portefeuille sain : la garde passe, l'hypothèse valide ────────
+        sain = self._bloc(_MCL_LAM_P, _MCL_LAM_E)
+        self.assertEqual(sain['statuts']['MCL-H5'], 'VALIDÉE')
+
+        # ── 2. Circularité franche : c'est la GARDE qui bloque, pas MCL-H5 ───
         Pt = np.asarray(_MCL_LAM_P, float)
-        E  = np.where(Pt > 0, Pt * 1.35, 0.0)
-        hc = verifier_hypotheses_munich(Pt, E, munich_cl(Pt, E, annee_base=1))
-        self.assertEqual(hc['statuts']['MCL-H5'], 'NON VALIDÉE')
-        self.assertFalse(hc['reserve_publiable'])
+        E_circ = np.where(Pt > 0, Pt * 1.35, 0.0)
+        m_circ = munich_cl(Pt, E_circ, annee_base=1)
+        h_circ = verifier_hypotheses_munich(Pt, E_circ, m_circ)
+        self.assertFalse(m_circ.get('disponible'),
+                         "la garde valider_prerequis doit avoir bloqué Munich")
+        self.assertEqual(h_circ['statuts']['MCL-H5'], 'NON VALIDÉE')
+        # → l'hypothèse n'ajoute RIEN ici : Munich était déjà hors jeu.
+
+        # ── 3. LA BANDE : la garde passe, MCL-H5 est seule à parler ──────────
+        rng = np.random.default_rng(4)          # graine figée : CV = 0,0223
+        E_bande = np.where(Pt > 0, Pt * 1.35 * (1 + rng.normal(0, 0.020, Pt.shape)), 0.0)
+        m_bande = munich_cl(Pt, E_bande, annee_base=1)
+        h_bande = verifier_hypotheses_munich(Pt, E_bande, m_bande)
+
+        self.assertTrue(m_bande.get('disponible'),
+                        "dans la bande, la garde doit LAISSER PASSER")
+        self.assertEqual(h_bande['statuts']['MCL-H5'], 'À JUSTIFIER',
+                         "dans la bande, MCL-H5 doit être la seule à signaler")
+        cv = float(h_bande['objets']['MCL-H5'].message.split('= ')[1].split(' ')[0])
+        self.assertTrue(MCL_CV_BLOQUANT <= cv < MCL_CV_ALERTE,
+                        f"CV = {cv} hors de la bande "
+                        f"[{MCL_CV_BLOQUANT} ; {MCL_CV_ALERTE}[")
+
+        # ── 4. Plus aucun drapeau de publication n'est produit ───────────────
+        for bloc in (sain, h_circ, h_bande):
+            self.assertNotIn('reserve_publiable', bloc,
+                             "le drapeau redondant ne doit pas revenir")
+        print(f"    OK MCL-H9 bande [{MCL_CV_BLOQUANT}–{MCL_CV_ALERTE}[ : "
+              f"CV={cv} → Munich CALCULÉ et MCL-H5 seule à signaler ; "
+              f"circularité franche → bloquée par la garde, pas par MCL-H5")
 
     def test_mh10_h4_est_une_mention_jamais_un_verdict(self):
         """MCL-H4 ne peut être ni VALIDÉE ni NON VALIDÉE, et son texte est figé."""

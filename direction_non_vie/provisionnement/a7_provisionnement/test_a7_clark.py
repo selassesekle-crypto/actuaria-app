@@ -300,7 +300,6 @@ class TestClarkStructurel(unittest.TestCase):
         dict de retour de l'agent, sans `annee_base`. Clark était la SEULE
         méthode à ne pas le recevoir.
         """
-        C = np.asarray(GENINS, float)
         r0 = _fit(GENINS, annee_base=0, calculer_ic=False)
         r1 = _fit(GENINS, annee_base=1, calculer_ic=False)
         self.assertNotEqual(r0['reserve_totale'], r1['reserve_totale'])
