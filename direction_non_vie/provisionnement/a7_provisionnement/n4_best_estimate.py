@@ -154,6 +154,50 @@ _CLES_N3 = {
     'cape_cod':             'cape_cod',
 }
 
+#: REGISTRE DES PORTEURS — LE VRAI LIVRABLE DU LOT « MACK ».
+#:
+#: ⚠️ QUATRE FOIS DE SUITE, ON EST TOMBÉ SUR LE MÊME MOTIF : une hypothèse
+#: déclare une cible qui n'est pas une méthode du Best Estimate, et personne ne
+#: sait quoi en faire. BOOT-H3/H4, MCL-H5, puis CLM-H3. À chaque fois on l'a
+#: redécouvert par hasard. Ce registre existe pour qu'il n'y ait pas de
+#: cinquième fois — et le test qui l'applique compte plus que le registre.
+#:
+#: LA RÈGLE, EN TROIS CAS :
+#:   · cible DANS `_CLES_N3`  → le circuit du Best Estimate (exclusion, ou
+#:     « à justifier » qui plafonne le VERT) ;
+#:   · cible HORS `_CLES_N3`  → un PORTEUR DÉCLARÉ obligatoire, qui retire ou
+#:     étiquette la sortie concernée ;
+#:   · pas de porteur         → l'hypothèse DOIT déclarer `critique_pour=()`
+#:     et s'assumer descriptive.
+#:
+#: Le troisième cas n'est pas un trou : il LÉGITIME le descriptif. CLM-H1,
+#: BFCC-H3, BOOT-H1/H2 et MCL-H1..H4 déclarent une cible vide et l'assument.
+#: Ce que le registre interdit, c'est le quatrième cas — gatante sur le papier,
+#: inerte en fait. C'est exactement ce qu'était le drapeau de MCL-H5.
+PORTEURS_DE_CIBLE = {
+    # ── Cibles DANS `_CLES_N3` : le circuit du Best Estimate ────────────────
+    'chain_ladder':         "circuit du BE — `_HYPOTHESES_BLOQUANTES` et "
+                            "`_hypotheses_a_justifier`, plus le filet par année",
+    'bornhuetter_ferguson': "circuit du BE — exclusion par BFCC-H4",
+    'cape_cod':             "circuit du BE — exclusion par BFCC-H5 et BFCC-H6",
+
+    # ── Cibles HORS `_CLES_N3` : chacune a son porteur nommé ────────────────
+    'mack':                 "le circuit du BE VIA `chain_ladder` — le point "
+                            "estimate de Mack VAUT Chain Ladder (commit "
+                            "6e2e66e) : ce qui traite l'un traite l'autre. "
+                            "Seule son INCERTITUDE a besoin d'un porteur "
+                            "propre, et c'est `percentiles_mack`",
+    'percentiles_mack':     "`n2_hypotheses_clm.percentiles_mack_publiables` — "
+                            "retire la colonne comparative et fait basculer la "
+                            "mesure principale, dans `BestEstimateS2.calculer`",
+    'percentiles_bootstrap':"`n2_hypotheses_bootstrap.percentiles_publiables` — "
+                            "met `reserve_p*_boot` à None",
+    'reserve_munich':       "la garde `n3.munich_cl.valider_prerequis`, EN "
+                            "AMONT — elle rend Munich indisponible avant même "
+                            "que l'hypothèse ne soit évaluée",
+}
+
+
 #: Méthode du filet de sécurité : celle qui ne suppose aucun a priori exogène.
 _METHODE_FILET = 'chain_ladder'
 
@@ -599,6 +643,12 @@ class BestEstimateS2:
             (_boot.get('be_bootstrap') or 0) > 0
             and _boot.get('p90') is not None)
 
+        # PORTEUR DE LA CIBLE `percentiles_mack` — CLM-H3. Même convention que
+        # le Bootstrap : absent → True, ne pas avoir jugé n'est pas juger
+        # défavorablement.
+        _mack_hyp_ok = bool(n2.get('clm', {})
+                              .get('percentiles_mack_publiables', True))
+
         # σ_modèle : std des réserves des méthodes incluses (pondérées par poids)
         # Si une seule méthode → σ_modèle = 0 (pas de dispersion inter-méthodes)
         reserves_val = list(methodes_incluses.values())
@@ -624,7 +674,36 @@ class BestEstimateS2:
         else:
             p75 = p90 = p995 = be
 
-        p90_source  = 'Incertitude composée (σ_Mack + σ_modèle)'
+        # ⚠️ LES DEUX ÉTAGES DE LA CONSÉQUENCE, ET ILS NE SONT PAS SYMÉTRIQUES.
+        # Si CLM-H3 est NON VALIDÉE, σ_Mack ne mesure plus l'erreur de
+        # prédiction. Mais σ_Mack alimente DEUX choses de statut très différent :
+        #   · les percentiles Mack `reserve_p*_mack`, colonne COMPARATIVE — on
+        #     les retire, exactement comme les percentiles Bootstrap ;
+        #   · `sigma_total_compose`, d'où sortent les percentiles PRINCIPAUX du
+        #     rapport — les retirer laisserait le livrable SANS AUCUNE mesure
+        #     d'incertitude. On ne fait JAMAIS ça en silence.
+        # D'où la bascule : si le Bootstrap est publiable, il prend le relais et
+        # `source_percentiles` le DIT ; sinon on publie quand même, en nommant
+        # la composante contestée. Le principe est celui du lot F1 — une case
+        # vide honnête vaut mieux qu'un nombre faux, mais un nombre étiqueté
+        # vaut mieux qu'une case vide quand une alternative existe.
+        p90_source = 'Incertitude composée (σ_Mack + σ_modèle)'
+        if not _mack_hyp_ok:
+            if _boot_ok:
+                p75  = float(_boot.get('p75')  or p75)
+                p90  = float(_boot.get('p90')  or p90)
+                p995 = float(_boot.get('p99_5') or p995)
+                p90_source = (
+                    "Bootstrap ODP — σ_Mack ÉCARTÉ : CLM-H3 (structure de "
+                    "variance) non validée, l'écart-type de Mack ne mesure "
+                    "plus l'erreur de prédiction")
+            else:
+                p90_source = (
+                    "⚠️ Incertitude composée dont la composante σ_Mack est "
+                    "CONTESTÉE — CLM-H3 (structure de variance) non validée, "
+                    "et le Bootstrap n'offre pas de relais publiable. "
+                    "Percentiles à interpréter avec prudence ; la réserve "
+                    "centrale, elle, n'est pas concernée.")
 
         # Percentiles Mack seul — centrés sur BE pondéré (pour affichage comparatif)
         if sigma > 0 and be > 0:
@@ -905,9 +984,15 @@ class BestEstimateS2:
             'reserve_p75':           round(p75,    0),
             'reserve_p90':           round(p90,    0),
             'reserve_p99_5':         round(p995,   0),
-            'reserve_p75_mack':      round(p75_mack_val,  0),
-            'reserve_p90_mack':      round(p90_mack_val,  0),
-            'reserve_p99_5_mack':    round(p995_mack_val, 0),
+            # Colonne COMPARATIVE — retirée si CLM-H3 est non validée, exactement
+            # comme les percentiles Bootstrap le sont par BOOT-H3/H4. `None` et
+            # non zéro : un zéro se lirait « dispersion nulle », soit l'inverse.
+            'reserve_p75_mack':      (round(p75_mack_val,  0)
+                                      if _mack_hyp_ok else None),
+            'reserve_p90_mack':      (round(p90_mack_val,  0)
+                                      if _mack_hyp_ok else None),
+            'reserve_p99_5_mack':    (round(p995_mack_val, 0)
+                                      if _mack_hyp_ok else None),
             'reserve_p75_boot':      (round(float(_boot.get('p75', p75_mack_val)), 0)
                                       if _boot_ok else None),
             'reserve_p90_boot':      (round(float(_boot.get('p90', p90_mack_val)), 0)

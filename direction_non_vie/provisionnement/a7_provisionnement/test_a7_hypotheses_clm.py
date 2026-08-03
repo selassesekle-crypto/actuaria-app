@@ -13,11 +13,11 @@ import unittest
 import numpy as np
 
 from direction_non_vie.provisionnement.a7_provisionnement.n2_hypotheses_clm import (
-    A_JUSTIFIER, NON_TESTABLE, NON_VALIDEE, VALIDEE,
-    _esperance_variance_Z, clm_h1_effet_calendaire, clm_h2_existence_facteurs,
-    clm_h3_structure_variance, clm_h4_incertitude_queue, couvertures_par_annee,
-    facteurs_individuels, verifier_hypotheses_clm,
-)
+    A_JUSTIFIER, NON_TESTABLE, NON_VALIDEE, PERCENTILES_MACK, VALIDEE,
+    _esperance_variance_Z, clm_h1_effet_calendaire,
+    clm_h2_existence_facteurs, clm_h3_structure_variance,
+    clm_h4_incertitude_queue, couvertures_par_annee, facteurs_individuels,
+    verifier_hypotheses_clm)
 from direction_non_vie.provisionnement.a7_provisionnement.n3.chain_ladder import (
     calculer_facteurs, calculer_tail_factor_multi,
 )
@@ -259,12 +259,31 @@ class T4_CLM_H3_Structure_De_Variance(unittest.TestCase):
         self.assertEqual(r.statut, NON_TESTABLE)
         print("    OK CLM-H3-c triangle 3×3 : NON TESTABLE")
 
-    def test_critique_pour_mack_seul(self):
+    def test_critique_pour_les_percentiles_de_mack_seulement(self):
         """Le point estimate de Chain Ladder ne dépend d'aucune hypothèse de
-        variance ; σ, la MSEP et les percentiles en dépendent entièrement."""
+        variance ; σ, la MSEP et les percentiles en dépendent entièrement.
+
+        ⚠️ L'ASSERTION A CHANGÉ AU LOT « MACK », ET LA DOCSTRING CI-DESSUS
+        DISAIT DÉJÀ POURQUOI. Elle épinglait `('mack',)`, faute de mieux :
+        `percentiles_mack` n'existait pas encore, et `mack` était le label le
+        plus proche disponible. Or l'intention écrite ici est bien « σ, la MSEP
+        et les percentiles », c'est-à-dire la MESURE D'INCERTITUDE — pas le
+        modèle. La cible exacte est donc `PERCENTILES_MACK`, strictement
+        parallèle à `PERCENTILES_BOOT` pour BOOT-H3/H4.
+
+        La distinction n'est pas cosmétique : elle a une conséquence mesurée.
+        `mack` est aussi la cible de CLM-H2, qui invalide le MODÈLE. Sans deux
+        labels distincts, le porteur `percentiles_mack_publiables` se serait
+        déclenché sur CLM-H2 aussi, et DEUX des cinq scénarios de référence
+        auraient perdu leurs percentiles Mack sans raison.
+        """
         r = clm_h3_structure_variance(triangle(VOLUMES_VARIES))
-        self.assertEqual(r.critique_pour, ('mack',))
-        print("    OK CLM-H3-d critique pour Mack seul, pas pour Chain Ladder")
+        self.assertEqual(r.critique_pour, (PERCENTILES_MACK,))
+        self.assertNotIn('chain_ladder', r.critique_pour)
+        self.assertNotIn('mack', r.critique_pour,
+                         "CLM-H3 ne vise pas le modèle, seulement son σ")
+        print("    OK CLM-H3-d critique pour les PERCENTILES de Mack "
+              "seulement — ni Chain Ladder, ni le modèle de Mack")
 
 
 class T5_CLM_H4_Incertitude_De_Queue(unittest.TestCase):

@@ -134,6 +134,27 @@ H4_DELTA_AIC_INDISCERNABLE = 2.0   # convention Burnham & Anderson (2002) :
 H4_ECART_RESERVE_MAJEUR    = 0.10  # 10 % d'écart de réserve entre courbes
                                    # indiscernables = divergence matérielle
 
+#: Cibles de `critique_pour`, nommées comme dans les autres familles. `MACK`
+#: n'est PAS une méthode du Best Estimate — `_CLES_N3` n'en contient que trois.
+#: Une hypothèse qui la vise ne peut donc rien retirer par le circuit du BE :
+#: il lui faut un PORTEUR propre, exactement comme `PERCENTILES_BOOT` a le
+#: sien. C'est `percentiles_mack_publiables`, plus bas.
+CHAIN_LADDER    = 'chain_ladder'
+MACK            = 'mack'
+#: ⚠️ CIBLE DISTINCTE DE `MACK`, ET LA DISTINCTION EST ACTUARIELLE, PAS
+#: COSMÉTIQUE. `MACK` désigne le MODÈLE ; `PERCENTILES_MACK` désigne sa MESURE
+#: D'INCERTITUDE. Une hétéroscédasticité ne biaise PAS le point estimate — celui
+#: de Mack vaut Chain Ladder et n'est pas concerné — elle invalide l'ERREUR DE
+#: PRÉDICTION. C'est donc σ_Mack et les percentiles qui en dérivent qui tombent,
+#: et eux seuls. Exactement le parallèle de `PERCENTILES_BOOT`.
+#:
+#: Sans cette distinction, le porteur se déclencherait aussi sur CLM-H2, qui
+#: vise `mack` parce qu'elle invalide le MODÈLE : mesuré, deux des cinq
+#: scénarios de référence perdraient leurs percentiles Mack. Or CLM-H2 est déjà
+#: traitée là où elle doit l'être — PAR ANNÉE, via `couverture_motif` et le
+#: filet — et son verdict global agrège des colonnes dont la plupart valident.
+PERCENTILES_MACK = 'percentiles_mack'
+
 #: Nombre minimum d'observations pour qu'une régression à 2 paramètres ait un
 #: degré de liberté résiduel exploitable.
 MIN_OBS_REGRESSION = 4
@@ -598,7 +619,7 @@ def clm_h3_structure_variance(C: np.ndarray) -> ResultatHypothese:
                  f"p ≥ {H3_P_TENDANCE} → validée ; p < {H3_P_TENDANCE_FORT} → "
                  f"non validée"),
         source_critere=SOURCE_JUGEMENT,
-        critique_pour=('mack',),
+        critique_pour=(PERCENTILES_MACK,),
         libelle_ok=("La dispersion des règlements croît bien comme le volume : "
                     "la mesure d'incertitude de Mack repose sur une base saine."),
         libelle_ko=("Sur {n_ko} période(s), la dispersion ne suit pas le volume "
@@ -832,6 +853,40 @@ def _pire_statut(statuts: Sequence[str]) -> str:
     return max(connus, key=lambda s: _ORDRE_SEVERITE[s])
 
 
+def percentiles_mack_publiables(
+    hypotheses: Dict[str, ResultatHypothese],
+) -> bool:
+    """Les percentiles de Mack sont-ils opposables ?
+
+    NON dès qu'une hypothèse portant `PERCENTILES_MACK` est NON VALIDÉE —
+    c'est CLM-H3, la structure de variance. Une hypothèse NON TESTABLE ne retire rien : ne pas
+    avoir pu juger n'est pas juger défavorablement. Même convention, mot pour
+    mot, que `percentiles_publiables` côté Bootstrap.
+
+    ⚠️ POURQUOI CE PORTEUR EXISTE. Aucune de ces deux cibles n'est dans
+    `_CLES_N3` : rejeter
+    CLM-H3 ne peut donc PAS retirer une méthode du Best Estimate — Mack n'y
+    figure pas, son point estimate VAUT Chain Ladder. Ce qui est en cause, c'est
+    son ÉCART-TYPE : si la dispersion ne suit pas le volume comme Mack le
+    suppose, σ_Mack ne mesure plus l'erreur de prédiction. Ce sont donc les
+    PERCENTILES qui tombent, et eux seuls.
+
+    ⚠️ ET CE PORTEUR N'EST PAS SYMÉTRIQUE DE CELUI DU BOOTSTRAP, malgré la
+    ressemblance. Les percentiles Bootstrap sont une colonne COMPARATIVE : les
+    retirer retire un point de comparaison. σ_Mack, lui, alimente AUSSI
+    `sigma_total_compose = √(σ_Mack² + σ_modèle²)`, d'où sortent les percentiles
+    PRINCIPAUX du rapport. Les retirer purement et simplement laisserait le
+    livrable SANS AUCUNE mesure d'incertitude. `n4_best_estimate` traite donc
+    les deux étages différemment : la colonne comparative disparaît, la mesure
+    principale bascule sur le Bootstrap s'il est publiable, et sinon reste
+    publiée avec sa provenance CONTESTÉE écrite noir sur blanc.
+    """
+    return not any(
+        h.statut == NON_VALIDEE and PERCENTILES_MACK in (h.critique_pour or ())
+        for h in hypotheses.values()
+    )
+
+
 def couvertures_par_annee(
     C:          np.ndarray,
     hypotheses: Dict[str, ResultatHypothese],
@@ -940,6 +995,9 @@ def verifier_hypotheses_clm(
     return {
         'hypotheses':  {code: r.synthese() for code, r in resultats.items()},
         'couvertures': couvertures_par_annee(C, resultats),
+        # Le PORTEUR de la cible `percentiles_mack`, calqué sur son
+        # équivalent Bootstrap `percentiles_publiables`.
+        'percentiles_mack_publiables': percentiles_mack_publiables(resultats),
         'chain_ladder': {'hypotheses': ['CLM-H1', 'CLM-H2'],
                          'statut_le_plus_severe': _pire(['CLM-H1', 'CLM-H2'])},
         'mack':         {'hypotheses': ['CLM-H1', 'CLM-H2', 'CLM-H3', 'CLM-H4'],

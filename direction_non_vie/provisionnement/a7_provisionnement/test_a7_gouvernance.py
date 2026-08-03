@@ -18,16 +18,15 @@
  ⚠️ CE QUI NE PEUT PAS REJOINDRE CE CIRCUIT, ET POURQUOI CE N'EST PAS UN
  OUBLI. Le filtre exige qu'une cible de `critique_pour` figure dans
  `methodes_incluses`, qui ne contient que les trois clés de `_CLES_N3`.
- CLM-H3 vise `mack`, BOOT-H3/H4 visent `percentiles_bootstrap`, MCL-H5 vise
- `reserve_munich` — aucune de ces cibles n'est une méthode du Best Estimate.
- Elles sont descriptives ICI, et deux d'entre elles ont déjà leur conséquence
- propre ailleurs (`percentiles_publiables` pour le Bootstrap ; la garde
- `valider_prerequis` pour Munich).
+ CLM-H3 vise `percentiles_mack`, BOOT-H3/H4 visent `percentiles_bootstrap`,
+ MCL-H5 vise `reserve_munich` — aucune n'est une méthode du Best Estimate.
+ Elles sont descriptives ICI, et CHACUNE a désormais son porteur propre
+ ailleurs. C'est ce que verrouille le registre `PORTEURS_DE_CIBLE`.
 
  C'est exactement pour ça que brancher `couverture_volatilite` ne déplace pas
- un euro : elle traduit CLM-H3, qui porte sur Mack, qui n'entre pas dans le
- Best Estimate. Elle est PUBLIÉE — elle était calculée et jetée — jamais
- gatante.
+ un euro : elle traduit CLM-H3, qui porte sur l'INCERTITUDE de Mack, laquelle
+ n'entre pas dans le Best Estimate. Elle est PUBLIÉE — elle était calculée et
+ jetée — jamais gatante.
 =============================================================================
 """
 
@@ -114,12 +113,29 @@ class T2_Les_Cibles_Hors_Best_Estimate(unittest.TestCase):
         print(f"    OK A1-3 _CLES_N3 = {sorted(cles)} — aucune cible de "
               f"CLM-H3 / BOOT-H3-H4 / MCL-H5 n'y figure")
 
-    def test_clm_h3_vise_mack_seul(self):
+    def test_clm_h3_vise_les_percentiles_de_mack_et_non_le_modele(self):
+        """⚠️ LA CIBLE A CHANGÉ AU LOT MACK, ET LA DISTINCTION EST ACTUARIELLE.
+
+        CLM-H3 déclarait `('mack',)`, c'est-à-dire le MODÈLE. C'était imprécis
+        et ça avait une conséquence mesurable : le porteur se serait aussi
+        déclenché sur CLM-H2, qui vise `mack` à juste titre puisqu'elle
+        invalide le modèle — et DEUX des cinq scénarios de référence auraient
+        perdu leurs percentiles Mack.
+
+        Or une hétéroscédasticité ne biaise PAS le point estimate : celui de
+        Mack VAUT Chain Ladder. Elle invalide l'ERREUR DE PRÉDICTION. La cible
+        exacte est donc `percentiles_mack`, parallèle de `percentiles_bootstrap`.
+        """
         r = _run(GENINS)
         h3 = r['n2']['clm']['hypotheses']['CLM-H3']
-        self.assertEqual(tuple(h3.get('critique_pour') or ()), ('mack',))
-        print("    OK A1-4 CLM-H3 vise `mack` seul → descriptive dans le "
-              "circuit, par construction et non par oubli")
+        self.assertEqual(tuple(h3.get('critique_pour') or ()),
+                         ('percentiles_mack',))
+        h2 = r['n2']['clm']['hypotheses']['CLM-H2']
+        self.assertIn('mack', tuple(h2.get('critique_pour') or ()),
+                      "CLM-H2 vise bien le MODÈLE, elle")
+        self.assertNotIn('percentiles_mack', tuple(h2.get('critique_pour') or ()))
+        print("    OK A1-4 CLM-H3 vise `percentiles_mack` (l'incertitude), "
+              "CLM-H2 vise `mack` (le modèle) — deux cibles distinctes")
 
 
 # =============================================================================
@@ -188,6 +204,158 @@ class T4_Zero_Euro_Deplace(unittest.TestCase):
         self.assertAlmostEqual(sum(n4['poids'].values()), 1.0, places=3)
         print(f"    OK A1-8 Recours : statut AMBRE, poids inchangés "
               f"{n4['poids']}, Σ = 1")
+
+
+# =============================================================================
+#  T5 — LE REGISTRE DES PORTEURS : le vrai livrable du lot « Mack »
+# =============================================================================
+
+class T5_Registre_Des_Porteurs(unittest.TestCase):
+    """(!) CE TEST EST LE LIVRABLE, PAS LE CORRECTIF MACK.
+
+    Quatre fois de suite on a redécouvert par hasard une hypothèse dont la
+    cible n'était portée par personne : BOOT-H3/H4, MCL-H5, puis CLM-H3. Ce
+    test échoue à la CINQUIÈME, avant qu'on ne la trouve par accident.
+    """
+
+    @staticmethod
+    def _cibles_declarees():
+        """Toutes les valeurs de `critique_pour`, des quatre familles."""
+        r = _run(GENINS)
+        blocs = [r['n2'].get('clm'), r['n2'].get('bfcc'),
+                 r['n2'].get('bootstrap_hyp'), r['n2'].get('munich_hyp')]
+        cibles = {}
+        for b in blocs:
+            for code, h in ((b or {}).get('hypotheses') or {}).items():
+                for cible in (h.get('critique_pour') or ()):
+                    cibles.setdefault(cible, []).append(code)
+        return cibles
+
+    def test_toute_cible_declaree_a_un_porteur(self):
+        cibles = self._cibles_declarees()
+        self.assertTrue(cibles, "aucune cible lue — la sonde est cassée")
+        orphelines = {c: h for c, h in cibles.items()
+                      if c not in N4.PORTEURS_DE_CIBLE}
+        self.assertEqual(
+            orphelines, {},
+            "Cible déclarée sans porteur : l'hypothèse se croit gatante et ne "
+            "l'est pas. Soit on lui donne un porteur dans PORTEURS_DE_CIBLE, "
+            "soit elle déclare critique_pour=() et s'assume descriptive. "
+            + str(orphelines))
+        print(f"    OK MACK-1 {len(cibles)} cibles déclarées, toutes portées : "
+              f"{sorted(cibles)}")
+
+    def test_le_registre_ne_porte_pas_de_cible_fantome(self):
+        """Un porteur pour une cible que personne ne déclare est du code mort."""
+        cibles = set(self._cibles_declarees())
+        fantomes = set(N4.PORTEURS_DE_CIBLE) - cibles
+        self.assertEqual(fantomes, set(),
+                         f"porteur sans cible déclarée : {fantomes}")
+        print("    OK MACK-2 aucun porteur orphelin — le registre ne diverge "
+              "pas des hypothèses")
+
+    def test_les_cibles_du_be_sont_exactement_cles_n3(self):
+        dans_be = {c for c in N4.PORTEURS_DE_CIBLE if c in N4._CLES_N3}
+        self.assertEqual(dans_be, set(N4._CLES_N3))
+        print(f"    OK MACK-3 les cibles du BE sont exactement _CLES_N3 : "
+              f"{sorted(dans_be)}")
+
+
+# =============================================================================
+#  T6 — LA CONSÉQUENCE SUR MACK, PROUVÉE SUR UN TRIANGLE CONSTRUIT
+# =============================================================================
+
+def _triangle_hetero(n=12, sd=0.30, k=1.0, graine=0, reprises_col=None,
+                     reprises_pct=0.03):
+    """Triangle dont la variance suit C^3 au lieu de C — Mack suppose C.
+
+    Les cinq scénarios de référence VALIDENT tous CLM-H3 : sans ce triangle
+    construit, le mécanisme serait livré sans preuve. Le bruit est
+    MULTIPLICATIF et son amplitude croît avec le volume, si bien que
+    |résidu|/racine(C) croît en C^(0.5+k) — exactement ce que CLM-H3 cherche.
+    `reprises_col` casse EN PLUS le Bootstrap, pour exercer la seconde branche.
+    """
+    f = [2.2, 1.5, 1.25, 1.14, 1.08, 1.05] + [1.03] * (n - 7)
+    vols = np.linspace(100_000, 100_000 * 200, n)
+    rng = np.random.default_rng(graine)
+    C = np.full((n, n), np.nan)
+    C[:, 0] = vols
+    vmax = float(np.max(vols))
+    for j in range(n - 1):
+        for i in range(n - j - 1):
+            ech = (C[i, 0] / vmax) ** k
+            C[i, j + 1] = C[i, j] * f[j] * (1 + rng.normal(0, sd * ech))
+    if reprises_col is not None:
+        for i in range(n):
+            for j in range(reprises_col, n - i):
+                if not np.isnan(C[i, j]):
+                    C[i, j] = C[i, j - 1] * (1 - reprises_pct)
+    return C
+
+
+class T6_Consequence_Sur_Mack(unittest.TestCase):
+
+    def test_clm_h3_validee_ne_retire_rien(self):
+        """Le témoin : sur GenIns, tout reste publié."""
+        r = _run(GENINS)
+        self.assertEqual(r['n2']['clm']['hypotheses']['CLM-H3']['statut'],
+                         'VALIDÉE')
+        self.assertTrue(r['n2']['clm']['percentiles_mack_publiables'])
+        for cle in ('reserve_p75_mack', 'reserve_p90_mack',
+                    'reserve_p99_5_mack'):
+            self.assertIsNotNone(r['n4'][cle])
+        self.assertEqual(r['n4']['source_percentiles'],
+                         'Incertitude composée (\u03c3_Mack + \u03c3_mod\xe8le)')
+        print("    OK MACK-4 témoin GenIns : CLM-H3 validée, colonne Mack "
+              "publiée, source inchangée")
+
+    def test_branche_1_bascule_sur_le_bootstrap(self):
+        """CLM-H3 tombe, le Bootstrap est publiable : il prend le relais."""
+        r = _run(_triangle_hetero())
+        self.assertEqual(r['n2']['clm']['hypotheses']['CLM-H3']['statut'],
+                         'NON VALIDÉE')
+        self.assertFalse(r['n2']['clm']['percentiles_mack_publiables'])
+        self.assertTrue(r['n2']['bootstrap_hyp']['percentiles_publiables'])
+        for cle in ('reserve_p75_mack', 'reserve_p90_mack',
+                    'reserve_p99_5_mack'):
+            self.assertIsNone(r['n4'][cle], f'{cle} devrait être retirée')
+        self.assertIn('Bootstrap ODP', r['n4']['source_percentiles'])
+        self.assertAlmostEqual(float(r['n4']['reserve_p90']),
+                               float(r['n3']['bootstrap']['p90']), delta=1.0)
+        print(f"    OK MACK-5 branche 1 : colonne Mack retirée, P90 basculé "
+              f"sur le Bootstrap ({r['n4']['reserve_p90']:,.0f}), source "
+              f"explicite")
+
+    def test_branche_2_aucun_relais_mais_jamais_de_vide(self):
+        """CLM-H3 tombe ET le Bootstrap n'est pas publiable.
+
+        Le composite est CONSERVÉ — le retirer laisserait le rapport sans
+        aucune mesure d'incertitude — mais sa provenance est étiquetée
+        CONTESTÉE.
+        """
+        r = _run(_triangle_hetero(reprises_col=6, reprises_pct=0.03))
+        self.assertEqual(r['n2']['clm']['hypotheses']['CLM-H3']['statut'],
+                         'NON VALIDÉE')
+        self.assertFalse(r['n2']['bootstrap_hyp']['percentiles_publiables'])
+        self.assertIsNone(r['n4']['reserve_p90_mack'])
+        self.assertIsNotNone(r['n4']['reserve_p90'])
+        self.assertGreater(float(r['n4']['reserve_p90']), 0.0)
+        self.assertIn('CONTESTÉE', r['n4']['source_percentiles'])
+        print(f"    OK MACK-6 branche 2 : pas de relais, composite CONSERVÉ "
+              f"(P90 = {r['n4']['reserve_p90']:,.0f}), provenance étiquetée "
+              f"CONTESTÉE")
+
+    def test_la_reserve_centrale_ne_bouge_dans_aucune_branche(self):
+        """Tout ceci ne touche QUE l'incertitude, jamais la réserve centrale."""
+        for lbl, tri in (('branche 1', _triangle_hetero()),
+                         ('branche 2', _triangle_hetero(reprises_col=6))):
+            n4 = _run(tri)['n4']
+            for cle in ('best_estimate', 'risk_margin', 'scr_prov',
+                        'provisions_techniques_s2'):
+                self.assertIsNotNone(n4[cle], f'{lbl}.{cle}')
+                self.assertNotEqual(float(n4[cle]), 0.0, f'{lbl}.{cle}')
+        print("    OK MACK-7 BE, Risk Margin, SCR et provisions techniques "
+              "intacts dans les deux branches")
 
 
 if __name__ == '__main__':
