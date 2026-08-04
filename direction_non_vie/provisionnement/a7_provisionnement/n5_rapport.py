@@ -928,10 +928,63 @@ table.premium tbody td .mono { font-family: 'JetBrains Mono', monospace; font-si
 .pied-meta .confidentiel-footer { color: var(--rouge); font-weight: 700; letter-spacing: 1px; }
 
 @media print {
+  /* ⚠️ LA RÈGLE QUI RÉPARE LES COULEURS QUI DISPARAISSAIENT.
+     Un navigateur SUPPRIME par défaut les fonds à l'impression — c'est une
+     économie d'encre héritée du papier. Le rapport pose plus de 180 fonds
+     colorés (69 `background`, 5 dégradés, 117 `rgba`) et le signal RAG en
+     dépend : sans cette déclaration, un statut ROUGE s'imprime sur fond
+     blanc, exactement comme un VERT. `print-color-adjust: exact` demande au
+     moteur de rendre les fonds tels quels. Le préfixe `-webkit-` reste
+     nécessaire : Chrome et Edge, qui font la conversion PDF, ne lisent
+     encore que lui dans certaines versions. */
+  *, *::before, *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* ⚠️ `@page { margin: 0 }` ÉTAIT PIRE QUE PAS DE RÈGLE DU TOUT. Sans marge,
+     le contenu court jusqu'au bord physique de la feuille : la plupart des
+     imprimantes et des convertisseurs rognent cette zone, et un tableau y
+     perd sa dernière colonne. La page de garde, elle, est conçue pour saigner
+     — d'où `:first` qui lui rend sa marge nulle sans l'imposer au reste. */
+  @page { size: A4; margin: 14mm 12mm 16mm 12mm; }
+  @page :first { margin: 0; }
+
   body { background: white; }
   .rapport-container { box-shadow: none; max-width: none; margin: 0; }
-  .page-garde { page-break-after: always; min-height: 100vh; }
-  @page { margin: 0; }
+  .page-garde { page-break-after: always; break-after: page; }
+
+  /* CE QUI NE DOIT PAS ÊTRE COUPÉ EN DEUX PAR UNE FIN DE PAGE.
+     Un tableau scindé perd son en-tête, une figure scindée ne veut plus rien
+     dire, et une carte d'hypothèse coupée sépare le verdict de sa
+     justification. `break-inside` est la propriété moderne, `page-break-inside`
+     son ancêtre : les deux sont posées parce que les moteurs d'impression
+     n'ont pas tous migré. */
+  table.premium, .hyp-card, .kpi-grid, .hyp-grid, .bz-grid, .garde-kpis,
+  .plotly-graph-div {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  tr { break-inside: avoid; page-break-inside: avoid; }
+
+  /* Un tableau qui franchit une page réimprime son en-tête. Sans cela, la
+     suite d'un tableau de dix-sept hypothèses arrive sans ses colonnes. */
+  thead { display: table-header-group; }
+
+  /* UN TITRE NE RESTE JAMAIS SEUL EN BAS DE PAGE, séparé de ce qu'il
+     annonce — c'est la faute de mise en page la plus visible d'un rapport. */
+  .section-header, .table-section-title, .comm-section-title {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  .section-divider { break-before: avoid; page-break-before: avoid; }
+
+  /* Pas de ligne isolée en haut ou en bas de page dans la prose. */
+  p, .comm-p, .hyp-text { orphans: 3; widows: 3; }
+
+  /* Une figure Plotly a une largeur en pixels fixée par le navigateur ; sur
+     une feuille A4 elle déborderait de la zone imprimable. */
+  .plotly-graph-div { max-width: 100% !important; }
 }
 </style>"""
 
@@ -2329,6 +2382,43 @@ def export_word(n1, n2, n3, n4,
             bo.set(qn('w:space'),'1'); bo.set(qn('w:color'),'C9A84C')
             pBdr.append(bo); pPr.append(pBdr)
 
+        # ⚠️ LE SIGNAL RAG N'EXISTAIT PAS DANS LES TABLEAUX DU WORD, ET CE
+        # SONT EUX QUI PORTENT LES VERDICTS. Mesuré sur un document généré :
+        # 99 fonds de cellule, mais DEUX teintes seulement — le gris de
+        # zébrage et le navy des en-têtes. Les dix-sept lignes du tableau des
+        # hypothèses affichaient « VALIDÉE » et « NON VALIDÉE » dans
+        # exactement la même encre noire. Depuis la décision B, le Word est le
+        # MAÎTRE D'IMPRESSION du PDF : ce n'est plus de la cosmétique.
+        #
+        # LA CORRESPONDANCE EST EXACTE, PAS HEURISTIQUE. Le vocabulaire des
+        # verdicts a été RELEVÉ sur huit exécutions — quatre triangles × avec
+        # et sans exposition — et il est fini. Comparer le texte ENTIER de la
+        # cellule à cette table ne peut pas produire de faux positif, là où un
+        # seuil de longueur ou une recherche de sous-chaîne en produirait :
+        # la colonne « Message » contient « BFCC-H4 VALIDÉE — loss ratio… »,
+        # qui ne doit pas repeindre toute la cellule.
+        #
+        # ET LA COULEUR N'EST JAMAIS SEULE PORTEUSE. Le mot reste écrit :
+        # imprimé en noir et blanc, ou lu par quelqu'un qui distingue mal le
+        # rouge du vert, le document dit toujours « NON VALIDÉE ». La couleur
+        # accélère la lecture, elle ne la remplace pas.
+        _RAG_CELLULE = {
+            'VALIDÉE':        (VR,  'EAF3DE'),
+            'À JUSTIFIER':    (AR,  'FAEEDA'),
+            'NON VALIDÉE':    (RgR, 'FCEBEB'),
+            'REJETÉE':        (RgR, 'FCEBEB'),
+            'NON TESTABLE':   (GrR, None),
+            'Non disponible': (GrR, None),
+            'non calculée':   (GrR, None),
+            'VERT':           (VR,  'EAF3DE'),
+            'AMBRE':          (AR,  'FAEEDA'),
+            'ROUGE':          (RgR, 'FCEBEB'),
+            '✓ Inclus':       (VR,  'EAF3DE'),
+            '⊘ Exclu':        (RgR, 'FCEBEB'),
+            '✅ OUI':          (VR,  'EAF3DE'),
+            '❌ NON':          (RgR, 'FCEBEB'),
+        }
+
         def _tbl(heads, rows, ws=None):
             t=doc.add_table(rows=1+len(rows), cols=len(heads)); t.style='Table Grid'
             for i,hd in enumerate(heads):
@@ -2338,9 +2428,15 @@ def export_word(n1, n2, n3, n4,
             for ri,row in enumerate(rows):
                 for ci,v in enumerate(row):
                     c=t.rows[ri+1].cells[ci]
-                    if ri%2==1: _bg(c,'EEF2F7')
+                    txt = str(v) if v is not None else '—'
+                    rag = _RAG_CELLULE.get(txt.strip())
+                    if rag and rag[1]:
+                        _bg(c, rag[1])
+                    elif ri%2==1: _bg(c,'EEF2F7')
                     pp=c.paragraphs[0]; pp.alignment=WD_ALIGN_PARAGRAPH.CENTER
-                    r=pp.add_run(str(v) if v is not None else '—'); r.font.size=Pt(9)
+                    r=pp.add_run(txt); r.font.size=Pt(9)
+                    if rag:
+                        r.font.color.rgb = rag[0]; r.bold = True
             if ws:
                 for i,w in enumerate(ws):
                     for row in t.rows: row.cells[i].width=Cm(w)
