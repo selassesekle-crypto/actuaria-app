@@ -49,7 +49,19 @@ from direction_non_vie.provisionnement.a7_provisionnement.test_a7_ibrahim import
     GENINS, RAA, _TRI_RECOURS)
 
 #: Un nombre à séparateur d'espace : « 1 564 926 ».
-_NOMBRE_ESPACE = re.compile(r'\d+(?: \d+)+')
+#:
+#: ⚠️ LE CHIFFRE NE DOIT PAS ÊTRE PRÉCÉDÉ D'UNE LETTRE, ET C'EST UN FAUX
+#: POSITIF MESURÉ QUI L'A IMPOSÉ. Sans cette garde, « Q1 2025 » déclenchait le
+#: verrou : la regex attrapait le « 1 » de « Q1 » et voyait un groupe de quatre
+#: chiffres là où il n'y a qu'un trimestre suivi d'une année. L'angle mort
+#: était GÉNÉRAL — « S2 2025 » tombait pareil, et « S2 » désigne Solvabilité 2
+#: dans tout ce dépôt. Il a fallu qu'une chaîne de cette forme atteigne le
+#: `n4` publié pour qu'il se révèle.
+#: Un chiffre précédé d'une lettre appartient à un jeton alphanumérique — Q1,
+#: S2, P99 — et n'ouvre jamais un montant formaté. Les quatre défauts réels
+#: restent détectés : dans « p < 0 01 », « 0 0294 » et « 12 34 € », le premier
+#: groupe est précédé d'une espace, jamais d'une lettre.
+_NOMBRE_ESPACE = re.compile(r'(?<![A-Za-zÀ-ÿ])\d+(?: \d+)+')
 #: Double espace entre deux caractères de mot — une virgule a sauté.
 _DOUBLE_ESPACE = re.compile(r'(?<=[^\W\d_])  +(?=[^\W\d_])')
 #: Trois espaces ou plus : la ligne aligne des colonnes, ce n'est pas de la prose.
@@ -128,6 +140,9 @@ class T1_Le_Detecteur_Discrimine(unittest.TestCase):
     #: Ce qui est LÉGITIME et ne doit jamais crier.
     _SAINS = (
         "réserve 1 564 926 €, p < 0,01, soit 26,3 % du Best Estimate",
+        # ⚠️ LES DEUX FORMES QUI ONT RÉVÉLÉ L'ANGLE MORT (lot « courbe »).
+        "EIOPA RFR Term Structures — Q1 2025",
+        "SCR PROVISIONS (Art. 115 S2 2025)",
         "BE = 18 680 856 € · σ = 2 447 095 € · CV = 13,1 %",
         "  Chain Ladder      réserve=18 680 856   poids=53%",
         "H2 Stabilité      : VALIDÉE       CV=7.9%  dérive=6.8",

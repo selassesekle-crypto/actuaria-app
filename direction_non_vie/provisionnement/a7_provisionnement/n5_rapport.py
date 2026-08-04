@@ -1501,8 +1501,13 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         + ('<tr style="border-top:2px solid var(--navy);"><td class="label" style="color:var(--navy);font-weight:600;">Risk Margin S2</td>'
         '<td class="center"><span class="mono" style="color:var(--navy);font-weight:700;">'
         + _f(n4.get('risk_margin', 0)) + '</span></td>'
-        '<td>Art. 77 §5 — CoC 6% · Méthode proportionnelle · Courbe EIOPA '
-        + _s(n4.get('date_courbe_rfr', '—')) + '</td></tr>'
+        # ⚠️ << Courbe EIOPA >> ÉTAIT ÉCRIT EN DUR. Avec un taux assumé par
+        # l'actuaire, le rapport affichait « Courbe EIOPA Arrêté courant » —
+        # il attribuait à EIOPA un taux que l'actuaire avait saisi lui-même.
+        # C'est la PROVENANCE publiée qui parle désormais.
+        '<td>Art. 77 §5 — CoC 6% · Méthode proportionnelle · '
+        + _s(n4.get('source_courbe_rfr', '—')) + ' ('
+        + _s(n4.get('date_courbe_rfr', '—')) + ')</td></tr>'
         '<tr class="highlight-gold"><td class="label">Provisions Techniques S2</td>'
         '<td class="center"><span class="mono" style="font-weight:700;">'
         + _f(n4.get('provisions_techniques_s2', 0)) + '</span></td>'

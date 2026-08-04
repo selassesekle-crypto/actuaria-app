@@ -88,6 +88,8 @@ from .config.lob_config import get_lob_config, get_sigma_eiopa, reference_s2
 from .methodes_be       import _CLES_N3, _LIBELLE_METHODE
 from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
 from .config.rfr_eiopa  import (get_taux_rfr, DATE_COURBE,
+                                SOURCE as SOURCE_RFR,
+                                MOIS_ALERTE_PEREMPTION, MOIS_ROUGE_PEREMPTION,
                                 get_courbe_embarquee, diagnostic_peremption)
 
 logger = logging.getLogger('actuaria.a7')
@@ -608,6 +610,80 @@ def selectionner_et_agreger(
             if d['volatilite'] in ('À JUSTIFIER', 'NON VALIDÉE')],
         # LA TRACE (lot A2) — une entrée par (année, hypothèse en défaut).
         'trace_gouvernance': _trace_gouvernance(n2, detail, float(be)),
+    }
+
+
+#: LA COURBE EMPLOYÉE SE DÉCRIT ELLE-MÊME  (lot « courbe des taux »)
+#:
+#: ⚠️ LE FIL ÉTAIT DÉBRANCHÉ SUR SON DERNIER MÈTRE. `run(courbe_rfr=…)`
+#: acheminait la courbe de l'actuaire jusqu'à `_calculer_risk_margin`, qui la
+#: recevait en paramètre et NE LA LISAIT JAMAIS : elle appelait `get_taux_rfr`,
+#: c'est-à-dire la courbe EMBARQUÉE, en dur. Mesuré avant correctif — une
+#: courbe plate à 0,5 %, à 10 % et à 25 % rendaient TOUTES la même Risk Margin
+#: de 2 240 584 € sur GenIns, au centime. Tout le mécanisme d'apport — l'import
+#: du fichier EIOPA officiel, le taux assumé, les deux boutons de
+#: l'application — était un no-op.
+#:
+#: ET LE RAPPORT PUBLIAIT `DATE_COURBE`, celle de l'embarquée, QUOI QU'IL
+#: ARRIVE. Un actuaire important la courbe en vigueur voyait « 2025-03-31 » :
+#: soit il le remarquait et perdait confiance dans l'outil, soit il ne le
+#: remarquait pas et signait un bilan qu'il croyait corrigé. Le second cas est
+#: le plus grave, et c'est le plus probable.
+#:
+#: ⚠️ VULTURE VOYAIT `courbe` COMME UNE VARIABLE MORTE, À 100 % DE CONFIANCE,
+#: ET C'ÉTAIT EXACT AU SENS LITTÉRAL. J'avais donc proposé de la RETIRER dans
+#: un lot de propreté — ce qui aurait cimenté le défaut définitivement, en
+#: effaçant jusqu'à la trace qu'une courbe était censée arriver là. Un
+#: paramètre mort et un fil débranché se ressemblent dans un outil et
+#: s'opposent dans le code.
+
+
+def _meta_courbe(courbe: Optional[Dict]) -> Dict:
+    """Ce qu'il faut PUBLIER de la courbe réellement employée.
+
+    Trois formes de courbe circulent, et elles ne portent pas les mêmes
+    champs — c'est pourquoi cette lecture est faite en UN endroit :
+      · `get_courbe_embarquee`  → porte son diagnostic de péremption ;
+      · `get_courbe_taux_plat`  → un taux assumé par l'actuaire, sans date ;
+      · `get_courbe_depuis_excel` → le fichier EIOPA officiel, dont le module
+        ne connaît pas la date d'arrêté : elle n'est pas dans les deux colonnes.
+
+    ⚠️ ET LE CAS D'ÉCHEC EST TRAITÉ COMME L'EMBARQUÉE, PARCE QU'IL L'EST.
+    Quand l'import Excel échoue, `get_courbe_depuis_excel` se rabat sur
+    `get_taux_rfr` : la courbe EFFECTIVEMENT appliquée est alors l'embarquée,
+    et son diagnostic de péremption doit donc s'appliquer. Publier « NON
+    TESTABLE » là serait taire une courbe périmée derrière un import raté.
+
+    ⚠️ UNE COURBE FOURNIE N'EST PAS DÉCLARÉE « À JOUR » — elle est déclarée
+    NON TESTABLE. Le module ne connaît pas sa date ; affirmer VERT serait
+    inventer un verdict. C'est la règle du lot BFCC, appliquée ici.
+    """
+    courbe = courbe or {}
+    type_ = str(courbe.get('type', 'embarquee'))
+
+    if type_ in ('embarquee', 'erreur') or not courbe:
+        diag = diagnostic_peremption()
+        return {
+            'date':       DATE_COURBE,
+            'source':     str(courbe.get('source') or SOURCE_RFR),
+            'peremption': diag,
+        }
+
+    return {
+        'date':   str(courbe.get('date') or '—'),
+        'source': str(courbe.get('source') or 'Courbe fournie par l\'actuaire'),
+        'peremption': {
+            'statut':   'NON TESTABLE',
+            'age_mois': None,
+            'date_courbe': str(courbe.get('date') or '—'),
+            'message': (
+                "Courbe fournie par l'actuaire (%s). Le test de péremption ne "
+                "porte que sur la courbe embarquée ; la date d'arrêté de cette "
+                "courbe-ci relève du jugement de l'actuaire."
+                % (courbe.get('label') or type_)),
+            'seuil_ambre_mois': MOIS_ALERTE_PEREMPTION,
+            'seuil_rouge_mois': MOIS_ROUGE_PEREMPTION,
+        },
     }
 
 
@@ -1233,6 +1309,10 @@ class BestEstimateS2:
                 'provisions_techniques_s2', round(be, 0)),
             'ratio_rm_be':              risk_margin_data.get('ratio_rm_be', 0),
             'date_courbe_rfr':          risk_margin_data.get('date_courbe_rfr', '—'),
+            # La PROVENANCE de la courbe employée, à côté de sa date : une
+            # date seule ne dit pas si elle vient d'EIOPA, d'un fichier
+            # importé ou d'un taux assumé par l'actuaire.
+            'source_courbe_rfr':        risk_margin_data.get('source_courbe_rfr', '—'),
             # Diagnostic de péremption REMONTÉ jusqu'ici : la date seule ne dit
             # pas si la courbe est encore valable, et c'est elle qui actualise
             # la Risk Margin inscrite au bilan.
@@ -1371,11 +1451,24 @@ class BestEstimateS2:
         SCR_NL(t) = SCR_NL(0) × BE(t) / BE(0)   [méthode 2]
         BE(t)     = BE(0) / CDF(t)               [run-off CL]
         CoC       = 6%                            [EIOPA fixé]
-        r_t       = courbe EIOPA RFR EUR embarquée (Q1 2025)
+        r_t       = LA COURBE REÇUE EN PARAMÈTRE, embarquée à défaut
+
+        ⚠️ `r_t` VENAIT DE LA COURBE EMBARQUÉE QUELLE QUE SOIT CELLE REÇUE.
+        La ligne fautive appelait `get_taux_rfr` — le module — au lieu de
+        `courbe['taux_fn']`. Le paramètre était acheminé depuis `run()` et
+        ignoré ici. Voir `_meta_courbe` pour le détail et la mesure.
         """
         COC  = 0.06
         be_0 = max(float(be), 1.0)
         scr_0 = float(scr.get('scr_provisions', 0))
+
+        # LA COURBE EST RÉSOLUE UNE FOIS, ET LES DEUX SORTIES LA DÉCRIVENT.
+        # Le repli sur l'embarquée vit ici et pas seulement chez l'appelant :
+        # `_calculer_risk_margin` est appelable directement, et un défaut de
+        # câblage ne doit pas se traduire par un plantage silencieux.
+        courbe   = courbe or get_courbe_embarquee()
+        _taux_fn = courbe.get('taux_fn') or get_taux_rfr
+        _meta    = _meta_courbe(courbe)
 
         if be_0 <= 0 or scr_0 <= 0 or not f_cum:
             return {
@@ -1383,8 +1476,9 @@ class BestEstimateS2:
                 'provisions_techniques_s2': round(be_0, 0),
                 'ratio_rm_be':              0.0,
                 'coc':                      COC,
-                'date_courbe_rfr':          DATE_COURBE,
-                'peremption_courbe':        diagnostic_peremption(),
+                'date_courbe_rfr':          _meta['date'],
+                'source_courbe_rfr':        _meta['source'],
+                'peremption_courbe':        _meta['peremption'],
                 'tableau_run_off':          [],
                 'message': 'Risk Margin non calculable — données insuffisantes.',
             }
@@ -1433,7 +1527,7 @@ class BestEstimateS2:
 
             # SCR projeté (méthode 2 — proportionnel au BE)
             scr_t    = scr_0 * (be_t / be_0)
-            r_t      = get_taux_rfr(t + 1)
+            r_t      = float(_taux_fn(t + 1))
             fact_act = 1.0 / (1.0 + r_t) ** (t + 1)
             contrib  = COC * scr_t * fact_act
             rm_sum  += contrib
@@ -1450,25 +1544,29 @@ class BestEstimateS2:
         risk_margin = round(rm_sum, 0)
         pt_s2       = round(be_0 + risk_margin, 0)
         ratio_rm_be  = round(risk_margin / be_0 * 100, 2)
-        _diag_courbe = diagnostic_peremption()
-
         return {
             'risk_margin':              risk_margin,
             'provisions_techniques_s2': pt_s2,
             'ratio_rm_be':              ratio_rm_be,
             'coc':                      COC,
-            'date_courbe_rfr':          DATE_COURBE,
+            # ⚠️ LA DATE EST CELLE DE LA COURBE EMPLOYÉE, PLUS CELLE DE
+            # L'EMBARQUÉE. Un actuaire qui importe la courbe EIOPA en vigueur
+            # doit voir SA date dans le rapport ; il lisait « 2025-03-31 ».
+            'date_courbe_rfr':          _meta['date'],
+            'source_courbe_rfr':        _meta['source'],
             # La péremption de la courbe voyage AVEC la Risk Margin qu'elle
             # actualise : sans ça, l'âge de la courbe n'atteignait aucun livrable.
-            'peremption_courbe':        _diag_courbe,
+            'peremption_courbe':        _meta['peremption'],
             'tableau_run_off':          tableau,
             'message': (
                 f"Risk Margin = {risk_margin:,.0f}€ ({ratio_rm_be:.1f}% du BE). "
                 f"Provisions Techniques S2 = {pt_s2:,.0f}€. "
-                f"CoC=6%, courbe EIOPA RFR EUR du {DATE_COURBE}. "
+                # Le message nomme la courbe EMPLOYÉE. Il annonçait
+                # `DATE_COURBE` — l'embarquée — même quand une autre servait.
+                f"CoC=6%, courbe {_meta['source']} ({_meta['date']}). "
                 f"Méthode proportionnelle au BE (méthode 2 EIOPA, Art. 77 §5)."
-                + ('' if _diag_courbe['statut'] == 'VERT'
-                   else ' ' + _diag_courbe['message'])
+                + ('' if _meta['peremption']['statut'] == 'VERT'
+                   else ' ' + _meta['peremption']['message'])
             ),
         }
 
