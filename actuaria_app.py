@@ -1316,12 +1316,28 @@ def _validation_agent(ak):
                 _C_val = _np_val.array(_tri_val) if not hasattr(_tri_val, "shape") else _tri_val
                 if _C_val.ndim != 2 or _C_val.shape[0] < 2:
                     raise ValueError(f"Triangle invalide shape={_C_val.shape}")
-                _figs_val = _gen_g(_C_val, _n2_val, _n3_val, _r_val.get("n4", {}))
+                # ⚠️ L'EXPOSITION DOIT SUIVRE, SINON g15 NE SORT JAMAIS.
+                # Les trois régénérations de graphiques de cette application
+                # appelaient `generer_graphiques(C, n2, n3, n4)` sans elle :
+                # `g15_exposition` ne pouvait pas se produire, alors que le
+                # run de l'agent, lui, la transmet. Les primes vivent dans
+                # `analyse_params["a7_primes"]`, chargées par l'uploader.
+                _expo_val = (st.session_state.get("analyse_params", {})
+                             or {}).get("a7_primes")
+                _figs_val = _gen_g(_C_val, _n2_val, _n3_val,
+                                   _r_val.get("n4", {}), exposition=_expo_val)
                 for _gnom, _gtitle in [
                     # ⚠️ g8 RETIRÉ AU LOT C3b — cinq barres remplacées par un
                     # tableau (Excel, onglet Hypothèses) qui porte la
                     # corrélation, le seuil, la significativité ET le verdict.
                     # g11 fondu dans g4 au même lot.
+                    #
+                    # ⚠️ LES DEUX GRAPHIQUES QUE LE GUIDE NOMME étaient produits
+                    # depuis le lot C3c et routés vers le HTML et le Word au lot
+                    # C3d — mais INVISIBLES ici. L'onglet s'appelle
+                    # « Validation » : c'est leur place.
+                    ("g17_linearite",   "Linéarité des cumulés — hypothèse sur l'espérance (guide §9.d.ii)"),
+                    ("g18_residus",     "Résidus standardisés — hypothèse sur la variance (guide §9.d.iii)"),
                     ("g9_h2",           "H2 — Stabilité des facteurs de développement"),
                     ("g10_h3",          "H3 — Loss Ratio a priori vs référence marché"),
                     ("g14_backtesting", "Back-testing — Boni/Mali de liquidation"),
@@ -4118,7 +4134,10 @@ def page_resultats():
                 from direction_non_vie.provisionnement.a7_provisionnement.n5_graphiques import generer_graphiques as _gen_g_now
                 import plotly.io as _pio_g
                 _C_g = _np_g.array(_tri) if not isinstance(_tri, _np_g.ndarray) else _tri
-                _figs = _gen_g_now(_C_g, r_raw.get("n2",{}), r_raw.get("n3",{}), r_raw.get("n4",{}))
+                _expo_now = (st.session_state.get("analyse_params", {})
+                             or {}).get("a7_primes")
+                _figs = _gen_g_now(_C_g, r_raw.get("n2",{}), r_raw.get("n3",{}),
+                                   r_raw.get("n4",{}), exposition=_expo_now)
                 if _figs:
                     _html_g = {}
                     for _gn, _gf in _figs.items():
@@ -4655,10 +4674,15 @@ Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non 
     if _tri_res is not None and n2 and n3:
         try:
             import numpy as _np_res
-            from direction_non_vie.provisionnement.a7_provisionnement.n5_graphiques import generer_graphiques as _gen_res
+            from direction_non_vie.provisionnement.a7_provisionnement.n5_graphiques import (
+                generer_graphiques as _gen_res, TITRES_FIGURES as _TITRES_FIG)
             _C_res = _np_res.array(_tri_res) if not hasattr(_tri_res, "shape") else _tri_res
-            _figs_res = _gen_res(_C_res, n2, n3, n4)
-            st.markdown(f"<div style='font-size:0.62rem;color:{VERT};margin-bottom:8px;'>✅ {len(_figs_res)}/12 graphiques générés</div>", unsafe_allow_html=True)
+            _expo_res = (st.session_state.get("analyse_params", {})
+                         or {}).get("a7_primes")
+            _figs_res = _gen_res(_C_res, n2, n3, n4, exposition=_expo_res)
+            # Le dénominateur était figé à 12 et le catalogue a bougé trois
+            # fois depuis. Il se lit maintenant sur le catalogue lui-même.
+            st.markdown(f"<div style='font-size:0.62rem;color:{VERT};margin-bottom:8px;'>✅ {len(_figs_res)}/{len(_TITRES_FIG)} graphiques générés</div>", unsafe_allow_html=True)
         except Exception as _eg:
             st.warning(f"Graphiques non disponibles : {_eg}")
 
@@ -4667,7 +4691,12 @@ Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non 
         # ⚠️ SUIT LE TRIAGE DU LOT C3b. g13 (le triangle une 3ᵉ fois) et g7
         # (donut SCR) sont retirés ; g4 fusionne l'ancien g4 et g11 et porte
         # desormais σ par année de survenance.
+        # ⚠️ ET LES DEUX GRAPHIQUES DE DONNÉES DU LOT C3c : g16 montre les
+        # reprises que les cumulés de g1 cachent par construction, g15 la
+        # chronique de l'exposition. Ils étaient produits et invisibles ici.
         ("g1_heatmap",       "◆ Triangle de développement cumulé"),
+        ("g16_increments",   "◆ Triangle des incréments — les reprises visibles"),
+        ("g15_exposition",   "◆ Chronique de l'exposition et loss ratio implicite"),
         ("g4_reserve_annee", "◆ Réserve par année de survenance — IBNR ± σ"),
         ("g14_backtesting",  "◆ Back-testing — Boni/Mali de liquidation"),
         ("g2_cadences",      "◆ Cadences cumulées — Chain Ladder"),

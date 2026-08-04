@@ -226,5 +226,119 @@ class T3_Le_Defaut_Est_Inchange(unittest.TestCase):
               'embarquée' % len(tableau))
 
 
+
+# =============================================================================
+#  T4 — UNE COURBE PÉRIMÉE PLAFONNE LE STATUT
+# =============================================================================
+
+def _triangle_regulier(n=8, f=(1.60, 1.25, 1.12, 1.06, 1.03, 1.015, 1.005)):
+    """Un triangle assez régulier pour sortir VERT — et il a fallu le CONSTRUIRE.
+
+    ⚠️ AUCUN DES CINQ TRIANGLES DE RÉFÉRENCE NE SORT VERT : mesuré, les dix
+    exécutions (cinq triangles × avec et sans exposition) rendent ROUGE ou
+    AMBRE, pour d'autres raisons — méthode unique, filet de sécurité,
+    dispersion. Un verrou posé sur eux ne prouverait donc RIEN du
+    plafonnement : il resterait vert quoi qu'on fasse à la courbe.
+
+    D'où ce triangle, dont l'exposition est calée sur l'ultime réel pour que
+    Chain Ladder, Bornhuetter-Ferguson et Cape Cod convergent — `cv_inter`
+    tombe à 0,0 et le statut est VERT tant que la courbe l'est.
+    """
+    plein = np.zeros((n, n))
+    for i in range(n):
+        v = 1_000_000.0 * (1 + 0.02 * i)
+        plein[i, 0] = v
+        for j in range(1, n):
+            v *= f[j - 1] if j - 1 < len(f) else 1.0
+            plein[i, j] = v
+    C = plein.copy()
+    for i in range(n):
+        for j in range(n - i, n):
+            C[i, j] = 0.0
+    return C, plein[:, -1]
+
+
+class T4_Une_Courbe_Perimee_Plafonne_Le_Statut(unittest.TestCase):
+    """⚠️ ET CE PLAFONNEMENT N'AURAIT PAS EU DE SENS AVANT QUE LE FIL SOIT
+    BRANCHÉ : refuser le VERT sans laisser aucun moyen de le regagner aurait
+    puni sans offrir de remède. On sanctionne une situation qui a désormais
+    une réponse — importer le fichier EIOPA, ou assumer un taux.
+    """
+
+    def _statut(self, date_courbe):
+        import direction_non_vie.provisionnement.a7_provisionnement.config \
+            .rfr_eiopa as RFR
+        C, ult = _triangle_regulier()
+        origine = RFR.DATE_COURBE
+        RFR.DATE_COURBE = date_courbe
+        try:
+            r = AgentA7Provisionnement(verbose=False).run(
+                source=C, mode_declare='cumule', generer_graphiques=False,
+                generer_word=False, n_sim_bootstrap=60, seed=42, primes=ult)
+        finally:
+            RFR.DATE_COURBE = origine
+        n4 = r['n4']
+        return (n4['statut'],
+                (n4.get('peremption_courbe') or {}).get('statut'),
+                float(n4['best_estimate']), float(n4['risk_margin']))
+
+    def test_une_courbe_fraiche_laisse_le_vert(self):
+        """Le témoin : sans lui, le test suivant ne prouverait rien."""
+        import datetime
+        statut, per, _, _ = self._statut(datetime.date.today().isoformat())
+        self.assertEqual(per, 'VERT')
+        self.assertEqual(statut, 'VERT',
+                         'ce scénario ne sort plus VERT même avec une courbe '
+                         'fraîche — le verrou suivant ne prouverait plus rien')
+        print('    OK RFR-10 courbe fraîche → péremption VERT, statut VERT')
+
+    def test_une_courbe_rouge_plafonne_le_vert_a_ambre(self):
+        """Le verrou du lot : un VERT ne peut pas coexister avec une courbe
+        périmée d'un an."""
+        import datetime
+        vieille = (datetime.date.today()
+                   - datetime.timedelta(days=500)).isoformat()
+        statut, per, _, _ = self._statut(vieille)
+        self.assertEqual(per, 'ROUGE')
+        self.assertEqual(statut, 'AMBRE',
+                         'une courbe ROUGE ne plafonne plus le statut')
+        print('    OK RFR-11 courbe de 16 mois → péremption ROUGE, statut '
+              'plafonné à AMBRE')
+
+    def test_une_courbe_ambre_ne_plafonne_pas(self):
+        """⚠️ SEUL LE ROUGE PLAFONNE, ET C'EST DÉLIBÉRÉ.
+
+        Le module le dit lui-même : un trimestre de retard reste usuel entre
+        deux arrêtés, un an ne l'est pas. Faire plafonner l'AMBRE reviendrait à
+        interdire le VERT presque toute l'année, et un plafonnement permanent
+        ne veut plus rien dire.
+        """
+        import datetime
+        six_mois = (datetime.date.today()
+                    - datetime.timedelta(days=183)).isoformat()
+        statut, per, _, _ = self._statut(six_mois)
+        self.assertEqual(per, 'AMBRE')
+        self.assertEqual(statut, 'VERT',
+                         'une courbe AMBRE plafonne le statut : le seuil de '
+                         'plafonnement a glissé du ROUGE vers l\'AMBRE')
+        print('    OK RFR-12 courbe de 6 mois → péremption AMBRE, statut VERT '
+              'conservé')
+
+    def test_le_plafonnement_deplace_un_verdict_et_pas_un_euro(self):
+        """La courbe n'entre pas dans le Best Estimate : elle actualise la
+        Risk Margin, et le DIAGNOSTIC ne touche ni l'un ni l'autre."""
+        import datetime
+        frais = self._statut(datetime.date.today().isoformat())
+        vieux = self._statut((datetime.date.today()
+                              - datetime.timedelta(days=500)).isoformat())
+        self.assertNotEqual(frais[0], vieux[0], 'le statut n\'a pas bougé')
+        self.assertAlmostEqual(frais[2], vieux[2], places=2,
+                               msg='le Best Estimate a bougé')
+        self.assertAlmostEqual(frais[3], vieux[3], places=2,
+                               msg='la Risk Margin a bougé : seule la DATE de '
+                                   'la courbe change, pas ses taux')
+        print('    OK RFR-13 statut %s → %s, BE et RM identiques au centime'
+              % (frais[0], vieux[0]))
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

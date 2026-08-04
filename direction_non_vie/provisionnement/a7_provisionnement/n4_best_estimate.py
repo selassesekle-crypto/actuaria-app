@@ -978,6 +978,33 @@ class BestEstimateS2:
         if statut == 'VERT' and a_justifier:
             statut = 'AMBRE'
 
+        # UNE COURBE DES TAUX PÉRIMÉE NE PEUT PAS COEXISTER AVEC UN VERT.
+        #
+        # ⚠️ ET CE PLAFONNEMENT N'AURAIT PAS EU DE SENS AVANT QUE LE FIL SOIT
+        # BRANCHÉ. Jusqu'au lot précédent, la courbe fournie par l'actuaire
+        # était ignorée : plafonner le statut aurait refusé le VERT sans
+        # laisser aucun moyen de le regagner. On sanctionne une situation à
+        # laquelle il existe désormais un remède — importer le fichier EIOPA
+        # en vigueur, ou assumer un taux.
+        #
+        # POURQUOI AMBRE ET NON ROUGE, et c'est une question de proportion.
+        # La courbe n'entre pas dans le Best Estimate : elle actualise la Risk
+        # Margin. Mesuré sur GenIns — un mouvement de 100 points de base, qui
+        # est considérable, déplace la Risk Margin de 4,17 % et les provisions
+        # techniques de 0,45 %. Le filet de sécurité, lui, force le ROUGE parce
+        # qu'une année entière du Best Estimate repose alors sur une seule
+        # méthode : ce n'est pas le même ordre de gravité.
+        # Mais un VERT affirme que rien n'a besoin d'être justifié, et une
+        # courbe de seize mois a besoin de l'être.
+        #
+        # SEUL LE ROUGE PLAFONNE, PAS L'AMBRE. Le module le dit lui-même : un
+        # trimestre de retard reste usuel entre deux arrêtés, un an ne l'est
+        # pas. Faire plafonner l'AMBRE reviendrait à interdire le VERT presque
+        # toute l'année.
+        _per_courbe = (risk_margin_data.get('peremption_courbe') or {})
+        if statut == 'VERT' and _per_courbe.get('statut') == 'ROUGE':
+            statut = 'AMBRE'
+
         # ⚠️ ET LA COUVERTURE « À JUSTIFIER » PAR ANNÉE ? ELLE NE PEUT RIEN
         # PLAFONNER, ET C'EST DÉMONTRÉ — ne pas rouvrir le sujet (lot A2).
         #
