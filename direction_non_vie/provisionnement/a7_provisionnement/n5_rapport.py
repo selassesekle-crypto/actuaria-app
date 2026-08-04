@@ -26,6 +26,7 @@ import numpy as np
 # Source UNIQUE d'affichage des hypothèses de BF et Cape Cod : une hypothèse non
 # évaluée y ressort NON TESTABLE, jamais en valeur par défaut.
 from .methodes_be import ORDRE_AFFICHAGE, libelle, reserve
+from .n5_graphiques import TITRES_FIGURES
 from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
 from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
 from .n2_hypotheses_munich import lignes_hypotheses_munich
@@ -1224,7 +1225,6 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         + _kpi4
         + '</div>'
     )
-    b['graph_convergence'] = graphiques_html.get('g5_convergence', '')
 
     # ── SECTION 2 : MÉTHODES ─────────────────────────────────────────────────
     def _badge_statut(m_name, pw_val):
@@ -1402,12 +1402,6 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
                   '<td style="font-size:8pt;color:var(--slate);">' + _s(c) + '</td></tr>'
                   for a, v, c in _lig_mcl)
         + '</tbody></table>'))
-    # ⚠️ CLÉ RENOMMÉE AU LOT C3b (fusion g4+g11). `_wrap_graph` rend ''
-    # sur une figure absente : une clé périmée aurait fait DISPARAÎTRE le
-    # graphique du rapport, en silence.
-    b['graph_ibnr']      = graphiques_html.get('g4_reserve_annee', '')
-    b['graph_heatmap']   = graphiques_html.get('g1_heatmap', '')
-    b['graph_bootstrap'] = graphiques_html.get('g6_bootstrap', '')
 
     # ── SECTION 3 : HYPOTHÈSES ────────────────────────────────────────────────
     hyp_cards = ''
@@ -1566,7 +1560,6 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     # Tableaux boni/mali détaillés
     b['tableau_bt_n1'] = _build_bt_table(bt, 'n1')
     b['tableau_bt_n2'] = _build_bt_table(bt, 'n2')
-    b['graph_bt']      = graphiques_html.get('g14_backtesting', '')
 
     msg_bt = _s(bt.get('message'))
     _bt_note_txt = msg_bt if msg_bt and msg_bt != '—' else ''
@@ -1929,14 +1922,80 @@ def _build_bt_table(bt: Dict, horizon: str) -> str:
         '</table>'
     )
     return html
-def _wrap_graph(html_g: str, titre: str) -> str:
-    if not html_g:
-        return ''
-    return (
-        '<div class="table-section-title">' + titre + '</div>'
-        '<div style="margin:12px 0;border:1px solid var(--border);border-radius:6px;overflow:hidden;">'
-        + html_g + '</div>'
-    )
+# =============================================================================
+#  LA NUMÉROTATION DES FIGURES  (lot C3d)
+# =============================================================================
+#
+#  ⚠️ LES IDENTIFIANTS TECHNIQUES NE SORTENT PAS DU CODE. `g1`, `g4`, `g9`,
+#  `g15`… sautent : g7, g8, g11 et g13 ont été retirés au lot C3b. Un lecteur
+#  de rapport n'a pas à subir l'histoire du dépôt, et « voir figure 7 » doit
+#  pouvoir s'écrire dans le texte.
+#
+#  LE NUMÉRO EST POSITIONNEL, ET C'EST CE QUI GARANTIT LA CONTINUITÉ. Le
+#  compteur n'avance QUE lorsqu'une figure est réellement rendue. Une figure
+#  absente — sans exposition, `g10_h3` et `g15_exposition` ne se produisent
+#  pas — ne laisse donc aucun trou : la suivante prend simplement son numéro.
+#
+#  ET L'ORDRE N'EST PAS TENU EN PARALLÈLE DU DOCUMENT, il EST le document :
+#  chaque appel numérote à l'endroit exact où la figure s'insère. Une liste
+#  d'ordre séparée dériverait au premier déplacement de section ; un compteur
+#  posé dans le flux ne le peut pas.
+
+
+def kaleido_disponible() -> bool:
+    """Le module qui convertit une figure Plotly en image est-il là ?
+
+    ⚠️ CE N'EST PAS UNE DÉPENDANCE COMME LES AUTRES. Un `.docx` ne sait porter
+    que du raster : sans `kaleido`, plotly refuse `to_image` et AUCUNE figure
+    ne peut entrer dans le Word. Trois issues étaient possibles ; celle
+    retenue est la troisième :
+      · l'exiger — l'export entier échouerait là où il manque. C'est le motif
+        `weasyprint` que le lot C1 vient précisément de retirer ;
+      · s'en passer — un rapport de provisionnement sans une seule figure,
+        dans le format qui part chez un commissaire aux comptes ;
+      · le rendre OPTIONNEL et NOMMER la dégradation. Le document porte alors
+        la légende de chaque figure et la raison de son absence, et `run()`
+        remonte `figures_word` dans `livrables_erreurs`.
+
+    ⚠️ ET L'ÉPINGLE DE `requirements.txt` EST DATÉE, PAS CASSÉE — vérifié
+    dans la source de plotly 6.5.2 : `kaleido` 0.2.1 fonctionne toujours,
+    par le chemin « v0 », mais plotly annonce sa suppression (variable
+    `ENGINE_SUPPORT_TIMELINE`, « September 2025 »). La version 1.0 qui le
+    remplace exige Google Chrome sur la machine. Le choix entre les deux
+    n'appartient pas à ce lot ; ne rien exiger, si.
+    """
+    import importlib.util
+    return importlib.util.find_spec('kaleido') is not None
+
+
+class _NumeroteurFigures:
+    """Numérote « Figure N » les figures présentes, dans l'ordre du document."""
+
+    def __init__(self, graphiques_html):
+        self._g = graphiques_html or {}
+        self.n = 0
+        self.rendues = []          # [(numero, cle)] — pour la trace et les tests
+
+    def html(self, cle: str) -> str:
+        """Le bloc HTML numéroté d'une figure, ou '' si elle n'existe pas."""
+        contenu = self._g.get(cle) or ''
+        if not contenu:
+            return ''
+        self.n += 1
+        self.rendues.append((self.n, cle))
+        titre = TITRES_FIGURES.get(cle, cle)
+        return (
+            '<div class="table-section-title">Figure ' + str(self.n)
+            + ' — ' + titre + '</div>'
+            '<div style="margin:12px 0;border:1px solid var(--border);'
+            'border-radius:6px;overflow:hidden;">' + contenu + '</div>'
+        )
+
+    def legende(self, cle: str) -> str:
+        """« Figure N — titre », sans le contenu : pour le Word."""
+        self.n += 1
+        self.rendues.append((self.n, cle))
+        return 'Figure %d — %s' % (self.n, TITRES_FIGURES.get(cle, cle))
 
 
 # =============================================================================
@@ -1981,6 +2040,13 @@ def export_html(
 
         # Construire tous les blocs
         b = _build_blocks(n2, n3, n4, narration, source, lob, cli, arr, dt, audit_id, methode, statut, graphiques_html, actuaire_nom=actuaire_nom, actuaire_numero_ia=actuaire_numero_ia)
+
+        # ⚠️ LE CATALOGUE ET LE RAPPORT COÏNCIDENT DEPUIS LE LOT C3d. Le HTML
+        # portait CINQ figures sur quatorze, et les neuf absentes étaient
+        # celles qui JUSTIFIENT la méthode — dont g17 et g18, les deux seuls
+        # graphiques que le guide nomme. Un rapport qui montre la réponse et
+        # cache le raisonnement est celui qu'on ne peut pas défendre.
+        fig = _NumeroteurFigures(graphiques_html)
 
         # Assembler
         html = (
@@ -2032,7 +2098,7 @@ def export_html(
             '<div class="section-header"><span class="section-num">01</span><span class="section-titre">Synthèse exécutive</span></div>\n'
             '<div class="section-body">\n'
             + b['kpi_grid']
-            + _wrap_graph(b['graph_convergence'], 'Convergence des méthodes — Best Estimate S2')
+            + fig.html('g5_convergence')
             + '\n</div>\n<div class="section-divider"></div>\n\n'
 
             # Section 2
@@ -2050,17 +2116,26 @@ def export_html(
             + (('<div class="table-section-title">Benktander (1976) — mélange '
                 'par crédibilité, INFORMATIF (hors Best Estimate)</div>\n'
                 + b['tableau_benktander']) if b.get('tableau_benktander') else '')
-            + _wrap_graph(b['graph_heatmap'], 'Triangle de développement cumulé')
-            + _wrap_graph(b['graph_ibnr'],
-                          'Réserve par année de survenance — IBNR ± σ Mack, '
-                          'payé à date et ultimes')
-            + _wrap_graph(b['graph_bootstrap'], 'Distribution Bootstrap ODP — Quantiles de réserve')
+            + fig.html('g1_heatmap')
+            + fig.html('g16_increments')
+            + fig.html('g15_exposition')
+            + fig.html('g2_cadences')
+            + fig.html('g3_facteurs_cl')
+            + fig.html('g4_reserve_annee')
+            + fig.html('g6_bootstrap')
             + '\n</div>\n<div class="section-divider"></div>\n\n'
 
             # Section 3
             '<div class="section-header"><span class="section-num">03</span><span class="section-titre">Validation des hypothèses actuarielles</span></div>\n'
             '<div class="section-body">\n'
             '<div class="hyp-grid">' + b['hyp_cards'] + '</div>\n'
+            # ⚠️ CETTE SECTION S'APPELLE « VALIDATION DES HYPOTHÈSES » ET NE
+            # PORTAIT AUCUNE FIGURE. Les deux que le guide de l'Institut des
+            # Actuaires nomme — §9.d.ii et §9.d.iii — sont ici, à leur place.
+            + fig.html('g17_linearite')
+            + fig.html('g18_residus')
+            + fig.html('g9_h2')
+            + fig.html('g10_h3')
             + b['methode_rec_box']
             + '\n</div>\n<div class="section-divider"></div>\n\n'
 
@@ -2078,7 +2153,7 @@ def export_html(
             + b['tableau_bt_n1']
             + '<div class="table-section-title" style="margin-top:20px;">Tableau N-2 — Horizon deux ans</div>\n'
             + b['tableau_bt_n2']
-            + _wrap_graph(b['graph_bt'], 'Boni/Mali de liquidation — Horizons N-1 et N-2')
+            + fig.html('g14_backtesting')
             + b['bt_note']
             + '\n</div>\n<div class="section-divider"></div>\n\n'
 
@@ -2113,6 +2188,10 @@ def export_html(
             '<div class="section-header"><span class="section-num">08</span><span class="section-titre">Jugement actuariel &amp; Recommandations</span></div>\n'
             '<div class="section-body">\n'
             '<div class="hyp-grid">' + b['alertes'] + b['recommandations'] + '</div>\n'
+            # Le guide exige que l'impact des retraitements soit étudié « dans
+            # le rapport actuariel [...] via des tests de sensibilité ». Sa
+            # place est donc auprès du jugement, pas dans les résultats.
+            + fig.html('g12_sensibilites')
             + b['avis']
             + '\n</div>\n\n'
 
@@ -2284,6 +2363,40 @@ def export_word(n1, n2, n3, n4,
              [[cli,lob,methode.replace('_',' ').title(),arr]],ws=[3.5,4.0,4.0,2.5])
         doc.add_page_break()
 
+        # ⚠️ LE WORD NE PORTAIT AUCUNE FIGURE (lot C3d). Zéro image mesurée
+        # sur 45 040 octets, alors que le HTML en portait cinq et
+        # l'application quatorze : le livrable qui VOYAGE était le plus
+        # pauvre des trois.
+        fig = _NumeroteurFigures(graphiques or {})
+        _kaleido = kaleido_disponible()
+
+        def _figure(cle):
+            """Insère une figure numérotée, ou nomme la raison de son absence."""
+            objet = (graphiques or {}).get(cle)
+            if objet is None:
+                return
+            legende = fig.legende(cle)
+            p = doc.add_paragraph()
+            p.paragraph_format.space_before = Pt(8)
+            p.paragraph_format.space_after = Pt(2)
+            _run(p, legende, bold=True, sz=9, col=GR)
+            if not _kaleido:
+                q = doc.add_paragraph()
+                q.paragraph_format.space_after = Pt(6)
+                _run(q, "Figure non rendue : le module « kaleido » n'est pas "
+                        "installé sur cette machine. Le rapport HTML la "
+                        "porte.", sz=8, col=GR)
+                return
+            try:
+                png = objet.to_image(format='png', width=1100, height=520,
+                                     scale=2)
+                doc.add_picture(io.BytesIO(png), width=Cm(16.5))
+            except Exception as _ef:
+                q = doc.add_paragraph()
+                q.paragraph_format.space_after = Pt(6)
+                _run(q, "Figure non rendue : %s." % type(_ef).__name__,
+                     sz=8, col=GR)
+
         _h('1. Synthèse exécutive'); _sep()
         _tbl(['Indicateur','Valeur','Indicateur','Valeur'],
              [['Best Estimate (brut)',_f(BE),'σ Mack total',_f(SIG)],
@@ -2297,6 +2410,10 @@ def export_word(n1, n2, n3, n4,
               ['Mack recentré',_f(n4.get('reserve_p90_mack',P90)),_f(n4.get('sigma_mack',SIG)),'BE pondéré'],
               ['Mack natif',_f(mk.get('reserve_p90',0)),_f(mk.get('sigma_total',SIG)),'réserve Mack'],
               ['Bootstrap ODP',_f(n3.get('bootstrap',{}).get('p90') or 0),_f(n3.get('bootstrap',{}).get('std_bootstrap') or 0),'réserve Bootstrap']],ws=[5.0,3.0,3.0,3.0])
+        # ⚠️ L'ORDRE DES FIGURES EST LE MÊME QUE DANS LE HTML, ET C'EST
+        # VOLONTAIRE : « Figure 7 » doit désigner la même chose dans les deux
+        # formats. Le compteur est positionnel dans chacun d'eux.
+        _figure('g5_convergence')
         doc.add_page_break()
 
         _h('2. Résultats par méthode actuarielle'); _sep()
@@ -2333,6 +2450,11 @@ def export_word(n1, n2, n3, n4,
             _tbl(['Indicateur', 'Valeur', 'Lecture'],
                  [[a, v, c] for a, v, c in _lignes_mcl], ws=[5.0, 3.5, 7.5])
 
+        for _cle in ('g1_heatmap', 'g16_increments', 'g15_exposition',
+                     'g2_cadences', 'g3_facteurs_cl', 'g4_reserve_annee',
+                     'g6_bootstrap'):
+            _figure(_cle)
+
         doc.add_page_break()
 
         _h('3. Validation des hypothèses actuarielles'); _sep()
@@ -2354,6 +2476,12 @@ def export_word(n1, n2, n3, n4,
             rows_h.append([ligne['libelle'], ligne['statut'], '—',
                            ligne['message']])
         if rows_h: _tbl(['Hypothèse','Résultat','Score','Message'],rows_h,ws=[4.5,2.5,1.2,7.8])
+        # Les deux graphiques que le guide nomme (§9.d.ii et §9.d.iii) sont
+        # dans la section qui s'appelle « Validation des hypothèses ».
+        _figure('g17_linearite')
+        _figure('g18_residus')
+        _figure('g9_h2')
+        _figure('g10_h3')
         doc.add_page_break()
 
         _h('4. SCR Provisions — Art. 115 Rgt délégué (UE) 2015/35'); _sep()
@@ -2372,6 +2500,7 @@ def export_word(n1, n2, n3, n4,
         _run(p,' | Score : '+bt_sc+'/100',sz=9,col=NR)
         _run(p,' | N-1 : '+str(bt.get('n_rouge_n1',0))+' rouge / '+str(bt.get('n_ambre_n1',0))+' ambre',sz=9,col=NR)
         _run(p,' | N-2 : '+str(bt.get('n_rouge_n2',0))+' rouge / '+str(bt.get('n_ambre_n2',0))+' ambre',sz=9,col=NR)
+        _figure('g14_backtesting')
         doc.add_page_break()
 
         _h('6. Effets calendaire — GLM Poisson APC (Renshaw-Verrall 1998)'); _sep()
@@ -2424,6 +2553,8 @@ def export_word(n1, n2, n3, n4,
             doc.add_paragraph()
             p=doc.add_paragraph()
             _run(p,avis_w,sz=10,bold=True,col=RgR if 'DÉFAVORABLE' in avis_w.upper() else VR)
+
+        _figure('g12_sensibilites')
 
         _sep()
         p=doc.add_paragraph(); p.alignment=WD_ALIGN_PARAGRAPH.CENTER

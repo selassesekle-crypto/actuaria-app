@@ -32,12 +32,16 @@
 =============================================================================
 """
 
+import io
+import re
 import unittest
 
 import numpy as np
 
 from direction_non_vie.provisionnement.a7_provisionnement.agent import (
     AgentA7Provisionnement)
+from direction_non_vie.provisionnement.a7_provisionnement.n5_graphiques import (
+    TITRES_FIGURES)
 from direction_non_vie.provisionnement.a7_provisionnement.test_a7_ibrahim import (
     GENINS, _TRI_RECOURS_FORT)
 
@@ -634,6 +638,206 @@ class T3_Les_Trois_Defauts_De_L_Audit_C2(unittest.TestCase):
             self.assertTrue(any(v for v in _f(t.y)),
                             '%r est une ligne plate à zéro' % lbl)
 
+
+
+# =============================================================================
+#  T4 — LE CATALOGUE ET LE RAPPORT COÏNCIDENT  (lot C3d)
+# =============================================================================
+
+class T4_Le_Catalogue_Atteint_Les_Livrables(unittest.TestCase):
+    """⚠️ PRODUIRE UNE FIGURE ET NE PAS LA PUBLIER, C'EST NE PAS L'AVOIR FAITE.
+
+    Avant le lot C3d, le HTML portait CINQ figures sur quatorze et le Word
+    ZÉRO. Les neuf absentes du HTML étaient celles qui JUSTIFIENT la méthode —
+    cadences, facteurs, hypothèses, sensibilités — pendant que celles qui
+    donnent le RÉSULTAT passaient. C'est l'inverse de ce dont un commissaire
+    aux comptes a besoin : le résultat, il le lit dans un tableau.
+    """
+
+    _NUM = re.compile(r'Figure (\d+) — ')
+
+    def _numeros_html(self, html):
+        return [int(n) for n in re.findall(r'Figure (\d+) — ', html)]
+
+    def _numeros_word(self, octets):
+        import docx
+        doc = docx.Document(io.BytesIO(octets))
+        return [int(m.group(1)) for m in
+                (self._NUM.match(p.text) for p in doc.paragraphs) if m]
+
+    def test_chaque_figure_produite_atteint_le_html(self):
+        r = _run(True)
+        html = r.get('html') or ''
+        if not html:
+            self.skipTest('HTML non produit')
+        manquantes = [cle for cle in (r.get('graphiques') or {})
+                      if TITRES_FIGURES[cle] not in html]
+        self.assertEqual(manquantes, [],
+                         'figures produites mais absentes du rapport : %s'
+                         % manquantes)
+        self.assertEqual(len(self._numeros_html(html)),
+                         len(r.get('graphiques') or {}))
+        print('    OK C3d-1 les %d figures produites sont TOUTES dans le HTML'
+              % len(r.get('graphiques') or {}))
+
+    def test_chaque_titre_du_catalogue_existe(self):
+        """Un graphique sans titre sortirait avec sa clé technique."""
+        self.assertEqual(sorted(TITRES_FIGURES), sorted(CATALOGUE),
+                         'le registre des titres et le catalogue divergent')
+        print('    OK C3d-2 les %d graphiques ont un titre de lecture'
+              % len(CATALOGUE))
+
+    def test_la_numerotation_reste_continue_quand_une_figure_manque(self):
+        """⚠️ LE POINT QUI JUSTIFIE UN COMPTEUR POSITIONNEL.
+
+        Sans exposition, `g10_h3` et `g15_exposition` ne se produisent pas.
+        Une numérotation précalculée laisserait deux trous — « Figure 4 » puis
+        « Figure 6 ». Le compteur n'avance que sur une figure RÉELLEMENT
+        rendue : la suivante prend simplement son numéro.
+        """
+        for avec in (True, False):
+            r = _run(avec)
+            html = r.get('html') or ''
+            if not html:
+                self.skipTest('HTML non produit')
+            nums = self._numeros_html(html)
+            self.assertEqual(nums, list(range(1, len(nums) + 1)),
+                             'numérotation à trous (exposition=%s) : %s'
+                             % (avec, nums))
+            self.assertEqual(len(nums), len(r.get('graphiques') or {}))
+        sans = len(_run(False).get('graphiques') or {})
+        avec = len(_run(True).get('graphiques') or {})
+        self.assertLess(sans, avec,
+                        "le scénario sans exposition ne retire plus aucune "
+                        "figure — le test ne prouverait plus rien")
+        print('    OK C3d-3 numérotation continue 1..%d et 1..%d, sans trou '
+              'là où deux figures s\'effacent' % (avec, sans))
+
+    def test_le_word_et_le_html_numerotent_pareil(self):
+        """« Figure 7 » doit désigner la même chose dans les deux formats."""
+        C = np.asarray(GENINS, dtype=float)
+        r = AgentA7Provisionnement(verbose=False).run(
+            source=C, mode_declare='cumule', generer_graphiques=True,
+            generer_word=True, n_sim_bootstrap=60, seed=42,
+            primes=EXPOSITION[:C.shape[0]])
+        html, mot = r.get('html') or '', r.get('word_bytes') or b''
+        if not html or not mot:
+            self.skipTest('HTML ou Word non produit')
+        titres_html = re.findall(r'Figure \d+ — ([^<]{4,120})', html)
+        import docx
+        titres_word = [p.text.split(' — ', 1)[1]
+                       for p in docx.Document(io.BytesIO(mot)).paragraphs
+                       if self._NUM.match(p.text)]
+        self.assertEqual(titres_html, titres_word,
+                         "l'ordre des figures diverge entre HTML et Word")
+        print('    OK C3d-4 les %d figures portent le même numéro dans le '
+              'HTML et dans le Word' % len(titres_html))
+
+    def test_le_word_nomme_l_absence_de_kaleido_au_lieu_de_la_taire(self):
+        """⚠️ NI INSTALLATION FORCÉE, NI SILENCE.
+
+        Un `.docx` ne porte que du raster : sans `kaleido`, plotly refuse
+        `to_image`. Le Word se produit quand même, chaque légende porte la
+        raison, et `run()` remonte `figures_word` — un livrable dégradé est
+        DÉCLARÉ, jamais deviné. C'est la discipline du lot F2, étendue à une
+        dépendance qui vit À L'INTÉRIEUR d'un export.
+        """
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport \
+            import kaleido_disponible
+        C = np.asarray(GENINS, dtype=float)
+        r = AgentA7Provisionnement(verbose=False).run(
+            source=C, mode_declare='cumule', generer_graphiques=True,
+            generer_word=True, n_sim_bootstrap=60, seed=42,
+            primes=EXPOSITION[:C.shape[0]])
+        mot = r.get('word_bytes') or b''
+        if not mot:
+            self.skipTest('Word non produit')
+        import docx
+        doc = docx.Document(io.BytesIO(mot))
+        notes = [p.text for p in doc.paragraphs
+                 if p.text.startswith('Figure non rendue')]
+        erreur = (r.get('livrables_erreurs') or {}).get('figures_word')
+        if kaleido_disponible():
+            self.assertEqual(notes, [], 'kaleido est là mais rien n\'est rendu')
+            self.assertIsNone(erreur)
+            print('    OK C3d-5 kaleido présent : les figures sont rendues, '
+                  'aucune dégradation annoncée')
+        else:
+            self.assertEqual(len(notes), len(self._numeros_word(mot)),
+                             'une figure manque sans dire pourquoi')
+            self.assertEqual(erreur, 'dependance_absente: kaleido',
+                             'la dégradation n\'est pas remontée à l\'appelant')
+            print('    OK C3d-5 kaleido absent : %d légendes, %d raisons '
+                  'nommées, et `figures_word` remonté' % (len(notes),
+                                                          len(notes)))
+
+    def test_le_chemin_nominal_du_word_insere_bien_les_images(self):
+        """⚠️ LE CHEMIN AVEC kaleido, EXERCÉ SANS L'INSTALLER.
+
+        La machine de développement n'a pas `kaleido` : le chemin dégradé est
+        donc le seul que la gate emprunte naturellement. On substitue un
+        rendeur qui produit de vrais PNG — ce qui vérifie que le code appelle
+        `to_image` avec les bons arguments ET que les images entrent bien dans
+        le document.
+
+        ⚠️ LES PNG SONT TOUS DIFFÉRENTS, ET C'EST NÉCESSAIRE : OOXML
+        déduplique les média identiques. Avec quatorze images identiques le
+        `.docx` n'en contient qu'UNE, ce qui ferait croire à un bug qui
+        n'existe pas — mesuré.
+        """
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest('Pillow absent')
+        import zipfile
+        import direction_non_vie.provisionnement.a7_provisionnement.n5_rapport \
+            as RAP
+
+        def _png(i):
+            b = io.BytesIO()
+            Image.new('RGB', (40 + i, 20 + i), (11, 35, 62)).save(b, 'PNG')
+            return b.getvalue()
+
+        class _Rendeur:
+            def __init__(self, vraie, i):
+                self._v, self._i, self.args = vraie, i, []
+
+            def to_image(self, **kw):
+                self.args.append(kw)
+                return _png(self._i)
+
+            def __getattr__(self, n):
+                return getattr(self._v, n)
+
+        r = _run(True)
+        g = r.get('graphiques') or {}
+        if not g:
+            self.skipTest('plotly absent')
+        faux = {k: _Rendeur(v, i) for i, (k, v) in enumerate(g.items())}
+        vrai = RAP.kaleido_disponible
+        RAP.kaleido_disponible = lambda: True
+        try:
+            mot = RAP.export_word(r.get('n1'), r['n2'], r['n3'], r['n4'],
+                                  commentaire=r.get('commentaire', ''),
+                                  graphiques=faux, lob_label='Test')
+        finally:
+            RAP.kaleido_disponible = vrai
+        media = [n for n in zipfile.ZipFile(io.BytesIO(mot)).namelist()
+                 if n.startswith('word/media/')]
+        self.assertEqual(len(media), len(g),
+                         'toutes les figures ne sont pas entrées dans le .docx')
+        appels = [a for f in faux.values() for a in f.args]
+        self.assertEqual(len(appels), len(g))
+        self.assertEqual(appels[0].get('format'), 'png')
+        import docx
+        notes = [p.text for p in docx.Document(io.BytesIO(mot)).paragraphs
+                 if p.text.startswith('Figure non rendue')]
+        self.assertEqual(notes, [],
+                         'une dégradation est annoncée alors que le rendeur '
+                         'répond')
+        print('    OK C3d-6 chemin nominal : %d images dans le .docx, '
+              'to_image appelé %d fois, aucune dégradation'
+              % (len(media), len(appels)))
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

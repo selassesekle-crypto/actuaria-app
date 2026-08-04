@@ -52,6 +52,7 @@ from .n5_graphiques     import generer_graphiques as _generer_graphiques
 from .n5_commentaire    import generer_commentaire
 from .n5_excel          import export_excel
 from .n5_rapport        import export_word, export_html
+from .n5_rapport        import kaleido_disponible
 from .config.lob_config import get_lob_config
 
 # ── Imports méthodes N3 ───────────────────────────────────────────────────────
@@ -777,9 +778,19 @@ class AgentA7Provisionnement:
                     "s'obtient desormais par conversion du Word ou du HTML. "
                     "Utilisez generer_html.")
 
+            # ⚠️ UNE DÉGRADATION NOMMÉE, PAS UN SILENCE (lot C3d). Le Word
+            # se produit sans figures quand `kaleido` manque : le document le
+            # dit à chaque légende, et l'appelant l'apprend ici. Ce n'est pas
+            # un échec — l'export a réussi — mais ce n'est pas non plus le
+            # livrable complet, et les deux doivent être distinguables.
+            err_fig_word = None
+            if generer_word and graphiques_dict and not kaleido_disponible():
+                err_fig_word = 'dependance_absente: kaleido'
+
             livrables_erreurs = {k: v for k, v in (
                 ('graphiques', graphiques_erreur), ('excel', err_xl),
-                ('word', err_wd), ('html', err_html)) if v}
+                ('word', err_wd), ('html', err_html),
+                ('figures_word', err_fig_word)) if v}
 
             # Audit trail
             audit = self._audit_trail(

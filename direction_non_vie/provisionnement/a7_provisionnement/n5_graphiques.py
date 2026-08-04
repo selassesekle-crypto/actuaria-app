@@ -1504,6 +1504,41 @@ def g18_residus(C: np.ndarray, n3: Dict) -> 'go.Figure':
     return fig
 
 
+#: LE TITRE DE LECTURE DE CHAQUE FIGURE — source unique (lot C3d).
+#:
+#: ⚠️ LES IDENTIFIANTS TECHNIQUES PORTENT DES TROUS, ET C'EST SANS IMPORTANCE.
+#: g7, g8, g11 et g13 ont été retirés au lot C3b : la suite g1, g2, g3, g4,
+#: g5, g6, g9, g10, g12, g14, g15… saute. Un lecteur de rapport n'a pas à
+#: subir l'histoire du dépôt. Les rapports numérotent donc leurs figures
+#: « Figure 1, 2, 3… » DE FAÇON POSITIONNELLE, au moment du rendu, et ces
+#: identifiants ne sortent jamais du code.
+#:
+#: L'ORDRE N'EST PAS ICI, ET C'EST DÉLIBÉRÉ : il appartient au document, qui
+#: place chaque figure dans sa section. Une liste d'ordre tenue en parallèle
+#: du document dériverait au premier déplacement ; un compteur qui avance à
+#: chaque figure RÉELLEMENT rendue ne peut pas dériver.
+TITRES_FIGURES = {
+    'g1_heatmap':       "Triangle de développement cumulé",
+    'g16_increments':   "Triangle des incréments — les reprises visibles",
+    'g15_exposition':   "Chronique de l'exposition et loss ratio implicite",
+    'g2_cadences':      "Cadences de développement — historique et projection",
+    'g3_facteurs_cl':   "Facteurs de développement Chain Ladder et dispersion",
+    'g17_linearite':    ("Linéarité des cumulés — hypothèse sur l'espérance "
+                         "(guide IA 2023, §9.d.ii)"),
+    'g18_residus':      ("Résidus standardisés — hypothèse sur la variance "
+                         "(guide IA 2023, §9.d.iii)"),
+    'g9_h2':            ("Écarts des facteurs individuels au facteur agrégé — "
+                         "effet calendaire"),
+    'g10_h3':           "Loss ratio a priori de Bornhuetter-Ferguson",
+    'g4_reserve_annee': "Réserve par année de survenance — IBNR ± σ de Mack",
+    'g5_convergence':   "Convergence des méthodes — Best Estimate S2",
+    'g6_bootstrap':     ("Distribution Bootstrap ODP et position du Best "
+                         "Estimate retenu"),
+    'g12_sensibilites': "Sensibilités du Best Estimate",
+    'g14_backtesting':  "Back-testing — boni / mali de liquidation",
+}
+
+
 def generer_graphiques(
     C:              np.ndarray,
     n2:             Dict,

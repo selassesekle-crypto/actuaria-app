@@ -10,6 +10,20 @@
 #   torch : toute la branche Deep Learning (agent A5) se desactive proprement.
 #   shap  : explicabilite SHAP des modeles ML (parametre calcul_shap sans effet).
 #   optuna: optimisation des hyperparametres XGBoost (repli sur params par defaut).
+#   kaleido : rendu des FIGURES dans le rapport Word (agent A7). Un .docx ne
+#       porte que du raster ; sans kaleido, le Word se produit quand meme et
+#       NOMME l'absence sous chaque legende, et `run()` remonte
+#       `figures_word: dependance_absente` dans `livrables_erreurs`. Le HTML,
+#       lui, porte les figures dans tous les cas.
+#       ATTENTION VERSION : l'epingle 0.2.1 vivait dans le COEUR alors que le code
+#       n'en depend pas. Elle n'est pas CASSEE -- verifie dans la source de
+#       plotly 6.5.2, le chemin << v0 >> fonctionne encore -- mais plotly
+#       annonce sa suppression (ENGINE_SUPPORT_TIMELINE = September 2025). La
+#       version 1.x qui la remplace exige Google Chrome sur la machine. Le
+#       choix entre les deux est ouvert ; ne rien EXIGER l'est aussi.
+#   cairosvg : logo vectoriel de la page de garde du Word. Importe en
+#       try/except depuis toujours, et n'etait declare NULLE PART : sans lui
+#       le logo se rabat sur du texte, ce qui est le comportement voulu.
 
 xgboost>=2.0.0
 lightgbm>=4.0.0
@@ -17,3 +31,5 @@ catboost>=1.2.0
 torch>=2.0.0
 shap>=0.43.0
 optuna>=3.0.0
+kaleido>=0.2.1
+cairosvg>=2.7.0
