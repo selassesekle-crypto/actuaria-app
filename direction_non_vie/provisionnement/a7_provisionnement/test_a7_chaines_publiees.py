@@ -92,6 +92,14 @@ def _chaines(obj, chemin='', acc=None):
     return acc
 
 
+def _run_complet(triangle, **kw):
+    """Un run avec TOUS les livrables — le verrou de vocabulaire les inspecte."""
+    src = np.asarray(triangle, dtype=float)
+    return AgentA7Provisionnement(verbose=False).run(
+        source=src, mode_declare='cumule', generer_graphiques=True,
+        generer_word=True, n_sim_bootstrap=60, seed=42, **kw)
+
+
 def _run(triangle, **kw):
     src = np.asarray(triangle, dtype=float)
     kw.setdefault('primes', np.full(src.shape[0],
@@ -185,6 +193,145 @@ class T2_Aucune_Chaine_Publiee_N_Est_Fautive(unittest.TestCase):
         print(f"    OK C1-4 {total} cellules de texte dans l'Excel, "
               f"aucune fautive")
 
+
+
+# =============================================================================
+#  T3 — LE VERROU DE VOCABULAIRE « SCR »  (lot C3b)
+# =============================================================================
+#
+#  ⚠️ MÊME DISPOSITIF QUE LE VERROU DE SÉPARATEUR CI-DESSUS, ET POUR LA MÊME
+#  RAISON : le mot « SCR » désignait QUATRE grandeurs différentes dans les
+#  livrables. Le relevé exhaustif du lot C3b a compté 110 occurrences, 70
+#  formulations distinctes — et sept d'entre elles nommaient « SCR » un NIVEAU
+#  de réserve. Corriger les sept sans poser de verrou, c'est attendre la
+#  huitième : C3c et C3d vont ajouter des graphiques et du routage.
+#
+#  LA CONVENTION, EN TROIS RÈGLES :
+#    1. « SCR » désigne UNE grandeur, la charge de capital de l'article 115
+#       (3·σ·V). C'est une MARGE, jamais un niveau de réserve.
+#    2. Un niveau de percentile se nomme par son percentile — « Réserve au
+#       P99,5 » — jamais « SCR ».
+#    3. Une marge issue d'un percentile se nomme comme telle, « Marge
+#       P99,5 − BE » : c'est elle, et non le niveau, qui se compare au SCR.
+#
+#  L'UNITÉ D'ANALYSE EST ATOMIQUE, ET C'EST LA CALIBRATION QUI L'A IMPOSÉ :
+#  une CELLULE d'un tableau, une étiquette de figure, une LIGNE de prose —
+#  jamais une ligne de tableau entière. Le Word aligne « P90 (composé) » et
+#  « SCR Provisions » dans deux cellules voisines : les aplatir ferait crier le
+#  verrou sur une mise en page parfaitement correcte.
+#
+#  CALIBRÉ AVANT D'ÊTRE FIGÉ, DANS LES DEUX SENS : 7 défauts réels sur 7
+#  détectés, 8 formulations légitimes sur 8 silencieuses, et 0 signalement sur
+#  9 045 unités réellement publiées par deux configurations d'exposition.
+# =============================================================================
+
+#: Le mot, isolé.
+_SCR = re.compile(r'\bSCR\b')
+#: Un percentile, sous toutes ses écritures — « P99.5 », « 99,5 », « 99.5th ».
+_PERCENTILE = re.compile(
+    r'\bP\s?\d{2,3}([.,]\d)?\b|\bpercentile\b|\bquantile\b|\b\d{2}[.,]\d',
+    re.I)
+#: Ce qui prouve qu'on parle bien de l'article 115 — et non d'un percentile.
+_ART115 = re.compile(
+    r'[Aa]rt(icle)?\.?\s*11[57]|3\s*[×x]\s*σ|3\s*[×x]\s*\d'
+    r'|SCR\s*/\s*BE|ratio SCR|formule standard', re.I)
+
+
+def vocabulaire_scr_fautif(unite):
+    """True si cette unité publiée nomme « SCR » un niveau de percentile."""
+    if not _SCR.search(unite) or not _PERCENTILE.search(unite):
+        return False
+    return not _ART115.search(unite)
+
+
+def _unites_publiees(r):
+    """Les unités ATOMIQUES d'un run — cellules, étiquettes, lignes de prose."""
+    out = []
+    for cle in ('n2', 'n3', 'n4'):
+        for chemin, s in _chaines(r.get(cle), cle):
+            out += [(chemin, ligne) for ligne in s.split('\n')]
+    for ligne in (r.get('commentaire') or '').split('\n'):
+        out.append(('commentaire', ligne))
+    for nom, fig in (r.get('graphiques') or {}).items():
+        for chemin, s in _chaines(fig.to_plotly_json(), 'figure:' + nom):
+            out.append((chemin, s))
+    octets = r.get('excel_bytes') or b''
+    if octets:
+        import openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(octets))
+        for ws in wb.worksheets:
+            for row in ws.iter_rows():
+                for c in row:
+                    if isinstance(c.value, str):
+                        out.append(('excel:%s!%s' % (ws.title, c.coordinate),
+                                    c.value))
+    mot = r.get('word_bytes') or b''
+    if mot:
+        import docx
+        doc = docx.Document(io.BytesIO(mot))
+        for p in doc.paragraphs:
+            out.append(('word', p.text))
+        for tbl in doc.tables:
+            for row in tbl.rows:
+                for c in row.cells:       # CELLULE, jamais la ligne entière
+                    out.append(('word:cellule', c.text))
+    return out
+
+
+class T3_Le_Mot_SCR_Ne_Nomme_Qu_Une_Grandeur(unittest.TestCase):
+
+    #: Les défauts RÉELS, tels qu'ils sortaient du code avant le lot C3b.
+    _DEFAUTS = (
+        'SCR (P99.5)',                          # g7, segment n°4
+        'Bootstrap P99.5 (SCR)',                # Excel, onglet Sensibilités
+        'P99.5 — SCR provisions',               # Excel, onglet Bootstrap
+        'P99.5 — SCR provisions (composé)',     # Excel, onglet Résultats
+        'SCR provisions — extrême (99.5th)',    # Excel, colonne Lecture
+        '<b>P99.5 (SCR)</b><br>25,040,191€',    # g6, annotation
+        "Le P99.5 Bootstrap de 25 040 191 € constitue l'estimation "
+        "stochastique du SCR provisions — comparable du P99.5 Mack.",
+    )
+
+    #: Ce qui est LÉGITIME : le SCR de l'article 115, sous ses formes réelles.
+    _SAINS = (
+        'SCR_prov = 3 × 11.0% × 17,571,609€ = 5,798,631€ (ratio SCR/BE = 33.0%)',
+        'Ratio SCR/BE',
+        'SCR PROVISIONS (Art. 115 S2)',
+        'CALCUL SCR PROVISIONS (LoB unique)',
+        "Le facteur 3 correspond au quantile 99.5% d'une loi normale",
+        'P99.5 — Provision extrême (composé)',
+        'SCR Provisions — Formule standard Art. 115 Règlement Délégué (UE) 2015/35',
+        "c'est cette marge, et non le niveau, qui se compare au SCR de "
+        "l'article 115. Elle est proche de celle du P99.5 Mack.",
+    )
+
+    def test_il_attrape_les_sept_defauts_du_releve(self):
+        for s in self._DEFAUTS:
+            self.assertTrue(vocabulaire_scr_fautif(s),
+                            'défaut non détecté : %s' % s[:70])
+        print('    OK C3b-1 les %d défauts du relevé exhaustif sont détectés'
+              % len(self._DEFAUTS))
+
+    def test_il_se_tait_sur_l_article_115(self):
+        for s in self._SAINS:
+            self.assertFalse(vocabulaire_scr_fautif(s),
+                             'faux positif sur : %s' % s[:70])
+        print('    OK C3b-2 les %d formulations légitimes restent silencieuses'
+              % len(self._SAINS))
+
+    def test_aucune_unite_publiee_ne_nomme_scr_un_percentile(self):
+        """Tout ce que l'agent publie, avec et sans exposition."""
+        n = np.asarray(GENINS).shape[0]
+        total, fautes = 0, []
+        for kw in ({'primes': np.full(n, 4e6)}, {}):
+            r = _run_complet(GENINS, **kw)
+            for ou, u in _unites_publiees(r):
+                total += 1
+                if vocabulaire_scr_fautif(u):
+                    fautes.append('%s — %r' % (ou, re.sub(r'\s+', ' ', u)[:90]))
+        self.assertEqual(fautes, [], '\n'.join(fautes[:10]))
+        print('    OK C3b-3 %d unités publiées, aucune ne nomme « SCR » un '
+              'niveau de percentile' % total)
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

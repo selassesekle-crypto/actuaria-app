@@ -501,10 +501,18 @@ def _s4_methodes(n3: Dict, n4: Dict) -> str:
             f"avec Mack. "
             f"Le facteur de sur-dispersion φ = {phi:.4f} "
             f"{'(> 1 : sur-dispersion par rapport au modèle Poisson pur)' if phi > 1 else '(< 1 : sous-dispersion)'}. "
-            f"Le P99.5 Bootstrap de {_e(p995)} constitue l'estimation "
-            f"stochastique du SCR provisions — "
-            f"{'comparable' if abs(p995/max(be_boot,1)-1) < 0.5 else 'significativement différent'} "
-            f"du P99.5 Mack."
+            # ⚠️ RÈGLE 3 DU LOT C3b. Cette phrase appelait le NIVEAU P99,5
+            # << l'estimation stochastique du SCR provisions >>. Le SCR de
+            # l'article 115 est une MARGE au-dessus du Best Estimate : la
+            # grandeur comparable n'est pas le niveau, c'est P99,5 − BE. La
+            # confusion faisait lire 25 040 191 € là où la charge de capital
+            # publiée vaut 5 798 631 €.
+            f"Le P99.5 Bootstrap s'établit à {_e(p995)}, soit une MARGE de "
+            f"{_e(p995 - be_boot)} au-dessus du Best Estimate bootstrap — "
+            f"c'est cette marge, et non le niveau, qui se compare au SCR de "
+            f"l'article 115. Elle est "
+            f"{'proche' if abs(p995/max(be_boot,1)-1) < 0.5 else 'significativement différente'} "
+            f"de celle du P99.5 Mack."
         )
     else:
         lignes.append(

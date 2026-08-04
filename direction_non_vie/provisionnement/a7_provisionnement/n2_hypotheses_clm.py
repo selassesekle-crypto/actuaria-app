@@ -1005,3 +1005,43 @@ def verifier_hypotheses_clm(
                              ['CLM-H1', 'CLM-H2', 'CLM-H3', 'CLM-H4'])},
         'scipy_disponible': SCIPY_OK,
     }
+
+# =============================================================================
+#  LE DÉTAIL DE H1, COLONNE PAR COLONNE  (lot C3b — remplace le graphique g8)
+# =============================================================================
+
+def lignes_correlations_h1(n2):
+    """Les corrélations de Spearman colonne par colonne, prêtes à afficher.
+
+    ⚠️ CES LIGNES N'ATTEIGNAIENT AUCUN LIVRABLE AVANT LE LOT C3b. Elles ne
+    vivaient que dans le graphique `g8_h1_independance` — cinq barres et une
+    ligne de seuil. Une barre ne porte QUE la corrélation : ni le seuil, ni la
+    significativité, ni le verdict de la colonne. g8 est retiré, ce tableau le
+    remplace, et il porte les quatre.
+
+    SOURCE UNIQUE, comme `lignes_hypotheses_bfcc` : l'Excel et le rapport HTML
+    lisent la même fonction. Une colonne non testée ressort NON TESTABLE,
+    jamais en valeur par défaut — c'est la règle du lot BFCC.
+    """
+    h1 = (n2 or {}).get('h1_independance') or {}
+    seuil = float(h1.get('seuil_utilise', 0.50))
+    lignes = []
+    for i, d in enumerate(h1.get('details') or []):
+        corr = d.get('corr')
+        sig = bool(d.get('significatif', False))
+        if corr is None:
+            statut = 'NON TESTABLE'
+        elif sig or abs(float(corr)) > seuil:
+            statut = 'À JUSTIFIER'
+        else:
+            statut = 'VALIDÉE'
+        lignes.append({
+            'colonnes':     str(d.get('colonnes', 'Col %d' % i)),
+            'corr':         None if corr is None else float(corr),
+            'corr_abs':     None if corr is None else abs(float(corr)),
+            'seuil':        seuil,
+            'significatif': sig,
+            'statut':       statut,
+            'ok':           statut == 'VALIDÉE',
+        })
+    return lignes

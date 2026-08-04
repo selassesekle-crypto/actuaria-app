@@ -381,99 +381,107 @@ def g3_facteurs_cl(n3: Dict) -> 'go.Figure':
         )
     )
     return fig
-
-
 # =============================================================================
-#  G4 — IBNR PAR ANNÉE DE SURVENANCE
+#  G4 — RÉSERVE PAR ANNÉE DE SURVENANCE  (fusion g4 + g11, lot C3b)
 # =============================================================================
 
-def g4_ibnr_par_annee(n3: Dict) -> 'go.Figure':
+def g4_reserve_par_annee(n3: Dict) -> 'go.Figure':
     """
-    IBNR par année — barres verticales (années en X) + courbe IBNR cumulé.
+    Combien reste-t-il à payer, par année de survenance — et avec quelle
+    incertitude.
+
+    ⚠️ CE GRAPHIQUE EN REMPLACE DEUX, ET RÉPARE UN DÉFAUT DATÉ.
+    `g4_ibnr_par_annee` et `g11_ultimates_vs_diagonale` répondaient à la même
+    question. Ils sont fondus ici, et le graphique porte en plus
+    `mack['sigma_par_annee']` — qui existait, et n'était affiché nulle part.
+
+    ⚠️ L'IBNR EST SIGNÉ. L'ancien g4 traçait `max(v, 0)` avec un commentaire
+    qui reportait la correction « au chantier rapport » : une année en reprise
+    (recours, subrogation) s'affichait à ZÉRO, et le cumul tracé DÉPASSAIT la
+    réserve — mesuré 1 483 affiché contre 1 076 réels sur un triangle à
+    recours. Une reprise descend maintenant sous l'axe, à sa valeur.
+
+    La courbe de cumul a disparu avec le plafonnement : elle ne disait rien
+    qu'un total ne dise mieux, et c'est elle qui était fausse.
+
+    `payé à date + IBNR == ultime` exactement, pour les trois méthodes —
+    vérifié sur les cinq triangles de référence.
     """
     if not PLOTLY_OK:
         return None
-    ibnr = n3.get('chain_ladder', {}).get('ibnr_par_annee', [])
-    if not ibnr:
+    cl     = n3.get('chain_ladder', {})
+    ibnr   = [float(v) for v in (cl.get('ibnr_par_annee') or [])]
+    diag   = [float(v) for v in (cl.get('last_diagonale') or [])]
+    if not ibnr or not diag:
         return None
 
     n      = len(ibnr)
     labels = [f"An. {i}" for i in range(n)]
-    vals   = [max(float(v), 0) for v in ibnr]
-    max_v  = max(vals) if vals else 1
+    sigma  = [float(v) for v in
+              (n3.get('mack', {}).get('sigma_par_annee') or [])][:n]
+    sigma  = sigma + [0.0] * (n - len(sigma))
+    max_v  = max((abs(v) for v in ibnr), default=0.0) or 1.0
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # ⚠️ TEMPORAIRE — GARDE ANTI-PLANTAGE, PAS LA VRAIE CORRECTION.
-    #
-    # Ce graphique affiche encore l'IBNR PLANCHÉ (le max(v, 0) ci-dessus) alors
-    # que sa source, chain_ladder['ibnr_par_annee'], est BRUTE depuis le Lot
-    # IBNR-B (be6f880) : les années en reprise (recours/subrogation) s'affichent
-    # à 0 et le cumul tracé dépasse reserve_totale (mesuré : 1 483 affiché contre
-    # 1 076 réel sur un triangle à recours).
-    #
-    # Cas limite : sur un portefeuille ENTIÈREMENT en reprise, tous les vals
-    # tombent à 0 → max_v = 0 → division par zéro dans le dégradé ci-dessous, et
-    # le graphique ne se rendait pas du tout. La garde neutralise CE PLANTAGE
-    # uniquement — un rapport qui ne se génère pas est plus grave qu'un
-    # graphique en retard sur sa donnée.
-    #
-    # La vraie correction (barres négatives, dégradé sur |v|, cumul aligné sur
-    # reserve_totale) est prévue au chantier « rapport », en même temps que les
-    # graphiques Munich / Bootstrap / Clark, pour les traiter d'un seul bloc.
-    # ─────────────────────────────────────────────────────────────────────────
-    if max_v <= 0:
-        max_v = 1.0
-
-    # Dégradé Or → Rouge selon magnitude
-    colors = [
-        f'rgba({int(201 + 46*(v/max_v))},{int(168 - 168*(v/max_v))},{int(76 - 76*(v/max_v))},0.85)'
-        for v in vals
+    # Dégradé Or → Rouge sur la MAGNITUDE ; une reprise prend une teinte
+    # distincte, parce qu'un IBNR négatif n'est pas un petit IBNR.
+    couleurs = [
+        ('rgba(26,188,156,0.85)' if v < 0 else
+         f'rgba({int(201 + 46*(abs(v)/max_v))},'
+         f'{int(168 - 168*(abs(v)/max_v))},'
+         f'{int(76 - 76*(abs(v)/max_v))},0.85)')
+        for v in ibnr
     ]
-
-    # IBNR cumulé croissant pour la courbe
-    cumul = []
-    s = 0.0
-    for v in vals:
-        s += v
-        cumul.append(s)
 
     fig = go.Figure()
 
-    # Barres IBNR verticales
     fig.add_trace(go.Bar(
-        x=labels,
-        y=vals,
-        marker_color=colors,
+        x=labels, y=ibnr,
+        marker_color=couleurs,
         marker_line=dict(color=NAVY, width=0.5),
-        name='IBNR par année',
-        text=[f"{v/1e3:,.0f}K€" if v >= 1000 else f"{v:,.0f}€" for v in vals],
-        textposition='outside',
-        textfont=dict(color=BLANC, size=8),
+        name='IBNR (Chain Ladder)',
+        error_y=dict(type='data', array=sigma, visible=True,
+                     color=BLANC, thickness=1.2, width=4),
         hovertemplate=(
             "<b>%{x}</b><br>"
-            "IBNR : <b>%{y:,.0f} €</b><extra></extra>"
+            "IBNR : <b>%{y:,.0f} €</b><br>"
+            "σ Mack : <b>%{error_y.array:,.0f} €</b><extra></extra>"
         ),
-        yaxis='y',
     ))
 
-    # Courbe IBNR cumulé (axe secondaire)
     fig.add_trace(go.Scatter(
-        x=labels,
-        y=cumul,
+        x=labels, y=diag,
         mode='lines+markers',
-        line=dict(color=BLEU, width=2.5),
-        marker=dict(size=5, color=BLEU, symbol='circle'),
-        name='IBNR cumulé',
-        hovertemplate=(
-            "<b>%{x}</b><br>"
-            "IBNR cumulé : <b>%{y:,.0f} €</b><extra></extra>"
-        ),
-        yaxis='y2',
+        line=dict(color=BLANC, width=1.5, dash='dot'),
+        marker=dict(size=6, color=BLANC, symbol='diamond'),
+        name='Payé à date',
+        hovertemplate=("<b>%{x}</b><br>"
+                       "Payé à date : <b>%{y:,.0f} €</b><extra></extra>"),
     ))
+
+    # Les ultimes par méthode — ce que g11 apportait, garde `disponible`
+    # comprise (lot C3a) : une méthode non calculée n'est pas une ligne à zéro.
+    for cle_n3, cle_meth, lbl, clr in (
+            ('chain_ladder', 'chain_ladder',         'Ultime Chain Ladder', BLEU),
+            ('bf',           'bornhuetter_ferguson', 'Ultime BF',           VERT),
+            ('cape_cod',     'cape_cod',             'Ultime Cape Cod',     VIOLET)):
+        if not disponible(n3, cle_meth):
+            continue
+        ult = [float(v) for v in (n3.get(cle_n3, {}).get('ultimates') or [])]
+        if not ult:
+            continue
+        fig.add_trace(go.Scatter(
+            x=labels, y=ult,
+            mode='lines+markers',
+            line=dict(color=clr, width=2),
+            marker=dict(size=5, color=clr),
+            name=lbl,
+            hovertemplate=(f"<b>%{{x}} — {lbl}</b><br>"
+                           "Ultime : <b>%{y:,.0f} €</b><extra></extra>"),
+        ))
 
     fig.update_layout(
         **_layout(
-            height=420,
+            height=440,
             title="",
             xaxis=dict(
                 title="Année de survenance",
@@ -482,19 +490,12 @@ def g4_ibnr_par_annee(n3: Dict) -> 'go.Figure':
                 showgrid=False,
             ),
             yaxis=dict(
-                title="IBNR (€)",
+                title="Montant (€) — IBNR ± σ Mack, et niveaux",
                 tickfont=dict(color=GRIS, size=9),
                 showgrid=True,
                 gridcolor='rgba(255,255,255,0.05)',
-                rangemode='tozero',
-            ),
-            yaxis2=dict(
-                title=dict(text="IBNR cumulé (€)", font=dict(color=BLEU)),
-                tickfont=dict(color=BLEU, size=9),
-                overlaying='y',
-                side='right',
-                showgrid=False,
-                rangemode='tozero',
+                zeroline=True,
+                zerolinecolor='rgba(255,255,255,0.25)',
             ),
             legend=dict(
                 bgcolor='rgba(11,35,62,0.85)',
@@ -648,7 +649,7 @@ def g5_convergence_methodes(n3: Dict, n4: Dict) -> 'go.Figure':
 def g6_distribution_bootstrap(n3: Dict, n2: Optional[Dict] = None) -> 'go.Figure':
     """
     Histogramme de la distribution Bootstrap ODP avec :
-    · P50 (médiane) · P75 · P90 · P99.5 (SCR)
+    · P50 (médiane) · P75 · P90 · P99.5
     · Zone IC 95% surlignée
     · Courbe KDE superposée
     """
@@ -689,7 +690,11 @@ def g6_distribution_bootstrap(n3: Dict, n2: Optional[Dict] = None) -> 'go.Figure
         (boot.get('p50',  0), 'P50',   CYAN,  'solid',  1.5),
         (boot.get('p75',  0), 'P75',   VERT,  'dash',   1.5),
         (boot.get('p90',  0), 'P90',   AMBRE, 'dash',   2),
-        (boot.get('p99_5',0), 'P99.5 (SCR)', ROUGE, 'dash', 2.5),
+        # ⚠️ « P99.5 (SCR) » AU LOT C3b : un NIVEAU de réserve porte le nom
+        # de son percentile, jamais celui du SCR. Le SCR de l'article 115
+        # est une MARGE (3·σ·V) ; l'appeler comme un niveau faisait lire
+        # 25 040 191 € pour une charge de capital publiée à 5 798 631 €.
+        (boot.get('p99_5',0), 'P99.5', ROUGE, 'dash', 2.5),
     ]
     for val, lbl, clr, dash, width in percentiles_config:
         if val > 0:
@@ -698,7 +703,7 @@ def g6_distribution_bootstrap(n3: Dict, n2: Optional[Dict] = None) -> 'go.Figure
                 line_color=clr, line_width=width, line_dash=dash,
                 annotation_text=f"<b>{lbl}</b><br>{val:,.0f}€",
                 annotation_font=dict(color=clr, size=9),
-                annotation_position='top right' if lbl in ('P99.5 (SCR)',) else 'top left',
+                annotation_position='top right' if lbl == 'P99.5' else 'top left',
             )
 
     cv = (boot.get('cv_bootstrap') or 0) * 100
@@ -737,174 +742,18 @@ def g6_distribution_bootstrap(n3: Dict, n2: Optional[Dict] = None) -> 'go.Figure
         )
     )
     return fig
-
-
 # =============================================================================
-#  G7 — SCR PAR COMPOSANTE (DONUT)
+#  G8 — RETIRE AU LOT C3b, REMPLACE PAR UN TABLEAU
 # =============================================================================
-
-def g7_scr_donut(n4: Dict) -> 'go.Figure':
-    """
-    Donut SCR provisions vs marge de sécurité.
-    Style identique à l'image fournie (SCR par risque).
-    """
-    if not PLOTLY_OK:
-        return None
-
-    scr  = n4.get('scr', {})
-    be   = n4.get('best_estimate', 0)
-    p90  = n4.get('reserve_p90',  0)
-    p995 = n4.get('reserve_p99_5', 0)
-    scr_prov = scr.get('scr_provisions', 0)
-
-    if be <= 0:
-        return None
-
-    labels = ['Best Estimate', 'Marge P75-BE', 'Marge P90-P75', 'SCR (P99.5)']
-    p75    = n4.get('reserve_p75', be)
-    values = [
-        be,
-        max(p75 - be, 0),
-        max(p90 - p75, 0),
-        max(p995 - p90, 0),
-    ]
-    colors = [BLEU, CYAN, AMBRE, ROUGE]
-
-    fig = go.Figure(go.Pie(
-        labels=labels,
-        values=values,
-        hole=0.55,
-        marker=dict(
-            colors=colors,
-            line=dict(color=NAVY, width=2),
-        ),
-        textfont=dict(color=BLANC, size=10),
-        hovertemplate=(
-            "<b>%{label}</b><br>"
-            "Montant : <b>%{value:,.0f} €</b><br>"
-            "Part : <b>%{percent}</b><extra></extra>"
-        ),
-        showlegend=True,
-    ))
-
-    # Annotation centrale
-    fig.add_annotation(
-        text=(
-            f"<b style='font-size:14px;color:{OR}'>SCR</b><br>"
-            f"<span style='font-size:10px;color:{BLANC}'>{scr_prov:,.0f}€</span>"
-        ),
-        x=0.5, y=0.5,
-        showarrow=False,
-        font=dict(color=BLANC),
-    )
-
-    fig.update_layout(
-        **_layout(
-            height=380,
-            title=dict(
-                text=(
-                    f"SCR provisions — Formule standard Art. 115 S2 · "
-                    f"σ(LoB)={scr.get('sigma_eiopa',0):.1%} · "
-                    f"{scr.get('lob_label','—')}"
-                ),
-                font=dict(color=OR, size=12),
-                x=0.01,
-            ),
-            legend=dict(
-                bgcolor='rgba(15,46,82,0.8)',
-                bordercolor=OR,
-                borderwidth=0.5,
-                font=dict(color=BLANC, size=9),
-                orientation='v',
-                x=0.75, y=0.5,
-            ),
-        )
-    )
-    return fig
-
-
-# =============================================================================
-#  G8 — H1 INDÉPENDANCE (CORRÉLATIONS SPEARMAN)
-# =============================================================================
-
-def g8_h1_independance(n2: Dict) -> 'go.Figure':
-    """
-    Corrélations Spearman par paire de colonnes.
-    Seuil de rejet visible. Barres colorées selon le statut.
-    """
-    if not PLOTLY_OK:
-        return None
-    h1      = n2.get('h1_independance', {})
-    details = h1.get('details', [])
-    if not details:
-        return None
-
-    ok      = h1.get('ok', True)
-    seuil   = h1.get('seuil_utilise', 0.50)
-    labels  = [d.get('colonnes', f"Col {i}") for i, d in enumerate(details)]
-    corrs   = [abs(d.get('corr', 0)) for d in details]
-    sigs    = [d.get('significatif', False) for d in details]
-
-    colors = [
-        ROUGE if s else AMBRE if c > seuil * 0.6 else VERT
-        for c, s in zip(corrs, sigs)
-    ]
-
-    fig = go.Figure()
-    fig.add_trace(go.Bar(
-        x=labels, y=corrs,
-        marker_color=colors,
-        marker_line=dict(color=NAVY, width=1),
-        width=0.6,
-        name='|Corrélation|',
-        text=[f"{c:.3f}{'*' if s else ''}" for c, s in zip(corrs, sigs)],
-        textposition='outside',
-        textfont=dict(color=BLANC, size=9),
-        hovertemplate=(
-            "<b>%{x}</b><br>"
-            "|Corr Spearman| : <b>%{y:.3f}</b><br>"
-            "%{text}<extra></extra>"
-        ),
-    ))
-
-    # Seuil de rejet
-    fig.add_hline(
-        y=seuil,
-        line_color=ROUGE, line_dash='dash', line_width=1.5,
-        annotation_text=f"Seuil H1 ({seuil:.2f})",
-        annotation_font=dict(color=ROUGE, size=10),
-        annotation_position='top right',
-    )
-    # Zone acceptable
-    fig.add_hrect(
-        y0=0, y1=seuil * 0.6,
-        fillcolor='rgba(46,204,113,0.05)',
-        line_width=0,
-    )
-
-    titre_statut = '✅ VALIDÉE' if ok else '⚠️ REJETÉE'
-    fig.update_layout(
-        **_layout(
-            title=dict(
-                text=f"H1 Indépendance : {titre_statut} — Corrélations Spearman inter-colonnes",
-                font=dict(color=VERT if ok else ROUGE, size=13),
-                x=0.01,
-            ),
-            xaxis=dict(
-                title="Paires de colonnes",
-                tickfont=dict(color=GRIS, size=9),
-                showgrid=False,
-            ),
-            yaxis=dict(
-                title="|Corrélation Spearman|",
-                tickfont=dict(color=GRIS, size=10),
-                showgrid=True,
-                gridcolor='rgba(255,255,255,0.05)',
-                range=[0, 1.05],
-            ),
-        )
-    )
-    return fig
+#
+# Cinq barres et une ligne de seuil. La barre ne portait QUE la correlation ;
+# le seuil, la significativite et le verdict ne s'y lisaient pas. Un tableau
+# porte les quatre.
+#
+# CE N'EST PAS UNE SUPPRESSION SECHE : `h1['details']` -- les correlations
+# colonne par colonne -- n'atteignaient AUCUN livrable en dehors de ce
+# graphique. `n2_hypotheses_clm.lignes_correlations_h1()` les publie desormais
+# en tableau, dans l'Excel et dans le HTML.
 
 
 # =============================================================================
@@ -1077,92 +926,14 @@ def g10_h3_lr_apriori(n2: Dict, n3: Dict) -> 'go.Figure':
         )
     )
     return fig
-
-
 # =============================================================================
-#  G11 — ULTIMATES PROJETÉS VS DERNIÈRE DIAGONALE
+#  G11 — FUSIONNE DANS G4 AU LOT C3b
 # =============================================================================
-
-def g11_ultimates_vs_diagonale(n3: Dict) -> 'go.Figure':
-    """
-    Comparaison ultimates projetés (CL, Mack, BF, CC) vs dernière diagonale.
-    Permet de visualiser l'IBNR implicite de chaque méthode.
-    """
-    if not PLOTLY_OK:
-        return None
-
-    # ⚠️ LE FAUX ZÉRO (lot C3a). Sans exposition, `n3['bf']['ultimates']` est
-    # une liste de zéros — non vide, donc le `if ult:` plus bas la laissait
-    # passer, et deux droites plates affirmaient des ultimes INFÉRIEURS aux
-    # montants déjà payés. La garde est celle du référentiel, la même que
-    # celle de N4.
-    ult_cl   = n3.get('chain_ladder', {}).get('ultimates', [])
-    ult_bf   = (n3.get('bf', {}).get('ultimates', [])
-                if disponible(n3, 'bornhuetter_ferguson') else [])
-    ult_cc   = (n3.get('cape_cod', {}).get('ultimates', [])
-                if disponible(n3, 'cape_cod') else [])
-    last_d   = n3.get('chain_ladder', {}).get('last_diagonale', [])
-    if not ult_cl or not last_d:
-        return None
-
-    n = len(ult_cl)
-    x = [f"An. {i}" for i in range(n)]
-
-    fig = go.Figure()
-
-    # Dernière diagonale (référence)
-    fig.add_trace(go.Scatter(
-        x=x, y=last_d,
-        mode='lines+markers',
-        name='Dernière diagonale',
-        line=dict(color=BLANC, width=1.5, dash='dot'),
-        marker=dict(size=6, color=BLANC, symbol='diamond'),
-        hovertemplate=(
-            "<b>%{x}</b><br>"
-            "Sinistres payés : <b>%{y:,.0f} €</b><extra></extra>"
-        ),
-    ))
-
-    # Ultimates par méthode
-    for ult, lbl, clr in [
-        (ult_cl,  'Chain Ladder', BLEU),
-        (ult_bf,  'BF',           VERT),
-        (ult_cc,  'Cape Cod',     VIOLET),
-    ]:
-        if ult:
-            fig.add_trace(go.Scatter(
-                x=x, y=ult,
-                mode='lines+markers',
-                name=lbl,
-                line=dict(width=2),
-                marker=dict(size=5),
-                line_color=clr,
-                hovertemplate=(
-                    f"<b>%{{x}} — {lbl}</b><br>"
-                    "Ultimate : <b>%{y:,.0f} €</b><extra></extra>"
-                ),
-            ))
-
-    fig.update_layout(
-        **_layout(
-            title="",
-            xaxis=dict(tickfont=dict(color=BLANC, size=9), showgrid=False),
-            yaxis=dict(
-                title="Montant (€)",
-                tickfont=dict(color=GRIS, size=10),
-                showgrid=True,
-                gridcolor='rgba(255,255,255,0.05)',
-            ),
-            showlegend=True,
-            legend=dict(
-                bgcolor='rgba(15,46,82,0.8)',
-                bordercolor=OR,
-                borderwidth=0.5,
-                font=dict(color=BLANC, size=9),
-            ),
-        )
-    )
-    return fig
+#
+# g4 (IBNR par annee) et g11 (ultimes vs diagonale) repondaient a la MEME
+# question : combien reste-t-il a payer, par annee de survenance. Un seul
+# graphique les remplace, et il porte en plus le sigma par annee de Mack --
+# `mack['sigma_par_annee']`, qui existait et n'etait affiche nulle part.
 
 
 # =============================================================================
@@ -1263,138 +1034,15 @@ def g12_sensibilites_tornado(n4: Dict) -> 'go.Figure':
         )
     )
     return fig
-
-
 # =============================================================================
-#  G13 — PAIEMENTS CUMULÉS PAR ANNÉE DE SURVENANCE
+#  G13 — RETIRE AU LOT C3b
 # =============================================================================
-
-def g13_paiements_cumules(C: np.ndarray) -> 'go.Figure':
-    """
-    Chain Ladder developments by origin period.
-    X = périodes de développement (12M, 24M...).
-    Y = paiements cumulés.
-    Une courbe par année de survenance — monte puis se stabilise.
-    Style PowerBI : palette vibrante, fond navy profond.
-    """
-    if not PLOTLY_OK:
-        return None
-    if C is None or C.ndim != 2 or C.shape[0] < 2:
-        return None
-
-    n_ann, n_dev = C.shape
-    periodes = list(range(1, n_dev + 1))  # 1, 2, 3... (numéros de période)
-
-    # Palette vibrante distincte — une couleur par année de survenance
-    PALETTE = [
-        '#E74C3C','#3498DB','#2ECC71','#F39C12','#9B59B6',
-        '#1ABC9C','#E67E22','#E91E63','#00BCD4','#8BC34A',
-        '#FF5722','#607D8B','#795548','#9C27B0','#03A9F4',
-        '#CDDC39','#FF9800','#4CAF50','#F44336','#2196F3',
-        '#FFEB3B','#00E5FF','#FF4081','#69F0AE','#FF6D00',
-        '#D500F9','#00BFA5','#FFD740','#40C4FF','#B2FF59',
-    ]
-
-    fig = go.Figure()
-
-    for i in range(n_ann):
-        # Valeurs non nulles de la ligne i
-        x_vals, y_vals = [], []
-        for j in range(n_dev):
-            val = float(C[i, j])
-            if val > 0:
-                x_vals.append(periodes[j])
-                y_vals.append(val)
-
-        if not y_vals:
-            continue
-
-        couleur = PALETTE[i % len(PALETTE)]
-        is_recent = (i >= n_ann - 6)
-        is_last   = (i == n_ann - 1)
-
-        fig.add_trace(go.Scatter(
-            x=x_vals,
-            y=y_vals,
-            mode='lines+markers+text',
-            name=f'{i}',
-            line=dict(
-                color=couleur,
-                width=2.5 if is_recent else 1.8,
-                dash='dash' if is_last else 'solid',
-            ),
-            marker=dict(
-                size=6 if is_recent else 4,
-                color=couleur,
-                symbol='circle',
-                line=dict(color='rgba(255,255,255,0.4)', width=1),
-            ),
-            # Label de l'année à la fin de chaque courbe
-            text=['' if k < len(x_vals)-1 else f' {i}' for k in range(len(x_vals))],
-            textposition='middle right',
-            textfont=dict(color=couleur, size=9, family='Arial Black'),
-            connectgaps=False,
-            hovertemplate=(
-                f"<b>Année {i}</b><br>"
-                "Période : <b>%{x}</b><br>"
-                "Cumulé : <b>%{y:,.0f} €</b><extra></extra>"
-            ),
-            visible=True if is_recent else 'legendonly',
-        ))
-
-    # Ligne verticale — dernière diagonale observée (n_ann - 1 périodes)
-    last_obs = n_ann  # dernière colonne pleinement observée
-    if last_obs <= n_dev:
-        fig.add_vline(
-            x=last_obs,
-            line=dict(color=OR, width=1.5, dash='dot'),
-            annotation=dict(
-                text="Diagonale",
-                font=dict(color=OR, size=9),
-                bgcolor='rgba(15,46,82,0.7)',
-                bordercolor=OR,
-                borderwidth=1,
-            ),
-        )
-
-    fig.update_layout(
-        **_layout(
-            height=460,
-            title="",
-            margin=dict(l=70, r=100, t=30, b=60),
-            xaxis=dict(
-                title=dict(text="Période de développement", font=dict(color=GRIS, size=10)),
-                tickfont=dict(color=BLANC, size=9),
-                showgrid=True,
-                gridcolor='rgba(255,255,255,0.06)',
-                dtick=1 if n_dev <= 15 else 2,
-                zeroline=False,
-            ),
-            yaxis=dict(
-                title=dict(text="Paiements cumulés (€)", font=dict(color=GRIS, size=10)),
-                tickfont=dict(color=GRIS, size=9),
-                showgrid=True,
-                gridcolor='rgba(255,255,255,0.06)',
-                tickformat=',.0f',
-                zeroline=False,
-                rangemode='tozero',
-            ),
-            legend=dict(
-                title=dict(text="Année surv.", font=dict(color=OR, size=9)),
-                bgcolor='rgba(11,35,62,0.92)',
-                bordercolor='rgba(201,168,76,0.5)',
-                borderwidth=1,
-                font=dict(color=BLANC, size=8),
-                orientation='v',
-                yanchor='middle', y=0.5,
-                xanchor='left', x=1.01,
-                tracegroupgap=1,
-            ),
-            hovermode='x unified',
-            plot_bgcolor='rgba(8,25,45,0.97)',
-        )
-    )
-    return fig
+#
+# C'etait le triangle de g1, trace en lignes au lieu d'une carte de chaleur,
+# et NON NORMALISE. g2 en est la version normalisee -- la fraction developpee
+# --, et c'est elle qui est informative : le guide de l'Institut des Actuaires
+# la recommande nommement (p.12). Trois graphiques pour la meme matrice,
+# c'etait deux de trop.
 
 
 # =============================================================================
@@ -1493,7 +1141,13 @@ def generer_graphiques(
     n4:             Dict,
 ) -> Dict:
     """
-    Génère les 14 graphiques ActuarIA.
+    Génère les 10 graphiques ActuarIA.
+
+    ⚠️ ILS ÉTAIENT 14 JUSQU'AU LOT C3b. Quatre sont partis : g7 (donut SCR,
+    mauvais encodage et étiquette fausse), g13 (le triangle une troisième
+    fois), g8 (cinq barres remplacées par un tableau qui en dit plus), et g11
+    (fondu dans g4). Chaque retrait porte sa justification à l'endroit exact
+    où la fonction se trouvait.
 
     Parameters
     ----------
@@ -1523,16 +1177,12 @@ def generer_graphiques(
         ('g1_heatmap',        lambda: g1_heatmap_triangle(C)),
         ('g2_cadences',       lambda: g2_cadences_developpement(C, f_cum, pct_dev)),
         ('g3_facteurs_cl',    lambda: g3_facteurs_cl(n3)),
-        ('g4_ibnr',           lambda: g4_ibnr_par_annee(n3)),
+        ('g4_reserve_annee',  lambda: g4_reserve_par_annee(n3)),
         ('g5_convergence',    lambda: g5_convergence_methodes(n3, n4)),
         ('g6_bootstrap',      lambda: g6_distribution_bootstrap(n3, n2)),
-        ('g7_scr',            lambda: g7_scr_donut(n4)),
-        ('g8_h1',             lambda: g8_h1_independance(n2)),
         ('g9_h2',             lambda: g9_h2_stabilite(C, n3)),
         ('g10_h3',            lambda: g10_h3_lr_apriori(n2, n3)),
-        ('g11_ultimates',     lambda: g11_ultimates_vs_diagonale(n3)),
         ('g12_sensibilites',  lambda: g12_sensibilites_tornado(n4)),
-        ('g13_paiements',      lambda: g13_paiements_cumules(C)),
         ('g14_backtesting',    lambda: g14_backtesting(n3, annee_debut=n3.get('annee_debut_triangle'))),
     ]
 

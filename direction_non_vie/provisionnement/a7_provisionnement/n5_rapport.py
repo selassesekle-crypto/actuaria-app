@@ -1402,7 +1402,10 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
                   '<td style="font-size:8pt;color:var(--slate);">' + _s(c) + '</td></tr>'
                   for a, v, c in _lig_mcl)
         + '</tbody></table>'))
-    b['graph_ibnr']      = graphiques_html.get('g4_ibnr', '')
+    # ⚠️ CLÉ RENOMMÉE AU LOT C3b (fusion g4+g11). `_wrap_graph` rend ''
+    # sur une figure absente : une clé périmée aurait fait DISPARAÎTRE le
+    # graphique du rapport, en silence.
+    b['graph_ibnr']      = graphiques_html.get('g4_reserve_annee', '')
     b['graph_heatmap']   = graphiques_html.get('g1_heatmap', '')
     b['graph_bootstrap'] = graphiques_html.get('g6_bootstrap', '')
 
@@ -2048,7 +2051,9 @@ def export_html(
                 'par crédibilité, INFORMATIF (hors Best Estimate)</div>\n'
                 + b['tableau_benktander']) if b.get('tableau_benktander') else '')
             + _wrap_graph(b['graph_heatmap'], 'Triangle de développement cumulé')
-            + _wrap_graph(b['graph_ibnr'], 'IBNR par année de survenance')
+            + _wrap_graph(b['graph_ibnr'],
+                          'Réserve par année de survenance — IBNR ± σ Mack, '
+                          'payé à date et ultimes')
             + _wrap_graph(b['graph_bootstrap'], 'Distribution Bootstrap ODP — Quantiles de réserve')
             + '\n</div>\n<div class="section-divider"></div>\n\n'
 

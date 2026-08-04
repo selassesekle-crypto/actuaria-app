@@ -1151,19 +1151,28 @@ class T20_Graphiques_Reellement_Produits(unittest.TestCase):
         """Le cœur : des figures existent, et ce sont bien des figures Plotly."""
         self.assertTrue(self.r.get('success'), self.r.get('erreur'))
         g = self.r.get('graphiques') or {}
-        # 14/14 et non « au moins un » : GenIns muni d'une exposition alimente
-        # les 14 graphiques (aucune garde « pas de données » ne s'y déclenche —
+        # 10/10 et non « au moins un » : GenIns muni d'une exposition alimente
+        # les 10 graphiques (aucune garde « pas de données » ne s'y déclenche —
         # vérifié). C'est ce verrou qui empêche un graphique de retomber
-        # silencieusement sans test rouge.
-        attendus = ['g1_heatmap', 'g2_cadences', 'g3_facteurs_cl', 'g4_ibnr',
-                    'g5_convergence', 'g6_bootstrap', 'g7_scr', 'g8_h1', 'g9_h2',
-                    'g10_h3', 'g11_ultimates', 'g12_sensibilites', 'g13_paiements',
-                    'g14_backtesting']
+        # silencieusement sans test rouge — et c'est lui qui a ARRÊTÉ le lot
+        # C3b, comme prévu, quand le catalogue est passé de 14 à 10.
+        #
+        # ⚠️ ILS ÉTAIENT QUATORZE. Le triage du lot C3b en a retiré quatre, sur
+        # décision explicite : g7 (donut SCR — quatre segments cumulatifs rendus
+        # en angles, et son 4ᵉ segment s'appelait « SCR » en valant P99.5−P90),
+        # g13 (le triangle de g1 une troisième fois, non normalisé), g8
+        # (cinq barres remplacées par un tableau qui porte aussi le seuil, la
+        # significativité et le verdict), et g11 (fondu dans g4, qui porte en
+        # plus σ par année de survenance). Seule la LISTE change ici : le sujet
+        # de ce test, lui, est intact.
+        attendus = ['g1_heatmap', 'g2_cadences', 'g3_facteurs_cl',
+                    'g4_reserve_annee', 'g5_convergence', 'g6_bootstrap',
+                    'g9_h2', 'g10_h3', 'g12_sensibilites', 'g14_backtesting']
         self.assertEqual(sorted(g), sorted(attendus),
                          f"manquant(s) : {[k for k in attendus if k not in g]}")
         self.assertTrue(all(hasattr(f, 'to_html') for f in g.values()),
                         "les valeurs doivent être des go.Figure, pas des placeholders")
-        print(f"    OK T20a graphiques : {len(g)}/14 réellement produits")
+        print(f"    OK T20a graphiques : {len(g)}/{len(attendus)} réellement produits")
 
     def test_echec_graphiques_remonte_dans_le_resultat(self):
         """Un échec N5 ne doit plus être un « succès dégradé » invisible."""
@@ -1186,21 +1195,46 @@ class T20_Graphiques_Reellement_Produits(unittest.TestCase):
         self.assertIn('boom', r['graphiques_erreur'])     # mais l'échec est visible
         print("    OK T20b échec N5 : run en succès, mais graphiques_erreur renseigné")
 
-    def test_g4_ibnr_ne_plante_plus_sur_portefeuille_en_reprise(self):
-        """Garde anti-plantage : sur un portefeuille ENTIÈREMENT en reprise, tous
-        les IBNR planchés valent 0 → max_v = 0 → division par zéro, et g4_ibnr ne
-        se rendait pas. On vérifie seulement qu'il se GÉNÈRE — pas qu'il affiche
-        le bon chiffre : il montre encore l'IBNR planché, la refonte est prévue
-        au chantier « rapport »."""
+    def test_g4_ne_planche_plus_les_reprises_ni_ne_plante(self):
+        """Une année en reprise vaut sa valeur NÉGATIVE, et plus zéro.
+
+        ⚠️ CE TEST TENAIT SA PROPRE PÉREMPTION PAR ÉCRIT. Il disait : « il
+        montre encore l'IBNR planché, la refonte est prévue au chantier
+        *rapport* ». Le chantier rapport, c'est le lot C3b — la refonte est
+        faite, et le test est durci d'autant.
+
+        CE QU'IL VÉRIFIAIT, ET QUI RESTE : sur un portefeuille ENTIÈREMENT en
+        reprise, tous les IBNR planchés valaient 0 → max_v = 0 → division par
+        zéro, et le graphique ne se rendait pas du tout.
+
+        CE QU'IL VÉRIFIE EN PLUS : que les barres portent bien les valeurs
+        négatives réelles. L'ancien `max(v, 0)` affichait six zéros et faisait
+        dépasser le cumul tracé — 1 483 contre 1 076 mesurés sur un triangle à
+        recours. Vérifier qu'une figure « se génère » ne dit rien de ce qu'elle
+        raconte : c'est précisément le trou que le filet du lot C2 a comblé.
+        """
         from direction_non_vie.provisionnement.a7_provisionnement.n5_graphiques import (
-            g4_ibnr_par_annee)
+            g4_reserve_par_annee)
         cl = chain_ladder(_TRI_TOUT_DECROISSANT, tail_force=1.0)
+        ibnr = [float(v) for v in cl['ibnr_par_annee']]
         # le cas dégénéré est bien exercé : aucun IBNR strictement positif
-        self.assertTrue(all(v <= 0 for v in cl['ibnr_par_annee']))
-        fig = g4_ibnr_par_annee({'chain_ladder': cl})
-        self.assertIsNotNone(fig, "g4_ibnr doit se générer, même planché à zéro")
+        self.assertTrue(all(v <= 0 for v in ibnr))
+        self.assertTrue(any(v < 0 for v in ibnr),
+                        "ce triangle ne porte plus de reprise — le test ne "
+                        "prouverait plus rien")
+        fig = g4_reserve_par_annee({'chain_ladder': cl})
+        self.assertIsNotNone(fig, "g4 doit se générer, même tout en reprise")
         self.assertTrue(hasattr(fig, 'to_html'))
-        print("    OK T20e g4_ibnr : portefeuille en reprise → figure générée, plus de crash")
+        barres = next(t for t in fig.data if str(t.name).startswith('IBNR'))
+        obs = [float(v) for v in barres.y]
+        self.assertEqual([round(v, 6) for v in obs], [round(v, 6) for v in ibnr],
+                         "les barres ne sont plus l'IBNR signé — un plancher "
+                         "est revenu")
+        self.assertEqual(sum(1 for v in obs if v < 0),
+                         sum(1 for v in ibnr if v < 0),
+                         "une année en reprise est affichée à zéro")
+        print(f"    OK T20e g4 : portefeuille en reprise → figure générée, et "
+              f"{sum(1 for v in obs if v < 0)} années tracées NÉGATIVES")
 
     def test_flags_desactivent_toujours(self):
         """Les deux drapeaux (nouveau et alias de compat) coupent bien la génération."""

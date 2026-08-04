@@ -29,6 +29,7 @@ import numpy as np
 # Formatage du loss ratio : source unique, pour qu'une méthode non calculée
 # n'apparaisse jamais comme un loss ratio de 0 %.
 from .methodes_be import ORDRE_AFFICHAGE, libelle, reserve
+from .n2_hypotheses_clm import lignes_correlations_h1
 from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
 from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
 from .n2_hypotheses_munich import lignes_hypotheses_munich
@@ -487,7 +488,8 @@ def _ong4_methodes(wb, n3, n4):
     pcts = [
         ("P75 — Provision prudentielle (composé)", n4['reserve_p75']),
         ("P90 — Provision stress test (composé)",  n4['reserve_p90']),
-        ("P99.5 — SCR provisions (composé)",       n4['reserve_p99_5']),
+        # ⚠️ Règle 2 du lot C3b : un percentile se nomme par son percentile.
+        ("P99.5 — Provision extrême (composé)",    n4['reserve_p99_5']),
         ("σ composé",                              n4.get('sigma_total_compose', n4['sigma_mack'])),
     ]
     for i, (lbl, val) in enumerate(pcts):
@@ -660,15 +662,53 @@ def _ong6_hypotheses(wb, n2, n4):
             c.border    = _border_thin()
         _row_h(ws, 3+i, 30)
 
+    # ⚠️ LES BLOCS SUIVANTS ÉTAIENT ÉCRITS À DES LIGNES EN DUR — 8 ET 13 —
+    # ALORS QUE LE TABLEAU DES HYPOTHÈSES EN OCCUPE 17 (lot C3b).
+    # « DÉCISION MÉTHODOLOGIQUE » écrasait les lignes 8 à 11 et « ALERTES »
+    # les lignes 13 à 16 : HUIT hypothèses sur dix-sept disparaissaient de
+    # l'onglet, en silence. Dont BFCC-H4, BFCC-H5 et BFCC-H6 — LES TROIS
+    # HYPOTHÈSES BLOQUANTES, celles qui peuvent exclure Bornhuetter-Ferguson
+    # ou Cape Cod du Best Estimate. La feuille qui s'appelle « Validation des
+    # hypothèses » détruisait précisément les hypothèses qui décident.
+    # Un curseur remplace les constantes : le nombre d'hypothèses peut varier
+    # sans que rien ne se recouvre.
+    ligne = 3 + len(rangs) + 1
+
+    # Le détail de H1, colonne par colonne — remplace le graphique g8, retiré
+    # au même lot. Ces corrélations n'atteignaient AUCUN livrable.
+    detail_h1 = lignes_correlations_h1(n2)
+    if detail_h1:
+        _titre_section(ws, ligne, 1,
+                       "H1 — CORRÉLATIONS DE SPEARMAN, COLONNE PAR COLONNE", 5)
+        for j, h in enumerate(["Colonnes", "|Corrélation|", "Seuil",
+                               "Significative", "Verdict"]):
+            _header(ws, ligne + 1, j + 1, h, width=[22, 14, 10, 14, 16][j])
+        for i, d in enumerate(detail_h1):
+            vals = [d['colonnes'],
+                    '—' if d['corr_abs'] is None else round(d['corr_abs'], 4),
+                    round(d['seuil'], 2),
+                    'oui' if d['significatif'] else 'non',
+                    d['statut']]
+            for j, val in enumerate(vals):
+                c = ws.cell(row=ligne + 2 + i, column=j + 1, value=val)
+                c.font = _font(bold=(j == 0),
+                               color=VERT_S2 if (j == 4 and d['ok'])
+                               else ROUGE_S2 if j == 4 else NOIR, size=10)
+                c.fill = _fill('EAF3DE' if d['ok'] else 'FCEBEB')
+                c.alignment = _align(h='left' if j == 0 else 'center')
+                c.border = _border_thin()
+        ligne += 2 + len(detail_h1) + 1
+
     # Décision méthodologique
-    _titre_section(ws, 8, 1, "DÉCISION MÉTHODOLOGIQUE", 5)
+    _titre_section(ws, ligne, 1, "DÉCISION MÉTHODOLOGIQUE", 5)
     for i, (lbl, val) in enumerate([
         ("Méthode CL retenue",     n2.get('methode_cl_retenue','—')),
         ("Méthode recommandée",    n2.get('methode_recommandee','—')),
         ("Statut global",          n2.get('statut_global','—')),
     ]):
-        _kpi(ws, 9+i, 1, lbl, val, None,
+        _kpi(ws, ligne + 1 + i, 1, lbl, val, None,
              n2.get('statut_global') if lbl == "Statut global" else None)
+    ligne += 5
 
     # ⚠️ LES ALERTES DE JUGEMENT, PAS SEULEMENT CELLES DE N2 (lot C1).
     # Cette feuille lisait `n2['alertes']` et elle seule. Or les alertes du
@@ -680,7 +720,7 @@ def _ong6_hypotheses(wb, n2, n4):
     # format ouvert. N4 les reprend déjà toutes, N2 comprises.
     alertes = n4.get('alertes') or n2.get('alertes', [])
     if alertes:
-        _titre_section(ws, 13, 1, "ALERTES", 5)
+        _titre_section(ws, ligne, 1, "ALERTES", 5)
         # ⚠️ LES ACCENTS NE SONT PLUS MANGÉS (lot C1). Un
         # `encode('ascii', 'ignore')` rendait « Années [9] : FILET DE SÉCURITÉ
         # déclenché » en « Annes [9] : FILET DE SCURIT dclench ». openpyxl écrit
@@ -691,13 +731,14 @@ def _ong6_hypotheses(wb, n2, n4):
         for i, a in enumerate(alertes[:6]):
             clean = ''.join(c for c in str(a)
                             if c.isprintable() and ord(c) < 0x1F000).strip()
-            c = ws.cell(row=14+i, column=1, value=clean)
+            c = ws.cell(row=ligne + 1 + i, column=1, value=clean)
             c.font      = _font(color=AMBRE_S2, size=9)
             c.fill      = _fill('FAEEDA')
             c.alignment = _align(wrap=True)
             c.border    = _border_thin()
-            ws.merge_cells(start_row=14+i, start_column=1, end_row=14+i, end_column=5)
-            _row_h(ws, 14+i, 25)
+            ws.merge_cells(start_row=ligne + 1 + i, start_column=1,
+                           end_row=ligne + 1 + i, end_column=5)
+            _row_h(ws, ligne + 1 + i, 25)
 
 
 # =============================================================================
@@ -727,7 +768,7 @@ def _ong7_bootstrap(wb, n3):
         ("P75",                       boot.get('p75',0),         None,       "75ème percentile"),
         ("P90 — Stress test S2",      boot.get('p90',0),         None,       "90ème percentile"),
         ("P95",                       boot.get('p95',0),         None,       "95ème percentile"),
-        ("P99.5 — SCR provisions",    boot.get('p99_5',0),       None,       "99.5ème percentile (VaR S2)"),
+        ("P99.5 — Réserve extrême",   boot.get('p99_5',0),       None,       "99.5ème percentile (VaR S2)"),
     ]
 
     for i, (lbl, val, vs_be, note) in enumerate(rows):
@@ -788,10 +829,13 @@ def _ong_munich(wb, n3):
                                    [40, 20, 72])):
         _header(ws, 2, j + 1, h, width=w)
 
-    for i, (libelle, valeur, lecture) in enumerate(lignes):
-        alerte = str(libelle).startswith('⚠')
+    # ⚠️ Renomme au lot C3b : la variable de boucle masquait l'import
+    # `libelle` du referentiel (ruff F402). Inoffensif tant que cette fonction
+    # ne l'appelle pas -- un piege a la premiere edition qui l'appellerait.
+    for i, (intitule, valeur, lecture) in enumerate(lignes):
+        alerte = str(intitule).startswith('⚠')
         bg = 'FDE9E7' if alerte else (BLANC if i % 2 == 0 else GRIS_CLAIR)
-        for j, v in enumerate((libelle, valeur, lecture)):
+        for j, v in enumerate((intitule, valeur, lecture)):
             c = ws.cell(row=3 + i, column=j + 1, value=v)
             c.font      = _font(bold=(j == 0 or alerte), size=10)
             c.fill      = _fill(bg)
@@ -983,7 +1027,7 @@ def _ong10_sensibilites(wb, n4):
         'boot_ic_inf':               'Bootstrap IC 95% — Borne basse',
         'boot_ic_sup':               'Bootstrap IC 95% — Borne haute',
         'boot_p90':                  'Bootstrap P90',
-        'boot_p99_5':                'Bootstrap P99.5 (SCR)',
+        'boot_p99_5':                'Bootstrap P99.5',
     }
     interp_map = {
         'sans_chain_ladder':         'Sensibilité à la méthode CL',
@@ -993,7 +1037,7 @@ def _ong10_sensibilites(wb, n4):
         'boot_ic_inf':               'Scénario favorable (2.5th percentile)',
         'boot_ic_sup':               'Scénario défavorable (97.5th percentile)',
         'boot_p90':                  'Provision stress test (90th percentile)',
-        'boot_p99_5':                'SCR provisions — extrême (99.5th)',
+        'boot_p99_5':                'Réserve au P99,5 — scénario extrême',
     }
 
     # Trier par amplitude

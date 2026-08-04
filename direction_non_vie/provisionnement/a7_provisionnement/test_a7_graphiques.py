@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 =============================================================================
- A7 Ibrahim — le filet des 14 graphiques (lot C2)
+ A7 Ibrahim — le filet des graphiques (lot C2, triage au lot C3b)
 =============================================================================
 
  ⚠️ POURQUOI CE FICHIER EXISTE.
@@ -16,12 +16,19 @@
  RECALCULE la série attendue depuis la source, il ne relit pas la figure.
 
  CE FILET N'EST PAS UN CONSTAT DE CONFORMITÉ GÉNÉRALE. L'audit a trouvé trois
- défauts, et ils sont ici aussi — écrits comme des assertions de ce qui DEVRAIT
- être vrai, marquées `@unittest.expectedFailure`. Le marqueur se démonte tout
- seul : le jour où le lot C3 corrige le défaut, le test réussit alors qu'on
- attendait un échec, et unittest fait ÉCHOUER la campagne (vérifié :
- `wasSuccessful()` rend False sur un `unexpectedSuccess`). Impossible de
- corriger le code et d'oublier le marqueur.
+ défauts, écrits ici comme des assertions de ce qui DEVRAIT être vrai et
+ marquées `@unittest.expectedFailure`. Le marqueur se démonte tout seul quand
+ le défaut est CORRIGÉ : le test réussit alors qu'on attendait un échec, et
+ unittest fait ÉCHOUER la campagne (vérifié : `wasSuccessful()` rend False sur
+ un `unexpectedSuccess`).
+
+ ⚠️ ET IL NE SE DÉMONTE PAS QUAND LE SUJET EST SUPPRIMÉ — mesuré : un
+ `KeyError` passe pour l'échec attendu, en silence. Les trois défauts ont
+ disparu de trois façons différentes, et c'est instructif :
+   · g5 et g11 CORRIGÉS au lot C3a — les marqueurs sont tombés d'eux-mêmes ;
+   · g7 SUPPRIMÉ au lot C3b — c'est le verrou de CATALOGUE qui a échoué et
+     forcé le retrait du test devenu orphelin.
+ Un marqueur ne suffit donc pas : il lui faut un verrou de périmètre à côté.
 =============================================================================
 """
 
@@ -32,14 +39,20 @@ import numpy as np
 from direction_non_vie.provisionnement.a7_provisionnement.agent import (
     AgentA7Provisionnement)
 from direction_non_vie.provisionnement.a7_provisionnement.test_a7_ibrahim import (
-    GENINS)
+    GENINS, _TRI_RECOURS_FORT)
 
 #: Le catalogue, dans l'ordre de `generer_graphiques`.
+#:
+#: ⚠️ ILS ÉTAIENT QUATORZE JUSQU'AU LOT C3b, LE TRIAGE LES A RAMENÉS À DIX.
+#: g7 (donut SCR) et g13 (le triangle une troisième fois) sont retirés, g8
+#: devient un tableau, et g11 est fondu dans g4. C'est ce verrou-ci qui a
+#: forcé la mise à jour du fichier : `expectedFailure` avale une SUPPRESSION
+#: en silence (mesuré — un `KeyError` y passe sans bruit), donc le marqueur
+#: de g7 ne pouvait pas se démonter tout seul. Le catalogue, lui, tombe.
 CATALOGUE = (
-    'g1_heatmap', 'g2_cadences', 'g3_facteurs_cl', 'g4_ibnr',
-    'g5_convergence', 'g6_bootstrap', 'g7_scr', 'g8_h1', 'g9_h2',
-    'g10_h3', 'g11_ultimates', 'g12_sensibilites', 'g13_paiements',
-    'g14_backtesting',
+    'g1_heatmap', 'g2_cadences', 'g3_facteurs_cl', 'g4_reserve_annee',
+    'g5_convergence', 'g6_bootstrap', 'g9_h2', 'g10_h3',
+    'g12_sensibilites', 'g14_backtesting',
 )
 
 _CACHE = {}
@@ -57,6 +70,14 @@ def _run(avec_primes):
         source=C, mode_declare='cumule', generer_graphiques=True,
         generer_word=False, n_sim_bootstrap=60, seed=42, **kw)
     return _CACHE[avec_primes]
+
+
+def _run_triangle(triangle, **kw):
+    """Un run sur un AUTRE triangle — GenIns ne porte aucune reprise."""
+    src = np.asarray(triangle, dtype=float)
+    return AgentA7Provisionnement(verbose=False).run(
+        source=src, mode_declare='cumule', generer_graphiques=True,
+        generer_word=False, n_sim_bootstrap=60, seed=42, **kw)
 
 
 def _figures(avec_primes=True):
@@ -98,13 +119,14 @@ def _f(seq):
 class T1_Le_Catalogue_Est_Clos(unittest.TestCase):
     """Un 15ᵉ graphique ne peut pas apparaître sans passer par ce fichier."""
 
-    def test_les_quatorze_sont_produits_et_seulement_eux(self):
+    def test_les_dix_sont_produits_et_seulement_eux(self):
         g, *_ = _figures()
         self.assertEqual(
             tuple(sorted(g)), tuple(sorted(CATALOGUE)),
             'catalogue modifié — épingle le nouveau graphique à sa source '
             'avant de l\'ajouter')
-        print('    OK C2-0 les 14 graphiques, et seulement eux')
+        print('    OK C2-0 les %d graphiques, et seulement eux'
+              % len(CATALOGUE))
 
     def test_g10_est_le_seul_a_pouvoir_manquer_et_c_est_correct(self):
         """⚠️ LE BON COMPORTEMENT FACE À UNE MÉTHODE INDISPONIBLE.
@@ -112,16 +134,16 @@ class T1_Le_Catalogue_Est_Clos(unittest.TestCase):
         Sans primes, Bornhuetter-Ferguson n'existe pas. `g10_h3`, qui trace
         son loss ratio, ne se rabat PAS sur zéro : il ne se produit pas du
         tout, et l'orchestrateur le journalise en « pas de données ».
-        C'est le contre-exemple exact de g5 et g11 (voir T3) — la bonne
-        réponse existe déjà dans le même fichier.
+        C'était le contre-exemple de g5 et g11 avant le lot C3a ; c'est
+        désormais le motif partagé, `methodes_be.disponible`.
         """
         g, _, _, n3, _ = _figures(avec_primes=False)
         self.assertFalse(n3['bf']['disponible'])
         self.assertEqual(sorted(set(CATALOGUE) - set(g)), ['g10_h3'],
                          'la liste des graphiques absents sans exposition a '
                          'changé')
-        print('    OK C2-0b sans exposition : 13/14, g10 s\'efface au lieu de '
-              'tracer zéro')
+        print('    OK C2-0b sans exposition : %d/%d, g10 s\'efface au lieu '
+              'de tracer zéro' % (len(g), len(CATALOGUE)))
 
 
 # =============================================================================
@@ -177,15 +199,67 @@ class T2_Chaque_Graphique_Est_Epingle(unittest.TestCase):
         print('    OK C2-3 g3 : %d barres == n3.chain_ladder.facteurs'
               % len(att))
 
-    def test_g4_l_ibnr_et_son_cumul(self):
+    def test_g4_la_reserve_par_annee_avec_son_sigma(self):
+        """g4 fusionne l'ancien g4 et l'ancien g11, et porte σ (lot C3b).
+
+        Trois choses vérifiées ici, dont deux qui n'existaient pas avant :
+        l'IBNR est SIGNÉ (l'ancien traçait `max(v, 0)`, une année en reprise
+        s'affichait à zéro), σ par année est présent, et les ultimes de chaque
+        méthode disponible sont exacts.
+        """
         g, _, _, n3, _ = _figures()
-        att = _f(n3['chain_ladder']['ibnr_par_annee'])
-        obs = _f(_tr(g['g4_ibnr'], 'IBNR par année').y)
-        np.testing.assert_allclose(obs, att, rtol=1e-9)
-        cum = _f(_tr(g['g4_ibnr'], 'IBNR cumulé').y)
-        np.testing.assert_allclose(cum, np.cumsum(att), rtol=1e-9)
-        self.assertAlmostEqual(cum[-1], sum(att), places=2)
-        print('    OK C2-4 g4 : barres == ibnr_par_annee, courbe == leur cumul')
+        fig = g['g4_reserve_annee']
+        ibnr = _f(n3['chain_ladder']['ibnr_par_annee'])
+        barres = _tr(fig, 'IBNR (Chain Ladder)')
+        np.testing.assert_allclose(_f(barres.y), ibnr, rtol=1e-9)
+        np.testing.assert_allclose(
+            _f(barres.error_y.array),
+            _f(n3['mack']['sigma_par_annee']), rtol=1e-9,
+            err_msg='la barre d\'erreur n\'est pas σ par année de Mack')
+        diag = _f(n3['chain_ladder']['last_diagonale'])
+        np.testing.assert_allclose(_f(_tr(fig, 'Payé à date').y), diag,
+                                   rtol=1e-9)
+        for lbl, cle in (('Ultime Chain Ladder', 'chain_ladder'),
+                         ('Ultime BF', 'bf'), ('Ultime Cape Cod', 'cape_cod')):
+            ult = _f(n3.get(cle, {}).get('ultimates'))
+            np.testing.assert_allclose(_f(_tr(fig, lbl).y), ult, rtol=1e-9,
+                                       err_msg='série %r' % lbl)
+        np.testing.assert_allclose(
+            [d + i for d, i in zip(diag, ibnr)],
+            _f(n3['chain_ladder']['ultimates']), rtol=1e-9,
+            err_msg='payé à date + IBNR ne fait plus l\'ultime')
+        print('    OK C2-4 g4 : IBNR signé ± σ Mack, payé à date et les '
+              'ultimes des %d méthodes disponibles'
+              % sum(1 for c in ('chain_ladder', 'bf', 'cape_cod')
+                    if n3.get(c, {}).get('ultimates')))
+
+    def test_g4_une_annee_en_reprise_descend_sous_l_axe(self):
+        """⚠️ LE DÉFAUT QUE L'ANCIEN g4 REPORTAIT PAR ÉCRIT.
+
+        Son code portait : « GARDE ANTI-PLANTAGE, PAS LA VRAIE CORRECTION […]
+        la vraie correction est prévue au chantier rapport ». Le `max(v, 0)`
+        affichait une année de recours à ZÉRO, et le cumul tracé dépassait la
+        réserve — 1 483 contre 1 076 mesurés. Le chantier rapport, c'est ici.
+        """
+        r = _run_triangle(_TRI_RECOURS_FORT)
+        g = r.get('graphiques') or {}
+        if not g:
+            self.skipTest('plotly absent')
+        ibnr = _f(r['n3']['chain_ladder']['ibnr_par_annee'])
+        self.assertTrue(any(v < 0 for v in ibnr),
+                        'ce triangle ne porte plus de reprise — le verrou '
+                        'ne prouverait plus rien')
+        obs = _f(_tr(g['g4_reserve_annee'], 'IBNR (Chain Ladder)').y)
+        np.testing.assert_allclose(obs, ibnr, rtol=1e-9)
+        self.assertEqual(sum(1 for v in obs if v < 0),
+                         sum(1 for v in ibnr if v < 0))
+        self.assertAlmostEqual(
+            sum(obs), float(r['n3']['chain_ladder']['reserve_totale']),
+            places=2,
+            msg='la somme des barres ne fait plus la réserve : un plancher '
+                'est revenu')
+        print('    OK C2-4b g4 : %d années en reprise tracées NÉGATIVES, et '
+              'la somme des barres == la réserve' % sum(1 for v in obs if v < 0))
 
     def test_g5_chaque_barre_est_la_reserve_de_sa_methode(self):
         g, _, _, n3, n4 = _figures()
@@ -214,37 +288,6 @@ class T2_Chaque_Graphique_Est_Epingle(unittest.TestCase):
         self.assertEqual(len(obs), len(att))
         np.testing.assert_allclose(sorted(obs), sorted(att), rtol=1e-9)
         print('    OK C2-6 g6 : %d tirages == bootstrap.distribution'
-              % len(att))
-
-    def test_g7_les_segments_sont_l_echelle_des_percentiles(self):
-        """Le SUBSTRAT du donut est juste — c'est son étiquette qui ment.
-
-        Voir `T3.test_g7_le_quatrieme_segment_devrait_etre_le_scr`.
-        """
-        g, _, _, _, n4 = _figures()
-        be = float(n4['best_estimate'])
-        p75 = float(n4.get('reserve_p75', be))
-        p90 = float(n4['reserve_p90'])
-        p995 = float(n4['reserve_p99_5'])
-        obs = _f(g['g7_scr'].data[0].values)
-        np.testing.assert_allclose(
-            obs, [be, p75 - be, p90 - p75, p995 - p90], rtol=1e-9)
-        self.assertAlmostEqual(sum(obs), p995, places=2,
-                               msg='le donut ne totalise plus le P99.5 — un '
-                                   'segment a été écrêté à 0 en silence')
-        print('    OK C2-7 g7 : les 4 segments == les incréments BE→P75→P90→'
-              'P99.5, total == P99.5')
-
-    def test_g8_les_barres_sont_les_correlations_de_h1(self):
-        g, _, n2, _, _ = _figures()
-        det = (n2.get('h1_independance') or {}).get('details') or []
-        att = [abs(float(d.get('corr', 0))) for d in det]
-        obs = _f(_tr(g['g8_h1'], '').y) if not att else _f(g['g8_h1'].data[0].y)
-        np.testing.assert_allclose(obs, att, rtol=1e-9)
-        self.assertTrue(all(v >= 0 for v in obs),
-                        'une corrélation est tracée signée alors que l\'axe '
-                        'annonce une valeur absolue')
-        print('    OK C2-8 g8 : %d barres == |corr| des colonnes de CLM-H1'
               % len(att))
 
     def test_g9_la_heatmap_est_l_ecart_au_facteur_agrege(self):
@@ -279,27 +322,6 @@ class T2_Chaque_Graphique_Est_Epingle(unittest.TestCase):
         print('    OK C2-10 g10 : ligne de référence == lr_apriori × 100 '
               '= %.2f' % (lr * 100.0))
 
-    def test_g11_les_courbes_sont_les_ultimates_publies(self):
-        g, _, _, n3, _ = _figures()
-        att = {
-            'Dernière diagonale': n3['chain_ladder']['last_diagonale'],
-            'Chain Ladder':       n3['chain_ladder']['ultimates'],
-            'BF':                 n3['bf']['ultimates'],
-            'Cape Cod':           n3['cape_cod']['ultimates'],
-        }
-        for lbl, src in att.items():
-            np.testing.assert_allclose(
-                _f(_tr(g['g11_ultimates'], lbl).y), _f(src), rtol=1e-9,
-                err_msg='série %r' % lbl)
-        diag = _f(att['Dernière diagonale'])
-        for lbl in ('Chain Ladder', 'BF', 'Cape Cod'):
-            ult = _f(_tr(g['g11_ultimates'], lbl).y)
-            self.assertTrue(
-                all(u >= d - 1.0 for u, d in zip(ult, diag)),
-                'la courbe %r passe SOUS la diagonale déjà payée' % lbl)
-        print('    OK C2-11 g11 : 4 séries == les ultimates publiés, aucune '
-              'sous la diagonale')
-
     def test_g12_le_tornado_est_horizontal_et_mesure_les_ecarts_au_be(self):
         g, _, _, _, n4 = _figures()
         be = float(n4['best_estimate'])
@@ -315,21 +337,6 @@ class T2_Chaque_Graphique_Est_Epingle(unittest.TestCase):
                          'les barres ne sont pas les écarts au BE')
         print('    OK C2-12 g12 : %d écarts horizontaux == sensibilites − BE'
               % len(obs))
-
-    def test_g13_chaque_courbe_est_une_ligne_du_triangle(self):
-        g, C, _, _, _ = _figures()
-        n, m = C.shape
-        for i in range(n):
-            k = min(n - i - 1, m - 1)
-            obs = _f(_tr(g['g13_paiements'], str(i)).y)
-            np.testing.assert_allclose(obs, _f(C[i, :k + 1]), rtol=1e-9,
-                                       err_msg='ligne %d du triangle' % i)
-            self.assertEqual(
-                obs, sorted(obs),
-                'la courbe %d décroît : un cumulé qui recule doit venir d\'un '
-                'recours, pas d\'un tracé' % i)
-        print('    OK C2-13 g13 : %d courbes == les lignes du triangle cumulé'
-              % n)
 
     def test_g14_le_backtesting_est_l_ecart_projete_observe(self):
         g, _, _, n3, _ = _figures()
@@ -353,40 +360,25 @@ class T2_Chaque_Graphique_Est_Epingle(unittest.TestCase):
 #  T3 — LES DÉFAUTS CONSTATÉS EN C2, NON CORRIGÉS ICI
 # =============================================================================
 
-class T3_Defauts_Constates_A_Corriger_En_C3(unittest.TestCase):
-    """⚠️ Chaque test énonce ce qui DEVRAIT être vrai.
+class T3_Les_Trois_Defauts_De_L_Audit_C2(unittest.TestCase):
+    """⚠️ LES TROIS DÉFAUTS DE L'AUDIT C2, ET LEURS TROIS SORTS.
 
-    Le marqueur `expectedFailure` se démonte tout seul : quand le correctif
-    arrive, le test réussit, unittest le compte en `unexpectedSuccess` et la
-    campagne ÉCHOUE tant que le marqueur n'est pas retiré.
+    Ils étaient écrits comme des assertions de ce qui DEVRAIT être vrai,
+    marquées `@unittest.expectedFailure`. Aucun marqueur ne subsiste, et les
+    trois chemins pour y arriver n'ont pas été les mêmes :
 
-    ⚠️ LE DISPOSITIF A FONCTIONNÉ, ET C'EST ICI QU'ON LE VOIT. Le lot C3a a
-    corrigé les deux faux zéros en faisant consommer aux livrables le
-    référentiel `methodes_be` et sa garde `disponible` : la campagne est
-    passée au rouge avec « unexpected successes=2 », et les deux marqueurs
-    ont dû être retirés. Ils l'ont été — les deux tests ci-dessous sont
-    désormais des verrous ordinaires.
+      · g5 et g11, CORRIGÉS au lot C3a. Le dispositif a fonctionné seul : la
+        campagne est passée au rouge avec « unexpected successes=2 » et les
+        marqueurs ont dû être retirés. Les deux tests ci-dessous sont
+        désormais des verrous ordinaires.
 
-    RESTE UN MARQUEUR : g7, dont l'étiquette sera réglée au lot C3b par le
-    RETRAIT du graphique. ⚠️ ET CELUI-LÀ NE SE DÉMONTERA PAS TOUT SEUL :
-    `expectedFailure` avale une erreur autant qu'un échec (vérifié — un
-    `KeyError` y passe en silence). C'est `T1.test_les_quatorze_sont_produits`
-    qui tombera quand le catalogue passera à 11, et forcera son retrait.
+      · g7, SUPPRIMÉ au lot C3b — et là le dispositif N'AURAIT PAS SUFFI.
+        `expectedFailure` avale une erreur autant qu'un échec : le `KeyError`
+        d'un graphique disparu serait passé pour l'échec attendu, en silence.
+        C'est le verrou de CATALOGUE de T1 qui a échoué au passage de 14 à 10
+        et forcé le retrait du test orphelin. Un marqueur a besoin d'un verrou
+        de périmètre à côté de lui.
     """
-
-    @unittest.expectedFailure
-    def test_g7_le_quatrieme_segment_devrait_etre_le_scr(self):
-        """GRAVITÉ 1 — le donut affiche DEUX « SCR » qui diffèrent de 33 %.
-
-        Le segment porte l'étiquette « SCR (P99.5) » mais vaut P99.5 − P90,
-        un INCRÉMENT de l'échelle des percentiles. Le vrai SCR de l'article
-        115 (3·σ·V) est affiché au centre du MÊME donut, sous le MÊME mot.
-        """
-        g, _, _, _, n4 = _figures()
-        p = g['g7_scr'].data[0]
-        i = list(p.labels).index('SCR (P99.5)')
-        self.assertAlmostEqual(float(p.values[i]),
-                               float(n4['scr']['scr_provisions']), places=2)
 
     def test_g5_une_methode_indisponible_ne_devrait_pas_valoir_zero_euro(self):
         """CORRIGÉ AU LOT C3a — le marqueur `expectedFailure` a été retiré.
@@ -410,22 +402,25 @@ class T3_Defauts_Constates_A_Corriger_En_C3(unittest.TestCase):
             self.fail('%r tracé à %s € alors que la méthode est indisponible'
                       % (lbl, _f(t.y)))
 
-    def test_g11_une_methode_indisponible_ne_devrait_pas_etre_une_ligne_a_zero(self):
-        """CORRIGÉ AU LOT C3a — le marqueur `expectedFailure` a été retiré.
+    def test_une_methode_indisponible_ne_devrait_pas_etre_une_ligne_a_zero(self):
+        """CORRIGÉ AU LOT C3a, ET LE SUJET A SUIVI LA FUSION AU LOT C3b.
 
-        Sur un graphique « ultimates vs diagonale », deux séries plates à zéro
-        affirmaient des ultimes INFÉRIEURS aux montants déjà payés. La liste
-        `n3['bf']['ultimates']` n'est pas VIDE quand BF est indisponible :
-        elle est pleine de zéros, donc le `if ult:` la laissait passer. La
-        garde porte maintenant sur `disponible()`, pas sur la longueur.
+        Le défaut était dans g11 : deux séries plates à zéro affirmaient des
+        ultimes INFÉRIEURS aux montants déjà payés. `n3['bf']['ultimates']`
+        n'est pas VIDE quand BF est indisponible — elle est pleine de zéros,
+        donc le `if ult:` la laissait passer. La garde porte sur
+        `disponible()`, pas sur la longueur.
+
+        g11 a été fondu dans g4 au lot C3b : le verrou vise le graphique
+        fusionné, parce que c'est le sujet qui compte, pas le nom du support.
         """
         g, _, _, n3, _ = _figures(avec_primes=False)
         self.assertFalse(n3['cape_cod']['disponible'])
-        for lbl in ('BF', 'Cape Cod'):
+        for lbl in ('Ultime BF', 'Ultime Cape Cod'):
             try:
-                t = _tr(g['g11_ultimates'], lbl)
+                t = _tr(g['g4_reserve_annee'], lbl)
             except AssertionError:
-                continue
+                continue          # absente : c'est la bonne réponse
             self.assertTrue(any(v for v in _f(t.y)),
                             '%r est une ligne plate à zéro' % lbl)
 

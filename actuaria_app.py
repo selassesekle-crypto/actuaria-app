@@ -1318,12 +1318,14 @@ def _validation_agent(ak):
                     raise ValueError(f"Triangle invalide shape={_C_val.shape}")
                 _figs_val = _gen_g(_C_val, _n2_val, _n3_val, _r_val.get("n4", {}))
                 for _gnom, _gtitle in [
-                    ("g8_h1",           "H1 — Indépendance (corrélations Spearman)"),
+                    # ⚠️ g8 RETIRÉ AU LOT C3b — cinq barres remplacées par un
+                    # tableau (Excel, onglet Hypothèses) qui porte la
+                    # corrélation, le seuil, la significativité ET le verdict.
+                    # g11 fondu dans g4 au même lot.
                     ("g9_h2",           "H2 — Stabilité des facteurs de développement"),
                     ("g10_h3",          "H3 — Loss Ratio a priori vs référence marché"),
                     ("g14_backtesting", "Back-testing — Boni/Mali de liquidation"),
                     ("g3_facteurs_cl",  "Facteurs Chain Ladder ±2σ — outliers"),
-                    ("g11_ultimates",   "Ultimates projetés vs dernière diagonale"),
                     ("g12_sensibilites","Sensibilités du BE — Tornado Chart"),
                 ]:
                     _fig_v = _figs_val.get(_gnom)
@@ -4660,16 +4662,17 @@ Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non 
         except Exception as _eg:
             st.warning(f"Graphiques non disponibles : {_eg}")
 
-    # Graphiques page Résultats : les 6 graphiques décisionnels
+    # Graphiques page Résultats : les graphiques décisionnels
     _ORDRE_RES = [
+        # ⚠️ SUIT LE TRIAGE DU LOT C3b. g13 (le triangle une 3ᵉ fois) et g7
+        # (donut SCR) sont retirés ; g4 fusionne l'ancien g4 et g11 et porte
+        # desormais σ par année de survenance.
         ("g1_heatmap",       "◆ Triangle de développement cumulé"),
-        ("g13_paiements",    "◆ Paiements cumulés par année de survenance"),
-        ("g4_ibnr",          "◆ IBNR par année de survenance"),
+        ("g4_reserve_annee", "◆ Réserve par année de survenance — IBNR ± σ"),
         ("g14_backtesting",  "◆ Back-testing — Boni/Mali de liquidation"),
         ("g2_cadences",      "◆ Cadences cumulées — Chain Ladder"),
         ("g5_convergence",   "◆ Convergence des méthodes — Best Estimate S2"),
         ("g6_bootstrap",     "◆ Distribution Bootstrap ODP — Quantiles de réserve"),
-        ("g7_scr",           "◆ SCR Provisions — Décomposition (Art. 105 S2)"),
     ]
     for _gnom, _gtit in _ORDRE_RES:
         _fig = _figs_res.get(_gnom)
