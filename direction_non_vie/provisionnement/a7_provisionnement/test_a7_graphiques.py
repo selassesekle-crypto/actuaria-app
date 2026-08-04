@@ -354,11 +354,24 @@ class T2_Chaque_Graphique_Est_Epingle(unittest.TestCase):
 # =============================================================================
 
 class T3_Defauts_Constates_A_Corriger_En_C3(unittest.TestCase):
-    """⚠️ Chaque test énonce ce qui DEVRAIT être vrai. Il échoue aujourd'hui.
+    """⚠️ Chaque test énonce ce qui DEVRAIT être vrai.
 
-    Le marqueur `expectedFailure` se démonte tout seul : quand C3 corrige,
-    le test réussit, unittest le compte en `unexpectedSuccess` et la campagne
-    ÉCHOUE tant que le marqueur n'est pas retiré.
+    Le marqueur `expectedFailure` se démonte tout seul : quand le correctif
+    arrive, le test réussit, unittest le compte en `unexpectedSuccess` et la
+    campagne ÉCHOUE tant que le marqueur n'est pas retiré.
+
+    ⚠️ LE DISPOSITIF A FONCTIONNÉ, ET C'EST ICI QU'ON LE VOIT. Le lot C3a a
+    corrigé les deux faux zéros en faisant consommer aux livrables le
+    référentiel `methodes_be` et sa garde `disponible` : la campagne est
+    passée au rouge avec « unexpected successes=2 », et les deux marqueurs
+    ont dû être retirés. Ils l'ont été — les deux tests ci-dessous sont
+    désormais des verrous ordinaires.
+
+    RESTE UN MARQUEUR : g7, dont l'étiquette sera réglée au lot C3b par le
+    RETRAIT du graphique. ⚠️ ET CELUI-LÀ NE SE DÉMONTERA PAS TOUT SEUL :
+    `expectedFailure` avale une erreur autant qu'un échec (vérifié — un
+    `KeyError` y passe en silence). C'est `T1.test_les_quatorze_sont_produits`
+    qui tombera quand le catalogue passera à 11, et forcera son retrait.
     """
 
     @unittest.expectedFailure
@@ -375,14 +388,17 @@ class T3_Defauts_Constates_A_Corriger_En_C3(unittest.TestCase):
         self.assertAlmostEqual(float(p.values[i]),
                                float(n4['scr']['scr_provisions']), places=2)
 
-    @unittest.expectedFailure
     def test_g5_une_methode_indisponible_ne_devrait_pas_valoir_zero_euro(self):
-        """GRAVITÉ 2 — sans primes, BF et Cape Cod sont tracés à « 0€ ».
+        """CORRIGÉ AU LOT C3a — le marqueur `expectedFailure` a été retiré.
 
-        `res_map.get(m, 0)` transforme « non calculable faute d'exposition »
+        `res_map.get(m, 0)` transformait « non calculable faute d'exposition »
         en « réserve de zéro euro », étiquette « 0€ » imprimée sur la barre.
-        Le scénario sans primes est celui de l'oracle GenIns : ce n'est pas
+        Le scénario sans primes est celui de l'oracle GenIns : ce n'était pas
         un cas de bord.
+
+        g5 lit désormais `methodes_be.reserve()`, qui rend **None** et non
+        zéro : une méthode exclue mais CALCULÉE reste tracée en grisé — c'est
+        une information — et une méthode absente n'a plus de barre.
         """
         g, _, _, n3, _ = _figures(avec_primes=False)
         self.assertFalse(n3['bf']['disponible'])
@@ -394,12 +410,14 @@ class T3_Defauts_Constates_A_Corriger_En_C3(unittest.TestCase):
             self.fail('%r tracé à %s € alors que la méthode est indisponible'
                       % (lbl, _f(t.y)))
 
-    @unittest.expectedFailure
     def test_g11_une_methode_indisponible_ne_devrait_pas_etre_une_ligne_a_zero(self):
-        """GRAVITÉ 2 — sans primes, BF et Cape Cod sont deux droites à 0.
+        """CORRIGÉ AU LOT C3a — le marqueur `expectedFailure` a été retiré.
 
         Sur un graphique « ultimates vs diagonale », deux séries plates à zéro
-        affirment des ultimes INFÉRIEURS aux montants déjà payés.
+        affirmaient des ultimes INFÉRIEURS aux montants déjà payés. La liste
+        `n3['bf']['ultimates']` n'est pas VIDE quand BF est indisponible :
+        elle est pleine de zéros, donc le `if ult:` la laissait passer. La
+        garde porte maintenant sur `disponible()`, pas sur la longueur.
         """
         g, _, _, n3, _ = _figures(avec_primes=False)
         self.assertFalse(n3['cape_cod']['disponible'])

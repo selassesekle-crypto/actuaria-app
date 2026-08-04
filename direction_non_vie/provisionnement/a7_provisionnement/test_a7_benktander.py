@@ -20,8 +20,9 @@
 
  La duplication serait PARTIELLE et VARIABLE PAR ANNÉE — α dépend de la
  maturité — donc invisible à la lecture. D'où un verrou structurel, sur
- l'arbre syntaxique de `n4_best_estimate.py`, et non une intention écrite
- dans un commentaire.
+ l'arbre syntaxique du RÉFÉRENTIEL DES MÉTHODES, et non une intention écrite
+ dans un commentaire. Ce référentiel a quitté `n4_best_estimate.py` pour
+ `methodes_be.py` au lot C3a : GB-2 a changé de cible, pas de sujet.
 =============================================================================
 """
 
@@ -54,25 +55,43 @@ class T1_Verrou_Perimetre(unittest.TestCase):
     def test_la_table_des_methodes_est_un_litteral_de_trois_cles(self):
         """Contrôle sur l'ARBRE SYNTAXIQUE, pas sur l'objet en mémoire.
 
-        Un test à l'exécution ne verrait pas un `_CLES_N3['benktander'] = …`
-        ajouté plus loin, ni une construction par compréhension. Ici on exige
-        que la table soit un dictionnaire LITTÉRAL de trois clés constantes :
-        il devient impossible d'y glisser une quatrième méthode sans que ce
-        test tombe.
+        Un test à l'exécution ne verrait pas une quatrième méthode ajoutée
+        plus loin, ni une construction par compréhension. Ici on exige que le
+        référentiel soit un dictionnaire LITTÉRAL : il devient impossible d'y
+        glisser une quatrième méthode du BE sans que ce test tombe.
+
+        ⚠️ CE TEST A CHANGÉ DE CIBLE AU LOT C3a, PAS DE SUJET. Le référentiel
+        a quitté `n4_best_estimate.py` pour `methodes_be.py` — il était
+        recopié six fois dans la couche N5, et chaque copie publiait un
+        « 0 € » sur une méthode non calculable.
+
+        ET IL EST PLUS FORT QU'AVANT : l'ancienne version n'inspectait qu'UN
+        fichier, donc une SECONDE définition ailleurs lui était invisible —
+        exactement la maladie que C3a soigne. On balaie tout le paquet.
         """
-        arbre = ast.parse(inspect.getsource(N4))
-        litteraux = [n.value for n in arbre.body
-                     if isinstance(n, ast.Assign)
-                     for c in n.targets
-                     if isinstance(c, ast.Name) and c.id == '_CLES_N3']
-        self.assertEqual(len(litteraux), 1,
-                         "`_CLES_N3` doit être défini une fois et une seule")
-        self.assertIsInstance(litteraux[0], ast.Dict,
-                              "`_CLES_N3` doit rester un littéral")
-        cles = {k.value for k in litteraux[0].keys}
-        self.assertEqual(cles, METHODES_DU_BE)
-        print(f"    OK GB-2 `_CLES_N3` est un littéral de {len(cles)} clés — "
-              f"aucune quatrième méthode ne peut y entrer")
+        from pathlib import Path
+        paquet = Path(N4.__file__).resolve().parent
+        litteraux = []
+        for chemin in sorted(paquet.rglob('*.py')):
+            if ('__pycache__' in str(chemin)
+                    or chemin.name.startswith('test_')):
+                continue
+            arbre = ast.parse(io.open(chemin, encoding='utf-8').read())
+            litteraux += [(chemin.name, n.value) for n in arbre.body
+                          if isinstance(n, ast.Assign)
+                          for c in n.targets
+                          if isinstance(c, ast.Name) and c.id == '_METHODES']
+        self.assertEqual(
+            len(litteraux), 1,
+            f"`_METHODES` doit être défini une fois et une seule dans le "
+            f"paquet — trouvé dans {[f for f, _ in litteraux]}")
+        fichier, noeud = litteraux[0]
+        self.assertIsInstance(noeud, ast.Dict,
+                              "`_METHODES` doit rester un littéral")
+        au_be = {m for m, v in ast.literal_eval(noeud).items() if v[3]}
+        self.assertEqual(au_be, METHODES_DU_BE)
+        print(f"    OK GB-2 `_METHODES` est un littéral unique ({fichier}) — "
+              f"{len(au_be)} méthodes au BE, aucune quatrième ne peut y entrer")
 
     def test_le_module_du_be_ignore_totalement_benktander(self):
         """N4 construit le Best Estimate : le mot ne doit pas y figurer."""

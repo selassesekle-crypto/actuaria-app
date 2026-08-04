@@ -85,6 +85,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 
 from .config.lob_config import get_lob_config, get_sigma_eiopa, reference_s2
+from .methodes_be       import _CLES_N3, _LIBELLE_METHODE
 from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
 from .config.rfr_eiopa  import (get_taux_rfr, DATE_COURBE,
                                 get_courbe_embarquee, diagnostic_peremption)
@@ -142,17 +143,12 @@ def s2_non_calculable(n4: Dict) -> bool:
 #  SÉLECTION PAR ANNÉE DE SURVENANCE  (lot B — remplace le gate par score)
 # =============================================================================
 
-#: Les trois méthodes qui construisent le Best Estimate, avec la clé sous
-#: laquelle N3 expose leur IBNR par année. Elles CONSOMMENT TOUTES LE MÊME MOTIF
-#: de développement — prouvé au correctif f_cum, qui a déplacé BF de +2,2 % et
-#: Cape Cod de +3,2 % sans toucher Chain Ladder. Une colonne de facteurs
-#: invalidée les frappe donc ensemble : c'est pourquoi la couverture du motif
-#: est une propriété de l'ANNÉE, pas de la méthode.
-_CLES_N3 = {
-    'chain_ladder':         'chain_ladder',
-    'bornhuetter_ferguson': 'bf',
-    'cape_cod':             'cape_cod',
-}
+#: ⚠️ `_CLES_N3` EST IMPORTÉ DE `methodes_be` DEPUIS LE LOT C3a — il était
+#: recopié six fois dans la couche N5, et chacune des copies produisait un
+#: « 0 € » sur une méthode non calculable. Le référentiel y explique pourquoi
+#: les trois méthodes du BE partagent le même motif de développement.
+#: `PORTEURS_DE_CIBLE`, juste dessous, RESTE ici : c'est de la gouvernance,
+#: écrite tout entière en termes de « dans / hors `_CLES_N3` ».
 
 #: REGISTRE DES PORTEURS — LE VRAI LIVRABLE DU LOT « MACK ».
 #:
@@ -198,14 +194,10 @@ PORTEURS_DE_CIBLE = {
 }
 
 
-#: Libellé lisible d'une méthode — la trace et les messages ne doivent pas
-#: publier une clé technique là où l'actuaire attend un nom. Source unique
-#: pour ce module ; la couche N5 aura la sienne au lot C.
-_LIBELLE_METHODE = {
-    'chain_ladder':         'Chain Ladder',
-    'bornhuetter_ferguson': 'Bornhuetter-Ferguson',
-    'cape_cod':             'Cape Cod',
-}
+#: ⚠️ `_LIBELLE_METHODE` EST IMPORTÉ DE `methodes_be` DEPUIS LE LOT C3a. Son
+#: commentaire d'origine annonçait la dette : « Source unique pour ce module ;
+#: la couche N5 aura la sienne au lot C ». Elle n'en a pas eu une autre, elle
+#: partage désormais celle-ci.
 
 #: Conséquences EFFECTIVEMENT appliquées, telles que la trace les nomme. Ce
 #: sont des constantes et non des chaînes écrites sur place : la trace doit
@@ -1201,6 +1193,17 @@ class BestEstimateS2:
             # à l'autre, publier un chiffre unique serait trompeur.
             'methodes_incluses':     list(methodes_incluses.keys()),
             'methodes_exclues':      list(methodes_exclues.keys()),
+
+            # ⚠️ LE MOTIF ÉTAIT CALCULÉ PUIS JETÉ (lot C3a). `_admissibilite_
+            # globale` distingue « non calculée », « réserve nulle ou non
+            # finie » et « <HYPOTHÈSE> NON VALIDÉE » — et seule la LISTE des
+            # noms sortait. Le commentaire, faute de mieux, écrivait donc
+            # « [exclu — score insuffisant] » : un motif qui n'existe plus
+            # depuis que `scores_confiance` a disparu, et qui n'a jamais
+            # correspondu à aucun des trois cas réels. Jointure pure, aucun
+            # calcul neuf.
+            'methodes_exclues_motifs': {m: motif for m, (_, motif)
+                                        in methodes_exclues.items()},
             'poids':                 poids,
 
             # Sélection par année de survenance (lot B)

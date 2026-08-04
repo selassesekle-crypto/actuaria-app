@@ -25,6 +25,7 @@ import numpy as np
 
 # Source UNIQUE d'affichage des hypothèses de BF et Cape Cod : une hypothèse non
 # évaluée y ressort NON TESTABLE, jamais en valeur par défaut.
+from .methodes_be import ORDRE_AFFICHAGE, libelle, reserve
 from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
 from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
 from .n2_hypotheses_munich import lignes_hypotheses_munich
@@ -215,8 +216,7 @@ STRUCTURE OBLIGATOIRE EN 7 SECTIONS :
 # =============================================================================
 
 def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: str) -> str:
-    cl    = n3.get('chain_ladder', {});  mk  = n3.get('mack', {})
-    bf    = n3.get('bf', {});            cc  = n3.get('cape_cod', {})
+    mk    = n3.get('mack', {})
     clark = n3.get('clark', {});         bz  = n3.get('glm_apc', {})
     bt    = n3.get('backtesting', {});   sc  = n4.get('scr', {})
     h1    = n2.get('h1_independance', {}); h2 = n2.get('h2_stabilite', {})
@@ -248,10 +248,14 @@ def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: s
           for l in lignes_hypotheses_bootstrap(n2)],
         "",
         "=== RÉSULTATS ===",
-        f"Chain Ladder : {_f(cl.get('reserve_totale'))} | poids={_pct(pw.get('chain_ladder', 0)*100)}",
-        f"Mack 1993 : {_f(mk.get('reserve_best_estimate'))} | poids={_pct(pw.get('mack', 0)*100)}",
-        f"BF : {_f(bf.get('reserve_totale'))} | poids={_pct(pw.get('bornhuetter_ferguson', 0)*100)}",
-        f"Cape Cod : {_f(cc.get('reserve_totale'))} | poids={_pct(pw.get('cape_cod', 0)*100)}",
+        # ⚠️ LE FAUX ZÉRO, TROISIÈME FOYER (lot C3a). Ces quatre lignes
+        # lisaient `bf.get('reserve_totale')` sans garde : une méthode non
+        # calculable ressortait à « 0 € ». Le référentiel rend None, et le
+        # motif vient de N4.
+        *[f"{libelle(_m)} : "
+          f"{_f(reserve(n3, _m)) if reserve(n3, _m) is not None else n4.get('methodes_exclues_motifs', {}).get(_m, 'non calculée')}"
+          f" | poids={_pct(pw.get(_m, 0)*100)}"
+          for _m in ORDRE_AFFICHAGE],
         f"Clark LDF : {_f(clark.get('reserve_be_clark'))} | courbe={clark.get('courbe_choisie', '—')} | AIC={clark.get('aic_optimal', '—')}"
         + ('' if (clark.get('structure_monotone') or {}).get('compatible', True)
            else ' | NON PUBLIEE : structure incompatible (facteur de developpement < 1)'),
@@ -1116,8 +1120,7 @@ def lignes_clark_rapport(n2: Dict, n3: Dict) -> List[Dict[str, str]]:
 
 
 def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, audit_id, methode, statut, graphiques_html, actuaire_nom='', actuaire_numero_ia='') -> Dict:
-    cl    = n3.get('chain_ladder', {});  mk  = n3.get('mack', {})
-    bf    = n3.get('bf', {});            cc  = n3.get('cape_cod', {})
+    mk    = n3.get('mack', {})
     clark = n3.get('clark', {});         bz  = n3.get('glm_apc', {})
     bt    = n3.get('backtesting', {});   sc  = n4.get('scr', {})
     h1    = n2.get('h1_independance', {}); h2 = n2.get('h2_stabilite', {})
@@ -1232,12 +1235,11 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
             return '<span class="badge badge-ok">✓ Inclus</span>'
         return '<span class="badge badge-excl">⊘ Exclu</span>'
 
-    rows_m = [
-        ('Chain Ladder',         cl.get('reserve_totale'),         pw.get('chain_ladder', 0),         '—'),
-        ('Mack 1993',            mk.get('reserve_best_estimate'),  pw.get('mack', 0),                 '—'),
-        ('Bornhuetter-Ferguson', bf.get('reserve_totale'),         pw.get('bornhuetter_ferguson', 0), '—'),
-        ('Cape Cod',             cc.get('reserve_totale'),         pw.get('cape_cod', 0),             '—'),
-    ]
+    # ⚠️ LE FAUX ZÉRO, DANS LE LIVRABLE QUE C1 A PROMU (lot C3a). Le HTML
+    # publiait « Bornhuetter-Ferguson | 0 € | 0.0 % » sans exposition.
+    _motifs_m = n4.get('methodes_exclues_motifs', {})
+    rows_m = [(libelle(_m), reserve(n3, _m), pw.get(_m, 0), '—')
+              for _m in ORDRE_AFFICHAGE]
     tbl = (
         '<table class="premium"><thead><tr>'
         '<th>Méthode</th>'
@@ -1251,7 +1253,9 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         s_txt = str(score) + ' / 100' if score != '—' else '—'
         tbl += (
             '<tr><td class="label">' + nom + '</td>'
-            '<td class="right"><span class="mono">' + _f(res) + '</span></td>'
+            '<td class="right"><span class="mono">'
+            + (_f(res) if res is not None
+               else _motifs_m.get(nom, 'non calculée')) + '</span></td>'
             '<td class="center">' + _pct(pds * 100) + '</td>'
             '<td class="center">' + s_txt + '</td>'
             '<td class="center">' + _badge_statut(nom, pds) + '</td></tr>'
@@ -2184,8 +2188,7 @@ def export_word(n1, n2, n3, n4,
         statut  = n4.get('statut','AMBRE')
         narration, source = _generer_narration(n2, n3, n4, commentaire, lob, arr)
 
-        cl  = n3.get('chain_ladder',{});  mk = n3.get('mack',{})
-        bf  = n3.get('bf',{});            cc = n3.get('cape_cod',{})
+        mk  = n3.get('mack',{})
         sc  = n4.get('scr',{});           pw = n4.get('poids',{})
         bt  = n3.get('backtesting',{});   bz = n3.get('glm_apc',{})
         h1  = n2.get('h1_independance',{}); h2 = n2.get('h2_stabilite',{})
@@ -2293,12 +2296,19 @@ def export_word(n1, n2, n3, n4,
 
         _h('2. Résultats par méthode actuarielle'); _sep()
         _tbl(['Méthode','Réserve IBNR','Poids BE','Score','Statut'],
-             [['Chain Ladder',_f(cl.get('reserve_totale')),_pct(pw.get('chain_ladder',0)*100),
-               '—','✓ Inclus'],
-              ['Mack 1993',_f(mk.get('reserve_best_estimate')),_pct(pw.get('mack',0)*100),'—','σ (volatilité)'],
-              ['Bornhuetter-Ferguson',_f(bf.get('reserve_totale')),_pct(pw.get('bornhuetter_ferguson',0)*100),'—','✓ Inclus'],
-              ['Cape Cod',_f(cc.get('reserve_totale')),_pct(pw.get('cape_cod',0)*100),
-               '—','✓ Inclus'],
+             # ⚠️ DEUX MENSONGES ICI, PAS UN (lot C3a). Le « 0 € » d'une
+             # méthode non calculable, et surtout un « ✓ Inclus » ÉCRIT EN
+             # DUR : sans exposition, le Word affirmait que
+             # Bornhuetter-Ferguson était incluse au Best Estimate alors
+             # qu'elle en était exclue. Le statut se déduit du poids, comme
+             # dans le HTML.
+             [[libelle(_m),
+               (_f(reserve(n3, _m)) if reserve(n3, _m) is not None
+                else n4.get('methodes_exclues_motifs', {}).get(_m, 'non calculée')),
+               _pct(pw.get(_m, 0)*100), '—',
+               ('σ (volatilité)' if _m == 'mack'
+                else '✓ Inclus' if pw.get(_m, 0) > 0 else '⊘ Exclu')]
+              for _m in ORDRE_AFFICHAGE] + [
               ['BEST ESTIMATE (brut)',_f(BE),'100 %','—','→ A10 (actualisation)']],ws=[4.5,3.5,2.5,2.5,3.0])
 
         # Benktander — MÊME SOURCE que le HTML et l'Excel, comme Munich.

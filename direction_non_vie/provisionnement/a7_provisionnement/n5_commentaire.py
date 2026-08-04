@@ -40,6 +40,7 @@ from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
 from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
 from .n3.bf_cape_cod import libelle_loss_ratio
 from .n4_best_estimate import s2_non_calculable, MSG_S2_NON_CALCULABLE
+from .methodes_be import ORDRE_AFFICHAGE, libelle, reserve
 
 logger = logging.getLogger('actuaria.a7')
 
@@ -340,6 +341,10 @@ def _s3_hypotheses(n2: Dict) -> str:
 #  SECTION 4 — ANALYSE DES MÉTHODES
 # =============================================================================
 
+#: Pour que « Quatre méthodes » ne soit pas écrit quand il y en a deux.
+_NOMBRE_MOT = {2: 'Deux', 3: 'Trois', 4: 'Quatre'}
+
+
 def _s4_methodes(n3: Dict, n4: Dict) -> str:
     cl   = n3['chain_ladder']
     mack = n3['mack']
@@ -353,29 +358,51 @@ def _s4_methodes(n3: Dict, n4: Dict) -> str:
     bf_r  = bf.get('reserve_totale', 0)
     cc_r  = cc.get('reserve_totale', 0)
 
-    methodes_all = {'Chain Ladder': cl_r, 'Mack 1993': mk_r, 'BF': bf_r, 'Cape Cod': cc_r}
-    r_max  = max(methodes_all.values())
-    r_min  = min(methodes_all.values())
-    r_moy  = sum(methodes_all.values()) / len(methodes_all)
+    # ⚠️ LA DISPERSION ÉTAIT MESURÉE SUR LES ZÉROS (lot C3a). Sans exposition,
+    # BF et Cape Cod valaient 0 € et la fourchette s'étendait « de 0 € à
+    # 18 680 856 €, soit un écart de 200,0 % » — pendant que le même texte,
+    # deux paragraphes plus bas, annonçait « convergence excellente
+    # (CV = 0,0 %) », lu sur le CV de N4 qui ne compte que les méthodes
+    # retenues. Le document se contredisait dans une seule section. On ne
+    # mesure une dispersion que sur ce qui a été calculé.
+    _reserves = {m: reserve(n3, m) for m in ORDRE_AFFICHAGE}
+    _motifs   = n4.get('methodes_exclues_motifs', {})
+    methodes_all = {libelle(m): r for m, r in _reserves.items() if r is not None}
+    r_max  = max(methodes_all.values()) if methodes_all else 0
+    r_min  = min(methodes_all.values()) if methodes_all else 0
+    r_moy  = (sum(methodes_all.values()) / len(methodes_all)
+              if methodes_all else 0)
     cv_all = abs(r_max - r_min) / r_moy * 100 if r_moy > 0 else 0
 
     methodes_inc = n4.get('methodes_incluses', [])
     methodes_exc = n4.get('methodes_exclues', [])
     poids        = n4.get('poids', {})
 
-    label_map = {
-        'chain_ladder':'Chain Ladder', 'mack':'Mack 1993',
-        'bornhuetter_ferguson':'Bornhuetter-Ferguson', 'cape_cod':'Cape Cod',
-    }
-
-    lignes = [
-        f"Quatre méthodes actuarielles ont été calculées :",
-        f"  • Chain Ladder ({cl.get('methode','').split('(')[1].rstrip(')') if '(' in cl.get('methode','') else 'standard'}) : {_e(cl_r)}",
-        f"  • Mack 1993 (stochastique)                         : {_e(mk_r)}",
-        f"  • Bornhuetter-Ferguson (LR={libelle_loss_ratio(bf)}, {bf.get('source_lr','—')}) : {_e(bf_r)}",
-        f"  • Cape Cod (LR_CC={libelle_loss_ratio(cc, 'lr_cape_cod')})                    : {_e(cc_r)}",
-        "",
-    ]
+    # ⚠️ LE TEXTE ANNONÇAIT « Quatre méthodes ont été calculées » PUIS LISTAIT
+    # « Bornhuetter-Ferguson (LR=non calculée) : 0 € ». On compte ce qui a été
+    # calculé, et ce qui ne l'a pas été le dit avec SON motif — publié par N4
+    # depuis ce lot, au lieu d'être deviné.
+    _n_calc = len(methodes_all)
+    lignes = ["Une méthode actuarielle a été calculée :" if _n_calc == 1 else
+              f"{_NOMBRE_MOT.get(_n_calc, _n_calc)} méthodes actuarielles "
+              f"ont été calculées :"]
+    if _reserves['chain_ladder'] is not None:
+        lignes.append(
+            f"  • Chain Ladder ({cl.get('methode','').split('(')[1].rstrip(')') if '(' in cl.get('methode','') else 'standard'}) : {_e(cl_r)}")
+    if _reserves['mack'] is not None:
+        lignes.append(
+            f"  • Mack 1993 (stochastique)                         : {_e(mk_r)}")
+    if _reserves['bornhuetter_ferguson'] is not None:
+        lignes.append(
+            f"  • Bornhuetter-Ferguson (LR={libelle_loss_ratio(bf)}, {bf.get('source_lr','—')}) : {_e(bf_r)}")
+    if _reserves['cape_cod'] is not None:
+        lignes.append(
+            f"  • Cape Cod (LR_CC={libelle_loss_ratio(cc, 'lr_cape_cod')})                    : {_e(cc_r)}")
+    for _m, _r in _reserves.items():
+        if _r is None:
+            lignes.append(f"  • {libelle(_m)} : "
+                          f"{_motifs.get(_m, 'méthode indisponible')}")
+    lignes.append("")
 
     # ── Convergence ──────────────────────────────────────────────────────────
     lignes.append(
@@ -384,8 +411,10 @@ def _s4_methodes(n3: Dict, n4: Dict) -> str:
         f"Cette convergence est {_qualif_ecart(cv_all)}."
     )
 
+    # Un écart CL/BF ne se commente que si BF existe : sans exposition, ce
+    # paragraphe interprétait « un écart de 100,0 % » — l'écart à zéro.
     ecart_cl_bf = abs(cl_r - bf_r) / max(cl_r, 1e-9) * 100
-    if ecart_cl_bf > 10:
+    if _reserves['bornhuetter_ferguson'] is not None and ecart_cl_bf > 10:
         lignes.append(
             f"L'écart CL/BF de {_p(ecart_cl_bf)} mérite une attention "
             f"particulière. Il reflète l'influence de l'a priori BF "
@@ -486,11 +515,20 @@ def _s4_methodes(n3: Dict, n4: Dict) -> str:
     lignes += ["", "MÉTHODES DANS LE BE S2 :"]
     for m in methodes_inc:
         w = poids.get(m, 0)
-        r = {'chain_ladder':cl_r,'mack':mk_r,'bornhuetter_ferguson':bf_r,'cape_cod':cc_r}.get(m, 0)
-        lignes.append(f"  ✅ {label_map.get(m,m):30s} {_e(r):>18s}  poids={_p(w*100,0)}")
+        r = _reserves.get(m)
+        lignes.append(f"  ✅ {libelle(m):30s} "
+                      f"{_e(r if r is not None else 0):>18s}  "
+                      f"poids={_p(w*100,0)}")
     for m in methodes_exc:
-        r = {'chain_ladder':cl_r,'mack':mk_r,'bornhuetter_ferguson':bf_r,'cape_cod':cc_r}.get(m, 0)
-        lignes.append(f"  ❌ {label_map.get(m,m):30s} {_e(r):>18s}  [exclu — score insuffisant]")
+        # ⚠️ « [exclu — score insuffisant] » ÉTAIT TOUJOURS FAUX (lot C3a).
+        # `scores_confiance` a disparu au lot BFCC — `n4_best_estimate.py`
+        # l'écrit noir sur blanc : « PLUS AUCUN SCORE ». Les trois motifs
+        # réels sont « non calculée », « réserve nulle ou non finie » et
+        # « <HYPOTHÈSE> NON VALIDÉE » ; N4 les calculait et les jetait.
+        r = _reserves.get(m)
+        lignes.append(f"  ❌ {libelle(m):30s} "
+                      f"{(_e(r) if r is not None else '—'):>18s}  "
+                      f"[exclu — {_motifs.get(m, 'motif non publié')}]")
 
     return "\n".join(lignes)
 

@@ -41,6 +41,7 @@ from typing import Dict, List, Optional
 import numpy as np
 
 from .n2_hypotheses_bootstrap import libelle_phi_par_axe
+from .methodes_be import disponible, libelle, reserve
 
 logger = logging.getLogger('actuaria.a7')
 
@@ -64,7 +65,6 @@ ROUGE    = '#E74C3C'
 AMBRE    = '#F39C12'
 VIOLET   = '#9B59B6'
 CYAN     = '#1ABC9C'
-ROSE     = '#E91E8C'
 
 # Séquence de couleurs pour les années de survenance (style image fournie)
 COULEURS_ANNEES = [
@@ -177,7 +177,6 @@ def g2_cadences_developpement(
     C:              np.ndarray,
     facteurs_cum:   List[float],
     pct_dev:        List[float],
-    methode_cl:     str = 'standard',
 ) -> 'go.Figure':
     """
     Courbes de développement cumulé par année de survenance.
@@ -530,30 +529,19 @@ def g5_convergence_methodes(n3: Dict, n4: Dict) -> 'go.Figure':
     be_mack           = n3['mack']['reserve_best_estimate']
     sigma             = n3['mack']['sigma_total']
 
-    label_map = {
-        'chain_ladder':         'Chain Ladder',
-        'mack':                 'Mack 1993',
-        'bornhuetter_ferguson': 'Bornhuetter-Ferguson',
-        'cape_cod':             'Cape Cod',
-    }
-    res_map = {
-        'chain_ladder':         n3['chain_ladder']['reserve_totale'],
-        'mack':                 n3['mack']['reserve_best_estimate'],
-        'bornhuetter_ferguson': n3['bf']['reserve_totale'],
-        'cape_cod':             n3['cape_cod']['reserve_totale'],
-    }
-
     fig = go.Figure()
 
     # Méthodes incluses (couleurs vives)
     couleurs_inc = [BLEU, CYAN, VERT, VIOLET]
     for idx, m in enumerate(methodes_incluses):
+        r = reserve(n3, m)
+        if r is None:                 # ceinture : N4 n'inclut jamais une
+            continue                  # méthode non calculée (cf. `reserve`)
         c = couleurs_inc[idx % len(couleurs_inc)]
-        r = res_map.get(m, 0)
         w = n4.get('poids', {}).get(m, 0)
         fig.add_trace(go.Bar(
-            x=[label_map.get(m, m)], y=[r],
-            name=f"{label_map.get(m,m)} ({w:.0%})",
+            x=[libelle(m)], y=[r],
+            name=f"{libelle(m)} ({w:.0%})",
             marker_color=c,
             marker_line=dict(color=NAVY, width=1),
             width=0.45,
@@ -561,7 +549,7 @@ def g5_convergence_methodes(n3: Dict, n4: Dict) -> 'go.Figure':
             textposition='outside',
             textfont=dict(color=BLANC, size=9),
             hovertemplate=(
-                f"<b>{label_map.get(m,m)}</b><br>"
+                f"<b>{libelle(m)}</b><br>"
                 f"Réserve : <b>%{{y:,.0f}} €</b><br>"
                 f"Poids BE : {w:.0%}<extra></extra>"
             ),
@@ -569,10 +557,17 @@ def g5_convergence_methodes(n3: Dict, n4: Dict) -> 'go.Figure':
 
     # Méthodes exclues (grisées)
     for m in methodes_exclues:
-        r = res_map.get(m, 0)
+        r = reserve(n3, m)
+        if r is None:
+            # ⚠️ LE FAUX ZÉRO (lot C3a). `res_map.get(m, 0)` dessinait une
+            # barre à 0 € étiquetée « 0€ » pour une méthode qu'on n'a PAS PU
+            # calculer faute d'exposition. Une méthode exclue mais CALCULÉE
+            # reste tracée, grisée : c'est une information. Une méthode
+            # absente n'a pas de barre.
+            continue
         fig.add_trace(go.Bar(
-            x=[label_map.get(m, m)], y=[r],
-            name=f"{label_map.get(m,m)} (exclu)",
+            x=[libelle(m)], y=[r],
+            name=f"{libelle(m)} (exclu)",
             marker_color='rgba(138,154,176,0.35)',
             marker_line=dict(color=GRIS, width=1),
             width=0.45,
@@ -580,7 +575,7 @@ def g5_convergence_methodes(n3: Dict, n4: Dict) -> 'go.Figure':
             textposition='outside',
             textfont=dict(color=GRIS, size=9),
             hovertemplate=(
-                f"<b>{label_map.get(m,m)} — EXCLU</b><br>"
+                f"<b>{libelle(m)} — EXCLU</b><br>"
                 f"Réserve : <b>%{{y:,.0f}} €</b><extra></extra>"
             ),
         ))
@@ -1096,9 +1091,16 @@ def g11_ultimates_vs_diagonale(n3: Dict) -> 'go.Figure':
     if not PLOTLY_OK:
         return None
 
+    # ⚠️ LE FAUX ZÉRO (lot C3a). Sans exposition, `n3['bf']['ultimates']` est
+    # une liste de zéros — non vide, donc le `if ult:` plus bas la laissait
+    # passer, et deux droites plates affirmaient des ultimes INFÉRIEURS aux
+    # montants déjà payés. La garde est celle du référentiel, la même que
+    # celle de N4.
     ult_cl   = n3.get('chain_ladder', {}).get('ultimates', [])
-    ult_bf   = n3.get('bf',           {}).get('ultimates', [])
-    ult_cc   = n3.get('cape_cod',     {}).get('ultimates', [])
+    ult_bf   = (n3.get('bf', {}).get('ultimates', [])
+                if disponible(n3, 'bornhuetter_ferguson') else [])
+    ult_cc   = (n3.get('cape_cod', {}).get('ultimates', [])
+                if disponible(n3, 'cape_cod') else [])
     last_d   = n3.get('chain_ladder', {}).get('last_diagonale', [])
     if not ult_cl or not last_d:
         return None
@@ -1515,12 +1517,11 @@ def generer_graphiques(
     cl       = n3.get('chain_ladder', {})
     f_cum    = cl.get('facteurs_cumules', [])
     pct_dev  = cl.get('pct_developpe', [])
-    methode  = cl.get('methode', 'Chain Ladder (standard)')
 
     g = {}
     specs = [
         ('g1_heatmap',        lambda: g1_heatmap_triangle(C)),
-        ('g2_cadences',       lambda: g2_cadences_developpement(C, f_cum, pct_dev, methode)),
+        ('g2_cadences',       lambda: g2_cadences_developpement(C, f_cum, pct_dev)),
         ('g3_facteurs_cl',    lambda: g3_facteurs_cl(n3)),
         ('g4_ibnr',           lambda: g4_ibnr_par_annee(n3)),
         ('g5_convergence',    lambda: g5_convergence_methodes(n3, n4)),

@@ -28,6 +28,7 @@ import numpy as np
 
 # Formatage du loss ratio : source unique, pour qu'une méthode non calculée
 # n'apparaisse jamais comme un loss ratio de 0 %.
+from .methodes_be import ORDRE_AFFICHAGE, libelle, reserve
 from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
 from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
 from .n2_hypotheses_munich import lignes_hypotheses_munich
@@ -201,19 +202,21 @@ def _ong1_synthese(wb, n1, n2, n3, n4, ref_client, date_str):
 
     # Bloc méthodes
     _titre_section(ws, 17, 1, "RÉSULTATS PAR MÉTHODE", 6)
-    label_map = {'chain_ladder':'Chain Ladder','mack':'Mack 1993',
-                 'bornhuetter_ferguson':'Bornhuetter-Ferguson','cape_cod':'Cape Cod'}
-    methodes = [
-        ('chain_ladder',         n3['chain_ladder']['reserve_totale']),
-        ('mack',                 n3['mack']['reserve_best_estimate']),
-        ('bornhuetter_ferguson', n3['bf']['reserve_totale']),
-        ('cape_cod',             n3['cape_cod']['reserve_totale']),
-    ]
-    for i, (m, r) in enumerate(methodes):
-        inc  = m in n4.get('methodes_incluses', [])
+    # ⚠️ LE FAUX ZÉRO (lot C3a). La liste était écrite en dur et lisait
+    # `n3['bf']['reserve_totale']` sans garde : sans exposition, la ligne
+    # affichait « Bornhuetter-Ferguson | 0 | ✗ Attention », ce qui se lit
+    # « BF donne une réserve nulle » là où la vérité est « BF n'a pas pu
+    # être calculée ». Le motif vient de N4, qui le publie depuis ce lot.
+    motifs = n4.get('methodes_exclues_motifs', {})
+    for i, m in enumerate(ORDRE_AFFICHAGE):
+        r    = reserve(n3, m)
         poid = n4.get('poids', {}).get(m, 0)
-        st   = 'VERT' if inc else 'ROUGE'
-        _kpi(ws, 18+i, 1, label_map.get(m, m), r, FMT_NB, st)
+        if r is None:
+            _kpi(ws, 18+i, 1, libelle(m),
+                 motifs.get(m, 'non calculée'), None, '—')
+        else:
+            st = 'VERT' if m in n4.get('methodes_incluses', []) else 'ROUGE'
+            _kpi(ws, 18+i, 1, libelle(m), r, FMT_NB, st)
         w = ws.cell(row=18+i, column=4, value=poid)
         w.number_format = FMT_PCT
         w.font      = _font(size=10)
