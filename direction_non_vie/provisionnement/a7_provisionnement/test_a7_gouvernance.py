@@ -406,7 +406,27 @@ class T7_Trace_Gouvernance(unittest.TestCase):
               "p-valeur et statut identiques a la source")
 
     def test_le_poids_est_publie_et_c_est_le_point(self):
-        """Sans le poids, la trace est une curiosite ; avec, une information."""
+        """Sans le poids, la trace est une curiosite ; avec, une information.
+
+        ⚠️ LE CHIFFRE PHARE DU LOT A2 A ETE REVISE PAR SA PROPRE SUITE, ET LA
+        DECOMPOSITION EST EXACTE. A2 annoncait 87,2 % du Best Estimate de
+        GenIns porte par des annees en defaut, en deux morceaux :
+            annee 9 sous filet              26,3 %
+            annees 5 a 8 << a justifier >>  60,9 %
+        Le lot << calibration >> corrige la multiplicite des tests par colonne.
+        La composante FILET survit INTACTE, a 26,3 % ; les 60,9 % restants
+        disparaissent, parce que la colonne 4 de CLM-H2 (p = 0,0262) etait
+        comparee au seuil brut de 0,05 alors que six colonnes sont
+        interrogees : le seuil de Holm au deuxieme rang vaut 0,05/5 = 0,01.
+
+        Ce que ce test verifie n'a pas change : le poids EST publie, et il est
+        arithmetiquement coherent avec le Best Estimate. Ce qui a change, c'est
+        la composition de la trace -- et c'etait le but du correctif.
+
+        La couverture des DEUX mecanismes (filet et signalement) reste assuree
+        par `test_les_deux_mecanismes_par_annee_sont_traces`, sur un triangle
+        qui les porte tous les deux.
+        """
         r = _run(GENINS)
         n4 = r['n4']
         be = float(n4['best_estimate'])
@@ -414,15 +434,19 @@ class T7_Trace_Gouvernance(unittest.TestCase):
                  if 'FILET' in t['consequence']]
         signale = [t for t in n4['trace_gouvernance']
                    if 'signalement' in t['consequence']]
-        self.assertTrue(filet and signale)
+        self.assertTrue(filet, "la trace doit encore nommer l'annee sous filet")
         for t in n4['trace_gouvernance']:
             self.assertAlmostEqual(t['part_du_be'],
                                    t['contribution_eur'] / be, places=3)
         part = sum(t['part_du_be'] for t in n4['trace_gouvernance'])
-        self.assertGreater(part, 0.80,
-                           "sur GenIns, plus de 80 % du BE est concerne")
+        self.assertGreater(part, 0.20,
+                           "sur GenIns, l'annee sous filet porte plus de 20 % "
+                           "du Best Estimate — c'est la composante REELLE, "
+                           "celle que la correction de multiplicite ne touche "
+                           "pas")
         print(f"    OK A2-3 GenIns : {len(filet)} annee(s) sous filet + "
-              f"{len(signale)} signalee(s) = {part:.1%} du Best Estimate")
+              f"{len(signale)} signalee(s) = {part:.1%} du Best Estimate "
+              f"(les 60,9 % « à justifier » d'A2 étaient de fausses alarmes)")
 
     def test_les_deux_mecanismes_par_annee_sont_traces(self):
         """CLM-H2 (motif) et BFCC-H2 (cadence) — les deux, pas un seul."""

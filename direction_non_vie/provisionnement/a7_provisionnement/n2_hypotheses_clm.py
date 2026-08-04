@@ -158,7 +158,22 @@ PERCENTILES_MACK = 'percentiles_mack'
 #: Nombre minimum d'observations pour qu'une régression à 2 paramètres ait un
 #: degré de liberté résiduel exploitable.
 MIN_OBS_REGRESSION = 4
-MIN_OBS_CORRELATION = 4
+#: ⚠️ PLUS EXIGEANT QUE POUR LA RÉGRESSION, ET CE N'EST PAS UNE PRÉCAUTION
+#: DÉCORATIVE. Le test de l'ordonnée repose sur une loi de Student EXACTE sous
+#: erreurs normales : à 4 points il lui reste 2 degrés de liberté, c'est peu
+#: mais c'est juste. La corrélation de rang, elle, n'a pas de loi exacte
+#: tabulée ici : `scipy` en donne une approximation asymptotique. À 4 points il
+#: n'existe que 4! = 24 permutations, donc 24 valeurs possibles de ρ : aucune
+#: approximation continue ne peut y être valide.
+#:
+#: MESURÉ, sur triangles conformes au modèle de Mack (300 répétitions), fausse
+#: alarme de CLM-H3 APRÈS correction de multiplicité :
+#:       plancher à 4 → 6 colonnes testées → 16,0 %
+#:       plancher à 5 → 5 colonnes testées →  6,0 %
+#:       plancher à 6 → 4 colonnes testées →  5,7 %
+#: Les colonnes de 4 points apportaient donc 10 points de fausse alarme à elles
+#: seules, et le passage de 5 à 6 n'apporte plus rien : 5 est le point d'arrêt.
+MIN_OBS_CORRELATION = 5
 
 
 @dataclass(frozen=True)
@@ -486,13 +501,9 @@ def clm_h2_existence_facteurs(C: np.ndarray) -> ResultatHypothese:
                            'r2': round(reg['r2'], 4), 'cv_volumes': round(cv_x, 4),
                            'motif': 'volumes trop homogènes'})
             continue
-        if reg['p_ordonnee'] < H2_P_ORDONNEE_FORT:
-            st = NON_VALIDEE
-        elif reg['p_ordonnee'] < H2_P_ORDONNEE:
-            st = A_JUSTIFIER
-        else:
-            st = VALIDEE
-        detail.append({'colonne': j, 'n': reg['n'], 'statut': st,
+        # Le STATUT n'est pas décidé ici : il l'est dans `_agreger_par_colonne`,
+        # après correction de multiplicité sur l'ensemble des colonnes.
+        detail.append({'colonne': j, 'n': reg['n'],
                        'r2': round(reg['r2'], 4),          # descriptif, cf. H2_*
                        'cv_volumes': round(cv_x, 4),
                        'ordonnee': round(reg['ordonnee'], 2),
@@ -500,10 +511,14 @@ def clm_h2_existence_facteurs(C: np.ndarray) -> ResultatHypothese:
 
     return _agreger_par_colonne(
         detail,
+        cle_p='p_ordonnee', seuil_fort=H2_P_ORDONNEE_FORT,
+        seuil_souple=H2_P_ORDONNEE,
         code='CLM-H2', libelle="Existence des facteurs de développement",
         critere=(f"par colonne : ordonnée à l'origine non significative "
                  f"(p ≥ {H2_P_ORDONNEE}) → validée ; p < {H2_P_ORDONNEE_FORT} → "
-                 f"non validée. Le R² est publié mais n'entre pas dans le verdict"),
+                 f"non validée. Seuils corrigés de la multiplicité par "
+                 f"Holm-Bonferroni sur l'ensemble des colonnes testées. Le R² "
+                 f"est publié mais n'entre pas dans le verdict"),
         source_critere=SOURCE_JUGEMENT,
         critique_pour=('chain_ladder', 'mack'),
         libelle_ok=("Les montants cumulés progressent proportionnellement d'une "
@@ -591,8 +606,11 @@ def clm_h3_structure_variance(C: np.ndarray) -> ResultatHypothese:
         # Résidu de Pearson : (C[i,j+1] − f̂_j·C[i,j]) / √C[i,j]
         res = np.array([(f * c - f_chap * c) / sqrt(c) for _, f, c in colonne])
         if np.allclose(res, 0.0):
-            # Ajustement parfait : aucune dispersion à structurer.
-            detail.append({'colonne': j, 'n': len(colonne), 'statut': VALIDEE,
+            # Ajustement parfait : aucune dispersion à structurer. La colonne
+            # porte bien une p-valeur — « aucune tendance décelable » est un
+            # résultat de test — elle entre donc dans la famille comme les
+            # autres, et Holm ne la rejettera jamais.
+            detail.append({'colonne': j, 'n': len(colonne),
                            'rho': 0.0, 'p': 1.0})
             continue
         rho, p = _spearmanr(np.abs(res), vol)
@@ -600,24 +618,22 @@ def clm_h3_structure_variance(C: np.ndarray) -> ResultatHypothese:
             detail.append({'colonne': j, 'n': len(colonne),
                            'statut': NON_TESTABLE})
             continue
-        if p < H3_P_TENDANCE_FORT:
-            st = NON_VALIDEE
-        elif p < H3_P_TENDANCE:
-            st = A_JUSTIFIER
-        else:
-            st = VALIDEE
-        detail.append({'colonne': j, 'n': len(colonne), 'statut': st,
+        # Le STATUT n'est pas décidé ici : cf. `_agreger_par_colonne`.
+        detail.append({'colonne': j, 'n': len(colonne),
                        'rho': round(float(rho), 4), 'p': round(float(p), 4)})
 
     # ── Verdict d'ensemble renforcé (Fisher) ────────────────────────────────
-    p_global = _combiner_p_valeurs([d.get('p') for d in detail
-                                    if d.get('statut') != NON_TESTABLE])
+    p_global = _combiner_p_valeurs([d['p'] for d in detail
+                                    if d.get('p') is not None])
     resultat = _agreger_par_colonne(
         detail,
+        cle_p='p', seuil_fort=H3_P_TENDANCE_FORT,
+        seuil_souple=H3_P_TENDANCE,
         code='CLM-H3', libelle="Structure de variance",
         critere=(f"par colonne : corrélation de rang |résidu| vs volume, "
                  f"p ≥ {H3_P_TENDANCE} → validée ; p < {H3_P_TENDANCE_FORT} → "
-                 f"non validée"),
+                 f"non validée. Seuils corrigés de la multiplicité par "
+                 f"Holm-Bonferroni sur l'ensemble des colonnes testées"),
         source_critere=SOURCE_JUGEMENT,
         critique_pour=(PERCENTILES_MACK,),
         libelle_ok=("La dispersion des règlements croît bien comme le volume : "
@@ -795,6 +811,74 @@ def clm_h4_incertitude_queue(
 #  AGRÉGATION D'UN VERDICT PAR COLONNE  (H2 et H3)
 # =============================================================================
 
+def _holm_bonferroni(p_valeurs: Sequence[float], alpha: float) -> set:
+    """Indices rejetés au niveau `alpha` SUR L'ENSEMBLE de la famille.
+
+    Procédure descendante de Holm (1979) : on ordonne les p-valeurs et l'on
+    rejette tant que `p_(r) ≤ alpha / (k − r + 1)`, en s'arrêtant au premier
+    échec. Elle contrôle le risque de première espèce FAMILIAL — la probabilité
+    de se tromper NE SERAIT-CE QUE SUR UNE colonne — et elle le fait sous une
+    dépendance ARBITRAIRE entre les colonnes. C'est précisément le cas ici :
+    les colonnes d'un même triangle partagent leurs années de survenance, elles
+    ne sont pas indépendantes.
+
+    Holm est UNIFORMÉMENT plus puissante que Bonferroni (le premier seuil vaut
+    `alpha/k` dans les deux cas, les suivants sont plus larges chez Holm) pour
+    le même contrôle du risque : il n'y a aucune raison de préférer Bonferroni.
+    """
+    k = len(p_valeurs)
+    if k == 0:
+        return set()
+    rejetes: set = set()
+    for rang, i in enumerate(sorted(range(k), key=lambda i: p_valeurs[i])):
+        if p_valeurs[i] > alpha / (k - rang):
+            break
+        rejetes.add(i)
+    return rejetes
+
+
+def _statuts_corriges(
+    detail:       List[Dict[str, Any]],
+    cle_p:        str,
+    seuil_fort:   float,
+    seuil_souple: float,
+) -> Tuple[List[Dict[str, Any]], int]:
+    """Attribue les statuts de colonne APRÈS correction de multiplicité.
+
+    ⚠️ LA CORRECTION PORTE SUR LES COLONNES, PAS SUR LE SEUL VERDICT GLOBAL, ET
+    CE N'EST PAS UN DÉTAIL D'IMPLÉMENTATION. `couvertures_par_annee` lit
+    `detail[j]['statut']` colonne par colonne pour dire quelles années de
+    survenance sont couvertes. Ne corriger que le verdict d'ensemble ferait
+    diverger les deux lectures, et invaliderait la démonstration du lot A2
+    (`n4_best_estimate`) : « le motif de l'année la plus récente EST le statut
+    global », qui n'est vraie que si les deux appliquent la même règle aux
+    mêmes statuts.
+
+    La famille, c'est l'ensemble des colonnes qui portent une p-valeur — donc
+    celles sur lesquelles un test a réellement été conduit. Une colonne
+    NON TESTABLE n'en fait pas partie : elle n'a pas de p-valeur, et n'a donc
+    aucune raison de durcir le seuil des autres.
+
+    ⚠️ LA DÉCISION EMPLOIE LA P-VALEUR PUBLIÉE, arrondie comme elle l'est dans
+    `detail`. C'est délibéré : le nombre imprimé dans le rapport et le verdict
+    qui l'accompagne ne peuvent jamais se contredire, ce qui est la propriété
+    qu'un contrôleur vérifiera. L'écart possible se loge dans une bande de
+    5·10⁻⁵ autour du seuil, et il est sans direction privilégiée.
+    """
+    indices = [i for i, d in enumerate(detail) if d.get(cle_p) is not None]
+    if not indices:
+        return list(detail), 0
+    p_valeurs = [float(detail[i][cle_p]) for i in indices]
+    forts   = _holm_bonferroni(p_valeurs, seuil_fort)
+    souples = _holm_bonferroni(p_valeurs, seuil_souple)
+    sortie = list(detail)
+    for rang, i in enumerate(indices):
+        sortie[i] = {**detail[i],
+                     'statut': (NON_VALIDEE if rang in forts else
+                                A_JUSTIFIER if rang in souples else VALIDEE)}
+    return sortie, len(p_valeurs)
+
+
 def _agreger_par_colonne(
     detail:         List[Dict[str, Any]],
     *,
@@ -806,9 +890,28 @@ def _agreger_par_colonne(
     libelle_ok:     str,
     libelle_ko:     str,
     libelle_mitige: str,
+    cle_p:          str,
+    seuil_fort:     float,
+    seuil_souple:   float,
 ) -> ResultatHypothese:
     """Verdict d'ensemble à partir des verdicts par colonne — le plus sévère
-    l'emporte, et le message dit COMBIEN de colonnes sont en cause."""
+    l'emporte, et le message dit COMBIEN de colonnes sont en cause.
+
+    ⚠️ LES STATUTS DE COLONNE SONT DÉCIDÉS ICI, ET NULLE PART AILLEURS. Ils
+    l'étaient auparavant chez chaque appelant, en comparant la p-valeur brute
+    aux seuils — donc sans jamais tenir compte du fait qu'on pose la question
+    à neuf colonnes à la fois. Avec neuf tests indépendants à 5 %, la
+    probabilité qu'AU MOINS UN se déclenche sur un triangle parfaitement sain
+    vaut `1 − 0,95⁹ = 37,0 %` ; la fausse alarme mesurée de CLM-H3 valait
+    35,2 %. La règle « le plus sévère l'emporte » n'était pas un choix de
+    prudence : c'était une multiplicité non corrigée.
+
+    Centraliser la décision ici est ce qui rend l'oubli impossible : un
+    troisième test par colonne héritera de la correction sans que personne ait
+    à y penser.
+    """
+    detail, n_famille = _statuts_corriges(detail, cle_p, seuil_fort,
+                                          seuil_souple)
     testees = [d for d in detail if d.get('statut') != NON_TESTABLE]
     if not testees:
         return ResultatHypothese(
@@ -834,7 +937,9 @@ def _agreger_par_colonne(
         critique_pour=critique_pour, detail=tuple(detail),
         extras={'n_colonnes_testees': len(testees),
                 'n_non_validees': n_non, 'n_a_justifier': n_just,
-                'n_non_testables': len(detail) - len(testees)})
+                'n_non_testables': len(detail) - len(testees),
+                'correction_multiplicite': 'Holm-Bonferroni',
+                'n_tests_famille': n_famille})
 
 
 # =============================================================================

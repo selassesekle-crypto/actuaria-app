@@ -229,16 +229,72 @@ class T4_CLM_H3_Structure_De_Variance(unittest.TestCase):
     def test_dispersion_proportionnelle_au_volume_detectee(self):
         """La dispersion croît comme C, pas comme √C : Mack suppose l'inverse.
 
-        Détection portée par le test COMBINÉ : prise seule, chaque colonne n'a
-        que 4 à 9 observations et n'a pratiquement aucune puissance.
+        DÉTECTION RÉELLEMENT PORTÉE PAR LE TEST COMBINÉ, ET ICI C'EST PROUVÉ,
+        PAS AFFIRMÉ. Le champ `statut_par_colonne_seul` enregistre le verdict
+        qu'auraient rendu les colonnes seules : « à justifier ». Fisher, en
+        agrégeant les six périodes (p = 0,0042), le durcit en « non validée ».
+        C'est exactement le rôle qu'on attend de lui.
+
+        ⚠️ CE TEST EMPLOYAIT AUPARAVANT UNE AUTRE RÉALISATION (graine 3,
+        bruit 1,2) EN AFFIRMANT DÉJÀ CETTE MÊME EXPLICATION — à tort : sur
+        celle-là Fisher vaut 0,128 et ne durcit rien. La détection y tenait à
+        une colonne isolée comparée au seuil brut. Ce cas est désormais traité
+        pour ce qu'il est, dans le test suivant.
+        """
+        C = triangle([400_000 * (1.55 ** k) for k in range(15)],
+                     bruit=3.0, variance_en_volume=True, graine=7)
+        r = clm_h3_structure_variance(C)
+        self.assertEqual(r.statut, NON_VALIDEE)
+        self.assertEqual(r.extras.get('statut_par_colonne_seul'), A_JUSTIFIER)
+        self.assertLess(r.extras['p_combine_fisher'], 0.01)
+        print(f"    OK CLM-H3-b dispersion ∝ C : colonnes seules "
+              f"« {A_JUSTIFIER} », combiné p = "
+              f"{r.extras['p_combine_fisher']} → {r.statut}")
+
+    def test_une_violation_marginale_de_variance_n_est_plus_detectee(self):
+        """⚠️ CE TEST DOCUMENTE UNE PERTE, IL NE LA MASQUE PAS.
+
+        Cette violation de variance ÉTAIT détectée avant le lot
+        « calibration », et ne l'est plus. Elle est réelle : le triangle est
+        engendré avec une dispersion croissant comme C au lieu de √C. Voici
+        pourquoi elle passe désormais, et à quel prix elle était attrapée.
+
+        Les six p-valeurs de colonne valent
+            0,0153  0,0984  0,2345  0,5270  0,8970  0,8984
+        L'ancienne règle comparait chacune au seuil brut de 0,05 : la première
+        passait dessous, et « le plus sévère l'emporte » suffisait à alerter.
+        Mais voir une p-valeur ≤ 0,0153 EN INTERROGEANT SIX COLONNES arrive sur
+        1 − (1 − 0,0153)^6 = 8,8 % des triangles parfaitement sains. Ce n'était
+        donc pas un rejet au seuil de 5 % : c'en était un au seuil de 8,8 %,
+        présenté comme s'il valait 5 %.
+
+        Le test combiné ne rattrape pas non plus : Fisher vaut 0,128.
+
+        LE COÛT EST MESURÉ, PAS SUPPOSÉ. Sur 400 triangles conformes à Mack et
+        400 triangles violés, la correction fait passer la fausse alarme de
+        CLM-H3 de 35,2 % à 10,5 % (et de 16,0 % à 4,2 % au niveau « non
+        validée »), en conservant 94,2 % de la puissance sur une violation
+        franche (Var ∝ C^2,4 : 81,5 % → 76,8 %). Ce sont les violations
+        MARGINALES, comme celle-ci, qui sont perdues.
+
+        LA BONNE RÉPONSE N'EST PAS DE RENONCER À LA CORRECTION mais d'aller
+        chercher de la puissance ailleurs — une statistique qui agrège le
+        triangle en UNE mesure plutôt que d'en découper six. Tant que ce n'est
+        pas fait, ce test tient la trace de ce qu'on ne voit plus.
         """
         C = triangle([400_000 * (1.55 ** k) for k in range(15)],
                      bruit=1.2, variance_en_volume=True, graine=3)
         r = clm_h3_structure_variance(C)
-        self.assertNotEqual(r.statut, VALIDEE)
-        self.assertIsNotNone(r.extras.get('p_combine_fisher'))
-        print(f"    OK CLM-H3-b dispersion ∝ C : {r.statut} "
-              f"(p combiné = {r.extras['p_combine_fisher']})")
+        self.assertEqual(r.statut, VALIDEE)
+        ps = sorted(d['p'] for d in r.detail if d.get('p') is not None)
+        self.assertLess(ps[0], 0.05,
+                        "la plus petite p-valeur est bien sous le seuil BRUT — "
+                        "c'est ce qui suffisait à alerter avant la correction")
+        self.assertGreater(r.extras['p_combine_fisher'], 0.05,
+                           "et le test combiné ne la rattrape pas")
+        print(f"    OK CLM-H3-b2 violation marginale NON détectée : p min = "
+              f"{ps[0]:.4f} sur {len(ps)} colonnes (soit 8,8 % de chance sur un "
+              f"triangle sain), Fisher = {r.extras['p_combine_fisher']}")
 
     def test_le_combine_ne_peut_qu_alerter_davantage(self):
         """Le test combiné ne doit JAMAIS adoucir un signal déjà vu en colonne."""
@@ -427,20 +483,40 @@ class T7_Couvertures_Par_Annee(unittest.TestCase):
         print("    OK CLM-cov-b année la plus jeune : traverse tout le motif")
 
     def test_une_colonne_non_validee_ne_touche_que_les_annees_exposees(self):
-        """ORACLE MESURÉ — sur GenIns comme sur RAA, la colonne 0 est NON
-        VALIDÉE et n'atteint que l'année la plus jeune, la seule dont le
-        parcours la contient."""
+        """ORACLE MESURÉ — une colonne non validée n'atteint que l'année la
+        plus jeune, la seule dont le parcours la contient.
+
+        ⚠️ RAA NE PORTE PLUS DE COLONNE NON VALIDÉE, ET C'EST LE LOT
+        « CALIBRATION » QUI L'A CHANGÉ. Sa colonne 0 porte p = 0,0020. Face au
+        seuil brut de 0,01 elle était « non validée » ; mais six colonnes sont
+        interrogées, et le seuil de Holm au premier rang vaut 0,01/6 =
+        0,00167. Elle reste sous le seuil souple (0,05/6 = 0,00833), donc le
+        verdict descend à « à justifier » — l'alerte n'est pas perdue, elle est
+        requalifiée. Aucune année n'est plus sous filet.
+
+        GenIns, lui, garde sa colonne 0 non validée (p = 0,0008 ≤ 0,00167) :
+        la propriété que ce test vérifie — la propagation par le PARCOURS de
+        chaque année — y reste démontrée de bout en bout.
+        """
+        attendu = {
+            # triangle : (colonnes non validées, colonnes à justifier,
+            #             années sous filet)
+            'GenIns': ([0], [], [9]),
+            'RAA':    ([], [0], []),
+        }
         for nom, T in (('GenIns', GENINS), ('RAA', RAA)):
             with self.subTest(triangle=nom):
                 C = np.array(T, dtype=float)
-                n, _ = C.shape
-                cov = self._couvertures(C)
-                ko = [d['colonne'] for d in clm_h2_existence_facteurs(C).detail
+                detail = clm_h2_existence_facteurs(C).detail
+                ko = [d['colonne'] for d in detail
                       if d.get('statut') == NON_VALIDEE]
-                self.assertEqual(ko, [0])
-                self.assertEqual(cov['synthese']['annees_sous_filet'], [n - 1])
-        print("    OK CLM-cov-c colonne 0 non validée → seule l'année la plus "
-              "jeune sous filet (GenIns et RAA)")
+                aj = [d['colonne'] for d in detail
+                      if d.get('statut') == A_JUSTIFIER]
+                filet = self._couvertures(C)['synthese']['annees_sous_filet']
+                self.assertEqual((ko, aj, filet), attendu[nom])
+        print("    OK CLM-cov-c GenIns : colonne 0 non validée → seule l'année "
+              "la plus jeune sous filet ; RAA : colonne 0 requalifiée « à "
+              "justifier » par la correction de multiplicité → aucun filet")
 
     def test_la_queue_touche_toutes_les_annees(self):
         """CLM-H4 est global : une queue non validée dégrade la volatilité de

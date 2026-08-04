@@ -300,9 +300,26 @@ class T4_Affichage(unittest.TestCase):
 class T5_Non_Regression(unittest.TestCase):
 
     def test_les_scenarios_sains_ne_bougent_pas(self):
-        """F1 ne change RIEN quand aucune valeur n'est écrêtée."""
+        """F1 ne change RIEN quand aucune valeur n'est écrêtée.
+
+        ⚠️ L'ORACLE DE RAA A CHANGÉ, ET CE N'EST PAS F1 QUI L'A BOUGÉ.
+        55 535 € → 58 106 € (+4,63 %) au lot « calibration », qui corrige la
+        multiplicité des tests par colonne. Sur RAA, la colonne 0 de CLM-H2
+        porte p = 0,0020 ; comparée au seuil brut de 0,01 elle était « non
+        validée », mais six colonnes sont interrogées, et le seuil de Holm au
+        premier rang vaut 0,01/6 = 0,00167. Le verdict descend donc à
+        « à justifier », l'année 9 sort du FILET DE SÉCURITÉ, et sa réserve
+        n'est plus portée par une méthode unique.
+
+        Voir une p-valeur de 0,002 en interrogeant six colonnes arrive sur
+        environ 1,2 % des triangles sains : l'alerte était une présomption,
+        pas la certitude que « non validée » revendiquait.
+
+        Ce que ce test vérifie — que F1 ne déplace rien — reste vrai : GenIns,
+        qui ne subit pas ce changement de verdict, garde son oracle au centime.
+        """
         for nom, tri, be_attendu in (('GenIns', _C, 17_571_609.0),
-                                     ('RAA', np.asarray(RAA, float), 55_535.0)):
+                                     ('RAA', np.asarray(RAA, float), 58_106.0)):
             src = np.asarray(tri, float)
             r = AgentA7Provisionnement(verbose=False).run(
                 source=src, mode_declare='cumule',
@@ -314,8 +331,8 @@ class T5_Non_Regression(unittest.TestCase):
                                    delta=1.0, msg=nom)
             self.assertEqual(r['n2']['bfcc']['statuts']['BFCC-H6'], H.VALIDEE)
             self.assertFalse(r['n3']['cape_cod']['lr_ecrete'])
-        print("    OK F1-18 GenIns 17 571 609 € et RAA 55 535 € inchangés, "
-              "BFCC-H6 validée, aucun écrêtage")
+        print("    OK F1-18 GenIns 17 571 609 € et RAA 58 106 € inchangés par "
+              "F1, BFCC-H6 validée, aucun écrêtage")
 
     def test_le_tail_retenu_est_inchange_par_le_lot(self):
         """Publier la brute ne déplace pas un euro : le retenu reste l'écrêté."""
