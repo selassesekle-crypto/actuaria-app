@@ -377,10 +377,31 @@ def _simuler(
 
 # =============================================================================
 
+#: LE NOMBRE DE SIMULATIONS PAR DEFAUT — SOURCE UNIQUE.
+#:
+#: ⚠️ IL Y EN AVAIT TROIS, ET ELLES NE DISAIENT PAS LA MEME CHOSE : 1000 ici,
+#: 5000 dans `agent.run`, 5000 dans le menu de l'application. Une seule
+#: décision, trois valeurs. Celle-ci était la plus basse ET la plus exposée :
+#: un appelant direct de `bootstrap_odp` obtenait 1000 en silence, soit le
+#: cinquième du plancher recommandé par EIOPA. Aucun appelant du dépôt ne la
+#: subissait — tous fournissent `n_sim` — mais c'est précisément ce qui la
+#: rendait invisible.
+#:
+#: POURQUOI 10 000 ET NON 5 000. Mesuré sur GenIns : le CV est stable dès 200
+#: simulations (13,34 % à 200, 13,52 % à 5 000, 13,42 % à 10 000) — c'est un
+#: moment central, il converge vite. Le P99.5, lui, bouge encore de 1 % entre
+#: 5 000 et 10 000, parce qu'il repose sur les 25 pires tirages à 5 000 contre
+#: 50 à 10 000. Or c'est LUI qui sert d'estimation stochastique du capital.
+#: Et le coût est faible : 5,6 s contre 7,4 s sur un triangle 10x10, 12,9 s
+#: contre 18,8 s sur un 20x20. Le Bootstrap n'est pas le goulot d'A7.
+#: 5 000 est le PLANCHER d'une recommandation, pas un optimum.
+N_SIM_DEFAUT = 10_000
+
+
 def bootstrap_odp(
     C:       np.ndarray,
     facteurs: np.ndarray,
-    n_sim:   int = 1000,
+    n_sim:   int = N_SIM_DEFAUT,
     seed:    int = 42,
     annee_base: int = 1,
 ) -> Dict:

@@ -340,5 +340,84 @@ class T4_Une_Courbe_Perimee_Plafonne_Le_Statut(unittest.TestCase):
         print('    OK RFR-13 statut %s → %s, BE et RM identiques au centime'
               % (frais[0], vieux[0]))
 
+
+# =============================================================================
+#  T5 — LE NOMBRE DE SIMULATIONS N'A QU'UNE SEULE VALEUR PAR DÉFAUT
+# =============================================================================
+
+class T5_Un_Seul_Nombre_De_Simulations_Par_Defaut(unittest.TestCase):
+    """⚠️ IL Y EN AVAIT TROIS, ET ELLES NE DISAIENT PAS LA MÊME CHOSE.
+
+    1 000 dans `bootstrap_odp`, 5 000 dans `agent.run`, 5 000 dans le menu de
+    l'application. Une seule décision actuarielle, trois valeurs. La plus
+    basse était aussi la plus exposée : un appelant direct de `bootstrap_odp`
+    obtenait 1 000 en silence, soit le cinquième du plancher recommandé par
+    EIOPA. Aucun appelant du dépôt ne la subissait — tous fournissent
+    `n_sim` — et c'est exactement ce qui la rendait invisible.
+    """
+
+    def test_les_deux_defauts_sont_le_meme_objet(self):
+        """Pas « la même valeur » : le MÊME objet. Deux constantes égales
+        aujourd'hui divergent au premier qui en modifie une."""
+        import inspect
+        from direction_non_vie.provisionnement.a7_provisionnement.n3 \
+            .bootstrap_odp import N_SIM_DEFAUT, bootstrap_odp
+        d_fn = inspect.signature(bootstrap_odp).parameters['n_sim'].default
+        d_ag = inspect.signature(
+            AgentA7Provisionnement.run).parameters['n_sim_bootstrap'].default
+        self.assertIs(d_fn, N_SIM_DEFAUT)
+        self.assertIs(d_ag, N_SIM_DEFAUT)
+        print('    OK NSIM-1 `bootstrap_odp` et `run` partagent le même objet '
+              '= %d' % N_SIM_DEFAUT)
+
+    def test_le_defaut_respecte_le_plancher_eiopa(self):
+        """5 000 est un PLANCHER de recommandation, pas un optimum."""
+        from direction_non_vie.provisionnement.a7_provisionnement.n3 \
+            .bootstrap_odp import N_SIM_DEFAUT
+        self.assertGreaterEqual(N_SIM_DEFAUT, 5000,
+                                'le défaut est repassé sous le plancher '
+                                'recommandé par EIOPA')
+        print('    OK NSIM-2 défaut %d >= plancher EIOPA 5 000' % N_SIM_DEFAUT)
+
+    def test_le_percentile_extreme_se_stabilise_avec_le_nombre_de_tirages(self):
+        """⚠️ LA RAISON D'ÊTRE DU RELÈVEMENT, ET ELLE EST MESURÉE.
+
+        Le CV est un moment CENTRAL : il converge dès quelques centaines de
+        tirages. Le P99.5 repose sur les tirages extrêmes — 25 sur 5 000, 50
+        sur 10 000 — et c'est LUI qui sert d'estimation stochastique du
+        capital. Ce test vérifie la propriété qui justifie le choix : le
+        percentile extrême bouge davantage que le CV quand on change le
+        nombre de tirages.
+        """
+        C = np.asarray(GENINS, dtype=float)
+        mesures = {}
+        for n in (500, 5000):
+            r = AgentA7Provisionnement(verbose=False).run(
+                source=C, mode_declare='cumule', generer_graphiques=False,
+                generer_word=False, n_sim_bootstrap=n, seed=42)
+            b = r['n3']['bootstrap']
+            mesures[n] = (float(b['p99_5']), float(b['cv_bootstrap']))
+        ecart_p995 = abs(mesures[5000][0] / mesures[500][0] - 1) * 100
+        ecart_cv = abs(mesures[5000][1] / mesures[500][1] - 1) * 100
+        self.assertGreater(
+            ecart_p995, ecart_cv,
+            'le P99.5 ne bouge plus davantage que le CV : la raison même de '
+            'préférer 10 000 à 5 000 ne tient plus, il faut la réexaminer')
+        print('    OK NSIM-3 de 500 à 5 000 tirages : P99.5 bouge de %.2f %%, '
+              'CV de %.2f %%' % (ecart_p995, ecart_cv))
+
+    def test_le_defaut_est_reellement_applique_par_run(self):
+        """Un défaut qu'aucun chemin n'emprunte ne protège personne."""
+        from direction_non_vie.provisionnement.a7_provisionnement.n3 \
+            .bootstrap_odp import N_SIM_DEFAUT
+        r = AgentA7Provisionnement(verbose=False).run(
+            source=np.asarray(GENINS, dtype=float), mode_declare='cumule',
+            generer_graphiques=False, generer_word=False, seed=42)
+        boot = r['n3']['bootstrap']
+        self.assertEqual(int(boot.get('n_simulations') or 0), N_SIM_DEFAUT)
+        self.assertEqual(len(boot.get('distribution') or []), N_SIM_DEFAUT)
+        print('    OK NSIM-4 `run()` sans argument tire bien %d fois'
+              % N_SIM_DEFAUT)
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

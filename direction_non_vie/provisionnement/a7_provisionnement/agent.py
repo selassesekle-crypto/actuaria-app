@@ -68,7 +68,7 @@ from .n3.chain_ladder  import (
 from .n3.mack         import mack_1993
 from .n3.bf_cape_cod  import bornhuetter_ferguson, cape_cod
 from .n3.benktander   import benktander
-from .n3.bootstrap_odp import bootstrap_odp
+from .n3.bootstrap_odp import bootstrap_odp, N_SIM_DEFAUT
 from .n3.munich_cl    import munich_cl
 from .n3.backtesting  import calculer_backtesting
 from .n3.clark               import clark_ldf
@@ -238,7 +238,7 @@ class AgentA7Provisionnement:
     ...     schema_mapping      = {'montant': 'cout'},# mapping colonnes
     ...     ref_client          = 'RC Auto Q2 2026',
     ...     arrete              = 'Q2 2026',
-    ...     n_sim_bootstrap     = 5000,               # EIOPA recommande 5000
+    ...     n_sim_bootstrap     = 10000,              # defaut ; EIOPA plancher 5000
     ...     resultats_precedents= dict_n1,            # comparatif N-1/N
     ... )
 
@@ -293,7 +293,7 @@ class AgentA7Provisionnement:
         # ── Options ───────────────────────────────────────────────────────────
         triangle_reference: str        = 'paiements',  # 'paiements' | 'charges'
         courbe_rfr:       object        = None,   # Courbe EIOPA RFR (dict rfr_eiopa)
-        n_sim_bootstrap:  int           = 5000,
+        n_sim_bootstrap:  int           = N_SIM_DEFAUT,
         seed:             int           = 42,
         generer_graphiques_flag: bool   = True,
         generer_word:     bool          = True,
