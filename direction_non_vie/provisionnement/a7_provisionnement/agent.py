@@ -713,7 +713,13 @@ class AgentA7Provisionnement:
             graphiques_erreur = None
             if gen_g:
                 try:
-                    graphiques_dict = _generer_graphiques(C_calc, n2, n3, n4)
+                    # ⚠️ L'EXPOSITION NE PARVENAIT PAS À LA COUCHE N5 (lot C3c).
+                    # `n1` la porte en interne mais la ligne 817 la retire du
+                    # payload publié — à raison, c'est un tableau. On la passe
+                    # donc directement : `g15_exposition` en a besoin, et lui
+                    # seul. Absente, il ne se produit pas.
+                    graphiques_dict = _generer_graphiques(
+                        C_calc, n2, n3, n4, exposition=primes_norm)
                     if graphiques_dict:
                         logger.info(f"N5 — {len(graphiques_dict)} graphiques générés : "
                                     f"{list(graphiques_dict.keys())}")

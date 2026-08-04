@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 =============================================================================
- A7 Ibrahim — le filet des graphiques (lot C2, triage au lot C3b)
+ A7 Ibrahim — le filet des graphiques (C2 · triage C3b · ajouts C3c)
 =============================================================================
 
  ⚠️ POURQUOI CE FICHIER EXISTE.
@@ -49,13 +49,27 @@ from direction_non_vie.provisionnement.a7_provisionnement.test_a7_ibrahim import
 #: forcé la mise à jour du fichier : `expectedFailure` avale une SUPPRESSION
 #: en silence (mesuré — un `KeyError` y passe sans bruit), donc le marqueur
 #: de g7 ne pouvait pas se démonter tout seul. Le catalogue, lui, tombe.
+#: ⚠️ LE LOT C3c EN AJOUTE QUATRE, ET LE VERROU EST TOMBÉ AU PREMIER — c'est
+#: exactement ce qu'on lui demande. L'ordre suit la LECTURE et non la
+#: numérotation : les numéros portent l'histoire du dépôt, pas le plan.
 CATALOGUE = (
-    'g1_heatmap', 'g2_cadences', 'g3_facteurs_cl', 'g4_reserve_annee',
-    'g5_convergence', 'g6_bootstrap', 'g9_h2', 'g10_h3',
+    # données
+    'g1_heatmap', 'g16_increments', 'g15_exposition',
+    # méthode
+    'g2_cadences', 'g3_facteurs_cl',
+    # validation des hypothèses — guide IA 2023, §9.d
+    'g17_linearite', 'g18_residus', 'g9_h2', 'g10_h3',
+    # résultat, incertitude, sensibilités, back-testing
+    'g4_reserve_annee', 'g5_convergence', 'g6_bootstrap',
     'g12_sensibilites', 'g14_backtesting',
 )
 
 _CACHE = {}
+
+
+#: L'exposition de référence des verrous — croissante, donc discriminante :
+#: une exposition plate ne dirait rien d'une chronique.
+EXPOSITION = np.arange(1, 11) * 4e5 + 3e6
 
 
 def _run(avec_primes):
@@ -65,7 +79,7 @@ def _run(avec_primes):
     C = np.asarray(GENINS, dtype=float)
     kw = {}
     if avec_primes:
-        kw['primes'] = np.full(C.shape[0], float(np.nanmean(C[:, 0])) * 8.0)
+        kw['primes'] = EXPOSITION[:C.shape[0]]
     _CACHE[avec_primes] = AgentA7Provisionnement(verbose=False).run(
         source=C, mode_declare='cumule', generer_graphiques=True,
         generer_word=False, n_sim_bootstrap=60, seed=42, **kw)
@@ -117,9 +131,13 @@ def _f(seq):
 # =============================================================================
 
 class T1_Le_Catalogue_Est_Clos(unittest.TestCase):
-    """Un 15ᵉ graphique ne peut pas apparaître sans passer par ce fichier."""
+    """Aucun graphique ne peut apparaître ni disparaître sans passer ici.
 
-    def test_les_dix_sont_produits_et_seulement_eux(self):
+    Le verrou a déjà servi deux fois : au lot C3b quand le triage a fait
+    tomber quatre graphiques, et au lot C3c quand quatre autres sont arrivés.
+    """
+
+    def test_le_catalogue_est_produit_en_entier_et_rien_d_autre(self):
         g, *_ = _figures()
         self.assertEqual(
             tuple(sorted(g)), tuple(sorted(CATALOGUE)),
@@ -128,22 +146,24 @@ class T1_Le_Catalogue_Est_Clos(unittest.TestCase):
         print('    OK C2-0 les %d graphiques, et seulement eux'
               % len(CATALOGUE))
 
-    def test_g10_est_le_seul_a_pouvoir_manquer_et_c_est_correct(self):
-        """⚠️ LE BON COMPORTEMENT FACE À UNE MÉTHODE INDISPONIBLE.
+    def test_seuls_les_graphiques_d_exposition_peuvent_manquer(self):
+        """⚠️ LE BON COMPORTEMENT FACE À UNE DONNÉE ABSENTE.
 
-        Sans primes, Bornhuetter-Ferguson n'existe pas. `g10_h3`, qui trace
-        son loss ratio, ne se rabat PAS sur zéro : il ne se produit pas du
-        tout, et l'orchestrateur le journalise en « pas de données ».
-        C'était le contre-exemple de g5 et g11 avant le lot C3a ; c'est
-        désormais le motif partagé, `methodes_be.disponible`.
+        Sans exposition, Bornhuetter-Ferguson n'existe pas et la chronique
+        n'a rien à tracer. `g10_h3` et `g15_exposition` ne se rabattent PAS
+        sur zéro : ils ne se produisent pas du tout, et l'orchestrateur les
+        journalise en « pas de données ». C'était le contre-exemple de g5 et
+        g11 avant le lot C3a ; c'est désormais le motif partagé,
+        `methodes_be.disponible`.
         """
         g, _, _, n3, _ = _figures(avec_primes=False)
         self.assertFalse(n3['bf']['disponible'])
-        self.assertEqual(sorted(set(CATALOGUE) - set(g)), ['g10_h3'],
+        self.assertEqual(sorted(set(CATALOGUE) - set(g)),
+                         ['g10_h3', 'g15_exposition'],
                          'la liste des graphiques absents sans exposition a '
                          'changé')
-        print('    OK C2-0b sans exposition : %d/%d, g10 s\'efface au lieu '
-              'de tracer zéro' % (len(g), len(CATALOGUE)))
+        print('    OK C2-0b sans exposition : %d/%d — g10 et g15 s\'effacent '
+              'au lieu de tracer zéro' % (len(g), len(CATALOGUE)))
 
 
 # =============================================================================
@@ -355,6 +375,196 @@ class T2_Chaque_Graphique_Est_Epingle(unittest.TestCase):
         print('    OK C2-14 g14 : les 2 horizons == ecart_pct par année, '
               'étiquettes alignées')
 
+
+    # ── AJOUTS DU LOT C3c ──────────────────────────────────────────────────
+
+    def test_g15_l_exposition_et_le_loss_ratio_qu_elle_implique(self):
+        """Guide IA 2023, Figure 11 — la chronique des primes acquises.
+
+        ⚠️ ET LA MESURE QUI JUSTIFIE L'AJOUT, PLUTÔT QUE MON ARGUMENT INITIAL.
+        J'avais dit que ce graphique aurait rendu visible l'erreur ×60 du lot
+        F1. C'est vrai, mais INCOMPLET : depuis F1, BFCC-H6 attrape déjà une
+        exposition globalement ×60 (loss ratio poolé 1,8 %, hors plage
+        plausible → NON VALIDÉE). La vraie valeur ajoutée est ailleurs, et
+        elle est mesurée dans le test suivant : UNE SEULE année mal saisie
+        passe la garde poolée.
+        """
+        g, _, _, n3, _ = _figures()
+        expo = _f(EXPOSITION[:len(_f(n3['chain_ladder']['ultimates']))])
+        obs = _f(_tr(g['g15_exposition'], 'Exposition').y)
+        np.testing.assert_allclose(obs, expo, rtol=1e-9)
+        ult = _f(n3['chain_ladder']['ultimates'])
+        att = [u / e * 100.0 for u, e in zip(ult, expo)]
+        np.testing.assert_allclose(
+            _f(_tr(g['g15_exposition'], 'Loss ratio implicite').y), att,
+            rtol=1e-9,
+            err_msg="la courbe n'est pas ultime / exposition")
+        print('    OK C3c-1 g15 : barres == exposition, courbe == ultime / '
+              'exposition (%.0f %% à %.0f %%)' % (min(att), max(att)))
+
+    def test_g15_voit_une_annee_que_la_garde_poolee_ne_voit_pas(self):
+        """⚠️ LA PREUVE DE LA VALEUR MARGINALE, ET ELLE EST MESURÉE.
+
+        Une SEULE année dont l'exposition est saisie soixante fois trop grande
+        ne fait pas tomber BFCC-H6 : le loss ratio POOLÉ reste dans la plage
+        plausible. Le graphique, lui, la montre à 1,6 % contre 109 % de
+        médiane. Une garde agrégée ne peut pas localiser ; une chronique si.
+        """
+        expo = np.array(EXPOSITION, dtype=float)
+        expo[4] *= 60
+        r = _run_triangle(GENINS, primes=expo)
+        g = r.get('graphiques') or {}
+        if not g:
+            self.skipTest('plotly absent')
+        h6 = (r['n2'].get('bfcc', {}).get('hypotheses', {})
+              .get('BFCC-H6', {}))
+        self.assertEqual(str(h6.get('statut')), 'VALIDÉE',
+                         "BFCC-H6 attrape désormais le cas — ce test ne "
+                         "prouverait plus la valeur marginale de g15")
+        lr = _f(_tr(g['g15_exposition'], 'Loss ratio implicite').y)
+        autres = sorted(v for i, v in enumerate(lr) if i != 4)
+        mediane = autres[len(autres) // 2]
+        self.assertLess(lr[4] * 20, mediane,
+                        "l'année aberrante ne ressort plus du lot")
+        print('    OK C3c-2 g15 : BFCC-H6 VALIDÉE mais l\'année 4 ressort à '
+              '%.1f %% contre %.0f %% de médiane' % (lr[4], mediane))
+
+    def test_g16_les_increments_et_leurs_negatifs(self):
+        """Le triangle que g1 cache par construction."""
+        g, C, _, _, _ = _figures()
+        z = np.asarray(g['g16_increments'].data[0].z, dtype=float)
+        n, m = C.shape
+        att = np.full(C.shape, np.nan)
+        for i in range(n):
+            for j in range(min(n - i - 1, m - 1) + 1):
+                att[i, j] = C[i, j] if j == 0 else C[i, j] - C[i, j - 1]
+        connu = ~np.isnan(att)
+        np.testing.assert_allclose(z[connu], att[connu], rtol=1e-9)
+        self.assertTrue(np.isnan(z[~connu]).all(),
+                        'une case future porte un incrément')
+        hm = g['g16_increments'].data[0]
+        self.assertEqual(hm.zmid, 0, "l'échelle n'est plus centrée sur zéro")
+        self.assertAlmostEqual(abs(float(hm.zmin)), abs(float(hm.zmax)),
+                               places=6,
+                               msg='échelle divergente asymétrique : un '
+                                   'négatif se noierait')
+        print('    OK C3c-3 g16 : %d incréments == C[i,j] − C[i,j−1], échelle '
+              'centrée sur zéro' % int(connu.sum()))
+
+    def test_g16_montre_les_reprises_que_g1_ne_montre_pas(self):
+        """⚠️ LE SUJET MÊME DE L'AJOUT, VÉRIFIÉ SUR UN TRIANGLE À RECOURS."""
+        r = _run_triangle(_TRI_RECOURS_FORT)
+        g = r.get('graphiques') or {}
+        if not g:
+            self.skipTest('plotly absent')
+        inc = np.asarray(g['g16_increments'].data[0].z, dtype=float)
+        cum = np.asarray(g['g1_heatmap'].data[0].z, dtype=float)
+        n_inc = int(np.nansum(inc < 0))
+        self.assertGreater(n_inc, 0,
+                           'ce triangle ne porte plus de reprise — le verrou '
+                           'ne prouverait plus rien')
+        self.assertEqual(int(np.nansum(cum < 0)), 0,
+                         'les cumulés portent un négatif : le contraste qui '
+                         'justifie g16 a disparu')
+        print('    OK C3c-4 g16 : %d incréments négatifs visibles, %d sur les '
+              'cumulés de g1' % (n_inc, int(np.nansum(cum < 0))))
+
+    def test_g17_le_nuage_de_linearite_et_sa_droite_par_l_origine(self):
+        """Guide IA 2023, §9.d.ii — l'hypothèse sur l'espérance."""
+        g, C, _, n3, _ = _figures()
+        fig = g['g17_linearite']
+        n, m = C.shape
+        f = _f(n3['chain_ladder']['facteurs'])
+        nuages = [t for t in fig.data if t.mode == 'markers']
+        droites = [t for t in fig.data if t.mode == 'lines']
+        # Une transition n'est traçable qu'à partir de DEUX points : un nuage
+        # d'un seul point ne montre aucune linéarité. La dernière transition
+        # n'en a qu'un, elle est écartée — et c'est voulu.
+        traçables = sum(1 for j in range(min(m - 1, len(f)))
+                        if sum(1 for i in range(n)
+                               if j + 1 <= min(n - i - 1, m - 1)
+                               and C[i, j] > 0) >= 2)
+        self.assertEqual(len(nuages), traçables)
+        self.assertEqual(len(droites), traçables,
+                         'chaque nuage doit porter SA droite par l\'origine')
+        for j, (nuage, droite) in enumerate(zip(nuages, droites)):
+            att_x = [float(C[i, j]) for i in range(n)
+                     if j + 1 <= min(n - i - 1, m - 1) and C[i, j] > 0]
+            att_y = [float(C[i, j + 1]) for i in range(n)
+                     if j + 1 <= min(n - i - 1, m - 1) and C[i, j] > 0]
+            np.testing.assert_allclose(_f(nuage.x), att_x, rtol=1e-9)
+            np.testing.assert_allclose(_f(nuage.y), att_y, rtol=1e-9)
+            self.assertEqual((float(droite.x[0]), float(droite.y[0])), (0.0, 0.0),
+                             'la droite ne part pas de l\'origine')
+            self.assertAlmostEqual(float(droite.y[1]) / float(droite.x[1]),
+                                   f[j], places=9,
+                                   msg='la pente n\'est pas le facteur f_%d' % j)
+        print('    OK C3c-5 g17 : %d nuages == (C[i,j], C[i,j+1]), %d droites '
+              'par l\'origine de pente f_j' % (len(nuages), len(droites)))
+
+    def test_g18_les_residus_standardises(self):
+        """Guide IA 2023, §9.d.iii — l'hypothèse sur la variance."""
+        g, C, _, n3, _ = _figures()
+        n, m = C.shape
+        f = _f(n3['chain_ladder']['facteurs'])
+        s2 = _f(n3['mack']['sigma2_par_colonne'])
+        att = []
+        for j in range(min(m - 1, len(f))):
+            for i in range(n):
+                if j + 1 > min(n - i - 1, m - 1) or C[i, j] <= 0:
+                    continue
+                brut = (C[i, j + 1] - f[j] * C[i, j]) / C[i, j] ** 0.5
+                att.append((float(C[i, j]),
+                            brut / s2[j] ** 0.5 if s2[j] > 0 else brut))
+        obs = [(float(x), float(y)) for t in g['g18_residus'].data
+               for x, y in zip(t.x or [], t.y or [])]
+        self.assertEqual(len(obs), len(att))
+        for a, b in zip(sorted(obs), sorted(att)):
+            self.assertAlmostEqual(a[0], b[0], places=6)
+            self.assertAlmostEqual(a[1], b[1], places=9)
+        ys = [p[1] for p in obs]
+        self.assertLess(max(abs(v) for v in ys), 10,
+                        'la standardisation par σ_j ne tient plus : sans elle '
+                        'la plage brute est [−617 ; 600] et le nuage est '
+                        'illisible')
+        print('    OK C3c-6 g18 : %d résidus == (C[i,j+1] − f_j·C[i,j])/√C[i,j] '
+              'rapportés à σ_j, plage [%.2f ; %.2f]'
+              % (len(att), min(ys), max(ys)))
+
+    def test_g6_marque_le_be_retenu_et_ecrit_sa_reserve(self):
+        """⚠️ LE CHIFFRE INCONFORTABLE EST PUBLIÉ, AVEC SA RÉSERVE.
+
+        Le guide assigne à la mesure d'incertitude un usage précis :
+        « objectiver la notion parfois floue de prudence dans les provisions
+        [...] dans le cadre des échanges avec les CAC et/ou l'ACPR ». g6
+        repérait P50, P75, P90 et P99.5 — et pas le montant qui part en
+        comptabilité.
+
+        LA RÉSERVE EST VÉRIFIÉE, PAS SEULEMENT LE REPÈRE : la distribution
+        bootstrap est bâtie sur le SEUL Chain Ladder alors que le BE mêle
+        trois méthodes. Publier un percentile sans dire contre quelle
+        distribution remplacerait une ambiguïté par une autre.
+        """
+        g, _, _, n3, n4 = _figures()
+        be = float(n4['best_estimate'])
+        lignes = [float(s.x0) for s in (g['g6_bootstrap'].layout.shapes or ())
+                  if s.type == 'line']
+        self.assertTrue(any(abs(x - be) < 1e-6 for x in lignes),
+                        'aucun repère sur le Best Estimate retenu')
+        textes = [str(a.text) for a in
+                  (g['g6_bootstrap'].layout.annotations or ())]
+        marque = [t for t in textes if 'BE retenu' in t]
+        self.assertEqual(len(marque), 1, 'le repère du BE n\'est pas nommé')
+        self.assertIn('Chain Ladder', marque[0],
+                      'le percentile est publié SANS dire contre quelle '
+                      'distribution il est mesuré')
+        dist = sorted(_f(n3['bootstrap']['distribution']))
+        rang = sum(1 for v in dist if v <= be) / len(dist) * 100.0
+        self.assertIn('P%.0f' % rang, marque[0],
+                      'le percentile affiché n\'est pas celui de la '
+                      'distribution publiée')
+        print('    OK C3c-7 g6 : BE retenu marqué au P%.0f de la distribution '
+              'Chain Ladder, réserve écrite sur le graphique' % rang)
 
 # =============================================================================
 #  T3 — LES DÉFAUTS CONSTATÉS EN C2, NON CORRIGÉS ICI

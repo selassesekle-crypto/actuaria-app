@@ -1151,23 +1151,32 @@ class T20_Graphiques_Reellement_Produits(unittest.TestCase):
         """Le cœur : des figures existent, et ce sont bien des figures Plotly."""
         self.assertTrue(self.r.get('success'), self.r.get('erreur'))
         g = self.r.get('graphiques') or {}
-        # 10/10 et non « au moins un » : GenIns muni d'une exposition alimente
-        # les 10 graphiques (aucune garde « pas de données » ne s'y déclenche —
+        # 14/14 et non « au moins un » : GenIns muni d'une exposition alimente
+        # les 14 graphiques (aucune garde « pas de données » ne s'y déclenche —
         # vérifié). C'est ce verrou qui empêche un graphique de retomber
-        # silencieusement sans test rouge — et c'est lui qui a ARRÊTÉ le lot
-        # C3b, comme prévu, quand le catalogue est passé de 14 à 10.
+        # silencieusement sans test rouge, ET un graphique d'apparaître sans
+        # etre epingle a sa source. Il a arrete le lot C3b (14 -> 10) puis le
+        # lot C3c (10 -> 14) : les deux fois, comme prevu.
         #
-        # ⚠️ ILS ÉTAIENT QUATORZE. Le triage du lot C3b en a retiré quatre, sur
-        # décision explicite : g7 (donut SCR — quatre segments cumulatifs rendus
-        # en angles, et son 4ᵉ segment s'appelait « SCR » en valant P99.5−P90),
-        # g13 (le triangle de g1 une troisième fois, non normalisé), g8
-        # (cinq barres remplacées par un tableau qui porte aussi le seuil, la
-        # significativité et le verdict), et g11 (fondu dans g4, qui porte en
-        # plus σ par année de survenance). Seule la LISTE change ici : le sujet
-        # de ce test, lui, est intact.
-        attendus = ['g1_heatmap', 'g2_cadences', 'g3_facteurs_cl',
+        # ⚠️ DEUX MOUVEMENTS, DEUX DECISIONS EXPLICITES, ET LA LISTE SEULE
+        # CHANGE — le sujet de ce test est intact.
+        #   · C3b a RETIRE quatre graphiques : g7 (donut SCR — quatre segments
+        #     cumulatifs rendus en angles, et son 4ᵉ segment s'appelait
+        #     « SCR » en valant P99.5−P90), g13 (le triangle de g1 une
+        #     troisième fois, non normalisé), g8 (cinq barres remplacées par
+        #     un tableau qui porte aussi le seuil, la significativité et le
+        #     verdict), g11 (fondu dans g4, qui porte en plus σ par année).
+        #   · C3c en a AJOUTE quatre : g15 (chronique de l'exposition, guide
+        #     Figure 11), g16 (triangle des INCRÉMENTS — g1 cache les reprises
+        #     par construction), g17 et g18 (les deux seuls graphiques que le
+        #     guide nomme, §9.d.ii et §9.d.iii — A7 n'avait aucun nuage de
+        #     points).
+        # L'ordre suit la LECTURE, pas la numérotation.
+        attendus = ['g1_heatmap', 'g16_increments', 'g15_exposition',
+                    'g2_cadences', 'g3_facteurs_cl',
+                    'g17_linearite', 'g18_residus', 'g9_h2', 'g10_h3',
                     'g4_reserve_annee', 'g5_convergence', 'g6_bootstrap',
-                    'g9_h2', 'g10_h3', 'g12_sensibilites', 'g14_backtesting']
+                    'g12_sensibilites', 'g14_backtesting']
         self.assertEqual(sorted(g), sorted(attendus),
                          f"manquant(s) : {[k for k in attendus if k not in g]}")
         self.assertTrue(all(hasattr(f, 'to_html') for f in g.values()),

@@ -646,7 +646,8 @@ def g5_convergence_methodes(n3: Dict, n4: Dict) -> 'go.Figure':
 #  G6 — DISTRIBUTION BOOTSTRAP ODP
 # =============================================================================
 
-def g6_distribution_bootstrap(n3: Dict, n2: Optional[Dict] = None) -> 'go.Figure':
+def g6_distribution_bootstrap(n3: Dict, n2: Optional[Dict] = None,
+                              n4: Optional[Dict] = None) -> 'go.Figure':
     """
     Histogramme de la distribution Bootstrap ODP avec :
     · P50 (médiane) · P75 · P90 · P99.5
@@ -705,6 +706,33 @@ def g6_distribution_bootstrap(n3: Dict, n2: Optional[Dict] = None) -> 'go.Figure
                 annotation_font=dict(color=clr, size=9),
                 annotation_position='top right' if lbl == 'P99.5' else 'top left',
             )
+
+    # ⚠️ LE BEST ESTIMATE RETENU, MARQUÉ DANS SA PROPRE DISTRIBUTION
+    # (lot C3c). Le graphique repérait P50, P75, P90 et P99.5 — et PAS le
+    # montant qui part en comptabilité. Le guide de l'Institut des Actuaires
+    # assigne à la mesure d'incertitude un usage précis : « objectiver la
+    # notion parfois floue de prudence dans les provisions [...] un indicateur
+    # d'analyse complémentaire dans le cadre des échanges avec les CAC et/ou
+    # l'ACPR ». Cette question-là se répond avec UNE ligne verticale.
+    #
+    # ⚠️ ET LE PERCENTILE EST ÉCRIT AVEC SA RÉSERVE, SUR LE GRAPHIQUE. La
+    # distribution bootstrap est bâtie sur le SEUL Chain Ladder ; le Best
+    # Estimate mêle Chain Ladder, Bornhuetter-Ferguson et Cape Cod. Le
+    # percentile reste un indicateur de prudence légitime, mais publier
+    # « BE au 32ᵉ percentile » sans dire contre quelle distribution serait
+    # remplacer une ambiguïté par une autre.
+    be_retenu = float((n4 or {}).get('best_estimate') or 0)
+    if be_retenu > 0 and len(dist):
+        rang = sum(1 for v in dist if v <= be_retenu) / len(dist) * 100.0
+        fig.add_vline(
+            x=be_retenu,
+            line_color=BLANC, line_width=2.5, line_dash='solid',
+            annotation_text=(f"<b>BE retenu</b><br>{be_retenu:,.0f}€<br>"
+                             f"<span style='font-size:8px'>P{rang:.0f} de la "
+                             f"distribution Chain Ladder</span>"),
+            annotation_font=dict(color=BLANC, size=9),
+            annotation_position='bottom left',
+        )
 
     cv = (boot.get('cv_bootstrap') or 0) * 100
     # φ est un SEUL nombre pour tout le triangle — c'est l'hypothèse même du
@@ -1134,14 +1162,357 @@ def g14_backtesting(n3: Dict, annee_debut: int = None) -> 'go.Figure':
     return fig
 
 
+
+# =============================================================================
+#  G15 — CHRONIQUE DE L'EXPOSITION  (lot C3c — guide IA 2023, Figure 11)
+# =============================================================================
+
+def g15_exposition(n3: Dict, exposition=None) -> 'go.Figure':
+    """L'exposition par année de survenance, et le loss ratio qu'elle implique.
+
+    ⚠️ CE GRAPHIQUE AURAIT RENDU L'ERREUR DU LOT F1 VISIBLE EN UNE SECONDE.
+    Une exposition soixante fois trop grande y était passée inaperçue : Cape
+    Cod publiait un loss ratio de 10 % là où la donnée en disait 2,94 %, parce
+    que la valeur ÉCRÊTÉE était publiée ET jugée. Une chronique d'exposition
+    seule ne l'aurait pas dit non plus — il faut savoir quel ordre de grandeur
+    attendre. Le loss ratio implicite, lui, le dit sans rien savoir : 2,9 %
+    est absurde à sa seule lecture, 174 % ne l'est pas.
+
+    D'où les deux séries : l'exposition en barres, et `ultime / exposition` en
+    courbe sur l'axe droit. Le guide de l'Institut des Actuaires présente la
+    chronique des primes acquises en Figure 11 ; c'est elle, augmentée de la
+    seule lecture qui la rend contrôlable.
+
+    Absent — et non tracé à zéro — quand aucune exposition n'est fournie :
+    c'est le motif de `g10_h3`, posé au lot C3a.
+    """
+    if not PLOTLY_OK or exposition is None:
+        return None
+    expo = [float(v) for v in exposition]
+    if not expo or not any(v > 0 for v in expo):
+        return None
+    ult = [float(v) for v in (n3.get('chain_ladder', {}).get('ultimates') or [])]
+    n = min(len(expo), len(ult)) if ult else len(expo)
+    expo, ult = expo[:n], (ult[:n] if ult else [])
+    labels = [f"An. {i}" for i in range(n)]
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=labels, y=expo,
+        marker_color='rgba(55,138,221,0.75)',
+        marker_line=dict(color=NAVY, width=0.5),
+        name="Exposition",
+        hovertemplate=("<b>%{x}</b><br>"
+                       "Exposition : <b>%{y:,.0f} €</b><extra></extra>"),
+    ))
+
+    if ult:
+        lr = [(u / e * 100.0) if e > 0 else None for u, e in zip(ult, expo)]
+        connus = [v for v in lr if v is not None]
+        fig.add_trace(go.Scatter(
+            x=labels, y=lr,
+            mode='lines+markers',
+            line=dict(color=OR, width=2.5),
+            marker=dict(size=6, color=OR),
+            name="Loss ratio implicite (ultime / exposition)",
+            yaxis='y2',
+            hovertemplate=("<b>%{x}</b><br>"
+                           "Loss ratio : <b>%{y:.1f} %</b><extra></extra>"),
+        ))
+        if connus:
+            moyen = sum(connus) / len(connus)
+            fig.add_hline(
+                y=moyen, yref='y2',
+                line_color=OR, line_width=1, line_dash='dot',
+                annotation_text=f"LR moyen {moyen:.1f} %",
+                annotation_font=dict(color=OR, size=9),
+                annotation_position='top left',
+            )
+
+    fig.update_layout(
+        **_layout(
+            height=400,
+            title="",
+            xaxis=dict(title="Année de survenance",
+                       tickfont=dict(color=GRIS, size=9),
+                       tickangle=-30 if n > 10 else 0, showgrid=False),
+            yaxis=dict(title="Exposition (€)",
+                       tickfont=dict(color=GRIS, size=9),
+                       showgrid=True, gridcolor='rgba(255,255,255,0.05)',
+                       rangemode='tozero'),
+            yaxis2=dict(title=dict(text="Loss ratio implicite (%)",
+                                   font=dict(color=OR)),
+                        tickfont=dict(color=OR, size=9),
+                        overlaying='y', side='right', showgrid=False,
+                        rangemode='tozero'),
+            legend=dict(bgcolor='rgba(11,35,62,0.85)',
+                        bordercolor='rgba(201,168,76,0.3)', borderwidth=1,
+                        font=dict(color=BLANC, size=9),
+                        orientation='h', yanchor='bottom', y=1.01,
+                        xanchor='right', x=1),
+        )
+    )
+    return fig
+
+
+# =============================================================================
+#  G16 — TRIANGLE DES INCRÉMENTS  (lot C3c)
+# =============================================================================
+
+def g16_increments(C: np.ndarray) -> 'go.Figure':
+    """Les paiements de la PÉRIODE, et non leur cumul — donc les négatifs.
+
+    ⚠️ `g1_heatmap_triangle` CACHE LES REPRISES PAR CONSTRUCTION. Un triangle
+    cumulé qui recule d'une colonne à l'autre signale un recours ou une
+    subrogation ; sur la carte des cumulés, deux cases voisines presque
+    identiques ne se distinguent pas d'une année qui se développe peu. La
+    différence, elle, saute aux yeux : elle est NÉGATIVE.
+
+    L'échelle est divergente et CENTRÉE SUR ZÉRO — sans ce centrage, un seul
+    incrément négatif se noierait dans un dégradé calé sur le maximum.
+
+    Le sujet compte au-delà de ce lot : le chantier RECOURS travaille sur ces
+    négatifs, et jusqu'ici aucun livrable ne les montrait.
+    """
+    if not PLOTLY_OK:
+        return None
+    C = np.asarray(C, dtype=float)
+    n, m = C.shape
+    inc = np.full((n, m), np.nan)
+    for i in range(n):
+        k = min(n - i - 1, m - 1)
+        for j in range(k + 1):
+            inc[i, j] = C[i, j] if j == 0 else C[i, j] - C[i, j - 1]
+
+    fini = inc[~np.isnan(inc)]
+    borne = float(np.max(np.abs(fini))) if fini.size else 1.0
+    borne = borne or 1.0
+    negatifs = int((fini < 0).sum())
+
+    fig = go.Figure(go.Heatmap(
+        z=inc,
+        x=[f"{(j + 1) * 12}M" for j in range(m)],
+        y=[f"An. {i}" for i in range(n)],
+        colorscale=[[0.0, '#1ABC9C'], [0.5, NAVY_LL], [1.0, '#E74C3C']],
+        zmid=0, zmin=-borne, zmax=borne,
+        hovertemplate=("<b>%{y} · %{x}</b><br>"
+                       "Incrément : <b>%{z:,.0f} €</b><extra></extra>"),
+        colorbar=dict(title=dict(text="Incrément (€)",
+                                 font=dict(color=BLANC, size=9)),
+                      tickfont=dict(color=GRIS, size=8), thickness=12),
+        xgap=1, ygap=1,
+    ))
+    fig.update_layout(
+        **_layout(
+            height=400,
+            title="",
+            xaxis=dict(title="Période de développement",
+                       tickfont=dict(color=GRIS, size=9), side='top'),
+            yaxis=dict(tickfont=dict(color=GRIS, size=9), autorange='reversed'),
+            annotations=[dict(
+                text=(f"{negatifs} incrément(s) négatif(s)" if negatifs
+                      else "aucun incrément négatif"),
+                xref='paper', yref='paper', x=0.99, y=1.10,
+                showarrow=False,
+                font=dict(color=('#1ABC9C' if negatifs else GRIS), size=10),
+            )],
+        )
+    )
+    return fig
+
+
+# =============================================================================
+#  G17 — LINÉARITÉ DES CUMULÉS  (lot C3c — guide IA 2023, §9.d.ii, Figure 55)
+# =============================================================================
+
+def g17_linearite(C: np.ndarray, n3: Dict) -> 'go.Figure':
+    """C[i,j+1] en fonction de C[i,j], avec la droite passant par l'origine.
+
+    ⚠️ LE GUIDE LE DEMANDE NOMMÉMENT, ET A7 N'AVAIT AUCUN NUAGE DE POINTS.
+    §9.d.ii, « Hypothèses sur l'espérance » : « on pourra tracer les C[i,j+1]
+    en fonction des C[i,j] afin de voir s'il existe approximativement une
+    relation linéaire autour de la droite passant par l'origine ». C'est
+    l'hypothèse H2 de Mack — celle qui fonde le facteur de développement.
+
+    CE QUE ÇA MONTRE ET QU'UN CHIFFRE NE MONTRE PAS : si une SEULE année de
+    survenance porte le facteur. Un point isolé loin de la droite se voit en
+    une seconde et ne se lit dans aucun test agrégé.
+
+    Une trace par transition de développement, la droite `y = f_j · x` avec
+    elle. Au-delà de la troisième, les traces s'ouvrent en `legendonly` : le
+    graphique reste lisible et rien n'est perdu.
+    """
+    if not PLOTLY_OK:
+        return None
+    C = np.asarray(C, dtype=float)
+    n, m = C.shape
+    facteurs = [float(v) for v in (n3.get('chain_ladder', {}).get('facteurs')
+                                   or [])]
+    if not facteurs:
+        return None
+
+    fig = go.Figure()
+    traces = 0
+    for j in range(min(m - 1, len(facteurs))):
+        xs, ys, txt = [], [], []
+        for i in range(n):
+            if j + 1 <= min(n - i - 1, m - 1) and C[i, j] > 0:
+                xs.append(float(C[i, j]))
+                ys.append(float(C[i, j + 1]))
+                txt.append(f"An. {i}")
+        if len(xs) < 2:
+            continue
+        clr = COULEURS_ANNEES[j % len(COULEURS_ANNEES)]
+        visible = True if j < 3 else 'legendonly'
+        fig.add_trace(go.Scatter(
+            x=xs, y=ys, mode='markers',
+            marker=dict(size=9, color=clr,
+                        line=dict(color=NAVY, width=1)),
+            name=f"{(j + 1) * 12}M → {(j + 2) * 12}M",
+            legendgroup=f"j{j}", visible=visible, text=txt,
+            hovertemplate=("<b>%{text}</b><br>"
+                           "C(j) : <b>%{x:,.0f} €</b><br>"
+                           "C(j+1) : <b>%{y:,.0f} €</b><extra></extra>"),
+        ))
+        borne = max(xs) * 1.05
+        fig.add_trace(go.Scatter(
+            x=[0, borne], y=[0, facteurs[j] * borne],
+            mode='lines',
+            line=dict(color=clr, width=1.5, dash='dot'),
+            name=f"f = {facteurs[j]:.4f}",
+            legendgroup=f"j{j}", visible=visible, showlegend=False,
+            hovertemplate=(f"droite par l'origine, pente {facteurs[j]:.4f}"
+                           "<extra></extra>"),
+        ))
+        traces += 1
+    if not traces:
+        return None
+
+    fig.update_layout(
+        **_layout(
+            height=430,
+            title="",
+            xaxis=dict(title="Cumulé en j (€)",
+                       tickfont=dict(color=GRIS, size=9),
+                       showgrid=True, gridcolor='rgba(255,255,255,0.05)',
+                       rangemode='tozero'),
+            yaxis=dict(title="Cumulé en j+1 (€)",
+                       tickfont=dict(color=GRIS, size=9),
+                       showgrid=True, gridcolor='rgba(255,255,255,0.05)',
+                       rangemode='tozero'),
+            legend=dict(bgcolor='rgba(11,35,62,0.85)',
+                        bordercolor='rgba(201,168,76,0.3)', borderwidth=1,
+                        font=dict(color=BLANC, size=9)),
+        )
+    )
+    return fig
+
+
+# =============================================================================
+#  G18 — RÉSIDUS STANDARDISÉS  (lot C3c — guide IA 2023, §9.d.iii)
+# =============================================================================
+
+def g18_residus(C: np.ndarray, n3: Dict) -> 'go.Figure':
+    """Les résidus de Mack en fonction du cumulé — la troisième hypothèse.
+
+    ⚠️ LE GUIDE LE DEMANDE NOMMÉMENT. §9.d.iii, « Hypothèse sur la variance » :
+    « on représentera les résidus (C[i,j+1] − λ̂_j·C[i,j]) / √C[i,j] en
+    fonction des C[i]. Si l'hypothèse est validée, les résidus ne devraient
+    pas montrer de tendance spécifique mais sembler aléatoires. » Le même test
+    est re-cité p.27 comme LE test graphique de H3.
+
+    CE QUE ÇA CHANGE POUR A7 : CLM-H3 a acquis des conséquences réelles au lot
+    « Mack » — quand elle tombe, les percentiles de Mack ne sont plus
+    opposables et la mesure principale bascule sur le Bootstrap. Le verdict
+    existait ; la PREUVE n'avait aucune image.
+
+    ⚠️ UN CHOIX DE PRÉSENTATION, ASSUMÉ ET MESURÉ : le résidu est rapporté à
+    σ_j. C'est le résidu du guide, exprimé en unités de σ_j — pas une autre
+    formule. Sans cela il est illisible : σ_j varie d'un facteur 19 entre la
+    première et la dernière colonne (mesuré sur GenIns), et la plage brute
+    [−617 ; 600] est dictée par les premières colonnes seules. Rapporté à σ_j
+    elle devient [−1,59 ; 1,84], et les bandes ±1 / ±2 veulent enfin dire
+    quelque chose.
+    """
+    if not PLOTLY_OK:
+        return None
+    C = np.asarray(C, dtype=float)
+    n, m = C.shape
+    cl = n3.get('chain_ladder', {})
+    facteurs = [float(v) for v in (cl.get('facteurs') or [])]
+    sigma2 = [float(v) for v in (n3.get('mack', {}).get('sigma2_par_colonne')
+                                 or [])]
+    if not facteurs:
+        return None
+
+    fig = go.Figure()
+    points = 0
+    for j in range(min(m - 1, len(facteurs))):
+        sig = (sigma2[j] ** 0.5) if j < len(sigma2) and sigma2[j] > 0 else None
+        xs, ys, txt = [], [], []
+        for i in range(n):
+            if j + 1 > min(n - i - 1, m - 1) or C[i, j] <= 0:
+                continue
+            brut = (C[i, j + 1] - facteurs[j] * C[i, j]) / (C[i, j] ** 0.5)
+            xs.append(float(C[i, j]))
+            ys.append(float(brut / sig) if sig else float(brut))
+            txt.append(f"An. {i} · {(j + 1) * 12}M")
+        if not xs:
+            continue
+        fig.add_trace(go.Scatter(
+            x=xs, y=ys, mode='markers',
+            marker=dict(size=9,
+                        color=COULEURS_ANNEES[j % len(COULEURS_ANNEES)],
+                        line=dict(color=NAVY, width=1)),
+            name=f"{(j + 1) * 12}M → {(j + 2) * 12}M",
+            text=txt,
+            hovertemplate=("<b>%{text}</b><br>"
+                           "Cumulé : <b>%{x:,.0f} €</b><br>"
+                           "Résidu / σ_j : <b>%{y:.2f}</b><extra></extra>"),
+        ))
+        points += len(xs)
+    if not points:
+        return None
+
+    fig.add_hline(y=0, line_color=BLANC, line_width=1.5)
+    for borne, clr in ((2, ROUGE), (-2, ROUGE), (1, GRIS), (-1, GRIS)):
+        fig.add_hline(y=borne, line_color=clr, line_width=1, line_dash='dot')
+    hors = sum(1 for t in fig.data for v in (t.y or []) if abs(float(v)) > 2)
+
+    fig.update_layout(
+        **_layout(
+            height=430,
+            title="",
+            xaxis=dict(title="Cumulé en j (€)",
+                       tickfont=dict(color=GRIS, size=9),
+                       showgrid=True, gridcolor='rgba(255,255,255,0.05)'),
+            yaxis=dict(title="Résidu standardisé (en unités de σ_j)",
+                       tickfont=dict(color=GRIS, size=9),
+                       showgrid=True, gridcolor='rgba(255,255,255,0.05)',
+                       zeroline=False),
+            legend=dict(bgcolor='rgba(11,35,62,0.85)',
+                        bordercolor='rgba(201,168,76,0.3)', borderwidth=1,
+                        font=dict(color=BLANC, size=9)),
+            annotations=[dict(
+                text=f"{points} résidus · {hors} hors ±2σ",
+                xref='paper', yref='paper', x=0.99, y=1.06,
+                showarrow=False,
+                font=dict(color=(ROUGE if hors else GRIS), size=10),
+            )],
+        )
+    )
+    return fig
+
+
 def generer_graphiques(
     C:              np.ndarray,
     n2:             Dict,
     n3:             Dict,
     n4:             Dict,
+    exposition=None,
 ) -> Dict:
     """
-    Génère les 10 graphiques ActuarIA.
+    Génère les 14 graphiques ActuarIA.
 
     ⚠️ ILS ÉTAIENT 14 JUSQU'AU LOT C3b. Quatre sont partis : g7 (donut SCR,
     mauvais encodage et étiquette fausse), g13 (le triangle une troisième
@@ -1172,16 +1543,29 @@ def generer_graphiques(
     f_cum    = cl.get('facteurs_cumules', [])
     pct_dev  = cl.get('pct_developpe', [])
 
+    # ⚠️ L'ORDRE EST CELUI DE LA LECTURE, PAS DE LA NUMÉROTATION (lot C3c) :
+    # les données d'abord, la méthode ensuite, la VALIDATION DES HYPOTHÈSES
+    # au milieu, le résultat, l'incertitude, et le back-testing pour finir.
+    # Les numéros portent l'histoire du dépôt (g7, g8, g11 et g13 ont été
+    # retirés au lot C3b) ; ils ne portent pas l'ordre de lecture.
     g = {}
     specs = [
+        # ── Données ────────────────────────────────────────────────────────
         ('g1_heatmap',        lambda: g1_heatmap_triangle(C)),
+        ('g16_increments',    lambda: g16_increments(C)),
+        ('g15_exposition',    lambda: g15_exposition(n3, exposition)),
+        # ── Méthode ────────────────────────────────────────────────────────
         ('g2_cadences',       lambda: g2_cadences_developpement(C, f_cum, pct_dev)),
         ('g3_facteurs_cl',    lambda: g3_facteurs_cl(n3)),
-        ('g4_reserve_annee',  lambda: g4_reserve_par_annee(n3)),
-        ('g5_convergence',    lambda: g5_convergence_methodes(n3, n4)),
-        ('g6_bootstrap',      lambda: g6_distribution_bootstrap(n3, n2)),
+        # ── Validation des hypothèses (guide IA 2023, §9.d) ────────────────
+        ('g17_linearite',     lambda: g17_linearite(C, n3)),
+        ('g18_residus',       lambda: g18_residus(C, n3)),
         ('g9_h2',             lambda: g9_h2_stabilite(C, n3)),
         ('g10_h3',            lambda: g10_h3_lr_apriori(n2, n3)),
+        # ── Résultat et incertitude ────────────────────────────────────────
+        ('g4_reserve_annee',  lambda: g4_reserve_par_annee(n3)),
+        ('g5_convergence',    lambda: g5_convergence_methodes(n3, n4)),
+        ('g6_bootstrap',      lambda: g6_distribution_bootstrap(n3, n2, n4)),
         ('g12_sensibilites',  lambda: g12_sensibilites_tornado(n4)),
         ('g14_backtesting',    lambda: g14_backtesting(n3, annee_debut=n3.get('annee_debut_triangle'))),
     ]
