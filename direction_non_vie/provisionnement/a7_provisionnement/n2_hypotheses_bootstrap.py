@@ -159,6 +159,7 @@ import numpy as np
 
 from direction_non_vie.services.nv_triangle_negatifs import FRAC_NEG_MAX_DEFAUT
 
+from .n2_puissance import sans_objet
 from .n2_hypotheses_clm import (
     A_JUSTIFIER, NON_TESTABLE, NON_VALIDEE, VALIDEE,
     SOURCE_GUIDE, SOURCE_JUGEMENT,
@@ -745,6 +746,8 @@ def verifier_hypotheses_bootstrap(
     return {
         'hypotheses':   {c: h.synthese() for c, h in hypotheses.items()},
         'statuts':      {c: h.statut for c, h in hypotheses.items()},
+        # Aucune hypothese ne reste silencieuse sur sa puissance.
+        'puissance':    puissance_bootstrap(),
         'phi_par_axe':  dict(h3.extras.get('phi_par_axe', {})),
         'phi_global':   h3.extras.get('phi_global'),
         'percentiles_publiables': percentiles_publiables(hypotheses),
@@ -772,6 +775,58 @@ def percentiles_publiables(hypotheses: Dict[str, ResultatHypothese]) -> bool:
 #  AFFICHAGE — SOURCE UNIQUE POUR LES LIVRABLES N5
 # =============================================================================
 
+#: Motifs de non-mesure, un par hypothèse. AUCUNE NE RESTE SILENCIEUSE : soit
+#: elle porte une puissance mesurée, soit elle dit pourquoi la notion n'a pas
+#: de sens pour elle. Un silence se lirait « on n'y a pas pensé ».
+_SANS_PUISSANCE_BOOT = {
+    'BOOT-H1': "elle reprend le verdict de CLM-H1, dont la puissance est "
+               "publiée là-bas",
+    'BOOT-H2': "elle republie le test calendaire du GLM Poisson âge-cohorte",
+    'BOOT-H4': "elle compte les incréments négatifs et les rapporte à un "
+               "seuil de tolérance",
+}
+
+#: ⚠️ BOOT-H3 EST LE SEUL CAS DU CATALOGUE OÙ LA PUISSANCE EST MESURABLE MAIS
+#: N'EST PAS PUBLIÉE, ET DEUX MESURES S'OPPOSENT SANS QU'AUCUNE SOIT ÉCARTÉE.
+#:
+#:   · les campagnes documentées en tête de ce module, sur des triangles
+#:     SYNTHÉTIQUES à φ constant par construction, donnent des témoins de
+#:     5,0 % et 6,4 % — la calibration y est juste ;
+#:   · une campagne conduite en régénérant depuis l'ajustement ODP DES
+#:     TRIANGLES DE RÉFÉRENCE eux-mêmes donne 21 à 30 % (deux triangles, deux
+#:     graines, 100 simulations, 400 régénérations internes).
+#:
+#: Les deux protocoles ne mesurent pas la même chose : le second hérite de la
+#: structure réelle du triangle, le premier d'un modèle croisé pur. La piste
+#: d'un effet de comptage a été testée et ÉCARTÉE — le second témoin reste
+#: entre 28 et 37 % quand on multiplie les effectifs de Poisson par mille.
+#:
+#: Tant que l'écart n'est pas expliqué, publier une puissance pour ce test
+#: reviendrait à choisir l'une des deux mesures sans raison de le faire. On dit
+#: donc ce qu'on sait, et l'on s'abstient du chiffre — c'est la même règle qui
+#: interdit d'inventer un zéro pour un contrôle de plage.
+_MOTIF_BOOT_H3 = (
+    "la mesure de sa puissance sur ce portefeuille demande un jeu de "
+    "référence conforme à son modèle, dont la calibration reste à réconcilier "
+    "avec celle des campagnes de laboratoire documentées pour ce test ; les "
+    "puissances mesurées en laboratoire figurent dans sa documentation"
+)
+
+
+def puissance_bootstrap() -> Dict[str, Dict[str, Any]]:
+    """Le statut de puissance des quatre hypothèses du Bootstrap.
+
+    Trois d'entre elles reprennent un verdict testé ailleurs ou comparent une
+    valeur à un seuil : la notion de puissance n'y a pas de sens. La quatrième,
+    BOOT-H3, est un vrai test statistique — mais sa calibration doit être
+    réglée avant que sa puissance signifie quelque chose, cf. `_MOTIF_BOOT_H3`.
+    """
+    out = {code: sans_objet(motif)
+           for code, motif in _SANS_PUISSANCE_BOOT.items()}
+    out['BOOT-H3'] = sans_objet(_MOTIF_BOOT_H3)
+    return out
+
+
 def lignes_hypotheses_bootstrap(n2: Optional[Dict]) -> List[Dict[str, Any]]:
     """Les quatre verdicts, prêts à afficher — commentaire, Excel, Word, rapport.
 
@@ -783,6 +838,7 @@ def lignes_hypotheses_bootstrap(n2: Optional[Dict]) -> List[Dict[str, Any]]:
     ressort NON TESTABLE, jamais en valeur par défaut.
     """
     hyps = (n2 or {}).get('bootstrap_hyp', {}).get('hypotheses', {})
+    puis = (n2 or {}).get('bootstrap_hyp', {}).get('puissance', {}) or {}
     lignes = []
     for code in CODES:
         h = hyps.get(code, {})
@@ -796,6 +852,8 @@ def lignes_hypotheses_bootstrap(n2: Optional[Dict]) -> List[Dict[str, Any]]:
             'source':  str(h.get('source_critere', '—')),
             'ok':      statut == VALIDEE,
             'critique': PERCENTILES_BOOT in (h.get('critique_pour') or []),
+            'puissance':        (puis.get(code) or {}).get('puissance'),
+            'puissance_phrase': str((puis.get(code) or {}).get('phrase', '')),
         })
     return lignes
 

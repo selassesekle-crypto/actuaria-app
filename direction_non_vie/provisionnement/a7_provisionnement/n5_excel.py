@@ -31,6 +31,7 @@ import numpy as np
 from .methodes_be import ORDRE_AFFICHAGE, libelle, reserve
 from .n2_hypotheses_clm import lignes_correlations_h1
 from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
+from .n2_hypotheses_clm import lignes_hypotheses_clm
 from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
 from .n2_hypotheses_munich import lignes_hypotheses_munich
 from .n3.bf_cape_cod import libelle_loss_ratio
@@ -602,8 +603,12 @@ def _ong6_hypotheses(wb, n2, n4):
     ws.sheet_view.showGridLines = False
 
     _titre_section(ws, 1, 1, "Validation des hypothèses actuarielles — Mack (1993) & England-Verrall (2002)", 5)
-    hdrs = ["Hypothèse", "Validée", "Score /100", "Seuil utilisé", "Message"]
-    widths = [28, 12, 12, 16, 60]
+    # ⚠️ SIXIÈME COLONNE : LA PUISSANCE DISPONIBLE. Un verdict dit ce qu'on a
+    # trouvé ; il ne dit pas ce qu'on aurait pu trouver. Les deux ensemble font
+    # une conclusion opposable, et cette colonne porte la seconde moitié.
+    hdrs = ["Hypothèse", "Validée", "Score /100", "Seuil utilisé", "Message",
+            "Puissance disponible"]
+    widths = [28, 12, 12, 16, 60, 60]
     for j, (h, w) in enumerate(zip(hdrs, widths)):
         _header(ws, 2, j+1, h, width=w)
 
@@ -621,35 +626,27 @@ def _ong6_hypotheses(wb, n2, n4):
         elif key == 'h2_stabilite':
             seuil_txt = f"CV<{h.get('seuil_cv',0.15):.0%} dérive<{h.get('seuil_derive',0.20):.0%}"
         rangs.append((lbl, '✅ OUI' if ok else '❌ NON', h.get('score', 0),
-                      seuil_txt, str(h.get('message', '—'))[:200], ok))
+                      seuil_txt, str(h.get('message', '—'))[:200], '', ok))
 
-    # BFCC-H1..H6 — statut motivé, sans score : ces hypothèses n'en produisent
-    # aucun, et en afficher un fabriqué serait le défaut qu'on vient de retirer.
+    # ⚠️ CLM-H1..H4 EN TÊTE, ET C'EST UN MANQUE QUI EST RÉPARÉ ICI. Les
+    # hypothèses de CHAIN LADDER ET MACK — les méthodes qui portent le Best
+    # Estimate, et dont deux sont gatantes — n'atteignaient aucun des trois
+    # formats. BFCC, Bootstrap et Munich avaient chacun leur affichage ; CLM
+    # n'en avait pas. Le HTML et le Word ont été complétés au lot précédent,
+    # l'Excel l'est ici : les trois formats disent désormais la même chose.
     # ⚠️ PLUS DE TRONCATURE À 200. Cinq messages sur quatorze y perdaient leur
     # justification — dont la mention MCL-H4, qui porte les seuls chiffres du
     # bloc. Une cellule Excel accepte 32 767 caractères.
-    for ligne in lignes_hypotheses_bfcc(n2):
-        rangs.append((ligne['libelle'], ligne['statut'], '—',
-                      ligne['source'], ligne['message'], ligne['ok']))
+    for source in (lignes_hypotheses_clm, lignes_hypotheses_bfcc,
+                   lignes_hypotheses_bootstrap, lignes_hypotheses_munich):
+        for ligne in source(n2):
+            rangs.append((ligne['libelle'], ligne['statut'], '—',
+                          ligne['source'], ligne['message'],
+                          ligne.get('puissance_phrase') or '', ligne['ok']))
 
-    # BOOT-H1..H4 — même traitement. La ligne « H4 — Homoscédasticité Bootstrap
-    # ODP » qui figurait plus haut portait un score sur 100 tiré du CV des
-    # variances des facteurs de développement : ni le φ du Bootstrap, ni un
-    # score que quiconque lisait.
-    for ligne in lignes_hypotheses_bootstrap(n2):
-        rangs.append((ligne['libelle'], ligne['statut'], '—',
-                      ligne['source'], ligne['message'], ligne['ok']))
-
-    # MCL-H1..H5 — même traitement. MCL-H4 y figure en MENTION : NON TESTABLE
-    # assumé, puissance mesurée 13-17 %, biais possible 20 %. Elle ne peut pas
-    # ressortir verte, et c'est le sujet.
-    for ligne in lignes_hypotheses_munich(n2):
-        rangs.append((ligne['libelle'], ligne['statut'], '—',
-                      ligne['source'], ligne['message'], ligne['ok']))
-
-    for i, (lbl, verdict, sc, seuil_txt, msg, ok) in enumerate(rangs):
+    for i, (lbl, verdict, sc, seuil_txt, msg, puiss, ok) in enumerate(rangs):
         bg = 'EAF3DE' if ok else 'FCEBEB'
-        vals = [lbl, verdict, sc, seuil_txt, msg]
+        vals = [lbl, verdict, sc, seuil_txt, msg, puiss]
         for j, val in enumerate(vals):
             c = ws.cell(row=3+i, column=j+1, value=val)
             c.font      = _font(
