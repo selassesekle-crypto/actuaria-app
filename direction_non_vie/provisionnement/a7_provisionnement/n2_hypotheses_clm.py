@@ -73,6 +73,9 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
+from .n3.bootstrap_odp import calculer_fitted_et_residus
+from .n3.chain_ladder import calculer_facteurs
+
 logger = logging.getLogger('actuaria.a7')
 
 try:
@@ -102,6 +105,51 @@ H1_SEUIL_VIGILANCE  = 1.645   # JUGEMENT : niveau 90 %, borne de la zone grise.
                               # Le guide ne prévoit que deux issues (rejet ou
                               # non) ; la convention à trois états en demande une
                               # troisième, que nous plaçons au seuil usuel de 10 %.
+
+# ── CLM-H1, second test : SCAN SUR LES RÉSIDUS PAR DIAGONALE ─────────────────
+#
+# DEUX TESTS COMPLÉMENTAIRES, ET LA COMPLÉMENTARITÉ EST MATHÉMATIQUE.
+# Le test des signes du guide lit les FACTEURS BRUTS ; le scan lit les RÉSIDUS
+# d'un ajustement chain-ladder. Chacun voit donc ce que l'autre ne peut pas :
+#
+#   · le test des signes ne retient que le SIGNE de l'écart, jamais son
+#     amplitude — il sature (un choc ×2 et un choc ×3 lui font le même effet)
+#     et plafonne autour de 37 % de détection ;
+#   · le scan retient l'amplitude ET la concentre sur la diagonale la plus
+#     écartée — mais ce que l'ajustement ABSORBE ne laisse rien dans ses
+#     résidus. Une dérive calendaire progressive lui échappe par construction.
+#
+# MESURÉ (120 répétitions, triangles 10×10, effet calendaire pur) :
+#                                      signes    scan
+#     fausse alarme                     11,7 %    6,7 %
+#     choc ×2,00 sur 1 diagonale        36,7 %  100,0 %
+#     choc ×2,00 sur 5 diagonales       34,2 %   72,5 %
+#     dérive progressive 1,5 %          31,7 %    9,2 %   ← l'angle mort du scan
+#
+# D'où la règle retenue : LE SCAN DÉCIDE LE STATUT — il est le mieux calibré
+# (5,2 % contre 10,4 % pour un nominal de 5 %) — et le verdict du guide est
+# TOUJOURS publié, puis NOMMÉ dans le message dès qu'il est plus sévère. Le
+# statut de CLM-H1 ne gate rien (`critique_pour = ()`) : sa fonction est
+# d'informer, et taire l'un des deux signaux serait en perdre la moitié.
+SCAN_P_TENDANCE      = 0.05
+SCAN_P_TENDANCE_FORT = 0.01
+#: ⚠️ ALIGNÉES SUR BOOT-H3, SEULE AUTRE HYPOTHÈSE D'A7 CALIBRÉE PAR SIMULATION.
+#: Ce sont deux procédures distinctes — rééchantillonnage paramétrique là-bas,
+#: permutation d'étiquettes ici — donc deux décisions, pas une constante
+#: partagée. Le nombre est identique parce que la contrainte l'est : l'erreur
+#: de Monte-Carlo d'une p-valeur simulée. Vérifié POUR CETTE PROCÉDURE, cf. le
+#: filet : à 400 permutations le statut ne dépend plus de la graine.
+SCAN_N_PERMUTATIONS  = 400
+#: LA GRAINE EST FIXE, ET CE N'EST PAS NÉGOCIABLE : un verdict d'hypothèse qui
+#: dépendrait d'un tirage non reproductible ne serait pas opposable devant un
+#: commissaire aux comptes. Même valeur et même raison que `GRAINE_CALIBRATION`.
+SCAN_GRAINE          = 2023
+#: ⚠️ PLANCHER CALIBRÉ, PAS CHOISI. Fausse alarme mesurée sur triangles sains :
+#:       4×4 → 23,3 %   5×5 → 11,7 %   6×6 → 8,3 %   7×7 → 3,3 %   10×10 → 6,7 %
+#: En deçà de 6 diagonales exploitables — soit 7 années — le scan n'a pas de
+#: quoi calibrer sa permutation, et l'on REVIENT au test du guide, exactement
+#: comme le GLM APC se déclare indisponible sous 5×5.
+SCAN_MIN_DIAGONALES  = 6
 
 # ── Seuils CLM-H2 — JUGEMENT INTÉGRAL, le guide n'en donne aucun ─────────────
 #
@@ -335,6 +383,186 @@ def _statistique_des_signes(
     return detail, somme_Z, somme_E, somme_V
 
 
+def _ecarts_par_diagonale(
+    residus:  Sequence[float],
+    diagonales: Sequence[int],
+) -> Optional[List[Tuple[int, int, float]]]:
+    """(diagonale, effectif, écart standardisé) pour chaque année calendaire.
+
+    L'écart d'une diagonale est la moyenne de ses résidus rapportée à l'erreur
+    type que cette moyenne aurait si la diagonale ne comptait pour rien —
+    `σ/√n_d`. Une diagonale nombreuse doit donc s'écarter moins qu'une
+    diagonale courte pour peser autant, ce qui est exactement la pondération
+    voulue.
+    """
+    r = np.asarray(residus, dtype=float)
+    d = np.asarray(diagonales)
+    sigma = float(np.std(r, ddof=1)) if r.size > 1 else 0.0
+    if sigma <= 0:
+        return None
+    out: List[Tuple[int, int, float]] = []
+    for g in np.unique(d):
+        masque = d == g
+        n_d = int(masque.sum())
+        if n_d >= 2:
+            out.append((int(g), n_d,
+                        float(np.mean(r[masque])) / (sigma / sqrt(n_d))))
+    return out or None
+
+
+def scan_diagonales(C: np.ndarray) -> Optional[Dict[str, Any]]:
+    """Test de SCAN : l'année calendaire la plus écartée l'est-elle trop ?
+
+    On ajuste le chain-ladder, on prend ses résidus de Pearson, on les groupe
+    PAR DIAGONALE — une diagonale, une année calendaire — et l'on retient
+    l'écart standardisé le plus fort. Un effet calendaire est par nature
+    CONCENTRÉ sur une diagonale : un test omnibus qui répartirait sa puissance
+    sur toutes les diagonales à la fois l'y diluerait. Mesuré : le F calendaire
+    du GLM APC, omnibus sur 5 à 9 degrés de liberté, ne détecte rien sous un
+    choc de ×1,40 là où le scan atteint 85 %.
+
+    LA CALIBRATION EST EXACTE PAR CONSTRUCTION, et c'est ce qui la rend sûre :
+    on ne suppose aucune loi pour ce maximum — on PERMUTE les étiquettes de
+    diagonale et l'on regarde à quelle fréquence le hasard fait aussi bien.
+    Aucune approximation asymptotique n'est en jeu.
+
+    Rend `None` — et l'appelant revient alors au test du guide — si le triangle
+    porte moins de `SCAN_MIN_DIAGONALES` diagonales exploitables, ou si les
+    résidus sont dégénérés.
+    """
+    C = np.asarray(C, dtype=float)
+    try:
+        facteurs, _ = calculer_facteurs(C, 'standard')
+        _, residus, _, _, _, _, cellules = calculer_fitted_et_residus(
+            C, np.asarray(facteurs, dtype=float))
+    except Exception:                                      # pragma: no cover
+        return None
+
+    r, d = [], []
+    for (i, j) in cellules:
+        v = residus[i, j]
+        if np.isfinite(v):
+            r.append(float(v)); d.append(i + j)
+    if len(r) < 2:
+        return None
+
+    ecarts = _ecarts_par_diagonale(r, d)
+    if ecarts is None or len(ecarts) < SCAN_MIN_DIAGONALES:
+        return None
+
+    observe = max(abs(e) for _, _, e in ecarts)
+    rng = np.random.default_rng(SCAN_GRAINE)
+    d_arr = np.asarray(d)
+    au_moins_aussi_fort = 0
+    for _ in range(SCAN_N_PERMUTATIONS):
+        tire = _ecarts_par_diagonale(r, rng.permutation(d_arr))
+        if tire is not None and max(abs(e) for _, _, e in tire) >= observe - 1e-12:
+            au_moins_aussi_fort += 1
+    # Le +1 au numérateur ET au dénominateur : l'observé fait partie de sa
+    # propre référence, sans quoi une p-valeur nulle serait possible — et une
+    # p-valeur nulle n'existe pas dans un test par permutation.
+    p = (au_moins_aussi_fort + 1) / (SCAN_N_PERMUTATIONS + 1)
+
+    pire = max(ecarts, key=lambda e: abs(e[2]))
+    return {'p': p, 'diagonale': pire[0], 'ecart': pire[2], 'n_cellules': pire[1],
+            'n_diagonales': len(ecarts), 'n_residus': len(r),
+            'profil': tuple((g, round(e, 3)) for g, _, e in ecarts)}
+
+
+def _message_guide_seul(t_stat: float, statut: str) -> str:
+    """Message lorsque le triangle est trop court pour le scan."""
+    if statut == NON_VALIDEE:
+        constat = (f"Un effet d'année calendaire est établi (statistique "
+                   f"{t_stat:+.2f}, hors de l'intervalle [−1,96 ; 1,96] au "
+                   f"seuil de 95 %). Certaines années de règlement se "
+                   f"comportent différemment des autres — inflation, "
+                   f"changement de politique de gestion ou rattrapage de "
+                   f"dossiers. Chain Ladder reste applicable, mais la période "
+                   f"servant à calculer les coefficients mérite d'être "
+                   f"resserrée sur les années récentes, et ce choix documenté.")
+    elif statut == A_JUSTIFIER:
+        constat = (f"Un effet d'année calendaire ressort sans être établi "
+                   f"(statistique {t_stat:+.2f} : au-delà du seuil de 90 %, en "
+                   f"deçà de celui de 95 %). À rapprocher de ce que l'on sait "
+                   f"des exercices concernés avant de retenir la période de "
+                   f"calcul.")
+    else:
+        constat = (f"Aucun effet d'année calendaire n'est décelé (statistique "
+                   f"{t_stat:+.2f}, dans l'intervalle [−1,96 ; 1,96]). Les "
+                   f"années de règlement se comportent de façon homogène.")
+    return (constat + " Le verdict repose ici sur le seul test des signes du "
+            "guide IA 2023 (§9.d.i) : le triangle compte moins de "
+            f"{SCAN_MIN_DIAGONALES + 1} années, en deçà de quoi le test de "
+            "scan n'a pas de quoi calibrer sa référence.")
+
+
+def _message_deux_tests(
+    scan:         Dict[str, Any],
+    statut:       str,
+    t_stat:       Optional[float],
+    statut_guide: str,
+) -> str:
+    """Message quand les deux tests s'expriment.
+
+    ⚠️ REGISTRE AFFIRMATIF, ET C'EST UNE EXIGENCE, PAS UN STYLE. Deux tests
+    complémentaires appliqués sciemment sont une MÉTHODE : le système sait ce
+    que chacun détecte et le dit. Écrire « les deux tests concluent
+    différemment » sous un symbole d'alerte donnerait à lire « cet outil ne
+    sait pas trancher » — l'inverse exact de ce qui est vrai. La divergence
+    n'est jamais présentée comme une incertitude, mais comme le résultat
+    attendu de deux lectures qui ne portent pas sur la même grandeur.
+    """
+    tete = "Deux tests complémentaires sont appliqués. "
+    p, d, e = scan['p'], scan['diagonale'], scan['ecart']
+    guide = (f"statistique {t_stat:+.2f}" if t_stat is not None
+             else "non calculable sur ce triangle")
+
+    if statut == NON_VALIDEE:
+        corps = (f"Le test de scan, qui décide le statut, isole l'année "
+                 f"calendaire {d} : ses règlements s'écartent de {e:+.2f} "
+                 f"écarts-types de ce que le modèle prévoit (p = {p:.4f} sur "
+                 f"{SCAN_N_PERMUTATIONS} permutations). Un tel écart traduit "
+                 f"un changement de politique de règlement, une inflation ou "
+                 f"un rattrapage de dossiers sur cet exercice. Chain Ladder "
+                 f"reste applicable, mais la période servant à calculer les "
+                 f"coefficients mérite d'être resserrée sur les années "
+                 f"récentes, et ce choix documenté.")
+    elif statut == A_JUSTIFIER:
+        corps = (f"Le test de scan, qui décide le statut, relève l'année "
+                 f"calendaire {d} comme la plus atypique ({e:+.2f} "
+                 f"écarts-types, p = {p:.4f}). L'écart ressort sans être "
+                 f"établi : à rapprocher de ce que l'on sait de cet exercice "
+                 f"avant de retenir la période de calcul.")
+    else:
+        corps = (f"Le test de scan, qui décide le statut, ne relève aucune "
+                 f"année calendaire atypique — la plus écartée, l'année {d}, "
+                 f"reste à {e:+.2f} écarts-types (p = {p:.4f}).")
+
+    # ── Ce que le guide ajoute, énoncé comme un résultat, jamais comme un doute
+    if statut_guide == NON_TESTABLE:
+        queue = (" Le test des signes du guide IA 2023 (§9.d.i) n'est pas "
+                 "calculable sur ce triangle ; le scan le couvre entièrement.")
+    elif _ORDRE_SEVERITE[statut_guide] > _ORDRE_SEVERITE[statut]:
+        queue = (f" Le test des signes du guide IA 2023 (§9.d.i), qui lit les "
+                 f"facteurs bruts plutôt que les résidus de l'ajustement, "
+                 f"signale de son côté un effet ({guide}). C'est la signature "
+                 f"d'une dérive PROGRESSIVE, répartie sur plusieurs années "
+                 f"calendaires : l'ajustement l'absorbe, et le scan ne peut "
+                 f"donc pas la voir — les deux tests sont retenus ensemble "
+                 f"précisément pour couvrir ces deux motifs. Ce point mérite "
+                 f"votre examen.")
+    elif _ORDRE_SEVERITE[statut_guide] < _ORDRE_SEVERITE[statut]:
+        queue = (f" Le test des signes du guide IA 2023 (§9.d.i) ne le relève "
+                 f"pas ({guide}) : il ne retient que le sens des écarts, non "
+                 f"leur amplitude, et une anomalie concentrée sur une seule "
+                 f"année lui échappe. C'est le motif que le scan est conçu "
+                 f"pour saisir.")
+    else:
+        queue = (f" Le test des signes du guide IA 2023 (§9.d.i) aboutit à la "
+                 f"même conclusion ({guide}).")
+    return tete + corps + queue
+
+
 def clm_h1_effet_calendaire(C: np.ndarray) -> ResultatHypothese:
     """CLM-H1 — un effet propre à une année CALENDAIRE contamine-t-il le triangle ?
 
@@ -352,7 +580,15 @@ def clm_h1_effet_calendaire(C: np.ndarray) -> ResultatHypothese:
     poursuit néanmoins : l'échec ne bloque rien, il réoriente le choix des
     coefficients (cf. Remarque p82). D'où `critique_pour = ()`.
 
-    ⚠️ CE QUE CE TEST NE PEUT PAS VOIR — une inflation calendaire CONSTANTE.
+    ⚠️ DEUX TESTS, ET LE SCAN DÉCIDE — cf. le bloc SCAN_* en tête de module.
+    Le test des signes ci-dessus reste CALCULÉ et PUBLIÉ (`extras['guide_*']`),
+    et il est NOMMÉ dans le message dès qu'il conclut autrement : il voit les
+    dérives progressives, que le scan ne peut pas voir. Le scan, lui, voit les
+    anomalies concentrées sur une année, où les signes plafonnent à 37 %. Sous
+    `SCAN_MIN_DIAGONALES + 1` années, le scan se retire et le guide décide
+    seul — exactement comme avant ce lot.
+
+    ⚠️ CE QU'AUCUN DES DEUX NE PEUT VOIR — une inflation calendaire CONSTANTE.
     Vérifié par construction : si chaque incrément est multiplié par (1+g)^(i+j),
     les cumulés valent `base_i × (1+g)^i × A_j`, donc tous les facteurs d'une
     même colonne deviennent IDENTIQUES — le triangle est parfaitement régulier
@@ -364,8 +600,10 @@ def clm_h1_effet_calendaire(C: np.ndarray) -> ResultatHypothese:
     statut VALIDÉE ne certifie donc PAS l'absence d'inflation.
     """
     detail, somme_Z, somme_E, somme_V = _statistique_des_signes(C)
+    scan = scan_diagonales(C)
+    guide_calculable = bool(detail) and somme_V > 0
 
-    if not detail or somme_V <= 0:
+    if not guide_calculable and scan is None:
         return ResultatHypothese(
             code='CLM-H1', libelle="Indépendance des années de survenance",
             statut=NON_TESTABLE, valeur=None,
@@ -374,49 +612,75 @@ def clm_h1_effet_calendaire(C: np.ndarray) -> ResultatHypothese:
                      "diagonale ne porte au moins deux facteurs comparables."),
             detail=tuple(detail))
 
-    t_stat = (somme_Z - somme_E) / sqrt(somme_V)
-    borne_basse = somme_E - 2.0 * sqrt(somme_V)
-    borne_haute = somme_E + 2.0 * sqrt(somme_V)
-
-    if abs(t_stat) > H1_SEUIL_REJET:
-        statut = NON_VALIDEE
-        message = (
-            f"Un effet d'année calendaire est détecté (statistique {t_stat:+.2f}, "
-            f"hors de l'intervalle [−1,96 ; 1,96] au seuil de 95 %). Certaines "
-            f"années de règlement se comportent différemment des autres — "
-            f"inflation, changement de politique de gestion ou rattrapage de "
-            f"dossiers. Chain Ladder reste applicable, mais la période servant à "
-            f"calculer les coefficients mérite d'être resserrée sur les années "
-            f"récentes, et ce choix documenté.")
-    elif abs(t_stat) > H1_SEUIL_VIGILANCE:
-        statut = A_JUSTIFIER
-        message = (
-            f"Un effet d'année calendaire est possible sans être établi "
-            f"(statistique {t_stat:+.2f} : au-delà du seuil de 90 %, en deçà de "
-            f"celui de 95 %). À rapprocher de ce que l'on sait des exercices "
-            f"concernés avant de retenir la période de calcul.")
+    if guide_calculable:
+        t_stat = (somme_Z - somme_E) / sqrt(somme_V)
+        statut_guide = (NON_VALIDEE if abs(t_stat) > H1_SEUIL_REJET else
+                        A_JUSTIFIER if abs(t_stat) > H1_SEUIL_VIGILANCE else
+                        VALIDEE)
+        bornes = [round(somme_E - 2.0 * sqrt(somme_V), 4),
+                  round(somme_E + 2.0 * sqrt(somme_V), 4)]
     else:
-        statut = VALIDEE
-        message = (
-            f"Aucun effet d'année calendaire décelé (statistique {t_stat:+.2f}, "
-            f"dans l'intervalle [−1,96 ; 1,96]). Les années de règlement se "
-            f"comportent de façon homogène.")
+        t_stat, statut_guide, bornes = None, NON_TESTABLE, None
 
+    extras: Dict[str, Any] = {
+        'somme_Z': round(somme_Z, 4), 'somme_E': round(somme_E, 4),
+        'somme_Var': round(somme_V, 4),
+        'intervalle_2sigma': bornes,
+        'n_diagonales_testees': len(detail),
+        # ── le test du guide : publié, quel que soit celui qui décide ────────
+        'guide_statut': statut_guide,
+        'guide_statistique': round(t_stat, 4) if t_stat is not None else None,
+        'guide_reference': "guide IA 2023, annexe 9.d.i",
+        'guide_intervalle': [-H1_SEUIL_REJET, H1_SEUIL_REJET],
+    }
+
+    # ── Le scan ne peut pas se prononcer : le guide décide, comme avant ──────
+    if scan is None:
+        extras['scan_disponible'] = False
+        extras['scan_motif'] = (f"moins de {SCAN_MIN_DIAGONALES} diagonales "
+                                f"exploitables (triangle de moins de "
+                                f"{SCAN_MIN_DIAGONALES + 1} années)")
+        return ResultatHypothese(
+            code='CLM-H1', libelle="Indépendance des années de survenance",
+            statut=statut_guide, valeur=round(t_stat, 4),
+            critere=(f"|t| ≤ {H1_SEUIL_VIGILANCE} validée · "
+                     f"≤ {H1_SEUIL_REJET} à justifier · au-delà non validée"),
+            source_critere=(f"{SOURCE_GUIDE} pour le seuil {H1_SEUIL_REJET} "
+                            f"(annexe 9.d p82) ; seuil intermédiaire "
+                            f"{H1_SEUIL_VIGILANCE} = jugement ActuarIA"),
+            message=_message_guide_seul(t_stat, statut_guide),
+            critique_pour=(), detail=tuple(detail), extras=extras)
+
+    # ── Le scan décide ──────────────────────────────────────────────────────
+    p = scan['p']
+    statut = (NON_VALIDEE if p < SCAN_P_TENDANCE_FORT else
+              A_JUSTIFIER if p < SCAN_P_TENDANCE else VALIDEE)
+    extras.update({
+        'scan_disponible': True,
+        'p_scan_diagonales': round(p, 6),
+        'diagonale_la_plus_ecartee': scan['diagonale'],
+        'ecart_standardise': round(scan['ecart'], 3),
+        'n_cellules_diagonale': scan['n_cellules'],
+        'n_diagonales_scan': scan['n_diagonales'],
+        'n_permutations': SCAN_N_PERMUTATIONS,
+        'graine': SCAN_GRAINE,
+        'profil_par_diagonale': scan['profil'],
+    })
     return ResultatHypothese(
         code='CLM-H1', libelle="Indépendance des années de survenance",
-        statut=statut, valeur=round(t_stat, 4),
-        critere=(f"|t| ≤ {H1_SEUIL_VIGILANCE} validée · "
-                 f"≤ {H1_SEUIL_REJET} à justifier · au-delà non validée"),
-        source_critere=(f"{SOURCE_GUIDE} pour le seuil {H1_SEUIL_REJET} "
-                        f"(annexe 9.d p82) ; seuil intermédiaire "
-                        f"{H1_SEUIL_VIGILANCE} = jugement ActuarIA"),
-        message=message,
+        statut=statut, valeur=round(p, 6),
+        critere=(f"test de scan sur les résidus par diagonale : "
+                 f"p ≥ {SCAN_P_TENDANCE} validée · < {SCAN_P_TENDANCE} à "
+                 f"justifier · < {SCAN_P_TENDANCE_FORT} non validée "
+                 f"({SCAN_N_PERMUTATIONS} permutations, graine {SCAN_GRAINE}). "
+                 f"Le test des signes de l'annexe 9.d.i est publié dans "
+                 f"`extras` et signalé dans le message"),
+        source_critere=(f"jugement ActuarIA pour les seuils du scan ; "
+                        f"{SOURCE_GUIDE} pour le test des signes publié en "
+                        f"regard (annexe 9.d p82)"),
+        message=_message_deux_tests(scan, statut, t_stat, statut_guide),
         critique_pour=(),          # le guide rejette et poursuit : jamais bloquant
-        detail=tuple(detail),
-        extras={'somme_Z': round(somme_Z, 4), 'somme_E': round(somme_E, 4),
-                'somme_Var': round(somme_V, 4),
-                'intervalle_2sigma': [round(borne_basse, 4), round(borne_haute, 4)],
-                'n_diagonales_testees': len(detail)})
+        detail=tuple(detail), extras=extras)
 
 
 # =============================================================================

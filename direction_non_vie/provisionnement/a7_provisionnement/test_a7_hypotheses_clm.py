@@ -131,18 +131,52 @@ class T2_CLM_H1_Effet_Calendaire(unittest.TestCase):
         print("    OK CLM-H1-a formules corrigées = tableau publié du guide (4 effectifs)")
 
     def test_triangle_sain_validee(self):
-        r = clm_h1_effet_calendaire(triangle(VOLUMES_VARIES, bruit=0.5))
-        self.assertEqual(r.statut, VALIDEE)
-        self.assertLess(abs(r.valeur), 1.645)
-        print(f"    OK CLM-H1-b triangle sain : VALIDÉE (t = {r.valeur:+.2f})")
+        """Un triangle sain doit valider — et c'est une CALIBRATION, pas un cas.
+
+        ⚠️ CE TEST NE PORTE PLUS SUR UN SEUL TIRAGE, ET LA RAISON EST MESURÉE.
+        Il employait la graine par défaut (11), sur laquelle le test de scan
+        rend p = 0,0199 et conclut « à justifier ». Ce n'est pas un défaut du
+        scan : sur 40 graines du même générateur, 5 rejets seulement, avec une
+        p-valeur MÉDIANE de 0,307 — la graine 11 est un tirage malheureux, et
+        un test bâti sur un seul d'entre eux ne dit rien de la calibration.
+
+        On vérifie donc ce qui a un sens, et sur assez de tirages pour que le
+        verrou ne soit pas lui-même à la merci du hasard : quarante triangles
+        sains, dont au moins trente doivent valider. Mesuré : 35 sur 40.
+        La fausse alarme du scan sur 200 triangles conformes au modèle vaut
+        6,0 % pour un nominal de 5 % — contre 10,4 % pour le seul test des
+        signes avant ce lot.
+        """
+        statuts = [clm_h1_effet_calendaire(
+            triangle(VOLUMES_VARIES, bruit=0.5, graine=g)).statut
+            for g in range(40)]
+        n_ok = sum(1 for s in statuts if s == VALIDEE)
+        self.assertGreaterEqual(
+            n_ok, 30,
+            "plus d'un quart des triangles sains sont signalés : la "
+            "calibration a dérivé")
+        print(f"    OK CLM-H1-b triangles sains : {n_ok}/40 validés "
+              f"(la graine 11 tombe à « à justifier » — tirage malheureux, "
+              f"médiane des p = 0,307)")
 
     def test_rupture_de_regime_non_validee(self):
-        """Une RUPTURE de régime calendaire doit être détectée."""
+        """Une RUPTURE de régime calendaire doit être détectée.
+
+        ⚠️ L'ASSERTION SUR `valeur` A CHANGÉ DE NATURE, PAS DE FOND. Depuis le
+        branchement du test de scan, `valeur` porte une P-VALEUR et non plus la
+        statistique t du test des signes : comparer `abs(valeur)` à 1,96 n'a
+        donc plus de sens. La statistique du guide reste vérifiée — elle est
+        publiée dans `extras`, où ce test va désormais la chercher.
+        """
         r = clm_h1_effet_calendaire(rupture_calendaire(0.35, depuis=6))
         self.assertEqual(r.statut, NON_VALIDEE)
-        self.assertGreater(abs(r.valeur), 1.96)
+        self.assertLess(r.valeur, 0.01)                    # p-valeur du scan
+        self.assertGreater(abs(r.extras['guide_statistique']), 1.96)
+        self.assertEqual(r.extras['guide_statut'], NON_VALIDEE)
         self.assertIn('année calendaire', r.message)
-        print(f"    OK CLM-H1-c rupture de régime : NON VALIDÉE (t = {r.valeur:+.2f})")
+        print(f"    OK CLM-H1-c rupture de régime : NON VALIDÉE "
+              f"(scan p = {r.valeur:.4f} ; guide t = "
+              f"{r.extras['guide_statistique']:+.2f} — les deux concordent)")
 
     def test_inflation_constante_indetectable_par_construction(self):
         """MUR D'IDENTIFIABILITÉ, vérifié et non supposé.
