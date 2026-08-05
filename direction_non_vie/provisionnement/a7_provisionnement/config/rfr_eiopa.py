@@ -22,7 +22,7 @@
 
 from __future__ import annotations
 import numpy as np
-from typing import Union
+from typing import Optional, Union
 
 # ── Métadonnées ───────────────────────────────────────────────────────────────
 DATE_COURBE    = "2025-03-31"
@@ -100,6 +100,60 @@ def get_facteur_actualisation(t: int) -> float:
 #  FONCTIONS DE SUBSTITUTION — courbe manuelle ou fichier Excel
 # =============================================================================
 
+#: En deçà de ce maximum EN VALEUR ABSOLUE, une courbe est lue comme étant en
+#: DÉCIMAL et non en pourcentage — et elle est refusée plutôt que divisée par
+#: cent une seconde fois.
+#:
+#: ⚠️ POURQUOI CE GARDE-FOU EXISTE. Les fichiers EIOPA publient les taux en
+#: DÉCIMAL — 0,02826 pour 2,826 %. Le code de ce module attend des POURCENTS
+#: et divise par cent. Un fichier EIOPA importé tel quel produirait donc une
+#: courbe CENT FOIS TROP BASSE, sans lever la moindre erreur. C'est le seul
+#: des trois obstacles à un import brut qui échouerait en silence : les deux
+#: autres — mauvaise feuille, en-tête absent — s'arrêtent bruyamment.
+#:
+#: ⚠️ SEUIL CALIBRÉ, PAS CHOISI, et sur le cas le plus défavorable : une
+#: courbe légitime en régime de taux NÉGATIFS, tronquée aux seules maturités
+#: courtes. Maximum en valeur absolue mesuré :
+#:       EIOPA 2026 en décimal ................ 0,0337
+#:       EIOPA 2026 en pourcentage ............ 3,3720
+#:       EUR fin 2020, complète ............... 3,1500
+#:       EUR fin 2020, tronquée à 10 ans ...... 0,6000   ← le cas serré
+#: La VALEUR ABSOLUE est ce qui sauve le dernier cas : son court terme vaut
+#: −0,60 %, donc 0,60 en module, loin des 0,034 du décimal. Tout seuil de 0,05
+#: à 0,50 sépare correctement ; 0,15 est le milieu géométrique des deux
+#: extrêmes (√(0,0337 × 0,60) = 0,142), soit un facteur 4,4 de marge de part
+#: et d'autre.
+TAUX_MIN_PLAUSIBLE_PCT = 0.15
+
+#: Ce que le message doit faire : dire QUOI FAIRE, pas seulement refuser. Un
+#: actuaire bloqué sans consigne rouvrira le même fichier et réessaiera.
+_CONSIGNE_POURCENT = (
+    "Les taux doivent être exprimés EN POURCENTAGE — 2,826 pour 2,826 %. "
+    "Les fichiers EIOPA les publient en décimal (0,02826) : multipliez la "
+    "colonne par 100 avant l'import. Si votre courbe est réellement de cet "
+    "ordre, saisissez-la comme taux manuel plutôt que par fichier."
+)
+
+
+def _diagnostic_unite(taux_pct) -> Optional[str]:
+    """Rend un message si la série ressemble à des décimaux, sinon `None`.
+
+    Le zéro est admis sans réserve : un actuaire qui assume une actualisation
+    nulle la saisit ainsi, et ce n'est pas une erreur d'unité.
+    """
+    valeurs = np.asarray([v for v in np.ravel(np.asarray(taux_pct,
+                                                         dtype=float))
+                          if np.isfinite(v)], dtype=float)
+    if valeurs.size == 0:
+        return None
+    maxi = float(np.abs(valeurs).max())
+    if maxi == 0.0 or maxi >= TAUX_MIN_PLAUSIBLE_PCT:
+        return None
+    return (f"Taux lus comme des décimaux : le plus élevé vaut {maxi:.5f} en "
+            f"valeur absolue, là où une courbe en pourcentage dépasse "
+            f"{TAUX_MIN_PLAUSIBLE_PCT}. {_CONSIGNE_POURCENT}")
+
+
 def get_courbe_taux_plat(taux_pct: float) -> dict:
     """
     Retourne une courbe de taux plat (même taux pour toutes les maturités).
@@ -111,7 +165,22 @@ def get_courbe_taux_plat(taux_pct: float) -> dict:
     Returns
     -------
     dict avec 'type', 'taux_pct', 'source', 'date'
+
+    ⚠️ MÊME PIÈGE QUE POUR LE FICHIER, ET IL A DÉJÀ SERVI. Saisir `0.03` en
+    pensant 3 % rendait une courbe à 0,030 % sans un mot — l'erreur a été
+    commise pendant la conception de ce garde-fou, sur cette fonction même,
+    et n'a été vue qu'en relisant le libellé publié.
     """
+    alerte = _diagnostic_unite(taux_pct)
+    if alerte:
+        return {
+            'type':      'erreur',
+            'taux_fn':   get_taux_rfr,
+            'source':    f'{alerte} — courbe embarquée utilisée',
+            'date':      DATE_COURBE,
+            'label':     'Courbe embarquée (taux manuel refusé)',
+            'erreur':    alerte,
+        }
     taux_decimal = taux_pct / 100.0
     return {
         'type':        'taux_plat',
@@ -155,6 +224,14 @@ def get_courbe_depuis_excel(fichier_bytes: bytes) -> dict:
 
         if len(mats) < 2 or len(taux) < 2:
             raise ValueError("Fichier invalide — moins de 2 maturités")
+
+        # ⚠️ LE SEUL DES TROIS OBSTACLES QUI ÉCHOUERAIT EN SILENCE. Mauvaise
+        # feuille et en-tête absent s'arrêtent bruyamment ; des taux en
+        # décimal, eux, passeraient et produiraient une courbe cent fois trop
+        # basse. On les refuse, en disant quoi faire.
+        alerte = _diagnostic_unite(taux)
+        if alerte:
+            raise ValueError(alerte)
 
         mats_arr = np.array(mats)
         taux_arr = np.array(taux)
