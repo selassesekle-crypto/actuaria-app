@@ -6,7 +6,7 @@
 
  CE QUE LE LOT A1 CHANGE, ET CE QU'IL NE CHANGE PAS.
 
- Le circuit `_hypotheses_a_justifier` ne lisait que la famille BFCC. Les
+ Le circuit `_hypotheses_a_signaler` ne lisait que la famille BFCC. Les
  verdicts de Chain Ladder et de Mack — CLM-H1..H4 — n'avaient donc AUCUN
  effet sur le statut publié, quel que soit leur contenu. CLM le rejoint.
 
@@ -72,19 +72,19 @@ class T1_Le_Circuit_Lit_CLM(unittest.TestCase):
             (r['n2']['clm']['hypotheses']['CLM-H2'] or {}).get('statut'),
             'À JUSTIFIER')
         self.assertIn('chain_ladder', r['n4']['methodes_incluses'])
-        self.assertIn('CLM-H2', r['n4']['hypotheses_a_justifier'],
+        self.assertIn('CLM-H2', r['n4']['hypotheses_a_signaler'],
                       "CLM n'atteint pas le circuit — le lot A1 est défait")
         self.assertEqual(r['n4']['statut'], 'AMBRE',
                          "une hypothèse à justifier ne peut pas coexister "
                          "avec un VERT")
         print(f"    OK A1-1 Recours : CLM-H2 à justifier → statut "
-              f"{r['n4']['statut']}, a_justifier="
-              f"{r['n4']['hypotheses_a_justifier']}")
+              f"{r['n4']['statut']}, a_signaler="
+              f"{r['n4']['hypotheses_a_signaler']}")
 
     def test_le_circuit_lit_toujours_bfcc(self):
         """L'ajout de CLM ne doit pas avoir évincé BFCC."""
         import inspect
-        src = inspect.getsource(N4._hypotheses_a_justifier)
+        src = inspect.getsource(N4._hypotheses_a_signaler)
         self.assertIn("'bfcc'", src)
         self.assertIn("'clm'", src)
         print("    OK A1-2 le circuit lit BFCC ET CLM, pas l'un à la place "

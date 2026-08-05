@@ -550,7 +550,7 @@ class T11_Gouvernance(unittest.TestCase):
     def test_une_hypothese_a_justifier_interdit_le_vert(self):
         """L'état intermédiaire doit avoir une conséquence, sinon il ne sert à rien."""
         from direction_non_vie.provisionnement.a7_provisionnement.n4_best_estimate \
-            import _hypotheses_a_justifier
+            import _hypotheses_a_signaler
         n2 = {'bfcc': {'hypotheses': {
             'BFCC-H3': {'statut': A_JUSTIFIER, 'critique_pour': []},
             'BFCC-H4': {'statut': A_JUSTIFIER,
@@ -559,17 +559,17 @@ class T11_Gouvernance(unittest.TestCase):
         }}}
         # BF retenue, Cape Cod non : seule H4 doit plafonner.
         self.assertEqual(
-            _hypotheses_a_justifier(n2, {'chain_ladder': 1.0,
-                                         'bornhuetter_ferguson': 1.0}),
+            _hypotheses_a_signaler(n2, {'chain_ladder': 1.0,
+                                        'bornhuetter_ferguson': 1.0}),
             ['BFCC-H4'])
         # Ni l'une ni l'autre retenue : rien ne plafonne.
-        self.assertEqual(_hypotheses_a_justifier(n2, {'chain_ladder': 1.0}), [])
+        self.assertEqual(_hypotheses_a_signaler(n2, {'chain_ladder': 1.0}), [])
         # BFCC-H3 est DESCRIPTIVE : `critique_pour` vide ne plafonne jamais.
         n2_h3 = {'bfcc': {'hypotheses': {
             'BFCC-H3': {'statut': A_JUSTIFIER, 'critique_pour': []}}}}
         self.assertEqual(
-            _hypotheses_a_justifier(n2_h3, {'chain_ladder': 1.0,
-                                            'bornhuetter_ferguson': 1.0}), [])
+            _hypotheses_a_signaler(n2_h3, {'chain_ladder': 1.0,
+                                           'bornhuetter_ferguson': 1.0}), [])
         print("    OK BFCC-36 À JUSTIFIER plafonne, filtré par méthode retenue, "
               "et jamais depuis une hypothèse descriptive")
 
@@ -579,7 +579,7 @@ class T11_Gouvernance(unittest.TestCase):
             source=np.array(_TRI_RECOURS, dtype=float), mode_declare='cumule',
             primes=_exposition(_TRI_RECOURS), generer_graphiques=False)
         self.assertIn('annees_cadence_ko', r['n4'])
-        self.assertIn('hypotheses_a_justifier', r['n4'])
+        self.assertIn('hypotheses_a_signaler', r['n4'])
         cov = r['n2']['bfcc']['couverture_cadence']
         attendu = sorted(i for i, s in cov.items()
                          if s == NON_VALIDEE

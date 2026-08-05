@@ -175,7 +175,7 @@ def s2_non_calculable(n4: Dict) -> bool:
 PORTEURS_DE_CIBLE = {
     # ── Cibles DANS `_CLES_N3` : le circuit du Best Estimate ────────────────
     'chain_ladder':         "circuit du BE — `_HYPOTHESES_BLOQUANTES` et "
-                            "`_hypotheses_a_justifier`, plus le filet par année",
+                            "`_hypotheses_a_signaler`, plus le filet par année",
     'bornhuetter_ferguson': "circuit du BE — exclusion par BFCC-H4",
     'cape_cod':             "circuit du BE — exclusion par BFCC-H5 et BFCC-H6",
 
@@ -228,9 +228,47 @@ _HYPOTHESES_BLOQUANTES = {
     'cape_cod':             ('BFCC-H5', 'BFCC-H6'),
 }
 
+#: Statuts qui empêchent un VERT lorsqu'ils portent sur une méthode retenue.
+#: ⚠️ LES DEUX, ET C'EST LA MONOTONIE DU SYSTÈME. Ce jeu ne contenait que
+#: `À JUSTIFIER` : un verdict FRANCHEMENT en défaut avait donc moins d'effet
+#: qu'un verdict douteux. Écrit ici plutôt qu'en dur dans le filtre pour que la
+#: règle se lise d'un coup d'œil et qu'un verrou puisse s'y adosser.
+_STATUTS_A_SIGNALER = ('À JUSTIFIER', 'NON VALIDÉE')
 
-def _hypotheses_a_justifier(n2: Dict, methodes_incluses: Dict) -> List[str]:
-    """Hypothèses en À JUSTIFIER qui portent sur une méthode RETENUE.
+
+def _hypotheses_a_signaler(n2: Dict, methodes_incluses: Dict) -> List[str]:
+    """Hypothèses NON SATISFAITES qui portent sur une méthode RETENUE.
+
+    ⚠️ UN VERDICT PLUS SÉVÈRE NE PEUT PAS AVOIR MOINS D'EFFET QU'UN VERDICT
+    MODÉRÉ — et ce circuit violait cette règle. Il ne lisait que
+    « À JUSTIFIER ». Une hypothèse déclarant une cible sans figurer dans
+    `_HYPOTHESES_BLOQUANTES` plafonnait donc le statut quand elle était
+    modérément en défaut, et NE FAISAIT RIEN quand elle l'était franchement.
+
+    MESURÉ, sur 216 triangles et une courbe de taux non périmée : 29
+    portefeuilles ressortaient VERT, et 14 d'entre eux — 48 % — portaient une
+    BFCC-H1 NON VALIDÉE. Un portefeuille dont l'hypothèse calendaire est
+    REJETÉE pouvait donc être déclaré « rien à justifier », pendant qu'un
+    portefeuille dont la même hypothèse était seulement douteuse était
+    plafonné à AMBRE.
+
+    ⚠️ LE DÉFAUT ÉTAIT INVISIBLE, ET POUR UNE RAISON QUI N'EST PAS
+    STRUCTURELLE. Le plafonnement ne s'applique qu'à un statut VERT ; or la
+    courbe RFR embarquée est périmée et plafonne déjà tout VERT à AMBRE. Aucun
+    portefeuille n'atteignait donc le cas. Le jour où une courbe à jour est
+    importée, le défaut devient actif — c'est ce qui a décidé de le corriger
+    avant, et non après.
+
+    LA RÈGLE VAUT POUR TOUTE HYPOTHÈSE, PAS SEULEMENT POUR CELLE QUI L'A
+    RÉVÉLÉE. Elle est écrite en termes de statuts et de cibles, jamais de
+    codes : une hypothèse future qui déclarerait une cible sans être bloquante
+    en hériterait sans que personne ait à y penser.
+
+    ⚠️ ET ELLE EST INERTE LÀ OÙ L'EXCLUSION JOUE DÉJÀ. Quand BFCC-H4, H5 ou H6
+    est NON VALIDÉE, sa méthode est retirée du Best Estimate : elle ne figure
+    plus dans `methodes_incluses`, et le filtre ne se déclenche pas. Aucun
+    double comptage n'est possible. Mesuré : sur 216 triangles, le correctif
+    déplace 14 statuts et ZÉRO euro.
 
     ⚠️ DEUX FAMILLES DEPUIS LE LOT A1, ET C'EST TOUT CE QUI PEUT L'ÊTRE. Ce
     circuit ne lisait que BFCC : les verdicts de Chain Ladder et Mack n'avaient
@@ -263,7 +301,7 @@ def _hypotheses_a_justifier(n2: Dict, methodes_incluses: Dict) -> List[str]:
     hyps.update(n2.get('clm', {}).get('hypotheses', {}))
     return sorted(
         code for code, h in hyps.items()
-        if h.get('statut') == 'À JUSTIFIER'
+        if h.get('statut') in _STATUTS_A_SIGNALER
         and any(m in methodes_incluses for m in (h.get('critique_pour') or []))
     )
 
@@ -551,7 +589,7 @@ def selectionner_et_agreger(
         # DISPERSION (CLM-H3 par colonne, durci par CLM-H4). Elle était calculée
         # par `couvertures_par_annee` et lue par PERSONNE. Elle est désormais
         # publiée. Elle ne gate rien : elle porte sur Mack, qui n'entre pas dans
-        # le Best Estimate — voir `_hypotheses_a_justifier`.
+        # le Best Estimate — voir `_hypotheses_a_signaler`.
         volatilite = couverture.get(i, {}).get('couverture_volatilite',
                                                'NON TESTABLE')
         sous_filet = motif == 'NON VALIDÉE'
@@ -974,8 +1012,8 @@ class BestEstimateS2:
         # n'avait aucune conséquence : À JUSTIFIER conserve la méthode — c'est là
         # sa différence avec NON VALIDÉE — mais demande une justification, et un
         # Best Estimate présenté comme VERT dispenserait de la donner.
-        a_justifier = _hypotheses_a_justifier(n2, methodes_incluses)
-        if statut == 'VERT' and a_justifier:
+        a_signaler = _hypotheses_a_signaler(n2, methodes_incluses)
+        if statut == 'VERT' and a_signaler:
             statut = 'AMBRE'
 
         # UNE COURBE DES TAUX PÉRIMÉE NE PEUT PAS COEXISTER AVEC UN VERT.
@@ -1023,7 +1061,7 @@ class BestEstimateS2:
         #
         # D'où deux cas, et deux seulement :
         #   · une colonne À JUSTIFIER (aucune non validée) → global
-        #     À JUSTIFIER → `_hypotheses_a_justifier` plafonne DÉJÀ, juste
+        #     À JUSTIFIER → `_hypotheses_a_signaler` plafonne DÉJÀ, juste
         #     au-dessus, puisque CLM-H2 vise `chain_ladder`, toujours retenue ;
         #   · une colonne NON VALIDÉE → l'année la plus récente passe sous
         #     filet → le ROUGE est DÉJÀ forcé plus haut.
@@ -1051,10 +1089,10 @@ class BestEstimateS2:
         if niveau_ancre_cl:
             alertes_jugement.append(MSG_NIVEAU_ANCRE_CL)
 
-        if a_justifier:
+        if a_signaler:
             alertes_jugement.append(
-                f"🟡 Hypothèses à justifier avant validation : "
-                f"{', '.join(a_justifier)} — les méthodes concernées restent "
+                f"🟡 Hypothèses non satisfaites sur une méthode retenue : "
+                f"{', '.join(a_signaler)} — les méthodes concernées restent "
                 f"retenues, mais le Best Estimate ne peut pas sortir en VERT "
                 f"sans que l'écart soit expliqué dans la note méthodologique.")
 
@@ -1325,7 +1363,7 @@ class BestEstimateS2:
             # l'actuaire voyait le Best Estimate changer sans savoir où.
             'annees_cadence_ko':     selection['annees_cadence_ko'],
             'annees_rouge_dur':      selection['annees_rouge_dur'],
-            'hypotheses_a_justifier': a_justifier,
+            'hypotheses_a_signaler': a_signaler,
 
             # SCR formule standard
             'scr':                   scr,
