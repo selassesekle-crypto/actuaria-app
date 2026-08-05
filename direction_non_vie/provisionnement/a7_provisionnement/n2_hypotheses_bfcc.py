@@ -86,6 +86,9 @@ from typing import Any, Dict, List, Optional, Sequence
 
 import numpy as np
 
+from .n2_puissance import (
+    GRAINE_PUISSANCE, N_SIM_PUISSANCE, arrondir, formuler,
+    regenerer_loss_ratio, sans_objet)
 from .n2_hypotheses_clm import (
     A_JUSTIFIER, NON_TESTABLE, NON_VALIDEE, VALIDEE,
     SOURCE_GUIDE, SOURCE_JUGEMENT,
@@ -722,6 +725,10 @@ def verifier_hypotheses_bfcc(
     hypotheses = {h.code: h for h in (h1, h2, h3, h4, h5, h6)}
     return {
         'hypotheses':          {c: h.synthese() for c, h in hypotheses.items()},
+        # Ce que BFCC-H5 POUVAIT détecter sur ce portefeuille — à lire avec son
+        # verdict, jamais à sa place.
+        'puissance':           puissance_bfcc(ultimates_cl, exposition,
+                                              cadence_ok),
         'couverture_cadence':  couverture_cadence_par_annee(h2),
         'recoupement_lr':      _recoupement_loss_ratios(bf, cape_cod),
         'statuts':             {c: h.statut for c, h in hypotheses.items()},
@@ -746,6 +753,93 @@ LIBELLES = {
 }
 
 
+#: Dérive publiée pour BFCC-H5, EN POINTS DE LOSS RATIO PAR AN. Trois points,
+#: parce que c'est l'ordre de grandeur qu'un actuaire corrige par un recalage
+#: « as-if » — le geste que le guide décrit p15 — et parce que la mesure le
+#: place dans la zone informative : ni 0 % ni 100 % sur les triangles de
+#: référence, donc un chiffre qui parle DU portefeuille et non du seuil choisi.
+H5_DERIVE_PUBLIEE = 0.03
+
+#: Les cinq autres hypothèses de la famille sont des contrôles de plage ou de
+#: comptage — elles n'ont pas de puissance, et inventer un chiffre serait pire
+#: que de le dire. Le motif est publié à la place.
+_SANS_PUISSANCE_BFCC = {
+    'BFCC-H1': "elle reprend le verdict de CLM-H1, dont la puissance est "
+               "publiée là-bas",
+    'BFCC-H2': "elle vérifie que la cadence brute reste dans [0, 1], année "
+               "par année",
+    'BFCC-H3': "elle republie le test calendaire du GLM Poisson âge-cohorte",
+    'BFCC-H4': "elle vérifie que le loss ratio a priori tient dans une plage "
+               "de plausibilité",
+    'BFCC-H6': "elle vérifie le NIVEAU du loss ratio poolé, par comparaison "
+               "à une plage",
+}
+
+
+def puissance_bfcc(
+    ultimates_cl: Optional[Sequence[float]],
+    exposition:   Optional[Sequence[float]],
+    cadence_ok:   Optional[Sequence[bool]],
+) -> Dict[str, Dict[str, Any]]:
+    """Ce que BFCC-H5 pouvait détecter SUR CE PORTEFEUILLE-CI.
+
+    ⚠️ SEULE BFCC-H5 EST UN TEST STATISTIQUE dans cette famille. Les cinq
+    autres comparent une valeur à une plage : la notion de puissance n'y a pas
+    de sens, et le dire vaut mieux qu'afficher un zéro qui se lirait
+    « aucune capacité de détection ».
+    """
+    out: Dict[str, Dict[str, Any]] = {
+        code: sans_objet(motif) for code, motif in _SANS_PUISSANCE_BFCC.items()
+    }
+    if ultimates_cl is None or exposition is None:
+        out['BFCC-H5'] = sans_objet(
+            "l'exposition n'est pas fournie : le loss ratio n'est pas calculable")
+        return out
+
+    u = np.asarray(list(ultimates_cl), dtype=float)
+    e = np.asarray(list(exposition), dtype=float)
+    ok = list(cadence_ok) if cadence_ok is not None else [True] * len(u)
+
+    def _mesure(pente: float) -> Optional[float]:
+        rng = np.random.default_rng(GRAINE_PUISSANCE)
+        detectes = evalues = 0
+        for _ in range(N_SIM_PUISSANCE):
+            simule = regenerer_loss_ratio(u, e, rng, pente=pente)
+            if simule is None:
+                return None
+            try:
+                statut = str(bfcc_h5_stabilite_lr(simule, e, ok).statut)
+            except Exception:                              # pragma: no cover
+                continue
+            evalues += 1
+            if statut not in (VALIDEE, NON_TESTABLE):
+                detectes += 1
+        return (100.0 * detectes / evalues) if evalues else None
+
+    pct = _mesure(H5_DERIVE_PUBLIEE)
+    if pct is None:
+        out['BFCC-H5'] = sans_objet(
+            "le portefeuille ne permet pas de régénérer un jeu de référence")
+        return out
+    effet = (f"une dérive de {H5_DERIVE_PUBLIEE * 100:.0f} points de loss "
+             f"ratio par an")
+    out['BFCC-H5'] = {
+        'mesurable':      True,
+        'puissance':      arrondir(pct),
+        'puissance_brute': round(pct, 1),
+        'temoin':         (lambda t: arrondir(t) if t is not None else None)(
+            _mesure(0.0)),
+        'effet':          effet,
+        'n_simulations':  N_SIM_PUISSANCE,
+        'graine':         GRAINE_PUISSANCE,
+        'phrase':         formuler(
+            pct, effet,
+            "les loss ratios de ce portefeuille sont déjà dispersés d'une "
+            "année à l'autre, ce qui laisse peu de place à une tendance"),
+    }
+    return out
+
+
 def lignes_hypotheses_bfcc(n2: Optional[Dict]) -> List[Dict[str, Any]]:
     """Les six verdicts, prêts à afficher — commentaire, Excel, Word, rapport.
 
@@ -756,6 +850,7 @@ def lignes_hypotheses_bfcc(n2: Optional[Dict]) -> List[Dict[str, Any]]:
     évaluée ressort ici NON TESTABLE, jamais en valeur par défaut.
     """
     hyps = (n2 or {}).get('bfcc', {}).get('hypotheses', {})
+    puis = (n2 or {}).get('bfcc', {}).get('puissance', {}) or {}
     lignes = []
     for code in CODES:
         h = hyps.get(code, {})
@@ -767,6 +862,8 @@ def lignes_hypotheses_bfcc(n2: Optional[Dict]) -> List[Dict[str, Any]]:
             'critere': str(h.get('critere', '—')),
             'source':  str(h.get('source_critere', '—')),
             'ok':      str(h.get('statut', NON_TESTABLE)) == VALIDEE,
+            'puissance':        (puis.get(code) or {}).get('puissance'),
+            'puissance_phrase': str((puis.get(code) or {}).get('phrase', '')),
         })
     return lignes
 

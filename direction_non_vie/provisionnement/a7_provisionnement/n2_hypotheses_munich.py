@@ -48,6 +48,9 @@ from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
 
+from .n2_puissance import (
+    GRAINE_PUISSANCE, N_SIM_PUISSANCE, arrondir, formuler, lambda_paye,
+    regenerer_munich, sans_objet)
 from .n2_hypotheses_clm import (
     A_JUSTIFIER, NON_TESTABLE, NON_VALIDEE, SOURCE_JUGEMENT, VALIDEE,
     ResultatHypothese, _pire_statut,
@@ -454,10 +457,99 @@ def verifier_hypotheses_munich(
     return {
         'hypotheses': {c: r.synthese() for c, r in resultats.items()},
         'statuts':    {c: r.statut for c, r in resultats.items()},
+        # Ce que MCL-H2 POUVAIT détecter sur cette paire — à lire avec son
+        # verdict, jamais à sa place.
+        'puissance':  puissance_munich(C_P, C_E),
         'mention_h4': MESSAGE_H4,
         'statut_le_plus_severe': _pire_statut([r.statut for r in resultats.values()]),
         'objets': resultats,
     }
+
+
+#: Courbure publiée pour MCL-H2 : coefficient du terme en carré du résidu
+#: standardisé. 0,50 parce que la mesure le place dans la zone informative —
+#: à 0,10 tout portefeuille afficherait le niveau du témoin, et le chiffre ne
+#: dirait plus rien de la paix payé / engagé qu'on lui soumet.
+MCL_H2_COURBURE_PUBLIEE = 0.50
+
+#: Les quatre autres hypothèses de la famille n'ont pas de puissance propre.
+_SANS_PUISSANCE_MCL = {
+    'MCL-H1': "elle rejoue CLM-H1 sur les deux triangles, et la puissance de "
+              "ce test est publiée là-bas",
+    'MCL-H3': "elle rejoue CLM-H3 sur les deux triangles, et la puissance de "
+              "ce test est publiée là-bas",
+    'MCL-H4': "aucun test n'est disponible pour l'homogénéité de λ — c'est "
+              "une limite assumée, pas un résultat",
+    'MCL-H5': "elle vérifie une condition de non-circularité, par comparaison "
+              "à un seuil",
+}
+
+
+def puissance_munich(
+    C_P: Optional[np.ndarray],
+    C_E: Optional[np.ndarray],
+) -> Dict[str, Dict[str, Any]]:
+    """Ce que MCL-H2 pouvait détecter SUR CETTE PAIRE payé / engagé.
+
+    ⚠️ LE λ VIENT DES DONNÉES, JAMAIS D'UNE CONSTANTE, et c'est une leçon
+    payée : en construisant ce générateur, coder λ = 0,35 « par défaut » là où
+    la paire réelle en portait −0,0 faisait passer le témoin de 7,5 % à
+    17,5 %. Le générateur cessait de respecter la nulle de Quarg & Mack, et
+    toute puissance qu'il aurait produite aurait été fausse.
+    """
+    out: Dict[str, Dict[str, Any]] = {
+        code: sans_objet(motif) for code, motif in _SANS_PUISSANCE_MCL.items()
+    }
+    if C_P is None or C_E is None:
+        out['MCL-H2'] = sans_objet(
+            "le triangle des engagés n'est pas fourni")
+        return out
+
+    lam = lambda_paye(C_P, C_E)
+    if lam is None:
+        out['MCL-H2'] = sans_objet(
+            "la paire ne permet pas d'estimer le coefficient de Quarg & Mack")
+        return out
+
+    def _mesure(courbure: float) -> Optional[float]:
+        rng = np.random.default_rng(GRAINE_PUISSANCE)
+        detectes = evalues = 0
+        for _ in range(N_SIM_PUISSANCE):
+            paire = regenerer_munich(C_P, C_E, lam, rng, quad=courbure)
+            if paire is None:
+                return None
+            try:
+                statut = str(mcl_h2_linearite(paire[0], paire[1]).statut)
+            except Exception:                              # pragma: no cover
+                continue
+            evalues += 1
+            if statut not in (VALIDEE, NON_TESTABLE):
+                detectes += 1
+        return (100.0 * detectes / evalues) if evalues else None
+
+    pct = _mesure(MCL_H2_COURBURE_PUBLIEE)
+    if pct is None:
+        out['MCL-H2'] = sans_objet(
+            "la paire ne permet pas de régénérer un jeu de référence")
+        return out
+    effet = (f"une courbure de {MCL_H2_COURBURE_PUBLIEE:.2f} dans la réponse "
+             f"du facteur payé au résidu engagé / payé")
+    out['MCL-H2'] = {
+        'mesurable':      True,
+        'puissance':      arrondir(pct),
+        'puissance_brute': round(pct, 1),
+        'temoin':         (lambda t: arrondir(t) if t is not None else None)(
+            _mesure(0.0)),
+        'lambda_estime':  round(lam, 4),
+        'effet':          effet,
+        'n_simulations':  N_SIM_PUISSANCE,
+        'graine':         GRAINE_PUISSANCE,
+        'phrase':         formuler(
+            pct, effet,
+            "la relation entre payé et engagé y est peu marquée, ce qui laisse "
+            "peu de prise à un test de courbure"),
+    }
+    return out
 
 
 def lignes_hypotheses_munich(n2: Optional[Dict]) -> list:
@@ -468,6 +560,7 @@ def lignes_hypotheses_munich(n2: Optional[Dict]) -> list:
     problème ».
     """
     hyps = ((n2 or {}).get('munich_hyp') or {}).get('hypotheses', {})
+    puis = ((n2 or {}).get('munich_hyp') or {}).get('puissance', {}) or {}
     lignes = []
     for code in CODES:
         h = hyps.get(code, {})
@@ -481,5 +574,7 @@ def lignes_hypotheses_munich(n2: Optional[Dict]) -> list:
             'source':   str(h.get('source_critere', '—')),
             'ok':       statut == VALIDEE,
             'critique': RESERVE_MUNICH in (h.get('critique_pour') or []),
+            'puissance':        (puis.get(code) or {}).get('puissance'),
+            'puissance_phrase': str((puis.get(code) or {}).get('phrase', '')),
         })
     return lignes

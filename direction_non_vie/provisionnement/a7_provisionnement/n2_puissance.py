@@ -214,6 +214,114 @@ def formuler(pourcentage: float, effet: str, levier: str = '') -> str:
             f"contradiction, mesurée, et non une vérification.")
 
 
+def regenerer_loss_ratio(
+    ultimates:   np.ndarray,
+    exposition:  np.ndarray,
+    rng:         np.random.Generator,
+    pente:       float = 0.0,
+) -> Optional[np.ndarray]:
+    """Des ultimes tirés d'un loss ratio SANS tendance — la nulle de BFCC-H5.
+
+    Le niveau moyen et la dispersion sont ceux du portefeuille réel : c'est ce
+    qui rend la puissance publiée propre à lui. `pente` ajoute une dérive
+    exprimée EN POINTS DE LOSS RATIO PAR AN, l'unité dans laquelle un actuaire
+    raisonne — et celle que le guide emploie quand il décrit un recalage
+    « as-if » (p15).
+    """
+    u = np.asarray(ultimates, dtype=float)
+    e = np.asarray(exposition, dtype=float)
+    valides = (e > 0) & np.isfinite(u) & np.isfinite(e)
+    if int(valides.sum()) < 4:
+        return None
+    lr = u[valides] / e[valides]
+    niveau = float(np.mean(lr))
+    dispersion = float(np.std(lr, ddof=1))
+    if niveau <= 0 or dispersion <= 0:
+        return None
+    n = len(u)
+    simule = (niveau + pente * np.arange(n)
+              + dispersion * rng.standard_normal(n))
+    return np.maximum(simule, 1e-9) * e
+
+
+def lambda_paye(C_P: np.ndarray, C_E: np.ndarray) -> Optional[float]:
+    """Le λ de Quarg & Mack, estimé sur la paire réelle.
+
+    ⚠️ IL DOIT VENIR DES DONNÉES, PAS D'UNE CONSTANTE. Mesuré en construisant
+    ce générateur : coder λ = 0,35 « par défaut » là où la paire réelle en
+    porte −0,0 fait passer le témoin de MCL-H2 de 7,5 % à 17,5 %. Le
+    générateur cessait alors de respecter la nulle, et toute puissance qu'il
+    aurait produite aurait été fausse.
+    """
+    from .n3.munich_cl import _statistiques_colonne
+    C_P = np.asarray(C_P, dtype=float)
+    C_E = np.asarray(C_E, dtype=float)
+    num = den = 0.0
+    for j in range(C_P.shape[1] - 1):
+        st = _statistiques_colonne(C_P, C_E, j)
+        if st is None:
+            continue
+        for i in st['idx']:
+            p, p1, e = C_P[i, j], C_P[i, j + 1], C_E[i, j]
+            if p <= 0:
+                continue
+            poids = float(np.sqrt(p))
+            y = (p1 / p - st['f_P']) / st['sig_P'] * poids
+            x = (e / p - st['q_inv']) / st['rho_Qi'] * poids
+            num += x * y
+            den += x * x
+    return float(num / den) if den > 0 else None
+
+
+def regenerer_munich(
+    C_P0:   np.ndarray,
+    C_E0:   np.ndarray,
+    lam:    float,
+    rng:    np.random.Generator,
+    quad:   float = 0.0,
+) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+    """Une paire payé / engagé tirée du modèle de MUNICH — la nulle de MCL-H2.
+
+    Quarg & Mack posent `E[Res(F^P) | Res(Q⁻¹)] = λ · Res(Q⁻¹)` : le facteur
+    payé répond LINÉAIREMENT au résidu du ratio engagé / payé. `quad` ajoute
+    un terme en carré de ce résidu — la courbure que MCL-H2 doit voir.
+    """
+    from .n3.munich_cl import _statistiques_colonne
+    C_P0 = np.asarray(C_P0, dtype=float)
+    C_E0 = np.asarray(C_E0, dtype=float)
+    n, m = C_P0.shape
+    stats = {j: _statistiques_colonne(C_P0, C_E0, j) for j in range(m - 1)}
+    if not any(v is not None for v in stats.values()):
+        return None
+    try:
+        f_E, s2_E = ajuster_mack(C_E0)
+    except Exception:                                      # pragma: no cover
+        return None
+    C_E = regenerer_mack(C_E0, f_E, s2_E, rng)
+    C_P = np.zeros((n, m))
+    C_P[:, 0] = C_P0[:, 0]
+    for i in range(n):
+        for j in range(m - 1):
+            if j + 1 >= n - i:
+                break
+            st = stats.get(j)
+            paye = C_P[i, j]
+            if st is None or paye <= 0 or C_E[i, j] <= 0:
+                C_P[i, j + 1] = paye * 1.0001
+                continue
+            residu = ((C_E[i, j] / paye) - st['q_inv']) / max(st['rho_Qi'],
+                                                              1e-12)
+            reponse = lam * residu + quad * (residu * residu - 1.0)
+            facteur = st['f_P'] + st['sig_P'] * (reponse +
+                                                 rng.standard_normal())
+            C_P[i, j + 1] = max(facteur * paye, paye * 1.0001)
+    for i in range(n):
+        for j in range(n - i, n):
+            C_P[i, j] = 0.0
+            C_E[i, j] = 0.0
+    return C_P, C_E
+
+
 def sans_objet(motif: str) -> Dict[str, Any]:
     """Pour les hypothèses qui ne sont pas des tests statistiques.
 
