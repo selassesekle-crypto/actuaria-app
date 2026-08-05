@@ -73,6 +73,9 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
+from .n2_puissance import (
+    GRAINE_PUISSANCE, N_SIM_PUISSANCE, arrondir, formuler, sans_objet,
+    taux_de_detection)
 from .n3.bootstrap_odp import calculer_fitted_et_residus
 from .n3.chain_ladder import calculer_facteurs
 
@@ -150,6 +153,32 @@ SCAN_GRAINE          = 2023
 #: quoi calibrer sa permutation, et l'on REVIENT au test du guide, exactement
 #: comme le GLM APC se déclare indisponible sous 5×5.
 SCAN_MIN_DIAGONALES  = 6
+#: Permutations employées DANS LA BOUCLE DE PUISSANCE, et seulement là. Le
+#: verdict publié en emploie toujours 400. Mesuré sur GenIns : 150 rend une
+#: puissance IDENTIQUE à 400 (70,0 % dans les deux cas) pour moins de la
+#: moitié du temps — 1,9 s au lieu de 4,2 s pour les trois hypothèses. À 60
+#: l'estimation commence à bouger (67,5 %), d'où l'arrêt à 150.
+SCAN_PERMUTATIONS_EN_PUISSANCE = 150
+
+# ── AMPLEURS DE VIOLATION PUBLIÉES — choisies PAR LA MESURE ──────────────────
+#
+# Une puissance ne veut rien dire sans l'ampleur à laquelle elle se rapporte.
+# Ces trois-là ont été retenues parce qu'elles sont À LA FOIS interprétables
+# par un actuaire et INFORMATIVES : trop petites, tout portefeuille afficherait
+# 0 % ; trop grandes, tout afficherait 100 %, et le chiffre ne dirait plus rien
+# de SON triangle. Mesuré sur les deux triangles de référence :
+#
+#                                          GenIns    RAA
+#     CLM-H1  choc calendaire ×1,50         73 %     32 %
+#     CLM-H2  ordonnée = 1 incrément moyen   8 %     47 %
+#     CLM-H3  variance en C^1,5             40 %     43 %
+#
+# Le contraste entre les deux portefeuilles sur CLM-H2 est exactement ce que
+# la publication doit rendre visible : les volumes de GenIns sont trop
+# homogènes pour donner du levier au test de l'ordonnée, ceux de RAA moins.
+H1_AMPLEUR_CHOC   = 1.50
+H2_INTERCEPT_MULT = 1.00
+H3_EXPOSANT_VAR   = 1.50
 
 # ── Seuils CLM-H2 — JUGEMENT INTÉGRAL, le guide n'en donne aucun ─────────────
 #
@@ -410,7 +439,10 @@ def _ecarts_par_diagonale(
     return out or None
 
 
-def scan_diagonales(C: np.ndarray) -> Optional[Dict[str, Any]]:
+def scan_diagonales(
+    C: np.ndarray,
+    n_permutations: int = SCAN_N_PERMUTATIONS,
+) -> Optional[Dict[str, Any]]:
     """Test de SCAN : l'année calendaire la plus écartée l'est-elle trop ?
 
     On ajuste le chain-ladder, on prend ses résidus de Pearson, on les groupe
@@ -454,14 +486,14 @@ def scan_diagonales(C: np.ndarray) -> Optional[Dict[str, Any]]:
     rng = np.random.default_rng(SCAN_GRAINE)
     d_arr = np.asarray(d)
     au_moins_aussi_fort = 0
-    for _ in range(SCAN_N_PERMUTATIONS):
+    for _ in range(n_permutations):
         tire = _ecarts_par_diagonale(r, rng.permutation(d_arr))
         if tire is not None and max(abs(e) for _, _, e in tire) >= observe - 1e-12:
             au_moins_aussi_fort += 1
     # Le +1 au numérateur ET au dénominateur : l'observé fait partie de sa
     # propre référence, sans quoi une p-valeur nulle serait possible — et une
     # p-valeur nulle n'existe pas dans un test par permutation.
-    p = (au_moins_aussi_fort + 1) / (SCAN_N_PERMUTATIONS + 1)
+    p = (au_moins_aussi_fort + 1) / (n_permutations + 1)
 
     pire = max(ecarts, key=lambda e: abs(e[2]))
     return {'p': p, 'diagonale': pire[0], 'ecart': pire[2], 'n_cellules': pire[1],
@@ -563,7 +595,10 @@ def _message_deux_tests(
     return tete + corps + queue
 
 
-def clm_h1_effet_calendaire(C: np.ndarray) -> ResultatHypothese:
+def clm_h1_effet_calendaire(
+    C: np.ndarray,
+    n_permutations: int = SCAN_N_PERMUTATIONS,
+) -> ResultatHypothese:
     """CLM-H1 — un effet propre à une année CALENDAIRE contamine-t-il le triangle ?
 
     Méthode de l'annexe 9.d : dans chaque colonne de développement, chaque
@@ -600,7 +635,7 @@ def clm_h1_effet_calendaire(C: np.ndarray) -> ResultatHypothese:
     statut VALIDÉE ne certifie donc PAS l'absence d'inflation.
     """
     detail, somme_Z, somme_E, somme_V = _statistique_des_signes(C)
-    scan = scan_diagonales(C)
+    scan = scan_diagonales(C, n_permutations)
     guide_calculable = bool(detail) and somme_V > 0
 
     if not guide_calculable and scan is None:
@@ -1338,12 +1373,73 @@ def couvertures_par_annee(
 #  POINT D'ENTRÉE
 # =============================================================================
 
+def puissance_clm(C: np.ndarray) -> Dict[str, Dict[str, Any]]:
+    """Ce que CHACUN des trois tests pouvait détecter, SUR CE TRIANGLE-CI.
+
+    Le verdict dit ce qu'on a trouvé ; ceci dit ce qu'on aurait pu trouver.
+    Les deux ensemble font une conclusion opposable — un « VALIDÉE » seul
+    confond « j'ai cherché et il n'y a rien » avec « je n'avais aucun moyen
+    de voir ». Aucun outil du marché ne publie la seconde ; c'est un avantage,
+    pas un aveu.
+
+    CLM-H4 n'y figure pas : c'est une comparaison de courbes d'extrapolation,
+    pas un test statistique — cf. `sans_objet`.
+    """
+    n = np.asarray(C, dtype=float).shape[0]
+    increment_moyen = float(np.mean(
+        [C[i, 1] - C[i, 0] for i in range(n - 1)])) if n > 1 else 0.0
+
+    plan = (
+        ('CLM-H1', lambda T: clm_h1_effet_calendaire(
+            T, SCAN_PERMUTATIONS_EN_PUISSANCE),
+         {'choc_diagonale': n // 2, 'ampleur': H1_AMPLEUR_CHOC},
+         f"un exercice où l'on aurait réglé "
+         f"{(H1_AMPLEUR_CHOC - 1) * 100:.0f} % de plus que la normale",
+         "un triangle court laisse peu de règlements par année calendaire"),
+        ('CLM-H2', clm_h2_existence_facteurs,
+         {'intercept': increment_moyen * H2_INTERCEPT_MULT},
+         "un montant fixe s'ajoutant à chaque période, de l'ordre d'un "
+         "règlement annuel moyen",
+         "les volumes des années de survenance y sont trop homogènes pour "
+         "donner du levier au test de l'ordonnée à l'origine"),
+        ('CLM-H3', clm_h3_structure_variance,
+         {'expo_var': H3_EXPOSANT_VAR},
+         "une dispersion croissant comme la puissance 1,5 du volume au lieu "
+         "du volume lui-même",
+         "chaque période de développement compte peu d'observations"),
+    )
+
+    out: Dict[str, Dict[str, Any]] = {}
+    for code, test, violation, effet, levier in plan:
+        pct = taux_de_detection(C, test, **violation)
+        temoin = taux_de_detection(C, test)
+        if pct is None:
+            out[code] = sans_objet("le triangle ne permet pas de régénérer "
+                                   "un jeu de référence")
+            continue
+        out[code] = {
+            'mesurable':      True,
+            'puissance':      arrondir(pct),
+            'puissance_brute': round(pct, 1),
+            'temoin':         arrondir(temoin) if temoin is not None else None,
+            'effet':          effet,
+            'n_simulations':  N_SIM_PUISSANCE,
+            'graine':         GRAINE_PUISSANCE,
+            'phrase':         formuler(pct, effet, levier),
+        }
+    out['CLM-H4'] = sans_objet(
+        "elle compare des courbes d'extrapolation de queue et mesure l'écart "
+        "de réserve qu'elles produisent")
+    return out
+
+
 def verifier_hypotheses_clm(
     C:          np.ndarray,
     *,
     tail_info:  Optional[Dict[str, Any]] = None,
     facteurs:   Optional[np.ndarray] = None,
     annee_base: int = 1,
+    puissance:  bool = True,
 ) -> Dict[str, Any]:
     """Vérifie les quatre hypothèses et rend un rapport structuré.
 
@@ -1363,6 +1459,9 @@ def verifier_hypotheses_clm(
 
     return {
         'hypotheses':  {code: r.synthese() for code, r in resultats.items()},
+        # Ce que chaque test POUVAIT détecter sur ce triangle — à lire avec le
+        # verdict, jamais à sa place.
+        'puissance':   puissance_clm(C) if puissance else {},
         'couvertures': couvertures_par_annee(C, resultats),
         # Le PORTEUR de la cible `percentiles_mack`, calqué sur son
         # équivalent Bootstrap `percentiles_publiables`.
@@ -1378,6 +1477,52 @@ def verifier_hypotheses_clm(
 # =============================================================================
 #  LE DÉTAIL DE H1, COLONNE PAR COLONNE  (lot C3b — remplace le graphique g8)
 # =============================================================================
+
+#: Libellés d'affichage — l'ordre est celui de la dépendance actuarielle :
+#: Chain Ladder repose sur H1 et H2, Mack y ajoute H3 puis H4.
+_LIBELLES_CLM = {
+    'CLM-H1': "Chain Ladder — Indépendance des années de survenance",
+    'CLM-H2': "Chain Ladder — Existence des facteurs de développement",
+    'CLM-H3': "Mack — Structure de variance",
+    'CLM-H4': "Mack — Incertitude de la queue de développement",
+}
+
+
+def lignes_hypotheses_clm(n2: Optional[Dict]) -> List[Dict[str, Any]]:
+    """Les quatre verdicts de Chain Ladder et Mack, prêts à afficher.
+
+    ⚠️ ELLES N'ATTEIGNAIENT AUCUN LIVRABLE. BFCC, Bootstrap et Munich avaient
+    chacun sa fonction d'affichage ; CLM n'en avait pas. Les quatre hypothèses
+    qui gouvernent les MÉTHODES PRINCIPALES étaient donc calculées, publiées
+    dans le résultat, gatantes pour deux d'entre elles — et invisibles au
+    lecteur du rapport. Seule CLM-H1 y surgissait, republiée sous une carte
+    Clark.
+
+    Chaque ligne porte la PUISSANCE mesurée sur le triangle à côté du verdict :
+    c'est le couple qui fait une conclusion opposable. Un verdict seul confond
+    « j'ai cherché et il n'y a rien » avec « je n'avais aucun moyen de voir ».
+    """
+    clm = (n2 or {}).get('clm') or {}
+    hyps = clm.get('hypotheses') or {}
+    puis = clm.get('puissance') or {}
+    lignes: List[Dict[str, Any]] = []
+    for code, libelle in _LIBELLES_CLM.items():
+        h = hyps.get(code) or {}
+        p = puis.get(code) or {}
+        statut = str(h.get('statut', NON_TESTABLE))
+        lignes.append({
+            'code':    code,
+            'libelle': libelle,
+            'statut':  statut,
+            'message': str(h.get('message', "Hypothèse non évaluée.")),
+            'critere': str(h.get('critere', '—')),
+            'source':  str(h.get('source_critere', '—')),
+            'ok':      statut == VALIDEE,
+            'puissance':        p.get('puissance'),
+            'puissance_phrase': str(p.get('phrase', '')),
+        })
+    return lignes
+
 
 def lignes_correlations_h1(n2):
     """Les corrélations de Spearman colonne par colonne, prêtes à afficher.

@@ -28,6 +28,7 @@ import numpy as np
 from .methodes_be import ORDRE_AFFICHAGE, libelle, reserve
 from .n5_graphiques import TITRES_FIGURES
 from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
+from .n2_hypotheses_clm import lignes_hypotheses_clm
 from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
 from .n2_hypotheses_munich import lignes_hypotheses_munich
 # Source UNIQUE d'affichage de Munich CL, partagée par HTML, Word et Excel.
@@ -823,6 +824,11 @@ table.premium tbody td .mono { font-family: 'JetBrains Mono', monospace; font-si
 .hyp-warn .hyp-label { background: rgba(230,126,34,0.10); color: var(--orange); border-right: 3px solid var(--orange); }
 
 .hyp-text { padding: 14px 18px; font-size: 9pt; color: var(--text-mid); line-height: 1.6; background: #FAFBFC; }
+/* La PUISSANCE se lit avec le verdict : même carte, registre visuel distinct
+   pour qu'on ne la confonde pas avec le verdict lui-même. */
+.hyp-puissance { padding: 10px 18px 14px 18px; font-size: 8.5pt; color: var(--text-mid);
+                 line-height: 1.55; background: #FAFBFC; border-top: 1px dashed #D8DEE6;
+                 font-style: italic; }
 
 /* ── RECOMMANDATION BOX ── */
 .recommandation-box {
@@ -1486,11 +1492,26 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     # MCL-H1..H5 rejoignent BFCC et BOOT : mêmes cartes, même convention de
     # statut. MCL-H4 y figure comme MENTION (NON TESTABLE assumé, cf. son
     # message) — elle ne peut pas être verte, on ne sait pas la tester.
-    for ligne in (list(lignes_hypotheses_bfcc(n2))
+    # ⚠️ CLM EN TÊTE, ET C'EST UN MANQUE QUI EST RÉPARÉ ICI. BFCC, Bootstrap et
+    # Munich avaient chacun leur affichage ; CLM-H1..H4 — les hypothèses des
+    # MÉTHODES PRINCIPALES, dont deux sont gatantes — n'atteignaient aucun
+    # livrable. Elles viennent en premier parce que Chain Ladder et Mack
+    # portent le Best Estimate.
+    for ligne in (list(lignes_hypotheses_clm(n2))
+                  + list(lignes_hypotheses_bfcc(n2))
                   + list(lignes_hypotheses_bootstrap(n2))
                   + list(lignes_hypotheses_munich(n2))):
         cls = ('hyp-ok' if ligne['statut'] == 'VALIDÉE'
                else 'hyp-warn' if ligne['statut'] != 'NON VALIDÉE' else 'hyp-warn')
+        # La PUISSANCE se lit avec le verdict, jamais à sa place : elle dit ce
+        # que le test POUVAIT détecter sur ce triangle-ci.
+        # ⚠️ ON TESTE LA VALEUR BRUTE, PAS `_s(...)` : `_s('')` rend « — », qui
+        # est vrai en Python. Le bloc serait alors posé sur les quinze
+        # hypothèses qui n'ont pas de puissance, avec un tiret pour tout
+        # contenu — le faux zéro que ce dépôt traque depuis plusieurs lots.
+        brut = ligne.get('puissance_phrase')
+        bloc_p = ('<div class="hyp-puissance">' + _s(brut) + '</div>'
+                  if brut else '')
         hyp_cards += (
             '<div class="hyp-card ' + cls + '">'
             '<div class="hyp-label">'
@@ -1498,6 +1519,7 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
             '<div class="hyp-score">' + _s(ligne['statut']) + '</div>'
             '</div>'
             '<div class="hyp-text">' + _s(ligne['message']) + '</div>'
+            + bloc_p +
             '</div>'
         )
     # Clark — PRÉSENTATION, pas gouvernance. Ces cartes n'affichent aucun
@@ -2571,11 +2593,17 @@ def export_word(n1, n2, n3, n4,
         # une ligne haute ; il ne peut pas se permettre une justification
         # coupée à « Cette hypothèse n'es ». La colonne Score, toujours « — »
         # pour ces lignes, cède sa largeur au message.
-        for ligne in (list(lignes_hypotheses_bfcc(n2))
+        # CLM en tête, comme dans le HTML : ces quatre-là gouvernent les
+        # méthodes principales et n'atteignaient aucun livrable. La puissance
+        # suit le message — le verdict seul ne dit pas ce qu'on pouvait voir.
+        for ligne in (list(lignes_hypotheses_clm(n2))
+                      + list(lignes_hypotheses_bfcc(n2))
                       + list(lignes_hypotheses_bootstrap(n2))
                       + list(lignes_hypotheses_munich(n2))):
-            rows_h.append([ligne['libelle'], ligne['statut'], '—',
-                           ligne['message']])
+            texte = ligne['message']
+            if ligne.get('puissance_phrase'):
+                texte = texte + ' ' + ligne['puissance_phrase']
+            rows_h.append([ligne['libelle'], ligne['statut'], '—', texte])
         if rows_h: _tbl(['Hypothèse','Résultat','Score','Message'],rows_h,ws=[4.5,2.5,1.2,7.8])
         # Les deux graphiques que le guide nomme (§9.d.ii et §9.d.iii) sont
         # dans la section qui s'appelle « Validation des hypothèses ».
