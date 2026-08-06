@@ -39,31 +39,66 @@ from direction_non_vie.reglementation.a10_solvabilite2.agent import DURATION_LOB
 
 
 def _bloc_reference(nom):
-    """Lit `reference_actuaria.json` — ET A8 NE LE CONSOMME PAS.
+    """La valeur ATTENDUE d'un bloc — recopiée du texte, pas lue du module.
 
-    ⚠️ LA DESCRIPTION D'ORIGINE ÉTAIT FAUSSE, ET LE LOT R5 LA CORRIGE SANS
-    TOUCHER AU VERROU. Elle annonçait « la source qu'A8 consomme » : A8 ne
-    l'a jamais lue. Une branche cherchait `market_data.py` sous le dossier
-    d'A8 alors que ce module vit à la racine — `exists()` rendait toujours
-    False. R5 a retiré cette branche : les valeurs d'A8 sont écrites chez
-    lui, point.
+    ⚠️ CETTE FONCTION A CHANGÉ DE SOURCE, ET C'EST LE LOT QUI L'EXIGE. Elle
+    lisait `reference_actuaria.json` en le décrivant comme « la source qu'A8
+    consomme » — description que le lot R5 avait déjà corrigée : A8 ne l'a
+    jamais lue. Le bloc `parametres_scr_standard` a maintenant quitté ce
+    fichier, comme les six écarts types l'avaient quitté au lot B10-c.
 
-    ⚠️ CE VERROU DEVIENT DONC PLUS IMPORTANT, PAS MOINS. Les paramètres de la
-    formule standard existent en DEUX copies — en dur dans `agent.py`, et
-    dans ce fichier — et il est désormais LA SEULE CHOSE qui les tient
-    synchronisées. Le croire redondant et le retirer laisserait les deux
-    copies dériver en silence, exactement comme `sigma_primes_rc_general`
-    avait dérivé de 0,14 à 0,11 avant le lot B10-c.
-
-    Le vrai remède serait de supprimer la duplication, comme le chantier B10
-    l'a fait pour les écarts types en les déplaçant dans
-    `reglementation/segments_s2.py`. C'est le successeur naturel de ce
-    chantier-ci, et il n'est pas ouvert.
+    ⚠️ ET ELLE NE LIT SURTOUT PAS `parametres_fs.py`. Un test qui importerait
+    la table qu'il vérifie ne vérifierait RIEN : il constaterait qu'une
+    variable est égale à elle-même. C'est la règle posée par
+    `test_a7_sigma_s2.py` — la duplication EST le mécanisme, et elle est
+    volontaire. La recopie ci-dessous vient du RÈGLEMENT, relu article par
+    article ; si les deux divergent un jour, c'est au texte qu'il faut
+    retourner, pas à l'autre copie.
     """
-    chemin = (Path(A8.__file__).resolve().parents[3]
-              / 'data' / 'marche' / 'reference_actuaria.json')
-    return json.load(io.open(chemin, encoding='utf-8'))[
-        'parametres_scr_standard'][nom]
+    return _RECOPIE_INDEPENDANTE[nom]
+
+
+#: ⚠️ RECOPIE INDEPENDANTE, ET C'EST LE MECANISME MEME.
+#:
+#: Ce tableau duplique `parametres_fs.py`. Un test qui IMPORTERAIT la table
+#: qu'il verifie ne verifierait rien -- c'est la lecon posee par
+#: `test_a7_sigma_s2.py` au chantier B10. Si les deux divergent un jour, il
+#: faut retourner au TEXTE OFFICIEL, pas a l'autre copie.
+#:
+#: ⚠️ ET LES VALEURS CI-DESSOUS ONT ETE RELUES DANS LE REGLEMENT DELEGUE
+#: le 2026-08-06, article par article, texte consolide au 02.08.2022 :
+#:      art. 166 par. 1  hausse des taux, echeance 10 ans ....... 42 %
+#:      art. 167 par. 1  baisse des taux, echeance 10 ans ....... 31 %
+#:      art. 169 par. 1 c)  actions de type 1 .................... 39 %
+#:      art. 169 par. 2 c)  actions de type 2 .................... 49 %
+#:      art. 174            actifs immobiliers ................... 25 %
+#:      art. 176 par. 3     spread, echelon 0, duration <= 5 ans .. 0,9 %
+#:      art. 188 par. 3-4   devise ............................... 25 %
+#: Les facteurs catastrophe, eux, ne sont PAS dans le texte : l'art. 121
+#: calibre sur les sommes assurees par region, donnee absente du depot.
+_RECOPIE_INDEPENDANTE = {
+    'scr_marche': {
+        'choc_taux_hausse_10ans_relatif': 0.42,
+        'choc_taux_baisse_10ans_relatif': -0.31,
+        'choc_actions_type1': 0.39,
+        'choc_actions_type2': 0.49,
+        'choc_immobilier': 0.25,
+        'choc_spread_IG': 0.009,
+        'choc_devise': 0.25,
+    },
+    'scr_souscription_non_vie': {
+        'facteur_catastrophe_vent': 0.10,
+        'facteur_catastrophe_grele': 0.03,
+        'facteur_catastrophe_inondation': 0.04,
+    },
+    'mcr': {
+        'pct_scr_min': 0.25,
+        'pct_scr_max': 0.45,
+        'seuil_absolu_non_vie': 2_500_000.0,
+        'alpha_primes': 0.0418,
+        'beta_provisions': 0.0261,
+    },
+}
 
 #: Ce que chaque nom transmis par A7 doit obtenir. Épinglé : un déplacement
 #: doit être un ACTE, pas un effet de bord d'une sous-chaîne.
@@ -138,18 +173,32 @@ class T1_Plus_De_Copie(unittest.TestCase):
             'sigma_primes_rc_general', 'sigma_reserves_rc_auto',
             'sigma_reserves_incendie', 'sigma_reserves_rc_general')
 
-    def test_le_json_ne_porte_plus_de_sigma(self):
+    def test_le_json_ne_porte_plus_de_parametres_reglementaires(self):
+        """⚠️ LE TEST A CHANGE D'OBJET, ET IL EST PLUS FORT.
+
+
+        Il verifiait que les six sigma avaient quitte `reference_actuaria.
+        json`. Le bloc `parametres_scr_standard` ENTIER l'a quitte depuis :
+        les parametres de la formule standard vivent dans `parametres_fs.py`.
+        Il exige donc desormais que ce fichier ne porte PLUS AUCUN parametre
+        reglementaire -- ni sigma, ni choc, ni borne de MCR. La regle est
+        plus large que celle qu'elle remplace, et elle ne peut pas se perimer
+        sur un nom particulier.
+        """
         chemin = (Path(A8.__file__).resolve().parents[3]
                   / 'data' / 'marche' / 'reference_actuaria.json')
         self.assertTrue(chemin.is_file(), f"introuvable : {chemin}")
-        bloc = json.load(io.open(chemin, encoding='utf-8'))[
-            'parametres_scr_standard']['scr_souscription_non_vie']
-        for cle in self.CLES:
-            self.assertNotIn(cle, bloc, f"{cle} est revenu dans le JSON")
-        self.assertIn('facteur_catastrophe_vent', bloc,
-                      "les facteurs catastrophe, eux, doivent rester")
-        print(f"    OK SIG8-1 les 6 sigma retires du JSON, "
-              f"{len(bloc)} cles conservees")
+        ref = json.load(io.open(chemin, encoding='utf-8'))
+        self.assertNotIn('parametres_scr_standard', ref,
+                         "le bloc des parametres reglementaires est revenu "
+                         "dans le fichier de donnees marche")
+        plat = json.dumps(ref, ensure_ascii=False)
+        for cle in tuple(self.CLES) + ('choc_taux_hausse', 'pct_scr_min',
+                                       'facteur_catastrophe_vent'):
+            self.assertNotIn(f'"{cle}"', plat,
+                             f"{cle} est revenu dans le JSON")
+        print(f"    OK SIG8-1 le fichier marche ne porte plus aucun "
+              f"parametre reglementaire ({len(ref)} blocs restants)")
 
     def test_le_repli_code_en_dur_ne_porte_plus_de_sigma(self):
         src = io.open(A8.__file__, encoding='utf-8').read()

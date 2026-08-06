@@ -130,16 +130,12 @@ def fetch_oat_bce(maturite_ans: int = 10) -> Dict:
 # ce n'etait pas une extraction EIOPA mais une esquisse, et aucun agent ne
 # la lisait. Ce module n'expose plus de taux d'actualisation.
 
-def fetch_parametres_scr() -> Dict:
-    """
-    Retourne les paramètres de la formule standard SCR S2.
-    Utilisé par A8 (chocs) et A10 (calcul SCR).
-    """
-    ref = _charger_reference()
-    params = ref['parametres_scr_standard']
-    logger.info(f"Paramètres SCR S2 chargés (ref. {params['date_reference']})")
-    return params
-
+# ⚠️ `fetch_parametres_scr` A ETE RETIREE, AVEC LE BLOC
+# `parametres_scr_standard` du fichier de reference. Les parametres de la
+# formule standard vivent dans `reglementation/parametres_fs.py`, source
+# unique pour A8 et A10 -- comme les ecarts types vivent dans
+# `segments_s2.py` depuis le chantier B10. Ce module ne porte plus aucun
+# parametre reglementaire : il ne fait que des DONNEES DE MARCHE.
 
 def fetch_macro() -> Dict:
     """
@@ -172,7 +168,6 @@ def fetch_all_market() -> Dict:
     {
         'oat_10ans':     dict,   # OAT 10 ans (source + valeur)
         'oat_5ans':      dict,   # OAT 5 ans
-        'scr_params':    dict,   # Paramètres formule standard
         'macro':         dict,   # Indicateurs macro
         'portefeuille':  dict,   # Portefeuille type
         'source_globale':str,    # Résumé des sources
@@ -185,7 +180,6 @@ def fetch_all_market() -> Dict:
 
     oat10  = fetch_oat_bce(10)
     oat5   = fetch_oat_bce(5)
-    params = fetch_parametres_scr()
     macro  = fetch_macro()
     ptf    = fetch_portefeuille_type()
 
@@ -210,7 +204,6 @@ def fetch_all_market() -> Dict:
     return {
         'oat_10ans':      oat10,
         'oat_5ans':       oat5,
-        'scr_params':     params,
         'macro':          macro,
         'portefeuille':   ptf,
         'source_globale': source_globale,

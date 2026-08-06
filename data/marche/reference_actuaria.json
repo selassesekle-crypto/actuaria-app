@@ -9,7 +9,8 @@
     },
     "periodicite_mise_a_jour": "Trimestrielle (janvier, avril, juillet, octobre)",
     "prochaine_maj": "2026-10-01",
-    "courbe_rfr": "Retiree du fichier au lot R5 : la courbe des taux sans risque vit desormais dans core/courbe_rfr.py, source unique pour A7, A8, A10, A11 et A12. Celle qui figurait ici etait plate a l UFR des 20 ans -- ce qu aucune courbe Smith-Wilson ne fait -- et divergeait de 4,1 bps du referentiel sans qu aucun agent ne la lise."
+    "courbe_rfr": "Retiree du fichier au lot R5 : la courbe des taux sans risque vit desormais dans core/courbe_rfr.py, source unique pour A7, A8, A10, A11 et A12. Celle qui figurait ici etait plate a l UFR des 20 ans -- ce qu aucune courbe Smith-Wilson ne fait -- et divergeait de 4,1 bps du referentiel sans qu aucun agent ne la lise.",
+    "parametres_scr": "Retires du fichier au lot << formule standard >> : ils vivent desormais dans direction_non_vie/reglementation/parametres_fs.py, source unique pour A8 et A10, ou chaque valeur porte sa provenance. Ils etaient ici en double avec A8, et cinq des douze (facteurs catastrophe, bornes du MCR) n etaient surveilles par aucun test."
   },
   "oat_france": {
     "description": "Obligations Assimilables du Trésor (AFT / Banque de France)",
@@ -29,42 +30,6 @@
     },
     "tec10": 3.65,
     "commentaire": "OAT 10 ans à 3.65% au 15/06/2026 (AFT). Hausse par rapport à fin 2025 (3.60%). Notation Moody's Aa3 perspective négative depuis avril 2026."
-  },
-  "parametres_scr_standard": {
-    "description": "Paramètres de la formule standard SCR Solvabilité 2 (Actes Délégués 2015/35/UE)",
-    "date_reference": "2026-01-01",
-    "scr_souscription_non_vie": {
-      "_commentaire_sigma": "Les six ecarts types qui figuraient ici ont ete retires au lot B10-c : ils dupliquaient les annexes II et XIV du Reglement delegue (UE) 2015/35 et le doublon avait derive (sigma_primes_rc_general valait 0.11 au lieu de 0.14). La source unique est direction_non_vie/reglementation/segments_s2.py.",
-      "facteur_catastrophe_vent": 0.1,
-      "facteur_catastrophe_grele": 0.03,
-      "facteur_catastrophe_inondation": 0.04
-    },
-    "scr_marche": {
-      "_commentaire_chocs_taux": "Facteurs RELATIFS a appliquer au taux sans risque, comme choc_actions_type1 et choc_immobilier (suffixe pose au lot B10-d, ou ils etaient lus comme des ecarts ABSOLUS). Valeurs corrigees au lot B10-e sur le texte : Reglement delegue (UE) 2015/35 art. 166 par. 1 (hausse, echeance 10 ans = 42 %) et art. 167 par. 1 (baisse, echeance 10 ans = 31 %). Elles valaient 48 % et 38 %, qui ne figurent a aucune echeance des deux tables.",
-      "choc_taux_hausse_10ans_relatif": 0.42,
-      "choc_taux_baisse_10ans_relatif": -0.31,
-      "choc_actions_type1": 0.39,
-      "choc_actions_type2": 0.49,
-      "choc_immobilier": 0.25,
-      "choc_spread_IG": 0.009,
-      "choc_devise": 0.25
-    },
-    "scr_vie": {
-      "choc_mortalite": 0.15,
-      "choc_longevite": 0.2,
-      "choc_invalidite": 0.35,
-      "choc_rachat_hausse": 0.4,
-      "choc_rachat_baisse": 0.4,
-      "choc_frais": 0.1,
-      "choc_catastrophe": 0.0015
-    },
-    "mcr": {
-      "pct_scr_min": 0.25,
-      "pct_scr_max": 0.45,
-      "seuil_absolu_non_vie": 2500000,
-      "seuil_absolu_vie": 3700000,
-      "seuil_absolu_mixte": 3700000
-    }
   },
   "marche_credit": {
     "description": "Spreads de crédit de référence (marché obligataire euro)",

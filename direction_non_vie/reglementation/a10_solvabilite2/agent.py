@@ -48,6 +48,7 @@ from typing import Dict, Tuple   # Any/List/Optional etaient importes sans usage
 import numpy as np
 
 from core.courbe_rfr import actualiser, courbe_embarquee
+from ..parametres_fs import valeur as valeur_fs
 from ..segments_s2 import (SEGMENTS_S2, libelle_reference,
                            verifier_rattachements)
 
@@ -178,7 +179,22 @@ CORR_LOB = {
 
 CORR_MODULES = np.array([[1.00,0.25,0.25],[0.25,1.00,0.25],[0.25,0.25,1.00]])
 
-MCR_ALPHA = 0.0418; MCR_BETA = 0.0261; MCR_PLANCHER_ABS = 2_500_000.0
+# ⚠️ LES CINQ PARAMETRES DU MCR VIENNENT DU REFERENTIEL (lot formule
+# standard). Trois d'entre eux vivaient ici -- deux ECRITS EN CLAIR dans
+# l'expression de `_mcr`, `0.25*scr` et `0.45*scr` -- pendant qu'A8 en portait
+# deux autres et que `reference_actuaria.json` portait les cinq. TROIS copies
+# pour un meme jeu de bornes.
+#
+# ⚠️ ET AUCUN DES CINQ N'EST DANS LE REGLEMENT DELEGUE. `0,0418` et `0,0261`
+# y sont INTROUVABLES -- cherches dans le texte consolide -- et le << 45 % >>
+# qu'on y trouve concerne le risque d'inondation, pas le MCR. Ils relevent de
+# la DIRECTIVE 2009/138/CE art. 129, autre document. Le referentiel les
+# marque comme tels au lieu de leur preter un article du delegue.
+MCR_ALPHA = valeur_fs('mcr_alpha_primes')
+MCR_BETA = valeur_fs('mcr_beta_provisions')
+MCR_PLANCHER_ABS = valeur_fs('mcr_seuil_absolu_non_vie')
+MCR_PCT_SCR_MIN = valeur_fs('mcr_pct_scr_min')
+MCR_PCT_SCR_MAX = valeur_fs('mcr_pct_scr_max')
 COC = 0.06
 
 DURATION_LOB = {
@@ -790,9 +806,10 @@ class AgentA10Solvabilite2:
     def _mcr(self, branches, scr_tot):
         scr=scr_tot['scr_total']
         lin=sum(MCR_ALPHA*b['primes']+MCR_BETA*b['be'] for b in branches)
-        plan=max(0.25*scr,MCR_PLANCHER_ABS); plaf=0.45*scr; mcr=max(min(lin,plaf),plan)
+        plan=max(MCR_PCT_SCR_MIN*scr,MCR_PLANCHER_ABS); plaf=MCR_PCT_SCR_MAX*scr
+        mcr=max(min(lin,plaf),plan)
         reg='PLANCHER_ACTIF' if lin<plan else ('PLAFOND_ACTIF' if lin>plaf else 'MCR_LINEAIRE')
-        return {'mcr':mcr,'mcr_lineaire':lin,'plancher':plan,'plancher_scr':0.25*scr,
+        return {'mcr':mcr,'mcr_lineaire':lin,'plancher':plan,'plancher_scr':MCR_PCT_SCR_MIN*scr,
                 'plancher_abs':MCR_PLANCHER_ABS,'plafond':plaf,'regime':reg}
 
     def _capital(self, fpp, tiers, be_act, rm, scr_tot, mcr):

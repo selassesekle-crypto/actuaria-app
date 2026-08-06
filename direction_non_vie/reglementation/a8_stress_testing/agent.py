@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 
 from core.courbe_rfr import actualiser, courbe_embarquee
+from ..parametres_fs import valeur as valeur_fs
 from ..segments_s2 import SEGMENTS_S2, libelle_reference
 # La correspondance << nom metier -> segment officiel >> n'est PAS redefinie
 # ici : elle vit dans A10, agent de reference Solvabilite II, et A8 fait du
@@ -73,6 +74,35 @@ logging.basicConfig(
 
 #: La courbe des taux sans risque, commune a tous les agents (lot R3).
 _COURBE_RFR = courbe_embarquee()
+
+
+def _scr_params_referentiel() -> Dict:
+    """Les parametres de la formule standard, dans la forme qu'A8 consomme.
+
+    Adaptateur pur : il ne DECIDE rien, il redistribue les valeurs du
+    referentiel dans les trois blocs que le corps de `run()` attend. Aucune
+    valeur ne s'ecrit ici -- c'est tout l'objet du lot.
+    """
+    return {
+        'scr_souscription_non_vie': {
+            'facteur_catastrophe_vent':       valeur_fs('facteur_catastrophe_vent'),
+            'facteur_catastrophe_grele':      valeur_fs('facteur_catastrophe_grele'),
+            'facteur_catastrophe_inondation': valeur_fs('facteur_catastrophe_inondation'),
+        },
+        'scr_marche': {
+            'choc_taux_hausse_10ans_relatif': valeur_fs('choc_taux_hausse_10ans_relatif'),
+            'choc_taux_baisse_10ans_relatif': valeur_fs('choc_taux_baisse_10ans_relatif'),
+            'choc_actions_type1':             valeur_fs('choc_actions_type1'),
+            'choc_actions_type2':             valeur_fs('choc_actions_type2'),
+            'choc_immobilier':                valeur_fs('choc_immobilier'),
+            'choc_spread_IG':                 valeur_fs('choc_spread_IG'),
+            'choc_devise':                    valeur_fs('choc_devise'),
+        },
+        'mcr': {
+            'pct_scr_min':          valeur_fs('mcr_pct_scr_min'),
+            'seuil_absolu_non_vie': valeur_fs('mcr_seuil_absolu_non_vie'),
+        },
+    }
 
 
 # ── Données marché ────────────────────────────────────────────────────────────
@@ -127,37 +157,21 @@ def _charger_market_data() -> Dict:
         'rfr_10ans':     {'rfr_pct': round(100 * actualiser(_COURBE_RFR, 10), 4),
                           'ufr': _COURBE_RFR.ufr},
         'rfr_20ans':     {'rfr_pct': round(100 * actualiser(_COURBE_RFR, 20), 4)},
-        'scr_params':    {
-            # Les six sigma qui vivaient ici ONT ETE RETIRES (lot B10-c) : ils
-            # dupliquaient la table officielle, et le doublon avait derive
-            # (sigma_primes_rc_general valait 0,11 au lieu de 0,14). Les ecarts
-            # types viennent desormais de `reglementation/segments_s2.py`.
-            'scr_souscription_non_vie': {
-                'facteur_catastrophe_vent': 0.10,
-                'facteur_catastrophe_grele': 0.03,
-                'facteur_catastrophe_inondation': 0.04,
-            },
-            'scr_marche': {
-                # RELATIFS au taux sans risque, comme les chocs actions et
-                # immobilier du meme bloc -- suffixe pose au lot B10-d parce
-                # qu'ils etaient lus comme des ecarts de taux ABSOLUS.
-                # Valeurs du texte a l'echeance 10 ans : art. 166 par. 1 pour
-                # la hausse (42 %), art. 167 par. 1 pour la baisse (31 %).
-                # Elles valaient 48 % et 38 %, qui ne figurent a AUCUNE
-                # echeance des deux tables (lot B10-e).
-                'choc_taux_hausse_10ans_relatif': 0.42,
-                'choc_taux_baisse_10ans_relatif': -0.31,
-                'choc_actions_type1': 0.39,
-                'choc_actions_type2': 0.49,
-                'choc_immobilier': 0.25,
-                'choc_spread_IG': 0.009,
-                'choc_devise': 0.25,
-            },
-            'mcr': {
-                'pct_scr_min': 0.25,
-                'seuil_absolu_non_vie': 2_500_000,
-            },
-        },
+        # ⚠️ LES DOUZE PARAMETRES DE LA FORMULE STANDARD NE SONT PLUS ECRITS
+        # ICI. Ils vivaient en DEUX exemplaires -- ce bloc et
+        # `reference_actuaria.json` -- et le filet ne recoupait que les SEPT
+        # du module marche : les trois facteurs catastrophe et les deux
+        # bornes du MCR etaient dupliques SANS AUCUN CONTROLE. C'est la
+        # configuration dans laquelle `sigma_primes_rc_general` avait derive
+        # avant le lot B10-c. Source unique desormais :
+        # `reglementation/parametres_fs.py`, ou chaque valeur porte SA
+        # PROVENANCE -- et ou huit sur quinze sont marquees comme ne venant
+        # PAS du reglement delegue, plutot que parees d'un article plausible.
+        #
+        # Le dictionnaire garde SA FORME : le corps d'A8 le consomme tel
+        # quel. Meme dispositif que l'adaptateur d'A7 au lot R2 -- surface
+        # d'impact minimale.
+        'scr_params':    _scr_params_referentiel(),
         'macro':         {'inflation_france_mai2026': 2.4, 'taux_directeur_bce': 2.25,
                           'croissance_pib_france_2026_prev': 0.9},
         'portefeuille':  {'duration_actifs_moy': 4.2, 'rendement_actifs_attendu': 3.80,

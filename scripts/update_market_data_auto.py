@@ -182,8 +182,10 @@ def verifier_coherence():
          0 <= ref['macroeconomique']['taux_directeur_bce'] < 6),
         ("Inflation dans [0%, 15%]",
          0 <= ref['macroeconomique']['inflation_france_mai2026'] < 15),
-        ("SCR params présents",
-         'scr_souscription_non_vie' in ref['parametres_scr_standard']),
+        # Le controle des parametres SCR a disparu avec le bloc
+        # `parametres_scr_standard` : ils vivent dans
+        # `reglementation/parametres_fs.py`, et ce script ne les touche
+        # pas.
     ]
 
     tous_ok = True
