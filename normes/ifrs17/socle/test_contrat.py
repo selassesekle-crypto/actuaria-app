@@ -12,7 +12,8 @@ import unittest
 
 from normes.ifrs17.socle.contrat import (
     CHAMPS, COUVERTURE_INDETERMINEE, EXIGENCES, NIVEAUX, NIVEAU_SOCLE,
-    capacites, champs_bloquants, champs_du_niveau, champs_scelles,
+    SOURCE_IFRS17, SOURCE_INVARIANT, SOURCES_ADMISES, capacites,
+    champs_bloquants, champs_du_niveau, champs_scelles, exigences_hors_norme,
     exigences_hors_portee, reference)
 
 #: Les quatre colonnes qu'on ira demander à un assureur.
@@ -60,6 +61,55 @@ class T1_VocabulaireCoherent(unittest.TestCase):
             champs_du_niveau('INEXISTANT')
         print(f"    OK T1c : {len(NIVEAUX)} niveaux couvrent les "
               f"{len(CHAMPS)} champs")
+
+
+class T1bis_Provenance(unittest.TestCase):
+    """T1-bis — chaque exigence déclare si elle vient de la norme.
+
+    ⚠️ CE VERROU EXISTE PARCE QUE L'ERREUR A ÉTÉ COMMISE ICI. La règle
+    d'invariance de devise citait le §30, qui régit la CONVERSION selon
+    IAS 21 — l'inverse de ce qu'elle posait. Le paragraphe existait ; il ne
+    disait pas ce qu'on lui prêtait. Aucun test ne distingue une citation
+    exacte d'une citation hors sujet — seule la relecture du texte le fait.
+    Ce que ces tests garantissent, c'est plus modeste et c'est tout ce qui
+    est mécanisable : rien ne passe pour une obligation de la norme sans
+    l'avoir déclaré.
+    """
+
+    def test_vocabulaire_de_source_ferme(self):
+        """Aucune source hors du vocabulaire contrôlé."""
+        for nom, ex in EXIGENCES.items():
+            self.assertIn(ex.source, SOURCES_ADMISES,
+                          f"{nom} porte une source inconnue : {ex.source}")
+        print(f"    OK T1bis : {len(EXIGENCES)} exigences, sources dans "
+              f"{{{', '.join(SOURCES_ADMISES)}}}")
+
+    def test_une_exigence_ne_vient_pas_de_la_norme_et_le_dit(self):
+        """L'invariance de devise est une règle produit, pas IFRS 17."""
+        hors = exigences_hors_norme()
+        self.assertEqual(set(hors), {'devise_entite_invariante'})
+        self.assertEqual(hors['devise_entite_invariante'].source,
+                         SOURCE_INVARIANT)
+        print(f"    OK T1bis-b : {len(hors)} exigence sur {len(EXIGENCES)} "
+              f"ne vient pas de la norme, et le declare")
+
+    def test_les_exigences_de_la_norme_citent_un_paragraphe(self):
+        """Une référence IFRS 17 commence par § ou B — jamais autre chose."""
+        for nom, ex in EXIGENCES.items():
+            if ex.source == SOURCE_IFRS17:
+                self.assertRegex(
+                    ex.reference, r'^(§|B\d)',
+                    f"{nom} se dit IFRS 17 mais ne cite pas de paragraphe")
+        print("    OK T1bis-c : toute exigence IFRS 17 cite un paragraphe")
+
+    def test_reference_distingue_la_provenance(self):
+        """Un livrable ne présente pas une règle maison comme la norme."""
+        self.assertTrue(reference('courbe_dans_la_monnaie').startswith(
+            'IFRS 17 §36 a), B79 — '))
+        self.assertTrue(reference('devise_entite_invariante').startswith(
+            'Règle ActuarIA ('))
+        print("    OK T1bis-d : reference() prefixe differemment selon "
+              "la provenance")
 
 
 class T2_QuatreColonnesMinimales(unittest.TestCase):

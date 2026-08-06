@@ -23,6 +23,14 @@ leçon de `parametres_fs.py` : un commentaire ne se vérifie pas, un champ si.
 Le lecteur d'inventaire (D2) construit son diagnostic à partir d'ici, donc ce
 que le client lit à l'écran et ce que le code applique ne peuvent pas diverger.
 
+⚠️ ET CHAQUE EXIGENCE DÉCLARE SI ELLE VIENT DE LA NORME. Le champ `source`
+est né d'une erreur commise sur ce module même : la règle « une entité ne
+change pas de monnaie » y citait le §30, lequel régit au contraire la
+CONVERSION selon IAS 21 — l'inverse de la décision produit qu'il fondait. Le
+bon rattachement était B79, « la courbe des taux dans la monnaie appropriée »,
+et la règle d'invariance, elle, ne vient pas d'IFRS 17 du tout. Les deux
+coexistent désormais, chacune sous sa provenance.
+
 ⚠️ TROIS EXIGENCES DE GÉNÉRALITÉ, TENUES ICI ET PAS AILLEURS. On ne code que
 le non-vie, mais l'objet ne lui est pas taillé :
   1. la couverture n'est JAMAIS supposée inférieure à un an — `fin_couverture`
@@ -74,8 +82,29 @@ COUVERTURE_INDETERMINEE = 'INDETERMINEE'
 #  LES EXIGENCES, CHACUNE AVEC SON PARAGRAPHE
 # =============================================================================
 
+#: Vocabulaire contrôlé de `Exigence.source`. ⚠️ AUCUNE VALEUR PAR DÉFAUT :
+#: chaque exigence DOIT déclarer d'où elle vient. Un défaut à `IFRS17` ferait
+#: silencieusement passer une règle maison pour une obligation de la norme,
+#: c'est-à-dire exactement le défaut que ce vocabulaire existe pour empêcher.
+SOURCE_IFRS17 = 'IFRS17'                       # relu dans le texte officiel
+SOURCE_INVARIANT = 'INVARIANT_PLATEFORME'      # règle produit, PAS la norme
+
+SOURCES_ADMISES = (SOURCE_IFRS17, SOURCE_INVARIANT)
+
+
 class Exigence(NamedTuple):
-    """Une exigence d'IFRS 17 que la plateforme peut ou non atteindre.
+    """Une exigence que la plateforme peut ou non atteindre.
+
+    ⚠️ `source` DISTINGUE CE QUI VIENT DE LA NORME DE CE QUI N'EN VIENT PAS,
+    et il existe parce que je m'y suis déjà trompé sur ce module même. La
+    règle « une entité ne change pas de monnaie » était rattachée au §30 —
+    lequel régit au contraire la CONVERSION d'une monnaie étrangère selon
+    IAS 21, soit l'inverse de la décision produit qu'il était censé fonder.
+    Le paragraphe existait ; il ne disait pas ce qu'on lui prêtait. Aucun
+    contrôle automatique ne distingue une citation exacte d'une citation hors
+    sujet — seule la relecture du texte le fait. Ce champ oblige au moins à
+    DÉCLARER ce qui ne vient pas du texte, plutôt qu'à le parer d'un
+    paragraphe plausible.
 
     `requiert` est une conjonction de disjonctions : chaque élément est un
     groupe de champs dont AU MOINS UN doit être présent, et TOUS les groupes
@@ -83,6 +112,7 @@ class Exigence(NamedTuple):
     « il faut une prime ET une borne de couverture, quelle qu'elle soit ».
     """
     reference: str                       # le paragraphe, tel qu'il se cite
+    source:    str                       # l'un de SOURCES_ADMISES
     libelle:   str
     requiert:  Tuple[FrozenSet[str], ...]
 
@@ -94,79 +124,101 @@ def _et(*groupes: Tuple[str, ...]) -> Tuple[FrozenSet[str], ...]:
 
 EXIGENCES: Dict[str, Exigence] = {
     'portefeuilles': Exigence(
-        '§14', "Identifier les portefeuilles de contrats",
+        '§14', SOURCE_IFRS17,
+        "Identifier les portefeuilles de contrats",
         _et(('portefeuille',))),
 
     'cohortes_annuelles': Exigence(
-        '§22, §25', "Ne pas grouper des contrats émis à plus d'un an "
-                    "d'intervalle, et dater la comptabilisation initiale",
+        '§22, §25', SOURCE_IFRS17,
+        "Ne pas grouper des contrats émis à plus d'un an d'intervalle, "
+        "et dater la comptabilisation initiale",
         _et(('date_emission',))),
 
     'granularite_declaree': Exigence(
-        '§17', "Savoir si l'évaluation porte sur un contrat ou un ensemble",
+        '§17', SOURCE_IFRS17,
+        "Savoir si l'évaluation porte sur un contrat ou un ensemble",
         _et(('nb_contrats',))),
 
     'eligibilite_paa_verifiee': Exigence(
-        '§53 b)', "Vérifier — et non déclarer — que la période de couverture "
-                  "de chacun des contrats n'excède pas un an",
+        '§53 b)', SOURCE_IFRS17,
+        "Vérifier — et non déclarer — que la période de couverture de "
+        "chacun des contrats n'excède pas un an",
         _et(('fin_couverture',), ('debut_couverture', 'date_emission'))),
 
     'lrc': Exigence(
-        '§55 a) i)', "Évaluer le passif au titre de la couverture restante",
+        '§55 a) i)', SOURCE_IFRS17,
+        "Évaluer le passif au titre de la couverture restante",
         _et(('prime',))),
 
     'revenu': Exigence(
-        'B126', "Affecter les encaissements de primes attendus à la période, "
-                "en fonction de l'écoulement du temps",
+        'B126', SOURCE_IFRS17,
+        "Affecter les encaissements de primes attendus à la période, "
+        "en fonction de l'écoulement du temps",
         _et(('prime',), ('fin_couverture',),
             ('debut_couverture', 'date_emission'))),
 
+    'courbe_dans_la_monnaie': Exigence(
+        '§36 a), B79', SOURCE_IFRS17,
+        "Actualiser avec la courbe des taux de la monnaie des flux — B79 "
+        "l'exige « dans la monnaie appropriée »",
+        _et(('devise',))),
+
     'frais_acquisition_dans_lrc': Exigence(
-        '§55 a) ii)', "Déduire du LRC les flux liés aux frais d'acquisition "
-                      "dès la comptabilisation initiale",
+        '§55 a) ii)', SOURCE_IFRS17,
+        "Déduire du LRC les flux liés aux frais d'acquisition dès la "
+        "comptabilisation initiale",
         _et(('frais_acquisition',))),
 
     'amortissement_frais_acquisition': Exigence(
-        'B125', "Affecter les frais d'acquisition aux périodes et "
-                "comptabiliser le même montant en charges",
+        'B125', SOURCE_IFRS17,
+        "Affecter les frais d'acquisition aux périodes et comptabiliser "
+        "le même montant en charges",
         _et(('frais_acquisition',), ('fin_couverture',),
             ('debut_couverture', 'date_emission'))),
 
     'option_charges_acquisition': Exigence(
-        '§59 a)', "Ouvrir l'option de comptabiliser les frais d'acquisition "
-                  "en charges — subordonnée à une couverture d'au plus un an",
+        '§59 a)', SOURCE_IFRS17,
+        "Ouvrir l'option de comptabiliser les frais d'acquisition en "
+        "charges — subordonnée à une couverture d'au plus un an",
         _et(('frais_acquisition',), ('fin_couverture',),
             ('debut_couverture', 'date_emission'))),
 
     'classement_16a_calcule': Exigence(
-        '§47, §16 a), §18', "Établir sur des chiffres qu'un groupe est "
-                            "déficitaire à l'origine, plutôt que de s'en "
-                            "remettre à la présomption de §18",
+        '§47, §16 a), §18', SOURCE_IFRS17,
+        "Établir sur des chiffres qu'un groupe est déficitaire à l'origine, "
+        "plutôt que de s'en remettre à la présomption de §18",
         _et(('sinistres_attendus',), ('prime',))),
 
     'classement_16_declare': Exigence(
-        '§16', "Recevoir du client le classement en groupes de profitabilité",
+        '§16', SOURCE_IFRS17,
+        "Recevoir du client le classement en groupes de profitabilité",
         _et(('classe_profitabilite',))),
 
     'multi_entites': Exigence(
-        '§78', "Produire un jeu d'états par entité juridique",
+        '§78', SOURCE_IFRS17,
+        "Produire un jeu d'états par entité juridique",
         _et(('entite',))),
 
-    'controle_devise': Exigence(
-        '§30', "Vérifier qu'une entité ne change pas de monnaie d'un arrêté "
-               "à l'autre — aucune conversion n'est pratiquée",
-        _et(('devise',))),
-
     'signalement_participation_directe': Exigence(
-        '§45, B101-B118', "Reconnaître les contrats avec éléments de "
-                          "participation directe pour les refuser "
-                          "explicitement — hors périmètre",
+        '§45, B101-B118', SOURCE_IFRS17,
+        "Reconnaître les contrats avec éléments de participation directe "
+        "pour les refuser explicitement — hors périmètre",
         _et(('participation_directe',))),
 
     'signalement_composante_investissement': Exigence(
-        '§85', "Reconnaître une composante d'investissement à exclure des "
-               "produits des activités d'assurance",
+        '§85', SOURCE_IFRS17,
+        "Reconnaître une composante d'investissement à exclure des "
+        "produits des activités d'assurance",
         _et(('composante_investissement',))),
+
+    # ── Ce qui NE VIENT PAS de la norme, et le dit ───────────────────────────
+    'devise_entite_invariante': Exigence(
+        'décision produit ④', SOURCE_INVARIANT,
+        "Vérifier qu'une entité ne change pas de monnaie d'un arrêté à "
+        "l'autre — la plateforme ne convertit jamais, chaque entité calcule "
+        "dans sa devise. IFRS 17 n'impose PAS cette règle : §30 et §92 "
+        "prévoient au contraire la conversion selon IAS 21",
+        _et(('devise',), ('entite',))),
 }
 
 
@@ -317,10 +369,27 @@ def exigences_hors_portee(champs_presents) -> Dict[str, Tuple[str, ...]]:
 
 
 def reference(exigence: str) -> str:
-    """Ce qu'il faut CITER dans un livrable pour une exigence donnée."""
+    """Ce qu'il faut CITER dans un livrable, provenance comprise.
+
+    Une exigence qui ne vient pas de la norme ne se cite pas comme si elle en
+    venait : le préfixe change, et un lecteur voit immédiatement à quoi il a
+    affaire.
+    """
     if exigence not in EXIGENCES:
         raise KeyError(
             f"Exigence inconnue : « {exigence} ». Les {len(EXIGENCES)} "
             f"exigences sont {', '.join(sorted(EXIGENCES))}.")
     ex = EXIGENCES[exigence]
-    return f"IFRS 17 {ex.reference} — {ex.libelle}"
+    if ex.source == SOURCE_IFRS17:
+        return f"IFRS 17 {ex.reference} — {ex.libelle}"
+    return f"Règle ActuarIA ({ex.reference}) — {ex.libelle}"
+
+
+def exigences_hors_norme() -> Dict[str, Exigence]:
+    """Les exigences qui NE SONT PAS des obligations d'IFRS 17.
+
+    Existe pour qu'un livrable puisse les nommer plutôt que de les noyer : un
+    actuaire qui signe a le droit de savoir ce que la plateforme lui impose
+    en propre, et ce que la norme lui impose. Aujourd'hui UNE SUR SEIZE.
+    """
+    return {c: e for c, e in EXIGENCES.items() if e.source != SOURCE_IFRS17}
