@@ -454,6 +454,23 @@ class AgentA11IFRS17:
         Le quantile (P75 standard) DOIT être déclaré dans les notes
         annexes IFRS 17 pour permettre la comparabilité.
 
+        ⚠️ AUCUN ÉCRÊTAGE. Le RA publié était borné à [2 %, 15 %] du BE.
+        Ces bornes ne venaient pas de la norme — §B91 pose que « IFRS 17
+        n'impose pas de méthode d'estimation particulière » et n'en fixe
+        aucune. Elles produisaient deux infractions mesurées :
+          · §119 — le niveau de confiance publié doit être celui UTILISÉ.
+            À CV 51,6 % (triangle RAA) l'agent livrait P70,2 en annonçant
+            P75 ; à CV 1 % il livrait P97,6.
+          · §B91(c) — le RA « sera d'un montant plus élevé si la
+            distribution des probabilités des risques est large ». Le
+            plafond le figeait : deux portefeuilles à CV 30 % et 60 %
+            recevaient le même montant.
+
+        Seul RA >= 0 est conservé : au-delà de CV = sqrt(exp(z_q²) − 1)
+        la VaR passe SOUS la moyenne et le RA deviendrait négatif, ce
+        qu'interdit §B87 — une indemnité que l'entité EXIGE pour porter
+        le risque.
+
         DIFFÉRENCE vs S2 :
         Risk Margin S2 = CoC × SCR_résiduel (méthode duration-based)
         RA IFRS 17     = quantile VaR sur distribution sinistres
@@ -462,24 +479,27 @@ class AgentA11IFRS17:
         q  = p['quantile_ra']
         z_q = float(scipy_stats.norm.ppf(q))
 
+        # Domaine où le RA croît avec la dispersion, comme l'exige §B91(c) :
+        # d/dσ_ln [z_q σ_ln − σ_ln²/2] > 0  ⟺  σ_ln < z_q  ⟺  CV < √(e^{z_q²}−1)
+        cv_limite = float(np.sqrt(np.exp(z_q ** 2) - 1))
+
         par_b  = []
         ra_tot = 0.0
+        cv_max = 0.0
 
         for b in branches:
             be_b  = b['be']
             sig_b = b['sigma']
             cv_b  = sig_b / max(be_b, 1.0)
+            cv_max = max(cv_max, cv_b)
 
             # Paramètres log-normale
             sig_ln = np.sqrt(np.log(1 + cv_b ** 2))
             mu_ln  = np.log(max(be_b, 1.0)) - 0.5 * sig_ln ** 2
 
-            # VaR au quantile q
+            # VaR au quantile q — publiée telle quelle, seul RA < 0 est exclu
             var_q  = np.exp(mu_ln + z_q * sig_ln)
-            ra_b   = max(var_q - be_b, be_b * 0.02)  # plancher 2% du BE
-
-            # Borne raisonnable : 2%-15% du BE
-            ra_b = max(be_b * 0.02, min(ra_b, be_b * 0.15))
+            ra_b   = max(var_q - be_b, 0.0)
 
             ra_tot += ra_b
             par_b.append({
@@ -498,12 +518,15 @@ class AgentA11IFRS17:
             'ra_total':   ra_tot,
             'quantile':   q,
             'z_quantile': round(z_q, 4),
+            'cv_max':        round(cv_max, 6),
+            'cv_limite_b91': round(cv_limite, 6),
+            'monotone_b91':  bool(cv_max < cv_limite),
             'methode':    f'VaR log-normale P{int(q*100)} (IFRS 17 §B86)',
             'note_annexe':(
                 f"Risk Adjustment calculé au quantile de confiance P{int(q*100)} "
                 f"(z={z_q:.3f}) sur distribution log-normale calibrée "
                 f"sur σ Mack Ibrahim. "
-                f"Déclaration obligatoire IFRS 17 §119(a)."
+                f"Déclaration obligatoire IFRS 17 §119."
             ),
             'par_branche': par_b,
         }
@@ -834,20 +857,30 @@ class AgentA11IFRS17:
             'critique': True,
         }
         # H2 — Risk Adjustment quantile explicite
+        # Le statut était 'VALIDÉE' en dur : l'hypothèse s'auto-déclarait
+        # tenue. Elle dit désormais ce qu'elle vérifie — le domaine où la
+        # VaR croît avec la dispersion, seul domaine où §B91(c) est tenu.
         q = p['quantile_ra']
+        b91_tenu = ra['monotone_b91']
         h2 = {
             'id':'H2',
             'hypothese':(
                 f"Risk Adjustment calibré au quantile P{int(q*100)} "
                 f"(z={ra['z_quantile']:.3f}) sur distribution "
-                f"log-normale σ Mack Ibrahim — déclaration IFRS 17 §119(a)"
+                f"log-normale σ Mack Ibrahim — déclaration IFRS 17 §119"
             ),
             'valeur':(
                 f"RA={ra['ra_total']:,.0f}€ | "
                 f"RA/BE={ra['ra_total']/max(src['be_brut'],1)*100:.1f}% | "
-                f"Méthode : {ra['methode']}"
+                f"Méthode : {ra['methode']} | "
+                f"CV max={ra['cv_max']:.1%} — limite §B91(c) "
+                f"{ra['cv_limite_b91']:.1%}"
+                + ("" if b91_tenu else
+                   f" | ⚠️ AU-DELÀ : la VaR P{int(q*100)} décroît quand la "
+                   f"dispersion augmente, §B91(c) n'est pas tenu par la "
+                   f"mesure de risque elle-même")
             ),
-            'statut':'VALIDÉE',
+            'statut':'VALIDÉE' if b91_tenu else 'À JUSTIFIER',
             'critique':True,
         }
         # H3 — Cohérence S2 ↔ IFRS 17
