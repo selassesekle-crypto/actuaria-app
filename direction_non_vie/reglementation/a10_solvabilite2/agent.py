@@ -481,11 +481,59 @@ class AgentA10Solvabilite2:
         # etait PUBLIE dans l'hypothese H1, marquee critique et VALIDEE --
         # la table qu'un actuaire signe. Le retrait est donc neutre en euros
         # et retire une affirmation fausse d'un livrable.
+        # ⚠️ LA COURBE ELLE-MEME VOYAGE, PAS SEULEMENT TROIS DE SES POINTS.
+        # C'est ce qui permet a `_rfr_dur` d'actualiser a la duration reelle
+        # de chaque branche au lieu d'un echantillon. Meme dispositif qu'A7
+        # depuis le lot R2 : la courbe circule dans le dictionnaire.
+        # Elle est absente si l'appelant a fourni `market_data` -- personne ne
+        # le fait dans ce depot -- et `_rfr_dur` se replie alors sur les trois
+        # points. Les trois restent publies : ils decrivent la courbe pour le
+        # lecteur, ils ne la remplacent plus dans le calcul.
         return {'rfr_5ans':r5,'rfr_10ans':r10,'rfr_20ans':r20,'rfr':r10,
+                'courbe': None if (md and isinstance(md, dict)) else _COURBE_RFR,
                 'oat':oat,'ufr':TAUX_DEFAUT['ufr'],
                 'inflation':inf,'source':src,'fiabilite':fib,'date':dat}
 
     def _rfr_dur(self, dur, taux):
+        """Le taux d'actualisation a la duration d'une branche.
+
+        ⚠️ TROIS POINTS N'ONT JAMAIS ETE UN CHOIX DE MODELE — c'etait une
+        contrainte de la source. `TAUX_DEFAUT` ne portait que trois valeurs,
+        cette fonction ne pouvait rien faire d'autre. Le referentiel publie
+        les 150 maturites d'EIOPA ; la contrainte a disparu, le contournement
+        n'a plus d'objet. L'art. 77 prescrit << la courbe des taux d'interet
+        sans risque pertinente >>, et EIOPA la publie entiere.
+
+        ⚠️ ET CE N'ETAIT PAS UNE INTERPOLATION SOUS CINQ ANS : `if dur <= 5:
+        return r5` APPLIQUAIT le taux a cinq ans, quelle que soit la duration.
+        15 des 21 branches du catalogue sont dans ce segment. La courbe EIOPA
+        etant croissante sur le court terme -- 2,826 % a un an contre 2,987 %
+        a cinq -- l'ecart etait de MEME SIGNE partout : le taux surestime,
+        donc la provision sous-estimee. Mesure : +16,10 bps a un an,
+        +10,85 pour l'assistance (1,5 an), +4,20 pour les sept branches a
+        trois ans.
+
+        ⚠️ ET ENTRE LES NOEUDS, LA CORDE PASSAIT SOUS LA COURBE, donc dans
+        l'AUTRE sens : a quinze ans elle donnait 3,2565 % contre 3,3070 %
+        publies, soit -5,05 bps. Les deux branches concernees sont les plus
+        longues du catalogue -- dommage corporel individuel (15 ans) et RC
+        medicale (17 ans) -- et ce sont celles ou l'actualisation pese le
+        plus. Un modele qui se trompe dans les DEUX sens selon la maturite ne
+        se corrige pas par une marge de prudence.
+
+        Au-dela de vingt ans, `else: return r20` etait une seconde
+        extrapolation plate : -1,70 bps a trente ans. Aucune branche du
+        catalogue n'y est aujourd'hui ; une LoB longue ajoutee demain aurait
+        herite du biais sans que rien ne le signale.
+
+        LE REPLI A TROIS POINTS RESTE, et il n'est pas decoratif : un
+        appelant peut fournir `market_data` sans courbe -- aucun ne le fait
+        dans ce depot, mais la fonction doit rester honnete pour celui qui le
+        ferait.
+        """
+        courbe = taux.get('courbe')
+        if courbe is not None:
+            return actualiser(courbe, dur)
         r5,r10,r20 = taux['rfr_5ans'],taux['rfr_10ans'],taux['rfr_20ans']
         if dur<=5:   return r5
         elif dur<=10: return r5 + (dur-5)/5*(r10-r5)
@@ -827,7 +875,35 @@ class AgentA10Solvabilite2:
         # employee est SANS VA, ce qui est le regime par defaut de l'art. 77 ;
         # le VA de l'art. 77 quinquies suppose un agrement qu'A10 ne declare
         # pas. H1 publie desormais l'arrete de la courbe, qui manquait.
-        h1={'id':'H1','hypothese':f"Courbe RFR EIOPA sans VA — arrêté {taux['date']} — 5a={taux['rfr_5ans']:.2%} 10a={taux['rfr_10ans']:.2%} 20a={taux['rfr_20ans']:.2%}",
+        #
+        # ⚠️ ET ELLE N'ANNONCE PLUS TROIS POINTS (lot R4b). Le modele n'en
+        # emploie plus trois : publier 5a/10a/20a ferait dire au livrable
+        # quelque chose que le calcul ne fait pas. Elle dit desormais ce qui
+        # sert REELLEMENT -- la courbe entiere, et la plage des taux appliques
+        # aux durations des branches, qu'un controleur doit pouvoir
+        # recalculer. Le detail par branche existe deja : `rfr_utilise` est
+        # publie pour chacune dans `provisions.par_branche`.
+        #
+        # PAS DE NOTE TRANSITOIRE DU TYPE << ceci a change a cette version >> :
+        # une note se date et se perime. L'actuaire qui compare deux arretes
+        # verra H1 passer de << 5a/10a/20a >> a << courbe complete >>, et
+        # cette formulation-la reste vraie indefiniment.
+        _c = taux.get('courbe')
+        if _c is not None and branches:
+            _appliques = [self._rfr_dur(b['duration'], taux) for b in branches]
+            _lo, _hi = min(_appliques), max(_appliques)
+            # Une seule branche, ou toutes de meme duration : une plage
+            # << 3,33 % a 3,33 % >> se lirait comme une maladresse.
+            _plage = (f"{_lo:.3%}" if _hi - _lo < 5e-5
+                      else f"{_lo:.3%} à {_hi:.3%}")
+            _h1t = (f"Courbe RFR EIOPA sans VA — arrêté {taux['date']} — "
+                    f"{len(_c.maturites)} maturités, appliquée à la duration "
+                    f"de chaque branche (taux retenu : {_plage})")
+        else:
+            _h1t = (f"Courbe RFR EIOPA sans VA — arrêté {taux['date']} — "
+                    f"interpolation 3 points 5a={taux['rfr_5ans']:.2%} "
+                    f"10a={taux['rfr_10ans']:.2%} 20a={taux['rfr_20ans']:.2%}")
+        h1={'id':'H1','hypothese':_h1t,
             'valeur':f"UFR={taux['ufr']:.2%} | {taux['fiabilite']}",
             'statut':'VALIDÉE' if 0.005<=taux['rfr_10ans']<=0.10 else 'À JUSTIFIER','critique':True}
         if mode_scr=='formule_standard':
