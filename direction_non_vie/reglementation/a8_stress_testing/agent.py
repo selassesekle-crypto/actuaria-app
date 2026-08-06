@@ -24,6 +24,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
+from core.courbe_rfr import actualiser, courbe_embarquee
 from ..segments_s2 import SEGMENTS_S2, libelle_reference
 # La correspondance << nom metier -> segment officiel >> n'est PAS redefinie
 # ici : elle vit dans A10, agent de reference Solvabilite II, et A8 fait du
@@ -70,6 +71,10 @@ logging.basicConfig(
 
 
 
+#: La courbe des taux sans risque, commune a tous les agents (lot R3).
+_COURBE_RFR = courbe_embarquee()
+
+
 # ── Chargement du module données marché ───────────────────────────────────────
 def _charger_market_data() -> Dict:
     """
@@ -77,6 +82,20 @@ def _charger_market_data() -> Dict:
     Fallback immédiat sur valeurs EIOPA par défaut (Streamlit Cloud / production).
     Le fallback est la voie normale sur Streamlit Cloud — market_data.py est
     un module local de développement non déployé.
+
+    ⚠️ LE TAUX SANS RISQUE NE VIENT PLUS D'ICI, QUEL QUE SOIT LE CHEMIN. Il
+    est ecrase par celui du referentiel dans les deux branches : ce module ne
+    doit plus etre une source de taux, c'est tout l'objet du chantier RFR.
+
+    ⚠️ ET LE CHEMIN CHERCHE CI-DESSOUS N'EXISTE PAS. Il pointe sous le
+    dossier d'A8 alors que `market_data.py` vit a la racine du depot :
+    verifie a l'execution, `chemin_local.exists()` rend False et le repli est
+    le SEUL chemin, y compris en local — la docstring d'origine
+    rationalisait cet etat en l'attribuant a Streamlit Cloud. Ce defaut n'est
+    PAS corrige ici : apres ce lot il ne concerne plus que l'OAT et
+    l'inflation, donc il releve du lot R5, qui tranchera si cette couche est
+    branchee ou retiree. Le corriger ici changerait ces deux entrees sans
+    rapport avec le taux sans risque, et sans mesure.
     """
     logger = logging.getLogger("actuaria.a8")
     # Tenter uniquement si le fichier existe localement (dev uniquement)
@@ -88,10 +107,19 @@ def _charger_market_data() -> Dict:
             md   = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(md)
             data = md.fetch_all_market()
+            # Le taux sans risque de cette couche est ECRASE : elle porte une
+            # courbe datee du 31/05/2026, plate a l'UFR des vingt ans, qu'une
+            # vraie courbe EIOPA depasse. Une seule source fait foi.
+            data['rfr_10ans'] = {
+                'rfr_pct': round(100 * actualiser(_COURBE_RFR, 10), 4),
+                'ufr': _COURBE_RFR.ufr}
+            data['rfr_20ans'] = {
+                'rfr_pct': round(100 * actualiser(_COURBE_RFR, 20), 4)}
             logger.info(
                 f"Données marché chargées ({data['fiabilite']}) : "
                 f"OAT10={data['oat_10ans']['taux_pct']}% · "
-                f"RFR={data['rfr_10ans']['rfr_pct']}%"
+                f"RFR={data['rfr_10ans']['rfr_pct']}% "
+                f"(référentiel, arrêté {_COURBE_RFR.date_arrete})"
             )
             return data
         except Exception as e:
@@ -102,8 +130,23 @@ def _charger_market_data() -> Dict:
     return {
         'oat_10ans':     {'taux_pct': 3.65, 'source': 'Défaut EIOPA', 'fiabilite': 'DEFAUT'},
         'oat_5ans':      {'taux_pct': 3.10, 'source': 'Défaut EIOPA', 'fiabilite': 'DEFAUT'},
-        'rfr_10ans':     {'rfr_pct': 3.20, 'rfr_avec_va_pct': 3.55, 'ufr': 3.30, 'va': 0.35},
-        'rfr_20ans':     {'rfr_pct': 3.30, 'rfr_avec_va_pct': 3.65},
+        # ⚠️ LES DEUX TAUX SANS RISQUE NE SONT PLUS ECRITS ICI (lot R3). Ils
+        # valaient 3,20 % et 3,30 %, sans date et sans source, quand A7 en
+        # portait 2,749 % : 45 bps d'ecart entre deux agents du meme rapport.
+        # Ils viennent desormais de `core/courbe_rfr.py`, comme chez A7.
+        #
+        # ⚠️ ET `rfr_avec_va_pct` A DISPARU AVEC EUX, VOLONTAIREMENT. Il
+        # valait 3,55 %, soit un Volatility Adjustment de 35 points de base
+        # la ou EIOPA en publie 13 au 31/07/2026 : la valeur etait fabriquee.
+        # Surtout, A8 ne declare AUCUN agrement de l'autorite de controle, et
+        # l'art. 77 quinquies y subordonne l'emploi du VA — publier un taux
+        # avec VA suggerait un droit qu'A8 n'a pas. Le retrait est neutre en
+        # euros : ce champ n'entrait dans AUCUN calcul, il n'etait
+        # QU'AFFICHE. S'il redevient utile, il repassera par l'acces dedie du
+        # referentiel, qui exige l'agrement.
+        'rfr_10ans':     {'rfr_pct': round(100 * actualiser(_COURBE_RFR, 10), 4),
+                          'ufr': _COURBE_RFR.ufr},
+        'rfr_20ans':     {'rfr_pct': round(100 * actualiser(_COURBE_RFR, 20), 4)},
         'scr_params':    {
             # Les six sigma qui vivaient ici ONT ETE RETIRES (lot B10-c) : ils
             # dupliquaient la table officielle, et le doublon avait derive
@@ -190,8 +233,15 @@ class AgentA8StressTesting:
         horizons_orsa:      List[int] = [1, 2, 3, 4, 5],
         sous_branche:       str = 'auto',
         generer_graphiques: bool = True,
-        # Compatibilité v1
-        result_a3:          Optional[Dict] = None,
+        # Compatibilité v1 — `primes_acq` et `scr_actuel` servent de repli
+        # quand A6 ou A7 manquent, et l'application les passe réellement.
+        #
+        # ⚠️ `result_a3` A ETE RETIRE. Il n'etait lu NULLE PART dans le corps,
+        # aucun appelant du depot ne le passait, et A6 agrege deja A3, A4 et
+        # A5 : le brancher ferait entrer une seconde fois la meme source.
+        # C'est le seul des huit signalements de propreté qui touche une
+        # signature publique, d'ou la verification des appelants avant de le
+        # retirer plutot qu'apres.
         primes_acq:         float = 5_000_000,
         scr_actuel:         float = 800_000,
     ) -> Dict[str, Any]:
@@ -219,8 +269,10 @@ class AgentA8StressTesting:
             mkt = _charger_market_data()
             scr_params = mkt['scr_params']
             oat_10ans  = mkt['oat_10ans']['taux_pct'] / 100
+            # Le referentiel expose le DECIMAL ; A8 travaille en pourcent
+            # depuis toujours. La conversion se fait ICI, a la frontiere de
+            # l'agent, et nulle part ailleurs.
             rfr_10ans  = mkt['rfr_10ans']['rfr_pct']  / 100
-            rfr_va     = mkt['rfr_10ans']['rfr_avec_va_pct'] / 100
             inflation  = mkt['macro']['inflation_france_mai2026'] / 100
 
             # ── Étape 2 : Extraire les données de A7 ─────────────────────────
@@ -230,22 +282,25 @@ class AgentA8StressTesting:
                 # Clés bootstrap en minuscule (A7 retourne p99_5, p90)
                 boot       = result_a7.get('bootstrap', {})
                 p99_5      = boot.get('p99_5', boot.get('P99_5', be * 1.25))
-                p90        = boot.get('p90',   boot.get('P90',   be * 1.12))
                 # tail_factor est un dict avec clé 'tail_factor'
                 tail_d     = result_a7.get('tail_factor', {})
                 tail_f     = tail_d.get('tail_factor', 1.0) if isinstance(tail_d, dict) else 1.0
                 orsa_a7    = result_a7.get('orsa_provisions', {})
                 sous_br    = result_a7.get('sous_branche', sous_branche)
-                facteurs_cl= result_a7.get('chain_ladder', {}).get('facteurs', [])
                 logger.info(f"A7 branché : BE={be:,.0f}€ | P99.5={p99_5:,.0f}€ | Tail={tail_f:.4f}")
             else:
+                # ⚠️ `p90` ET `facteurs_cl` ONT ETE RETIRES DES DEUX BRANCHES.
+                # Ils etaient lus chez A7 -- percentile 90 du bootstrap et
+                # facteurs de developpement -- puis jetes : aucune sortie
+                # d'A8, aucun graphique, aucun QRT ne les consommait. Ce sont
+                # de vraies lectures mortes, contrairement a `t_debut` et au
+                # nom du modele d'A6, qui etaient des fils DEBRANCHES et sont
+                # desormais publies.
                 be      = scr_actuel * 3.5
                 p99_5   = be * 1.25
-                p90     = be * 1.12
                 tail_f  = 1.0
                 orsa_a7 = {}
                 sous_br = sous_branche
-                facteurs_cl = []
                 logger.warning("result_a7 absent — utilisation des valeurs par défaut")
 
             # ── Étape 3 : Extraire les données de A6 ─────────────────────────
@@ -330,7 +385,10 @@ class AgentA8StressTesting:
                 'marche': {
                     'oat_10ans_pct':    round(oat_10ans * 100, 3),
                     'rfr_10ans_pct':    round(rfr_10ans * 100, 3),
-                    'rfr_va_pct':       round(rfr_va * 100, 3),
+                    # `rfr_va_pct` retire au lot R3 : voir `_charger_market_
+                    # data`. Il affichait un VA de 35 bps fabrique, quand
+                    # EIOPA en publie 13, et A8 ne declare aucun agrement.
+                    'rfr_arrete':       _COURBE_RFR.date_arrete,
                     'inflation_pct':    round(inflation * 100, 2),
                     'source':           mkt['source_globale'],
                     'fiabilite':        mkt['fiabilite'],
@@ -342,6 +400,18 @@ class AgentA8StressTesting:
                 'prime_nette_utilisee': round(prime_nette, 2),
                 'fonds_propres':        fonds_propres,
                 'gini_a6':              round(gini, 4),
+                # ⚠️ FIL DEBRANCHE, BRANCHE PLUTOT QUE COUPE. Le nom du
+                # modele etait lu chez A6 puis jete : A8 publiait un Gini
+                # sans dire QUEL modele l'avait produit. Pour un outil
+                # examine par un commissaire aux comptes, c'est une moitie
+                # de reponse.
+                'modele_a6':            str(modele),
+                # ⚠️ MEME MOTIF. `t_debut` etait mesure des la premiere ligne
+                # de `run()` puis jete, alors qu'A11 et A12 -- ses deux
+                # voisins -- publient tous deux `duree_sec`. A8 etait le seul
+                # des trois a chronometrer sans rien en dire.
+                'duree_sec':            round(
+                    (datetime.now() - t_debut).total_seconds(), 2),
                 # Résultats principaux
                 'chocs_s2':             chocs,
                 'scr_total':            scr_total_dict,
@@ -1050,8 +1120,11 @@ class AgentA8StressTesting:
         # Securiser scr_vec : padding a 4 elements si la liste est trop courte
         _vec_raw = scr_dict.get('scr_vec', [])
         vec = (_vec_raw + [0, 0, 0, 0])[:4]
-        lab = scr_dict.get('labels_vec', ['Souscription', 'Catastrophe', 'Marché', 'Opérationnel'])
-
+        # ⚠️ `labels_vec` N'A RIEN A FAIRE ICI, ET LE BRANCHER SERAIT UNE
+        # FAUTE. Il porte les libelles d'AFFICHAGE francais -- Souscription,
+        # Catastrophe, Marche, Operationnel. Un QRT S.25.01 doit porter les
+        # libelles REGLEMENTAIRES anglais, qui sont ecrits en dur ci-dessous.
+        # La variable etait lue et jetee : elle est retiree, pas connectee.
         return {
             'code':  'S.25.01',
             'titre': 'Solvency Capital Requirement — Standard Formula',
@@ -1341,7 +1414,9 @@ class AgentA8StressTesting:
         except:
             return {}
 
-        NAVY="#0F2E52";NAVYL="#1B3A5C";OR="#C9A84C";BLANC="#F0F4F8"
+        # `OR` retire : la palette est recopiee de `_graphiques`, ou cette
+        # teinte sert ; ici aucun trace ne l'emploie.
+        NAVY="#0F2E52";NAVYL="#1B3A5C";BLANC="#F0F4F8"
         GRIS="#8A9AB0";VERT="#2ECC71";ROUGE="#E74C3C";AMBRE="#F39C12"
         LAYOUT = dict(paper_bgcolor=NAVY, plot_bgcolor=NAVYL,
                      font=dict(family="Inter", color=BLANC, size=11),

@@ -319,7 +319,6 @@ class T5_Article_204(unittest.TestCase):
     def test_le_coefficient_des_provisions_nest_plus_dix_fois_trop_bas(self):
         """Il valait 0,003 pour 0,03 — un ordre de grandeur (art. 204(4))."""
         r = _run('rc_auto')
-        c = r['chocs_s2']
         self.assertAlmostEqual(A8.OP_TAUX_PROVISIONS_NON_VIE
                                / A8.OP_TAUX_PRIMES_NON_VIE, 1.0, places=9,
                                msg="les deux coefficients non-vie sont egaux")
