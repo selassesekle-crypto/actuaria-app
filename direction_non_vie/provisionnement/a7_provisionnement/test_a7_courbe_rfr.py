@@ -40,7 +40,8 @@ import numpy as np
 from direction_non_vie.provisionnement.a7_provisionnement.agent import (
     AgentA7Provisionnement)
 from direction_non_vie.provisionnement.a7_provisionnement.config.rfr_eiopa import (
-    DATE_COURBE, get_courbe_embarquee, get_courbe_taux_plat, get_taux_rfr)
+    DATE_COURBE, diagnostic_peremption, get_courbe_embarquee,
+    get_courbe_taux_plat, get_taux_rfr)
 from direction_non_vie.provisionnement.a7_provisionnement.test_a7_ibrahim import (
     GENINS)
 
@@ -133,14 +134,28 @@ class T1_Deux_Courbes_Deux_Risk_Margins(unittest.TestCase):
 class T2_La_Date_Suit_La_Courbe(unittest.TestCase):
 
     def test_la_courbe_embarquee_publie_sa_date_et_sa_peremption(self):
+        """⚠️ CE VERROU N'EXIGE PLUS « ROUGE », ET IL EST PLUS FORT AINSI.
+
+        Il épinglait le statut de la courbe embarquée d'alors — périmée de
+        seize mois. La bascule du lot R2 l'a remplacée par celle du
+        31/07/2026 : le test tombait, non parce que le rapport mentait, mais
+        parce qu'il décrivait une donnée devenue fausse. Sa docstring posait
+        d'ailleurs la bonne question — « a-t-elle été mise à jour ? ».
+
+        Ce qu'il doit vérifier est ailleurs : que le rapport publie LE MÊME
+        statut que le module, quel qu'il soit. Cette forme attrape le défaut
+        d'origine — un rapport qui inventerait sa péremption — et ne se
+        périme pas avec la courbe.
+        """
         n4 = _run(None, cle='defaut')['n4']
+        attendu = diagnostic_peremption()['statut']
         self.assertEqual(n4.get('date_courbe_rfr'), DATE_COURBE)
         self.assertEqual((n4.get('peremption_courbe') or {}).get('statut'),
-                         'ROUGE',
-                         'la courbe embarquée n\'est plus jugée périmée — '
-                         'a-t-elle été mise à jour ? le seuil a-t-il bougé ?')
-        print('    OK RFR-4 courbe embarquée : date %s publiée, péremption '
-              'ROUGE' % DATE_COURBE)
+                         attendu,
+                         'le rapport publie un statut de péremption qui n\'est '
+                         'pas celui du module')
+        print('    OK RFR-4 courbe embarquée : date %s publiée, péremption %s '
+              '— celle du module' % (DATE_COURBE, attendu))
 
     def test_une_courbe_fournie_publie_la_sienne_et_non_l_embarquee(self):
         """⚠️ LE DÉFAUT LE PLUS TROMPEUR DES DEUX.
@@ -159,17 +174,32 @@ class T2_La_Date_Suit_La_Courbe(unittest.TestCase):
                  str(n4.get('source_courbe_rfr'))[:52]))
 
     def test_une_courbe_fournie_n_est_pas_declaree_a_jour(self):
-        """Le module ne connaît pas sa date : il ne peut pas la juger VERTE.
+        """⚠️ LA RÈGLE A CHANGÉ AU LOT R2, ET DANS LE SENS SÉVÈRE.
 
-        Affirmer VERT sur une courbe dont on ignore l'arrêté serait inventer
-        un verdict — c'est la règle posée au lot BFCC.
+        Ce test énonçait : « affirmer VERT sur une courbe dont on ignore
+        l'arrêté serait inventer un verdict », d'où « NON TESTABLE ». Le
+        principe était juste, la conséquence trop faible : `NON TESTABLE`
+        n'est ni `'ROUGE'` — donc aucun plafonnement — ni dans
+        `('AMBRE','ROUGE')` — donc aucune alerte. Une courbe fournie
+        traversait les DEUX circuits de gouvernance en silence.
+
+        MESURÉ SUR 197 PORTEFEUILLES : un taux plat supposé rendait
+        exactement ce qu'aurait rendu une courbe officielle fraîche —
+        37 VERT. Autrement dit, le repli explicite périmé était MIEUX
+        gouverné que la saisie de l'actuaire.
+
+        La règle est désormais : sans date d'arrêté, ROUGE. Et elle ne punit
+        pas sans remède — ces mêmes 37 portefeuilles regagnent tous le VERT
+        avec le classeur EIOPA officiel, qui porte sa date.
         """
         per = (_run(get_courbe_taux_plat(3.0), cle='plat_3.0')['n4']
                .get('peremption_courbe') or {})
-        self.assertEqual(per.get('statut'), 'NON TESTABLE')
-        self.assertIn('actuaire', str(per.get('message', '')).lower())
-        print('    OK RFR-6 courbe fournie : péremption NON TESTABLE, et le '
-              'message dit pourquoi')
+        self.assertEqual(per.get('statut'), 'ROUGE',
+                         'une courbe sans date d\'arrêté doit plafonner : '
+                         'elle ne peut pas porter un chiffre définitif')
+        self.assertIn("sans date d'arrêté", str(per.get('message', '')).lower())
+        print('    OK RFR-6 courbe fournie sans arrêté : péremption ROUGE, et '
+              'le message dit pourquoi')
 
     def test_un_import_rate_retombe_sur_l_embarquee_ET_sur_son_diagnostic(self):
         """⚠️ LE CAS SUBTIL, ET IL EST RÉEL.
@@ -186,8 +216,8 @@ class T2_La_Date_Suit_La_Courbe(unittest.TestCase):
         n4 = _run(courbe)['n4']
         self.assertEqual(n4.get('date_courbe_rfr'), DATE_COURBE)
         self.assertEqual((n4.get('peremption_courbe') or {}).get('statut'),
-                         'ROUGE',
-                         'un import raté masque la péremption de la courbe '
+                         diagnostic_peremption()['statut'],
+                         'un import raté masque le diagnostic de la courbe '
                          'qui sert réellement')
         self.assertAlmostEqual(float(n4['risk_margin']),
                                float(_run(None, cle='defaut')
@@ -266,17 +296,30 @@ class T4_Une_Courbe_Perimee_Plafonne_Le_Statut(unittest.TestCase):
     """
 
     def _statut(self, date_courbe):
+        """⚠️ LE SEAM A ÉTÉ RÉPARÉ AU LOT R2, PAS LA PROPRIÉTÉ TESTÉE.
+
+        Ces trois verrous vieillissaient artificiellement la courbe en
+        écrasant `RFR.DATE_COURBE`. La bascule sur le référentiel a fait de
+        cette constante une valeur DÉRIVÉE, que plus rien ne lit : les tests
+        tombaient parce que leur levier ne levait plus, non parce que le
+        plafonnement avait cessé de fonctionner.
+
+        On vieillit donc la courbe elle-même — `_EMBARQUEE._replace(
+        date_arrete=…)`. Les taux sont identiques, seule la date change :
+        c'est bien le plafonnement par péremption qui est mesuré, et rien
+        d'autre.
+        """
         import direction_non_vie.provisionnement.a7_provisionnement.config \
             .rfr_eiopa as RFR
         C, ult = _triangle_regulier()
-        origine = RFR.DATE_COURBE
-        RFR.DATE_COURBE = date_courbe
+        origine = RFR._EMBARQUEE
+        RFR._EMBARQUEE = origine._replace(date_arrete=date_courbe)
         try:
             r = AgentA7Provisionnement(verbose=False).run(
                 source=C, mode_declare='cumule', generer_graphiques=False,
                 generer_word=False, n_sim_bootstrap=60, seed=42, primes=ult)
         finally:
-            RFR.DATE_COURBE = origine
+            RFR._EMBARQUEE = origine
         n4 = r['n4']
         return (n4['statut'],
                 (n4.get('peremption_courbe') or {}).get('statut'),

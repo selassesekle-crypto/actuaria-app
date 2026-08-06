@@ -179,9 +179,19 @@ class T4_Zero_Euro_Deplace(unittest.TestCase):
     """Valeurs figées AVANT le lot A1, mesurées sur l'arbre propre."""
 
     #: GenIns et Recours, exposition = 8 × moyenne de la 1ʳᵉ colonne, seed 42.
+    #:
+    #: ⚠️ LES DEUX RISK MARGIN MISES À JOUR AU LOT R2, ET LES BEST ESTIMATE
+    #: NE BOUGENT PAS — c'est ce qui identifie la cause. A7 portait sa propre
+    #: courbe EIOPA arrêtée au 31/03/2025 ; elle est remplacée par celle du
+    #: 31/07/2026, commune à tous les agents. La Risk Margin actualise le
+    #: profil de run-off sur cette courbe, le Best Estimate non :
+    #:      GenIns   BE 17 571 609 inchangé   RM 2 107 541 → 2 078 603
+    #:      Recours  BE      1 032 inchangé   RM        71 →        70
+    #: L'effet dépend de la duration, il n'est donc pas une constante —
+    #: mesuré de −1,67 % à nul sur 197 portefeuilles.
     _ATTENDU = {
-        'GenIns':  {'best_estimate': 17_571_609.0, 'risk_margin': 2_107_541.0},
-        'Recours': {'best_estimate': 1_032.0,      'risk_margin': 71.0},
+        'GenIns':  {'best_estimate': 17_571_609.0, 'risk_margin': 2_078_603.0},
+        'Recours': {'best_estimate': 1_032.0,      'risk_margin': 70.0},
     }
 
     def test_les_grandeurs_monetaires_sont_inchangees(self):
@@ -192,8 +202,8 @@ class T4_Zero_Euro_Deplace(unittest.TestCase):
                                        msg=f'{nom}.{cle}')
             for cle in _GRANDEURS_EN_EUROS:
                 self.assertIn(cle, n4, f'{cle} a disparu du livrable')
-        print("    OK A1-7 GenIns 17 571 609 € / RM 2 107 541 € et Recours "
-              "1 032 € / RM 71 € — inchangés par le lot A1")
+        print("    OK A1-7 GenIns 17 571 609 € / RM 2 078 603 € et Recours "
+              "1 032 € / RM 70 € — les BE inchangés par le lot A1")
 
     def test_le_verdict_bouge_mais_pas_les_poids(self):
         """Recours passe en AMBRE sans qu'aucune pondération ne change."""

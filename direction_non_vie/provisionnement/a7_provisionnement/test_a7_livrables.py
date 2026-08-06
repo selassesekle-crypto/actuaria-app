@@ -206,7 +206,15 @@ class T3_Peremption_Courbe(unittest.TestCase):
         print(f"    OK LIV-10 arrêté du {DATE_COURBE} : VERT (0 mois)")
 
     def test_la_courbe_embarquee_signale_son_age_aujourdhui(self):
-        """Le cœur du point : plus de 'erreur': None inconditionnel."""
+        """Le cœur du point : plus de 'erreur': None inconditionnel.
+
+        ⚠️ CE TEST N'ASSERTAIT PLUS RIEN APRÈS LA BASCULE DU LOT R2, ET IL
+        PASSAIT QUAND MÊME. Son unique assertion vivait sous
+        `if mois >= MOIS_ALERTE_PEREMPTION` ; la courbe embarquée étant
+        passée du 31/03/2025 au 31/07/2026, la branche n'était plus prise et
+        le test devenait creux — vert, silencieux, et sans valeur. Il vérifie
+        désormais LES DEUX SENS, donc il ne peut plus se vider tout seul.
+        """
         c = get_courbe_embarquee()
         self.assertIn('peremption', c)
         mois = age_courbe_mois()
@@ -214,8 +222,14 @@ class T3_Peremption_Courbe(unittest.TestCase):
             self.assertIsNotNone(
                 c['erreur'],
                 "la courbe est périmée et ne le déclare pas — c'était le bug")
+        else:
+            self.assertIsNone(
+                c['erreur'],
+                "la courbe est fraîche et se déclare pourtant en défaut — "
+                "un reproche sans motif use le signal")
         print(f"    OK LIV-11 courbe du {DATE_COURBE} : {mois:.0f} mois, "
-              f"statut {c['peremption']['statut']}")
+              f"statut {c['peremption']['statut']}, erreur "
+              f"{'absente' if c['erreur'] is None else 'présente'}")
 
     def test_la_peremption_atteint_le_resultat_et_les_alertes(self):
         r = AgentA7Provisionnement(verbose=False).run(
@@ -224,10 +238,20 @@ class T3_Peremption_Courbe(unittest.TestCase):
         diag = (r['n4'].get('peremption_courbe')
                 or (r['n4'].get('risk_margin_data') or {}).get('peremption_courbe'))
         self.assertIsNotNone(diag, "le diagnostic doit remonter jusqu'à N4")
+        alertes = ' '.join(str(a) for a in r['n4'].get('alertes', []))
+        # ⚠️ MÊME DÉFAUT QUE LIV-11, ET MÊME CORRECTIF. L'assertion vivait
+        # sous `if diag['statut'] in ('AMBRE','ROUGE')` ; la courbe embarquée
+        # étant devenue fraîche au lot R2, la branche n'était plus prise et le
+        # test passait sans rien vérifier. Les deux sens sont désormais
+        # exigés : une courbe en défaut doit alerter, une courbe à jour ne
+        # doit PAS — une alerte sans motif use le signal aussi sûrement qu'une
+        # alerte manquante.
         if diag['statut'] in ('AMBRE', 'ROUGE'):
-            alertes = ' '.join(str(a) for a in r['n4'].get('alertes', []))
             self.assertIn('courbe', alertes.lower(),
                           "la péremption doit apparaître dans les alertes N4")
+        else:
+            self.assertNotIn('périmée', alertes.lower(),
+                             "la courbe est à jour et N4 alerte quand même")
         print(f"    OK LIV-12 N4 porte le diagnostic : {diag['statut']} "
               f"({diag['age_mois']} mois)")
 

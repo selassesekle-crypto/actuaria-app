@@ -1072,8 +1072,22 @@ class T19_BE_Negatif_Livrables_Et_RM(unittest.TestCase):
         # proratisation ; seule son entrée a été corrigée. Les σ sont désormais
         # épinglés à leur segment officiel par test_a7_sigma_s2.py, qui rend
         # une nouvelle dérive silencieuse impossible.
-        self.assertAlmostEqual(r['n4']['risk_margin'], 2_480_464, delta=1)
-        print("    OK T19c LLT normal : RM = 2 480 464 (recalcul ≡ proratisation)")
+        #
+        # CONSTANTE MISE À JOUR UNE CINQUIÈME FOIS — lot R2 (bascule d'A7 sur
+        # le référentiel de courbe) : 2 480 464 → 2 446 406. NI LE BE NI σ NE
+        # BOUGENT cette fois — c'est la COURBE D'ACTUALISATION.
+        # A7 portait sa propre courbe EIOPA, arrêtée au 31/03/2025, quand le
+        # reste du dépôt en portait sept autres ; le relevé du chantier RFR a
+        # mesuré 45 bps d'écart en non-vie, et A7 était 41 bps SOUS la courbe
+        # en vigueur. La courbe embarquée est désormais celle du 31/07/2026,
+        # commune à tous les agents (`core/courbe_rfr.py`).
+        # La Risk Margin actualise le profil de run-off sur cette courbe : des
+        # taux plus hauts la réduisent. L'effet dépend de la duration, donc il
+        # n'est pas une constante — mesuré de −1,67 % à nul sur 197
+        # portefeuilles ; il vaut ici −1,373 %, et le BE reste 20 680 856 €.
+        # LA RELATION TESTÉE N'A, ELLE, TOUJOURS PAS BOUGÉ.
+        self.assertAlmostEqual(r['n4']['risk_margin'], 2_446_406, delta=1)
+        print("    OK T19c LLT normal : RM = 2 446 406 (recalcul ≡ proratisation)")
 
 
 # =============================================================================

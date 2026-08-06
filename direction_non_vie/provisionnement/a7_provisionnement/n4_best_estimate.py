@@ -87,6 +87,7 @@ import numpy as np
 from .config.lob_config import get_lob_config, get_sigma_eiopa, reference_s2
 from .methodes_be       import _CLES_N3, _LIBELLE_METHODE
 from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
+from core.courbe_rfr import diagnostic_peremption as peremption_referentiel
 from .config.rfr_eiopa  import (get_taux_rfr, DATE_COURBE,
                                 SOURCE as SOURCE_RFR,
                                 MOIS_ALERTE_PEREMPTION, MOIS_ROUGE_PEREMPTION,
@@ -697,6 +698,30 @@ def _meta_courbe(courbe: Optional[Dict]) -> Dict:
     inventer un verdict. C'est la règle du lot BFCC, appliquée ici.
     """
     courbe = courbe or {}
+
+    # ⚠️ SI LA COURBE VIENT DU RÉFÉRENTIEL, ELLE PORTE SA PROPRE DATE — ET
+    # C'EST CE QUI BRANCHE LA GOUVERNANCE SUR LES COURBES FOURNIES.
+    #
+    # Avant cette bascule, seule l'embarquée était jugeable : tout le reste
+    # recevait « NON TESTABLE », qui n'est ni `'ROUGE'` (donc aucun
+    # plafonnement, voir plus bas) ni dans `('AMBRE', 'ROUGE')` (donc aucune
+    # alerte). Un actuaire saisissait un taux plat, obtenait un VERT, et rien
+    # ne disait que l'actualisation reposait sur un taux supposé. La courbe
+    # embarquée périmée, ELLE, était plafonnée : le repli explicite était
+    # mieux gouverné que la saisie de l'actuaire.
+    #
+    # Désormais la `CourbeRFR` voyage dans le dictionnaire et répond
+    # elle-même : une date d'arrêté donne VERT/AMBRE/ROUGE selon son âge,
+    # son ABSENCE donne ROUGE. Un classeur EIOPA officiel importé devient
+    # donc jugeable, là où il était muet.
+    _courbe_ref = courbe.get('courbe')
+    if _courbe_ref is not None:
+        return {
+            'date':       _courbe_ref.date_arrete or '—',
+            'source':     str(courbe.get('source') or _courbe_ref.provenance),
+            'peremption': peremption_referentiel(_courbe_ref),
+        }
+
     type_ = str(courbe.get('type', 'embarquee'))
 
     if type_ in ('embarquee', 'erreur') or not courbe:
