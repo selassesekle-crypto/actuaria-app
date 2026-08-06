@@ -75,58 +75,38 @@ logging.basicConfig(
 _COURBE_RFR = courbe_embarquee()
 
 
-# ── Chargement du module données marché ───────────────────────────────────────
+# ── Données marché ────────────────────────────────────────────────────────────
 def _charger_market_data() -> Dict:
     """
-    Charge les données marché depuis market_data.py si disponible localement.
-    Fallback immédiat sur valeurs EIOPA par défaut (Streamlit Cloud / production).
-    Le fallback est la voie normale sur Streamlit Cloud — market_data.py est
-    un module local de développement non déployé.
+    Les données marché employées par A8 — reproductibles par construction.
 
-    ⚠️ LE TAUX SANS RISQUE NE VIENT PLUS D'ICI, QUEL QUE SOIT LE CHEMIN. Il
-    est ecrase par celui du referentiel dans les deux branches : ce module ne
-    doit plus etre une source de taux, c'est tout l'objet du chantier RFR.
+    ⚠️ CE N'EST PLUS UN << REPLI >>, C'EST LA SOURCE. Une branche cherchait
+    auparavant `market_data.py` sous le dossier d'A8, alors que ce module vit
+    a la racine du depot : `exists()` rendait False et cette voie-ci etait la
+    SEULE, y compris en local. La docstring d'origine rationalisait l'etat en
+    l'attribuant a Streamlit Cloud. La branche est retiree (lot R5), et ce
+    qu'elle promettait ne manque a personne — mesure ci-dessous.
 
-    ⚠️ ET LE CHEMIN CHERCHE CI-DESSOUS N'EXISTE PAS. Il pointe sous le
-    dossier d'A8 alors que `market_data.py` vit a la racine du depot :
-    verifie a l'execution, `chemin_local.exists()` rend False et le repli est
-    le SEUL chemin, y compris en local — la docstring d'origine
-    rationalisait cet etat en l'attribuant a Streamlit Cloud. Ce defaut n'est
-    PAS corrige ici : apres ce lot il ne concerne plus que l'OAT et
-    l'inflation, donc il releve du lot R5, qui tranchera si cette couche est
-    branchee ou retiree. Le corriger ici changerait ces deux entrees sans
-    rapport avec le taux sans risque, et sans mesure.
+    ⚠️ ET LA BRANCHER AURAIT ETE PIRE QUE DE LA RETIRER. Mesure comparant les
+    deux, champ par champ : sur les SEPT champs qu'A8 lit reellement, UN SEUL
+    divergeait -- l'OAT, 3,65 % contre 3,1463 % -- et il n'entre dans AUCUN
+    calcul, il est publie en `oat_calibrage`. Les parametres SCR sont
+    IDENTIQUES des deux cotes (0,42 / -0,31 / 0,39 / 0,25 / 0,10), les lots
+    B10-c a B10-e ayant tenu les deux copies alignees.
+    Mais `fetch_oat_bce` interroge l'API de la BCE : la couche a rendu
+    `fiabilite: TEMPS_REEL` pendant la mesure. La brancher ferait donc
+    dependre un livrable actuariel d'un APPEL RESEAU VIVANT, et deux
+    executions du meme arrete rendraient deux chiffres. Ce n'est pas
+    defendable devant un commissaire aux comptes, et cela ne s'achetait
+    contre rien.
+
+    `market_data.py` n'est pas supprime pour autant : c'est un module
+    coherent, qui sait interroger la BCE, et qui servira le jour ou une
+    fonctionnalite << marche en temps reel >> sera ASSUMEE comme telle. Ce
+    que le lot retire, c'est la tentative cassee, pas l'outil.
     """
     logger = logging.getLogger("actuaria.a8")
-    # Tenter uniquement si le fichier existe localement (dev uniquement)
-    chemin_local = Path(__file__).parent / "data" / "marche" / "market_data.py"
-    if chemin_local.exists():
-        try:
-            import importlib.util
-            spec = importlib.util.spec_from_file_location("market_data", chemin_local)
-            md   = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(md)
-            data = md.fetch_all_market()
-            # Le taux sans risque de cette couche est ECRASE : elle porte une
-            # courbe datee du 31/05/2026, plate a l'UFR des vingt ans, qu'une
-            # vraie courbe EIOPA depasse. Une seule source fait foi.
-            data['rfr_10ans'] = {
-                'rfr_pct': round(100 * actualiser(_COURBE_RFR, 10), 4),
-                'ufr': _COURBE_RFR.ufr}
-            data['rfr_20ans'] = {
-                'rfr_pct': round(100 * actualiser(_COURBE_RFR, 20), 4)}
-            logger.info(
-                f"Données marché chargées ({data['fiabilite']}) : "
-                f"OAT10={data['oat_10ans']['taux_pct']}% · "
-                f"RFR={data['rfr_10ans']['rfr_pct']}% "
-                f"(référentiel, arrêté {_COURBE_RFR.date_arrete})"
-            )
-            return data
-        except Exception as e:
-            logger.warning(f"market_data.py erreur : {e}")
-
-    # Fallback EIOPA — valeurs de référence Q2 2026 (voie normale sur Streamlit Cloud)
-    logger.info("market_data : fallback valeurs EIOPA reference Q2 2026")
+    logger.info("market_data : valeurs de reference (reproductibles)")
     return {
         'oat_10ans':     {'taux_pct': 3.65, 'source': 'Défaut EIOPA', 'fiabilite': 'DEFAUT'},
         'oat_5ans':      {'taux_pct': 3.10, 'source': 'Défaut EIOPA', 'fiabilite': 'DEFAUT'},

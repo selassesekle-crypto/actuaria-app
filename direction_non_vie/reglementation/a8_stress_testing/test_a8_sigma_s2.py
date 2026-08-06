@@ -10,6 +10,10 @@
  en dur dans le repli de `agent.py`. Une d'entre elles avait dérivé
  (`sigma_primes_rc_general` valait 0,11 au lieu de 0,14).
 
+ ⚠️ ET A8 N'A JAMAIS LU CE FICHIER — voir `_bloc_reference` plus bas. La
+ duplication des paramètres de la formule standard subsiste, et ce filet est
+ seul à la surveiller.
+
  MAIS LE VRAI DÉFAUT ÉTAIT AILLEURS, ET IL ÉTAIT PLUS GRAVE. Le σ n'était pas
  choisi par segment mais par recherche de sous-chaîne dans le nom de la
  branche, et se trompait sur 13 des 17 noms qu'A7 transmet — `'rc' in
@@ -35,7 +39,27 @@ from direction_non_vie.reglementation.a10_solvabilite2.agent import DURATION_LOB
 
 
 def _bloc_reference(nom):
-    """Lit le fichier de reference du depot — la source qu'A8 consomme."""
+    """Lit `reference_actuaria.json` — ET A8 NE LE CONSOMME PAS.
+
+    ⚠️ LA DESCRIPTION D'ORIGINE ÉTAIT FAUSSE, ET LE LOT R5 LA CORRIGE SANS
+    TOUCHER AU VERROU. Elle annonçait « la source qu'A8 consomme » : A8 ne
+    l'a jamais lue. Une branche cherchait `market_data.py` sous le dossier
+    d'A8 alors que ce module vit à la racine — `exists()` rendait toujours
+    False. R5 a retiré cette branche : les valeurs d'A8 sont écrites chez
+    lui, point.
+
+    ⚠️ CE VERROU DEVIENT DONC PLUS IMPORTANT, PAS MOINS. Les paramètres de la
+    formule standard existent en DEUX copies — en dur dans `agent.py`, et
+    dans ce fichier — et il est désormais LA SEULE CHOSE qui les tient
+    synchronisées. Le croire redondant et le retirer laisserait les deux
+    copies dériver en silence, exactement comme `sigma_primes_rc_general`
+    avait dérivé de 0,14 à 0,11 avant le lot B10-c.
+
+    Le vrai remède serait de supprimer la duplication, comme le chantier B10
+    l'a fait pour les écarts types en les déplaçant dans
+    `reglementation/segments_s2.py`. C'est le successeur naturel de ce
+    chantier-ci, et il n'est pas ouvert.
+    """
     chemin = (Path(A8.__file__).resolve().parents[3]
               / 'data' / 'marche' / 'reference_actuaria.json')
     return json.load(io.open(chemin, encoding='utf-8'))[

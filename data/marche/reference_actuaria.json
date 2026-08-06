@@ -4,12 +4,12 @@
     "date_mise_a_jour": "2026-06-19",
     "sources": {
       "oat": "Agence France Trésor / Banque de France (15/06/2026)",
-      "eiopa": "EIOPA RFR Term Structures (publication juin 2026)",
       "inflation": "INSEE mai 2026",
       "notation": "Moody's avril 2026"
     },
     "periodicite_mise_a_jour": "Trimestrielle (janvier, avril, juillet, octobre)",
-    "prochaine_maj": "2026-10-01"
+    "prochaine_maj": "2026-10-01",
+    "courbe_rfr": "Retiree du fichier au lot R5 : la courbe des taux sans risque vit desormais dans core/courbe_rfr.py, source unique pour A7, A8, A10, A11 et A12. Celle qui figurait ici etait plate a l UFR des 20 ans -- ce qu aucune courbe Smith-Wilson ne fait -- et divergeait de 4,1 bps du referentiel sans qu aucun agent ne la lise."
   },
   "oat_france": {
     "description": "Obligations Assimilables du Trésor (AFT / Banque de France)",
@@ -29,36 +29,6 @@
     },
     "tec10": 3.65,
     "commentaire": "OAT 10 ans à 3.65% au 15/06/2026 (AFT). Hausse par rapport à fin 2025 (3.60%). Notation Moody's Aa3 perspective négative depuis avril 2026."
-  },
-  "eiopa_rfr_eur": {
-    "description": "Courbe des taux sans risque EIOPA (Risk-Free Rate) pour l'euro",
-    "devise": "EUR",
-    "unite": "pourcentage annuel",
-    "date": "2026-05-31",
-    "publication_suivante": "2026-07-03",
-    "methode": "Smith-Wilson avec Last Liquid Point à 20 ans",
-    "ufr": 3.3,
-    "cra": 0.1,
-    "volatility_adjustment": 0.35,
-    "rfr_par_maturite": {
-      "1": 2.51,
-      "2": 2.68,
-      "3": 2.79,
-      "4": 2.87,
-      "5": 2.94,
-      "6": 3.0,
-      "7": 3.05,
-      "8": 3.09,
-      "10": 3.2,
-      "15": 3.27,
-      "20": 3.3,
-      "30": 3.3,
-      "40": 3.3,
-      "50": 3.3
-    },
-    "rfr_10ans": 3.2,
-    "rfr_20ans": 3.3,
-    "commentaire": "RFR EIOPA EUR mai 2026. UFR = 3.30% (stable depuis 2024). VA = 0.35% (portefeuille représentatif mis à jour mars 2026)."
   },
   "parametres_scr_standard": {
     "description": "Paramètres de la formule standard SCR Solvabilité 2 (Actes Délégués 2015/35/UE)",

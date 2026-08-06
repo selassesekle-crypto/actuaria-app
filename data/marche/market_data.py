@@ -17,7 +17,6 @@ Utilisé par :
 """
 
 import json
-import os
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -122,63 +121,14 @@ def fetch_oat_bce(maturite_ans: int = 10) -> Dict:
     }
 
 
-def fetch_rfr_eiopa(maturite_ans: int = 10) -> Dict:
-    """
-    Récupère le taux sans risque EIOPA (RFR) pour la maturité demandée.
-    Toujours depuis le fichier référence (EIOPA publie mensuellement en Excel).
-
-    Retourne :
-      {
-        'rfr_pct': float,        # RFR en %
-        'rfr_avec_va_pct': float,# RFR + Volatility Adjustment
-        'ufr': float,            # Ultimate Forward Rate
-        'va': float,             # Volatility Adjustment
-        'maturite': int,
-        'source': str,
-        'fiabilite': str,
-      }
-    """
-    ref = _charger_reference()
-    rfr_data = ref['eiopa_rfr_eur']
-
-    cle = str(maturite_ans)
-    rfr = rfr_data['rfr_par_maturite'].get(cle)
-    if rfr is None:
-        # Interpolation simple entre maturités disponibles
-        maturites = sorted([int(k) for k in rfr_data['rfr_par_maturite'].keys()])
-        for i in range(len(maturites) - 1):
-            if maturites[i] <= maturite_ans <= maturites[i+1]:
-                t = (maturite_ans - maturites[i]) / (maturites[i+1] - maturites[i])
-                rfr_inf = rfr_data['rfr_par_maturite'][str(maturites[i])]
-                rfr_sup = rfr_data['rfr_par_maturite'][str(maturites[i+1])]
-                rfr = rfr_inf * (1 - t) + rfr_sup * t
-                break
-        if rfr is None:
-            rfr = rfr_data['ufr']
-
-    va  = rfr_data['volatility_adjustment']
-    ufr = rfr_data['ufr']
-    rfr_avec_va = rfr + va
-
-    date_ref = rfr_data['date']
-    pub_suiv = rfr_data['publication_suivante']
-
-    logger.info(f"RFR EIOPA {maturite_ans}ans : {rfr:.3f}% | VA : {va:.2f}% | UFR : {ufr:.2f}%")
-
-    return {
-        'rfr_pct':        round(rfr, 4),
-        'rfr_avec_va_pct':round(rfr_avec_va, 4),
-        'ufr':            ufr,
-        'va':             va,
-        'cra':            rfr_data['cra'],
-        'maturite':       maturite_ans,
-        'source':         f"EIOPA RFR EUR ({date_ref})",
-        'date':           date_ref,
-        'prochaine_pub':  pub_suiv,
-        'fiabilite':      'REFERENCE',
-        'signal':         f"ℹ️ RFR EIOPA {maturite_ans}ans = {rfr:.3f}% + VA {va:.2f}% = {rfr_avec_va:.3f}% (pub. {date_ref})",
-    }
-
+# ⚠️ `fetch_rfr_eiopa` A ETE RETIREE AU LOT R5, AVEC LE BLOC
+# `eiopa_rfr_eur` du fichier de reference. La courbe des taux sans risque
+# vit desormais dans `core/courbe_rfr.py`, source unique pour A7, A8, A10,
+# A11 et A12 -- tous rendaient 3,1590 % au dix ans quand celle-ci en
+# annoncait 3,2000, soit 4,1 points de base d'ecart. Elle etait de surcroit
+# PLATE A L'UFR des vingt ans, ce qu'aucune courbe Smith-Wilson ne fait :
+# ce n'etait pas une extraction EIOPA mais une esquisse, et aucun agent ne
+# la lisait. Ce module n'expose plus de taux d'actualisation.
 
 def fetch_parametres_scr() -> Dict:
     """
@@ -222,8 +172,6 @@ def fetch_all_market() -> Dict:
     {
         'oat_10ans':     dict,   # OAT 10 ans (source + valeur)
         'oat_5ans':      dict,   # OAT 5 ans
-        'rfr_10ans':     dict,   # RFR EIOPA 10 ans
-        'rfr_20ans':     dict,   # RFR EIOPA 20 ans (pour A12 ALM)
         'scr_params':    dict,   # Paramètres formule standard
         'macro':         dict,   # Indicateurs macro
         'portefeuille':  dict,   # Portefeuille type
@@ -237,25 +185,21 @@ def fetch_all_market() -> Dict:
 
     oat10  = fetch_oat_bce(10)
     oat5   = fetch_oat_bce(5)
-    rfr10  = fetch_rfr_eiopa(10)
-    rfr20  = fetch_rfr_eiopa(20)
     params = fetch_parametres_scr()
     macro  = fetch_macro()
     ptf    = fetch_portefeuille_type()
 
     signaux.append(oat10['signal'])
     signaux.append(oat5['signal'])
-    signaux.append(rfr10['signal'])
-    signaux.append(rfr20['signal'])
 
     # Fiabilité globale
     fiabilite = 'TEMPS_REEL' if any(
         d.get('fiabilite') == 'TEMPS_REEL'
-        for d in [oat10, oat5, rfr10, rfr20]
+        for d in [oat10, oat5]
     ) else 'REFERENCE'
 
     source_globale = (
-        "✅ Données marché BCE temps réel + EIOPA référence"
+        "✅ Données marché BCE temps réel"
         if fiabilite == 'TEMPS_REEL' else
         f"⚠️ Données de référence uniquement (mise à jour : {oat10['date']}) — "
         f"API BCE indisponible dans cet environnement"
@@ -266,8 +210,6 @@ def fetch_all_market() -> Dict:
     return {
         'oat_10ans':      oat10,
         'oat_5ans':       oat5,
-        'rfr_10ans':      rfr10,
-        'rfr_20ans':      rfr20,
         'scr_params':     params,
         'macro':          macro,
         'portefeuille':   ptf,
@@ -294,9 +236,8 @@ if __name__ == '__main__':
 
     print(f"\nOAT 10 ans : {data['oat_10ans']['taux_pct']}%  ({data['oat_10ans']['source']})")
     print(f"OAT 5 ans  : {data['oat_5ans']['taux_pct']}%  ({data['oat_5ans']['source']})")
-    print(f"RFR 10 ans : {data['rfr_10ans']['rfr_pct']}%  (RFR sans VA)")
-    print(f"RFR+VA 10a : {data['rfr_10ans']['rfr_avec_va_pct']}%  (RFR + Volatility Adjustment)")
-    print(f"UFR EIOPA  : {data['rfr_10ans']['ufr']}%")
+    # Le taux sans risque ne s'affiche plus ici : `core/courbe_rfr.py` en est
+    # la source unique depuis le lot R5.
     print(f"Taux BCE   : {data['macro']['taux_directeur_bce']}%")
     print(f"Inflation  : {data['macro']['inflation_france_mai2026']}%")
 

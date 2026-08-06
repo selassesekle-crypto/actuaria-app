@@ -8,7 +8,6 @@ avec les taux réels du marché.
 
 Sources :
   → OAT France   : API BCE (data-api.ecb.europa.eu)
-  → RFR EIOPA    : Calculé depuis les swap EUR (approximation)
   → Taux BCE     : API BCE taux directeur
   → Inflation    : Dernière valeur connue (mise à jour manuelle)
 """
@@ -116,7 +115,9 @@ def mettre_a_jour_json(taux_oat, date_oat, taux_bce, date_bce):
     # Mettre à jour les taux OAT
     if taux_oat:
         for maturite, valeur in taux_oat.items():
-            cle = maturite.replace("_", " ").replace(" ans", "_ans").replace(" an", "_an")
+            # `cle` retiree (lot R5) : cette normalisation avait ete
+            # remplacee par le mapping explicite ci-dessous, qui est
+            # d ailleurs l identite. Elle etait calculee et jetee.
             # Mapper les clés BCE vers les clés JSON
             mapping = {
                 "10_ans": "10_ans",
@@ -174,10 +175,9 @@ def verifier_coherence():
     checks = [
         ("OAT 10 ans dans [0%, 10%]",
          0 < ref['oat_france']['tec10'] < 10),
-        ("RFR 10 ans dans [0%, 8%]",
-         0 < ref['eiopa_rfr_eur']['rfr_10ans'] < 8),
-        ("UFR dans [2%, 5%]",
-         2 < ref['eiopa_rfr_eur']['ufr'] < 5),
+        # Les deux controles sur le taux sans risque ont disparu avec le
+        # bloc `eiopa_rfr_eur` (lot R5) : la courbe vit dans
+        # `core/courbe_rfr.py`, et ce script ne la touche pas.
         ("Taux BCE dans [0%, 6%]",
          0 <= ref['macroeconomique']['taux_directeur_bce'] < 6),
         ("Inflation dans [0%, 15%]",
