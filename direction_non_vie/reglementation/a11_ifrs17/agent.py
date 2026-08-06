@@ -40,9 +40,11 @@
 import json, logging, warnings
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict
 import numpy as np
 from scipy import stats as scipy_stats
+
+from core.courbe_rfr import actualiser, courbe_embarquee
 
 try:
     import plotly.graph_objects as go
@@ -74,6 +76,17 @@ ILLIQUIDITY_PREMIUM_LONG    = 0.0090   # 90 bps — branches longues (RC Medical
 # Parametrer via params_ifrs['illiq_premium'] selon la branche analysee
 QUANTILE_RA_DEFAULT         = 0.75     # P75 — standard marché PAA
 DUREE_CONTRAT_DEFAULT       = 1.0      # 1 an — Non-Vie standard
+
+#: ⚠️ LE REPLI DE TAUX NE S'ECRIT PLUS EN DUR (lot R4c). Il valait `0.032`
+#: a trois endroits — le taux d'A10 d'AVANT le chantier RFR. Ce repli ne se
+#: declenche jamais : A10 renseigne toujours ses taux. Mais un repli qui ne
+#: sert pas n'en est pas moins LU, et celui-la annoncait une courbe qui
+#: n'existe plus. Il vient desormais du referentiel, comme partout ailleurs.
+#:
+#: ⚠️ ET LE TAUX IFRS 17 RESTE UN DERIVE : `rfr + prime d'illiquidite`. C'est
+#: un referentiel COMPTABLE, pas prudentiel ; il se CALCULE ici a partir de la
+#: courbe, il n'entre pas dans le referentiel — typologie (C) du lot R1.
+_RFR_REPLI = actualiser(courbe_embarquee(), 10)
 
 # Mapping libellés branches
 LOB_LABELS = {
@@ -281,7 +294,7 @@ class AgentA11IFRS17:
         → LIC IFRS 17 < BE S2 (actualisation plus forte)
         """
         # RFR S2 depuis Elena
-        rfr_s2 = result_a10.get('taux', {}).get('rfr_10ans', 0.032)
+        rfr_s2 = result_a10.get('taux', {}).get('rfr_10ans', _RFR_REPLI)
 
         # Prime d'illiquidité configurée ou par défaut
         illiq = p['illiq_premium']
@@ -307,7 +320,7 @@ class AgentA11IFRS17:
             'fiabilite':      fib,
             'note':           (
                 f"Taux IFRS 17 ({taux_ifrs:.3%}) > RFR S2 ({rfr_s2:.3%}) "
-                f"de {illiq*100:.0f}bps → LIC IFRS 17 < BE S2"
+                f"de {illiq*10000:.0f} bps → LIC IFRS 17 < BE S2"
             ),
         }
 
@@ -327,7 +340,7 @@ class AgentA11IFRS17:
 
         be_s2   = float(result_a10.get('provisions', {}).get('best_estimate', be_brut))
         rm_s2   = float(result_a10.get('provisions', {}).get('risk_margin',   be_brut*0.05))
-        rfr_s2  = float(result_a10.get('taux', {}).get('rfr_10ans', 0.032))
+        rfr_s2  = float(result_a10.get('taux', {}).get('rfr_10ans', _RFR_REPLI))
         dur_p   = float(result_a10.get('duration', {}).get('passif', 4.0))
 
         primes = 0.0
@@ -361,7 +374,10 @@ class AgentA11IFRS17:
         if branches:
             res = []
             tot_be = sum(b.get('be', 0) for b in branches)
-            tot_pr = sum(b.get('primes', 0) for b in branches)
+            # `tot_pr` retire (lot R4c) : `tot_be` sert a repartir sigma au
+            # prorata du Best Estimate, mais les primes se repartissent A
+            # PARTS EGALES par choix -- `src['primes'] / len(branches)`
+            # ci-dessous. Il n'y avait donc pas de proratisation a cabler.
             for b in branches:
                 be_b = b.get('be', src['be_brut'] / len(branches))
                 pr_b = b.get('primes', src['primes'] / len(branches))
@@ -722,7 +738,7 @@ class AgentA11IFRS17:
         """
         be_s2   = float(result_a10.get('provisions', {}).get('best_estimate', 0))
         rm_s2   = float(result_a10.get('provisions', {}).get('risk_margin', 0))
-        rfr_s2  = float(result_a10.get('taux', {}).get('rfr_10ans', 0.032))
+        rfr_s2  = float(result_a10.get('taux', {}).get('rfr_10ans', _RFR_REPLI))
         t_ifrs  = taux['taux_ifrs17']
 
         lic_tot = lic['lic_total']
@@ -742,7 +758,7 @@ class AgentA11IFRS17:
 
         motif = (
             f"Écart taux : IFRS 17={t_ifrs:.3%} vs RFR S2={rfr_s2:.3%} "
-            f"(+{(t_ifrs-rfr_s2)*100:.0f}bps) → LIC < BE_S2. "
+            f"(+{(t_ifrs-rfr_s2)*10000:.0f} bps) → LIC < BE_S2. "
             f"RA VaR P{int(ra['quantile']*100)} vs RM CoC 6% → "
             f"{'RA > RM' if ra_tot > rm_s2 else 'RA < RM'}. "
             f"Ratio IFRS17/S2 = {ratio:.3f}."
@@ -810,7 +826,7 @@ class AgentA11IFRS17:
             'hypothese':(
                 f"Taux d'actualisation IFRS 17 bottom-up = "
                 f"RFR S2 ({taux['rfr_s2']:.3%}) + "
-                f"prime illiquidité ({taux['illiq_premium']*100:.0f}bps) "
+                f"prime illiquidité ({taux['illiq_premium']*10000:.0f} bps) "
                 f"= {taux['taux_ifrs17']:.3%}"
             ),
             'valeur': f"Méthode : {taux['methode']} | Source RFR : {taux['source_rfr']}",
@@ -887,7 +903,7 @@ class AgentA11IFRS17:
         L += [
             "", "🔢 PROVISIONS IFRS 17 PAA", "─"*40,
             f"  Taux IFRS 17 (bottom-up)   : {taux['taux_ifrs17']:.4%}",
-            f"  (RFR S2={taux['rfr_s2']:.4%} + illiq={taux['illiq_premium']*100:.0f}bps)",
+            f"  (RFR S2={taux['rfr_s2']:.4%} + illiq={taux['illiq_premium']*10000:.0f} bps)",
             f"  LIC (sinistres survenus)    : {lic['lic_total']:>15,.0f}€",
             f"  LRC (couverture restante)   : {lrc['lrc_total']:>15,.0f}€",
             f"  Risk Adjustment P{int(p['quantile_ra']*100)}          : {ra['ra_total']:>15,.0f}€",
@@ -941,7 +957,9 @@ class AgentA11IFRS17:
     # ══════════════════════════════════════════════════════════════════════════
     def _graphiques(self, lic, lrc, ra, lc, rev, ecart, taux, branches, rec):
         gph = {}
-        crag = lambda s: VERT if s=='VERT' else (AMBRE if s=='AMBRE' else ROUGE)
+        # `crag`, lambda statut -> couleur, retiree : JAMAIS appelee. Les cinq
+        # occurrences de VERT/AMBRE/ROUGE qu'un releve rapide voyait ici
+        # etaient toutes DANS SA PROPRE DEFINITION.
 
         # G1 — WATERFALL BE → TP IFRS 17
         try:
@@ -1010,7 +1028,7 @@ class AgentA11IFRS17:
                 yaxis=dict(tickfont=dict(color=GRIS),showgrid=True,
                            gridcolor='rgba(255,255,255,0.05)'),
                 annotations=[dict(
-                    text=(f"💡 Écart taux : {(taux['taux_ifrs17']-taux['rfr_s2'])*100:.0f}bps → "
+                    text=(f"💡 Écart taux : {(taux['taux_ifrs17']-taux['rfr_s2'])*10000:.0f} bps → "
                           f"LIC<BE_S2. RA VaR P{int(ra['quantile']*100)} vs RM CoC6%. "
                           "Transmis à A9 Marcus C4."),
                     xref="paper",yref="paper",x=0.01,y=-0.22,
@@ -1140,7 +1158,7 @@ if __name__ == '__main__':
     }
     a10 = {
         'provisions':{'best_estimate':6_195_000.0,'risk_margin':236_000.0,'tp_s2':6_431_000.0},
-        'taux':{'rfr_10ans':0.032,'rfr_5ans':0.031,'rfr_20ans':0.033,
+        'taux':{'rfr_10ans':actualiser(courbe_embarquee(),10),'rfr_5ans':actualiser(courbe_embarquee(),5),'rfr_20ans':actualiser(courbe_embarquee(),20),
                 'source':'FALLBACK_REFERENCE','fiabilite':'REFERENCE'},
         'duration':{'passif':3.88},
         'scr':{'total':3_771_000.0},

@@ -5,6 +5,7 @@ Commande : python test_a11_thomas.py
 import sys, unittest
 import os as _os
 sys.path.insert(0, _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '../../../../')))
+from core.courbe_rfr import actualiser, courbe_embarquee
 from direction_non_vie.reglementation.a11_ifrs17.agent import AgentA11IFRS17
 
 # ── Données de base ──────────────────────────────────────────────────────────
@@ -14,9 +15,16 @@ A7 = {
     'tail':{'tail_factor':1.035},'meta':{'nb_lignes':60000,'n_annees':8},
     'sous_branche':'rc_auto',
 }
+# ⚠️ CETTE FIXTURE SIMULAIT UN A10 QUI N'EXISTE PLUS (lot R4c). Elle portait
+# 0,032 / 0,031 / 0,033 -- les taux d'A10 d'avant le chantier RFR. Elle restait
+# VERTE en le simulant, parce que les assertions de ce fichier sont
+# relationnelles : elle ne cassait pas, elle mentait. Elle prend desormais les
+# taux du referentiel, comme A10 les produit reellement.
 A10 = {
     'provisions':{'best_estimate':6_100_000.0,'risk_margin':220_000.0,'tp_s2':6_320_000.0},
-    'taux':{'rfr_10ans':0.032,'rfr_5ans':0.031,'rfr_20ans':0.033,
+    'taux':{'rfr_10ans':actualiser(courbe_embarquee(), 10),
+            'rfr_5ans': actualiser(courbe_embarquee(), 5),
+            'rfr_20ans':actualiser(courbe_embarquee(), 20),
             'source':'FALLBACK','fiabilite':'REFERENCE'},
     'duration':{'passif':3.5},
     'scr':{'total':3_500_000.0},
@@ -63,7 +71,9 @@ class T2_TauxIFRS17_SepaeDuRFR(unittest.TestCase):
         self.assertAlmostEqual(t['rfr_s2'], rfr_s2, places=5)
         self.assertGreater(t['taux_ifrs17'], t['rfr_s2'])
         self.assertAlmostEqual(t['taux_ifrs17'], rfr_s2 + illiq, places=5)
-        print(f"    ✅ T2 taux : RFR_S2={t['rfr_s2']:.3%}  illiq={t['illiq_premium']*100:.0f}bps  IFRS17={t['taux_ifrs17']:.3%}")
+        # Sixieme site du meme facteur cent : des points de base demandent
+        # x10 000, pas x100. Les cinq autres etaient dans l'agent.
+        print(f"    ✅ T2 taux : RFR_S2={t['rfr_s2']:.3%}  illiq={t['illiq_premium']*10000:.0f} bps  IFRS17={t['taux_ifrs17']:.3%}")
 
 class T3_RiskAdjustment_VaR(unittest.TestCase):
     """T3 — RA par VaR log-normale au quantile P75"""

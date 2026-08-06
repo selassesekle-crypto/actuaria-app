@@ -5,11 +5,19 @@ Commande : python test_a12_aisha.py
 import sys, unittest
 import os as _os
 sys.path.insert(0, _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '../../../../')))
+from core.courbe_rfr import actualiser, courbe_embarquee
 from direction_non_vie.reglementation.a12_alm.agent import AgentA12ALM
 
+# ⚠️ CETTE FIXTURE SIMULAIT UN A10 QUI N'EXISTE PLUS (lot R4c). Elle portait
+# 0,032 / 0,031 / 0,033 -- les taux d'A10 d'avant le chantier RFR. Elle restait
+# VERTE en le simulant, parce que les assertions de ce fichier sont
+# relationnelles : elle ne cassait pas, elle mentait. Elle prend desormais les
+# taux du referentiel, comme A10 les produit reellement.
 A10_BASE = {
     'provisions':{'best_estimate':6_000_000.0,'risk_margin':230_000.0,'tp_s2':6_230_000.0},
-    'taux':{'rfr_10ans':0.032,'rfr_5ans':0.031,'rfr_20ans':0.033,
+    'taux':{'rfr_10ans':actualiser(courbe_embarquee(), 10),
+            'rfr_5ans': actualiser(courbe_embarquee(), 5),
+            'rfr_20ans':actualiser(courbe_embarquee(), 20),
             'source':'FALLBACK','fiabilite':'REFERENCE'},
     'duration':{'passif':3.5,'par_branche':[
         {'nom':'rc_auto','duration_macaulay':4.0,'poids':0.70},
@@ -72,8 +80,15 @@ class T4_BV01(unittest.TestCase):
     def test_bv01_net(self):
         r = run_base()
         b = r['bv01']
+        # ⚠️ TOLERANCE CORRIGEE (lot R4c), ET LE TEST ETAIT FRAGILE AVANT LUI.
+        # L'agent arrondit `bv01_actif`, `bv01_passif` ET `bv01_net` a deux
+        # decimales INDEPENDAMMENT (agent.py:495-497). La difference des deux
+        # premiers peut donc s'ecarter du troisieme de 0,01, quand `places=2`
+        # n'en tolerait que 0,005 : cette assertion ne passait QUE PAR CHANCE
+        # sur l'ancien taux. Le changement de fixture l'a revelee, il ne l'a
+        # pas causee. `delta=0.02` est la tolerance que son arithmetique exige.
         self.assertAlmostEqual(b['bv01_net'],
-                                b['bv01_actif'] - b['bv01_passif'], places=2)
+                                b['bv01_actif'] - b['bv01_passif'], delta=0.02)
         self.assertGreater(b['bv01_actif'], 0)
         self.assertGreater(b['bv01_passif'], 0)
         self.assertIn('impact_100bp', b)

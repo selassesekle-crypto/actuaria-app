@@ -37,8 +37,12 @@
 import json, logging, warnings
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
-import numpy as np
+from typing import Dict
+
+from core.courbe_rfr import actualiser, courbe_embarquee
+
+#: La courbe des taux sans risque, commune a tous les agents (lot R4c).
+_COURBE_RFR = courbe_embarquee()
 
 try:
     import plotly.graph_objects as go
@@ -256,10 +260,15 @@ class AgentA12ALM:
     # 2. TAUX
     # ══════════════════════════════════════════════════════════════════════════
     def _taux(self, result_a10, market_data):
+        # ⚠️ LES TROIS REPLIS NE S'ECRIVENT PLUS EN DUR (lot R4c). Ils valaient
+        # 0,032 / 0,031 / 0,033 — les taux d'A10 d'AVANT le chantier RFR. Ils
+        # ne se declenchent jamais, A10 renseigne toujours ses taux ; mais un
+        # repli qui ne sert pas n'en est pas moins LU, et ceux-la annoncaient
+        # une courbe qui n'existe plus.
         t = result_a10.get('taux', {})
-        rfr  = float(t.get('rfr_10ans', 0.032))
-        r5   = float(t.get('rfr_5ans',  0.031))
-        r20  = float(t.get('rfr_20ans', 0.033))
+        rfr  = float(t.get('rfr_10ans', actualiser(_COURBE_RFR, 10)))
+        r5   = float(t.get('rfr_5ans',  actualiser(_COURBE_RFR, 5)))
+        r20  = float(t.get('rfr_20ans', actualiser(_COURBE_RFR, 20)))
         src  = t.get('source', 'FALLBACK')
         fib  = t.get('fiabilite', 'REFERENCE')
         return {
@@ -515,7 +524,10 @@ class AgentA12ALM:
         nav = actif['nav']
         dur_a = actif['dur_modifiee']
         dur_p = passif['dur_modifiee']
-        bv01_n = bv01['bv01_net']
+        # `bv01_n` retire (lot R4c) : les TROIS conditions de Redington se
+        # testent sur la NAV et sur les durations -- C2 compare `dur_a` et
+        # `dur_p` directement. Le BV01 en serait une expression equivalente en
+        # euros, pas une condition manquante.
 
         # C1 — VA(actif) ≥ VA(passif)
         c1_ok = nav >= 0
@@ -1052,7 +1064,7 @@ if __name__ == '__main__':
 
     a10 = {
         'provisions':{'best_estimate':6_195_000.0,'risk_margin':236_000.0,'tp_s2':6_431_000.0},
-        'taux':{'rfr_10ans':0.032,'rfr_5ans':0.031,'rfr_20ans':0.033,
+        'taux':{'rfr_10ans':actualiser(_COURBE_RFR,10),'rfr_5ans':actualiser(_COURBE_RFR,5),'rfr_20ans':actualiser(_COURBE_RFR,20),
                 'source':'FALLBACK','fiabilite':'REFERENCE'},
         'duration':{'passif':3.88,'par_branche':[
             {'nom':'rc_auto','duration_macaulay':4.0,'poids':0.68},
