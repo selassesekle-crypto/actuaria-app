@@ -47,6 +47,7 @@ from pathlib import Path
 from typing import Dict, Tuple   # Any/List/Optional etaient importes sans usage
 import numpy as np
 
+from core.courbe_rfr import actualiser, courbe_embarquee
 from ..segments_s2 import (SEGMENTS_S2, libelle_reference,
                            verifier_rattachements)
 
@@ -210,9 +211,27 @@ DURATION_LOB = {
     # ATTENTION : toujours verifier que la branche est mappee ici
 }
 
+#: La courbe des taux sans risque, commune a tous les agents (lot R4a).
+_COURBE_RFR = courbe_embarquee()
+
+#: ⚠️ LES TROIS TAUX NE SONT PLUS ECRITS ICI. Ils valaient 3,10 / 3,20 /
+#: 3,30 %, ronds a deux decimales, sans date ni source -- une esquisse, pas
+#: une extraction : une vraie courbe EIOPA ne prend pas ces valeurs-la. A7,
+#: pendant ce temps, portait 2,749 % au 10 ans. 45 points de base separaient
+#: deux agents du meme rapport, et pas dans le meme sens.
+#: Ils viennent desormais de `core/courbe_rfr.py`, comme chez A7 et A8.
+#:
+#: ⚠️ `ufr` AUSSI. Il valait 3,30 % en dur ; il est publie par le fichier
+#: EIOPA au meme titre que les taux, et la courbe le porte.
+#:
+#: L'OAT et l'inflation RESTENT ici : ce ne sont pas des taux
+#: d'actualisation reglementaires, et le referentiel les exclut a dessein.
 TAUX_DEFAUT = {
-    'rfr_5ans':0.0310,'rfr_10ans':0.0320,'rfr_20ans':0.0330,
-    'oat_10ans':0.0365,'inflation':0.0240,'ufr':0.0330,
+    'rfr_5ans':  actualiser(_COURBE_RFR, 5),
+    'rfr_10ans': actualiser(_COURBE_RFR, 10),
+    'rfr_20ans': actualiser(_COURBE_RFR, 20),
+    'oat_10ans':0.0365,'inflation':0.0240,
+    'ufr': (_COURBE_RFR.ufr or 3.30) / 100.0,
 }
 
 BRANCHE_MAP = {
@@ -438,12 +457,32 @@ class AgentA10Solvabilite2:
         else:
             r5,r10,r20 = TAUX_DEFAUT['rfr_5ans'],TAUX_DEFAUT['rfr_10ans'],TAUX_DEFAUT['rfr_20ans']
             oat = TAUX_DEFAUT['oat_10ans']; inf = TAUX_DEFAUT['inflation']
-            src='FALLBACK_REFERENCE (19/06/2026)'; fib='REFERENCE'; dat='19/06/2026'
+            # La date suit desormais la COURBE, pas une chaine ecrite en dur.
+            # Elle valait << 19/06/2026 >> sans rapport avec les taux publies.
+            src = f'Referentiel EIOPA ({_COURBE_RFR.date_arrete})'
+            fib = 'REFERENCE'; dat = _COURBE_RFR.date_arrete
             self.logger.warning(f"market_data absent — courbe référence RFR5={r5:.3%} RFR10={r10:.3%} RFR20={r20:.3%}")
         r5=max(0.0001,min(r5,0.15)); r10=max(0.0001,min(r10,0.15)); r20=max(0.0001,min(r20,0.15))
-        va = max(0.0, oat - r10)
+        # ⚠️ LE << VA >> A ETE RETIRE, ET CE N'ETAIT PAS UN VA.
+        #
+        # Il valait `max(0, oat - r10)`, c'est-a-dire l'ECART DE RENDEMENT DE
+        # L'OAT FRANCAISE sur le taux sans risque. Le Volatility Adjustment
+        # de l'art. 77 quinquies est publie par EIOPA -- 13 points de base au
+        # 31/07/2026 -- et il suppose l'agrement de l'autorite de controle,
+        # qu'A10 ne declare nulle part.
+        #
+        # Mesure : il valait 45,0 bps, et la bascule sur le referentiel
+        # l'aurait porte a 49,1 bps -- il AUGMENTE quand le taux sans risque
+        # BAISSE, puisqu'il en est une difference. Soit 3,8 fois le VA reel,
+        # et dans le mauvais sens.
+        #
+        # Il n'entrait dans AUCUN calcul : `rfr_va` etait compose puis jamais
+        # consomme, verifie par releve exhaustif sur tout le depot. Mais il
+        # etait PUBLIE dans l'hypothese H1, marquee critique et VALIDEE --
+        # la table qu'un actuaire signe. Le retrait est donc neutre en euros
+        # et retire une affirmation fausse d'un livrable.
         return {'rfr_5ans':r5,'rfr_10ans':r10,'rfr_20ans':r20,'rfr':r10,
-                'rfr_va':r10+va,'oat':oat,'va':va,'ufr':TAUX_DEFAUT['ufr'],
+                'oat':oat,'ufr':TAUX_DEFAUT['ufr'],
                 'inflation':inf,'source':src,'fiabilite':fib,'date':dat}
 
     def _rfr_dur(self, dur, taux):
@@ -782,8 +821,14 @@ class AgentA10Solvabilite2:
         return 'VERT',f"SCR={rs:.1f}% | MCR={rm:.1f}% — conforme"
 
     def _hypotheses(self, taux, branches, be_act, ss, cap, mcr, mode_scr, reass):
-        h1={'id':'H1','hypothese':f"Courbe RFR EIOPA 5a={taux['rfr_5ans']:.2%} 10a={taux['rfr_10ans']:.2%} 20a={taux['rfr_20ans']:.2%}",
-            'valeur':f"VA={taux['va']:.2%} | {taux['fiabilite']}",
+        # ⚠️ H1 NE DECLARE PLUS DE VOLATILITY ADJUSTMENT, ET C'EST LA VERITE.
+        # Elle annoncait << VA=0,45 % >> -- l'ecart de rendement de l'OAT, pas
+        # le VA -- dans une hypothese marquee critique et VALIDEE. La courbe
+        # employee est SANS VA, ce qui est le regime par defaut de l'art. 77 ;
+        # le VA de l'art. 77 quinquies suppose un agrement qu'A10 ne declare
+        # pas. H1 publie desormais l'arrete de la courbe, qui manquait.
+        h1={'id':'H1','hypothese':f"Courbe RFR EIOPA sans VA — arrêté {taux['date']} — 5a={taux['rfr_5ans']:.2%} 10a={taux['rfr_10ans']:.2%} 20a={taux['rfr_20ans']:.2%}",
+            'valeur':f"UFR={taux['ufr']:.2%} | {taux['fiabilite']}",
             'statut':'VALIDÉE' if 0.005<=taux['rfr_10ans']<=0.10 else 'À JUSTIFIER','critique':True}
         if mode_scr=='formule_standard':
             h2t=f"Formule standard EIOPA — {len(branches)} branche(s)"; h2v=f"σ_net={ss['sigma_net']:.4f}"; ok=True
@@ -906,7 +951,10 @@ class AgentA10Solvabilite2:
             fig.update_layout(**l); gph['double_jauge_scr_mcr']=fig
         except Exception as e: self.logger.warning(f"G3:{e}")
         try:
-            t1=cap['tier1']; t2=cap['tier2']; t3=cap['tier3']; scr=st['scr_total']; mcr_v=mcr['mcr']
+            # `scr` retire (lot R4a) : la barre << SCR Requis >> est EMPILEE
+            # depuis ses quatre composantes ci-dessous, le total etait lu et
+            # jamais trace.
+            t1=cap['tier1']; t2=cap['tier2']; t3=cap['tier3']; mcr_v=mcr['mcr']
             fig=go.Figure()
             for nom,val,col in [('Tier 1',t1,VERT),('Tier 2',t2,AMBRE),('Tier 3',t3,BLEU)]:
                 fig.add_trace(go.Bar(name=nom,x=['Fonds Propres'],y=[val],marker_color=col,opacity=0.85,

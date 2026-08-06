@@ -5,6 +5,7 @@ Commande : python test_a10_elena.py
 import sys, unittest
 import os as _os
 sys.path.insert(0, _os.path.abspath(_os.path.join(_os.path.dirname(__file__), '../../../../')))
+from core.courbe_rfr import actualiser, courbe_embarquee
 from direction_non_vie.reglementation.a10_solvabilite2.agent import AgentA10Solvabilite2, MCR_PLANCHER_ABS
 
 A7_BASE = {
@@ -30,16 +31,40 @@ class T1_FluxMinimal(unittest.TestCase):
         print(f"    ✅ T1 minimal : SCR={r['scr']['total']:,.0f}€  MCR={r['mcr']['mcr']:,.0f}€")
 
 class T2_FallbackTaux(unittest.TestCase):
-    """T2 — Courbe de taux fallback : valeurs de référence 19/06/2026"""
+    """T2 — La courbe employée est celle du référentiel commun.
+
+    ⚠️ CE VERROU N'ÉPINGLE PLUS DE VALEURS, ET IL EST PLUS FORT AINSI.
+    Il portait 0,031 / 0,032 / 0,033 — les trois points de `TAUX_DEFAUT`,
+    ronds à deux décimales, sans date ni source. Sa docstring l'assumait :
+    « valeurs de référence 19/06/2026 ». Le lot R4a les remplace par ceux du
+    référentiel, et un test qui recopierait les nouveaux se périmerait au
+    prochain arrêté EIOPA.
+
+    Il exige désormais que les taux publiés soient CEUX DU RÉFÉRENTIEL, à la
+    sixième décimale : A10 ne peut plus en porter une copie, quelle qu'elle
+    soit. Il verrouille aussi ce que la mesure a montré manquant — la date
+    d'arrêté suit la courbe au lieu d'une chaîne écrite en dur, et le faux
+    Volatility Adjustment a disparu.
+    """
     def test_courbe_defaut(self):
         r = agent().run(result_a7=A7_BASE)
         t = r['taux']
-        self.assertAlmostEqual(t['rfr_5ans'],  0.031, places=4)
-        self.assertAlmostEqual(t['rfr_10ans'], 0.032, places=4)
-        self.assertAlmostEqual(t['rfr_20ans'], 0.033, places=4)
+        emb = courbe_embarquee()
+        for cle, maturite in (('rfr_5ans', 5), ('rfr_10ans', 10),
+                              ('rfr_20ans', 20)):
+            self.assertAlmostEqual(t[cle], actualiser(emb, maturite), places=6,
+                                   msg=f"{cle} n'est pas celui du référentiel")
+        self.assertEqual(t['date'], emb.date_arrete,
+                         "la date publiée ne suit pas la courbe employée")
+        self.assertNotIn('va', t,
+                         "le « VA » d'A10 valait `oat - rfr`, l'écart de "
+                         "rendement de l'OAT et non le Volatility Adjustment")
+        self.assertNotIn('rfr_va', t)
         self.assertEqual(t['fiabilite'], 'REFERENCE')
         self.assertLess(r['provisions']['best_estimate'], r['provisions']['be_brut'])
-        print(f"    ✅ T2 taux : RFR={t['rfr_10ans']:.3%}  BE_S2={r['provisions']['best_estimate']:,.0f}€ < BE_brut={r['provisions']['be_brut']:,.0f}€")
+        print(f"    ✅ T2 taux : RFR={t['rfr_10ans']:.3%} (référentiel, arrêté "
+              f"{t['date']}, sans VA)  BE_S2={r['provisions']['best_estimate']:,.0f}€ "
+              f"< BE_brut={r['provisions']['be_brut']:,.0f}€")
 
 class T3_ActualisationBE(unittest.TestCase):
     """T3 — Actualisation BE : impact négatif attendu, borne raisonnable"""
