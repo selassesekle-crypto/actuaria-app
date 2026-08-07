@@ -48,11 +48,19 @@ from typing import Dict, NamedTuple, Tuple
 #: Formats acceptés en entrée, et l'ordre dans lequel on les essaie.
 #: Les deux existent dans le dépôt — on les lit tous deux plutôt que d'en
 #: décréter un et de casser l'autre, mais on DIT lequel a été reconnu.
+#: ⚠️ L'ORDRE COMPTE. Les formes à quatre chiffres d'année passent AVANT
+#: celles à deux : « 15/03/2026 » ne doit jamais tomber dans `%d/%m/%y`. Et
+#: `%y` suit la convention POSIX — 00-68 vaut 2000-2068, 69-99 vaut 1969-1999.
+#: Un contrat émis en 2070 s'y lirait donc de travers ; la bande de
+#: plausibilité et la porte de confirmation sont ce qui l'attrape.
 FORMATS: Tuple[Tuple[str, str], ...] = (
     ('%Y-%m-%d', 'AAAA-MM-JJ'),
     ('%d/%m/%Y', 'JJ/MM/AAAA'),
     ('%d-%m-%Y', 'JJ-MM-AAAA'),
     ('%Y/%m/%d', 'AAAA/MM/JJ'),
+    ('%Y%m%d',   'AAAAMMJJ'),
+    ('%d.%m.%Y', 'JJ.MM.AAAA'),
+    ('%d/%m/%y', 'JJ/MM/AA'),
 )
 
 #: Bande de plausibilité. Hors d'elle, c'est une faute de saisie, et il n'y a

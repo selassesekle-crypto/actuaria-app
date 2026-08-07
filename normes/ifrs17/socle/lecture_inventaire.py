@@ -41,6 +41,7 @@ un sens.
 """
 
 import csv
+import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 
@@ -147,6 +148,21 @@ MOTIF_SANS_DATE_EMISSION = 'SANS_DATE_EMISSION'
 MOTIF_SANS_PORTEFEUILLE = 'SANS_PORTEFEUILLE'
 MOTIF_AUCUNE_LIGNE = 'AUCUNE_LIGNE'
 MOTIF_COLONNES_CONCURRENTES = 'COLONNES_CONCURRENTES'
+MOTIF_FORMAT = 'FORMAT'
+
+#: ⚠️ Une ligne de total n'est pas un contrat. Un export Excel en porte
+#: presque toujours une en pied de tableau. On l'écarte — ce n'est pas
+#: inventer une valeur, c'est reconnaître une ligne qui n'en est pas une —
+#: mais JAMAIS en silence : le diagnostic la nomme.
+MOTS_DE_TOTAL = ('total', 'totaux', 'sous-total', 'sous total', 'somme',
+                 'cumul', 'ensemble', 'general', 'général')
+
+#: Combien de premières lignes on inspecte pour trouver l'en-tête réel.
+LIGNES_SONDEES_POUR_ENTETE = 8
+
+#: Séparateurs essayés, par ordre de préférence — « ; » d'abord, l'usage
+#: français, qui tranche les égalités.
+SEPARATEURS = (';', ',', '	', '|')
 
 
 # =============================================================================
@@ -172,6 +188,8 @@ class RapportInventaire(NamedTuple):
     granularite:      str
     capacites:        Dict[str, bool]
     hors_portee:      Dict[str, Tuple[str, ...]]
+    #: Lignes reconnues comme des totaux et écartées — jamais en silence.
+    lignes_ecartees:  Tuple[str, ...] = ()
 
     @property
     def champs_lus(self) -> Tuple[str, ...]:
@@ -201,9 +219,22 @@ class RapportInventaire(NamedTuple):
 #  LECTURE
 # =============================================================================
 
+def sans_accents(texte: str) -> str:
+    """Forme comparable d'un texte accentué — idiome standard, pas une table.
+
+    ⚠️ NÉCESSAIRE, ET TROUVÉ PAR UN TEST. `DATE_ÉCHÉANCE` — une colonne
+    parfaitement ordinaire dans un export français — ne se reconnaissait pas,
+    parce que le synonyme est `date_echeance`. Une colonne accentuée était
+    donc ignorée en silence.
+    """
+    return unicodedata.normalize('NFKD', str(texte)) \
+        .encode('ascii', 'ignore').decode('ascii')
+
+
 def _normaliser(nom: Any) -> str:
     """Nom de colonne → forme comparable."""
-    return str(nom).strip().lower().replace(' ', '_').replace('-', '_')
+    return sans_accents(nom).strip().lower() \
+        .replace(' ', '_').replace('-', '_')
 
 
 def _reconnaitre(nom: Any) -> Tuple[Optional[str], str]:
@@ -237,22 +268,102 @@ def _lire_tableau(chemin: Path,
                   onglet: Optional[str]) -> Tuple[pd.DataFrame, str, str]:
     """(tableau, conteneur, détail). Un tableau plat, rien d'autre."""
     suffixe = chemin.suffix.lower()
-    if suffixe in ('.xlsx', '.xlsm', '.xls'):
+    if suffixe in ('.xlsx', '.xlsm'):
         # ⚠️ `sheet_name=None` rendrait un DICT de toutes les feuilles, pas un
         # tableau. On nomme donc la feuille explicitement — et on la DIT, pour
         # qu'un classeur multi-onglets ne se lise pas de travers en silence.
         classeur = pd.ExcelFile(chemin)
         nom = onglet if onglet is not None else classeur.sheet_names[0]
         return classeur.parse(nom), 'Excel', f"onglet « {nom} »"
+    if suffixe == '.xls':
+        # ⚠️ ANNONCER UN FORMAT QU'ON NE SAIT PAS LIRE EST PIRE QUE DE LE
+        # REFUSER. `.xls` (Excel 97-2003) exige le moteur `xlrd`, absent de
+        # cet environnement : la lecture échouait sur un « format cannot be
+        # determined » qui ne disait rien au client.
+        raise RefusLecture(
+            MOTIF_FORMAT,
+            f"Format « .xls » (Excel 97-2003) non lisible ici : il exige le "
+            f"moteur `xlrd`, absent de cet environnement. Réenregistrez le "
+            f"fichier en « .xlsx » depuis Excel, ou exportez-le en CSV.")
     if suffixe in ('.csv', '.txt'):
-        sep = _detecter_separateur(chemin)
-        brut = pd.read_csv(chemin, sep=sep, encoding='utf-8-sig')
+        brut, encodage, sep, saut = _lire_csv(chemin)
         lisible = {'\t': 'tabulation'}.get(sep, f"« {sep} »")
-        return brut, 'CSV', f"séparateur {lisible}"
+        detail = f"séparateur {lisible}, encodage {encodage}"
+        if saut:
+            detail += (f", en-tête à la ligne {saut + 1} — les {saut} "
+                       f"première(s) ligne(s) sont un titre, pas des données")
+        return brut, 'CSV', detail
     raise RefusLecture(
-        MOTIF_AUCUNE_LIGNE,
+        MOTIF_FORMAT,
         f"Format non pris en charge : « {suffixe} ». L'inventaire de "
-        f"contrats se dépose en CSV (.csv, .txt) ou en Excel (.xlsx).")
+        f"contrats se dépose en CSV (.csv, .txt) ou en Excel (.xlsx, .xlsm).")
+
+
+def _lire_csv(chemin: Path) -> Tuple[pd.DataFrame, str, str, int]:
+    """Lit un CSV en essayant les encodages, dans l'ordre — et DIT lequel.
+
+    ⚠️ CECI CORRIGE UN DÉFAUT, PAS UNE LACUNE. Le lecteur imposait `utf-8` :
+    un CSV en `cp1252` — l'encodage par défaut des systèmes d'assurance
+    français — produisait une TRACE DE PILE, pas un diagnostic. C'était le
+    seul endroit du socle où la promesse « jamais de refus global, toujours
+    un diagnostic » était rompue.
+
+    ⚠️ ESSAI ORDONNÉ, PAS DÉTECTION STATISTIQUE. `charset_normalizer` est
+    présent, mais mesuré sur un en-tête court il lit du `cp1252` comme du
+    `big5` : deviner l'encodage est moins fiable que l'essayer. L'ordre
+    compte — `utf-8` d'abord, car un fichier UTF-8 se décoderait sans erreur
+    en `cp1252`, en produisant des accents faux.
+
+    ⚠️ ET `latin-1` NE PEUT PAS ÉCHOUER : tout octet y est valide. C'est un
+    dernier recours, et il se DIT comme tel.
+    """
+    for encodage in ('utf-8-sig', 'utf-8', 'cp1252'):
+        try:
+            sep, saut = _reperer_structure(chemin, encodage)
+            return (pd.read_csv(chemin, sep=sep, encoding=encodage,
+                                skiprows=saut), encodage, sep, saut)
+        except UnicodeDecodeError:
+            continue
+    dernier = ('latin-1 (dernier recours — aucun octet n\'y est invalide, '
+               'vérifiez les accents)')
+    sep, saut = _reperer_structure(chemin, 'latin-1')
+    return (pd.read_csv(chemin, sep=sep, encoding='latin-1', skiprows=saut),
+            dernier, sep, saut)
+
+
+def _reperer_structure(chemin: Path, encodage: str) -> Tuple[str, int]:
+    """(séparateur, lignes à sauter) — résolus ENSEMBLE, et c'est le point.
+
+    ⚠️ LES DEUX QUESTIONS N'EN FONT QU'UNE. Mesuré : sur un fichier dont les
+    en-têtes sont précédés d'un titre, le renifleur de `csv` rend « , » là où
+    le fichier est en « ; » — le titre, sans séparateur, l'égare. Et sans le
+    bon séparateur, aucune ligne ne se découpe en champs reconnaissables.
+    Chercher l'un sans l'autre échoue donc dans les deux sens.
+
+    On essaie chaque séparateur sur chaque ligne de tête, et on retient le
+    couple qui reconnaît le PLUS de champs. À égalité, l'ordre de préférence
+    tranche — « ; » d'abord, l'usage français.
+
+    ⚠️ ET CE REPÉRAGE PRÉCÈDE L'ANALYSE. pandas fixe le nombre de colonnes sur
+    la PREMIÈRE ligne : un titre isolé réduit le tableau à une colonne et
+    écrase l'en-tête véritable, irrécupérablement. On lit donc le texte brut
+    avant de le confier à pandas.
+    """
+    with open(chemin, 'r', encoding=encodage, newline='') as f:
+        lignes = [f.readline() for _ in range(LIGNES_SONDEES_POUR_ENTETE)]
+    meilleur = (0, 0, ';')            # (reconnus, -rang, separateur)
+    for sep in SEPARATEURS:
+        for i, ligne in enumerate(lignes):
+            if not ligne.strip():
+                continue
+            n = _reconnues(ligne.rstrip('\r\n').split(sep))
+            if n > meilleur[0]:
+                meilleur = (n, i, sep)
+    if meilleur[0] == 0:
+        # Aucun champ reconnu nulle part : on s'en remet au renifleur, et le
+        # diagnostic dira que rien n'a été reconnu.
+        return _detecter_separateur(chemin), 0
+    return meilleur[2], meilleur[1]
 
 
 def lire(chemin, *, onglet: Optional[str] = None,
@@ -270,6 +381,10 @@ def lire(chemin, *, onglet: Optional[str] = None,
     """
     chemin = Path(chemin)
     brut, conteneur, detail = _lire_tableau(chemin, onglet)
+    brut, decale = _recadrer_sur_l_entete(brut)
+    if decale:
+        detail += (f", en-tête à la ligne {decale + 1} — les {decale} "
+                   f"première(s) ligne(s) sont un titre, pas des données")
 
     if brut.empty or not len(brut.columns):
         raise RefusLecture(
@@ -301,6 +416,12 @@ def lire(chemin, *, onglet: Optional[str] = None,
             liens.append(Correspondance(str(col), champ, par))
 
     _refuser_si_concurrentes(liens)
+
+    par_champ = {c.champ: c.colonne for c in liens}
+    brut, totaux = _ecarter_les_totaux(
+        brut, par_champ.get('portefeuille', ''),
+        par_champ.get('date_emission'))
+
     _refuser_si_bloquant_absent(liens, brut, chemin)
 
     canonique = brut.rename(
@@ -309,6 +430,7 @@ def lire(chemin, *, onglet: Optional[str] = None,
     presents = {c.champ for c in liens}
 
     return canonique, RapportInventaire(
+        lignes_ecartees=totaux,
         conteneur=conteneur,
         detail_conteneur=detail,
         nb_lignes=int(len(brut)),
@@ -320,6 +442,67 @@ def lire(chemin, *, onglet: Optional[str] = None,
         capacites=capacites(presents),
         hors_portee=exigences_hors_portee(presents),
     )
+
+
+def _reconnues(noms) -> int:
+    """Combien de ces noms sont des champs connus."""
+    return sum(1 for n in noms if _reconnaitre(n)[0] is not None)
+
+
+def _recadrer_sur_l_entete(brut: pd.DataFrame) -> Tuple[pd.DataFrame, int]:
+    """(tableau recadré, nombre de lignes écartées au-dessus de l'en-tête).
+
+    ⚠️ UN EXPORT EXCEL PORTE SOUVENT UN TITRE AU-DESSUS DE SES EN-TÊTES.
+    pandas prend alors le titre pour l'en-tête, et le lecteur refusait pour
+    « aucune date d'émission » — un message vrai mais trompeur, qui envoyait
+    le client chercher une colonne qu'il avait pourtant fournie.
+
+    ⚠️ CETTE VOIE SERT LES CLASSEURS EXCEL. Pour un CSV, le repérage se fait
+    AVANT l'analyse (`_ligne_d_entete`) : pandas y fixe le nombre de colonnes
+    sur la première ligne, et un titre isolé écrase l'en-tête réel de façon
+    irrécupérable. Deux mécanismes, parce que les deux conteneurs cassent
+    différemment.
+
+    On ne recadre que si une ligne suivante reconnaît STRICTEMENT PLUS de
+    champs que l'en-tête courant : sans ce gain mesuré, on ne touche à rien.
+    """
+    depart = _reconnues(brut.columns)
+    meilleur, gain = 0, depart
+    for i in range(min(LIGNES_SONDEES_POUR_ENTETE, len(brut))):
+        n = _reconnues(brut.iloc[i].tolist())
+        if n > gain:
+            meilleur, gain = i + 1, n
+    if not meilleur:
+        return brut, 0
+    entete = [str(x) for x in brut.iloc[meilleur - 1].tolist()]
+    recadre = brut.iloc[meilleur:].reset_index(drop=True)
+    recadre.columns = entete
+    return recadre, meilleur
+
+
+def _ecarter_les_totaux(df: pd.DataFrame, cible_portefeuille: str,
+                        cible_emission: Optional[str]
+                        ) -> Tuple[pd.DataFrame, Tuple[str, ...]]:
+    """Retire les lignes de total, et rend leur libellé pour le diagnostic.
+
+    ⚠️ DEUX SIGNAUX EXIGÉS, PAS UN. Le libellé doit évoquer un total ET la
+    date d'émission doit manquer : un contrat réel porte une date. Exiger les
+    deux rend quasi impossible d'écarter un vrai contrat dont le portefeuille
+    s'appellerait « TOTAL ».
+    """
+    if cible_portefeuille not in df.columns:
+        return df, ()
+    libelles = df[cible_portefeuille].astype(str).str.strip().str.lower()
+    suspect = libelles.apply(lambda v: any(m in v for m in MOTS_DE_TOTAL))
+    if cible_emission in df.columns:
+        vide = df[cible_emission].isna() | (
+            df[cible_emission].astype(str).str.strip() == '')
+        suspect = suspect & vide
+    if not suspect.any():
+        return df, ()
+    ecartes = tuple(sorted({str(v) for v in
+                            df.loc[suspect, cible_portefeuille]}))
+    return df.loc[~suspect].reset_index(drop=True), ecartes
 
 
 def _refuser_si_concurrentes(liens: List[Correspondance]) -> None:
@@ -429,6 +612,13 @@ def diagnostic(rapport: RapportInventaire) -> str:
         for c in rapport.a_confirmer:
             a(f"  {c.colonne} lu comme « {c.champ} » — "
               f"{CHAMPS[c.champ].libelle}")
+
+    if rapport.lignes_ecartees:
+        a("")
+        a(f"LIGNES ÉCARTÉES ({len(rapport.lignes_ecartees)}) — reconnues "
+          f"comme des totaux, pas des contrats")
+        a(f"  {', '.join(rapport.lignes_ecartees)}")
+        a("  (libellé évoquant un total ET date d'émission absente)")
 
     if rapport.colonnes_ignorees:
         a("")

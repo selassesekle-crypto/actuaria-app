@@ -54,7 +54,9 @@ RÉFÉRENCES — IFRS 17, annexe au règlement (UE) 2023/1803, JO L 237 du
 =============================================================================
 """
 
-from datetime import date, datetime
+import re
+import unicodedata
+from datetime import date, datetime, timedelta
 from typing import Dict, Iterable, List, Mapping, NamedTuple, Optional, Tuple
 
 from normes.ifrs17.socle.arrete import FORMATS
@@ -177,13 +179,55 @@ MOTIF_SANS_EMISSION = 'SANS_EMISSION'
 #  LECTURE DES DATES — UNE SEULE SOURCE DE FORMATS
 # =============================================================================
 
-def _lire_date(valeur) -> Optional[date]:
-    """Une date de contrat, dans l'un des formats admis par le dépôt.
+#: Mois français en toutes lettres. ⚠️ Table EXPLICITE plutôt que `%B` : ce
+#: dernier dépend de la locale du système, donc du poste qui exécute — un
+#: livrable actuariel ne peut pas dépendre de la langue de la machine.
+MOIS_FR = {
+    'janvier': 1, 'janv': 1, 'fevrier': 2, 'fev': 2, 'mars': 3,
+    'avril': 4, 'avr': 4, 'mai': 5, 'juin': 6, 'juillet': 7, 'juil': 7,
+    'aout': 8, 'septembre': 9, 'sept': 9, 'octobre': 10, 'oct': 10,
+    'novembre': 11, 'nov': 11, 'decembre': 12, 'dec': 12,
+}
 
-    ⚠️ `FORMATS` vient de `arrete.py` : les formats acceptés sont une SEULE
+#: Origine du calendrier Excel sous Windows. Excel compte les jours depuis le
+#: 31/12/1899 avec un décalage d'un jour hérité d'un bogue de 1900, d'où cette
+#: origine et non le 01/01/1900.
+_ORIGINE_EXCEL = date(1899, 12, 30)
+
+#: Bande de plausibilité d'un numéro de série Excel : du 01/01/1990 au
+#: 31/12/2100. Hors d'elle, un nombre n'est pas une date mais un montant, un
+#: identifiant ou un compte — le lire comme une date serait pire que de ne
+#: rien lire.
+_SERIE_MIN = (date(1990, 1, 1) - _ORIGINE_EXCEL).days
+_SERIE_MAX = (date(2100, 12, 31) - _ORIGINE_EXCEL).days
+
+
+def _sans_accent(texte: str) -> str:
+    """Forme comparable d'un mois écrit en toutes lettres.
+
+    ⚠️ IDIOME STANDARD, PAS UNE TABLE DE CORRESPONDANCE. J'avais d'abord
+    écrit cinq substitutions à la main — elles auraient manqué « décembre »
+    écrit avec un autre accent, ou n'importe quelle lettre non prévue.
+    `unicodedata` couvre tout l'alphabet latin, et c'est un appel de
+    bibliothèque, pas une règle recopiée.
+    """
+    return unicodedata.normalize('NFKD', texte) \
+        .encode('ascii', 'ignore').decode('ascii')
+
+
+def _lire_date(valeur) -> Optional[date]:
+    """Une date de contrat, dans l'une des formes qu'un assureur produit.
+
+    ⚠️ `FORMATS` vient de `arrete.py` : les formes TEXTUELLES sont une SEULE
     donnée pour tout le socle. Mais le TYPE diffère — un `Arrete` est la date
     à laquelle une entité arrête ses comptes, pas celle d'un contrat. On
     réemploie la liste, jamais le type.
+
+    ⚠️ DEUX MÉCANISMES S'AJOUTENT ICI, ET SEULEMENT ICI, parce qu'ils ne sont
+    pas des formats `strptime` et qu'ils naissent des fichiers de contrats :
+    le NUMÉRO DE SÉRIE EXCEL — une colonne de dates lue en numérique — et le
+    MOIS EN TOUTES LETTRES. Aucun des deux n'a de sens pour une date d'arrêté,
+    qu'un humain saisit.
     """
     if valeur is None or valeur == '':
         return None
@@ -191,15 +235,47 @@ def _lire_date(valeur) -> Optional[date]:
         return valeur.date()
     if isinstance(valeur, date):
         return valeur
+
+    if isinstance(valeur, (int, float)) and not isinstance(valeur, bool):
+        return _depuis_serie_excel(float(valeur))
+
     brut = str(valeur).strip()
     if not brut or brut == COUVERTURE_INDETERMINEE:
         return None
     for motif, _ in FORMATS:
         try:
-            return datetime.strptime(brut[:10], motif).date()
+            longueur = 8 if motif == '%Y%m%d' else 10
+            return datetime.strptime(brut[:longueur], motif).date()
         except ValueError:
             continue
-    return None
+    lu = _depuis_mois_en_lettres(brut)
+    if lu is not None:
+        return lu
+    try:
+        return _depuis_serie_excel(float(brut.replace(',', '.')))
+    except ValueError:
+        return None
+
+
+def _depuis_serie_excel(n: float) -> Optional[date]:
+    """Un numéro de série Excel → une date, si le nombre est plausible."""
+    if not _SERIE_MIN <= n <= _SERIE_MAX:
+        return None
+    return _ORIGINE_EXCEL + timedelta(days=int(n))
+
+
+def _depuis_mois_en_lettres(brut: str) -> Optional[date]:
+    """« 15 mars 2026 », « 15-mars-2026 », « 15/janv/2026 »."""
+    morceaux = re.split(r"[\s/.\-]+", _sans_accent(brut.lower()).strip())
+    if len(morceaux) != 3:
+        return None
+    jour, mois, an = morceaux
+    if mois not in MOIS_FR:
+        return None
+    try:
+        return date(int(an), MOIS_FR[mois], int(jour))
+    except ValueError:
+        return None
 
 
 def _un_an_apres(d: date) -> date:

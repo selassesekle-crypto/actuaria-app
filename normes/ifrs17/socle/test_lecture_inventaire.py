@@ -6,14 +6,17 @@
 import re
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
 
 from normes.ifrs17.socle.contrat import EXIGENCES
+from normes.ifrs17.socle.groupe import _lire_date
 from normes.ifrs17.socle.lecture_inventaire import (
     MOTIF_AUCUNE_LIGNE, MOTIF_COLONNES_CONCURRENTES,
-    MOTIF_SANS_DATE_EMISSION, MOTIF_SANS_PORTEFEUILLE, PAR_DECLARATION,
+    MOTIF_FORMAT, MOTIF_SANS_DATE_EMISSION, MOTIF_SANS_PORTEFEUILLE,
+    PAR_DECLARATION,
     PAR_SYNONYME, PAR_SYNONYME_AMBIGU, RefusLecture, diagnostic, lire)
 
 #: Un inventaire réaliste : noms de colonnes tels qu'un assureur les sort.
@@ -139,6 +142,117 @@ class T2_Conteneurs(unittest.TestCase):
         self.assertIn('Contrats', r.detail_conteneur)
         print("    OK T2b : onglet nomme dans le rapport ; le premier "
               "onglet n'est jamais suppose bon")
+
+
+class T2bis_LesFormesDEntree(unittest.TestCase):
+    """T2-bis — les formes qu'un assureur produit réellement.
+
+    ⚠️ CINQ DE CES SIX CAS ONT ÉTÉ TROUVÉS EN FABRIQUANT DES FICHIERS, pas en
+    lisant le code. Aucun ne serait apparu sur les données synthétiques du
+    socle, qui sont propres, en UTF-8 et en dates ISO.
+    """
+
+    def _ecrire_texte(self, contenu, encodage='utf-8', suffixe='.csv'):
+        p = Path(tempfile.mkdtemp()) / f"inv{suffixe}"
+        p.write_text(contenu, encoding=encodage)
+        return p
+
+    def test_un_csv_en_cp1252_est_lu_et_l_encodage_est_dit(self):
+        """⚠️ C'ETAIT UN DEFAUT, PAS UNE LACUNE : cp1252 -- l'encodage par
+        defaut des systemes d'assurance francais -- produisait une TRACE DE
+        PILE, pas un diagnostic. Le seul endroit du socle ou la promesse
+        << jamais de refus global, toujours un diagnostic >> etait rompue."""
+        p = self._ecrire_texte(
+            "BRANCHE;DT_SOUSCRIPTION;DATE_ÉCHÉANCE\n"
+            "RC_AUTO;2026-03-15;2027-03-14\nMRH;2026-04-02;2027-04-01\n",
+            encodage='cp1252')
+        _, r = lire(p)
+        self.assertIn('cp1252', r.detail_conteneur)
+        self.assertEqual(r.nb_lignes, 2)
+        print(f"    OK T2bis : cp1252 lu, {r.detail_conteneur}")
+
+    def test_l_encodage_est_essaye_dans_l_ordre_utf8_d_abord(self):
+        """Un fichier UTF-8 se decoderait SANS ERREUR en cp1252, avec des
+        accents faux. L'ordre est donc une garantie, pas une commodite.
+
+        ⚠️ ET LA FIXTURE DOIT PORTER UN ACCENT. Mon premier test employait
+        `REALISTE`, dont aucune colonne n'en a : son cp1252 est byte a byte
+        identique a son utf-8, et le test ne mesurait rien.
+        """
+        contenu = ("BRANCHE;DT_SOUSCRIPTION;DATE_ÉCHÉANCE\n"
+                   "RC_AUTO;2026-03-15;2027-03-14\n")
+        _, r = lire(self._ecrire_texte(contenu, encodage='utf-8'))
+        self.assertIn('utf-8', r.detail_conteneur)
+        self.assertNotIn('cp1252', r.detail_conteneur)
+        self.assertIn('DATE_ÉCHÉANCE', [c.colonne for c in
+                                        r.correspondances])
+        print("    OK T2bis-b : utf-8 essaye avant cp1252, accent conserve")
+
+    def test_les_quatre_formes_de_date_qui_manquaient(self):
+        """Compacte, annee sur 2 chiffres, mois en lettres, serie Excel."""
+        for brut, attendu in (('20260315', date(2026, 3, 15)),
+                              ('15/03/26', date(2026, 3, 15)),
+                              ('15-mars-2026', date(2026, 3, 15)),
+                              ('45731', date(2025, 3, 15)),
+                              (45731, date(2025, 3, 15))):
+            self.assertEqual(_lire_date(brut), attendu, f"forme {brut!r}")
+        print("    OK T2bis-c : 5 formes de date supplementaires lues")
+
+    def test_un_nombre_hors_bande_n_est_pas_lu_comme_une_date(self):
+        """⚠️ Un montant ou un identifiant ne doit JAMAIS devenir une date."""
+        for pas_une_date in ('999', '12345678901', 'RC_AUTO', '0'):
+            self.assertIsNone(_lire_date(pas_une_date), repr(pas_une_date))
+        print("    OK T2bis-d : hors bande de plausibilite, rien n'est lu")
+
+    def test_un_titre_au_dessus_des_entetes_est_recadre(self):
+        """⚠️ SEPARATEUR ET LIGNE D'EN-TETE SE RESOLVENT ENSEMBLE. Mesure : le
+        renifleur de `csv` rend << , >> sur ce fichier pourtant en << ; >> --
+        le titre, sans separateur, l'egare. Et sans le bon separateur, aucune
+        ligne ne se decoupe en champs reconnaissables."""
+        p = self._ecrire_texte(
+            "Inventaire des contrats\nExtraction du 31/12/2026\n\n"
+            "BRANCHE;DT_SOUSCRIPTION;PRIME_HT\n"
+            "RC_AUTO;2026-03-15;820\nMRH;2026-04-02;340\n")
+        _, r = lire(p)
+        self.assertEqual(r.nb_lignes, 2)
+        self.assertIn('« ; »', r.detail_conteneur)
+        self.assertIn('en-tête à la ligne 4', r.detail_conteneur)
+        print(f"    OK T2bis-e : {r.detail_conteneur[-58:]}")
+
+    def test_une_ligne_de_total_est_ecartee_et_nommee(self):
+        """Deux signaux exiges : libelle de total ET date d'emission absente."""
+        p = self._ecrire_texte(
+            "BRANCHE;DT_SOUSCRIPTION;PRIME_HT\nRC_AUTO;2026-03-15;820\n"
+            "MRH;2026-04-02;340\nTOTAL;;1160\n")
+        _, r = lire(p)
+        self.assertEqual(r.nb_lignes, 2)
+        self.assertEqual(r.lignes_ecartees, ('TOTAL',))
+        self.assertIn('LIGNES ÉCARTÉES', diagnostic(r))
+        print(f"    OK T2bis-f : {len(r.lignes_ecartees)} ligne de total "
+              "ecartee, et NOMMEE")
+
+    def test_un_portefeuille_nomme_TOTAL_avec_une_date_est_conserve(self):
+        """Le second signal protege un vrai contrat du meme nom."""
+        p = self._ecrire_texte(
+            "BRANCHE;DT_SOUSCRIPTION\nTOTAL;2026-03-15\nMRH;2026-04-02\n")
+        _, r = lire(p)
+        self.assertEqual(r.nb_lignes, 2)
+        self.assertEqual(r.lignes_ecartees, ())
+        print("    OK T2bis-g : un contrat dont le portefeuille s'appelle "
+              "TOTAL mais qui porte une date est CONSERVE")
+
+    def test_un_xls_est_refuse_avec_la_raison(self):
+        """⚠️ ANNONCER UN FORMAT QU'ON NE SAIT PAS LIRE EST PIRE QUE DE LE
+        REFUSER : `.xls` exige `xlrd`, absent, et echouait sur un message
+        pandas qui ne disait rien au client."""
+        p = self._ecrire_texte("BRANCHE;DT_SOUSCRIPTION\nRC_AUTO;2026-03-15\n",
+                               suffixe='.xls')
+        with self.assertRaises(RefusLecture) as ctx:
+            lire(p)
+        self.assertEqual(ctx.exception.motif, MOTIF_FORMAT)
+        self.assertIn('xlrd', str(ctx.exception))
+        self.assertIn('.xlsx', str(ctx.exception))
+        print("    OK T2bis-h : .xls refuse, avec la raison et le remede")
 
 
 class T3_Mapping(unittest.TestCase):
