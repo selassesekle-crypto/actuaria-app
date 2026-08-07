@@ -48,6 +48,22 @@ le non-vie, mais l'objet ne lui est pas taillé :
 un seul portant `nb_contrats` : 1 pour un inventaire ligne à ligne, N pour un
 ensemble. La granularité se lit dans la donnée.
 
+⚠️ ET LES DEUX VOIES N'OFFRENT PAS LE MÊME NIVEAU D'ASSURANCE. Sur un
+ensemble pré-agrégé, une seule date d'émission ne peut pas prouver que §22
+est tenu : rien ne dit que l'ensemble ne réunit pas des contrats émis à
+quinze mois d'écart. La PLAGE d'émission (`date_emission_min` et
+`date_emission_max`) le prouve — `max − min ≤ 1 an` est exactement la règle
+de §22. D'où deux exigences distinctes plutôt qu'une : `cohortes_annuelles`
+CONSTITUE les cohortes, `amplitude_cohorte_verifiee` les VÉRIFIE. Une
+exigence absente vaut « déclaré, non établi », comme pour §53 b).
+
+⚠️ LIMITE ASSUMÉE DU MODÈLE DE CAPACITÉS. Il est monotone : une exigence
+devient atteignable quand des champs s'ajoutent, jamais l'inverse. Il ne sait
+donc pas exprimer « sans objet parce que l'inventaire est contrat par
+contrat » — c'est le libellé de l'exigence qui le porte. Un inventaire ligne
+à ligne verra donc `amplitude_cohorte_verifiee` hors de portée, avec la
+mention qui l'explique.
+
 RÉFÉRENCES
   IFRS 17 « Contrats d'assurance », annexe au règlement (UE) 2023/1803,
   JO L 237 du 26.9.2023. Chaque paragraphe cité ci-dessous a été relu dans ce
@@ -130,9 +146,18 @@ EXIGENCES: Dict[str, Exigence] = {
 
     'cohortes_annuelles': Exigence(
         '§22, §25', SOURCE_IFRS17,
-        "Ne pas grouper des contrats émis à plus d'un an d'intervalle, "
-        "et dater la comptabilisation initiale",
+        "Constituer les cohortes annuelles et dater la comptabilisation "
+        "initiale",
         _et(('date_emission',))),
+
+    'amplitude_cohorte_verifiee': Exigence(
+        '§22', SOURCE_IFRS17,
+        "Vérifier — et non déclarer — qu'un ensemble pré-agrégé ne réunit "
+        "pas des contrats émis à plus d'un an d'intervalle : la plage "
+        "d'émission le prouve (max − min ≤ 1 an). Sans objet pour un "
+        "inventaire contrat par contrat, où chaque ligne porte une seule "
+        "date d'émission",
+        _et(('date_emission_min',), ('date_emission_max',))),
 
     'granularite_declaree': Exigence(
         '§17', SOURCE_IFRS17,
@@ -263,6 +288,12 @@ CHAMPS: Dict[str, ChampContrat] = {
     'fin_couverture': ChampContrat(
         NIVEAU_DEBLOQUE,
         "Date de fin de couverture, ou COUVERTURE_INDETERMINEE"),
+    'date_emission_min': ChampContrat(
+        NIVEAU_DEBLOQUE,
+        "Émission la PLUS ANCIENNE d'un ensemble pré-agrégé (§17)"),
+    'date_emission_max': ChampContrat(
+        NIVEAU_DEBLOQUE,
+        "Émission la PLUS RÉCENTE d'un ensemble pré-agrégé (§17)"),
     'frais_acquisition': ChampContrat(
         NIVEAU_DEBLOQUE,
         "Flux de trésorerie liés aux frais d'acquisition du contrat"),

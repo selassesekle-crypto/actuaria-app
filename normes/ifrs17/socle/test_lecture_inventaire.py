@@ -185,6 +185,26 @@ class T3_Mapping(unittest.TestCase):
         self.assertTrue(r.capacites['granularite_declaree'])
         print(f"    OK T3d : granularite = {r.granularite}")
 
+    def test_la_plage_d_emission_est_reconnue_et_verifie_22(self):
+        """Sur la voie pre-agregee, §22 passe de DECLARE a VERIFIE."""
+        d = dict(REALISTE)
+        d['NB_POLICES'] = [120, 310, 45, 3]
+        _, sans = lire(_ecrire(d))
+        d['PREMIERE_EMISSION'] = ['2024-01-08', '2025-01-03', '2025-10-01',
+                                  '2026-01-02']
+        d['DERNIERE_EMISSION'] = ['2024-12-30', '2025-12-28', '2025-12-30',
+                                  '2026-03-31']
+        _, avec = lire(_ecrire(d))
+        par_col = {c.colonne: c.champ for c in avec.correspondances}
+        self.assertEqual(par_col['PREMIERE_EMISSION'], 'date_emission_min')
+        self.assertEqual(par_col['DERNIERE_EMISSION'], 'date_emission_max')
+        self.assertFalse(sans.capacites['amplitude_cohorte_verifiee'])
+        self.assertTrue(avec.capacites['amplitude_cohorte_verifiee'])
+        self.assertIn('amplitude_cohorte_verifiee', sans.hors_portee)
+        self.assertNotIn('amplitude_cohorte_verifiee', avec.hors_portee)
+        print("    OK T3e : plage reconnue par synonymes, §22 passe de "
+              "DECLARE a VERIFIE")
+
 
 class T4_LesQuatreRefus(unittest.TestCase):
     """T4 — les quatre seuls motifs, chacun sur son cas."""

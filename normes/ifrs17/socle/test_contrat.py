@@ -161,6 +161,50 @@ class T3_FraisAcquisition(unittest.TestCase):
               "restent hors de portee")
 
 
+class T3bis_PlageDEmission(unittest.TestCase):
+    """T3-bis — §22 vérifié plutôt que déclaré, sur la voie pré-agrégée.
+
+    Sur un ensemble pré-agrégé, une seule date d'émission ne prouve rien :
+    rien ne dit que l'ensemble ne réunit pas des contrats émis a quinze mois
+    d'ecart. La plage le prouve — `max - min <= 1 an` EST la regle de §22.
+    """
+
+    def test_la_plage_debloque_la_verification_de_22(self):
+        sans = capacites(MINIMAL + ('nb_contrats',))
+        avec = capacites(MINIMAL + ('nb_contrats', 'date_emission_min',
+                                    'date_emission_max'))
+        self.assertTrue(sans['cohortes_annuelles'])
+        self.assertFalse(sans['amplitude_cohorte_verifiee'])
+        self.assertTrue(avec['amplitude_cohorte_verifiee'])
+        gagnees = {n for n, ok in avec.items() if ok} - \
+                  {n for n, ok in sans.items() if ok}
+        self.assertEqual(gagnees, {'amplitude_cohorte_verifiee'})
+        print("    OK T3bis : la plage debloque §22 VERIFIE, et rien d'autre")
+
+    def test_une_seule_borne_ne_suffit_pas(self):
+        """Une amplitude se mesure entre DEUX bornes."""
+        for borne in ('date_emission_min', 'date_emission_max'):
+            cap = capacites(MINIMAL + ('nb_contrats', borne))
+            self.assertFalse(cap['amplitude_cohorte_verifiee'],
+                             f"{borne} seule ne devrait rien prouver")
+        print("    OK T3bis-b : une borne seule ne prouve rien")
+
+    def test_constituer_et_verifier_sont_deux_exigences_distinctes(self):
+        """⚠️ MEME HONNETETE QUE POUR §53 b) : une exigence absente vaut
+        << declare, non etabli >>, jamais << conforme >>."""
+        self.assertIn('cohortes_annuelles', EXIGENCES)
+        self.assertIn('amplitude_cohorte_verifiee', EXIGENCES)
+        self.assertIn('§22', EXIGENCES['cohortes_annuelles'].reference)
+        self.assertEqual(EXIGENCES['amplitude_cohorte_verifiee'].reference,
+                         '§22')
+        self.assertIn('non déclarer',
+                      EXIGENCES['amplitude_cohorte_verifiee'].libelle)
+        self.assertIn('Sans objet',
+                      EXIGENCES['amplitude_cohorte_verifiee'].libelle)
+        print("    OK T3bis-c : CONSTITUER et VERIFIER sont deux exigences, "
+              "et le libelle dit quand la seconde est sans objet")
+
+
 class T4_RefusEtScellement(unittest.TestCase):
     """T4 — ce qui fait refuser, et ce qui ne se corrige plus après."""
 
