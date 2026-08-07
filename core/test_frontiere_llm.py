@@ -8,11 +8,13 @@ couvrent donc pas.
 import os
 import re
 import unittest
+from unittest.mock import patch
 
 from core.frontiere_llm import (
-    MODELE_ETABLI, MODELE_RECENT, MODELES_CONNUS, SITES, VARIABLE_CLE,
-    FrontiereLLMIndisponible, appeler, chemins_appelants, cle_api,
-    sites_du_modele, texte_des_blocs, texte_du_premier_bloc)
+    MODELE_ETABLI, MODELE_RECENT, MODELES_CONNUS, PARAMETRES_REFUSES, SITES,
+    VARIABLE_CLE, FrontiereLLMIndisponible, RequeteRefusee, appeler,
+    chemins_appelants, cle_api, sites_du_modele, texte_des_blocs,
+    texte_du_premier_bloc)
 
 RACINE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -54,6 +56,30 @@ class _Bloc:
 class _Reponse:
     def __init__(self, *blocs):
         self.content = list(blocs)
+
+
+def _payload_transmis(**kwargs):
+    """Ce que la frontière transmet RÉELLEMENT au client, client simulé.
+
+    ⚠️ AUCUN TEST DE CE DÉPÔT NE DOIT ATTEINDRE LE RÉSEAU. Le paquet
+    `anthropic` a été installé en cours de route ; s'appuyer sur son absence
+    n'est donc pas une garantie — on simule.
+    """
+    vus = {}
+
+    class _Messages:
+        def create(self, **kw):
+            vus.update(kw)
+            return _Reponse(_Bloc('reponse simulee'))
+
+    class _Client:
+        def __init__(self, **_):
+            self.messages = _Messages()
+
+    with patch('anthropic.Anthropic', _Client):
+        appeler(systeme='s', messages=[{'role': 'user', 'content': 'x'}],
+                **kwargs)
+    return vus
 
 
 class T1_LeVerrou(unittest.TestCase):
@@ -191,6 +217,110 @@ class T4_LesDeuxLectures(unittest.TestCase):
         self.assertEqual(texte_des_blocs(r2), 'ab')
         print('    OK T4b : les deux lectures divergent sur une réponse à '
               'plusieurs blocs — écart conservé, non corrigé')
+
+
+class T6_LaCombinaisonRefusee(unittest.TestCase):
+    """T6 — le défaut qui a fait taire trois sites, et son verrou.
+
+    ⚠️ MESURÉ CONTRE L'API le 2026-08-07 : `claude-sonnet-5` refuse
+    `temperature` (400, « deprecated for this model »), quelle que soit sa
+    valeur. Trois sites du dépôt associaient les deux ; leurs appels étaient
+    TOUS rejetés, et l'un d'eux — en production — repliait en silence.
+    """
+
+    def setUp(self):
+        self.avant = os.environ.get(VARIABLE_CLE)
+        os.environ[VARIABLE_CLE] = 'cle-de-test'
+
+    def tearDown(self):
+        if self.avant is None:
+            os.environ.pop(VARIABLE_CLE, None)
+        else:
+            os.environ[VARIABLE_CLE] = self.avant
+
+    def test_la_combinaison_est_refusee_AVANT_le_reseau(self):
+        """Le paquet `anthropic` est absent ici : si la frontière atteignait
+        l'import, l'erreur porterait sur le paquet. Elle porte sur le
+        paramètre — donc le refus précède bien toute tentative."""
+        with self.assertRaises(RequeteRefusee) as ctx:
+            appeler(modele=MODELE_RECENT, systeme='s', messages=[],
+                    max_tokens=10, temperature=0.0)
+        message = str(ctx.exception)
+        self.assertIn('temperature', message)
+        self.assertIn(MODELE_RECENT, message)
+        self.assertNotIn('anthropic', message)
+        print('    OK T6 : la combinaison est refusée avant le réseau')
+
+    def test_le_refus_ne_depend_pas_de_la_valeur(self):
+        """⚠️ « DÉPRÉCIÉ POUR CE MODÈLE » N'EST PAS « VALEUR NON-DÉFAUT
+        REFUSÉE » : 0.0, 1.0 ou 0.7 sont refusées de la même façon."""
+        for valeur in (0.0, 0.7, 1.0):
+            with self.assertRaises(RequeteRefusee):
+                appeler(modele=MODELE_RECENT, systeme='s', messages=[],
+                        max_tokens=10, temperature=valeur)
+        print('    OK T6b : refus indépendant de la valeur (0.0, 0.7, 1.0)')
+
+    def test_sans_le_parametre_la_frontiere_laisse_passer(self):
+        """Ne pas transmettre le paramètre est la correction, et on vérifie la
+        CHARGE UTILE elle-même : `temperature` n'y figure plus.
+
+        ⚠️ LE CLIENT EST SIMULÉ. Aucun test de ce dépôt ne doit atteindre le
+        réseau — j'ai écrit ces tests en supposant le paquet absent, il a été
+        installé depuis, et deux d'entre eux ont réellement tenté un appel.
+        """
+        vus = _payload_transmis(modele=MODELE_RECENT, max_tokens=10)
+        self.assertNotIn('temperature', vus)
+        self.assertEqual(vus['model'], MODELE_RECENT)
+        print('    OK T6c : sans le paramètre, la requête part sans lui')
+
+    def test_l_autre_modele_accepte_toujours_le_parametre(self):
+        """Le refus est attaché à UN modèle, pas posé en règle générale."""
+        self.assertNotIn(MODELE_ETABLI, PARAMETRES_REFUSES)
+        vus = _payload_transmis(modele=MODELE_ETABLI, max_tokens=10,
+                                temperature=0.0)
+        self.assertEqual(vus['temperature'], 0.0)
+        print(f'    OK T6d : {MODELE_ETABLI} accepte toujours temperature')
+
+    def test_un_repli_d_environnement_n_est_pas_un_repli_sur_defaut(self):
+        """⚠️ C'EST LA DISTINCTION QUI MANQUAIT ET QUI A PERMIS LE SILENCE.
+        RequeteRefusee HÉRITE de FrontiereLLMIndisponible : tout appelant qui
+        capturait déjà celle-ci continue de la capturer — la distinction
+        s'ajoute sans casser personne."""
+        self.assertTrue(issubclass(RequeteRefusee, FrontiereLLMIndisponible))
+        self.assertIsNot(RequeteRefusee, FrontiereLLMIndisponible)
+        print('    OK T6e : RequeteRefusee se distingue sans rien casser')
+
+    def test_aucun_site_ne_reintroduit_le_parametre_refuse(self):
+        """⚠️ LE VERROU. Dans les sources des sites qui portent le modèle
+        concerné, toute constante de température doit valoir None."""
+        import ast
+        fautifs = []
+        for site in sites_du_modele(MODELE_RECENT):
+            chemin = os.path.join(RACINE, site.chemin.replace('/', os.sep))
+            arbre = ast.parse(_lire(chemin))
+            for noeud in ast.walk(arbre):
+                if not isinstance(noeud, ast.Assign):
+                    continue
+                for cible in noeud.targets:
+                    if (isinstance(cible, ast.Name)
+                            and 'TEMPERATURE' in cible.id.upper()):
+                        valeur = noeud.value
+                        if not (isinstance(valeur, ast.Constant)
+                                and valeur.value is None):
+                            fautifs.append(f'{site.chemin}::{cible.id}')
+        self.assertEqual(fautifs, [], 'température réintroduite : %s'
+                         % ', '.join(fautifs))
+        print(f'    OK T6f : les {len(sites_du_modele(MODELE_RECENT))} sites '
+              f'du modèle concerné ne transmettent aucune température')
+
+    def test_la_provenance_de_la_mesure_est_dans_la_donnee(self):
+        """Une entrée sans mesure n'a rien à faire dans cette table."""
+        source = _lire(os.path.join(RACINE, 'core', 'frontiere_llm.py'))
+        bloc = source.split('PARAMETRES_REFUSES')[0][-1200:]
+        for attendu in ('2026-08-07', '400', 'deprecated for this model'):
+            self.assertIn(attendu, bloc, attendu)
+        self.assertEqual(PARAMETRES_REFUSES[MODELE_RECENT], ('temperature',))
+        print('    OK T6g : la mesure et sa date accompagnent la table')
 
 
 class T5_LaFrontiereNeSeSubstitueARien(unittest.TestCase):

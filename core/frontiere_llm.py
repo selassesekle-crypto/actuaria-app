@@ -81,6 +81,24 @@ SITES: Tuple[Site, ...] = (
 
 VARIABLE_CLE = 'ANTHROPIC_API_KEY'
 
+# =============================================================================
+#  LES PARAMÈTRES QU'UN MODÈLE REFUSE
+# =============================================================================
+# ⚠️ MESURÉ CONTRE L'API le 2026-08-07, avec la clé et le paquet :
+#
+#     anthropic.BadRequestError: Error code: 400
+#     '`temperature` is deprecated for this model.'
+#
+# ⚠️ LE PARAMÈTRE EST DÉPRÉCIÉ POUR CE MODÈLE, QUELLE QUE SOIT SA VALEUR — ce
+# n'est pas « une valeur non-défaut est refusée ». Trois sites du dépôt
+# associaient les deux, et leurs appels étaient donc TOUS rejetés.
+#
+# La provenance vit dans la donnée, comme pour les paramètres de la formule
+# standard : une entrée sans mesure n'a rien à faire ici.
+PARAMETRES_REFUSES: Dict[str, Tuple[str, ...]] = {
+    MODELE_RECENT: ('temperature',),
+}
+
 
 class FrontiereLLMIndisponible(RuntimeError):
     """Le service ne peut pas être atteint : paquet absent, ou clé absente.
@@ -89,6 +107,22 @@ class FrontiereLLMIndisponible(RuntimeError):
     du client `anthropic` (authentification, quota, réseau, HTTP) remontent
     INCHANGÉES, parce que plusieurs appelants les distinguent par leur type et
     que les envelopper changerait leur comportement.
+    """
+
+
+class RequeteRefusee(FrontiereLLMIndisponible):
+    """La requête est FAUTIVE — un défaut du dépôt, pas une dégradation.
+
+    ⚠️ C'EST LA DISTINCTION QUI MANQUAIT, ET QUI A PERMIS LE SILENCE. Un repli
+    parce que le paquet manque est une dégradation ATTENDUE : l'environnement
+    n'a pas ce qu'il faut, le repli local est la bonne réponse. Un repli parce
+    que la requête est REFUSÉE est un DÉFAUT : la plateforme envoie une requête
+    qu'elle n'aurait jamais dû construire. Les deux tombaient dans le même
+    `except Exception` et produisaient le même repli muet.
+
+    Hérite de FrontiereLLMIndisponible pour que tout appelant qui capturait
+    déjà celle-ci continue de capturer celle-ci — la distinction s'ajoute,
+    elle ne casse personne.
     """
 
 
@@ -139,6 +173,18 @@ def appeler(*, modele: str, systeme: str,
         raise FrontiereLLMIndisponible(
             f'modèle « {modele} » inconnu de la frontière ; '
             f'connus : {", ".join(MODELES_CONNUS)}')
+    # ⚠️ REFUS EN AMONT, AVANT LE RÉSEAU. Laisser partir une requête vouée au
+    # 400 coûte un aller-retour et rend une erreur opaque, loin de sa cause.
+    # Et `temperature` reste un paramètre PUBLIC de deux modules : retirer sa
+    # valeur par défaut n'empêche pas un appelant d'en passer une. Ce contrôle
+    # est le seul endroit qui puisse l'attraper — et il est testable, ce que le
+    # 400 n'est pas (aucune clé en vérification).
+    if temperature is not None and 'temperature' in PARAMETRES_REFUSES.get(
+            modele, ()):
+        raise RequeteRefusee(
+            f'le modèle « {modele} » refuse le paramètre « temperature » '
+            f'(déprécié pour ce modèle, mesuré le 2026-08-07) ; '
+            f'ne pas le transmettre')
     try:
         import anthropic
     except Exception as e:          # paquet absent : dégradation propre

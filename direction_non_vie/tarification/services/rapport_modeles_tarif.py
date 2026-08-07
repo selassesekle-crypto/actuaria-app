@@ -265,26 +265,25 @@ def _construire_contexte_tarif(
     return '\n'.join(lines)
 
 
-# Modèle et température figés — reproductibilité obligatoire des commentaires
-# actuariels réglementaires. Réf. : GL EIOPA ORSA GL 56 (déterminisme des
-# processus de calcul S2) ; ACPR-2022-P-01 (auditabilité des sorties IA).
-# NE PAS utiliser temperature > 0 pour cet appel : un rapport S2 doit être
-# reproductible sur les mêmes données d'entrée.
+# ⚠⚠ CE BLOC AFFIRMAIT UNE GARANTIE QUE LE MODÈLE NE PERMET PLUS. Il
+# prescrivait `temperature=0` comme socle de reproductibilité réglementaire.
+# MESURÉ CONTRE L'API le 2026-08-07 : ce modèle REFUSE le paramètre (400,
+# « deprecated for this model »), quelle que soit sa valeur. La prescription
+# ne produisait donc pas du déterminisme : elle produisait un appel rejeté,
+# et un repli muet sur le commentaire d'agent.
 #
-# ⚠ PRÉCISION IMPORTANTE (audit V4, axe d'amélioration continue) :
-# cette reproductibilité est STATISTIQUE, pas garantie BIT-À-BIT.
-# `temperature=0` rend le tirage du prochain token déterministe (probabilité
-# maximale à chaque étape, pas d'échantillonnage aléatoire) et la version du
-# modèle est figée par un identifiant exact, désormais nommé une seule fois
-# dans `core.frontiere_llm` (C1) au lieu d'être répété site par site,
-# mais l'inférence des grands modèles de langage n'offre pas de garantie
-# formelle de reproductibilité bit-exacte d'une exécution à l'autre :
-# des variations d'infrastructure côté fournisseur (répartition de charge
-# sur des accélérateurs différents, effets d'arrondi flottant liés au
-# batching concurrent d'autres requêtes, mises à jour internes du service
-# non annoncées par un changement de nom de modèle) peuvent en théorie
-# produire un texte différent sur les mêmes données d'entrée, même si en
-# pratique les écarts observés sont rarissimes et mineurs à `temperature=0`.
+# CE QUI RESTE VRAI, ET QUI ÉTAIT DÉJÀ ÉCRIT ICI : la reproductibilité d'une
+# narration n'a JAMAIS été garantie bit-à-bit. Des variations d'infrastructure
+# côté fournisseur (répartition de charge, arrondis flottants liés au batching,
+# mises à jour internes non annoncées par un changement de nom de modèle)
+# peuvent produire un texte différent sur les mêmes entrées. Le paramètre
+# retiré apportait donc moins qu'annoncé, et son retrait ne coûte pas la
+# garantie — celle-ci n'existait pas.
+#
+# Réf. : GL EIOPA ORSA GL 56 (déterminisme des processus de calcul S2) ;
+# ACPR-2022-P-01 (auditabilité des sorties IA). Ce qui satisfait ces exigences
+# n'est pas un réglage d'échantillonnage, c'est la RELECTURE par l'actuaire
+# responsable, ci-dessous.
 #
 # Conséquence pour l'usage réglementaire : le commentaire narratif généré
 # doit être traité comme une AIDE À LA RÉDACTION, relue et validée par
@@ -295,9 +294,24 @@ def _construire_contexte_tarif(
 # L'identifiant vient de la frontière (C1) ; ce nom reste parce que le pied
 # de page du rapport le cite au lecteur.
 CLAUDE_MODEL_TARIF = frontiere_llm.MODELE_RECENT
-CLAUDE_TEMPERATURE_TARIF = 0
+
+# ⚠️ TEMPERATURE RETIRÉE — MESURÉ CONTRE L'API le 2026-08-07 : ce modèle REFUSE
+# le paramètre (400, « deprecated for this model »), quelle que soit sa valeur.
+# CE SITE ÉTAIT EN PANNE SILENCIEUSE : chaque rapport de tarification tentait
+# l'appel, était rejeté, et retombait sur le commentaire d'agent — l'actuaire
+# lisait « Source : commentaire_agent » sans savoir que la plateforme avait
+# essayé et échoué. `None` = paramètre non transmis.
+CLAUDE_TEMPERATURE_TARIF = None
+
+# Sources de narration. La distinction entre les deux replis est le sens de ce
+# lot : un repli d'ENVIRONNEMENT est attendu, un repli sur REQUÊTE REFUSÉE est
+# un défaut du dépôt, et le livrable doit les nommer différemment.
+SRC_API = 'claude_api'
+SRC_REPLI = 'commentaire_agent'
+SRC_DEFAUT = 'commentaire_agent (appel refuse — defaut de configuration)'
 
 def _narration_claude(result_a3, result_a4, result_a6, branche, arrete) -> Tuple[str, str]:
+    repli = SRC_REPLI
     try:
         ctx = _construire_contexte_tarif(result_a3, result_a4, result_a6, branche, arrete)
         resp = frontiere_llm.appeler(
@@ -307,13 +321,19 @@ def _narration_claude(result_a3, result_a4, result_a6, branche, arrete) -> Tuple
             messages=[{'role': 'user', 'content': ctx}],
             cle=frontiere_llm.cle_api_ou_secrets(),
         )
-        return frontiere_llm.texte_du_premier_bloc(resp), 'claude_api'
+        return frontiere_llm.texte_du_premier_bloc(resp), SRC_API
+    except frontiere_llm.RequeteRefusee as e:
+        # ⚠️ CE N'EST PAS UNE DÉGRADATION, C'EST UN DÉFAUT. Journalisé en
+        # ERREUR, et le livrable le dit — c'est ce qui manquait.
+        logger.error(f'Narration NON generee — requete refusee par la '
+                     f'frontiere : {e}')
+        repli = SRC_DEFAUT
     except Exception as e:
         logger.warning(f'Claude API indisponible : {e}')
     # Fallback : commentaire agent
     for r in [result_a6, result_a4, result_a3]:
         if r and r.get('commentaire'):
-            return _clean(r['commentaire']), 'commentaire_agent'
+            return _clean(r['commentaire']), repli
     return '', 'aucune'
 
 

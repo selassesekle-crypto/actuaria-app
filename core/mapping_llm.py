@@ -25,7 +25,7 @@ AUTEUR : ActuarIA
 from __future__ import annotations
 
 import json
-from typing import Dict
+from typing import Dict, Optional
 
 import pandas as pd
 
@@ -40,10 +40,15 @@ __all__ = ["proposer_mapping", "MappingLLMIndisponible"]
 # Modèle et température — MÊME CONVENTION que les services de narration
 # (direction_non_vie/.../services/rapport_modeles_tarif.py : CLAUDE_MODEL_TARIF /
 # CLAUDE_TEMPERATURE_TARIF). Rapatriés ici en constantes LOCALES : core ne doit
-# pas dépendre d'un service (ce serait inverser la dépendance). temperature=0 :
-# reproductibilité (statistique) recherchée — même rationale S2 que le service.
+# pas dépendre d'un service (ce serait inverser la dépendance).
+#
+# ⚠️ TEMPERATURE RETIRÉE — MESURÉ CONTRE L'API le 2026-08-07 : ce modèle
+# REFUSE le paramètre (400, « deprecated for this model »), quelle que soit
+# sa valeur. Chaque appel partait donc pour être rejeté. `None` = paramètre
+# non transmis. Il reste dans la signature publique, et la frontière refuse
+# désormais en amont si un appelant en passe une.
 _MODELE_CLAUDE = frontiere_llm.MODELE_RECENT
-_TEMPERATURE_DEFAUT = 0.0
+_TEMPERATURE_DEFAUT = None
 _MAX_TOKENS = 2000
 
 _MSG_MANUEL = ("ecrivez le mapping manuellement "
@@ -110,7 +115,8 @@ def _prompt_utilisateur(df: pd.DataFrame, plan: PlanTarifaire,
 
 
 # ── appel API (SEUL point qui touche anthropic — patchable en test) ──────────
-def _appeler_claude(systeme: str, utilisateur: str, *, temperature: float) -> str:
+def _appeler_claude(systeme: str, utilisateur: str, *,
+                    temperature: Optional[float]) -> str:
     """Appelle Claude et rend le TEXTE brut de la réponse. Toute défaillance
     (paquet absent, clé absente, réseau, HTTP) → MappingLLMIndisponible."""
     try:                        # clé absente : dégradation propre
@@ -161,7 +167,7 @@ def proposer_mapping(
     plan: PlanTarifaire,
     *,
     n_lignes_exemple: int = 5,
-    temperature: float = _TEMPERATURE_DEFAUT,
+    temperature: Optional[float] = _TEMPERATURE_DEFAUT,
 ) -> MappingClient:
     """Claude Sonnet lit un apercu CAVIARDE du client (aucune valeur du fichier
     ne sort) + les colonnes attendues par le plan, et propose un MappingClient.

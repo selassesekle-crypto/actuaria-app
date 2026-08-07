@@ -45,7 +45,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 import pandas as pd
 
@@ -62,10 +62,15 @@ __all__ = [
     'proposer_roles_onglets', 'proposer_mapping_colonnes',
 ]
 
-# Modèle et température — même convention que le reste du projet. temperature=0 :
-# reproductibilité recherchée (une proposition doit être stable d'un run à l'autre).
+# Modèle — la valeur vient de la frontière (C1).
+#
+# ⚠️ TEMPERATURE RETIRÉE — MESURÉ CONTRE L'API le 2026-08-07 : ce modèle
+# REFUSE le paramètre (400, « deprecated for this model »), quelle que soit
+# sa valeur. Chaque appel partait donc pour être rejeté. `None` = paramètre
+# non transmis ; il reste dans la signature publique, et la frontière refuse
+# en amont si un appelant en passe une.
 _MODELE_CLAUDE = frontiere_llm.MODELE_RECENT
-_TEMPERATURE_DEFAUT = 0.0
+_TEMPERATURE_DEFAUT = None
 _MAX_TOKENS = 2000
 
 _MSG_MANUEL = ("mappez manuellement (nv_triangle_mapping / un YAML de mapping) — "
@@ -226,7 +231,8 @@ def _prompt_utilisateur_mapping(df: pd.DataFrame, kind: str,
 # =============================================================================
 #  FRONTIÈRE API — SEUL point qui touche `anthropic` (patché en test)
 # =============================================================================
-def _appeler_claude(systeme: str, utilisateur: str, *, temperature: float) -> str:
+def _appeler_claude(systeme: str, utilisateur: str, *,
+                    temperature: Optional[float]) -> str:
     """Appelle Claude et rend le TEXTE brut de la réponse.
 
     Toute défaillance (paquet absent, clé absente, réseau, HTTP) est convertie en
@@ -282,7 +288,7 @@ def proposer_roles_onglets(
     onglets: Mapping[str, pd.DataFrame],
     *,
     n_lignes_exemple: int = 5,
-    temperature: float = _TEMPERATURE_DEFAUT,
+    temperature: Optional[float] = _TEMPERATURE_DEFAUT,
 ) -> RapportRolesLLM:
     """Claude lit un aperçu de chaque onglet et propose son RÔLE (cf. ROLES).
 
@@ -342,7 +348,7 @@ def proposer_mapping_colonnes(
     kind: str = 'sinistres',
     *,
     n_lignes_exemple: int = 5,
-    temperature: float = _TEMPERATURE_DEFAUT,
+    temperature: Optional[float] = _TEMPERATURE_DEFAUT,
 ) -> TriangleSchema:
     """Claude lit un aperçu du tableau + le vocabulaire canonique, et propose un
     TriangleSchema (module 2) prêt à passer à appliquer_mapping_triangle().
