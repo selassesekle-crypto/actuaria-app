@@ -53,6 +53,7 @@ from direction_non_vie.services.nv_triangle_mapping import (
     CHAMPS_PRIMES, CHAMPS_SINISTRES, TriangleSchema, valider_mapping_triangle,
 )
 from core import frontiere_llm
+from core import apercu_caviarde
 
 logger = logging.getLogger('actuaria.nv.mapping_llm')
 
@@ -154,15 +155,15 @@ def _lignes_vocabulaire(kind: str) -> str:
 
 
 def _apercu(df: pd.DataFrame, n_lignes: int) -> str:
-    """Colonnes + dtypes + n lignes d'exemple (CSV) — l'aperçu envoyé au modèle."""
-    colonnes = "\n".join(f"- {c} : {df[c].dtype}" for c in df.columns)
-    try:
-        exemple = df.head(n_lignes).to_csv(index=False).strip()
-    except Exception:                       # types exotiques : on dégrade l'aperçu
-        exemple = "(apercu indisponible)"
-    return (f"dimensions : {df.shape[0]} lignes x {df.shape[1]} colonnes\n"
-            f"colonnes (nom : type) :\n{colonnes}\n"
-            f"{n_lignes} premieres lignes (CSV) :\n{exemple}")
+    """L'aperçu CAVIARDÉ envoyé au modèle (C2) — aucune valeur du fichier.
+
+    ⚠️ `n_lignes` N'INFLUENCE PLUS CE QUI SORT, et c'est le sens du lot : le
+    paramètre commandait autrefois le nombre de VRAIES lignes envoyées ; il
+    n'en part aucune. Il reste dans la signature parce qu'il appartient à
+    l'API publique du module, et un test verrouille son absence d'effet.
+    """
+    del n_lignes                            # conservé pour l'API, sans effet
+    return apercu_caviarde.apercu(df)
 
 
 def _prompt_systeme_roles() -> str:

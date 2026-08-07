@@ -1,7 +1,8 @@
 """
 core/mapping_llm.py — PROPOSITION LLM DE MAPPING CLIENT (Phase 5, couche LLM).
 
-Claude LIT les colonnes du fichier client + quelques lignes d'exemple + les
+Claude LIT un apercu CAVIARDE du fichier client (noms de colonnes, types,
+forme des valeurs -- jamais les valeurs, cf. core.apercu_caviarde) + les
 colonnes ATTENDUES par le plan, et PROPOSE un MappingClient (les correspondances
 de noms). Claude ne propose JAMAIS le plan : le sens des colonnes reste porté par
 le plan signé. La proposition est un ACCÉLÉRATEUR — le mapping manuel
@@ -32,6 +33,7 @@ from core.derivations import sources_brutes
 from core.mapping_client import MappingClient, valider_mapping
 from core.plan_tarifaire import PlanTarifaire
 from core import frontiere_llm
+from core import apercu_caviarde
 
 __all__ = ["proposer_mapping", "MappingLLMIndisponible"]
 
@@ -93,15 +95,13 @@ def _prompt_systeme() -> str:
 
 def _prompt_utilisateur(df: pd.DataFrame, plan: PlanTarifaire,
                         n_lignes_exemple: int) -> str:
-    cols_client = "\n".join(f"- {c} : {df[c].dtype}" for c in df.columns)
-    exemple = df.head(n_lignes_exemple).to_csv(index=False).strip()
+    del n_lignes_exemple                    # conservé pour l'API, sans effet
     roles = _roles_attendus(plan)
     attendues = "\n".join(
         f"- {c} : {roles.get(c, 'facteur')}" for c in plan.colonnes_attendues())
     return (
-        f"COLONNES DU FICHIER CLIENT (nom : type pandas) :\n{cols_client}\n\n"
-        f"{n_lignes_exemple} LIGNES D'EXEMPLE DU FICHIER CLIENT (CSV) :\n"
-        f"{exemple}\n\n"
+        f"FICHIER CLIENT (apercu CAVIARDE — aucune valeur transmise) :\n"
+        f"{apercu_caviarde.apercu(df)}\n\n"
         f"COLONNES ATTENDUES PAR LE PLAN '{plan.lob}' (nom : role) :\n"
         f"{attendues}\n\n"
         "Reponds par le seul objet JSON des correspondances "
@@ -163,8 +163,8 @@ def proposer_mapping(
     n_lignes_exemple: int = 5,
     temperature: float = _TEMPERATURE_DEFAUT,
 ) -> MappingClient:
-    """Claude Sonnet lit les colonnes du client + n lignes d'exemple + les
-    colonnes attendues par le plan, et propose un MappingClient.
+    """Claude Sonnet lit un apercu CAVIARDE du client (aucune valeur du fichier
+    ne sort) + les colonnes attendues par le plan, et propose un MappingClient.
 
     Le résultat passe par valider_mapping() avant d'être rendu : une cible
     inconnue du plan (ou une collision) lève MappingIncoherent — même garde-fou
