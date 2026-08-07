@@ -324,6 +324,38 @@ def _controler_22(ligne: Mapping, convention: ConventionCohorte,
 #  LA DÉRIVATION
 # =============================================================================
 
+def cle_de_ligne(ligne: Mapping, convention: ConventionCohorte,
+                 rang: int = 1) -> CleGroupe:
+    """La clé de groupe d'UNE ligne d'inventaire. Lève si elle n'en a pas.
+
+    Existe pour que le rattachement ligne → groupe ait UNE seule définition :
+    `deriver` l'emploie pour agréger, le registre pour tracer l'appartenance.
+    Sans elle, la règle de classe par défaut vivrait en deux exemplaires — le
+    motif que ce dépôt combat depuis les huit sources de taux.
+    """
+    portefeuille = str(ligne.get('portefeuille') or '').strip()
+    if not portefeuille:
+        raise RefusGroupe(
+            MOTIF_SANS_PORTEFEUILLE,
+            f"Ligne {rang} : aucun portefeuille. §14 demande de regrouper "
+            f"les contrats à risques similaires, gérés ensemble.")
+    emission = _lire_date(ligne.get('date_emission'))
+    if emission is None:
+        raise RefusGroupe(
+            MOTIF_SANS_EMISSION,
+            f"Ligne {rang} : date d'émission illisible « "
+            f"{ligne.get('date_emission')} ». Sans elle, aucune cohorte "
+            f"(§22).")
+    classe = str(ligne.get('classe_profitabilite') or '').strip() \
+        or CLASSE_PAR_DEFAUT
+    return CleGroupe(portefeuille, classe, cohorte(convention, emission))
+
+
+def date_emission_de_ligne(ligne: Mapping) -> Optional[date]:
+    """La date d'émission d'une ligne, lue avec les formats du socle."""
+    return _lire_date(ligne.get('date_emission'))
+
+
 def deriver(lignes: Iterable[Mapping], *,
             convention: ConventionCohorte = CONVENTION_CALENDAIRE,
             critere_16b_declare: bool = False) -> Tuple[Groupe, ...]:
@@ -336,32 +368,16 @@ def deriver(lignes: Iterable[Mapping], *,
     traces_par_cle: Dict[CleGroupe, set] = {}
 
     for rang, ligne in enumerate(lignes, 1):
-        portefeuille = str(ligne.get('portefeuille') or '').strip()
-        if not portefeuille:
-            raise RefusGroupe(
-                MOTIF_SANS_PORTEFEUILLE,
-                f"Ligne {rang} : aucun portefeuille. §14 demande de regrouper "
-                f"les contrats à risques similaires, gérés ensemble.")
-        emission = _lire_date(ligne.get('date_emission'))
-        if emission is None:
-            raise RefusGroupe(
-                MOTIF_SANS_EMISSION,
-                f"Ligne {rang} : date d'émission illisible « "
-                f"{ligne.get('date_emission')} ». Sans elle, aucune cohorte "
-                f"(§22).")
+        cle = cle_de_ligne(ligne, convention, rang)
 
         traces = set()
-        agrege = ligne.get('nb_contrats') is not None
-        if agrege:
+        if ligne.get('nb_contrats') is not None:
             trace = _controler_22(ligne, convention, rang)
             if trace:
                 traces.add(trace)
-        classe = str(ligne.get('classe_profitabilite') or '').strip() \
-            or CLASSE_PAR_DEFAUT
-        if not critere_16b_declare and classe == CLASSE_PAR_DEFAUT:
+        if not critere_16b_declare and cle.classe_16 == CLASSE_PAR_DEFAUT:
             traces.add(TRACE_16B_NON_DECLARE)
 
-        cle = CleGroupe(portefeuille, classe, cohorte(convention, emission))
         par_cle.setdefault(cle, []).append(ligne)
         traces_par_cle.setdefault(cle, set()).update(traces)
 
