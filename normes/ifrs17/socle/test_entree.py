@@ -9,6 +9,7 @@ from datetime import date
 from normes.ifrs17.socle.entree import (
     CREE, EFFETS, REJOINT, Entree, analyser, resume_entrees,
     trace_reconnaissance_tardive)
+from normes.ifrs17.socle.confirmation import Confirmation
 from normes.ifrs17.socle.groupe import (
     CONVENTION_CALENDAIRE, CleGroupe, convention_exercice)
 from normes.ifrs17.socle.registre import ajouter, ouvrir
@@ -20,6 +21,11 @@ def _ligne(ident='P-001', emission='2026-03-15', **kw):
             'fin_couverture': '2027-03-14'}
     base.update(kw)
     return base
+
+
+def _conf(arrete):
+    """Une confirmation signee — le scellement exige un signataire (U1d)."""
+    return Confirmation('Actuaire Test', arrete, ())
 
 
 class T1_LesDeuxSeulsEffets(unittest.TestCase):
@@ -68,8 +74,10 @@ class T2_LaFenetreFermeeNExistePas(unittest.TestCase):
     def test_la_cle_reste_unique(self):
         """Deux groupes de meme cle briseraient l'identite du groupe (§24)."""
         r = ajouter(ouvrir('CLI', 'ENT'),
-                    [_ligne('P-001', '2024-05-10')], '2024-12-31')
-        r = ajouter(r, [_ligne('P-002', '2024-11-20')], '2027-06-30')
+                    [_ligne('P-001', '2024-05-10')], '2024-12-31',
+                    _conf('2024-12-31'))
+        r = ajouter(r, [_ligne('P-002', '2024-11-20')], '2027-06-30',
+                    _conf('2027-06-30'))
         cles = [g.cle for g in r.groupes]
         self.assertEqual(len(cles), len(set(cles)))
         self.assertEqual(len(r.groupes), 1)
@@ -79,7 +87,8 @@ class T2_LaFenetreFermeeNExistePas(unittest.TestCase):
 
     def test_un_contrat_ancien_n_est_jamais_refuse(self):
         r = ajouter(ouvrir('CLI', 'ENT'),
-                    [_ligne('P-001', '2021-02-01')], '2027-06-30')
+                    [_ligne('P-001', '2021-02-01')], '2027-06-30',
+                    _conf('2027-06-30'))
         self.assertEqual(len(r.groupes), 1)
         self.assertEqual(r.groupes[0].cle.cohorte, '2021')
         print("    OK T2c : un contrat de 2021 declare en 2027 entre, "
@@ -147,7 +156,8 @@ class T4_LaTraceNommeSansBloquer(unittest.TestCase):
 
     def test_le_registre_porte_la_trace_sur_le_groupe(self):
         r = ajouter(ouvrir('CLI', 'ENT'),
-                    [_ligne('P-001', '2024-05-10')], '2027-06-30')
+                    [_ligne('P-001', '2024-05-10')], '2027-06-30',
+                    _conf('2027-06-30'))
         self.assertTrue(any('reconnaissance tardive' in t
                             for t in r.groupes[0].traces))
         print("    OK T4b : la trace remonte jusqu'au groupe enregistre")

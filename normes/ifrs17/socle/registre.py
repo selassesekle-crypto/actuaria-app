@@ -65,6 +65,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, NamedTuple, Optional, Tuple
 
 from normes.ifrs17.socle.arrete import Arrete, iso, lire as lire_arrete
+from normes.ifrs17.socle.confirmation import Confirmation, verifier
 from normes.ifrs17.socle.entree import (analyser,
                                         trace_reconnaissance_tardive)
 from normes.ifrs17.socle.groupe import (
@@ -105,11 +106,17 @@ class GroupeEnregistre(NamedTuple):
 
 
 class Registre(NamedTuple):
-    """Le registre d'une entité. Immuable : `ajouter` en rend un nouveau."""
-    client:     str
-    entite:     str
-    convention: ConventionCohorte
-    groupes:    Tuple[GroupeEnregistre, ...]
+    """Le registre d'une entité. Immuable : `ajouter` en rend un nouveau.
+
+    ⚠️ `confirmations` est une SUITE, append-only : une confirmation ne se
+    corrige pas, on en ajoute une. Le registre répond donc à « qui a scellé
+    quoi, et quand » pour CHAQUE versement, pas seulement pour le premier.
+    """
+    client:        str
+    entite:        str
+    convention:    ConventionCohorte
+    groupes:       Tuple[GroupeEnregistre, ...]
+    confirmations: Tuple[Confirmation, ...] = ()
 
 
 class RefusRegistre(Exception):
@@ -142,6 +149,7 @@ def ouvrir(client: str, entite: str,
 
 
 def ajouter(registre: Registre, lignes: Iterable[Mapping], arrete,
+            confirmation: Optional[Confirmation] = None,
             *, critere_16b_declare: bool = False) -> Registre:
     """Verse un inventaire dans le registre et rend un NOUVEAU registre.
 
@@ -149,10 +157,16 @@ def ajouter(registre: Registre, lignes: Iterable[Mapping], arrete,
     `modifier`, ni `supprimer`, ni `reclasser` : le geste est impossible
     parce que la fonction n'existe pas.
 
+    ⚠️ ET C'EST L'ACTE QUI SCELLE, donc celui qui exige une signature. La
+    lecture (`lecture_inventaire`) et la dérivation (`groupe`) restent
+    accessibles sans confirmation : un client dépose, voit son diagnostic et
+    ses groupes, et ne signe qu'au moment où l'irréversible commence.
+
     La convention employée est celle DU REGISTRE, jamais celle de l'appelant.
     """
     arr = arrete if isinstance(arrete, Arrete) else lire_arrete(arrete)
     quand = iso(arr)
+    verifier(confirmation, quand)
     lignes = list(lignes)
 
     derives = deriver(lignes, convention=registre.convention,
@@ -187,7 +201,8 @@ def ajouter(registre: Registre, lignes: Iterable[Mapping], arrete,
 
     fusionnes.extend(existants.values())
     return registre._replace(
-        groupes=tuple(sorted(fusionnes, key=lambda g: g.cle)))
+        groupes=tuple(sorted(fusionnes, key=lambda g: g.cle)),
+        confirmations=registre.confirmations + (confirmation,))
 
 
 def _traces(base: Tuple[str, ...], membres: Tuple[Membre, ...],
@@ -318,6 +333,11 @@ def _en_dict(registre: Registre) -> Dict:
             'mois_debut': registre.convention.mois_debut,
             'libelle': registre.convention.libelle,
         },
+        'confirmations': [
+            {'actuaire_resp': c.actuaire_resp, 'arrete': c.arrete,
+             'correspondances': [list(x) for x in c.correspondances]}
+            for c in registre.confirmations
+        ],
         'groupes': [
             {
                 'portefeuille': g.cle.portefeuille,
@@ -367,6 +387,10 @@ def relire(chemin) -> Registre:
         client=brut['client'], entite=brut['entite'],
         convention=ConventionCohorte(int(conv['mois_debut']),
                                      conv['libelle']),
+        confirmations=tuple(
+            Confirmation(c['actuaire_resp'], c['arrete'],
+                         tuple(tuple(x) for x in c['correspondances']))
+            for c in brut.get('confirmations', ())),
         groupes=tuple(
             GroupeEnregistre(
                 cle=CleGroupe(g['portefeuille'], g['classe_16'],
@@ -388,9 +412,13 @@ def resume(registre: Registre) -> str:
     """Ce que le registre contient, dit à un actuaire."""
     total = sum(g.nb_lignes for g in registre.groupes)
     suivis = sum(len(g.membres) for g in registre.groupes)
+    dernier = registre.confirmations[-1] if registre.confirmations else None
     lignes = [
         f"REGISTRE — {registre.client} / {registre.entite}",
         f"  convention de cohorte : {registre.convention.libelle} (§22)",
+        f"  {len(registre.confirmations)} confirmation(s), la dernière par "
+        f"{dernier.actuaire_resp} au {dernier.arrete}"
+        if dernier else "  aucune confirmation",
         f"  {len(registre.groupes)} groupe(s), {total} ligne(s), "
         f"{suivis} contrat(s) suivi(s) nominativement",
         "",

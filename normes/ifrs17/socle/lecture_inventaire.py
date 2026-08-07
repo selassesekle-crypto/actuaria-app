@@ -184,9 +184,17 @@ class RapportInventaire(NamedTuple):
 
     @property
     def a_confirmer(self) -> Tuple[Correspondance, ...]:
-        """Les champs scellés — voir la note D2b en tête de module."""
+        """Les correspondances qui exigent une signature avant scellement.
+
+        ⚠️ LES CHAMPS SCELLÉS RECONNUS PAR LEUR NOM CANONIQUE EN SONT EXCLUS.
+        Une colonne nommée `date_emission` n'a rien fait deviner : il n'y a
+        rien à attester. C'est la seule définition de ce qui doit être
+        confirmé — `confirmation.a_confirmer` s'y rapporte plutôt que d'en
+        tenir une seconde, qui dériverait un jour.
+        """
         scelles = set(champs_scelles())
-        return tuple(c for c in self.correspondances if c.champ in scelles)
+        return tuple(c for c in self.correspondances
+                     if c.champ in scelles and c.par != PAR_NOM_CANONIQUE)
 
 
 # =============================================================================
