@@ -207,11 +207,12 @@ STRUCTURE OBLIGATOIRE EN 7 SECTIONS :
 # CONTEXTE CLAUDE API
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _construire_contexte_prev(m1: Dict, m3: Dict, entite: str, date_arrete: str) -> str:
+def _construire_contexte_prev(m1: Dict, m3: Dict, date_arrete: str) -> str:
     hyp = m3.get("hypotheses_consolidees", [])
 
     lines = [
-        f"DOSSIER PRÉVOYANCE — {entite.upper()} — Arrêté {date_arrete}",
+        f"DOSSIER PRÉVOYANCE — Arrêté {date_arrete}",
+        "(Identité de l'organisme non transmise : ne jamais la nommer ni l'inventer.)",
         "",
         "=== PORTEFEUILLE ===",
         f"Assurés : {m1.get('nb_assures', '—'):,}",
@@ -284,9 +285,9 @@ def _construire_contexte_prev(m1: Dict, m3: Dict, entite: str, date_arrete: str)
 # NARRATION CLAUDE API (3 niveaux)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _narration_claude_api(m1: Dict, m3: Dict, entite: str, date_arrete: str) -> str:
+def _narration_claude_api(m1: Dict, m3: Dict, date_arrete: str) -> str:
     try:
-        ctx = _construire_contexte_prev(m1, m3, entite, date_arrete)
+        ctx = _construire_contexte_prev(m1, m3, date_arrete)
         resp = frontiere_llm.appeler(
             modele=frontiere_llm.MODELE_ETABLI,
             max_tokens=10000,
@@ -302,9 +303,9 @@ def _narration_claude_api(m1: Dict, m3: Dict, entite: str, date_arrete: str) -> 
 def _narration_fallback(m3: Dict, commentaire: str) -> str:
     return _clean(commentaire) or _clean(m3.get("commentaire_consolide", ""))
 
-def _generer_narration(m1, m3, entite, date_arrete, commentaire) -> Tuple[str, str]:
+def _generer_narration(m1, m3, date_arrete, commentaire) -> Tuple[str, str]:
     try:
-        txt = _narration_claude_api(m1, m3, entite, date_arrete)
+        txt = _narration_claude_api(m1, m3, date_arrete)
         if txt:
             return txt, "claude_api"
     except Exception:
@@ -1268,7 +1269,7 @@ class AgentRapportPrevoyance:
             # ── M5 : Livrables ───────────────────────────────────────────────
             commentaire = self._commentaire(rag, m3, m4, entite, date_arrete)
             narration, src_narration = _generer_narration(
-                m1, m3, entite, date_arrete, commentaire
+                m1, m3, date_arrete, commentaire
             )
             html_bytes  = _export_html_prev(m1, m3, m4, narration, src_narration, entite, date_arrete)
             pdf_bytes   = _export_pdf_prev(html_bytes)

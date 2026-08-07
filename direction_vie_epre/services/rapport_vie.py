@@ -291,7 +291,7 @@ def _construire_contexte_vie(
     result_v3, result_v5, result_v7, result_v8, result_v9,
     result_v6, result_rvie1, result_rvie2,
     result_ep1, result_ep3, result_ep4, result_ep6, result_ep7,
-    ref_client, arrete,
+    arrete,
 ) -> str:
     r3=result_v3 or {}; r5=result_v5 or {}; r6=result_v6 or {}
     r7=result_v7 or {}; r8=result_v8 or {}; r9=result_v9 or {}
@@ -316,7 +316,8 @@ def _construire_contexte_vie(
     dom_mod = max(scr_mod, key=lambda k: float(scr_mod[k] or 0)) if scr_mod else "non disponible"
 
     lignes = [
-        f"RAPPORT CONSOLIDE VIE & EP-RE -- {ref_client.upper()} -- Arrete {arrete}",
+        f"RAPPORT CONSOLIDE VIE & EP-RE -- Arrete {arrete}",
+        "(Identite de l'organisme non transmise : ne jamais la nommer ni l'inventer.)",
         f"Date generation : {datetime.now().strftime('%d/%m/%Y')}",
         "",
         "=== VIE PURE -- PROVISIONS ===",
@@ -553,7 +554,7 @@ def export_html(
 
         # Narration
         contexte = _construire_contexte_vie(
-            r3,r5,r7,r8,r9,r6,rr1,rr2,ep1,ep3,ep4,ep6,ep7,cli,arr)
+            r3,r5,r7,r8,r9,r6,rr1,rr2,ep1,ep3,ep4,ep6,ep7,arr)
         narration, source = _generer_narration_vie(contexte, commentaire)
 
         # SCR modules
@@ -839,7 +840,7 @@ def export_word(
         csm   = float(r8.get("csm",0) or 0)
 
         contexte = _construire_contexte_vie(
-            r3,r5,r7,r8,r9,r6,rr1,{},ep1,ep3,ep4,ep6,ep7,cli,arr)
+            r3,r5,r7,r8,r9,r6,rr1,{},ep1,ep3,ep4,ep6,ep7,arr)
         narration, source = _generer_narration_vie(contexte, commentaire)
 
         doc = Document()

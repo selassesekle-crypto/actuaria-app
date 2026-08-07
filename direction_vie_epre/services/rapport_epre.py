@@ -301,7 +301,7 @@ def _md_to_html(texte: str) -> str:
 def _construire_contexte_epre(
     result_ep1, result_ep2, result_ep3, result_ep4,
     result_ep6, result_ep7,
-    ref_client, arrete,
+    arrete,
 ) -> str:
     """Contexte structuré EP-RE transmis à Claude."""
     ep1=result_ep1 or {}; ep2=result_ep2 or {}; ep3=result_ep3 or {}
@@ -332,7 +332,8 @@ def _construire_contexte_epre(
     t_remp = float(tar.get("taux_remplacement_pct", 0) or 0)
 
     lignes = [
-        f"RAPPORT CONSOLIDE EP-RE -- {ref_client.upper()} -- Arrete {arrete}",
+        f"RAPPORT CONSOLIDE EP-RE -- Arrete {arrete}",
+        "(Identite de l'organisme non transmise : ne jamais la nommer ni l'inventer.)",
         f"Date generation : {datetime.now().strftime('%d/%m/%Y')}",
         "",
         "=== ENGAGEMENTS IAS 19 ===",
@@ -522,7 +523,7 @@ def export_html(
 
         # Narration
         contexte = _construire_contexte_epre(
-            ep1,ep2,ep3,ep4,ep6,ep7,cli,arr)
+            ep1,ep2,ep3,ep4,ep6,ep7,arr)
         narration, source = _generer_narration_epre(contexte, commentaire)
 
         # KPI page de garde
@@ -764,7 +765,7 @@ def export_word(
         avis  = ep4.get("avis_pa", ep3.get("avis_pa", "FAVORABLE AVEC RESERVE"))
         ecarts= ep6.get("ecarts", {}) or {}
 
-        contexte = _construire_contexte_epre(ep1,ep2,ep3,ep4,ep6,ep7,cli,arr)
+        contexte = _construire_contexte_epre(ep1,ep2,ep3,ep4,ep6,ep7,arr)
         narration, source = _generer_narration_epre(contexte, commentaire)
 
         doc = Document()
