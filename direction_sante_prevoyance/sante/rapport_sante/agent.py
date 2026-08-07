@@ -44,12 +44,13 @@ import hashlib
 import io
 import json
 import logging
-import os
 import re
 import warnings
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional, Tuple
+
+from core import frontiere_llm
 
 import numpy as np
 
@@ -272,25 +273,15 @@ def _construire_contexte_sante(m1: Dict, m3: Dict, entite: str, date_arrete: str
 
 def _narration_claude_api(m1: Dict, m3: Dict, entite: str, date_arrete: str) -> str:
     try:
-        import anthropic
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
-        if not api_key:
-            try:
-                import streamlit as st
-                api_key = st.secrets.get("ANTHROPIC_API_KEY")
-            except Exception:
-                pass
-        if not api_key:
-            raise ValueError("ANTHROPIC_API_KEY non définie")
-        client = anthropic.Anthropic(api_key=api_key)
         ctx = _construire_contexte_sante(m1, m3, entite, date_arrete)
-        resp = client.messages.create(
-            model="claude-sonnet-4-6",
+        resp = frontiere_llm.appeler(
+            modele=frontiere_llm.MODELE_ETABLI,
             max_tokens=10000,
-            system=SYSTEM_PROMPT_SANTE,
+            systeme=SYSTEM_PROMPT_SANTE,
             messages=[{"role": "user", "content": ctx}],
+            cle=frontiere_llm.cle_api_ou_secrets(),
         )
-        return resp.content[0].text
+        return frontiere_llm.texte_du_premier_bloc(resp)
     except Exception as e:
         logging.getLogger("actuaria.sp.rapport_sante").warning(f"Claude API : {e}")
         raise

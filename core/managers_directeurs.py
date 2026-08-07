@@ -11,6 +11,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from core import frontiere_llm
+
 logging.basicConfig(level=logging.INFO,
     format="%(asctime)s | actuaria.mgr | %(levelname)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S")
@@ -570,20 +572,19 @@ class AgentChatbot:
             }
 
         try:
-            client = anthropic.Anthropic(api_key=api_key)
-
             # Ajouter le message à l'historique
             self.historique.append({"role": "user", "content": message})
 
-            # Appel API
-            response = client.messages.create(
-                model      = "claude-sonnet-4-6",
+            # Appel API — par la frontière unique (C1)
+            response = frontiere_llm.appeler(
+                modele     = frontiere_llm.MODELE_ETABLI,
                 max_tokens = max_tokens,
-                system     = self.system_prompt,
+                systeme    = self.system_prompt,
                 messages   = self.historique,
+                cle        = api_key,
             )
 
-            reponse_txt = response.content[0].text
+            reponse_txt = frontiere_llm.texte_du_premier_bloc(response)
 
             # Ajouter la réponse à l'historique
             self.historique.append({"role": "assistant", "content": reponse_txt})

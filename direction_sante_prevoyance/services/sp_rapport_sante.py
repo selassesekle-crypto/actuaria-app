@@ -11,9 +11,11 @@
 # =============================================================================
 
 from __future__ import annotations
-import base64, io, logging, os, re
+import base64, io, logging, re
 from datetime import datetime
 from typing import Dict, Optional
+
+from core import frontiere_llm
 
 import numpy as np
 
@@ -187,24 +189,14 @@ def _construire_contexte(s1, s2, s3, reg2, reg3, arrete):
 
 def _narration_claude_api(contexte):
     try:
-        import anthropic
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
-        if not api_key:
-            try:
-                import streamlit as st
-                api_key = st.secrets.get("ANTHROPIC_API_KEY")
-            except Exception:
-                pass
-        if not api_key:
-            raise ValueError("ANTHROPIC_API_KEY non définie")
-        client = anthropic.Anthropic(api_key=api_key)
-        resp = client.messages.create(
-            model="claude-sonnet-4-6",
+        resp = frontiere_llm.appeler(
+            modele=frontiere_llm.MODELE_ETABLI,
             max_tokens=10000,
-            system=SYSTEM_PROMPT_SANTE,
+            systeme=SYSTEM_PROMPT_SANTE,
             messages=[{"role": "user", "content": contexte}],
+            cle=frontiere_llm.cle_api_ou_secrets(),
         )
-        return resp.content[0].text
+        return frontiere_llm.texte_du_premier_bloc(resp)
     except Exception as e:
         logger.warning(f"Claude API Santé indisponible : {e}")
         raise

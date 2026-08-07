@@ -9,6 +9,8 @@ import numpy as np
 from datetime import datetime
 import anthropic
 
+from core import frontiere_llm
+
 st.set_page_config(
     page_title="ActuarIA — Plateforme Actuarielle IA",
     page_icon="⚡",
@@ -461,10 +463,9 @@ def appeler_claude(messages, system_prompt):
         api_key = st.secrets.get("ANTHROPIC_API_KEY", os.environ.get("ANTHROPIC_API_KEY", ""))
         if not api_key:
             return "⚠️ Clé API Anthropic non configurée. Ajoutez ANTHROPIC_API_KEY dans les variables d'environnement Render."
-        client = anthropic.Anthropic(api_key=api_key)
         msgs = [{"role":m["role"],"content":m["content"]} for m in messages if m["role"] in ["user","assistant"]]
-        r = client.messages.create(model="claude-sonnet-4-6", max_tokens=1024, messages=msgs, system=system_prompt)
-        return r.content[0].text
+        r = frontiere_llm.appeler(modele=frontiere_llm.MODELE_ETABLI, max_tokens=1024, messages=msgs, systeme=system_prompt, cle=api_key)
+        return frontiere_llm.texte_du_premier_bloc(r)
     except anthropic.AuthenticationError:
         return "❌ Clé API invalide."
     except anthropic.RateLimitError:

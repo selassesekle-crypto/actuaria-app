@@ -21,9 +21,11 @@ Produit :
 Niveau : équivalent rapport A7 Non-Vie.
 """
 
-import io, os, re, logging, base64
+import io, re, logging, base64
 from datetime import datetime
 from typing import Dict, Optional, Tuple
+
+from core import frontiere_llm
 
 logger = logging.getLogger("actuaria.rapport_epre")
 
@@ -387,24 +389,14 @@ def _construire_contexte_epre(
 
 
 def _narration_claude_api_epre(contexte: str) -> str:
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        try:
-            import streamlit as st
-            api_key = st.secrets.get("ANTHROPIC_API_KEY")
-        except Exception:
-            pass
-    if not api_key:
-        raise ValueError("ANTHROPIC_API_KEY non definie")
-    import anthropic
-    client = anthropic.Anthropic(api_key=api_key)
-    resp = client.messages.create(
-        model="claude-sonnet-4-6",
+    resp = frontiere_llm.appeler(
+        modele=frontiere_llm.MODELE_ETABLI,
         max_tokens=12000,
-        system=SYSTEM_PROMPT_EPRE,
+        systeme=SYSTEM_PROMPT_EPRE,
         messages=[{"role": "user", "content": contexte}],
+        cle=frontiere_llm.cle_api_ou_secrets(),
     )
-    return resp.content[0].text
+    return frontiere_llm.texte_du_premier_bloc(resp)
 
 
 def _generer_narration_epre(contexte: str, commentaire: str) -> Tuple[str, str]:

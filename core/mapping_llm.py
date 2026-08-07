@@ -24,7 +24,6 @@ AUTEUR : ActuarIA
 from __future__ import annotations
 
 import json
-import os
 from typing import Dict
 
 import pandas as pd
@@ -32,6 +31,7 @@ import pandas as pd
 from core.derivations import sources_brutes
 from core.mapping_client import MappingClient, valider_mapping
 from core.plan_tarifaire import PlanTarifaire
+from core import frontiere_llm
 
 __all__ = ["proposer_mapping", "MappingLLMIndisponible"]
 
@@ -40,7 +40,7 @@ __all__ = ["proposer_mapping", "MappingLLMIndisponible"]
 # CLAUDE_TEMPERATURE_TARIF). Rapatriés ici en constantes LOCALES : core ne doit
 # pas dépendre d'un service (ce serait inverser la dépendance). temperature=0 :
 # reproductibilité (statistique) recherchée — même rationale S2 que le service.
-_MODELE_CLAUDE = "claude-sonnet-5"
+_MODELE_CLAUDE = frontiere_llm.MODELE_RECENT
 _TEMPERATURE_DEFAUT = 0.0
 _MAX_TOKENS = 2000
 
@@ -113,26 +113,22 @@ def _prompt_utilisateur(df: pd.DataFrame, plan: PlanTarifaire,
 def _appeler_claude(systeme: str, utilisateur: str, *, temperature: float) -> str:
     """Appelle Claude et rend le TEXTE brut de la réponse. Toute défaillance
     (paquet absent, clé absente, réseau, HTTP) → MappingLLMIndisponible."""
+    try:                        # clé absente : dégradation propre
+        api_key = frontiere_llm.cle_api()
+    except frontiere_llm.FrontiereLLMIndisponible as e:
+        raise MappingLLMIndisponible(f"{e} — {_MSG_MANUEL}") from e
     try:
-        import anthropic
-    except Exception as e:      # paquet absent : dégradation propre
-        raise MappingLLMIndisponible(
-            f"paquet 'anthropic' indisponible ({e}) — {_MSG_MANUEL}") from e
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise MappingLLMIndisponible(
-            f"ANTHROPIC_API_KEY non definie — {_MSG_MANUEL}")
-    try:
-        client = anthropic.Anthropic(api_key=api_key)
-        resp = client.messages.create(
-            model=_MODELE_CLAUDE, max_tokens=_MAX_TOKENS, temperature=temperature,
-            system=systeme, messages=[{"role": "user", "content": utilisateur}],
+        resp = frontiere_llm.appeler(
+            modele=_MODELE_CLAUDE, max_tokens=_MAX_TOKENS,
+            temperature=temperature,
+            systeme=systeme,
+            messages=[{"role": "user", "content": utilisateur}],
+            cle=api_key,
         )
-        return "".join(
-            b.text for b in resp.content if getattr(b, "type", None) == "text")
+        return frontiere_llm.texte_des_blocs(resp)
     except MappingLLMIndisponible:
         raise
-    except Exception as e:      # réseau, HTTP, 4xx/5xx : dégradation propre
+    except Exception as e:      # paquet absent, réseau, HTTP : dégradation propre
         raise MappingLLMIndisponible(
             f"service de proposition indisponible ({e}) — {_MSG_MANUEL}") from e
 

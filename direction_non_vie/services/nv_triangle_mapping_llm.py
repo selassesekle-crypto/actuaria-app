@@ -44,7 +44,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Mapping, Tuple
 
@@ -53,6 +52,7 @@ import pandas as pd
 from direction_non_vie.services.nv_triangle_mapping import (
     CHAMPS_PRIMES, CHAMPS_SINISTRES, TriangleSchema, valider_mapping_triangle,
 )
+from core import frontiere_llm
 
 logger = logging.getLogger('actuaria.nv.mapping_llm')
 
@@ -63,7 +63,7 @@ __all__ = [
 
 # Modèle et température — même convention que le reste du projet. temperature=0 :
 # reproductibilité recherchée (une proposition doit être stable d'un run à l'autre).
-_MODELE_CLAUDE = 'claude-sonnet-5'
+_MODELE_CLAUDE = frontiere_llm.MODELE_RECENT
 _TEMPERATURE_DEFAUT = 0.0
 _MAX_TOKENS = 2000
 
@@ -229,28 +229,23 @@ def _appeler_claude(systeme: str, utilisateur: str, *, temperature: float) -> st
     """Appelle Claude et rend le TEXTE brut de la réponse.
 
     Toute défaillance (paquet absent, clé absente, réseau, HTTP) est convertie en
-    MappingTriangleLLMIndisponible avec un message actionnable. `anthropic` est
-    importé ICI, jamais au chargement du module.
+    MappingTriangleLLMIndisponible avec un message actionnable. La sortie elle-
+    même passe par `core.frontiere_llm` (C1) — seul point d'appel du dépôt.
     """
     try:
-        import anthropic
-    except Exception as e:
-        raise MappingTriangleLLMIndisponible(
-            f"paquet 'anthropic' indisponible ({e}) — {_MSG_MANUEL}") from e
-
-    api_key = os.environ.get('ANTHROPIC_API_KEY')
-    if not api_key:
-        raise MappingTriangleLLMIndisponible(
-            f"ANTHROPIC_API_KEY non definie — {_MSG_MANUEL}")
+        api_key = frontiere_llm.cle_api()
+    except frontiere_llm.FrontiereLLMIndisponible as e:
+        raise MappingTriangleLLMIndisponible(f"{e} — {_MSG_MANUEL}") from e
 
     try:
-        client = anthropic.Anthropic(api_key=api_key)
-        resp = client.messages.create(
-            model=_MODELE_CLAUDE, max_tokens=_MAX_TOKENS, temperature=temperature,
-            system=systeme, messages=[{'role': 'user', 'content': utilisateur}],
+        resp = frontiere_llm.appeler(
+            modele=_MODELE_CLAUDE, max_tokens=_MAX_TOKENS,
+            temperature=temperature,
+            systeme=systeme,
+            messages=[{'role': 'user', 'content': utilisateur}],
+            cle=api_key,
         )
-        return "".join(
-            b.text for b in resp.content if getattr(b, 'type', None) == 'text')
+        return frontiere_llm.texte_des_blocs(resp)
     except MappingTriangleLLMIndisponible:
         raise
     except Exception as e:

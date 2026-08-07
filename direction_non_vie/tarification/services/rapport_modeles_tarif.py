@@ -20,7 +20,7 @@ Version  : 1.0.0
 """
 
 from __future__ import annotations
-import base64, io, logging, os, re
+import base64, io, logging, re
 from core.conformite_reglementaire import (
     avertissement_walk_forward, synthese_exclusions, synthese_alertes_experience,
     synthese_modele_dl,
@@ -30,6 +30,8 @@ from core.plan_tarifaire import synthese_colonnes_plan_manquantes
 from core.mapping_client import synthese_mapping
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
+
+from core import frontiere_llm
 
 import numpy as np
 
@@ -273,7 +275,8 @@ def _construire_contexte_tarif(
 # cette reproductibilité est STATISTIQUE, pas garantie BIT-À-BIT.
 # `temperature=0` rend le tirage du prochain token déterministe (probabilité
 # maximale à chaque étape, pas d'échantillonnage aléatoire) et la version du
-# modèle est figée par une chaîne de caractères exacte ('claude-sonnet-5'),
+# modèle est figée par un identifiant exact, désormais nommé une seule fois
+# dans `core.frontiere_llm` (C1) au lieu d'être répété site par site,
 # mais l'inférence des grands modèles de langage n'offre pas de garantie
 # formelle de reproductibilité bit-exacte d'une exécution à l'autre :
 # des variations d'infrastructure côté fournisseur (répartition de charge
@@ -289,30 +292,22 @@ def _construire_contexte_tarif(
 # calcul déterministe au même titre que les modèles GLM/ML eux-mêmes
 # (qui, eux, sont reproductibles bit-à-bit sur la même version de
 # statsmodels/scikit-learn et les mêmes données).
-CLAUDE_MODEL_TARIF = 'claude-sonnet-5'
+# L'identifiant vient de la frontière (C1) ; ce nom reste parce que le pied
+# de page du rapport le cite au lecteur.
+CLAUDE_MODEL_TARIF = frontiere_llm.MODELE_RECENT
 CLAUDE_TEMPERATURE_TARIF = 0
 
 def _narration_claude(result_a3, result_a4, result_a6, branche, arrete) -> Tuple[str, str]:
     try:
-        import anthropic
-        api_key = os.environ.get('ANTHROPIC_API_KEY')
-        if not api_key:
-            try:
-                import streamlit as st
-                api_key = st.secrets.get('ANTHROPIC_API_KEY')
-            except Exception:
-                pass
-        if not api_key:
-            raise ValueError('ANTHROPIC_API_KEY non définie')
-        client = anthropic.Anthropic(api_key=api_key)
         ctx = _construire_contexte_tarif(result_a3, result_a4, result_a6, branche, arrete)
-        resp = client.messages.create(
-            model=CLAUDE_MODEL_TARIF, max_tokens=6000,
+        resp = frontiere_llm.appeler(
+            modele=CLAUDE_MODEL_TARIF, max_tokens=6000,
             temperature=CLAUDE_TEMPERATURE_TARIF,
-            system=SYSTEM_PROMPT_TARIF,
+            systeme=SYSTEM_PROMPT_TARIF,
             messages=[{'role': 'user', 'content': ctx}],
+            cle=frontiere_llm.cle_api_ou_secrets(),
         )
-        return resp.content[0].text, 'claude_api'
+        return frontiere_llm.texte_du_premier_bloc(resp), 'claude_api'
     except Exception as e:
         logger.warning(f'Claude API indisponible : {e}')
     # Fallback : commentaire agent

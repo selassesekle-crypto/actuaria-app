@@ -18,9 +18,11 @@
 # =============================================================================
 
 from __future__ import annotations
-import base64, io, logging, os, re
+import base64, io, logging, re
 from datetime import datetime
 from typing import Dict, List, Tuple
+
+from core import frontiere_llm
 import numpy as np
 
 # Source UNIQUE d'affichage des hypothèses de BF et Cape Cod : une hypothèse non
@@ -293,24 +295,14 @@ def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: s
 
 def _narration_claude_api(n2, n3, n4, lob_label, arrete) -> str:
     try:
-        import anthropic
-        api_key = os.environ.get('ANTHROPIC_API_KEY')
-        if not api_key:
-            try:
-                import streamlit as st
-                api_key = st.secrets.get('ANTHROPIC_API_KEY')
-            except Exception:
-                pass
-        if not api_key:
-            raise ValueError('ANTHROPIC_API_KEY non définie')
-        client = anthropic.Anthropic(api_key=api_key)
         ctx = _construire_contexte(n2, n3, n4, lob_label, arrete)
-        resp = client.messages.create(
-            model='claude-sonnet-4-6', max_tokens=10000,
-            system=SYSTEM_PROMPT,
+        resp = frontiere_llm.appeler(
+            modele=frontiere_llm.MODELE_ETABLI, max_tokens=10000,
+            systeme=SYSTEM_PROMPT,
             messages=[{'role': 'user', 'content': ctx}],
+            cle=frontiere_llm.cle_api_ou_secrets(),
         )
-        return resp.content[0].text
+        return frontiere_llm.texte_du_premier_bloc(resp)
     except Exception as e:
         logger.warning(f'Claude API indisponible : {e}')
         raise
