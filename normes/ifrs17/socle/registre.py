@@ -16,8 +16,13 @@ les groupes au moment de la comptabilisation initiale et AJOUTER des contrats
 aux groupes par application du §28. L'entité ne doit pas en REVOIR la
 composition par la suite. » Ce qui est interdit, c'est de sortir un contrat ou
 de le reclasser — pas au groupe de grossir. D'où un magasin **append-only** et
-non figé. (L'ajout au sens du §28, avec la révision du taux initial qu'il
-entraîne selon B73, est le lot U1c ; ce module pose le support.)
+non figé. Les effets de l'entrée d'un contrat vivent dans `entree.py` (§28) :
+il rejoint un groupe ou en crée un, jamais rien d'autre, et une entrée hors de
+sa période de reconnaissance est TRACÉE sans être bloquée. La révision du taux
+initial que §28 entraîne selon B73 n'est PAS construite : mesuré, son seul
+usage possible dans le périmètre publié est §56, qui s'exempte lui-même pour
+les contrats annuels — et elle exigerait un magasin de courbes indexé par
+date, que le socle n'a pas.
 
 ⚠️ LES TROIS INVARIANTS, ET C'EST LEUR MÉCANIQUE QUI COMPTE, PAS LEUR ÉNONCÉ.
 
@@ -60,6 +65,8 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, NamedTuple, Optional, Tuple
 
 from normes.ifrs17.socle.arrete import Arrete, iso, lire as lire_arrete
+from normes.ifrs17.socle.entree import (analyser,
+                                        trace_reconnaissance_tardive)
 from normes.ifrs17.socle.groupe import (
     CONVENTION_CALENDAIRE, CleGroupe, ConventionCohorte, cle_de_ligne,
     date_emission_de_ligne, deriver)
@@ -151,6 +158,7 @@ def ajouter(registre: Registre, lignes: Iterable[Mapping], arrete,
     derives = deriver(lignes, convention=registre.convention,
                       critere_16b_declare=critere_16b_declare)
     membres_par_cle = _membres_par_cle(lignes, registre.convention, quand)
+    tardives = _traces_entree(registre, lignes, arr)
 
     _refuser_si_reclassification(registre, membres_par_cle)
 
@@ -160,6 +168,8 @@ def ajouter(registre: Registre, lignes: Iterable[Mapping], arrete,
     for d in derives:
         nouveaux = membres_par_cle.get(d.cle, ())
         ancien = existants.pop(d.cle, None)
+        base = _traces(d.traces, nouveaux, d.nb_lignes) \
+            + tardives.get(d.cle, ())
         if ancien is None:
             fusionnes.append(GroupeEnregistre(
                 cle=d.cle,
@@ -171,9 +181,9 @@ def ajouter(registre: Registre, lignes: Iterable[Mapping], arrete,
                 arrete_creation=quand,
                 nb_lignes=d.nb_lignes,
                 membres=nouveaux,
-                traces=_traces(d.traces, nouveaux, d.nb_lignes)))
+                traces=tuple(sorted(set(base)))))
         else:
-            fusionnes.append(_absorber(ancien, d, nouveaux, quand))
+            fusionnes.append(_absorber(ancien, d, nouveaux, quand, base))
 
     fusionnes.extend(existants.values())
     return registre._replace(
@@ -189,8 +199,26 @@ def _traces(base: Tuple[str, ...], membres: Tuple[Membre, ...],
     return tuple(sorted(t))
 
 
+def _traces_entree(registre: Registre, lignes: List[Mapping],
+                   arr: Arrete) -> Dict[CleGroupe, Tuple[str, ...]]:
+    """Les traces de §28 : ce qui rejoint, ce qui crée, ce qui arrive tard.
+
+    ⚠️ Aucune de ces traces ne refuse quoi que ce soit. §28 autorise l'ajout
+    après la date de clôture ; ce qu'il situe dans une période, c'est le
+    MOMENT de l'ajout, et un écart relève d'IAS 8.
+    """
+    cles = {g.cle for g in registre.groupes}
+    par_cle: Dict[CleGroupe, set] = {}
+    for rang, ligne in enumerate(lignes, 1):
+        e = analyser(cles, ligne, registre.convention, arr.valeur, rang)
+        t = trace_reconnaissance_tardive(e)
+        if t:
+            par_cle.setdefault(e.cle, set()).add(t)
+    return {c: tuple(sorted(t)) for c, t in par_cle.items()}
+
+
 def _absorber(ancien: GroupeEnregistre, derive, nouveaux: Tuple[Membre, ...],
-              quand: str) -> GroupeEnregistre:
+              quand: str, base: Tuple[str, ...] = ()) -> GroupeEnregistre:
     """Ajoute des membres à un groupe existant SANS toucher à ses scellés.
 
     ⚠️ Le verdict §53 et la date §25 de l'ancien l'emportent — ils ont été
@@ -201,8 +229,7 @@ def _absorber(ancien: GroupeEnregistre, derive, nouveaux: Tuple[Membre, ...],
     frais = tuple(m for m in nouveaux if m.cle_contrat not in connus)
     deja = len(nouveaux) - len(frais)
 
-    traces = set(ancien.traces) | set(_traces(derive.traces, nouveaux,
-                                              derive.nb_lignes))
+    traces = set(ancien.traces) | set(base)
     if derive.eligibilite_paa != ancien.eligibilite_paa:
         traces.add(
             f"verdict §53 SCELLÉ à {ancien.eligibilite_paa} le "
