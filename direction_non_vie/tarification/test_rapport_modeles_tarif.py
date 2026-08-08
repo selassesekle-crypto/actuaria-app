@@ -135,5 +135,95 @@ class T1_UneSeuleNarration(unittest.TestCase):
         print('    OK T1e : export_html appelé seul calcule sa narration')
 
 
+class T2_LeContexteDeNarration(unittest.TestCase):
+    """T2 — le prompt ordonne « §4 — COMPARAISON DES MODÈLES ML ET SÉLECTION ».
+
+    ⚠️ MESURÉ SUR LE RAPPORT RÉEL PRODUIT AVANT CE LOT : le §4 citait
+    1 modèle sur 7, aucun contrôle de sélection, et pas une occurrence de
+    « comparaison » hors de son propre titre. `cl4` et `val6` étaient extraits
+    puis jetés — `ruff F841` les signalait depuis toujours.
+    """
+
+    CLASSEMENT = [
+        {'modele': 'GLM Poisson (référence A3)', 'famille': 'GLM',
+         'gini_test': 0.1775, 'rmse_test': 0.4504, 'overfit_ratio': 1.000},
+        {'modele': 'lightgbm', 'famille': 'Arbres / Boosting',
+         'gini_test': 0.1729, 'rmse_test': 0.4579, 'overfit_ratio': 2.757},
+        {'modele': 'xgboost_tweedie', 'famille': 'Arbres / Boosting',
+         'gini_test': 0.1120, 'rmse_test': 0.4629, 'overfit_ratio': 5.248},
+    ]
+    CONTROLES = {
+        'c1_nb_modeles': {'statut': 'VERT',
+                          'message': '7 modèles comparés ≥ 3 → robuste'},
+        'c2_ecart_gini': {'statut': 'VERT',
+                          'message': 'Écart Gini = 0.0655 ≥ 2%'},
+        'c3_coherence': {'statut': 'AMBRE',
+                         'message': 'GLM_POISSON rang #1'},
+    }
+
+    def _contexte(self, classement=None, controles=None):
+        a4 = {'classement': self.CLASSEMENT if classement is None else classement}
+        a6 = {'branche': 'auto',
+              'validation_selection': (self.CONTROLES if controles is None
+                                       else controles)}
+        return R._construire_contexte_tarif(A3, a4, a6, 'auto', '31/12/2025')
+
+    def test_les_modeles_compares_entrent_TOUS_dans_le_contexte(self):
+        ctx = self._contexte()
+        for modele in ('GLM Poisson (référence A3)', 'lightgbm',
+                       'xgboost_tweedie'):
+            self.assertIn(modele, ctx, modele)
+        self.assertIn('CLASSEMENT ML (3 modèle(s) comparé(s))', ctx)
+        print('    OK T2 : les 3 modèles comparés sont dans le contexte '
+              '(1 sur 7 avant ce lot)')
+
+    def test_les_indicateurs_qui_permettent_de_comparer_y_sont(self):
+        """⚠️ C'EST L'ÉCART D'OVERFIT QUI JUSTIFIE LE CHOIX : lightgbm est à
+        0,0046 de Gini du GLM, mais à 2,757 de surapprentissage contre 1,000.
+        Sans ces chiffres, la « comparaison » n'a rien à dire."""
+        ctx = self._contexte()
+        for valeur in ('Gini=0.1729', 'overfit=2.757', 'overfit=5.248',
+                       'RMSE=0.4504'):
+            self.assertIn(valeur, ctx, valeur)
+        print('    OK T2b : Gini, RMSE et surapprentissage de chaque modèle')
+
+    def test_les_trois_controles_de_selection_y_sont(self):
+        ctx = self._contexte()
+        self.assertIn('=== CONTRÔLES DE SÉLECTION ===', ctx)
+        for attendu in ('C1 — nombre de modèles comparés : VERT',
+                        'C2 — écart de Gini entre modèles : VERT',
+                        'C3 — cohérence du modèle retenu : AMBRE'):
+            self.assertIn(attendu, ctx, attendu)
+        print('    OK T2c : les 3 contrôles de sélection, avec leur statut')
+
+    def test_une_valeur_non_calculee_ne_vaut_pas_zero(self):
+        """⚠️ UN GINI À 0,0000 AFFIRMERAIT UN POUVOIR DISCRIMINANT NUL. Sur le
+        rapport réel, `score_global` est absent des sept entrées : il doit
+        sortir « — », jamais « 0.0000 »."""
+        ctx = self._contexte(classement=[{'modele': 'sans_metrique'}])
+        self.assertIn('Gini=— | RMSE=— | overfit=— | score=—', ctx)
+        self.assertNotIn('0.0000', ctx.split('CLASSEMENT ML')[1].split('===')[0])
+        print('    OK T2d : une métrique absente sort « — », pas « 0.0000 »')
+
+    def test_un_classement_vide_SE_DIT(self):
+        """L'absence se nomme — elle ne laisse pas une section muette."""
+        ctx = self._contexte(classement=[])
+        self.assertIn('aucun classement transmis', ctx)
+        ctx2 = self._contexte(controles={})
+        self.assertIn('non calculé', ctx2)
+        print('    OK T2e : un classement vide et un contrôle absent se disent')
+
+    def test_aucun_identifiant_n_est_reintroduit(self):
+        """⚠️ CE LOT AJOUTE DES DONNÉES AU CONTEXTE — le chantier C1-C3 vient
+        d'établir qu'aucun identifiant n'en sort. Noms d'algorithmes et
+        indicateurs, oui ; référence client ou entité, non."""
+        motif = re.compile(
+            r'entite|entité|ref_client|client_nom|societe|société|'
+            r'raison_sociale|siren|siret|numero_police|matricule', re.I)
+        fautives = [l for l in self._contexte().split('\n') if motif.search(l)]
+        self.assertEqual(fautives, [], '; '.join(fautives))
+        print('    OK T2f : aucun motif identifiant dans le contexte enrichi')
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

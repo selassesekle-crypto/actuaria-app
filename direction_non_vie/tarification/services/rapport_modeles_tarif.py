@@ -208,11 +208,49 @@ def _construire_contexte_tarif(
     _lignes_map6 = (["=== MAPPING CLIENT (renommage du fichier avant tarification) ===",
                      _synth_map6, ""] if _synth_map6 else [])
 
+    # ⚠️ LE CLASSEMENT ÉTAIT EXTRAIT PUIS JETÉ — `ruff F841` le signalait depuis
+    # toujours. Le prompt ordonne pourtant « §4 — COMPARAISON DES MODÈLES ML ET
+    # SÉLECTION », et sa règle 9 interdit « les phrases génériques sans
+    # données » : le modèle recevait UN modèle et devait en comparer sept.
+    # Mesuré sur le rapport réel produit avant ce lot : §4 citait 1 modèle sur
+    # 7, aucun contrôle de sélection, et pas une occurrence de « comparaison »
+    # hors de son propre titre. Il n'inventait pas — il remplissait la section
+    # avec autre chose, ce qui est le bon comportement face à un contexte vide.
+    lines += ["", f"=== CLASSEMENT ML ({len(cl4)} modèle(s) comparé(s)) ==="]
+    for rang, m in enumerate(cl4, 1):
+        # ⚠️ « NON CALCULÉ » NE VAUT PAS ZÉRO : un Gini à 0,0000 affirmerait un
+        # pouvoir discriminant nul. Même garde que le tableau du rapport.
+        def _n(cle, dec=4):
+            v = m.get(cle)
+            return f'{float(v):.{dec}f}' if isinstance(v, (int, float)) else '—'
+        lines.append(
+            f"{rang}. {m.get('modele','—')} | famille={m.get('famille','—')} | "
+            f"Gini={_n('gini_test')} | RMSE={_n('rmse_test')} | "
+            f"overfit={_n('overfit_ratio', 3)} | score={_n('score_global')}")
+    if not cl4:
+        lines.append("aucun classement transmis — la comparaison des modèles "
+                     "ne peut pas être commentée")
+
     lines += [
         "",
         "=== ML — MODÈLE RETENU ===",
         f"Modèle production : {prod.get('modele','—')} | Score={prod.get('score_global',0):.4f} | Gini={prod.get('gini_test',0):.4f}",
         f"Overfit ratio : {prod.get('overfit_ratio',0):.3f}",
+    ]
+
+    # ⚠️ LES TROIS CONTRÔLES DE SÉLECTION, EUX AUSSI EXTRAITS PUIS JETÉS. Ils
+    # disent si la comparaison était robuste, si les modèles se distinguaient,
+    # et si le choix est cohérent avec le classement. Sans eux, la SÉLECTION du
+    # titre de la section n'a rien derrière elle.
+    lines += ["", "=== CONTRÔLES DE SÉLECTION ==="]
+    for _cle, _libelle in (('c1_nb_modeles', 'C1 — nombre de modèles comparés'),
+                           ('c2_ecart_gini', 'C2 — écart de Gini entre modèles'),
+                           ('c3_coherence', 'C3 — cohérence du modèle retenu')):
+        _c = val6.get(_cle) or {}
+        lines.append(f"{_libelle} : {_c.get('statut', 'non calculé')} | "
+                     f"{_c.get('message', '—')}")
+
+    lines += [
         "",
         "=== HYPOTHÈSES ML ===",
         f"H1 Overfitting : {hyp4.get('h1_overfitting',{}).get('statut','?')} | ratio={hyp4.get('h1_overfitting',{}).get('ratio','—')}",
