@@ -82,6 +82,22 @@ def pourcent(valeur: Any, dec: int = 1) -> str:
     return ABSENT if f is None else _groupe(f, dec) + SEP_MILLIERS + '%'
 
 
+def tronque(texte: Any, largeur: int) -> str:
+    """Coupe un texte trop long SUR UN MOT, et le dit par des points de suite.
+
+    ⚠️ LE RAPPORT COUPAIT EN PLEIN MOT, SANS RIEN DIRE. Un conseil actuariel
+    s'achevait sur « le GLM est bien spécifié sur toute », une note sur
+    « ...4 dimensions normalisées (Gini, Stabilité, Interprétabilité, RMSE).
+    N'es ». Le lecteur ne pouvait pas savoir qu'il manquait quelque chose : la
+    phrase semblait mal écrite, pas tronquée.
+    """
+    t = '' if texte is None else str(texte).strip()
+    if len(t) <= largeur:
+        return t
+    coupe = t[:largeur].rsplit(' ', 1)[0].rstrip(' ,;:.')
+    return (coupe or t[:largeur]) + '…'
+
+
 # ── Le nombre de décimales par NATURE de grandeur ────────────────────────────
 # ⚠️ UNE PRÉCISION SE JUSTIFIE, ELLE NE SE CHOISIT PAS AU CAS PAR CAS. Le
 # rapport mesuré affichait la même colonne à 1, 3 et 4 décimales selon la

@@ -128,15 +128,24 @@ def _construire_contexte_tarif(
     met3  = result_a3.get('metriques', {}) if result_a3 else {}
     hyp3  = result_a3.get('hypotheses', {}) if result_a3 else {}
     rels  = result_a3.get('relativites_poisson', {}) if result_a3 else {}
-    cl4   = result_a4.get('classement', []) if result_a4 else []
+    # ⚠️ LE SCORE EXISTAIT, LE RAPPORT LISAIT LA MAUVAISE SOURCE. A4 RANGE
+    # les modèles ; A6 les SCORE (grille multicritères, 40 % Gini / 30 %
+    # stabilité / 20 % interprétabilité / 10 % RMSE) et publie SON propre
+    # `classement`, enrichi de `score_global`. Le rapport lisait celui d'A4 —
+    # donc sans score — pendant que sa section « Modèle retenu » affichait
+    # 1.0000, venu d'A6 : deux sections du même document, deux vérités sur le
+    # même modèle. Mesuré : la colonne Score était vide sur les SEPT lignes.
+    cl4   = ((result_a6 or {}).get('classement')
+             or (result_a4.get('classement', []) if result_a4 else []))
     hyp4  = result_a4.get('hypotheses', {}) if result_a4 else {}
     bt6   = result_a6.get('backtest', {}) if result_a6 else {}
     val6  = result_a6.get('validation_selection', {}) if result_a6 else {}
     prod  = result_a6.get('modele_production', {}) if result_a6 else {}
 
+    # ⚠️ CE QUI N'EST PAS CALCULÉ NE VAUT PAS ZÉRO — surtout ici : ce texte
+    # est lu par le modèle qui rédige le commentaire actuariel. « Gini=0.0000 »
+    # lui AFFIRME un pouvoir discriminant nul ; « Gini=— » lui dit la vérité.
     m_poi = met3.get('poisson', {})
-    gini_p = m_poi.get('gini', 0)
-    aic_p  = m_poi.get('aic', 0)
     vars_r = m_poi.get('vars_retenues', [])
 
     # Modules avancés P2 (A3) et gouvernance (A6)
@@ -152,9 +161,13 @@ def _construire_contexte_tarif(
         f"Variables retenues : {', '.join(vars_r) or '—'}",
         "",
         "=== GLM ===",
-        f"Poisson : Gini={gini_p:.4f} | AIC={aic_p:.0f} | Pseudo-R²={m_poi.get('pseudo_r2',0):.4f}",
-        f"Gamma   : Gini={met3.get('gamma',{}).get('gini',0):.4f} | AIC={met3.get('gamma',{}).get('aic',0):.0f}",
-        f"Tweedie : Gini={met3.get('tweedie',{}).get('gini',0):.4f} | AIC={met3.get('tweedie',{}).get('aic',0):.0f}",
+        f"Poisson : Gini={F.nombre(m_poi.get('gini'), F.DEC_GINI)} | "
+        f"AIC={F.nombre(m_poi.get('aic'), 0)} | "
+        f"Pseudo-R²={F.nombre(m_poi.get('pseudo_r2'), F.DEC_GINI)}",
+        f"Gamma   : Gini={F.nombre(met3.get('gamma',{}).get('gini'), F.DEC_GINI)} | "
+        f"AIC={F.nombre(met3.get('gamma',{}).get('aic'), 0)}",
+        f"Tweedie : Gini={F.nombre(met3.get('tweedie',{}).get('gini'), F.DEC_GINI)} | "
+        f"AIC={F.nombre(met3.get('tweedie',{}).get('aic'), 0)}",
         "",
         "=== HYPOTHÈSES GLM ===",
         f"H1 Sur-dispersion : {hyp3.get('h1_poisson',{}).get('statut','?')} | Var/E={hyp3.get('h1_poisson',{}).get('ratio_disp','—')}",
@@ -165,7 +178,10 @@ def _construire_contexte_tarif(
         "=== RELATIVITÉS POISSON (top 5) ===",
     ]
     for var, d in list(rels.items())[:5]:
-        lines.append(f"  {var} : exp(β)={d.get('relativite',0):.4f} | p={d.get('pvalue',0):.4f} | {d.get('sens','')} | sig={'oui' if d.get('significatif') else 'non'}")
+        lines.append(
+            f"  {var} : exp(β)={F.nombre(d.get('relativite'), F.DEC_GINI)} | "
+            f"p={F.nombre(d.get('pvalue'), F.DEC_GINI)} | {d.get('sens','')} | "
+            f"sig={'oui' if d.get('significatif') else 'non'}")
 
     # === CRÉDIBILITÉ BÜHLMANN-STRAUB (P2) ===
     lines += ["", "=== CRÉDIBILITÉ BÜHLMANN-STRAUB ==="]
@@ -421,7 +437,15 @@ def export_html(
 
     met3  = (result_a3 or {}).get('metriques', {})
     rels  = (result_a3 or {}).get('relativites_poisson', {})
-    cl4   = (result_a4 or {}).get('classement', [])
+    # ⚠️ LE SCORE EXISTAIT, LE RAPPORT LISAIT LA MAUVAISE SOURCE. A4 RANGE
+    # les modèles ; A6 les SCORE (grille multicritères, 40 % Gini / 30 %
+    # stabilité / 20 % interprétabilité / 10 % RMSE) et publie SON propre
+    # `classement`, enrichi de `score_global`. Le rapport lisait celui d'A4 —
+    # donc sans score — pendant que sa section « Modèle retenu » affichait
+    # 1.0000, venu d'A6 : deux sections du même document, deux vérités sur le
+    # même modèle. Mesuré : la colonne Score était vide sur les SEPT lignes.
+    cl4   = ((result_a6 or {}).get('classement')
+             or (result_a4 or {}).get('classement', []))
     hyp3  = (result_a3 or {}).get('hypotheses', {})
     hyp4  = (result_a4 or {}).get('hypotheses', {})
     bt6   = (result_a6 or {}).get('backtest', {})
@@ -484,10 +508,18 @@ def export_html(
 
     def _hyp_row(key, label, val_key='', val=''):
         # Cherche dans hyp3 (GLM), puis hyp4 (ML) — clés toujours distinctes.
-        # Retourne '' si l'hypothèse n'a pas été calculée (pas de ligne vide dans le HTML).
+        # ⚠️ ELLE DISPARAISSAIT EN SILENCE. Le titre de la section promet
+        # « H1–H4 » (douze endroits du dépôt le promettent) et la ligne
+        # s'effaçait : le lecteur ne pouvait pas distinguer « vérifiée » de
+        # « jamais calculée ». Publier ce qui n'a pas pu l'être vaut mieux que
+        # de le cacher — c'est la règle du projet, sans exception.
         h = hyp3.get(key) or hyp4.get(key) or {}
         if not h:
-            return ''
+            return _row([label,
+                         '<span class="badge-non-calcule">○ NON CALCULÉE</span>',
+                         F.ABSENT,
+                         'Hypothèse non produite par la chaîne — '
+                         'à instruire avant validation'], num=(2,))
         st = h.get('statut', '?')
         em = _statut_emoji(st)
         brut = h.get(val_key, val)
@@ -501,7 +533,7 @@ def export_html(
         return _row([label,
                      f'<span class="badge-{st.lower()}">{em} {st}</span>',
                      valeur,
-                     str(h.get('conseil', ''))[:80]], num=(2,))
+                     F.tronque(h.get('conseil'), 80)], num=(2,))
 
     html = f"""<!DOCTYPE html>
 <html lang="fr">
@@ -526,6 +558,11 @@ body{{font-family:'Segoe UI',Arial,sans-serif; background:var(--bg); color:var(-
 .header .meta{{font-size:11px; color:#8a9bb0; margin-top:10px; display:flex; gap:24px; flex-wrap:wrap;}}
 .badge{{display:inline-block; padding:3px 10px; border-radius:4px; font-size:11px; font-weight:700; color:#fff;}}
 .badge-vert{{background:var(--vert);}} .badge-ambre{{background:var(--orange);}} .badge-rouge{{background:var(--rouge);}}
+/* Une hypothese NON CALCULEE se distingue d'une hypothese verte : gris,
+   sans couleur de statut, parce qu'elle n'en a pas. */
+.badge-non-calcule{{display:inline-block; padding:3px 10px; border-radius:4px;
+  font-size:11px; font-weight:700; color:var(--slate);
+  border:1px dashed var(--slate); background:transparent;}}
 /* Sections */
 .section{{background:var(--white); border-radius:8px; margin-bottom:20px; box-shadow:0 1px 4px rgba(0,0,0,.07); overflow:hidden;}}
 .section-head{{background:var(--navy-mid); color:var(--gold); padding:10px 18px; font-size:13px; font-weight:700;}}
@@ -720,9 +757,9 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
       <div class="kpi"><div class="kpi-label">Modèle retenu</div><div class="kpi-value" style="font-size:15px;color:{NAVY}">{prod.get('modele','—')}</div></div>
       <div class="kpi"><div class="kpi-label">Famille</div><div class="kpi-value" style="font-size:15px;">{prod.get('famille','—')}</div></div>
       <div class="kpi"><div class="kpi-label">Score global</div><div class="kpi-value">{_score_txt}</div></div>
-      <div class="kpi"><div class="kpi-label">Gini test</div><div class="kpi-value">{prod.get('gini_test',0):.4f}</div></div>
-      <div class="kpi"><div class="kpi-label">Overfit ratio</div><div class="kpi-value">{prod.get('overfit_ratio',0):.3f}</div></div>
-      <div class="kpi"><div class="kpi-label">Interprétabilité</div><div class="kpi-value">{prod.get('interpretabilite',0):.2f}/1.0</div></div>
+      <div class="kpi"><div class="kpi-label">Gini test</div><div class="kpi-value">{F.nombre(prod.get('gini_test'), F.DEC_GINI)}</div></div>
+      <div class="kpi"><div class="kpi-label">Overfit ratio</div><div class="kpi-value">{F.nombre(prod.get('overfit_ratio'), F.DEC_RATIO)}</div></div>
+      <div class="kpi"><div class="kpi-label">Interprétabilité</div><div class="kpi-value">{F.nombre(prod.get('interpretabilite'), 2)}/1.0</div></div>
     </div>
     <p style="margin-top:8px; font-size:10px; color:{SLATE}; font-style:italic;">
       ✦ Le « Score global » est une normalisation RELATIVE au meilleur
@@ -743,7 +780,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
             st = cv.get('statut','?')
             html += _row([cl,
                           f'<span class="badge badge-{st.lower()}">{_statut_emoji(st)} {st}</span>',
-                          cv.get('message','')[:80]])
+                          F.tronque(cv.get('message'), 80)])
         html += '    </table>'
     html += """
   </div>
@@ -773,7 +810,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
 """
     for k, v in at.items():
         if isinstance(v, (str, int, float, bool)):
-            html += _row([k.replace('_',' ').title(), str(v)[:120]])
+            html += _row([k.replace('_',' ').title(), F.tronque(v, 120)])
     html += f"""    </table>
   </div>
 </div>
@@ -817,7 +854,9 @@ def export_word(
         statut = (result_a6 or result_a3 or {}).get('statut_rag', 'AMBRE')
         met3   = (result_a3 or {}).get('metriques', {})
         rels   = (result_a3 or {}).get('relativites_poisson', {})
-        cl4    = (result_a4 or {}).get('classement', [])
+        # ⚠️ Même source que l'HTML : le classement SCORÉ d'A6 en premier.
+        cl4    = ((result_a6 or {}).get('classement')
+                  or (result_a4 or {}).get('classement', []))
         hyp3   = (result_a3 or {}).get('hypotheses', {})
         hyp4   = (result_a4 or {}).get('hypotheses', {})
         bt6    = (result_a6 or {}).get('backtest', {})
@@ -938,10 +977,10 @@ def export_word(
         for var, d in sorted(rels.items(), key=lambda x: -abs(x[1].get('beta',0)))[:15]:
             rows_rel.append([
                 var,
-                f"{d.get('beta',0):.4f}",
-                f"{d.get('relativite',0):.4f}",
-                f"{d.get('ic95_low',0):.4f}",
-                f"{d.get('ic95_high',0):.4f}",
+                F.nombre(d.get('beta'), F.DEC_GINI),
+                F.nombre(d.get('relativite'), F.DEC_GINI),
+                F.nombre(d.get('ic95_low'), F.DEC_GINI),
+                F.nombre(d.get('ic95_high'), F.DEC_GINI),
                 # Audit V7 IMPORTANT : garde NA cohérent avec le HTML.
                 f"{d.get('pvalue'):.4f}" if 'pvalue' in d else '—',
                 'Oui' if d.get('significatif') else 'Non',
@@ -982,7 +1021,7 @@ def export_word(
             h = hyp3.get(hkey) or hyp4.get(hkey, {})
             if h:
                 rows_hyp.append([hlabel, h.get('statut','?'),
-                                  str(h.get('message',''))[:70],
+                                  F.tronque(h.get('message'), 70),
                                   str(h.get('conseil',''))[:60]])
         if rows_hyp:
             _tbl(['Hypothèse','Statut','Message','Conseil'], rows_hyp,

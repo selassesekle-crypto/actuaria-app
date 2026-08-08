@@ -225,5 +225,87 @@ class T2_LeContexteDeNarration(unittest.TestCase):
         print('    OK T2f : aucun motif identifiant dans le contexte enrichi')
 
 
+class T4_CeQuiNEstPasCalcule(unittest.TestCase):
+    """T4 — ne jamais fabriquer un chiffre pour combler un trou.
+
+    ⚠️ RÈGLE DU PROJET, SANS EXCEPTION : une case vide honnête vaut mieux
+    qu'un nombre faux ; publier ce qui n'a pas pu être calculé plutôt que de
+    le cacher.
+    """
+
+    def _html(self, a3=None, a4=None, a6=None):
+        with patch.dict(os.environ, {}, clear=False):
+            return R.export_html(a3 or {}, a4 or {}, a6 or {},
+                                 'DEMO', '31/12/2025', 'T4')
+
+    def test_le_score_vient_du_classement_SCORE_d_A6(self):
+        """⚠️ LE SCORE EXISTAIT — LE RAPPORT LISAIT LA MAUVAISE SOURCE. A4
+        range les modèles, A6 les SCORE et publie son propre classement. La
+        colonne Score était vide sur les SEPT lignes pendant que la section
+        « Modèle retenu » affichait 1.0000 : deux vérités sur le même modèle.
+        """
+        a4 = {'classement': [{'modele': 'GLM', 'gini_test': 0.1775}]}
+        a6 = {'classement': [{'modele': 'GLM', 'gini_test': 0.1775,
+                              'score_global': 1.0}],
+              'modele_production': {'modele': 'GLM', 'score_global': 1.0}}
+        html = self._html(a4=a4, a6=a6)
+        self.assertIn('1.0000', html)
+        # sans A6, on lit A4 — et le score absent sort en tiret, pas en zéro
+        html_sans_a6 = self._html(a4=a4)
+        self.assertIn('—', html_sans_a6)
+        self.assertNotIn('0.0000', html_sans_a6.split('Classement ML')[1][:900])
+        print('    OK T4 : le score vient du classement SCORÉ d\'A6')
+
+    def test_une_metrique_absente_ne_vaut_pas_zero(self):
+        """⚠️ UN GINI À 0,0000 AFFIRME UN POUVOIR DISCRIMINANT NUL. Le code
+        portait déjà un commentaire disant qu'UNE colonne sur quatre avait été
+        corrigée ; les trois autres portaient encore le défaut."""
+        html = self._html(a3={'metriques': {'poisson': {}}},
+                          a6={'modele_production': {'modele': 'GLM'}})
+        bloc = html.split('Résultats GLM')[1][:600]
+        self.assertNotIn('0.0000', bloc)
+        self.assertIn('—', bloc)
+        print('    OK T4b : une métrique absente sort « — », jamais « 0.0000 »')
+
+    def test_une_hypothese_non_calculee_NE_DISPARAIT_PLUS(self):
+        """⚠️ DOUZE ENDROITS DU DÉPÔT PROMETTENT « H1–H4 » et trois sites
+        effaçaient la ligne : le lecteur ne pouvait pas distinguer
+        « vérifiée » de « jamais calculée »."""
+        a3 = {'hypotheses': {'h1_poisson': {'statut': 'VERT',
+                                            'ratio_disp': 1.022}}}
+        html = self._html(a3=a3, a6={'modele_production': {}})
+        bloc = html.split('Hypothèses Actuarielles')[1].split('</table>')[0]
+        self.assertIn('NON CALCULÉE', bloc)
+        # les quatre hypothèses GLM figurent, calculées ou non
+        for h in ('H1 —', 'H2 —', 'H3 —', 'H4 —'):
+            self.assertIn(h, bloc, h)
+        print('    OK T4c : les hypothèses non calculées sont NOMMÉES, pas '
+              'effacées')
+
+    def test_un_texte_trop_long_est_coupe_SUR_UN_MOT_et_le_dit(self):
+        """⚠️ LE RAPPORT COUPAIT EN PLEIN MOT, SANS RIEN DIRE : « le GLM est
+        bien spécifié sur toute ». La phrase semblait mal écrite, pas
+        tronquée."""
+        from core.format_fr import tronque
+        long = ('Dispersion homogène entre bandes de risque — le GLM est bien '
+                'spécifié sur toute la plage des primes prédites')
+        coupe = tronque(long, 80)
+        self.assertTrue(coupe.endswith('…'))
+        self.assertLessEqual(len(coupe), 81)
+        self.assertFalse(coupe[:-1].endswith(' '))
+        # la coupure tombe sur une frontière de mot
+        self.assertTrue(long.startswith(coupe[:-1]))
+        self.assertIn(' ', coupe)
+        mot_coupe = coupe[:-1].rsplit(' ', 1)[-1]
+        self.assertIn(mot_coupe, long.split())
+        print(f'    OK T4d : « …{coupe[-28:]} » — coupé sur un mot, et dit')
+
+    def test_un_texte_court_n_est_pas_touche(self):
+        from core.format_fr import tronque
+        self.assertEqual(tronque('GLM Poisson adapté', 80), 'GLM Poisson adapté')
+        self.assertEqual(tronque(None, 80), '')
+        print('    OK T4e : un texte court passe intact')
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
