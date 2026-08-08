@@ -302,9 +302,9 @@ def _narration_claude_api(n2, n3, n4, lob_label, arrete) -> str:
             messages=[{'role': 'user', 'content': ctx}],
             cle=frontiere_llm.cle_api_ou_secrets(),
         )
-        return frontiere_llm.texte_du_premier_bloc(resp)
+        return frontiere_llm.texte_des_blocs(resp)
     except Exception as e:
-        logger.warning(f'Claude API indisponible : {e}')
+        logger.warning(f'Narration non generee : {e}')
         raise
 
 def _narration_templates(n4, commentaire) -> str:

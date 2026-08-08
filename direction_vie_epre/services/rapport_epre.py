@@ -397,7 +397,7 @@ def _narration_claude_api_epre(contexte: str) -> str:
         messages=[{"role": "user", "content": contexte}],
         cle=frontiere_llm.cle_api_ou_secrets(),
     )
-    return frontiere_llm.texte_du_premier_bloc(resp)
+    return frontiere_llm.texte_des_blocs(resp)
 
 
 def _generer_narration_epre(contexte: str, commentaire: str) -> Tuple[str, str]:
@@ -406,7 +406,7 @@ def _generer_narration_epre(contexte: str, commentaire: str) -> Tuple[str, str]:
         if txt:
             return txt, "claude_api"
     except Exception as e:
-        logger.warning(f"Claude API : {e}")
+        logger.warning(f"Narration non générée : {e}")
     if commentaire and commentaire.strip():
         return _clean(commentaire), "manuel"
     return "", "aucune"

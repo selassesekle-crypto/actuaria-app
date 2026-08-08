@@ -465,7 +465,7 @@ def appeler_claude(messages, system_prompt):
             return "⚠️ Clé API Anthropic non configurée. Ajoutez ANTHROPIC_API_KEY dans les variables d'environnement Render."
         msgs = [{"role":m["role"],"content":m["content"]} for m in messages if m["role"] in ["user","assistant"]]
         r = frontiere_llm.appeler(modele=frontiere_llm.MODELE_ETABLI, max_tokens=1024, messages=msgs, systeme=system_prompt, cle=api_key)
-        return frontiere_llm.texte_du_premier_bloc(r)
+        return frontiere_llm.texte_des_blocs(r)
     except anthropic.AuthenticationError:
         return "❌ Clé API invalide."
     except anthropic.RateLimitError:

@@ -12,9 +12,9 @@ from unittest.mock import patch
 
 from core.frontiere_llm import (
     MODELE_ETABLI, MODELE_RECENT, MODELES_CONNUS, PARAMETRES_REFUSES, SITES,
-    VARIABLE_CLE, FrontiereLLMIndisponible, RequeteRefusee, appeler,
-    chemins_appelants, cle_api, sites_du_modele, texte_des_blocs,
-    texte_du_premier_bloc)
+    VARIABLE_CLE, FrontiereLLMIndisponible, ReponseInexploitable,
+    RequeteRefusee, appeler, chemins_appelants, cle_api, sites_du_modele,
+    texte_des_blocs)
 
 RACINE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -195,28 +195,87 @@ class T3_LAppel(unittest.TestCase):
               'leurs appelants')
 
 
-class T4_LesDeuxLectures(unittest.TestCase):
-    """T4 — elles diffèrent, et ce lot ne les unifie pas."""
+class T4_LaLectureUnique(unittest.TestCase):
+    """T4 — il y avait deux lectures, la divergence était une panne.
 
-    def test_sur_une_reponse_ordinaire_les_deux_concordent(self):
-        r = _Reponse(_Bloc('le commentaire'))
-        self.assertEqual(texte_du_premier_bloc(r), 'le commentaire')
-        self.assertEqual(texte_des_blocs(r), 'le commentaire')
-        print('    OK T4 : sur une réponse ordinaire, les deux lectures '
-              'concordent')
+    ⚠️ MESURÉ À L'USAGE : six appels ont abouti en 200 OK et leurs six
+    réponses ont été JETÉES, parce que `content[0].text` lève dès que le
+    premier bloc n'est pas du texte. J'avais documenté cet écart en C1 en le
+    classant « amélioration » — c'était un mauvais classement.
+    """
 
-    def test_elles_divergent_des_que_la_reponse_se_complique(self):
-        """⚠️ LA DIFFÉRENCE EST RÉELLE ET ELLE EST CONSERVÉE. Unifier serait
-        une amélioration, donc un changement de comportement, donc un autre
-        lot."""
-        r = _Reponse(_Bloc('', 'thinking'), _Bloc('la réponse'))
-        self.assertEqual(texte_du_premier_bloc(r), '')
+    def test_l_ancienne_lecture_n_existe_plus(self):
+        """Laisser les deux, c'était laisser le piège."""
+        import core.frontiere_llm as f
+        self.assertFalse(hasattr(f, 'texte_du_premier_bloc'))
+        # Ce fichier est exclu : il NOMME l'ancienne lecture pour vérifier
+        # qu'elle a disparu, comme T1 et T2 s'excluent pour la même raison.
+        fautifs = [rel for rel, chemin in _fichiers_python()
+                   if rel != 'core/test_frontiere_llm.py'
+                   and 'texte_du_premier_bloc' in _lire(chemin)]
+        self.assertEqual(fautifs, [], '; '.join(fautifs))
+        print('    OK T4 : l\'ancienne lecture a disparu du dépôt entier')
+
+    def test_un_seul_bloc_de_texte_rend_le_texte(self):
+        """La forme ordinaire : identique à ce que rendait l'ancienne."""
+        self.assertEqual(texte_des_blocs(_Reponse(_Bloc('le commentaire'))),
+                         'le commentaire')
+        self.assertEqual(texte_des_blocs(_Reponse(_Bloc('a'), _Bloc('b'))),
+                         'ab')
+        print('    OK T4b : un bloc de texte → le texte ; deux → concaténés')
+
+    def test_un_bloc_de_raisonnement_EN_TETE_ne_fait_plus_perdre_la_reponse(self):
+        """⚠️ LE CAS QUI A COÛTÉ SIX RÉPONSES. Un bloc de raisonnement porte
+        `.thinking`, pas `.text` : l'ancienne lecture levait."""
+        r = _Reponse(_Bloc(None, 'thinking'), _Bloc('la réponse'))
         self.assertEqual(texte_des_blocs(r), 'la réponse')
-        r2 = _Reponse(_Bloc('a'), _Bloc('b'))
-        self.assertEqual(texte_du_premier_bloc(r2), 'a')
-        self.assertEqual(texte_des_blocs(r2), 'ab')
-        print('    OK T4b : les deux lectures divergent sur une réponse à '
-              'plusieurs blocs — écart conservé, non corrigé')
+        print('    OK T4c : raisonnement en tête → la réponse est récupérée')
+
+    def test_une_reponse_sans_texte_LEVE_au_lieu_de_rendre_du_vide(self):
+        """⚠️ SANS CELA ON ÉCHANGERAIT UNE PANNE MUETTE CONTRE UNE AUTRE :
+        une narration VIDE étiquetée « venue de l'API »."""
+        for reponse, attendu in (
+                (_Reponse(), 'aucun bloc'),
+                (_Reponse(_Bloc(None, 'thinking')), 'thinking'),
+                (_Reponse(_Bloc('   ')), 'text')):
+            with self.assertRaises(ReponseInexploitable) as ctx:
+                texte_des_blocs(reponse)
+            self.assertIn(attendu, str(ctx.exception))
+        print('    OK T4d : réponse vide, raisonnement seul ou texte blanc → '
+              'ReponseInexploitable, jamais une chaîne vide')
+
+    def test_le_message_nomme_les_TYPES_jamais_le_contenu(self):
+        """Diagnostiquer sans divulguer : c'est la règle de C2."""
+        with self.assertRaises(ReponseInexploitable) as ctx:
+            texte_des_blocs(_Reponse(_Bloc('SECRET_DU_CLIENT', 'thinking')))
+        message = str(ctx.exception)
+        self.assertIn('thinking', message)
+        self.assertNotIn('SECRET_DU_CLIENT', message)
+        print('    OK T4e : le message nomme les types, pas le contenu')
+
+
+class T7_LesTroisCauses(unittest.TestCase):
+    """T7 — F2 : un message qui désigne la mauvaise cause est pire que rien."""
+
+    def test_les_trois_causes_sont_des_types_distincts(self):
+        self.assertTrue(issubclass(ReponseInexploitable,
+                                   FrontiereLLMIndisponible))
+        self.assertTrue(issubclass(RequeteRefusee, FrontiereLLMIndisponible))
+        self.assertFalse(issubclass(ReponseInexploitable, RequeteRefusee))
+        self.assertFalse(issubclass(RequeteRefusee, ReponseInexploitable))
+        print('    OK T7 : environnement / requête refusée / réponse '
+              'inexploitable — trois types, une famille')
+
+    def test_plus_aucun_site_n_accuse_l_API_d_une_panne(self):
+        """⚠️ LE DÉPÔT PORTAIT DÉJÀ LA TRACE DU MÊME MOTIF : le commentaire
+        d'en-tête de `n5_rapport.py` raconte un défaut de code journalisé
+        comme « Claude API indisponible ». C'était la troisième fois."""
+        motif = re.compile(r'warning\([^)]*Claude API[^)]*\)')
+        fautifs = [rel for rel, chemin in _fichiers_python()
+                   if motif.search(_lire(chemin))]
+        self.assertEqual(fautifs, [], 'accuse encore l\'API : %s'
+                         % ', '.join(fautifs))
+        print('    OK T7b : plus aucun journal n\'accuse l\'API d\'une panne')
 
 
 class T6_LaCombinaisonRefusee(unittest.TestCase):

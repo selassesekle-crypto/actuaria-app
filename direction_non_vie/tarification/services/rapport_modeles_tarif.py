@@ -303,12 +303,14 @@ CLAUDE_MODEL_TARIF = frontiere_llm.MODELE_RECENT
 # essayé et échoué. `None` = paramètre non transmis.
 CLAUDE_TEMPERATURE_TARIF = None
 
-# Sources de narration. La distinction entre les deux replis est le sens de ce
-# lot : un repli d'ENVIRONNEMENT est attendu, un repli sur REQUÊTE REFUSÉE est
-# un défaut du dépôt, et le livrable doit les nommer différemment.
+# Sources de narration. TROIS REPLIS, TROIS NOMS : un repli d'ENVIRONNEMENT est
+# attendu ; un repli sur REQUÊTE REFUSÉE est un défaut de configuration ; un
+# repli sur RÉPONSE INEXPLOITABLE veut dire que le service a répondu et qu'on
+# n'a rien su en faire. Les confondre, c'est ce qui a coûté six réponses reçues.
 SRC_API = 'claude_api'
 SRC_REPLI = 'commentaire_agent'
 SRC_DEFAUT = 'commentaire_agent (appel refuse — defaut de configuration)'
+SRC_REPONSE = 'commentaire_agent (reponse recue mais inexploitable)'
 
 def _narration_claude(result_a3, result_a4, result_a6, branche, arrete) -> Tuple[str, str]:
     repli = SRC_REPLI
@@ -321,15 +323,21 @@ def _narration_claude(result_a3, result_a4, result_a6, branche, arrete) -> Tuple
             messages=[{'role': 'user', 'content': ctx}],
             cle=frontiere_llm.cle_api_ou_secrets(),
         )
-        return frontiere_llm.texte_du_premier_bloc(resp), SRC_API
+        return frontiere_llm.texte_des_blocs(resp), SRC_API
     except frontiere_llm.RequeteRefusee as e:
         # ⚠️ CE N'EST PAS UNE DÉGRADATION, C'EST UN DÉFAUT. Journalisé en
         # ERREUR, et le livrable le dit — c'est ce qui manquait.
         logger.error(f'Narration NON generee — requete refusee par la '
                      f'frontiere : {e}')
         repli = SRC_DEFAUT
+    except frontiere_llm.ReponseInexploitable as e:
+        # ⚠️ L'API A REPONDU. Le dire est le contraire de ce que ce site
+        # faisait : il journalisait « Claude API indisponible » sur un 200.
+        logger.error(f'Narration NON generee — le service a repondu mais sa '
+                     f'reponse est inexploitable : {e}')
+        repli = SRC_REPONSE
     except Exception as e:
-        logger.warning(f'Claude API indisponible : {e}')
+        logger.warning(f'Narration non generee : {e}')
     # Fallback : commentaire agent
     for r in [result_a6, result_a4, result_a3]:
         if r and r.get('commentaire'):

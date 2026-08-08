@@ -295,9 +295,9 @@ def _narration_claude_api(m1: Dict, m3: Dict, date_arrete: str) -> str:
             messages=[{"role": "user", "content": ctx}],
             cle=frontiere_llm.cle_api_ou_secrets(),
         )
-        return frontiere_llm.texte_du_premier_bloc(resp)
+        return frontiere_llm.texte_des_blocs(resp)
     except Exception as e:
-        logging.getLogger("actuaria.sp.rapport_prevoyance").warning(f"Claude API : {e}")
+        logging.getLogger("actuaria.sp.rapport_prevoyance").warning(f"Narration non générée : {e}")
         raise
 
 def _narration_fallback(m3: Dict, commentaire: str) -> str:

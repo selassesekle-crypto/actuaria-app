@@ -236,9 +236,9 @@ def _narration_claude_api(contexte):
             messages=[{'role': 'user', 'content': contexte}],
             cle=frontiere_llm.cle_api_ou_secrets(),
         )
-        return frontiere_llm.texte_du_premier_bloc(resp)
+        return frontiere_llm.texte_des_blocs(resp)
     except Exception as e:
-        logger.warning(f'Claude API Prévoyance indisponible : {e}')
+        logger.warning(f'Narration Prévoyance non générée : {e}')
         raise
 
 def _generer_narration(p1, p2, p3, p4, alm, reg1, arrete) -> Tuple[str, str]:

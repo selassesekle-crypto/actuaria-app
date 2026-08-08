@@ -584,7 +584,7 @@ class AgentChatbot:
                 cle        = api_key,
             )
 
-            reponse_txt = frontiere_llm.texte_du_premier_bloc(response)
+            reponse_txt = frontiere_llm.texte_des_blocs(response)
 
             # Ajouter la réponse à l'historique
             self.historique.append({"role": "assistant", "content": reponse_txt})

@@ -196,9 +196,9 @@ def _narration_claude_api(contexte):
             messages=[{"role": "user", "content": contexte}],
             cle=frontiere_llm.cle_api_ou_secrets(),
         )
-        return frontiere_llm.texte_du_premier_bloc(resp)
+        return frontiere_llm.texte_des_blocs(resp)
     except Exception as e:
-        logger.warning(f"Claude API Santé indisponible : {e}")
+        logger.warning(f"Narration Santé non générée : {e}")
         raise
 
 def _generer_narration(s1, s2, s3, reg2, reg3, arrete):

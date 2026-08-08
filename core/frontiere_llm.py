@@ -101,10 +101,16 @@ PARAMETRES_REFUSES: Dict[str, Tuple[str, ...]] = {
 
 
 class FrontiereLLMIndisponible(RuntimeError):
-    """Le service ne peut pas être atteint : paquet absent, ou clé absente.
+    """Aucun texte exploitable n'a pu être obtenu. Famille, et cas de base.
 
-    ⚠️ N'EST PAS LEVÉE POUR UNE DÉFAILLANCE DE L'APPEL LUI-MÊME. Les erreurs
-    du client `anthropic` (authentification, quota, réseau, HTTP) remontent
+    ⚠️ TROIS CAUSES DISTINCTES, ET LES CONFONDRE COÛTE CHER. Levée
+    DIRECTEMENT, elle signifie « l'ENVIRONNEMENT n'a pas ce qu'il faut » :
+    paquet absent, clé absente. Ses deux filles nomment les deux autres
+    causes — `RequeteRefusee` (la requête est fautive) et
+    `ReponseInexploitable` (le service a répondu, sa réponse ne sert à rien).
+
+    ⚠️ N'EST PAS LEVÉE POUR UNE DÉFAILLANCE DU TRANSPORT. Les erreurs du
+    client `anthropic` (authentification, quota, réseau, HTTP) remontent
     INCHANGÉES, parce que plusieurs appelants les distinguent par leur type et
     que les envelopper changerait leur comportement.
     """
@@ -123,6 +129,20 @@ class RequeteRefusee(FrontiereLLMIndisponible):
     Hérite de FrontiereLLMIndisponible pour que tout appelant qui capturait
     déjà celle-ci continue de capturer celle-ci — la distinction s'ajoute,
     elle ne casse personne.
+    """
+
+
+class ReponseInexploitable(FrontiereLLMIndisponible):
+    """Le service a RÉPONDU, et sa réponse ne porte aucun texte utilisable.
+
+    ⚠️ CE N'EST NI L'UN NI L'AUTRE, ET SURTOUT PAS << API INDISPONIBLE >>.
+    L'API était disponible : elle a répondu 200. Dire le contraire envoie
+    chercher la panne au mauvais endroit — c'est ce qui est arrivé, et le
+    dépôt en porte déjà la trace : le commentaire d'en-tête de `n5_rapport.py`
+    raconte le MÊME motif, un défaut de code journalisé comme une panne d'API.
+
+    Hérite de FrontiereLLMIndisponible : la distinction s'ajoute sans casser
+    les appelants qui capturaient déjà la famille.
     """
 
 
@@ -202,23 +222,38 @@ def appeler(*, modele: str, systeme: str,
 
 
 # =============================================================================
-#  LES DEUX FORMES DE LECTURE — nommées, non unifiées
+#  LA LECTURE DE LA RÉPONSE — UNE SEULE FORME
 # =============================================================================
-# ⚠️ ELLES DIFFÈRENT, ET CE LOT NE LES RAPPROCHE PAS. Onze sites lisent le
-# premier bloc ; deux concatènent les blocs de texte. Sur une réponse ordinaire
-# les deux rendent la même chaîne ; sur une réponse qui commencerait par un
-# bloc non textuel, la première échoue là où la seconde tient. Unifier serait
-# une amélioration — donc un changement de comportement, donc un autre lot.
-
-def texte_du_premier_bloc(reponse: Any) -> str:
-    """`reponse.content[0].text` — la forme des onze sites de narration."""
-    return reponse.content[0].text
-
+# ⚠️⚠️ IL Y EN AVAIT DEUX, ET LA DIVERGENCE ÉTAIT UNE PANNE EN ATTENTE. Onze
+# sites lisaient `reponse.content[0].text` ; deux concaténaient les blocs de
+# texte. Sur une réponse à un seul bloc de texte, identique. Sur une réponse
+# dont le PREMIER bloc n'est pas du texte — un bloc de raisonnement porte
+# `.thinking`, pas `.text` — la première lève `AttributeError`.
+#
+# MESURÉ À L'USAGE : six appels ont abouti en 200 OK et leurs six réponses ont
+# été JETÉES, le rapport repliant sur le commentaire d'agent. J'avais documenté
+# cet écart en C1 en le classant « amélioration, donc changement de
+# comportement ». C'était un mauvais classement : c'était une panne en attente.
 
 def texte_des_blocs(reponse: Any) -> str:
-    """Concatène les blocs de type « text » — la forme des deux mappings."""
-    return ''.join(b.text for b in reponse.content
-                   if getattr(b, 'type', None) == 'text')
+    """Le texte de la réponse : tous les blocs « text », concaténés.
+
+    ⚠️ LÈVE PLUTÔT QUE DE RENDRE UNE CHAÎNE VIDE. Sans cela on échangerait une
+    panne muette contre une autre : une narration VIDE étiquetée « venue de
+    l'API », qu'aucun appelant ne distinguerait d'une narration réussie.
+
+    Le message nomme les TYPES de blocs reçus — jamais leur contenu : c'est ce
+    qui permet de diagnostiquer sans rien divulguer.
+    """
+    blocs = list(getattr(reponse, 'content', None) or ())
+    texte = ''.join(b.text for b in blocs
+                    if getattr(b, 'type', None) == 'text')
+    if not texte.strip():
+        types = [str(getattr(b, 'type', '?')) for b in blocs] or ['aucun bloc']
+        raise ReponseInexploitable(
+            f'le service a répondu, mais sa réponse ne porte aucun texte '
+            f'exploitable — {len(blocs)} bloc(s) reçu(s) : {", ".join(types)}')
+    return texte
 
 
 def sites_du_modele(modele: str) -> Tuple[Site, ...]:
