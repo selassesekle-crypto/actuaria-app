@@ -274,10 +274,12 @@ class T4_CeQuiNEstPasCalcule(unittest.TestCase):
         a3 = {'hypotheses': {'h1_poisson': {'statut': 'VERT',
                                             'ratio_disp': 1.022}}}
         html = self._html(a3=a3, a6={'modele_production': {}})
-        bloc = html.split('Hypothèses Actuarielles')[1].split('</table>')[0]
+        bloc = html.split(R.chapitre(4))[1].split('</table>')[0]
         self.assertIn('NON CALCULÉE', bloc)
         # les quatre hypothèses GLM figurent, calculées ou non
-        for h in ('H1 —', 'H2 —', 'H3 —', 'H4 —'):
+        # ⚠️ T5 les a NOMMÉES : elles s'appelaient « H1 » à « H4 » à côté de
+        # « H1 ML » à « H4 ML », soit huit lignes pour quatre numéros.
+        for h in ('H1 GLM —', 'H2 GLM —', 'H3 GLM —', 'H4 GLM —'):
             self.assertIn(h, bloc, h)
         print('    OK T4c : les hypothèses non calculées sont NOMMÉES, pas '
               'effacées')
@@ -305,6 +307,250 @@ class T4_CeQuiNEstPasCalcule(unittest.TestCase):
         self.assertEqual(tronque('GLM Poisson adapté', 80), 'GLM Poisson adapté')
         self.assertEqual(tronque(None, 80), '')
         print('    OK T4e : un texte court passe intact')
+
+
+# ── T5 : un payload complet, pour voir les DEUX formats en entier ───────────
+# ⚠️ LES TESTS PRÉCÉDENTS SE CONTENTAIENT D'UN A3 MINIMAL : ils ne rendaient
+# ni classement, ni backtesting, ni contrôles de sélection — c'est-à-dire
+# précisément les tableaux où les deux formats divergeaient.
+A3_COMPLET = {
+    'metriques': {
+        'poisson': {'gini': 0.1775, 'aic': 10308.0, 'deviance': 8421.5,
+                    'pseudo_r2': 0.0412, 'nb_vars_retenues': 9},
+        'gamma': {'gini': 0.0912, 'aic': 20114.0, 'deviance': 15012.3,
+                  'pseudo_r2': 0.0188, 'nb_vars_retenues': 7},
+    },
+    'relativites_poisson': {
+        'age_conducteur': {'beta': -0.2841, 'relativite': 0.7527,
+                           'ic95_low': 0.6902, 'ic95_high': 0.8208,
+                           'pvalue': 0.0001, 'significatif': True,
+                           'sens': 'allegant'},
+    },
+    'hypotheses': {
+        'h1_poisson': {'statut': 'VERT', 'ratio_disp': 1.022,
+                       'message': 'Var/E = 1.02 < 2', 'conseil': 'GLM adapte'},
+    },
+    'commentaire': 'REPLI AGENT',
+}
+A4_COMPLET = {'classement': [], 'commentaire': 'REPLI AGENT'}
+A6_COMPLET = {
+    'branche': 'auto', 'statut_rag': 'VERT',
+    'classement': [
+        {'modele': 'GLM_POISSON', 'famille': 'GLM', 'gini_test': 0.1775,
+         'rmse_test': 0.4504, 'overfit_ratio': 1.0, 'score_global': 1.0},
+        {'modele': 'ML_LIGHTGBM', 'famille': 'ML', 'gini_test': 0.1729,
+         'rmse_test': 0.4579, 'overfit_ratio': 2.757, 'score_global': 0.6696},
+    ],
+    'modele_production': {'modele': 'GLM_POISSON', 'famille': 'GLM',
+                          'score_global': 1.0, 'gini_test': 0.1775,
+                          'overfit_ratio': 1.0, 'interpretabilite': 1.0},
+    'validation_selection': {
+        'c1_nb_modeles': {'statut': 'VERT', 'message': '7 modeles compares'},
+        'c2_ecart_gini': {'statut': 'VERT', 'message': 'Ecart = 0.0655'},
+        'c3_coherence': {'statut': 'VERT', 'message': 'Rang 1 coherent'},
+    },
+    'backtest': {
+        'disponible': True, 'ae_ratio': 0.9947, 'interpretation': 'Bon',
+        'stabilite_wf': 'Stable', 'n_fenetres': 4,
+        'walk_forward': [
+            {'annee_test': 2023, 'n_train': 9528, 'n_test': 2472,
+             'moy_train': 0.21, 'moy_test': 0.21, 'ae_ratio': 0.9947,
+             'statut': 'VERT'},
+        ],
+    },
+    'audit_trail': {'agent': 'A6_COMPARAISON', 'ae_ratio': 0.9947,
+                    'stabilite_wf': 'Stable', 'nb_modeles': 7,
+                    'gouvernance_ok': True, 'modele_production': 'GLM_POISSON',
+                    'timestamp': '2026-08-08T06:34:34.813112'},
+}
+
+
+def _les_deux_formats():
+    """Le MÊME payload dans les deux formats, sans réseau."""
+    appels = []
+    with patch.dict(os.environ, {'ANTHROPIC_API_KEY': 'cle-de-test'}):
+        with patch('anthropic.Anthropic', _client_simule(appels)):
+            rap = R.generer_rapport_tarification(
+                A3_COMPLET, A4_COMPLET, A6_COMPLET, 'DEMO', '31/12/2025',
+                'T5', ['html', 'word'])
+    html = (rap.get('html_bytes') or b'').decode('utf-8', 'replace')
+    return html, rap.get('word_bytes') or b''
+
+
+def _entetes_html(html):
+    return {re.sub(r'<[^>]+>', '', c).strip()
+            for c in re.findall(r'<th[^>]*>(.*?)</th>', html, re.S)}
+
+
+def _entetes_word(octets):
+    """Les en-têtes du Word : la 1re ligne de chaque tableau du document."""
+    from docx import Document
+    doc = Document(io.BytesIO(octets))
+    return {c.text.strip() for t in doc.tables for c in t.rows[0].cells}
+
+
+class T5_LeVocabulaire(unittest.TestCase):
+    """T5 — un en-tête défini deux fois diverge.
+
+    ⚠️ MESURÉ AVANT CE LOT sur un payload réel : 21 libellés communs aux deux
+    formats, 12 propres à l'HTML, 10 propres au Word. Les mêmes colonnes
+    portaient « IC 95% bas » d'un côté et « IC bas » de l'autre.
+    """
+
+    def test_les_titres_de_colonnes_vivent_a_UN_SEUL_endroit(self):
+        """Le motif du chantier : la source est unique, les formats la lisent.
+
+        Un test qui recopierait les libellés attendus recréerait la deuxième
+        définition qu'on vient de supprimer — il lit donc la source.
+        """
+        html, word = _les_deux_formats()
+        h, w = _entetes_html(html), _entetes_word(word)
+        for cle in ('glm', 'relativites', 'classement', 'hypotheses',
+                    'backtest', 'controles', 'audit'):
+            for titre in R.titres(cle):
+                self.assertIn(titre, h, f'HTML · {cle} · {titre}')
+                self.assertIn(titre, w, f'WORD · {cle} · {titre}')
+        print(f'    OK T5 : {sum(len(R.titres(c)) for c in R.COLONNES)} '
+              f'libellés, une seule définition, lue par les deux formats')
+
+    def test_ce_qui_reste_propre_a_UN_format_est_DECLARE(self):
+        """⚠️ UN CHOIX SE DÉCLARE ; CE QUI NE SE DÉCLARE PAS EST UN OUBLI.
+        Avant ce lot, six colonnes et un tableau entier manquaient au Word
+        sans qu'aucun commentaire du dépôt ne le mentionne."""
+        html, word = _les_deux_formats()
+        h, w = _entetes_html(html), _entetes_word(word)
+        # les deux tableaux propres au Word, page de garde et fiche modèle
+        declares_word = set(R.titres('garde')) | set(R.titres('production'))
+        self.assertEqual(w - h - declares_word, set())
+        # l'étoile décorative, propre à l'HTML
+        self.assertEqual(h - w, {'⭐'})
+        print(f'    OK T5b : {len(h - w)} propre HTML + '
+              f'{len(w - h)} propres Word, tous déclarés')
+
+    def test_les_huit_hypotheses_portent_HUIT_noms(self):
+        """⚠️ QUATRE S'APPELAIENT « H1 » À « H4 » ET QUATRE « H1 ML » À
+        « H4 ML », sous un titre qui annonçait « H1–H4 »."""
+        libelles = [lib for _, lib, _ in R.HYPOTHESES]
+        self.assertEqual(len(libelles), 8)
+        self.assertEqual(len(set(libelles)), 8)
+        for lib in libelles:
+            self.assertRegex(lib, r'^H[1-4] (GLM|ML) — ')
+        html, _ = _les_deux_formats()
+        self.assertNotRegex(html, r'>H[1-4] — ')
+        print('    OK T5c : 8 hypothèses, 8 noms, la famille dans chacun')
+
+    def test_les_deux_formats_annoncent_les_MEMES_chapitres(self):
+        """⚠️ « §1 — Résultats GLM Poisson / Gamma / Tweedie » en HTML et
+        « 1. Résultats GLM — Poisson / Gamma / Tweedie » en Word : 8 titres,
+        0 identique."""
+        html, word = _les_deux_formats()
+        texte_word = _texte_docx(word)
+        for n in range(1, len(R.CHAPITRES) + 1):
+            titre = R.chapitre(n)
+            self.assertIn(titre, html, f'HTML · {titre}')
+            self.assertIn(titre, texte_word, f'WORD · {titre}')
+        print(f'    OK T5d : {len(R.CHAPITRES)} chapitres, mot pour mot dans '
+              f'les deux formats')
+
+    def test_le_rapport_ne_dit_plus_paragraphe_N_comme_la_narration(self):
+        """⚠️ « §4 » DÉSIGNAIT DEUX CHOSES : le chapitre « Hypothèses » du
+        rapport et, dans le commentaire, la section « COMPARAISON DES MODÈLES »
+        que le prompt impose. Un renvoi « voir §4 » n'y voulait rien dire."""
+        for titre in R.CHAPITRES:
+            self.assertNotIn('§', titre)
+        html, _ = _les_deux_formats()
+        # les « §N » restants sont ceux de la narration, et d'elle seule
+        narration = html.split('class="section-body narration"')[1]
+        for m in re.finditer(r'§\s*\d', html):
+            self.assertGreaterEqual(
+                m.start(), html.index('class="section-body narration"'),
+                'un « §N » hors du commentaire actuariel')
+        self.assertIn('§1', narration)
+        print('    OK T5e : « §N » n\'appartient plus qu\'au commentaire')
+
+    def test_un_modele_porte_UN_nom(self):
+        """⚠️ « GLM Poisson (référence A3) » au classement et « GLM_POISSON »
+        deux chapitres plus loin. Et la même chaîne produit deux écritures
+        selon le passage : « lightgbm » ici, « ML_LIGHTGBM » là."""
+        self.assertEqual(R.nom_modele('GLM_POISSON'), 'GLM Poisson')
+        self.assertEqual(R.nom_modele('ML_LIGHTGBM'), 'LightGBM')
+        self.assertEqual(R.nom_modele('lightgbm'), 'LightGBM')
+        self.assertEqual(R.nom_modele('ML_LINEAIRE_REGULARISE'),
+                         'Linéaire régularisé')
+        # la provenance est une information, pas un nom : elle est conservée
+        self.assertEqual(R.nom_modele('GLM Poisson (référence A3)'),
+                         'GLM Poisson (référence A3)')
+        # ⚠️ UN NOM INCONNU N'EST JAMAIS REMPLACÉ — un nom inventé serait pire
+        self.assertEqual(R.nom_modele('MODELE_FUTUR'), 'MODELE_FUTUR')
+        self.assertEqual(R.nom_modele(None), '—')
+        html, word = _les_deux_formats()
+        texte_word = _texte_docx(word)
+        for forme in ('GLM_POISSON', 'ML_LIGHTGBM'):
+            self.assertNotIn(forme, html, f'HTML · {forme}')
+            self.assertNotIn(forme, texte_word, f'WORD · {forme}')
+        print('    OK T5f : les identifiants techniques ne sortent plus')
+
+    def test_la_piste_d_audit_se_lit_en_francais(self):
+        """⚠️ « Ae Ratio », « Stabilite Wf », « Gouvernance Ok : True » et un
+        horodatage à la microseconde — des noms de variables capitalisés."""
+        self.assertEqual(R.libelle_audit('ae_ratio'), 'Ratio A/E')
+        self.assertEqual(R.valeur_audit(True), 'oui')
+        self.assertEqual(R.valeur_audit(False), 'non')
+        self.assertEqual(R.valeur_audit('2026-08-08T06:34:34.813112'),
+                         '08/08/2026 à 06 h 34')
+        # ⚠️ UNE CLÉ INCONNUE RESTE VISIBLE : une piste d'audit amputée n'en
+        # serait plus une.
+        self.assertEqual(R.libelle_audit('cle_inconnue'), 'Cle inconnue')
+        html, word = _les_deux_formats()
+        texte_word = _texte_docx(word)
+        for brut in ('Ae Ratio', 'Stabilite Wf', 'Nb Modeles',
+                     'Gouvernance Ok'):
+            self.assertNotIn(brut, html, f'HTML · {brut}')
+            self.assertNotIn(brut, texte_word, f'WORD · {brut}')
+        self.assertIn('Ratio A/E', html)
+        self.assertIn('Ratio A/E', texte_word)
+        print('    OK T5g : 14 clés techniques devenues des libellés')
+
+    def test_le_Word_porte_les_colonnes_et_le_tableau_qui_lui_manquaient(self):
+        """⚠️ SIX COLONNES ET UN TABLEAU ENTIER. Le fichier qui part chez un
+        commissaire n'avait ni la déviance, ni le RMSE, ni l'effectif de test,
+        ni les moyennes, ni les trois contrôles qui justifient la sélection."""
+        _, word = _les_deux_formats()
+        texte = _texte_docx(word)
+        for manquant in ('Déviance', 'RMSE test', 'N test', 'Moy train',
+                         'Moy test', 'Contrôle sélection'):
+            self.assertIn(manquant, texte, manquant)
+        for controle in ('C1 — Nombre de modèles', 'C2 — Écart Gini',
+                         'C3 — Cohérence'):
+            self.assertIn(controle, texte, controle)
+        print('    OK T5h : 6 colonnes + 3 contrôles rendus au Word')
+
+    def test_aucun_tableau_du_Word_ne_deborde_de_la_page(self):
+        """⚠️ AJOUTER UNE COLONNE PEUT COÛTER LA LISIBILITÉ : la largeur utile
+        est de 16,5 cm, marges déduites. Elle se vérifie, elle ne s'espère
+        pas."""
+        from docx import Document
+        from docx.shared import Cm
+        _, word = _les_deux_formats()
+        doc = Document(io.BytesIO(word))
+        for n, t in enumerate(doc.tables, 1):
+            largeur = sum((c.width or 0) / Cm(1) for c in t.rows[0].cells)
+            self.assertLessEqual(round(largeur, 1), 16.5,
+                                 f'tableau {n} : {largeur:.1f} cm')
+        print(f'    OK T5i : {len(doc.tables)} tableaux, tous dans 16,5 cm')
+
+    def test_une_hypothese_absente_se_voit_AUSSI_dans_le_Word(self):
+        """⚠️ LE WORD LA FAISAIT DISPARAÎTRE EN SILENCE là où l'HTML la publie
+        « NON CALCULÉE » depuis T4 : le livrable signé était le plus indulgent
+        des deux."""
+        _, word = _les_deux_formats()
+        texte = _texte_docx(word)
+        # A3_COMPLET ne porte que h1_poisson : les sept autres sont absentes
+        self.assertIn('NON CALCULÉE', texte)
+        for _, libelle, _ in R.HYPOTHESES:
+            self.assertIn(libelle, texte, libelle)
+        print('    OK T5j : 8 hypothèses nommées dans le Word, calculées ou '
+              'non')
 
 
 if __name__ == '__main__':

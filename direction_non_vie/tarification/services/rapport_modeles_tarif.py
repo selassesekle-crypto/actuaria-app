@@ -5,15 +5,10 @@ Direction Non-Vie · Équipe Tarification · BLOC 5
 4 formats : HTML · Word (.docx) · PDF (weasyprint) · Excel (via tarif_excel.py)
 Narration : Claude API → commentaire agent → données seules (3 niveaux)
 
-Structure du rapport (8 chapitres) :
-  §1 — Contexte & Qualité des données
-  §2 — Résultats GLM (Poisson / Gamma / Tweedie)
-  §3 — Classement ML (8 modèles) & Sélection finale
-  §4 — Validation des hypothèses actuarielles (H1–H4)
-  §5 — Backtesting temporel Walk-Forward & Test A/E
-  §6 — Relativités tarifaires exp(β) — GLM Poisson
-  §7 — Commentaire actuariel
-  §8 — Recommandations & Audit Trail
+Structure du rapport : voir `CHAPITRES`, plus bas. ⚠️ CET EN-TÊTE PORTAIT UNE
+TROISIÈME NUMÉROTATION — un plan en huit « §N » que le code n'a jamais produit,
+différent de celui de l'HTML comme de celui du Word. Les titres vivent
+désormais à un seul endroit, et les deux formats les y lisent.
 
 Auteur   : ActuarIA v1.0
 Version  : 1.0.0
@@ -29,7 +24,7 @@ from core.qualite_donnees import synthese_qualite_donnees
 from core.plan_tarifaire import synthese_colonnes_plan_manquantes
 from core.mapping_client import synthese_mapping
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, NamedTuple, Optional, Tuple
 
 from core import format_fr as F
 from core import narration as _md
@@ -131,6 +126,261 @@ STRUCTURE OBLIGATOIRE EN 7 SECTIONS :
 # exactement les marqueurs qui ressortaient en clair dans le livrable.
 SYSTEM_PROMPT_TARIF = _PROMPT_TARIF_GABARIT.replace(
     '{CONSIGNE_MARKDOWN}', _md.CONSIGNE_SANS_MARKDOWN)
+
+
+# =============================================================================
+#  LE VOCABULAIRE DU RAPPORT — DEFINI UNE FOIS, CONSOMME PAR LES DEUX FORMATS
+# =============================================================================
+#
+#  ⚠️ UN EN-TÊTE DÉFINI DEUX FOIS DIVERGE. Mesuré avant ce lot sur les quinze
+#  tableaux du rapport : 21 libellés communs, 12 propres à l'HTML, 10 propres
+#  au Word. Les mêmes colonnes portaient des noms différents — « IC 95% bas »
+#  et « IC bas », « Relativité exp(β) » et « Relativité », « Significatif » et
+#  « Sig. », « Score global » et « Score ». Ce ne sont pas deux rendus d'un
+#  document, ce sont deux documents. C'est le motif que T1, T3 et T6 ont
+#  chacun fermé sur leur objet ; celui-ci le ferme sur les mots.
+#
+#  ⚠️ ET SIX COLONNES MANQUAIENT AU WORD, PLUS UN TABLEAU ENTIER — les
+#  contrôles de sélection C1/C2/C3. OUBLI, PAS CHOIX, et c'est mesuré : le
+#  tableau de backtesting n'occupait que 10,0 cm sur les 16,5 cm utiles de la
+#  page, et aucun commentaire du dépôt ne déclarait l'abrègement. Un choix se
+#  déclare ; ce qui ne se déclare pas est un oubli. Les quatre exceptions qui
+#  restent sont désormais écrites, juste en dessous.
+
+class Colonne(NamedTuple):
+    """Un en-tête de tableau, et la nature de ce qu'il porte.
+
+    ⚠️ L'ALIGNEMENT SUIT LE LIBELLÉ, il ne se redéclare pas à chaque appel :
+    une colonne dite numérique ici l'est dans les deux formats.
+    """
+    titre: str
+    numerique: bool = False
+
+
+def _c(titre: str, numerique: bool = False) -> Colonne:
+    return Colonne(titre, numerique)
+
+
+COLONNES: Dict[str, Tuple[Colonne, ...]] = {
+    'glm': (
+        _c('Modèle'), _c('Gini test', True), _c('AIC', True),
+        _c('Déviance', True), _c('Pseudo-R²', True),
+        _c('Vars retenues', True)),
+    'relativites': (
+        _c('Variable'), _c('β', True), _c('Relativité exp(β)', True),
+        _c('IC 95% bas', True), _c('IC 95% haut', True), _c('p-value', True),
+        _c('Significatif'), _c('Sens')),
+    'classement': (
+        _c('Rang'), _c('Modèle'), _c('Famille'), _c('Gini test', True),
+        _c('RMSE test', True), _c('Overfit', True),
+        _c('Score global', True)),
+    'hypotheses': (
+        _c('Hypothèse'), _c('Statut'), _c('Valeur', True), _c('Message'),
+        _c('Conseil')),
+    'backtest': (
+        _c('Année test'), _c('N train', True), _c('N test', True),
+        _c('Moy train', True), _c('Moy test', True), _c('A/E ratio', True),
+        _c('Statut')),
+    'controles': (
+        _c('Contrôle sélection'), _c('Statut'), _c('Message')),
+    'audit': (
+        _c('Élément'), _c('Valeur')),
+    # ── Les deux tableaux propres au Word, et pourquoi ────────────────────
+    # ⚠️ EXCEPTIONS DÉCLARÉES, PAS OUBLIS. L'HTML porte les mêmes informations
+    # sous une autre forme : la page de garde y est la bande d'en-tête, et le
+    # modèle retenu y est une grille de six vignettes. Un `.docx` n'a ni l'une
+    # ni l'autre. Ce sont les deux seuls endroits où la structure diffère —
+    # partout ailleurs les deux formats portent les mêmes colonnes.
+    'garde': (
+        _c('Client'), _c('Branche'), _c('Arrêté'), _c('Identifiant d\'audit')),
+    'production': (
+        _c('Attribut'), _c('Valeur'), _c('Attribut'), _c('Valeur')),
+}
+
+# ⚠️ TROISIÈME EXCEPTION, DÉCORATIVE : l'étoile du premier du classement
+# n'existe qu'en HTML. Elle ne dit rien que la colonne « Rang » ne dise déjà —
+# c'est une mise en valeur, pas une donnée. Le Word met la même ligne en gras.
+
+
+def titres(cle: str) -> List[str]:
+    """Les en-têtes d'un tableau. La MÊME liste pour l'HTML et pour le Word."""
+    return [c.titre for c in COLONNES[cle]]
+
+
+def colonnes_numeriques(cle: str) -> Tuple[int, ...]:
+    """Les index à aligner à droite — la règle posée par T3, déclarée ici."""
+    return tuple(i for i, c in enumerate(COLONNES[cle]) if c.numerique)
+
+
+# ── Les chapitres du rapport ────────────────────────────────────────────────
+# ⚠️ « §4 » DÉSIGNAIT DEUX CHOSES DANS LE MÊME DOCUMENT : le chapitre
+# « Validation des hypothèses » et, dans le commentaire actuariel, la section
+# « COMPARAISON DES MODÈLES ML ET SÉLECTION » que le prompt impose au modèle.
+# Un renvoi « voir §4 » n'y voulait rien dire — et le commentaire réel en
+# contient. ⚠️ ET IL Y AVAIT UNE TROISIÈME NUMÉROTATION : celle de l'en-tête
+# de ce fichier, qui décrivait un plan que le code n'a jamais produit.
+# Le rapport parle donc de CHAPITRES et la narration garde ses « §N » — forme
+# que son prompt lui impose et que T6 verrouille. Les deux ne se croisent plus.
+CHAPITRES: Tuple[str, ...] = (
+    'Résultats GLM — Poisson / Gamma / Tweedie',
+    'Relativités tarifaires GLM Poisson — exp(β)',
+    'Classement ML — grille multicritères '
+    '(Gini 40 % · Stabilité 30 % · Interprétabilité 20 % · RMSE 10 %)',
+    'Validation des hypothèses actuarielles',
+    'Backtesting walk-forward et test A/E',
+    'Modèle de production retenu',
+    'Commentaire actuariel',
+    'Piste d\'audit et traçabilité ACPR',
+)
+
+
+def chapitre(numero: int) -> str:
+    """« Chapitre N — Titre », rendu à l'identique dans les deux formats.
+
+    ⚠️ LA PONDÉRATION DE LA GRILLE VIT DANS LE TITRE, et non plus dans le seul
+    HTML : le Word la perdait, alors qu'elle explique le classement.
+    """
+    return f'Chapitre {numero} — {CHAPITRES[numero - 1]}'
+
+
+# ── Les huit hypothèses, nommées sans ambiguïté ─────────────────────────────
+# ⚠️ QUATRE LIGNES S'APPELAIENT « H1 » À « H4 » ET QUATRE AUTRES « H1 ML » À
+# « H4 ML », SOUS UN TITRE QUI ANNONÇAIT « H1–H4 ». Le lecteur avait huit
+# lignes pour quatre numéros. Le Word préfixait déjà « H1 GLM » — l'HTML non :
+# c'est cette forme-là qui est retenue, elle nomme la famille des deux côtés.
+# Le troisième membre est la clé de la valeur mesurée, propre à chaque test.
+HYPOTHESES: Tuple[Tuple[str, str, str], ...] = (
+    ('h1_poisson',     'H1 GLM — Sur-dispersion Poisson',           'ratio_disp'),
+    ('h2_homosc',      'H2 GLM — Homoscédasticité résidus Pearson',
+     'ratio_variance'),
+    ('h3_ajustement',  'H3 GLM — Qualité ajustement (Gini)',        'gini_max'),
+    ('h4_stabilite',   'H4 GLM — Stabilité relativités bootstrap',  'cv_max'),
+    ('h1_overfitting', 'H1 ML — Overfitting',                       'ratio'),
+    ('h2_psi',         'H2 ML — PSI réel',                          'psi'),
+    ('h3_gini',        'H3 ML — Performance Gini',                  'gini'),
+    ('h4_calibration', 'H4 ML — Calibration',              'ecart_moy_pct'),
+)
+
+# ── Les contrôles de sélection ──────────────────────────────────────────────
+# ⚠️ CE TABLEAU N'EXISTAIT QU'EN HTML. Il porte les trois contrôles qui
+# justifient le choix du modèle de production : le fichier qui part chez un
+# commissaire ne les avait pas.
+CONTROLES_SELECTION: Tuple[Tuple[str, str], ...] = (
+    ('c1_nb_modeles', 'C1 — Nombre de modèles'),
+    ('c2_ecart_gini', 'C2 — Écart Gini'),
+    ('c3_coherence',  'C3 — Cohérence'),
+)
+
+
+# ── Un modèle porte UN nom ──────────────────────────────────────────────────
+# ⚠️ LE MODÈLE RETENU S'APPELAIT « GLM Poisson (référence A3) » au chapitre 3
+# et « GLM_POISSON » au chapitre 6 — mesuré sur le rapport réel, 5 fois sous
+# la seconde forme. Rien ne dit au lecteur qu'il s'agit du même. Six autres
+# lignes du classement portaient leur identifiant technique tel quel :
+# « lightgbm », « lineaire_regularise », « xgboost_tweedie ».
+# La provenance entre parenthèses est CONSERVÉE : elle dit que ce modèle vient
+# d'A3 et n'a pas été réentraîné par A6 — c'est une information, pas un nom.
+_NOMS_MODELES = {
+    'glm_poisson': 'GLM Poisson',
+    'glm_gamma': 'GLM Gamma',
+    'glm_tweedie': 'GLM Tweedie',
+    'lineaire_regularise': 'Linéaire régularisé',
+    'elasticnet': 'ElasticNet',
+    'xgboost': 'XGBoost',
+    'xgboost_tweedie': 'XGBoost Tweedie',
+    'lightgbm': 'LightGBM',
+    'catboost': 'CatBoost',
+    'gbm': 'GBM',
+    'random_forest': 'Random Forest',
+    'cann': 'CANN',
+    'tabnet': 'TabNet',
+    'poisson': 'Poisson',
+    'gamma': 'Gamma',
+    'tweedie': 'Tweedie',
+}
+
+
+def nom_modele(brut) -> str:
+    """Le nom lisible d'un modèle, quelle que soit son écriture technique.
+
+    ⚠️ UN NOM INCONNU EST RENDU TEL QUEL, jamais remplacé ni masqué : la
+    liste ci-dessus ne prétend pas connaître tous les modèles que la chaîne
+    pourra produire, et un nom inventé serait pire qu'un nom technique.
+    """
+    if brut in (None, ''):
+        return F.ABSENT
+    texte = str(brut).strip()
+    identifiant, _, precision = texte.partition('(')
+    cle = identifiant.strip().lower().replace(' ', '_').replace('-', '_')
+    lisible = _NOMS_MODELES.get(cle)
+    # ⚠️ LA MÊME CHAÎNE PRODUIT DEUX ÉCRITURES SELON LE PASSAGE : le rapport
+    # réel du 08/08 porte « lightgbm », un rejeu de la même chaîne porte
+    # « ML_LIGHTGBM ». Le préfixe de famille est déjà dans la colonne
+    # « Famille » — il ne fait pas partie du nom.
+    if lisible is None and cle.startswith('ml_'):
+        lisible = _NOMS_MODELES.get(cle[3:])
+    if lisible is None:
+        return texte
+    return f'{lisible} ({precision.strip()}' if precision else lisible
+
+
+# ── La piste d'audit se lit en français ─────────────────────────────────────
+# ⚠️ LE CHAPITRE 8 AFFICHAIT « Ae Ratio », « Stabilite Wf », « Nb Modeles »,
+# « Gouvernance Ok : True » et un horodatage à la microseconde. Ce sont des
+# noms de variables mis en capitales par une substitution mécanique, pas la
+# langue d'un rapport signé. Quatorze clés, mesurées sur le rapport réel.
+_LIBELLES_AUDIT = {
+    'agent': 'Agent producteur',
+    'version': 'Version du moteur',
+    'audit_id': 'Identifiant d\'audit',
+    'timestamp': 'Date et heure de production',
+    'branche': 'Branche',
+    'statut_rag': 'Statut RAG',
+    'nb_modeles': 'Nombre de modèles comparés',
+    'modele_production': 'Modèle retenu pour la production',
+    'ae_ratio': 'Ratio A/E',
+    'stabilite_wf': 'Stabilité walk-forward',
+    'profil_ponderation': 'Profil de pondération',
+    'profil_valide_par': 'Profil validé par',
+    'environnement': 'Environnement',
+    'gouvernance_ok': 'Gouvernance validée',
+}
+
+_HORODATAGE = re.compile(r'^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})')
+
+
+def libelle_audit(cle) -> str:
+    """Le libellé lisible d'une clé de piste d'audit.
+
+    ⚠️ UNE CLÉ INCONNUE RESTE VISIBLE — mise en forme, jamais effacée : une
+    piste d'audit amputée ne serait plus une piste d'audit.
+    """
+    brut = str(cle)
+    return _LIBELLES_AUDIT.get(brut, brut.replace('_', ' ').capitalize())
+
+
+def valeur_audit(valeur, cle=None) -> str:
+    """La valeur d'une entrée de piste d'audit, en français.
+
+    ⚠️ « True » N'EST PAS DU FRANÇAIS, et la microseconde d'un horodatage
+    n'apporte rien à un lecteur — elle encombre une colonne.
+
+    ⚠️ ET LA PISTE D'AUDIT NOMMAIT LE MODÈLE UNE TROISIÈME FOIS, sous sa
+    forme technique : c'est le même modèle que celui des chapitres 3 et 6, il
+    porte donc le même nom.
+    """
+    if cle == 'modele_production':
+        return nom_modele(valeur)
+    if isinstance(valeur, bool):
+        return 'oui' if valeur else 'non'
+    texte = str(valeur)
+    h = _HORODATAGE.match(texte)
+    if h:
+        return (f'{h.group(3)}/{h.group(2)}/{h.group(1)} '
+                f'à {h.group(4)} h {h.group(5)}')
+    if isinstance(valeur, float):
+        return F.nombre(valeur, F.DEC_GINI)
+    return F.tronque(texte, 120)
 
 
 def _construire_contexte_tarif(
@@ -514,6 +764,18 @@ def export_html(
             else f'<{tag}>{c}</{tag}>'
             for i, c in enumerate(cells)) + '</tr>'
 
+    def _ouvrir_chapitre(numero, classe=''):
+        """L'ouverture d'un chapitre — son titre vient de `CHAPITRES`.
+
+        ⚠️ CE GABARIT ÉTAIT RECOPIÉ HUIT FOIS, chaque copie portant son titre
+        en dur, et le Word en portait huit autres. C'est ainsi que les deux
+        formats ont fini par annoncer des chapitres différents.
+        """
+        return (f'\n<!-- CHAPITRE {numero} -->\n'
+                f'<div class="section">\n'
+                f'  <div class="section-head">{chapitre(numero)}</div>\n'
+                f'  <div class="section-body{classe}">\n')
+
     def _hyp_row(key, label, val_key='', val=''):
         # Cherche dans hyp3 (GLM), puis hyp4 (ML) — clés toujours distinctes.
         # ⚠️ ELLE DISPARAISSAIT EN SILENCE. Le titre de la section promet
@@ -525,9 +787,10 @@ def export_html(
         if not h:
             return _row([label,
                          '<span class="badge-non-calcule">○ NON CALCULÉE</span>',
-                         F.ABSENT,
+                         F.ABSENT, F.ABSENT,
                          'Hypothèse non produite par la chaîne — '
-                         'à instruire avant validation'], num=(2,))
+                         'à instruire avant validation'],
+                        num=colonnes_numeriques('hypotheses'))
         st = h.get('statut', '?')
         em = _statut_emoji(st)
         brut = h.get(val_key, val)
@@ -538,10 +801,15 @@ def export_html(
         valeur = (F.nombre(brut, F.DEC_GINI)
                   if isinstance(brut, (int, float)) and not isinstance(brut, bool)
                   else (str(brut)[:60] if brut else F.ABSENT))
+        # ⚠️ LA COLONNE « MESSAGE » N'EXISTAIT QU'EN WORD. Elle porte le
+        # diagnostic du test ; l'HTML n'affichait que le conseil qui en
+        # découle, c'est-à-dire la conclusion sans son motif.
         return _row([label,
                      f'<span class="badge-{st.lower()}">{em} {st}</span>',
                      valeur,
-                     F.tronque(h.get('conseil'), 80)], num=(2,))
+                     F.tronque(h.get('message'), 70),
+                     F.tronque(h.get('conseil'), 80)],
+                    num=colonnes_numeriques('hypotheses'))
 
     html = f"""<!DOCTYPE html>
 <html lang="fr">
@@ -619,35 +887,24 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
   </div>
 </div>
 
-<!-- §1 RÉSULTATS GLM -->
-<div class="section">
-  <div class="section-head">§1 — Résultats GLM Poisson / Gamma / Tweedie</div>
-  <div class="section-body">
-    <table>
-      <tr><th>Modèle</th>{''.join(f'<th class="right">{h}</th>' for h in ['Gini test','AIC','Déviance','Pseudo-R²','Vars retenues'])}</tr>
+{_ouvrir_chapitre(1)}    <table>
+      {_row(titres('glm'), header=True, num=colonnes_numeriques('glm'))}
 """
     for modele in ['poisson', 'gamma', 'tweedie']:
         m = met3.get(modele, {})
         if m:
             html += _row([
-                modele.capitalize(),
+                nom_modele(modele),
                 F.nombre(m.get('gini'), F.DEC_GINI),
                 F.nombre(m.get('aic'), 0),
                 F.nombre(m.get('deviance'), 2),
                 F.nombre(m.get('pseudo_r2'), F.DEC_GINI),
                 F.nombre(m.get('nb_vars_retenues'), 0),
-            ], num=(1, 2, 3, 4, 5))
-    html += """    </table>
-  </div>
-</div>
-
-<!-- §2 RELATIVITÉS POISSON -->
-<div class="section">
-  <div class="section-head">§2 — Relativités Tarifaires GLM Poisson — exp(β)</div>
-  <div class="section-body">
-    <table>
-      <tr><th>Variable</th><th class="right">β</th><th class="right">Relativité exp(β)</th><th class="right">IC 95% bas</th><th class="right">IC 95% haut</th><th class="right">p-value</th><th class="center">Significatif</th><th class="center">Sens</th></tr>
-"""
+            ], num=colonnes_numeriques('glm'))
+    html += '    </table>\n  </div>\n</div>\n'
+    html += _ouvrir_chapitre(2) + '    <table>\n      ' + _row(
+        titres('relativites'), header=True,
+        num=colonnes_numeriques('relativites')) + '\n'
     for var, d in sorted(rels.items(), key=lambda x: -abs(x[1].get('beta',0))):
         sens_col = f'color:{VERT}' if d.get('sens')=='allegant' else f'color:{ROUGE}'
         html += _row([
@@ -661,57 +918,37 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
             F.nombre(d.get('pvalue'), F.DEC_GINI),
             '✓' if d.get('significatif') else '·',
             f'<span style="{sens_col};font-weight:600">{d.get("sens","")}</span>',
-        ], num=(1, 2, 3, 4, 5))
-    html += """    </table>
-  </div>
-</div>
-
-<!-- §3 CLASSEMENT ML -->
-<div class="section">
-  <div class="section-head">§3 — Classement ML — Grille Multicritères (Gini 40% · Stabilité 30% · Interprét. 20% · RMSE 10%)</div>
-  <div class="section-body">
-    <table>
-      <tr><th>#</th><th>Modèle</th><th>Famille</th><th class="right">Gini test</th><th class="right">RMSE test</th><th class="right">Overfit</th><th class="right">Score global</th><th class="center">⭐</th></tr>
-"""
+        ], num=colonnes_numeriques('relativites'))
+    html += '    </table>\n  </div>\n</div>\n'
+    html += _ouvrir_chapitre(3) + '    <table>\n      ' + _row(
+        titres('classement') + ['⭐'], header=True,
+        num=colonnes_numeriques('classement')) + '\n'
     for rank, m in enumerate(cl4, 1):
+        # ⚠️ L'ÉTOILE EST LA TROISIÈME EXCEPTION DÉCLARÉE : décorative, propre
+        # à l'HTML, elle ne dit rien que « Rang 1 » ne dise. Le Word met la
+        # même ligne en gras.
         star = '⭐' if rank == 1 else ''
         style = 'font-weight:700; background:#f0f7ff;' if rank == 1 else ''
         html += f'<tr style="{style}">'
-        html += f'<td>{rank}</td><td>{m.get("modele","")}</td><td>{m.get("famille","")}</td>'
+        html += f'<td>{rank}</td><td>{nom_modele(m.get("modele"))}</td><td>{m.get("famille","")}</td>'
         html += f'<td class="right">{F.nombre(m.get("gini_test"), F.DEC_GINI)}</td>'
         html += f'<td class="right">{F.nombre(m.get("rmse_test"), F.DEC_GINI)}</td>'
         html += f'<td class="right">{F.nombre(m.get("overfit_ratio"), F.DEC_RATIO)}</td>'
         # Audit V7 IMPORTANT : garde NA — était toujours affiché "0.0000".
         html += f'<td class="right">{F.nombre(m.get("score_global"), F.DEC_GINI)}</td>'
         html += f'<td class="center">{star}</td></tr>\n'
-    html += """    </table>
-  </div>
-</div>
-
-<!-- §4 HYPOTHÈSES H1–H4 -->
-<div class="section">
-  <div class="section-head">§4 — Validation des Hypothèses Actuarielles H1–H4</div>
-  <div class="section-body">
-    <table>
-      <tr><th>Hypothèse</th><th>Statut</th><th class="right">Valeur</th><th>Conseil</th></tr>
-"""
-    html += _hyp_row('h1_poisson','H1 — Sur-dispersion Poisson','ratio_disp')
-    html += _hyp_row('h2_homosc','H2 — Homoscédasticité résidus Pearson','ratio_variance')
-    html += _hyp_row('h3_ajustement','H3 — Qualité ajustement (Gini)','gini_max')
-    html += _hyp_row('h4_stabilite','H4 — Stabilité relativités bootstrap','cv_max')
-    html += _hyp_row('h1_overfitting','H1 ML — Overfitting','ratio')
-    html += _hyp_row('h2_psi','H2 ML — PSI réel','psi')
-    html += _hyp_row('h3_gini','H3 ML — Performance Gini','gini')
-    html += _hyp_row('h4_calibration','H4 ML — Calibration','ecart_moy_pct')
-    html += """    </table>
-  </div>
-</div>
-
-<!-- §5 BACKTESTING -->
-<div class="section">
-  <div class="section-head">§5 — Backtesting Walk-Forward & Test A/E</div>
-  <div class="section-body">
-"""
+    html += '    </table>\n  </div>\n</div>\n'
+    html += _ouvrir_chapitre(4) + '    <table>\n      ' + _row(
+        titres('hypotheses'), header=True,
+        num=colonnes_numeriques('hypotheses')) + '\n'
+    # ⚠️ HUIT LIGNES POUR QUATRE NUMÉROS, sous un titre qui annonçait
+    # « H1–H4 » : les quatre tests GLM s'appelaient « H1 » à « H4 » et les
+    # quatre tests ML « H1 ML » à « H4 ML ». Elles sont désormais nommées à
+    # un seul endroit, et le titre ne promet plus quatre hypothèses.
+    for _cle, _libelle, _val in HYPOTHESES:
+        html += _hyp_row(_cle, _libelle, _val)
+    html += '    </table>\n  </div>\n</div>\n'
+    html += _ouvrir_chapitre(5)
     if bt6.get('disponible'):
         ae = bt6.get('ae_ratio', 0)
         ae_col = VERT if 0.95<=ae<=1.05 else ORANGE if 0.90<=ae<=1.10 else ROUGE
@@ -729,7 +966,8 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
         if wf:
             html += """
     <table style="margin-top:12px;">
-      <tr><th>Année test</th><th class="right">N train</th><th class="right">N test</th><th class="right">Moy train</th><th class="right">Moy test</th><th class="right">A/E ratio</th><th class="center">Statut</th></tr>
+      """ + _row(titres('backtest'), header=True,
+                 num=colonnes_numeriques('backtest')) + """
 """
             for w in wf:
                 st_w = w.get('statut','')
@@ -748,21 +986,14 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
             html += '    </table>'
     else:
         html += f'<p><em>Backtesting non disponible. {bt6.get("note","")}</em></p>'
-    html += """
-  </div>
-</div>
-
-<!-- §6 MODÈLE PRODUCTION -->
-<div class="section">
-  <div class="section-head">§6 — Modèle de Production Retenu</div>
-  <div class="section-body">
-"""
+    html += '\n  </div>\n</div>\n'
+    html += _ouvrir_chapitre(6)
     if prod:
         prod_col = _statut_col((result_a6 or {}).get('statut_rag','AMBRE'))
         _score_txt = f"{prod.get('score_global'):.4f}" if 'score_global' in prod else '—'
         html += f"""
     <div class="kpi-grid">
-      <div class="kpi"><div class="kpi-label">Modèle retenu</div><div class="kpi-value" style="font-size:15px;color:{NAVY}">{prod.get('modele','—')}</div></div>
+      <div class="kpi"><div class="kpi-label">Modèle retenu</div><div class="kpi-value" style="font-size:15px;color:{NAVY}">{nom_modele(prod.get('modele'))}</div></div>
       <div class="kpi"><div class="kpi-label">Famille</div><div class="kpi-value" style="font-size:15px;">{prod.get('famille','—')}</div></div>
       <div class="kpi"><div class="kpi-label">Score global</div><div class="kpi-value">{_score_txt}</div></div>
       <div class="kpi"><div class="kpi-label">Gini test</div><div class="kpi-value">{F.nombre(prod.get('gini_test'), F.DEC_GINI)}</div></div>
@@ -779,11 +1010,9 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
     if val6:
         html += """
     <table style="margin-top:14px;">
-      <tr><th>Contrôle sélection</th><th>Statut</th><th>Message</th></tr>
+      """ + _row(titres('controles'), header=True) + """
 """
-        for ck, cl in [('c1_nb_modeles','C1 — Nombre de modèles'),
-                       ('c2_ecart_gini','C2 — Écart Gini'),
-                       ('c3_coherence','C3 — Cohérence')]:
+        for ck, cl in CONTROLES_SELECTION:
             cv = val6.get(ck, {})
             st = cv.get('statut','?')
             html += _row([cl,
@@ -795,12 +1024,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
 </div>
 """
     html += _section_figures
-    html += """
-<!-- §7 COMMENTAIRE ACTUARIEL -->
-<div class="section">
-  <div class="section-head">§7 — Commentaire Actuariel</div>
-  <div class="section-body narration">
-"""
+    html += _ouvrir_chapitre(7, ' narration')
     html += narr_html
     html += f"""
     <p style="margin-top:12px; font-size:10px; color:{SLATE}; font-style:italic;">
@@ -809,16 +1033,15 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
   </div>
 </div>
 
-<!-- §8 AUDIT TRAIL -->
-<div class="section">
-  <div class="section-head">§8 — Audit Trail & Traçabilité</div>
-  <div class="section-body">
-    <table>
-      <tr><th>Clé</th><th>Valeur</th></tr>
+{_ouvrir_chapitre(8)}    <table>
+      {_row(titres('audit'), header=True)}
 """
+    # ⚠️ « Ae Ratio », « Stabilite Wf », « Gouvernance Ok : True » — la
+    # substitution mécanique `.title()` produisait des noms de variables
+    # capitalisés, pas du français.
     for k, v in at.items():
         if isinstance(v, (str, int, float, bool)):
-            html += _row([k.replace('_',' ').title(), F.tronque(v, 120)])
+            html += _row([libelle_audit(k), valeur_audit(v, k)])
     html += f"""    </table>
   </div>
 </div>
@@ -869,6 +1092,10 @@ def export_word(
         hyp4   = (result_a4 or {}).get('hypotheses', {})
         bt6    = (result_a6 or {}).get('backtest', {})
         prod   = (result_a6 or {}).get('modele_production', {})
+        # ⚠️ CETTE SOURCE N'ÉTAIT PAS LUE PAR LE WORD — c'est pour cela que
+        # les trois contrôles de sélection n'y figuraient pas. Même clé, même
+        # repli que l'HTML.
+        val6   = (result_a6 or {}).get('validation_selection', {})
         # Priorité A6 (le plus complet — gouvernance + WF recalibré) > A4 > A3
         at     = (
             (result_a6 or {}).get('audit_trail')
@@ -921,7 +1148,7 @@ def export_word(
             bo.set(qn('w:space'),'1'); bo.set(qn('w:color'),'C9A84C')
             pBdr.append(bo); pPr.append(pBdr)
 
-        def _tbl(heads, rows, ws=None, num=()):
+        def _tbl(heads, rows, ws=None, num=(), gras_premiere=False):
             # ⚠️ MESURÉ AVANT CE LOT : 0 cellule numérique sur 69 alignée à
             # droite dans le Word. `num` = les index des colonnes numériques.
             t=doc.add_table(rows=1+len(rows), cols=len(heads)); t.style='Table Grid'
@@ -937,6 +1164,12 @@ def export_word(
                     if ci in num:
                         pp.alignment=WD_ALIGN_PARAGRAPH.RIGHT
                     r=pp.add_run(str(v) if v is not None else '—'); r.font.size=Pt(9)
+                    # ⚠️ L'ÉTOILE DU PREMIER DU CLASSEMENT EST PROPRE À L'HTML
+                    # — décorative, elle ne dit rien que « Rang 1 » ne dise.
+                    # Le Word marque la même ligne en gras : même information,
+                    # moyen propre au format. C'est une exception DÉCLARÉE.
+                    if gras_premiere and ri == 0:
+                        r.bold = True
             if ws:
                 for i, w in enumerate(ws):
                     for row in t.rows: row.cells[i].width=Cm(w)
@@ -956,31 +1189,34 @@ def export_word(
         _run(p, 'Statut : ', sz=11, col=NR)
         _run(p, statut, bold=True, sz=11, col=s_col_r)
         doc.add_paragraph()
-        _tbl(['Client','Branche','Arrêté','Audit ID'],
+        _tbl(titres('garde'),
              [[ref_client or 'À renseigner', branche.replace('_',' ').title(), arr, audit_id or 'N/A']],
              ws=[3.5, 4.0, 3.0, 3.5])
         doc.add_page_break()
 
-        # ── §1 : SYNTHÈSE GLM ─────────────────────────────────────────────────
-        _h('1. Résultats GLM — Poisson / Gamma / Tweedie'); _sep()
+        # ── CHAPITRE 1 : SYNTHÈSE GLM ────────────────────────────────────────
+        _h(chapitre(1)); _sep()
         rows_glm = []
         for modele in ['poisson','gamma','tweedie']:
             m = met3.get(modele, {})
             if m:
                 rows_glm.append([
-                    modele.capitalize(),
+                    nom_modele(modele),
                     F.nombre(m.get('gini'), F.DEC_GINI),
                     F.nombre(m.get('aic'), 0),
+                    # ⚠️ LA DÉVIANCE MANQUAIT AU WORD. C'est la mesure
+                    # d'écart du GLM ; l'AIC seul ne la remplace pas.
+                    F.nombre(m.get('deviance'), 2),
                     F.nombre(m.get('pseudo_r2'), F.DEC_GINI),
                     F.nombre(m.get('nb_vars_retenues'), 0),
                 ])
         if rows_glm:
-            _tbl(['Modèle','Gini test','AIC','Pseudo-R²','Vars retenues'], rows_glm,
-                 ws=[3.0,2.5,2.5,2.5,3.5], num=(1, 2, 3, 4))
+            _tbl(titres('glm'), rows_glm, ws=[2.8,2.3,2.3,2.6,2.3,3.0],
+                 num=colonnes_numeriques('glm'))
         doc.add_page_break()
 
-        # ── §2 : RELATIVITÉS ─────────────────────────────────────────────────
-        _h('2. Relativités Tarifaires GLM Poisson — exp(β)'); _sep()
+        # ── CHAPITRE 2 : RELATIVITÉS ─────────────────────────────────────────
+        _h(chapitre(2)); _sep()
         rows_rel = []
         for var, d in sorted(rels.items(), key=lambda x: -abs(x[1].get('beta',0)))[:15]:
             rows_rel.append([
@@ -995,49 +1231,60 @@ def export_word(
                 d.get('sens',''),
             ])
         if rows_rel:
-            _tbl(['Variable','β','Relativité','IC bas','IC haut','p-value','Sig.','Sens'],
-                 rows_rel, ws=[3.0,1.8,2.0,1.8,1.8,1.8,1.2,1.6],
-                 num=(1, 2, 3, 4, 5))
+            _tbl(titres('relativites'), rows_rel,
+                 ws=[3.0,1.6,2.4,1.9,1.9,1.7,1.4,1.6],
+                 num=colonnes_numeriques('relativites'))
         doc.add_page_break()
 
-        # ── §3 : CLASSEMENT ML ───────────────────────────────────────────────
-        _h('3. Classement ML — Grille Multicritères'); _sep()
+        # ── CHAPITRE 3 : CLASSEMENT ML ───────────────────────────────────────
+        _h(chapitre(3)); _sep()
         # Audit V7 IMPORTANT : garde NA cohérent avec le HTML.
-        rows_ml = [[str(i), m.get('modele',''), m.get('famille',''),
+        # ⚠️ LE RMSE TEST MANQUAIT AU WORD — il pèse 10 % de la grille que le
+        # titre du chapitre annonce désormais dans les deux formats.
+        rows_ml = [[str(i), nom_modele(m.get('modele')), m.get('famille',''),
                     F.nombre(m.get('gini_test'), F.DEC_GINI),
+                    F.nombre(m.get('rmse_test'), F.DEC_GINI),
                     F.nombre(m.get('overfit_ratio'), F.DEC_RATIO),
                     F.nombre(m.get('score_global'), F.DEC_GINI)]
                    for i, m in enumerate(cl4[:10], 1)]
         if rows_ml:
-            _tbl(['#','Modèle','Famille','Gini test','Overfit','Score'],
-                 rows_ml, ws=[1.0,4.0,2.5,2.5,2.0,2.0], num=(3, 4, 5))
+            _tbl(titres('classement'), rows_ml,
+                 ws=[1.3,3.6,2.8,2.3,2.3,1.9,2.3],
+                 num=colonnes_numeriques('classement'), gras_premiere=True)
         doc.add_page_break()
 
-        # ── §4 : HYPOTHÈSES H1-H4 ────────────────────────────────────────────
-        _h('4. Validation des Hypothèses Actuarielles H1–H4'); _sep()
+        # ── CHAPITRE 4 : LES HUIT HYPOTHÈSES ─────────────────────────────────
+        _h(chapitre(4)); _sep()
         rows_hyp = []
-        for hkey, hlabel in [
-            ('h1_poisson',   'H1 GLM — Sur-dispersion Poisson'),
-            ('h2_homosc',    'H2 GLM — Homoscédasticité résidus'),
-            ('h3_ajustement','H3 GLM — Gini ajustement'),
-            ('h4_stabilite', 'H4 GLM — Stabilité relativités'),
-            ('h1_overfitting','H1 ML — Overfitting'),
-            ('h2_psi',       'H2 ML — PSI réel'),
-            ('h3_gini',      'H3 ML — Gini performance'),
-            ('h4_calibration','H4 ML — Calibration'),
-        ]:
-            h = hyp3.get(hkey) or hyp4.get(hkey, {})
-            if h:
-                rows_hyp.append([hlabel, h.get('statut','?'),
-                                  F.tronque(h.get('message'), 70),
-                                  str(h.get('conseil',''))[:60]])
+        for hkey, hlabel, hval in HYPOTHESES:
+            h = hyp3.get(hkey) or hyp4.get(hkey) or {}
+            if not h:
+                # ⚠️ LE WORD LA FAISAIT DISPARAÎTRE EN SILENCE, là où l'HTML
+                # la publie « NON CALCULÉE » depuis T4. Une hypothèse absente
+                # doit se voir dans les deux formats — sinon le livrable qui
+                # part chez un commissaire est le plus indulgent des deux.
+                rows_hyp.append([hlabel, '○ NON CALCULÉE', F.ABSENT, F.ABSENT,
+                                 'Hypothèse non produite par la chaîne — '
+                                 'à instruire avant validation'])
+                continue
+            brut = h.get(hval)
+            # ⚠️ LA VALEUR MESURÉE MANQUAIT AU WORD : il donnait le verdict
+            # sans le chiffre qui le fonde. Même précision que l'HTML.
+            valeur = (F.nombre(brut, F.DEC_GINI)
+                      if isinstance(brut, (int, float))
+                      and not isinstance(brut, bool)
+                      else (str(brut)[:60] if brut else F.ABSENT))
+            rows_hyp.append([hlabel, h.get('statut','?'), valeur,
+                             F.tronque(h.get('message'), 70),
+                             F.tronque(h.get('conseil'), 60)])
         if rows_hyp:
-            _tbl(['Hypothèse','Statut','Message','Conseil'], rows_hyp,
-                 ws=[4.5,1.8,5.5,4.2])
+            _tbl(titres('hypotheses'), rows_hyp,
+                 ws=[4.2,1.7,1.6,4.5,4.0],
+                 num=colonnes_numeriques('hypotheses'))
         doc.add_page_break()
 
-        # ── §5 : BACKTESTING ─────────────────────────────────────────────────
-        _h('5. Backtesting Walk-Forward & Test A/E'); _sep()
+        # ── CHAPITRE 5 : BACKTESTING ─────────────────────────────────────────
+        _h(chapitre(5)); _sep()
         if bt6.get('disponible'):
             ae = bt6.get('ae_ratio', 0)
             bt_col = VR if 0.95<=ae<=1.05 else AR if 0.90<=ae<=1.10 else RgR
@@ -1048,25 +1295,35 @@ def export_word(
                  sz=9, col=NR)
             wf = bt6.get('walk_forward', [])
             if wf:
+                # ⚠️ TROIS COLONNES MANQUAIENT — l'effectif de test et les
+                # deux moyennes. Le ratio A/E est leur QUOTIENT : sans elles
+                # le lecteur ne peut ni le recalculer ni juger s'il repose sur
+                # 2 371 contrats ou sur 40. Le tableau n'occupait que 10,0 cm
+                # sur les 16,5 utiles : la place n'était pas en cause.
                 rows_wf = [[str(w.get('annee_test','')),
                              F.nombre(w.get('n_train'), 0),
+                             F.nombre(w.get('n_test'), 0),
+                             F.nombre(w.get('moy_train'), F.DEC_GINI),
+                             F.nombre(w.get('moy_test'), F.DEC_GINI),
                              F.nombre(w.get('ae_ratio'), F.DEC_GINI),
                              w.get('statut','')]
                            for w in wf]
-                _tbl(['Année test','N train','A/E ratio','Statut'], rows_wf,
-                     ws=[2.5,2.5,2.5,2.5], num=(1, 2))
+                _tbl(titres('backtest'), rows_wf,
+                     ws=[2.2,2.4,2.4,2.4,2.4,2.4,2.3],
+                     num=colonnes_numeriques('backtest'))
         else:
             p=doc.add_paragraph()
             _run(p, f"Backtesting non disponible. {bt6.get('note','')}", sz=9, italic=True)
         doc.add_page_break()
 
-        # ── §6 : MODÈLE PRODUCTION ───────────────────────────────────────────
-        _h('6. Modèle de Production Retenu'); _sep()
+        # ── CHAPITRE 6 : MODÈLE DE PRODUCTION ────────────────────────────────
+        _h(chapitre(6)); _sep()
         if prod:
             p_col = VR if statut=='VERT' else AR if statut=='AMBRE' else RgR
             _score_txt = f"{prod.get('score_global'):.4f}" if 'score_global' in prod else '—'
-            _tbl(['Attribut','Valeur','Attribut','Valeur'],
-                 [['Modèle retenu', prod.get('modele','—'), 'Famille', prod.get('famille','—')],
+            _tbl(titres('production'),
+                 [['Modèle retenu', nom_modele(prod.get('modele')),
+                   'Famille', prod.get('famille','—')],
                   ['Score global', _score_txt,
                    'Gini test', f"{prod.get('gini_test',0):.4f}"],
                   ['Overfit ratio', f"{prod.get('overfit_ratio',0):.3f}",
@@ -1084,10 +1341,20 @@ def export_word(
                  "meilleur modèle vaut toujours ≈ 1,0000) — ce n'est pas "
                  "une mesure de performance absolue en pourcentage.",
                  sz=9, italic=True)
+        # ⚠️ CE TABLEAU N'EXISTAIT PAS DANS LE WORD. Les trois contrôles
+        # justifient le choix du modèle de production : le fichier qui part
+        # chez un commissaire aux comptes ne les portait pas.
+        if val6:
+            rows_ct = []
+            for ck, cl in CONTROLES_SELECTION:
+                cv = val6.get(ck, {})
+                rows_ct.append([cl, cv.get('statut','?'),
+                                F.tronque(cv.get('message'), 80)])
+            _tbl(titres('controles'), rows_ct, ws=[5.0,2.5,9.0])
         doc.add_page_break()
 
-        # ── §7 : COMMENTAIRE ACTUARIEL ───────────────────────────────────────
-        _h('7. Commentaire Actuariel'); _sep()
+        # ── CHAPITRE 7 : COMMENTAIRE ACTUARIEL ───────────────────────────────
+        _h(chapitre(7)); _sep()
         if narration:
             # ⚠️ CE BLOC N'INTERPRÉTAIT AUCUN MARKDOWN. Il découpait sur « §N »
             # et écrivait chaque ligne TELLE QUELLE : mesuré, 7 formes sur 7
@@ -1138,12 +1405,12 @@ def export_word(
                  sz=9, italic=True)
         doc.add_page_break()
 
-        # ── §8 : AUDIT TRAIL ─────────────────────────────────────────────────
-        _h('8. Audit Trail & Traçabilité ACPR'); _sep()
-        rows_at = [[k.replace('_',' ').title(), str(v)[:80]]
+        # ── CHAPITRE 8 : PISTE D'AUDIT ───────────────────────────────────────
+        _h(chapitre(8)); _sep()
+        rows_at = [[libelle_audit(k), valeur_audit(v, k)]
                    for k, v in at.items() if isinstance(v, (str,int,float,bool))]
         if rows_at:
-            _tbl(['Clé','Valeur'], rows_at, ws=[5.0,11.0])
+            _tbl(titres('audit'), rows_at, ws=[5.5,10.5])
 
         _sep()
         p=doc.add_paragraph(); p.alignment=WD_ALIGN_PARAGRAPH.CENTER
