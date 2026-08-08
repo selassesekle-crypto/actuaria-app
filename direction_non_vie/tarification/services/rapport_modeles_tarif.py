@@ -32,6 +32,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
 from core import format_fr as F
+from core import narration as _md
 from core import frontiere_llm
 
 
@@ -92,7 +93,7 @@ def _statut_emoji(s: str) -> str:
 # =============================================================================
 #  SYSTEM PROMPT CLAUDE API
 # =============================================================================
-SYSTEM_PROMPT_TARIF = """\
+_PROMPT_TARIF_GABARIT = """\
 Tu es un actuaire Non-Vie senior certifié par l'Institut des Actuaires (IA), \
 expert en tarification Solvabilité 2 et IFRS 17, avec 20 ans d'expérience \
 auprès de mutuelles et grands groupes d'assurance.
@@ -101,8 +102,8 @@ Tu rédiges le commentaire actuariel d'un rapport de tarification Non-Vie \
 destiné à l'actuaire désigné, au Comité des risques et à l'ACPR.
 
 RÈGLES ABSOLUES :
-0. FORMAT : §N — TITRE pour les sections, ### pour les sous-titres, \
-**gras** pour les termes importants. PAS de tableaux Markdown. Sépare les sections par une ligne vide.
+0. FORMAT : les sections s'écrivent « §N — TITRE », séparées par une ligne vide.
+{CONSIGNE_MARKDOWN}
 1. LANGUE : Français professionnel actuariel.
 2. RIGUEUR : Chaque affirmation est justifiée par les données fournies.
 3. CHIFFRES : Gini à 4 décimales, AIC arrondi, p-values à 4 décimales.
@@ -119,6 +120,17 @@ STRUCTURE OBLIGATOIRE EN 7 SECTIONS :
 §6 — RISQUES IDENTIFIÉS ET POINTS D'ATTENTION
 §7 — CONCLUSION ET RECOMMANDATIONS POUR L'ACTUAIRE DÉSIGNÉ\
 """
+
+# ⚠️ LA CONSIGNE ANTI-MARKDOWN VIENT DE `core.narration` — un seul endroit du
+# dépôt la porte, comme la conversion qui la double. CEINTURE ET BRETELLES :
+# la consigne évite le marqueur, la conversion traite celui qui passe quand
+# même. Une consigne peut se relâcher — le modèle glisse un marqueur, ou son
+# comportement change d'une version à l'autre ; une conversion, non.
+# ⚠️ ET LA RÈGLE 0 A ÉTÉ RÉÉCRITE : elle demandait « ### pour les
+# sous-titres, **gras** pour les termes importants », c'est-à-dire
+# exactement les marqueurs qui ressortaient en clair dans le livrable.
+SYSTEM_PROMPT_TARIF = _PROMPT_TARIF_GABARIT.replace(
+    '{CONSIGNE_MARKDOWN}', _md.CONSIGNE_SANS_MARKDOWN)
 
 
 def _construire_contexte_tarif(
@@ -389,23 +401,13 @@ def _narration_claude(result_a3, result_a4, result_a6, branche, arrete) -> Tuple
 #  HTML
 # =============================================================================
 
-def _md_to_html(txt: str) -> str:
-    """Conversion Markdown minimal → HTML."""
-    if not txt: return ''
-    txt = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', txt)
-    txt = re.sub(r'\*(.+?)\*', r'<em>\1</em>', txt)
-    txt = re.sub(r'^§(\d+)\s*[—\-–]\s*(.+)$', r'<h3 class="s-head">§\1 — \2</h3>', txt, flags=re.MULTILINE)
-    txt = re.sub(r'^###\s+(.+)$', r'<h4>\1</h4>', txt, flags=re.MULTILINE)
-    txt = re.sub(r'^-\s+(.+)$', r'<li>\1</li>', txt, flags=re.MULTILINE)
-    txt = re.sub(r'(<li>.*</li>\n?)+', r'<ul>\g<0></ul>', txt)
-    paragraphs = []
-    for line in txt.split('\n'):
-        line = line.strip()
-        if not line or line.startswith('<h') or line.startswith('<ul') or line.startswith('<li'):
-            paragraphs.append(line)
-        else:
-            paragraphs.append(f'<p>{line}</p>')
-    return '\n'.join(paragraphs)
+# ⚠️ L'ANCIENNE CONVERSION LOCALE A ÉTÉ RETIRÉE ICI (T6). Elle ne traitait
+# que 3 formes de markdown sur 7 et produisait un HTML MALFORMÉ : elle
+# enveloppait les <li> dans un <ul> par une substitution de regex, puis
+# passait chaque LIGNE au découpeur de paragraphes — la balise </ul> se
+# retrouvait donc À L'INTÉRIEUR d'un <p>. La conversion vit désormais dans
+# `core.narration`, partagée avec le rendu Word, et un test valide que les
+# balises se ferment.
 
 
 def export_html(
@@ -433,7 +435,13 @@ def export_html(
     narration, n_src = (
         narration_calculee if narration_calculee is not None
         else _narration_claude(result_a3, result_a4, result_a6, branche, arr))
-    narr_html = _md_to_html(narration) if narration else '<p><em>Narration non disponible.</em></p>'
+    # ⚠️ MÊME ANALYSE QUE LE WORD (T6). L'ancienne conversion locale ne
+    # traitait que 3 formes sur 7 et produisait un HTML MALFORMÉ : elle
+    # enveloppait les <li> par une regex puis passait chaque LIGNE au
+    # découpeur de paragraphes, si bien que la balise </ul> se retrouvait
+    # DANS un <p>.
+    narr_html = (_md.en_html(narration) if narration
+                 else '<p><em>Narration non disponible.</em></p>')
 
     met3  = (result_a3 or {}).get('metriques', {})
     rels  = (result_a3 or {}).get('relativites_poisson', {})
@@ -1081,20 +1089,39 @@ def export_word(
         # ── §7 : COMMENTAIRE ACTUARIEL ───────────────────────────────────────
         _h('7. Commentaire Actuariel'); _sep()
         if narration:
-            sections_n = re.split(r'(?=§\d+\s*[—\-–])', _clean(narration))
-            for sec in sections_n:
-                sec = sec.strip()
-                if not sec: continue
-                ls = sec.split('\n', 1)
-                if ls[0]: _h(ls[0], lv=2)
-                if len(ls) > 1:
-                    for ln in ls[1].split('\n'):
-                        ln = ln.strip()
-                        if ln:
-                            p=doc.add_paragraph()
-                            p.paragraph_format.space_after=Pt(3)
-                            p.paragraph_format.left_indent=Cm(0.3)
-                            _run(p, ln, sz=9, col=NR)
+            # ⚠️ CE BLOC N'INTERPRÉTAIT AUCUN MARKDOWN. Il découpait sur « §N »
+            # et écrivait chaque ligne TELLE QUELLE : mesuré, 7 formes sur 7
+            # ressortaient brutes — « # », « ## », « **gras** », « - », « | »…
+            # Il consomme désormais la MÊME analyse que l'HTML, si bien que les
+            # deux formats ne peuvent plus rendre des structures différentes.
+            for bloc in _md.analyser(_clean(narration)):
+                if bloc.genre == _md.SECTION or bloc.genre == _md.TITRE1:
+                    _h(bloc.texte, lv=2)
+                    continue
+                if bloc.genre == _md.REGLE:
+                    _sep()
+                    continue
+                p = doc.add_paragraph()
+                p.paragraph_format.space_after = Pt(3)
+                p.paragraph_format.left_indent = Cm(
+                    0.6 if bloc.genre in (_md.PUCE, _md.CITATION) else 0.3)
+                if bloc.genre == _md.TITRE2:
+                    _run(p, bloc.texte, bold=True, sz=10, col=NR)
+                    continue
+                if bloc.genre == _md.TITRE3:
+                    _run(p, bloc.texte, bold=True, sz=9, col=NR)
+                    continue
+                if bloc.genre == _md.PUCE:
+                    _run(p, '• ', sz=9, col=NR)
+                elif bloc.genre == _md.CITATION:
+                    _run(p, '« ', sz=9, italic=True, col=GrR)
+                # Le gras et l'italique deviennent des passages, pas des
+                # étoiles : un `.docx` n'a pas de balises, il a des runs.
+                for seg in _md.segments(bloc.texte):
+                    _run(p, seg.texte, bold=seg.gras, italic=seg.italique,
+                         sz=9, col=NR)
+                if bloc.genre == _md.CITATION:
+                    _run(p, ' »', sz=9, italic=True, col=GrR)
             # ⚠️ LE WORD NE NOMMAIT SA SOURCE QU'EN CAS DE SUCCÈS. Un repli y
             # était donc INDISCERNABLE d'une narration réussie, là où l'HTML
             # l'affichait. Une narration calculée une fois qui échoue doit le
