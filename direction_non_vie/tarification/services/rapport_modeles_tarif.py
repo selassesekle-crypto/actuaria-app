@@ -371,8 +371,18 @@ def _md_to_html(txt: str) -> str:
 def export_html(
     result_a3: Dict = None, result_a4: Dict = None, result_a6: Dict = None,
     ref_client: str = '', arrete: str = '', audit_id: str = '',
+    narration_calculee: Optional[Tuple[str, str]] = None,
 ) -> str:
-    """Génère le rapport HTML tarification. Retourne str HTML ou ''."""
+    """Génère le rapport HTML tarification. Retourne str HTML ou ''.
+
+    `narration_calculee` : le couple (texte, source) déjà obtenu, à réutiliser.
+    ⚠️ SANS LUI, CHAQUE FORMAT PAIE SA PROPRE NARRATION — et rien ne garantit
+    qu'ils obtiennent la même. Mesuré sur un rapport réel : le HTML portait les
+    18 089 caractères de commentaire actuariel, le Word portait le dépôt
+    technique de l'agent. Le fichier qui part chez un commissaire n'avait pas
+    le commentaire. `generer_rapport_tarification` calcule donc UNE fois et
+    transmet ; appelé seul, cet export calcule pour lui-même comme avant.
+    """
     now    = datetime.now().strftime('%d/%m/%Y %H:%M')
     arr    = arrete or datetime.now().strftime('%d/%m/%Y')
     branche = (result_a6 or result_a3 or {}).get('branche', 'non_vie')
@@ -380,7 +390,9 @@ def export_html(
     s_col   = _statut_col(statut)
     s_emoji = _statut_emoji(statut)
 
-    narration, n_src = _narration_claude(result_a3, result_a4, result_a6, branche, arr)
+    narration, n_src = (
+        narration_calculee if narration_calculee is not None
+        else _narration_claude(result_a3, result_a4, result_a6, branche, arr))
     narr_html = _md_to_html(narration) if narration else '<p><em>Narration non disponible.</em></p>'
 
     met3  = (result_a3 or {}).get('metriques', {})
@@ -738,8 +750,13 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
 def export_word(
     result_a3: Dict = None, result_a4: Dict = None, result_a6: Dict = None,
     ref_client: str = '', arrete: str = '', audit_id: str = '',
+    narration_calculee: Optional[Tuple[str, str]] = None,
 ) -> bytes:
-    """Génère le rapport Word tarification (.docx). Retourne bytes ou b''."""
+    """Génère le rapport Word tarification (.docx). Retourne bytes ou b''.
+
+    `narration_calculee` : voir `export_html`. C'est ce format-ci qui payait le
+    plus cher l'appel séparé — il partait sans le commentaire actuariel.
+    """
     try:
         from docx import Document
         from docx.shared import Pt, Cm, RGBColor
@@ -769,7 +786,9 @@ def export_word(
             or {}
         )
 
-        narration, n_src = _narration_claude(result_a3, result_a4, result_a6, branche, arr)
+        narration, n_src = (
+            narration_calculee if narration_calculee is not None
+            else _narration_claude(result_a3, result_a4, result_a6, branche, arr))
 
         def rgb(h):
             h = h.lstrip('#')
@@ -985,12 +1004,20 @@ def export_word(
                             p.paragraph_format.space_after=Pt(3)
                             p.paragraph_format.left_indent=Cm(0.3)
                             _run(p, ln, sz=9, col=NR)
-            if n_src == 'claude_api':
-                p=doc.add_paragraph()
-                _run(p, '✦ Narration générée par ActuarIA Intelligence', sz=7, italic=True, col=GrR)
+            # ⚠️ LE WORD NE NOMMAIT SA SOURCE QU'EN CAS DE SUCCÈS. Un repli y
+            # était donc INDISCERNABLE d'une narration réussie, là où l'HTML
+            # l'affichait. Une narration calculée une fois qui échoue doit le
+            # dire dans les DEUX formats — sinon on remplace deux commentaires
+            # divergents par un silence dans l'un des deux.
+            p = doc.add_paragraph()
+            _run(p, (f'✦ Narration générée par ActuarIA Intelligence '
+                     f'({CLAUDE_MODEL_TARIF})' if n_src == SRC_API
+                     else f'✦ Source de la narration : {n_src}'),
+                 sz=7, italic=True, col=GrR)
         else:
             p=doc.add_paragraph()
-            _run(p, 'Narration non disponible.', sz=9, italic=True)
+            _run(p, f'Narration non disponible — source : {n_src}',
+                 sz=9, italic=True)
         doc.add_page_break()
 
         # ── §8 : AUDIT TRAIL ─────────────────────────────────────────────────
@@ -1023,11 +1050,17 @@ def export_word(
 def export_pdf(
     result_a3: Dict = None, result_a4: Dict = None, result_a6: Dict = None,
     ref_client: str = '', arrete: str = '', audit_id: str = '',
+    narration_calculee: Optional[Tuple[str, str]] = None,
 ) -> bytes:
-    """Génère le rapport PDF via weasyprint (HTML→PDF). Retourne bytes ou b''."""
+    """Génère le rapport PDF via weasyprint (HTML→PDF). Retourne bytes ou b''.
+
+    `narration_calculee` : transmis à `export_html` — le PDF est un rendu de
+    l'HTML, il doit porter exactement le même commentaire.
+    """
     try:
         from weasyprint import HTML as WP_HTML
-        html = export_html(result_a3, result_a4, result_a6, ref_client, arrete, audit_id)
+        html = export_html(result_a3, result_a4, result_a6, ref_client, arrete,
+                           audit_id, narration_calculee)
         if not html:
             return b''
         buf = io.BytesIO()
@@ -1072,14 +1105,28 @@ def generer_rapport_tarification(
         'excel_bytes': b'',
     }
 
+    # ⚠️ LA NARRATION EST CALCULÉE UNE FOIS, ICI, POUR TOUS LES FORMATS.
+    # Avant ce lot, chaque export appelait `_narration_claude` pour son propre
+    # compte. Mesuré sur un rapport réel : le HTML portait les 18 089 caractères
+    # du commentaire actuariel, le Word portait le dépôt technique de l'agent —
+    # le format qui part chez un commissaire n'avait pas le commentaire. Deux
+    # narrations divergentes dans un même livrable deviennent désormais
+    # IMPOSSIBLES PAR CONSTRUCTION, et le nombre d'appels est divisé par deux.
+    arr_narr = arrete or datetime.now().strftime('%d/%m/%Y')
+    branche_narr = (result_a6 or result_a3 or {}).get('branche', 'non_vie')
+    narration_calculee = _narration_claude(
+        result_a3, result_a4, result_a6, branche_narr, arr_narr)
+
     # HTML d'abord (réutilisé pour PDF)
     html_str = ''
     if 'html' in formats or 'pdf' in formats:
-        html_str = export_html(result_a3, result_a4, result_a6, ref_client, arrete, audit_id)
+        html_str = export_html(result_a3, result_a4, result_a6, ref_client, arrete,
+                               audit_id, narration_calculee)
         out['html_bytes'] = html_str.encode('utf-8') if html_str else b''
 
     if 'word' in formats:
-        out['word_bytes'] = export_word(result_a3, result_a4, result_a6, ref_client, arrete, audit_id)
+        out['word_bytes'] = export_word(result_a3, result_a4, result_a6, ref_client,
+                                        arrete, audit_id, narration_calculee)
 
     if 'pdf' in formats:
         if html_str:
@@ -1092,7 +1139,8 @@ def generer_rapport_tarification(
             except ImportError:
                 logger.warning('weasyprint absent — PDF non généré')
         else:
-            out['pdf_bytes'] = export_pdf(result_a3, result_a4, result_a6, ref_client, arrete, audit_id)
+            out['pdf_bytes'] = export_pdf(result_a3, result_a4, result_a6, ref_client,
+                                          arrete, audit_id, narration_calculee)
 
     if 'excel' in formats:
         try:
