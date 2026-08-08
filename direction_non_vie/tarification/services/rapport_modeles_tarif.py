@@ -1082,12 +1082,26 @@ def export_html(
             else f'<{tag}>{c}</{tag}>'
             for i, c in enumerate(cells)) + '</tr>'
 
-    def _ouvrir_chapitre_figures():
-        """La section des figures — sans numéro de chapitre, elle les porte
-        toutes en attendant que le lot suivant les distribue."""
-        return ('\n<!-- FIGURES -->\n<div class="section">\n'
-                '  <div class="section-head">Figures</div>\n'
-                '  <div class="section-body">\n')
+    def _figures_du_chapitre(numero):
+        return ''.join(_bloc_figure(f) for f in _figures.get(numero, ()))
+
+    def _fermer_chapitre(numero, avec_table=True):
+        """La clôture d'un chapitre : SES figures, puis la fermeture.
+
+        ⚠️ ELLES ÉTAIENT GROUPÉES APRÈS LE CHAPITRE 6, dans une section sans
+        numéro, hors de la numérotation des chapitres. Le lecteur devait
+        quitter la section pour aller chercher la preuve de ce qu'elle
+        affirmait — et le chapitre 4, qui publie huit verdicts, renvoyait sa
+        preuve trois chapitres plus loin.
+
+        ⚠️ LE NUMÉRO DE FIGURE NE BOUGE PAS D'UN CRAN : `numeroter` parcourt
+        le plan une fois, avant tout rendu. Déplacer le GESTE de rendu ne
+        touche pas au compteur — c'est ce qu'un compteur positionnel calculé
+        en amont garantit, et ce qu'une numérotation faite au fil du document
+        n'aurait pas garanti.
+        """
+        return (('    </table>\n' if avec_table else '\n')
+                + _figures_du_chapitre(numero) + '  </div>\n</div>\n')
 
     def _ouvrir_chapitre(numero, classe=''):
         """L'ouverture d'un chapitre — son titre vient de `CHAPITRES`.
@@ -1226,7 +1240,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
                 F.nombre(m.get('pseudo_r2'), F.DEC_GINI),
                 F.nombre(m.get('nb_vars_retenues'), 0),
             ], num=colonnes_numeriques('glm'))
-    html += '    </table>\n  </div>\n</div>\n'
+    html += _fermer_chapitre(1)
     html += _ouvrir_chapitre(2) + '    <table>\n      ' + _row(
         titres('relativites'), header=True,
         num=colonnes_numeriques('relativites')) + '\n'
@@ -1244,7 +1258,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
             '✓' if d.get('significatif') else '·',
             f'<span style="{sens_col};font-weight:600">{d.get("sens","")}</span>',
         ], num=colonnes_numeriques('relativites'))
-    html += '    </table>\n  </div>\n</div>\n'
+    html += _fermer_chapitre(2)
     html += _ouvrir_chapitre(3) + '    <table>\n      ' + _row(
         titres('classement') + ['⭐'], header=True,
         num=colonnes_numeriques('classement')) + '\n'
@@ -1262,7 +1276,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
         # Audit V7 IMPORTANT : garde NA — était toujours affiché "0.0000".
         html += f'<td class="right">{F.nombre(m.get("score_global"), F.DEC_GINI)}</td>'
         html += f'<td class="center">{star}</td></tr>\n'
-    html += '    </table>\n  </div>\n</div>\n'
+    html += _fermer_chapitre(3)
     html += _ouvrir_chapitre(4) + '    <table>\n      ' + _row(
         titres('hypotheses'), header=True,
         num=colonnes_numeriques('hypotheses')) + '\n'
@@ -1272,7 +1286,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
     # un seul endroit, et le titre ne promet plus quatre hypothèses.
     for _cle, _libelle, _val in HYPOTHESES:
         html += _hyp_row(_cle, _libelle, _val)
-    html += '    </table>\n  </div>\n</div>\n'
+    html += _fermer_chapitre(4)
     html += _ouvrir_chapitre(5)
     if bt6.get('disponible'):
         ae = bt6.get('ae_ratio', 0)
@@ -1311,7 +1325,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
             html += '    </table>'
     else:
         html += f'<p><em>Backtesting non disponible. {bt6.get("note","")}</em></p>'
-    html += '\n  </div>\n</div>\n'
+    html += _fermer_chapitre(5, avec_table=False)
     html += _ouvrir_chapitre(6)
     if prod:
         prod_col = _statut_col((result_a6 or {}).get('statut_rag','AMBRE'))
@@ -1344,21 +1358,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
                           f'<span class="badge badge-{st.lower()}">{_statut_emoji(st)} {st}</span>',
                           F.tronque(cv.get('message'), 80)])
         html += '    </table>'
-    html += """
-  </div>
-</div>
-"""
-    # ⚠️ LES FIGURES SONT ENCORE GROUPÉES ICI. Leur placement chapitre par
-    # chapitre est le lot suivant ; le plan, lui, sait déjà à quel chapitre
-    # chacune appartient.
-    if _figures:
-        html += _ouvrir_chapitre_figures()
-        for _num, _fs in sorted(_figures.items()):
-            html += (f'    <div style="color:{SLATE};font-size:11px;'
-                     f'font-weight:600;margin:14px 0 2px;">'
-                     f'{chapitre(_num)}</div>\n')
-            html += ''.join(_bloc_figure(_f) for _f in _fs)
-        html += '  </div>\n</div>\n'
+    html += _fermer_chapitre(6, avec_table=False)
     html += _ouvrir_chapitre(7, ' narration')
     html += narr_html
     html += f"""
@@ -1517,6 +1517,31 @@ def export_word(
                     for row in t.rows: row.cells[i].width=Cm(w)
             doc.add_paragraph().paragraph_format.space_after=Pt(2)
 
+        def _figures_du_chapitre(numero):
+            """Les figures du chapitre, à sa fin — MÊME plan que l'HTML.
+
+            ⚠️ ELLES ÉTAIENT GROUPÉES DANS UNE SECTION « Figures » placée
+            après le chapitre 6. Elles rejoignent le chapitre qu'elles
+            illustrent, et le numéro qu'elles portent est celui que `numeroter`
+            leur a donné avant tout rendu : il ne bouge pas d'un cran.
+            """
+            for f in figures_numerotees.get(numero, ()):
+                p = doc.add_paragraph()
+                p.paragraph_format.space_before = Pt(8)
+                p.paragraph_format.space_after = Pt(2)
+                _run(p, legende(f), bold=True, sz=9, col=GR)
+                rendu = rendus_figures.get(f.cle)
+                # ⚠️ UN .DOCX NE PORTE QUE DU RASTER : il prend le PNG dans
+                # tous les cas, là où l'HTML choisit le plus léger des deux.
+                if rendu is not None and rendu.png:
+                    doc.add_picture(io.BytesIO(rendu.png), width=Cm(16.5))
+                else:
+                    q = doc.add_paragraph()
+                    q.paragraph_format.space_after = Pt(6)
+                    _run(q, (rendu.note if rendu is not None and rendu.note
+                             else 'Figure non rendue dans ce format.'),
+                         sz=8, italic=True, col=GrR)
+
         # ── PAGE DE GARDE ─────────────────────────────────────────────────────
         p=doc.add_paragraph()
         _run(p, 'Actuar', bold=True, sz=28, col=NR)
@@ -1555,6 +1580,7 @@ def export_word(
         if rows_glm:
             _tbl(titres('glm'), rows_glm, ws=[2.8,2.3,2.3,2.6,2.3,3.0],
                  num=colonnes_numeriques('glm'))
+        _figures_du_chapitre(1)
         doc.add_page_break()
 
         # ── CHAPITRE 2 : RELATIVITÉS ─────────────────────────────────────────
@@ -1576,6 +1602,7 @@ def export_word(
             _tbl(titres('relativites'), rows_rel,
                  ws=[3.0,1.6,2.4,1.9,1.9,1.7,1.4,1.6],
                  num=colonnes_numeriques('relativites'))
+        _figures_du_chapitre(2)
         doc.add_page_break()
 
         # ── CHAPITRE 3 : CLASSEMENT ML ───────────────────────────────────────
@@ -1593,6 +1620,7 @@ def export_word(
             _tbl(titres('classement'), rows_ml,
                  ws=[1.3,3.6,2.8,2.3,2.3,1.9,2.3],
                  num=colonnes_numeriques('classement'), gras_premiere=True)
+        _figures_du_chapitre(3)
         doc.add_page_break()
 
         # ── CHAPITRE 4 : LES HUIT HYPOTHÈSES ─────────────────────────────────
@@ -1623,6 +1651,7 @@ def export_word(
             _tbl(titres('hypotheses'), rows_hyp,
                  ws=[4.2,1.7,1.6,4.5,4.0],
                  num=colonnes_numeriques('hypotheses'))
+        _figures_du_chapitre(4)
         doc.add_page_break()
 
         # ── CHAPITRE 5 : BACKTESTING ─────────────────────────────────────────
@@ -1656,6 +1685,7 @@ def export_word(
         else:
             p=doc.add_paragraph()
             _run(p, f"Backtesting non disponible. {bt6.get('note','')}", sz=9, italic=True)
+        _figures_du_chapitre(5)
         doc.add_page_break()
 
         # ── CHAPITRE 6 : MODÈLE DE PRODUCTION ────────────────────────────────
@@ -1693,38 +1723,8 @@ def export_word(
                 rows_ct.append([cl, cv.get('statut','?'),
                                 F.tronque(cv.get('message'), 80)])
             _tbl(titres('controles'), rows_ct, ws=[5.0,2.5,9.0])
+        _figures_du_chapitre(6)
         doc.add_page_break()
-
-        # ── LES FIGURES ──────────────────────────────────────────────────────
-        # ⚠️ LE WORD NE PORTAIT AUCUNE FIGURE. Mesuré : zéro image sur
-        # 39 414 octets, alors que l'HTML en portait six. Le livrable qui
-        # part chez un commissaire aux comptes était le plus pauvre des deux.
-        # ⚠️ ET IL LIT LE MÊME PLAN NUMÉROTÉ QUE L'HTML — pas une seconde
-        # liste : « Figure 7 » désigne la même chose des deux côtés parce
-        # qu'il n'existe qu'un seul numérotage, calculé une fois.
-        if figures_numerotees:
-            _h('Figures'); _sep()
-            for _num_ch, _fs in sorted(figures_numerotees.items()):
-                p = doc.add_paragraph()
-                p.paragraph_format.space_before = Pt(6)
-                _run(p, chapitre(_num_ch), bold=True, sz=9, col=GrR)
-                for _f in _fs:
-                    p = doc.add_paragraph()
-                    p.paragraph_format.space_before = Pt(8)
-                    p.paragraph_format.space_after = Pt(2)
-                    _run(p, legende(_f), bold=True, sz=9, col=GR)
-                    _r = rendus_figures.get(_f.cle)
-                    # ⚠️ UN .DOCX NE PORTE QUE DU RASTER : il prend le PNG
-                    # dans tous les cas, là où l'HTML choisit le plus léger.
-                    if _r is not None and _r.png:
-                        doc.add_picture(io.BytesIO(_r.png), width=Cm(16.5))
-                    else:
-                        q = doc.add_paragraph()
-                        q.paragraph_format.space_after = Pt(6)
-                        _run(q, (_r.note if _r is not None and _r.note else
-                                 'Figure non rendue dans ce format.'),
-                             sz=8, italic=True, col=GrR)
-            doc.add_page_break()
 
         # ── CHAPITRE 7 : COMMENTAIRE ACTUARIEL ───────────────────────────────
         _h(chapitre(7)); _sep()

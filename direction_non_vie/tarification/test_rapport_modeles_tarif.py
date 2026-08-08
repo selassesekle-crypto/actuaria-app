@@ -810,5 +810,105 @@ class T7a_LeCatalogueDesFigures(unittest.TestCase):
               'images')
 
 
+class T7b_LePlacementDesFigures(unittest.TestCase):
+    """T7b — une figure vit dans le chapitre qu'elle illustre.
+
+    ⚠️ ELLES ÉTAIENT GROUPÉES dans une section « Figures » placée après le
+    chapitre 6, hors de la numérotation des chapitres. Le chapitre 4 publiait
+    huit verdicts et renvoyait sa preuve trois chapitres plus loin.
+    """
+
+    def _positions(self, texte, chapitres):
+        """L'index de chaque titre de chapitre dans le document rendu."""
+        return {n: texte.index(R.chapitre(n)) for n in chapitres
+                if R.chapitre(n) in texte}
+
+    def test_chaque_figure_est_DANS_son_chapitre_en_HTML(self):
+        a3, a4, a6 = _payload_figures()
+        with rendu_simule():
+            html = R.export_html(a3, a4, a6, 'DEMO', '31/12/2025', 'T7b',
+                                 narration_calculee=('Texte.', 'temoin'))
+        bornes = self._positions(html, range(1, 9))
+        plan = R.numeroter(R.figures_disponibles(a3, a4, a6))
+        for numero, figures in plan.items():
+            debut = bornes[numero]
+            # la borne haute : le titre du chapitre suivant qui existe
+            suivants = [p for _, p in sorted(bornes.items()) if p > debut]
+            fin = suivants[0] if suivants else len(html)
+            for f in figures:
+                place = html.find(R.legende(f))
+                self.assertNotEqual(place, -1, R.legende(f))
+                self.assertTrue(debut < place < fin,
+                                '%s hors du chapitre %d' % (R.legende(f),
+                                                            numero))
+        print('    OK T7b : %d figures, chacune entre son chapitre et le '
+              'suivant' % sum(len(f) for f in plan.values()))
+
+    def test_chaque_figure_est_DANS_son_chapitre_en_WORD(self):
+        a3, a4, a6 = _payload_figures()
+        with rendu_simule():
+            word = R.export_word(a3, a4, a6, 'DEMO', '31/12/2025', 'T7b',
+                                 narration_calculee=('Texte.', 'temoin'))
+        texte = _texte_docx(word)
+        bornes = self._positions(texte, range(1, 9))
+        plan = R.numeroter(R.figures_disponibles(a3, a4, a6))
+        for numero, figures in plan.items():
+            debut = bornes[numero]
+            suivants = [p for _, p in sorted(bornes.items()) if p > debut]
+            fin = suivants[0] if suivants else len(texte)
+            for f in figures:
+                place = texte.find(R.legende(f))
+                self.assertNotEqual(place, -1, R.legende(f))
+                self.assertTrue(debut < place < fin,
+                                '%s hors du chapitre %d' % (R.legende(f),
+                                                            numero))
+        print('    OK T7b-b : les mêmes figures dans les mêmes chapitres, '
+              'côté Word')
+
+    def test_la_section_groupee_a_DISPARU(self):
+        """⚠️ SANS CE VERROU, LES DEUX PLACEMENTS POURRAIENT COEXISTER —
+        chaque figure publiée deux fois, et le lecteur incapable de savoir
+        laquelle fait foi."""
+        a3, a4, a6 = _payload_figures()
+        with rendu_simule():
+            html = R.export_html(a3, a4, a6, 'DEMO', '31/12/2025', 'T7b',
+                                 narration_calculee=('Texte.', 'temoin'))
+            word = R.export_word(a3, a4, a6, 'DEMO', '31/12/2025', 'T7b',
+                                 narration_calculee=('Texte.', 'temoin'))
+        self.assertNotIn('<div class="section-head">Figures</div>', html)
+        for f in R.numeroter(R.figures_disponibles(a3, a4, a6))[1]:
+            self.assertEqual(html.count(R.legende(f)), 1,
+                             '%s publiée deux fois' % R.legende(f))
+            self.assertEqual(_texte_docx(word).count(R.legende(f)), 1)
+        print('    OK T7b-c : aucune section « Figures », aucune figure en '
+              'double')
+
+    def test_le_deplacement_N_A_PAS_TOUCHE_A_LA_NUMEROTATION(self):
+        """⚠️ LE CAS OÙ UN COMPTEUR POSITIONNEL SE PROUVE. `numeroter`
+        parcourt le plan AVANT tout rendu : déplacer le geste de rendu ne peut
+        pas décaler un numéro. Une numérotation faite au fil du document
+        n'aurait pas offert cette garantie."""
+        a3, a4, a6 = _payload_figures()
+        with rendu_simule():
+            html = R.export_html(a3, a4, a6, 'DEMO', '31/12/2025', 'T7b',
+                                 narration_calculee=('Texte.', 'temoin'))
+        numeros = [int(n) for n in re.findall(r'Figure (\d+) — ', html)]
+        self.assertEqual(numeros, list(range(1, len(numeros) + 1)),
+                         'numérotation à trous : %s' % numeros)
+        # et elle reste continue quand une figure s'efface d'un chapitre
+        for retiree in ('aic_comparaison', 'chart_lorenz_gini',
+                        'radar_modele_retenu'):
+            restantes = [c for c in R.SOURCES_FIGURES if c != retiree]
+            b3, b4, b6 = _payload_figures(restantes)
+            with rendu_simule():
+                h = R.export_html(b3, b4, b6, 'D', '31/12/2025', 'T',
+                                  narration_calculee=('T.', 'temoin'))
+            n = [int(x) for x in re.findall(r'Figure (\d+) — ', h)]
+            self.assertEqual(n, list(range(1, len(n) + 1)),
+                             'trou sans %s : %s' % (retiree, n))
+        print('    OK T7b-d : numérotation 1..%d continue après le '
+              'déplacement, et à chaque figure retirée' % len(numeros))
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
