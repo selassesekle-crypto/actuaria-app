@@ -31,9 +31,9 @@ from core.mapping_client import synthese_mapping
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
+from core import format_fr as F
 from core import frontiere_llm
 
-import numpy as np
 
 logger = logging.getLogger('actuaria.tarif.rapport')
 
@@ -68,26 +68,12 @@ except Exception:
     _CHARTS_HTML_OK = False
 
 # ── Helpers formatage ─────────────────────────────────────────────────────────
-def _f(v, dec=0) -> str:
-    if v is None: return '—'
-    try:
-        fv = float(v)
-        if not np.isfinite(fv): return '—'
-        if dec == 0:
-            return f"{fv:,.0f} €".replace(',', '\u202f')
-        return f"{fv:,.{dec}f}".replace(',', '\u202f')
-    except Exception: return '—'
-
-def _pct(v, dec=1) -> str:
-    if v is None: return '—'
-    try:
-        fv = float(v)
-        return '—' if not np.isfinite(fv) else f"{fv:.{dec}f}\u202f%"
-    except Exception: return '—'
-
-def _s(v) -> str:
-    if v is None: return '—'
-    return re.sub(r'\s+', ' ', str(v)).strip() or '—'
+# ⚠️ TROIS FORMATEURS ONT ÉTÉ RETIRÉS ICI — `_f`, `_pct` et `_s`. Ils
+# reproduisaient la convention d'A7 et n'étaient appelés NULLE PART : vulture
+# les signalait, et les 53 nombres du rapport étaient formatés en ligne, chacun
+# à sa façon. Le rapport RESSEMBLAIT à A7 sans en appliquer un seul formatage —
+# d'où « 2,435 » à l'anglaise à côté de « 10308 » sans séparateur. La
+# convention vit désormais dans `core.format_fr`, en un seul endroit.
 
 def _clean(txt) -> str:
     if not txt: return ''
@@ -480,9 +466,21 @@ def export_html(
         + ''.join(_figs_html) + '</div></div>'
     ) if _figs_html else ''
 
-    def _row(cells, header=False):
+    def _row(cells, header=False, num=()):
+        """Une ligne de tableau. `num` = les index des colonnes NUMÉRIQUES.
+
+        ⚠️ L'ALIGNEMENT SE DÉCLARE, IL NE SE DEVINE PAS. Un tiret « — » d'une
+        colonne de chiffres doit s'aligner comme un chiffre ; une heuristique
+        sur le contenu de la cellule ne peut pas le savoir, la colonne si.
+        Mesuré avant ce lot : 41 cellules numériques sur 95 alignées à droite,
+        et les deux tableaux GLM — ceux qu'un actuaire lit en premier — les
+        avaient TOUTES à gauche, sous des en-têtes qui annonçaient « right ».
+        """
         tag = 'th' if header else 'td'
-        return '<tr>' + ''.join(f'<{tag}>{c}</{tag}>' for c in cells) + '</tr>'
+        return '<tr>' + ''.join(
+            f'<{tag} class="right">{c}</{tag}>' if i in num
+            else f'<{tag}>{c}</{tag}>'
+            for i, c in enumerate(cells)) + '</tr>'
 
     def _hyp_row(key, label, val_key='', val=''):
         # Cherche dans hyp3 (GLM), puis hyp4 (ML) — clés toujours distinctes.
@@ -492,10 +490,18 @@ def export_html(
             return ''
         st = h.get('statut', '?')
         em = _statut_emoji(st)
+        brut = h.get(val_key, val)
+        # ⚠️ LA MÊME COLONNE AFFICHAIT 1, 3 ET 4 DÉCIMALES SELON LA LIGNE —
+        # « 1.0 » à côté de « 1.2176 ». Une précision se justifie, elle ne se
+        # choisit pas ligne par ligne. Une valeur non numérique (un libellé)
+        # passe telle quelle ; une absence rend le tiret de la convention.
+        valeur = (F.nombre(brut, F.DEC_GINI)
+                  if isinstance(brut, (int, float)) and not isinstance(brut, bool)
+                  else (str(brut)[:60] if brut else F.ABSENT))
         return _row([label,
                      f'<span class="badge-{st.lower()}">{em} {st}</span>',
-                     str(h.get(val_key, val) or '—')[:60],
-                     str(h.get('conseil', ''))[:80]])
+                     valeur,
+                     str(h.get('conseil', ''))[:80]], num=(2,))
 
     html = f"""<!DOCTYPE html>
 <html lang="fr">
@@ -573,19 +579,19 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
   <div class="section-head">§1 — Résultats GLM Poisson / Gamma / Tweedie</div>
   <div class="section-body">
     <table>
-      <tr>{''.join(f'<th>{h}</th>' for h in ['Modèle','Gini test','AIC','Déviance','Pseudo-R²','Vars retenues'])}</tr>
+      <tr><th>Modèle</th>{''.join(f'<th class="right">{h}</th>' for h in ['Gini test','AIC','Déviance','Pseudo-R²','Vars retenues'])}</tr>
 """
     for modele in ['poisson', 'gamma', 'tweedie']:
         m = met3.get(modele, {})
         if m:
             html += _row([
                 modele.capitalize(),
-                f"{m.get('gini',0):.4f}" if 'gini' in m else '—',
-                f"{m.get('aic',0):.0f}",
-                f"{m.get('deviance',0):.2f}",
-                f"{m.get('pseudo_r2',0):.4f}" if 'pseudo_r2' in m else '—',
-                str(m.get('nb_vars_retenues','—')),
-            ])
+                F.nombre(m.get('gini'), F.DEC_GINI),
+                F.nombre(m.get('aic'), 0),
+                F.nombre(m.get('deviance'), 2),
+                F.nombre(m.get('pseudo_r2'), F.DEC_GINI),
+                F.nombre(m.get('nb_vars_retenues'), 0),
+            ], num=(1, 2, 3, 4, 5))
     html += """    </table>
   </div>
 </div>
@@ -595,22 +601,22 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
   <div class="section-head">§2 — Relativités Tarifaires GLM Poisson — exp(β)</div>
   <div class="section-body">
     <table>
-      <tr><th>Variable</th><th>β</th><th class="right">Relativité exp(β)</th><th class="right">IC 95% bas</th><th class="right">IC 95% haut</th><th class="right">p-value</th><th class="center">Significatif</th><th class="center">Sens</th></tr>
+      <tr><th>Variable</th><th class="right">β</th><th class="right">Relativité exp(β)</th><th class="right">IC 95% bas</th><th class="right">IC 95% haut</th><th class="right">p-value</th><th class="center">Significatif</th><th class="center">Sens</th></tr>
 """
     for var, d in sorted(rels.items(), key=lambda x: -abs(x[1].get('beta',0))):
         sens_col = f'color:{VERT}' if d.get('sens')=='allegant' else f'color:{ROUGE}'
         html += _row([
             var,
-            f"{d.get('beta',0):.4f}",
-            f"<strong>{d.get('relativite',0):.4f}</strong>",
-            f"{d.get('ic95_low',0):.4f}",
-            f"{d.get('ic95_high',0):.4f}",
+            F.nombre(d.get('beta'), F.DEC_GINI),
+            f"<strong>{F.nombre(d.get('relativite'), F.DEC_GINI)}</strong>",
+            F.nombre(d.get('ic95_low'), F.DEC_GINI),
+            F.nombre(d.get('ic95_high'), F.DEC_GINI),
             # Audit V7 IMPORTANT : garde NA — était toujours affiché "0.0000"
             # (indiscernable d'une vraie p-value nulle) si la clé était absente.
-            f"{d.get('pvalue'):.4f}" if 'pvalue' in d else '—',
+            F.nombre(d.get('pvalue'), F.DEC_GINI),
             '✓' if d.get('significatif') else '·',
             f'<span style="{sens_col};font-weight:600">{d.get("sens","")}</span>',
-        ])
+        ], num=(1, 2, 3, 4, 5))
     html += """    </table>
   </div>
 </div>
@@ -627,14 +633,11 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
         style = 'font-weight:700; background:#f0f7ff;' if rank == 1 else ''
         html += f'<tr style="{style}">'
         html += f'<td>{rank}</td><td>{m.get("modele","")}</td><td>{m.get("famille","")}</td>'
-        html += f'<td class="right">{m.get("gini_test",0):.4f}</td>'
-        html += f'<td class="right">{m.get("rmse_test",0):.4f}</td>'
-        html += f'<td class="right">{m.get("overfit_ratio",0):.3f}</td>'
+        html += f'<td class="right">{F.nombre(m.get("gini_test"), F.DEC_GINI)}</td>'
+        html += f'<td class="right">{F.nombre(m.get("rmse_test"), F.DEC_GINI)}</td>'
+        html += f'<td class="right">{F.nombre(m.get("overfit_ratio"), F.DEC_RATIO)}</td>'
         # Audit V7 IMPORTANT : garde NA — était toujours affiché "0.0000".
-        html += (
-            f'<td class="right">{m.get("score_global"):.4f}</td>'
-            if 'score_global' in m else '<td class="right">—</td>'
-        )
+        html += f'<td class="right">{F.nombre(m.get("score_global"), F.DEC_GINI)}</td>'
         html += f'<td class="center">{star}</td></tr>\n'
     html += """    </table>
   </div>
@@ -645,7 +648,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
   <div class="section-head">§4 — Validation des Hypothèses Actuarielles H1–H4</div>
   <div class="section-body">
     <table>
-      <tr><th>Hypothèse</th><th>Statut</th><th>Valeur</th><th>Conseil</th></tr>
+      <tr><th>Hypothèse</th><th>Statut</th><th class="right">Valeur</th><th>Conseil</th></tr>
 """
     html += _hyp_row('h1_poisson','H1 — Sur-dispersion Poisson','ratio_disp')
     html += _hyp_row('h2_homosc','H2 — Homoscédasticité résidus Pearson','ratio_variance')
@@ -688,11 +691,14 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
                 bg   = {'VERT':'#eaf3de','AMBRE':'#faeeda','ROUGE':'#fcebeb'}.get(st_w,'')
                 html += f'<tr style="background:{bg};">'
                 html += f'<td>{w.get("annee_test","")}</td>'
-                html += f'<td class="right">{w.get("n_train",0):,}</td>'
-                html += f'<td class="right">{w.get("n_test",0):,}</td>'
-                html += f'<td class="right">{w.get("moy_train",0):.4f}</td>'
-                html += f'<td class="right">{w.get("moy_test",0):.4f}</td>'
-                html += f'<td class="right"><strong>{w.get("ae_ratio",0):.4f}</strong></td>'
+                # ⚠️ « {v:,} » RENDAIT « 2,435 » — le séparateur ANGLAIS,
+                # dans un rapport français, à côté de « 10308 » sans aucun
+                # séparateur. Trois conventions coexistaient dans ce document.
+                html += f'<td class="right">{F.nombre(w.get("n_train"), 0)}</td>'
+                html += f'<td class="right">{F.nombre(w.get("n_test"), 0)}</td>'
+                html += f'<td class="right">{F.nombre(w.get("moy_train"), F.DEC_GINI)}</td>'
+                html += f'<td class="right">{F.nombre(w.get("moy_test"), F.DEC_GINI)}</td>'
+                html += f'<td class="right"><strong>{F.nombre(w.get("ae_ratio"), F.DEC_GINI)}</strong></td>'
                 html += f'<td class="center"><span class="badge badge-{st_w.lower()}">{st_w}</span></td></tr>\n'
             html += '    </table>'
     else:
@@ -868,7 +874,9 @@ def export_word(
             bo.set(qn('w:space'),'1'); bo.set(qn('w:color'),'C9A84C')
             pBdr.append(bo); pPr.append(pBdr)
 
-        def _tbl(heads, rows, ws=None):
+        def _tbl(heads, rows, ws=None, num=()):
+            # ⚠️ MESURÉ AVANT CE LOT : 0 cellule numérique sur 69 alignée à
+            # droite dans le Word. `num` = les index des colonnes numériques.
             t=doc.add_table(rows=1+len(rows), cols=len(heads)); t.style='Table Grid'
             for i, hd in enumerate(heads):
                 c=t.rows[0].cells[i]; _bg(c, '0F2E52')
@@ -879,6 +887,8 @@ def export_word(
                     c=t.rows[ri+1].cells[ci]
                     if ri%2==1: _bg(c, 'EEF2F7')
                     pp=c.paragraphs[0]
+                    if ci in num:
+                        pp.alignment=WD_ALIGN_PARAGRAPH.RIGHT
                     r=pp.add_run(str(v) if v is not None else '—'); r.font.size=Pt(9)
             if ws:
                 for i, w in enumerate(ws):
@@ -912,14 +922,14 @@ def export_word(
             if m:
                 rows_glm.append([
                     modele.capitalize(),
-                    f"{m.get('gini',0):.4f}" if 'gini' in m else '—',
-                    f"{m.get('aic',0):.0f}",
-                    f"{m.get('pseudo_r2',0):.4f}" if 'pseudo_r2' in m else '—',
-                    str(m.get('nb_vars_retenues','—')),
+                    F.nombre(m.get('gini'), F.DEC_GINI),
+                    F.nombre(m.get('aic'), 0),
+                    F.nombre(m.get('pseudo_r2'), F.DEC_GINI),
+                    F.nombre(m.get('nb_vars_retenues'), 0),
                 ])
         if rows_glm:
             _tbl(['Modèle','Gini test','AIC','Pseudo-R²','Vars retenues'], rows_glm,
-                 ws=[3.0,2.5,2.5,2.5,3.5])
+                 ws=[3.0,2.5,2.5,2.5,3.5], num=(1, 2, 3, 4))
         doc.add_page_break()
 
         # ── §2 : RELATIVITÉS ─────────────────────────────────────────────────
@@ -939,19 +949,21 @@ def export_word(
             ])
         if rows_rel:
             _tbl(['Variable','β','Relativité','IC bas','IC haut','p-value','Sig.','Sens'],
-                 rows_rel, ws=[3.0,1.8,2.0,1.8,1.8,1.8,1.2,1.6])
+                 rows_rel, ws=[3.0,1.8,2.0,1.8,1.8,1.8,1.2,1.6],
+                 num=(1, 2, 3, 4, 5))
         doc.add_page_break()
 
         # ── §3 : CLASSEMENT ML ───────────────────────────────────────────────
         _h('3. Classement ML — Grille Multicritères'); _sep()
         # Audit V7 IMPORTANT : garde NA cohérent avec le HTML.
         rows_ml = [[str(i), m.get('modele',''), m.get('famille',''),
-                    f"{m.get('gini_test',0):.4f}", f"{m.get('overfit_ratio',0):.3f}",
-                    f"{m.get('score_global'):.4f}" if 'score_global' in m else '—']
+                    F.nombre(m.get('gini_test'), F.DEC_GINI),
+                    F.nombre(m.get('overfit_ratio'), F.DEC_RATIO),
+                    F.nombre(m.get('score_global'), F.DEC_GINI)]
                    for i, m in enumerate(cl4[:10], 1)]
         if rows_ml:
             _tbl(['#','Modèle','Famille','Gini test','Overfit','Score'],
-                 rows_ml, ws=[1.0,4.0,2.5,2.5,2.0,2.0])
+                 rows_ml, ws=[1.0,4.0,2.5,2.5,2.0,2.0], num=(3, 4, 5))
         doc.add_page_break()
 
         # ── §4 : HYPOTHÈSES H1-H4 ────────────────────────────────────────────
@@ -989,11 +1001,13 @@ def export_word(
                  sz=9, col=NR)
             wf = bt6.get('walk_forward', [])
             if wf:
-                rows_wf = [[str(w.get('annee_test','')), f"{w.get('n_train',0):,}",
-                             f"{w.get('ae_ratio',0):.4f}", w.get('statut','')]
+                rows_wf = [[str(w.get('annee_test','')),
+                             F.nombre(w.get('n_train'), 0),
+                             F.nombre(w.get('ae_ratio'), F.DEC_GINI),
+                             w.get('statut','')]
                            for w in wf]
                 _tbl(['Année test','N train','A/E ratio','Statut'], rows_wf,
-                     ws=[2.5,2.5,2.5,2.5])
+                     ws=[2.5,2.5,2.5,2.5], num=(1, 2))
         else:
             p=doc.add_paragraph()
             _run(p, f"Backtesting non disponible. {bt6.get('note','')}", sz=9, italic=True)
