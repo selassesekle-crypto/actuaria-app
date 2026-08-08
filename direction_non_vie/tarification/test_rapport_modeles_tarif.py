@@ -12,9 +12,11 @@ et le Word portait le dépôt technique de l'agent.
 import io
 import os
 import re
+import struct
 import sys
 import unittest
 import zipfile
+import zlib
 from unittest.mock import patch
 
 RACINE = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -551,6 +553,261 @@ class T5_LeVocabulaire(unittest.TestCase):
             self.assertIn(libelle, texte, libelle)
         print('    OK T5j : 8 hypothèses nommées dans le Word, calculées ou '
               'non')
+
+
+# ── T7a : le catalogue des figures ─────────────────────────────────────────
+#
+# ⚠️ AUCUN TEST D'ICI N'APPELLE kaleido POUR DE VRAI. Le lot précédent a
+# mesuré ce que coûte une gate qui rasterise : 94 conversions, 562 s, et une
+# suite qui n'exerçait pas le même code selon la machine. `rasteriser` est
+# une couture ; les tests la substituent.
+#
+# ⚠️ ET LE PNG DE SUBSTITUTION EST ÉCRIT ICI PLUTÔT QU'IMPORTÉ D'A7 : un
+# test de tarification qui importerait un test de provisionnement coupleroit
+# les deux sous-directions, alors que l'indépendance de la tarification est
+# précisément ce qui permet de ne pas faire tourner `provisionnement` sur un
+# lot qui ne le touche pas. Dix lignes valent mieux qu'un couplage.
+
+def _png_minimal(largeur, hauteur):
+    """Un PNG valide, sans aucune dépendance — zlib et struct suffisent."""
+    def _bloc(typ, donnees):
+        return (struct.pack('>I', len(donnees)) + typ + donnees
+                + struct.pack('>I', zlib.crc32(typ + donnees) & 0xFFFFFFFF))
+
+    entete = struct.pack('>IIBBBBB', largeur, hauteur, 8, 2, 0, 0, 0)
+    ligne = b'\x00' + bytes((11, 30, 61)) * largeur
+    return (b'\x89PNG\r\n\x1a\n' + _bloc(b'IHDR', entete)
+            + _bloc(b'IDAT', zlib.compress(ligne * hauteur, 9))
+            + _bloc(b'IEND', b''))
+
+
+class rendu_simule:
+    """Substitue le rasteriseur et déclare kaleido présent.
+
+    `svg_lourd` reproduit le cas mesuré du QQ-plot : un SVG plus lourd que
+    le PNG, où la règle doit basculer.
+
+    ⚠️ LES PNG SONT DISTINCTS : OOXML déduplique les médias identiques —
+    quatorze images identiques ne laissent qu'UN fichier dans `word/media/`.
+    """
+
+    def __init__(self, present=True, svg_lourd=False):
+        self._present, self._lourd = present, svg_lourd
+        self.appels = []
+
+    def __enter__(self):
+        self._vk, self._vr = R.kaleido_disponible, R.rasteriser
+        R.kaleido_disponible = lambda: self._present
+
+        def _faux(figure, format):
+            self.appels.append((getattr(figure, 'nom', '?'), format))
+            n = len(self.appels)
+            if format == 'png':
+                return _png_minimal(200 + n, 100 + n)
+            corps = b'x' * (40000 if self._lourd else 200)
+            return (b'<?xml version="1.0"?><svg xmlns="http://www.w3.org/'
+                    b'2000/svg"><!--' + corps + b'--></svg>')
+        R.rasteriser = _faux
+        return self
+
+    def __exit__(self, *_):
+        R.kaleido_disponible, R.rasteriser = self._vk, self._vr
+        return False
+
+
+class _FigureFactice:
+    """Une figure Plotly de substitution — elle sait rendre son fragment."""
+
+    def __init__(self, nom):
+        self.nom = nom
+
+    def to_html(self, **_):
+        return '<div class="plotly-graph-div">%s</div>' % self.nom
+
+
+def _payload_figures(cles=None):
+    """Les trois résultats d'agent, portant les figures demandées."""
+    cles = list(R.SOURCES_FIGURES) if cles is None else list(cles)
+    res = {'a3': {}, 'a4': {}, 'a6': {}}
+    for cle in cles:
+        agent, dico = R.SOURCES_FIGURES[cle]
+        res[agent].setdefault(dico, {})[cle] = _FigureFactice(cle)
+    return res['a3'], res['a4'], res['a6']
+
+
+class T7a_LeCatalogueDesFigures(unittest.TestCase):
+    """T7a — 30 figures produites, 6 publiées, et un dictionnaire entier que
+    personne ne lisait."""
+
+    def test_toute_figure_produite_par_la_chaine_est_CLASSEE(self):
+        """⚠️ LA RAISON D'UN ÉCART VIT DANS LE CODE, PAS DANS UN COMMENTAIRE.
+
+        Ce test relève les figures que les agents produisent réellement et
+        vérifie que chacune est soit au plan, soit écartée AVEC SA RAISON.
+        Une figure nouvelle qui ne serait ni l'un ni l'autre fait tomber la
+        gate — c'est ce qui empêche le catalogue de se périmer en silence.
+        """
+        racine = os.path.abspath(os.path.join(os.path.dirname(__file__), '..',
+                                              '..'))
+        motif = re.compile(r"""graphiques(?:_validation)?\s*\[\s*['"]"""
+                           r"""([A-Za-z0-9_]+)['"]\s*\]\s*=""")
+        produites = set()
+        for sous in ('a3_glm', 'a4_ml', 'a5_deep_learning', 'a6_comparaison'):
+            chemin = os.path.join(racine, 'direction_non_vie', 'tarification',
+                                  sous, 'agent.py')
+            if not os.path.exists(chemin):
+                continue
+            with io.open(chemin, encoding='utf-8', errors='replace') as f:
+                produites |= set(motif.findall(f.read()))
+        au_plan = {c for _, cles in R.PLAN_FIGURES for c in cles}
+        self.assertTrue(produites, 'le relevé ne trouve aucune figure')
+        non_classees = produites - au_plan - set(R.FIGURES_ECARTEES)
+        self.assertEqual(non_classees, set(),
+                         'figures ni publiées ni écartées : %s' % non_classees)
+        # et rien d'écarté ne doit être au plan en même temps
+        self.assertEqual(au_plan & set(R.FIGURES_ECARTEES), set())
+        print('    OK T7a : %d figures produites, %d publiées, %d écartées '
+              'avec leur raison'
+              % (len(produites), len(au_plan), len(produites - au_plan)))
+
+    def test_chaque_figure_du_plan_a_un_titre_et_une_source(self):
+        au_plan = [c for _, cles in R.PLAN_FIGURES for c in cles]
+        self.assertEqual(len(au_plan), len(set(au_plan)), 'doublon au plan')
+        for cle in au_plan:
+            self.assertIn(cle, R.TITRES_FIGURES, cle)
+            self.assertIn(cle, R.SOURCES_FIGURES, cle)
+        self.assertEqual(set(R.TITRES_FIGURES), set(au_plan))
+        self.assertEqual(set(R.SOURCES_FIGURES), set(au_plan))
+        print('    OK T7a-b : %d figures, un titre et une source chacune, '
+              'aucune orpheline' % len(au_plan))
+
+    def test_cinq_figures_viennent_du_dictionnaire_que_personne_ne_lisait(self):
+        """⚠️ `graphiques_validation` : 25 sites de production dans le dépôt,
+        ZÉRO lecture. Le chapitre 4 publiait huit verdicts sans preuve."""
+        validation = [c for c, (_, d) in R.SOURCES_FIGURES.items()
+                      if d == 'graphiques_validation']
+        self.assertEqual(len(validation), 5)
+        for attendue in ('sur_dispersion_poisson', 'overfitting_train_test',
+                         'scores_multicriteres'):
+            self.assertIn(attendue, validation)
+        a3, a4, a6 = _payload_figures()
+        trouvees = R.figures_disponibles(a3, a4, a6)
+        self.assertEqual(len(trouvees), len(R.SOURCES_FIGURES))
+        print('    OK T7a-c : %d figures tirées de `graphiques_validation`'
+              % len(validation))
+
+    def test_la_numerotation_reste_CONTINUE_quand_une_figure_s_efface(self):
+        """⚠️ LE COMPTEUR N'AVANCE QUE SUR UNE FIGURE PRÉSENTE. Une
+        numérotation précalculée laisserait un trou : « Figure 3 » puis
+        « Figure 5 »."""
+        toutes = [c for _, cles in R.PLAN_FIGURES for c in cles]
+        for retiree in ('chart_shap_summary', 'sur_dispersion_poisson',
+                        'aic_comparaison'):
+            restantes = [c for c in toutes if c != retiree]
+            plan = R.numeroter(R.figures_disponibles(
+                *_payload_figures(restantes)))
+            numeros = [f.numero for fs in plan.values() for f in fs]
+            self.assertEqual(sorted(numeros),
+                             list(range(1, len(restantes) + 1)),
+                             'trou dans la numérotation sans %s' % retiree)
+        vide = R.numeroter({})
+        self.assertEqual(vide, {})
+        print('    OK T7a-d : numérotation 1..N sans trou, quelle que soit la '
+              'figure qui manque')
+
+    def test_les_numeros_suivent_l_ordre_du_PLAN(self):
+        plan = R.numeroter(R.figures_disponibles(*_payload_figures()))
+        attendu = [c for _, cles in R.PLAN_FIGURES for c in cles]
+        obtenu = [f.cle for _, fs in sorted(plan.items()) for f in fs]
+        self.assertEqual(obtenu, attendu)
+        print('    OK T7a-e : les %d numéros suivent le plan, chapitre par '
+              'chapitre' % len(obtenu))
+
+    def test_le_format_est_DECIDE_PAR_LA_MESURE_pas_par_une_liste(self):
+        """⚠️ MESURÉ SUR LES FIGURES RÉELLES : douze pèsent moins en SVG, et
+        le QQ-plot — 400 points — passe de 49,8 ko en PNG à 940,0 ko en SVG.
+        Une règle « tout en SVG » aurait multiplié son poids par dix-neuf."""
+        fig = _FigureFactice('t')
+        with rendu_simule(svg_lourd=False):
+            leger = R.rendre_figure(fig)
+        with rendu_simule(svg_lourd=True):
+            lourd = R.rendre_figure(fig)
+        self.assertEqual(leger.genre, 'svg')
+        self.assertTrue(leger.html.startswith('<svg'))
+        self.assertEqual(lourd.genre, 'png')
+        self.assertIn('data:image/png;base64,', lourd.html)
+        # le Word reçoit un PNG dans les deux cas
+        self.assertTrue(leger.png and lourd.png)
+        print('    OK T7a-f : SVG quand il est plus léger, PNG quand il ne '
+              'l\'est pas — la règle compare, elle ne liste pas')
+
+    def test_sans_kaleido_le_repli_est_INTERACTIF_et_DECLARE(self):
+        """⚠️ ON DÉGRADE VERS LE COMPORTEMENT D'AUJOURD'HUI, NOMMÉ — pas vers
+        rien. Et aujourd'hui, hors ligne, le cadre reste vide EN SILENCE."""
+        with rendu_simule(present=False):
+            r = R.rendre_figure(_FigureFactice('g'))
+        self.assertEqual(r.genre, 'interactif')
+        self.assertIsNone(r.png)
+        self.assertIn('plotly-graph-div', r.html)
+        self.assertIn('kaleido', r.note)
+        self.assertIn('connexion', r.note)
+        print('    OK T7a-g : repli interactif, et la raison est DANS le '
+              'document')
+
+    def test_les_deux_formats_portent_les_MEMES_figures_numerotees(self):
+        """⚠️ LE POINT DU LOT. A7 tient deux compteurs positionnels
+        indépendants, rattrapés par un test. Ici la numérotation est calculée
+        UNE fois : « Figure 7 » ne PEUT pas désigner deux choses."""
+        a3, a4, a6 = _payload_figures()
+        a3.update(A3_COMPLET)
+        a6.update({k: v for k, v in A6_COMPLET.items()
+                   if k not in ('graphiques', 'graphiques_validation')})
+        with rendu_simule():
+            html = R.export_html(a3, a4, a6, 'DEMO', '31/12/2025', 'T7a',
+                                 narration_calculee=('Texte.', 'temoin'))
+            word = R.export_word(a3, a4, a6, 'DEMO', '31/12/2025', 'T7a',
+                                 narration_calculee=('Texte.', 'temoin'))
+        legendes_html = re.findall(r'Figure (\d+) — ([^<]{4,120})', html)
+        texte_word = _texte_docx(word)
+        self.assertTrue(legendes_html, 'aucune figure dans l\'HTML')
+        self.assertEqual([n for n, _ in legendes_html],
+                         [str(i) for i in range(1, len(legendes_html) + 1)])
+        for numero, titre in legendes_html:
+            self.assertIn('Figure %s — %s' % (numero, titre), texte_word,
+                          'Figure %s absente ou différente dans le Word'
+                          % numero)
+        print('    OK T7a-h : %d figures, mêmes numéros et mêmes titres dans '
+              'les deux formats' % len(legendes_html))
+
+    def test_le_word_porte_bien_les_images(self):
+        """⚠️ LE WORD NE PORTAIT AUCUNE FIGURE — zéro image mesurée sur
+        39 414 octets, quand l'HTML en portait six."""
+        a3, a4, a6 = _payload_figures()
+        with rendu_simule():
+            word = R.export_word(a3, a4, a6, 'DEMO', '31/12/2025', 'T7a',
+                                 narration_calculee=('Texte.', 'temoin'))
+        medias = [n for n in zipfile.ZipFile(io.BytesIO(word)).namelist()
+                  if n.startswith('word/media/')]
+        self.assertEqual(len(medias), len(R.SOURCES_FIGURES),
+                         'les images ne sont pas toutes entrées — et OOXML '
+                         'déduplique les médias identiques')
+        print('    OK T7a-i : %d images dans le .docx (0 avant ce lot)'
+              % len(medias))
+
+    def test_plotly_n_est_charge_QUE_si_une_figure_reste_interactive(self):
+        """Une image n'a besoin d'aucune bibliothèque : un rapport qui n'en
+        porte plus ne doit pas réclamer le réseau pour rien."""
+        a3, a4, a6 = _payload_figures()
+        with rendu_simule():
+            html_images = R.export_html(a3, a4, a6, 'D', '31/12/2025', 'T',
+                                        narration_calculee=('T.', 'temoin'))
+        with rendu_simule(present=False):
+            html_replis = R.export_html(a3, a4, a6, 'D', '31/12/2025', 'T',
+                                        narration_calculee=('T.', 'temoin'))
+        self.assertNotIn('cdn.plot.ly', html_images)
+        self.assertIn('cdn.plot.ly', html_replis)
+        print('    OK T7a-j : aucun appel réseau quand les figures sont des '
+              'images')
 
 
 if __name__ == '__main__':

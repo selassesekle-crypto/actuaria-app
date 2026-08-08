@@ -383,6 +383,320 @@ def valeur_audit(valeur, cle=None) -> str:
     return F.tronque(texte, 120)
 
 
+# =============================================================================
+#  LE CATALOGUE DES FIGURES — UN PLAN UNIQUE, DEUX FORMATS
+# =============================================================================
+#
+#  ⚠️ MESURÉ SUR UN REJEU RÉEL DE LA CHAÎNE : 30 figures existent en mémoire,
+#  le rapport en rendait SIX. Et elles vivent dans DEUX dictionnaires — les
+#  agents remplissent `graphiques` (19) et `graphiques_validation` (11). Le
+#  second n'était lu par PERSONNE : relevé exhaustif, 25 sites de production
+#  dans le dépôt, ZÉRO lecture.
+#
+#  ⚠️ CE N'EST PAS UN DÉFAUT D'APPARENCE. Le chapitre 4 s'appelle « Validation
+#  des hypothèses actuarielles », publie huit verdicts et ne montrait aucune
+#  preuve — pendant que la chaîne dessinait `sur_dispersion_poisson` (H1 GLM)
+#  et `overfitting_train_test` (H1 ML) puis les jetait. Le chapitre 3 annonce
+#  dans son titre une grille multicritères et n'en montrait pas la figure.
+#  Un rapport qui affirme un verdict et cache le raisonnement est celui qu'on
+#  ne peut pas défendre devant l'ACPR.
+#
+#  ⚠️ ET TOUT RENDRE SERAIT PIRE. Le dépôt produit NEUF variantes de
+#  Lorenz/Gini et SEPT de scores. Le catalogue est donc DÉCIDÉ : quatorze
+#  figures, douze concepts, aucun doublon — et ce qui est écarté l'est avec sa
+#  raison, dans le code, sous un test qui tombe si une figure nouvelle
+#  n'était pas classée.
+
+TITRES_FIGURES: Dict[str, str] = {
+    # chapitre 1 — les GLM
+    'aic_comparaison': 'Comparaison des GLM par AIC',
+    'chart_distribution_predictions': 'Distribution des fréquences prédites',
+    # chapitre 2 — les relativités
+    'chart_relativites_glm': 'Relativités tarifaires GLM Poisson — exp(β)',
+    # chapitre 3 — le classement
+    'scores_multicriteres': 'Grille multicritères — score par modèle',
+    'scatter_gini_stabilite': 'Pouvoir discriminant et stabilité — '
+                              'l\'arbitrage du classement',
+    'chart_lorenz_gini': 'Courbe de Lorenz et coefficient de Gini',
+    # chapitre 4 — les hypothèses
+    'sur_dispersion_poisson': 'H1 GLM — sur-dispersion de Poisson',
+    'chart_residus_qq': 'H2 GLM — QQ-plot des résidus de Pearson',
+    'overfitting_train_test': 'H1 ML — surapprentissage, apprentissage '
+                              'contre test',
+    'monitoring_gini': 'H2 ML — dérive du pouvoir discriminant',
+    # chapitre 5 — le backtesting
+    'chart_walkforward_ae': 'Backtesting walk-forward — ratio A/E par fenêtre',
+    'chart_lift_decile': 'Lift par décile de risque prédit',
+    # chapitre 6 — le modèle retenu
+    'radar_modele_retenu': 'Profil du modèle retenu',
+    'chart_shap_summary': 'Importance SHAP — contribution des variables',
+}
+
+#: Le plan : quel chapitre porte quelles figures, dans quel ordre.
+#:
+#: ⚠️ C'EST LA SOURCE UNIQUE, ET LES DEUX FORMATS LA CONSOMMENT. A7 tient
+#: deux compteurs positionnels indépendants — un dans l'HTML, un dans le Word
+#: — que seul un test rattrape après coup. Ici la numérotation est calculée
+#: UNE fois et les deux formats lisent le même résultat : « Figure 7 » ne
+#: PEUT plus désigner deux choses. C'est le motif que ce chantier a fermé
+#: quatre fois (T1 sur la narration, T5 sur les en-têtes).
+PLAN_FIGURES: Tuple[Tuple[int, Tuple[str, ...]], ...] = (
+    (1, ('aic_comparaison', 'chart_distribution_predictions')),
+    (2, ('chart_relativites_glm',)),
+    (3, ('scores_multicriteres', 'scatter_gini_stabilite',
+         'chart_lorenz_gini')),
+    (4, ('sur_dispersion_poisson', 'chart_residus_qq',
+         'overfitting_train_test', 'monitoring_gini')),
+    (5, ('chart_walkforward_ae', 'chart_lift_decile')),
+    (6, ('radar_modele_retenu', 'chart_shap_summary')),
+)
+
+#: Où chaque figure du catalogue se trouve : (résultat d'agent, dictionnaire).
+#: ⚠️ CINQ DES QUATORZE VIENNENT DE `graphiques_validation`, celui que
+#: personne n'ouvrait.
+SOURCES_FIGURES: Dict[str, Tuple[str, str]] = {
+    'aic_comparaison': ('a3', 'graphiques'),
+    'chart_distribution_predictions': ('a3', 'graphiques'),
+    'chart_relativites_glm': ('a3', 'graphiques'),
+    'chart_residus_qq': ('a3', 'graphiques'),
+    'sur_dispersion_poisson': ('a3', 'graphiques_validation'),
+    'chart_shap_summary': ('a4', 'graphiques'),
+    'overfitting_train_test': ('a4', 'graphiques_validation'),
+    'monitoring_gini': ('a4', 'graphiques_validation'),
+    'chart_lorenz_gini': ('a6', 'graphiques'),
+    'chart_lift_decile': ('a6', 'graphiques'),
+    'chart_walkforward_ae': ('a6', 'graphiques'),
+    'scatter_gini_stabilite': ('a6', 'graphiques'),
+    'scores_multicriteres': ('a6', 'graphiques_validation'),
+    'radar_modele_retenu': ('a6', 'graphiques_validation'),
+}
+
+#: Ce que la chaîne produit et que le rapport NE PUBLIE PAS, avec la raison.
+#:
+#: ⚠️ LA RAISON VIT DANS LE CODE, PAS DANS UN COMMENTAIRE. Un test compare
+#: cette table au relevé des figures réellement produites par les agents :
+#: une figure nouvelle qui ne serait ni au plan ni ici fait tomber la gate.
+#: C'est ce qui empêche la liste de se périmer en silence.
+FIGURES_ECARTEES: Dict[str, str] = {
+    # les neuf variantes de Lorenz / Gini — une seule est publiée
+    'lorenz': 'doublon — chart_lorenz_gini porte la courbe de Lorenz',
+    'lorenz_glm': 'doublon — chart_lorenz_gini porte la courbe de Lorenz',
+    'gini_comparaison': 'doublon — le Gini par modèle est au tableau du '
+                        'chapitre 3',
+    'gini_comparaison_glm': 'doublon — le Gini des GLM est au tableau du '
+                            'chapitre 1',
+    'comparaison_gini': 'doublon — et produite par A5, hors de la chaîne du '
+                        'rapport',
+    'scatter_gini_rmse': 'doublon — scatter_gini_stabilite porte l\'arbitrage '
+                         'qui décide du classement',
+    # les variantes de relativités
+    'coefficients_glm': 'doublon — chart_relativites_glm porte les exp(β) '
+                        'avec leurs intervalles',
+    'relativites_poisson': 'doublon — chart_relativites_glm, même contenu',
+    # les résidus
+    'residus_deviance': 'doublon — chart_residus_qq porte le même diagnostic '
+                        'sous une forme lisible',
+    'durbin_watson': 'hors catalogue — l\'autocorrélation n\'est pas une des '
+                     'huit hypothèses que le chapitre 4 publie',
+    # le lift
+    'lift_chart': 'doublon — chart_lift_decile, même mesure',
+    # les scorecards : des tableaux déguisés en figures
+    'scorecard_validation_glm': 'tableau déguisé — le chapitre 4 porte déjà '
+                                'les huit hypothèses en tableau',
+    'scorecard_validation_ml': 'tableau déguisé — même tableau, chapitre 4',
+    'scorecard_validation_dl': 'tableau déguisé — et produite par A5',
+    'scorecard_selection': 'tableau déguisé — les trois contrôles de '
+                           'sélection sont au tableau du chapitre 6',
+    # les trois vues supplémentaires du même classement
+    'radar_multicriteres': 'doublon — scores_multicriteres porte la grille',
+    'scores_profils': 'doublon — la grille du profil retenu suffit ; les '
+                      'autres profils ne sont pas ceux qui décident',
+    'scores_finaux': 'doublon — scores_multicriteres, même grandeur',
+    # hors périmètre du rapport de modèles
+    'optimisation_tarifaire': 'hors périmètre — c\'est du pilotage tarifaire, '
+                              'pas la validation d\'un modèle',
+    # A5 n'entre pas dans la chaîne du rapport
+    'apprentissage_cann': 'A5 n\'entre pas dans la chaîne du rapport',
+    'apprentissage_tabnet': 'A5 n\'entre pas dans la chaîne du rapport',
+    'importance_tabnet': 'A5 n\'entre pas dans la chaîne du rapport',
+    'convergence_loss': 'A5 n\'entre pas dans la chaîne du rapport',
+    'comparaison_dl_glm': 'A5 n\'entre pas dans la chaîne du rapport',
+    'jauge_surapprentissage': 'A5 n\'entre pas dans la chaîne du rapport',
+}
+
+
+class FigureNumerotee(NamedTuple):
+    """Une figure du plan, avec le numéro qu'elle porte dans le document."""
+    numero: int
+    cle: str
+    titre: str
+    objet: object
+
+
+def figures_disponibles(result_a3, result_a4, result_a6) -> Dict[str, object]:
+    """Rassemble les figures du catalogue, où qu'elles se trouvent.
+
+    ⚠️ ELLE OUVRE LES DEUX DICTIONNAIRES. `graphiques_validation` n'avait
+    aucun lecteur dans tout le dépôt ; cinq des quatorze figures publiées en
+    viennent, dont les preuves de H1 GLM et de H1 ML.
+    """
+    resultats = {'a3': result_a3 or {}, 'a4': result_a4 or {},
+                 'a6': result_a6 or {}}
+    trouvees: Dict[str, object] = {}
+    for cle, (agent, dictionnaire) in SOURCES_FIGURES.items():
+        objet = ((resultats.get(agent) or {}).get(dictionnaire) or {}).get(cle)
+        if objet is not None:
+            trouvees[cle] = objet
+    # ⚠️ UNE FIGURE NI PUBLIÉE NI ÉCARTÉE SE SIGNALE, ICI AUSSI. Un test
+    # statique relit le code des agents ; ce contrôle-ci voit ce qui arrive
+    # RÉELLEMENT dans les résultats — une figure ajoutée par un autre chemin
+    # ne passerait pas devant lui.
+    for resultat in resultats.values():
+        for dictionnaire in ('graphiques', 'graphiques_validation'):
+            for cle in (resultat.get(dictionnaire) or {}):
+                if cle not in SOURCES_FIGURES and cle not in FIGURES_ECARTEES:
+                    logger.warning(
+                        'Figure « %s » produite par la chaîne mais ni publiée '
+                        'ni écartée : le catalogue est à instruire.', cle)
+    return trouvees
+
+
+def numeroter(disponibles: Dict[str, object]) -> Dict[int, Tuple[
+        FigureNumerotee, ...]]:
+    """Numérote le plan POSITIONNELLEMENT — un seul passage, deux formats.
+
+    ⚠️ LE COMPTEUR N'AVANCE QUE SUR UNE FIGURE RÉELLEMENT PRÉSENTE. Une
+    figure absente — SHAP désactivé, une hypothèse non calculée — ne laisse
+    donc aucun trou : la suivante prend son numéro. La continuité est
+    garantie PAR CONSTRUCTION, pas par une liste qu'il faudrait tenir à jour.
+    """
+    numero = 0
+    par_chapitre: Dict[int, Tuple[FigureNumerotee, ...]] = {}
+    for chapitre, cles in PLAN_FIGURES:
+        du_chapitre = []
+        for cle in cles:
+            objet = disponibles.get(cle)
+            if objet is None:
+                continue
+            numero += 1
+            du_chapitre.append(FigureNumerotee(
+                numero, cle, TITRES_FIGURES[cle], objet))
+        if du_chapitre:
+            par_chapitre[chapitre] = tuple(du_chapitre)
+    return par_chapitre
+
+
+def legende(figure: FigureNumerotee) -> str:
+    """« Figure N — titre ». La MÊME chaîne dans les deux formats."""
+    return f'Figure {figure.numero} — {figure.titre}'
+
+
+# ── LE RENDU : le format le plus léger, décidé par la mesure ────────────────
+#
+#  ⚠️ MESURÉ SUR LES FIGURES RÉELLES, ET LE RÉSULTAT N'EST PAS UNIFORME :
+#  douze figures pèsent moins en SVG (6,7 à 21,8 ko), et le QQ-plot des
+#  résidus — quatre cents points, donc quatre cents éléments de dessin —
+#  passe de 49,8 ko en PNG à 940,0 ko en SVG. Une règle « tout en SVG »
+#  aurait multiplié le poids du rapport par cinq sur cette seule figure.
+#
+#  ⚠️ LA RÈGLE COMPARE, ELLE NE LISTE PAS. Une figure future qui changerait
+#  de nature — un nuage de points là où il y avait des barres — bascule
+#  d'elle-même. Une liste figée aurait menti au premier changement.
+#
+#  ⚠️ ET LE POIDS COMPARÉ EST CELUI DU DOCUMENT, pas celui du fichier : un
+#  PNG inséré dans un HTML autonome passe par base64, qui l'alourdit d'un
+#  tiers. C'est ce chiffre-là qu'il faut comparer au SVG.
+
+TAILLE_FIGURE = (1100, 520)
+
+
+def rasteriser(figure, format: str) -> bytes:
+    """Convertit une figure Plotly. LE SEUL point du module qui le fasse.
+
+    ⚠️ SUBSTITUABLE PAR LES TESTS, ET C'EST UNE EXIGENCE, pas un confort :
+    une conversion réelle coûte ~4 s par figure et par format. Le lot
+    précédent a montré ce que devient une gate qui les paie.
+    """
+    largeur, hauteur = TAILLE_FIGURE
+    if format == 'png':
+        return figure.to_image(format='png', width=largeur, height=hauteur,
+                               scale=1)
+    return figure.to_image(format='svg', width=largeur, height=hauteur)
+
+
+def kaleido_disponible() -> bool:
+    """Le module qui convertit une figure Plotly en image est-il là ?"""
+    import importlib.util
+    return importlib.util.find_spec('kaleido') is not None
+
+
+class RenduFigure(NamedTuple):
+    """Ce qu'une figure devient dans chaque format, et pourquoi.
+
+    `genre` vaut 'svg', 'png' ou 'interactif' ; `note` est la phrase que le
+    document porte quand le rendu est dégradé — jamais un silence.
+    """
+    html: str
+    png: Optional[bytes]
+    genre: str
+    note: str = ''
+
+
+def _svg_propre(octets: bytes) -> str:
+    """Le SVG rendu par kaleido porte un en-tête XML : on garde la balise."""
+    texte = octets.decode('utf-8', 'replace')
+    debut = texte.find('<svg')
+    return texte[debut:] if debut >= 0 else texte
+
+
+def rendre_figure(objet) -> RenduFigure:
+    """Le rendu d'une figure dans les deux formats, avec le repli en cascade.
+
+    ⚠️ SANS kaleido, ON DÉGRADE VERS LE COMPORTEMENT D'AUJOURD'HUI, NOMMÉ.
+    Le fragment interactif reste — il s'affiche, mais il exige une connexion
+    pour charger sa bibliothèque. Le document le DIT. Dégrader vers rien
+    aurait été plus grave que l'état antérieur ; dégrader en silence, comme
+    aujourd'hui où l'absence de réseau laisse un cadre vide, l'est déjà.
+    """
+    if not kaleido_disponible():
+        return RenduFigure(
+            html=_fragment_interactif(objet), png=None, genre='interactif',
+            note='Figure interactive : le module « kaleido » n\'est pas '
+                 'installé sur la machine de production. Son affichage exige '
+                 'une connexion Internet.')
+    try:
+        svg = rasteriser(objet, 'svg')
+        png = rasteriser(objet, 'png')
+    except Exception as erreur:
+        return RenduFigure(
+            html=_fragment_interactif(objet), png=None, genre='interactif',
+            note='Figure non convertie en image (%s) : elle reste '
+                 'interactive et exige une connexion Internet.'
+                 % type(erreur).__name__)
+    # ⚠️ base64 alourdit un PNG d'un tiers : c'est le poids DANS LE DOCUMENT
+    # qu'on compare, pas celui du fichier.
+    if len(svg) <= len(png) * 4 // 3:
+        return RenduFigure(html=_svg_propre(svg), png=png, genre='svg')
+    # ⚠️ PAS DE `%` DE FORMATAGE ICI : le style porte « width:100% », que
+    # l'interpolation prendrait pour un spécificateur. Le test de la règle a
+    # attrapé exactement cela — cette branche n'avait jamais été exercée.
+    b64 = base64.b64encode(png).decode('ascii')
+    return RenduFigure(
+        html=('<img alt="" style="width:100%;height:auto;" '
+              'src="data:image/png;base64,' + b64 + '">'),
+        png=png, genre='png')
+
+
+def _fragment_interactif(objet) -> str:
+    """Le repli : la figure Plotly telle que le rapport la rendait avant."""
+    try:
+        return objet.to_html(full_html=False, include_plotlyjs=False,
+                             config=_CFG_PLOTLY)
+    except Exception as erreur:
+        logger.debug('Fragment interactif non rendu : %s', erreur)
+        return ''
+
+
 def _construire_contexte_tarif(
     result_a3: Dict, result_a4: Dict, result_a6: Dict,
     branche: str, arrete: str
@@ -717,36 +1031,40 @@ def export_html(
         or {}
     )
 
-    # ── Figures V3 (core/charts_tarif) — OPTIONNELLES (absente → rien affiché) ──
-    _figs_html = []
+    # ── LES FIGURES — le plan unique, numéroté une fois ──────────────────
+    # ⚠️ CE BLOC LISAIT SEPT CLÉS EN DUR, TOUTES DANS `graphiques`, et
+    # ignorait `graphiques_validation` en entier. Il consomme désormais
+    # `PLAN_FIGURES` — la même source que le Word, si bien que « Figure 7 »
+    # ne peut plus désigner deux choses.
+    _figures = {}
+    _rendus = {}
+    _genres = []
     if _CHARTS_HTML_OK:
-        for _src, _key, _lbl in [
-            (result_a3, 'chart_relativites_glm',          'Relativités GLM Poisson  exp(β)'),
-            (result_a3, 'chart_residus_qq',               'QQ-plot des résidus de Pearson'),
-            (result_a3, 'chart_distribution_predictions', 'Distribution des fréquences prédites'),
-            (result_a4, 'chart_shap_summary',             'Importance SHAP — meilleur modèle ML'),
-            (result_a6, 'chart_lift_decile',              'Lift par décile de risque prédit'),
-            (result_a6, 'chart_lorenz_gini',              'Courbe de Lorenz & Gini'),
-            (result_a6, 'chart_walkforward_ae',           'Backtesting walk-forward A/E'),
-        ]:
-            _fig = ((_src or {}).get('graphiques', {}) or {}).get(_key)
-            if _fig is None:
-                continue
-            try:
-                _frag = _fig.to_html(full_html=False, include_plotlyjs=False,
-                                     config=_CFG_PLOTLY)
-                _figs_html.append(
-                    f'<div style="margin:16px 0;"><div style="color:{GOLD_L};'
-                    f'font-weight:600;font-size:13px;margin-bottom:6px;">{_lbl}</div>'
-                    f'{_frag}</div>')
-            except Exception as _e:
-                logger.debug(f"Figure {_key} non rendue : {_e}")
-    _plotly_cdn = _PLOTLYJS_CDN if _figs_html else ''
-    _section_figures = (
-        '<!-- FIGURES V3 --><div class="section"><div class="section-head">'
-        'Graphiques de validation</div><div class="section-body">'
-        + ''.join(_figs_html) + '</div></div>'
-    ) if _figs_html else ''
+        _figures = numeroter(figures_disponibles(result_a3, result_a4,
+                                                 result_a6))
+        for _fs in _figures.values():
+            for _f in _fs:
+                _r = rendre_figure(_f.objet)
+                _rendus[_f.cle] = _r
+                _genres.append(_r.genre)
+
+    def _bloc_figure(f):
+        """Une figure numérotée, et la raison de sa dégradation s'il y en a."""
+        r = _rendus.get(f.cle)
+        if r is None or not r.html:
+            return ''
+        note = (f'<div style="font-size:10px;color:{SLATE};font-style:italic;'
+                f'margin-top:4px;">✦ {r.note}</div>') if r.note else ''
+        return (f'<div class="figure" style="margin:16px 0;">'
+                f'<div style="color:{NAVY};font-weight:600;font-size:12px;'
+                f'margin-bottom:6px;">{legende(f)}</div>'
+                f'<div style="max-width:100%;overflow:hidden;">{r.html}</div>'
+                f'{note}</div>')
+
+    # ⚠️ plotly.js n'est chargé QUE si une figure reste interactive : une
+    # image n'a besoin d'aucune bibliothèque, et un rapport qui n'en porte
+    # plus ne doit pas réclamer le réseau pour rien.
+    _plotly_cdn = _PLOTLYJS_CDN if 'interactif' in _genres else ''
 
     def _row(cells, header=False, num=()):
         """Une ligne de tableau. `num` = les index des colonnes NUMÉRIQUES.
@@ -763,6 +1081,13 @@ def export_html(
             f'<{tag} class="right">{c}</{tag}>' if i in num
             else f'<{tag}>{c}</{tag}>'
             for i, c in enumerate(cells)) + '</tr>'
+
+    def _ouvrir_chapitre_figures():
+        """La section des figures — sans numéro de chapitre, elle les porte
+        toutes en attendant que le lot suivant les distribue."""
+        return ('\n<!-- FIGURES -->\n<div class="section">\n'
+                '  <div class="section-head">Figures</div>\n'
+                '  <div class="section-body">\n')
 
     def _ouvrir_chapitre(numero, classe=''):
         """L'ouverture d'un chapitre — son titre vient de `CHAPITRES`.
@@ -1023,7 +1348,17 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
   </div>
 </div>
 """
-    html += _section_figures
+    # ⚠️ LES FIGURES SONT ENCORE GROUPÉES ICI. Leur placement chapitre par
+    # chapitre est le lot suivant ; le plan, lui, sait déjà à quel chapitre
+    # chacune appartient.
+    if _figures:
+        html += _ouvrir_chapitre_figures()
+        for _num, _fs in sorted(_figures.items()):
+            html += (f'    <div style="color:{SLATE};font-size:11px;'
+                     f'font-weight:600;margin:14px 0 2px;">'
+                     f'{chapitre(_num)}</div>\n')
+            html += ''.join(_bloc_figure(_f) for _f in _fs)
+        html += '  </div>\n</div>\n'
     html += _ouvrir_chapitre(7, ' narration')
     html += narr_html
     html += f"""
@@ -1096,6 +1431,13 @@ def export_word(
         # les trois contrôles de sélection n'y figuraient pas. Même clé, même
         # repli que l'HTML.
         val6   = (result_a6 or {}).get('validation_selection', {})
+        # ⚠️ LE MÊME PLAN QUE L'HTML, NUMÉROTÉ PAR LA MÊME FONCTION. Deux
+        # compteurs indépendants — le choix d'A7 — se rattrapent par un test ;
+        # une numérotation unique ne peut pas diverger.
+        figures_numerotees = numeroter(
+            figures_disponibles(result_a3, result_a4, result_a6))
+        rendus_figures = {f.cle: rendre_figure(f.objet)
+                          for fs in figures_numerotees.values() for f in fs}
         # Priorité A6 (le plus complet — gouvernance + WF recalibré) > A4 > A3
         at     = (
             (result_a6 or {}).get('audit_trail')
@@ -1352,6 +1694,37 @@ def export_word(
                                 F.tronque(cv.get('message'), 80)])
             _tbl(titres('controles'), rows_ct, ws=[5.0,2.5,9.0])
         doc.add_page_break()
+
+        # ── LES FIGURES ──────────────────────────────────────────────────────
+        # ⚠️ LE WORD NE PORTAIT AUCUNE FIGURE. Mesuré : zéro image sur
+        # 39 414 octets, alors que l'HTML en portait six. Le livrable qui
+        # part chez un commissaire aux comptes était le plus pauvre des deux.
+        # ⚠️ ET IL LIT LE MÊME PLAN NUMÉROTÉ QUE L'HTML — pas une seconde
+        # liste : « Figure 7 » désigne la même chose des deux côtés parce
+        # qu'il n'existe qu'un seul numérotage, calculé une fois.
+        if figures_numerotees:
+            _h('Figures'); _sep()
+            for _num_ch, _fs in sorted(figures_numerotees.items()):
+                p = doc.add_paragraph()
+                p.paragraph_format.space_before = Pt(6)
+                _run(p, chapitre(_num_ch), bold=True, sz=9, col=GrR)
+                for _f in _fs:
+                    p = doc.add_paragraph()
+                    p.paragraph_format.space_before = Pt(8)
+                    p.paragraph_format.space_after = Pt(2)
+                    _run(p, legende(_f), bold=True, sz=9, col=GR)
+                    _r = rendus_figures.get(_f.cle)
+                    # ⚠️ UN .DOCX NE PORTE QUE DU RASTER : il prend le PNG
+                    # dans tous les cas, là où l'HTML choisit le plus léger.
+                    if _r is not None and _r.png:
+                        doc.add_picture(io.BytesIO(_r.png), width=Cm(16.5))
+                    else:
+                        q = doc.add_paragraph()
+                        q.paragraph_format.space_after = Pt(6)
+                        _run(q, (_r.note if _r is not None and _r.note else
+                                 'Figure non rendue dans ce format.'),
+                             sz=8, italic=True, col=GrR)
+            doc.add_page_break()
 
         # ── CHAPITRE 7 : COMMENTAIRE ACTUARIEL ───────────────────────────────
         _h(chapitre(7)); _sep()
