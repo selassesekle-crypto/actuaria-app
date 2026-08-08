@@ -910,5 +910,155 @@ class T7b_LePlacementDesFigures(unittest.TestCase):
               'déplacement, et à chaque figure retirée' % len(numeros))
 
 
+class T7c_LImpressionEtLesTroncatures(unittest.TestCase):
+    """T7c — ce que le document TAIT : une couleur qui disparaît au papier,
+    des lignes coupées sans le dire."""
+
+    def _html(self, **kw):
+        a3, a4, a6 = _payload_figures()
+        a3.update(kw.pop('a3', {}))
+        a6.update(kw.pop('a6', {}))
+        with rendu_simule():
+            return R.export_html(a3, a4, a6, 'DEMO', '31/12/2025', 'T7c',
+                                 narration_calculee=('Texte.', 'temoin'))
+
+    def test_les_fonds_colores_survivent_a_l_impression(self):
+        """⚠️ LE SEUL DÉFAUT DE CE CHANTIER QUI PUISSE TROMPER UN LECTEUR.
+
+        Un navigateur supprime par défaut les fonds à l'impression. Le signal
+        RAG de ce rapport ne vit QUE dans le fond des badges : sans cette
+        règle, « ROUGE » s'imprime en blanc sur blanc, avec le même texte
+        noir que « VERT ».
+        """
+        html = self._html()
+        self.assertIn('@media print', html)
+        for regle in ('-webkit-print-color-adjust: exact',
+                      'print-color-adjust: exact'):
+            self.assertIn(regle, html, regle)
+        # et le signal RAG dépend bien d'un fond, ce qui justifie la règle
+        self.assertIn('.badge-rouge{background:var(--rouge);}', html)
+        print('    OK T7c : les fonds du signal RAG survivent au papier')
+
+    def test_les_regles_d_impression_essentielles_sont_TOUTES_la(self):
+        """Mesuré avant ce lot : ZÉRO règle d'impression, contre 21 dans le
+        rapport de provisionnement."""
+        html = self._html()
+        attendues = {
+            '@page': 'size: A4',
+            'marges': 'margin: 14mm 12mm 16mm 12mm',
+            'rupture interne': 'break-inside: avoid',
+            'ancienne rupture': 'page-break-inside: avoid',
+            'en-tête répété': 'display: table-header-group',
+            'titre non orphelin': 'break-after: avoid',
+            'lignes veuves': 'orphans: 3',
+            'lignes isolées': 'widows: 3',
+        }
+        for nom, regle in attendues.items():
+            self.assertIn(regle, html, nom)
+        print(f'    OK T7c-b : les {len(attendues)} règles d\'impression '
+              f'sont émises (0 avant ce lot)')
+
+    def test_le_bloc_media_print_est_BIEN_FORME(self):
+        """⚠️ UNE ACCOLADE MANQUANTE DANS UN `@media` AVALE TOUT CE QUI SUIT.
+        Le style est construit par une f-string à accolades doublées : une
+        seule oubliée casse le bloc sans que rien ne le dise."""
+        html = self._html()
+        style = html.split('<style>')[1].split('</style>')[0]
+        self.assertEqual(style.count('{'), style.count('}'),
+                         'accolades déséquilibrées dans le style')
+        bloc = style[style.index('@media print'):]
+        # le bloc se referme, et il contient bien ses règles
+        profondeur, fin = 0, None
+        for i, c in enumerate(bloc):
+            if c == '{':
+                profondeur += 1
+            elif c == '}':
+                profondeur -= 1
+                if profondeur == 0:
+                    fin = i
+                    break
+        self.assertIsNotNone(fin, 'le bloc @media print ne se referme pas')
+        self.assertIn('@page', bloc[:fin])
+        print('    OK T7c-c : le bloc @media print est équilibré et complet')
+
+    def test_le_word_DECLARE_qu_il_coupe_les_relativites(self):
+        """⚠️ MÊMES COLONNES, MÊMES LIBELLÉS, ET PAS LES MÊMES LIGNES. Le
+        Word coupait à quinze sans rien dire ; l'HTML les rend toutes."""
+        rels = {f'variable_{i:02d}': {
+            'beta': 0.5 - i * 0.01, 'relativite': 1.0 + i * 0.01,
+            'ic95_low': 0.9, 'ic95_high': 1.1, 'pvalue': 0.01,
+            'significatif': True, 'sens': 'aggravant'} for i in range(22)}
+        a3, a4, a6 = _payload_figures()
+        a3['relativites_poisson'] = rels
+        with rendu_simule():
+            word = _texte_docx(R.export_word(
+                a3, a4, a6, 'DEMO', '31/12/2025', 'T7c',
+                narration_calculee=('Texte.', 'temoin')))
+            html = R.export_html(a3, a4, a6, 'DEMO', '31/12/2025', 'T7c',
+                                 narration_calculee=('Texte.', 'temoin'))
+        self.assertIn('15 relativités sur 22', word)
+        self.assertIn('|β| décroissant', word)
+        # l'HTML les porte toutes, et n'a donc rien à déclarer
+        self.assertEqual(sum(1 for v in rels if v in html), 22)
+        self.assertNotIn('relativités sur 22', html)
+        print('    OK T7c-d : « 15 relativités sur 22 » — la coupe est DITE')
+
+    def test_le_word_DECLARE_qu_il_coupe_le_classement(self):
+        cl = [{'modele': f'MODELE_{i:02d}', 'famille': 'ML',
+               'gini_test': 0.2 - i * 0.01, 'rmse_test': 0.4,
+               'overfit_ratio': 1.0, 'score_global': 1.0 - i * 0.05}
+              for i in range(14)]
+        a3, a4, a6 = _payload_figures()
+        a6['classement'] = cl
+        with rendu_simule():
+            word = _texte_docx(R.export_word(
+                a3, a4, a6, 'DEMO', '31/12/2025', 'T7c',
+                narration_calculee=('Texte.', 'temoin')))
+        self.assertIn('10 modèles sur 14', word)
+        self.assertIn('ordre du classement', word)
+        print('    OK T7c-e : « 10 modèles sur 14 » — la coupe est DITE')
+
+    def test_rien_n_est_declare_quand_rien_n_est_coupe(self):
+        """⚠️ UNE DÉCLARATION INUTILE EST UN BRUIT. Sous le seuil, le
+        document ne dit rien parce qu'il n'y a rien à dire."""
+        self.assertEqual(R.note_troncature(15, 8, 'relativités', 'triées'), '')
+        self.assertEqual(R.note_troncature(15, 15, 'relativités', 'triées'), '')
+        self.assertIn('sur 16', R.note_troncature(15, 16, 'x', 'y'))
+        a3, a4, a6 = _payload_figures()
+        with rendu_simule():
+            word = _texte_docx(R.export_word(
+                a3, a4, a6, 'DEMO', '31/12/2025', 'T7c',
+                narration_calculee=('Texte.', 'temoin')))
+        self.assertNotIn('sur 0', word)
+        self.assertNotIn('relativités sur', word)
+        print('    OK T7c-f : aucune déclaration là où rien n\'est coupé')
+
+    def test_la_limite_et_la_phrase_lisent_la_MEME_constante(self):
+        """⚠️ DEUX COPIES AURAIENT FINI PAR DIRE DEUX CHOSES : le tableau
+        coupé à quinze et la phrase annonçant douze. C'est le motif que ce
+        chantier a fermé cinq fois."""
+        rels = {f'v{i:02d}': {'beta': 0.5 - i * 0.01, 'relativite': 1.0,
+                              'ic95_low': 0.9, 'ic95_high': 1.1,
+                              'pvalue': 0.01, 'significatif': True,
+                              'sens': 'aggravant'} for i in range(30)}
+        a3, a4, a6 = _payload_figures()
+        a3['relativites_poisson'] = rels
+        with rendu_simule():
+            octets = R.export_word(a3, a4, a6, 'DEMO', '31/12/2025', 'T7c',
+                                   narration_calculee=('Texte.', 'temoin'))
+        from docx import Document
+        doc = Document(io.BytesIO(octets))
+        # le tableau des relativités : autant de lignes que la constante
+        rel = [t for t in doc.tables
+               if [c.text.strip() for c in t.rows[0].cells]
+               == R.titres('relativites')]
+        self.assertEqual(len(rel), 1)
+        self.assertEqual(len(rel[0].rows) - 1, R.MAX_RELATIVITES_WORD)
+        self.assertIn('%d relativités sur 30' % R.MAX_RELATIVITES_WORD,
+                      _texte_docx(octets))
+        print('    OK T7c-g : %d lignes rendues, %d annoncées — une seule '
+              'constante' % (len(rel[0].rows) - 1, R.MAX_RELATIVITES_WORD))
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

@@ -525,6 +525,34 @@ FIGURES_ECARTEES: Dict[str, str] = {
 }
 
 
+# ── CE QUE LE WORD NE MONTRE PAS, ET QU'IL DOIT DIRE ────────────────────────
+#
+#  ⚠️ MESURÉ, ET INVISIBLE JUSQU'ICI : le Word coupe les relativités à quinze
+#  lignes et le classement à dix, quand l'HTML les rend TOUTES. Mêmes
+#  colonnes, mêmes libellés, même ordre — et pas les mêmes lignes. T5 avait
+#  comparé les EN-TÊTES, pas le NOMBRE DE LIGNES : le défaut lui a échappé.
+#  Un GLM à vingt variables retenues perdait ses cinq dernières relativités
+#  dans le fichier qui part chez un commissaire aux comptes, SANS RIEN DIRE.
+#
+#  ⚠️ ARBITRAGE : DÉCLARER, PAS ALIGNER. Le tri est déjà par |β| décroissant
+#  et par rang de classement : les premières lignes sont celles qui pèsent le
+#  plus. C'est un choix éditorial défendable — À CONDITION D'ÊTRE ÉCRIT.
+#  Aligner alourdirait un livrable papier sans rien apprendre au lecteur.
+#
+#  ⚠️ ET LE NOMBRE AFFICHÉ EST CELUI QUI COUPE : la limite et la phrase
+#  lisent la même constante. Deux copies auraient fini par dire deux choses.
+MAX_RELATIVITES_WORD = 15
+MAX_CLASSEMENT_WORD = 10
+
+
+def note_troncature(montrees: int, total: int, quoi: str, critere: str) -> str:
+    """La phrase qui déclare une troncature, ou rien s'il n'y en a pas."""
+    if total <= montrees:
+        return ''
+    return (f'{montrees} {quoi} sur {total}, {critere}. '
+            f'Le rapport HTML les porte toutes.')
+
+
 class FigureNumerotee(NamedTuple):
     """Une figure du plan, avec le numéro qu'elle porte dans le document."""
     numero: int
@@ -1197,6 +1225,69 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
 .narration ul{{margin:4px 0 4px 16px;}}
 /* Footer */
 .footer{{text-align:center; font-size:10px; color:var(--slate); margin-top:28px; padding:10px;}}
+
+/* ══════════════════════════════════════════════════════════════════════
+   L'IMPRESSION — le rapport se lit A L'ECRAN et se signe SUR PAPIER
+   ══════════════════════════════════════════════════════════════════════
+   ⚠️ MESURE AVANT CE LOT : ZERO regle d'impression dans ce rapport, contre
+   vingt et une dans celui du provisionnement. Un livrable destine a etre
+   imprime, converti en PDF et archive n'en portait aucune.
+*/
+@media print {{
+  /* ⚠️ LA REGLE QUI EMPECHE UN ROUGE DE S'IMPRIMER COMME UN VERT. Un
+     navigateur SUPPRIME par defaut les fonds colores a l'impression — la
+     case << Graphiques d'arriere-plan >> du dialogue Ctrl+P est DECOCHEE.
+     Or le signal RAG de ce rapport ne vit QUE dans le fond des badges :
+     << VERT >>, << AMBRE >> et << ROUGE >> s'impriment sinon en blanc sur
+     blanc, avec le meme texte noir. C'est le seul defaut de ce chantier
+     qui puisse TROMPER un lecteur plutot que le gener.
+     Le prefixe -webkit- reste necessaire : Chrome et Edge, qui font la
+     conversion PDF, ne lisent encore que lui dans certaines versions. */
+  *, *::before, *::after {{
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }}
+
+  /* ⚠️ DES MARGES, PAS ZERO. Sans marge le contenu court jusqu'au bord
+     physique de la feuille, zone que la plupart des imprimantes et des
+     convertisseurs rognent — un tableau y perd sa derniere colonne. */
+  @page {{ size: A4; margin: 14mm 12mm 16mm 12mm; }}
+
+  body {{ background: white; }}
+  .page {{ max-width: none; margin: 0; padding: 0; }}
+  .section {{ box-shadow: none; }}
+
+  /* CE QUI NE DOIT PAS ETRE COUPE EN DEUX PAR UNE FIN DE PAGE.
+     Un tableau scinde perd son en-tete ; une FIGURE scindee ne veut plus
+     rien dire ; une vignette coupee separe le chiffre de son libelle.
+     `break-inside` est la propriete moderne, `page-break-inside` son
+     ancetre : les deux sont posees parce que les moteurs d'impression
+     n'ont pas tous migre. */
+  table, .kpi, .kpi-grid, .figure, .plotly-graph-div {{
+    break-inside: avoid; page-break-inside: avoid;
+  }}
+  tr {{ break-inside: avoid; page-break-inside: avoid; }}
+
+  /* Un tableau qui franchit une page reimprime son en-tete. Sans cela, la
+     suite du tableau des huit hypotheses arrive sans ses colonnes. */
+  thead {{ display: table-header-group; }}
+
+  /* UN TITRE NE RESTE JAMAIS SEUL EN BAS DE PAGE, separe de ce qu'il
+     annonce — c'est la faute de mise en page la plus visible d'un
+     rapport. */
+  .section-head, .narration h3.s-head, .narration h4 {{
+    break-after: avoid; page-break-after: avoid;
+  }}
+
+  /* Pas de ligne isolee en haut ou en bas de page dans la prose. */
+  p, li {{ orphans: 3; widows: 3; }}
+
+  /* Une figure a une largeur fixee en pixels par le navigateur ; sur une
+     feuille A4 elle deborderait de la zone imprimable. */
+  .figure img, .figure svg, .plotly-graph-div {{
+    max-width: 100% !important; height: auto !important;
+  }}
+}}
 .kpi-grid{{display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px; margin-top:8px;}}
 .kpi{{background:var(--bg); border:1px solid #dde4ee; border-radius:6px; padding:10px 12px;}}
 .kpi-label{{font-size:10px; color:var(--slate); text-transform:uppercase; letter-spacing:.4px;}}
@@ -1586,7 +1677,9 @@ def export_word(
         # ── CHAPITRE 2 : RELATIVITÉS ─────────────────────────────────────────
         _h(chapitre(2)); _sep()
         rows_rel = []
-        for var, d in sorted(rels.items(), key=lambda x: -abs(x[1].get('beta',0)))[:15]:
+        for var, d in sorted(rels.items(),
+                             key=lambda x: -abs(x[1].get('beta', 0))
+                             )[:MAX_RELATIVITES_WORD]:
             rows_rel.append([
                 var,
                 F.nombre(d.get('beta'), F.DEC_GINI),
@@ -1602,6 +1695,12 @@ def export_word(
             _tbl(titres('relativites'), rows_rel,
                  ws=[3.0,1.6,2.4,1.9,1.9,1.7,1.4,1.6],
                  num=colonnes_numeriques('relativites'))
+        _note = note_troncature(MAX_RELATIVITES_WORD, len(rels),
+                                'relativités', 'triées par |β| décroissant')
+        if _note:
+            p = doc.add_paragraph()
+            p.paragraph_format.space_after = Pt(4)
+            _run(p, '✦ ' + _note, sz=8, italic=True, col=GrR)
         _figures_du_chapitre(2)
         doc.add_page_break()
 
@@ -1615,11 +1714,17 @@ def export_word(
                     F.nombre(m.get('rmse_test'), F.DEC_GINI),
                     F.nombre(m.get('overfit_ratio'), F.DEC_RATIO),
                     F.nombre(m.get('score_global'), F.DEC_GINI)]
-                   for i, m in enumerate(cl4[:10], 1)]
+                   for i, m in enumerate(cl4[:MAX_CLASSEMENT_WORD], 1)]
         if rows_ml:
             _tbl(titres('classement'), rows_ml,
                  ws=[1.3,3.6,2.8,2.3,2.3,1.9,2.3],
                  num=colonnes_numeriques('classement'), gras_premiere=True)
+        _note = note_troncature(MAX_CLASSEMENT_WORD, len(cl4), 'modèles',
+                                'dans l\'ordre du classement')
+        if _note:
+            p = doc.add_paragraph()
+            p.paragraph_format.space_after = Pt(4)
+            _run(p, '✦ ' + _note, sz=8, italic=True, col=GrR)
         _figures_du_chapitre(3)
         doc.add_page_break()
 
