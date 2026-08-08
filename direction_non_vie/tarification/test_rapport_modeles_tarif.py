@@ -1123,5 +1123,64 @@ class T7d_LaPageDeGardeEtLesBordures(unittest.TestCase):
         print('    OK T7d-d : cellules bordées des quatre côtés, comme au Word')
 
 
+class T7e_LaNavigationDansLeWord(unittest.TestCase):
+    """T7e — 23 paragraphes de titre, zéro niveau de plan : Word ne pouvait
+    construire ni volet de navigation ni table des matières."""
+
+    def _word(self):
+        a3, a4, a6 = _payload_figures()
+        with rendu_simule():
+            return R.export_word(a3, a4, a6, 'DEMO', '31/12/2025', 'T7e',
+                                 narration_calculee=(
+                                     '§1 — CONTEXTE\nTexte.\n'
+                                     '§2 — SUITE\nEncore.', 'temoin'))
+
+    def _niveaux(self, octets):
+        xml = zipfile.ZipFile(io.BytesIO(octets)).read(
+            'word/document.xml').decode('utf-8')
+        return re.findall(r'<w:outlineLvl w:val="(\d+)"/>', xml)
+
+    def test_les_huit_chapitres_portent_un_niveau_de_plan(self):
+        """⚠️ SANS NIVEAU DE PLAN, un rapport de neuf pages se parcourt à la
+        molette : Word n'a rien pour bâtir sa navigation."""
+        niveaux = self._niveaux(self._word())
+        self.assertEqual(niveaux.count('0'), len(R.CHAPITRES),
+                         'un chapitre sans niveau de plan')
+        self.assertGreaterEqual(niveaux.count('1'), 2,
+                                'les sections du commentaire n\'ont pas de '
+                                'niveau')
+        print(f'    OK T7e : {niveaux.count("0")} chapitres au niveau 0, '
+              f'{niveaux.count("1")} sections au niveau 1 (0 avant ce lot)')
+
+    def test_le_niveau_est_pose_SANS_TOUCHER_A_LA_TYPOGRAPHIE(self):
+        """⚠️ LE POINT DU LOT, ET LA RAISON DE NE PAS UTILISER « Heading 1 ».
+
+        Basculer les paragraphes sur un style Heading aurait apporté la
+        typographie de Word avec — Calibri Light, bleu #2F5496 — et changé
+        l'apparence de TOUS les titres d'un document signé. Le niveau de plan
+        seul suffit à Word ; la typographie ne bouge pas d'un point.
+        """
+        from docx import Document
+        doc = Document(io.BytesIO(self._word()))
+        titres = [p for p in doc.paragraphs
+                  if p.text.strip().startswith('Chapitre ')]
+        self.assertEqual(len(titres), len(R.CHAPITRES))
+        for p in titres:
+            self.assertEqual(p.style.name, 'Normal',
+                             'le style a changé — la typographie avec')
+            r0 = [r for r in p.runs if r.text.strip()][0]
+            self.assertEqual(r0.font.size.pt, 16.0)
+            self.assertTrue(r0.bold)
+            self.assertEqual(str(r0.font.color.rgb), '0F2E52')
+        print('    OK T7e-b : style « Normal », 16 pt, navy, gras — '
+              'inchangés sur les 8 chapitres')
+
+    def test_le_niveau_de_plan_reste_dans_les_bornes_de_Word(self):
+        """Word n'accepte que 0..8 ; au-delà le document est refusé."""
+        for niveau in self._niveaux(self._word()):
+            self.assertTrue(0 <= int(niveau) <= 8, niveau)
+        print('    OK T7e-c : tous les niveaux dans 0..8')
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

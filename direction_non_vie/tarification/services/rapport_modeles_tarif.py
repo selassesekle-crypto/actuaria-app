@@ -1609,11 +1609,29 @@ def export_word(
             return r
 
         def _h(txt, lv=1, col=None):
+            """Un titre — et son NIVEAU DE PLAN, qui ouvre la navigation.
+
+            ⚠️ MESURÉ AVANT CE LOT : 23 paragraphes de titre, TOUS en style
+            « Normal », et ZÉRO niveau de plan. Word ne pouvait construire ni
+            volet de navigation ni table des matières : un rapport de neuf
+            pages se parcourait à la molette.
+
+            ⚠️ ET LE NIVEAU EST POSÉ SANS TOUCHER AU STYLE, délibérément.
+            Basculer les paragraphes sur « Heading 1 » aurait apporté la
+            typographie de Word avec — Calibri Light, bleu #2F5496 — et
+            changé l'apparence de tous les titres d'un document signé. Le
+            niveau de plan (`w:outlineLvl`) suffit à Word pour bâtir sa
+            navigation ; la typographie, elle, ne bouge pas d'un point.
+            C'est aussi ce qui rend ce lot RETIRABLE SEUL.
+            """
             p=doc.add_paragraph()
             p.paragraph_format.space_before=Pt(8); p.paragraph_format.space_after=Pt(3)
             sz={1:16,2:13,3:10}.get(lv,10)
             c=col or (NR if lv==1 else GR)
             _run(p, txt, bold=True, sz=sz, col=c)
+            niveau = OxmlElement('w:outlineLvl')
+            niveau.set(qn('w:val'), str(max(0, min(lv - 1, 8))))
+            p._p.get_or_add_pPr().append(niveau)
 
         def _sep():
             p=doc.add_paragraph()
