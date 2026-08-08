@@ -1110,6 +1110,27 @@ def export_html(
             else f'<{tag}>{c}</{tag}>'
             for i, c in enumerate(cells)) + '</tr>'
 
+    def _champs_garde():
+        """Les quatre champs d'identité de la page de garde, NOMMÉS.
+
+        ⚠️ L'HTML LES PORTAIT SANS LIBELLÉ : « 🔑 A6_20260808_063434 » ne dit
+        pas à un lecteur ce qu'il regarde, et « Arrêté » n'apparaissait que
+        collé à la branche. Le Word, lui, les présente en tableau depuis
+        toujours — avec des en-têtes.
+
+        ⚠️ ET LES LIBELLÉS VIENNENT DE `titres('garde')`, la source que T5 a
+        posée pour ce tableau-là. Les deux formats nomment donc les mêmes
+        champs avec les mêmes mots, par construction.
+        """
+        valeurs = [ref_client or 'À renseigner',
+                   branche.replace('_', ' ').title(), arr,
+                   audit_id or 'N/A']
+        return ('<div class="garde-champs">'
+                + ''.join(f'<div class="garde-champ"><span class="lbl">'
+                          f'{lbl}</span><span class="val">{val}</span></div>'
+                          for lbl, val in zip(titres('garde'), valeurs))
+                + '</div>')
+
     def _figures_du_chapitre(numero):
         return ''.join(_bloc_figure(f) for f in _figures.get(numero, ()))
 
@@ -1210,10 +1231,27 @@ body{{font-family:'Segoe UI',Arial,sans-serif; background:var(--bg); color:var(-
 .section{{background:var(--white); border-radius:8px; margin-bottom:20px; box-shadow:0 1px 4px rgba(0,0,0,.07); overflow:hidden;}}
 .section-head{{background:var(--navy-mid); color:var(--gold); padding:10px 18px; font-size:13px; font-weight:700;}}
 .section-body{{padding:16px 18px;}}
+/* Page de garde */
+.garde-champs{{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:1px; margin-top:16px; background:rgba(255,255,255,.14);
+  border:1px solid rgba(255,255,255,.14);}}
+.garde-champ{{background:var(--navy); padding:8px 12px;}}
+.garde-champ .lbl{{display:block; font-size:9px; letter-spacing:.6px;
+  text-transform:uppercase; color:var(--gold-l); opacity:.85;}}
+.garde-champ .val{{display:block; font-size:12px; font-weight:600; color:#fff;
+  margin-top:2px; word-break:break-word;}}
 /* Tables */
+/* ⚠️ LES BORDURES CONVERGENT AVEC LE WORD. Le `.docx` grille toutes ses
+   cellules (`Table Grid`) quand l'HTML ne traçait que des filets
+   horizontaux : les deux formats du même rapport ne se ressemblaient pas.
+   C'est l'HTML qui s'aligne — le document SIGNÉ garde son apparence, et la
+   convergence coûte une règle au lieu d'une réécriture XML.
+   ⚠️ ET C'EST UN DÉPASSEMENT, PAS UN RATTRAPAGE : A7 porte exactement le
+   même écart, mesuré. */
 table{{width:100%; border-collapse:collapse; font-size:12px; margin-top:8px;}}
-th{{background:var(--navy); color:var(--gold); padding:7px 10px; text-align:left;}}
-td{{padding:6px 10px; border-bottom:1px solid #e8edf2;}}
+th{{background:var(--navy); color:var(--gold); padding:7px 10px; text-align:left;
+  border:1px solid var(--navy-mid);}}
+td{{padding:6px 10px; border:1px solid #e2e8f0;}}
 tr:nth-child(even) td{{background:#f7f9fc;}}
 .right{{text-align:right;}}
 .center{{text-align:center;}}
@@ -1255,6 +1293,11 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
 
   body {{ background: white; }}
   .page {{ max-width: none; margin: 0; padding: 0; }}
+
+  /* ⚠️ LA PAGE DE GARDE OCCUPE SA PAGE. Le Word en a une depuis toujours ;
+     l'HTML enchaînait sur le chapitre 1 au milieu de la premiere feuille,
+     si bien que le document imprime n'avait pas de page de titre. */
+  .header {{ break-after: page; page-break-after: always; }}
   .section {{ box-shadow: none; }}
 
   /* CE QUI NE DOIT PAS ETRE COUPE EN DEUX PAR UNE FIN DE PAGE.
@@ -1309,10 +1352,10 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
       <div class="sub" style="margin-top:6px;">{ref_client or 'Client à renseigner'}</div>
     </div>
   </div>
+  {_champs_garde()}
   <div class="meta">
     <span>🏢 ActuarIA v1.0</span>
     <span>📅 {now}</span>
-    <span>🔑 {audit_id or 'N/A'}</span>
     <span>🧠 Narration : {n_src}</span>
   </div>
 </div>

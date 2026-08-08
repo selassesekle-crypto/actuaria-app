@@ -1060,5 +1060,68 @@ class T7c_LImpressionEtLesTroncatures(unittest.TestCase):
               'constante' % (len(rel[0].rows) - 1, R.MAX_RELATIVITES_WORD))
 
 
+class T7d_LaPageDeGardeEtLesBordures(unittest.TestCase):
+    """T7d — le Word ouvre sur une page de garde, l'HTML enchaînait."""
+
+    def _html(self):
+        a3, a4, a6 = _payload_figures()
+        with rendu_simule():
+            return R.export_html(a3, a4, a6, 'CLIENT DE DEMONSTRATION',
+                                 '31/12/2025', 'A6_20260809_101112',
+                                 narration_calculee=('Texte.', 'temoin'))
+
+    def test_les_quatre_champs_d_identite_sont_NOMMES(self):
+        """⚠️ « 🔑 A6_20260808_063434 » NE DIT PAS À UN LECTEUR CE QU'IL
+        REGARDE. Le Word les présente en tableau, avec des en-têtes, depuis
+        toujours ; l'HTML les portait sans libellé."""
+        html = self._html()
+        for libelle in R.titres('garde'):
+            self.assertIn(f'<span class="lbl">{libelle}</span>', html,
+                          libelle)
+        for valeur in ('CLIENT DE DEMONSTRATION', '31/12/2025',
+                       'A6_20260809_101112'):
+            self.assertIn(valeur, html, valeur)
+        print(f'    OK T7d : les {len(R.titres("garde"))} champs de garde '
+              f'sont nommés, pas devinés')
+
+    def test_les_libelles_viennent_de_LA_MEME_source_que_le_Word(self):
+        """⚠️ SANS CELA, LES DEUX PAGES DE GARDE DÉRIVERAIENT — c'est le
+        motif que T5 a fermé sur les en-têtes de tableaux."""
+        a3, a4, a6 = _payload_figures()
+        with rendu_simule():
+            word = _texte_docx(R.export_word(
+                a3, a4, a6, 'CLIENT', '31/12/2025', 'AUDIT-1',
+                narration_calculee=('Texte.', 'temoin')))
+        html = self._html()
+        for libelle in R.titres('garde'):
+            self.assertIn(libelle, html, f'HTML · {libelle}')
+            self.assertIn(libelle, word, f'WORD · {libelle}')
+        print('    OK T7d-b : mêmes libellés de garde dans les deux formats, '
+              'lus dans `titres(\'garde\')`')
+
+    def test_la_page_de_garde_occupe_SA_page_a_l_impression(self):
+        """⚠️ L'HTML ENCHAÎNAIT SUR LE CHAPITRE 1 au milieu de la première
+        feuille : le document imprimé n'avait pas de page de titre, quand le
+        Word en a une depuis toujours."""
+        html = self._html()
+        bloc = html[html.index('@media print'):]
+        self.assertIn('.header { break-after: page; '
+                      'page-break-after: always; }',
+                      bloc.replace('\n', ' ').replace('  ', ' '))
+        print('    OK T7d-c : la page de garde se termine par un saut de page')
+
+    def test_les_tableaux_sont_bordes_comme_ceux_du_Word(self):
+        """⚠️ LE .DOCX GRILLE TOUTES SES CELLULES (`Table Grid`) quand l'HTML
+        ne traçait que des filets horizontaux. C'est l'HTML qui s'aligne : le
+        document SIGNÉ garde son apparence."""
+        html = self._html()
+        style = html.split('<style>')[1].split('</style>')[0]
+        self.assertIn('td{padding:6px 10px; border:1px solid #e2e8f0;}', style)
+        self.assertIn('border:1px solid var(--navy-mid);', style)
+        # l'ancienne regle, qui ne bordait qu'en bas, a disparu
+        self.assertNotIn('border-bottom:1px solid #e8edf2', style)
+        print('    OK T7d-d : cellules bordées des quatre côtés, comme au Word')
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
