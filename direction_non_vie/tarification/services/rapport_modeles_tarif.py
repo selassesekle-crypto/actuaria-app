@@ -525,6 +525,74 @@ FIGURES_ECARTEES: Dict[str, str] = {
 }
 
 
+# ── LA RELECTURE ACTUARIELLE ────────────────────────────────────────────────
+#
+#  ⚠️ CE RAPPORT SE DÉCLARE LUI-MÊME « destiné à l'actuaire désigné, au Comité
+#  des risques et à l'ACPR » (prompt, plus haut), et le dépôt a écrit noir sur
+#  blanc, au lot `temperature`, que ce qui satisfait l'auditabilité des
+#  sorties IA « n'est pas un réglage d'échantillonnage, c'est la RELECTURE par
+#  l'actuaire responsable ». Cette relecture était exigée par le code et
+#  n'avait NULLE PART où s'enregistrer : neuf générateurs de rapport dans le
+#  dépôt, quatre portent une identification d'actuaire, cinq n'en portent
+#  aucune — dont celui-ci.
+#
+#  ⚠️ « RELU ET VALIDÉ PAR », JAMAIS « SIGNÉ PAR ». Un champ de texte rempli
+#  par celui qui clique n'est pas une signature au sens juridique. La trace
+#  est purement FACTUELLE — qui, et quand — et ne qualifie PAS ce que la
+#  validation engage. C'est la doctrine déjà écrite dans
+#  `core/conformite_reglementaire`, appliquée à la validation d'un modèle de
+#  deep learning ; elle vaut ici mot pour mot.
+#
+#  ⚠️ ET AUCUN EFFET SUR LE STATUT RAG, délibérément. Les huit plafonds d'A6
+#  portent tous sur une décision qui change CE QUE LE RÉSULTAT VAUT — une
+#  pondération que personne n'assume, un backtesting qui n'a pas tourné, une
+#  validation temporelle portant sur un autre modèle. La relecture d'un
+#  document n'est pas de cette famille : elle ne touche ni au Gini, ni au
+#  surapprentissage. Le statut dit « ce modèle est-il déployable » ; la
+#  relecture dit « ce document est-il diffusable ». Les confondre dégraderait
+#  les deux — et un plafond qui se déclenche toujours cesse d'être un signal.
+
+RELECTURE_VALIDEE = 'validee'
+RELECTURE_NON_ENREGISTREE = 'non_enregistree'
+RELECTURE_HORS_PRODUCTION = 'hors_production'
+
+
+class TraceRelecture(NamedTuple):
+    """L'état de la relecture : son code, sa phrase, et s'il alerte."""
+    etat: str
+    texte: str
+    alerte: bool
+
+
+def trace_relecture(nom, numero_ia=None, horodatage=None,
+                    environnement='production') -> TraceRelecture:
+    """Les trois états de la relecture actuarielle, en toutes lettres.
+
+    ⚠️ AUCUNE DATE N'EST GÉNÉRÉE ICI : celle qui s'affiche est l'horodatage
+    du dossier (`audit_trail['timestamp']`), mis en forme par le même
+    `valeur_audit` que le chapitre 8. Une date fabriquée au moment du rendu
+    dirait quand le document a été produit, pas quand il a été relu.
+    """
+    if nom and str(nom).strip():
+        texte = 'Relu et validé par ' + str(nom).strip()
+        if numero_ia and str(numero_ia).strip():
+            texte += ' — N° IA ' + str(numero_ia).strip()
+        if horodatage:
+            texte += ', le ' + valeur_audit(horodatage)
+        return TraceRelecture(RELECTURE_VALIDEE, texte, False)
+    if str(environnement or 'production') != 'production':
+        return TraceRelecture(
+            RELECTURE_HORS_PRODUCTION,
+            'Environnement de développement — relecture actuarielle non '
+            'requise.', False)
+    # ⚠️ L'ABSENCE SE DIT. « Ce qui n'est que dans un champ technique n'existe
+    # pas pour l'actuaire qui relit le dossier plus tard. »
+    return TraceRelecture(
+        RELECTURE_NON_ENREGISTREE,
+        'Relecture actuarielle non enregistrée — ce rapport n\'a pas été relu '
+        'par un actuaire identifié.', True)
+
+
 # ── CE QUE LE WORD NE MONTRE PAS, ET QU'IL DOIT DIRE ────────────────────────
 #
 #  ⚠️ MESURÉ, ET INVISIBLE JUSQU'ICI : le Word coupe les relativités à quinze
@@ -1006,6 +1074,7 @@ def export_html(
     result_a3: Dict = None, result_a4: Dict = None, result_a6: Dict = None,
     ref_client: str = '', arrete: str = '', audit_id: str = '',
     narration_calculee: Optional[Tuple[str, str]] = None,
+    actuaire_nom: str = '', actuaire_numero_ia: str = '',
 ) -> str:
     """Génère le rapport HTML tarification. Retourne str HTML ou ''.
 
@@ -1125,11 +1194,20 @@ def export_html(
         valeurs = [ref_client or 'À renseigner',
                    branche.replace('_', ' ').title(), arr,
                    audit_id or 'N/A']
+        # ⚠️ LA RELECTURE EST SUR LA PAGE DE GARDE, pas en pied de page :
+        # c'est la première chose qu'un lecteur doit savoir d'un document
+        # destiné à l'actuaire désigné et à l'ACPR.
+        t = trace_relecture(actuaire_nom, actuaire_numero_ia,
+                            at.get('timestamp'),
+                            at.get('environnement', 'production'))
+        couleur = GOLD_L if not t.alerte else '#F5B7B1'
         return ('<div class="garde-champs">'
                 + ''.join(f'<div class="garde-champ"><span class="lbl">'
                           f'{lbl}</span><span class="val">{val}</span></div>'
                           for lbl, val in zip(titres('garde'), valeurs))
-                + '</div>')
+                + '</div>'
+                + f'<div class="garde-relecture" style="color:{couleur};">'
+                + ('⚠ ' if t.alerte else '✓ ') + t.texte + '</div>')
 
     def _figures_du_chapitre(numero):
         return ''.join(_bloc_figure(f) for f in _figures.get(numero, ()))
@@ -1240,6 +1318,8 @@ body{{font-family:'Segoe UI',Arial,sans-serif; background:var(--bg); color:var(-
   text-transform:uppercase; color:var(--gold-l); opacity:.85;}}
 .garde-champ .val{{display:block; font-size:12px; font-weight:600; color:#fff;
   margin-top:2px; word-break:break-word;}}
+.garde-relecture{{margin-top:10px; font-size:11px; font-weight:600;
+  letter-spacing:.2px;}}
 /* Tables */
 /* ⚠️ LES BORDURES CONVERGENT AVEC LE WORD. Le `.docx` grille toutes ses
    cellules (`Table Grid`) quand l'HTML ne traçait que des filets
@@ -1532,6 +1612,7 @@ def export_word(
     result_a3: Dict = None, result_a4: Dict = None, result_a6: Dict = None,
     ref_client: str = '', arrete: str = '', audit_id: str = '',
     narration_calculee: Optional[Tuple[str, str]] = None,
+    actuaire_nom: str = '', actuaire_numero_ia: str = '',
 ) -> bytes:
     """Génère le rapport Word tarification (.docx). Retourne bytes ou b''.
 
@@ -1711,6 +1792,17 @@ def export_word(
         _tbl(titres('garde'),
              [[ref_client or 'À renseigner', branche.replace('_',' ').title(), arr, audit_id or 'N/A']],
              ws=[3.5, 4.0, 3.0, 3.5])
+        # ⚠️ LA MÊME TRACE QUE L'HTML, AU MÊME ENDROIT. Le chantier a fermé
+        # TROIS fois le défaut « le Word ne porte pas ce que l'HTML porte » —
+        # la narration (T1), six colonnes et un tableau (T5), les figures
+        # (T7a). Et A7, mesuré, accepte encore une signature qu'il jette.
+        _t = trace_relecture(actuaire_nom, actuaire_numero_ia,
+                             at.get('timestamp'),
+                             at.get('environnement', 'production'))
+        p = doc.add_paragraph()
+        p.paragraph_format.space_before = Pt(10)
+        _run(p, ('⚠ ' if _t.alerte else '✓ ') + _t.texte,
+             bold=True, sz=9, col=RgR if _t.alerte else GR)
         doc.add_page_break()
 
         # ── CHAPITRE 1 : SYNTHÈSE GLM ────────────────────────────────────────
@@ -1975,6 +2067,7 @@ def export_pdf(
     result_a3: Dict = None, result_a4: Dict = None, result_a6: Dict = None,
     ref_client: str = '', arrete: str = '', audit_id: str = '',
     narration_calculee: Optional[Tuple[str, str]] = None,
+    actuaire_nom: str = '', actuaire_numero_ia: str = '',
 ) -> bytes:
     """Génère le rapport PDF via weasyprint (HTML→PDF). Retourne bytes ou b''.
 
@@ -1984,7 +2077,8 @@ def export_pdf(
     try:
         from weasyprint import HTML as WP_HTML
         html = export_html(result_a3, result_a4, result_a6, ref_client, arrete,
-                           audit_id, narration_calculee)
+                           audit_id, narration_calculee,
+                           actuaire_nom, actuaire_numero_ia)
         if not html:
             return b''
         buf = io.BytesIO()
@@ -2013,6 +2107,7 @@ def generer_rapport_tarification(
     arrete: str = '',
     audit_id: str = '',
     formats: List[str] = None,
+    actuaire_nom: str = '', actuaire_numero_ia: str = '',
 ) -> Dict[str, bytes]:
     """
     Génère tous les formats demandés en un seul appel.
@@ -2021,6 +2116,17 @@ def generer_rapport_tarification(
     """
     if formats is None:
         formats = ['html', 'word']
+
+    # ⚠️ L'ABSENCE DE RELECTURE SE SIGNALE AUSSI DANS LE JOURNAL, pas
+    # seulement dans le document : celui qui lance la chaîne ne lit pas
+    # toujours le livrable qu'il produit. Même geste qu'A6 pour la
+    # gouvernance — et une fois par rapport, pas une fois par format.
+    _at_relecture = (result_a6 or {}).get('audit_trail') or {}
+    _trace = trace_relecture(actuaire_nom, actuaire_numero_ia,
+                             _at_relecture.get('timestamp'),
+                             _at_relecture.get('environnement', 'production'))
+    if _trace.etat == RELECTURE_NON_ENREGISTREE:
+        logger.warning('[RELECTURE] %s', _trace.texte)
 
     out: Dict[str, bytes] = {
         'html_bytes':  b'',
@@ -2045,12 +2151,14 @@ def generer_rapport_tarification(
     html_str = ''
     if 'html' in formats or 'pdf' in formats:
         html_str = export_html(result_a3, result_a4, result_a6, ref_client, arrete,
-                               audit_id, narration_calculee)
+                               audit_id, narration_calculee,
+                               actuaire_nom, actuaire_numero_ia)
         out['html_bytes'] = html_str.encode('utf-8') if html_str else b''
 
     if 'word' in formats:
         out['word_bytes'] = export_word(result_a3, result_a4, result_a6, ref_client,
-                                        arrete, audit_id, narration_calculee)
+                                        arrete, audit_id, narration_calculee,
+                                        actuaire_nom, actuaire_numero_ia)
 
     if 'pdf' in formats:
         if html_str:

@@ -214,6 +214,15 @@ class AgentA6Comparaison:
         profil_valide_par:   Optional[str] = None,
         environnement:       str = 'production',
         valide_par_actuaire_dl: Optional[str] = None,
+        # ⚠️ LA RELECTURE ACTUARIELLE DU RAPPORT — À NE PAS CONFONDRE AVEC
+        # `profil_valide_par`, JUSTE AU-DESSUS. Celui-là valide une DÉCISION
+        # DE MODÉLISATION (la pondération des critères) et plafonne le statut
+        # RAG, parce qu'il change ce que le classement vaut. Celui-ci
+        # enregistre qu'un actuaire a RELU LE DOCUMENT : il n'entre dans aucun
+        # plafond, il se publie. A6 ne l'utilise pas, il le fait transiter —
+        # même mécanisme que `rapport_qualite` et le champ DL.
+        actuaire_nom:        Optional[str] = None,
+        actuaire_numero_ia:  Optional[str] = None,
         # RapportQualite (core/qualite_donnees.py) du chemin déclaratif
         # (pipeline_complet). A6 ne l'UTILISE pas — il le fait TRANSITER vers les
         # 3 rapports (synthese_qualite_donnees), même mécanisme que le champ DL.
@@ -507,11 +516,19 @@ class AgentA6Comparaison:
                     logger.warning(f"Excel A6 échoué : {e_xl}")
             if TARIF_RAPPORT_OK:
                 try:
+                    # ⚠️ LA RELECTURE ACTUARIELLE TRANSITE ICI. A6 ne s'en sert
+                    # pas — il la fait passer, comme il fait déjà passer
+                    # `rapport_qualite` et `valide_par_actuaire_dl`. Elle
+                    # n'entre PAS dans le statut RAG : les plafonds portent sur
+                    # ce qui change la valeur du résultat, la relecture d'un
+                    # document n'en est pas.
                     _rapports = generer_rapport_tarification(
                         result_a3=result_a3, result_a4=result_a4,
                         result_a6=_tmp_a6,
                         arrete=datetime.now().strftime('%d/%m/%Y'),
                         audit_id=audit_id, formats=['html','word'],
+                        actuaire_nom=actuaire_nom or '',
+                        actuaire_numero_ia=actuaire_numero_ia or '',
                     )
                     _html_a6 = _rapports.get('html_bytes', b'')
                     _word_a6 = _rapports.get('word_bytes', b'')

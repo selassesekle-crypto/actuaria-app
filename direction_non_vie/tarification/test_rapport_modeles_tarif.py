@@ -1182,5 +1182,137 @@ class T7e_LaNavigationDansLeWord(unittest.TestCase):
         print('    OK T7e-c : tous les niveaux dans 0..8')
 
 
+class T8_LaRelectureActuarielle(unittest.TestCase):
+    """T8 — le rapport se déclare destiné à l'actuaire désigné et à l'ACPR, et
+    n'avait nulle part où enregistrer qu'un actuaire l'avait relu."""
+
+    HORODATAGE = '2026-08-09T10:11:12.131415'
+
+    def _rendu(self, nom='', ia='', environnement='production'):
+        a3, a4, a6 = _payload_figures()
+        a6['audit_trail'] = {'timestamp': self.HORODATAGE,
+                             'environnement': environnement}
+        with rendu_simule():
+            html = R.export_html(a3, a4, a6, 'CLIENT', '31/12/2025', 'AUD',
+                                 narration_calculee=('Texte.', 'temoin'),
+                                 actuaire_nom=nom, actuaire_numero_ia=ia)
+            word = _texte_docx(R.export_word(
+                a3, a4, a6, 'CLIENT', '31/12/2025', 'AUD',
+                narration_calculee=('Texte.', 'temoin'),
+                actuaire_nom=nom, actuaire_numero_ia=ia))
+        return html, word
+
+    def test_relu_et_valide_porte_QUI_et_QUAND(self):
+        """⚠️ FACTUEL : qui, et quand. Rien de plus."""
+        html, word = self._rendu('Marie Dupont', 'IA-2024-1234')
+        attendu = ('Relu et validé par Marie Dupont — N° IA IA-2024-1234, '
+                   'le 09/08/2026 à 10 h 11')
+        for format_, texte in (('HTML', html), ('WORD', word)):
+            self.assertIn(attendu, texte, format_)
+        print('    OK T8 : « %s » — dans les deux formats' % attendu[:52])
+
+    def test_le_libelle_est_RELU_ET_VALIDE_jamais_SIGNE(self):
+        """⚠️ UN CHAMP DE TEXTE REMPLI PAR CELUI QUI CLIQUE N'EST PAS UNE
+        SIGNATURE au sens juridique. Le dire autrement serait une fausse
+        déclaration."""
+        html, word = self._rendu('Marie Dupont')
+        for texte in (html, word):
+            self.assertIn('Relu et validé par', texte)
+            self.assertNotIn('Signé par', texte)
+            self.assertNotIn('Signature', texte)
+        print('    OK T8-b : « Relu et validé par », jamais « Signé par »')
+
+    def test_l_absence_de_relecture_SE_DIT(self):
+        """⚠️ « Ce qui n'est que dans un champ technique n'existe pas pour
+        l'actuaire qui relit le dossier plus tard. » Le danger n'a jamais été
+        l'erreur, c'était le silence."""
+        html, word = self._rendu('')
+        for format_, texte in (('HTML', html), ('WORD', word)):
+            self.assertIn('Relecture actuarielle non enregistrée', texte,
+                          format_)
+            self.assertIn('n\'a pas été relu par un actuaire identifié',
+                          texte, format_)
+            self.assertNotIn('Relu et validé par', texte, format_)
+        print('    OK T8-c : l\'absence est ÉCRITE dans les deux formats')
+
+    def test_hors_production_ne_reclame_pas_de_relecture(self):
+        """Une exécution de développement n'a pas à porter une alerte de
+        gouvernance : elle dit ce qu'elle est."""
+        html, word = self._rendu('', environnement='developpement')
+        for texte in (html, word):
+            self.assertIn('Environnement de développement', texte)
+            self.assertNotIn('non enregistrée', texte)
+        print('    OK T8-d : hors production, la trace dit ce qu\'elle est')
+
+    def test_les_trois_etats_et_leurs_codes(self):
+        t = R.trace_relecture('Marie Dupont', 'IA-1', self.HORODATAGE)
+        self.assertEqual(t.etat, R.RELECTURE_VALIDEE)
+        self.assertFalse(t.alerte)
+        t = R.trace_relecture('', None, self.HORODATAGE)
+        self.assertEqual(t.etat, R.RELECTURE_NON_ENREGISTREE)
+        self.assertTrue(t.alerte)
+        t = R.trace_relecture('   ', None, None, 'developpement')
+        self.assertEqual(t.etat, R.RELECTURE_HORS_PRODUCTION)
+        self.assertFalse(t.alerte)
+        # un nom fait d'espaces n'est pas un nom
+        self.assertEqual(R.trace_relecture('  ').etat,
+                         R.RELECTURE_NON_ENREGISTREE)
+        print('    OK T8-e : trois états, et un nom vide reste vide')
+
+    def test_AUCUNE_DATE_N_EST_GENEREE(self):
+        """⚠️ LA DATE VIENT DU DOSSIER, pas du moment du rendu. Une date
+        fabriquée dirait quand le document a été produit, pas quand il a été
+        relu."""
+        sans = R.trace_relecture('Marie Dupont', None, None)
+        self.assertEqual(sans.texte, 'Relu et validé par Marie Dupont')
+        self.assertNotIn(', le ', sans.texte)
+        avec = R.trace_relecture('Marie Dupont', None, self.HORODATAGE)
+        self.assertIn('le 09/08/2026 à 10 h 11', avec.texte)
+        # et c'est le MÊME formateur que le chapitre 8
+        self.assertIn(R.valeur_audit(self.HORODATAGE), avec.texte)
+        print('    OK T8-f : la date vient de `audit_trail[timestamp]`, '
+              'jamais du rendu')
+
+    def test_la_relecture_NE_TOUCHE_PAS_au_statut_RAG(self):
+        """⚠️ LE STATUT DIT « CE MODÈLE EST-IL DÉPLOYABLE », LA RELECTURE DIT
+        « CE DOCUMENT EST-IL DIFFUSABLE ». Les huit plafonds d'A6 portent sur
+        ce qui change la valeur du résultat ; la relecture d'un document n'en
+        est pas."""
+        a3, a4, a6 = _payload_figures()
+        a6['statut_rag'] = 'VERT'
+        a6['audit_trail'] = {'timestamp': self.HORODATAGE,
+                             'environnement': 'production'}
+        rendus = {}
+        for cle, nom in (('avec', 'Marie Dupont'), ('sans', '')):
+            with rendu_simule():
+                rendus[cle] = R.export_html(
+                    a3, a4, a6, 'CLIENT', '31/12/2025', 'AUD',
+                    narration_calculee=('Texte.', 'temoin'),
+                    actuaire_nom=nom)
+        for html in rendus.values():
+            self.assertIn('badge badge-vert', html,
+                          'le statut publié a changé avec la relecture')
+        print('    OK T8-g : statut VERT dans les deux cas — la relecture ne '
+              'plafonne rien')
+
+    def test_A6_fait_transiter_la_relecture(self):
+        """A6 ne l'utilise pas : il la fait passer, comme `rapport_qualite`."""
+        import inspect
+        from direction_non_vie.tarification.a6_comparaison.agent import (
+            AgentA6Comparaison)
+        params = inspect.signature(AgentA6Comparaison.run).parameters
+        for nom in ('actuaire_nom', 'actuaire_numero_ia'):
+            self.assertIn(nom, params, nom)
+            self.assertIsNone(params[nom].default)
+        # et l'orchestrateur les accepte aussi
+        for fonction in (R.generer_rapport_tarification, R.export_html,
+                         R.export_word, R.export_pdf):
+            p = inspect.signature(fonction).parameters
+            self.assertIn('actuaire_nom', p, fonction.__name__)
+            self.assertIn('actuaire_numero_ia', p, fonction.__name__)
+        print('    OK T8-h : le champ traverse A6 et les quatre entrées du '
+              'générateur')
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
