@@ -2040,6 +2040,25 @@ def kaleido_disponible() -> bool:
     return importlib.util.find_spec('kaleido') is not None
 
 
+def rendre_image(figure) -> bytes:
+    """Rasterise une figure Plotly. LE SEUL point du module qui le fasse.
+
+    ⚠️ CETTE FONCTION EXISTE POUR ÊTRE SUBSTITUÉE PAR LES TESTS, et c'est un
+    besoin de JUSTESSE, pas de vitesse. Mesuré avant ce lot : six tests
+    faisaient rasteriser 94 figures — 562 s — parce que `kaleido` se trouvait
+    installé sur la machine. Sans lui, les mêmes tests passaient en empruntant
+    un AUTRE chemin. Une suite de tests qui n'exerce pas le même code selon la
+    machine ne prouve pas la même chose selon la machine.
+
+    Cinq de ces six tests ne parlent pas de figures — ils inspectent le
+    vocabulaire publié, les marges de la page, les couleurs, le classeur
+    Excel. Ils ont besoin qu'une image ENTRE dans le document, pas qu'elle
+    soit belle : un rendeur substitué leur suffit, et le chemin réel reste
+    vérifié par les deux tests qui, eux, portent sur les figures.
+    """
+    return figure.to_image(format='png', width=1100, height=520, scale=2)
+
+
 class _NumeroteurFigures:
     """Numérote « Figure N » les figures présentes, dans l'ordre du document."""
 
@@ -2503,8 +2522,7 @@ def export_word(n1, n2, n3, n4,
                         "porte.", sz=8, col=GR)
                 return
             try:
-                png = objet.to_image(format='png', width=1100, height=520,
-                                     scale=2)
+                png = rendre_image(objet)
                 doc.add_picture(io.BytesIO(png), width=Cm(16.5))
             except Exception as _ef:
                 q = doc.add_paragraph()

@@ -35,6 +35,8 @@ from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
 from direction_non_vie.provisionnement.a7_provisionnement.test_a7_ibrahim import (
     GENINS,
 )
+from direction_non_vie.provisionnement.a7_provisionnement.test_a7_graphiques import (
+    kaleido_declare, rendeur_substitue)
 
 
 def _exposition(triangle, loss_ratio=0.70):
@@ -51,10 +53,15 @@ class T1_Livrables_Declarent(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.r = AgentA7Provisionnement(verbose=False).run(
-            source=np.array(GENINS, dtype=float), mode_declare='cumule',
-            primes=_exposition(GENINS), n_sim_bootstrap=300, seed=42,
-            generer_graphiques=True, generer_word=True, generer_pdf_flag=True)
+        # ⚠️ CE VERROU PORTE SUR LA DÉCLARATION DES LIVRABLES, pas sur les
+        # pixels. Il faisait rasteriser 14 figures — 103 s mesurées — pour
+        # inspecter un classeur Excel.
+        with kaleido_declare(True), rendeur_substitue():
+            cls.r = AgentA7Provisionnement(verbose=False).run(
+                source=np.array(GENINS, dtype=float), mode_declare='cumule',
+                primes=_exposition(GENINS), n_sim_bootstrap=300, seed=42,
+                generer_graphiques=True, generer_word=True,
+                generer_pdf_flag=True)
 
     def test_le_resultat_porte_un_bilan_des_livrables(self):
         self.assertTrue(self.r.get('success'), self.r.get('erreur'))

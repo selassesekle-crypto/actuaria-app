@@ -47,6 +47,8 @@ from direction_non_vie.provisionnement.a7_provisionnement.agent import (
     AgentA7Provisionnement)
 from direction_non_vie.provisionnement.a7_provisionnement.test_a7_ibrahim import (
     GENINS, _TRI_RECOURS_FORT)
+from direction_non_vie.provisionnement.a7_provisionnement.test_a7_graphiques import (
+    kaleido_declare, rendeur_substitue)
 
 #: Le vocabulaire des verdicts, RELEVÉ sur huit exécutions — quatre triangles
 #: × avec et sans exposition. Il est fini : la correspondance peut donc être
@@ -71,9 +73,13 @@ def _run(triangle=GENINS, avec_expo=True, cle=None):
     kw = {}
     if avec_expo:
         kw['primes'] = np.full(C.shape[0], float(np.nanmean(C[:, 0])) * 8.0)
-    r = AgentA7Provisionnement(verbose=False).run(
-        source=C, mode_declare='cumule', generer_graphiques=True,
-        generer_word=True, n_sim_bootstrap=60, seed=42, **kw)
+    # ⚠️ CES VERROUS PORTENT SUR LES MARGES ET LES COULEURS, pas sur les
+    # pixels d'une figure. Ils faisaient rasteriser 26 figures — 143 s
+    # mesurées — pour lire une taille de page et des fonds de cellule.
+    with kaleido_declare(True), rendeur_substitue():
+        r = AgentA7Provisionnement(verbose=False).run(
+            source=C, mode_declare='cumule', generer_graphiques=True,
+            generer_word=True, n_sim_bootstrap=60, seed=42, **kw)
     if cle is not None:
         _CACHE[cle] = r
     return r

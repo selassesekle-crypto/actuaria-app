@@ -47,6 +47,8 @@ from direction_non_vie.provisionnement.a7_provisionnement.agent import (
     AgentA7Provisionnement)
 from direction_non_vie.provisionnement.a7_provisionnement.test_a7_ibrahim import (
     GENINS, RAA, _TRI_RECOURS)
+from direction_non_vie.provisionnement.a7_provisionnement.test_a7_graphiques import (
+    kaleido_declare, rendeur_substitue)
 
 #: Un nombre à séparateur d'espace : « 1 564 926 ».
 #:
@@ -105,11 +107,17 @@ def _chaines(obj, chemin='', acc=None):
 
 
 def _run_complet(triangle, **kw):
-    """Un run avec TOUS les livrables — le verrou de vocabulaire les inspecte."""
+    """Un run avec TOUS les livrables — le verrou de vocabulaire les inspecte.
+
+    ⚠️ CE VERROU PORTE SUR LES MOTS PUBLIÉS, pas sur les pixels. Il faisait
+    rasteriser 26 figures — 160 s mesurées — pour relire du vocabulaire. Le
+    rendeur substitué met une image dans le document sans la dessiner.
+    """
     src = np.asarray(triangle, dtype=float)
-    return AgentA7Provisionnement(verbose=False).run(
-        source=src, mode_declare='cumule', generer_graphiques=True,
-        generer_word=True, n_sim_bootstrap=60, seed=42, **kw)
+    with kaleido_declare(True), rendeur_substitue():
+        return AgentA7Provisionnement(verbose=False).run(
+            source=src, mode_declare='cumule', generer_graphiques=True,
+            generer_word=True, n_sim_bootstrap=60, seed=42, **kw)
 
 
 def _run(triangle, **kw):

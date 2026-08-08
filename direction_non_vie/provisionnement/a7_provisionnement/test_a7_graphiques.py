@@ -34,16 +34,103 @@
 
 import io
 import re
+import struct
 import unittest
+import zlib
 
 import numpy as np
 
 from direction_non_vie.provisionnement.a7_provisionnement.agent import (
     AgentA7Provisionnement)
+from direction_non_vie.provisionnement.a7_provisionnement import (
+    n5_rapport as _RAP)
 from direction_non_vie.provisionnement.a7_provisionnement.n5_graphiques import (
     TITRES_FIGURES)
 from direction_non_vie.provisionnement.a7_provisionnement.test_a7_ibrahim import (
     GENINS, _TRI_RECOURS_FORT)
+
+
+# =============================================================================
+#  LE RENDEUR SUBSTITUÉ — pour que la gate ne dépende pas d'un paquet
+# =============================================================================
+#
+#  ⚠️ MESURÉ AVANT CE LOT : six tests faisaient rasteriser 94 figures, 562 s,
+#  parce que `kaleido` se trouvait installé sur la machine. Sans lui, les
+#  MÊMES tests passaient — en empruntant un autre chemin. Une suite qui
+#  n'exerce pas le même code selon le poste ne prouve pas la même chose selon
+#  le poste ; c'est un défaut de justesse, la lenteur n'en est que le symptôme
+#  visible.
+#
+#  ⚠️ ET LE RENDEUR NE PEUT DÉPENDRE D'AUCUN PAQUET OPTIONNEL, sinon on
+#  remplace une dépendance à `kaleido` par une dépendance à `Pillow` — le
+#  patron d'origine en avait une, et il SAUTAIT là où Pillow manque. Ce PNG
+#  est écrit avec `zlib` et `struct` de la bibliothèque standard : 263 octets,
+#  aucune importation à faire.
+
+def png_de_test(largeur: int, hauteur: int, rgb=(11, 30, 61)) -> bytes:
+    """Un PNG valide, uni, sans aucune dépendance."""
+    def _bloc(typ, donnees):
+        return (struct.pack('>I', len(donnees)) + typ + donnees
+                + struct.pack('>I', zlib.crc32(typ + donnees) & 0xFFFFFFFF))
+
+    entete = struct.pack('>IIBBBBB', largeur, hauteur, 8, 2, 0, 0, 0)
+    ligne = b'\x00' + bytes(rgb) * largeur        # filtre 0, puis les pixels
+    return (b'\x89PNG\r\n\x1a\n' + _bloc(b'IHDR', entete)
+            + _bloc(b'IDAT', zlib.compress(ligne * hauteur, 9))
+            + _bloc(b'IEND', b''))
+
+
+class rendeur_substitue:
+    """Remplace le rasteriseur de `n5_rapport` le temps d'un bloc `with`.
+
+    ⚠️ LES IMAGES DOIVENT ÊTRE DISTINCTES. OOXML déduplique les médias
+    identiques : mesuré, quatorze PNG identiques ne laissent qu'UN fichier
+    dans `word/media/`. Un test qui compte les médias diagnostiquerait alors
+    un bug qui n'existe pas. Chaque appel rend donc une image d'une taille
+    différente.
+
+    `appels` conserve les figures reçues : un test peut vérifier QUE le
+    rendeur a été sollicité, et combien de fois.
+    """
+
+    def __init__(self):
+        self.appels = []
+
+    def __enter__(self):
+        self._vrai = _RAP.rendre_image
+        def _faux(figure):
+            self.appels.append(figure)
+            n = len(self.appels)
+            return png_de_test(200 + 3 * n, 100 + n)
+        _RAP.rendre_image = _faux
+        return self
+
+    def __exit__(self, *_):
+        _RAP.rendre_image = self._vrai
+        return False
+
+
+class kaleido_declare:
+    """Force la réponse du prédicat `kaleido_disponible`, dans les DEUX sens.
+
+    ⚠️ LE TEST DÉCIDE DU CHEMIN QU'IL EXERCE, PAS LA MACHINE. Avant ce lot,
+    le chemin dégradé n'était atteint que sur un poste sans `kaleido` et le
+    chemin nominal que sur un poste avec : chaque machine n'en voyait qu'un.
+    Les deux sont désormais exercés partout.
+    """
+
+    def __init__(self, present: bool):
+        self._present = present
+
+    def __enter__(self):
+        self._vrai = _RAP.kaleido_disponible
+        _RAP.kaleido_disponible = lambda: self._present
+        return self
+
+    def __exit__(self, *_):
+        _RAP.kaleido_disponible = self._vrai
+        return False
+
 
 #: Le catalogue, dans l'ordre de `generer_graphiques`.
 #:
@@ -714,12 +801,19 @@ class T4_Le_Catalogue_Atteint_Les_Livrables(unittest.TestCase):
               'là où deux figures s\'effacent' % (avec, sans))
 
     def test_le_word_et_le_html_numerotent_pareil(self):
-        """« Figure 7 » doit désigner la même chose dans les deux formats."""
+        """« Figure 7 » doit désigner la même chose dans les deux formats.
+
+        ⚠️ CE TEST PORTE SUR DES NUMÉROS, PAS SUR DES PIXELS. Il rasterisait
+        quatorze figures — 82 s mesurées — pour lire quatorze légendes. Le
+        rendeur substitué lui donne exactement ce dont il a besoin : des
+        images qui entrent dans le document.
+        """
         C = np.asarray(GENINS, dtype=float)
-        r = AgentA7Provisionnement(verbose=False).run(
-            source=C, mode_declare='cumule', generer_graphiques=True,
-            generer_word=True, n_sim_bootstrap=60, seed=42,
-            primes=EXPOSITION[:C.shape[0]])
+        with kaleido_declare(True), rendeur_substitue():
+            r = AgentA7Provisionnement(verbose=False).run(
+                source=C, mode_declare='cumule', generer_graphiques=True,
+                generer_word=True, n_sim_bootstrap=60, seed=42,
+                primes=EXPOSITION[:C.shape[0]])
         html, mot = r.get('html') or '', r.get('word_bytes') or b''
         if not html or not mot:
             self.skipTest('HTML ou Word non produit')
@@ -742,13 +836,12 @@ class T4_Le_Catalogue_Atteint_Les_Livrables(unittest.TestCase):
         DÉCLARÉ, jamais deviné. C'est la discipline du lot F2, étendue à une
         dépendance qui vit À L'INTÉRIEUR d'un export.
         """
-        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport \
-            import kaleido_disponible
         C = np.asarray(GENINS, dtype=float)
-        r = AgentA7Provisionnement(verbose=False).run(
-            source=C, mode_declare='cumule', generer_graphiques=True,
-            generer_word=True, n_sim_bootstrap=60, seed=42,
-            primes=EXPOSITION[:C.shape[0]])
+        with kaleido_declare(False):
+            r = AgentA7Provisionnement(verbose=False).run(
+                source=C, mode_declare='cumule', generer_graphiques=True,
+                generer_word=True, n_sim_bootstrap=60, seed=42,
+                primes=EXPOSITION[:C.shape[0]])
         mot = r.get('word_bytes') or b''
         if not mot:
             self.skipTest('Word non produit')
@@ -757,87 +850,76 @@ class T4_Le_Catalogue_Atteint_Les_Livrables(unittest.TestCase):
         notes = [p.text for p in doc.paragraphs
                  if p.text.startswith('Figure non rendue')]
         erreur = (r.get('livrables_erreurs') or {}).get('figures_word')
-        if kaleido_disponible():
-            self.assertEqual(notes, [], 'kaleido est là mais rien n\'est rendu')
-            self.assertIsNone(erreur)
-            print('    OK C3d-5 kaleido présent : les figures sont rendues, '
-                  'aucune dégradation annoncée')
-        else:
-            self.assertEqual(len(notes), len(self._numeros_word(mot)),
-                             'une figure manque sans dire pourquoi')
-            self.assertEqual(erreur, 'dependance_absente: kaleido',
-                             'la dégradation n\'est pas remontée à l\'appelant')
-            print('    OK C3d-5 kaleido absent : %d légendes, %d raisons '
-                  'nommées, et `figures_word` remonté' % (len(notes),
-                                                          len(notes)))
+        self.assertEqual(len(notes), len(self._numeros_word(mot)),
+                         'une figure manque sans dire pourquoi')
+        self.assertEqual(erreur, 'dependance_absente: kaleido',
+                         'la dégradation n\'est pas remontée à l\'appelant')
+        # ⚠️ ET LA DÉGRADATION DOIT ÊTRE LUE PAR TOUTE LA CHAÎNE : l'export
+        # produit les mentions, l'agent remonte `figures_word`. Ces deux-là
+        # lisaient le prédicat à deux endroits — l'un par référence figée.
+        print('    OK C3d-5 dégradation FORCÉE : %d légendes, %d raisons '
+              'nommées, et `figures_word` remonté' % (len(notes), len(notes)))
+
+    def test_le_rasteriseur_demande_bien_un_png_a_la_bonne_taille(self):
+        """⚠️ LE RENDEUR SUBSTITUÉ NE PROUVE RIEN SUR LES ARGUMENTS RÉELS.
+
+        En remplaçant `rendre_image`, les tests cessent de voir ce que la
+        vraie fonction demande à Plotly — et un `format='svg'` glissé là
+        passerait tous les tests en produisant un `.docx` que Word refuse.
+        Cette vérification-ci porte donc sur `rendre_image` elle-même, avec
+        une figure de substitution qui note ce qu'on lui demande.
+        """
+        vus = {}
+
+        class _Figure:
+            def to_image(self, **kw):
+                vus.update(kw)
+                return b'png'
+
+        self.assertEqual(_RAP.rendre_image(_Figure()), b'png')
+        self.assertEqual(vus.get('format'), 'png')
+        self.assertEqual((vus.get('width'), vus.get('height')), (1100, 520))
+        self.assertEqual(vus.get('scale'), 2)
+        print('    OK C3d-7 le rasteriseur demande un PNG 1100x520 en x2')
 
     def test_le_chemin_nominal_du_word_insere_bien_les_images(self):
-        """⚠️ LE CHEMIN AVEC kaleido, EXERCÉ SANS L'INSTALLER.
+        """⚠️ LE CHEMIN AVEC kaleido, EXERCÉ QUE LA MACHINE L'AIT OU NON.
 
-        La machine de développement n'a pas `kaleido` : le chemin dégradé est
-        donc le seul que la gate emprunte naturellement. On substitue un
-        rendeur qui produit de vrais PNG — ce qui vérifie que le code appelle
-        `to_image` avec les bons arguments ET que les images entrent bien dans
-        le document.
+        Avant ce lot, ce chemin n'était emprunté que sur un poste où
+        `kaleido` se trouvait installé. Il est désormais FORCÉ, et le
+        rasteriseur substitué vérifie que les images entrent bien dans le
+        document — ce que la vraie fonction demande à Plotly étant vérifié
+        juste au-dessus.
 
         ⚠️ LES PNG SONT TOUS DIFFÉRENTS, ET C'EST NÉCESSAIRE : OOXML
         déduplique les média identiques. Avec quatorze images identiques le
         `.docx` n'en contient qu'UNE, ce qui ferait croire à un bug qui
         n'existe pas — mesuré.
         """
-        try:
-            from PIL import Image
-        except ImportError:
-            self.skipTest('Pillow absent')
         import zipfile
-        import direction_non_vie.provisionnement.a7_provisionnement.n5_rapport \
-            as RAP
-
-        def _png(i):
-            b = io.BytesIO()
-            Image.new('RGB', (40 + i, 20 + i), (11, 35, 62)).save(b, 'PNG')
-            return b.getvalue()
-
-        class _Rendeur:
-            def __init__(self, vraie, i):
-                self._v, self._i, self.args = vraie, i, []
-
-            def to_image(self, **kw):
-                self.args.append(kw)
-                return _png(self._i)
-
-            def __getattr__(self, n):
-                return getattr(self._v, n)
-
         r = _run(True)
         g = r.get('graphiques') or {}
         if not g:
             self.skipTest('plotly absent')
-        faux = {k: _Rendeur(v, i) for i, (k, v) in enumerate(g.items())}
-        vrai = RAP.kaleido_disponible
-        RAP.kaleido_disponible = lambda: True
-        try:
-            mot = RAP.export_word(r.get('n1'), r['n2'], r['n3'], r['n4'],
-                                  commentaire=r.get('commentaire', ''),
-                                  graphiques=faux, lob_label='Test')
-        finally:
-            RAP.kaleido_disponible = vrai
+        with kaleido_declare(True), rendeur_substitue() as rendeur:
+            mot = _RAP.export_word(r.get('n1'), r['n2'], r['n3'], r['n4'],
+                                   commentaire=r.get('commentaire', ''),
+                                   graphiques=g, lob_label='Test')
         media = [n for n in zipfile.ZipFile(io.BytesIO(mot)).namelist()
                  if n.startswith('word/media/')]
         self.assertEqual(len(media), len(g),
                          'toutes les figures ne sont pas entrées dans le .docx')
-        appels = [a for f in faux.values() for a in f.args]
-        self.assertEqual(len(appels), len(g))
-        self.assertEqual(appels[0].get('format'), 'png')
+        self.assertEqual(len(rendeur.appels), len(g),
+                         'le rasteriseur n\'a pas été appelé pour chaque figure')
         import docx
         notes = [p.text for p in docx.Document(io.BytesIO(mot)).paragraphs
                  if p.text.startswith('Figure non rendue')]
         self.assertEqual(notes, [],
                          'une dégradation est annoncée alors que le rendeur '
                          'répond')
-        print('    OK C3d-6 chemin nominal : %d images dans le .docx, '
-              'to_image appelé %d fois, aucune dégradation'
-              % (len(media), len(appels)))
+        print('    OK C3d-6 chemin nominal FORCÉ : %d images dans le .docx, '
+              'le rasteriseur appelé %d fois, aucune dégradation'
+              % (len(media), len(rendeur.appels)))
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

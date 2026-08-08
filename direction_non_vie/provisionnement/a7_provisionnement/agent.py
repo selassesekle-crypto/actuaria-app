@@ -52,7 +52,14 @@ from .n5_graphiques     import generer_graphiques as _generer_graphiques
 from .n5_commentaire    import generer_commentaire
 from .n5_excel          import export_excel
 from .n5_rapport        import export_word, export_html
-from .n5_rapport        import kaleido_disponible
+# ⚠️ IMPORTÉ COMME MODULE, PAS COMME VALEUR. `from … import kaleido_disponible`
+# fige ICI une référence à la fonction : substituer le prédicat dans
+# `n5_rapport` ne changeait alors que la moitié de la chaîne — l'export voyait
+# la substitution, l'agent non, et `livrables_erreurs` restait incohérent avec
+# le document produit. Même motif que « source unique ≠ valeur unique » du
+# lot C1 : une seule définition ne suffit pas, encore faut-il une seule
+# LECTURE.
+from . import n5_rapport as _n5_rapport
 from .config.lob_config import get_lob_config
 
 # ── Imports méthodes N3 ───────────────────────────────────────────────────────
@@ -784,7 +791,8 @@ class AgentA7Provisionnement:
             # un échec — l'export a réussi — mais ce n'est pas non plus le
             # livrable complet, et les deux doivent être distinguables.
             err_fig_word = None
-            if generer_word and graphiques_dict and not kaleido_disponible():
+            if (generer_word and graphiques_dict
+                    and not _n5_rapport.kaleido_disponible()):
                 err_fig_word = 'dependance_absente: kaleido'
 
             livrables_erreurs = {k: v for k, v in (
