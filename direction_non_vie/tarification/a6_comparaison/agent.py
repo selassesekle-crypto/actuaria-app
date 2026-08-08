@@ -358,7 +358,8 @@ class AgentA6Comparaison:
                 )
             # Graphiques V3 (charte partagée) — ajoutés au même dict, OPTIONNELS.
             if generer_graphiques and PLOTLY_OK and _CHARTS_V3_OK:
-                self._charts_tarif_v3(graphiques, backtest, courbes)
+                self._charts_tarif_v3(graphiques, backtest, courbes,
+                                      modele_production)
 
             # ── AIDE À LA DÉCISION v3 ─────────────────────────────────────────
             fiche_decision = {}
@@ -1982,7 +1983,8 @@ class AgentA6Comparaison:
     # GRAPHIQUES v3 + AIDE À LA DÉCISION
     # ══════════════════════════════════════════════════════════════════════════
 
-    def _charts_tarif_v3(self, graphiques: dict, backtest: dict, courbes: dict) -> None:
+    def _charts_tarif_v3(self, graphiques: dict, backtest: dict, courbes: dict,
+                         modele_production: dict = None) -> None:
         """Ajoute les graphiques V3 (core/charts_tarif) au dict `graphiques`.
         Chaque figure est OPTIONNELLE : données manquantes (pas de backtest, pas
         de lift fréquence…) → chart non produit, le run continue (pattern
@@ -2001,8 +2003,13 @@ class AgentA6Comparaison:
         try:
             lz = cb.get('lorenz') or {}
             if lz.get('x') and lz.get('y'):
+                # ⚠️ LES DEUX GINI, PAS UN SEUL. `gini_observe` est le
+                # PLAFOND (tri par la valeur observée = tri d'un oracle) ;
+                # le Gini du modèle est son pouvoir discriminant réel. Leur
+                # rapport dit ce qu'aucun des deux ne dit seul.
                 graphiques['chart_lorenz_gini'] = chart_lorenz_gini(
-                    lz['x'], lz['y'], cb.get('gini_observe'))
+                    lz['x'], lz['y'], cb.get('gini_observe'),
+                    gini_modele=(modele_production or {}).get('gini_test'))
         except Exception as e:
             logger.debug(f"chart_lorenz_gini non produit : {e}")
         # Backtesting walk-forward A/E par fenêtre

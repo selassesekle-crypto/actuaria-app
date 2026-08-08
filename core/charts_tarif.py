@@ -202,14 +202,35 @@ def chart_lift_decile(
 def chart_lorenz_gini(
     lorenz_x: Sequence[float],
     lorenz_y: Sequence[float],
-    gini: Optional[float] = None,
+    gini_observe: Optional[float] = None,
     *,
+    gini_modele: Optional[float] = None,
     titre: str = 'Courbe de Lorenz — concentration du risque',
 ) -> go.Figure:
     """
     lorenz_x / lorenz_y : points de la courbe de Lorenz dans [0, 1]
                           (x = % cumulé de contrats, y = % cumulé de sinistres).
-    gini                : coefficient de Gini — affiché en badge.
+    gini_observe        : concentration des sinistres OBSERVÉS — le PLAFOND.
+    gini_modele         : Gini prédictif du modèle retenu, si connu.
+
+    ⚠️ CE BADGE DISAIT « GINI », ET C'ÉTAIT TROMPEUR. La courbe est construite
+    en triant par la valeur OBSERVÉE : c'est trier comme un oracle parfait.
+    Le nombre affiché est donc le PLAFOND atteignable sur ce portefeuille, pas
+    une performance — mesuré, il ne bouge pas d'un iota quand la prédiction
+    passe du hasard à l'oracle, et il BAISSE quand le portefeuille se dégrade
+    (fréquence 0,05 → 0,95 ; fréquence 1,50 → 0,44). Or ailleurs dans le
+    rapport, « Gini » désigne le pouvoir discriminant du modèle. Sur le
+    rapport mesuré, le badge affichait 0,832 quand les tableaux affichaient
+    0,178 : lu comme un Gini, le premier classait « excellent » un modèle que
+    l'échelle du dépôt situe sous « acceptable ».
+
+    ⚠️ ET LES DEUX ENSEMBLE VALENT MIEUX QUE L'UN CORRIGÉ. Leur rapport dit
+    quelle part du discriminable le modèle capte réellement — une information
+    qu'aucun des deux ne donne seul. Il est APPROXIMATIF et se lit comme tel :
+    le plafond est calculé sur le portefeuille entier, le Gini du modèle sur
+    la seule base de test. Mesuré sur huit tirages : le plafond varie de 1,8 %
+    et le rapport reste entre 21,0 % et 21,5 %. C'est un ordre de grandeur
+    fiable, pas une quatrième décimale.
     """
     xs = [float(v) for v in lorenz_x]
     ys = [float(v) for v in lorenz_y]
@@ -239,8 +260,15 @@ def chart_lorenz_gini(
     fig.update_xaxes(title='% cumulé de contrats (bas → haut risque)',
                      tickformat='.0%', range=[0, 1])
     fig.update_yaxes(title='% cumulé de sinistres', tickformat='.0%', range=[0, 1])
-    if gini is not None:
-        _badge_kpi(fig, f'GINI {float(gini):.3f}')
+    if gini_observe is not None:
+        obs = float(gini_observe)
+        # 4 décimales : la convention des tableaux du rapport pour un Gini.
+        texte = f'Concentration observée {obs:.4f}'
+        if gini_modele is not None and obs > 0:
+            mod = float(gini_modele)
+            texte += (f'<br>Modèle {mod:.4f} — soit {100.0 * mod / obs:.0f} %'
+                      f' du discriminable')
+        _badge_kpi(fig, texte)
     return fig
 
 

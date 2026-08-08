@@ -73,11 +73,46 @@ class TestChartsTarifFigures(unittest.TestCase):
         self.assertTrue(any('LIFT' in (a.text or '') for a in fig.layout.annotations))
 
     def test_2_lorenz_gini(self):
+        """⚠️ CE TEST VERROUILLAIT LA MAUVAISE ÉTIQUETTE. Il exigeait « GINI »
+        dans le badge — or la courbe est construite en triant par la valeur
+        OBSERVÉE : le nombre affiché est le PLAFOND du portefeuille, pas le
+        Gini d'un modèle. Sur le rapport mesuré, le badge disait 0,832 quand
+        les tableaux disaient 0,178.
+        """
         x = np.linspace(0, 1, 50)
         y = x ** 1.8
-        fig = ct.chart_lorenz_gini(x.tolist(), y.tolist(), gini=0.42)
+        fig = ct.chart_lorenz_gini(x.tolist(), y.tolist(), gini_observe=0.832)
         self._assert_figure(fig, min_traces=3)  # aire + diagonale + halo + ligne
-        self.assertTrue(any('GINI' in (a.text or '') for a in fig.layout.annotations))
+        badges = ' '.join(a.text or '' for a in fig.layout.annotations)
+        self.assertIn('Concentration observée', badges)
+        self.assertIn('0.8320', badges)
+        self.assertNotIn('GINI', badges)
+
+    def test_2b_lorenz_les_deux_gini_donnent_le_ratio(self):
+        """⚠️ LES DEUX ENSEMBLE VALENT MIEUX QUE L'UN CORRIGÉ : leur rapport
+        dit la part du discriminable que le modèle capte — 0,1775 / 0,832 =
+        21 % — ce qu'aucun des deux ne dit seul."""
+        x = np.linspace(0, 1, 50)
+        fig = ct.chart_lorenz_gini(x.tolist(), (x ** 1.8).tolist(),
+                                   gini_observe=0.832, gini_modele=0.1775)
+        badges = ' '.join(a.text or '' for a in fig.layout.annotations)
+        self.assertIn('0.1775', badges)
+        self.assertIn('21 %', badges)
+        self.assertIn('discriminable', badges)
+
+    def test_2c_sans_gini_modele_aucun_ratio_invente(self):
+        """Un ratio ne se produit que si les DEUX nombres existent."""
+        x = np.linspace(0, 1, 50)
+        fig = ct.chart_lorenz_gini(x.tolist(), (x ** 1.8).tolist(),
+                                   gini_observe=0.832)
+        badges = ' '.join(a.text or '' for a in fig.layout.annotations)
+        self.assertNotIn('discriminable', badges)
+        self.assertNotIn('%', badges)
+        # et un plafond nul ne produit pas une division
+        fig0 = ct.chart_lorenz_gini(x.tolist(), (x ** 1.8).tolist(),
+                                    gini_observe=0.0, gini_modele=0.1775)
+        self.assertNotIn('discriminable',
+                         ' '.join(a.text or '' for a in fig0.layout.annotations))
 
     def test_3_relativites_glm(self):
         rel = {
