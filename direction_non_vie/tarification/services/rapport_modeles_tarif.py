@@ -125,7 +125,7 @@ STRUCTURE OBLIGATOIRE EN 7 SECTIONS :
 # sous-titres, **gras** pour les termes importants », c'est-à-dire
 # exactement les marqueurs qui ressortaient en clair dans le livrable.
 SYSTEM_PROMPT_TARIF = _PROMPT_TARIF_GABARIT.replace(
-    '{CONSIGNE_MARKDOWN}', _md.CONSIGNE_SANS_MARKDOWN)
+    '{CONSIGNE_MARKDOWN}', _md.CONSIGNE_MARKDOWN_RESTREINT)
 
 
 # =============================================================================

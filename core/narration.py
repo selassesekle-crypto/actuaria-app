@@ -197,14 +197,72 @@ def en_html(markdown: Any, classe_section: str = 's-head') -> str:
 
 
 # ── La consigne posée au modèle, en un seul endroit ─────────────────────────
-# ⚠️ CEINTURE ET BRETELLES, ET LA CEINTURE VIENT EN PREMIER : le meilleur
-# markdown converti reste du markdown qui n'aurait pas dû être produit.
-CONSIGNE_SANS_MARKDOWN = (
-    "FORMAT DU TEXTE RENDU : n'emploie AUCUN marqueur Markdown. Pas de « # » "
-    "ni « ## » ni « ### » pour les titres, pas de « ** » ni « * » pour "
-    "l'emphase, pas de « - » en tête de ligne, pas de tableau « | », pas de "
-    "« > », pas de « --- », pas de bloc de code. Les seuls titres admis sont "
-    "les sections « §N — TITRE » demandées ci-dessous ; le reste est de la "
-    "prose. Ce texte part dans un rapport signé : un marqueur laissé en clair "
-    "s'y lit tel quel."
+#
+# ⚠️ ELLE INTERDISAIT TOUT, ET C'ÉTAIT TROP. Mesuré sur le rapport du 09/08 :
+# la conversion marchait parfaitement — ZÉRO marqueur brut sur 13 748
+# caractères — mais le commentaire n'était plus qu'un mur de prose. 36
+# paragraphes, AUCUN sous-titre, AUCUNE liste, AUCUN terme mis en valeur, là
+# où le rapport de provisionnement offre des paliers de lecture. Interdire
+# les marqueurs a supprimé le défaut ET la texture avec.
+#
+# ⚠️ TROIS MARQUEURS SONT DONC ROUVERTS, ET TROIS SEULEMENT — CEUX QUE LA
+# CHAÎNE SAIT TRAITER DE BOUT EN BOUT. La règle n'est pas « ce que la
+# conversion reconnaît » mais « ce que la conversion reconnaît ET que les
+# deux formats RENDENT VISIBLEMENT ». Relevé :
+#
+#   marqueur   genre     HTML            stylé ?   Word
+#   « ## »     TITRE2    <h4>            OUI       gras 10 pt navy
+#   « - »      PUCE      <ul><li>        OUI       « • » + retrait
+#   « **x** »  segment   <strong>        OUI       gras
+#   ─────────────────────────────────────────────────────────────────────
+#   « ### »    TITRE3    <h5>            NON       gras 9 pt   → REFUSÉ
+#   « > »      CITATION  <blockquote>    NON       guillemets  → REFUSÉ
+#   « --- »    REGLE     <hr>            NON       séparateur  → REFUSÉ
+#   « | »      TABLEAU   <p.md-tableau>  NON       paragraphe  → REFUSÉ
+#
+# ⚠️ UN MARQUEUR AUTORISÉ MAIS NON RENDU RAMÈNERAIT LE DÉFAUT DE DÉPART :
+# un « ### » sortirait converti en `<h5>` qu'aucune règle ne distingue d'un
+# paragraphe — le lecteur verrait un titre qui n'en a pas l'air. Les trois
+# retenus sont ceux dont le rendu se voit dans les DEUX formats. Un test
+# vérifie cette correspondance dans les deux sens : rien d'autorisé qui ne
+# soit rendu, rien d'interdit qui soit rendu.
+#
+# ⚠️ ET LA CONVERSION RESTE LA CEINTURE. Elle continue de traiter les neuf
+# formes : si le modèle glisse un « > » malgré la consigne, il ne se lira
+# pas en clair dans le rapport. Une consigne se relâche, une conversion non.
+
+#: Les marqueurs autorisés — libellé de la consigne et exemple.
+MARQUEURS_AUTORISES = (
+    ('##', 'un sous-titre à l\'intérieur d\'une section'),
+    ('-', 'une puce, en tête de ligne'),
+    ('**', 'un terme mis en valeur, entre doubles astérisques'),
 )
+
+#: Ceux qui restent interdits, et ils le sont pour une raison mesurée.
+MARQUEURS_INTERDITS = ('#', '###', '*', '>', '---', '|', '```')
+
+def _phrase_consigne() -> str:
+    """La consigne, CONSTRUITE à partir des deux tables ci-dessus.
+
+    ⚠️ ELLE ÉTAIT ÉCRITE À LA MAIN, ET LES TABLES À CÔTÉ. Deux listes du même
+    fait finissent par diverger — c'est le motif que ce chantier a fermé six
+    fois. La consigne les LIT : autoriser un marqueur sans le dire au modèle,
+    ou lui interdire quelque chose que la table autorise, devient impossible
+    par construction plutôt que rattrapé par un test.
+    """
+    permis = ' ; '.join('« %s » pour %s' % (m, quoi)
+                        for m, quoi in MARQUEURS_AUTORISES)
+    bannis = ', '.join('« %s »' % m for m in MARQUEURS_INTERDITS)
+    return (
+        "FORMAT DU TEXTE RENDU : tu disposes de %d marqueurs, et de %d "
+        "seulement. %s. Emploie-les pour aérer la lecture — un sous-titre par "
+        "idée, une liste quand tu énumères, le gras sur les grandeurs et les "
+        "verdicts. TOUT AUTRE MARQUEUR EST INTERDIT, et notamment %s. Les "
+        "sections restent « §N — TITRE » comme demandé ci-dessous. Ce texte "
+        "part dans un rapport signé : un marqueur non prévu s'y lirait tel "
+        "quel." % (len(MARQUEURS_AUTORISES), len(MARQUEURS_AUTORISES),
+                   permis, bannis))
+
+
+CONSIGNE_MARKDOWN_RESTREINT = _phrase_consigne()
+
