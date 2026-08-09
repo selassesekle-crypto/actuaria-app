@@ -109,6 +109,32 @@ logging.basicConfig(
 )
 logger = logging.getLogger('actuaria.a6')
 
+
+# ── GOUVERNANCE : QUI ASSUME LA DÉCISION ──────────────────────────────────────
+#
+#  ⚠️ CE PRÉDICAT VIVAIT EN DEUX EXEMPLAIRES — dans `_calculer_statut_rag` et
+#  dans l'audit trail — tenus d'accord par rien. Deux copies de la même règle
+#  finissent par diverger, et celle-ci aurait divergé au premier durcissement :
+#  l'audit trail aurait annoncé « gouvernance validée » sur un rapport
+#  plafonné pour défaut de gouvernance. C'est le motif que ce dépôt a fermé
+#  sur les σ, sur les paramètres de la formule standard et sur les courbes de
+#  taux. Une seule copie, deux appelants.
+#
+#  ⚠️ ET IL TESTAIT `is None` : une chaîne VIDE le satisfaisait. Un champ
+#  « validé par » qui accepte du vide ne valide rien — c'est la même famille
+#  que le mot « Actuaire » passé par la démo, une valeur qui contente le
+#  contrôle sans nommer personne.
+def gouvernance_validee(profil_valide_par, environnement='production') -> bool:
+    """La décision de modèle est-elle assumée par quelqu'un de nommé ?
+
+    Hors production, la question ne se pose pas : le contrôle ne s'applique
+    qu'aux décisions destinées à produire un tarif.
+    """
+    if str(environnement or 'production') != 'production':
+        return True
+    return bool(str(profil_valide_par or '').strip())
+
+
 # ── GRILLE MULTICRITÈRES ──────────────────────────────────────────────────────
 # Profils de pondération prédéfinis
 # Le profil est sélectionnable par client dans l'interface Streamlit
@@ -433,9 +459,15 @@ class AgentA6Comparaison:
                 # (garde-fou délibéré) : nom de l'actuaire validateur, ou None.
                 # Tracé ici ET rendu dans les 3 rapports via synthese_modele_dl.
                 'valide_par_actuaire_dl': valide_par_actuaire_dl,
-                'gouvernance_ok':     not (
-                    environnement == 'production' and profil_valide_par is None
-                ),
+                'gouvernance_ok':     gouvernance_validee(profil_valide_par,
+                                                          environnement),
+                # ⚠️ LA CAUSE, PAS SEULEMENT L'EFFET. Un rapport plafonné ne
+                # disait PAS pourquoi : la raison n'existait que dans un
+                # `logger.warning`, invisible au lecteur du document. Six mois
+                # plus tard, personne ne savait pourquoi tel rapport était
+                # AMBRE — et l'actuaire cherchait un défaut technique là où le
+                # motif était administratif.
+                'raisons_plafond': list(getattr(self, '_raisons_plafond', [])),
                 'poids_criteres': {
                     'gini':            poids_actifs['gini'],
                     'stabilite':       poids_actifs['stabilite'],
@@ -1585,9 +1617,7 @@ class AgentA6Comparaison:
         gini  = modele_production.get('gini_test',   0)
 
         # Gouvernance : blocage VERT si profil non validé en production
-        _gouvernance_ok = not (
-            environnement == 'production' and profil_valide_par is None
-        )
+        _gouvernance_ok = gouvernance_validee(profil_valide_par, environnement)
         if not _gouvernance_ok:
             logger.warning(
                 "[GOUVERNANCE] profil_valide_par=None en environnement "
@@ -1851,6 +1881,43 @@ class AgentA6Comparaison:
             logger.warning(
                 f"[HYPOTHÈSES] Hypothèse(s) de modélisation en ROUGE {_hyp_rouges} "
                 f"— statut plafonné à AMBRE en environnement 'production'.")
+
+        # ⚠️ CE QUI EMPÊCHE LE VERT SE NOMME, ET DANS LE MÊME GESTE QUE LA
+        # DÉCISION — une liste construite ailleurs divergerait du test qui
+        # suit. Chaque phrase est écrite pour un lecteur du rapport, pas pour
+        # un développeur : elle dit la cause, pas le nom de la variable.
+        self._raisons_plafond = [phrase for satisfait, phrase in (
+            (score >= 0.60,
+             (f"Score composite = {score:.4f} < 0.60 — le modèle retenu "
+              f"n'atteint pas le seuil de la grille multicritères.")),
+            (gini >= 0.15,
+             f"Gini = {gini:.4f} < 0.15 — pouvoir discriminant insuffisant."),
+            (_gouvernance_ok,
+             ("Décision de modèle non validée par un actuaire identifié en "
+              "environnement de production (ACPR-2022-P-01 §4.3).")),
+            (_backtest_ok,
+             ("Backtesting indisponible en production — la validation "
+              "temporelle n'a pas pu être conduite.")),
+            (_wf_fidele_ok,
+             "La validation temporelle ne porte pas sur le modèle retenu."),
+            (_wf_resultat_ok,
+             ("Le backtesting walk-forward a été conduit et son résultat "
+              "n'est pas satisfaisant.")),
+            (_gini_plausible,
+             "Gini hors des bornes plausibles pour la branche."),
+            (_cann_ancre_ok,
+             "Modèle CANN non ancré sur un GLM vérifié."),
+            (_dl_confirme_ok,
+             "Modèle de deep learning non confirmé par un actuaire."),
+            (_plan_complet_ok,
+             ("Le plan tarifaire est amputé — des variables déclarées n'ont "
+              "pas été utilisées.")),
+            (_hypotheses_ok,
+             "Hypothèse(s) de modélisation en ROUGE : "
+             + ', '.join(_hyp_rouges) + "."),
+            (_lift_ok,
+             "Le lift par décile ne confirme pas la hiérarchie des risques."),
+        ) if not satisfait]
 
         if (score >= 0.60 and gini >= 0.15 and _gouvernance_ok
                 and _backtest_ok and _wf_fidele_ok and _wf_resultat_ok

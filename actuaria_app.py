@@ -3285,17 +3285,52 @@ def page_analyse():
                 st.rerun()
         st.stop()  # Stopper ici — ne pas afficher le bouton Lancer
 
+    # ── QUI ASSUME LA DÉCISION ? LA QUESTION SE POSE AVANT LE CALCUL ─────────
+    # ⚠️ CE CHAMP ÉTAIT DEMANDÉ APRÈS L'ANALYSE, sur la page des résultats, et
+    # n'atteignait donc JAMAIS A6 : `profil_valide_par` restait None, et
+    # `gouvernance_ok` valait False sur 100 % des analyses de l'application.
+    # Mesuré sur 24 configurations réelles : 13 d'entre elles — 54 % —
+    # étaient plafonnées à AMBRE pour cette seule raison administrative,
+    # pendant que l'actuaire cherchait un défaut technique inexistant.
+    #
+    # ⚠️ ET L'AUTRE ORDRE A ÉTÉ ÉCARTÉ DÉLIBÉRÉMENT : réévaluer le statut
+    # après coup ferait virer un AMBRE au VERT sous les yeux du lecteur parce
+    # qu'il vient de taper son nom. Un verdict qui change sans qu'aucune
+    # donnée ne bouge enseigne que le verdict ne vaut rien. La gouvernance est
+    # une condition d'ENTRÉE.
+    _gv1, _gv2 = st.columns(2)
+    with _gv1:
+        _act_nom = st.text_input(
+            "Nom de l'actuaire responsable *",
+            placeholder="Ex : Marie Dupont",
+            key="analyse_actuaire_nom",
+            help="Qui assume la décision de modèle. Exigé en production — "
+                 "ACPR-2022-P-01 §4.3.",
+        )
+    with _gv2:
+        st.text_input(
+            "N° Institut des Actuaires",
+            placeholder="Ex : IA-2024-1234",
+            key="analyse_actuaire_ia",
+        )
+
     # Vérification données disponibles
     pret = True
     if besoin in besoins_upload and besoin != "mortalite":
         if st.session_state.get("analyse_df") is None:
             pret = False
 
+    _actuaire_ok = bool(str(_act_nom or "").strip())
+
     with col_btn:
         btn_label = "🚀 Lancer l'analyse"
         if not pret:
             st.button(btn_label, disabled=True, use_container_width=True, key="btn_lancer")
             st.caption("⚠️ Uploadez d'abord vos données")
+        elif not _actuaire_ok:
+            st.button(btn_label, disabled=True, use_container_width=True, key="btn_lancer")
+            st.caption("⚠️ Nom de l'actuaire responsable requis avant de lancer "
+                       "l'analyse.")
         else:
             if st.button(btn_label, type="primary", use_container_width=True, key="btn_lancer"):
                 _executer_analyse(besoin, direction, equipe, client)
@@ -3509,7 +3544,14 @@ def _executer_analyse(besoin, direction, equipe, client):
                         r2, plan=_plan_auto, generer_graphiques=False)
                     if besoin == "selection":
                         from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
-                        r6 = AgentA6Comparaison(audit_path=_tmp, verbose=False).run(r2, result_a3=r3, generer_graphiques=False, aide_decision=True)
+                        # ⚠️ `profil_valide_par` ENFIN TRANSMIS : l'application
+                        # exigeait ce nom depuis toujours, et ne le donnait
+                        # jamais au calcul.
+                        r6 = AgentA6Comparaison(audit_path=_tmp, verbose=False).run(
+                            r2, result_a3=r3, generer_graphiques=False,
+                            aide_decision=True,
+                            profil_valide_par=st.session_state.get(
+                                "analyse_actuaire_nom") or None)
                         resultats["principal"] = r6
                     else:
                         resultats["principal"] = r3
@@ -4856,18 +4898,21 @@ Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non 
             placeholder="Ex : Mutuelle XYZ — RC Auto 2026",
             key="export_ref_client",
         )
+    # ⚠️ UNE SEULE SOURCE, PAS DEUX SAISIES. Le nom est demandé AVANT
+    # l'analyse, parce que la gouvernance est une condition d'entrée ; le
+    # redemander ici aurait créé deux champs pour un même fait, et rien
+    # n'aurait garanti que le nom signant le rapport soit celui qui a validé
+    # la décision de modèle. On relit donc, on ne redemande pas.
+    _actuaire_nom = st.session_state.get("analyse_actuaire_nom", "")
+    _actuaire_ia = st.session_state.get("analyse_actuaire_ia", "")
     with _exp_c2:
-        _actuaire_nom = st.text_input(
-            "Nom de l'actuaire *",
-            placeholder="Ex : Marie Dupont",
-            key="export_actuaire_nom",
-        )
+        st.text_input("Actuaire responsable", value=_actuaire_nom,
+                      disabled=True, key="export_actuaire_nom_lecture",
+                      help="Saisi avant l'analyse — il valide la décision de "
+                           "modèle ET signe le rapport.")
     with _exp_c3:
-        _actuaire_ia = st.text_input(
-            "N° Institut des Actuaires",
-            placeholder="Ex : IA-2024-1234",
-            key="export_actuaire_ia",
-        )
+        st.text_input("N° Institut des Actuaires", value=_actuaire_ia,
+                      disabled=True, key="export_actuaire_ia_lecture")
 
     _champs_ok = bool(_ref_client_export and _actuaire_nom)
     if not _champs_ok:

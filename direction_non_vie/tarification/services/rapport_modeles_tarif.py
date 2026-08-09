@@ -481,6 +481,47 @@ SOURCES_FIGURES: Dict[str, Tuple[str, str]] = {
     'radar_modele_retenu': ('a6', 'graphiques_validation'),
 }
 
+#: Le titre du bloc qui dit POURQUOI le rapport n'est pas VERT.
+TITRE_RAISONS_PLAFOND = 'Pourquoi ce rapport n\'est pas classé VERT'
+
+#: La phrase posée quand le statut n'est pas VERT sans qu'aucune cause n'ait
+#: été enregistrée — un cas qui ne doit pas arriver, et qui se voit s'il
+#: arrive plutôt que de laisser un bloc vide.
+RAISON_INCONNUE = ('Statut non VERT sans cause enregistrée — anomalie à '
+                   'signaler : le rapport ne peut pas justifier son statut.')
+
+
+def _bloc_raisons_html(raisons: tuple[str, ...]) -> str:
+    """Le bloc des causes, en HTML. Vide quand il n'y a rien à dire."""
+    if not raisons:
+        return ''
+    puces = '\n'.join(f'      <li>{r}</li>' for r in raisons)
+    return (f'<div class="raisons-plafond">\n'
+            f'  <div class="raisons-titre">⚠️ {TITRE_RAISONS_PLAFOND}</div>\n'
+            f'    <ul>\n{puces}\n    </ul>\n'
+            f'</div>\n')
+
+
+def raisons_plafond(result_a6) -> tuple[str, ...]:
+    """Les causes qui empêchent le statut VERT, telles qu'A6 les a nommées.
+
+    ⚠️ UNE SEULE SOURCE, DEUX FORMATS — le motif que ce chantier a fermé cinq
+    fois. La liste est construite par A6 AU MOMENT MÊME de la décision, pas
+    reconstituée ici : une reconstitution divergerait du test qui décide.
+
+    ⚠️ ET LA CAUSE N'EXISTAIT QUE DANS UN `logger.warning`. Un rapport
+    plafonné affichait AMBRE sans dire pourquoi ; six mois plus tard personne
+    ne savait si le motif était technique ou administratif, et l'actuaire
+    cherchait un défaut de modèle là où il manquait une signature.
+    """
+    at6 = (result_a6 or {}).get('audit_trail') or {}
+    raisons = tuple(str(r) for r in (at6.get('raisons_plafond') or ()) if r)
+    statut = (result_a6 or {}).get('statut_rag', '')
+    if statut and statut != 'VERT' and not raisons:
+        return (RAISON_INCONNUE,)
+    return raisons
+
+
 #: Les figures du plan qui ne sont pas TOUJOURS produites, et à quelle
 #: condition.
 #:
@@ -1460,6 +1501,12 @@ body{{font-family:'Segoe UI',Arial,sans-serif; background:var(--bg); color:var(-
 .header h1{{font-size:22px; color:var(--gold); letter-spacing:.5px;}}
 .header .sub{{font-size:13px; color:var(--gold-l); margin-top:4px;}}
 .header .meta{{font-size:11px; color:#8a9bb0; margin-top:10px; display:flex; gap:24px; flex-wrap:wrap;}}
+.raisons-plafond{{border-left:4px solid var(--orange); background:#FDF3E7;
+  padding:10px 14px; margin:0 0 16px 0; border-radius:0 4px 4px 0;}}
+.raisons-titre{{font-weight:700; color:var(--orange); font-size:12px;
+  margin-bottom:4px;}}
+.raisons-plafond ul{{margin:0; padding-left:20px;}}
+.raisons-plafond li{{font-size:11px; color:var(--navy); margin:2px 0;}}
 .badge{{display:inline-block; padding:3px 10px; border-radius:4px; font-size:11px; font-weight:700; color:#fff;}}
 .badge-vert{{background:var(--vert);}} .badge-ambre{{background:var(--orange);}} .badge-rouge{{background:var(--rouge);}}
 /* Une hypothese NON CALCULEE se distingue d'une hypothese verte : gris,
@@ -1616,7 +1663,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
   </div>
 </div>
 
-{_ouvrir_chapitre(1)}    <table>
+{_bloc_raisons_html(raisons_plafond(result_a6))}{_ouvrir_chapitre(1)}    <table>
       {_row(titres('glm'), header=True, num=colonnes_numeriques('glm'))}
 """
     for modele in ['poisson', 'gamma', 'tweedie']:
@@ -1984,6 +2031,22 @@ def export_word(
         p.paragraph_format.space_before = Pt(10)
         _run(p, ('⚠ ' if _t.alerte else '✓ ') + _t.texte,
              bold=True, sz=9, col=RgR if _t.alerte else GR)
+        # ⚠️ LA MÊME SOURCE QUE L'HTML, RENDUE AUTREMENT. Un `.docx` ne lit pas
+        # de balise : le bloc se compose en paragraphes, mais les phrases sont
+        # celles qu'A6 a nommées, pas une reformulation locale.
+        # ⚠️ UN SEUL PARAGRAPHE, DES PASSAGES SEPARES PAR DES SAUTS — comme le
+        # pied d'A7. Un paragraphe par cause aurait demande un reglage de
+        # format par cause, pour un rendu identique.
+        _raisons_w = raisons_plafond(result_a6)
+        if _raisons_w:
+            p = doc.add_paragraph()
+            _run(p, '⚠ ' + TITRE_RAISONS_PLAFOND, bold=True, sz=10,
+                 col=AR).add_break()
+            for _i, _r in enumerate(_raisons_w):
+                _passage = _run(p, '   · ' + _r, sz=9, col=NR)
+                if _i < len(_raisons_w) - 1:
+                    _passage.add_break()
+
         doc.add_page_break()
 
         # ── CHAPITRE 1 : SYNTHÈSE GLM ────────────────────────────────────────

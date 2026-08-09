@@ -718,6 +718,107 @@ class TestAuditV10_B3_ExcelCoherentAvecGate(unittest.TestCase):
         print("    V10-B3 Excel avertit sur proxy, se tait si fidèle ✅")
 
 
+class GOUV_LePredicatUnique(unittest.TestCase):
+    """La gouvernance : une seule copie de la regle, et elle refuse le vide.
+
+    ⚠️ LE PREDICAT VIVAIT EN DEUX EXEMPLAIRES : dans `_calculer_statut_rag`
+    et dans l'audit trail, tenus d'accord par rien. Le durcir d'un seul cote
+    aurait fait annoncer << gouvernance validee >> par l'audit trail d'un
+    rapport plafonne POUR DEFAUT DE GOUVERNANCE — une contradiction dans un
+    document signe. C'est le motif ferme sur les sigma, sur les parametres de
+    la formule standard et sur les courbes de taux.
+
+    ⚠️ ET IL TESTAIT `is None` : une chaine VIDE le satisfaisait. Un champ
+    << valide par >> qui accepte du vide ne valide rien.
+    """
+
+    def test_une_valeur_vide_ou_blanche_ne_vaut_PAS_validation(self):
+        from direction_non_vie.tarification.a6_comparaison.agent import (
+            gouvernance_validee,
+        )
+        for vide in (None, '', '   ', '	'):
+            with self.subTest(valeur=vide):
+                self.assertFalse(gouvernance_validee(vide, 'production'))
+        self.assertTrue(gouvernance_validee('Marie Dupont', 'production'))
+        print("    OK GOUV : le vide ne vaut plus validation")
+
+    def test_hors_production_la_question_ne_se_pose_pas(self):
+        from direction_non_vie.tarification.a6_comparaison.agent import (
+            gouvernance_validee,
+        )
+        for env in ('developpement', 'test', 'recette'):
+            with self.subTest(environnement=env):
+                self.assertTrue(gouvernance_validee(None, env))
+        print("    OK GOUV-b : le controle ne vise que la production")
+
+    def test_UNE_SEULE_copie_du_predicat_dans_l_agent(self):
+        """⚠️ LE VERROU CONTRE LA DIVERGENCE : si quelqu'un reecrit la regle
+        en dur ailleurs, ce test tombe."""
+        import inspect
+
+        from direction_non_vie.tarification.a6_comparaison import agent as A6M
+        src = inspect.getsource(A6M)
+        self.assertEqual(src.count('profil_valide_par is None'), 0,
+                         "le predicat est reecrit en dur quelque part")
+        self.assertGreaterEqual(src.count('gouvernance_validee('), 3)
+        print("    OK GOUV-c : une seule regle, appelee par ses deux sites")
+
+    def test_le_statut_et_l_audit_trail_ne_peuvent_pas_se_contredire(self):
+        from direction_non_vie.tarification.a6_comparaison.agent import (
+            AgentA6Comparaison,
+            gouvernance_validee,
+        )
+        a6 = AgentA6Comparaison.__new__(AgentA6Comparaison)
+        m = {'modele': 'GLM_POISSON', 'famille': 'GLM', 'gini': 0.22,
+             'gini_test': 0.22, 'gini_train': 0.23, 'score_global': 0.85,
+             'overfit_ratio': 1.05}
+        for profil in (None, '', 'Marie Dupont'):
+            with self.subTest(profil=profil):
+                a6._calculer_statut_rag(m, [m], profil_valide_par=profil,
+                                        environnement='production')
+                attendu = gouvernance_validee(profil, 'production')
+                nomme = any('non validee' in r or 'non validée' in r
+                            for r in a6._raisons_plafond)
+                self.assertEqual(nomme, not attendu)
+        print("    OK GOUV-d : la cause suit le predicat, dans les deux sens")
+
+
+class GOUV_LesRaisonsDuPlafond(unittest.TestCase):
+    """⚠️ LA CAUSE SE NOMME. Elle n'existait que dans un `logger.warning`."""
+
+    def test_les_raisons_sont_enregistrees_et_lisibles(self):
+        from direction_non_vie.tarification.a6_comparaison.agent import (
+            AgentA6Comparaison,
+        )
+        a6 = AgentA6Comparaison.__new__(AgentA6Comparaison)
+        m = {'modele': 'GLM_POISSON', 'famille': 'GLM', 'gini': 0.22,
+             'gini_test': 0.22, 'gini_train': 0.23, 'score_global': 0.85,
+             'overfit_ratio': 1.05}
+        statut = a6._calculer_statut_rag(m, [m], profil_valide_par=None,
+                                         environnement='production')
+        self.assertNotEqual(statut, 'VERT')
+        self.assertTrue(a6._raisons_plafond, "aucune cause enregistree")
+        for r in a6._raisons_plafond:
+            self.assertGreater(len(r), 30, "phrase trop courte pour un lecteur")
+            self.assertNotIn('_ok', r, "un nom de variable a fui dans le texte")
+        print(f"    OK RAISONS : {len(a6._raisons_plafond)} cause(s) "
+              f"nommee(s) en toutes lettres")
+
+    def test_un_statut_VERT_ne_laisse_aucune_raison(self):
+        from direction_non_vie.tarification.a6_comparaison.agent import (
+            AgentA6Comparaison,
+        )
+        a6 = AgentA6Comparaison.__new__(AgentA6Comparaison)
+        a6._raisons_plafond = ["reste d'un appel precedent"]
+        m = {'modele': 'GLM_POISSON', 'famille': 'GLM', 'gini': 0.05,
+             'gini_test': 0.05, 'gini_train': 0.05, 'score_global': 0.10,
+             'overfit_ratio': 1.0}
+        a6._calculer_statut_rag(m, [m], profil_valide_par='X',
+                                environnement='production')
+        self.assertNotIn("reste d'un appel precedent", a6._raisons_plafond)
+        print("    OK RAISONS-b : la liste est reconstruite a chaque appel")
+
+
 if __name__ == '__main__':
     print("="*65)
     print("  TESTS A6 COMPARAISON v1.0 — SÉLECTION FINALE")

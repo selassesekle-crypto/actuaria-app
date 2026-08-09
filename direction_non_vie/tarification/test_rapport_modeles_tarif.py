@@ -1779,5 +1779,68 @@ class V8_LeNomDuModeleRetenu(unittest.TestCase):
         print('    OK V8-c : ni titre ni conclusion ne publient de dict')
 
 
+#: La fixture de V9 : un resultat A6 plafonne, avec ses causes nommees.
+A6_BRIDE = {
+    'statut_rag': 'AMBRE', 'branche': 'auto',
+    'classement': [{'modele': 'GLM_POISSON', 'famille': 'GLM',
+                    'gini_test': 0.18, 'score_global': 0.80}],
+    'audit_trail': {'raisons_plafond': [
+        'Décision de modèle non validée par un actuaire identifié.',
+        'Backtesting indisponible en production.']},
+}
+
+
+class V9_LaCauseDuPlafond(unittest.TestCase):
+    """V9 — un rapport bridé doit dire POURQUOI il l'est.
+
+    ⚠️ LA CAUSE N'EXISTAIT QUE DANS UN `logger.warning`. Le rapport affichait
+    AMBRE sans un mot d'explication : six mois plus tard, personne ne savait
+    si le motif était technique ou administratif — et l'actuaire cherchait un
+    défaut de modèle là où il manquait une signature. Remplacer un plafond
+    aveugle par un plafond invisible n'aurait rien réglé.
+    """
+
+    def _rendus(self, a6):
+        with rendu_simule():
+            html = R.export_html({}, {}, a6, 'CLIENT', '31/12/2025', 'V9',
+                                 narration_calculee=('Texte.', 'temoin'))
+            word = _texte_docx(R.export_word(
+                {}, {}, a6, 'CLIENT', '31/12/2025', 'V9',
+                narration_calculee=('Texte.', 'temoin')))
+        return (('HTML', html), ('WORD', word))
+
+    def test_les_DEUX_formats_nomment_chaque_cause(self):
+        for nom, texte in self._rendus(A6_BRIDE):
+            self.assertIn(R.TITRE_RAISONS_PLAFOND, texte, nom)
+            for raison in A6_BRIDE['audit_trail']['raisons_plafond']:
+                self.assertIn(raison, texte, f'{nom} : « {raison[:40]} »')
+        print('    OK V9 : les deux formats nomment chaque cause')
+
+    def test_un_rapport_VERT_ne_porte_pas_le_bloc(self):
+        """Un bloc d'explication permanent serait le défaut symétrique."""
+        vert = dict(A6_BRIDE, statut_rag='VERT',
+                    audit_trail={'raisons_plafond': []})
+        for nom, texte in self._rendus(vert):
+            self.assertNotIn(R.TITRE_RAISONS_PLAFOND, texte, nom)
+        print('    OK V9-b : rien à expliquer quand le statut est VERT')
+
+    def test_un_statut_bride_SANS_cause_se_signale(self):
+        """⚠️ LE CAS QUI NE DOIT PAS ARRIVER, ET QUI SE VOIT S'IL ARRIVE : un
+        bloc vide laisserait croire qu'il n'y a rien à dire."""
+        muet = dict(A6_BRIDE, audit_trail={})
+        for nom, texte in self._rendus(muet):
+            self.assertIn(R.RAISON_INCONNUE, texte, nom)
+        print('    OK V9-c : un plafond sans cause enregistrée se dénonce')
+
+    def test_les_raisons_viennent_d_A6_pas_d_une_reconstitution(self):
+        """⚠️ UNE SEULE SOURCE. Reconstituer les causes ici divergerait du
+        test qui décide réellement du statut."""
+        self.assertEqual(R.raisons_plafond(A6_BRIDE),
+                         tuple(A6_BRIDE['audit_trail']
+                               ['raisons_plafond']))
+        self.assertEqual(R.raisons_plafond({}), ())
+        print('    OK V9-d : la liste est lue, jamais reconstruite')
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
