@@ -39,11 +39,6 @@ import numpy as np
 import pandas as pd
 
 warnings.filterwarnings("ignore")
-# Silence le bavardage INFO des agents — on affiche l'essentiel nous-mêmes.
-logging.getLogger("actuaria").setLevel(logging.ERROR)
-# Le générateur de rapport logue en ERROR l'absence de python-docx (optionnel) :
-# bruit attendu et sans effet ici, on le passe sous silence pour la lisibilité.
-logging.getLogger("actuaria.tarif.rapport").setLevel(logging.CRITICAL)
 
 RACINE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if RACINE not in sys.path:
@@ -202,7 +197,31 @@ def run_lob(nom, df, marqueurs_attendus):
     }
 
 
+def silencer_le_bavardage():
+    """Le silence d'affichage de CETTE demo — pose seulement si on la LANCE.
+
+    ⚠️ CES DEUX REGLAGES VIVAIENT AU NIVEAU MODULE, et `logging.getLogger`
+    rend un objet DE PROCESSUS : le seul fait d'importer un generateur de
+    portefeuille d'ici eteignait le journal de l'appelant. Mesure :
+    `actuaria` NOTSET -> ERROR, `actuaria.tarif.rapport` NOTSET -> CRITICAL.
+    Sur ce dernier, meme les ERROR passaient a la trappe — dont l'echec
+    d'export Word, le refus de narration et l'avertissement [RELECTURE] de
+    la gouvernance. Le silence emportait le signal avec le bruit.
+
+    La regle : un module importable ne configure pas le journal de son hote,
+    seul un point d'entree le fait. La demo EST un point d'entree quand on
+    l'execute — c'est ici, et nulle part avant.
+    """
+    # Silence le bavardage INFO des agents — on affiche l'essentiel nous-mêmes.
+    logging.getLogger("actuaria").setLevel(logging.ERROR)
+    # Le générateur de rapport logue en ERROR l'absence de python-docx
+    # (optionnel) : bruit attendu et sans effet ici, on le passe sous silence
+    # pour la lisibilité du récapitulatif.
+    logging.getLogger("actuaria.tarif.rapport").setLevel(logging.CRITICAL)
+
+
 def main():
+    silencer_le_bavardage()
     os.makedirs(TMP, exist_ok=True)
     rng = np.random.default_rng(2026)
     plan = [
