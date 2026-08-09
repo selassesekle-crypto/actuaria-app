@@ -152,7 +152,13 @@ def run_lob(nom, df, marqueurs_attendus):
             result_a2=r2, result_a3=r3, result_a4=r4, result_a5=None,
             col_cible="nb_sinistres", generer_graphiques=False,
             generer_rapport_equipe=False, environnement="production",
-            profil_valide_par="Actuaire")
+            # ⚠️ « Actuaire » ÉTAIT UN MOT, PAS UNE PERSONNE : une valeur qui
+            # satisfaisait le contrôle de gouvernance sans identifier qui que
+            # ce soit — exactement ce que le lot T8 a fermé sur le rapport.
+            # Le champ enregistre QUI ASSUME la décision ; ici la réponse est
+            # « personne, c'est une démonstration », et c'est ce qu'il dit
+            # désormais. Un lecteur du dossier d'audit sait ce qu'il a.
+            profil_valide_par="DEMONSTRATION - aucun actuaire responsable")
     except Exception as e:
         import traceback
         print(f"  !!! CRASH : {type(e).__name__}: {e}")

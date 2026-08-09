@@ -112,7 +112,11 @@ def main():
         result_a2=r2, result_a3=r3, result_a4=r4, result_a5=None,
         col_cible='nb_sinistres', generer_graphiques=True,
         generer_rapport_equipe=False, environnement='production',
-        profil_valide_par='Actuaire')
+        # ⚠️ MEME DEFAUT QUE LA DEMO, ET IL ETAIT DANS MON PROPRE OUTIL :
+        # << Actuaire >> satisfaisait le controle de gouvernance sans nommer
+        # personne. Le rapport produit ici est une verification, pas un
+        # livrable signe — il le dit.
+        profil_valide_par='VERIFICATION LOCALE - aucun actuaire responsable')
 
     horodatage = maintenant.strftime('%Y%m%d_%H%M%S')
     rapports = generer_rapport_tarification(

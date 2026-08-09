@@ -4986,47 +4986,35 @@ Seuil alerte : ±15% &nbsp;·&nbsp; Vigilance : ±8% &nbsp;·&nbsp; Années non 
                 except Exception as _ew_e:
                     st.error(f"Erreur Word : {_ew_e}")
     with e5:
-        if st.button("📑 Rapport PDF", use_container_width=True, key="dl_res_pdf_btn",
-                     disabled=not _champs_ok):
-            with st.spinner("Génération du rapport PDF..."):
-                try:
-                    _pdf_bytes_sp = r_raw.get("pdf_bytes", b"")
-                    if _pdf_bytes_sp:
-                        # Rapport SP — pdf_bytes déjà générés par l'agent
-                        st.download_button(
-                            "⬇️ Télécharger PDF",
-                            data=_pdf_bytes_sp,
-                            file_name=f"rapport_actuariel_{besoin}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-                            mime="application/pdf",
-                            use_container_width=True,
-                            key="dl_res_pdf",
-                        )
-                    else:
-                        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import export_pdf as _ep
-                        _pdf = _ep(
-                            n1={}, n2=r_raw.get("n2",{}), n3=r_raw.get("n3",{}), n4=r_raw.get("n4",{}),
-                            commentaire=r_raw.get("commentaire",""),
-                            ref_client=_ref_client_export,
-                            arrete=_arrete_exp,
-                            audit_id=r_raw.get("audit_id",""),
-                            lob_label=_lob_exp,
-                            graphiques=_graphiques_exp,
-                            actuaire_nom=_actuaire_nom,
-                            actuaire_numero_ia=_actuaire_ia,
-                        )
-                        if _pdf:
-                            st.download_button(
-                                "⬇️ Télécharger PDF",
-                                data=_pdf,
-                                file_name=f"rapport_actuariel_{besoin}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-                                mime="application/pdf",
-                                use_container_width=True,
-                                key="dl_res_pdf",
-                            )
-                        else:
-                            st.error("Génération PDF échouée")
-                except Exception as _ep_e:
-                    st.error(f"Erreur PDF : {_ep_e}")
+        # ⚠️ LE BOUTON N'APPARAIT QUE LA OU IL PEUT MARCHER. Il appelait
+        # `export_pdf` depuis `n5_rapport`, fonction RETIREE par le lot C1 :
+        # « Le PDF n'est plus GENERE : il s'obtient par CONVERSION du Word ou
+        # du HTML, ce qui supprime la dependance a weasyprint. » L'import
+        # levait donc un ImportError, attrape par le `except` et affiche a
+        # l'actuaire sous la forme « Erreur PDF : cannot import name
+        # 'export_pdf' ». Un bouton qui ne peut pas marcher est pire qu'un
+        # bouton absent : il promet un livrable et rend un message technique.
+        # Le chemin Sante-Prevoyance, lui, produit de vrais `pdf_bytes` et
+        # garde son bouton.
+        _pdf_bytes_sp = r_raw.get("pdf_bytes", b"")
+        if _pdf_bytes_sp:
+            if st.button("📑 Rapport PDF", use_container_width=True, key="dl_res_pdf_btn",
+                         disabled=not _champs_ok):
+                st.download_button(
+                    "⬇️ Télécharger PDF",
+                    data=_pdf_bytes_sp,
+                    file_name=f"rapport_actuariel_{besoin}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    key="dl_res_pdf",
+                )
+        else:
+            st.caption(
+                "📑 **PDF** — non généré directement : imprimez le rapport "
+                "**HTML** ou le **Word** ci-contre en PDF depuis votre "
+                "navigateur ou Word. La mise en page d'impression est prévue "
+                "pour cela."
+            )
     with e6:
         if st.button("📊 Voir Dashboard", use_container_width=True, key="res_to_dash"):
             nav_to("dashboard")
