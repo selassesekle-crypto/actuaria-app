@@ -163,7 +163,11 @@ def export_excel_a3(result_a3: Dict, audit_id: str = "") -> bytes:
             st = h.get('statut', 'N/A')
             _section(ws4, r, f"▶ {hlabel}"); r += 1
             _kpi(ws4, r, "Statut",     st,                    statut=st); r += 1
-            _kpi(ws4, r, "Valeur",     round(h.get(hval_key, 0), 4)); r += 1
+            # ⚠️ MEME DEFAUT QU'AU BLOC A4, ET IL Y EN AVAIT DEUX : 0 pour
+            # une valeur absente, et un plantage sur un None.
+            _v = h.get(hval_key)
+            _kpi(ws4, r, "Valeur",
+                 '—' if _v is None else round(_v, 4)); r += 1
             _kpi(ws4, r, "Message",    h.get('message', ''),  wrap=True); r += 1
             _kpi(ws4, r, "Conseil",    h.get('conseil', ''),  wrap=True); r += 2
 
@@ -367,7 +371,12 @@ def export_excel_a4(result_a4: Dict, audit_id: str = "") -> bytes:
             st = h.get('statut', 'N/A')
             _section(ws4, r, f"▶ {hlabel}"); r += 1
             _kpi(ws4, r, "Statut",  st,                   statut=st); r += 1
-            _kpi(ws4, r, "Valeur",  round(h.get(hval_key, 0), 4)); r += 1
+            # ⚠️ `round(h.get(cle, 0), 4)` FAISAIT DEUX FAUTES : il rendait
+            # 0 pour une valeur absente, et il planterait sur un None. Une
+            # grandeur non mesuree se declare, elle ne s'invente pas.
+            _v = h.get(hval_key)
+            _kpi(ws4, r, "Valeur",
+                 '—' if _v is None else round(_v, 4)); r += 1
             _kpi(ws4, r, "Message", h.get('message', ''), wrap=True); r += 1
             _kpi(ws4, r, "Conseil", h.get('conseil', ''), wrap=True); r += 2
 

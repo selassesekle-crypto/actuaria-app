@@ -2629,7 +2629,17 @@ class AgentA4ML:
         h4_statut    = "AMBRE"
         h4_msg       = "Calibration NON testée (X_test/y_test absents) — à vérifier ⚠️"
         h4_conseil   = "Fournir X_test et y_test pour le reliability diagram"
-        ecart_moy    = 0.0
+        # ⚠️ None, PAS 0.0 — ET C'EST UN CORRECTIF DE JUSTESSE. Le repli
+        # etait publie tel quel dans la colonne << Valeur >> du rapport,
+        # dans le contexte lu par le modele et dans le classeur Excel. Or
+        # sur un ECART DE CALIBRATION, zero n'est pas neutre : c'est la
+        # MEILLEURE valeur possible. Le lecteur qui balayait la colonne
+        # voyait une calibration parfaite la ou RIEN n'avait ete mesure.
+        # Le message disait bien << NON testee >> ; la valeur le
+        # contredisait. Regle du projet : ne jamais fabriquer un chiffre
+        # pour combler un trou -- une case vide honnete vaut mieux qu'un
+        # nombre faux, et celui-ci etait flatteur.
+        ecart_moy    = None
         reliability  = []
         try:
             if classement and y_test is not None and X_test is not None:
@@ -2713,12 +2723,19 @@ class AgentA4ML:
                 "titre_graphique": f"{'✅' if h3_statut=='VERT' else '⚠️' if h3_statut=='AMBRE' else '❌'} Performance Gini = {gini_test:.4f}",
             },
             "h4_calibration": {
-                "ecart_moy_pct": round(ecart_moy * 100, 2),
+                # ⚠️ None TRAVERSE : un consommateur doit pouvoir distinguer
+                # << non mesure >> de << mesure a zero >>.
+                "ecart_moy_pct": (None if ecart_moy is None
+                                  else round(ecart_moy * 100, 2)),
                 "reliability":   reliability,
                 "statut":        h4_statut,
                 "message":       h4_msg,
                 "conseil":       h4_conseil,
-                "titre_graphique": f"{'✅' if h4_statut=='VERT' else '⚠️' if h4_statut=='AMBRE' else '❌'} Calibration — Écart moyen = {ecart_moy*100:.1f}%",
+                "titre_graphique": (
+                    f"{'✅' if h4_statut=='VERT' else '⚠️' if h4_statut=='AMBRE' else '❌'}"
+                    " Calibration — "
+                    + ("écart non mesuré" if ecart_moy is None
+                       else f"Écart moyen = {ecart_moy*100:.1f}%")),
             },
             "statut_global":   statut_global,
             "conclusion":      conclusion,

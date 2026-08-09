@@ -432,6 +432,18 @@ TITRES_FIGURES: Dict[str, str] = {
     'chart_shap_summary': 'Importance SHAP — contribution des variables',
 }
 
+#: ⚠️ L'ORDRE DU CLASSEMENT N'EST PAS CELUI DU GINI, et rien ne le disait.
+#: Mesure sur le rapport du 09/08 : LightGBM (Gini 0,1729) est TROISIEME,
+#: derriere Lineaire regularise (Gini 0,1491) — parce que son
+#: surapprentissage vaut 2,757 contre 1,112. Le classement est juste : c'est
+#: la grille multicriteres qui decide. Mais un lecteur presse y voit une
+#: erreur de tri, et le titre du chapitre ne suffit pas a l'en detourner.
+NOTE_CLASSEMENT = (
+    "L'ordre de ce classement suit le SCORE GLOBAL de la grille "
+    "multicritères, et non le Gini seul : un modèle plus discriminant peut "
+    "être classé après un modèle plus stable ou plus interprétable."
+)
+
 #: Le plan : quel chapitre porte quelles figures, dans quel ordre.
 #:
 #: ⚠️ C'EST LA SOURCE UNIQUE, ET LES DEUX FORMATS LA CONSOMMENT. A7 tient
@@ -881,6 +893,19 @@ def _fragment_interactif(objet) -> str:
         return ''
 
 
+def _valeur_ou_absente(valeur, unite: str = '') -> str:
+    """Une grandeur pour le contexte du modele, ou le tiret de l'absence.
+
+    ⚠️ IL LIT CE TEXTE ET ECRIT LE COMMENTAIRE ACTUARIEL. Lui donner « 0.0 »
+    pour « non mesure » revient a lui faire affirmer un resultat que
+    personne n'a calcule — le defaut que T2 avait ferme sur les modeles et
+    T4 sur les metriques.
+    """
+    if valeur is None:
+        return F.ABSENT
+    return f'{valeur}{unite}'
+
+
 def _construire_contexte_tarif(
     result_a3: Dict, result_a4: Dict, result_a6: Dict,
     branche: str, arrete: str
@@ -1018,7 +1043,12 @@ def _construire_contexte_tarif(
         f"H1 Overfitting : {hyp4.get('h1_overfitting',{}).get('statut','?')} | ratio={hyp4.get('h1_overfitting',{}).get('ratio','—')}",
         f"H2 PSI réel : {hyp4.get('h2_psi',{}).get('statut','?')} | PSI={hyp4.get('h2_psi',{}).get('psi','—')}",
         f"H3 Gini : {hyp4.get('h3_gini',{}).get('statut','?')} | Gini={hyp4.get('h3_gini',{}).get('gini','—')}",
-        f"H4 Calibration : {hyp4.get('h4_calibration',{}).get('statut','?')} | écart moy={hyp4.get('h4_calibration',{}).get('ecart_moy_pct','—')}%",
+        # ⚠️ `.get(cle, '—')` NE SUFFIT PAS quand la cle EXISTE et vaut None :
+        # le modele lisait « écart moy=0.0% », c'est-a-dire une calibration
+        # parfaite, la ou rien n'avait ete mesure.
+        f"H4 Calibration : {hyp4.get('h4_calibration',{}).get('statut','?')}"
+        f" | écart moy="
+        f"{_valeur_ou_absente(hyp4.get('h4_calibration',{}).get('ecart_moy_pct'), '%')}",
         "",
         "=== BACKTESTING A/E (walk-forward recalibré) ===",
         f"A/E ratio : {bt6.get('ae_ratio','—')} | {bt6.get('interpretation','—')}",
@@ -1593,6 +1623,8 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
         # Audit V7 IMPORTANT : garde NA — était toujours affiché "0.0000".
         html += f'<td class="right">{F.nombre(m.get("score_global"), F.DEC_GINI)}</td>'
         html += f'<td class="center">{star}</td></tr>\n'
+    html += (f'    <p style="margin-top:6px; font-size:10px; color:{SLATE};'
+             f' font-style:italic;">✦ {NOTE_CLASSEMENT}</p>\n')
     html += _fermer_chapitre(3)
     html += _ouvrir_chapitre(4) + '    <table>\n      ' + _row(
         titres('hypotheses'), header=True,
@@ -1978,6 +2010,9 @@ def export_word(
             _tbl(titres('classement'), rows_ml,
                  ws=[1.3,3.6,2.8,2.3,2.3,1.9,2.3],
                  num=colonnes_numeriques('classement'), gras_premiere=True)
+        p = doc.add_paragraph()
+        p.paragraph_format.space_after = Pt(4)
+        _run(p, '✦ ' + NOTE_CLASSEMENT, sz=8, italic=True, col=GrR)
         _note = note_troncature(MAX_CLASSEMENT_WORD, len(cl4), 'modèles',
                                 'dans l\'ordre du classement')
         if _note:

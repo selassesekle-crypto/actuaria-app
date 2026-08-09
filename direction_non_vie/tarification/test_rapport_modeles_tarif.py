@@ -23,6 +23,7 @@ RACINE = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 if RACINE not in sys.path:
     sys.path.insert(0, RACINE)
 
+from core import format_fr as F  # noqa: E402
 from direction_non_vie.tarification.services import (  # noqa: E402
     rapport_modeles_tarif as R)
 
@@ -1465,6 +1466,128 @@ class V2_LeBruitEtLeServeurDeRendu(unittest.TestCase):
                 sys.modules['kaleido'] = vrai
         print('    OK V2-c : aucun navigateur sans figure, aucun pour un '
               'rendeur substitué')
+
+
+class V3_LaSentinelleDeCalibration(unittest.TestCase):
+    """V3 — une valeur de repli publiée comme une mesure, et FLATTEUSE.
+
+    ⚠️ MESURÉ SUR LE RAPPORT DU 09/08 : « H4 ML — Calibration » affichait
+    « 0.0000 » dans la colonne Valeur, avec pour message « Calibration NON
+    testée ». A4 initialisait `ecart_moy = 0.0` avant sa branche de calcul et
+    publiait ce repli tel quel. Or sur un ÉCART de calibration, zéro n'est pas
+    neutre — c'est la MEILLEURE valeur possible. Le lecteur voyait une
+    calibration parfaite là où rien n'avait été mesuré.
+    """
+
+    ABSENTE = {'h4_calibration': {'statut': 'AMBRE', 'ecart_moy_pct': None,
+                                  'message': 'Calibration NON testée',
+                                  'conseil': 'Fournir X_test et y_test'}}
+    MESUREE = {'h4_calibration': {'statut': 'VERT', 'ecart_moy_pct': 0.0,
+                                  'message': 'Écart moyen = 0.0%',
+                                  'conseil': ''}}
+
+    def _ligne_h4(self, hypotheses_ml):
+        a3, a4, a6 = _payload_figures()
+        a4['hypotheses'] = hypotheses_ml
+        with rendu_simule():
+            html = R.export_html(a3, a4, a6, 'DEMO', '31/12/2025', 'V3',
+                                 narration_calculee=('Texte.', 'temoin'))
+        bloc = html[html.index('H4 ML — Calibration'):][:600]
+        return [re.sub(r'<[^>]+>', '', c).strip()
+                for c in re.findall(r'<td[^>]*>(.*?)</td>', bloc, re.S)]
+
+    def test_une_calibration_NON_MESUREE_ne_sort_pas_a_zero(self):
+        """⚠️ LE POINT DU LOT : la case vide honnête plutôt que le nombre
+        faux — et celui-ci était flatteur."""
+        cellules = self._ligne_h4(self.ABSENTE)
+        self.assertEqual(cellules[1], F.ABSENT,
+                         'la valeur non mesurée sort encore un chiffre')
+        self.assertNotIn('0.0000', cellules[:2])
+        print('    OK V3 : une calibration non mesurée sort « %s »'
+              % F.ABSENT)
+
+    def test_un_VRAI_zero_reste_un_zero(self):
+        """⚠️ LE DÉFAUT INVERSE SERAIT AUSSI GRAVE : un écart réellement nul
+        est une calibration parfaite, et il doit se lire."""
+        cellules = self._ligne_h4(self.MESUREE)
+        self.assertEqual(cellules[1], '0.0000')
+        print('    OK V3-b : un écart réellement mesuré à zéro reste 0.0000')
+
+    def test_le_CONTEXTE_DU_MODELE_ne_recoit_pas_le_faux_zero(self):
+        """⚠️ IL LIT CE TEXTE ET ÉCRIT LE COMMENTAIRE ACTUARIEL. Lui donner
+        « écart moy=0.0% » pour « non mesuré » revient à lui faire affirmer un
+        résultat que personne n'a calculé."""
+        ctx = R._construire_contexte_tarif(
+            {}, {'hypotheses': self.ABSENTE}, {'branche': 'auto'}, 'auto',
+            '31/12/2025')
+        self.assertIn('écart moy=%s' % F.ABSENT, ctx)
+        self.assertNotIn('écart moy=0.0', ctx)
+        ctx2 = R._construire_contexte_tarif(
+            {}, {'hypotheses': self.MESUREE}, {'branche': 'auto'}, 'auto',
+            '31/12/2025')
+        self.assertIn('écart moy=0.0%', ctx2)
+        print('    OK V3-c : le contexte dit l\'absence, et garde le vrai zéro')
+
+    def test_A4_ne_publie_plus_zero_quand_il_n_a_rien_mesure(self):
+        """⚠️ CORRIGÉ À LA SOURCE. Neutraliser dans le rapport seul aurait
+        laissé la valeur fautive circuler — l'Excel et le contexte la
+        lisaient aussi."""
+        import inspect
+        from direction_non_vie.tarification.a4_ml import agent as A4
+        src = inspect.getsource(A4.AgentA4ML._valider_modele_ml)
+        self.assertIn('ecart_moy    = None', src,
+                      'la sentinelle est encore un nombre')
+        self.assertNotIn('ecart_moy    = 0.0', src)
+        self.assertIn('None if ecart_moy is None', src)
+        print('    OK V3-d : la sentinelle d\'A4 est None, pas 0.0')
+
+    def test_l_excel_ne_plante_pas_et_n_invente_pas(self):
+        """⚠️ `round(h.get(cle, 0), 4)` FAISAIT DEUX FAUTES : il rendait 0
+        pour une valeur absente, et il planterait sur un None."""
+        import inspect
+        from direction_non_vie.tarification.services import tarif_excel
+        src = inspect.getsource(tarif_excel)
+        self.assertNotIn('round(h.get(hval_key, 0), 4)', src)
+        self.assertIn("'—' if _v is None else round(_v, 4)", src)
+        print('    OK V3-e : le classeur déclare l\'absence au lieu de la '
+              'chiffrer')
+
+
+class V4_LaNoteDuClassement(unittest.TestCase):
+    """V4 — l'ordre du classement n'est pas celui du Gini, et rien ne le
+    disait."""
+
+    def test_les_deux_formats_portent_la_note(self):
+        """⚠️ MESURÉ : LightGBM (Gini 0,1729) est TROISIÈME, derrière
+        Linéaire régularisé (Gini 0,1491) — son surapprentissage vaut 2,757
+        contre 1,112. Le classement est JUSTE ; c'est sa lecture qui
+        trompait."""
+        a3, a4, a6 = _payload_figures()
+        a6['classement'] = [
+            {'modele': 'GLM_POISSON', 'famille': 'GLM', 'gini_test': 0.1491,
+             'rmse_test': 0.45, 'overfit_ratio': 1.112, 'score_global': 0.90},
+            {'modele': 'ML_LIGHTGBM', 'famille': 'ML', 'gini_test': 0.1729,
+             'rmse_test': 0.46, 'overfit_ratio': 2.757, 'score_global': 0.67},
+        ]
+        with rendu_simule():
+            html = R.export_html(a3, a4, a6, 'DEMO', '31/12/2025', 'V4',
+                                 narration_calculee=('Texte.', 'temoin'))
+            word = _texte_docx(R.export_word(
+                a3, a4, a6, 'DEMO', '31/12/2025', 'V4',
+                narration_calculee=('Texte.', 'temoin')))
+        for nom, texte in (('HTML', html), ('WORD', word)):
+            self.assertIn(R.NOTE_CLASSEMENT, texte, nom)
+        print('    OK V4 : la note explique l\'ordre, dans les deux formats')
+
+    def test_la_note_est_DANS_le_chapitre_du_classement(self):
+        a3, a4, a6 = _payload_figures()
+        with rendu_simule():
+            html = R.export_html(a3, a4, a6, 'DEMO', '31/12/2025', 'V4',
+                                 narration_calculee=('Texte.', 'temoin'))
+        debut = html.index(R.chapitre(3))
+        fin = html.index(R.chapitre(4))
+        self.assertTrue(debut < html.index(R.NOTE_CLASSEMENT) < fin)
+        print('    OK V4-b : la note est dans le chapitre 3, pas ailleurs')
 
 
 if __name__ == '__main__':
