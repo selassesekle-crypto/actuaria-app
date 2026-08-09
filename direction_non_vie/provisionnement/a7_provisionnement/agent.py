@@ -297,6 +297,15 @@ class AgentA7Provisionnement:
         ref_client:       str           = '',
         arrete:           str           = '',
         resultats_precedents: Optional[Dict] = None,
+        # ⚠️ SANS CES DEUX CHAMPS, LES DEUX ETATS DE LA RELECTURE SERAIENT UN
+        # TAMPON PERMANENT. `run()` ne connaissait pas l'actuaire — 0
+        # occurrence de `actuaire_nom` dans cet agent — donc AUCUN rapport
+        # produit par la chaine ne pouvait porter de signature, dans aucun
+        # des deux formats. Poser << relecture non enregistree >> sans
+        # brancher aurait mis cette mention sur 100 % des rapports, et un
+        # signal qui se declenche toujours a cesse d'etre un signal.
+        actuaire_nom:     str           = '',
+        actuaire_numero_ia: str         = '',
         # ── Options ───────────────────────────────────────────────────────────
         triangle_reference: str        = 'paiements',  # 'paiements' | 'charges'
         courbe_rfr:       object        = None,   # Courbe EIOPA RFR (dict rfr_eiopa)
@@ -764,7 +773,9 @@ class AgentA7Provisionnement:
                     'word', export_word,
                     n1=n1, n2=n2, n3=n3, n4=n4, commentaire=commentaire,
                     graphiques=graphiques_dict, ref_client=ref_client,
-                    arrete=arrete, audit_id=audit_id, lob_label=lob_label)
+                    arrete=arrete, audit_id=audit_id, lob_label=lob_label,
+                    actuaire_nom=actuaire_nom,
+                    actuaire_numero_ia=actuaire_numero_ia)
 
             # ⚠️ LE HTML EST UNE SORTIE A PART ENTIERE (lot C1, decision B).
             # Il n'existait que comme intermediaire technique d'`export_pdf` :
@@ -777,7 +788,9 @@ class AgentA7Provisionnement:
                     'html', export_html,
                     n1=n1, n2=n2, n3=n3, n4=n4, commentaire=commentaire,
                     graphiques=graphiques_dict, ref_client=ref_client,
-                    arrete=arrete, audit_id=audit_id, lob_label=lob_label)
+                    arrete=arrete, audit_id=audit_id, lob_label=lob_label,
+                    actuaire_nom=actuaire_nom,
+                    actuaire_numero_ia=actuaire_numero_ia)
 
             if generer_pdf_flag:
                 logger.warning(

@@ -20,7 +20,7 @@
 from __future__ import annotations
 import base64, io, logging, re
 from datetime import datetime
-from typing import Dict, List, Tuple
+from typing import Dict, List, NamedTuple, Tuple
 
 from core import frontiere_llm
 import numpy as np
@@ -1171,6 +1171,51 @@ def lignes_clark_rapport(n2: Dict, n3: Dict) -> List[Dict[str, str]]:
     return lignes
 
 
+# ── LA RELECTURE ACTUARIELLE ────────────────────────────────────────────────
+#
+#  ⚠️ DEUX ETATS, ET PAS TROIS. Le rapport de tarification en porte trois
+#  (validee / non enregistree / hors production), le troisieme derivant du
+#  parametre `environnement` d'A6. A7 N'A AUCUNE NOTION D'ENVIRONNEMENT —
+#  releve : les deux occurrences du mot dans l'agent et ici sont des
+#  commentaires sur l'environnement de test et sur weasyprint. Transposer le
+#  troisieme etat serait de la symetrie sans source : un etat qu'aucune
+#  donnee ne peut produire.
+#
+#  ⚠️ ET L'ETAT NEGATIF EST ACTIF, C'EST TOUT LE POINT. A7 ne distinguait que
+#  << signe >> et << rien >> : sans nom, le pied ne disait RIEN, et le lecteur
+#  ne pouvait pas separer << relu par personne >> de << le champ n'a pas ete
+#  transmis >>. C'est le silence que ce chantier ferme depuis le debut.
+
+#  ⚠️ ET DEUX ETATS SE PORTENT PAR UN BOOLEEN, PAS PAR UN CODE. Le rapport de
+#  tarification expose un `etat` textuel parce qu'il en a TROIS a distinguer.
+#  Ici `alerte` porte a lui seul la distinction : ajouter une chaine
+#  redondante aurait ete un champ que personne ne lit — le motif que ce
+#  chantier ferme depuis le debut.
+
+
+class TraceRelecture(NamedTuple):
+    """L'état de la relecture : sa phrase, et s'il alerte."""
+    texte: str
+    alerte: bool
+
+
+def trace_relecture(nom, numero_ia=None) -> TraceRelecture:
+    """Les deux états de la relecture actuarielle, en toutes lettres.
+
+    ⚠️ AUCUNE DATE N'EST FABRIQUÉE ICI. Une date posée au moment du rendu
+    dirait quand le document a été produit, pas quand il a été relu — et le
+    dépôt n'enregistre pas la seconde.
+    """
+    if nom and str(nom).strip():
+        texte = 'Relu et validé par ' + str(nom).strip()
+        if numero_ia and str(numero_ia).strip():
+            texte += ' — N° IA ' + str(numero_ia).strip()
+        return TraceRelecture(texte, False)
+    return TraceRelecture(
+        'Relecture actuarielle non enregistrée — ce rapport n\'a pas été relu '
+        'par un actuaire identifié.', True)
+
+
 def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, audit_id, methode, statut, graphiques_html, actuaire_nom='', actuaire_numero_ia='') -> Dict:
     mk    = n3.get('mack', {})
     clark = n3.get('clark', {});         bz  = n3.get('glm_apc', {})
@@ -1882,14 +1927,19 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         b['avis'] = ''
 
     # ── PIED ─────────────────────────────────────────────────────────────────
-    # Signature actuaire
+    # Signature actuaire — DEUX ETATS, cf. `trace_relecture`.
     act_nom = actuaire_nom or ''
     act_ia  = actuaire_numero_ia or ''
-    act_str = ''
-    if act_nom:
-        act_str = act_nom + (' — N° IA : ' + act_ia if act_ia else '') + ' · '
+    _tr = trace_relecture(act_nom, act_ia)
     b['pied_info'] = cli + ' · ' + lob + ' · Arrêté ' + arr + ' · Audit ID : ' + (audit_id or '—') + ' · ' + dt
-    b['signature_actuaire'] = act_str
+    b['relecture'] = _tr
+    # ⚠️ L'ALERTE SE VOIT DANS LES DEUX FORMATS. Le Word colore la mention en
+    # ambre quand la relecture n'est pas enregistree ; sans cette regle, l'HTML
+    # l'aurait rendue au gris du pied, et l'etat negatif aurait ete ACTIF dans
+    # un format et discret dans l'autre — la divergence que ce lot ferme.
+    b['signature_actuaire'] = (
+        ('<span style="color:' + ORANGE + ';">' + _tr.texte + '</span>'
+         if _tr.alerte else _tr.texte) + ' · ')
     b['actuaire_nom'] = act_nom
     b['actuaire_ia']  = act_ia
 
@@ -2696,8 +2746,22 @@ def export_word(n1, n2, n3, n4,
         _figure('g12_sensibilites')
 
         _sep()
+        # ⚠️ CE PIED NE PORTAIT NI SIGNATURE NI IDENTIFIANT D'AUDIT. Les trois
+        # parametres `actuaire_nom`, `actuaire_numero_ia` et `audit_id`
+        # etaient DECLARES dans la signature de `export_word` et lus nulle
+        # part : 0 occurrence de << actuaire >> sur ses 375 lignes. L'HTML,
+        # lui, imprimait les deux. Le document qui VOYAGE et qu'on SIGNE
+        # etait le seul des deux a ne rien porter.
+        # ⚠️ UN SEUL PARAGRAPHE, DEUX PASSAGES : la mention de relecture porte
+        # sa propre couleur (ambre quand elle alerte) sans qu'un second
+        # paragraphe centre soit necessaire.
+        _tr = trace_relecture(actuaire_nom, actuaire_numero_ia)
         p=doc.add_paragraph(); p.alignment=WD_ALIGN_PARAGRAPH.CENTER
-        _run(p,'ActuarIA · '+cli+' · '+lob+' · Arrêté '+arr+' · '+dt+' · CONFIDENTIEL',sz=7,italic=True,col=GrR)
+        _run(p, _tr.texte, sz=7, italic=True,
+             col=AR if _tr.alerte else GrR).add_break()
+        _run(p,'ActuarIA · '+cli+' · '+lob+' · Arrêté '+arr
+             +' · Audit ID : '+(audit_id or '—')+' · '+dt+' · CONFIDENTIEL',
+             sz=7,italic=True,col=GrR)
 
         buf=io.BytesIO(); doc.save(buf); buf.seek(0)
         wb=buf.read()
