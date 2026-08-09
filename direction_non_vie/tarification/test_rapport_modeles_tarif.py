@@ -1686,5 +1686,98 @@ class V6_LeContexteEtLeRepliMort(unittest.TestCase):
               'posée')
 
 
+class V7_LaFigureConditionnelle(unittest.TestCase):
+    """V7 — le catalogue promettait 14 figures, la chaîne en rendait 13.
+
+    ⚠️ `chart_shap_summary` n'existe que si SHAP a été calculé, et rien ne le
+    déclarait. Ce n'est pas la figure qui est en cause : c'est une promesse du
+    catalogue qui ne se tenait pas dans la configuration courante — celle du
+    lanceur, qui passe `calcul_shap=False`.
+    """
+
+    def test_la_condition_est_ECRITE_dans_le_code(self):
+        self.assertIn('chart_shap_summary', R.FIGURES_CONDITIONNELLES)
+        raison = R.FIGURES_CONDITIONNELLES['chart_shap_summary']
+        self.assertIn('calcul_shap', raison)
+        print(f'    OK V7 : la condition est déclarée — « {raison[:46]} »')
+
+    def test_toute_conditionnelle_est_AU_PLAN_et_non_ecartee(self):
+        """Une figure conditionnelle reste publiée quand elle existe : elle
+        n'a rien à faire dans les écartées."""
+        au_plan = {c for _, cles in R.PLAN_FIGURES for c in cles}
+        for cle in R.FIGURES_CONDITIONNELLES:
+            self.assertIn(cle, au_plan, cle)
+            self.assertNotIn(cle, R.FIGURES_ECARTEES, cle)
+        print('    OK V7-b : les conditionnelles sont au plan, pas écartées')
+
+    def test_la_condition_correspond_a_la_GARDE_REELLE_d_A4(self):
+        """⚠️ UNE DÉCLARATION QUI NE SUIT PAS LE CODE EST PIRE QUE RIEN. On
+        relit la garde qui décide de produire la figure."""
+        import inspect
+
+        from direction_non_vie.tarification.a4_ml import agent as A4
+
+        src = inspect.getsource(A4.AgentA4ML.run)
+        i = src.index("graphiques['chart_shap_summary']")
+        garde = src[max(0, i - 500):i]
+        self.assertIn('shap_summary', garde)
+        self.assertIn('importance_globale', garde)
+        print('    OK V7-c : la garde d\'A4 confirme la condition déclarée')
+
+
+class V8_LeNomDuModeleRetenu(unittest.TestCase):
+    """V8 — un DICT Python entier se publiait là où un nom était attendu.
+
+    ⚠️ MESURÉ SUR LE RAPPORT DU 09/08 : le titre du radar affichait
+    « Profil multicritères — {'modele': 'GLM_POISSON', 'famille': 'GLM',
+    'cible': 'nb_sinistres', … ». `c3_coherence['modele']` portait
+    `classement[0]`, le dict, alors que ses QUATRE lecteurs le comparent à
+    une chaîne — les comparaisons étaient donc toujours fausses.
+    """
+
+    def _val_sel(self):
+        from direction_non_vie.tarification.a6_comparaison.agent import (
+            AgentA6Comparaison,
+        )
+        a6 = AgentA6Comparaison.__new__(AgentA6Comparaison)
+        classement = [
+            {'modele': 'GLM_POISSON', 'famille': 'GLM', 'gini': 0.18,
+             'gini_test': 0.18, 'score_global': 0.91},
+            {'modele': 'ML_LIGHTGBM', 'famille': 'ML', 'gini': 0.17,
+             'gini_test': 0.17, 'score_global': 0.67},
+        ]
+        return AgentA6Comparaison._valider_selection(
+            a6, classement, classement[0], None), classement
+
+    def test_le_champ_modele_porte_un_NOM_pas_un_dict(self):
+        val, _ = self._val_sel()
+        retenu = val['c3_coherence']['modele']
+        self.assertIsInstance(retenu, str, 'le champ porte encore un objet')
+        self.assertEqual(retenu, 'GLM_POISSON')
+        print(f'    OK V8 : le champ porte « {retenu} », pas son dictionnaire')
+
+    def test_la_comparaison_des_figures_REDEVIENT_vraie(self):
+        """⚠️ LA CONSÉQUENCE VISIBLE : le graphique des scores annonce dans son
+        propre titre « Barre dorée = modèle retenu », et aucune barre ne
+        l'était — la comparaison chaîne/dict ne pouvait pas réussir."""
+        val, classement = self._val_sel()
+        retenu = val['c3_coherence']['modele']
+        correspondances = [m for m in classement
+                           if m.get('modele') == retenu]
+        self.assertEqual(len(correspondances), 1,
+                         'aucun modèle du classement ne correspond au retenu')
+        print('    OK V8-b : la barre dorée retrouve son modèle')
+
+    def test_aucune_representation_de_dict_ne_sort_des_textes(self):
+        val, _ = self._val_sel()
+        textes = [val['c3_coherence']['titre_graphique'],
+                  val['c3_coherence']['message'],
+                  val.get('conclusion', '')]
+        for t in textes:
+            self.assertNotIn("{'modele'", str(t))
+            self.assertNotIn("'famille'", str(t))
+        print('    OK V8-c : ni titre ni conclusion ne publient de dict')
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

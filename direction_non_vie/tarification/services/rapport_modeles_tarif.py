@@ -481,6 +481,21 @@ SOURCES_FIGURES: Dict[str, Tuple[str, str]] = {
     'radar_modele_retenu': ('a6', 'graphiques_validation'),
 }
 
+#: Les figures du plan qui ne sont pas TOUJOURS produites, et à quelle
+#: condition.
+#:
+#: ⚠️ LE CATALOGUE PROMETTAIT QUATORZE FIGURES ET LA CHAÎNE N'EN RENDAIT
+#: TREIZE. `chart_shap_summary` n'existe que si SHAP a été calculé — A4 le dit
+#: lui-même : « OPTIONNEL : pas de SHAP (package absent / calcul_shap=False)
+#: → chart non produit ». Ce n'est pas un défaut de la figure : c'est une
+#: promesse du catalogue qui ne se tenait pas dans la configuration courante,
+#: et rien ne le déclarait. Le numéroteur absorbe déjà l'absence sans laisser
+#: de trou ; ce qui manquait, c'était de le DIRE.
+FIGURES_CONDITIONNELLES: dict[str, str] = {
+    'chart_shap_summary': 'produite seulement si SHAP a été calculé — '
+                          '`calcul_shap=True` et le paquet `shap` installé',
+}
+
 #: Ce que la chaîne produit et que le rapport NE PUBLIE PAS, avec la raison.
 #:
 #: ⚠️ LA RAISON VIT DANS LE CODE, PAS DANS UN COMMENTAIRE. Un test compare
@@ -669,6 +684,17 @@ def figures_disponibles(result_a3, result_a4, result_a6) -> Dict[str, object]:
         objet = ((resultats.get(agent) or {}).get(dictionnaire) or {}).get(cle)
         if objet is not None:
             trouvees[cle] = objet
+        elif cle not in FIGURES_CONDITIONNELLES:
+            # ⚠️ LE MIROIR DU CONTRÔLE CI-DESSOUS, ET IL MANQUAIT. Une figure
+            # PRODUITE mais non cataloguée se signalait déjà ; une figure
+            # CATALOGUÉE mais absente, non — le rapport en publiait
+            # simplement une de moins, sans que rien ne le dise. Mesuré : le
+            # catalogue promettait quatorze figures et la chaîne en rendait
+            # treize. Une absence ATTENDUE se déclare dans
+            # `FIGURES_CONDITIONNELLES` ; toute autre est un défaut.
+            logger.warning(
+                'Figure « %s » au catalogue mais absente des résultats, et '
+                'aucune condition ne le prévoit.', cle)
     # ⚠️ UNE FIGURE NI PUBLIÉE NI ÉCARTÉE SE SIGNALE, ICI AUSSI. Un test
     # statique relit le code des agents ; ce contrôle-ci voit ce qui arrive
     # RÉELLEMENT dans les résultats — une figure ajoutée par un autre chemin

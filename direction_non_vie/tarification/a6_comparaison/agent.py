@@ -2570,7 +2570,10 @@ class AgentA6Comparaison:
         statuts = [c1_statut, c2_statut, c3_statut]
         statut_global = "ROUGE" if "ROUGE" in statuts else "AMBRE" if "AMBRE" in statuts else "VERT"
         conclusion = {
-            "VERT":  f"✅ Sélection validée — {modele_production} retenu après comparaison rigoureuse",
+            # ⚠️ `nom_prod`, PAS `modele_production` : le second est le DICT du
+            # modèle (`classement[0]`), et l'interpoler publiait sa
+            # représentation Python entière dans une phrase de conclusion.
+            "VERT":  f"✅ Sélection validée — {nom_prod} retenu après comparaison rigoureuse",
             "AMBRE": f"⚠️ Sélection acceptable — documenter les précautions dans la fiche de décision",
             "ROUGE": f"❌ Sélection à revoir — contrôles non satisfaits",
         }[statut_global]
@@ -2593,14 +2596,21 @@ class AgentA6Comparaison:
                 "titre_graphique": f"{'✅' if c2_statut=='VERT' else '⚠️'} Écart Gini = {ecart_gini:.4f}",
             },
             "c3_coherence": {
-                "modele":       modele_production,
+                # ⚠️ LE NOM, PAS LE DICT — ET C'EST LA CAUSE DES TROIS AUTRES
+                # DEFAUTS. Ce champ etait le dict entier de `classement[0]`,
+                # alors que ses QUATRE lecteurs (tous dans le code des
+                # figures) le comparent a une CHAINE : les comparaisons
+                # etaient donc toujours fausses, et la barre doree du
+                # graphique des scores — annoncee par son propre titre,
+                # << Barre doree = modele retenu >> — n'apparaissait jamais.
+                "modele":       nom_prod,
                 "rang":         rang,
                 "score":        round(score_retenu, 4),
                 "in_top3":      in_top3,
                 "statut":       c3_statut,
                 "message":      c3_msg,
                 "conseil":      c3_conseil,
-                "titre_graphique": f"{'✅' if c3_statut=='VERT' else '⚠️' if c3_statut=='AMBRE' else '❌'} {modele_production} — Rang #{rang} Score={score_retenu:.4f}",
+                "titre_graphique": f"{'✅' if c3_statut=='VERT' else '⚠️' if c3_statut=='AMBRE' else '❌'} {nom_prod} — Rang #{rang} Score={score_retenu:.4f}",
             },
             "statut_global": statut_global,
             "conclusion":    conclusion,
