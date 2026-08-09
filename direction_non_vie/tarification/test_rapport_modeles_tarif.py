@@ -687,12 +687,18 @@ class T7a_LeCatalogueDesFigures(unittest.TestCase):
         print('    OK T7a-b : %d figures, un titre et une source chacune, '
               'aucune orpheline' % len(au_plan))
 
-    def test_cinq_figures_viennent_du_dictionnaire_que_personne_ne_lisait(self):
+    def test_les_figures_du_dictionnaire_que_personne_ne_lisait(self):
         """⚠️ `graphiques_validation` : 25 sites de production dans le dépôt,
-        ZÉRO lecture. Le chapitre 4 publiait huit verdicts sans preuve."""
+        ZÉRO lecture. Le chapitre 4 publiait huit verdicts sans preuve.
+
+        Elles étaient CINQ à la clôture de T7a ; elles sont QUATRE depuis que
+        `monitoring_gini` a été écartée pour ses données fabriquées — T7a
+        cataloguait les figures sans interroger leur source de données.
+        """
         validation = [c for c, (_, d) in R.SOURCES_FIGURES.items()
                       if d == 'graphiques_validation']
-        self.assertEqual(len(validation), 5)
+        self.assertEqual(len(validation), 4)
+        self.assertNotIn('monitoring_gini', validation)
         for attendue in ('sur_dispersion_poisson', 'overfitting_train_test',
                          'scores_multicriteres'):
             self.assertIn(attendue, validation)
@@ -1588,6 +1594,96 @@ class V4_LaNoteDuClassement(unittest.TestCase):
         fin = html.index(R.chapitre(4))
         self.assertTrue(debut < html.index(R.NOTE_CLASSEMENT) < fin)
         print('    OK V4-b : la note est dans le chapitre 3, pas ailleurs')
+
+
+class V5_LaFigureAuxDonneesFabriquees(unittest.TestCase):
+    """V5 — `monitoring_gini` écartée pour sa SOURCE DE DONNÉES.
+
+    ⚠️ T7a A CATALOGUÉ QUATORZE FIGURES SANS INTERROGER LEUR PROVENANCE.
+    Celle-ci traçait treize points « M-12 … M actuel » pour un portefeuille
+    observé UNE fois : `_monitoring_derive` tire son PSI de deux lois bêta
+    (graine 42, aucune donnée client) et sa courbe de Gini d'une
+    « simulation légère dégradation progressive ». Mesuré sur le rapport du
+    09/08 : la figure affichait « PSI=0.0792 » quand le tableau du même
+    chapitre affichait 0,0051, et le mot « simulé » n'apparaissait pas une
+    fois dans les 236 ko.
+    """
+
+    def test_elle_est_ECARTEE_avec_sa_raison_dans_le_code(self):
+        self.assertNotIn('monitoring_gini', R.TITRES_FIGURES)
+        self.assertNotIn('monitoring_gini', R.SOURCES_FIGURES)
+        self.assertNotIn('monitoring_gini',
+                         [c for _, cles in R.PLAN_FIGURES for c in cles])
+        raison = R.FIGURES_ECARTEES.get('monitoring_gini', '')
+        self.assertTrue(raison, 'écartée sans raison écrite')
+        self.assertIn('FABRIQU', raison.upper())
+        print(f'    OK V5 : écartée, et la raison vit dans le code — '
+              f'« {raison[:52]} »')
+
+    def test_elle_ne_paraît_dans_AUCUN_des_deux_formats(self):
+        a3, a4, a6 = _payload_figures()
+        with rendu_simule():
+            html = R.export_html(a3, a4, a6, 'DEMO', '31/12/2025', 'V5',
+                                 narration_calculee=('Texte.', 'temoin'))
+            word = _texte_docx(R.export_word(
+                a3, a4, a6, 'DEMO', '31/12/2025', 'V5',
+                narration_calculee=('Texte.', 'temoin')))
+        for nom, texte in (('HTML', html), ('WORD', word)):
+            self.assertNotIn('dérive du pouvoir discriminant', texte, nom)
+            self.assertNotIn('Évolution Gini 12 mois', texte, nom)
+        print('    OK V5-b : absente des deux formats')
+
+    def test_la_numerotation_reste_CONTINUE_apres_le_retrait(self):
+        """⚠️ LE CAS OÙ LE COMPTEUR POSITIONNEL SE PROUVE : la figure retirée
+        était au MILIEU du chapitre 4, pas à la fin. Un numéro figé aurait
+        laissé un trou entre le chapitre 4 et le chapitre 5."""
+        plan = R.numeroter(R.figures_disponibles(*_payload_figures()))
+        numeros = [f.numero for fs in plan.values() for f in fs]
+        self.assertEqual(sorted(numeros),
+                         list(range(1, len(R.SOURCES_FIGURES) + 1)))
+        # le chapitre 4 en garde trois, et le chapitre 5 enchaîne sans trou
+        ch4 = [f.numero for f in plan.get(4, [])]
+        ch5 = [f.numero for f in plan.get(5, [])]
+        self.assertEqual(len(ch4), 3)
+        self.assertEqual(ch5[0], ch4[-1] + 1,
+                         'trou entre le chapitre 4 et le chapitre 5')
+        print(f'    OK V5-c : 1..{len(numeros)} sans trou, ch.4 en garde '
+              f'{len(ch4)} et le ch.5 enchaîne')
+
+
+class V6_LeContexteEtLeRepliMort(unittest.TestCase):
+    """V6 — le PSI dans le contexte du modèle, et le repli d'A4."""
+
+    def test_le_contexte_dit_l_absence_au_lieu_de_None(self):
+        """⚠️ MOTIF EXACT DU POINT 6 : `.get('psi','—')` ne protège de rien
+        quand la clé EXISTE et vaut None."""
+        ctx = R._construire_contexte_tarif(
+            {}, {'hypotheses': {'h2_psi': {'statut': 'AMBRE', 'psi': None}}},
+            {'branche': 'auto'}, 'auto', '31/12/2025')
+        self.assertIn(f'PSI={F.ABSENT}', ctx)
+        self.assertNotIn('PSI=None', ctx)
+        ctx2 = R._construire_contexte_tarif(
+            {}, {'hypotheses': {'h2_psi': {'statut': 'VERT', 'psi': 0.0}}},
+            {'branche': 'auto'}, 'auto', '31/12/2025')
+        self.assertIn('PSI=0.0', ctx2)
+        print('    OK V6 : le contexte dit l\'absence, et garde le vrai zéro')
+
+    def test_le_repli_mort_est_retire_d_A4(self):
+        """⚠️ DÉCLARÉ POUR CE QU'IL EST : du code mort. `_monitoring_derive`
+        pose toujours la clé, les trois sites d'appel passent son résultat, et
+        sur 75 configurations réelles le repli n'a mordu 0 fois."""
+        import inspect
+
+        from direction_non_vie.tarification.a4_ml import agent as A4
+        src = inspect.getsource(A4.AgentA4ML._valider_modele_ml)
+        self.assertNotIn("monitoring.get('psi', 0.0)", src)
+        self.assertIn("monitoring['psi']", src)
+        # et la cle est bien TOUJOURS posee par le producteur
+        mon = A4.AgentA4ML._monitoring_derive(
+            A4.AgentA4ML.__new__(A4.AgentA4ML), {})
+        self.assertIn('psi', mon)
+        print('    OK V6-b : le repli est retiré, et la clé est toujours '
+              'posée')
 
 
 if __name__ == '__main__':

@@ -423,7 +423,6 @@ TITRES_FIGURES: Dict[str, str] = {
     'chart_residus_qq': 'H2 GLM — QQ-plot des résidus de Pearson',
     'overfitting_train_test': 'H1 ML — surapprentissage, apprentissage '
                               'contre test',
-    'monitoring_gini': 'H2 ML — dérive du pouvoir discriminant',
     # chapitre 5 — le backtesting
     'chart_walkforward_ae': 'Backtesting walk-forward — ratio A/E par fenêtre',
     'chart_lift_decile': 'Lift par décile de risque prédit',
@@ -458,7 +457,7 @@ PLAN_FIGURES: Tuple[Tuple[int, Tuple[str, ...]], ...] = (
     (3, ('scores_multicriteres', 'scatter_gini_stabilite',
          'chart_lorenz_gini')),
     (4, ('sur_dispersion_poisson', 'chart_residus_qq',
-         'overfitting_train_test', 'monitoring_gini')),
+         'overfitting_train_test')),
     (5, ('chart_walkforward_ae', 'chart_lift_decile')),
     (6, ('radar_modele_retenu', 'chart_shap_summary')),
 )
@@ -474,7 +473,6 @@ SOURCES_FIGURES: Dict[str, Tuple[str, str]] = {
     'sur_dispersion_poisson': ('a3', 'graphiques_validation'),
     'chart_shap_summary': ('a4', 'graphiques'),
     'overfitting_train_test': ('a4', 'graphiques_validation'),
-    'monitoring_gini': ('a4', 'graphiques_validation'),
     'chart_lorenz_gini': ('a6', 'graphiques'),
     'chart_lift_decile': ('a6', 'graphiques'),
     'chart_walkforward_ae': ('a6', 'graphiques'),
@@ -490,6 +488,22 @@ SOURCES_FIGURES: Dict[str, Tuple[str, str]] = {
 #: une figure nouvelle qui ne serait ni au plan ni ici fait tomber la gate.
 #: C'est ce qui empêche la liste de se périmer en silence.
 FIGURES_ECARTEES: Dict[str, str] = {
+    # ⚠️ LA SEULE ÉCARTÉE POUR SA SOURCE DE DONNÉES, ET NON POUR SON CONTENU.
+    # Publiée par T7a, retirée après mesure : ses treize points « M-12 … M
+    # actuel » sont FABRIQUÉS. `_monitoring_derive` tire le PSI de deux lois
+    # bêta (`np.random.beta(2,5)` contre `beta(2.2,4.8)`, graine 42) sans
+    # qu'aucune donnée du client n'entre, et la courbe de Gini est une
+    # « simulation légère dégradation progressive » — le commentaire du code
+    # le dit. Le portefeuille est observé UNE fois ; il n'a pas d'historique
+    # de douze mois. Mesuré sur le rapport du 09/08 : la figure affichait
+    # « PSI=0.0792 » quand le tableau du même chapitre affichait 0,0051 —
+    # deux valeurs pour la même grandeur dans un document signé, et le mot
+    # « simulé » n'apparaissait pas une seule fois dans les 236 ko.
+    # ⚠️ ET ELLE NE PEUT PAS DEVENIR VRAIE : le dépôt ne possède pas
+    # l'historique nécessaire. La déclarer illustrative aurait laissé un
+    # objet sans raison d'être dans un rapport signé.
+    'monitoring_gini': 'données FABRIQUÉES — treize mois d\'historique '
+                       'simulés pour un portefeuille observé une fois',
     # les neuf variantes de Lorenz / Gini — une seule est publiée
     'lorenz': 'doublon — chart_lorenz_gini porte la courbe de Lorenz',
     'lorenz_glm': 'doublon — chart_lorenz_gini porte la courbe de Lorenz',
@@ -1041,7 +1055,10 @@ def _construire_contexte_tarif(
         "",
         "=== HYPOTHÈSES ML ===",
         f"H1 Overfitting : {hyp4.get('h1_overfitting',{}).get('statut','?')} | ratio={hyp4.get('h1_overfitting',{}).get('ratio','—')}",
-        f"H2 PSI réel : {hyp4.get('h2_psi',{}).get('statut','?')} | PSI={hyp4.get('h2_psi',{}).get('psi','—')}",
+        # ⚠️ MÊME PIÈGE QU'EN H4, MÊME REMÈDE : `.get(clé, '—')` ne protège de
+        # rien quand la clé EXISTE et vaut None — le repli n'est jamais lu.
+        (f"H2 PSI réel : {hyp4.get('h2_psi',{}).get('statut','?')}"
+         f" | PSI={_valeur_ou_absente(hyp4.get('h2_psi',{}).get('psi'))}"),
         f"H3 Gini : {hyp4.get('h3_gini',{}).get('statut','?')} | Gini={hyp4.get('h3_gini',{}).get('gini','—')}",
         # ⚠️ `.get(cle, '—')` NE SUFFIT PAS quand la cle EXISTE et vaut None :
         # le modele lisait « écart moy=0.0% », c'est-a-dire une calibration

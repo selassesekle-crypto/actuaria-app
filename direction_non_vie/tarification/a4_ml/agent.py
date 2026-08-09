@@ -2547,7 +2547,15 @@ class AgentA4ML:
         # Calcul PSI sur les features les plus importantes (top 5 SHAP si dispo,
         # sinon toutes les colonnes numériques).
         # Remplace le PSI simulé par un PSI calculé sur vraies données.
-        psi_global = monitoring.get('psi', 0.0)  # fallback si X non dispo
+        # ⚠️ LE REPLI `0.0` EST RETIRÉ, ET C'ÉTAIT DU CODE MORT — pas un
+        # correctif de gouvernance. Mesuré : `_monitoring_derive` pose
+        # TOUJOURS la clé `psi` (aucun chemin d'exception avant son `return`)
+        # et les trois sites d'appel passent tous son résultat ; sur 75
+        # configurations réelles, le repli n'a mordu 0 fois. Il aurait de
+        # toute façon été inoffensif : le plafond RAG d'A6 ne se déclenche
+        # que sur ROUGE, et 0.0 donne VERT. `[...]` échoue bruyamment si un
+        # appelant futur oublie la clé — c'est le comportement voulu.
+        psi_global = monitoring['psi']
         psi_source = "simulé"
         h2_details = {}
         try:
