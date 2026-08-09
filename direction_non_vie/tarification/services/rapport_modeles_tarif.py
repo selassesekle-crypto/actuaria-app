@@ -720,6 +720,10 @@ def rasteriser(figure, format: str) -> bytes:
     return figure.to_image(format='svg', width=largeur, height=hauteur)
 
 
+#: La fonction d'origine, gardée pour reconnaître un rasteriseur SUBSTITUÉ.
+_RASTERISEUR_REEL = rasteriser
+
+
 def kaleido_disponible() -> bool:
     """Le module qui convertit une figure Plotly en image est-il là ?"""
     import importlib.util
@@ -743,6 +747,90 @@ def _svg_propre(octets: bytes) -> str:
     texte = octets.decode('utf-8', 'replace')
     debut = texte.find('<svg')
     return texte[debut:] if debut >= 0 else texte
+
+
+_JOURNAUX_MUSELES = [False]
+
+
+def museler_journaux_de_rendu() -> bool:
+    """Coupe le bavardage du moteur de rendu. Rend True s'il a ete muselé.
+
+    ⚠️ MESURE : 25 lignes de journal PAR FIGURE au niveau INFO — soit
+    ~650 pour un rapport de treize figures dans deux formats. Elles noient
+    la seule ligne qui compte, celle qui dit quels fichiers ont ete ecrits
+    et d'ou vient la narration. Une vraie erreur y passerait inaperçue.
+
+    ⚠️ ET L'ORDRE EST UN PIEGE MESURE : `kaleido` s'appuie sur `logistro`,
+    qui installe une classe de logger porteuse d'un niveau `debug2`.
+    Toucher `logging.getLogger('kaleido…')` AVANT l'import fige un logger
+    ordinaire, et la conversion casse alors sur
+    `AttributeError: 'Logger' object has no attribute 'debug2'`. L'import
+    doit donc PRECEDER le reglage — c'est la seule raison de l'import qui
+    suit, et il ne faut pas le retirer.
+    """
+    if _JOURNAUX_MUSELES[0]:
+        return True
+    try:
+        import kaleido  # noqa: F401  — l'import DOIT preceder le reglage
+    except ImportError:
+        return False
+    for nom in ('kaleido', 'choreographer'):
+        logging.getLogger(nom).setLevel(logging.WARNING)
+    _JOURNAUX_MUSELES[0] = True
+    return True
+
+
+class serveur_de_rendu:
+    """Garde le navigateur ouvert le temps d'une serie de conversions.
+
+    ⚠️ MESURE : sans lui, le moteur ouvre et referme un navigateur A CHAQUE
+    figure — 4,12 s par conversion contre 0,92 s. Sur les vingt-six
+    conversions d'un rapport complet, 107 s contre 24 s, soit un facteur
+    4,5 et 83 secondes rendues. Et le demarrage du serveur est GRATUIT
+    (0,0 s mesure) : le moteur l'amorce de toute façon a la premiere
+    conversion.
+
+    ⚠️ IL SE REFERME MEME SI LE RENDU ECHOUE. Un navigateur laisse ouvert
+    par une exception survivrait au processus qui l'a lance.
+    """
+
+    def __init__(self, nombre_de_figures: int = 1):
+        # ⚠️ ET RIEN NE DEMARRE S'IL N'Y A RIEN A RENDRE. Mesuré : sans ce
+        # garde-fou, un rapport SANS figure ouvrait quand même un navigateur
+        # — la suite de tests entière le payait, 14 s devenues 118.
+        self._utile = nombre_de_figures > 0
+        self._ouvert = False
+
+    def __enter__(self):
+        self._ouvert = False
+        if not self._utile:
+            return self
+        # ⚠️ RIEN NE DEMARRE SI LE RASTERISEUR EST SUBSTITUE. Un test qui
+        # remplace `rasteriser` n'a aucun navigateur a garder ouvert — et
+        # en demarrer un ferait payer a la gate un moteur que personne
+        # n'utilise. C'est exactement le defaut que le lot `062fe16` a
+        # ferme : une suite de tests qui depend d'un paquet optionnel.
+        if rasteriser is not _RASTERISEUR_REEL:
+            return self
+        if not museler_journaux_de_rendu():
+            return self
+        try:
+            import kaleido
+            kaleido.start_sync_server()
+            self._ouvert = True
+        except Exception as erreur:      # noqa: BLE001 — jamais bloquant
+            logger.debug('Serveur de rendu non demarre : %s', erreur)
+        return self
+
+    def __exit__(self, *_):
+        if not self._ouvert:
+            return False
+        try:
+            import kaleido
+            kaleido.stop_sync_server()
+        except Exception as erreur:      # noqa: BLE001
+            logger.debug('Serveur de rendu non arrete : %s', erreur)
+        return False
 
 
 def rendre_figure(objet) -> RenduFigure:
@@ -1139,11 +1227,12 @@ def export_html(
     if _CHARTS_HTML_OK:
         _figures = numeroter(figures_disponibles(result_a3, result_a4,
                                                  result_a6))
-        for _fs in _figures.values():
-            for _f in _fs:
-                _r = rendre_figure(_f.objet)
-                _rendus[_f.cle] = _r
-                _genres.append(_r.genre)
+        with serveur_de_rendu(sum(len(x) for x in _figures.values())):
+            for _fs in _figures.values():
+                for _f in _fs:
+                    _r = rendre_figure(_f.objet)
+                    _rendus[_f.cle] = _r
+                    _genres.append(_r.genre)
 
     def _bloc_figure(f):
         """Une figure numérotée, et la raison de sa dégradation s'il y en a."""
@@ -1320,6 +1409,17 @@ body{{font-family:'Segoe UI',Arial,sans-serif; background:var(--bg); color:var(-
   margin-top:2px; word-break:break-word;}}
 .garde-relecture{{margin-top:10px; font-size:11px; font-weight:600;
   letter-spacing:.2px;}}
+/* ⚠️ UNE FIGURE NE DEPASSE JAMAIS SA COLONNE — A L'ECRAN AUSSI.
+   Mesure sur le rapport du 09/08 : les SVG portent `width="1100"` quand la
+   zone utile en vaut 976 (page 1060 - 48 de marge - 36 de section-body), et
+   le conteneur les enveloppe dans un `overflow:hidden`. DOUZE figures sur
+   treize etaient donc amputees de 124 px — 11 % de leur largeur — EN
+   SILENCE. La treizieme, un PNG, s'en sortait parce que son `<img>` porte
+   son propre `width:100%` en ligne.
+   ⚠️ ET LA REGLE EXISTAIT DEJA : elle etait enfermee dans le bloc
+   d'impression, ou elle n'agit qu'au papier. Le defaut n'etait pas une
+   regle manquante, c'etait une regle au mauvais endroit. */
+.figure img, .figure svg, .plotly-graph-div{{max-width:100%; height:auto;}}
 /* Tables */
 /* ⚠️ LES BORDURES CONVERGENT AVEC LE WORD. Le `.docx` grille toutes ses
    cellules (`Table Grid`) quand l'HTML ne traçait que des filets
@@ -1406,7 +1506,10 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
   p, li {{ orphans: 3; widows: 3; }}
 
   /* Une figure a une largeur fixee en pixels par le navigateur ; sur une
-     feuille A4 elle deborderait de la zone imprimable. */
+     feuille A4 elle deborderait de la zone imprimable. La meme regle agit
+     deja a l'ecran (plus haut) — celle-ci la renforce d'un `!important`
+     pour l'impression, ou des feuilles de style d'agent peuvent
+     s'interposer. */
   .figure img, .figure svg, .plotly-graph-div {{
     max-width: 100% !important; height: auto !important;
   }}
@@ -1651,8 +1754,11 @@ def export_word(
         # une numérotation unique ne peut pas diverger.
         figures_numerotees = numeroter(
             figures_disponibles(result_a3, result_a4, result_a6))
-        rendus_figures = {f.cle: rendre_figure(f.objet)
-                          for fs in figures_numerotees.values() for f in fs}
+        with serveur_de_rendu(sum(len(x) for x
+                                  in figures_numerotees.values())):
+            rendus_figures = {f.cle: rendre_figure(f.objet)
+                              for fs in figures_numerotees.values()
+                              for f in fs}
         # Priorité A6 (le plus complet — gouvernance + WF recalibré) > A4 > A3
         at     = (
             (result_a6 or {}).get('audit_trail')

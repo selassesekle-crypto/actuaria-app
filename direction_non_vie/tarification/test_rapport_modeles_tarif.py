@@ -605,8 +605,13 @@ class rendu_simule:
             if format == 'png':
                 return _png_minimal(200 + n, 100 + n)
             corps = b'x' * (40000 if self._lourd else 200)
+            # ⚠️ LA MEME EN-TETE QUE CELLE DE kaleido : `width` et `height`
+            # en pixels, plus un `viewBox`. Sans eux, le harnais ne
+            # ressemblait pas au rendu reel — et c'est precisement cette
+            # largeur de 1100 px qui a fait couper douze figures sur treize.
             return (b'<?xml version="1.0"?><svg xmlns="http://www.w3.org/'
-                    b'2000/svg"><!--' + corps + b'--></svg>')
+                    b'2000/svg" width="1100" height="520" '
+                    b'viewBox="0 0 1100 520"><!--' + corps + b'--></svg>')
         R.rasteriser = _faux
         return self
 
@@ -1312,6 +1317,154 @@ class T8_LaRelectureActuarielle(unittest.TestCase):
             self.assertIn('actuaire_numero_ia', p, fonction.__name__)
         print('    OK T8-h : le champ traverse A6 et les quatre entrées du '
               'générateur')
+
+
+class V1_LeRenduDesFigures(unittest.TestCase):
+    """V1 — vérification à l'usage : ce que le rapport du 09/08 a montré."""
+
+    #: La zone utile, en pixels : `.page` 1060 moins ses marges (2 x 24)
+    #: moins celles de `.section-body` (2 x 18).
+    ZONE_UTILE = 1060 - 2 * 24 - 2 * 18
+
+    def _html(self):
+        a3, a4, a6 = _payload_figures()
+        with rendu_simule():
+            return R.export_html(a3, a4, a6, 'DEMO', '31/12/2025', 'V1',
+                                 narration_calculee=('Texte.', 'temoin'))
+
+    def test_une_figure_ne_depasse_JAMAIS_la_zone_utile(self):
+        """⚠️ LE TEST QUI MANQUAIT, ET QUI AURAIT ATTRAPÉ LE DÉFAUT.
+
+        Mesuré sur le rapport du 09/08 : les SVG portent `width="1100"` pour
+        une zone utile de 976 px, dans un conteneur `overflow:hidden`. DOUZE
+        figures sur treize étaient amputées de 124 px — 11 % de leur largeur
+        — sans que rien ne le dise. La règle qui l'empêche existait, mais
+        elle était enfermée dans le bloc d'impression.
+        """
+        html = self._html()
+        style = html.split('<style>')[1].split('</style>')[0]
+        ecran = style[:style.index('@media print')]
+        # la contrainte agit A L'ECRAN, pas seulement au papier
+        self.assertRegex(
+            ecran, r'\.figure img, \.figure svg[^{]*\{[^}]*max-width:\s*100%',
+            'aucune contrainte de largeur hors du bloc d\'impression')
+        # et les figures declarent bien une largeur superieure a la zone
+        largeurs = [int(w) for w in re.findall(r'<svg[^>]*width="(\d+)"', html)]
+        self.assertTrue(largeurs, 'aucune figure SVG rendue')
+        self.assertGreater(max(largeurs), self.ZONE_UTILE,
+                           'le test ne prouverait rien si les figures '
+                           'tenaient déjà dans la zone')
+        print(f'    OK V1 : {len(largeurs)} figures à {max(largeurs)} px '
+              f'contraintes dans {self.ZONE_UTILE} px — à l\'écran aussi')
+
+    def test_aucun_conteneur_ne_coupe_une_figure(self):
+        """⚠️ `overflow:hidden` COUPE, il ne redimensionne pas. Il n'est
+        acceptable que parce qu'une contrainte de largeur agit en amont."""
+        html = self._html()
+        style = html.split('<style>')[1].split('</style>')[0]
+        ecran = style[:style.index('@media print')]
+        for balise in ('img', 'svg'):
+            self.assertIn(f'.figure {balise}', ecran, balise)
+        self.assertIn('height:auto', ecran.replace(' ', ''))
+        print('    OK V1-b : la largeur est contrainte avant que le '
+              'conteneur ne coupe')
+
+
+class V2_LeBruitEtLeServeurDeRendu(unittest.TestCase):
+    """V2 — ~650 lignes de journal par rapport, et un navigateur rouvert à
+    chaque figure."""
+
+    def test_museler_les_journaux_NE_CASSE_PAS_la_conversion(self):
+        """⚠️ LE PIÈGE MESURÉ. `kaleido` s'appuie sur `logistro`, qui installe
+        une classe de logger porteuse d'un niveau `debug2`. Toucher
+        `logging.getLogger('kaleido…')` AVANT l'import fige un logger
+        ordinaire et la conversion casse ensuite sur `AttributeError:
+        'Logger' object has no attribute 'debug2'`.
+        """
+        import importlib.util
+        import logging
+        if importlib.util.find_spec('kaleido') is None:
+            self.skipTest('kaleido absent — le muselage n\'a rien à museler')
+        R._JOURNAUX_MUSELES[0] = False
+        self.assertTrue(R.museler_journaux_de_rendu())
+        for nom in ('kaleido', 'choreographer'):
+            self.assertEqual(logging.getLogger(nom).level, logging.WARNING,
+                             nom)
+        # ⚠️ ET LA CONVERSION MARCHE ENCORE : c'est tout l'enjeu.
+        import plotly.graph_objects as go
+        octets = R.rasteriser(go.Figure(go.Bar(x=[1], y=[1])), 'png')
+        self.assertTrue(octets.startswith(b'\x89PNG'))
+        print('    OK V2 : journaux muselés ET conversion intacte')
+
+    def test_le_serveur_se_referme_MEME_EN_CAS_D_ECHEC(self):
+        """⚠️ UN NAVIGATEUR LAISSÉ OUVERT SURVIVRAIT AU PROCESSUS qui l'a
+        lancé."""
+        arrets = []
+
+        class _Faux:
+            @staticmethod
+            def start_sync_server():
+                pass
+
+            @staticmethod
+            def stop_sync_server():
+                arrets.append(1)
+
+        import sys
+        vrai = sys.modules.get('kaleido')
+        vrai_rast, vrai_mus = R.rasteriser, R._JOURNAUX_MUSELES[0]
+        sys.modules['kaleido'] = _Faux
+        R._JOURNAUX_MUSELES[0] = True          # le muselage est déjà fait
+        try:
+            with self.assertRaises(ValueError):
+                with R.serveur_de_rendu(3):
+                    raise ValueError('rendu interrompu')
+        finally:
+            R.rasteriser, R._JOURNAUX_MUSELES[0] = vrai_rast, vrai_mus
+            if vrai is None:
+                sys.modules.pop('kaleido', None)
+            else:
+                sys.modules['kaleido'] = vrai
+        self.assertEqual(arrets, [1], 'le serveur n\'a pas été refermé')
+        print('    OK V2-b : le serveur se referme même quand le rendu lève')
+
+    def test_rien_ne_demarre_sans_figure_ni_avec_un_rendeur_substitue(self):
+        """⚠️ DEUX GARDE-FOUS, ET LE SECOND EST CELUI DU LOT `062fe16` :
+        la gate ne doit pas payer un moteur que personne n'utilise. Sans le
+        premier, un rapport sans figure ouvrait quand même un navigateur —
+        mesuré, la suite passait de 14 s à 118 s."""
+        demarrages = []
+
+        class _Faux:
+            @staticmethod
+            def start_sync_server():
+                demarrages.append(1)
+
+            @staticmethod
+            def stop_sync_server():
+                pass
+
+        import sys
+        vrai = sys.modules.get('kaleido')
+        sys.modules['kaleido'] = _Faux
+        vrai_mus = R._JOURNAUX_MUSELES[0]
+        R._JOURNAUX_MUSELES[0] = True
+        try:
+            with R.serveur_de_rendu(0):        # aucune figure
+                pass
+            self.assertEqual(demarrages, [], 'démarré sans rien à rendre')
+            with rendu_simule():               # rasteriseur substitué
+                with R.serveur_de_rendu(5):
+                    pass
+            self.assertEqual(demarrages, [], 'démarré pour un faux rendeur')
+        finally:
+            R._JOURNAUX_MUSELES[0] = vrai_mus
+            if vrai is None:
+                sys.modules.pop('kaleido', None)
+            else:
+                sys.modules['kaleido'] = vrai
+        print('    OK V2-c : aucun navigateur sans figure, aucun pour un '
+              'rendeur substitué')
 
 
 if __name__ == '__main__':
