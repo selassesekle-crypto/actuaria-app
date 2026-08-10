@@ -295,7 +295,15 @@ class AgentA7Provisionnement:
         annee_base_reserve: int         = 1,
         # ── Rapport ───────────────────────────────────────────────────────────
         ref_client:       str           = '',
+        # ⚠️ DEUX CHAMPS, DEUX NATURES, ET CE N'EST PAS UNE DIVERGENCE.
+        # `arrete` est un LIBELLE d'affichage (« T2 2026 »), derive de la
+        # date par `core.arrete.libelle` — il ne se compare pas. `date_arrete`
+        # est la date TYPEE, en 'AAAA-MM-JJ' : c'est elle que la gouvernance
+        # de la courbe lit pour dire si la courbe employee existait a la
+        # cloture. L'un ne peut pas contredire l'autre puisque le libelle
+        # DECOULE de la date.
         arrete:           str           = '',
+        date_arrete:      str           = '',
         resultats_precedents: Optional[Dict] = None,
         # ⚠️ SANS CES DEUX CHAMPS, LES DEUX ETATS DE LA RELECTURE SERAIENT UN
         # TAMPON PERMANENT. `run()` ne connaissait pas l'actuaire — 0
@@ -577,7 +585,8 @@ class AgentA7Provisionnement:
                 n1_rapport, triangle_reference, annee_base_reserve, n1)
 
             n4 = self._be.calculer(n2, n3, C_calc, lob=lob, courbe_rfr=courbe_rfr,
-                                   provisions_dossier=_prov_dossier)
+                                   provisions_dossier=_prov_dossier,
+                                   date_arrete=date_arrete or None)
 
             # ── Réintégration grands sinistres (LLT) ──────────────────────────
             if reserve_grands_sinistres is not None and reserve_grands_sinistres > 0:
@@ -635,7 +644,8 @@ class AgentA7Provisionnement:
                 _scr_final = {**n4['scr'], 'scr_provisions': _scr_new}
                 _f_cum_llt = n3.get('chain_ladder', {}).get('facteurs_cumules', [])
                 _rm_data   = self._be._calculer_risk_margin(
-                    _be_final, _scr_final, _f_cum_llt, courbe_rfr)
+                    _be_final, _scr_final, _f_cum_llt, courbe_rfr,
+                    date_arrete=date_arrete or None)
                 _rm_new    = float(_rm_data['risk_margin'])
                 n4['risk_margin'] = _rm_data['risk_margin']
                 n4['ratio_rm_be'] = _rm_data['ratio_rm_be']

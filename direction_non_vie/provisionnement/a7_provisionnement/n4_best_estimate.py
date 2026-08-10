@@ -677,7 +677,7 @@ def selectionner_et_agreger(
 #: s'opposent dans le code.
 
 
-def _meta_courbe(courbe: Optional[Dict]) -> Dict:
+def _meta_courbe(courbe: Optional[Dict], date_arrete=None) -> Dict:
     """Ce qu'il faut PUBLIER de la courbe réellement employée.
 
     Trois formes de courbe circulent, et elles ne portent pas les mêmes
@@ -719,13 +719,14 @@ def _meta_courbe(courbe: Optional[Dict]) -> Dict:
         return {
             'date':       _courbe_ref.date_arrete or '—',
             'source':     str(courbe.get('source') or _courbe_ref.provenance),
-            'peremption': peremption_referentiel(_courbe_ref),
+            'peremption': peremption_referentiel(_courbe_ref,
+                                                 date_arrete),
         }
 
     type_ = str(courbe.get('type', 'embarquee'))
 
     if type_ in ('embarquee', 'erreur') or not courbe:
-        diag = diagnostic_peremption()
+        diag = diagnostic_peremption(date_arrete)
         return {
             'date':       DATE_COURBE,
             'source':     str(courbe.get('source') or SOURCE_RFR),
@@ -769,6 +770,11 @@ class BestEstimateS2:
         C:            np.ndarray,
         lob:          str   = 'generique',
         provisions_dossier: Optional[float] = None,
+        # ⚠️ ELLE TRAVERSE SANS RIEN CALCULER ICI : `calculer` ne s'en sert
+        # que pour la faire descendre à la Risk Margin, qui la remet à la
+        # gouvernance de la courbe. La nommer dans la signature plutôt que la
+        # laisser dans `**kwargs` la rend visible à qui lit le contrat.
+        date_arrete:  object = None,
         **kwargs,
     ) -> Dict:
         """
@@ -984,7 +990,8 @@ class BestEstimateS2:
         if _courbe is None:
             _courbe = get_courbe_embarquee()
         _courbe['_lob'] = lob
-        risk_margin_data = self._calculer_risk_margin(be, scr, _f_cum, _courbe)
+        risk_margin_data = self._calculer_risk_margin(
+            be, scr, _f_cum, _courbe, date_arrete=date_arrete)
 
         # ── 8. Sensibilités ───────────────────────────────────────────────────
         sensibilites = self._calculer_sensibilites(
@@ -1532,6 +1539,12 @@ class BestEstimateS2:
         scr:    Dict,
         f_cum:  list,
         courbe: dict = None,
+        # ⚠️ LA DATE D'ARRÊTÉ DE L'ENTITÉ, PAS CELLE DE LA COURBE. Sans elle
+        # la gouvernance jugeait la courbe contre LE JOUR DU CALCUL : une
+        # clôture de décembre reprise en août comparait sa courbe à août.
+        # `None` conserve ce comportement — la garde reste dormante pour un
+        # appelant qui ne la fournit pas.
+        date_arrete: object = None,
     ) -> Dict:
         """
         Risk Margin S2 — Méthode proportionnelle au BE (méthode 2 EIOPA).
@@ -1558,7 +1571,7 @@ class BestEstimateS2:
         # câblage ne doit pas se traduire par un plantage silencieux.
         courbe   = courbe or get_courbe_embarquee()
         _taux_fn = courbe.get('taux_fn') or get_taux_rfr
-        _meta    = _meta_courbe(courbe)
+        _meta    = _meta_courbe(courbe, date_arrete)
 
         if be_0 <= 0 or scr_0 <= 0 or not f_cum:
             return {

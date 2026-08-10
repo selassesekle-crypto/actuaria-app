@@ -708,14 +708,23 @@ def age_courbe_mois(courbe: CourbeRFR, date_valorisation=None) -> Optional[float
     """
     if courbe.date_arrete is None:
         return None
-    if date_valorisation is None:
-        reference = date.today()
-    elif isinstance(date_valorisation, str):
-        reference = datetime.strptime(date_valorisation[:10], '%Y-%m-%d').date()
-    else:
-        reference = date_valorisation
     arrete = datetime.strptime(courbe.date_arrete, '%Y-%m-%d').date()
-    return (reference - arrete).days / JOURS_PAR_MOIS
+    return (date_reference(date_valorisation) - arrete).days / JOURS_PAR_MOIS
+
+
+def date_reference(date_valorisation=None) -> date:
+    """La date à laquelle on juge la courbe. `None` = aujourd'hui.
+
+    ⚠️ EXTRAITE POUR N'EXISTER QU'UNE FOIS. L'âge et le message de refus la
+    lisent tous deux ; deux normalisations de la même entrée finiraient par
+    diverger sur un format, et le message nommerait alors une autre date que
+    celle qui a servi au calcul.
+    """
+    if date_valorisation is None:
+        return date.today()
+    if isinstance(date_valorisation, str):
+        return datetime.strptime(date_valorisation[:10], '%Y-%m-%d').date()
+    return date_valorisation
 
 
 def diagnostic_peremption(courbe: CourbeRFR, date_valorisation=None) -> Dict:
@@ -750,6 +759,7 @@ def diagnostic_peremption(courbe: CourbeRFR, date_valorisation=None) -> Dict:
     ici ; les verdicts qu'elle déplacera se mesureront en R2.
     """
     mois = age_courbe_mois(courbe, date_valorisation)
+    reference = date_reference(date_valorisation)
     if mois is None:
         return {
             'statut': 'ROUGE', 'age_mois': None, 'date_courbe': None,
@@ -783,13 +793,18 @@ def diagnostic_peremption(courbe: CourbeRFR, date_valorisation=None) -> Dict:
         # phrase qui le porte.
         ecart = (f"{-mois:.0f} mois" if -mois >= 1
                  else f"{round(-mois * JOURS_PAR_MOIS)} jour(s)")
+        # ⚠️ LE MESSAGE NOMME LA DATE À CHERCHER. Dire « charger la courbe de
+        # la date d'arrêté » laisse l'actuaire la deviner dans un classeur
+        # EIOPA qui en publie une par mois ; un remède qui ne dit pas quoi
+        # chercher n'est pas un remède.
         statut = 'ROUGE'
         message = (
             f"⚠️ COURBE POSTÉRIEURE À L'ARRÊTÉ — la courbe employée est datée "
-            f"du {courbe.date_arrete}, soit {ecart} APRÈS l'arrêté "
-            f"retenu. Elle n'existait pas à la date de clôture : l'actualiser "
-            f"avec elle emploierait une information future. Charger la courbe "
-            f"EIOPA publiée pour la date d'arrêté.")
+            f"du {courbe.date_arrete}, soit {ecart} APRÈS l'arrêté du "
+            f"{reference.isoformat()}. Elle n'existait pas à la date de "
+            f"clôture : l'actualiser avec elle emploierait une information "
+            f"future. Charger la courbe EIOPA publiée au "
+            f"{reference.isoformat()}.")
     elif mois >= MOIS_ROUGE_PEREMPTION:
         statut = 'ROUGE'
         message = (

@@ -3501,6 +3501,10 @@ def _executer_analyse(besoin, direction, equipe, client):
                     generer_graphiques   = True,
                     lob                  = _a7p.get("a7_lob", "generique"),
                     arrete               = _a7p.get("a7_arrete", ""),
+                    # ⚠️ LA DATE TYPÉE ENFIN TRANSMISE. Elle était saisie et
+                    # n'atteignait pas le calcul : la gouvernance jugeait la
+                    # courbe contre le jour du calcul, pas contre l'arrêté.
+                    date_arrete          = _a7p.get("a7_arrete_iso", ""),
                     n_sim_bootstrap      = _a7p.get("a7_n_sim_bootstrap", 5000),
                     annee_base_reserve   = _a7p.get("a7_annee_base_reserve", 1),
                     resultats_precedents = _a7p.get("a7_resultats_precedents"),
@@ -3686,6 +3690,7 @@ def _executer_analyse(besoin, direction, equipe, client):
                     generer_graphiques = True,
                     lob                = _a7p.get("a7_lob", "generique"),
                     arrete             = _a7p.get("a7_arrete", ""),
+                    date_arrete        = _a7p.get("a7_arrete_iso", ""),
                     n_sim_bootstrap    = int(_a7p.get("a7_n_sim_bootstrap", 5000)),
                     annee_base_reserve = int(_a7p.get("a7_annee_base_reserve", 1)),
                     resultats_precedents = _a7p.get("a7_resultats_precedents"),

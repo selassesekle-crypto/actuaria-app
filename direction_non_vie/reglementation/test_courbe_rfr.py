@@ -27,6 +27,7 @@ testé depuis la direction qui le consomme — `core/mapping_client.py` par
 `reglementation/` héberge déjà `segments_s2.py`, l'autre table partagée.
 """
 
+import datetime
 import io
 import unittest
 
@@ -538,6 +539,107 @@ class TRFR8_Devise(TRFR_Base):
                               float)
         self.assertIsInstance(R.actualiser_avec_va(c, 10.0, True), float)
         print("    OK RFR-8f les deux portes d'actualisation sont gardées")
+
+
+
+
+# =============================================================================
+#  RFR-9 — LA DATE D'ARRÊTÉ DESCEND JUSQU'À LA GOUVERNANCE
+# =============================================================================
+
+class TRFR9_LaDateDescend(TRFR_Base):
+    """⚠️ LA GARDE POSÉE AU LOT PRÉCÉDENT DORMAIT. Aucun chemin de production
+    ne fournissait de date d'arrêté : la gouvernance jugeait la courbe contre
+    LE JOUR DU CALCUL. Une clôture de décembre reprise en août comparait sa
+    courbe à août.
+
+    ⚠️ ET LE MESSAGE NOMME LA DATE À CHERCHER. Dire « charger la courbe de la
+    date d'arrêté » laisse l'actuaire la deviner dans un classeur qui en
+    publie une par mois.
+    """
+
+    def test_le_message_NOMME_la_date_a_importer(self):
+        c = R.courbe_embarquee()
+        diag = R.diagnostic_peremption(c, '2025-12-31')
+        self.assertEqual(diag['statut'], 'ROUGE')
+        self.assertIn('2025-12-31', diag['message'])
+        self.assertIn("publiée au 2025-12-31", diag['message'])
+        print("    OK RFR-9a le message nomme la date de courbe a charger")
+
+    def test_la_date_de_reference_n_existe_qu_UNE_fois(self):
+        """⚠️ L'ÂGE ET LE MESSAGE LA LISENT TOUS DEUX. Deux normalisations de
+        la même entrée finiraient par diverger sur un format, et le message
+        nommerait alors une autre date que celle qui a servi au calcul."""
+        from datetime import date as _date
+        for entree, attendu in (('2026-06-30', _date(2026, 6, 30)),
+                                (_date(2026, 6, 30), _date(2026, 6, 30)),
+                                ('2026-06-30T12:00:00', _date(2026, 6, 30))):
+            with self.subTest(entree=entree):
+                self.assertEqual(R.date_reference(entree), attendu)
+        c = R.courbe_embarquee()
+        for forme in ('2025-12-31', datetime.date(2025, 12, 31)):
+            with self.subTest(forme=forme):
+                self.assertIn('2025-12-31',
+                              R.diagnostic_peremption(c, forme)['message'])
+        print("    OK RFR-9b une seule normalisation, deux lecteurs")
+
+    def test_les_maillons_de_la_chaine_acceptent_la_date(self):
+        """⚠️ UNE MESURE SUR LA FONCTION NE PROUVE PAS LE CÂBLAGE. On relit la
+        signature de chaque maillon entre `A7.run` et la gouvernance."""
+        import inspect
+
+        from direction_non_vie.provisionnement.a7_provisionnement import (
+            n4_best_estimate as N4,
+        )
+        from direction_non_vie.provisionnement.a7_provisionnement.agent import (
+            AgentA7Provisionnement,
+        )
+        maillons = [
+            ('A7.run', AgentA7Provisionnement.run),
+            ('BestEstimate.calculer', N4.BestEstimateS2.calculer),
+            ('_calculer_risk_margin', N4.BestEstimateS2._calculer_risk_margin),
+            ('_meta_courbe', N4._meta_courbe),
+        ]
+        for nom, fonction in maillons:
+            with self.subTest(maillon=nom):
+                self.assertIn('date_arrete',
+                              inspect.signature(fonction).parameters, nom)
+        print(f"    OK RFR-9c les {len(maillons)} maillons portent la date")
+
+    def test_SANS_date_le_comportement_est_INCHANGE(self):
+        """⚠️ LA CONDITION DE L'INNOCUITÉ POUR TOUT APPELANT QUI N'EN PASSE
+        PAS : la garde reste dormante, elle ne se réveille pas seule."""
+        from direction_non_vie.provisionnement.a7_provisionnement import (
+            n4_best_estimate as N4,
+        )
+        from direction_non_vie.provisionnement.a7_provisionnement.config import (
+            rfr_eiopa,
+        )
+        emb = rfr_eiopa.get_courbe_embarquee()
+        self.assertEqual(N4._meta_courbe(emb)['peremption']['statut'],
+                         N4._meta_courbe(emb, None)['peremption']['statut'])
+        print("    OK RFR-9d sans date, le verdict est celui d'avant")
+
+    def test_l_anachronisme_se_declenche_MAINTENANT_dans_la_chaine(self):
+        """⚠️ CE QUE LE LOT DÉPLACE, ET IL LE DÉPLACE VOLONTAIREMENT : mesuré
+        sur 24 configurations, 10 passent de VERT à ROUGE — toutes par
+        anachronisme, aucune vers plus d'indulgence."""
+        from direction_non_vie.provisionnement.a7_provisionnement import (
+            n4_best_estimate as N4,
+        )
+        from direction_non_vie.provisionnement.a7_provisionnement.config import (
+            rfr_eiopa,
+        )
+        emb = rfr_eiopa.get_courbe_embarquee()
+        avant = N4._meta_courbe(emb)['peremption']['statut']
+        apres = N4._meta_courbe(emb, '2025-12-31')['peremption']['statut']
+        self.assertEqual(avant, 'VERT')
+        self.assertEqual(apres, 'ROUGE')
+        # ... et un arrêté POSTÉRIEUR à la courbe reste jugé sur son âge
+        self.assertEqual(
+            N4._meta_courbe(emb, '2026-09-30')['peremption']['statut'], 'VERT')
+        print("    OK RFR-9e la chaine bascule sur un arrete anterieur, "
+              "pas sur un posterieur")
 
 
 if __name__ == '__main__':
