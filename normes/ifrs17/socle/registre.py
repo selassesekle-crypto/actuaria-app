@@ -64,7 +64,7 @@ import json
 from pathlib import Path
 from typing import Dict, Iterable, List, Mapping, NamedTuple, Optional, Tuple
 
-from normes.ifrs17.socle.arrete import Arrete, iso, lire as lire_arrete
+from core.arrete import Arrete, iso, lire as lire_arrete
 from normes.ifrs17.socle.confirmation import Confirmation, verifier
 from normes.ifrs17.socle.entree import (analyser,
                                         trace_reconnaissance_tardive)

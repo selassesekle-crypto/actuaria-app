@@ -59,7 +59,7 @@ import unicodedata
 from datetime import date, datetime, timedelta
 from typing import Dict, Iterable, List, Mapping, NamedTuple, Optional, Tuple
 
-from normes.ifrs17.socle.arrete import FORMATS
+from core.arrete import FORMATS
 from normes.ifrs17.socle.contrat import COUVERTURE_INDETERMINEE
 
 # =============================================================================

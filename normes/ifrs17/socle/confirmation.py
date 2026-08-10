@@ -39,7 +39,7 @@ RÉFÉRENCES — IFRS 17, annexe au règlement (UE) 2023/1803. §14, §16, §22,
 
 from typing import NamedTuple, Optional, Tuple
 
-from normes.ifrs17.socle.arrete import Arrete, iso, lire as lire_arrete
+from core.arrete import Arrete, iso, lire as lire_arrete
 from normes.ifrs17.socle.contrat import CHAMPS, champs_scelles
 
 

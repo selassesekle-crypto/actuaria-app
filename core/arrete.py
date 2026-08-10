@@ -31,14 +31,27 @@ se confondent pas.
 date qu'il accompagne. Ici le libellé se CALCULE à partir de la date, donc
 les deux ne peuvent plus diverger.
 
-⚠️ CE MODULE NE BASCULE AUCUN CONSOMMATEUR. La bascule d'A7 et de la courbe
-touche `direction_non_vie` et `core/`, et elle DÉPLACE DES VERDICTS : mesuré
-sur huit arrêtés, brancher la date d'arrêté sur `diagnostic_peremption` en
-déplace QUATRE, tous vers plus de sévérité, et révèle un cas que le code
-actuel ne sait pas exprimer — un arrêté ANTÉRIEUR à la courbe donne un âge
-négatif, donc sous tous les seuils, donc VERT. Une clôture au 30/06/2026
-actualisée avec la courbe du 31/07/2026 emploie une courbe qui n'existait
-pas encore. Cela mérite son propre lot, mesuré.
+⚠️ POURQUOI CE MODULE VIT DANS `core/` ET NON DANS `normes/ifrs17/`. Il y a
+été écrit parce que c'est là qu'il a servi en premier, mais la date d'arrêté
+d'une entité n'est pas une notion IFRS 17 : le relevé ci-dessus la trouve sur
+les quatre directions et dans `core/`. Le laisser sous `normes/` aurait obligé
+`direction_non_vie` à importer `normes/` pour brancher la gouvernance de la
+courbe — un sens de dépendance que le dépôt n'a nulle part, et qui aurait mis
+une norme comptable sur le chemin d'un calcul prudentiel. Il ne dépend que de
+la bibliothèque standard ; il est donc descendu là où les quatre directions
+peuvent le lire sans rien inverser.
+
+⚠️ CE MODULE NE BASCULE TOUJOURS AUCUN CONSOMMATEUR. La gouvernance de la
+courbe sait désormais refuser une courbe POSTÉRIEURE à l'arrêté — cause
+ajoutée à `diagnostic_peremption` — mais elle dort tant que personne ne lui
+fournit de date. Ce que la descente déclenchera est mesuré : sur les arrêtés
+lisibles, TROIS SUR CINQ passent au ROUGE avec la courbe embarquée, tous par
+anachronisme, et AUCUN quand la courbe correspond à l'arrêté.
+
+⚠️ ET UN CHIFFRE À NE PAS REPRENDRE. Une version antérieure de cette note
+annonçait « quatre verdicts déplacés sur huit ». Ce compte DÉRIVE avec l'âge
+de la courbe embarquée — mesuré à zéro le 10/08/2026, six à six mois, quatre à
+douze. Ce n'était pas une propriété du défaut, c'était une photo.
 =============================================================================
 """
 

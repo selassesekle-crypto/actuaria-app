@@ -6,7 +6,7 @@
 import unittest
 from datetime import date, datetime
 
-from normes.ifrs17.socle.arrete import (
+from core.arrete import (
     ANNEE_MAX, ANNEE_MIN, FINS_DE_PERIODE, FORMATS, Arrete, ArreteInvalide,
     est_fin_de_periode, iso, libelle, lire, resume_confirmation)
 
