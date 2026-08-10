@@ -476,5 +476,45 @@ class TestClarkRestitutionRapport(unittest.TestCase):
         self.assertIn('Positivité des incréments ajustés', html)
 
 
+
+
+class T9_ClarkNAnnoncePasUnEffetQuiNExistePas(unittest.TestCase):
+    """⚠️ UN MESSAGE QUI EXAGÈRE LA PORTÉE D'UNE ANOMALIE COÛTE DEUX FOIS.
+
+    La recommandation d'un résultat Clark aberrant disait « méthode exclue de
+    la pondération » — or Clark N'ENTRE PAS dans la pondération du Best
+    Estimate :  ne porte que Chain Ladder, Mack,
+    Bornhuetter-Ferguson et Cape Cod. Le lecteur comprenait que son BE aurait
+    été différent sans l'anomalie. Il ne l'aurait pas été.
+
+    Le coût est double : l'actuaire cherche un effet inexistant, puis, quand
+    il découvre l'exagération, les AUTRES messages cessent d'être crus.
+    """
+
+    def test_clark_n_est_pas_dans_la_ponderation_du_BE(self):
+        from direction_non_vie.provisionnement.a7_provisionnement.methodes_be import (
+            ORDRE_AFFICHAGE,
+        )
+        self.assertNotIn('clark', ORDRE_AFFICHAGE)
+        self.assertEqual(len(ORDRE_AFFICHAGE), 4)
+        print(f'    OK : les 4 methodes du BE sont {ORDRE_AFFICHAGE}')
+
+    def test_la_recommandation_ne_parle_plus_d_exclusion_de_ponderation(self):
+        """⚠️ L'ANCRE EST LE TEXTE PUBLIÉ, relu dans le source du module —
+        c'est lui que l'actuaire lit."""
+        import inspect
+
+        from direction_non_vie.provisionnement.a7_provisionnement import (
+            n4_best_estimate as N4,
+        )
+        src = inspect.getsource(N4)
+        i = src.index('Clark LDF produit un')
+        message = src[i:i + 420]
+        self.assertNotIn('exclue de la pondération', message)
+        self.assertIn("n'entre pas dans la", message)
+        self.assertIn("Best Estimate n'est PAS affecté", message)
+        print("    OK : la recommandation dit que le BE n'est pas affecte")
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

@@ -1251,10 +1251,25 @@ class BestEstimateS2:
                 "accepte les facteurs sous 1, reste applicable."
             )
         elif clark.get('aberrant'):
+            # ⚠️ CE MESSAGE ANNONÇAIT UNE CONSÉQUENCE QUI NE SE PRODUIT PAS.
+            # Il disait « méthode exclue de la pondération » — or Clark N'Y
+            # EST JAMAIS ENTRÉE : `ORDRE_AFFICHAGE` ne porte que Chain Ladder,
+            # Mack, Bornhuetter-Ferguson et Cape Cod. Le lecteur comprenait
+            # qu'une méthode venait d'être retirée du calcul du Best Estimate,
+            # donc que son BE aurait été différent sans l'anomalie. Il ne
+            # l'aurait pas été : Clark est un ÉCLAIRAGE sur la queue de
+            # développement, publié à côté du BE, jamais dedans.
+            #
+            # ⚠️ ET EXAGÉRER LA PORTÉE D'UNE ANOMALIE COÛTE DEUX FOIS : une
+            # fois quand l'actuaire cherche un effet qui n'existe pas, une
+            # seconde quand il apprend que le message exagérait — les autres
+            # cessent alors d'être crus.
             recommandations.append(
-                "Clark LDF produit un résultat aberrant — méthode exclue de la pondération. "
-                "Vérifier la structure du triangle et la longueur de la "
-                "queue de développement."
+                "Clark LDF produit un résultat aberrant — sa réserve n'est "
+                "pas publiée. Le Best Estimate n'est PAS affecté : Clark "
+                "éclaire la queue de développement, elle n'entre pas dans la "
+                "pondération. Vérifier la structure du triangle et la "
+                "longueur de la queue."
             )
 
         # Recommandation Risk Margin
