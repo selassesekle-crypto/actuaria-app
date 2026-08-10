@@ -324,7 +324,18 @@ class AgentA13AuditTrail:
         • Durée de conservation : 5 ans après fin de contrat
         """
         return {
-            'responsable_traitement': 'ActuarIA Platform',
+            # ⚠️ C'ÉTAIT À L'ENVERS, ET LE REGISTRE JUMEAU AVAIT RAISON. Le
+            # responsable de traitement est l'entité qui décide des finalités
+            # — l'assureur — jamais l'éditeur du logiciel. Sous licence
+            # installée chez le client, l'éditeur n'est même pas
+            # sous-traitant : il ne touche aucune donnée.
+            #
+            # ⚠️ ET C'EST UNE VALEUR DÉCLARÉE, PAS DÉDUITE. Le code ne peut
+            # pas savoir qui est responsable ; il porte ce que le client
+            # déclare. Une offre hébergée changerait la réponse — raison de
+            # plus pour ne jamais la coder en dur, comme ici auparavant
+            # (« ActuarIA Platform »).
+            'responsable_traitement': client_nom,
             'client':                 client_nom,
             'date_creation':          date_arrete,
             'version':                '1.0',
@@ -365,7 +376,11 @@ class AgentA13AuditTrail:
                     'sous_branche':     sous_branche,
                 },
             ],
-            'dpo_contact':   'dpo@actuaria.fr',
+            # ⚠️ « dpo@actuaria.fr » ÉTAIT UNE ADRESSE FABRIQUÉE. Un registre
+            # art. 30 qui porte un contact inventé dirige un lecteur — ou une
+            # personne exerçant ses droits — vers le vide. Le registre jumeau
+            # portait déjà la forme honnête ; elle est reprise telle quelle.
+            'dpo_contact':   "A définir par l'entité",
             'ref_legale':    'RGPD Art. 30 + Loi Informatique et Libertés',
             # ⚠️ LE FAIT QUI MANQUAIT. Ce registre documente A1 à A12, dont
             # les trois qui appellent un service tiers — et il n'a jamais
