@@ -137,6 +137,11 @@ DEVISE_EMBARQUEE = "EUR"
 MOIS_ALERTE_PEREMPTION = 3
 MOIS_ROUGE_PEREMPTION = 12
 
+#: Jours par mois moyen — 365,25 / 12. Le nombre existait en dur au seul
+#: endroit qui l'employait ; il est nommé parce qu'un second site le lit
+#: désormais, et deux copies d'une même constante finissent par diverger.
+JOURS_PAR_MOIS = 30.4375
+
 #: EIOPA RFR EUR au 31/07/2026, onglet `RFR_spot_no_VA`, colonne Euro.
 #: LES 150 MATURITÉS PUBLIÉES, PAS UN ÉCHANTILLON INTERPOLÉ. Une embarquée à
 #: trente points-clés — le découpage qu'employait A7 — s'écarte au maximum de
@@ -190,7 +195,49 @@ def courbe_embarquee() -> CourbeRFR:
 #  (A) LE TAUX RÉGLEMENTAIRE D'ACTUALISATION — UNE FONCTION, UNE QUESTION
 # =============================================================================
 
-def actualiser(courbe: CourbeRFR, maturite: float) -> float:
+#: Un code ISO 4217 : trois lettres. Le décodeur d'onglet EIOPA accepte un
+#: préfixe de DEUX OU TROIS lettres, et les onglets réels en portent des deux
+#: sortes — `EUR_...` mais aussi `FR_...` et `UK_...`. Le champ `devise` d'une
+#: courbe mélange donc des devises et des PAYS.
+_ISO_4217 = re.compile(r'^[A-Z]{3}$')
+
+
+def _verifier_devise(courbe: CourbeRFR, devise_engagement) -> None:
+    """Refuse d'actualiser un engagement dans une monnaie qui n'est pas
+    celle de la courbe — ou dont on ne peut pas l'affirmer.
+
+    ⚠️ ON NE COMPARE PAS CE QU'ON NE SAIT PAS LIRE. `UK` n'est pas une
+    devise (GBP l'est), `FR` non plus (EUR l'est), et deux fabriques posent
+    `'?'`. Traduire `FR` en `EUR` serait DEVINER — la ligne de partage que
+    `CourbeIllisible` trace déjà pour la lecture du classeur : deviner ou
+    refuser. On refuse, en disant ce qui manque.
+    """
+    if devise_engagement is None:
+        return
+    demandee = str(devise_engagement).strip().upper()
+    portee = str(courbe.devise or '').strip().upper()
+    if not _ISO_4217.match(demandee):
+        raise ValueError(
+            f"Devise d'engagement « {devise_engagement} » non reconnue : "
+            f"un code ISO 4217 de trois lettres est attendu (EUR, USD, GBP).")
+    if not _ISO_4217.match(portee):
+        raise ValueError(
+            f"Actualisation en {demandee} demandée sur une courbe dont la "
+            f"devise n'est pas établie (« {courbe.devise} » — "
+            f"{courbe.provenance}). Le nom d'onglet EIOPA porte parfois un "
+            f"PAYS et non une monnaie : il n'est pas traduit ici, car "
+            f"supposer que FR vaut EUR serait deviner. Charger la courbe de "
+            f"la monnaie voulue, ou établir sa devise avant d'actualiser.")
+    if demandee != portee:
+        raise ValueError(
+            f"Engagement en {demandee} actualisé sur une courbe {portee}. "
+            f"B79 exige « la courbe des taux dans la monnaie appropriée » : "
+            f"charger la courbe {demandee}, ou convertir les flux avant "
+            f"actualisation — jamais l'inverse.")
+
+
+def actualiser(courbe: CourbeRFR, maturite: float,
+               devise_engagement: str | None = None) -> float:
     """Le taux qui actualise un engagement au bilan (art. 77). En DÉCIMAL.
 
     ⚠️ REFUSE UNE COURBE AVEC VA, ET C'EST LE POINT. Le Volatility Adjustment
@@ -199,7 +246,20 @@ def actualiser(courbe: CourbeRFR, maturite: float) -> float:
     personne ne relit. Qui a l'agrément appelle `actualiser_avec_va`, et
     l'agrément apparaît alors sur CHAQUE site d'appel — c'est-à-dire à
     l'endroit exact où un contrôleur le cherchera.
+
+    ⚠️ ET REFUSE UNE DEVISE QUI NE CONCORDE PAS, sur le même dessin. Cette
+    fonction ne lisait JAMAIS `courbe.devise` : un engagement en dollars
+    aurait été actualisé sur la courbe euro EN SILENCE, contre B79 — « la
+    courbe des taux dans la monnaie appropriée », exigence que le socle
+    IFRS 17 de ce dépôt déclare déjà sous `courbe_dans_la_monnaie`.
+
+    ⚠️ `None` NE DÉCLENCHE RIEN, et c'est délibéré : aucun appelant du dépôt
+    ne déclare de devise aujourd'hui, le passif Non-Vie n'en porte pas. La
+    garde est LATENTE, comme l'était le refus du VA quand il a été posé —
+    elle n'a pas de client, elle rend l'omission impossible le jour où elle
+    en aura un.
     """
+    _verifier_devise(courbe, devise_engagement)
     if courbe.avec_va:
         raise ValueError(
             "Courbe AVEC Volatility Adjustment employée pour une "
@@ -210,7 +270,8 @@ def actualiser(courbe: CourbeRFR, maturite: float) -> float:
 
 
 def actualiser_avec_va(courbe: CourbeRFR, maturite: float,
-                       agrement_acpr: bool) -> float:
+                       agrement_acpr: bool,
+                       devise_engagement: str | None = None) -> float:
     """Idem, avec Volatility Adjustment — l'agrément n'a PAS de valeur par
     défaut, et il est redemandé à chaque appel.
 
@@ -218,6 +279,7 @@ def actualiser_avec_va(courbe: CourbeRFR, maturite: float,
     posé une fois à la construction se propage ensuite en silence. Ici il
     s'écrit sur chaque site d'appel : le lire dans le code, c'est le vérifier.
     """
+    _verifier_devise(courbe, devise_engagement)
     if not agrement_acpr:
         raise ValueError(
             "Volatility Adjustment demandé sans agrément déclaré. L'art. 77 "
@@ -653,11 +715,23 @@ def age_courbe_mois(courbe: CourbeRFR, date_valorisation=None) -> Optional[float
     else:
         reference = date_valorisation
     arrete = datetime.strptime(courbe.date_arrete, '%Y-%m-%d').date()
-    return (reference - arrete).days / 30.4375
+    return (reference - arrete).days / JOURS_PAR_MOIS
 
 
 def diagnostic_peremption(courbe: CourbeRFR, date_valorisation=None) -> Dict:
     """VERT / AMBRE / ROUGE — et une courbe SANS DATE est ROUGE.
+
+    ⚠️ CETTE FONCTION NE JUGE PLUS SEULEMENT LA PÉREMPTION, et son nom ne le
+    dit plus tout à fait. Elle répond désormais à la question complète :
+    « cette courbe est-elle admissible pour cet arrêté ? » — dont la
+    péremption n'est qu'une des causes de refus, l'anachronisme en étant une
+    autre. Le nom est conservé délibérément : le renommer toucherait quatorze
+    sites d'appel pour un gain de vocabulaire.
+
+    ⚠️ ET C'EST UN STATUT, PAS DEUX. Rendre l'anachronisme par un second
+    verdict aurait laissé DEUX valeurs à consulter, et un consommateur n'en
+    aurait lu qu'une — le défaut « contrôle correct, non câblé » qu'A6 a déjà
+    payé. Un statut, des causes nommées : la forme retenue hier pour le RAG.
 
     ⚠️ C'EST LA RÈGLE QUE CE LOT POSE, ET ELLE CORRIGE UN SILENCE MESURÉ. Une
     courbe fournie sans date recevait « NON TESTABLE », qui n'est ni ROUGE ni
@@ -689,7 +763,34 @@ def diagnostic_peremption(courbe: CourbeRFR, date_valorisation=None) -> Dict:
             'seuil_ambre_mois': MOIS_ALERTE_PEREMPTION,
             'seuil_rouge_mois': MOIS_ROUGE_PEREMPTION,
         }
-    if mois >= MOIS_ROUGE_PEREMPTION:
+    if mois < 0:
+        # ⚠️ QUATRIÈME CAUSE DE ROUGE, ET CE N'EST PAS DE LA PÉREMPTION. Une
+        # courbe POSTÉRIEURE à l'arrêté n'est pas « trop vieille » : elle
+        # n'existait pas quand la clôture a été arrêtée. La valoriser avec
+        # elle revient à employer une information future.
+        #
+        # ⚠️ ET LE SILENCE ÉTAIT TOTAL : un âge négatif passe sous TOUS les
+        # seuils, donc sortait VERT, avec ce message publié —
+        # « Courbe EIOPA du 2026-07-31 (-24 mois) — à jour pour l'arrêté
+        # retenu ». Un âge négatif s'affichait ET se certifiait à jour.
+        #
+        # ⚠️ ROUGE ET NON AMBRE : cela ne se corrige pas en « vérifiant ».
+        # L'AMBRE dit « regardez de plus près » ; ici il n'y a rien à
+        # regarder, la courbe est inadmissible pour cet arrêté.
+        # ⚠️ L'ÉCART SE DIT EN JOURS SOUS UN MOIS, et c'est mon propre test qui
+        # l'a exigé : à un jour d'écart, -0,03 mois s'arrondit à zéro et le
+        # message annonçait « 0 mois APRÈS l'arrêté » — un chiffre qui nie la
+        # phrase qui le porte.
+        ecart = (f"{-mois:.0f} mois" if -mois >= 1
+                 else f"{round(-mois * JOURS_PAR_MOIS)} jour(s)")
+        statut = 'ROUGE'
+        message = (
+            f"⚠️ COURBE POSTÉRIEURE À L'ARRÊTÉ — la courbe employée est datée "
+            f"du {courbe.date_arrete}, soit {ecart} APRÈS l'arrêté "
+            f"retenu. Elle n'existait pas à la date de clôture : l'actualiser "
+            f"avec elle emploierait une information future. Charger la courbe "
+            f"EIOPA publiée pour la date d'arrêté.")
+    elif mois >= MOIS_ROUGE_PEREMPTION:
         statut = 'ROUGE'
         message = (
             f"⚠️ COURBE DES TAUX PÉRIMÉE — la courbe employée date du "

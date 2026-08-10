@@ -394,5 +394,151 @@ class TRFR6_Confirmation(TRFR_Base):
               "ROUGE, sans coche de concordance")
 
 
+
+# =============================================================================
+#  RFR-7 — L'ANACHRONISME : UNE COURBE POSTÉRIEURE À L'ARRÊTÉ
+# =============================================================================
+
+class TRFR7_Anachronisme(TRFR_Base):
+    """⚠️ QUATRIÈME CAUSE DE ROUGE, ET CE N'EST PAS DE LA PÉREMPTION.
+
+    Une courbe postérieure à l'arrêté n'est pas « trop vieille » : elle
+    n'existait pas quand la clôture a été arrêtée. Le silence était total —
+    un âge NÉGATIF passe sous tous les seuils, donc sortait VERT, avec ce
+    message publié : « Courbe EIOPA du 2026-07-31 (-24 mois) — à jour pour
+    l'arrêté retenu ». Un âge négatif s'affichait ET se certifiait à jour.
+
+    ⚠️ ET CE N'EST PAS UN QUATRIÈME ÉTAT : rendre un second verdict aurait
+    laissé deux valeurs à consulter, et un consommateur n'en aurait lu
+    qu'une. Un statut, des causes nommées.
+    """
+
+    def test_une_courbe_posterieure_a_l_arrete_est_ROUGE(self):
+        c = R.lire_classeur_eiopa(_classeur())      # arrêté 2026-07-31
+        for valorisation in ('2026-07-30', '2026-01-31', '2024-07-31'):
+            with self.subTest(arrete=valorisation):
+                diag = R.diagnostic_peremption(c, valorisation)
+                self.assertEqual(diag['statut'], 'ROUGE', valorisation)
+                self.assertIn("POSTÉRIEURE À L'ARRÊTÉ", diag['message'])
+                self.assertLessEqual(diag['age_mois'], 0)
+        print("    OK RFR-7a une courbe qui n'existait pas à l'arrêté est "
+              "ROUGE")
+
+    def test_un_ecart_de_MOINS_D_UN_MOIS_se_dit_en_jours(self):
+        """⚠️ DÉFAUT DE MA PROPRE PREMIÈRE VERSION, trouvé par ce test : à un
+        jour d'écart, −0,03 mois s'arrondit à zéro et le message annonçait
+        « 0 mois APRÈS l'arrêté » — un chiffre qui nie sa propre phrase."""
+        diag = R.diagnostic_peremption(R.lire_classeur_eiopa(_classeur()),
+                                       '2026-07-30')
+        self.assertEqual(diag['statut'], 'ROUGE')
+        self.assertIn('jour(s)', diag['message'])
+        self.assertNotIn('0 mois APRÈS', diag['message'])
+        print("    OK RFR-7e un écart de moins d'un mois se dit en jours")
+
+    def test_le_message_ne_certifie_plus_un_age_negatif(self):
+        """⚠️ LE DÉFAUT LITTÉRAL : « (-24 mois) — à jour pour l'arrêté
+        retenu »."""
+        diag = R.diagnostic_peremption(R.lire_classeur_eiopa(_classeur()),
+                                       '2024-07-31')
+        self.assertNotIn('à jour', diag['message'])
+        self.assertIn('information future', diag['message'])
+        print("    OK RFR-7b un âge négatif ne se certifie plus « à jour »")
+
+    def test_le_jour_meme_reste_VERT(self):
+        """La borne : l'arrêté ET la courbe au même jour n'est pas un
+        anachronisme."""
+        c = R.lire_classeur_eiopa(_classeur())
+        self.assertEqual(R.diagnostic_peremption(c, '2026-07-31')['statut'],
+                         'VERT')
+        print("    OK RFR-7c le jour même n'est pas un anachronisme")
+
+    def test_les_trois_autres_causes_de_ROUGE_sont_intactes(self):
+        """⚠️ UNE CAUSE AJOUTÉE NE DOIT PAS EN MASQUER UNE AUTRE."""
+        c = R.lire_classeur_eiopa(_classeur())
+        self.assertEqual(R.diagnostic_peremption(c, '2027-09-30')['statut'],
+                         'ROUGE')                       # périmée
+        self.assertIn('PÉRIMÉE',
+                      R.diagnostic_peremption(c, '2027-09-30')['message'])
+        self.assertEqual(R.diagnostic_peremption(R.taux_plat(3.0))['statut'],
+                         'ROUGE')                       # sans date
+        self.assertEqual(R.diagnostic_peremption(c, '2026-12-31')['statut'],
+                         'AMBRE')                       # l'AMBRE survit
+        print("    OK RFR-7d péremption, absence de date et AMBRE intacts")
+
+
+# =============================================================================
+#  RFR-8 — LA DEVISE : ON NE COMPARE PAS CE QU'ON NE SAIT PAS LIRE
+# =============================================================================
+
+class TRFR8_Devise(TRFR_Base):
+    """⚠️ `actualiser` NE LISAIT JAMAIS `courbe.devise`. Un engagement en
+    dollars aurait été actualisé sur la courbe euro EN SILENCE, contre B79 —
+    exigence que le socle IFRS 17 de ce dépôt déclare déjà sous
+    `courbe_dans_la_monnaie`.
+
+    ⚠️ GARDE LATENTE, comme l'était le refus du VA quand il a été posé :
+    aucun appelant du dépôt ne déclare de devise, le passif Non-Vie n'en
+    porte pas.
+    """
+
+    def test_sans_declaration_le_comportement_est_INCHANGE(self):
+        """⚠️ LA CONDITION DE L'INNOCUITÉ : `None` ne déclenche rien."""
+        c = R.courbe_embarquee()
+        for m in (0.5, 1, 5, 10, 20, 30, 50):
+            with self.subTest(maturite=m):
+                self.assertEqual(R.actualiser(c, m), R.actualiser(c, m, None))
+        print("    OK RFR-8a sans devise déclarée, rien ne change")
+
+    def test_une_devise_concordante_passe(self):
+        c = R.courbe_embarquee()
+        self.assertEqual(R.actualiser(c, 10.0, 'EUR'), R.actualiser(c, 10.0))
+        self.assertEqual(R.actualiser(c, 10.0, 'eur'), R.actualiser(c, 10.0))
+        print("    OK RFR-8b la devise de la courbe passe, casse comprise")
+
+    def test_une_devise_DISCORDANTE_est_refusee(self):
+        c = R.courbe_embarquee()
+        with self.assertRaises(ValueError) as e:
+            R.actualiser(c, 10.0, 'USD')
+        self.assertIn('B79', str(e.exception))
+        print("    OK RFR-8c un engagement USD sur courbe EUR est refusé")
+
+    def test_une_courbe_SANS_devise_ISO_est_refusee_et_NON_devinee(self):
+        """⚠️ LE POINT DE FOND : le décodeur d'onglet EIOPA accepte deux ou
+        trois lettres, et les onglets réels portent `FR_...` et `UK_...` —
+        des PAYS. Traduire FR en EUR serait deviner, la ligne que
+        `CourbeIllisible` trace déjà pour la lecture du classeur."""
+        for faux in ('FR', 'UK', '?'):
+            with self.subTest(devise=faux):
+                c = R.courbe_embarquee()._replace(devise=faux)
+                with self.assertRaises(ValueError) as e:
+                    R.actualiser(c, 10.0, 'EUR')
+                self.assertIn('deviner', str(e.exception))
+                # ... et sans déclaration, cette même courbe passe
+                self.assertIsInstance(R.actualiser(c, 10.0), float)
+        print("    OK RFR-8d une devise non ISO se refuse au lieu de se "
+              "traduire")
+
+    def test_une_devise_d_engagement_non_ISO_est_refusee(self):
+        c = R.courbe_embarquee()
+        for mauvaise in ('EU', 'EUROS', 'euro'):
+            with self.subTest(devise=mauvaise):
+                with self.assertRaises(ValueError) as e:
+                    R.actualiser(c, 10.0, mauvaise)
+                self.assertIn('ISO 4217', str(e.exception))
+        print("    OK RFR-8e la devise demandée doit être un code ISO 4217")
+
+    def test_actualiser_avec_va_porte_la_MEME_garde(self):
+        """⚠️ DEUX PORTES D'ACTUALISATION, UNE SEULE RÈGLE : une garde posée
+        sur une seule des deux aurait laissé l'autre ouverte."""
+        c = R.courbe_embarquee()._replace(avec_va=True, va_bps=13)
+        with self.assertRaises(ValueError) as e:
+            R.actualiser_avec_va(c, 10.0, True, 'USD')
+        self.assertIn('B79', str(e.exception))
+        self.assertIsInstance(R.actualiser_avec_va(c, 10.0, True, 'EUR'),
+                              float)
+        self.assertIsInstance(R.actualiser_avec_va(c, 10.0, True), float)
+        print("    OK RFR-8f les deux portes d'actualisation sont gardées")
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
