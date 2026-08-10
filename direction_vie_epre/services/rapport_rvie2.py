@@ -389,8 +389,19 @@ def export_html(
             '<p class="comm-p" style="color:var(--slate);font-style:italic;">'''
             "Narration non disponible — alimenter result_rvie2 et configurer ANTHROPIC_API_KEY.</p>"
         )
-        ai_badge = ("❆ Narration générée par ActuarIA Intelligence"
-                    if source == "claude_api" else "❆ Commentaire actuariel manuel")
+        # ⚠️ TROIS ÉTATS, PAS DEUX — et le repli n'est PAS « manuel ». Ce que
+        # `_generer_narration_rvie2` renvoie sous ce nom est le `commentaire` de
+        # l'agent appelant, une f-string. Dire « Commentaire actuariel manuel »
+        # attribuait à un humain le texte d'un gabarit, dans un document signé.
+        # ⚠️ ET LE BADGE S'AFFICHE SANS CONDITION : quand aucune narration
+        # n'existe, le corps disait « Narration non disponible » et le badge
+        # juste au-dessus affirmait le contraire. Vocabulaire aligné sur celui
+        # d'A7, déjà honnête (`'templates': 'Mode standard'`, `'aucune': ''`).
+        ai_badge = {
+            "claude_api": "❆ Narration générée par ActuarIA Intelligence",
+            "manuel":     "❆ Mode standard",
+            "aucune":     "",
+        }.get(source, "")
 
         H = []
         H.append('<!DOCTYPE html>')
