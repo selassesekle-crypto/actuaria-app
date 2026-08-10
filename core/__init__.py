@@ -1,7 +1,11 @@
 # ActuarIA — core
 # Modules transversaux communs à tous les agents
 from .base_agent        import BaseAgent
-from .audit_trail       import AuditTrail, AgentRafael
+# ⚠️ `audit_trail` RETIRÉ (C5d) : 333 lignes qu'aucun appelant n'instanciait,
+# portant 76 déclarations juridiques (19 agents × traitement / base légale /
+# données / durée) que rien ne produisait. Les registres art. 30 vivants sont
+# ceux d'A13 et de SP audit. Réparer cette couche lui aurait donné une
+# apparence de justesse qui aurait invité à la brancher.
 from .conformite_reglementaire import (
     filtrer_genre,
     filtrer_famille_cible,
@@ -22,7 +26,7 @@ from .tables_mortalite  import (
 )
 
 __all__ = [
-    'BaseAgent', 'AuditTrail', 'AgentRafael',
+    'BaseAgent',
     # Plan tarifaire — LA SOURCE UNIQUE du contrat A2→A3→conformité
     'PlanTarifaire', 'Facteur',
     # Conformité réglementaire — SOURCE UNIQUE pour les trois directions
