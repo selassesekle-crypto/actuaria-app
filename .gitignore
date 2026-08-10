@@ -9,3 +9,24 @@ catboost_info/
 torch_extensions/
 torch_compile_debug/
 # shap : verifie, n'ecrit aucun cache dans le repo (utilise ~/.cache si besoin).
+
+# --- Porteurs de secret : un fichier cree demain ne doit pas etre PROPOSE ---
+# Le depot lit la cle dans os.environ['ANTHROPIC_API_KEY'] et NULLE PART
+# ailleurs : aucun `dotenv` n'y figure, un `.env` ne serait donc meme pas lu.
+# Ces lignes ne servent donc pas un usage courant — elles ferment un trou.
+#
+# Un secret committe une fois reste dans l'historique MEME APRES suppression :
+# le seul moment ou l'on peut encore l'empecher est avant qu'il existe.
+#
+# Releve fait avant de poser ces lignes, sur 1493 commits et 539 fichiers :
+# aucun nom de fichier porteur de secret n'a jamais existe, et les 9 commits
+# qui contiennent << sk-ant- >> portent tous le meme fragment de SEPT
+# caracteres — `api_key='sk-ant-...'`, un exemple d'usage dans un `print` de
+# documentation. Aucune vraie cle n'a jamais ete committee.
+.env
+.env.*
+.streamlit/secrets.toml
+*.key
+*.pem
+*.p12
+*.pfx
