@@ -264,7 +264,7 @@ class T3_Best_Estimate_Intact(unittest.TestCase):
         cls.r = AgentA7Provisionnement(verbose=False).run(
             source=C, primes=expo, mode_declare='cumule',
             generer_graphiques=False, generer_word=False,
-            generer_pdf_flag=False, n_sim_bootstrap=200, seed=42)
+            n_sim_bootstrap=200, seed=42)
 
     def test_benktander_est_calcule_mais_hors_du_be(self):
         n3, n4 = self.r['n3'], self.r['n4']

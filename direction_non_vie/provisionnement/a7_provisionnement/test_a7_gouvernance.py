@@ -55,8 +55,7 @@ def _run(triangle):
     return AgentA7Provisionnement(verbose=False).run(
         source=src, mode_declare='cumule',
         primes=np.full(src.shape[0], float(np.nanmean(src[:, 0])) * 8.0),
-        generer_graphiques=False, generer_word=False, generer_pdf_flag=False,
-        n_sim_bootstrap=60, seed=42)
+        generer_graphiques=False, generer_word=False, n_sim_bootstrap=60, seed=42)
 
 
 # =============================================================================

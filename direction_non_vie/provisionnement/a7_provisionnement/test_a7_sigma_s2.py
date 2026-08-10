@@ -287,8 +287,7 @@ class T6_Tracabilite_Livrable(unittest.TestCase):
         r = AgentA7Provisionnement(verbose=False).run(
             source=np.asarray(GENINS, float), lob='accidents_corporels',
             mode_declare='cumule', generer_graphiques=False,
-            generer_word=False, generer_pdf_flag=False,
-            n_sim_bootstrap=100, seed=42)
+            generer_word=False, n_sim_bootstrap=100, seed=42)
         self.assertTrue(r['success'], r.get('erreur'))
         html = export_html(n1=r.get('n1', {}), n2=r['n2'], n3=r['n3'], n4=r['n4'])
         self.assertIn('Annexe XIV', html,

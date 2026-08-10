@@ -341,7 +341,7 @@ class T8_Exports(unittest.TestCase):
         # asserts — plus robuste qu'un n3/n4 mocké qui divergerait du réel.
         cls.r = AgentA7Provisionnement(verbose=False).run(
             source=GENINS, lob='generique', n_sim_bootstrap=300,
-            generer_word=True, generer_pdf_flag=False, generer_graphiques=False,
+            generer_word=True, generer_graphiques=False,
         )
 
     def test_export_excel_produit_bytes(self):
@@ -577,7 +577,7 @@ class T11_BE_Mack_Retire(unittest.TestCase):
     def setUpClass(cls):
         cls.r = AgentA7Provisionnement(verbose=False).run(
             source=_make_mack_recommande(), lob='generique', n_sim_bootstrap=100,
-            generer_word=False, generer_pdf_flag=False, generer_graphiques=False)
+            generer_word=False, generer_graphiques=False)
 
     def test_mack_non_pondere_dans_le_be(self):
         """Mack n'entre JAMAIS dans la pondération du Best Estimate.
@@ -919,7 +919,7 @@ class T17_N4_GardeFou_CheminPrimaire(unittest.TestCase):
 
     def _n2_n3(self):
         r = AgentA7Provisionnement(verbose=False).run(
-            source=GENINS, generer_word=False, generer_pdf_flag=False, generer_graphiques=False)
+            source=GENINS, generer_word=False, generer_graphiques=False)
         return r['n2'], r['n3'], np.array(r['triangle'])
 
     def test_be_negatif_chemin_primaire_declenche_garde_fou(self):
@@ -1001,7 +1001,7 @@ class T19_BE_Negatif_Livrables_Et_RM(unittest.TestCase):
 
     def _run(self, **kw):
         return AgentA7Provisionnement(verbose=False).run(
-            generer_word=False, generer_pdf_flag=False, generer_graphiques=False, **kw)
+            generer_word=False, generer_graphiques=False, **kw)
 
     def test_be_negatif_rapport_complet_sans_crash(self):
         # mode_declare='cumule' : le triangle décroissant est pris tel quel (sinon N1
@@ -1113,7 +1113,7 @@ class T24_Reserve_Totale_Egale_Somme_Par_Annee(unittest.TestCase):
         for nom, source in (('GenIns', GENINS), ('RAA', RAA)):
             r = AgentA7Provisionnement(verbose=False).run(
                 source=source, n_sim_bootstrap=200, generer_graphiques=False,
-                generer_word=False, generer_pdf_flag=False)
+                generer_word=False)
             self.assertTrue(r['success'], r.get('erreur'))
             base = int(r['n3']['chain_ladder'].get('annee_base_reserve', 1))
             for cle, libelle in (('chain_ladder', 'Chain Ladder'),
@@ -1159,7 +1159,7 @@ class T20_Graphiques_Reellement_Produits(unittest.TestCase):
     def setUpClass(cls):
         cls.r = AgentA7Provisionnement(verbose=False).run(
             source=GENINS, primes=cls.EXPOSITION, n_sim_bootstrap=300,
-            generer_graphiques=True, generer_word=False, generer_pdf_flag=False)
+            generer_graphiques=True, generer_word=False)
 
     def test_graphiques_reellement_produits(self):
         """Le cœur : des figures existent, et ce sont bien des figures Plotly."""
@@ -1210,7 +1210,7 @@ class T20_Graphiques_Reellement_Produits(unittest.TestCase):
                 RuntimeError('boom'))
             r = AgentA7Provisionnement(verbose=False).run(
                 source=GENINS, n_sim_bootstrap=300,
-                generer_graphiques=True, generer_word=False, generer_pdf_flag=False)
+                generer_graphiques=True, generer_word=False)
         finally:
             _ag._generer_graphiques = _vrai
         self.assertTrue(r['success'])                     # comportement global inchangé
@@ -1264,7 +1264,7 @@ class T20_Graphiques_Reellement_Produits(unittest.TestCase):
         for kw in ({'generer_graphiques': False}, {'generer_graphiques_flag': False}):
             r = AgentA7Provisionnement(verbose=False).run(
                 source=GENINS, n_sim_bootstrap=300,
-                generer_word=False, generer_pdf_flag=False, **kw)
+                generer_word=False, **kw)
             self.assertEqual(r.get('graphiques'), {}, f"{kw} n'a pas désactivé")
             self.assertIsNone(r.get('graphiques_erreur'), f"{kw} : faux positif d'erreur")
         print("    OK T20c les deux drapeaux désactivent, sans fausse alerte")

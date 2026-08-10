@@ -2011,8 +2011,7 @@ def page_dashboard():
                                             source=_tri_grands, mode_declare="cumule",
                                             lob=_ar_lob, generer_graphiques=False,
                                             n_sim_bootstrap=500,
-                                            generer_word=False, generer_pdf_flag=False,
-                                        )
+                                            generer_word=False, )
                                         if _r7_gs.get("success"):
                                             _reserve_gs = float(_r7_gs.get("n4",{}).get("best_estimate",0))
                                             _inc_gs  = _r7_gs.get("n4", {}).get("methodes_incluses", [])
@@ -2040,7 +2039,6 @@ def page_dashboard():
                                 arrete                   = _ar_arrete,
                                 n_sim_bootstrap          = _ar_n_sim,
                                 generer_word             = False,
-                                generer_pdf_flag         = False,
                                 reserve_grands_sinistres = _reserve_gs if _reserve_gs > 0 else None,
                                 n_grands_sinistres       = _n_grands,
                                 methode_grands           = _methode_gs,
@@ -2296,8 +2294,7 @@ def page_dashboard():
                                 source=_mb_rb['triangle_total'], mode_declare='cumule',
                                 lob=_mb_b['lob'], generer_graphiques=False,
                                 n_sim_bootstrap=_mb_nsim,
-                                generer_word=False, generer_pdf_flag=False,
-                            )
+                                generer_word=False, )
                             _mb_res.append({
                                 'lob':   _mb_b['lob'],
                                 'label': _lob_labels.get(_mb_b['lob'], _mb_b['lob']),
@@ -3514,7 +3511,6 @@ def _executer_analyse(besoin, direction, equipe, client):
                     triangle_engage      = _a7p.get("a7_triangle_engage"),
                     courbe_rfr           = _a7p.get("a7_courbe_rfr", None),
                     generer_word         = False,
-                    generer_pdf_flag     = False,
                 )
 
                 # Enrichir les résultats avec les infos de séparation LLT
@@ -3699,7 +3695,6 @@ def _executer_analyse(besoin, direction, equipe, client):
                     annee_debut        = _a7p.get("a7_annee_debut"),
                     triangle_engage    = _a7p.get("a7_triangle_engage"),
                     generer_word       = False,
-                    generer_pdf_flag   = False,
                 )
                 resultats["principal"] = r7
 

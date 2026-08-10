@@ -625,10 +625,10 @@ class T8_Cablage_Dans_Le_Pipeline(unittest.TestCase):
             AgentA7Provisionnement)
         cls.r = AgentA7Provisionnement(verbose=False).run(
             source=GENINS, n_sim_bootstrap=100, generer_graphiques=False,
-            generer_word=False, generer_pdf_flag=False)
+            generer_word=False)
         cls.r_expo = AgentA7Provisionnement(verbose=False).run(
             source=GENINS, primes=EXPOSITION_GENINS, n_sim_bootstrap=100,
-            generer_graphiques=False, generer_word=False, generer_pdf_flag=False)
+            generer_graphiques=False, generer_word=False)
 
     def test_clm_est_calcule_en_n2(self):
         clm = self.r['n2'].get('clm', {})
@@ -693,7 +693,7 @@ class T8_Cablage_Dans_Le_Pipeline(unittest.TestCase):
                    '.verifier_hypotheses_clm', side_effect=RuntimeError('boum')):
             r = AgentA7Provisionnement(verbose=False).run(
                 source=GENINS, n_sim_bootstrap=100, generer_graphiques=False,
-                generer_word=False, generer_pdf_flag=False)
+                generer_word=False)
         self.assertTrue(r['success'])
         self.assertIn('erreur', r['n2']['clm'])
         # Sans couvertures, aucune année n'est sous filet. Et sans exposition,

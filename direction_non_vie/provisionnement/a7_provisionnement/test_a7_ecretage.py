@@ -65,7 +65,7 @@ def _run(**kwargs):
     kwargs.setdefault('primes', np.full(_C.shape[0], _BASE))
     return AgentA7Provisionnement(verbose=False).run(
         source=_C, mode_declare='cumule', generer_graphiques=False,
-        generer_word=False, generer_pdf_flag=False, n_sim_bootstrap=60,
+        generer_word=False, n_sim_bootstrap=60,
         seed=42, **kwargs)
 
 
@@ -274,8 +274,7 @@ class T4_Affichage(unittest.TestCase):
         r = AgentA7Provisionnement(verbose=False).run(
             source=_C, mode_declare='cumule',
             primes=np.full(_C.shape[0], _BASE * 60), lob='generique',
-            n_sim_bootstrap=100, generer_word=False, generer_pdf_flag=False,
-            generer_graphiques=False)
+            n_sim_bootstrap=100, generer_word=False, generer_graphiques=False)
         octets = r.get('excel_bytes', b'')
         if not octets:
             self.skipTest("openpyxl absent — pas d'Excel à relire")
@@ -326,7 +325,7 @@ class T5_Non_Regression(unittest.TestCase):
                 primes=np.full(src.shape[0],
                                float(np.nanmean(src[:, 0])) * 8.0),
                 generer_graphiques=False, generer_word=False,
-                generer_pdf_flag=False, n_sim_bootstrap=60, seed=42)
+                n_sim_bootstrap=60, seed=42)
             self.assertAlmostEqual(r['n4']['best_estimate'], be_attendu,
                                    delta=1.0, msg=nom)
             self.assertEqual(r['n2']['bfcc']['statuts']['BFCC-H6'], H.VALIDEE)

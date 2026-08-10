@@ -217,10 +217,10 @@ class T4_Scenario_De_Reference_Avec_Exposition(unittest.TestCase):
     def setUpClass(cls):
         cls.sans = AgentA7Provisionnement(verbose=False).run(
             source=GENINS, n_sim_bootstrap=150, generer_graphiques=False,
-            generer_word=False, generer_pdf_flag=False)
+            generer_word=False)
         cls.avec = AgentA7Provisionnement(verbose=False).run(
             source=GENINS, primes=_exposition(GENINS), n_sim_bootstrap=150,
-            generer_graphiques=False, generer_word=False, generer_pdf_flag=False)
+            generer_graphiques=False, generer_word=False)
 
     def test_les_deux_runs_aboutissent(self):
         self.assertTrue(self.sans['success'], self.sans.get('erreur'))

@@ -322,13 +322,6 @@ class AgentA7Provisionnement:
         generer_graphiques_flag: bool   = True,
         generer_word:     bool          = True,
         generer_html:     bool          = True,
-        # ⚠️ DEPRECIE (lot C1, decision B). Le PDF n'est plus GENERE : il
-        # s'obtient par CONVERSION du Word ou du HTML. Ce parametre n'a plus
-        # aucun effet ; il n'est conserve que le temps que les appelants
-        # migrent vers `generer_html`, et il journalise un avertissement s'il
-        # vaut True. Le retirer aujourd'hui casserait des appels existants,
-        # `run()` refusant durement tout mot-cle inconnu depuis le lot F2.
-        generer_pdf_flag: bool          = False,
         # ── Compatibilité ancienne API ────────────────────────────────────────
         triangle                        = None,
         result_a2                       = None,
@@ -801,12 +794,6 @@ class AgentA7Provisionnement:
                     arrete=arrete, audit_id=audit_id, lob_label=lob_label,
                     actuaire_nom=actuaire_nom,
                     actuaire_numero_ia=actuaire_numero_ia)
-
-            if generer_pdf_flag:
-                logger.warning(
-                    "generer_pdf_flag est DEPRECIE et sans effet : le PDF "
-                    "s'obtient desormais par conversion du Word ou du HTML. "
-                    "Utilisez generer_html.")
 
             # ⚠️ UNE DÉGRADATION NOMMÉE, PAS UN SILENCE (lot C3d). Le Word
             # se produit sans figures quand `kaleido` manque : le document le

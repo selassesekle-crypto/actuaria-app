@@ -60,8 +60,7 @@ class T1_Livrables_Declarent(unittest.TestCase):
             cls.r = AgentA7Provisionnement(verbose=False).run(
                 source=np.array(GENINS, dtype=float), mode_declare='cumule',
                 primes=_exposition(GENINS), n_sim_bootstrap=300, seed=42,
-                generer_graphiques=True, generer_word=True,
-                generer_pdf_flag=True)
+                generer_graphiques=True, generer_word=True)
 
     def test_le_resultat_porte_un_bilan_des_livrables(self):
         self.assertTrue(self.r.get('success'), self.r.get('erreur'))

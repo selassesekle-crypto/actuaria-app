@@ -396,8 +396,7 @@ class TestMunichHypothesesStructurel(unittest.TestCase):
         r = AgentA7Provisionnement(verbose=False).run(
             source=C, triangle_engage=np.asarray(_MCL_ENG_SAIN, float),
             lob='rc_generale', mode_declare='cumule', generer_graphiques=False,
-            generer_word=False, generer_pdf_flag=False,
-            n_sim_bootstrap=200, seed=42)
+            generer_word=False, n_sim_bootstrap=200, seed=42)
         n1, n2, n3, n4 = r.get('n1', {}), r['n2'], r['n3'], r['n4']
         self.assertIn('munich_hyp', n2, "l'agent doit publier le bloc")
 

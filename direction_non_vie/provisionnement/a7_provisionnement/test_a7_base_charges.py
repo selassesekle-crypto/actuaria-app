@@ -49,7 +49,7 @@ class T1_Exemple_De_Reference(unittest.TestCase):
         """n2/n3 réels, dont on force la réserve à l'IBNR PUR de l'exemple (30)."""
         r = AgentA7Provisionnement(verbose=False).run(
             source=GENINS, n_sim_bootstrap=100,
-            generer_graphiques=False, generer_word=False, generer_pdf_flag=False)
+            generer_graphiques=False, generer_word=False)
         cls.n2, cls.C = r['n2'], np.array(r['triangle'])
         cls.n3 = r['n3']
         # Une seule méthode incluse, à 30 : le BE vaut donc exactement 30.
@@ -153,7 +153,7 @@ class T3_Non_Regression(unittest.TestCase):
         """Un run standard : provisions_dossier absent, be_ibnr_pur == BE."""
         r = AgentA7Provisionnement(verbose=False).run(
             source=GENINS, n_sim_bootstrap=100,
-            generer_graphiques=False, generer_word=False, generer_pdf_flag=False)
+            generer_graphiques=False, generer_word=False)
         n4 = r['n4']
         self.assertAlmostEqual(n4['provisions_dossier'], 0.0, delta=0.5)
         self.assertAlmostEqual(n4['be_ibnr_pur'], n4['best_estimate'], delta=1.0)
@@ -213,7 +213,7 @@ class T4_Bout_En_Bout(unittest.TestCase):
             for j in range(n - i):
                 charges[i, j] = 0.5 * G[i, j] + 0.5 * cls.U[i]
         kw = dict(n_sim_bootstrap=200, generer_graphiques=False,
-                  generer_word=False, generer_pdf_flag=False, mode_declare='cumule')
+                  generer_word=False, mode_declare='cumule')
         a = AgentA7Provisionnement(verbose=False)
         cls.r_paie = a.run(source=GENINS, triangle_engage=charges,
                            triangle_reference='paiements', **kw)
@@ -273,7 +273,7 @@ class T4_Bout_En_Bout(unittest.TestCase):
             source=GENINS, triangle_engage=charges, triangle_reference='charges',
             reserve_grands_sinistres=1_000_000.0, n_grands_sinistres=3,
             n_sim_bootstrap=200, generer_graphiques=False, generer_word=False,
-            generer_pdf_flag=False, mode_declare='cumule')
+            mode_declare='cumule')
         n4 = r['n4']
         self.assertTrue(n4['llt_applique'])
         self.assertAlmostEqual(

@@ -467,7 +467,7 @@ class TestClarkRestitutionRapport(unittest.TestCase):
         r = AgentA7Provisionnement(verbose=False).run(
             source=np.asarray(GENINS, float), mode_declare='cumule',
             generer_graphiques=False, generer_word=False,
-            generer_pdf_flag=False, n_sim_bootstrap=200, seed=42)
+            n_sim_bootstrap=200, seed=42)
         html = export_html(n1=r.get('n1', {}), n2=r['n2'], n3=r['n3'],
                            n4=r['n4'])
         self.assertNotIn(MARQUEUR_ECHEC_RAPPORT, html)

@@ -29,6 +29,7 @@
 
 import ast
 import inspect
+import os
 import pathlib
 import typing
 import unittest
@@ -230,6 +231,100 @@ class T4_Aucun_Nom_Non_Defini(unittest.TestCase):
                          "Annotation citant un nom non défini : " + str(fautifs))
         print(f"    OK F2-6 {verifies} signatures évaluées sur "
               f"{len(modules)} modules, aucun nom non défini")
+
+
+
+
+#: Ce qui a été retiré de `run()`, et pourquoi. Une table plutôt qu'un test
+#: par nom : le prochain retrait s'y ajoute en une ligne, avec sa raison.
+PARAMETRES_RETIRES = {
+    'generer_pdf_flag':
+        "déprécié au lot C1 — le PDF s'obtient par conversion du Word ou du "
+        "HTML ; utiliser `generer_html`",
+}
+
+
+class T5_Un_Parametre_Retire_Ne_Revient_Pas(unittest.TestCase):
+    """T5 — `generer_pdf_flag` a disparu, et ne peut pas revenir en silence.
+
+    ⚠️ CE TEST EST LA CONDITION DU RETRAIT, PAS SON ACCESSOIRE. Un paramètre
+    retiré sans filet revient par un copier-coller : quelqu'un duplique un
+    appel ancien, `run()` lève une `TypeError` en production, et personne ne
+    voit le lien avec un lot vieux de six mois.
+
+    L'HISTOIRE : le lot C1 a supprimé la GÉNÉRATION du PDF — il s'obtient
+    désormais par conversion du Word ou du HTML, ce qui a supprimé la
+    dépendance à weasyprint. Le paramètre a été conservé DÉPRÉCIÉ, sans
+    effet, avec un avertissement journalisé, le temps que les appelants
+    migrent vers `generer_html`. Ils ont migré : 31 sites d'appel retirés sur
+    12 fichiers, plus la déclaration et son bloc de dépréciation.
+    """
+
+    def test_run_ne_declare_plus_ces_parametres(self):
+        from direction_non_vie.provisionnement.a7_provisionnement.agent import (
+            AgentA7Provisionnement,
+        )
+
+        parametres = inspect.signature(AgentA7Provisionnement.run).parameters
+        for nom, raison in PARAMETRES_RETIRES.items():
+            with self.subTest(parametre=nom):
+                self.assertNotIn(nom, parametres,
+                                 f"`{nom}` est revenu dans run() — {raison}")
+        print(f"    OK T5 : les {len(PARAMETRES_RETIRES)} parametre(s) retire(s) ne "
+              f"sont plus declares")
+
+    def test_les_passer_LEVE_au_lieu_d_etre_avale(self):
+        """⚠️ LA CONSÉQUENCE UTILE DU LOT F2 : `run()` n'a plus de `**kwargs`,
+        donc un appelant resté en arrière l'apprend tout de suite — au lieu
+        d'obtenir un résultat calculé sur autre chose."""
+        from direction_non_vie.provisionnement.a7_provisionnement.agent import (
+            AgentA7Provisionnement,
+        )
+
+        agent = AgentA7Provisionnement(verbose=False)
+        for nom in PARAMETRES_RETIRES:
+            with self.subTest(parametre=nom):
+                with self.assertRaises(TypeError) as leve:
+                    agent.run(**{nom: False})
+                self.assertIn(nom, str(leve.exception))
+        print("    OK T5b : les passer leve une TypeError qui les nomme")
+
+    def test_AUCUNE_occurrence_ne_subsiste_dans_le_depot(self):
+        """⚠️ LE VRAI FILET CONTRE LE COPIER-COLLER. La signature seule ne
+        protège pas : un appel oublié dans un fichier qu'aucune gate
+        n'exercerait ne se verrait qu'en production. On relit le dépôt.
+        """
+        racine = os.path.abspath(os.path.join(os.path.dirname(__file__),
+                                              '..', '..', '..'))
+        ignores = {'.git', '.venv', '__pycache__', 'node_modules',
+                   '.ruff_cache', '.pytest_cache', 'site-packages'}
+        moi = os.path.abspath(__file__)
+        survivants, lus = [], 0
+        for dossier, sous, fichiers in os.walk(racine):
+            sous[:] = [d for d in sous if d not in ignores]
+            for f in fichiers:
+                if not f.endswith(('.py', '.md')):
+                    continue
+                chemin = os.path.join(dossier, f)
+                if os.path.abspath(chemin) == moi:
+                    continue          # cette table les NOMME, forcément
+                try:
+                    with open(chemin, encoding='utf-8') as fh:
+                        texte = fh.read()
+                except (OSError, UnicodeDecodeError):
+                    continue
+                lus += 1
+                for nom in PARAMETRES_RETIRES:
+                    if nom in texte:
+                        survivants.append(
+                            f'{os.path.relpath(chemin, racine)} — {nom}')
+        self.assertGreater(lus, 200,
+                           'le balayage n a presque rien lu : verifier la '
+                           'racine')
+        self.assertEqual(survivants, [],
+                         'occurrence(s) survivante(s) :\n  '
+                         + '\n  '.join(survivants))
+        print(f"    OK T5c : {lus} fichiers relus, 0 occurrence survivante")
 
 
 if __name__ == '__main__':
