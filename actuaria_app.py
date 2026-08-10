@@ -9,6 +9,7 @@ import numpy as np
 from datetime import datetime
 import anthropic
 
+from core import arrete as _arrete_core
 from core import frontiere_llm
 
 st.set_page_config(
@@ -41,6 +42,31 @@ for k, v in {
 }.items():
     if k not in st.session_state:
         st.session_state[k] = v
+
+# ── LA DATE D'ARRÊTÉ — LUE ET TYPÉE, LE LIBELLÉ EN DÉCOULE ──────────────────
+#
+#  ⚠️ CES QUATRE AIDES NE DÉCIDENT RIEN : elles enveloppent `core.arrete`,
+#  qui porte la règle. L'application ne réimplémente pas la lecture d'une
+#  date — c'est ce qui avait produit 26 formes de la même notion sur 71 sites.
+
+def _lire_arrete(valeur):
+    """L'objet `Arrete` de `core`, ou `None` si la saisie est inexploitable."""
+    try:
+        return _arrete_core.lire(valeur)
+    except _arrete_core.ArreteInvalide:
+        return None
+
+
+def _libelle_arrete(arrete_obj):
+    """Le libellé lisible, DÉRIVÉ de la date. Jamais saisi, donc jamais faux."""
+    return _arrete_core.libelle(arrete_obj) if arrete_obj is not None else ''
+
+
+def _fin_de_periode(arrete_obj):
+    """Une fin de trimestre usuelle ? Une clôture en milieu de mois existe —
+    run-off, cession — assez rare pour être signalée, pas refusée."""
+    return _arrete_core.est_fin_de_periode(arrete_obj)
+
 
 def nav_to(page, agent=None, dir_key=None, besoin=None, equipe=None):
     st.session_state.page = page
@@ -2668,12 +2694,33 @@ def page_analyse():
                             index=0,
                             key="a7_lob",
                         )
-                        _arrete = st.text_input(
+                        # ⚠️ UNE DATE, PLUS UN LIBELLÉ LIBRE. Ce champ était un
+                        # texte (« Q2 2026 »), donc ni comparable ni ordonnable
+                        # — le relevé du dépôt a trouvé 26 formes de cette même
+                        # notion sur 71 sites. Une clôture ne peut pas être
+                        # jugée contre une chaîne : la gouvernance de la courbe
+                        # a besoin d'une date pour dire si la courbe employée
+                        # existait à l'arrêté.
+                        #
+                        # ⚠️ ET LE LIBELLÉ N'EST PAS SUPPRIMÉ, IL EST DÉRIVÉ.
+                        # Deux champs qui disent le même fait finissent par se
+                        # contredire ; un libellé calculé ne le peut pas.
+                        # « T2 2026 » remplace donc « Q2 2026 » dans les
+                        # rapports — même notion, notation française du dépôt.
+                        _arrete_date = st.date_input(
                             "Arrêté comptable",
-                            value="Q2 2026",
-                            placeholder="Ex : Q2 2026 · FY 2025 · S1 2026",
-                            key="a7_arrete",
+                            value=_arrete_core.dernier_trimestre_clos(),
+                            format="DD/MM/YYYY",
+                            key="a7_arrete_date",
                         )
+                        _arrete_obj = _lire_arrete(_arrete_date)
+                        _arrete = _libelle_arrete(_arrete_obj)
+                        if _arrete_obj is not None and not _fin_de_periode(
+                                _arrete_obj):
+                            st.caption(
+                                f"ℹ️ {_arrete} n'est pas une fin de trimestre "
+                                f"comptable usuelle — run-off ou cession de "
+                                f"portefeuille ? Signalé, pas refusé.")
                     with _pa2:
                         _n_sim = st.number_input(
                             "Simulations Bootstrap ODP",
@@ -2876,6 +2923,14 @@ def page_analyse():
                         "a7_lob":                _lob_sel,
                         "a7_courbe_rfr":         _rfr_courbe,
                         "a7_arrete":             _arrete,
+                        # ⚠️ LA DATE TYPÉE VOYAGE À CÔTÉ DU LIBELLÉ, et ce
+                        # n'est PAS une seconde source : le libellé en est
+                        # DÉRIVÉ, il ne peut donc pas la contredire. C'est
+                        # elle que la gouvernance de la courbe lira — un
+                        # libellé ne se compare pas à une date de publication
+                        # EIOPA.
+                        "a7_arrete_iso": (_arrete_core.iso(_arrete_obj)
+                                          if _arrete_obj is not None else ''),
                         "a7_n_sim_bootstrap":    int(_n_sim),
                         "a7_annee_base_reserve": int(_annee_base),
                         "a7_resultats_precedents": _res_prec,

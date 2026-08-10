@@ -55,7 +55,7 @@ douze. Ce n'était pas une propriété du défaut, c'était une photo.
 =============================================================================
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Dict, NamedTuple, Tuple
 
 #: Formats acceptés en entrée, et l'ordre dans lequel on les essaie.
@@ -184,6 +184,30 @@ def est_fin_de_periode(arrete: Arrete) -> bool:
     mais elle est assez rare pour mériter d'être SIGNALÉE, pas refusée.
     """
     return (arrete.valeur.month, arrete.valeur.day) in FINS_DE_PERIODE
+
+
+def dernier_trimestre_clos(aujourd_hui: date | None = None) -> date:
+    """Le dernier trimestre comptable ACHEVÉ — une valeur par défaut, pas une
+    supposition sur ce que l'actuaire veut arrêter.
+
+    ⚠️ ELLE VIT ICI, PAS DANS L'INTERFACE. Une interface qui calcule elle-même
+    les fins de trimestre en poserait une seconde définition — c'est ainsi que
+    la même notion s'est retrouvée sous 26 formes. Les bornes lues sont celles
+    de `FINS_DE_PERIODE`, la table qui sert déjà au libellé.
+
+    ⚠️ ET « CLOS » VEUT DIRE ACHEVÉ : au 31/12, le T4 court encore, le dernier
+    trimestre clos est le T3. Un défaut qui proposerait un trimestre en cours
+    inviterait à arrêter des comptes sur une période inachevée.
+    """
+    # ⚠️ La date LOCALE, et tz-aware : `date.today()` est aveugle au fuseau.
+    reference = aujourd_hui or datetime.now(timezone.utc).astimezone().date()
+    bornes = sorted(FINS_DE_PERIODE, reverse=True)          # (12,31) … (3,31)
+    for mois, jour in bornes:
+        candidat = date(reference.year, mois, jour)
+        if candidat < reference:
+            return candidat
+    mois, jour = bornes[0]
+    return date(reference.year - 1, mois, jour)
 
 
 def resume_confirmation(arrete: Arrete) -> str:

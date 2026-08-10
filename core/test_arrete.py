@@ -1,14 +1,17 @@
 # -*- coding: utf-8 -*-
 """Tests D3 — la date d'arrêté de l'entité, typée et unique.
 
-⚠️ GATE : `py -m unittest discover -s normes -t .` — voir test_contrat.py.
+⚠️ GATE : `py -m unittest discover -s core -t .` — le module a rejoint
+`core/` : la date d'arrêté n'est pas une notion IFRS 17.
 """
+import os
 import unittest
 from datetime import date, datetime
 
 from core.arrete import (
     ANNEE_MAX, ANNEE_MIN, FINS_DE_PERIODE, FORMATS, Arrete, ArreteInvalide,
-    est_fin_de_periode, iso, libelle, lire, resume_confirmation)
+    dernier_trimestre_clos, est_fin_de_periode, iso, libelle, lire,
+    resume_confirmation)
 
 
 class T1_LesFormatsDuDepot(unittest.TestCase):
@@ -125,6 +128,102 @@ class T4_LePontVersLaCourbe(unittest.TestCase):
         self.assertNotEqual(iso(entite), courbe.date_arrete)
         print(f"    OK T4b : courbe {courbe.date_arrete} vs entite "
               f"{iso(entite)} — deux notions, deux valeurs")
+
+
+
+
+class T5_LeDefautDArrete(unittest.TestCase):
+    """T5 — le dernier trimestre CLOS, une valeur par défaut qui ne suppose
+    rien.
+
+    ⚠️ ELLE VIT DANS `core`, PAS DANS L'INTERFACE. Une interface qui
+    calculerait elle-même ses fins de trimestre poserait une seconde
+    définition de la même notion — c'est ainsi qu'elle s'est retrouvée sous
+    26 formes sur 71 sites.
+    """
+
+    def test_le_trimestre_EN_COURS_n_est_jamais_propose(self):
+        """⚠️ « CLOS » VEUT DIRE ACHEVÉ. Au 31/12 le T4 court encore : un
+        défaut qui le proposerait inviterait à arrêter des comptes sur une
+        période inachevée."""
+        for aujourd_hui, attendu in ((date(2026, 12, 31), date(2026, 9, 30)),
+                                     (date(2026, 3, 31), date(2025, 12, 31)),
+                                     (date(2026, 6, 30), date(2026, 3, 31))):
+            with self.subTest(aujourd_hui=aujourd_hui):
+                self.assertEqual(dernier_trimestre_clos(aujourd_hui), attendu)
+        print("    OK T5 : le trimestre en cours n'est jamais propose")
+
+    def test_le_passage_d_annee_recule_sur_l_annee_precedente(self):
+        for aujourd_hui, attendu in ((date(2026, 1, 1), date(2025, 12, 31)),
+                                     (date(2026, 1, 15), date(2025, 12, 31)),
+                                     (date(2027, 1, 1), date(2026, 12, 31))):
+            with self.subTest(aujourd_hui=aujourd_hui):
+                self.assertEqual(dernier_trimestre_clos(aujourd_hui), attendu)
+        print("    OK T5b : en janvier, le defaut est le T4 precedent")
+
+    def test_le_defaut_est_TOUJOURS_une_fin_de_trimestre_lisible(self):
+        """La boucle ferme la boucle : ce que la fonction rend doit passer par
+        `lire` et sortir un libelle de periode."""
+        for mois in range(1, 13):
+            for jour in (1, 15, 28):
+                d = dernier_trimestre_clos(date(2026, mois, jour))
+                a = lire(d)
+                self.assertTrue(est_fin_de_periode(a), f'{d}')
+                self.assertRegex(libelle(a), r'^T[1-4] \d{4}$')
+        print("    OK T5c : 36 dates testees, le defaut est toujours un "
+              "trimestre")
+
+
+class T6_LApplicationSaisitUneDate(unittest.TestCase):
+    """T6 — l'interface ne saisit plus un libellé libre.
+
+    ⚠️ `actuaria_app.py` VIT A LA RACINE ET AUCUNE GATE NE LE DECOUVRE — la
+    regle Streamlit, qui se defend : l'interface ne se teste pas ici. Mais la
+    FORME d'une valeur qui entre dans le calcul n'est pas de l'affichage.
+    Le champ etait un texte (« Q2 2026 ») : ni comparable, ni ordonnable, et
+    illisible pour `lire` — mesure faite, 6 saisies usuelles sur 11 etaient
+    refusees, dont la valeur par defaut de l'application elle-meme.
+
+    Ce test relit le fichier, il ne l'importe pas : `actuaria_app` execute
+    Streamlit a l'import.
+    """
+
+    CHEMIN = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        'actuaria_app.py')
+
+    def _source(self):
+        with open(self.CHEMIN, encoding='utf-8') as f:
+            return f.read()
+
+    def test_le_champ_d_arrete_est_une_DATE(self):
+        src = self._source()
+        self.assertIn('key="a7_arrete_date"', src)
+        self.assertIn('st.date_input(', src)
+        self.assertNotIn('key="a7_arrete"', src,
+                         "le champ texte libre est revenu")
+        print("    OK T6 : l'arrete se saisit comme une date")
+
+    def test_le_libelle_est_DERIVE_et_la_date_typee_voyage(self):
+        """⚠️ DEUX CHAMPS QUI DISENT LE MEME FAIT FINISSENT PAR DIVERGER. Le
+        libelle descend toujours vers A7, mais CALCULE : il ne peut plus
+        contredire la date qui l'accompagne."""
+        src = self._source()
+        self.assertIn('_libelle_arrete(', src)
+        self.assertIn('"a7_arrete_iso"', src)
+        self.assertIn('_arrete_core.iso(', src)
+        print("    OK T6b : libelle derive, et la date ISO voyage a cote")
+
+    def test_l_application_ne_REIMPLEMENTE_pas_la_lecture(self):
+        """⚠️ CE QUI AVAIT PRODUIT 26 FORMES : chacun relit une date a sa
+        facon. L'interface appelle `core.arrete`, elle ne decide rien."""
+        src = self._source()
+        self.assertIn('from core import arrete as _arrete_core', src)
+        self.assertIn('_arrete_core.dernier_trimestre_clos()', src)
+        self.assertNotIn('def _dernier_trimestre_clos', src,
+                         "l'interface a repris sa propre definition")
+        print("    OK T6c : l'interface enveloppe `core.arrete`, elle ne le "
+              "double pas")
 
 
 if __name__ == '__main__':
