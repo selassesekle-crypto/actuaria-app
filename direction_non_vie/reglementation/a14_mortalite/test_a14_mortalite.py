@@ -7,6 +7,7 @@
 """
 
 import sys, os
+import unittest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../..")))
 
 import numpy as np
@@ -120,6 +121,40 @@ def test_t7_dict_retour_complet():
         assert h in val, f"Hypothèse manquante : {h}"
         assert val[h]["statut"] in ("VERT", "AMBRE", "ROUGE")
     print(f"T7 ✅ — Dict retour complet | H1={val['h1_lee_carter']['statut']} H2={val['h2_coherence']['statut']} H3={val['h3_qx_valide']['statut']}")
+
+# ── CE QUE LA GATE VOIT ─────────────────────────────────────────────────────
+# ⚠️ LES SEPT FONCTIONS CI-DESSUS ÉTAIENT INVISIBLES À LA GATE. `unittest
+# discover` ne collecte que les méthodes des sous-classes de `TestCase` ; sur ce
+# fichier il rendait « Ran 0 tests — NO TESTS RAN » et sortait en 0. Le silence
+# ressemblait au succès.
+#
+# ⚠️ CETTE CLASSE N'AJOUTE AUCUNE VÉRIFICATION. Chaque méthode appelle sa
+# fonction, rien de plus — ce que les tests contrôlent est inchangé, seule leur
+# visibilité l'est. `core/test_couverture_gate.py` empêche le trou de se rouvrir.
+
+class T14_GateA14Mortalite(unittest.TestCase):
+    """Expose à `unittest discover` les sept tests ci-dessus."""
+
+    def test_t1_nominal_th0002_homme_65(self):
+        test_t1_nominal_th0002_homme_65()
+
+    def test_t2_nominal_tf0002_femme_45(self):
+        test_t2_nominal_tf0002_femme_45()
+
+    def test_t3_qx_contrainte_01(self):
+        test_t3_qx_contrainte_01()
+
+    def test_t4_capitaux_deces_relation_fondamentale(self):
+        test_t4_capitaux_deces_relation_fondamentale()
+
+    def test_t5_lee_carter_reduction_mortalite(self):
+        test_t5_lee_carter_reduction_mortalite()
+
+    def test_t6_validation_ae_table_identique(self):
+        test_t6_validation_ae_table_identique()
+
+    def test_t7_dict_retour_complet(self):
+        test_t7_dict_retour_complet()
 
 # ── RUNNER ────────────────────────────────────────────────────────────────────
 

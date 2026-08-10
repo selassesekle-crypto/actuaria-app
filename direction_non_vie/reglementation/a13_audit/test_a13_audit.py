@@ -7,6 +7,7 @@
 """
 
 import sys, os
+import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 try:
@@ -172,6 +173,43 @@ def test_t7_dict_retour_complet():
     assert res["erreur"] is None
     assert res["audit_id"].startswith("A13_")
     print("T7 ✅ — Dictionnaire de retour complet")
+
+# ── CE QUE LA GATE VOIT ───────────────────────────────────────────────────────
+# ⚠️ LES SEPT FONCTIONS CI-DESSUS ÉTAIENT INVISIBLES À LA GATE. `unittest
+# discover` ne collecte que les méthodes des sous-classes de `TestCase` ; sur
+# ce fichier il rendait « Ran 0 tests — NO TESTS RAN » et sortait en 0. Sept
+# tests réels ne tournaient pas, et la gate déclarait le succès : le silence
+# ressemblait au succès.
+#
+# ⚠️ CETTE CLASSE N'AJOUTE AUCUNE VÉRIFICATION. Chaque méthode appelle sa
+# fonction, rien de plus — ce que les tests contrôlent est inchangé, seule leur
+# visibilité l'est. `core/test_couverture_gate.py` empêche le trou de se
+# rouvrir en silence.
+
+class T13_GateA13Audit(unittest.TestCase):
+    """Expose à `unittest discover` les sept tests ci-dessus."""
+
+    def test_t1_nominal_tous_agents_vert(self):
+        test_t1_nominal_tous_agents_vert()
+
+    def test_t2_agents_manquants_ambre(self):
+        test_t2_agents_manquants_ambre()
+
+    def test_t3_agent_rouge_statut_rouge(self):
+        test_t3_agent_rouge_statut_rouge()
+
+    def test_t4_registre_rgpd_structure(self):
+        test_t4_registre_rgpd_structure()
+
+    def test_t5_versioning_hypotheses(self):
+        test_t5_versioning_hypotheses()
+
+    def test_t6_validation_audit_c1_c2_c3(self):
+        test_t6_validation_audit_c1_c2_c3()
+
+    def test_t7_dict_retour_complet(self):
+        test_t7_dict_retour_complet()
+
 
 # ── RUNNER ────────────────────────────────────────────────────────────────────
 

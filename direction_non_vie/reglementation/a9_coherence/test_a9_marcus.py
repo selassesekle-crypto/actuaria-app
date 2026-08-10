@@ -15,6 +15,7 @@
 """
 
 import sys
+import unittest
 import traceback
 from direction_non_vie.reglementation.a9_coherence.agent import AgentA9Coherence
 
@@ -285,6 +286,41 @@ def test_t7_alertes_ia_capital():
 # ══════════════════════════════════════════════════════════════════════════════
 # RUNNER
 # ══════════════════════════════════════════════════════════════════════════════
+
+# ── CE QUE LA GATE VOIT ─────────────────────────────────────────────────────
+# ⚠️ LES SEPT FONCTIONS CI-DESSUS ÉTAIENT INVISIBLES À LA GATE. `unittest
+# discover` ne collecte que les méthodes des sous-classes de `TestCase` ; sur ce
+# fichier il rendait « Ran 0 tests — NO TESTS RAN » et sortait en 0. Le silence
+# ressemblait au succès.
+#
+# ⚠️ CETTE CLASSE N'AJOUTE AUCUNE VÉRIFICATION. Chaque méthode appelle sa
+# fonction, rien de plus — ce que les tests contrôlent est inchangé, seule leur
+# visibilité l'est. `core/test_couverture_gate.py` empêche le trou de se rouvrir.
+
+class T9_GateA9Coherence(unittest.TestCase):
+    """Expose à `unittest discover` les sept tests ci-dessus."""
+
+    def test_t1_flux_minimaux_vert(self):
+        test_t1_flux_minimaux_vert()
+
+    def test_t2_c1_sans_primes(self):
+        test_t2_c1_sans_primes()
+
+    def test_t3_c1_avec_primes(self):
+        test_t3_c1_avec_primes()
+
+    def test_t4_c2_scr_anomal(self):
+        test_t4_c2_scr_anomal()
+
+    def test_t5_flux_complets(self):
+        test_t5_flux_complets()
+
+    def test_t6_flux_partiels_gracieux(self):
+        test_t6_flux_partiels_gracieux()
+
+    def test_t7_alertes_ia_capital(self):
+        test_t7_alertes_ia_capital()
+
 
 def main():
     print("\n" + "=" * 70)
