@@ -44,6 +44,8 @@ from typing import Dict, Any, List, Optional
 
 import numpy as np
 import pandas as pd
+
+from core import traitement_ia
 try:
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
@@ -365,6 +367,11 @@ class AgentA13AuditTrail:
             ],
             'dpo_contact':   'dpo@actuaria.fr',
             'ref_legale':    'RGPD Art. 30 + Loi Informatique et Libertés',
+            # ⚠️ LE FAIT QUI MANQUAIT. Ce registre documente A1 à A12, dont
+            # les trois qui appellent un service tiers — et il n'a jamais
+            # nommé ce service. Constat TECHNIQUE, mesuré à la frontière : sa
+            # qualification juridique appartient au DPO, pas au code.
+            'assistance_ia': traitement_ia.constat_assistance_ia(),
         }
 
     # ══════════════════════════════════════════════════════════════════════════

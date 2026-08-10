@@ -55,6 +55,8 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
+from core import traitement_ia
+
 warnings.filterwarnings("ignore")
 logging.basicConfig(
     level=logging.INFO,
@@ -434,6 +436,13 @@ class AgentSPAuditTrail:
                 "rgpd_art9":      "✅ Base légale contrat d'assurance collective",
                 "cnil_assureurs": "✅ Recommandations CNIL assureurs 2023",
             },
+
+            # ⚠️ LE FAIT QUI MANQUAIT, identique à celui du registre Non-Vie
+            # et lu à la MÊME source : les destinataires ci-dessus nomment les
+            # actuaires, l'ACPR et le commissaire aux comptes, jamais le
+            # fournisseur du service d'assistance IA. Constat technique ; sa
+            # qualification juridique appartient au DPO, pas au code.
+            "assistance_ia": traitement_ia.constat_assistance_ia(),
         }
 
     # =========================================================================

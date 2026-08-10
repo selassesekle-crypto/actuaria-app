@@ -42,6 +42,12 @@ MODELE_ETABLI = 'claude-sonnet-4-6'
 
 MODELES_CONNUS = (MODELE_RECENT, MODELE_ETABLI)
 
+# ⚠️ NOMMÉS ICI PARCE QUE C'EST ICI QU'ON LE SAIT. Ce module est le seul du
+# dépôt qui importe `anthropic` pour appeler ; tout autre fichier qui écrirait
+# ce nom le recopierait. Les deux registres art. 30 (C5) les lisent d'ici.
+FOURNISSEUR = 'Anthropic'
+SERVICE = "API Claude (messages), appelée depuis le poste où tourne le logiciel"
+
 
 class Site(NamedTuple):
     """Un appelant de la frontière, et le modèle qu'il porte aujourd'hui."""
