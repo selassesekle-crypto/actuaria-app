@@ -120,7 +120,11 @@ class T1_UneSeuleNarration(unittest.TestCase):
         html, word = _produire(appels, echouer=True)
         self.assertEqual(len(appels), 1, 'le repli est calculé une seule fois')
         for texte in (html, word):
-            self.assertIn('commentaire_agent', texte)   # la source est nommée
+            # /!\ ANCRE MISE A JOUR AVEC LE TEXTE PUBLIE, INTENTION
+            # INCHANGEE : le test verifie toujours que LA SOURCE EST
+            # NOMMEE dans les deux formats. Seul l identifiant
+            # `commentaire_agent` est devenu lisible pour le lecteur.
+            self.assertIn("commentaire de l'agent", texte)
             self.assertIn('REPLI AGENT', texte)         # le même texte
             self.assertNotIn('ActuarIA Intelligence', texte)
         print('    OK T1d : un échec est NOMMÉ dans les deux formats, et le '

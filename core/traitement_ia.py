@@ -57,6 +57,35 @@ QUALIFICATION = (
 )
 
 
+#: C5c-1 — la phrase que porte la mention d'origine, dans TOUS les rapports.
+#:
+#: ⚠️ ELLE DIT L'ENGAGEMENT, PAS LE FAIT. Certifier « relue et validée » serait
+#: invérifiable : sur les neuf rapports, deux seulement savent si une relecture
+#: a eu lieu (A7 et tarification, via `trace_relecture`), et quatre ignorent
+#: jusqu'au nom de l'actuaire. Une mention qui affirme un acte que le code ne
+#: constate pas est exactement le défaut que ce chantier retire.
+#:
+#: ⚠️ ET LÀ OÙ LE CODE SAIT, LES DEUX COEXISTENT SANS SE CONTREDIRE :
+#: `trace_relecture` dit le FAIT (relecture enregistrée ou non), cette phrase
+#: dit ce que le document ENGAGE. Vraie partout, sans dépendre d'un mécanisme.
+#:
+#: ⚠️ « Cette narration » et non « Elle » : le libellé la précède parfois sans
+#: antécédent grammatical (« Mode standard — … »).
+ENGAGEMENT = "Cette narration engage l'actuaire signataire."
+
+
+def avec_engagement(libelle: str) -> str:
+    """Le libellé d'origine, suivi de la phrase d'engagement.
+
+    ⚠️ RIEN QUAND IL N'Y A RIEN. Un rapport sans narration ne doit engager
+    personne : le libellé vide reste vide, la phrase ne s'y ajoute pas. C'est
+    la même règle que l'état « aucune » des libellés, et elle est ici en UN
+    seul endroit plutôt que répétée aux vingt-six sites de rendu.
+    """
+    libelle = (libelle or '').strip()
+    return f'{libelle} — {ENGAGEMENT}' if libelle else ''
+
+
 def constat_assistance_ia() -> dict[str, Any]:
     """Le constat technique, prêt à être porté par un registre art. 30.
 

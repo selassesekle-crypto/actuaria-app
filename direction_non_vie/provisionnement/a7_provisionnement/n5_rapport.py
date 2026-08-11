@@ -23,6 +23,7 @@ from datetime import datetime
 from typing import Dict, List, NamedTuple, Tuple
 
 from core import frontiere_llm
+from core import traitement_ia
 import numpy as np
 
 # Source UNIQUE d'affichage des hypothèses de BF et Cape Cod : une hypothèse non
@@ -1885,6 +1886,7 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         'templates':  '📝 Mode standard',
         'aucune':     '',
     }.get(source_narration, '')
+    source_badge = traitement_ia.avec_engagement(source_badge)
 
     b['narration_html']  = narration_html
     b['commentaire_badge'] = source_badge
@@ -2721,7 +2723,7 @@ def export_word(n1, n2, n3, n4,
                             _run(p,ln,sz=9,col=NR)
             if source=='claude_api':
                 p=doc.add_paragraph()
-                _run(p,'✦ Narration générée par ActuarIA Intelligence',sz=7,italic=True,col=GrR)
+                _run(p,traitement_ia.avec_engagement('✦ Narration générée par ActuarIA Intelligence'),sz=7,italic=True,col=GrR)
         else:
             p=doc.add_paragraph(); _run(p,'Narration non disponible.',sz=9,italic=True)
         doc.add_page_break()

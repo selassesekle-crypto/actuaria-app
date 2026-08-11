@@ -73,6 +73,30 @@ class T5A_ConstatAssistanceIA(unittest.TestCase):
         self.assertIn('conversationnel', reserves)
 
 
+class T5C_PhraseDEngagement(unittest.TestCase):
+    """C5c-1 — la mention dit l'ENGAGEMENT, jamais un fait invérifiable."""
+
+    def test_la_phrase_suit_le_libelle(self):
+        rendu = traitement_ia.avec_engagement('✦ Narration générée')
+        self.assertTrue(rendu.startswith('✦ Narration générée'))
+        self.assertTrue(rendu.endswith(traitement_ia.ENGAGEMENT))
+
+    def test_rien_quand_il_n_y_a_rien(self):
+        """⚠️ LA RÈGLE QUI COMPTE. Un rapport sans narration n'engage
+        personne : sans elle, la phrase s'afficherait seule sous un bloc
+        « Narration non disponible » — le défaut de C5c-0 dans l'autre sens."""
+        for vide in ('', None, '   ', '\n'):
+            self.assertEqual(traitement_ia.avec_engagement(vide), '')
+
+    def test_elle_ne_certifie_aucune_relecture(self):
+        """⚠️ Deux sites sur neuf seulement savent si une relecture a eu lieu.
+        Affirmer « relue et validée » serait invérifiable aux sept autres."""
+        phrase = traitement_ia.ENGAGEMENT.lower()
+        for mot in ('relue', 'validée', 'validee', 'vérifiée'):
+            self.assertNotIn(mot, phrase)
+        self.assertIn('engage', phrase)
+
+
 class T5A_VeriteDuConstat(unittest.TestCase):
     """⚠️ LE VERROU QUI COMPTE : le constat est-il encore VRAI ?"""
 

@@ -29,6 +29,7 @@ from typing import Dict, List, NamedTuple, Optional, Tuple
 from core import format_fr as F
 from core import narration as _md
 from core import frontiere_llm
+from core import traitement_ia
 
 
 logger = logging.getLogger('actuaria.tarif.rapport')
@@ -1226,6 +1227,29 @@ SRC_REPLI = 'commentaire_agent'
 SRC_DEFAUT = 'commentaire_agent (appel refuse — defaut de configuration)'
 SRC_REPONSE = 'commentaire_agent (reponse recue mais inexploitable)'
 
+
+# /!\ CE QUE LE LECTEUR LIT, ET SEULEMENT LUI. Les constantes SRC_* restent des
+# identifiants INTERNES : un test et `scripts/rapport_tarif_local.py` s'y
+# ancrent. Seul `commentaire_agent` est traduit -- LES CAUSES ENTRE PARENTHESES
+# RESTENT INTACTES, c'est l'acquis du lot F2 : les effacer reproduirait le
+# defaut qu'il a ferme (neuf sites accusaient l'API sur un 200).
+def _libelle_source(n_src: str) -> str:
+    """L'identifiant de repli, en francais lisible. Les causes sont gardees."""
+    return str(n_src or '').replace('commentaire_agent', "commentaire de l'agent")
+
+
+# /!\ UNE SEULE FONCTION POUR LES DEUX FORMATS. L'HTML disait << Source : >> et
+# le Word << Source de la narration : >> -- deux textes pour un meme fait.
+# Analyser une fois et rendre deux fois est le motif deja pose par le lot T6.
+def _badge_narration(n_src: str) -> str:
+    """Le libelle d'origine publie au lecteur, identique en HTML et en Word."""
+    if n_src == SRC_API:
+        base = ('✦ Narration générée par ActuarIA Intelligence '
+                f'({CLAUDE_MODEL_TARIF})')
+    else:
+        base = f'✦ Source de la narration : {_libelle_source(n_src)}'
+    return traitement_ia.avec_engagement(base)
+
 def _narration_claude(result_a3, result_a4, result_a6, branche, arrete) -> Tuple[str, str]:
     repli = SRC_REPLI
     try:
@@ -1802,7 +1826,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
     html += narr_html
     html += f"""
     <p style="margin-top:12px; font-size:10px; color:{SLATE}; font-style:italic;">
-      ✦ {f'Narration générée par ActuarIA Intelligence ({CLAUDE_MODEL_TARIF})' if n_src=='claude_api' else f'Source : {n_src}'}
+      {_badge_narration(n_src)}
     </p>
   </div>
 </div>
@@ -2273,9 +2297,7 @@ def export_word(
             # dire dans les DEUX formats — sinon on remplace deux commentaires
             # divergents par un silence dans l'un des deux.
             p = doc.add_paragraph()
-            _run(p, (f'✦ Narration générée par ActuarIA Intelligence '
-                     f'({CLAUDE_MODEL_TARIF})' if n_src == SRC_API
-                     else f'✦ Source de la narration : {n_src}'),
+            _run(p, _badge_narration(n_src),
                  sz=7, italic=True, col=GrR)
         else:
             p=doc.add_paragraph()

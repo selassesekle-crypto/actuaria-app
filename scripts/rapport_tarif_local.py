@@ -152,7 +152,7 @@ def main():
         verdict = 'NARRATION CLAUDE (appel API reussi)'
     elif 'appel refuse' in texte:
         verdict = 'REPLI SUR DEFAUT DE CONFIGURATION (requete refusee)'
-    elif 'commentaire_agent' in texte:
+    elif "commentaire de l'agent" in texte:
         verdict = 'repli sur commentaire agent (API indisponible)'
     else:
         verdict = 'source indeterminee'

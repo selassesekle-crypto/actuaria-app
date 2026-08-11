@@ -26,6 +26,7 @@ from datetime import datetime
 from typing import Dict, Optional, Tuple
 
 from core import frontiere_llm
+from core import traitement_ia
 
 logger = logging.getLogger("actuaria.rapport_epre")
 
@@ -584,6 +585,7 @@ def export_html(
             "manuel":     "❆ Mode standard",
             "aucune":     "",
         }.get(source, "")
+        ai_badge = traitement_ia.avec_engagement(ai_badge)
 
         H = []
         H.append('<!DOCTYPE html>')
@@ -953,7 +955,7 @@ def export_word(
                             _run(p,ln,sz=9,col=NR)
             if source=="claude_api":
                 p=doc.add_paragraph()
-                _run(p,"❆ Narration generee par ActuarIA Intelligence",sz=7,italic=True,col=SR)
+                _run(p,traitement_ia.avec_engagement("❆ Narration generee par ActuarIA Intelligence"),sz=7,italic=True,col=SR)
         else:
             p=doc.add_paragraph()
             _run(p,"Narration non disponible — configurer ANTHROPIC_API_KEY.",sz=9,italic=True,col=SR)

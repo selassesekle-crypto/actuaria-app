@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Dict, Optional
 
 from core import frontiere_llm
+from core import traitement_ia
 
 import numpy as np
 
@@ -255,6 +256,7 @@ def export_html(result_s1, result_s2, result_s3,
         narration_html    = _md_to_html(narration)
         source_badge = {"claude_api": "✦ ActuarIA Intelligence",
                         "templates": "📝 Mode standard", "aucune": ""}.get(source, "")
+        source_badge = traitement_ia.avec_engagement(source_badge)
 
         # KPIs page de garde
         logo_src = LOGO_URI if _N5_IMPORT else ""
@@ -591,7 +593,7 @@ def export_word(result_s1, result_s2, result_s3,
                             _run(p, ln, sz=9, col=NR)
             if source == "claude_api":
                 p=doc.add_paragraph()
-                _run(p,"✦ Narration générée par ActuarIA Intelligence",sz=7,italic=True,col=GrR)
+                _run(p,traitement_ia.avec_engagement("✦ Narration générée par ActuarIA Intelligence"),sz=7,italic=True,col=GrR)
         else:
             p=doc.add_paragraph()
             _run(p,"Narration non disponible.",sz=9,italic=True)

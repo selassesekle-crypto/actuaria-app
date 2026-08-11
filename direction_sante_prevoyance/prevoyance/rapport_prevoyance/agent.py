@@ -58,6 +58,7 @@ from pathlib import Path
 from typing import Dict, Tuple
 
 from core import frontiere_llm
+from core import traitement_ia
 
 import numpy as np
 
@@ -615,7 +616,9 @@ def _export_html_prev(m1: Dict, m3: Dict, m4: Dict,
         )
         source_badge = ""
         if source_narration == "claude_api":
-            source_badge = '<span style="font-size:7pt;color:#8A9BB0;font-style:italic;">✦ Narration générée par ActuarIA Intelligence</span>'
+            source_badge = ('<span style="font-size:7pt;color:#8A9BB0;font-style:italic;">'
+                        + traitement_ia.avec_engagement('✦ Narration générée par ActuarIA Intelligence')
+                        + '</span>')
 
         html = (
             "<!DOCTYPE html>\n<html lang='fr'>\n<head>\n"
