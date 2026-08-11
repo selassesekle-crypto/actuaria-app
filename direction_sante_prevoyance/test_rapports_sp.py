@@ -196,3 +196,28 @@ def test_le_docx_n_est_pas_une_coquille_vide(nom, rapport_sante,
     total = sum(len(p) for p in _paragraphes(r["word_bytes"]))
     assert total > 3000, (
         f"{nom} : le .docx ne porte que {total} caracteres de texte")
+
+
+@pytest.mark.parametrize("nom", ["sante", "prevoyance"])
+def test_la_mention_d_origine_est_dans_LES_DEUX_formats(nom, rapport_sante,
+                                                        rapport_prevoyance):
+    """⚠️ C5c-1b — le Word ne nommait JAMAIS l'origine de sa narration : on ne
+    lui passait meme pas la source. L'HTML ne la nommait qu'en cas de SUCCES.
+    Un repli etait donc indiscernable d'une narration reussie, dans les deux
+    livrables signes.
+
+    ⚠️ L'ANCRE EST LE TEXTE PUBLIE, relu dans les deux artefacts reels.
+    """
+    r = rapport_sante if nom == "sante" else rapport_prevoyance
+    html = r["html_bytes"].decode("utf-8", "ignore")
+    word = "\n".join(_paragraphes(r["word_bytes"]))
+    marqueurs = ("ActuarIA Intelligence", "Mode standard")
+    dans_html = [m for m in marqueurs if m in html]
+    dans_word = [m for m in marqueurs if m in word]
+    assert dans_html, f"{nom} : aucune mention d'origine dans l'HTML"
+    assert dans_word, f"{nom} : aucune mention d'origine dans le .docx"
+    assert dans_html == dans_word, (
+        f"{nom} : les deux formats nomment des origines differentes — "
+        f"HTML {dans_html}, Word {dans_word}")
+    assert "engage l'actuaire signataire" in word, (
+        f"{nom} : la phrase d'engagement manque au .docx")

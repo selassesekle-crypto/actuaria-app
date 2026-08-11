@@ -707,6 +707,20 @@ body {
 # EXPORT HTML
 # ══════════════════════════════════════════════════════════════════════════════
 
+# /!\ UN SEUL LIBELLE POUR LES DEUX FORMATS. L'HTML ne nommait sa source QU'EN
+# CAS DE SUCCES et le Word ne la nommait JAMAIS -- on ne lui passait meme pas
+# l'information. Un repli etait donc indiscernable d'une narration reussie
+# dans les deux livrables signes. Meme correction que le lot T1 en tarification,
+# ou le raisonnement est ecrit en toutes lettres.
+def _badge_narration_sante(source: str) -> str:
+    """Le libelle d'origine publie au lecteur, identique en HTML et en Word."""
+    libelle = {
+        "claude_api": "✦ Narration générée par ActuarIA Intelligence",
+        "fallback": "📝 Mode standard",
+    }.get(source, "")
+    return traitement_ia.avec_engagement(libelle)
+
+
 def _export_html_sante(m1: Dict, m3: Dict, m4: Dict,
                        narration: str, source_narration: str,
                        entite: str, date_arrete: str) -> str:
@@ -752,11 +766,10 @@ def _export_html_sante(m1: Dict, m3: Dict, m4: Dict,
         narration_html = _md_to_html(narration) if narration else (
             '<p style="color:#8A9BB0;font-style:italic;">Narration non disponible — vérifier la clé API.</p>'
         )
-        source_badge = ""
-        if source_narration == "claude_api":
-            source_badge = ('<span style="font-size:7pt;color:#8A9BB0;font-style:italic;">'
-                        + traitement_ia.avec_engagement('✦ Narration générée par ActuarIA Intelligence')
-                        + '</span>')
+        source_badge = _badge_narration_sante(source_narration)
+        if source_badge:
+            source_badge = ('<span style="font-size:7pt;color:#8A9BB0;'
+                            'font-style:italic;">' + source_badge + '</span>')
 
         html = (
             "<!DOCTYPE html>\n<html lang='fr'>\n<head>\n"
@@ -952,7 +965,7 @@ def _export_pdf_sante(html: str) -> bytes:
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _export_word_sante(m1: Dict, m3: Dict, m4: Dict,
-                       narration: str, entite: str, date_arrete: str) -> bytes:
+                       narration: str, source_narration: str, entite: str, date_arrete: str) -> bytes:
     try:
         from docx import Document
         from docx.shared import Pt, Cm, RGBColor
@@ -1163,6 +1176,12 @@ def _export_word_sante(m1: Dict, m3: Dict, m4: Dict,
         else:
             p = doc.add_paragraph()
             _run(p, "Narration non disponible.", sz=9, italic=True)
+        # /!\ LA MENTION D ORIGINE, DANS LE WORD AUSSI. Elle en etait
+        # totalement absente : ce format ne recevait meme pas la source.
+        _badge = _badge_narration_sante(source_narration)
+        if _badge:
+            p = doc.add_paragraph()
+            _run(p, _badge, sz=7, italic=True, col=GrR)
         doc.add_paragraph()
 
         # Pied
@@ -1394,7 +1413,7 @@ class AgentRapportSante:
             )
             html_bytes = _export_html_sante(m1, m3, m4, narration, src_narration, entite, date_arrete)
             pdf_bytes  = _export_pdf_sante(html_bytes)
-            word_bytes = _export_word_sante(m1, m3, m4, narration, entite, date_arrete)
+            word_bytes = _export_word_sante(m1, m3, m4, narration, src_narration, entite, date_arrete)
             excel_bytes = _export_excel_sante(m1, m3, m4, entite, date_arrete)
 
             # Graphiques
