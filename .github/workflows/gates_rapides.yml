@@ -44,13 +44,13 @@ jobs:
 
     steps:
       - name: "Recuperer le depot"
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: "Python 3.14 — la version REELLEMENT utilisee"
         # /!\ PAS 3.11. Certifier une version que personne n'utilise ne prouve
         # rien. Si 3.14 est indisponible, ce pas ECHOUE -- c'est voulu : mieux
         # vaut une CI rouge qu'une CI qui teste autre chose en silence.
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.14"
 
@@ -86,7 +86,8 @@ jobs:
           set -e
           # /!\ LE CODE DE SORTIE EST CAPTURE ICI, avant toute autre commande :
           # piper une gate dans `tail` ferait rendre le code de `tail`.
-          n=$(grep -oE '^Ran [0-9]+ test' /tmp/normes.txt | grep -oE '[0-9]+' || echo 0)
+          n=$(grep -oE '^Ran [0-9]+ test' /tmp/normes.txt | grep -oE '[0-9]+')
+          n=${n:-0}
           echo "tests=$n" >> "$GITHUB_OUTPUT"
           tail -20 /tmp/normes.txt
           exit $code
@@ -98,7 +99,8 @@ jobs:
           python -m unittest discover -s core -t . > /tmp/core.txt 2>&1
           code=$?
           set -e
-          n=$(grep -oE '^Ran [0-9]+ test' /tmp/core.txt | grep -oE '[0-9]+' || echo 0)
+          n=$(grep -oE '^Ran [0-9]+ test' /tmp/core.txt | grep -oE '[0-9]+')
+          n=${n:-0}
           echo "tests=$n" >> "$GITHUB_OUTPUT"
           tail -20 /tmp/core.txt
           exit $code
@@ -111,8 +113,10 @@ jobs:
             -q -n 6 --dist loadfile > /tmp/pytest.txt 2>&1
           code=$?
           set -e
-          n=$(grep -oE '[0-9]+ passed' /tmp/pytest.txt | grep -oE '[0-9]+' | head -1 || echo 0)
-          f=$(grep -oE '[0-9]+ failed' /tmp/pytest.txt | grep -oE '[0-9]+' | head -1 || echo 0)
+          n=$(grep -oE '[0-9]+ passed' /tmp/pytest.txt | grep -oE '[0-9]+' | head -1)
+          n=${n:-0}
+          f=$(grep -oE '[0-9]+ failed' /tmp/pytest.txt | grep -oE '[0-9]+' | head -1)
+          f=${f:-0}
           echo "tests=$n" >> "$GITHUB_OUTPUT"
           echo "echecs=$f" >> "$GITHUB_OUTPUT"
           tail -25 /tmp/pytest.txt

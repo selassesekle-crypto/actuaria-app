@@ -1,0 +1,135 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# ActuarIA — GATE `direction_non_vie`, NOCTURNE
+#
+# CE QU'ELLE VERIFIE : les 1 128 tests de `direction_non_vie` -- la zone que le
+# workflow `gates_rapides.yml` NE COUVRE PAS.
+#
+# POURQUOI LA NUIT : mesure locale, 23 a 26 min d'execution + 5 a 8 min
+# d'installation (torch pese ~800 Mo, kaleido embarque Chrome). Attendre 30 a
+# 45 min a chaque push serait trop lent pour etre utilise ; une fois par nuit,
+# le retard maximal est de 24 h et le cout est nul (depot public).
+#
+# /!\ PARALLELISER NE SERVIRAIT A RIEN : `provisionnement` pese 90,9 % du temps
+#     de la zone (2 124 s contre 198 + 9 + 6 pour les trois autres
+#     sous-directions). Des jobs paralleles buteraient sur le meme mur.
+#
+# /!\ ELLE NOMME CE QU'ELLE N'A PAS PU FAIRE. Si un paquet optionnel ne
+#     s'installe pas en 3.14, il est NOMME et le resume s'intitule
+#     << GATE PARTIELLE >>. Un vert qui a saute 24 tests sans le dire serait
+#     exactement la gate qui rendait << Ran 0 tests >> et sortait en 0.
+#
+# /!\ AUCUNE CLE. Depot public, journaux publics : voir `gates_rapides.yml`.
+# ══════════════════════════════════════════════════════════════════════════════
+name: "Gate direction_non_vie (nocturne)"
+
+on:
+  schedule:
+    # 03h00 UTC, chaque nuit.
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gate-non-vie:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    env:
+      PYTHONUTF8: "1"
+      PYTHONPATH: "."
+
+    steps:
+      - name: "Recuperer le depot"
+        uses: actions/checkout@v5
+
+      - name: "Python 3.14 — la version REELLEMENT utilisee"
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: "/!\\ Verifier qu'AUCUNE cle n'est presente"
+        run: |
+          if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+            echo "::error::ANTHROPIC_API_KEY presente dans un depot PUBLIC."
+            exit 1
+          fi
+          echo "ANTHROPIC_API_KEY absente."
+
+      - name: "Pile coeur"
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-xdist
+
+      - name: "Pile optionnelle — UN PAQUET A LA FOIS, pour pouvoir NOMMER"
+        id: optionnels
+        # /!\ `pip install -r` est tout-ou-rien : un seul echec et l'on ne sait
+        # pas lequel. Un par un, on peut dire exactement ce qui manque -- et
+        # c'est la condition posee pour ce lot.
+        run: |
+          set +e
+          manquants=""
+          poses=0
+          while read -r ligne; do
+            pkg=$(echo "$ligne" | sed 's/#.*//' | tr -d '[:space:]')
+            [ -z "$pkg" ] && continue
+            if pip install "$pkg" > /dev/null 2>&1; then
+              poses=$((poses + 1))
+            else
+              manquants="$manquants $pkg"
+              echo "::warning::paquet optionnel NON INSTALLE en 3.14 : $pkg"
+            fi
+          done < requirements-optional.txt
+          set -e
+          echo "poses=$poses" >> "$GITHUB_OUTPUT"
+          echo "manquants=$manquants" >> "$GITHUB_OUTPUT"
+          if [ -n "$manquants" ]; then
+            echo "PAQUETS MANQUANTS :$manquants"
+          else
+            echo "Les $poses paquets optionnels sont installes."
+          fi
+
+      - name: "Gate direction_non_vie — 1 128 tests"
+        id: gate
+        run: |
+          set +e
+          python -m unittest discover -s direction_non_vie -t . > /tmp/nv.txt 2>&1
+          code=$?
+          set -e
+          # /!\ Code de sortie capture AVANT toute autre commande.
+          n=$(grep -oE '^Ran [0-9]+ test' /tmp/nv.txt | grep -oE '[0-9]+')
+          n=${n:-0}
+          s=$(grep -oE 'skipped=[0-9]+' /tmp/nv.txt | grep -oE '[0-9]+')
+          s=${s:-0}
+          echo "tests=$n" >> "$GITHUB_OUTPUT"
+          echo "sautes=$s" >> "$GITHUB_OUTPUT"
+          tail -30 /tmp/nv.txt
+          exit $code
+
+      - name: "Resume — COMPLETE ou PARTIELLE, jamais ambigu"
+        if: always()
+        run: |
+          if [ -z "${{ steps.optionnels.outputs.manquants }}" ]; then
+            titre="## Gate direction_non_vie — COMPLETE"
+            note="Les ${{ steps.optionnels.outputs.poses }} paquets optionnels sont installes : aucun test n'a ete saute faute de dependance."
+          else
+            titre="## Gate direction_non_vie — PARTIELLE"
+            note="**PAQUETS ABSENTS EN 3.14 :**\`${{ steps.optionnels.outputs.manquants }}\`. Les tests qui en dependent ont ete SAUTES. Ce resultat ne vaut PAS pour une gate complete."
+          fi
+          {
+            echo "$titre"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| tests executes | ${{ steps.gate.outputs.tests }} |"
+            echo "| tests sautes | ${{ steps.gate.outputs.sautes }} |"
+            echo "| paquets optionnels poses | ${{ steps.optionnels.outputs.poses }} |"
+            echo ""
+            echo "$note"
+            echo ""
+            echo "Zones NON couvertes ici : \`normes\`, \`core\`, Vie/EP-RE,"
+            echo "Sante-Prevoyance — elles tournent a chaque push dans"
+            echo "\`gates_rapides.yml\`."
+          } >> "$GITHUB_STEP_SUMMARY"
