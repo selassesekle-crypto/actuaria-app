@@ -2,9 +2,10 @@
 Palette et helpers communs aux modules de rapport SP.
 Reproduit fidèlement le style Navy/Gold de n5_rapport.py.
 """
-from openpyxl.styles import (
-    Font, PatternFill, Alignment, Border, Side
-)
+import io
+
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 # Palette Navy/Gold ActuarIA
@@ -102,18 +103,16 @@ def _f(v, dec=0):
         if dec == 0:
             return f"{fv:,.0f} €".replace(",", " ")
         return f"{fv:,.{dec}f}".replace(",", " ")
-    except: return "—"
+    except (TypeError, ValueError): return "—"
 
 def _pct(v, dec=1):
     if v is None: return "—"
     try: return f"{float(v):.{dec}f} %"
-    except: return "—"
+    except (TypeError, ValueError): return "—"
 
 
-from openpyxl import Workbook
-import io
 
-def generer(result_p1: dict, result_p2: dict = None) -> bytes:
+def generer(result_p1: dict, result_p2: dict | None = None) -> bytes:
     """
     Rapport tarification prévoyance : P1 (primes ITT/IP) + P2 (tables BCAC/Markov).
     3 onglets : Tarification · Tables Morbidité · Markov
@@ -214,7 +213,11 @@ def generer(result_p1: dict, result_p2: dict = None) -> bytes:
     r3 = 5
     r3 = _section_title(ws3, r3, "🔢 MATRICE P (ANNUELLE) — PROBABILITÉS %")
     etats = ["Actif", "ITT", "IP", "Décès"]
-    _header_row(ws3, r3, ["État \ Vers →"] + etats)
+    # ⚠️ ANTISLASH ÉCHAPPÉ, RENDU INCHANGÉ. « \ » seul est une séquence
+    # invalide que Python interprète encore comme antislash-espace, avec
+    # avertissement — et qui deviendra une erreur. L'en-tête diagonal
+    # « État \ Vers → » s'affiche exactement pareil.
+    _header_row(ws3, r3, ["État \\ Vers →"] + etats)
     r3 += 1
 
     mat = p2.get("matrice_P", [[0]*4]*4)
