@@ -15,7 +15,8 @@ from pathlib import Path
 from normes.ifrs17.socle import registre as R
 from normes.ifrs17.socle.confirmation import Confirmation
 from normes.ifrs17.socle.groupe import (
-    CLASSE_16A, CleGroupe, convention_exercice)
+    CLASSE_16A, PAA_ELIGIBLE, PAA_NON_ELIGIBLE, PAA_NON_ETABLI,
+    CleGroupe, convention_exercice)
 from normes.ifrs17.socle.registre import (
     API_PUBLIQUE, FORMAT_REGISTRE, MOTIF_CLE_DIVERGENTE,
     MOTIF_FORMAT_INCONNU, MOTIF_RECLASSIFICATION,
@@ -291,3 +292,57 @@ class T6_SurfaceEtRefus(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
+
+
+class T7_EligibilitePubliee(unittest.TestCase):
+    """C1 — publier l'éligibilité que le socle établit déjà (§53).
+
+    ⚠️ CE QUE CES TESTS VERROUILLENT. Le registre scellait le verdict §53
+    depuis U1a, mais `resume()` n'en publiait que le mot : ni les comptes,
+    ni le motif. Un dossier comptable demande la RAISON, et un comptage.
+    """
+
+    def _registre(self):
+        r = R.ouvrir('Mutuelle Test', 'Entite A')
+        return R.ajouter(r, [
+            _ligne('P-1', portefeuille='rc_auto'),
+            _ligne('P-2', portefeuille='mrh', fin_couverture='2029-03-31'),
+            _ligne('P-3', portefeuille='sante', fin_couverture=None,
+                   debut_couverture=None),
+        ], ARRETE_2026, confirmation=C26)
+
+    def test_les_trois_verdicts_sont_comptes(self):
+        c = R.comptes_eligibilite(self._registre())
+        self.assertEqual(c[PAA_ELIGIBLE], 1)
+        self.assertEqual(c[PAA_NON_ELIGIBLE], 1)
+        self.assertEqual(c[PAA_NON_ETABLI], 1)
+
+    def test_les_trois_cles_existent_meme_a_zero(self):
+        """⚠️ LE POINT QUI COMPTE. « 0 non établi » doit être indiscernable
+        de rien du tout — sinon un dossier dont la donnée ne permet pas de
+        trancher se lit comme un dossier conforme."""
+        vide = R.ouvrir('Mutuelle Test', 'Entite A')
+        c = R.comptes_eligibilite(vide)
+        self.assertEqual(set(c), {PAA_ELIGIBLE, PAA_NON_ELIGIBLE,
+                                  PAA_NON_ETABLI})
+        self.assertEqual(sum(c.values()), 0)
+
+    def test_le_resume_publie_les_comptes(self):
+        texte = R.resume(self._registre())
+        self.assertIn('§53', texte)
+        for verdict in (PAA_ELIGIBLE, PAA_NON_ELIGIBLE, PAA_NON_ETABLI):
+            self.assertIn(f'{verdict} : 1', texte)
+
+    def test_le_resume_publie_le_MOTIF_pas_seulement_le_verdict(self):
+        """« NON_ELIGIBLE » seul ne dit pas si la porte s'est fermée sur un
+        contrat trop long ou sur une couverture sans terme."""
+        texte = R.resume(self._registre())
+        self.assertIn('couvrent plus d', texte)
+        self.assertIn('non calculable', texte)
+
+    def test_le_motif_publie_nomme_54(self):
+        """⚠️ §54 EST NOMMÉ, ET LE CODE DIT POURQUOI IL NE FERME PAS LA PORTE
+        — l'ancienne phrase disait « pas évaluable ici », sans raison."""
+        texte = R.resume(self._registre())
+        self.assertIn('§54', texte)
+        self.assertIn("ATTENTE de l'entité", texte)

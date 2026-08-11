@@ -50,7 +50,7 @@ faits », le magasin à « combien valaient-ils à cet arrêté ». Un test verr
 qu'aucun champ de `Groupe` ne porte de montant.
 
 RÉFÉRENCES — IFRS 17, annexe au règlement (UE) 2023/1803, JO L 237 du
-26.9.2023. §14, §16, §18, §19, §22, §24, §25, §53.
+26.9.2023. §14, §16, §18, §19, §22, §24, §25, §53, §54.
 =============================================================================
 """
 
@@ -139,6 +139,25 @@ class CleGroupe(NamedTuple):
 PAA_ELIGIBLE = 'ELIGIBLE'
 PAA_NON_ELIGIBLE = 'NON_ELIGIBLE'
 PAA_NON_ETABLI = 'NON_ETABLI'
+
+#: ⚠️ POURQUOI LE CODE NE FERME PAS LA PORTE §53 a) — ET §54 EST MESURÉ, PAS
+#: SUPPOSÉ. §54 dit quand le critère (a) n'est PAS rempli. Relu dans le texte
+#: officiel (règlement UE 2023/1803), il ne fournit AUCUNE règle calculable :
+#:
+#:   · sa clause opératoire est « l'entité S'ATTEND à une variabilité
+#:     importante » — un jugement de l'entité, pas une donnée ;
+#:   · son facteur (a), les dérivés incorporés, n'existe dans AUCUNE colonne
+#:     que le lecteur reconnaisse (`participation_directe` relève de §45 et
+#:     B101-B118, `composante_investissement` de §85 : autre chose) ;
+#:   · son facteur (b), la durée, est bien observable — mais §54 écrit que la
+#:     variabilité « augmente, PAR EXEMPLE, en fonction de » : aucun seuil.
+#:
+#: Dire « pas évaluable ici » était vague. Ceci dit pourquoi.
+PORTE_53A = (
+    "La porte §53 a) reste ouverte en droit et le code ne la ferme pas : "
+    "§54 subordonne sa fermeture à une ATTENTE de l'entité, son facteur des "
+    "dérivés incorporés n'est dans aucune colonne de l'inventaire, et son "
+    "facteur de durée est cité sans seuil. Groupe signalé, non évalué.")
 
 
 class Groupe(NamedTuple):
@@ -316,9 +335,7 @@ def _eligibilite(lignes: List[Mapping]) -> Tuple[str, str]:
     if indeterminees:
         return PAA_NON_ELIGIBLE, (
             f"{indeterminees} ligne(s) à couverture indéterminée : une durée "
-            f"sans terme excède un an, §53 b) est fermé. La porte §53 a) "
-            f"reste ouverte en droit mais n'est pas évaluable ici — groupe "
-            f"signalé, non évalué.")
+            f"sans terme excède un an, §53 b) est fermé. {PORTE_53A}")
     if not couvertures:
         return PAA_NON_ETABLI, (
             "période de couverture non calculable — il manque `fin_couverture` "
@@ -330,8 +347,7 @@ def _eligibilite(lignes: List[Mapping]) -> Tuple[str, str]:
         return PAA_NON_ELIGIBLE, (
             f"{len(trop_longues)} contrat(s) sur {len(couvertures)} couvrent "
             f"plus d'un an (ex. {d.isoformat()} → {f.isoformat()}) : §53 b) "
-            f"est fermé. La porte §53 a) reste ouverte en droit mais n'est pas "
-            f"évaluable ici — groupe signalé, non évalué.")
+            f"est fermé. {PORTE_53A}")
     return PAA_ELIGIBLE, (
         f"les {len(couvertures)} contrats couvrent au plus un an — §53 b) "
         f"vérifié, et non déclaré.")

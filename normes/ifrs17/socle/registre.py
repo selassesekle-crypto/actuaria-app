@@ -69,8 +69,9 @@ from normes.ifrs17.socle.confirmation import Confirmation, verifier
 from normes.ifrs17.socle.entree import (analyser,
                                         trace_reconnaissance_tardive)
 from normes.ifrs17.socle.groupe import (
-    CONVENTION_CALENDAIRE, CleGroupe, ConventionCohorte, cle_de_ligne,
-    date_emission_de_ligne, deriver)
+    CONVENTION_CALENDAIRE, PAA_ELIGIBLE, PAA_NON_ELIGIBLE, PAA_NON_ETABLI,
+    CleGroupe, ConventionCohorte, cle_de_ligne, date_emission_de_ligne,
+    deriver)
 
 #: Version du format de fichier. Elle est ÉCRITE dans le fichier : une
 #: relecture doit pouvoir refuser un format qu'elle ne connaît pas plutôt que
@@ -408,11 +409,33 @@ def relire(chemin) -> Registre:
             for g in brut['groupes']))
 
 
+#: L'ordre d'affichage des verdicts §53. ⚠️ `NON_ETABLI` EST UNE CATÉGORIE À
+#: PART ENTIÈRE, et elle est comptée même à zéro : un dossier dont la donnée
+#: ne permet pas de trancher ne doit PAS se lire comme un dossier conforme.
+#: C'est aujourd'hui le cas de toute la plateforme — aucun inventaire du dépôt
+#: ne porte de période de couverture, donc tout groupe y serait « non établi ».
+ORDRE_VERDICTS_53 = (PAA_ELIGIBLE, PAA_NON_ELIGIBLE, PAA_NON_ETABLI)
+
+
+def comptes_eligibilite(registre: Registre) -> dict[str, int]:
+    """Combien de groupes par verdict §53 — les trois, y compris à zéro.
+
+    ⚠️ LES TROIS CLÉS SONT TOUJOURS PRÉSENTES. Un comptage qui omettrait les
+    verdicts absents laisserait « 0 non établi » indiscernable de « je n'ai
+    pas regardé ».
+    """
+    comptes = {v: 0 for v in ORDRE_VERDICTS_53}
+    for g in registre.groupes:
+        comptes[g.eligibilite_paa] = comptes.get(g.eligibilite_paa, 0) + 1
+    return comptes
+
+
 def resume(registre: Registre) -> str:
     """Ce que le registre contient, dit à un actuaire."""
     total = sum(g.nb_lignes for g in registre.groupes)
     suivis = sum(len(g.membres) for g in registre.groupes)
     dernier = registre.confirmations[-1] if registre.confirmations else None
+    comptes = comptes_eligibilite(registre)
     lignes = [
         f"REGISTRE — {registre.client} / {registre.entite}",
         f"  convention de cohorte : {registre.convention.libelle} (§22)",
@@ -422,12 +445,22 @@ def resume(registre: Registre) -> str:
         f"  {len(registre.groupes)} groupe(s), {total} ligne(s), "
         f"{suivis} contrat(s) suivi(s) nominativement",
         "",
+        "  ÉLIGIBILITÉ À LA MÉTHODE D'AFFECTATION DES PRIMES (§53) :",
+        "    " + "   ".join(f"{v} : {comptes[v]}"
+                            for v in ORDRE_VERDICTS_53),
+        "",
     ]
     for g in registre.groupes:
         lignes.append(f"  {g.cle.texte}   {g.nb_lignes} ligne(s), "
                       f"né le {g.arrete_creation}")
         lignes.append(f"      §25 : {g.date_compta_25 or '—'}   "
                       f"§53 : {g.eligibilite_paa}")
+        # ⚠️ LE MOTIF EST PUBLIÉ, PAS SEULEMENT LE VERDICT. « NON_ELIGIBLE »
+        # seul ne dit pas si la porte s'est fermée sur un contrat trop long
+        # ou sur une couverture sans terme — et le lecteur d'un dossier
+        # comptable a besoin de la raison, pas du seul mot.
+        if g.motif_eligibilite:
+            lignes.append(f"        {g.motif_eligibilite}")
         for t in g.traces:
             lignes.append(f"      ⚠️ {t}")
     return '\n'.join(lignes)
@@ -435,4 +468,5 @@ def resume(registre: Registre) -> str:
 
 #: ⚠️ LA SURFACE PUBLIQUE, CLOSE ET VÉRIFIÉE PAR UN TEST. Toute fonction
 #: ajoutée ici doit l'être délibérément — et aucune ne modifie ni ne supprime.
-API_PUBLIQUE = ('ouvrir', 'ajouter', 'groupe', 'ecrire', 'relire', 'resume')
+API_PUBLIQUE = ('ouvrir', 'ajouter', 'groupe', 'ecrire', 'relire',
+                'resume', 'comptes_eligibilite')
