@@ -130,10 +130,25 @@ def _charger_market_data() -> Dict:
     defendable devant un commissaire aux comptes, et cela ne s'achetait
     contre rien.
 
-    `market_data.py` n'est pas supprime pour autant : c'est un module
-    coherent, qui sait interroger la BCE, et qui servira le jour ou une
-    fonctionnalite << marche en temps reel >> sera ASSUMEE comme telle. Ce
-    que le lot retire, c'est la tentative cassee, pas l'outil.
+    ⚠️ `market_data.py` A ETE RETIRE DEPUIS (lot CI-3), ET CE PARAGRAPHE
+    GARDE LA TRACE DE CE QU'IL ETAIT. R5 l'avait conserve avec cette raison,
+    qui etait bonne : << c'est un module coherent, qui sait interroger la
+    BCE, et qui servira le jour ou une fonctionnalite "marche en temps reel"
+    sera ASSUMEE comme telle. Ce que le lot retire, c'est la tentative
+    cassee, pas l'outil. >>
+
+    Selasse a tranche autrement, en connaissance de cause : du code mort
+    finit toujours par tromper quelqu'un, et ce qui existe << au cas ou >>
+    ne se retire jamais. Mesure au moment du retrait : ZERO importateur sur
+    les douze noms de niveau module, la seule occurrence de `fetch_oat_bce`
+    hors du module etant ce commentaire meme.
+
+    ⚠️ CE QUI COMPTE POUR CELUI QUI RECONSTRUIRA CETTE FONCTIONNALITE : le
+    module savait interroger l'API de la BCE et rendait `fiabilite:
+    TEMPS_REEL`. C'est justement ce qui interdisait de le brancher --
+    dependre d'un appel reseau vivant ferait rendre DEUX chiffres a deux
+    executions du meme arrete. Une fonctionnalite temps reel assumee devra
+    resoudre cela d'abord ; l'historique est dans les lots R5 et CI-3.
     """
     logger = logging.getLogger("actuaria.a8")
     logger.info("market_data : valeurs de reference (reproductibles)")
