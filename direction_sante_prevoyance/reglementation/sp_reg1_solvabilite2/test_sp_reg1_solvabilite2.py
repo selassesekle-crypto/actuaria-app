@@ -5,8 +5,8 @@ SCR/MCR consolidé, RAG, cas d'insuffisance de solvabilité.
 """
 
 import math
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
 
@@ -469,7 +469,9 @@ if __name__ == "__main__":
         try:
             test()
             passed += 1
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 -- un lanceur de tests
+            # DOIT tout attraper : le retrecir ferait passer une erreur
+            # inattendue pour un succes.
             print(f"  ❌ {test.__name__} ÉCHOUÉ : {e}")
             failed += 1
 

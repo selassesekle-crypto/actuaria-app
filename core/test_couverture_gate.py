@@ -63,14 +63,15 @@ def _invisible(nom_fichier, outil, fonctions, classes):
     """Ce fichier porte des tests : la gate de sa zone les verrait-elle ?"""
     if outil == 'unittest':
         if not fnmatch.fnmatch(nom_fichier, MOTIF_UNITTEST):
-            return 'nom hors du motif « %s »' % MOTIF_UNITTEST
+            return f'nom hors du motif « {MOTIF_UNITTEST} »'
         if classes == 0 and fonctions > 0:
-            return ('%d fonction(s) `test_*` au niveau module, aucune classe '
-                    '`TestCase` : unittest ne les collecte pas' % fonctions)
+            return (f'{fonctions} fonction(s) `test_*` au niveau module, '
+                    f'aucune classe `TestCase` : unittest ne les collecte pas')
         return None
     if not any(fnmatch.fnmatch(nom_fichier, m) for m in MOTIFS_PYTEST):
-        return ('nom hors des motifs pytest %s -- invisible aux DEUX outils'
-                % ', '.join(MOTIFS_PYTEST))
+        motifs = ', '.join(MOTIFS_PYTEST)
+        return (f'nom hors des motifs pytest {motifs} -- invisible aux '
+                f'DEUX outils')
     return None
 
 
@@ -105,13 +106,12 @@ class T5G_CouvertureDeLaGate(unittest.TestCase):
     def test_aucun_fichier_de_test_n_echappe_a_sa_gate(self):
         manques = relever_invisibles()
         if manques:
-            detail = '\n'.join('    %s\n        -> %s' % (c, r)
+            detail = '\n'.join(f'    {c}\n        -> {r}'
                                for c, r in manques)
             self.fail(
-                '%d fichier(s) portent des tests que la gate ne lit PAS. '
-                'La gate sortirait en 0 sans les avoir executes -- le '
-                'silence ressemblerait au succes :\n%s' % (len(manques),
-                                                           detail))
+                f'{len(manques)} fichier(s) portent des tests que la gate ne '
+                f'lit PAS. La gate sortirait en 0 sans les avoir executes -- '
+                f'le silence ressemblerait au succes :\n{detail}')
 
     def test_le_releve_couvre_les_cinq_zones_de_la_gate(self):
         """⚠️ Un garde-fou qui ne regarde qu'une zone est pire que rien : il

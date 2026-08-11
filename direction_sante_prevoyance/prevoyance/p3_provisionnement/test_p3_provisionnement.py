@@ -10,25 +10,20 @@ Tests P3 Élodie v3.0 — AgentP3ProvissionnementPrevoyance
   T7 — RAG ROUGE si LR > 100% ou H critique rejetée
 """
 
-import math
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
 
 import numpy as np
 
 from direction_sante_prevoyance.prevoyance.p3_provisionnement.agent import (
-    AgentP3ProvissionnementPrevoyance,
-    LR_CTIP_ITT_MARCHE,
-    LR_CTIP_ITT_MIN,
     LR_CTIP_ITT_MAX,
+    LR_CTIP_ITT_MIN,
     SIGMA_NSLT_RESERVES,
-    SIGMA_NSLT_PRIMES,
     TAUX_ACT_RFR,
-    N_SIM_BOOTSTRAP,
+    AgentP3ProvissionnementPrevoyance,
 )
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -268,7 +263,7 @@ def test_t3_methodes_actuarielles():
             f"P90={mack['reserve_p90']:,.0f} doit être > BE={be_mack:,.0f}"
         )
         assert mack["reserve_p99_5"] >= mack["reserve_p90"], (
-            f"P99.5 ≥ P90 requis"
+            "P99.5 ≥ P90 requis"
         )
         assert mack["reserve_p75"] <= mack["reserve_p90"], "P75 ≤ P90"
 
@@ -755,7 +750,9 @@ if __name__ == "__main__":
         try:
             test()
             passed += 1
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 -- un lanceur de tests
+            # DOIT tout attraper : le retrecir ferait passer une erreur
+            # inattendue pour un succes.
             import traceback
             print(f"  ❌ {test.__name__} ÉCHOUÉ : {e}")
             traceback.print_exc()
