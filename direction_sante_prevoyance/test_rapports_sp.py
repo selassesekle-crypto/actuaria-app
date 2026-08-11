@@ -17,11 +17,13 @@ entre eux — cette comparaison appartient au lot suivant. Il vérifie que les
 deux chaînes vont au bout, que les deux livrables signés sortent non vides,
 que le `.docx` s'ouvre réellement, et qu'il porte un plancher de texte.
 
-⚠️ CE QUE LA PREMIÈRE EXÉCUTION A TROUVÉ, ET QUI EST SIGNALÉ SANS ÊTRE
-TRAITÉ : le `.docx` Prévoyance porte **1 477 caractères** quand son HTML en
-porte **22 477**. Le livrable Word est nettement plus pauvre que son jumeau.
-C'est un défaut de fond, découvert précisément parce que plus rien ne
-tournait à l'aveugle — mais poser le filet vient avant de le corriger.
+⚠️ CE QUE LA PREMIÈRE MESURE A CRU TROUVER, ET QUI ÉTAIT FAUX. J'ai d'abord
+annoncé un Word « nettement plus pauvre » : 1 477 caractères contre 22 477.
+DEUX ERREURS DE MESURE, pas un défaut du code — je comparais du BALISAGE
+HTML à du TEXTE Word, et je lisais `doc.paragraphs`, qui IGNORE LES
+TABLEAUX. Texte contre texte, tableaux compris : 3 473 contre 4 415 en
+Prévoyance (0,79) et 3 241 contre 3 463 en Santé (0,94). Les deux livrables
+sont comparables ; le seul écart réel est la mention d'origine.
 """
 import io
 
@@ -139,10 +141,18 @@ def rapport_prevoyance(chaine_amont):
 
 
 def _paragraphes(word_bytes):
-    """Le texte du .docx, paragraphe par paragraphe."""
+    """Le texte du .docx : paragraphes ET cellules de tableau.
+
+    ⚠️ `doc.paragraphs` NE LIT PAS LES TABLEAUX, et un rapport actuariel Word
+    est fait surtout de tableaux — ici sept, environ 145 cellules. Les
+    omettre m'a fait mesurer un tiers du document et conclure a tort qu'il
+    etait appauvri. Une mesure qui ignore la moitie de son objet ne dit rien.
+    """
     from docx import Document
     doc = Document(io.BytesIO(word_bytes))
-    return [p.text for p in doc.paragraphs if p.text.strip()]
+    textes = [p.text for p in doc.paragraphs]
+    textes += [c.text for tb in doc.tables for row in tb.rows for c in row.cells]
+    return [x for x in textes if x.strip()]
 
 
 @pytest.mark.parametrize("nom", ["sante", "prevoyance"])
@@ -176,16 +186,13 @@ def test_le_docx_s_ouvre_et_porte_du_texte(nom, rapport_sante,
 @pytest.mark.parametrize("nom", ["sante", "prevoyance"])
 def test_le_docx_n_est_pas_une_coquille_vide(nom, rapport_sante,
                                              rapport_prevoyance):
-    """⚠️ MESURÉ EN ÉCRIVANT CE FICHIER, ET SIGNALÉ : le .docx Prévoyance
-    porte 1 477 caractères quand son HTML en porte 22 477. Un livrable signé
-    nettement plus pauvre que son jumeau est un défaut de fond, mais le
-    corriger n'est pas l'objet de ce lot-ci : il n'existait AUCUN test, et
-    poser le filet vient d'abord.
+    """Le plancher de texte réellement mesuré, tableaux compris.
 
-    Ce test fixe le plancher constaté aujourd'hui. Il ne valide pas la
-    parité entre formats — il empêche une régression sous l'état actuel.
+    ⚠️ CE TEST NE VALIDE PAS LA PARITÉ ENTRE FORMATS — il empêche une
+    régression sous l'état constaté. La parité, elle, se mesure : 0,79 en
+    Prévoyance et 0,94 en Santé, texte contre texte.
     """
     r = rapport_sante if nom == "sante" else rapport_prevoyance
     total = sum(len(p) for p in _paragraphes(r["word_bytes"]))
-    assert total > 1000, (
+    assert total > 3000, (
         f"{nom} : le .docx ne porte que {total} caracteres de texte")
