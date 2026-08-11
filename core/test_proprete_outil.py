@@ -128,3 +128,86 @@ class T2_LaRegleArbitree(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
+
+
+def _outil():
+    """Le module de l'outil, charge depuis son chemin (il vit hors paquet)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('proprete_outil', OUTIL)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class T3_LEtatAbsolu(unittest.TestCase):
+    """L'outil doit VOIR ce qui ne change pas — c'etait son angle mort.
+
+    ⚠️ IL AFFICHAIT `31 -> 31` SANS DIRE QUE 24 ETAIENT DES CODES DE
+    CORRECTION. Un defaut committe devenait invisible a l'instrument cense
+    l'attraper : meme famille que la gate rendant « Ran 0 tests » et sortant
+    en 0, et que le registre ou « 0 non etabli » ne se comptait pas.
+    """
+
+    def test_l_absolu_et_le_delta_partagent_UNE_SEULE_regle(self):
+        """⚠️ Deux classifications donneraient deux chiffres pour le meme
+        fichier selon qui mesure — l'erreur exacte commise en annoncant
+        3 791 defauts la ou l'outil en compte 7 618."""
+        o = _outil()
+        src = _source()
+        self.assertIn('def _famille(', src)
+        # Le delta comme l'absolu passent par `_famille`, jamais par une
+        # comparaison recopiee.
+        corps_classer = src.split('def _classer(')[1].split('\ndef ')[0]
+        corps_absolu = src.split('def absolu(')[1].split('\ndef ')[0]
+        for nom, corps in (('_classer', corps_classer), ('absolu', corps_absolu)):
+            self.assertIn('_famille(', corps,
+                          f'{nom} doit classer par `_famille`, pas autrement')
+        self.assertEqual(o._famille('UP009'), 'tolere')
+        self.assertEqual(o._famille('F401'), 'correction')
+        self.assertEqual(o._famille('I001'), 'jamais_examine')
+
+    def test_un_code_INCONNU_compte_comme_un_defaut_MAIS_SE_DISTINGUE(self):
+        """⚠️ Arbitre le 11/08 : defensif. Un code que le projet n'a pas
+        examine compte comme un defaut — MAIS PAS SOUS LE MEME NOM.
+
+        ⚠️ `F401` est un defaut ARBITRE ; `I001` n'a JAMAIS ETE EXAMINE. Les
+        confondre laisserait croire que 7 618 defauts ont ete juges, quand la
+        moitie n'a jamais ete regardee. Avant ce lot, les deux branches de
+        `_classer` etaient IDENTIQUES : `CODES_STRICTS` ne gouvernait RIEN."""
+        o = _outil()
+        self.assertEqual(o._famille('XYZ999'), 'jamais_examine')
+        self.assertNotEqual(o._famille('I001'), o._famille('F401'))
+        # Les deux comptent, aucun n'est tolere.
+        for code in ('I001', 'F401', 'XYZ999'):
+            self.assertNotEqual(o._famille(code), 'tolere')
+
+    def test_l_absolu_decompose_ce_que_le_total_taisait(self):
+        o = _outil()
+        arbitres, jamais_vus, declares = o.absolu(
+            {'F401': 24, 'I001': 8, 'UP009': 7})
+        self.assertEqual((arbitres, jamais_vus, declares), (24, 8, 7))
+
+    def test_l_absolu_N_EST_PAS_un_verdict(self):
+        """⚠️ LE POINT QUI REND LA REGLE TENABLE. Faire echouer un lot sur la
+        dette pre-existante bloquerait toute retouche dans un gros fichier.
+        Le verdict reste sur le DELTA ; la dette se ferme par DECISION."""
+        src = _source()
+        # `faute` — la variable qui commande la sortie — ne doit jamais etre
+        # armee par l'absolu.
+        corps = src.split('def mesurer(')[1]
+        for ligne in corps.split('\n'):
+            if 'faute = True' in ligne:
+                self.assertNotIn('dette', ligne)
+                self.assertNotIn('absolu', ligne)
+        self.assertIn('DECISION', src)
+
+    def test_le_total_du_lot_est_TOUJOURS_affiche_meme_a_zero(self):
+        """⚠️ L'absence d'une ligne ne doit jamais pouvoir se lire comme
+        « je n'ai pas regarde » — meme lecon que NON_ETABLI dans le registre
+        IFRS 17."""
+        src = _source()
+        corps = src.split('def mesurer(')[1]
+        i = corps.index('DETTE PRE-EXISTANTE DU LOT')
+        avant = corps[:i].split('\n')[-3:]
+        self.assertNotIn('if ', '\n'.join(avant),
+                         "le total du lot ne doit etre sous AUCUNE condition")

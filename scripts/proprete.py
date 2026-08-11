@@ -134,6 +134,31 @@ def locales_mortes(source):
     return mortes
 
 
+def _famille(code):
+    """A quelle famille appartient un code — LA REGLE, en un seul endroit.
+
+    /!\\ ELLE EST PARTAGEE PAR LE DELTA ET PAR L'ABSOLU. Deux
+    classifications donneraient deux chiffres pour le meme fichier selon qui
+    mesure — c'est exactement l'erreur commise en annoncant 3 791 defauts la
+    ou l'outil en compte 7 618.
+
+    /!\\ UN CODE INCONNU EST UN CODE DE CORRECTION. Defensif et arbitre : un
+    code que le projet n'a pas encore examine compte comme un defaut jusqu'a
+    ce qu'il soit declare tolere. `I001` et les `RUF` non listes sont dans ce
+    cas.
+    """
+    if code in CODES_TOLERES:
+        return 'tolere'
+    if code.startswith(CODES_STRICTS):
+        return 'correction'
+    # /!\ STRICT PAR DEFAUT, ET CE N'EST PAS LA MEME AFFIRMATION. `F401` est
+    # un defaut ARBITRE ; `I001` est un code que le projet n'a JAMAIS EXAMINE.
+    # Les confondre laisserait croire que 7 618 defauts ont ete juges, quand
+    # la moitie n'a jamais ete regardee. Avant ce lot, les deux branches de
+    # `_classer` etaient IDENTIQUES : `CODES_STRICTS` ne gouvernait rien.
+    return 'jamais_examine'
+
+
 def _classer(avant, apres):
     """Les codes qui ont AUGMENTE, separes selon la regle arbitrée."""
     stricts, toleres = {}, {}
@@ -141,13 +166,33 @@ def _classer(avant, apres):
         ecart = n - avant.get(code, 0)
         if ecart <= 0:
             continue
-        if code in CODES_TOLERES:
+        if _famille(code) == 'tolere':
             toleres[code] = ecart
-        elif code.startswith(CODES_STRICTS):
-            stricts[code] = ecart
         else:
             stricts[code] = ecart
     return stricts, toleres
+
+
+def absolu(codes):
+    """L'etat ABSOLU d'un fichier : (a corriger, declares).
+
+    /!\\ POURQUOI CETTE FONCTION EXISTE. L'outil affichait `31 -> 31` sans
+    jamais dire que 24 de ces 31 etaient des codes de CORRECTION : le tableau
+    avait l'air rassurant. Un defaut committe devenait invisible a
+    l'instrument cense l'attraper -- meme famille que la gate rendant
+    << Ran 0 tests >> et sortant en 0.
+
+    /!\\ ELLE N'EST PAS UN VERDICT. Le verdict reste sur le DELTA : faire
+    echouer un lot sur l'absolu bloquerait toute retouche dans un gros
+    fichier. La dette pre-existante se ferme par DECISION DE LOT, annoncee
+    dans le message — jamais automatiquement.
+    """
+    arbitres = sum(n for c, n in codes.items()
+                   if _famille(c) == 'correction')
+    jamais_vus = sum(n for c, n in codes.items()
+                     if _famille(c) == 'jamais_examine')
+    declares = sum(n for c, n in codes.items() if _famille(c) == 'tolere')
+    return arbitres, jamais_vus, declares
 
 
 def mesurer(chemins):
@@ -156,6 +201,7 @@ def mesurer(chemins):
     print('=' * 78)
     print(f"  {'fichier':<40} {'ruff':<15} {'vulture':<14} locales mortes")
     faute = False
+    dette_arb = dette_jam = dette_decl = 0
     for chemin in chemins:
         source_avant = contenu_head(chemin)
         with open(os.path.join(RACINE, chemin), encoding='utf-8') as f:
@@ -184,6 +230,25 @@ def mesurer(chemins):
         for code, n in sorted(toleres.items()):
             print(f'      i   {code:<8} +{n}   preference de style : '
                   f'a DECLARER')
+        # /!\ L'ETAT ABSOLU, SUR CHAQUE FICHIER QUI EN PORTE. Le total seul
+        # (`31 -> 31`) ne disait pas de quoi il etait fait.
+        arb, jam, decl = absolu(r_apres)
+        dette_arb += arb
+        dette_jam += jam
+        dette_decl += decl
+        if arb or jam or decl:
+            print(f'      ETAT ABSOLU : {arb} arbitres, {jam} jamais '
+                  f'examines, {decl} declares')
+    print()
+    # /!\ TOUJOURS AFFICHE, MEME A ZERO. L'absence d'une ligne ne doit jamais
+    # pouvoir se lire comme << je n'ai pas regarde >> — meme lecon que la
+    # categorie NON_ETABLI du registre IFRS 17, et que la gate qui rendait
+    # << Ran 0 tests >> sans le dire.
+    print(f'  DETTE PRE-EXISTANTE DU LOT : {dette_arb} arbitres, '
+          f'{dette_jam} jamais examines, {dette_decl} declares.')
+    if dette_arb or dette_jam:
+        print('  Elle ne fait PAS echouer ce lot : sa fermeture est une '
+              'DECISION, a annoncer dans le message.')
     print()
     if faute:
         print('  /!\\ AU MOINS UN ECART SUR UN CODE DE CORRECTION, OU UNE '
