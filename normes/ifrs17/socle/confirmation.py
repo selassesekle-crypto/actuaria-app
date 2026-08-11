@@ -37,9 +37,10 @@ RÉFÉRENCES — IFRS 17, annexe au règlement (UE) 2023/1803. §14, §16, §22,
 =============================================================================
 """
 
-from typing import NamedTuple, Optional, Tuple
+from typing import NamedTuple
 
-from core.arrete import Arrete, iso, lire as lire_arrete
+from core.arrete import Arrete, iso
+from core.arrete import lire as lire_arrete
 from normes.ifrs17.socle.contrat import CHAMPS, champs_scelles
 
 
@@ -51,7 +52,7 @@ class Confirmation(NamedTuple):
     """
     actuaire_resp:   str
     arrete:          str                        # 'AAAA-MM-JJ'
-    correspondances: Tuple[Tuple[str, str], ...]   # (colonne, champ)
+    correspondances: tuple[tuple[str, str], ...]   # (colonne, champ)
 
 
 class RefusConfirmation(Exception):
@@ -66,7 +67,7 @@ MOTIF_SANS_SIGNATAIRE = 'SANS_SIGNATAIRE'
 MOTIF_ARRETE_DISCORDANT = 'ARRETE_DISCORDANT'
 
 
-def a_confirmer(rapport) -> Tuple:
+def a_confirmer(rapport) -> tuple:
     """Les correspondances qui exigent une signature avant scellement.
 
     ⚠️ LA RÈGLE VIT DANS `RapportInventaire.a_confirmer`, ET ELLE Y VIT SEULE.
@@ -104,7 +105,7 @@ def confirmer(rapport, actuaire_resp: str, arrete) -> Confirmation:
                               for c in a_confirmer(rapport)))
 
 
-def verifier(confirmation: Optional[Confirmation], arrete_iso: str) -> None:
+def verifier(confirmation: Confirmation | None, arrete_iso: str) -> None:
     """Contrôle qu'un scellement peut avoir lieu. Lève sinon.
 
     ⚠️ LA PORTE EST AU SCELLEMENT, PAS À LA LECTURE. Un client dépose son
@@ -135,8 +136,8 @@ def verifier(confirmation: Optional[Confirmation], arrete_iso: str) -> None:
 
 def resume_confirmation(confirmation: Confirmation) -> str:
     """Ce qu'un contrôleur lit pour savoir qui a scellé quoi."""
-    lignes = [f"CONFIRMÉ par {confirmation.actuaire_resp} "
-              f"au {confirmation.arrete}"]
+    lignes = [(f"CONFIRMÉ par {confirmation.actuaire_resp} "
+               f"au {confirmation.arrete}")]
     if not confirmation.correspondances:
         lignes.append("  aucune correspondance inférée : les champs scellés "
                       "portaient leur nom canonique.")

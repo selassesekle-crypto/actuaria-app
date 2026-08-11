@@ -39,12 +39,17 @@ RÉFÉRENCES — IFRS 17, annexe au règlement (UE) 2023/1803. §22, §24, §25,
 =============================================================================
 """
 
+from collections.abc import Mapping
 from datetime import date
-from typing import Mapping, NamedTuple, Optional, Set
+from typing import NamedTuple
 
 from normes.ifrs17.socle.groupe import (
-    CleGroupe, ConventionCohorte, cle_de_ligne, cohorte,
-    date_emission_de_ligne)
+    CleGroupe,
+    ConventionCohorte,
+    cle_de_ligne,
+    cohorte,
+    date_emission_de_ligne,
+)
 
 #: Les deux seuls effets possibles. Il n'y en a pas de troisième : ni refus,
 #: ni reclassement, ni création d'un doublon de clé.
@@ -87,7 +92,7 @@ def _ecart_periodes(convention: ConventionCohorte, a: str, b: str) -> int:
     return int(b.split('-')[0]) - int(a.split('-')[0])
 
 
-def analyser(cles_enregistrees: Set[CleGroupe], ligne: Mapping,
+def analyser(cles_enregistrees: set[CleGroupe], ligne: Mapping,
              convention: ConventionCohorte, arrete_entree: date,
              rang: int = 1) -> Entree:
     """Ce qu'une ligne fait en entrant. Ne décide rien, ne refuse rien."""
@@ -102,7 +107,7 @@ def analyser(cles_enregistrees: Set[CleGroupe], ligne: Mapping,
         retard_periodes=max(0, _ecart_periodes(convention, p25, pentree)))
 
 
-def trace_reconnaissance_tardive(entree: Entree) -> Optional[str]:
+def trace_reconnaissance_tardive(entree: Entree) -> str | None:
     """La trace d'une entrée hors de sa période, ou None si elle est dans
     les temps.
 
@@ -131,8 +136,8 @@ def resume_entrees(entrees) -> str:
     tardifs = [e for e in entrees if e.retard_periodes > 0]
     lignes = [
         f"ENTRÉES (§28) — {len(entrees)} ligne(s)",
-        f"  {rejoints} rejoignent un groupe existant, "
-        f"{crees} groupe(s) créé(s)",
+        (f"  {rejoints} rejoignent un groupe existant, "
+         f"{crees} groupe(s) créé(s)"),
     ]
     if tardifs:
         pires = max(e.retard_periodes for e in tardifs)

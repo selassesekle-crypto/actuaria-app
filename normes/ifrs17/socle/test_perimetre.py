@@ -26,16 +26,17 @@ class T1_LesTroisEtats(unittest.TestCase):
                                       NON_CONSTRUIT})
         for etat in ETATS:
             self.assertTrue(elements(etat), f"état {etat} vide")
-        print("    OK T1 : %s" % ' · '.join(
-            f'{e} {len(elements(e))}' for e in ETATS))
+        detail = ' · '.join(f'{e} {len(elements(e))}' for e in ETATS)
+        print(f"    OK T1 : {detail}")
 
     def test_une_exclusion_sans_raison_est_une_omission_deguisee(self):
         for e in PERIMETRE:
             if e.etat != COUVERT:
                 self.assertTrue(e.raison.strip(),
                                 f"{e.reference} ({e.etat}) sans raison")
-        print("    OK T1b : les %d elements non couverts portent tous "
-              "leur raison" % sum(1 for e in PERIMETRE if e.etat != COUVERT))
+        n = sum(1 for e in PERIMETRE if e.etat != COUVERT)
+        print(f"    OK T1b : les {n} elements non couverts portent tous "
+              f"leur raison")
 
     def test_aucun_etat_hors_vocabulaire(self):
         for e in PERIMETRE:

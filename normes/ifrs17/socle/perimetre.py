@@ -32,7 +32,8 @@ RÉFÉRENCES — IFRS 17, annexe au règlement (UE) 2023/1803, JO L 237 du
 =============================================================================
 """
 
-from typing import Dict, Iterable, Mapping, NamedTuple, Tuple
+from collections.abc import Iterable, Mapping
+from typing import NamedTuple
 
 #: Le socle le fait, et `contrat.EXIGENCES` le nomme.
 COUVERT = 'COUVERT'
@@ -56,7 +57,7 @@ class Element(NamedTuple):
     raison:    str = ''
 
 
-PERIMETRE: Tuple[Element, ...] = (
+PERIMETRE: tuple[Element, ...] = (
 
     # ── Ce que le socle fait ────────────────────────────────────────────────
     Element('§14, §16, §22, §25', COUVERT,
@@ -181,17 +182,17 @@ PERIMETRE: Tuple[Element, ...] = (
 #: Champ de l'inventaire → (référence, ce que le contrôle dit).
 #: ⚠️ Ces drapeaux ont été posés en D1 pour ce moment précis : reconnaître ce
 #: qu'on ne traite pas plutôt que de le mesurer en silence.
-CONTROLES: Dict[str, Tuple[str, str]] = {
+CONTROLES: dict[str, tuple[str, str]] = {
     'participation_directe': (
         '§45, B101-B118',
-        "contrat(s) déclaré(s) avec éléments de participation directe : "
-        "la méthode de la commission variable est HORS PÉRIMÈTRE. Ces "
-        "contrats ne doivent pas être mesurés par cette plateforme."),
+        ("contrat(s) déclaré(s) avec éléments de participation directe : "
+         "la méthode de la commission variable est HORS PÉRIMÈTRE. Ces "
+         "contrats ne doivent pas être mesurés par cette plateforme.")),
     'composante_investissement': (
         '§85',
-        "contrat(s) déclaré(s) avec une composante d'investissement : elle "
-        "doit être exclue des produits des activités d'assurance, ce que "
-        "cette plateforme ne fait pas. Traiter ces contrats à part."),
+        ("contrat(s) déclaré(s) avec une composante d'investissement : elle "
+         "doit être exclue des produits des activités d'assurance, ce que "
+         "cette plateforme ne fait pas. Traiter ces contrats à part.")),
 }
 
 
@@ -203,14 +204,14 @@ class Alerte(NamedTuple):
     message:   str
 
 
-def signaler(lignes: Iterable[Mapping]) -> Tuple[Alerte, ...]:
+def signaler(lignes: Iterable[Mapping]) -> tuple[Alerte, ...]:
     """Les cas hors périmètre présents dans un inventaire.
 
     ⚠️ SIGNALE, NE REFUSE PAS. Un inventaire peut légitimement contenir des
     contrats que cette plateforme ne mesure pas ; ce qui serait fautif, c'est
     de les mesurer quand même. L'alerte nomme le paragraphe et dit quoi faire.
     """
-    compte: Dict[str, int] = {}
+    compte: dict[str, int] = {}
     for ligne in lignes:
         for champ in CONTROLES:
             if _est_vrai(ligne.get(champ)):
@@ -235,7 +236,7 @@ def _est_vrai(valeur) -> bool:
 #  LE PÉRIMÈTRE PUBLIÉ
 # =============================================================================
 
-def elements(etat: str) -> Tuple[Element, ...]:
+def elements(etat: str) -> tuple[Element, ...]:
     """Les éléments d'un état donné. Lève sur un état inconnu."""
     if etat not in ETATS:
         raise KeyError(

@@ -43,20 +43,26 @@ un sens.
 import csv
 import unicodedata
 from pathlib import Path
-from typing import Any, Dict, List, NamedTuple, Optional, Tuple
+from typing import Any, NamedTuple
 
 import pandas as pd
 
 from normes.ifrs17.socle.contrat import (
-    CHAMPS, EXIGENCES, capacites, champs_bloquants, champs_scelles,
-    exigences_hors_portee, reference)
+    CHAMPS,
+    EXIGENCES,
+    capacites,
+    champs_bloquants,
+    champs_scelles,
+    exigences_hors_portee,
+    reference,
+)
 
 # =============================================================================
 #  LE VOCABULAIRE D'ENTRÉE
 # =============================================================================
 
 #: Synonymes reconnus sans réserve : la cible ne fait pas de doute.
-SYNONYMES: Dict[str, Tuple[str, ...]] = {
+SYNONYMES: dict[str, tuple[str, ...]] = {
     'portefeuille': ('lob', 'branche', 'produit', 'ligne_produit',
                      'portfolio', 'product', 'line_of_business', 'segment'),
     'date_emission': ('date_souscription', 'date_emission', 'dt_souscription',
@@ -104,7 +110,7 @@ SYNONYMES: Dict[str, Tuple[str, ...]] = {
 #: toute la couverture que §55 a) i) demande : les confondre sous-évalue le
 #: LRC des contrats souscrits en cours d'exercice. On l'accepte plutôt que de
 #: refuser un client qui n'a que cette colonne, mais on le DIT.
-AMBIGUS: Dict[str, str] = {
+AMBIGUS: dict[str, str] = {
     'prime_acquise':   'prime',
     'primes_acquises': 'prime',
     'earned_premium':  'prime',
@@ -118,7 +124,7 @@ INDICES_FICHIER_SINISTRES = frozenset({
     'claim_id', 'annee_sinistre',
 })
 
-_INDEX_SYNONYMES: Dict[str, str] = {
+_INDEX_SYNONYMES: dict[str, str] = {
     syn: champ for champ, syns in SYNONYMES.items() for syn in syns}
 
 #: Comment une colonne a été rattachée — la nuance importe au client.
@@ -183,25 +189,25 @@ class RapportInventaire(NamedTuple):
     detail_conteneur: str          # séparateur détecté, ou onglet lu
     nb_lignes:        int
     nb_colonnes:      int
-    correspondances:  Tuple[Correspondance, ...]
-    colonnes_ignorees: Tuple[str, ...]
+    correspondances:  tuple[Correspondance, ...]
+    colonnes_ignorees: tuple[str, ...]
     granularite:      str
-    capacites:        Dict[str, bool]
-    hors_portee:      Dict[str, Tuple[str, ...]]
+    capacites:        dict[str, bool]
+    hors_portee:      dict[str, tuple[str, ...]]
     #: Lignes reconnues comme des totaux et écartées — jamais en silence.
-    lignes_ecartees:  Tuple[str, ...] = ()
+    lignes_ecartees:  tuple[str, ...] = ()
 
     @property
-    def champs_lus(self) -> Tuple[str, ...]:
+    def champs_lus(self) -> tuple[str, ...]:
         return tuple(sorted({c.champ for c in self.correspondances}))
 
     @property
-    def sous_reserve(self) -> Tuple[Correspondance, ...]:
+    def sous_reserve(self) -> tuple[Correspondance, ...]:
         return tuple(c for c in self.correspondances
                      if c.par == PAR_SYNONYME_AMBIGU)
 
     @property
-    def a_confirmer(self) -> Tuple[Correspondance, ...]:
+    def a_confirmer(self) -> tuple[Correspondance, ...]:
         """Les correspondances qui exigent une signature avant scellement.
 
         ⚠️ LES CHAMPS SCELLÉS RECONNUS PAR LEUR NOM CANONIQUE EN SONT EXCLUS.
@@ -237,7 +243,7 @@ def _normaliser(nom: Any) -> str:
         .replace(' ', '_').replace('-', '_')
 
 
-def _reconnaitre(nom: Any) -> Tuple[Optional[str], str]:
+def _reconnaitre(nom: Any) -> tuple[str | None, str]:
     """(champ canonique | None, comment). Canonique > synonyme > ambigu."""
     n = _normaliser(nom)
     if n in CHAMPS:
@@ -265,7 +271,7 @@ def _detecter_separateur(chemin: Path) -> str:
 
 
 def _lire_tableau(chemin: Path,
-                  onglet: Optional[str]) -> Tuple[pd.DataFrame, str, str]:
+                  onglet: str | None) -> tuple[pd.DataFrame, str, str]:
     """(tableau, conteneur, détail). Un tableau plat, rien d'autre."""
     suffixe = chemin.suffix.lower()
     if suffixe in ('.xlsx', '.xlsm'):
@@ -282,9 +288,9 @@ def _lire_tableau(chemin: Path,
         # determined » qui ne disait rien au client.
         raise RefusLecture(
             MOTIF_FORMAT,
-            f"Format « .xls » (Excel 97-2003) non lisible ici : il exige le "
-            f"moteur `xlrd`, absent de cet environnement. Réenregistrez le "
-            f"fichier en « .xlsx » depuis Excel, ou exportez-le en CSV.")
+            "Format « .xls » (Excel 97-2003) non lisible ici : il exige le "
+            "moteur `xlrd`, absent de cet environnement. Réenregistrez le "
+            "fichier en « .xlsx » depuis Excel, ou exportez-le en CSV.")
     if suffixe in ('.csv', '.txt'):
         brut, encodage, sep, saut = _lire_csv(chemin)
         lisible = {'\t': 'tabulation'}.get(sep, f"« {sep} »")
@@ -299,7 +305,7 @@ def _lire_tableau(chemin: Path,
         f"contrats se dépose en CSV (.csv, .txt) ou en Excel (.xlsx, .xlsm).")
 
 
-def _lire_csv(chemin: Path) -> Tuple[pd.DataFrame, str, str, int]:
+def _lire_csv(chemin: Path) -> tuple[pd.DataFrame, str, str, int]:
     """Lit un CSV en essayant les encodages, dans l'ordre — et DIT lequel.
 
     ⚠️ CECI CORRIGE UN DÉFAUT, PAS UNE LACUNE. Le lecteur imposait `utf-8` :
@@ -331,7 +337,7 @@ def _lire_csv(chemin: Path) -> Tuple[pd.DataFrame, str, str, int]:
             dernier, sep, saut)
 
 
-def _reperer_structure(chemin: Path, encodage: str) -> Tuple[str, int]:
+def _reperer_structure(chemin: Path, encodage: str) -> tuple[str, int]:
     """(séparateur, lignes à sauter) — résolus ENSEMBLE, et c'est le point.
 
     ⚠️ LES DEUX QUESTIONS N'EN FONT QU'UNE. Mesuré : sur un fichier dont les
@@ -366,9 +372,9 @@ def _reperer_structure(chemin: Path, encodage: str) -> Tuple[str, int]:
     return meilleur[2], meilleur[1]
 
 
-def lire(chemin, *, onglet: Optional[str] = None,
-         correspondances: Optional[Dict[str, str]] = None
-         ) -> Tuple[pd.DataFrame, RapportInventaire]:
+def lire(chemin, *, onglet: str | None = None,
+         correspondances: dict[str, str] | None = None
+         ) -> tuple[pd.DataFrame, RapportInventaire]:
     """Lit un inventaire de contrats et rend (tableau canonique, rapport).
 
     `correspondances` — déclaration explicite {colonne client: champ} — prend
@@ -401,8 +407,8 @@ def lire(chemin, *, onglet: Optional[str] = None,
             f"sont pas des champs de l'inventaire. Champs valides : "
             f"{', '.join(sorted(CHAMPS))}.")
 
-    liens: List[Correspondance] = []
-    ignorees: List[str] = []
+    liens: list[Correspondance] = []
+    ignorees: list[str] = []
     for col in brut.columns:
         n = _normaliser(col)
         if n in declarees:
@@ -433,8 +439,8 @@ def lire(chemin, *, onglet: Optional[str] = None,
         lignes_ecartees=totaux,
         conteneur=conteneur,
         detail_conteneur=detail,
-        nb_lignes=int(len(brut)),
-        nb_colonnes=int(len(brut.columns)),
+        nb_lignes=len(brut),
+        nb_colonnes=len(brut.columns),
         correspondances=tuple(liens),
         colonnes_ignorees=tuple(ignorees),
         granularite=('ensemble pré-agrégé (§17)' if 'nb_contrats' in presents
@@ -449,7 +455,7 @@ def _reconnues(noms) -> int:
     return sum(1 for n in noms if _reconnaitre(n)[0] is not None)
 
 
-def _recadrer_sur_l_entete(brut: pd.DataFrame) -> Tuple[pd.DataFrame, int]:
+def _recadrer_sur_l_entete(brut: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     """(tableau recadré, nombre de lignes écartées au-dessus de l'en-tête).
 
     ⚠️ UN EXPORT EXCEL PORTE SOUVENT UN TITRE AU-DESSUS DE SES EN-TÊTES.
@@ -481,8 +487,8 @@ def _recadrer_sur_l_entete(brut: pd.DataFrame) -> Tuple[pd.DataFrame, int]:
 
 
 def _ecarter_les_totaux(df: pd.DataFrame, cible_portefeuille: str,
-                        cible_emission: Optional[str]
-                        ) -> Tuple[pd.DataFrame, Tuple[str, ...]]:
+                        cible_emission: str | None
+                        ) -> tuple[pd.DataFrame, tuple[str, ...]]:
     """Retire les lignes de total, et rend leur libellé pour le diagnostic.
 
     ⚠️ DEUX SIGNAUX EXIGÉS, PAS UN. Le libellé doit évoquer un total ET la
@@ -505,9 +511,9 @@ def _ecarter_les_totaux(df: pd.DataFrame, cible_portefeuille: str,
     return df.loc[~suspect].reset_index(drop=True), ecartes
 
 
-def _refuser_si_concurrentes(liens: List[Correspondance]) -> None:
+def _refuser_si_concurrentes(liens: list[Correspondance]) -> None:
     """Deux colonnes pour un même champ : le client tranche, pas nous."""
-    par_champ: Dict[str, List[str]] = {}
+    par_champ: dict[str, list[str]] = {}
     for lien in liens:
         par_champ.setdefault(lien.champ, []).append(lien.colonne)
     doubles = {ch: cols for ch, cols in par_champ.items() if len(cols) > 1}
@@ -522,7 +528,7 @@ def _refuser_si_concurrentes(liens: List[Correspondance]) -> None:
             f"verrez scellée : déclarez la correspondance voulue.")
 
 
-def _refuser_si_bloquant_absent(liens: List[Correspondance],
+def _refuser_si_bloquant_absent(liens: list[Correspondance],
                                 brut: pd.DataFrame, chemin: Path) -> None:
     """Les deux champs sans lesquels rien n'est calculable."""
     presents = {lien.champ for lien in liens}
@@ -559,7 +565,7 @@ def _refuser_si_bloquant_absent(liens: List[Correspondance],
 #  LE DIAGNOSTIC — CE QUE LE CLIENT VOIT
 # =============================================================================
 
-def _ordre_paragraphe(exigence: str) -> Tuple[int, int, str]:
+def _ordre_paragraphe(exigence: str) -> tuple[int, int, str]:
     """Classe les exigences dans l'ordre de la norme, pas de l'alphabet.
 
     Un actuaire lit §14, §16, §22… puis l'annexe B. Sortir §22 avant §14
@@ -584,7 +590,7 @@ def diagnostic(rapport: RapportInventaire) -> str:
     d'acquisition » ne veut rien dire pour un client, « §55 a) ii) et B125
     hors de portée » se comprend et se corrige.
     """
-    lignes: List[str] = []
+    lignes: list[str] = []
     a = lignes.append
     nb = f"{rapport.nb_lignes:,}".replace(',', ' ')
 
@@ -637,7 +643,7 @@ def diagnostic(rapport: RapportInventaire) -> str:
     if rapport.hors_portee:
         a("")
         a(f"CE QUI MANQUE, ET CE QUE CELA COÛTE ({len(rapport.hors_portee)})")
-        par_champ: Dict[str, List[str]] = {}
+        par_champ: dict[str, list[str]] = {}
         for nom, absents in rapport.hors_portee.items():
             par_champ.setdefault(' ou '.join(absents), []).append(nom)
         for champ, noms in sorted(par_champ.items()):

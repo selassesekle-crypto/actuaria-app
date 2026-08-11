@@ -228,7 +228,7 @@ class T5_EcrireEtRelire(unittest.TestCase):
     def test_l_ecriture_est_deterministe(self):
         """Un livrable auditable ne change pas de forme sans changer de fond."""
         r = ajouter(ouvrir('CLI', 'ENT'),
-                    [_ligne('P-00%d' % i) for i in range(5)], ARRETE_2026, C26)
+                    [_ligne(f'P-00{i}') for i in range(5)], ARRETE_2026, C26)
         a, b = _fichier(), _fichier()
         self.assertEqual(ecrire(r, a).read_bytes(), ecrire(r, b).read_bytes())
         print("    OK T5b : deux ecritures du meme registre -> memes octets")

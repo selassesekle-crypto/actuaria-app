@@ -61,17 +61,25 @@ RÉFÉRENCES — IFRS 17, annexe au règlement (UE) 2023/1803. §16, §24, §25,
 """
 
 import json
+from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Dict, Iterable, List, Mapping, NamedTuple, Optional, Tuple
+from typing import NamedTuple
 
-from core.arrete import Arrete, iso, lire as lire_arrete
+from core.arrete import Arrete, iso
+from core.arrete import lire as lire_arrete
 from normes.ifrs17.socle.confirmation import Confirmation, verifier
-from normes.ifrs17.socle.entree import (analyser,
-                                        trace_reconnaissance_tardive)
+from normes.ifrs17.socle.entree import analyser, trace_reconnaissance_tardive
 from normes.ifrs17.socle.groupe import (
-    CONVENTION_CALENDAIRE, PAA_ELIGIBLE, PAA_NON_ELIGIBLE, PAA_NON_ETABLI,
-    CleGroupe, ConventionCohorte, cle_de_ligne, date_emission_de_ligne,
-    deriver)
+    CONVENTION_CALENDAIRE,
+    PAA_ELIGIBLE,
+    PAA_NON_ELIGIBLE,
+    PAA_NON_ETABLI,
+    CleGroupe,
+    ConventionCohorte,
+    cle_de_ligne,
+    date_emission_de_ligne,
+    deriver,
+)
 
 #: Version du format de fichier. Elle est ÉCRITE dans le fichier : une
 #: relecture doit pouvoir refuser un format qu'elle ne connaît pas plutôt que
@@ -96,14 +104,14 @@ class Membre(NamedTuple):
 class GroupeEnregistre(NamedTuple):
     """Un groupe et ses attributs scellés. ⚠️ AUCUN MONTANT."""
     cle:               CleGroupe
-    date_compta_25:    Optional[str]     # 'AAAA-MM-JJ', §25
+    date_compta_25:    str | None     # 'AAAA-MM-JJ', §25
     origine_date_25:   str
     eligibilite_paa:   str               # §53, scellé
     motif_eligibilite: str
     arrete_creation:   str               # quand le groupe est né
     nb_lignes:         int               # des lignes, pas des euros
-    membres:           Tuple[Membre, ...]
-    traces:            Tuple[str, ...]
+    membres:           tuple[Membre, ...]
+    traces:            tuple[str, ...]
 
 
 class Registre(NamedTuple):
@@ -116,8 +124,8 @@ class Registre(NamedTuple):
     client:        str
     entite:        str
     convention:    ConventionCohorte
-    groupes:       Tuple[GroupeEnregistre, ...]
-    confirmations: Tuple[Confirmation, ...] = ()
+    groupes:       tuple[GroupeEnregistre, ...]
+    confirmations: tuple[Confirmation, ...] = ()
 
 
 class RefusRegistre(Exception):
@@ -150,7 +158,7 @@ def ouvrir(client: str, entite: str,
 
 
 def ajouter(registre: Registre, lignes: Iterable[Mapping], arrete,
-            confirmation: Optional[Confirmation] = None,
+            confirmation: Confirmation | None = None,
             *, critere_16b_declare: bool = False) -> Registre:
     """Verse un inventaire dans le registre et rend un NOUVEAU registre.
 
@@ -178,7 +186,7 @@ def ajouter(registre: Registre, lignes: Iterable[Mapping], arrete,
     _refuser_si_reclassification(registre, membres_par_cle)
 
     existants = {g.cle: g for g in registre.groupes}
-    fusionnes: List[GroupeEnregistre] = []
+    fusionnes: list[GroupeEnregistre] = []
 
     for d in derives:
         nouveaux = membres_par_cle.get(d.cle, ())
@@ -206,8 +214,8 @@ def ajouter(registre: Registre, lignes: Iterable[Mapping], arrete,
         confirmations=registre.confirmations + (confirmation,))
 
 
-def _traces(base: Tuple[str, ...], membres: Tuple[Membre, ...],
-            nb_lignes: int) -> Tuple[str, ...]:
+def _traces(base: tuple[str, ...], membres: tuple[Membre, ...],
+            nb_lignes: int) -> tuple[str, ...]:
     """Les traces du groupe, plus celle de l'appartenance intraçable."""
     t = set(base)
     if len(membres) < nb_lignes:
@@ -215,8 +223,8 @@ def _traces(base: Tuple[str, ...], membres: Tuple[Membre, ...],
     return tuple(sorted(t))
 
 
-def _traces_entree(registre: Registre, lignes: List[Mapping],
-                   arr: Arrete) -> Dict[CleGroupe, Tuple[str, ...]]:
+def _traces_entree(registre: Registre, lignes: list[Mapping],
+                   arr: Arrete) -> dict[CleGroupe, tuple[str, ...]]:
     """Les traces de §28 : ce qui rejoint, ce qui crée, ce qui arrive tard.
 
     ⚠️ Aucune de ces traces ne refuse quoi que ce soit. §28 autorise l'ajout
@@ -224,7 +232,7 @@ def _traces_entree(registre: Registre, lignes: List[Mapping],
     MOMENT de l'ajout, et un écart relève d'IAS 8.
     """
     cles = {g.cle for g in registre.groupes}
-    par_cle: Dict[CleGroupe, set] = {}
+    par_cle: dict[CleGroupe, set] = {}
     for rang, ligne in enumerate(lignes, 1):
         e = analyser(cles, ligne, registre.convention, arr.valeur, rang)
         t = trace_reconnaissance_tardive(e)
@@ -233,8 +241,8 @@ def _traces_entree(registre: Registre, lignes: List[Mapping],
     return {c: tuple(sorted(t)) for c, t in par_cle.items()}
 
 
-def _absorber(ancien: GroupeEnregistre, derive, nouveaux: Tuple[Membre, ...],
-              quand: str, base: Tuple[str, ...] = ()) -> GroupeEnregistre:
+def _absorber(ancien: GroupeEnregistre, derive, nouveaux: tuple[Membre, ...],
+              quand: str, base: tuple[str, ...] = ()) -> GroupeEnregistre:
     """Ajoute des membres à un groupe existant SANS toucher à ses scellés.
 
     ⚠️ Le verdict §53 et la date §25 de l'ancien l'emportent — ils ont été
@@ -263,8 +271,8 @@ def _absorber(ancien: GroupeEnregistre, derive, nouveaux: Tuple[Membre, ...],
         traces=tuple(sorted(traces)))
 
 
-def _membres_par_cle(lignes: List[Mapping], convention: ConventionCohorte,
-                     quand: str) -> Dict[CleGroupe, Tuple[Membre, ...]]:
+def _membres_par_cle(lignes: list[Mapping], convention: ConventionCohorte,
+                     quand: str) -> dict[CleGroupe, tuple[Membre, ...]]:
     """L'appartenance, quand elle est traçable.
 
     Sans `identifiant_contrat`, on ne peut pas nommer un contrat : le groupe
@@ -275,7 +283,7 @@ def _membres_par_cle(lignes: List[Mapping], convention: ConventionCohorte,
     et pas d'une seconde copie de la règle ici : sinon la classe par défaut
     de §16 vivrait en deux exemplaires, et l'une des deux dériverait un jour.
     """
-    par_cle: Dict[CleGroupe, List[Membre]] = {}
+    par_cle: dict[CleGroupe, list[Membre]] = {}
     for rang, ligne in enumerate(lignes, 1):
         ident = ligne.get('identifiant_contrat')
         if ident is None or str(ident).strip() == '':
@@ -289,7 +297,7 @@ def _membres_par_cle(lignes: List[Mapping], convention: ConventionCohorte,
 
 def _refuser_si_reclassification(
         registre: Registre,
-        membres_par_cle: Dict[CleGroupe, Tuple[Membre, ...]]) -> None:
+        membres_par_cle: dict[CleGroupe, tuple[Membre, ...]]) -> None:
     """Une clé de contrat ne change jamais de groupe (§24)."""
     place = {m.cle_contrat: g.cle for g in registre.groupes
              for m in g.membres}
@@ -322,7 +330,7 @@ def groupe(registre: Registre, cle: CleGroupe) -> GroupeEnregistre:
 #  ÉCRIRE ET RELIRE
 # =============================================================================
 
-def _en_dict(registre: Registre) -> Dict:
+def _en_dict(registre: Registre) -> dict:
     """La forme sérialisée — ordre FIXE, pour que deux écritures du même
     registre rendent les mêmes octets. Un livrable auditable ne peut pas
     changer de forme sans changer de fond."""
@@ -442,8 +450,8 @@ def resume(registre: Registre) -> str:
         f"  {len(registre.confirmations)} confirmation(s), la dernière par "
         f"{dernier.actuaire_resp} au {dernier.arrete}"
         if dernier else "  aucune confirmation",
-        f"  {len(registre.groupes)} groupe(s), {total} ligne(s), "
-        f"{suivis} contrat(s) suivi(s) nominativement",
+        (f"  {len(registre.groupes)} groupe(s), {total} ligne(s), "
+         f"{suivis} contrat(s) suivi(s) nominativement"),
         "",
         "  ÉLIGIBILITÉ À LA MÉTHODE D'AFFECTATION DES PRIMES (§53) :",
         "    " + "   ".join(f"{v} : {comptes[v]}"

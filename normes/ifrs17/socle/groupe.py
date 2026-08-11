@@ -56,8 +56,9 @@ RÉFÉRENCES — IFRS 17, annexe au règlement (UE) 2023/1803, JO L 237 du
 
 import re
 import unicodedata
+from collections.abc import Iterable, Mapping
 from datetime import date, datetime, timedelta
-from typing import Dict, Iterable, List, Mapping, NamedTuple, Optional, Tuple
+from typing import NamedTuple
 
 from core.arrete import FORMATS
 from normes.ifrs17.socle.contrat import COUVERTURE_INDETERMINEE
@@ -167,12 +168,12 @@ class Groupe(NamedTuple):
     diagnostic et n'entre dans aucune évaluation.
     """
     cle:                CleGroupe
-    date_compta_25:     Optional[date]
+    date_compta_25:     date | None
     origine_date_25:    str
     eligibilite_paa:    str
     motif_eligibilite:  str
     nb_lignes:          int
-    traces:             Tuple[str, ...]
+    traces:             tuple[str, ...]
 
 
 class RefusGroupe(Exception):
@@ -234,7 +235,7 @@ def _sans_accent(texte: str) -> str:
         .encode('ascii', 'ignore').decode('ascii')
 
 
-def _lire_date(valeur) -> Optional[date]:
+def _lire_date(valeur) -> date | None:
     """Une date de contrat, dans l'une des formes qu'un assureur produit.
 
     ⚠️ `FORMATS` vient de `arrete.py` : les formes TEXTUELLES sont une SEULE
@@ -264,7 +265,13 @@ def _lire_date(valeur) -> Optional[date]:
     for motif, _ in FORMATS:
         try:
             longueur = 8 if motif == '%Y%m%d' else 10
-            return datetime.strptime(brut[:longueur], motif).date()
+            # ⚠️ FAUX POSITIF DTZ007 DÉCLARÉ, PAS CORRIGÉ. Le `datetime`
+            # est un artefact de lecture : `.date()` est extrait dans la
+            # foulée. Une date d'émission de contrat est une date
+            # CALENDAIRE, pas un moment — lui donner un fuseau serait
+            # inventer une information que l'inventaire ne porte pas.
+            return datetime.strptime(  # noqa: DTZ007
+                brut[:longueur], motif).date()
         except ValueError:
             continue
     lu = _depuis_mois_en_lettres(brut)
@@ -276,14 +283,14 @@ def _lire_date(valeur) -> Optional[date]:
         return None
 
 
-def _depuis_serie_excel(n: float) -> Optional[date]:
+def _depuis_serie_excel(n: float) -> date | None:
     """Un numéro de série Excel → une date, si le nombre est plausible."""
     if not _SERIE_MIN <= n <= _SERIE_MAX:
         return None
     return _ORIGINE_EXCEL + timedelta(days=int(n))
 
 
-def _depuis_mois_en_lettres(brut: str) -> Optional[date]:
+def _depuis_mois_en_lettres(brut: str) -> date | None:
     """« 15 mars 2026 », « 15-mars-2026 », « 15/janv/2026 »."""
     morceaux = re.split(r"[\s/.\-]+", _sans_accent(brut.lower()).strip())
     if len(morceaux) != 3:
@@ -309,7 +316,7 @@ def _un_an_apres(d: date) -> date:
 #  §53 — L'ÉLIGIBILITÉ, ET SON MOTIF
 # =============================================================================
 
-def _eligibilite(lignes: List[Mapping]) -> Tuple[str, str]:
+def _eligibilite(lignes: list[Mapping]) -> tuple[str, str]:
     """Le verdict §53 b) d'un groupe, et le motif qui le justifie.
 
     §53 b) porte sur « la période de couverture de CHACUN des contrats du
@@ -357,7 +364,7 @@ def _eligibilite(lignes: List[Mapping]) -> Tuple[str, str]:
 #  §25 — LA DATE DE COMPTABILISATION INITIALE
 # =============================================================================
 
-def _date_25(lignes: List[Mapping]) -> Tuple[Optional[date], str]:
+def _date_25(lignes: list[Mapping]) -> tuple[date | None, str]:
     """La première des trois dates de §25, et laquelle a servi.
 
     §25 : la PREMIÈRE de (a) début de la période de couverture, (b) échéance
@@ -381,7 +388,7 @@ def _date_25(lignes: List[Mapping]) -> Tuple[Optional[date], str]:
 # =============================================================================
 
 def _controler_22(ligne: Mapping, convention: ConventionCohorte,
-                  rang: int) -> Optional[str]:
+                  rang: int) -> str | None:
     """Contrôle un ensemble pré-agrégé. Lève si §22 est rompu, sinon trace.
 
     DEUX contrôles, et le second est celui qui rend la convention opérante.
@@ -443,21 +450,21 @@ def cle_de_ligne(ligne: Mapping, convention: ConventionCohorte,
     return CleGroupe(portefeuille, classe, cohorte(convention, emission))
 
 
-def date_emission_de_ligne(ligne: Mapping) -> Optional[date]:
+def date_emission_de_ligne(ligne: Mapping) -> date | None:
     """La date d'émission d'une ligne, lue avec les formats du socle."""
     return _lire_date(ligne.get('date_emission'))
 
 
 def deriver(lignes: Iterable[Mapping], *,
             convention: ConventionCohorte = CONVENTION_CALENDAIRE,
-            critere_16b_declare: bool = False) -> Tuple[Groupe, ...]:
+            critere_16b_declare: bool = False) -> tuple[Groupe, ...]:
     """Un inventaire canonique → les groupes de §14-16-22, triés par clé.
 
     Ne persiste rien, ne calcule aucun montant. Lève `RefusGroupe` si un
     ensemble pré-agrégé enfreint §22 — il n'y a pas de groupe partiel.
     """
-    par_cle: Dict[CleGroupe, List[Mapping]] = {}
-    traces_par_cle: Dict[CleGroupe, set] = {}
+    par_cle: dict[CleGroupe, list[Mapping]] = {}
+    traces_par_cle: dict[CleGroupe, set] = {}
 
     for rang, ligne in enumerate(lignes, 1):
         cle = cle_de_ligne(ligne, convention, rang)
@@ -486,11 +493,11 @@ def deriver(lignes: Iterable[Mapping], *,
     return tuple(groupes)
 
 
-def resume(groupes: Tuple[Groupe, ...],
+def resume(groupes: tuple[Groupe, ...],
            convention: ConventionCohorte = CONVENTION_CALENDAIRE) -> str:
     """Ce que la dérivation a produit, dit à un actuaire."""
-    lignes = [f"GROUPES DÉRIVÉS — {len(groupes)}, convention de cohorte : "
-              f"{convention.libelle} (§22)", ""]
+    lignes = [(f"GROUPES DÉRIVÉS — {len(groupes)}, convention de cohorte : "
+               f"{convention.libelle} (§22)"), ""]
     for g in groupes:
         lignes.append(f"  {g.cle.texte}   {g.nb_lignes} ligne(s)")
         lignes.append(f"      §25 : {g.date_compta_25 or '—'} — "

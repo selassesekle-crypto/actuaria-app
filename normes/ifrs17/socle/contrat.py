@@ -71,7 +71,7 @@ RÉFÉRENCES
 =============================================================================
 """
 
-from typing import Dict, FrozenSet, NamedTuple, Tuple
+from typing import NamedTuple
 
 # =============================================================================
 #  LES TROIS NIVEAUX
@@ -130,15 +130,15 @@ class Exigence(NamedTuple):
     reference: str                       # le paragraphe, tel qu'il se cite
     source:    str                       # l'un de SOURCES_ADMISES
     libelle:   str
-    requiert:  Tuple[FrozenSet[str], ...]
+    requiert:  tuple[frozenset[str], ...]
 
 
-def _et(*groupes: Tuple[str, ...]) -> Tuple[FrozenSet[str], ...]:
+def _et(*groupes: tuple[str, ...]) -> tuple[frozenset[str], ...]:
     """Conjonction de groupes ; dans un groupe, un champ suffit."""
     return tuple(frozenset(g) for g in groupes)
 
 
-EXIGENCES: Dict[str, Exigence] = {
+EXIGENCES: dict[str, Exigence] = {
     'portefeuilles': Exigence(
         '§14', SOURCE_IFRS17,
         "Identifier les portefeuilles de contrats",
@@ -265,7 +265,7 @@ class ChampContrat(NamedTuple):
     scelle:  bool = False
 
 
-CHAMPS: Dict[str, ChampContrat] = {
+CHAMPS: dict[str, ChampContrat] = {
     # ── Socle — sans eux, rien d'utile ───────────────────────────────────────
     'portefeuille': ChampContrat(
         NIVEAU_SOCLE,
@@ -335,7 +335,7 @@ CHAMPS: Dict[str, ChampContrat] = {
 #  FONCTIONS PUBLIQUES — UNE PAR QUESTION
 # =============================================================================
 
-def champs_du_niveau(niveau: str) -> Tuple[str, ...]:
+def champs_du_niveau(niveau: str) -> tuple[str, ...]:
     """Les champs d'un niveau donné, triés. Lève sur un niveau inconnu."""
     if niveau not in NIVEAUX:
         raise KeyError(
@@ -344,7 +344,7 @@ def champs_du_niveau(niveau: str) -> Tuple[str, ...]:
     return tuple(sorted(c for c, d in CHAMPS.items() if d.niveau == niveau))
 
 
-def champs_scelles() -> Tuple[str, ...]:
+def champs_scelles() -> tuple[str, ...]:
     """Les champs qui fixent l'unité de compte et ne se corrigent plus.
 
     §16, §22 et §53 s'apprécient « à la date de la création du groupe ». Le
@@ -353,7 +353,7 @@ def champs_scelles() -> Tuple[str, ...]:
     return tuple(sorted(c for c, d in CHAMPS.items() if d.scelle))
 
 
-def champs_bloquants() -> Tuple[str, ...]:
+def champs_bloquants() -> tuple[str, ...]:
     """Les champs dont l'absence fait REFUSER la lecture.
 
     ⚠️ C'EST LE REFUS QUI DÉFINIT LE PRODUIT. Sans `date_emission` il n'y a
@@ -369,7 +369,7 @@ def champs_bloquants() -> Tuple[str, ...]:
     return ('date_emission', 'portefeuille')
 
 
-def capacites(champs_presents) -> Dict[str, bool]:
+def capacites(champs_presents) -> dict[str, bool]:
     """Exigence par exigence : atteignable ou non, à partir des champs fournis.
 
     Le pendant de `_capacites_depuis_champs` de la couche triangle, étendu du
@@ -381,7 +381,7 @@ def capacites(champs_presents) -> Dict[str, bool]:
             for nom, ex in EXIGENCES.items()}
 
 
-def exigences_hors_portee(champs_presents) -> Dict[str, Tuple[str, ...]]:
+def exigences_hors_portee(champs_presents) -> dict[str, tuple[str, ...]]:
     """Ce qui reste inatteignable, et LE CHAMP QUI MANQUE pour chacune.
 
     Existe pour que le diagnostic dise le COÛT d'une absence plutôt que de la
@@ -416,7 +416,7 @@ def reference(exigence: str) -> str:
     return f"Règle ActuarIA ({ex.reference}) — {ex.libelle}"
 
 
-def exigences_hors_norme() -> Dict[str, Exigence]:
+def exigences_hors_norme() -> dict[str, Exigence]:
     """Les exigences qui NE SONT PAS des obligations d'IFRS 17.
 
     Existe pour qu'un livrable puisse les nommer plutôt que de les noyer : un
