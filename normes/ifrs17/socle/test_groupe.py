@@ -10,6 +10,7 @@ from normes.ifrs17.socle.groupe import (
     CLASSE_16A,
     CLASSE_16C,
     CLASSE_PAR_DEFAUT,
+    CLASSES_16,
     CONVENTION_CALENDAIRE,
     MOTIF_AMPLITUDE_22,
     MOTIF_CHEVAUCHE_COHORTES,
@@ -55,6 +56,22 @@ class T1_LaCle(unittest.TestCase):
             'rc_auto|AUTRES|2025', 'rc_auto|DEFICITAIRE|2026'})
         print(f"    OK T1 : 4 lignes -> {len(gs)} groupes, "
               "un par combinaison des trois etages")
+
+    def test_le_vocabulaire_du_16_est_clos_a_trois_valeurs(self):
+        """⚠️ §16 CLASSE EN TROIS, PAS EN QUATRE. Une valeur qui
+        apparaitrait en silence -- par une colonne d'inventaire mal lue, ou
+        par une quatrieme classe inventee -- se propagerait jusqu'a la cle de
+        groupe, donc jusqu'a l'unite de compte. Ce verrou est le pendant de
+        `test_aucun_etat_hors_vocabulaire` sur le perimetre.
+        """
+        self.assertEqual(len(CLASSES_16), 3)
+        self.assertEqual(len(set(CLASSES_16)), 3)
+        self.assertIn(CLASSE_PAR_DEFAUT, CLASSES_16)
+        gs = deriver([_ligne(classe_profitabilite=c) for c in CLASSES_16])
+        for g in gs:
+            self.assertIn(g.cle.classe_16, CLASSES_16)
+        print(f"    OK T1d : vocabulaire §16 clos a {len(CLASSES_16)} "
+              f"valeurs, defaut = {CLASSE_PAR_DEFAUT}")
 
     def test_les_groupes_sortent_tries(self):
         gs = deriver([_ligne(portefeuille=p) for p in ('mrh', 'auto', 'zzz')])
