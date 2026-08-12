@@ -52,8 +52,37 @@ def _run(args, entree=None):
 
 
 def fichiers_du_diff():
-    sortie = _run(['git', 'diff', '--name-only'])
-    return [f for f in sortie.split('\n') if f.strip().endswith('.py')]
+    """Les fichiers Python que ce lot touche — LES TROIS ENSEMBLES.
+
+    /!\\ IL EN MANQUAIT DEUX, ET L'OUTIL SE TAISAIT. `git diff --name-only`
+    ne montre que les modifications NON INDEXEES de fichiers SUIVIS. Un
+    fichier NEUF n'y figure jamais ; un fichier INDEXE en SORT.
+
+    /!\\ MESURE DU 13/08/2026 : trois fichiers crees ont rendu << Aucun
+    fichier Python modifie. Rien a mesurer. >> avant ET apres `git add`,
+    alors qu'ils portaient 5 ISC004 -- un code de CORRECTION -- et quatre
+    signalements vulture. C'est la meme famille que la gate rendant << Ran 0
+    tests >> en sortant 0 : le silence ressemble au succes.
+
+    /!\\ ET LE CAS LE PLUS TRAITRE ETAIT L'INDEXATION, pas la creation.
+    Mesurer la proprete APRES `git add` -- l'ordre naturel juste avant un
+    commit -- ne mesurait PLUS RIEN, y compris sur des fichiers suivis et
+    modifies dont l'outil avait parle une minute plus tot.
+
+    /!\\ LES SUPPRESSIONS SONT ECARTEES (`--diff-filter=d`) et l'existence
+    est verifiee : ruff et vulture echouent sur un chemin absent, et cet
+    echec-la n'est pas un defaut de proprete.
+    """
+    vus = []
+    for args in (['git', 'diff', '--name-only', '--diff-filter=d'],
+                 ['git', 'diff', '--cached', '--name-only',
+                  '--diff-filter=d'],
+                 ['git', 'ls-files', '--others', '--exclude-standard']):
+        vus += _run(args).split('\n')
+    uniques = dict.fromkeys(f.strip() for f in vus
+                            if f.strip().endswith('.py'))
+    return [f for f in uniques
+            if os.path.exists(os.path.join(RACINE, f))]
 
 
 def contenu_head(chemin):
