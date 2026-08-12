@@ -34,8 +34,33 @@ import sys
 RACINE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 #: Les classes de test sont decouvertes par REFLEXION : vulture ne peut pas
-#: le voir. Le motif vaut mieux qu'une liste blanche, qui deviendrait une
-#: liste a tenir.
+#: le voir.
+#:
+#: /!\ CE MOTIF NE SUFFIT PAS, ET C'EST MESURE. Le commentaire d'origine
+#: disait << le motif vaut mieux qu'une liste blanche, qui deviendrait une
+#: liste a tenir >>. C'etait vrai du principe et faux du resultat : le motif
+#: EST une liste a tenir, simplement implicite.
+#:
+#: MESURE DU 13/08/2026, fichier par fichier -- comme l'outil mesure
+#: vraiment : **73 signalements vulture, dont 17 FAUX** sur 122 fichiers de
+#: test. Tous des classes `unittest.TestCase` que le motif ne couvre pas :
+#: `LesSymbolesRetires`, `TGARDE_*`, `TMONO*`, `TMULT*`, `TPUISS*`. Aucun
+#: motif raisonnable ne les attrapera toutes.
+#:
+#: /!\ ET UNE PRECISION QUE J'AI DU ME FAIRE A MOI-MEME : 425 classes
+#: derivent de `TestCase` dans le depot et 114 echappent au motif -- mais
+#: echapper au motif n'est un defaut que si vulture SIGNALE, ce qu'il ne
+#: fait pas toujours. Le chiffre qui compte est 17, pas 114. La
+#: non-couverture d'un filtre n'est pas du bruit tant qu'on ne l'a pas
+#: mesuree.
+#:
+#: /!\ LE DEGAT N'EST PAS LE VOLUME, C'EST L'HABITUDE. Des faux
+#: signalements recurrents apprennent a l'oeil a survoler la sortie vulture
+#: -- et le jour ou elle porte un vrai symbole mort, il passe avec eux.
+#:
+#: Il reste ici pour ce qu'il couvre encore : des fonctions et des constantes
+#: appelees par reflexion, qui ne sont pas des classes. La couverture des
+#: CLASSES, elle, se MESURE desormais -- voir `_classes_de_test`.
 MOTIF_VULTURE = 'T[0-9]*_*,V[0-9]_*,TRFR*,GOUV_*,S[0-9]_*,F5_*'
 
 #: Ce sur quoi le zero est STRICT : des defauts, pas des gouts.
@@ -116,10 +141,45 @@ def ruff(chemin, source=None):
     return codes_ruff(_run(args + ['--stdin-filename', chemin, '-'], source))
 
 
+def _classes_de_test(source):
+    """Les classes decouvertes par REFLEXION dans ce source — MESUREES.
+
+    /!\\ UNE MESURE PLUTOT QU'UN MOTIF. Une classe qui derive de
+    `unittest.TestCase` est instanciee par le decouvreur, jamais par un
+    appel qu'un analyseur statique verrait. Vulture la declare donc morte,
+    et il a tort a tous les coups. Plutot que de deviner ses noms, on les
+    LIT dans l'arbre syntaxique du fichier mesure.
+
+    /!\\ ON LIT LE SOURCE MESURE, PAS LE DEPOT. Une classe ajoutee dans le
+    lot courant doit etre taue des ce lot ; une classe RETIREE ne doit plus
+    l'etre. Un cache serait faux au premier renommage.
+    """
+    try:
+        arbre = ast.parse(source)
+    except (SyntaxError, ValueError):
+        return ()
+    return tuple(n.name for n in ast.walk(arbre)
+                 if isinstance(n, ast.ClassDef)
+                 and any('TestCase' in ast.unparse(b) for b in n.bases))
+
+
+def _noms_tus(chemin, source=None):
+    """Le motif, PLUS les classes de test effectivement presentes."""
+    if source is None:
+        try:
+            with open(os.path.join(RACINE, chemin), encoding='utf-8',
+                      errors='replace') as f:
+                source = f.read()
+        except OSError:
+            return MOTIF_VULTURE
+    classes = _classes_de_test(source)
+    return ','.join((MOTIF_VULTURE, *classes)) if classes else MOTIF_VULTURE
+
+
 def vulture(chemin, source=None):
-    """Le nombre de signalements vulture, motif d'exclusion applique."""
+    """Le nombre de signalements vulture, exclusions appliquees."""
     args = ['py', '-m', 'vulture', '--min-confidence', '60',
-            '--ignore-names', MOTIF_VULTURE]
+            '--ignore-names', _noms_tus(chemin, source)]
     if source is None:
         return len([x for x in _run(args + [chemin]).split('\n') if x.strip()])
     # ⚠️ PIEGE 2 : le temoin garde le MEME prefixe de nom, sinon vulture
