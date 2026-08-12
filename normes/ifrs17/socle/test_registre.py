@@ -16,8 +16,8 @@ from normes.ifrs17.socle import registre as R
 from normes.ifrs17.socle.confirmation import Confirmation
 from normes.ifrs17.socle.groupe import (
     CLASSE_16A,
+    PAA_53A_NON_EVALUEE,
     PAA_ELIGIBLE,
-    PAA_NON_ELIGIBLE,
     PAA_NON_ETABLI,
     CleGroupe,
     convention_exercice,
@@ -209,7 +209,7 @@ class T4_LesScellesNeSEcrasentPas(unittest.TestCase):
         r = ajouter(ouvrir('CLI', 'ENT'), [_ligne('P-001')], ARRETE_2026, C26)
         self.assertEqual(r.groupes[0].eligibilite_paa, 'ELIGIBLE')
         # un contrat de 3 ans rejoint le meme groupe : la derivation dirait
-        # NON_ELIGIBLE, mais le verdict a ete scelle a la creation
+        # 53A_NON_EVALUEE, mais le verdict a ete scelle a la creation
         r2 = ajouter(r, [_ligne('P-002', fin_couverture='2029-03-31')],
                      ARRETE_2027, C27)
         g = r2.groupes[0]
@@ -332,7 +332,7 @@ class T7_EligibilitePubliee(unittest.TestCase):
     def test_les_trois_verdicts_sont_comptes(self):
         c = R.comptes_eligibilite(self._registre())
         self.assertEqual(c[PAA_ELIGIBLE], 1)
-        self.assertEqual(c[PAA_NON_ELIGIBLE], 1)
+        self.assertEqual(c[PAA_53A_NON_EVALUEE], 1)
         self.assertEqual(c[PAA_NON_ETABLI], 1)
 
     def test_les_trois_cles_existent_meme_a_zero(self):
@@ -341,19 +341,19 @@ class T7_EligibilitePubliee(unittest.TestCase):
         trancher se lit comme un dossier conforme."""
         vide = R.ouvrir('Mutuelle Test', 'Entite A')
         c = R.comptes_eligibilite(vide)
-        self.assertEqual(set(c), {PAA_ELIGIBLE, PAA_NON_ELIGIBLE,
+        self.assertEqual(set(c), {PAA_ELIGIBLE, PAA_53A_NON_EVALUEE,
                                   PAA_NON_ETABLI})
         self.assertEqual(sum(c.values()), 0)
 
     def test_le_resume_publie_les_comptes(self):
         texte = R.resume(self._registre())
         self.assertIn('§53', texte)
-        for verdict in (PAA_ELIGIBLE, PAA_NON_ELIGIBLE, PAA_NON_ETABLI):
+        for verdict in (PAA_ELIGIBLE, PAA_53A_NON_EVALUEE, PAA_NON_ETABLI):
             self.assertIn(f'{verdict} : 1', texte)
 
     def test_le_resume_publie_le_MOTIF_pas_seulement_le_verdict(self):
-        """« NON_ELIGIBLE » seul ne dit pas si la porte s'est fermée sur un
-        contrat trop long ou sur une couverture sans terme."""
+        """« 53A_NON_EVALUEE » seul ne dit pas si la porte s'est fermée sur
+        un contrat trop long ou sur une couverture sans terme."""
         texte = R.resume(self._registre())
         self.assertIn('couvrent plus d', texte)
         self.assertIn('non calculable', texte)

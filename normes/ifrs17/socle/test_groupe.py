@@ -15,8 +15,8 @@ from normes.ifrs17.socle.groupe import (
     MOTIF_CHEVAUCHE_COHORTES,
     MOTIF_SANS_EMISSION,
     MOTIF_SANS_PORTEFEUILLE,
+    PAA_53A_NON_EVALUEE,
     PAA_ELIGIBLE,
-    PAA_NON_ELIGIBLE,
     PAA_NON_ETABLI,
     TRACE_16B_NON_DECLARE,
     CleGroupe,
@@ -175,15 +175,15 @@ class T4_Eligibilite53(unittest.TestCase):
         """§53 b) porte sur CHACUN des contrats du groupe."""
         gs = deriver([_ligne(), _ligne(debut_couverture='2026-04-01',
                                        fin_couverture='2029-03-31')])
-        self.assertEqual(gs[0].eligibilite_paa, PAA_NON_ELIGIBLE)
+        self.assertEqual(gs[0].eligibilite_paa, PAA_53A_NON_EVALUEE)
         self.assertIn('1 contrat(s) sur 2', gs[0].motif_eligibilite)
         self.assertIn('signalé, non évalué', gs[0].motif_eligibilite)
-        print("    OK T4b : 1 contrat sur 2 trop long -> groupe NON ELIGIBLE, "
-              "signale et non evalue")
+        print("    OK T4b : 1 contrat sur 2 trop long -> §53 b) ferme, "
+              "§53 a) NON EVALUEE -- jamais 'ineligible'")
 
     def test_couverture_indeterminee_ferme_la_porte_b(self):
         gs = deriver([_ligne(fin_couverture='INDETERMINEE')])
-        self.assertEqual(gs[0].eligibilite_paa, PAA_NON_ELIGIBLE)
+        self.assertEqual(gs[0].eligibilite_paa, PAA_53A_NON_EVALUEE)
         self.assertIn('sans terme excède un an', gs[0].motif_eligibilite)
         print("    OK T4c : couverture indeterminee -> §53 b) ferme")
 
@@ -195,6 +195,37 @@ class T4_Eligibilite53(unittest.TestCase):
         self.assertNotEqual(gs[0].eligibilite_paa, PAA_ELIGIBLE)
         print("    OK T4d : sans fin de couverture -> NON_ETABLI, "
               "distinct d'ELIGIBLE")
+
+    def test_aucun_verdict_53_ne_conclut_a_l_ineligibilite(self):
+        """⚠️ LE VERROU DE CE LOT. §53 ouvre DEUX portes disjonctives et le
+        socle n'en observe qu'une : (b), la durée. Aucun des trois verdicts
+        ne peut donc affirmer qu'un groupe est inéligible à la PAA — c'est
+        une conclusion que ce code n'atteint pas, faute de pouvoir apprécier
+        (a). Ce test aurait échoué sur le socle publié en C1.
+        """
+        for verdict in (PAA_ELIGIBLE, PAA_53A_NON_EVALUEE, PAA_NON_ETABLI):
+            self.assertNotIn('NON_ELIGIBLE', verdict, verdict)
+            self.assertNotIn('INELIGIBLE', verdict, verdict)
+        self.assertIn('53A', PAA_53A_NON_EVALUEE)
+        print("    OK T4e : aucun des 3 verdicts §53 ne conclut a "
+              "l'ineligibilite")
+
+    def test_un_contrat_de_trois_ans_n_est_pas_refuse(self):
+        """⚠️ LE CAS QUI A CORRIGE CE SOCLE. Un contrat de TROIS ANS mesuré
+        en PAA existe dans la littérature actuarielle publiée : ICA/CIA,
+        note éducative doc 222092, juin 2022, section 5.6.1. Si dépasser un
+        an suffisait à imposer le modèle général, cet exemple n'existerait
+        pas. Le socle ne doit donc jamais conclure qu'une couverture
+        pluriannuelle exclut la PAA — il constate que §53 b) est fermé, et
+        il s'arrête là.
+        """
+        gs = deriver([_ligne(debut_couverture='2026-01-01',
+                             fin_couverture='2028-12-31')])
+        self.assertEqual(gs[0].eligibilite_paa, PAA_53A_NON_EVALUEE)
+        self.assertIn('§53 b)', gs[0].motif_eligibilite)
+        self.assertIn('reste ouverte en droit', gs[0].motif_eligibilite)
+        print("    OK T4f : 3 ans de couverture -> §53 b) ferme, la porte "
+              "(a) reste ouverte (cas ICA 5.6.1)")
 
 
 class T5_Date25(unittest.TestCase):

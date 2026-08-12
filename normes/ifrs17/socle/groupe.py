@@ -135,10 +135,27 @@ class CleGroupe(NamedTuple):
         return f"{self.portefeuille}|{self.classe_16}|{self.cohorte}"
 
 
-#: Verdicts d'éligibilité PAA (§53). ⚠️ « NON_ETABLI » n'est pas « éligible » :
-#: c'est l'aveu que la donnée ne permet pas de trancher.
+#: Verdicts d'éligibilité PAA (§53). ⚠️ AUCUN DES TROIS NE DIT « INÉLIGIBLE »,
+#: et c'est le fond de ce lot. §53 ouvre DEUX portes disjonctives : (a) l'écart
+#: non significatif attendu avec le modèle général, OU (b) la couverture d'un
+#: an au plus. Le socle n'observe que (b) — voir PORTE_53A ci-dessous.
+#:
+#: ⚠️ ÉCHOUER À (b) N'ÉTABLIT RIEN SUR (a). L'exemple 5.6.1 de l'ICA (note
+#: éducative, doc 222092, juin 2022) mesure un contrat de TROIS ANS en PAA :
+#: si dépasser un an suffisait à basculer en modèle général, cet exemple
+#: n'existerait pas. Le verdict s'appelait « NON_ELIGIBLE » — il affirmait une
+#: conclusion que ce code ne peut pas atteindre.
+#:
+#: ⚠️ POURQUOI LE NOM COMPTE AUTANT QUE LA RAISON. Le motif, lui, était juste
+#: depuis le début : il dit « §53 b) est fermé » et publie PORTE_53A. Mais le
+#: motif est lu par des humains, et le NOM est ce que consomment les agrégats
+#: — `comptes_eligibilite()` publie la clé, pas la phrase. Un CAC lisant
+#: « NON_ELIGIBLE : 20 » lisait exactement ce que le motif s'appliquait à nier.
+#:
+#: ⚠️ « NON_ETABLI » N'EST PAS « ÉLIGIBLE » NON PLUS : c'est l'aveu que la
+#: donnée ne permet même pas d'apprécier (b).
 PAA_ELIGIBLE = 'ELIGIBLE'
-PAA_NON_ELIGIBLE = 'NON_ELIGIBLE'
+PAA_53A_NON_EVALUEE = '53A_NON_EVALUEE'
 PAA_NON_ETABLI = 'NON_ETABLI'
 
 #: ⚠️ POURQUOI LE CODE NE FERME PAS LA PORTE §53 a) — ET §54 EST MESURÉ, PAS
@@ -340,7 +357,7 @@ def _eligibilite(lignes: list[Mapping]) -> tuple[str, str]:
         couvertures.append((debut, fin))
 
     if indeterminees:
-        return PAA_NON_ELIGIBLE, (
+        return PAA_53A_NON_EVALUEE, (
             f"{indeterminees} ligne(s) à couverture indéterminée : une durée "
             f"sans terme excède un an, §53 b) est fermé. {PORTE_53A}")
     if not couvertures:
@@ -351,7 +368,7 @@ def _eligibilite(lignes: list[Mapping]) -> tuple[str, str]:
     trop_longues = [(d, f) for d, f in couvertures if f > _un_an_apres(d)]
     if trop_longues:
         d, f = trop_longues[0]
-        return PAA_NON_ELIGIBLE, (
+        return PAA_53A_NON_EVALUEE, (
             f"{len(trop_longues)} contrat(s) sur {len(couvertures)} couvrent "
             f"plus d'un an (ex. {d.isoformat()} → {f.isoformat()}) : §53 b) "
             f"est fermé. {PORTE_53A}")

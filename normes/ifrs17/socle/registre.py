@@ -71,8 +71,8 @@ from normes.ifrs17.socle.confirmation import Confirmation, verifier
 from normes.ifrs17.socle.entree import analyser, trace_reconnaissance_tardive
 from normes.ifrs17.socle.groupe import (
     CONVENTION_CALENDAIRE,
+    PAA_53A_NON_EVALUEE,
     PAA_ELIGIBLE,
-    PAA_NON_ELIGIBLE,
     PAA_NON_ETABLI,
     CleGroupe,
     ConventionCohorte,
@@ -422,7 +422,13 @@ def relire(chemin) -> Registre:
 #: ne permet pas de trancher ne doit PAS se lire comme un dossier conforme.
 #: C'est aujourd'hui le cas de toute la plateforme — aucun inventaire du dépôt
 #: ne porte de période de couverture, donc tout groupe y serait « non établi ».
-ORDRE_VERDICTS_53 = (PAA_ELIGIBLE, PAA_NON_ELIGIBLE, PAA_NON_ETABLI)
+#:
+#: ⚠️ ET `53A_NON_EVALUEE` N'EST PAS UN REFUS. C'est la clé que publie ce
+#: comptage : elle dit que la voie automatique §53 b) est fermée et que le
+#: test qualitatif §53 a) n'a pas été mené. Un groupe qui la porte PEUT
+#: relever de la PAA — c'est à l'actuaire signataire de l'apprécier, pas à ce
+#: code. Aucune des trois clés ne conclut à l'inéligibilité.
+ORDRE_VERDICTS_53 = (PAA_ELIGIBLE, PAA_53A_NON_EVALUEE, PAA_NON_ETABLI)
 
 
 def comptes_eligibilite(registre: Registre) -> dict[str, int]:
@@ -463,7 +469,7 @@ def resume(registre: Registre) -> str:
                       f"né le {g.arrete_creation}")
         lignes.append(f"      §25 : {g.date_compta_25 or '—'}   "
                       f"§53 : {g.eligibilite_paa}")
-        # ⚠️ LE MOTIF EST PUBLIÉ, PAS SEULEMENT LE VERDICT. « NON_ELIGIBLE »
+        # ⚠️ LE MOTIF EST PUBLIÉ, PAS SEULEMENT LE VERDICT. « 53A_NON_EVALUEE »
         # seul ne dit pas si la porte s'est fermée sur un contrat trop long
         # ou sur une couverture sans terme — et le lecteur d'un dossier
         # comptable a besoin de la raison, pas du seul mot.
