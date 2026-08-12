@@ -49,18 +49,34 @@ class RefusMesure(Exception):
         super().__init__(f'{message} [{motif}]')
 
 
+#: Ce que porte `motif_resultat` quand la séparation n'a pas été fournie.
+MOTIF_SEPARATION_NON_FOURNIE = (
+    "séparation attribuable / non attribuable NON FOURNIE — le résultat "
+    "n'est PAS établi. Elle relève d'une décision comptable de l'entité "
+    "(§B65 énumère ce qui est attribuable), pas d'une règle calculable : ce "
+    "module ne la devine pas. ⚠️ La supposer nulle gonflerait le résultat "
+    "de tous les frais non attribuables — 55 sur l'exemple ICA 5.2.")
+
+
 class Periode(NamedTuple):
     """Le résultat d'un arrêté, dans la présentation du §80.
 
     ⚠️ `resultat` N'EST PAS `service_result`. Le §80 ventile en DEUX postes,
     et les frais non attribuables vivent hors du résultat d'assurance.
+
+    ⚠️ `autres_charges` ET `resultat` VALENT `None` QUAND LA SÉPARATION N'A
+    PAS ÉTÉ FOURNIE, et `motif_resultat` dit pourquoi. C'est la leçon de
+    `PAA_NON_ETABLI` dans le socle : « on ne sait pas » ne doit jamais
+    ressembler à « zéro ». Rendre `resultat = service_result` par défaut
+    aurait publié un total silencieusement gonflé.
     """
-    revenue:          float   # produits des activités d'assurance
-    charges_service:  float   # charges afférentes aux activités d'assurance
-    service_result:   float   # revenue - charges_service
-    autres_charges:   float   # non attribuables — hors résultat d'assurance
-    resultat:         float   # service_result - autres_charges
+    revenue:          float           # produits des activités d'assurance
+    charges_service:  float           # charges afférentes aux activités
+    service_result:   float           # revenue - charges_service
+    autres_charges:   float | None    # non attribuables — hors résultat
+    resultat:         float | None    # service_result - autres_charges
     lrc_cloture:      float
+    motif_resultat:   str = ''        # vide quand le résultat EST établi
 
 
 def _controler(valeurs: dict, duree_ans: int, financement_significatif: bool,
@@ -160,7 +176,7 @@ def revenue_prorata_temporis(primes_attendues: float, duree_ans: int) -> float:
 def periode_annuelle(*, primes_attendues: float, duree_ans: int,
                      frais_acquisition_attribuables: float = 0.0,
                      frais_maintenance_attribuables: float = 0.0,
-                     frais_non_attribuables: float = 0.0,
+                     frais_non_attribuables: float | None = None,
                      sinistres_survenus: float = 0.0,
                      lrc_ouverture: float | None = None,
                      primes_periode: float | None = None,
@@ -176,6 +192,11 @@ def periode_annuelle(*, primes_attendues: float, duree_ans: int,
 
     ⚠️ LES FRAIS NON ATTRIBUABLES NE TOUCHENT NI LE LRC NI LE RÉSULTAT
     D'ASSURANCE. Ils sortent en `autres_charges`.
+
+    ⚠️ ET `None` N'EST PAS `0.0`. Ne pas fournir la séparation laisse le
+    résultat NON ÉTABLI, motif à l'appui ; fournir `0.0` affirme qu'il n'y a
+    aucun frais non attribuable. Confondre les deux publierait un résultat
+    d'assurance gonflé sans que rien ne le signale.
     """
     premier = lrc_ouverture is None
     amortissement = frais_acquisition_attribuables / duree_ans
@@ -200,9 +221,15 @@ def periode_annuelle(*, primes_attendues: float, duree_ans: int,
         eligibilite_declaree=eligibilite_declaree,
         financement_significatif=financement_significatif)
 
-    charges = frais_maintenance_attribuables + amortissement + sinistres_survenus
-    return Periode(revenue=revenue, charges_service=charges,
-                   service_result=revenue - charges,
-                   autres_charges=frais_non_attribuables,
-                   resultat=revenue - charges - frais_non_attribuables,
-                   lrc_cloture=cloture)
+    charges = (frais_maintenance_attribuables + amortissement
+               + sinistres_survenus)
+    service_result = revenue - charges
+    etabli = frais_non_attribuables is not None
+    return Periode(
+        revenue=revenue,
+        charges_service=charges,
+        service_result=service_result,
+        autres_charges=frais_non_attribuables if etabli else None,
+        resultat=(service_result - frais_non_attribuables) if etabli else None,
+        lrc_cloture=cloture,
+        motif_resultat='' if etabli else MOTIF_SEPARATION_NON_FOURNIE)

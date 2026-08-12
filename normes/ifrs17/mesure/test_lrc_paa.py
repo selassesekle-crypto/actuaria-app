@@ -14,6 +14,7 @@ from normes.ifrs17.mesure.lrc_paa import (
     MOTIF_FINANCEMENT_NON_CONSTRUIT,
     MOTIF_MONTANT_NEGATIF,
     MOTIF_SANS_ELIGIBILITE,
+    MOTIF_SEPARATION_NON_FOURNIE,
     RefusMesure,
     lrc_initial,
     lrc_suivant,
@@ -104,6 +105,55 @@ class T1_LOracle5_2(unittest.TestCase):
         self.assertNotAlmostEqual(p.service_result, p.resultat, 6)
         print(f"    OK M1d : {p.autres_charges:.0f} de frais non "
               f"attribuables hors du resultat d'assurance")
+
+
+class T1b_LaSeparationNonFournie(unittest.TestCase):
+    """T1b — « on ne sait pas » ne doit pas ressembler à « zéro »."""
+
+    def test_sans_separation_le_resultat_n_est_pas_etabli(self):
+        """⚠️ LA LECON DE `PAA_NON_ETABLI`, APPLIQUEE A LA MESURE.
+
+        La separation attribuable / non attribuable releve d'une decision
+        comptable de l'entite, pas d'une regle calculable : ce module ne la
+        devine pas. Mais ne pas la fournir ne doit PAS rendre un resultat
+        egal au resultat d'assurance -- ce serait publier un total gonfle de
+        tous les frais non attribuables, 55 sur l'exemple ICA 5.2, sans que
+        rien ne le signale.
+        """
+        e = ENTREE_5_2
+        p = periode_annuelle(
+            primes_attendues=e['prime'],
+            duree_ans=e['duree_couverture_ans'],
+            frais_acquisition_attribuables=e['frais_acquisition_attribuables'],
+            frais_maintenance_attribuables=(
+                e['frais_maintenance_attribuables_an1']),
+            eligibilite_declaree=True)
+        self.assertIsNone(p.resultat)
+        self.assertIsNone(p.autres_charges)
+        self.assertEqual(p.motif_resultat, MOTIF_SEPARATION_NON_FOURNIE)
+        self.assertIn('NON FOURNIE', p.motif_resultat)
+        # ce qui EST etabli le reste : le LRC et le resultat d'assurance
+        self.assertAlmostEqual(p.lrc_cloture, ATTENDU_5_2['lrc'], 6)
+        self.assertAlmostEqual(p.service_result,
+                               ATTENDU_5_2['insurance_service_result'], 6)
+        print("    OK M1e : sans separation -> resultat NON ETABLI et "
+              "motive ; le LRC et le resultat d'assurance restent etablis")
+
+    def test_zero_fourni_n_est_pas_absence(self):
+        """⚠️ `0.0` AFFIRME QU'IL N'Y A AUCUN FRAIS NON ATTRIBUABLE. C'est
+        une declaration, pas une absence -- et elle s'honore."""
+        e = ENTREE_5_2
+        commun = {'primes_attendues': e['prime'],
+                  'duree_ans': e['duree_couverture_ans'],
+                  'eligibilite_declaree': True}
+        declare = periode_annuelle(frais_non_attribuables=0.0, **commun)
+        tu = periode_annuelle(**commun)
+        self.assertEqual(declare.autres_charges, 0.0)
+        self.assertIsNotNone(declare.resultat)
+        self.assertEqual(declare.motif_resultat, '')
+        self.assertIsNone(tu.resultat)
+        print("    OK M1f : 0.0 declare -> resultat etabli ; absent -> "
+              "non etabli. Les deux ne se confondent pas")
 
 
 class T2_LesRefus(unittest.TestCase):
