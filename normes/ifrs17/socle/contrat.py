@@ -34,8 +34,12 @@ coexistent désormais, chacune sous sa provenance.
 ⚠️ TROIS EXIGENCES DE GÉNÉRALITÉ, TENUES ICI ET PAS AILLEURS. On ne code que
 le non-vie, mais l'objet ne lui est pas taillé :
   1. la couverture n'est JAMAIS supposée inférieure à un an — `fin_couverture`
-     est une date libre, un contrat pluriannuel entre et échoue proprement au
-     test §53 b) au lieu d'être mesuré à tort ;
+     est une date libre, donc un contrat pluriannuel ENTRE au lieu d'être
+     silencieusement pris pour annuel. ⚠️ Ce qu'il obtient alors est le
+     constat que la voie automatique du §53 b) est fermée — PAS un verdict
+     d'inéligibilité : la porte §53 a) reste ouverte et relève du jugement
+     de l'entité (voir `groupe.PORTE_53A`). Un contrat pluriannuel mesuré en
+     PAA est parfaitement régulier ;
   2. une couverture à durée INDÉTERMINÉE (vie entière) se représente par
      `COUVERTURE_INDETERMINEE`, valeur DISTINCTE d'une absence de donnée —
      « pas de fin prévue » et « on ne sait pas » ne se confondent pas ;

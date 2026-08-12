@@ -333,9 +333,18 @@ def texte() -> str:
             if e.raison:
                 lignes.append(f"      {e.raison}")
         lignes.append("")
+    # ⚠️ CE QUE CETTE PHRASE DISAIT AVANT, ET POURQUOI C'ÉTAIT FAUX. Elle
+    # affirmait « ils ne sont jamais mesurés à tort ». Or `signaler()` REND
+    # DES ALERTES ET NE LÈVE JAMAIS : il ne bloque rien. Une alerte que
+    # personne ne lit laisse le contrat être mesuré. Promettre un blocage
+    # qu'on ne fait pas est plus dangereux que ne rien promettre — le lecteur
+    # cesse de surveiller. Le test `test_signaler_ne_refuse_jamais` disait
+    # déjà la vérité ; c'est le texte publié qui la contredisait.
     lignes.append(
         "Les contrats relevant d'un pan hors périmètre sont SIGNALÉS par")
     lignes.append(
-        "contrôle lorsque l'inventaire les déclare — ils ne sont jamais")
-    lignes.append("mesurés à tort.")
+        "contrôle lorsque l'inventaire les déclare. ⚠️ LE SIGNALEMENT NE")
+    lignes.append(
+        "BLOQUE PAS LA MESURE : il revient à l'actuaire signataire de")
+    lignes.append("décider du sort de ces contrats.")
     return '\n'.join(lignes)

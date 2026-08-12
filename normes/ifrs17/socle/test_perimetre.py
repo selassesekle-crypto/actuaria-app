@@ -120,6 +120,23 @@ class T3_LesExclusionsQueLeTexteImpose(unittest.TestCase):
             self.assertIn(mesure, b73)
         print("    OK T3b : les 3 exclusions portent leur raison mesuree")
 
+    def test_le_texte_publie_ne_promet_pas_un_blocage_qu_il_ne_fait_pas(self):
+        """⚠️ PROMETTRE UN BLOCAGE QU'ON NE FAIT PAS EST PIRE QUE DE NE RIEN
+        PROMETTRE : le lecteur cesse de surveiller.
+
+        Le texte publie affirmait que les contrats hors perimetre << ne sont
+        jamais mesures a tort >>. Or `signaler()` rend des alertes et NE LEVE
+        JAMAIS -- voir `test_signaler_ne_refuse_jamais`, qui disait deja la
+        verite pendant que le texte la contredisait.
+        """
+        publie = texte()
+        self.assertNotIn('jamais', publie.split('SIGNALÉS')[-1][:220])
+        self.assertIn('NE', publie)
+        self.assertIn('BLOQUE PAS LA MESURE', publie)
+        self.assertIn('actuaire signataire', publie)
+        print("    OK T3f : le texte publie dit que le signalement ne bloque "
+              "pas — il ne promet plus un refus qu'il ne fait pas")
+
     def test_B72_n_ecarte_plus_le_taux_par_un_raisonnement_refute(self):
         """⚠️ UN ARGUMENT REFUTE NE RESTE PAS EN PLACE EN SILENCE.
 
