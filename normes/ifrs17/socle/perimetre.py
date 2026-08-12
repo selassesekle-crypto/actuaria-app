@@ -130,6 +130,20 @@ PERIMETRE: tuple[Element, ...] = (
             "plateforme retient la première : l'intégralité en résultat "
             "net. ⚠️ C'est une MÉTHODE COMPTABLE et elle se déclare en "
             "annexe aux états financiers, non seulement ici."),
+    # ⚠️ CE QUE CETTE RAISON DISAIT AVANT, ET POURQUOI C'ÉTAIT FAUX. Elle
+    # concluait : « les cas pluriannuels qui le déclencheraient échouent au
+    # §53 b) », donc aucun cas §56 ne survient, donc pas de magasin. La
+    # prémisse est réfutée — §53 b) fermé ne renvoie pas au modèle général,
+    # la porte §53 a) reste ouverte (voir groupe.PORTE_53A) — et l'oracle ICA
+    # 5.6.1 exhibe le cas exact que la phrase déclarait impossible.
+    #
+    # ⚠️ LA CONCLUSION SURVIT, LE RAISONNEMENT NON, ET LA DISTINCTION QUI
+    # MANQUAIT EST CELLE-CI : appliquer un taux verrouillé FOURNI est un
+    # paramètre ; constituer un magasin de courbes interrogeable par date est
+    # un ouvrage. La raison confondait les deux, et écartait le premier avec
+    # le second. Cette narration reste ICI, dans le code : la raison publiée
+    # part chez le client par `texte()`, et un livrable n'est pas un journal
+    # de corrections — y répéter l'affirmation fausse la ferait relire.
     Element('B72 b) à e), B73', HORS_PERIMETRE,
             "Révision du taux d'actualisation initial d'un groupe quand des "
             "contrats y entrent, et magasin de courbes indexé par date",
@@ -138,10 +152,18 @@ PERIMETRE: tuple[Element, ...] = (
             "vise l'option OCI, exclue ci-dessus ; un vise les taux "
             "COURANTS, donc sans objet. Reste le §56 seul — qui s'exempte "
             "lui-même quand le délai entre service et échéance de prime "
-            "n'excède pas un an, c'est-à-dire le contrat annuel — et les "
-            "cas pluriannuels qui le déclencheraient échouent au §53 b). "
-            "Construire un magasin de courbes historiques pour servir un "
-            "usage que le périmètre exclut serait disproportionné."),
+            "n'excède pas un an, c'est-à-dire le contrat annuel. Un groupe "
+            "pluriannuel mesuré en PAA par la porte §53 a) déclenche bien "
+            "le §56, et ce cas existe : l'exemple 5.6.1 de l'ICA (doc "
+            "222092, juin 2022) mesure un contrat de trois ans en PAA avec "
+            "composante de financement, sur un taux verrouillé à la "
+            "comptabilisation initiale. "
+            "CE QUI RESTE HORS PÉRIMÈTRE EST LE MAGASIN, PAS LE TAUX : "
+            "appliquer un taux verrouillé FOURNI est un paramètre, et la "
+            "mesure §56 le prendra en entrée déclarée et signée ; "
+            "constituer un magasin de courbes historiques interrogeable par "
+            "date est un ouvrage distinct, non bâti, à rouvrir quand un "
+            "portefeuille pluriannuel réel se présentera."),
     Element('annexe C', HORS_PERIMETRE,
             "Dispositions transitoires (rétrospective, rétrospective "
             "modifiée, juste valeur)",

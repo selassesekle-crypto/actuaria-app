@@ -113,9 +113,31 @@ class T3_LesExclusionsQueLeTexteImpose(unittest.TestCase):
         self.assertIn('annexe C', hors)                     # transition
         self.assertIn('B72 b) à e), B73', hors)             # révision B73
         b73 = hors['B72 b) à e), B73'].raison
-        for mesure in ('cinq usages', 'ABSENTE en PAA', '§56', '§53 b)'):
+        # ⚠️ « §53 a) » ET NON « §53 b) » : l'argument de B72 s'appuyait sur
+        # la porte (b) fermee pour conclure qu'aucun cas §56 ne survient.
+        # Premisse refutee — voir test_B72_n_ecarte_plus_le_taux ci-dessous.
+        for mesure in ('cinq usages', 'ABSENTE en PAA', '§56', '§53 a)'):
             self.assertIn(mesure, b73)
         print("    OK T3b : les 3 exclusions portent leur raison mesuree")
+
+    def test_B72_n_ecarte_plus_le_taux_par_un_raisonnement_refute(self):
+        """⚠️ UN ARGUMENT REFUTE NE RESTE PAS EN PLACE EN SILENCE.
+
+        La raison de B72 concluait que les cas pluriannuels declenchant §56
+        « echouent au §53 b) », donc qu'aucun cas ne survient. C2-0 a refute
+        la premisse, et l'oracle ICA 5.6.1 exhibe le cas : trois ans, en
+        PAA, avec §56. La CONCLUSION (ne pas batir le magasin) survit ; le
+        RAISONNEMENT qui la portait, non.
+        """
+        hors = {e.reference: e for e in elements(HORS_PERIMETRE)}
+        b72 = hors['B72 b) à e), B73'].raison
+        self.assertNotIn("déclencheraient échouent au §53 b)", b72)
+        # ce que la raison doit desormais distinguer : le taux, et le magasin
+        self.assertIn('entrée déclarée', b72)
+        self.assertIn('magasin', b72)
+        self.assertIn('5.6.1', b72)
+        print("    OK T3e : B72 separe le taux fourni du magasin de courbes, "
+              "et ne s'appuie plus sur une premisse refutee")
 
     def test_les_flux_d_execution_sont_dus_en_PAA_pas_exclus(self):
         """⚠️ CE QUE §59 b) IMPOSE, ET QUE LE PÉRIMÈTRE DÉCLARAIT EXCLU.
