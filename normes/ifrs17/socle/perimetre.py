@@ -90,11 +90,27 @@ PERIMETRE: tuple[Element, ...] = (
             "Choix contractuel de l'entité, exercé en amont de toute "
             "évaluation. Un contrat remis à la plateforme est traité selon "
             "IFRS 17."),
-    Element('§32-52', HORS_PERIMETRE,
+    Element('§32, §38-52', HORS_PERIMETRE,
             "Modèle général (BBA) et marge sur services contractuels",
-            "La plateforme mesure en PAA. Les groupes qui échouent au test "
-            "du §53 sont SIGNALÉS et non évalués — jamais mesurés à tort "
-            "sous une méthode qui ne leur convient pas."),
+            "La plateforme mesure en PAA. Un groupe dont la voie automatique "
+            "du §53 b) est fermée n'est PAS pour autant renvoyé au modèle "
+            "général : la porte §53 a) reste ouverte et relève du jugement "
+            "de l'entité (§54). Ces groupes sont SIGNALÉS, jamais mesurés "
+            "d'office sous une méthode qui ne leur a pas été choisie."),
+    # ⚠️ §33-37 ET B36-B92 NE SONT PAS DANS LA LIGNE CI-DESSUS, ET C'EST
+    # MESURÉ. §59 b) écrit que l'entité en PAA « DOIT évaluer le passif au
+    # titre des sinistres survenus [...] conformément aux paragraphes 33 à 37
+    # et B36 à B92 ». Ils ne sont donc pas exclus par le choix de la PAA : ils
+    # lui sont IMPOSÉS. Les laisser dans un « §32-52 hors périmètre » les
+    # faisait passer pour écartés quand ils sont dus — l'exacte confusion que
+    # ce module existe pour empêcher.
+    Element('§33-37, B36-B92', NON_CONSTRUIT,
+            "Flux de trésorerie d'exécution : estimation, actualisation, "
+            "ajustement au titre du risque",
+            "Imposés en PAA par §59 b) pour le passif au titre des sinistres "
+            "survenus (LIC). §59 b) dispense d'actualiser lorsque le "
+            "règlement est attendu dans l'année suivant le sinistre — c'est "
+            "une dispense, pas une exclusion. Non bâti."),
     Element('§45, §71, B101-B118', HORS_PERIMETRE,
             "Contrats avec éléments de participation directe (VFA) et "
             "contrats d'investissement avec participation discrétionnaire",
@@ -149,7 +165,15 @@ PERIMETRE: tuple[Element, ...] = (
     Element('§55-59, B125-B126', NON_CONSTRUIT,
             "Évaluation PAA : LRC, élément de perte, revenu, charges",
             "Le socle constitue les groupes et les scelle ; la mesure "
-            "elle-même reste à bâtir."),
+            "elle-même reste à bâtir. Ce qu'elle comprend, nommément, pour "
+            "qu'aucun morceau ne se perde : §55 a) le LRC à la "
+            "comptabilisation initiale, §55 b) sa mesure ultérieure, §56 la "
+            "composante de financement lorsqu'elle est significative, §57 le "
+            "test du caractère déficitaire, §58 l'élément de perte, §59 a) "
+            "l'option de passer les frais d'acquisition en charges — ouverte "
+            "seulement si la couverture n'excède pas un an — §59 b) le "
+            "passif au titre des sinistres survenus, et B125-B126 le produit "
+            "des activités d'assurance."),
     Element('§60-70A', NON_CONSTRUIT,
             "Réassurance détenue",
             "Régime propre — agrégation adaptée (§61), PAA sous conditions "

@@ -109,13 +109,34 @@ class T3_LesExclusionsQueLeTexteImpose(unittest.TestCase):
 
     def test_les_trois_exclusions_du_cahier_des_charges(self):
         hors = {e.reference: e for e in elements(HORS_PERIMETRE)}
-        self.assertIn('§32-52', hors)                       # modèle général
+        self.assertIn('§32, §38-52', hors)                  # modèle général
         self.assertIn('annexe C', hors)                     # transition
         self.assertIn('B72 b) à e), B73', hors)             # révision B73
         b73 = hors['B72 b) à e), B73'].raison
         for mesure in ('cinq usages', 'ABSENTE en PAA', '§56', '§53 b)'):
             self.assertIn(mesure, b73)
         print("    OK T3b : les 3 exclusions portent leur raison mesuree")
+
+    def test_les_flux_d_execution_sont_dus_en_PAA_pas_exclus(self):
+        """⚠️ CE QUE §59 b) IMPOSE, ET QUE LE PÉRIMÈTRE DÉCLARAIT EXCLU.
+
+        §59 b) : l'entité en PAA « DOIT evaluer le passif au titre des
+        sinistres survenus [...] conformement aux paragraphes 33 a 37 et B36
+        a B92 ». Choisir la PAA n'ecarte donc pas ces paragraphes, elle les
+        appelle. Les ranger sous un << §32-52 hors perimetre >> les faisait
+        passer pour ecartes quand ils sont dus.
+        """
+        refs = {e.reference: e for e in PERIMETRE}
+        self.assertIn('§33-37, B36-B92', refs)
+        flux = refs['§33-37, B36-B92']
+        self.assertEqual(flux.etat, NON_CONSTRUIT)
+        self.assertIn('§59 b)', flux.raison)
+        hors = ' '.join(e.reference for e in elements(HORS_PERIMETRE))
+        self.assertNotIn('§32-52', hors)
+        for paragraphe in ('33', '34', '35', '36', '37'):
+            self.assertNotIn(f'§{paragraphe},', hors)
+        print("    OK T3d : §33-37 et B36-B92 sont NON CONSTRUITS et dus "
+              "(§59 b), plus jamais declares hors perimetre")
 
     def test_l_option_OCI_se_declare_comme_methode_comptable(self):
         """Le §88 impose de CHOISIR : ne pas choisir n'est pas une option."""
