@@ -54,10 +54,13 @@ class RefusMesure(Exception):
 #: Ce que porte `motif_resultat` quand la séparation n'a pas été fournie.
 MOTIF_SEPARATION_NON_FOURNIE = (
     "séparation attribuable / non attribuable NON FOURNIE — le résultat "
-    "n'est PAS établi. Elle relève d'une décision comptable de l'entité "
-    "(§B65 énumère ce qui est attribuable), pas d'une règle calculable : ce "
-    "module ne la devine pas. ⚠️ La supposer nulle gonflerait le résultat "
-    "de tous les frais non attribuables — 55 sur l'exemple ICA 5.2.")
+    "n'est PAS établi. B65 e) et f) nomment ce qui entre, B66 d) ce qui "
+    "sort ; mais B66 d) dit « TELS QUE » et « CERTAINS », donc sa liste est "
+    "illustrative et une catégorie peut se partager. L'application du "
+    "critère relève de l'entité, seule à voir sa comptabilité analytique : "
+    "ce module ne la devine pas — voir `attribution.py`, qui la reçoit "
+    "déclarée et signée. ⚠️ La supposer nulle gonflerait le résultat de "
+    "tous les frais non attribuables — 55 sur l'exemple ICA 5.2.")
 
 
 class Periode(NamedTuple):
