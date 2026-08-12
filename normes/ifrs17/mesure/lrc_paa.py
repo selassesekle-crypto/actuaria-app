@@ -7,11 +7,13 @@
 Le LRC en méthode d'affectation des primes, à la comptabilisation initiale
 (§55 a) et aux arrêtés suivants (§55 b).
 
-⚠️ CE MODULE N'ACTUALISE PAS, ET IL LE DIT PLUTÔT QUE DE SE TAIRE. Le §56
-impose d'ajuster le LRC de la valeur temps de l'argent quand la composante
-de financement est significative. Ce lot ne le construit pas. Une entrée qui
-DÉCLARE un financement significatif est donc REFUSÉE, jamais mesurée sans
-lui : rendre un LRC silencieusement faux serait pire que ne rien rendre.
+⚠️ CE MODULE N'ACTUALISE PAS LUI-MÊME, ET IL LE DIT PLUTÔT QUE DE SE TAIRE.
+Le §56 impose d'ajuster le LRC de la valeur temps de l'argent quand la
+composante de financement est significative. Le calcul de cette charge vit
+dans `financement.py`, qui la produit à partir d'un taux VERROUILLÉ ET
+SIGNÉ ; ce module se contente de l'accueillir. Une entrée qui DÉCLARE un
+financement significatif SANS fournir la charge est donc REFUSÉE : rendre un
+LRC silencieusement non actualisé serait pire que ne rien rendre.
 
 ⚠️ LES FRAIS D'ACQUISITION NE SONT PAS UN ACTIF SÉPARÉ. C'est le piège que
 l'oracle ICA 5.2 attrape, et le seul qu'il attrape seul. Ils entrent dans le
@@ -80,7 +82,8 @@ class Periode(NamedTuple):
 
 
 def _controler(valeurs: dict, duree_ans: int, financement_significatif: bool,
-               eligibilite_declaree: bool) -> None:
+               eligibilite_declaree: bool,
+               charge_fournie: bool = False) -> None:
     """Les refus, tous groupés, AVANT le moindre calcul."""
     if not eligibilite_declaree:
         raise RefusMesure(
@@ -88,13 +91,14 @@ def _controler(valeurs: dict, duree_ans: int, financement_significatif: bool,
             "l'éligibilité à la PAA n'est pas déclarée. §53 s'apprécie à la "
             "création du groupe et le socle la scelle ; ce module ne la "
             "réévalue pas et ne la suppose pas")
-    if financement_significatif:
+    if financement_significatif and not charge_fournie:
         raise RefusMesure(
             MOTIF_FINANCEMENT_NON_CONSTRUIT,
             "le §56 impose d'ajuster le LRC de la valeur temps de l'argent "
-            "quand la composante de financement est significative ; ce "
-            "module ne le construit pas encore. Mesurer sans lui rendrait "
-            "un LRC faux sans le dire")
+            "quand la composante de financement est significative, et "
+            "aucune charge financière n'est fournie. Mesurer sans elle "
+            "rendrait un LRC faux sans le dire — voir `financement.py`, qui "
+            "la calcule à partir d'un taux verrouillé et SIGNÉ")
     if duree_ans <= 0:
         raise RefusMesure(
             MOTIF_DUREE_INVALIDE,
@@ -130,6 +134,7 @@ def lrc_suivant(lrc_ouverture: float, *, primes_periode: float = 0.0,
                 frais_acquisition_periode: float = 0.0,
                 amortissement_frais_acquisition: float = 0.0,
                 revenue_periode: float = 0.0,
+                charge_financiere: float = 0.0,
                 eligibilite_declaree: bool = False,
                 financement_significatif: bool = False) -> float:
     """§55 b) — le LRC à un arrêté ultérieur.
@@ -143,18 +148,27 @@ def lrc_suivant(lrc_ouverture: float, *, primes_periode: float = 0.0,
     progressivement la soustraction faite au §55 a) : ce qui est passé en
     charges n'a plus à rester déduit du passif. C'est contre-intuitif, et
     c'est exactement ce que l'oracle 5.2 vérifie — 800 + 100 − 500 = 400.
+
+    ⚠️ `charge_financiere` EST LE §56, ET ELLE AUGMENTE AUSSI LE LRC. Elle
+    ne se calcule pas ici : `financement.py` la produit à partir d'un taux
+    VERROUILLÉ ET SIGNÉ. Tant qu'un financement significatif est déclaré
+    sans elle, ce module refuse — le refus tombe quand elle arrive, pas
+    avant.
     """
     _controler({'lrc_ouverture': lrc_ouverture,
                 'primes_periode': primes_periode,
                 'frais_acquisition_periode': frais_acquisition_periode,
                 'amortissement_frais_acquisition':
                     amortissement_frais_acquisition,
-                'revenue_periode': revenue_periode},
-               1, financement_significatif, eligibilite_declaree)
+                'revenue_periode': revenue_periode,
+                'charge_financiere': charge_financiere},
+               1, financement_significatif, eligibilite_declaree,
+               charge_fournie=charge_financiere > 0.0)
     return (lrc_ouverture
             + primes_periode
             - frais_acquisition_periode
             + amortissement_frais_acquisition
+            + charge_financiere
             - revenue_periode)
 
 
