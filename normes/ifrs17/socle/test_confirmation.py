@@ -10,8 +10,15 @@ from pathlib import Path
 import pandas as pd
 
 from normes.ifrs17.socle.confirmation import (
-    MOTIF_ARRETE_DISCORDANT, MOTIF_SANS_SIGNATAIRE, Confirmation,
-    RefusConfirmation, a_confirmer, confirmer, resume_confirmation, verifier)
+    MOTIF_ARRETE_DISCORDANT,
+    MOTIF_SANS_SIGNATAIRE,
+    Confirmation,
+    RefusConfirmation,
+    a_confirmer,
+    confirmer,
+    resume_confirmation,
+    verifier,
+)
 from normes.ifrs17.socle.groupe import deriver
 from normes.ifrs17.socle.lecture_inventaire import lire
 from normes.ifrs17.socle.registre import ajouter, ecrire, ouvrir, relire
@@ -65,6 +72,7 @@ class T1_CeQuiDoitEtreAtteste(unittest.TestCase):
             _, r = _lu(dico)
             self.assertEqual(a_confirmer(r), r.a_confirmer)
         import inspect
+
         from normes.ifrs17.socle import confirmation as C
         corps = [l.strip() for l in
                  inspect.getsource(C.a_confirmer).split('\n')
@@ -114,7 +122,7 @@ class T3_LaPorteEstAuScellement(unittest.TestCase):
 
     def test_lire_et_deriver_ne_demandent_aucune_signature(self):
         """⚠️ L'EXIGENCE DE FACILITE : le client depose et voit, sans signer."""
-        df, r = _lu(INFERE)
+        df, _ = _lu(INFERE)
         groupes = deriver(df.to_dict('records'))
         self.assertEqual(len(groupes), 2)
         print(f"    OK T3 : {len(groupes)} groupes derives sans aucune "

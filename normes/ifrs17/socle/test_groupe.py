@@ -7,11 +7,26 @@ import unittest
 from datetime import date
 
 from normes.ifrs17.socle.groupe import (
-    CLASSE_16A, CLASSE_16C, CLASSE_PAR_DEFAUT, CONVENTION_CALENDAIRE,
-    MOTIF_AMPLITUDE_22, MOTIF_CHEVAUCHE_COHORTES, MOTIF_SANS_EMISSION,
-    MOTIF_SANS_PORTEFEUILLE, PAA_ELIGIBLE, PAA_NON_ELIGIBLE, PAA_NON_ETABLI,
-    TRACE_16B_NON_DECLARE, CleGroupe, Groupe, RefusGroupe, cohorte,
-    convention_exercice, deriver, resume)
+    CLASSE_16A,
+    CLASSE_16C,
+    CLASSE_PAR_DEFAUT,
+    CONVENTION_CALENDAIRE,
+    MOTIF_AMPLITUDE_22,
+    MOTIF_CHEVAUCHE_COHORTES,
+    MOTIF_SANS_EMISSION,
+    MOTIF_SANS_PORTEFEUILLE,
+    PAA_ELIGIBLE,
+    PAA_NON_ELIGIBLE,
+    PAA_NON_ETABLI,
+    TRACE_16B_NON_DECLARE,
+    CleGroupe,
+    Groupe,
+    RefusGroupe,
+    cohorte,
+    convention_exercice,
+    deriver,
+    resume,
+)
 
 
 def _ligne(**kw):

@@ -6,12 +6,21 @@
 import unittest
 from datetime import date
 
-from normes.ifrs17.socle.entree import (
-    CREE, EFFETS, REJOINT, Entree, analyser, resume_entrees,
-    trace_reconnaissance_tardive)
 from normes.ifrs17.socle.confirmation import Confirmation
+from normes.ifrs17.socle.entree import (
+    CREE,
+    EFFETS,
+    REJOINT,
+    Entree,
+    analyser,
+    resume_entrees,
+    trace_reconnaissance_tardive,
+)
 from normes.ifrs17.socle.groupe import (
-    CONVENTION_CALENDAIRE, CleGroupe, convention_exercice)
+    CONVENTION_CALENDAIRE,
+    CleGroupe,
+    convention_exercice,
+)
 from normes.ifrs17.socle.registre import ajouter, ouvrir
 
 

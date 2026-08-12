@@ -15,13 +15,31 @@ from pathlib import Path
 from normes.ifrs17.socle import registre as R
 from normes.ifrs17.socle.confirmation import Confirmation
 from normes.ifrs17.socle.groupe import (
-    CLASSE_16A, PAA_ELIGIBLE, PAA_NON_ELIGIBLE, PAA_NON_ETABLI,
-    CleGroupe, convention_exercice)
+    CLASSE_16A,
+    PAA_ELIGIBLE,
+    PAA_NON_ELIGIBLE,
+    PAA_NON_ETABLI,
+    CleGroupe,
+    convention_exercice,
+)
 from normes.ifrs17.socle.registre import (
-    API_PUBLIQUE, FORMAT_REGISTRE, MOTIF_CLE_DIVERGENTE,
-    MOTIF_FORMAT_INCONNU, MOTIF_RECLASSIFICATION,
-    TRACE_APPARTENANCE_NON_TRACABLE, GroupeEnregistre, Membre, Registre,
-    RefusRegistre, ajouter, ecrire, groupe, ouvrir, relire, resume)
+    API_PUBLIQUE,
+    FORMAT_REGISTRE,
+    MOTIF_CLE_DIVERGENTE,
+    MOTIF_FORMAT_INCONNU,
+    MOTIF_RECLASSIFICATION,
+    TRACE_APPARTENANCE_NON_TRACABLE,
+    GroupeEnregistre,
+    Membre,
+    RefusRegistre,
+    Registre,
+    ajouter,
+    ecrire,
+    groupe,
+    ouvrir,
+    relire,
+    resume,
+)
 
 ARRETE_2026 = '2026-06-30'
 ARRETE_2027 = '2027-06-30'

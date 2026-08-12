@@ -11,10 +11,22 @@ sans que rien ne le signale. On ne le refait pas.
 import unittest
 
 from normes.ifrs17.socle.contrat import (
-    CHAMPS, COUVERTURE_INDETERMINEE, EXIGENCES, NIVEAUX, NIVEAU_SOCLE,
-    SOURCE_IFRS17, SOURCE_INVARIANT, SOURCES_ADMISES, capacites,
-    champs_bloquants, champs_du_niveau, champs_scelles, exigences_hors_norme,
-    exigences_hors_portee, reference)
+    CHAMPS,
+    COUVERTURE_INDETERMINEE,
+    EXIGENCES,
+    NIVEAU_SOCLE,
+    NIVEAUX,
+    SOURCE_IFRS17,
+    SOURCE_INVARIANT,
+    SOURCES_ADMISES,
+    capacites,
+    champs_bloquants,
+    champs_du_niveau,
+    champs_scelles,
+    exigences_hors_norme,
+    exigences_hors_portee,
+    reference,
+)
 
 #: Les quatre colonnes qu'on ira demander à un assureur.
 MINIMAL = ('portefeuille', 'date_emission', 'prime', 'fin_couverture')

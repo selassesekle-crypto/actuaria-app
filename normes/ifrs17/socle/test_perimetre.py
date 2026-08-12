@@ -8,8 +8,18 @@ import unittest
 
 from normes.ifrs17.socle.contrat import EXIGENCES, SOURCE_IFRS17
 from normes.ifrs17.socle.perimetre import (
-    CONTROLES, COUVERT, ETATS, HORS_PERIMETRE, NON_CONSTRUIT, PERIMETRE,
-    Element, elements, mention_directions, signaler, texte)
+    CONTROLES,
+    COUVERT,
+    ETATS,
+    HORS_PERIMETRE,
+    NON_CONSTRUIT,
+    PERIMETRE,
+    Element,
+    elements,
+    mention_directions,
+    signaler,
+    texte,
+)
 
 
 def _paragraphes(reference):
@@ -109,7 +119,7 @@ class T3_LesExclusionsQueLeTexteImpose(unittest.TestCase):
 
     def test_l_option_OCI_se_declare_comme_methode_comptable(self):
         """Le §88 impose de CHOISIR : ne pas choisir n'est pas une option."""
-        oci = [e for e in PERIMETRE if '§88-89' in e.reference][0]
+        oci = next(e for e in PERIMETRE if '§88-89' in e.reference)
         self.assertIn('MÉTHODE COMPTABLE', oci.raison)
         self.assertIn('annexe', oci.raison)
         print("    OK T3c : l'option OCI est declaree comme methode "

@@ -14,10 +14,18 @@ import pandas as pd
 from normes.ifrs17.socle.contrat import EXIGENCES
 from normes.ifrs17.socle.groupe import _lire_date
 from normes.ifrs17.socle.lecture_inventaire import (
-    MOTIF_AUCUNE_LIGNE, MOTIF_COLONNES_CONCURRENTES,
-    MOTIF_FORMAT, MOTIF_SANS_DATE_EMISSION, MOTIF_SANS_PORTEFEUILLE,
+    MOTIF_AUCUNE_LIGNE,
+    MOTIF_COLONNES_CONCURRENTES,
+    MOTIF_FORMAT,
+    MOTIF_SANS_DATE_EMISSION,
+    MOTIF_SANS_PORTEFEUILLE,
     PAR_DECLARATION,
-    PAR_SYNONYME, PAR_SYNONYME_AMBIGU, RefusLecture, diagnostic, lire)
+    PAR_SYNONYME,
+    PAR_SYNONYME_AMBIGU,
+    RefusLecture,
+    diagnostic,
+    lire,
+)
 
 #: Un inventaire réaliste : noms de colonnes tels qu'un assureur les sort.
 REALISTE = {
