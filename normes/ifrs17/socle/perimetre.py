@@ -177,11 +177,25 @@ PERIMETRE: tuple[Element, ...] = (
             "Séparation des composantes d'un contrat d'assurance",
             "Rare en non-vie. Non évaluée, mais SIGNALÉE par contrôle "
             "lorsque l'inventaire la déclare — voir `signaler`."),
+    # ⚠️ §85 PORTE DEUX INTERDICTIONS, ET LA RAISON N'EN COUVRAIT QU'UNE.
+    # Sa première phrase exclut les composantes d'investissement ; sa SECONDE
+    # interdit de présenter des primes en résultat net lorsqu'elles ne sont
+    # pas conformes au §83 — cela n'a rien à voir avec les composantes
+    # d'investissement, et cela disparaissait sous un motif qui ne parlait
+    # que d'elles. Une étiquette qui ne couvre pas ce qu'elle annonce.
     Element('§85', HORS_PERIMETRE,
-            "Exclusion des composantes d'investissement des produits des "
-            "activités d'assurance",
-            "Rare en non-vie. Non évaluée, mais SIGNALÉE par contrôle "
-            "lorsque l'inventaire la déclare — voir `signaler`."),
+            "Deux interdictions : exclure les composantes d'investissement "
+            "des produits et charges d'assurance, et ne pas présenter en "
+            "résultat net des primes non conformes au §83",
+            "PREMIÈRE PHRASE — les composantes d'investissement sont rares "
+            "en non-vie. Non évaluées, mais SIGNALÉES par contrôle lorsque "
+            "l'inventaire les déclare — voir `signaler`. "
+            "⚠️ SECONDE PHRASE — l'interdiction de présenter des primes non "
+            "conformes au §83 est une contrainte de PRÉSENTATION, distincte "
+            "de la première et NON CONSTRUITE : la plateforme ne produit "
+            "encore aucun état de performance financière, elle ne peut donc "
+            "ni l'enfreindre ni la tenir. Elle deviendra exigible le jour où "
+            "le §80 sera bâti."),
 
     # ── Prévu, pas encore construit ─────────────────────────────────────────
     Element('§55-59, B125-B126', NON_CONSTRUIT,
@@ -201,10 +215,26 @@ PERIMETRE: tuple[Element, ...] = (
             "Régime propre — agrégation adaptée (§61), PAA sous conditions "
             "distinctes (§69), composante recouvrement de perte (§66B, "
             "§70A). Dans le périmètre, non encore bâti."),
+    # ⚠️ CETTE RAISON SOUS-AFFIRMAIT, ET C'EST LA FAUTE INVERSE DE CELLE
+    # CORRIGÉE EN C2-0. Elle disait « aucun n'est encore produit » : faux
+    # depuis que la mesure existe. `mesure.lrc_paa.Periode` porte le résultat
+    # des activités d'assurance, `mesure.financement.ArreteFinancement` porte
+    # la charge financière. Les DEUX postes du §80 sont calculés — ce qui
+    # manque est leur ASSEMBLAGE et leur présentation.
+    #
+    # ⚠️ Sous-affirmer trompe autant que sur-affirmer : un lecteur croirait
+    # devoir refaire un travail déjà fait, ou jugerait la plateforme plus
+    # loin de l'objectif qu'elle ne l'est.
     Element('§78-92', NON_CONSTRUIT,
             "Présentation au bilan et au compte de résultat",
-            "Le §80 impose de ventiler le résultat en DEUX postes ; aucun "
-            "n'est encore produit."),
+            "Le §80 impose de ventiler le résultat en DEUX postes. Les deux "
+            "sont désormais CALCULÉS — le résultat des activités "
+            "d'assurance par la mesure PAA (§55-59), les produits et charges "
+            "financiers par la composante de financement (§56). Ce qui reste "
+            "non construit est leur ASSEMBLAGE en un état de performance "
+            "financière, ainsi que la présentation au bilan. ⚠️ Et cet "
+            "assemblage ne sera adossé à AUCUNE source externe : aucun "
+            "exemple publié disponible ne chiffre les deux postes ensemble."),
     Element('§93-132', NON_CONSTRUIT,
             "Informations à fournir, dont le développement des sinistres "
             "(§130) et l'analyse de sensibilité (§128-129)",

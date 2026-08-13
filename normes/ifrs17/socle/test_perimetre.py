@@ -137,6 +137,43 @@ class T3_LesExclusionsQueLeTexteImpose(unittest.TestCase):
         print("    OK T3f : le texte publie dit que le signalement ne bloque "
               "pas — il ne promet plus un refus qu'il ne fait pas")
 
+    def test_le_85_porte_ses_DEUX_interdictions(self):
+        """⚠️ UNE ETIQUETTE QUI NE COUVRE PAS CE QU'ELLE ANNONCE.
+
+        §85 interdit deux choses : les composantes d'investissement dans les
+        produits et charges, ET la presentation en resultat net de primes
+        non conformes au §83. La seconde n'a RIEN a voir avec la premiere,
+        et elle disparaissait sous un motif qui ne parlait que d'elle.
+        """
+        hors = {e.reference: e for e in elements(HORS_PERIMETRE)}
+        e85 = hors['§85']
+        self.assertIn('Deux interdictions', e85.libelle)
+        self.assertIn('§83', e85.libelle)
+        self.assertIn('PREMIÈRE PHRASE', e85.raison)
+        self.assertIn('SECONDE PHRASE', e85.raison)
+        self.assertIn('§83', e85.raison)
+        print("    OK T3g : §85 porte ses DEUX interdictions, la seconde ne "
+              "disparait plus sous la premiere")
+
+    def test_le_78_92_ne_sous_affirme_plus(self):
+        """⚠️ LA FAUTE INVERSE DE C2-0, ET ELLE TROMPE AUTANT.
+
+        La raison disait << aucun n'est encore produit >>. Faux depuis que la
+        mesure existe : les deux postes du §80 sont CALCULES, c'est leur
+        assemblage qui manque. Sous-affirmer fait croire qu'un travail deja
+        fait reste a faire.
+        """
+        refs = {e.reference: e for e in PERIMETRE}
+        e = refs['§78-92']
+        self.assertEqual(e.etat, NON_CONSTRUIT)
+        self.assertNotIn("aucun n'est encore produit", e.raison)
+        self.assertIn('CALCULÉS', e.raison)
+        self.assertIn('ASSEMBLAGE', e.raison)
+        # ⚠️ et la limite est ecrite : rien ne pourra confronter l'assemblage
+        self.assertIn('AUCUNE source externe', e.raison)
+        print("    OK T3h : §78-92 dit ce qui est calcule, ce qui manque, "
+              "et qu'aucune source ne pourra confronter l'assemblage")
+
     def test_B72_n_ecarte_plus_le_taux_par_un_raisonnement_refute(self):
         """⚠️ UN ARGUMENT REFUTE NE RESTE PAS EN PLACE EN SILENCE.
 
