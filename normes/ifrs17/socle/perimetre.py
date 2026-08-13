@@ -110,7 +110,17 @@ PERIMETRE: tuple[Element, ...] = (
             "Imposés en PAA par §59 b) pour le passif au titre des sinistres "
             "survenus (LIC). §59 b) dispense d'actualiser lorsque le "
             "règlement est attendu dans l'année suivant le sinistre — c'est "
-            "une dispense, pas une exclusion. Non bâti."),
+            "une dispense, pas une exclusion. "
+            "ÉTAT : le SQUELETTE est bâti — l'espérance du §33 a) sur "
+            "scénarios déclarés, l'actualisation du §36 par courbe déclarée "
+            "et signée, l'ajustement du §37 déclaré et signé avec son niveau "
+            "de confiance (§119), et la dispense du §59 b) exercée sur "
+            "déclaration. ⚠️ CE QUI RESTE : le raccordement à des flux "
+            "RÉELS. Aucune donnée de sinistres n'a été remise à ce jour — ni "
+            "triangle de liquidation, ni échéancier de règlement — et le "
+            "module ne peut donc être alimenté que par des montants saisis. "
+            "⚠️ Et il n'est adossé à AUCUNE source externe : ses garanties "
+            "sont des invariants internes, pas une concordance publiée."),
     Element('§45, §71, B101-B118', HORS_PERIMETRE,
             "Contrats avec éléments de participation directe (VFA) et "
             "contrats d'investissement avec participation discrétionnaire",
@@ -200,16 +210,19 @@ PERIMETRE: tuple[Element, ...] = (
     # ── Prévu, pas encore construit ─────────────────────────────────────────
     Element('§55-59, B125-B126', NON_CONSTRUIT,
             "Évaluation PAA : LRC, élément de perte, revenu, charges",
-            "Le socle constitue les groupes et les scelle ; la mesure "
-            "elle-même reste à bâtir. Ce qu'elle comprend, nommément, pour "
-            "qu'aucun morceau ne se perde : §55 a) le LRC à la "
-            "comptabilisation initiale, §55 b) sa mesure ultérieure, §56 la "
-            "composante de financement lorsqu'elle est significative, §57 le "
-            "test du caractère déficitaire, §58 l'élément de perte, §59 a) "
-            "l'option de passer les frais d'acquisition en charges — ouverte "
-            "seulement si la couverture n'excède pas un an — §59 b) le "
-            "passif au titre des sinistres survenus, et B125-B126 le produit "
-            "des activités d'assurance."),
+            "Le socle constitue les groupes et les scelle. LA MESURE EST "
+            "PARTIELLEMENT BÂTIE, et le détail compte plus que le mot : "
+            "§55 a) et b) le LRC initial et ultérieur — BÂTIS et adossés à "
+            "l'oracle ICA 5.2 ; §56 la composante de financement — BÂTIE et "
+            "adossée au déroulé ICA 5.6.1 sur trois arrêtés ; §57 et §58 le "
+            "test du caractère déficitaire et l'élément de perte — BÂTIS "
+            "sur déclaration signée, SANS oracle ; B125-B126 le produit des "
+            "activités d'assurance — BÂTIS, avec le bouclage de B120. "
+            "⚠️ RESTENT NON BÂTIS : §59 a), l'option de passer les frais "
+            "d'acquisition en charges, qui est un choix de l'entité et non "
+            "une règle ; et §59 b), le passif au titre des sinistres "
+            "survenus, qui attend des données de sinistres — aucune n'a été "
+            "remise à ce jour."),
     Element('§60-70A', NON_CONSTRUIT,
             "Réassurance détenue",
             "Régime propre — agrégation adaptée (§61), PAA sous conditions "

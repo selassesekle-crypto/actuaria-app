@@ -137,6 +137,37 @@ class T3_LesExclusionsQueLeTexteImpose(unittest.TestCase):
         print("    OK T3f : le texte publie dit que le signalement ne bloque "
               "pas — il ne promet plus un refus qu'il ne fait pas")
 
+    def test_le_perimetre_dit_CE_QUI_EST_BATI_dans_la_mesure(self):
+        """⚠️ LE PERIMETRE A DEJA VIEILLI DEUX FOIS, ET TOUJOURS DE MON FAIT.
+
+        Chaque lot de construction rend une raison fausse : elle continue de
+        dire << reste a batir >> quand le module existe. C'est la faute
+        corrigee en C4-0 (le par. 78-92 disait << aucun n'est encore
+        produit >>), et elle est revenue des que F1 et F2 ont ete pousses.
+
+        Ce test ne la previent pas -- il la CONSTATE sur ce qui est bati
+        aujourd'hui. Le verrou mecanique qui l'empecherait de revenir est
+        propose, non ouvert : il exigerait un registre module -> paragraphe
+        que le gate ferait respecter.
+        """
+        refs = {e.reference: e for e in PERIMETRE}
+        mesure = refs['§55-59, B125-B126'].raison
+        for bati in ('§55 a) et b)', '§56', '§57 et §58', 'B125-B126'):
+            self.assertIn(bati, mesure, bati)
+        self.assertIn('BÂTIS', mesure)
+        self.assertNotIn('la mesure elle-même reste à bâtir', mesure)
+        # ⚠️ et ce qui NE l'est pas doit rester nomme, sans quoi la raison
+        # sur-affirmerait cette fois
+        self.assertIn('RESTENT NON BÂTIS', mesure)
+        self.assertIn('§59 a)', mesure)
+        self.assertIn('§59 b)', mesure)
+        flux = refs['§33-37, B36-B92'].raison
+        self.assertIn('SQUELETTE', flux)
+        self.assertIn('AUCUNE source externe', flux)
+        self.assertIn('flux RÉELS', flux)
+        print("    OK T3i : le perimetre dit ce qui est bati (§55-58, §56, "
+              "B125) et ce qui ne l'est pas (§59 a) et b))")
+
     def test_le_85_porte_ses_DEUX_interdictions(self):
         """⚠️ UNE ETIQUETTE QUI NE COUVRE PAS CE QU'ELLE ANNONCE.
 
