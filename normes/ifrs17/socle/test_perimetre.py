@@ -189,22 +189,31 @@ class T3_LesExclusionsQueLeTexteImpose(unittest.TestCase):
     def test_le_78_92_ne_sous_affirme_plus(self):
         """⚠️ LA FAUTE INVERSE DE C2-0, ET ELLE TROMPE AUTANT.
 
-        La raison disait << aucun n'est encore produit >>. Faux depuis que la
-        mesure existe : les deux postes du §80 sont CALCULES, c'est leur
-        assemblage qui manque. Sous-affirmer fait croire qu'un travail deja
-        fait reste a faire.
+        La raison disait << aucun n'est encore produit >>. Faux des que la
+        mesure a existe. Sous-affirmer fait croire qu'un travail deja fait
+        reste a faire.
+
+        ⚠️ CE TEST A DEJA MORDU DEUX FOIS, ET LES DEUX FOIS IL AVAIT RAISON :
+        une premiere quand le bilan a ete bati, une seconde quand le §80 l'a
+        ete. Il ne fige pas une redaction -- il exige que la raison suive
+        l'etat. Ses assertions se mettent donc a jour AVEC lui, jamais en
+        retablissant les mots d'avant.
         """
         refs = {e.reference: e for e in PERIMETRE}
         e = refs['§78-92']
         self.assertEqual(e.etat, NON_CONSTRUIT)
         self.assertNotIn("aucun n'est encore produit", e.raison)
-        self.assertIn('CALCULÉS', e.raison)
-        self.assertIn('ASSEMBLAGE', e.raison)
-        # ⚠️ et le bilan, bati depuis, doit y figurer comme tel
+        # ⚠️ ce qui est BATI doit etre nomme comme tel
         self.assertIn('§78-79, LA PRÉSENTATION AU BILAN : BÂTIE', e.raison)
+        self.assertIn('§80, LE COMPTE DE RÉSULTAT : BÂTI', e.raison)
+        self.assertIn('CROISÉE', e.raison)
+        # ⚠️ et ce qui NE l'est pas doit le rester, sinon la raison
+        # sur-affirmerait cette fois
         self.assertIn('§78 c) et d)', e.raison)
-        # ⚠️ et la limite est ecrite : rien ne pourra confronter l'assemblage
-        self.assertIn('AUCUNE source externe', e.raison)
+        self.assertIn('RESTE NON BÂTI', e.raison)
+        self.assertIn('§87-92', e.raison)
+        # ⚠️ et la contrainte de licence est ECRITE dans le livrable publie
+        self.assertIn("AUCUNE VALEUR DE CETTE SOURCE N'EST REPRISE", e.raison)
         print("    OK T3h : §78-92 dit ce qui est calcule, ce qui manque, "
               "et qu'aucune source ne pourra confronter l'assemblage")
 
