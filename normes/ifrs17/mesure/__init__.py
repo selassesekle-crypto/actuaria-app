@@ -45,6 +45,7 @@ fait surévaluer.
 #: forcer à y écrire la vérité. C'est un rappel mécanique, pas une preuve.
 PARAGRAPHE_DES_MODULES = {
     'attribution':    '§55-59, B125-B126',
+    'bilan':          '§78-92',
     'bouclage_b120':  '§55-59, B125-B126',
     'deficit':        '§55-59, B125-B126',
     'financement':    '§55-59, B125-B126',

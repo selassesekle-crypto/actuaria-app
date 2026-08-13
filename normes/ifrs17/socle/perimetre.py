@@ -240,14 +240,19 @@ PERIMETRE: tuple[Element, ...] = (
     # loin de l'objectif qu'elle ne l'est.
     Element('§78-92', NON_CONSTRUIT,
             "Présentation au bilan et au compte de résultat",
-            "Le §80 impose de ventiler le résultat en DEUX postes. Les deux "
-            "sont désormais CALCULÉS — le résultat des activités "
-            "d'assurance par la mesure PAA (§55-59), les produits et charges "
-            "financiers par la composante de financement (§56). Ce qui reste "
-            "non construit est leur ASSEMBLAGE en un état de performance "
-            "financière, ainsi que la présentation au bilan. ⚠️ Et cet "
-            "assemblage ne sera adossé à AUCUNE source externe : aucun "
-            "exemple publié disponible ne chiffre les deux postes ensemble."),
+            "§78-79, LA PRÉSENTATION AU BILAN : BÂTIE. Les portefeuilles y "
+            "sont séparés par côté — actifs d'un côté, passifs de l'autre — "
+            "et JAMAIS compensés entre eux, ce que §78 impose par le mot "
+            "« séparément ». ⚠️ Deux lignes manquent et l'état le DIT : "
+            "§78 c) et d), les portefeuilles de réassurance détenue, qui "
+            "dépendent du §60-70A non construit. "
+            "§80, LE COMPTE DE RÉSULTAT : ses DEUX postes sont CALCULÉS — le "
+            "résultat des activités d'assurance par la mesure PAA (§55-59), "
+            "les produits et charges financiers par la composante de "
+            "financement (§56) — mais leur ASSEMBLAGE en un état de "
+            "performance financière n'est pas bâti. ⚠️ Et il ne sera adossé "
+            "à AUCUNE source externe : aucun exemple publié disponible ne "
+            "chiffre les deux postes ensemble."),
     Element('§93-132', NON_CONSTRUIT,
             "Informations à fournir, dont le développement des sinistres "
             "(§130) et l'analyse de sensibilité (§128-129)",

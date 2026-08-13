@@ -200,6 +200,9 @@ class T3_LesExclusionsQueLeTexteImpose(unittest.TestCase):
         self.assertNotIn("aucun n'est encore produit", e.raison)
         self.assertIn('CALCULÉS', e.raison)
         self.assertIn('ASSEMBLAGE', e.raison)
+        # ⚠️ et le bilan, bati depuis, doit y figurer comme tel
+        self.assertIn('§78-79, LA PRÉSENTATION AU BILAN : BÂTIE', e.raison)
+        self.assertIn('§78 c) et d)', e.raison)
         # ⚠️ et la limite est ecrite : rien ne pourra confronter l'assemblage
         self.assertIn('AUCUNE source externe', e.raison)
         print("    OK T3h : §78-92 dit ce qui est calcule, ce qui manque, "
