@@ -168,6 +168,57 @@ class T3_LesExclusionsQueLeTexteImpose(unittest.TestCase):
         print("    OK T3i : le perimetre dit ce qui est bati (§55-58, §56, "
               "B125) et ce qui ne l'est pas (§59 a) et b))")
 
+    def test_le_92_a_son_PROPRE_element_et_nomme_IAS_21(self):
+        """⚠️⚠️ IL ETAIT AVALE PAR L'INTITULE DE PLAGE << §78-92 >>.
+
+        Ni le libelle ni la raison de la plage ne mentionnaient les ecarts
+        de change, IAS 21 ni le §30 : introuvable pour qui le cherchait.
+        C'est la faute corrigee en C4-0, ou la seconde interdiction du §85
+        disparaissait sous une raison qui ne parlait que de la premiere.
+
+        ⚠️ ET C'EST UNE TROISIEME NATURE. Les ecarts de change ne relevent NI
+        de la presentation du resultat d'assurance (§80 a), NI des produits
+        et charges financiers (§80 b) : ils viennent d'IAS 21 par le renvoi
+        du §30. Une phrase ajoutee a la plage les laisserait dependre de la
+        bonne volonte du lecteur.
+        """
+        refs = {e.reference: e for e in PERIMETRE}
+        self.assertIn('§92, §30, IAS 21', refs)
+        e = refs['§92, §30, IAS 21']
+        self.assertEqual(e.etat, NON_CONSTRUIT)
+        self.assertIn('change', e.libelle)
+        for cle in ('IAS 21', 'ÉLÉMENT', 'MONÉTAIRE', 'NON BÂTI'):
+            self.assertIn(cle, e.raison, cle)
+        # ⚠️ et il est trouvable par une recherche sur chacun de ses termes
+        for terme in ('§92', '§30', 'IAS 21'):
+            self.assertIn(terme, e.reference + ' ' + e.raison, terme)
+        print("    OK T3j : §92 a son propre element, IAS 21 et §30 nommes")
+
+    def test_le_defaut_latent_de_la_devise_est_NOMME_la_ou_on_le_cherche(self):
+        """⚠️ SIGNALE, NON TRAITE -- IL VIT DANS `core/`, HORS DE CE
+        CHANTIER. Mais un defaut archive dans une note que personne ne relit
+        est un defaut perdu. Il est donc NOMME a l'endroit ou quelqu'un le
+        chercherait : la raison du pan qui en depend.
+        """
+        e = {x.reference: x for x in PERIMETRE}['§92, §30, IAS 21']
+        for cle in ('core/courbe_rfr.py', 'NE LIT JAMAIS LA DEVISE',
+                    'EN SILENCE', 'B79'):
+            self.assertIn(cle, e.raison, cle)
+        print("    OK T3k : le defaut latent de la devise est nomme dans la "
+              "raison du §92 — signale, non traite")
+
+    def test_le_87_dit_ce_qui_manque_ET_pourquoi(self):
+        """⚠️ << PARTIELLEMENT BATI >> SANS LE DETAIL SERAIT UNE ETIQUETTE
+        DE PLUS. La raison doit dire QUOI manque et POURQUOI."""
+        e = {x.reference: x for x in PERIMETRE}['§78-92']
+        self.assertIn('PARTIELLEMENT BÂTIS', e.raison)
+        self.assertIn('sinistres survenus', e.raison)
+        self.assertIn('VARIATIONS', e.raison)
+        self.assertIn('B72 a)', e.raison)
+        self.assertIn('SANS OBJET', e.raison)     # §90 et §91
+        print("    OK T3l : §87 dit ce qui manque (LIC, variations de taux) "
+              "et pourquoi (taux verrouille en PAA, donnees absentes)")
+
     def test_le_85_porte_ses_DEUX_interdictions(self):
         """⚠️ UNE ETIQUETTE QUI NE COUVRE PAS CE QU'ELLE ANNONCE.
 
@@ -210,8 +261,14 @@ class T3_LesExclusionsQueLeTexteImpose(unittest.TestCase):
         # ⚠️ et ce qui NE l'est pas doit le rester, sinon la raison
         # sur-affirmerait cette fois
         self.assertIn('§78 c) et d)', e.raison)
-        self.assertIn('RESTE NON BÂTI', e.raison)
-        self.assertIn('§87-92', e.raison)
+        # ⚠️ TROISIEME FOIS QUE CE TEST MORD, TROISIEME FOIS QU'IL A RAISON.
+        # Le pan §87-92 n'est plus un bloc << non bati >> : §87 est
+        # PARTIELLEMENT bati, §88-89 sont arbitres, §90-91 sont SANS OBJET
+        # par construction, et §92 a son propre element. Les assertions
+        # suivent l'etat -- elles ne retablissent pas les mots d'avant.
+        self.assertIn('PARTIELLEMENT BÂTIS', e.raison)
+        self.assertIn('SANS OBJET', e.raison)
+        self.assertIn('§92 a son PROPRE élément', e.raison)
         # ⚠️ et la contrainte de licence est ECRITE dans le livrable publie
         self.assertIn("AUCUNE VALEUR DE CETTE SOURCE N'EST REPRISE", e.raison)
         print("    OK T3h : §78-92 dit ce qui est calcule, ce qui manque, "

@@ -260,8 +260,57 @@ PERIMETRE: tuple[Element, ...] = (
             "mais AUCUNE VALEUR DE CETTE SOURCE N'EST REPRISE dans le dépôt : "
             "ses conditions de réutilisation sont restrictives et ce dépôt "
             "est public. L'exemple a enseigné l'invariant, il ne le vérifie "
-            "pas. ⚠️ RESTE NON BÂTI : §87-92, la ventilation détaillée des "
-            "produits et charges financiers d'assurance."),
+            "pas. "
+            "§87, LES PRODUITS ET CHARGES FINANCIERS : PARTIELLEMENT BÂTIS, "
+            "et le détail compte. §87 vise « la variation de la valeur "
+            "comptable DU GROUPE résultant de a) l'effet de la valeur temps "
+            "de l'argent ET DE SES VARIATIONS ; b) l'effet du RISQUE "
+            "FINANCIER ». La plateforme produit le déroulement du LRC au "
+            "taux VERROUILLÉ (§56). ⚠️ MANQUENT : la désactualisation du "
+            "passif au titre des sinistres survenus, et l'effet des "
+            "VARIATIONS de taux — sous PAA le LRC est insensible à ces "
+            "variations puisque son taux est figé (B72 a), mais le LIC "
+            "relève du §36 qui exige des taux concordant avec les prix de "
+            "marché COURANTS. Ce manque est bloqué sur la même chose que "
+            "tout le reste : l'absence de données de sinistres. "
+            "§88-89 sont arbitrés et déclarés ci-dessus ; §90 et §91 sont "
+            "SANS OBJET par construction, étant conditionnés à des options "
+            "que la plateforme n'exerce pas. ⚠️ §92 a son PROPRE élément — "
+            "les écarts de change ne sont ni §80 a) ni §80 b)."),
+    # ⚠️ §92 A SON PROPRE ÉLÉMENT, ET C'EST UN ARBITRAGE. Il était AVALÉ par
+    # l'intitulé de plage « §78-92 », dont ni le libellé ni la raison ne
+    # mentionnaient les écarts de change, IAS 21 ni §30 — introuvable pour
+    # qui le cherchait. C'est exactement la faute corrigée en C4-0, où la
+    # seconde interdiction du §85 disparaissait sous une raison qui ne
+    # parlait que de la première.
+    #
+    # ⚠️ ET C'EST UNE TROISIÈME NATURE. Les écarts de change ne relèvent NI
+    # de la présentation du résultat d'assurance (§80 a), NI des produits et
+    # charges financiers d'assurance (§80 b) : ils viennent d'IAS 21 par le
+    # renvoi du §30. Une phrase ajoutée à la plage les laisserait dépendre
+    # de la bonne volonté du lecteur.
+    Element('§92, §30, IAS 21', NON_CONSTRUIT,
+            "Écarts de change sur la valeur comptable des groupes de "
+            "contrats d'assurance, présentés en résultat net",
+            "§30 impose de traiter un contrat d'assurance comme un ÉLÉMENT "
+            "MONÉTAIRE au sens d'IAS 21 ; §92 impose de présenter en "
+            "résultat net les écarts de change sur la valeur comptable des "
+            "groupes. ⚠️ CE N'EST NI §80 a) NI §80 b) : c'est un troisième "
+            "poste, et le seul de §87-92 qui soit calculable aujourd'hui. "
+            "NON BÂTI. ⚠️ Il ne peut pas se produire sur les inventaires "
+            "remis à ce jour — toutes les lignes sont en EUR, le "
+            "multidevise n'est pas exercé — mais cela tient à la DONNÉE, "
+            "pas au périmètre. "
+            "⚠️⚠️ ET UN DÉFAUT LATENT S'Y RATTACHE, SIGNALÉ ET NON TRAITÉ "
+            "PARCE QU'IL VIT HORS DE CE CHANTIER : `actualiser` "
+            "(`core/courbe_rfr.py`) NE LIT JAMAIS LA DEVISE. La courbe "
+            "embarquée est en EUR seule, et `CourbeRFR.devise` n'est lue "
+            "qu'à deux endroits — un en-tête d'affichage et une assertion "
+            "de test. Un contrat en dollars serait donc actualisé sur la "
+            "courbe euro EN SILENCE, contre B79 qui exige « la courbe des "
+            "taux dans la monnaie appropriée ». Le mécanisme de garde "
+            "existe juste à côté : `actualiser` REFUSE déjà une courbe "
+            "sans agrément. Lot à ouvrir dans `core/`."),
     Element('§93-132', NON_CONSTRUIT,
             "Informations à fournir, dont le développement des sinistres "
             "(§130) et l'analyse de sensibilité (§128-129)",
