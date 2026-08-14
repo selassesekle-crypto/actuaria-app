@@ -120,7 +120,16 @@ PERIMETRE: tuple[Element, ...] = (
             "triangle de liquidation, ni échéancier de règlement — et le "
             "module ne peut donc être alimenté que par des montants saisis. "
             "⚠️ Et il n'est adossé à AUCUNE source externe : ses garanties "
-            "sont des invariants internes, pas une concordance publiée."),
+            "sont des invariants internes, pas une concordance publiée. "
+            "⚠️⚠️ LES DÉCLARATIONS SIGNÉES SONT CONTRÔLÉES CONTRE LE "
+            "REMPLISSAGE FICTIF, et cela n'allait pas de soi : les portes de "
+            "signature vérifiaient qu'un champ n'était pas VIDE, si bien "
+            "qu'une déclaration d'ajustement pour risque dont le signataire "
+            "s'appelait « A_RENSEIGNER » a été ACCEPTÉE. « Non vide » n'est "
+            "pas « renseigné ». Les cinq portes du chantier refusent "
+            "désormais aussi `A_RENSEIGNER`, `TBD`, `N/A`, `TODO` et leurs "
+            "variantes — contrôle calibré sur 21 valeurs légitimes et 21 "
+            "formes fictives, zéro rejet à tort."),
     Element('§45, §71, B101-B118', HORS_PERIMETRE,
             "Contrats avec éléments de participation directe (VFA) et "
             "contrats d'investissement avec participation discrétionnaire",

@@ -39,6 +39,7 @@ RÉFÉRENCES — IFRS 17, annexe au règlement (UE) 2023/1803, JO L 237 du
 
 from typing import NamedTuple
 
+from normes.ifrs17.mesure.declaration import est_renseigne
 from normes.ifrs17.mesure.lrc_paa import RefusMesure
 
 MOTIF_SANS_SIGNATURE = 'declaration_sans_signataire'
@@ -177,18 +178,18 @@ def _controler_annee(annee: int) -> None:
 def declarer_courbe(taux: dict, source: str, arrete: str,
                     actuaire_resp: str) -> CourbeDeclaree:
     """La courbe du §36, ou un REFUS disant ce qui manque."""
-    if not (actuaire_resp or '').strip():
+    if not est_renseigne(actuaire_resp):
         raise RefusMesure(
             MOTIF_SANS_SIGNATURE,
             "aucun actuaire ne se porte garant de cette courbe. §36 b) "
             "exige qu'elle CONCORDE avec des prix de marché observables — "
             "une appréciation, donc quelqu'un qui l'assume")
-    if not (source or '').strip():
+    if not est_renseigne(source):
         raise RefusMesure(
             MOTIF_SANS_SOURCE,
             "la courbe est fournie sans sa source. « D'où vient cette "
             "courbe » est la première question d'un commissaire aux comptes")
-    if not (arrete or '').strip():
+    if not est_renseigne(arrete):
         raise RefusMesure(
             MOTIF_SANS_SIGNATURE,
             "la courbe est fournie sans son arrêté ; une courbe vaut pour "
@@ -212,19 +213,19 @@ def declarer_ajustement(montant: float, niveau_confiance: str, methode: str,
     majoration du passif, jamais une remise. Un négatif ici traduirait une
     convention de signe inverse, et il faut le dire plutôt que l'absorber.
     """
-    if not (actuaire_resp or '').strip():
+    if not est_renseigne(actuaire_resp):
         raise RefusMesure(
             MOTIF_SANS_SIGNATURE,
             "aucun actuaire ne se porte garant de cet ajustement. §37 ne "
             "prescrit AUCUNE méthode : c'est l'indemnité que l'entité exige, "
             "donc une décision qui engage quelqu'un nommément")
-    if not (niveau_confiance or '').strip():
+    if not est_renseigne(niveau_confiance):
         raise RefusMesure(
             MOTIF_SANS_NIVEAU_CONFIANCE,
             "l'ajustement est fourni sans son niveau de confiance. §119 "
             "impose de le PUBLIER : un ajustement dont on ne peut pas dire "
             "à quel quantile il correspond n'est pas présentable en annexe")
-    if not (methode or '').strip() or not (arrete or '').strip():
+    if not est_renseigne(methode) or not est_renseigne(arrete):
         raise RefusMesure(
             MOTIF_SANS_SIGNATURE,
             "l'ajustement est fourni sans sa méthode ou sans son arrêté. "

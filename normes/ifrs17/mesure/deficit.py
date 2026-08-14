@@ -41,6 +41,7 @@ RÉFÉRENCES — IFRS 17, annexe au règlement (UE) 2023/1803, JO L 237 du
 
 from typing import NamedTuple
 
+from normes.ifrs17.mesure.declaration import est_renseigne
 from normes.ifrs17.mesure.flux_execution import FluxExecution
 from normes.ifrs17.mesure.lrc_paa import RefusMesure
 
@@ -96,19 +97,19 @@ def declarer_declenchement(*, declenche: bool, faits_et_circonstances: str,
     serait pas vérifiable par un tiers, et un élément de perte non
     justifiable n'est pas présentable.
     """
-    if not (actuaire_resp or '').strip():
+    if not est_renseigne(actuaire_resp):
         raise RefusMesure(
             MOTIF_SANS_SIGNATURE,
             "aucun actuaire ne se porte garant de cette appréciation. Le "
             "§57 la confie à l'entité et le §58 en fait une perte en "
             "résultat net : elle engage quelqu'un, nommément")
-    if not (arrete or '').strip():
+    if not est_renseigne(arrete):
         raise RefusMesure(
             MOTIF_SANS_SIGNATURE,
             "l'appréciation est fournie sans son arrêté. §57 dit « à "
             "n'importe quel moment au cours de la période de couverture » : "
             "sans date, elle ne se rattache à aucun moment")
-    if declenche and not (faits_et_circonstances or '').strip():
+    if declenche and not est_renseigne(faits_et_circonstances):
         raise RefusMesure(
             MOTIF_SANS_FAITS,
             "le test est déclenché sans qu'aucun fait ni aucune "

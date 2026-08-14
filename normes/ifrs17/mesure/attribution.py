@@ -41,6 +41,7 @@ RÉFÉRENCES — IFRS 17, annexe au règlement (UE) 2023/1803, JO L 237 du
 
 from typing import NamedTuple
 
+from normes.ifrs17.mesure.declaration import est_renseigne
 from normes.ifrs17.mesure.lrc_paa import RefusMesure
 
 MOTIF_ATTRIBUTION_SANS_SIGNATURE = 'attribution_sans_signataire'
@@ -88,13 +89,13 @@ def declarer(*, attribuables: dict, non_attribuables: dict,
     contrôle n'a PAS lieu — et son absence ne se déguise pas en succès :
     c'est à l'appelant de savoir s'il a remis un total.
     """
-    if not (actuaire_resp or '').strip():
+    if not est_renseigne(actuaire_resp):
         raise RefusMesure(
             MOTIF_ATTRIBUTION_SANS_SIGNATURE,
             "personne ne se porte garant de cette répartition. Elle déplace "
             "des charges hors du résultat des activités d'assurance : elle "
             "engage quelqu'un, nommément")
-    if not (arrete or '').strip():
+    if not est_renseigne(arrete):
         raise RefusMesure(
             MOTIF_ATTRIBUTION_SANS_SIGNATURE,
             "la déclaration est fournie sans son arrêté. Une répartition "

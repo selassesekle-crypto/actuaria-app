@@ -37,6 +37,7 @@ RÉFÉRENCES — IFRS 17, annexe au règlement (UE) 2023/1803, JO L 237 du
 
 from typing import NamedTuple
 
+from normes.ifrs17.mesure.declaration import est_renseigne
 from normes.ifrs17.mesure.lrc_paa import (
     RefusMesure,
     lrc_initial,
@@ -109,18 +110,18 @@ class TauxVerrouille(NamedTuple):
 def verrouiller(taux: float, arrete_verrouillage: str, source: str,
                 actuaire_resp: str) -> TauxVerrouille:
     """Constitue un taux verrouillé, ou REFUSE en disant ce qui manque."""
-    if not (actuaire_resp or '').strip():
+    if not est_renseigne(actuaire_resp):
         raise RefusMesure(
             MOTIF_TAUX_SANS_SIGNATURE,
             "aucun actuaire ne se porte garant de ce taux. Le §56 fait "
             "entrer une charge financière dans le résultat : elle engage "
             "quelqu'un, nommément")
-    if not (source or '').strip():
+    if not est_renseigne(source):
         raise RefusMesure(
             MOTIF_TAUX_SANS_SOURCE,
             "le taux est fourni sans sa source. « D'où vient ce taux » est "
             "la première question d'un commissaire aux comptes")
-    if not (arrete_verrouillage or '').strip():
+    if not est_renseigne(arrete_verrouillage):
         raise RefusMesure(
             MOTIF_TAUX_SANS_ARRETE,
             "le taux est fourni sans sa date de verrouillage. §B72 a) le "

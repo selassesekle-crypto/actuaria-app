@@ -47,6 +47,12 @@ PARAGRAPHE_DES_MODULES = {
     'attribution':    '§55-59, B125-B126',
     'bilan':          '§78-92',
     'bouclage_b120':  '§55-59, B125-B126',
+    # ⚠️ `declaration` ne sert AUCUN paragraphe en propre : il porte le
+    # contrôle « non vide n'est pas renseigné », commun aux cinq portes de
+    # signature. Il est rattaché au pan des flux d'exécution parce que c'est
+    # là que le défaut a été trouvé — une déclaration d'ajustement pour
+    # risque signée « A_RENSEIGNER », acceptée sans broncher.
+    'declaration':    '§33-37, B36-B92',
     'deficit':        '§55-59, B125-B126',
     'financement':    '§55-59, B125-B126',
     'flux_execution': '§33-37, B36-B92',
