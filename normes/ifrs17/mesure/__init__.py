@@ -60,6 +60,7 @@ PARAGRAPHE_DES_MODULES = {
     'lic':            '§55-59, B125-B126',
     'lrc_paa':        '§55-59, B125-B126',
     'reassurance_63': '§60-70A',
+    'recouvrement_perte': '§60-70A',
     # ⚠️ `reassurance_reconciliation` N'IMPLÉMENTE AUCUN PARAGRAPHE, et
     # l'inscrire ici sans le dire serait le sur-affirmer. C'est un contrôle
     # d'INTÉGRITÉ qui sert le §63 : celui-ci mesure des flux cédés ventilés
