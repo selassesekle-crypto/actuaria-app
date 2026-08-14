@@ -227,11 +227,23 @@ PERIMETRE: tuple[Element, ...] = (
             "test du caractère déficitaire et l'élément de perte — BÂTIS "
             "sur déclaration signée, SANS oracle ; B125-B126 le produit des "
             "activités d'assurance — BÂTIS, avec le bouclage de B120. "
-            "⚠️ RESTENT NON BÂTIS : §59 a), l'option de passer les frais "
-            "d'acquisition en charges, qui est un choix de l'entité et non "
-            "une règle ; et §59 b), le passif au titre des sinistres "
-            "survenus, qui attend des données de sinistres — aucune n'a été "
-            "remise à ce jour."),
+            "§59 b), le passif au titre des sinistres survenus — BÂTI. Il "
+            "lit un triangle de liquidation pour ce qui est OBSERVÉ (charge "
+            "cumulée, paiements, provision dossier) et REÇOIT la charge "
+            "ultime déclarée et signée, avec sa méthode nommée : le choix "
+            "entre Chain Ladder, Mack, Bornhuetter-Ferguson, Cape Cod et "
+            "Bootstrap est un jugement actuariel, pas une lecture de la "
+            "norme, et l'IBNR n'est que la différence — il hérite donc "
+            "entièrement de l'incertitude du déclaré. "
+            "⚠️⚠️ MAIS AUCUN MONTANT QUI EN DESCEND N'EST OPPOSABLE À CE "
+            "JOUR : le triangle disponible porte la mention « synthétique, "
+            "CADENCES INVENTÉES ». Une projection dessus rend UN NOMBRE, PAS "
+            "UNE RÉSERVE — elle éprouve la plomberie, jamais l'exactitude. "
+            "La réserve accompagne toute sortie tant que la source n'est pas "
+            "attestée par l'actuaire signataire. "
+            "⚠️ RESTE NON BÂTI : §59 a), l'option de passer les frais "
+            "d'acquisition en charges — c'est un choix de l'entité, pas une "
+            "règle."),
     Element('§60-70A', NON_CONSTRUIT,
             "Réassurance détenue",
             "Régime propre — agrégation adaptée (§61), PAA sous conditions "

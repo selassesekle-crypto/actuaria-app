@@ -156,11 +156,17 @@ class T3_LesExclusionsQueLeTexteImpose(unittest.TestCase):
             self.assertIn(bati, mesure, bati)
         self.assertIn('BÂTIS', mesure)
         self.assertNotIn('la mesure elle-même reste à bâtir', mesure)
-        # ⚠️ et ce qui NE l'est pas doit rester nomme, sans quoi la raison
-        # sur-affirmerait cette fois
-        self.assertIn('RESTENT NON BÂTIS', mesure)
+        # ⚠️ QUATRIEME MORSURE DE CE TEST, QUATRIEME FOIS QU'IL A RAISON. Le
+        # par. 59 b) est bati depuis L1 ; il ne reste que le par. 59 a), qui
+        # est une OPTION de l'entite et non une regle. Les assertions suivent
+        # l'etat, elles ne retablissent pas les mots d'avant.
+        self.assertIn('§59 b), le passif au titre des sinistres survenus — '
+                      'BÂTI', mesure)
+        self.assertIn('RESTE NON BÂTI', mesure)
         self.assertIn('§59 a)', mesure)
-        self.assertIn('§59 b)', mesure)
+        # ⚠️ et la reserve qui rend ce pan NON OPPOSABLE doit y figurer
+        self.assertIn('CADENCES INVENTÉES', mesure)
+        self.assertIn("N'EST OPPOSABLE", mesure)
         flux = refs['§33-37, B36-B92'].raison
         self.assertIn('SQUELETTE', flux)
         self.assertIn('AUCUNE source externe', flux)

@@ -56,6 +56,7 @@ PARAGRAPHE_DES_MODULES = {
     'deficit':        '§55-59, B125-B126',
     'financement':    '§55-59, B125-B126',
     'flux_execution': '§33-37, B36-B92',
+    'lic':            '§55-59, B125-B126',
     'lrc_paa':        '§55-59, B125-B126',
     'resultat_80':    '§78-92',
     'revenu_b125':    '§55-59, B125-B126',
