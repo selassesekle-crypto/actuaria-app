@@ -246,9 +246,30 @@ PERIMETRE: tuple[Element, ...] = (
             "règle."),
     Element('§60-70A', NON_CONSTRUIT,
             "Réassurance détenue",
-            "Régime propre — agrégation adaptée (§61), PAA sous conditions "
-            "distinctes (§69), composante recouvrement de perte (§66B, "
-            "§70A). Dans le périmètre, non encore bâti."),
+            "⚠️ CE N'EST PAS UN « RÉGIME PROPRE », ET LA RAISON LE DISAIT À "
+            "TORT. §61 impose de diviser les portefeuilles « CONFORMÉMENT "
+            "AUX PARAGRAPHES 14 À 24 », avec UNE substitution : les "
+            "références aux contrats déficitaires deviennent des références "
+            "aux contrats donnant lieu à un PROFIT NET. Même agrégation, un "
+            "critère inversé — et §61 admet explicitement un groupe d'un "
+            "seul contrat. "
+            "§69, L'ÉLIGIBILITÉ À LA PAA : BÂTIE. C'est le §53 à "
+            "l'identique — deux portes disjonctives, §70 étant le miroir mot "
+            "pour mot du §54 — et les trois verdicts portent les mêmes noms "
+            "honnêtes : AUCUN ne dit « inéligible ». ⚠️ LA PARENTHÈSE DU "
+            "§69 b) COMMANDE TOUT : la période inclut « la couverture "
+            "d'assurance découlant de toutes les primes comprises dans le "
+            "périmètre », donc elle DÉPEND DE LA BASE — en risques "
+            "attachants la couverture des polices déborde, en sinistres "
+            "survenus non. Mesuré sur les treize traités livrés : SEPT "
+            "portes ouvertes, SIX fermées, la quote-part décennale couvrant "
+            "onze ans au sens du §69 b). "
+            "⚠️ RESTENT NON BÂTIS : §61 et §62 (leur classement et leur date "
+            "reposent sur le caractère déficitaire du SOUS-JACENT, que son "
+            "producteur déclare faux par omission des frais de gestion des "
+            "sinistres — réserve à instruire avant de s'y appuyer) ; §63-68 "
+            "la mesure ; §66A, §66B et §70A la composante de recouvrement "
+            "de perte."),
     # ⚠️ CETTE RAISON SOUS-AFFIRMAIT, ET C'EST LA FAUTE INVERSE DE CELLE
     # CORRIGÉE EN C2-0. Elle disait « aucun n'est encore produit » : faux
     # depuis que la mesure existe. `mesure.lrc_paa.Periode` porte le résultat

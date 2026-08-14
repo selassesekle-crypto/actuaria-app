@@ -59,6 +59,7 @@ PARAGRAPHE_DES_MODULES = {
     'flux_execution': '§33-37, B36-B92',
     'lic':            '§55-59, B125-B126',
     'lrc_paa':        '§55-59, B125-B126',
+    'reassurance_69': '§60-70A',
     'resultat_80':    '§78-92',
     'revenu_b125':    '§55-59, B125-B126',
 }
