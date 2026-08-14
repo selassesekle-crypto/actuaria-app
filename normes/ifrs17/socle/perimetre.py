@@ -264,12 +264,29 @@ PERIMETRE: tuple[Element, ...] = (
             "survenus non. Mesuré sur les treize traités livrés : SEPT "
             "portes ouvertes, SIX fermées, la quote-part décennale couvrant "
             "onze ans au sens du §69 b). "
+            "§63, LA MESURE : BÂTIE, et elle porte DEUX exigences de nature "
+            "différente. La CONCORDANCE des hypothèses avec le sous-jacent "
+            "est une contrainte qui se vérifie entre deux jeux fournis, elle "
+            "ne se calcule pas — deux jeux évalués séparément peuvent chacun "
+            "être défendable et se contredire entre eux, et rien d'autre ne "
+            "l'attraperait. Le RISQUE DE NON-EXÉCUTION, lui, se calcule et se "
+            "vérifie : le taux déclaré n'est pas repris mais contrôlé contre "
+            "défaut × (1 − collatéral), ligne à ligne. "
+            "⚠️ CE QUE §63 EXIGE EN TROIS TERMES, ET CE QUE LES DONNÉES "
+            "PORTENT — « y compris l'effet des GARANTIES et des PERTES "
+            "DÉCOULANT DE LITIGES ». Le défaut de crédit est présent ; les "
+            "GARANTIES aussi, et la relation se vérifie exactement ; les "
+            "LITIGES sont ABSENTS, mesuré à zéro occurrence sur les 2 251 "
+            "lignes des quatre fichiers de réassurance livrés, toutes "
+            "colonnes. L'omission n'est pas neutre : elle sous-estime le "
+            "risque, donc surestime les récupérations et l'actif de "
+            "réassurance — en faveur de l'entité. Tout montant qui descend du "
+            "taux publie ce qu'il ne couvre pas. "
             "⚠️ RESTENT NON BÂTIS : §61 et §62 (leur classement et leur date "
             "reposent sur le caractère déficitaire du SOUS-JACENT, que son "
             "producteur déclare faux par omission des frais de gestion des "
-            "sinistres — réserve à instruire avant de s'y appuyer) ; §63-68 "
-            "la mesure ; §66A, §66B et §70A la composante de recouvrement "
-            "de perte."),
+            "sinistres — réserve à instruire avant de s'y appuyer) ; §64-68 ; "
+            "§66A, §66B et §70A la composante de recouvrement de perte."),
     # ⚠️ CETTE RAISON SOUS-AFFIRMAIT, ET C'EST LA FAUTE INVERSE DE CELLE
     # CORRIGÉE EN C2-0. Elle disait « aucun n'est encore produit » : faux
     # depuis que la mesure existe. `mesure.lrc_paa.Periode` porte le résultat
