@@ -47,7 +47,7 @@ class T1_LaDeclarationEstRecue(unittest.TestCase):
         e = ENTREE_5_2
         p = periode_annuelle(
             primes_attendues=e['prime'],
-            duree_ans=e['duree_couverture_ans'],
+            duree_couverture=e['duree_couverture_ans'],
             frais_acquisition_attribuables=e['frais_acquisition_attribuables'],
             frais_maintenance_attribuables=(
                 e['frais_maintenance_attribuables_an1']),

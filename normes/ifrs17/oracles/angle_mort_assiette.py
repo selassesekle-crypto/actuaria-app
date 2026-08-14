@@ -38,7 +38,7 @@ PROVENANCE = (
 #: Le cas : un contrat type dommages-ouvrage, dix ans, frais ET taux non nuls.
 ENTREE = {
     'prime': 4800.0,
-    'duree_ans': 10,
+    'duree_couverture': 10,
     'frais_acquisition': 360.0,
     'taux': 0.02,
 }

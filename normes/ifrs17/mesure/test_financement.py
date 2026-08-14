@@ -52,7 +52,7 @@ def _taux():
 
 def _mesure():
     return roll_forward(prime=ENTREE_5_6_1['prime'],
-                        duree_ans=ENTREE_5_6_1['duree_couverture_ans'],
+                        nb_periodes=ENTREE_5_6_1['duree_couverture_ans'],
                         taux=_taux(), eligibilite_declaree=True)
 
 
@@ -144,7 +144,7 @@ class T1b_LAssietteEstTRANCHEE(unittest.TestCase):
         t = verrouiller(ANGLE_MORT['taux'], '2026-01-01',
                         'courbe interne', 'Selasse Sekle')
         return roll_forward(prime=ANGLE_MORT['prime'],
-                            duree_ans=ANGLE_MORT['duree_ans'],
+                            nb_periodes=ANGLE_MORT['duree_couverture'],
                             frais_acquisition=ANGLE_MORT['frais_acquisition'],
                             taux=t, eligibilite_declaree=True)
 
@@ -215,7 +215,7 @@ class T1c_LeLRCDoitSEteindre(unittest.TestCase):
         roll-forward le refuse desormais.
         """
         t = verrouiller(0.02, '2026-01-01', 'courbe interne', 'Selasse')
-        a = roll_forward(prime=4800.0, duree_ans=10, frais_acquisition=360.0,
+        a = roll_forward(prime=4800.0, nb_periodes=10, frais_acquisition=360.0,
                          taux=t, eligibilite_declaree=True)
         self.assertAlmostEqual(a[-1].lrc_cloture, 0.0, 6)
         self.assertEqual(MOTIF_LRC_NON_ETEINT,
@@ -228,9 +228,9 @@ class T1c_LeLRCDoitSEteindre(unittest.TestCase):
         des frais nuls ; l'appelant devait composer a la main, et c'est la
         que je me suis trompe."""
         t = verrouiller(0.02, '2026-01-01', 'courbe interne', 'Selasse')
-        sans = roll_forward(prime=4800.0, duree_ans=10, taux=t,
+        sans = roll_forward(prime=4800.0, nb_periodes=10, taux=t,
                             eligibilite_declaree=True)
-        avec = roll_forward(prime=4800.0, duree_ans=10, taux=t,
+        avec = roll_forward(prime=4800.0, nb_periodes=10, taux=t,
                             frais_acquisition=360.0, eligibilite_declaree=True)
         self.assertAlmostEqual(sans[0].lrc_ouverture, 4800.0, 6)
         self.assertAlmostEqual(avec[0].lrc_ouverture, 4440.0, 6)

@@ -10,15 +10,20 @@ un calcul du dépôt à des valeurs venues du dehors.
 import unittest
 
 from normes.ifrs17.mesure.lrc_paa import (
+    MOTIF_BASE_DE_PRIME_NON_DECLAREE,
     MOTIF_DUREE_INVALIDE,
     MOTIF_FINANCEMENT_NON_CONSTRUIT,
     MOTIF_MONTANT_NEGATIF,
+    MOTIF_PRORATA_DEUX_FOIS,
     MOTIF_SANS_ELIGIBILITE,
     MOTIF_SEPARATION_NON_FOURNIE,
+    PRIME_DEJA_PRORATISEE,
+    PRIME_NOMINALE,
     RefusMesure,
     lrc_initial,
     lrc_suivant,
     periode_annuelle,
+    revenue_depuis_fraction,
     revenue_prorata_temporis,
 )
 from normes.ifrs17.oracles.ica_222092 import (
@@ -34,7 +39,7 @@ def _mesure_5_2():
     e = ENTREE_5_2
     return periode_annuelle(
         primes_attendues=e['prime'],
-        duree_ans=e['duree_couverture_ans'],
+        duree_couverture=e['duree_couverture_ans'],
         frais_acquisition_attribuables=e['frais_acquisition_attribuables'],
         frais_maintenance_attribuables=e['frais_maintenance_attribuables_an1'],
         frais_non_attribuables=(e['frais_acquisition_non_attribuables']
@@ -123,7 +128,7 @@ class T1b_LaSeparationNonFournie(unittest.TestCase):
         e = ENTREE_5_2
         p = periode_annuelle(
             primes_attendues=e['prime'],
-            duree_ans=e['duree_couverture_ans'],
+            duree_couverture=e['duree_couverture_ans'],
             frais_acquisition_attribuables=e['frais_acquisition_attribuables'],
             frais_maintenance_attribuables=(
                 e['frais_maintenance_attribuables_an1']),
@@ -144,7 +149,7 @@ class T1b_LaSeparationNonFournie(unittest.TestCase):
         une declaration, pas une absence -- et elle s'honore."""
         e = ENTREE_5_2
         commun = {'primes_attendues': e['prime'],
-                  'duree_ans': e['duree_couverture_ans'],
+                  'duree_couverture': e['duree_couverture_ans'],
                   'eligibilite_declaree': True}
         declare = periode_annuelle(frais_non_attribuables=0.0, **commun)
         tu = periode_annuelle(**commun)
@@ -154,6 +159,88 @@ class T1b_LaSeparationNonFournie(unittest.TestCase):
         self.assertIsNone(tu.resultat)
         print("    OK M1f : 0.0 declare -> resultat etabli ; absent -> "
               "non etabli. Les deux ne se confondent pas")
+
+
+class T1c_LeProrataNeSAppliquePasDeuxFois(unittest.TestCase):
+    """T1c — le seul chemin par lequel l'ajustement peut être doublé."""
+
+    def test_une_prime_deja_proratisee_refuse_une_fraction(self):
+        """⚠️⚠️ MESURE, PAS SUPPOSITION. Sur les 2 000 contrats remis,
+        `revenue_cumule = prime_attendue x fraction_acquise` tient a 0,0000
+        pres -- maximum, minimum et moyenne des ecarts tous nuls. Le prorata
+        est DEJA dans la donnee. Lui appliquer une fraction le compterait
+        deux fois, et rien dans les NOMBRES ne le dirait : seule la
+        declaration de l'appelant le distingue.
+        """
+        with self.assertRaises(RefusMesure) as ctx:
+            revenue_depuis_fraction(prime=320.37,
+                                    base_prime=PRIME_DEJA_PRORATISEE,
+                                    fraction_acquise=0.58)
+        self.assertEqual(ctx.exception.motif, MOTIF_PRORATA_DEUX_FOIS)
+        self.assertIn('DEUX FOIS', str(ctx.exception))
+        self.assertIn('0,0000', str(ctx.exception))
+        print("    OK M1g : prime deja proratisee + fraction -> REFUS, et le "
+              "message porte la mesure qui le fonde")
+
+    def test_une_prime_nominale_accepte_la_fraction(self):
+        obtenu = revenue_depuis_fraction(prime=1000.0,
+                                         base_prime=PRIME_NOMINALE,
+                                         fraction_acquise=0.5)
+        self.assertAlmostEqual(obtenu, 500.0, 9)
+        print(f"    OK M1h : prime nominale x 0,5 = {obtenu:.0f}")
+
+    def test_une_base_non_declaree_est_refusee(self):
+        """⚠️ DEUX GRANDEURS DIFFERENTES, ET RIEN DANS LE NOMBRE NE LES
+        DISTINGUE. D'ou une declaration, comme pour le taux verrouille,
+        l'attribution des couts et le declenchement du §57."""
+        for base in (None, '', 'brute'):
+            with self.assertRaises(RefusMesure) as ctx:
+                revenue_depuis_fraction(prime=1000.0, base_prime=base,
+                                        fraction_acquise=0.5)
+            self.assertEqual(ctx.exception.motif,
+                             MOTIF_BASE_DE_PRIME_NON_DECLAREE)
+        print("    OK M1i : base de prime non declaree -> refus")
+
+    def test_une_fraction_hors_bornes_est_refusee(self):
+        """Au-dela de 1, elle produirait un revenu superieur a la prime."""
+        for f in (-0.1, 1.5):
+            with self.assertRaises(RefusMesure) as ctx:
+                revenue_depuis_fraction(prime=1000.0,
+                                        base_prime=PRIME_NOMINALE,
+                                        fraction_acquise=f)
+            self.assertEqual(ctx.exception.motif,
+                             'fraction_acquise_hors_bornes')
+        print("    OK M1j : fraction hors [0, 1] refusee")
+
+
+class T1d_LaDureeNEstPasEnAnneesEntieres(unittest.TestCase):
+    """T1d — la correction de vocabulaire, et ce qu'elle pèse."""
+
+    def test_une_duree_fractionnaire_est_acceptee(self):
+        """⚠️ NI §55 b) NI B126 NE CONNAISSENT L'ANNEE ENTIERE. Le premier
+        deroule << a la fin de chaque PERIODE DE REPORTING >>, le second
+        repartit << en fonction de l'ECOULEMENT DU TEMPS >>. La contrainte
+        d'annees entieres etait la MIENNE, et le nom `duree_ans` pretait a
+        la norme une exigence qu'elle n'a pas."""
+        p = periode_annuelle(primes_attendues=320.37, duree_couverture=0.582,
+                             frais_non_attribuables=0.0,
+                             eligibilite_declaree=True)
+        self.assertGreater(p.revenue, 0)
+        self.assertAlmostEqual(p.revenue, 320.37 / 0.582, 6)
+        print(f"    OK M1k : duree 0,582 acceptee, revenue "
+              f"{p.revenue:.2f} par unite de temps")
+
+    def test_le_module_ECRIT_ce_que_le_fractionnaire_pese(self):
+        """⚠️ POUR QUE PERSONNE NE ROUVRE LE SUJET EN CROYANT QU'IL EST GROS.
+        6,7 % des lignes, 0,55 % du LRC -- l'inverse du portefeuille DO, ou
+        100 contrats portaient 86 % du passif."""
+        from normes.ifrs17.mesure import lrc_paa
+        doc = lrc_paa.__doc__
+        self.assertIn('6,7 % DES LIGNES', doc)
+        self.assertIn('0,55 % DU LRC', doc)
+        self.assertIn("n'est jamais une mesure de matérialité", doc)
+        print("    OK M1l : le module ecrit 6,7 % des lignes contre 0,55 % "
+              "du LRC")
 
 
 class T2_LesRefus(unittest.TestCase):

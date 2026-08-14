@@ -17,7 +17,7 @@ def _ventilation_5_2():
     e = ENTREE_5_2
     return ventiler(revenu_periode=ATTENDU_5_2['insurance_revenue'],
                     frais_acquisition=e['frais_acquisition_attribuables'],
-                    duree_ans=e['duree_couverture_ans'])
+                    duree_couverture=e['duree_couverture_ans'])
 
 
 class T1_LeDoubleCompteEstEmpeche(unittest.TestCase):
@@ -68,7 +68,7 @@ class T1_LeDoubleCompteEstEmpeche(unittest.TestCase):
         e = ENTREE_5_2
         p = periode_annuelle(
             primes_attendues=e['prime'],
-            duree_ans=e['duree_couverture_ans'],
+            duree_couverture=e['duree_couverture_ans'],
             frais_acquisition_attribuables=e['frais_acquisition_attribuables'],
             frais_maintenance_attribuables=(
                 e['frais_maintenance_attribuables_an1']),
@@ -125,7 +125,7 @@ class T3_LesRefus(unittest.TestCase):
     def test_un_recouvrement_superieur_au_produit_est_refuse(self):
         with self.assertRaises(RefusMesure) as ctx:
             ventiler(revenu_periode=100.0, frais_acquisition=500.0,
-                     duree_ans=1)
+                     duree_couverture=1)
         self.assertEqual(ctx.exception.motif, MOTIF_CHARGE_DISCORDANTE)
         self.assertIn("À L'INTÉRIEUR", str(ctx.exception))
         print("    OK P3 : part > tout -> refus motive, jamais un service "
@@ -135,7 +135,7 @@ class T3_LesRefus(unittest.TestCase):
         for duree in (0, -2):
             with self.assertRaises(RefusMesure):
                 ventiler(revenu_periode=500.0, frais_acquisition=200.0,
-                         duree_ans=duree)
+                         duree_couverture=duree)
         print("    OK P3b : duree <= 0 refusee")
 
 

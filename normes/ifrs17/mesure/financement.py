@@ -171,7 +171,7 @@ def revenu_de_financement(cumul_charges: float, cumul_revenu_anterieur: float,
     return (cumul_charges - cumul_revenu_anterieur) / periodes_restantes
 
 
-def roll_forward(*, prime: float, duree_ans: int, taux: TauxVerrouille,
+def roll_forward(*, prime: float, nb_periodes: int, taux: TauxVerrouille,
                  frais_acquisition: float = 0.0,
                  eligibilite_declaree: bool = False
                  ) -> tuple[ArreteFinancement, ...]:
@@ -195,17 +195,17 @@ def roll_forward(*, prime: float, duree_ans: int, taux: TauxVerrouille,
     """
     lrc = lrc_initial(prime, frais_acquisition,
                       eligibilite_declaree=eligibilite_declaree)
-    amortissement = frais_acquisition / duree_ans
+    amortissement = frais_acquisition / nb_periodes
     cumul_charges = cumul_revenu = 0.0
     arretes = []
-    for periode in range(1, duree_ans + 1):
+    for periode in range(1, nb_periodes + 1):
         # ⚠️ ASSIETTE NETTE : `lrc` porte déjà la déduction du §55 a) ii).
         charge = charge_financiere(lrc, taux)
         cumul_charges += charge
         revenu_fin = revenu_de_financement(cumul_charges, cumul_revenu,
-                                           duree_ans - periode + 1)
+                                           nb_periodes - periode + 1)
         cumul_revenu += revenu_fin
-        revenu_prime = revenue_prorata_temporis(prime, duree_ans)
+        revenu_prime = revenue_prorata_temporis(prime, nb_periodes)
         cloture = lrc_suivant(
             lrc, amortissement_frais_acquisition=amortissement,
             revenue_periode=revenu_prime + revenu_fin,
@@ -222,7 +222,7 @@ def roll_forward(*, prime: float, duree_ans: int, taux: TauxVerrouille,
         raise RefusMesure(
             MOTIF_LRC_NON_ETEINT,
             f"le passif au titre de la couverture restante vaut {lrc:.2f} "
-            f"après les {duree_ans} période(s) de couverture, au lieu de "
+            f"après les {nb_periodes} période(s) de couverture, au lieu de "
             f"zéro. Un terme du déroulé a été perdu ou compté deux fois. "
             f"⚠️ Ce contrôle existe parce que l'erreur a été COMMISE : une "
             f"composition à la main omettant de relâcher le revenu de "

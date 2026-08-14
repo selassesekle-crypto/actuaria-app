@@ -23,7 +23,7 @@ def _mesure():
                     "oracle ICA/CIA doc 222092 section 5.6.1",
                     'Selasse Sekle')
     return roll_forward(prime=ENTREE_5_6_1['prime'],
-                        duree_ans=ENTREE_5_6_1['duree_couverture_ans'],
+                        nb_periodes=ENTREE_5_6_1['duree_couverture_ans'],
                         taux=t, eligibilite_declaree=True)
 
 

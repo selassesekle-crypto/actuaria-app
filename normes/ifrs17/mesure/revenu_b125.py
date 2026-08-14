@@ -74,17 +74,17 @@ class VentilationB125(NamedTuple):
 
 
 def ventiler(*, revenu_periode: float, frais_acquisition: float,
-             duree_ans: int) -> VentilationB125:
+             duree_couverture: int) -> VentilationB125:
     """B125 dans B126 : identifier, jamais ajouter.
 
     ⚠️ `revenu_periode` ENTRE ET RESSORT INCHANGÉ. Ce module ne fabrique pas
     de produit : il en désigne une part. C'est la garantie contre le double
     compte, et elle est vérifiable d'un coup d'œil sur le corps.
     """
-    if duree_ans <= 0:
+    if duree_couverture <= 0:
         raise RefusMesure(
             'duree_de_couverture_invalide',
-            f"la durée vaut {duree_ans} ; l'affectation systématique de "
+            f"la durée vaut {duree_couverture} ; l'affectation systématique de "
             f"B125 exige une durée strictement positive")
     if frais_acquisition < 0 or revenu_periode < 0:
         raise RefusMesure(
@@ -92,7 +92,7 @@ def ventiler(*, revenu_periode: float, frais_acquisition: float,
             "B125 s'applique à des montants en valeur absolue ; ce module "
             "pose les signes lui-même")
 
-    recouvrement = frais_acquisition / duree_ans
+    recouvrement = frais_acquisition / duree_couverture
     if recouvrement > revenu_periode:
         raise RefusMesure(
             MOTIF_CHARGE_DISCORDANTE,

@@ -26,7 +26,7 @@ from normes.ifrs17.mesure.resultat_80 import (
 )
 
 #: Une période quelconque, mesurée par la plateforme — aucune valeur reprise.
-COMMUN = {'primes_attendues': 1200.0, 'duree_ans': 2,
+COMMUN = {'primes_attendues': 1200.0, 'duree_couverture': 2,
           'frais_acquisition_attribuables': 240.0,
           'frais_maintenance_attribuables': 60.0,
           'eligibilite_declaree': True}

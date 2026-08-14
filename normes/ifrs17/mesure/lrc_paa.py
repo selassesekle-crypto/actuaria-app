@@ -28,6 +28,22 @@ ils vont en « autres charges ». Les y oublier gonflerait le résultat
 d'assurance de 55 sur l'exemple 5.2. Le socle ne porte pas encore cette
 distinction — c'est l'appelant qui la fournit.
 
+⚠️ LA DURÉE DE COUVERTURE N'EST PAS UN NOMBRE D'ANNÉES, ET LE NOM LE DISAIT
+À TORT. Ce module parlait de `duree_ans`, ce qui prêtait à la norme une
+exigence qu'elle n'a pas : §55 b) déroule « à la fin de chaque PÉRIODE DE
+REPORTING » et B126 répartit « en fonction de l'ÉCOULEMENT DU TEMPS ». Ni
+l'un ni l'autre ne connaît l'année entière. La contrainte était la mienne ;
+le paramètre s'appelle désormais `duree_couverture` et accepte le
+fractionnaire.
+
+⚠️ ET CE QUE CELA PÈSE, ÉCRIT ICI POUR QU'ON NE ROUVRE PAS LE SUJET EN
+CROYANT QU'IL EST GROS. Sur l'inventaire remis : 131 contrats à durée
+fractionnaire sur 2 000, soit 6,7 % DES LIGNES mais 0,55 % DU LRC. Et 103
+des 133 résiliés ont leur couverture EXPIRÉE — ce qui reste réellement en
+jeu, ce sont 30 contrats pour 3 894 €, soit 0,53 %. ⚠️ Un compte de lignes
+n'est jamais une mesure de matérialité : sur le portefeuille DO, 100
+contrats portaient 86 % du passif. C'est l'inverse ici.
+
 RÉFÉRENCES — IFRS 17, annexe au règlement (UE) 2023/1803, JO L 237 du
 26.9.2023, §55 à §59. Chaque paragraphe cité a été relu dans ce texte.
 =============================================================================
@@ -84,7 +100,7 @@ class Periode(NamedTuple):
     motif_resultat:   str = ''        # vide quand le résultat EST établi
 
 
-def _controler(valeurs: dict, duree_ans: int, financement_significatif: bool,
+def _controler(valeurs: dict, duree_couverture: int, financement_significatif: bool,
                eligibilite_declaree: bool,
                charge_fournie: bool = False) -> None:
     """Les refus, tous groupés, AVANT le moindre calcul."""
@@ -102,10 +118,10 @@ def _controler(valeurs: dict, duree_ans: int, financement_significatif: bool,
             "aucune charge financière n'est fournie. Mesurer sans elle "
             "rendrait un LRC faux sans le dire — voir `financement.py`, qui "
             "la calcule à partir d'un taux verrouillé et SIGNÉ")
-    if duree_ans <= 0:
+    if duree_couverture <= 0:
         raise RefusMesure(
             MOTIF_DUREE_INVALIDE,
-            f"la durée de couverture vaut {duree_ans} ; l'affectation "
+            f"la durée de couverture vaut {duree_couverture} ; l'affectation "
             f"prorata temporis exige une durée strictement positive")
     for nom, v in valeurs.items():
         if v < 0:
@@ -175,7 +191,7 @@ def lrc_suivant(lrc_ouverture: float, *, primes_periode: float = 0.0,
             - revenue_periode)
 
 
-def revenue_prorata_temporis(primes_attendues: float, duree_ans: int) -> float:
+def revenue_prorata_temporis(primes_attendues: float, duree_couverture: int) -> float:
     """§55 b) i — les produits d'une période, sur l'écoulement du temps.
 
     ⚠️ C'EST LA BASE PAR DÉFAUT, PAS LA SEULE. Le §55 b) ii impose une
@@ -183,14 +199,77 @@ def revenue_prorata_temporis(primes_attendues: float, duree_ans: int) -> float:
     du risque n'est pas uniforme dans le temps. Ce module ne construit que
     la première, et ne prétend pas décider laquelle s'applique.
     """
-    if duree_ans <= 0:
+    if duree_couverture <= 0:
         raise RefusMesure(
             MOTIF_DUREE_INVALIDE,
-            f"la durée de couverture vaut {duree_ans}")
-    return primes_attendues / duree_ans
+            f"la durée de couverture vaut {duree_couverture}")
+    return primes_attendues / duree_couverture
 
 
-def periode_annuelle(*, primes_attendues: float, duree_ans: int,
+# =============================================================================
+#  LE DOUBLE COMPTAGE DU PRORATA — MESURÉ SUR DES DONNÉES RÉELLES
+# =============================================================================
+
+#: Ce que l'appelant doit DÉCLARER sur la prime qu'il remet.
+PRIME_NOMINALE = 'NOMINALE'
+PRIME_DEJA_PRORATISEE = 'DEJA_PRORATISEE'
+BASES_DE_PRIME = (PRIME_NOMINALE, PRIME_DEJA_PRORATISEE)
+
+MOTIF_PRORATA_DEUX_FOIS = 'prorata_applique_deux_fois'
+MOTIF_BASE_DE_PRIME_NON_DECLAREE = 'base_de_prime_non_declaree'
+
+#: ⚠️⚠️ POURQUOI CE GARDE EXISTE, ET IL EST MESURÉ, PAS SUPPOSÉ. Sur les
+#: 2 000 contrats de l'inventaire remis, la relation
+#: `revenue_cumulé = prime_attendue × fraction_acquise` tient à 0,0000 près —
+#: maximum, minimum et moyenne des écarts tous nuls. LE PRORATA EST DONC DÉJÀ
+#: DANS LA DONNÉE. Un appelant qui appliquerait une fraction acquise à une
+#: prime déjà révisée au prorata compterait l'ajustement DEUX FOIS.
+#:
+#: ⚠️ Et le danger est à la FRONTIÈRE DE L'APPELANT, pas dans le calcul : ce
+#: module ne voit que des nombres, et deux nombres ne disent pas de quelle
+#: convention ils viennent. D'où une DÉCLARATION, comme pour le taux
+#: verrouillé, l'attribution des coûts et le déclenchement du §57.
+MOTIF_PRORATA_MESURE = (
+    "mesuré sur les 2 000 contrats remis : revenue_cumulé = prime_attendue × "
+    "fraction_acquise, à 0,0000 près sur tout le portefeuille. Le prorata "
+    "est déjà porté par la prime.")
+
+
+def revenue_depuis_fraction(*, prime: float, base_prime: str,
+                            fraction_acquise: float) -> float:
+    """Le produit d'une période, à partir d'une fraction acquise déclarée.
+
+    ⚠️ REFUSE D'APPLIQUER UNE FRACTION À UNE PRIME DÉJÀ PRORATISÉE. C'est le
+    seul chemin par lequel l'ajustement des contrats résiliés peut être
+    compté deux fois, et il ne se détecte pas dans les nombres — seule la
+    déclaration de l'appelant le dit.
+    """
+    if base_prime not in BASES_DE_PRIME:
+        raise RefusMesure(
+            MOTIF_BASE_DE_PRIME_NON_DECLAREE,
+            f"la base de la prime n'est pas déclarée (reçu {base_prime!r}, "
+            f"attendu l'une de {BASES_DE_PRIME}). Une prime révisée au "
+            f"prorata et une prime nominale sont deux grandeurs "
+            f"différentes, et rien dans le nombre ne les distingue")
+    if not 0.0 <= fraction_acquise <= 1.0:
+        raise RefusMesure(
+            'fraction_acquise_hors_bornes',
+            f"la fraction acquise vaut {fraction_acquise} ; elle est une "
+            f"part de la période de couverture écoulée, donc dans [0, 1]. "
+            f"Au-delà de 1, elle produirait un revenu supérieur à la prime")
+    if base_prime == PRIME_DEJA_PRORATISEE:
+        raise RefusMesure(
+            MOTIF_PRORATA_DEUX_FOIS,
+            f"la prime est déclarée DÉJÀ RÉVISÉE AU PRORATA et une fraction "
+            f"acquise de {fraction_acquise} lui est appliquée : "
+            f"l'ajustement serait compté DEUX FOIS. {MOTIF_PRORATA_MESURE} "
+            f"⚠️ Pour une prime déjà proratisée, le produit de la période "
+            f"s'obtient par `revenue_prorata_temporis` sur la durée "
+            f"EFFECTIVE de couverture, pas par une seconde fraction")
+    return prime * fraction_acquise
+
+
+def periode_annuelle(*, primes_attendues: float, duree_couverture: int,
                      frais_acquisition_attribuables: float = 0.0,
                      frais_maintenance_attribuables: float = 0.0,
                      frais_non_attribuables: float | None = None,
@@ -216,8 +295,8 @@ def periode_annuelle(*, primes_attendues: float, duree_ans: int,
     d'assurance gonflé sans que rien ne le signale.
     """
     premier = lrc_ouverture is None
-    amortissement = frais_acquisition_attribuables / duree_ans
-    revenue = revenue_prorata_temporis(primes_attendues, duree_ans)
+    amortissement = frais_acquisition_attribuables / duree_couverture
+    revenue = revenue_prorata_temporis(primes_attendues, duree_couverture)
 
     if premier:
         encaisse = (primes_attendues if primes_periode is None
