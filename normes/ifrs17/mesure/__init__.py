@@ -55,6 +55,7 @@ PARAGRAPHE_DES_MODULES = {
     'declaration':    '§33-37, B36-B92',
     'deficit':        '§55-59, B125-B126',
     'financement':    '§55-59, B125-B126',
+    'financier_lic':  '§78-92',
     'flux_execution': '§33-37, B36-B92',
     'lic':            '§55-59, B125-B126',
     'lrc_paa':        '§55-59, B125-B126',

@@ -218,12 +218,17 @@ class T3_LesExclusionsQueLeTexteImpose(unittest.TestCase):
         DE PLUS. La raison doit dire QUOI manque et POURQUOI."""
         e = {x.reference: x for x in PERIMETRE}['§78-92']
         self.assertIn('PARTIELLEMENT BÂTIS', e.raison)
-        self.assertIn('sinistres survenus', e.raison)
-        self.assertIn('VARIATIONS', e.raison)
-        self.assertIn('B72 a)', e.raison)
-        self.assertIn('SANS OBJET', e.raison)     # §90 et §91
-        print("    OK T3l : §87 dit ce qui manque (LIC, variations de taux) "
-              "et pourquoi (taux verrouille en PAA, donnees absentes)")
+        self.assertIn('SINISTRES SURVENUS ET L\'EFFET DES VARIATIONS DE '
+                      'TAUX SONT DÉSORMAIS BÂTIS', e.raison)
+        # ⚠️ et ce qui manque encore est nomme SANS le confondre avec ce qui
+        # vient d'etre bati -- une premiere redaction disait dans la meme
+        # phrase que l'effet de taux etait bati PUIS qu'il manquait.
+        self.assertIn('MANQUE ENCORE : §87 b)', e.raison)
+        self.assertIn('RISQUE FINANCIER', e.raison)
+        self.assertIn('cadences', e.raison)        # la reserve descend
+        self.assertIn('SANS OBJET', e.raison)      # §90 et §91
+        print("    OK T3l : §87 dit ce qui vient d'etre bati, ce qui manque "
+              "encore (§87 b), et la reserve qui rend le tout non opposable")
 
     def test_le_85_porte_ses_DEUX_interdictions(self):
         """⚠️ UNE ETIQUETTE QUI NE COUVRE PAS CE QU'ELLE ANNONCE.
