@@ -10,6 +10,8 @@ partir du second serait passé. Ici il y en a trois.
 import unittest
 
 from normes.ifrs17.mesure.financement import (
+    ASSIETTE,
+    MOTIF_LRC_NON_ETEINT,
     MOTIF_TAUX_ABERRANT,
     MOTIF_TAUX_SANS_ARRETE,
     MOTIF_TAUX_SANS_SIGNATURE,
@@ -21,6 +23,16 @@ from normes.ifrs17.mesure.lrc_paa import (
     MOTIF_FINANCEMENT_NON_CONSTRUIT,
     RefusMesure,
     lrc_suivant,
+)
+from normes.ifrs17.oracles.angle_mort_assiette import (
+    ECART_MAXIMAL_EN_PART_DU_LRC,
+    ECART_MAXIMAL_PAR_CONTRAT,
+    LES_DEUX_PASSENT_LES_ORACLES,
+    LRC_PAR_ASSIETTE,
+    PROVENANCE,
+)
+from normes.ifrs17.oracles.angle_mort_assiette import (
+    ENTREE as ANGLE_MORT,
 )
 from normes.ifrs17.oracles.ica_222092 import (
     CHAINE_EXACTE_5_6_1,
@@ -123,6 +135,108 @@ class T1_LOracle5_6_1(unittest.TestCase):
         self.assertAlmostEqual(_mesure()[-1].lrc_cloture, 0.0, 6)
         print("    OK N1d : LRC eteint au dernier arrete — controle de "
               "terme perdu, pas preuve d'exactitude")
+
+
+class T1b_LAssietteEstTRANCHEE(unittest.TestCase):
+    """T1b — l'arbitrage qui tenait par accident, désormais posé et testé."""
+
+    def _mesure(self):
+        t = verrouiller(ANGLE_MORT['taux'], '2026-01-01',
+                        'courbe interne', 'Selasse Sekle')
+        return roll_forward(prime=ANGLE_MORT['prime'],
+                            duree_ans=ANGLE_MORT['duree_ans'],
+                            frais_acquisition=ANGLE_MORT['frais_acquisition'],
+                            taux=t, eligibilite_declaree=True)
+
+    def test_la_mesure_suit_l_assiette_NETTE_et_PAS_la_brute(self):
+        """⚠️⚠️ LE TEST QUI FAIT ECHOUER LA VARIANTE BRUTE.
+
+        §56 ajuste << la valeur comptable du passif au titre de la couverture
+        restante >> ; §55 a) ii) definit cette valeur comptable comme les
+        primes reçues MOINS les frais d'acquisition. Meme expression dans les
+        deux paragraphes : l'assiette est NETTE.
+
+        Avant ce lot, ce module retenait DEJA l'assiette nette -- mais par
+        accident, parce qu'elle tombe de `lrc_initial`. Rien ne l'ecrivait,
+        rien ne la testait. Un arbitrage qui se trouve juste sans avoir ete
+        pris tient par chance.
+        """
+        par_periode = {a.periode: a.lrc_cloture for a in self._mesure()}
+        for periode, (brute, nette) in LRC_PAR_ASSIETTE.items():
+            obtenu = par_periode[periode]
+            self.assertAlmostEqual(obtenu, nette, 2,
+                                   f"periode {periode} : assiette nette")
+            if abs(brute - nette) > 0.01:
+                self.assertNotAlmostEqual(
+                    obtenu, brute, 2,
+                    f"periode {periode} : la mesure suit l'assiette BRUTE, "
+                    f"que le texte ecarte")
+        print("    OK N1f : les 5 periodes suivent l'assiette NETTE, et "
+              "AUCUNE ne coincide avec la brute la ou elles different")
+
+    def test_l_arbitrage_est_ECRIT_avec_ses_deux_citations(self):
+        """⚠️ UN ARBITRAGE NON ECRIT NE SE RELIT PAS DANS SIX MOIS."""
+        for morceau in ('§56', '§55 a) ii)', 'valeur comptable',
+                        'NETTE', 'même expression'):
+            self.assertIn(morceau, ASSIETTE, morceau)
+        print("    OK N1g : l'assiette est ecrite, avec les deux paragraphes "
+              "qui la fondent")
+
+    def test_l_angle_mort_est_reel_et_sa_provenance_est_DITE(self):
+        """⚠️ CE CAS N'EST PAS UN ORACLE, ET LE FICHIER LE DIT. C'est une
+        construction d'un TIERS ; personne n'a publie la bonne reponse pour
+        ce cas. Il ne prouve rien -- il MONTRE ce que les oracles laissent
+        passer, et c'est pour cela qu'on le garde."""
+        self.assertTrue(LES_DEUX_PASSENT_LES_ORACLES)
+        self.assertIn("construction d'un tiers", PROVENANCE)
+        self.assertIn('AUCUNE autorité normative', PROVENANCE)
+        ecarts = [abs(b - n) for b, n in LRC_PAR_ASSIETTE.values()]
+        self.assertAlmostEqual(max(ecarts), ECART_MAXIMAL_PAR_CONTRAT, 2)
+        # ⚠️ ET LE DENOMINATEUR EST VERIFIE, PAS SUPPOSE. Le taux publie par
+        # la construction tierce rapporte l'ecart au LRC BRUT, pas au net :
+        # 12,36 / 1 052,79 = 1,17 %. Ne pas le verifier laisserait une
+        # lecture non controlee du tableau d'un tiers -- et c'est vulture,
+        # signalant la constante non lue, qui l'a fait remarquer.
+        parts = [abs(b - n) / b for b, n in LRC_PAR_ASSIETTE.values() if b]
+        self.assertAlmostEqual(max(parts), ECART_MAXIMAL_EN_PART_DU_LRC, 4)
+        print(f"    OK N1h : angle mort reel, ecart max "
+              f"{max(ecarts):.2f} EUR par contrat soit {max(parts):.2%} du "
+              f"LRC brut, provenance ecrite")
+
+
+class T1c_LeLRCDoitSEteindre(unittest.TestCase):
+    """T1c — le contrôle né d'une erreur que j'ai commise."""
+
+    def test_le_roll_forward_exige_l_extinction(self):
+        """⚠️ CE CONTROLE EXISTE PARCE QUE L'ERREUR A ETE COMMISE. En
+        composant les primitives a la main pour confronter ce module a une
+        implementation tierce, j'ai omis de relacher le revenu de
+        financement : 550,66 EUR de residu, et RIEN ne l'a signale. Le
+        roll-forward le refuse desormais.
+        """
+        t = verrouiller(0.02, '2026-01-01', 'courbe interne', 'Selasse')
+        a = roll_forward(prime=4800.0, duree_ans=10, frais_acquisition=360.0,
+                         taux=t, eligibilite_declaree=True)
+        self.assertAlmostEqual(a[-1].lrc_cloture, 0.0, 6)
+        self.assertEqual(MOTIF_LRC_NON_ETEINT,
+                         'lrc_non_eteint_en_fin_de_couverture')
+        print(f"    OK N1i : LRC eteint a {a[-1].lrc_cloture:.6f} apres 10 "
+              "periodes, avec frais d'acquisition ET financement")
+
+    def test_les_frais_d_acquisition_sont_desormais_exprimables(self):
+        """⚠️ LE CAS REEL N'ETAIT PAS EXPRIMABLE. `roll_forward` supposait
+        des frais nuls ; l'appelant devait composer a la main, et c'est la
+        que je me suis trompe."""
+        t = verrouiller(0.02, '2026-01-01', 'courbe interne', 'Selasse')
+        sans = roll_forward(prime=4800.0, duree_ans=10, taux=t,
+                            eligibilite_declaree=True)
+        avec = roll_forward(prime=4800.0, duree_ans=10, taux=t,
+                            frais_acquisition=360.0, eligibilite_declaree=True)
+        self.assertAlmostEqual(sans[0].lrc_ouverture, 4800.0, 6)
+        self.assertAlmostEqual(avec[0].lrc_ouverture, 4440.0, 6)
+        self.assertNotAlmostEqual(sans[0].lrc_cloture, avec[0].lrc_cloture, 2)
+        print(f"    OK N1j : ouverture {sans[0].lrc_ouverture:.0f} sans frais "
+              f"contre {avec[0].lrc_ouverture:.0f} avec — §55 a) ii)")
 
 
 class T2_LeTauxEstSigne(unittest.TestCase):

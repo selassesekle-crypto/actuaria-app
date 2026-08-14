@@ -39,11 +39,48 @@ from typing import NamedTuple
 
 from normes.ifrs17.mesure.lrc_paa import (
     RefusMesure,
+    lrc_initial,
     lrc_suivant,
     revenue_prorata_temporis,
 )
 
+#: ⚠️⚠️ L'ARBITRAGE DE L'ASSIETTE — POSÉ ICI PARCE QU'IL NE L'AVAIT JAMAIS
+#: ÉTÉ. Sur quoi la charge financière du §56 s'applique-t-elle : le passif
+#: AVANT déduction des frais d'acquisition, ou APRÈS ? Deux implémentations
+#: concurrentes existent, elles passent TOUTES DEUX les oracles ICA §5.2 et
+#: §5.6.1, et elles divergent de 1,17 % du LRC sur un contrat de dix ans.
+#: Aucun oracle disponible ne les départage — le terme d'interaction est nul
+#: dans chacun des deux exemples.
+#:
+#: ⚠️ LE TEXTE LES DÉPARTAGE, ET PAR L'ARGUMENT LE PLUS SIMPLE QUI SOIT : les
+#: deux paragraphes emploient LA MÊME EXPRESSION.
+#:
+#:   · §56 : « l'entité doit ajuster LA VALEUR COMPTABLE DU PASSIF AU TITRE
+#:     DE LA COUVERTURE RESTANTE pour tenir compte de la valeur temps de
+#:     l'argent » ;
+#:   · §55 a) : « LA VALEUR COMPTABLE DU PASSIF est égale à : i) les primes
+#:     reçues […] ii) MOINS […] le montant […] des flux de trésorerie liés
+#:     aux frais d'acquisition ».
+#:
+#: §56 actualise la valeur comptable du passif ; §55 a) définit cette valeur
+#: comme NETTE des frais d'acquisition. L'assiette est donc NETTE. La
+#: variante brute actualiserait une grandeur qui n'est pas la valeur
+#: comptable du passif.
+#:
+#: ⚠️ ET POURQUOI CETTE NOTE EXISTE : ce module retenait DÉJÀ l'assiette
+#: nette — mais par ACCIDENT, parce qu'elle tombe de `lrc_initial` qui
+#: déduit les frais. Le choix n'avait été ni posé, ni écrit, ni testé. Un
+#: arbitrage qui se trouve juste sans avoir été pris tient par chance, et la
+#: chance ne se relit pas dans six mois.
+ASSIETTE = (
+    "NETTE des frais d'acquisition — §56 ajuste « la valeur comptable du "
+    "passif au titre de la couverture restante », et §55 a) ii) définit "
+    "cette valeur comptable comme les primes reçues MOINS les flux de "
+    "trésorerie liés aux frais d'acquisition. Les deux paragraphes emploient "
+    "la même expression : l'assiette de l'actualisation est le passif NET.")
+
 MOTIF_TAUX_SANS_SIGNATURE = 'taux_verrouille_sans_signataire'
+MOTIF_LRC_NON_ETEINT = 'lrc_non_eteint_en_fin_de_couverture'
 MOTIF_TAUX_SANS_SOURCE = 'taux_verrouille_sans_source'
 MOTIF_TAUX_SANS_ARRETE = 'taux_verrouille_sans_arrete'
 MOTIF_TAUX_ABERRANT = 'taux_verrouille_aberrant'
@@ -135,20 +172,34 @@ def revenu_de_financement(cumul_charges: float, cumul_revenu_anterieur: float,
 
 
 def roll_forward(*, prime: float, duree_ans: int, taux: TauxVerrouille,
+                 frais_acquisition: float = 0.0,
                  eligibilite_declaree: bool = False
                  ) -> tuple[ArreteFinancement, ...]:
     """Le LRC arrêté par arrêté, prime encaissée en totalité à l'origine.
 
-    ⚠️ LE LRC INITIAL VAUT LA PRIME ENTIÈRE ICI, et ce n'est pas une
-    hypothèse cachée : les frais d'acquisition valent zéro dans le cas que
-    cette fonction sert. Un groupe qui en porterait exigerait le §55 a)
-    complet, et l'interaction financement × frais d'acquisition N'EST PAS
-    VERROUILLÉE par l'oracle disponible — voir `oracles.ica_222092.LACUNES`.
+    ⚠️ LES FRAIS D'ACQUISITION SONT UN PARAMÈTRE, ET ILS NE L'ÉTAIENT PAS.
+    Cette fonction supposait des frais nuls, si bien que le cas RÉEL —
+    financement ET frais ensemble — n'était pas exprimable et devait être
+    composé à la main par l'appelant. C'est exactement là que je me suis
+    trompé en confrontant ce module à une implémentation tierce : 550,66 €
+    d'écart, en silence.
+
+    ⚠️ L'ASSIETTE DE LA CHARGE EST LE LRC NET — voir `ASSIETTE` en tête de
+    module, où l'arbitrage est posé et fondé sur §56 et §55 a) ii). Les deux
+    oracles disponibles ne le départagent PAS : le terme d'interaction y est
+    nul des deux côtés.
+
+    ⚠️ ET LE LRC DOIT S'ÉTEINDRE. Un roll-forward mené sur toute la durée de
+    couverture finit à zéro ; ne pas le vérifier laisserait passer un terme
+    perdu, ce qui est précisément l'erreur que j'ai commise.
     """
-    lrc = prime
+    lrc = lrc_initial(prime, frais_acquisition,
+                      eligibilite_declaree=eligibilite_declaree)
+    amortissement = frais_acquisition / duree_ans
     cumul_charges = cumul_revenu = 0.0
     arretes = []
     for periode in range(1, duree_ans + 1):
+        # ⚠️ ASSIETTE NETTE : `lrc` porte déjà la déduction du §55 a) ii).
         charge = charge_financiere(lrc, taux)
         cumul_charges += charge
         revenu_fin = revenu_de_financement(cumul_charges, cumul_revenu,
@@ -156,7 +207,8 @@ def roll_forward(*, prime: float, duree_ans: int, taux: TauxVerrouille,
         cumul_revenu += revenu_fin
         revenu_prime = revenue_prorata_temporis(prime, duree_ans)
         cloture = lrc_suivant(
-            lrc, revenue_periode=revenu_prime + revenu_fin,
+            lrc, amortissement_frais_acquisition=amortissement,
+            revenue_periode=revenu_prime + revenu_fin,
             charge_financiere=charge,
             eligibilite_declaree=eligibilite_declaree,
             financement_significatif=True)
@@ -165,4 +217,15 @@ def roll_forward(*, prime: float, duree_ans: int, taux: TauxVerrouille,
             revenu_financement=revenu_fin, revenu_prime=revenu_prime,
             revenu_total=revenu_prime + revenu_fin, lrc_cloture=cloture))
         lrc = cloture
+
+    if abs(lrc) > 1e-6:
+        raise RefusMesure(
+            MOTIF_LRC_NON_ETEINT,
+            f"le passif au titre de la couverture restante vaut {lrc:.2f} "
+            f"après les {duree_ans} période(s) de couverture, au lieu de "
+            f"zéro. Un terme du déroulé a été perdu ou compté deux fois. "
+            f"⚠️ Ce contrôle existe parce que l'erreur a été COMMISE : une "
+            f"composition à la main omettant de relâcher le revenu de "
+            f"financement a laissé 550,66 € de résidu sans que rien ne le "
+            f"signale")
     return tuple(arretes)
