@@ -16,6 +16,8 @@ from normes.ifrs17.socle.errata_donnees import (
     FORME_REFUS,
     FORME_TECHNIQUE,
     FORMES_PRIME_ILLIQUIDITE,
+    MOTIF_NON_OPPOSABLE_CEIOPS,
+    MOTIF_OPPOSABLE_ECART_DE_LIQUIDITE,
     PANIER_AVEC_FRAIS_GESTION,
     PANIER_COMPLET_47,
     PANIER_COMPLET_47_ACTUALISE,
@@ -23,7 +25,6 @@ from normes.ifrs17.socle.errata_donnees import (
     PANIERS,
     PANIERS_SANS_COMPTAGE_ETABLI,
     PANIERS_TRIBUTAIRES_D_UNE_DECLARATION,
-    PLAGE_CEIOPS_A_INSTRUIRE,
     SENSIBILITE_ACTUALISATION,
     SourceDesavouee,
     qualifier_prime_illiquidite,
@@ -161,13 +162,13 @@ class T6_LaPrimeDIlliquiditeATroisFormes(unittest.TestCase):
     #: contrôle sur de la prose qui n'exhibe pas ses deux taux d'erreur se
     #: fait croire sur parole.
     NEANTS_MOTIVES = (
-        'hors plage CEIOPS : duree de reglement maximale 4,76 ans',
+        'ecart de liquidite tenu a des maturites de 0,81 a 4,76 ans',
         'aucune prime retenue, les passifs sont adosses a du monetaire',
         'nulle par decision du comite ALM du 12/06/2026',
         'sans objet : portefeuille integralement en run-off',
         'zero, faute de portefeuille de reference representatif',
         'rien de significatif au regard du seuil de materialite',
-        'neant, lecture haute de la borne CEIOPS non retenue',
+        'neant, spread du portefeuille de reference non significatif',
         'non applicable aux traites detenus, note du 30/06',
     )
     NEANTS_NUS = (
@@ -176,6 +177,21 @@ class T6_LaPrimeDIlliquiditeATroisFormes(unittest.TestCase):
         'na', '-', '', 'A_REMPLACER', 'pas applicable', 'inapplicable',
         'non', 'no', '  neant  ',
     )
+
+    def test_le_controle_verifie_la_PRESENCE_du_motif_pas_sa_QUALITE(self):
+        """⚠️ CE QU'IL N'ÉTABLIT PAS, ET IL FAUT LE LIRE AVANT DE S'Y FIER.
+
+        « Hors plage CEIOPS » porte un motif, donc passe — alors que ce
+        motif n'est PAS opposable : il invoque une source sans portée
+        normative ici. Le mécanisme constate qu'une raison est donnée ; il
+        ne juge pas si elle vaut. Les deux contrôles sont distincts, et le
+        second n'existe pas.
+        """
+        qualifier_prime_illiquidite(
+            forme=FORME_NEANT_MOTIVE,
+            contenu='hors plage CEIOPS 24-48 ans')
+        self.assertIn("N'EST PAS UN MOTIF OPPOSABLE",
+                      MOTIF_NON_OPPOSABLE_CEIOPS)
 
     def test_zero_faux_rejet_sur_les_neants_motives(self):
         for v in self.NEANTS_MOTIVES:
@@ -199,7 +215,8 @@ class T6_LaPrimeDIlliquiditeATroisFormes(unittest.TestCase):
             forme=FORME_NEANT_MOTIVE,
             contenu='hors plage CEIOPS, duree maximale 4,76 ans')
         self.assertIn('pas une absence de déclaration', m)
-        self.assertIn(PLAGE_CEIOPS_A_INSTRUIRE, m)
+        self.assertIn(MOTIF_NON_OPPOSABLE_CEIOPS, m)
+        self.assertIn(MOTIF_OPPOSABLE_ECART_DE_LIQUIDITE, m)
 
     def test_un_refus_est_une_position_et_il_se_porte(self):
         m = qualifier_prime_illiquidite(
@@ -217,22 +234,37 @@ class T6_LaPrimeDIlliquiditeATroisFormes(unittest.TestCase):
                 qualifier_prime_illiquidite(forme=f, contenu='')
 
 
-class T7_LaPlageCEIOPSNEstPasUnSeuilDansLeCode(unittest.TestCase):
-    """⚠️ ELLE VIT DANS LE LIBELLÉ, PAS DANS UN CONTRÔLE."""
+class T7_LaPlageCEIOPSNEstPasOpposable(unittest.TestCase):
+    """⚠️ CETTE CONSTANTE DISAIT « À INSTRUIRE » — c'était lui prêter une
+    autorité qu'elle n'a pas."""
 
     def test_aucune_borne_numerique_n_est_posee(self):
         """24 et 48 sont CITÉS, jamais comparés à une durée."""
-        self.assertIn('24 et 48 ans', PLAGE_CEIOPS_A_INSTRUIRE)
-        self.assertIn('À INSTRUIRE', PLAGE_CEIOPS_A_INSTRUIRE)
+        self.assertIn('24 à 48 ans', MOTIF_NON_OPPOSABLE_CEIOPS)
 
-    def test_le_libelle_expose_la_contradiction_de_la_lecture_basse(self):
-        """⚠️ Lue comme un seuil d'entrée, la phrase se vide d'effet."""
-        self.assertIn('se contredit', PLAGE_CEIOPS_A_INSTRUIRE)
-        self.assertIn('Last Liquid Point', PLAGE_CEIOPS_A_INSTRUIRE)
-        self.assertIn('nulle part', PLAGE_CEIOPS_A_INSTRUIRE)
+    def test_le_motif_dit_que_la_source_n_est_pas_opposable(self):
+        self.assertIn("N'EST PAS UN MOTIF OPPOSABLE",
+                      MOTIF_NON_OPPOSABLE_CEIOPS)
+        self.assertIn('trois degrés de distance',
+                      MOTIF_NON_OPPOSABLE_CEIOPS.lower()
+                      .replace('degres', 'degrés'))
 
-    def test_le_libelle_demande_sur_quelle_lecture_on_se_fonde(self):
-        self.assertIn('SUR QUELLE LECTURE', PLAGE_CEIOPS_A_INSTRUIRE)
+    def test_le_motif_rappelle_que_la_norme_ne_pose_aucun_seuil(self):
+        """⚠️ Vérifié au texte : ni §36 a) ni B80 n'en portent."""
+        self.assertIn('NI §36 a) NI B80', MOTIF_NON_OPPOSABLE_CEIOPS)
+        self.assertIn('sans borne', MOTIF_NON_OPPOSABLE_CEIOPS)
+
+    def test_l_argument_d_auto_annulation_a_DISPARU(self):
+        """⚠️ RETIRÉ, PAS NUANCÉ : il importait un paramètre postérieur de
+        cinq ans à la phrase qu'il commentait."""
+        for mort in ('se contredit', 'Last Liquid Point', 'nulle part',
+                     'SUR QUELLE LECTURE'):
+            self.assertNotIn(mort, MOTIF_NON_OPPOSABLE_CEIOPS)
+
+    def test_le_motif_opposable_est_MESURABLE_et_le_dit(self):
+        self.assertIn('MESURABLE', MOTIF_OPPOSABLE_ECART_DE_LIQUIDITE)
+        self.assertIn('0,81 à 4,76 ans', MOTIF_OPPOSABLE_ECART_DE_LIQUIDITE)
+        self.assertIn('se conteste', MOTIF_OPPOSABLE_ECART_DE_LIQUIDITE)
 
 
 class T4_LeDepotRefuseEffectivementLeStatutDu747(unittest.TestCase):

@@ -206,28 +206,45 @@ MOTS_QUI_REDISENT_LE_NEANT = frozenset({
     'non applicable', 'sans', 'pas applicable', 'inapplicable', 'no', 'non',
 })
 
-#: ⚠️ CE QUE LA PLAGE CEIOPS NE TRANCHE PAS, ET POURQUOI ELLE N'EST PAS UN
-#: SEUIL DANS CE CODE. La note de place cite le CEIOPS : la prime « devrait
-#: s'appliquer pour des maturités comprises entre 24 et 48 ans selon la devise
-#: mais ne devrait pas s'appliquer pour la partie extrapolée de la courbe ».
-#: ⚠️ LUE COMME UN SEUIL D'ENTRÉE À 24 ANS, LA PHRASE SE CONTREDIT : la partie
-#: extrapolée commence au Last Liquid Point, soit 20 ans en euro, si bien que
-#: [24 ; 48] serait entièrement dans la zone que la même phrase exclut — la
-#: prime ne s'appliquerait NULLE PART. Lue comme une borne HAUTE, les deux
-#: moitiés sont compatibles. ⚠️ MAIS LE TEXTE EST AMBIGU, ET CE CODE NE LE
-#: TRANCHE PAS : coder 24 ans en seuil poserait une valeur de place dans le
-#: code, ce que ce dépôt s'interdit déjà pour les allocations en pourcentage.
-#: La plage vit ICI, comme élément à instruire par la déclaration.
-PLAGE_CEIOPS_A_INSTRUIRE = (
-    "⚠️ À INSTRUIRE DANS LA DÉCLARATION : la note de place cite le CEIOPS — "
-    "prime applicable « pour des maturités comprises entre 24 et 48 ans selon "
-    "la devise », et « pas pour la partie extrapolée de la courbe ». Lue "
-    "comme un SEUIL D'ENTRÉE à 24 ans, la phrase se contredit : la partie "
-    "extrapolée commence au Last Liquid Point (20 ans en euro), donc [24 ; "
-    "48] serait entièrement exclu et la prime ne s'appliquerait nulle part. "
-    "Lue comme une BORNE HAUTE, les deux moitiés tiennent. ⚠️ La déclaration "
-    "doit dire SUR QUELLE LECTURE elle se fonde — un « néant, hors plage » "
-    "repose sur la première, qui est celle qui vide le texte de son effet.")
+#: ⚠️⚠️ CETTE CONSTANTE DISAIT « À INSTRUIRE », ET C'ÉTAIT LUI PRÊTER UNE
+#: AUTORITÉ QU'ELLE N'A PAS. Elle exigeait que la déclaration tranche entre
+#: deux lectures de la plage CEIOPS — ce qui présuppose que la source
+#: gouverne quelque chose. Elle ne gouverne rien : ni §36 a) ni B80 ne posent
+#: le moindre seuil de maturité, VÉRIFIÉ sur les blocs entiers du règlement.
+#: C'est le motif de l'étiquette qui affirme trop, appliqué à une citation.
+#:
+#: ⚠️ ET L'ARGUMENT D'AUTO-ANNULATION QUI FIGURAIT ICI EST RETIRÉ, PAS
+#: NUANCÉ. Il opposait la plage [24 ; 48] au Last Liquid Point de 20 ans pour
+#: conclure à une intersection vide. Or le LLP à 20 ans est le cadre EIOPA
+#: posé à la mise en œuvre de Solvabilité II, quand la phrase est tirée du
+#: « Task Force Report on the Liquidity Premium » du CEIOPS, DATÉ DE 2010 par
+#: la bibliographie de la note elle-même — et le CEIOPS a cessé d'exister le
+#: 1er janvier 2011. L'argument importait un paramètre POSTÉRIEUR de cinq ans
+#: à la phrase qu'il commentait. Le garder affaibli aurait été pire que
+#: l'effacer.
+#:
+#: ⚠️ TROIS DEGRÉS DE DISTANCE À IFRS 17 : résumé français de 2022 → rapport
+#: CEIOPS de 2010 → exercice quantitatif Solvabilité II. Arbitrer entre les
+#: deux lectures reviendrait à discuter la grammaire d'une source sans portée
+#: normative ici.
+MOTIF_NON_OPPOSABLE_CEIOPS = (
+    "⚠️ « HORS PLAGE CEIOPS » N'EST PAS UN MOTIF OPPOSABLE. La plage de 24 à "
+    "48 ans parfois invoquée vient d'un rapport CEIOPS de 2010 sur la prime "
+    "de liquidité, résumé par une note de place française de 2022, à propos "
+    "d'un exercice quantitatif Solvabilité II — trois degrés de distance. "
+    "⚠️ NI §36 a) NI B80 NE POSENT DE SEUIL DE MATURITÉ : la prime reflète "
+    "« les caractéristiques de liquidité DES CONTRATS », sans borne. "
+    "L'invoquer pour écarter la prime opposerait une autorité qui n'existe "
+    "pas sur ce point.")
+
+#: ⚠️ CE QUI EST OPPOSABLE, À LA PLACE — ET LA DIFFÉRENCE EST TOUT LE SUJET.
+#: Un motif tiré d'un seuil se discute sur la grammaire d'une source ; un
+#: motif tiré de l'économie des passifs se MESURE et se CONTESTE.
+MOTIF_OPPOSABLE_ECART_DE_LIQUIDITE = (
+    "Le néant reste défendable, mais pour un motif MESURABLE : l'écart de "
+    "liquidité est économiquement ténu à des maturités de 0,81 à 4,76 ans, "
+    "durées de règlement observées sur ce portefeuille. Ce motif se mesure et "
+    "se conteste — contrairement à un seuil invoqué.")
 
 #: ⚠️ LE PREMIER ÉCUEIL À DOCUMENTER, ET C'EST EXACTEMENT NOTRE SITUATION.
 #: La note « Courbe des taux sans risque sous IFRS 17 » de l'Institut des
@@ -363,7 +380,8 @@ def qualifier_prime_illiquidite(*, forme: str, contenu: str) -> str:
             f"fictif (reçu {contenu!r}). Les TROIS formes exigent un contenu : "
             f"la technique pour {FORME_TECHNIQUE}, la raison pour "
             f"{FORME_NEANT_MOTIVE}, le fondement pour {FORME_REFUS}. "
-            + PLAGE_CEIOPS_A_INSTRUIRE)
+            + MOTIF_NON_OPPOSABLE_CEIOPS + " "
+            + MOTIF_OPPOSABLE_ECART_DE_LIQUIDITE)
 
     if (forme == FORME_NEANT_MOTIVE
             and normaliser(contenu) in MOTS_QUI_REDISENT_LE_NEANT):
@@ -372,7 +390,8 @@ def qualifier_prime_illiquidite(*, forme: str, contenu: str) -> str:
             f"une réponse légitime à la prime d'illiquidité, mais il se "
             f"motive : sans sa raison, il affirme une conclusion sans "
             f"l'appuyer — même exigence que B119E, où un montant sans sa "
-            f"méthode est refusé. " + PLAGE_CEIOPS_A_INSTRUIRE)
+            f"méthode est refusé. " + MOTIF_NON_OPPOSABLE_CEIOPS + " "
+            + MOTIF_OPPOSABLE_ECART_DE_LIQUIDITE)
 
     if forme == FORME_TECHNIQUE:
         return (f"§36 a) et B80 : prime d'illiquidité déterminée par l'entité "
@@ -383,7 +402,8 @@ def qualifier_prime_illiquidite(*, forme: str, contenu: str) -> str:
         return (f"§36 a) : prime d'illiquidité déclarée NULLE, et motivée — "
                 f"« {contenu} ». ⚠️ Un néant motivé est une déclaration, pas "
                 f"une absence de déclaration ; il vaut position de l'entité. "
-                + PLAGE_CEIOPS_A_INSTRUIRE)
+                + MOTIF_NON_OPPOSABLE_CEIOPS + " "
+            + MOTIF_OPPOSABLE_ECART_DE_LIQUIDITE)
     return (f"§36 a) : l'entité REFUSE de déclarer une prime d'illiquidité — "
             f"« {contenu} ». ⚠️ Le refus est une position, et il se porte : "
             f"tout taux qui en descend ne reflète PAS les caractéristiques de "
