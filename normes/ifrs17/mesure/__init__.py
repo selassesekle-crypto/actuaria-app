@@ -48,6 +48,7 @@ PARAGRAPHE_DES_MODULES = {
     'bilan':          '§78-92',
     'bouclage_b120':  '§55-59, B125-B126',
     'csm_cedee_65':   '§60-70A',
+    'csm_cedee_66':   '§60-70A',
     # ⚠️ `declaration` ne sert AUCUN paragraphe en propre : il porte le
     # contrôle « non vide n'est pas renseigné », commun aux cinq portes de
     # signature. Il est rattaché au pan des flux d'exécution parce que c'est
