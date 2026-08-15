@@ -9,6 +9,7 @@ dans le règlement (UE) 2023/1803 avant d'être codés — et le relevé a corri
 le dessin deux fois.
 """
 import ast
+import shutil
 import unittest
 from pathlib import Path
 
@@ -24,10 +25,14 @@ from normes.ifrs17.socle.cloture import (
     AXE_LIC_FLUX_FUTURS,
     AXE_LRC_HORS_PERTE,
     AXES,
+    FORMAT_CLOTURES,
+    LIMITE_DE_LA_CHAINE,
     MOTIF_ARRETE_INVALIDE,
     MOTIF_ARTICULATION_ROMPUE,
     MOTIF_AXE_NON_DECLARE,
+    MOTIF_CHAINE_ROMPUE,
     MOTIF_DOSSIER_ABSENT,
+    MOTIF_FORMAT_INCONNU,
     MOTIF_LIBELLE_MANQUANT,
     MOTIF_NATURE_DIVERGENTE,
     MOTIF_NATURE_NON_DECLAREE,
@@ -47,10 +52,13 @@ from normes.ifrs17.socle.cloture import (
     RefusCloture,
     Soldes,
     apposer,
+    chainer,
     constituer,
     deposer,
     dossier_courant,
+    ecrire,
     ouvrir,
+    relire,
     resume,
     servir_comme_ouverture,
     signature_de,
@@ -486,12 +494,199 @@ class T9_LeRefusEstAuSEUL_POINT_QUI_ENGAGE(unittest.TestCase):
         self.assertIn('signature INOPPOSABLE', tiers)
         self.assertIn("Ce n'est pas « non signé »", tiers)
 
-    def test_le_resume_NOMME_la_limite_de_l_ouverture_auditee(self):
+    def test_le_resume_NOMME_ses_limites_ET_ELLES_SE_RETIRENT_AVEC_LEUR_LOT(
+            self):
         """⚠️ Il constate une signature apposée ICI, jamais un audit mené
-        ailleurs. Une première année vient d'un autre système."""
+        ailleurs. Une première année vient d'un autre système.
+
+        ⚠️⚠️ CE TEST A PERDU UNE ASSERTION, ET C'EST LA RÈGLE QUI FONCTIONNE.
+        Il exigeait aussi que le résumé nomme l'absence de contrôle de
+        CONTINUITÉ — vrai tant que `chainer` n'existait pas, faux dès qu'il a
+        été bâti. ⚠️ C'est la différence exacte avec le test que M2 a dû
+        démonter : celui-là épinglait un ÉTAT TRANSITOIRE et un nom de lot,
+        qui devaient être démentis ; celui-ci épingle une LIMITE, et une
+        limite se retire AVEC le contrôle qui la comble. La première dérive,
+        la seconde suit.
+        """
         t = resume(self._magasin(QUALITE_ENTITE))
         self.assertIn('AUDITÉE', t)
-        self.assertIn('CONTINUITÉ', t)
+        self.assertIn('arrêté MANQUE', t)
+        self.assertNotIn('CONTINUITÉ', t)
+
+
+class T10_LaPersistance(unittest.TestCase):
+    """M3 — écrire, relire, et refuser un format qu'on ne connaît pas."""
+
+    PTF = ('DO', 'MRH')
+    CONTEXTE = ContexteEvaluation(arrete='2026-12-31', portefeuilles=PTF)
+
+    def _fichier(self):
+        import tempfile
+        d = tempfile.mkdtemp(prefix='cloture_')
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        return Path(d) / 'clotures.json'
+
+    def _magasin(self):
+        m = deposer(ouvrir('MutuelleTest'), _dossier())
+        m = deposer(m, _dossier(
+            mouvements=[Mouvement('PRIMES', AXE_LRC_HORS_PERTE, 1234.567891)],
+            cloture=Soldes(1234.567891, 0.0, 0.0, 0.0),
+            version=2, motif='prime tardive'))
+        m = apposer(m, arrete='2026-12-31', statut='signee le 15/02',
+                    declarant='directrice technique', qualite=QUALITE_ENTITE,
+                    portefeuilles=self.PTF, contexte=self.CONTEXTE)
+        return m
+
+    def test_l_aller_retour_est_fidele(self):
+        m = self._magasin()
+        relu = relire(ecrire(m, self._fichier()))
+        self.assertEqual(relu, m)
+        print(f"    OK M3 : aller-retour fidele sur {len(m.dossiers)} "
+              f"dossiers et {len(m.signatures)} signature(s)")
+
+    def test_les_montants_traversent_SANS_PERDRE_DE_PRECISION(self):
+        """⚠️ Un solde arrondi par la sérialisation romprait l'articulation
+        au retour, et le magasin l'aurait accepté à l'aller."""
+        relu = relire(ecrire(self._magasin(), self._fichier()))
+        self.assertEqual(relu.dossiers[1].cloture.lrc_hors_perte,
+                         1234.567891)
+        self.assertEqual(relu.dossiers[1].mouvements[0].montant, 1234.567891)
+
+    def test_deux_ecritures_du_meme_magasin_rendent_les_MEMES_OCTETS(self):
+        m = self._magasin()
+        a, b = self._fichier(), self._fichier()
+        self.assertEqual(ecrire(m, a).read_bytes(), ecrire(m, b).read_bytes())
+        print("    OK M3b : deux ecritures -> memes octets")
+
+    def test_L_ORDRE_DE_DEPOT_SURVIT_et_n_est_PAS_trie(self):
+        """⚠️⚠️ LA SEULE DIFFÉRENCE AVEC `registre`, ET LA RECOPIER AURAIT
+        CASSÉ CE MODULE EN SILENCE. Le registre TRIE ses groupes ;
+        `dossier_courant` rend le DERNIER DÉPOSÉ. Trier ferait remonter une
+        rectification avant la clôture qu'elle corrige, et la version 1
+        redeviendrait courante."""
+        cle = CleCloture(NATURE_EMIS, 'DO|AUTRES|2026', '2026-12-31')
+        relu = relire(ecrire(self._magasin(), self._fichier()))
+        self.assertEqual([d.version for d in versions(relu, cle)], [1, 2])
+        self.assertEqual(dossier_courant(relu, cle).version, 2)
+        print("    OK M3c : l'ordre de depot survit -- la v2 reste courante")
+
+    def test_le_VERDICT_de_signature_est_relu_TEL_QUEL(self):
+        """⚠️ Il dit ce que le contrôle établissait CE JOUR-LÀ. Le recalculer
+        ferait changer l'histoire quand le vocabulaire du contrôle évolue."""
+        m = apposer(deposer(ouvrir('X'), _dossier()), arrete='2026-12-31',
+                    statut='signee', declarant='producteur',
+                    qualite=QUALITE_TIERS, portefeuilles=self.PTF,
+                    contexte=self.CONTEXTE)
+        relu = relire(ecrire(m, self._fichier()))
+        s = signature_de(relu, '2026-12-31')
+        self.assertEqual(s.verdict, SIGNATURE_INOPPOSABLE)
+        self.assertIn('§36', s.motif)
+
+    def test_un_format_inconnu_est_refuse_pas_devine(self):
+        p = self._fichier()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text('{"format": "autre/9", "entite": "X"}',
+                     encoding='utf-8')
+        with self.assertRaises(RefusCloture) as e:
+            relire(p)
+        self.assertEqual(e.exception.motif, MOTIF_FORMAT_INCONNU)
+        self.assertIn(FORMAT_CLOTURES, str(e.exception))
+        print("    OK M3d : un format inconnu est refuse, pas devine")
+
+    def test_un_magasin_relu_REFUSE_TOUJOURS_ce_qu_il_refusait(self):
+        """⚠️ La persistance ne doit pas être une porte dérobée : une clôture
+        non signée relue ne devient pas servable."""
+        cle = CleCloture(NATURE_EMIS, 'DO|AUTRES|2026', '2026-12-31')
+        m = relire(ecrire(deposer(ouvrir('X'), _dossier()), self._fichier()))
+        with self.assertRaises(RefusCloture) as e:
+            servir_comme_ouverture(m, cle)
+        self.assertEqual(e.exception.motif, MOTIF_OUVERTURE_NON_SIGNEE)
+
+
+class T11_LaContinuiteDeLaChaine(unittest.TestCase):
+    """M4 — la clôture d'un arrêté ouvre le SUIVANT, nommément.
+
+    ⚠️ LES DEUX CONTRÔLES SE CUMULENT ET AUCUN N'ABSORBE L'AUTRE : une
+    clôture signée peut être chaînée à l'envers, une clôture bien chaînée
+    peut n'être signée par personne.
+    """
+
+    PTF = ('DO', 'MRH')
+    CONTEXTE = ContexteEvaluation(arrete='2026-12-31', portefeuilles=PTF)
+    CLE = CleCloture(NATURE_EMIS, 'DO|AUTRES|2026', '2026-12-31')
+
+    def _magasin(self, signee=True):
+        m = deposer(ouvrir('MutuelleTest'), _dossier())
+        if signee:
+            m = apposer(m, arrete='2026-12-31', statut='signee le 15/02',
+                        declarant='directrice technique',
+                        qualite=QUALITE_ENTITE, portefeuilles=self.PTF,
+                        contexte=self.CONTEXTE)
+        return m
+
+    def test_un_arrete_POSTERIEUR_est_chaine(self):
+        soldes = chainer(self._magasin(), self.CLE, '2027-12-31')
+        self.assertEqual(soldes.lrc_hors_perte, 1000.0)
+        print("    OK M4 : 2026-12-31 -> 2027-12-31, chaine")
+
+    def test_une_periodicite_non_annuelle_passe(self):
+        """⚠️ IFRS 17 N'IMPOSE AUCUNE PÉRIODICITÉ — §98 vise « la période »,
+        que l'entité définit. Exiger douze mois refuserait un semestriel."""
+        self.assertIsNotNone(chainer(self._magasin(), self.CLE, '2027-06-30'))
+
+    def test_un_arrete_ANTERIEUR_est_refuse(self):
+        with self.assertRaises(RefusCloture) as e:
+            chainer(self._magasin(), self.CLE, '2025-12-31')
+        self.assertEqual(e.exception.motif, MOTIF_CHAINE_ROMPUE)
+        self.assertIn('ANTÉRIEUR', str(e.exception))
+        self.assertIn('inverserait le temps', str(e.exception))
+
+    def test_LE_MEME_arrete_est_refuse(self):
+        """⚠️ L'exercice boucler sur lui-même : le solde de clôture
+        deviendrait sa propre origine, et l'articulation n'aurait plus de
+        sens."""
+        with self.assertRaises(RefusCloture) as e:
+            chainer(self._magasin(), self.CLE, '2026-12-31')
+        self.assertEqual(e.exception.motif, MOTIF_CHAINE_ROMPUE)
+        self.assertIn('le même arrêté', str(e.exception))
+        self.assertIn('sa propre origine', str(e.exception))
+        print("    OK M4b : chainage sur le meme arrete -> REFUSE")
+
+    def test_les_DEUX_controles_se_cumulent(self):
+        """⚠️ AUCUN N'ABSORBE L'AUTRE, et c'est mesuré dans les deux sens."""
+        # bien chaîné, mais non signé
+        with self.assertRaises(RefusCloture) as e:
+            chainer(self._magasin(signee=False), self.CLE, '2027-12-31')
+        self.assertEqual(e.exception.motif, MOTIF_OUVERTURE_NON_SIGNEE)
+        # signé, mais chaîné à l'envers
+        with self.assertRaises(RefusCloture) as e:
+            chainer(self._magasin(), self.CLE, '2025-12-31')
+        self.assertEqual(e.exception.motif, MOTIF_CHAINE_ROMPUE)
+        print("    OK M4c : signature et continuite se cumulent -- deux "
+              "motifs distincts")
+
+    def test_un_arrete_de_destination_malforme_est_refuse(self):
+        with self.assertRaises(RefusCloture) as e:
+            chainer(self._magasin(), self.CLE, '31/12/2027')
+        self.assertEqual(e.exception.motif, MOTIF_ARRETE_INVALIDE)
+
+    def test_la_LIMITE_de_la_chaine_est_NOMMEE_dans_le_refus(self):
+        """⚠️ IL NE DÉTECTE PAS UN ARRÊTÉ MANQUANT : 2025 → 2027 sans 2026
+        passe. Le magasin ne connaît que ce qu'on lui a remis."""
+        with self.assertRaises(RefusCloture) as e:
+            chainer(self._magasin(), self.CLE, '2026-12-31')
+        self.assertIn(LIMITE_DE_LA_CHAINE, str(e.exception))
+        self.assertIn('arrêté MANQUANT', str(e.exception))
+        # ⚠️ et le trou passe REELLEMENT : la limite n'est pas rhetorique
+        trou = deposer(ouvrir('X'), _dossier(arrete='2025-12-31'))
+        trou = apposer(trou, arrete='2025-12-31', statut='signee',
+                       declarant='DT', qualite=QUALITE_ENTITE,
+                       portefeuilles=self.PTF,
+                       contexte=ContexteEvaluation('2025-12-31', self.PTF))
+        self.assertIsNotNone(chainer(
+            trou, CleCloture(NATURE_EMIS, 'DO|AUTRES|2026', '2025-12-31'),
+            '2027-12-31'))
+        print("    OK M4d : le trou 2025 -> 2027 PASSE, et la limite le dit")
 
 
 class Z_LaMesureN_IMPORTE_PAS_LeMagasin(unittest.TestCase):

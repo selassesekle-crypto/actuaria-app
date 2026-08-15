@@ -44,6 +44,8 @@ RÉFÉRENCES — IFRS 17, annexe au règlement (UE) 2023/1803, JO L 237 du
 =============================================================================
 """
 
+import json
+from pathlib import Path
 from typing import NamedTuple
 
 #: ⚠️⚠️ CET IMPORT VA DU SOCLE VERS LA MESURE, ET LA FRONTIÈRE TIENT — elle a
@@ -532,6 +534,59 @@ def signature_de(magasin: Magasin, arrete: str) -> SignatureCloture | None:
     return trouvees[-1] if trouvees else None
 
 
+MOTIF_CHAINE_ROMPUE = 'chaine_des_arretes_rompue'
+
+#: ⚠️⚠️ CE QUE LA CONTINUITÉ EXIGE, ET CE QU'ELLE NE PEUT PAS EXIGER. Deux
+#: arrêtés se succèdent si le second est POSTÉRIEUR au premier — c'est tout ce
+#: que ce module peut établir. Il ne peut PAS exiger qu'ils soient distants
+#: d'un an : rien dans IFRS 17 n'impose une périodicité annuelle des états, et
+#: §98 vise « la période », que l'entité définit. Un arrêté semestriel, ou un
+#: exercice décalé, sont légitimes.
+#:
+#: ⚠️ CE QU'IL REFUSE EST DONC ÉTROIT ET EXACT : un arrêté antérieur ou égal.
+#: Une ouverture qui viendrait d'une clôture postérieure inverserait le temps ;
+#: une ouverture prise sur le MÊME arrêté ferait boucler l'exercice sur
+#: lui-même, et le solde de clôture deviendrait sa propre origine.
+#:
+#: ⚠️ ET IL NE VÉRIFIE PAS L'ABSENCE DE TROU. Si l'entité a clôturé 2025 puis
+#: 2027 sans 2026, la chaîne 2025 → 2027 passe ici. Le magasin ne sait pas
+#: quels arrêtés AURAIENT DÛ exister — il ne connaît que ceux qu'on lui a
+#: remis. La limite est nommée plutôt que comblée par un contrôle que les
+#: paramètres ne permettent pas.
+LIMITE_DE_LA_CHAINE = (
+    "⚠️ CE CONTRÔLE ÉTABLIT QUE L'ARRÊTÉ SUIVANT EST POSTÉRIEUR, RIEN DE "
+    "PLUS. Il n'impose aucune périodicité — IFRS 17 n'en fixe pas, et §98 "
+    "vise « la période » que l'entité définit — et il ne peut pas détecter un "
+    "arrêté MANQUANT : le magasin ne connaît que les clôtures qu'on lui a "
+    "remises, jamais celles qui auraient dû exister.")
+
+
+def chainer(magasin: Magasin, cle: CleCloture,
+            arrete_suivant: str) -> Soldes:
+    """La clôture d'un arrêté devient l'ouverture du SUIVANT, nommément.
+
+    ⚠️ CETTE FONCTION AJOUTE À `servir_comme_ouverture` LA SEULE CHOSE QU'ELLE
+    NE VÉRIFIAIT PAS : que l'arrêté d'arrivée succède bien à celui de départ.
+    Les deux contrôles sont cumulatifs et aucun n'absorbe l'autre — une
+    clôture signée peut être chaînée à l'envers, une clôture bien chaînée peut
+    n'être signée par personne.
+    """
+    _exiger_arrete(arrete_suivant, "l'arrêté de destination du chaînage")
+    if arrete_suivant <= cle.arrete:
+        sens = ('le même arrêté' if arrete_suivant == cle.arrete
+                else 'un arrêté ANTÉRIEUR')
+        raise RefusCloture(
+            MOTIF_CHAINE_ROMPUE,
+            f"la clôture {cle.texte} ne peut pas ouvrir {arrete_suivant} : "
+            f"c'est {sens}. ⚠️ Une ouverture prise sur une clôture postérieure "
+            f"inverserait le temps ; prise sur le MÊME arrêté, elle ferait "
+            f"boucler l'exercice sur lui-même — le solde de clôture "
+            f"deviendrait sa propre origine, et l'articulation "
+            f"« ouverture + mouvements = clôture » n'aurait plus de sens. "
+            + LIMITE_DE_LA_CHAINE)
+    return servir_comme_ouverture(magasin, cle)
+
+
 def servir_comme_ouverture(magasin: Magasin, cle: CleCloture) -> Soldes:
     """La clôture d'un arrêté devient l'ouverture du suivant — SI ELLE EST
     SIGNÉE. ⚠️ C'EST LE SEUL POINT DE CE MODULE QUI REFUSE POUR SIGNATURE.
@@ -549,7 +604,9 @@ def servir_comme_ouverture(magasin: Magasin, cle: CleCloture) -> Soldes:
     plutôt que comblée par un contrôle que les paramètres ne permettent pas.
 
     ⚠️ LA CONTINUITÉ DE LA CHAÎNE — que l'arrêté suivant succède bien à
-    celui-ci — n'est PAS vérifiée ici : c'est le lot M4.
+    celui-ci — n'est pas vérifiée ici : elle exige de connaître l'arrêté de
+    destination, que cette fonction ne reçoit pas. C'est `chainer` qui la
+    porte, et les deux contrôles se cumulent.
     """
     dossier = dossier_courant(magasin, cle)
     signature = signature_de(magasin, cle.arrete)
@@ -567,6 +624,105 @@ def servir_comme_ouverture(magasin: Magasin, cle: CleCloture) -> Soldes:
             f"ENTRER DANS LA CHAÎNE : un solde d'ouverture engage tout "
             f"l'exercice qui en descend, et personne ne répond de celui-ci.")
     return dossier.cloture
+
+
+#: Version du format de fichier. Elle est ÉCRITE dans le fichier : une
+#: relecture doit pouvoir REFUSER un format qu'elle ne connaît pas plutôt que
+#: de l'interpréter de travers.
+FORMAT_CLOTURES = 'actuaria.ifrs17.clotures/1'
+
+MOTIF_FORMAT_INCONNU = 'format_de_magasin_inconnu'
+
+
+def _en_dict(magasin: Magasin) -> dict:
+    """La forme sérialisée — ordre FIXE, mêmes données, mêmes octets.
+
+    ⚠️⚠️ ET L'ORDRE EST CELUI DU DÉPÔT, PAS UN TRI. C'est la seule différence
+    avec `registre._en_dict`, qui trie ses groupes — et la recopier aurait
+    cassé ce module en silence. `dossier_courant` rend `trouves[-1]`, c'est-à-
+    dire LA DERNIÈRE VERSION DÉPOSÉE, et sa docstring dit pourquoi : le
+    numéro de version est une déclaration de l'appelant, l'ordre de dépôt est
+    le seul fait que le magasin constate. Trier ferait remonter une
+    rectification avant la clôture qu'elle corrige.
+    ⚠️ La détermination des octets n'exige pas de trier : le même magasin a le
+    même ordre. Le tri servait au registre parce que ses groupes n'ont pas
+    d'ordre propre ; les dépôts, si.
+    """
+    return {
+        'format': FORMAT_CLOTURES,
+        'entite': magasin.entite,
+        'signatures': [
+            {'arrete': s.arrete, 'statut': s.statut,
+             'declarant': s.declarant, 'qualite': s.qualite,
+             'portefeuilles': list(s.portefeuilles),
+             'verdict': s.verdict, 'motif': s.motif}
+            for s in magasin.signatures
+        ],
+        'dossiers': [
+            {
+                'nature': d.cle.nature,
+                'cle_groupe': d.cle.cle_groupe,
+                'arrete': d.cle.arrete,
+                'ouverture': list(d.ouverture),
+                'cloture': list(d.cloture),
+                'version': d.version,
+                'motif': d.motif,
+                'mouvements': [
+                    {'poste': m.poste, 'axe': m.axe, 'montant': m.montant,
+                     'libelle': m.libelle}
+                    for m in d.mouvements
+                ],
+            }
+            for d in magasin.dossiers
+        ],
+    }
+
+
+def ecrire(magasin: Magasin, chemin) -> Path:
+    """Écrit le magasin en JSON. Déterministe : mêmes données, mêmes octets."""
+    chemin = Path(chemin)
+    chemin.parent.mkdir(parents=True, exist_ok=True)
+    chemin.write_text(
+        json.dumps(_en_dict(magasin), ensure_ascii=False, indent=2) + '\n',
+        encoding='utf-8')
+    return chemin
+
+
+def relire(chemin) -> Magasin:
+    """Relit un magasin écrit par `ecrire`. REFUSE un format inconnu.
+
+    ⚠️ LE VERDICT DE SIGNATURE EST RELU TEL QUEL, JAMAIS RECALCULÉ. Il dit ce
+    que le contrôle établissait AU MOMENT DE L'APPOSITION ; le refaire à la
+    relecture ferait changer l'histoire dès que le vocabulaire du contrôle
+    évolue — et une clôture signée en 2027 doit se relire en 2030 telle
+    qu'elle a été signée.
+    """
+    brut = json.loads(Path(chemin).read_text(encoding='utf-8'))
+    fmt = brut.get('format')
+    if fmt != FORMAT_CLOTURES:
+        raise RefusCloture(
+            MOTIF_FORMAT_INCONNU,
+            f"format de magasin inconnu : « {fmt} ». Ce module lit "
+            f"« {FORMAT_CLOTURES} ». Interpréter un format qu'on ne connaît "
+            f"pas reviendrait à deviner des soldes et des signatures.")
+    return Magasin(
+        entite=brut['entite'],
+        dossiers=tuple(
+            DossierCloture(
+                cle=CleCloture(d['nature'], d['cle_groupe'], d['arrete']),
+                ouverture=Soldes(*d['ouverture']),
+                mouvements=tuple(
+                    Mouvement(m['poste'], m['axe'], m['montant'],
+                              m['libelle'])
+                    for m in d['mouvements']),
+                cloture=Soldes(*d['cloture']),
+                version=int(d['version']), motif=d['motif'])
+            for d in brut['dossiers']),
+        signatures=tuple(
+            SignatureCloture(s['arrete'], s['statut'], s['declarant'],
+                             s['qualite'], tuple(s['portefeuilles']),
+                             s['verdict'], s['motif'])
+            for s in brut.get('signatures', ())))
 
 
 def resume(magasin: Magasin) -> str:
@@ -611,7 +767,7 @@ def resume(magasin: Magasin) -> str:
             f"dans la chaîne.")
     lignes.append(
         "  ⚠️ CE QUE CE MAGASIN N'ÉTABLIT PAS : que l'ouverture d'un premier "
-        "exercice soit celle qui a été AUDITÉE. Il constate une signature "
-        "apposée ICI, jamais un audit mené ailleurs. Et la CONTINUITÉ de la "
-        "chaîne d'un arrêté au suivant n'est pas encore vérifiée.")
+        "exercice soit celle qui a été AUDITÉE — il constate une signature "
+        "apposée ICI, jamais un audit mené ailleurs ; ni qu'un arrêté MANQUE "
+        "entre deux clôtures, n'en connaissant que ce qu'on lui a remis.")
     return '\n'.join(lignes)
