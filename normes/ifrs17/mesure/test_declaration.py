@@ -189,8 +189,21 @@ class Y3_LOutilExiger(unittest.TestCase):
                 importes |= {a.name.split('.')[0] for a in n.names}
             elif isinstance(n, ast.ImportFrom):
                 importes.add((n.module or '').split('.')[0])
-        self.assertEqual(importes, {'re', 'unicodedata'},
-                         f"imports inattendus : {importes}")
+        # ⚠️ L'INVARIANT PORTE SUR SA RAISON, PAS SUR UNE LISTE DE DEUX NOMS.
+        # Il interdisait `{'re', 'unicodedata'}` à l'identique, ce qui l'a
+        # fait échouer le jour où `typing.NamedTuple` est devenu nécessaire —
+        # alors que `typing` n'est appelant de rien. Ce qu'il protège, c'est
+        # le SENS de la dépendance : ce module ne doit connaître AUCUN module
+        # du dépôt, sinon il devient le maître de ses appelants. La
+        # bibliothèque standard ne crée pas ce lien.
+        du_depot = importes & {'normes', 'core', 'direction_non_vie',
+                               'direction_vie_epre', 'scripts',
+                               'direction_sante_prevoyance'}
+        self.assertEqual(du_depot, set(),
+                         f"ce module transversal importe du dépôt : {du_depot}")
+        self.assertTrue(importes <= {'re', 'unicodedata', 'typing'},
+                        f"imports hors bibliothèque standard connue : "
+                        f"{importes}")
         print(f"    OK Y3c : le controle transversal n'importe que "
               f"{sorted(importes)} — aucune porte")
 

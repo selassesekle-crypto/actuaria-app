@@ -9,20 +9,32 @@ fait croire sur parole.
 import unittest
 
 from normes.ifrs17.mesure.declaration import (
+    DEMONSTRATION_INCOHERENCE_D_ENSEMBLE,
+    FORME_ARRETE,
     MARQUEURS_DE_NON_SIGNATURE,
+    MOTIF_CONTEXTE_INVALIDE,
     MOTIF_DECLARANT_NON_HABILITE,
+    MOTIF_PERIMETRE_DISCORDANT,
     MOTIF_STATUT_NON_SIGNE,
     QUALITE_ENTITE,
     QUALITE_TIERS,
     QUALITES,
+    ContexteEvaluation,
+    PerimetreDeclare,
     exiger_declaration_opposable,
+    exiger_ensemble_coherent,
 )
 from normes.ifrs17.mesure.lrc_paa import RefusMesure
+
+PTF = ('AUTO_TR', 'MRH', 'GAV', 'RC_AUTO', 'RC_PRO', 'DO')
+CONTEXTE = ContexteEvaluation(arrete='2026-12-31', portefeuilles=PTF)
+PERIMETRE = PerimetreDeclare(arrete='2026-12-31', portefeuilles=PTF)
 
 
 def _opposable(**kw):
     base = {'statut': 'signee le 12/06/2026', 'declarant': 'directrice technique',
-            'qualite': QUALITE_ENTITE, 'erreur': RefusMesure}
+            'qualite': QUALITE_ENTITE, 'erreur': RefusMesure,
+            'perimetre': PERIMETRE, 'contexte': CONTEXTE}
     base.update(kw)
     return exiger_declaration_opposable(**base)
 
@@ -122,6 +134,141 @@ class T2_LaQualiteEstUnSecondChamp(unittest.TestCase):
         self.assertEqual(QUALITES, (QUALITE_ENTITE, QUALITE_TIERS))
 
 
+class T4_LeTroisiemeControle_POUR_QUOI(unittest.TestCase):
+    """⚠️⚠️ LE CAS LE PLUS DANGEREUX : signée, par la bonne entité, et FAUSSE.
+
+    Une courbe de l'arrêté précédent franchit les deux premiers contrôles.
+    C'est le seul des trois défauts qui NE LAISSE AUCUNE TRACE — les montants
+    qui en descendent restent plausibles.
+    """
+
+    def test_une_courbe_PERIMEE_est_refusee(self):
+        with self.assertRaises(RefusMesure) as e:
+            _opposable(perimetre=PerimetreDeclare(arrete='2025-12-31',
+                                                  portefeuilles=PTF))
+        self.assertEqual(e.exception.motif, MOTIF_PERIMETRE_DISCORDANT)
+        self.assertIn('PÉRIMÉE', str(e.exception))
+        self.assertIn('aucune trace', str(e.exception))
+
+    def test_une_couverture_PARTIELLE_est_refusee_et_nomme_les_manquants(self):
+        """⚠️ Cinq portefeuilles sur six : silencieux jusqu'ici."""
+        with self.assertRaises(RefusMesure) as e:
+            _opposable(perimetre=PerimetreDeclare(arrete='2026-12-31',
+                                                  portefeuilles=PTF[:5]))
+        self.assertEqual(e.exception.motif, MOTIF_PERIMETRE_DISCORDANT)
+        self.assertIn("'DO'", str(e.exception))
+        self.assertIn('SILENCIEUSE', str(e.exception))
+
+    def test_couvrir_DAVANTAGE_que_l_evalue_passe(self):
+        """La déclaration doit couvrir AU MOINS l'évalué, pas exactement."""
+        _opposable(perimetre=PerimetreDeclare(
+            arrete='2026-12-31', portefeuilles=PTF + ('SANTE', 'PREVOYANCE')))
+
+    def test_sans_contexte_le_controle_est_IMPOSSIBLE_et_le_dit(self):
+        for absent in ({'perimetre': None}, {'contexte': None}):
+            with self.assertRaises(RefusMesure, msg=str(absent)) as e:
+                _opposable(**absent)
+            self.assertEqual(e.exception.motif, MOTIF_CONTEXTE_INVALIDE)
+            self.assertIn("IL EST IMPOSSIBLE", str(e.exception))
+
+    def test_un_arrete_hors_ISO_est_refuse_plutot_que_devine(self):
+        """⚠️ Parser « 31/12/2026 » ferait passer deux dates pour une."""
+        with self.assertRaises(RefusMesure) as e:
+            _opposable(perimetre=PerimetreDeclare(arrete='31/12/2026',
+                                                  portefeuilles=PTF))
+        self.assertIn('AAAA-MM-JJ', str(e.exception))
+
+    def test_la_forme_de_l_arrete_est_STRICTE_et_le_reste(self):
+        """⚠️ Un verrou sur la décision « refuser plutôt que deviner ».
+
+        Assouplir cette expression pour accepter « 31/12/2026 » rouvrirait
+        le parsing, donc la possibilité que deux dates distinctes soient
+        prises pour la même.
+        """
+        self.assertTrue(FORME_ARRETE.match('2026-12-31'))
+        for mauvais in ('31/12/2026', '2026-12-31 ', '26-12-31', '2026-12',
+                        '2026/12/31', 'le 31 decembre 2026'):
+            self.assertIsNone(FORME_ARRETE.match(mauvais), msg=mauvais)
+
+    def test_un_contexte_sans_portefeuille_est_refuse(self):
+        """Sinon la couverture serait suffisante trivialement."""
+        with self.assertRaises(RefusMesure) as e:
+            _opposable(contexte=ContexteEvaluation(arrete='2026-12-31',
+                                                   portefeuilles=()))
+        self.assertEqual(e.exception.motif, MOTIF_CONTEXTE_INVALIDE)
+
+    def test_le_contexte_ne_porte_AUCUN_groupe(self):
+        """⚠️ LA FRONTIÈRE TIENT : `mesure` ne sait pas quels groupes
+        existent, seulement ce qu'on lui demande d'évaluer."""
+        self.assertEqual(ContexteEvaluation._fields,
+                         ('arrete', 'portefeuilles'))
+
+
+class T5_LaQuatriemeQuestion_ENSEMBLE(unittest.TestCase):
+    """⚠️⚠️ TROIS DÉCLARATIONS VALIDES SÉPARÉMENT, UN JEU FAUX.
+
+    Les trois premiers contrôles portent chacun sur UNE déclaration. Celui-ci
+    porte sur l'ENSEMBLE — et le défaut vit entre elles.
+    """
+
+    def _jeu(self, a_courbe, a_conv, a_prime):
+        return {'courbe': PerimetreDeclare(a_courbe, PTF),
+                'convention': PerimetreDeclare(a_conv, PTF),
+                'prime_illiquidite': PerimetreDeclare(a_prime, PTF)}
+
+    def test_trois_arretes_differents_sont_refuses(self):
+        with self.assertRaises(RefusMesure) as e:
+            exiger_ensemble_coherent(
+                perimetres=self._jeu('2026-12-31', '2025-12-31', '2024-12-31'),
+                contexte=CONTEXTE, erreur=RefusMesure)
+        self.assertEqual(e.exception.motif, MOTIF_PERIMETRE_DISCORDANT)
+        self.assertIn('3 arrêtés différents', str(e.exception))
+        self.assertIn('Le défaut est ENTRE elles', str(e.exception))
+
+    def test_chacune_du_jeu_faux_passe_les_TROIS_premiers_controles(self):
+        """⚠️ LA DÉMONSTRATION, ET C'EST ELLE QUI REND LA QUESTION CITABLE.
+
+        Si l'une échouait aux contrôles individuels, le quatrième serait
+        superflu. Aucune n'échoue.
+        """
+        for nom, arrete in (('courbe', '2026-12-31'),
+                            ('convention', '2025-12-31'),
+                            ('prime', '2024-12-31')):
+            exiger_declaration_opposable(
+                statut='signee', declarant='directrice technique',
+                qualite=QUALITE_ENTITE, erreur=RefusMesure,
+                perimetre=PerimetreDeclare(arrete, PTF),
+                contexte=ContexteEvaluation(arrete, PTF), objet=nom)
+
+    def test_un_ensemble_coherent_MAIS_PERIME_reste_refuse(self):
+        """⚠️ La cohérence ne remplace pas le périmètre, elle s'y ajoute."""
+        with self.assertRaises(RefusMesure) as e:
+            exiger_ensemble_coherent(
+                perimetres=self._jeu('2025-12-31', '2025-12-31', '2025-12-31'),
+                contexte=CONTEXTE, erreur=RefusMesure)
+        self.assertIn('PÉRIMÉ RESTE PÉRIMÉ', str(e.exception))
+
+    def test_un_ensemble_coherent_et_a_jour_passe(self):
+        m = exiger_ensemble_coherent(
+            perimetres=self._jeu('2026-12-31', '2026-12-31', '2026-12-31'),
+            contexte=CONTEXTE, erreur=RefusMesure)
+        self.assertIn('2026-12-31', m)
+        self.assertIn("le seul à regarder l'ensemble", m.lower())
+
+    def test_un_ensemble_vide_est_refuse(self):
+        """Sinon la cohérence serait constatée trivialement."""
+        with self.assertRaises(RefusMesure) as e:
+            exiger_ensemble_coherent(perimetres={}, contexte=CONTEXTE,
+                                     erreur=RefusMesure)
+        self.assertIn('Ran 0 tests', str(e.exception))
+
+    def test_la_demonstration_est_PORTEE_par_le_module(self):
+        """⚠️ Citable plutôt que théorique."""
+        self.assertIn('2026-12-31', DEMONSTRATION_INCOHERENCE_D_ENSEMBLE)
+        self.assertIn('2024-12-31', DEMONSTRATION_INCOHERENCE_D_ENSEMBLE)
+        self.assertIn('un seul calcul', DEMONSTRATION_INCOHERENCE_D_ENSEMBLE)
+
+
 class T3_CeQueLeControleNEtablitPas(unittest.TestCase):
     """⚠️ UN CONTRÔLE QUI NE DIT PAS SA PORTÉE SE FAIT SURÉVALUER."""
 
@@ -135,6 +282,7 @@ class T3_CeQueLeControleNEtablitPas(unittest.TestCase):
         m = _opposable(statut='validee le 30/06', declarant='comite ALM')
         self.assertIn('validee le 30/06', m)
         self.assertIn('comite ALM', m)
+        self.assertIn('2026-12-31', m)
 
     def test_les_marqueurs_sont_une_liste_fermee(self):
         self.assertIn('demonstration', MARQUEURS_DE_NON_SIGNATURE)

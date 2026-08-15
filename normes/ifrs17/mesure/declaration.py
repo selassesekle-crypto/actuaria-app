@@ -40,6 +40,7 @@ cinq autres.
 
 import re
 import unicodedata
+from typing import NamedTuple
 
 #: Les formes de remplissage fictif refusées. ⚠️ LISTE FERMÉE ET COMPARÉE À
 #: LA VALEUR ENTIÈRE APRÈS NORMALISATION — jamais en sous-chaîne.
@@ -53,6 +54,13 @@ PLACEHOLDERS = frozenset({
 MOTIF_NON_RENSEIGNE = 'champ_non_renseigne'
 MOTIF_STATUT_NON_SIGNE = 'declaration_non_signee'
 MOTIF_DECLARANT_NON_HABILITE = 'declarant_non_habilite'
+MOTIF_PERIMETRE_DISCORDANT = 'perimetre_de_validite_discordant'
+MOTIF_CONTEXTE_INVALIDE = 'contexte_d_evaluation_invalide'
+
+#: ⚠️ LA FORME ATTENDUE D'UN ARRÊTÉ, ET ELLE EST STRICTE À DESSEIN. Comparer
+#: « 2026-12-31 » à « 31/12/2026 » exigerait de PARSER, donc de deviner un
+#: format. Ce module refuse de deviner : il impose l'ISO et le dit.
+FORME_ARRETE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 
 #: ⚠️⚠️ LES MARQUEURS D'UNE NON-SIGNATURE DÉCLARÉE — ET ILS SE CHERCHENT EN
 #: SOUS-CHAÎNE, contrairement à `PLACEHOLDERS`. La différence tient au champ :
@@ -94,6 +102,34 @@ MARQUEURS_DE_NON_SIGNATURE = (
 QUALITE_ENTITE = 'ENTITE'
 QUALITE_TIERS = 'TIERS'
 QUALITES = (QUALITE_ENTITE, QUALITE_TIERS)
+
+
+class ContexteEvaluation(NamedTuple):
+    """CE QU'ON DEMANDE D'ÉVALUER — pas ce qui existe.
+
+    ⚠️⚠️ IL NE PORTE AUCUN `Groupe`, ET C'EST DÉLIBÉRÉ. La frontière du
+    paquet tient : `mesure` ne sait toujours pas quels groupes existent, il
+    sait seulement à quel ARRÊTÉ et sur quels PORTEFEUILLES on lui demande de
+    travailler. C'est le minimum qui rende une comparaison possible.
+
+    ⚠️ ET SANS LUI, LE CONTRÔLE DE PÉRIMÈTRE N'EST PAS OMIS, IL EST
+    IMPOSSIBLE : on ne peut pas confronter une déclaration à un périmètre
+    évalué que personne ne tient.
+    """
+    arrete:        str    # 'AAAA-MM-JJ', celui qu'on évalue
+    portefeuilles: tuple  # ceux qu'on évalue réellement
+
+
+class PerimetreDeclare(NamedTuple):
+    """POUR QUOI une déclaration est signée — la troisième question.
+
+    ⚠️ ELLE N'EST RÉDUCTIBLE NI AU STATUT NI À LA QUALITÉ. Une courbe de
+    l'arrêté précédent est SIGNÉE, par la BONNE ENTITÉ, et FAUSSE : §36 b)
+    impose une courbe à la date d'évaluation. C'est le seul des trois défauts
+    qui ne laisse AUCUNE trace — les montants restent plausibles.
+    """
+    arrete:        str    # 'AAAA-MM-JJ', celui que la déclaration couvre
+    portefeuilles: tuple  # ceux qu'elle couvre
 
 
 def normaliser(valeur) -> str:
@@ -143,9 +179,34 @@ def exiger(valeur, champ: str, exigence: str, erreur):
         f"« A_RENSEIGNER ».")
 
 
+def _exiger_arrete_iso(valeur, quoi: str, erreur, motif):
+    """⚠️ L'ISO EST IMPOSÉE PLUTÔT QUE DEVINÉE. Comparer « 2026-12-31 » à
+    « 31/12/2026 » exigerait de parser, donc de supposer un format ; et un
+    format supposé de travers ferait passer deux arrêtés différents pour le
+    même. Ce module refuse, et dit ce qu'il attend."""
+    if not FORME_ARRETE.match(str(valeur or '')):
+        raise erreur(
+            motif,
+            f"{quoi} vaut {valeur!r} : la forme AAAA-MM-JJ est attendue. Les "
+            f"arrêtés se COMPARENT ici, et comparer deux formats différents "
+            f"exigerait d'en deviner un — ce qui ferait passer deux dates "
+            f"distinctes pour la même.")
+
+
 def exiger_declaration_opposable(*, statut, declarant, qualite, erreur,
+                                 perimetre=None, contexte=None,
                                  objet: str = 'cette déclaration') -> str:
-    """DEUX contrôles distincts, parce que ce sont deux faits distincts.
+    """TROIS contrôles distincts, parce que ce sont trois faits distincts.
+
+    ⚠️⚠️ EST-CE SIGNÉ, PAR QUI, ET POUR QUOI. Le troisième a été trouvé après
+    les deux autres, et il porte le cas le plus dangereux : une courbe de
+    l'arrêté précédent est SIGNÉE, par la BONNE ENTITÉ, et FAUSSE. §36 b)
+    impose une courbe à la date d'évaluation. C'est le seul des trois défauts
+    qui NE LAISSE AUCUNE TRACE — les montants restent plausibles.
+
+    ⚠️ ET LE PÉRIMÈTRE N'EST PAS PLUS RÉDUCTIBLE AU STATUT QUE LA QUALITÉ NE
+    L'ÉTAIT. Fondre l'un dans l'autre reproduirait la faille qu'on vient de
+    fermer : trois questions, trois champs.
 
     ⚠️ LE STATUT DIT SI C'EST SIGNÉ, LA QUALITÉ DIT PAR QUI. Aucun des deux
     ne se déduit de l'autre : un jeu de démonstration porte un statut qui le
@@ -203,9 +264,122 @@ def exiger_declaration_opposable(*, statut, declarant, qualite, erreur,
             f"ici. ⚠️ Son statut ne le dirait pas : c'est pourquoi la qualité "
             f"est un champ à part.")
 
+    if perimetre is None or contexte is None:
+        raise erreur(
+            MOTIF_CONTEXTE_INVALIDE,
+            f"{objet} est présentée sans son périmètre de validité ou sans le "
+            f"contexte évalué (reçus {perimetre!r} et {contexte!r}). ⚠️ SANS "
+            f"EUX LE CONTRÔLE N'EST PAS OMIS, IL EST IMPOSSIBLE : on ne peut "
+            f"pas confronter une déclaration à un périmètre que personne ne "
+            f"tient. C'est ce qui a laissé passer une courbe périmée.")
+
+    _exiger_arrete_iso(perimetre.arrete, f"l'arrêté déclaré de {objet}",
+                       erreur, MOTIF_PERIMETRE_DISCORDANT)
+    _exiger_arrete_iso(contexte.arrete, "l'arrêté évalué", erreur,
+                       MOTIF_CONTEXTE_INVALIDE)
+    if not contexte.portefeuilles:
+        raise erreur(
+            MOTIF_CONTEXTE_INVALIDE,
+            "le contexte n'évalue aucun portefeuille. Une couverture jugée "
+            "suffisante sur un ensemble vide le serait trivialement.")
+
+    if perimetre.arrete != contexte.arrete:
+        raise erreur(
+            MOTIF_PERIMETRE_DISCORDANT,
+            f"{objet} couvre l'arrêté {perimetre.arrete} et l'évaluation "
+            f"porte sur {contexte.arrete}. ⚠️ ELLE EST SIGNÉE, PAR LA BONNE "
+            f"ENTITÉ, ET PÉRIMÉE : §36 b) impose des taux à la date "
+            f"d'évaluation. C'est le défaut qui ne laisse aucune trace — les "
+            f"montants qui en descendent restent plausibles.")
+
+    manquants = sorted(set(contexte.portefeuilles)
+                       - set(perimetre.portefeuilles))
+    if manquants:
+        raise erreur(
+            MOTIF_PERIMETRE_DISCORDANT,
+            f"{objet} ne couvre pas {len(manquants)} des "
+            f"{len(set(contexte.portefeuilles))} portefeuilles évalués : "
+            f"{manquants}. ⚠️ UNE COUVERTURE PARTIELLE EST SILENCIEUSE — le "
+            f"calcul aboutit sur les portefeuilles couverts et laisse les "
+            f"autres sans déclaration, sans que rien ne le signale. La "
+            f"déclaration doit couvrir AU MOINS ce qui est évalué ; couvrir "
+            f"davantage est sans conséquence.")
+
     return (f"{objet} : statut « {statut} », déclarée par « {declarant} » de "
-            f"qualité {QUALITE_ENTITE}. ⚠️ CE QUE CE CONTRÔLE ÉTABLIT ET CE "
-            f"QU'IL N'ÉTABLIT PAS : il constate une signature DÉCLARÉE par un "
-            f"déclarant DÉCLARÉ de la bonne qualité. Il ne peut pas attraper "
-            f"un statut qui ment, et ne vaut donc pas vérification de la "
-            f"signature elle-même.")
+            f"qualité {QUALITE_ENTITE}, pour l'arrêté {perimetre.arrete} et "
+            f"{len(set(perimetre.portefeuilles))} portefeuille(s) couvrant "
+            f"les {len(set(contexte.portefeuilles))} évalué(s). ⚠️ CE QUE CE "
+            f"CONTRÔLE ÉTABLIT ET CE QU'IL N'ÉTABLIT PAS : il constate une "
+            f"signature DÉCLARÉE, par un déclarant DÉCLARÉ de la bonne "
+            f"qualité, pour un périmètre DÉCLARÉ qui couvre l'évalué. Il ne "
+            f"peut pas attraper un statut qui ment, et ne vaut donc pas "
+            f"vérification de la signature elle-même.")
+
+
+#: ⚠️⚠️ LA QUATRIÈME QUESTION, ET ELLE N'EST PAS DANS LES TROIS AUTRES.
+#: Est-ce signé · par qui · pour quoi — les trois portent sur UNE déclaration.
+#: Celle-ci porte sur L'ENSEMBLE : trois déclarations irréprochables prises
+#: séparément peuvent alimenter un même calcul avec TROIS ARRÊTÉS DIFFÉRENTS.
+#: Aucun contrôle par déclaration ne peut le voir — le défaut est ENTRE elles.
+#:
+#: ⚠️ ET CE DÉPÔT AVAIT DÉJÀ ÉCRIT LA RÈGLE, POUR AUTRE CHOSE. « Deux états
+#: produits séparément peuvent chacun boucler sur eux-mêmes et se contredire
+#: entre eux » figure à quatre endroits — pour le §80, pour le §63, pour la
+#: réconciliation. Elle n'avait jamais été retournée contre les DÉCLARATIONS
+#: elles-mêmes. La règle existait, elle portait sur autre chose.
+DEMONSTRATION_INCOHERENCE_D_ENSEMBLE = (
+    "la courbe signée le 05/01/2027 pour l'arrêté 2026-12-31, la convention "
+    "signée le 20/01/2026 pour l'arrêté 2025-12-31, et la prime "
+    "d'illiquidité signée le 18/01/2025 pour l'arrêté 2024-12-31 : chacune "
+    "est signée, par l'entité, et valide pour SON arrêté — et les trois "
+    "alimentent un seul calcul.")
+
+
+def exiger_ensemble_coherent(*, perimetres: dict, contexte, erreur) -> str:
+    """LA QUATRIÈME QUESTION : ensemble, sont-elles cohérentes ?
+
+    ⚠️ ELLE EST IRRÉDUCTIBLE AUX TROIS AUTRES, qui portent chacune sur UNE
+    déclaration. Ici le défaut vit ENTRE elles : voir
+    `DEMONSTRATION_INCOHERENCE_D_ENSEMBLE`, qui n'est pas une illustration
+    mais le cas mesuré — les trois déclarations y passent les trois premiers
+    contrôles et le jeu reste faux.
+
+    ⚠️ ET ELLE NE SE SUBSTITUE PAS À EUX : un ensemble cohérent de trois
+    déclarations toutes périmées du même arrêté serait cohérent et faux. Les
+    quatre contrôles se cumulent, aucun n'absorbe l'autre.
+    """
+    if not perimetres:
+        raise erreur(
+            MOTIF_PERIMETRE_DISCORDANT,
+            "aucune déclaration fournie à la vérification d'ensemble. Une "
+            "cohérence constatée sur un ensemble vide le serait "
+            "trivialement, et ce serait la même faute qu'une gate rendant "
+            "« Ran 0 tests » en sortant 0.")
+
+    arretes = {nom: p.arrete for nom, p in perimetres.items()}
+    distincts = sorted(set(arretes.values()))
+    if len(distincts) > 1:
+        detail = ' · '.join(f'{nom} → {a}' for nom, a in sorted(arretes.items()))
+        raise erreur(
+            MOTIF_PERIMETRE_DISCORDANT,
+            f"les {len(perimetres)} déclarations qui alimentent ce calcul "
+            f"portent {len(distincts)} arrêtés différents : {detail}. ⚠️ "
+            f"CHACUNE PEUT ÊTRE IRRÉPROCHABLE PRISE SÉPARÉMENT — signée, par "
+            f"l'entité, valide pour SON arrêté — et l'ensemble reste faux. "
+            f"Le défaut est ENTRE elles, et aucun contrôle par déclaration ne "
+            f"le voit.")
+
+    if distincts[0] != contexte.arrete:
+        raise erreur(
+            MOTIF_PERIMETRE_DISCORDANT,
+            f"les {len(perimetres)} déclarations s'accordent sur l'arrêté "
+            f"{distincts[0]}, mais l'évaluation porte sur {contexte.arrete}. "
+            f"⚠️ UN ENSEMBLE COHÉRENT ET PÉRIMÉ RESTE PÉRIMÉ : la cohérence "
+            f"d'ensemble ne remplace pas le contrôle de périmètre, elle "
+            f"s'y ajoute.")
+
+    return (f"{len(perimetres)} déclarations — {', '.join(sorted(perimetres))} "
+            f"— s'accordent sur l'arrêté {contexte.arrete}, celui qui est "
+            f"évalué. ⚠️ CE CONTRÔLE EST LE SEUL À REGARDER L'ENSEMBLE : les "
+            f"trois autres portent chacun sur une déclaration, et un jeu de "
+            f"déclarations toutes valides séparément peut rester faux.")
