@@ -155,6 +155,45 @@ PANIERS_TRIBUTAIRES_D_UNE_DECLARATION = frozenset({PANIER_COMPLET_47,
 SENSIBILITE_ACTUALISATION = {0.00: 747, 0.01: 690, 0.02: 640,
                              0.03: 587, 0.04: 539}
 
+#: ⚠️⚠️ DEUX CONVENTIONS, DEUX SÉRIES, ET AUCUNE NE REMPLACE L'AUTRE. Les
+#: comptages publiés jusqu'ici viennent de la convention A. La convention E —
+#: chaque flux à sa propre échéance, les frais de maintenance à 0,5 an parce
+#: qu'ils sont encourus sur la période de COUVERTURE et non de règlement — en
+#: donne d'autres. Les DEUX sont reproduites ici sur les 2 000 contrats
+#: livrés, à l'unité près.
+#:
+#: ⚠️ ET E N'EST PAS SIGNÉE : elle vient d'un fichier de démonstration dont
+#: chaque ligne porte « le producteur n'est PAS l'entité au sens du §36 ».
+#: Remplacer A par E ferait passer pour retenue une convention qui ne l'est
+#: pas. Les deux vivent donc côte à côte, chacune sous son étiquette — ce que
+#: le mécanisme des trois déclarations existe précisément pour rendre visible.
+CONVENTION_A = 'A'
+CONVENTION_E = 'E'
+CONVENTIONS_MESUREES = (CONVENTION_A, CONVENTION_E)
+
+SENSIBILITE_PAR_CONVENTION = {
+    CONVENTION_A: {0.00: 747, 0.01: 690, 0.02: 640, 0.03: 587, 0.04: 539},
+    CONVENTION_E: {0.00: 747, 0.01: 688, 0.02: 637, 0.03: 579, 0.04: 532},
+}
+
+LIBELLE_DES_CONVENTIONS = {
+    CONVENTION_A: (
+        "durée moyenne de règlement par portefeuille appliquée aux sinistres "
+        "attendus, frais de gestion et ajustement pour risque ; frais "
+        "d'acquisition ET DE MAINTENANCE laissés en nominal"),
+    CONVENTION_E: (
+        "chaque flux à sa propre échéance — sinistres, frais de gestion et "
+        "ajustement pour risque à la durée de règlement du portefeuille ; "
+        "FRAIS DE MAINTENANCE À 0,5 AN car encourus sur la période de "
+        "COUVERTURE ; frais d'acquisition en nominal car déjà décaissés"),
+}
+
+#: ⚠️ L'ÉCART A/E EST FAIBLE ICI, ET C'EST UNE PROPRIÉTÉ DE CE PORTEFEUILLE,
+#: PAS UN RÉSULTAT GÉNÉRAL. Sept contrats à 4 % — mais les frais de
+#: maintenance y sont petits devant les sinistres ; sur un portefeuille à
+#: frais lourds, l'écart s'ouvrirait.
+ECART_A_VS_E_A_4PCT = 7
+
 #: ⚠️⚠️ LA CONVENTION D'ACTUALISATION EST ELLE-MÊME UNE DÉCISION, ET PAS UNE
 #: PETITE. Ce n'est pas seulement la COURBE qui se déclare (§36 b), c'est aussi
 #: CE QU'ON ACTUALISE. Mesuré à 4 % sur le portefeuille livré :

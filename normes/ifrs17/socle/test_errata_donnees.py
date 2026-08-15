@@ -7,7 +7,11 @@ from normes.ifrs17.mesure.declaration import est_renseigne
 from normes.ifrs17.socle.errata_donnees import (
     COLONNE_DESAVOUEE_TEST_47,
     COMPTAGE_DEFICITAIRES,
+    CONVENTION_A,
     CONVENTION_DES_SENSIBILITES,
+    CONVENTION_E,
+    CONVENTIONS_MESUREES,
+    ECART_A_VS_E_A_4PCT,
     ECART_ENTRE_CONVENTIONS_A_4PCT,
     ECUEIL_TAUX_INCOMPLET,
     EFFET_ACTUALISATION_A_4PCT,
@@ -16,6 +20,7 @@ from normes.ifrs17.socle.errata_donnees import (
     FORME_REFUS,
     FORME_TECHNIQUE,
     FORMES_PRIME_ILLIQUIDITE,
+    LIBELLE_DES_CONVENTIONS,
     MOTIF_NON_OPPOSABLE_CEIOPS,
     MOTIF_OPPOSABLE_ECART_DE_LIQUIDITE,
     PANIER_AVEC_FRAIS_GESTION,
@@ -26,6 +31,7 @@ from normes.ifrs17.socle.errata_donnees import (
     PANIERS_SANS_COMPTAGE_ETABLI,
     PANIERS_TRIBUTAIRES_D_UNE_DECLARATION,
     SENSIBILITE_ACTUALISATION,
+    SENSIBILITE_PAR_CONVENTION,
     SourceDesavouee,
     qualifier_prime_illiquidite,
     refuser_source_test_47,
@@ -153,6 +159,51 @@ class T5_LeQuatriemePanierNAPasDeComptage(unittest.TestCase):
     def test_la_sensibilite_nomme_sa_convention(self):
         self.assertIn('durée moyenne', CONVENTION_DES_SENSIBILITES)
         self.assertIn('nominal', CONVENTION_DES_SENSIBILITES)
+
+
+class T8_DeuxConventionsMesureesCoteACote(unittest.TestCase):
+    """⚠️ AUCUNE NE REMPLACE L'AUTRE — E n'est pas signée."""
+
+    def test_les_deux_series_sont_portees(self):
+        self.assertEqual(set(SENSIBILITE_PAR_CONVENTION), set(CONVENTIONS_MESUREES))
+        self.assertEqual(SENSIBILITE_PAR_CONVENTION[CONVENTION_A],
+                         {0.00: 747, 0.01: 690, 0.02: 640, 0.03: 587, 0.04: 539})
+        self.assertEqual(SENSIBILITE_PAR_CONVENTION[CONVENTION_E],
+                         {0.00: 747, 0.01: 688, 0.02: 637, 0.03: 579, 0.04: 532})
+
+    def test_les_deux_partent_du_meme_point_a_taux_nul(self):
+        """⚠️ À taux nul aucune actualisation n'a lieu : les conventions
+        ne peuvent PAS differer là, et c'est un contrôle de cohérence."""
+        self.assertEqual(SENSIBILITE_PAR_CONVENTION[CONVENTION_A][0.00],
+                         SENSIBILITE_PAR_CONVENTION[CONVENTION_E][0.00])
+
+    def test_E_est_toujours_au_plus_egale_a_A(self):
+        """E actualise EN PLUS les frais de maintenance : le panier baisse,
+        donc le comptage ne peut pas monter."""
+        for taux, n_a in SENSIBILITE_PAR_CONVENTION[CONVENTION_A].items():
+            self.assertLessEqual(SENSIBILITE_PAR_CONVENTION[CONVENTION_E][taux],
+                                 n_a, msg=f'taux {taux}')
+
+    def test_l_ecart_a_4pct_est_mesure(self):
+        self.assertEqual(
+            SENSIBILITE_PAR_CONVENTION[CONVENTION_A][0.04]
+            - SENSIBILITE_PAR_CONVENTION[CONVENTION_E][0.04],
+            ECART_A_VS_E_A_4PCT)
+
+    def test_chaque_convention_porte_son_libelle(self):
+        for c in CONVENTIONS_MESUREES:
+            self.assertIn(c, LIBELLE_DES_CONVENTIONS)
+            self.assertTrue(LIBELLE_DES_CONVENTIONS[c])
+
+    def test_le_libelle_de_E_nomme_ce_qui_la_distingue(self):
+        """⚠️ La maintenance à 0,5 an — encourue sur la COUVERTURE."""
+        self.assertIn('0,5 AN', LIBELLE_DES_CONVENTIONS[CONVENTION_E])
+        self.assertIn('COUVERTURE', LIBELLE_DES_CONVENTIONS[CONVENTION_E])
+
+    def test_la_serie_historique_reste_celle_de_A(self):
+        """⚠️ Ce qui a été publié vient de A, et le rester est honnête."""
+        self.assertEqual(SENSIBILITE_ACTUALISATION,
+                         SENSIBILITE_PAR_CONVENTION[CONVENTION_A])
 
 
 class T6_LaPrimeDIlliquiditeATroisFormes(unittest.TestCase):
