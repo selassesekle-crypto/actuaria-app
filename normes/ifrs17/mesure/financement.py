@@ -184,7 +184,7 @@ def revenu_de_financement(cumul_charges: float, cumul_revenu_anterieur: float,
 
 def roll_forward(*, prime: float, nb_periodes: int, taux: TauxVerrouille,
                  contexte, frais_acquisition: float = 0.0,
-                 eligibilite_declaree: bool = False
+                 verdict_53_declare: str = ''
                  ) -> tuple[ArreteFinancement, ...]:
     """Le LRC arrêté par arrêté, prime encaissée en totalité à l'origine.
 
@@ -213,7 +213,7 @@ def roll_forward(*, prime: float, nb_periodes: int, taux: TauxVerrouille,
         erreur=RefusMesure, objet="le taux verrouillé (B72 a)")
 
     lrc = lrc_initial(prime, frais_acquisition,
-                      eligibilite_declaree=eligibilite_declaree)
+                      verdict_53_declare=verdict_53_declare)
     amortissement = frais_acquisition / nb_periodes
     cumul_charges = cumul_revenu = 0.0
     arretes = []
@@ -229,7 +229,7 @@ def roll_forward(*, prime: float, nb_periodes: int, taux: TauxVerrouille,
             lrc, amortissement_frais_acquisition=amortissement,
             revenue_periode=revenu_prime + revenu_fin,
             charge_financiere=charge,
-            eligibilite_declaree=eligibilite_declaree,
+            verdict_53_declare=verdict_53_declare,
             financement_significatif=True)
         arretes.append(ArreteFinancement(
             periode=periode, lrc_ouverture=lrc, charge_financiere=charge,

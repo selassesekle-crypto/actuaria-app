@@ -21,6 +21,7 @@ from normes.ifrs17.mesure.financement import (
 )
 from normes.ifrs17.mesure.lrc_paa import (
     MOTIF_FINANCEMENT_NON_CONSTRUIT,
+    VERDICT_53_ELIGIBLE,
     RefusMesure,
     lrc_suivant,
 )
@@ -53,7 +54,7 @@ def _taux():
 def _mesure():
     return roll_forward_ctx(prime=ENTREE_5_6_1['prime'],
                         nb_periodes=ENTREE_5_6_1['duree_couverture_ans'],
-                        taux=_taux(), eligibilite_declaree=True)
+                        taux=_taux(), verdict_53_declare=VERDICT_53_ELIGIBLE)
 
 
 class T1_LOracle5_6_1(unittest.TestCase):
@@ -158,7 +159,7 @@ class T1b_LAssietteEstTRANCHEE(unittest.TestCase):
         return roll_forward_ctx(prime=ANGLE_MORT['prime'],
                             nb_periodes=ANGLE_MORT['duree_couverture'],
                             frais_acquisition=ANGLE_MORT['frais_acquisition'],
-                            taux=t, eligibilite_declaree=True)
+                            taux=t, verdict_53_declare=VERDICT_53_ELIGIBLE)
 
     def test_la_mesure_suit_l_assiette_NETTE_et_PAS_la_brute(self):
         """⚠️⚠️ LE TEST QUI FAIT ECHOUER LA VARIANTE BRUTE.
@@ -228,7 +229,7 @@ class T1c_LeLRCDoitSEteindre(unittest.TestCase):
         """
         t = verrouiller(0.02, '2026-01-01', 'courbe interne', 'Selasse')
         a = roll_forward_ctx(prime=4800.0, nb_periodes=10, frais_acquisition=360.0,
-                         taux=t, eligibilite_declaree=True)
+                         taux=t, verdict_53_declare=VERDICT_53_ELIGIBLE)
         self.assertAlmostEqual(a[-1].lrc_cloture, 0.0, 6)
         self.assertEqual(MOTIF_LRC_NON_ETEINT,
                          'lrc_non_eteint_en_fin_de_couverture')
@@ -241,9 +242,9 @@ class T1c_LeLRCDoitSEteindre(unittest.TestCase):
         que je me suis trompe."""
         t = verrouiller(0.02, '2026-01-01', 'courbe interne', 'Selasse')
         sans = roll_forward_ctx(prime=4800.0, nb_periodes=10, taux=t,
-                            eligibilite_declaree=True)
+                            verdict_53_declare=VERDICT_53_ELIGIBLE)
         avec = roll_forward_ctx(prime=4800.0, nb_periodes=10, taux=t,
-                            frais_acquisition=360.0, eligibilite_declaree=True)
+                            frais_acquisition=360.0, verdict_53_declare=VERDICT_53_ELIGIBLE)
         self.assertAlmostEqual(sans[0].lrc_ouverture, 4800.0, 6)
         self.assertAlmostEqual(avec[0].lrc_ouverture, 4440.0, 6)
         self.assertNotAlmostEqual(sans[0].lrc_cloture, avec[0].lrc_cloture, 2)
@@ -307,7 +308,7 @@ class T3_LeRefusDu55TombeQuandLaChargeArrive(unittest.TestCase):
         n'est fournie."""
         with self.assertRaises(RefusMesure) as ctx:
             lrc_suivant(3000.0, revenue_periode=1000.0,
-                        eligibilite_declaree=True,
+                        verdict_53_declare=VERDICT_53_ELIGIBLE,
                         financement_significatif=True)
         self.assertEqual(ctx.exception.motif,
                          MOTIF_FINANCEMENT_NON_CONSTRUIT)
@@ -316,7 +317,7 @@ class T3_LeRefusDu55TombeQuandLaChargeArrive(unittest.TestCase):
     def test_avec_la_charge_la_mesure_passe(self):
         obtenu = lrc_suivant(3000.0, revenue_periode=1020.0,
                              charge_financiere=60.0,
-                             eligibilite_declaree=True,
+                             verdict_53_declare=VERDICT_53_ELIGIBLE,
                              financement_significatif=True)
         self.assertAlmostEqual(obtenu, 2040.0, 6)
         print(f"    OK N3b : 3000 + 60 - 1020 = {obtenu:.0f}, le refus tombe "

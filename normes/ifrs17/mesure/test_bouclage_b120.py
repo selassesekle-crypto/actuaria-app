@@ -15,7 +15,10 @@ from normes.ifrs17.mesure.bouclage_b120 import (
 )
 from normes.ifrs17.mesure.declaration import ContexteEvaluation
 from normes.ifrs17.mesure.financement import roll_forward, verrouiller
-from normes.ifrs17.mesure.lrc_paa import RefusMesure
+from normes.ifrs17.mesure.lrc_paa import (
+    VERDICT_53_ELIGIBLE,
+    RefusMesure,
+)
 from normes.ifrs17.oracles.ica_222092 import ENTREE_5_6_1, ROLL_FORWARD_5_6_1
 
 CONTEXTE = ContexteEvaluation(arrete='2026-12-31',
@@ -34,7 +37,7 @@ def _mesure():
                     'Selasse Sekle')
     return roll_forward_ctx(prime=ENTREE_5_6_1['prime'],
                         nb_periodes=ENTREE_5_6_1['duree_couverture_ans'],
-                        taux=t, eligibilite_declaree=True)
+                        taux=t, verdict_53_declare=VERDICT_53_ELIGIBLE)
 
 
 class T1_LIdentiteSurLaMesureDuDepot(unittest.TestCase):

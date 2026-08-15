@@ -328,5 +328,37 @@ class T8_CleGroupeEstStable(unittest.TestCase):
         print("    OK T8 : cle ordonnable, comparable, imprimable")
 
 
+class Z_LaCopieDuVocabulaire53EstBRUYANTE(unittest.TestCase):
+    """⚠️⚠️ DEUX COPIES, ET C'EST ASSUMÉ — À UNE CONDITION.
+
+    `mesure.lrc_paa` porte sa propre liste des trois verdicts du §53, parce
+    qu'il ne doit PAS importer le socle : il reçoit le verdict DÉCLARÉ, comme
+    il reçoit le contexte, jamais un `Groupe`.
+
+    ⚠️ C'est donc littéralement une seconde source, et ce dépôt en combat
+    depuis les huit sources de taux. Ce qui rend celle-ci acceptable est
+    exactement ce qui rend `PARAGRAPHE_DES_MODULES` acceptable : SA
+    DIVERGENCE EST BRUYANTE. Ce test échoue si les deux listes s'écartent
+    d'un seul caractère.
+
+    ⚠️ Et il est placé DANS LE SOCLE, pas dans la mesure : c'est le socle qui
+    scelle le verdict, donc c'est lui qui doit crier si une copie dérive.
+    """
+
+    def test_les_trois_verdicts_sont_identiques_de_part_et_d_autre(self):
+        from normes.ifrs17.mesure.lrc_paa import VERDICTS_53
+        self.assertEqual(
+            VERDICTS_53,
+            (PAA_ELIGIBLE, PAA_53A_NON_EVALUEE, PAA_NON_ETABLI),
+            "le vocabulaire du §53 a divergé entre le socle et la mesure")
+
+    def test_il_y_en_a_exactement_TROIS(self):
+        """⚠️ Un quatrième ajouté d'un côté seul passerait le test
+        d'égalité si l'ordre changeait — l'arité se vérifie à part."""
+        from normes.ifrs17.mesure.lrc_paa import VERDICTS_53
+        self.assertEqual(len(VERDICTS_53), 3)
+        self.assertEqual(len(set(VERDICTS_53)), 3)
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

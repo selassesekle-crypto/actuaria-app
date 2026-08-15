@@ -16,7 +16,11 @@ qui ne prouve rien. La propriété qui vaut est CROISÉE, et c'est
 """
 import unittest
 
-from normes.ifrs17.mesure.lrc_paa import RefusMesure, periode_annuelle
+from normes.ifrs17.mesure.lrc_paa import (
+    VERDICT_53_ELIGIBLE,
+    RefusMesure,
+    periode_annuelle,
+)
 from normes.ifrs17.mesure.resultat_80 import (
     MOTIF_ARTICULATION_ROMPUE,
     MOTIF_COMPOSANTE_INVESTISSEMENT,
@@ -29,7 +33,7 @@ from normes.ifrs17.mesure.resultat_80 import (
 COMMUN = {'primes_attendues': 1200.0, 'duree_couverture': 2,
           'frais_acquisition_attribuables': 240.0,
           'frais_maintenance_attribuables': 60.0,
-          'eligibilite_declaree': True}
+          'verdict_53_declare': VERDICT_53_ELIGIBLE}
 
 
 def _periode(**kw):

@@ -15,10 +15,15 @@ from normes.ifrs17.mesure.lrc_paa import (
     MOTIF_FINANCEMENT_NON_CONSTRUIT,
     MOTIF_MONTANT_NEGATIF,
     MOTIF_PRORATA_DEUX_FOIS,
-    MOTIF_SANS_ELIGIBILITE,
     MOTIF_SEPARATION_NON_FOURNIE,
+    MOTIF_VERDICT_53_53A_NON_EVALUEE,
+    MOTIF_VERDICT_53_NON_DECLARE,
+    MOTIF_VERDICT_53_NON_ETABLI,
     PRIME_DEJA_PRORATISEE,
     PRIME_NOMINALE,
+    VERDICT_53_53A_NON_EVALUEE,
+    VERDICT_53_ELIGIBLE,
+    VERDICT_53_NON_ETABLI,
     RefusMesure,
     lrc_initial,
     lrc_suivant,
@@ -45,7 +50,7 @@ def _mesure_5_2():
         frais_non_attribuables=(e['frais_acquisition_non_attribuables']
                                 + e['frais_maintenance_non_attribuables_par_an']),
         sinistres_survenus=0.0,
-        eligibilite_declaree=True)
+        verdict_53_declare=VERDICT_53_ELIGIBLE)
 
 
 class T1_LOracle5_2(unittest.TestCase):
@@ -87,7 +92,7 @@ class T1_LOracle5_2(unittest.TestCase):
         e = ENTREE_5_2
         ouverture = lrc_initial(e['prime'],
                                 e['frais_acquisition_attribuables'],
-                                eligibilite_declaree=True)
+                                verdict_53_declare=VERDICT_53_ELIGIBLE)
         self.assertAlmostEqual(ouverture, 800.0, 6)
         cloture = lrc_suivant(
             ouverture,
@@ -96,7 +101,7 @@ class T1_LOracle5_2(unittest.TestCase):
                 / e['duree_couverture_ans']),
             revenue_periode=revenue_prorata_temporis(
                 e['prime'], e['duree_couverture_ans']),
-            eligibilite_declaree=True)
+            verdict_53_declare=VERDICT_53_ELIGIBLE)
         self.assertAlmostEqual(cloture, ATTENDU_5_2['lrc'], 6)
         print(f"    OK M1c : §55 a) {ouverture:.0f} -> §55 b) "
               f"{cloture:.0f}, terme a terme")
@@ -132,7 +137,7 @@ class T1b_LaSeparationNonFournie(unittest.TestCase):
             frais_acquisition_attribuables=e['frais_acquisition_attribuables'],
             frais_maintenance_attribuables=(
                 e['frais_maintenance_attribuables_an1']),
-            eligibilite_declaree=True)
+            verdict_53_declare=VERDICT_53_ELIGIBLE)
         self.assertIsNone(p.resultat)
         self.assertIsNone(p.autres_charges)
         self.assertEqual(p.motif_resultat, MOTIF_SEPARATION_NON_FOURNIE)
@@ -150,7 +155,7 @@ class T1b_LaSeparationNonFournie(unittest.TestCase):
         e = ENTREE_5_2
         commun = {'primes_attendues': e['prime'],
                   'duree_couverture': e['duree_couverture_ans'],
-                  'eligibilite_declaree': True}
+                  'verdict_53_declare': VERDICT_53_ELIGIBLE}
         declare = periode_annuelle(frais_non_attribuables=0.0, **commun)
         tu = periode_annuelle(**commun)
         self.assertEqual(declare.autres_charges, 0.0)
@@ -224,7 +229,7 @@ class T1d_LaDureeNEstPasEnAnneesEntieres(unittest.TestCase):
         la norme une exigence qu'elle n'a pas."""
         p = periode_annuelle(primes_attendues=320.37, duree_couverture=0.582,
                              frais_non_attribuables=0.0,
-                             eligibilite_declaree=True)
+                             verdict_53_declare=VERDICT_53_ELIGIBLE)
         self.assertGreater(p.revenue, 0)
         self.assertAlmostEqual(p.revenue, 320.37 / 0.582, 6)
         print(f"    OK M1k : duree 0,582 acceptee, revenue "
@@ -246,14 +251,42 @@ class T1d_LaDureeNEstPasEnAnneesEntieres(unittest.TestCase):
 class T2_LesRefus(unittest.TestCase):
     """T2 — ce que le module refuse de mesurer plutôt que de le fausser."""
 
-    def test_sans_eligibilite_declaree_la_mesure_est_refusee(self):
-        """⚠️ §53 S'APPRECIE A LA CREATION DU GROUPE. Ce module ne le
-        reevalue pas, et surtout ne le SUPPOSE pas."""
-        with self.assertRaises(RefusMesure) as ctx:
-            lrc_initial(1000.0, 200.0)
-        self.assertEqual(ctx.exception.motif, MOTIF_SANS_ELIGIBILITE)
-        self.assertIn('§53', str(ctx.exception))
-        print("    OK M2 : sans eligibilite declaree -> refus motive")
+    def test_les_TROIS_etats_du_53_ont_TROIS_motifs_distincts(self):
+        """⚠️⚠️ LE BOOLEEN ECRASAIT TROIS ETATS EN DEUX.
+
+        `NON_ETABLI` et `53A_NON_EVALUEE` devenaient tous deux `False`,
+        indiscernables l'un de l'autre ET d'un refus franc. C'est le nom du
+        motif que consomment les agregats : trois etats, trois noms.
+        """
+        attendus = {
+            '': MOTIF_VERDICT_53_NON_DECLARE,
+            VERDICT_53_NON_ETABLI: MOTIF_VERDICT_53_NON_ETABLI,
+            VERDICT_53_53A_NON_EVALUEE: MOTIF_VERDICT_53_53A_NON_EVALUEE,
+        }
+        for verdict, motif in attendus.items():
+            with self.assertRaises(RefusMesure, msg=verdict) as ctx:
+                lrc_initial(1000.0, 200.0, verdict_53_declare=verdict)
+            self.assertEqual(ctx.exception.motif, motif, msg=verdict)
+        self.assertEqual(len(set(attendus.values())), 3)
+        print("    OK M2 : trois etats du §53 -> trois motifs distincts")
+
+    def test_le_refus_distingue_l_AVEU_de_la_PORTE_OUVERTE(self):
+        """⚠️ Un aveu d'ignorance et une porte ouverte en droit ne sont pas
+        la meme chose, et aucun des deux n'est un refus d'eligibilite."""
+        with self.assertRaises(RefusMesure) as a:
+            lrc_initial(1000.0, 200.0,
+                        verdict_53_declare=VERDICT_53_NON_ETABLI)
+        self.assertIn('AVEU', str(a.exception))
+        with self.assertRaises(RefusMesure) as b:
+            lrc_initial(1000.0, 200.0,
+                        verdict_53_declare=VERDICT_53_53A_NON_EVALUEE)
+        self.assertIn('OUVERTE EN DROIT', str(b.exception))
+        self.assertIn('§54', str(b.exception))
+
+    def test_ELIGIBLE_laisse_mesurer(self):
+        self.assertAlmostEqual(
+            lrc_initial(1000.0, 200.0,
+                        verdict_53_declare=VERDICT_53_ELIGIBLE), 800.0)
 
     def test_un_financement_significatif_est_refuse_pas_ignore(self):
         """⚠️ LE POINT QUI SEPARE UN REFUS D'UN CHIFFRE FAUX. Le §56 impose
@@ -262,7 +295,7 @@ class T2_LesRefus(unittest.TestCase):
         traque. C2-4 levera ce refus, pas avant.
         """
         with self.assertRaises(RefusMesure) as ctx:
-            lrc_initial(3000.0, 0.0, eligibilite_declaree=True,
+            lrc_initial(3000.0, 0.0, verdict_53_declare=VERDICT_53_ELIGIBLE,
                         financement_significatif=True)
         self.assertEqual(ctx.exception.motif,
                          MOTIF_FINANCEMENT_NON_CONSTRUIT)
@@ -281,7 +314,7 @@ class T2_LesRefus(unittest.TestCase):
         """Le module pose les signes lui-meme ; un negatif en entree veut
         dire que l'appelant en pose d'autres."""
         with self.assertRaises(RefusMesure) as ctx:
-            lrc_initial(-1000.0, 200.0, eligibilite_declaree=True)
+            lrc_initial(-1000.0, 200.0, verdict_53_declare=VERDICT_53_ELIGIBLE)
         self.assertEqual(ctx.exception.motif, MOTIF_MONTANT_NEGATIF)
         print("    OK M2d : montant negatif refuse, convention d'appel "
               "signalee")
@@ -296,13 +329,33 @@ class T3_LaFrontiereAvecLeSocle(unittest.TestCase):
         prend des montants nommes. Un import du socle ferait fuir l'unite de
         compte dans le calcul, et le calcul dans l'unite de compte.
         """
+        import ast
         import inspect
 
         from normes.ifrs17.mesure import lrc_paa
-        source = inspect.getsource(lrc_paa)
-        for interdit in ('from normes.ifrs17.socle', 'import socle',
-                         'Groupe', 'CleGroupe', 'Registre'):
-            self.assertNotIn(interdit, source, interdit)
+        # ⚠️ ON TESTE LES IMPORTS ET LES ANNOTATIONS, PAS LES MENTIONS. La
+        # premiere version cherchait `Groupe` dans le SOURCE ENTIER et a
+        # echoue le jour ou un commentaire a ecrit « une valeur, jamais un
+        # `Groupe` » -- une PHRASE qui dit precisement que la dependance
+        # n'existe pas. C'est le defaut que le test voisin
+        # `test_le_module_n_importe_AUCUNE_porte` avait deja corrige : un
+        # test qui confond un import et une mention echoue pour une raison
+        # qui n'interesse personne.
+        arbre = ast.parse(inspect.getsource(lrc_paa))
+        importes = set()
+        for n in ast.walk(arbre):
+            if isinstance(n, ast.Import):
+                importes |= {a.name for a in n.names}
+            elif isinstance(n, ast.ImportFrom):
+                importes.add(n.module or '')
+        du_socle = {i for i in importes if 'socle' in i}
+        self.assertEqual(du_socle, set(), f'imports du socle : {du_socle}')
+        # et aucune ANNOTATION ne porte un type du socle
+        annotations = {ast.unparse(n.annotation) for n in ast.walk(arbre)
+                       if isinstance(n, (ast.AnnAssign, ast.arg))
+                       and getattr(n, 'annotation', None)}
+        for interdit in ('Groupe', 'CleGroupe', 'Registre'):
+            self.assertNotIn(interdit, ' '.join(annotations), interdit)
         print("    OK M3 : aucune dependance au socle — la frontiere tient "
               "dans les deux sens")
 

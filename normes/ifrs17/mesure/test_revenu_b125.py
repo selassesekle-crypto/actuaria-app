@@ -5,7 +5,11 @@
 """
 import unittest
 
-from normes.ifrs17.mesure.lrc_paa import RefusMesure, periode_annuelle
+from normes.ifrs17.mesure.lrc_paa import (
+    VERDICT_53_ELIGIBLE,
+    RefusMesure,
+    periode_annuelle,
+)
 from normes.ifrs17.mesure.revenu_b125 import (
     MOTIF_CHARGE_DISCORDANTE,
     ventiler,
@@ -73,7 +77,7 @@ class T1_LeDoubleCompteEstEmpeche(unittest.TestCase):
             frais_maintenance_attribuables=(
                 e['frais_maintenance_attribuables_an1']),
             frais_non_attribuables=0.0,
-            eligibilite_declaree=True)
+            verdict_53_declare=VERDICT_53_ELIGIBLE)
         v = _ventilation_5_2()
         self.assertEqual(p.charges_service,
                          ATTENDU_5_2['insurance_service_expenses'])

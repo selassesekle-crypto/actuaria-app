@@ -100,16 +100,78 @@ class Periode(NamedTuple):
     motif_resultat:   str = ''        # vide quand le résultat EST établi
 
 
+#: ⚠️⚠️ LE VERDICT DU §53 A TROIS VALEURS, ET CE MODULE N'EN VOYAIT QUE DEUX.
+#: Il recevait un BOOLÉEN `eligibilite_declaree`, qui ÉCRASAIT TROIS ÉTATS EN
+#: DEUX : `NON_ETABLI` et `53A_NON_EVALUEE` devenaient tous deux `False`,
+#: indiscernables l'un de l'autre ET d'un refus franc. C'est exactement la
+#: leçon payée sur les comptages : « 0 non établi » ne doit pas se lire comme
+#: « rien ». Un aveu d'ignorance et une porte restée ouverte en droit ne sont
+#: pas la même chose, et aucun des deux n'est un refus.
+#:
+#: ⚠️ CE MODULE N'IMPORTE PAS LE SOCLE, ET IL NE LE FERA PAS. Il reçoit le
+#: verdict DÉCLARÉ, comme il reçoit le contexte : une valeur, jamais un
+#: `Groupe`. Le vocabulaire est donc écrit ici — c'est une SECONDE COPIE, et
+#: elle est assumée pour la même raison que `PARAGRAPHE_DES_MODULES` : un test
+#: confronte ces trois chaînes à celles du socle et ÉCHOUE BRUYAMMENT si elles
+#: divergent. Une copie dont la divergence est bruyante n'est pas du même bois
+#: qu'une copie silencieuse — c'est le seul arbitrage qui rende deux sources
+#: acceptables, et ce dépôt l'a déjà tranché ainsi.
+VERDICT_53_ELIGIBLE = 'ELIGIBLE'
+VERDICT_53_53A_NON_EVALUEE = '53A_NON_EVALUEE'
+VERDICT_53_NON_ETABLI = 'NON_ETABLI'
+VERDICTS_53 = (VERDICT_53_ELIGIBLE, VERDICT_53_53A_NON_EVALUEE,
+               VERDICT_53_NON_ETABLI)
+
+#: ⚠️ TROIS MOTIFS DISTINCTS, ET C'EST LE NOM QUE CONSOMMENT LES AGRÉGATS.
+#: Les fondre en un seul rendrait de nouveau indiscernables les trois états —
+#: la faute qu'on vient de défaire.
+MOTIF_VERDICT_53_NON_DECLARE = 'verdict_53_non_declare'
+MOTIF_VERDICT_53_NON_ETABLI = 'verdict_53_non_etabli'
+MOTIF_VERDICT_53_53A_NON_EVALUEE = 'verdict_53_53a_non_evaluee'
+
+
+def _exiger_verdict_53(verdict: str) -> None:
+    """§53 — le verdict scellé à la création du groupe, reçu et non deviné.
+
+    ⚠️ TROIS ÉTATS, TROIS REFUS DISTINCTS, ET AUCUN NE DIT « INÉLIGIBLE ».
+    Ce module ne réévalue pas le §53 et ne le suppose pas : il refuse de
+    mesurer tant que le verdict n'autorise pas la PAA, en disant LEQUEL des
+    trois états il a reçu.
+    """
+    if verdict == VERDICT_53_ELIGIBLE:
+        return
+    if verdict == VERDICT_53_NON_ETABLI:
+        raise RefusMesure(
+            MOTIF_VERDICT_53_NON_ETABLI,
+            "le verdict §53 du groupe vaut NON_ETABLI : c'est l'AVEU que "
+            "l'éligibilité n'a pas pu être établie, pas un refus. Mesurer en "
+            "PAA sur cet aveu reviendrait à le lire comme un « oui ». ⚠️ Et "
+            "le distinguer d'un 53A_NON_EVALUEE compte : ici rien n'a pu "
+            "être calculé, là une porte reste ouverte en droit.")
+    if verdict == VERDICT_53_53A_NON_EVALUEE:
+        raise RefusMesure(
+            MOTIF_VERDICT_53_53A_NON_EVALUEE,
+            "le verdict §53 du groupe vaut 53A_NON_EVALUEE : la voie "
+            "automatique du §53 b) est fermée, mais la porte du §53 a) reste "
+            "OUVERTE EN DROIT — §54 en confie l'appréciation à l'entité "
+            "seule, sans seuil. Ce n'est donc PAS un refus d'éligibilité, "
+            "c'est une déclaration qui manque. La produire signée rouvre la "
+            "mesure.")
+    raise RefusMesure(
+        MOTIF_VERDICT_53_NON_DECLARE,
+        f"le verdict §53 n'est pas déclaré (reçu {verdict!r}, attendu l'une "
+        f"de {VERDICTS_53}). §53 s'apprécie à la création du groupe et le "
+        f"socle le scelle ; ce module ne le réévalue pas et ne le suppose "
+        f"pas. ⚠️ IL RECEVAIT AUPARAVANT UN BOOLÉEN, qui écrasait les trois "
+        f"états en deux et rendait un aveu d'ignorance indiscernable d'un "
+        f"refus.")
+
+
 def _controler(valeurs: dict, duree_couverture: int, financement_significatif: bool,
-               eligibilite_declaree: bool,
+               verdict_53_declare: str,
                charge_fournie: bool = False) -> None:
     """Les refus, tous groupés, AVANT le moindre calcul."""
-    if not eligibilite_declaree:
-        raise RefusMesure(
-            MOTIF_SANS_ELIGIBILITE,
-            "l'éligibilité à la PAA n'est pas déclarée. §53 s'apprécie à la "
-            "création du groupe et le socle la scelle ; ce module ne la "
-            "réévalue pas et ne la suppose pas")
+    _exiger_verdict_53(verdict_53_declare)
     if financement_significatif and not charge_fournie:
         raise RefusMesure(
             MOTIF_FINANCEMENT_NON_CONSTRUIT,
@@ -133,7 +195,7 @@ def _controler(valeurs: dict, duree_couverture: int, financement_significatif: b
 
 
 def lrc_initial(primes_recues: float, frais_acquisition: float, *,
-                eligibilite_declaree: bool = False,
+                verdict_53_declare: str = '',
                 financement_significatif: bool = False) -> float:
     """§55 a) — le LRC à la comptabilisation initiale.
 
@@ -145,7 +207,7 @@ def lrc_initial(primes_recues: float, frais_acquisition: float, *,
     """
     _controler({'primes_recues': primes_recues,
                 'frais_acquisition': frais_acquisition},
-               1, financement_significatif, eligibilite_declaree)
+               1, financement_significatif, verdict_53_declare)
     return primes_recues - frais_acquisition
 
 
@@ -154,7 +216,7 @@ def lrc_suivant(lrc_ouverture: float, *, primes_periode: float = 0.0,
                 amortissement_frais_acquisition: float = 0.0,
                 revenue_periode: float = 0.0,
                 charge_financiere: float = 0.0,
-                eligibilite_declaree: bool = False,
+                verdict_53_declare: str = '',
                 financement_significatif: bool = False) -> float:
     """§55 b) — le LRC à un arrêté ultérieur.
 
@@ -181,7 +243,7 @@ def lrc_suivant(lrc_ouverture: float, *, primes_periode: float = 0.0,
                     amortissement_frais_acquisition,
                 'revenue_periode': revenue_periode,
                 'charge_financiere': charge_financiere},
-               1, financement_significatif, eligibilite_declaree,
+               1, financement_significatif, verdict_53_declare,
                charge_fournie=charge_financiere > 0.0)
     return (lrc_ouverture
             + primes_periode
@@ -276,7 +338,7 @@ def periode_annuelle(*, primes_attendues: float, duree_couverture: int,
                      sinistres_survenus: float = 0.0,
                      lrc_ouverture: float | None = None,
                      primes_periode: float | None = None,
-                     eligibilite_declaree: bool = False,
+                     verdict_53_declare: str = '',
                      financement_significatif: bool = False) -> Periode:
     """Un arrêté annuel complet, dans la présentation du §80.
 
@@ -303,7 +365,7 @@ def periode_annuelle(*, primes_attendues: float, duree_couverture: int,
                     else primes_periode)
         ouverture = lrc_initial(
             encaisse, frais_acquisition_attribuables,
-            eligibilite_declaree=eligibilite_declaree,
+            verdict_53_declare=verdict_53_declare,
             financement_significatif=financement_significatif)
         entrees = 0.0
     else:
@@ -314,7 +376,7 @@ def periode_annuelle(*, primes_attendues: float, duree_couverture: int,
         ouverture, primes_periode=entrees,
         amortissement_frais_acquisition=amortissement,
         revenue_periode=revenue,
-        eligibilite_declaree=eligibilite_declaree,
+        verdict_53_declare=verdict_53_declare,
         financement_significatif=financement_significatif)
 
     charges = (frais_maintenance_attribuables + amortissement

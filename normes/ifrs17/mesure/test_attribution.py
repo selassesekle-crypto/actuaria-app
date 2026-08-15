@@ -14,7 +14,11 @@ from normes.ifrs17.mesure.attribution import (
     declarer,
     resume,
 )
-from normes.ifrs17.mesure.lrc_paa import RefusMesure, periode_annuelle
+from normes.ifrs17.mesure.lrc_paa import (
+    VERDICT_53_ELIGIBLE,
+    RefusMesure,
+    periode_annuelle,
+)
 from normes.ifrs17.oracles.ica_222092 import ATTENDU_5_2, ENTREE_5_2
 
 #: L'exemple ICA 5.2, tel qu'une entité le déclarerait.
@@ -52,7 +56,7 @@ class T1_LaDeclarationEstRecue(unittest.TestCase):
             frais_maintenance_attribuables=(
                 e['frais_maintenance_attribuables_an1']),
             frais_non_attribuables=_declaration().total_non_attribuable,
-            eligibilite_declaree=True)
+            verdict_53_declare=VERDICT_53_ELIGIBLE)
         self.assertAlmostEqual(p.autres_charges,
                                ATTENDU_5_2['autres_charges'], 6)
         self.assertAlmostEqual(p.resultat, ATTENDU_5_2['resultat'], 6)
