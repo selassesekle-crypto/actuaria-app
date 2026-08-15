@@ -567,40 +567,109 @@ FORME_COHORTE = re.compile(r'^\d{4}$')
 MOTIF_COHORTE_NON_DECLAREE = 'cohorte_du_groupe_non_declaree'
 MOTIF_TAUX_HORS_COHORTE = 'taux_verrouille_hors_cohorte'
 
-#: ⚠️⚠️ POURQUOI L'ANNÉE ET NON UNE DATE EXACTE — C'EST UN RAISONNEMENT, PAS
-#: UNE LECTURE LITTÉRALE, ET IL DOIT ÊTRE CITABLE. B72 d) dit que le taux est
-#: déterminé « LORS DE LA COMPTABILISATION INITIALE », pas « à la fin de la
-#: cohorte ». Pris au pied de la lettre, il appellerait une date de groupe.
-#: ⚠️ MAIS §22 INTERDIT DE RÉUNIR DANS UN MÊME GROUPE DES CONTRATS ÉMIS À PLUS
-#: D'UN AN D'INTERVALLE : la cohorte annuelle EST l'unité que la norme impose.
-#: Exiger une date exacte supposerait une granularité que la norme ne demande
-#: pas — et refuserait des déclarations correctes, qui est le mode de
-#: défaillance le plus coûteux d'un contrôle.
+#: ⚠️⚠️ POURQUOI L'ANNÉE, ET L'APPUI A ÉTÉ CORRIGÉ — LE PREMIER ÉTAIT FAUX.
+#: Ce module a d'abord justifié l'année par le §22 : « §22 impose des cohortes
+#: annuelles, donc la cohorte est l'unité ». ⚠️ §22 NE DIT PAS ÇA. Il dit
+#: seulement qu'on « ne doit pas classer dans un même groupe des contrats émis
+#: à plus d'un an d'intervalle » — il plafonne l'ÉTENDUE d'un groupe, et ne
+#: dit rien de la date à laquelle un taux se détermine. Celle-ci relève du
+#: §25 : la PREMIÈRE du début de couverture, de la première prime exigible, ou
+#: du moment où le groupe devient déficitaire.
 #:
-#: ⚠️ CE QUE CE CHOIX LAISSE PASSER, ET IL FAUT LE LIRE : deux groupes de la
-#: même cohorte annuelle peuvent avoir des dates de comptabilisation initiale
-#: distinctes, donc des taux légitimement différents. Ce contrôle les tient
-#: pour interchangeables. Il vérifie l'ANNÉE, pas la date.
+#: ⚠️⚠️ L'APPUI RÉEL EST B73, ET IL EST DIRECT : « Pour déterminer, à la date
+#: de la comptabilisation initiale d'un groupe de contrats, les taux
+#: d'actualisation décrits AUX PARAGRAPHES B72 b) À B72 e), l'entité PEUT
+#: utiliser des taux d'actualisation MOYENS PONDÉRÉS POUR L'INTERVALLE DE
+#: TEMPS AU COURS DUQUEL SONT ÉMIS LES CONTRATS DU GROUPE, et qui, selon le
+#: paragraphe 22, ne peut excéder un an. » Il couvre B72 d), donc le §56 : la
+#: norme ANTICIPE qu'un groupe s'étale sur un an, et l'autorise explicitement.
+#:
+#: ⚠️ ET B73 DIT « PEUT » — C'EST UNE FACULTÉ, PAS UNE RÈGLE. Deux formes sont
+#: donc légitimes, et elles ne donnent pas la même date :
+#:
+#:   · la DATE DU §25 — celle de la comptabilisation initiale du groupe ;
+#:   · la MOYENNE PONDÉRÉE DE B73 — sur l'intervalle d'émission.
+#:
+#: ⚠️⚠️ ET CE CONTRÔLE N'EXIGE NI L'UNE NI L'AUTRE : il accepte toute date de
+#: l'année de la cohorte. Il est donc PLUS LÂCHE QUE LES DEUX FORMES
+#: LÉGITIMES — mesuré : il accepte le 1er janvier, le 1er juillet et le
+#: 31 décembre indifféremment. Le 31 décembre est le taux de FIN d'année, pas
+#: une moyenne ; sur des émissions quasi uniformes, une moyenne pondérée
+#: tombe vers le milieu de l'année. La différence n'est pas cosmétique sur un
+#: exercice à taux mobiles.
+#:
+#: ⚠️⚠️ UNE VARIANTE DU MOTIF DE CE DÉPÔT, ET ELLE EST NEUVE. Le premier
+#: raisonnement ANNONÇAIT qu'il était un raisonnement — « c'est un
+#: raisonnement, pas une lecture littérale » — et s'appuyait pourtant sur le
+#: mauvais article. LE SIGNALER NE LE RENDAIT PAS JUSTE. Une étiquette
+#: d'honnêteté n'est pas une vérification : elle dit qu'on sait ce qu'on fait,
+#: pas qu'on a raison de le faire.
 RAISONNEMENT_COHORTE_ANNUELLE = (
-    "⚠️ CE CONTRÔLE RETIENT L'ANNÉE, ET C'EST UN RAISONNEMENT. B72 d) dit "
-    "« déterminés LORS DE LA COMPTABILISATION INITIALE », pas « à la fin de "
-    "la cohorte » : lu littéralement, il appellerait une date de groupe. Mais "
-    "§22 interdit de réunir des contrats émis à plus d'un an d'intervalle — "
-    "la COHORTE ANNUELLE est l'unité que la norme impose, et exiger une date "
-    "exacte supposerait une granularité qu'elle ne demande pas. ⚠️ CE QUE "
-    "CELA LAISSE PASSER : deux groupes de la même cohorte peuvent avoir des "
-    "dates de comptabilisation distinctes, donc des taux légitimement "
-    "différents ; ce contrôle les tient pour interchangeables.")
+    "⚠️ CE CONTRÔLE RETIENT L'ANNÉE, ET SON APPUI EST B73 — non le §22, qui "
+    "avait d'abord été invoqué À TORT. §22 plafonne l'ÉTENDUE d'un groupe "
+    "(pas de contrats émis à plus d'un an d'intervalle) et ne dit rien de la "
+    "date d'un taux ; celle-ci relève du §25. B73, lui, autorise directement "
+    "« des taux d'actualisation MOYENS PONDÉRÉS pour l'intervalle de temps au "
+    "cours duquel sont émis les contrats du groupe » — pour les taux de B72 "
+    "b) à e), donc pour le §56. La norme anticipe qu'un groupe s'étale sur "
+    "un an. ⚠️ MAIS B73 DIT « PEUT » : deux formes sont légitimes — la date "
+    "du §25, ou la moyenne pondérée de B73 — et elles ne donnent pas la même "
+    "date. ⚠️ CE QUE CE CONTRÔLE LAISSE PASSER, ET C'EST PLUS LARGE QU'UN "
+    "ARBITRAGE : il n'exige NI l'une NI l'autre, il accepte toute date de "
+    "l'année. Le 31 décembre est le taux de FIN d'année ; sur des émissions "
+    "quasi uniformes, une moyenne pondérée tombe vers le milieu. Sur un "
+    "exercice à taux mobiles, l'écart n'est pas cosmétique.")
+
+
+#: ⚠️⚠️ LES DEUX FORMES QUE B73 REND LÉGITIMES, ET ELLES SE DÉCLARENT. B73
+#: dit « PEUT » : l'entité détermine le taux à la date de comptabilisation
+#: initiale (§25), OU par moyenne pondérée sur l'intervalle d'émission. Les
+#: deux sont recevables et ne donnent pas la même date — deviner laquelle est
+#: employée reviendrait à supposer une méthode.
+FORME_DATE_25 = 'DATE_COMPTABILISATION_25'
+FORME_MOYENNE_B73 = 'MOYENNE_PONDEREE_B73'
+FORMES_DU_TAUX_VERROUILLE = (FORME_DATE_25, FORME_MOYENNE_B73)
+
+MOTIF_FORME_DU_TAUX_NON_DECLAREE = 'forme_du_taux_verrouille_non_declaree'
+
+#: ⚠️⚠️ CE QUE CE MODULE NE PEUT PAS VÉRIFIER, ET IL FAUT LE LIRE AVANT DE S'Y
+#: FIER. Aucune des deux formes n'est RECALCULABLE ici : la date du §25 exige
+#: le début de couverture du groupe, la moyenne de B73 exige les dates
+#: d'émission de ses contrats — `roll_forward` ne reçoit ni l'un ni l'autre.
+#: Ce contrôle vérifie donc trois choses seulement : que la forme est
+#: DÉCLARÉE, que la date tombe dans l'année de la cohorte, et qu'elle n'est
+#: pas postérieure à l'évaluation. ⚠️ LA LIMITE EST NOMMÉE PLUTÔT QUE COMBLÉE
+#: PAR UN CONTRÔLE QUE LES PARAMÈTRES NE PERMETTENT PAS — c'est la règle qui a
+#: déjà servi pour la fenêtre du §57.
+LIMITE_DES_DEUX_FORMES = (
+    "⚠️ CE CONTRÔLE NE RECALCULE NI L'UNE NI L'AUTRE DES DEUX FORMES. La date "
+    "du §25 exigerait le début de couverture du groupe, la moyenne pondérée "
+    "de B73 exigerait les dates d'émission de ses contrats : ce module ne "
+    "reçoit ni l'un ni l'autre. Il vérifie que la forme est DÉCLARÉE, que la "
+    "date tombe dans l'année de la cohorte, et qu'elle n'est pas postérieure "
+    "à l'évaluation. La valeur elle-même reste sous la responsabilité de "
+    "l'entité.")
 
 
 def exiger_taux_de_la_cohorte(*, arrete_verrouillage, cohorte, contexte,
-                              erreur, objet: str = 'le taux verrouillé') -> str:
+                              erreur, forme: str = '',
+                              objet: str = 'le taux verrouillé') -> str:
     """B72 d) — le taux figé appartient-il à la cohorte du groupe évalué ?
 
     ⚠️ `ANTERIEUR_OU_EGAL` NE SUFFISAIT PAS, ET C'ÉTAIT MESURÉ : il acceptait
     un taux de 2020 pour une cohorte 2024. Il ne vérifiait qu'une borne, la
     haute — la limite était nommée, et c'est ici qu'elle mordait.
     """
+    if forme not in FORMES_DU_TAUX_VERROUILLE:
+        raise erreur(
+            MOTIF_FORME_DU_TAUX_NON_DECLAREE,
+            f"la forme du taux verrouillé n'est pas déclarée (reçu "
+            f"{forme!r}, attendu l'une de {FORMES_DU_TAUX_VERROUILLE}). B73 "
+            f"dit « PEUT » : l'entité détermine le taux à la date de "
+            f"comptabilisation initiale du groupe (§25) OU par moyenne "
+            f"pondérée sur l'intervalle d'émission. Les deux sont légitimes "
+            f"et ne donnent pas la même date — la deviner reviendrait à "
+            f"supposer une méthode.")
     if not FORME_COHORTE.match(str(cohorte or '')):
         raise erreur(
             MOTIF_COHORTE_NON_DECLAREE,
@@ -631,5 +700,22 @@ def exiger_taux_de_la_cohorte(*, arrete_verrouillage, cohorte, contexte,
             f"acceptait un taux de 2020 pour une cohorte 2024. "
             + RAISONNEMENT_COHORTE_ANNUELLE)
 
+    #: ⚠️ UNE MOYENNE PONDÉRÉE QUI TOMBE LE 31 DÉCEMBRE EST SIGNALÉE, PAS
+    #: REFUSÉE. Elle n'est possible que si tous les contrats du groupe ont
+    #: été émis ce jour-là — cas réel mais rare. Refuser bloquerait un cas
+    #: légitime ; taire laisserait passer le taux de FIN d'année déguisé en
+    #: moyenne, qui est l'approximation la plus courante.
+    signal = ''
+    if forme == FORME_MOYENNE_B73 and arrete_verrouillage[5:] == '12-31':
+        signal = (
+            " ⚠️ SIGNALEMENT, NON REFUS : une MOYENNE PONDÉRÉE annoncée qui "
+            "tombe le 31 décembre n'est possible que si tous les contrats du "
+            "groupe ont été émis ce jour-là. Sur des émissions étalées, une "
+            "moyenne tombe vers le milieu de l'intervalle — le 31 décembre "
+            "est le taux de FIN d'année, qui est une autre chose. Ce module "
+            "ne peut pas trancher, faute des dates d'émission ; il signale.")
+
     return (f"{objet} : arrêté {arrete_verrouillage}, cohorte {cohorte} du "
-            f"groupe évalué. " + RAISONNEMENT_COHORTE_ANNUELLE)
+            f"groupe évalué, forme déclarée « {forme} »."
+            + signal + ' ' + RAISONNEMENT_COHORTE_ANNUELLE
+            + ' ' + LIMITE_DES_DEUX_FORMES)

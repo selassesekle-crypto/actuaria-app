@@ -13,12 +13,17 @@ from normes.ifrs17.mesure.declaration import (
     COMPARAISON_EGAL,
     DEMONSTRATION_INCOHERENCE_D_ENSEMBLE,
     FORME_ARRETE,
+    FORME_DATE_25,
+    FORME_MOYENNE_B73,
+    FORMES_DU_TAUX_VERROUILLE,
     LIMITE_ANTERIEUR_OU_EGAL,
+    LIMITE_DES_DEUX_FORMES,
     MARQUEURS_DE_NON_SIGNATURE,
     MOTIF_ARRETE_HORS_CONTEXTE,
     MOTIF_COHORTE_NON_DECLAREE,
     MOTIF_CONTEXTE_INVALIDE,
     MOTIF_DECLARANT_NON_HABILITE,
+    MOTIF_FORME_DU_TAUX_NON_DECLAREE,
     MOTIF_PERIMETRE_DISCORDANT,
     MOTIF_STATUT_NON_SIGNE,
     MOTIF_TAUX_HORS_COHORTE,
@@ -417,10 +422,10 @@ class T8_LeTauxVERROUILLE_APPARTIENT_A_SA_COHORTE(unittest.TestCase):
     2024. Il ne vérifiait qu'une borne, la haute — la limite était nommée, et
     c'est ici qu'elle mordait."""
 
-    def _cohorte(self, arrete, cohorte):
+    def _cohorte(self, arrete, cohorte, forme=FORME_DATE_25):
         return exiger_taux_de_la_cohorte(
             arrete_verrouillage=arrete, cohorte=cohorte, contexte=CONTEXTE,
-            erreur=RefusMesure)
+            erreur=RefusMesure, forme=forme)
 
     def test_le_taux_de_SA_cohorte_passe(self):
         m = self._cohorte('2024-12-31', '2024')
@@ -451,22 +456,78 @@ class T8_LeTauxVERROUILLE_APPARTIENT_A_SA_COHORTE(unittest.TestCase):
         for jour in ('2024-01-01', '2024-06-30', '2024-12-31'):
             self._cohorte(jour, '2024')
 
-    def test_le_RAISONNEMENT_est_ecrit_et_citable(self):
-        """⚠️ B72 d) dit « lors de la comptabilisation initiale », PAS « à la
-        fin de la cohorte ». L'année est retenue parce que §22 la rend
-        suffisante — c'est un raisonnement, pas une lecture littérale."""
+    def test_l_appui_est_B73_ET_LE_PREMIER_ETAIT_FAUX(self):
+        """⚠️⚠️ LE §22 AVAIT ÉTÉ INVOQUÉ À TORT.
+
+        §22 plafonne l'ÉTENDUE d'un groupe — pas de contrats émis à plus d'un
+        an d'intervalle — et ne dit RIEN de la date d'un taux ; celle-ci
+        relève du §25. B73 est l'appui direct : il autorise « des taux
+        MOYENS PONDÉRÉS pour l'intervalle de temps au cours duquel sont émis
+        les contrats du groupe », pour les taux de B72 b) à e).
+        """
         m = self._cohorte('2024-12-31', '2024')
         self.assertIn(RAISONNEMENT_COHORTE_ANNUELLE, m)
-        self.assertIn('LORS DE LA COMPTABILISATION INITIALE', m)
-        self.assertIn('§22', m)
-        self.assertIn("granularité qu'elle ne demande pas", m)
+        self.assertIn('B73', m)
+        self.assertIn('MOYENS PONDÉRÉS', m)
+        self.assertIn('À TORT', m)
 
-    def test_le_motif_dit_CE_QUE_L_ARBITRAGE_LAISSE_PASSER(self):
-        """Deux groupes d'une même cohorte peuvent avoir des dates
-        distinctes — le contrôle les tient pour interchangeables."""
+    def test_la_FORME_du_taux_se_declare_et_ne_se_devine_pas(self):
+        """⚠️ B73 dit « PEUT » : deux formes légitimes, dates différentes."""
+        with self.assertRaises(RefusMesure) as e:
+            self._cohorte('2024-12-31', '2024', forme='')
+        self.assertEqual(e.exception.motif, MOTIF_FORME_DU_TAUX_NON_DECLAREE)
+        self.assertIn('supposer une méthode', str(e.exception))
+
+    def test_les_deux_formes_sont_acceptees(self):
+        for f in FORMES_DU_TAUX_VERROUILLE:
+            self.assertIn(f, self._cohorte('2024-06-30', '2024', forme=f))
+
+    def test_une_MOYENNE_au_31_decembre_est_SIGNALEE_pas_refusee(self):
+        """⚠️ Elle n'est possible que si tous les contrats ont été émis ce
+        jour-là. Refuser bloquerait un cas légitime ; taire laisserait passer
+        le taux de FIN d'année déguisé en moyenne."""
+        m = self._cohorte('2024-12-31', '2024', forme=FORME_MOYENNE_B73)
+        self.assertIn('SIGNALEMENT, NON REFUS', m)
+        self.assertIn('émis ce jour-là', m)
+
+    def test_la_meme_date_en_forme_25_n_est_PAS_signalee(self):
+        """La date du §25 peut légitimement tomber le 31 décembre."""
+        m = self._cohorte('2024-12-31', '2024', forme=FORME_DATE_25)
+        self.assertNotIn('SIGNALEMENT', m)
+
+    def test_la_LIMITE_des_deux_formes_est_nommee(self):
+        """⚠️ NI L'UNE NI L'AUTRE N'EST RECALCULABLE ICI, et le dire vaut
+        mieux que bâtir un contrôle que les paramètres ne permettent pas."""
+        m = self._cohorte('2024-06-30', '2024')
+        self.assertIn(LIMITE_DES_DEUX_FORMES, m)
+        self.assertIn('NE RECALCULE NI', m)
+        self.assertIn("responsabilité de l'entité", m)
+
+    def test_le_motif_dit_que_B73_est_une_FACULTE(self):
+        """⚠️ « PEUT » : deux formes légitimes, et elles ne donnent pas la
+        même date — celle du §25, ou la moyenne pondérée de B73."""
         m = self._cohorte('2024-12-31', '2024')
-        self.assertIn('CE QUE CELA LAISSE PASSER', m)
-        self.assertIn('interchangeables', m)
+        self.assertIn('« PEUT »', m)
+        self.assertIn('§25', m)
+
+    def test_le_motif_dit_que_le_controle_N_EXIGE_NI_L_UNE_NI_L_AUTRE(self):
+        """⚠️ PLUS LARGE QU'UN ARBITRAGE : il accepte toute date de l'année.
+
+        Le 31 décembre est le taux de FIN d'année ; une moyenne pondérée sur
+        des émissions quasi uniformes tombe vers le milieu.
+        """
+        m = self._cohorte('2024-12-31', '2024')
+        self.assertIn("NI l'une NI l'autre", m)
+        self.assertIn("FIN d'année", m)
+        self.assertIn('pas cosmétique', m)
+
+    def test_le_22_n_est_PLUS_invoque_comme_appui(self):
+        """⚠️ VERROU DANS L'AUTRE SENS : le §22 ne doit revenir que comme
+        ce qu'il est — un plafond d'étendue, jamais un fondement de date."""
+        m = self._cohorte('2024-12-31', '2024')
+        self.assertNotIn('§22 la rend suffisante', m)
+        self.assertNotIn("granularité qu'elle ne demande pas", m)
+        self.assertIn("plafonne l'ÉTENDUE", m)
 
 
 class T3_CeQueLeControleNEtablitPas(unittest.TestCase):

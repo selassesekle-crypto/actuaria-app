@@ -79,6 +79,8 @@ class T1_LOracle5_6_1(unittest.TestCase):
 from normes.ifrs17.mesure.declaration import ContexteEvaluation
 
 COHORTE = '2026'
+from normes.ifrs17.mesure.declaration import FORME_DATE_25
+
 CONTEXTE = ContexteEvaluation(
     arrete='2026-12-31',
     portefeuilles=('AUTO_TR', 'MRH', 'GAV', 'RC_AUTO', 'RC_PRO', 'DO'))
@@ -87,7 +89,8 @@ CONTEXTE = ContexteEvaluation(
 def roll_forward_ctx(**kw):
     """⚠️ `contexte` obligatoire au site de consommation."""
     return roll_forward(contexte=CONTEXTE,
-                        cohorte_du_groupe=COHORTE, **kw)
+                        cohorte_du_groupe=COHORTE,
+                        forme_du_taux_verrouille=FORME_DATE_25, **kw)
 
 
     def test_la_convention_de_signe_est_RETOURNEE_EXPLICITEMENT(self):

@@ -22,6 +22,8 @@ from normes.ifrs17.mesure.lrc_paa import (
 from normes.ifrs17.oracles.ica_222092 import ENTREE_5_6_1, ROLL_FORWARD_5_6_1
 
 COHORTE = '2026'
+from normes.ifrs17.mesure.declaration import FORME_DATE_25
+
 CONTEXTE = ContexteEvaluation(arrete='2026-12-31',
                               portefeuilles=('AUTO_TR', 'MRH', 'GAV', 'RC_AUTO', 'RC_PRO', 'DO'))
 
@@ -29,7 +31,8 @@ CONTEXTE = ContexteEvaluation(arrete='2026-12-31',
 def roll_forward_ctx(**kw):
     """⚠️ `contexte` obligatoire au site de consommation."""
     return roll_forward(contexte=CONTEXTE,
-                        cohorte_du_groupe=COHORTE, **kw)
+                        cohorte_du_groupe=COHORTE,
+                        forme_du_taux_verrouille=FORME_DATE_25, **kw)
 
 
 
