@@ -9,8 +9,13 @@ from normes.ifrs17.socle.errata_donnees import (
     COMPTAGE_DEFICITAIRES,
     CONVENTION_DES_SENSIBILITES,
     ECART_ENTRE_CONVENTIONS_A_4PCT,
+    ECUEIL_TAUX_INCOMPLET,
     EFFET_ACTUALISATION_A_4PCT,
     ERRATA,
+    FORME_NEANT_MOTIVE,
+    FORME_REFUS,
+    FORME_TECHNIQUE,
+    FORMES_PRIME_ILLIQUIDITE,
     PANIER_AVEC_FRAIS_GESTION,
     PANIER_COMPLET_47,
     PANIER_COMPLET_47_ACTUALISE,
@@ -18,8 +23,10 @@ from normes.ifrs17.socle.errata_donnees import (
     PANIERS,
     PANIERS_SANS_COMPTAGE_ETABLI,
     PANIERS_TRIBUTAIRES_D_UNE_DECLARATION,
+    PLAGE_CEIOPS_A_INSTRUIRE,
     SENSIBILITE_ACTUALISATION,
     SourceDesavouee,
+    qualifier_prime_illiquidite,
     refuser_source_test_47,
     reserve_du_panier,
 )
@@ -145,6 +152,87 @@ class T5_LeQuatriemePanierNAPasDeComptage(unittest.TestCase):
     def test_la_sensibilite_nomme_sa_convention(self):
         self.assertIn('durée moyenne', CONVENTION_DES_SENSIBILITES)
         self.assertIn('nominal', CONVENTION_DES_SENSIBILITES)
+
+
+class T6_LaPrimeDIlliquiditeATroisFormes(unittest.TestCase):
+    """⚠️ TECHNIQUE, NÉANT MOTIVÉ, OU REFUS — JAMAIS UN NÉANT NU."""
+
+    #: ⚠️ LE CALIBRAGE VIT DANS LA GATE, comme celui de `PLACEHOLDERS`. Un
+    #: contrôle sur de la prose qui n'exhibe pas ses deux taux d'erreur se
+    #: fait croire sur parole.
+    NEANTS_MOTIVES = (
+        'hors plage CEIOPS : duree de reglement maximale 4,76 ans',
+        'aucune prime retenue, les passifs sont adosses a du monetaire',
+        'nulle par decision du comite ALM du 12/06/2026',
+        'sans objet : portefeuille integralement en run-off',
+        'zero, faute de portefeuille de reference representatif',
+        'rien de significatif au regard du seuil de materialite',
+        'neant, lecture haute de la borne CEIOPS non retenue',
+        'non applicable aux traites detenus, note du 30/06',
+    )
+    NEANTS_NUS = (
+        'neant', 'Neant', 'NEANT', 'néant', 'nul', 'nulle', 'zero', 'aucune',
+        'aucun', 'rien', 'sans objet', 'non applicable', 'SANS OBJET', 'N/A',
+        'na', '-', '', 'A_REMPLACER', 'pas applicable', 'inapplicable',
+        'non', 'no', '  neant  ',
+    )
+
+    def test_zero_faux_rejet_sur_les_neants_motives(self):
+        for v in self.NEANTS_MOTIVES:
+            qualifier_prime_illiquidite(forme=FORME_NEANT_MOTIVE, contenu=v)
+
+    def test_zero_faux_accepte_sur_les_neants_nus(self):
+        for v in self.NEANTS_NUS:
+            with self.assertRaises(SourceDesavouee, msg=v):
+                qualifier_prime_illiquidite(forme=FORME_NEANT_MOTIVE,
+                                            contenu=v)
+
+    def test_une_technique_est_acceptee_et_engage_l_entite(self):
+        m = qualifier_prime_illiquidite(
+            forme=FORME_TECHNIQUE,
+            contenu='approche ascendante B80, granularite par portefeuille')
+        self.assertIn('engage', m)
+        self.assertIn('ne sont pas des règles', m)
+
+    def test_un_neant_motive_est_une_DECLARATION_pas_une_absence(self):
+        m = qualifier_prime_illiquidite(
+            forme=FORME_NEANT_MOTIVE,
+            contenu='hors plage CEIOPS, duree maximale 4,76 ans')
+        self.assertIn('pas une absence de déclaration', m)
+        self.assertIn(PLAGE_CEIOPS_A_INSTRUIRE, m)
+
+    def test_un_refus_est_une_position_et_il_se_porte(self):
+        m = qualifier_prime_illiquidite(
+            forme=FORME_REFUS, contenu='faute de portefeuille de reference')
+        self.assertIn('REFUSE', m)
+        self.assertIn(ECUEIL_TAUX_INCOMPLET, m)
+
+    def test_une_quatrieme_forme_est_refusee(self):
+        with self.assertRaises(SourceDesavouee):
+            qualifier_prime_illiquidite(forme='PEUT_ETRE', contenu='x')
+
+    def test_les_trois_formes_exigent_un_contenu(self):
+        for f in FORMES_PRIME_ILLIQUIDITE:
+            with self.assertRaises(SourceDesavouee, msg=f):
+                qualifier_prime_illiquidite(forme=f, contenu='')
+
+
+class T7_LaPlageCEIOPSNEstPasUnSeuilDansLeCode(unittest.TestCase):
+    """⚠️ ELLE VIT DANS LE LIBELLÉ, PAS DANS UN CONTRÔLE."""
+
+    def test_aucune_borne_numerique_n_est_posee(self):
+        """24 et 48 sont CITÉS, jamais comparés à une durée."""
+        self.assertIn('24 et 48 ans', PLAGE_CEIOPS_A_INSTRUIRE)
+        self.assertIn('À INSTRUIRE', PLAGE_CEIOPS_A_INSTRUIRE)
+
+    def test_le_libelle_expose_la_contradiction_de_la_lecture_basse(self):
+        """⚠️ Lue comme un seuil d'entrée, la phrase se vide d'effet."""
+        self.assertIn('se contredit', PLAGE_CEIOPS_A_INSTRUIRE)
+        self.assertIn('Last Liquid Point', PLAGE_CEIOPS_A_INSTRUIRE)
+        self.assertIn('nulle part', PLAGE_CEIOPS_A_INSTRUIRE)
+
+    def test_le_libelle_demande_sur_quelle_lecture_on_se_fonde(self):
+        self.assertIn('SUR QUELLE LECTURE', PLAGE_CEIOPS_A_INSTRUIRE)
 
 
 class T4_LeDepotRefuseEffectivementLeStatutDu747(unittest.TestCase):

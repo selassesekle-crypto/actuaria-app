@@ -30,16 +30,22 @@ from normes.ifrs17.socle.errata_donnees import (
     DECLARATION_PRIME_ILLIQUIDITE,
     DECLARATIONS_DU_TAUX_36,
     ECUEIL_TAUX_INCOMPLET,
+    FORME_NEANT_MOTIVE,
+    FORME_TECHNIQUE,
     PANIER_COMPLET_47,
     PANIER_LIVRE,
+    SourceDesavouee,
 )
 
 J = datetime.date
 DEBUT = J(2026, 1, 1)
 PANIER = PANIER_ADMIS_FAUTE_DE_MIEUX_62B
-COURBE = 'EIOPA 31/07/2026 sans VA, CRA de 10 bps reintegre, note du 12/08'
+COURBE = ('EIOPA 31/07/2026, source swaps EURIBOR 6 mois, sans VA, '
+          'CRA publie de 10 bps deja retranche - note du 12/08/2026')
 CONV = 'duree moyenne sur sinistres + frais de gestion + ajustement risque'
-ILLIQ = 'approche ascendante B80, 50 % du spread du portefeuille de reference'
+ILLIQ = ('approche ascendante B80, spread du portefeuille de reference, '
+         'granularite par portefeuille - note ALM du 30/06/2026')
+FORME = FORME_TECHNIQUE
 
 
 class T1_Le61InverseLeCritereDu16(unittest.TestCase):
@@ -132,7 +138,8 @@ class T3_Le62ARefuseUnPanierNonSigne(unittest.TestCase):
             date_deficit_sous_jacent=J(2025, 11, 1),
             traite_conclu_au_plus_tard=True,
             panier_du_deficit=PANIER_PREFERE_62B,
-            courbe_declaree=COURBE, prime_illiquidite_declaree=ILLIQ,
+            courbe_declaree=COURBE, forme_prime_illiquidite=FORME,
+            prime_illiquidite_declaree=ILLIQ,
             convention_actualisation_declaree=CONV)
         self.assertEqual(r.date, J(2025, 11, 1))
         self.assertNotIn("N'EST PAS ACTUALISÉ", r.motif)
@@ -145,7 +152,8 @@ class T3_Le62ARefuseUnPanierNonSigne(unittest.TestCase):
                 date_deficit_sous_jacent=J(2025, 11, 1),
                 traite_conclu_au_plus_tard=True,
                 panier_du_deficit=PANIER_PREFERE_62B,
-                prime_illiquidite_declaree=ILLIQ,
+                forme_prime_illiquidite=FORME,
+            prime_illiquidite_declaree=ILLIQ,
                 convention_actualisation_declaree=CONV)
         self.assertEqual(e.exception.motif, MOTIF_ACTUALISATION_NON_DECLAREE)
 
@@ -158,10 +166,43 @@ class T3_Le62ARefuseUnPanierNonSigne(unittest.TestCase):
                 date_deficit_sous_jacent=J(2025, 11, 1),
                 traite_conclu_au_plus_tard=True,
                 panier_du_deficit=PANIER_PREFERE_62B, courbe_declaree=COURBE,
-                prime_illiquidite_declaree=ILLIQ)
+                forme_prime_illiquidite=FORME,
+            prime_illiquidite_declaree=ILLIQ)
         self.assertEqual(e.exception.motif, MOTIF_ACTUALISATION_NON_DECLAREE)
         self.assertIn('23 %', str(e.exception))
         self.assertIn('521, 539, 541 et 568', str(e.exception))
+
+    def test_un_NEANT_MOTIVE_ne_bloque_PAS_la_datation(self):
+        """⚠️ UN NÉANT MOTIVÉ EST UNE DÉCLARATION, PAS UNE ABSENCE.
+
+        Les confondre bloquerait un cas légitime : si la prime d'illiquidité
+        est nulle pour une raison établie, le groupe doit pouvoir être daté.
+        """
+        r = date_comptabilisation_62(
+            debut_couverture_cedee=DEBUT, couverture_proportionnelle=False,
+            date_deficit_sous_jacent=J(2025, 11, 1),
+            traite_conclu_au_plus_tard=True,
+            panier_du_deficit=PANIER_PREFERE_62B, courbe_declaree=COURBE,
+            forme_prime_illiquidite=FORME_NEANT_MOTIVE,
+            prime_illiquidite_declaree=(
+                'hors plage CEIOPS, duree de reglement maximale 4,76 ans'),
+            convention_actualisation_declaree=CONV)
+        self.assertEqual(r.date, J(2025, 11, 1))
+        self.assertIn('déclarée NULLE, et motivée', r.motif)
+
+    def test_un_neant_NU_bloque_bien_la_datation(self):
+        """⚠️ Le verrou dans l'autre sens : « néant » seul n'établit rien."""
+        with self.assertRaises(SourceDesavouee) as e:
+            date_comptabilisation_62(
+                debut_couverture_cedee=DEBUT,
+                couverture_proportionnelle=False,
+                date_deficit_sous_jacent=J(2025, 11, 1),
+                traite_conclu_au_plus_tard=True,
+                panier_du_deficit=PANIER_PREFERE_62B, courbe_declaree=COURBE,
+                forme_prime_illiquidite=FORME_NEANT_MOTIVE,
+                prime_illiquidite_declaree='neant',
+                convention_actualisation_declaree=CONV)
+        self.assertIn('REDIT LE NÉANT', str(e.exception))
 
     def _refus_actualisation(self):
         with self.assertRaises(RefusMesure) as e:

@@ -113,6 +113,8 @@ point par mesure indépendante sur les 2 000 contrats livrés.
 
 from typing import NamedTuple
 
+from normes.ifrs17.mesure.declaration import est_renseigne, normaliser
+
 #: La colonne que E1 désavoue comme référence du test §47.
 COLONNE_DESAVOUEE_TEST_47 = 'classe_profitabilite'
 
@@ -183,6 +185,49 @@ DECLARATION_PRIME_ILLIQUIDITE = 'PRIME_ILLIQUIDITE'
 DECLARATION_CONVENTION = 'CONVENTION_ACTUALISATION'
 DECLARATIONS_DU_TAUX_36 = (DECLARATION_COURBE, DECLARATION_PRIME_ILLIQUIDITE,
                            DECLARATION_CONVENTION)
+
+#: ⚠️⚠️ LA PRIME D'ILLIQUIDITÉ SE DÉCLARE SOUS TROIS FORMES, ET JAMAIS EN
+#: NÉANT NU. Une technique, un néant MOTIVÉ, ou un refus assumé. Le néant est
+#: une réponse légitime — la plage d'application citée par le CEIOPS pourrait
+#: la justifier — mais un « néant » qui ne dit pas POURQUOI affirme une
+#: conclusion sans l'établir. C'est la même exigence que B119E (un montant
+#: sans sa méthode est refusé) et que §65 b) (un montant sans sa source).
+FORME_TECHNIQUE = 'TECHNIQUE'
+FORME_NEANT_MOTIVE = 'NEANT_MOTIVE'
+FORME_REFUS = 'REFUS'
+FORMES_PRIME_ILLIQUIDITE = (FORME_TECHNIQUE, FORME_NEANT_MOTIVE, FORME_REFUS)
+
+#: ⚠️ LES MOTS QUI REDISENT LE NÉANT AU LIEU DE L'ÉTABLIR. Liste FERMÉE,
+#: comparée à la valeur ENTIÈRE après normalisation — jamais en sous-chaîne,
+#: exactement comme `declaration.PLACEHOLDERS`. « néant » seul redit la forme ;
+#: « néant, hors plage CEIOPS » établit une raison.
+MOTS_QUI_REDISENT_LE_NEANT = frozenset({
+    'neant', 'nul', 'nulle', 'zero', 'aucune', 'aucun', 'rien', 'sans objet',
+    'non applicable', 'sans', 'pas applicable', 'inapplicable', 'no', 'non',
+})
+
+#: ⚠️ CE QUE LA PLAGE CEIOPS NE TRANCHE PAS, ET POURQUOI ELLE N'EST PAS UN
+#: SEUIL DANS CE CODE. La note de place cite le CEIOPS : la prime « devrait
+#: s'appliquer pour des maturités comprises entre 24 et 48 ans selon la devise
+#: mais ne devrait pas s'appliquer pour la partie extrapolée de la courbe ».
+#: ⚠️ LUE COMME UN SEUIL D'ENTRÉE À 24 ANS, LA PHRASE SE CONTREDIT : la partie
+#: extrapolée commence au Last Liquid Point, soit 20 ans en euro, si bien que
+#: [24 ; 48] serait entièrement dans la zone que la même phrase exclut — la
+#: prime ne s'appliquerait NULLE PART. Lue comme une borne HAUTE, les deux
+#: moitiés sont compatibles. ⚠️ MAIS LE TEXTE EST AMBIGU, ET CE CODE NE LE
+#: TRANCHE PAS : coder 24 ans en seuil poserait une valeur de place dans le
+#: code, ce que ce dépôt s'interdit déjà pour les allocations en pourcentage.
+#: La plage vit ICI, comme élément à instruire par la déclaration.
+PLAGE_CEIOPS_A_INSTRUIRE = (
+    "⚠️ À INSTRUIRE DANS LA DÉCLARATION : la note de place cite le CEIOPS — "
+    "prime applicable « pour des maturités comprises entre 24 et 48 ans selon "
+    "la devise », et « pas pour la partie extrapolée de la courbe ». Lue "
+    "comme un SEUIL D'ENTRÉE à 24 ans, la phrase se contredit : la partie "
+    "extrapolée commence au Last Liquid Point (20 ans en euro), donc [24 ; "
+    "48] serait entièrement exclu et la prime ne s'appliquerait nulle part. "
+    "Lue comme une BORNE HAUTE, les deux moitiés tiennent. ⚠️ La déclaration "
+    "doit dire SUR QUELLE LECTURE elle se fonde — un « néant, hors plage » "
+    "repose sur la première, qui est celle qui vide le texte de son effet.")
 
 #: ⚠️ LE PREMIER ÉCUEIL À DOCUMENTER, ET C'EST EXACTEMENT NOTRE SITUATION.
 #: La note « Courbe des taux sans risque sous IFRS 17 » de l'Institut des
@@ -289,6 +334,60 @@ def refuser_source_test_47(colonne: str) -> None:
             f"titre du risque non financier, que §32 a) iii) range dans les "
             f"flux d'exécution : elle compte 249 contrats déficitaires là où "
             f"le panier complet du §47 en compte 747.")
+
+
+def qualifier_prime_illiquidite(*, forme: str, contenu: str) -> str:
+    """La déclaration de prime d'illiquidité, sous l'une de ses TROIS formes.
+
+    ⚠️ LA FORME EST DÉCLARÉE, ELLE N'EST PAS DEVINÉE. Distinguer une technique
+    d'un néant à la lecture d'une prose serait une heuristique ; ici l'entité
+    dit ce qu'elle déclare, et le contenu est exigé dans les trois cas.
+
+    ⚠️ ET UN NÉANT NU EST REFUSÉ. « Néant » redit la forme au lieu de
+    l'établir : c'est « non vide n'est pas renseigné » appliqué à une réponse
+    nulle. Le refus vaut aussi bien — refuser de déclarer est une position,
+    mais elle se motive comme les autres.
+
+    Rend le motif à faire descendre avec tout résultat qui en dépend.
+    """
+    if forme not in FORMES_PRIME_ILLIQUIDITE:
+        raise SourceDesavouee(
+            f"forme de déclaration inconnue : {forme!r}. La prime "
+            f"d'illiquidité du §36 a) se déclare sous l'une de "
+            f"{FORMES_PRIME_ILLIQUIDITE} — une technique, un néant MOTIVÉ, ou "
+            f"un refus. En inventer une quatrième laisserait passer une "
+            f"réponse dont personne ne sait ce qu'elle affirme.")
+    if not est_renseigne(contenu):
+        raise SourceDesavouee(
+            f"la forme « {forme} » est déclarée mais son contenu est vide ou "
+            f"fictif (reçu {contenu!r}). Les TROIS formes exigent un contenu : "
+            f"la technique pour {FORME_TECHNIQUE}, la raison pour "
+            f"{FORME_NEANT_MOTIVE}, le fondement pour {FORME_REFUS}. "
+            + PLAGE_CEIOPS_A_INSTRUIRE)
+
+    if (forme == FORME_NEANT_MOTIVE
+            and normaliser(contenu) in MOTS_QUI_REDISENT_LE_NEANT):
+        raise SourceDesavouee(
+            f"« {contenu} » REDIT LE NÉANT AU LIEU DE L'ÉTABLIR. Un néant est "
+            f"une réponse légitime à la prime d'illiquidité, mais il se "
+            f"motive : sans sa raison, il affirme une conclusion sans "
+            f"l'appuyer — même exigence que B119E, où un montant sans sa "
+            f"méthode est refusé. " + PLAGE_CEIOPS_A_INSTRUIRE)
+
+    if forme == FORME_TECHNIQUE:
+        return (f"§36 a) et B80 : prime d'illiquidité déterminée par l'entité "
+                f"— « {contenu} ». ⚠️ Cette technique engage l'entité, pas ce "
+                f"code : aucune méthode n'est prescrite, et les allocations "
+                f"indicatives des notes de place ne sont pas des règles.")
+    if forme == FORME_NEANT_MOTIVE:
+        return (f"§36 a) : prime d'illiquidité déclarée NULLE, et motivée — "
+                f"« {contenu} ». ⚠️ Un néant motivé est une déclaration, pas "
+                f"une absence de déclaration ; il vaut position de l'entité. "
+                + PLAGE_CEIOPS_A_INSTRUIRE)
+    return (f"§36 a) : l'entité REFUSE de déclarer une prime d'illiquidité — "
+            f"« {contenu} ». ⚠️ Le refus est une position, et il se porte : "
+            f"tout taux qui en descend ne reflète PAS les caractéristiques de "
+            f"liquidité que §36 a) exige. " + ECUEIL_TAUX_INCOMPLET)
 
 
 def reserve_du_panier(panier: str) -> str:

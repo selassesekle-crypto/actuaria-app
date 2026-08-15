@@ -73,10 +73,12 @@ from normes.ifrs17.socle.errata_donnees import (
     DECLARATION_PRIME_ILLIQUIDITE,
     DECLARATIONS_DU_TAUX_36,
     ECUEIL_TAUX_INCOMPLET,
+    FORMES_PRIME_ILLIQUIDITE,
     PANIER_AVEC_FRAIS_GESTION,
     PANIER_COMPLET_47,
     PANIER_COMPLET_47_ACTUALISE,
     PANIER_LIVRE,
+    qualifier_prime_illiquidite,
     reserve_du_panier,
 )
 
@@ -181,7 +183,7 @@ def classe_61(*, position_nette: float, panier_de_la_position: str,
         f"lieu — c'est la leçon de `NON_ELIGIBLE`, et elle vaut ici."))
 
 
-def _verifier_panier_62b(panier: str, courbe: str,
+def _verifier_panier_62b(panier: str, courbe: str, forme_prime: str,
                          prime_illiquidite: str, convention: str) -> str:
     """Le panier admis pour dater, et la réserve qu'il fait descendre.
 
@@ -223,12 +225,23 @@ def _verifier_panier_62b(panier: str, courbe: str,
         #: ⚠️ DEUX DÉCLARATIONS, PAS UNE. Ce n'est pas seulement la COURBE
         #: qui se déclare (§36 b), c'est aussi CE QU'ON ACTUALISE : mesuré,
         #: la convention seule déplace 23 % de l'effet qu'elle mesure.
+        #: ⚠️ LA COURBE ET SON CRA SONT UNE SEULE DÉCLARATION, PAS DEUX. Le
+        #: CRA n'est pas une constante : il vaut ZÉRO sur une courbe bâtie sur
+        #: €STR, SONIA ou SOFR — indices tenus pour presque sans risque — et
+        #: de 10 à 35 points de base sur une courbe de swaps, 10 étant le
+        #: PLANCHER de la fourchette et non sa valeur. Il DÉCOULE donc de la
+        #: donnée source, et déclarer « EIOPA du 31/07 » sans dire laquelle
+        #: laisserait ignorer si le retraitement vaut 0 ou 35.
+        libelle_courbe = (
+            f"{DECLARATION_COURBE} (la courbe du §36 b) : LA DONNÉE SOURCE "
+            f"— swaps, €STR, souverains — ET le CRA qui en découle, la date "
+            f"d'arrêté, et avec ou sans Volatility Adjustment)")
         libelle_illiquidite = (
             f"{DECLARATION_PRIME_ILLIQUIDITE} (la prime d'illiquidité du "
-            f"§36 a) et de B80, AVEC SA TECHNIQUE)")
+            f"§36 a) et de B80, sous l'une des trois formes "
+            f"{FORMES_PRIME_ILLIQUIDITE})")
         attendues = (
-            (f'{DECLARATION_COURBE} (la courbe sans risque du §36 b))',
-             courbe),
+            (libelle_courbe, courbe),
             (libelle_illiquidite, prime_illiquidite),
             (f"{DECLARATION_CONVENTION} (ce qu'on actualise)", convention),
         )
@@ -261,7 +274,11 @@ def _verifier_panier_62b(panier: str, courbe: str,
                 f"contrats d'écart pour un effet d'actualisation de 208, soit "
                 f"23 % de l'effet qu'elles mesurent. "
                 + ECUEIL_TAUX_INCOMPLET)
-        return ''
+        #: ⚠️ LA FORME DE LA PRIME EST QUALIFIÉE, PAS SEULEMENT SON CONTENU :
+        #: un « néant » nu passerait `est_renseigne` et affirmerait une
+        #: conclusion sans l'établir.
+        return qualifier_prime_illiquidite(forme=forme_prime,
+                                           contenu=prime_illiquidite)
 
     return reserve_du_panier(PANIER_ADMIS_FAUTE_DE_MIEUX_62B)
 
@@ -273,6 +290,7 @@ def date_comptabilisation_62(*, debut_couverture_cedee,
                              traite_conclu_au_plus_tard: bool = False,
                              panier_du_deficit: str = '',
                              courbe_declaree: str = '',
+                             forme_prime_illiquidite: str = '',
                              prime_illiquidite_declaree: str = '',
                              convention_actualisation_declaree: str = '',
                              sous_jacent_en_paa: bool = False
@@ -291,6 +309,7 @@ def date_comptabilisation_62(*, debut_couverture_cedee,
     """
     if date_deficit_sous_jacent is not None:
         reserve = _verifier_panier_62b(panier_du_deficit, courbe_declaree,
+                                       forme_prime_illiquidite,
                                        prime_illiquidite_declaree,
                                        convention_actualisation_declaree)
     else:
