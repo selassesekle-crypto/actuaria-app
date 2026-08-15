@@ -62,7 +62,18 @@ PERIMETRE: tuple[Element, ...] = (
     # ── Ce que le socle fait ────────────────────────────────────────────────
     Element('§14, §16, §22, §25', COUVERT,
             "Unité de compte : portefeuilles, classes de profitabilité, "
-            "cohortes annuelles, date de comptabilisation initiale"),
+            "cohortes annuelles, date de comptabilisation initiale. "
+            "⚠️ LA CLASSE DE PROFITABILITÉ LIVRÉE EST DÉSAVOUÉE COMME "
+            "RÉFÉRENCE DU TEST §16/§47, et le code la REFUSE — voir "
+            "`socle.errata_donnees`, erratum E1. Son panier omet deux "
+            "composantes des flux d'exécution : les frais de gestion des "
+            "sinistres et l'ajustement au titre du risque non financier, que "
+            "§32 a) iii) y range. Mesuré sur les 2 000 contrats livrés : "
+            "249 déficitaires avec le panier livré, 552 en ajoutant les "
+            "frais de gestion, 747 avec l'ajustement pour risque. ⚠️ ET LES "
+            "TROIS N'ONT PAS LA MÊME SOLIDITÉ : le 552 ne dépend d'aucune "
+            "déclaration, le 747 hérite du statut A_REMPLACER de celle qui "
+            "l'alimente — que `mesure.declaration.est_renseigne` refuse."),
     Element('§17', COUVERT,
             "Évaluation d'un ensemble de contrats plutôt que contrat "
             "par contrat"),
