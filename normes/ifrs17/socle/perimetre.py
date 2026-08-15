@@ -701,11 +701,125 @@ PERIMETRE: tuple[Element, ...] = (
             "taux dans la monnaie appropriée ». Le mécanisme de garde "
             "existe juste à côté : `actualiser` REFUSE déjà une courbe "
             "sans agrément. Lot à ouvrir dans `core/`."),
-    Element('§93-132', NON_CONSTRUIT,
-            "Informations à fournir, dont le développement des sinistres "
-            "(§130) et l'analyse de sensibilité (§128-129)",
-            "Le §119, niveau de confiance de l'ajustement pour risque, est "
-            "le seul déjà tenu — hors de ce socle, dans l'agent A11."),
+    # ⚠️⚠️ CE PAN ÉTAIT UN SEUL ÉLÉMENT « §93-132 », ET IL NE POUVAIT PAS
+    # PORTER UN ÉTAT VRAI. Les trois tiers du bloc n'auront JAMAIS le même :
+    # les rapprochements sont un OUVRAGE à bâtir, les risques et jugements
+    # sont majoritairement de la PROSE que seule l'entité écrit. Une étiquette
+    # unique aurait donc été fausse pour au moins une moitié.
+    #
+    # ⚠️ C'EST LE DÉFAUT DU §92 AVALÉ PAR LA PLAGE §78-92, corrigé une fois
+    # déjà : une plage dont ni le libellé ni la raison ne mentionnaient les
+    # écarts de change, introuvable pour qui les cherchait. La scission
+    # l'ANTICIPE au lieu de le subir.
+    #
+    # ⚠️ ET LA COUPURE NE LAISSE AUCUN TROU : §106 à §109 sont exclus en PAA
+    # par §97, mais ils doivent rester DANS un élément — sinon ils
+    # n'appartiendraient à rien, et « exclu » deviendrait indistinguable
+    # d'« oublié ». Ils vivent donc dans le pan des rapprochements, qui dit
+    # lui-même lesquels de ses paragraphes ne s'appliquent pas.
+    Element('§93-97', NON_CONSTRUIT,
+            "Objectif des informations à fournir, niveau de regroupement, et "
+            "les trois informations propres à la méthode d'affectation des "
+            "primes",
+            "⚠️ §97 EST L'INDEX DU BLOC, ET IL SE LIT AVANT TOUT LE RESTE : "
+            "« Parmi les obligations d'information énoncées aux paragraphes "
+            "98 à 109A, SEULES celles des paragraphes 98 à 100, 102, 103, "
+            "105 à 105B et 109A s'appliquent aux contrats évalués selon la "
+            "méthode d'affectation des primes. » ⚠️ Sa portée s'arrête à "
+            "§109A : il ne dit RIEN de §110 à §132, qui portent leurs propres "
+            "restrictions. "
+            "⚠️ ET §97 IMPOSE EN OUTRE TROIS INFORMATIONS PROPRES À LA PAA, "
+            "dont la plateforme tient déjà la matière : a) laquelle des "
+            "conditions des §53 et §69 est remplie — le socle scelle ce "
+            "verdict ; b) si un ajustement a été apporté pour la valeur temps "
+            "de l'argent (§56, §57 b), §59 b)) — `mesure.financement` le "
+            "porte ; c) la méthode retenue pour les flux liés aux frais "
+            "d'acquisition (§59 a)) — DÉCISION DE L'ENTITÉ, et elle n'est pas "
+            "bâtie. ⚠️ Aucune n'est PRODUITE aujourd'hui : la matière existe, "
+            "la restitution non. "
+            "⚠️ §96 laisse le NIVEAU DE REGROUPEMENT à l'entité — IAS 1 §29-31, "
+            "et « il pourrait par exemple être approprié » par type de "
+            "contrat, zone géographique ou secteur IFRS 8. Rien n'est "
+            "prescrit : la plateforme stocke à la maille FINE du groupe, "
+            "l'agrégation est un choix de restitution."),
+    Element('§98-109A', NON_CONSTRUIT,
+            "Rapprochements des soldes d'ouverture et de clôture, et leurs "
+            "causes de mouvement",
+            "⚠️ LA MATIÈRE EST BÂTIE, LA RESTITUTION NE L'EST PAS, et "
+            "confondre les deux serait la sur-affirmation que ce document "
+            "vient de corriger ailleurs. `socle.cloture` porte les QUATRE "
+            "soldes du §100 — le passif net de couverture restante hors "
+            "élément de perte, l'élément de perte, et le passif des sinistres "
+            "survenus VENTILÉ entre flux futurs et ajustement pour risque, "
+            "cette ventilation ne portant que sur le poste c) — ainsi que les "
+            "ONZE postes de mouvement de §103 et §105 et le résidu du "
+            "§105 d). ⚠️ MAIS AUCUN TABLEAU N'EST PRODUIT : §99 a) exige les "
+            "rapprochements « sous forme de tableau », et rien ne les "
+            "assemble. "
+            "⚠️ CE QUI NE S'APPLIQUE PAS EN PAA, PAR §97 : §101 et §104 "
+            "(ils visent les contrats « qui NE SONT PAS évalués » selon la "
+            "PAA et apporteraient la marge sur services contractuels, qui "
+            "n'existe pas ici), §106, §107, §108 et §109. ⚠️ §109 ET §109A "
+            "SONT DEUX PARAGRAPHES DIFFÉRENTS : le premier est exclu, le "
+            "second s'applique. "
+            "⚠️⚠️ TROIS PARAGRAPHES SONT BLOQUÉS PAR UNE SEULE ET MÊME CAUSE, "
+            "ET CE N'EST PAS TROIS OUBLIS : §105A (rapprochement séparé de "
+            "l'actif au titre des flux liés aux frais d'acquisition), §105B "
+            "(pertes de valeur et reprises de cet actif) et §109A (calendrier "
+            "ATTENDU de sa décomptabilisation) reposent tous sur le mécanisme "
+            "des §28B, §28C, §28E et §28F, QUI N'EST PAS BÂTI. Le §28B est "
+            "traité au bilan (§79, incorporation au portefeuille) ; son "
+            "déroulé, sa dépréciation et sa décomptabilisation ne le sont "
+            "pas. Un seul ouvrage manquant, trois informations absentes. "
+            "⚠️ §102 est une clause d'OBJECTIF : il n'y a rien à en calculer."),
+    Element('§110-132', NON_CONSTRUIT,
+            "Produits et charges financiers, jugements importants, et nature "
+            "et ampleur des risques",
+            "⚠️ CE PAN EST MAJORITAIREMENT DE LA PROSE QUE SEULE L'ENTITÉ "
+            "ÉCRIT, et le dire est plus utile que de promettre un ouvrage. "
+            "§117 (jugements, données d'entrée, hypothèses), §121 à §127 "
+            "(expositions, objectifs, politiques, concentrations) et §132 a) "
+            "(gestion du risque de liquidité) ne se calculent pas. §125 a) "
+            "s'appuie même explicitement sur les informations « communiquées "
+            "EN INTERNE aux principaux dirigeants », que la plateforme ne "
+            "voit pas. "
+            "⚠️ DEUX EXIGENCES SORTENT STRUCTURELLEMENT DU PÉRIMÈTRE, ET PAS "
+            "FAUTE DE TRAVAIL : §110 demande d'expliquer le lien entre les "
+            "charges financières d'assurance et LE RENDEMENT DES ACTIFS de "
+            "l'entité, et §128 a) ii) de relier la sensibilité des contrats à "
+            "celle des ACTIFS FINANCIERS DÉTENUS. La plateforme mesure des "
+            "passifs d'assurance ; elle ne voit aucun actif. "
+            "⚠️ CE QUI EST RESTITUABLE, ET SEULEMENT RESTITUABLE : §119, le "
+            "niveau de confiance de l'ajustement pour risque — déjà tenu hors "
+            "de ce socle, dans l'agent A11, et `mesure.flux_execution` porte "
+            "le champ ; §120, la courbe d'actualisation employée. ⚠️ ET §120 "
+            "PORTE UN PIÈGE DÉJÀ PAYÉ : il admet une présentation « sous "
+            "forme de MOYENNES PONDÉRÉES ou de fourchettes ». Une moyenne "
+            "pondérée de courbe est une DÉCISION, exactement comme la "
+            "pondération de B73 — trois pondérations défendables donnent "
+            "trois courbes. Elle se REÇOIT déclarée, elle ne se calcule pas. "
+            "La fourchette, elle, se déduit des taux remis. "
+            "⚠️ §130 — LE DÉVELOPPEMENT DES SINISTRES, avec ses deux bornes "
+            "et son « cependant ». Il n'est pas obligatoire de remonter "
+            "au-delà de DIX ANS, ni de couvrir les sinistres dont "
+            "l'incertitude « est habituellement levée dans un délai d'un "
+            "an » ; mais l'entité doit CEPENDANT rapprocher le développement "
+            "communiqué de la valeur comptable totale présentée en "
+            "application du §100 c). ⚠️ Ce rapprochement, lui, est calculable "
+            "— c'est exactement ce que `socle.cloture` porte. "
+            "⚠️ §132 — LE PASSIF AU TITRE DE LA COUVERTURE RESTANTE EN PAA "
+            "EST EXCLU DE L'ANALYSE D'ÉCHÉANCES, le texte le dit : « l'entité "
+            "n'est pas tenue d'inclure dans ces analyses le passif au titre "
+            "de la couverture restante évalué selon les paragraphes 55 à 59 "
+            "et les paragraphes 69 à 70A ». Il ne reste donc que le passif "
+            "des sinistres survenus — et AUCUN ÉCHÉANCIER DE RÈGLEMENT n'a "
+            "été remis à ce jour. "
+            "⚠️ §131 est partiellement atteignable : l'exposition maximale au "
+            "risque de crédit se calcule sur la part cédée, et le chantier de "
+            "réassurance vérifie déjà le taux de défaut contre "
+            "« défaut × (1 − collatéral) » ligne à ligne ; en revanche la "
+            "QUALITÉ DU CRÉDIT des réassureurs — une notation — n'est dans "
+            "aucune donnée remise."),
     # ⚠️⚠️ CETTE EXCLUSION N'A AUCUN APPUI NORMATIF, ET C'EST SA RAISON
     # D'ÊTRE. Aucun paragraphe d'IFRS 17 ne dit comment le document est
     # RÉDIGÉ : la norme prescrit ce qui doit y figurer, pas la plume. Ce

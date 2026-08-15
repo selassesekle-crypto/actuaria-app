@@ -3,6 +3,7 @@
 
 ⚠️ GATE : `py -m unittest discover -s normes -t .` — voir test_contrat.py.
 """
+import itertools
 import re
 import unittest
 
@@ -104,6 +105,90 @@ class T0_LeQuatriemeEtatEtSonVERROU(unittest.TestCase):
         self.assertNotIn('', OPPOSABILITES)
 
 
+class T0b_LaScissionDesAnnexes(unittest.TestCase):
+    """⚠️⚠️ UN SEUL ÉLÉMENT « §93-132 » NE POUVAIT PAS PORTER UN ÉTAT VRAI.
+
+    Les trois tiers du bloc n'auront jamais le même : les rapprochements sont
+    un OUVRAGE à bâtir, les risques et jugements sont majoritairement de la
+    PROSE que seule l'entité écrit. Une étiquette unique aurait été fausse
+    pour au moins une moitié.
+
+    ⚠️ C'est le défaut du §92 AVALÉ PAR LA PLAGE §78-92, déjà corrigé une
+    fois. La scission l'anticipe au lieu de le subir.
+    """
+
+    ANNEXES = ('§93-97', '§98-109A', '§110-132')
+
+    def _annexes(self):
+        return {e.reference: e for e in PERIMETRE
+                if e.reference in self.ANNEXES}
+
+    def test_les_trois_pans_existent_et_portent_chacun_sa_raison(self):
+        a = self._annexes()
+        self.assertEqual(sorted(a), sorted(self.ANNEXES))
+        for ref, e in a.items():
+            self.assertTrue(e.raison.strip(), ref)
+        print(f"    OK T0c : les annexes sont scindees en {len(a)} pans")
+
+    def test_LA_COUPURE_NE_LAISSE_AUCUN_TROU(self):
+        """⚠️⚠️ §106 À §109 SONT EXCLUS EN PAA, ET ILS DOIVENT RESTER DANS UN
+        ÉLÉMENT. Sans cela ils n'appartiendraient à rien, et « exclu »
+        deviendrait indistinguable d'« oublié » — exactement le §92 avalé."""
+        bornes = []
+        for ref in self.ANNEXES:
+            deb, fin = ref.lstrip('§').split('-')
+            bornes.append((int(re.sub(r'\D', '', deb)),
+                           int(re.sub(r'\D', '', fin))))
+        bornes.sort()
+        self.assertEqual(bornes[0][0], 93)
+        self.assertEqual(bornes[-1][1], 132)
+        for (_, fin), (deb, _) in itertools.pairwise(bornes):
+            self.assertEqual(deb, fin + 1,
+                             f"trou ou recouvrement entre §{fin} et §{deb}")
+        print(f"    OK T0d : §93 a §132 couverts sans trou -- {bornes}")
+
+    def test_le_pan_des_rapprochements_NOMME_les_exclus_du_97(self):
+        """⚠️ Un paragraphe exclu qui n'est nommé nulle part se lit comme
+        oublié."""
+        r = self._annexes()['§98-109A'].raison
+        for exclu in ('§101', '§104', '§106', '§107', '§108', '§109'):
+            self.assertIn(exclu, r, exclu)
+        self.assertIn('§109 ET §109A', r)
+
+    def test_les_trois_paragraphes_bloques_ont_UNE_SEULE_CAUSE_et_le_disent(
+            self):
+        """⚠️ §105A, §105B et §109A ne sont pas trois oublis : ils reposent
+        tous sur le mécanisme des §28B/§28C/§28E/§28F, non bâti. Un lecteur
+        doit voir UN ouvrage manquant, pas trois trous."""
+        r = self._annexes()['§98-109A'].raison
+        for morceau in ('§105A', '§105B', '§109A', '§28B', '§28C', '§28E',
+                        '§28F', 'UNE SEULE ET MÊME CAUSE',
+                        'trois informations absentes'):
+            self.assertIn(morceau, r, morceau)
+
+    def test_le_piege_du_120_est_ECRIT_avec_son_precedent(self):
+        """⚠️ Une moyenne pondérée de courbe est une DÉCISION, exactement
+        comme la pondération de B73 : trois pondérations, trois courbes.
+        Elle se REÇOIT, elle ne se calcule pas."""
+        r = self._annexes()['§110-132'].raison
+        for morceau in ('MOYENNES PONDÉRÉES', 'B73', 'DÉCISION',
+                        'Elle se REÇOIT', 'ne se calcule pas'):
+            self.assertIn(morceau, r, morceau)
+
+    def test_les_deux_restrictions_HORS_PORTEE_DU_97_sont_ecrites(self):
+        """⚠️⚠️ §97 s'arrête à §109A. Ces deux-là vivent dans §110-132 et
+        auraient été manquées en s'y fiant."""
+        r = self._annexes()['§110-132'].raison
+        self.assertIn("n'est pas tenue d'inclure dans ces analyses le passif "
+                      "au titre de la couverture restante", r)
+        self.assertIn('DIX ANS', r)
+        self.assertIn('CEPENDANT', r)
+        self.assertIn("s'arrête à §109A",
+                      self._annexes()['§93-97'].raison)
+        print("    OK T0e : les 2 restrictions hors portee du §97 sont "
+              "ecrites, avec l'index lui-meme")
+
+
 class T1_LesQuatreEtats(unittest.TestCase):
     """T1 — confondre deux états trompe, quel que soit le couple."""
 
@@ -174,7 +259,8 @@ class T2_LePerimetreNeRevendiquePasPlusQueLeSocle(unittest.TestCase):
             self.assertIn(attendu, batis)
         non_construits = ' '.join(e.reference for e in
                                   elements(NON_CONSTRUIT))
-        self.assertIn('§93-132', non_construits)
+        for annexe in ('§93-97', '§98-109A', '§110-132'):
+            self.assertIn(annexe, non_construits)
         couverts = ' '.join(e.reference for e in elements(COUVERT))
         for interdit in ('§55', '§60', '§80', '§100', '§130'):
             self.assertNotIn(interdit, couverts)
