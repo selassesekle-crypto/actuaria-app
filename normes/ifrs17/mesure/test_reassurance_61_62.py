@@ -27,6 +27,9 @@ from normes.ifrs17.mesure.reassurance_61_62 import (
     date_comptabilisation_62,
 )
 from normes.ifrs17.socle.errata_donnees import (
+    DECLARATION_PRIME_ILLIQUIDITE,
+    DECLARATIONS_DU_TAUX_36,
+    ECUEIL_TAUX_INCOMPLET,
     PANIER_COMPLET_47,
     PANIER_LIVRE,
 )
@@ -36,6 +39,7 @@ DEBUT = J(2026, 1, 1)
 PANIER = PANIER_ADMIS_FAUTE_DE_MIEUX_62B
 COURBE = 'EIOPA 31/07/2026 sans VA, CRA de 10 bps reintegre, note du 12/08'
 CONV = 'duree moyenne sur sinistres + frais de gestion + ajustement risque'
+ILLIQ = 'approche ascendante B80, 50 % du spread du portefeuille de reference'
 
 
 class T1_Le61InverseLeCritereDu16(unittest.TestCase):
@@ -128,7 +132,8 @@ class T3_Le62ARefuseUnPanierNonSigne(unittest.TestCase):
             date_deficit_sous_jacent=J(2025, 11, 1),
             traite_conclu_au_plus_tard=True,
             panier_du_deficit=PANIER_PREFERE_62B,
-            courbe_declaree=COURBE, convention_actualisation_declaree=CONV)
+            courbe_declaree=COURBE, prime_illiquidite_declaree=ILLIQ,
+            convention_actualisation_declaree=CONV)
         self.assertEqual(r.date, J(2025, 11, 1))
         self.assertNotIn("N'EST PAS ACTUALISÉ", r.motif)
 
@@ -140,6 +145,7 @@ class T3_Le62ARefuseUnPanierNonSigne(unittest.TestCase):
                 date_deficit_sous_jacent=J(2025, 11, 1),
                 traite_conclu_au_plus_tard=True,
                 panier_du_deficit=PANIER_PREFERE_62B,
+                prime_illiquidite_declaree=ILLIQ,
                 convention_actualisation_declaree=CONV)
         self.assertEqual(e.exception.motif, MOTIF_ACTUALISATION_NON_DECLAREE)
 
@@ -151,7 +157,8 @@ class T3_Le62ARefuseUnPanierNonSigne(unittest.TestCase):
                 couverture_proportionnelle=False,
                 date_deficit_sous_jacent=J(2025, 11, 1),
                 traite_conclu_au_plus_tard=True,
-                panier_du_deficit=PANIER_PREFERE_62B, courbe_declaree=COURBE)
+                panier_du_deficit=PANIER_PREFERE_62B, courbe_declaree=COURBE,
+                prime_illiquidite_declaree=ILLIQ)
         self.assertEqual(e.exception.motif, MOTIF_ACTUALISATION_NON_DECLAREE)
         self.assertIn('23 %', str(e.exception))
         self.assertIn('521, 539, 541 et 568', str(e.exception))
@@ -176,9 +183,39 @@ class T3_Le62ARefuseUnPanierNonSigne(unittest.TestCase):
         d'illiquidité du §36 a) et de B80.
         """
         msg = self._refus_actualisation()
-        self.assertIn("PRIME D'ILLIQUIDITÉ", msg)
+        self.assertIn(DECLARATION_PRIME_ILLIQUIDITE, msg)
+        self.assertIn("prime d'illiquidité", msg)
         self.assertIn('B80', msg)
         self.assertIn('§36 a)', msg)
+
+    def test_la_PRIME_D_ILLIQUIDITE_est_une_declaration_A_PART(self):
+        """⚠️ SÉPARÉE DE LA COURBE, ET C'EST LA LEÇON DU CRA.
+
+        Courbe et convention déclarées, illiquidité manquante : le module
+        doit refuser. La fondre dans « la courbe » la rendrait invisible, et
+        un terme absorbé dans un mot global ne se rouvre pas.
+        """
+        with self.assertRaises(RefusMesure) as e:
+            date_comptabilisation_62(
+                debut_couverture_cedee=DEBUT,
+                couverture_proportionnelle=False,
+                date_deficit_sous_jacent=J(2025, 11, 1),
+                traite_conclu_au_plus_tard=True,
+                panier_du_deficit=PANIER_PREFERE_62B, courbe_declaree=COURBE,
+                convention_actualisation_declaree=CONV)
+        self.assertEqual(e.exception.motif, MOTIF_ACTUALISATION_NON_DECLAREE)
+        self.assertIn(DECLARATION_PRIME_ILLIQUIDITE, str(e.exception))
+        self.assertIn('1 des 3', str(e.exception))
+
+    def test_le_refus_porte_l_ecueil_documente(self):
+        """⚠️ « À LA FOIS le sans-risque ET la prime d'illiquidité »."""
+        self.assertIn(ECUEIL_TAUX_INCOMPLET, self._refus_actualisation())
+
+    def test_les_trois_declarations_sont_nommees_dans_le_refus(self):
+        msg = self._refus_actualisation()
+        for d in DECLARATIONS_DU_TAUX_36:
+            self.assertIn(d, msg)
+        self.assertIn('3 des 3', msg)
 
     def test_le_refus_dit_que_le_CRA_est_DEJA_conforme(self):
         """⚠️ Le verrou dans l'autre sens : ne pas redemander de le défaire."""

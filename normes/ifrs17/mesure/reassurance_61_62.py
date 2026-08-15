@@ -68,6 +68,11 @@ from typing import NamedTuple
 from normes.ifrs17.mesure.declaration import est_renseigne
 from normes.ifrs17.mesure.lrc_paa import RefusMesure
 from normes.ifrs17.socle.errata_donnees import (
+    DECLARATION_CONVENTION,
+    DECLARATION_COURBE,
+    DECLARATION_PRIME_ILLIQUIDITE,
+    DECLARATIONS_DU_TAUX_36,
+    ECUEIL_TAUX_INCOMPLET,
     PANIER_AVEC_FRAIS_GESTION,
     PANIER_COMPLET_47,
     PANIER_COMPLET_47_ACTUALISE,
@@ -90,7 +95,8 @@ ORIGINE_62B_DEFICIT_SOUS_JACENT = 'DEFICIT_SOUS_JACENT_25C'
 
 #: ⚠️⚠️ DEUX PANIERS ADMIS, ET ILS NE LE SONT PAS AU MÊME TITRE. Le panier
 #: COMPLET ACTUALISÉ est le seul complet au sens du §47 : il est PRÉFÉRÉ, mais
-#: il exige sa courbe et sa convention déclarées. Le 552 reste admis FAUTE DE
+#: il exige les TROIS déclarations du taux §36 — la courbe sans risque, la
+#: prime d'illiquidité et la convention. Le 552 reste admis FAUTE DE
 #: MIEUX, avec sa réserve — le refuser supprimerait une date que la norme
 #: exige, et un refus qui supprime une obligation est pire que le défaut
 #: qu'il évite.
@@ -100,7 +106,7 @@ PANIERS_ADMIS_62B = (PANIER_PREFERE_62B, PANIER_ADMIS_FAUTE_DE_MIEUX_62B)
 
 MOTIF_PANIER_REFUSE = 'panier_du_deficit_refuse_pour_dater'
 MOTIF_POSITION_NON_QUALIFIEE = 'position_nette_non_qualifiee'
-MOTIF_ACTUALISATION_NON_DECLAREE = 'courbe_ou_convention_non_declaree'
+MOTIF_ACTUALISATION_NON_DECLAREE = 'declarations_du_taux_36_incompletes'
 
 #: ⚠️ CE QUE §18 CHANGE AU STATUT, ET QU'UN AGRÉGAT NE DOIT PAS PERDRE.
 RESERVE_18_PAA = (
@@ -175,7 +181,8 @@ def classe_61(*, position_nette: float, panier_de_la_position: str,
         f"lieu — c'est la leçon de `NON_ELIGIBLE`, et elle vaut ici."))
 
 
-def _verifier_panier_62b(panier: str, courbe: str, convention: str) -> str:
+def _verifier_panier_62b(panier: str, courbe: str,
+                         prime_illiquidite: str, convention: str) -> str:
     """Le panier admis pour dater, et la réserve qu'il fait descendre.
 
     ⚠️ REFUSER LES DEUX PANIERS IMPARFAITS SUPPRIMERAIT UNE DATE QUE LA NORME
@@ -216,31 +223,44 @@ def _verifier_panier_62b(panier: str, courbe: str, convention: str) -> str:
         #: ⚠️ DEUX DÉCLARATIONS, PAS UNE. Ce n'est pas seulement la COURBE
         #: qui se déclare (§36 b), c'est aussi CE QU'ON ACTUALISE : mesuré,
         #: la convention seule déplace 23 % de l'effet qu'elle mesure.
-        manquants = [nom for nom, v in (('la courbe du §36 b)', courbe),
-                                        ("la convention d'actualisation",
-                                         convention))
-                     if not est_renseigne(v)]
+        libelle_illiquidite = (
+            f"{DECLARATION_PRIME_ILLIQUIDITE} (la prime d'illiquidité du "
+            f"§36 a) et de B80, AVEC SA TECHNIQUE)")
+        attendues = (
+            (f'{DECLARATION_COURBE} (la courbe sans risque du §36 b))',
+             courbe),
+            (libelle_illiquidite, prime_illiquidite),
+            (f"{DECLARATION_CONVENTION} (ce qu'on actualise)", convention),
+        )
+        manquants = [nom for nom, v in attendues if not est_renseigne(v)]
         if manquants:
             raise RefusMesure(
                 MOTIF_ACTUALISATION_NON_DECLAREE,
                 f"le panier complet actualisé est employé mais "
-                f"{' et '.join(manquants)} n'est pas déclaré. ⚠️ LA "
-                f"CONVENTION N'EST PAS MOINS UNE DÉCISION QUE LA COURBE : "
-                f"mesuré à 4 % sur le portefeuille livré, quatre conventions "
-                f"également défendables donnent 521, 539, 541 et 568 "
-                f"déficitaires — 47 contrats d'écart pour un effet "
-                f"d'actualisation de 208, soit 23 % de l'effet qu'elles "
-                f"mesurent. Un comptage actualisé sans sa convention laisse "
-                f"croire à une grandeur objective là où il y a DEUX "
-                f"décisions superposées. ⚠️ Et la courbe EIOPA sans VA n'est "
-                f"pas une courbe §36 telle quelle : il lui manque la PRIME "
-                f"D'ILLIQUIDITÉ que §36 a) et B80 exigent — « les "
-                f"caractéristiques de liquidité des contrats d'assurance ». "
-                f"Son ajustement pour risque de crédit, lui, est DÉJÀ "
-                f"conforme : il retire de la courbe swap un facteur qui "
-                f"influe sur les prix de marché mais pas sur les flux "
-                f"d'assurance, ce que §36 c) impose d'exclure. La prime "
-                f"d'illiquidité SE DÉCLARE, avec sa technique")
+                f"{len(manquants)} des {len(DECLARATIONS_DU_TAUX_36)} "
+                f"déclarations du taux §36 manque(nt) : "
+                f"{' · '.join(manquants)}. "
+                f"⚠️⚠️ LES TROIS SE DÉCLARENT SÉPARÉMENT, ET CE N'EST PAS UNE "
+                f"formalité : fondre la prime d'illiquidité dans « la "
+                f"courbe » la rendrait invisible, et un terme absorbé dans "
+                f"un mot global ne se rouvre pas. Ce module en a fait la "
+                f"preuve — il a exigé pendant un temps qu'on « retraite » "
+                f"l'ajustement pour risque de crédit, à l'envers, et il a "
+                f"fallu une source externe pour le voir. "
+                f"⚠️ LA COURBE EIOPA SANS VA NE SUFFIT PAS : il lui manque la "
+                f"prime d'illiquidité que §36 a) exige — « les "
+                f"caractéristiques de liquidité des contrats d'assurance » — "
+                f"et que B80 construit par voie ascendante. Son ajustement "
+                f"pour risque de crédit, lui, est DÉJÀ conforme : il retire "
+                f"de la courbe swap un facteur qui influe sur les prix de "
+                f"marché mais pas sur les flux d'assurance, ce que §36 c) "
+                f"impose d'exclure. "
+                f"⚠️ ET LA CONVENTION N'EST PAS MOINS UNE DÉCISION : mesuré à "
+                f"4 % sur le portefeuille livré, quatre conventions également "
+                f"défendables donnent 521, 539, 541 et 568 déficitaires — 47 "
+                f"contrats d'écart pour un effet d'actualisation de 208, soit "
+                f"23 % de l'effet qu'elles mesurent. "
+                + ECUEIL_TAUX_INCOMPLET)
         return ''
 
     return reserve_du_panier(PANIER_ADMIS_FAUTE_DE_MIEUX_62B)
@@ -253,6 +273,7 @@ def date_comptabilisation_62(*, debut_couverture_cedee,
                              traite_conclu_au_plus_tard: bool = False,
                              panier_du_deficit: str = '',
                              courbe_declaree: str = '',
+                             prime_illiquidite_declaree: str = '',
                              convention_actualisation_declaree: str = '',
                              sous_jacent_en_paa: bool = False
                              ) -> Comptabilisation62:
@@ -270,6 +291,7 @@ def date_comptabilisation_62(*, debut_couverture_cedee,
     """
     if date_deficit_sous_jacent is not None:
         reserve = _verifier_panier_62b(panier_du_deficit, courbe_declaree,
+                                       prime_illiquidite_declaree,
                                        convention_actualisation_declaree)
     else:
         reserve = ''

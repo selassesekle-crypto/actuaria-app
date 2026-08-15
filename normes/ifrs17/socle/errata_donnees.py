@@ -173,6 +173,31 @@ CONVENTION_DES_SENSIBILITES = (
 ECART_ENTRE_CONVENTIONS_A_4PCT = 47
 EFFET_ACTUALISATION_A_4PCT = 208
 
+#: ⚠️⚠️ TROIS DÉCLARATIONS, ET ELLES SE SÉPARENT — c'est le tout de la leçon
+#: du CRA. Fondre la prime d'illiquidité dans « la courbe » la rendrait
+#: invisible, et un terme absorbé dans un mot global ne se rouvre pas : il
+#: a fallu une source externe pour voir qu'une exigence posée ici sur le CRA
+#: était à l'envers. Ce qui est nommé séparément se relit séparément.
+DECLARATION_COURBE = 'COURBE_SANS_RISQUE'
+DECLARATION_PRIME_ILLIQUIDITE = 'PRIME_ILLIQUIDITE'
+DECLARATION_CONVENTION = 'CONVENTION_ACTUALISATION'
+DECLARATIONS_DU_TAUX_36 = (DECLARATION_COURBE, DECLARATION_PRIME_ILLIQUIDITE,
+                           DECLARATION_CONVENTION)
+
+#: ⚠️ LE PREMIER ÉCUEIL À DOCUMENTER, ET C'EST EXACTEMENT NOTRE SITUATION.
+#: La note « Courbe des taux sans risque sous IFRS 17 » de l'Institut des
+#: Actuaires (juillet 2022, §5, bonnes pratiques et gouvernance) place en
+#: tête des écueils à éviter ET À DOCUMENTER le cas d'un taux d'actualisation
+#: qui ne reflète pas à la fois le taux sans risque ET la prime
+#: d'illiquidité. L'avoir écrit vaut mieux que le découvrir.
+ECUEIL_TAUX_INCOMPLET = (
+    "⚠️ ÉCUEIL NOMMÉ, ET C'EST LE PREMIER DE LA LISTE : un taux "
+    "d'actualisation qui ne reflète pas À LA FOIS le taux sans risque ET la "
+    "prime d'illiquidité. §36 a) exige les « caractéristiques de liquidité "
+    "des contrats d'assurance » et B80 décrit l'ajustement correspondant ; "
+    "une courbe sans risque seule ne les porte pas. C'est la situation de ce "
+    "dépôt, et elle est écrite plutôt que laissée à découvrir.")
+
 
 class Erratum(NamedTuple):
     """Un défaut de donnée confirmé, avec sa nature, son poids et sa suite."""
