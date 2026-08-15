@@ -631,6 +631,45 @@ PERIMETRE: tuple[Element, ...] = (
             "(§130) et l'analyse de sensibilité (§128-129)",
             "Le §119, niveau de confiance de l'ajustement pour risque, est "
             "le seul déjà tenu — hors de ce socle, dans l'agent A11."),
+    # ⚠️⚠️ CETTE EXCLUSION N'A AUCUN APPUI NORMATIF, ET C'EST SA RAISON
+    # D'ÊTRE. Aucun paragraphe d'IFRS 17 ne dit comment le document est
+    # RÉDIGÉ : la norme prescrit ce qui doit y figurer, pas la plume. Ce
+    # qu'aucun texte n'interdit, aucun texte n'arrête — la ligne existe donc
+    # ici, où un actuaire qui signe et un CAC qui lit la rencontreront.
+    #
+    # ⚠️ ET LE RISQUE EST MESURÉ, PAS CRAINT. `core.frontiere_llm` déclare
+    # TREIZE sites d'appel, dont NEUF sont des narrations de rapport —
+    # provisionnement, tarification, vie, santé, prévoyance. **AUCUN n'est
+    # dans `normes/`** : IFRS 17 est aujourd'hui le seul domaine du dépôt
+    # sans site LLM, et rien ne le disait. Le jour où le rendu des états
+    # sera bâti, la chaîne A7 sera le modèle évident à reprendre — elle
+    # porte `_narration_claude_api`, et la reprendre par réflexe de
+    # réutilisation est le chemin le plus court.
+    #
+    # ⚠️ LE VERROU TIENT EN DEUX PIÈCES, ET AUCUNE NE SUFFIT SEULE :
+    #   · `test_frontiere_llm` interdit d'appeler l'API hors de la frontière,
+    #     dans TOUT le dépôt — un quatorzième site doit donc l'importer ;
+    #   · `test_perimetre` interdit qu'un fichier de `normes/` l'importe.
+    # Ensemble, elles rendent la déclaration vérifiable et non seulement
+    # écrite. Une exclusion que personne ne contrôle est une intention.
+    Element('aucun paragraphe — production du livrable', HORS_PERIMETRE,
+            "Rédaction par modèle de langage de tout ou partie des états "
+            "financiers (§78-92) et de leurs annexes (§93-132)",
+            "Les états financiers et leurs annexes ne comportent AUCUN texte "
+            "produit par un modèle de langage. La norme prescrit des MONTANTS "
+            "et des rapprochements dont la forme est imposée (§99-109) : un "
+            "rapport actuariel argumente, une annexe énonce. Une phrase "
+            "générée dans un document signé affirmerait plus que la mesure ne "
+            "porte, et aucun contrôle ne peut la confronter au texte comme il "
+            "confronte un montant. ⚠️ AUCUN PARAGRAPHE D'IFRS 17 NE L'INTERDIT "
+            "— la norme ne dit pas qui tient la plume — et c'est précisément "
+            "pourquoi cette exclusion est écrite : ce qu'aucun texte "
+            "n'interdit, aucun texte n'arrête. ⚠️ ELLE PORTE SUR LE CONTENU DU "
+            "LIVRABLE, NON SUR LA PLATEFORME : un modèle de langage peut "
+            "servir en amont — reconnaissance de colonnes, assistance à la "
+            "saisie — sans qu'aucune de ses sorties n'entre dans les états. La "
+            "frontière technique unique par laquelle une donnée sort reste "
+            "inchangée : cette ligne déclare un PÉRIMÈTRE, pas un mécanisme."),
     Element('§21', NON_CONSTRUIT,
             "Subdivision des groupes au-delà de §16",
             "Le champ `groupe_declare` de l'inventaire la permet ; elle "

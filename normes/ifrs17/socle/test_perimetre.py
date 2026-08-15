@@ -426,5 +426,108 @@ class T6_LeTextePublie(unittest.TestCase):
         print(f"    OK T6b : les {len(PERIMETRE)} elements figurent au texte")
 
 
+class T7_LaNarrationLLM_EstECARTEE_ET_LE_VERROU_TIENT(unittest.TestCase):
+    """⚠️⚠️ UNE EXCLUSION QUE PERSONNE NE CONTRÔLE EST UNE INTENTION.
+
+    Cette classe est le second demi-verrou. Le premier vit dans
+    `core/test_frontiere_llm.py` : il interdit d'appeler l'API hors de la
+    frontière, dans TOUT le dépôt — un quatorzième site DOIT donc importer
+    la frontière. Celui-ci interdit qu'un fichier de `normes/` l'importe.
+
+    ⚠️ NI L'UN NI L'AUTRE NE SUFFIT SEUL : sans le premier, un module de
+    `normes/` pourrait instancier son propre client ; sans le second, il
+    suffirait de passer par la frontière pour rédiger une annexe signée.
+    """
+
+    #: L'élément, repéré par sa référence — qui ne cite AUCUN paragraphe,
+    #: et c'est délibéré : la norme ne dit pas qui tient la plume.
+    REFERENCE = 'aucun paragraphe — production du livrable'
+
+    def _element(self):
+        trouves = [e for e in PERIMETRE if e.reference == self.REFERENCE]
+        self.assertEqual(len(trouves), 1, "l'exclusion LLM a disparu")
+        return trouves[0]
+
+    def test_l_exclusion_est_une_DECISION_ASSUMEE_pas_un_chantier(self):
+        """⚠️ HORS_PERIMETRE et non NON_CONSTRUIT : rien ne viendra la
+        combler. La confondre avec un chantier laisserait croire l'inverse."""
+        self.assertEqual(self._element().etat, HORS_PERIMETRE)
+        print("    OK T7 : la narration LLM est HORS PERIMETRE, assumee")
+
+    def test_elle_ne_cite_aucun_paragraphe_ET_LE_DIT(self):
+        """⚠️ CITER UN PARAGRAPHE SERAIT LUI INVENTER UN APPUI. Aucun
+        paragraphe d'IFRS 17 n'interdit une prose générée — c'est
+        exactement pourquoi la ligne doit exister."""
+        e = self._element()
+        self.assertEqual(_paragraphes(e.reference), set())
+        self.assertIn("AUCUN PARAGRAPHE D'IFRS 17 NE L'INTERDIT", e.raison)
+        self.assertIn("aucun texte n'arrête", e.raison)
+
+    def test_elle_porte_sur_le_LIVRABLE_et_pas_sur_la_plateforme(self):
+        """⚠️ SANS CETTE PRÉCISION, ELLE SE LIRAIT COMME UNE INTERDICTION
+        GÉNÉRALE — et le mapping de colonnes tomberait avec."""
+        r = self._element().raison
+        self.assertIn('LE CONTENU DU LIVRABLE, NON SUR LA PLATEFORME', r)
+        self.assertIn('reconnaissance de colonnes', r)
+        self.assertIn('un PÉRIMÈTRE, pas un mécanisme', r)
+
+    def test_AUCUN_fichier_de_normes_n_atteint_le_modele_de_langage(self):
+        """⚠️⚠️ LE VERROU RÉEL, MESURÉ SUR LE CODE ET NON DÉCLARÉ.
+
+        Le jour où le rendu des états sera bâti, la chaîne A7 sera le modèle
+        évident à reprendre — elle porte `_narration_claude_api`. Ce test
+        échoue AVANT que la ligne ne parte chez un client.
+
+        ⚠️ IL SE LIT SUR L'AST, ET LA PREMIÈRE VERSION SE LISAIT SUR LE
+        TEXTE : elle échouait sur ELLE-MÊME, en trouvant les chaînes qu'elle
+        cherchait dans sa propre prose. Le dépôt avait déjà payé cette leçon
+        avec `test_aucune_dependance_au_socle`. Mesuré ici : « appeler »
+        apparaît trois fois dans `normes/`, TOUJOURS en français — « l'appeler
+        directement contourne ce contrôle » — et JAMAIS comme identifiant. Un
+        relevé textuel rendrait trois faux positifs ; l'AST en rend zéro.
+        """
+        import ast
+        from pathlib import Path
+        racine = Path(__file__).resolve().parents[2]
+        fautifs, balayes = [], 0
+        for f in racine.rglob('*.py'):
+            balayes += 1
+            arbre = ast.parse(f.read_text(encoding='utf-8'))
+            noms = set()
+            for n in ast.walk(arbre):
+                if isinstance(n, ast.Import):
+                    noms |= {a.name.split('.')[0] for a in n.names}
+                elif isinstance(n, ast.ImportFrom):
+                    noms.add((n.module or '').split('.')[0])
+                    noms |= {a.name for a in n.names}
+                elif isinstance(n, ast.Attribute):
+                    noms.add(n.attr)
+                elif isinstance(n, ast.Name):
+                    noms.add(n.id)
+            atteint = noms & {'anthropic', 'appeler'}
+            if atteint:
+                fautifs.append(f'{f.name} ({sorted(atteint)})')
+        self.assertEqual(
+            fautifs, [],
+            f"{len(fautifs)} fichier(s) de normes/ atteignent le modèle de "
+            f"langage : {fautifs}. Le périmètre publié affirme qu'aucun texte "
+            f"des états financiers n'en provient — voir « {self.REFERENCE} ».")
+        print(f"    OK T7b : {balayes} fichiers de normes/ balayes sur "
+              "l'AST, AUCUN n'atteint le modele de langage")
+
+    def test_le_releve_des_narrations_du_depot_est_BRUYANT(self):
+        """⚠️ LA RAISON PUBLIÉE CITE « 13 sites, dont 9 narrations ». Un
+        chiffre écrit dans un livrable et jamais confronté redevient faux
+        sans bruit — celui-ci tombe si le relevé bouge."""
+        from core.frontiere_llm import SITES
+        narrations = [s for s in SITES if s.usage == 'narration']
+        self.assertEqual((len(SITES), len(narrations)), (13, 9))
+        dans_normes = [s.chemin for s in SITES
+                       if s.chemin.startswith('normes/')]
+        self.assertEqual(dans_normes, [], "un site LLM est apparu dans normes/")
+        print(f"    OK T7c : {len(SITES)} sites declares, {len(narrations)} "
+              "narrations, AUCUNE dans normes/")
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
