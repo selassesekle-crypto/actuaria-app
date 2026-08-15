@@ -59,6 +59,7 @@ PARAGRAPHE_DES_MODULES = {
     'flux_execution': '§33-37, B36-B92',
     'lic':            '§55-59, B125-B126',
     'lrc_paa':        '§55-59, B125-B126',
+    'reassurance_61_62': '§60-70A',
     'reassurance_63': '§60-70A',
     'recouvrement_perte': '§60-70A',
     # ⚠️ `reassurance_reconciliation` N'IMPLÉMENTE AUCUN PARAGRAPHE, et
