@@ -37,7 +37,11 @@ RÉFÉRENCES — IFRS 17, annexe au règlement (UE) 2023/1803, JO L 237 du
 
 from typing import NamedTuple
 
-from normes.ifrs17.mesure.declaration import est_renseigne
+from normes.ifrs17.mesure.declaration import (
+    COMPARAISON_ANTERIEUR_OU_EGAL,
+    est_renseigne,
+    exiger_arrete_dans_le_contexte,
+)
 from normes.ifrs17.mesure.lrc_paa import (
     RefusMesure,
     lrc_initial,
@@ -151,7 +155,13 @@ class ArreteFinancement(NamedTuple):
 
 def charge_financiere(lrc_ouverture: float,
                       taux: TauxVerrouille) -> float:
-    """§56 — la désactualisation de la période, au taux verrouillé."""
+    """§56 — la désactualisation de la période, au taux verrouillé.
+
+    ⚠️ CETTE FONCTION NE CONTRÔLE PAS LA PÉREMPTION DU TAUX, et c'est dit
+    plutôt que tu : elle est un calcul d'une ligne, appelée depuis
+    `roll_forward` qui, lui, confronte l'arrêté de verrouillage au contexte
+    évalué. L'appeler directement contourne ce contrôle.
+    """
     return lrc_ouverture * taux.taux
 
 
@@ -173,7 +183,7 @@ def revenu_de_financement(cumul_charges: float, cumul_revenu_anterieur: float,
 
 
 def roll_forward(*, prime: float, nb_periodes: int, taux: TauxVerrouille,
-                 frais_acquisition: float = 0.0,
+                 contexte, frais_acquisition: float = 0.0,
                  eligibilite_declaree: bool = False
                  ) -> tuple[ArreteFinancement, ...]:
     """Le LRC arrêté par arrêté, prime encaissée en totalité à l'origine.
@@ -194,6 +204,14 @@ def roll_forward(*, prime: float, nb_periodes: int, taux: TauxVerrouille,
     couverture finit à zéro ; ne pas le vérifier laisserait passer un terme
     perdu, ce qui est précisément l'erreur que j'ai commise.
     """
+    #: ⚠️ B72 a) FIGE LE TAUX À LA COMPTABILISATION INITIALE : son arrêté est
+    #: dans le passé PAR CONSTRUCTION. Le comparer par égalité refuserait un
+    #: taux verrouillé CORRECT — d'où la catégorie déclarée ici.
+    exiger_arrete_dans_le_contexte(
+        arrete=taux.arrete_verrouillage,
+        comparaison=COMPARAISON_ANTERIEUR_OU_EGAL, contexte=contexte,
+        erreur=RefusMesure, objet="le taux verrouillé (B72 a)")
+
     lrc = lrc_initial(prime, frais_acquisition,
                       eligibilite_declaree=eligibilite_declaree)
     amortissement = frais_acquisition / nb_periodes

@@ -41,7 +41,11 @@ RÉFÉRENCES — IFRS 17, annexe au règlement (UE) 2023/1803, JO L 237 du
 
 from typing import NamedTuple
 
-from normes.ifrs17.mesure.declaration import est_renseigne
+from normes.ifrs17.mesure.declaration import (
+    COMPARAISON_ANTERIEUR_OU_EGAL,
+    est_renseigne,
+    exiger_arrete_dans_le_contexte,
+)
 from normes.ifrs17.mesure.flux_execution import FluxExecution
 from normes.ifrs17.mesure.lrc_paa import RefusMesure
 
@@ -123,7 +127,8 @@ def declarer_declenchement(*, declenche: bool, faits_et_circonstances: str,
                          actuaire_resp=actuaire_resp.strip())
 
 
-def eprouver(declenchement: Declenchement, *, lrc: float | None = None,
+def eprouver(declenchement: Declenchement, contexte, *,
+             lrc: float | None = None,
              flux: FluxExecution | None = None,
              dispense_59b_sur_le_lic: bool = False) -> TestDeficit:
     """§57 puis §58 — l'écart, et la perte s'il y en a une.
@@ -137,6 +142,11 @@ def eprouver(declenchement: Declenchement, *, lrc: float | None = None,
     peut pas actualiser les flux du §57 b). Deux conventions différentes
     dans le même test rendraient l'écart faux dans un sens systématique.
     """
+    exiger_arrete_dans_le_contexte(
+        arrete=declenchement.arrete,
+        comparaison=COMPARAISON_ANTERIEUR_OU_EGAL, contexte=contexte,
+        erreur=RefusMesure, objet="l'appréciation du §57")
+
     if not declenchement.declenche:
         return TestDeficit(declenche=False, lrc=None, flux_execution=None,
                            ecart=None, element_de_perte=None,

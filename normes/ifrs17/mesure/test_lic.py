@@ -10,6 +10,7 @@ un nombre, pas une provision.
 """
 import unittest
 
+from normes.ifrs17.mesure.declaration import ContexteEvaluation
 from normes.ifrs17.mesure.lic import (
     MOTIF_ACTUALISATION_INCOHERENTE,
     MOTIF_AUCUNE_CELLULE,
@@ -23,6 +24,15 @@ from normes.ifrs17.mesure.lic import (
     passif_sinistres,
 )
 from normes.ifrs17.mesure.lrc_paa import RefusMesure
+
+CONTEXTE = ContexteEvaluation(arrete='2026-12-31',
+                              portefeuilles=('AUTO_TR', 'MRH', 'GAV', 'RC_AUTO', 'RC_PRO', 'DO'))
+
+
+def passif_sinistres_ctx(cellules, projection, **kw):
+    """⚠️ `contexte` obligatoire — voir `eprouver_ctx`."""
+    return passif_sinistres(cellules, projection, CONTEXTE, **kw)
+
 
 #: Un triangle a deux survenances, CUMULE -- comme un vrai.
 TRIANGLE = (
@@ -47,7 +57,7 @@ class Z1_LObserveEtLeDeclareNeSeMelangentPas(unittest.TestCase):
         qu'il y a de developpements. Seule la DERNIERE cellule connue de
         chaque survenance porte l'observation.
         """
-        p = passif_sinistres(TRIANGLE, _proj(), dispense_59b=True)
+        p = passif_sinistres_ctx(TRIANGLE, _proj(), dispense_59b=True)
         # RC_AUTO 2025 -> dev 1 (1650), RC_AUTO 2026 -> dev 0 (1500)
         self.assertAlmostEqual(p.charge_connue, 1650.0 + 1500.0, 6)
         self.assertAlmostEqual(p.paiements, 1400.0 + 900.0, 6)
@@ -60,7 +70,7 @@ class Z1_LObserveEtLeDeclareNeSeMelangentPas(unittest.TestCase):
     def test_l_IBNR_est_la_DIFFERENCE_et_herite_de_l_incertitude(self):
         """⚠️ L'IBNR N'EST PAS OBSERVE. Il vaut ultime declare moins charge
         connue : toute son incertitude vient du DECLARE."""
-        p = passif_sinistres(TRIANGLE, _proj(3400.0), dispense_59b=True)
+        p = passif_sinistres_ctx(TRIANGLE, _proj(3400.0), dispense_59b=True)
         self.assertAlmostEqual(p.ibnr, 3400.0 - p.charge_connue, 6)
         self.assertAlmostEqual(p.provision_connue,
                                p.charge_connue - p.paiements, 6)
@@ -72,7 +82,7 @@ class Z1_LObserveEtLeDeclareNeSeMelangentPas(unittest.TestCase):
         que ce qui est deja survenu ET evalue. Un IBNR negatif se declare et
         se motive, il ne se produit pas par accident."""
         with self.assertRaises(RefusMesure) as ctx:
-            passif_sinistres(TRIANGLE, _proj(1000.0), dispense_59b=True)
+            passif_sinistres_ctx(TRIANGLE, _proj(1000.0), dispense_59b=True)
         self.assertEqual(ctx.exception.motif, MOTIF_PROJECTION_INFERIEURE)
         self.assertIn('INFÉRIEUR', str(ctx.exception))
         print("    OK Z1c : ultime < charge connue -> refus, IBNR negatif "
@@ -86,7 +96,7 @@ class Z2_LesReservesDESCENDENT(unittest.TestCase):
         """⚠️ LE TRIANGLE LIVRE PORTE << SYNTHETIQUE, CADENCES INVENTEES >>.
         Une projection dessus rend UN NOMBRE, PAS UNE RESERVE. La reserve
         accompagne tout montant qui en descend."""
-        p = passif_sinistres(TRIANGLE, _proj(), dispense_59b=True)
+        p = passif_sinistres_ctx(TRIANGLE, _proj(), dispense_59b=True)
         self.assertIn('SOURCE NON ATTESTÉE', p.motif)
         self.assertIn('PAS UNE RÉSERVE', p.motif)
         self.assertIn('opposable', p.motif)
@@ -94,7 +104,7 @@ class Z2_LesReservesDESCENDENT(unittest.TestCase):
               "sortie -- un nombre, pas une reserve")
 
     def test_une_source_attestee_leve_cette_reserve_LA_seulement(self):
-        p = passif_sinistres(TRIANGLE, _proj(), source_attestee=True,
+        p = passif_sinistres_ctx(TRIANGLE, _proj(), source_attestee=True,
                              dispense_59b=True)
         self.assertNotIn('SOURCE NON ATTESTÉE', p.motif)
         # ⚠️ mais la reserve sur la dispense, elle, RESTE
@@ -106,7 +116,7 @@ class Z2_LesReservesDESCENDENT(unittest.TestCase):
         """⚠️ §59 b) PORTE SUR LE DELAI << A COMPTER DE LA DATE DU SINISTRE >>,
         contrat par contrat. Une duree moyenne de portefeuille sous un an
         peut recouvrir une queue bien plus longue."""
-        p = passif_sinistres(TRIANGLE, _proj(), dispense_59b=True)
+        p = passif_sinistres_ctx(TRIANGLE, _proj(), dispense_59b=True)
         self.assertFalse(p.actualisation_faite)
         self.assertIn('DATE DU SINISTRE', p.motif)
         self.assertIn('proxy', p.motif)
@@ -117,7 +127,7 @@ class Z2_LesReservesDESCENDENT(unittest.TestCase):
         """⚠️ RENDRE UN PASSIF NON ACTUALISE SANS LE DIRE SERAIT RENDRE UN
         CHIFFRE FAUX EN SILENCE. La dispense existe, mais elle s'exerce."""
         with self.assertRaises(RefusMesure) as ctx:
-            passif_sinistres(TRIANGLE, _proj())
+            passif_sinistres_ctx(TRIANGLE, _proj())
         self.assertEqual(ctx.exception.motif, MOTIF_DISPENSE_NON_DECLAREE)
         self.assertIn('§36', str(ctx.exception))
         print("    OK Z2d : ni actualisation ni dispense -> REFUS")
@@ -132,7 +142,7 @@ class Z2b_LeChiffrePrincipalEstVERIFIE(unittest.TestCase):
         et `lic_avant_risque` est LE CHIFFRE PRINCIPAL de ce module. Un
         champ publie que rien ne lit est un champ que rien ne verifie.
         """
-        p = passif_sinistres(TRIANGLE, _proj(3400.0), dispense_59b=True)
+        p = passif_sinistres_ctx(TRIANGLE, _proj(3400.0), dispense_59b=True)
         self.assertAlmostEqual(p.ultime_declare, 3400.0, 6)
         self.assertAlmostEqual(p.lic_avant_risque, 3400.0 - p.paiements, 6)
         print(f"    OK Z2e : LIC {p.lic_avant_risque:.0f} = ultime "
@@ -147,7 +157,7 @@ class Z2b_LeChiffrePrincipalEstVERIFIE(unittest.TestCase):
         """
         brut = 3400.0 - 2300.0          # ultime - paiements
         with self.assertRaises(RefusMesure) as ctx:
-            passif_sinistres(TRIANGLE, _proj(3400.0),
+            passif_sinistres_ctx(TRIANGLE, _proj(3400.0),
                              actualisation=brut + 500.0)
         self.assertEqual(ctx.exception.motif, MOTIF_ACTUALISATION_INCOHERENTE)
         self.assertIn('DIMINUE', str(ctx.exception).upper())
@@ -156,7 +166,7 @@ class Z2b_LeChiffrePrincipalEstVERIFIE(unittest.TestCase):
 
     def test_une_actualisation_plausible_passe_et_est_publiee(self):
         brut = 3400.0 - 2300.0
-        p = passif_sinistres(TRIANGLE, _proj(3400.0),
+        p = passif_sinistres_ctx(TRIANGLE, _proj(3400.0),
                              actualisation=brut * 0.95)
         self.assertTrue(p.actualisation_faite)
         self.assertAlmostEqual(p.lic_avant_risque, brut * 0.95, 6)
@@ -166,7 +176,7 @@ class Z2b_LeChiffrePrincipalEstVERIFIE(unittest.TestCase):
 
     def test_une_actualisation_negative_est_refusee(self):
         with self.assertRaises(RefusMesure) as ctx:
-            passif_sinistres(TRIANGLE, _proj(3400.0), actualisation=-1.0)
+            passif_sinistres_ctx(TRIANGLE, _proj(3400.0), actualisation=-1.0)
         self.assertEqual(ctx.exception.motif, MOTIF_ACTUALISATION_INCOHERENTE)
         print("    OK Z2h : actualisation negative -> refus")
 
@@ -199,7 +209,7 @@ class Z4_LesRefus(unittest.TestCase):
 
     def test_un_triangle_vide_n_est_pas_un_passif_nul(self):
         with self.assertRaises(RefusMesure) as ctx:
-            passif_sinistres([], _proj(), dispense_59b=True)
+            passif_sinistres_ctx([], _proj(), dispense_59b=True)
         self.assertEqual(ctx.exception.motif, MOTIF_AUCUNE_CELLULE)
         self.assertIn('Ran 0 tests', str(ctx.exception))
         print("    OK Z4 : triangle vide -> refus, jamais un passif nul")
@@ -209,7 +219,7 @@ class Z4_LesRefus(unittest.TestCase):
         conventions melangees."""
         faux = (Cellule('MRH', 2025, 0, 900.0, 500.0),)
         with self.assertRaises(RefusMesure) as ctx:
-            passif_sinistres(faux, _proj(), dispense_59b=True)
+            passif_sinistres_ctx(faux, _proj(), dispense_59b=True)
         self.assertEqual(ctx.exception.motif, MOTIF_TRIANGLE_INCOHERENT)
         self.assertIn('MRH', str(ctx.exception))
         print("    OK Z4b : paiements > charge -> refus, la cellule fautive "

@@ -10,6 +10,7 @@ concordance avec une source publiée.
 """
 import unittest
 
+from normes.ifrs17.mesure.declaration import ContexteEvaluation
 from normes.ifrs17.mesure.deficit import (
     MOTIF_INCOHERENCE_59B,
     MOTIF_LRC_NEGATIF,
@@ -29,6 +30,16 @@ from normes.ifrs17.mesure.flux_execution import (
 )
 from normes.ifrs17.mesure.lrc_paa import RefusMesure
 
+CONTEXTE = ContexteEvaluation(arrete='2026-12-31',
+                              portefeuilles=('AUTO_TR', 'MRH', 'GAV', 'RC_AUTO', 'RC_PRO', 'DO'))
+
+
+def eprouver_ctx(declenchement, **kw):
+    """⚠️ `contexte` est OBLIGATOIRE au site de consommation : un défaut
+    à None recréerait le contrôle qui ne tire pas."""
+    return eprouver(declenchement, CONTEXTE, **kw)
+
+
 PLATE = {1: 0.02, 2: 0.02}
 
 
@@ -43,7 +54,7 @@ def _flux(montants=(1000.0, 800.0), ajust=100.0, dispense=False,
         PLATE, 'courbe interne', '2026-12-31', 'Selasse Sekle')
     aj = declarer_ajustement(ajust, 'quantile 75 %', 'cout du capital 6 %',
                              '2026-12-31', 'Selasse Sekle')
-    return assembler(lot, courbe, aj, dispense_59b=dispense)
+    return assembler(lot, courbe, aj, CONTEXTE, dispense_59b=dispense)
 
 
 def _decl(declenche=True, faits='sinistralite 2026 superieure de 40 % a '
@@ -62,7 +73,7 @@ class T1_NonDeclencheNEstPasSain(unittest.TestCase):
         circonstances declares, la presomption de non-deficit de la PAA est
         MAINTENUE -- ce n'est pas un constat que le groupe est sain, c'est
         l'absence d'examen."""
-        r = eprouver(_decl(declenche=False, faits=''))
+        r = eprouver_ctx(_decl(declenche=False, faits=''))
         self.assertFalse(r.declenche)
         self.assertIsNone(r.element_de_perte)
         self.assertIsNone(r.ecart)
@@ -77,7 +88,7 @@ class T1_NonDeclencheNEstPasSain(unittest.TestCase):
         trouve pas de perte EST un examen concluant ; un test non declenche
         ne l'est pas. Les deux rendent zero perte, et ils ne valent pas la
         meme chose."""
-        r = eprouver(_decl(), lrc=5000.0, flux=_flux(probabilise=True))
+        r = eprouver_ctx(_decl(), lrc=5000.0, flux=_flux(probabilise=True))
         self.assertTrue(r.declenche)
         self.assertEqual(r.element_de_perte, 0.0)
         self.assertIn('MENÉ', r.motif)
@@ -91,7 +102,7 @@ class T2_LEcartEtLElementDePerte(unittest.TestCase):
 
     def test_les_flux_qui_excedent_le_LRC_font_une_perte(self):
         f = _flux(probabilise=True)
-        r = eprouver(_decl(), lrc=1000.0, flux=f)
+        r = eprouver_ctx(_decl(), lrc=1000.0, flux=f)
         self.assertAlmostEqual(r.ecart, f.total - 1000.0, 9)
         self.assertAlmostEqual(r.element_de_perte, f.total - 1000.0, 9)
         self.assertGreater(r.element_de_perte, 0)
@@ -102,7 +113,7 @@ class T2_LEcartEtLElementDePerte(unittest.TestCase):
         """⚠️ §58 : « DANS LA MESURE OU les flux EXCEDENT ». Un LRC
         superieur aux flux ne cree pas un profit -- il ne cree rien."""
         f = _flux(probabilise=True)
-        r = eprouver(_decl(), lrc=99999.0, flux=f)
+        r = eprouver_ctx(_decl(), lrc=99999.0, flux=f)
         self.assertEqual(r.element_de_perte, 0.0)
         self.assertLess(r.ecart, 0)
         print(f"    OK U2b : ecart {r.ecart:+.1f} negatif -> perte 0, "
@@ -112,7 +123,7 @@ class T2_LEcartEtLElementDePerte(unittest.TestCase):
         """⚠️ UN CHIFFRE CALCULE SUR UNE BASE NON ETABLIE NE DEVIENT PAS
         ETABLI EN CHANGEANT DE LIGNE. Si les flux portent la reserve du
         §33 a), l'element de perte la porte aussi."""
-        r = eprouver(_decl(), lrc=1000.0, flux=_flux(probabilise=False))
+        r = eprouver_ctx(_decl(), lrc=1000.0, flux=_flux(probabilise=False))
         self.assertGreater(r.element_de_perte, 0)
         self.assertIn('BASE NON ÉTABLIE', r.motif)
         self.assertIn('§33 a)', r.motif)
@@ -133,7 +144,7 @@ class T3_LaRegleDeCoherenceDu57(unittest.TestCase):
         de perte serait sous-estime -- en faveur de l'entite.
         """
         with self.assertRaises(RefusMesure) as ctx:
-            eprouver(_decl(), lrc=1000.0, flux=_flux(probabilise=True),
+            eprouver_ctx(_decl(), lrc=1000.0, flux=_flux(probabilise=True),
                      dispense_59b_sur_le_lic=True)
         self.assertEqual(ctx.exception.motif, MOTIF_INCOHERENCE_59B)
         self.assertIn('en faveur de l', str(ctx.exception))
@@ -143,7 +154,7 @@ class T3_LaRegleDeCoherenceDu57(unittest.TestCase):
     def test_dispense_des_deux_cotes_est_coherente(self):
         f = _flux(dispense=True, probabilise=True)
         self.assertFalse(f.actualisation_appliquee)
-        r = eprouver(_decl(), lrc=1000.0, flux=f,
+        r = eprouver_ctx(_decl(), lrc=1000.0, flux=f,
                      dispense_59b_sur_le_lic=True)
         self.assertGreater(r.element_de_perte, 0)
         print("    OK U3b : dispense des deux cotes -> coherent, le test "
@@ -179,14 +190,14 @@ class T4_LesRefus(unittest.TestCase):
         """Un ecart calcule sur un seul terme n'a aucun sens."""
         for kw in ({'lrc': 1000.0}, {'flux': _flux()}):
             with self.assertRaises(RefusMesure) as ctx:
-                eprouver(_decl(), **kw)
+                eprouver_ctx(_decl(), **kw)
             self.assertEqual(ctx.exception.motif, 'termes_du_57_incomplets')
         print("    OK U4c : un seul terme du §57 -> refus, jamais un ecart "
               "calcule sur la moitie")
 
     def test_un_LRC_negatif_est_refuse(self):
         with self.assertRaises(RefusMesure) as ctx:
-            eprouver(_decl(), lrc=-500.0, flux=_flux())
+            eprouver_ctx(_decl(), lrc=-500.0, flux=_flux())
         self.assertEqual(ctx.exception.motif, MOTIF_LRC_NEGATIF)
         print("    OK U4d : LRC negatif -> refus, creance de prime signalee")
 

@@ -39,7 +39,11 @@ RÉFÉRENCES — IFRS 17, annexe au règlement (UE) 2023/1803, JO L 237 du
 
 from typing import NamedTuple
 
-from normes.ifrs17.mesure.declaration import est_renseigne
+from normes.ifrs17.mesure.declaration import (
+    COMPARAISON_EGAL,
+    est_renseigne,
+    exiger_arrete_dans_le_contexte,
+)
 from normes.ifrs17.mesure.lrc_paa import RefusMesure
 
 MOTIF_SANS_SIGNATURE = 'declaration_sans_signataire'
@@ -260,7 +264,7 @@ MOTIF_DISPENSE_59B = (
 
 
 def assembler(flux, courbe: CourbeDeclaree | None,
-              ajustement: AjustementRisque,
+              ajustement: AjustementRisque, contexte,
               dispense_59b: bool = False) -> FluxExecution:
     """§33 + §36 + §37 — les flux d'exécution d'un groupe.
 
@@ -268,7 +272,26 @@ def assembler(flux, courbe: CourbeDeclaree | None,
     le résultat porte alors le motif qui le dit. Autrement, l'absence de
     courbe est un refus : rendre une valeur non actualisée sans le signaler
     serait rendre un chiffre faux en silence.
+
+    ⚠️⚠️ `contexte` EST OBLIGATOIRE, ET C'EST ICI QUE LA PÉREMPTION SE JUGE.
+    Elle ne se juge PAS à la constitution : au moment où `declarer_courbe`
+    fabrique une courbe, son arrêté est nécessairement celui du jour — c'est
+    à la CONSOMMATION qu'une courbe de l'exercice précédent devient fausse.
+    Un contrôle placé au mauvais moment donne du réconfort, ce qui est pire
+    qu'aucun contrôle : on cesse de chercher.
+
+    ⚠️ ET IL N'A PAS DE DÉFAUT À `None`. Un défaut recréerait exactement le
+    contrôle qui ne tire pas — celui qu'on vient de fermer.
     """
+    exiger_arrete_dans_le_contexte(
+        arrete=ajustement.arrete, comparaison=COMPARAISON_EGAL,
+        contexte=contexte, erreur=RefusMesure,
+        objet="l'ajustement pour risque du §37")
+    if courbe is not None:
+        exiger_arrete_dans_le_contexte(
+            arrete=courbe.arrete, comparaison=COMPARAISON_EGAL,
+            contexte=contexte, erreur=RefusMesure,
+            objet="la courbe du §36")
     lot = list(flux)
     if not lot:
         raise RefusMesure(

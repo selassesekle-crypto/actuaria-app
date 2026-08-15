@@ -12,6 +12,7 @@ c'est écrit ici pour qu'on ne confonde jamais les deux.
 """
 import unittest
 
+from normes.ifrs17.mesure.declaration import ContexteEvaluation
 from normes.ifrs17.mesure.flux_execution import (
     ESPERANCE_CALCULEE,
     MONTANT_DECLARE,
@@ -31,6 +32,10 @@ from normes.ifrs17.mesure.flux_execution import (
     montant_declare,
 )
 from normes.ifrs17.mesure.lrc_paa import RefusMesure
+
+CONTEXTE = ContexteEvaluation(arrete='2026-12-31',
+                              portefeuilles=('AUTO_TR', 'MRH', 'GAV', 'RC_AUTO', 'RC_PRO', 'DO'))
+
 
 PLATE = {1: 0.02, 2: 0.02, 3: 0.02}
 
@@ -67,7 +72,7 @@ class T1_LesDeuxFormesDuFluxSeDistinguent(unittest.TestCase):
         remis seul PEUT en etre une, mais rien ne l'etablit -- et le
         presenter comme telle serait affirmer plus que la donnee ne porte.
         """
-        r = assembler(_flux(), _courbe(), _ajustement())
+        r = assembler(_flux(), _courbe(), _ajustement(), CONTEXTE)
         self.assertIn('PAS ÉTABLI', r.motif_esperance)
         self.assertIn('§33 a)', r.motif_esperance)
         print("    OK S1b : un montant declare marque le resultat entier "
@@ -76,7 +81,7 @@ class T1_LesDeuxFormesDuFluxSeDistinguent(unittest.TestCase):
     def test_des_esperances_seules_ne_marquent_rien(self):
         flux = [esperance(a, [Scenario(1000.0 - 100 * a, 1.0)])
                 for a in (1, 2, 3)]
-        r = assembler(flux, _courbe(), _ajustement())
+        r = assembler(flux, _courbe(), _ajustement(), CONTEXTE)
         self.assertEqual(r.motif_esperance, '')
         self.assertTrue(all(f.base == ESPERANCE_CALCULEE for f in flux))
         print("    OK S1c : que des esperances calculees -> aucun motif, "
@@ -86,7 +91,7 @@ class T1_LesDeuxFormesDuFluxSeDistinguent(unittest.TestCase):
         """⚠️ LA MARQUE PORTE SUR LE RESULTAT, PAS SUR LA LIGNE. Un total
         dont un seul terme n'est pas etabli n'est pas etabli."""
         flux = [esperance(1, [Scenario(900.0, 1.0)]), montant_declare(2, 800.0)]
-        r = assembler(flux, _courbe(), _ajustement())
+        r = assembler(flux, _courbe(), _ajustement(), CONTEXTE)
         self.assertNotEqual(r.motif_esperance, '')
         self.assertEqual(flux[1].base, MONTANT_DECLARE)
         print("    OK S1d : 1 montant declare sur 2 -> le total est marque")
@@ -97,7 +102,7 @@ class T2_LesInvariantsInternes(unittest.TestCase):
 
     def test_a_taux_nul_l_actualisation_degenere_en_somme_brute(self):
         r = assembler(_flux(), _courbe({1: 0.0, 2: 0.0, 3: 0.0}),
-                      _ajustement(0.0))
+                      _ajustement(0.0), CONTEXTE)
         self.assertAlmostEqual(r.valeur_actualisee, r.valeur_brute, 9)
         self.assertAlmostEqual(r.valeur_brute, 2400.0, 9)
         print(f"    OK S2 : a taux nul, actualisee = brute = "
@@ -105,7 +110,7 @@ class T2_LesInvariantsInternes(unittest.TestCase):
 
     def test_la_valeur_actualisee_decroit_quand_le_taux_monte(self):
         vals = [assembler(_flux(), _courbe({1: t, 2: t, 3: t}),
-                          _ajustement(0.0)).valeur_actualisee
+                          _ajustement(0.0), CONTEXTE).valeur_actualisee
                 for t in (0.0, 0.01, 0.02, 0.05, 0.10)]
         self.assertEqual(vals, sorted(vals, reverse=True))
         self.assertLess(vals[-1], vals[0])
@@ -114,8 +119,8 @@ class T2_LesInvariantsInternes(unittest.TestCase):
 
     def test_l_ajustement_majore_toujours_le_passif(self):
         """⚠️ §37 : « l'indemnite QU'ELLE EXIGE ». Elle majore, jamais."""
-        sans = assembler(_flux(), _courbe(), _ajustement(0.0))
-        avec = assembler(_flux(), _courbe(), _ajustement(500.0))
+        sans = assembler(_flux(), _courbe(), _ajustement(0.0), CONTEXTE)
+        avec = assembler(_flux(), _courbe(), _ajustement(500.0), CONTEXTE)
         self.assertGreater(avec.total, sans.total)
         self.assertAlmostEqual(avec.total - sans.total, 500.0, 9)
         print(f"    OK S2c : l'ajustement majore le total de "
@@ -131,7 +136,7 @@ class T2_LesInvariantsInternes(unittest.TestCase):
         d'annexe lit la ventilation, pas le total.
         """
         a = _ajustement(500.0)
-        r = assembler(_flux(), _courbe(), a)
+        r = assembler(_flux(), _courbe(), a, CONTEXTE)
         self.assertEqual(r.ajustement_risque, a.montant)
         self.assertAlmostEqual(r.valeur_actualisee + r.ajustement_risque,
                                r.total, 9)
@@ -144,9 +149,9 @@ class T2_LesInvariantsInternes(unittest.TestCase):
         """⚠️ §36 a) PARLE DES CARACTERISTIQUES DE LIQUIDITE : une courbe
         par annee n'est pas un taux unique, et le calcul doit le refleter."""
         plate = assembler(_flux(), _courbe({1: .02, 2: .02, 3: .02}),
-                          _ajustement(0.0)).valeur_actualisee
+                          _ajustement(0.0), CONTEXTE).valeur_actualisee
         pentue = assembler(_flux(), _courbe({1: .01, 2: .02, 3: .04}),
-                           _ajustement(0.0)).valeur_actualisee
+                           _ajustement(0.0), CONTEXTE).valeur_actualisee
         self.assertNotAlmostEqual(plate, pentue, 6)
         print(f"    OK S2d : courbe plate {plate:.1f} vs pentue "
               f"{pentue:.1f} — la structure par terme opere")
@@ -156,7 +161,7 @@ class T3_LaDispenseDu59b(unittest.TestCase):
     """T3 — §59 b) dispense, il n'exclut pas."""
 
     def test_la_dispense_se_declare_et_se_publie(self):
-        r = assembler(_flux(), None, _ajustement(), dispense_59b=True)
+        r = assembler(_flux(), None, _ajustement(), CONTEXTE, dispense_59b=True)
         self.assertFalse(r.actualisation_appliquee)
         self.assertAlmostEqual(r.valeur_actualisee, r.valeur_brute, 9)
         self.assertIn('§59 b)', r.motif_actualisation)
@@ -169,7 +174,7 @@ class T3_LaDispenseDu59b(unittest.TestCase):
         valeur brute sans le signaler serait rendre un chiffre faux en
         silence."""
         with self.assertRaises(RefusMesure) as ctx:
-            assembler(_flux(), None, _ajustement())
+            assembler(_flux(), None, _ajustement(), CONTEXTE)
         self.assertEqual(ctx.exception.motif, MOTIF_SANS_SOURCE)
         self.assertIn('§36', str(ctx.exception))
         print("    OK S3b : ni courbe ni dispense -> REFUS, jamais une "
@@ -199,7 +204,7 @@ class T4_LesRefus(unittest.TestCase):
         """⚠️⚠️ LE MOTIF DE TOUTE CETTE SESSION. Rendre 0 sur une liste vide
         serait la faute d'une gate rendant « Ran 0 tests » en sortant 0."""
         with self.assertRaises(RefusMesure) as ctx:
-            assembler([], _courbe(), _ajustement())
+            assembler([], _courbe(), _ajustement(), CONTEXTE)
         self.assertEqual(ctx.exception.motif, MOTIF_AUCUN_FLUX)
         self.assertIn('Ran 0 tests', str(ctx.exception))
         print("    OK S4c : aucun flux -> refus, jamais un total nul rendu "
@@ -209,7 +214,7 @@ class T4_LesRefus(unittest.TestCase):
         """⚠️ EXTRAPOLER SERAIT INVENTER UNE HYPOTHESE QUE PERSONNE N'A
         SIGNEE ; IGNORER LE FLUX LE FERAIT DISPARAITRE."""
         with self.assertRaises(RefusMesure) as ctx:
-            assembler(_flux(), _courbe({1: 0.02, 2: 0.02}), _ajustement())
+            assembler(_flux(), _courbe({1: 0.02, 2: 0.02}), _ajustement(), CONTEXTE)
         self.assertEqual(ctx.exception.motif, MOTIF_ANNEE_HORS_COURBE)
         self.assertIn('[3]', str(ctx.exception))
         print("    OK S4d : annee 3 absente de la courbe -> refus, l'annee "

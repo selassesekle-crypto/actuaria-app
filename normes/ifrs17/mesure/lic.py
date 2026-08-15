@@ -46,7 +46,11 @@ RÉFÉRENCES — IFRS 17, annexe au règlement (UE) 2023/1803, JO L 237 du
 
 from typing import NamedTuple
 
-from normes.ifrs17.mesure.declaration import est_renseigne
+from normes.ifrs17.mesure.declaration import (
+    COMPARAISON_EGAL,
+    est_renseigne,
+    exiger_arrete_dans_le_contexte,
+)
 from normes.ifrs17.mesure.lrc_paa import RefusMesure
 
 MOTIF_AUCUNE_CELLULE = 'aucune_cellule_de_triangle'
@@ -174,7 +178,7 @@ def declarer_projection(*, ultime: float, methode: str, actuaire_resp: str,
                       arrete=arrete.strip())
 
 
-def passif_sinistres(cellules, projection: Projection, *,
+def passif_sinistres(cellules, projection: Projection, contexte, *,
                      source_attestee: bool = False,
                      dispense_59b: bool = False,
                      actualisation: float | None = None) -> PassifSinistres:
@@ -190,6 +194,11 @@ def passif_sinistres(cellules, projection: Projection, *,
     une durée moyenne de portefeuille. Une moyenne est un PROXY : elle peut
     passer sous un an alors que la queue s'étale bien au-delà.
     """
+    exiger_arrete_dans_le_contexte(
+        arrete=projection.arrete, comparaison=COMPARAISON_EGAL,
+        contexte=contexte, erreur=RefusMesure,
+        objet="la projection du §59 b)")
+
     lot = _controler(cellules)
     der = _derniers(lot)
     charge = sum(c.charge_cumulee for c in der.values())

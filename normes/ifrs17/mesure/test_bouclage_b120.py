@@ -13,16 +13,26 @@ from normes.ifrs17.mesure.bouclage_b120 import (
     MOTIF_AUCUNE_PERIODE,
     verifier,
 )
+from normes.ifrs17.mesure.declaration import ContexteEvaluation
 from normes.ifrs17.mesure.financement import roll_forward, verrouiller
 from normes.ifrs17.mesure.lrc_paa import RefusMesure
 from normes.ifrs17.oracles.ica_222092 import ENTREE_5_6_1, ROLL_FORWARD_5_6_1
+
+CONTEXTE = ContexteEvaluation(arrete='2026-12-31',
+                              portefeuilles=('AUTO_TR', 'MRH', 'GAV', 'RC_AUTO', 'RC_PRO', 'DO'))
+
+
+def roll_forward_ctx(**kw):
+    """⚠️ `contexte` obligatoire au site de consommation."""
+    return roll_forward(contexte=CONTEXTE, **kw)
+
 
 
 def _mesure():
     t = verrouiller(ENTREE_5_6_1['taux_verrouille'], '2026-01-01',
                     "oracle ICA/CIA doc 222092 section 5.6.1",
                     'Selasse Sekle')
-    return roll_forward(prime=ENTREE_5_6_1['prime'],
+    return roll_forward_ctx(prime=ENTREE_5_6_1['prime'],
                         nb_periodes=ENTREE_5_6_1['duree_couverture_ans'],
                         taux=t, eligibilite_declaree=True)
 
