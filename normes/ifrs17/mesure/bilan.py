@@ -46,6 +46,7 @@ RÉFÉRENCES — IFRS 17, annexe au règlement (UE) 2023/1803, JO L 237 du
 
 from typing import NamedTuple
 
+from normes.ifrs17.mesure.declaration import est_renseigne
 from normes.ifrs17.mesure.lrc_paa import RefusMesure
 
 MOTIF_AUCUN_SOLDE = 'aucun_solde_fourni'
@@ -95,8 +96,80 @@ class Bilan(NamedTuple):
     motif:             str
 
 
-def etat_situation_financiere(soldes) -> Bilan:
+#: ⚠️⚠️ DEUX ÉCARTS DE PÉRIMÈTRE, ET ILS NE SE VALENT PAS.
+#:
+#:   · un portefeuille ÉTRANGER au périmètre est VISIBLE — sa ligne existe,
+#:     quelqu'un peut la voir et s'en étonner ;
+#:   · un portefeuille MANQUANT est SILENCIEUX, et c'est ce qui le rend plus
+#:     grave : LE BILAN ÉQUILIBRE QUAND MÊME. C'est exactement la forme que ce
+#:     module combat déjà pour la compensation entre côtés — « un bilan dont
+#:     le total est juste et dont les deux lignes sont fausses, une erreur
+#:     qu'aucun contrôle d'équilibre ne verrait, puisque l'équilibre tient ».
+#:
+#: ⚠️ MAIS UN REFUS AVEUGLE SUR LE MANQUANT SERAIT FAUX. Un portefeuille
+#: évalué peut légitimement n'avoir AUCUN groupe à l'arrêté : il n'a alors
+#: aucune valeur comptable à présenter, et son absence est juste. Le code ne
+#: peut pas distinguer « absent parce que vide » de « absent parce
+#: qu'oublié » — il exige donc que le premier se DÉCLARE, comme un néant se
+#: motive et comme un zéro se déclare au lieu de se supposer.
+MOTIF_PORTEFEUILLE_ETRANGER = 'portefeuille_hors_perimetre_evalue'
+MOTIF_PORTEFEUILLE_MANQUANT = 'portefeuille_evalue_absent_du_bilan'
+
+
+def _confronter_au_perimetre(lot, contexte, vides_declares) -> None:
+    """Les deux écarts de périmètre, traités selon leur gravité propre."""
+    presents = {s.portefeuille.strip() for s in lot}
+    evalues = set(contexte.portefeuilles)
+
+    etrangers = sorted(presents - evalues)
+    if etrangers:
+        raise RefusMesure(
+            MOTIF_PORTEFEUILLE_ETRANGER,
+            f"{len(etrangers)} portefeuille(s) figurent au bilan sans être "
+            f"dans le périmètre évalué : {etrangers}. Présenter un "
+            f"portefeuille que l'évaluation ne couvre pas revient à affirmer "
+            f"une valeur comptable hors mandat.")
+
+    declares = dict(vides_declares or {})
+    manquants = sorted(evalues - presents)
+    non_declares = [n for n in manquants
+                    if not est_renseigne(declares.get(n, ''))]
+    if non_declares:
+        raise RefusMesure(
+            MOTIF_PORTEFEUILLE_MANQUANT,
+            f"{len(non_declares)} portefeuille(s) du périmètre évalué "
+            f"n'apparaissent pas au bilan et leur absence n'est pas "
+            f"déclarée : {non_declares}. ⚠️ C'EST L'ÉCART SILENCIEUX, ET LE "
+            f"PLUS GRAVE DES DEUX : le bilan ÉQUILIBRE QUAND MÊME, et aucun "
+            f"contrôle d'équilibre ne le verrait — la même forme que la "
+            f"compensation entre côtés que ce module refuse déjà. Un "
+            f"portefeuille sans aucun groupe à l'arrêté est une absence "
+            f"légitime, mais elle se DÉCLARE : sans motif, elle est "
+            f"indiscernable d'un oubli.")
+
+    #: ⚠️ UNE DÉCLARATION DE VIDE SUR UN PORTEFEUILLE PRÉSENT SE CONTREDIT.
+    inutiles = sorted(set(declares) - set(manquants))
+    if inutiles:
+        raise RefusMesure(
+            MOTIF_PORTEFEUILLE_MANQUANT,
+            f"{len(inutiles)} portefeuille(s) sont déclarés vides alors "
+            f"qu'ils figurent au bilan : {inutiles}. Une déclaration et une "
+            f"donnée qui se contredisent ne peuvent pas être vraies toutes "
+            f"les deux.")
+
+def etat_situation_financiere(soldes, contexte, *,
+                              portefeuilles_vides_declares=None) -> Bilan:
     """§78 — les portefeuilles, séparés par côté, jamais compensés.
+
+    ⚠️⚠️ `contexte` EST OBLIGATOIRE, ET LE BILAN EST CONFRONTÉ À LUI. Cette
+    fonction rend L'ÉTAT de la situation financière, pas une vue partielle :
+    un portefeuille évalué qui n'y figure pas en fait un état INCOMPLET
+    présenté comme complet.
+
+    ⚠️ `portefeuilles_vides_declares` REÇOIT LES ABSENCES LÉGITIMES, avec
+    leur motif. Un portefeuille sans aucun groupe à l'arrêté n'a rien à
+    présenter — mais son absence doit être DÉCLARÉE, faute de quoi elle est
+    indiscernable d'un oubli.
 
     ⚠️ LA COMPENSATION INTERNE AU PORTEFEUILLE EST VOULUE ; CELLE QUI LE
     FRANCHIT EST INTERDITE. §78 nomme le portefeuille quatre fois : c'est
@@ -120,6 +193,8 @@ def etat_situation_financiere(soldes) -> Bilan:
                 f"le groupe « {s.cle_groupe} » ne nomme aucun portefeuille. "
                 f"§78 présente PAR PORTEFEUILLE : sans lui, la ligne du "
                 f"bilan où ce groupe atterrit n'est pas déterminée")
+
+    _confronter_au_perimetre(lot, contexte, portefeuilles_vides_declares)
 
     par_portefeuille: dict = {}
     for s in lot:

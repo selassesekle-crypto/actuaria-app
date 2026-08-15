@@ -10,13 +10,21 @@ import unittest
 
 from normes.ifrs17.mesure.bilan import (
     MOTIF_AUCUN_SOLDE,
+    MOTIF_PORTEFEUILLE_ETRANGER,
+    MOTIF_PORTEFEUILLE_MANQUANT,
     MOTIF_PORTEFEUILLE_VIDE,
     MOTIF_REASSURANCE_ABSENTE,
     SoldeGroupe,
     etat_situation_financiere,
     valeur_comptable_avec_frais_acquisition,
 )
+from normes.ifrs17.mesure.declaration import ContexteEvaluation
 from normes.ifrs17.mesure.lrc_paa import RefusMesure
+
+CONTEXTE = ContexteEvaluation(arrete='2026-12-31',
+                              portefeuilles=('rc_auto', 'mrh', 'flotte'))
+CONTEXTE_MRH = ContexteEvaluation(arrete='2026-12-31',
+                                  portefeuilles=('mrh',))
 
 #: Trois portefeuilles : deux passifs, un actif (creance de prime nette).
 SOLDES = (
@@ -33,7 +41,7 @@ class W1_LaSeparationDuCoteActifEtDuCotePassif(unittest.TestCase):
     def test_un_portefeuille_net_negatif_est_un_ACTIF(self):
         """⚠️ UN LRC NEGATIF EST UN CAS REEL -- une creance de prime non
         encaissee. Le portefeuille bascule alors du cote ACTIF."""
-        b = etat_situation_financiere(SOLDES)
+        b = etat_situation_financiere(SOLDES, CONTEXTE)
         self.assertEqual([p.portefeuille for p in b.actifs], ['flotte'])
         self.assertEqual(b.total_actifs, 5_000.0)
         self.assertTrue(b.actifs[0].est_actif)
@@ -48,7 +56,7 @@ class W1_LaSeparationDuCoteActifEtDuCotePassif(unittest.TestCase):
         ne verrait, puisque l'equilibre tient. Ici : 23 000 de passifs et
         5 000 d'actifs, jamais 18 000 nets.
         """
-        b = etat_situation_financiere(SOLDES)
+        b = etat_situation_financiere(SOLDES, CONTEXTE)
         self.assertEqual(b.total_passifs, 23_000.0)
         self.assertEqual(b.total_actifs, 5_000.0)
         compense = b.total_passifs - b.total_actifs
@@ -62,7 +70,7 @@ class W1_LaSeparationDuCoteActifEtDuCotePassif(unittest.TestCase):
         """⚠️ §78 NOMME LE PORTEFEUILLE QUATRE FOIS : c'est l'unite de
         presentation. Additionner les groupes d'un meme portefeuille est donc
         juste ; ce qui est interdit, c'est de franchir le portefeuille."""
-        b = etat_situation_financiere(SOLDES)
+        b = etat_situation_financiere(SOLDES, CONTEXTE)
         auto = next(p for p in b.passifs if p.portefeuille == 'rc_auto')
         self.assertEqual(auto.valeur, 15_000.0)
         self.assertEqual(auto.nb_groupes, 2)
@@ -75,7 +83,7 @@ class W1_LaSeparationDuCoteActifEtDuCotePassif(unittest.TestCase):
         TOUT ENTIER, il ne se coupe pas en deux."""
         soldes = (SoldeGroupe('mrh', 'mrh|A|2026', 8_000.0),
                   SoldeGroupe('mrh', 'mrh|B|2026', -9_500.0))
-        b = etat_situation_financiere(soldes)
+        b = etat_situation_financiere(soldes, CONTEXTE_MRH)
         self.assertEqual(len(b.actifs), 1)
         self.assertEqual(len(b.passifs), 0)
         self.assertEqual(b.total_actifs, 1_500.0)
@@ -91,7 +99,7 @@ class W2_CeQueLEtatNeCouvrePas(unittest.TestCase):
         n'est pas construite. Un etat a deux lignes lu comme complet ferait
         conclure qu'il n'y a PAS de reassurance -- ce qui n'est pas la meme
         chose que ne pas la mesurer."""
-        b = etat_situation_financiere(SOLDES)
+        b = etat_situation_financiere(SOLDES, CONTEXTE)
         self.assertEqual(b.motif, MOTIF_REASSURANCE_ABSENTE)
         self.assertIn('§78 c) et d)', b.motif)
         self.assertIn('ABSENTES, elles', b.motif)
@@ -126,7 +134,7 @@ class W4_LesRefus(unittest.TestCase):
     def test_aucun_solde_n_est_pas_un_bilan_a_zero(self):
         """⚠️ LE MOTIF DE TOUTE CETTE SESSION."""
         with self.assertRaises(RefusMesure) as ctx:
-            etat_situation_financiere([])
+            etat_situation_financiere([], CONTEXTE)
         self.assertEqual(ctx.exception.motif, MOTIF_AUCUN_SOLDE)
         self.assertIn('Ran 0 tests', str(ctx.exception))
         print("    OK W4 : aucun solde -> refus, jamais deux lignes nulles")
@@ -135,11 +143,82 @@ class W4_LesRefus(unittest.TestCase):
         """§78 presente PAR PORTEFEUILLE : sans lui, la ligne du bilan ou ce
         groupe atterrit n'est pas determinee."""
         with self.assertRaises(RefusMesure) as ctx:
-            etat_situation_financiere([SoldeGroupe('  ', 'g|A|2026', 100.0)])
+            etat_situation_financiere(
+                [SoldeGroupe('  ', 'g|A|2026', 100.0)], CONTEXTE)
         self.assertEqual(ctx.exception.motif, MOTIF_PORTEFEUILLE_VIDE)
         self.assertIn('g|A|2026', str(ctx.exception))
         print("    OK W4b : groupe sans portefeuille -> refus, et le groupe "
               "fautif est nomme")
+
+
+class W5_LesDeuxEcartsDePerimetreNeSeValentPas(unittest.TestCase):
+    """⚠️⚠️ L'ÉTRANGER EST VISIBLE, LE MANQUANT EST SILENCIEUX."""
+
+    def test_un_portefeuille_ETRANGER_est_refuse(self):
+        with self.assertRaises(RefusMesure) as e:
+            etat_situation_financiere(
+                SOLDES, ContexteEvaluation(arrete='2026-12-31',
+                                           portefeuilles=('rc_auto', 'mrh')))
+        self.assertEqual(e.exception.motif, MOTIF_PORTEFEUILLE_ETRANGER)
+        self.assertIn("'flotte'", str(e.exception))
+        self.assertIn('hors mandat', str(e.exception))
+
+    def test_un_portefeuille_MANQUANT_est_refuse_ET_dit_pourquoi_c_est_pire(self):
+        """⚠️ LE BILAN ÉQUILIBRE QUAND MÊME — aucun contrôle d'équilibre ne
+        le verrait. C'est la forme que ce module combat déjà pour la
+        compensation entre côtés."""
+        large = ContexteEvaluation(
+            arrete='2026-12-31',
+            portefeuilles=('rc_auto', 'mrh', 'flotte', 'dommages_ouvrage'))
+        with self.assertRaises(RefusMesure) as e:
+            etat_situation_financiere(SOLDES, large)
+        self.assertEqual(e.exception.motif, MOTIF_PORTEFEUILLE_MANQUANT)
+        self.assertIn("'dommages_ouvrage'", str(e.exception))
+        self.assertIn('ÉQUILIBRE QUAND MÊME', str(e.exception))
+        self.assertIn('SILENCIEUX', str(e.exception))
+
+    def test_le_bilan_EQUILIBRE_malgre_le_portefeuille_manquant(self):
+        """⚠️ LA DÉMONSTRATION, ET C'EST ELLE QUI JUSTIFIE LE REFUS.
+
+        Sans ce contrôle, le bilan amputé se présente exactement comme un
+        bilan complet : mêmes totaux, mêmes lignes, rien qui cloche.
+        """
+        b = etat_situation_financiere(SOLDES, CONTEXTE)
+        self.assertEqual(b.nb_portefeuilles, 3)
+        self.assertGreater(b.total_passifs, 0.0)
+        self.assertGreater(b.total_actifs, 0.0)
+
+    def test_une_absence_DECLAREE_vide_est_acceptee(self):
+        """⚠️ Un portefeuille sans aucun groupe à l'arrêté n'a rien à
+        présenter — un refus aveugle bloquerait un cas légitime."""
+        large = ContexteEvaluation(
+            arrete='2026-12-31',
+            portefeuilles=('rc_auto', 'mrh', 'flotte', 'dommages_ouvrage'))
+        b = etat_situation_financiere(
+            SOLDES, large,
+            portefeuilles_vides_declares={
+                'dommages_ouvrage': 'aucun groupe a cet arrete, note du 30/06'})
+        self.assertEqual(b.nb_portefeuilles, 3)
+
+    def test_une_absence_declaree_SANS_MOTIF_est_refusee(self):
+        """« non vide » n'est pas « renseigne », ici comme ailleurs."""
+        large = ContexteEvaluation(
+            arrete='2026-12-31',
+            portefeuilles=('rc_auto', 'mrh', 'flotte', 'dommages_ouvrage'))
+        for motif in ('', 'A_RENSEIGNER'):
+            with self.assertRaises(RefusMesure, msg=motif) as e:
+                etat_situation_financiere(
+                    SOLDES, large,
+                    portefeuilles_vides_declares={'dommages_ouvrage': motif})
+            self.assertEqual(e.exception.motif, MOTIF_PORTEFEUILLE_MANQUANT)
+
+    def test_declarer_vide_un_portefeuille_PRESENT_se_contredit(self):
+        with self.assertRaises(RefusMesure) as e:
+            etat_situation_financiere(
+                SOLDES, CONTEXTE,
+                portefeuilles_vides_declares={'mrh': 'pretendu vide'})
+        self.assertEqual(e.exception.motif, MOTIF_PORTEFEUILLE_MANQUANT)
+        self.assertIn('se contredisent', str(e.exception))
 
 
 if __name__ == '__main__':
