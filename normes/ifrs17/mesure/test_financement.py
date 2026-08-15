@@ -9,6 +9,11 @@ partir du second serait passé. Ici il y en a trois.
 """
 import unittest
 
+from normes.ifrs17.mesure.declaration import (
+    FORME_DATE_25,
+    ContexteEvaluation,
+    GroupeEvalue,
+)
 from normes.ifrs17.mesure.financement import (
     ASSIETTE,
     MOTIF_LRC_NON_ETEINT,
@@ -41,6 +46,23 @@ from normes.ifrs17.oracles.ica_222092 import (
     ROLL_FORWARD_5_6_1,
     TOLERANCE,
 )
+
+CONTEXTE = ContexteEvaluation(
+    arrete='2026-12-31',
+    portefeuilles=('AUTO_TR', 'MRH', 'GAV', 'RC_AUTO', 'RC_PRO', 'DO'))
+
+#: ⚠️ LE GROUPE DE L'ORACLE, D'UN SEUL TENANT. Sa cohorte (§22, l'émission)
+#: et sa date de comptabilisation initiale (§25) coïncident ici — l'exemple
+#: ICA place les deux au 1er janvier 2026. ⚠️ ELLES NE COÏNCIDENT PAS
+#: TOUJOURS, et c'est tout l'objet de `GroupeEvalue` : les avoir supposées
+#: liées faisait refuser 2 groupes sur 18 du banc local.
+GROUPE = GroupeEvalue(cohorte='2026', date_25='2026-01-01')
+
+
+def roll_forward_ctx(**kw):
+    """⚠️ `contexte` et `groupe` obligatoires au site de consommation."""
+    return roll_forward(contexte=CONTEXTE, groupe=GROUPE,
+                        forme_du_taux_verrouille=FORME_DATE_25, **kw)
 
 
 def _taux():
@@ -75,23 +97,6 @@ class T1_LOracle5_6_1(unittest.TestCase):
         obtenus = [round(m.lrc_cloture, 2) for m in mesure]
         print(f"    OK N1 : LRC de cloture {obtenus} vs oracle "
               f"{[p['lrc_cloture'] for p in publie]}")
-
-from normes.ifrs17.mesure.declaration import ContexteEvaluation
-
-COHORTE = '2026'
-from normes.ifrs17.mesure.declaration import FORME_DATE_25
-
-CONTEXTE = ContexteEvaluation(
-    arrete='2026-12-31',
-    portefeuilles=('AUTO_TR', 'MRH', 'GAV', 'RC_AUTO', 'RC_PRO', 'DO'))
-
-
-def roll_forward_ctx(**kw):
-    """⚠️ `contexte` obligatoire au site de consommation."""
-    return roll_forward(contexte=CONTEXTE,
-                        cohorte_du_groupe=COHORTE,
-                        forme_du_taux_verrouille=FORME_DATE_25, **kw)
-
 
     def test_la_convention_de_signe_est_RETOURNEE_EXPLICITEMENT(self):
         """⚠️⚠️ LE PIEGE QUE L'ORACLE PORTE DANS SON PROPRE DOCUMENT.

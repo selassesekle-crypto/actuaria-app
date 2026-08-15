@@ -353,6 +353,28 @@ USAGES_DU_TAUX = (USAGE_COURANT, USAGE_VERROUILLE)
 
 MOTIF_USAGE_NON_DECLARE = 'usage_du_taux_non_declare'
 
+#: ⚠️⚠️ UNE LIMITE TROUVÉE PAR LE BALAYAGE EN PROSE, ET ELLE N'EST PAS
+#: FERMÉE — elle est NOMMÉE. Le refus sur deux taux verrouillés de même arrêté
+#: était justifié par « §22 impose des cohortes ANNUELLES, donc deux cohortes
+#: ont deux arrêtés ». ⚠️ CETTE JUSTIFICATION EST DU MÊME AXE FAUX que celle
+#: que ce lot corrige : l'arrêté d'un taux verrouillé ne vient pas de la
+#: cohorte (§22, l'émission) mais de la comptabilisation initiale (§25).
+#:
+#: ⚠️ ET DEUX GROUPES PEUVENT SE COMPTABILISER LE MÊME JOUR — deux
+#: portefeuilles dont la couverture s'ouvre au 1er janvier, ou deux cohortes
+#: dont l'une porte une couverture rétroactive. Le refus peut donc être un
+#: FAUX REJET. Il est maintenu parce que le cas ordinaire reste le doublon, et
+#: parce que le corriger relève du COMPORTEMENT, pas de la propreté de ce lot.
+LIMITE_DU_DOUBLON = (
+    "⚠️ CE REFUS SUPPOSE QUE DEUX GROUPES SE COMPTABILISENT À DES DATES "
+    "DISTINCTES, ET CE N'EST PAS TOUJOURS VRAI. B72 d) fige le taux à la "
+    "COMPTABILISATION INITIALE (§25), que deux groupes peuvent partager — "
+    "deux portefeuilles dont la couverture s'ouvre le même jour, ou une "
+    "cohorte à couverture rétroactive. C'est donc un faux rejet POSSIBLE, "
+    "nommé plutôt que tu : sa justification d'origine invoquait les cohortes "
+    "annuelles du §22, qui est le MÊME axe faux que ce module vient de "
+    "défaire ailleurs.")
+
 
 def exiger_ensemble_coherent(*, perimetres: dict, contexte, erreur,
                              usages: dict | None = None) -> str:
@@ -513,9 +535,16 @@ def _coherence_par_usage(perimetres, usages, contexte, erreur) -> str:
 
     ⚠️ LES DEUX USAGES N'ATTENDENT PAS LE MÊME ARRÊTÉ, et c'est tout le
     point : un taux COURANT doit porter l'arrêté évalué ; un taux VERROUILLÉ
-    porte celui de la cohorte, nécessairement antérieur ou égal. Les
-    confondre refuserait des déclarations correctes — le mode de défaillance
-    qu'une comparaison uniforme produit toujours.
+    porte celui de la COMPTABILISATION INITIALE de son groupe (B72 d) + §25),
+    nécessairement antérieur ou égal à l'évaluation. Les confondre refuserait
+    des déclarations correctes — le mode de défaillance qu'une comparaison
+    uniforme produit toujours.
+
+    ⚠️⚠️ CETTE DOCSTRING DISAIT « PORTE CELUI DE LA COHORTE », ET C'ÉTAIT
+    FAUX. Un taux verrouillé n'est pas daté par la cohorte : §22 constitue le
+    groupe sur l'ÉMISSION, §25 le comptabilise ailleurs. La correction est
+    venue d'un balayage EN PROSE — un relevé par symbole ne l'aurait pas vue,
+    parce que rien de ce qui est faux ici n'est un nom.
     """
     courants = {n: p.arrete for n, p in perimetres.items()
                 if usages[n] == USAGE_COURANT}
@@ -544,81 +573,111 @@ def _coherence_par_usage(perimetres, usages, contexte, erreur) -> str:
     if doublons:
         raise erreur(
             MOTIF_PERIMETRE_DISCORDANT,
-            f"deux taux verrouillés portent le même arrêté {sorted(doublons)} "
-            f"alors qu'ils devraient couvrir des cohortes distinctes. §22 "
-            f"impose des cohortes ANNUELLES : un arrêté en double signale "
-            f"soit un doublon, soit une cohorte oubliée.")
+            f"deux taux verrouillés portent le même arrêté "
+            f"{sorted(doublons)}. Le cas ordinaire est un doublon, ou un "
+            f"groupe oublié dont le taux manque. " + LIMITE_DU_DOUBLON)
 
     return (f"{len(perimetres)} déclarations, {len(courants)} d'usage COURANT "
             f"à l'arrêté évalué {contexte.arrete} et {len(verrouilles)} "
             f"VERROUILLÉ(S) sur {sorted(verrouilles.values())}. ⚠️ LA "
             f"COHÉRENCE SE JUGE PAR USAGE : des arrêtés différents ne sont "
-            f"incohérents que s'ils servent le MÊME usage. §22 imposant des "
-            f"cohortes annuelles, un portefeuille de trois cohortes appelle "
-            f"trois taux verrouillés — quatre arrêtés distincts, et l'ensemble "
-            f"se tient. ⚠️ CE CONTRÔLE NE VÉRIFIE PAS que chaque taux "
-            f"verrouillé porte l'arrêté de SA cohorte : il ne connaît pas les "
-            f"cohortes évaluées.")
+            f"incohérents que s'ils servent le MÊME usage. §22 bornant "
+            f"l'étendue d'un groupe à un an d'émissions, un portefeuille de "
+            f"trois cohortes appelle trois taux verrouillés — quatre arrêtés "
+            f"distincts, et l'ensemble se tient. ⚠️ CE CONTRÔLE NE VÉRIFIE "
+            f"PAS que chaque taux verrouillé porte la date de comptabilisation "
+            f"initiale de SON groupe : il ne connaît pas les groupes évalués. "
+            + LIMITE_DU_DOUBLON)
 
 
-#: ⚠️ LA FORME D'UNE COHORTE — §22 les impose ANNUELLES, donc une année.
-FORME_COHORTE = re.compile(r'^\d{4}$')
+#: ⚠️⚠️ LA FORME D'UNE ÉTIQUETTE DE COHORTE, ET ELLE ÉTAIT TROP ÉTROITE.
+#: `^\d{4}$` n'acceptait que l'année civile. Or le socle produit l'étiquette
+#: sous une convention DÉCLARÉE : `cohorte(convention_exercice(4), …)` rend
+#: « 2024-25 » pour un exercice avril-mars, que ce module refusait à tort —
+#: mesuré sur le producteur d'étiquettes lui-même. La forme accepte donc les
+#: deux, et REFUSE toujours ce qui n'est pas une étiquette : « 2024-12-31 »
+#: (un arrêté glissé à la place d'une cohorte) et « 24 » (une année tronquée).
+#:
+#: ⚠️ ET LA CORRESPONDANCE AVEC LE SOCLE EST VÉRIFIÉE BRUYAMMENT, DANS LE
+#: SOCLE — `test_groupe.py`. Ce module ne peut pas importer `socle.groupe`
+#: sans rompre la frontière du paquet ; c'est donc au producteur de
+#: l'étiquette de crier si sa forme s'écarte de ce que la mesure accepte.
+FORME_COHORTE = re.compile(r'^\d{4}(-\d{2})?$')
 
 MOTIF_COHORTE_NON_DECLAREE = 'cohorte_du_groupe_non_declaree'
-MOTIF_TAUX_HORS_COHORTE = 'taux_verrouille_hors_cohorte'
+MOTIF_GROUPE_NON_DECLARE = 'groupe_evalue_non_declare'
+MOTIF_TAUX_POSTERIEUR_A_L_EVALUATION = 'taux_verrouille_posterieur'
+MOTIF_TAUX_HORS_COMPTABILISATION_25 = 'taux_hors_comptabilisation_initiale'
 
-#: ⚠️⚠️ POURQUOI L'ANNÉE, ET L'APPUI A ÉTÉ CORRIGÉ — LE PREMIER ÉTAIT FAUX.
-#: Ce module a d'abord justifié l'année par le §22 : « §22 impose des cohortes
-#: annuelles, donc la cohorte est l'unité ». ⚠️ §22 NE DIT PAS ÇA. Il dit
-#: seulement qu'on « ne doit pas classer dans un même groupe des contrats émis
-#: à plus d'un an d'intervalle » — il plafonne l'ÉTENDUE d'un groupe, et ne
-#: dit rien de la date à laquelle un taux se détermine. Celle-ci relève du
-#: §25 : la PREMIÈRE du début de couverture, de la première prime exigible, ou
-#: du moment où le groupe devient déficitaire.
+#: ⚠️⚠️ DEUX AXES, ET LES CONFONDRE REFUSAIT DU CORRECT. C'est le troisième
+#: état de ce raisonnement, et les deux premiers étaient faux :
 #:
-#: ⚠️⚠️ L'APPUI RÉEL EST B73, ET IL EST DIRECT : « Pour déterminer, à la date
-#: de la comptabilisation initiale d'un groupe de contrats, les taux
-#: d'actualisation décrits AUX PARAGRAPHES B72 b) À B72 e), l'entité PEUT
-#: utiliser des taux d'actualisation MOYENS PONDÉRÉS POUR L'INTERVALLE DE
-#: TEMPS AU COURS DUQUEL SONT ÉMIS LES CONTRATS DU GROUPE, et qui, selon le
-#: paragraphe 22, ne peut excéder un an. » Il couvre B72 d), donc le §56 : la
-#: norme ANTICIPE qu'un groupe s'étale sur un an, et l'autorise explicitement.
+#:   1. « §22 impose des cohortes annuelles, donc la cohorte est l'unité » —
+#:      FAUX D'APPUI. §22 dit seulement qu'on « ne doit pas classer dans un
+#:      même groupe des contrats ÉMIS à plus d'un an d'intervalle » : il
+#:      plafonne l'ÉTENDUE d'un groupe et ne dit rien de la date d'un taux.
+#:   2. « l'appui est B73, donc l'arrêté du taux tombe dans l'année de la
+#:      cohorte » — APPUI JUSTE, CONCLUSION FAUSSE. B73 autorise la moyenne
+#:      pondérée sur l'intervalle d'ÉMISSION ; il ne dit pas que la
+#:      comptabilisation initiale tombe dans l'année d'émission.
 #:
-#: ⚠️ ET B73 DIT « PEUT » — C'EST UNE FACULTÉ, PAS UNE RÈGLE. Deux formes sont
-#: donc légitimes, et elles ne donnent pas la même date :
+#: ⚠️⚠️ CE QUI EST VRAI : LA COHORTE SUIT L'ÉMISSION, LE TAUX SUIT LA
+#: COMPTABILISATION INITIALE, ET AUCUNE DES DEUX NE BORNE L'AUTRE.
 #:
-#:   · la DATE DU §25 — celle de la comptabilisation initiale du groupe ;
-#:   · la MOYENNE PONDÉRÉE DE B73 — sur l'intervalle d'émission.
+#:   · §22  — la cohorte, par l'ÉMISSION ;
+#:   · B72 d) — le taux verrouillé, « DÉTERMINÉ LORS DE LA COMPTABILISATION
+#:     INITIALE » ; §25 la définit comme la PREMIÈRE du début de couverture,
+#:     de la première prime exigible, ou du moment où le groupe devient
+#:     déficitaire. Aucune des trois n'est bornée par l'année d'émission.
 #:
-#: ⚠️⚠️ ET CE CONTRÔLE N'EXIGE NI L'UNE NI L'AUTRE : il accepte toute date de
-#: l'année de la cohorte. Il est donc PLUS LÂCHE QUE LES DEUX FORMES
-#: LÉGITIMES — mesuré : il accepte le 1er janvier, le 1er juillet et le
-#: 31 décembre indifféremment. Le 31 décembre est le taux de FIN d'année, pas
-#: une moyenne ; sur des émissions quasi uniformes, une moyenne pondérée
-#: tombe vers le milieu de l'année. La différence n'est pas cosmétique sur un
-#: exercice à taux mobiles.
+#: ⚠️ LES DEUX SENS SONT MESURÉS SUR LE BANC LOCAL, pas supposés : une
+#: production de décembre 2024 (cohorte 2024) se comptabilise le 08/01/2025 ;
+#: une couverture rétroactive émise en 2026 (cohorte 2026) se comptabilise le
+#: 27/12/2025. L'ancien contrôle refusait les deux.
 #:
 #: ⚠️⚠️ UNE VARIANTE DU MOTIF DE CE DÉPÔT, ET ELLE EST NEUVE. Le premier
 #: raisonnement ANNONÇAIT qu'il était un raisonnement — « c'est un
 #: raisonnement, pas une lecture littérale » — et s'appuyait pourtant sur le
 #: mauvais article. LE SIGNALER NE LE RENDAIT PAS JUSTE. Une étiquette
 #: d'honnêteté n'est pas une vérification : elle dit qu'on sait ce qu'on fait,
-#: pas qu'on a raison de le faire.
-RAISONNEMENT_COHORTE_ANNUELLE = (
-    "⚠️ CE CONTRÔLE RETIENT L'ANNÉE, ET SON APPUI EST B73 — non le §22, qui "
-    "avait d'abord été invoqué À TORT. §22 plafonne l'ÉTENDUE d'un groupe "
-    "(pas de contrats émis à plus d'un an d'intervalle) et ne dit rien de la "
-    "date d'un taux ; celle-ci relève du §25. B73, lui, autorise directement "
-    "« des taux d'actualisation MOYENS PONDÉRÉS pour l'intervalle de temps au "
-    "cours duquel sont émis les contrats du groupe » — pour les taux de B72 "
-    "b) à e), donc pour le §56. La norme anticipe qu'un groupe s'étale sur "
-    "un an. ⚠️ MAIS B73 DIT « PEUT » : deux formes sont légitimes — la date "
-    "du §25, ou la moyenne pondérée de B73 — et elles ne donnent pas la même "
-    "date. ⚠️ CE QUE CE CONTRÔLE LAISSE PASSER, ET C'EST PLUS LARGE QU'UN "
-    "ARBITRAGE : il n'exige NI l'une NI l'autre, il accepte toute date de "
-    "l'année. Le 31 décembre est le taux de FIN d'année ; sur des émissions "
-    "quasi uniformes, une moyenne pondérée tombe vers le milieu. Sur un "
-    "exercice à taux mobiles, l'écart n'est pas cosmétique.")
+#: pas qu'on a raison de le faire. ⚠️ ET LE SECOND ÉTAT MONTRE LA SUITE : un
+#: appui CORRIGÉ ne corrige pas à lui seul la conclusion qu'il portait.
+RAISONNEMENT_DES_DEUX_AXES = (
+    "⚠️ LA COHORTE ET L'ARRÊTÉ DU TAUX SONT DEUX AXES, ET LES CONFONDRE "
+    "REFUSAIT DU CORRECT. La cohorte suit l'ÉMISSION — §22 : « ne pas classer "
+    "dans un même groupe des contrats ÉMIS à plus d'un an d'intervalle ». Le "
+    "taux verrouillé suit la COMPTABILISATION INITIALE — B72 d) : des taux "
+    "« déterminés lors de la comptabilisation initiale », que §25 fixe à la "
+    "PREMIÈRE du début de couverture, de la première prime exigible, ou du "
+    "moment où le groupe devient déficitaire. ⚠️ AUCUNE DES DEUX NE BORNE "
+    "L'AUTRE, DANS AUCUN SENS : une production de décembre relève de la "
+    "cohorte de l'année et se comptabilise en janvier suivant ; une "
+    "couverture rétroactive relève de la cohorte de son émission et se "
+    "comptabilise l'année d'avant. ⚠️ CE CONTRÔLE A EXIGÉ L'ANNÉE DE LA "
+    "COHORTE, ET LE PRIX EST MESURÉ : 2 groupes sur 18 du banc local refusés "
+    "à tort, et 116 contrats sur 2 005 dont l'année du §25 diffère de l'année "
+    "d'émission — 25 par la branche §25 a), 91 par la branche §25 b).")
+
+#: ⚠️⚠️ ET L'EXACTITUDE FERME UN TROU QUI ÉTAIT NOMMÉ. L'ancien contrôle
+#: acceptait TOUTE date de l'année de la cohorte : le 1er janvier, le
+#: 1er juillet et le 31 décembre indifféremment. Il était donc PLUS LÂCHE que
+#: les deux formes légitimes, et sa docstring le disait sans le corriger.
+#: C'est exactement ce qui a laissé passer la première déclaration du
+#: producteur — un taux au 31/12/2024 annoncé pour une cohorte 2024 dont la
+#: comptabilisation initiale tombe le 11/01/2024.
+#:
+#: ⚠️ LA COMPARAISON EXACTE PAR FORME LE FERME DANS LES DEUX SENS : elle
+#: cesse de refuser du correct (les deux groupes ci-dessus) et cesse
+#: d'accepter le taux de FIN d'année déguisé en date de comptabilisation.
+CE_QUE_L_EXACTITUDE_FERME = (
+    "⚠️ CE CONTRÔLE COMPARE DÉSORMAIS PAR FORME, ET EXACTEMENT. L'ancien "
+    "acceptait toute date de l'année de la cohorte — plus lâche que les DEUX "
+    "formes légitimes, et sa propre docstring le disait sans le corriger. "
+    "C'est ce qui a laissé passer un taux au 31 décembre annoncé pour un "
+    "groupe dont la comptabilisation initiale tombe le 11 janvier. "
+    "L'exactitude ferme le trou dans les deux sens : elle cesse de refuser du "
+    "correct, et cesse d'accepter le taux de FIN d'année déguisé en date de "
+    "comptabilisation initiale.")
 
 
 #: ⚠️⚠️ LES DEUX FORMES QUE B73 REND LÉGITIMES, ET ELLES SE DÉCLARENT. B73
@@ -676,34 +735,100 @@ RESERVE_MOYENNE_DE_TAUX = (
     "ne vérifie donc PAS l'approximation elle-même.")
 
 #: ⚠️⚠️ CE QUE CE MODULE NE PEUT PAS VÉRIFIER, ET IL FAUT LE LIRE AVANT DE S'Y
-#: FIER. Aucune des deux formes n'est RECALCULABLE ici : la date du §25 exige
-#: le début de couverture du groupe, la moyenne de B73 exige les dates
-#: d'émission de ses contrats — `roll_forward` ne reçoit ni l'un ni l'autre.
-#: Ce contrôle vérifie donc trois choses seulement : que la forme est
-#: DÉCLARÉE, que la date tombe dans l'année de la cohorte, et qu'elle n'est
-#: pas postérieure à l'évaluation. ⚠️ LA LIMITE EST NOMMÉE PLUTÔT QUE COMBLÉE
-#: PAR UN CONTRÔLE QUE LES PARAMÈTRES NE PERMETTENT PAS — c'est la règle qui a
-#: déjà servi pour la fenêtre du §57.
+#: FIER. Aucune des deux formes n'est RECALCULABLE ici : la date du §25 se
+#: DÉCLARE avec le groupe, elle ne se dérive pas — il faudrait le début de
+#: couverture, l'échéance de la première prime et le moment du déficit, que ce
+#: module ne reçoit pas. La moyenne de B73 exigerait les dates d'émission de
+#: chaque contrat, qu'il ne reçoit pas davantage.
+#:
+#: ⚠️ CE QU'IL ÉTABLIT EST DONC UNE COHÉRENCE ENTRE DÉCLARATIONS, PAS UNE
+#: VALEUR : que la forme est déclarée, et que l'arrêté du taux s'accorde avec
+#: le fait déclaré que cette forme désigne. C'est réel — c'est exactement ce
+#: qui attrape « forme §25 déclarée, taux de fin d'année fourni » — et ce
+#: n'est pas une vérification de la courbe elle-même.
 LIMITE_DES_DEUX_FORMES = (
     "⚠️ CE CONTRÔLE NE RECALCULE NI L'UNE NI L'AUTRE DES DEUX FORMES. La date "
-    "du §25 exigerait le début de couverture du groupe, la moyenne pondérée "
-    "de B73 exigerait les dates d'émission de ses contrats : ce module ne "
-    "reçoit ni l'un ni l'autre. Il vérifie que la forme est DÉCLARÉE, que la "
-    "date tombe dans l'année de la cohorte, et qu'elle n'est pas postérieure "
-    "à l'évaluation. La valeur elle-même reste sous la responsabilité de "
+    "du §25 se DÉCLARE avec le groupe — la dériver exigerait le début de "
+    "couverture, l'échéance de la première prime et le moment du déficit ; la "
+    "moyenne pondérée de B73 exigerait les dates d'émission de chaque "
+    "contrat. Ce module ne reçoit ni les uns ni les autres. Il établit une "
+    "COHÉRENCE ENTRE DÉCLARATIONS — la forme déclarée et le fait qu'elle "
+    "désigne — et non la valeur du taux, qui reste sous la responsabilité de "
     "l'entité.")
 
 
-def exiger_taux_de_la_cohorte(*, arrete_verrouillage, cohorte, contexte,
-                              erreur, forme: str = '',
-                              intervalle_emission=None,
-                              ponderation_declaree: str = '',
-                              objet: str = 'le taux verrouillé') -> str:
-    """B72 d) — le taux figé appartient-il à la cohorte du groupe évalué ?
+class GroupeEvalue(NamedTuple):
+    """L'IDENTITÉ DÉCLARÉE DU GROUPE — TROIS FAITS, TROIS ARTICLES.
 
-    ⚠️ `ANTERIEUR_OU_EGAL` NE SUFFISAIT PAS, ET C'ÉTAIT MESURÉ : il acceptait
-    un taux de 2020 pour une cohorte 2024. Il ne vérifiait qu'une borne, la
-    haute — la limite était nommée, et c'est ici qu'elle mordait.
+    ⚠️⚠️ CE REGROUPEMENT EST NÉ D'UN DÉFAUT, ET LE DÉFAUT VENAIT DE LA
+    SÉPARATION. La cohorte et l'arrêté du taux verrouillé voyageaient comme
+    deux paramètres indépendants d'une signature qui en portait six. Rien ne
+    disait qu'ils relevaient de DEUX AXES, et le contrôle a comparé l'un à
+    l'autre : il exigeait que l'arrêté du taux tombe dans l'ANNÉE de la
+    cohorte. ⚠️ IL REFUSAIT ALORS DES TAUX CORRECTS.
+
+      · `cohorte`             — §22, l'ÉMISSION. C'est l'étiquette produite
+        par le socle sous la convention déclarée, « 2024 » ou « 2024-25 ».
+      · `date_25`             — §25, la COMPTABILISATION INITIALE. C'est elle
+        que B72 d) vise, et elle NE SE DÉRIVE PAS de la cohorte.
+      · `intervalle_emission` — B73, les bornes d'émission du groupe.
+
+    ⚠️ LE REGROUPEMENT NE CORRIGE PAS LE DÉFAUT — la comparaison par forme le
+    fait. Il empêche le SUIVANT : trois faits liés qui voyagent ensemble ne
+    peuvent plus être comparés au hasard de l'ordre des paramètres.
+    """
+    cohorte:             str          # §22  — l'étiquette du socle
+    date_25:             str          # §25  — 'AAAA-MM-JJ'
+    intervalle_emission: tuple = ()   # B73  — (première, dernière) émission
+
+
+def _exiger_groupe_declare(groupe, erreur):
+    """Le groupe évalué est-il déclaré, et ses trois faits bien formés ?
+
+    ⚠️ LA `date_25` EST VÉRIFIÉE MÊME SOUS LA FORME B73, QUI NE LA COMPARE
+    PAS. Elle fait partie de l'identité du groupe, pas de la déclaration de
+    taux : une `date_25` malformée signale un appelant qui s'est trompé
+    d'objet, et le signaler tard vaudrait moins que le signaler ici.
+    """
+    if groupe is None:
+        raise erreur(
+            MOTIF_GROUPE_NON_DECLARE,
+            "le groupe évalué n'est pas déclaré. Un taux verrouillé se "
+            "rattache à UN groupe — sans lui, toute comparaison serait une "
+            "supposition. " + RAISONNEMENT_DES_DEUX_AXES)
+    if not FORME_COHORTE.match(str(groupe.cohorte or '')):
+        raise erreur(
+            MOTIF_COHORTE_NON_DECLAREE,
+            f"la cohorte du groupe évalué n'est pas déclarée (reçu "
+            f"{groupe.cohorte!r}, attendu l'étiquette produite par le socle — "
+            f"« AAAA » en année civile, « AAAA-AA » sous exercice décalé). "
+            f"⚠️ ELLE N'EST PLUS CE QUI BORNE LE TAUX : elle identifie le "
+            f"groupe. " + RAISONNEMENT_DES_DEUX_AXES)
+    _exiger_arrete_iso(groupe.date_25,
+                       "la date de comptabilisation initiale (§25) du groupe",
+                       erreur, MOTIF_TAUX_HORS_COMPTABILISATION_25)
+
+
+def exiger_taux_verrouille_du_groupe(*, arrete_verrouillage, groupe, contexte,
+                                     erreur, forme: str = '',
+                                     ponderation_declaree: str = '',
+                                     objet: str = 'le taux verrouillé') -> str:
+    """B72 d) — le taux figé s'accorde-t-il à la forme DÉCLARÉE du groupe ?
+
+    ⚠️⚠️ SON NOM A CHANGÉ PARCE QUE L'ANCIEN ÉTAIT FAUX. Il s'appelait
+    `exiger_taux_de_la_cohorte`, et un taux verrouillé N'APPARTIENT PAS à une
+    cohorte : B72 d) le fige à la COMPTABILISATION INITIALE, que §25 place où
+    elle tombe. Le nom disait l'axe que le code comparait, et c'était le
+    mauvais — un instrument qui affirme autre chose que ce qu'il porte, encore.
+
+    ⚠️ LA COMPARAISON EST PAR FORME, ET CHACUNE EST EXACTE :
+      · §25 — l'arrêté du taux ÉGALE la date de comptabilisation initiale
+        déclarée. C'est ce que la forme signifie ;
+      · B73 — l'arrêté tombe dans l'intervalle d'ÉMISSION. Une moyenne
+        pondérée de valeurs de [a ; b] à poids positifs y est nécessairement.
+
+    ⚠️ ET LA COHORTE NE BORNE PLUS RIEN : elle identifie le groupe et descend
+    dans le motif, pour qu'un lecteur sache lequel a été contrôlé.
     """
     if forme not in FORMES_DU_TAUX_VERROUILLE:
         raise erreur(
@@ -715,35 +840,34 @@ def exiger_taux_de_la_cohorte(*, arrete_verrouillage, cohorte, contexte,
             f"pondérée sur l'intervalle d'émission. Les deux sont légitimes "
             f"et ne donnent pas la même date — la deviner reviendrait à "
             f"supposer une méthode.")
-    if not FORME_COHORTE.match(str(cohorte or '')):
-        raise erreur(
-            MOTIF_COHORTE_NON_DECLAREE,
-            f"la cohorte du groupe évalué n'est pas déclarée (reçu "
-            f"{cohorte!r}, attendu une année AAAA). §22 impose des cohortes "
-            f"ANNUELLES ; sans elle, un taux verrouillé ne se rattache à "
-            f"aucun groupe et toute comparaison serait une supposition.")
+    _exiger_groupe_declare(groupe, erreur)
     _exiger_arrete_iso(arrete_verrouillage, f"l'arrêté de {objet}", erreur,
-                       MOTIF_TAUX_HORS_COHORTE)
+                       MOTIF_TAUX_POSTERIEUR_A_L_EVALUATION)
     _exiger_arrete_iso(contexte.arrete, "l'arrêté évalué", erreur,
                        MOTIF_CONTEXTE_INVALIDE)
 
     if arrete_verrouillage > contexte.arrete:
         raise erreur(
-            MOTIF_TAUX_HORS_COHORTE,
+            MOTIF_TAUX_POSTERIEUR_A_L_EVALUATION,
             f"{objet} porte l'arrêté {arrete_verrouillage}, POSTÉRIEUR à "
             f"l'arrêté évalué {contexte.arrete}. Un taux figé à la "
             f"comptabilisation initiale ne peut pas venir d'après la date "
             f"qu'on évalue.")
-    if arrete_verrouillage[:4] != cohorte:
+
+    if forme == FORME_DATE_25 and arrete_verrouillage != groupe.date_25:
         raise erreur(
-            MOTIF_TAUX_HORS_COHORTE,
-            f"{objet} porte l'arrêté {arrete_verrouillage} et le groupe "
-            f"évalué relève de la cohorte {cohorte}. B72 d) fige le taux À LA "
-            f"COMPTABILISATION INITIALE du groupe : un taux d'une AUTRE "
-            f"cohorte est signé, antérieur, et faux. ⚠️ C'est le cas qu'une "
-            f"simple borne « antérieur ou égal » laissait passer — elle "
-            f"acceptait un taux de 2020 pour une cohorte 2024. "
-            + RAISONNEMENT_COHORTE_ANNUELLE)
+            MOTIF_TAUX_HORS_COMPTABILISATION_25,
+            f"{objet} porte l'arrêté {arrete_verrouillage} et la forme "
+            f"déclarée est {FORME_DATE_25} : le groupe se comptabilise le "
+            f"{groupe.date_25} (§25). ⚠️ CETTE FORME SIGNIFIE EXACTEMENT CETTE "
+            f"DATE — B72 d) fige le taux « lors de la comptabilisation "
+            f"initiale ». Un arrêté qui s'en écarte relève soit de l'autre "
+            f"forme ({FORME_MOYENNE_B73}), soit d'une APPROXIMATION, et ce "
+            f"module refuse de deviner laquelle. ⚠️ Ce n'est PAS un contrôle "
+            f"de cohorte : le groupe relève de la cohorte "
+            f"{groupe.cohorte} (§22, l'émission), et sa comptabilisation "
+            f"initiale peut tomber une autre année. "
+            + RAISONNEMENT_DES_DEUX_AXES)
 
     #: ⚠️ UNE MOYENNE PONDÉRÉE QUI TOMBE LE 31 DÉCEMBRE EST SIGNALÉE, PAS
     #: REFUSÉE. Elle n'est possible que si tous les contrats du groupe ont
@@ -751,6 +875,7 @@ def exiger_taux_de_la_cohorte(*, arrete_verrouillage, cohorte, contexte,
     #: légitime ; taire laisserait passer le taux de FIN d'année déguisé en
     #: moyenne, qui est l'approximation la plus courante.
     if forme == FORME_MOYENNE_B73:
+        intervalle_emission = groupe.intervalle_emission
         if not intervalle_emission or len(intervalle_emission) != 2:
             raise erreur(
                 MOTIF_HORS_INTERVALLE_EMISSION,
@@ -795,9 +920,11 @@ def exiger_taux_de_la_cohorte(*, arrete_verrouillage, cohorte, contexte,
             "est le taux de FIN d'année, qui est une autre chose. Ce module "
             "ne peut pas trancher, faute des dates d'émission ; il signale.")
 
-    return (f"{objet} : arrêté {arrete_verrouillage}, cohorte {cohorte} du "
-            f"groupe évalué, forme déclarée « {forme} »."
-            + signal + ' ' + RAISONNEMENT_COHORTE_ANNUELLE
+    return (f"{objet} : arrêté {arrete_verrouillage}, forme déclarée "
+            f"« {forme} ». Groupe évalué — cohorte {groupe.cohorte} (§22, "
+            f"l'émission), comptabilisation initiale {groupe.date_25} (§25)."
+            + signal + ' ' + RAISONNEMENT_DES_DEUX_AXES
+            + ' ' + CE_QUE_L_EXACTITUDE_FERME
             + ' ' + LIMITE_DES_DEUX_FORMES
             + ' ' + LIMITE_INTERVALLE_PAR_FORME
             + (' ' + RESERVE_MOYENNE_DE_TAUX

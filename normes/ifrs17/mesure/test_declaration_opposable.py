@@ -9,6 +9,7 @@ fait croire sur parole.
 import unittest
 
 from normes.ifrs17.mesure.declaration import (
+    CE_QUE_L_EXACTITUDE_FERME,
     COMPARAISON_ANTERIEUR_OU_EGAL,
     COMPARAISON_EGAL,
     DEMONSTRATION_INCOHERENCE_D_ENSEMBLE,
@@ -18,6 +19,7 @@ from normes.ifrs17.mesure.declaration import (
     FORMES_DU_TAUX_VERROUILLE,
     LIMITE_ANTERIEUR_OU_EGAL,
     LIMITE_DES_DEUX_FORMES,
+    LIMITE_DU_DOUBLON,
     LIMITE_INTERVALLE_PAR_FORME,
     MARQUEURS_DE_NON_SIGNATURE,
     MOTIF_ARRETE_HORS_CONTEXTE,
@@ -25,25 +27,28 @@ from normes.ifrs17.mesure.declaration import (
     MOTIF_CONTEXTE_INVALIDE,
     MOTIF_DECLARANT_NON_HABILITE,
     MOTIF_FORME_DU_TAUX_NON_DECLAREE,
+    MOTIF_GROUPE_NON_DECLARE,
     MOTIF_HORS_INTERVALLE_EMISSION,
     MOTIF_PERIMETRE_DISCORDANT,
     MOTIF_PONDERATION_NON_DECLAREE,
     MOTIF_STATUT_NON_SIGNE,
-    MOTIF_TAUX_HORS_COHORTE,
+    MOTIF_TAUX_HORS_COMPTABILISATION_25,
+    MOTIF_TAUX_POSTERIEUR_A_L_EVALUATION,
     MOTIF_USAGE_NON_DECLARE,
     QUALITE_ENTITE,
     QUALITE_TIERS,
     QUALITES,
-    RAISONNEMENT_COHORTE_ANNUELLE,
+    RAISONNEMENT_DES_DEUX_AXES,
     RESERVE_MOYENNE_DE_TAUX,
     USAGE_COURANT,
     USAGE_VERROUILLE,
     ContexteEvaluation,
+    GroupeEvalue,
     PerimetreDeclare,
     exiger_arrete_dans_le_contexte,
     exiger_declaration_opposable,
     exiger_ensemble_coherent,
-    exiger_taux_de_la_cohorte,
+    exiger_taux_verrouille_du_groupe,
 )
 from normes.ifrs17.mesure.lrc_paa import RefusMesure
 
@@ -352,11 +357,11 @@ class T6_DeuxCategoriesDeComparaison(unittest.TestCase):
 class T7_LaCoherenceSeJugePARUSAGE(unittest.TestCase):
     """⚠️⚠️ CE CONTRÔLE REFUSAIT UNE DÉCLARATION CORRECTE.
 
-    Il exigeait UN SEUL arrêté pour tout l'ensemble. Or §22 impose des
-    cohortes ANNUELLES : un portefeuille de trois cohortes appelle TROIS taux
-    verrouillés (B72 d) plus un taux courant (B72 a). Quatre arrêtés, et le
-    tout cohérent. **Une exigence FAUSSE bloque** — c'est le défaut le plus
-    visible, et le plus vite payé.
+    Il exigeait UN SEUL arrêté pour tout l'ensemble. Or §22 borne l'étendue
+    d'un groupe à un an d'ÉMISSIONS : un portefeuille de trois cohortes
+    appelle TROIS taux verrouillés (B72 d) plus un taux courant (B72 a).
+    Quatre arrêtés, et le tout cohérent. **Une exigence FAUSSE bloque** —
+    c'est le défaut le plus visible, et le plus vite payé.
     """
 
     QUATRE = {'courant': PerimetreDeclare('2026-12-31', PTF),
@@ -394,13 +399,27 @@ class T7_LaCoherenceSeJugePARUSAGE(unittest.TestCase):
                             'verr_2024': PerimetreDeclare('2027-12-31', PTF)})
         self.assertIn('POSTÉRIEUR', str(e.exception))
 
-    def test_deux_verrouilles_au_MEME_arrete_signalent_une_cohorte_oubliee(self):
-        """⚠️ §22 impose des cohortes annuelles : un doublon d'arrêté est
-        soit un doublon, soit une cohorte manquante."""
+    def test_deux_verrouilles_au_MEME_arrete_sont_refuses(self):
+        """⚠️ Le cas ordinaire est un doublon, ou un groupe dont le taux
+        manque. Le refus TIENT — mais sa portée est nommée : voir le test
+        suivant."""
         with self.assertRaises(RefusMesure) as e:
             self._ensemble({**self.QUATRE,
                             'verr_2025': PerimetreDeclare('2024-12-31', PTF)})
-        self.assertIn('cohorte oubliée', str(e.exception))
+        self.assertIn('un doublon', str(e.exception))
+
+    def test_le_refus_du_doublon_NOMME_son_faux_rejet_possible(self):
+        """⚠️⚠️ TROUVÉ PAR LE BALAYAGE EN PROSE, PAS PAR LES SYMBOLES. Sa
+        justification d'origine — « §22 impose des cohortes annuelles » —
+        était du MÊME axe faux que le défaut principal de ce lot. Deux
+        groupes PEUVENT se comptabiliser le même jour. Le refus est maintenu
+        (le corriger relève du comportement) et sa limite est écrite."""
+        with self.assertRaises(RefusMesure) as e:
+            self._ensemble({**self.QUATRE,
+                            'verr_2025': PerimetreDeclare('2024-12-31', PTF)})
+        self.assertIn(LIMITE_DU_DOUBLON, str(e.exception))
+        self.assertIn('faux rejet POSSIBLE', str(e.exception))
+        self.assertIn('MÊME axe faux', str(e.exception))
 
     def test_un_usage_non_declare_est_refuse(self):
         us = {k: v for k, v in self.USAGES.items() if k != 'verr_2026'}
@@ -416,175 +435,266 @@ class T7_LaCoherenceSeJugePARUSAGE(unittest.TestCase):
         self.assertEqual(e.exception.motif, MOTIF_PERIMETRE_DISCORDANT)
 
     def test_le_motif_dit_CE_QU_IL_NE_VERIFIE_PAS(self):
-        """⚠️ Il ne sait pas si chaque taux porte l'arrêté de SA cohorte."""
+        """⚠️ Il ne sait pas si chaque taux porte la date de comptabilisation
+        initiale de SON groupe — il ne connaît pas les groupes évalués."""
         self.assertIn('NE VÉRIFIE PAS', self._ensemble())
-        self.assertIn('ne connaît pas les cohortes', self._ensemble())
+        self.assertIn('ne connaît pas les groupes', self._ensemble())
+        self.assertIn(LIMITE_DU_DOUBLON, self._ensemble())
 
 
-class T8_LeTauxVERROUILLE_APPARTIENT_A_SA_COHORTE(unittest.TestCase):
-    """⚠️⚠️ « ANTÉRIEUR OU ÉGAL » ACCEPTAIT UN TAUX DE 2020 POUR UNE COHORTE
-    2024. Il ne vérifiait qu'une borne, la haute — la limite était nommée, et
-    c'est ici qu'elle mordait."""
+class T8_LaCohorteEtLeTauxSontDEUX_AXES(unittest.TestCase):
+    """⚠️⚠️ CE CONTRÔLE EXIGEAIT L'ANNÉE DE LA COHORTE, ET IL REFUSAIT DU
+    CORRECT. La cohorte suit l'ÉMISSION (§22), le taux verrouillé suit la
+    COMPTABILISATION INITIALE (B72 d) + §25), et aucune des deux ne borne
+    l'autre — dans aucun des deux sens.
+
+    ⚠️ LES CAS DE CETTE CLASSE SONT MESURÉS SUR LE BANC LOCAL, PAS INVENTÉS :
+    2 groupes sur 18 étaient refusés à tort, et 116 contrats sur 2 005 ont une
+    date §25 dans une autre année que leur émission.
+    """
 
     #: L'intervalle réel de la cohorte DO 2024 du banc local.
     INTERVALLE = ('2024-01-11', '2024-12-25')
     PONDERATION = 'par la prime, la composante §56 s accretant sur elle'
+    #: DO 2024 : émissions du 11/01 au 25/12, comptabilisation le 11/01.
+    DO_2024 = GroupeEvalue(cohorte='2024', date_25='2024-01-11',
+                           intervalle_emission=INTERVALLE)
 
-    def _cohorte(self, arrete, cohorte, forme=FORME_DATE_25, **kw):
-        base = {'arrete_verrouillage': arrete, 'cohorte': cohorte,
+    def _taux(self, arrete, groupe=None, forme=FORME_DATE_25, **kw):
+        base = {'arrete_verrouillage': arrete, 'groupe': groupe or self.DO_2024,
                 'contexte': CONTEXTE, 'erreur': RefusMesure, 'forme': forme}
         if forme == FORME_MOYENNE_B73:
-            base.setdefault('intervalle_emission', self.INTERVALLE)
             base.setdefault('ponderation_declaree', self.PONDERATION)
         base.update(kw)
-        return exiger_taux_de_la_cohorte(**base)
+        return exiger_taux_verrouille_du_groupe(**base)
 
-    def test_le_taux_de_SA_cohorte_passe(self):
-        m = self._cohorte('2024-12-31', '2024')
+    # -- LES DEUX SENS QUI ÉTAIENT REFUSÉS À TORT --------------------------
+
+    def test_une_COUVERTURE_RETROACTIVE_passe_desormais(self):
+        """⚠️⚠️ LE CAS RÉEL N° 1, MESURÉ : GAV cohorte 2026, comptabilisé le
+        27/12/2025. L'ancien contrôle exigeait un arrêté en 2026 et refusait
+        ce groupe — un des 2 sur 18 du banc local."""
+        g = GroupeEvalue(cohorte='2026', date_25='2025-12-27')
+        m = self._taux('2025-12-27', g)
+        self.assertIn('cohorte 2026', m)
+        self.assertIn('2025-12-27', m)
+
+    def test_une_PRODUCTION_DE_DECEMBRE_passe_desormais(self):
+        """⚠️⚠️ LE CAS RÉEL N° 2, MESURÉ : DO, 3 contrats émis du 01/12 au
+        25/12/2024 — cohorte 2024 — comptabilisés le 08/01/2025. C'est le
+        sens le plus courant : 91 des 116 écarts viennent de §25 b)."""
+        g = GroupeEvalue(cohorte='2024', date_25='2025-01-08')
+        m = self._taux('2025-01-08', g)
         self.assertIn('cohorte 2024', m)
+        self.assertIn('2025-01-08', m)
 
-    def test_le_cas_QUE_LA_BORNE_LACHE_LAISSAIT_PASSER(self):
-        """⚠️ 2020 pour une cohorte 2024 : antérieur, donc admis avant."""
+    def test_le_motif_dit_LES_DEUX_AXES_et_le_prix_mesure(self):
+        m = self._taux('2024-01-11')
+        self.assertIn(RAISONNEMENT_DES_DEUX_AXES, m)
+        self.assertIn('DEUX AXES', m)
+        self.assertIn('2 groupes sur 18', m)
+        self.assertIn('116 contrats sur 2 005', m)
+
+    # -- CE QUE L'EXACTITUDE FERME, ET QUI PASSAIT AVANT -------------------
+
+    def test_la_forme_25_EXIGE_LA_DATE_du_25_pas_l_annee(self):
+        """⚠️⚠️ LE TROU QUI ÉTAIT NOMMÉ SANS ÊTRE FERMÉ. L'ancien contrôle
+        acceptait TOUTE date de l'année : c'est ce qui a laissé passer la
+        première déclaration du producteur — taux au 31/12/2024 pour un
+        groupe comptabilisé le 11/01/2024."""
         with self.assertRaises(RefusMesure) as e:
-            self._cohorte('2020-01-01', '2024')
-        self.assertEqual(e.exception.motif, MOTIF_TAUX_HORS_COHORTE)
-        self.assertIn('une AUTRE cohorte', str(e.exception))
-        self.assertIn('2020', str(e.exception))
+            self._taux('2024-12-31')
+        self.assertEqual(e.exception.motif,
+                         MOTIF_TAUX_HORS_COMPTABILISATION_25)
+        self.assertIn('2024-01-11', str(e.exception))
+        self.assertIn('APPROXIMATION', str(e.exception))
+
+    def test_le_refus_du_25_DIT_QU_IL_N_EST_PAS_UN_CONTROLE_DE_COHORTE(self):
+        """⚠️ Sans quoi le lecteur referait la confusion qu'on vient de
+        défaire — et « corrigerait » en alignant sur la cohorte."""
+        with self.assertRaises(RefusMesure) as e:
+            self._taux('2024-12-31')
+        self.assertIn("PAS un contrôle de cohorte", str(e.exception))
+
+    def test_le_motif_dit_CE_QUE_L_EXACTITUDE_FERME(self):
+        m = self._taux('2024-01-11')
+        self.assertIn(CE_QUE_L_EXACTITUDE_FERME, m)
+        self.assertIn('dans les deux sens', m)
+
+    def test_le_cas_de_2020_reste_refuse_PAR_LA_BONNE_RAISON(self):
+        """⚠️ Il l'était pour une raison fausse — « autre cohorte ». Il l'est
+        maintenant parce que ce n'est pas la date de comptabilisation."""
+        with self.assertRaises(RefusMesure) as e:
+            self._taux('2020-01-01')
+        self.assertEqual(e.exception.motif,
+                         MOTIF_TAUX_HORS_COMPTABILISATION_25)
+
+    # -- CE QUI SURVIT INCHANGÉ -------------------------------------------
 
     def test_un_taux_POSTERIEUR_a_l_evaluation_reste_refuse(self):
+        g = GroupeEvalue(cohorte='2027', date_25='2027-06-30')
         with self.assertRaises(RefusMesure) as e:
-            self._cohorte('2027-06-30', '2027')
+            self._taux('2027-06-30', g)
+        self.assertEqual(e.exception.motif,
+                         MOTIF_TAUX_POSTERIEUR_A_L_EVALUATION)
         self.assertIn('POSTÉRIEUR', str(e.exception))
 
-    def test_sans_cohorte_declaree_le_module_refuse(self):
-        """⚠️ Sans elle, toute comparaison serait une supposition."""
+    def test_sans_GROUPE_declare_le_module_refuse(self):
+        """⚠️ Un taux verrouillé se rattache à UN groupe ; sans lui, toute
+        comparaison serait une supposition. L'appel contourne l'aide de la
+        classe, qui substitue le groupe par défaut."""
+        with self.assertRaises(RefusMesure) as e:
+            exiger_taux_verrouille_du_groupe(
+                arrete_verrouillage='2024-01-11', groupe=None,
+                contexte=CONTEXTE, erreur=RefusMesure, forme=FORME_DATE_25)
+        self.assertEqual(e.exception.motif, MOTIF_GROUPE_NON_DECLARE)
+        self.assertIn('DEUX AXES', str(e.exception))
+
+    def test_une_cohorte_malformee_est_refusee(self):
         for c in ('', '24', '2024-12-31', 'A_RENSEIGNER'):
+            g = GroupeEvalue(cohorte=c, date_25='2024-01-11')
             with self.assertRaises(RefusMesure, msg=c) as e:
-                self._cohorte('2024-12-31', c)
+                self._taux('2024-01-11', g)
             self.assertEqual(e.exception.motif, MOTIF_COHORTE_NON_DECLAREE)
 
-    def test_le_jour_DANS_l_annee_de_la_cohorte_est_indifferent(self):
-        """⚠️ L'ARBITRAGE : l'ANNÉE, pas la date exacte."""
-        for jour in ('2024-01-01', '2024-06-30', '2024-12-31'):
-            self._cohorte(jour, '2024')
-
-    def test_l_appui_est_B73_ET_LE_PREMIER_ETAIT_FAUX(self):
-        """⚠️⚠️ LE §22 AVAIT ÉTÉ INVOQUÉ À TORT.
-
-        §22 plafonne l'ÉTENDUE d'un groupe — pas de contrats émis à plus d'un
-        an d'intervalle — et ne dit RIEN de la date d'un taux ; celle-ci
-        relève du §25. B73 est l'appui direct : il autorise « des taux
-        MOYENS PONDÉRÉS pour l'intervalle de temps au cours duquel sont émis
-        les contrats du groupe », pour les taux de B72 b) à e).
-        """
-        m = self._cohorte('2024-12-31', '2024')
-        self.assertIn(RAISONNEMENT_COHORTE_ANNUELLE, m)
-        self.assertIn('B73', m)
-        self.assertIn('MOYENS PONDÉRÉS', m)
-        self.assertIn('À TORT', m)
+    def test_une_date_25_malformee_est_refusee(self):
+        for d in ('', '11/01/2024', 'A_RENSEIGNER'):
+            g = GroupeEvalue(cohorte='2024', date_25=d)
+            with self.assertRaises(RefusMesure, msg=d) as e:
+                self._taux('2024-01-11', g)
+            self.assertEqual(e.exception.motif,
+                             MOTIF_TAUX_HORS_COMPTABILISATION_25)
 
     def test_la_FORME_du_taux_se_declare_et_ne_se_devine_pas(self):
         """⚠️ B73 dit « PEUT » : deux formes légitimes, dates différentes."""
         with self.assertRaises(RefusMesure) as e:
-            self._cohorte('2024-12-31', '2024', forme='')
+            self._taux('2024-01-11', forme='')
         self.assertEqual(e.exception.motif, MOTIF_FORME_DU_TAUX_NON_DECLAREE)
         self.assertIn('supposer une méthode', str(e.exception))
 
-    def test_les_deux_formes_sont_acceptees(self):
-        for f in FORMES_DU_TAUX_VERROUILLE:
-            self.assertIn(f, self._cohorte('2024-06-30', '2024', forme=f))
+    def test_les_deux_formes_sont_acceptees_ET_IL_N_Y_EN_A_QUE_DEUX(self):
+        """⚠️ L'ARITÉ SE VÉRIFIE À PART. B73 dit « PEUT » et n'ouvre qu'UNE
+        alternative à B72 d) : une troisième forme ajoutée sans son appui au
+        texte passerait ici sans que rien ne le dise."""
+        self.assertEqual(FORMES_DU_TAUX_VERROUILLE,
+                         (FORME_DATE_25, FORME_MOYENNE_B73))
+        self.assertIn(FORME_DATE_25, self._taux('2024-01-11'))
+        self.assertIn(FORME_MOYENNE_B73,
+                      self._taux('2024-07-20', forme=FORME_MOYENNE_B73))
+
+    # -- U2 : L'INTERVALLE RESTE OPPOSÉ À B73, ET À ELLE SEULE -------------
 
     def test_l_intervalle_refuse_EXACTEMENT_pour_B73(self):
         """⚠️ CE REFUS N'EST PAS PRUDENTIEL : une moyenne pondérée de
         valeurs de [a ; b] est NÉCESSAIREMENT dans [a ; b]."""
         with self.assertRaises(RefusMesure) as e:
-            self._cohorte('2024-01-05', '2024', forme=FORME_MOYENNE_B73)
+            self._taux('2024-01-05', forme=FORME_MOYENNE_B73)
         self.assertEqual(e.exception.motif, MOTIF_HORS_INTERVALLE_EMISSION)
         self.assertIn('EXACT, PAS PRUDENTIEL', str(e.exception))
 
     def test_la_date_ponderee_REELLE_de_DO_2024_passe(self):
         """Sa déclaration : 2024-07-20, dans [11/01 ; 25/12]."""
-        self._cohorte('2024-07-20', '2024', forme=FORME_MOYENNE_B73)
+        self._taux('2024-07-20', forme=FORME_MOYENNE_B73)
 
     def test_l_intervalle_n_est_PAS_oppose_a_la_forme_25(self):
-        """⚠️ §25 retient la PREMIÈRE de trois dates, dont aucune n'est
-        bornée par l'émission — l'y contraindre refuserait du correct."""
-        m = self._cohorte('2024-01-05', '2024', forme=FORME_DATE_25)
+        """⚠️⚠️ U2 : l'intervalle borne B73 et RIEN D'AUTRE. §25 retient la
+        PREMIÈRE de trois dates, dont aucune n'est bornée par l'émission —
+        l'y contraindre refuserait du correct, et c'est exactement ce que les
+        deux cas mesurés ci-dessus démontrent."""
+        g = GroupeEvalue(cohorte='2024', date_25='2025-01-08',
+                         intervalle_emission=('2024-12-01', '2024-12-25'))
+        m = self._taux('2025-01-08', g)
         self.assertIn(LIMITE_INTERVALLE_PAR_FORME, m)
         self.assertIn('refuserait du correct', m)
         self.assertIn('PREMIÈRE de trois dates', m)
 
     def test_B73_sans_intervalle_est_refuse_et_le_refus_dit_pourquoi(self):
         """⚠️ Qui a calculé une moyenne AVAIT les dates."""
+        g = GroupeEvalue(cohorte='2024', date_25='2024-01-11')
         with self.assertRaises(RefusMesure) as e:
-            self._cohorte('2024-07-20', '2024', forme=FORME_MOYENNE_B73,
-                          intervalle_emission=None)
+            self._taux('2024-07-20', g, forme=FORME_MOYENNE_B73)
         self.assertEqual(e.exception.motif, MOTIF_HORS_INTERVALLE_EMISSION)
         self.assertIn('AVAIT NÉCESSAIREMENT ces dates', str(e.exception))
 
     def test_B73_sans_PONDERATION_est_refuse(self):
         """⚠️ Prime, nombre, flux : trois pondérations, trois dates."""
         with self.assertRaises(RefusMesure) as e:
-            self._cohorte('2024-07-20', '2024', forme=FORME_MOYENNE_B73,
-                          ponderation_declaree='')
+            self._taux('2024-07-20', forme=FORME_MOYENNE_B73,
+                       ponderation_declaree='')
         self.assertEqual(e.exception.motif, MOTIF_PONDERATION_NON_DECLAREE)
         self.assertIn('3 à 9', str(e.exception))
 
     def test_la_RESERVE_moyenne_de_TAUX_descend_sur_B73_seulement(self):
         """⚠️ T3 : une limite non dite se fait surévaluer."""
-        b73 = self._cohorte('2024-07-20', '2024', forme=FORME_MOYENNE_B73)
+        b73 = self._taux('2024-07-20', forme=FORME_MOYENNE_B73)
         self.assertIn(RESERVE_MOYENNE_DE_TAUX, b73)
         self.assertIn('MOYENNE DE TAUX, PAS UNE DATE MOYENNE', b73)
-        self.assertNotIn(RESERVE_MOYENNE_DE_TAUX,
-                         self._cohorte('2024-01-11', '2024'))
+        self.assertNotIn(RESERVE_MOYENNE_DE_TAUX, self._taux('2024-01-11'))
 
     def test_une_MOYENNE_au_31_decembre_est_SIGNALEE_pas_refusee(self):
         """⚠️ Elle n'est possible que si tous les contrats ont été émis ce
         jour-là. Refuser bloquerait un cas légitime ; taire laisserait passer
         le taux de FIN d'année déguisé en moyenne."""
-        m = self._cohorte('2024-12-31', '2024', forme=FORME_MOYENNE_B73,
-                          intervalle_emission=('2024-01-11', '2024-12-31'))
+        g = GroupeEvalue(cohorte='2024', date_25='2024-01-11',
+                         intervalle_emission=('2024-01-11', '2024-12-31'))
+        m = self._taux('2024-12-31', g, forme=FORME_MOYENNE_B73)
         self.assertIn('SIGNALEMENT, NON REFUS', m)
         self.assertIn('émis ce jour-là', m)
 
     def test_la_meme_date_en_forme_25_n_est_PAS_signalee(self):
         """La date du §25 peut légitimement tomber le 31 décembre."""
-        m = self._cohorte('2024-12-31', '2024', forme=FORME_DATE_25)
-        self.assertNotIn('SIGNALEMENT', m)
+        g = GroupeEvalue(cohorte='2024', date_25='2024-12-31')
+        self.assertNotIn('SIGNALEMENT', self._taux('2024-12-31', g))
 
     def test_la_LIMITE_des_deux_formes_est_nommee(self):
         """⚠️ NI L'UNE NI L'AUTRE N'EST RECALCULABLE ICI, et le dire vaut
         mieux que bâtir un contrôle que les paramètres ne permettent pas."""
-        m = self._cohorte('2024-06-30', '2024')
+        m = self._taux('2024-01-11')
         self.assertIn(LIMITE_DES_DEUX_FORMES, m)
         self.assertIn('NE RECALCULE NI', m)
         self.assertIn("responsabilité de l'entité", m)
 
-    def test_le_motif_dit_que_B73_est_une_FACULTE(self):
-        """⚠️ « PEUT » : deux formes légitimes, et elles ne donnent pas la
-        même date — celle du §25, ou la moyenne pondérée de B73."""
-        m = self._cohorte('2024-12-31', '2024')
-        self.assertIn('« PEUT »', m)
-        self.assertIn('§25', m)
-
-    def test_le_motif_dit_que_le_controle_N_EXIGE_NI_L_UNE_NI_L_AUTRE(self):
-        """⚠️ PLUS LARGE QU'UN ARBITRAGE : il accepte toute date de l'année.
-
-        Le 31 décembre est le taux de FIN d'année ; une moyenne pondérée sur
-        des émissions quasi uniformes tombe vers le milieu.
-        """
-        m = self._cohorte('2024-12-31', '2024')
-        self.assertIn("NI l'une NI l'autre", m)
-        self.assertIn("FIN d'année", m)
-        self.assertIn('pas cosmétique', m)
-
-    def test_le_22_n_est_PLUS_invoque_comme_appui(self):
-        """⚠️ VERROU DANS L'AUTRE SENS : le §22 ne doit revenir que comme
-        ce qu'il est — un plafond d'étendue, jamais un fondement de date."""
-        m = self._cohorte('2024-12-31', '2024')
+    def test_le_22_n_est_PLUS_invoque_comme_BORNE_du_taux(self):
+        """⚠️⚠️ VERROU DANS L'AUTRE SENS, ET IL A DÉJÀ SERVI DEUX FOIS. Le
+        §22 est revenu deux fois comme fondement — d'abord comme appui de
+        l'année, puis comme borne. Il ne doit revenir que comme ce qu'il est :
+        la règle d'ÉMISSION qui constitue la cohorte."""
+        m = self._taux('2024-01-11')
         self.assertNotIn('§22 la rend suffisante', m)
         self.assertNotIn("granularité qu'elle ne demande pas", m)
-        self.assertIn("plafonne l'ÉTENDUE", m)
+        self.assertNotIn("CE CONTRÔLE RETIENT L'ANNÉE", m)
+        self.assertIn("§22, l'émission", m)
+
+
+class T8b_LEtiquetteDeCohorteSuitLaCONVENTION(unittest.TestCase):
+    """⚠️⚠️ `^\\d{4}$` REFUSAIT UNE ÉTIQUETTE CORRECTE. Le socle produit
+    « 2024-25 » sous exercice décalé — `convention_exercice(4)` — et ce module
+    la rejetait. Même famille que le défaut principal du lot : un contrôle qui
+    suppose une forme au lieu de suivre son producteur.
+
+    ⚠️ La correspondance elle-même est verrouillée DANS LE SOCLE, qui produit
+    l'étiquette ; ici on ne vérifie que ce que la mesure accepte.
+    """
+
+    def test_l_annee_civile_et_l_exercice_decale_passent(self):
+        for c in ('2024', '2024-25'):
+            g = GroupeEvalue(cohorte=c, date_25='2024-04-02')
+            m = exiger_taux_verrouille_du_groupe(
+                arrete_verrouillage='2024-04-02', groupe=g,
+                contexte=CONTEXTE, erreur=RefusMesure, forme=FORME_DATE_25)
+            self.assertIn(f'cohorte {c}', m)
+
+    def test_ce_qui_n_est_PAS_une_etiquette_reste_refuse(self):
+        """⚠️ Élargir n'est pas ouvrir : un arrêté glissé à la place d'une
+        cohorte, ou une année tronquée, restent des erreurs d'appelant."""
+        for c in ('2024-12-31', '24', '2024-2025'):
+            g = GroupeEvalue(cohorte=c, date_25='2024-04-02')
+            with self.assertRaises(RefusMesure, msg=c) as e:
+                exiger_taux_verrouille_du_groupe(
+                    arrete_verrouillage='2024-04-02', groupe=g,
+                    contexte=CONTEXTE, erreur=RefusMesure,
+                    forme=FORME_DATE_25)
+            self.assertEqual(e.exception.motif, MOTIF_COHORTE_NON_DECLAREE)
 
 
 class T3_CeQueLeControleNEtablitPas(unittest.TestCase):

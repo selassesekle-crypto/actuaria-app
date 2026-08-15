@@ -381,6 +381,49 @@ def _eligibilite(lignes: list[Mapping]) -> tuple[str, str]:
 #  §25 — LA DATE DE COMPTABILISATION INITIALE
 # =============================================================================
 
+#: ⚠️⚠️ NE « CORRIGEZ » PAS LA COHORTE SUR LA DATE DU §25. CE MODULE EST
+#: CORRECT, ET CETTE NOTE EXISTE PARCE QU'ON A SOUTENU LE CONTRAIRE.
+#:
+#: Un producteur de données a livré des dates de comptabilisation initiale et
+#: signalé que « 116 contrats changent de cohorte §22 — ça touche la
+#: constitution des groupes ». ⚠️ C'EST FAUX, ET DANS LES DEUX MOTS. Les 116
+#: changent de DATE (§25), pas de GROUPE (§22) : ce qui a bougé est la date de
+#: comptabilisation initiale, pas la cohorte, qui n'a pas bougé d'un contrat.
+#:
+#: LE TEXTE TRANCHE, ET LES DEUX PARAGRAPHES EMPLOIENT DES MOTS DIFFÉRENTS :
+#:
+#:   · §22 — « ne doit pas classer dans un même groupe des contrats ÉMIS à
+#:     plus d'un an d'intervalle ». La cohorte se lit sur L'ÉMISSION.
+#:   · §25 — « la PREMIÈRE des dates suivantes » : début de la période de
+#:     couverture, échéance du premier paiement, ou moment où le groupe
+#:     devient déficitaire. Aucune des trois n'est l'émission, et aucune n'est
+#:     bornée par l'année d'émission.
+#:
+#: ⚠️ CE QUE COÛTERAIT LA « CORRECTION », MESURÉ SUR 2 005 CONTRATS. Dériver
+#: la cohorte sur la date du §25 au lieu de `date_emission` donnerait :
+#:     par ÉMISSION (correct)   2024 : 693 · 2025 : 647 · 2026 : 665
+#:     par §25      (faux)      2024 : 650 · 2025 : 661 · 2026 : 654
+#:                              + une COHORTE 2027 DE 40 CONTRATS
+#: ⚠️ Une cohorte 2027 dans laquelle AUCUN contrat n'a été émis en 2027 — le
+#: signe le plus net que l'axe serait le mauvais.
+#:
+#: ⚠️ ET L'ÉCART EST NORMAL, PAS ANORMAL : 116 contrats sur 2 005 ont une date
+#: §25 dans une autre année que leur émission — 25 par la branche §25 a)
+#: (couverture rétroactive ou différée), 91 par la branche §25 b) (première
+#: prime exigible l'année suivante). Les deux sens existent. Le module de
+#: mesure a payé la confusion inverse : il exigeait que l'arrêté du taux
+#: verrouillé tombe dans l'année de la cohorte, et refusait 2 groupes sur 18.
+POURQUOI_LA_COHORTE_SUIT_L_EMISSION = (
+    "§22 lit l'ÉMISSION (« des contrats ÉMIS à plus d'un an d'intervalle ») ; "
+    "§25 retient la PREMIÈRE de trois dates dont aucune n'est l'émission. Ce "
+    "sont DEUX AXES : `date_emission` fonde la cohorte, `date_compta_25` "
+    "fonde la comptabilisation initiale, et l'une ne borne pas l'autre. "
+    "⚠️ MESURÉ SUR 2 005 CONTRATS : 116 ont une date §25 dans une autre année "
+    "que leur émission (25 par §25 a), 91 par §25 b)) — ils changent de DATE, "
+    "PAS DE GROUPE. Dériver la cohorte sur la date du §25 ferait apparaître "
+    "une cohorte 2027 de 40 contrats dont AUCUN n'a été émis en 2027.")
+
+
 def _date_25(lignes: list[Mapping]) -> tuple[date | None, str]:
     """La première des trois dates de §25, et laquelle a servi.
 

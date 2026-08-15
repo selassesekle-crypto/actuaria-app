@@ -19,6 +19,7 @@ from normes.ifrs17.socle.groupe import (
     PAA_53A_NON_EVALUEE,
     PAA_ELIGIBLE,
     PAA_NON_ETABLI,
+    POURQUOI_LA_COHORTE_SUIT_L_EMISSION,
     TRACE_16B_NON_DECLARE,
     CleGroupe,
     Groupe,
@@ -268,6 +269,57 @@ class T5_Date25(unittest.TestCase):
               "-- pas devinee")
 
 
+class T5b_LaCohorteSuitL_EMISSION_PAS_LA_DATE_25(unittest.TestCase):
+    """⚠️⚠️ NE « CORRIGEZ » PAS CE MODULE. Un producteur de données a soutenu
+    que ses nouvelles dates de comptabilisation « touchent la constitution des
+    groupes ». C'EST FAUX : les contrats concernés changent de DATE (§25), pas
+    de GROUPE (§22). Cette classe le MESURE, pour que la remarque ne survive
+    pas à sa réfutation.
+    """
+
+    def test_deux_contrats_emis_la_meme_annee_font_UN_SEUL_groupe(self):
+        """⚠️ Même si leurs dates du §25 tombent dans DEUX années.
+
+        Décembre 2024, couverture au 1er janvier 2025 : la cohorte est 2024
+        (§22 lit l'ÉMISSION), la comptabilisation initiale est 2025.
+        """
+        gs = deriver([
+            _ligne(date_emission='2024-03-15', debut_couverture='2024-04-01',
+                   fin_couverture='2025-03-31'),
+            _ligne(date_emission='2024-12-20', debut_couverture='2025-01-01',
+                   fin_couverture='2025-12-31'),
+        ])
+        self.assertEqual(len(gs), 1, "les deux contrats sont émis en 2024")
+        self.assertEqual(gs[0].cle.cohorte, '2024')
+        self.assertEqual(gs[0].date_compta_25, date(2024, 4, 1))
+        print(f"    OK T5c : 2 contrats emis en 2024 -> 1 groupe cohorte "
+              f"{gs[0].cle.cohorte}, §25 = {gs[0].date_compta_25}")
+
+    def test_une_couverture_RETROACTIVE_ne_change_pas_la_cohorte(self):
+        """⚠️ L'AUTRE SENS, ET IL EST RÉEL : émis en 2026, couvert depuis
+        décembre 2025. La cohorte reste 2026 ; c'est la date du §25 qui
+        recule. Mesuré sur le banc local : GAV 2026, §25 au 27/12/2025."""
+        gs = deriver([_ligne(date_emission='2026-01-15',
+                             debut_couverture='2025-12-27',
+                             fin_couverture='2026-12-26')])
+        self.assertEqual(gs[0].cle.cohorte, '2026')
+        self.assertEqual(gs[0].date_compta_25, date(2025, 12, 27))
+        print(f"    OK T5d : couverture retroactive -> cohorte "
+              f"{gs[0].cle.cohorte} (emission), §25 {gs[0].date_compta_25}")
+
+    def test_la_raison_est_ECRITE_avec_les_deux_mots_du_texte(self):
+        """⚠️ SANS CE TEXTE, QUELQU'UN « CORRIGERA » LE SOCLE SUR LA FOI DE LA
+        REMARQUE. Les deux paragraphes emploient des mots différents, et c'est
+        tout l'argument."""
+        for morceau in ('ÉMIS', 'PREMIÈRE de trois dates', 'DEUX AXES',
+                        'date_emission', 'date_compta_25',
+                        'PAS DE GROUPE', 'cohorte 2027'):
+            self.assertIn(morceau, POURQUOI_LA_COHORTE_SUIT_L_EMISSION,
+                          morceau)
+        print("    OK T5e : la raison est ecrite, avec §22 (emission), §25 "
+              "(premiere de trois) et le cout mesure de la 'correction'")
+
+
 class T6_Classe16(unittest.TestCase):
     """T6 — la presomption de §18, et la trace qui la dit."""
 
@@ -358,6 +410,42 @@ class Z_LaCopieDuVocabulaire53EstBRUYANTE(unittest.TestCase):
         from normes.ifrs17.mesure.lrc_paa import VERDICTS_53
         self.assertEqual(len(VERDICTS_53), 3)
         self.assertEqual(len(set(VERDICTS_53)), 3)
+
+
+class Z_LEtiquetteDeCohorteEstACCEPTEE_PAR_LA_MESURE(unittest.TestCase):
+    """⚠️⚠️ MÊME MOTIF, MÊME REMÈDE QUE LE VOCABULAIRE DU §53. `mesure` ne
+    peut pas importer le socle ; il porte donc sa propre idée de ce à quoi
+    ressemble une étiquette de cohorte. ⚠️ ET ELLE ÉTAIT FAUSSE : `^\\d{4}$`
+    refusait « 2024-25 », que `cohorte(convention_exercice(4), …)` produit.
+
+    ⚠️ Le test est placé DANS LE SOCLE parce que c'est LUI qui produit
+    l'étiquette : c'est au producteur de crier si le consommateur ne la
+    reconnaît plus. Le contrôle est exhaustif sur les DOUZE conventions
+    possibles — une seule laissée de côté suffirait à rouvrir le défaut.
+    """
+
+    def test_les_douze_conventions_produisent_une_etiquette_ACCEPTEE(self):
+        from normes.ifrs17.mesure.declaration import FORME_COHORTE
+        vues = set()
+        for mois in range(1, 13):
+            conv = convention_exercice(mois)
+            for jour in (date(2024, 1, 15), date(2024, 6, 15),
+                         date(2024, 12, 15)):
+                et = cohorte(conv, jour)
+                vues.add(et)
+                self.assertTrue(
+                    FORME_COHORTE.match(et),
+                    f"le socle produit l'étiquette « {et} » sous "
+                    f"{conv.libelle}, que la mesure REFUSE")
+        print(f"    OK Z2 : {len(vues)} etiquettes distinctes produites par "
+              f"les 12 conventions, toutes acceptees par la mesure")
+
+    def test_la_mesure_refuse_toujours_ce_qui_n_est_PAS_une_etiquette(self):
+        """⚠️ Élargir n'est pas ouvrir : la forme doit encore attraper un
+        arrêté glissé à la place d'une cohorte."""
+        from normes.ifrs17.mesure.declaration import FORME_COHORTE
+        for faux in ('2024-12-31', '24', '', 'A_RENSEIGNER', '2024-2025'):
+            self.assertIsNone(FORME_COHORTE.match(faux), faux)
 
 
 if __name__ == '__main__':

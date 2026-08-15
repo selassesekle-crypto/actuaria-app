@@ -56,7 +56,7 @@ from typing import NamedTuple
 
 from normes.ifrs17.mesure.declaration import (
     est_renseigne,
-    exiger_taux_de_la_cohorte,
+    exiger_taux_verrouille_du_groupe,
 )
 from normes.ifrs17.mesure.lrc_paa import (
     RefusMesure,
@@ -199,9 +199,8 @@ def revenu_de_financement(cumul_charges: float, cumul_revenu_anterieur: float,
 
 
 def roll_forward(*, prime: float, nb_periodes: int, taux: TauxVerrouille,
-                 contexte, cohorte_du_groupe: str = '',
+                 contexte, groupe=None,
                  forme_du_taux_verrouille: str = '',
-                 intervalle_emission=None,
                  ponderation_declaree: str = '',
                  frais_acquisition: float = 0.0,
                  verdict_53_declare: str = ''
@@ -224,15 +223,17 @@ def roll_forward(*, prime: float, nb_periodes: int, taux: TauxVerrouille,
     couverture finit à zéro ; ne pas le vérifier laisserait passer un terme
     perdu, ce qui est précisément l'erreur que j'ai commise.
     """
-    #: ⚠️⚠️ ET UNE BORNE « ANTÉRIEUR OU ÉGAL » NE SUFFISAIT PAS : elle
-    #: acceptait un taux de 2020 pour une cohorte 2024. B72 d) fige le taux à
-    #: la comptabilisation initiale DU GROUPE — la comparaison se fait donc
-    #: contre SA cohorte, pas contre une borne lâche.
-    exiger_taux_de_la_cohorte(
+    #: ⚠️⚠️ LE GROUPE VOYAGE D'UN SEUL TENANT, ET CETTE SIGNATURE EST LA
+    #: RAISON DU REGROUPEMENT. `cohorte_du_groupe` et l'arrêté du taux y
+    #: étaient deux paramètres indépendants parmi six ; rien ne disait qu'ils
+    #: relevaient de DEUX AXES — §22 l'émission, B72 d) la comptabilisation
+    #: initiale — et le contrôle a fini par comparer l'un à l'autre. Il
+    #: refusait des taux CORRECTS. Les trois faits du groupe tiennent
+    #: désormais dans `GroupeEvalue`.
+    exiger_taux_verrouille_du_groupe(
         arrete_verrouillage=taux.arrete_verrouillage,
-        cohorte=cohorte_du_groupe, contexte=contexte, erreur=RefusMesure,
+        groupe=groupe, contexte=contexte, erreur=RefusMesure,
         forme=forme_du_taux_verrouille,
-        intervalle_emission=intervalle_emission,
         ponderation_declaree=ponderation_declaree,
         objet="le taux verrouillé (B72 d)")
 
