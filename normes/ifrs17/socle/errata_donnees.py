@@ -36,13 +36,45 @@ et le comptage à 747 est fondé EN DROIT.
 que se promettre : `mesure.declaration.est_renseigne('A_REMPLACER')` rend
 False. Le module bâti pour ce défaut refuse exactement ce chiffre-là.
 
-⚠️ CE QUE L'ERRATA NE COUVRE PAS, ET QUI RESTE OUVERT. Aucun des trois
-paniers ne porte de terme d'ACTUALISATION, que §32 a) ii) range pourtant
-dans les flux d'exécution au même rang que l'ajustement pour risque. Ce
-module ne tranche pas : il ne peut pas savoir, depuis les colonnes livrées,
-si `sinistres_attendus` est déjà une valeur actuelle. C'est une QUESTION au
-producteur, pas un quatrième défaut établi — et la nommer vaut mieux que la
-laisser découvrir.
+⚠️⚠️ LE QUATRIÈME TERME EST ÉTABLI DEPUIS, ET IL PENCHE DANS L'AUTRE SENS.
+La question posée ici — « `sinistres_attendus` est-il déjà une valeur
+actuelle ? » — a reçu sa réponse : NON, au code source du générateur. §32 a)
+ii) range l'ajustement pour la valeur temps de l'argent dans les flux
+d'exécution, au même rang que l'ajustement pour risque, et AUCUN des trois
+premiers paniers ne le porte. D'où le quatrième.
+
+⚠️ ET C'EST CE QUI REND LES QUATRE TERMES NÉCESSAIRES PLUTÔT QU'UN SOLDE.
+Les deux premières omissions rendaient le test TROP INDULGENT (249 → 552 →
+747) ; l'actualisation le rend TROP SÉVÈRE (747 → 539 à 4 %). Elles NE SE
+COMPENSENT PAS : il faudrait un taux sans risque d'environ 11 % pour que le
+panier complet retombe à 249. Un solde net cacherait deux erreurs de sens
+contraire sous un chiffre presque juste — le motif de ce dépôt, appliqué à
+un comptage.
+
+⚠️⚠️ ET LA CONVENTION D'ACTUALISATION EST ELLE-MÊME UNE DÉCISION. Ce n'est
+pas seulement la COURBE qui se déclare (§36 b) : c'est aussi CE QU'ON
+ACTUALISE. Mesuré à 4 % sur le portefeuille livré, quatre conventions
+également défendables donnent 521, 539, 541 et 568 — 47 contrats d'écart
+pour un effet de 208, soit 23 % de l'effet qu'elles mesurent. Un comptage
+actualisé cité sans sa convention laisse croire à une grandeur objective là
+où il y a DEUX décisions superposées.
+
+⚠️ CE QUE L'ERRATA NE COUVRE PAS, ET QUI RESTE OUVERT. La courbe du §36 b)
+n'est pas déclarée, et la courbe EIOPA embarquée (`core/courbe_rfr`) n'est
+PAS une courbe §36 telle quelle. Deux raisons distinctes, et une seule mord
+ici : le VOLATILITY ADJUSTMENT est déjà écarté par le code — `actualiser`
+REFUSE une courbe `avec_va`, l'agrément de l'art. 77 quinquies devant se
+déclarer à chaque appel — mais le CREDIT RISK ADJUSTMENT de 10 bps est
+retranché à TOUTES les maturités, et c'est une construction réglementaire,
+non un prix de marché observable. ⚠️ IL DOIT DONC ÊTRE RETRAITÉ, ET LE
+RETRAITEMENT SE DÉCLARE — jamais ne se déduit.
+
+⚠️ BONNE NOUVELLE MESURÉE, ET ELLE EXPLIQUE POURQUOI SEUL LE CRA RESTE : la
+durée de règlement la plus longue du portefeuille est 4,76 ans (DO), très en
+deçà du LAST LIQUID POINT de 20 ans. L'extrapolation vers l'UFR — l'autre
+construction réglementaire de la courbe EIOPA — N'EST PAS ATTEINTE sur ce
+portefeuille. Un seul retraitement suffit donc, et il porte sur un montant
+publié, donc traçable.
 
 ⚠️ ET SOUS PAA, LE TEST N'EST PAS LE §47 MAIS LE §18 : « l'entité doit
 SUPPOSER qu'aucun des contrats du portefeuille n'est déficitaire […] À MOINS
@@ -73,9 +105,50 @@ COMPTAGE_DEFICITAIRES = {
     PANIER_COMPLET_47: 747,
 }
 
+#: ⚠️ LE QUATRIÈME PANIER — CELUI QUI N'A PAS DE COMPTAGE. §32 a) ii) range
+#: l'ajustement pour la VALEUR TEMPS DE L'ARGENT dans les flux d'exécution, au
+#: même rang que l'ajustement pour risque. Aucun des trois autres ne le porte.
+PANIER_COMPLET_47_ACTUALISE = 'PANIER_COMPLET_47_ACTUALISE'
+
+#: ⚠️ QUATRE PANIERS, TROIS COMPTAGES. Le quatrième n'a pas de nombre tant
+#: que sa courbe ET sa convention ne sont pas déclarées : le ranger ici sans
+#: comptage, plutôt que de lui en inventer un, est tout le sujet.
+PANIERS = (PANIER_LIVRE, PANIER_AVEC_FRAIS_GESTION, PANIER_COMPLET_47,
+           PANIER_COMPLET_47_ACTUALISE)
+PANIERS_SANS_COMPTAGE_ETABLI = frozenset({PANIER_COMPLET_47_ACTUALISE})
+
 #: ⚠️ CE PANIER DESCEND D'UNE DÉCLARATION NON SIGNÉE. Le nommer ici évite
-#: qu'un agrégat le cite au même rang que les deux autres.
-PANIERS_TRIBUTAIRES_D_UNE_DECLARATION = frozenset({PANIER_COMPLET_47})
+#: qu'un agrégat le cite au même rang que les autres.
+PANIERS_TRIBUTAIRES_D_UNE_DECLARATION = frozenset({PANIER_COMPLET_47,
+                                                   PANIER_COMPLET_47_ACTUALISE})
+
+#: ⚠️⚠️ CE QUE L'ACTUALISATION FAIT AU COMPTAGE — MESURÉ, ET DANS L'AUTRE SENS.
+#: Les deux premières omissions rendaient le test TROP INDULGENT (249 → 747) ;
+#: celle-ci le rend TROP SÉVÈRE. ⚠️ ELLES NE SE COMPENSENT PAS : il faudrait un
+#: taux sans risque d'environ 11 % pour que le panier complet retombe à 249.
+#: Mesuré sur les 2 000 contrats livrés, sous la convention nommée ci-dessous.
+SENSIBILITE_ACTUALISATION = {0.00: 747, 0.01: 690, 0.02: 640,
+                             0.03: 587, 0.04: 539}
+
+#: ⚠️⚠️ LA CONVENTION D'ACTUALISATION EST ELLE-MÊME UNE DÉCISION, ET PAS UNE
+#: PETITE. Ce n'est pas seulement la COURBE qui se déclare (§36 b), c'est aussi
+#: CE QU'ON ACTUALISE. Mesuré à 4 % sur le portefeuille livré :
+#:
+#:   · durée moyenne, sinistres + frais de gestion + ajustement risque : 539
+#:   · cadence complète au lieu de la durée moyenne                    : 541
+#:   · sinistres seuls actualisés                                      : 568
+#:   · frais de maintenance actualisés aussi                           : 521
+#:
+#: Soit 47 contrats d'écart entre conventions, pour un effet d'actualisation
+#: de 208 contrats : LA CONVENTION PÈSE 23 % DE L'EFFET QU'ELLE MESURE. Citer
+#: un comptage actualisé sans nommer sa convention laisse croire à une
+#: grandeur objective là où il y a deux décisions superposées.
+CONVENTION_DES_SENSIBILITES = (
+    "durée moyenne de règlement par portefeuille appliquée aux sinistres "
+    "attendus, frais de gestion des sinistres et ajustement pour risque ; "
+    "frais d'acquisition et de maintenance laissés en nominal")
+ECART_ENTRE_CONVENTIONS_A_4PCT = 47
+EFFET_ACTUALISATION_A_4PCT = 208
 
 
 class Erratum(NamedTuple):
@@ -102,6 +175,23 @@ ERRATA = (
         "Ne PAS employer `classe_profitabilite` comme référence du test "
         "§47 : `refuser_source_test_47()` le refuse. Employer le panier 552 "
         "sans réserve, le 747 sous la réserve de sa déclaration."),
+    Erratum(
+        'E4', 'contrats_ifrs17_v2.csv / sinistres_attendus',
+        'DEFAUT_CONFIRME',
+        "Les sinistres attendus sont NOMINAUX — confirmé au code source du "
+        "générateur : prime × ratio S/P, aucun facteur d'actualisation. §32 "
+        "a) ii) range pourtant l'ajustement pour la valeur temps de l'argent "
+        "dans les flux d'exécution, au même rang que l'ajustement pour "
+        "risque. Aucun des trois premiers paniers ne le porte.",
+        "⚠️ SENS INVERSE DES DEUX AUTRES OMISSIONS : l'actualisation RÉDUIT "
+        "le comptage. 747 à taux nul, 690 à 1 %, 640 à 2 %, 587 à 3 %, 539 à "
+        "4 %. Elles NE SE COMPENSENT PAS — il faudrait environ 11 % pour "
+        "retomber aux 249 du panier livré. ⚠️ Et la CONVENTION pèse 47 "
+        "contrats à 4 % pour un effet de 208, soit 23 % de l'effet mesuré.",
+        "Employer `PANIER_COMPLET_47_ACTUALISE` dès que la courbe du §36 b) "
+        "ET la convention d'actualisation sont déclarées. Jusque-là, le "
+        "panier 552 reste le meilleur disponible et porte sa réserve : ne pas "
+        "bloquer le §62 b), qui supprimerait une date que la norme exige."),
     Erratum(
         'E2', 'panel de génération / part récupérable GAV',
         'ERREUR_DE_PARAMETRE',
@@ -160,11 +250,45 @@ def reserve_du_panier(panier: str) -> str:
     comptage cité sans sa réserve devient un fait, et le 747 n'en est pas
     un tant que sa déclaration n'est pas signée.
     """
-    if panier not in COMPTAGE_DEFICITAIRES:
+    if panier not in PANIERS:
         raise SourceDesavouee(
             f"panier inconnu : {panier!r}. Les paniers connus sont "
-            f"{sorted(COMPTAGE_DEFICITAIRES)}, et en inventer un laisserait "
-            f"citer un comptage sans réserve attachée")
+            f"{sorted(PANIERS)}, et en inventer un laisserait citer un "
+            f"comptage sans réserve attachée")
+
+    #: ⚠️ « PANIER CONNU SANS COMPTAGE ÉTABLI » N'EST PAS « PANIER INCONNU ».
+    #: Les confondre laisserait croire que le quatrième panier n'existe pas,
+    #: alors qu'il est le seul complet au sens du §47.
+    if panier in PANIERS_SANS_COMPTAGE_ETABLI:
+        return (
+            f"⚠️ CE PANIER EST LE SEUL COMPLET AU SENS DU §47, ET IL N'A PAS "
+            f"DE COMPTAGE. Il exige une COURBE déclarée (§36 b confie à "
+            f"l'entité « celle qui concorde avec les prix de marché "
+            f"observables ») ET une CONVENTION déclarée — ce qu'on actualise "
+            f"n'est pas moins une décision que le taux auquel on actualise. "
+            f"Mesuré : à 4 %, la convention seule déplace "
+            f"{ECART_ENTRE_CONVENTIONS_A_4PCT} contrats pour un effet de "
+            f"{EFFET_ACTUALISATION_A_4PCT}, soit "
+            f"{ECART_ENTRE_CONVENTIONS_A_4PCT / EFFET_ACTUALISATION_A_4PCT:.0%} "
+            f"de l'effet qu'elle mesure. Sensibilité indicative sous la "
+            f"convention « {CONVENTION_DES_SENSIBILITES} » : "
+            + ', '.join(f'{t:.0%} → {n}'
+                        for t, n in sorted(SENSIBILITE_ACTUALISATION.items()))
+            + ".")
+
+    if panier == PANIER_AVEC_FRAIS_GESTION:
+        return (
+            "⚠️ CE COMPTAGE N'EST PAS ACTUALISÉ, ET L'OMISSION PENCHE DANS "
+            "L'AUTRE SENS QUE LES DEUX PRÉCÉDENTES. §32 a) ii) range "
+            "l'ajustement pour la valeur temps de l'argent dans les flux "
+            "d'exécution, au même rang que l'ajustement pour risque ; ce "
+            "panier ne le porte pas. L'actualisation RÉDUIT la valeur "
+            "actuelle des sorties, donc RÉDUIT le nombre de déficitaires : ce "
+            "comptage les SURESTIME. ⚠️ Les omissions NE SE COMPENSENT PAS — "
+            "il faudrait un taux sans risque d'environ 11 % pour que le "
+            "panier complet retombe aux 249 du panier livré. Ce panier reste "
+            "le meilleur disponible, et c'est à ce titre qu'il est employé.")
+
     if panier in PANIERS_TRIBUTAIRES_D_UNE_DECLARATION:
         return (
             "⚠️ CE COMPTAGE HÉRITE D'UNE DÉCLARATION NON SIGNÉE. Il descend "
@@ -172,5 +296,7 @@ def reserve_du_panier(panier: str) -> str:
             "n'est pas plus solide que cette déclaration, et "
             "`mesure.declaration.est_renseigne` la refuse. Le fondement EN "
             "DROIT est acquis — §32 a) iii) range l'ajustement pour risque "
-            "dans les flux d'exécution — mais la VALEUR ne l'est pas.")
+            "dans les flux d'exécution — mais la VALEUR ne l'est pas. ⚠️ ET "
+            "IL N'EST PAS ACTUALISÉ NON PLUS : le §32 a) ii) reste omis, ce "
+            "que seul le panier complet actualisé corrige.")
     return ''

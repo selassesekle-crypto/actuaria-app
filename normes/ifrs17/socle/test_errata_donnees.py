@@ -7,11 +7,18 @@ from normes.ifrs17.mesure.declaration import est_renseigne
 from normes.ifrs17.socle.errata_donnees import (
     COLONNE_DESAVOUEE_TEST_47,
     COMPTAGE_DEFICITAIRES,
+    CONVENTION_DES_SENSIBILITES,
+    ECART_ENTRE_CONVENTIONS_A_4PCT,
+    EFFET_ACTUALISATION_A_4PCT,
     ERRATA,
     PANIER_AVEC_FRAIS_GESTION,
     PANIER_COMPLET_47,
+    PANIER_COMPLET_47_ACTUALISE,
     PANIER_LIVRE,
+    PANIERS,
+    PANIERS_SANS_COMPTAGE_ETABLI,
     PANIERS_TRIBUTAIRES_D_UNE_DECLARATION,
+    SENSIBILITE_ACTUALISATION,
     SourceDesavouee,
     refuser_source_test_47,
     reserve_du_panier,
@@ -63,9 +70,24 @@ class T3_LesTroisPaniersNOntPasLaMemeSolidite(unittest.TestCase):
         self.assertEqual(COMPTAGE_DEFICITAIRES[PANIER_AVEC_FRAIS_GESTION], 552)
         self.assertEqual(COMPTAGE_DEFICITAIRES[PANIER_COMPLET_47], 747)
 
-    def test_le_552_ne_porte_aucune_reserve(self):
-        """Vérifié : ses taux ne dépendent d'aucune déclaration."""
-        self.assertEqual(reserve_du_panier(PANIER_AVEC_FRAIS_GESTION), '')
+    def test_le_552_porte_desormais_la_reserve_d_actualisation(self):
+        """⚠️ ET ELLE PENCHE DANS L'AUTRE SENS QUE LES DEUX PRÉCÉDENTES."""
+        r = reserve_du_panier(PANIER_AVEC_FRAIS_GESTION)
+        self.assertIn("N'EST PAS ACTUALISÉ", r)
+        self.assertIn('SURESTIME', r)
+        self.assertIn('§32 a) ii)', r)
+
+    def test_la_reserve_du_552_dit_que_les_omissions_ne_se_compensent_pas(self):
+        r = reserve_du_panier(PANIER_AVEC_FRAIS_GESTION)
+        self.assertIn('NE SE COMPENSENT PAS', r)
+        self.assertIn('11 %', r)
+
+    def test_la_reserve_du_552_dit_pourquoi_il_reste_employe(self):
+        """Le refuser supprimerait une date que la norme exige."""
+        self.assertIn('meilleur disponible',
+                      reserve_du_panier(PANIER_AVEC_FRAIS_GESTION))
+
+    def test_le_panier_livre_ne_porte_aucune_reserve_car_il_est_refuse(self):
         self.assertEqual(reserve_du_panier(PANIER_LIVRE), '')
 
     def test_le_747_porte_sa_reserve_et_elle_descend_avec_lui(self):
@@ -84,9 +106,45 @@ class T3_LesTroisPaniersNOntPasLaMemeSolidite(unittest.TestCase):
         with self.assertRaises(SourceDesavouee):
             reserve_du_panier('PANIER_INVENTE')
 
-    def test_seul_le_747_est_tributaire(self):
-        self.assertEqual(PANIERS_TRIBUTAIRES_D_UNE_DECLARATION,
-                         frozenset({PANIER_COMPLET_47}))
+    def test_les_deux_paniers_complets_sont_tributaires(self):
+        self.assertEqual(
+            PANIERS_TRIBUTAIRES_D_UNE_DECLARATION,
+            frozenset({PANIER_COMPLET_47, PANIER_COMPLET_47_ACTUALISE}))
+
+
+class T5_LeQuatriemePanierNAPasDeComptage(unittest.TestCase):
+    """⚠️ « CONNU SANS COMPTAGE » N'EST PAS « INCONNU »."""
+
+    def test_il_est_connu_mais_absent_du_comptage(self):
+        self.assertIn(PANIER_COMPLET_47_ACTUALISE, PANIERS)
+        self.assertNotIn(PANIER_COMPLET_47_ACTUALISE, COMPTAGE_DEFICITAIRES)
+        self.assertIn(PANIER_COMPLET_47_ACTUALISE,
+                      PANIERS_SANS_COMPTAGE_ETABLI)
+
+    def test_sa_reserve_exige_DEUX_declarations(self):
+        """⚠️ La courbe ET la convention — pas seulement la courbe."""
+        r = reserve_du_panier(PANIER_COMPLET_47_ACTUALISE)
+        self.assertIn('COURBE déclarée', r)
+        self.assertIn('CONVENTION déclarée', r)
+        self.assertIn('§36 b', r)
+
+    def test_sa_reserve_chiffre_le_poids_de_la_convention(self):
+        """⚠️ 47 contrats sur 208 : la convention pèse 23 % de l'effet."""
+        r = reserve_du_panier(PANIER_COMPLET_47_ACTUALISE)
+        self.assertIn(str(ECART_ENTRE_CONVENTIONS_A_4PCT), r)
+        self.assertIn(str(EFFET_ACTUALISATION_A_4PCT), r)
+        self.assertIn('23%', r.replace(' %', '%'))
+
+    def test_la_sensibilite_est_mesuree_et_decroissante(self):
+        """⚠️ L'actualisation RÉDUIT — sens inverse des deux omissions."""
+        taux = sorted(SENSIBILITE_ACTUALISATION)
+        comptes = [SENSIBILITE_ACTUALISATION[t] for t in taux]
+        self.assertEqual(comptes[0], 747)
+        self.assertEqual(comptes, sorted(comptes, reverse=True))
+
+    def test_la_sensibilite_nomme_sa_convention(self):
+        self.assertIn('durée moyenne', CONVENTION_DES_SENSIBILITES)
+        self.assertIn('nominal', CONVENTION_DES_SENSIBILITES)
 
 
 class T4_LeDepotRefuseEffectivementLeStatutDu747(unittest.TestCase):

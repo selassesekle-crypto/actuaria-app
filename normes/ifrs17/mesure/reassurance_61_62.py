@@ -70,7 +70,9 @@ from normes.ifrs17.mesure.lrc_paa import RefusMesure
 from normes.ifrs17.socle.errata_donnees import (
     PANIER_AVEC_FRAIS_GESTION,
     PANIER_COMPLET_47,
+    PANIER_COMPLET_47_ACTUALISE,
     PANIER_LIVRE,
+    reserve_du_panier,
 )
 
 #: §61 — les trois classes du §16, avec la substitution du §61.
@@ -86,11 +88,19 @@ ORIGINE_62A_REPORT = 'REPORT_62A_COUVERTURE_PROPORTIONNELLE'
 ORIGINE_62A_DEBUT_COUVERTURE = 'DEBUT_COUVERTURE_CEDEE'
 ORIGINE_62B_DEFICIT_SOUS_JACENT = 'DEFICIT_SOUS_JACENT_25C'
 
-#: ⚠️ Le seul panier admis pour dater par le §62 b).
-PANIER_ADMIS_62B = PANIER_AVEC_FRAIS_GESTION
+#: ⚠️⚠️ DEUX PANIERS ADMIS, ET ILS NE LE SONT PAS AU MÊME TITRE. Le panier
+#: COMPLET ACTUALISÉ est le seul complet au sens du §47 : il est PRÉFÉRÉ, mais
+#: il exige sa courbe et sa convention déclarées. Le 552 reste admis FAUTE DE
+#: MIEUX, avec sa réserve — le refuser supprimerait une date que la norme
+#: exige, et un refus qui supprime une obligation est pire que le défaut
+#: qu'il évite.
+PANIER_PREFERE_62B = PANIER_COMPLET_47_ACTUALISE
+PANIER_ADMIS_FAUTE_DE_MIEUX_62B = PANIER_AVEC_FRAIS_GESTION
+PANIERS_ADMIS_62B = (PANIER_PREFERE_62B, PANIER_ADMIS_FAUTE_DE_MIEUX_62B)
 
 MOTIF_PANIER_REFUSE = 'panier_du_deficit_refuse_pour_dater'
 MOTIF_POSITION_NON_QUALIFIEE = 'position_nette_non_qualifiee'
+MOTIF_ACTUALISATION_NON_DECLAREE = 'courbe_ou_convention_non_declaree'
 
 #: ⚠️ CE QUE §18 CHANGE AU STATUT, ET QU'UN AGRÉGAT NE DOIT PAS PERDRE.
 RESERVE_18_PAA = (
@@ -165,12 +175,81 @@ def classe_61(*, position_nette: float, panier_de_la_position: str,
         f"lieu — c'est la leçon de `NON_ELIGIBLE`, et elle vaut ici."))
 
 
+def _verifier_panier_62b(panier: str, courbe: str, convention: str) -> str:
+    """Le panier admis pour dater, et la réserve qu'il fait descendre.
+
+    ⚠️ REFUSER LES DEUX PANIERS IMPARFAITS SUPPRIMERAIT UNE DATE QUE LA NORME
+    EXIGE. §62 impose de comptabiliser à la PREMIÈRE des deux dates ; fermer
+    le b) faute de panier complet retiendrait systématiquement le a), donc
+    une date potentiellement trop tardive. Un refus qui supprime une
+    obligation est pire que le défaut qu'il évite — d'où l'admission du 552
+    SOUS RÉSERVE, plutôt que son rejet.
+    """
+    if panier == PANIER_COMPLET_47:
+        raise RefusMesure(
+            MOTIF_PANIER_REFUSE,
+            "le panier complet du §47 (747 contrats) est REFUSÉ comme source "
+            "de datation : il descend d'une déclaration d'ajustement pour "
+            "risque en statut A_REMPLACER, que `declaration.est_renseigne` "
+            "refuse. L'employer ferait hériter la date de comptabilisation "
+            "d'une déclaration non signée par une porte dérobée — le statut "
+            "n'apparaîtrait nulle part dans le résultat. ⚠️ Et il n'est pas "
+            "actualisé non plus : §32 a) ii) y reste omis. Employer "
+            f"« {PANIER_PREFERE_62B} » avec sa courbe et sa convention, ou "
+            f"« {PANIER_ADMIS_FAUTE_DE_MIEUX_62B} » sous sa réserve.")
+    if panier == PANIER_LIVRE:
+        raise RefusMesure(
+            MOTIF_PANIER_REFUSE,
+            "le panier livré (249 contrats) est REFUSÉ comme source de "
+            "datation : il omet les frais de gestion des sinistres et "
+            "l'ajustement au titre du risque non financier, que §32 a) range "
+            "dans les flux d'exécution. Erratum E1.")
+    if panier not in PANIERS_ADMIS_62B:
+        raise RefusMesure(
+            MOTIF_PANIER_REFUSE,
+            f"panier {panier!r} inconnu. §62 b) date sur un groupe "
+            f"sous-jacent DÉFICITAIRE : sans savoir de quel panier ce "
+            f"caractère est tiré, la date n'est pas traçable. Paniers "
+            f"admis : {PANIERS_ADMIS_62B}")
+
+    if panier == PANIER_PREFERE_62B:
+        #: ⚠️ DEUX DÉCLARATIONS, PAS UNE. Ce n'est pas seulement la COURBE
+        #: qui se déclare (§36 b), c'est aussi CE QU'ON ACTUALISE : mesuré,
+        #: la convention seule déplace 23 % de l'effet qu'elle mesure.
+        manquants = [nom for nom, v in (('la courbe du §36 b)', courbe),
+                                        ("la convention d'actualisation",
+                                         convention))
+                     if not est_renseigne(v)]
+        if manquants:
+            raise RefusMesure(
+                MOTIF_ACTUALISATION_NON_DECLAREE,
+                f"le panier complet actualisé est employé mais "
+                f"{' et '.join(manquants)} n'est pas déclaré. ⚠️ LA "
+                f"CONVENTION N'EST PAS MOINS UNE DÉCISION QUE LA COURBE : "
+                f"mesuré à 4 % sur le portefeuille livré, quatre conventions "
+                f"également défendables donnent 521, 539, 541 et 568 "
+                f"déficitaires — 47 contrats d'écart pour un effet "
+                f"d'actualisation de 208, soit 23 % de l'effet qu'elles "
+                f"mesurent. Un comptage actualisé sans sa convention laisse "
+                f"croire à une grandeur objective là où il y a DEUX "
+                f"décisions superposées. ⚠️ Et la courbe EIOPA embarquée "
+                f"n'est pas une courbe §36 telle quelle : son ajustement "
+                f"pour risque de crédit de 10 points de base doit être "
+                f"retraité, et ce retraitement SE DÉCLARE — il ne se déduit "
+                f"pas")
+        return ''
+
+    return reserve_du_panier(PANIER_ADMIS_FAUTE_DE_MIEUX_62B)
+
+
 def date_comptabilisation_62(*, debut_couverture_cedee,
                              couverture_proportionnelle: bool,
                              premiere_compta_sous_jacent=None,
                              date_deficit_sous_jacent=None,
                              traite_conclu_au_plus_tard: bool = False,
                              panier_du_deficit: str = '',
+                             courbe_declaree: str = '',
+                             convention_actualisation_declaree: str = '',
                              sous_jacent_en_paa: bool = False
                              ) -> Comptabilisation62:
     """§62, §62A — la date de comptabilisation du groupe cédé.
@@ -181,34 +260,15 @@ def date_comptabilisation_62(*, debut_couverture_cedee,
     postérieure. Mesuré sur les treize traités livrés : six quote-parts sont
     concernées, sept excédents ne le sont pas.
 
-    ⚠️ ET LE §62 b) N'ADMET QUE LE PANIER 552 : voir l'en-tête du module.
+    ⚠️ DEUX PANIERS SONT ADMIS, ET PAS AU MÊME TITRE. Le complet actualisé
+    est PRÉFÉRÉ et exige courbe et convention déclarées ; le 552 reste admis
+    FAUTE DE MIEUX, sa réserve descendant avec la date.
     """
     if date_deficit_sous_jacent is not None:
-        if panier_du_deficit == PANIER_COMPLET_47:
-            raise RefusMesure(
-                MOTIF_PANIER_REFUSE,
-                "le panier complet du §47 (747 contrats) est REFUSÉ comme "
-                "source de datation : il descend d'une déclaration "
-                "d'ajustement pour risque en statut A_REMPLACER, que "
-                "`declaration.est_renseigne` refuse. L'employer ferait "
-                "hériter la date de comptabilisation d'une déclaration non "
-                "signée par une porte dérobée — le statut n'apparaîtrait "
-                "nulle part dans le résultat. Employer le panier "
-                f"« {PANIER_ADMIS_62B} », qui ne dépend d'aucune "
-                "déclaration, ou faire signer celle du 747.")
-        if panier_du_deficit == PANIER_LIVRE:
-            raise RefusMesure(
-                MOTIF_PANIER_REFUSE,
-                "le panier livré (249 contrats) est REFUSÉ comme source de "
-                "datation : il omet les frais de gestion des sinistres et "
-                "l'ajustement au titre du risque non financier, que §32 a) "
-                "range dans les flux d'exécution. Erratum E1.")
-        if panier_du_deficit != PANIER_ADMIS_62B:
-            raise RefusMesure(
-                MOTIF_PANIER_REFUSE,
-                f"panier {panier_du_deficit!r} inconnu. §62 b) date sur un "
-                f"groupe sous-jacent DÉFICITAIRE : sans savoir de quel "
-                f"panier ce caractère est tiré, la date n'est pas traçable")
+        reserve = _verifier_panier_62b(panier_du_deficit, courbe_declaree,
+                                       convention_actualisation_declaree)
+    else:
+        reserve = ''
 
     candidates = []
     if couverture_proportionnelle and premiere_compta_sous_jacent is not None \
@@ -223,12 +283,20 @@ def date_comptabilisation_62(*, debut_couverture_cedee,
                            ORIGINE_62B_DEFICIT_SOUS_JACENT))
 
     date, origine = min(candidates, key=lambda c: c[0])
-    return Comptabilisation62(date, origine,
-                              _motif_62(origine, sous_jacent_en_paa))
+    return Comptabilisation62(
+        date, origine,
+        _motif_62(origine, sous_jacent_en_paa, panier_du_deficit, reserve))
 
 
-def _motif_62(origine: str, sous_jacent_en_paa: bool) -> str:
-    """Ce que la date établit, et sous quelle réserve."""
+def _motif_62(origine: str, sous_jacent_en_paa: bool,
+              panier: str = '', reserve: str = '') -> str:
+    """Ce que la date établit, et sous quelle réserve.
+
+    ⚠️ LA RÉSERVE DU PANIER NE DESCEND QUE SI LE PANIER A SERVI. Elle est
+    attachée au §62 b) ; l'accrocher à une date retenue par le §62 a) ou le
+    §62A ferait porter à un résultat une réserve qui ne le concerne pas, et
+    une réserve hors sujet finit par ne plus être lue.
+    """
     if origine == ORIGINE_62A_REPORT:
         return (
             "§62A appliqué : la couverture est PROPORTIONNELLE et la "
@@ -239,8 +307,11 @@ def _motif_62(origine: str, sous_jacent_en_paa: bool) -> str:
         base = ("§62 b) retenu : le groupe sous-jacent est devenu "
                 "déficitaire avant le début de la couverture cédée, et le "
                 "traité était conclu à cette date. Caractère déficitaire "
-                f"tiré du panier « {PANIER_ADMIS_62B} », qui ne dépend "
-                "d'aucune déclaration.")
-        return base + ' ' + RESERVE_18_PAA if sous_jacent_en_paa else base
+                f"tiré du panier « {panier} ».")
+        if reserve:
+            base += ' ' + reserve
+        if sous_jacent_en_paa:
+            base += ' ' + RESERVE_18_PAA
+        return base
     return ("§62 a) retenu : le début de la période de couverture cédée est "
             "la première des dates applicables.")

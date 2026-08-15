@@ -14,12 +14,14 @@ from normes.ifrs17.mesure.reassurance_61_62 import (
     CLASSE_PROFIT_NET,
     CLASSE_SANS_POSSIBILITE,
     CLASSES_61,
+    MOTIF_ACTUALISATION_NON_DECLAREE,
     MOTIF_PANIER_REFUSE,
     MOTIF_POSITION_NON_QUALIFIEE,
     ORIGINE_62A_DEBUT_COUVERTURE,
     ORIGINE_62A_REPORT,
     ORIGINE_62B_DEFICIT_SOUS_JACENT,
-    PANIER_ADMIS_62B,
+    PANIER_ADMIS_FAUTE_DE_MIEUX_62B,
+    PANIER_PREFERE_62B,
     RESERVE_18_PAA,
     classe_61,
     date_comptabilisation_62,
@@ -31,7 +33,9 @@ from normes.ifrs17.socle.errata_donnees import (
 
 J = datetime.date
 DEBUT = J(2026, 1, 1)
-PANIER = PANIER_ADMIS_62B
+PANIER = PANIER_ADMIS_FAUTE_DE_MIEUX_62B
+COURBE = 'EIOPA 31/07/2026 sans VA, CRA de 10 bps reintegre, note du 12/08'
+CONV = 'duree moyenne sur sinistres + frais de gestion + ajustement risque'
 
 
 class T1_Le61InverseLeCritereDu16(unittest.TestCase):
@@ -108,7 +112,68 @@ class T3_Le62ARefuseUnPanierNonSigne(unittest.TestCase):
                 panier_du_deficit=PANIER_LIVRE)
         self.assertEqual(e.exception.motif, MOTIF_PANIER_REFUSE)
 
-    def test_le_panier_552_est_admis(self):
+    def test_le_panier_552_reste_admis_MAIS_avec_sa_reserve(self):
+        """⚠️ Le refuser supprimerait une date que la norme exige."""
+        r = date_comptabilisation_62(
+            debut_couverture_cedee=DEBUT, couverture_proportionnelle=False,
+            date_deficit_sous_jacent=J(2025, 11, 1),
+            traite_conclu_au_plus_tard=True, panier_du_deficit=PANIER)
+        self.assertEqual(r.origine, ORIGINE_62B_DEFICIT_SOUS_JACENT)
+        self.assertIn("N'EST PAS ACTUALISÉ", r.motif)
+        self.assertIn('SURESTIME', r.motif)
+
+    def test_le_panier_complet_actualise_est_admis_si_tout_est_declare(self):
+        r = date_comptabilisation_62(
+            debut_couverture_cedee=DEBUT, couverture_proportionnelle=False,
+            date_deficit_sous_jacent=J(2025, 11, 1),
+            traite_conclu_au_plus_tard=True,
+            panier_du_deficit=PANIER_PREFERE_62B,
+            courbe_declaree=COURBE, convention_actualisation_declaree=CONV)
+        self.assertEqual(r.date, J(2025, 11, 1))
+        self.assertNotIn("N'EST PAS ACTUALISÉ", r.motif)
+
+    def test_le_panier_actualise_sans_COURBE_est_refuse(self):
+        with self.assertRaises(RefusMesure) as e:
+            date_comptabilisation_62(
+                debut_couverture_cedee=DEBUT,
+                couverture_proportionnelle=False,
+                date_deficit_sous_jacent=J(2025, 11, 1),
+                traite_conclu_au_plus_tard=True,
+                panier_du_deficit=PANIER_PREFERE_62B,
+                convention_actualisation_declaree=CONV)
+        self.assertEqual(e.exception.motif, MOTIF_ACTUALISATION_NON_DECLAREE)
+
+    def test_le_panier_actualise_sans_CONVENTION_est_refuse(self):
+        """⚠️ Ce n'est pas seulement la courbe qui se déclare."""
+        with self.assertRaises(RefusMesure) as e:
+            date_comptabilisation_62(
+                debut_couverture_cedee=DEBUT,
+                couverture_proportionnelle=False,
+                date_deficit_sous_jacent=J(2025, 11, 1),
+                traite_conclu_au_plus_tard=True,
+                panier_du_deficit=PANIER_PREFERE_62B, courbe_declaree=COURBE)
+        self.assertEqual(e.exception.motif, MOTIF_ACTUALISATION_NON_DECLAREE)
+        self.assertIn('23 %', str(e.exception))
+        self.assertIn('521, 539, 541 et 568', str(e.exception))
+
+    def test_le_refus_exige_le_retraitement_DECLARE_du_CRA(self):
+        with self.assertRaises(RefusMesure) as e:
+            date_comptabilisation_62(
+                debut_couverture_cedee=DEBUT,
+                couverture_proportionnelle=False,
+                date_deficit_sous_jacent=J(2025, 11, 1),
+                traite_conclu_au_plus_tard=True,
+                panier_du_deficit=PANIER_PREFERE_62B)
+        self.assertIn('risque de crédit', str(e.exception))
+        self.assertIn('ne se déduit pas', str(e.exception))
+
+    def test_la_reserve_ne_descend_PAS_sur_une_date_du_62a(self):
+        """⚠️ Une réserve hors sujet finit par ne plus être lue."""
+        r = date_comptabilisation_62(
+            debut_couverture_cedee=DEBUT, couverture_proportionnelle=False)
+        self.assertNotIn("N'EST PAS ACTUALISÉ", r.motif)
+
+    def test_le_panier_552_donne_toujours_la_meme_date(self):
         r = date_comptabilisation_62(
             debut_couverture_cedee=DEBUT, couverture_proportionnelle=False,
             date_deficit_sous_jacent=J(2025, 11, 1),
