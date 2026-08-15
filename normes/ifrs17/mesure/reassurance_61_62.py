@@ -232,11 +232,15 @@ def _verifier_panier_62b(panier: str, courbe: str, convention: str) -> str:
                 f"d'actualisation de 208, soit 23 % de l'effet qu'elles "
                 f"mesurent. Un comptage actualisé sans sa convention laisse "
                 f"croire à une grandeur objective là où il y a DEUX "
-                f"décisions superposées. ⚠️ Et la courbe EIOPA embarquée "
-                f"n'est pas une courbe §36 telle quelle : son ajustement "
-                f"pour risque de crédit de 10 points de base doit être "
-                f"retraité, et ce retraitement SE DÉCLARE — il ne se déduit "
-                f"pas")
+                f"décisions superposées. ⚠️ Et la courbe EIOPA sans VA n'est "
+                f"pas une courbe §36 telle quelle : il lui manque la PRIME "
+                f"D'ILLIQUIDITÉ que §36 a) et B80 exigent — « les "
+                f"caractéristiques de liquidité des contrats d'assurance ». "
+                f"Son ajustement pour risque de crédit, lui, est DÉJÀ "
+                f"conforme : il retire de la courbe swap un facteur qui "
+                f"influe sur les prix de marché mais pas sur les flux "
+                f"d'assurance, ce que §36 c) impose d'exclure. La prime "
+                f"d'illiquidité SE DÉCLARE, avec sa technique")
         return ''
 
     return reserve_du_panier(PANIER_ADMIS_FAUTE_DE_MIEUX_62B)

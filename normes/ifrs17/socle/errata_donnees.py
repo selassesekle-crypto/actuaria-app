@@ -59,22 +59,45 @@ pour un effet de 208, soit 23 % de l'effet qu'elles mesurent. Un comptage
 actualisé cité sans sa convention laisse croire à une grandeur objective là
 où il y a DEUX décisions superposées.
 
-⚠️ CE QUE L'ERRATA NE COUVRE PAS, ET QUI RESTE OUVERT. La courbe du §36 b)
-n'est pas déclarée, et la courbe EIOPA embarquée (`core/courbe_rfr`) n'est
-PAS une courbe §36 telle quelle. Deux raisons distinctes, et une seule mord
-ici : le VOLATILITY ADJUSTMENT est déjà écarté par le code — `actualiser`
-REFUSE une courbe `avec_va`, l'agrément de l'art. 77 quinquies devant se
-déclarer à chaque appel — mais le CREDIT RISK ADJUSTMENT de 10 bps est
-retranché à TOUTES les maturités, et c'est une construction réglementaire,
-non un prix de marché observable. ⚠️ IL DOIT DONC ÊTRE RETRAITÉ, ET LE
-RETRAITEMENT SE DÉCLARE — jamais ne se déduit.
+⚠️⚠️ CE QUE L'ERRATA NE COUVRE PAS, ET UNE AFFIRMATION D'ICI QUI ÉTAIT FAUSSE.
+Ce module a d'abord écrit que « l'ajustement pour risque de crédit de 10 bps
+doit être RETRAITÉ, car c'est une construction réglementaire ». C'EST FAUX,
+ET DANS LE SENS INVERSE. Le CRA RETIRE de la courbe swap le risque de crédit
+bancaire résiduel ; il la rapproche du sans-risque au lieu de l'en éloigner.
+Or §36 c) impose précisément d'« EXCLURE L'EFFET DES FACTEURS QUI INFLUENT
+SUR CES PRIX DE MARCHÉ OBSERVABLES, MAIS PAS SUR LES FLUX DE TRÉSORERIE » des
+contrats — et le risque de crédit d'une banque en est un. Le retraitement du
+CRA est donc EXIGÉ PAR §36 c), non à défaire : le défaire remettrait ce
+risque dans la courbe.
 
-⚠️ BONNE NOUVELLE MESURÉE, ET ELLE EXPLIQUE POURQUOI SEUL LE CRA RESTE : la
-durée de règlement la plus longue du portefeuille est 4,76 ans (DO), très en
-deçà du LAST LIQUID POINT de 20 ans. L'extrapolation vers l'UFR — l'autre
-construction réglementaire de la courbe EIOPA — N'EST PAS ATTEINTE sur ce
-portefeuille. Un seul retraitement suffit donc, et il porte sur un montant
-publié, donc traçable.
+⚠️⚠️ CE QUI MANQUE RÉELLEMENT EST LA PRIME D'ILLIQUIDITÉ, ET ELLE EST D'UN
+AUTRE ORDRE. §36 a) exige de refléter « les CARACTÉRISTIQUES DE LIQUIDITÉ des
+contrats d'assurance », et B80 décrit l'approche ascendante : ajuster une
+courbe sans risque LIQUIDE « pour tenir compte des différences entre les
+caractéristiques de liquidité des instruments financiers sous-jacents aux
+taux observés sur le marché et celles des contrats d'assurance ». La courbe
+EIOPA sans VA ne porte AUCUN ajustement de ce type — le VA est la
+transposition Solvabilité II de cette idée, et le code l'écarte déjà pour une
+raison qui lui est propre (l'agrément de l'art. 77 quinquies). ⚠️ Le taux
+§36 se compose donc de DEUX termes, et un seul est disponible.
+
+⚠️ ET SON SENS PROLONGE CELUI DE L'ACTUALISATION : une prime d'illiquidité
+AUGMENTE le taux, donc réduit encore la valeur actuelle des sorties, donc
+réduit le comptage AU-DELÀ des 539 mesurés à 4 %. Elle ne compense rien, elle
+accentue.
+
+⚠️ LA MESURE SUR LE LAST LIQUID POINT RESTE VRAIE, mais elle prouve autre
+chose que ce qui lui était attribué : la durée de règlement la plus longue du
+portefeuille est 4,76 ans (DO), très en deçà du LLP de 20 ans, donc
+l'EXTRAPOLATION vers l'UFR n'est pas atteinte. Ni le CRA ni l'extrapolation
+ne sont donc en cause — reste la seule prime d'illiquidité.
+
+⚠️ ET AUCUN TAUX N'EST POSÉ ICI. La note « Courbe des taux sans risque sous
+IFRS 17 » de l'Institut des Actuaires (juillet 2022) donne des allocations
+indicatives par nature de passif, mais une indication de place n'est pas une
+règle : la prime d'illiquidité SE DÉCLARE, avec sa technique. Son §5 nomme
+d'ailleurs comme premier écueil à documenter le fait qu'un taux ne reflète
+pas à la fois le sans-risque ET la prime d'illiquidité.
 
 ⚠️ ET SOUS PAA, LE TEST N'EST PAS LE §47 MAIS LE §18 : « l'entité doit
 SUPPOSER qu'aucun des contrats du portefeuille n'est déficitaire […] À MOINS

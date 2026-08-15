@@ -156,7 +156,7 @@ class T3_Le62ARefuseUnPanierNonSigne(unittest.TestCase):
         self.assertIn('23 %', str(e.exception))
         self.assertIn('521, 539, 541 et 568', str(e.exception))
 
-    def test_le_refus_exige_le_retraitement_DECLARE_du_CRA(self):
+    def _refus_actualisation(self):
         with self.assertRaises(RefusMesure) as e:
             date_comptabilisation_62(
                 debut_couverture_cedee=DEBUT,
@@ -164,8 +164,28 @@ class T3_Le62ARefuseUnPanierNonSigne(unittest.TestCase):
                 date_deficit_sous_jacent=J(2025, 11, 1),
                 traite_conclu_au_plus_tard=True,
                 panier_du_deficit=PANIER_PREFERE_62B)
-        self.assertIn('risque de crédit', str(e.exception))
-        self.assertIn('ne se déduit pas', str(e.exception))
+        return str(e.exception)
+
+    def test_le_refus_nomme_la_PRIME_D_ILLIQUIDITE_comme_manquante(self):
+        """⚠️ CE TEST A AFFIRMÉ L'INVERSE, ET C'ÉTAIT FAUX.
+
+        Il exigeait que le refus réclame « le retraitement du CRA ». Or le
+        CRA retire de la courbe swap le risque de crédit bancaire : §36 c)
+        impose justement d'exclure les facteurs qui influent sur les prix de
+        marché mais pas sur les flux d'assurance. Ce qui manque est la prime
+        d'illiquidité du §36 a) et de B80.
+        """
+        msg = self._refus_actualisation()
+        self.assertIn("PRIME D'ILLIQUIDITÉ", msg)
+        self.assertIn('B80', msg)
+        self.assertIn('§36 a)', msg)
+
+    def test_le_refus_dit_que_le_CRA_est_DEJA_conforme(self):
+        """⚠️ Le verrou dans l'autre sens : ne pas redemander de le défaire."""
+        msg = self._refus_actualisation()
+        self.assertIn('DÉJÀ', msg)
+        self.assertIn('§36 c)', msg)
+        self.assertNotIn('doit être retraité', msg)
 
     def test_la_reserve_ne_descend_PAS_sur_une_date_du_62a(self):
         """⚠️ Une réserve hors sujet finit par ne plus être lue."""
