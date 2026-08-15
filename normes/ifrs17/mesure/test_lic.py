@@ -12,16 +12,21 @@ import unittest
 
 from normes.ifrs17.mesure.declaration import ContexteEvaluation
 from normes.ifrs17.mesure.lic import (
+    DISPENSE_NE_LIBERE_PAS_DU_PONT,
     MOTIF_ACTUALISATION_INCOHERENTE,
     MOTIF_AUCUNE_CELLULE,
     MOTIF_DISPENSE_NON_DECLAREE,
+    MOTIF_PONT_130_INCOMPLET,
+    MOTIF_PONT_130_ROMPU,
     MOTIF_PROJECTION_INFERIEURE,
     MOTIF_PROJECTION_NON_DECLAREE,
     MOTIF_TRIANGLE_INCOHERENT,
+    PONT_A_DEUX_TERMES,
     Cellule,
     declarer_projection,
     developpement_130,
     passif_sinistres,
+    rapprocher_130_vers_100c,
 )
 from normes.ifrs17.mesure.lrc_paa import RefusMesure
 
@@ -270,3 +275,72 @@ class Z5_AucuneDependanceHorsDuChantier(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class N2_LePontDu130VersLe100c(unittest.TestCase):
+    """⚠️⚠️ LE « CEPENDANT » DU §130. La dispense libère du TABLEAU, pas du
+    RAPPROCHEMENT — et une plateforme non-vie en PAA est précisément celle
+    qui sera tentée par la dispense."""
+
+    BASE = {'ultime_non_actualise': 1000.0, 'paiements_cumules': 400.0,
+            'effet_actualisation': 20.0, 'ajustement_risque': 50.0,
+            'lic_flux_futurs': 580.0, 'lic_ajustement_risque': 50.0}
+
+    def _pont(self, **kw):
+        return rapprocher_130_vers_100c(**{**self.BASE, **kw})
+
+    def test_le_pont_boucle_terme_a_terme(self):
+        m = self._pont()
+        self.assertIn('se rapproche du §100 c)', m)
+        print("    OK N2 : 1000 - 400 - 20 = 580 de flux futurs, + 50 d'AR")
+
+    def test_un_ecart_sur_les_FLUX_est_refuse(self):
+        with self.assertRaises(RefusMesure) as e:
+            self._pont(lic_flux_futurs=600.0)
+        self.assertEqual(e.exception.motif, MOTIF_PONT_130_ROMPU)
+        self.assertIn('§100 c) i)', str(e.exception))
+        self.assertIn('-20.00', str(e.exception))
+
+    def test_un_ecart_sur_l_AJUSTEMENT_est_refuse_SEPAREMENT(self):
+        """⚠️ §100 c) impose DEUX rapprochements séparés en PAA : les
+        confondre laisserait une erreur de l'un compenser l'autre."""
+        with self.assertRaises(RefusMesure) as e:
+            self._pont(lic_ajustement_risque=70.0)
+        self.assertEqual(e.exception.motif, MOTIF_PONT_130_ROMPU)
+        self.assertIn('§100 c) ii)', str(e.exception))
+        self.assertNotIn('§100 c) i)', str(e.exception))
+
+    def test_LE_CAS_QUE_LE_TOTAL_LAISSERAIT_PASSER(self):
+        """⚠️⚠️ Deux erreurs de sens contraire sur les DEUX axes du §100 c) :
+        le total du LIC boucle, chaque ligne est fausse."""
+        with self.assertRaises(RefusMesure) as e:
+            self._pont(lic_flux_futurs=600.0, lic_ajustement_risque=30.0)
+        self.assertEqual(sum((600.0, 30.0)), sum((580.0, 50.0)))
+        for axe in ('§100 c) i)', '§100 c) ii)'):
+            self.assertIn(axe, str(e.exception))
+        print("    OK N2b : total du LIC identique (630), les DEUX axes faux "
+              "-> REFUSE")
+
+    def test_les_deux_termes_du_pont_se_RECOIVENT_et_ne_se_calculent_pas(self):
+        """⚠️ Un pont qui fabriquerait ses propres appuis ne prouverait
+        rien."""
+        for absent in ('effet_actualisation', 'ajustement_risque'):
+            with self.assertRaises(RefusMesure, msg=absent) as e:
+                self._pont(**{absent: None})
+            self.assertEqual(e.exception.motif, MOTIF_PONT_130_INCOMPLET)
+            self.assertIn(absent, str(e.exception))
+        self.assertIn('ne prouverait rien', PONT_A_DEUX_TERMES)
+
+    def test_la_DISPENSE_ne_libere_PAS_du_pont_et_le_motif_le_dit(self):
+        """⚠️ « Elle doit CEPENDANT fournir un rapprochement » — c'est la
+        lecture la plus coûteuse du paragraphe si on la manque."""
+        self.assertIn(DISPENSE_NE_LIBERE_PAS_DU_PONT, self._pont())
+        self.assertIn('CEPENDANT', DISPENSE_NE_LIBERE_PAS_DU_PONT)
+        self.assertIn("règle dans l'année", DISPENSE_NE_LIBERE_PAS_DU_PONT)
+
+    def test_le_pont_N_EST_PAS_une_egalite_et_le_motif_l_explique(self):
+        """⚠️ §130 porte du NON ACTUALISÉ, §100 c) de l'actualisé plus l'AR.
+        Les confondre serait faux."""
+        m = self._pont()
+        self.assertIn('NON ACTUALISÉS', m)
+        self.assertIn("Ils se REÇOIVENT déclarés", m)

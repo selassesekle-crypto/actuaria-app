@@ -72,6 +72,15 @@ PARAGRAPHE_DES_MODULES = {
     # qui les engendrent, la mesure repose sur des flux faux.
     'reassurance_reconciliation': '§60-70A',
     'reassurance_69': '§60-70A',
+    # ⚠️ LE PREMIER MODULE DU PAN DES ANNEXES. Le pan reste NON_CONSTRUIT —
+    # la matière existe, aucun tableau n'est produit, et §99 a) les exige
+    # « sous forme de tableau ». Un module ne fait pas un pan bâti.
+    'rapprochement_99': '§98-109A',
+    # ⚠️ IL RESTITUE AUSSI §119 ET §120, QUI VIVENT DANS §110-132 — cette
+    # table ne porte qu'UN pan par module, et le déclarer là serait basculer
+    # un pan de 23 paragraphes majoritairement de prose. Le débordement est
+    # NOMMÉ dans la raison de §110-132, comme l'est le pont du §130.
+    'notes_declarees': '§93-97',
     'resultat_80':    '§78-92',
     'revenu_b125':    '§55-59, B125-B126',
 }

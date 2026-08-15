@@ -717,7 +717,7 @@ PERIMETRE: tuple[Element, ...] = (
     # n'appartiendraient à rien, et « exclu » deviendrait indistinguable
     # d'« oublié ». Ils vivent donc dans le pan des rapprochements, qui dit
     # lui-même lesquels de ses paragraphes ne s'appliquent pas.
-    Element('§93-97', NON_CONSTRUIT,
+    Element('§93-97', BATI,
             "Objectif des informations à fournir, niveau de regroupement, et "
             "les trois informations propres à la méthode d'affectation des "
             "primes",
@@ -735,28 +735,62 @@ PERIMETRE: tuple[Element, ...] = (
             "de l'argent (§56, §57 b), §59 b)) — `mesure.financement` le "
             "porte ; c) la méthode retenue pour les flux liés aux frais "
             "d'acquisition (§59 a)) — DÉCISION DE L'ENTITÉ, et elle n'est pas "
-            "bâtie. ⚠️ Aucune n'est PRODUITE aujourd'hui : la matière existe, "
-            "la restitution non. "
+            "bâtie. ⚠️⚠️ LES TROIS SE RESTITUENT DÉSORMAIS, dans "
+            "`mesure.notes_declarees`, et ce module NE CALCULE RIEN : il "
+            "constate leur PRÉSENCE et leur forme, et refuse quand elles "
+            "manquent — « non vide » n'étant pas « renseigné ». Les "
+            "recalculer en produirait une seconde version, qui divergerait. "
+            "⚠️ CE QUE CE PAN N'ÉTABLIT PAS : que ces déclarations soient "
+            "VRAIES. Leur opposabilité — signées, par l'entité, pour le bon "
+            "périmètre — relève de `mesure.declaration`, qui refuse "
+            "aujourd'hui les cinq déclarations de démonstration reçues. "
             "⚠️ §96 laisse le NIVEAU DE REGROUPEMENT à l'entité — IAS 1 §29-31, "
             "et « il pourrait par exemple être approprié » par type de "
             "contrat, zone géographique ou secteur IFRS 8. Rien n'est "
             "prescrit : la plateforme stocke à la maille FINE du groupe, "
-            "l'agrégation est un choix de restitution."),
-    Element('§98-109A', NON_CONSTRUIT,
+            "l'agrégation est un choix de restitution.",
+            SOUS_RESERVE,
+            "Ces trois informations sont RESTITUÉES, jamais vérifiées : le "
+            "relevé constate leur présence et leur forme, pas leur valeur. "
+            "Aucune n'est signée par l'entité à ce jour."),
+    # ⚠️⚠️ CE PAN EST PASSÉ DE `NON_CONSTRUIT` À `BATI` DÈS LE PREMIER
+    # CONTRÔLE QU'IL A PORTÉ, ET C'EST LE VERROU QUI L'A EXIGÉ : un pan
+    # inscrit au registre des modules ne peut pas se dire « rien n'existe
+    # encore ». ⚠️ L'ALTERNATIVE AURAIT ÉTÉ DE NE PAS INSCRIRE LE MODULE —
+    # cacher du code pour satisfaire une étiquette, ce que le verrou existe
+    # précisément pour empêcher.
+    #
+    # ⚠️ ET L'ARBITRAGE S'EST TRANCHÉ SUR UNE SEULE PHRASE : entre une
+    # affirmation FAUSSE (« rien n'existe encore », d'un pan où un contrôle
+    # est bâti et testé) et une affirmation VRAIE qui exige qu'on lise sa
+    # raison (« bâti, voici ce qui manque à l'intérieur »), le choix n'est
+    # pas ouvert. `BATI` n'a jamais voulu dire « complet » : les quatre
+    # autres pans bâtis portent tous des manques nommés.
+    Element('§98-109A', BATI,
             "Rapprochements des soldes d'ouverture et de clôture, et leurs "
             "causes de mouvement",
-            "⚠️ LA MATIÈRE EST BÂTIE, LA RESTITUTION NE L'EST PAS, et "
-            "confondre les deux serait la sur-affirmation que ce document "
-            "vient de corriger ailleurs. `socle.cloture` porte les QUATRE "
+            "⚠️ CE QUI EST BÂTI SE COMPTE SUR UNE MAIN, ET LE RESTE EST "
+            "NOMMÉ. §99 b) est bâti et testé : le rapprochement doit être "
+            "ÉGAL à l'état de la situation financière du §78, et la "
+            "comparaison porte sur les DEUX TOTAUX — actifs et passifs — "
+            "jamais sur le net, qui boucle toujours quelle que soit la "
+            "ventilation. ⚠️ LE RAPPROCHEMENT DE LA RÉASSURANCE DÉTENUE, LUI, "
+            "EST REFUSÉ et non bouclé à zéro : §98 en exige un séparé, et "
+            "§78 c) et d) ne sont pas construits — ce n'est pas la mesure qui "
+            "manque, c'est la ligne de bilan. "
+            "⚠️⚠️ ET AUCUN TABLEAU N'EST PRODUIT, QUAND §99 a) LES EXIGE "
+            "« SOUS FORME DE TABLEAU ». La matière existe — voir ci-dessous — "
+            "mais rien ne l'assemble : le pan est bâti d'un contrôle, pas "
+            "d'un livrable. "
+            "`socle.cloture` porte les QUATRE "
             "soldes du §100 — le passif net de couverture restante hors "
             "élément de perte, l'élément de perte, et le passif des sinistres "
             "survenus VENTILÉ entre flux futurs et ajustement pour risque, "
             "cette ventilation ne portant que sur le poste c) — ainsi que les "
             "ONZE postes de mouvement de §103 et §105 et le résidu du "
-            "§105 d). ⚠️ MAIS AUCUN TABLEAU N'EST PRODUIT : §99 a) exige les "
-            "rapprochements « sous forme de tableau », et rien ne les "
-            "assemble. "
-            "⚠️ CE QUI NE S'APPLIQUE PAS EN PAA, PAR §97 : §101 et §104 "
+            "§105 d). "
+            "⚠️ CE QUI NE S'APPLIQUE PAS EN PAA, PAR §97 — SIX PARAGRAPHES : "
+            "§101 et §104 "
             "(ils visent les contrats « qui NE SONT PAS évalués » selon la "
             "PAA et apporteraient la marge sur services contractuels, qui "
             "n'existe pas ici), §106, §107, §108 et §109. ⚠️ §109 ET §109A "
@@ -771,7 +805,13 @@ PERIMETRE: tuple[Element, ...] = (
             "traité au bilan (§79, incorporation au portefeuille) ; son "
             "déroulé, sa dépréciation et sa décomptabilisation ne le sont "
             "pas. Un seul ouvrage manquant, trois informations absentes. "
-            "⚠️ §102 est une clause d'OBJECTIF : il n'y a rien à en calculer."),
+            "⚠️ §102 est une clause d'OBJECTIF : il n'y a rien à en calculer.",
+            SOUS_RESERVE,
+            "Les soldes rapprochés descendent du passif au titre des "
+            "sinistres survenus, qui porte la réserve des « cadences "
+            "inventées » : le contrôle du §99 b) établit que deux états "
+            "CONCORDENT, jamais qu'ils sont justes. Deux états faux de la "
+            "même façon boucleraient."),
     Element('§110-132', NON_CONSTRUIT,
             "Produits et charges financiers, jugements importants, et nature "
             "et ampleur des risques",
@@ -789,10 +829,14 @@ PERIMETRE: tuple[Element, ...] = (
             "l'entité, et §128 a) ii) de relier la sensibilité des contrats à "
             "celle des ACTIFS FINANCIERS DÉTENUS. La plateforme mesure des "
             "passifs d'assurance ; elle ne voit aucun actif. "
-            "⚠️ CE QUI EST RESTITUABLE, ET SEULEMENT RESTITUABLE : §119, le "
-            "niveau de confiance de l'ajustement pour risque — déjà tenu hors "
-            "de ce socle, dans l'agent A11, et `mesure.flux_execution` porte "
-            "le champ ; §120, la courbe d'actualisation employée. ⚠️ ET §120 "
+            "⚠️⚠️ §119 ET §120 SONT RESTITUÉS, HORS DE CE PAN, dans "
+            "`mesure.notes_declarees` — le niveau de confiance de "
+            "l'ajustement pour risque, ou la technique employée et le niveau "
+            "auquel elle correspond ; et la courbe d'actualisation. Ce module "
+            "est déclaré au pan §93-97 : cette plateforme ne rattache qu'UN "
+            "pan par module, et le déclarer ici basculerait un pan de "
+            "23 paragraphes majoritairement de prose. Le débordement est donc "
+            "NOMMÉ plutôt que caché. ⚠️ ET §120 "
             "PORTE UN PIÈGE DÉJÀ PAYÉ : il admet une présentation « sous "
             "forme de MOYENNES PONDÉRÉES ou de fourchettes ». Une moyenne "
             "pondérée de courbe est une DÉCISION, exactement comme la "
@@ -805,8 +849,16 @@ PERIMETRE: tuple[Element, ...] = (
             "l'incertitude « est habituellement levée dans un délai d'un "
             "an » ; mais l'entité doit CEPENDANT rapprocher le développement "
             "communiqué de la valeur comptable totale présentée en "
-            "application du §100 c). ⚠️ Ce rapprochement, lui, est calculable "
-            "— c'est exactement ce que `socle.cloture` porte. "
+            "application du §100 c). ⚠️⚠️ CE RAPPROCHEMENT EST BÂTI, HORS DE "
+            "CE PAN, dans `mesure.lic` — où le développement du §130 vit "
+            "déjà. Il relie terme à terme l'ultime NON ACTUALISÉ, les "
+            "paiements, l'effet d'actualisation et l'ajustement pour risque "
+            "aux deux axes du §100 c), et il REFUSE tant que les deux termes "
+            "de passage ne sont pas déclarés : les calculer ici fabriquerait "
+            "les chiffres qui font boucler le pont. ⚠️ ET LA DISPENSE DU §130 "
+            "LIBÈRE DU TABLEAU, PAS DU RAPPROCHEMENT — lecture décisive pour "
+            "une plateforme non-vie, qui sera précisément tentée par la "
+            "dispense. "
             "⚠️ §132 — LE PASSIF AU TITRE DE LA COUVERTURE RESTANTE EN PAA "
             "EST EXCLU DE L'ANALYSE D'ÉCHÉANCES, le texte le dit : « l'entité "
             "n'est pas tenue d'inclure dans ces analyses le passif au titre "

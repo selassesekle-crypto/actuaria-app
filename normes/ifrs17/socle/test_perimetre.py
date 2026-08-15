@@ -255,12 +255,17 @@ class T2_LePerimetreNeRevendiquePasPlusQueLeSocle(unittest.TestCase):
         sur-affirmation que ce test existe pour empêcher.
         """
         batis = ' '.join(e.reference for e in elements(BATI))
-        for attendu in ('§55-59', '§60-70A', '§78-92', '§33-37'):
+        for attendu in ('§55-59', '§60-70A', '§78-92', '§33-37',
+                        '§93-97', '§98-109A'):
             self.assertIn(attendu, batis)
         non_construits = ' '.join(e.reference for e in
                                   elements(NON_CONSTRUIT))
-        for annexe in ('§93-97', '§98-109A', '§110-132'):
-            self.assertIn(annexe, non_construits)
+        # ⚠️⚠️ ET §110-132 RESTE NON CONSTRUIT : C'EST TOUT L'INTÉRÊT DE LA
+        # SCISSION. Deux tiers du bloc des annexes ont pu basculer sans
+        # emporter le troisième, qui est majoritairement de la prose que
+        # seule l'entité écrit. Un élément unique aurait forcé une étiquette
+        # fausse pour l'un des trois.
+        self.assertIn('§110-132', non_construits)
         couverts = ' '.join(e.reference for e in elements(COUVERT))
         for interdit in ('§55', '§60', '§80', '§100', '§130'):
             self.assertNotIn(interdit, couverts)

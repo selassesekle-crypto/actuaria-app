@@ -291,3 +291,114 @@ def developpement_130(cellules, *, source_attestee: bool = False) -> dict:
             'profondeur_demandee_par_130': 10,
             'charge_cumulee': tableau,
             'motif': ' '.join(reserves)}
+
+
+MOTIF_PONT_130_ROMPU = 'rapprochement_130_vers_100c_rompu'
+MOTIF_PONT_130_INCOMPLET = 'rapprochement_130_sans_ses_termes'
+
+#: ⚠️ MÊME BORNE QUE LES AUTRES ARTICULATIONS DU DÉPÔT : ce pont relie les
+#: MÊMES montants lus par deux chemins. Seule l'erreur de virgule flottante
+#: est tolérée.
+TOLERANCE_PONT_130 = 1e-6
+
+#: ⚠️⚠️ LA DISPENSE DU §130 LIBÈRE DU TABLEAU, PAS DU RAPPROCHEMENT — et
+#: c'est toute la force de son « cependant ». Le texte : « L'entité N'EST PAS
+#: TENUE de fournir d'informations sur le développement des demandes
+#: d'indemnisation pour lesquels l'incertitude […] est habituellement levée
+#: dans un délai d'un an. Elle doit CEPENDANT fournir un rapprochement entre
+#: les informations communiquées sur le développement des demandes
+#: d'indemnisation et la valeur comptable totale des groupes de contrats
+#: d'assurance présentée en application du PARAGRAPHE 100 c). »
+#:
+#: ⚠️ Une plateforme non-vie en PAA est précisément celle qui sera tentée par
+#: la dispense — beaucoup de branches se règlent dans l'année. Croire qu'elle
+#: dispense aussi du rapprochement serait la lecture la plus coûteuse du
+#: paragraphe.
+DISPENSE_NE_LIBERE_PAS_DU_PONT = (
+    "⚠️ LA DISPENSE DU §130 LIBÈRE DU TABLEAU DE DÉVELOPPEMENT, PAS DU "
+    "RAPPROCHEMENT. Le texte dit « elle doit CEPENDANT fournir un "
+    "rapprochement entre les informations communiquées sur le développement "
+    "et la valeur comptable totale des groupes présentée en application du "
+    "paragraphe 100 c) ». Une branche qui se règle dans l'année échappe au "
+    "tableau ; son passif reste à rapprocher.")
+
+#: ⚠️⚠️ CE PONT N'EST PAS UNE ÉGALITÉ, ET LES CONFONDRE SERAIT FAUX. §130
+#: porte des montants NON ACTUALISÉS — « les estimations antérieures de leur
+#: montant non actualisé » — quand §100 c) porte i) la valeur ACTUALISÉE des
+#: flux futurs et ii) l'AJUSTEMENT POUR RISQUE. Deux termes les séparent, et
+#: ce module ne peut calculer NI L'UN NI L'AUTRE : l'actualisation exigerait
+#: la courbe et l'échéancier de règlement, l'ajustement pour risque est une
+#: décision de l'entité (§37, sans méthode prescrite).
+#:
+#: ⚠️ ILS SE REÇOIVENT DONC DÉCLARÉS. Les calculer ici reviendrait à
+#: fabriquer les deux chiffres qui font boucler le pont — un pont qui
+#: fabrique ses propres appuis ne prouve rien.
+PONT_A_DEUX_TERMES = (
+    "⚠️ LE PONT DU §130 N'EST PAS UNE ÉGALITÉ : §130 porte des montants NON "
+    "ACTUALISÉS, §100 c) porte la valeur ACTUALISÉE des flux futurs et "
+    "l'ajustement pour risque. Deux termes les séparent — l'effet "
+    "d'actualisation et l'ajustement pour risque — et ce module ne peut "
+    "calculer ni l'un ni l'autre : le premier exigerait la courbe et "
+    "l'échéancier de règlement, le second est une décision de l'entité que "
+    "§37 laisse sans méthode prescrite. Ils se REÇOIVENT déclarés. Un pont "
+    "qui fabriquerait ses propres appuis ne prouverait rien.")
+
+
+def rapprocher_130_vers_100c(*, ultime_non_actualise: float,
+                             paiements_cumules: float,
+                             effet_actualisation, ajustement_risque,
+                             lic_flux_futurs: float,
+                             lic_ajustement_risque: float) -> str:
+    """§130 — le « cependant » : le développement se rapproche du §100 c).
+
+    ⚠️ LE CHEMIN, TERME À TERME :
+
+        ultime non actualisé  −  paiements cumulés   = passif non actualisé
+        passif non actualisé  −  effet d'actualisation = §100 c) i)
+        ajustement pour risque                         = §100 c) ii)
+
+    ⚠️ `effet_actualisation` EST POSITIF QUAND L'ACTUALISATION RÉDUIT LE
+    PASSIF, ce qui est le cas ordinaire. Aucun signe n'est imposé au-delà :
+    ce module ne pose pas une troisième convention là où le dépôt en a déjà
+    payé deux contradictoires.
+    """
+    if effet_actualisation is None or ajustement_risque is None:
+        manquants = [n for n, v in (('effet_actualisation',
+                                     effet_actualisation),
+                                    ('ajustement_risque', ajustement_risque))
+                     if v is None]
+        raise RefusMesure(
+            MOTIF_PONT_130_INCOMPLET,
+            f"le rapprochement du §130 est demandé sans {manquants}. "
+            + PONT_A_DEUX_TERMES)
+
+    non_actualise = ultime_non_actualise - paiements_cumules
+    attendu_flux = non_actualise - effet_actualisation
+    ecarts = []
+    if abs(attendu_flux - lic_flux_futurs) > TOLERANCE_PONT_130:
+        ecarts.append(
+            f"§100 c) i) — flux futurs : le développement donne "
+            f"{ultime_non_actualise:.2f} − {paiements_cumules:.2f} − "
+            f"{effet_actualisation:.2f} = {attendu_flux:.2f}, le "
+            f"rapprochement porte {lic_flux_futurs:.2f} "
+            f"(écart {attendu_flux - lic_flux_futurs:+.2f})")
+    if abs(ajustement_risque - lic_ajustement_risque) > TOLERANCE_PONT_130:
+        ecarts.append(
+            f"§100 c) ii) — ajustement pour risque : déclaré "
+            f"{ajustement_risque:.2f}, rapprochement "
+            f"{lic_ajustement_risque:.2f} "
+            f"(écart {ajustement_risque - lic_ajustement_risque:+.2f})")
+    if ecarts:
+        raise RefusMesure(
+            MOTIF_PONT_130_ROMPU,
+            "le développement des sinistres et le passif du §100 c) ne se "
+            "rapprochent pas — " + ' · '.join(ecarts) + ". "
+            + PONT_A_DEUX_TERMES)
+
+    return (f"§130 — le développement se rapproche du §100 c) : "
+            f"{ultime_non_actualise:.2f} d'ultime non actualisé, moins "
+            f"{paiements_cumules:.2f} de paiements, moins "
+            f"{effet_actualisation:.2f} d'actualisation = "
+            f"{lic_flux_futurs:.2f} de flux futurs, plus "
+            f"{lic_ajustement_risque:.2f} d'ajustement pour risque. "
+            + PONT_A_DEUX_TERMES + ' ' + DISPENSE_NE_LIBERE_PAS_DU_PONT)

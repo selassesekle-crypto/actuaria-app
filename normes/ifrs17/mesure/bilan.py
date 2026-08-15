@@ -172,6 +172,32 @@ def _confronter_au_perimetre(lot, contexte, vides_declares) -> None:
             f"donnée qui se contredisent ne peuvent pas être vraies toutes "
             f"les deux.")
 
+def ventiler_par_cote(soldes) -> tuple[list, list]:
+    """La règle du §78 : net PAR PORTEFEUILLE, puis séparé par côté.
+
+    ⚠️⚠️ EXTRAITE POUR N'EXISTER QU'UNE FOIS. Le contrôle d'articulation du
+    §99 b) doit ventiler EXACTEMENT comme le bilan, sinon il comparerait deux
+    règles au lieu de deux états — et une divergence de règle se lirait comme
+    une divergence de montants. Ce dépôt combat les secondes sources depuis
+    les huit sources de taux ; celle-ci n'a pas eu lieu d'être.
+
+    ⚠️ LA COMPENSATION INTERNE AU PORTEFEUILLE EST VOULUE, CELLE QUI LE
+    FRANCHIT EST INTERDITE : §78 nomme le portefeuille quatre fois.
+    """
+    par_portefeuille: dict = {}
+    for s in soldes:
+        nom = s.portefeuille.strip()
+        somme, compte = par_portefeuille.get(nom, (0.0, 0))
+        par_portefeuille[nom] = (somme + s.valeur_comptable, compte + 1)
+
+    actifs, passifs = [], []
+    for nom, (net, compte) in sorted(par_portefeuille.items()):
+        poste = PosteBilan(portefeuille=nom, valeur=abs(net),
+                           est_actif=net < 0, nb_groupes=compte)
+        (actifs if poste.est_actif else passifs).append(poste)
+    return actifs, passifs
+
+
 def etat_situation_financiere(soldes, contexte, *,
                               portefeuilles_vides_declares=None) -> Bilan:
     """§78 — les portefeuilles, séparés par côté, jamais compensés.
@@ -211,17 +237,8 @@ def etat_situation_financiere(soldes, contexte, *,
 
     _confronter_au_perimetre(lot, contexte, portefeuilles_vides_declares)
 
-    par_portefeuille: dict = {}
-    for s in lot:
-        nom = s.portefeuille.strip()
-        somme, compte = par_portefeuille.get(nom, (0.0, 0))
-        par_portefeuille[nom] = (somme + s.valeur_comptable, compte + 1)
-
-    actifs, passifs = [], []
-    for nom, (net, compte) in sorted(par_portefeuille.items()):
-        poste = PosteBilan(portefeuille=nom, valeur=abs(net),
-                           est_actif=net < 0, nb_groupes=compte)
-        (actifs if poste.est_actif else passifs).append(poste)
+    actifs, passifs = ventiler_par_cote(lot)
+    par_portefeuille = {p.portefeuille for p in actifs + passifs}
 
     return Bilan(actifs=tuple(actifs), passifs=tuple(passifs),
                  total_actifs=sum(p.valeur for p in actifs),
