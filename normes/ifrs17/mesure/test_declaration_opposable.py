@@ -18,13 +18,16 @@ from normes.ifrs17.mesure.declaration import (
     FORMES_DU_TAUX_VERROUILLE,
     LIMITE_ANTERIEUR_OU_EGAL,
     LIMITE_DES_DEUX_FORMES,
+    LIMITE_INTERVALLE_PAR_FORME,
     MARQUEURS_DE_NON_SIGNATURE,
     MOTIF_ARRETE_HORS_CONTEXTE,
     MOTIF_COHORTE_NON_DECLAREE,
     MOTIF_CONTEXTE_INVALIDE,
     MOTIF_DECLARANT_NON_HABILITE,
     MOTIF_FORME_DU_TAUX_NON_DECLAREE,
+    MOTIF_HORS_INTERVALLE_EMISSION,
     MOTIF_PERIMETRE_DISCORDANT,
+    MOTIF_PONDERATION_NON_DECLAREE,
     MOTIF_STATUT_NON_SIGNE,
     MOTIF_TAUX_HORS_COHORTE,
     MOTIF_USAGE_NON_DECLARE,
@@ -32,6 +35,7 @@ from normes.ifrs17.mesure.declaration import (
     QUALITE_TIERS,
     QUALITES,
     RAISONNEMENT_COHORTE_ANNUELLE,
+    RESERVE_MOYENNE_DE_TAUX,
     USAGE_COURANT,
     USAGE_VERROUILLE,
     ContexteEvaluation,
@@ -422,10 +426,18 @@ class T8_LeTauxVERROUILLE_APPARTIENT_A_SA_COHORTE(unittest.TestCase):
     2024. Il ne vérifiait qu'une borne, la haute — la limite était nommée, et
     c'est ici qu'elle mordait."""
 
-    def _cohorte(self, arrete, cohorte, forme=FORME_DATE_25):
-        return exiger_taux_de_la_cohorte(
-            arrete_verrouillage=arrete, cohorte=cohorte, contexte=CONTEXTE,
-            erreur=RefusMesure, forme=forme)
+    #: L'intervalle réel de la cohorte DO 2024 du banc local.
+    INTERVALLE = ('2024-01-11', '2024-12-25')
+    PONDERATION = 'par la prime, la composante §56 s accretant sur elle'
+
+    def _cohorte(self, arrete, cohorte, forme=FORME_DATE_25, **kw):
+        base = {'arrete_verrouillage': arrete, 'cohorte': cohorte,
+                'contexte': CONTEXTE, 'erreur': RefusMesure, 'forme': forme}
+        if forme == FORME_MOYENNE_B73:
+            base.setdefault('intervalle_emission', self.INTERVALLE)
+            base.setdefault('ponderation_declaree', self.PONDERATION)
+        base.update(kw)
+        return exiger_taux_de_la_cohorte(**base)
 
     def test_le_taux_de_SA_cohorte_passe(self):
         m = self._cohorte('2024-12-31', '2024')
@@ -482,11 +494,56 @@ class T8_LeTauxVERROUILLE_APPARTIENT_A_SA_COHORTE(unittest.TestCase):
         for f in FORMES_DU_TAUX_VERROUILLE:
             self.assertIn(f, self._cohorte('2024-06-30', '2024', forme=f))
 
+    def test_l_intervalle_refuse_EXACTEMENT_pour_B73(self):
+        """⚠️ CE REFUS N'EST PAS PRUDENTIEL : une moyenne pondérée de
+        valeurs de [a ; b] est NÉCESSAIREMENT dans [a ; b]."""
+        with self.assertRaises(RefusMesure) as e:
+            self._cohorte('2024-01-05', '2024', forme=FORME_MOYENNE_B73)
+        self.assertEqual(e.exception.motif, MOTIF_HORS_INTERVALLE_EMISSION)
+        self.assertIn('EXACT, PAS PRUDENTIEL', str(e.exception))
+
+    def test_la_date_ponderee_REELLE_de_DO_2024_passe(self):
+        """Sa déclaration : 2024-07-20, dans [11/01 ; 25/12]."""
+        self._cohorte('2024-07-20', '2024', forme=FORME_MOYENNE_B73)
+
+    def test_l_intervalle_n_est_PAS_oppose_a_la_forme_25(self):
+        """⚠️ §25 retient la PREMIÈRE de trois dates, dont aucune n'est
+        bornée par l'émission — l'y contraindre refuserait du correct."""
+        m = self._cohorte('2024-01-05', '2024', forme=FORME_DATE_25)
+        self.assertIn(LIMITE_INTERVALLE_PAR_FORME, m)
+        self.assertIn('refuserait du correct', m)
+        self.assertIn('PREMIÈRE de trois dates', m)
+
+    def test_B73_sans_intervalle_est_refuse_et_le_refus_dit_pourquoi(self):
+        """⚠️ Qui a calculé une moyenne AVAIT les dates."""
+        with self.assertRaises(RefusMesure) as e:
+            self._cohorte('2024-07-20', '2024', forme=FORME_MOYENNE_B73,
+                          intervalle_emission=None)
+        self.assertEqual(e.exception.motif, MOTIF_HORS_INTERVALLE_EMISSION)
+        self.assertIn('AVAIT NÉCESSAIREMENT ces dates', str(e.exception))
+
+    def test_B73_sans_PONDERATION_est_refuse(self):
+        """⚠️ Prime, nombre, flux : trois pondérations, trois dates."""
+        with self.assertRaises(RefusMesure) as e:
+            self._cohorte('2024-07-20', '2024', forme=FORME_MOYENNE_B73,
+                          ponderation_declaree='')
+        self.assertEqual(e.exception.motif, MOTIF_PONDERATION_NON_DECLAREE)
+        self.assertIn('3 à 9', str(e.exception))
+
+    def test_la_RESERVE_moyenne_de_TAUX_descend_sur_B73_seulement(self):
+        """⚠️ T3 : une limite non dite se fait surévaluer."""
+        b73 = self._cohorte('2024-07-20', '2024', forme=FORME_MOYENNE_B73)
+        self.assertIn(RESERVE_MOYENNE_DE_TAUX, b73)
+        self.assertIn('MOYENNE DE TAUX, PAS UNE DATE MOYENNE', b73)
+        self.assertNotIn(RESERVE_MOYENNE_DE_TAUX,
+                         self._cohorte('2024-01-11', '2024'))
+
     def test_une_MOYENNE_au_31_decembre_est_SIGNALEE_pas_refusee(self):
         """⚠️ Elle n'est possible que si tous les contrats ont été émis ce
         jour-là. Refuser bloquerait un cas légitime ; taire laisserait passer
         le taux de FIN d'année déguisé en moyenne."""
-        m = self._cohorte('2024-12-31', '2024', forme=FORME_MOYENNE_B73)
+        m = self._cohorte('2024-12-31', '2024', forme=FORME_MOYENNE_B73,
+                          intervalle_emission=('2024-01-11', '2024-12-31'))
         self.assertIn('SIGNALEMENT, NON REFUS', m)
         self.assertIn('émis ce jour-là', m)
 

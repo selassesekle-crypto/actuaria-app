@@ -631,6 +631,49 @@ FORME_MOYENNE_B73 = 'MOYENNE_PONDEREE_B73'
 FORMES_DU_TAUX_VERROUILLE = (FORME_DATE_25, FORME_MOYENNE_B73)
 
 MOTIF_FORME_DU_TAUX_NON_DECLAREE = 'forme_du_taux_verrouille_non_declaree'
+MOTIF_HORS_INTERVALLE_EMISSION = 'taux_b73_hors_intervalle_d_emission'
+MOTIF_PONDERATION_NON_DECLAREE = 'ponderation_b73_non_declaree'
+
+#: ⚠️⚠️ L'INTERVALLE D'ÉMISSION VAUT POUR B73, ET PAS POUR LE §25 — la
+#: distinction est le tout de ce contrôle.
+#:
+#:   · Pour B73, il est EXACT PAR CONSTRUCTION : une moyenne pondérée de
+#:     valeurs de [a ; b] avec des poids positifs est dans [a ; b]. Ce n'est
+#:     pas une heuristique, c'est une propriété — le refus est donc sûr.
+#:   · Pour le §25, il serait FAUX. §25 retient la PREMIÈRE de trois dates :
+#:     début de couverture, première prime exigible, ou moment où le groupe
+#:     devient déficitaire. Un début de couverture peut PRÉCÉDER l'émission
+#:     (couverture rétroactive) ; un déclenchement de déficit peut la SUIVRE.
+#:     Aucune des trois n'est bornée par l'intervalle d'émission, et l'imposer
+#:     refuserait une date §25 légitime.
+LIMITE_INTERVALLE_PAR_FORME = (
+    "⚠️ L'INTERVALLE D'ÉMISSION N'EST OPPOSÉ QU'À LA FORME B73. Pour elle il "
+    "est EXACT par construction — une moyenne pondérée de valeurs de [a ; b] "
+    "est dans [a ; b]. Pour la date du §25 il serait FAUX : §25 retient la "
+    "PREMIÈRE de trois dates — début de couverture, première prime exigible, "
+    "moment où le groupe devient déficitaire — dont aucune n'est bornée par "
+    "l'intervalle d'émission. L'y contraindre refuserait du correct.")
+
+#: ⚠️⚠️ CE QU'UNE DATE NE PEUT PAS PORTER, ET IL FAUT LE LIRE. B73 autorise
+#: des « taux d'actualisation MOYENS PONDÉRÉS », pas une date moyenne.
+#: Déclarer une DATE suppose que le taux au barycentre des émissions égale la
+#: moyenne pondérée des taux sur l'intervalle — ce qui n'est exact que si le
+#: taux évolue LINÉAIREMENT sur la période. Sur une courbe convexe ou un
+#: mouvement brutal en cours d'exercice, l'écart est réel.
+#:
+#: ⚠️ ET CE MODULE NE PEUT RIEN Y FAIRE : il ne voit pas les taux, seulement
+#: leur date. Un champ d'arrêté unique ne peut pas porter une moyenne de
+#: taux ; il porte au mieux son approximation par une date. La limite est
+#: nommée plutôt que comblée par un contrôle que les paramètres ne permettent
+#: pas — un contrôle qui ne dit pas sa portée se fait surévaluer.
+RESERVE_MOYENNE_DE_TAUX = (
+    "⚠️ B73 AUTORISE UNE MOYENNE DE TAUX, PAS UNE DATE MOYENNE. Déclarer une "
+    "date suppose que le taux au barycentre des émissions égale la moyenne "
+    "pondérée des taux sur l'intervalle — exact si le taux évolue "
+    "linéairement, APPROCHÉ sinon, et l'écart est réel sur une courbe convexe "
+    "ou un mouvement brutal en cours d'exercice. Un champ d'arrêté unique ne "
+    "peut pas porter une moyenne de taux ; ce module ne voit que la date, et "
+    "ne vérifie donc PAS l'approximation elle-même.")
 
 #: ⚠️⚠️ CE QUE CE MODULE NE PEUT PAS VÉRIFIER, ET IL FAUT LE LIRE AVANT DE S'Y
 #: FIER. Aucune des deux formes n'est RECALCULABLE ici : la date du §25 exige
@@ -653,6 +696,8 @@ LIMITE_DES_DEUX_FORMES = (
 
 def exiger_taux_de_la_cohorte(*, arrete_verrouillage, cohorte, contexte,
                               erreur, forme: str = '',
+                              intervalle_emission=None,
+                              ponderation_declaree: str = '',
                               objet: str = 'le taux verrouillé') -> str:
     """B72 d) — le taux figé appartient-il à la cohorte du groupe évalué ?
 
@@ -705,6 +750,41 @@ def exiger_taux_de_la_cohorte(*, arrete_verrouillage, cohorte, contexte,
     #: été émis ce jour-là — cas réel mais rare. Refuser bloquerait un cas
     #: légitime ; taire laisserait passer le taux de FIN d'année déguisé en
     #: moyenne, qui est l'approximation la plus courante.
+    if forme == FORME_MOYENNE_B73:
+        if not intervalle_emission or len(intervalle_emission) != 2:
+            raise erreur(
+                MOTIF_HORS_INTERVALLE_EMISSION,
+                f"la forme {FORME_MOYENNE_B73} est déclarée pour {objet}, "
+                f"mais l'intervalle d'émission du groupe n'est pas fourni "
+                f"(reçu {intervalle_emission!r}). ⚠️ CE N'EST PAS UNE "
+                f"EXIGENCE DE PLUS : qui a calculé une moyenne pondérée sur "
+                f"l'intervalle d'émission AVAIT NÉCESSAIREMENT ces dates. On "
+                f"demande ce qui a déjà servi.")
+        debut, fin = intervalle_emission
+        _exiger_arrete_iso(debut, "le début de l'intervalle d'émission",
+                           erreur, MOTIF_HORS_INTERVALLE_EMISSION)
+        _exiger_arrete_iso(fin, "la fin de l'intervalle d'émission", erreur,
+                           MOTIF_HORS_INTERVALLE_EMISSION)
+        if not debut <= arrete_verrouillage <= fin:
+            raise erreur(
+                MOTIF_HORS_INTERVALLE_EMISSION,
+                f"{objet} porte l'arrêté {arrete_verrouillage}, hors de "
+                f"l'intervalle d'émission [{debut} ; {fin}]. ⚠️ CE REFUS EST "
+                f"EXACT, PAS PRUDENTIEL : une moyenne pondérée de valeurs de "
+                f"[{debut} ; {fin}] avec des poids positifs est "
+                f"NÉCESSAIREMENT dans cet intervalle. Une date hors bornes "
+                f"n'est donc pas une moyenne pondérée, quoi qu'elle déclare.")
+        if not est_renseigne(ponderation_declaree):
+            raise erreur(
+                MOTIF_PONDERATION_NON_DECLAREE,
+                f"la forme {FORME_MOYENNE_B73} est déclarée pour {objet} sans "
+                f"sa PONDÉRATION. ⚠️ ELLE EST ELLE-MÊME UNE DÉCISION : par la "
+                f"prime, par le nombre de contrats, par les flux d'exécution "
+                f"— trois pondérations défendables qui donnent trois dates. "
+                f"Mesuré sur un portefeuille de démonstration : de 3 à 9 "
+                f"jours d'écart, et davantage dès que la production se "
+                f"concentre en fin d'exercice.")
+
     signal = ''
     if forme == FORME_MOYENNE_B73 and arrete_verrouillage[5:] == '12-31':
         signal = (
@@ -718,4 +798,7 @@ def exiger_taux_de_la_cohorte(*, arrete_verrouillage, cohorte, contexte,
     return (f"{objet} : arrêté {arrete_verrouillage}, cohorte {cohorte} du "
             f"groupe évalué, forme déclarée « {forme} »."
             + signal + ' ' + RAISONNEMENT_COHORTE_ANNUELLE
-            + ' ' + LIMITE_DES_DEUX_FORMES)
+            + ' ' + LIMITE_DES_DEUX_FORMES
+            + ' ' + LIMITE_INTERVALLE_PAR_FORME
+            + (' ' + RESERVE_MOYENNE_DE_TAUX
+               if forme == FORME_MOYENNE_B73 else ''))

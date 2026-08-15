@@ -201,6 +201,8 @@ def revenu_de_financement(cumul_charges: float, cumul_revenu_anterieur: float,
 def roll_forward(*, prime: float, nb_periodes: int, taux: TauxVerrouille,
                  contexte, cohorte_du_groupe: str = '',
                  forme_du_taux_verrouille: str = '',
+                 intervalle_emission=None,
+                 ponderation_declaree: str = '',
                  frais_acquisition: float = 0.0,
                  verdict_53_declare: str = ''
                  ) -> tuple[ArreteFinancement, ...]:
@@ -230,6 +232,8 @@ def roll_forward(*, prime: float, nb_periodes: int, taux: TauxVerrouille,
         arrete_verrouillage=taux.arrete_verrouillage,
         cohorte=cohorte_du_groupe, contexte=contexte, erreur=RefusMesure,
         forme=forme_du_taux_verrouille,
+        intervalle_emission=intervalle_emission,
+        ponderation_declaree=ponderation_declaree,
         objet="le taux verrouillé (B72 d)")
 
     lrc = lrc_initial(prime, frais_acquisition,
