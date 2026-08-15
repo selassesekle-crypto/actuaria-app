@@ -559,3 +559,77 @@ def _coherence_par_usage(perimetres, usages, contexte, erreur) -> str:
             f"se tient. ⚠️ CE CONTRÔLE NE VÉRIFIE PAS que chaque taux "
             f"verrouillé porte l'arrêté de SA cohorte : il ne connaît pas les "
             f"cohortes évaluées.")
+
+
+#: ⚠️ LA FORME D'UNE COHORTE — §22 les impose ANNUELLES, donc une année.
+FORME_COHORTE = re.compile(r'^\d{4}$')
+
+MOTIF_COHORTE_NON_DECLAREE = 'cohorte_du_groupe_non_declaree'
+MOTIF_TAUX_HORS_COHORTE = 'taux_verrouille_hors_cohorte'
+
+#: ⚠️⚠️ POURQUOI L'ANNÉE ET NON UNE DATE EXACTE — C'EST UN RAISONNEMENT, PAS
+#: UNE LECTURE LITTÉRALE, ET IL DOIT ÊTRE CITABLE. B72 d) dit que le taux est
+#: déterminé « LORS DE LA COMPTABILISATION INITIALE », pas « à la fin de la
+#: cohorte ». Pris au pied de la lettre, il appellerait une date de groupe.
+#: ⚠️ MAIS §22 INTERDIT DE RÉUNIR DANS UN MÊME GROUPE DES CONTRATS ÉMIS À PLUS
+#: D'UN AN D'INTERVALLE : la cohorte annuelle EST l'unité que la norme impose.
+#: Exiger une date exacte supposerait une granularité que la norme ne demande
+#: pas — et refuserait des déclarations correctes, qui est le mode de
+#: défaillance le plus coûteux d'un contrôle.
+#:
+#: ⚠️ CE QUE CE CHOIX LAISSE PASSER, ET IL FAUT LE LIRE : deux groupes de la
+#: même cohorte annuelle peuvent avoir des dates de comptabilisation initiale
+#: distinctes, donc des taux légitimement différents. Ce contrôle les tient
+#: pour interchangeables. Il vérifie l'ANNÉE, pas la date.
+RAISONNEMENT_COHORTE_ANNUELLE = (
+    "⚠️ CE CONTRÔLE RETIENT L'ANNÉE, ET C'EST UN RAISONNEMENT. B72 d) dit "
+    "« déterminés LORS DE LA COMPTABILISATION INITIALE », pas « à la fin de "
+    "la cohorte » : lu littéralement, il appellerait une date de groupe. Mais "
+    "§22 interdit de réunir des contrats émis à plus d'un an d'intervalle — "
+    "la COHORTE ANNUELLE est l'unité que la norme impose, et exiger une date "
+    "exacte supposerait une granularité qu'elle ne demande pas. ⚠️ CE QUE "
+    "CELA LAISSE PASSER : deux groupes de la même cohorte peuvent avoir des "
+    "dates de comptabilisation distinctes, donc des taux légitimement "
+    "différents ; ce contrôle les tient pour interchangeables.")
+
+
+def exiger_taux_de_la_cohorte(*, arrete_verrouillage, cohorte, contexte,
+                              erreur, objet: str = 'le taux verrouillé') -> str:
+    """B72 d) — le taux figé appartient-il à la cohorte du groupe évalué ?
+
+    ⚠️ `ANTERIEUR_OU_EGAL` NE SUFFISAIT PAS, ET C'ÉTAIT MESURÉ : il acceptait
+    un taux de 2020 pour une cohorte 2024. Il ne vérifiait qu'une borne, la
+    haute — la limite était nommée, et c'est ici qu'elle mordait.
+    """
+    if not FORME_COHORTE.match(str(cohorte or '')):
+        raise erreur(
+            MOTIF_COHORTE_NON_DECLAREE,
+            f"la cohorte du groupe évalué n'est pas déclarée (reçu "
+            f"{cohorte!r}, attendu une année AAAA). §22 impose des cohortes "
+            f"ANNUELLES ; sans elle, un taux verrouillé ne se rattache à "
+            f"aucun groupe et toute comparaison serait une supposition.")
+    _exiger_arrete_iso(arrete_verrouillage, f"l'arrêté de {objet}", erreur,
+                       MOTIF_TAUX_HORS_COHORTE)
+    _exiger_arrete_iso(contexte.arrete, "l'arrêté évalué", erreur,
+                       MOTIF_CONTEXTE_INVALIDE)
+
+    if arrete_verrouillage > contexte.arrete:
+        raise erreur(
+            MOTIF_TAUX_HORS_COHORTE,
+            f"{objet} porte l'arrêté {arrete_verrouillage}, POSTÉRIEUR à "
+            f"l'arrêté évalué {contexte.arrete}. Un taux figé à la "
+            f"comptabilisation initiale ne peut pas venir d'après la date "
+            f"qu'on évalue.")
+    if arrete_verrouillage[:4] != cohorte:
+        raise erreur(
+            MOTIF_TAUX_HORS_COHORTE,
+            f"{objet} porte l'arrêté {arrete_verrouillage} et le groupe "
+            f"évalué relève de la cohorte {cohorte}. B72 d) fige le taux À LA "
+            f"COMPTABILISATION INITIALE du groupe : un taux d'une AUTRE "
+            f"cohorte est signé, antérieur, et faux. ⚠️ C'est le cas qu'une "
+            f"simple borne « antérieur ou égal » laissait passer — elle "
+            f"acceptait un taux de 2020 pour une cohorte 2024. "
+            + RAISONNEMENT_COHORTE_ANNUELLE)
+
+    return (f"{objet} : arrêté {arrete_verrouillage}, cohorte {cohorte} du "
+            f"groupe évalué. " + RAISONNEMENT_COHORTE_ANNUELLE)

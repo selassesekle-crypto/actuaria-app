@@ -55,9 +55,8 @@ RÉFÉRENCES — IFRS 17, annexe au règlement (UE) 2023/1803, JO L 237 du
 from typing import NamedTuple
 
 from normes.ifrs17.mesure.declaration import (
-    COMPARAISON_ANTERIEUR_OU_EGAL,
     est_renseigne,
-    exiger_arrete_dans_le_contexte,
+    exiger_taux_de_la_cohorte,
 )
 from normes.ifrs17.mesure.lrc_paa import (
     RefusMesure,
@@ -200,7 +199,8 @@ def revenu_de_financement(cumul_charges: float, cumul_revenu_anterieur: float,
 
 
 def roll_forward(*, prime: float, nb_periodes: int, taux: TauxVerrouille,
-                 contexte, frais_acquisition: float = 0.0,
+                 contexte, cohorte_du_groupe: str = '',
+                 frais_acquisition: float = 0.0,
                  verdict_53_declare: str = ''
                  ) -> tuple[ArreteFinancement, ...]:
     """Le LRC arrêté par arrêté, prime encaissée en totalité à l'origine.
@@ -221,13 +221,14 @@ def roll_forward(*, prime: float, nb_periodes: int, taux: TauxVerrouille,
     couverture finit à zéro ; ne pas le vérifier laisserait passer un terme
     perdu, ce qui est précisément l'erreur que j'ai commise.
     """
-    #: ⚠️ B72 d) FIGE LE TAUX À LA COMPTABILISATION INITIALE : son arrêté est
-    #: dans le passé PAR CONSTRUCTION. Le comparer par égalité refuserait un
-    #: taux verrouillé CORRECT — d'où la catégorie déclarée ici.
-    exiger_arrete_dans_le_contexte(
-        arrete=taux.arrete_verrouillage,
-        comparaison=COMPARAISON_ANTERIEUR_OU_EGAL, contexte=contexte,
-        erreur=RefusMesure, objet="le taux verrouillé (B72 d)")
+    #: ⚠️⚠️ ET UNE BORNE « ANTÉRIEUR OU ÉGAL » NE SUFFISAIT PAS : elle
+    #: acceptait un taux de 2020 pour une cohorte 2024. B72 d) fige le taux à
+    #: la comptabilisation initiale DU GROUPE — la comparaison se fait donc
+    #: contre SA cohorte, pas contre une borne lâche.
+    exiger_taux_de_la_cohorte(
+        arrete_verrouillage=taux.arrete_verrouillage,
+        cohorte=cohorte_du_groupe, contexte=contexte, erreur=RefusMesure,
+        objet="le taux verrouillé (B72 d)")
 
     lrc = lrc_initial(prime, frais_acquisition,
                       verdict_53_declare=verdict_53_declare)

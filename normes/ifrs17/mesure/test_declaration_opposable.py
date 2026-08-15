@@ -16,14 +16,17 @@ from normes.ifrs17.mesure.declaration import (
     LIMITE_ANTERIEUR_OU_EGAL,
     MARQUEURS_DE_NON_SIGNATURE,
     MOTIF_ARRETE_HORS_CONTEXTE,
+    MOTIF_COHORTE_NON_DECLAREE,
     MOTIF_CONTEXTE_INVALIDE,
     MOTIF_DECLARANT_NON_HABILITE,
     MOTIF_PERIMETRE_DISCORDANT,
     MOTIF_STATUT_NON_SIGNE,
+    MOTIF_TAUX_HORS_COHORTE,
     MOTIF_USAGE_NON_DECLARE,
     QUALITE_ENTITE,
     QUALITE_TIERS,
     QUALITES,
+    RAISONNEMENT_COHORTE_ANNUELLE,
     USAGE_COURANT,
     USAGE_VERROUILLE,
     ContexteEvaluation,
@@ -31,6 +34,7 @@ from normes.ifrs17.mesure.declaration import (
     exiger_arrete_dans_le_contexte,
     exiger_declaration_opposable,
     exiger_ensemble_coherent,
+    exiger_taux_de_la_cohorte,
 )
 from normes.ifrs17.mesure.lrc_paa import RefusMesure
 
@@ -406,6 +410,63 @@ class T7_LaCoherenceSeJugePARUSAGE(unittest.TestCase):
         """⚠️ Il ne sait pas si chaque taux porte l'arrêté de SA cohorte."""
         self.assertIn('NE VÉRIFIE PAS', self._ensemble())
         self.assertIn('ne connaît pas les cohortes', self._ensemble())
+
+
+class T8_LeTauxVERROUILLE_APPARTIENT_A_SA_COHORTE(unittest.TestCase):
+    """⚠️⚠️ « ANTÉRIEUR OU ÉGAL » ACCEPTAIT UN TAUX DE 2020 POUR UNE COHORTE
+    2024. Il ne vérifiait qu'une borne, la haute — la limite était nommée, et
+    c'est ici qu'elle mordait."""
+
+    def _cohorte(self, arrete, cohorte):
+        return exiger_taux_de_la_cohorte(
+            arrete_verrouillage=arrete, cohorte=cohorte, contexte=CONTEXTE,
+            erreur=RefusMesure)
+
+    def test_le_taux_de_SA_cohorte_passe(self):
+        m = self._cohorte('2024-12-31', '2024')
+        self.assertIn('cohorte 2024', m)
+
+    def test_le_cas_QUE_LA_BORNE_LACHE_LAISSAIT_PASSER(self):
+        """⚠️ 2020 pour une cohorte 2024 : antérieur, donc admis avant."""
+        with self.assertRaises(RefusMesure) as e:
+            self._cohorte('2020-01-01', '2024')
+        self.assertEqual(e.exception.motif, MOTIF_TAUX_HORS_COHORTE)
+        self.assertIn('une AUTRE cohorte', str(e.exception))
+        self.assertIn('2020', str(e.exception))
+
+    def test_un_taux_POSTERIEUR_a_l_evaluation_reste_refuse(self):
+        with self.assertRaises(RefusMesure) as e:
+            self._cohorte('2027-06-30', '2027')
+        self.assertIn('POSTÉRIEUR', str(e.exception))
+
+    def test_sans_cohorte_declaree_le_module_refuse(self):
+        """⚠️ Sans elle, toute comparaison serait une supposition."""
+        for c in ('', '24', '2024-12-31', 'A_RENSEIGNER'):
+            with self.assertRaises(RefusMesure, msg=c) as e:
+                self._cohorte('2024-12-31', c)
+            self.assertEqual(e.exception.motif, MOTIF_COHORTE_NON_DECLAREE)
+
+    def test_le_jour_DANS_l_annee_de_la_cohorte_est_indifferent(self):
+        """⚠️ L'ARBITRAGE : l'ANNÉE, pas la date exacte."""
+        for jour in ('2024-01-01', '2024-06-30', '2024-12-31'):
+            self._cohorte(jour, '2024')
+
+    def test_le_RAISONNEMENT_est_ecrit_et_citable(self):
+        """⚠️ B72 d) dit « lors de la comptabilisation initiale », PAS « à la
+        fin de la cohorte ». L'année est retenue parce que §22 la rend
+        suffisante — c'est un raisonnement, pas une lecture littérale."""
+        m = self._cohorte('2024-12-31', '2024')
+        self.assertIn(RAISONNEMENT_COHORTE_ANNUELLE, m)
+        self.assertIn('LORS DE LA COMPTABILISATION INITIALE', m)
+        self.assertIn('§22', m)
+        self.assertIn("granularité qu'elle ne demande pas", m)
+
+    def test_le_motif_dit_CE_QUE_L_ARBITRAGE_LAISSE_PASSER(self):
+        """Deux groupes d'une même cohorte peuvent avoir des dates
+        distinctes — le contrôle les tient pour interchangeables."""
+        m = self._cohorte('2024-12-31', '2024')
+        self.assertIn('CE QUE CELA LAISSE PASSER', m)
+        self.assertIn('interchangeables', m)
 
 
 class T3_CeQueLeControleNEtablitPas(unittest.TestCase):
