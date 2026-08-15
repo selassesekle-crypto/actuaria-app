@@ -27,11 +27,17 @@ le même signataire ni la même opposabilité. La frontière déjà écrite dans
 `socle.groupe` tient — « le registre répond à quels groupes existent, le
 magasin à combien valaient-ils à cet arrêté ».
 
-⚠️ CE QUE CE LOT (M1) FAIT, ET CE QU'IL NE FAIT PAS. Il constitue un dossier
-de clôture et REFUSE une articulation rompue. La SIGNATURE (M2), la
-PERSISTANCE (M3) et le CHAÎNAGE N → N+1 (M4) ne sont pas ici. En
-particulier : rien n'empêche encore de servir une clôture non signée comme
-ouverture — c'est M2, et c'est la seule place où la règle mordra utilement.
+⚠️ CE QUE CE MODULE FAIT, ET CE QU'IL NE FAIT PAS. Il constitue un dossier de
+clôture et REFUSE une articulation rompue (M1) ; il constate les signatures et
+refuse qu'une clôture non signée serve d'OUVERTURE (M2). La PERSISTANCE (M3)
+et la CONTINUITÉ de la chaîne d'un arrêté au suivant (M4) ne sont pas ici.
+
+⚠️⚠️ ET UN PRINCIPE DE CONCEPTION LE TRAVERSE, POSÉ POUR LE RENDU QUI VIENDRA
+BIEN PLUS TARD : LE RENDU NE DEMANDE RIEN, IL RESTITUE. Il assemble ce qui
+existe, porte les signatures comme INFORMATION TRACÉE, et DIT ce qui manque
+plutôt que de bloquer — même patron que le lecteur d'inventaire. C'est ce
+principe qui décide OÙ le refus de signature se place : au seul point de
+consommation qui engage la suite, jamais à la lecture.
 
 RÉFÉRENCES — IFRS 17, annexe au règlement (UE) 2023/1803, JO L 237 du
 26.9.2023. §97, §98, §99, §100, §103, §105. Chacun relu dans ce texte.
@@ -39,6 +45,26 @@ RÉFÉRENCES — IFRS 17, annexe au règlement (UE) 2023/1803, JO L 237 du
 """
 
 from typing import NamedTuple
+
+#: ⚠️⚠️ CET IMPORT VA DU SOCLE VERS LA MESURE, ET LA FRONTIÈRE TIENT — elle a
+#: été MESURÉE sur l'AST avant d'être franchie. Ce qui est verrouillé est
+#: précis : `mesure` ne doit pas prendre un `Groupe`, elle reçoit des montants
+#: nommés (`test_aucune_dependance_au_socle`). Le sens inverse n'est pas
+#: interdit, et il est déjà emprunté : `socle.errata_donnees` importe
+#: `mesure.declaration`, comme `mesure.reassurance_61_62` importe
+#: `socle.errata_donnees`.
+#:
+#: ⚠️ ET `declaration` EST LE MEILLEUR CANDIDAT QUI SOIT : il n'importe RIEN
+#: du dépôt — `re`, `unicodedata`, `typing` — et un test l'y verrouille.
+#: L'emprunter n'ajoute aucune profondeur de dépendance.
+#:
+#: ⚠️ REBÂTIR ICI UN CONTRÔLE DE SIGNATURE AURAIT ÉTÉ LA VRAIE FAUTE : ce
+#: dépôt combat les secondes sources depuis les huit sources de taux, et
+#: celui-ci a été calibré contre 32 valeurs ordinaires et 8 attaques.
+from normes.ifrs17.mesure.declaration import (
+    PerimetreDeclare,
+    exiger_declaration_opposable,
+)
 
 #: ⚠️⚠️ §98 EXIGE DEUX RAPPROCHEMENTS SÉPARÉS, ET LA CLÉ DE GROUPE NE LE
 #: PERMETTAIT PAS. « L'entité doit présenter des rapprochements SÉPARÉS pour
@@ -354,14 +380,59 @@ def constituer(*, nature: str, cle_groupe: str, arrete: str,
                           str(motif or '').strip())
 
 
+#: ⚠️⚠️ LA SIGNATURE EST CONSTATÉE, ELLE N'EST PAS EXIGÉE À L'ENTRÉE — et
+#: c'est le dessin d'ensemble qui le commande : LE RENDU NE DEMANDE RIEN, IL
+#: RESTITUE. Il assemble ce qui existe, porte les signatures comme
+#: INFORMATION TRACÉE, et DIT ce qui manque plutôt que de bloquer.
+#:
+#: ⚠️ SI CE MODULE REFUSAIT DE RENDRE UNE CLÔTURE NON SIGNÉE, LE RENDU
+#: DEVRAIT REDEMANDER UNE SIGNATURE POUR AFFICHER QUOI QUE CE SOIT. Le refus
+#: est donc placé au SEUL endroit où il mord utilement : `servir_comme_
+#: ouverture`. Partout ailleurs, la signature est une donnée qu'on lit.
+#:
+#: ⚠️ ET UNE SIGNATURE INOPPOSABLE EST ENREGISTRÉE, PAS REJETÉE. « Personne
+#: n'a signé » et « le producteur a signé, et il n'est pas l'entité » ne sont
+#: PAS la même information — c'est exactement ce que le chantier du taux a
+#: établi, où cinq déclarations parfaitement signées par un tiers ne valaient
+#: rien au sens du §36. Les rejeter ferait perdre la seconde.
+SIGNATURE_OPPOSABLE = 'OPPOSABLE'
+SIGNATURE_INOPPOSABLE = 'INOPPOSABLE'
+VERDICTS_SIGNATURE = (SIGNATURE_OPPOSABLE, SIGNATURE_INOPPOSABLE)
+
+
+class SignatureCloture(NamedTuple):
+    """Qui atteste les MONTANTS d'un arrêté, et ce que le contrôle en dit.
+
+    ⚠️ À NE PAS CONFONDRE AVEC `socle.confirmation.Confirmation`, ET LES DEUX
+    COEXISTENT VOLONTAIREMENT. Celle-ci atteste une LECTURE — quelles colonnes
+    d'un inventaire ont été reconnues, et par qui. Celle-là atteste des
+    MONTANTS de clôture. Les signataires peuvent différer, les dates aussi, et
+    fondre les deux ferait dépendre l'attestation des chiffres de celle des
+    en-têtes de fichier.
+
+    ⚠️ `verdict` EST CONSTATÉ À L'APPOSITION et figé avec elle : il dit ce que
+    le contrôle établissait CE JOUR-LÀ. Le recalculer à la lecture ferait
+    changer l'histoire quand le vocabulaire du contrôle évolue.
+    """
+    arrete:        str      # 'AAAA-MM-JJ'
+    statut:        str
+    declarant:     str
+    qualite:       str
+    portefeuilles: tuple
+    verdict:       str      # l'un de VERDICTS_SIGNATURE
+    motif:         str      # ce que le contrôle a établi, ou son refus
+
+
 class Magasin(NamedTuple):
     """Les clôtures d'une entité. ⚠️ APPEND-ONLY, comme le registre.
 
     Immuable : `deposer` en rend un nouveau. Aucune fonction ne modifie ni ne
-    supprime — une clôture rectifiée s'AJOUTE en version suivante.
+    supprime — une clôture rectifiée s'AJOUTE en version suivante, et une
+    signature refaite s'AJOUTE à la suite des précédentes.
     """
-    entite:   str
-    dossiers: tuple[DossierCloture, ...] = ()
+    entite:     str
+    dossiers:   tuple[DossierCloture, ...] = ()
+    signatures: tuple[SignatureCloture, ...] = ()
 
 
 def ouvrir(entite: str) -> Magasin:
@@ -413,21 +484,134 @@ def versions(magasin: Magasin, cle: CleCloture) -> tuple[DossierCloture, ...]:
     return tuple(d for d in magasin.dossiers if d.cle == cle)
 
 
+MOTIF_OUVERTURE_NON_SIGNEE = 'ouverture_issue_d_une_cloture_non_signee'
+
+
+def apposer(magasin: Magasin, *, arrete: str, statut: str, declarant: str,
+            qualite: str, portefeuilles, contexte) -> Magasin:
+    """Appose une signature sur un arrêté, et CONSTATE son opposabilité.
+
+    ⚠️⚠️ CETTE FONCTION NE REFUSE PAS UNE SIGNATURE INOPPOSABLE — elle
+    l'enregistre avec son verdict. Le refus vivrait au mauvais endroit : le
+    rendu doit pouvoir écrire « signée par un tiers, sans valeur au sens du
+    §36 », ce qu'un rejet lui interdirait de savoir.
+
+    ⚠️ CE QUI RESTE UN REFUS, ET LA DISTINCTION COMPTE : un arrêté malformé.
+    Une signature dont on ne sait pas QUEL arrêté elle couvre n'est pas une
+    signature inopposable, c'est une donnée invalide — et elle rendrait
+    `signature_de` incapable de la retrouver.
+    """
+    _exiger_arrete(arrete, "l'arrêté de la signature de clôture")
+    ptf = tuple(portefeuilles)
+    try:
+        motif = exiger_declaration_opposable(
+            statut=statut, declarant=declarant, qualite=qualite,
+            erreur=RefusCloture,
+            perimetre=PerimetreDeclare(arrete, ptf), contexte=contexte,
+            objet=f"la signature de la clôture au {arrete}")
+        verdict = SIGNATURE_OPPOSABLE
+    except RefusCloture as refus:
+        # ⚠️ ON CONSTATE, ON NE PROPAGE PAS. Le motif du refus devient la
+        # trace : c'est lui qui dira au lecteur POURQUOI la clôture n'est pas
+        # opposable, et « non signée » ne le dirait pas.
+        verdict, motif = SIGNATURE_INOPPOSABLE, str(refus)
+    return magasin._replace(signatures=magasin.signatures + (
+        SignatureCloture(arrete, statut, declarant, qualite, ptf,
+                         verdict, motif),))
+
+
+def signature_de(magasin: Magasin, arrete: str) -> SignatureCloture | None:
+    """La DERNIÈRE signature apposée sur cet arrêté, ou `None`.
+
+    ⚠️ REND `None` PLUTÔT QUE DE LEVER, ET C'EST LE DESSIN D'ENSEMBLE : un
+    état non signé se PRÉSENTE avec sa mention, il ne bloque pas le document.
+    Lever ici obligerait le rendu à demander une signature pour afficher quoi
+    que ce soit — l'inverse de ce qu'il doit faire.
+    """
+    trouvees = [s for s in magasin.signatures if s.arrete == arrete]
+    return trouvees[-1] if trouvees else None
+
+
+def servir_comme_ouverture(magasin: Magasin, cle: CleCloture) -> Soldes:
+    """La clôture d'un arrêté devient l'ouverture du suivant — SI ELLE EST
+    SIGNÉE. ⚠️ C'EST LE SEUL POINT DE CE MODULE QUI REFUSE POUR SIGNATURE.
+
+    ⚠️⚠️ ET C'EST LA SEULE PLACE OÙ LA RÈGLE MORD UTILEMENT. Un chiffre non
+    signé peut être lu, présenté, discuté — il ne peut pas devenir le point
+    de départ de l'exercice suivant, parce qu'il entrerait alors dans une
+    chaîne dont personne ne répond. C'est la même distinction que la
+    péremption jugée à la CONSOMMATION et non à la constitution.
+
+    ⚠️ CE QUE CE CONTRÔLE NE VÉRIFIE PAS, ET IL FAUT LE LIRE : que l'ouverture
+    remise est celle qui a été AUDITÉE. Il constate qu'elle a été signée ICI,
+    par une entité déclarée. Une première année vient d'un autre système, et
+    aucun contrôle de ce module ne peut l'attester. La limite est nommée
+    plutôt que comblée par un contrôle que les paramètres ne permettent pas.
+
+    ⚠️ LA CONTINUITÉ DE LA CHAÎNE — que l'arrêté suivant succède bien à
+    celui-ci — n'est PAS vérifiée ici : c'est le lot M4.
+    """
+    dossier = dossier_courant(magasin, cle)
+    signature = signature_de(magasin, cle.arrete)
+    if signature is None or signature.verdict != SIGNATURE_OPPOSABLE:
+        etat = ('aucune signature n\'a été apposée'
+                if signature is None
+                else f"la signature apposée est {signature.verdict} — "
+                     f"{signature.motif}")
+        raise RefusCloture(
+            MOTIF_OUVERTURE_NON_SIGNEE,
+            f"la clôture {cle.texte} ne peut pas servir d'ouverture à "
+            f"l'exercice suivant : {etat}. ⚠️ ELLE RESTE LISIBLE ET "
+            f"PRÉSENTABLE — `dossier_courant` la rend, et un état peut la "
+            f"porter avec sa mention. Ce qui est refusé est de la faire "
+            f"ENTRER DANS LA CHAÎNE : un solde d'ouverture engage tout "
+            f"l'exercice qui en descend, et personne ne répond de celui-ci.")
+    return dossier.cloture
+
+
 def resume(magasin: Magasin) -> str:
     """Ce qu'un actuaire ou un commissaire lit du magasin."""
     par_nature = {n: sum(1 for d in magasin.dossiers if d.cle.nature == n)
                   for n in NATURES}
     arretes = sorted({d.cle.arrete for d in magasin.dossiers})
     rectifies = sum(1 for d in magasin.dossiers if d.version > 1)
-    return (
-        f"MAGASIN DE CLÔTURES — {magasin.entite}\n"
-        f"  {len(magasin.dossiers)} dossier(s), "
-        f"{par_nature[NATURE_EMIS]} émis et "
-        f"{par_nature[NATURE_REASSURANCE_DETENUE]} en réassurance détenue "
-        f"(§98 les sépare)\n"
-        f"  arrêtés couverts : {arretes or 'aucun'}\n"
-        f"  {rectifies} rectification(s) déposée(s), aucune n'a écrasé la "
-        f"version qu'elle corrige\n"
-        f"  ⚠️ CE QUE CE MAGASIN N'ÉTABLIT PAS ENCORE : aucune clôture n'est "
-        f"SIGNÉE, et rien n'empêche donc de servir une clôture non signée "
-        f"comme ouverture de l'exercice suivant. C'est le lot M2.")
+    #: ⚠️⚠️ CE RÉSUMÉ SE LIT SUR L'ÉTAT, IL NE RÉCITE PAS UN LOT. Sa version
+    #: précédente annonçait « aucune clôture n'est SIGNÉE […] c'est le lot
+    #: M2 » : une phrase juste le jour où elle a été écrite, et qui serait
+    #: devenue fausse en silence dès la première signature apposée. C'est le
+    #: motif que le périmètre publié venait de payer — une étiquette restée
+    #: en retard sur ce qu'elle décrit. Ici, chaque ligne se calcule.
+    signes = [a for a in arretes
+              if (s := signature_de(magasin, a)) is not None
+              and s.verdict == SIGNATURE_OPPOSABLE]
+    tentees = {s.arrete for s in magasin.signatures} - set(signes)
+    lignes = [
+        f"MAGASIN DE CLÔTURES — {magasin.entite}",
+        (f"  {len(magasin.dossiers)} dossier(s), "
+         f"{par_nature[NATURE_EMIS]} émis et "
+         f"{par_nature[NATURE_REASSURANCE_DETENUE]} en réassurance détenue "
+         f"(§98 les sépare)"),
+        f"  arrêtés couverts : {arretes or 'aucun'}",
+        (f"  {rectifies} rectification(s) déposée(s), aucune n'a écrasé la "
+         f"version qu'elle corrige"),
+        f"  arrêtés SIGNÉS et opposables : {signes or 'aucun'}",
+    ]
+    if tentees:
+        lignes.append(
+            f"  ⚠️ {len(tentees)} arrêté(s) portent une signature "
+            f"INOPPOSABLE : {sorted(tentees)}. Ce n'est pas « non signé » — "
+            f"quelqu'un a signé, et le contrôle a établi que sa déclaration "
+            f"ne vaut pas ici. Le motif est conservé avec la signature.")
+    non_signes = [a for a in arretes if a not in signes]
+    if non_signes:
+        lignes.append(
+            f"  ⚠️ {len(non_signes)} arrêté(s) ne peuvent PAS servir "
+            f"d'ouverture à l'exercice suivant : {non_signes}. Ils restent "
+            f"lisibles et présentables — ce qui est refusé est leur entrée "
+            f"dans la chaîne.")
+    lignes.append(
+        "  ⚠️ CE QUE CE MAGASIN N'ÉTABLIT PAS : que l'ouverture d'un premier "
+        "exercice soit celle qui a été AUDITÉE. Il constate une signature "
+        "apposée ICI, jamais un audit mené ailleurs. Et la CONTINUITÉ de la "
+        "chaîne d'un arrêté au suivant n'est pas encore vérifiée.")
+    return '\n'.join(lignes)

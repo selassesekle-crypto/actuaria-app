@@ -12,6 +12,11 @@ import ast
 import unittest
 from pathlib import Path
 
+from normes.ifrs17.mesure.declaration import (
+    QUALITE_ENTITE,
+    QUALITE_TIERS,
+    ContexteEvaluation,
+)
 from normes.ifrs17.socle.cloture import (
     AXE_DECLARE,
     AXE_ELEMENT_DE_PERTE,
@@ -19,12 +24,14 @@ from normes.ifrs17.socle.cloture import (
     AXE_LIC_FLUX_FUTURS,
     AXE_LRC_HORS_PERTE,
     AXES,
+    MOTIF_ARRETE_INVALIDE,
     MOTIF_ARTICULATION_ROMPUE,
     MOTIF_AXE_NON_DECLARE,
     MOTIF_DOSSIER_ABSENT,
     MOTIF_LIBELLE_MANQUANT,
     MOTIF_NATURE_DIVERGENTE,
     MOTIF_NATURE_NON_DECLAREE,
+    MOTIF_OUVERTURE_NON_SIGNEE,
     MOTIF_POSTE_INCONNU,
     MOTIF_VERSION_SANS_MOTIF,
     NATURE_EMIS,
@@ -33,15 +40,20 @@ from normes.ifrs17.socle.cloture import (
     POSTE_AUTRE,
     POSTES,
     PRESENCE_CONDITIONNELLE,
+    SIGNATURE_INOPPOSABLE,
+    SIGNATURE_OPPOSABLE,
     CleCloture,
     Mouvement,
     RefusCloture,
     Soldes,
+    apposer,
     constituer,
     deposer,
     dossier_courant,
     ouvrir,
     resume,
+    servir_comme_ouverture,
+    signature_de,
     versions,
 )
 
@@ -317,12 +329,169 @@ class T7_LeResumeDitCeQuIlNEtablitPas(unittest.TestCase):
         self.assertIn('1 en réassurance détenue', t)
         self.assertIn('§98', t)
 
-    def test_le_resume_dit_que_RIEN_N_EST_SIGNE_et_nomme_M2(self):
-        """⚠️ M1 ne signe pas, et rien n'empêche encore de servir une clôture
-        non signée comme ouverture. Le taire ferait croire l'inverse."""
+    def test_le_resume_dit_CE_QU_IL_N_ETABLIT_PAS_sans_nommer_de_lot(self):
+        """⚠️⚠️ CE TEST ÉPINGLAIT UNE PHRASE QUI NOMMAIT UN LOT À VENIR —
+        « aucune clôture n'est SIGNÉE […] c'est le lot M2 ». Il était juste le
+        jour où il a été écrit, et il GARANTISSAIT que la prose devienne
+        fausse : le lot suivant devait la démentir.
+
+        ⚠️ ÉPINGLER UN NOM DE LOT DANS UN TEXTE PUBLIÉ, C'EST DATER CE TEXTE.
+        Ce que le résumé doit dire est ce qu'il N'ÉTABLIT PAS — une limite qui
+        reste vraie tant que le contrôle n'existe pas, et qui se retire avec
+        lui. Le reste se CALCULE sur l'état du magasin.
+        """
         t = resume(deposer(ouvrir('MutuelleTest'), _dossier()))
-        self.assertIn("aucune clôture n'est SIGNÉE", t)
-        self.assertIn('M2', t)
+        self.assertIn("CE QUE CE MAGASIN N'ÉTABLIT PAS", t)
+        self.assertIn('AUDITÉE', t)
+        for date in ('M1', 'M2', 'M3', 'M4'):
+            self.assertNotIn(f'lot {date}', t)
+        self.assertIn("ne peuvent PAS servir d'ouverture", t)
+
+
+class T8_LaSignatureEstCONSTATEE_PasEXIGEE(unittest.TestCase):
+    """⚠️⚠️ M2 — ET SON DESSIN VIENT DU RENDU, QUI EST POURTANT LOIN.
+
+    LE RENDU NE DEMANDE RIEN, IL RESTITUE : il assemble ce qui existe, porte
+    les signatures comme information tracée, et DIT ce qui manque plutôt que
+    de bloquer. C'est ce principe qui décide où le refus se place.
+    """
+
+    PTF = ('DO', 'MRH')
+    CONTEXTE = ContexteEvaluation(arrete='2026-12-31', portefeuilles=PTF)
+
+    def _magasin(self):
+        return deposer(ouvrir('MutuelleTest'), _dossier())
+
+    def _signer(self, m, **kw):
+        base = {'arrete': '2026-12-31', 'statut': 'signee le 15/02/2027',
+                'declarant': 'directrice technique', 'qualite': QUALITE_ENTITE,
+                'portefeuilles': self.PTF, 'contexte': self.CONTEXTE}
+        base.update(kw)
+        return apposer(m, **base)
+
+    def test_une_signature_de_l_entite_est_OPPOSABLE(self):
+        m = self._signer(self._magasin())
+        s = signature_de(m, '2026-12-31')
+        self.assertEqual(s.verdict, SIGNATURE_OPPOSABLE)
+        self.assertIn('directrice technique', s.motif)
+        print("    OK M2 : signature de l'entite -> OPPOSABLE")
+
+    def test_une_signature_de_TIERS_est_ENREGISTREE_pas_rejetee(self):
+        """⚠️⚠️ « PERSONNE N'A SIGNÉ » ET « LE PRODUCTEUR A SIGNÉ, ET IL N'EST
+        PAS L'ENTITÉ » NE SONT PAS LA MÊME INFORMATION. Le chantier du taux
+        l'a établi : cinq déclarations parfaitement signées par un tiers ne
+        valaient rien au sens du §36. Les rejeter ferait perdre la seconde."""
+        m = self._signer(self._magasin(), qualite=QUALITE_TIERS,
+                         declarant='producteur de donnees')
+        s = signature_de(m, '2026-12-31')
+        self.assertEqual(s.verdict, SIGNATURE_INOPPOSABLE)
+        self.assertIn('producteur de donnees', s.motif)
+        self.assertIn('§36', s.motif)
+        print("    OK M2b : signature d'un TIERS -> enregistree INOPPOSABLE, "
+              "avec son motif")
+
+    def test_un_statut_de_DEMONSTRATION_est_enregistre_INOPPOSABLE(self):
+        m = self._signer(self._magasin(), statut='DEMONSTRATION_NON_SIGNEE')
+        self.assertEqual(signature_de(m, '2026-12-31').verdict,
+                         SIGNATURE_INOPPOSABLE)
+
+    def test_un_ARRETE_MALFORME_reste_un_REFUS_et_non_un_verdict(self):
+        """⚠️ LA DISTINCTION COMPTE : une signature dont on ignore QUEL arrêté
+        elle couvre n'est pas inopposable, elle est invalide — et
+        `signature_de` ne la retrouverait jamais."""
+        with self.assertRaises(RefusCloture) as e:
+            self._signer(self._magasin(), arrete='31/12/2026')
+        self.assertEqual(e.exception.motif, MOTIF_ARRETE_INVALIDE)
+
+    def test_sans_signature_la_lecture_rend_None_et_NE_LEVE_PAS(self):
+        self.assertIsNone(signature_de(self._magasin(), '2026-12-31'))
+
+    def test_une_signature_refaite_s_AJOUTE_et_la_derniere_vaut(self):
+        m = self._signer(self._magasin(), qualite=QUALITE_TIERS)
+        m = self._signer(m)
+        self.assertEqual(len(m.signatures), 2)
+        self.assertEqual(signature_de(m, '2026-12-31').verdict,
+                         SIGNATURE_OPPOSABLE)
+        self.assertEqual(m.signatures[0].verdict, SIGNATURE_INOPPOSABLE)
+
+
+class T9_LeRefusEstAuSEUL_POINT_QUI_ENGAGE(unittest.TestCase):
+    """⚠️⚠️ LE REFUS NE VIT QU'À UN ENDROIT : servir une clôture comme
+    OUVERTURE. Partout ailleurs, la signature est une donnée qu'on lit."""
+
+    PTF = ('DO', 'MRH')
+    CONTEXTE = ContexteEvaluation(arrete='2026-12-31', portefeuilles=PTF)
+    CLE = CleCloture(NATURE_EMIS, 'DO|AUTRES|2026', '2026-12-31')
+
+    def _magasin(self, signee=None):
+        m = deposer(ouvrir('MutuelleTest'), _dossier())
+        if signee is not None:
+            m = apposer(m, arrete='2026-12-31', statut='signee le 15/02',
+                        declarant='directrice technique', qualite=signee,
+                        portefeuilles=self.PTF, contexte=self.CONTEXTE)
+        return m
+
+    def test_une_cloture_SIGNEE_sert_d_ouverture(self):
+        soldes = servir_comme_ouverture(self._magasin(QUALITE_ENTITE),
+                                        self.CLE)
+        self.assertEqual(soldes.lrc_hors_perte, 1000.0)
+        print("    OK M2c : cloture signee -> sert d'ouverture")
+
+    def test_une_cloture_NON_signee_est_REFUSEE_comme_ouverture(self):
+        with self.assertRaises(RefusCloture) as e:
+            servir_comme_ouverture(self._magasin(), self.CLE)
+        self.assertEqual(e.exception.motif, MOTIF_OUVERTURE_NON_SIGNEE)
+        self.assertIn('aucune signature', str(e.exception))
+        self.assertIn('ENTRER DANS LA CHAÎNE', str(e.exception))
+        print("    OK M2d : cloture non signee -> REFUSEE comme ouverture")
+
+    def test_une_signature_INOPPOSABLE_ne_sert_pas_davantage(self):
+        """⚠️ Signée par un tiers reste non opposable — et le refus REPREND
+        le motif, il ne dit pas seulement « non signée »."""
+        with self.assertRaises(RefusCloture) as e:
+            servir_comme_ouverture(self._magasin(QUALITE_TIERS), self.CLE)
+        self.assertEqual(e.exception.motif, MOTIF_OUVERTURE_NON_SIGNEE)
+        self.assertIn('INOPPOSABLE', str(e.exception))
+        self.assertIn('§36', str(e.exception))
+
+    def test_LE_RENDU_LIT_TOUT_SANS_JAMAIS_ETRE_REFUSE(self):
+        """⚠️⚠️ LE TEST QUI PORTE LE DESSIN D'ENSEMBLE. Un rendu qui assemble
+        un état doit pouvoir tout lire — dossier, versions, signature — et
+        écrire « non signée » de lui-même. S'il pouvait être refusé, il
+        devrait REDEMANDER une signature pour afficher quoi que ce soit,
+        l'inverse de ce qu'il doit faire.
+        """
+        for m in (self._magasin(), self._magasin(QUALITE_TIERS),
+                  self._magasin(QUALITE_ENTITE)):
+            self.assertIsNotNone(dossier_courant(m, self.CLE))
+            self.assertTrue(versions(m, self.CLE))
+            signature_de(m, '2026-12-31')     # ⚠️ ne lève jamais
+            self.assertIn('MAGASIN DE CLÔTURES', resume(m))
+        print("    OK M2e : 3 etats de signature, le rendu lit TOUT et n'est "
+              "JAMAIS refuse")
+
+    def test_le_resume_SE_CALCULE_et_ne_recite_pas_un_lot(self):
+        """⚠️⚠️ SA VERSION PRÉCÉDENTE ANNONÇAIT « aucune clôture n'est SIGNÉE
+        […] c'est le lot M2 » — juste le jour où elle a été écrite, fausse en
+        silence dès la première signature. C'est le motif que le périmètre
+        publié venait de payer : une étiquette en retard sur ce qu'elle
+        décrit."""
+        t = resume(self._magasin(QUALITE_ENTITE))
+        self.assertIn("arrêtés SIGNÉS et opposables : ['2026-12-31']", t)
+        self.assertNotIn('lot M2', t)
+        self.assertNotIn("aucune clôture n'est SIGNÉE", t)
+        sans = resume(self._magasin())
+        self.assertIn('ne peuvent PAS servir', sans)
+        tiers = resume(self._magasin(QUALITE_TIERS))
+        self.assertIn('signature INOPPOSABLE', tiers)
+        self.assertIn("Ce n'est pas « non signé »", tiers)
+
+    def test_le_resume_NOMME_la_limite_de_l_ouverture_auditee(self):
+        """⚠️ Il constate une signature apposée ICI, jamais un audit mené
+        ailleurs. Une première année vient d'un autre système."""
+        t = resume(self._magasin(QUALITE_ENTITE))
+        self.assertIn('AUDITÉE', t)
+        self.assertIn('CONTINUITÉ', t)
 
 
 class Z_LaMesureN_IMPORTE_PAS_LeMagasin(unittest.TestCase):
