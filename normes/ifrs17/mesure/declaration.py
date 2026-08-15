@@ -383,3 +383,83 @@ def exiger_ensemble_coherent(*, perimetres: dict, contexte, erreur) -> str:
             f"évalué. ⚠️ CE CONTRÔLE EST LE SEUL À REGARDER L'ENSEMBLE : les "
             f"trois autres portent chacun sur une déclaration, et un jeu de "
             f"déclarations toutes valides séparément peut rester faux.")
+
+
+#: ⚠️⚠️ DEUX CATÉGORIES DE COMPARAISON, ET UN BALAYAGE UNIFORME SERAIT FAUX.
+#: Tous les arrêtés déclarés ne se comparent pas de la même façon à l'arrêté
+#: évalué, et les traiter pareil refuserait des déclarations CORRECTES :
+#:
+#:   · ÉGAL — une valeur qui vaut pour UNE date d'évaluation : une courbe
+#:     (« une courbe vaut pour une date, pas pour toutes »), un ajustement
+#:     pour risque, un ultime de projection, une répartition de coûts.
+#:
+#:   · ANTÉRIEUR OU ÉGAL — une valeur FIGÉE ou ÉVÉNEMENTIELLE, dont la date
+#:     est dans le passé PAR CONSTRUCTION : un taux verrouillé, que B72 a)
+#:     fige à la comptabilisation initiale du groupe ; une appréciation du
+#:     §57, portée « à n'importe quel moment au cours de la période de
+#:     couverture ».
+#:
+#: ⚠️ ET LA CATÉGORIE SE DÉCLARE PAR SITE, JAMAIS NE SE DÉDUIT DU NOM DU
+#: CHAMP. Deux champs appelés `arrete` désignent ici deux choses opposées.
+COMPARAISON_EGAL = 'EGAL'
+COMPARAISON_ANTERIEUR_OU_EGAL = 'ANTERIEUR_OU_EGAL'
+COMPARAISONS = (COMPARAISON_EGAL, COMPARAISON_ANTERIEUR_OU_EGAL)
+
+MOTIF_ARRETE_HORS_CONTEXTE = 'arrete_declare_hors_contexte'
+
+#: ⚠️ CE QUE `ANTÉRIEUR OU ÉGAL` NE VÉRIFIE PAS, ET IL FAUT LE LIRE.
+LIMITE_ANTERIEUR_OU_EGAL = (
+    "⚠️ CE CONTRÔLE NE VÉRIFIE QU'UNE BORNE, LA HAUTE. Il refuse une date "
+    "postérieure à l'arrêté évalué ; il ne peut pas refuser une date trop "
+    "ANCIENNE, faute de connaître le début de la période concernée. Pour le "
+    "§57, qui vise « à n'importe quel moment AU COURS DE la période de "
+    "couverture », une appréciation antérieure au début de couverture serait "
+    "aussi invalide qu'une appréciation postérieure à l'arrêté — et elle "
+    "passerait ici. La fenêtre complète exigerait le début de couverture, que "
+    "ce module ne reçoit pas : la limite est NOMMÉE plutôt que comblée par "
+    "un contrôle que les paramètres ne permettent pas.")
+
+
+def exiger_arrete_dans_le_contexte(*, arrete, comparaison, contexte, erreur,
+                                   objet: str = 'cette déclaration') -> str:
+    """Confronte un arrêté DÉCLARÉ à l'arrêté ÉVALUÉ, selon sa catégorie.
+
+    ⚠️ SIX MODULES EXIGEAIENT L'ARRÊTÉ NON VIDE ET AUCUN NE LE COMPARAIT. Le
+    refus d'`attribution` écrivait pourtant « une répartition vaut pour
+    l'exercice où elle a été arrêtée, pas pour tous » : la prose énonçait la
+    règle, le code ne vérifiait que le non-vide. C'est la forme exacte du
+    §70A, dont la docstring citait « ÉVALUE » quand le code testait
+    « éligible ».
+    """
+    if comparaison not in COMPARAISONS:
+        raise erreur(
+            MOTIF_ARRETE_HORS_CONTEXTE,
+            f"la catégorie de comparaison de {objet} n'est pas déclarée "
+            f"(reçu {comparaison!r}, attendu l'une de {COMPARAISONS}). ⚠️ "
+            f"ELLE NE SE DÉDUIT PAS DU NOM DU CHAMP : deux champs appelés "
+            f"`arrete` désignent ici deux choses opposées — une courbe vaut "
+            f"pour la date évaluée, un taux verrouillé est figé dans le "
+            f"passé par B72 a).")
+    _exiger_arrete_iso(arrete, f"l'arrêté déclaré de {objet}", erreur,
+                       MOTIF_ARRETE_HORS_CONTEXTE)
+    _exiger_arrete_iso(contexte.arrete, "l'arrêté évalué", erreur,
+                       MOTIF_CONTEXTE_INVALIDE)
+
+    if comparaison == COMPARAISON_EGAL:
+        if arrete != contexte.arrete:
+            raise erreur(
+                MOTIF_ARRETE_HORS_CONTEXTE,
+                f"{objet} porte l'arrêté {arrete} et l'évaluation porte sur "
+                f"{contexte.arrete}. Cette valeur vaut pour UNE date, pas "
+                f"pour toutes — l'employer hors de sa date la rend fausse "
+                f"sans rien changer à sa vraisemblance.")
+        return (f"{objet} : arrêté {arrete}, égal à l'arrêté évalué.")
+
+    if arrete > contexte.arrete:
+        raise erreur(
+            MOTIF_ARRETE_HORS_CONTEXTE,
+            f"{objet} porte l'arrêté {arrete}, POSTÉRIEUR à l'arrêté évalué "
+            f"{contexte.arrete}. Une valeur figée ou un fait constaté ne "
+            f"peuvent pas venir d'après la date qu'on évalue.")
+    return (f"{objet} : arrêté {arrete}, antérieur ou égal à l'arrêté évalué "
+            f"{contexte.arrete}. " + LIMITE_ANTERIEUR_OU_EGAL)

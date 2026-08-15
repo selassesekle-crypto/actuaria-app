@@ -9,9 +9,13 @@ fait croire sur parole.
 import unittest
 
 from normes.ifrs17.mesure.declaration import (
+    COMPARAISON_ANTERIEUR_OU_EGAL,
+    COMPARAISON_EGAL,
     DEMONSTRATION_INCOHERENCE_D_ENSEMBLE,
     FORME_ARRETE,
+    LIMITE_ANTERIEUR_OU_EGAL,
     MARQUEURS_DE_NON_SIGNATURE,
+    MOTIF_ARRETE_HORS_CONTEXTE,
     MOTIF_CONTEXTE_INVALIDE,
     MOTIF_DECLARANT_NON_HABILITE,
     MOTIF_PERIMETRE_DISCORDANT,
@@ -21,6 +25,7 @@ from normes.ifrs17.mesure.declaration import (
     QUALITES,
     ContexteEvaluation,
     PerimetreDeclare,
+    exiger_arrete_dans_le_contexte,
     exiger_declaration_opposable,
     exiger_ensemble_coherent,
 )
@@ -267,6 +272,65 @@ class T5_LaQuatriemeQuestion_ENSEMBLE(unittest.TestCase):
         self.assertIn('2026-12-31', DEMONSTRATION_INCOHERENCE_D_ENSEMBLE)
         self.assertIn('2024-12-31', DEMONSTRATION_INCOHERENCE_D_ENSEMBLE)
         self.assertIn('un seul calcul', DEMONSTRATION_INCOHERENCE_D_ENSEMBLE)
+
+
+class T6_DeuxCategoriesDeComparaison(unittest.TestCase):
+    """⚠️⚠️ UN BALAYAGE UNIFORME SERAIT FAUX SUR DEUX MODULES SUR SIX.
+
+    Une courbe vaut pour LA date évaluée ; un taux verrouillé est figé dans
+    le passé par B72 a). Les comparer pareil refuserait un taux correct — et
+    un contrôle faux est pire que pas de contrôle.
+    """
+
+    def _cmp(self, arrete, comparaison):
+        return exiger_arrete_dans_le_contexte(
+            arrete=arrete, comparaison=comparaison, contexte=CONTEXTE,
+            erreur=RefusMesure, objet='la valeur')
+
+    def test_EGAL_refuse_un_arrete_anterieur(self):
+        with self.assertRaises(RefusMesure) as e:
+            self._cmp('2025-12-31', COMPARAISON_EGAL)
+        self.assertEqual(e.exception.motif, MOTIF_ARRETE_HORS_CONTEXTE)
+        self.assertIn('vaut pour UNE date', str(e.exception))
+
+    def test_EGAL_accepte_l_arrete_evalue(self):
+        self.assertIn('égal', self._cmp('2026-12-31', COMPARAISON_EGAL))
+
+    def test_ANTERIEUR_accepte_ce_que_EGAL_refuse(self):
+        """⚠️ LA PREUVE QUE LES DEUX BRANCHES DIFFÈRENT, sur le MÊME arrêté."""
+        with self.assertRaises(RefusMesure):
+            self._cmp('2025-12-31', COMPARAISON_EGAL)
+        self._cmp('2025-12-31', COMPARAISON_ANTERIEUR_OU_EGAL)
+
+    def test_ANTERIEUR_refuse_un_arrete_POSTERIEUR(self):
+        with self.assertRaises(RefusMesure) as e:
+            self._cmp('2027-12-31', COMPARAISON_ANTERIEUR_OU_EGAL)
+        self.assertIn('POSTÉRIEUR', str(e.exception))
+
+    def test_la_categorie_se_DECLARE_et_ne_se_deduit_pas(self):
+        with self.assertRaises(RefusMesure) as e:
+            self._cmp('2026-12-31', '')
+        self.assertEqual(e.exception.motif, MOTIF_ARRETE_HORS_CONTEXTE)
+        self.assertIn('NE SE DÉDUIT PAS DU NOM DU CHAMP', str(e.exception))
+        self.assertIn('B72 a)', str(e.exception))
+
+    def test_la_limite_de_ANTERIEUR_descend_avec_le_resultat(self):
+        """⚠️ IL NE VÉRIFIE QU'UNE BORNE, ET LE DIT.
+
+        La fenêtre complète du §57 exigerait le début de couverture, que le
+        module ne reçoit pas. La limite est NOMMÉE plutôt que comblée par un
+        contrôle que les paramètres ne permettent pas.
+        """
+        m = self._cmp('2025-12-31', COMPARAISON_ANTERIEUR_OU_EGAL)
+        self.assertIn(LIMITE_ANTERIEUR_OU_EGAL, m)
+        self.assertIn('AU COURS DE', m)
+        self.assertIn('ANCIENNE', m)
+        self.assertIn('la limite est NOMMÉE', m)
+
+    def test_EGAL_ne_porte_PAS_la_limite_qui_ne_le_concerne_pas(self):
+        """Une réserve hors sujet finit par ne plus être lue."""
+        self.assertNotIn(LIMITE_ANTERIEUR_OU_EGAL,
+                         self._cmp('2026-12-31', COMPARAISON_EGAL))
 
 
 class T3_CeQueLeControleNEtablitPas(unittest.TestCase):
