@@ -270,7 +270,7 @@ class T2_LeTauxEstSigne(unittest.TestCase):
         print("    OK N2b : pas de taux sans sa source")
 
     def test_sans_date_de_verrouillage_le_taux_est_refuse(self):
-        """§B72 a) fige le taux a la comptabilisation initiale ; sans cette
+        """§B72 d) fige le taux a la comptabilisation initiale ; sans cette
         date, il ne se rattache a aucun groupe."""
         with self.assertRaises(RefusMesure) as ctx:
             verrouiller(0.02, '', 'courbe EIOPA', 'Selasse Sekle')

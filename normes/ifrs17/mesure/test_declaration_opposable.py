@@ -20,9 +20,12 @@ from normes.ifrs17.mesure.declaration import (
     MOTIF_DECLARANT_NON_HABILITE,
     MOTIF_PERIMETRE_DISCORDANT,
     MOTIF_STATUT_NON_SIGNE,
+    MOTIF_USAGE_NON_DECLARE,
     QUALITE_ENTITE,
     QUALITE_TIERS,
     QUALITES,
+    USAGE_COURANT,
+    USAGE_VERROUILLE,
     ContexteEvaluation,
     PerimetreDeclare,
     exiger_arrete_dans_le_contexte,
@@ -278,7 +281,7 @@ class T6_DeuxCategoriesDeComparaison(unittest.TestCase):
     """⚠️⚠️ UN BALAYAGE UNIFORME SERAIT FAUX SUR DEUX MODULES SUR SIX.
 
     Une courbe vaut pour LA date évaluée ; un taux verrouillé est figé dans
-    le passé par B72 a). Les comparer pareil refuserait un taux correct — et
+    le passé par B72 d). Les comparer pareil refuserait un taux correct — et
     un contrôle faux est pire que pas de contrôle.
     """
 
@@ -312,7 +315,7 @@ class T6_DeuxCategoriesDeComparaison(unittest.TestCase):
             self._cmp('2026-12-31', '')
         self.assertEqual(e.exception.motif, MOTIF_ARRETE_HORS_CONTEXTE)
         self.assertIn('NE SE DÉDUIT PAS DU NOM DU CHAMP', str(e.exception))
-        self.assertIn('B72 a)', str(e.exception))
+        self.assertIn('B72 d)', str(e.exception))
 
     def test_la_limite_de_ANTERIEUR_descend_avec_le_resultat(self):
         """⚠️ IL NE VÉRIFIE QU'UNE BORNE, ET LE DIT.
@@ -331,6 +334,78 @@ class T6_DeuxCategoriesDeComparaison(unittest.TestCase):
         """Une réserve hors sujet finit par ne plus être lue."""
         self.assertNotIn(LIMITE_ANTERIEUR_OU_EGAL,
                          self._cmp('2026-12-31', COMPARAISON_EGAL))
+
+
+class T7_LaCoherenceSeJugePARUSAGE(unittest.TestCase):
+    """⚠️⚠️ CE CONTRÔLE REFUSAIT UNE DÉCLARATION CORRECTE.
+
+    Il exigeait UN SEUL arrêté pour tout l'ensemble. Or §22 impose des
+    cohortes ANNUELLES : un portefeuille de trois cohortes appelle TROIS taux
+    verrouillés (B72 d) plus un taux courant (B72 a). Quatre arrêtés, et le
+    tout cohérent. **Une exigence FAUSSE bloque** — c'est le défaut le plus
+    visible, et le plus vite payé.
+    """
+
+    QUATRE = {'courant': PerimetreDeclare('2026-12-31', PTF),
+              'verr_2024': PerimetreDeclare('2024-12-31', PTF),
+              'verr_2025': PerimetreDeclare('2025-12-31', PTF),
+              'verr_2026': PerimetreDeclare('2026-12-31', PTF)}
+    USAGES = {'courant': USAGE_COURANT, 'verr_2024': USAGE_VERROUILLE,
+              'verr_2025': USAGE_VERROUILLE, 'verr_2026': USAGE_VERROUILLE}
+
+    def _ensemble(self, per=None, us=None):
+        return exiger_ensemble_coherent(
+            perimetres=per or self.QUATRE, contexte=CONTEXTE,
+            erreur=RefusMesure, usages=self.USAGES if us is None else us)
+
+    def test_quatre_jeux_a_quatre_arretes_sont_COHERENTS(self):
+        m = self._ensemble()
+        self.assertIn("1 d'usage COURANT", m)
+        self.assertIn('3 VERROUILLÉ', m)
+
+    def test_le_motif_dit_pourquoi_des_arretes_differents_se_tiennent(self):
+        m = self._ensemble()
+        self.assertIn('SE JUGE PAR USAGE', m)
+        self.assertIn('cohortes annuelles', m)
+
+    def test_un_COURANT_perime_reste_refuse(self):
+        """⚠️ L'assouplissement ne doit pas ouvrir l'autre porte."""
+        with self.assertRaises(RefusMesure) as e:
+            self._ensemble({**self.QUATRE,
+                            'courant': PerimetreDeclare('2025-12-31', PTF)})
+        self.assertIn('B72 a)', str(e.exception))
+
+    def test_un_VERROUILLE_dans_le_FUTUR_est_refuse(self):
+        with self.assertRaises(RefusMesure) as e:
+            self._ensemble({**self.QUATRE,
+                            'verr_2024': PerimetreDeclare('2027-12-31', PTF)})
+        self.assertIn('POSTÉRIEUR', str(e.exception))
+
+    def test_deux_verrouilles_au_MEME_arrete_signalent_une_cohorte_oubliee(self):
+        """⚠️ §22 impose des cohortes annuelles : un doublon d'arrêté est
+        soit un doublon, soit une cohorte manquante."""
+        with self.assertRaises(RefusMesure) as e:
+            self._ensemble({**self.QUATRE,
+                            'verr_2025': PerimetreDeclare('2024-12-31', PTF)})
+        self.assertIn('cohorte oubliée', str(e.exception))
+
+    def test_un_usage_non_declare_est_refuse(self):
+        us = {k: v for k, v in self.USAGES.items() if k != 'verr_2026'}
+        with self.assertRaises(RefusMesure) as e:
+            self._ensemble(us=us)
+        self.assertEqual(e.exception.motif, MOTIF_USAGE_NON_DECLARE)
+
+    def test_SANS_usages_l_ancienne_regle_tient(self):
+        """⚠️ Ce n'est pas un défaut à None : c'est le cas où toutes les
+        déclarations servent le même usage, et il reste le plus fréquent."""
+        with self.assertRaises(RefusMesure) as e:
+            self._ensemble(us={})
+        self.assertEqual(e.exception.motif, MOTIF_PERIMETRE_DISCORDANT)
+
+    def test_le_motif_dit_CE_QU_IL_NE_VERIFIE_PAS(self):
+        """⚠️ Il ne sait pas si chaque taux porte l'arrêté de SA cohorte."""
+        self.assertIn('NE VÉRIFIE PAS', self._ensemble())
+        self.assertIn('ne connaît pas les cohortes', self._ensemble())
 
 
 class T3_CeQueLeControleNEtablitPas(unittest.TestCase):

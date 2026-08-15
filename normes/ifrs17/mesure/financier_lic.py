@@ -9,9 +9,16 @@ comprennent la variation de la valeur comptable du groupe de contrats
 d'assurance résultant de : a) l'effet de la valeur temps de l'argent ET DE
 SES VARIATIONS ; et b) l'effet du risque financier et de ses variations. »
 
+⚠️ ET LA DISTINCTION B72 a) / B72 d) EST TOUT LE SUJET DE CE MODULE. B72
+énumère les taux PAR USAGE : a) pour les flux d'exécution, des taux COURANTS
+respectant le §36 ; d) pour l'ajustement du §56 sous PAA, des taux DÉTERMINÉS
+LORS DE LA COMPTABILISATION INITIALE. Le LRC du §56 est figé (d), le LIC du
+§59 b) est courant (a) — et c'est précisément pourquoi les variations de taux
+frappent le second et pas le premier.
+
 ⚠️ CE MODULE COMPLÈTE UN MANQUE NOMMÉ AU PÉRIMÈTRE. La plateforme produisait
 le déroulement du LRC au taux VERROUILLÉ (§56) — insensible aux variations,
-puisque son taux est figé par B72 a). Le passif au titre des sinistres
+puisque son taux est figé par B72 d). Le passif au titre des sinistres
 survenus, lui, relève du §59 b) → §33-37 → §36, qui exige des taux
 « concordant avec les prix de marché COURANTS ». Les variations de taux
 frappent donc le LIC, et cette part du §87 n'existait pas.
@@ -38,7 +45,7 @@ avec ses courbes déclarées et signées ; les mélanger ici ferait de ce module
 un second lieu où vit la règle d'actualisation.
 
 RÉFÉRENCES — IFRS 17, annexe au règlement (UE) 2023/1803, JO L 237 du
-26.9.2023, §87 a), §36, §59 b), B72 a).
+26.9.2023, §87 a), §36, §59 b), B72 a) et B72 d).
 =============================================================================
 """
 

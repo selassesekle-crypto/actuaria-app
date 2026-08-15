@@ -6,7 +6,24 @@
 
 Quand la composante de financement d'un groupe est significative, le §56
 impose d'ajuster le LRC de la valeur temps de l'argent, au taux verrouillé
-à la comptabilisation initiale (§B72 a).
+à la comptabilisation initiale (§B72 d).
+
+⚠️⚠️ ET CE MODULE A CITÉ « B72 a) » SIX FOIS, À TORT — une référence qui, lue,
+RÉFUTE la règle qu'elle appuyait. B72 énumère les taux par usage :
+
+  · **B72 a)** : « pour évaluer les FLUX DE TRÉSORERIE D'EXÉCUTION — des taux
+    d'actualisation COURANTS respectant le paragraphe 36 ». C'est l'exact
+    CONTRAIRE d'un taux verrouillé, et c'est ce qui gouverne `flux_execution`.
+  · **B72 d)** : « pour ajuster, EN APPLICATION DU PARAGRAPHE 56, la valeur
+    comptable du passif au titre de la couverture restante des groupes
+    auxquels est appliquée la méthode d'affectation des primes et qui
+    comportent une composante financement importante — des taux [...]
+    DÉTERMINÉS LORS DE LA COMPTABILISATION INITIALE ». C'est celui-ci.
+
+⚠️ LE COMPORTEMENT ÉTAIT JUSTE, LA JUSTIFICATION ÉTAIT FAUSSE. Le verrouillage
+est fondé — par B72 d). Mais dans un dépôt destiné à un commissaire aux
+comptes, une référence erronée est un défaut à part entière : c'est la
+première chose qu'il vérifiera, et elle l'aurait mené à conclure l'inverse.
 
 ⚠️ LE TAUX EST UNE ENTRÉE DÉCLARÉE ET SIGNÉE, PAS UNE VALEUR DEVINÉE. Ce
 module ne va chercher aucune courbe : il exige qu'on lui remette un taux,
@@ -31,7 +48,7 @@ retournement est fait au point de comparaison, dans le test, et il y est
 écrit — jamais en silence.
 
 RÉFÉRENCES — IFRS 17, annexe au règlement (UE) 2023/1803, JO L 237 du
-26.9.2023, §56 et B72 a).
+26.9.2023, §56, B72 d) et B72 a) — ce dernier par CONTRASTE.
 =============================================================================
 """
 
@@ -99,7 +116,7 @@ TAUX_MIN, TAUX_MAX = -0.10, 0.25
 
 
 class TauxVerrouille(NamedTuple):
-    """Le taux du §B72 a), avec ce qui le rend opposable.
+    """Le taux du §B72 d), avec ce qui le rend opposable.
 
     ⚠️ LES QUATRE CHAMPS SONT OBLIGATOIRES. Un taux sans source ne se
     justifie pas devant un contrôleur ; un taux sans date de verrouillage ne
@@ -128,7 +145,7 @@ def verrouiller(taux: float, arrete_verrouillage: str, source: str,
     if not est_renseigne(arrete_verrouillage):
         raise RefusMesure(
             MOTIF_TAUX_SANS_ARRETE,
-            "le taux est fourni sans sa date de verrouillage. §B72 a) le "
+            "le taux est fourni sans sa date de verrouillage. §B72 d) le "
             "fige à la comptabilisation initiale du groupe : sans cette "
             "date, il ne se rattache à aucun groupe")
     if not TAUX_MIN <= taux <= TAUX_MAX:
@@ -204,13 +221,13 @@ def roll_forward(*, prime: float, nb_periodes: int, taux: TauxVerrouille,
     couverture finit à zéro ; ne pas le vérifier laisserait passer un terme
     perdu, ce qui est précisément l'erreur que j'ai commise.
     """
-    #: ⚠️ B72 a) FIGE LE TAUX À LA COMPTABILISATION INITIALE : son arrêté est
+    #: ⚠️ B72 d) FIGE LE TAUX À LA COMPTABILISATION INITIALE : son arrêté est
     #: dans le passé PAR CONSTRUCTION. Le comparer par égalité refuserait un
     #: taux verrouillé CORRECT — d'où la catégorie déclarée ici.
     exiger_arrete_dans_le_contexte(
         arrete=taux.arrete_verrouillage,
         comparaison=COMPARAISON_ANTERIEUR_OU_EGAL, contexte=contexte,
-        erreur=RefusMesure, objet="le taux verrouillé (B72 a)")
+        erreur=RefusMesure, objet="le taux verrouillé (B72 d)")
 
     lrc = lrc_initial(prime, frais_acquisition,
                       verdict_53_declare=verdict_53_declare)

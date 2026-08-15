@@ -109,14 +109,14 @@ class Y2_LesCinqPortesRefusentToutes(unittest.TestCase):
 
     def test_les_cinq_portes_refusent_un_signataire_fictif(self):
         """⚠️ CINQ PORTES, UN SEUL DEFAUT. Elles portent chacune une
-        decision d'entite differente -- §37, §36 b), §57, B66 d), B72 a) --
+        decision d'entite differente -- §37, §36 b), §57, B66 d), B72 d) --
         et toutes reposaient sur le meme controle perméable."""
         appels = (
             ('§37 ajustement', lambda s: declarer_ajustement(
                 500.0, 'quantile 75 %', 'cout du capital', '2026-12-31', s)),
             ('§36 b) courbe', lambda s: declarer_courbe(
                 {1: 0.02}, 'courbe interne', '2026-12-31', s)),
-            ('B72 a) taux', lambda s: verrouiller(
+            ('B72 d) taux', lambda s: verrouiller(
                 0.02, '2026-01-01', 'courbe interne', s)),
             ('§57 declenchement', lambda s: declarer_declenchement(
                 declenche=False, faits_et_circonstances='', arrete='2026-12-31',

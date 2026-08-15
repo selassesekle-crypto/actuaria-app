@@ -335,7 +335,27 @@ DEMONSTRATION_INCOHERENCE_D_ENSEMBLE = (
     "alimentent un seul calcul.")
 
 
-def exiger_ensemble_coherent(*, perimetres: dict, contexte, erreur) -> str:
+#: ⚠️⚠️ LE TAUX A UN USAGE, ET L'USAGE COMMANDE L'ARRÊTÉ ATTENDU. B72 énumère
+#: les taux PAR USAGE : a) les flux d'exécution prennent des taux COURANTS ;
+#: b), c) et d) prennent des taux DÉTERMINÉS À LA COMPTABILISATION INITIALE du
+#: groupe. Deux déclarations d'arrêtés différents ne sont donc pas
+#: nécessairement incohérentes — elles le sont si elles servent le MÊME usage.
+#:
+#: ⚠️ ET CE CONTRÔLE REFUSAIT UNE DÉCLARATION CORRECTE. Il exigeait UN SEUL
+#: arrêté pour tout l'ensemble. Or §22 impose des COHORTES ANNUELLES : un
+#: portefeuille de trois cohortes a besoin de TROIS taux verrouillés, plus un
+#: taux courant. Quatre jeux, quatre arrêtés, et le tout parfaitement
+#: cohérent. ⚠️ Une exigence FAUSSE bloque ; c'est le défaut le plus visible,
+#: et le plus vite payé.
+USAGE_COURANT = 'COURANT'
+USAGE_VERROUILLE = 'VERROUILLE'
+USAGES_DU_TAUX = (USAGE_COURANT, USAGE_VERROUILLE)
+
+MOTIF_USAGE_NON_DECLARE = 'usage_du_taux_non_declare'
+
+
+def exiger_ensemble_coherent(*, perimetres: dict, contexte, erreur,
+                             usages: dict | None = None) -> str:
     """LA QUATRIÈME QUESTION : ensemble, sont-elles cohérentes ?
 
     ⚠️ ELLE EST IRRÉDUCTIBLE AUX TROIS AUTRES, qui portent chacune sur UNE
@@ -355,6 +375,29 @@ def exiger_ensemble_coherent(*, perimetres: dict, contexte, erreur) -> str:
             "cohérence constatée sur un ensemble vide le serait "
             "trivialement, et ce serait la même faute qu'une gate rendant "
             "« Ran 0 tests » en sortant 0.")
+
+    #: ⚠️ SANS `usages`, ON RETOMBE SUR L'ANCIENNE RÈGLE — un seul arrêté
+    #: pour tout. Ce n'est pas un défaut à None : c'est le cas où toutes les
+    #: déclarations servent le même usage, et il reste le plus fréquent.
+    if usages:
+        inconnus = sorted(n for n in perimetres if n not in usages)
+        if inconnus:
+            raise erreur(
+                MOTIF_USAGE_NON_DECLARE,
+                f"{len(inconnus)} déclaration(s) sans usage déclaré : "
+                f"{inconnus}. Dès qu'un ensemble mêle des usages, CHACUN doit "
+                f"dire le sien — sinon l'arrêté attendu n'est pas déterminé.")
+        mauvais = sorted(n for n, u in usages.items()
+                         if u not in USAGES_DU_TAUX)
+        if mauvais:
+            raise erreur(
+                MOTIF_USAGE_NON_DECLARE,
+                f"usage inconnu pour {mauvais} (attendu l'une de "
+                f"{USAGES_DU_TAUX}). B72 range les taux par usage : les flux "
+                f"d'exécution prennent des taux COURANTS (B72 a), "
+                f"l'ajustement du §56 des taux VERROUILLÉS à la "
+                f"comptabilisation initiale (B72 d).")
+        return _coherence_par_usage(perimetres, usages, contexte, erreur)
 
     arretes = {nom: p.arrete for nom, p in perimetres.items()}
     distincts = sorted(set(arretes.values()))
@@ -394,7 +437,7 @@ def exiger_ensemble_coherent(*, perimetres: dict, contexte, erreur) -> str:
 #:     pour risque, un ultime de projection, une répartition de coûts.
 #:
 #:   · ANTÉRIEUR OU ÉGAL — une valeur FIGÉE ou ÉVÉNEMENTIELLE, dont la date
-#:     est dans le passé PAR CONSTRUCTION : un taux verrouillé, que B72 a)
+#:     est dans le passé PAR CONSTRUCTION : un taux verrouillé, que B72 d)
 #:     fige à la comptabilisation initiale du groupe ; une appréciation du
 #:     §57, portée « à n'importe quel moment au cours de la période de
 #:     couverture ».
@@ -439,7 +482,7 @@ def exiger_arrete_dans_le_contexte(*, arrete, comparaison, contexte, erreur,
             f"ELLE NE SE DÉDUIT PAS DU NOM DU CHAMP : deux champs appelés "
             f"`arrete` désignent ici deux choses opposées — une courbe vaut "
             f"pour la date évaluée, un taux verrouillé est figé dans le "
-            f"passé par B72 a).")
+            f"passé par B72 d).")
     _exiger_arrete_iso(arrete, f"l'arrêté déclaré de {objet}", erreur,
                        MOTIF_ARRETE_HORS_CONTEXTE)
     _exiger_arrete_iso(contexte.arrete, "l'arrêté évalué", erreur,
@@ -463,3 +506,56 @@ def exiger_arrete_dans_le_contexte(*, arrete, comparaison, contexte, erreur,
             f"peuvent pas venir d'après la date qu'on évalue.")
     return (f"{objet} : arrêté {arrete}, antérieur ou égal à l'arrêté évalué "
             f"{contexte.arrete}. " + LIMITE_ANTERIEUR_OU_EGAL)
+
+
+def _coherence_par_usage(perimetres, usages, contexte, erreur) -> str:
+    """La cohérence se juge PAR USAGE, pas sur l'ensemble indistinct.
+
+    ⚠️ LES DEUX USAGES N'ATTENDENT PAS LE MÊME ARRÊTÉ, et c'est tout le
+    point : un taux COURANT doit porter l'arrêté évalué ; un taux VERROUILLÉ
+    porte celui de la cohorte, nécessairement antérieur ou égal. Les
+    confondre refuserait des déclarations correctes — le mode de défaillance
+    qu'une comparaison uniforme produit toujours.
+    """
+    courants = {n: p.arrete for n, p in perimetres.items()
+                if usages[n] == USAGE_COURANT}
+    hors = sorted(n for n, a in courants.items() if a != contexte.arrete)
+    if hors:
+        raise erreur(
+            MOTIF_PERIMETRE_DISCORDANT,
+            f"{len(hors)} déclaration(s) d'usage COURANT ne portent pas "
+            f"l'arrêté évalué {contexte.arrete} : "
+            f"{[(n, courants[n]) for n in hors]}. B72 a) impose des taux "
+            f"COURANTS pour les flux d'exécution.")
+
+    verrouilles = {n: p.arrete for n, p in perimetres.items()
+                   if usages[n] == USAGE_VERROUILLE}
+    futurs = sorted(n for n, a in verrouilles.items() if a > contexte.arrete)
+    if futurs:
+        raise erreur(
+            MOTIF_PERIMETRE_DISCORDANT,
+            f"{len(futurs)} taux VERROUILLÉ(S) portent un arrêté POSTÉRIEUR "
+            f"à l'évaluation : {[(n, verrouilles[n]) for n in futurs]}. Un "
+            f"taux figé à la comptabilisation initiale ne peut pas venir "
+            f"d'après la date qu'on évalue.")
+
+    doublons = [a for a in set(verrouilles.values())
+                if list(verrouilles.values()).count(a) > 1]
+    if doublons:
+        raise erreur(
+            MOTIF_PERIMETRE_DISCORDANT,
+            f"deux taux verrouillés portent le même arrêté {sorted(doublons)} "
+            f"alors qu'ils devraient couvrir des cohortes distinctes. §22 "
+            f"impose des cohortes ANNUELLES : un arrêté en double signale "
+            f"soit un doublon, soit une cohorte oubliée.")
+
+    return (f"{len(perimetres)} déclarations, {len(courants)} d'usage COURANT "
+            f"à l'arrêté évalué {contexte.arrete} et {len(verrouilles)} "
+            f"VERROUILLÉ(S) sur {sorted(verrouilles.values())}. ⚠️ LA "
+            f"COHÉRENCE SE JUGE PAR USAGE : des arrêtés différents ne sont "
+            f"incohérents que s'ils servent le MÊME usage. §22 imposant des "
+            f"cohortes annuelles, un portefeuille de trois cohortes appelle "
+            f"trois taux verrouillés — quatre arrêtés distincts, et l'ensemble "
+            f"se tient. ⚠️ CE CONTRÔLE NE VÉRIFIE PAS que chaque taux "
+            f"verrouillé porte l'arrêté de SA cohorte : il ne connaît pas les "
+            f"cohortes évaluées.")
