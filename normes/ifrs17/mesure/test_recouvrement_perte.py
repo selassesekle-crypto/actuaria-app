@@ -17,14 +17,15 @@ from normes.ifrs17.mesure.recouvrement_perte import (
     DESTINATION_ACTIF,
     DESTINATION_CSM,
     EPSILON_REPRESENTATION,
+    MODELE_GENERAL,
+    MODELE_PAA,
     MOTIF_AFFECTATION_B119E,
+    MOTIF_MODELE_NON_ELU,
     MOTIF_PART_HORS_BORNES,
     MOTIF_PERTE_NEGATIVE,
     MOTIF_PLAFOND_B119F,
-    MOTIF_ROUTAGE_NON_ETABLI,
     PORTEE_DU_CONTROLE_B119F,
     destination_66a,
-    destination_66a_hors_paa,
     part_couverte_b119e,
     recouvrement_b119d,
     verifier_plafond_b119f,
@@ -36,7 +37,7 @@ class TestB119D(unittest.TestCase):
     def test_la_composante_est_le_produit_perte_x_part(self):
         r = recouvrement_b119d(perte_comptabilisee=1000.0,
                                part_recuperable=0.46,
-                               verdict_69=PAA_RA_ELIGIBLE)
+                               modele_elu=MODELE_PAA)
         self.assertAlmostEqual(r.composante, 460.0, places=9)
 
     def test_la_destination_est_portee_par_le_resultat_lui_meme(self):
@@ -47,56 +48,92 @@ class TestB119D(unittest.TestCase):
         """
         r = recouvrement_b119d(perte_comptabilisee=1000.0,
                                part_recuperable=0.46,
-                               verdict_69=PAA_RA_ELIGIBLE)
+                               modele_elu=MODELE_PAA)
         self.assertEqual(r.destination, DESTINATION_ACTIF)
 
     def test_une_perte_negative_n_ouvre_aucun_recouvrement(self):
         with self.assertRaises(RefusMesure) as e:
             recouvrement_b119d(perte_comptabilisee=-1.0, part_recuperable=0.5,
-                               verdict_69=PAA_RA_ELIGIBLE)
+                               modele_elu=MODELE_PAA)
         self.assertEqual(e.exception.motif, MOTIF_PERTE_NEGATIVE)
 
     def test_une_part_hors_de_zero_un_est_refusee(self):
         with self.assertRaises(RefusMesure) as e:
             recouvrement_b119d(perte_comptabilisee=1000.0,
                                part_recuperable=46.0,
-                               verdict_69=PAA_RA_ELIGIBLE)
+                               modele_elu=MODELE_PAA)
         self.assertEqual(e.exception.motif, MOTIF_PART_HORS_BORNES)
 
 
 class TestAiguillage70A(unittest.TestCase):
-    """⚠️ L'AIGUILLE DU §70A EST LE VERDICT §69, ET ELLE PEUT MANQUER."""
+    """⚠️ L'AIGUILLE DU §70A EST LE MODÈLE ÉLU, PAS L'ÉLIGIBILITÉ."""
 
-    def test_en_paa_l_ajustement_va_a_l_actif(self):
-        self.assertEqual(destination_66a(PAA_RA_ELIGIBLE), DESTINATION_ACTIF)
+    def test_evalue_en_paa_l_ajustement_va_a_l_actif(self):
+        a = destination_66a(modele_elu=MODELE_PAA)
+        self.assertEqual(a.destination, DESTINATION_ACTIF)
+        self.assertIn('ÉVALUÉ selon la PAA', a.motif)
 
-    def test_hors_paa_l_ajustement_va_a_la_csm(self):
-        self.assertEqual(destination_66a_hors_paa(), DESTINATION_CSM)
+    def test_evalue_en_modele_general_il_va_a_la_csm(self):
+        a = destination_66a(modele_elu=MODELE_GENERAL)
+        self.assertEqual(a.destination, DESTINATION_CSM)
 
-    def test_un_verdict_non_etabli_refuse_de_router(self):
+    def test_sans_election_le_module_refuse_de_router(self):
+        """⚠️ LE DÉFAUT CORRIGÉ : éligible n'est pas élu."""
         with self.assertRaises(RefusMesure) as e:
-            destination_66a(PAA_RA_NON_ETABLI)
-        self.assertEqual(e.exception.motif, MOTIF_ROUTAGE_NON_ETABLI)
+            destination_66a(modele_elu='')
+        self.assertEqual(e.exception.motif, MOTIF_MODELE_NON_ELU)
 
-    def test_un_69a_non_evalue_refuse_aussi(self):
-        with self.assertRaises(RefusMesure) as e:
-            destination_66a(PAA_RA_69A_NON_EVALUEE)
-        self.assertEqual(e.exception.motif, MOTIF_ROUTAGE_NON_ETABLI)
+    def test_un_verdict_69_ne_suffit_PAS_a_router(self):
+        """⚠️ C'est le coeur du correctif : §69 ouvre une option, il ne la
+        lève pas. Passer le seul verdict ne doit rien décider."""
+        for verdict in (PAA_RA_ELIGIBLE, PAA_RA_NON_ETABLI,
+                        PAA_RA_69A_NON_EVALUEE):
+            with self.assertRaises(RefusMesure) as e:
+                destination_66a(modele_elu='', verdict_69=verdict)
+            self.assertEqual(e.exception.motif, MOTIF_MODELE_NON_ELU)
 
     def test_le_refus_nomme_les_deux_postes_possibles(self):
         """Un refus qui ne dit pas ce qui manque ne se lève pas."""
         with self.assertRaises(RefusMesure) as e:
-            destination_66a(PAA_RA_NON_ETABLI)
+            destination_66a(modele_elu='')
         self.assertIn('couverture restante', str(e.exception))
         self.assertIn('services contractuels', str(e.exception))
 
-    def test_le_recouvrement_ne_se_calcule_pas_sans_destination(self):
+    def test_le_refus_dit_que_l_indetermination_vise_les_treize(self):
+        """⚠️ Elle ne vise pas les seules six quote-parts."""
+        with self.assertRaises(RefusMesure) as e:
+            destination_66a(modele_elu='')
+        self.assertIn('AUCUN des treize', str(e.exception))
+
+    def test_elire_la_paa_sur_un_groupe_non_etabli_signale_la_tension(self):
+        """⚠️ PUBLIÉE, PAS TRANCHÉE — l'élection appartient à l'entité."""
+        a = destination_66a(modele_elu=MODELE_PAA,
+                            verdict_69=PAA_RA_NON_ETABLI)
+        self.assertEqual(a.destination, DESTINATION_ACTIF)
+        self.assertIn('TENSION SIGNALÉE, NON TRANCHÉE', a.motif)
+        self.assertIn('§69 a)', a.motif)
+
+    def test_aucune_tension_quand_l_election_suit_l_eligibilite(self):
+        a = destination_66a(modele_elu=MODELE_PAA, verdict_69=PAA_RA_ELIGIBLE)
+        self.assertNotIn('TENSION', a.motif)
+
+    def test_le_recouvrement_ne_se_calcule_pas_sans_election(self):
         """⚠️ Le montant n'est pas rendu « en attendant » sa destination."""
         with self.assertRaises(RefusMesure) as e:
             recouvrement_b119d(perte_comptabilisee=1000.0,
                                part_recuperable=0.46,
+                               modele_elu='',
                                verdict_69=PAA_RA_NON_ETABLI)
-        self.assertEqual(e.exception.motif, MOTIF_ROUTAGE_NON_ETABLI)
+        self.assertEqual(e.exception.motif, MOTIF_MODELE_NON_ELU)
+
+    def test_le_motif_de_destination_descend_avec_le_recouvrement(self):
+        """⚠️ Séparé du motif B119F : les deux se citent séparément."""
+        r = recouvrement_b119d(perte_comptabilisee=1000.0,
+                               part_recuperable=0.46,
+                               modele_elu=MODELE_PAA,
+                               verdict_69=PAA_RA_NON_ETABLI)
+        self.assertIn('TENSION SIGNALÉE', r.motif_destination)
+        self.assertNotIn('TENSION', r.motif)
 
 
 class TestB119E(unittest.TestCase):
@@ -154,7 +191,7 @@ class TestB119F_FiletDeNonRegression_PasPreuveDeConformite(unittest.TestCase):
         """⚠️ Sinon quelqu'un citera le contrôle comme une preuve."""
         r = recouvrement_b119d(perte_comptabilisee=1000.0,
                                part_recuperable=0.46,
-                               verdict_69=PAA_RA_ELIGIBLE)
+                               modele_elu=MODELE_PAA)
         self.assertEqual(r.motif, PORTEE_DU_CONTROLE_B119F)
         self.assertIn('PAS PREUVE DE CONFORMITÉ', r.motif)
         self.assertIn('PAR CONSTRUCTION', r.motif)
@@ -163,7 +200,7 @@ class TestB119F_FiletDeNonRegression_PasPreuveDeConformite(unittest.TestCase):
         """La gratuité du contrôle est MESURÉE, pas seulement annoncée."""
         r = recouvrement_b119d(perte_comptabilisee=1000.0,
                                part_recuperable=0.46,
-                               verdict_69=PAA_RA_ELIGIBLE)
+                               modele_elu=MODELE_PAA)
         self.assertAlmostEqual(r.composante, r.plafond, places=12)
 
     def test_non_regression_un_calcul_qui_deriverait_est_attrape(self):

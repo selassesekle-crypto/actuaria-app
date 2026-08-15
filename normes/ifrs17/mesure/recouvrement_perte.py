@@ -19,18 +19,37 @@ selon la méthode d'affectation des primes, elle doit appliquer le §66A en
 ajustant la valeur comptable de l'ACTIF au titre de la couverture restante
 PLUTÔT QU'EN AJUSTANT LA MARGE sur services contractuels. »
 
-⚠️⚠️ LE COUPLAGE §66A / §70A EST UN AIGUILLAGE, ET SON AIGUILLE EST LE §69.
-La destination de l'ajustement — l'actif ou la CSM — dépend entièrement de
-l'évaluation du groupe cédé en PAA, que §69 tranche. Or `reassurance_69`
-rend TROIS verdicts, et l'un d'eux n'établit rien. Mesuré sur les treize
-traités livrés : SEPT éligibles, SIX `NON_ETABLI` — et pour ces six, NI la
-CSM NI l'actif ne peuvent être désignés. Ce module REFUSE alors de router,
-au lieu de choisir une destination par défaut.
+⚠️⚠️ LE COUPLAGE §66A / §70A EST UN AIGUILLAGE, ET SON AIGUILLE EST LE MODÈLE
+ÉLU — PAS L'ÉLIGIBILITÉ. Ce module a d'abord routé sur le verdict du §69, et
+c'était FAUX : §70A pose sa condition sur « SI l'entité ÉVALUE un groupe […]
+selon la méthode d'affectation des primes », quand §69 dit seulement que
+l'entité « PEUT » l'appliquer. Une option ouverte n'est pas une option levée.
+⚠️ Le défaut était d'autant plus net que la docstring de l'aiguillage citait
+déjà « ÉVALUE » pendant que le code testait « éligible » : le contrôle était
+écrit, il portait sur autre chose.
 
-⚠️ ET LES SIX NON ÉTABLIS SONT LES QUOTE-PARTS, c'est-à-dire exactement les
-traités qui portent la part de sinistres récupérable dont descend le
-recouvrement. L'aiguillage n'est pas indéterminé sur un coin du portefeuille :
-il l'est là où le recouvrement se joue.
+⚠️ ET L'INDÉTERMINATION EST PLUS LARGE QU'ON NE L'AVAIT DIT. On avait écrit
+qu'elle visait les SIX quote-parts `NON_ETABLI` au §69. En réalité AUCUN des
+treize traités livrés ne porte l'élection du modèle d'évaluation : elle vise
+les TREIZE. Les six restent particuliers pour trois raisons déjà mesurées —
+§62A les reporte, §69 b) ne les établit pas, elles portent le recouvrement —
+mais l'aiguillage du §70A n'en est pas une quatrième.
+
+⚠️ ET LA TENSION ENTRE ÉLECTION ET ÉLIGIBILITÉ SE PUBLIE SANS SE TRANCHER.
+Une entité qui déclare évaluer en PAA un groupe non établi au §69 déclenche
+bien le §70A — le texte vise l'évaluation effective — mais elle affirme du
+même coup le §69 a), que ce code n'a pas vérifié. Le motif le dit ; refuser
+substituerait notre jugement au sien, taire la tension l'effacerait.
+
+⚠️ ET UNE ASYMÉTRIE QU'UN COMMISSAIRE SONDERA, parce que le même mot y
+désigne deux objets différents. §68 pose que « les contrats de réassurance
+détenus NE PEUVENT PAS être déficitaires » et écarte les §47 à 52 : la marge
+sur services contractuels d'un groupe CÉDÉ est donc SIGNÉE — elle peut valoir
+un coût net, sans plancher et sans composante de perte. Celle d'un groupe
+ÉMIS, elle, est bloquée à zéro, et §47-52 fabriquent une composante de perte
+à la place. La composante de RECOUVREMENT du §66B, portée ici, n'est donc pas
+le miroir de la composante de PERTE : elle vit sur un poste qui n'a pas les
+mêmes bornes.
 
 B119D — l'ajustement se calcule « en multipliant a) la perte comptabilisée au
 titre des contrats d'assurance sous-jacents ; et b) le POURCENTAGE des
@@ -84,7 +103,18 @@ from normes.ifrs17.mesure.reassurance_reconciliation import (
 DESTINATION_ACTIF = 'ACTIF_COUVERTURE_RESTANTE'      # §70A — groupe en PAA
 DESTINATION_CSM = 'MARGE_SERVICES_CONTRACTUELS'      # §66A — modèle général
 
-MOTIF_ROUTAGE_NON_ETABLI = 'destination_66a_non_etablie'
+#: ⚠️⚠️ LE MODÈLE ÉLU, ET C'EST LUI QUE §70A INTERROGE — PAS L'ÉLIGIBILITÉ.
+#: §70A dit « SI l'entité ÉVALUE un groupe […] selon la méthode d'affectation
+#: des primes ». §69 dit que l'entité « PEUT » l'appliquer : c'est une OPTION,
+#: et une option ouverte n'est pas une option levée. Router sur l'éligibilité
+#: supposerait une élection que personne n'a déclarée — le défaut corrigé ici,
+#: et il était d'autant plus net que la docstring citait déjà « ÉVALUE »
+#: pendant que le code testait « éligible ».
+MODELE_PAA = 'PAA'
+MODELE_GENERAL = 'MODELE_GENERAL'
+MODELES = (MODELE_PAA, MODELE_GENERAL)
+
+MOTIF_MODELE_NON_ELU = 'modele_d_evaluation_non_elu'
 MOTIF_PART_HORS_BORNES = 'part_recuperable_hors_bornes'
 MOTIF_PERTE_NEGATIVE = 'perte_comptabilisee_negative'
 MOTIF_PLAFOND_B119F = 'composante_au_dessus_du_plafond_b119f'
@@ -108,43 +138,69 @@ PORTEE_DU_CONTROLE_B119F = (
 
 class Recouvrement(NamedTuple):
     """La composante du §66B, sa destination, et la portée de son contrôle."""
-    composante:  float
-    plafond:     float
+    composante:         float
+    plafond:            float
+    destination:        str
+    motif:              str
+    #: ⚠️ SUR QUOI LA DESTINATION A ÉTÉ DÉCIDÉE — séparé du motif B119F parce
+    #: que les deux se citent séparément, et qu'un motif fourre-tout se cite
+    #: en entier ou pas du tout.
+    motif_destination:  str
+
+
+class Aiguillage70A(NamedTuple):
+    """La destination du §66A, et ce sur quoi elle a été décidée."""
     destination: str
     motif:       str
 
 
-def destination_66a(verdict_69: str) -> str:
-    """§70A — l'aiguillage, et il refuse de deviner.
+def destination_66a(*, modele_elu: str, verdict_69: str = '') -> Aiguillage70A:
+    """§70A — l'aiguillage, sur le modèle ÉLU et non sur l'éligibilité.
 
-    ⚠️ TROIS VERDICTS ENTRENT, DEUX DESTINATIONS SORTENT, ET LE TROISIÈME NE
-    SORT PAS. §70A ne s'applique que « SI l'entité évalue le groupe selon la
-    méthode d'affectation des primes ». Tant que §69 n'a rien établi, la
-    condition du §70A n'est ni vraie ni fausse : router quand même
-    placerait un ajustement sur un poste que la norme ne désigne pas.
+    ⚠️⚠️ CE MODULE A ROUTÉ SUR L'ÉLIGIBILITÉ, ET C'ÉTAIT FAUX. §70A pose sa
+    condition sur « SI l'entité ÉVALUE un groupe […] selon la méthode
+    d'affectation des primes » ; §69 dit que l'entité « PEUT » l'appliquer.
+    Éligible n'est pas élu, et router sur le premier supposait le second.
+
+    ⚠️ ET LA TENSION ENTRE L'ÉLECTION ET L'ÉLIGIBILITÉ SE PUBLIE, ELLE NE SE
+    TRANCHE PAS. Si l'entité déclare mesurer en PAA un groupe dont
+    l'éligibilité n'est pas établie, §70A s'applique tout de même — son
+    déclencheur est l'évaluation effective. Refuser substituerait notre
+    jugement au sien ; taire la tension la ferait disparaître. Le motif la
+    porte, et `reassurance_69` continue de dire ce qu'il sait.
     """
-    if verdict_69 == PAA_RA_ELIGIBLE:
-        return DESTINATION_ACTIF
-    raise RefusMesure(
-        MOTIF_ROUTAGE_NON_ETABLI,
-        f"le verdict §69 du groupe cédé vaut {verdict_69!r} : l'éligibilité à "
-        f"la PAA n'est pas ÉTABLIE, et §70A y subordonne toute sa règle "
-        f"(« SI l'entité évalue […] selon la méthode d'affectation des "
-        f"primes »). L'ajustement du §66A irait à l'actif au titre de la "
-        f"couverture restante si le groupe est en PAA, à la marge sur "
-        f"services contractuels sinon : les deux postes sont réels, ils ne "
-        f"sont pas le même, et rien ne permet de choisir. ⚠️ Sur le "
-        f"portefeuille mesuré, les six groupes concernés sont les "
-        f"quote-parts — celles-là mêmes qui portent la part de sinistres "
-        f"récupérable dont descend le recouvrement")
+    if modele_elu not in MODELES:
+        raise RefusMesure(
+            MOTIF_MODELE_NON_ELU,
+            f"le modèle d'évaluation du groupe cédé n'est pas déclaré (reçu "
+            f"{modele_elu!r}, attendu l'une de {MODELES}). §70A y subordonne "
+            f"toute sa règle : l'ajustement du §66A irait à l'actif au titre "
+            f"de la couverture restante si le groupe est ÉVALUÉ en PAA, à la "
+            f"marge sur services contractuels sinon. Les deux postes sont "
+            f"réels, ils ne sont pas le même, et l'éligibilité du §69 ne "
+            f"permet pas de choisir — elle ouvre une option, elle ne la lève "
+            f"pas. ⚠️ Sur le portefeuille mesuré, AUCUN des treize traités ne "
+            f"porte cette élection : l'indétermination est générale, elle ne "
+            f"vise pas les seules six quote-parts")
 
+    if modele_elu == MODELE_GENERAL:
+        return Aiguillage70A(DESTINATION_CSM, (
+            "le groupe cédé est ÉVALUÉ selon le modèle général : la condition "
+            "du §70A n'est pas remplie, et l'ajustement du §66A rejoint la "
+            "marge sur services contractuels."))
 
-def destination_66a_hors_paa() -> str:
-    """La destination quand le groupe cédé N'EST PAS en PAA — et elle se
-    déclare. ⚠️ Passer par une fonction distincte plutôt que par un défaut
-    de `destination_66a` est délibéré : « pas éligible » et « non établi »
-    sont deux états différents, et un défaut les confondrait."""
-    return DESTINATION_CSM
+    base = ("le groupe cédé est ÉVALUÉ selon la PAA : §70A s'applique et "
+            "l'ajustement du §66A rejoint l'actif au titre de la couverture "
+            "restante, et non la marge sur services contractuels.")
+    if verdict_69 and verdict_69 != PAA_RA_ELIGIBLE:
+        return Aiguillage70A(DESTINATION_ACTIF, base + (
+            f" ⚠️ TENSION SIGNALÉE, NON TRANCHÉE : l'élection porte sur un "
+            f"groupe dont le verdict §69 vaut {verdict_69!r}, donc dont "
+            f"l'éligibilité n'est pas établie par le calcul. §70A se "
+            f"déclenche sur l'évaluation EFFECTIVE, et l'élection appartient "
+            f"à l'entité — mais elle emporte alors une affirmation du §69 a), "
+            f"que ce code n'a pas vérifiée."))
+    return Aiguillage70A(DESTINATION_ACTIF, base)
 
 
 def part_couverte_b119e(*, perte_du_groupe: float,
@@ -186,7 +242,8 @@ def part_couverte_b119e(*, perte_du_groupe: float,
 
 def recouvrement_b119d(*, perte_comptabilisee: float,
                        part_recuperable: float,
-                       verdict_69: str) -> Recouvrement:
+                       modele_elu: str,
+                       verdict_69: str = '') -> Recouvrement:
     """B119D + §66B + §70A — la composante, son plafond et sa destination.
 
     ⚠️ LE PLAFOND EST RENDU AVEC LA COMPOSANTE, et il lui est ici ÉGAL. C'est
@@ -207,11 +264,13 @@ def recouvrement_b119d(*, perte_comptabilisee: float,
             f"recouvrement, donc dans [0, 1]")
 
     composante = perte_comptabilisee * part_recuperable
+    aiguillage = destination_66a(modele_elu=modele_elu, verdict_69=verdict_69)
     return Recouvrement(
         composante=composante,
         plafond=perte_comptabilisee * part_recuperable,
-        destination=destination_66a(verdict_69),
-        motif=PORTEE_DU_CONTROLE_B119F)
+        destination=aiguillage.destination,
+        motif=PORTEE_DU_CONTROLE_B119F,
+        motif_destination=aiguillage.motif)
 
 
 def verifier_plafond_b119f(composante: float, plafond: float, *,
