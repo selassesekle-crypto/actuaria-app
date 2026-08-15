@@ -53,17 +53,32 @@ MOTIF_AUCUN_SOLDE = 'aucun_solde_fourni'
 MOTIF_PORTEFEUILLE_VIDE = 'portefeuille_sans_nom'
 
 #: ⚠️ CE QUE LE BILAN RENDU NE COUVRE PAS, ET QUI DOIT L'ACCOMPAGNER. §78 c)
-#: et d) exigent les portefeuilles de réassurance détenue, séparément. Ils ne
-#: sont pas construits. Un état à deux lignes présenté comme complet ferait
-#: lire « pas de réassurance » là où il faut lire « réassurance non mesurée ».
+#: et d) exigent les portefeuilles de réassurance détenue, séparément. Cet
+#: état ne les porte pas. Un état à deux lignes présenté comme complet ferait
+#: lire « pas de réassurance » là où il faut lire « réassurance non présentée
+#: ICI ».
+#:
+#: ⚠️⚠️ CE MOTIF DISAIT « LA RÉASSURANCE DÉTENUE (§60-70A) N'EST PAS
+#: CONSTRUITE », ET C'ÉTAIT FAUX — mesuré : huit modules, 1 837 lignes, 154
+#: tests. La conclusion tenait, la PRÉMISSE était fausse : les deux lignes
+#: manquent parce que `Bilan` n'a aucun champ pour elles, pas parce que la
+#: réassurance ne serait pas mesurée.
+#:
+#: ⚠️ C'EST LA TROISIÈME FOIS QUE CE CHANTIER RENCONTRE CETTE FORME — une
+#: conclusion vraie adossée à une référence qui dit autre chose. B72 a) citée
+#: pour une règle qu'elle contredit ; §22 invoqué comme appui d'une date de
+#: taux ; et ici un état de périmètre périmé, recopié dans un motif qui
+#: DESCEND AVEC UN BILAN REMIS AU CLIENT. C'est ce dernier point qui la rend
+#: plus grave que les deux premières : elle ne vivait pas dans un commentaire.
 MOTIF_REASSURANCE_ABSENTE = (
     "état de la situation financière PARTIEL — §78 c) et d) exigent de "
     "présenter séparément les portefeuilles de réassurance DÉTENUE qui sont "
-    "des actifs et ceux qui sont des passifs. La réassurance détenue "
-    "(§60-70A) n'est pas construite : ces deux lignes sont ABSENTES, elles "
-    "ne valent pas zéro. ⚠️ Un état à deux lignes lu comme complet ferait "
-    "conclure qu'il n'y a pas de réassurance, ce qui n'est pas la même "
-    "chose que ne pas la mesurer.")
+    "des actifs et ceux qui sont des passifs. Cet état ne porte pas ces deux "
+    "lignes : elles sont ABSENTES, elles ne valent pas zéro. ⚠️ Un état à "
+    "deux lignes lu comme complet ferait conclure qu'il n'y a pas de "
+    "réassurance, ce qui n'est pas la même chose que ne pas la présenter "
+    "ici. ⚠️ ET LA RÉASSURANCE DÉTENUE EST MESURÉE PAR AILLEURS (§60-70A) : "
+    "ce qui manque est la ligne de bilan, pas la mesure.")
 
 
 class SoldeGroupe(NamedTuple):

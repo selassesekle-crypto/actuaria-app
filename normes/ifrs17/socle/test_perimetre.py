@@ -8,12 +8,16 @@ import unittest
 
 from normes.ifrs17.socle.contrat import EXIGENCES, SOURCE_IFRS17
 from normes.ifrs17.socle.perimetre import (
+    BATI,
+    BATI_N_EST_PAS_OPPOSABLE,
     CONTROLES,
     COUVERT,
     ETATS,
     HORS_PERIMETRE,
     NON_CONSTRUIT,
+    OPPOSABILITES,
     PERIMETRE,
+    SOUS_RESERVE,
     Element,
     elements,
     mention_directions,
@@ -28,11 +32,87 @@ def _paragraphes(reference):
             for n, b in re.findall(r'§?(\d+)|B(\d+)', reference)}
 
 
-class T1_LesTroisEtats(unittest.TestCase):
-    """T1 — confondre « exclu » et « pas encore fait » tromperait deux fois."""
+class T0_LeQuatriemeEtatEtSonVERROU(unittest.TestCase):
+    """⚠️⚠️ `NON_CONSTRUIT` DISAIT DEUX CHOSES OPPOSÉES, ET C'ÉTAIT MESURÉ :
+    « rien n'existe » (§93-132) et « 20 modules, 5 182 lignes, 378 tests avec
+    des manques nommés » (§33-37, §55-59, §60-70A, §78-92). Un client ne
+    pouvait pas les distinguer — et le préambule du même document
+    revendiquait ces quatre pans.
 
-    def test_trois_etats_et_pas_deux(self):
-        self.assertEqual(set(ETATS), {COUVERT, HORS_PERIMETRE,
+    ⚠️ LE VERROU EST LE CŒUR DE CE LOT. Corriger les états d'aujourd'hui sans
+    empêcher ceux de demain aurait laissé la dérive se reformer : c'est la
+    leçon du lot précédent — une exclusion que personne ne contrôle est une
+    intention.
+    """
+
+    def test_UN_PAN_NON_CONSTRUIT_NE_PEUT_PAS_PORTER_DE_MODULES(self):
+        """⚠️⚠️ LE VERROU. `mesure.PARAGRAPHE_DES_MODULES` est le registre
+        que les modules tiennent d'eux-mêmes. Un pan qui y figure a du code ;
+        le déclarer « rien n'existe encore » est faux, et c'est exactement ce
+        qui s'était produit sur quatre pans.
+
+        ⚠️ Il est placé DANS LE SOCLE, qui publie le périmètre : c'est à
+        celui qui AFFIRME de crier quand son affirmation cesse d'être vraie.
+        """
+        from normes.ifrs17.mesure import PARAGRAPHE_DES_MODULES
+        avec_code = set(PARAGRAPHE_DES_MODULES.values())
+        fautifs = [e.reference for e in elements(NON_CONSTRUIT)
+                   if e.reference in avec_code]
+        self.assertEqual(
+            fautifs, [],
+            f"{len(fautifs)} pan(s) déclarés NON_CONSTRUIT portent pourtant "
+            f"des modules au registre de la mesure : {fautifs}. Un pan qui a "
+            f"du code n'est pas « rien n'existe encore » — il est BATI, et sa "
+            f"raison dit ce qui lui manque à l'intérieur.")
+        print(f"    OK T0 : {len(elements(NON_CONSTRUIT))} pans NON_CONSTRUIT, "
+              "aucun ne porte de module")
+
+    def test_UN_PAN_BATI_DOIT_PORTER_DES_MODULES(self):
+        """⚠️ LE VERROU DANS L'AUTRE SENS, et il compte autant. Déclarer
+        « bâti » un pan sans code serait la sur-affirmation symétrique — la
+        faute que le préambule commettait."""
+        from normes.ifrs17.mesure import PARAGRAPHE_DES_MODULES
+        avec_code = set(PARAGRAPHE_DES_MODULES.values())
+        fautifs = [e.reference for e in elements(BATI)
+                   if e.reference not in avec_code]
+        self.assertEqual(
+            fautifs, [],
+            f"{len(fautifs)} pan(s) déclarés BATI ne portent AUCUN module : "
+            f"{fautifs}. « Bâti » se prouve par du code, pas par une "
+            f"étiquette.")
+        print(f"    OK T0b : {len(elements(BATI))} pans BATI, tous adosses a "
+              "des modules du registre")
+
+    def test_tout_pan_BATI_declare_son_OPPOSABILITE(self):
+        """⚠️ BÂTI N'EST PAS OPPOSABLE. Un pan bâti dont l'opposabilité n'est
+        pas dite se ferait lire comme opposable — la sur-affirmation par
+        omission."""
+        for e in elements(BATI):
+            self.assertIn(e.opposabilite, OPPOSABILITES, e.reference)
+            if e.opposabilite == SOUS_RESERVE:
+                self.assertTrue(
+                    e.reserve.strip(),
+                    f"{e.reference} réserve son opposabilité sans dire "
+                    f"pourquoi — une réserve sans motif est une omission "
+                    f"déguisée, comme une exclusion sans raison")
+
+    def test_le_defaut_d_opposabilite_est_VIDE_et_non_SANS_OBJET(self):
+        """⚠️ UN DÉFAUT QUI VAUT UNE RÉPONSE VALIDE ferait passer un champ non
+        renseigné pour une décision. « Non vide n'est pas renseigné », et le
+        dépôt l'a déjà payé une fois."""
+        self.assertEqual(Element('x', COUVERT, 'y').opposabilite, '')
+        self.assertNotIn('', OPPOSABILITES)
+
+
+class T1_LesQuatreEtats(unittest.TestCase):
+    """T1 — confondre deux états trompe, quel que soit le couple."""
+
+    def test_quatre_etats_et_pas_trois(self):
+        """⚠️ CE TEST EXIGEAIT TROIS ÉTATS, ET IL AVAIT RAISON QUAND IL A ÉTÉ
+        ÉCRIT. Le même argument — « confondre tromperait dans les deux
+        sens » — en a exigé un quatrième dès que des pans ont été bâtis avec
+        des manques nommés."""
+        self.assertEqual(set(ETATS), {COUVERT, BATI, HORS_PERIMETRE,
                                       NON_CONSTRUIT})
         for etat in ETATS:
             self.assertTrue(elements(etat), f"état {etat} vide")
@@ -78,18 +158,29 @@ class T2_LePerimetreNeRevendiquePasPlusQueLeSocle(unittest.TestCase):
         print(f"    OK T2 : les {len(elements(COUVERT))} elements couverts "
               f"sont adosses aux {len(EXIGENCES)} exigences du socle")
 
-    def test_ce_qui_n_est_pas_construit_n_est_pas_declare_couvert(self):
-        """La mesure PAA, la reassurance et la presentation ne sont PAS
-        couvertes — les annoncer telles serait la faute inverse."""
+    def test_ce_qui_est_BATI_n_est_pas_pour_autant_declare_couvert(self):
+        """⚠️ CE TEST DISAIT « la mesure PAA, la réassurance et la
+        présentation NE SONT PAS COUVERTES », et il avait raison. Il en
+        tirait qu'elles étaient NON_CONSTRUITES, et c'était la faute inverse
+        — mesuré : 18 modules, 3 913 lignes, 279 tests sur ces trois pans.
+
+        ⚠️ SA GARDE SURVIT INTACTE : `BATI` n'est pas `COUVERT`. Le premier
+        dit qu'un mécanisme existe, le second qu'il est adossé aux exigences
+        que `contrat.EXIGENCES` nomme. Les confondre serait la
+        sur-affirmation que ce test existe pour empêcher.
+        """
+        batis = ' '.join(e.reference for e in elements(BATI))
+        for attendu in ('§55-59', '§60-70A', '§78-92', '§33-37'):
+            self.assertIn(attendu, batis)
         non_construits = ' '.join(e.reference for e in
                                   elements(NON_CONSTRUIT))
-        for attendu in ('§55-59', '§60-70A', '§78-92', '§93-132'):
-            self.assertIn(attendu, non_construits)
+        self.assertIn('§93-132', non_construits)
         couverts = ' '.join(e.reference for e in elements(COUVERT))
         for interdit in ('§55', '§60', '§80', '§100', '§130'):
             self.assertNotIn(interdit, couverts)
-        print("    OK T2b : mesure, reassurance, presentation et annexes "
-              "sont NON CONSTRUITES, jamais annoncees couvertes")
+        print("    OK T2b : mesure, reassurance et presentation sont BATIES "
+              "-- jamais annoncees COUVERTES, les annexes restent non "
+              "construites")
 
 
 class T3_LesExclusionsQueLeTexteImpose(unittest.TestCase):
@@ -260,10 +351,17 @@ class T3_LesExclusionsQueLeTexteImpose(unittest.TestCase):
         ete. Il ne fige pas une redaction -- il exige que la raison suive
         l'etat. Ses assertions se mettent donc a jour AVEC lui, jamais en
         retablissant les mots d'avant.
+
+        ⚠️⚠️ ET IL SURVEILLAIT LA RAISON EN ETANT AVEUGLE A L'ETIQUETTE. Deux
+        fois il a fait corriger la prose de ce pan, et deux fois il a laisse
+        `NON_CONSTRUIT` intact -- sur trois modules bâtis et 34 tests. La
+        sous-affirmation qu'il combattait vivait donc, tout ce temps, dans le
+        champ d'à côté. Un controle qui verifie un axe ne voit pas l'autre :
+        c'est le motif de ce depot, applique a un test.
         """
         refs = {e.reference: e for e in PERIMETRE}
         e = refs['§78-92']
-        self.assertEqual(e.etat, NON_CONSTRUIT)
+        self.assertEqual(e.etat, BATI)
         self.assertNotIn("aucun n'est encore produit", e.raison)
         # ⚠️ ce qui est BATI doit etre nomme comme tel
         self.assertIn('§78-79, LA PRÉSENTATION AU BILAN : BÂTIE', e.raison)
@@ -316,7 +414,7 @@ class T3_LesExclusionsQueLeTexteImpose(unittest.TestCase):
         refs = {e.reference: e for e in PERIMETRE}
         self.assertIn('§33-37, B36-B92', refs)
         flux = refs['§33-37, B36-B92']
-        self.assertEqual(flux.etat, NON_CONSTRUIT)
+        self.assertEqual(flux.etat, BATI)
         self.assertIn('§59 b)', flux.raison)
         hors = ' '.join(e.reference for e in elements(HORS_PERIMETRE))
         self.assertNotIn('§32-52', hors)
@@ -406,23 +504,47 @@ class T5_LaMentionDePerimetrePartiel(unittest.TestCase):
 class T6_LeTextePublie(unittest.TestCase):
     """T6 — ce qui se remet à un actuaire ou à un commissaire."""
 
-    def test_le_texte_porte_les_trois_sections_et_les_raisons(self):
+    def test_le_texte_porte_les_quatre_sections_et_les_raisons(self):
         t = texte()
         for attendu in ('PÉRIMÈTRE IFRS 17', 'CE QUI EST COUVERT',
-                        'PAS ENCORE CONSTRUIT', 'DÉCISIONS ASSUMÉES',
-                        'SIGNALÉS par'):
+                        'BÂTI ET TESTÉ', "RIEN N'EXISTE ENCORE",
+                        'DÉCISIONS ASSUMÉES', 'SIGNALÉS par'):
             self.assertIn(attendu, t)
         for e in elements(HORS_PERIMETRE):
             self.assertIn(e.reference, t)
         print(f"    OK T6 : {len(texte().splitlines())} lignes, "
-              "3 sections, toutes les references citees")
+              "4 sections, toutes les references citees")
+
+    def test_le_preambule_NE_SUR_AFFIRME_PLUS(self):
+        """⚠️⚠️ IL DISAIT « la plateforme COUVRE l'évaluation, la
+        présentation et la clôture » et « conserve les clôtures
+        successives ». Les trois étaient faux : §93-132 n'est pas bâti, et la
+        persistance des soldes n'existe pas. ⚠️ Et le corps du MÊME document
+        déclarait NON_CONSTRUIT les pans que le préambule revendiquait."""
+        t = texte()
+        for disparu in ('couvre', 'conserve les clôtures successives'):
+            self.assertNotIn(disparu, t.split('CE QUI EST COUVERT')[0])
+        self.assertIn(BATI_N_EST_PAS_OPPOSABLE, t)
+        self.assertIn("BÂTI N'EST PAS OPPOSABLE", t)
+
+    def test_le_texte_publie_porte_les_RESERVES_d_opposabilite(self):
+        """⚠️ Un pan bâti dont la réserve ne descend pas se lirait comme
+        opposable. C'est la seule chose qui sépare « la plateforme sait le
+        calculer » de « ce montant peut être signé »."""
+        t = texte()
+        self.assertIn('OPPOSABILITÉ RÉSERVÉE', t)
+        self.assertIn('CADENCES INVENTÉES', t)
+        for e in elements(BATI):
+            if e.opposabilite == SOUS_RESERVE:
+                self.assertIn(e.reserve, t, e.reference)
 
     def test_aucun_element_n_est_oublie_du_texte(self):
         t = texte()
         for e in PERIMETRE:
             self.assertIn(e.libelle.split('\n')[0][:40], t, e.reference)
         self.assertEqual(set(Element._fields),
-                         {'reference', 'etat', 'libelle', 'raison'})
+                         {'reference', 'etat', 'libelle', 'raison',
+                          'opposabilite', 'reserve'})
         print(f"    OK T6b : les {len(PERIMETRE)} elements figurent au texte")
 
 

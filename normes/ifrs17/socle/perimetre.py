@@ -37,12 +37,54 @@ from typing import NamedTuple
 
 #: Le socle le fait, et `contrat.EXIGENCES` le nomme.
 COUVERT = 'COUVERT'
+#: ⚠️⚠️ LE QUATRIÈME ÉTAT, ET C'EST CE DOCUMENT QUI L'A EXIGÉ. Sa propre
+#: en-tête plaidait « TROIS ÉTATS, ET NON DEUX » — confondre « hors
+#: périmètre » et « pas encore construit » trompe dans les deux sens. Le même
+#: raisonnement en imposait un de plus, et la mesure l'a montré :
+#:
+#:   `NON_CONSTRUIT` disait à la fois « RIEN N'EXISTE » (§93-132) et
+#:   « 20 modules, 5 182 lignes, 378 tests, avec des manques nommés »
+#:   (§33-37, §55-59, §60-70A, §78-92).
+#:
+#: ⚠️ UN CLIENT NE POUVAIT PAS LES DISTINGUER — et le préambule du même
+#: document revendiquait ces quatre pans. Sur-affirmation en tête,
+#: sous-affirmation dans le corps, dans un seul texte.
+#:
+#: `BATI` dit : le mécanisme existe et il est testé. Ce qui lui manque À
+#: L'INTÉRIEUR vit dans sa `raison`, qui l'a toujours dit avec précision.
+BATI = 'BATI'
 #: Décision assumée : la plateforme ne le fera pas, et dit pourquoi.
 HORS_PERIMETRE = 'HORS_PERIMETRE'
-#: Prévu, pas encore fait. ⚠️ N'est PAS une exclusion.
+#: Prévu, RIEN n'existe encore. ⚠️ N'est PAS une exclusion, et n'est PAS
+#: « BATI avec des manques » — c'est exactement la confusion que le
+#: quatrième état a défaite.
 NON_CONSTRUIT = 'NON_CONSTRUIT'
 
-ETATS = (COUVERT, HORS_PERIMETRE, NON_CONSTRUIT)
+ETATS = (COUVERT, BATI, HORS_PERIMETRE, NON_CONSTRUIT)
+
+#: ⚠️⚠️ L'OPPOSABILITÉ EST UNE PROPRIÉTÉ DE LA DONNÉE, PAS DU PAN — et c'est
+#: pourquoi elle est un CHAMP et non un cinquième état. Le jour où le client
+#: remet un triangle de liquidation signé, quatre pans deviennent opposables
+#: SANS QU'UNE LIGNE DE CODE CHANGE. En faire un état obligerait à réécrire
+#: le périmètre pour un fait qui ne le concerne pas.
+#:
+#: ⚠️ ET LA DISTINCTION N'EST PAS THÉORIQUE : c'est aujourd'hui la seule qui
+#: sépare « la plateforme sait le calculer » de « ce montant peut être signé ».
+#: Le triangle disponible porte la mention « cadences INVENTÉES » ; les cinq
+#: déclarations de taux portent `DEMONSTRATION_NON_SIGNEE` et `qualite=TIERS`.
+OPPOSABLE = 'OPPOSABLE'
+SOUS_RESERVE = 'SOUS_RESERVE'
+OPPOSABILITE_SANS_OBJET = 'SANS_OBJET'
+
+OPPOSABILITES = (OPPOSABLE, SOUS_RESERVE, OPPOSABILITE_SANS_OBJET)
+
+#: ⚠️ LA PHRASE QUI PORTE TOUT CE DOCUMENT, et elle descend dans le texte
+#: publié parce que c'est là qu'elle sert.
+BATI_N_EST_PAS_OPPOSABLE = (
+    "⚠️ BÂTI N'EST PAS OPPOSABLE, ET LA DIFFÉRENCE EST LE TOUT DE CE "
+    "DOCUMENT. Un pan BÂTI a son mécanisme écrit et testé ; cela ne dit rien "
+    "de la valeur des montants qui en sortent, laquelle dépend de la donnée "
+    "remise et de sa signature.")
 
 
 class Element(NamedTuple):
@@ -50,11 +92,20 @@ class Element(NamedTuple):
 
     `raison` est obligatoire hors du cas COUVERT : une exclusion sans motif
     est une omission déguisée.
+
+    ⚠️ `opposabilite` ET `reserve` FORMENT LE MÊME COUPLE QUE `etat` ET
+    `raison` — un verdict clos, et son motif obligatoire dès qu'il réserve.
+    Leur défaut est la chaîne VIDE et non `SANS_OBJET` : un défaut qui vaut
+    une réponse valide ferait passer un champ non renseigné pour une décision.
+    C'est la faute que ce dépôt a déjà payée avec « non vide n'est pas
+    renseigné ».
     """
-    reference: str
-    etat:      str
-    libelle:   str
-    raison:    str = ''
+    reference:    str
+    etat:         str
+    libelle:      str
+    raison:       str = ''
+    opposabilite: str = ''
+    reserve:      str = ''
 
 
 PERIMETRE: tuple[Element, ...] = (
@@ -229,7 +280,7 @@ PERIMETRE: tuple[Element, ...] = (
     # lui sont IMPOSÉS. Les laisser dans un « §32-52 hors périmètre » les
     # faisait passer pour écartés quand ils sont dus — l'exacte confusion que
     # ce module existe pour empêcher.
-    Element('§33-37, B36-B92', NON_CONSTRUIT,
+    Element('§33-37, B36-B92', BATI,
             "Flux de trésorerie d'exécution : estimation, actualisation, "
             "ajustement au titre du risque",
             "Imposés en PAA par §59 b) pour le passif au titre des sinistres "
@@ -254,7 +305,13 @@ PERIMETRE: tuple[Element, ...] = (
             "pas « renseigné ». Les cinq portes du chantier refusent "
             "désormais aussi `A_RENSEIGNER`, `TBD`, `N/A`, `TODO` et leurs "
             "variantes — contrôle calibré sur 21 valeurs légitimes et 21 "
-            "formes fictives, zéro rejet à tort."),
+            "formes fictives, zéro rejet à tort.",
+            SOUS_RESERVE,
+            "Aucune donnée de sinistres n'a été remise : ni triangle de "
+            "liquidation, ni échéancier de règlement. Le module ne peut être "
+            "alimenté que par des montants saisis, et il n'est adossé à "
+            "AUCUNE source externe — ses garanties sont des invariants "
+            "internes, pas une concordance publiée."),
     Element('§45, §71, B101-B118', HORS_PERIMETRE,
             "Contrats avec éléments de participation directe (VFA) et "
             "contrats d'investissement avec participation discrétionnaire",
@@ -342,7 +399,7 @@ PERIMETRE: tuple[Element, ...] = (
             "le §80 sera bâti."),
 
     # ── Prévu, pas encore construit ─────────────────────────────────────────
-    Element('§55-59, B125-B126', NON_CONSTRUIT,
+    Element('§55-59, B125-B126', BATI,
             "Évaluation PAA : LRC, élément de perte, revenu, charges",
             "Le socle constitue les groupes et les scelle. LA MESURE EST "
             "PARTIELLEMENT BÂTIE, et le détail compte plus que le mot : "
@@ -368,8 +425,13 @@ PERIMETRE: tuple[Element, ...] = (
             "attestée par l'actuaire signataire. "
             "⚠️ RESTE NON BÂTI : §59 a), l'option de passer les frais "
             "d'acquisition en charges — c'est un choix de l'entité, pas une "
-            "règle."),
-    Element('§60-70A', NON_CONSTRUIT,
+            "règle.",
+            SOUS_RESERVE,
+            "Le triangle de liquidation disponible porte la mention "
+            "« synthétique, CADENCES INVENTÉES » : aucun montant qui en "
+            "descend n'est opposable tant que la source n'est pas attestée "
+            "par l'actuaire signataire. La réserve accompagne toute sortie."),
+    Element('§60-70A', BATI,
             "Réassurance détenue",
             "⚠️ CE N'EST PAS UN « RÉGIME PROPRE », ET LA RAISON LE DISAIT À "
             "TORT. §61 impose de diviser les portefeuilles « CONFORMÉMENT "
@@ -535,7 +597,14 @@ PERIMETRE: tuple[Element, ...] = (
             "qualification « événements antérieurs » du §65A, le montant "
             "décomptabilisé du §65 b), et le modèle d'évaluation du groupe "
             "SOUS-JACENT pour l'exclusion du §66 c) ii) — distinct de celui "
-            "du groupe cédé."),
+            "du groupe cédé.",
+            SOUS_RESERVE,
+            "Quatre décisions restent remises à l'entité et aucune n'est "
+            "signée à ce jour : la méthode du §64, les unités de couverture "
+            "de B119 pour le poste §66 e), la qualification « événements "
+            "antérieurs » du §65A et le montant décomptabilisé du §65 b). "
+            "S'y ajoute la réserve des sinistres survenus, dont dépend la "
+            "part cédée."),
     # ⚠️ CETTE RAISON SOUS-AFFIRMAIT, ET C'EST LA FAUTE INVERSE DE CELLE
     # CORRIGÉE EN C2-0. Elle disait « aucun n'est encore produit » : faux
     # depuis que la mesure existe. `mesure.lrc_paa.Periode` porte le résultat
@@ -546,7 +615,7 @@ PERIMETRE: tuple[Element, ...] = (
     # ⚠️ Sous-affirmer trompe autant que sur-affirmer : un lecteur croirait
     # devoir refaire un travail déjà fait, ou jugerait la plateforme plus
     # loin de l'objectif qu'elle ne l'est.
-    Element('§78-92', NON_CONSTRUIT,
+    Element('§78-92', BATI,
             "Présentation au bilan et au compte de résultat",
             "§78-79, LA PRÉSENTATION AU BILAN : BÂTIE. Les portefeuilles y "
             "sont séparés par côté — actifs d'un côté, passifs de l'autre — "
@@ -591,7 +660,13 @@ PERIMETRE: tuple[Element, ...] = (
             "§88-89 sont arbitrés et déclarés ci-dessus ; §90 et §91 sont "
             "SANS OBJET par construction, étant conditionnés à des options "
             "que la plateforme n'exerce pas. ⚠️ §92 a son PROPRE élément — "
-            "les écarts de change ne sont ni §80 a) ni §80 b)."),
+            "les écarts de change ne sont ni §80 a) ni §80 b).",
+            SOUS_RESERVE,
+            "Deux lignes du §78 manquent — c) et d), les portefeuilles de "
+            "réassurance détenue — et §87 b), l'effet du risque financier, "
+            "n'est pas construit. S'y ajoute la réserve des sinistres "
+            "survenus : le mouvement financier du LIC décompose trois "
+            "valorisations reçues, il ne les produit pas."),
     # ⚠️ §92 A SON PROPRE ÉLÉMENT, ET C'EST UN ARBITRAGE. Il était AVALÉ par
     # l'intitulé de plage « §78-92 », dont ni le libellé ni la raison ne
     # mentionnaient les écarts de change, IAS 21 ni §30 — introuvable pour
@@ -771,20 +846,38 @@ def mention_directions(directions: Iterable[str]) -> str:
 
 def texte() -> str:
     """Le périmètre publié, tel qu'il se remet à un actuaire ou à un CAC."""
+    #: ⚠️⚠️ CE PRÉAMBULE A ÉTÉ FAUX DANS LES DEUX SENS À LA FOIS, et la
+    #: mesure l'a établi. Il disait « la plateforme COUVRE l'évaluation, la
+    #: présentation et la clôture » — sur-affirmation : §93-132 n'est pas
+    #: bâti, et « conserve les clôtures successives » ne l'a jamais été, la
+    #: persistance des soldes restant à construire. Et le corps du MÊME
+    #: document déclarait `NON_CONSTRUIT` les quatre pans que le préambule
+    #: revendiquait — sous-affirmation sur 20 modules et 378 tests.
+    #:
+    #: ⚠️ La correction ne consiste pas à choisir un des deux sens : elle
+    #: consiste à dire ce qui est BÂTI, et à ne plus confondre bâti et
+    #: opposable. Le décompte ci-dessous se lit sur `PERIMETRE`, il n'est
+    #: donc pas une affirmation de plus à tenir à jour à la main.
     lignes = [
         "PÉRIMÈTRE IFRS 17 — ASSURANCE NON-VIE",
         "",
-        "La plateforme couvre l'évaluation, la présentation et la clôture",
-        "IFRS 17 en non-vie selon la MÉTHODE D'AFFECTATION DES PRIMES",
-        "(§53-59), pour les contrats d'assurance émis et les contrats de",
-        "réassurance détenus (§60-70A). Elle constitue l'unité de compte",
-        "réglementaire à partir d'un inventaire de contrats fourni par",
-        "l'entité, et conserve les clôtures successives.",
+        "La plateforme constitue l'unité de compte réglementaire (§14-25) à",
+        "partir d'un inventaire de contrats fourni par l'entité, et",
+        "enregistre les groupes d'un arrêté à l'autre.",
+        "",
+        f"Le MÉCANISME est bâti et testé sur {len(elements(BATI))} pans de",
+        "la norme, énumérés ci-dessous : évaluation en méthode d'affectation",
+        "des primes, réassurance détenue, flux d'exécution et présentation",
+        "aux états primaires.",
+        "",
+        BATI_N_EST_PAS_OPPOSABLE,
         "",
     ]
     for etat, titre in (
             (COUVERT, "CE QUI EST COUVERT"),
-            (NON_CONSTRUIT, "DANS LE PÉRIMÈTRE, PAS ENCORE CONSTRUIT"),
+            (BATI, ("BÂTI ET TESTÉ — avec, pour chacun, ce qui lui manque à "
+                    "l'intérieur et ce qui réserve son opposabilité")),
+            (NON_CONSTRUIT, "DANS LE PÉRIMÈTRE, RIEN N'EXISTE ENCORE"),
             (HORS_PERIMETRE, "HORS PÉRIMÈTRE — DÉCISIONS ASSUMÉES")):
         groupe = elements(etat)
         lignes.append(f"{titre} ({len(groupe)})")
@@ -792,6 +885,10 @@ def texte() -> str:
             lignes.append(f"  {e.reference} — {e.libelle}")
             if e.raison:
                 lignes.append(f"      {e.raison}")
+            if e.opposabilite == SOUS_RESERVE:
+                lignes.append(f"      ⚠️ OPPOSABILITÉ RÉSERVÉE : {e.reserve}")
+            elif e.opposabilite == OPPOSABLE:
+                lignes.append("      OPPOSABLE — aucune réserve de donnée.")
         lignes.append("")
     # ⚠️ CE QUE CETTE PHRASE DISAIT AVANT, ET POURQUOI C'ÉTAIT FAUX. Elle
     # affirmait « ils ne sont jamais mesurés à tort ». Or `signaler()` REND
