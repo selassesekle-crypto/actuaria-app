@@ -44,9 +44,30 @@ from direction_non_vie.provisionnement.a7_provisionnement.test_a7_ibrahim import
 GUIDE_MOYENNE    = 53_428
 GUIDE_MEDIANE    = 52_091
 GUIDE_ECART_TYPE = 13_923
-GUIDE_MIN        = 17_705
-GUIDE_MAX        = 118_008
 GUIDE_QUANTILES  = {5: 32_945, 25: 43_419, 75: 61_940, 95: 78_150, 99: 91_898}
+
+# ⚠️⚠️ LE MIN ET LE MAX DE LA FIGURE 30 SONT RETIRÉS, ET C'EST DÉLIBÉRÉ. Ils
+# valaient 17 705 et 118 008. Ils sont restés déclarés sans jamais être lus —
+# une constante morte qui INVITE au câblage, et le câbler aurait été faux.
+#
+# ⚠️ CE SONT DES STATISTIQUES D'ORDRE : elles n'ont pas de limite quand le
+# nombre de simulations grandit. Mesuré sur RAA, graine 42 :
+#
+#     n_sim      min        max      écart-type
+#       500   15 228    112 722          14 836
+#     2 000   15 545    142 651          14 571
+#    10 000   14 481    142 520          14 496
+#    40 000   13 805    147 570          14 588
+#
+# Le min DESCEND et le max MONTE avec n_sim ; l'écart-type, lui, CONVERGE.
+# C'est exactement pourquoi σ et les quantiles se comparent au guide et pas
+# ces deux-là : comparer un extremum reviendrait à comparer deux nombres de
+# tirages, pas deux modèles.
+#
+# ⚠️ `GUIDE_MOYENNE`, elle, était morte AUSSI — et elle ne se retire pas : la
+# première question devant une constante morte est ce qu'elle aurait dû faire
+# vérifier. Celle-ci répondait à une identité que rien ne gardait ; elle est
+# désormais consommée par `T2b_Identite_Du_Recentrage`.
 #: Réserve Chain Ladder du même triangle — le guide écrit que la médiane en est
 #: « très proche » et que la moyenne « n'en est pas très différente ».
 GUIDE_RESERVE_CL = 52_135
@@ -212,6 +233,111 @@ class T2_Verite_Connue(unittest.TestCase):
 
 
 # =============================================================================
+#  VERROU 2b — L'IDENTITÉ DU RECENTRAGE  (EXACTE, PAS APPROCHÉE)
+# =============================================================================
+
+class T2b_Identite_Du_Recentrage(unittest.TestCase):
+    """⚠️⚠️ LA MOYENNE DU BOOTSTRAP VAUT LA RÉSERVE CHAIN LADDER — EXACTEMENT.
+
+    Le recentrage est un DÉCALAGE PUR : chaque tirage est translaté d'une
+    constante choisie pour que la moyenne tombe sur la réserve de référence.
+    La moyenne du décalé vaut donc la cible PAR CONSTRUCTION, et le seul écart
+    possible est l'erreur de virgule flottante.
+
+    ⚠️ CETTE IDENTITÉ N'ÉTAIT GARDÉE PAR RIEN. Un recentrage cassé — cible
+    fausse, décalage appliqué à moitié, moyenne calculée avant translation —
+    serait passé sans qu'aucun test ne bronche : la distribution reste
+    plausible, seule sa position est fausse. C'est la forme la plus discrète
+    d'un défaut de mesure, celle qui ne laisse aucune trace visible.
+
+    ⚠️ ET LA BORNE EST 1e-9, PAS 1e-4 — mais PAS pour la raison qu'on croit.
+    Une note ancienne annonçait « à quatre décimales » ; la mesure donne
+    7,3e-12 au pire sur cinq graines.
+
+    ⚠️⚠️ J'AVAIS D'ABORD ÉCRIT ICI QU'UN VERROU À 1e-4 « laisserait passer un
+    décalage d'un centime ». C'EST FAUX, et le sabotage ci-dessous l'a
+    démenti : 0,01 € dépasse 1e-4, donc 1e-4 attrapait déjà tout défaut
+    monétairement réel. La justification affirmait plus que la mesure ne
+    portait — le motif exact que ce dépôt combat.
+
+    ⚠️ LA VRAIE RAISON DE 1e-9 EST AUTRE, ET ELLE EST PLUS FINE : ce qu'on
+    garde n'est pas une précision, c'est une IDENTITÉ. Un verrou huit ordres
+    de grandeur au-dessus du résidu observé accepterait en silence une DÉRIVE
+    — un changement futur qui ferait passer l'exactitude de 1e-12 à 1e-5
+    resterait vert, alors que cette dégradation est précisément le signal que
+    le recentrage a cessé d'être un décalage pur. On garde la NATURE de la
+    propriété, pas son ordre de grandeur monétaire.
+    """
+
+    #: ⚠️ Tolérance de VIRGULE FLOTTANTE, pas de modèle. Mesuré : 7,3e-12 au
+    #: pire sur les graines ci-dessous, deux d'entre elles à zéro exact.
+    EPSILON = 1e-9
+
+    #: ⚠️ PLUSIEURS GRAINES, PARCE QUE L'IDENTITÉ NE DOIT DÉPENDRE D'AUCUNE.
+    #: Une seule graine ne distinguerait pas une identité d'une coïncidence.
+    GRAINES = (0, 42, 123, 2026, 99999)
+
+    def test_la_moyenne_vaut_la_reference_a_la_virgule_flottante_pres(self):
+        C = np.asarray(RAA, float)
+        f = _facteurs(C)
+        reference = _reserve_cl_simple(C, f)
+        ecarts = []
+        for graine in self.GRAINES:
+            r = bootstrap_odp(C, f, n_sim=2_000, seed=graine)
+            moyenne = float(np.mean(r['distribution']))
+            ecarts.append(abs(moyenne - reference))
+            self.assertAlmostEqual(
+                moyenne, reference, delta=self.EPSILON,
+                msg=f"graine {graine} : moyenne {moyenne:,.6f} contre "
+                    f"référence {reference:,.6f}. Le recentrage est un "
+                    f"DÉCALAGE PUR — un écart au-delà de la virgule flottante "
+                    f"signale une cible fausse ou un décalage mal appliqué")
+        print(f"    OK BOOT-6b identité du recentrage sur "
+              f"{len(self.GRAINES)} graines — écart maximal {max(ecarts):.1e} "
+              f"(toléré {self.EPSILON:.0e})")
+
+    def test_l_identite_ne_depend_pas_du_nombre_de_simulations(self):
+        """⚠️ UN DÉCALAGE PUR EST INDIFFÉRENT AU NOMBRE DE TIRAGES. Si
+        l'identité se dégradait avec `n_sim`, elle ne serait pas une identité
+        mais une convergence — et un test à 2 000 tirages l'aurait masquée."""
+        C = np.asarray(RAA, float)
+        f = _facteurs(C)
+        reference = _reserve_cl_simple(C, f)
+        for n_sim in (200, 2_000, 10_000):
+            moyenne = float(np.mean(
+                bootstrap_odp(C, f, n_sim=n_sim, seed=7)['distribution']))
+            self.assertAlmostEqual(moyenne, reference, delta=self.EPSILON,
+                                   msg=f"n_sim={n_sim}")
+
+    def test_la_moyenne_du_guide_est_VOISINE_sans_etre_la_reference(self):
+        """⚠️⚠️ CE QUE `GUIDE_MOYENNE` AURAIT DÛ FAIRE VÉRIFIER, ET QU'ELLE NE
+        FAISAIT PAS. Elle est restée déclarée sans lecteur — la première
+        question devant une constante morte est ce qu'elle aurait dû garder.
+
+        Le guide écrit que sa moyenne « n'est pas très différente » de la
+        réserve Chain Ladder. C'est une observation SUR SON PROPRE TIRAGE,
+        pas une identité : notre moyenne, elle, vaut la réserve EXACTEMENT,
+        et c'est une propriété plus forte. Les deux ne se confondent pas —
+        et confondre l'observation d'un auteur avec une identité de modèle
+        est exactement ce qui érigerait un exemple publié en norme.
+        """
+        C = np.asarray(RAA, float)
+        reference = _reserve_cl_simple(C, _facteurs(C))
+        ecart = abs(GUIDE_MOYENNE / reference - 1)
+        self.assertLess(ecart, 0.10,
+                        f"moyenne du guide {GUIDE_MOYENNE:,} contre réserve "
+                        f"CL {reference:,.0f} — l'écart devrait rester petit")
+        self.assertNotAlmostEqual(
+            float(GUIDE_MOYENNE), reference, delta=1.0,
+            msg="le guide n'est PAS notre référence de recentrage : si les "
+                "deux coïncidaient à l'euro, ce test ne distinguerait plus "
+                "une identité de modèle d'une coïncidence de tirage")
+        print(f"    OK BOOT-6c moyenne du guide {GUIDE_MOYENNE:,} contre "
+              f"réserve CL {reference:,.0f} ({ecart:+.1%}) — voisine, "
+              f"jamais confondue avec la référence")
+
+
+# =============================================================================
 #  VERROU 3 — DÉRIVE CONTRE L'EXEMPLE PUBLIÉ  (INFORMATIF, TOLÉRANCE LARGE)
 # =============================================================================
 
@@ -229,6 +355,25 @@ class T3_Derive_Contre_Oracle_Publie(unittest.TestCase):
 
     #: Assez serrée pour attraper le facteur 2,4 de l'audit, assez large pour
     #: ne pas ériger un exemple publié en référence normative.
+    #:
+    #: ⚠️⚠️ CE QUE CETTE TOLÉRANCE COUVRE RÉELLEMENT, MESURÉ — sans quoi un
+    #: lecteur ne peut pas savoir si 50 % est une marge de 7× ou de 1,1×.
+    #: Sur RAA à 10 000 tirages : σ +4,1 %, q5 +6,7 % (le pire), q25 +3,6 %,
+    #: q75 +1,7 %, q95 +0,4 %, q99 +0,0 %. **La tolérance vaut donc 7,5 fois
+    #: le pire écart observé.**
+    #:
+    #: ⚠️ ET CET ÉCART EST SYSTÉMATIQUE, PAS DU BRUIT : sur cinq graines il
+    #: reste entre 6,3 % et 7,4 %, soit 1,1 point d'amplitude. Le resserrer
+    #: à 10 % laisserait 1,3× de marge sur une différence STRUCTURELLE entre
+    #: deux bootstraps dont aucun n'est la référence de l'autre.
+    #:
+    #: ⚠️ RESSERRER A ÉTÉ ENVISAGÉ PUIS ÉCARTÉ, SUR MESURE. Le défaut que
+    #: cette classe existe pour attraper fait **+140 %** (σ = 33 395 contre
+    #: 13 923) : toute valeur entre 10 % et 50 % l'attrape identiquement.
+    #: Resserrer n'aurait donc rien gagné contre le risque visé, et aurait
+    #: coûté de la marge contre une variation légitime. ⚠️ Ce qui FONDE la
+    #: correction n'est pas ici mais dans `T2_Verite_Connue`, sur vérité
+    #: connue — cette classe-ci n'est qu'un détecteur d'ordre de grandeur.
     TOLERANCE = 0.50
 
     @classmethod
