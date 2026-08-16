@@ -3,7 +3,7 @@
 #  nv_triangle_diagnostics.py — Diagnostic qualité du triangle
 # =============================================================================
 #
-#  Module autonome appelé par NVTriangleBuilder avant tout calcul A7.
+#  Module autonome appelé par la façade `nv_triangle` avant tout calcul A7.
 #  Produit un score de santé sur 100 avec 7 contrôles structurés.
 #
 #  Score :  ≥ 85 → VERT   (triangle de bonne qualité)

@@ -112,8 +112,10 @@ def _lire_chemin(
     if fmt == 'excel':
         # sheet_name=None rendrait un DICT de toutes les feuilles, pas un
         # DataFrame : on retombe explicitement sur la PREMIÈRE feuille (0).
-        # C'est le piège qui fait planter TriangleValidator.charger() sur un
-        # classeur multi-onglets sans nom_onglet.
+        # C'est le piège qui FAISAIT planter `TriangleValidator.charger()`
+        # (supprimé depuis) sur un classeur multi-onglets sans nom_onglet.
+        # ⚠️ Le piège, lui, n'a pas disparu avec ce module : il est dans
+        # `read_excel`, et c'est cette ligne qui l'évite.
         feuille = nom_onglet if nom_onglet is not None else 0
         brut = pd.read_excel(chemin, sheet_name=feuille)
         rapport['infos'].append(

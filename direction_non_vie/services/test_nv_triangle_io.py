@@ -95,8 +95,10 @@ class T1_LireSource_Formats(unittest.TestCase):
 
     def test_excel_multi_onglets_ne_plante_pas(self):
         """Sans nom_onglet → PREMIÈRE feuille, jamais un dict de feuilles.
-        C'est le piège qui fait planter TriangleValidator.charger()
-        ('dict' object has no attribute 'ndim')."""
+        C'est le piège qui FAISAIT planter `TriangleValidator.charger()`,
+        supprimé depuis ('dict' object has no attribute 'ndim'). ⚠️ Le piège
+        vient de `read_excel`, pas du module disparu : ce test garde donc
+        tout son objet."""
         r = lire_source(self.xlsx_multi)
         self._verifier_contrat(r, 'excel')
         self.assertIsInstance(r['brut'], pd.DataFrame)     # pas un dict

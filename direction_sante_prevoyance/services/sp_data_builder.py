@@ -4,7 +4,9 @@
 ║         Constructeur de données Santé-Prévoyance                            ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
 ║                                                                              ║
-║  RÔLE : Équivalent de NVTriangleBuilder pour la Direction SP.               ║
+║  RÔLE : constructeur de données propre à la Direction SP.                   ║
+║  (Il était décrit comme « équivalent de NVTriangleBuilder » — ce module     ║
+║   Non-Vie a été supprimé, un rôle ne se définit pas par un absent.)         ║
 ║  Charge, normalise et valide les données clients avant de les passer        ║
 ║  aux agents S1/S2/P1/P2/P3 et sp_coord.                                    ║
 ║                                                                              ║

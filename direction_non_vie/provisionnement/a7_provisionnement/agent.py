@@ -387,7 +387,8 @@ class AgentA7Provisionnement:
                 logger.info("N1 — Ingestion & validation")
 
             # Façade nv_triangle (Bloc II) : lire → mapper → séparer → construire
-            # → diagnostiquer. Remplace TriangleValidator, dont la branche
+            # → diagnostiquer. A REMPLACÉ `TriangleValidator`, supprimé depuis,
+            # dont la branche
             # triangle_engage forçait le mode 'cumule' SANS détection — un engagé
             # fourni en incrémental était utilisé tel quel, silencieusement faux.
             # mode_charges='auto' ferme ce trou (détection à trois états).
