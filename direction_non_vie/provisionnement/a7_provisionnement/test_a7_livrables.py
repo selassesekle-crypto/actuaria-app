@@ -331,9 +331,13 @@ class T4_Affichages_Application(unittest.TestCase):
         import io as _io
         from pathlib import Path
         racine = Path(__file__).resolve().parents[3]
-        for chemin in (racine / 'actuaria_app.py',
-                       racine / 'direction_non_vie' / 'services'
-                              / 'nv_triangle_builder.py'):
+        # ⚠️ CE BALAYAGE PORTAIT SUR DEUX FICHIERS, ET LE SECOND N'EXISTE
+        # PLUS : `nv_triangle_builder.py` a été supprimé avec l'ancien chemin
+        # de préparation des données. ⚠️ Il était ouvert PAR SON CHEMIN, pas
+        # importé — sa disparition ne se serait donc pas vue à l'import mais
+        # par un `FileNotFoundError` à l'exécution, et aucun relevé par AST
+        # ne l'aurait signalée. C'est un relevé par CHAÎNE qui l'a trouvé.
+        for chemin in (racine / 'actuaria_app.py',):
             src = _io.open(chemin, encoding='utf-8').read()
             self.assertNotIn(
                 'Guide IA 2023 §3.', src,
