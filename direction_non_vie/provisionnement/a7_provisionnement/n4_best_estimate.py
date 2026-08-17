@@ -1497,7 +1497,12 @@ class BestEstimateS2:
 
         σ(LoB) = écart type du risque de RÉSERVE du segment (art. 117 ; valeurs
         à l'annexe II pour le non-vie, à l'annexe XIV pour la santé non-SLT).
-        Le facteur 3 correspond au quantile 99,5 % d'une loi normale.
+        ⚠️ LE FACTEUR 3 VIENT D'UNE LOG-NORMALE, PAS D'UNE NORMALE. Le
+        quantile 99,5 % d'une loi normale standardisée vaut 2,5758 ; cette
+        docstring écrivait 3, soit 16,5 % d'écart. La calibration EIOPA du
+        risque de réserve suppose une log-normale, dont le rapport
+        quantile/moyenne vaut 2,81 à 3,17 pour σ de 8 % à 20 % — c'est de
+        là que vient le 3.
 
         ⚠️ CE N'EST PAS L'ARTICLE 105. L'art. 105 du Règlement délégué porte
         sur le calcul simplifié du risque de spread des entreprises captives.

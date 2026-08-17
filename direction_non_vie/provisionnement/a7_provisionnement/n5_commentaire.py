@@ -785,8 +785,18 @@ def _s7_scr(n4: Dict) -> str:
         f"           = {_e(scr_prov)}",
         f"  Ratio SCR/BE = {_p(ratio*100)}",
         "",
-        f"Le facteur 3 correspond au quantile 99.5% d'une loi normale "
-        f"standardisée, conformément à la calibration EIOPA.",
+        # ⚠️ CETTE PHRASE DISAIT « quantile 99,5 % d'une loi NORMALE ».
+        # Mesuré : ce quantile vaut 2,5758 — le texte se trompait de 16,5 %
+        # sur la justification d'une charge de capital. La calibration EIOPA
+        # du risque de réserve suppose une LOG-NORMALE, dont le rapport
+        # quantile/moyenne vaut 2,81 à 3,17 pour σ de 8 % à 20 % : c'est là
+        # qu'est le 3. Le 2,576 est nommé pour qu'on ne réintroduise pas
+        # l'erreur au prochain passage.
+        "Le facteur 3 provient de la calibration EIOPA du risque de "
+        "réserve, qui suppose une distribution log-normale : pour les σ "
+        "retenus, le rapport entre le quantile 99,5 % et la moyenne vaut "
+        "environ 3σ. Ce n'est pas le quantile d'une loi normale, qui "
+        "vaut 2,576.",
         f"Le facteur σ(LoB) = {_p(sigma_e*100)} est l'écart type réglementaire "
         f"du risque de RÉSERVE du segment dont relève cette branche "
         f"— {scr.get('reference_s2', 'annexes II / XIV, Règlement Délégué UE 2015/35')}.",
@@ -1222,8 +1232,19 @@ def _lob_rc_generale(n1, n2, n3, n4):
         "3. Appliquer un Large Loss Threshold si un sinistre > 10% du portefeuille "
         "— traitement séparé obligatoire pour ne pas biaiser les facteurs CL. "
         "4. Comparer le S/P avec la référence marché (78% FFA 2024). "
-        "5. Surveiller l'évolution jurisprudentielle sur la RC produits "
-        "(directive 85/374/CEE — révision en cours au niveau européen)."
+        # ⚠️ « révision en cours » n'était pas faux, c'est devenu PÉRIMÉ :
+        # la révision est achevée. La directive (UE) 2024/2853 du 23 octobre
+        # 2024 abroge 85/374/CEE avec effet au 9 décembre 2026, date à
+        # laquelle elle doit être transposée ; 85/374 continue de
+        # s'appliquer aux produits mis sur le marché avant. L'énoncé exact
+        # est plus utile que l'ancien : l'élargissement de la notion de
+        # « produit » aux LOGICIELS est une considération de
+        # provisionnement, pas une note de bas de page.
+        "5. Surveiller la transposition de la directive (UE) 2024/2853 sur "
+        "la responsabilité du fait des produits défectueux, qui abroge la "
+        "directive 85/374/CEE au 9 décembre 2026 et étend la notion de "
+        "produit aux logiciels — élargissement d'assiette à anticiper sur "
+        "la RC produits."
     )
 
     return {
@@ -1285,7 +1306,10 @@ def _lob_rc_auto_corporels(n1, n2, n3, n4):
         "post-COVID, révision des barèmes). "
         "La variante volume_weighted doit être systématiquement privilégiée "
         "pour donner plus de poids aux années récentes. "
-        "Le test H4 (homoscédasticité Bootstrap) est crucial car "
+        # ⚠️ « H4 » était un vestige : l'ancienne H4 bootstrap a été
+        # remplacée par BOOT-H1..H4, et le test de dispersion est BOOT-H3.
+        # Le renommage avait balayé les symboles, pas la prose française.
+        "Le test BOOT-H3 (homogénéité de la sur-dispersion φ) est crucial car "
         "la distribution des sinistres corporels graves est très asymétrique "
         "— quelques sinistres extrêmes peuvent dominer les résidus."
     )
@@ -1310,7 +1334,11 @@ def _lob_rc_auto_corporels(n1, n2, n3, n4):
             "Cohérent. " if 0.75 < bf_lr < 0.95 else
             f"Écart significatif — documenter la cause (mix sinistres, millésimes atypiques). "
         )
-        + f"Le P99.5 Bootstrap = {_e(p995)} "
+        # ⚠️ ÉTIQUETTE FAUSSE : `n4['reserve_p99_5']` est le P99.5 COMPOSÉ
+        # (σ Mack ⊕ σ modèle), que §5 nomme correctement. Le vrai P99.5
+        # Bootstrap vit dans `n3['bootstrap']['p99_5']` et vaut autre chose
+        # — mesuré 8 266 contre 8 285 sur le triangle témoin.
+        + f"Le P99.5 composé (σ Mack ⊕ σ modèle) = {_e(p995)} "
         f"({'+' if p995 > be else ''}{_p((p995/max(be,1)-1)*100)} vs BE) "
         "est le chiffre critique pour le SCR provisions — "
         "sur RC Auto corporels, un ratio P99.5/BE > 1.5 est courant "
@@ -1390,7 +1418,8 @@ def _lob_rc_medicale(n1, n2, n3, n4):
         "l'évolution jurisprudentielle (augmentation des indemnisations, "
         "reconnaissance de nouveaux préjudices) crée une dérive structurelle "
         "des facteurs. La variante volume_weighted est obligatoire. "
-        "Le test H4 (Bootstrap) doit être interprété avec prudence : "
+        # ⚠️ Même vestige qu'en RC Auto corporels : c'est BOOT-H3.
+        "Le test BOOT-H3 (sur-dispersion) doit être interprété avec prudence : "
         "la distribution RC Médicale est très leptokurtique "
         "(queue épaisse à droite), la normalité des résidus est douteuse."
     )
@@ -1557,6 +1586,15 @@ def _lob_marine(n1, n2, n3, n4):
     n_ann = n1.get('n_annees', 0)
     be    = n4.get('best_estimate', 0)
     cl_r  = n3.get('chain_ladder', {}).get('reserve_totale', 0)
+    # ⚠️ σ ÉTAIT ÉCRIT « 17 % » EN DUR, DEUX FOIS. Le vrai σ de RÉSERVE du
+    # segment II-3 (Maritime, aérienne et transport) vaut 11 %. Le 17 % est
+    # le σ de PRIMES du segment II-11 (réassurance MAT non proportionnelle)
+    # — mauvais segment ET mauvais risque, alors que A7 n'emploie que le σ
+    # de réserve. On le LIT désormais là où le SCR le lit déjà, plutôt que
+    # d'en poser une troisième copie qui divergera.
+    sigma_e = (n4.get('scr') or {}).get('sigma_eiopa') or 0.0
+    sigma_txt = (f"σ de réserve = {_p(sigma_e * 100)}" if sigma_e > 0
+                 else "σ de réserve du segment II-3")
 
     contexte = (
         "SPÉCIFICITÉS MARINE / AVIATION / TRANSPORT : "
@@ -1579,7 +1617,8 @@ def _lob_marine(n1, n2, n3, n4):
         "selon les couches (XL vs proportionnel) ; "
         "(2) Exposition aux événements géopolitiques (zones de guerre, embargos) ; "
         "(3) Sinistres CAT maritimes (tempêtes, typhons) à isoler. "
-        "Le facteur de volatilité EIOPA σ=17% reflète cette incertitude élevée."
+        f"Le facteur de volatilité EIOPA du segment Maritime, aérienne et "
+        f"transport ({sigma_txt}) reflète cette incertitude élevée."
     )
 
     hypotheses = (
@@ -1623,7 +1662,10 @@ def _lob_marine(n1, n2, n3, n4):
         "(primes nettes vs sinistres nets des recouvrements). "
         "3. Documenter les sinistres CAT maritimes "
         "(tempêtes, événements géopolitiques) et leur traitement. "
-        "4. Le SCR LoB 6 (σ=17%) est particulièrement élevé "
+        # « LoB 6 » est EXACT et reste : le segment est II-3, mais la ligne
+        # d'activité de l'annexe I qui le compose est bien la 6 (et la 18 en
+        # réassurance proportionnelle). Seul le σ était faux.
+        f"4. Le SCR de la ligne d'activité 6 ({sigma_txt}) est élevé "
         "— anticiper une exigence de capital importante. "
         "5. Envisager une analyse par sous-branche "
         "(corps, RC, cargaison) si le volume le permet. "
@@ -1661,9 +1703,19 @@ def _avertissement_petit_triangle(n_ann: int) -> str:
         "tout usage bilan ; "
         "(4) Travailler à l'enrichissement du triangle "
         "(données historiques supplémentaires, données de place). "
+        # ⚠️ CETTE PHRASE INVENTAIT UNE RÈGLE. Elle disait « en-dessous de
+        # 5 ans, le S2 ne reconnaît pas la méthode CL comme suffisamment
+        # fiable ». Aucune disposition de Solvabilité 2 ne nomme Chain
+        # Ladder ni ne pose de seuil en années. Ce qui existe réellement est
+        # le principe de PROPORTIONNALITÉ, qui impose d'évaluer l'erreur de
+        # modèle au regard de la nature, l'ampleur et la complexité des
+        # risques. On énonce le principe SANS numéro d'article : remplacer
+        # une citation fabriquée par une citation non lue ne vaudrait pas
+        # mieux.
         "Un triangle standard de marché couvre 10 à 15 années "
-        "de survenance — en-dessous de 5 ans, le S2 ne reconnaît "
-        "pas la méthode CL comme suffisamment fiable."
+        "de survenance. En-dessous de 5 ans, l'erreur de modèle attachée "
+        "au Chain Ladder augmente fortement ; le principe de "
+        "proportionnalité impose de l'évaluer et de la documenter."
     )
 
 

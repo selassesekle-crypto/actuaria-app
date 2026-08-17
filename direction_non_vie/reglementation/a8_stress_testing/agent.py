@@ -523,8 +523,13 @@ class AgentA8StressTesting:
         # Art. 117(2) donne l'expression sous la racine : le terme croisé y
         # porte le coefficient 1, écrit ici 2 × 0,5, soit une corrélation
         # implicite de 0,5 entre risque de primes et risque de réserve.
-        # Art. 115 pose ensuite SCR = 3 × σ_nl × V_nl, le facteur 3
-        # correspondant au quantile 99,5 % d'une loi normale.
+        # Art. 115 pose ensuite SCR = 3 × σ_nl × V_nl.
+        #
+        # ⚠️ LE FACTEUR 3 VIENT D'UNE LOG-NORMALE, PAS D'UNE NORMALE. Ce
+        # commentaire disait « quantile 99,5 % d'une loi normale » ; ce
+        # quantile vaut 2,5758, soit 16,5 % d'écart. La calibration EIOPA du
+        # risque de réserve suppose une log-normale, dont le rapport
+        # quantile/moyenne vaut 2,81 à 3,17 pour σ de 8 % à 20 %.
         #
         # CE FACTEUR 3 MANQUAIT (corrigé au lot B10-d). A8 s'arrêtait à
         # σ_nl × V_nl : ce module valait le TIERS de sa valeur réglementaire,

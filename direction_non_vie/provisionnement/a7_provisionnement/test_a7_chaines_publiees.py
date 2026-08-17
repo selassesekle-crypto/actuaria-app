@@ -321,7 +321,21 @@ class T3_Le_Mot_SCR_Ne_Nomme_Qu_Une_Grandeur(unittest.TestCase):
         'Ratio SCR/BE',
         'SCR PROVISIONS (Art. 115 S2)',
         'CALCUL SCR PROVISIONS (LoB unique)',
-        "Le facteur 3 correspond au quantile 99.5% d'une loi normale",
+        # ⚠️ CETTE FIXTURE PORTAIT UNE PHRASE FAUSSE, DANS UNE LISTE NOMMÉE
+        # « SAINS ». Elle disait « le facteur 3 correspond au quantile 99,5 %
+        # d'une loi normale » — ce quantile vaut 2,5758, soit 16,5 % d'écart.
+        # `_SAINS` veut dire « sain POUR LA RÈGLE SCR » ; ça se lisait « sain,
+        # point ». La propriété testée est inchangée : le détecteur reste muet
+        # sur l'ancienne comme sur la nouvelle. Seul l'exemple cesse d'endosser
+        # une fausseté. Ne pas restaurer l'ancienne formulation.
+        # ⚠️ PARENTHÉSÉE (ISC004) : dans un tuple de fixtures, une
+        # concaténation implicite non parenthésée est à une virgule oubliée de
+        # fusionner deux entrées en silence. Dans un fichier dont le métier est
+        # de détecter des chaînes fausses, ce serait un vrai défaut.
+        ("Le facteur 3 provient de la calibration EIOPA du risque de réserve, "
+         "qui suppose une distribution log-normale : pour les σ retenus, le "
+         "rapport entre le quantile 99,5 % et la moyenne vaut environ 3σ. "
+         "Ce n'est pas le quantile d'une loi normale, qui vaut 2,576."),
         'P99.5 — Provision extrême (composé)',
         'SCR Provisions — Formule standard Art. 115 Règlement Délégué (UE) 2015/35',
         "c'est cette marge, et non le niveau, qui se compare au SCR de "
