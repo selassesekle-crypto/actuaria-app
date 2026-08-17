@@ -33,6 +33,7 @@
 # =============================================================================
 
 import logging
+import unicodedata
 from datetime import datetime
 from typing import Dict, Optional
 
@@ -63,6 +64,37 @@ def _p(v, d=1) -> str:
     return f"{float(v):.{d}f}%"
 
 
+#: Les mois en toutes lettres.
+#:
+#: ⚠️ PAS DE `locale.setlocale`. Il modifie un ÉTAT GLOBAL du processus, son
+#: nom diffère selon la plateforme (`fr_FR.UTF-8` contre `French_France`), et
+#: il échoue là où la locale n'est pas installée — `%B` rendait alors
+#: « 16 August 2026 » dans un rapport destiné au conseil d'administration et
+#: au CAC. Une table est déterministe et portable.
+_MOIS_FR = ('janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet',
+            'août', 'septembre', 'octobre', 'novembre', 'décembre')
+
+
+def _date_fr(d: datetime) -> str:
+    """La date en toutes lettres, en français, sans dépendre de la locale."""
+    return f"{d.day} {_MOIS_FR[d.month - 1]} {d.year}"
+
+
+def _sans_symboles(texte: str) -> str:
+    """Le texte débarrassé des émojis, **accents conservés**.
+
+    ⚠️ CE QUI ÉTAIT FAIT AVANT : `texte.encode('ascii', 'ignore')`. Cela
+    retirait bien le « ⚠️ » que N2 place en tête de ses alertes — et tous les
+    accents avec : « Cellule ngative dtecte  l'anne 2019  dveloppement
+    dcroissant » était publié tel quel. On ne retire que les SYMBOLES
+    (catégorie Unicode `So` : ⚠ 🟡 ✅) et le sélecteur de variante U+FE0F.
+    """
+    return ''.join(
+        c for c in texte
+        if unicodedata.category(c) != 'So' and ord(c) != 0xFE0F
+    ).strip()
+
+
 def _statut_txt(s) -> str:
     if s == 'VERT':  return "CONFORME"
     if s == 'AMBRE': return "A SURVEILLER"
@@ -91,7 +123,12 @@ def _s1_contexte(n1: Dict, n2: Dict, n3: Dict, lob: str, lob_label: str) -> str:
     n_dev      = n1.get('n_dev', 0)
     methode_cl = n3.get('methode_cl', '—')
     methode_rec= n2.get('methode_recommandee', '—')
-    date_str   = datetime.now().strftime('%d %B %Y')
+    # ⚠️ CE LOT NE CORRIGE QUE LA LANGUE, PAS LA DATE. `%B` rendait
+    # « 16 August 2026 » ; elle se lit désormais « 16 août 2026 ». Mais c'est
+    # toujours `datetime.now()` publié comme la date d'ARRÊTÉ, alors que
+    # `generer_commentaire` ne reçoit jamais l'arrêté. Cette fausseté-là est
+    # entière et appartient au lot A4, qui devra passer le paramètre.
+    date_str   = _date_fr(datetime.now())
 
     mode_desc = {
         'cumule':     "triangle déjà cumulé fourni directement",
@@ -150,10 +187,10 @@ def _s2_qualite(n1: Dict) -> str:
     if n_ann < 5:
         lignes.append(
             f"AVERTISSEMENT : Avec seulement {n_ann} années de survenance, "
-            f"le triangle est de petite taille. Les estimations sur les "
-            f"premières colonnes reposent sur peu d'observations — "
-            f"les résultats doivent être interprétés avec prudence. "
-            f"Un trianglestandard de marché couvre 10 à 15 années."
+            "le triangle est de petite taille. Les estimations sur les "
+            "premières colonnes reposent sur peu d'observations — "
+            "les résultats doivent être interprétés avec prudence. "
+            "Un triangle standard de marché couvre 10 à 15 années."
         )
     elif n_ann >= 15:
         lignes.append(
@@ -171,7 +208,7 @@ def _s2_qualite(n1: Dict) -> str:
         )
 
     for a in alertes[:6]:
-        clean = a.encode('ascii', 'ignore').decode('ascii').strip()
+        clean = _sans_symboles(a)
         if clean:
             lignes.append(f"• {clean}")
 
@@ -1610,7 +1647,7 @@ def _avertissement_petit_triangle(n_ann: int) -> str:
         return ''
     return (
         f"⚠️  AVERTISSEMENT CRITIQUE — TRIANGLE PETIT ({n_ann} ANNÉES) : "
-        "Avec seulement {n_ann} années de survenance, les estimations "
+        f"Avec seulement {n_ann} années de survenance, les estimations "
         "actuarielles sont peu robustes sur l'ensemble des colonnes. "
         "Les facteurs de développement reposent sur 2 à 4 observations "
         "par colonne — un seul sinistre atypique peut modifier "
@@ -1727,7 +1764,11 @@ def _lob_generique(n1, n2, n3, n4):
     return {
         'contexte': (
             "Branche non identifiée spécifiquement dans la configuration ActuarIA. "
-            "Les seuils et seuils génériques (H2 CV=15%, dérive=20%) sont appliqués. "
+            # ⚠️ SEUL LE MOT DUPLIQUÉ EST CORRIGÉ ICI. Cette phrase reste
+            # FAUSSE sur le fond — les seuils annoncés ne sont pas ceux
+            # appliqués (Cat-Nat : 25 % / 35 %), et la branche EST configurée.
+            # Le fond appartient au lot A4.
+            "Les seuils génériques (H2 CV=15%, dérive=20%) sont appliqués. "
             "Pour une analyse adaptée à votre branche, préciser le paramètre "
             "'lob' dans l'appel à run() parmi : mrh, rc_auto_materiel, "
             "rc_auto_corporels, rc_generale, rc_medicale, construction, "
