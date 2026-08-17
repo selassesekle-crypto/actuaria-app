@@ -207,15 +207,64 @@ def _s3_hypotheses(n2: Dict) -> str:
         lignes.append(
             f"H1 — INDÉPENDANCE (Mack 1993) : VALIDÉE [score {h1.get('score',0)}/100]"
         )
-        lignes.append(
-            f"La corrélation de Spearman moyenne entre facteurs de colonnes "
-            f"consécutives est de {corr:.2f}, inférieure au seuil {seuil:.2f}. "
-            f"Sur {n_test} paires testées, aucune ne présente de dépendance "
-            f"statistiquement significative. L'hypothèse fondamentale de Mack "
-            f"est respectée : les années de survenance se développent "
-            f"indépendamment les unes des autres. Cette validation autorise "
-            f"l'utilisation du Chain Ladder et de Mack comme méthodes principales."
-        )
+        # ⚠️ UN VERDICT NE SE PUBLIE PAS SANS SON ASSIETTE. Ce bloc annonçait
+        # « Sur N paires testées, aucune ne présente de dépendance » sans jamais
+        # lire `n_colonnes_sig`, et sans distinguer le cas où RIEN n'avait été
+        # testé. Deux défauts distincts en découlaient :
+        #
+        #   · `ok` tolère jusqu'à DEUX colonnes significatives
+        #     (`ok = corr_moy < seuil and n_sig <= 2`, n2_hypotheses) : « aucune »
+        #     était faux dès la première.
+        #   · DEUX chemins de n2_hypotheses rendent `ok: True` avec ZÉRO paire
+        #     testée — scipy absent, et « trop peu de données (< 4 obs par
+        #     colonne) », qui se déclenche sur tout triangle court. Le texte
+        #     publiait alors une validation et « aucune dépendance » sur rien,
+        #     pendant que le module écrivait « H1 non testable » dans `message`.
+        #     Ce motif est calculé et n'était lu nulle part : on le publie.
+        #
+        # Le verdict `ok` n'est pas touché ici — il est lu par N4 pour composer
+        # le Best Estimate. Ce lot corrige ce qui est ÉCRIT, pas ce qui est décidé.
+        paires = f"{n_test} paire{'s' if n_test > 1 else ''}"
+        if n_test == 0:
+            motif = str(h1.get('message', '')).strip()
+            lignes.append(
+                "AUCUNE PAIRE DE COLONNES N'A PU ÊTRE TESTÉE. "
+                # ⚠️ Le motif est CITÉ tel quel, jamais découpé. Le message a la
+                # forme « H1 non testable — <raison> » : en retirer le préfixe
+                # marcherait aujourd'hui et publierait le message entier le jour
+                # où sa forme change. On cite, on ne parse pas.
+                + (f"Le module indique : « {motif} ». " if motif else "")
+                + "Le verdict « VALIDÉE » est ici la valeur par défaut du "
+                "module, non le résultat d'une mesure : il n'autorise rien par "
+                "lui-même. L'indépendance des années de survenance reste à "
+                "établir avant de retenir Chain Ladder et Mack comme méthodes "
+                "principales."
+            )
+        elif n_sig == 0:
+            lignes.append(
+                f"La corrélation de Spearman moyenne entre facteurs de colonnes "
+                f"consécutives est de {corr:.2f}, inférieure au seuil {seuil:.2f}. "
+                f"Sur {paires} testée{'s' if n_test > 1 else ''}, aucune ne "
+                f"présente de dépendance statistiquement significative. "
+                f"L'hypothèse fondamentale de Mack est respectée sur cette "
+                f"assiette : les années de survenance se développent "
+                f"indépendamment les unes des autres. Cette validation autorise "
+                f"l'utilisation du Chain Ladder et de Mack comme méthodes "
+                f"principales."
+            )
+        else:
+            lignes.append(
+                f"La corrélation de Spearman moyenne entre facteurs de colonnes "
+                f"consécutives est de {corr:.2f}, inférieure au seuil {seuil:.2f}. "
+                f"Sur {paires} testée{'s' if n_test > 1 else ''}, "
+                f"{n_sig} présente{'nt' if n_sig > 1 else ''} néanmoins une "
+                f"dépendance statistiquement significative : le rejet de H1 exige "
+                f"que la corrélation moyenne dépasse le seuil OU qu'au moins "
+                f"trois paires soient significatives, ce qui n'est pas le cas ici. "
+                f"L'hypothèse de Mack est retenue, mais cette dépendance résiduelle "
+                f"doit être regardée avant de s'appuyer pleinement sur Chain Ladder "
+                f"et Mack."
+            )
     else:
         lignes.append(
             f"H1 — INDÉPENDANCE (Mack 1993) : REJETÉE [score {h1.get('score',0)}/100]"
