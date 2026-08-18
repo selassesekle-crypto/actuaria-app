@@ -207,6 +207,18 @@ def _ratio_scr(scp, be):
         return None
     return scp / float(be) * 100.0
 
+
+#: ⚠️ CE QUE LE RAPPORT AFFICHE QUAND AUCUN ARRETE N'EST COMMUNIQUE. Jusqu'a ce
+#: lot, HTML et Word ecrivaient `arr = arrete or dt` : la DATE DU JOUR se
+#: faisait passer pour l'arrete, sous une etiquette << Arrete >> (sous-titre de
+#: garde et KPI cote HTML, colonne de table cote Word) et jusque dans le prompt
+#: du LLM via `_generer_narration`. C'est le defaut exact qu'A4a a ferme dans
+#: `n5_commentaire` (`arrete or date_arrete or 'NON COMMUNIQUE'`), sans que la
+#: correction atteigne les deux exports. Le libelle nomme desormais l'absence
+#: au lieu de la combler -- meme mot que le livrable frere, pour qu'un lecteur
+#: retrouve la meme chose partout.
+ARRETE_ABSENT = 'non communiqué'
+
 def _clean(txt) -> str:
     if not txt:
         return ''
@@ -2268,7 +2280,9 @@ def export_html(
         n1=n1 or {}; n2=n2 or {}; n3=n3 or {}; n4=n4 or {}
 
         dt      = datetime.now().strftime('%d/%m/%Y')
-        arr     = arrete or dt
+        # ⚠️ PLUS DE `arrete or dt` : la date du jour ne se fait plus
+        # passer pour l'arrete. Voir ARRETE_ABSENT.
+        arr     = arrete or ARRETE_ABSENT
         cli     = ref_client or 'À renseigner'
         lob     = _lob(lob_label or n2.get('lob_label', '') or n2.get('lob', ''))
         methode = n4.get('methode_facteurs', n2.get('methode_recommandee', '—'))
@@ -2330,7 +2344,11 @@ def export_html(
             '    <div class="garde-hero">\n'
             '      <div class="garde-eyebrow">Rapport de Provisionnement Non-Vie</div>\n'
             '      <div class="garde-titre">' + b['garde_titre'] + '</div>\n'
-            '      <div class="garde-subtitle">Arrêté au ' + arr + '</div>\n'
+            # ⚠️ « au » N'A DE SENS QUE DEVANT UNE DATE. Sans arrete, `arr` vaut
+            # ARRETE_ABSENT : « Arrêté au non communiqué » serait fautif. Le
+            # gabarit s'adapte au lieu d'imposer la preposition.
+            '      <div class="garde-subtitle">Arrêté '
+            + ('au ' + arr if arrete else arr) + '</div>\n'
             '      <div class="garde-sep">\n'
             '        <div class="garde-sep-line"></div>\n'
             '        <div class="garde-sep-diamond"></div>\n'
@@ -2521,7 +2539,9 @@ def export_word(n1, n2, n3, n4,
         GrR=rgb(SLATE); RgR=rgb(ROUGE); VR=rgb(VERT); AR=rgb(ORANGE)
 
         dt      = datetime.now().strftime('%d/%m/%Y')
-        arr     = arrete or dt
+        # ⚠️ PLUS DE `arrete or dt` : la date du jour ne se fait plus
+        # passer pour l'arrete. Voir ARRETE_ABSENT.
+        arr     = arrete or ARRETE_ABSENT
         cli     = ref_client or 'À renseigner'
         lob     = _lob(lob_label or n2.get('lob_label','') or n2.get('lob',''))
         methode = n4.get('methode_facteurs', n2.get('methode_recommandee','—'))

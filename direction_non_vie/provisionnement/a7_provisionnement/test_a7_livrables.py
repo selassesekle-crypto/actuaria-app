@@ -19,24 +19,40 @@ from datetime import date, timedelta
 import numpy as np
 
 from direction_non_vie.provisionnement.a7_provisionnement.agent import (
-    AgentA7Provisionnement, _TAILLE_MIN_LIVRABLE, _dependance_absente,
-    _produire_livrable, etiquette_methode_grands,
+    _TAILLE_MIN_LIVRABLE,
+    AgentA7Provisionnement,
+    _dependance_absente,
+    _produire_livrable,
+    etiquette_methode_grands,
 )
 from direction_non_vie.provisionnement.a7_provisionnement.config.lob_config import (
-    LOB_CONFIG, get_lob_config,
+    LOB_CONFIG,
+    get_lob_config,
 )
 from direction_non_vie.provisionnement.a7_provisionnement.config.rfr_eiopa import (
-    DATE_COURBE, MOIS_ALERTE_PEREMPTION, MOIS_ROUGE_PEREMPTION,
-    age_courbe_mois, diagnostic_peremption, get_courbe_embarquee,
+    DATE_COURBE,
+    MOIS_ALERTE_PEREMPTION,
+    MOIS_ROUGE_PEREMPTION,
+    age_courbe_mois,
+    diagnostic_peremption,
+    get_courbe_embarquee,
+)
+from direction_non_vie.provisionnement.a7_provisionnement.n5_excel import (
+    export_excel,
 )
 from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
-    MARQUEUR_ECHEC_RAPPORT, export_html,
+    ARRETE_ABSENT,
+    MARQUEUR_ECHEC_RAPPORT,
+    export_html,
+    export_word,
+)
+from direction_non_vie.provisionnement.a7_provisionnement.test_a7_graphiques import (
+    kaleido_declare,
+    rendeur_substitue,
 )
 from direction_non_vie.provisionnement.a7_provisionnement.test_a7_ibrahim import (
     GENINS,
 )
-from direction_non_vie.provisionnement.a7_provisionnement.test_a7_graphiques import (
-    kaleido_declare, rendeur_substitue)
 
 
 def _exposition(triangle, loss_ratio=0.70):
@@ -276,7 +292,10 @@ class T4_Affichages_Application(unittest.TestCase):
         `munich_cl_disponible` est vrai — sur 'generique' la méthode est
         désactivée, et le premier jet de ce test ne prouvait donc rien.
         """
-        from direction_non_vie.provisionnement.a7_provisionnement.test_a7_ibrahim             import _MCL_PAYE, _MCL_ENG_SAIN
+        from direction_non_vie.provisionnement.a7_provisionnement.test_a7_ibrahim import (
+            _MCL_ENG_SAIN,
+            _MCL_PAYE,
+        )
         r = AgentA7Provisionnement(verbose=False).run(
             source=np.array(_MCL_PAYE, dtype=float), mode_declare='cumule',
             triangle_engage=np.array(_MCL_ENG_SAIN, dtype=float),
@@ -407,6 +426,109 @@ class T5_LoB_Distinguables(unittest.TestCase):
             self.assertIn(cle, LOB_CONFIG)
             self.assertTrue(LOB_CONFIG[cle]['distinction'].strip())
         print(f"    OK LIV-20 {len(avec)} LoB portent une distinction explicite")
+
+
+# =============================================================================
+#  LOT B (releve B2) — UN ARRETE NON COMMUNIQUE NE DEVIENT PAS LA DATE DU JOUR
+# =============================================================================
+#
+#  ⚠️ LE FILET COUVRE LES TROIS LIVRABLES, PAS LE MODULE, ET C'EST LA LECON DU
+#  LOT. A4a avait ferme ce defaut dans `n5_commentaire` et cru le lot complet ;
+#  la correction n'avait atteint ni le HTML ni le Word, qui ecrivaient encore
+#  `arr = arrete or dt` -- la date du jour sous une etiquette << Arrete >>.
+#  Un filet borne au module l'aurait laisse revenir par un autre export.
+#
+#  ⚠️ ET LA TRACE PAR CONSOMMATEUR A CORRIGE MON PROPRE RELEVE. J'avais compte
+#  l'Excel comme troisieme site du meme faux. Il ne l'est PAS : son `date_str`
+#  est etiquete << Date rapport >> (la date de generation, pour laquelle
+#  aujourd'hui est JUSTE quand l'arrete manque), pas << Arrete >>. Le variable
+#  matchait le grep ; le consommateur dit autre chose. L'Excel porte un autre
+#  defaut, plus doux -- il confond arrete et date de generation dans un seul
+#  champ quand l'arrete EST fourni -- nomme a l'ardoise, hors de ce lot.
+#  Le filet le VERIFIE quand meme : il s'assure que l'Excel ne presente jamais
+#  la date du jour SOUS une etiquette d'arrete.
+# =============================================================================
+
+def _today_fr():
+    # ⚠️ `datetime.now()` NAIF, ET C'EST DELIBERE (noqa DTZ005). Ce helper doit
+    # reproduire A L'IDENTIQUE la date que la production calcule dans
+    # `n5_rapport` (`datetime.now().strftime('%d/%m/%Y')`, sans fuseau) : la
+    # comparaison << la date du jour n'apparait pas comme arrete >> n'a de sens
+    # que si les deux chaines sont produites de la meme facon. Un tz les ferait
+    # diverger aux frontieres de journee.
+    from datetime import datetime
+    return datetime.now().strftime('%d/%m/%Y')  # noqa: DTZ005
+
+
+class T_Arrete_Les_Trois_Livrables_Ne_Fabriquent_Pas_La_Date(unittest.TestCase):
+    """⚠️ TROIS LIVRABLES, UN INVARIANT : la date du jour ne se fait jamais
+    passer pour l'arrete quand aucun arrete n'est communique."""
+
+    @classmethod
+    def setUpClass(cls):
+        # ⚠️ UN RUN REEL, RE-EXPORTE AVEC L'ARRETE CHOISI. Bricoler un `n4`
+        # partiel ferait lever l'Excel (`n4['reserve_p75']`, acces direct) sur
+        # une cause etrangere au lot. On part des vrais objets et on ne fait
+        # varier QUE l'arrete.
+        with kaleido_declare(True), rendeur_substitue():
+            r = AgentA7Provisionnement(verbose=False).run(
+                source=np.array(GENINS, dtype=float), mode_declare='cumule',
+                primes=_exposition(GENINS), n_sim_bootstrap=200, seed=42,
+                generer_graphiques=False)
+        cls.n1, cls.n2 = r['n1'], r['n2']
+        cls.n3, cls.n4 = r['n3'], r['n4']
+        cls.C = np.array(GENINS, dtype=float)
+
+    def _formes_fabriquees(self):
+        t = _today_fr()
+        return (f'Arrêté au {t}', f'Arrêté {t}', f'Arrêté : {t}')
+
+    def test_html_nomme_l_absence_au_lieu_de_la_combler(self):
+        html = export_html(self.n1, self.n2, self.n3, self.n4,
+                           arrete='', ref_client='ACME')
+        self.assertIn(ARRETE_ABSENT, html)
+        for forme in self._formes_fabriquees():
+            self.assertNotIn(forme, html, f'HTML fabrique : {forme!r}')
+        print('    OK LIV-B1 le HTML dit « non communiqué », pas la date du jour')
+
+    def test_html_garde_la_vraie_date_quand_elle_existe(self):
+        html = export_html(self.n1, self.n2, self.n3, self.n4,
+                           arrete='30/06/2026', ref_client='ACME')
+        # ⚠️ NE PAS SUR-CORRIGER : un arrete fourni doit s'afficher, avec « au ».
+        self.assertIn('Arrêté au 30/06/2026', html)
+        print('    OK LIV-B2 le HTML garde l arrete fourni, avec « au »')
+
+    def test_word_nomme_l_absence(self):
+        import io
+
+        from docx import Document
+        w = export_word(self.n1, self.n2, self.n3, self.n4,
+                        arrete='', ref_client='ACME')
+        cells = [c.text for t in Document(io.BytesIO(w)).tables
+                 for r in t.rows for c in r.cells]
+        self.assertIn('Arrêté', cells)                    # l'etiquette existe
+        self.assertIn(ARRETE_ABSENT, cells)               # la valeur nomme l'absence
+        self.assertNotIn(_today_fr(), cells, 'le Word porte la date du jour')
+        print('    OK LIV-B3 le Word dit « non communiqué » dans sa table')
+
+    def test_excel_n_etiquette_jamais_la_date_du_jour_en_arrete(self):
+        # ⚠️ L'EXCEL N'EST PAS LE MEME FAUX (cf. l'en-tete). On verrouille qu'il
+        # ne le DEVIENNE pas : la date du jour peut figurer, mais jamais sous
+        # une etiquette d'arrete.
+        import io
+
+        from openpyxl import load_workbook
+        xl = export_excel(self.C, self.n1, self.n2, self.n3, self.n4,
+                          ref_client='ACME', arrete='')
+        wb = load_workbook(io.BytesIO(xl))
+        textes = [str(c.value) for ws in wb.worksheets
+                  for row in ws.iter_rows() for c in row if c.value is not None]
+        self.assertTrue(any('Date rapport' in t for t in textes),
+                        "l'etiquette « Date rapport » a disparu")
+        for forme in self._formes_fabriquees():
+            self.assertFalse(any(forme in t for t in textes),
+                             f'Excel etiquette la date du jour en arrete : {forme!r}')
+        print('    OK LIV-B4 l Excel etiquette la date du jour « Date rapport »')
 
 
 if __name__ == '__main__':
