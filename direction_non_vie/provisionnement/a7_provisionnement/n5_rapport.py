@@ -159,6 +159,54 @@ def _s(v) -> str:
         return '—'
     return re.sub(r'\s+', ' ', str(v)).strip() or '—'
 
+
+def _scr_publiable(sc):
+    """Le SCR Provisions a publier, ou `None` quand il n'est pas calculable.
+
+    ⚠️⚠️ CE QUE CETTE FONCTION REMPLACE PORTAIT DEUX DEFAUTS DANS LA MEME
+    EXPRESSION, ET ELLE VIVAIT EN TROIS EXEMPLAIRES (contexte du LLM, HTML,
+    Word) :
+
+        SCP = float(sc.get('scr_provisions',
+                           sc.get('scr_prov', BE * 0.30)) if sc else BE * 0.30)
+
+    · SCR absent  -> un chiffre FABRIQUE a 30 % du Best Estimate, publie sans
+      la moindre marque. Mesure : BE de 1 000 -> << SCR 300 EUR, ratio 30,0 % >>.
+      Atteignable : `actuaria_app` passe `r_raw.get("n4", {})`, donc un `n4`
+      partiel arrive bien jusqu'ici.
+    · `scr_provisions` PRESENT A None -> `.get` ne prend JAMAIS son repli,
+      `float(None)` leve, et le rapport ne se genere pas du tout.
+
+    ⚠️ ET C'EST LE SECOND CAS QUI COMPTE, PARCE QUE SA CAUSE EST L'INVERSE D'UN
+    DEFAUT. `None` est pose par `garde_fou_be_negatif` quand le Best Estimate
+    est NEGATIF : N4 y refuse d'inventer, marque l'absence et passe en ROUGE --
+    << marqueurs None + statut ROUGE, jamais de plancher silencieux >>.
+    Le renderer DEFAISAIT ce garde-fou en plantant dessus. La couche de calcul
+    faisait ce qu'il fallait ; la couche de rendu ne savait pas le rendre.
+
+    Rendre `None` suffit a tout reparer : `_f` et `_pct` publient deja un tiret
+    sur `None`. L'instrument existait, il etait court-circuite en amont.
+    """
+    if not sc:
+        return None
+    valeur = sc.get('scr_provisions')
+    if valeur is None:
+        valeur = sc.get('scr_prov')
+    if valeur is None:
+        return None
+    try:
+        v = float(valeur)
+    except (TypeError, ValueError):                    # pragma: no cover
+        return None
+    return v if np.isfinite(v) else None
+
+
+def _ratio_scr(scp, be):
+    """Le ratio SCR/BE en %, ou `None` des qu'un des deux manque."""
+    if scp is None or not be:
+        return None
+    return scp / float(be) * 100.0
+
 def _clean(txt) -> str:
     if not txt:
         return ''
@@ -232,8 +280,8 @@ def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: s
     P75 = float(n4.get('reserve_p75', 0) or 0)
     P90 = float(n4.get('reserve_p90', 0) or 0)
     P99 = float(n4.get('reserve_p99_5', 0) or 0)
-    SCP = float(sc.get('scr_provisions', sc.get('scr_prov', BE * 0.30)) if sc else BE * 0.30)
-    SCR = SCP / BE * 100 if BE else 0
+    SCP = _scr_publiable(sc)
+    SCR = _ratio_scr(SCP, BE)
     lines = [
         f"DOSSIER DE PROVISIONNEMENT — {lob_label.upper()} — Arrêté {arrete}",
         "",
@@ -1280,8 +1328,8 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     P75_boot = n4.get('reserve_p75_boot')
     P90_boot = n4.get('reserve_p90_boot')
     _boot_dispo = P75_boot is not None and float(P75_boot or 0) > 0
-    SCP = float(sc.get('scr_provisions', sc.get('scr_prov', BE * 0.30)) if sc else BE * 0.30)
-    SCR = SCP / BE * 100 if BE else 0
+    SCP = _scr_publiable(sc)
+    SCR = _ratio_scr(SCP, BE)
 
     s_label = _statut_label(statut)
     s_cls   = statut.lower()
@@ -1341,7 +1389,11 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         '<div class="kpi-card-value">' + _f(n4.get('provisions_techniques_s2', 0)) + '</div>'
         '<div class="kpi-card-sub">BE + RM — Art. 77 §1</div>'
         '</div>'
-        if n4.get('risk_margin', 0) > 0
+        # ⚠️ MEME GARDE-FOU, MEME CHUTE, DEUX LIGNES PLUS LOIN.
+        # `garde_fou_be_negatif` met AUSSI `risk_margin` a None ; `.get(k, 0)`
+        # rend alors None — la cle EXISTE — et `None > 0` leve. Le `or 0`
+        # traite les deux etats (absent, present a None) de la meme facon.
+        if (n4.get('risk_margin') or 0) > 0
         else '<div class="kpi-card">'
         '<div class="kpi-card-label">Provision P99,5 (composé)</div>'
         '<div class="kpi-card-value">' + _f(P99) + '</div>'
@@ -2487,8 +2539,8 @@ def export_word(n1, n2, n3, n4,
         P90 = float(n4.get('reserve_p90',0) or 0)
         P99 = float(n4.get('reserve_p99_5',0) or 0)
         CV  = float(n4.get('cv_inter_methodes',0) or 0)
-        SCP = float(sc.get('scr_provisions', sc.get('scr_prov', BE*0.30)) if sc else BE*0.30)
-        SCR = SCP/BE*100 if BE else 0
+        SCP = _scr_publiable(sc)
+        SCR = _ratio_scr(SCP, BE)
         # En pourcentage et à la décimale : deux segments ont un σ à trois
         # chiffres significatifs (protection juridique 5,5 %, crédit 17,2 %).
         SIG_EIOPA = _pct(float(sc.get('sigma_eiopa') or 0) * 100) if sc else '—'
