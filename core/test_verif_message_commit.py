@@ -10,12 +10,13 @@
 #  un garde-fou qui laisse passer ce qu'il devait refuser est pire que rien,
 #  parce qu'il donne la confiance sans la couverture.
 #
-#  Trois choses sont vérifiées ici, et ce sont exactement les trois que
+#  Quatre choses sont vérifiées ici, et ce sont exactement les quatre que
 #  Selasse a exigées :
 #    · il REFUSE la violation plantée — un sujet à 77 caractères ;
 #    · il LAISSE PASSER un message conforme ;
 #    · il ne bloque AUCUN cas légitime — en particulier les lignes de
-#      commentaire que git ajoute lui-même au fichier de message.
+#      commentaire que git ajoute lui-même, ET la prose qui MENTIONNE
+#      `Co-Authored-By` sans en être un trailer.
 #
 #  Le module est chargé PAR CHEMIN, comme `scripts/proprete.py` : il n'y a
 #  aucun `import verif_message_commit` à trouver dans le dépôt.
@@ -125,6 +126,51 @@ class G2_Il_Laisse_Passer_Le_Legitime(unittest.TestCase):
         print('    OK G2-3 le diff verbeux est ignore')
 
 
+class G4_Le_Trailer_Co_Authored_By(unittest.TestCase):
+    """⚠️ UN CONTROLE TROP LARGE RAPPORTE AUTRE CHOSE QUE CE QU'IL MESURE.
+
+    Ce quatrieme controle a ete ajoute APRES avoir paye la lecon : sur le
+    commit `d1bbad2`, un `grep -c 'Co-Authored'` a rapporte 1 alors qu'aucun
+    trailer n'y figurait -- il matchait la PROSE qui documentait l'absence de
+    couverture. Le discriminant retenu est donc la FORME du trailer (debut de
+    ligne + deux-points), jamais le mot.
+    """
+
+    def test_il_refuse_un_vrai_trailer(self):
+        msg = _CONFORME + '\nCo-Authored-By: quelqu un <x@y.z>\n'
+        violations = V.verifier(msg)
+        self.assertTrue(any('Co-Authored-By interdit' in v
+                            for v in violations),
+                        f'trailer non detecte : {violations}')
+        print('    OK G4-1 un vrai trailer Co-Authored-By est refuse')
+
+    def test_il_refuse_toutes_les_casses(self):
+        # Les outils ecrivent `Co-authored-by`, `Co-Authored-By`, parfois tout
+        # en minuscules. La casse ne doit pas servir de contournement.
+        for forme in ('Co-authored-by:', 'CO-AUTHORED-BY:', 'co-authored-by:'):
+            msg = _CONFORME + '\n' + forme + ' x <a@b.c>\n'
+            self.assertTrue(V.verifier(msg), f'{forme} est passe')
+        print('    OK G4-2 les variantes de casse sont refusees')
+
+    def test_il_laisse_passer_la_prose_qui_en_parle(self):
+        # ⚠️ LE CAS QUI A MOTIVE LE MOTIF ETROIT. C'est la ligne exacte du
+        # message de `d1bbad2`. Un message qui documente le controle ne doit
+        # pas etre refuse par le controle qu'il documente.
+        prose = (_CONFORME +
+                 "\n  - `Co-Authored-By` n'est PAS detecte. La regle existe\n"
+                 '    et elle est permanente.\n')
+        self.assertEqual(V.verifier(prose), [],
+                         'la prose mentionnant le terme est refusee a tort')
+        print('    OK G4-3 la prose qui mentionne le terme passe')
+
+    def test_une_ligne_indentee_n_est_pas_un_trailer(self):
+        # git n'interprete un trailer qu'en colonne 0.
+        indente = _CONFORME + '\n    Co-Authored-By: cite dans un exemple\n'
+        self.assertEqual(V.verifier(indente), [],
+                         'une ligne indentee est prise pour un trailer')
+        print('    OK G4-4 une ligne indentee n est pas un trailer')
+
+
 class G3_Ce_Qu_Il_Ne_Couvre_Pas(unittest.TestCase):
     """⚠️ CE QUE LE CONTROLE NE VOIT PAS EST ECRIT, PAS SOUS-ENTENDU.
 
@@ -132,15 +178,6 @@ class G3_Ce_Qu_Il_Ne_Couvre_Pas(unittest.TestCase):
     reproduit le defaut qu'il corrige : une etiquette qui affirme plus que
     la chose ne porte.
     """
-
-    def test_il_ne_voit_pas_Co_Authored_By(self):
-        # La regle « JAMAIS de Co-Authored-By » est permanente elle aussi,
-        # mais elle n'a pas ete demandee ici : Selasse en a nomme trois.
-        # Ce test CONSTATE l'absence de couverture, il ne la deplore pas.
-        msg = _CONFORME + '\nCo-Authored-By: quelqu un <x@y.z>\n'
-        self.assertEqual(V.verifier(msg), [],
-                         'la couverture a change : mettre a jour ce test')
-        print('    OK G3-1 Co-Authored-By N EST PAS couvert (constate)')
 
     def test_il_ne_voit_pas_le_contenu(self):
         # Il juge la FORME. Un message conforme mais faux passe — c est le
