@@ -438,7 +438,7 @@ def _ong4_methodes(wb, n3, n4):
     for i, (nom, res, key, detail, note) in enumerate(rows):
         inc  = key in methodes_inc
         poid = poids.get(key, 0)
-        _mack = (key == 'mack')   # Mack : volatilité (σ), non pondérée dans le BE (point = CL)
+        _mack = (key == 'mack')   # Mack : volatilité (σ), non pondérée dans le BE (point = CL)
         # Benktander : ni incluse ni EXCLUE. Il est informatif PAR
         # CONSTRUCTION -- l'etiqueter << Exclue >> en rouge le ferait
         # passer pour une methode disqualifiee par une hypothese.
