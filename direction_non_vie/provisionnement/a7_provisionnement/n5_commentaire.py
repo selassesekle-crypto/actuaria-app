@@ -37,6 +37,8 @@ import unicodedata
 from datetime import datetime
 from typing import Dict, Optional
 
+from core import arrete as _arrete
+
 from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
 from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
 from .n3.bf_cape_cod import libelle_loss_ratio
@@ -80,6 +82,57 @@ def _date_fr(d: datetime) -> str:
     return f"{d.day} {_MOIS_FR[d.month - 1]} {d.year}"
 
 
+def _mention_arrete(arrete: str, date_arrete: str) -> str:
+    """La phrase d'arrêté du §1 — TROIS états, et aucun n'est silencieux.
+
+    ⚠️ `date_arrete` DOIT ÊTRE AU FORMAT ISO (`AAAA-MM-JJ`). Ce n'est pas une
+    exigence de cette fonction — `core.arrete.lire` en accepte quatre — mais
+    du pipeline : `core.courbe_rfr.date_reference` n'accepte que l'ISO et fait
+    tomber le run en amont sur toute autre forme. Voir la mise en sommeil
+    plus bas.
+
+    ⚠️ CE QUE FAISAIT LE CODE AVANT : il écrivait « arrêtée au {datetime.now()} ».
+    `generer_commentaire` ne recevait pas l'arrêté, alors que `agent.run()` le
+    passait déjà à l'Excel, au Word et à l'HTML. Le rapport publiait donc la
+    date de GÉNÉRATION en la présentant comme la date d'ARRÊTÉ — une fausseté
+    réglementaire, et un repli d'autant plus dangereux qu'il était muet.
+
+    ⚠️ LE CORRECTIF NE DOIT PAS CRÉER UN SECOND REPLI MUET. Quand l'arrêté
+    manque, on le DIT ; on ne met aucune autre date à sa place.
+
+    ⚠️ ET C'EST `date_arrete` QUI FAIT FOI, JAMAIS `arrete`. `core.arrete` le
+    pose noir sur blanc : « un libellé libre du type "Q2 2026" n'en est pas
+    un — il ne se compare pas, ne s'ordonne pas et ne peut pas servir de clé
+    d'archivage ».
+    """
+    if date_arrete:
+        # ⚠️ AUCUN `except` ICI, ET C'EST DÉLIBÉRÉ — MISE EN SOMMEIL DATÉE.
+        #
+        # Une quatrième branche existait, « ARRÊTÉ FOURNI MAIS ILLISIBLE ».
+        # Elle était INATTEIGNABLE, mesuré : toute date non-ISO fait tomber le
+        # run bien avant d'arriver ici, dans `core.courbe_rfr.date_reference`
+        # qui n'accepte que `%Y-%m-%d` — alors que `core.arrete.lire` en
+        # accepte quatre. Deux contrats de date incompatibles dans le même
+        # dépôt ; le format français « 30/06/2026 » tue A7 entièrement.
+        #
+        # Publier une branche qui ne peut pas s'imprimer, c'est faire croire à
+        # une tolérance qui n'existe pas — le défaut même que ce chantier
+        # retire. Elle revient LE JOUR OÙ LES DEUX CONTRATS SONT HARMONISÉS
+        # (chantier à ouvrir : `arrete` / `courbe_rfr`).
+        #
+        # D'ici là, `ArreteInvalide` remonte, et c'est la bonne conduite :
+        # `core.arrete` la pose pour ça — « il n'y a pas de clôture partielle :
+        # on lève » — et l'appelant veut un échec bruyant, pas un rapport qui
+        # invente une date.
+        return f"Arrêté au {_date_fr(_arrete.lire(date_arrete).valeur)}."
+    if arrete:
+        return (f"⚠️ AUCUNE DATE D'ARRÊTÉ COMMUNIQUÉE. Le libellé « {arrete} » "
+                f"est un affichage : il ne se compare pas et ne peut pas "
+                f"servir de clé d'archivage.")
+    return ("⚠️ ARRÊTÉ NON COMMUNIQUÉ. Le rapport ne peut pas se rattacher "
+            "à un exercice.")
+
+
 def _sans_symboles(texte: str) -> str:
     """Le texte débarrassé des émojis, **accents conservés**.
 
@@ -116,19 +169,17 @@ def _qualif_ecart(ecart_pct: float) -> str:
 #  SECTION 1 — CONTEXTE ET PÉRIMÈTRE
 # =============================================================================
 
-def _s1_contexte(n1: Dict, n2: Dict, n3: Dict, lob: str, lob_label: str) -> str:
+def _s1_contexte(n1: Dict, n2: Dict, n3: Dict, lob: str, lob_label: str,
+                 arrete: str = '', date_arrete: str = '') -> str:
     taille     = n1.get('taille', '—')
     mode       = n1.get('mode_detecte', '—')
     n_ann      = n1.get('n_annees', 0)
     n_dev      = n1.get('n_dev', 0)
     methode_cl = n3.get('methode_cl', '—')
     methode_rec= n2.get('methode_recommandee', '—')
-    # ⚠️ CE LOT NE CORRIGE QUE LA LANGUE, PAS LA DATE. `%B` rendait
-    # « 16 August 2026 » ; elle se lit désormais « 16 août 2026 ». Mais c'est
-    # toujours `datetime.now()` publié comme la date d'ARRÊTÉ, alors que
-    # `generer_commentaire` ne reçoit jamais l'arrêté. Cette fausseté-là est
-    # entière et appartient au lot A4, qui devra passer le paramètre.
-    date_str   = _date_fr(datetime.now())
+    # L'arrêté est désormais REÇU. Voir `_mention_arrete` pour les quatre
+    # états et pourquoi aucun n'est un repli muet.
+    mention    = _mention_arrete(arrete, date_arrete)
 
     mode_desc = {
         'cumule':     "triangle déjà cumulé fourni directement",
@@ -137,8 +188,9 @@ def _s1_contexte(n1: Dict, n2: Dict, n3: Dict, lob: str, lob_label: str) -> str:
     }.get(mode, mode)
 
     lignes = [
-        f"Le présent rapport porte sur l'analyse actuarielle du provisionnement",
-        f"Non-Vie arrêtée au {date_str}, branche : {lob_label}.",
+        "Le présent rapport porte sur l'analyse actuarielle du provisionnement",
+        f"Non-Vie, branche : {lob_label}.",
+        mention,
         "",
         f"Le triangle de développement analysé couvre {n_ann} années de survenance",
         f"et {n_dev} périodes de développement ({taille}, {mode_desc}).",
@@ -1857,6 +1909,14 @@ def generer_commentaire(
     lob_label: str = '',
     ref_client: str = '',
     resultats_precedents: Optional[Dict] = None,
+    # ⚠️ LES DEUX, ET CE N'EST PAS UNE REDONDANCE. `date_arrete` est la DATE :
+    # elle se compare, s'ordonne et sert de clé d'archivage. `arrete` est un
+    # LIBELLÉ d'affichage (« T2 2026 ») qui ne fait rien de tout cela. Le §1
+    # établit l'exercice à partir de la première ; le titre affiche la seconde.
+    # Ce sont les deux champs que `agent.run()` porte déjà et passait à
+    # l'Excel, au Word et à l'HTML — mais pas ici.
+    arrete: str = '',
+    date_arrete: str = '',
 ) -> str:
     """
     Génère le commentaire actuariel complet en 8 sections enrichies.
@@ -1901,7 +1961,7 @@ def generer_commentaire(
     comparatif = _narration_comparatif(n4, resultats_precedents)
 
     # ── §1 enrichi : contexte général + spécificité LoB ──────────────────────
-    s1 = _s1_contexte(n1, n2, n3, lob, lob_label)
+    s1 = _s1_contexte(n1, n2, n3, lob, lob_label, arrete, date_arrete)
     if blocs_lob.get('contexte'):
         s1 += "\n\n" + blocs_lob['contexte']
     if avert_petit:
@@ -1940,7 +2000,11 @@ def generer_commentaire(
     titre = [
         "═" * 70,
         f" RAPPORT DE PROVISIONNEMENT NON-VIE — AGENT A7 IBRAHIM v5.0",
-        f" Date : {date_str}",
+        # ⚠️ « Généré le », PAS « Date ». C'est la date de GÉNÉRATION, et
+        # l'étiquette « Date » la laissait passer pour la date d'arrêté —
+        # laquelle vit maintenant au §1, où elle est établie ou dite absente.
+        f" Généré le : {date_str}",
+        f" Arrêté : {arrete or date_arrete or 'NON COMMUNIQUÉ'}",
         f" Branche : {lob_label}",
         f" Référence : {ref_client}" if ref_client else "",
         f" Statut global : {_statut_txt(statut)}",

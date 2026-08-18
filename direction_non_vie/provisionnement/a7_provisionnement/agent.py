@@ -755,10 +755,16 @@ class AgentA7Provisionnement:
             # Commentaire actuariel — AUCUN except : un échec ici doit faire
             # tomber le run bruyamment. C'est le seul livrable dont le contenu
             # est irremplaçable, et un commentaire vide passerait inaperçu.
+            # ⚠️ L'ARRÊTÉ EST DÉSORMAIS TRANSMIS. Il l'était déjà à l'Excel,
+            # au Word et à l'HTML ; le commentaire était le SEUL producteur N5
+            # à ne pas le recevoir, et publiait `datetime.now()` à sa place en
+            # l'appelant « arrêté ». Les deux champs passent : `date_arrete`
+            # établit l'exercice, `arrete` s'affiche.
             commentaire = generer_commentaire(
                 n1=n1, n2=n2, n3=n3, n4=n4,
                 lob=lob, lob_label=lob_label,
                 ref_client=ref_client,
+                arrete=arrete, date_arrete=date_arrete,
             )
 
             # ── Les trois exports binaires, via UN SEUL mécanisme ──────────────
