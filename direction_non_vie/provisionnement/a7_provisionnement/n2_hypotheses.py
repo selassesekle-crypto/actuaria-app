@@ -257,10 +257,16 @@ class HypothesesValidator:
         try:
             from scipy.stats import spearmanr
         except ImportError:
+            # ⚠️ PREMIER DES DEUX CHEMINS QUI RENDENT `ok: True` SUR ZÉRO PAIRE.
+            # `statut` est la MOITIÉ MANQUANTE DU LOT F3, qui l'avait donnée à
+            # `_h2` seulement : cinq badges de trois livrables se déduisaient
+            # encore de `ok`, et affichaient « ✓ VALIDÉE · Score 70/100 » —
+            # en vert — au-dessus du texte « H1 non testable ».
             return {
                 'ok': True, 'score': 70,
                 'corr_max': 0, 'corr_moy': 0,
                 'n_colonnes_testees': 0, 'n_colonnes_sig': 0,
+                'statut': NON_TESTABLE,
                 'message': "H1 non testable — scipy non disponible",
                 'details': [],
             }
@@ -295,10 +301,20 @@ class HypothesesValidator:
                     })
 
         if not corrs:
+            # ⚠️ SECOND CHEMIN, ET LE PLUS FRÉQUENT : il se déclenche sur tout
+            # triangle de moins de 7 années. `_h1` exige DEUX colonnes
+            # consécutives à 4 facteurs appariés.
+            #
+            # ⚠️ `seuil_utilise` RESTE ABSENT ICI, ET C'EST DÉLIBÉRÉ. Le
+            # rétablir est « F3b pour H1 » — une autre clé, pour un autre
+            # consommateur (le tableau de corrélations de l'Excel, qui retombe
+            # sur le seuil GÉNÉRIQUE 0,50). Nommé, non ouvert : ce lot ferme
+            # les badges, rien d'autre.
             return {
                 'ok': True, 'score': 80,
                 'corr_max': 0, 'corr_moy': 0,
                 'n_colonnes_testees': 0, 'n_colonnes_sig': 0,
+                'statut': NON_TESTABLE,
                 'message': "H1 non testable — trop peu de données (< 4 obs par colonne)",
                 'details': [],
             }
@@ -360,6 +376,11 @@ class HypothesesValidator:
             'n_colonnes_testees':   len(corrs),
             'n_colonnes_sig':       n_sig,
             'seuil_utilise':        seuil,
+            # ⚠️ MÊME VOCABULAIRE QUE `_h2` DEPUIS F3 : le statut PUBLIÉ se
+            # distingue du booléen de GATING. `ok` continue d'alimenter N4 et
+            # la sélection des méthodes ; `statut` est ce que les livrables
+            # affichent. Les deux coïncident ici, et seulement ici.
+            'statut':               'VALIDÉE' if ok else 'REJETÉE',
             'message':              message,
             'details':              details[:5],
         }

@@ -232,8 +232,16 @@ def _ong1_synthese(wb, n1, n2, n3, n4, ref_client, date_str):
         ('h2_stabilite','H2 Stabilité'),
     ]):
         h = n2.get(key, {})
-        _kpi(ws, 24+i, 1, lbl, h.get('score', 0), None,
-             'VERT' if h.get('ok') else 'ROUGE')
+        # ⚠️ SECOND SITE EXCEL, ET LE LOT F3 N'AVAIT FERME QUE L'AUTRE (onglet
+        # « Validation hypothèses »). Ici, en synthese, une hypothese non
+        # testable sortait « ✓ Conforme » EN VERT avec son score par defaut.
+        _st = str(h.get('statut', 'VALIDÉE' if h.get('ok') else 'REJETÉE'))
+        _nt = _st == 'NON TESTABLE'
+        # ⚠️ TABLE PLUTOT QUE BRANCHE SUR `ok` : un statut inconnu tombe sur
+        # AMBRE (« à surveiller »), jamais sur VERT. Le filet a refuse la
+        # premiere version, qui rebranchait sur `ok` pour choisir la couleur.
+        _kpi(ws, 24+i, 1, lbl, '—' if _nt else h.get('score', 0), None,
+             {'VALIDÉE': 'VERT', 'REJETÉE': 'ROUGE'}.get(_st, 'AMBRE'))
     # Synthèse BFCC en une ligne : le pire des six statuts, et son code.
     _bfcc = lignes_hypotheses_bfcc(n2)
     _pire = next((l for l in _bfcc if l['statut'] == 'NON VALIDÉE'),
@@ -620,8 +628,15 @@ def _ong6_hypotheses(wb, n2, n4):
     for key, lbl in hyps:
         h   = n2.get(key, {})
         ok  = h.get('ok', True)
-        vert = ok
-        statut_txt = '✅ OUI' if ok else '❌ NON'
+        # ⚠️ LA FORME DU LOT F3 ETAIT << DERIVER DE `ok`, PUIS RATTRAPER >>, ET
+        # LE FILET DU LOT C L'A REFUSEE. Elle marchait pour NON TESTABLE parce
+        # qu'un correctif la reecrivait plus bas ; tout statut FUTUR serait
+        # retombe sur la valeur deduite de `ok`. Le libelle vient desormais du
+        # seul `statut`, par table, et `ok` n'est plus que le repli du `.get`.
+        _st = str(h.get('statut', 'VALIDÉE' if ok else 'REJETÉE'))
+        vert = _st == 'VALIDÉE'
+        statut_txt = {'VALIDÉE': '✅ OUI',
+                      'REJETÉE': '❌ NON'}.get(_st, '⚠️ ' + _st)
         seuil_txt = '—'
         if key == 'h1_independance':
             seuil_txt = f"{h.get('seuil_utilise', 0.50):.2f}"
@@ -629,10 +644,10 @@ def _ong6_hypotheses(wb, n2, n4):
             # ⚠️ « OUI » EN VERT SUR UNE HYPOTHÈSE NON TESTÉE. `ok` vaut True par
             # défaut quand aucune colonne n'est testable ; la ligne sortait donc
             # verte, avec « CV<15% dérive<20% » — les seuils GÉNÉRIQUES, parce
-            # que `_h2` ne publiait pas ceux de la branche sur ce chemin. Il les
-            # publie désormais, et le statut ne se déduit plus du booléen.
-            if h.get('statut') == 'NON TESTABLE':
-                statut_txt, vert = '⚠️ NON TESTABLE', False
+            # que `_h2` ne publiait pas ceux de la branche sur ce chemin.
+            # ⚠️ LE RATTRAPAGE QUI VIVAIT ICI EST RETIRE : il ne couvrait que H2
+            # et que le statut NON TESTABLE. Le libelle vient maintenant du
+            # `statut` pour LES DEUX hypotheses et pour tout statut.
             seuil_txt = (f"CV<{h.get('seuil_cv', 0.15):.0%} "
                          f"dérive<{h.get('seuil_derive', 0.20):.0%}")
         rangs.append((lbl, statut_txt, h.get('score', 0),

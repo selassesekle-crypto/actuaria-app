@@ -40,12 +40,15 @@
 
 import ast
 import inspect
+import re
 import unittest
 
 import numpy as np
 
 from . import n2_hypotheses as _n2h
 from . import n5_commentaire as _n5c
+from . import n5_excel as _n5x
+from . import n5_rapport as _n5r
 from .n2_hypotheses import HypothesesValidator
 from .n5_commentaire import _s3_hypotheses
 
@@ -408,6 +411,140 @@ class I1_Le_Verdict_De_H1_Ne_Bouge_Pas(unittest.TestCase):
                              h1['corr_moy'] < h1['seuil_utilise']
                              and h1['n_colonnes_sig'] <= 2)
         print('    OK I1-1 ok, score et corr_moy suivent la regle d avant')
+
+
+# =============================================================================
+#  LOT C — UN STATUT PUBLIE NE SE DEDUIT JAMAIS DE `ok` SEUL
+# =============================================================================
+#
+#  ⚠️⚠️ CE LOT EXISTE PARCE QUE LES DEUX PRECEDENTS ETAIENT INCOMPLETS, ET QUE
+#  MES PROPRES FILETS NE POUVAIENT PAS LE VOIR. F3 avait donne `statut` à `_h2`
+#  seulement, et ses tests visaient `_s3_hypotheses` ; le scan de source de
+#  F1+F2 parcourait `n2_hypotheses` et `n5_commentaire`. Aucun des deux ne
+#  regardait `n5_rapport`. Mesure sur un triangle 3×3 sain, AVANT ce lot :
+#
+#      BADGE   : ✓ VALIDÉE · Score 80 / 100      <- carte HTML
+#      TEXTE   : H2 NON TESTABLE — aucune période…
+#
+#  Une pastille VERTE au-dessus de son propre démenti, dans le livrable remis
+#  au CAC. Cinq sites, trois livrables.
+#
+#  ⚠️ LA REGLE EST STRUCTURELLE, DONC LE CONTROLE L'EST AUSSI. Un scan de
+#  chaînes ne verrait rien : aucune chaîne n'est fausse. C'est la FORME de
+#  l'expression qui décide — `'VALIDÉE' if …ok… else …` n'est licite que comme
+#  REPLI d'un `.get('statut', …)`. Le contrôle parcourt donc l'AST des trois
+#  modules de livrable, `n5_rapport` et `n5_excel` COMPRIS.
+
+#: Les libellés de statut tels que les livrables les affichent.
+_LIBELLES_STATUT = {
+    'VALIDÉE', 'REJETÉE', '✓ VALIDÉE', '⚠ REJETÉE', '⚠ NON TESTABLE',
+    'VERT', 'ROUGE', 'AMBRE', '✅ OUI', '❌ NON', '⚠️ NON TESTABLE',
+}
+
+
+def _fautives_dans_source(source):
+    """Les expressions qui déduisent un statut publié de `ok`, hors repli.
+
+    Rend la liste des lignes fautives. Une expression est LICITE quand elle
+    sert de second argument à `.get('statut', …)` : c'est la forme retenue
+    par les lots F3 et C, où le module reste la source et `ok` le dernier
+    recours pour un dict ancien.
+
+    ⚠️ PREND DU TEXTE, PAS UN MODULE, et c'est ce qui rend le contrôle
+    lui-même éprouvable : la classe `J1` lui soumet la forme fautive exacte
+    d'avant le lot, et la forme licite, pour vérifier qu'il distingue les deux.
+    """
+    arbre = ast.parse(source)
+    licites = set()
+    for n in ast.walk(arbre):
+        if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                and n.func.attr == 'get' and len(n.args) == 2
+                and isinstance(n.args[0], ast.Constant)
+                and n.args[0].value == 'statut'):
+            licites.add(id(n.args[1]))
+    fautives = []
+    for n in ast.walk(arbre):
+        if not isinstance(n, ast.IfExp) or id(n) in licites:
+            continue
+        libelles = {c.value for c in ast.walk(n)
+                    if isinstance(c, ast.Constant) and isinstance(c.value, str)}
+        if not (libelles & _LIBELLES_STATUT):
+            continue
+        noms = {c.value for c in ast.walk(n.test)
+                if isinstance(c, ast.Constant) and isinstance(c.value, str)}
+        noms |= {c.attr for c in ast.walk(n.test) if isinstance(c, ast.Attribute)}
+        noms |= {c.id for c in ast.walk(n.test) if isinstance(c, ast.Name)}
+        if 'ok' in noms:
+            fautives.append(n.lineno)
+    return fautives
+
+
+def _derive_un_statut_de_ok(mod):
+    """Le contrôle appliqué à un module de livrable."""
+    return _fautives_dans_source(inspect.getsource(mod))
+
+
+class J1_Aucun_Statut_Publie_Ne_Vient_De_ok(unittest.TestCase):
+    """⚠️ LE CONTROLE COUVRE LES TROIS MODULES DE LIVRABLE. Le restreindre à
+    celui qu'on vient de corriger reproduirait la cause du lot."""
+
+    def test_les_trois_livrables_sont_propres(self):
+        for module in (_n5r, _n5x, _n5c):
+            lignes = _derive_un_statut_de_ok(module)
+            self.assertEqual(
+                lignes, [],
+                f"{module.__name__} déduit encore un statut publié de `ok` "
+                f"aux lignes {lignes}")
+        print('    OK J1-1 aucun statut publie ne se deduit de ok')
+
+    def test_le_controle_distingue_la_forme_fautive_de_la_licite(self):
+        # ⚠️ SANS CETTE EPREUVE, UN CONTROLE QUI PASSE NE PROUVE RIEN — et un
+        # controle qui refuserait TOUT serait pire. On lui soumet les deux
+        # formes exactes en jeu dans ce lot.
+        fautive = ("def f(h):\n"
+                   "    return 'VALIDÉE' if h.get('ok') else 'REJETÉE'\n")
+        licite  = ("def f(h):\n"
+                   "    return h.get('statut',\n"
+                   "                 'VALIDÉE' if h.get('ok') else 'REJETÉE')\n")
+        self.assertEqual(_fautives_dans_source(fautive), [2],
+                         'la forme fautive passe')
+        self.assertEqual(_fautives_dans_source(licite), [],
+                         'le repli licite est refuse a tort')
+        print('    OK J1-2 le controle distingue la forme fautive de la licite')
+
+
+class K1_Les_Livrables_Disent_NON_TESTABLE(unittest.TestCase):
+    """⚠️ VERIFIE PAR EXECUTION, PAS PAR LECTURE — sur le triangle 3×3 sain."""
+
+    def _n2(self):
+        return HypothesesValidator().valider(COURT, lob=LOB)
+
+    def test_h1_publie_desormais_un_statut(self):
+        # La moitié manquante du lot F3 : `_h1` n'avait aucun `statut`.
+        self.assertEqual(self._n2()['h1_independance']['statut'],
+                         'NON TESTABLE')
+        print('    OK K1-1 _h1 publie un statut, comme _h2 depuis F3')
+
+    def test_les_cartes_html_ne_sont_plus_vertes(self):
+        b = _n5r._build_blocks(self._n2(), {}, {}, '', 'aucune', 'Credit', 'X',
+                               '30/06/2026', '18/08/2026', 'A7-1',
+                               'chain_ladder', 'VERT', '')
+        cartes = b['hyp_cards']
+        badges = re.findall(r'hyp-score">(.*?)</div>', cartes)[:2]
+        for badge in badges:
+            self.assertIn('NON TESTABLE', badge)
+            # ⚠️ ET PAS DE SCORE : « 80 / 100 » était la valeur par défaut.
+            self.assertNotIn('/ 100', badge)
+        self.assertNotIn('hyp-card hyp-ok', cartes[:400])
+        print('    OK K1-2 les cartes HTML disent NON TESTABLE, sans score')
+
+    def test_le_contexte_llm_ne_dit_plus_validee(self):
+        txt = _n5r._construire_contexte(self._n2(), {}, {}, 'Credit', '30/06')
+        for ligne in txt.splitlines():
+            if ligne.startswith(('H1 ', 'H2 ')):
+                self.assertIn('NON TESTABLE', ligne)
+                self.assertNotIn('/100', ligne)
+        print('    OK K1-3 le contexte du LLM ne dit plus VALIDEE')
 
 
 if __name__ == '__main__':

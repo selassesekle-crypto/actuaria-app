@@ -243,7 +243,15 @@ def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: s
         f"Méthode retenue : {n4.get('methode_facteurs', n2.get('methode_recommandee', '—'))}",
         "",
         "=== HYPOTHÈSES ===",
-        f"H1 Indépendance : {'VALIDÉE' if h1.get('ok') else 'REJETÉE'} | corr_moy={h1.get('corr_moy', '—')} | score={h1.get('score', '—')}/100",
+        # ⚠️ SYMETRIQUE DE H2 CI-DESSOUS. `ok` vaut True par defaut sur les DEUX
+        # chemins non testables de `_h1` (scipy absent, triangle < 7 ans) : le
+        # LLM recevait « VALIDÉE | corr_moy=0 | score=80/100 » et redigeait
+        # dessus.
+        f"H1 Indépendance : "
+        f"{h1.get('statut', 'VALIDÉE' if h1.get('ok') else 'REJETÉE')} | "
+        + (f"corr_moy={h1.get('corr_moy', '—')} | score={h1.get('score', '—')}/100"
+           if h1.get('statut') != 'NON TESTABLE' else
+           "aucune paire de colonnes testable"),
         f"  Message : {str(h1.get('message', ''))[:200]}",
         # ⚠️ LE STATUT VIENT DU MODULE, PLUS DU BOOLÉEN DE GATING. `ok` vaut True
         # par défaut quand aucune colonne n'est testable : cette ligne publiait
@@ -1546,16 +1554,36 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     ]:
         if not h:
             continue
-        ok    = bool(h.get('ok', True))
-        cls   = 'hyp-ok' if ok else 'hyp-warn'
-        lbl   = '✓ VALIDÉE' if ok else '⚠ REJETÉE'
-        score = _s(h.get('score'))
+        # ⚠️⚠️ LA CARTE SE CONTREDISAIT ELLE-MEME, ET C'EST LE DEFAUT QUI A
+        # OUVERT CE LOT. Le badge se deduisait de `ok` — True par defaut quand
+        # rien n'est testable — pendant que le texte juste en dessous portait
+        # le message honnete du module. Mesure sur un triangle 3x3 sain :
+        #
+        #     BADGE   : ✓ VALIDÉE · Score 80 / 100
+        #     TEXTE   : H2 NON TESTABLE — aucune période ne porte 3 facteurs…
+        #
+        # Une pastille VERTE au-dessus de son propre dementi. Les deux
+        # hypotheses etaient touchees.
+        # ⚠️ UNE SEULE DERIVATION DEPUIS `ok`, ET ELLE EST LE REPLI DU `.get`.
+        # La premiere version de ce correctif rebranchait sur `ok` pour choisir
+        # le libelle : le controle du filet l'a REFUSEE, à juste titre. Le
+        # badge se lit desormais du seul `statut`, par table — ce qui couvre
+        # aussi tout statut futur sans nouvelle branche.
+        statut = str(h.get('statut',
+                           'VALIDÉE' if h.get('ok', True) else 'REJETÉE'))
+        non_testable = statut == 'NON TESTABLE'
+        cls   = 'hyp-ok' if statut == 'VALIDÉE' else 'hyp-warn'
+        lbl   = {'VALIDÉE': '✓ VALIDÉE',
+                 'REJETÉE': '⚠ REJETÉE'}.get(statut, '⚠ ' + statut)
+        # ⚠️ UN SCORE NE SE PUBLIE PAS SOUS UN STATUT QUI DIT QU'IL N'Y A PAS EU
+        # DE MESURE. « Score 80 / 100 » etait la valeur par defaut du module.
+        score = '' if non_testable else ' · Score ' + _s(h.get('score')) + ' / 100'
         msg   = _s(h.get('message'))
         hyp_cards += (
             '<div class="hyp-card ' + cls + '">'
             '<div class="hyp-label">'
             '<div class="hyp-code">' + label + '</div>'
-            '<div class="hyp-score">' + lbl + ' · Score ' + score + ' / 100</div>'
+            '<div class="hyp-score">' + lbl + score + '</div>'
             '</div>'
             '<div class="hyp-text">' + msg + '</div>'
             '</div>'
@@ -2679,8 +2707,16 @@ def export_word(n1, n2, n3, n4,
         rows_h=[]
         for lbl,h in [('H1 Indépendance',h1),('H2 Stabilité',h2)]:
             if not h: continue
-            ok=bool(h.get('ok',True))
-            rows_h.append([lbl,'VALIDÉE' if ok else 'REJETÉE',str(h.get('score','—'))+'/100',str(h.get('message',''))[:80]])
+            # ⚠️ TROISIEME LIVRABLE, MEME DEFAUT. Le Word remis au CAC affichait
+            # « VALIDÉE | 80/100 » sur une hypothese que le module declarait non
+            # testable. Le statut vient desormais du module.
+            # ⚠️ La troncature du message a 80 caracteres reste EN PLACE et
+            # NOMMEE : c'est la classe (3) du releve B2, non arbitree. Le bloc
+            # juste en dessous a deja retire la sienne pour ce motif.
+            _st = str(h.get('statut',
+                            'VALIDÉE' if h.get('ok', True) else 'REJETÉE'))
+            _sc = '—' if _st == 'NON TESTABLE' else str(h.get('score', '—')) + '/100'
+            rows_h.append([lbl, _st, _sc, str(h.get('message', ''))[:80]])
         # ⚠️ PLUS DE TRONCATURE. Les messages étaient coupés à 80 caractères et
         # les libellés à 38 : sur les 14 lignes d'un dossier avec Munich, 14
         # messages et 13 libellés étaient rognés en pleine phrase (médiane 170
