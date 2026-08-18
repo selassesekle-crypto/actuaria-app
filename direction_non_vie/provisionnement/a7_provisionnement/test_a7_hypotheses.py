@@ -38,10 +38,14 @@
 #  RELEVÉES sur le code d'avant : ce sont des oracles, pas des recopies.
 # =============================================================================
 
+import ast
+import inspect
 import unittest
 
 import numpy as np
 
+from . import n2_hypotheses as _n2h
+from . import n5_commentaire as _n5c
 from .n2_hypotheses import HypothesesValidator
 from .n5_commentaire import _s3_hypotheses
 
@@ -231,6 +235,179 @@ class F1_Le_Motif_Survit_A_LA_Troncature(unittest.TestCase):
         # AVANT la coupe.
         self.assertIn('NON CALCULÉE', _h2(MOYEN)['message'][:TRONCATURE])
         print('    OK F1-2 « NON CALCULEE » survit a la troncature')
+
+
+# =============================================================================
+#  LOT F1 + F2 — LE TEXTE DIT CE QUE LE TEST TESTE, ET NE PRESCRIT PLUS SANS
+#  FONDEMENT
+# =============================================================================
+#
+#  ⚠️ CES DEUX DÉFAUTS ONT ÉTÉ TRACÉS PAR CONSOMMATEUR, PAS PAR MODULE — et
+#  c'est ce qui a fait la différence. Le relevé B1, conduit module par module,
+#  avait vu 1 site de F2 ; la trace par la prose en a trouvé SIX, dont deux
+#  dans `n5_commentaire` et **deux que j'avais écrits moi-même au lot A1**.
+#  A1 avait corrigé l'ASSIETTE de H1 et laissé la caractérisation de ce que le
+#  test PROUVE.
+#
+#  F1 n'était pas une phrase mais une PRÉMISSE sous quatre recommandations,
+#  dont un « obligatoire ». Mesuré sur un portefeuille en croissance, l'année
+#  récente portant le plus gros volume ET le facteur le plus élevé (1,6000) :
+#        standard         f0 = 1,5808   <- le PLUS proche
+#        volume_weighted  f0 = 1,5674   <- le plus LOIN
+#  `volume_weighted` donne donc MOINS de poids aux années récentes, dans le cas
+#  même que le texte invoquait.
+
+#: Les formes exactes qui ne doivent plus être PUBLIÉES. Écrites en toutes
+#: lettres pour qu'une recherche plein texte les retrouve si elles revenaient.
+INTERDITES = (
+    "années de survenance sont indépendantes",
+    "années de survenance se développent",
+    "systématiquement différent des autres",
+    "favorise les années récentes",
+    "plus de poids aux années récentes",
+    "pondère par C[i,j]",
+    "volume_weighted doit être",
+    "volume_weighted est obligatoire",
+    "volume_weighted recommandée",
+)
+
+#: ⚠️ UNE FAUSSETÉ PEUT APPARAÎTRE DANS UNE PHRASE QUI LA DÉSAVOUE, ET SEULEMENT
+#: LÀ. Même discriminant que le garde-fou du message de commit : c'est la FORME
+#: qui décide, jamais le mot. Sans cette porte, le test refuserait le texte qui
+#: explique pourquoi l'ancien était faux — un contrôle trop large rapporte autre
+#: chose que ce qu'il prétend mesurer.
+DESAVEUX = ("était fausse", "publiée jusqu'ici", "c'est faux", "ne porte pas",
+            "ne porte PAS")
+
+
+def _chaines_publiees(module):
+    """Toutes les chaînes littérales du module SAUF les docstrings.
+
+    Une docstring ne va nulle part : `inspect.getsource` n'apparaît que dans
+    des fichiers de test, aucun livrable n'en publie. Les inclure ferait
+    échouer le contrôle sur la documentation qui explique le défaut.
+    """
+    arbre = ast.parse(inspect.getsource(module))
+    docstrings = set()
+    for noeud in ast.walk(arbre):
+        if isinstance(noeud, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef,
+                              ast.ClassDef)):
+            corps = getattr(noeud, 'body', None) or []
+            if (corps and isinstance(corps[0], ast.Expr)
+                    and isinstance(corps[0].value, ast.Constant)
+                    and isinstance(corps[0].value.value, str)):
+                docstrings.add(id(corps[0].value))
+    return [n.value for n in ast.walk(arbre)
+            if isinstance(n, ast.Constant) and isinstance(n.value, str)
+            and id(n) not in docstrings]
+
+
+class G1_Aucune_Faussete_N_Est_Publiee(unittest.TestCase):
+    """⚠️ LE CONTRÔLE PORTE SUR LA SOURCE, PAS SUR UN TRIANGLE. Un test qui
+    n'exercerait que les branches atteintes par mes triangles laisserait
+    revenir la phrase dans une branche LoB que je n'ai pas jouée — et c'est
+    exactement là que la trace en a trouvé quatre."""
+
+    def test_ni_n2_ni_n5_ne_publient_une_forme_interdite(self):
+        for module in (_n2h, _n5c):
+            for chaine in _chaines_publiees(module):
+                if any(d in chaine for d in DESAVEUX):
+                    continue
+                for forme in INTERDITES:
+                    self.assertNotIn(
+                        forme, chaine,
+                        f"{module.__name__} publie encore « {forme} » "
+                        f"dans : {chaine[:120]}")
+        print('    OK G1-1 aucune forme interdite dans les chaines publiees')
+
+    def test_le_desaveu_reste_possible(self):
+        # ⚠️ SANS CETTE ÉPREUVE, LE CONTRÔLE PRÉCÉDENT POURRAIT ÊTRE VIDE DE
+        # SENS s'il refusait tout. Le texte qui explique le défaut doit passer.
+        temoin = ("la justification publiée jusqu'ici (« volume_weighted "
+                  "favorise les années récentes ») était fausse")
+        self.assertTrue(any(d in temoin for d in DESAVEUX))
+        print('    OK G1-2 une phrase qui desavoue la faussete passe')
+
+
+#: ⚠️ `_h1` EXIGE DEUX COLONNES CONSÉCUTIVES À ≥ 4 FACTEURS — il faut donc un
+#: triangle d'au moins 7 années, et `LONG` (5×5) tombait sur le chemin « non
+#: testable ». Les deux graines ci-dessous ont été CHOISIES PAR BALAYAGE pour
+#: atteindre les deux branches publiantes ; elles sont figées, et le triangle
+#: est reconstruit à l'identique à chaque exécution.
+_CADENCE = (1.45, 1.14, 1.06, 1.03, 1.015, 1.008, 1.004, 1.002, 1.001)
+
+
+def _triangle(n, graine):
+    """Triangle cumulé déterministe de taille n, bruit gaussien à 2 %."""
+    rng = np.random.default_rng(graine)
+    C = np.zeros((n, n))
+    for i in range(n):
+        C[i, 0] = 1000.0 * (1.0 + 0.05 * i)
+        for j in range(1, n - i):
+            C[i, j] = C[i, j - 1] * _CADENCE[j - 1] * (1.0 + rng.normal(0, 0.02))
+    return C
+
+
+#: H1 VALIDÉE, zéro paire significative — la branche qui portait MA phrase d'A1.
+H1_VALIDE = _triangle(9, 11)
+#: H1 REJETÉE — la branche qui portait « comportement systématiquement
+#: différent », la phrase que `n2_hypotheses` qualifie lui-même de fausse.
+H1_REJETE = _triangle(9, 7)
+
+
+class H1_H1_Dit_Ce_Qu_Il_Teste(unittest.TestCase):
+    """⚠️ LE TEST CORRÈLE DES COLONNES, IL NE JUGE PAS LES ANNÉES."""
+
+    def test_les_deux_branches_sont_bien_atteintes(self):
+        # ⚠️ SANS CETTE ÉPREUVE, LES SUIVANTES POURRAIENT PASSER À VIDE sur un
+        # triangle retombé en « non testable ». C'est le piège qui a fait
+        # échouer la première version de ce filet.
+        a = HypothesesValidator().valider(H1_VALIDE, lob=LOB)['h1_independance']
+        b = HypothesesValidator().valider(H1_REJETE, lob=LOB)['h1_independance']
+        self.assertTrue(a['ok']);  self.assertEqual(a['n_colonnes_sig'], 0)
+        self.assertFalse(b['ok']); self.assertGreater(b['n_colonnes_testees'], 0)
+        print('    OK H1-1 les branches VALIDEE et REJETEE sont atteintes')
+
+    def test_le_message_valide_nomme_la_bonne_grandeur(self):
+        h1 = HypothesesValidator().valider(H1_VALIDE, lob=LOB)['h1_independance']
+        self.assertIn('colonnes consécutives', h1['message'])
+        self.assertIn('CLM-H1', h1['message'])
+        self.assertNotIn('années de survenance sont indépendantes',
+                         h1['message'])
+        print('    OK H1-2 le message nomme les colonnes et renvoie a CLM-H1')
+
+    def test_le_message_tient_sous_la_troncature(self):
+        msg = HypothesesValidator().valider(
+            H1_VALIDE, lob=LOB)['h1_independance']['message']
+        self.assertLessEqual(len(msg), TRONCATURE,
+                             f'message de {len(msg)} car., tronque a 200')
+        print(f'    OK H1-3 le message de H1 tient en {len(msg)} car.')
+
+    def test_la_narration_validee_renvoie_a_clm_h1(self):
+        txt = _texte(H1_VALIDE)
+        self.assertIn('CLM-H1', txt)
+        self.assertNotIn('les années de survenance se développent', txt)
+        print('    OK H1-4 la narration VALIDEE distingue les deux hypotheses')
+
+    def test_la_narration_rejetee_ne_juge_plus_les_annees(self):
+        txt = _texte(H1_REJETE)
+        self.assertNotIn('systématiquement différent des autres', txt)
+        self.assertIn('période de développement', txt)
+        print('    OK H1-5 la narration REJETEE ne juge plus les annees')
+
+
+class I1_Le_Verdict_De_H1_Ne_Bouge_Pas(unittest.TestCase):
+    """⚠️ MÊME VERROU QU'EN A1 : le texte change, la décision non."""
+
+    def test_ok_score_et_corr_suivent_la_regle_d_avant(self):
+        for C in (H1_VALIDE, H1_REJETE):
+            h1 = HypothesesValidator().valider(C, lob=LOB)['h1_independance']
+            self.assertEqual(h1['score'],
+                             max(0, int((1 - h1['corr_moy']) * 100)))
+            self.assertEqual(h1['ok'],
+                             h1['corr_moy'] < h1['seuil_utilise']
+                             and h1['n_colonnes_sig'] <= 2)
+        print('    OK I1-1 ok, score et corr_moy suivent la regle d avant')
 
 
 if __name__ == '__main__':

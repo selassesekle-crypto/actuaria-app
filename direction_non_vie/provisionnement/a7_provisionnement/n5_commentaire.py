@@ -335,11 +335,18 @@ def _s3_hypotheses(n2: Dict) -> str:
                 f"consécutives est de {corr:.2f}, inférieure au seuil {seuil:.2f}. "
                 f"Sur {paires} testée{'s' if n_test > 1 else ''}, aucune ne "
                 f"présente de dépendance statistiquement significative. "
-                f"L'hypothèse fondamentale de Mack est respectée sur cette "
-                f"assiette : les années de survenance se développent "
-                f"indépendamment les unes des autres. Cette validation autorise "
-                f"l'utilisation du Chain Ladder et de Mack comme méthodes "
-                f"principales."
+                # ⚠️ CETTE PHRASE EST DE MA MAIN, LOT A1, ET ELLE ÉTAIT FAUSSE.
+                # A1 a corrigé l'ASSIETTE — combien de paires avaient été
+                # testées — et a laissé, en la réécrivant, la caractérisation
+                # de ce que le test PROUVE. Or ce test corrèle les facteurs de
+                # COLONNES CONSÉCUTIVES ; il ne dit rien du développement des
+                # années de survenance les unes par rapport aux autres, ce qui
+                # est l'objet de CLM-H1, publié plus bas dans le MÊME rapport.
+                f"L'hypothèse de non-corrélation des facteurs successifs est "
+                f"respectée sur cette assiette. ⚠️ Ce test ne porte PAS sur "
+                f"l'indépendance des années de survenance : c'est l'objet de "
+                f"CLM-H1, dont le verdict est publié plus bas et peut différer. "
+                f"Sur ce seul critère, rien ne s'oppose au Chain Ladder ni à Mack."
             )
         else:
             lignes.append(
@@ -362,9 +369,13 @@ def _s3_hypotheses(n2: Dict) -> str:
             f"La corrélation de Spearman moyenne de {corr:.2f} dépasse le seuil "
             f"{seuil:.2f}. {n_sig} paire(s) de colonnes sur {n_test} testées "
             f"présentent une dépendance statistiquement significative (p < 0.05). "
-            f"Cela signifie que certaines années de survenance ont un comportement "
-            f"systématiquement différent des autres — une mauvaise ou bonne année "
-            f"tend à l'être sur plusieurs périodes de développement. "
+            # ⚠️ « ANNÉES DE SURVENANCE AU COMPORTEMENT SYSTÉMATIQUEMENT
+            # DIFFÉRENT » ÉTAIT LA PHRASE QUE `n2_hypotheses` QUALIFIE
+            # LUI-MÊME DE FAUSSE dans sa docstring — elle y est citée mot pour
+            # mot. Le module le savait ; le rapport la publiait quand même.
+            f"Cela signifie que le facteur d'une période de développement "
+            f"renseigne sur celui de la période suivante : les colonnes ne "
+            f"portent pas une information indépendante. "
             f"Dans ce contexte, les estimateurs Chain Ladder et Mack sont biaisés "
             f"et doivent être utilisés avec prudence, voire remplacés par "
             f"Bornhuetter-Ferguson ou Cape Cod qui s'ancrent sur un a priori "
@@ -1203,17 +1214,22 @@ def _lob_rc_auto_materiel(n1, n2, n3, n4):
     hypotheses = (
         "COHÉRENCE RC AUTO MATÉRIELS : "
         + (
-            "H1 validée — les années de survenance sont indépendantes, "
-            "ce qui est attendu sur RC Auto matériels (portefeuille fréquence). "
+            "H1 validée — les facteurs de colonnes consécutives ne sont pas "
+            "corrélés, ce qui est attendu sur RC Auto matériels (portefeuille "
+            "fréquence). "
             if h1_ok else
             "H1 rejetée sur RC Auto matériels — inhabituel sur un portefeuille de masse. "
             "Vérifier l'homogénéité du mix assuré (VP/utilitaires/deux-roues) "
             "et l'absence d'effet de cohorte lié à l'évolution du barème IDA. "
         )
+        # ⚠️ LA SURVEILLANCE RESTE, LA PRESCRIPTION PART. Ce qui suivait —
+        # « la variante volume_weighted doit être privilégiée » — reposait sur
+        # une prémisse mesurée fausse (cf. `_choisir_variante_cl`). Le constat
+        # sur l'inflation carrosserie, lui, est une instruction de travail
+        # sourcée par le métier : il est conservé tel quel.
         + "Surveiller la dérive des facteurs récents liée à l'inflation carrosserie "
         "— si les 2-3 dernières colonnes montrent des facteurs systématiquement "
-        "plus élevés que les colonnes anciennes, H2 sera rejetée sur la dérive "
-        "et la variante volume_weighted doit être privilégiée."
+        "plus élevés que les colonnes anciennes, H2 sera rejetée sur la dérive."
     )
 
     methodes = (
@@ -1404,8 +1420,11 @@ def _lob_rc_auto_corporels(n1, n2, n3, n4):
         + "Attention particulière sur H2 : la dérive des facteurs récents "
         "est attendue sur cette branche (hausse de l'inflation médicale "
         "post-COVID, révision des barèmes). "
-        "La variante volume_weighted doit être systématiquement privilégiée "
-        "pour donner plus de poids aux années récentes. "
+        # ⚠️ LE SITE QUI PUBLIAIT LA PRÉMISSE FAUSSE EN TOUTES LETTRES —
+        # « pour donner plus de poids aux années récentes ». Mesuré :
+        # `volume_weighted` pondère par √C[i,j] et donne MOINS de poids aux
+        # gros volumes que `standard`. Prescription et justification retirées
+        # ensemble ; le constat de dérive, sourcé par le métier, reste.
         # ⚠️ « H4 » était un vestige : l'ancienne H4 bootstrap a été
         # remplacée par BOOT-H1..H4, et le test de dispersion est BOOT-H3.
         # Le renommage avait balayé les symboles, pas la prose française.
@@ -1511,7 +1530,10 @@ def _lob_rc_medicale(n1, n2, n3, n4):
         "Le rejet de H2 est également attendu : "
         "l'évolution jurisprudentielle (augmentation des indemnisations, "
         "reconnaissance de nouveaux préjudices) crée une dérive structurelle "
-        "des facteurs. La variante volume_weighted est obligatoire. "
+        # ⚠️ « OBLIGATOIRE » — la formulation la plus forte du dépôt, sur la
+        # prémisse mesurée fausse. Un actuaire qui signe pouvait la lire comme
+        # une contrainte. Retirée : rien de sourcé ne la remplace.
+        "des facteurs. "
         # ⚠️ Même vestige qu'en RC Auto corporels : c'est BOOT-H3.
         "Le test BOOT-H3 (sur-dispersion) doit être interprété avec prudence : "
         "la distribution RC Médicale est très leptokurtique "

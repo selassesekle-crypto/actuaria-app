@@ -310,11 +310,26 @@ class HypothesesValidator:
         ok    = corr_moy < seuil and n_sig <= 2
         score = max(0, int((1 - corr_moy) * 100))
 
+        # ⚠️ CE TEST NE MESURE PAS L'INDÉPENDANCE DES ANNÉES DE SURVENANCE, ET LE
+        # MODULE LE SAVAIT DÉJÀ (cf. l'avertissement de la docstring plus haut :
+        # « c'est faux »). Il corrèle les facteurs de COLONNES CONSÉCUTIVES —
+        # c'est le test de corrélation de Mack 1994, pas son test d'effet
+        # calendaire. L'indépendance des années de survenance est l'objet de
+        # CLM-H1, publié DANS LE MÊME RAPPORT sous un intitulé quasi identique.
+        # Le rapport affirmait donc, sur ce test-ci, une conclusion qui ne lui
+        # appartient pas, à trois lignes d'un verdict qui pouvait la contredire.
+        #
+        # ⚠️ L'INTITULÉ DE SECTION N'EST PAS TOUCHÉ ICI. « H1 — INDÉPENDANCE
+        # (Mack 1993) » reste vague sans être faux — Mack porte bien un test de
+        # corrélation. Savoir si ce cadre doit garder ce nom, ou sortir de la
+        # chaîne publiée, est une question de fond OUVERTE (constat A7 du
+        # relevé B1) : elle se tranche avec sa mesure d'impact, pas ici.
         if not ok:
             alertes.append(
                 f"⚠️ H1 Indépendance : corrélation Spearman moyenne = {corr_moy:.2f} "
                 f"(seuil LoB = {seuil:.2f}), {n_sig} colonne(s) significative(s). "
-                f"Années de survenance dépendantes → BF ou Cape Cod recommandés."
+                f"Facteurs de colonnes consécutives corrélés → l'a priori exogène "
+                f"de BF ou Cape Cod réduit la dépendance au seul triangle."
             )
             message = (
                 f"H1 REJETÉE — corrélation Spearman moy={corr_moy:.2f}, "
@@ -328,9 +343,13 @@ class HypothesesValidator:
                     f"— proche du seuil ({seuil:.2f}), surveiller."
                 )
             infos.append(f"✅ H1 Indépendance validée (corr_moy={corr_moy:.2f})")
+            # ⚠️ TIENT SOUS 200 CARACTÈRES — `n5_excel` et `n5_rapport` tronquent.
+            # Verrouillé par test.
             message = (
                 f"H1 VALIDÉE — corrélation Spearman moy={corr_moy:.2f} < {seuil:.2f}. "
-                f"Les années de survenance sont indépendantes. CL est approprié."
+                f"Les facteurs de colonnes consécutives ne sont pas corrélés. Ce "
+                f"test ne porte pas sur l'indépendance des années de survenance "
+                f"(voir CLM-H1)."
             )
 
         return {
@@ -477,10 +496,16 @@ class HypothesesValidator:
                 f"→ facteurs instables. Variante médiane ou trimmed_mean recommandée."
             )
         if not ok_derive:
+            # ⚠️ LA PRESCRIPTION EST RETIRÉE, PAS REMPLACÉE. Elle disait
+            # « Variante volume_weighted recommandée » sur une prémisse
+            # MESURÉE FAUSSE (cf. `_choisir_variante_cl`). Quelle variante
+            # convient à un triangle en dérive n'est pas tranché : le dire
+            # vaut mieux que conseiller sans fondement.
             alertes.append(
                 f"⚠️ H2 Dérive temporelle : {derive_moy:.1%} entre facteurs "
                 f"anciens et récents (seuil = {seuil_derive:.0%}) "
-                f"→ triangle en évolution. Variante volume_weighted recommandée."
+                f"→ triangle en évolution. Le choix de la variante Chain Ladder "
+                f"appartient à l'actuaire : aucune n'est établie pour ce motif."
             )
         # ⚠️ NE JAMAIS ANNONCER UNE DÉRIVE SOUS SON SEUIL SI ELLE N'A PAS ÉTÉ
         # CALCULÉE. Ces deux formulations sont la seule source du texte publié.
@@ -697,11 +722,36 @@ class HypothesesValidator:
             )
 
         # Cas 2 : dérive temporelle dominante
+        #
+        # ⚠️⚠️ LA JUSTIFICATION PUBLIÉE ICI ÉTAIT FAUSSE SUR TROIS POINTS, ET
+        # ELLE ATTEIGNAIT LE RAPPORT SIGNÉ via `raison_cl`. Elle disait
+        # « volume_weighted pondère par C[i,j] → favorise les années récentes ».
+        # Or `chain_ladder.calculer_facteurs` pondère par √C[i,j] — c'est
+        # `standard` qui pondère par C[i,j] — et son propre commentaire dit
+        # « donne moins de poids aux très grandes années ».
+        #
+        # MESURÉ, sur un portefeuille en croissance où l'année récente porte le
+        # plus gros volume ET le facteur le plus élevé (1,6000) :
+        #       standard         f0 = 1,5808   <- le PLUS proche de 1,6000
+        #       volume_weighted  f0 = 1,5674   <- le plus LOIN
+        # `volume_weighted` donne donc MOINS de poids aux années récentes que
+        # `standard`, dans le cas même que le texte invoquait.
+        #
+        # ⚠️ LA VALEUR RENDUE NE BOUGE PAS. Inverser la recommandation sur cette
+        # seule mesure serait de la conception actuarielle, pas une correction
+        # de texte : quelle variante convient à un triangle en DÉRIVE reste
+        # OUVERT, et se tranchera avec sa propre mesure. Ce lot retire un
+        # conseil sans fondement ; il n'en met pas un autre à la place.
         if not h2_ok and derive > 0.20 and cv <= 0.20:
             return 'volume_weighted', (
-                f"H2 rejetée sur dérive temporelle ({derive:.1%} > 20%). "
-                f"volume_weighted pondère par C[i,j] → favorise les années "
-                f"récentes (volumes généralement plus élevés)."
+                f"H2 rejetée sur dérive temporelle ({derive:.1%} > 20%) : les "
+                f"facteurs anciens et récents diffèrent. ⚠️ AUCUNE VARIANTE DE "
+                f"CHAIN LADDER N'EST ÉTABLIE POUR CE MOTIF — la justification "
+                f"publiée jusqu'ici (« volume_weighted favorise les années "
+                f"récentes ») était fausse : il pondère par la RACINE de C[i,j] "
+                f"et donne donc MOINS de poids aux gros volumes que "
+                f"l'estimateur standard. Le choix appartient à l'actuaire, via "
+                f"le paramètre `methode_cl` de run()."
             )
 
         # Cas 3 : forte dispersion
@@ -721,11 +771,14 @@ class HypothesesValidator:
             )
 
         # Cas 5 : H1 rejetée seule
+        # ⚠️ Même retrait qu'au cas 2 : « volume_weighted pour le CL utilisé en
+        # entrée de BF » ne reposait sur rien. La valeur rendue est inchangée.
         if not h1_ok:
             return 'volume_weighted', (
                 f"H1 rejetée (corr={h1.get('corr_moy', 0):.2f}) — "
                 f"BF/Cape Cod seront les méthodes principales (N4). "
-                f"volume_weighted pour le CL utilisé en entrée de BF."
+                f"Le choix de la variante Chain Ladder servant d'entrée à BF "
+                f"appartient à l'actuaire : aucune n'est établie pour ce motif."
             )
 
         # Fallback sécurisé
