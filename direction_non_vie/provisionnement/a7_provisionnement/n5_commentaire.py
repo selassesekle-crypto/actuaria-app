@@ -374,25 +374,66 @@ def _s3_hypotheses(n2: Dict) -> str:
     lignes.append("")
 
     # ── H2 ────────────────────────────────────────────────────────────────────
+    # ⚠️ MÊME DÉFAUT QUE H1, MÊME REMÈDE, ET LE LOT A1 NE L'AVAIT PAS TOUCHÉ.
+    # `_h2` rend `ok: True, score: 80, cv_moy: 0, derive_moy: 0` quand AUCUNE
+    # colonne n'est testable, et son `message` honnête — « H2 NON TESTABLE » —
+    # n'était lu par personne : ce bloc ne lisait que `ok`, `cv_moy`,
+    # `derive_moy` et `score`. Prouvé par exécution sur un triangle 3×3 sain.
+    #
+    # Le verdict `ok` n'est pas touché : il est lu par N4. On corrige ce qui est
+    # ÉCRIT, pas ce qui est décidé.
+    #
+    # ⚠️ LES DEUX REPLIS CI-DESSOUS SONT CALIBRÉS POUR NE RIEN CHANGER À UN DICT
+    # ANCIEN OU CONSTRUIT À LA MAIN : sans `statut`, on retombe sur le texte
+    # d'avant ; sans `derive_calculee`, on suppose qu'elle l'a été. Une
+    # information nouvelle ne modifie le texte que lorsqu'elle est présente.
     h2_ok  = h2.get('ok', True)
     cv     = h2.get('cv_moy', 0)
     derive = h2.get('derive_moy', 0)
     s_cv   = h2.get('seuil_cv', 0.15)
     s_der  = h2.get('seuil_derive', 0.20)
+    h2_statut  = str(h2.get('statut', 'VALIDÉE' if h2_ok else 'REJETÉE'))
+    derive_vue = bool(h2.get('derive_calculee', True))
 
-    if h2_ok:
+    if h2_statut == 'NON TESTABLE':
+        motif = str(h2.get('message', '')).strip()
+        lignes.append("H2 — STABILITÉ DES FACTEURS : NON TESTABLE")
+        lignes.append(
+            "AUCUNE PÉRIODE DE DÉVELOPPEMENT N'A PU ÊTRE TESTÉE. "
+            # ⚠️ Le motif est CITÉ tel quel, jamais découpé — même règle qu'en H1.
+            + (f"Le module indique : « {motif} ». " if motif else "")
+            + "Ni le coefficient de variation des facteurs ni leur dérive "
+            "temporelle n'ont été calculés : aucun chiffre de stabilité n'est "
+            "publié ici, et le verdict interne « validé » est la valeur par "
+            "défaut du module, non le résultat d'une mesure. La stabilité des "
+            "facteurs reste à établir avant de retenir Chain Ladder."
+        )
+    elif h2_ok:
         lignes.append(
             f"H2 — STABILITÉ DES FACTEURS : VALIDÉE [score {h2.get('score',0)}/100]"
         )
         lignes.append(
             f"Le coefficient de variation moyen des facteurs de développement "
             f"est de {_p(cv*100)} (seuil branche : {_p(s_cv*100)}), "
-            f"et la dérive temporelle est de {_p(derive*100)} "
-            f"(seuil : {_p(s_der*100)}). "
-            f"Les facteurs sont stables dans le temps : "
-            f"les années récentes se développent de la même façon que les "
-            f"années anciennes. Cette stabilité est un prérequis fondamental "
-            f"pour la fiabilité des projections Chain Ladder."
+            + (
+                f"et la dérive temporelle est de {_p(derive*100)} "
+                f"(seuil : {_p(s_der*100)}). "
+                f"Les facteurs sont stables dans le temps : "
+                f"les années récentes se développent de la même façon que les "
+                f"années anciennes. Cette stabilité est un prérequis fondamental "
+                f"pour la fiabilité des projections Chain Ladder."
+                if derive_vue else
+                # ⚠️ « LES ANNÉES RÉCENTES SE DÉVELOPPENT COMME LES ANCIENNES »
+                # EST UN CONSTAT SUR LE PORTEFEUILLE, et il exige la comparaison
+                # ancien/récent. Sans elle, on publie ce qui a été mesuré, et
+                # rien de plus.
+                "et la dispersion des facteurs est donc acceptable. "
+                "⚠️ LA DÉRIVE TEMPORELLE N'A PAS ÉTÉ CALCULÉE : aucune période "
+                "ne porte les 4 facteurs qu'exige la comparaison entre années "
+                "anciennes et récentes. Ce verdict porte sur la DISPERSION des "
+                "facteurs, pas sur leur stabilité dans le temps, qui reste à "
+                "établir."
+            )
         )
     else:
         ok_cv    = h2.get('ok_cv', True)

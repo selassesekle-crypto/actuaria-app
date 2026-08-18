@@ -1813,6 +1813,25 @@ class BestEstimateS2:
                 f"  ❌ {m.replace('_', ' ').title():30s} exclue — {motif}"
             )
 
+        # ⚠️ CE TEXTE EST UN LIVRABLE SIGNÉ, PAS UN LOG. Il devient
+        # `n4['jugement']`, que `n5_rapport.corps_narratif` publie EN REPLI de
+        # la narration. Il affichait « ✅ VALIDÉE  CV=0.0%  dérive=0.0%
+        # score=80/100 » quand `_h2` n'avait testé AUCUNE colonne — le statut se
+        # déduisait de `ok`, qui vaut True par défaut sur ce chemin.
+        h2_statut = str(h2.get('statut',
+                               'VALIDÉE' if h2.get('ok') else 'REJETÉE'))
+        h2_marque = ('⚠️ NON TESTABLE' if h2_statut == 'NON TESTABLE' else
+                     '✅ VALIDÉE' if h2.get('ok') else '⚠️ REJETÉE')
+        if h2_statut == 'NON TESTABLE':
+            h2_mesures = "aucune periode testable — CV et derive non calcules"
+        else:
+            h2_mesures = (
+                f"CV={h2.get('cv_moy', 0):.1%}  "
+                + (f"dérive={h2.get('derive_moy', 0):.1%}  "
+                   if h2.get('derive_calculee', True)
+                   else "dérive non calculée  ")
+                + f"score={h2.get('score', 0)}/100")
+
         lignes += [
             "",
             "2. VALIDATION DES HYPOTHÈSES ACTUARIELLES",
@@ -1821,11 +1840,7 @@ class BestEstimateS2:
             f"{'✅ VALIDÉE' if h1.get('ok') else '⚠️ REJETÉE':15s} "
             f"corr_moy={h1.get('corr_moy', 0):.2f}  "
             f"score={h1.get('score', 0)}/100",
-            f"  H2 Stabilité      : "
-            f"{'✅ VALIDÉE' if h2.get('ok') else '⚠️ REJETÉE':15s} "
-            f"CV={h2.get('cv_moy', 0):.1%}  "
-            f"dérive={h2.get('derive_moy', 0):.1%}  "
-            f"score={h2.get('score', 0)}/100",
+            f"  H2 Stabilité      : {h2_marque:15s} {h2_mesures}",
             "",
             "   Bornhuetter-Ferguson et Cape Cod — hypothèses propres :",
         ] + [

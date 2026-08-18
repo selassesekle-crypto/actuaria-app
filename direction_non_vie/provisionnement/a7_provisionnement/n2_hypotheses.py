@@ -71,7 +71,7 @@ import numpy as np
 from .config.lob_config import get_lob_config
 # Reconstruction des facteurs individuels : SOURCE UNIQUE. Les boucles
 # identiques qui vivaient ici (H1, H2) ont été remplacées par cet appel.
-from .n2_hypotheses_clm import facteurs_individuels
+from .n2_hypotheses_clm import NON_TESTABLE, facteurs_individuels
 
 logger = logging.getLogger('actuaria.a7')
 
@@ -411,16 +411,57 @@ class HypothesesValidator:
                 })
 
         if not cv_cols:
+            # ⚠️ AUCUNE COLONNE TESTÉE, ET QUATRE LIVRABLES LISAIENT CES ZÉROS
+            # COMME DES MESURES. Prouvé par exécution sur un triangle 3×3 sain :
+            # le commentaire signé publiait « H2 — STABILITÉ DES FACTEURS :
+            # VALIDÉE [score 80/100] », « CV 0,0 % », « dérive 0,0 % » et le
+            # constat « les années récentes se développent de la même façon que
+            # les années anciennes » — sur ZÉRO colonne. Trois lignes plus bas,
+            # BFCC-H2 et BOOT-H2 écrivaient NON TESTABLE sur le même triangle :
+            # le rapport se contredisait dans un seul paragraphe.
+            #
+            # ⚠️ LE VERDICT NE BOUGE PAS, ET C'EST DÉLIBÉRÉ. `ok`, `score`,
+            # `ok_cv`, `ok_derive`, `cv_moy`, `derive_moy` gardent EXACTEMENT
+            # leurs valeurs : ils alimentent `_choisir_methode`,
+            # `_choisir_variante_cl` et N4. Ce lot corrige ce qui est ÉCRIT, pas
+            # ce qui est décidé — même arbitrage qu'au lot A1 pour H1. Qu'un
+            # `ok: True` par défaut soit tenable sur zéro test reste une question
+            # ouverte, à instruire avec sa mesure d'impact.
+            #
+            # Ce qui est AJOUTÉ est ce qui manquait pour ne plus se tromper :
+            # un `statut` distinct du booléen de gating, le compte de colonnes
+            # testées, le fait que la dérive n'a pas été calculée, et les seuils
+            # DE LA BRANCHE — absents jusqu'ici, ce qui faisait publier 15 % et
+            # 20 % (les valeurs génériques) pour les 10 LoB sur 15 qui ont
+            # d'autres seuils.
             return {
                 'ok': True, 'score': 80,
                 'cv_moy': 0, 'cv_max': 0, 'derive_moy': 0,
                 'ok_cv': True, 'ok_derive': True,
-                'message': "H2 non testable — trop peu de données",
+                'statut':             NON_TESTABLE,
+                'n_colonnes_testees': 0,
+                'derive_calculee':    False,
+                'seuil_cv':           seuil_cv,
+                'seuil_derive':       seuil_derive,
+                # ⚠️ TIENT SOUS 200 CARACTÈRES, ET C'EST UNE CONTRAINTE MESURÉE :
+                # `n5_excel` et `n5_rapport` tronquent le message à 200. Un motif
+                # coupé en deux publierait une phrase sans son « pas des
+                # mesures ». Verrouillé par test.
+                'message': ("H2 NON TESTABLE — aucune période ne porte 3 "
+                            "facteurs ou plus. Ni le CV ni la dérive n'ont été "
+                            "calculés : les zéros publiés sont des valeurs par "
+                            "défaut, pas des mesures."),
                 'details': [],
             }
 
         cv_moy     = float(np.mean(cv_cols))
         cv_max     = float(np.max(cv_cols))
+        # ⚠️ UNE DÉRIVE NON CALCULÉE VAUT 0,0 ET SE LIT « AUCUNE DÉRIVE ». Elle
+        # n'est mesurée que sur les colonnes portant au moins 4 facteurs
+        # (`mid >= 2` ci-dessus) : sur un triangle court, `derive_cols` reste
+        # vide, `derive_moy` vaut 0,0 et `ok_derive` devient True PAR
+        # CONSTRUCTION. Le chemin est ordinaire, pas un repli.
+        derive_calculee = bool(derive_cols)
         derive_moy = float(np.mean(derive_cols)) if derive_cols else 0.0
 
         ok_cv     = cv_moy    < seuil_cv
@@ -441,21 +482,36 @@ class HypothesesValidator:
                 f"anciens et récents (seuil = {seuil_derive:.0%}) "
                 f"→ triangle en évolution. Variante volume_weighted recommandée."
             )
+        # ⚠️ NE JAMAIS ANNONCER UNE DÉRIVE SOUS SON SEUIL SI ELLE N'A PAS ÉTÉ
+        # CALCULÉE. Ces deux formulations sont la seule source du texte publié.
+        txt_derive = (
+            f"dérive={derive_moy:.1%} (seuil {seuil_derive:.0%})"
+            if derive_calculee else
+            "dérive NON CALCULÉE (aucune période ne porte 4 facteurs, minimum "
+            "pour comparer années anciennes et récentes)"
+        )
         if ok:
             infos.append(
                 f"✅ H2 Stabilité validée — CV={cv_moy:.1%} < {seuil_cv:.0%}, "
-                f"dérive={derive_moy:.1%} < {seuil_derive:.0%}"
+                + (f"dérive={derive_moy:.1%} < {seuil_derive:.0%}"
+                   if derive_calculee else "dérive non calculée")
             )
+
+        if not ok:
+            conclusion = ("Les facteurs montrent une instabilité ou une dérive "
+                          "temporelle.")
+        elif derive_calculee:
+            conclusion = "Les facteurs sont stables dans le temps."
+        else:
+            # ⚠️ « STABLE DANS LE TEMPS » EST UN CONSTAT SUR LE PORTEFEUILLE. Il
+            # ne se publie pas quand la comparaison ancien/récent n'a pas eu lieu.
+            conclusion = ("La dispersion des facteurs est acceptable ; leur "
+                          "stabilité DANS LE TEMPS n'a pas été testée.")
 
         message = (
             f"H2 {'VALIDÉE' if ok else 'REJETÉE'} — "
             f"CV moy={cv_moy:.1%} (seuil {seuil_cv:.0%}), "
-            f"dérive={derive_moy:.1%} (seuil {seuil_derive:.0%}). "
-            + (
-                "Les facteurs sont stables dans le temps."
-                if ok else
-                "Les facteurs montrent une instabilité ou une dérive temporelle."
-            )
+            f"{txt_derive}. " + conclusion
         )
 
         return {
@@ -468,6 +524,9 @@ class HypothesesValidator:
             'derive_moy':  round(derive_moy, 4),
             'seuil_cv':    seuil_cv,
             'seuil_derive': seuil_derive,
+            'statut':             'VALIDÉE' if ok else 'REJETÉE',
+            'n_colonnes_testees': len(cv_cols),
+            'derive_calculee':    derive_calculee,
             'message':     message,
             'details':     details,
         }

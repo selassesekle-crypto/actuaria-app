@@ -620,13 +620,23 @@ def _ong6_hypotheses(wb, n2, n4):
     for key, lbl in hyps:
         h   = n2.get(key, {})
         ok  = h.get('ok', True)
+        vert = ok
+        statut_txt = '✅ OUI' if ok else '❌ NON'
         seuil_txt = '—'
         if key == 'h1_independance':
             seuil_txt = f"{h.get('seuil_utilise', 0.50):.2f}"
         elif key == 'h2_stabilite':
-            seuil_txt = f"CV<{h.get('seuil_cv',0.15):.0%} dérive<{h.get('seuil_derive',0.20):.0%}"
-        rangs.append((lbl, '✅ OUI' if ok else '❌ NON', h.get('score', 0),
-                      seuil_txt, str(h.get('message', '—'))[:200], '', ok))
+            # ⚠️ « OUI » EN VERT SUR UNE HYPOTHÈSE NON TESTÉE. `ok` vaut True par
+            # défaut quand aucune colonne n'est testable ; la ligne sortait donc
+            # verte, avec « CV<15% dérive<20% » — les seuils GÉNÉRIQUES, parce
+            # que `_h2` ne publiait pas ceux de la branche sur ce chemin. Il les
+            # publie désormais, et le statut ne se déduit plus du booléen.
+            if h.get('statut') == 'NON TESTABLE':
+                statut_txt, vert = '⚠️ NON TESTABLE', False
+            seuil_txt = (f"CV<{h.get('seuil_cv', 0.15):.0%} "
+                         f"dérive<{h.get('seuil_derive', 0.20):.0%}")
+        rangs.append((lbl, statut_txt, h.get('score', 0),
+                      seuil_txt, str(h.get('message', '—'))[:200], '', vert))
 
     # ⚠️ CLM-H1..H4 EN TÊTE, ET C'EST UN MANQUE QUI EST RÉPARÉ ICI. Les
     # hypothèses de CHAIN LADDER ET MACK — les méthodes qui portent le Best

@@ -245,7 +245,17 @@ def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: s
         "=== HYPOTHÈSES ===",
         f"H1 Indépendance : {'VALIDÉE' if h1.get('ok') else 'REJETÉE'} | corr_moy={h1.get('corr_moy', '—')} | score={h1.get('score', '—')}/100",
         f"  Message : {str(h1.get('message', ''))[:200]}",
-        f"H2 Stabilité : {'VALIDÉE' if h2.get('ok') else 'REJETÉE'} | CV={h2.get('cv_moy', '—')} | score={h2.get('score', '—')}/100",
+        # ⚠️ LE STATUT VIENT DU MODULE, PLUS DU BOOLÉEN DE GATING. `ok` vaut True
+        # par défaut quand aucune colonne n'est testable : cette ligne publiait
+        # alors « VALIDÉE | CV=0 | score=80/100 ».
+        f"H2 Stabilité : "
+        f"{h2.get('statut', 'VALIDÉE' if h2.get('ok') else 'REJETÉE')} | "
+        + (f"CV={h2.get('cv_moy', '—')} | score={h2.get('score', '—')}/100"
+           if h2.get('statut') != 'NON TESTABLE' else
+           "aucune periode testable"),
+        # ⚠️ H1 publiait son message, pas H2 : l'asymétrie masquait le seul
+        # endroit où le module disait « non testable ».
+        f"  Message : {str(h2.get('message', ''))[:200]}",
         f"Loss ratio a priori : {libelle_loss_ratio(n3.get('bf', {}))} (source : {n3.get('bf', {}).get('source_lr', '—')}) — UNIQUE, produit par N3.",
         *[f"{l['libelle']} : {l['statut']} | {l['message'][:160]}"
           for l in lignes_hypotheses_bfcc(n2)],
