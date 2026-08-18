@@ -327,6 +327,34 @@ def _generer_narration(n2, n3, n4, commentaire, lob_label, arrete) -> Tuple[str,
     return '', 'aucune'
 
 
+#: Le libellé d'origine de la narration, par source. UNE SEULE TABLE.
+#:
+#: ⚠️ IL Y EN AVAIT DEUX, ET ELLES DIVERGEAIENT SUR DEUX POINTS. L'HTML
+#: écrivait « ✦ ActuarIA Intelligence », le Word « ✦ Narration générée par
+#: ActuarIA Intelligence » — divergence de forme. Et surtout, le Word était
+#: gardé par `if source == 'claude_api'` : le chemin `templates`, LE SEUL qui
+#: s'exécute sans clé API, n'y publiait ni origine ni engagement.
+_LIBELLE_SOURCE = {
+    'claude_api': '✦ ActuarIA Intelligence',
+    'templates':  '📝 Mode standard',
+    'aucune':     '',
+}
+
+
+def badge_narration(source: str) -> str:
+    """Le libellé d'origine suivi de la phrase d'engagement — ou rien.
+
+    ⚠️ CE QUE PORTE L'HTML, LE WORD LE PORTE. C'est le format Word que
+    l'actuaire envoie au commissaire aux comptes ; un document qui n'y dit pas
+    ce qui a produit sa section 7, ni ce qu'elle engage, n'est pas opposable.
+
+    ⚠️ RIEN QUAND IL N'Y A RIEN : `avec_engagement('')` rend `''`, donc une
+    source inconnue ou `aucune` ne fait apparaître aucun badge — un rapport
+    sans narration ne doit engager personne.
+    """
+    return traitement_ia.avec_engagement(_LIBELLE_SOURCE.get(source, ''))
+
+
 # =============================================================================
 #  RENDU MARKDOWN → HTML (style premium)
 # =============================================================================
@@ -1881,12 +1909,7 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         narration_html = '<p class="comm-p">' + _clean(narration) + '</p>' if narration else \
             '<p class="comm-p" style="color:#8A9BB0;font-style:italic;">Narration non disponible.</p>'
 
-    source_badge = {
-        'claude_api': '✦ ActuarIA Intelligence',
-        'templates':  '📝 Mode standard',
-        'aucune':     '',
-    }.get(source_narration, '')
-    source_badge = traitement_ia.avec_engagement(source_badge)
+    source_badge = badge_narration(source_narration)
 
     b['narration_html']  = narration_html
     b['commentaire_badge'] = source_badge
@@ -2721,9 +2744,16 @@ def export_word(n1, n2, n3, n4,
                             p=doc.add_paragraph(); p.paragraph_format.space_after=Pt(3)
                             p.paragraph_format.left_indent=Cm(0.3)
                             _run(p,ln,sz=9,col=NR)
-            if source=='claude_api':
+            # ⚠️ CE `if source=='claude_api'` LAISSAIT LE WORD MUET. Le chemin
+            # `templates` — le SEUL qui s'exécute sans clé API — ne publiait
+            # NI origine NI phrase d'engagement. Mesuré : « Cette narration
+            # engage l'actuaire signataire. » comptait 1 en HTML et 0 en Word,
+            # dans le format que l'actuaire envoie au commissaire aux comptes.
+            # Le badge vient désormais de `badge_narration`, comme l'HTML.
+            _badge = badge_narration(source)
+            if _badge:
                 p=doc.add_paragraph()
-                _run(p,traitement_ia.avec_engagement('✦ Narration générée par ActuarIA Intelligence'),sz=7,italic=True,col=GrR)
+                _run(p,_badge,sz=7,italic=True,col=GrR)
         else:
             p=doc.add_paragraph(); _run(p,'Narration non disponible.',sz=9,italic=True)
         doc.add_page_break()
