@@ -7,7 +7,8 @@
 #  Référence réglementaire :
 #    - EIOPA Guidelines on the valuation of technical provisions (EIOPA-BoS-14/166)
 #    - Annexe I du Règlement Délégué 2015/35 : classification des LoB Non-Vie
-#    - FFSA/FFA : données marché et benchmarks LR par branche
+#    - benchmarks LR par branche : valeurs de place NON VÉRIFIÉES,
+#      destinées à être remplacées par le benchmark du client
 #
 #  Chaque LoB définit :
 #    · seuils H1/H2 adaptés au comportement réel de la branche
@@ -15,7 +16,7 @@
 #    · méthodes actuarielles prioritaires
 #    · alertes spécifiques à la branche
 #    · le SEGMENT officiel Solvabilité II dont elle relève (cf. SEGMENTS_S2)
-#    · LR marché de référence (source FFA/FFSA)
+#    · LR marché de référence (valeur de place non vérifiée)
 #
 # =============================================================================
 
@@ -88,8 +89,6 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         # et non le segment II-2, qui couvre les dommages au véhicule assuré.
         "segment_s2":       ('II', 1),
 
-        # Longueur de développement attendue
-        "queue_attendue_ans": 5,
 
         # Seuils H2 adaptés : Auto matériel = portefeuille stable, peu de variance
         "h2_seuil_cv":      0.12,   # CV max acceptable des facteurs
@@ -104,9 +103,9 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         # Munich CL : non pertinent sans triangle engagé fiable
         "munich_cl_disponible": False,
 
-        # LR marché de référence (source FFA Non-Vie 2024)
+        # LR marché de référence (valeur de place non vérifiée)
         "lr_marche_reference":  0.72,
-        "lr_marche_source":     "FFA Non-Vie 2024 — RC Auto matériels",
+        "lr_marche_source":     "valeur de place NON VÉRIFIÉE — à remplacer par le benchmark du client",
 
         # Alertes spécifiques à la branche
         "alertes_specifiques": [
@@ -127,7 +126,6 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "label":            "RC Automobile — Corporels",
         "segment_s2":       ('II', 1),
 
-        "queue_attendue_ans": 20,
 
         # Queue longue → plus de tolérance sur le CV, mais surveiller la dérive
         "h2_seuil_cv":      0.20,
@@ -140,10 +138,10 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "munich_cl_disponible": True,
 
         "lr_marche_reference":  0.85,
-        "lr_marche_source":     "FFA Non-Vie 2024 — RC Auto corporels",
+        "lr_marche_source":     "valeur de place NON VÉRIFIÉE — à remplacer par le benchmark du client",
 
         "alertes_specifiques": [
-            "ATTENTION : branche à queue très longue (15–25 ans). "
+            "ATTENTION : branche à queue très longue. "
             "Vérifier le tail factor — un tail > 1.05 est anormal.",
             "Surveiller l'évolution de la jurisprudence Dintilhac "
             "(révision du barème de capitalisation).",
@@ -163,7 +161,6 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "label":            "Multirisque Habitation (MRH)",
         "segment_s2":       ('II', 4),
 
-        "queue_attendue_ans": 4,
 
         # MRH = portefeuille très stable → seuils stricts
         "h2_seuil_cv":      0.12,
@@ -174,7 +171,7 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "munich_cl_disponible":  False,
 
         "lr_marche_reference":  0.68,
-        "lr_marche_source":     "FFA Non-Vie 2024 — MRH",
+        "lr_marche_source":     "valeur de place NON VÉRIFIÉE — à remplacer par le benchmark du client",
 
         "alertes_specifiques": [
             "Isoler impérativement les sinistres CAT NAT (tempêtes, inondations, grêle) "
@@ -197,7 +194,6 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "label":            "Responsabilité Civile Générale",
         "segment_s2":       ('II', 5),
 
-        "queue_attendue_ans": 12,
 
         "h2_seuil_cv":      0.18,
         "h2_seuil_derive":  0.20,
@@ -209,13 +205,13 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "munich_cl_disponible": True,
 
         "lr_marche_reference":  0.78,
-        "lr_marche_source":     "FFA Non-Vie 2024 — RC Générale",
+        "lr_marche_source":     "valeur de place NON VÉRIFIÉE — à remplacer par le benchmark du client",
 
         "alertes_specifiques": [
             "Attention aux sinistres sériels (produits défectueux, contamination) "
             "— les isoler avant calcul CL.",
             "Surveiller les sinistres émergents à déclaration tardive "
-            "(délai > 3 ans entre fait générateur et déclaration).",
+            "(délai important entre fait générateur et déclaration).",
             "Contrôler la stabilité du ratio S/P vs N-1 : "
             "une hausse > 5 pts doit être documentée.",
         ],
@@ -234,7 +230,6 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         # responsabilité civile médicale dans la RC générale (ligne 8).
         "segment_s2":       ('II', 5),
 
-        "queue_attendue_ans": 25,
 
         # Très longue queue → tolérance haute sur CV
         "h2_seuil_cv":      0.25,
@@ -247,10 +242,10 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "munich_cl_disponible": True,
 
         "lr_marche_reference":  0.92,
-        "lr_marche_source":     "MACSF/Sham — RC Médicale 2024",
+        "lr_marche_source":     "valeur de place NON VÉRIFIÉE — à remplacer par le benchmark du client",
 
         "alertes_specifiques": [
-            "BRANCHE À QUEUE TRÈS LONGUE (20–30 ans). "
+            "BRANCHE À QUEUE TRÈS LONGUE. "
             "Un triangle < 15 ans est insuffisant pour calibrer les facteurs de queue.",
             "Surveiller l'évolution de la loi Kouchner et les délais CRCI/CCI "
             "(impact sur le rythme de déclaration).",
@@ -274,7 +269,6 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         # RC médicale. Il n'existe pas de segment « construction ».
         "segment_s2":       ('II', 5),
 
-        "queue_attendue_ans": 15,
 
         # Triangles souvent creux (déclaration différée jusqu'à 10 ans)
         "h2_seuil_cv":      0.25,
@@ -287,12 +281,12 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "munich_cl_disponible": False,
 
         "lr_marche_reference":  0.88,
-        "lr_marche_source":     "FFA Non-Vie 2024 — Construction",
+        "lr_marche_source":     "valeur de place NON VÉRIFIÉE — à remplacer par le benchmark du client",
 
         "alertes_specifiques": [
-            "ATTENTION : garantie décennale = déclaration différée jusqu'à 10 ans. "
+            "ATTENTION : garantie décennale — déclaration différée jusqu'à dix ans après réception des travaux (art. 1792-4-1 du code civil). "
             "La zone connue du triangle sera structurellement creuse.",
-            "BF fortement recommandé sur les années récentes (< 5 ans de développement).",
+            "BF fortement recommandé sur les années les moins développées.",
             "Surveiller les insolvabilités constructeurs "
             "(impact sur les recours en garantie).",
             "Isoler les sinistres sériels (défaut de conception vs défaut d'exécution).",
@@ -315,7 +309,6 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         # aucun ne figure à l'annexe II.
         "segment_s2":       ('II', 3),
 
-        "queue_attendue_ans": 8,
 
         "h2_seuil_cv":      0.22,
         "h2_seuil_derive":  0.22,
@@ -327,11 +320,11 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "munich_cl_disponible": False,
 
         "lr_marche_reference":  0.82,
-        "lr_marche_source":     "FFA Non-Vie 2024 — Marine/Transport",
+        "lr_marche_source":     "valeur de place NON VÉRIFIÉE — à remplacer par le benchmark du client",
 
         "alertes_specifiques": [
             "Portefeuille à fort risque de concentration : "
-            "1 sinistre peut représenter 30–40% du portefeuille.",
+            "1 sinistre peut représenter une part majeure du portefeuille.",
             "Isoler les gros sinistres (Large Loss Threshold) avant calcul CL.",
             "Vérifier la séparation brut/net de réassurance.",
             "Surveiller l'exposition aux CAT maritimes et aux événements géopolitiques.",
@@ -364,7 +357,6 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         # qui partage ce segment et sert des rentes.
         "segment_s2":       ('XIV', 2),
 
-        "queue_attendue_ans": 6,
 
         "h2_seuil_cv":      0.15,
         "h2_seuil_derive":  0.15,
@@ -376,10 +368,10 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "munich_cl_disponible": False,
 
         "lr_marche_reference":  0.70,
-        "lr_marche_source":     "Marché français — GAV / Accident scolaire (estimation)",
+        "lr_marche_source":     "valeur de place NON VÉRIFIÉE — à remplacer par le benchmark du client",
 
         "alertes_specifiques": [
-            "Portefeuille court — vérifier suffisance du triangle (min 5 ans).",
+            "Portefeuille court — vérifier la suffisance du triangle.",
             "Distinguer GAV individuelle et collective (sinistralité différente).",
         ],
 
@@ -393,7 +385,6 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "label":            "Transport",
         "segment_s2":       ('II', 3),
 
-        "queue_attendue_ans": 8,
 
         "h2_seuil_cv":      0.22,
         "h2_seuil_derive":  0.22,
@@ -405,7 +396,7 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "munich_cl_disponible": False,
 
         "lr_marche_reference":  0.82,
-        "lr_marche_source":     "FFA Non-Vie 2024 — Transport",
+        "lr_marche_source":     "valeur de place NON VÉRIFIÉE — à remplacer par le benchmark du client",
 
         "alertes_specifiques": [
             "Portefeuille à fort risque de concentration — isoler les gros sinistres.",
@@ -423,7 +414,6 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "label":            "Branche Non-Vie Générique",
         "segment_s2":       ('II', 5),
 
-        "queue_attendue_ans": 10,
 
         # Seuils standards marché
         "h2_seuil_cv":      0.15,
@@ -437,10 +427,10 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         "munich_cl_disponible": False,
 
         "lr_marche_reference":  None,
-        "lr_marche_source":     "Aucun benchmark disponible — à calibrer sur données internes",
+        "lr_marche_source":     "valeur de place NON VÉRIFIÉE — à remplacer par le benchmark du client",
 
         "alertes_specifiques": [
-            "Branche non identifiée. Les seuils H2 génériques (CV=15%, dérive=20%) "
+            "Branche sans commentaire spécifique disponible. Les seuils appliqués "
             "sont appliqués. Préciser le paramètre 'lob' pour une analyse adaptée.",
         ],
 
@@ -458,14 +448,13 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
     "incendie_dommages": {
         "label":            "Incendie & Dommages aux Biens",
         "segment_s2":       ('II', 4),
-        "queue_attendue_ans": 5,
         "h2_seuil_cv":      0.15,
         "h2_seuil_derive":  0.20,
         "h1_seuil_corr":    0.50,
         "methodes_prioritaires": ["chain_ladder", "bornhuetter_ferguson", "bootstrap_odp"],
         "munich_cl_disponible": False,
         "lr_marche_reference":  0.68,
-        "lr_marche_source":     "Marché français FFSA — Dommages aux biens",
+        "lr_marche_source":     "valeur de place NON VÉRIFIÉE — à remplacer par le benchmark du client",
         "risque_long":              False,
         "tail_seuil_stabilisation": 1.01,
         "tail_factor_max_alerte":   1.02,
@@ -483,14 +472,13 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
     "protection_juridique": {
         "label":            "Protection Juridique",
         "segment_s2":       ('II', 7),
-        "queue_attendue_ans": 8,
         "h2_seuil_cv":      0.15,
         "h2_seuil_derive":  0.20,
         "h1_seuil_corr":    0.50,
         "methodes_prioritaires": ["chain_ladder", "bornhuetter_ferguson", "bootstrap_odp"],
         "munich_cl_disponible": False,
         "lr_marche_reference":  0.72,
-        "lr_marche_source":     "Marché français — Protection Juridique",
+        "lr_marche_source":     "valeur de place NON VÉRIFIÉE — à remplacer par le benchmark du client",
         "risque_long":              False,
         "tail_seuil_stabilisation": 1.01,
         "tail_factor_max_alerte":   1.02,
@@ -522,14 +510,13 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
         # charge en capital totale d'un portefeuille cat-nat : il lui manque le
         # module catastrophe, qui relève d'A10.
         "segment_s2":       ('II', 4),
-        "queue_attendue_ans": 7,
         "h2_seuil_cv":      0.25,
         "h2_seuil_derive":  0.35,
         "h1_seuil_corr":    0.40,
         "methodes_prioritaires": ["bornhuetter_ferguson", "cape_cod", "chain_ladder"],
         "munich_cl_disponible": False,
         "lr_marche_reference":  None,
-        "lr_marche_source":     "Référence CCR/MRN par événement",
+        "lr_marche_source":     "valeur de place NON VÉRIFIÉE — à remplacer par le benchmark du client",
         "risque_long":              False,
         "tail_seuil_stabilisation": 1.02,
         "tail_factor_max_alerte":   1.05,
@@ -548,14 +535,13 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
     "credit_caution": {
         "label":            "Crédit / Caution",
         "segment_s2":       ('II', 6),
-        "queue_attendue_ans": 12,
         "h2_seuil_cv":      0.20,
         "h2_seuil_derive":  0.30,
         "h1_seuil_corr":    0.45,
         "methodes_prioritaires": ["bornhuetter_ferguson", "cape_cod", "chain_ladder"],
         "munich_cl_disponible": False,
         "lr_marche_reference":  None,
-        "lr_marche_source":     "À calibrer par secteur — corrélation cycle économique",
+        "lr_marche_source":     "valeur de place NON VÉRIFIÉE — à remplacer par le benchmark du client",
         "risque_long":              True,
         "tail_seuil_stabilisation": 1.05,
         "tail_factor_max_alerte":   1.04,
@@ -580,14 +566,13 @@ LOB_CONFIG: Dict[str, Dict[str, Any]] = {
                             "rentes potentielles, inflation judiciaire. Pour un "
                             "dénouement rapide, utiliser 'accidents_corporels'.",
         "segment_s2":       ('XIV', 2),
-        "queue_attendue_ans": 7,
         "h2_seuil_cv":      0.15,
         "h2_seuil_derive":  0.20,
         "h1_seuil_corr":    0.50,
         "methodes_prioritaires": ["bornhuetter_ferguson", "chain_ladder", "mack_1993", "bootstrap_odp"],
         "munich_cl_disponible": False,
         "lr_marche_reference":  0.75,
-        "lr_marche_source":     "Marché français — GAV / Accident scolaire (estimation)",
+        "lr_marche_source":     "valeur de place NON VÉRIFIÉE — à remplacer par le benchmark du client",
         "risque_long":              True,
         "tail_seuil_stabilisation": 1.05,
         "tail_factor_max_alerte":   1.04,

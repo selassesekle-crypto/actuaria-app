@@ -1008,16 +1008,21 @@ def _s8_recommandations(n1: Dict, n2: Dict, n3: Dict, n4: Dict, lob: str) -> str
 #  NARRATION SPÉCIFIQUE PAR BRANCHE (LoB)
 # =============================================================================
 
-# Données marché de référence par branche (FFA Non-Vie 2024 / MACSF / Sham)
-_LR_MARCHE = {
-    'mrh':                  ('68%',  'FFA Non-Vie 2024 — MRH'),
-    'rc_auto_materiel':     ('72%',  'FFA Non-Vie 2024 — RC Auto matériels'),
-    'rc_auto_corporels':    ('85%',  'FFA Non-Vie 2024 — RC Auto corporels'),
-    'rc_generale':          ('78%',  'FFA Non-Vie 2024 — RC Générale'),
-    'rc_medicale':          ('92%',  'MACSF/Sham — RC Médicale 2024'),
-    'construction':         ('88%',  'FFA Non-Vie 2024 — Construction'),
-    'marine_aviation_transport': ('82%', 'FFA Non-Vie 2024 — Marine/Transport'),
-}
+# ⚠️ `_LR_MARCHE` A ÉTÉ RETIRÉE — TABLE MORTE, ET TROISIÈME COPIE.
+#
+# Elle portait sept loss ratios de place attribués à « FFA Non-Vie 2024 » et
+# « MACSF/Sham ». Mesuré : UNE SEULE occurrence dans le fichier — sa propre
+# définition. Elle n'a jamais été consommée.
+#
+# Et elle était la troisième copie du même chiffre : `LOB_CONFIG` porte
+# `lr_marche_reference` pour les 15 branches — celle-là VIVANTE, lue par
+# Bornhuetter-Ferguson, Cape Cod et BFCC-H4 — pendant que la prose des blocs
+# LoB réécrivait les mêmes valeurs à la main. Une source qui compte, deux qui
+# dérivent.
+#
+# La comparaison au marché n'est pas perdue : elle se fait déjà dans
+# `bf_cape_cod`, qui publie son alerte AVEC sa source au-delà de
+# `ECART_LR_REFERENCE`. La prose n'avait qu'à ne pas la redire.
 
 
 def _narration_lob(
@@ -1053,7 +1058,10 @@ def _lob_mrh(n1, n2, n3, n4):
 
     contexte = (
         "SPÉCIFICITÉS BRANCHE MRH : "
-        "La Multirisque Habitation est une branche à développement court (3-5 ans). "
+        # ⚠️ La fourchette « (3-5 ans) » est retirée : non sourcée, et le champ
+        # `queue_attendue_ans` qui la doublait en config est mort. Le caractère
+        # court de la branche reste — c'est un fait de métier, pas un chiffre.
+        "La Multirisque Habitation est une branche à développement court. "
         "Elle est caractérisée par un volume élevé de sinistres attritionnels "
         "(dégâts des eaux, incendie, vol) et une grande homogénéité des facteurs "
         "de développement. Le triangle CL doit converger rapidement — "
@@ -1094,19 +1102,16 @@ def _lob_mrh(n1, n2, n3, n4):
     if tail_val > 1.02:
         methodes = (
             f"SIGNAL MRH — Tail factor = {tail_val:.4f} (+{(tail_val-1)*100:.2f}%) : "
-            "Ce tail est atypique pour MRH (attendu < 1%). "
+            "Ce tail est atypique pour une branche courte. "
             "Un tail élevé sur une branche courte suggère soit un triangle "
             "tronqué (colonnes manquantes), soit un problème dans les données "
             "des dernières périodes. Vérifier la complétude des dernières colonnes "
-            "avant d'accepter ce tail factor. "
-            "Référence marché FFA : LR MRH ≈ 68% (FFA Non-Vie 2024)."
+            "avant d'accepter ce tail factor."
         )
     else:
         methodes = (
             f"COHÉRENCE MRH — Tail factor ≈ {tail_val:.4f} : conforme à une branche courte. "
-            "Le développement est considéré complet dans la dernière colonne. "
-            f"Référence marché FFA : LR MRH ≈ 68% (FFA Non-Vie 2024). "
-            f"Comparer le LR BF retenu avec cette référence."
+            "Le développement est considéré complet dans la dernière colonne."
         )
 
     recommandations = (
@@ -1115,11 +1120,14 @@ def _lob_mrh(n1, n2, n3, n4):
         "sécheresse) ont été isolés du triangle avant calcul — "
         "les intégrer fausse systématiquement les facteurs de développement. "
         "2. Contrôler l'évolution du coût moyen incendie sur les 3 dernières années "
-        "(impact de l'inflation matériaux BTP : +15 à +25% entre 2021 et 2024). "
+        "(impact de l'inflation des matériaux BTP). "
         "3. Analyser la saisonnalité de la diagonale Q4 "
         "(dégâts des eaux hiver, gel) pour valider H2. "
-        "4. Le S/P MRH doit être comparé à la moyenne marché (68% FFA 2024) — "
-        "un écart > 5 pts doit être documenté dans le dossier actuariel."
+        # ⚠️ Le « 68% FFA 2024 » et le seuil « > 5 pts » sont retirés : ni l'un
+        # ni l'autre n'est sourcé ici, et la comparaison au benchmark est déjà
+        # faite par `bf_cape_cod` avec SA source et SON seuil mesuré.
+        "4. Comparer le S/P au benchmark retenu pour la branche et documenter "
+        "tout écart significatif dans le dossier actuariel."
     )
 
     return {
@@ -1140,13 +1148,13 @@ def _lob_rc_auto_materiel(n1, n2, n3, n4):
 
     contexte = (
         "SPÉCIFICITÉS RC AUTO MATÉRIELS : "
-        "La RC Auto matériels est une branche à développement court (4-6 ans). "
+        "La RC Auto matériels est une branche à développement court. "
         "Le portefeuille est régi par la convention IDA (Indemnisation Directe de "
         "l'Assuré) pour les sinistres bilatéraux — les recours inter-compagnies "
         "doivent être traités séparément du triangle principal. "
         "L'inflation des pièces détachées et de la main-d'œuvre carrosserie "
-        "(+8 à +12% par an depuis 2022) est un facteur structurel "
-        "qui peut biaiser les facteurs de développement récents. "
+        "est un facteur structurel qui peut biaiser les facteurs de "
+        "développement récents. "
         f"Le triangle de {n_ann} années est "
         f"{'suffisant' if n_ann >= 6 else 'à la limite — des années supplémentaires amélioreraient la robustesse'}."
     )
@@ -1173,12 +1181,11 @@ def _lob_rc_auto_materiel(n1, n2, n3, n4):
         + (
             "conforme à une branche courte (tail < 1%). "
             if tail_val < 1.015 else
-            f"atypique pour RC Auto matériels (attendu < 1%). "
+            "atypique pour une branche courte. "
             "Vérifier la complétude des dernières colonnes. "
         )
         + "Le LR Cape Cod est particulièrement pertinent sur cette branche "
         "car les primes sont bien connues (tarification automobile précise). "
-        "Référence marché FFA : LR RC Auto matériels ≈ 72% (FFA Non-Vie 2024). "
         "Les recours IDA reçus et payés doivent être traités en net "
         "pour cohérence avec les primes nettes."
     )
@@ -1188,8 +1195,8 @@ def _lob_rc_auto_materiel(n1, n2, n3, n4):
         "1. Vérifier que les recours IDA sont bien en net dans le triangle "
         "(recours reçus en déduction, recours payés en ajout). "
         "2. Contrôler l'évolution du coût moyen sur les 2-3 dernières années "
-        "(signal inflation carrosserie : +8 à +12%/an depuis 2022). "
-        "3. Comparer le S/P avec la moyenne marché (72% FFA 2024). "
+        "(signal d'inflation carrosserie). "
+        "3. Comparer le S/P au benchmark retenu pour la branche. "
         "4. Pour les flottes et les deux-roues, un traitement séparé "
         "est recommandé si leur poids dans le portefeuille dépasse 15%."
     )
@@ -1214,7 +1221,7 @@ def _lob_rc_generale(n1, n2, n3, n4):
 
     contexte = (
         "SPÉCIFICITÉS RC GÉNÉRALE : "
-        "La RC Générale est une branche à queue moyenne (8-15 ans). "
+        "La RC Générale est une branche à queue moyenne. "
         "Elle présente une forte hétérogénéité : sinistres fréquence attritionnels "
         "(petits accidents, dommages matériels) coexistent avec des sinistres graves "
         "à développement long (préjudices corporels, produits défectueux). "
@@ -1224,7 +1231,7 @@ def _lob_rc_generale(n1, n2, n3, n4):
         "(1) les sinistres sériels (défaut de produit, contamination) "
         "qui créent des corrélations inter-années et invalident H1 ; "
         "(2) l'émergence tardive — certains sinistres RC Générale "
-        "sont déclarés 3 à 8 ans après le fait générateur. "
+        "sont déclarés plusieurs années après le fait générateur. "
         "Le triangle doit inclure les sinistres tardifs pour être complet."
     )
 
@@ -1256,20 +1263,21 @@ def _lob_rc_generale(n1, n2, n3, n4):
         "LECTURE RC GÉNÉRALE : "
         f"Le tail factor de {tail_val:.4f} "
         + (
-            "est significatif — normal pour RC Générale (queue 8-15 ans). "
+            "est significatif — attendu sur une branche à queue moyenne. "
             "Ce tail représente le développement résiduel des sinistres graves "
             "au-delà de la dernière colonne du triangle. "
             if tail_val > 1.02 else
             "est faible — vérifier que le triangle est suffisamment long "
             "pour capturer les sinistres graves tardifs. "
         )
-        + f"Le LR BF = {_p(bf_lr*100)} — "
-        + (
-            "cohérent avec la référence marché RC Générale (~78% FFA 2024). "
-            if 0.65 < bf_lr < 0.92 else
-            "à valider par rapport à la référence marché (~78% FFA 2024). "
-            "Un écart significatif doit être documenté (mix produits, sinistralité atypique). "
-        )
+        # ⚠️ LA COMPARAISON AU MARCHÉ EST RETIRÉE D'ICI, ET DEUX FOIS À RAISON.
+        # Son chiffre (« ~78% FFA 2024 ») n'est pas sourçable, et sa FENÊTRE
+        # contredisait son propre énoncé : tout LR entre 65 % et 92 % était
+        # déclaré « cohérent avec ~78 % » — un écart de 12 points appelé
+        # cohérence. La vraie comparaison se fait dans `bf_cape_cod`, contre
+        # `lr_marche_reference`, au seuil mesuré `ECART_LR_REFERENCE`, et elle
+        # publie sa source.
+        + f"Le LR BF retenu est de {_p(bf_lr*100)}. "
         + "Sur RC Générale, la séparation des gros sinistres (Large Loss Threshold) "
         "est recommandée si un sinistre dépasse 10% du total — "
         "les traiter en CAS-BY-CAS et réintégrer dans le BE final."
@@ -1283,7 +1291,7 @@ def _lob_rc_generale(n1, n2, n3, n4):
         "sont bien intégrés dans le triangle. "
         "3. Appliquer un Large Loss Threshold si un sinistre > 10% du portefeuille "
         "— traitement séparé obligatoire pour ne pas biaiser les facteurs CL. "
-        "4. Comparer le S/P avec la référence marché (78% FFA 2024). "
+        "4. Comparer le S/P au benchmark retenu pour la branche. "
         # ⚠️ « révision en cours » n'était pas faux, c'est devenu PÉRIMÉ :
         # la révision est achevée. La directive (UE) 2024/2853 du 23 octobre
         # 2024 abroge 85/374/CEE avec effet au 9 décembre 2026, date à
@@ -1321,13 +1329,12 @@ def _lob_rc_auto_corporels(n1, n2, n3, n4):
     _suffisance_tri = (
         "est suffisant pour l'estimation des sinistres graves"
         if n_ann >= 15 else
-        "est insuffisant pour une branche à queue 15-25 ans"
+        "est insuffisant pour une branche à queue aussi longue"
         " — le tail factor est critique et doit être validé avec soin"
     )
     contexte = (
         "SPÉCIFICITÉS RC AUTO CORPORELS : "
-        "La RC Auto corporels est la branche à queue la plus longue du Non-Vie "
-        "français (15 à 25 ans de développement). "
+        "La RC Auto corporels est une branche à queue très longue. "
         "Elle est dominée par les sinistres graves — tétraplégies, paraplégies, "
         "polytraumatismes — dont le règlement (rente ou capital) s'étale sur "
         "plusieurs décennies. "
@@ -1381,19 +1388,14 @@ def _lob_rc_auto_corporels(n1, n2, n3, n4):
                 "Niveau cohérent avec la longueur de développement observée. "
             )
         )
-        + f"LR BF = {_p(bf_lr*100)} vs référence marché ≈ 85% (FFA 2024). "
-        + (
-            "Cohérent. " if 0.75 < bf_lr < 0.95 else
-            f"Écart significatif — documenter la cause (mix sinistres, millésimes atypiques). "
-        )
+        + f"Le LR BF retenu est de {_p(bf_lr*100)}. "
         # ⚠️ ÉTIQUETTE FAUSSE : `n4['reserve_p99_5']` est le P99.5 COMPOSÉ
         # (σ Mack ⊕ σ modèle), que §5 nomme correctement. Le vrai P99.5
         # Bootstrap vit dans `n3['bootstrap']['p99_5']` et vaut autre chose
         # — mesuré 8 266 contre 8 285 sur le triangle témoin.
         + f"Le P99.5 composé (σ Mack ⊕ σ modèle) = {_e(p995)} "
         f"({'+' if p995 > be else ''}{_p((p995/max(be,1)-1)*100)} vs BE) "
-        "est le chiffre critique pour le SCR provisions — "
-        "sur RC Auto corporels, un ratio P99.5/BE > 1.5 est courant "
+        "est le chiffre critique pour le SCR provisions, "
         "compte tenu de la forte volatilité des sinistres graves. "
         "La distribution Bootstrap doit être analysée avec soin : "
         "une asymétrie marquée vers la droite est attendue."
@@ -1433,15 +1435,14 @@ def _lob_rc_medicale(n1, n2, n3, n4):
 
     contexte = (
         "SPÉCIFICITÉS RC MÉDICALE : "
-        "La RC Médicale est la branche la plus longue et la plus complexe "
-        "du Non-Vie français (20 à 30 ans de développement). "
+        "La RC Médicale est une branche à queue très longue et complexe. "
         "Elle couvre les praticiens libéraux, les établissements de santé "
         "et les produits de santé (dispositifs médicaux, médicaments). "
         f"Avec {n_ann} années de survenance, "
         + (
             "le triangle est insuffisant pour cette branche — "
             "les sinistres graves (infections nosocomiales, accidents chirurgicaux) "
-            "se développent sur 20 à 30 ans. Le tail factor est CRITIQUE "
+            "se développent sur plusieurs décennies. Le tail factor est CRITIQUE "
             "et doit être validé par l'actuaire désigné. "
             if n_ann < 15 else
             "le triangle commence à capturer la queue mais une analyse "
@@ -1455,8 +1456,8 @@ def _lob_rc_medicale(n1, n2, n3, n4):
         "pour les aléas thérapeutiques — recours à isoler ; "
         "(3) Délais de prescription : 10 ans à compter de la consolidation "
         "du dommage, ce qui explique les déclarations très tardives ; "
-        "(4) Inflation médicale différenciée : honoraires (+3-4%/an), "
-        "hospitalisation (+4-5%/an), appareillage (+2-3%/an)."
+        "(4) Inflation médicale différenciée selon le poste — honoraires, "
+        "hospitalisation, appareillage."
     )
 
     hypotheses = (
@@ -1493,12 +1494,9 @@ def _lob_rc_medicale(n1, n2, n3, n4):
                 "cohérent avec la longueur du triangle. "
             )
         )
-        + f"LR BF = {_p(bf_lr*100)} vs référence marché ≈ 92% (MACSF/Sham 2024). "
-        + (
-            "Cohérent. " if 0.80 < bf_lr < 1.05 else
-            f"Écart vs référence marché — le LR RC Médicale est structurellement "
-            "élevé (charge sinistres graves, indemnisations en hausse). "
-        )
+        + f"Le LR BF retenu est de {_p(bf_lr*100)} — le LR de cette branche est "
+        "structurellement élevé (charge sinistres graves, indemnisations en "
+        "hausse) ; le comparer au benchmark retenu. "
         + "Le discount (actualisation des flux futurs) est obligatoire "
         "en S2 pour les rentes long terme — vérifier que le BE intègre "
         "la valeur actuelle des rentes et pas leur valeur nominale."
@@ -1590,10 +1588,15 @@ def _lob_construction(n1, n2, n3, n4):
         f"Tail factor = {tail_val:.4f} "
         + (
             f"(+{(tail_val-1)*100:.2f}%) — "
-            "sur Construction, un tail modéré est attendu (3-6%). "
+            # ⚠️ La fourchette « (3-6%) » est retirée, et pas seulement parce
+            # qu'elle n'est pas sourcée : elle CONTREDISAIT le code juste
+            # dessous, qui teste > 7 % et < 2 %. Un tail de 6,5 % se voyait
+            # annoncer « attendu 3-6% » puis déclarer « cohérent ». Une bande
+            # annoncée doit être celle qui est appliquée, ou ne pas être dite.
+            "sur Construction, un tail modéré est attendu. "
             + (
                 "SIGNAL : tail élevé — vérifier que le triangle couvre "
-                "bien les 12-15 ans de développement attendus. "
+                "bien la durée de développement attendue sur la branche. "
                 if tail_val > 1.07 else
                 "SIGNAL : tail faible — vérifier que les sinistres tardifs "
                 "(déclarés après 8 ans) sont bien intégrés. "
@@ -1605,7 +1608,7 @@ def _lob_construction(n1, n2, n3, n4):
         "importante sur Construction : les années récentes (< 5 ans) "
         "ont des IBNR très élevés (triangle creux) et sont "
         "très sensibles à l'a priori BF. "
-        "Référence marché FFA : LR Construction ≈ 88% (FFA Non-Vie 2024)."
+        "Comparer le LR retenu au benchmark de la branche."
     )
 
     recommandations = (
@@ -1621,7 +1624,7 @@ def _lob_construction(n1, n2, n3, n4):
         "5. Vérifier la couverture DO / RC Dec de chaque chantier majeur "
         "pour identifier les sous-assurances potentielles. "
         "6. Le tail factor doit être validé en cohérence avec la courbe "
-        "de déclaration Construction (pic à 7-9 ans)."
+        "de déclaration de la branche."
     )
 
     return {
@@ -1652,7 +1655,7 @@ def _lob_marine(n1, n2, n3, n4):
         "SPÉCIFICITÉS MARINE / AVIATION / TRANSPORT : "
         "La branche Marine/Transport est caractérisée par une forte "
         "CONCENTRATION du risque : un seul sinistre (naufrage, crash, "
-        "contamination cargaison) peut représenter 30 à 50% du portefeuille. "
+        "contamination cargaison) peut représenter une part majeure du portefeuille. "
         "Cette concentration rend les méthodes CL standard très sensibles "
         "aux années atypiques. "
         f"Avec {n_ann} années de survenance, "
@@ -1701,8 +1704,7 @@ def _lob_marine(n1, n2, n3, n4):
         "le BE brut (avant réassurance) peut être très différent du BE net. "
         "Vérifier que les primes et sinistres sont en COHÉRENCE "
         "(tout en brut ou tout en net). "
-        "Référence marché : LR Marine ≈ 82% (FFA Non-Vie 2024), "
-        "mais avec une très forte dispersion selon les sous-branches "
+        "Le LR de la branche connaît une très forte dispersion selon les sous-branches "
         "(corps de navires vs RC transporteurs vs cargaison)."
     )
 
