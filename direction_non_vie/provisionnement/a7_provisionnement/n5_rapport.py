@@ -219,6 +219,58 @@ def _ratio_scr(scp, be):
 #: retrouve la meme chose partout.
 ARRETE_ABSENT = 'non communiqué'
 
+
+#: Ce que chaque rendu en texte simple (prompt LLM, Word) dit de l'etat du test
+#: calendaire. Le HTML garde son propre balisage, mais lit le MEME etat.
+_PHRASE_CALENDAIRE = {
+    'indisponible': "Test calendaire indisponible : le GLM Poisson "
+                    "age-cohorte ne s'est pas ajuste sur ce triangle. "
+                    "Absence de test, pas absence d'effet",
+    'diffus':       "Effet calendaire global reparti (aucune diagonale "
+                    "isolee dominante)",
+    'aucun':        "Aucun effet calendaire significatif",
+}
+
+#: Ce que le prompt du LLM dit de l'etat calendaire. `indisponible` porte une
+#: consigne explicite : ne pas conclure a une absence d'effet.
+_CAL_PROMPT = {
+    'present':      'SIGNIFICATIF',
+    'diffus':       'significatif mais diffus (aucune diagonale dominante)',
+    'aucun':        'non significatif',
+    'indisponible': 'INDISPONIBLE (GLM non ajuste -- NE PAS conclure a une '
+                    'absence d effet)',
+}
+
+
+def etat_calendaire(bz):
+    """L'etat du test calendaire GLM Poisson APC, en UN mot -- SOURCE UNIQUE
+    des trois rendus (prompt LLM, HTML, Word).
+
+    ⚠️ POURQUOI CETTE FONCTION EXISTE. Le HTML distinguait deja
+    << indisponible >> de << aucun effet >> (le FIX 2 de la section 6). Le
+    Word et le prompt LLM, eux, deduisaient << Aucun effet calendaire
+    significatif >> / << non significatif >> du SEUL compteur d'effets, SANS
+    regarder si le test avait tourne. Sur un triangle ou le GLM ne s'ajuste
+    pas, ils affirmaient une absence d'EFFET la ou il n'y avait qu'absence de
+    TEST -- le faux de F3 (un << OK >> vert sur zero test), transpose au
+    calendaire, dans le document SIGNE (Word) et dans le prompt du MODELE.
+
+    ⚠️ LA PRECEDENCE REPRODUIT EXACTEMENT CELLE DU HTML pour que sa sortie
+    reste identique au caractere pres : un effet compte prime ; sinon
+    l'indisponibilite ; sinon le diffus ; sinon l'absence. Verrouille par un
+    test de non-regression sur le HTML.
+
+    Rend 'present' | 'indisponible' | 'diffus' | 'aucun'.
+    """
+    if int(bz.get('n_effets_significatifs', 0) or 0) > 0:
+        return 'present'
+    if not bz.get('glm_disponible', False):
+        return 'indisponible'
+    if bz.get('cal_significatif', False):
+        return 'diffus'
+    return 'aucun'
+
+
 def _clean(txt) -> str:
     if not txt:
         return ''
@@ -356,9 +408,12 @@ def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: s
         f"Message: {str(bt.get('message', ''))[:300]}",
         "",
         "=== EFFETS CALENDAIRE (GLM POISSON APC) ===",
+        # ⚠️ LE PROMPT NE DIT PLUS << non significatif >> QUAND LE TEST N'A PAS
+        # TOURNE. `cal_significatif` faux couvrait DEUX cas -- test negatif et
+        # test absent -- et le modele recevait la meme phrase pour les deux.
         f"Statut={bz.get('statut', '—')} | Sig.={bz.get('n_effets_significatifs', 0)}/{bz.get('n_diagonales_evaluees', 0)}",
         f"Réserve GLM APC={_f(bz.get('reserve_apc', 0))} (= chain-ladder par MLE) | "
-        f"test calendaire {'SIGNIFICATIF' if bz.get('cal_significatif') else 'non significatif'} "
+        f"test calendaire {_CAL_PROMPT[etat_calendaire(bz)]} "
         f"(F quasi-Poisson, p={bz.get('p_calendaire', '—')})",
         f"Diagonales anormales: {', '.join(bz.get('diagonales_anormales', [])) or 'Aucune'}",
         f"Recommandation: {bz.get('recommandation', '—')}",
@@ -1814,12 +1869,13 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     b['bt_note'] = '<div class="bt-note">' + _bt_note_txt + '</div>' if _bt_note_txt else ''
 
     # ── SECTION 6 : EFFETS CALENDAIRE ────────────────────────────────────────
-    n_sig    = int(bz.get('n_effets_significatifs', 0))
-    _glm_ok  = bz.get('glm_disponible', False)
-    _cal_sig = bz.get('cal_significatif', False)
+    # ⚠️ L'ETAT VIENT DE `etat_calendaire`, SOURCE PARTAGEE AVEC LE WORD ET LE
+    # PROMPT. Les trois branches ci-dessous sont le rendu HTML des trois etats
+    # sans effet ; le balisage est INCHANGE (verrouille par non-regression).
+    _etat_cal = etat_calendaire(bz)
     bz_items = ''
-    if n_sig == 0:
-        if not _glm_ok:
+    if _etat_cal != 'present':
+        if _etat_cal == 'indisponible':
             # FIX 2 : test indisponible -> ne jamais afficher "aucun effet".
             bz_items = (
                 '<div class="bz-item bz-info">'
@@ -1828,7 +1884,7 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
                 '<span class="bz-pct" style="color:var(--cyan);">Test calendaire indisponible</span>'
                 '</div>'
             )
-        elif _cal_sig:
+        elif _etat_cal == 'diffus':
             # FIX 1 : F global significatif mais aucune diagonale isolee dominante (effet diffus).
             bz_items = (
                 '<div class="bz-item bz-warn">'
@@ -2836,9 +2892,23 @@ def export_word(n1, n2, n3, n4,
         doc.add_page_break()
 
         _h('6. Effets calendaire — GLM Poisson APC (Renshaw-Verrall 1998)'); _sep()
-        n_sig_w = int(bz.get('n_effets_significatifs',0))
-        if n_sig_w == 0:
-            p=doc.add_paragraph(); _run(p,'✅ Aucun effet calendaire significatif.',sz=9,col=VR)
+        # ⚠️⚠️ LE FAUX DE F3, TRANSPOSE AU WORD. Cette section affichait
+        # << ✅ Aucun effet calendaire significatif >>, EN VERT, des que le
+        # compteur valait zero -- SANS regarder si le test avait tourne. Sur
+        # un triangle ou le GLM ne s'ajuste pas, le document remis au CAC
+        # affirmait une absence d'effet que rien n'avait testee. Le HTML
+        # distinguait deja les deux (FIX 2) ; le Word non. L'etat vient
+        # desormais de `etat_calendaire`, source partagee.
+        _etat_cal_w = etat_calendaire(bz)
+        if _etat_cal_w == 'indisponible':
+            p=doc.add_paragraph()
+            _run(p, _PHRASE_CALENDAIRE['indisponible']+'.', sz=9, col=GrR)
+        elif _etat_cal_w == 'diffus':
+            p=doc.add_paragraph()
+            _run(p, '⚠️ '+_PHRASE_CALENDAIRE['diffus']+'.', sz=9, col=AR)
+        elif _etat_cal_w == 'aucun':
+            p=doc.add_paragraph()
+            _run(p, '✅ '+_PHRASE_CALENDAIRE['aucun']+'.', sz=9, col=VR)
         else:
             for e in bz.get('effets_calendaire',[]):
                 if e.get('significatif'):

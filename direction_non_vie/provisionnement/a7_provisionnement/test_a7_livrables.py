@@ -43,6 +43,8 @@ from direction_non_vie.provisionnement.a7_provisionnement.n5_excel import (
 from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
     ARRETE_ABSENT,
     MARQUEUR_ECHEC_RAPPORT,
+    _construire_contexte,
+    etat_calendaire,
     export_html,
     export_word,
 )
@@ -529,6 +531,96 @@ class T_Arrete_Les_Trois_Livrables_Ne_Fabriquent_Pas_La_Date(unittest.TestCase):
             self.assertFalse(any(forme in t for t in textes),
                              f'Excel etiquette la date du jour en arrete : {forme!r}')
         print('    OK LIV-B4 l Excel etiquette la date du jour « Date rapport »')
+
+
+# =============================================================================
+#  F-cal (releve B2) — UN TEST CALENDAIRE NON FAIT N'EST PAS UN << AUCUN EFFET >>
+# =============================================================================
+#
+#  ⚠️ LE FAUX DE F3, TRANSPOSE AU CALENDAIRE. Le Word (document SIGNE) et le
+#  prompt LLM deduisaient << Aucun effet calendaire significatif >> / << non
+#  significatif >> du SEUL compteur d'effets, sans regarder si le GLM Poisson
+#  age-cohorte avait pu s'ajuster. Sur un triangle ou il ne s'ajuste pas, ils
+#  affirmaient une absence d'EFFET la ou il n'y avait qu'absence de TEST. Le
+#  HTML distinguait deja les deux (FIX 2) -- encore une correction qui n'avait
+#  pas atteint tous ses sites.
+#
+#  ⚠️ LE FILET PORTE SUR LES TROIS CONSOMMATEURS, PAS SUR LE MODULE, et le
+#  remede est une SOURCE UNIQUE (`etat_calendaire`) plutot qu'une troisieme
+#  copie de la logique -- c'est la duplication qui a cause la divergence.
+
+#: Les quatre etats du test calendaire et un `bz` (glm_apc) qui les produit.
+#: Au niveau du module, comme N4_GARDE : un dict mutable en attribut de classe
+#: demanderait un ClassVar, et il n'appartient pas plus a une classe qu'a une
+#: autre.
+ETATS_CALENDAIRE = {
+    'indisponible': {'glm_disponible': False},
+    'aucun':        {'glm_disponible': True, 'n_effets_significatifs': 0,
+                     'cal_significatif': False},
+    'diffus':       {'glm_disponible': True, 'n_effets_significatifs': 0,
+                     'cal_significatif': True},
+    'present':      {'glm_disponible': True, 'n_effets_significatifs': 2},
+}
+
+
+class T_Calendaire_Non_Teste_N_Est_Pas_Aucun_Effet(unittest.TestCase):
+    """⚠️ TROIS RENDUS (HTML, Word, prompt LLM), UNE SOURCE : un test absent
+    ne se rend jamais comme une absence d'effet."""
+
+    @classmethod
+    def setUpClass(cls):
+        with kaleido_declare(True), rendeur_substitue():
+            cls.r = AgentA7Provisionnement(verbose=False).run(
+                source=np.array(GENINS, dtype=float), mode_declare='cumule',
+                primes=_exposition(GENINS), n_sim_bootstrap=200, seed=42,
+                generer_graphiques=False)
+
+    def _word_paras(self, bz):
+        import io
+
+        from docx import Document
+        n3 = dict(self.r['n3']); n3['glm_apc'] = bz
+        w = export_word(self.r['n1'], self.r['n2'], n3, self.r['n4'],
+                        arrete='30/06/2026', ref_client='ACME')
+        return ' '.join(p.text for p in Document(io.BytesIO(w)).paragraphs)
+
+    def _html(self, bz):
+        n3 = dict(self.r['n3']); n3['glm_apc'] = bz
+        return export_html(self.r['n1'], self.r['n2'], n3, self.r['n4'],
+                           arrete='30/06/2026', ref_client='ACME')
+
+    def test_l_etat_a_quatre_valeurs_exactes(self):
+        for attendu, bz in ETATS_CALENDAIRE.items():
+            self.assertEqual(etat_calendaire(bz), attendu, f'etat {attendu}')
+        print('    OK CAL-1 les quatre etats de etat_calendaire sont exacts')
+
+    def test_word_ne_dit_pas_aucun_effet_quand_le_test_est_absent(self):
+        joined = self._word_paras(ETATS_CALENDAIRE['indisponible'])
+        self.assertNotIn('Aucun effet calendaire significatif', joined)
+        self.assertIn('indisponible', joined.lower())
+        print('    OK CAL-2 le Word dit indisponible, jamais aucun effet')
+
+    def test_word_dit_bien_aucun_effet_quand_le_test_a_conclu(self):
+        # ⚠️ NE PAS SUR-CORRIGER : un vrai << aucun effet >> reste vert.
+        joined = self._word_paras(ETATS_CALENDAIRE['aucun'])
+        self.assertIn('Aucun effet calendaire significatif', joined)
+        print('    OK CAL-3 le Word dit aucun effet quand le test a conclu')
+
+    def test_le_prompt_llm_ne_conclut_pas_sur_un_test_absent(self):
+        ctx = _construire_contexte({}, {'glm_apc': ETATS_CALENDAIRE['indisponible']},
+                                   {}, 'RC', '30/06')
+        ligne = next(x for x in ctx.splitlines() if 'test calendaire' in x)
+        self.assertIn('INDISPONIBLE', ligne)
+        self.assertNotIn('non significatif', ligne)
+        print('    OK CAL-4 le prompt LLM ne conclut pas sur un test absent')
+
+    def test_html_distingue_toujours_indisponible_de_aucun(self):
+        # ⚠️ NON-REGRESSION : le HTML distinguait deja, il doit rendre pareil.
+        self.assertIn('Test calendaire indisponible',
+                      self._html(ETATS_CALENDAIRE['indisponible']))
+        self.assertIn('Aucun effet significatif',
+                      self._html(ETATS_CALENDAIRE['aucun']))
+        print('    OK CAL-5 le HTML distingue toujours indisponible et aucun')
 
 
 if __name__ == '__main__':
