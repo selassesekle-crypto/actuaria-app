@@ -43,6 +43,7 @@ from direction_non_vie.provisionnement.a7_provisionnement.n5_excel import (
 from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
     ARRETE_ABSENT,
     MARQUEUR_ECHEC_RAPPORT,
+    _build_blocks,
     _construire_contexte,
     etat_calendaire,
     export_html,
@@ -621,6 +622,128 @@ class T_Calendaire_Non_Teste_N_Est_Pas_Aucun_Effet(unittest.TestCase):
         self.assertIn('Aucun effet significatif',
                       self._html(ETATS_CALENDAIRE['aucun']))
         print('    OK CAL-5 le HTML distingue toujours indisponible et aucun')
+
+
+# =============================================================================
+#  AVIS-COULEUR (releve B2) — LA COULEUR SUIT LE STATUT, PAS UN MOT
+# =============================================================================
+#
+#  ⚠️⚠️ LA COULEUR ETAIT TOUJOURS VERTE, PAS << verte sauf si >>. Les deux
+#  renderers coloraient l'avis en rouge SI le mot << DEFAVORABLE >> figurait
+#  dans `avis_actuariel` -- un mot que ce champ NE PRODUIT JAMAIS. Ses trois
+#  valeurs (n4_best_estimate l. 1315-1322) commencent TOUTES par
+#  << FAVORABLE >>. Le test etait donc toujours faux : l'avis d'un dossier
+#  ROUGE (<< FAVORABLE SOUS RESERVE -- revisions requises avant bilan S2 >>)
+#  s'affichait EN VERT dans le HTML ET dans le Word signe.
+#
+#  Le controle lisait le vocabulaire d'un AUTRE champ : c'est `jugement`
+#  (l. 1919) qui ecrit << AVIS DEFAVORABLE >>.
+#
+#  ⚠️ LE REMEDE TRANSPOSE `_RAG_CELLULE` : match exact sur un vocabulaire FINI
+#  (VERT / AMBRE / ROUGE), jamais une recherche de mot dans du texte libre.
+#  Un statut inconnu tombe sur l'orange, jamais sur le vert.
+#
+#  ⚠️ ET CE LOT A REVELE UN BUG DU LOT C : la boucle des cartes d'hypotheses
+#  ECRASAIT le parametre `statut` de `_build_blocks`. Invisible tant que rien
+#  ne lisait `statut` en aval ; avis-couleur l'a fait pour la premiere fois.
+#  Le verrou ci-dessous est STRUCTUREL -- aucun parametre reaffecte -- parce
+#  qu'un test sur la seule couleur n'aurait pas empeche le prochain ecrasement.
+
+#: Les couleurs attendues, par statut RAG. Cote Word ce sont les RGB de
+#: `n5_rapport` (VR / AR / RgR), cote HTML les variables CSS.
+_AVIS_ATTENDU = {
+    'VERT':  ('var(--vert)',   '1E8449'),
+    'AMBRE': ('var(--orange)', 'E67E22'),
+    'ROUGE': ('var(--rouge)',  'C0392B'),
+}
+
+
+class T_Avis_Couleur_Suit_Le_Statut(unittest.TestCase):
+    """⚠️ DEUX LIVRABLES, UN INVARIANT : la couleur de l'avis vient du statut
+    RAG, jamais d'un mot cherche dans le texte."""
+
+    @classmethod
+    def setUpClass(cls):
+        with kaleido_declare(True), rendeur_substitue():
+            cls.r = AgentA7Provisionnement(verbose=False).run(
+                source=np.array(GENINS, dtype=float), mode_declare='cumule',
+                primes=_exposition(GENINS), n_sim_bootstrap=200, seed=42,
+                generer_graphiques=False)
+
+    def _n4(self, statut):
+        n4 = dict(self.r['n4']); n4['statut'] = statut
+        return n4
+
+    def test_le_champ_avis_ne_dit_jamais_defavorable(self):
+        # ⚠️ LA MESURE QUI FONDE TOUT LE LOT. Si ce constat tombait, le
+        # controle par mot-cle redeviendrait defendable ; il faut donc le
+        # verifier, pas le supposer.
+        avis = str(self.r['n4'].get('avis_actuariel', ''))
+        self.assertTrue(avis, "n4 ne produit aucun avis actuariel")
+        self.assertNotIn('DÉFAVORABLE', avis.upper())
+        print(f'    OK AVIS-1 avis produit sans « DÉFAVORABLE » : {avis[:44]}…')
+
+    def test_html_colore_l_avis_selon_le_statut(self):
+        import re
+        # ⚠️ INDEX PLUTOT QUE DEBALLAGE : `for statut, (css, _rgb)` laissait une
+        # locale assignee et jamais relue -- l'angle mort de ruff, que le
+        # controle de proprete du depot attrape.
+        for statut, attendu in _AVIS_ATTENDU.items():
+            css = attendu[0]
+            b = _build_blocks(self.r['n2'], self.r['n3'], self._n4(statut),
+                              '', 'aucune', 'RC', 'X', '30/06', '18/08',
+                              'A7-1', 'chain_ladder', statut, {})
+            trouve = re.search(r'background:(var\(--[a-z]+\))', b['avis'])
+            self.assertIsNotNone(trouve, f'{statut} : encadre d avis absent')
+            self.assertEqual(trouve.group(1), css, f'statut {statut}')
+        print('    OK AVIS-2 le HTML colore l avis selon VERT/AMBRE/ROUGE')
+
+    def test_word_colore_l_avis_selon_le_statut(self):
+        import io
+
+        from docx import Document
+        avis = str(self.r['n4'].get('avis_actuariel', '')).strip()[:20]
+        for statut, attendu in _AVIS_ATTENDU.items():
+            rgb = attendu[1]
+            w = export_word(self.r['n1'], self.r['n2'], self.r['n3'],
+                            self._n4(statut), arrete='30/06/2026',
+                            ref_client='ACME')
+            cols = [str(run.font.color.rgb)
+                    for p in Document(io.BytesIO(w)).paragraphs
+                    for run in p.runs if run.text.strip()[:20] == avis]
+            self.assertTrue(cols, f'{statut} : avis introuvable dans le Word')
+            self.assertEqual(cols[0], rgb, f'statut {statut}')
+        print('    OK AVIS-3 le Word colore l avis selon VERT/AMBRE/ROUGE')
+
+    def test_un_dossier_rouge_n_est_jamais_vert(self):
+        # ⚠️ LE FAUX EXACT, ENONCE EN TOUTES LETTRES pour qu'une recherche
+        # plein texte le retrouve s'il revenait.
+        b = _build_blocks(self.r['n2'], self.r['n3'], self._n4('ROUGE'),
+                          '', 'aucune', 'RC', 'X', '30/06', '18/08',
+                          'A7-1', 'chain_ladder', 'ROUGE', {})
+        self.assertNotIn('background:var(--vert)', b['avis'])
+        print('    OK AVIS-4 un dossier ROUGE n affiche jamais un avis vert')
+
+    def test_aucun_parametre_de_build_blocks_n_est_ecrase(self):
+        # ⚠️ VERROU STRUCTUREL, PAS COSMETIQUE. Le lot C avait ecrase `statut`
+        # dans la boucle des cartes d'hypotheses : tout code lisant `statut`
+        # en aval recevait le verdict de la DERNIERE hypothese. Un test sur la
+        # seule couleur n'aurait pas empeche le prochain ecrasement.
+        import ast
+        import inspect
+
+        from direction_non_vie.provisionnement.a7_provisionnement import (
+            n5_rapport as _n5r_mod,
+        )
+        fn = ast.parse(inspect.getsource(_n5r_mod._build_blocks)).body[0]
+        params = {a.arg for a in fn.args.args}
+        ecrases = sorted({
+            t.id for n in ast.walk(fn) if isinstance(n, ast.Assign)
+            for t in n.targets if isinstance(t, ast.Name) and t.id in params
+        })
+        self.assertEqual(ecrases, [],
+                         f'parametres de _build_blocks reaffectes : {ecrases}')
+        print('    OK AVIS-5 aucun parametre de _build_blocks n est ecrase')
 
 
 if __name__ == '__main__':

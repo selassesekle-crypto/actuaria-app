@@ -231,6 +231,18 @@ _PHRASE_CALENDAIRE = {
     'aucun':        "Aucun effet calendaire significatif",
 }
 
+#: Couleur de l'encadre d'avis actuariel, cote HTML, PAR STATUT RAG.
+#:
+#: ⚠️ MATCH EXACT SUR UN VOCABULAIRE FINI, jamais une recherche de mot dans le
+#: texte de l'avis -- meme principe que `_RAG_CELLULE` cote Word. Le statut
+#: inconnu tombe sur l'orange (a surveiller), jamais sur le vert : une couleur
+#: par defaut ne doit pas rassurer.
+_COULEUR_AVIS_HTML = {
+    'VERT':  'var(--vert)',
+    'AMBRE': 'var(--orange)',
+    'ROUGE': 'var(--rouge)',
+}
+
 #: Ce que le prompt du LLM dit de l'etat calendaire. `indisponible` porte une
 #: consigne explicite : ne pas conclure a une absence d'effet.
 _CAL_PROMPT = {
@@ -1688,12 +1700,21 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         # le libelle : le controle du filet l'a REFUSEE, à juste titre. Le
         # badge se lit desormais du seul `statut`, par table — ce qui couvre
         # aussi tout statut futur sans nouvelle branche.
-        statut = str(h.get('statut',
-                           'VALIDÉE' if h.get('ok', True) else 'REJETÉE'))
-        non_testable = statut == 'NON TESTABLE'
-        cls   = 'hyp-ok' if statut == 'VALIDÉE' else 'hyp-warn'
+        # ⚠️⚠️ NOM LOCAL `statut_hyp`, ET C'EST UNE CORRECTION DE BUG. Le lot C
+        # avait ecrit `statut` ici : cette boucle ECRASAIT le parametre
+        # `statut` de la fonction -- le statut RAG du dossier. Apres elle, tout
+        # code lisant `statut` recevait le verdict de la DERNIERE hypothese
+        # rendue (<< VALIDÉE >>, << NON TESTABLE >>...), plus le RAG. Le defaut
+        # est reste INVISIBLE tant que rien n'utilisait `statut` en aval ; il a
+        # ete revele par le lot avis-couleur, qui l'a fait pour la premiere
+        # fois. Verrouille par un controle AST : aucun parametre de
+        # `_build_blocks` ne doit etre reaffecte dans son corps.
+        statut_hyp = str(h.get('statut',
+                               'VALIDÉE' if h.get('ok', True) else 'REJETÉE'))
+        non_testable = statut_hyp == 'NON TESTABLE'
+        cls   = 'hyp-ok' if statut_hyp == 'VALIDÉE' else 'hyp-warn'
         lbl   = {'VALIDÉE': '✓ VALIDÉE',
-                 'REJETÉE': '⚠ REJETÉE'}.get(statut, '⚠ ' + statut)
+                 'REJETÉE': '⚠ REJETÉE'}.get(statut_hyp, '⚠ ' + statut_hyp)
         # ⚠️ UN SCORE NE SE PUBLIE PAS SOUS UN STATUT QUI DIT QU'IL N'Y A PAS EU
         # DE MESURE. « Score 80 / 100 » etait la valeur par defaut du module.
         score = '' if non_testable else ' · Score ' + _s(h.get('score')) + ' / 100'
@@ -2100,7 +2121,26 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
 
     avis_txt = _clean(n4.get('avis_actuariel', ''))
     if avis_txt:
-        avis_col = 'var(--rouge)' if 'DÉFAVORABLE' in avis_txt.upper() else 'var(--vert)'
+        # ⚠️⚠️ LA COULEUR ETAIT TOUJOURS VERTE, PAS << verte sauf si >>. Elle
+        # cherchait le mot << DEFAVORABLE >> dans `avis_actuariel` -- un mot que
+        # ce champ NE PRODUIT JAMAIS : ses trois valeurs (n4_best_estimate,
+        # l. 1315-1322) commencent TOUTES par << FAVORABLE >>. Le test etait
+        # donc toujours faux, et l'avis d'un dossier ROUGE
+        # (<< FAVORABLE SOUS RESERVE -- revisions requises avant bilan S2 >>)
+        # s'affichait EN VERT. Le controle lisait le vocabulaire d'un AUTRE
+        # champ : c'est `jugement` (l. 1919) qui ecrit << AVIS DEFAVORABLE >>.
+        #
+        # LA COULEUR S'ADOSSE DESORMAIS AU STATUT RAG, PAR MATCH EXACT -- meme
+        # principe que `_RAG_CELLULE` cote Word : une table sur un vocabulaire
+        # FINI (VERT / AMBRE / ROUGE), jamais une recherche de mot dans du
+        # texte libre. Le statut est deja calcule et deja transmis ici.
+        #
+        # ⚠️ ET LA COULEUR N'EST JAMAIS SEULE PORTEUSE : le texte de l'avis
+        # reste imprime tel quel. Le libelle lui-meme -- << FAVORABLE SOUS
+        # RESERVE >> sur un dossier que `jugement` declare << a ne pas inscrire
+        # au bilan >> -- est une INCOHERENCE DU PRODUCTEUR, nommee a l'ardoise
+        # et NON traitee ici : elle porte sur le verdict, pas sur son rendu.
+        avis_col = _COULEUR_AVIS_HTML.get(statut, 'var(--orange)')
         b['avis'] = (
             '<div style="background:' + avis_col + ';color:#fff;padding:16px 24px;'
             'border-radius:6px;margin-top:20px;font-size:10pt;font-weight:600;">'
@@ -2961,7 +3001,12 @@ def export_word(n1, n2, n3, n4,
         if avis_w:
             doc.add_paragraph()
             p=doc.add_paragraph()
-            _run(p,avis_w,sz=10,bold=True,col=RgR if 'DÉFAVORABLE' in avis_w.upper() else VR)
+            # ⚠️ MEME DEFAUT QU'EN HTML, MEME REMEDE. `avis_actuariel` ne dit
+            # JAMAIS << DEFAVORABLE >> : l'avis d'un dossier ROUGE sortait en
+            # VERT dans le document signe. La couleur vient du STATUT, par la
+            # meme table que le bandeau de garde -- `s_col_r`, deja calcule
+            # plus haut sur ce meme statut.
+            _run(p,avis_w,sz=10,bold=True,col=s_col_r)
 
         _figure('g12_sensibilites')
 
