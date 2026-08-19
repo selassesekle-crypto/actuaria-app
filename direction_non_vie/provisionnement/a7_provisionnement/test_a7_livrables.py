@@ -15,6 +15,7 @@
 
 import inspect
 import io
+import os
 import unittest
 from datetime import date, timedelta
 
@@ -1556,10 +1557,17 @@ class T_Une_Seule_Narration_Pour_Les_Deux_Formats(unittest.TestCase):
         appels = []
         vrai = RAPP_MOD._generer_narration
 
+        # ⚠️ TROIS VALEURS, PAS DEUX. `_generer_narration` rend desormais la
+        # CHARGE UTILE en plus du texte et de sa source, pour que le verrou C2
+        # n'ait pas a la reconstruire. Cet espion en deballait deux : il levait
+        # AVANT de compter, le compteur restait a zero, et le test annoncait
+        # << 0 appels : les deux formats divergeraient >> -- un diagnostic
+        # faux sur un code juste. La traversee de couches, payee une fois de
+        # plus ; c'est la gate qui l'a vue, pas la relecture.
         def espion(n2, n3, n4, com, lob, arr):
-            txt, src = vrai(n2, n3, n4, com, lob, arr)
+            txt, src, charge = vrai(n2, n3, n4, com, lob, arr)
             appels.append((src, txt))
-            return txt, src
+            return txt, src, charge
 
         RAPP_MOD._generer_narration = espion
         AG._generer_narration = espion
@@ -1616,6 +1624,144 @@ class T_Une_Seule_Narration_Pour_Les_Deux_Formats(unittest.TestCase):
         self.assertGreater(len(html), _TAILLE_MIN_LIVRABLE)
         self.assertNotIn(MARQUEUR_ECHEC_RAPPORT, html)
         print('    OK NAR-3 sans narration fournie, rien ne change')
+
+
+# =============================================================================
+#  LE VERROU C2 EST BRANCHE — ET IL MORD, PROUVE PAR UNE REPONSE SIMULEE
+# =============================================================================
+#
+#  ⚠️⚠️ SANS CLE API, LE VERROU NE S'EXERCE JAMAIS EN CONDITIONS REELLES.
+#  C'est la contrepartie assumee du branchement : il REND POSSIBLE la mesure
+#  du taux sur du LLM, il ne la PRODUIT pas. Un mecanisme jamais exerce est
+#  un mecanisme qui atteste surveiller sans avoir jamais surveille -- le
+#  defaut exact que ce chantier vient de nommer sur `vocabulaire_scr_fautif`.
+#
+#  D'OU LA REPONSE SIMULEE : on substitue la frontiere LLM pour lui faire
+#  rendre un texte porteur d'un nombre ABSENT de la charge utile. C'est la
+#  SEULE preuve que le verrou mord, et elle est indispensable, pas optionnelle.
+
+
+class T_Verrou_C2_Branche_Sur_L_Audit(unittest.TestCase):
+    """⚠️ UN JOURNAL QUE PERSONNE NE CONSULTE N'EST PAS UN CONTROLE."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.C = np.array(GENINS, dtype=float)
+
+    def _run(self, **kw):
+        import tempfile
+        d = tempfile.mkdtemp()
+        r = AgentA7Provisionnement(models_path=d, audit_path=d,
+                                   verbose=False).run(
+            source=self.C, mode_declare='cumule',
+            primes=_exposition(GENINS), n_sim_bootstrap=60, seed=42,
+            generer_graphiques=False, **kw)
+        return r, d
+
+    def _audit_sur_disque(self, dossier):
+        import glob
+        import json
+        fichiers = glob.glob(os.path.join(dossier, '*.json'))
+        self.assertTrue(fichiers, 'aucun audit ecrit sur disque')
+        with open(fichiers[0], encoding='utf-8') as f:
+            return json.load(f)
+
+    # ── C2B-1 : le controle atteint le fichier archive ──────────────────────
+    def test_le_controle_est_ecrit_dans_l_audit_sur_disque(self):
+        # ⚠️ SUR DISQUE, pas dans le dict retourne : c'est le FICHIER qui est
+        # archive pour l'ACPR, et c'est lui que quelqu'un relira.
+        _, d = self._run()
+        audit = self._audit_sur_disque(d)
+        self.assertIn('controle_narration', audit)
+        self.assertIn('porte', audit['controle_narration'])
+        print('    OK C2B-1 le controle est dans l audit archive')
+
+    # ── C2B-2 : hors LLM, il rend sa RAISON, jamais un zero ─────────────────
+    def test_hors_chemin_llm_il_dit_pourquoi_il_ne_s_applique_pas(self):
+        # ⚠️ UN ZERO SE LIRAIT << controle, rien trouve >>. Sans transmission
+        # il n'y a pas de charge utile : le controle n'a pas d'objet, et le
+        # dire est la seule sortie honnete.
+        _, d = self._run()
+        c = self._audit_sur_disque(d)['controle_narration']
+        self.assertFalse(c['applicable'])
+        self.assertNotIn('taux_orphelins', c)
+        self.assertIn('charge utile', c['raison'])
+        print('    OK C2B-2 hors LLM : la raison, jamais un zero')
+
+    # ── C2B-3 : LA PREUVE QU'IL MORD ────────────────────────────────────────
+    def test_un_nombre_invente_par_le_modele_est_signale(self):
+        # ⚠️ LA SEULE PREUVE POSSIBLE AUJOURD'HUI. On substitue la frontiere
+        # LLM : elle rend un texte qui porte 999 111 777 EUR -- un montant
+        # qu'AUCUNE charge utile ne peut contenir.
+        invente = '999 111 777'
+        faux = (f"Le Best Estimate retenu s'eleve a {invente} EUR pour "
+                f"l'exercice, en hausse de 4,2 % sur l'arrete precedent.")
+
+        # ⚠️ `type = 'text'` EST INDISPENSABLE : `texte_des_blocs` ne
+        # concatene que les blocs de ce type et LEVE sur une chaine vide. Un
+        # bloc sans type ferait retomber le run sur `templates` EN SILENCE,
+        # et le test aurait valide un chemin jamais pris -- mesure : c'est
+        # exactement ce qui s'est produit a la premiere ecriture.
+        class _Bloc:
+            type = 'text'
+            text = faux
+
+        class _Resp:
+            content = [_Bloc()]
+
+        vrai_appeler = RAPP_MOD.frontiere_llm.appeler
+        vraie_cle = RAPP_MOD.frontiere_llm.cle_api_ou_secrets
+        RAPP_MOD.frontiere_llm.appeler = lambda **kw: _Resp()
+        RAPP_MOD.frontiere_llm.cle_api_ou_secrets = lambda *a, **k: 'cle-test'
+        try:
+            _, d = self._run()
+            c = self._audit_sur_disque(d)['controle_narration']
+        finally:
+            RAPP_MOD.frontiere_llm.appeler = vrai_appeler
+            RAPP_MOD.frontiere_llm.cle_api_ou_secrets = vraie_cle
+
+        self.assertTrue(c['applicable'], 'le chemin LLM n a pas ete pris')
+        self.assertEqual(c['source'], 'claude_api')
+        self.assertGreaterEqual(c['n_orphelins'], 1,
+                                'le nombre invente n a PAS ete signale')
+        plat = ' '.join(str(o) for o in c['orphelins'])
+        self.assertIn('999', plat, f'orphelins releves : {c["orphelins"]}')
+        print('    OK C2B-3 un nombre invente est signale — le verrou mord')
+
+    # ── C2B-4 : sa reserve vit dans le fichier, pas seulement en commentaire ─
+    def test_la_reserve_de_fond_est_ecrite_dans_l_audit(self):
+        # ⚠️ IL PROUVE LA PROVENANCE, JAMAIS LA JUSTESSE. Un relecteur qui
+        # ouvre l'audit doit le lire LA, pas dans le code source.
+        _, d = self._run()
+        c = self._audit_sur_disque(d)['controle_narration']
+        self.assertIn('provenance', c['porte'])
+        self.assertIn('justesse', c['porte'])
+        print('    OK C2B-4 la reserve est ecrite dans le fichier archive')
+
+    # ── C2B-5 : il ne leve jamais ───────────────────────────────────────────
+    def test_le_verrou_ne_fait_jamais_tomber_le_run(self):
+        # ⚠️ DECISION ARBITREE : il JOURNALISE, il ne LEVE pas. Meme avec une
+        # narration integralement inventee, le run rend ses livrables.
+        class _Bloc:
+            type = 'text'
+            text = 'Provision de 123 456 789 EUR, ratio 42,42 %, sur 77 ans.'
+
+        class _Resp:
+            content = [_Bloc()]
+
+        vrai_appeler = RAPP_MOD.frontiere_llm.appeler
+        vraie_cle = RAPP_MOD.frontiere_llm.cle_api_ou_secrets
+        RAPP_MOD.frontiere_llm.appeler = lambda **kw: _Resp()
+        RAPP_MOD.frontiere_llm.cle_api_ou_secrets = lambda *a, **k: 'cle-test'
+        try:
+            r, d = self._run()
+        finally:
+            RAPP_MOD.frontiere_llm.appeler = vrai_appeler
+            RAPP_MOD.frontiere_llm.cle_api_ou_secrets = vraie_cle
+        self.assertTrue(r.get('success'), 'le run est tombe sur le verrou')
+        c = self._audit_sur_disque(d)['controle_narration']
+        self.assertGreaterEqual(c['n_orphelins'], 1)
+        print('    OK C2B-5 il journalise, il ne leve pas')
 
 
 # =============================================================================

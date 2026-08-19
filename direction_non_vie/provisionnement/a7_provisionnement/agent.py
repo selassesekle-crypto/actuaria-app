@@ -54,7 +54,8 @@ from .n5_excel          import export_excel
 from .n5_rapport        import export_word, export_html
 # La narration est produite ICI, une seule fois, et transmise aux deux
 # formats — voir le commentaire à son point de génération.
-from .n5_rapport        import ARRETE_ABSENT, _generer_narration, _lob
+from .n5_rapport        import (ARRETE_ABSENT, _generer_narration, _lob,
+                                controle_narration)
 # ⚠️ IMPORTÉ COMME MODULE, PAS COMME VALEUR. `from … import kaleido_disponible`
 # fige ICI une référence à la fonction : substituer le prédicat dans
 # `n5_rapport` ne changeait alors que la moitié de la chaîne — l'export voyait
@@ -806,10 +807,30 @@ class AgentA7Provisionnement:
             # dossier, tous deux transmis au commissaire aux comptes,
             # porteraient deux textes differents -- et l'appel serait paye
             # deux fois.
-            _narr, _src_narr = _generer_narration(
+            _narr, _src_narr, _charge_narr = _generer_narration(
                 n2, n3, n4, commentaire,
                 _lob(lob_label or n2.get('lob_label', '') or n2.get('lob', '')),
                 arrete or ARRETE_ABSENT)
+
+            # ⚠️⚠️ LE VERROU C2 EST BRANCHE ICI, ET IL NE LEVE JAMAIS.
+            # Faire tomber un rapport pour un defaut de narration
+            # reproduirait ce que le lot A a ferme : un renderer qui plantait
+            # sur un garde-fou bien pose. Le refus vit dans les TESTS ; ici on
+            # CONSIGNE, dans l'audit trail, qui est archive et relu.
+            #
+            # ⚠️ IL NE S'EXERCE QUE SUR LE CHEMIN LLM, ET C'EST STRUCTUREL.
+            # Sans transmission il n'y a pas de charge utile : sur
+            # `templates`, le texte est DERIVE de n4 par du code
+            # deterministe, aucun nombre ne peut y etre invente. Un taux
+            # calcule la mesurerait la couverture du contexte, pas une
+            # invention -- lecture fausse que ce lot refuse de rendre
+            # possible.
+            #
+            # ⚠️ CONSEQUENCE ASSUMEE : sans cle API, ce journal reste VIDE.
+            # Le branchement REND POSSIBLE la mesure du taux reel sur du LLM,
+            # il ne la PRODUIT pas. Personne ne doit attendre de ce lot un
+            # chiffre qu'aucune execution ne peut produire aujourd'hui.
+            _ctrl_narr = controle_narration(_narr, _src_narr, _charge_narr)
 
             word_bytes, err_wd = (b'', None)
             if generer_word:
@@ -857,6 +878,7 @@ class AgentA7Provisionnement:
             audit = self._audit_trail(
                 audit_id, n1, n2, n3, n4,
                 n4['statut'], t_debut, ref_client, lob,
+                controle_narration=_ctrl_narr,
             )
             self._sauvegarder_audit(audit_id, audit)
 
@@ -1274,6 +1296,7 @@ class AgentA7Provisionnement:
         t_debut:    datetime,
         ref_client: str,
         lob:        str,
+        controle_narration: dict | None = None,
     ) -> Dict:
         """Génère l'audit trail JSON complet et traçable ACPR."""
         duree = (datetime.now() - t_debut).total_seconds()
@@ -1285,6 +1308,13 @@ class AgentA7Provisionnement:
             'duree_sec':      round(duree, 2),
             'statut':         statut,
             'version':        'A7-v5.0',
+
+            # ⚠️ LE VERROU C2, CONSIGNÉ LÀ OÙ QUELQU'UN LE RELIRA. Un
+            # `logger.info` dans une application Streamlit n'est lu par
+            # personne ; l'audit trail est ÉCRIT SUR DISQUE et archivé pour
+            # l'ACPR. Un journal que personne ne consulte n'est pas un
+            # contrôle — c'est la seule raison du choix de cet emplacement.
+            'controle_narration': controle_narration or {},
 
             'n1_resume': {
                 'taille':    n1.get('taille'),

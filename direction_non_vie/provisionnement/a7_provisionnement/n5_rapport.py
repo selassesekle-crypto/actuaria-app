@@ -445,7 +445,15 @@ def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: s
 #  GÉNÉRATION NARRATION (3 NIVEAUX)
 # =============================================================================
 
-def _narration_claude_api(n2, n3, n4, lob_label, arrete) -> str:
+def _narration_claude_api(n2, n3, n4, lob_label, arrete) -> tuple[str, str]:
+    """Le texte du modèle ET la charge utile qui lui a été transmise.
+
+    ⚠️ LA CHARGE UTILE REMONTE, ELLE NE SE RECALCULE PAS. Le verrou C2 en a
+    besoin pour vérifier qu'aucun nombre publié n'est absent de ce qui a été
+    envoyé. La reconstruire dans `agent` produirait un second
+    `_construire_contexte` — exactement le doublon que le lot précédent vient
+    de fermer sur la narration elle-même.
+    """
     try:
         ctx = _construire_contexte(n2, n3, n4, lob_label, arrete)
         resp = frontiere_llm.appeler(
@@ -454,7 +462,7 @@ def _narration_claude_api(n2, n3, n4, lob_label, arrete) -> str:
             messages=[{'role': 'user', 'content': ctx}],
             cle=frontiere_llm.cle_api_ou_secrets(),
         )
-        return frontiere_llm.texte_des_blocs(resp)
+        return frontiere_llm.texte_des_blocs(resp), ctx
     except Exception as e:
         logger.warning(f'Narration non generee : {e}')
         raise
@@ -564,20 +572,68 @@ def orphelins_narration(narration: str, charge_utile: str) -> list:
     return [n for n in nombres_publies(narration)
             if _cle_nombre(n) not in connus]
 
-def _generer_narration(n2, n3, n4, commentaire, lob_label, arrete) -> Tuple[str, str]:
+
+def controle_narration(narration: str, source: str, charge_utile: str) -> dict:
+    """Le verdict du verrou C2, tel qu'il entre dans l'audit trail.
+
+    ⚠️⚠️ IL PROUVE LA PROVENANCE, JAMAIS LA JUSTESSE. Un modèle qui
+    INVERSERAIT deux valeurs justes passe sans un mot : les deux sont dans la
+    charge utile. Le champ `porte` le dit dans le fichier archivé, pour qu'un
+    relecteur ne prenne pas ce verdict pour une validation actuarielle.
+
+    ⚠️ `applicable` EST FAUX HORS DU CHEMIN LLM, ET CE N'EST PAS UNE PANNE.
+    Sans transmission, il n'y a pas de charge utile : sur `templates`, le
+    texte dérive de `n4` par du code déterministe. Publier un taux y
+    mesurerait la couverture du contexte, pas une invention. On rend la
+    RAISON plutôt qu'un zéro — un zéro se lirait « contrôlé, rien trouvé ».
+    """
+    if source != 'claude_api' or not charge_utile:
+        return {
+            'applicable': False,
+            'source':     source,
+            'raison':     ("narration non transmise a un modele : sans charge "
+                           "utile, le controle de provenance n'a pas d'objet"),
+            'porte':      "provenance des nombres, jamais leur justesse",
+        }
+    publies   = nombres_publies(narration)
+    orphelins = orphelins_narration(narration, charge_utile)
+    return {
+        'applicable':     True,
+        'source':         source,
+        'n_publies':      len(publies),
+        'n_orphelins':    len(orphelins),
+        'taux_orphelins': (round(len(orphelins) / len(publies), 4)
+                           if publies else 0.0),
+        # Les formes BRUTES, dans l'ordre du texte — de quoi retrouver la
+        # phrase. Bornees : un audit archive n'est pas un journal de debug.
+        'orphelins':      orphelins[:20],
+        'porte':          "provenance des nombres, jamais leur justesse",
+    }
+
+def _generer_narration(n2, n3, n4, commentaire, lob_label,
+                       arrete) -> Tuple[str, str, str]:
+    """Le texte, sa source, et LA CHARGE UTILE TRANSMISE AU MODÈLE.
+
+    ⚠️⚠️ LA CHARGE UTILE EST VIDE HORS DU CHEMIN LLM, ET CE N'EST PAS UN
+    MANQUE. Sur `templates`, le texte est DÉRIVÉ de `n4` par du code
+    déterministe : rien n'est transmis à personne, donc rien ne peut être
+    inventé. Le verrou C2 — « aucun nombre publié hors de la charge utile » —
+    n'a littéralement pas d'objet là. Rendre `''` le dit ; rendre le contexte
+    laisserait croire à un contrôle qui mesurerait autre chose.
+    """
     try:
-        txt = _narration_claude_api(n2, n3, n4, lob_label, arrete)
+        txt, charge = _narration_claude_api(n2, n3, n4, lob_label, arrete)
         if txt:
-            return txt, 'claude_api'
+            return txt, 'claude_api', charge
     except Exception:
         pass
     try:
         txt = _narration_templates(n4, commentaire)
         if txt:
-            return txt, 'templates'
+            return txt, 'templates', ''
     except Exception:
         pass
-    return '', 'aucune'
+    return '', 'aucune', ''
 
 
 #: Le libellé d'origine de la narration, par source. UNE SEULE TABLE.
@@ -2596,8 +2652,8 @@ def export_html(
         # Le repli `is None` garde intacts les appels qui ne la fournissent
         # pas -- l'application et une trentaine de tests.
         if narration is None:
-            narration, source = _generer_narration(n2, n3, n4, commentaire,
-                                                   lob, arr)
+            narration, source, _ = _generer_narration(
+                n2, n3, n4, commentaire, lob, arr)
         else:
             source = source_narration
 
@@ -2869,8 +2925,8 @@ def export_word(n1, n2, n3, n4,
         # Le repli `is None` garde intacts les appels qui ne la fournissent
         # pas -- l'application et une trentaine de tests.
         if narration is None:
-            narration, source = _generer_narration(n2, n3, n4, commentaire,
-                                                   lob, arr)
+            narration, source, _ = _generer_narration(
+                n2, n3, n4, commentaire, lob, arr)
         else:
             source = source_narration
 
