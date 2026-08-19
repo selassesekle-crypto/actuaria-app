@@ -284,8 +284,21 @@ _FORMULE_SCR = re.compile(
 #: B — LA CITATION. Elle n'ATTESTE rien : n'importe quelle phrase peut la
 #: porter, y compris celle qui contredit l'article cité. Elle n'exempte plus
 #: qu'à condition que la phrase ne PRESCRIVE rien.
+#: ⚠️ `σ de réserve` A REJOINT CE TIER, ET PAS L'AUTRE — la mesure a tranche.
+#: Le bloc LoB Marine publie « Le SCR de la ligne d'activite 6 (σ de réserve =
+#: 11,0 %) est eleve » : phrase JUSTE, signalee a tort des que l'assiette l'a
+#: atteinte, parce que `11,0` ressemble a un percentile. Le reflexe etait de
+#: l'exempter par la FORMULE, qui exempte SANS CONDITION. Mesure :
+#:
+#:     « σ de réserve : retenir le P99.5 pour le calcul du SCR provisions. »
+#:
+#: passait alors le controle. Nommer sigma aurait suffi a prescrire n'importe
+#: quoi. La regle posee au lot precedent le disait deja : `3 × σ` est une
+#: OPERATION, qui demontre ; `σ de réserve` est un NOM, qui coexiste avec
+#: n'importe quelle phrase. Un nom atteste aussi peu qu'une citation d'article.
 _CITATION_SCR = re.compile(
-    r'[Aa]rt(icle)?\.?\s*11[57]|formule standard', re.IGNORECASE)
+    r'[Aa]rt(icle)?\.?\s*11[57]|formule standard|σ\s+de\s+réserve',
+    re.IGNORECASE)
 
 #: C — LA PRESCRIPTION : un verbe qui DIRIGE une grandeur vers le SCR.
 #:
@@ -390,6 +403,21 @@ class T3_Le_Mot_SCR_Ne_Nomme_Qu_Une_Grandeur(unittest.TestCase):
         'SCR Provisions — Formule standard Art. 115 Règlement Délégué (UE) 2015/35',
         "c'est cette marge, et non le niveau, qui se compare au SCR de "
         "l'article 115. Elle est proche de celle du P99.5 Mack.",
+        # ⚠️ LE CAS QUE L'ELARGISSEMENT DE L'ASSIETTE A REVELE (bloc LoB
+        # Marine). σ de réserve EST le facteur de l'article 115 ; « 11,0 »
+        # n'est pas un percentile. La phrase est JUSTE, et elle n'avait
+        # jamais ete balayee.
+        ("4. Le SCR de la ligne d'activité 6 (σ de réserve = 11,0 %) est "
+         "élevé — anticiper une exigence de capital importante."),
+    )
+
+    #: ⚠️ LES DEUX CONTRE-EPREUVES DU MEME MOT, ET ELLES SONT INDISPENSABLES.
+    #: Exempter `σ de réserve` par la FORMULE aurait fait passer ces deux
+    #: prescriptions : nommer sigma aurait suffi a diriger n'importe quelle
+    #: grandeur vers le SCR. Elles verrouillent le tier ou le motif a ete mis.
+    _DEFAUTS_SIGMA_NOMME = (
+        "σ de réserve : retenir le P99.5 pour le calcul du SCR provisions.",
+        "σ de réserve = 11,0 % — utiliser le P90 comme assiette du SCR.",
     )
 
     def test_il_attrape_les_sept_defauts_du_releve(self):
@@ -405,6 +433,18 @@ class T3_Le_Mot_SCR_Ne_Nomme_Qu_Une_Grandeur(unittest.TestCase):
                              'faux positif sur : %s' % s[:70])
         print('    OK C3b-2 les %d formulations légitimes restent silencieuses'
               % len(self._SAINS))
+
+    def test_nommer_sigma_ne_permet_pas_de_prescrire(self):
+        """⚠️ LE TROU QU'UNE EXEMPTION PAR LA FORMULE AURAIT OUVERT.
+
+        `σ de réserve` a rejoint le tier CITATION, qui n'exempte QUE ce qui
+        ne prescrit rien. Dans le tier FORMULE — inconditionnel — ces deux
+        phrases seraient passées : nommer sigma aurait suffi à diriger
+        n'importe quelle grandeur vers le SCR. Mesuré avant d'être écrit."""
+        for s in self._DEFAUTS_SIGMA_NOMME:
+            self.assertTrue(vocabulaire_scr_fautif(s),
+                            f'prescription non detectee : {s[:70]}')
+        print('    OK C3b-2b nommer sigma n exempte aucune prescription')
 
     def test_aucune_unite_publiee_ne_nomme_scr_un_percentile(self):
         """Tout ce que l'agent publie, avec et sans exposition."""
@@ -528,6 +568,141 @@ class T4_Aucune_Prescription_De_Percentile_Pour_Le_SCR(unittest.TestCase):
         self.assertFalse(vocabulaire_scr_fautif(MSG_ASSIETTE_SCR),
                          'la phrase de correction déclenche le contrôle')
         print('    OK SCR-6 une seule redaction, et elle ne se signale pas')
+
+
+# =============================================================================
+#  T5 — L'ASSIETTE DES CONTROLES : PAR LES CHEMINS, PAS PAR LES TRIANGLES
+# =============================================================================
+#
+#  ⚠️⚠️ LE BALAYAGE ETAIT COMPLET, L'ASSIETTE NE L'ETAIT PAS. `_unites_publiees`
+#  parcourt DEJA n2/n3/n4, le commentaire, 26 figures, l'Excel et le Word.
+#  Mais on ne lui donnait a balayer qu'UN triangle, UNE LoB, deux expositions.
+#  Les QUATRE prescriptions fausses du lot SCR vivaient toutes sur des chemins
+#  que cette assiette n'atteignait pas :
+#
+#      branche VERT           GenIns sort ROUGE
+#      ecart P99.5 > 15 %     sort sur RAA, pas sur GenIns
+#      LoB specifique         la LoB par defaut est << generique >>
+#      BOOT-H3 rejetee        validee sur les triangles de reference
+#
+#  ⚠️ ON ELARGIT PAR LES CHEMINS, PAS PAR LES TRIANGLES, ET C'EST MESURE.
+#  `_run_complet` produit Excel + Word + 26 figures : le multiplier par N
+#  quadruplerait le controle le plus lourd du depot, sur une gate deja a
+#  30 minutes. Or les quatre fautes vivaient dans le COMMENTAIRE et dans N4 --
+#  `_run` leger les atteint toutes. Un chemin coute un appel ; un balayage
+#  coute une gate.
+#
+#  ⚠️ ET LA MEME ASSIETTE SERT LES DEUX DETECTEURS. Elargir pour
+#  `vocabulaire_scr_fautif` fait passer gratuitement `defauts_de_separateur`
+#  sur les memes chemins -- T2 les avait deja sur trois triangles, jamais sur
+#  ces etats-la.
+
+
+class T5_Les_Chemins_Que_L_Assiette_N_Atteignait_Pas(unittest.TestCase):
+    """⚠️ UN CONTROLE NE VAUT QUE SUR CE QU'ON LUI DONNE A REGARDER."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.gen = _run(GENINS)
+        cls.raa = _run(RAA)
+
+    @staticmethod
+    def _unites_textuelles(n1, n2, n3, n4, commentaire):
+        """Les unites ou vivaient les quatre fautes : N4 et la prose."""
+        bloc = {'n2': n2, 'n3': n3, 'n4': n4, 'commentaire': commentaire}
+        out = []
+        for chemin, s in _chaines(bloc):
+            out += [(chemin, ligne) for ligne in s.split('\n')]
+        return out
+
+    def _balayer(self, nom, unites):
+        """Les DEUX detecteurs sur les memes unites, et le compte rendu."""
+        fautes = []
+        for chemin, u in unites:
+            if vocabulaire_scr_fautif(u):
+                fautes.append(f'{nom}{chemin} — SCR/percentile : {u[:90]!r}')
+            for genre, extrait in defauts_de_separateur(u):
+                fautes.append(f'{nom}{chemin} — {genre} : {extrait!r}')
+        return fautes
+
+    # ── CHEMIN 1 : la branche VERT ──────────────────────────────────────────
+    def test_chemin_branche_verte(self):
+        # ⚠️ GenIns et RAA sortent ROUGE : ce chemin n'etait JAMAIS exerce, et
+        # c'est celui ou vivait << Retenir {P90} pour le calcul du SCR >>.
+        r = self.gen
+        n4 = dict(r['n4'], statut='VERT')
+        com = generer_commentaire(r['n1'], r['n2'], r['n3'], n4)
+        unites = self._unites_textuelles(r['n1'], r['n2'], r['n3'], n4, com)
+        unites += [('.s8', l) for l in
+                   _s8_recommandations(r['n1'], r['n2'], r['n3'], n4,
+                                       'generique').split('\n')]
+        self.assertTrue(unites, 'aucune unite produite')
+        self.assertEqual(self._balayer('VERT', unites), [])
+        print(f'    OK ASS-1 branche VERT : {len(unites)} unites, aucune '
+              f'fautive')
+
+    # ── CHEMIN 2 : l'ecart P99.5 significatif ───────────────────────────────
+    def test_chemin_ecart_p995_significatif(self):
+        # RAA le declenche reellement ; GenIns non. C'est ce chemin qui
+        # publiait << Pour le SCR, retenir le maximum des deux >>.
+        r = self.raa
+        s6 = _s6_incertitude(r['n3'], r['n4'])
+        unites = [('.s6', l) for l in s6.split('\n')]
+        self.assertEqual(self._balayer('RAA', unites), [])
+        print(f'    OK ASS-2 ecart P99.5 : {len(unites)} unites, aucune '
+              f'fautive')
+
+    # ── CHEMIN 3 : les LoB specifiques ──────────────────────────────────────
+    def test_chemin_lob_specifiques(self):
+        # ⚠️ LA LoB PAR DEFAUT EST << generique >>, qui rend des blocs VIDES.
+        # Les blocs LoB sont le chemin le moins relu du module -- et l'un
+        # d'eux disait du P99.5 qu'il etait << le chiffre critique pour le
+        # SCR >>. Les sept handlers sont exerces, plus le repli.
+        r = self.gen
+        total, fautes = 0, []
+        for lob in ('mrh', 'rc_auto_materiel', 'rc_auto_corporels',
+                    'rc_generale', 'rc_medicale', 'construction',
+                    'marine_aviation_transport', 'generique'):
+            com = generer_commentaire(r['n1'], r['n2'], r['n3'], r['n4'],
+                                      lob=lob)
+            unites = [(f'.{lob}', l) for l in com.split('\n')]
+            total += len(unites)
+            fautes += self._balayer(lob, unites)
+        self.assertEqual(fautes, [], '\n'.join(fautes[:10]))
+        print(f'    OK ASS-3 8 LoB : {total} unites, aucune fautive')
+
+    # ── CHEMIN 4 : BOOT-H3 rejetee ──────────────────────────────────────────
+    def test_chemin_boot_h3_rejetee(self):
+        # ⚠️ VALIDEE SUR TOUS LES TRIANGLES DE REFERENCE : ce chemin n'est
+        # atteignable qu'en forcant la porte d'hypothese. C'est lui qui
+        # publiait << Retenir l'incertitude de Mack pour le SCR >>.
+        from direction_non_vie.provisionnement.a7_provisionnement.n4_best_estimate import (
+            BestEstimateS2,
+        )
+        r = self.gen
+        n2 = dict(r['n2'],
+                  bootstrap_hyp={**r['n2'].get('bootstrap_hyp', {}),
+                                 'percentiles_publiables': False})
+        n4 = BestEstimateS2().calculer(n2, r['n3'],
+                                       np.asarray(GENINS, dtype=float))
+        unites = self._unites_textuelles(r['n1'], n2, r['n3'], n4, '')
+        self.assertTrue(any('recommandations' in c for c, _ in unites),
+                        'les recommandations ne sont pas produites')
+        self.assertEqual(self._balayer('BOOTH3', unites), [])
+        print(f'    OK ASS-4 BOOT-H3 rejetee : {len(unites)} unites, aucune '
+              f'fautive')
+
+    # ── ET LE CONTROLE DE L'ASSIETTE ELLE-MEME ──────────────────────────────
+    def test_les_quatre_chemins_sont_bien_DISTINCTS_du_balayage_existant(self):
+        # ⚠️ SANS CE TEST, RIEN NE PROUVE QUE L'ELARGISSEMENT ELARGIT. Un
+        # chemin qui reproduirait l'etat deja balaye ne couvrirait rien de
+        # neuf, et le lot n'aurait fait qu'allonger la gate.
+        self.assertEqual(self.gen['n4']['statut'], 'ROUGE',
+                         'GenIns sort VERT : le chemin 1 doublonne')
+        self.assertTrue(self.raa['n2']['bootstrap_hyp']
+                        .get('percentiles_publiables', True),
+                        'BOOT-H3 deja rejetee : le chemin 4 doublonne')
+        print('    OK ASS-5 les quatre chemins sont bien hors du balayage')
 
 
 if __name__ == '__main__':
