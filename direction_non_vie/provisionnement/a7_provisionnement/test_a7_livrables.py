@@ -1041,5 +1041,138 @@ class T_Jugement_Nomme_Ses_Grandeurs(unittest.TestCase):
         print('    OK JUG-5 le VERT publie le SCR reel, pas un percentile')
 
 
+# =============================================================================
+#  VERROU C2 — AUCUN NOMBRE PUBLIE QUI NE SOIT DANS LA CHARGE UTILE
+# =============================================================================
+#
+#  ⚠️⚠️ CE VERROU PROUVE LA PROVENANCE, JAMAIS LA JUSTESSE -- et c'est ecrit
+#  dans le module, pas seulement ici. Un modele qui INVERSERAIT deux valeurs
+#  justes passerait : les deux sont dans la charge utile.
+#
+#  ⚠️ IL A TROUVE TROIS DEFAUTS AVANT D'EXISTER. Sa mesure preparatoire a fait
+#  ressortir les trois provisions du jugement (`fcfb3d3`) -- un ecart de
+#  8,4 M EUR sur le P99.5 -- que SIX releves successifs n'avaient pas vus.
+#
+#  ⚠️ ET LE DETECTEUR EST TESTE POUR LUI-MEME, AVANT D'ETRE CRU. Une premiere
+#  version ne reconnaissait pas la virgule comme separateur de milliers : elle
+#  scindait << 8,057,830 >> en trois nombres, tous orphelins, et annoncait 42 %
+#  de faux positifs. La narration n'inventait rien -- le detecteur fabriquait
+#  des orphelins. Un verrou ne vaut pas mieux que son instrument.
+
+#: Formes mesurees dans la narration et la charge utile reelles. Au niveau du
+#: module : un attribut de classe mutable demanderait un `ClassVar`, et ces
+#: formes n'appartiennent pas plus a une classe qu'a une autre.
+_FORMES_MESUREES = {
+    '8,057,830':   '8057830',      # virgule -- celle qui m'avait trompe
+    '1.234.567':   '1234567',      # point separateur de milliers
+    '4 894 197':   '4894197',      # espace fine insecable
+    '11.0':        '11',           # decimale nulle == entier
+    '17,3':        '17.3',         # decimale a la francaise
+    '0.5':         '0.5',
+    '7':           '7',
+}
+
+
+class T_Detecteur_De_Nombres(unittest.TestCase):
+    """⚠️ LE DETECTEUR AVANT LE VERROU. S'il se trompe, tout le reste ment."""
+
+    def test_les_formes_mesurees_sont_reconnues(self):
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
+            _cle_nombre,
+            nombres_publies,
+        )
+        for brut, attendu in _FORMES_MESUREES.items():
+            trouves = nombres_publies(brut)
+            self.assertEqual(trouves, [brut], f'{brut!r} mal decoupe')
+            self.assertEqual(_cle_nombre(brut), attendu, f'{brut!r} mal normalise')
+        print(f'    OK C2-1 les {len(_FORMES_MESUREES)} formes mesurees '
+              f'sont reconnues')
+
+    def test_une_decimale_non_nulle_ne_s_apparie_pas_a_l_entier(self):
+        # ⚠️ SANS CETTE EPREUVE, LA NORMALISATION POURRAIT TOUT APLATIR et le
+        # verrou laisserait passer n'importe quel arrondi.
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
+            _cle_nombre,
+        )
+        self.assertEqual(_cle_nombre('11.0'), _cle_nombre('11'))
+        self.assertNotEqual(_cle_nombre('11.3'), _cle_nombre('11'))
+        self.assertNotEqual(_cle_nombre('17'), _cle_nombre('17,3'))
+        print('    OK C2-2 un arrondi ne s apparie pas a sa valeur pleine')
+
+    def test_la_zone_franche_ne_couvre_que_des_references(self):
+        # ⚠️ LA REGLE DE SELASSE : aucun seuil numerique n'y entre.
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
+            nombres_publies,
+        )
+        for ref in ('§5 — CONTEXTE', 'Mack 1993', 'Mack (1993)', 'BFCC-H4',
+                    'H2', 'Art. 115', 'QIS5 TP.5.26', '2015/35'):
+            self.assertEqual(nombres_publies(ref), [],
+                             f'{ref!r} devrait etre en zone franche')
+        # ⚠️ ET CE QUI N'EST PAS UNE REFERENCE DOIT RESTER CONTROLE.
+        for grandeur in ('5 annees', '3 observations', 'CV de 11.0 %'):
+            self.assertTrue(nombres_publies(grandeur),
+                            f'{grandeur!r} ne doit PAS etre exempte')
+        print('    OK C2-3 zone franche = references seules, aucun seuil')
+
+
+class T_Verrou_Charge_Utile(unittest.TestCase):
+    """⚠️ UN NOMBRE PUBLIE QUI N'EST PAS DANS LA CHARGE EST SOIT INVENTE, SOIT
+    PERIME."""
+
+    @classmethod
+    def setUpClass(cls):
+        with kaleido_declare(True), rendeur_substitue():
+            cls.r = AgentA7Provisionnement(verbose=False).run(
+                source=np.array(GENINS, dtype=float), mode_declare='cumule',
+                primes=_exposition(GENINS), n_sim_bootstrap=200, seed=42,
+                generer_graphiques=False)
+
+    def test_un_nombre_invente_est_detecte(self):
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
+            orphelins_narration,
+        )
+        charge = 'BEST ESTIMATE : 14 830 899 € | CV=2.0 %'
+        propre = 'Le Best Estimate ressort a 14 830 899 € (CV 2.0 %).'
+        self.assertEqual(orphelins_narration(propre, charge), [])
+        invente = 'Le Best Estimate ressort a 99 999 999 € (CV 2.0 %).'
+        self.assertEqual(orphelins_narration(invente, charge), ['99 999 999'])
+        print('    OK C2-4 un nombre absent de la charge est signale')
+
+    def test_le_taux_reste_praticable_sur_la_narration_reelle(self):
+        # ⚠️ MESURE SUR LE DETERMINISTE, PAS SUR LE LLM -- aucune cle API
+        # disponible, aucune narration Claude archivee. Ordre de grandeur.
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
+            _construire_contexte,
+            nombres_publies,
+            orphelins_narration,
+        )
+        n2, n3, n4 = self.r['n2'], self.r['n3'], self.r['n4']
+        texte = n4.get('jugement', '')
+        charge = _construire_contexte(n2, n3, n4, 'RC', '30/06/2026')
+        pub = nombres_publies(texte)
+        orph = orphelins_narration(texte, charge)
+        taux = 100 * len(orph) / max(len(pub), 1)
+        self.assertGreater(len(pub), 20, 'narration trop pauvre pour mesurer')
+        # ⚠️ SEUIL LARGE ET ASSUME : il verrouille que le detecteur ne se
+        # DEREGLE pas (retour a 42 %), pas que la narration soit parfaite.
+        self.assertLess(taux, 30,
+                        f'taux d orphelins {taux:.0f} % -- detecteur deregle ?')
+        print(f'    OK C2-5 taux mesure {taux:.0f} % '
+              f'({len(orph)}/{len(pub)}) sur le deterministe')
+
+    def test_le_verrou_ne_juge_pas_la_justesse(self):
+        # ⚠️ LA RESERVE DE FOND, EPROUVEE PLUTOT QUE SEULEMENT ECRITE. Deux
+        # valeurs justes ECHANGEES passent le verrou : c'est sa limite, et
+        # elle doit etre demontree, pas promise.
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
+            orphelins_narration,
+        )
+        charge = 'BE : 14 830 899 € | SCR : 4 894 197 €'
+        inverse = 'Le BE vaut 4 894 197 € et le SCR 14 830 899 €.'
+        self.assertEqual(orphelins_narration(inverse, charge), [],
+                         'le verrou pretendrait juger la justesse')
+        print('    OK C2-6 le verrou prouve la provenance, PAS la justesse')
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=1)

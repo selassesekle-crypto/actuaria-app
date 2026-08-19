@@ -456,6 +456,108 @@ def _narration_claude_api(n2, n3, n4, lob_label, arrete) -> str:
 def _narration_templates(n4, commentaire) -> str:
     return _clean(commentaire) or _clean(n4.get('jugement', ''))
 
+
+# =============================================================================
+#  VERROU C2 — AUCUN NOMBRE PUBLIE QUI NE SOIT DANS LA CHARGE UTILE
+# =============================================================================
+#
+#  ⚠️⚠️ CE VERROU PROUVE LA PROVENANCE, JAMAIS LA JUSTESSE. Il verifie qu'un
+#  nombre imprime dans la narration EXISTE dans ce qui a ete transmis -- rien
+#  de plus. Un modele qui INVERSERAIT deux valeurs justes passerait sans un
+#  mot : les deux nombres sont dans la charge utile. Il attrape ce qui est
+#  INVENTE ou PERIME, pas ce qui est mal attribue. Le dire ici plutot que de
+#  laisser croire a une garantie qu'il n'offre pas.
+#
+#  ⚠️ LA ZONE FRANCHE NE COUVRE QUE DES FORMES DE REFERENCE, JAMAIS UN SEUIL
+#  NUMERIQUE. Exempter << 5 annees >> ou << 3 observations >> rouvrirait
+#  exactement ce que ce chantier a passe une semaine a fermer : ce sont des
+#  affirmations sur le portefeuille. Seuls sortent les identifiants qui ne
+#  designent aucune grandeur -- section, hypothese, annee de publication.
+#
+#  ⚠️ APPARIEMENT EXACT, ET LES ARRONDIS REMONTENT COMME ORPHELINS. Un poids
+#  publie << 17 % >> pour une charge utile a 17,3 % est une perte de precision
+#  SILENCIEUSE. Mieux vaut que la charge porte la valeur affichee.
+#
+#  ⚠️ TAUX MESURE : 16 % d'orphelins (45 nombres, 7 orphelins) sur la narration
+#  DETERMINISTE (`n4['jugement']`) -- PAS sur du LLM. Aucune cle API n'etait
+#  disponible et aucune narration Claude n'est archivee dans le depot. Ce
+#  chiffre vaut comme ORDRE DE GRANDEUR ; personne ne doit le lire comme une
+#  mesure du chemin LLM. Sur ces 7 : 1 seul faux positif reel, 2 arrondis,
+#  4 VRAIS defauts -- dont les trois provisions du jugement (`fcfb3d3`).
+#
+#  ⚠️ IL JOURNALISE, IL NE LEVE PAS. Faire tomber un rapport pour un defaut de
+#  narration reproduirait le defaut que le lot A a ferme : un renderer qui
+#  plantait sur un garde-fou bien pose. Le refus vit dans les TESTS.
+
+#: Formes qui ne designent AUCUNE grandeur -- elles sortent du controle.
+#: ⚠️ MESUREES sur la narration reelle, pas devinees : section (<< §5 >>),
+#: hypothese (<< H2 >>, << CLM-H1 >>, << BFCC-H4 >>), annee de publication
+#: d'une methode (<< Mack 1993 >>, << Clark 2003 >>), article et reglement.
+_REFERENCES_NON_CHIFFREES = re.compile(
+    r'§\s*\d+'                                  # section
+    r'|\b(?:CLM|BFCC|BOOT|MCL)-H\d+\b'          # hypotheses nommees
+    r'|\bH\d\b'                                 # H1..H4
+    # ⚠️ LA PARENTHESE EST OBLIGATOIRE DANS CE MOTIF, ET C'EST MESURE : la
+    # narration ecrit AUSSI BIEN << Mack 1993 >> que << Mack (1993) >>. La
+    # premiere version ne couvrait que la forme sans parenthese, et 1993
+    # ressortait orphelin -- le SEUL faux positif reel des sept mesures.
+    r'|\b(?:Mack|Clark|Renshaw|Verrall|Quarg|Benktander|B&Z|Bornhuetter)'
+    r'\s+(?:&\s+\w+\s+)?\(?(?:19|20)\d\d\)?'    # methode + annee, () optionnelles
+    r'|Art(?:icle)?\.?\s*\d+'                   # Art. 77, Art. 115
+    r'|\b(?:19|20)\d\d/\d+\b'                   # reglement 2015/35
+    r'|\bQIS\s*\d+\b|\bTP\.\d[\d.]*',           # QIS5 TP.5.26
+    re.IGNORECASE)
+
+#: Un nombre : chiffres, separateurs de milliers (virgule, point, espace fine
+#: ou insecable), decimale optionnelle.
+#: ⚠️ CE MOTIF EST LA PIECE CRITIQUE, ET IL M'A DEJA TROMPE. Une premiere
+#: version ne reconnaissait pas la virgule comme separateur : elle scindait
+#: << 8,057,830 >> en TROIS nombres, tous orphelins, et annoncait 42 % de faux
+#: positifs. La narration n'inventait rien -- le detecteur fabriquait des
+#: orphelins. Il est teste POUR LUI-MEME (classe dediee) avant d'etre cru.
+_NOMBRE = re.compile(r'\d[\d.,    ]*\d|\d')
+
+
+def _cle_nombre(brut: str) -> str:
+    """La forme canonique d'un nombre, pour comparer sans le formatage.
+
+    ⚠️ LE POINT DELICAT EST LE POINT : separateur de milliers dans
+    << 1.234.567 >>, separateur DECIMAL dans << 11.0 >>. On ne tranche pas au
+    jugé -- un point suivi d'exactement trois chiffres ET d'une frontiere est
+    un separateur de milliers ; sinon c'est une decimale. Meme regle pour la
+    virgule, dans l'autre sens.
+    """
+    x = re.sub(r'[    ]', '', brut.strip())
+    x = re.sub(r'(?<=\d)[.,](?=\d{3}(?:\D|$))', '', x)   # milliers
+    x = x.replace(',', '.').rstrip('.')                  # decimale unifiee
+    if '.' in x:
+        entier, dec = x.split('.', 1)
+        dec = dec.rstrip('0')
+        x = f'{entier.lstrip("0") or "0"}.{dec}' if dec else (entier.lstrip('0') or '0')
+        return x
+    return x.lstrip('0') or '0'
+
+
+def nombres_publies(texte: str) -> list:
+    """Les nombres d'un texte, hors formes de reference. Ordre preserve."""
+    if not texte:
+        return []
+    return _NOMBRE.findall(_REFERENCES_NON_CHIFFREES.sub(' ', texte))
+
+
+def orphelins_narration(narration: str, charge_utile: str) -> list:
+    """Les nombres PUBLIES qui ne figurent pas dans la CHARGE UTILE.
+
+    ⚠️ RIEN N'EST APPARIE PAR IDENTIFIANT : on compare des VALEURS. Un
+    identifiant de correspondance obligerait le modele a le reproduire, et
+    ferait echouer le controle sur sa mise en forme plutot que sur son fond.
+
+    Rend la liste des formes brutes orphelines, dans l'ordre du texte.
+    """
+    connus = {_cle_nombre(n) for n in nombres_publies(charge_utile)}
+    return [n for n in nombres_publies(narration)
+            if _cle_nombre(n) not in connus]
+
 def _generer_narration(n2, n3, n4, commentaire, lob_label, arrete) -> Tuple[str, str]:
     try:
         txt = _narration_claude_api(n2, n3, n4, lob_label, arrete)
