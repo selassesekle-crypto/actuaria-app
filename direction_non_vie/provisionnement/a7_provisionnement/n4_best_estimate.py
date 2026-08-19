@@ -1895,10 +1895,30 @@ class BestEstimateS2:
             "",
             "3. BEST ESTIMATE — RÉSERVE BRUTE (Art. 77 ; actualisation S2 par A10)",
             "─" * 40,
+            # ⚠️⚠️ CES TROIS PERCENTILES SONT CEUX DE MACK SEUL, ET L'ETIQUETTE
+            # NE LE DISAIT PAS. Le rapport HTML/Word publie, sous le MEME nom
+            # << Provision P75 / P90 / P99.5 >>, les percentiles COMPOSES de N4
+            # (sigma compose = Mack + incertitude inter-methodes). Deux
+            # grandeurs JUSTES chacune, sous une etiquette identique, dans le
+            # MEME document. Ecart mesure sur un run reel (GenIns) :
+            #
+            #     P75    Mack 20 226 075   compose 17 660 196   -12,7 %
+            #     P90    Mack 21 892 882   compose 21 832 044    -0,3 %
+            #     P99.5  Mack 25 918 951   compose 34 310 605   +32,4 %   (8,4 M EUR)
+            #
+            # ⚠️ AUCUN CALCUL NE CHANGE ICI, ET C'EST DELIBERE. La vue Mack
+            # NATIVE a une valeur diagnostique -- le HTML la publie sciemment
+            # dans sa table << decomposition de l'incertitude >>. Le defaut
+            # n'etait pas la valeur, c'etait l'ETIQUETTE qui ne disait pas de
+            # quelle grandeur elle parle. On nomme la source ; on ne remplace
+            # pas une information juste par une autre.
             f"  BE retenu         : {be:>16,.0f} €",
-            f"  Provision P75     : {n3['mack'].get('reserve_p75', 0):>16,.0f} €",
-            f"  Provision P90     : {p90:>16,.0f} €",
-            f"  Provision P99.5   : {p995:>16,.0f} €",
+            (f"  Provision P75 (Mack natif)   : "
+             f"{n3['mack'].get('reserve_p75', 0):>16,.0f} €"),
+            f"  Provision P90 (Mack natif)   : {p90:>16,.0f} €",
+            f"  Provision P99.5 (Mack natif) : {p995:>16,.0f} €",
+            "  ⚠️ Percentiles de Mack SEUL. Le rapport publie les percentiles",
+            "     COMPOSES (Mack + incertitude inter-methodes), plus larges.",
             f"  σ Mack total      : {sigma:>16,.0f} €",
             f"  CV inter-méthodes : {cv:>15.1f} %"
             f"  {'(acceptable)' if cv < 5 else '(à surveiller)' if cv < 15 else '(élevé)'}",
@@ -1932,9 +1952,28 @@ class BestEstimateS2:
 
         if statut == 'VERT':
             lignes += [
+                # ⚠️⚠️ CETTE LIGNE DIRIGEAIT VERS LE MAUVAIS NOMBRE, DANS UNE
+                # SECTION QUI S'APPELLE << DECISION ET RECOMMANDATIONS >>, ET
+                # SUR LE SEUL CHEMIN VERT -- celui qu'on relit le moins. Elle
+                # disait << Utiliser {p90} EUR pour le calcul du SCR
+                # provisions >>. Or le SCR ne se calcule sur AUCUN percentile :
+                #
+                #     scr_prov = 3.0 * sigma_eiopa * be        (Art. 115)
+                #
+                # Mesure sur un run reel : le SCR vaut 4 894 197 EUR quand le
+                # P90 vaut 21 892 882 EUR. Un actuaire qui aurait suivi cette
+                # instruction aurait obtenu un SCR 4,5x trop eleve.
+                #
+                # ⚠️ ET L'INSTRUCTION N'AVAIT PAS D'OBJET : il n'existe aucun
+                # nombre a << utiliser pour calculer >> le SCR, il est DEJA
+                # calcule par ce meme module. On publie donc la valeur reelle
+                # plutot que de retirer la ligne : la section DECISION est
+                # l'endroit ou l'actuaire cherche cette information.
                 f"  AVIS FAVORABLE — Les méthodes convergent (CV={cv:.1f}%).",
                 f"  BE de {be:,.0f}€ retenu pour inscription au bilan S2.",
-                f"  Utiliser {p90:,.0f}€ pour le calcul du SCR provisions.",
+                (f"  SCR provisions : "
+                 f"{(scr or {}).get('scr_provisions') or 0:,.0f}€ "
+                 f"(3 × σ_EIOPA × BE — Art. 115)."),
                 f"  Archiver ce rapport et l'audit trail associé.",
             ]
         elif statut == 'AMBRE':

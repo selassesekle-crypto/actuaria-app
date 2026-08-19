@@ -462,8 +462,13 @@ def _today_fr():
     # comparaison << la date du jour n'apparait pas comme arrete >> n'a de sens
     # que si les deux chaines sont produites de la meme facon. Un tz les ferait
     # diverger aux frontieres de journee.
+    # ⚠️ `noqa` MAL CIBLE AU LOT B, ET LE CONSTAT VAUT D'ETRE ECRIT : la
+    # directive portait `DTZ005` seul, que `ruff` nu n'active pas -- il la
+    # declarait donc INUTILE (RUF100) pendant que `scripts/proprete.py`, lui,
+    # active DTZ005 et l'exigeait. Deux outils, deux configurations, une seule
+    # ligne : il faut les deux codes pour satisfaire les deux.
     from datetime import datetime
-    return datetime.now().strftime('%d/%m/%Y')  # noqa: DTZ005
+    return datetime.now().strftime('%d/%m/%Y')  # noqa: DTZ005, RUF100
 
 
 class T_Arrete_Les_Trois_Livrables_Ne_Fabriquent_Pas_La_Date(unittest.TestCase):
@@ -935,6 +940,105 @@ class T_Avis_Et_Jugement_Ne_Se_Contredisent_Pas(unittest.TestCase):
         self.assertFalse(contredit,
                          f'jugement dit DEFAVORABLE, avis dit : {avis[:60]}')
         print('    OK N1-4 avis et jugement ne se contredisent pas')
+
+
+# =============================================================================
+#  LE JUGEMENT DIT DE QUELLE GRANDEUR IL PARLE, ET NE DIRIGE PLUS VERS LE
+#  MAUVAIS NOMBRE
+# =============================================================================
+#
+#  ⚠️ CES TROIS DEFAUTS ONT ETE TROUVES PAR LA MESURE DU VERROU C2, AVANT MEME
+#  QUE LE VERROU EXISTE : en comparant les nombres publies a la charge utile,
+#  trois provisions sont ressorties orphelines. Aucun releve ne les avait vues.
+#
+#  P1/P2 -- `_documenter_jugement` publiait les percentiles de MACK SEUL sous
+#  l'etiquette generique << Provision P75 / P90 / P99.5 >>, la MEME que le
+#  rapport emploie pour les percentiles COMPOSES de N4. Deux grandeurs justes
+#  chacune, sous un nom identique, dans le meme document. Ecart mesure :
+#      P75   Mack 20 226 075   compose 17 660 196   -12,7 %
+#      P90   Mack 21 892 882   compose 21 832 044    -0,3 %
+#      P99.5 Mack 25 918 951   compose 34 310 605   +32,4 %  (8,4 M EUR)
+#  ⚠️ AUCUNE VALEUR N'A CHANGE : le defaut etait l'ETIQUETTE. La vue Mack
+#  native est diagnostique et le HTML la publie sciemment.
+#
+#  P3 -- LE PLUS GRAVE, ET SUR LE CHEMIN LE MOINS RELU. La section
+#  << DECISION ET RECOMMANDATIONS >>, branche VERT SEULE, disait :
+#      << Utiliser 21 892 882 EUR pour le calcul du SCR provisions. >>
+#  Or `scr_prov = 3.0 * sigma_eiopa * be` -- AUCUN percentile n'y entre. Le
+#  SCR reel vaut 4 894 197 EUR : un actuaire qui aurait suivi l'instruction
+#  aurait obtenu un SCR 4,5x trop eleve. Et l'instruction n'avait pas d'objet,
+#  le SCR etant deja calcule par ce meme module.
+
+class T_Jugement_Nomme_Ses_Grandeurs(unittest.TestCase):
+    """⚠️ DEUX GRANDEURS JUSTES SOUS UN MEME NOM RESTENT UN DEFAUT."""
+
+    @classmethod
+    def setUpClass(cls):
+        with kaleido_declare(True), rendeur_substitue():
+            cls.r = AgentA7Provisionnement(verbose=False).run(
+                source=np.array(GENINS, dtype=float), mode_declare='cumule',
+                primes=_exposition(GENINS), n_sim_bootstrap=200, seed=42,
+                generer_graphiques=False)
+
+    def _jugement(self, statut):
+        """Le jugement pour un statut donne -- la branche VERT n'est atteignable
+        que par cette voie, et c'est justement celle qu'on relit le moins."""
+        from direction_non_vie.provisionnement.a7_provisionnement.n4_best_estimate import (
+            BestEstimateS2,
+        )
+        n4 = self.r['n4']
+        return BestEstimateS2()._documenter_jugement(
+            {}, {}, n4.get('poids', {}), n4['best_estimate'], 2.0,
+            self.r['n2'], self.r['n3'], statut, n4['scr'], {'label': 'RC'})
+
+    # ── P1 / P2 ──────────────────────────────────────────────────────────────
+    def test_les_percentiles_nomment_leur_source(self):
+        j = self.r['n4']['jugement']
+        for cle in ('P75', 'P90', 'P99.5'):
+            ligne = next((x for x in j.splitlines()
+                          if f'Provision {cle}' in x), None)
+            self.assertIsNotNone(ligne, f'{cle} absent du jugement')
+            self.assertIn('Mack natif', ligne,
+                          f'{cle} ne dit pas de quelle grandeur il parle')
+        print('    OK JUG-1 les trois percentiles disent « Mack natif »')
+
+    def test_la_difference_avec_le_compose_est_ecrite(self):
+        # ⚠️ NOMMER LA SOURCE NE SUFFIT PAS SI LE LECTEUR IGNORE QU'IL EN
+        # EXISTE UNE AUTRE. Le jugement dit que le rapport publie l'autre.
+        j = self.r['n4']['jugement']
+        self.assertIn('COMPOSES', j)
+        print('    OK JUG-2 le jugement signale l existence des composes')
+
+    def test_aucune_valeur_de_percentile_n_a_change(self):
+        # ⚠️ LE VERROU DU LOT : on a corrige une ETIQUETTE, pas un calcul.
+        j = self.r['n4']['jugement']
+        mk = self.r['n3']['mack']
+        for cle, attendu in (('P75', mk.get('reserve_p75')),
+                             ('P90', mk.get('reserve_p90')),
+                             ('P99.5', mk.get('reserve_p99_5'))):
+            ligne = next(x for x in j.splitlines() if f'Provision {cle}' in x)
+            self.assertIn(f'{attendu:,.0f}', ligne,
+                          f'{cle} : la valeur de Mack a change')
+        print('    OK JUG-3 aucune valeur n a bouge, seule l etiquette')
+
+    # ── P3 ───────────────────────────────────────────────────────────────────
+    def test_le_vert_ne_dirige_plus_vers_un_percentile_pour_le_scr(self):
+        j = self._jugement('VERT')
+        self.assertNotIn('pour le calcul du SCR provisions', j,
+                         "l'instruction fausse est encore la")
+        print('    OK JUG-4 l instruction « utiliser X pour le SCR » a disparu')
+
+    def test_le_vert_publie_le_scr_reellement_calcule(self):
+        j = self._jugement('VERT')
+        scr = self.r['n4']['scr'].get('scr_provisions') or 0
+        self.assertIn(f'{scr:,.0f}', j, 'le SCR publie n est pas celui de n4')
+        self.assertIn('Art. 115', j)
+        # ⚠️ ET SURTOUT : le P90 ne doit PLUS figurer comme cible du SCR.
+        p90 = self.r['n3']['mack'].get('reserve_p90') or 0
+        ligne = next(x for x in j.splitlines() if 'SCR provisions' in x)
+        self.assertNotIn(f'{p90:,.0f}', ligne,
+                         'la ligne SCR porte encore le P90')
+        print('    OK JUG-5 le VERT publie le SCR reel, pas un percentile')
 
 
 if __name__ == '__main__':
