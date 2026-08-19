@@ -616,9 +616,20 @@ class AgentA7Provisionnement:
                 n4['scr_prov'] = n4['scr']['scr_provisions']
 
                 # 2. Percentiles log-normale (QIS5 TP.5.26) recentrés sur BE_final,
-                #    σ inchangé (σ_total composé, comme les percentiles d'origine).
-                #    Les variantes _mack / _boot restent sur l'attritional (transparence).
-                _sig_pct = float(n4.get('sigma_total_compose') or n4.get('sigma_mack') or 0.0)
+                #    σ inchangé — mais σ DE QUOI ?
+                #    ⚠️ CE RECENTRAGE EST UN SECOND PRODUCTEUR DE `reserve_p*`.
+                #    Il lisait `sigma_total_compose` en dur : quand N4 a retenu
+                #    σ_Mack (CLM-H3 validée), le chemin LLT REPUBLIAIT le composé
+                #    en silence, et le dossier divergeait selon qu'un grand
+                #    sinistre était détecté ou non. Il lit désormais
+                #    `sigma_percentiles`, la clé par laquelle N4 NOMME le σ qui a
+                #    engendré les percentiles publiés : la bascule ne peut plus
+                #    être contournée ici.
+                #    Les variantes _mack / _boot / _compose restent sur
+                #    l'attritional (transparence) — convention inchangée.
+                _sig_pct = float(n4.get('sigma_percentiles')
+                                 or n4.get('sigma_total_compose')
+                                 or n4.get('sigma_mack') or 0.0)
                 if _sig_pct > 0 and _be_final > 0:
                     _cv    = _sig_pct / _be_final
                     _s2_ln = float(np.log(1.0 + _cv ** 2))
@@ -670,6 +681,9 @@ class AgentA7Provisionnement:
                     n4['reserve_p75']              = _garde['reserve_p75']
                     n4['reserve_p90']              = _garde['reserve_p90']
                     n4['reserve_p99_5']            = _garde['reserve_p99_5']
+                    n4['reserve_p75_compose']      = _garde['reserve_p75_compose']
+                    n4['reserve_p90_compose']      = _garde['reserve_p90_compose']
+                    n4['reserve_p99_5_compose']    = _garde['reserve_p99_5_compose']
                     n4['risk_margin']              = _garde['risk_margin']
                     n4['ratio_rm_be']              = _garde['ratio_rm_be']
                     n4['provisions_techniques_s2'] = _garde['provisions_techniques_s2']
@@ -713,6 +727,8 @@ class AgentA7Provisionnement:
             # afficher MSG_S2_NON_CALCULABLE au lieu de chiffres trompeurs.
             if s2_non_calculable(n4):
                 for _k in ('reserve_p75', 'reserve_p90', 'reserve_p99_5',
+                           'reserve_p75_compose', 'reserve_p90_compose',
+                           'reserve_p99_5_compose',
                            'risk_margin', 'provisions_techniques_s2',
                            'ratio_rm_be', 'scr_prov'):
                     if n4.get(_k) is None:

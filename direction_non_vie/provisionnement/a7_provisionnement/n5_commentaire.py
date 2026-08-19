@@ -43,6 +43,10 @@ from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
 from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
 from .n3.bf_cape_cod import libelle_loss_ratio
 from .n4_best_estimate import s2_non_calculable, MSG_S2_NON_CALCULABLE
+# Source UNIQUE du NOM de l'approche publiée dans `reserve_p*` — la même que
+# HTML, Word et l'Excel. Les libellés étaient écrits en dur ici aussi.
+from .n4_best_estimate import (CLE_BOOT, CLE_COMPOSE, CLE_MACK,
+                               libelle_percentiles, marque_retenue)
 from .methodes_be import ORDRE_AFFICHAGE, libelle, reserve
 
 logger = logging.getLogger('actuaria.a7')
@@ -770,7 +774,8 @@ def _s5_best_estimate(n4: Dict) -> str:
         f"— la valeur actuelle au sens de l'Art. 77 — est opérée en aval par "
         f"A10 (Solvabilité 2).",
         "",
-        f"Distribution log-normale composée (σ Mack ⊕ σ modèle) — percentiles retenus (QIS5 TP.5.26) :",
+        f"Distribution log-normale — {libelle_percentiles(n4).lower()} — "
+        f"percentiles retenus (QIS5 TP.5.26) :",
         f"  • Provision prudentielle P75  : {_e(p75)}  (+{_p((p75/max(be,1)-1)*100)} vs BE)",
         f"  • Provision stress test P90   : {_e(p90)}  (+{_p((p90/max(be,1)-1)*100)} vs BE)",
         f"  • Provision extrême P99.5     : {_e(p995)} (+{_p((p995/max(be,1)-1)*100)} vs BE)",
@@ -816,7 +821,13 @@ def _s6_incertitude(n3: Dict, n4: Dict) -> str:
     mack = n3.get('mack', {})
     boot = n3.get('bootstrap', {})
 
-    p90_compose  = n4.get('reserve_p90', 0)
+    # ⚠️ LISAIT `reserve_p90`, C'EST-À-DIRE LA RÉFÉRENCE, PAS LE COMPOSÉ. Tant
+    # que la référence ÉTAIT le composé, les deux coïncidaient et l'étiquette
+    # semblait juste. Depuis la bascule sur σ_Mack, la ligne « Incertitude
+    # composée » aurait affiché le Mack recentré sous le nom du composé — deux
+    # grandeurs justes sous une même étiquette, le défaut exact du lot
+    # précédent. La clé dédiée retire la coïncidence.
+    p90_compose  = n4.get('reserve_p90_compose', 0)
     sig_compose  = n4.get('sigma_total_compose', n4.get('sigma_mack', 0))
     p90_mack_re  = n4.get('reserve_p90_mack', p90_compose)
     sig_mack     = n4.get('sigma_mack', 0)
@@ -828,28 +839,38 @@ def _s6_incertitude(n3: Dict, n4: Dict) -> str:
     sig_boot     = boot.get('std_bootstrap') or 0
     boot_ok      = bool(boot.get('disponible', True)) and (boot.get('be_bootstrap', 0) or 0) > 0
 
-    lignes = [
-        "DIAGNOSTIC — décomposition de l'incertitude "
-        "(outil analytique interne, non destiné au bilan)",
-        "",
-        "Le Best Estimate retient le P90 composé (incertitude composée "
-        "σ Mack ⊕ σ modèle). L'incertitude se décompose selon plusieurs "
+    # Assemblé HORS de la liste : une concaténation implicite dans une
+    # collection cache une virgule oubliée (ISC004).
+    _intro = (
+        f"Le livrable retient le P90 {libelle_percentiles(n4).lower()} — "
+        f"{n4.get('source_percentiles', '')} "
+        "L'incertitude se décompose selon plusieurs "
         "approches : Mack (1993), distribution-free, sépare l'erreur de paramètre "
         "et de processus (termes croisés inclus, Theorem 3) ; le Bootstrap ODP "
         "(England & Verrall 2002) simule les scénarios de développement. Les quatre "
         "lignes ci-dessous diffèrent par le σ et/ou le point de centrage — "
-        "à titre de contrôle :",
+        "à titre de contrôle :"
+    )
+
+    lignes = [
+        "DIAGNOSTIC — décomposition de l'incertitude "
+        "(outil analytique interne, non destiné au bilan)",
         "",
-        f"  • Incertitude composée (retenue) : P90 = {_e(p90_compose)} — "
+        _intro,
+        "",
+        f"  • {marque_retenue(n4, CLE_COMPOSE, 'Incertitude composée')} : "
+        f"P90 = {_e(p90_compose)} — "
         f"σ composé {_e(sig_compose)}, centré sur le BE pondéré.",
-        f"  • Mack recentré : P90 = {_e(p90_mack_re)} — "
+        f"  • {marque_retenue(n4, CLE_MACK, 'Mack recentré')} : "
+        f"P90 = {_e(p90_mack_re)} — "
         f"σ Mack {_e(sig_mack)}, centré sur le BE pondéré.",
         f"  • Mack natif : P90 = {_e(p90_mack_nat)} — "
         f"σ Mack {_e(sig_mack_nat)}, centré sur la réserve Mack.",
     ]
     if boot_ok:
         lignes.append(
-            f"  • Bootstrap ODP : P90 = {_e(p90_boot)} — "
+            f"  • {marque_retenue(n4, CLE_BOOT, 'Bootstrap ODP')} : "
+            f"P90 = {_e(p90_boot)} — "
             f"σ bootstrap {_e(sig_boot)}, centré sur la réserve Bootstrap."
         )
     else:
@@ -1449,11 +1470,13 @@ def _lob_rc_auto_corporels(n1, n2, n3, n4):
             )
         )
         + f"Le LR BF retenu est de {_p(bf_lr*100)}. "
-        # ⚠️ ÉTIQUETTE FAUSSE : `n4['reserve_p99_5']` est le P99.5 COMPOSÉ
-        # (σ Mack ⊕ σ modèle), que §5 nomme correctement. Le vrai P99.5
-        # Bootstrap vit dans `n3['bootstrap']['p99_5']` et vaut autre chose
-        # — mesuré 8 266 contre 8 285 sur le triangle témoin.
-        + f"Le P99.5 composé (σ Mack ⊕ σ modèle) = {_e(p995)} "
+        # ⚠️ ÉTIQUETTE FAUSSE, CORRIGÉE DEUX FOIS. Elle disait « Bootstrap » :
+        # le vrai P99.5 Bootstrap vit dans `n3['bootstrap']['p99_5']` et vaut
+        # autre chose — 8 266 contre 8 285 sur le triangle témoin. Elle a
+        # ensuite dit « composé », ce qui était juste tant que la référence
+        # l'était. `reserve_p99_5` suit désormais la bascule de N4, et cette
+        # ligne LA NOMME au lieu de la supposer.
+        + f"Le P99.5 {libelle_percentiles(n4).lower()} = {_e(p995)} "
         f"({'+' if p995 > be else ''}{_p((p995/max(be,1)-1)*100)} vs BE) "
         "est le chiffre critique pour le SCR provisions, "
         "compte tenu de la forte volatilité des sinistres graves. "

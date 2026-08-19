@@ -313,10 +313,20 @@ class T6_Consequence_Sur_Mack(unittest.TestCase):
         for cle in ('reserve_p75_mack', 'reserve_p90_mack',
                     'reserve_p99_5_mack'):
             self.assertIsNotNone(r['n4'][cle])
-        self.assertEqual(r['n4']['source_percentiles'],
-                         'Incertitude composée (\u03c3_Mack + \u03c3_mod\xe8le)')
+        # ⚠️ CETTE ASSERTION PORTAIT LE LIBELLÉ LITTÉRAL de la branche par
+        # défaut. Le lot « percentiles » a changé ce que cette branche PUBLIE
+        # — Mack recentré au lieu du composé — donc la chaîne a bougé, alors
+        # que la propriété testée, « CLM-H3 validée ne retire rien », est
+        # intacte : c'est un test de NON-RETRAIT, pas de libellé. Il verrouille
+        # désormais la PROPRIÉTÉ — branche NOMINALE prise, aucun repli — et
+        # vérifie EN PLUS que le composé reste publié, ce que le libellé seul
+        # ne disait pas.
+        self.assertEqual(r['n4']['cle_percentiles'], N4.CLE_MACK)
+        for cle in ('reserve_p75_compose', 'reserve_p90_compose',
+                    'reserve_p99_5_compose'):
+            self.assertIsNotNone(r['n4'][cle], f'{cle} a été retirée')
         print("    OK MACK-4 témoin GenIns : CLM-H3 validée, colonne Mack "
-              "publiée, source inchangée")
+              "publiée, branche nominale, rien retiré")
 
     def test_branche_1_bascule_sur_le_bootstrap(self):
         """CLM-H3 tombe, le Bootstrap est publiable : il prend le relais."""

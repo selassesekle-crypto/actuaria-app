@@ -117,6 +117,14 @@ def garde_fou_be_negatif(be_final: float) -> Optional[Dict]:
         'reserve_p75':              None,
         'reserve_p90':              None,
         'reserve_p99_5':            None,
+        # La colonne comparative du composé suit la référence : un BE négatif
+        # rend la log-normale non calculable pour ELLE AUSSI. Sans cette
+        # neutralisation, un dossier ROUGE publierait des percentiles composés
+        # à côté de trois cases vides — une substitution, exactement le défaut
+        # que ce chantier ferme.
+        'reserve_p75_compose':      None,
+        'reserve_p90_compose':      None,
+        'reserve_p99_5_compose':    None,
         'risk_margin':              None,
         'ratio_rm_be':              None,
         'provisions_techniques_s2': None,
@@ -140,6 +148,49 @@ def s2_non_calculable(n4: Dict) -> bool:
     afficher MSG_S2_NON_CALCULABLE AU LIEU des chiffres : aucune valeur None ne
     doit atteindre un formatage ou un calcul. Source UNIQUE partagée par les 4."""
     return bool(n4.get('be_negatif'))
+
+
+# =============================================================================
+#  QUELLE APPROCHE `reserve_p*` PORTE-T-IL ?  — source UNIQUE des 4 livrables
+# =============================================================================
+
+#: Les trois approches qui peuvent alimenter `reserve_p*`, arbitrées dans
+#: `BestEstimateS2` par CLM-H3 puis par la disponibilité du Bootstrap.
+#: ⚠️ « MACK NATIF » (`n3['mack']['reserve_p*']`) N'EN FAIT PAS PARTIE, et c'est
+#: une distinction de fond : il est centré sur la réserve de MACK, pas sur le BE
+#: publié. Le publier donnerait des percentiles qui ne décrivent pas la
+#: distribution du Best Estimate. Il figure au diagnostic pour comparaison, il
+#: n'est jamais retenu.
+CLE_MACK    = 'mack'
+CLE_BOOT    = 'boot'
+CLE_COMPOSE = 'compose'
+
+#: Le nom court de chaque approche, tel que les livrables le montrent.
+LIBELLE_APPROCHE = {
+    CLE_MACK:    'Mack recentré',
+    CLE_BOOT:    'Bootstrap ODP',
+    CLE_COMPOSE: 'Incertitude composée',
+}
+
+
+def libelle_percentiles(n4: dict) -> str:
+    """Le nom de l'approche que `reserve_p*` porte EFFECTIVEMENT.
+
+    ⚠️ Les livrables étiquetaient « (composé) » EN DUR les percentiles publiés.
+    Depuis que la référence bascule sur σ_Mack quand CLM-H3 la valide, cette
+    étiquette nommerait une grandeur que la clé ne porte plus — le motif même
+    que ce chantier ferme. Source unique, lue par les quatre générateurs."""
+    return LIBELLE_APPROCHE.get(n4.get('cle_percentiles'),
+                                LIBELLE_APPROCHE[CLE_COMPOSE])
+
+
+def marque_retenue(n4: dict, cle: str, base: str) -> str:
+    """Ajoute « (retenue) » à la SEULE approche effectivement publiée.
+
+    La marque SUIT l'arbitrage au lieu d'être clouée sur une ligne : le tableau
+    diagnostic ne peut plus désigner comme retenue une approche qui ne l'est
+    pas. C'est la PROPRIÉTÉ que le filet verrouille, et non le libellé."""
+    return base + ' (retenue)' if n4.get('cle_percentiles') == cle else base
 
 
 # =============================================================================
@@ -923,44 +974,19 @@ class BestEstimateS2:
             s_ln   = np.sqrt(s2_ln)
             m_ln   = np.log(be) - s2_ln / 2.0
 
-            p75  = float(np.exp(m_ln + 0.6745 * s_ln))
-            p90  = float(np.exp(m_ln + 1.2816 * s_ln))
-            p995 = float(np.exp(m_ln + 2.5758 * s_ln))
+            p75_compose  = float(np.exp(m_ln + 0.6745 * s_ln))
+            p90_compose  = float(np.exp(m_ln + 1.2816 * s_ln))
+            p995_compose = float(np.exp(m_ln + 2.5758 * s_ln))
         else:
-            p75 = p90 = p995 = be
+            p75_compose = p90_compose = p995_compose = be
 
-        # ⚠️ LES DEUX ÉTAGES DE LA CONSÉQUENCE, ET ILS NE SONT PAS SYMÉTRIQUES.
-        # Si CLM-H3 est NON VALIDÉE, σ_Mack ne mesure plus l'erreur de
-        # prédiction. Mais σ_Mack alimente DEUX choses de statut très différent :
-        #   · les percentiles Mack `reserve_p*_mack`, colonne COMPARATIVE — on
-        #     les retire, exactement comme les percentiles Bootstrap ;
-        #   · `sigma_total_compose`, d'où sortent les percentiles PRINCIPAUX du
-        #     rapport — les retirer laisserait le livrable SANS AUCUNE mesure
-        #     d'incertitude. On ne fait JAMAIS ça en silence.
-        # D'où la bascule : si le Bootstrap est publiable, il prend le relais et
-        # `source_percentiles` le DIT ; sinon on publie quand même, en nommant
-        # la composante contestée. Le principe est celui du lot F1 — une case
-        # vide honnête vaut mieux qu'un nombre faux, mais un nombre étiqueté
-        # vaut mieux qu'une case vide quand une alternative existe.
-        p90_source = 'Incertitude composée (σ_Mack + σ_modèle)'
-        if not _mack_hyp_ok:
-            if _boot_ok:
-                p75  = float(_boot.get('p75')  or p75)
-                p90  = float(_boot.get('p90')  or p90)
-                p995 = float(_boot.get('p99_5') or p995)
-                p90_source = (
-                    "Bootstrap ODP — σ_Mack ÉCARTÉ : CLM-H3 (structure de "
-                    "variance) non validée, l'écart-type de Mack ne mesure "
-                    "plus l'erreur de prédiction")
-            else:
-                p90_source = (
-                    "⚠️ Incertitude composée dont la composante σ_Mack est "
-                    "CONTESTÉE — CLM-H3 (structure de variance) non validée, "
-                    "et le Bootstrap n'offre pas de relais publiable. "
-                    "Percentiles à interpréter avec prudence ; la réserve "
-                    "centrale, elle, n'est pas concernée.")
-
-        # Percentiles Mack seul — centrés sur BE pondéré (pour affichage comparatif)
+        # Percentiles Mack RECENTRÉS sur le BE pondéré — MÊME CENTRE que le
+        # composé, seul σ change.
+        # ⚠️ À NE PAS CONFONDRE AVEC `n3['mack']['reserve_p*']`, qui applique
+        # σ_Mack à la réserve de MACK, un autre centre que le BE publié. Publier
+        # ces derniers donnerait des percentiles qui ne décrivent pas la
+        # distribution du Best Estimate publié. La confusion a été faite, et
+        # elle inversait le sens de l'écart mesuré : voir la mesure ci-dessous.
         if sigma > 0 and be > 0:
             cv_ln_m  = sigma / be
             s2_ln_m  = np.log(1.0 + cv_ln_m ** 2)
@@ -976,6 +1002,79 @@ class BestEstimateS2:
         p75_mack_val  = p75_mack
         p90_mack_val  = p90_mack
         p995_mack_val = p995_mack
+
+        # ═══ QUELLE MESURE D'INCERTITUDE LE RAPPORT PUBLIE-T-IL ? ═══════════
+        #
+        # ⚠️ LE COMPOSÉ NE MESURE PAS L'INCERTITUDE, IL MESURE LE DÉSACCORD
+        # ENTRE MÉTHODES. σ_modèle est l'écart-type des réserves des méthodes
+        # retenues : il est GRAND quand elles divergent et PETIT quand elles
+        # convergent, que la provision soit incertaine ou non. Mesuré sur les
+        # deux triangles de référence du dépôt :
+        #     GenIns   σ_modèle = 79 % de la variance composée
+        #     RAA      σ_modèle = 18 %
+        # Deux régimes opposés, sans qu'aucune propriété du passif ne le
+        # commande — seul l'accord des estimateurs change.
+        #
+        # ⚠️⚠️ ET SON HYPOTHÈSE N'EST PAS VÉRIFIÉE. `√(σ_Mack² + σ_modèle²)`
+        # suppose σ_Mack et σ_modèle INDÉPENDANTS. Ils ne le sont pas : les
+        # méthodes agrégées partagent `pct_dev`, dérivé des facteurs Chain
+        # Ladder, et BF reçoit directement `ultimates_cl`. Sous covariance
+        # POSITIVE, la somme quadratique SOUS-ESTIME. Le composé n'est donc
+        # pas prudent — il est INDÉTERMINÉ. Aucun test de ce module ne vérifie
+        # cette indépendance, et cette note est le seul endroit qui le dise.
+        #
+        # D'OÙ LA RÉFÉRENCE : σ_Mack recentré, quand CLM-H3 le valide. C'est
+        # une erreur de prédiction PUBLIÉE et TESTABLE (Mack 1993), pas un
+        # écart entre estimateurs. Le composé reste publié en colonne
+        # comparative (`reserve_p*_compose`) : retirer une information n'est
+        # pas la corriger.
+        #
+        # ⚠️ LA BASCULE RESTE CONDITIONNELLE À CLM-H3, ET C'EST LE POINT LE
+        # PLUS IMPORTANT DE CE BLOC. Si CLM-H3 est NON VALIDÉE, σ_Mack ne
+        # mesure plus l'erreur de prédiction : en faire la référence
+        # publierait σ_Mack exactement là où ce module a établi qu'il ne vaut
+        # rien. L'ordre de repli est donc INCHANGÉ — Bootstrap s'il est
+        # publiable, composé signalé sinon — et `source_percentiles` le dit
+        # dans les trois cas.
+        #
+        # `sigma_percentiles` NOMME le σ qui a produit les percentiles publiés.
+        # Il existe pour que le recentrage post-LLT (`agent.py`) reprenne le
+        # MÊME σ que cette bascule : sans lui, le LLT recalculait sur le
+        # composé et le réintroduisait en silence sur ce chemin.
+        if _mack_hyp_ok:
+            p75, p90, p995 = p75_mack, p90_mack, p995_mack
+            sigma_percentiles = sigma
+            cle_pct = CLE_MACK
+            p90_source = (
+                "Mack recentré sur le BE pondéré (σ_Mack, Mack 1993) — CLM-H3 "
+                "validée. L'incertitude composée √(σ_Mack² + σ_modèle²) est "
+                "publiée en comparaison : elle mesure le désaccord entre "
+                "méthodes, et son hypothèse d'indépendance n'est PAS vérifiée.")
+        elif _boot_ok:
+            p75  = float(_boot.get('p75')   or p75_compose)
+            p90  = float(_boot.get('p90')   or p90_compose)
+            p995 = float(_boot.get('p99_5') or p995_compose)
+            # Le Bootstrap donne des percentiles EMPIRIQUES : aucun σ ne les
+            # engendre. `sigma_percentiles` reçoit ici le composé, ce qui
+            # reproduit à l'identique le comportement du recentrage post-LLT
+            # d'avant ce lot. ⚠️ Ce chemin reste imparfait — un LLT écrase des
+            # percentiles Bootstrap par une log-normale. Signalé, hors périmètre.
+            sigma_percentiles = sigma_total_compose
+            cle_pct = CLE_BOOT
+            p90_source = (
+                "Bootstrap ODP — σ_Mack ÉCARTÉ : CLM-H3 (structure de "
+                "variance) non validée, l'écart-type de Mack ne mesure "
+                "plus l'erreur de prédiction")
+        else:
+            p75, p90, p995 = p75_compose, p90_compose, p995_compose
+            sigma_percentiles = sigma_total_compose
+            cle_pct = CLE_COMPOSE
+            p90_source = (
+                "⚠️ Incertitude composée dont la composante σ_Mack est "
+                "CONTESTÉE — CLM-H3 (structure de variance) non validée, "
+                "et le Bootstrap n'offre pas de relais publiable. "
+                "Percentiles à interpréter avec prudence ; la réserve "
+                "centrale, elle, n'est pas concernée.")
 
         # Exposer σ_modèle et σ_total composé dans le dict retour
         sigma_modele_val       = round(sigma_modele, 2)
@@ -1352,9 +1451,16 @@ class BestEstimateS2:
                               "robuste ; actualisation S2 opérée en aval (A10)")
 
         # ── 9. Jugement actuariel documenté ───────────────────────────────────
+        # ⚠️ LES PERCENTILES PUBLIES SONT PASSES AU JUGEMENT, ET NON RELUS PAR
+        # LUI. Il lisait `n3['mack']` de son cote : deux chemins vers deux
+        # grandeurs, dans un document qui les nomme pareil. Un seul chemin.
         jugement = self._documenter_jugement(
             methodes_incluses, methodes_exclues, poids,
-            be, cv_inter, n2, n3, statut, scr, cfg
+            be, cv_inter, n2, n3, statut, scr, cfg,
+            pcts={'p75': p75, 'p90': p90, 'p99_5': p995,
+                  'libelle': LIBELLE_APPROCHE.get(
+                      cle_pct, LIBELLE_APPROCHE[CLE_COMPOSE]),
+                  'source': p90_source},
         )
 
         msg = (
@@ -1398,7 +1504,21 @@ class BestEstimateS2:
                                       if _boot_ok else None),
             'reserve_p99_5_boot':    (round(float(_boot.get('p99_5', p995_mack_val)), 0)
                                       if _boot_ok else None),
+            # Colonne COMPARATIVE de l'incertitude composée. Publiée TOUJOURS,
+            # y compris quand elle est la référence : un consommateur qui veut
+            # le composé ne doit pas avoir à deviner si `reserve_p*` le porte.
+            'reserve_p75_compose':   round(p75_compose,  0),
+            'reserve_p90_compose':   round(p90_compose,  0),
+            'reserve_p99_5_compose': round(p995_compose, 0),
             'source_percentiles':    p90_source,
+            # La CLÉ de l'approche retenue — posée dans la même instruction que
+            # `source_percentiles`, donc incapable d'en diverger. C'est elle que
+            # `libelle_percentiles` et `marque_retenue` lisent pour que les
+            # quatre livrables nomment la grandeur qu'ils publient vraiment.
+            'cle_percentiles':       cle_pct,
+            # Le σ qui a ENGENDRÉ `reserve_p*` — lu par le recentrage post-LLT
+            # pour qu'il ne puisse pas repartir d'un autre σ que la bascule.
+            'sigma_percentiles':     round(sigma_percentiles, 2),
 
             # Incertitude composée (Option B — σ_Mack² + σ_modèle²)
             'sigma_mack':            round(sigma,  0),
@@ -1498,6 +1618,9 @@ class BestEstimateS2:
             resultat['reserve_p75']              = None
             resultat['reserve_p90']              = None
             resultat['reserve_p99_5']            = None
+            resultat['reserve_p75_compose']      = None
+            resultat['reserve_p90_compose']      = None
+            resultat['reserve_p99_5_compose']    = None
             resultat['risk_margin']              = None
             resultat['provisions_techniques_s2'] = None
             resultat['ratio_rm_be']              = None
@@ -1805,6 +1928,7 @@ class BestEstimateS2:
         statut:    str,
         scr:       Dict,
         cfg:       Dict,
+        pcts:      dict | None = None,
     ) -> str:
         """
         Génère le texte de jugement actuariel documenté.
@@ -1821,8 +1945,16 @@ class BestEstimateS2:
         lob_label   = cfg.get('label', 'Non précisée')
         date_str    = datetime.now().strftime('%d/%m/%Y')
         sigma       = n3['mack']['sigma_total']
-        p90         = n3['mack']['reserve_p90']
-        p995        = n3['mack']['reserve_p99_5']
+        # ⚠️ LISAIT `n3['mack']`, C'EST-A-DIRE MACK NATIF — une autre grandeur
+        # que celle des quatre livrables, et centree ailleurs. `pcts` porte
+        # desormais les percentiles PUBLIES ; le repli sur Mack natif ne sert
+        # qu'aux appels qui ne les fournissent pas (aucun en production).
+        _pj         = pcts or {}
+        appr        = _pj.get('libelle', LIBELLE_APPROCHE[CLE_COMPOSE])
+        source_pct  = _pj.get('source', '—')
+        p75_j       = _pj.get('p75',   n3['mack'].get('reserve_p75', 0))
+        p90         = _pj.get('p90',   n3['mack']['reserve_p90'])
+        p995        = _pj.get('p99_5', n3['mack']['reserve_p99_5'])
 
         lignes = [
             f"JUGEMENT ACTUARIEL — {date_str}",
@@ -1895,30 +2027,31 @@ class BestEstimateS2:
             "",
             "3. BEST ESTIMATE — RÉSERVE BRUTE (Art. 77 ; actualisation S2 par A10)",
             "─" * 40,
-            # ⚠️⚠️ CES TROIS PERCENTILES SONT CEUX DE MACK SEUL, ET L'ETIQUETTE
-            # NE LE DISAIT PAS. Le rapport HTML/Word publie, sous le MEME nom
-            # << Provision P75 / P90 / P99.5 >>, les percentiles COMPOSES de N4
-            # (sigma compose = Mack + incertitude inter-methodes). Deux
-            # grandeurs JUSTES chacune, sous une etiquette identique, dans le
-            # MEME document. Ecart mesure sur un run reel (GenIns) :
+            # ⚠️⚠️ CE BLOC A PUBLIE TROIS GRANDEURS DIFFERENTES EN TROIS LOTS.
+            # Il portait d'abord les percentiles de MACK NATIF sous le libelle
+            # generique << Provision P75 / P90 / P99.5 >>, celui-la meme que le
+            # rapport employait pour ses percentiles COMPOSES : deux grandeurs
+            # justes chacune, sous une etiquette identique, dans le MEME
+            # document. Le lot precedent a NOMME la source sans rien deplacer,
+            # au motif qu'on ne remplace pas une information juste par une
+            # autre. CE LOT-CI REVIENT SUR CE CHOIX, et voici pourquoi.
             #
-            #     P75    Mack 20 226 075   compose 17 660 196   -12,7 %
-            #     P90    Mack 21 892 882   compose 21 832 044    -0,3 %
-            #     P99.5  Mack 25 918 951   compose 34 310 605   +32,4 %   (8,4 M EUR)
+            # Mack natif est centre sur la reserve de MACK, pas sur le BE
+            # publie. Ses percentiles ne decrivent donc AUCUNE distribution du
+            # Best Estimate que ce meme bloc annonce deux lignes plus haut.
+            # Les nommer ne suffisait pas : la section DECISION reste l'endroit
+            # ou l'actuaire lit ses provisions, et elle doit y lire CELLES DU
+            # RAPPORT. Le jugement republie desormais `reserve_p*`, la meme
+            # grandeur que HTML, Word et Excel, nommee par la meme source.
             #
-            # ⚠️ AUCUN CALCUL NE CHANGE ICI, ET C'EST DELIBERE. La vue Mack
-            # NATIVE a une valeur diagnostique -- le HTML la publie sciemment
-            # dans sa table << decomposition de l'incertitude >>. Le defaut
-            # n'etait pas la valeur, c'etait l'ETIQUETTE qui ne disait pas de
-            # quelle grandeur elle parle. On nomme la source ; on ne remplace
-            # pas une information juste par une autre.
+            # Mack natif garde sa valeur DIAGNOSTIQUE : les quatre livrables le
+            # publient dans leur table << decomposition de l'incertitude >>,
+            # avec sa colonne Centre qui dit ou il est centre.
             f"  BE retenu         : {be:>16,.0f} €",
-            (f"  Provision P75 (Mack natif)   : "
-             f"{n3['mack'].get('reserve_p75', 0):>16,.0f} €"),
-            f"  Provision P90 (Mack natif)   : {p90:>16,.0f} €",
-            f"  Provision P99.5 (Mack natif) : {p995:>16,.0f} €",
-            "  ⚠️ Percentiles de Mack SEUL. Le rapport publie les percentiles",
-            "     COMPOSES (Mack + incertitude inter-methodes), plus larges.",
+            f"  Provision P75 ({appr})   : {p75_j:>16,.0f} €",
+            f"  Provision P90 ({appr})   : {p90:>16,.0f} €",
+            f"  Provision P99.5 ({appr}) : {p995:>16,.0f} €",
+            f"  Source : {source_pct}",
             f"  σ Mack total      : {sigma:>16,.0f} €",
             f"  CV inter-méthodes : {cv:>15.1f} %"
             f"  {'(acceptable)' if cv < 5 else '(à surveiller)' if cv < 15 else '(élevé)'}",

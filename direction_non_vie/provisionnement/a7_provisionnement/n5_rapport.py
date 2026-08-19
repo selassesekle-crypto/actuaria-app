@@ -45,6 +45,11 @@ from .n3.benktander import lignes_benktander_rapport
 # commentaire actuariel par Claude n'a donc JAMAIS pu être produit, et le
 # message accusait l'API d'une panne qui était dans le code.
 from .n3.bf_cape_cod import libelle_loss_ratio
+# Source UNIQUE du NOM de l'approche publiée dans `reserve_p*` — la même que
+# l'Excel et le commentaire. Ces libellés étaient écrits en dur dans les deux
+# formats de ce fichier, et « (retenue) » y était cloué sur le composé.
+from .n4_best_estimate import (CLE_BOOT, CLE_COMPOSE, CLE_MACK,
+                               libelle_percentiles, marque_retenue)
 
 logger = logging.getLogger('actuaria.a7.rapport')
 
@@ -1576,6 +1581,9 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     CV  = float(n4.get('cv_inter_methodes', 0) or 0)
     P90 = float(n4.get('reserve_p90', 0) or 0)
     P99 = float(n4.get('reserve_p99_5', 0) or 0)
+    # Le nom de la grandeur que P90/P99 portent RÉELLEMENT — les cartes KPI
+    # affichaient « (composé) » en dur, y compris quand ce n'en est pas un.
+    _appr_h = libelle_percentiles(n4)
     # Percentiles Mack et Bootstrap séparés
     P90_mack = float(n4.get('reserve_p90_mack', P90) or P90)
     P75_boot = n4.get('reserve_p75_boot')
@@ -1648,9 +1656,9 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         # traite les deux etats (absent, present a None) de la meme facon.
         if (n4.get('risk_margin') or 0) > 0
         else '<div class="kpi-card">'
-        '<div class="kpi-card-label">Provision P99,5 (composé)</div>'
+        '<div class="kpi-card-label">Provision P99,5 (' + _appr_h + ')</div>'
         '<div class="kpi-card-value">' + _f(P99) + '</div>'
-        '<div class="kpi-card-sub">P90 (composé) : ' + _f(P90) + '</div>'
+        '<div class="kpi-card-sub">P90 (' + _appr_h + ') : ' + _f(P90) + '</div>'
         '</div>'
     )
     b['kpi_grid'] = (
@@ -1773,36 +1781,49 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     # Table diagnostic — décomposition de l'incertitude (4 lignes, colonne Centre)
     _mk = n3.get('mack', {}); _bo = n3.get('bootstrap', {})
     P90_natif      = float(_mk.get('reserve_p90', 0) or 0)
+    P90_COMPOSE    = float(n4.get('reserve_p90_compose', 0) or 0)
     SIG_COMPOSE    = float(n4.get('sigma_total_compose', SIG) or SIG)
     SIG_MACK       = float(n4.get('sigma_mack', SIG) or SIG)
     SIG_MACK_NATIF = float(_mk.get('sigma_total', SIG) or SIG)
     STD_BOOT       = float(_bo.get('std_bootstrap', 0) or 0)
     _bp90 = ('<span class="mono">' + _f(P90_boot) + '</span>') if _boot_dispo else '<span style="color:var(--slate)">—</span>'
     _bsig = ('<span class="mono">' + _f(STD_BOOT) + '</span>')  if _boot_dispo else '<span style="color:var(--slate)">—</span>'
+    # ⚠️ « (retenue) », LE SURLIGNAGE OR ET LA PHRASE DE PIED étaient CLOUÉS sur
+    # la ligne du composé. Les trois suivent désormais l'arbitrage de N4 : la
+    # ligne marquée est celle qui porte réellement `reserve_p90`. « Mack natif »
+    # ne peut jamais l'être — il est centré sur la réserve de Mack, pas sur le
+    # BE publié — d'où sa clé vide, qu'aucun arbitrage ne peut désigner.
+    _mo = '<span class="mono">'
+    _lignes_i = [
+        (CLE_COMPOSE, 'Incertitude composée',
+         _mo + _f(P90_COMPOSE) + '</span>', _mo + _f(SIG_COMPOSE) + '</span>',
+         'BE pondéré'),
+        (CLE_MACK, 'Mack recentré',
+         _mo + _f(P90_mack) + '</span>', _mo + _f(SIG_MACK) + '</span>',
+         'BE pondéré'),
+        ('', 'Mack natif',
+         _mo + _f(P90_natif) + '</span>', _mo + _f(SIG_MACK_NATIF) + '</span>',
+         'réserve Mack'),
+        (CLE_BOOT, 'Bootstrap ODP', _bp90, _bsig, 'réserve Bootstrap'),
+    ]
+    _corps_i = ''
+    for _cle, _base, _vp90, _vsig, _centre in _lignes_i:
+        _cls = (' class="highlight-gold"'
+                if _cle and n4.get('cle_percentiles') == _cle else '')
+        _corps_i += (
+            '<tr' + _cls + '><td class="label">'
+            + marque_retenue(n4, _cle, _base) + '</td>'
+            '<td class="right">' + _vp90 + '</td>'
+            '<td class="right">' + _vsig + '</td>'
+            '<td>' + _centre + '</td></tr>')
     tbl_i = (
         '<table class="premium"><thead><tr>'
         '<th>Approche</th><th class="right">P90</th><th class="right">σ</th><th>Centre</th>'
-        '</tr></thead><tbody>'
-        '<tr class="highlight-gold"><td class="label">Incertitude composée (retenue)</td>'
-        '<td class="right"><span class="mono">' + _f(P90) + '</span></td>'
-        '<td class="right"><span class="mono">' + _f(SIG_COMPOSE) + '</span></td>'
-        '<td>BE pondéré</td></tr>'
-        '<tr><td class="label">Mack recentré</td>'
-        '<td class="right"><span class="mono">' + _f(P90_mack) + '</span></td>'
-        '<td class="right"><span class="mono">' + _f(SIG_MACK) + '</span></td>'
-        '<td>BE pondéré</td></tr>'
-        '<tr><td class="label">Mack natif</td>'
-        '<td class="right"><span class="mono">' + _f(P90_natif) + '</span></td>'
-        '<td class="right"><span class="mono">' + _f(SIG_MACK_NATIF) + '</span></td>'
-        '<td>réserve Mack</td></tr>'
-        '<tr><td class="label">Bootstrap ODP</td>'
-        '<td class="right">' + _bp90 + '</td>'
-        '<td class="right">' + _bsig + '</td>'
-        '<td>réserve Bootstrap</td></tr>'
-        '</tbody></table>'
+        '</tr></thead><tbody>' + _corps_i + '</tbody></table>'
         '<p style="font-size:8pt;color:var(--slate);font-style:italic;margin-top:6px;">'
         'Ces valeurs diffèrent par le σ (Mack seul / composé / bootstrap) et/ou le point de '
-        'centrage (colonne Centre). Le livrable retient le P90 composé.</p>'
+        'centrage (colonne Centre). Le livrable retient le P90 '
+        + libelle_percentiles(n4).lower() + '.</p>'
     )
     # Clark porte lui aussi une incertitude, construite autrement : variance de
     # PROCESSUS + variance de PARAMÈTRE (Clark 2003), là où Mack agrège des σ_j
@@ -2828,6 +2849,9 @@ def export_word(n1, n2, n3, n4,
         P75 = float(n4.get('reserve_p75',0) or 0)
         P90 = float(n4.get('reserve_p90',0) or 0)
         P99 = float(n4.get('reserve_p99_5',0) or 0)
+        # Le nom de la grandeur publiée, jamais « composé » en dur : la
+        # bascule de N4 peut avoir retenu Mack recentré ou le Bootstrap.
+        _appr_w = libelle_percentiles(n4)
         CV  = float(n4.get('cv_inter_methodes',0) or 0)
         SCP = _scr_publiable(sc)
         SCR = _ratio_scr(SCP, BE)
@@ -2988,16 +3012,16 @@ def export_word(n1, n2, n3, n4,
         _h('1. Synthèse exécutive'); _sep()
         _tbl(['Indicateur','Valeur','Indicateur','Valeur'],
              [['Best Estimate (brut)',_f(BE),'σ Mack total',_f(SIG)],
-              ['P75 (composé)',_f(P75),'CV inter-méthodes',_pct(CV)],
-              ['P90 (composé)',_f(P90),'SCR Provisions',_f(SCP)],
-              ['P99.5 (composé)',_f(P99),'Ratio SCR/BE',_pct(SCR)]],ws=[4.5,3.5,4.5,3.5])
+              [f'P75 ({_appr_w})',_f(P75),'CV inter-méthodes',_pct(CV)],
+              [f'P90 ({_appr_w})',_f(P90),'SCR Provisions',_f(SCP)],
+              [f'P99.5 ({_appr_w})',_f(P99),'Ratio SCR/BE',_pct(SCR)]],ws=[4.5,3.5,4.5,3.5])
 
         _h("Diagnostic — décomposition de l'incertitude (outil analytique interne, non destiné au bilan)"); _sep()
         _tbl(['Approche','P90','σ','Centre'],
-             [['Incertitude composée (retenue)',_f(P90),_f(n4.get('sigma_total_compose',SIG)),'BE pondéré'],
-              ['Mack recentré',_f(n4.get('reserve_p90_mack',P90)),_f(n4.get('sigma_mack',SIG)),'BE pondéré'],
+             [[marque_retenue(n4,CLE_COMPOSE,'Incertitude composée'),_f(n4.get('reserve_p90_compose',0) or 0),_f(n4.get('sigma_total_compose',SIG)),'BE pondéré'],
+              [marque_retenue(n4,CLE_MACK,'Mack recentré'),_f(n4.get('reserve_p90_mack',P90)),_f(n4.get('sigma_mack',SIG)),'BE pondéré'],
               ['Mack natif',_f(mk.get('reserve_p90',0)),_f(mk.get('sigma_total',SIG)),'réserve Mack'],
-              ['Bootstrap ODP',_f(n3.get('bootstrap',{}).get('p90') or 0),_f(n3.get('bootstrap',{}).get('std_bootstrap') or 0),'réserve Bootstrap']],ws=[5.0,3.0,3.0,3.0])
+              [marque_retenue(n4,CLE_BOOT,'Bootstrap ODP'),_f(n3.get('bootstrap',{}).get('p90') or 0),_f(n3.get('bootstrap',{}).get('std_bootstrap') or 0),'réserve Bootstrap']],ws=[5.0,3.0,3.0,3.0])
         # ⚠️ L'ORDRE DES FIGURES EST LE MÊME QUE DANS LE HTML, ET C'EST
         # VOLONTAIRE : « Figure 7 » doit désigner la même chose dans les deux
         # formats. Le compteur est positionnel dans chacun d'eux.

@@ -38,6 +38,10 @@ from .n3.bf_cape_cod import libelle_loss_ratio
 from .n3.bootstrap_odp import libelle_incertitude
 # Source UNIQUE d'affichage de Munich CL — la même que HTML et Word.
 from .n3.munich_cl import lignes_munich_rapport
+# Source UNIQUE du NOM de l'approche publiée dans `reserve_p*` — la même que
+# HTML, Word et le commentaire. Les libellés étaient écrits en dur ici.
+from .n4_best_estimate import (CLE_BOOT, CLE_COMPOSE, CLE_MACK,
+                               libelle_percentiles, marque_retenue)
 
 logger = logging.getLogger('actuaria.a7')
 
@@ -492,14 +496,19 @@ def _ong4_methodes(wb, n3, n4):
     c_p.border    = _border_thin()
     c_p.alignment = _align(h='center')
 
-    # Bloc phare — distribution log-normale composée (percentiles retenus)
-    _titre_section(ws, row_be+2, 1, "Distribution log-normale — incertitude composée (σ Mack ⊕ σ modèle)", 4)
+    # Bloc phare — distribution log-normale des percentiles RETENUS.
+    # ⚠️ Le libellé nommait « composé » en dur une grandeur qui n'est plus
+    # toujours le composé : il vient désormais de `libelle_percentiles`.
+    _appr = libelle_percentiles(n4)
+    _titre_section(ws, row_be+2, 1,
+                   f"Distribution log-normale — {_appr.lower()}", 4)
     pcts = [
-        ("P75 — Provision prudentielle (composé)", n4['reserve_p75']),
-        ("P90 — Provision stress test (composé)",  n4['reserve_p90']),
+        (f"P75 — Provision prudentielle ({_appr})", n4['reserve_p75']),
+        (f"P90 — Provision stress test ({_appr})",  n4['reserve_p90']),
         # ⚠️ Règle 2 du lot C3b : un percentile se nomme par son percentile.
-        ("P99.5 — Provision extrême (composé)",    n4['reserve_p99_5']),
-        ("σ composé",                              n4.get('sigma_total_compose', n4['sigma_mack'])),
+        (f"P99.5 — Provision extrême ({_appr})",    n4['reserve_p99_5']),
+        ("σ des percentiles publiés",
+         n4.get('sigma_percentiles', n4.get('sigma_total_compose', n4['sigma_mack']))),
     ]
     for i, (lbl, val) in enumerate(pcts):
         _kpi(ws, row_be+3+i, 1, lbl, val, FMT_NB)
@@ -511,11 +520,18 @@ def _ong4_methodes(wb, n3, n4):
                    "Diagnostic — décomposition de l'incertitude (outil analytique interne, non destiné au bilan)", 4)
     for j, h in enumerate(["Approche", "P90 (€)", "σ (€)", "Centre"]):
         _header(ws, row_diag+1, j+1, h)
+    # ⚠️ « (retenue) » était CLOUÉ sur la ligne du composé. Il suit désormais
+    # l'arbitrage de N4 : la marque désigne la ligne qui porte réellement
+    # `reserve_p90`, quelle qu'elle soit. « Mack natif » n'est jamais marqué —
+    # il est centré sur la réserve de Mack, pas sur le BE publié.
     diag_rows = [
-        ("Incertitude composée (retenue)", n4['reserve_p90'],             n4.get('sigma_total_compose', 0), "BE pondéré"),
-        ("Mack recentré",                  n4.get('reserve_p90_mack', 0), n4.get('sigma_mack', 0),          "BE pondéré"),
-        ("Mack natif",                     _mk.get('reserve_p90', 0),     _mk.get('sigma_total', 0),        "réserve Mack"),
-        ("Bootstrap ODP",                  _bo.get('p90') or 0,           _bo.get('std_bootstrap') or 0,      "réserve Bootstrap"),
+        (marque_retenue(n4, CLE_COMPOSE, "Incertitude composée"),
+         n4.get('reserve_p90_compose', 0),  n4.get('sigma_total_compose', 0), "BE pondéré"),
+        (marque_retenue(n4, CLE_MACK, "Mack recentré"),
+         n4.get('reserve_p90_mack', 0),     n4.get('sigma_mack', 0),          "BE pondéré"),
+        ("Mack natif",                      _mk.get('reserve_p90', 0),     _mk.get('sigma_total', 0),        "réserve Mack"),
+        (marque_retenue(n4, CLE_BOOT, "Bootstrap ODP"),
+         _bo.get('p90') or 0,               _bo.get('std_bootstrap') or 0,      "réserve Bootstrap"),
     ]
     for i, (appr, p90v, sigv, centre) in enumerate(diag_rows):
         r   = row_diag + 2 + i

@@ -38,6 +38,14 @@ from direction_non_vie.provisionnement.a7_provisionnement.config.rfr_eiopa impor
     diagnostic_peremption,
     get_courbe_embarquee,
 )
+from direction_non_vie.provisionnement.a7_provisionnement.n4_best_estimate import (
+    CLE_BOOT,
+    CLE_COMPOSE,
+    CLE_MACK,
+    LIBELLE_APPROCHE,
+    libelle_percentiles,
+    marque_retenue,
+)
 from direction_non_vie.provisionnement.a7_provisionnement.n5_excel import (
     export_excel,
 )
@@ -992,34 +1000,66 @@ class T_Jugement_Nomme_Ses_Grandeurs(unittest.TestCase):
             self.r['n2'], self.r['n3'], statut, n4['scr'], {'label': 'RC'})
 
     # ── P1 / P2 ──────────────────────────────────────────────────────────────
+    #
+    # ⚠️⚠️ CES TROIS TESTS ONT ETE REECRITS PAR LE LOT PERCENTILES, ET LA RAISON
+    # DOIT ETRE LUE AVANT DE LES CROIRE. Ils verrouillaient la decision du lot
+    # `fcfb3d3` : le jugement publie MACK NATIF, et on le NOMME sans rien
+    # deplacer. Cette decision a ete explicitement renversee -- Mack natif est
+    # centre sur la reserve de Mack, pas sur le BE publie, donc ses percentiles
+    # ne decrivent aucune distribution du Best Estimate que le meme bloc
+    # annonce. Le jugement republie desormais `reserve_p*`, la meme grandeur
+    # que les quatre livrables.
+    #
+    # ⚠️ ILS VERROUILLENT DESORMAIS UNE PROPRIETE, PLUS UN LIBELLE : non pas
+    # << le jugement dit "Mack natif" >>, mais << le jugement dit ce que
+    # `cle_percentiles` designe, et publie les nombres que le rapport publie >>.
+    # Un libelle peut etre rearbitre ; la coherence entre deux documents, non.
     def test_les_percentiles_nomment_leur_source(self):
-        j = self.r['n4']['jugement']
+        n4 = self.r['n4']
+        attendu = libelle_percentiles(n4)
+        j = n4['jugement']
         for cle in ('P75', 'P90', 'P99.5'):
             ligne = next((x for x in j.splitlines()
                           if f'Provision {cle}' in x), None)
             self.assertIsNotNone(ligne, f'{cle} absent du jugement')
-            self.assertIn('Mack natif', ligne,
+            self.assertIn(attendu, ligne,
                           f'{cle} ne dit pas de quelle grandeur il parle')
-        print('    OK JUG-1 les trois percentiles disent « Mack natif »')
+        # Et ce nom n'est pas une constante de test : il vient de l'arbitrage.
+        self.assertIn(n4.get('cle_percentiles'),
+                      (CLE_MACK, CLE_BOOT, CLE_COMPOSE))
+        print(f'    OK JUG-1 les trois percentiles disent « {attendu} »')
 
-    def test_la_difference_avec_le_compose_est_ecrite(self):
-        # ⚠️ NOMMER LA SOURCE NE SUFFIT PAS SI LE LECTEUR IGNORE QU'IL EN
-        # EXISTE UNE AUTRE. Le jugement dit que le rapport publie l'autre.
-        j = self.r['n4']['jugement']
-        self.assertIn('COMPOSES', j)
-        print('    OK JUG-2 le jugement signale l existence des composes')
+    def test_le_jugement_nomme_sa_source_en_toutes_lettres(self):
+        # ⚠️ NOMMER L'APPROCHE NE SUFFIT PAS : le lecteur doit savoir POURQUOI
+        # c'est celle-la. La phrase de `source_percentiles` porte la raison --
+        # et, quand Mack est retenu, la reserve sur l'hypothese d'independance
+        # du compose. Elle doit arriver INTACTE dans le jugement.
+        n4 = self.r['n4']
+        source = n4.get('source_percentiles') or ''
+        self.assertTrue(source.strip(), 'aucune source publiee')
+        self.assertIn(source, n4['jugement'],
+                      'le jugement ne porte pas la raison de son arbitrage')
+        print('    OK JUG-2 le jugement porte la raison de son arbitrage')
 
-    def test_aucune_valeur_de_percentile_n_a_change(self):
-        # ⚠️ LE VERROU DU LOT : on a corrige une ETIQUETTE, pas un calcul.
-        j = self.r['n4']['jugement']
-        mk = self.r['n3']['mack']
-        for cle, attendu in (('P75', mk.get('reserve_p75')),
-                             ('P90', mk.get('reserve_p90')),
-                             ('P99.5', mk.get('reserve_p99_5'))):
-            ligne = next(x for x in j.splitlines() if f'Provision {cle}' in x)
+    def test_le_jugement_publie_les_memes_nombres_que_le_rapport(self):
+        # ⚠️ LE VERROU DU LOT, ET IL REMPLACE L'ANCIEN. On ne verifie plus que
+        # << rien n'a bouge >> -- quelque chose a bouge, deliberement. On
+        # verifie que le jugement et le rapport ne peuvent plus DIVERGER.
+        n4 = self.r['n4']
+        for cle, attendu in (('P75',   n4['reserve_p75']),
+                             ('P90',   n4['reserve_p90']),
+                             ('P99.5', n4['reserve_p99_5'])):
+            ligne = next(x for x in n4['jugement'].splitlines()
+                         if f'Provision {cle}' in x)
             self.assertIn(f'{attendu:,.0f}', ligne,
-                          f'{cle} : la valeur de Mack a change')
-        print('    OK JUG-3 aucune valeur n a bouge, seule l etiquette')
+                          f'{cle} : le jugement ne publie pas le chiffre du rapport')
+        # Et la contre-epreuve : Mack NATIF, l'ancienne source, a bien disparu
+        # du bloc -- sinon les deux grandeurs cohabiteraient encore.
+        mk = self.r['n3']['mack']
+        bloc = [x for x in n4['jugement'].splitlines() if 'Provision P' in x]
+        self.assertNotIn(f"{mk.get('reserve_p99_5') or 0:,.0f}", ' '.join(bloc),
+                         'le P99.5 de Mack natif est encore publie')
+        print('    OK JUG-3 jugement et rapport publient les memes nombres')
 
     # ── P3 ───────────────────────────────────────────────────────────────────
     def test_le_vert_ne_dirige_plus_vers_un_percentile_pour_le_scr(self):
@@ -1039,6 +1079,203 @@ class T_Jugement_Nomme_Ses_Grandeurs(unittest.TestCase):
         self.assertNotIn(f'{p90:,.0f}', ligne,
                          'la ligne SCR porte encore le P90')
         print('    OK JUG-5 le VERT publie le SCR reel, pas un percentile')
+
+
+# =============================================================================
+#  LOT PERCENTILES — LA REFERENCE SUIT L'ARBITRAGE, ET LES 4 FORMATS SUIVENT
+# =============================================================================
+#
+#  ⚠️ LE COMPOSE NE MESURAIT PAS L'INCERTITUDE, IL MESURAIT LE DESACCORD ENTRE
+#  METHODES. sigma_modele est l'ecart-type des reserves des methodes retenues :
+#  79 % de la variance sur GenIns (methodes divergentes), 18 % sur RAA (elles
+#  convergent). Et son hypothese d'independance est FAUSSE -- les methodes
+#  partagent `pct_dev`, BF recoit `ultimates_cl`. Sous covariance positive la
+#  somme quadratique SOUS-ESTIME : le compose n'est pas prudent, il est
+#  INDETERMINE.
+#
+#  ⚠️⚠️ CE FILET VERROUILLE DES PROPRIETES, JAMAIS DES LIBELLES. Un libelle
+#  peut etre rearbitre demain -- ce lot en rearbitre trois. Ce qui ne doit
+#  jamais changer : quelle grandeur `reserve_p*` porte, que le sigma publie la
+#  REGENERE, que la bascule reste conditionnelle a CLM-H3, et que les quatre
+#  livrables nomment tous la meme approche.
+
+
+class T_Percentiles_La_Reference_Suit_L_Arbitrage(unittest.TestCase):
+    """⚠️ LA BASCULE EST CONDITIONNELLE, ET C'EST LE POINT LE PLUS IMPORTANT."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.C = np.array(GENINS, dtype=float)
+        with kaleido_declare(True), rendeur_substitue():
+            cls.r = AgentA7Provisionnement(verbose=False).run(
+                source=cls.C, mode_declare='cumule',
+                primes=_exposition(GENINS), n_sim_bootstrap=200, seed=42,
+                generer_graphiques=False)
+        cls.n4 = cls.r['n4']
+
+    def _calculer(self, mack_ok, boot_ok):
+        """N4 recalcule avec les DEUX portes d'hypothese forcees.
+
+        C'est la seule facon d'atteindre les branches de repli : sur les
+        triangles de reference, CLM-H3 passe toujours."""
+        from direction_non_vie.provisionnement.a7_provisionnement.n4_best_estimate import (
+            BestEstimateS2,
+        )
+        n2 = self.r['n2']
+        n2b = {
+            **n2,
+            'clm': {**n2.get('clm', {}),
+                    'percentiles_mack_publiables': mack_ok},
+            'bootstrap_hyp': {**n2.get('bootstrap_hyp', {}),
+                              'percentiles_publiables': boot_ok},
+        }
+        return BestEstimateS2().calculer(n2b, self.r['n3'], self.C)
+
+    @staticmethod
+    def _log_normale(be, sig, z):
+        """QIS5 TP.5.26, REECRITE ICI. Le filet ne doit pas emprunter la
+        fonction qu'il verifie -- sinon une erreur commune passerait deux
+        fois inapercue."""
+        cv = sig / be
+        s2 = float(np.log(1.0 + cv ** 2))
+        return float(np.exp(np.log(be) - s2 / 2.0 + z * np.sqrt(s2)))
+
+    # ── PCT-1 ────────────────────────────────────────────────────────────────
+    def test_la_reference_est_mack_recentre_quand_clm_h3_valide(self):
+        n4 = self.n4
+        self.assertTrue(self.r['n2'].get('clm', {})
+                        .get('percentiles_mack_publiables', True),
+                        'ce triangle ne valide pas CLM-H3 : test sans objet')
+        self.assertEqual(n4['cle_percentiles'], CLE_MACK)
+        for p in ('p75', 'p90', 'p99_5'):
+            self.assertEqual(n4[f'reserve_{p}'], n4[f'reserve_{p}_mack'],
+                             f'{p} publie n est pas le Mack recentre')
+        print('    OK PCT-1 la reference publiee est Mack recentre')
+
+    # ── PCT-2 ────────────────────────────────────────────────────────────────
+    def test_le_sigma_publie_regenere_les_percentiles_publies(self):
+        # ⚠️ LA PROPRIETE QUI REND LE CHIFFRE OPPOSABLE : un tiers doit
+        # pouvoir refaire le calcul avec les seuls nombres publies.
+        n4 = self.n4
+        be, sig = n4['best_estimate'], n4['sigma_percentiles']
+        for p, z in (('p75', 0.6745), ('p90', 1.2816), ('p99_5', 2.5758)):
+            self.assertAlmostEqual(
+                self._log_normale(be, sig, z), n4[f'reserve_{p}'], delta=1.0,
+                msg=f'{p} n est pas regenerable depuis (BE, sigma_percentiles)')
+        print('    OK PCT-2 (BE, sigma_percentiles) regenerent les 3 publies')
+
+    # ── PCT-3 ────────────────────────────────────────────────────────────────
+    def test_le_compose_reste_publie_et_differe_de_la_reference(self):
+        # Une colonne comparative qui vaut la reference ne compare rien.
+        n4 = self.n4
+        for p in ('p75', 'p90', 'p99_5'):
+            self.assertIsNotNone(n4.get(f'reserve_{p}_compose'),
+                                 f'{p} compose retire du livrable')
+        self.assertNotEqual(n4['reserve_p99_5'], n4['reserve_p99_5_compose'],
+                            'le compose vaut la reference : rien n a bascule')
+        # Et le sens mesure : retirer sigma_modele RETRECIT la queue.
+        self.assertLess(n4['reserve_p99_5'], n4['reserve_p99_5_compose'])
+        print('    OK PCT-3 le compose reste publie, et il differe')
+
+    # ── PCT-4 : LA BASCULE EST CONDITIONNELLE ────────────────────────────────
+    def test_clm_h3_rejetee_retire_mack_de_la_reference(self):
+        # ⚠️⚠️ LE TEST LE PLUS IMPORTANT DU LOT. Si CLM-H3 est NON VALIDEE,
+        # sigma_Mack ne mesure plus l'erreur de prediction : en faire la
+        # reference publierait sigma_Mack exactement la ou ce module a etabli
+        # qu'il ne vaut rien. La bascule DOIT rendre la main.
+        r = self._calculer(mack_ok=False, boot_ok=True)
+        self.assertNotEqual(r['cle_percentiles'], CLE_MACK,
+                            'Mack reste la reference alors que CLM-H3 le rejette')
+        self.assertEqual(r['cle_percentiles'], CLE_BOOT)
+        for p in ('p75', 'p90', 'p99_5'):
+            self.assertEqual(r[f'reserve_{p}'], r[f'reserve_{p}_boot'],
+                             f'{p} ne suit pas le relais Bootstrap')
+        print('    OK PCT-4 CLM-H3 rejetee : la reference passe au Bootstrap')
+
+    def test_sans_relais_bootstrap_le_repli_est_le_compose_signale(self):
+        r = self._calculer(mack_ok=False, boot_ok=False)
+        self.assertEqual(r['cle_percentiles'], CLE_COMPOSE)
+        for p in ('p75', 'p90', 'p99_5'):
+            self.assertEqual(r[f'reserve_{p}'], r[f'reserve_{p}_compose'])
+        # Et le repli se DIT : une case juste mais contestee doit le declarer.
+        self.assertIn('CONTESTÉE', r['source_percentiles'])
+        print('    OK PCT-5 sans relais : compose, et le livrable le signale')
+
+    # ── PCT-6 : l'hypothese d'independance est declaree NON VERIFIEE ─────────
+    def test_l_hypothese_d_independance_du_compose_est_declaree(self):
+        # ⚠️ LA RESERVE DE FOND VIT DANS LE LIVRABLE, PAS SEULEMENT EN
+        # COMMENTAIRE : le compose suppose sigma_Mack et sigma_modele
+        # independants, et rien ne le verifie.
+        src = self.n4['source_percentiles']
+        self.assertIn("indépendance", src)
+        self.assertIn("PAS vérifiée", src)
+        print('    OK PCT-6 l hypothese d independance est declaree non verifiee')
+
+    # ── PCT-7 : une seule approche marquee « retenue », la bonne ─────────────
+    def test_une_seule_approche_est_marquee_retenue(self):
+        n4 = self.n4
+        marques = [c for c in (CLE_MACK, CLE_BOOT, CLE_COMPOSE)
+                   if marque_retenue(n4, c, 'X') != 'X']
+        self.assertEqual(marques, [n4['cle_percentiles']],
+                         'la marque « retenue » ne suit pas l arbitrage')
+        # Mack natif ne peut JAMAIS l'etre : il est centre ailleurs.
+        self.assertEqual(marque_retenue(n4, '', 'Mack natif'), 'Mack natif')
+        print('    OK PCT-7 une seule approche marquee, celle qui est publiee')
+
+    # ── PCT-8 : les quatre livrables nomment la MEME approche ────────────────
+    def test_les_quatre_livrables_nomment_la_meme_approche(self):
+        # ⚠️ LE DEFAUT QUE LE LOT FERME : chaque format ecrivait « composé » en
+        # dur. Le nom vient desormais d'une source unique -- on verifie qu'il
+        # ARRIVE dans les trois formats textuels, et qu'aucun ne contredit.
+        n4, n3, n2, n1 = (self.r['n4'], self.r['n3'],
+                          self.r['n2'], self.r['n1'])
+        appr = libelle_percentiles(n4)
+        self.assertEqual(appr, LIBELLE_APPROCHE[CLE_MACK])
+        html = export_html(n1, n2, n3, n4, {})
+        self.assertIn(appr, html, 'le HTML ne nomme pas l approche publiee')
+        # ⚠️ CONTRE-EPREUVE : plus aucune etiquette « (composé) » collee a un
+        # percentile publie. On cherche la FORME EXACTE qui etait en dur.
+        for forme in ('P99,5 (composé)', 'P90 (composé)', 'P75 (composé)'):
+            self.assertNotIn(forme, html,
+                             f'etiquette figee encore presente : {forme}')
+        comm = n4.get('jugement') or ''
+        self.assertIn(appr, comm)
+        print(f'    OK PCT-8 les livrables nomment tous « {appr} »')
+
+    # ── PCT-9 : le chemin LLT ne ressuscite pas le compose ───────────────────
+    def test_le_recentrage_llt_repart_du_sigma_de_la_bascule(self):
+        # ⚠️ LE SECOND PRODUCTEUR. `agent.py` recalcule `reserve_p*` apres le
+        # LLT ; il lisait `sigma_total_compose` EN DUR. Le dossier divergeait
+        # donc selon qu'un grand sinistre etait detecte ou non. On verifie sur
+        # le CODE que la cle de la bascule est bien celle qui est lue -- un
+        # test de valeur ne le verrait pas tant qu'aucun LLT ne se declenche.
+        import direction_non_vie.provisionnement.a7_provisionnement.agent as ag
+        src = inspect.getsource(ag)
+        # On isole L'EXPRESSION elle-meme, pas une fenetre de caracteres : un
+        # commentaire un peu plus long deplacerait une fenetre, jamais ceci.
+        i = src.index('_sig_pct = float(')
+        expr = src[i:src.index('0.0)', i) + 4]
+        self.assertIn("n4.get('sigma_percentiles')", expr,
+                      'le recentrage LLT ne lit pas le sigma de la bascule')
+        self.assertLess(expr.index("sigma_percentiles"),
+                        expr.index("sigma_total_compose"),
+                        'le compose est lu AVANT le sigma de la bascule')
+        print('    OK PCT-9 le recentrage LLT repart du sigma de la bascule')
+
+    # ── PCT-10 : rien d'autre n'a bouge ──────────────────────────────────────
+    def test_ni_le_be_ni_le_scr_ni_la_rm_ne_dependent_des_percentiles(self):
+        # ⚠️ MESURE, PAS RAISONNEMENT : on rejoue les trois arbitrages et on
+        # verifie que les agregats du bilan sont RIGOUREUSEMENT identiques.
+        ref = self.n4
+        for mack_ok, boot_ok in ((False, True), (False, False)):
+            r = self._calculer(mack_ok, boot_ok)
+            for cle in ('best_estimate', 'risk_margin',
+                        'provisions_techniques_s2', 'cv_inter_methodes'):
+                self.assertEqual(r[cle], ref[cle],
+                                 f'{cle} depend de l arbitrage des percentiles')
+            self.assertEqual(r['scr']['scr_provisions'],
+                             ref['scr']['scr_provisions'])
+        print('    OK PCT-10 BE / SCR / RM / PT invariants aux 3 arbitrages')
 
 
 # =============================================================================
