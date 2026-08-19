@@ -45,6 +45,8 @@ from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
     MARQUEUR_ECHEC_RAPPORT,
     _build_blocks,
     _construire_contexte,
+    _md_to_html,
+    _nettoyer_narration,
     etat_calendaire,
     export_html,
     export_word,
@@ -744,6 +746,92 @@ class T_Avis_Couleur_Suit_Le_Statut(unittest.TestCase):
         self.assertEqual(ecrases, [],
                          f'parametres de _build_blocks reaffectes : {ecrases}')
         print('    OK AVIS-5 aucun parametre de _build_blocks n est ecrase')
+
+
+# =============================================================================
+#  N2/N3/N4 (releve narration) — LE NETTOYAGE N'EFFACE PLUS DU VRAI
+# =============================================================================
+#
+#  ⚠️ CE DEFAUT N'AFFIRMAIT RIEN DE FAUX -- IL SUPPRIMAIT DU VRAI, en silence,
+#  dans le commentaire actuariel remis au CAC. Trois pertes, toutes mesurees
+#  AVANT correction :
+#    N2 : une ligne de tableau markdown etait effacee AVEC ses chiffres.
+#         Mesure : narration 81 -> 25 caracteres, << 7 746 000 EUR >> disparu.
+#    N3 : six motifs de faux-titre s'appliquaient a TOUT le texte. Mesure :
+#         << Ce rapport sera transmis a l'ACPR avec une reserve de 12 M EUR >>,
+#         ecrite en §5, etait supprimee -- le chiffre avec.
+#    N4 : le preambule etait TRONQUE en bloc, ouverture legitime comprise.
+#
+#  ⚠️ LE FILET PORTE SUR `_md_to_html`, PAS SEULEMENT SUR `_nettoyer_narration`.
+#  La trace par consommateur l'impose : les deux services Sante-Prevoyance
+#  (`sp_rapport_prevoyance`, `sp_rapport_sante`) importent ces fonctions mais
+#  n'appellent QUE `_md_to_html` -- ils consomment donc la correction
+#  INDIRECTEMENT. Un filet borne a la fonction interne ne prouverait rien pour
+#  eux. TROIS livrables, d'ou la gate Vie+SP.
+
+_NL = chr(10)
+
+
+class T_Nettoyage_Narration_N_Efface_Plus_Du_Vrai(unittest.TestCase):
+    """⚠️ CE QUI DOIT PARTIR PART, CE QUI DOIT RESTER RESTE."""
+
+    TABLEAU = ('§1 — CONTEXTE' + _NL * 2 + '| Methode | Reserve |' + _NL
+               + '|---|---|' + _NL + '| CL | 7 746 000 EUR |' + _NL * 2 + '§2')
+    CORPS = ('§1 — CONTEXTE' + _NL * 2
+             + "Ce rapport sera transmis a l ACPR avec une reserve de 12 M EUR."
+             + _NL * 2 + '§2')
+    OUVERTURE = ('Analyse du portefeuille auto, primes acquises 45 M EUR.'
+                 + _NL * 2 + '§1 — CONTEXTE' + _NL + 'suite')
+    FAUX_TITRE = ('# RAPPORT ACTUARIEL' + _NL + 'Document destine au Conseil'
+                  + _NL + 'Arrete au 30/06/2026' + _NL * 2 + '§1 — CONTEXTE'
+                  + _NL + 'corps')
+
+    # ── N2 ───────────────────────────────────────────────────────────────────
+    def test_n2_le_chiffre_d_un_tableau_survit(self):
+        r = _nettoyer_narration(self.TABLEAU)
+        self.assertIn('7 746 000', r, 'le Best Estimate est efface')
+        self.assertNotIn('|', r, 'les pipes markdown restent')
+        self.assertIn('CL · 7 746 000 EUR', r)
+        print('    OK NAR-1 le contenu du tableau est converti, pas efface')
+
+    def test_n2_la_separatrice_seule_disparait(self):
+        # ⚠️ ELLE NE PORTE AUCUN CONTENU : la garder afficherait des tirets nus.
+        self.assertNotIn('---', _nettoyer_narration(self.TABLEAU))
+        print('    OK NAR-2 la separatrice |---|---| part, elle seule')
+
+    # ── N3 ───────────────────────────────────────────────────────────────────
+    def test_n3_une_phrase_du_corps_n_est_pas_filtree(self):
+        self.assertIn('12 M EUR', _nettoyer_narration(self.CORPS),
+                      'un motif de faux-titre mange une phrase du corps')
+        print('    OK NAR-3 le corps du rapport n est plus filtre')
+
+    # ── N4 ───────────────────────────────────────────────────────────────────
+    def test_n4_une_ouverture_legitime_survit(self):
+        self.assertIn('45 M EUR', _nettoyer_narration(self.OUVERTURE),
+                      'le preambule est encore tronque en bloc')
+        print('    OK NAR-4 une ouverture legitime avant le §1 survit')
+
+    # ── NON-REGRESSION : ce que la fonction doit TOUJOURS retirer ────────────
+    def test_le_faux_titre_part_toujours(self):
+        r = _nettoyer_narration(self.FAUX_TITRE)
+        self.assertNotIn('RAPPORT ACTUARIEL', r)
+        self.assertNotIn('Document destine', r)
+        self.assertIn('§1', r); self.assertIn('corps', r)
+        print('    OK NAR-5 le faux-titre part, le corps reste')
+
+    def test_un_texte_vide_reste_vide(self):
+        self.assertEqual(_nettoyer_narration(''), '')
+        print('    OK NAR-6 un texte vide reste vide')
+
+    # ── LE CHEMIN DES TROIS LIVRABLES ───────────────────────────────────────
+    def test_md_to_html_le_point_d_entree_reel_conserve_tout(self):
+        # ⚠️ C'EST CE CHEMIN QUE LES DEUX SERVICES SP CONSOMMENT.
+        html = _md_to_html(self.TABLEAU + _NL * 2
+                           + "Ce rapport transmis a l ACPR avec 12 M EUR.")
+        self.assertIn('7 746 000', html)
+        self.assertIn('12 M EUR', html)
+        self.assertNotIn('|', html)
+        print('    OK NAR-7 _md_to_html conserve tout (chemin A7 + 2 SP)')
 
 
 if __name__ == '__main__':

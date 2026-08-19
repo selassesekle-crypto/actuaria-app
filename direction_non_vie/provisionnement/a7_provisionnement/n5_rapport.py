@@ -504,49 +504,121 @@ def badge_narration(source: str) -> str:
 #  RENDU MARKDOWN → HTML (style premium)
 # =============================================================================
 
-def _nettoyer_narration(texte: str) -> str:
-    """
-    Supprime le header générique que Claude ajoute en début de narration.
-    Ex: "# RAPPORT ACTUARIEL...", "Arrêté au...", "Document destiné..."
+#: Les six formes du FAUX-TITRE que le modele ajoute avant le §1 malgre la
+#: consigne. ⚠️ ELLES NE CHERCHENT QU'UNE SEULE CHOSE -- l'en-tete de document.
+#: C'est pourquoi elles ne s'appliquent QUE dans le preambule (cf. plus bas) :
+#: affinees ou non, elles restent des motifs de DEBUT DE LIGNE, et un motif de
+#: debut de ligne applique au corps du rapport juge une phrase entiere sur ses
+#: premiers mots. Mesure : << Ce rapport sera transmis a l'ACPR avec une
+#: reserve de 12 M EUR >>, ecrite en §5, etait SUPPRIMEE -- le chiffre avec.
+_FAUX_TITRE = (
+    r'^#+\s+RAPPORT',
+    r'^Arrêté\s+(au|Q\d)',
+    r'^Document\s+destin',
+    r'^Commentaire\s+destin',
+    r'^Reporting\s+Solvabilit',
+    r'^Ce\s+rapport.*ACPR',
+)
 
-    Tout ce qui précède le premier § est supprimé car c'est du remplissage
-    que Claude génère parfois malgré les instructions du system prompt.
+#: ⚠️⚠️ CES DEUX MOTIFS SONT REPRIS DE `core.narration` (lot T6) -- ET A7 DOIT
+#: L'Y REJOINDRE. Les transposer ici cree la ONZIEME implementation de markdown
+#: d'un depot qui en comptait dix, et `core.narration` existe PRECISEMENT pour
+#: supprimer cette divergence : il couvre neuf formes la ou A7 en couvre six,
+#: et il analyse UNE fois pour le HTML et le Word.
+#:
+#: Le choix de transposer plutot que de migrer est DELIBERE et arbitre : ce lot
+#: ferme une PERTE DE CONTENU mesuree, il ne migre pas trois directions (A7 +
+#: deux services Sante-Prevoyance consomment ces fonctions). Une migration
+#: merite sa propre mesure d'impact -- le rendu HTML des trois changerait
+#: (neuf formes au lieu de six, <h5>/<blockquote>/<hr> nouveaux).
+#:
+#: ⚠️ QUI LIT CECI ET TOUCHE A LA CONVERSION : va voir `core.narration` AVANT
+#: d'ajouter une regle ici. La bonne fin de cette histoire est qu'A7 appelle
+#: `core.narration` et que ce bloc disparaisse.
+_TABLEAU_MD = re.compile(r'^\s*\|.*\|\s*$')
+_SEPARATRICE_MD = re.compile(r'^\s*\|?[\s:|-]{5,}\|?\s*$')   # |---|---|
+
+
+def _sans_faux_titre(preambule: str) -> str:
+    """Le preambule debarrasse de ses lignes de faux-titre -- le RESTE SURVIT.
+
+    ⚠️ AVANT CE LOT, LE PREAMBULE ENTIER ETAIT JETE (`txt[premier_s.start():]`).
+    Une ouverture legitime -- un paragraphe de contexte redige avant le §1 --
+    disparaissait avec le faux-titre. On FILTRE desormais, on ne tronque plus.
+    """
+    gardees = [
+        ligne for ligne in preambule.split(chr(10))
+        if not any(re.match(p, ligne.strip(), re.IGNORECASE)
+                   for p in _FAUX_TITRE)
+    ]
+    return chr(10).join(gardees)
+
+
+def _tableaux_en_texte(txt: str) -> str:
+    """Les lignes de tableau markdown, CONTENU CONSERVE, pipes retires.
+
+    ⚠️ ELLES ETAIENT PUREMENT ET SIMPLEMENT EFFACEES. Mesure : une narration de
+    81 caracteres tombait a 25, et << 7 746 000 EUR >> -- le Best Estimate --
+    disparaissait du commentaire remis au CAC. Le prompt interdit les tableaux
+    (regle 0), mais un modele en produit malgre tout : la consigne se relache,
+    la conversion non.
+
+    Regle reprise de `core.narration` : les cellules deviennent
+    << cellule - cellule >>, et seule la ligne SEPARATRICE (|---|---|) part,
+    car elle ne porte aucun contenu.
+    """
+    sortie = []
+    for ligne in txt.split(chr(10)):
+        if not _TABLEAU_MD.match(ligne):
+            sortie.append(ligne)
+            continue
+        if _SEPARATRICE_MD.match(ligne):
+            continue
+        cellules = [c.strip() for c in ligne.strip().strip('|').split('|')]
+        sortie.append(' · '.join(c for c in cellules if c))
+    return chr(10).join(sortie)
+
+
+def _nettoyer_narration(texte: str) -> str:
+    """Retire le faux-titre du preambule, sans rien detruire du corps.
+
+    ⚠️ CETTE FONCTION EFFACAIT DU VRAI, ET C'ETAIT MESURE. Trois pertes,
+    toutes fermees ici :
+      · les lignes de tableau markdown, effacees avec leurs chiffres ;
+      · les six motifs de faux-titre appliques a TOUT le texte, qui
+        supprimaient des phrases legitimes du corps du rapport ;
+      · le preambule tronque en bloc, ouverture legitime comprise.
+
+    ⚠️ ELLE N'EST PAS PRIVEE A A7, malgre le tiret bas : deux services
+    Sante-Prevoyance l'importent (`sp_rapport_prevoyance`, `sp_rapport_sante`).
+    Toute modification porte sur TROIS livrables -- d'ou la gate Vie+SP.
     """
     if not texte:
         return ''
     txt = texte.strip()
 
-    # Si le texte commence par un header Markdown # ou ##
-    # supprimer tout jusqu'au premier §
+    # ── Le preambule : filtre, jamais tronque ────────────────────────────────
+    # ⚠️ LA PORTEE EST LE REMEDE, PAS LA PRECISION DES MOTIFS. Le faux-titre ne
+    # peut exister QU'AVANT le premier §. Au-dela, c'est du corps de rapport et
+    # cela ne se filtre pas.
+    # ⚠️ C'EST LA PRESENCE D'UN §, PAS SA POSITION, QUI DELIMITE LE PREAMBULE.
+    # L'ancien code exigeait `start() > 10` -- un seuil herite dont l'effet
+    # etait l'inverse du but : sur une narration BIEN FORMEE commencant par
+    # << §1 >> (position 0), la condition etait fausse et le texte ENTIER
+    # partait dans la branche sans §, donc filtre de bout en bout. C'est
+    # exactement ce qui detruisait la phrase du §5. Un preambule vide est un
+    # preambule : on le filtre, il rend '', et le corps passe intact.
     premier_s = re.search(r'§\s*\d+', txt)
-    if premier_s and premier_s.start() > 10:
-        # Du texte avant le premier § → le couper
-        txt = txt[premier_s.start():]
+    if premier_s:
+        preambule = _sans_faux_titre(txt[:premier_s.start()]).strip()
+        corps = txt[premier_s.start():]
+        txt = (preambule + chr(10) * 2 + corps) if preambule else corps
+    else:
+        # Aucun § : rien ne delimite le corps, le texte entier est un
+        # preambule potentiel -- seul cas ou le filtre porte partout.
+        txt = _sans_faux_titre(txt)
 
-    # Supprimer les lignes de header génériques ligne par ligne
-    lignes = txt.split(chr(10))
-    filtrees = []
-    patterns_supprimer = [
-        r'^#+\s+RAPPORT',
-        r'^Arrêté\s+(au|Q\d)',
-        r'^Document\s+destin',
-        r'^Commentaire\s+destin',
-        r'^Reporting\s+Solvabilit',
-        r'^Ce\s+rapport.*ACPR',
-    ]
-    for ligne in lignes:
-        supprimer = any(re.match(p, ligne.strip(), re.IGNORECASE) for p in patterns_supprimer)
-        if not supprimer:
-            filtrees.append(ligne)
-    txt = chr(10).join(filtrees)
-
-    # Supprimer les tableaux Markdown (lignes avec |)
-    _lignes_ok = []
-    for _l in txt.split(chr(10)):
-        if re.match(r'^\s*\|', _l) or re.match(r'^\s*[-|:]+\s*$', _l):
-            continue
-        _lignes_ok.append(_l)
-    txt = chr(10).join(_lignes_ok)
+    txt = _tableaux_en_texte(txt)
 
     # Normaliser les sauts de ligne
     txt = re.sub(r'\n{3,}', '\n\n', txt)
