@@ -150,6 +150,27 @@ MSG_ASSIETTE_SCR = (
     "de la réserve ; ils n'entrent pas dans l'exigence de capital."
 )
 
+#: ⚠️ D'OÙ VIENT LE FACTEUR 3 — PHRASE UNIQUE, ET UNE CORRECTION PARTIELLE
+#: DE PLUS. Quatre endroits l'expliquent : la docstring de `_calculer_scr`, le
+#: commentaire actuariel, une fixture de test, et l'Excel. Les TROIS premiers
+#: ont été corrigés ; l'Excel publiait encore « Quantile 99.5% loi normale ».
+#: Mesuré : ce quantile vaut 2,5758 — 16,5 % d'écart sur la justification
+#: d'une exigence de capital, lue par un CAC.
+MSG_FACTEUR_3 = (
+    "Le facteur 3 provient de la calibration EIOPA du risque de réserve, "
+    "qui suppose une distribution log-normale : pour les σ retenus, le "
+    "rapport entre le quantile 99,5 % et la moyenne vaut environ 3σ. "
+    "Ce n'est pas le quantile d'une loi normale, qui vaut 2,576."
+)
+
+#: La même vérité, à la taille d'une cellule. ⚠️ DEUX CONSTANTES ET NON UNE :
+#: un tableau a besoin d'un libellé, un rapport d'une explication. Les deux
+#: viennent d'ici pour qu'aucun site ne les RÉDIGE — c'est la rédaction locale
+#: qui a produit la version fausse.
+MSG_FACTEUR_3_COURT = (
+    "Calibration log-normale EIOPA — pas le quantile d'une normale (2,576)"
+)
+
 
 # Message UNIQUE affiché par les livrables N5 quand les agrégats S2 ne sont pas
 # calculables (BE négatif). Source unique — ne pas dupliquer dans N5.

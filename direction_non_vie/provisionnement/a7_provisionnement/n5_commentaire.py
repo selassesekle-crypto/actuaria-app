@@ -45,12 +45,13 @@ from .n3.bf_cape_cod import libelle_loss_ratio
 from .n4_best_estimate import s2_non_calculable, MSG_S2_NON_CALCULABLE
 # Phrase UNIQUE sur ce que le SCR emploie — quatre sites la rédigeaient
 # chacun à sa façon, et les quatre se trompaient différemment.
-from .n4_best_estimate import MSG_ASSIETTE_SCR
+from .n4_best_estimate import MSG_ASSIETTE_SCR, MSG_FACTEUR_3
 # Source UNIQUE du NOM de l'approche publiée dans `reserve_p*` — la même que
 # HTML, Word et l'Excel. Les libellés étaient écrits en dur ici aussi.
 from .n4_best_estimate import (CLE_BOOT, CLE_COMPOSE, CLE_MACK,
                                libelle_percentiles, marque_retenue)
-from .methodes_be import ORDRE_AFFICHAGE, libelle, reserve
+from .methodes_be import (ORDRE_AFFICHAGE, libelle, motif_exclusion,
+                          reserve)
 
 logger = logging.getLogger('actuaria.a7')
 
@@ -563,7 +564,6 @@ def _s4_methodes(n3: Dict, n4: Dict) -> str:
     # retenues. Le document se contredisait dans une seule section. On ne
     # mesure une dispersion que sur ce qui a été calculé.
     _reserves = {m: reserve(n3, m) for m in ORDRE_AFFICHAGE}
-    _motifs   = n4.get('methodes_exclues_motifs', {})
     methodes_all = {libelle(m): r for m, r in _reserves.items() if r is not None}
     r_max  = max(methodes_all.values()) if methodes_all else 0
     r_min  = min(methodes_all.values()) if methodes_all else 0
@@ -598,7 +598,7 @@ def _s4_methodes(n3: Dict, n4: Dict) -> str:
     for _m, _r in _reserves.items():
         if _r is None:
             lignes.append(f"  • {libelle(_m)} : "
-                          f"{_motifs.get(_m, 'méthode indisponible')}")
+                          f"{motif_exclusion(n4, _m)}")
     lignes.append("")
 
     # ── Convergence ──────────────────────────────────────────────────────────
@@ -733,7 +733,7 @@ def _s4_methodes(n3: Dict, n4: Dict) -> str:
         r = _reserves.get(m)
         lignes.append(f"  ❌ {libelle(m):30s} "
                       f"{(_e(r) if r is not None else '—'):>18s}  "
-                      f"[exclu — {_motifs.get(m, 'motif non publié')}]")
+                      f"[exclu — {motif_exclusion(n4, m)}]")
 
     return "\n".join(lignes)
 
@@ -931,11 +931,11 @@ def _s7_scr(n4: Dict) -> str:
         # quantile/moyenne vaut 2,81 à 3,17 pour σ de 8 % à 20 % : c'est là
         # qu'est le 3. Le 2,576 est nommé pour qu'on ne réintroduise pas
         # l'erreur au prochain passage.
-        "Le facteur 3 provient de la calibration EIOPA du risque de "
-        "réserve, qui suppose une distribution log-normale : pour les σ "
-        "retenus, le rapport entre le quantile 99,5 % et la moyenne vaut "
-        "environ 3σ. Ce n'est pas le quantile d'une loi normale, qui "
-        "vaut 2,576.",
+        # ⚠️ CE TEXTE ÉTAIT JUSTE ICI ET FAUX DANS L'EXCEL. Il vient
+        # désormais d'une source unique : quatre endroits l'expliquaient,
+        # trois avaient été corrigés, le quatrième publiait encore
+        # « Quantile 99.5% loi normale ». Un site qui RÉDIGE peut diverger.
+        MSG_FACTEUR_3,
         f"Le facteur σ(LoB) = {_p(sigma_e*100)} est l'écart type réglementaire "
         f"du risque de RÉSERVE du segment dont relève cette branche "
         f"— {scr.get('reference_s2', 'annexes II / XIV, Règlement Délégué UE 2015/35')}.",

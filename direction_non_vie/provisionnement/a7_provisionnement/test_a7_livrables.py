@@ -14,10 +14,26 @@
 # =============================================================================
 
 import inspect
+import io
 import unittest
 from datetime import date, timedelta
 
 import numpy as np
+
+from direction_non_vie.provisionnement.a7_provisionnement import (
+    n5_commentaire as COMM_MOD)
+from direction_non_vie.provisionnement.a7_provisionnement import (
+    n5_excel as XL_MOD)
+from direction_non_vie.provisionnement.a7_provisionnement import (
+    n5_rapport as RAPP_MOD)
+from direction_non_vie.provisionnement.a7_provisionnement.methodes_be import (
+    disponible,
+    libelle,
+    motif_exclusion,
+)
+from direction_non_vie.provisionnement.a7_provisionnement.n5_commentaire import (
+    generer_commentaire,
+)
 
 from direction_non_vie.provisionnement.a7_provisionnement.agent import (
     _TAILLE_MIN_LIVRABLE,
@@ -1276,6 +1292,147 @@ class T_Percentiles_La_Reference_Suit_L_Arbitrage(unittest.TestCase):
             self.assertEqual(r['scr']['scr_provisions'],
                              ref['scr']['scr_provisions'])
         print('    OK PCT-10 BE / SCR / RM / PT invariants aux 3 arbitrages')
+
+
+# =============================================================================
+#  LOT « CORRECTIONS PARTIELLES » — UN SITE RESTANT, TROIS FOIS
+# =============================================================================
+#
+#  ⚠️⚠️ LES TROIS DEFAUTS DE CE LOT AVAIENT DEJA ETE CORRIGES AILLEURS.
+#  Le facteur 3 : juste dans la docstring de N4, juste dans le commentaire,
+#  juste dans une fixture -- FAUX dans l'Excel. Le faux zero : ferme aux
+#  onglets 1 et 4, ouvert au 5. Le motif d'exclusion : juste sur quatre
+#  sites, impossible sur le cinquieme.
+#
+#  ⚠️ UNE CORRECTION PARTIELLE LAISSE UNE TRACE QUI ATTESTE QU'ELLE EST
+#  COMPLETE. C'est ce qui la rend plus dangereuse qu'une faute jamais vue :
+#  le releve suivant lit la trace et passe. Le remede n'est donc PAS la
+#  correction du site restant -- c'est la SOURCE UNIQUE, qui rend le
+#  sixieme site impossible.
+
+
+class T_Corrections_Partielles_Une_Seule_Source(unittest.TestCase):
+    """⚠️ LES SITES NE REDIGENT PLUS, DONC ILS NE PEUVENT PLUS DIVERGER."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.C = np.array(GENINS, dtype=float)
+        with kaleido_declare(True), rendeur_substitue():
+            # SANS exposition : BF et Cape Cod ne sont PAS calculables. C'est
+            # la seule configuration ou les trois defauts se manifestent.
+            cls.r = AgentA7Provisionnement(verbose=False).run(
+                source=cls.C, mode_declare='cumule', n_sim_bootstrap=60,
+                seed=42, generer_graphiques=False)
+        cls.n1, cls.n2 = cls.r['n1'], cls.r['n2']
+        cls.n3, cls.n4 = cls.r['n3'], cls.r['n4']
+        cls.xl = export_excel(cls.C, cls.n1, cls.n2, cls.n3, cls.n4)
+
+    def _onglet(self, titre):
+        import openpyxl
+        wb = openpyxl.load_workbook(io.BytesIO(self.xl))
+        return [[c.value for c in row] for row in wb[titre].iter_rows()]
+
+    # ── CP-1 : le facteur 3 ─────────────────────────────────────────────────
+    def test_le_facteur_3_n_est_plus_dit_quantile_d_une_normale(self):
+        from direction_non_vie.provisionnement.a7_provisionnement.n4_best_estimate import (  # noqa: E501
+            MSG_FACTEUR_3,
+        )
+        # ⚠️ LA PROPRIETE, PAS LE LIBELLE : le quantile 99,5 % d'une loi
+        # normale vaut 2,5758 -- 16,5 % d'ecart avec le facteur 3. Aucun
+        # livrable ne doit plus attribuer ce facteur a une loi normale.
+        plat = ' '.join(str(c) for lg in self._onglet('9. SCR formule standard')
+                        for c in lg if c)
+        self.assertNotIn('Quantile 99.5% loi normale', plat)
+        self.assertIn('2,576', plat, "l'Excel ne nomme pas le vrai quantile")
+        # Et la source est UNE : le commentaire ne redige plus la sienne.
+        self.assertIn(MSG_FACTEUR_3,
+                      generer_commentaire(self.n1, self.n2, self.n3, self.n4))
+        src = inspect.getsource(COMM_MOD)
+        self.assertNotIn('Ce n\'est pas le quantile d\'une loi normale', src,
+                         'le commentaire redige de nouveau sa propre version')
+        print('    OK CP-1 le facteur 3 vient d une source unique')
+
+    # ── CP-2 : le faux zero de l'onglet 5 ───────────────────────────────────
+    def test_l_onglet_ibnr_ne_publie_pas_zero_pour_une_methode_absente(self):
+        self.assertFalse(disponible(self.n3, 'bornhuetter_ferguson'),
+                         'ce run calcule BF : le test serait sans objet')
+        lignes = self._onglet('5. IBNR par année')
+        total = next(lg for lg in lignes if lg and lg[0] == 'TOTAL')
+        self.assertEqual([total[2], total[3]], ['—', '—'],
+                         'le TOTAL republie un zero pour une methode absente')
+        corps = [lg for lg in lignes
+                 if lg and isinstance(lg[0], str) and lg[0].startswith('An. ')]
+        self.assertTrue(corps, 'aucune ligne de detail')
+        for lg in corps:
+            self.assertEqual([lg[2], lg[3]], ['—', '—'], str(lg[:4]))
+        # ⚠️ CONTRE-EPREUVE : quand la methode EST calculee, le montant sort.
+        # Un garde qui masque tout serait aussi faux que le zero.
+        with kaleido_declare(True), rendeur_substitue():
+            r2 = AgentA7Provisionnement(verbose=False).run(
+                source=self.C, mode_declare='cumule', seed=42,
+                primes=_exposition(GENINS), n_sim_bootstrap=60,
+                generer_graphiques=False)
+        xl2 = export_excel(self.C, r2['n1'], r2['n2'], r2['n3'], r2['n4'])
+        import openpyxl
+        wb2 = openpyxl.load_workbook(io.BytesIO(xl2))
+        t2 = next(([c.value for c in row]
+                   for row in wb2['5. IBNR par année'].iter_rows()
+                   if row[0].value == 'TOTAL'))
+        self.assertIsInstance(t2[2], float)
+        self.assertGreater(t2[2], 0)
+        print('    OK CP-2 IBNR : tiret si non calculee, montant sinon')
+
+    # ── CP-3 : le motif d'exclusion atteint TOUS les formats ────────────────
+    def test_le_motif_d_exclusion_atteint_le_html_comme_l_excel(self):
+        # ⚠️ LE HTML CHERCHAIT PAR LIBELLE DANS UN DICT INDEXE PAR CLE :
+        # intersection vide, mesuré — le repli était pris à TOUS les coups.
+        #
+        # ⚠️⚠️ ET LA MESURE A REFUTE MA PROPRE DESCRIPTION DU DEFAUT. J'avais
+        # ecrit que << l'Excel publie le motif detaille, le HTML jamais >>.
+        # FAUX : `methodes_exclues_motifs` porte litteralement
+        # << non calculée >> -- LE MEME TEXTE QUE LE REPLI. Le bug du lookup
+        # etait donc DORMANT : les deux formats disaient deja la meme chose,
+        # par hasard. Il cessera de l'etre le jour ou le dict portera un vrai
+        # motif -- c'est-a-dire au premier lot qui remonte
+        # `n3[cle]['message']`, aujourd'hui publie nulle part (SIGNALE, non
+        # traite ici).
+        #
+        # LA PROPRIETE VERROUILLEE EST DONC CELLE QUI TIENDRA ENCORE APRES :
+        # ce que publie un format ne depend plus de la FORME de la cle, et
+        # les deux formats publient la MEME chose.
+        motif = motif_exclusion(self.n4, 'bornhuetter_ferguson')
+        self.assertIn('bornhuetter_ferguson', self.n4['methodes_exclues'])
+        html = export_html(self.n1, self.n2, self.n3, self.n4, {})
+        plat = ' '.join(str(c) for lg in self._onglet('1. Synthèse')
+                        for c in lg if c)
+        for ou, txt in (('HTML', html), ('Excel', plat)):
+            self.assertIn(motif, txt, f'{ou} : motif absent')
+        # La contre-epreuve du bug ferme : chercher par LIBELLE ne rend plus
+        # rien, chercher par CLE rend le motif. Le code ne fait plus le premier.
+        self.assertEqual(
+            motif_exclusion(self.n4, libelle('bornhuetter_ferguson')),
+            'non calculée',
+            'le libelle serait devenu une cle valide : le test perd son sens')
+        print('    OK CP-3 le motif ne depend plus de la forme de la cle')
+
+    # ── CP-4 : la source est unique, et personne ne la contourne ────────────
+    def test_plus_aucun_site_ne_lit_le_dict_des_motifs_en_direct(self):
+        # ⚠️ LA PROPRIETE STRUCTURELLE QUI EMPECHE LE SIXIEME SITE. Un `.get`
+        # ecrit a la main peut se tromper de cle ; `motif_exclusion` non.
+        for mod in (RAPP_MOD, COMM_MOD, XL_MOD):
+            src = inspect.getsource(mod)
+            self.assertNotIn("methodes_exclues_motifs", src,
+                             f'{mod.__name__} lit le dict en direct')
+        print('    OK CP-4 un seul acces au dict des motifs')
+
+    # ── CP-5 : aucun euro deplace ───────────────────────────────────────────
+    def test_aucun_agregat_n_a_bouge(self):
+        # ⚠️ MESURE, PAS RAISONNEMENT : ce lot ne touche que des ETIQUETTES et
+        # des GARDES d'affichage. Les agregats du bilan doivent etre inchanges.
+        self.assertEqual(self.n4['best_estimate'], 18680856.0)
+        self.assertEqual(self.n4['scr']['scr_provisions'], 6164682.0)
+        self.assertEqual(self.n4['reserve_p90'], 21892882.0)
+        print('    OK CP-5 BE / SCR / P90 inchanges')
 
 
 # =============================================================================

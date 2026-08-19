@@ -28,7 +28,8 @@ import numpy as np
 
 # Formatage du loss ratio : source unique, pour qu'une méthode non calculée
 # n'apparaisse jamais comme un loss ratio de 0 %.
-from .methodes_be import ORDRE_AFFICHAGE, libelle, reserve
+from .methodes_be import (ORDRE_AFFICHAGE, disponible, libelle,
+                          motif_exclusion, reserve)
 from .n2_hypotheses_clm import lignes_correlations_h1
 from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
 from .n2_hypotheses_clm import lignes_hypotheses_clm
@@ -41,6 +42,7 @@ from .n3.munich_cl import lignes_munich_rapport
 # Source UNIQUE du NOM de l'approche publiée dans `reserve_p*` — la même que
 # HTML, Word et le commentaire. Les libellés étaient écrits en dur ici.
 from .n4_best_estimate import (CLE_BOOT, CLE_COMPOSE, CLE_MACK,
+                               MSG_FACTEUR_3, MSG_FACTEUR_3_COURT,
                                libelle_percentiles, marque_retenue)
 
 logger = logging.getLogger('actuaria.a7')
@@ -213,13 +215,12 @@ def _ong1_synthese(wb, n1, n2, n3, n4, ref_client, date_str):
     # affichait « Bornhuetter-Ferguson | 0 | ✗ Attention », ce qui se lit
     # « BF donne une réserve nulle » là où la vérité est « BF n'a pas pu
     # être calculée ». Le motif vient de N4, qui le publie depuis ce lot.
-    motifs = n4.get('methodes_exclues_motifs', {})
     for i, m in enumerate(ORDRE_AFFICHAGE):
         r    = reserve(n3, m)
         poid = n4.get('poids', {}).get(m, 0)
         if r is None:
             _kpi(ws, 18+i, 1, libelle(m),
-                 motifs.get(m, 'non calculée'), None, '—')
+                 motif_exclusion(n4, m), None, '—')
         else:
             st = 'VERT' if m in n4.get('methodes_incluses', []) else 'ROUGE'
             _kpi(ws, 18+i, 1, libelle(m), r, FMT_NB, st)
@@ -565,9 +566,21 @@ def _ong5_ibnr(wb, n3):
     bf   = n3['bf']
     cc   = n3['cape_cod']
 
+    # ⚠️⚠️ LE FAUX ZÉRO, QUATRIÈME FOYER — ET LE SEUL QUI N'AVAIT PAS ÉTÉ
+    # FERMÉ. Les onglets 1 et 4 passent par `reserve()` depuis le lot C3a et
+    # publient « non calculée » ; celui-ci lisait `ibnr_par_annee` en direct.
+    # Mesuré sans exposition : `bf['disponible'] = False` mais la liste porte
+    # DIX ZÉROS — la colonne sortait à 0 € ligne par ligne, et le TOTAL à
+    # 0 €. Le même classeur disait donc « non calculée » à l'onglet 1 et
+    # « 0 € » à l'onglet 5, sur la même méthode.
+    # ⚠️ Le garde est `disponible()`, la source unique du référentiel : une
+    # liste pleine de zéros n'est pas un signal, c'est l'absence de signal.
+    _bf_ok = disponible(n3, 'bornhuetter_ferguson')
+    _cc_ok = disponible(n3, 'cape_cod')
+
     ibnr_cl   = cl.get('ibnr_par_annee', [])
-    ibnr_bf   = bf.get('ibnr_par_annee', [])
-    ibnr_cc   = cc.get('ibnr_par_annee', [])
+    ibnr_bf   = bf.get('ibnr_par_annee', []) if _bf_ok else []
+    ibnr_cc   = cc.get('ibnr_par_annee', []) if _cc_ok else []
     ult_cl    = cl.get('ultimates', [])
     pct_dev   = cl.get('pct_developpe', [])
 
@@ -577,13 +590,15 @@ def _ong5_ibnr(wb, n3):
         vals = [
             f"An. {i}",
             ibnr_cl[i] if i < len(ibnr_cl) else 0,
-            ibnr_bf[i]  if i < len(ibnr_bf)  else 0,
-            ibnr_cc[i]  if i < len(ibnr_cc)  else 0,
+            ibnr_bf[i] if i < len(ibnr_bf) else '—',
+            ibnr_cc[i] if i < len(ibnr_cc) else '—',
             ult_cl[i]   if i < len(ult_cl)   else 0,
             pct_dev[i]  if i < len(pct_dev)  else 0,
         ]
         fmts = [None, FMT_NB, FMT_NB, FMT_NB, FMT_NB, FMT_PCT]
-        tot_cl += vals[1]; tot_bf += vals[2]; tot_cc += vals[3]
+        tot_cl += vals[1]
+        tot_bf += vals[2] if _bf_ok else 0
+        tot_cc += vals[3] if _cc_ok else 0
 
         for j, (val, fmt) in enumerate(zip(vals, fmts)):
             c = ws.cell(row=3+i, column=j+1, value=val)
@@ -596,9 +611,13 @@ def _ong5_ibnr(wb, n3):
 
     # Ligne total
     row_tot = 3 + len(ibnr_cl)
+    # ⚠️ LE TOTAL SUIT LA COLONNE. Un « TOTAL 0 € » sous une colonne de
+    # tirets se lirait « la méthode donne zéro » — la substitution que ce
+    # chantier ferme, à l'endroit le plus lu du tableau.
     for j, (val, fmt) in enumerate([
         ("TOTAL", None), (tot_cl, FMT_NB),
-        (tot_bf, FMT_NB), (tot_cc, FMT_NB), (None, None), (None, None)
+        (tot_bf if _bf_ok else '—', FMT_NB),
+        (tot_cc if _cc_ok else '—', FMT_NB), (None, None), (None, None)
     ]):
         c = ws.cell(row=row_tot, column=j+1, value=val)
         c.font      = _font(bold=True, color=GOLD)
@@ -985,7 +1004,7 @@ def _ong9_scr(wb, n4):
         # La source du σ est celle du RÉSULTAT, plus une constante : elle vaut
         # « Annexe XIV » pour une LoB de santé non-SLT, où « Annexe II » mentait.
         ("Facteur σ(LoB) — réserve",    scr.get('sigma_eiopa',0),         FMT_PCT2,  scr.get('reference_s2','Annexes II / XIV Rgt 2015/35'), "Écart type risque de réserve, art. 117"),
-        ("Facteur multiplicatif",        3.0,                              "0.0",     "Art. 115 Rgt 2015/35",         "Quantile 99.5% loi normale"),
+        ("Facteur multiplicatif",        3.0,                              "0.0",     "Art. 115 Rgt 2015/35",         MSG_FACTEUR_3_COURT),
         ("SCR_prov = 3 × σ × BE",       scr.get('scr_provisions',0),      FMT_NB,    "Art. 115 Rgt 2015/35",         "Exigence de capital provisions"),
         ("Ratio SCR/BE",                scr.get('ratio_scr_be',0),         FMT_PCT,   "Indicateur de pilotage",       ""),
         ("Branche (LoB)",               scr.get('lob_label','—'),          None,      "Classification EIOPA",         ""),
@@ -1007,6 +1026,10 @@ def _ong9_scr(wb, n4):
     # Note réglementaire
     _titre_section(ws, 5+len(rows_scr)+1, 1, "NOTE RÉGLEMENTAIRE", 4)
     notes = [
+        # ⚠️ L'EXPLICATION COMPLÈTE DU FACTEUR 3 ARRIVE ICI, où la cellule est
+        # fusionnée et enveloppée — la colonne « Notes » du tableau ne porte
+        # que le libellé court. Les deux viennent de la même source.
+        MSG_FACTEUR_3,
         "Le SCR calculé ici est le SCR provisions d'une seule LoB (formule mono-branche).",
         "L'agrégation multi-LoB utilise la matrice de corrélation EIOPA Non-Vie 12×12",
         "(Annexe IV, Règlement Délégué 2015/35) :",

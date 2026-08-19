@@ -115,3 +115,22 @@ def reserve(n3: Dict, methode: str) -> Optional[float]:
     cle, cle_reserve = _METHODES[methode][0], _METHODES[methode][1]
     valeur = (n3.get(cle) or {}).get(cle_reserve)
     return None if valeur is None else float(valeur)
+
+
+def motif_exclusion(n4: dict, methode: str) -> str:
+    """POURQUOI cette méthode n'a pas de réserve — le pendant de `reserve`.
+
+    ⚠️ CINQ SITES FAISAIENT CE `.get` EUX-MÊMES, ET L'UN D'EUX NE POUVAIT
+    JAMAIS ABOUTIR. `n4['methodes_exclues_motifs']` est indexé par CLÉ
+    (`bornhuetter_ferguson`) ; le tableau des méthodes du HTML cherchait par
+    LIBELLÉ (`Bornhuetter-Ferguson`). Intersection vide, mesuré : le repli
+    « non calculée » était pris à TOUS les coups, et l'Excel affichait le
+    motif détaillé pendant que le HTML n'affichait rien de plus qu'un constat.
+
+    ⚠️ ET C'EST LA FORME QUI COMPTE, PAS LE BUG : quatre sites sur cinq
+    étaient justes. Une correction site par site aurait fermé le cinquième et
+    laissé la même faute possible au sixième. `reserve` rend le montant ou
+    None ; celle-ci rend la raison. Les appelants ne cherchent plus.
+    """
+    return str((n4 or {}).get('methodes_exclues_motifs', {})
+               .get(methode) or 'non calculée')

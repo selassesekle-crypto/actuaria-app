@@ -28,7 +28,8 @@ import numpy as np
 
 # Source UNIQUE d'affichage des hypothèses de BF et Cape Cod : une hypothèse non
 # évaluée y ressort NON TESTABLE, jamais en valeur par défaut.
-from .methodes_be import ORDRE_AFFICHAGE, libelle, reserve
+from .methodes_be import (ORDRE_AFFICHAGE, libelle, motif_exclusion,
+                          reserve)
 from .n5_graphiques import TITRES_FIGURES
 from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
 from .n2_hypotheses_clm import lignes_hypotheses_clm
@@ -405,7 +406,7 @@ def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: s
         # calculable ressortait à « 0 € ». Le référentiel rend None, et le
         # motif vient de N4.
         *[f"{libelle(_m)} : "
-          f"{_f(reserve(n3, _m)) if reserve(n3, _m) is not None else n4.get('methodes_exclues_motifs', {}).get(_m, 'non calculée')}"
+          f"{_f(reserve(n3, _m)) if reserve(n3, _m) is not None else motif_exclusion(n4, _m)}"
           f" | poids={_pct(pw.get(_m, 0)*100)}"
           for _m in ORDRE_AFFICHAGE],
         f"Clark LDF : {_f(clark.get('reserve_be_clark'))} | courbe={clark.get('courbe_choisie', '—')} | AIC={clark.get('aic_optimal', '—')}"
@@ -1693,8 +1694,12 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
 
     # ⚠️ LE FAUX ZÉRO, DANS LE LIVRABLE QUE C1 A PROMU (lot C3a). Le HTML
     # publiait « Bornhuetter-Ferguson | 0 € | 0.0 % » sans exposition.
-    _motifs_m = n4.get('methodes_exclues_motifs', {})
-    rows_m = [(libelle(_m), reserve(n3, _m), pw.get(_m, 0), '—')
+    # ⚠️ LA CLÉ VOYAGE AVEC LE LIBELLÉ, ET C'EST LA CORRECTION. Ce tableau
+    # cherchait le motif d'exclusion par LIBELLÉ dans un dict indexé par CLÉ :
+    # intersection vide, le repli « non calculée » était pris à tous les
+    # coups. L'Excel publiait le motif détaillé, le HTML jamais — deux formats,
+    # deux informations, sur le même fait.
+    rows_m = [(_m, libelle(_m), reserve(n3, _m), pw.get(_m, 0), '—')
               for _m in ORDRE_AFFICHAGE]
     tbl = (
         '<table class="premium"><thead><tr>'
@@ -1705,13 +1710,13 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         '<th class="center">Statut</th>'
         '</tr></thead><tbody>'
     )
-    for nom, res, pds, score in rows_m:
+    for _cle_m, nom, res, pds, score in rows_m:
         s_txt = str(score) + ' / 100' if score != '—' else '—'
         tbl += (
             '<tr><td class="label">' + nom + '</td>'
             '<td class="right"><span class="mono">'
             + (_f(res) if res is not None
-               else _motifs_m.get(nom, 'non calculée')) + '</span></td>'
+               else motif_exclusion(n4, _cle_m)) + '</span></td>'
             '<td class="center">' + _pct(pds * 100) + '</td>'
             '<td class="center">' + s_txt + '</td>'
             '<td class="center">' + _badge_statut(nom, pds) + '</td></tr>'
@@ -3038,7 +3043,7 @@ def export_word(n1, n2, n3, n4,
              # dans le HTML.
              [[libelle(_m),
                (_f(reserve(n3, _m)) if reserve(n3, _m) is not None
-                else n4.get('methodes_exclues_motifs', {}).get(_m, 'non calculée')),
+                else motif_exclusion(n4, _m)),
                _pct(pw.get(_m, 0)*100), '—',
                ('σ (volatilité)' if _m == 'mack'
                 else '✓ Inclus' if pw.get(_m, 0) > 0 else '⊘ Exclu')]
