@@ -52,6 +52,9 @@ from .n5_graphiques     import generer_graphiques as _generer_graphiques
 from .n5_commentaire    import generer_commentaire
 from .n5_excel          import export_excel
 from .n5_rapport        import export_word, export_html
+# La narration est produite ICI, une seule fois, et transmise aux deux
+# formats — voir le commentaire à son point de génération.
+from .n5_rapport        import ARRETE_ABSENT, _generer_narration, _lob
 # ⚠️ IMPORTÉ COMME MODULE, PAS COMME VALEUR. `from … import kaleido_disponible`
 # fige ICI une référence à la fonction : substituer le prédicat dans
 # `n5_rapport` ne changeait alors que la moitié de la chaîne — l'export voyait
@@ -793,6 +796,21 @@ class AgentA7Provisionnement:
                 C=C_calc, n1=n1, n2=n2, n3=n3, n4=n4, ref_client=ref_client,
                 arrete=arrete, resultats_precedents=resultats_precedents)
 
+            # ⚠️⚠️ UNE SEULE NARRATION POUR LES DEUX DOCUMENTS SIGNES.
+            # Chaque export appelait `_generer_narration` de son cote : mesure
+            # sur un run reel, DEUX appels. Tant que le texte deterministe
+            # passait devant, les deux etaient identiques par construction
+            # (12 699 caracteres) et le doublon ne coutait rien. La decision
+            # de faire passer la narration LLM devant transforme ce doublon
+            # inerte en DIVERGENCE REELLE : le HTML et le Word du meme
+            # dossier, tous deux transmis au commissaire aux comptes,
+            # porteraient deux textes differents -- et l'appel serait paye
+            # deux fois.
+            _narr, _src_narr = _generer_narration(
+                n2, n3, n4, commentaire,
+                _lob(lob_label or n2.get('lob_label', '') or n2.get('lob', '')),
+                arrete or ARRETE_ABSENT)
+
             word_bytes, err_wd = (b'', None)
             if generer_word:
                 word_bytes, err_wd = _produire_livrable(
@@ -801,7 +819,8 @@ class AgentA7Provisionnement:
                     graphiques=graphiques_dict, ref_client=ref_client,
                     arrete=arrete, audit_id=audit_id, lob_label=lob_label,
                     actuaire_nom=actuaire_nom,
-                    actuaire_numero_ia=actuaire_numero_ia)
+                    actuaire_numero_ia=actuaire_numero_ia,
+                    narration=_narr, source_narration=_src_narr)
 
             # ⚠️ LE HTML EST UNE SORTIE A PART ENTIERE (lot C1, decision B).
             # Il n'existait que comme intermediaire technique d'`export_pdf` :
@@ -816,7 +835,8 @@ class AgentA7Provisionnement:
                     graphiques=graphiques_dict, ref_client=ref_client,
                     arrete=arrete, audit_id=audit_id, lob_label=lob_label,
                     actuaire_nom=actuaire_nom,
-                    actuaire_numero_ia=actuaire_numero_ia)
+                    actuaire_numero_ia=actuaire_numero_ia,
+                    narration=_narr, source_narration=_src_narr)
 
             # ⚠️ UNE DÉGRADATION NOMMÉE, PAS UN SILENCE (lot C3d). Le Word
             # se produit sans figures quand `kaleido` manque : le document le

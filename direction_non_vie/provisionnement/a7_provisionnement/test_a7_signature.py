@@ -155,15 +155,33 @@ class S3_LaChaineTransmetLActuaire(unittest.TestCase):
 
         from . import n5_rapport
         src = inspect.getsource(n5_rapport)
-        fonction = next(
-            n for n in ast.parse(src).body
-            if isinstance(n, ast.FunctionDef) and n.name == 'export_word')
-        lus = {n.id for n in ast.walk(fonction)
-               if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)}
-        for p in ('actuaire_nom', 'actuaire_numero_ia', 'audit_id'):
-            self.assertIn(p, lus, f'{p} est encore déclaré et jamais lu')
-        print('    OK S3-b : les trois paramètres morts d\'export_word sont '
-              'lus')
+        # ⚠️ LE VERROU PORTE DESORMAIS SUR LES DEUX EXPORTS, ET SUR LES DEUX
+        # PARAMETRES NEUFS. `narration` / `source_narration` ont ete ajoutes
+        # pour qu'UNE seule narration serve le HTML et le Word : un parametre
+        # declare et oublie dans l'un des deux ferait exactement revenir la
+        # divergence que ce lot ferme -- un format lisant la narration
+        # partagee, l'autre regenerant la sienne. C'est le motif que ce
+        # chantier a ferme CINQ fois ; il ne se garde qu'en le testant.
+        arbre = ast.parse(src).body
+        for nom_fn, attendus in (
+            ('export_word', ('actuaire_nom', 'actuaire_numero_ia', 'audit_id',
+                             'narration', 'source_narration')),
+            ('export_html', ('narration', 'source_narration')),
+        ):
+            fonction = next(
+                n for n in arbre
+                if isinstance(n, ast.FunctionDef) and n.name == nom_fn)
+            declares = {a.arg for a in fonction.args.args
+                        + fonction.args.kwonlyargs}
+            lus = {n.id for n in ast.walk(fonction)
+                   if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)}
+            for p in attendus:
+                self.assertIn(p, declares,
+                              f'{nom_fn} ne declare plus {p}')
+                self.assertIn(p, lus,
+                              f'{nom_fn} : {p} est declaré et jamais lu')
+        print('    OK S3-b : les paramètres déclarés des deux exports sont '
+              'lus, narration comprise')
 
 
 if __name__ == '__main__':

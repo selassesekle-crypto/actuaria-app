@@ -2571,6 +2571,7 @@ def export_html(
     commentaire='', ref_client='', arrete='',
     audit_id='', lob_label='', graphiques=None,
     actuaire_nom='', actuaire_numero_ia='',
+    narration=None, source_narration='',
 ) -> str:
     try:
         n1=n1 or {}; n2=n2 or {}; n3=n3 or {}; n4=n4 or {}
@@ -2584,7 +2585,21 @@ def export_html(
         methode = n4.get('methode_facteurs', n2.get('methode_recommandee', '—'))
         statut  = n4.get('statut', 'AMBRE')
 
-        narration, source = _generer_narration(n2, n3, n4, commentaire, lob, arr)
+        # ⚠️⚠️ LA NARRATION EST RECUE SI ON LA DONNE, GENEREE SINON.
+        # Mesure : un seul `run()` appelait `_generer_narration` DEUX fois --
+        # une fois ici, une fois dans l'autre format. Tant que le texte
+        # deterministe passait devant, les deux etaient identiques par
+        # construction (12 699 caracteres, mesures a l'identique) et le
+        # doublon etait inerte. Depuis que la narration LLM passe devant, ce
+        # sont DEUX APPELS INDEPENDANTS : le HTML et le Word du meme dossier
+        # porteraient deux textes differents, et le cout d'appel double.
+        # Le repli `is None` garde intacts les appels qui ne la fournissent
+        # pas -- l'application et une trentaine de tests.
+        if narration is None:
+            narration, source = _generer_narration(n2, n3, n4, commentaire,
+                                                   lob, arr)
+        else:
+            source = source_narration
 
         # Graphiques Plotly — accepte go.Figure ou HTML pré-converti
         graphiques_html = {}
@@ -2814,7 +2829,8 @@ def export_html(
 def export_word(n1, n2, n3, n4,
                 commentaire='', ref_client='', arrete='',
                 audit_id='', lob_label='', graphiques=None,
-                actuaire_nom='', actuaire_numero_ia='') -> bytes:
+                actuaire_nom='', actuaire_numero_ia='',
+                narration=None, source_narration='') -> bytes:
     try:
         from docx import Document
         from docx.shared import Pt, Cm, RGBColor
@@ -2842,7 +2858,21 @@ def export_word(n1, n2, n3, n4,
         lob     = _lob(lob_label or n2.get('lob_label','') or n2.get('lob',''))
         methode = n4.get('methode_facteurs', n2.get('methode_recommandee','—'))
         statut  = n4.get('statut','AMBRE')
-        narration, source = _generer_narration(n2, n3, n4, commentaire, lob, arr)
+        # ⚠️⚠️ LA NARRATION EST RECUE SI ON LA DONNE, GENEREE SINON.
+        # Mesure : un seul `run()` appelait `_generer_narration` DEUX fois --
+        # une fois ici, une fois dans l'autre format. Tant que le texte
+        # deterministe passait devant, les deux etaient identiques par
+        # construction (12 699 caracteres, mesures a l'identique) et le
+        # doublon etait inerte. Depuis que la narration LLM passe devant, ce
+        # sont DEUX APPELS INDEPENDANTS : le HTML et le Word du meme dossier
+        # porteraient deux textes differents, et le cout d'appel double.
+        # Le repli `is None` garde intacts les appels qui ne la fournissent
+        # pas -- l'application et une trentaine de tests.
+        if narration is None:
+            narration, source = _generer_narration(n2, n3, n4, commentaire,
+                                                   lob, arr)
+        else:
+            source = source_narration
 
         mk  = n3.get('mack',{})
         sc  = n4.get('scr',{});           pw = n4.get('poids',{})

@@ -1531,6 +1531,94 @@ class T_Comparatif_N1_La_Couleur_Suit_La_Comparabilite(unittest.TestCase):
 
 
 # =============================================================================
+#  UNE SEULE NARRATION POUR LES DEUX DOCUMENTS SIGNES
+# =============================================================================
+#
+#  ⚠️⚠️ CHAQUE EXPORT APPELAIT `_generer_narration` DE SON COTE. Mesure sur un
+#  run reel : DEUX appels. Tant que le texte deterministe passait devant, les
+#  deux etaient identiques par construction -- 12 699 caracteres, mesures a
+#  l'identique -- et le doublon ne coutait rien.
+#
+#  ⚠️ C'EST LA DECISION DE FAIRE PASSER LA NARRATION LLM DEVANT QUI REND LE
+#  DEFAUT ACTIF : deux appels LLM independants produisent deux textes
+#  differents. Le HTML et le Word du MEME dossier, tous deux transmis au
+#  commissaire aux comptes, ne diraient pas la meme chose -- et l'appel serait
+#  paye deux fois. Un doublon inerte devient une divergence entre documents
+#  signes.
+
+
+class T_Une_Seule_Narration_Pour_Les_Deux_Formats(unittest.TestCase):
+    """⚠️ DEUX DOCUMENTS SIGNES NE PEUVENT PAS PORTER DEUX TEXTES."""
+
+    def _run_espionne(self, **kw):
+        """Un run complet, en comptant les appels a la narration."""
+        import direction_non_vie.provisionnement.a7_provisionnement.agent as AG
+        appels = []
+        vrai = RAPP_MOD._generer_narration
+
+        def espion(n2, n3, n4, com, lob, arr):
+            txt, src = vrai(n2, n3, n4, com, lob, arr)
+            appels.append((src, txt))
+            return txt, src
+
+        RAPP_MOD._generer_narration = espion
+        AG._generer_narration = espion
+        try:
+            with kaleido_declare(True), rendeur_substitue():
+                r = AG.AgentA7Provisionnement(verbose=False).run(
+                    source=np.array(GENINS, dtype=float),
+                    mode_declare='cumule', primes=_exposition(GENINS),
+                    n_sim_bootstrap=60, seed=42, **kw)
+        finally:
+            RAPP_MOD._generer_narration = vrai
+            AG._generer_narration = vrai
+        return r, appels
+
+    def test_un_run_ne_genere_la_narration_qu_une_fois(self):
+        # ⚠️ LA PROPRIETE, ET ELLE TIENT MEME SANS CLE API : c'est le NOMBRE
+        # d'appels qui garantit l'identite des deux documents, pas le fait que
+        # le repli deterministe rende deux fois le meme texte.
+        r, appels = self._run_espionne(generer_graphiques=True,
+                                       generer_word=True)
+        self.assertEqual(len(appels), 1,
+                         f'{len(appels)} appels : les deux formats divergeraient')
+        self.assertTrue(r.get('html'), 'le HTML n a pas ete produit')
+        self.assertTrue(r.get('word_bytes'), 'le Word n a pas ete produit')
+        print('    OK NAR-1 un seul appel, deux documents produits')
+
+    def test_la_narration_recue_est_celle_qui_est_publiee(self):
+        # ⚠️ UN PARAMETRE RECU ET IGNORE SERAIT PIRE QUE LE DOUBLON : les deux
+        # formats regenereraient en silence. On PLANTE un texte reconnaissable
+        # et on verifie qu'il ressort des DEUX cotes.
+        r = AgentA7Provisionnement(verbose=False).run(
+            source=np.array(GENINS, dtype=float), mode_declare='cumule',
+            primes=_exposition(GENINS), n_sim_bootstrap=60, seed=42,
+            generer_graphiques=False)
+        temoin = 'TEMOIN-NARRATION-PARTAGEE-4718'
+        html = export_html(r['n1'], r['n2'], r['n3'], r['n4'], {},
+                           narration=temoin, source_narration='templates')
+        mot = export_word(r['n1'], r['n2'], r['n3'], r['n4'], {},
+                          narration=temoin, source_narration='templates')
+        self.assertIn(temoin, html, 'le HTML a ignore la narration recue')
+        import docx
+        txt = '\n'.join(p.text for p in docx.Document(io.BytesIO(mot)).paragraphs)
+        self.assertIn(temoin, txt, 'le Word a ignore la narration recue')
+        print('    OK NAR-2 la narration recue ressort des deux cotes')
+
+    def test_sans_narration_fournie_le_comportement_est_inchange(self):
+        # ⚠️ CONTRE-EPREUVE INDISPENSABLE : une trentaine d'appels de tests et
+        # l'application n'ont PAS ete modifies. Le repli doit rester intact.
+        r = AgentA7Provisionnement(verbose=False).run(
+            source=np.array(GENINS, dtype=float), mode_declare='cumule',
+            primes=_exposition(GENINS), n_sim_bootstrap=60, seed=42,
+            generer_graphiques=False)
+        html = export_html(r['n1'], r['n2'], r['n3'], r['n4'], {})
+        self.assertGreater(len(html), _TAILLE_MIN_LIVRABLE)
+        self.assertNotIn(MARQUEUR_ECHEC_RAPPORT, html)
+        print('    OK NAR-3 sans narration fournie, rien ne change')
+
+
+# =============================================================================
 #  VERROU C2 — AUCUN NOMBRE PUBLIE QUI NE SOIT DANS LA CHARGE UTILE
 # =============================================================================
 #
