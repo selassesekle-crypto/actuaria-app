@@ -43,6 +43,7 @@ from .n3.munich_cl import lignes_munich_rapport
 # HTML, Word et le commentaire. Les libellés étaient écrits en dur ici.
 from .n4_best_estimate import (CLE_BOOT, CLE_COMPOSE, CLE_MACK,
                                MSG_FACTEUR_3, MSG_FACTEUR_3_COURT,
+                               MSG_P90_NON_COMPARABLE,
                                libelle_percentiles, marque_retenue)
 
 logger = logging.getLogger('actuaria.a7')
@@ -930,19 +931,33 @@ def _ong8_comparatif(wb, n4, resultats_precedents=None):
             return None, None
         return n - nm1, (n - nm1) / abs(nm1)
 
+    # Le 5e champ dit si la VARIATION de cette ligne est interprétable comme
+    # une évolution du portefeuille. Voir la couleur, plus bas.
     indicateurs = [
-        ("Best Estimate S2 (€)",    be_n,    be_nm1,    FMT_NB),
-        ("Provision P90 (€)",       p90_n,   p90_nm1,   FMT_NB),
-        ("Incertitude Mack σ (€)",  sigma_n, sigma_nm1, FMT_NB),
-        ("CV inter-méthodes",       cv_n/100, (cv_nm1/100 if cv_nm1 is not None else None), FMT_PCT),
+        ("Best Estimate S2 (€)",    be_n,    be_nm1,    FMT_NB,   True),
+        ("Provision P90 (€)",       p90_n,   p90_nm1,   FMT_NB,   False),
+        ("Incertitude Mack σ (€)",  sigma_n, sigma_nm1, FMT_NB,   True),
+        ("CV inter-méthodes",       cv_n/100, (cv_nm1/100 if cv_nm1 is not None else None), FMT_PCT, True),
     ]
 
-    for i, (lbl, vn, vnm1, fmt) in enumerate(indicateurs):
+    for i, (lbl, vn, vnm1, fmt, comparable) in enumerate(indicateurs):
         delta_abs, delta_pct = _var(vn, vnm1)
         bg = BLANC if i % 2 == 0 else GRIS_CLAIR
 
         # Couleur variation
-        if delta_pct is not None:
+        # ⚠️⚠️ LA LIGNE P90 N'EST PLUS COLORÉE, ET CE N'EST PAS UN OUBLI À
+        # COMBLER. `reserve_p90` a CHANGÉ DE NATURE le 19/08/2026
+        # (`6b630d2`) : composé auparavant, σ_Mack recentré désormais —
+        # −17,3 % mesuré sur GenIns. La valeur N-1 est SAISIE À LA MAIN par
+        # l'actuaire (`st.number_input`) : rien ne dit de quelle approche
+        # elle vient. Colorer en ROUGE un écart de méthode ferait signaler
+        # une DÉRIVE DE PROVISIONNEMENT là où rien n'a bougé — plus grave
+        # que l'imprécision elle-même. La réserve est publiée en clair
+        # sous le tableau ; le BE, σ et le CV gardent leur couleur, leur
+        # nature n'ayant pas changé.
+        # ⚠️ À RÉTABLIR le jour où tous les arrêtés N-1 saisis auront été
+        # produits après `6b630d2` — pas avant, et alors seulement.
+        if delta_pct is not None and comparable:
             if abs(delta_pct) < 0.05:
                 var_col = VERT_S2
             elif abs(delta_pct) < 0.15:
@@ -967,6 +982,19 @@ def _ong8_comparatif(wb, n4, resultats_precedents=None):
             c.border    = _border_thin()
             if f and val is not None and isinstance(val, (int,float)):
                 c.number_format = f
+
+    # La réserve sur le P90, publiée SOUS le tableau qu'elle concerne — une
+    # couleur retirée sans explication se lit comme une case oubliée.
+    if resultats_precedents:
+        _r = ws.cell(row=3+len(indicateurs)+1, column=1,
+                     value=MSG_P90_NON_COMPARABLE)
+        _r.font      = _font(color=AMBRE_S2, size=9, italic=True)
+        _r.fill      = _fill('FAEEDA')
+        _r.alignment = _align(wrap=True)
+        _r.border    = _border_thin()
+        ws.merge_cells(start_row=3+len(indicateurs)+1, start_column=1,
+                       end_row=3+len(indicateurs)+1, end_column=5)
+        _row_h(ws, 3+len(indicateurs)+1, 46)
 
     # Message si pas de N-1
     if not resultats_precedents:

@@ -171,6 +171,35 @@ MSG_FACTEUR_3_COURT = (
     "Calibration log-normale EIOPA — pas le quantile d'une normale (2,576)"
 )
 
+#: ⚠️⚠️ POURQUOI LE P90 DE DEUX ARRÊTÉS NE SE COMPARE PLUS DIRECTEMENT.
+#:
+#: `reserve_p90` a CHANGÉ DE NATURE le 19/08/2026 (`6b630d2`) : il portait
+#: l'incertitude composée √(σ_Mack² + σ_modèle²), il porte désormais σ_Mack
+#: recentré quand CLM-H3 le valide. Écart mesuré sur GenIns : **−17,3 %**.
+#:
+#: ⚠️ ET IL N'EXISTE AUCUN MOYEN DE SAVOIR CE QUE PORTE LA VALEUR N-1. Elle
+#: n'est pas archivée par A7 : l'actuaire la SAISIT À LA MAIN depuis un
+#: rapport précédent (`st.number_input`, actuaria_app). Aucune clé
+#: d'approche ne peut l'accompagner. On ne peut donc que le DIRE — prétendre
+#: savoir serait le défaut que ce chantier combat.
+#:
+#: ⚠️ LE BE ET LE CV NE SONT PAS CONCERNÉS : leur nature n'a pas bougé. Cette
+#: réserve porte sur la SEULE ligne P90.
+#:
+#: ⚠️ ET ELLE EST DATÉE PAR NATURE. Elle cesse d'être utile quand tous les
+#: arrêtés N-1 saisis auront été produits après `6b630d2` — les livrables
+#: nomment désormais leur approche (« Mack recentré »), donc la saisie de
+#: l'exercice suivant portera un chiffre dont la nature est écrite. À
+#: retirer alors, plutôt qu'à laisser vieillir.
+MSG_P90_NON_COMPARABLE = (
+    "⚠️ La comparaison du P90 suppose la MÊME approche des deux côtés. "
+    "L'approche publiée a changé le 19/08/2026 : le P90 dérive désormais de "
+    "σ_Mack recentré et non de l'incertitude composée (−17,3 % mesuré). "
+    "Si la valeur N-1 saisie vient d'un arrêté antérieur, l'écart affiché "
+    "est un artefact de méthode, pas une évolution du portefeuille. "
+    "Le Best Estimate et le CV inter-méthodes, eux, restent comparables."
+)
+
 
 # Message UNIQUE affiché par les livrables N5 quand les agrégats S2 ne sont pas
 # calculables (BE négatif). Source unique — ne pas dupliquer dans N5.

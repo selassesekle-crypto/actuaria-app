@@ -1436,6 +1436,101 @@ class T_Corrections_Partielles_Une_Seule_Source(unittest.TestCase):
 
 
 # =============================================================================
+#  COMPARATIF N-1/N — UNE COULEUR NE SIGNALE PLUS UN ARTEFACT DE METHODE
+# =============================================================================
+#
+#  ⚠️⚠️ REGRESSION INTRODUITE PAR LE LOT PERCENTILES (`6b630d2`), ET C'EST
+#  MOI QUI L'AI FAITE. `reserve_p90` a change de NATURE -- compose avant,
+#  sigma_Mack recentre depuis. La valeur N-1 est SAISIE A LA MAIN par
+#  l'actuaire : rien ne dit de quelle approche elle vient.
+#
+#  Un ecart de -17,3 % s'affichait donc en ROUGE (seuil 15 %) : le rapport
+#  signalait une DERIVE DE PROVISIONNEMENT la ou rien n'avait bouge. C'est
+#  plus grave que l'imprecision -- une couleur se lit avant un chiffre.
+
+
+class T_Comparatif_N1_La_Couleur_Suit_La_Comparabilite(unittest.TestCase):
+    """⚠️ LA COULEUR SUIT LA COMPARABILITE, PAS LA LIGNE."""
+
+    #: Un N-1 dont le P90 est le COMPOSE -- exactement le cas qui produit
+    #: l'artefact. Les autres grandeurs sont proches, pour qu'un ecart sur
+    #: elles reste dans les seuils VERT/AMBRE et prouve que leur couleur vit.
+    _PREC = {'best_estimate': 14000000.0, 'reserve_p90': 21832044.0,
+             'cv_inter_methodes': 38.0, 'sigma_mack': 2400000.0}
+
+    @classmethod
+    def setUpClass(cls):
+        cls.C = np.array(GENINS, dtype=float)
+        with kaleido_declare(True), rendeur_substitue():
+            cls.r = AgentA7Provisionnement(verbose=False).run(
+                source=cls.C, mode_declare='cumule',
+                primes=_exposition(GENINS), n_sim_bootstrap=60, seed=42,
+                generer_graphiques=False)
+        cls.xl = export_excel(cls.C, cls.r['n1'], cls.r['n2'], cls.r['n3'],
+                              cls.r['n4'], resultats_precedents=cls._PREC)
+
+    def _lignes(self):
+        import openpyxl
+        ws = openpyxl.load_workbook(io.BytesIO(self.xl))['8. Comparatif N-1 N']
+        return [row for row in ws.iter_rows(min_row=3, max_row=6)
+                if row[0].value]
+
+    def test_la_ligne_p90_n_est_plus_coloree(self):
+        # ⚠️ LA PROPRIETE : l'ecart EXISTE et reste publie -- on ne cache pas
+        # l'information, on retire la LECTURE fausse qu'une couleur impose.
+        p90 = next(r for r in self._lignes() if 'P90' in str(r[0].value))
+        self.assertLess(p90[4].value, -0.15,
+                        "l ecart n atteint plus le seuil ROUGE : test sans objet")
+        self.assertNotIn(p90[4].font.color.rgb[-6:], ('C0392B', 'B87A00'),
+                         'un artefact de methode est encore colore')
+        print('    OK CN-1 la ligne P90 publie son ecart, sans couleur')
+
+    def test_les_autres_lignes_gardent_leur_couleur(self):
+        # ⚠️ CONTRE-EPREUVE INDISPENSABLE : un correctif qui eteint TOUT le
+        # tableau serait aussi faux que la couleur de trop. BE, sigma et CV
+        # n'ont pas change de nature, leur variation reste interpretable.
+        vivantes = [r for r in self._lignes() if 'P90' not in str(r[0].value)]
+        self.assertEqual(len(vivantes), 3)
+        for r in vivantes:
+            self.assertIn(r[4].font.color.rgb[-6:], ('1D7A3A', 'B87A00', 'C0392B'),
+                          f'{r[0].value} a perdu sa couleur')
+        print('    OK CN-2 BE, sigma et CV gardent leur couleur')
+
+    def test_la_raison_est_publiee_dans_les_deux_formats(self):
+        # ⚠️ UNE COULEUR RETIREE SANS EXPLICATION SE LIT COMME UN OUBLI.
+        from direction_non_vie.provisionnement.a7_provisionnement.n4_best_estimate import (  # noqa: E501
+            MSG_P90_NON_COMPARABLE,
+        )
+        import openpyxl
+        ws = openpyxl.load_workbook(io.BytesIO(self.xl))['8. Comparatif N-1 N']
+        plat = ' '.join(str(c.value) for row in ws.iter_rows()
+                        for c in row if c.value)
+        self.assertIn(MSG_P90_NON_COMPARABLE, plat, 'Excel : reserve absente')
+        com = generer_commentaire(self.r['n1'], self.r['n2'], self.r['n3'],
+                                  self.r['n4'],
+                                  resultats_precedents=self._PREC)
+        self.assertIn(MSG_P90_NON_COMPARABLE, com, 'commentaire : absente')
+        print('    OK CN-3 la raison est publiee dans les deux formats')
+
+    def test_la_raison_vit_a_l_endroit_ou_la_couleur_sautait(self):
+        # ⚠️ SANS CELA, QUELQU'UN LA RETABLIRA DANS SIX MOIS en croyant
+        # combler un oubli. Le lot avis-couleur a deja paye exactement ca.
+        src = inspect.getsource(XL_MOD)
+        i = src.index('# Couleur variation')
+        bloc = src[i:i + 1200]
+        self.assertIn('CHANGÉ DE NATURE', bloc)
+        self.assertIn('comparable', bloc)
+        print('    OK CN-4 la raison est ecrite la ou la couleur sautait')
+
+    def test_aucun_agregat_n_a_bouge(self):
+        n4 = self.r['n4']
+        self.assertEqual(n4['best_estimate'], 14830899.0)
+        self.assertEqual(n4['scr']['scr_provisions'], 4894197.0)
+        self.assertEqual(n4['reserve_p90'], 18053284.0)
+        print('    OK CN-5 BE / SCR / P90 inchanges')
+
+
+# =============================================================================
 #  VERROU C2 — AUCUN NOMBRE PUBLIE QUI NE SOIT DANS LA CHARGE UTILE
 # =============================================================================
 #

@@ -45,7 +45,8 @@ from .n3.bf_cape_cod import libelle_loss_ratio
 from .n4_best_estimate import s2_non_calculable, MSG_S2_NON_CALCULABLE
 # Phrase UNIQUE sur ce que le SCR emploie — quatre sites la rédigeaient
 # chacun à sa façon, et les quatre se trompaient différemment.
-from .n4_best_estimate import MSG_ASSIETTE_SCR, MSG_FACTEUR_3
+from .n4_best_estimate import (MSG_ASSIETTE_SCR, MSG_FACTEUR_3,
+                               MSG_P90_NON_COMPARABLE)
 # Source UNIQUE du NOM de l'approche publiée dans `reserve_p*` — la même que
 # HTML, Word et l'Excel. Les libellés étaient écrits en dur ici aussi.
 from .n4_best_estimate import (CLE_BOOT, CLE_COMPOSE, CLE_MACK,
@@ -1927,9 +1928,13 @@ def _narration_comparatif(n4: Dict, resultats_precedents: Optional[Dict]) -> str
     ]
 
     if delta_p90 is not None:
+        # ⚠️ LA RÉSERVE SUIT LE CHIFFRE, jamais reléguée en fin de section :
+        # cette ligne est le seul endroit où le P90 des deux arrêtés se
+        # rencontre, donc le seul où l'avertissement se lit au bon moment.
         lignes.append(
             f"P90 N vs N-1  : {'+' if delta_p90 >= 0 else ''}{_p(delta_p90)}"
         )
+        lignes.append(MSG_P90_NON_COMPARABLE)
 
     if cv_nm1 > 0:
         delta_cv = cv_n - cv_nm1
