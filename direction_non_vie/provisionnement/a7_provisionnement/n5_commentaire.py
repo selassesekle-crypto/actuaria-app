@@ -43,6 +43,9 @@ from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
 from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
 from .n3.bf_cape_cod import libelle_loss_ratio
 from .n4_best_estimate import s2_non_calculable, MSG_S2_NON_CALCULABLE
+# Phrase UNIQUE sur ce que le SCR emploie — quatre sites la rédigeaient
+# chacun à sa façon, et les quatre se trompaient différemment.
+from .n4_best_estimate import MSG_ASSIETTE_SCR
 # Source UNIQUE du NOM de l'approche publiée dans `reserve_p*` — la même que
 # HTML, Word et l'Excel. Les libellés étaient écrits en dur ici aussi.
 from .n4_best_estimate import (CLE_BOOT, CLE_COMPOSE, CLE_MACK,
@@ -881,9 +884,20 @@ def _s6_incertitude(n3: Dict, n4: Dict) -> str:
         if ecart_p995 > 15:
             lignes += [
                 "",
+                # ⚠️⚠️ CETTE LIGNE PRESCRIVAIT « POUR LE SCR, RETENIR LE
+                # MAXIMUM DES DEUX » — ET ELLE SORTAIT VRAIMENT : mesurée sur
+                # le triangle RAA de référence. Deux fautes en une : le SCR ne
+                # se calcule sur AUCUN percentile, et une règle de maximum
+                # entre deux jeux de percentiles avait été explicitement
+                # ÉCARTÉE en arbitrage. Le code la prescrivait encore.
+                # L'écart reste publié — c'est un vrai signal de forme de
+                # distribution — mais il appelle un examen, pas une provision.
                 f"SIGNAL : écart P99.5 Mack ({_e(p995_mack)}) vs Bootstrap "
                 f"({_e(p995_boot)}) de {_p(ecart_p995)} — possible non-normalité "
-                f"ou hétéroscédasticité. Pour le SCR, retenir le maximum des deux.",
+                f"ou hétéroscédasticité. C'est un signal de DIAGNOSTIC sur la "
+                f"forme de la distribution : il appelle un examen des résidus "
+                f"et des hypothèses, jamais un choix de provision. "
+                + MSG_ASSIETTE_SCR,
             ]
 
     return "\n".join(lignes)
@@ -1005,13 +1019,21 @@ def _s8_recommandations(n1: Dict, n2: Dict, n3: Dict, n4: Dict, lob: str) -> str
     if statut == 'VERT':
         lignes += [
             f"1. Transmettre {_e(be)} (réserve brute) à A10 pour actualisation avant inscription au bilan S2 (Art. 77).",
-            f"2. Retenir {_e(p90)} pour le calcul du SCR provisions "
-            f"   (stress test P90, formule standard Art. 115).",
-            f"3. SCR provisions calculé : {_e(scr_prov)}.",
-            f"4. Documenter la méthodologie et les hypothèses dans le rapport "
+            # ⚠️⚠️ LA MÊME INSTRUCTION QUE `fcfb3d3` A RETIRÉE DU JUGEMENT
+            # VIVAIT ICI, MOT POUR MOT, ET SUR LE MÊME CHEMIN VERT — celui
+            # qu'on relit le moins. Elle disait « Retenir {P90} pour le calcul
+            # du SCR provisions ». Mesuré : P90 = 18 053 284 € quand le SCR
+            # vaut 4 894 197 € — un facteur 3,7.
+            # ⚠️ ET ELLE ÉTAIT REDONDANTE AVEC LA LIGNE SUIVANTE, qui publiait
+            # déjà le SCR réel : la fausse instruction était posée juste
+            # au-dessus de la vraie valeur. Les deux fusionnent.
+            # ⚠️ LE CONTRÔLE NE LA VOYAIT PAS : ses deux mots d'échappement,
+            # « formule standard » et « Art. 115 », l'exemptaient.
+            f"2. SCR provisions : {_e(scr_prov)}. {MSG_ASSIETTE_SCR}",
+            f"3. Documenter la méthodologie et les hypothèses dans le rapport "
             f"   actuaire désigné.",
-            f"5. Archiver ce rapport et l'audit trail associé (traçabilité ACPR).",
-            f"6. Revue trimestrielle recommandée pour suivre l'évolution des facteurs.",
+            f"4. Archiver ce rapport et l'audit trail associé (traçabilité ACPR).",
+            f"5. Revue trimestrielle recommandée pour suivre l'évolution des facteurs.",
         ]
     elif statut == 'AMBRE':
         lignes += [
@@ -1478,8 +1500,13 @@ def _lob_rc_auto_corporels(n1, n2, n3, n4):
         # ligne LA NOMME au lieu de la supposer.
         + f"Le P99.5 {libelle_percentiles(n4).lower()} = {_e(p995)} "
         f"({'+' if p995 > be else ''}{_p((p995/max(be,1)-1)*100)} vs BE) "
-        "est le chiffre critique pour le SCR provisions, "
-        "compte tenu de la forte volatilité des sinistres graves. "
+        # ⚠️ DISAIT « est le chiffre critique pour le SCR provisions ». Le
+        # P99.5 mesure la dispersion de la réserve ; il n'entre pas dans
+        # l'exigence de capital. Troisième formulation de la même faute, dans
+        # un bloc LoB — c'est-à-dire sur le chemin le moins relu du module.
+        "mesure la dispersion de la réserve sur cette branche, où les "
+        "sinistres graves sont très volatils. "
+        + MSG_ASSIETTE_SCR + " "
         "La distribution Bootstrap doit être analysée avec soin : "
         "une asymétrie marquée vers la droite est attendue."
     )

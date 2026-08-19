@@ -37,12 +37,21 @@
 =============================================================================
 """
 
+import inspect
 import io
 import re
 import unittest
 
 import numpy as np
 
+from direction_non_vie.provisionnement.a7_provisionnement import (
+    n4_best_estimate as N4)
+from direction_non_vie.provisionnement.a7_provisionnement import (
+    n5_commentaire as COMM)
+from direction_non_vie.provisionnement.a7_provisionnement.n4_best_estimate import (
+    MSG_ASSIETTE_SCR)
+from direction_non_vie.provisionnement.a7_provisionnement.n5_commentaire import (
+    _s6_incertitude, _s8_recommandations, generer_commentaire)
 from direction_non_vie.provisionnement.a7_provisionnement.agent import (
     AgentA7Provisionnement)
 from direction_non_vie.provisionnement.a7_provisionnement.test_a7_ibrahim import (
@@ -254,17 +263,58 @@ _SCR = re.compile(r'\bSCR\b')
 _PERCENTILE = re.compile(
     r'\bP\s?\d{2,3}([.,]\d)?\b|\bpercentile\b|\bquantile\b|\b\d{2}[.,]\d',
     re.I)
-#: Ce qui prouve qu'on parle bien de l'article 115 — et non d'un percentile.
-_ART115 = re.compile(
-    r'[Aa]rt(icle)?\.?\s*11[57]|3\s*[×x]\s*σ|3\s*[×x]\s*\d'
-    r'|SCR\s*/\s*BE|ratio SCR|formule standard', re.I)
+#: ⚠️⚠️ L'EXEMPTION SE SCINDE EN DEUX ÉTAGES, ET C'EST LE CŒUR D'UN LOT.
+#:
+#: Elle était UNE seule alternative, où la FORMULE de l'article 115 et sa
+#: CITATION valaient exemption à égalité. Conséquence mesurée : la phrase
+#:
+#:     « Retenir 18 053 284 € pour le calcul du SCR provisions
+#:       (stress test P90, formule standard Art. 115). »
+#:
+#: passait le contrôle — avec DEUX mots d'échappement, « formule standard »
+#: et « Art. 115 ». **Citer l'article suffisait à échapper au contrôle de
+#: l'article.** C'est le motif du lot avis-couleur : un contrôle qui cherche
+#: un mot est battu par le mot.
+#:
+#: A — LA FORMULE. Elle DÉMONTRE qu'on parle de l'exigence de capital :
+#: personne n'écrit « 3 × σ » pour désigner un percentile. Exemption forte.
+_FORMULE_SCR = re.compile(
+    r'3\s*[×x]\s*σ|3\s*[×x]\s*\d|SCR\s*/\s*BE|ratio SCR', re.IGNORECASE)
+
+#: B — LA CITATION. Elle n'ATTESTE rien : n'importe quelle phrase peut la
+#: porter, y compris celle qui contredit l'article cité. Elle n'exempte plus
+#: qu'à condition que la phrase ne PRESCRIVE rien.
+_CITATION_SCR = re.compile(
+    r'[Aa]rt(icle)?\.?\s*11[57]|formule standard', re.IGNORECASE)
+
+#: C — LA PRESCRIPTION : un verbe qui DIRIGE une grandeur vers le SCR.
+#:
+#: ⚠️ C'EST UNE LISTE DE MOTS, ET C'EST ASSUMÉ — PARCE QU'ELLE NE PEUT QUE
+#: RENDRE LE CONTRÔLE PLUS SENSIBLE. Une liste qui EXEMPTE ouvre un trou (on
+#: vient d'en payer un) ; une liste qui ACCUSE ne peut qu'ajouter des
+#: signalements, jamais en retirer. Un mot qui manque ici laisse le contrôle
+#: exactement où il était sans cette étape — il ne crée aucune cécité neuve.
+_PRESCRIPTION_SCR = re.compile(
+    r'\bretenir\b|\butiliser\b|\bpour le calcul d|\bchiffre critique\b'
+    r'|\bmaximum des deux\b|\bse calcule sur\b', re.IGNORECASE)
 
 
 def vocabulaire_scr_fautif(unite):
-    """True si cette unité publiée nomme « SCR » un niveau de percentile."""
+    """True si cette unité publiée nomme « SCR » un niveau de percentile.
+
+    Calibré dans les DEUX SENS après la fermeture de l'exemption : les 7
+    défauts du relevé restent détectés, les 8 formulations légitimes restent
+    silencieuses — dont « c'est cette marge, et non le niveau, qui se compare
+    au SCR de l'article 115 », qui aurait crié si la citation avait été
+    retirée sans l'étage de prescription."""
     if not _SCR.search(unite) or not _PERCENTILE.search(unite):
         return False
-    return not _ART115.search(unite)
+    if _FORMULE_SCR.search(unite):
+        return False
+    # La citation n'exempte QUE la phrase qui ne prescrit rien.
+    exempt = bool(_CITATION_SCR.search(unite)
+                  and not _PRESCRIPTION_SCR.search(unite))
+    return not exempt
 
 
 def _unites_publiees(r):
@@ -369,6 +419,116 @@ class T3_Le_Mot_SCR_Ne_Nomme_Qu_Une_Grandeur(unittest.TestCase):
         self.assertEqual(fautes, [], '\n'.join(fautes[:10]))
         print('    OK C3b-3 %d unités publiées, aucune ne nomme « SCR » un '
               'niveau de percentile' % total)
+
+# =============================================================================
+#  T4 — AUCUNE PRESCRIPTION DE PERCENTILE POUR LE SCR
+# =============================================================================
+#
+#  ⚠️⚠️ CE CONTRÔLE SURVEILLAIT, ET SON ASSIETTE NE COUVRAIT PAS LES FAUTES.
+#  `test_aucune_unite_publiee_ne_nomme_scr_un_percentile` balaie DÉJÀ tout ce
+#  que l'agent publie — n2/n3/n4, commentaire, 26 figures, Excel, Word. Son
+#  balayage est complet. Son ASSIETTE ne l'est pas : UN triangle (GenIns), UNE
+#  LoB (générique), deux expositions. Les QUATRE prescriptions fausses
+#  vivaient toutes sur des chemins que cette assiette n'atteint pas :
+#
+#      · branche VERT          — GenIns sort ROUGE
+#      · écart P99.5 > 15 %    — sort sur RAA, pas sur GenIns
+#      · LoB rc_auto_corporels — la LoB par défaut est « générique »
+#      · BOOT-H3 NON VALIDÉE   — validée sur les triangles de référence
+#
+#  ⚠️ C'EST « UN VERDICT NE SE PUBLIE PAS SANS SON ASSIETTE », APPLIQUÉ AU
+#  CONTRÔLE LUI-MÊME. Le test imprime « N unités publiées, aucune ne nomme
+#  SCR un percentile » — vrai de CES unités-là, lu comme une propriété du
+#  logiciel. Ce bloc atteint les chemins, au lieu d'élargir un balayage qui
+#  était déjà complet.
+
+
+class T4_Aucune_Prescription_De_Percentile_Pour_Le_SCR(unittest.TestCase):
+    """⚠️ LE SCR NE SE CALCULE SUR AUCUN PERCENTILE, NI SUR σ_MACK."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.r_gen = _run(GENINS)
+        cls.r_raa = _run(RAA)
+
+    def _aucune_faute(self, texte, ou):
+        fautes = [ligne for ligne in texte.split('\n')
+                  if vocabulaire_scr_fautif(ligne)]
+        self.assertEqual(fautes, [], f'{ou} : {fautes[:3]}')
+
+    # ── SCR-1 : la phrase qui ÉCHAPPAIT au contrôle est désormais vue ────────
+    def test_la_citation_de_l_article_n_exempte_plus_une_prescription(self):
+        # ⚠️ LA VIOLATION PLANTÉE DU LOT, SOUS SA FORME EXACTE. Elle portait
+        # DEUX mots d'échappement — « formule standard » ET « Art. 115 » — et
+        # passait le contrôle. Citer l'article suffisait à échapper au
+        # contrôle de l'article.
+        echappait = ('2. Retenir 18 053 284 € pour le calcul du SCR '
+                     'provisions (stress test P90, formule standard Art. 115).')
+        self.assertTrue(vocabulaire_scr_fautif(echappait),
+                        "la citation exempte encore une prescription")
+        # ET LA CONTRE-ÉPREUVE, dans les deux sens : la citation exempte
+        # toujours ce qui ne prescrit rien, et la formule exempte toujours.
+        self.assertFalse(vocabulaire_scr_fautif(
+            "c'est cette marge, et non le niveau, qui se compare au SCR de "
+            "l'article 115. Elle est proche de celle du P99.5 Mack."))
+        self.assertFalse(vocabulaire_scr_fautif(
+            'SCR_prov = 3 × 11.0% × 17,571,609€ (ratio SCR/BE = 33.0%)'))
+        print('    OK SCR-1 la citation n exempte plus une prescription')
+
+    # ── SCR-2 : les quatre chemins, atteints un par un ──────────────────────
+    def test_la_branche_verte_ne_dirige_plus_un_percentile_vers_le_scr(self):
+        n4 = dict(self.r_gen['n4'], statut='VERT')
+        txt = _s8_recommandations(self.r_gen['n1'], self.r_gen['n2'],
+                                  self.r_gen['n3'], n4, 'generique')
+        self.assertNotIn('pour le calcul du SCR provisions', txt)
+        self._aucune_faute(txt, 'recommandations VERT')
+        self.assertIn(MSG_ASSIETTE_SCR, txt)
+        print('    OK SCR-2 la branche VERT publie le SCR, pas un percentile')
+
+    def test_l_ecart_p995_n_appelle_plus_une_regle_de_maximum(self):
+        # RAA le déclenche réellement ; GenIns non — d'où les deux.
+        for nom, r in (('RAA', self.r_raa), ('GenIns', self.r_gen)):
+            txt = _s6_incertitude(r['n3'], r['n4'])
+            self.assertNotIn('maximum des deux', txt, nom)
+            self._aucune_faute(txt, 'incertitude ' + nom)
+        print('    OK SCR-3 l ecart P99.5 appelle un examen, pas une provision')
+
+    def test_les_blocs_lob_ne_nomment_plus_un_percentile_critique(self):
+        for lob in ('rc_auto_corporels', 'rc_medicale', 'generique'):
+            txt = generer_commentaire(
+                self.r_gen['n1'], self.r_gen['n2'], self.r_gen['n3'],
+                self.r_gen['n4'], lob=lob)
+            self.assertNotIn('chiffre critique pour le SCR', txt, lob)
+            self._aucune_faute(txt, 'commentaire ' + lob)
+        print('    OK SCR-4 les blocs LoB ne prescrivent plus de percentile')
+
+    def test_la_recommandation_boot_h3_ne_dirige_plus_vers_sigma_mack(self):
+        # ⚠️ CHEMIN NON ATTEIGNABLE SUR LES TRIANGLES DE RÉFÉRENCE (BOOT-H3 y
+        # est validée) : on verrouille donc la SOURCE, pas une sortie. Un test
+        # de valeur ne verrait rien tant qu'aucun triangle ne rejette BOOT-H3.
+        src = inspect.getsource(N4)
+        self.assertNotIn("Retenir\"\n                    f\"\n", src)
+        self.assertNotIn("l'incertitude de Mack (σ) pour le SCR", src,
+                         'la prescription vers sigma_Mack est revenue')
+        i = src.index("ne pèse pas dans sa")
+        self.assertIn('MSG_ASSIETTE_SCR', src[i:i + 400])
+        print('    OK SCR-5 BOOT-H3 ne dirige plus vers sigma_Mack')
+
+    # ── SCR-3 : la phrase est UNE, et elle n'est rédigée qu'une fois ─────────
+    def test_la_phrase_du_scr_a_une_source_unique(self):
+        # ⚠️ LA PROPRIÉTÉ QUI EMPÊCHE LA CORRECTION PARTIELLE DE REVENIR : les
+        # sites ne rédigent plus, donc ils ne peuvent plus diverger.
+        for mod in (N4, COMM):
+            src = inspect.getsource(mod)
+            self.assertEqual(
+                src.count('"Le SCR provisions ne se calcule sur aucun'),
+                1 if mod is N4 else 0,
+                'la phrase est réécrite ailleurs que dans sa source')
+        self.assertIn('σ(LoB)', MSG_ASSIETTE_SCR)
+        self.assertFalse(vocabulaire_scr_fautif(MSG_ASSIETTE_SCR),
+                         'la phrase de correction déclenche le contrôle')
+        print('    OK SCR-6 une seule redaction, et elle ne se signale pas')
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

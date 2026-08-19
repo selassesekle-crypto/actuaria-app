@@ -131,6 +131,26 @@ def garde_fou_be_negatif(be_final: float) -> Optional[Dict]:
     }
 
 
+#: ⚠️⚠️ CE SUR QUOI LE SCR PROVISIONS SE CALCULE — PHRASE UNIQUE DU DÉPÔT.
+#:
+#: QUATRE sites prescrivaient d'employer pour le SCR une grandeur qui n'y
+#: entre pas : le P90, le P99.5, « le maximum des deux », et σ_Mack. Mesuré
+#: sur un run réel : SCR = 3 × 11,0 % × BE = 4 894 197 € ; le P90 vaut
+#: 18 053 284 € (3,7×) et σ_Mack 2 447 095 € — lequel n'intervient NULLE PART
+#: dans la formule. Quatre formulations, une seule faute.
+#:
+#: ⚠️ LA CORRECTION DE `fcfb3d3` N'AVAIT FERMÉ QU'UN SITE SUR CINQ, et son
+#: commentaire attestait le contraire. C'est la forme la plus dangereuse du
+#: défaut : une correction qui laisse une trace écrite prouvant qu'on a
+#: traité le problème. D'où cette constante — les sites ne peuvent plus
+#: diverger, parce qu'ils ne rédigent plus.
+MSG_ASSIETTE_SCR = (
+    "Le SCR provisions ne se calcule sur aucun percentile ni sur σ_Mack : "
+    "SCR = 3 × σ(LoB) × BE (Art. 115). Les percentiles mesurent la dispersion "
+    "de la réserve ; ils n'entrent pas dans l'exigence de capital."
+)
+
+
 # Message UNIQUE affiché par les livrables N5 quand les agrégats S2 ne sont pas
 # calculables (BE négatif). Source unique — ne pas dupliquer dans N5.
 MSG_S2_NON_CALCULABLE = (
@@ -1327,11 +1347,19 @@ class BestEstimateS2:
         for ligne in lignes_hypotheses_bootstrap(n2):
             if ligne['statut'] == 'NON VALIDÉE' and ligne['critique']:
                 recommandations.append(
+                    # ⚠️ QUATRIÈME SITE DE LA MÊME FAUTE, ET LE SEUL DANS N4.
+                    # Il disait « Retenir l'incertitude de Mack (σ) pour le
+                    # SCR provisions ». Mesuré : le SCR emploie σ_EIOPA
+                    # (0,11), jamais σ_Mack (2 447 095 €) — deux grandeurs
+                    # sans rapport, l'une un taux réglementaire, l'autre un
+                    # montant. Aucun relevé ne l'avait vu : il ne porte ni le
+                    # mot « percentile » ni le mot « composé », les deux
+                    # termes sur lesquels les relevés précédents balayaient.
                     f"{ligne['libelle']} — NON VALIDÉE. Les percentiles "
                     f"Bootstrap (P75/P90/P99.5) ne sont pas publiés. Le Best "
                     f"Estimate est INCHANGÉ : le Bootstrap ne pèse pas dans sa "
-                    f"pondération, il en mesure la dispersion. Retenir "
-                    f"l'incertitude de Mack (σ) pour le SCR provisions."
+                    f"pondération, il en mesure la dispersion. "
+                    f"{MSG_ASSIETTE_SCR}"
                 )
 
         # Recommandation Clark — deux causes DISTINCTES, deux messages distincts.
