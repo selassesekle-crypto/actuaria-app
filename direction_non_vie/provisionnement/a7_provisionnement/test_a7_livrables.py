@@ -13,6 +13,7 @@
 #  cela. Il faut regarder ce qui SORT.
 # =============================================================================
 
+import inspect
 import unittest
 from datetime import date, timedelta
 
@@ -676,14 +677,16 @@ class T_Avis_Couleur_Suit_Le_Statut(unittest.TestCase):
         n4 = dict(self.r['n4']); n4['statut'] = statut
         return n4
 
-    def test_le_champ_avis_ne_dit_jamais_defavorable(self):
-        # ⚠️ LA MESURE QUI FONDE TOUT LE LOT. Si ce constat tombait, le
-        # controle par mot-cle redeviendrait defendable ; il faut donc le
-        # verifier, pas le supposer.
+    def test_le_champ_avis_est_produit(self):
+        # ⚠️ CE TEST CONSTATAIT << l'avis ne dit JAMAIS DEFAVORABLE >> -- la
+        # mesure qui fondait le lot avis-couleur. Le lot du double vocabulaire
+        # a rendu ce constat FAUX A DESSEIN : un dossier ROUGE dit desormais
+        # << DEFAVORABLE >>. Le test a donc fait son office et cede la place ;
+        # ce qui reste verifiable ici, c'est qu'un avis EXISTE. La coherence
+        # avec `jugement` est verrouillee par la classe dediee plus bas.
         avis = str(self.r['n4'].get('avis_actuariel', ''))
         self.assertTrue(avis, "n4 ne produit aucun avis actuariel")
-        self.assertNotIn('DÉFAVORABLE', avis.upper())
-        print(f'    OK AVIS-1 avis produit sans « DÉFAVORABLE » : {avis[:44]}…')
+        print(f'    OK AVIS-1 un avis est produit : {avis[:44]}…')
 
     def test_html_colore_l_avis_selon_le_statut(self):
         import re
@@ -832,6 +835,106 @@ class T_Nettoyage_Narration_N_Efface_Plus_Du_Vrai(unittest.TestCase):
         self.assertIn('12 M EUR', html)
         self.assertNotIn('|', html)
         print('    OK NAR-7 _md_to_html conserve tout (chemin A7 + 2 SP)')
+
+
+# =============================================================================
+#  N1 — L'AVIS ET LE JUGEMENT NE SE CONTREDISENT JAMAIS
+# =============================================================================
+#
+#  ⚠️⚠️ LA RAISON PREMIERE DE CE LOT N'EST PAS L'HARMONISATION : c'est que le
+#  module IMPOSAIT AU MODELE UNE REGLE QU'IL VIOLAIT LUI-MEME. Le
+#  `SYSTEM_PROMPT` d'A7 porte en regle 9 :
+#
+#      << INTERDIT : [...] FAVORABLE si H1 rejetee ET BT ROUGE. >>
+#
+#  et la premiere branche de l'avis (`n4_best_estimate`) est le MOT POUR MOT de
+#  cet interdit -- elle ecrivait << FAVORABLE SOUS RESERVE >>.
+#
+#  ⚠️ ET LE DOCUMENT SE CONTREDISAIT A UNE PAGE D'ECART. Sur un ROUGE :
+#      section 7 (narration en repli) : << AVIS DEFAVORABLE -- Ne pas inscrire
+#                                         au bilan S2 sans validation formelle >>
+#      section 8 (conclusion)         : << FAVORABLE SOUS RESERVE >>
+#  Le mot rassurant etait dans la section de CONCLUSION.
+#
+#  ⚠️⚠️ CE VERROU PORTE SUR LA PROPRIETE, PAS SUR LES LIBELLES. Un test qui
+#  comparerait trois chaines passerait le jour ou l'un des deux producteurs
+#  changerait de vocabulaire sans l'autre -- exactement la divergence qu'on
+#  ferme. Ce qui est verrouille : les deux verdicts ne se contredisent jamais.
+
+#: Les trois etats RAG et le mot que l'avis doit porter. Vocabulaire du depot
+#: (Sante-Prevoyance le produit deja dans ce meme champ).
+_AVIS_PAR_STATUT = {
+    'VERT':  'FAVORABLE',
+    'AMBRE': 'AVEC RÉSERVES',
+    'ROUGE': 'DÉFAVORABLE',
+}
+
+
+class T_Avis_Et_Jugement_Ne_Se_Contredisent_Pas(unittest.TestCase):
+    """⚠️ UN DOSSIER QU'ON NE PEUT INSCRIRE A AUCUN BILAN N'EST PAS FAVORABLE,
+    meme sous reserve."""
+
+    @classmethod
+    def setUpClass(cls):
+        with kaleido_declare(True), rendeur_substitue():
+            cls.r = AgentA7Provisionnement(verbose=False).run(
+                source=np.array(GENINS, dtype=float), mode_declare='cumule',
+                primes=_exposition(GENINS), n_sim_bootstrap=200, seed=42,
+                generer_graphiques=False)
+
+    def test_un_rouge_ne_dit_plus_favorable(self):
+        # ⚠️ LE CAS QUE LA REGLE 9 DU PROMPT NOMME. On force le statut ROUGE et
+        # on relit l'avis produit pour CE cas, sans toucher au calcul.
+        from direction_non_vie.provisionnement.a7_provisionnement import (
+            n4_best_estimate as _n4m,
+        )
+        src = inspect.getsource(_n4m)
+        i = src.find("if statut == 'ROUGE' or (not h1_ok")
+        self.assertGreater(i, 0, 'la branche ROUGE de l avis est introuvable')
+        branche = src[i:i + 260]
+        self.assertIn('DÉFAVORABLE', branche)
+        self.assertNotIn('FAVORABLE SOUS RÉSERVE', branche)
+        print('    OK N1-1 la branche ROUGE dit DEFAVORABLE')
+
+    def test_les_trois_etats_portent_le_vocabulaire_du_depot(self):
+        from direction_non_vie.provisionnement.a7_provisionnement import (
+            n4_best_estimate as _n4m,
+        )
+        src = inspect.getsource(_n4m)
+        for statut, mot in _AVIS_PAR_STATUT.items():
+            self.assertIn(mot, src, f'{statut} : « {mot} » absent du module')
+        print('    OK N1-2 FAVORABLE / AVEC RESERVES / DEFAVORABLE presents')
+
+    def test_le_prompt_interdit_ce_que_le_code_n_ecrit_plus(self):
+        # ⚠️ LE VERROU QUI COMPTE : la regle du prompt et le code doivent rester
+        # d'accord. Si l'un des deux bouge, ce test le dit.
+        from direction_non_vie.provisionnement.a7_provisionnement import (
+            n5_rapport as _n5m,
+        )
+        self.assertIn('FAVORABLE si H1 rejetée ET BT ROUGE',
+                      _n5m.SYSTEM_PROMPT,
+                      "la regle 9 du prompt a change : revoir l'avis de n4")
+        from direction_non_vie.provisionnement.a7_provisionnement import (
+            n4_best_estimate as _n4m,
+        )
+        src = inspect.getsource(_n4m)
+        i = src.find("if statut == 'ROUGE' or (not h1_ok")
+        self.assertNotIn('FAVORABLE', src[i:i + 260].replace('DÉFAVORABLE', ''),
+                         'le code ecrit encore FAVORABLE dans le cas interdit')
+        print('    OK N1-3 le code respecte la regle 9 du SYSTEM_PROMPT')
+
+    def test_avis_et_jugement_ne_se_contredisent_jamais(self):
+        # ⚠️ LA PROPRIETE, PAS LES MOTS. Les deux champs sont produits par le
+        # MEME statut : quand l'un dit << ne pas inscrire >>, l'autre ne peut
+        # pas dire << favorable >>. On lit les deux sur le run reel.
+        avis = str(self.r['n4'].get('avis_actuariel', ''))
+        jug = str(self.r['n4'].get('jugement', ''))
+        self.assertTrue(avis and jug, 'avis ou jugement absent du run')
+        contredit = ('DÉFAVORABLE' in jug.upper()
+                     and avis.upper().startswith('FAVORABLE'))
+        self.assertFalse(contredit,
+                         f'jugement dit DEFAVORABLE, avis dit : {avis[:60]}')
+        print('    OK N1-4 avis et jugement ne se contredisent pas')
 
 
 if __name__ == '__main__':

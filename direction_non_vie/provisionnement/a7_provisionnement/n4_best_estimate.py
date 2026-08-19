@@ -1311,12 +1311,42 @@ class BestEstimateS2:
                 "sur les années 2020+ avant inscription au bilan S2."
             )
 
-        # Avis actuariel global
+        # ── Avis actuariel global ─────────────────────────────────────────────
+        #
+        # ⚠️⚠️ CE MODULE IMPOSAIT AU MODÈLE UNE RÈGLE QU'IL VIOLAIT LUI-MÊME, ET
+        # C'EST LA RAISON PREMIÈRE DE CETTE CORRECTION — pas l'harmonisation.
+        # Le `SYSTEM_PROMPT` d'A7 (`n5_rapport`) porte, en règle 9 :
+        #
+        #     « INTERDIT : […] FAVORABLE si H1 rejetée ET BT ROUGE. »
+        #
+        # La condition de la première branche ci-dessous est le MOT POUR MOT de
+        # cet interdit — et elle écrivait « FAVORABLE SOUS RÉSERVE ». Le
+        # déterministe s'autorisait ce qu'il défend au modèle de faire.
+        #
+        # ⚠️ ET LE DOCUMENT SE CONTREDISAIT À UNE PAGE D'ÉCART. Sur un dossier
+        # ROUGE, `_documenter_jugement` écrit « AVIS DÉFAVORABLE — Ne pas
+        # inscrire au bilan S2 sans validation formelle » (cf. plus bas), publié
+        # en section 7 quand la narration LLM n'a pas tourné ; la section 8 —
+        # celle qui s'appelle « Jugement actuariel », la CONCLUSION du document
+        # — affichait « FAVORABLE » en gras. Un lecteur qui parcourt la fin y
+        # lisait un feu vert. `jugement` avait raison : un dossier qu'on ne peut
+        # inscrire à aucun bilan n'est pas « favorable », même sous réserve.
+        #
+        # ⚠️ LE VOCABULAIRE N'EST PAS INVENTÉ ICI, il est celui du dépôt :
+        # Santé-Prévoyance produit déjà FAVORABLE / AVEC RÉSERVES / DÉFAVORABLE
+        # dans ce même champ, adossé au RAG (`rapport_sante.agent._avis`). A7
+        # était l'exception.
+        #
+        # ⚠️ AUCUN CALCUL NE CHANGE — ni un euro, ni un statut RAG, ni un poids.
+        # Seul change LE MOT que l'outil dit à un actuaire qui signe. La couleur
+        # de l'encadré suit déjà le statut depuis le lot avis-couleur : le texte
+        # cesse simplement de contredire sa propre couleur.
         h1_ok = n2.get('h1_independance', {}).get('ok', True)
         if statut == 'ROUGE' or (not h1_ok and bt_statut_val == 'ROUGE'):
-            avis_actuariel = 'FAVORABLE SOUS RÉSERVE — révisions requises avant bilan S2'
+            avis_actuariel = ('DÉFAVORABLE — révisions requises avant '
+                              'inscription au bilan S2')
         elif statut == 'AMBRE' or not h1_ok:
-            avis_actuariel = 'FAVORABLE SOUS RÉSERVE — points de vigilance à documenter'
+            avis_actuariel = 'AVEC RÉSERVES — points de vigilance à documenter'
         else:
             avis_actuariel = ("FAVORABLE — Best Estimate (réserve brute) "
                               "robuste ; actualisation S2 opérée en aval (A10)")
