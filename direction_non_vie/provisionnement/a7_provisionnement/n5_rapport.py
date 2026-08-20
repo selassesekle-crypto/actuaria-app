@@ -700,6 +700,11 @@ _LIBELLE_SOURCE = {
     # sur un rapport ampute serait l'etiquette qui affirme plus que le
     # document ne porte.
     'jugement_degrade': '⚠️ Rapport dégradé — commentaire actuariel absent',
+    # ⚠️ LE SOCLE A SON PROPRE BADGE, ET C'EST TOUT L'ARGUMENT. Le conteneur
+    # du commentaire porte UN badge d'origine : y loger deux textes de
+    # provenances differentes le rendrait FAUX. Deux blocs, deux badges --
+    # sinon on ferme le defaut d'un cote en l'ouvrant de l'autre.
+    'socle':      '⚙ Énoncés dérivés du calcul',
     'aucune':     '',
 }
 
@@ -716,6 +721,56 @@ def badge_narration(source: str) -> str:
     sans narration ne doit engager personne.
     """
     return traitement_ia.avec_engagement(_LIBELLE_SOURCE.get(source, ''))
+
+
+#: ⚠️⚠️ LA PHRASE DE PORTEE DU SOCLE, ET ELLE N'EST PAS UN ORNEMENT.
+#:
+#: DEUX TEXTES COTE A COTE LAISSENT CROIRE QUE L'UN VALIDE L'AUTRE. Publier le
+#: socle sous la narration suggere une confrontation qui n'a PAS lieu : rien
+#: ne compare les deux, aucun ecart n'est calcule, aucun desaccord ne serait
+#: signale. Sans cette phrase, la juxtaposition affirme un controle qui
+#: n'existe pas -- le motif meme que ce chantier ferme partout ailleurs.
+#:
+#: ⚠️ UNE SEULE CONSTANTE POUR LES DEUX FORMATS. Recopiee dans l'HTML et dans
+#: le Word, elle divergerait au premier ajustement : c'est exactement ce qui
+#: etait arrive aux deux tables de libelles avant qu'on les fonde en une.
+#: ⚠️⚠️ ELLE A DIT PLUS QUE LE CODE NE PORTE, ET C'EST MOI QUI L'AVAIS
+#: ECRIT. Premiere version : « il se reproduit A L'IDENTIQUE d'un run a
+#: l'autre ». Jamais mesure -- et FAUX : le socle porte DEUX horodatages
+#: (« Genere le : 20/08/2026 »), donc deux runs a un jour d'ecart, sur les
+#: memes donnees, rendent deux textes differents. Mesure : identiques le
+#: meme jour, la date est la SEULE variation.
+#: La reserve est donc NOMMEE, pas tue. Dans la phrase dont c'est
+#: precisement le role de n'affirmer que ce qui est vrai, une revendication
+#: non mesuree etait le defaut que ce chantier ferme partout ailleurs.
+PORTEE_SOCLE = (
+    "Socle dérivé du calcul par du code déterministe, sans modèle de "
+    "langage : ses énoncés ne dépendent que des données du dossier — seule "
+    "la date de génération varie d'un run à l'autre. Il ne vérifie PAS la "
+    "narration ci-dessus et n'atteste de rien à son sujet : les deux textes "
+    "sont publiés côte à côte, jamais l'un contre l'autre.")
+
+
+def socle_a_publier(commentaire: str, narration: str) -> str:
+    """Le commentaire deterministe, s'il n'est pas DEJA dans la narration.
+
+    ⚠️⚠️ LA REGLE PORTE SUR LE FAIT, PAS SUR L'ETIQUETTE. Tester
+    `source == 'claude_api'` marcherait aujourd'hui et mentirait demain : une
+    source nouvelle, ou renommee, republierait le socle en double sans qu'un
+    test s'en apercoive. On demande au texte ce qu'il contient.
+
+    ⚠️ CE QUE CETTE FONCTION EMPECHE, MESURE : sans cle API, la narration EST
+    `_clean(commentaire)` -- les deux sont identiques. Publier les deux
+    livrerait 14 150 caracteres EN DOUBLE a tous les utilisateurs actuels,
+    c'est-a-dire une regression introduite par le lot cense proteger.
+
+    L'invariant tenu est : le commentaire deterministe atteint le document
+    signe EXACTEMENT UNE FOIS, sur les trois chemins de narration.
+    """
+    socle = _clean(commentaire or '')
+    if not socle or socle in (narration or ''):
+        return ''
+    return socle
 
 
 # =============================================================================
@@ -2732,6 +2787,33 @@ def export_html(
         # Construire tous les blocs
         b = _build_blocks(n2, n3, n4, narration, source, lob, cli, arr, dt, audit_id, methode, statut, graphiques_html, actuaire_nom=actuaire_nom, actuaire_numero_ia=actuaire_numero_ia)
 
+        # ⚠️⚠️ LE SOCLE EST CALCULE ICI, PAS DANS `_build_blocks`, ET C'EST
+        # MESURE : cette fonction a QUATRE appelants de test POSITIONNELS.
+        # Y inserer un parametre les casserait tous — pour un bloc que la
+        # concatenation ci-dessous peut composer sans elle.
+        _socle = socle_a_publier(commentaire, narration)
+        _socle_html = ''
+        if _socle:
+            # ⚠️ AUCUN `except` ICI, ET C'EST MESURE. La narration en est
+            # entoure parce qu'elle vient d'un TIERS ; ce texte vient de NOTRE
+            # code. Un rattrapage y publierait un bug a nous comme un simple
+            # defaut de rendu. Et le risque est nul : sur le chemin
+            # `templates`, ce meme texte passe DEJA par `_md_to_html` a chaque
+            # run sans incident — c'est litteralement la narration du jour.
+            _corps_socle = _md_to_html(_socle)
+            _socle_html = (
+                '<div class="commentaire-wrap" style="margin-top:22px;">\n'
+                '  <div class="commentaire-header">\n'
+                '    <span class="commentaire-header-title">Socle — énoncés dérivés du calcul</span>\n'
+                '    <span class="commentaire-ai-badge">' + badge_narration('socle') + '</span>\n'
+                '  </div>\n'
+                '  <div class="commentaire-body">\n'
+                '    <p style="font-size:8pt;color:var(--slate);margin-bottom:20px;font-style:italic;">'
+                + _s(PORTEE_SOCLE) + '</p>\n'
+                + _corps_socle + '\n'
+                '  </div>\n'
+                '</div>\n')
+
         # ⚠️ LE CATALOGUE ET LE RAPPORT COÏNCIDENT DEPUIS LE LOT C3d. Le HTML
         # portait CINQ figures sur quatorze, et les neuf absentes étaient
         # celles qui JUSTIFIENT la méthode — dont g17 et g18, les deux seuls
@@ -2877,7 +2959,8 @@ def export_html(
             + '\n    <div class="comm-footer">✦ Narration générée par ActuarIA Intelligence · Agent A7 Ibrahim v5.0 · ' + dt + '</div>\n'
             '  </div>\n'
             '</div>\n'
-            '</div>\n<div class="section-divider"></div>\n\n'
+            + _socle_html
+            + '</div>\n<div class="section-divider"></div>\n\n'
 
             # Section 8
             '<div class="section-header"><span class="section-num">08</span><span class="section-titre">Jugement actuariel &amp; Recommandations</span></div>\n'
@@ -3327,6 +3410,33 @@ def export_word(n1, n2, n3, n4,
                 _run(p,_badge,sz=7,italic=True,col=GrR)
         else:
             p=doc.add_paragraph(); _run(p,'Narration non disponible.',sz=9,italic=True)
+
+        # ⚠️⚠️ LE SOCLE EST HORS DU `if narration`, ET C'EST VOULU. Quand la
+        # narration manque, il est le SEUL texte du document : le loger dans
+        # la branche haute le ferait disparaitre precisement la ou il compte
+        # le plus. La regle de publication vit dans `socle_a_publier` -- une
+        # seule fonction pour les deux formats, jamais deux tests jumeaux.
+        _socle_w = socle_a_publier(commentaire, narration or '')
+        if _socle_w:
+            _h('Socle — énoncés dérivés du calcul', lv=2)
+            p=doc.add_paragraph(); p.paragraph_format.space_after=Pt(8)
+            _run(p, PORTEE_SOCLE, sz=8, italic=True, col=GrR)
+            for sec in re.split(r'(?=§\d+\s*[—\-–])', _socle_w):
+                sec=sec.strip()
+                if not sec: continue
+                ls=sec.split('\n',1)
+                if ls[0]: _h(ls[0],lv=2)
+                if len(ls)>1:
+                    for ln in ls[1].split('\n'):
+                        ln=ln.strip()
+                        if ln:
+                            p=doc.add_paragraph(); p.paragraph_format.space_after=Pt(3)
+                            p.paragraph_format.left_indent=Cm(0.3)
+                            _run(p,ln,sz=9,col=NR)
+            _b_socle = badge_narration('socle')
+            if _b_socle:
+                p=doc.add_paragraph()
+                _run(p,_b_socle,sz=7,italic=True,col=GrR)
         doc.add_page_break()
 
         _h('8. Jugement actuariel & Recommandations'); _sep()

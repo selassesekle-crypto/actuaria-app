@@ -15,6 +15,7 @@
 
 import inspect
 import io
+import re
 import os
 import unittest
 from datetime import date, timedelta
@@ -2275,6 +2276,137 @@ class T_Le_Repli_Du_Repli_Dit_Qu_Il_Est_Une_Panne(unittest.TestCase):
         with self.assertRaises(KeyError):
             COMM_MOD.generer_commentaire(n1={}, n2={}, n3={}, n4={})
         print('    OK REPLI-9 cas rare : un run reel ne degrade jamais')
+
+
+class T_D2_Le_Socle_N_Est_Pas_Substituable(unittest.TestCase):
+    """⚠️ LA NARRATION LLM NE REMPLACE PLUS LE COMMENTAIRE DETERMINISTE.
+
+    Mesure d'ouverture, narration LLM SIMULEE : la ligne du Best Estimate
+    avec sa base reglementaire (`Art. 77`) DISPARAISSAIT des deux documents
+    signes des qu'une cle API existait.
+    """
+
+    FAUSSE = ("§1 — CONTEXTE\n\nLe triangle porte dix annees.\n\n"
+              "§7 — CONCLUSION\n\nLe provisionnement est adequat.")
+    TEMOIN = 'BEST ESTIMATE'
+
+    @classmethod
+    def setUpClass(cls):
+        cls.r = AgentA7Provisionnement(verbose=False).run(
+            source=np.array(GENINS, dtype=float), mode_declare='cumule',
+            primes=_exposition(GENINS), n_sim_bootstrap=60, seed=42,
+            generer_graphiques=False)
+        cls.comm = cls.r['commentaire']
+
+    def _html(self, narration, source):
+        return RAPP_MOD.export_html(
+            self.r['n1'], self.r['n2'], self.r['n3'], self.r['n4'],
+            commentaire=self.comm, narration=narration,
+            source_narration=source)
+
+    # ── la regle, la ou elle vit ──────────────────────────────────────────
+    def test_le_socle_ne_se_republie_pas_s_il_est_deja_la(self):
+        # ⚠️ SANS CLE API, LA NARRATION *EST* LE COMMENTAIRE. Publier les deux
+        # livrerait 14 150 caracteres EN DOUBLE a tous les utilisateurs
+        # actuels — une regression introduite par le lot cense proteger.
+        deja = RAPP_MOD._clean(self.comm)
+        self.assertEqual(RAPP_MOD.socle_a_publier(self.comm, deja), '',
+                         'le socle serait publie DEUX fois')
+        print('    OK D2-1 narration == socle -> aucune republication')
+
+    def test_le_socle_est_rendu_quand_la_narration_ne_le_porte_pas(self):
+        rendu = RAPP_MOD.socle_a_publier(self.comm, self.FAUSSE)
+        self.assertIn(self.TEMOIN, rendu,
+                      'le socle manque alors que la narration ne le porte pas')
+        print('    OK D2-2 narration LLM -> le socle est rendu')
+
+    def test_sans_commentaire_il_n_y_a_pas_de_socle(self):
+        self.assertEqual(RAPP_MOD.socle_a_publier('', self.FAUSSE), '')
+        self.assertEqual(RAPP_MOD.socle_a_publier('   ', self.FAUSSE), '')
+        print('    OK D2-3 pas de commentaire -> pas de bloc socle vide')
+
+    # ── l invariant, sur le document ──────────────────────────────────────
+    def test_le_socle_atteint_le_html_exactement_une_fois(self):
+        # ⚠️ L'INVARIANT DU LOT, ET IL PORTE SUR LES TROIS CHEMINS : le
+        # commentaire deterministe atteint le document signe UNE fois.
+        for narration, source, attendu in (
+                (self.FAUSSE, 'claude_api', 1),
+                (RAPP_MOD._clean(self.comm), 'templates', 0),
+                ('', 'aucune', 1)):
+            html = self._html(narration, source)
+            self.assertEqual(html.count(RAPP_MOD.PORTEE_SOCLE), attendu,
+                             f'bloc socle mal compte sur {source!r}')
+            self.assertIn(self.TEMOIN, html,
+                          f'le socle n atteint pas le HTML sur {source!r}')
+        print('    OK D2-4 socle une seule fois, sur les TROIS chemins')
+
+    def test_la_ligne_du_be_revient_dans_le_html_signe(self):
+        # ⚠️ LE TEMOIN DE LA MESURE D'OUVERTURE : cette ligne disparaissait.
+        html = self._html(self.FAUSSE, 'claude_api')
+        self.assertIn('Art. 77', html,
+                      'la base reglementaire du BE manque au document signe')
+        print('    OK D2-5 la ligne du BE avec Art. 77 est de retour')
+
+    def test_le_socle_atteint_le_word_avec_sa_portee(self):
+        from docx import Document
+        w = RAPP_MOD.export_word(
+            self.r['n1'], self.r['n2'], self.r['n3'], self.r['n4'],
+            commentaire=self.comm, narration=self.FAUSSE,
+            source_narration='claude_api')
+        txt = '\n'.join(p.text for p in Document(io.BytesIO(w)).paragraphs)
+        self.assertIn(self.TEMOIN, txt,
+                      'le Word transmis au CAC a perdu le socle')
+        self.assertIn(RAPP_MOD.PORTEE_SOCLE, txt,
+                      'le Word publie le socle SANS sa portee')
+        print('    OK D2-6 le socle et sa portee atteignent le Word')
+
+    # ── la portee, et ce qu elle empeche de croire ────────────────────────
+    def test_la_portee_dit_qu_elle_ne_valide_rien(self):
+        # ⚠️ DEUX TEXTES COTE A COTE LAISSENT CROIRE QUE L'UN VALIDE L'AUTRE.
+        # Rien ne compare les deux : la phrase doit le dire, pas le suggerer.
+        p = RAPP_MOD.PORTEE_SOCLE
+        self.assertIn('ne vérifie PAS', p)
+        self.assertIn("n'atteste de rien", p)
+        print('    OK D2-7 la portee refuse explicitement le controle')
+
+    def test_la_portee_n_affirme_que_ce_qui_est_mesure(self):
+        # ⚠️⚠️ MA PREMIERE VERSION DISAIT « il se reproduit A L'IDENTIQUE d'un
+        # run a l'autre ». JAMAIS MESURE, ET FAUX : le socle porte deux
+        # horodatages. Ce test tient les DEUX moities du fait.
+        p = RAPP_MOD.PORTEE_SOCLE
+        self.assertNotIn("à l'identique", p,
+                         'la portee revendique une reproductibilite exacte')
+        self.assertIn('date de génération', p,
+                      'la portee tait la seule variation qui existe')
+        # La moitie mesuree : a donnees egales, les enonces ne bougent pas.
+        autre = COMM_MOD.generer_commentaire(
+            n1=self.r['n1'], n2=self.r['n2'], n3=self.r['n3'],
+            n4=self.r['n4'])
+        sans_date = re.compile(r'\d{2}/\d{2}/\d{4}')
+        self.assertEqual(sans_date.sub('', autre),
+                         sans_date.sub('', self.comm),
+                         'a donnees egales, les enonces du socle ont bouge')
+        print('    OK D2-10 la portee dit le fait mesure, et lui seul')
+
+    def test_la_portee_vient_d_une_seule_constante(self):
+        # ⚠️ RECOPIEE DANS LES DEUX FORMATS, ELLE DIVERGERAIT — c'est ce qui
+        # etait arrive aux deux tables de libelles avant qu'on les fonde.
+        src = inspect.getsource(RAPP_MOD)
+        litteral = "Socle dérivé du calcul par du code déterministe"
+        self.assertEqual(src.count(litteral), 1,
+                         'la phrase de portee est recopiee : elle divergera')
+        print('    OK D2-8 une seule occurrence litterale de la portee')
+
+    # ── deux blocs, deux badges ───────────────────────────────────────────
+    def test_le_socle_a_son_propre_badge(self):
+        # ⚠️ TOUT L'ARGUMENT DE Q1 : le conteneur porte UN badge d'origine ;
+        # deux textes de provenances differentes le rendraient faux.
+        socle = RAPP_MOD.badge_narration('socle')
+        self.assertTrue(socle, 'le bloc socle ne dit pas son origine')
+        self.assertNotEqual(socle, RAPP_MOD.badge_narration('claude_api'))
+        html = self._html(self.FAUSSE, 'claude_api')
+        self.assertIn(RAPP_MOD._LIBELLE_SOURCE['socle'], html)
+        print(f'    OK D2-9 badge propre au socle : {socle[:44]}')
 
 
 if __name__ == '__main__':
