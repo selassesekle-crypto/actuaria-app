@@ -2065,6 +2065,14 @@ _FORMES_MESUREES = {
     '17,3':        '17.3',         # decimale a la francaise
     '0.5':         '0.5',
     '7':           '7',
+    # ⚠️⚠️ LE TROU DE L'ASSIETTE, MESURE SUR DU LLM REEL. Aucune forme testee
+    # n'avait EXACTEMENT TROIS decimales avec une partie entiere nulle :
+    # `0,309` devenait `309`. Le detecteur etait teste, pas sur ce point.
+    '0,309':       '0.309',
+    '0,131':       '0.131',
+    '0,500':       '0.5',        # la decimale nulle tombe, la valeur reste
+    # Et la contre-epreuve : un zero NON isole reste un separateur de milliers.
+    '10,500':      '10500',
 }
 
 
@@ -2093,6 +2101,23 @@ class T_Detecteur_De_Nombres(unittest.TestCase):
         self.assertNotEqual(_cle_nombre('11.3'), _cle_nombre('11'))
         self.assertNotEqual(_cle_nombre('17'), _cle_nombre('17,3'))
         print('    OK C2-2 un arrondi ne s apparie pas a sa valeur pleine')
+
+    def test_une_decimale_a_partie_entiere_nulle_n_est_pas_des_milliers(self):
+        # ⚠️⚠️ LE DEFAUT MESURE SUR LE PREMIER RUN LLM REEL. La charge portait
+        # `p = 0.3090`, le modele publiait `0,309` : MEME VALEUR, deux cles.
+        # Trois des 34 signalements etaient FABRIQUES par le detecteur.
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
+            _cle_nombre,
+        )
+        self.assertEqual(_cle_nombre('0.3090'), _cle_nombre('0,309'),
+                         'la charge et la narration ne se correspondent plus')
+        self.assertNotEqual(_cle_nombre('0,309'), _cle_nombre('309'),
+                            'FAUX NEGATIF : un entier passe pour une decimale')
+        # ⚠️ ET LE CAS OPPOSE NE DOIT PAS BOUGER : un zero non isole ouvre
+        # bien des milliers.
+        self.assertEqual(_cle_nombre('10,500'), '10500')
+        self.assertEqual(_cle_nombre('8,057,830'), '8057830')
+        print('    OK C2-2b 0,309 est une decimale, 10,500 des milliers')
 
     def test_la_zone_franche_ne_couvre_que_des_references(self):
         # ⚠️ LA REGLE DE SELASSE : aucun seuil numerique n'y entre.

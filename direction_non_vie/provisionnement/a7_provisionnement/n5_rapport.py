@@ -580,9 +580,25 @@ def _cle_nombre(brut: str) -> str:
     jugé -- un point suivi d'exactement trois chiffres ET d'une frontiere est
     un separateur de milliers ; sinon c'est une decimale. Meme regle pour la
     virgule, dans l'autre sens.
+
+    ⚠️⚠️ SAUF QUAND LA PARTIE ENTIERE VAUT ZERO, ET C'EST MESURE SUR DU LLM.
+    << 0,309 >> devenait << 309 >> : AUCUN NOMBRE NE S'ECRIT << 0 milliers
+    309 >>. La charge transmettait `p = 0.3090` -- quatre decimales, donc lue
+    comme decimale -- et le modele publiait `0,309` -- trois decimales, donc
+    lue comme des milliers. LA MEME VALEUR, DEUX CLES : un orphelin FABRIQUE
+    par le detecteur. Trois des 34 signalements du premier run reel.
+
+    ⚠️ ET LE FAUX NEGATIF EST PIRE QUE LE FAUX POSITIF : avant ce correctif,
+    un modele publiant l'entier << 309 >> passait pour le << 0,309 >> de la
+    charge. Le verrou attestait la provenance d'un nombre sans rapport.
+
+    ⚠️ L'ASSIETTE DES FORMES TESTEES NE COUVRAIT PAS LE CAS : `0.5` porte DEUX
+    decimales, jamais TROIS. Le detecteur etait teste -- pas sur ce point.
     """
     x = re.sub(r'[    ]', '', brut.strip())
-    x = re.sub(r'(?<=\d)[.,](?=\d{3}(?:\D|$))', '', x)   # milliers
+    # `(?<!\b0)` : un separateur de milliers ne peut pas suivre un zero isole.
+    # << 10,500 >> reste des milliers -- son zero n'ouvre pas le nombre.
+    x = re.sub(r'(?<!\b0)(?<=\d)[.,](?=\d{3}(?:\D|$))', '', x)   # milliers
     x = x.replace(',', '.').rstrip('.')                  # decimale unifiee
     if '.' in x:
         entier, dec = x.split('.', 1)
