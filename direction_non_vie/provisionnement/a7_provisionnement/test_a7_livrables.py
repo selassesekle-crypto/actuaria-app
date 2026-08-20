@@ -2119,6 +2119,37 @@ class T_Detecteur_De_Nombres(unittest.TestCase):
         self.assertEqual(_cle_nombre('8,057,830'), '8057830')
         print('    OK C2-2b 0,309 est une decimale, 10,500 des milliers')
 
+    def test_les_formes_de_reference_du_llm_reel_sont_muettes(self):
+        # ⚠️ TOUTES MESUREES SUR LA PREMIERE NARRATION LLM DU DEPOT, jamais
+        # devinees. Chacune ressortait orpheline.
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
+            nombres_publies,
+        )
+        for s in ('articles 77 et 115', 'article 77 S2', '(Clark, 2003)',
+                  'Guide IA 2023', "Guide de l'Institut des Actuaires 2023",
+                  'Mack (1993)', 'Art. 115', '§7', 'H1', 'BFCC-H5'):
+            self.assertEqual(nombres_publies(s), [],
+                             f'{s!r} publie encore un nombre')
+        print('    OK C2-3b les 10 formes de reference mesurees sont muettes')
+
+    def test_l_elargissement_ne_rend_aucune_grandeur_muette(self):
+        # ⚠️⚠️ LA REGLE D'ASYMETRIE : une liste qui EXEMPTE ouvre un trou.
+        # Le sens 2 de la calibration est donc OBLIGATOIRE -- et il porte sur
+        # les DEUX vrais defauts de la narration reelle, qui doivent rester
+        # signales : un montant fabrique et une soustraction fausse.
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
+            nombres_publies,
+        )
+        for s, attendu in (('soit 910 000 € minimum', '910 000'),
+                           ('est de 10 622 026 €', '10 622 026'),
+                           ('BE de 14 830 899 €', '14 830 899'),
+                           ('2 alertes rouges', '2'),
+                           ('CV de 13,1 %', '13,1'),
+                           ('au taux de 6 %', '6')):
+            self.assertIn(attendu, nombres_publies(s),
+                          f'{s!r} : la grandeur est devenue muette')
+        print('    OK C2-3c aucune grandeur ne tombe dans la zone franche')
+
     def test_la_zone_franche_ne_couvre_que_des_references(self):
         # ⚠️ LA REGLE DE SELASSE : aucun seuil numerique n'y entre.
         from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (

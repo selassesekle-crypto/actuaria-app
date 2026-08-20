@@ -555,9 +555,19 @@ _REFERENCES_NON_CHIFFREES = re.compile(
     # narration ecrit AUSSI BIEN << Mack 1993 >> que << Mack (1993) >>. La
     # premiere version ne couvrait que la forme sans parenthese, et 1993
     # ressortait orphelin -- le SEUL faux positif reel des sept mesures.
+    # ⚠️⚠️ ET LA VIRGULE AUSSI, MESUREE SUR DU LLM REEL : le modele ecrit
+    # << (Clark, 2003) >>. Meme defaut que la parenthese, une forme plus tard.
     r'|\b(?:Mack|Clark|Renshaw|Verrall|Quarg|Benktander|B&Z|Bornhuetter)'
-    r'\s+(?:&\s+\w+\s+)?\(?(?:19|20)\d\d\)?'    # methode + annee, () optionnelles
-    r'|Art(?:icle)?\.?\s*\d+'                   # Art. 77, Art. 115
+    r'\s*,?\s*(?:&\s+\w+\s+)?\(?(?:19|20)\d\d\)?'   # methode + annee, () ou ,
+    # ⚠️⚠️ LE PLURIEL ET L'ENUMERATION, MESURES : sur << articles 77 et 115 >>
+    # le motif d'origine ne prenait RIEN -- le `s` de << articles >> bloquait
+    # tout. Les DEUX articles ressortaient orphelins.
+    r'|Art(?:icle)?s?\.?\s*\d+(?:\s+et\s+\d+)*'  # Art. 77, articles 77 et 115
+    # ⚠️ 3 occurrences dans la premiere narration reelle, aucune couverte.
+    r'|Guide\s+(?:IA|de l\'Institut des Actuaires)\s*\d{4}'
+    # ⚠️ LE << 2 >> DE << S2 >> RESSORTAIT COMME UN NOMBRE. Le suffixe
+    # Solvabilite 2 suit huit references dans la meme narration.
+    r'|\bS2\b'
     r'|\b(?:19|20)\d\d/\d+\b'                   # reglement 2015/35
     r'|\bQIS\s*\d+\b|\bTP\.\d[\d.]*',           # QIS5 TP.5.26
     re.IGNORECASE)
