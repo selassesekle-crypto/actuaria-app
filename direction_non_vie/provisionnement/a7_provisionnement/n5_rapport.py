@@ -467,8 +467,48 @@ def _narration_claude_api(n2, n3, n4, lob_label, arrete) -> tuple[str, str]:
         logger.warning(f'Narration non generee : {e}')
         raise
 
-def _narration_templates(n4, commentaire) -> str:
-    return _clean(commentaire) or _clean(n4.get('jugement', ''))
+#: ⚠️⚠️ LE SIGNAL DE PANNE DU REPLI-DU-REPLI. Il vit ICI, en UN seul endroit,
+#: parce qu'il doit dire la MEME chose dans le HTML, dans le Word et dans le
+#: `commentaire.txt` archive.
+#:
+#: ⚠️ IL EST DANS LE TEXTE, PAS SEULEMENT DANS LE BADGE, ET C'EST LE POINT.
+#: Un badge est un element de mise en page : il ne survit ni au copier-coller,
+#: ni a l'extraction du texte, ni a la lecture du fichier archive. Le signal
+#: voyage avec le contenu qu'il qualifie, ou il ne protege personne.
+SIGNAL_NARRATION_DEGRADEE = (
+    "⚠️ RAPPORT DÉGRADÉ — le commentaire actuariel n'a pas été produit. "
+    "Ce qui suit est l'état brut du calcul, pas une analyse rédigée : il "
+    "n'engage aucun jugement professionnel et ne peut pas en tenir lieu.")
+
+
+def _narration_templates(n4, commentaire) -> tuple[str, str]:
+    """Le texte deterministe ET l'etat dans lequel il a ete obtenu.
+
+    ⚠️⚠️ CE N'ETAIT PAS UN CHOIX ENTRE DEUX TEXTES : C'EST UN SIGNAL DE PANNE.
+    L'ecriture d'origine — `_clean(commentaire) or _clean(jugement)` — rendait
+    les deux etats sous une meme sortie et une meme source `templates`. Un
+    rapport ampute de son commentaire affichait donc le badge d'un rapport
+    normal : la panne passait pour un fonctionnement ordinaire.
+
+    ⚠️ LE CAS EST RARE, ET LE DIRE EVITE DE SURESTIMER CE LOT. Mesure : le
+    repli ne se declenche JAMAIS depuis `agent.run()`. `generer_commentaire`
+    ne peut pas rendre vide (huit sections en dur, un seul `return`) ; sur
+    donnees degradees il LEVE (`KeyError`), et l'agent ne l'entoure d'aucun
+    `except` — le run tombe avant d'arriver ici. Aucun appelant de production
+    n'entre par `generer_html`/`export_word`. Ce lot ferme un cas rare.
+
+    ⚠️ ET LE JUGEMENT EST CONSERVE, PAS REMPLACE PAR UN REFUS. Mesure : ses
+    neuf grands nombres sont tous dans le commentaire, mais quand le
+    commentaire manque, il est tout ce qui reste. Le jeter priverait le
+    lecteur au lieu de l'avertir.
+    """
+    txt = _clean(commentaire)
+    if txt:
+        return txt, 'templates'
+    jugement = _clean(n4.get('jugement', ''))
+    if jugement:
+        return f'{SIGNAL_NARRATION_DEGRADEE}\n\n{jugement}', 'jugement_degrade'
+    return '', 'aucune'
 
 
 # =============================================================================
@@ -628,9 +668,13 @@ def _generer_narration(n2, n3, n4, commentaire, lob_label,
     except Exception:
         pass
     try:
-        txt = _narration_templates(n4, commentaire)
+        # ⚠️ LA SOURCE VIENT DE LA FONCTION QUI A CHOISI LE TEXTE. La retester
+        # ici ferait un SECOND site qui deciderait de l'etat — deux sources
+        # pour un meme fait, exactement la desynchronisation que ce chantier
+        # ferme ailleurs.
+        txt, src = _narration_templates(n4, commentaire)
         if txt:
-            return txt, 'templates', ''
+            return txt, src, ''
     except Exception:
         pass
     return '', 'aucune', ''
@@ -643,9 +687,19 @@ def _generer_narration(n2, n3, n4, commentaire, lob_label,
 #: ActuarIA Intelligence » — divergence de forme. Et surtout, le Word était
 #: gardé par `if source == 'claude_api'` : le chemin `templates`, LE SEUL qui
 #: s'exécute sans clé API, n'y publiait ni origine ni engagement.
+#: ⚠️ L'ENTREE `templates` N'EST PAS MODIFIEE, ET C'EST MESURE. Trois modules
+#: hors A7 — `rapport_epre`, `rapport_rvie2`, `rapport_vie` — la CITENT en
+#: prose pour dire que le libelle d'A7 est « deja honnete ». En changer le
+#: texte perimerait trois mentions dans deux autres directions. On AJOUTE un
+#: etat, on n'en reecrit aucun.
 _LIBELLE_SOURCE = {
     'claude_api': '✦ ActuarIA Intelligence',
     'templates':  '📝 Mode standard',
+    # ⚠️ IL DIT LA PANNE, PAS L'ORIGINE. Les trois autres libelles nomment ce
+    # qui a REDIGE le texte ; celui-ci nomme ce qui MANQUE. « Mode standard »
+    # sur un rapport ampute serait l'etiquette qui affirme plus que le
+    # document ne porte.
+    'jugement_degrade': '⚠️ Rapport dégradé — commentaire actuariel absent',
     'aucune':     '',
 }
 

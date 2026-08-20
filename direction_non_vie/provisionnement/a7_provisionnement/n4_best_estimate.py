@@ -2054,8 +2054,13 @@ class BestEstimateS2:
             )
 
         # ⚠️ CE TEXTE EST UN LIVRABLE SIGNÉ, PAS UN LOG. Il devient
-        # `n4['jugement']`, que `n5_rapport.corps_narratif` publie EN REPLI de
-        # la narration. Il affichait « ✅ VALIDÉE  CV=0.0%  dérive=0.0%
+        # `n4['jugement']`, que `n5_rapport._narration_templates` publie EN
+        # REPLI de la narration — précédé du signal de panne, car un rapport
+        # réduit à ce texte est un rapport DÉGRADÉ et doit le dire.
+        # ⚠️ LE NOM CITÉ ICI ÉTAIT MORT : `corps_narratif` n'existe plus, et
+        # qui la cherchait ne trouvait rien. Une mention en prose survit à un
+        # renommage que les symboles, eux, ont suivi.
+        # Il affichait « ✅ VALIDÉE  CV=0.0%  dérive=0.0%
         # score=80/100 » quand `_h2` n'avait testé AUCUNE colonne — le statut se
         # déduisait de `ok`, qui vaut True par défaut sur ce chemin.
         h2_statut = str(h2.get('statut',

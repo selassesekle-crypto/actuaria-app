@@ -2168,5 +2168,114 @@ class T_Verrou_Charge_Utile(unittest.TestCase):
         print('    OK C2-6 le verrou prouve la provenance, PAS la justesse')
 
 
+class T_Le_Repli_Du_Repli_Dit_Qu_Il_Est_Une_Panne(unittest.TestCase):
+    """⚠️ UN RAPPORT DEGRADE QUI NE LE DIT PAS FAIT PASSER UNE PANNE POUR UN
+    FONCTIONNEMENT NORMAL.
+
+    Le repli `commentaire or jugement` rendait les deux etats sous une meme
+    source `templates` : le badge d'un rapport ampute etait celui d'un
+    rapport complet.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.r = AgentA7Provisionnement(verbose=False).run(
+            source=np.array(GENINS, dtype=float), mode_declare='cumule',
+            primes=_exposition(GENINS), n_sim_bootstrap=60, seed=42,
+            generer_graphiques=False)
+        cls.n4 = cls.r['n4']
+        cls.comm = cls.r['commentaire']
+
+    # ── les trois etats sont distincts ────────────────────────────────────
+    def test_commentaire_present_aucun_signal_de_panne(self):
+        txt, src = RAPP_MOD._narration_templates(self.n4, self.comm)
+        self.assertEqual(src, 'templates')
+        self.assertNotIn(RAPP_MOD.SIGNAL_NARRATION_DEGRADEE, txt,
+                         'un rapport complet se declarerait degrade')
+        print('    OK REPLI-1 commentaire present -> templates, sans signal')
+
+    def test_commentaire_absent_le_signal_est_dans_le_texte(self):
+        txt, src = RAPP_MOD._narration_templates(self.n4, '')
+        self.assertEqual(src, 'jugement_degrade',
+                         'la panne passe pour un mode normal')
+        self.assertIn(RAPP_MOD.SIGNAL_NARRATION_DEGRADEE, txt,
+                      'le texte degrade ne dit pas ce qu il est')
+        # ⚠️ DANS LE TEXTE, PAS SEULEMENT DANS LE BADGE : le signal doit
+        # survivre au copier-coller et a la lecture du fichier archive.
+        self.assertTrue(txt.startswith(RAPP_MOD.SIGNAL_NARRATION_DEGRADEE),
+                        'le signal doit precede le contenu, pas le suivre')
+        print('    OK REPLI-2 commentaire absent -> signal EN TETE du texte')
+
+    def test_le_jugement_est_conserve_pas_remplace(self):
+        # ⚠️ ON AVERTIT, ON NE PRIVE PAS. Quand le commentaire manque, le
+        # jugement est tout ce qui reste : le jeter couterait au lecteur.
+        txt, _ = RAPP_MOD._narration_templates(self.n4, '')
+        for temoin in ('BEST ESTIMATE', 'SCR PROVISIONS'):
+            self.assertIn(temoin, txt,
+                          f'{temoin} perdu : le repli prive au lieu d avertir')
+        print('    OK REPLI-3 le jugement est conserve sous le signal')
+
+    def test_ni_commentaire_ni_jugement_rend_aucune(self):
+        txt, src = RAPP_MOD._narration_templates({}, '')
+        self.assertEqual((txt, src), ('', 'aucune'))
+        print('    OK REPLI-4 rien a publier -> aucune, sans signal orphelin')
+
+    # ── le badge suit, et il nomme la panne ───────────────────────────────
+    def test_le_badge_distingue_la_panne_du_mode_normal(self):
+        degrade = RAPP_MOD.badge_narration('jugement_degrade')
+        normal = RAPP_MOD.badge_narration('templates')
+        self.assertTrue(degrade, 'aucun badge sur un rapport degrade')
+        self.assertNotEqual(degrade, normal,
+                            'le badge ne distingue pas la panne')
+        self.assertIn('dégradé', degrade.lower())
+        print(f'    OK REPLI-5 badge degrade distinct : {degrade[:52]}')
+
+    def test_l_entree_templates_n_a_pas_change(self):
+        # ⚠️ TROIS MODULES HORS A7 CITENT CE LIBELLE EN PROSE pour dire qu il
+        # est « deja honnete ». Le reecrire perimerait leurs mentions.
+        self.assertEqual(RAPP_MOD._LIBELLE_SOURCE['templates'],
+                         '📝 Mode standard')
+        print('    OK REPLI-6 `templates` intact — 3 mentions hors A7 saines')
+
+    # ── le signal atteint les DEUX documents signes ───────────────────────
+    def test_le_signal_atteint_le_html_et_le_word(self):
+        from docx import Document
+        txt, src = RAPP_MOD._narration_templates(self.n4, '')
+        html = RAPP_MOD.export_html(
+            self.r['n1'], self.r['n2'], self.r['n3'], self.n4,
+            narration=txt, source_narration=src)
+        self.assertIn('RAPPORT DÉGRADÉ', html,
+                      'le HTML signe ne dit pas qu il est degrade')
+        w = RAPP_MOD.export_word(
+            self.r['n1'], self.r['n2'], self.r['n3'], self.n4,
+            narration=txt, source_narration=src)
+        mot = '\n'.join(p.text for p in Document(io.BytesIO(w)).paragraphs)
+        self.assertIn('RAPPORT DÉGRADÉ', mot,
+                      'le Word transmis au CAC ne dit pas qu il est degrade')
+        print('    OK REPLI-7 le signal est dans le HTML ET dans le Word')
+
+    # ── l audit trail porte l etat ────────────────────────────────────────
+    def test_l_audit_trail_porte_la_source_degradee(self):
+        ctrl = RAPP_MOD.controle_narration('peu importe', 'jugement_degrade', '')
+        self.assertEqual(ctrl['source'], 'jugement_degrade',
+                         'l audit ne conserve pas la trace de la panne')
+        print('    OK REPLI-8 la source degradee entre dans l audit trail')
+
+    # ── et le cas est RARE : la production ne l atteint pas ───────────────
+    def test_un_run_reel_ne_produit_jamais_l_etat_degrade(self):
+        # ⚠️ CE LOT FERME UN CAS RARE, ET LE VERROUILLER EVITE DE LE
+        # SURESTIMER. `generer_commentaire` ne peut pas rendre vide : huit
+        # sections en dur, un seul `return`. Sur donnees degradees il LEVE,
+        # et l agent ne l entoure d aucun `except` — le run tombe avant.
+        self.assertTrue(self.comm.strip(),
+                        'un run reel a rendu un commentaire vide')
+        _, src = RAPP_MOD._narration_templates(self.n4, self.comm)
+        self.assertEqual(src, 'templates',
+                         'un run reel est passe par le chemin degrade')
+        with self.assertRaises(KeyError):
+            COMM_MOD.generer_commentaire(n1={}, n2={}, n3={}, n4={})
+        print('    OK REPLI-9 cas rare : un run reel ne degrade jamais')
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=1)
