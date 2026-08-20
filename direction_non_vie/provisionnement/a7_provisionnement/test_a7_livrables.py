@@ -38,10 +38,12 @@ from direction_non_vie.provisionnement.a7_provisionnement.n5_commentaire import 
 
 from direction_non_vie.provisionnement.a7_provisionnement.agent import (
     _TAILLE_MIN_LIVRABLE,
+    PORTEE_ARCHIVE,
     AgentA7Provisionnement,
     _dependance_absente,
     _produire_livrable,
     etiquette_methode_grands,
+    verifier_archive,
 )
 from direction_non_vie.provisionnement.a7_provisionnement.config.lob_config import (
     LOB_CONFIG,
@@ -1762,6 +1764,159 @@ class T_Verrou_C2_Branche_Sur_L_Audit(unittest.TestCase):
         c = self._audit_sur_disque(d)['controle_narration']
         self.assertGreaterEqual(c['n_orphelins'], 1)
         print('    OK C2B-5 il journalise, il ne leve pas')
+
+
+# =============================================================================
+#  C3 — LE DOSSIER CONSERVE ET VERIFIABLE
+# =============================================================================
+#
+#  ⚠️⚠️ MESURE QUI A OUVERT CE BLOC : un run produit 344 118 octets -- 1,07 Mo
+#  avec les figures reelles -- et en ecrivait 7 169, l'audit trail SEUL.
+#  97,9 % de ce qui est produit disparaissait a la fin du run. Les trois
+#  documents ne survivaient que si l'actuaire cliquait sur un bouton de
+#  telechargement : la conservation du dossier signe reposait sur un clic.
+#
+#  ⚠️ ET L'EMPREINTE EST LE CŒUR, PAS L'ECRITURE. Un fichier ecrit sans
+#  empreinte ne prouve rien : rien n'interdit de le remplacer. C'est pourquoi
+#  l'ALTERATION PLANTEE est la condition d'acceptation du lot -- modifier UN
+#  octet doit faire echouer la verification.
+#
+#  ⚠️ CE QUE CE LOT NE FAIT PAS, et le module le dit aux trois endroits ou on
+#  pourrait croire le contraire : un dossier CONSERVE ET VERIFIABLE n'est pas
+#  un dossier OPPOSABLE au sens juridique. La signature reste hors du systeme.
+
+
+class T_C3_Le_Dossier_Est_Conserve_Et_Verifiable(unittest.TestCase):
+    """⚠️ SANS EMPREINTE, UN FICHIER ECRIT NE PROUVE RIEN."""
+
+    @classmethod
+    def setUpClass(cls):
+        import tempfile
+        cls.dir = tempfile.mkdtemp()
+        with kaleido_declare(True), rendeur_substitue():
+            cls.r = AgentA7Provisionnement(
+                models_path=cls.dir, audit_path=cls.dir, verbose=False).run(
+                source=np.array(GENINS, dtype=float), mode_declare='cumule',
+                primes=_exposition(GENINS), n_sim_bootstrap=60, seed=42,
+                generer_graphiques=True, generer_word=True, archiver=True)
+        cls.audit = cls._audit(cls.dir)
+        cls.archive = cls.audit['archive']
+
+    @staticmethod
+    def _audit(dossier):
+        import glob
+        import json
+        f = [x for x in glob.glob(os.path.join(dossier, '*.json'))]
+        with open(f[0], encoding='utf-8') as fh:
+            return json.load(fh)
+
+    # ── P1 : le document EXISTE apres le run ────────────────────────────────
+    def test_p1_les_livrables_sont_ecrits_sur_disque(self):
+        fichiers = self.archive['fichiers']
+        self.assertEqual(sorted(fichiers), ['commentaire.txt', 'donnees.xlsx',
+                                            'rapport.docx', 'rapport.html'])
+        for nom, meta in fichiers.items():
+            chemin = os.path.join(self.archive['dossier'], nom)
+            self.assertTrue(os.path.exists(chemin), nom)
+            self.assertEqual(os.path.getsize(chemin), meta['octets'], nom)
+        total = sum(m['octets'] for m in fichiers.values())
+        self.assertGreater(total, 300_000, 'le dossier est anormalement leger')
+        print(f'    OK C3-1 {len(fichiers)} livrables ecrits, {total:,} octets')
+
+    # ── P2 : il est RETROUVABLE par son audit_id ────────────────────────────
+    def test_p2_le_dossier_porte_l_audit_id(self):
+        self.assertIn(self.audit['audit_id'],
+                      os.path.basename(self.archive['dossier']))
+        print('    OK C3-2 le dossier porte l audit_id')
+
+    # ── P3 : LE CŒUR — il est INALTERE, et l'alteration se voit ─────────────
+    def test_p3_l_alteration_d_un_seul_octet_est_detectee(self):
+        # ⚠️ LA CONDITION D'ACCEPTATION DU LOT. Un archivage qui ne detecte
+        # pas l'alteration ne vaut pas mieux qu'un fichier sans empreinte --
+        # il ATTESTE la conservation sans la prouver.
+        v = verifier_archive(self.archive)
+        self.assertTrue(v['verifiable'])
+        self.assertTrue(v['intact'], v['ecarts'])
+
+        cible = os.path.join(self.archive['dossier'], 'commentaire.txt')
+        octets = open(cible, 'rb').read()
+        try:
+            with open(cible, 'wb') as fh:      # UN SEUL octet change
+                fh.write(octets[:-1] + b'X')
+            v2 = verifier_archive(self.archive)
+            self.assertFalse(v2['intact'], 'une alteration passe inapercue')
+            self.assertEqual(len(v2['ecarts']), 1)
+            self.assertIn('altere', v2['ecarts'][0])
+        finally:
+            with open(cible, 'wb') as fh:
+                fh.write(octets)
+        self.assertTrue(verifier_archive(self.archive)['intact'],
+                        'le fichier n a pas ete restaure')
+        print('    OK C3-3 un octet modifie fait echouer la verification')
+
+    def test_p3bis_un_fichier_retire_est_detecte(self):
+        import shutil
+        cible = os.path.join(self.archive['dossier'], 'donnees.xlsx')
+        garde = cible + '.garde'
+        shutil.move(cible, garde)
+        try:
+            v = verifier_archive(self.archive)
+            self.assertFalse(v['intact'])
+            self.assertIn('absent', v['ecarts'][0])
+        finally:
+            shutil.move(garde, cible)
+        print('    OK C3-3b un fichier retire est detecte')
+
+    # ── P4 : il est RELIE a son audit trail ─────────────────────────────────
+    def test_p4_les_empreintes_vivent_dans_l_audit_archive(self):
+        # ⚠️ DANS L'AUDIT, PAS A COTE : c'est le seul fichier ecrit a chaque
+        # run, donc le seul qui puisse porter de quoi verifier les autres.
+        for nom, meta in self.archive['fichiers'].items():
+            self.assertEqual(len(meta['sha256']), 64, nom)
+            self.assertRegex(meta['sha256'], r'^[0-9a-f]{64}$', nom)
+        print('    OK C3-4 les empreintes SHA-256 sont dans l audit')
+
+    # ── LA PORTEE, ECRITE LA OU ON POURRAIT CROIRE LE CONTRAIRE ─────────────
+    def test_la_portee_est_publiee_et_ne_promet_pas_l_opposabilite(self):
+        # ⚠️ TROIS ENDROITS : la constante, l'audit archive, et le verdict de
+        # `verifier_archive`. Un mecanisme qui laisserait croire qu'il rend un
+        # dossier OPPOSABLE serait exactement ce que ce chantier combat.
+        for ou, texte in (('archive', self.archive.get('porte', '')),
+                          ('verdict', verifier_archive(self.archive)['porte']),
+                          ('constante', PORTEE_ARCHIVE)):
+            self.assertIn('verifiable', texte, ou)
+            self.assertIn('signature', texte, ou)
+            self.assertIn('hors du systeme', texte, ou)
+        print('    OK C3-5 la portee est publiee aux trois endroits')
+
+    # ── SANS ARCHIVAGE : rien n'est ecrit, et rien n'est promis ─────────────
+    def test_sans_archiver_rien_n_est_ecrit_et_rien_n_est_affirme(self):
+        # ⚠️ CONTRE-EPREUVE : `archiver=False` par defaut, sinon la gate
+        # ecrirait 1,07 Mo a chacun de ses 1 232 tests. Et `verifier_archive`
+        # doit rendre `verifiable: False` -- JAMAIS `intact: True`, qui se
+        # lirait << verifie, tout va bien >>.
+        import tempfile
+        d = tempfile.mkdtemp()
+        r = AgentA7Provisionnement(models_path=d, audit_path=d,
+                                   verbose=False).run(
+            source=np.array(GENINS, dtype=float), mode_declare='cumule',
+            primes=_exposition(GENINS), n_sim_bootstrap=60, seed=42,
+            generer_graphiques=False)
+        self.assertTrue(r.get('success'))
+        ecrits = [x for x in os.listdir(d) if not x.endswith('.json')]
+        self.assertEqual(ecrits, [], f'des fichiers ont ete ecrits : {ecrits}')
+        v = verifier_archive(self._audit(d)['archive'])
+        self.assertFalse(v['verifiable'])
+        self.assertIsNone(v['intact'], 'un dossier absent se dit INTACT')
+        print('    OK C3-6 sans archivage : rien ecrit, rien affirme')
+
+    # ── AUCUN EURO DEPLACE ──────────────────────────────────────────────────
+    def test_aucun_agregat_n_a_bouge(self):
+        n4 = self.r['n4']
+        self.assertEqual(n4['best_estimate'], 14830899.0)
+        self.assertEqual(n4['scr']['scr_provisions'], 4894197.0)
+        self.assertEqual(n4['reserve_p90'], 18053284.0)
+        print('    OK C3-7 BE / SCR / P90 inchanges')
 
 
 # =============================================================================

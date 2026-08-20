@@ -27,6 +27,7 @@
 #
 # =============================================================================
 
+import hashlib
 import json
 import logging
 import traceback
@@ -158,6 +159,56 @@ def etiquette_methode_grands(methodes_incluses) -> tuple:
 #: certain de tenir un repli, pas un document. Le seuil ne sert qu'à transformer
 #: un « 0 octet » silencieux en anomalie déclarée — il ne juge pas la qualité.
 _TAILLE_MIN_LIVRABLE = 512
+
+#: ⚠️⚠️ CE QUE L'ARCHIVAGE PRODUIT, ET CE QU'IL NE PRODUIT PAS. Cette phrase
+#: est écrite ICI, publiée dans l'audit trail et rendue par
+#: `verifier_archive` — c'est-à-dire aux TROIS endroits où quelqu'un pourrait
+#: croire le contraire, jamais dans un en-tête qu'on ne lit pas.
+#:
+#: Un dossier CONSERVÉ ET VÉRIFIABLE n'est pas un dossier OPPOSABLE au sens
+#: juridique. L'empreinte prouve que le fichier relu est celui qui a été
+#: écrit ; elle ne prouve NI que l'actuaire l'a signé, NI qu'il en assume le
+#: contenu. La signature reste hors du système : `trace_relecture` publie un
+#: ÉTAT de relecture, pas une signature. Confondre les deux ferait de ce
+#: mécanisme exactement ce que ce chantier combat — un dispositif qui atteste
+#: plus qu'il ne porte.
+PORTEE_ARCHIVE = (
+    "dossier conserve et verifiable : l'empreinte prouve que le fichier relu "
+    "est celui qui a ete ecrit, jamais qu'il a ete signe ni assume. La "
+    "signature de l'actuaire reste hors du systeme."
+)
+
+
+def verifier_archive(archive: dict) -> dict:
+    """Le dossier archivé est-il intact ? Relit les fichiers, compare.
+
+    ⚠️ SANS CETTE FONCTION, L'EMPREINTE EST DÉCORATIVE. Écrire un SHA-256
+    dans un audit trail que personne ne sait vérifier ne prouve rien de plus
+    qu'un fichier sans empreinte — c'est la forme du défaut que ce chantier a
+    nommée sur le détecteur SCR : un contrôle qui atteste surveiller.
+
+    Rend `{'verifiable', 'intact', 'ecarts', 'porte'}`. `ecarts` nomme chaque
+    fichier manquant ou altéré ; `intact` est False dès le premier.
+    """
+    fichiers = (archive or {}).get('fichiers') or {}
+    dossier = (archive or {}).get('dossier')
+    if not fichiers or not dossier:
+        return {'verifiable': False, 'intact': None, 'ecarts': [],
+                'raison': "aucun dossier archive pour ce run",
+                'porte': PORTEE_ARCHIVE}
+    ecarts = []
+    for nom, attendu in fichiers.items():
+        chemin = Path(dossier) / nom
+        if not chemin.exists():
+            ecarts.append(f'{nom} : absent du dossier')
+            continue
+        octets = chemin.read_bytes()
+        if hashlib.sha256(octets).hexdigest() != attendu.get('sha256'):
+            ecarts.append(f'{nom} : empreinte differente — fichier altere')
+        elif len(octets) != attendu.get('octets'):
+            ecarts.append(f'{nom} : taille differente')
+    return {'verifiable': True, 'intact': not ecarts, 'ecarts': ecarts,
+            'porte': PORTEE_ARCHIVE}
 
 
 #: Bibliothèque optionnelle dont chaque export binaire dépend. Vérifiée AVANT
@@ -326,6 +377,12 @@ class AgentA7Provisionnement:
         generer_graphiques_flag: bool   = True,
         generer_word:     bool          = True,
         generer_html:     bool          = True,
+        # ⚠️ FAUX PAR DÉFAUT, ET C'EST UN ARBITRAGE MESURÉ. Un run produit
+        # 344 118 octets — 1,07 Mo avec les figures réelles. Les écrire à
+        # CHAQUE run, y compris aux 1 232 tests de la gate, coûterait un
+        # gigaoctet par passage pour des dossiers que personne ne relira.
+        # L'application l'active ; la gate ne le paie pas.
+        archiver:         bool          = False,
         # ── Compatibilité ancienne API ────────────────────────────────────────
         triangle                        = None,
         result_a2                       = None,
@@ -874,11 +931,23 @@ class AgentA7Provisionnement:
                 ('word', err_wd), ('html', err_html),
                 ('figures_word', err_fig_word)) if v}
 
+            # ── Archivage du dossier (bloc C3) ────────────────────────────
+            # ⚠️ AVANT L'AUDIT, ET C'EST L'ORDRE QUI COMPTE : les empreintes
+            # doivent ENTRER dans l'audit trail. Un dossier ecrit dont
+            # l'empreinte vit ailleurs ne se verifie pas.
+            archive, err_archive = ({}, None)
+            if archiver:
+                archive, err_archive = self._archiver_dossier(
+                    audit_id, html_txt, word_bytes, excel_bytes, commentaire)
+                if err_archive:
+                    livrables_erreurs['archive'] = err_archive
+
             # Audit trail
             audit = self._audit_trail(
                 audit_id, n1, n2, n3, n4,
                 n4['statut'], t_debut, ref_client, lob,
                 controle_narration=_ctrl_narr,
+                archive=archive,
             )
             self._sauvegarder_audit(audit_id, audit)
 
@@ -1297,6 +1366,7 @@ class AgentA7Provisionnement:
         ref_client: str,
         lob:        str,
         controle_narration: dict | None = None,
+        archive: dict | None = None,
     ) -> Dict:
         """Génère l'audit trail JSON complet et traçable ACPR."""
         duree = (datetime.now() - t_debut).total_seconds()
@@ -1315,6 +1385,13 @@ class AgentA7Provisionnement:
             # l'ACPR. Un journal que personne ne consulte n'est pas un
             # contrôle — c'est la seule raison du choix de cet emplacement.
             'controle_narration': controle_narration or {},
+
+            # ⚠️ LES EMPREINTES DU DOSSIER, DANS LE FICHIER QUI SURVIT.
+            # L'audit trail est le seul ecrit sur disque a chaque run :
+            # c'est donc lui qui doit porter de quoi verifier les autres.
+            # Vide quand `archiver=False` -- et `verifier_archive` rend
+            # alors `verifiable: False`, jamais `intact: True`.
+            'archive': archive or {},
 
             'n1_resume': {
                 'taille':    n1.get('taille'),
@@ -1396,3 +1473,62 @@ class AgentA7Provisionnement:
                 json.dump(audit, f, indent=2, ensure_ascii=False, default=str)
         except Exception as e:
             logger.warning(f"Audit non sauvegardé : {e}")
+
+    # =========================================================================
+    #  ARCHIVAGE — LE DOSSIER CONSERVÉ ET VÉRIFIABLE  (bloc C3)
+    # =========================================================================
+
+    def _archiver_dossier(self, audit_id, html, word, excel, commentaire):
+        """Écrit les livrables et rend leurs EMPREINTES. `(archive, erreur)`.
+
+        ⚠️⚠️ MESURE QUI A OUVERT CE BLOC : un run produit 344 118 octets
+        — 1,07 Mo avec les figures réelles — et en écrit 7 169, l'audit trail
+        SEUL. 97,9 % de ce qui est produit disparaît à la fin du run. Les
+        trois documents ne survivaient que si l'actuaire cliquait sur
+        `st.download_button` : la conservation du dossier signé reposait sur
+        un clic.
+
+        ⚠️ L'EMPREINTE EST LE CŒUR, PAS L'ÉCRITURE. Un fichier écrit sans
+        empreinte ne prouve rien — rien n'interdit de le remplacer. Le
+        SHA-256 de chaque livrable entre dans l'audit trail : c'est lui qui
+        transforme trois fichiers en un DOSSIER, et il ne vaut que parce que
+        `verifier_archive` sait s'en servir.
+        """
+        try:
+            dossier = self.audit_path / audit_id
+            dossier.mkdir(parents=True, exist_ok=True)
+            pieces = (
+                ('rapport.html',    (html or '').encode('utf-8')),
+                ('rapport.docx',    word or b''),
+                ('donnees.xlsx',    excel or b''),
+                ('commentaire.txt', (commentaire or '').encode('utf-8')),
+            )
+            fichiers = {}
+            for nom, octets in pieces:
+                if not octets:
+                    continue          # un livrable absent n'est pas archivé
+                (dossier / nom).write_bytes(octets)
+                fichiers[nom] = {
+                    'octets': len(octets),
+                    'sha256': hashlib.sha256(octets).hexdigest(),
+                }
+            return {
+                'dossier':  str(dossier),
+                'fichiers': fichiers,
+                'porte':    PORTEE_ARCHIVE,
+            }, None
+        except OSError as e:
+            # ⚠️ `OSError` ET NON `Exception`, ET C'EST UN CHOIX DE FOND.
+            # Un `except` nu attraperait aussi un bug de CE code — un
+            # `TypeError` sur `octets`, par exemple — et le publierait comme
+            # un « echec d'ecriture ». Le dossier serait declare non archive
+            # pour une raison fausse, et le vrai defaut resterait invisible.
+            # Seuls les echecs du DISQUE sont rattrapes : plein, droits,
+            # chemin trop long. Le reste doit tomber bruyamment.
+            # ⚠️ L'ÉCHEC REMONTE, IL N'EST PAS AVALÉ. `_sauvegarder_audit`
+            # se contente d'un `logger.warning` — acceptable pour un journal,
+            # PAS pour un archivage : un dossier qu'on croit conservé et qui
+            # ne l'est pas est pire que pas d'archivage du tout. Il rejoint
+            # `livrables_erreurs`, le canal que l'appelant lit déjà.
+            logger.warning(f"Archivage échoué : {e}")
+            return {}, f'echec: {e}'
