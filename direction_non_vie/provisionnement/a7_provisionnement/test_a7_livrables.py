@@ -33,7 +33,13 @@ from direction_non_vie.provisionnement.a7_provisionnement.methodes_be import (
     motif_exclusion,
 )
 from direction_non_vie.provisionnement.a7_provisionnement.n5_commentaire import (
+    _LOB_HANDLERS,
+    _narration_lob,
     generer_commentaire,
+)
+from direction_non_vie.provisionnement.a7_provisionnement.config.lob_config import (
+    LOB_CONFIG,
+    get_lob_config,
 )
 
 from direction_non_vie.provisionnement.a7_provisionnement.agent import (
@@ -1917,6 +1923,116 @@ class T_C3_Le_Dossier_Est_Conserve_Et_Verifiable(unittest.TestCase):
         self.assertEqual(n4['scr']['scr_provisions'], 4894197.0)
         self.assertEqual(n4['reserve_p90'], 18053284.0)
         print('    OK C3-7 BE / SCR / P90 inchanges')
+
+
+# =============================================================================
+#  D3 — UN SILENCE DOCUMENTE SE PUBLIE, IL NE SE CACHE PAS
+# =============================================================================
+#
+#  ⚠️⚠️ << BRANCHE NON IDENTIFIEE >> ETAIT FAUX POUR 7 LoB SUR 15. Mesure :
+#  quinze branches sont CONFIGUREES -- seuils H2, sigma_EIOPA, segment S2,
+#  reference de marche -- et seules HUIT ont un bloc de prose. Les sept autres
+#  tombaient sur un repli qui les declarait INCONNUES alors que le module lit
+#  leurs parametres et les applique.
+#
+#  ⚠️ DEUX FAITS DIFFERENTS, ET LE SECOND SE PUBLIE : << branche inconnue >>
+#  n'est pas << branche configuree sans prose documentee >>. Le taire derriere
+#  le premier ferait croire a une lacune de PARAMETRAGE qui n'existe pas.
+#
+#  ⚠️ ET L'INTITULE DU PLAN ETAIT FAUX : D3 disait << sourcer les 14 branches >>.
+#  Il n'y a rien a sourcer -- le referentiel est complet. Il y a une VALEUR a
+#  CONSOMMER et un SILENCE a DECLARER.
+
+
+class T_D3_Branche_Configuree_Sans_Prose(unittest.TestCase):
+    """⚠️ CONFIGUREE SANS PROSE N'EST PAS INCONNUE."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.r = AgentA7Provisionnement(verbose=False).run(
+            source=np.array(GENINS, dtype=float), mode_declare='cumule',
+            primes=_exposition(GENINS), n_sim_bootstrap=60, seed=42,
+            generer_graphiques=False)
+
+    def _contexte(self, lob):
+        return _narration_lob(lob, self.r['n1'], self.r['n2'],
+                              self.r['n3'], self.r['n4'])['contexte']
+
+    # ── D3-1 : l'ecart qui a ouvert le lot, mesure ──────────────────────────
+    def test_sept_lob_sont_configurees_sans_prose(self):
+        # ⚠️ SI CET ECART DISPARAIT, LE LOT PERD SON OBJET : le test le dit
+        # plutot que de le supposer. Selasse peut rediger ces proses quand il
+        # veut -- ce compte baissera, et c'est le but.
+        sans = set(LOB_CONFIG) - set(_LOB_HANDLERS)
+        self.assertTrue(sans, 'toutes les LoB ont une prose : lot sans objet')
+        self.assertEqual(len(LOB_CONFIG), 15)
+        print(f'    OK D3-1 {len(sans)} LoB configurees sans prose redigee')
+
+    # ── D3-2 : LE CŒUR — les deux etats ne se confondent plus ───────────────
+    def test_une_branche_configuree_n_est_plus_dite_inconnue(self):
+        for lob in sorted(set(LOB_CONFIG) - set(_LOB_HANDLERS)):
+            c = self._contexte(lob)
+            self.assertIn('CONFIGURÉE', c, lob)
+            self.assertNotIn('NON IDENTIFIÉE', c,
+                             f'{lob} est configuree et se dit inconnue')
+            # Et le silence est NOMME, pas comble par du texte plausible.
+            self.assertIn('SANS ANALYSE RÉDIGÉE', c, lob)
+            self.assertIn(LOB_CONFIG[lob]['label'], c, lob)
+        print('    OK D3-2 une branche configuree ne se dit plus inconnue')
+
+    def test_une_branche_inconnue_se_dit_inconnue(self):
+        # ⚠️ CONTRE-EPREUVE : un correctif qui declarerait TOUT << configure >>
+        # serait aussi faux que l'inverse.
+        c = self._contexte('branche_qui_n_existe_pas')
+        self.assertIn('NON IDENTIFIÉE', c)
+        self.assertNotIn('SANS ANALYSE RÉDIGÉE', c)
+        print('    OK D3-3 une branche inconnue se dit inconnue')
+
+    # ── D3-4 : les seuils sont LUS, pas reecrits ────────────────────────────
+    def test_les_seuils_publies_sont_ceux_du_referentiel(self):
+        # ⚠️ L'ANCIEN TEXTE RECOPIAIT << H2 CV=15%, derive=20% >> A LA MAIN :
+        # juste pour `generique`, faux pour toute autre branche passant ici.
+        # Cat-Nat applique 25 % / 35 % -- l'ecart le plus large des quinze.
+        for lob in ('catastrophes_naturelles', 'mrh_inexistant', 'generique'):
+            cfg = get_lob_config(lob)
+            c = self._contexte(lob)
+            self.assertIn(f"CV<{cfg['h2_seuil_cv']:.0%}", c, lob)
+            self.assertIn(f"dérive<{cfg['h2_seuil_derive']:.0%}", c, lob)
+        cat = self._contexte('catastrophes_naturelles')
+        self.assertIn('CV<25%', cat)
+        self.assertIn('dérive<35%', cat)
+        print('    OK D3-4 les seuils viennent du referentiel, pas de la prose')
+
+    # ── D3-5 : aucune prose n'est inventee ──────────────────────────────────
+    def test_aucune_prose_de_branche_n_est_fabriquee(self):
+        # ⚠️ LE REFUS QUI FONDE CE LOT : ecrire << sur Credit/Caution, le rejet
+        # de H1 est frequent parce que... >> serait une affirmation sur un
+        # portefeuille reel, du meme genre que celles qu'un modele a inventees
+        # le 2026-06-24 et que ce chantier a passe une semaine a retirer.
+        for lob in sorted(set(LOB_CONFIG) - set(_LOB_HANDLERS)):
+            blocs = _narration_lob(lob, self.r['n1'], self.r['n2'],
+                                   self.r['n3'], self.r['n4'])
+            for cle in ('hypotheses', 'methodes', 'recommandations'):
+                self.assertEqual(blocs[cle], '',
+                                 f'{lob} : une prose a ete fabriquee en {cle}')
+        print('    OK D3-5 aucune prose de branche n est fabriquee')
+
+    # ── D3-6 : les 8 LoB redigees gardent leur prose ────────────────────────
+    def test_les_lob_redigees_ne_perdent_rien(self):
+        for lob in sorted(k for k in _LOB_HANDLERS if k != 'generique'):
+            c = self._contexte(lob)
+            self.assertNotIn('SANS ANALYSE RÉDIGÉE', c, lob)
+            self.assertGreater(len(c), 200, lob)
+        print('    OK D3-6 les LoB redigees gardent leur analyse')
+
+    def test_aucun_agregat_n_a_bouge(self):
+        # ⚠️ LES VALEURS DU RUN AVEC EXPOSITION, celui de `setUpClass`. La
+        # premiere version portait celles du run SANS primes (18 680 856) --
+        # une erreur de recopie, attrapee par le filet lui-meme.
+        n4 = self.r['n4']
+        self.assertEqual(n4['best_estimate'], 14830899.0)
+        self.assertEqual(n4['scr']['scr_provisions'], 4894197.0)
+        print('    OK D3-7 BE / SCR inchanges')
 
 
 # =============================================================================

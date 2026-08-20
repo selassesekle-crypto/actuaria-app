@@ -53,6 +53,9 @@ from .n4_best_estimate import (CLE_BOOT, CLE_COMPOSE, CLE_MACK,
                                libelle_percentiles, marque_retenue)
 from .methodes_be import (ORDRE_AFFICHAGE, libelle, motif_exclusion,
                           reserve)
+# Le référentiel des branches — SOURCE UNIQUE des seuils. Le repli les
+# recopiait à la main, ce qui n'était juste que pour la branche générique.
+from .config.lob_config import LOB_CONFIG, get_lob_config
 
 logger = logging.getLogger('actuaria.a7')
 
@@ -1139,7 +1142,12 @@ def _narration_lob(
           'recommandations': paragraphe §8 — actions LoB spécifiques
         }
     """
-    fn = _LOB_HANDLERS.get(lob, _lob_generique)
+    # ⚠️ LE REPLI REÇOIT LA LoB, LES HANDLERS NON — et c'est ce qui lui
+    # manquait pour distinguer « branche inconnue » de « branche configurée
+    # sans prose ». Sans ce nom, il ne pouvait que déclarer l'ignorance.
+    fn = _LOB_HANDLERS.get(lob)
+    if fn is None:
+        return _lob_generique(n1, n2, n3, n4, lob=lob)
     return fn(n1, n2, n3, n4)
 
 
@@ -1983,21 +1991,60 @@ def _narration_comparatif(n4: Dict, resultats_precedents: Optional[Dict]) -> str
 
 # ── Registre des handlers LoB ─────────────────────────────────────────────────
 
-def _lob_generique(n1, n2, n3, n4):
-    """Fallback — narration générique sans spécificité branche."""
+def _lob_generique(n1, n2, n3, n4, lob: str = 'generique'):
+    """Le repli — et il distingue DEUX FAITS que l'ancien confondait.
+
+    ⚠️⚠️ « BRANCHE NON IDENTIFIÉE » ÉTAIT FAUX POUR 7 LoB SUR 15. Mesuré :
+    quinze branches sont CONFIGURÉES — seuils H2, σ_EIOPA, segment S2,
+    référence de marché — et seules HUIT ont un bloc de prose. Les sept
+    autres (Cat-Nat, Crédit/Caution, Transport, Incendie, Protection
+    Juridique, Accidents Corporels, Dommage Corporel Individuel) tombaient
+    donc sur un repli qui les déclarait inconnues alors que le module lit
+    leurs paramètres et les applique.
+
+    ⚠️ CE SONT DEUX FAITS DIFFÉRENTS, ET LE SECOND SE PUBLIE :
+      · branche INCONNUE          -> la configuration générique s'applique ;
+      · branche CONFIGURÉE, SANS PROSE -> ses propres paramètres s'appliquent,
+        et c'est l'ANALYSE RÉDIGÉE qui manque. Un silence documenté n'est pas
+        un manque à combler par du texte plausible : c'est un fait à dire.
+        Le taire derrière « non identifiée » ferait croire à une lacune de
+        paramétrage qui n'existe pas.
+
+    ⚠️ ET LES SEUILS SE LISENT, ILS NE SE RÉÉCRIVENT PAS. L'ancien texte les
+    recopiait à la main (« H2 CV=15%, dérive=20% ») : juste pour `generique`,
+    et faux pour toute autre branche qui passerait ici. Ils viennent
+    désormais de `get_lob_config`, la source unique — comme le SCR les lit
+    déjà.
+    """
+    cfg     = get_lob_config(lob)
+    connue  = lob in LOB_CONFIG
+    redigee = sorted(k for k in _LOB_HANDLERS if k != 'generique')
+    seuils  = (f"Les seuils appliqués sont ceux de la branche : "
+               f"H2 CV<{cfg['h2_seuil_cv']:.0%}, "
+               f"dérive<{cfg['h2_seuil_derive']:.0%}, "
+               f"σ(LoB) = {cfg['sigma_eiopa']:.1%}. ")
+
+    if connue and lob != 'generique':
+        contexte = (
+            f"BRANCHE CONFIGURÉE, SANS ANALYSE RÉDIGÉE — {cfg['label']}. "
+            + seuils
+            + "Aucune spécificité de branche n'est documentée pour celle-ci : "
+            "le rapport ne publie donc AUCUN commentaire de branche, plutôt "
+            "qu'un commentaire générique qui aurait l'apparence d'une analyse. "
+            "Les branches disposant d'une analyse rédigée sont : "
+            + ', '.join(redigee) + "."
+        )
+    else:
+        contexte = (
+            "BRANCHE NON IDENTIFIÉE dans la configuration ActuarIA. "
+            + seuils
+            + "Pour une analyse adaptée, préciser le paramètre 'lob' dans "
+            "l'appel à run() — branches disposant d'une analyse rédigée : "
+            + ', '.join(redigee) + "."
+        )
+
     return {
-        'contexte': (
-            "Branche non identifiée spécifiquement dans la configuration ActuarIA. "
-            # ⚠️ SEUL LE MOT DUPLIQUÉ EST CORRIGÉ ICI. Cette phrase reste
-            # FAUSSE sur le fond — les seuils annoncés ne sont pas ceux
-            # appliqués (Cat-Nat : 25 % / 35 %), et la branche EST configurée.
-            # Le fond appartient au lot A4.
-            "Les seuils génériques (H2 CV=15%, dérive=20%) sont appliqués. "
-            "Pour une analyse adaptée à votre branche, préciser le paramètre "
-            "'lob' dans l'appel à run() parmi : mrh, rc_auto_materiel, "
-            "rc_auto_corporels, rc_generale, rc_medicale, construction, "
-            "marine_aviation_transport."
-        ),
+        'contexte':        contexte,
         'hypotheses':      '',
         'methodes':        '',
         'recommandations': '',
