@@ -38,6 +38,7 @@ from typing import Dict, List, Optional
 import numpy as np
 
 # ── Imports modules A7 ───────────────────────────────────────────────────────
+from core import arrete as _arrete
 from direction_non_vie.services.nv_triangle import preparer_pour_agent
 from .n2_hypotheses     import HypothesesValidator
 from .n2_hypotheses_clm  import verifier_hypotheses_clm
@@ -438,6 +439,35 @@ class AgentA7Provisionnement:
                         "Aucune donnée fournie. "
                         "Passez source=votre_triangle ou source=df_sinistres."
                     )
+
+            # ── Date d'arrete : NORMALISEE A LA FRONTIERE ─────────────────────
+            # ⚠️⚠️ LE MEME PARAMETRE ETAIT LU PAR DEUX CONSOMMATEURS AUX
+            # EXIGENCES OPPOSEES. `n5_commentaire` le lit par `core.arrete` --
+            # qui accepte TOUS les formats de sa table, JJ/MM/AAAA compris.
+            # `courbe_rfr.date_reference` n'accepte que 'AAAA-MM-JJ'.
+            # ⚠️ AUCUN COMPTE N'EST ECRIT ICI, ET C'EST DELIBERE : la
+            # docstring de `arrete.lire` annoncait << les quatre formats >>
+            # quand la table en portait SEPT. Un nombre recopie derive.
+            # Avec << 30/06/2026 >>, le commentaire sortait
+            # JUSTE et le run TOMBAIT : les deux moities du meme rapport ne
+            # s'accordaient pas sur ce qu'est une date.
+            #
+            # ⚠️ ET LE REMEDE EXISTAIT DEJA, ECRIT POUR CE CAS : `arrete.iso`
+            # se documente comme << la forme qu'attend `age_courbe_mois` >>.
+            # Le module prevenait meme qu'elle << dort tant que personne ne
+            # lui fournit de date >>. A7 ne l'appelait pas.
+            #
+            # ⚠️ ON NORMALISE A L'ENTREE, ON NE TOUCHE PAS `courbe_rfr` :
+            # l'assouplir le rendrait tolerant a l'ambigu (01/02/2026 est-il
+            # janvier ou fevrier ?) pour un besoin qui n'existe qu'ici -- et
+            # onze autres consommateurs ne lui fournissent aucune date.
+            #
+            # ⚠️ UNE DATE INDECHIFFRABLE LEVE ICI, TOT, avec le message de
+            # `core.arrete` qui NOMME les formats acceptes. Elle tombait deja,
+            # mais six appels plus bas et sur un `ValueError` de `strptime`
+            # qui ne disait ni quel champ ni quelles formes sont admises.
+            if date_arrete:
+                date_arrete = _arrete.iso(_arrete.lire(date_arrete))
 
             # ── Config LoB ────────────────────────────────────────────────────
             cfg_lob   = get_lob_config(lob)

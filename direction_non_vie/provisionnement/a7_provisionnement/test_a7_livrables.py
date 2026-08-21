@@ -2974,5 +2974,86 @@ class T_B1_La_Regle_De_H1_Est_Celle_Du_Code(unittest.TestCase):
         print('    OK B1-4 la regle du code est intacte, seule la prose cede')
 
 
+class T_La_Date_D_Arrete_Est_Normalisee_A_La_Frontiere(unittest.TestCase):
+    """⚠️⚠️ LE MEME PARAMETRE, DEUX CONSOMMATEURS, DEUX EXIGENCES OPPOSEES.
+
+    `n5_commentaire` lisait `date_arrete` par `core.arrete` — tolerant.
+    `courbe_rfr.date_reference` n'accepte que 'AAAA-MM-JJ'. Avec
+    << 30/06/2026 >>, le commentaire sortait JUSTE et le run TOMBAIT.
+    """
+
+    def _run(self, date_arrete):
+        return AgentA7Provisionnement(verbose=False).run(
+            source=np.array(GENINS, dtype=float), mode_declare='cumule',
+            n_sim_bootstrap=20, seed=42, generer_graphiques=False,
+            date_arrete=date_arrete)
+
+    def test_le_format_francais_ne_fait_plus_tomber_le_run(self):
+        # ⚠️ C'EST CE QU'UN ACTUAIRE TAPE SPONTANEMENT. Le rapport tombait
+        # sur la forme la plus naturelle.
+        r = self._run('30/06/2026')
+        self.assertTrue(r.get('success'), r.get('erreur'))
+        print('    OK DATE-1 30/06/2026 ne fait plus tomber le run')
+
+    def test_tous_les_formats_de_la_table_sont_acceptes(self):
+        # ⚠️ AUCUN COMPTE ECRIT ICI : on itere la TABLE. Un format ajoute
+        # demain entre dans ce test tout seul.
+        from core.arrete import FORMATS
+        d = date(2026, 6, 30)
+        # ⚠️ PAS `libelle` COMME VARIABLE : ce nom est deja importe de
+        # `methodes_be` dans ce fichier, et l'ombrer aurait rendu muet tout
+        # test ecrit APRES celui-ci qui l'utiliserait.
+        for motif, forme in FORMATS:
+            texte = d.strftime(motif)
+            with self.subTest(format=forme):
+                r = self._run(texte)
+                self.assertTrue(r.get('success'),
+                                f'{forme} ({texte}) fait tomber le run')
+        print(f'    OK DATE-2 les {len(FORMATS)} formats de la table passent')
+
+    def test_le_verdict_ne_depend_pas_de_la_forme_ecrite(self):
+        # ⚠️⚠️ L'INVARIANT DU LOT : normaliser ne doit RIEN deplacer. La meme
+        # date ecrite de deux facons doit rendre le MEME verdict.
+        iso = self._run('2026-06-30')['n4'].get('peremption_courbe', {})
+        fra = self._run('30/06/2026')['n4'].get('peremption_courbe', {})
+        self.assertEqual(iso.get('statut'), fra.get('statut'),
+                         'la forme ecrite change le verdict')
+        self.assertEqual(iso.get('statut'), 'ROUGE',
+                         'le controle d anachronisme ne s exerce plus')
+        print(f"    OK DATE-3 meme verdict quelle que soit la forme "
+              f"({iso.get('statut')})")
+
+    def test_une_date_indechiffrable_est_refusee_en_nommant_les_formats(self):
+        # ⚠️ ELLE TOMBAIT DEJA — mais SIX appels plus bas, sur un ValueError
+        # de `strptime` qui ne disait ni quel champ ni quelles formes.
+        # ⚠️ ET ELLE NE LEVE PAS JUSQU'A L'APPELANT : `run` a son except
+        # global et rend `success=False`. Ma premiere version de ce test
+        # attendait une exception — le comportement reel est MEILLEUR, et
+        # c'est lui qu'il faut verrouiller, pas celui que j'imaginais.
+        r = self._run('Q2 2026')
+        self.assertFalse(r.get('success'))
+        msg = str(r.get('erreur', ''))
+        self.assertIn('JJ/MM/AAAA', msg, 'le refus ne nomme pas les formats')
+        self.assertIn('Q2 2026', msg, 'le refus ne cite pas la valeur recue')
+        print('    OK DATE-4 date illisible : refus tot, formats nommes')
+
+    def test_sans_date_le_controle_juge_a_la_date_du_jour(self):
+        # ⚠️ CONTRE-EPREUVE : le lot ne doit pas rendre le controle
+        # obligatoire. Sans arrete fourni, le comportement d'avant tient.
+        r = self._run(None)
+        self.assertTrue(r.get('success'))
+        self.assertEqual(
+            r['n4'].get('peremption_courbe', {}).get('statut'), 'VERT')
+        print('    OK DATE-5 sans date, le comportement d avant est intact')
+
+    def test_le_compte_de_formats_n_est_ecrit_nulle_part(self):
+        # ⚠️ LA DOCSTRING DE `arrete.lire` ANNONCAIT << les quatre formats >>
+        # quand la table en portait SEPT. Un nombre recopie derive.
+        from core import arrete as _a
+        self.assertNotIn('quatre formats', inspect.getsource(_a),
+                         'un compte de formats est recopie dans la prose')
+        print('    OK DATE-6 aucun compte de formats recopie dans la prose')
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=1)

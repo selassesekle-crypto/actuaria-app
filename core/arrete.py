@@ -110,7 +110,12 @@ class ArreteInvalide(ValueError):
 def lire(texte) -> Arrete:
     """Un texte (ou une date) → un `Arrete` typé. Lève si indéchiffrable.
 
-    Accepte les quatre formats de `FORMATS` et retient CELUI QUI A MARCHÉ,
+    ⚠️ CETTE LIGNE ANNONÇAIT « les QUATRE formats ». `FORMATS` en porte
+    SEPT — un compte écrit à la main dérive dès qu'on en ajoute un, et
+    celui-ci avait déjà dérivé. Il est RETIRÉ plutôt que corrigé : la seule
+    source du nombre est le tuple lui-même, que le message de refus énumère.
+
+    Accepte les formats de `FORMATS` et retient CELUI QUI A MARCHÉ,
     pour que le client puisse vérifier qu'on a lu 03/04 comme le 3 avril et
     non comme le 4 mars.
     """
