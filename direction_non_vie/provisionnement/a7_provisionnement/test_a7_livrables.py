@@ -2578,5 +2578,62 @@ class T_C_Une_Prescription_Chiffree_Non_Sourcee_Est_Marquee(unittest.TestCase):
         print('    OK C-9 R1..R9 exemptes, la valeur qui suit reste visible')
 
 
+class T_Le_Document_N_Affirme_Une_Origine_Qu_Une_Fois(unittest.TestCase):
+    """⚠️ UN DOCUMENT NE PEUT PAS DIRE DEUX CHOSES DE SA PROPRE ORIGINE.
+
+    Le pied de la section 7 ecrivait << Narration generee par ActuarIA
+    Intelligence >> SANS CONDITION, pendant que le badge du meme bloc disait
+    << Mode standard >>. Sur `templates` -- le chemin par defaut, sans cle
+    API -- la seconde etait juste et la premiere fausse.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.r = AgentA7Provisionnement(verbose=False).run(
+            source=np.array(GENINS, dtype=float), mode_declare='cumule',
+            primes=_exposition(GENINS), n_sim_bootstrap=60, seed=42,
+            generer_graphiques=False)
+
+    def _html(self, source):
+        return RAPP_MOD.export_html(
+            self.r['n1'], self.r['n2'], self.r['n3'], self.r['n4'],
+            commentaire=self.r['commentaire'],
+            narration='§1 — CONTEXTE\n\nUn texte.', source_narration=source)
+
+    def test_aucune_generation_par_modele_affirmee_hors_du_chemin_llm(self):
+        # ⚠️ LE CAS COURANT, ET C'EST CE QUI REND LE DEFAUT GRAVE : sans cle
+        # API, TOUS les rapports produits portaient cette phrase.
+        for source in ('templates', 'jugement_degrade', 'aucune'):
+            html = self._html(source)
+            self.assertNotIn('Narration générée par ActuarIA Intelligence',
+                             html,
+                             f'{source!r} affirme une generation par modele')
+        print('    OK PIED-1 aucune origine LLM affirmee hors du chemin LLM')
+
+    def test_l_origine_est_dite_par_le_badge_et_par_lui_seul(self):
+        # ⚠️ SOURCE UNIQUE : l'origine vient de `_LIBELLE_SOURCE`, jamais d'une
+        # phrase ecrite en dur ailleurs dans le meme bloc.
+        html = self._html('templates')
+        self.assertIn(RAPP_MOD._LIBELLE_SOURCE['templates'], html,
+                      'le badge d origine a disparu du document')
+        print('    OK PIED-2 l origine vient du badge, source unique')
+
+    def test_le_pied_identifie_toujours_le_producteur_et_la_date(self):
+        # ⚠️ ON RETIRE UNE AFFIRMATION FAUSSE, PAS L'IDENTIFICATION. L'agent
+        # et la date ne dependent d'AUCUNE source : ils restent.
+        html = self._html('templates')
+        self.assertIn('Agent A7 Ibrahim v5.0', html,
+                      'le rapport ne dit plus quel agent l a produit')
+        print('    OK PIED-3 le producteur et la date restent publies')
+
+    def test_le_chemin_llm_dit_bien_son_origine(self):
+        # ⚠️ CONTRE-EPREUVE : le correctif ne doit pas rendre le document MUET
+        # sur le chemin ou l'affirmation etait JUSTE.
+        html = self._html('claude_api')
+        self.assertIn(RAPP_MOD._LIBELLE_SOURCE['claude_api'], html,
+                      'le chemin LLM ne declare plus son origine')
+        print('    OK PIED-4 sur claude_api, l origine reste declaree')
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=1)

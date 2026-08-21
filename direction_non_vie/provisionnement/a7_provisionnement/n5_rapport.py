@@ -3071,7 +3071,17 @@ def export_html(
             'Commentaire à destination du Conseil d\'Administration et de l\'Actuaire Désigné.<br>'
             'Document soumis à l\'ACPR dans le cadre du reporting Solvabilité 2.</p>\n'
             + b['narration_html']
-            + '\n    <div class="comm-footer">✦ Narration générée par ActuarIA Intelligence · Agent A7 Ibrahim v5.0 · ' + dt + '</div>\n'
+            # ⚠️⚠️ CE PIED AFFIRMAIT UNE ORIGINE, ET IL SE TROMPAIT SUR LE
+            # CHEMIN PAR DEFAUT. Il ecrivait << Narration generee par ActuarIA
+            # Intelligence >> SANS CONDITION : sur `templates` -- le seul
+            # chemin qui s'execute sans cle API, donc LE CAS COURANT -- le
+            # meme bloc portait le badge << Mode standard >> ET cette phrase.
+            # DEUX SOURCES POUR UN MEME FAIT, L'UNE FAUSSE.
+            # ⚠️ L'ORIGINE VIT DESORMAIS A UN SEUL ENDROIT : `badge_narration`,
+            # en tete du bloc. Le pied n'identifie plus que le PRODUCTEUR du
+            # rapport et sa date -- deux faits qui, eux, ne dependent d'aucune
+            # source. La tarification, elle, conditionnait deja son libelle.
+            + '\n    <div class="comm-footer">Agent A7 Ibrahim v5.0 · ' + dt + '</div>\n'
             '  </div>\n'
             '</div>\n'
             + _socle_html
