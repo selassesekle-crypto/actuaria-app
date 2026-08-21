@@ -3321,5 +3321,103 @@ class T_Une_Narration_Tronquee_Est_Declaree(unittest.TestCase):
         print('    OK TRONC-7 le verrou est AVEUGLE a la troncature')
 
 
+class T_Les_Ecarts_Sont_Transmis_Pas_Calcules(unittest.TestCase):
+    """⚠️⚠️ LE PROMPT DEMANDAIT LE CALCUL QUI PRODUISAIT LES ERREURS.
+
+    Sa regle 6 exigeait << impact X EUR sur BE >> : on transmettait les
+    TERMES et on demandait la DIFFERENCE. Mesure sur deux modeles : les
+    SEPT valeurs etaient transmises, AUCUN des quatre ecarts ne l'etait.
+
+    Et les DEUX versions se sont trompees sur la MEME soustraction --
+    10 622 026 au lieu de 10 623 026. Ce n'est pas une propriete de
+    version : c'est un calcul qui piege.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.r = AgentA7Provisionnement(verbose=False).run(
+            source=np.array(GENINS, dtype=float), mode_declare='cumule',
+            primes=_exposition(GENINS), n_sim_bootstrap=20, seed=42,
+            generer_graphiques=False)
+        cls.ctx = RAPP_MOD._construire_contexte(
+            cls.r['n2'], cls.r['n3'], cls.r['n4'], 'Automobile', '31/12/2025')
+        cls.cles = {RAPP_MOD._cle_nombre(x)
+                    for x in RAPP_MOD.nombres_publies(cls.ctx)}
+
+    def test_les_quatre_ecarts_sont_dans_la_charge_utile(self):
+        # ⚠️ CE SONT EXACTEMENT CEUX QUE LES MODELES CALCULAIENT, releves
+        # sur deux narrations reelles.
+        for lib, haut, bas in (('CL - BF', 18680856, 8057830),
+                               ('P99,5 - BE', 22318991, 14830899),
+                               ('P75 - BE', 16343466, 14830899),
+                               ('Clark - BE', 17740889, 14830899)):
+            with self.subTest(ecart=lib):
+                self.assertIn(str(haut - bas), self.cles,
+                              f'{lib} n est pas transmis : le modele devra '
+                              f'le calculer')
+        print('    OK ECART-1 les 4 ecarts sont transmis, plus a calculer')
+
+    def test_l_ecart_transmis_est_le_JUSTE(self):
+        # ⚠️⚠️ LA VALEUR EXACTE, celle que les deux modeles ont ratee.
+        self.assertIn('10623026', self.cles)
+        self.assertNotIn('10622026', self.cles,
+                         'la valeur FAUSSE des modeles est transmise')
+        print('    OK ECART-2 10 623 026 transmis, jamais 10 622 026')
+
+    def test_les_rapports_sont_transmis_aussi(self):
+        # ⚠️ ARBITRAGE : sonnet-5 publiait un RAPPORT (<< facteur 2,32x >>)
+        # la ou sonnet-4-6 publiait une difference. Ne transmettre que les
+        # differences le ferait recalculer les rapports -- un rapport est un
+        # calcul comme un autre.
+        self.assertIn('rapport 2.32x', self.ctx)
+        print('    OK ECART-3 les rapports relatifs sont transmis')
+
+    def test_aucun_ecart_n_est_fabrique_quand_un_terme_manque(self):
+        # ⚠️⚠️ MESURE : sur un run SANS primes, `bornhuetter_ferguson` rend
+        # None -- l'ecart CL-BF n'existe PAS. Le fabriquer serait publier un
+        # faux pour eviter un trou.
+        # ⚠️⚠️ MA PREMIERE VERSION NE REGARDAIT QU'UNE LIGNE SUR TROIS. Elle
+        # verifiait l'absence de << CL - BF >> et laissait passer deux ecarts
+        # FABRIQUES sur les autres couples : la violation plantee produisait
+        # << P99,5 - BE : -14 830 899 EUR >> et << Clark LDF - BE : idem >>,
+        # sans qu'aucun test ne tombe. UNE ASSIETTE TROP ETROITE, dans le
+        # filet meme du lot qui ferme un defaut de transmission.
+        self.assertEqual(RAPP_MOD._ecarts_transmis({}, {}), [])
+        # Un dossier ou SEULS `BE` et `P75` existent : UN SEUL ecart est
+        # publiable. Tout ce qui depasse est fabrique.
+        partiel = RAPP_MOD._ecarts_transmis(
+            {'clark': {}}, {'best_estimate': 14830899, 'reserve_p75': 16343466})
+        self.assertEqual(len(partiel), 1,
+                         f'{len(partiel)} ecarts publies pour UN calculable '
+                         f'-- des termes manquants sont traites comme zero : '
+                         f'{partiel}')
+        self.assertIn('P75 - BE', partiel[0])
+        # ⚠️ ET LA SIGNATURE DU DEFAUT, verrouillee pour elle-meme : un terme
+        # absent lu comme 0 rend un ecart de -100 %.
+        self.assertTrue(all('-100.0' not in x for x in partiel),
+                        'un terme manquant a ete lu comme zero')
+        print(f'    OK ECART-4 aucun ecart fabrique ({len(partiel)} publie)')
+
+    def test_le_prompt_interdit_desormais_de_calculer(self):
+        # ⚠️ LA REGLE 6 DEMANDAIT L'IMPACT CHIFFRE -- elle CAUSAIT le defaut.
+        # Reformulee, pas supprimee : la causalite reste, l'injonction part.
+        p = RAPP_MOD.SYSTEM_PROMPT
+        self.assertIn('6bis. CALCUL : tu ne calcules RIEN', p)
+        self.assertIn('ne les recalcule jamais', p)
+        self.assertNotIn('impact X', p, "l'injonction a chiffrer subsiste")
+        self.assertIn('CAUSALITÉ', p, 'la causalite a ete perdue')
+        print('    OK ECART-5 regle 6 reformulee : causalite gardee, calcul interdit')
+
+    def test_la_baisse_du_taux_est_declaree_comme_un_artefact(self):
+        # ⚠️⚠️ LE TAUX BAISSERA PARCE QU'ON DONNE LES REPONSES, pas parce
+        # que le modele s'ameliore. Quelqu'un le lira comme un progres dans
+        # six mois : la mise en garde doit vivre a l'endroit ou on lit le
+        # taux, pas dans un message de commit.
+        src = inspect.getsource(RAPP_MOD.controle_narration)
+        self.assertIn('PAS PARCE', src.upper(),
+                      'rien ne previent que la baisse est un artefact')
+        print('    OK ECART-6 la baisse du taux est declaree artefact')
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=1)

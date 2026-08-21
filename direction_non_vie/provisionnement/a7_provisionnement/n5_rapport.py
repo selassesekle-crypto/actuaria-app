@@ -330,7 +330,10 @@ PAS de tableaux Markdown. PAS de blockquotes >. Sépare les sections par une lig
 3. CHIFFRES : En euros avec séparateurs (ex : 2\u202f526\u202f597\u202f€). Pourcentages avec une décimale.
 4. RÉFÉRENCES : Art. 77 S2, Art. 115 S2, Guide IA 2023, Mack 1993, Clark 2003.
 5. ALERTES : Ne jamais minimiser. Présenter avec l'implication réelle pour le bilan S2.
-6. CAUSALITÉ : H1 rejetée (corr=0.52) → CL biaisé → BF retenu → impact X\u202f€ sur BE.
+6. CAUSALITÉ : H1 rejetée (corr=0.52) → CL biaisé → BF retenu → impact sur le BE. \
+Les écarts et les rapports te sont FOURNIS : cite-les, ne les recalcule jamais.
+6bis. CALCUL : tu ne calcules RIEN — ni différence, ni rapport, ni pourcentage. \
+Toute grandeur que tu publies figure telle quelle dans le dossier transmis.
 7. INCERTITUDE : Toujours quantifier via CV ou intervalles de confiance.
 8. POSTURE : Assertif mais prudent. Recommandations claires avec justification.
 9. INTERDIT : Phrases génériques sans données. FAVORABLE si H1 rejetée ET BT ROUGE.
@@ -349,6 +352,51 @@ STRUCTURE OBLIGATOIRE EN 7 SECTIONS :
 # =============================================================================
 #  CONTEXTE CLAUDE API
 # =============================================================================
+
+def _ecarts_transmis(n3: dict, n4: dict) -> list:
+    """Les ecarts que le modele calculait lui-meme -- calcules par le CODE.
+
+    ⚠️⚠️ LE PROMPT DEMANDAIT CE CALCUL, ET C'EST LUI QUI PRODUISAIT LES
+    ERREURS. Sa regle 6 exigeait << impact X EUR sur BE >> : on transmettait
+    les TERMES et on demandait la DIFFERENCE. Mesure sur deux modeles : les
+    sept valeurs etaient transmises, AUCUN des quatre ecarts ne l'etait.
+
+    ⚠️ ET LES DEUX VERSIONS SE SONT TROMPEES SUR LA MEME SOUSTRACTION :
+    18 680 856 - 8 057 830 rendu 10 622 026 au lieu de 10 623 026, par
+    sonnet-4-6 A UN RUN et par sonnet-5 A UN AUTRE. Ce n'est donc pas une
+    propriete de version : c'est un calcul qui piege, et aucun changement de
+    modele ne l'aurait corrige.
+
+    ⚠️ LES RAPPORTS SONT TRANSMIS AUSSI, ET C'EST MESURE : sonnet-5 a publie
+    un RAPPORT (<< un facteur 2,32x >>) la ou sonnet-4-6 publiait une
+    difference. Ne transmettre que les differences le ferait recalculer les
+    rapports -- un rapport est un calcul comme un autre.
+
+    ⚠️ UN ECART N'EST TRANSMIS QUE SI SES DEUX TERMES EXISTENT. Mesure : sur
+    un run sans primes, `bornhuetter_ferguson` et `cape_cod` rendent None --
+    l'ecart CL-BF n'existe alors PAS. Le fabriquer serait publier un faux
+    pour eviter un trou.
+    """
+    BE = float(n4.get('best_estimate', 0) or 0)
+    clark = (n3 or {}).get('clark') or {}
+    couples = [
+        ('amplitude inter-methodes (CL - BF)',
+         reserve(n3, 'chain_ladder'), reserve(n3, 'bornhuetter_ferguson')),
+        ('P99,5 - BE', float(n4.get('reserve_p99_5', 0) or 0) or None, BE or None),
+        ('P75 - BE (provision de precaution)',
+         float(n4.get('reserve_p75', 0) or 0) or None, BE or None),
+        ('Clark LDF - BE', clark.get('reserve_be_clark'), BE or None),
+    ]
+    lignes = []
+    for libelle_ecart, haut, bas in couples:
+        if haut is None or bas is None or not bas:
+            continue
+        diff = float(haut) - float(bas)
+        lignes.append(f"{libelle_ecart} : {_f(diff)} "
+                      f"({_pct(diff / float(bas) * 100)} de la base, "
+                      f"rapport {float(haut) / float(bas):.2f}x)")
+    return lignes
+
 
 def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: str) -> str:
     mk    = n3.get('mack', {})
@@ -445,6 +493,16 @@ def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: s
         # ⚠️ ELLES SONT AUTORISEES, PAS VERIFIEES AU TEXTE : le depot ne
         # detient pas le Reglement delegue. Le dire au modele evite qu'il
         # prenne cette liste pour une garantie d'exactitude.
+        "",
+        # ⚠️⚠️ ON TRANSMET LE RESULTAT, ON NE DEMANDE PLUS LE CALCUL. Le
+        # meme geste que pour les references autorisees -- et c'est mesure :
+        # les references hors liste sont tombees a ZERO quand on les a
+        # TRANSMISES, jamais quand on les ORDONNAIT (la regle 4 existait
+        # depuis toujours, et etait ignoree).
+        *(["=== ÉCARTS DÉJÀ CALCULÉS — NE LES RECALCULE PAS ==="]
+          + _ecarts_transmis(n3, n4)
+          if _ecarts_transmis(n3, n4) else []),
+        "",
         "=== RÉFÉRENCES AUTORISÉES — déclarées, NON vérifiée au texte ===",
         "Articles du Règlement délégué citables : "
         + ', '.join('Art. ' + a for a in sorted(ARTICLES_AUTORISES, key=int)),
@@ -889,6 +947,14 @@ def controle_narration(narration: str, source: str, charge_utile: str) -> dict:
         'source':         source,
         'n_publies':      len(publies),
         'n_orphelins':    len(orphelins),
+        # ⚠️⚠️ CE TAUX A BAISSE PARCE QU'ON A DONNE LES REPONSES, PAS PARCE
+        # QUE LE MODELE S'EST AMELIORE. Depuis que `_ecarts_transmis` porte
+        # les quatre differences dans la charge utile, elles ne peuvent plus
+        # ressortir orphelines -- par construction, pas par progres.
+        # ⚠️ QUI COMPARERA CE TAUX A UNE MESURE D'AVANT DOIT LE SAVOIR : les
+        # deux ne portent pas sur la meme chose. C'est le piege du << 0 %
+        # d'orphelins >> de la narration tronquee, ou une ABSENCE se lisait
+        # comme une QUALITE.
         'taux_orphelins': (round(len(orphelins) / len(publies), 4)
                            if publies else 0.0),
         # Les formes BRUTES, dans l'ordre du texte — de quoi retrouver la
