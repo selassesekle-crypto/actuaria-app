@@ -2465,5 +2465,118 @@ class T_D2_Le_Socle_N_Est_Pas_Substituable(unittest.TestCase):
         print(f'    OK D2-9 badge propre au socle : {socle[:44]}')
 
 
+class T_C_Une_Prescription_Chiffree_Non_Sourcee_Est_Marquee(unittest.TestCase):
+    """⚠️ LE MODELE DECRIT, IL NE PRESCRIT PAS DE CHIFFRE SANS SOURCE.
+
+    Mesure d'ouverture : sur cinq montants orphelins d'un run reel, QUATRE
+    etaient des soustractions justes au centime. Le seul fabrique etait dans
+    la seule phrase qui PRESCRIT — celle adressee au Conseil.
+    """
+
+    CHARGE = 'BE : 14 830 899 € | SCR : 4 894 197 € | P75 : 16 343 466 €'
+
+    def _mq(self, texte):
+        return RAPP_MOD.marquer_prescriptions_chiffrees(texte, self.CHARGE)
+
+    # ── ce qui est marque, et ce qui ne l est pas ─────────────────────────
+    def test_prescription_avec_chiffre_orphelin_est_marquee(self):
+        _, n = self._mq('Il est recommandé de provisionner 999 999 999 €.')
+        self.assertEqual(n, 1, 'la prescription non sourcee passe')
+        print('    OK C-1 prescription + chiffre orphelin -> marquee')
+
+    def test_une_phrase_descriptive_n_est_jamais_marquee(self):
+        # ⚠️ LA DISTINCTION EST TOUT LE LOT : un chiffre descriptif faux est
+        # refutable par son contexte, un chiffre prescriptif faux engage.
+        _, n = self._mq("L'écart atteint 999 999 999 € sur la période.")
+        self.assertEqual(n, 0, 'une description est marquee a tort')
+        print('    OK C-2 une phrase descriptive n est pas marquee')
+
+    def test_une_prescription_sourcee_n_est_pas_marquee(self):
+        _, n = self._mq('Il est recommandé de retenir 14 830 899 €.')
+        self.assertEqual(n, 0, 'une prescription sourcee est marquee a tort')
+        print('    OK C-3 prescription dont le chiffre est transmis -> muette')
+
+    def test_sans_charge_utile_rien_n_est_marque(self):
+        # ⚠️ Hors du chemin LLM il n'y a pas de charge : le controle n'a pas
+        # d'objet, et une marque y affirmerait un defaut qu'on ne mesure pas.
+        _, n = RAPP_MOD.marquer_prescriptions_chiffrees(
+            'Il est recommandé de provisionner 999 999 999 €.', '')
+        self.assertEqual(n, 0)
+        print('    OK C-4 pas de charge utile -> aucune marque')
+
+    # ── L INVARIANT : ON N ENLEVE RIEN ────────────────────────────────────
+    def test_le_marquage_n_enleve_ni_ne_modifie_rien(self):
+        # ⚠️⚠️ C'EST L'ARBITRAGE DU LOT, EPROUVE PLUTOT QU'ECRIT. On a REFUSE
+        # de retirer la phrase : elle portait aussi un avertissement legitime
+        # et un calcul juste. Retirer la marque doit rendre le texte D'ORIGINE.
+        src = ("Le BE atteint 14 830 899 €. Il est recommandé de "
+               "provisionner 999 999 999 € de plus.\nAutre ligne.")
+        marque, n = self._mq(src)
+        self.assertEqual(n, 1)
+        restitue = marque.replace(
+            ' ' + RAPP_MOD.PORTEE_MARQUE_PRESCRIPTION, '')
+        self.assertEqual(restitue, src,
+                         'le marquage a altere le texte du modele')
+        print('    OK C-5 marque retiree -> texte identique a l original')
+
+    # ── LA PHRASE DE PORTEE SE MESURE COMME UN CHIFFRE ────────────────────
+    def test_la_marque_n_affirme_pas_que_le_chiffre_est_faux(self):
+        # ⚠️⚠️ LE VERROU NE SAIT PAS SI LE NOMBRE EST JUSTE. Quatre des cinq
+        # montants orphelins du run reel etaient EXACTS : une marque
+        # accusatrice aurait denonce quatre calculs justes.
+        p = RAPP_MOD.PORTEE_MARQUE_PRESCRIPTION
+        for interdit in ('est faux', 'inventé', 'erroné', 'incorrect'):
+            self.assertNotIn(interdit, p.lower(),
+                             f'la marque accuse : {interdit!r}')
+        self.assertIn('jamais sur la justesse', p)
+        self.assertIn("n'a pas été vérifié", p)
+        print('    OK C-6 la marque dit ce qu elle ignore, sans accuser')
+
+    def test_les_deux_affirmations_de_la_marque_sont_vraies(self):
+        # ⚠️⚠️ CE QUI LIMITE EST SUR, CE QUI AFFIRME EST UNE DETTE. La marque
+        # affirme DEUX choses : que la phrase RECOMMANDE, et qu'un nombre NE
+        # FIGURE PAS dans le dossier. Les deux se mesurent.
+        src = 'Il est recommandé de provisionner 999 999 999 €.'
+        marque, _ = self._mq(src)
+        phrase = marque.split(RAPP_MOD.PORTEE_MARQUE_PRESCRIPTION)[0]
+        self.assertTrue(RAPP_MOD._PRESCRIPTION_ACTUARIELLE.search(phrase),
+                        "la marque dit RECOMMANDATION sur une phrase qui ne "
+                        "prescrit pas")
+        self.assertTrue(
+            RAPP_MOD.orphelins_narration(phrase, self.CHARGE),
+            "la marque dit NON SOURCE sur une phrase entierement sourcee")
+        print('    OK C-7 les deux affirmations de la marque sont mesurees')
+
+    # ── elle atteint les documents signes et l audit ──────────────────────
+    def test_la_marque_atteint_le_html_et_l_audit(self):
+        r = AgentA7Provisionnement(verbose=False).run(
+            source=np.array(GENINS, dtype=float), mode_declare='cumule',
+            primes=_exposition(GENINS), n_sim_bootstrap=60, seed=42,
+            generer_graphiques=False)
+        marque, n = self._mq(
+            'Il est recommandé de provisionner 999 999 999 €.')
+        self.assertEqual(n, 1)
+        html = RAPP_MOD.export_html(
+            r['n1'], r['n2'], r['n3'], r['n4'], commentaire=r['commentaire'],
+            narration=marque, source_narration='claude_api')
+        self.assertIn('RECOMMANDATION CHIFFRÉE NON SOURCÉE', html,
+                      'le document signe ne porte pas la marque')
+        ctrl = RAPP_MOD.controle_narration(marque, 'claude_api', self.CHARGE)
+        self.assertEqual(ctrl['n_prescriptions_marquees'], 1,
+                         'l audit ne compte pas les prescriptions marquees')
+        print('    OK C-8 la marque atteint le HTML et l audit trail')
+
+    def test_les_identifiants_de_recommandation_ne_sont_pas_des_nombres(self):
+        # ⚠️ SANS CETTE EXEMPTION, << R6 -- Documenter ... doivent etre
+        # justifies >> etait marquee a tort : le `6` de `R6` ressortait
+        # orphelin. Mesure : 8 occurrences dans la narration reelle, TOUTES
+        # des identifiants.
+        self.assertEqual(RAPP_MOD.nombres_publies('R6 — Documenter'), [])
+        self.assertEqual(RAPP_MOD.nombres_publies('des points R1 à R4'), [])
+        # ⚠️ Et la valeur qui SUIT l etiquette reste visible.
+        self.assertIn('0,85', RAPP_MOD.nombres_publies('R2 = 0,85'))
+        print('    OK C-9 R1..R9 exemptes, la valeur qui suit reste visible')
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=1)

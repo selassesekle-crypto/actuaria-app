@@ -551,6 +551,13 @@ _REFERENCES_NON_CHIFFREES = re.compile(
     r'§\s*\d+'                                  # section
     r'|\b(?:CLM|BFCC|BOOT|MCL)-H\d+\b'          # hypotheses nommees
     r'|\bH\d\b'                                 # H1..H4
+    # ⚠️ LES IDENTIFIANTS DE RECOMMANDATION, MESURES : << R6 -- Documenter
+    # l'incertitude >>. Huit occurrences dans la premiere narration reelle,
+    # TOUTES des identifiants -- et le `6` de `R6` ressortait orphelin, dans
+    # une phrase que le marquage de prescription aurait signalee a tort.
+    # ⚠️ `R2` est aussi le coefficient de determination : l'exemption masque
+    # l'etiquette, JAMAIS la valeur qui la suit (<< R2 = 0,85 >> -> 0,85 reste).
+    r'|\bR\d\b'                                 # R1..R9, identifiants
     # ⚠️ LA PARENTHESE EST OBLIGATOIRE DANS CE MOTIF, ET C'EST MESURE : la
     # narration ecrit AUSSI BIEN << Mack 1993 >> que << Mack (1993) >>. La
     # premiere version ne couvrait que la forme sans parenthese, et 1993
@@ -639,6 +646,77 @@ def orphelins_narration(narration: str, charge_utile: str) -> list:
             if _cle_nombre(n) not in connus]
 
 
+#: ⚠️ VOCABULAIRE DE PRESCRIPTION ACTUARIELLE. Une liste qui ACCUSE : par la
+#: regle d'asymetrie, un mot qui y manque laisse le controle ou il etait, il
+#: ne cree AUCUNE cecite neuve.
+#:
+#: ⚠️ CALIBREE MOT PAR MOT SUR LA NARRATION REELLE, et DEUX candidats ont ete
+#: RETIRES pour ambiguite, apport mesure NUL :
+#:   `constituer` -- << cette absence CONSTITUE un point de vigilance >> est
+#:                   descriptif ; << constituer une provision >> prescrit.
+#:   `a hauteur de` -- << l'ecart est a hauteur de 10 % >> decrit.
+#: ⚠️ ET `prescri\w*` N'Y EST PAS : dans ce depot, << delais de prescription >>
+#: designe un DELAI JURIDIQUE (`n5_commentaire`), pas une injonction.
+_PRESCRIPTION_ACTUARIELLE = re.compile(
+    r'\brecommand\w*|\bpr[ée]conis\w*|\bil convient\b'
+    r'|\bdoi(?:t|vent)\s+[êe]tre\b|\benvisag\w*', re.IGNORECASE)
+
+#: ⚠️⚠️ LA MARQUE DIT CE QU'ELLE SAIT ET CE QU'ELLE IGNORE.
+#:
+#: ELLE NE PEUT PAS DIRE << CE CHIFFRE EST FAUX >> : le verrou ne le sait pas.
+#: Mesure a l'appui -- sur les cinq montants orphelins d'un run reel, QUATRE
+#: etaient des soustractions JUSTES au centime. Un seul etait fabrique. Une
+#: marque accusatrice aurait denonce quatre calculs exacts.
+#:
+#: ⚠️ SES DEUX AFFIRMATIONS SONT MESUREES, le reste LIMITE :
+#:   AFFIRME  << recommandation >>          -> la phrase prescrit  (teste)
+#:   AFFIRME  << ne figure pas dans le dossier >> -> orphelin      (teste)
+#:   LIMITE   << jamais sur la justesse >>, << peut etre exact >>,
+#:            << il n'a pas ete verifie >>  -> ne peuvent qu'affaiblir
+PORTEE_MARQUE_PRESCRIPTION = (
+    "⚠️ RECOMMANDATION CHIFFRÉE NON SOURCÉE — au moins un nombre de la phrase "
+    "ci-dessus ne figure pas dans le dossier transmis au modèle. Le contrôle "
+    "porte sur la PROVENANCE, jamais sur la justesse : ce nombre peut être "
+    "exact, calculé à partir du dossier, ou sans fondement — il n'a pas été "
+    "vérifié.")
+
+
+def marquer_prescriptions_chiffrees(narration: str,
+                                    charge_utile: str) -> tuple[str, int]:
+    """La narration, chaque prescription chiffree non sourcee suivie de sa marque.
+
+    ⚠️⚠️ ON MARQUE LA PHRASE, JAMAIS LE CHIFFRE, ET C'EST MESURE. Dans la
+    phrase du run reel, `2 909 990` est orphelin mais JUSTE (17 740 889 -
+    14 830 899). Marquer les nombres un a un l'aurait denonce a tort. Marquer
+    la phrase dit exactement ce qu'on sait : elle porte au moins un nombre
+    absent du dossier.
+
+    ⚠️ ON NE RETIRE RIEN, ET C'EST UN ARBITRAGE. La phrase visee portait AUSSI
+    un avertissement legitime (<< ne valide pas ce BE sans resolution des
+    points R1 a R4 >>) et un calcul exact. La supprimer aurait fait perdre les
+    deux -- et une suppression silencieuse est une absence NON DECLAREE, le
+    defaut que ce chantier ferme partout ailleurs.
+    """
+    if not narration or not charge_utile:
+        return narration or '', 0
+    orph = {_cle_nombre(n)
+            for n in orphelins_narration(narration, charge_utile)}
+    if not orph:
+        return narration, 0
+    # Le split CAPTURE ses separateurs : la narration se reconstruit a
+    # l'identique, marques exclues. Un split simple les perdrait.
+    parts = re.split(r'((?<=[.!?])\s+|\n)', narration)
+    sortie, marquees = [], 0
+    for p in parts:
+        sortie.append(p)
+        if not p.strip() or not _PRESCRIPTION_ACTUARIELLE.search(p):
+            continue
+        if any(_cle_nombre(n) in orph for n in nombres_publies(p)):
+            sortie.append(' ' + PORTEE_MARQUE_PRESCRIPTION)
+            marquees += 1
+    return ''.join(sortie), marquees
+
+
 def controle_narration(narration: str, source: str, charge_utile: str) -> dict:
     """Le verdict du verrou C2, tel qu'il entre dans l'audit trail.
 
@@ -673,6 +751,12 @@ def controle_narration(narration: str, source: str, charge_utile: str) -> dict:
         # Les formes BRUTES, dans l'ordre du texte — de quoi retrouver la
         # phrase. Bornees : un audit archive n'est pas un journal de debug.
         'orphelins':      orphelins[:20],
+        # ⚠️ LE COMPTE SE LIT DANS LE TEXTE, IL NE SE REMONTE PAS. Faire
+        # passer ce nombre par `_generer_narration` lui donnerait une
+        # QUATRIEME valeur de retour -- le changement de signature qui a
+        # deja coute une gate rouge sur ce chantier.
+        'n_prescriptions_marquees':
+            narration.count(PORTEE_MARQUE_PRESCRIPTION),
         'porte':          "provenance des nombres, jamais leur justesse",
     }
 
@@ -690,6 +774,11 @@ def _generer_narration(n2, n3, n4, commentaire, lob_label,
     try:
         txt, charge = _narration_claude_api(n2, n3, n4, lob_label, arrete)
         if txt:
+            # ⚠️ LE MARQUAGE EST APPLIQUE ICI, ET UNE SEULE FOIS. C'est le
+            # SEUL point ou le texte et sa charge utile coexistent : le faire
+            # plus loin obligerait a re-transporter la charge, ou a la
+            # reconstruire -- le doublon que ce chantier a deja ferme.
+            txt, _ = marquer_prescriptions_chiffrees(txt, charge)
             return txt, 'claude_api', charge
     except Exception:
         pass
