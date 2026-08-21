@@ -59,7 +59,11 @@
 #      constante 'standard' (l'actuaire en change par `methode_cl` de run()).
 #      La prose avait survécu au changement de code — rien de ce qui était
 #      faux n'était un nom, donc aucun relevé par symbole ne pouvait le voir.
-#    · Seuils H2 dynamiques depuis lob_config (plus de 15% codé en dur)
+#    · Seuils H2 lus dans lob_config, par LoB. ⚠️ CE TEXTE DISAIT « plus de
+#      15% codé en dur » : les littéraux n'ont pas disparu, ils sont devenus
+#      des REPLIS — `get('h2_seuil_cv', 0.15)`, `get('h2_seuil_derive', 0.20)`,
+#      `get('h1_seuil_corr', 0.50)`. Un déplacement, pas une suppression : une
+#      LoB muette sur ces clés recevrait encore ces valeurs sans le dire.
 #    · _choisir_variante_cl() séparée et documentée (5 cas + fallback)
 #
 #  Références :
@@ -165,9 +169,20 @@ class HypothesesValidator:
                                       recommande, parmi les quatre valeurs
                                       ci-dessus. JAMAIS appliqué d'office.
             raison_recommandation   : str
-            raison_cl               : str  — justification du choix CL
+            raison_cl               : str  — motif de la RECOMMANDATION
+                                      ci-dessus, pas de ce qui est appliqué.
+                                      Le commentaire signé l'affichait sous
+                                      l'étiquette « Variante CL » : le lecteur
+                                      attendait un nom, il recevait un motif.
             statut_global           : 'VERT'|'AMBRE'|'ROUGE'
             alertes, infos          : list[str]
+            lob                     : str  — la clé demandée, telle quelle
+            lob_label               : str  — son libellé lisible, depuis
+                                      lob_config
+
+        ⚠️ CETTE LISTE EN DÉCLARAIT DIX POUR TREIZE CLÉS RENDUES. Les trois
+        absentes étaient `variante_cl_recommandee`, `lob` et `lob_label` — et
+        la première était justement celle qu'aucun livrable ne publiait.
         """
         n, m    = C.shape
         alertes: List[str] = []
@@ -304,6 +319,14 @@ class HypothesesValidator:
             # `_h2` seulement : cinq badges de trois livrables se déduisaient
             # encore de `ok`, et affichaient « ✓ VALIDÉE · Score 70/100 » —
             # en vert — au-dessus du texte « H1 non testable ».
+            # ⚠️ 70 ICI, 80 SUR L'AUTRE CHEMIN NON TESTABLE, ET RIEN NE
+            # DISAIT POURQUOI. Aucun des deux n'est une mesure : ce sont des
+            # valeurs par defaut, et elles different sans raison ecrite. Elles
+            # ne sont PAS harmonisees ici -- ce serait deplacer un chiffre
+            # publie sur une decision de fond, et le score alimente le tableau
+            # de synthese. Ce qui est corrige, c'est qu'aucun format ne les
+            # affiche plus comme un resultat : le score sort '—' des que le
+            # statut vaut NON TESTABLE, dans LES DEUX sites de l'Excel.
             return {
                 'ok': True, 'score': 70,
                 'corr_max': 0, 'corr_moy': 0,
@@ -763,10 +786,18 @@ class HypothesesValidator:
                             2,999, réserve 63 500 contre 52 135, soit +22 %.
         'mediane'         : médiane des facteurs individuels par colonne.
                             Robuste aux outliers, insensible au volume.
-                            Préféré si CV > seuil élevé.
-        'trimmed_mean'    : moyenne écrêtée (10% haut, 10% bas) par colonne.
+                            Recommandée quand `cv_moy` dépasse 0,20 (cas 3).
+        'trimmed_mean'    : moyenne écrêtée par colonne — `chain_ladder`
+                            retient les facteurs entre les percentiles 10 et
+                            90 (vérifié dans son code, pas seulement annoncé).
                             Compromis entre standard et médiane.
-                            Préféré si CV modéré (10–20%).
+                            Recommandée quand `cv_moy` dépasse `seuil_cv`
+                            SANS dépasser 0,20 (cas 4).
+
+        ⚠️ CES DEUX LIGNES DISAIENT « seuil élevé » ET « CV modéré (10–20%) ».
+        Le premier n'avait aucun référent ; le second en donnait un FAUX — la
+        borne de 10 % n'existe nulle part, la borne basse est `seuil_cv`, le
+        seuil DE LA LoB, mesuré de 0,12 (MRH) à 0,25 (RC Médicale).
 
         Règles de décision (5 cas + fallback)
         --------------------------------------

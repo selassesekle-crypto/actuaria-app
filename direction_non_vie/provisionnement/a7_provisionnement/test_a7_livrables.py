@@ -3419,6 +3419,133 @@ class T_Les_Ecarts_Sont_Transmis_Pas_Calcules(unittest.TestCase):
         print('    OK ECART-6 la baisse du taux est declaree artefact')
 
 
+class T_Un_Verdict_Non_Testable_Est_Le_Meme_Partout(unittest.TestCase):
+    """⚠️⚠️ LE COMMENTAIRE SIGNE DISAIT << VALIDEE >> LA OU RIEN N'ETAIT TESTE.
+
+    Mesure d'ouverture sur un triangle 3x3 -- `statut` = NON TESTABLE pour H1
+    comme pour H2 :
+
+        Excel        H1 : ⚠️ NON TESTABLE | 80    <- verdict juste, score faux
+        HTML         H1 : ⚠ NON TESTABLE          <- juste
+        COMMENTAIRE  H1 : VALIDEE [score 80/100]  <- FAUX
+        COMMENTAIRE  H2 : NON TESTABLE            <- trois lignes plus bas
+
+    Le document signe se contredisait DANS UN SEUL PARAGRAPHE. Ce n'etait pas
+    une decision maintenue mais une propagation inachevee : `statut` n'existait
+    pas sur H1 quand ce bloc a ete ecrit.
+
+    ⚠️ CE FILET LIT LES PRODUITS -- le vrai commentaire, le vrai classeur.
+    """
+
+    PETIT = np.array([[100., 180., 220.],
+                      [120., 200., np.nan],
+                      [130., np.nan, np.nan]])
+
+    @staticmethod
+    def _grand():
+        n = 7
+        T = np.array([[1000.0 * (1.6 ** j) * (1 + 0.03 * i)
+                       for j in range(n)] for i in range(n)])
+        for i in range(n):
+            for j in range(n):
+                if i + j >= n:
+                    T[i, j] = np.nan
+        return T
+
+    @classmethod
+    def setUpClass(cls):
+        ag = AgentA7Provisionnement(verbose=False)
+        cls.r_nt = ag.run(source=cls.PETIT, mode_declare='cumule',
+                          n_sim_bootstrap=30, seed=42,
+                          generer_graphiques=False)
+        cls.r_ok = ag.run(source=cls._grand(), mode_declare='cumule',
+                          n_sim_bootstrap=30, seed=42,
+                          generer_graphiques=False)
+
+    @staticmethod
+    def _titres(commentaire):
+        """Les deux lignes de VERDICT, telles qu'elles sont publiees."""
+        return {ligne.split('—')[0].strip(): ligne.split(':')[-1].strip()
+                for ligne in commentaire.split('\n')
+                if ligne.startswith(('H1 —', 'H2 —'))}
+
+    def test_le_cas_de_depart_est_bien_non_testable(self):
+        # ⚠️ SANS CECI, TOUT LE RESTE MESURE LE VIDE.
+        for cle in ('h1_independance', 'h2_stabilite'):
+            h = self.r_nt['n2'][cle]
+            self.assertEqual(str(h['statut']), 'NON TESTABLE', cle)
+            self.assertTrue(h['ok'],
+                            f'{cle} : `ok` ne vaut plus True par defaut, '
+                            f'le cas mesure a change')
+        print('    OK NT-1 H1 et H2 sont bien NON TESTABLE, ok=True')
+
+    def test_le_commentaire_signe_ne_publie_plus_validee(self):
+        titres = self._titres(self.r_nt['commentaire'])
+        self.assertEqual(titres.get('H1'), 'NON TESTABLE',
+                         f'le commentaire publie {titres.get("H1")!r} '
+                         f'sur une hypothese non testee')
+        print(f'    OK NT-2 le commentaire publie H1 : {titres.get("H1")}')
+
+    def test_les_deux_hypotheses_recoivent_le_MEME_verdict(self):
+        # ⚠️⚠️ C'EST LA CONTRADICTION QUI ETAIT LE DEFAUT, pas seulement le
+        # mot. Meme fait, meme paragraphe -> meme verdict, ou le lecteur
+        # conclut que H1 est passee et H2 non.
+        titres = self._titres(self.r_nt['commentaire'])
+        self.assertEqual(titres.get('H1'), titres.get('H2'),
+                         f'meme fait, deux verdicts : {titres}')
+        print(f'    OK NT-3 H1 et H2 disent la meme chose : {titres}')
+
+    def test_un_triangle_testable_publie_toujours_un_vrai_verdict(self):
+        # ⚠️ CONTRE-EPREUVE DE SUR-CORRECTION : le remede ne doit pas rendre
+        # tout NON TESTABLE.
+        titres = self._titres(self.r_ok['commentaire'])
+        self.assertNotIn('NON TESTABLE', titres.get('H1', ''))
+        self.assertEqual(str(self.r_ok['n2']['h1_independance']['statut']),
+                         titres.get('H1', '').split('[')[0].strip())
+        print(f'    OK NT-4 sur un 7x7 le commentaire publie H1 : '
+              f'{titres.get("H1")}')
+
+    def test_aucun_score_ne_s_affiche_a_cote_de_non_testable(self):
+        # ⚠️ DEUX SITES DANS LE MEME CLASSEUR, ET UN SEUL ETAIT FERME : la
+        # synthese publiait '—', le tableau publiait 80.
+        from openpyxl import load_workbook
+        wb = load_workbook(io.BytesIO(self.r_nt['excel_bytes']))
+        fautifs = []
+        for ws in wb:
+            for row in ws.iter_rows(values_only=True):
+                cs = [str(c) for c in row if c is not None]
+                if any('NON TESTABLE' in c for c in cs):
+                    fautifs += [c for c in cs if c.strip().isdigit()]
+        self.assertEqual(fautifs, [],
+                         f'un score chiffre cotoie NON TESTABLE : {fautifs}')
+        print('    OK NT-5 aucun score chiffre a cote d un NON TESTABLE')
+
+    def test_les_cles_rendues_sont_celles_qui_sont_documentees(self):
+        # ⚠️ LA DOCSTRING EN DECLARAIT DIX POUR TREIZE RENDUES. On verrouille
+        # le CONTRAT, pas le texte : chercher les mots dans la docstring
+        # serait satisfait par un commentaire.
+        # ⚠️ ON MESURE `valider()`, PAS `r['n2']`. Une premiere version de ce
+        # test lisait le dict de l'agent -- qui l'ENRICHIT de sept cles venues
+        # des sous-modules (`clm`, `bfcc`, `bootstrap_hyp`, `munich_hyp`,
+        # `dimensions`, `n_lignes`, `n_colonnes`). Le contrat documente est
+        # celui de `valider()` ; viser l'autre objet mesurait autre chose.
+        from direction_non_vie.provisionnement.a7_provisionnement.n2_hypotheses import (
+            HypothesesValidator,
+        )
+        attendues = {
+            'h1_independance', 'h2_stabilite', 'methode_recommandee',
+            'methode_cl_retenue', 'variante_cl_recommandee',
+            'raison_recommandation', 'raison_cl', 'statut_global',
+            'alertes', 'infos', 'lob', 'lob_label',
+        }
+        rendues = set(HypothesesValidator().valider(self.PETIT, 'generique'))
+        self.assertEqual(rendues, attendues,
+                         f'non documentees : {sorted(rendues - attendues)} ; '
+                         f'documentees absentes : {sorted(attendues-rendues)}')
+        print(f'    OK NT-6 les {len(attendues)} cles de valider() sont '
+              f'declarees')
+
+
 class T_La_Variante_Ecartee_Est_Nommee(unittest.TestCase):
     """⚠️⚠️ UNE RECOMMANDATION CALCULEE, EXPOSEE -- ET LUE PAR PERSONNE.
 

@@ -40,6 +40,7 @@ from typing import Dict, Optional
 from core import arrete as _arrete
 
 from .n2_hypotheses import mention_variante_cl
+from .n2_hypotheses_clm import NON_TESTABLE
 from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
 from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
 from .n3.bf_cape_cod import libelle_loss_ratio
@@ -305,7 +306,46 @@ def _s3_hypotheses(n2: Dict) -> str:
     n_test  = h1.get('n_colonnes_testees', 0)
     seuil   = h1.get('seuil_utilise', 0.50)
 
-    if h1_ok:
+    # ⚠️⚠️ LE TITRE DISAIT « VALIDÉE » LÀ OÙ RIEN N'AVAIT ÉTÉ TESTÉ — SEUL DES
+    # TROIS FORMATS. Mesuré sur un triangle 3×3, `statut` = NON TESTABLE pour
+    # H1 comme pour H2 :
+    #
+    #     Excel        H1 : ⚠️ NON TESTABLE          <- lit `statut`
+    #     HTML         H1 : ⚠ NON TESTABLE           <- lit `statut`
+    #     COMMENTAIRE  H1 : VALIDÉE [score 80/100]   <- dérivait de `ok`
+    #     COMMENTAIRE  H2 : NON TESTABLE             <- trois lignes plus bas
+    #
+    # Le document signé se contredisait donc DANS UN SEUL PARAGRAPHE, et la
+    # moitié fausse était le titre — ce que lit un lecteur pressé.
+    #
+    # ⚠️ CE N'ÉTAIT PAS UNE DÉCISION MAINTENUE, C'ÉTAIT UNE PROPAGATION
+    # INACHEVÉE : quand ce bloc a été écrit, `statut` n'existait pas encore sur
+    # H1 (le lot F3 ne l'avait donné qu'à `_h2`). Le bloc H2 ci-dessous annonce
+    # « MÊME DÉFAUT QUE H1, MÊME REMÈDE » — mais les remèdes différaient : H2
+    # avait corrigé son TITRE, H1 seulement son CORPS.
+    #
+    # ⚠️ `n_test == 0` EST GARDÉ EN PLUS DU STATUT : un dict ancien, sans
+    # `statut`, retombait sinon sur « Sur 0 paire testée, aucune ne présente de
+    # dépendance ». Le repli ne peut qu'ajouter un NON TESTABLE mérité.
+    h1_statut = str(h1.get('statut', 'VALIDÉE' if h1_ok else 'REJETÉE'))
+
+    if h1_statut == NON_TESTABLE or n_test == 0:
+        motif = str(h1.get('message', '')).strip()
+        lignes.append(f"H1 — INDÉPENDANCE (Mack 1993) : {NON_TESTABLE}")
+        lignes.append(
+            "AUCUNE PAIRE DE COLONNES N'A PU ÊTRE TESTÉE. "
+            # ⚠️ Le motif est CITÉ tel quel, jamais découpé. Le message a la
+            # forme « H1 non testable — <raison> » : en retirer le préfixe
+            # marcherait aujourd'hui et publierait le message entier le jour
+            # où sa forme change. On cite, on ne parse pas.
+            + (f"Le module indique : « {motif} ». " if motif else "")
+            + "Le verdict interne « validé » est la valeur par défaut du "
+            "module, non le résultat d'une mesure : il n'autorise rien par "
+            "lui-même. L'indépendance des années de survenance reste à "
+            "établir avant de retenir Chain Ladder et Mack comme méthodes "
+            "principales."
+        )
+    elif h1_ok:
         lignes.append(
             f"H1 — INDÉPENDANCE (Mack 1993) : VALIDÉE [score {h1.get('score',0)}/100]"
         )
@@ -327,22 +367,7 @@ def _s3_hypotheses(n2: Dict) -> str:
         # Le verdict `ok` n'est pas touché ici — il est lu par N4 pour composer
         # le Best Estimate. Ce lot corrige ce qui est ÉCRIT, pas ce qui est décidé.
         paires = f"{n_test} paire{'s' if n_test > 1 else ''}"
-        if n_test == 0:
-            motif = str(h1.get('message', '')).strip()
-            lignes.append(
-                "AUCUNE PAIRE DE COLONNES N'A PU ÊTRE TESTÉE. "
-                # ⚠️ Le motif est CITÉ tel quel, jamais découpé. Le message a la
-                # forme « H1 non testable — <raison> » : en retirer le préfixe
-                # marcherait aujourd'hui et publierait le message entier le jour
-                # où sa forme change. On cite, on ne parse pas.
-                + (f"Le module indique : « {motif} ». " if motif else "")
-                + "Le verdict « VALIDÉE » est ici la valeur par défaut du "
-                "module, non le résultat d'une mesure : il n'autorise rien par "
-                "lui-même. L'indépendance des années de survenance reste à "
-                "établir avant de retenir Chain Ladder et Mack comme méthodes "
-                "principales."
-            )
-        elif n_sig == 0:
+        if n_sig == 0:
             lignes.append(
                 f"La corrélation de Spearman moyenne entre facteurs de colonnes "
                 f"consécutives est de {corr:.2f}, inférieure au seuil {seuil:.2f}. "
@@ -419,7 +444,7 @@ def _s3_hypotheses(n2: Dict) -> str:
     h2_statut  = str(h2.get('statut', 'VALIDÉE' if h2_ok else 'REJETÉE'))
     derive_vue = bool(h2.get('derive_calculee', True))
 
-    if h2_statut == 'NON TESTABLE':
+    if h2_statut == NON_TESTABLE:
         motif = str(h2.get('message', '')).strip()
         lignes.append("H2 — STABILITÉ DES FACTEURS : NON TESTABLE")
         lignes.append(

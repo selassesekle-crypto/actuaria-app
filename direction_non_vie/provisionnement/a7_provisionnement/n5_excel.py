@@ -31,6 +31,7 @@ import numpy as np
 from .methodes_be import (ORDRE_AFFICHAGE, disponible, libelle,
                           motif_exclusion, reserve)
 from .n2_hypotheses import mention_recommandation_cl_courte
+from .n2_hypotheses_clm import NON_TESTABLE
 from .n2_hypotheses_clm import lignes_correlations_h1
 from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
 from .n2_hypotheses_clm import lignes_hypotheses_clm
@@ -243,7 +244,7 @@ def _ong1_synthese(wb, n1, n2, n3, n4, ref_client, date_str):
         # « Validation hypothèses »). Ici, en synthese, une hypothese non
         # testable sortait « ✓ Conforme » EN VERT avec son score par defaut.
         _st = str(h.get('statut', 'VALIDÉE' if h.get('ok') else 'REJETÉE'))
-        _nt = _st == 'NON TESTABLE'
+        _nt = _st == NON_TESTABLE
         # ⚠️ TABLE PLUTOT QUE BRANCHE SUR `ok` : un statut inconnu tombe sur
         # AMBRE (« à surveiller »), jamais sur VERT. Le filet a refuse la
         # premiere version, qui rebranchait sur `ok` pour choisir la couleur.
@@ -702,7 +703,13 @@ def _ong6_hypotheses(wb, n2, n4):
             # `statut` pour LES DEUX hypotheses et pour tout statut.
             seuil_txt = (f"CV<{h.get('seuil_cv', 0.15):.0%} "
                          f"dérive<{h.get('seuil_derive', 0.20):.0%}")
-        rangs.append((lbl, statut_txt, h.get('score', 0),
+        # ⚠️⚠️ UN SCORE DE 80/100 A COTE DE << NON TESTABLE >>. Le lot F3
+        # avait ferme le VERDICT de cette ligne et laisse son SCORE : le
+        # tableau publiait donc << ⚠️ NON TESTABLE | 80 >> pendant que la
+        # synthese du meme classeur, vingt lignes plus haut, publiait << — >>.
+        # Le meme classeur donnait deux reponses au meme fait.
+        rangs.append((lbl, statut_txt,
+                      '—' if _st == NON_TESTABLE else h.get('score', 0),
                       seuil_txt, str(h.get('message', '—'))[:200], '', vert))
 
     # ⚠️ CLM-H1..H4 EN TÊTE, ET C'EST UN MANQUE QUI EST RÉPARÉ ICI. Les
