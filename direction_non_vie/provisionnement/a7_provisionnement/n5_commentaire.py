@@ -39,6 +39,7 @@ from typing import Dict, Optional
 
 from core import arrete as _arrete
 
+from .n2_hypotheses import mention_variante_cl
 from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
 from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
 from .n3.bf_cape_cod import libelle_loss_ratio
@@ -530,10 +531,17 @@ def _s3_hypotheses(n2: Dict) -> str:
             "reste celle de Mack (σ)."
         )
 
+    # ⚠️⚠️ L'ÉTIQUETTE ANNONÇAIT UNE VARIANTE, LA VALEUR ÉTAIT UN PARAGRAPHE.
+    # « Variante CL : » était suivi de `raison_cl`, c'est-à-dire du MOTIF de
+    # la recommandation — jamais du nom d'une variante. Et la variante
+    # recommandée, elle, n'était publiée par AUCUN format : mesuré, zéro
+    # lecteur dans tout le dépôt. Le commentaire signé donnait donc le
+    # POURQUOI d'un choix dont il taisait le QUOI.
     lignes += [
         "",
         f"DÉCISION MÉTHODOLOGIQUE : {rr}",
-        f"Variante CL : {rcl}",
+        f"Variante CL : {mention_variante_cl(n2)}",
+        f"Motif de la recommandation : {rcl}",
     ]
 
     return "\n".join(lignes)

@@ -52,8 +52,13 @@
 #
 #  Corrections v5.0 vs v4.0 :
 #    · Bug methode_cl_retenue corrigé : valider() expose maintenant
-#      'methode_cl_retenue' directement dans le dict retourné,
-#      calculée via _choisir_variante_cl() cohérente avec methode_recommandee
+#      'methode_cl_retenue' directement dans le dict retourné.
+#      ⚠️ CE TEXTE DISAIT « calculée via _choisir_variante_cl() », ET C'EST
+#      FAUX DEPUIS LE LOT B : cette fonction alimente désormais
+#      `variante_cl_recommandee`, tandis que `methode_cl_retenue` reçoit la
+#      constante 'standard' (l'actuaire en change par `methode_cl` de run()).
+#      La prose avait survécu au changement de code — rien de ce qui était
+#      faux n'était un nom, donc aucun relevé par symbole ne pouvait le voir.
 #    · Seuils H2 dynamiques depuis lob_config (plus de 15% codé en dur)
 #    · _choisir_variante_cl() séparée et documentée (5 cas + fallback)
 #
@@ -100,9 +105,20 @@ class HypothesesValidator:
 
     Correction critique v5.0
     ------------------------
-    La méthode valider() retourne maintenant 'methode_cl_retenue' dans son
-    dict, calculée par _choisir_variante_cl(). Cela garantit la cohérence
-    entre la recommandation N2 et le choix de variante CL en N3/N4.
+    La méthode valider() retourne 'methode_cl_retenue' dans son dict.
+
+    ⚠️ CE PARAGRAPHE AFFIRMAIT QU'ELLE EST « calculée par
+    _choisir_variante_cl() » : faux depuis le lot B. Les DEUX clés existent
+    et elles ne disent pas la même chose —
+
+      `methode_cl_retenue`      ce qui est APPLIQUÉ au calcul des facteurs
+                                ('standard', sauf `methode_cl` de run())
+      `variante_cl_recommandee` ce que _choisir_variante_cl() RECOMMANDE,
+                                jamais appliqué d'office
+
+    Les publier ensemble est l'objet de `mention_variante_cl` en bas de
+    module : la seconde n'avait AUCUN lecteur, et le commentaire signé
+    affichait sa justification sous l'étiquette « Variante CL ».
     """
 
     def __init__(self):
@@ -137,9 +153,17 @@ class HypothesesValidator:
         dict avec :
             h1_independance, h2_stabilite
             methode_recommandee     : str  — méthode principale conseillée
-            methode_cl_retenue      : str  — variante CL à utiliser en N3
+            methode_cl_retenue      : str  — variante CL APPLIQUÉE en N3.
+                                      ⚠️ CETTE LIGNE ANNONÇAIT QUATRE VALEURS
                                       ('standard'|'mediane'|'trimmed_mean'|
-                                       'volume_weighted')
+                                      'volume_weighted') pour une clé que ce
+                                      module rend TOUJOURS à 'standard'
+                                      (mesuré sur deux triangles). Seul
+                                      `run(methode_cl=...)` la change, et il
+                                      écrase alors cette clé.
+            variante_cl_recommandee : str  — ce que _choisir_variante_cl()
+                                      recommande, parmi les quatre valeurs
+                                      ci-dessus. JAMAIS appliqué d'office.
             raison_recommandation   : str
             raison_cl               : str  — justification du choix CL
             statut_global           : 'VERT'|'AMBRE'|'ROUGE'
@@ -490,8 +514,14 @@ class HypothesesValidator:
             # un `statut` distinct du booléen de gating, le compte de colonnes
             # testées, le fait que la dérive n'a pas été calculée, et les seuils
             # DE LA BRANCHE — absents jusqu'ici, ce qui faisait publier 15 % et
-            # 20 % (les valeurs génériques) pour les 10 LoB sur 15 qui ont
+            # 20 % (les valeurs génériques) pour les 11 LoB sur 15 qui ont
             # d'autres seuils.
+            #
+            # ⚠️ CE COMPTE DISAIT « 10 sur 15 », ET IL ÉTAIT FAUX D'UNE UNITÉ :
+            # j'avais mesuré UNE des deux clés et écrit le total. 10 LoB
+            # diffèrent sur le CV, 10 sur la dérive, mais l'UNION en fait 11 —
+            # `rc_generale` ne diffère que par le CV, `accidents_corporels`
+            # que par la dérive.
             return {
                 'ok': True, 'score': 80,
                 'cv_moy': 0, 'cv_max': 0, 'derive_moy': 0,
@@ -740,12 +770,26 @@ class HypothesesValidator:
 
         Règles de décision (5 cas + fallback)
         --------------------------------------
-        Cas 1 : H1 + H2 OK                         → standard
-        Cas 2 : H2 rejetée sur dérive > 20%         → volume_weighted
-        Cas 3 : H2 rejetée sur CV > 20%             → mediane
-        Cas 4 : H2 rejetée sur CV 10–20%            → trimmed_mean
-        Cas 5 : H1 rejetée seule (H2 OK)            → volume_weighted
-        Fallback                                     → standard
+        ⚠️ TROIS DE CES LIGNES DÉCRIVAIENT UNE AUTRE RÈGLE QUE LE CODE. Le
+        tableau est réécrit sur le code, condition par condition ; ce qui a
+        été retiré est nommé, pour qu'on ne le réintroduise pas.
+
+        Cas 1 : h1_ok ET h2_ok                              → standard
+        Cas 2 : NON h2_ok ET derive > 0,20 ET cv <= 0,20    → volume_weighted
+                (la condition sur le CV était OMISE ici)
+        Cas 3 : NON h2_ok ET cv > 0,20                      → mediane
+        Cas 4 : NON h2_ok ET cv > seuil_cv                  → trimmed_mean
+                ⚠️ le tableau annonçait « CV 10–20 % » : la borne de 10 %
+                n'existe NULLE PART dans le code. La borne basse est
+                `seuil_cv`, LE SEUIL DE LA LoB — mesuré de 0,12 (MRH) à
+                0,25 (RC Médicale). La borne haute est implicite : au-delà
+                de 0,20, le cas 3 a déjà répondu.
+        Cas 5 : NON h1_ok                                   → volume_weighted
+                ⚠️ le tableau ajoutait « seule (H2 OK) », que le code ne
+                teste PAS. Atteignable H2 REJETÉE : `mrh` a seuil_derive
+                = 0,12 ; une dérive de 0,15 rejette H2, ne dépasse pas 0,20
+                (cas 2), et tombe ici avec un CV faible.
+        Fallback (atteint, et il journalise)                → standard
         """
         h1_ok    = h1.get('ok', True)
         h2_ok    = h2.get('ok', True)
@@ -827,3 +871,74 @@ class HypothesesValidator:
             f"→ fallback standard"
         )
         return 'standard', "Fallback sécurisé — standard appliqué par défaut."
+
+
+# =============================================================================
+#  CE QUE LES LIVRABLES DOIVENT NOMMER : LA VARIANTE APPLIQUÉE **ET** CELLE
+#  QUI A ÉTÉ ÉCARTÉE
+# =============================================================================
+#
+#  ⚠️⚠️ LA RECOMMANDATION ÉTAIT CALCULÉE, EXPOSÉE — ET LUE PAR PERSONNE.
+#  ────────────────────────────────────────────────────────────────────
+#  Mesuré sur tout le dépôt : `variante_cl_recommandee` n'avait AUCUN lecteur
+#  hors de ce module, et AUCUN format ne la publiait — ni Excel, ni HTML, ni
+#  commentaire, ni JSON. Deux docstrings affirmaient pourtant qu'elle était
+#  « exposée pour que l'actuaire puisse la retenir en connaissance de cause ».
+#  L'actuaire ne la voyait jamais.
+#
+#  ⚠️ ET SA JUSTIFICATION, ELLE, ÉTAIT PUBLIÉE. `raison_cl` sortait dans le
+#  commentaire signé sous l'étiquette « Variante CL : » — le lecteur attendait
+#  un nom de variante, il recevait un paragraphe. Mesuré sur un triangle 7×7 :
+#
+#      EXCEL           « Méthode CL retenue »   : 'standard'
+#      CALCULÉ, MUET   variante_cl_recommandee  : 'volume_weighted'
+#      COMMENTAIRE     « Variante CL : H1 rejetée (corr=0,73) — ... »
+#
+#  Le rapport publiait le POURQUOI d'un choix dont il taisait le QUOI, à côté
+#  d'un QUOI qui n'était pas ce choix.
+#
+#  ⚠️ CE QUI EST AFFIRMÉ ICI A ÉTÉ MESURÉ, ET RIEN DE PLUS :
+#    · « appliquée au calcul des facteurs » — `agent.py` passe bien
+#      `methode_cl_retenue` à N3, qui le donne à `calculer_facteurs`.
+#    · « aucune bascule automatique » — depuis le lot B, `valider()` pose
+#      `methode_cl = 'standard'` sans condition, et seul le paramètre
+#      `methode_cl` de `run()` en change.
+#  Ce qui n'est PAS affirmé : qu'une variante vaille mieux que l'autre. Le
+#  module lui-même écrit « aucune n'est établie pour ce motif » sur deux de
+#  ses branches — l'écrire ici serait une prescription sans fondement.
+
+
+def recommandation_cl_ecartee(n2: dict) -> bool:
+    """VRAI si N2 recommande une variante autre que celle qui est appliquée.
+
+    ⚠️ LA RÈGLE PORTE SUR LE FAIT, PAS SUR L'ÉTIQUETTE : elle compare les deux
+    valeurs, elle ne lit aucun libellé. Même choix qu'à `socle_a_publier`.
+    """
+    return (n2.get('variante_cl_recommandee', '—')
+            != n2.get('methode_cl_retenue', '—'))
+
+
+def mention_variante_cl(n2: dict) -> str:
+    """La variante appliquée — et celle que N2 recommandait si elle diffère."""
+    appliquee = n2.get('methode_cl_retenue', '—')
+    reco      = n2.get('variante_cl_recommandee', '—')
+    if not recommandation_cl_ecartee(n2):
+        return (f"{appliquee} — appliquée au calcul des facteurs de "
+                f"développement ; c'est aussi celle que N2 recommande.")
+    return (f"{appliquee} — APPLIQUÉE au calcul des facteurs de "
+            f"développement. N2 recommandait « {reco} », qui n'a pas été "
+            f"retenue : aucune bascule de variante n'est automatique, la "
+            f"variante appliquée est celle du paramètre `methode_cl` de "
+            f"run() (défaut : standard).")
+
+
+def mention_recommandation_cl_courte(n2: dict) -> str:
+    """La recommandation de N2, marquée NON APPLIQUÉE quand elle l'est.
+
+    ⚠️ POUR LES CELLULES, PAS POUR LA PROSE. La colonne des KPI de l'Excel
+    fait 18 caractères : y verser la phrase longue la rendrait illisible.
+    Les deux rendus disent la MÊME chose et reposent sur le MÊME prédicat —
+    seul le support change.
+    """
+    reco = n2.get('variante_cl_recommandee', '—')
+    return f"{reco} — NON APPLIQUÉE" if recommandation_cl_ecartee(n2) else reco

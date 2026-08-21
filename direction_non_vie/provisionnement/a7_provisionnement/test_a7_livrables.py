@@ -3419,6 +3419,136 @@ class T_Les_Ecarts_Sont_Transmis_Pas_Calcules(unittest.TestCase):
         print('    OK ECART-6 la baisse du taux est declaree artefact')
 
 
+class T_La_Variante_Ecartee_Est_Nommee(unittest.TestCase):
+    """⚠️⚠️ UNE RECOMMANDATION CALCULEE, EXPOSEE -- ET LUE PAR PERSONNE.
+
+    Mesure d'ouverture : `variante_cl_recommandee` n'avait AUCUN lecteur dans
+    tout le depot, et AUCUN format ne la publiait. Sa JUSTIFICATION, elle,
+    sortait dans le commentaire signe sous l'etiquette << Variante CL >> --
+    le lecteur attendait un nom de variante, il recevait un paragraphe.
+
+      EXCEL          << Methode CL retenue >>  : 'standard'
+      CALCULE, MUET  variante_cl_recommandee   : 'volume_weighted'
+      COMMENTAIRE    << Variante CL : H1 rejetee (corr=0,73) -- ... >>
+
+    ⚠️ CE FILET LIT LES PRODUITS, il ne refait aucun rendu : le vrai classeur,
+    le vrai texte de N4, le vrai commentaire.
+    """
+
+    # Triangle regulier 7x7 : H1 y est rejetee, donc la recommandation
+    # (`volume_weighted`) DIFFERE de ce qui est applique (`standard`).
+    @staticmethod
+    def _triangle_ecart():
+        n = 7
+        T = np.array([[1000.0 * (1.6 ** j) * (1 + 0.03 * i)
+                       for j in range(n)] for i in range(n)])
+        for i in range(n):
+            for j in range(n):
+                if i + j >= n:
+                    T[i, j] = np.nan
+        return T
+
+    @classmethod
+    def setUpClass(cls):
+        from direction_non_vie.provisionnement.a7_provisionnement.n2_hypotheses import (
+            HypothesesValidator,
+        )
+        cls.n2 = HypothesesValidator().valider(cls._triangle_ecart(),
+                                               'generique')
+
+    def test_le_predicat_porte_sur_le_fait_pas_sur_un_libelle(self):
+        # ⚠️ LA LECON DE `PORTEE_ARCHIVE` : un controle qui cherche un mot est
+        # satisfait par un mot. Celui-ci compare DEUX VALEURS.
+        from direction_non_vie.provisionnement.a7_provisionnement.n2_hypotheses import (
+            recommandation_cl_ecartee,
+        )
+        self.assertTrue(recommandation_cl_ecartee(
+            {'methode_cl_retenue': 'standard',
+             'variante_cl_recommandee': 'mediane'}))
+        self.assertFalse(recommandation_cl_ecartee(
+            {'methode_cl_retenue': 'mediane',
+             'variante_cl_recommandee': 'mediane'}))
+        print('    OK VCL-1 le predicat compare les valeurs, pas les mots')
+
+    def test_la_prose_nomme_les_deux_variantes(self):
+        from direction_non_vie.provisionnement.a7_provisionnement.n2_hypotheses import (
+            mention_variante_cl,
+        )
+        txt = mention_variante_cl(self.n2)
+        self.assertIn(self.n2['methode_cl_retenue'], txt)
+        self.assertIn(self.n2['variante_cl_recommandee'], txt,
+                      'la recommandation ecartee reste invisible')
+        self.assertNotEqual(self.n2['methode_cl_retenue'],
+                            self.n2['variante_cl_recommandee'],
+                            'le triangle de reference ne produit plus d ecart')
+        print(f"    OK VCL-2 la prose nomme "
+              f"{self.n2['methode_cl_retenue']} ET "
+              f"{self.n2['variante_cl_recommandee']}")
+
+    def test_sans_ecart_la_prose_n_invente_pas_de_divergence(self):
+        # ⚠️ L'AUTRE BRANCHE : elle ne doit RIEN affirmer d'un desaccord.
+        from direction_non_vie.provisionnement.a7_provisionnement.n2_hypotheses import (
+            mention_variante_cl,
+        )
+        txt = mention_variante_cl({'methode_cl_retenue': 'standard',
+                                   'variante_cl_recommandee': 'standard'})
+        self.assertNotIn('APPLIQUÉE.', txt)
+        self.assertNotIn('n\'a pas été retenue', txt)
+        self.assertIn('standard', txt)
+        print('    OK VCL-3 sans ecart, aucune divergence affirmee')
+
+    def test_ce_que_la_phrase_AFFIRME_est_mesure(self):
+        # ⚠️⚠️ UNE PHRASE DE PORTEE SE MESURE COMME UN CHIFFRE. Elle affirme
+        # << aucune bascule de variante n'est automatique >>. Contre-epreuve :
+        # QUEL QUE SOIT le triangle, la variante appliquee reste 'standard'.
+        from direction_non_vie.provisionnement.a7_provisionnement.n2_hypotheses import (
+            HypothesesValidator,
+        )
+        petit = np.array([[100., 180., 220.],
+                          [120., 200., np.nan],
+                          [130., np.nan, np.nan]])
+        for nom, T in (('7x7 H1 rejetee', self._triangle_ecart()),
+                       ('3x3 non testable', petit)):
+            r = HypothesesValidator().valider(T, 'generique')
+            self.assertEqual(r['methode_cl_retenue'], 'standard',
+                             f'{nom} : une bascule automatique a eu lieu')
+        print('    OK VCL-4 aucune bascule automatique, sur les deux regimes')
+
+    def test_le_commentaire_signe_publie_la_recommandation(self):
+        # ⚠️ ON LIT LE VRAI COMMENTAIRE. Une version qui aurait recompose la
+        # ligne dans le test serait passee au vert sur n5_commentaire inchange.
+        r = AgentA7Provisionnement(verbose=False).run(
+            source=self._triangle_ecart(), mode_declare='cumule',
+            n_sim_bootstrap=30, seed=42, generer_graphiques=False)
+        self.assertTrue(r.get('success'), r.get('erreur'))
+        reco = r['n2']['variante_cl_recommandee']
+        txt = r['commentaire']
+        self.assertIn('Variante CL :', txt)
+        self.assertIn(reco, txt,
+                      'le commentaire signe tait la variante recommandee')
+        self.assertIn('Motif de la recommandation', txt,
+                      'la justification n est plus etiquetee comme telle')
+        print(f'    OK VCL-5 le commentaire signe nomme {reco}')
+
+    def test_le_classeur_publie_la_recommandation(self):
+        from openpyxl import load_workbook
+        r = AgentA7Provisionnement(verbose=False).run(
+            source=self._triangle_ecart(), mode_declare='cumule',
+            n_sim_bootstrap=30, seed=42, generer_graphiques=False)
+        self.assertTrue(r.get('success'), r.get('erreur'))
+        wb = load_workbook(io.BytesIO(r['excel_bytes']))
+        cellules = [str(c) for ws in wb
+                    for row in ws.iter_rows(values_only=True)
+                    for c in row if c is not None]
+        self.assertIn('Variante CL recommandée', cellules,
+                      'le classeur n a pas la ligne de la recommandation')
+        self.assertIn('Variante CL appliquée', cellules)
+        marquees = [c for c in cellules if 'NON APPLIQUÉE' in c]
+        self.assertTrue(marquees,
+                        'la recommandation ecartee n est pas marquee')
+        print(f'    OK VCL-6 le classeur publie {marquees[0]!r}')
+
+
 class T_Les_Quatre_Chaines_Declarent_Leur_Troncature(unittest.TestCase):
     """⚠️⚠️ LE NOMMER NE LE FERMAIT PAS.
 

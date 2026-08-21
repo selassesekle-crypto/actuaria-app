@@ -30,6 +30,7 @@ import numpy as np
 # n'apparaisse jamais comme un loss ratio de 0 %.
 from .methodes_be import (ORDRE_AFFICHAGE, disponible, libelle,
                           motif_exclusion, reserve)
+from .n2_hypotheses import mention_recommandation_cl_courte
 from .n2_hypotheses_clm import lignes_correlations_h1
 from .n2_hypotheses_bfcc import lignes_hypotheses_bfcc
 from .n2_hypotheses_clm import lignes_hypotheses_clm
@@ -271,7 +272,9 @@ def _ong1_synthese(wb, n1, n2, n3, n4, ref_client, date_str):
     _titre_section(ws, 29, 1, "DONNÉES", 6)
     _kpi(ws, 30, 1, "Taille triangle", n1.get('taille','—'))
     _kpi(ws, 31, 1, "Mode détecté",    n1.get('mode_detecte','—'))
-    _kpi(ws, 32, 1, "Méthode CL",      n3.get('methode_cl','—'))
+    # ⚠️ « Méthode CL » laissait croire à un CHOIX. C'est la variante
+    # APPLIQUÉE, et le tableau de décision porte celle qui a été écartée.
+    _kpi(ws, 32, 1, "Variante CL appliquée", n3.get('methode_cl','—'))
     _kpi(ws, 33, 1, "Tail factor",     n3['chain_ladder'].get('tail_factor',{}).get('tail_factor',1) if isinstance(n3['chain_ladder'].get('tail_factor'),dict) else 1, FMT_DEC4)
     _kpi(ws, 34, 1, "Date rapport",    date_str)
     _kpi(ws, 35, 1, "Référence",       ref_client)
@@ -772,14 +775,20 @@ def _ong6_hypotheses(wb, n2, n4):
 
     # Décision méthodologique
     _titre_section(ws, ligne, 1, "DÉCISION MÉTHODOLOGIQUE", 5)
+    # ⚠️⚠️ LA RECOMMANDATION MANQUAIT — ET C'EST LE BLOC DE LA DÉCISION.
+    # `variante_cl_recommandee` n'avait AUCUN lecteur dans tout le dépôt :
+    # le classeur publiait la variante appliquée sans jamais dire qu'une
+    # autre avait été recommandée. La colonne des valeurs fait 18 caractères,
+    # d'où le rendu COURT ici et la phrase entière dans le commentaire signé.
     for i, (lbl, val) in enumerate([
-        ("Méthode CL retenue",     n2.get('methode_cl_retenue','—')),
+        ("Variante CL appliquée",   n2.get('methode_cl_retenue','—')),
+        ("Variante CL recommandée", mention_recommandation_cl_courte(n2)),
         ("Méthode recommandée",    n2.get('methode_recommandee','—')),
         ("Statut global",          n2.get('statut_global','—')),
     ]):
         _kpi(ws, ligne + 1 + i, 1, lbl, val, None,
              n2.get('statut_global') if lbl == "Statut global" else None)
-    ligne += 5
+    ligne += 6
 
     # ⚠️ LES ALERTES DE JUGEMENT, PAS SEULEMENT CELLES DE N2 (lot C1).
     # Cette feuille lisait `n2['alertes']` et elle seule. Or les alertes du

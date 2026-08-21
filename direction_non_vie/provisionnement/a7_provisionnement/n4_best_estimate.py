@@ -86,6 +86,7 @@ import numpy as np
 
 from .config.lob_config import get_lob_config, get_sigma_eiopa, reference_s2
 from .methodes_be       import _CLES_N3, _LIBELLE_METHODE
+from .n2_hypotheses import mention_variante_cl
 from .n2_hypotheses_bootstrap import lignes_hypotheses_bootstrap
 from core.courbe_rfr import diagnostic_peremption as peremption_referentiel
 from .config.rfr_eiopa  import (get_taux_rfr, DATE_COURBE,
@@ -2103,8 +2104,11 @@ class BestEstimateS2:
             for l in lignes_hypotheses_bootstrap(n2)
         ] + [
             "",
-            f"  Méthode CL retenue    : {n2.get('methode_cl_retenue', '—')}",
-            f"  Justification CL      : {raison_cl}",
+            # ⚠️ « Méthode CL retenue » ne publiait QUE la variante appliquée,
+            # et « Justification CL » le motif d'une recommandation que rien
+            # ne nommait. Les deux clés se lisent ensemble ou pas du tout.
+            f"  Variante CL           : {mention_variante_cl(n2)}",
+            f"  Motif recommandation  : {raison_cl}",
             f"  Méthode recommandée   : {methode_rec}",
             f"  Justification         : {raison_rec}",
             "",
