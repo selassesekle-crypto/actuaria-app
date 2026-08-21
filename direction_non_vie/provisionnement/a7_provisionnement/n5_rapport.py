@@ -2753,7 +2753,13 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
         b['avis'] = ''
 
     # ── PIED ─────────────────────────────────────────────────────────────────
-    # Signature actuaire — DEUX ETATS, cf. `trace_relecture`.
+    # ⚠️⚠️ CETTE CLE S'APPELAIT `signature_actuaire`, ET LE NOM CONTREDISAIT
+    # LA PORTEE PUBLIEE DANS LE MEME DEPOT : `PORTEE_ARCHIVE` affirme que
+    # << la signature de l'actuaire reste hors du systeme >>. Elle ne porte
+    # PAS une signature -- elle porte le texte de `trace_relecture`, un ETAT
+    # de relecture construit a partir d'un champ libre. Le nom affirmait plus
+    # que le code, a cote de la phrase qui disait l'inverse.
+    # Relecture actuarielle — DEUX ETATS, cf. `trace_relecture`.
     act_nom = actuaire_nom or ''
     act_ia  = actuaire_numero_ia or ''
     _tr = trace_relecture(act_nom, act_ia)
@@ -2763,7 +2769,7 @@ def _build_blocks(n2, n3, n4, narration, source_narration, lob, cli, arr, dt, au
     # ambre quand la relecture n'est pas enregistree ; sans cette regle, l'HTML
     # l'aurait rendue au gris du pied, et l'etat negatif aurait ete ACTIF dans
     # un format et discret dans l'autre — la divergence que ce lot ferme.
-    b['signature_actuaire'] = (
+    b['relecture_actuaire'] = (
         ('<span style="color:' + ORANGE + ';">' + _tr.texte + '</span>'
          if _tr.alerte else _tr.texte) + ' · ')
     b['actuaire_nom'] = act_nom
@@ -3227,7 +3233,7 @@ def export_html(
             '<div class="pied-de-page">\n'
             '  <div class="pied-logo"><img src="' + LOGO_URI + '" alt="ActuarIA"/></div>\n'
             '  <div class="pied-meta">'
-            + b['signature_actuaire']
+            + b['relecture_actuaire']
             + b['pied_info'] + '<br>'
             '    <span style="font-size:6.5pt;color:#8A9AB0;">'
             'Rapport établi conformément à l\'Art. 77 et 105 de la Directive Solvabilité II '

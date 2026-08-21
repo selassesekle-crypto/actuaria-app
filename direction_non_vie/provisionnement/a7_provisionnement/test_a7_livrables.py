@@ -2847,5 +2847,71 @@ class T_F3b_Aucun_Seuil_Generique_Sur_Une_Hypothese_Non_Testee(
         print(f'    OK F3b-4 {len(vus)} seuils H1 distincts : {sorted(vus)}')
 
 
+class T_La_Portee_De_L_Archive_Est_EPROUVEE_Pas_Seulement_Ecrite(
+        unittest.TestCase):
+    """⚠️⚠️ UNE PHRASE DE PORTEE SE MESURE COMME UN CHIFFRE.
+
+    `PORTEE_ARCHIVE` affirme deux choses. La premiere — l'empreinte prouve
+    l'integrite — etait deja eprouvee par une alteration plantee. LA
+    SECONDE — << la signature de l'actuaire reste hors du systeme >> — ne
+    l'etait PAS : le test C3-5 verifie que le MOT << signature >> figure
+    dans le texte, jamais que le fait est vrai. UN CONTROLE QUI CHERCHE LE
+    MOT NE PROUVE RIEN.
+    """
+
+    def test_le_nom_publie_n_est_verifie_par_personne(self):
+        # ⚠️ L'EPREUVE DU FAIT, ET ELLE EST BRUTALE : n'importe quelle chaine
+        # est acceptee telle quelle. C'est precisement ce qui fait que ce
+        # n'est PAS une signature -- rien n'authentifie qui a saisi quoi.
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
+            trace_relecture,
+        )
+        for faux in ('Personne Inexistante', 'AAAA', '???', 'Ibrahim'):
+            t = trace_relecture(faux, 'X-999')
+            self.assertIn(faux, t.texte,
+                          'un nom arbitraire devrait passer tel quel')
+            self.assertFalse(t.alerte)
+        print('    OK PORT-1 tout nom passe : ce n est pas une signature')
+
+    def test_sans_nom_l_etat_negatif_est_actif(self):
+        # ⚠️ CONTRE-EPREUVE : l'absence ne doit pas etre SILENCIEUSE, sinon
+        # << non relu >> et << champ non transmis >> seraient indistincts.
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
+            trace_relecture,
+        )
+        t = trace_relecture('', '')
+        self.assertTrue(t.alerte)
+        self.assertIn('non enregistrée', t.texte)
+        print('    OK PORT-2 sans nom, l etat negatif est ACTIF')
+
+    def test_aucune_cle_du_rapport_ne_se_dit_signature(self):
+        # ⚠️⚠️ LE DEFAUT TROUVE : la cle s'appelait `signature_actuaire` et
+        # portait un ETAT DE RELECTURE. Le nom affirmait plus que le code, a
+        # cote de la phrase qui disait l'inverse.
+        src = inspect.getsource(RAPP_MOD)
+        self.assertNotIn("b['signature_actuaire']", src,
+                         'une cle se dit signature alors que la portee dit '
+                         "qu'il n'y en a pas")
+        self.assertIn("b['relecture_actuaire']", src)
+        print('    OK PORT-3 aucune cle ne se dit signature')
+
+    def test_la_portee_declare_que_la_mention_n_est_pas_authentifiee(self):
+        # ⚠️ CE QUI LIMITE NE PEUT QU'AFFAIBLIR LA REVENDICATION : cette
+        # clause s'ajoute sans arbitrage. Elle dit ce que la portee taisait.
+        self.assertIn('DECLARATIVE', PORTEE_ARCHIVE)
+        self.assertIn("n'est verifie par personne", PORTEE_ARCHIVE)
+        print('    OK PORT-4 la portee declare la mention non authentifiee')
+
+    def test_la_clause_neuve_atteint_les_trois_sites_de_la_portee(self):
+        # ⚠️ LA PORTEE VIT A TROIS ENDROITS depuis C3 : la constante, l'audit
+        # archive, et le verdict de `verifier_archive`. Une clause ajoutee a
+        # la constante SEULE laisserait deux des trois sites incomplets.
+        vide = verifier_archive({})
+        self.assertIn('DECLARATIVE', vide['porte'],
+                      'le verdict ne porte pas la clause neuve')
+        self.assertIn('DECLARATIVE', PORTEE_ARCHIVE)
+        print('    OK PORT-5 la clause atteint la constante et le verdict')
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=1)

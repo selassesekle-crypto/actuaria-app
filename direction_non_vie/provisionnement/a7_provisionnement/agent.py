@@ -175,7 +175,9 @@ _TAILLE_MIN_LIVRABLE = 512
 PORTEE_ARCHIVE = (
     "dossier conserve et verifiable : l'empreinte prouve que le fichier relu "
     "est celui qui a ete ecrit, jamais qu'il a ete signe ni assume. La "
-    "signature de l'actuaire reste hors du systeme."
+    "signature de l'actuaire reste hors du systeme. La mention de relecture "
+    "publiee dans le rapport est DECLARATIVE : le nom saisi n'est verifie "
+    "par personne."
 )
 
 
