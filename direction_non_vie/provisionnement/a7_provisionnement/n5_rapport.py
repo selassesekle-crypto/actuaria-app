@@ -436,6 +436,21 @@ def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: s
         f"Diagonales anormales: {', '.join(bz.get('diagonales_anormales', [])) or 'Aucune'}",
         f"Recommandation: {bz.get('recommandation', '—')}",
         "",
+        "",
+        # ⚠️⚠️ LA LISTE PART AVEC LE DOSSIER, ET C'EST LA MOITIE QUI MANQUAIT.
+        # Le prompt PRESCRIVAIT de citer cinq references sans en transmettre
+        # AUCUNE : le modele les produisait de memoire. Mesure sur le premier
+        # run reel -- 9 references citees, 0 dans la charge utile, dont un
+        # << article 260 >> que personne ne lui avait demande.
+        # ⚠️ ELLES SONT AUTORISEES, PAS VERIFIEES AU TEXTE : le depot ne
+        # detient pas le Reglement delegue. Le dire au modele evite qu'il
+        # prenne cette liste pour une garantie d'exactitude.
+        "=== RÉFÉRENCES AUTORISÉES — déclarées, NON vérifiée au texte ===",
+        "Articles du Règlement délégué citables : "
+        + ', '.join('Art. ' + a for a in sorted(ARTICLES_AUTORISES, key=int)),
+        "Sources méthodologiques citables : " + ' | '.join(SOURCES_AUTORISEES),
+        "N'en cite AUCUNE AUTRE : toute référence hors liste est signalée.",
+        "",
         "Rédige le commentaire actuariel complet en 7 sections.",
     ]
     return '\n'.join(lines)
@@ -646,6 +661,56 @@ def orphelins_narration(narration: str, charge_utile: str) -> list:
             if _cle_nombre(n) not in connus]
 
 
+#: ⚠️⚠️ AUTORISEES PAR L'ENTITE -- PAS VERIFIEES AU TEXTE. C'EST UNE
+#: DECLARATION, PAS UNE PREUVE.
+#:
+#: Le depot NE DETIENT PAS le Reglement delegue : personne ici ne peut
+#: confirmer qu'un article dit ce qu'on lui fait dire. Cette liste enregistre
+#: ce que l'entite s'autorise a citer, rien de plus. Le controle qui s'y
+#: adosse verifie une APPARTENANCE A CETTE LISTE, JAMAIS UNE JUSTESSE --
+#: exactement la limite du verrou sur les nombres, et elle est ecrite ici
+#: pour que personne ne prenne l'un pour l'autre.
+#:
+#: ⚠️ CE DEPOT A DEJA PAYE UNE CITATION FAUSSE A VINGT ENDROITS : `Art. 105`
+#: (risque de spread des captives) ecrit pour `Art. 115`. Une liste composee
+#: de memoire aurait reproduit le defaut que ce controle combat.
+#:
+#: ⚠️ `260` N'Y FIGURE PAS -- non parce qu'on le sait faux, mais parce que
+#: RIEN ICI NE PERMET DE LE DIRE VRAI. Le modele l'a cite deux fois dans la
+#: premiere narration reelle, sans qu'on le lui demande.
+ARTICLES_AUTORISES = frozenset({
+    '77',                    # Best Estimate -- deja cite par n4_best_estimate
+    '115', '116', '117',     # SCR provisions, mesure de volume, sigma
+})
+
+#: Les sources methodologiques citables. Elles ne sont pas juridiques : un
+#: article faux engage, une reference bibliographique se verifie en
+#: bibliotheque. On les transmet pour que le modele n'en invente pas d'autres.
+SOURCES_AUTORISEES = ('Guide IA 2023', 'Mack (1993)', 'Clark (2003)',
+                      'Reglement delegue (UE) 2015/35')
+
+#: Un article cite dans la narration : on ne retient que le NUMERO.
+_ARTICLE_CITE = re.compile(r'\bArt(?:icle)?s?\.?\s*(\d+)(?:\s+et\s+(\d+))?',
+                           re.IGNORECASE)
+
+
+def references_hors_liste(narration: str) -> list:
+    """Les numeros d'article cites qui ne sont PAS dans la liste autorisee.
+
+    ⚠️ CE CONTROLE NE DIT PAS QU'UNE REFERENCE EST FAUSSE. Il dit qu'elle
+    n'appartient pas a ce que l'entite a declare autoriser. Un article exact
+    mais non declare y figurera ; c'est le prix d'une liste qui ACCUSE, et
+    c'est le bon sens de l'erreur -- elle ne peut qu'ajouter des
+    signalements, jamais en retirer.
+    """
+    vus = []
+    for m in _ARTICLE_CITE.finditer(narration or ''):
+        for num in m.groups():
+            if num and num not in ARTICLES_AUTORISES and num not in vus:
+                vus.append(num)
+    return vus
+
+
 #: ⚠️ VOCABULAIRE DE PRESCRIPTION ACTUARIELLE. Une liste qui ACCUSE : par la
 #: regle d'asymetrie, un mot qui y manque laisse le controle ou il etait, il
 #: ne cree AUCUNE cecite neuve.
@@ -703,18 +768,66 @@ def marquer_prescriptions_chiffrees(narration: str,
             for n in orphelins_narration(narration, charge_utile)}
     if not orph:
         return narration, 0
-    # Le split CAPTURE ses separateurs : la narration se reconstruit a
-    # l'identique, marques exclues. Un split simple les perdrait.
-    parts = re.split(r'((?<=[.!?])\s+|\n)', narration)
+    return _marquer_phrases(
+        narration,
+        lambda p: (_PRESCRIPTION_ACTUARIELLE.search(p)
+                   and any(_cle_nombre(n) in orph
+                           for n in nombres_publies(p))),
+        PORTEE_MARQUE_PRESCRIPTION)
+
+
+def _marquer_phrases(narration: str, retenir, marque: str) -> tuple[str, int]:
+    """La mecanique commune : decouper, tester, inserer apres la phrase.
+
+    ⚠️ UNE SEULE MECANIQUE POUR TOUS LES MARQUAGES. Deux decoupages jumeaux
+    divergeraient au premier ajustement -- c'est ce qui etait arrive aux deux
+    tables de libelles avant qu'on les fonde en une.
+
+    ⚠️ LE SPLIT CAPTURE SES SEPARATEURS : la narration se reconstruit a
+    l'identique, marques exclues. Un split simple les perdrait, et le lot
+    n'enleverait plus << rien >> mais << presque rien >>.
+    """
     sortie, marquees = [], 0
-    for p in parts:
+    for p in re.split(r'((?<=[.!?])\s+|\n)', narration):
         sortie.append(p)
-        if not p.strip() or not _PRESCRIPTION_ACTUARIELLE.search(p):
-            continue
-        if any(_cle_nombre(n) in orph for n in nombres_publies(p)):
-            sortie.append(' ' + PORTEE_MARQUE_PRESCRIPTION)
+        if p.strip() and retenir(p):
+            sortie.append(' ' + marque)
             marquees += 1
     return ''.join(sortie), marquees
+
+
+#: ⚠️⚠️ ELLE DIT << HORS LISTE >>, JAMAIS << FAUSSE >>, ET LA DISTINCTION EST
+#: TOUT LE LOT. Le depot ne detient pas le Reglement delegue : affirmer
+#: qu'un article est faux serait affirmer plus que ce qu'on mesure -- le
+#: defaut exact que ce chantier ferme partout ailleurs.
+#: C'est la MEME limite que le verrou sur les nombres, et elle est ecrite au
+#: meme endroit qu'eux : dans le texte publie, pas dans un en-tete.
+PORTEE_MARQUE_REFERENCE = (
+    "⚠️ RÉFÉRENCE HORS LISTE — l'article cité dans la phrase ci-dessus ne "
+    "figure pas parmi ceux que l'entité a déclaré autoriser. Cette liste est "
+    "une AUTORISATION, pas une vérification au texte : le contrôle porte sur "
+    "l'appartenance à la liste, jamais sur l'exactitude de l'article — qui "
+    "n'a pas été vérifiée.")
+
+
+def marquer_references_hors_liste(narration: str) -> tuple[str, int]:
+    """La narration, chaque phrase citant un article hors liste marquee.
+
+    ⚠️ LA CHARGE UTILE N'EST PAS UN ARGUMENT ICI, ET C'EST VOULU. Les
+    references ne s'apparient pas a des valeurs transmises : elles se
+    comparent a une liste DECLAREE. Prendre la charge en parametre laisserait
+    croire a un controle de provenance, alors que c'en est un
+    d'AUTORISATION.
+    """
+    if not narration:
+        return '', 0
+    hors = set(references_hors_liste(narration))
+    if not hors:
+        return narration, 0
+    return _marquer_phrases(
+        narration,
+        lambda p: bool(hors & set(references_hors_liste(p))),
+        PORTEE_MARQUE_REFERENCE)
 
 
 def controle_narration(narration: str, source: str, charge_utile: str) -> dict:
@@ -757,6 +870,10 @@ def controle_narration(narration: str, source: str, charge_utile: str) -> dict:
         # deja coute une gate rouge sur ce chantier.
         'n_prescriptions_marquees':
             narration.count(PORTEE_MARQUE_PRESCRIPTION),
+        # ⚠️ LES NUMEROS BRUTS, POUR QU'UN RELECTEUR RETROUVE LA PHRASE. Le
+        # champ dit HORS LISTE, jamais FAUX : l'entite autorise, elle ne
+        # verifie pas au texte.
+        'references_hors_liste': references_hors_liste(narration)[:20],
         'porte':          "provenance des nombres, jamais leur justesse",
     }
 
@@ -779,6 +896,7 @@ def _generer_narration(n2, n3, n4, commentaire, lob_label,
             # plus loin obligerait a re-transporter la charge, ou a la
             # reconstruire -- le doublon que ce chantier a deja ferme.
             txt, _ = marquer_prescriptions_chiffrees(txt, charge)
+            txt, _ = marquer_references_hors_liste(txt)
             return txt, 'claude_api', charge
     except Exception:
         pass

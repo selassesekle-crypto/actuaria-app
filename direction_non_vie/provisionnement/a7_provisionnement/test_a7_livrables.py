@@ -2635,5 +2635,97 @@ class T_Le_Document_N_Affirme_Une_Origine_Qu_Une_Fois(unittest.TestCase):
         print('    OK PIED-4 sur claude_api, l origine reste declaree')
 
 
+class T_Une_Reference_Hors_Liste_Est_Signalee(unittest.TestCase):
+    """⚠️⚠️ AUTORISEE PAR L'ENTITE, PAS VERIFIEE AU TEXTE.
+
+    Le depot ne detient pas le Reglement delegue. Ce controle verifie une
+    APPARTENANCE A UNE LISTE DECLAREE, jamais une exactitude — et c'est la
+    meme limite que le verrou sur les nombres.
+    """
+
+    def test_un_article_hors_liste_est_releve(self):
+        # ⚠️ MESURE : le modele a cite << article 260 >> DEUX FOIS dans la
+        # premiere narration reelle, sans qu'on le lui demande.
+        self.assertEqual(
+            RAPP_MOD.references_hors_liste("conformément à l'article 260 du "
+                                           "Règlement Délégué"), ['260'])
+        print('    OK REF-1 un article hors liste est releve')
+
+    def test_les_articles_autorises_ne_sont_jamais_releves(self):
+        for txt in ('Art. 77 S2', "l'article 115", 'articles 77 et 115',
+                    'Art. 116', 'article 117(2)'):
+            self.assertEqual(RAPP_MOD.references_hors_liste(txt), [],
+                             f'{txt!r} signale a tort')
+        print('    OK REF-2 les articles autorises restent muets')
+
+    def test_l_enumeration_est_lue_en_entier(self):
+        # ⚠️ << articles 77 et 260 >> : le SECOND doit ressortir. Un motif qui
+        # ne lirait que le premier laisserait passer la moitie des citations.
+        self.assertEqual(
+            RAPP_MOD.references_hors_liste('articles 77 et 260'), ['260'])
+        print('    OK REF-3 le second membre d une enumeration est lu')
+
+    # ── la marque, et ce qu elle refuse de dire ───────────────────────────
+    def test_la_marque_dit_hors_liste_et_jamais_faux(self):
+        # ⚠️⚠️ LE DEPOT NE PEUT PAS SAVOIR SI L'ARTICLE EST EXACT. Dire
+        # << faux >> serait affirmer plus que ce qu'on mesure.
+        p = RAPP_MOD.PORTEE_MARQUE_REFERENCE
+        for interdit in ('est faux', 'inexact', 'inventé', 'erroné'):
+            self.assertNotIn(interdit, p.lower(), f'la marque accuse : {interdit}')
+        self.assertIn('AUTORISATION, pas une vérification', p)
+        self.assertIn("n'a pas été vérifiée", p)
+        print('    OK REF-4 la marque dit hors liste, jamais faux')
+
+    def test_le_marquage_n_enleve_rien(self):
+        src = ("Le BE atteint 14 830 899 €. Conformément à l'article 260, "
+               "un inventaire est requis.\nAutre ligne.")
+        marque, n = RAPP_MOD.marquer_references_hors_liste(src)
+        self.assertEqual(n, 1)
+        self.assertEqual(
+            marque.replace(' ' + RAPP_MOD.PORTEE_MARQUE_REFERENCE, ''), src,
+            'le marquage a altere le texte du modele')
+        print('    OK REF-5 marque retiree -> texte identique a l original')
+
+    def test_une_narration_conforme_n_est_pas_marquee(self):
+        src = "Le BE relève de l'article 77, le SCR de l'article 115."
+        marque, n = RAPP_MOD.marquer_references_hors_liste(src)
+        self.assertEqual((marque, n), (src, 0))
+        print('    OK REF-6 une narration conforme reste intacte')
+
+    # ── la liste part AVEC le dossier ─────────────────────────────────────
+    def test_la_liste_autorisee_est_transmise_au_modele(self):
+        # ⚠️⚠️ LA MOITIE QUI MANQUAIT : le prompt PRESCRIVAIT cinq references
+        # sans en transmettre AUCUNE. Mesure : 9 citees, 0 dans la charge.
+        r = AgentA7Provisionnement(verbose=False).run(
+            source=np.array(GENINS, dtype=float), mode_declare='cumule',
+            primes=_exposition(GENINS), n_sim_bootstrap=60, seed=42,
+            generer_graphiques=False)
+        ctx = RAPP_MOD._construire_contexte(
+            r['n2'], r['n3'], r['n4'], 'Automobile', '31/12/2025')
+        self.assertIn('RÉFÉRENCES AUTORISÉES', ctx)
+        for a in ('77', '115', '116', '117'):
+            self.assertIn('Art. ' + a, ctx, f'Art. {a} non transmis')
+        # ⚠️ ET LE CONTEXTE DIT SA PROPRE LIMITE au modele.
+        self.assertIn('NON vérifiée au texte', ctx,
+                      'la charge presente la liste comme une garantie')
+        self.assertNotIn('Art. 260', ctx)
+        print('    OK REF-7 la liste part avec le dossier, limite comprise')
+
+    def test_l_audit_porte_les_references_hors_liste(self):
+        ctrl = RAPP_MOD.controle_narration(
+            "selon l'article 260", 'claude_api', 'charge')
+        self.assertEqual(ctrl['references_hors_liste'], ['260'])
+        print('    OK REF-8 l audit trail porte les numeros hors liste')
+
+    def test_la_liste_est_declaree_autorisee_et_non_verifiee(self):
+        # ⚠️ LA MENTION VIT DANS LE MODULE, a l'endroit exact ou quelqu'un
+        # pourrait prendre une AUTORISATION pour une PREUVE.
+        src = inspect.getsource(RAPP_MOD)
+        self.assertIn('AUTORISEES PAR L\'ENTITE -- PAS VERIFIEES AU TEXTE',
+                      src)
+        self.assertNotIn('260', RAPP_MOD.ARTICLES_AUTORISES)
+        print('    OK REF-9 la liste se declare autorisee, pas verifiee')
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=1)
