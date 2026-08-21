@@ -601,7 +601,12 @@ _REFERENCES_NON_CHIFFREES = re.compile(
 #: << 8,057,830 >> en TROIS nombres, tous orphelins, et annoncait 42 % de faux
 #: positifs. La narration n'inventait rien -- le detecteur fabriquait des
 #: orphelins. Il est teste POUR LUI-MEME (classe dediee) avant d'etre cru.
-_NOMBRE = re.compile(r'\d[\d.,    ]*\d|\d')
+#: ⚠️ LES QUATRE ESPACES SONT NOMMES PAR LEUR CODEPOINT. Ecrits en clair
+#: ils sont INVISIBLES dans le source -- ils ont deja fait echouer une
+#: edition de ce fichier, et personne ne peut relire ce qu'il ne voit pas.
+_ESPACES_MILLIERS = '\u202f\u00a0\u2009\u0020'
+
+_NOMBRE = re.compile(r'\d(?:[' + _ESPACES_MILLIERS + r']\d|[.,]\d|\d)*')
 
 
 def _cle_nombre(brut: str) -> str:

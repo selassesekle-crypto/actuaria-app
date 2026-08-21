@@ -2102,6 +2102,43 @@ class T_Detecteur_De_Nombres(unittest.TestCase):
         self.assertNotEqual(_cle_nombre('17'), _cle_nombre('17,3'))
         print('    OK C2-2 un arrondi ne s apparie pas a sa valeur pleine')
 
+    def test_une_ponctuation_ne_soude_pas_deux_nombres(self):
+        # ⚠️⚠️ MESURE SUR DU LLM REEL : << Score 83,2/100, 2 alertes >> rendait
+        # << 100, 2 >> comme UN SEUL nombre. Un separateur de milliers ne
+        # porte JAMAIS d'espace apres lui -- << 100, 2 >> est une virgule de
+        # ponctuation suivie d'un second nombre.
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
+            nombres_publies,
+        )
+        self.assertEqual(nombres_publies('100, 2'), ['100', '2'])
+        self.assertEqual(nombres_publies('Score 83,2/100, 2 alertes'),
+                         ['83,2', '100', '2'])
+        print('    OK C2-2c une ponctuation ne soude pas deux nombres')
+
+    def test_les_separateurs_colles_restent_des_separateurs(self):
+        # ⚠️ CONTRE-EPREUVE : le correctif ne doit rien casser de ce qui
+        # marchait. Les quatre espaces de milliers sont testes un par un.
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
+            nombres_publies,
+        )
+        for brut in ('8,057,830', '1.234.567', '0,309', '11.0',
+                     '4 894 197', '14 830 899',
+                     '2 447 095', '18 680 856'):
+            self.assertEqual(nombres_publies(brut), [brut],
+                             f'{brut!r} scinde a tort')
+        print('    OK C2-2d les 4 espaces et les separateurs colles tiennent')
+
+    def test_les_espaces_du_motif_sont_lisibles_dans_le_source(self):
+        # ⚠️ ILS ETAIENT ECRITS EN CLAIR : invisibles, ils ont fait echouer une
+        # edition de ce fichier. Personne ne peut relire ce qu'il ne voit pas.
+        src = inspect.getsource(RAPP_MOD)
+        ligne = [x for x in src.splitlines()
+                 if x.startswith('_ESPACES_MILLIERS =')]
+        self.assertEqual(len(ligne), 1)
+        self.assertFalse(any(ord(c) > 127 for c in ligne[0]),
+                         'un espace invisible est revenu dans le source')
+        print('    OK C2-2e les espaces du motif sont nommes, pas invisibles')
+
     def test_une_decimale_a_partie_entiere_nulle_n_est_pas_des_milliers(self):
         # ⚠️⚠️ LE DEFAUT MESURE SUR LE PREMIER RUN LLM REEL. La charge portait
         # `p = 0.3090`, le modele publiait `0,309` : MEME VALEUR, deux cles.
