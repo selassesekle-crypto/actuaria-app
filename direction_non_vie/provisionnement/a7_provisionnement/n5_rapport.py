@@ -460,6 +460,21 @@ def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: s
 #  GÉNÉRATION NARRATION (3 NIVEAUX)
 # =============================================================================
 
+#: ⚠️⚠️ ELLE DIT QUE LE TEXTE EST INCOMPLET -- LE SEUL FAIT QU'ON CONNAISSE.
+#:
+#: Elle n'affirme PAS ce qui manque : personne ne le sait. Elle ne dit pas
+#: non plus que ce qui precede est faux -- il ne l'est pas, il est SEULEMENT
+#: interrompu. C'est une phrase de portee : ses clauses se mesurent.
+#:   AFFIRME  << s'est arrete a la limite >>   -> `stop_reason == max_tokens`
+#:   LIMITE   << ce qui precede n'est pas invalide >>, << la suite est
+#:            absente, pas erronee >>
+PORTEE_NARRATION_TRONQUEE = (
+    "⚠️ NARRATION INTERROMPUE — le modèle a atteint sa limite de longueur et "
+    "le texte ci-dessus s'arrête avant sa fin. Ce qui précède n'est pas "
+    "invalidé : il est INCOMPLET. Les sections manquantes sont absentes, "
+    "non erronées — et personne ne peut dire ce qu'elles auraient contenu.")
+
+
 def _narration_claude_api(n2, n3, n4, lob_label, arrete) -> tuple[str, str]:
     """Le texte du modèle ET la charge utile qui lui a été transmise.
 
@@ -477,7 +492,17 @@ def _narration_claude_api(n2, n3, n4, lob_label, arrete) -> tuple[str, str]:
             messages=[{'role': 'user', 'content': ctx}],
             cle=frontiere_llm.cle_api_ou_secrets(),
         )
-        return frontiere_llm.texte_des_blocs(resp), ctx
+        # ⚠️⚠️ UNE NARRATION COUPEE NE SE PUBLIE PAS EN SILENCE. Le modele
+        # s'arrete a la limite de jetons et le texte finit EN PLEINE PHRASE ;
+        # rien, jusqu'ici, ne le disait. Mesure du 21/08 : `stop_reason`
+        # n'etait lu NULLE PART dans le depot.
+        # ⚠️ ON MARQUE, ON NE LEVE PAS : le texte deja produit reste utile --
+        # sur un cas mesure, 40 % de la narration etait ecrite. Faire tomber
+        # le rapport reproduirait ce que le lot A a ferme.
+        texte = frontiere_llm.texte_des_blocs(resp)
+        if frontiere_llm.est_tronquee(resp):
+            texte = texte.rstrip() + '\n\n' + PORTEE_NARRATION_TRONQUEE
+        return texte, ctx
     except Exception as e:
         logger.warning(f'Narration non generee : {e}')
         raise
@@ -879,6 +904,11 @@ def controle_narration(narration: str, source: str, charge_utile: str) -> dict:
         # champ dit HORS LISTE, jamais FAUX : l'entite autorise, elle ne
         # verifie pas au texte.
         'references_hors_liste': references_hors_liste(narration)[:20],
+        # ⚠️ SE LIT DANS LE TEXTE, comme les prescriptions marquees : la
+        # marque voyage avec le contenu, l'audit la retrouve sans qu'aucune
+        # signature n'ait a transporter un drapeau de plus.
+        'narration_tronquee':
+            PORTEE_NARRATION_TRONQUEE in narration,
         'porte':          "provenance des nombres, jamais leur justesse",
     }
 

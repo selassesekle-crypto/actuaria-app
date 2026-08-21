@@ -262,6 +262,43 @@ def texte_des_blocs(reponse: Any) -> str:
     return texte
 
 
+#: Le motif d'arrêt qui signale une réponse COUPÉE par la limite de jetons.
+MOTIF_TRONQUEE = 'max_tokens'
+
+
+def motif_arret(reponse: Any) -> str:
+    """Pourquoi le modèle s'est arrêté. `''` si la réponse ne le dit pas."""
+    return str(getattr(reponse, 'stop_reason', '') or '')
+
+
+def est_tronquee(reponse: Any) -> bool:
+    """La réponse a-t-elle été COUPÉE par la limite de jetons ?
+
+    ⚠️⚠️ CE MODULE FERMAIT DÉJÀ LE CAS VOISIN, ET À MOITIÉ SEULEMENT.
+    `texte_des_blocs` lève sur une réponse VIDE, en écrivant pourquoi : « on
+    échangerait une panne muette contre une autre — une narration vide
+    étiquetée "venue de l'API", qu'aucun appelant ne distinguerait d'une
+    narration réussie ». LE MÊME RAISONNEMENT VAUT MOT POUR MOT POUR UNE
+    RÉPONSE COUPÉE, et il n'avait pas été appliqué : un texte qui s'arrête
+    en pleine phrase est, lui aussi, indiscernable d'un texte abouti.
+
+    ⚠️ L'INFORMATION EXISTAIT ET PERSONNE NE LA LISAIT. Mesure du 21/08 :
+    `stop_reason` n'apparaissait NULLE PART dans le dépôt — la réponse était
+    jetée une ligne après son arrivée, par `texte_des_blocs`.
+
+    ⚠️ ET AUCUN AUTRE CONTRÔLE NE PEUT LE VOIR. Le verrou C2 mesure la
+    PROVENANCE des nombres, jamais la COMPLÉTUDE du texte : mesuré, une
+    narration coupée à 420 caractères affichait « 0,0 % d'orphelins » — un
+    taux qui se lit comme une qualité alors qu'il ne dit qu'une absence.
+
+    ⚠️ CETTE FONCTION MESURE, ELLE NE SANCTIONNE PAS. Lever ici ferait
+    tomber les HUIT chaînes qui appellent `texte_des_blocs` — c'est ce que
+    le lot A a fermé, un renderer qui plante sur un garde-fou bien posé.
+    C'est à chaque publieur de décider ce qu'il en fait.
+    """
+    return motif_arret(reponse) == MOTIF_TRONQUEE
+
+
 def sites_du_modele(modele: str) -> Tuple[Site, ...]:
     """Les sites qui portent ce modèle. Lève si le modèle est inconnu."""
     if modele not in MODELES_CONNUS:

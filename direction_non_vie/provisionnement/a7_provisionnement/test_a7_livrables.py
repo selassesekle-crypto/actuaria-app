@@ -3209,5 +3209,117 @@ class T_Le_Document_Confidentiel_Ne_Contacte_Aucun_Tiers(unittest.TestCase):
         print('    OK TIERS-6 BaseAgent n a aucun heritier, mesure et declare')
 
 
+class T_Une_Narration_Tronquee_Est_Declaree(unittest.TestCase):
+    """⚠️⚠️ LE MODULE FERMAIT DEJA LE CAS VOISIN, ET A MOITIE.
+
+    `texte_des_blocs` leve sur une reponse VIDE en ecrivant pourquoi : << on
+    echangerait une panne muette contre une autre -- une narration vide
+    etiquetee "venue de l'API", qu'aucun appelant ne distinguerait d'une
+    narration reussie >>. LE MEME RAISONNEMENT VAUT MOT POUR MOT POUR UNE
+    REPONSE COUPEE, et il n'avait pas ete applique.
+
+    Mesure du 21/08 : `stop_reason` n'apparaissait NULLE PART dans le depot.
+    """
+
+    @staticmethod
+    def _Reponse(texte, stop=None):
+        """Une reponse d'API, reduite a ce que le code en lit.
+
+        ⚠️ `Mock` PLUTOT QUE DES CLASSES : `texte_des_blocs` lit `type`,
+        `text` et `content` par `getattr`, et vulture ne peut pas le voir --
+        des classes ecrites a la main auraient produit quatre faux
+        signalements de plus, dans un fichier qui en porte deja.
+        ⚠️ `type='text'` EST INDISPENSABLE : `texte_des_blocs` ne concatene
+        que ces blocs et LEVE sur une chaine vide.
+        """
+        from unittest.mock import Mock
+        bloc = Mock(type='text', text=texte)
+        rep = Mock(content=[bloc])
+        if stop is None:
+            del rep.stop_reason      # un service qui ne publie aucun motif
+        else:
+            rep.stop_reason = stop
+        return rep
+
+    def test_la_troncature_est_detectee_sur_le_motif_d_arret(self):
+        from core import frontiere_llm as F
+        self.assertTrue(F.est_tronquee(self._Reponse('coupe', 'max_tokens')))
+        self.assertFalse(F.est_tronquee(self._Reponse('fini', 'end_turn')))
+        print('    OK TRONC-1 max_tokens detecte, end_turn non')
+
+    def test_une_reponse_sans_motif_n_est_pas_dite_tronquee(self):
+        # ⚠️ NE PAS AFFIRMER CE QU'ON NE MESURE PAS : un service qui ne
+        # publie aucun motif ne prouve pas une troncature.
+        from core import frontiere_llm as F
+        muette = self._Reponse('x')          # aucun `stop_reason` publie
+        self.assertFalse(F.est_tronquee(muette))
+        self.assertEqual(F.motif_arret(muette), '')
+        print('    OK TRONC-2 sans motif publie, aucune troncature affirmee')
+
+    def test_la_narration_coupee_porte_sa_mention(self):
+        from unittest.mock import patch
+
+        from core import frontiere_llm as F
+        rep = self._Reponse('§1 — CONTEXTE\n\nLe triangle porte dix', 'max_tokens')
+        # La cle est mockee elle aussi : ce test n'a pas besoin d'un
+        # secret, et  s'evalue AVANT l'appel patche.
+        with patch.object(F, 'appeler', return_value=rep),                 patch.object(F, 'cle_api_ou_secrets', return_value='x'):
+            txt, _ = RAPP_MOD._narration_claude_api({}, {}, {}, 'X', '31/12/2025')
+        self.assertIn(RAPP_MOD.PORTEE_NARRATION_TRONQUEE, txt,
+                      'une narration coupee est publiee sans mention')
+        self.assertIn('Le triangle porte dix', txt,
+                      'le texte deja produit a ete perdu')
+        print('    OK TRONC-3 le texte coupe est conserve ET declare')
+
+    def test_une_narration_complete_ne_porte_aucune_mention(self):
+        # ⚠️ CONTRE-EPREUVE : la mention ne doit pas devenir un tampon.
+        from unittest.mock import patch
+
+        from core import frontiere_llm as F
+        rep = self._Reponse('§1 — CONTEXTE\n\nTexte complet.', 'end_turn')
+        # La cle est mockee elle aussi : ce test n'a pas besoin d'un
+        # secret, et  s'evalue AVANT l'appel patche.
+        with patch.object(F, 'appeler', return_value=rep),                 patch.object(F, 'cle_api_ou_secrets', return_value='x'):
+            txt, _ = RAPP_MOD._narration_claude_api({}, {}, {}, 'X', '31/12/2025')
+        self.assertNotIn(RAPP_MOD.PORTEE_NARRATION_TRONQUEE, txt)
+        print('    OK TRONC-4 une narration achevee ne porte pas la mention')
+
+    def test_la_mention_n_affirme_pas_que_le_texte_est_faux(self):
+        # ⚠️⚠️ CE QUI EST COUPE N'EST PAS FAUX -- IL EST INCOMPLET. Affirmer
+        # l'un pour l'autre serait dire plus que ce qu'on mesure.
+        # ⚠️ ON VISE DES ASSERTIONS, PAS DES MOTS. Ma premiere version
+        # interdisait << errone >> -- et tombait sur << non erronees >>, ou
+        # le mot sert justement a NIER. Une liste de mots isoles attrape la
+        # negation de ce qu'elle traque.
+        p = RAPP_MOD.PORTEE_NARRATION_TRONQUEE
+        for interdit in ('est faux', 'est erroné', 'sont erronées',
+                         'est inexact', 'invalide ce qui'):
+            self.assertNotIn(interdit, p.lower(),
+                             f'la mention accuse : {interdit}')
+        self.assertIn("n'est pas invalidé", p)
+        self.assertIn('absentes, non erronées', p)
+        print('    OK TRONC-5 la mention dit INCOMPLET, jamais FAUX')
+
+    def test_l_audit_porte_l_etat_de_troncature(self):
+        ctrl = RAPP_MOD.controle_narration(
+            'texte\n\n' + RAPP_MOD.PORTEE_NARRATION_TRONQUEE,
+            'claude_api', 'charge')
+        self.assertTrue(ctrl['narration_tronquee'])
+        sain = RAPP_MOD.controle_narration('texte', 'claude_api', 'charge')
+        self.assertFalse(sain['narration_tronquee'])
+        print('    OK TRONC-6 l audit trail porte l etat de troncature')
+
+    def test_le_verrou_c2_ne_peut_pas_voir_une_troncature(self):
+        # ⚠️⚠️ LA RAISON D'ETRE DE CE LOT, EPROUVEE PLUTOT QU'ECRITE. Une
+        # narration coupee affiche ZERO orphelin -- un taux qui se lit comme
+        # une qualite alors qu'il ne dit qu'une absence. Mesure du 21/08 :
+        # 420 caracteres, << 0,0 % d'orphelins >>.
+        charge = 'BE : 14 830 899 € | SCR : 4 894 197 €'
+        coupe = 'Le Best Estimate atteint 14 830 899 € et le rapport s'
+        self.assertEqual(RAPP_MOD.orphelins_narration(coupe, charge), [],
+                         'le verrou devrait etre muet sur un texte coupe')
+        print('    OK TRONC-7 le verrou est AVEUGLE a la troncature')
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=1)
