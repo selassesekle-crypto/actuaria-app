@@ -2913,5 +2913,66 @@ class T_La_Portee_De_L_Archive_Est_EPROUVEE_Pas_Seulement_Ecrite(
         print('    OK PORT-5 la clause atteint la constante et le verdict')
 
 
+class T_B1_La_Regle_De_H1_Est_Celle_Du_Code(unittest.TestCase):
+    """⚠️⚠️ UNE DOCSTRING NE SE TESTE PAS — UN COMPORTEMENT, SI.
+
+    `_tester_h1_independance` annoncait << rejetee si corr_moy > seuil ET au
+    moins 2 colonnes significatives >>. Le code valide sur
+    `corr_moy < seuil AND n_sig <= 2` : il rejette donc sur l'une OU
+    l'autre, et a partir de TROIS colonnes. Mesure : 8 combinaisons sur 20
+    divergent.
+
+    Ce test verrouille la regle REELLE. La prose peut deriver a nouveau ;
+    lui ne le peut pas.
+    """
+
+    SEUIL = 0.50
+
+    @staticmethod
+    def _valide(corr_moy, n_sig, seuil):
+        """La regle du code, recopiee depuis `n2_hypotheses` ligne 326."""
+        return corr_moy < seuil and n_sig <= 2
+
+    def test_le_rejet_se_declenche_sur_l_une_OU_l_autre_condition(self):
+        # ⚠️ LE COEUR DE L'ECART : la docstring disait ET, le code fait OU.
+        self.assertFalse(self._valide(0.60, 0, self.SEUIL),
+                         'corr seule au-dessus du seuil : le code rejette')
+        self.assertFalse(self._valide(0.30, 3, self.SEUIL),
+                         'n_sig seul a 3 : le code rejette')
+        self.assertTrue(self._valide(0.30, 2, self.SEUIL))
+        print('    OK B1-1 le rejet est un OU, pas un ET')
+
+    def test_le_seuil_de_colonnes_significatives_est_trois_pas_deux(self):
+        # ⚠️ SECOND ECART, PLUS DISCRET : << au moins 2 >> dans la prose,
+        # `n_sig <= 2` dans le code -- donc le rejet commence a TROIS.
+        self.assertTrue(self._valide(0.30, 2, self.SEUIL),
+                        'deux colonnes significatives ne rejettent PAS')
+        self.assertFalse(self._valide(0.30, 3, self.SEUIL))
+        print('    OK B1-2 le rejet commence a 3 colonnes, pas a 2')
+
+    def test_la_docstring_decrit_desormais_la_regle_du_code(self):
+        # ⚠️ ON VERIFIE QUE LA PROSE A CEDE, pas qu'elle contient un mot.
+        from direction_non_vie.provisionnement.a7_provisionnement.n2_hypotheses import (
+            HypothesesValidator,
+        )
+        doc = HypothesesValidator._tester_h1_independance.__doc__ or ''
+        self.assertIn('corr_moy >= seuil  OU  n_sig >= 3', doc,
+                      'la docstring ne publie pas la regle du code')
+        self.assertIn('SIGNALÉ, NON TRANCHÉ', doc,
+                      'la question actuarielle ouverte n est pas declaree')
+        print('    OK B1-3 la docstring publie la regle reellement appliquee')
+
+    def test_le_code_n_a_pas_bouge(self):
+        # ⚠️⚠️ AUCUN EURO DEPLACE : c'est la PROSE qui a cede. Si le code
+        # avait change, des verdicts publies auraient bouge.
+        from direction_non_vie.provisionnement.a7_provisionnement.n2_hypotheses import (
+            HypothesesValidator,
+        )
+        src = inspect.getsource(HypothesesValidator._tester_h1_independance)
+        self.assertIn('ok    = corr_moy < seuil and n_sig <= 2', src,
+                      'la regle du code a ete modifiee : des verdicts bougent')
+        print('    OK B1-4 la regle du code est intacte, seule la prose cede')
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=1)

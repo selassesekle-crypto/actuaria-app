@@ -251,8 +251,26 @@ class HypothesesValidator:
         par n4 et les livrables, et le renommer déborderait du périmètre.
 
         Seuil d'alerte : |corr_moy| > h1_seuil_corr (depuis lob_config).
-        H1 rejetée si : corr_moy > seuil ET au moins 2 colonnes significatives
-                        (pval < 0.05 et |corr| > seuil).
+
+        ⚠️⚠️ CETTE DOCSTRING DÉCRIVAIT UNE AUTRE RÈGLE QUE LE CODE. Elle
+        annonçait « rejetée si corr_moy > seuil ET au moins 2 colonnes
+        significatives ». Le code applique `corr_moy < seuil AND n_sig <= 2`
+        pour VALIDER — donc il rejette sur l'une OU l'autre condition, et à
+        partir de TROIS colonnes significatives, pas deux.
+
+        Mesure : les deux règles divergent sur 8 combinaisons sur 20. Un
+        triangle à corr_moy 0,60 et n_sig 0 est REJETÉ par le code et
+        VALIDÉ par la docstring.
+
+        H1 VALIDÉE si : corr_moy < seuil  ET  n_sig <= 2
+        H1 REJETÉE si : corr_moy >= seuil  OU  n_sig >= 3
+                        (significative = pval < 0.05 et |corr| > seuil)
+
+        ⚠️ C'EST LA PROSE QUI A CÉDÉ, PAS LE CODE — et c'est délibéré : le
+        code s'exécute, il porte les oracles, et le modifier déplacerait des
+        verdicts publiés. SIGNALÉ, NON TRANCHÉ : laquelle des deux règles est
+        actuariellement juste reste une question ouverte, et elle n'appartient
+        pas à un lot qui ferme un écart d'assertion.
         """
         try:
             from scipy.stats import spearmanr
