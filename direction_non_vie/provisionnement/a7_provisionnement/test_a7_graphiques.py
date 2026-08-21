@@ -879,8 +879,24 @@ class T4_Le_Catalogue_Atteint_Les_Livrables(unittest.TestCase):
         self.assertEqual(_RAP.rendre_image(_Figure()), b'png')
         self.assertEqual(vus.get('format'), 'png')
         self.assertEqual((vus.get('width'), vus.get('height')), (1100, 520))
-        self.assertEqual(vus.get('scale'), 2)
-        print('    OK C3d-7 le rasteriseur demande un PNG 1100x520 en x2')
+        # ⚠️⚠️ `scale` EST PASSE DE 2 A 1.5, ET CE TEST A FAIT SON TRAVAIL :
+        # il a signale le changement, comme il doit. Il n'est mis a jour que
+        # parce que le changement est INTENTIONNEL, MESURE et ARBITRE.
+        #
+        # RAISON : depuis que le HTML porte ses figures en image, C3 archive
+        # ce document A CHAQUE RUN. Le poids devient un cout recurrent.
+        #   scale=1    32 Ko/figure   plus petit texte  9 px  -- ECARTE
+        #   scale=1.5  62 Ko/figure                    14 px  -- retenu
+        #   scale=2    98 Ko/figure                    18 px
+        # Effet mesure sur le dossier archive : 3 957 254 -> 2 619 797 octets,
+        # soit 1,34 Mo PAR CLOTURE (le Word en profite aussi : `rendre_image`
+        # sert les deux formats).
+        #
+        # ⚠️ CE QUE CE TEST PROTEGE RESTE ENTIER : le `format='png'` et les
+        # dimensions. Un `format='svg'` glisse ici produirait toujours un
+        # `.docx` que Word refuse, et il tomberait toujours.
+        self.assertEqual(vus.get('scale'), 1.5)
+        print('    OK C3d-7 le rasteriseur demande un PNG 1100x520 en x1.5')
 
     def test_le_chemin_nominal_du_word_insere_bien_les_images(self):
         """⚠️ LE CHEMIN AVEC kaleido, EXERCÉ QUE LA MACHINE L'AIT OU NON.

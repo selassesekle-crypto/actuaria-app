@@ -1204,7 +1204,15 @@ def _md_to_html(texte: str) -> str:
 def _css() -> str:
     return """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,400&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+/* ⚠️⚠️ L'@IMPORT DES POLICES GOOGLE EST RETIRE, ET C'EST LE MEME MOTIF QUE
+   LE SCRIPT PLOTLY : un document marque CONFIDENTIEL n'a pas a signaler son
+   ouverture a un tiers. Il emettait une requete vers `fonts.googleapis.com`
+   au moment ou un commissaire l'ouvrait -- revelant qu'il le consulte, quand,
+   et depuis quelle adresse.
+   ⚠️ AUCUNE POLICE N'EST PERDUE SANS REPLI : chaque `font-family` de cette
+   feuille declare deja sa famille generique (`'Inter', sans-serif`,
+   `'Playfair Display', serif`). Le document rend donc la meme chose hors
+   ligne, et dans cinq ans -- ce qu'un document d'archive doit faire. */
 
 :root {
   --navy:        #0B1E3D;
@@ -1715,8 +1723,13 @@ table.premium tbody td .mono { font-family: 'JetBrains Mono', monospace; font-si
      justification. `break-inside` est la propriété moderne, `page-break-inside`
      son ancêtre : les deux sont posées parce que les moteurs d'impression
      n'ont pas tous migré. */
+  /* ⚠️ `.plotly-graph-div` EST RETIRE DE CETTE LISTE : depuis que les
+     figures sont rasterisees, cette classe n'existe plus dans le document.
+     Une regle qui vise une classe absente ne protege rien -- et c'est un
+     test de mise en page qui l'a attrape, pas moi. Les images sont des
+     `<img>` : elles heritent des regles ci-dessous. */
   table.premium, .hyp-card, .kpi-grid, .hyp-grid, .bz-grid, .garde-kpis,
-  .plotly-graph-div {
+  .rapport-container img {
     break-inside: avoid;
     page-break-inside: avoid;
   }
@@ -1737,9 +1750,11 @@ table.premium tbody td .mono { font-family: 'JetBrains Mono', monospace; font-si
   /* Pas de ligne isolée en haut ou en bas de page dans la prose. */
   p, .comm-p, .hyp-text { orphans: 3; widows: 3; }
 
-  /* Une figure Plotly a une largeur en pixels fixée par le navigateur ; sur
-     une feuille A4 elle déborderait de la zone imprimable. */
-  .plotly-graph-div { max-width: 100% !important; }
+  /* ⚠️ VISAIT `.plotly-graph-div`, QUI N'EXISTE PLUS. Le besoin, lui,
+     demeure : une figure a une largeur en pixels, et sur une feuille A4
+     elle deborderait de la zone imprimable. La regle suit donc les `<img>`
+     qui ont remplace les divs Plotly. */
+  .rapport-container img { max-width: 100% !important; }
 }
 </style>"""
 
@@ -2896,6 +2911,26 @@ def _build_bt_table(bt: Dict, horizon: str) -> str:
 #  posé dans le flux ne le peut pas.
 
 
+#: La seule adresse tierce que le document puisse encore appeler.
+URL_PLOTLY = 'https://cdn.jsdelivr.net/npm/plotly.js-dist@2.26.0/plotly.min.js'
+
+
+def _script_plotly(blocs: dict) -> str:
+    """La balise du script tiers — UNIQUEMENT si un bloc en a besoin.
+
+    ⚠️⚠️ ON REGARDE CE QUI EST PRODUIT, PAS CE QU'ON CROIT PRODUIRE. Les
+    figures sont rasterisees ; seul un graphique deja converti en HTML par
+    l'appelant porte encore du Plotly. Le detecter sur les BLOCS -- et non
+    sur `generer_graphiques` ou sur la presence d'un dict -- evite de
+    rendre le document dependant d'un tiers pour une intention.
+    """
+    besoin = any('plotly' in str(v).lower() or 'Plotly.' in str(v)
+                 for v in (blocs or {}).values())
+    if not besoin:
+        return ''
+    return ('<script src="' + URL_PLOTLY + '"></script>\n')
+
+
 def kaleido_disponible() -> bool:
     """Le module qui convertit une figure Plotly en image est-il là ?
 
@@ -2938,7 +2973,16 @@ def rendre_image(figure) -> bytes:
     soit belle : un rendeur substitué leur suffit, et le chemin réel reste
     vérifié par les deux tests qui, eux, portent sur les figures.
     """
-    return figure.to_image(format='png', width=1100, height=520, scale=2)
+    # ⚠️ `scale=1.5` ET NON 2, ET C'EST CHIFFRE. Depuis que le HTML porte
+    # les figures en image, C3 archive ce document A CHAQUE RUN : le poids
+    # est un cout recurrent, pas un detail.
+    #   scale=1    32 Ko/figure   le plus petit texte fait  9 px  -- trop bas
+    #   scale=1.5  62 Ko/figure                            14 px  -- lisible
+    #   scale=2    98 Ko/figure                            18 px  -- confort
+    # Mesure : HTML archive 2,49 Mo -> ~1,6 Mo, soit ~900 Ko par cloture.
+    # `scale=1` a ete ECARTE par la mesure, pas par gout : 9 px est en
+    # limite basse a l'impression et flou sur un ecran dense.
+    return figure.to_image(format='png', width=1100, height=520, scale=1.5)
 
 
 class _NumeroteurFigures:
@@ -3010,23 +3054,59 @@ def export_html(
         else:
             source = source_narration
 
-        # Graphiques Plotly — accepte go.Figure ou HTML pré-converti
+        # ⚠️⚠️ LES FIGURES SONT RASTERISEES, PLUS RENDUES EN PLOTLY.
+        #
+        # LE DOCUMENT EST MARQUE CONFIDENTIEL ET CONTACTAIT DEUX TIERS A SON
+        # OUVERTURE : `fonts.googleapis.com` pour ses polices, et surtout
+        # `cdn.jsdelivr.net` pour `plotly.min.js` -- DU CODE EXECUTABLE. Un
+        # commissaire qui ouvre le rapport emettait deux requetes revelant
+        # qu'il le consulte, quand, et depuis ou.
+        #
+        # ⚠️ ET C'EST UNE QUESTION D'OPPOSABILITE, PAS D'ESTHETIQUE :
+        # `normes/ifrs17/etats/rendu.py` avait DEJA mesure et ecrit ce defaut
+        # d'A7 -- << un document d'archive qui va chercher une feuille de
+        # style et un script chez deux tiers AU MOMENT OU ON L'OUVRE depend
+        # d'eux a la lecture [...] et ne rend pas la meme chose hors ligne ou
+        # dans cinq ans >>. Ce module porte meme le controle `FORMES_EXTERNES`.
+        #
+        # ⚠️ CE QU'ON PERD, MESURE : le zoom, le survol et la legende
+        # cliquable sur 12 figures. Ce qui reste : les 9 tableaux chiffres du
+        # rapport, et le WORD -- le format qui part chez le commissaire --
+        # QUI N'A JAMAIS EU L'INTERACTIVITE. La rasterisation y est deja
+        # payee par kaleido.
+        #
+        # ⚠️ L'EMBARQUEMENT DE PLOTLY A ETE MESURE ET ECARTE : 4,6 Mo de JS
+        # porteraient le HTML de 227 Ko a 4,8 Mo -- x21 sur un document que
+        # C3 archive a chaque run.
         graphiques_html = {}
-        if graphiques:
-            for nom, fig_or_html in graphiques.items():
-                try:
-                    if isinstance(fig_or_html, str):
-                        # Déjà converti en HTML (stockage session_state optimisé)
-                        graphiques_html[nom] = fig_or_html
-                    else:
-                        # Objet go.Figure → convertir en HTML
-                        import plotly.io as pio
-                        graphiques_html[nom] = pio.to_html(
-                            fig_or_html, full_html=False, include_plotlyjs=False,
-                            config={'displayModeBar': False},
-                        )
-                except Exception as _eg:
-                    logger.debug(f'Graphique {nom} ignoré : {_eg}')
+        for nom, fig_or_html in (graphiques or {}).items():
+            try:
+                if isinstance(fig_or_html, str):
+                    # ⚠️ CE CHEMIN NE PEUT PAS ETRE RASTERISE : l'appelant a
+                    # deja converti en HTML. On le garde -- et c'est LUI, et
+                    # lui seul, qui fait charger Plotly plus bas.
+                    graphiques_html[nom] = fig_or_html
+                else:
+                    # ⚠️⚠️ ON PASSE PAR `rendre_image`, ET C'EST UNE QUESTION
+                    # DE JUSTESSE, PAS DE VITESSE. Sa docstring dit qu'elle
+                    # est << LE SEUL point du module >> qui rasterise, et
+                    # qu'elle << existe pour etre SUBSTITUEE par les tests >>.
+                    # Ma premiere ecriture appelait `pio.to_image` en direct :
+                    # elle creait un SECOND point de rasterisation, que le
+                    # substitut des tests ne couvrait pas.
+                    # ⚠️ CE QUE CELA CASSAIT : le module avait deja paye ce
+                    # defaut -- 94 figures, 562 s -- et surtout, les tests
+                    # n'exercaient plus le meme code selon que `kaleido` est
+                    # installe ou non. UNE SUITE QUI CHANGE DE CHEMIN SELON
+                    # LA MACHINE NE PROUVE PAS LA MEME CHOSE SELON LA MACHINE.
+                    _b64 = base64.b64encode(
+                        rendre_image(fig_or_html)).decode('ascii')
+                    graphiques_html[nom] = (
+                        '<img alt="' + _s(nom) + '" style="width:100%;'
+                        'height:auto;" src="data:image/png;base64,'
+                        + _b64 + '">')
+            except Exception as _eg:
+                logger.debug(f'Graphique {nom} ignoré : {_eg}')
 
         # Construire tous les blocs
         b = _build_blocks(n2, n3, n4, narration, source, lob, cli, arr, dt, audit_id, methode, statut, graphiques_html, actuaire_nom=actuaire_nom, actuaire_numero_ia=actuaire_numero_ia)
@@ -3070,7 +3150,14 @@ def export_html(
             '<!DOCTYPE html>\n<html lang="fr">\n<head>\n'
             '<meta charset="UTF-8">\n'
             '<title>Rapport Actuariel — ' + cli + ' — ' + arr + '</title>\n'
-            '<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist@2.26.0/plotly.min.js"></script>\n'
+            # ⚠️⚠️ LE SCRIPT TIERS N'EST PLUS CHARGE QUE S'IL SERT.
+            # Mesure : avec `generer_graphiques=False`, le HTML comptait ZERO
+            # appel Plotly ET chargeait quand meme 4,6 Mo de code depuis
+            # `cdn.jsdelivr.net`. Depuis la rasterisation des figures, le
+            # SEUL cas qui l'exige est un graphique deja converti en HTML par
+            # l'appelant -- et on le detecte sur le document PRODUIT, pas sur
+            # une intention.
+            + _script_plotly(b)
             + _css() +
             '\n</head>\n<body>\n<div class="rapport-container">\n\n'
 

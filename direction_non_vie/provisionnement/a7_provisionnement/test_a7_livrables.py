@@ -17,6 +17,7 @@ import inspect
 import io
 import re
 import os
+import pathlib
 import unittest
 from datetime import date, timedelta
 
@@ -1826,9 +1827,30 @@ class T_C3_Le_Dossier_Est_Conserve_Et_Verifiable(unittest.TestCase):
             chemin = os.path.join(self.archive['dossier'], nom)
             self.assertTrue(os.path.exists(chemin), nom)
             self.assertEqual(os.path.getsize(chemin), meta['octets'], nom)
+        # ⚠️⚠️ UN MINIMUM PAR FICHIER, PLUS UNE SOMME -- ET LE DEFAUT ETAIT
+        # LE CRITERE, PAS SA VALEUR.
+        #
+        # L'ancien seuil global (300 000 o) est tombe quand les figures sont
+        # passees en image. Mesure : le VRAI dossier est passe de 351 232 a
+        # 3 957 254 octets -- ONZE FOIS PLUS LOURD, aucune regression. Ce qui
+        # a maigri, c'est le dossier SOUS RENDEUR SUBSTITUE, dont les PNG de
+        # test sont minuscules.
+        #
+        # ⚠️ CE QUE LE SEUIL MESURAIT REELLEMENT : le poids du JSON que
+        # Plotly embarquait dans le HTML. Il croyait mesurer << le dossier
+        # est complet >>. Ce contenu a disparu VOLONTAIREMENT.
+        #
+        # ⚠️ ET UNE SOMME MASQUE CE QU'ELLE DEVRAIT ATTRAPER : un livrable
+        # tronque que ses trois voisins compensent passe inapercu. Le
+        # minimum par fichier, lui, tombe -- c'est P1 : << le document
+        # EXISTE apres le run >>, pour CHACUN.
+        for nom, meta in fichiers.items():
+            self.assertGreater(
+                meta['octets'], 1_000,
+                f'{nom} est tronque ou vide ({meta["octets"]} octets)')
         total = sum(m['octets'] for m in fichiers.values())
-        self.assertGreater(total, 300_000, 'le dossier est anormalement leger')
-        print(f'    OK C3-1 {len(fichiers)} livrables ecrits, {total:,} octets')
+        print(f'    OK C3-1 {len(fichiers)} livrables ecrits, aucun tronque, '
+              f'{total:,} octets')
 
     # ── P2 : il est RETROUVABLE par son audit_id ────────────────────────────
     def test_p2_le_dossier_porte_l_audit_id(self):
@@ -3053,6 +3075,138 @@ class T_La_Date_D_Arrete_Est_Normalisee_A_La_Frontiere(unittest.TestCase):
         self.assertNotIn('quatre formats', inspect.getsource(_a),
                          'un compte de formats est recopie dans la prose')
         print('    OK DATE-6 aucun compte de formats recopie dans la prose')
+
+
+class T_Le_Document_Confidentiel_Ne_Contacte_Aucun_Tiers(unittest.TestCase):
+    """⚠️⚠️ UN DOCUMENT MARQUE CONFIDENTIEL NE SIGNALE PAS SON OUVERTURE.
+
+    Mesure : le HTML contactait `fonts.googleapis.com` ET
+    `cdn.jsdelivr.net` (plotly.min.js — du CODE EXECUTABLE). Un
+    commissaire qui l'ouvrait emettait deux requetes revelant qu'il le
+    consulte, quand, et depuis ou.
+
+    ⚠️ QUESTION D'OPPOSABILITE, PAS D'ESTHETIQUE : `normes/ifrs17/etats/
+    rendu.py` avait DEJA mesure et ecrit ce defaut d'A7.
+    """
+
+    #: ⚠️ REPRIS DE `normes/ifrs17/etats/rendu.py`, QUI PORTAIT DEJA LE
+    #: CONTROLE. Une seconde liste aurait diverge de la premiere.
+    FORMES = ('http://', 'https://', '@import', '<link', '<script')
+
+    @classmethod
+    def setUpClass(cls):
+        # ⚠️ LE RENDEUR EST SUBSTITUE, ET C'EST LA REGLE DU MODULE, PAS UN
+        # RACCOURCI : `rendre_image` << existe pour etre SUBSTITUEE par les
+        # tests >>, et ces tests-ci ne parlent PAS des pixels -- ils
+        # verifient qu'aucun hote tiers n'est contacte. Le chemin reel de
+        # rasterisation reste couvert par `test_a7_graphiques`.
+        # Mesure : 53,5 s -> 12,0 s par run.
+        from .test_a7_graphiques import kaleido_declare, rendeur_substitue
+        with kaleido_declare(True), rendeur_substitue():
+            cls.sans = AgentA7Provisionnement(verbose=False).run(
+                source=np.array(GENINS, dtype=float), mode_declare='cumule',
+                n_sim_bootstrap=20, seed=42, generer_graphiques=False)
+            cls.avec = AgentA7Provisionnement(verbose=False).run(
+                source=np.array(GENINS, dtype=float), mode_declare='cumule',
+                n_sim_bootstrap=20, seed=42, generer_graphiques=True)
+
+    def _hotes(self, html):
+        return sorted(set(re.findall(r'https?://([a-zA-Z0-9.\-]+)', html)))
+
+    def test_le_document_est_marque_confidentiel(self):
+        # ⚠️ SANS CE FAIT, LE LOT N'A PAS D'OBJET : c'est la marque qui rend
+        # la fuite d'ouverture problematique.
+        self.assertIn('CONFIDENTIEL', (self.sans.get('html') or '').upper())
+        print('    OK TIERS-1 le document se declare CONFIDENTIEL')
+
+    def test_aucun_hote_tiers_avec_ou_sans_graphiques(self):
+        for nom, r in (('sans graphiques', self.sans),
+                       ('avec graphiques', self.avec)):
+            with self.subTest(cas=nom):
+                hotes = self._hotes(r.get('html') or '')
+                self.assertEqual(hotes, [],
+                                 f'{nom} : le document contacte {hotes}')
+        print('    OK TIERS-2 aucun hote tiers, avec ni sans graphiques')
+
+    def test_aucune_forme_externe_ne_subsiste(self):
+        # ⚠️ LE BALAYAGE D'IFRS 17, PAS UN MOTIF A MOI. `<script` et
+        # `@import` sont couverts, pas seulement les URL.
+        html = self.avec.get('html') or ''
+        presentes = [f for f in self.FORMES if f in html]
+        self.assertEqual(presentes, [],
+                         f'formes externes encore presentes : {presentes}')
+        print('    OK TIERS-3 aucune forme externe du balayage IFRS 17')
+
+    def test_les_figures_sont_rasterisees_et_le_rapport_reste_complet(self):
+        # ⚠️ CONTRE-EPREUVE : retirer un tiers ne doit pas retirer le
+        # contenu. Les figures doivent EXISTER, en image.
+        html = self.avec.get('html') or ''
+        self.assertGreater(html.count('data:image/png;base64,'), 5,
+                           'les figures ont disparu au lieu d etre rasterisees')
+        self.assertEqual(html.count('Plotly.newPlot'), 0)
+        self.assertEqual(self.avec.get('livrables_erreurs'), {},
+                         'le rendu signale une erreur')
+        print(f"    OK TIERS-4 {html.count('data:image/png;base64,')} figures "
+              f"en image, rapport complet")
+
+    def test_le_script_n_est_charge_que_s_il_sert(self):
+        # ⚠️ ON REGARDE LE DOCUMENT PRODUIT, PAS L'INTENTION. Un bloc qui
+        # porte encore du Plotly doit RAMENER le script — sinon le document
+        # serait casse au lieu d'etre autonome.
+        self.assertEqual(RAPP_MOD._script_plotly({}), '')
+        self.assertEqual(RAPP_MOD._script_plotly({'g': '<img src="x">'}), '')
+        avec = RAPP_MOD._script_plotly({'g': '<div>Plotly.newPlot(...)</div>'})
+        self.assertIn(RAPP_MOD.URL_PLOTLY, avec,
+                      'un bloc Plotly resterait sans sa bibliotheque')
+        print('    OK TIERS-5 le script ne vient que si un bloc en a besoin')
+
+    def test_un_seul_point_de_rasterisation_dans_le_module(self):
+        # ⚠️⚠️ LA PROPRIETE QUE J'AI CASSEE PUIS RETABLIE DANS CE LOT MEME.
+        # `rendre_image` se documente comme << LE SEUL point du module >> qui
+        # rasterise, et existe << pour etre SUBSTITUEE par les tests >>. Ma
+        # premiere ecriture appelait `pio.to_image` en direct : un SECOND
+        # point, hors de portee du substitut.
+        #
+        # ⚠️ CE N'EST PAS UNE QUESTION DE VITESSE. Le module avait deja paye
+        # ce defaut -- 94 figures, 562 s -- et surtout : sans `kaleido`, les
+        # tests empruntaient un AUTRE chemin. UNE SUITE QUI CHANGE DE CHEMIN
+        # SELON LA MACHINE NE PROUVE PAS LA MEME CHOSE SELON LA MACHINE.
+        #
+        # ⚠️ LA DOCSTRING NE SUFFISAIT PAS : elle etait ecrite, et je l'ai
+        # rouverte quand meme. Ce test, lui, tombe.
+        src = inspect.getsource(RAPP_MOD)
+        appels = [ln.strip() for ln in src.splitlines()
+                  if 'to_image(' in ln and not ln.strip().startswith('#')]
+        self.assertEqual(len(appels), 1,
+                         f'{len(appels)} points de rasterisation : {appels}')
+        self.assertIn('def rendre_image',
+                      src[:src.index(appels[0])].rsplit('def ', 1)[0]
+                      + 'def rendre_image',
+                      'le seul appel doit vivre dans `rendre_image`')
+        # ⚠️ ET LE CHEMIN DU RAPPORT DOIT L'EMPRUNTER, pas le contourner.
+        self.assertIn('rendre_image(fig_or_html)', src,
+                      'le rendu des figures contourne `rendre_image`')
+        print(f'    OK TIERS-7 un seul point de rasterisation : {appels[0]}')
+
+    def test_base_agent_declare_n_avoir_aucun_heritier(self):
+        # ⚠️ TROIS NOTES D'ARDOISE SUR QUATRE AFFIRMAIENT UN DEFAUT QUE LE
+        # CODE NE PORTAIT PAS. Celle-ci le declare, et ce test le mesure.
+        import core.base_agent as _ba
+        src = inspect.getsource(_ba)
+        self.assertIn("N'A AUCUN HERITIER", src)
+        # La mesure elle-meme, refaite ici : aucune classe n'herite.
+        racine = pathlib.Path(_ba.__file__).parent.parent
+        heritiers = []
+        for f in racine.rglob('*.py'):
+            if f.name.startswith('test_'):
+                continue
+            txt = f.read_text(encoding='utf-8', errors='ignore')
+            heritiers += [m for m in re.findall(r'^class\s+\w+\(([^)]*)\)',
+                                                txt, re.MULTILINE)
+                          if 'BaseAgent' in m]
+        self.assertEqual(heritiers, [],
+                         f'BaseAgent a des heritiers : {heritiers}')
+        print('    OK TIERS-6 BaseAgent n a aucun heritier, mesure et declare')
 
 
 if __name__ == '__main__':

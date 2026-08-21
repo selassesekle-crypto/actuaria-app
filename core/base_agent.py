@@ -14,6 +14,23 @@
 #            ...
 #            return self._succes(n1=n1, n2=n2, commentaire=commentaire)
 #
+#  ⚠️⚠️ CE MODULE N'A AUCUN HERITIER, ET C'EST MESURE (21/08/2026). Aucune
+#  classe du depot n'ecrit `(BaseAgent)` : l'exemple ci-dessus est la SEULE
+#  occurrence de ce nom hors de ce fichier. `AgentA7Provisionnement` et les
+#  autres agents sont des classes autonomes.
+#
+#  ⚠️ CE QUE CELA REND THEORIQUE : `_sauvegarder_audit` existe ici en
+#  `(audit_trail, audit_id)` et dans `a7_provisionnement/agent.py` en
+#  `(audit_id, audit)` -- L'ORDRE EST INVERSE. Cette divergence a ete portee
+#  a l'ardoise pendant plusieurs lots comme un risque. ELLE N'EN EST PAS UN
+#  TANT QUE PERSONNE N'HERITE : les deux methodes ne se rencontrent jamais,
+#  aucun `super()` ne les relie, et aucun appel polymorphe n'existe.
+#
+#  ⚠️ CE QUI RESTE VRAI : le jour ou une classe heritera d'ici, l'ordre
+#  devra etre aligne AVANT. Ce commentaire est la pour que celui qui lira
+#  << signature inversee >> sache ce qu'il en est, plutot que de corriger un
+#  risque qui n'existe pas -- ou de croire qu'il n'en existera jamais.
+#
 # =============================================================================
 
 import json
