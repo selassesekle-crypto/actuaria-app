@@ -675,7 +675,20 @@ def _ong6_hypotheses(wb, n2, n4):
                       'REJETÉE': '❌ NON'}.get(_st, '⚠️ ' + _st)
         seuil_txt = '—'
         if key == 'h1_independance':
-            seuil_txt = f"{h.get('seuil_utilise', 0.50):.2f}"
+            # ⚠️⚠️ AUCUN REPLI CHIFFRE, ET LE NOM DE LA CLE LE COMMANDE :
+            # `seuil_UTILISE`, au passe. Sur le chemin NON TESTABLE -- le plus
+            # frequent, il se declenche sous 7 annees -- `_h1` ne le publie
+            # pas, parce qu'AUCUN seuil n'a ete utilise : aucune correlation
+            # n'a ete calculee. Le repli `0.50` affichait donc le seuil
+            # GENERIQUE comme s'il avait servi.
+            # ⚠️ MESURE : 6 LoB sur 15 ont un autre seuil -- Cat-Nat 0,40,
+            # MRH et Credit/Caution 0,45, RC medicale, Construction et
+            # Accidents corporels 0,55. Le tableau leur en montrait un faux.
+            # ⚠️ `is not None` ET PAS `.get(cle, repli)` : un repli ne se
+            # declenche jamais quand la cle existe A None, et ce depot a deja
+            # paye deux fois ce piege.
+            _seuil = h.get('seuil_utilise')
+            seuil_txt = '—' if _seuil is None else f"{_seuil:.2f}"
         elif key == 'h2_stabilite':
             # ⚠️ « OUI » EN VERT SUR UNE HYPOTHÈSE NON TESTÉE. `ok` vaut True par
             # défaut quand aucune colonne n'est testable ; la ligne sortait donc

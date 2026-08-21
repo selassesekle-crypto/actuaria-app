@@ -2764,5 +2764,88 @@ class T_Une_Reference_Hors_Liste_Est_Signalee(unittest.TestCase):
         print('    OK REF-9 la liste se declare autorisee, pas verifiee')
 
 
+class T_F3b_Aucun_Seuil_Generique_Sur_Une_Hypothese_Non_Testee(
+        unittest.TestCase):
+    """⚠️ `seuil_UTILISE` EST AU PASSE : sur un chemin non testable, aucun
+    seuil n'a servi, et l'Excel en affichait un.
+
+    Mesure : le repli `0,50` s'appliquait a 6 LoB sur 15 qui en ont un
+    autre — Cat-Nat 0,40, MRH et Credit/Caution 0,45, RC medicale,
+    Construction et Accidents corporels 0,55.
+    """
+
+    PETIT = np.array([[100., 180., 220.],
+                      [120., 200., np.nan],
+                      [130., np.nan, np.nan]])
+
+    def _h1(self, lob):
+        from direction_non_vie.provisionnement.a7_provisionnement.n2_hypotheses import (
+            HypothesesValidator,
+        )
+        return HypothesesValidator()._tester_h1_independance(
+            self.PETIT, [], [], get_lob_config(lob))
+
+    def test_le_chemin_non_testable_ne_publie_aucun_seuil(self):
+        # ⚠️ LE FAIT DE DEPART : la cle est ABSENTE, pas nulle. C'est
+        # delibere cote `_h1`, et c'est au lecteur de la cle de le respecter.
+        for lob in ('rc_medicale', 'catastrophes_naturelles', 'mrh'):
+            r = self._h1(lob)
+            self.assertEqual(str(r.get('statut')), 'NON TESTABLE')
+            self.assertNotIn('seuil_utilise', r,
+                             f'{lob} publie un seuil sans avoir teste')
+        print('    OK F3b-1 aucun seuil publie quand rien n a ete teste')
+
+    def test_l_excel_n_affiche_plus_le_seuil_generique(self):
+        # ⚠️⚠️ ON LIT LE VRAI CLASSEUR, PAS LA LOGIQUE REPRODUITE. Une
+        # premiere version de ce test recalculait `'—' if None else ...`
+        # dans le test lui-meme : il aurait passe au vert avec `n5_excel`
+        # inchange. UN CONTROLE QUI ATTESTE SANS SURVEILLER — le motif que
+        # ce chantier ferme, commis dans son propre filet.
+        from openpyxl import load_workbook
+        r = AgentA7Provisionnement(verbose=False).run(
+            source=self.PETIT, mode_declare='cumule', n_sim_bootstrap=30,
+            seed=42, generer_graphiques=False, lob='rc_medicale')
+        self.assertTrue(r.get('success'), r.get('erreur'))
+        wb = load_workbook(io.BytesIO(r['excel_bytes']))
+        lignes = [[str(c) for c in row if c is not None]
+                  for ws in wb for row in ws.iter_rows(values_only=True)]
+        h1 = [x for x in lignes if x and x[0].startswith('H1 — Indépendance')]
+        self.assertTrue(h1, 'la ligne H1 du tableau est introuvable')
+        for ligne in h1:
+            self.assertNotIn('0.50', ligne,
+                             'le seuil generique est publie sur un test '
+                             'qui n a pas eu lieu')
+            self.assertIn('—', ligne, 'le seuil n est pas declare absent')
+        print(f'    OK F3b-2 classeur reel, ligne H1 : {h1[0]}')
+
+    def test_un_seuil_reellement_utilise_reste_publie(self):
+        # ⚠️ CONTRE-EPREUVE : sur un triangle testable, le seuil de la BRANCHE
+        # doit sortir — et il doit differer d'une branche a l'autre, sinon le
+        # correctif aurait simplement tout rendu muet.
+        r = AgentA7Provisionnement(verbose=False).run(
+            source=np.array(GENINS, dtype=float), mode_declare='cumule',
+            primes=_exposition(GENINS), n_sim_bootstrap=60, seed=42,
+            generer_graphiques=False, lob='rc_medicale')
+        h = r['n2'].get('h1_independance', {})
+        if str(h.get('statut')) != 'NON TESTABLE':
+            self.assertAlmostEqual(
+                h.get('seuil_utilise'),
+                get_lob_config('rc_medicale')['h1_seuil_corr'],
+                msg='le seuil publie n est pas celui de la branche')
+            print(f"    OK F3b-3 seuil publie = celui de la branche "
+                  f"({h.get('seuil_utilise')})")
+        else:
+            self.skipTest('GenIns non testable pour H1 sur cette branche')
+
+    def test_les_seuils_h1_different_reellement_entre_branches(self):
+        # ⚠️ SANS CETTE MESURE, LE LOT N'AURAIT PAS D'OBJET : si toutes les
+        # branches valaient 0,50, le repli aurait ete juste.
+        vus = {get_lob_config(lob)['h1_seuil_corr'] for lob in LOB_CONFIG}
+        self.assertGreater(len(vus), 1, 'toutes les branches au meme seuil')
+        self.assertIn(0.55, vus)
+        self.assertIn(0.40, vus)
+        print(f'    OK F3b-4 {len(vus)} seuils H1 distincts : {sorted(vus)}')
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=1)
