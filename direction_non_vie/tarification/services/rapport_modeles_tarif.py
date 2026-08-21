@@ -1261,7 +1261,16 @@ def _narration_claude(result_a3, result_a4, result_a6, branche, arrete) -> Tuple
             messages=[{'role': 'user', 'content': ctx}],
             cle=frontiere_llm.cle_api_ou_secrets(),
         )
-        return frontiere_llm.texte_des_blocs(resp), SRC_API
+        # ⚠️⚠️ UNE NARRATION COUPEE NE SE PUBLIE PAS EN SILENCE. Le
+        # modele s'arrete a sa limite de jetons et le texte finit EN
+        # PLEINE PHRASE ; rien ne le disait. `stop_reason` existait dans
+        # la reponse et n'etait lu NULLE PART dans le depot.
+        # ⚠️ ON MARQUE, ON NE LEVE PAS : le texte deja produit reste
+        # utile -- sur le cas mesure, 40 % de la narration etait ecrite.
+        # ⚠️ ET LE VERROU NE PEUT PAS LE VOIR : il mesure la PROVENANCE
+        # des nombres, jamais la COMPLETUDE du texte. Mesure : une
+        # narration coupee a 420 caracteres affichait << 0,0 % >>.
+        return frontiere_llm.texte_ou_mention_troncature(resp), SRC_API
     except frontiere_llm.RequeteRefusee as e:
         # ⚠️ CE N'EST PAS UNE DÉGRADATION, C'EST UN DÉFAUT. Journalisé en
         # ERREUR, et le livrable le dit — c'est ce qui manquait.

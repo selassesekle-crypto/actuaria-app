@@ -518,19 +518,15 @@ def _construire_contexte(n2: Dict, n3: Dict, n4: Dict, lob_label: str, arrete: s
 #  GÉNÉRATION NARRATION (3 NIVEAUX)
 # =============================================================================
 
-#: ⚠️⚠️ ELLE DIT QUE LE TEXTE EST INCOMPLET -- LE SEUL FAIT QU'ON CONNAISSE.
-#:
-#: Elle n'affirme PAS ce qui manque : personne ne le sait. Elle ne dit pas
-#: non plus que ce qui precede est faux -- il ne l'est pas, il est SEULEMENT
-#: interrompu. C'est une phrase de portee : ses clauses se mesurent.
+#: ⚠️⚠️ LA MENTION A ETE REMONTEE DANS `core.frontiere_llm`, ET CE NOM RESTE
+#: POUR NE PAS BRISER SES LECTEURS. Elle est nee ici, quand A7 etait le seul
+#: a publier une narration ; trois autres chaines le font, et quatre copies
+#: d'une meme phrase divergent au premier ajustement.
+#: C'est une phrase de portee : ses clauses se mesurent.
 #:   AFFIRME  << s'est arrete a la limite >>   -> `stop_reason == max_tokens`
 #:   LIMITE   << ce qui precede n'est pas invalide >>, << la suite est
 #:            absente, pas erronee >>
-PORTEE_NARRATION_TRONQUEE = (
-    "⚠️ NARRATION INTERROMPUE — le modèle a atteint sa limite de longueur et "
-    "le texte ci-dessus s'arrête avant sa fin. Ce qui précède n'est pas "
-    "invalidé : il est INCOMPLET. Les sections manquantes sont absentes, "
-    "non erronées — et personne ne peut dire ce qu'elles auraient contenu.")
+PORTEE_NARRATION_TRONQUEE = frontiere_llm.PORTEE_NARRATION_TRONQUEE
 
 
 def _narration_claude_api(n2, n3, n4, lob_label, arrete) -> tuple[str, str]:
@@ -557,10 +553,11 @@ def _narration_claude_api(n2, n3, n4, lob_label, arrete) -> tuple[str, str]:
         # ⚠️ ON MARQUE, ON NE LEVE PAS : le texte deja produit reste utile --
         # sur un cas mesure, 40 % de la narration etait ecrite. Faire tomber
         # le rapport reproduirait ce que le lot A a ferme.
-        texte = frontiere_llm.texte_des_blocs(resp)
-        if frontiere_llm.est_tronquee(resp):
-            texte = texte.rstrip() + '\n\n' + PORTEE_NARRATION_TRONQUEE
-        return texte, ctx
+        # ⚠️ LE GESTE EST REMONTE DANS LA FRONTIERE. Il etait ecrit ici quand
+        # A7 etait le seul a le faire ; trois autres chaines publient une
+        # narration, et recopier le `if` chez chacune aurait fait QUATRE
+        # copies d'une meme regle.
+        return frontiere_llm.texte_ou_mention_troncature(resp), ctx
     except Exception as e:
         logger.warning(f'Narration non generee : {e}')
         raise

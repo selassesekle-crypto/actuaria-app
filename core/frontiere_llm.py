@@ -265,6 +265,45 @@ def texte_des_blocs(reponse: Any) -> str:
 #: Le motif d'arrêt qui signale une réponse COUPÉE par la limite de jetons.
 MOTIF_TRONQUEE = 'max_tokens'
 
+#: ⚠️⚠️ LA MENTION VIT ICI, ET PAS DANS CHAQUE RAPPORT. Elle est née dans A7 ;
+#: la recopier dans les trois autres chaînes qui publient une narration en
+#: aurait fait QUATRE copies — et quatre copies divergent au premier
+#: ajustement. C'est ce qui était arrivé aux deux tables de libellés avant
+#: qu'on les fonde en une.
+#:
+#: ⚠️ ELLE DIT QUE LE TEXTE EST INCOMPLET — le seul fait qu'on connaisse.
+#: Elle n'affirme PAS ce qui manque : personne ne le sait. Et elle ne dit pas
+#: que ce qui précède est faux — il ne l'est pas, il est SEULEMENT interrompu.
+PORTEE_NARRATION_TRONQUEE = (
+    "⚠️ NARRATION INTERROMPUE — le modèle a atteint sa limite de longueur et "
+    "le texte ci-dessus s'arrête avant sa fin. Ce qui précède n'est pas "
+    "invalidé : il est INCOMPLET. Les sections manquantes sont absentes, "
+    "non erronées — et personne ne peut dire ce qu'elles auraient contenu.")
+
+
+def texte_ou_mention_troncature(reponse: Any) -> str:
+    """Le texte de la réponse, suivi de sa mention SI elle a été coupée.
+
+    ⚠️⚠️ LE GESTE EST LE MÊME POUR LES QUATRE CHAÎNES QUI PUBLIENT UNE
+    NARRATION. Mesuré : `texte_des_blocs` a HUIT appelants, mais tous ne
+    publient pas de la même façon —
+      · QUATRE publient une narration dans un document signé (A7,
+        tarification, santé, prévoyance) : une troncature y est SILENCIEUSE ;
+      · DEUX parsent le texte en JSON : `json.loads` lève, le défaut est déjà
+        bruyant ;
+      · DEUX alimentent une conversation : l'utilisateur VOIT le texte coupé.
+    Seuls les quatre premiers ont besoin de ceci — et le leur donner ici
+    évite d'écrire quatre fois le même `if`.
+
+    ⚠️ ON MARQUE, ON NE LÈVE PAS : le texte déjà produit reste utile — sur le
+    cas mesuré, 40 % de la narration était écrite. Faire tomber le rapport
+    reproduirait ce que le lot A a fermé.
+    """
+    texte = texte_des_blocs(reponse)
+    if est_tronquee(reponse):
+        return texte.rstrip() + '\n\n' + PORTEE_NARRATION_TRONQUEE
+    return texte
+
 
 def motif_arret(reponse: Any) -> str:
     """Pourquoi le modèle s'est arrêté. `''` si la réponse ne le dit pas."""

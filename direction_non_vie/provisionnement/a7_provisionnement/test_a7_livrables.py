@@ -3419,5 +3419,98 @@ class T_Les_Ecarts_Sont_Transmis_Pas_Calcules(unittest.TestCase):
         print('    OK ECART-6 la baisse du taux est declaree artefact')
 
 
+class T_Les_Quatre_Chaines_Declarent_Leur_Troncature(unittest.TestCase):
+    """⚠️⚠️ LE NOMMER NE LE FERMAIT PAS.
+
+    Le lot precedent avait signale que SEPT appelants de `texte_des_blocs`
+    ne marquaient pas leur troncature. Mesure du perimetre REEL :
+
+      4 publient une narration dans un document signe -> SILENCIEUSE
+      2 parsent en JSON (`json.loads` LEVE)           -> deja bruyant
+      2 alimentent une conversation                   -> l'utilisateur VOIT
+
+    Seuls les quatre premiers sont concernes -- et mon annonce de << sept >>
+    etait trop large, comme celle de << douze modules >> l'avait ete pour
+    `contrats-de-date`.
+    """
+
+    #: Les chaines qui PUBLIENT une narration dans un document signe.
+    PUBLIENT = (
+        'direction_non_vie/provisionnement/a7_provisionnement/n5_rapport.py',
+        'direction_non_vie/tarification/services/rapport_modeles_tarif.py',
+        'direction_sante_prevoyance/prevoyance/rapport_prevoyance/agent.py',
+        'direction_sante_prevoyance/sante/rapport_sante/agent.py',
+    )
+
+    @staticmethod
+    def _racine():
+        import core
+        return pathlib.Path(core.__file__).parent.parent
+
+    def test_les_quatre_publieurs_declarent_la_troncature(self):
+        racine = self._racine()
+        muets = []
+        for rel in self.PUBLIENT:
+            src = (racine / rel).read_text(encoding='utf-8')
+            if 'texte_ou_mention_troncature' not in src:
+                muets.append(rel)
+        self.assertEqual(muets, [],
+                         f'ces chaines publient une narration sans declarer '
+                         f'une troncature : {muets}')
+        print(f'    OK 4CH-1 les {len(self.PUBLIENT)} publieurs declarent')
+
+    def test_aucun_publieur_ne_contourne_la_frontiere(self):
+        # ⚠️ LE CONTOURNEMENT EST LE VRAI RISQUE : appeler `texte_des_blocs`
+        # en direct redonne un texte muet. C'est exactement ce que j'ai fait
+        # avec `pio.to_image` au lot des figures.
+        racine = self._racine()
+        fautifs = []
+        for rel in self.PUBLIENT:
+            src = (racine / rel).read_text(encoding='utf-8')
+            for ligne in src.splitlines():
+                s = ligne.strip()
+                if s.startswith('#'):
+                    continue
+                if 'texte_des_blocs(' in s and 'def ' not in s:
+                    fautifs.append(f'{pathlib.Path(rel).name}: {s[:60]}')
+        self.assertEqual(fautifs, [],
+                         f'un publieur contourne la frontiere : {fautifs}')
+        print('    OK 4CH-2 aucun publieur n appelle texte_des_blocs en direct')
+
+    def test_la_mention_vit_a_UN_seul_endroit(self):
+        # ⚠️⚠️ QUATRE COPIES DIVERGENT AU PREMIER AJUSTEMENT -- c'est ce qui
+        # etait arrive aux deux tables de libelles avant qu'on les fonde.
+        racine = self._racine()
+        litteral = 'NARRATION INTERROMPUE — le modèle a atteint'
+        porteurs = [rel for rel in self.PUBLIENT
+                    if litteral in (racine / rel).read_text(encoding='utf-8')]
+        self.assertEqual(porteurs, [],
+                         f'la mention est recopiee dans : {porteurs}')
+        from core import frontiere_llm as F
+        self.assertIn(litteral, F.PORTEE_NARRATION_TRONQUEE)
+        print('    OK 4CH-3 la mention vit dans core, aucune copie locale')
+
+    def test_a7_republie_la_mention_de_la_frontiere(self):
+        # ⚠️ CONTRE-EPREUVE : A7 garde son nom pour ses lecteurs, mais il
+        # doit porter LA MEME valeur -- pas une copie qui derivera.
+        from core import frontiere_llm as F
+        self.assertIs(RAPP_MOD.PORTEE_NARRATION_TRONQUEE,
+                      F.PORTEE_NARRATION_TRONQUEE)
+        print('    OK 4CH-4 A7 republie la valeur de core, pas une copie')
+
+    def test_les_mappings_restent_hors_perimetre(self):
+        # ⚠️ CE QUE LA MESURE A ECARTE, ET POURQUOI : une troncature y casse
+        # le JSON. Le defaut est deja bruyant -- y ajouter une mention
+        # rendrait le texte INVALIDE pour son propre parseur.
+        racine = self._racine()
+        for rel in ('core/mapping_llm.py',
+                    'direction_non_vie/services/nv_triangle_mapping_llm.py'):
+            src = (racine / rel).read_text(encoding='utf-8')
+            self.assertIn('json.loads', src)
+            self.assertNotIn('texte_ou_mention_troncature', src,
+                             f'{rel} : une mention casserait son parseur')
+        print('    OK 4CH-5 les mappings restent hors perimetre, et pourquoi')
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=1)

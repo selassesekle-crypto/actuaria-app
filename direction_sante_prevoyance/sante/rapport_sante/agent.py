@@ -283,7 +283,16 @@ def _narration_claude_api(m1: Dict, m3: Dict, date_arrete: str) -> str:
             messages=[{"role": "user", "content": ctx}],
             cle=frontiere_llm.cle_api_ou_secrets(),
         )
-        return frontiere_llm.texte_des_blocs(resp)
+        # ⚠️⚠️ UNE NARRATION COUPEE NE SE PUBLIE PAS EN SILENCE. Le
+        # modele s'arrete a sa limite de jetons et le texte finit EN
+        # PLEINE PHRASE ; rien ne le disait. `stop_reason` existait dans
+        # la reponse et n'etait lu NULLE PART dans le depot.
+        # ⚠️ ON MARQUE, ON NE LEVE PAS : le texte deja produit reste
+        # utile -- sur le cas mesure, 40 % de la narration etait ecrite.
+        # ⚠️ ET LE VERROU NE PEUT PAS LE VOIR : il mesure la PROVENANCE
+        # des nombres, jamais la COMPLETUDE du texte. Mesure : une
+        # narration coupee a 420 caracteres affichait << 0,0 % >>.
+        return frontiere_llm.texte_ou_mention_troncature(resp)
     except Exception as e:
         logging.getLogger("actuaria.sp.rapport_sante").warning(f"Narration non générée : {e}")
         raise
