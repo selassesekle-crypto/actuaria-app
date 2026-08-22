@@ -3419,6 +3419,134 @@ class T_Les_Ecarts_Sont_Transmis_Pas_Calcules(unittest.TestCase):
         print('    OK ECART-6 la baisse du taux est declaree artefact')
 
 
+class T_La_Courbe_De_L_Arrete_Est_Dite_Dans_Le_Commentaire(unittest.TestCase):
+    """⚠️⚠️ QUATRE FORMATS SUR CINQ LE DISAIENT ; LE CINQUIEME EST SIGNE.
+
+    Mesure d'ouverture, arrete du 30/06/2026 contre une courbe embarquee du
+    31/07/2026 -- l'age est NEGATIF, la courbe est POSTERIEURE a la cloture :
+
+        n4['alertes'] 1 | HTML 1 | Excel 1 | Word 1 | COMMENTAIRE 0
+
+    Le mecanisme existait en entier (`core.courbe_rfr.diagnostic_peremption`
+    repond deja << cette courbe est-elle admissible pour cet arrete ? >>). Il
+    ne manquait pas un mecanisme, il manquait une phrase.
+    """
+
+    #: Les regimes de refus, et il y en a TROIS -- pas seulement
+    #: l'anachronisme. Ne couvrir que lui aurait laisse le commentaire muet
+    #: sur une courbe perimee.
+    ARRETES = (('2026-06-30', 'ROUGE', 'anachronisme'),
+               ('2026-11-30', 'AMBRE', 'peremption'),
+               ('2027-09-30', 'ROUGE', 'peremption longue'))
+    ARRETE_VERT = '2026-08-22'
+
+    @staticmethod
+    def _triangle():
+        n = 7
+        T = np.array([[1000.0 * (1.6 ** j) * (1 + 0.03 * i)
+                       for j in range(n)] for i in range(n)])
+        for i in range(n):
+            for j in range(n):
+                if i + j >= n:
+                    T[i, j] = np.nan
+        return T
+
+    @classmethod
+    def _run(cls, arrete, **kw):
+        return AgentA7Provisionnement(verbose=False).run(
+            source=cls._triangle(), mode_declare='cumule',
+            n_sim_bootstrap=30, seed=42, generer_graphiques=False,
+            date_arrete=arrete, **kw)
+
+    @staticmethod
+    def _paragraphe(commentaire):
+        """Les lignes qui suivent l'ancrage, dans le vrai commentaire."""
+        lignes = commentaire.split('\n')
+        k = next((i for i, ligne in enumerate(lignes)
+                  if 'en aval par A10' in ligne), None)
+        if k is None:
+            return []
+        bloc = []
+        for ligne in lignes[k + 1:]:
+            if ligne.strip():
+                bloc.append(ligne.strip())
+            elif bloc:
+                break
+        return bloc
+
+    def test_les_trois_regimes_de_refus_sont_publies(self):
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_commentaire import (
+            PORTEE_COURBE_ARRETE,
+        )
+        for arrete, statut, cause in self.ARRETES:
+            r = self._run(arrete)
+            self.assertEqual(
+                str((r['n4'].get('peremption_courbe') or {}).get('statut')),
+                statut, f'{arrete} ({cause}) : le regime mesure a change')
+            self.assertIn(PORTEE_COURBE_ARRETE, r['commentaire'],
+                          f'{arrete} ({cause}) : le commentaire signe est '
+                          f'muet sur la courbe')
+            print(f'    OK CA-1 {arrete} ({statut}, {cause}) : publie')
+
+    def test_un_arrete_compatible_ne_publie_rien(self):
+        # ⚠️ CONTRE-EPREUVE DE SUR-CORRECTION : le remede ne doit pas parler
+        # d'une courbe qui convient.
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_commentaire import (
+            PORTEE_COURBE_ARRETE,
+        )
+        r = self._run(self.ARRETE_VERT)
+        self.assertEqual(
+            str((r['n4'].get('peremption_courbe') or {}).get('statut')),
+            'VERT')
+        self.assertNotIn(PORTEE_COURBE_ARRETE, r['commentaire'])
+        print('    OK CA-2 un arrete compatible ne publie aucun paragraphe')
+
+    def test_le_fait_est_CITE_du_module_jamais_reecrit(self):
+        # ⚠️⚠️ DEUX TEXTES POUR UN SEUL FAIT DIVERGENT. Le message vient du
+        # module ; le commentaire doit le porter MOT POUR MOT.
+        r = self._run(self.ARRETES[0][0])
+        msg = str((r['n4']['peremption_courbe'])['message']).strip()
+        self.assertTrue(msg)
+        self.assertIn(msg, r['commentaire'],
+                      'le commentaire reformule le fait au lieu de le citer')
+        print('    OK CA-3 le fait est cite mot pour mot du module')
+
+    def test_le_paragraphe_n_ajoute_QUE_ce_qui_manquait(self):
+        # ⚠️ UNE PREMIERE VERSION OUVRAIT SUR UN TITRE ET AJOUTAIT UNE NUANCE
+        # -- les deux etaient DEJA dans le message. Le paragraphe disait trois
+        # fois la meme chose. On verrouille la structure : fait, portee,
+        # sortie. Rien d'autre.
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_commentaire import (
+            PORTEE_COURBE_ARRETE,
+            SORTIE_COURBE_ARRETE,
+        )
+        bloc = self._paragraphe(self._run(self.ARRETES[0][0])['commentaire'])
+        self.assertEqual(len(bloc), 3,
+                         f'le paragraphe porte {len(bloc)} lignes : {bloc}')
+        self.assertEqual(bloc[1], PORTEE_COURBE_ARRETE)
+        self.assertEqual(bloc[2], SORTIE_COURBE_ARRETE)
+        print('    OK CA-4 trois lignes : le fait cite, la portee, la sortie')
+
+    def test_ce_que_la_portee_AFFIRME_est_mesure(self):
+        # ⚠️⚠️ UNE PHRASE DE PORTEE SE MESURE COMME UN CHIFFRE. Elle affirme
+        # DEUX choses : le Best Estimate est INCHANGE, et seule la marge de
+        # risque depend de la courbe. On substitue une courbe entierement
+        # differente et on regarde ce qui bouge.
+        from direction_non_vie.provisionnement.a7_provisionnement.config.rfr_eiopa import (
+            get_courbe_taux_plat,
+        )
+        a = self._run(self.ARRETES[0][0])
+        b = self._run(self.ARRETES[0][0], courbe_rfr=get_courbe_taux_plat(5.0))
+        self.assertEqual(a['n4']['best_estimate'], b['n4']['best_estimate'],
+                         'le Best Estimate depend de la courbe : la portee '
+                         'publiee est FAUSSE')
+        self.assertNotEqual(a['n4']['risk_margin'], b['n4']['risk_margin'],
+                            'la marge de risque ne depend pas de la courbe : '
+                            'la portee publiee est FAUSSE')
+        print(f"    OK CA-5 BE {a['n4']['best_estimate']} inchange, "
+              f"MR {a['n4']['risk_margin']} -> {b['n4']['risk_margin']}")
+
+
 class T_Un_Verdict_Non_Testable_Est_Le_Meme_Partout(unittest.TestCase):
     """⚠️⚠️ LE COMMENTAIRE SIGNE DISAIT << VALIDEE >> LA OU RIEN N'ETAIT TESTE.
 

@@ -779,6 +779,99 @@ def _s4_methodes(n3: Dict, n4: Dict) -> str:
 #  SECTION 5 — BEST ESTIMATE S2
 # =============================================================================
 
+# =============================================================================
+#  L'ADMISSIBILITÉ DE LA COURBE, DANS LE DOCUMENT QUE L'ACTUAIRE SIGNE
+# =============================================================================
+#
+#  ⚠️⚠️ QUATRE FORMATS SUR CINQ LE DISAIENT DÉJÀ. Mesuré sur un run réel,
+#  arrêté du 30/06/2026 contre une courbe embarquée du 31/07/2026 :
+#
+#      n4['alertes']       1     rapport HTML     1
+#      classeur Excel      1     document Word    1
+#      COMMENTAIRE SIGNÉ   0     <- le seul muet, et c'est celui qu'on signe
+#
+#  ⚠️ LE MÉCANISME EXISTE EN ENTIER — `core.courbe_rfr.diagnostic_peremption`
+#  répond déjà « cette courbe est-elle admissible pour cet arrêté ? », avec
+#  l'anachronisme comme cause de refus distincte de la péremption. Il ne
+#  manquait pas un mécanisme, il manquait une phrase.
+#
+#  ⚠️ LE FAIT EST CITÉ, JAMAIS RECONSTRUIT. Le message vient du module ; le
+#  réécrire ici créerait DEUX textes pour un seul fait, et ils divergeraient.
+#  Ce qui est ajouté est ce que le format court ne peut pas porter : la
+#  portée, et la voie de sortie.
+#
+#  ⚠️⚠️ CE QUI EST AFFIRMÉ A ÉTÉ MESURÉ, ET RIEN DE PLUS. En substituant une
+#  courbe plate au run ci-dessus : Best Estimate 83 134 -> 83 134 (IDENTIQUE),
+#  marge de risque 8 332 -> 7 800. La courbe ne touche PAS le Best Estimate.
+#
+#  ⚠️ ET L'ÉCART N'EST PAS CHIFFRÉ, DÉLIBÉRÉMENT. Le seul nombre disponible
+#  compare la courbe embarquée à une courbe ENTIÈREMENT DIFFÉRENTE — il
+#  mesure autre chose que l'anachronisme. Chiffrer l'anachronisme exigerait
+#  la courbe du mois de l'arrêté, c'est-à-dire précisément ce qui manque et
+#  ce que le message demande. L'impossibilité de chiffrer EST l'argument.
+#
+#  ⚠️ AUCUN NUMÉRO D'ARTICLE ICI. Le principe est posé seul : ce dépôt a déjà
+#  publié une citation fausse à vingt endroits. Quel article fonde l'exigence
+#  d'une courbe à la date de valorisation reste À ÉTABLIR AU TEXTE.
+
+#: ⚠️ PHRASE DE PORTÉE — ses clauses se mesurent, comme un chiffre.
+#:   AFFIRME  « le Best Estimate est inchangé »  -> mesuré, 83 134 = 83 134
+#:   AFFIRME  « seule la marge de risque dépend » -> mesuré, 8 332 -> 7 800
+#:   LIMITE   « l'ampleur ne peut être établie sans la courbe de l'arrêté »
+PORTEE_COURBE_ARRETE = (
+    "Ce qui est concerné, et ce qui ne l'est pas. Le Best Estimate publié "
+    "ici est une réserve BRUTE, non actualisée : il est INCHANGÉ. Seule la "
+    "marge de risque dépend de la courbe. L'ampleur de l'écart ne peut être "
+    "établie sans disposer de la courbe du mois de l'arrêté.")
+
+#: ⚠️ LA SORTIE NOMME CE QUE L'ACTUAIRE VOIT À L'ÉCRAN, pas un paramètre.
+#: `actuaria_app` lui présente un menu « Fichier Excel EIOPA » ; `courbe_rfr`
+#: ne désigne rien sur son écran, et serait du jargon d'outil dans un
+#: document lu par le commissaire aux comptes et par l'ACPR. Un message dont
+#: la sortie n'est pas praticable se fait désactiver.
+#:
+#: ⚠️ LES TROIS MESSAGES DU MODULE DISENT DÉJÀ QUOI FAIRE — « charger la
+#: courbe publiée au … », « vérifier qu'elle correspond … », « importer la
+#: courbe en vigueur … ». Aucun ne dit PAR OÙ. C'est le seul manque.
+SORTIE_COURBE_ARRETE = (
+    "Cette courbe se charge via l'option « Fichier Excel EIOPA ». Si l'écart "
+    "vient d'une saisie, corriger la date d'arrêté.")
+
+
+def lignes_courbe_arrete(peremption: dict) -> list:
+    """Le paragraphe sur l'admissibilité de la courbe — vide si VERT.
+
+    ⚠️⚠️ NI TITRE NI REFORMULATION DU FAIT, ET C'EST MESURÉ. Une première
+    version ouvrait sur un titre et ajoutait une nuance (« la courbe n'est
+    pas erronée, seulement postérieure ») : les DEUX étaient déjà dans le
+    message du module, qui porte le fait, la cause ET une voie de sortie.
+    Le paragraphe disait donc trois fois la même chose.
+
+    ⚠️ CE QUI RESTE EST CE QUE LE FORMAT COURT NE PEUT PAS PORTER —
+    vérifié sur les TROIS régimes non-VERT, pas seulement l'anachronisme :
+      · aucun des trois ne dit que le Best Estimate est INCHANGÉ ; celui de
+        la péremption ROUGE dit même « la Risk Margin ET TOUTE
+        ACTUALISATION en découlent », ce qui se lit à l'envers ici. Le
+        module sert tout le dépôt : il ne peut pas savoir qu'A7 rend une
+        réserve brute ;
+      · aucun des trois ne nomme l'option de l'écran.
+
+    ⚠️ UN `⚠️` OUVRE DONC UNE SECTION NARRATIVE, et c'est un défaut de forme
+    assumé : deux formulations désynchronisées pour un seul fait serait un
+    défaut de fond, et c'est celui que ce chantier ferme.
+    """
+    if not peremption or str(peremption.get('statut', 'VERT')) == 'VERT':
+        return []
+    return [
+        "",
+        # ⚠️ LE FAIT EST CITÉ, JAMAIS PARSÉ NI RÉÉCRIT. Même règle qu'aux
+        # motifs de H1 et H2 : on cite, on ne découpe pas.
+        str(peremption.get('message', '')).strip(),
+        PORTEE_COURBE_ARRETE,
+        SORTIE_COURBE_ARRETE,
+    ]
+
+
 def _s5_best_estimate(n4: Dict) -> str:
     be     = n4.get('best_estimate', 0)
 
@@ -813,6 +906,10 @@ def _s5_best_estimate(n4: Dict) -> str:
         f"réserve BRUTE (non actualisée) : l'actualisation à la courbe RFR EIOPA "
         f"— la valeur actuelle au sens de l'Art. 77 — est opérée en aval par "
         f"A10 (Solvabilité 2).",
+        # ⚠️ L'ANCRAGE EST ICI PARCE QUE LA COURBE Y EST DÉJÀ NOMMÉE. Elle
+        # était nommée sans son admissibilité : le lecteur apprenait quelle
+        # courbe sert, jamais si elle convient à l'arrêté qu'il signe.
+        *lignes_courbe_arrete(n4.get('peremption_courbe') or {}),
         "",
         f"Distribution log-normale — {libelle_percentiles(n4).lower()} — "
         f"percentiles retenus (QIS5 TP.5.26) :",
