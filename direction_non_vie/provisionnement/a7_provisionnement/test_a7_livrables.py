@@ -3420,6 +3420,107 @@ class T_Les_Ecarts_Sont_Transmis_Pas_Calcules(unittest.TestCase):
         print('    OK ECART-6 la baisse du taux est declaree artefact')
 
 
+class T_Le_HTML_Telecharge_Est_Le_HTML_Archive(unittest.TestCase):
+    """⚠️⚠️ LE DOCUMENT TELECHARGE N'ETAIT PAS LE DOCUMENT ARCHIVE.
+
+    A7 etait le SEUL agent du depot a rendre son HTML sous `html` (str) ;
+    tous les autres rendent `html_bytes` (bytes). L'application lit la
+    convention majoritaire -- la cle ne correspondait JAMAIS, et elle
+    retombait sur un REEXPORT par `export_html`.
+
+    Mesure, en appelant `export_html` exactement comme l'application :
+
+        HTML de l'agent  80 234 car.
+        HTML de l'app    79 920 car.    ecart 314
+        le verdict du verrou   agent=1   app=0
+
+    ⚠️ ET `export_html` REGENERE la narration quand on ne la lui passe pas.
+    Sans cle le texte est deterministe donc identique ; SOUS CLE c'etait un
+    SECOND appel LLM independant -- un autre texte que l'archive, et le cout
+    double. Le defaut annulait le lot D1 : la mention du verrou voyage DANS
+    le texte, mais sur ce chemin le texte etait refabrique.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        n = 7
+        T = np.array([[1000.0 * (1.6 ** j) * (1 + 0.03 * i)
+                       for j in range(n)] for i in range(n)])
+        for i in range(n):
+            for j in range(n):
+                if i + j >= n:
+                    T[i, j] = np.nan
+        cls.r = AgentA7Provisionnement(verbose=False).run(
+            source=T, mode_declare='cumule', n_sim_bootstrap=30, seed=42,
+            generer_graphiques=False)
+
+    def test_la_cle_suit_la_convention_du_depot(self):
+        # ⚠️ LE FAIT DE DEPART : sans cette cle, l'application ne peut PAS
+        # servir le document produit -- elle en refabrique un autre.
+        self.assertTrue(self.r.get('success'), self.r.get('erreur'))
+        self.assertIn('html_bytes', self.r, 'A7 ne suit pas la convention')
+        self.assertIsInstance(self.r['html_bytes'], bytes)
+        self.assertTrue(self.r['html_bytes'], 'la cle existe mais est vide')
+        print(f"    OK APP-1 html_bytes present, "
+              f"{len(self.r['html_bytes']):,} octets")
+
+    def test_les_octets_servis_sont_ceux_qui_sont_ARCHIVES(self):
+        # ⚠️⚠️ LE TEST QUI PORTE L'OPPOSABILITE. `_archiver_dossier` ecrit
+        # `(html or '').encode('utf-8')` : le telechargement doit etre
+        # IDENTIQUE A L'OCTET PRES, sinon l'empreinte SHA-256 de l'audit
+        # trail ne certifie pas ce que l'actuaire a en main.
+        attendu = (self.r['html'] or '').encode('utf-8')
+        self.assertEqual(self.r['html_bytes'], attendu,
+                         'le telechargement differe de l archive')
+        import hashlib
+        e = hashlib.sha256(attendu).hexdigest()
+        self.assertEqual(hashlib.sha256(self.r['html_bytes']).hexdigest(), e)
+        print(f'    OK APP-2 meme empreinte que l archive — {e[:16]}...')
+
+    def test_le_verdict_du_verrou_survit_au_telechargement(self):
+        # ⚠️ CE QUE LE REEXPORT PERDAIT, NOMMEMENT. Sans ce test, la cle
+        # pourrait exister et porter un document ampute sans qu'on le voie.
+        texte = self.r['html_bytes'].decode('utf-8')
+        self.assertIn('Contrôle de provenance', texte,
+                      'le document telecharge tait le verdict du verrou')
+        print('    OK APP-3 le verdict du verrou est dans les octets servis')
+
+    def test_le_reexport_de_l_application_reste_MOINS_complet(self):
+        # ⚠️⚠️ ON PROUVE QUE LE DEFAUT ETAIT REEL, pas qu'on l'a contourne.
+        # On appelle `export_html` comme l'application le faisait -- sans
+        # narration -- et on verifie qu'il PERD bien le verdict. Le jour ou
+        # ce test tombe, c'est que le reexport est devenu complet : alors ce
+        # lot n'a plus d'objet, et il faut le RELIRE, pas le supprimer.
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
+            export_html,
+        )
+        ampute = export_html(
+            n1={}, n2=self.r['n2'], n3=self.r['n3'], n4=self.r['n4'],
+            commentaire=self.r.get('commentaire', ''), ref_client='X',
+            arrete='2026-08-22', audit_id=self.r.get('audit_id', ''),
+            lob_label='generique', graphiques=None)
+        self.assertNotIn('Contrôle de provenance', ampute,
+                         'le reexport ne perd plus le verdict : relire ce lot')
+        print('    OK APP-4 le reexport perd bien le verdict — defaut reel')
+
+    def test_le_retour_degrade_porte_la_meme_cle(self):
+        # ⚠️ UN CONSOMMATEUR NE DOIT PAS DEVINER si une cle absente vaut
+        # echec ou oubli.
+        #
+        # ⚠️ L'ECHEC EST MESURE, PAS SUPPOSE. Ma premiere version passait un
+        # triangle 1x1 en croyant qu'il tomberait : IL PASSE. On emploie donc
+        # le seul echec dont ce depot a la preuve -- une date d'arrete
+        # indechiffrable, refusee a la frontiere par `core.arrete`.
+        r = AgentA7Provisionnement(verbose=False).run(
+            source=np.array([[100.0, 180.0], [120.0, np.nan]]),
+            mode_declare='cumule', n_sim_bootstrap=5, seed=42,
+            generer_graphiques=False, date_arrete='30 juin 2026')
+        self.assertFalse(r.get('success'))
+        self.assertIn('html_bytes', r, 'le retour degrade omet la cle')
+        self.assertEqual(r['html_bytes'], b'')
+        print('    OK APP-5 le retour degrade declare le vide, il ne l omet pas')
+
+
 class T_Le_Verdict_Du_Verrou_Atteint_Le_Document_Signe(unittest.TestCase):
     """⚠️⚠️ LE VERROU JOURNALISAIT, ET PERSONNE NE LE LISAIT.
 

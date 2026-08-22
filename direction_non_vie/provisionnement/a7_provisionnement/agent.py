@@ -1049,6 +1049,28 @@ class AgentA7Provisionnement:
                 'excel_bytes':  excel_bytes,
                 'word_bytes':   word_bytes,    # ← NOUVEAU v5.0
                 'html':         html_txt,
+                # ⚠️⚠️ `html_bytes` EXISTE PARCE QUE LE DOCUMENT TELECHARGE
+                # N'ETAIT PAS LE DOCUMENT ARCHIVE. A7 etait le SEUL agent du
+                # depot a rendre son HTML sous `html` (str) quand tous les
+                # autres rendent `html_bytes` (bytes). L'application lit la
+                # convention majoritaire : la cle ne correspondait JAMAIS, et
+                # elle retombait sur un REEXPORT.
+                #
+                # ⚠️ CE QUE LE REEXPORT PERDAIT, MESURE : le verdict du verrou
+                # (1 -> 0), soit 314 caracteres. Et `export_html` REGENERE la
+                # narration quand on ne la lui passe pas : sous cle API,
+                # c'etait un SECOND appel LLM independant -- un autre texte
+                # que l'archive, et le cout double.
+                #
+                # ⚠️ L'ENCODAGE N'EST PAS LIBRE : `_archiver_dossier` ecrit
+                # `(html or '').encode('utf-8')`. Le meme encodage ici rend le
+                # telechargement IDENTIQUE A L'OCTET PRES a l'archive, dont
+                # l'empreinte SHA-256 est dans l'audit trail. Un autre
+                # encodage romprait l'opposabilite sans rien signaler.
+                #
+                # ⚠️ `html` EST CONSERVE : 18 references de test le lisent, et
+                # le renommer les casserait pour un gain nul.
+                'html_bytes':   (html_txt or '').encode('utf-8'),
                 # Un livrable dégradé est DÉCLARÉ ici, jamais deviné : dict vide
                 # si les quatre sont sortis. Une valeur commençant par
                 # `dependance_absente:` dit une bibliothèque manquante — pas un
@@ -1090,6 +1112,17 @@ class AgentA7Provisionnement:
                 'excel_bytes': b'',
                 'word_bytes':  b'',
                 'html':        '',
+                # ⚠️ LE RETOUR DEGRADE PORTE LES MEMES CLES QUE LE NOMINAL --
+                # un consommateur ne doit pas avoir a deviner si l'absence
+                # d'une cle vaut echec ou oubli. `b''` DECLARE le vide.
+                #
+                # ⚠️ ET IL NE CHANGE RIEN AU COMPORTEMENT DE L'APPLICATION,
+                # qui teste la verite de la valeur : `b''` la fait retomber
+                # sur son reexport, exactement comme une cle absente. Produire
+                # un rapport LA OU LE RUN A ECHOUE est un defaut de
+                # l'application, PRE-EXISTANT et hors de ce lot. Signale, non
+                # ouvert -- et surtout pas masque en pretendant ici le fermer.
+                'html_bytes':  b'',
                 'graphiques':  {},
                 'graphiques_erreur': 'run interrompu avant N5',
                 'livrables_erreurs': {k: 'run interrompu avant N5'
