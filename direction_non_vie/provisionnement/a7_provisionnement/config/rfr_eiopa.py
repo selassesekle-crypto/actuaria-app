@@ -31,7 +31,41 @@
 #    · une courbe SANS date d'arrêté est ROUGE, donc plafonnante. Elle
 #      traversait jusqu'ici les deux circuits de gouvernance en silence.
 #
-#  Réf. : Art. 77 du règlement délégué (UE) 2015/35.
+#  ⚠️⚠️ RÉFÉRENCE ÉTABLIE AU TEXTE, ET LA PRÉCÉDENTE ÉTAIT DOUBLEMENT FAUSSE.
+#  Ce bloc rattachait l'article 77 au RÈGLEMENT DÉLÉGUÉ. Lu dans le texte
+#  consolidé 02015R0035 (FR, 02.08.2022), l'article 77 de ce règlement
+#  s'intitule « Fonds propres de base de niveau 3 — Caractéristiques
+#  déterminant le classement » (p. 72). Il ne traite ni de la courbe des taux
+#  ni de la meilleure estimation.
+#
+#  ⚠️ LA FORMULE FAUTIVE N'EST PAS RECOPIÉE ICI, ET C'EST DÉLIBÉRÉ : un
+#  contrôle qui l'interdit tomberait sur le commentaire qui la corrige. La
+#  leçon du mot « erroné », qui frappait « non erronées » — on interdit des
+#  ASSERTIONS, pas des mots, et on n'écrit pas l'assertion qu'on proscrit.
+#
+#  ⚠️ LE DÉPÔT PORTAIT DEUX ATTRIBUTIONS POUR LE MÊME NUMÉRO — mesuré : DIX
+#  occurrences donnaient « Art. 77 » à la DIRECTIVE 2009/138/CE, UNE SEULE au
+#  règlement délégué, et c'était celle-ci. Une majorité n'est pas une preuve :
+#  c'est le texte qui a tranché, pas le compte.
+#
+#  Réf. — la courbe des taux sans risque PERTINENTS pour la meilleure
+#  estimation est celle de l'ARTICLE 77, PARAGRAPHE 2, DE LA DIRECTIVE
+#  2009/138/CE. Le règlement délégué le dit lui-même, dans sa définition de
+#  la « courbe des taux sans risque de base » (art. 1er, point 36) :
+#      « … établie de la même manière que la courbe des taux sans risque
+#        pertinents à utiliser pour calculer la meilleure estimation visée à
+#        l'article 77, paragraphe 2, de la directive 2009/138/CE … »
+#  Ses modalités de CONSTRUCTION sont aux articles 43 à 48 du règlement
+#  délégué, section 4 « Courbe des taux sans risque pertinents » : instruments
+#  retenus (44), ajustement des swaps (45), extrapolation (46), taux à terme
+#  ultime (47), monnaies rattachées (48).
+#
+#  ⚠️ CE QUI N'EST PAS ÉTABLI ICI, ET NE DOIT PAS ÊTRE AFFIRMÉ : que la
+#  Directive exige EN CES TERMES la courbe « à la date de valorisation ». Le
+#  règlement délégué n'est pas la Directive, et celle-ci n'est pas sur le
+#  disque. Le contrôle d'anachronisme de `diagnostic_peremption` repose donc
+#  sur un raisonnement actuariel, pas sur une citation vérifiée — et le
+#  message publié aux actuaires ne cite AUCUN article, délibérément.
 #
 #  Utilisation, inchangée pour les appelants :
 #      from config.rfr_eiopa import get_taux_rfr, DATE_COURBE

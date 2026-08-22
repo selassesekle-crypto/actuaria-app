@@ -3420,6 +3420,103 @@ class T_Les_Ecarts_Sont_Transmis_Pas_Calcules(unittest.TestCase):
         print('    OK ECART-6 la baisse du taux est declaree artefact')
 
 
+class T_L_Article_77_N_Est_Pas_Attribue_Au_Reglement_Delegue(unittest.TestCase):
+    """⚠️⚠️ ETABLI AU TEXTE, PAS A LA MAJORITE.
+
+    Le depot attribuait << Art. 77 >> a DEUX textes : DIX occurrences a la
+    directive 2009/138/CE, UNE au reglement delegue 2015/35 -- et cette
+    derniere etait dans le module de la courbe des taux.
+
+    Lu dans le consolide 02015R0035 (FR, 02.08.2022) : l'article 77 DU
+    REGLEMENT DELEGUE s'intitule << Fonds propres de base de niveau 3 --
+    Caracteristiques determinant le classement >> (p. 72). Rien a voir.
+
+    Et le reglement nomme lui-meme le bon article, dans sa definition de la
+    << courbe des taux sans risque de base >> (art. 1er, point 36) :
+        << ... la courbe des taux sans risque pertinents a utiliser pour
+          calculer la meilleure estimation visee a l'article 77, paragraphe
+          2, de la directive 2009/138/CE ... >>
+
+    ⚠️ CE CONTROLE ACCUSE, IL N'EXEMPTE PAS : il ne peut qu'ajouter des
+    signalements. Regle d'asymetrie.
+    """
+
+    #: ⚠️ ON VISE UNE ASSERTION, PAS UN MOT. Interdire << 77 >> pres de
+    #: << delegue >> frapperait le commentaire qui CORRIGE l'erreur -- la
+    #: lecon du mot << errone >>, qui tombait sur << non erronees >>.
+    #:
+    #: ⚠️⚠️ LES DEUX ORDRES, ET C'EST UNE LECON PAYEE DANS CE LOT MEME. La
+    #: premiere version ne couvrait que la tournure ARTICLE-D'ABORD. Le meme
+    #: fichier portait la faute dans l'ordre INVERSE -- le texte d'abord,
+    #: l'article ensuite -- dans son bloc REFERENCES, et le controle est
+    #: passe au vert dessus. Un filet qui ne connait qu'une tournure atteste
+    #: sans surveiller.
+    #:
+    #: ⚠️ AUCUNE DES DEUX TOURNURES N'EST RECOPIEE DANS CES COMMENTAIRES, ET
+    #: C'EST OBLIGATOIRE ICI : le controle balaie TOUT le depot, ce fichier
+    #: compris. Ecrire l'assertion qu'on proscrit fait echouer le filet sur
+    #: sa propre explication -- mesure, il l'a fait. C'est la lecon du mot
+    #: << errone >> qui frappait << non erronees >>.
+    #:
+    #: ⚠️⚠️ ET LA VERSION << ELARGIE >> A ECHOUE AUSSI, POUR UNE MAJUSCULE.
+    #: J'avais ajoute la tournure inverse en la commencant par `r[eè]glement`
+    #: MINUSCULE, sans `re.I` : la violation plantee ecrivait `Reglement`, et
+    #: le controle est reste VERT. Deux assiettes trop etroites d'affilee sur
+    #: LE MEME filet. D'ou `re.IGNORECASE`, et deux violations plantees --
+    #: une par tournure -- comme condition d'acceptation.
+    _FAUTIF = re.compile(
+        r"art(?:icle)?\.?\s*77\s+du\s+r[eè]glement\s+d[eé]l[eé]gu[eé]"
+        r"|r[eè]glement\s+d[eé]l[eé]gu[eé][^\n]{0,40},\s*art(?:icle)?\.?\s*77\b",
+        re.IGNORECASE)
+
+    def test_aucun_module_ne_rattache_l_article_77_au_reglement(self):
+        racine = pathlib.Path(
+            AgentA7Provisionnement.__module__.split('.')[0])
+        racine = pathlib.Path(__file__).resolve().parents[3]
+        fautifs = []
+        for chemin in racine.rglob('*.py'):
+            s = str(chemin)
+            if '.venv' in s or 'site-packages' in s or '.git' in s:
+                continue
+            try:
+                texte = chemin.read_text(encoding='utf-8')
+            except (OSError, UnicodeDecodeError):
+                continue
+            for n, ligne in enumerate(texte.splitlines(), 1):
+                if self._FAUTIF.search(ligne):
+                    fautifs.append(f'{chemin.name}:{n}')
+        self.assertEqual(fautifs, [],
+                         f"l'article 77 est rattache au reglement delegue, "
+                         f"alors qu'il y traite des fonds propres de niveau "
+                         f"3 : {fautifs}")
+        print('    OK ART-1 aucun module ne rattache Art. 77 au reglement')
+
+    def test_le_motif_ne_frappe_pas_le_commentaire_qui_corrige(self):
+        # ⚠️ CONTRE-EPREUVE DU CONTROLE LUI-MEME. Le bloc de `rfr_eiopa` parle
+        # longuement de cette erreur : s'il declenchait, le filet serait
+        # inutilisable et on le desactiverait -- ce qui est pire que rien.
+        from direction_non_vie.provisionnement.a7_provisionnement.config import (
+            rfr_eiopa,
+        )
+        texte = pathlib.Path(rfr_eiopa.__file__).read_text(encoding='utf-8')
+        self.assertIn('Fonds propres de base de niveau 3', texte,
+                      'le module ne porte plus la mesure au texte')
+        self.assertIsNone(self._FAUTIF.search(texte),
+                          'le commentaire correcteur declenche le controle')
+        print('    OK ART-2 le controle ne frappe pas sa propre correction')
+
+    def test_la_bonne_reference_est_ecrite_avec_son_paragraphe(self):
+        # ⚠️ << Art. 77 >> seul serait ambigu : c'est le PARAGRAPHE 2 qui
+        # porte la courbe. Le numero sans son paragraphe est une demi-mesure.
+        from direction_non_vie.provisionnement.a7_provisionnement.config import (
+            rfr_eiopa,
+        )
+        texte = pathlib.Path(rfr_eiopa.__file__).read_text(encoding='utf-8')
+        self.assertRegex(texte, r'77,\s*PARAGRAPHE\s*2,\s*DE\s*LA\s*DIRECTIVE')
+        self.assertIn('2009/138/CE', texte)
+        print('    OK ART-3 la reference porte son paragraphe et son texte')
+
+
 class T_Le_HTML_Telecharge_Est_Le_HTML_Archive(unittest.TestCase):
     """⚠️⚠️ LE DOCUMENT TELECHARGE N'ETAIT PAS LE DOCUMENT ARCHIVE.
 

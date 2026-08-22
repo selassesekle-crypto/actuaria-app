@@ -19,12 +19,30 @@ prétend résoudre. Trois natures de taux circulent, et une seule entre ici :
 
   (A) LE TAUX RÉGLEMENTAIRE D'ACTUALISATION — il y en a UN.
       La courbe EIOPA SANS Volatility Adjustment. C'est le seul taux qui
-      actualise un engagement inscrit au bilan (art. 77 du règlement délégué
-      (UE) 2015/35). C'est ce que ce module expose par défaut.
+      actualise un engagement inscrit au bilan — **art. 77, paragraphe 2, de
+      la DIRECTIVE 2009/138/CE**. C'est ce que ce module expose par défaut.
+
+      ⚠️⚠️ CE TEXTE RATTACHAIT CE NUMÉRO AU RÈGLEMENT DÉLÉGUÉ, ET C'ÉTAIT
+      FAUX. Établi au consolidé 02015R0035 (FR, 02.08.2022) : l'article 77
+      DU RÈGLEMENT s'intitule « Fonds propres de base de niveau 3 —
+      Caractéristiques déterminant le classement » (p. 72). Le règlement
+      nomme lui-même le bon article, dans sa définition de la « courbe des
+      taux sans risque de base » (art. 1er, point 36) : « … la courbe des
+      taux sans risque pertinents à utiliser pour calculer la meilleure
+      estimation visée à l'article 77, paragraphe 2, de la directive
+      2009/138/CE … ». Les modalités de CONSTRUCTION, elles, sont bien dans
+      le règlement délégué : section 4, articles 43 à 48.
+
+      ⚠️ CE MODULE SERT TOUT LE DÉPÔT — une citation fausse y voyage partout,
+      et c'est exactement ce que le défaut « Art. 105 » a coûté à vingt
+      endroits. Un contrôle de test l'interdit désormais.
 
   (B) LES VARIANTES OFFICIELLES DE CETTE MÊME COURBE, sous accès DISTINCTS.
       · avec VA — suppose l'agrément de l'autorité de contrôle
-        (art. 77 quinquies) ; d'où un argument sans valeur par défaut ;
+        (art. 77 quinquies **de la même DIRECTIVE** : mesuré, le règlement
+        délégué ne possède aucun article 77 bis/ter/quater/quinquies, il ne
+        fait que citer ceux de la directive) ; d'où un argument sans valeur
+        par défaut ;
       · courbes choquées (`Spot_*_shock_UP/DOWN`) — servent le SCR de taux,
         pas l'actualisation. NON implémentées ici : A8 calcule son choc par
         les facteurs relatifs des art. 166 et 167, ce qui EST la formule
@@ -63,9 +81,21 @@ bascule AUCUN consommateur : il pose le référentiel et rien d'autre, pour que
 zéro euro bouge. Le doublon disparaît en R2, quand A7 bascule.
 
 RÉFÉRENCES
-  Règlement délégué (UE) 2015/35, art. 77 (meilleure estimation, actualisée
-  par la courbe des taux sans risque), art. 77 quinquies (Volatility
-  Adjustment, soumis à agrément).
+  ⚠️ CE BLOC PORTAIT LA MÊME ERREUR QUE LE POINT (A), DANS L'ORDRE INVERSE —
+  le texte d'abord, l'article ensuite. C'est ce qui l'a rendu invisible au
+  premier contrôle, qui ne cherchait qu'une seule tournure. Corriger un site
+  sur deux dans le MÊME fichier est le motif que ce dépôt paie sans cesse.
+
+  Directive 2009/138/CE
+    · art. 77, paragraphe 2 — meilleure estimation, actualisée par la courbe
+      des taux sans risque pertinents. C'est le fondement du taux exposé ici.
+    · art. 77 quinquies — Volatility Adjustment, soumis à agrément.
+  Règlement délégué (UE) 2015/35
+    · section 4, art. 43 à 48 — CONSTRUCTION de la courbe : instruments
+      retenus (44), ajustement des swaps (45), extrapolation (46), taux à
+      terme ultime (47), monnaies rattachées (48).
+    · art. 1er, point 36 — définition de la « courbe des taux sans risque de
+      base », qui renvoie elle-même à l'art. 77 §2 de la directive.
   EIOPA — Risk-Free Interest Rate Term Structures, publication mensuelle.
 =============================================================================
 """
