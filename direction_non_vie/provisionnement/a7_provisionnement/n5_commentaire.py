@@ -99,11 +99,19 @@ def _date_fr(d: datetime) -> str:
 def _mention_arrete(arrete: str, date_arrete: str) -> str:
     """La phrase d'arrêté du §1 — TROIS états, et aucun n'est silencieux.
 
-    ⚠️ `date_arrete` DOIT ÊTRE AU FORMAT ISO (`AAAA-MM-JJ`). Ce n'est pas une
-    exigence de cette fonction — `core.arrete.lire` en accepte quatre — mais
-    du pipeline : `core.courbe_rfr.date_reference` n'accepte que l'ISO et fait
-    tomber le run en amont sur toute autre forme. Voir la mise en sommeil
-    plus bas.
+    ⚠️⚠️ CE PARAGRAPHE ANNONÇAIT UNE CONTRAINTE QUI N'EXISTE PLUS. Il disait
+    que `date_arrete` DOIT être au format ISO, parce que
+    `core.courbe_rfr.date_reference` n'accepte que lui « et fait tomber le run
+    en amont sur toute autre forme ». C'était vrai, et ça ne l'est plus :
+    `agent.run` normalise la date à sa frontière (`arrete.iso(arrete.lire(…))`)
+    avant que rien ne la lise. Mesuré sur les quatre formes usuelles —
+    `2026-06-30`, `30/06/2026`, `30-06-2026`, `30.06.2026` : verdict de
+    péremption IDENTIQUE, au message près.
+
+    ⚠️ AUCUN COMPTE DE FORMATS ICI, ET C'EST DÉLIBÉRÉ. Ce texte annonçait
+    « quatre » quand `core.arrete.FORMATS` en portait sept — le même compte
+    recopié qui a déjà dérivé dans la docstring de `arrete.lire`. Un nombre
+    écrit à la main vieillit ; la table, elle, fait foi. On y renvoie.
 
     ⚠️ CE QUE FAISAIT LE CODE AVANT : il écrivait « arrêtée au {datetime.now()} ».
     `generer_commentaire` ne recevait pas l'arrêté, alors que `agent.run()` le
@@ -120,21 +128,34 @@ def _mention_arrete(arrete: str, date_arrete: str) -> str:
     d'archivage ».
     """
     if date_arrete:
-        # ⚠️ AUCUN `except` ICI, ET C'EST DÉLIBÉRÉ — MISE EN SOMMEIL DATÉE.
+        # ⚠️ AUCUN `except` ICI, ET C'EST DÉLIBÉRÉ — MISE EN SOMMEIL MAINTENUE,
+        # JUSTIFICATION RÉÉCRITE.
         #
         # Une quatrième branche existait, « ARRÊTÉ FOURNI MAIS ILLISIBLE ».
-        # Elle était INATTEIGNABLE, mesuré : toute date non-ISO fait tomber le
-        # run bien avant d'arriver ici, dans `core.courbe_rfr.date_reference`
-        # qui n'accepte que `%Y-%m-%d` — alors que `core.arrete.lire` en
-        # accepte quatre. Deux contrats de date incompatibles dans le même
-        # dépôt ; le format français « 30/06/2026 » tue A7 entièrement.
+        # Elle est INATTEIGNABLE, et elle l'était déjà — mais PLUS POUR LA
+        # MÊME RAISON, et c'est tout l'objet de cette réécriture.
         #
-        # Publier une branche qui ne peut pas s'imprimer, c'est faire croire à
-        # une tolérance qui n'existe pas — le défaut même que ce chantier
-        # retire. Elle revient LE JOUR OÙ LES DEUX CONTRATS SONT HARMONISÉS
-        # (chantier à ouvrir : `arrete` / `courbe_rfr`).
+        # AVANT : toute date non-ISO faisait tomber le run bien avant
+        # d'arriver ici, dans `core.courbe_rfr.date_reference`. Le texte
+        # annonçait donc son retour « le jour où les deux contrats sont
+        # harmonisés », et renvoyait à un chantier à ouvrir.
         #
-        # D'ici là, `ArreteInvalide` remonte, et c'est la bonne conduite :
+        # ⚠️⚠️ CE JOUR EST VENU, ET LA BRANCHE N'EN DEVIENT PAS UTILE POUR
+        # AUTANT. `agent.run` normalise la date à sa frontière : ce qui
+        # parvient ici est TOUJOURS de l'ISO, et une date indéchiffrable a
+        # déjà levé LÀ-BAS — tôt, avec le message de `core.arrete` qui NOMME
+        # les formes admises. ⚠️ `run()` rattrape cette levée et rend
+        # `success=False` en la portant dans `erreur` : le run ne produit
+        # AUCUN livrable, mesuré à 0 octet. C'est un échec bruyant, pas une
+        # exception qui remonte à l'appelant. La condition de réveil de la
+        # branche est satisfaite ; la branche reste sans chemin qui l'atteigne.
+        #
+        # ⚠️ NE PAS LA RESSUSCITER SUR LA FOI DE LA CONDITION SEULE. Publier
+        # une branche que rien n'atteint, c'est faire croire à une tolérance
+        # qui n'existe pas — le défaut que ce chantier retire. Ce qui a changé
+        # est la CAUSE de son inutilité, pas son inutilité.
+        #
+        # `ArreteInvalide` remonte donc toujours, et c'est la bonne conduite :
         # `core.arrete` la pose pour ça — « il n'y a pas de clôture partielle :
         # on lève » — et l'appelant veut un échec bruyant, pas un rapport qui
         # invente une date.
