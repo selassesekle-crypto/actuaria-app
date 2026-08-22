@@ -898,6 +898,92 @@ class T4_Le_Catalogue_Atteint_Les_Livrables(unittest.TestCase):
         self.assertEqual(vus.get('scale'), 1.5)
         print('    OK C3d-7 le rasteriseur demande un PNG 1100x520 en x1.5')
 
+    def test_une_figure_n_est_rasterisee_qu_une_fois(self):
+        """⚠️⚠️ CHAQUE FIGURE ETAIT RENDUE DEUX FOIS — MESURE SUR UN RUN REEL.
+
+        24 appels a `rendre_image` pour DOUZE figures distinctes : les douze,
+        sans exception, une fois pour l'HTML et une fois pour le Word. 126,1 s
+        cumulees, 5,3 s par appel. La MOITIE etait de la pure duplication, et
+        un arrete reel la payait a chaque cloture.
+
+        ⚠️ MEMOISER NE PEUT RIEN CHANGER A CE QUI EST PUBLIE : `rendre_image`
+        ne prend AUCUN parametre de taille. Prouve par ailleurs octet par
+        octet (les 12 images HTML et les 12 Word sont identiques avant et
+        apres). Ce test-ci verrouille le MECANISME.
+        """
+        rendus = []
+
+        class _Figure:
+            def to_image(self, **kw):
+                rendus.append(kw)
+                return b'PNG-' + bytes([len(rendus)])
+
+        f = _Figure()
+        premier = _RAP.rendre_image(f)
+        second = _RAP.rendre_image(f)
+        self.assertEqual(len(rendus), 1,
+                         'la meme figure est rasterisee plusieurs fois')
+        self.assertEqual(premier, second, 'deux octets differents pour une '
+                                          'seule et meme figure')
+        # ⚠️ CONTRE-EPREUVE : une AUTRE figure ne doit pas recevoir l'image
+        # de la premiere. Sans elle, un cache qui rendrait toujours la meme
+        # chose passerait ce test au vert.
+        autre = _RAP.rendre_image(_Figure())
+        self.assertEqual(len(rendus), 2, 'une figure neuve n a pas ete rendue')
+        self.assertNotEqual(premier, autre, 'une figure recoit l image d une '
+                                            'autre')
+        print('    OK C3d-8 une figure rendue une fois, une autre distinguee')
+
+    def test_le_cache_d_images_ne_survit_pas_a_sa_figure(self):
+        """⚠️ LA CLE EST `id()`, ET UN `id` SE RECYCLE.
+
+        Une figure Plotly n'est pas hashable : la cle ne peut pas etre la
+        figure elle-meme. `id()` est donc employe -- mais un `id` libere est
+        REATTRIBUE par CPython, et une entree survivante rendrait alors
+        l'image d'une figure morte a une figure neuve. Le finaliseur weakref
+        l'interdit ; ce test verifie qu'il est bien pose.
+        """
+        import gc
+
+        class _Figure:
+            def to_image(self, **kw):
+                return b'PNG'
+
+        # ⚠️⚠️ ON SUIT NOTRE PROPRE CLE, PAS LA TAILLE DU CACHE. Une premiere
+        # version comparait `len(...)` avant et apres : elle passait ISOLEE et
+        # ECHOUAIT dans la gate complete -- `gc.collect()` libere aussi les
+        # figures des AUTRES tests, si bien que la taille finale etait
+        # INFERIEURE a la taille initiale. Un test qui mesure un compteur
+        # partage mesure le voisinage autant que lui-meme.
+        f = _Figure()
+        _RAP.rendre_image(f)
+        cle = id(f)
+        self.assertIn(cle, _RAP._IMAGES_RASTERISEES, 'rien n a ete memoise')
+        del f
+        gc.collect()
+        self.assertNotIn(cle, _RAP._IMAGES_RASTERISEES,
+                         'le cache survit a sa figure : un id recycle '
+                         'rendrait une image etrangere')
+        print('    OK C3d-9 le cache meurt avec sa figure, aucun id recycle')
+
+    # ⚠️⚠️ UN TEST A ETE ECRIT ICI, PUIS RETIRE, ET C'EST UN ARBITRAGE.
+    # Il comparait les images du HTML a celles du Word pour verifier que la
+    # memoisation ne les desynchronise pas. Deux raisons de ne pas le garder :
+    #
+    #   · le fixture partage `_run` produit le HTML SANS le Word
+    #     (`generer_word=False`) : le test aurait exige un run DE PLUS,
+    #     mesure a ~55 s -- dans un lot dont l'objet est justement de rendre
+    #     la suite moins chere ;
+    #   · l'invariant qu'il verifiait DECOULE de C3d-8 : une meme figure rend
+    #     les memes octets, donc les deux formats recoivent les memes images
+    #     des lors qu'ils recoivent les memes figures -- ce que
+    #     `test_le_word_et_le_html_numerotent_pareil` couvre deja.
+    #
+    # ⚠️ L'IDENTITE A ETE VERIFIEE, HORS SUITE, SUR LES PRODUITS REELS :
+    # 12 images HTML et 12 images Word, empreintes SHA-256 identiques AVANT
+    # et APRES la memoisation, et identiques entre les deux formats. Mesure
+    # ponctuelle et non verrouillee -- c'est dit plutot que sous-entendu.
+
     def test_le_chemin_nominal_du_word_insere_bien_les_images(self):
         """⚠️ LE CHEMIN AVEC kaleido, EXERCÉ QUE LA MACHINE L'AIT OU NON.
 

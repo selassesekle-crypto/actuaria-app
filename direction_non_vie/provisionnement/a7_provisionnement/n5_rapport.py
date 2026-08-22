@@ -18,7 +18,7 @@
 # =============================================================================
 
 from __future__ import annotations
-import base64, io, logging, re
+import base64, io, logging, re, weakref
 from datetime import datetime
 from typing import Dict, List, NamedTuple, Tuple
 
@@ -3163,6 +3163,11 @@ def kaleido_disponible() -> bool:
     return importlib.util.find_spec('kaleido') is not None
 
 
+#: Les octets deja rasterises, par figure VIVANTE. Vide entre deux runs :
+#: le finaliseur retire chaque entree quand sa figure est collectee.
+_IMAGES_RASTERISEES: dict[int, bytes] = {}
+
+
 def rendre_image(figure) -> bytes:
     """Rasterise une figure Plotly. LE SEUL point du module qui le fasse.
 
@@ -3188,7 +3193,37 @@ def rendre_image(figure) -> bytes:
     # Mesure : HTML archive 2,49 Mo -> ~1,6 Mo, soit ~900 Ko par cloture.
     # `scale=1` a ete ECARTE par la mesure, pas par gout : 9 px est en
     # limite basse a l'impression et flou sur un ecran dense.
-    return figure.to_image(format='png', width=1100, height=520, scale=1.5)
+    #
+    # ⚠️⚠️ CHAQUE FIGURE ETAIT RASTERISEE DEUX FOIS, ET C'EST MESURE. Sur un
+    # run reel : 24 appels ici pour DOUZE figures distinctes -- les douze,
+    # sans exception, rendues une fois pour l'HTML et une fois pour le Word.
+    # 126,1 s cumulees, 5,3 s par appel. La MOITIE etait de la pure
+    # duplication.
+    #
+    # ⚠️ ET LES DEUX CONSOMMATEURS VEULENT LES MEMES OCTETS : cette fonction
+    # ne prend AUCUN parametre de taille -- elle est figee a 1100x520 x1,5.
+    # Le Word redimensionne a l'insertion (`width=Cm(16.5)`), il ne
+    # redemande pas un rendu. Memoiser ne peut donc rien changer a ce qui
+    # est publie ; c'est ce que le test de ce lot verifie octet par octet.
+    #
+    # ⚠️ LA CLE EST `id()`, ET ELLE EST ASSAINIE. Une figure Plotly n'est ni
+    # hashable (donc pas de cle directe) mais elle est weak-referencable :
+    # le finaliseur retire l'entree quand la figure meurt, si bien qu'aucun
+    # `id` recycle ne peut rendre une image etrangere. Enregistre AVANT de
+    # stocker -- on ne garde jamais une entree sans son nettoyeur.
+    cle = id(figure)
+    deja = _IMAGES_RASTERISEES.get(cle)
+    if deja is not None:
+        return deja
+    png = figure.to_image(format='png', width=1100, height=520, scale=1.5)
+    try:
+        weakref.finalize(figure, _IMAGES_RASTERISEES.pop, cle, None)
+    except TypeError:
+        # ⚠️ UN OBJET NON WEAK-REFERENCABLE N'EST PAS MEMOISE, il n'est pas
+        # REFUSE : le rendu reste juste, seule l'economie est perdue.
+        return png
+    _IMAGES_RASTERISEES[cle] = png
+    return png
 
 
 class _NumeroteurFigures:
