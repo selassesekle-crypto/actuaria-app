@@ -643,7 +643,29 @@ def _narration_templates(n4, commentaire) -> tuple[str, str]:
 #: hypothese (<< H2 >>, << CLM-H1 >>, << BFCC-H4 >>), annee de publication
 #: d'une methode (<< Mack 1993 >>, << Clark 2003 >>), article et reglement.
 _REFERENCES_NON_CHIFFREES = re.compile(
-    r'§\s*\d+'                                  # section
+    # ⚠️⚠️ LE NUMEROTAGE DE TITRE — MESURE SOUS CLE LE 22/08, ET IL ETAIT LA
+    # TOTALITE DU SIGNAL RESIDUEL. Sur un run reel : 153 nombres publies,
+    # 24 orphelins, et LES VINGT-QUATRE etaient des numeros de section
+    # (<< ### 4.4 Provision de precaution >>). Pas un montant, pas un ratio.
+    #
+    # ⚠️ ET LE LOT D1 PUBLIAIT CE COMPTE DANS LE RAPPORT SIGNE : un
+    # commissaire aux comptes lisait << 24 nombres non traces >> quand il n'y
+    # en avait AUCUN. Le verrou noyait ce qui compte dans son propre bruit.
+    #
+    # ⚠️⚠️ L'EXEMPTION VISE UNE POSITION, JAMAIS UNE VALEUR, et c'est ce qui
+    # la rend defendable au regard de la regle d'asymetrie. Le marqueur `#`
+    # de titre est ce qui identifie la forme ; << 4.4 >> reste compte PARTOUT
+    # ailleurs. Calibre dans LES DEUX SENS, mesure par mesure :
+    #     `### 4.4 Provision`            -> exempte   (titre)
+    #     `Le ratio atteint 4.4`         -> COMPTE    (meme forme, valeur)
+    #     `4 500 000 EUR de provision`   -> COMPTE    (montant en tete)
+    #     `1.5 fois le best estimate`    -> COMPTE    (ratio en tete)
+    r'#{1,6}\s*\d+(?:\.\d+)*'                   # titre markdown numerote
+    # ⚠️ LA SOUS-SECTION EN MILIEU DE PHRASE FUYAIT, MESURE : sur
+    # << le montant en §4.4 est eleve >>, le motif `§\s*\d+` prenait `§4` et
+    # laissait `.4` -- dont `_NOMBRE` tirait un `4` ORPHELIN. Un identifiant
+    # de section n'est pas une grandeur, ou qu'il se trouve dans la phrase.
+    r'|§\s*\d+(?:\.\d+)*'                       # section, sous-section
     r'|\b(?:CLM|BFCC|BOOT|MCL)-H\d+\b'          # hypotheses nommees
     r'|\bH\d\b'                                 # H1..H4
     # ⚠️ LES IDENTIFIANTS DE RECOMMANDATION, MESURES : << R6 -- Documenter

@@ -2151,6 +2151,100 @@ class T_Detecteur_De_Nombres(unittest.TestCase):
                              f'{brut!r} scinde a tort')
         print('    OK C2-2d les 4 espaces et les separateurs colles tiennent')
 
+    #: ⚠️⚠️ CALIBRE DANS LES DEUX SENS, ET C'EST LA CONDITION D'ACCEPTATION
+    #: DE L'EXEMPTION. Elle vise une POSITION -- le marqueur de titre -- et
+    #: jamais une valeur : la MEME forme << 4.4 >> doit rester comptee des
+    #: qu'elle designe une grandeur, ou qu'elle se trouve.
+    _TITRES_ET_VALEURS = (
+        # ce qui SORT du comptage : des identifiants de section
+        ('### 4.4 Provision de precaution',      []),
+        ('## 2.1 Perimetre',                     []),
+        ('#### 7.10 Detail',                     []),
+        ('# 3 Introduction',                     []),
+        ('§5 — CONCLUSION',                      []),
+        # ⚠️ MESURE : `§\s*\d+` prenait `§4` et laissait `.4`, dont le
+        # detecteur tirait un `4` ORPHELIN. Une sous-section en milieu de
+        # phrase n'est pas davantage une grandeur qu'en tete de ligne.
+        ('Le montant en §4.4 est eleve',         []),
+        # ce qui RESTE compte : des grandeurs, quelle que soit leur place
+        ('4 500 000 EUR de provision',           ['4 500 000']),
+        ('1.5 fois le best estimate',            ['1.5']),
+        ('Le ratio atteint 4.4 sur la periode',  ['4.4']),
+        # ⚠️ LE CAS LE PLUS FIN : un titre dont le nombre n'est PAS son
+        # numero. L'exemption ne mord que sur ce qui SUIT le marqueur.
+        ('### Provision 4.4 fois le BE',         ['4.4']),
+        ('Le SCR vaut 6 164 682 EUR',            ['6 164 682']),
+        ('P99,5 : 25 918 951 EUR',               ['99,5', '25 918 951']),
+    )
+
+    def test_le_numerotage_de_titre_sort_mais_pas_les_grandeurs(self):
+        # ⚠️⚠️ MESURE SOUS CLE LE 22/08 : sur un run reel, 153 nombres
+        # publies, 24 orphelins -- et LES VINGT-QUATRE etaient des numeros de
+        # section. Le verrou noyait ce qui compte dans son propre bruit, et le
+        # lot D1 publiait ce compte au commissaire aux comptes.
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
+            nombres_publies,
+        )
+        for brut, attendu in self._TITRES_ET_VALEURS:
+            with self.subTest(texte=brut):
+                self.assertEqual(nombres_publies(brut), attendu,
+                                 f'{brut!r} mal traite par la zone franche')
+        sortent = sum(1 for _, a in self._TITRES_ET_VALEURS if not a)
+        restent = len(self._TITRES_ET_VALEURS) - sortent
+        self.assertGreaterEqual(sortent, 5, 'plus assez de cas EXEMPTES')
+        self.assertGreaterEqual(restent, 5, 'plus assez de cas COMPTES')
+        print(f'    OK C2-2e {sortent} formes exemptees, {restent} comptees')
+
+    def test_une_narration_entierement_titree_ne_produit_aucun_orphelin(self):
+        # ⚠️ L'EPREUVE D'ENSEMBLE, pas seulement forme par forme : on
+        # reconstitue la structure exacte de la narration mesuree.
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
+            orphelins_narration,
+        )
+        narration = '\n'.join(
+            f'### {s}.{p} Titre de sous-section\nDu texte sans aucun nombre.'
+            for s in range(1, 8) for p in range(1, 5))
+        self.assertEqual(orphelins_narration(narration, ''), [],
+                         'le numerotage ressort encore comme orphelin')
+        # ⚠️ CONTRE-EPREUVE DANS LE MEME TEST : un montant glisse dans ce
+        # texte DOIT ressortir. Sans elle, un detecteur qui ne trouve plus
+        # RIEN passerait pour corrige.
+        avec = narration + '\nLa provision atteint 4 500 000 EUR.'
+        self.assertEqual(orphelins_narration(avec, ''), ['4 500 000'])
+        print('    OK C2-2f 28 titres muets, et le montant glisse ressort')
+
+    def test_l_exemption_ne_masque_aucune_prescription_chiffree(self):
+        # ⚠️⚠️ LE SECOND CONSOMMATEUR. `nombres_publies` alimente AUSSI le
+        # marquage des prescriptions : elargir la zone franche pouvait rendre
+        # MUETTE une recommandation chiffree non sourcee. Et le defaut du
+        # 20/08 -- un montant FABRIQUE dans une recommandation au Conseil --
+        # vivait precisement en << §4.4 Provision de precaution >>, c'est-a-
+        # dire dans une section NUMEROTEE. Le risque n'est pas theorique.
+        #
+        # ⚠️ MA PREMIERE SONDE RENDAIT 0 PARTOUT et j'ai failli conclure que
+        # le marquage etait casse : elle passait une charge utile VIDE, que
+        # `marquer_prescriptions_chiffrees` ecarte par une garde deliberee.
+        # L'instrument n'exercait pas le chemin.
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
+            marquer_prescriptions_chiffrees,
+        )
+        charge = 'Best Estimate 18 680 856 EUR. Mack 2 447 095 EUR.'
+        cas = (
+            ('Il est recommande de doter une provision de 910 000 EUR.', 1),
+            ('Il est recommande de retenir le BE de 18 680 856 EUR.', 0),
+            ('### 4.4 Provision de precaution recommandee', 0),
+            # ⚠️ LE CAS QUI PORTE LE TEST : un titre numerote QUI PRESCRIT UN
+            # MONTANT non source. L'exemption ne doit mordre que sur le
+            # numero, jamais sur ce que la phrase affirme.
+            ('### 4.4 Il est recommande de doter 910 000 EUR.', 1),
+            ('Le montant en §4.4 est recommande.', 0),
+        )
+        for texte, attendu in cas:
+            with self.subTest(texte=texte):
+                _, n = marquer_prescriptions_chiffrees(texte, charge)
+                self.assertEqual(n, attendu, f'{texte!r} mal marque')
+        print('    OK C2-2g l exemption ne rend muette aucune prescription')
+
     def test_les_espaces_du_motif_sont_lisibles_dans_le_source(self):
         # ⚠️ ILS ETAIENT ECRITS EN CLAIR : invisibles, ils ont fait echouer une
         # edition de ce fichier. Personne ne peut relire ce qu'il ne voit pas.
