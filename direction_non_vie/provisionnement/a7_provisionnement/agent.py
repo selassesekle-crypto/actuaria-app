@@ -57,6 +57,7 @@ from .n5_rapport        import export_word, export_html
 # La narration est produite ICI, une seule fois, et transmise aux deux
 # formats — voir le commentaire à son point de génération.
 from .n5_rapport        import (ARRETE_ABSENT, _generer_narration, _lob,
+                                avec_mention_provenance,
                                 controle_narration)
 # ⚠️ IMPORTÉ COMME MODULE, PAS COMME VALEUR. `from … import kaleido_disponible`
 # fige ICI une référence à la fonction : substituer le prédicat dans
@@ -920,6 +921,27 @@ class AgentA7Provisionnement:
             # il ne la PRODUIT pas. Personne ne doit attendre de ce lot un
             # chiffre qu'aucune execution ne peut produire aujourd'hui.
             _ctrl_narr = controle_narration(_narr, _src_narr, _charge_narr)
+
+            # /!\ CES DEUX LIGNES SONT DANS CET ORDRE, ET L ORDRE EST LE
+            # FOND. Le verrou compte les nombres de la narration ; la mention
+            # ajoutee ci-dessous CONTIENT DES NOMBRES (le total publie et le
+            # compte d orphelins). Ajoutee AVANT le controle, elle serait
+            # mesuree par lui : LE VERROU COMPTERAIT SA PROPRE ANNONCE.
+            # Mesure : 1 orphelin avant annonce, 3 apres.
+            #
+            # /!\ NE PAS << REGLER >> CELA PAR UNE EXEMPTION. Exempter la
+            # mention du comptage ouvrirait un trou par lequel un vrai
+            # orphelin passerait -- regle d asymetrie : une liste qui EXEMPTE
+            # ouvre un trou, une liste qui ACCUSE n en ouvre aucun. Calculer
+            # d abord n ouvre rien. C est pour cela, et rien d autre, que ces
+            # deux lignes ne se permutent pas. Un test verrouille leur ordre,
+            # et il compte les sites avant de comparer leurs positions.
+            #
+            # /!\ ET ELLE VOYAGE DANS LE TEXTE, pas en parametre : le
+            # renderer HTML est appele par ce module ET directement par
+            # l application. Un parametre de plus n aurait ete branche que
+            # sur un site des deux.
+            _narr = avec_mention_provenance(_narr, _ctrl_narr)
 
             word_bytes, err_wd = (b'', None)
             if generer_word:

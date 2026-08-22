@@ -933,8 +933,13 @@ def controle_narration(narration: str, source: str, charge_utile: str) -> dict:
         return {
             'applicable': False,
             'source':     source,
-            'raison':     ("narration non transmise a un modele : sans charge "
-                           "utile, le controle de provenance n'a pas d'objet"),
+            # ⚠️ ACCENTUÉE, ET CE N'EST PAS COSMÉTIQUE : cette phrase était
+            # écrite pour un JSON d'audit, où l'ASCII suffisait. Elle est
+            # désormais CITÉE dans le rapport signé par .
+            # Une phrase publiée à un commissaire aux comptes s'écrit en
+            # français correct — et la corriger ICI la corrige partout.
+            'raison':     ("narration non transmise à un modèle : sans charge "
+                           "utile, le contrôle de provenance n'a pas d'objet"),
             'porte':      "provenance des nombres, jamais leur justesse",
         }
     publies   = nombres_publies(narration)
@@ -1009,6 +1014,92 @@ def _generer_narration(n2, n3, n4, commentaire, lob_label,
     except Exception:
         pass
     return '', 'aucune', ''
+
+
+# =============================================================================
+#  LE VERDICT DU VERROU, DANS LE DOCUMENT QUE L'ACTUAIRE SIGNE
+# =============================================================================
+#
+#  ⚠️⚠️ IL N'ATTEIGNAIT PERSONNE, ET C'EST MESURÉ PAR VIOLATION PLANTÉE. Un
+#  verdict forcé à 100 % d'orphelins, narration tronquée, références hors
+#  liste, 99 prescriptions marquées, donnait :
+#
+#      commentaire 0 | HTML 0 | Excel 0 | Word 0 | alertes 0 | success=True
+#
+#  Le verdict vivait UNIQUEMENT dans l'audit trail JSON. La condition du plan
+#  — « la narration LLM passe devant, mais SEULEMENT après le verrou » —
+#  était donc tenue formellement et pas substantiellement.
+#
+#  ⚠️ CE VERROU NE BLOQUE TOUJOURS RIEN, ET C'EST UN ARBITRAGE MESURÉ. Sur un
+#  run réel — 209 nombres, 35 signalements — il y avait ~12 faux positifs,
+#  6 arrondis, 8 calculs justes… et DEUX défauts réels : un montant fabriqué
+#  dans une recommandation au Conseil, et une soustraction fausse de 1 000 €.
+#  ⚠️⚠️ LE VERROU NE VOIT NI L'UN NI L'AUTRE : tous deux sont dans la charge
+#  utile ou dérivés d'elle. Un seuil supprimerait de bonnes narrations et
+#  laisserait passer exactement ce qui engage. On PUBLIE, on ne GATE PAS.
+#
+#  ⚠️ UN COMPTE, JAMAIS UN TAUX. « 16,7 % d'orphelins » se lit « 16,7 % de
+#  faux » quand le taux de défaut réel mesuré est ~1 %. Ce serait une valeur
+#  dont l'étiquette ne correspond pas à la provenance — le défaut même que ce
+#  chantier ferme.
+#
+#  ⚠️ ET C'EST LE SEUL FAIT NEUF. Les trois autres champs du verdict sont
+#  DÉJÀ sous les yeux du lecteur, parce que la marque voyage avec le contenu :
+#  `PORTEE_MARQUE_PRESCRIPTION`, `PORTEE_MARQUE_REFERENCE` et
+#  `PORTEE_NARRATION_TRONQUEE` sont dans la narration. Seul le compte
+#  d'orphelins n'existait que dans le JSON.
+
+
+def mention_provenance(controle: dict) -> str:
+    """Ce que le verrou a vu, en une phrase — les TROIS cas, jamais le silence.
+
+    ⚠️ LES DEUX PHRASES CLÉS SONT CITÉES, PAS REFORMULÉES. `porte` et
+    `raison` sont écrits dans `controle_narration` et destinés à être lus :
+    les réécrire ici ferait DEUX textes pour un fait, et ils divergeraient.
+
+    ⚠️ LE CAS NON APPLICABLE SE DIT. Sans clé API le chemin est `templates`,
+    le verrou n'a pas d'objet — et le taire laisserait croire à un contrôle
+    qui a eu lieu. Le silence n'est plus un état possible ; c'est ce qui
+    permet de publier aussi le cas où tout est retracé sans qu'il se lise
+    comme un vert de routine.
+    """
+    if not controle:
+        return ''
+    porte = str(controle.get('porte', '')).strip()
+    if not controle.get('applicable'):
+        raison = str(controle.get('raison', '')).strip()
+        return ("**Contrôle de provenance — non applicable.** "
+                + (f"{raison[0].upper() + raison[1:]}. " if raison else '')
+                + "Le texte ci-dessus est dérivé du calcul par du code "
+                  "déterministe.")
+    n = int(controle.get('n_publies', 0) or 0)
+    m = int(controle.get('n_orphelins', 0) or 0)
+    if m == 0:
+        return (f"**Contrôle de provenance** — les {n} nombres de cette "
+                f"narration se retrouvent tous dans les données transmises "
+                f"au modèle. Ce contrôle porte sur la {porte}.")
+    return (f"**Contrôle de provenance** — sur {n} nombres publiés dans "
+            f"cette narration, {m} ne se retrouvent pas dans les données "
+            f"transmises au modèle. Ce contrôle porte sur la {porte} : un "
+            f"nombre non retrouvé peut être un calcul exact, un arrondi de "
+            f"présentation ou une référence. Les formes en cause figurent "
+            f"dans l'audit archivé.")
+
+
+def avec_mention_provenance(narration: str, controle: dict) -> str:
+    """La narration, suivie de ce que le verrou a vu.
+
+    ⚠️⚠️ LA MENTION VOYAGE DANS LE TEXTE, COMME LES TROIS AUTRES MARQUES —
+    et c'est ce qui évite un paramètre de plus. Mesuré : `export_html` est
+    appelé par `agent.py` ET directement par `actuaria_app`, qui ne passe
+    même pas la narration. Un paramètre supplémentaire aurait été branché sur
+    UN site des deux : le motif « une propagation inachevée » que ce chantier
+    a déjà payé trois fois.
+    """
+    if not narration:
+        return narration
+    mention = mention_provenance(controle)
+    return narration.rstrip() + '\n\n' + mention if mention else narration
 
 
 #: Le libellé d'origine de la narration, par source. UNE SEULE TABLE.

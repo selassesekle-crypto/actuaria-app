@@ -19,6 +19,7 @@ import re
 import os
 import pathlib
 import unittest
+import zipfile
 from datetime import date, timedelta
 
 import numpy as np
@@ -3417,6 +3418,183 @@ class T_Les_Ecarts_Sont_Transmis_Pas_Calcules(unittest.TestCase):
         self.assertIn('PAS PARCE', src.upper(),
                       'rien ne previent que la baisse est un artefact')
         print('    OK ECART-6 la baisse du taux est declaree artefact')
+
+
+class T_Le_Verdict_Du_Verrou_Atteint_Le_Document_Signe(unittest.TestCase):
+    """⚠️⚠️ LE VERROU JOURNALISAIT, ET PERSONNE NE LE LISAIT.
+
+    Mesure d'ouverture par violation plantee -- verdict force a 100 %
+    d'orphelins, narration tronquee, references hors liste, 99 prescriptions :
+
+        commentaire 0 | HTML 0 | Excel 0 | Word 0 | alertes 0 | success=True
+
+    Le verdict vivait UNIQUEMENT dans l'audit trail JSON. La condition du plan
+    -- << la narration LLM passe devant, mais SEULEMENT apres le verrou >> --
+    etait tenue formellement et pas substantiellement.
+
+    ⚠️ IL NE BLOQUE TOUJOURS RIEN, ET C'EST MESURE : sur 209 nombres et 35
+    signalements, il y avait ~12 faux positifs, 6 arrondis, 8 calculs justes
+    et DEUX defauts reels -- que le verrou ne voit NI L'UN NI L'AUTRE. Un
+    seuil supprimerait de bonnes narrations et laisserait passer ce qui
+    engage. On PUBLIE, on ne GATE PAS.
+    """
+
+    PORTE = 'provenance des nombres, jamais leur justesse'
+
+    @staticmethod
+    def _triangle():
+        n = 7
+        T = np.array([[1000.0 * (1.6 ** j) * (1 + 0.03 * i)
+                       for j in range(n)] for i in range(n)])
+        for i in range(n):
+            for j in range(n):
+                if i + j >= n:
+                    T[i, j] = np.nan
+        return T
+
+    def test_les_trois_cas_sont_dits_et_distincts(self):
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
+            controle_narration,
+            mention_provenance,
+        )
+        nt = mention_provenance(controle_narration('x', 'templates', ''))
+        ok = mention_provenance({'applicable': True, 'n_publies': 209,
+                                 'n_orphelins': 0, 'porte': self.PORTE})
+        ko = mention_provenance({'applicable': True, 'n_publies': 209,
+                                 'n_orphelins': 35, 'porte': self.PORTE})
+        self.assertIn('non applicable', nt)
+        self.assertIn('209', ok)
+        self.assertIn('35', ko)
+        self.assertEqual(len({nt, ok, ko}), 3, 'deux cas rendent le meme texte')
+        # ⚠️ LE SILENCE N'EST PLUS UN ETAT : aucun des trois n'est vide.
+        for t in (nt, ok, ko):
+            self.assertTrue(t.strip())
+        print('    OK D1-1 les trois cas sont dits, et distincts')
+
+    def test_aucun_taux_nulle_part(self):
+        # ⚠️⚠️ << 16,7 % d'orphelins >> se lit << 16,7 % de faux >> quand le
+        # taux de defaut reel mesure est ~1 %. Une valeur dont l'etiquette ne
+        # correspond pas a la provenance -- le defaut que ce chantier ferme.
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
+            mention_provenance,
+        )
+        for c in ({'applicable': True, 'n_publies': 209, 'n_orphelins': 0,
+                   'porte': self.PORTE},
+                  {'applicable': True, 'n_publies': 209, 'n_orphelins': 35,
+                   'porte': self.PORTE, 'taux_orphelins': 0.167}):
+            t = mention_provenance(c)
+            self.assertNotIn('%', t, f'un taux est publie : {t}')
+            self.assertNotIn('0.167', t)
+            self.assertNotIn('16,7', t)
+        print('    OK D1-2 aucun taux, un compte et rien d autre')
+
+    def test_LE_PIEGE_DE_L_ORDRE_le_verrou_ne_compte_pas_son_annonce(self):
+        # ⚠️⚠️⚠️ LE TEST CENTRAL DE CE LOT. La mention CONTIENT des nombres.
+        # Ajoutee AVANT le controle, elle serait mesuree par lui : le verrou
+        # compterait sa propre annonce. Ce test PROUVE que le piege est reel,
+        # puis que l'ordre retenu l'evite -- il tombera si quelqu'un permute
+        # les deux lignes d'`agent.py`.
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
+            avec_mention_provenance,
+            controle_narration,
+        )
+        charge = 'Best Estimate 18 680 856 EUR, Mack 2 447 094 EUR.'
+        narr = ('Le Best Estimate ressort a 18 680 856 EUR et la volatilite '
+                'de Mack a 2 447 094 EUR. Le ratio atteint 13,1.')
+
+        # L'ORDRE RETENU : on controle, PUIS on annonce.
+        juste = controle_narration(narr, 'claude_api', charge)
+        annotee = avec_mention_provenance(narr, juste)
+
+        # L'ORDRE INVERSE : on annonce, PUIS on controle.
+        inverse = controle_narration(annotee, 'claude_api', charge)
+
+        self.assertGreater(
+            inverse['n_publies'], juste['n_publies'],
+            "le piege n'existe plus : la mention ne porte plus de nombres, "
+            "ce test ne prouve donc plus rien -- le RECALIBRER, pas le retirer")
+        self.assertGreater(
+            inverse['n_orphelins'], juste['n_orphelins'],
+            'le verrou ne compte pas sa propre annonce : le piege a disparu')
+        print(f"    OK D1-3 piege reel : {juste['n_orphelins']} orphelins "
+              f"avant annonce, {inverse['n_orphelins']} apres — l ordre tient")
+
+    def test_l_ordre_des_deux_lignes_est_verrouille_dans_agent(self):
+        # ⚠️⚠️ LE TEST PRECEDENT PROUVE QUE LE PIEGE EXISTE ; CELUI-CI PROUVE
+        # QU'`agent.py` NE TOMBE PAS DEDANS. Les deux sont necessaires.
+        #
+        # ⚠️ J'AI D'ABORD CRU QUE LA PERMUTATION ETAIT DEJA ATTRAPEE : en la
+        # plantant, deux tests tombaient. Mais ils tombaient sur une VARIABLE
+        # INDEFINIE, pas sur le comptage gonfle. Une permutation qui garderait
+        # la variable definie -- deplacer le controle plus bas -- ne faisait
+        # tomber PERSONNE. L'assiette etait trop etroite.
+        #
+        # ⚠️ ET C'EST UN TEST QUI LIT LA SOURCE, donc il ignore les
+        # commentaires : la note qui explique l'ordre cite les deux noms, et
+        # un test naif serait satisfait par elle.
+        # ⚠️⚠️ ET CE TEST A EU, LUI AUSSI, L'ASSIETTE TROP ETROITE. Premiere
+        # version : il cherchait la PREMIERE occurrence de chacun. Violation
+        # plantee -- garder la ligne de controle en place et en AJOUTER une
+        # apres l'annonce -- il passait au VERT. C'est le signal de la fiche :
+        # une violation plantee qui ne fait tomber PERSONNE.
+        # On compte donc les sites AVANT de comparer leurs positions.
+        import inspect as _insp
+        src = _insp.getsource(_insp.getmodule(AgentA7Provisionnement))
+        code = [ligne for ligne in src.splitlines()
+                if not ligne.strip().startswith('#')]
+        i_ctrl = [k for k, ligne in enumerate(code)
+                  if '_ctrl_narr = controle_narration(' in ligne]
+        i_ment = [k for k, ligne in enumerate(code)
+                  if 'avec_mention_provenance(' in ligne]
+        self.assertEqual(len(i_ctrl), 1,
+                         f'{len(i_ctrl)} sites de controle : lequel fait foi ?')
+        self.assertEqual(len(i_ment), 1,
+                         f'{len(i_ment)} sites d annonce : lequel fait foi ?')
+        self.assertLess(i_ctrl[0], i_ment[0],
+                        'PERMUTATION : le verrou compterait sa propre annonce')
+        print('    OK D1-7 un seul controle, une seule annonce, dans cet ordre')
+
+    def test_les_deux_phrases_cles_sont_CITEES_pas_reformulees(self):
+        # ⚠️ DEUX TEXTES POUR UN FAIT DIVERGENT. `porte` et `raison` sont
+        # ecrits dans `controle_narration` : la mention les CITE.
+        from direction_non_vie.provisionnement.a7_provisionnement.n5_rapport import (
+            controle_narration,
+            mention_provenance,
+        )
+        ctrl = controle_narration('x', 'templates', '')
+        self.assertIn(ctrl['raison'][1:], mention_provenance(ctrl),
+                      'la raison est reformulee au lieu d etre citee')
+        applicable = {'applicable': True, 'n_publies': 5, 'n_orphelins': 1,
+                      'porte': self.PORTE}
+        self.assertIn(self.PORTE, mention_provenance(applicable))
+        print('    OK D1-4 `porte` et `raison` sont cites mot pour mot')
+
+    def test_la_mention_atteint_les_deux_documents_signes(self):
+        # ⚠️ ON LIT LES PRODUITS. Et surtout PAS leurs empreintes : HTML et
+        # Excel portent un horodatage, deux runs identiques en donnent deux
+        # differentes -- c'est ce qui a rendu ma premiere mesure muette.
+        r = AgentA7Provisionnement(verbose=False).run(
+            source=self._triangle(), mode_declare='cumule',
+            n_sim_bootstrap=30, seed=42, generer_graphiques=False)
+        self.assertTrue(r.get('success'), r.get('erreur'))
+        M = 'Contrôle de provenance'
+        self.assertEqual((r['html'] or '').count(M), 1, 'muet en HTML')
+        z = zipfile.ZipFile(io.BytesIO(r['word_bytes']))
+        xml = z.read('word/document.xml').decode('utf-8', 'ignore')
+        self.assertEqual(xml.count(M), 1, 'muet en Word')
+        print('    OK D1-5 la mention atteint le HTML ET le Word')
+
+    def test_sans_cle_le_cas_non_applicable_est_DIT(self):
+        # ⚠️ LE TAIRE LAISSERAIT CROIRE A UN CONTROLE QUI A EU LIEU.
+        r = AgentA7Provisionnement(verbose=False).run(
+            source=self._triangle(), mode_declare='cumule',
+            n_sim_bootstrap=30, seed=42, generer_graphiques=False)
+        self.assertIn('non applicable', r['html'],
+                      'le rapport tait que le controle n a pas eu lieu')
+        # ⚠️ ET IL DIT POURQUOI, pas seulement QUE. Une exemption nue n est
+        # pas relisible ; celle-ci porte sa raison.
+        self.assertIn('sans charge utile', r['html'])
+        print('    OK D1-6 sans cle, le non-applicable est dit, et motive')
 
 
 class T_La_Courbe_De_L_Arrete_Est_Dite_Dans_Le_Commentaire(unittest.TestCase):
