@@ -990,15 +990,24 @@ class AgentA6Comparaison:
             backtest['n_test']  = len(df_test)
             moy_train = float(df_train[col_cible].mean())
             moy_test  = float(df_test[col_cible].mean())
-            ae_ratio  = moy_test / max(moy_train, 1e-6)
-            backtest['ae_ratio']       = round(ae_ratio, 4)
+            # ⚠️ CE CHEMIN NE RECALIBRE AUCUN MODÈLE : sans colonne
+            # temporelle, il n'y a qu'un découpage aléatoire, donc aucune
+            # prédiction. Il publiait pourtant `moy_test / moy_train` sous le
+            # nom `ae_ratio`, avec l'interprétation « 🟢 Non biaisé » — un
+            # rapport de deux moyennes OBSERVÉES nommé Actual/Expected. Le
+            # rapport de stationnarité reste publié SOUS SON PROPRE NOM ; l'A/E
+            # vaut None, parce qu'il n'a pas été calculé.
+            backtest['ae_ratio']            = None
+            backtest['somme_observee']      = round(float(df_test[col_cible].sum()), 2)
+            backtest['somme_attendue']      = None
+            backtest['ratio_stationnarite'] = round(moy_test / max(moy_train, 1e-6), 4)
             backtest['moy_train']      = round(moy_train, 2)
             backtest['moy_test']       = round(moy_test, 2)
             backtest['disponible']     = True
             backtest['interpretation'] = (
-                '🟢 Non biaisé'       if 0.95 <= ae_ratio <= 1.05 else
-                '🟡 Légère déviation' if 0.90 <= ae_ratio <= 1.10 else
-                '🔴 Déviation majeure'
+                "⚠️ A/E NON calculé — aucune colonne temporelle, donc aucun "
+                "modèle recalibré et aucune prédiction hors échantillon. Le "
+                "ratio de stationnarité publié ne mesure PAS la calibration."
             )
             return backtest
 
@@ -1018,6 +1027,9 @@ class AgentA6Comparaison:
         # affirme que quelqu'un l'a écrite. La règle qu'elle habillait tient
         # sans elle, et elle est énoncée ci-dessus.
         walk_forward = []
+        # année de test → prédictions du modèle recalibré, indexées sur les
+        # lignes de la fenêtre (voir l'A/E par segment, plus bas).
+        preds_par_annee: dict = {}
 
         # ── Recalibration sur le MODÈLE RÉELLEMENT RETENU (audit V4 reco #7) ──
         # AVANT : un GradientBoostingRegressor générique était TOUJOURS
@@ -1103,7 +1115,27 @@ class AgentA6Comparaison:
 
             m_tr = float(df_tr[col_cible].mean()) if len(df_tr) > 0 else 0
             m_te = float(df_te[col_cible].mean())
-            ae   = round(m_te / max(m_tr, 1e-6), 4)
+
+            # ⚠️⚠️ A/E VEUT DIRE ACTUAL / EXPECTED, ET « EXPECTED » EST UNE
+            # PRÉDICTION. Cette ligne valait `round(m_te / m_tr, 4)` : le
+            # rapport de deux moyennes OBSERVÉES, c'est-à-dire un test de
+            # STATIONNARITÉ du portefeuille. Le commentaire d'en-tête de ce
+            # bloc l'annonçait pourtant en toutes lettres — « calculer Gini et
+            # A/E SUR LES PRÉDICTIONS. C'est un vrai backtesting de modèle —
+            # PAS un test de stationnarité » — et la prédiction naissait
+            # 91 lignes plus bas sans jamais y entrer.
+            # ⚠️ CE QUE ÇA PRODUISAIT, MESURÉ : sur une dernière année peuplée
+            # exclusivement de conducteurs de moins de 25 ans portant 3× le
+            # risque, mais dont la charge observée reste au niveau
+            # d'apprentissage, l'instrument publiait « A/E = 1,0000 🟢 Non
+            # biaisé ». Le modèle sur-tarifait massivement et la seule
+            # grandeur qu'un contrôleur lit disait que tout allait bien.
+            # ⚠️ Un A/E qui ne peut pas être calculé vaut None — il ne retombe
+            # PAS sur la stationnarité, qui donnerait l'apparence d'une mesure.
+            ae         = None
+            somme_obs  = float(df_te[col_cible].sum())
+            somme_att  = None
+            pred_serie = None
 
             # ── Recalibration + Gini sur cette fenêtre ────────────────────────
             gini_wf = None
@@ -1195,6 +1227,10 @@ class AgentA6Comparaison:
                         modele_wf.fit(X_tr, y_tr)
                     # Prédire sur la fenêtre test
                     pred_te = np.maximum(modele_wf.predict(X_te), 0)
+                    # ⚠️ INDEXÉE SUR `df_te` : l'A/E par segment, plus bas,
+                    # découpe le MÊME dataframe. Sans index partagé, un
+                    # alignement par position casserait au premier filtre.
+                    pred_serie = pd.Series(pred_te, index=df_te.index)
                     # Gini walk-forward — audit V6 #2, puis audit V7 MINEUR #3.
                     # V6 avait corrigé deux bugs (np.trapz supprimé sous
                     # numpy≥2.0, signe inversé) directement dans cette formule
@@ -1226,22 +1262,52 @@ class AgentA6Comparaison:
                 # pouvoir disparaître silencieusement en niveau debug.
                 logger.warning(f"Recalibration WF {annee_t} échouée : {e_wf}")
 
+            # ── A/E = charge OBSERVÉE / charge ATTENDUE par le modèle ────────
+            # ⚠️ L'UNITÉ EST MESURÉE, PAS SUPPOSÉE. Pour une cible de
+            # FRÉQUENCE, `predict` rend un TAUX ANNUEL et non un comptage :
+            # `_GLMWalkForward` ajuste avec `offset=log(expo)` et prédit SANS
+            # offset. Mesuré sur données de vérité connue :
+            # Σy / Σ(pred × expo) = 1,0000 alors que Σy / Σpred = 0,5533.
+            # L'attendu est donc `pred × exposition` — exactement la
+            # construction que le chemin déclaratif emploie déjà
+            # (`pipeline_tarifaire.py:229` : attendu = frequence_annuelle ×
+            # exposition). Pour une cible de coût ou de prime pure, `y` et
+            # `pred` sont déjà homogènes : pas d'exposition.
+            if pred_serie is not None:
+                _att = pred_serie.to_numpy(dtype=float)
+                if _est_freq_cible and col_expo in df_te.columns:
+                    _att = _att * df_te[col_expo].to_numpy(dtype=float)
+                somme_att = float(_att.sum())
+                if somme_att > 1e-9:
+                    ae = round(somme_obs / somme_att, 4)
+
             walk_forward.append({
                 'annee_test':         int(annee_t),
                 'n_train':            len(df_tr),
                 'n_test':             len(df_te),
                 'moy_train':          round(m_tr, 2),
                 'moy_test':           round(m_te, 2),
+                'somme_observee':     round(somme_obs, 2),
+                'somme_attendue':     (round(somme_att, 2)
+                                       if somme_att is not None else None),
+                'n_sinistres_test':   int((df_te[col_cible] > 0).sum()),
                 'ae_ratio':           ae,
                 'gini_recalibre':     gini_wf,
                 'modele_recalibre':   _modele_reel_recalibre,
                 'modele_recalibre_fidele': _recalibration_est_fidele,
                 'statut':             (
+                    'AMBRE' if ae is None else
                     'VERT'  if 0.95 <= ae <= 1.05 else
                     'AMBRE' if 0.90 <= ae <= 1.10 else
                     'ROUGE'
                 ),
             })
+            # ⚠️ La prédiction de la fenêtre est CONSERVÉE : l'A/E par segment,
+            # plus bas, la redemande pour la dernière fenêtre. Elle était
+            # jusqu'ici jetée à chaque tour de boucle — c'est pourquoi les
+            # segments se rabattaient sur une moyenne observée.
+            if pred_serie is not None:
+                preds_par_annee[int(annee_t)] = pred_serie
 
         if not walk_forward:
             backtest['note'] = "Aucune fenêtre walk-forward valide."
@@ -1252,38 +1318,96 @@ class AgentA6Comparaison:
         ae_ratio = derniere['ae_ratio']
 
         # Stabilité walk-forward : CV des A/E sur toutes les fenêtres
-        aes       = [w['ae_ratio'] for w in walk_forward]
-        ae_moyen  = float(np.mean(aes))
-        ae_cv     = float(np.std(aes) / max(ae_moyen, 1e-6))
+        # ⚠️ UNE FENÊTRE SANS A/E MESURÉ N'ENTRE PAS DANS LA STABILITÉ. Elle ne
+        # vaut pas 1 : elle ne vaut rien, et la moyenner à 1 dirait « stable ».
+        aes       = [w['ae_ratio'] for w in walk_forward if w['ae_ratio'] is not None]
+        ae_moyen  = float(np.mean(aes)) if aes else None
+        ae_cv     = (float(np.std(aes) / max(ae_moyen, 1e-6))
+                     if aes and ae_moyen else None)
         n_rouge   = sum(1 for w in walk_forward if w['statut'] == 'ROUGE')
 
         # ── TEST A/E PAR SEGMENT ──────────────────────────────────────────────
         # Utiliser la dernière fenêtre (la plus réaliste)
         annee_test = derniere['annee_test']
-        df_test_n  = df[df[col_annee] == annee_test]
-        df_train_n = df[df[col_annee] < annee_test]
-        moy_ref    = float(df_train_n[col_cible].mean()) if len(df_train_n) > 0 else 1.0
+        df_test_n  = df[df[col_annee] == annee_test].copy()
+        pred_n     = preds_par_annee.get(int(annee_test))
+
+        # ⚠️⚠️ LE DÉNOMINATEUR ÉTAIT `moy_ref`, LA MOYENNE OBSERVÉE DU TRAIN —
+        # LA MÊME POUR LES TROIS SEGMENTATIONS. Un segment réellement plus
+        # risqué sortait donc ROUGE même parfaitement tarifé : la grandeur
+        # mesurait l'HÉTÉROGÉNÉITÉ du portefeuille, jamais la CALIBRATION du
+        # modèle. Mesuré sur la fixture du dépôt : 8 segments ROUGE sur 11.
+        # Chaque segment se compare désormais à ce que LE MODÈLE prédit POUR
+        # LUI — c'est la définition d'un contrôle de calibration.
+        if pred_n is not None:
+            _att_n = pred_n.reindex(df_test_n.index).to_numpy(dtype=float)
+            if _est_freq_cible and col_expo in df_test_n.columns:
+                _att_n = _att_n * df_test_n[col_expo].to_numpy(dtype=float)
+            df_test_n['_attendu'] = _att_n
 
         ae_par_segment = {}
+        _N_MINI_SEG = 20
 
-        # Segment 1 : déciles de la variable cible observée
+        # ⚠️⚠️ UN A/E DE SEGMENT EXIGE ASSEZ DE SINISTRES POUR VOULOIR DIRE
+        # QUELQUE CHOSE, ET L'EFFECTIF NE SUFFIT PAS À LE DIRE. Mesuré en
+        # écrivant ce correctif, sur la fixture du dépôt (cible à 95,8 % de
+        # zéros, CV 5,4) : le quintile de risque le plus bas sortait
+        # « A/E = 287,92 » — 77 contrats, quelques euros attendus, un sinistre
+        # survenu — et trois segments sortaient « A/E = 0,00 ». Aucun n'est un
+        # défaut de tarification : c'est un rapport dont le DÉNOMINATEUR n'a
+        # pas de signal.
+        # ⚠️ LE PLANCHER PORTE SUR LE NOMBRE DE SINISTRES, PAS SUR L'EFFECTIF :
+        # trente contrats sans sinistre ne disent rien d'un tarif. C'est un
+        # seuil de PUBLICATION, pas une norme de crédibilité — en dessous, le
+        # chiffre est montré avec sa mention « non crédible » et ne peut plus
+        # rendre ni VERT ni ROUGE. On publie ce qu'on ne peut pas juger ; on
+        # ne le juge pas.
+        _N_MINI_SINISTRES = 10
+
+        def _ligne_ae(sub, cle_nom, cle_val):
+            """A/E d'un sous-ensemble : charge OBSERVÉE / charge ATTENDUE."""
+            obs   = float(sub[col_cible].sum())
+            att   = float(sub['_attendu'].sum()) if '_attendu' in sub.columns else None
+            n_sin = int((sub[col_cible] > 0).sum())
+            r     = round(obs / att, 4) if att and att > 1e-9 else None
+            credible = r is not None and n_sin >= _N_MINI_SINISTRES
+            return {
+                cle_nom:      cle_val,
+                'n':          len(sub),
+                'n_sinistres': n_sin,
+                'moy_obs':    round(float(sub[col_cible].mean()), 2),
+                'moy_pred':   (round(float(sub['_attendu'].mean()), 2)
+                               if '_attendu' in sub.columns else None),
+                'ae_ratio':   r,
+                'credible':   credible,
+                'statut':     ('AMBRE' if not credible else
+                               'VERT'  if 0.90 <= r <= 1.10 else
+                               'AMBRE' if 0.80 <= r <= 1.20 else 'ROUGE'),
+                'note':       (None if credible else
+                               f"A/E non crédible : {n_sin} sinistre(s) dans ce "
+                               f"segment, seuil de publication {_N_MINI_SINISTRES}"),
+            }
+
+        # Segment 1 : quintiles de RISQUE PRÉDIT
+        # ⚠️ ILS ÉTAIENT DÉCOUPÉS SUR LA CIBLE OBSERVÉE, et c'est un piège
+        # statistique classique : trier par l'observé puis comparer l'observé
+        # à une référence garantit que le quintile haut sort au-dessus et le
+        # quintile bas en dessous — même pour un modèle PARFAIT (régression
+        # vers la moyenne). Le découpage se fait sur le risque PRÉDIT : c'est
+        # le diagramme de fiabilité standard, et lui seul montre si le modèle
+        # se trompe DE NIVEAU sur une bande de risque donnée.
         try:
-            df_test_n = df_test_n.copy()
-            df_test_n['_decile'] = pd.qcut(
-                df_test_n[col_cible], q=5, labels=False, duplicates='drop'
+            if '_attendu' not in df_test_n.columns:
+                raise ValueError("aucune prédiction : quintiles non calculables")
+            df_test_n['_quintile'] = pd.qcut(
+                df_test_n['_attendu'], q=5, labels=False, duplicates='drop'
             )
-            ae_deciles = []
-            for d in sorted(df_test_n['_decile'].dropna().unique()):
-                sub = df_test_n[df_test_n['_decile'] == d]
-                ae_d = float(sub[col_cible].mean()) / max(moy_ref, 1e-6)
-                ae_deciles.append({
-                    'quintile': int(d) + 1,
-                    'n':        len(sub),
-                    'moy_obs':  round(float(sub[col_cible].mean()), 2),
-                    'ae_ratio': round(ae_d, 4),
-                    'statut':   'VERT' if 0.90 <= ae_d <= 1.10 else 'AMBRE' if 0.80 <= ae_d <= 1.20 else 'ROUGE',
-                })
-            ae_par_segment['quintiles_risque'] = ae_deciles
+            ae_quintiles = []
+            for d in sorted(df_test_n['_quintile'].dropna().unique()):
+                sub = df_test_n[df_test_n['_quintile'] == d]
+                ae_quintiles.append(_ligne_ae(sub, 'quintile', int(d) + 1))
+            if ae_quintiles:
+                ae_par_segment['quintiles_risque'] = ae_quintiles
         except Exception as e_q:
             logger.debug(f"A/E quintiles échoué : {e_q}")
 
@@ -1294,17 +1418,9 @@ class AgentA6Comparaison:
                     ae_zones = []
                     for zone in df_test_n[col_zone].dropna().unique()[:8]:
                         sub = df_test_n[df_test_n[col_zone] == zone]
-                        if len(sub) < 20:
+                        if len(sub) < _N_MINI_SEG:
                             continue
-                        ae_z = float(sub[col_cible].mean()) / max(moy_ref, 1e-6)
-                        ae_zones.append({
-                            'zone':     str(zone),
-                            'n':        len(sub),
-                            'moy_obs':  round(float(sub[col_cible].mean()), 2),
-                            'ae_ratio': round(ae_z, 4),
-                            'statut':   'VERT' if 0.90 <= ae_z <= 1.10 else
-                                        'AMBRE' if 0.80 <= ae_z <= 1.20 else 'ROUGE',
-                        })
+                        ae_zones.append(_ligne_ae(sub, 'zone', str(zone)))
                     if ae_zones:
                         ae_par_segment['zones'] = ae_zones
                 except Exception as e_z:
@@ -1317,24 +1433,15 @@ class AgentA6Comparaison:
                 try:
                     bins  = [0, 25, 35, 45, 55, 65, 200]
                     lbls  = ['<25', '25-34', '35-44', '45-54', '55-64', '65+']
-                    df_test_n = df_test_n.copy()
                     df_test_n['_age_tranche'] = pd.cut(
                         df_test_n[col_age], bins=bins, labels=lbls, right=False
                     )
                     ae_ages = []
                     for tranche in lbls:
                         sub = df_test_n[df_test_n['_age_tranche'] == tranche]
-                        if len(sub) < 20:
+                        if len(sub) < _N_MINI_SEG:
                             continue
-                        ae_a = float(sub[col_cible].mean()) / max(moy_ref, 1e-6)
-                        ae_ages.append({
-                            'tranche':  tranche,
-                            'n':        len(sub),
-                            'moy_obs':  round(float(sub[col_cible].mean()), 2),
-                            'ae_ratio': round(ae_a, 4),
-                            'statut':   'VERT' if 0.90 <= ae_a <= 1.10 else
-                                        'AMBRE' if 0.80 <= ae_a <= 1.20 else 'ROUGE',
-                        })
+                        ae_ages.append(_ligne_ae(sub, 'tranche', tranche))
                     if ae_ages:
                         ae_par_segment['tranches_age'] = ae_ages
                 except Exception as e_a:
@@ -1387,8 +1494,34 @@ class AgentA6Comparaison:
             'moy_train':         derniere['moy_train'],
             'moy_test':          derniere['moy_test'],
             'ae_ratio':          ae_ratio,
-            'ae_moyen_wf':       round(ae_moyen, 4),
-            'ae_cv_wf':          round(ae_cv, 4),
+            # ⚠️ LES DEUX TERMES DU RAPPORT SONT PUBLIÉS. Un A/E qui ne donne
+            # pas sa charge observée et sa charge attendue n'est pas
+            # vérifiable : un commissaire doit pouvoir refaire la division.
+            'somme_observee':    derniere.get('somme_observee'),
+            'somme_attendue':    derniere.get('somme_attendue'),
+            # ⚠️ LE NOMBRE DE SINISTRES DE LA FENÊTRE EST PUBLIÉ AVEC L'A/E.
+            # Un A/E porté par trois sinistres et un porté par mille se lisent
+            # pareil et ne valent pas pareil ; sans ce compte, rien à l'écran
+            # ne distingue les deux.
+            'n_sinistres_test':  derniere.get('n_sinistres_test'),
+            # ⚠️ LA BASE DU CALCUL EST PUBLIÉE AVEC LE RÉSULTAT. Un A/E ne se
+            # lit pas sans savoir ce qui a été divisé — et sur une cible de
+            # fréquence l'attendu vaut `prédiction × exposition` parce que le
+            # modèle rend un TAUX ANNUEL.
+            # ⚠️⚠️ LIMITE MESURÉE, ET ELLE EST DU CÔTÉ SÛR. La convention
+            # « prédiction = taux » est EXACTE pour un GLM recalibré
+            # (Σy / Σ(pred×expo) = 1,0000 sur données de vérité connue) mais
+            # FAUSSE pour un modèle ML réajusté sur le comptage brut avec
+            # `sample_weight=exposition` : il rend une troisième grandeur, ni
+            # taux ni comptage. L'attendu est alors SOUS-estimé, donc l'A/E
+            # sort TROP HAUT, donc ROUGE — une fausse alerte, jamais une
+            # fausse mise hors de cause. Le correctif (ajuster le ML sur le
+            # taux) a été mesuré et ne referme pas l'écart : 1,72 → 1,10, pas
+            # 1,00. Il demande son propre chantier.
+            'base_attendu':      ('prédiction × exposition' if _est_freq_cible
+                                  else 'prédiction'),
+            'ae_moyen_wf':       round(ae_moyen, 4) if ae_moyen is not None else None,
+            'ae_cv_wf':          round(ae_cv, 4) if ae_cv is not None else None,
             'n_fenetres':        len(walk_forward),
             'n_fenetres_rouge':  n_rouge,
             'gini_wf_moyen':     gini_wf_moyen,
@@ -1401,11 +1534,15 @@ class AgentA6Comparaison:
             'walk_forward':      walk_forward,
             'ae_par_segment':    ae_par_segment,
             'interpretation': (
+                '⚠️ A/E NON calculé — aucune prédiction hors échantillon '
+                'disponible sur la dernière fenêtre' if ae_ratio is None else
                 '🟢 Non biaisé'       if 0.95 <= ae_ratio <= 1.05 else
                 '🟡 Légère déviation' if 0.90 <= ae_ratio <= 1.10 else
                 '🔴 Déviation majeure'
             ),
             'stabilite_wf': (
+                '⚠️ Stabilité NON mesurée — aucune fenêtre avec A/E'
+                if ae_cv is None else
                 '🟢 Stable'     if ae_cv <= 0.05 and n_rouge == 0 else
                 '🟡 Acceptable' if ae_cv <= 0.10 else
                 '🔴 Instable'
@@ -1414,7 +1551,10 @@ class AgentA6Comparaison:
 
         logger.info(
             f"Walk-forward : {len(walk_forward)} fenêtres | "
-            f"A/E N-1→N = {ae_ratio:.4f} | CV = {ae_cv:.4f} | "
+            f"A/E N-1→N = {'non calculé' if ae_ratio is None else f'{ae_ratio:.4f}'} "
+            f"({derniere.get('somme_observee')} observé / "
+            f"{derniere.get('somme_attendue')} attendu) | "
+            f"CV = {'n/a' if ae_cv is None else f'{ae_cv:.4f}'} | "
             f"Fenêtres ROUGE = {n_rouge}"
         )
 

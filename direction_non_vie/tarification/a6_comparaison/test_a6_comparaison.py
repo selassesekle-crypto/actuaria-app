@@ -879,6 +879,192 @@ class T_Les_Figures_Portent_Les_Valeurs_REELLES(unittest.TestCase):
         print(f"    POS-A6b radar = {rayons} — les composantes mesurées ✅")
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+#  CONTRÔLES POSITIFS — L'A/E DOIT LIRE LA PRÉDICTION
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _a2_age_pilote(n=2000, seed=5, mix_risque_derniere_annee=False,
+                   surcharge_zone_invisible=False):
+    """Un portefeuille où l'ÂGE — variable numérique, donc FEATURE du modèle —
+    pilote le risque. Les tranches d'âge d'A6 deviennent alors des segments que
+    le modèle peut réellement prédire : c'est la seule construction où « ce
+    segment est-il bien tarifé ? » se distingue de « ce segment est-il plus
+    risqué que la moyenne ? ».
+
+    ⚠️ CIBLE STRICTEMENT POSITIVE, À DESSEIN. Sur la fixture historique la
+    prime pure est à 95,8 % de zéros : `pd.qcut(q=5)` s'y effondre en UNE seule
+    ligne et un segment sans sinistre sort A/E = 0,0. On ne prouve rien sur un
+    bruit pareil.
+
+    `mix_risque_derniere_annee` fabrique le cas décisif : la dernière année est
+    peuplée de profils RISQUÉS, mais sa charge observée est ramenée au niveau
+    moyen des années d'apprentissage. Stationnarité et calibration s'y
+    contredisent — c'est là que se voit ce que la grandeur mesure vraiment.
+    """
+    rng    = np.random.default_rng(seed)
+    annees = rng.choice([2020, 2021, 2022, 2023], n, p=[.25, .25, .25, .25])
+    age    = rng.integers(18, 75, n).astype(float)
+    if mix_risque_derniere_annee:
+        _d = annees == 2023
+        age[_d] = rng.integers(18, 25, int(_d.sum())).astype(float)
+    zone   = rng.choice(['A', 'B', 'C', 'D'], n)
+    # ⚠️ LA ZONE EST UNE CHAÎNE : elle n'entre PAS dans `_cols_num`, donc le
+    # modèle ne la voit pas. `surcharge_zone_invisible` fabrique ainsi un
+    # segment RÉELLEMENT mal tarifé — le seul moyen de prouver que le plancher
+    # de crédibilité n'avale pas un vrai défaut.
+    risque = np.where(age < 25, 3.0, 1.0)
+    if surcharge_zone_invisible:
+        risque = risque * np.where(zone == 'D', 2.5, 1.0)
+    prime  = rng.gamma(6.0, 70.0 * risque)
+    if mix_risque_derniere_annee:
+        _d = annees == 2023
+        prime[_d] = prime[_d] * (prime[~_d].mean() / prime[_d].mean())
+    expo = rng.uniform(0.3, 1.0, n)
+    df = pd.DataFrame({
+        'nb_sinistres':         rng.poisson(0.08 * expo, n).astype(float),
+        'cout_total_sinistres': prime,
+        'exposition':           expo,
+        'prime_pure':           prime,
+        'annee_souscription':   annees,
+        'age':                  age,
+        'zone_geographique':    zone,
+        'bonus_malus':          rng.uniform(50, 350, n),
+    })
+    return {'success': True, 'dataframe': df, 'branche': 'auto',
+            'statut_rag': 'VERT', 'parametres': {}, 'rapport': {},
+            'commentaire': 'OK', 'audit_id': 'A2_AE', 'erreur': None}
+
+
+class T_L_A_E_Compare_L_OBSERVE_AU_PREDIT(unittest.TestCase):
+    """CONTRÔLE POSITIF — A/E veut dire Actual / Expected.
+
+    ⚠️ LE COMMENTAIRE DU CODE DIT DÉJÀ CE QUE LE CODE NE FAIT PAS (a6:1012) :
+    « prédire sur test, calculer Gini et A/E SUR LES PRÉDICTIONS. C'est un vrai
+    backtesting de modèle — PAS un test de stationnarité. » Or `ae` vaut
+    `moyenne_test_observée / moyenne_train_observée` (a6:1104-1106), ce qui EST
+    un test de stationnarité. La prédiction naît 91 lignes plus bas (a6:1197)
+    et n'entre jamais dans le calcul.
+
+    ⚠️ L'ENJEU : c'est le seul indicateur du module qu'un contrôleur lit
+    directement. Un modèle grossièrement mal calibré obtient « 🟢 Non biaisé »
+    du moment que le portefeuille est stationnaire.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from direction_non_vie.tarification.a6_comparaison.agent import (
+            AgentA6Comparaison,
+        )
+        cls.agent = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp',
+                                       verbose=False)
+        cls.r_sain = cls.agent.run(
+            result_a2=_a2_age_pilote(2000), result_a3=_make_r_a3(),
+            result_a4=_make_r_a4(), result_a5=None,
+            col_cible='prime_pure', col_expo='exposition',
+            generer_graphiques=False, aide_decision=True)
+
+    def test_l_A_E_n_est_pas_le_rapport_de_deux_moyennes_OBSERVEES(self):
+        """⚠️ LA GRANDEUR, PAS LE STATUT. Sur un portefeuille dont la dernière
+        année est stationnaire EN NIVEAU mais peuplée de profils risqués, le
+        modèle prédit haut et l'observé reste au niveau d'apprentissage : un
+        vrai A/E s'éloigne de 1, un test de stationnarité rend 1."""
+        r = self.agent.run(
+            result_a2=_a2_age_pilote(2000, mix_risque_derniere_annee=True),
+            result_a3=_make_r_a3(), result_a4=_make_r_a4(), result_a5=None,
+            col_cible='prime_pure', col_expo='exposition',
+            generer_graphiques=False, aide_decision=True)
+        self.assertTrue(r['success'], f"Erreur : {r.get('erreur')}")
+        bt = r['backtest']
+        self.assertTrue(bt.get('disponible'), "prémisse : backtest indisponible")
+        stationnarite = bt['moy_test'] / max(bt['moy_train'], 1e-9)
+        self.assertAlmostEqual(
+            stationnarite, 1.0, delta=0.12,
+            msg=(f"prémisse du contrôle : la dernière année doit être "
+                 f"STATIONNAIRE en niveau, elle sort à {stationnarite:.4f}"))
+        self.assertNotAlmostEqual(
+            bt['ae_ratio'], stationnarite, places=3,
+            msg=(f"l'A/E publié vaut {bt['ae_ratio']}, soit EXACTEMENT "
+                 f"moy_test/moy_train = {stationnarite:.4f} — c'est un test de "
+                 f"stationnarité, pas un rapport observé/prédit. Le "
+                 f"commentaire a6:1012 affirme pourtant l'inverse."))
+        print(f"    POS-A6c A/E={bt['ae_ratio']} vs stationnarité "
+              f"{stationnarite:.4f} — deux grandeurs distinctes ✅")
+
+    def test_l_A_E_publie_les_deux_sommes_dont_il_est_le_rapport(self):
+        """⚠️ UN RAPPORT QUI NE PUBLIE PAS SES DEUX TERMES N'EST PAS
+        VÉRIFIABLE. Un commissaire doit pouvoir refaire la division."""
+        bt  = self.r_sain['backtest']
+        obs = bt.get('somme_observee')
+        att = bt.get('somme_attendue')
+        self.assertIsNotNone(obs, "la charge OBSERVÉE de la fenêtre n'est pas publiée")
+        self.assertIsNotNone(att, "la charge ATTENDUE par le modèle n'est pas publiée")
+        self.assertAlmostEqual(
+            bt['ae_ratio'], obs / att, places=3,
+            msg=(f"A/E publié {bt['ae_ratio']} ≠ {obs}/{att} = "
+                 f"{obs / max(att, 1e-9):.4f} — le rapport ne vient pas de ses "
+                 f"propres termes"))
+        print(f"    POS-A6d A/E = {obs:,.0f} / {att:,.0f} = {obs/att:.4f} ✅")
+
+    def test_un_segment_BIEN_TARIFE_n_est_pas_juge_sur_la_moyenne_GLOBALE(self):
+        """⚠️ MESURÉ : les trois segmentations divisent par `moy_ref`, la
+        moyenne OBSERVÉE du train (a6:1265) — jamais par une prédiction. Un
+        segment réellement plus risqué sort donc ROUGE même si le modèle le
+        tarife parfaitement : la grandeur mesure l'HÉTÉROGÉNÉITÉ du
+        portefeuille, pas la CALIBRATION du modèle.
+
+        Ici les moins de 25 ans portent 3× le risque, et l'âge est une feature
+        numérique que le modèle voit. Un A/E de calibration doit valoir ≈ 1 sur
+        cette tranche ; le rapport à la moyenne globale vaut ≈ 3."""
+        bt  = self.r_sain['backtest']
+        seg = (bt.get('ae_par_segment') or {}).get('tranches_age') or []
+        jeunes = next((L for L in seg if L.get('tranche') == '<25'), None)
+        self.assertIsNotNone(jeunes, "prémisse : la tranche <25 doit exister")
+        self.assertGreaterEqual(jeunes['n'], 20, "prémisse : effectif suffisant")
+        rapport_global = jeunes['moy_obs'] / max(bt.get('moy_train') or 1.0, 1e-9)
+        self.assertGreater(
+            rapport_global, 1.6,
+            f"prémisse : la tranche <25 doit être RÉELLEMENT plus risquée que "
+            f"la moyenne, elle sort à {rapport_global:.2f}x")
+        self.assertLess(
+            abs(jeunes['ae_ratio'] - 1.0), 0.35,
+            f"la tranche <25 sort A/E={jeunes['ae_ratio']} ({jeunes['statut']}) "
+            f"alors qu'elle est {rapport_global:.2f}x plus risquée que la "
+            f"moyenne ET que le modèle voit l'âge : c'est le rapport à la "
+            f"moyenne GLOBALE qui est publié, pas un écart de calibration")
+        print(f"    POS-A6e tranche <25 : {rapport_global:.2f}x la moyenne, "
+              f"A/E de calibration {jeunes['ae_ratio']} ✅")
+
+    def test_le_plancher_de_credibilite_N_AVALE_PAS_un_vrai_defaut(self):
+        """⚠️⚠️ LE GARDE-FOU DE L'EXEMPTION. Le correctif introduit un seuil :
+        en dessous de 10 sinistres, un segment ne peut plus rendre ROUGE. Une
+        liste qui EXEMPTE ouvre un trou — il faut donc prouver que ce seuil
+        laisse passer ce qu'il doit laisser passer.
+
+        Ici la zone 'D' porte 2,5× le risque, et `zone_geographique` est une
+        CHAÎNE : elle n'entre pas dans les features numériques du modèle, qui
+        ne peut donc pas la tarifer. Le segment est réellement sous-tarifé, il
+        est crédible, et il doit sortir ROUGE."""
+        r = self.agent.run(
+            result_a2=_a2_age_pilote(2400, seed=9, surcharge_zone_invisible=True),
+            result_a3=_make_r_a3(), result_a4=_make_r_a4(), result_a5=None,
+            col_cible='prime_pure', col_expo='exposition',
+            generer_graphiques=False, aide_decision=True)
+        zones = (r['backtest'].get('ae_par_segment') or {}).get('zones') or []
+        zone_d = next((L for L in zones if L.get('zone') == 'D'), None)
+        self.assertIsNotNone(zone_d, "prémisse : la zone D doit être publiée")
+        self.assertTrue(
+            zone_d['credible'],
+            f"prémisse : la zone D doit être crédible pour que ce contrôle "
+            f"prouve quelque chose ({zone_d['n_sinistres']} sinistres)")
+        self.assertEqual(
+            zone_d['statut'], 'ROUGE',
+            f"la zone D porte 2,5x le risque sur une variable que le modèle NE "
+            f"VOIT PAS, et sort {zone_d['statut']} (A/E={zone_d['ae_ratio']}) — "
+            f"le plancher de crédibilité avale un vrai défaut de tarification")
+        print(f"    POS-A6f zone D sous-tarifée : A/E={zone_d['ae_ratio']} "
+              f"sur {zone_d['n_sinistres']} sinistres → ROUGE ✅")
+
+
 if __name__ == '__main__':
     print("="*65)
     print("  TESTS A6 COMPARAISON v1.0 — SÉLECTION FINALE")

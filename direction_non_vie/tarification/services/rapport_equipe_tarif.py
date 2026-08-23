@@ -317,7 +317,11 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
                  statut="AMBRE", wrap=True); r += 1
         if bt6.get('gini_wf_moyen') is not None:
             _kpi(ws5, r, "Gini WF moyen", round(bt6.get('gini_wf_moyen', 0), 4), fmt=FMT_DEC4); r += 1
-        _kpi(ws5, r, "A/E ratio", round(bt6.get('ae_ratio', 0), 4), fmt=FMT_DEC4); r += 1
+        # ⚠️ `round(None, 4)` leve : A6 publie None pour un A/E non calcule.
+        _ae6 = bt6.get('ae_ratio')
+        _kpi(ws5, r, "A/E ratio",
+             '— non calcule' if _ae6 is None else round(_ae6, 4),
+             fmt=None if _ae6 is None else FMT_DEC4); r += 1
         r += 1
         _synth_exc6 = synthese_exclusions(r6.get('exclusions_conformite')
                                           if isinstance(r6, dict) else None)
@@ -512,7 +516,7 @@ def export_html_equipe(results: Dict[str, Dict], branche: str = '',
           <div class="kpi"><b>Modèle retenu</b><br>{prod.get('modele','N/A')}</div>
           <div class="kpi"><b>Score global</b><br>{_score_txt6}</div>
           <div class="kpi"><b>Gini WF moyen</b><br>{bt6.get('gini_wf_moyen') if bt6.get('gini_wf_moyen') is not None else '—'}</div>
-          <div class="kpi"><b>A/E ratio</b><br>{bt6.get('ae_ratio','—')}</div>
+          <div class="kpi"><b>A/E ratio</b><br>{bt6.get('ae_ratio') or '— non calcule'}</div>
         </div>
         <p style="font-size:10px;color:#8A9BB0;font-style:italic;margin-top:4px;">
           ✦ Score global : normalisation relative au meilleur modèle du

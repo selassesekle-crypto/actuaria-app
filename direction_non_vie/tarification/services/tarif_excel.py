@@ -583,9 +583,16 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
 
         _section(ws1, r, "▶ BACKTESTING"); r += 1
         if backtest.get('disponible'):
-            ae = backtest.get('ae_ratio', 0)
-            _kpi(ws1, r, "A/E ratio (N-1→N)", round(ae, 4),
-                 statut='VERT' if 0.95<=ae<=1.05 else 'AMBRE' if 0.90<=ae<=1.10 else 'ROUGE'); r += 1
+            # ⚠️ `round(None, 4)` leve. Un A/E non calcule se dit, il ne
+            # s'arrondit pas — et il ne peut rendre ni VERT ni ROUGE.
+            ae = backtest.get('ae_ratio')
+            _kpi(ws1, r, "A/E ratio (N-1→N)",
+                 '— non calcule' if ae is None else round(ae, 4),
+                 statut='AMBRE' if ae is None else
+                        'VERT' if 0.95 <= ae <= 1.05 else
+                        'AMBRE' if 0.90 <= ae <= 1.10 else 'ROUGE'); r += 1
+            _kpi(ws1, r, "Sinistres de la fenetre de test",
+                 backtest.get('n_sinistres_test', '—'), fmt=FMT_NB); r += 1
             _kpi(ws1, r, "Interprétation",   backtest.get('interpretation','')); r += 1
             _kpi(ws1, r, "Stabilité WF",     backtest.get('stabilite_wf','N/A')); r += 1
             _kpi(ws1, r, "Fenêtres testées", backtest.get('n_fenetres', 0), fmt=FMT_NB); r += 2
@@ -821,7 +828,9 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
             _kpi(ws5, r, "Sinistralité passée conservée — à vérifier",
                  _synth_alertes, statut="AMBRE", wrap=True); r += 1
         _kpi(ws5, r, "A/E ratio final",
-             round(backtest.get('ae_ratio', 0), 4) if backtest.get('disponible') else "N/A",
+             (round(backtest['ae_ratio'], 4)
+              if backtest.get('disponible') and backtest.get('ae_ratio') is not None
+              else "N/A"),
              fmt=FMT_DEC4 if backtest.get('disponible') else None); r += 1
 
         buf = io.BytesIO()

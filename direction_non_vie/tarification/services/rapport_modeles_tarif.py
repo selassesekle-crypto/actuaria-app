@@ -1766,11 +1766,19 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
     html += _fermer_chapitre(4)
     html += _ouvrir_chapitre(5)
     if bt6.get('disponible'):
-        ae = bt6.get('ae_ratio', 0)
-        ae_col = VERT if 0.95<=ae<=1.05 else ORANGE if 0.90<=ae<=1.10 else ROUGE
+        # ⚠️ UN A/E NON CALCULE N'EST PAS UN A/E DE 0. `.get(cle, 0)` ne
+        # couvre que la cle ABSENTE ; A6 publie desormais `None` quand aucune
+        # prediction hors echantillon n'existe, et `{None:.4f}` leve.
+        ae = bt6.get('ae_ratio')
+        ae_col = (ORANGE if ae is None else
+                  VERT if 0.95 <= ae <= 1.05 else
+                  ORANGE if 0.90 <= ae <= 1.10 else ROUGE)
+        ae_txt = 'non calcule' if ae is None else f"{ae:.4f}"
+        _n_sin = bt6.get('n_sinistres_test')
         html += f"""
     <div class="kpi-grid">
-      <div class="kpi"><div class="kpi-label">A/E ratio (N-1→N)</div><div class="kpi-value" style="color:{ae_col}">{ae:.4f}</div></div>
+      <div class="kpi"><div class="kpi-label">A/E ratio (N-1→N)</div><div class="kpi-value" style="color:{ae_col}">{ae_txt}</div></div>
+      <div class="kpi"><div class="kpi-label">Sinistres de la fenetre</div><div class="kpi-value">{'—' if _n_sin is None else _n_sin}</div></div>
       <div class="kpi"><div class="kpi-label">Interprétation</div><div class="kpi-value" style="font-size:13px;">{bt6.get('interpretation','—')}</div></div>
       <div class="kpi"><div class="kpi-label">Stabilité Walk-Forward</div><div class="kpi-value" style="font-size:13px;">{bt6.get('stabilite_wf','—')}</div></div>
       <div class="kpi"><div class="kpi-label">Fenêtres testées</div><div class="kpi-value">{bt6.get('n_fenetres','—')}</div></div>
@@ -2200,11 +2208,15 @@ def export_word(
         # ── CHAPITRE 5 : BACKTESTING ─────────────────────────────────────────
         _h(chapitre(5)); _sep()
         if bt6.get('disponible'):
-            ae = bt6.get('ae_ratio', 0)
-            bt_col = VR if 0.95<=ae<=1.05 else AR if 0.90<=ae<=1.10 else RgR
+            # ⚠️ Meme defaut qu'en HTML : un A/E non calcule vaut None.
+            ae = bt6.get('ae_ratio')
+            bt_col = (AR if ae is None else
+                      VR if 0.95 <= ae <= 1.05 else
+                      AR if 0.90 <= ae <= 1.10 else RgR)
             p=doc.add_paragraph()
             _run(p, f"A/E ratio (N-1→N) : ", sz=10, col=NR)
-            _run(p, f"{ae:.4f}", bold=True, sz=10, col=bt_col)
+            _run(p, 'non calcule' if ae is None else f"{ae:.4f}",
+                 bold=True, sz=10, col=bt_col)
             _run(p, f" | {bt6.get('interpretation','')} | Stabilité : {bt6.get('stabilite_wf','')}",
                  sz=9, col=NR)
             wf = bt6.get('walk_forward', [])

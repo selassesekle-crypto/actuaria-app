@@ -334,8 +334,14 @@ def chart_walkforward_ae(
     Bande d'acceptabilité ±15 % (0.85–1.15), cible à 1.0, points colorés
     VERT (0.95–1.05) / AMBRE (0.90–1.10) / ROUGE sinon.
     """
-    annees = [f.get('annee', f.get('annee_test')) for f in fenetres]
-    ae = [float(f.get('ae_ratio', 1.0)) for f in fenetres]
+    # ⚠️ UNE FENÊTRE SANS A/E N'EST PAS UNE FENÊTRE À 1,0. Le défaut `1.0`
+    # aurait tracé un point PARFAIT là où rien n'a été mesuré — et depuis
+    # qu'A6 publie `None` pour une fenêtre dont le modèle n'a pu être
+    # recalibré, `float(None)` aurait de toute façon levé. Ces fenêtres
+    # sortent du tracé ; le graphique montre ce qui a été mesuré.
+    _mesurees = [f for f in fenetres if f.get('ae_ratio') is not None]
+    annees = [f.get('annee', f.get('annee_test')) for f in _mesurees]
+    ae = [float(f['ae_ratio']) for f in _mesurees]
 
     def _coul(v: float) -> str:
         if 0.95 <= v <= 1.05:
