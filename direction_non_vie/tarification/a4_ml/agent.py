@@ -918,7 +918,11 @@ class AgentA4ML:
             # ⚠️ POSE AVANT LE COMMENTAIRE, ET DANS `rapport` : le
             # commentaire actuaire le lit de la, le resultat le republie plus
             # bas. Une seule source, deux lecteurs.
-            rapport['elasticite'] = etat_elasticite(plan)
+            # ⚠️ LE DATAFRAME EST PASSÉ, ET C'EST LUI QUI REND
+            # `NON_IDENTIFIABLE` ATTEIGNABLE. Sans données, on ne peut pas
+            # mesurer si la variation de prix est exploitable — et un état qui
+            # ne peut pas être atteint est un état qui n'existe pas.
+            rapport['elasticite'] = etat_elasticite(plan, df)
             _etat_elasticite = rapport['elasticite']
 
             commentaire = self._commenter_actuaire_senior(

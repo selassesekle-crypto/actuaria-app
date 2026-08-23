@@ -181,6 +181,192 @@ def diagnostic(plan) -> str:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+#  L'EXPLOITABILITÉ DE LA VARIATION DE PRIX — mesurée AVANT toute estimation
+# ══════════════════════════════════════════════════════════════════════════════
+
+#: ⚠️⚠️ TROIS CONVENTIONS, ET AUCUNE NE VIENT D'UN TEXTE. Un seuil sans son
+#: origine se lit comme une norme ; ceux-ci sont des choix du module, publiés
+#: avec le diagnostic pour que le lecteur puisse les contester.
+#:
+#: `R2_MAX` — au-delà, la variation de prix est considérée comme entièrement
+#: expliquée par les facteurs de risque : il ne reste rien d'indépendant à
+#: exploiter. 0,95 est le seuil pratique du « quasi déterministe ».
+#: `N_MIN_LIGNES` / `N_MIN_RESILIATIONS` — en dessous, l'échantillon ne porte
+#: pas une élasticité, quelle que soit la qualité de sa variation de prix. Un
+#: modèle de résiliation a besoin d'ÉVÉNEMENTS, pas seulement de lignes.
+R2_MAX = 0.95
+N_MIN_LIGNES = 200
+N_MIN_RESILIATIONS = 30
+#: En dessous, la variation résiduelle est indiscernable d'un bruit d'arrondi.
+ECART_TYPE_MIN = 1e-4
+
+VOIE_EXPERIMENTALE = 'experimentale'
+VOIE_RESIDUELLE = 'residuelle'
+
+
+def _r2_prix_sur_risque(v, X):
+    """Part de la variation de prix expliquée par les facteurs de risque.
+
+    ⚠️ C'EST LA MESURE QUI DÉCIDE, ET ELLE NE DEMANDE AUCUN MODÈLE. La question
+    n'est pas « le modèle prédit-il bien ? » mais « le prix a-t-il bougé
+    AUTREMENT que le risque ? ». C'est une propriété des données seules, donc
+    elle se mesure avant toute estimation — et c'est ce qui rend le troisième
+    état atteignable sans rien estimer.
+
+    Rend `(r2, ecart_type_residuel)`, ou `(None, ecart_type)` si la régression
+    n'a pas pu être faite.
+    """
+    import numpy as np
+
+    v = np.asarray(v, dtype=float)
+    ss_tot = float(np.sum((v - v.mean()) ** 2))
+    if ss_tot <= 0:
+        return None, 0.0
+    X = np.asarray(X, dtype=float)
+    if X.ndim != 2 or X.shape[0] != v.size or X.shape[1] == 0:
+        return None, float(np.std(v))
+    A = np.column_stack([np.ones(v.size), X])
+    try:
+        beta, *_ = np.linalg.lstsq(A, v, rcond=None)
+    except np.linalg.LinAlgError:
+        return None, float(np.std(v))
+    residus = v - A @ beta
+    r2 = 1.0 - float(np.sum(residus ** 2)) / ss_tot
+    return max(0.0, min(1.0, r2)), float(np.std(residus))
+
+
+def diagnostic_exploitabilite(plan, df,
+                              r2_max: float = R2_MAX,
+                              n_min: int = N_MIN_LIGNES,
+                              n_min_resiliations: int = N_MIN_RESILIATIONS):
+    """La variation de prix observée permet-elle d'identifier un effet-prix ?
+
+    ⚠️⚠️ LE POINT DUR. L'assureur fixe le prix D'APRÈS LE RISQUE. Si les
+    segments dont la sinistralité s'est dégradée ont été augmentés, alors prix,
+    résiliation et risque bougent ensemble : régresser la résiliation sur le
+    prix mesure UN MÉLANGE de l'effet-prix et de la sélection du risque. C'est
+    de l'endogénéité au sens strict, et c'est ce qui sépare une élasticité
+    d'une corrélation.
+
+    ⚠️ DEUX VOIES, ET ELLES NE SE VALENT PAS :
+
+      `experimentale`  un test de prix au renouvellement — remise ou hausse
+                       TIRÉE AU SORT. Son exogénéité ne se mesure pas, elle se
+                       déclare : c'est la seule situation où c'est vrai.
+      `residuelle`     le prix a bougé autrement que le risque, et c'est cette
+                       part-là qui identifie l'effet. Valide seulement s'il en
+                       reste quelque chose — d'où la mesure du R².
+
+    ⚠️⚠️ CE QUE CETTE FONCTION NE PEUT PAS FAIRE, ET QUI DOIT FIGURER DANS LE
+    LIVRABLE : elle mesure la variation RÉSIDUELLE, elle ne démontre PAS que
+    cette variation est indépendante de ce qu'on n'observe pas. Un R² faible
+    dit qu'il reste de la variation ; il ne dit pas qu'elle est exogène. Aucun
+    calcul ne peut le dire — seule une expérience le garantit.
+
+    ⚠️ TROIS RAISONS DE REFUSER, ET ELLES NE SE CONFONDENT PAS : aucune
+    variation de prix · une variation entièrement expliquée par le risque ·
+    un effectif insuffisant. Elles appellent des actions différentes du
+    client, donc le motif les distingue.
+    """
+    import numpy as np
+
+    bloc = getattr(plan, 'comportement', None) if plan is not None else None
+    conventions = {
+        'r2_max': r2_max,
+        'n_min_lignes': n_min,
+        'n_min_resiliations': n_min_resiliations,
+        'origine': "conventions du module — aucun texte n'en fixe",
+    }
+    vide = {
+        'exploitable': False, 'voie': None, 'r2_prix_sur_risque': None,
+        'ecart_type_residuel': None, 'n_lignes': 0, 'n_resiliations': 0,
+        'n_groupes_test': 0, 'conventions': conventions,
+        'reserve': (
+            "La variation résiduelle est MESURÉE ; son indépendance à ce qui "
+            "n'est pas observé n'est pas démontrée — aucun calcul ne le peut. "
+            "Seul un test de prix la garantit."
+        ),
+    }
+    if bloc is None or df is None or not hasattr(df, 'columns'):
+        return {**vide, 'motif': "Aucun bloc `comportement` déclaré, ou aucune "
+                                 "donnée fournie : rien n'a été mesuré."}
+
+    manquantes = [c for c in bloc.colonnes() if c not in df.columns]
+    if manquantes:
+        return {**vide, 'motif': (
+            f"Colonnes déclarées au plan mais absentes du fichier : "
+            f"{sorted(manquantes)}. La déclaration n'est pas honorée.")}
+
+    p0 = np.asarray(df[bloc.prime_precedente], dtype=float)
+    p1 = np.asarray(df[bloc.prime_proposee], dtype=float)
+    issue = np.asarray(df[bloc.issue], dtype=float)
+    ok = np.isfinite(p0) & np.isfinite(p1) & (p0 > 0) & (p1 > 0)
+    n_resil = int(np.nansum(issue[ok] > 0)) if ok.any() else 0
+
+    # ── L'EFFECTIF D'ABORD : il conditionne tout le reste ────────────────────
+    if int(ok.sum()) < n_min or n_resil < n_min_resiliations:
+        return {**vide, 'n_lignes': int(ok.sum()), 'n_resiliations': n_resil,
+                'motif': (
+                    f"Effectif insuffisant : {int(ok.sum())} renouvellement(s) "
+                    f"exploitable(s) et {n_resil} résiliation(s), pour un "
+                    f"plancher de {n_min} et {n_min_resiliations}. Un modèle "
+                    f"de résiliation a besoin d'ÉVÉNEMENTS, pas seulement de "
+                    f"lignes.")}
+
+    # ── LA VOIE EXPÉRIMENTALE : elle prime, et elle ne se mesure pas ─────────
+    n_groupes = 0
+    if bloc.groupe_test and bloc.groupe_test in df.columns:
+        n_groupes = int(df.loc[ok, bloc.groupe_test].nunique())
+        if n_groupes >= 2:
+            v = np.log(p1[ok] / p0[ok])
+            return {
+                **vide, 'exploitable': True, 'voie': VOIE_EXPERIMENTALE,
+                'n_lignes': int(ok.sum()), 'n_resiliations': n_resil,
+                'n_groupes_test': n_groupes,
+                'ecart_type_residuel': float(np.std(v)),
+                'motif': (
+                    f"Test de prix déclaré ({n_groupes} groupes) : la variation "
+                    f"est exogène par construction. C'est la seule situation où "
+                    f"l'exogénéité ne se discute pas."),
+            }
+
+    # ── LA VOIE RÉSIDUELLE : ce qui reste quand le risque est retiré ─────────
+    v = np.log(p1[ok] / p0[ok])
+    cols_risque = [c for c in (plan.colonnes_produites() if plan else ())
+                   if c in df.columns]
+    X = df.loc[ok, cols_risque].to_numpy(dtype=float) if cols_risque else None
+    r2, sigma = _r2_prix_sur_risque(v, X if X is not None else np.empty((v.size, 0)))
+
+    base = {**vide, 'n_lignes': int(ok.sum()), 'n_resiliations': n_resil,
+            'n_groupes_test': n_groupes, 'r2_prix_sur_risque': r2,
+            'ecart_type_residuel': sigma}
+
+    if sigma <= ECART_TYPE_MIN and (r2 is None or float(np.std(v)) <= ECART_TYPE_MIN):
+        return {**base, 'motif': (
+            "Aucune variation de prix observée : les deux primes déclarées "
+            "sont identiques sur tout l'échantillon. Aucune méthode ne "
+            "récupère une élasticité sans variation à laquelle répondre.")}
+
+    if r2 is None:
+        return {**base, 'motif': (
+            "La part de variation expliquée par les facteurs n'a pas pu être "
+            "mesurée (aucun facteur exploitable dans le fichier).")}
+
+    if r2 >= r2_max:
+        return {**base, 'motif': (
+            f"Le prix proposé est une fonction (quasi) déterministe du risque : "
+            f"{r2:.1%} de sa variation est expliquée par les facteurs "
+            f"tarifaires, pour un plafond de {r2_max:.0%}. Prix et risque sont "
+            f"colinéaires — aucune méthode ne sépare l'effet-prix de la "
+            f"sélection du risque.")}
+
+    return {**base, 'exploitable': True, 'voie': VOIE_RESIDUELLE, 'motif': (
+        f"{1 - r2:.1%} de la variation de prix reste inexpliquée par les "
+        f"facteurs tarifaires (R² = {r2:.4f}) : c'est cette part qui identifie "
+        f"l'effet-prix.")}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 #  L'ÉTAT PUBLIÉ — jamais une valeur inventée
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -215,7 +401,7 @@ def _cout_des_absences(hors: dict[str, tuple[str, ...]]) -> str:
         for role, noms in sorted(par_role.items()))
 
 
-def etat_elasticite(plan=None) -> dict:
+def etat_elasticite(plan=None, df=None) -> dict:
     """L'élasticité-prix : un ÉTAT déclaré, jamais une valeur inventée.
 
     ⚠️ AUCUN BLOCAGE, DANS AUCUN ÉTAT. La tarification se fait normalement ;
@@ -267,20 +453,69 @@ def etat_elasticite(plan=None) -> dict:
             ),
         }
 
+    # ── LA DONNÉE EST DÉCLARÉE : SA VARIATION DE PRIX EST-ELLE EXPLOITABLE ? ─
+    # ⚠️ CE DIAGNOSTIC NE DEMANDE AUCUN MODÈLE. Il mesure une propriété des
+    # DONNÉES — le prix a-t-il bougé autrement que le risque — et c'est ce qui
+    # rend `NON_IDENTIFIABLE` atteignable sans rien estimer.
+    if df is None:
+        return {
+            **socle,
+            'etat': ELASTICITE_NON_EXPLOITEE,
+            'motif': (
+                "Le bloc `comportement` est déclaré et complet : la donnée "
+                "nécessaire est là. Aucun fichier n'a été fourni à ce calcul, "
+                "donc l'exploitabilité de la variation de prix n'a pas été "
+                "examinée."
+            ),
+            'ce_que_cela_coute': (
+                "L'élasticité-prix n'est pas estimée, et AUCUNE recommandation "
+                "de variation tarifaire n'est produite. ⚠️ Ce n'est PAS une "
+                "limite du portefeuille : rien n'a été mesuré sur lui. "
+                + _cout_des_absences(hors)
+            ),
+            'ce_quil_faudrait': (
+                "Rien de plus du client. Ce qui manque est dans le module."
+            ),
+        }
+
+    diag = diagnostic_exploitabilite(plan, df)
+    socle = {**socle, 'exploitabilite': diag}
+
+    if not diag['exploitable']:
+        # ⚠️ ICI LA LIMITE EST BIEN CELLE DU PORTEFEUILLE, ET L'ÉTAT DOIT LE
+        # DIRE — c'est le pendant exact de `NON_EXPLOITEE`. Se tromper d'axe
+        # ferait corriger au client la mauvaise chose.
+        return {
+            **socle,
+            'etat': ELASTICITE_NON_IDENTIFIABLE,
+            'motif': diag['motif'],
+            'ce_que_cela_coute': (
+                "L'élasticité-prix n'est pas estimée, et AUCUNE recommandation "
+                "de variation tarifaire n'est produite. ⚠️ Cette fois la limite "
+                "est celle des DONNÉES, pas du module : aucune méthode ne "
+                "récupérerait une élasticité de cette variation de prix."
+            ),
+            'ce_quil_faudrait': (
+                "Une variation de prix qui ne suive pas le risque — une "
+                "révision tarifaire différenciée, ou mieux un test de prix au "
+                "renouvellement (déclarer `groupe_test`), dont l'exogénéité ne "
+                "se discute pas."
+            ),
+        }
+
     return {
         **socle,
         'etat': ELASTICITE_NON_EXPLOITEE,
         'motif': (
-            "Le bloc `comportement` est déclaré et complet : la donnée "
-            "nécessaire est là. L'exploitation — diagnostic d'exploitabilité "
-            "de la variation de prix, puis estimation — n'est pas encore "
-            "construite (lots L3 à L5)."
+            f"Le bloc `comportement` est déclaré, et la variation de prix est "
+            f"exploitable par la voie « {diag['voie']} » : {diag['motif']} "
+            f"L'estimation elle-même (lots L4-L5) n'est pas construite."
         ),
         'ce_que_cela_coute': (
             "L'élasticité-prix n'est pas estimée, et AUCUNE recommandation de "
             "variation tarifaire n'est produite. ⚠️ Ce n'est PAS une limite du "
-            "portefeuille : sa variation de prix n'a pas été examinée. "
-            + _cout_des_absences(hors)
+            "portefeuille : sa variation de prix a été examinée et elle "
+            "convient. " + _cout_des_absences(hors)
         ),
         'ce_quil_faudrait': (
             "Rien de plus du client. Ce qui manque est dans le module."

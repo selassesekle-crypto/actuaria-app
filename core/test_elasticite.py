@@ -225,5 +225,197 @@ class T_L_Etat_Distingue_Ce_Qui_Manque_De_Ce_Qui_N_Est_Pas_Construit(
               "diagnostic — une seule source ✅")
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+#  L3 — L'EXPLOITABILITÉ DE LA VARIATION DE PRIX
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _bloc(**kw):
+    from core.plan_tarifaire import Comportement
+    base = {'issue': 'resilie', 'prime_precedente': 'prime_n_1',
+            'prime_proposee': 'prime_n'}
+    base.update(kw)
+    return Comportement(**base)
+
+
+def _renouvellements(n=3000, seed=3, regime='residuelle', taux_resil=0.15):
+    """Un historique de renouvellement, sous quatre régimes de variation.
+
+    ⚠️ C'EST LA VARIATION DE PRIX QUI DÉCIDE, PAS LE VOLUME DE DONNÉES. Les
+    quatre régimes ci-dessous portent tous la même donnée déclarée ; seule
+    change la façon dont le prix a bougé — et c'est elle qui rend l'élasticité
+    identifiable ou non.
+
+      'deterministe' le prix proposé est une fonction EXACTE des facteurs de
+                     risque. Prix et risque sont colinéaires : aucune méthode
+                     ne sépare l'effet-prix de la sélection.
+      'residuelle'   le prix suit le risque, PLUS un aléa propre. C'est cet
+                     aléa qui identifie l'effet-prix.
+      'experimentale' une hausse tirée au sort sur un groupe : l'exogénéité ne
+                     se discute pas.
+      'sans_variation' le prix n'a pas bougé. Rien à exploiter.
+    """
+    import numpy as np
+    import pandas as pd
+    rng = np.random.default_rng(seed)
+    age = rng.integers(18, 75, n).astype(float)
+    bm = rng.uniform(50, 350, n)
+    p0 = rng.uniform(300, 900, n)
+
+    # la part de la variation expliquee par le risque
+    part_risque = 0.10 * (bm - 200) / 200 + 0.05 * (age - 45) / 45
+    groupe = np.array(['—'] * n, dtype=object)
+
+    if regime == 'deterministe':
+        v = part_risque
+    elif regime == 'residuelle':
+        v = part_risque + rng.normal(0, 0.08, n)
+    elif regime == 'experimentale':
+        groupe = rng.choice(['temoin', 'hausse'], n)
+        v = part_risque + np.where(groupe == 'hausse', 0.10, 0.0)
+    elif regime == 'sans_variation':
+        v = np.zeros(n)
+    else:
+        raise ValueError(regime)
+
+    return pd.DataFrame({
+        'id_contrat':       np.arange(n),
+        'annee_exercice':   2023,
+        'age':              age,
+        'bonus_malus':      bm,
+        'prime_n_1':        p0,
+        'prime_n':          p0 * np.exp(v),
+        'resilie':          (rng.random(n) < taux_resil).astype(float),
+        'groupe_prix':      groupe,
+        'exposition':       rng.uniform(0.3, 1.0, n),
+        'nb_sinistres':     rng.poisson(0.08, n).astype(float),
+        'cout_total_sinistres': rng.exponential(600, n),
+    })
+
+
+class T_L_Exploitabilite_Se_Mesure_Avant_Toute_Estimation(unittest.TestCase):
+    """CONTRÔLE POSITIF — le troisième état, et il se mesure sans estimer.
+
+    ⚠️⚠️ LE POINT DUR DE TOUT LE CHANTIER. L'assureur fixe le prix D'APRÈS LE
+    RISQUE. Si les segments dont la sinistralité s'est dégradée ont été
+    augmentés, alors prix, résiliation et risque bougent ensemble : régresser
+    la résiliation sur le prix mesure UN MÉLANGE de l'effet-prix et de la
+    sélection. C'est de l'endogénéité au sens strict.
+
+    ⚠️ ET ÇA SE MESURE AVANT D'ESTIMER QUOI QUE CE SOIT : la part de la
+    variation de prix expliquée par les facteurs de risque est une propriété
+    des DONNÉES, pas du modèle. Si elle vaut 1, il ne reste rien à exploiter.
+    """
+
+    def test_un_prix_FONCTION_DU_RISQUE_n_est_pas_identifiable(self):
+        from core.elasticite import diagnostic_exploitabilite
+        d = diagnostic_exploitabilite(
+            _plan(comportement=_bloc()), _renouvellements(regime='deterministe'))
+        self.assertFalse(d['exploitable'],
+                         f"un prix déterministe du risque est déclaré "
+                         f"exploitable : {d}")
+        self.assertIsNotNone(d['r2_prix_sur_risque'])
+        self.assertGreaterEqual(
+            d['r2_prix_sur_risque'], 0.95,
+            "prémisse : la variation doit être quasi entièrement expliquée")
+        self.assertIn('risque', d['motif'].lower())
+        print(f"    POS-L3a prix déterministe : R²={d['r2_prix_sur_risque']:.4f} "
+              f"→ non identifiable ✅")
+
+    def test_une_variation_RESIDUELLE_est_exploitable(self):
+        """⚠️⚠️ LA LEÇON V14 APPLIQUÉE ICI. Un diagnostic qui refuserait tout
+        serait aussi inutile qu'un diagnostic qui accepterait tout — et bien
+        plus difficile à repérer, parce qu'il donne l'apparence de la rigueur.
+        Ce contrôle est le garde-fou du précédent."""
+        from core.elasticite import diagnostic_exploitabilite
+        d = diagnostic_exploitabilite(
+            _plan(comportement=_bloc()), _renouvellements(regime='residuelle'))
+        self.assertTrue(d['exploitable'],
+                        f"une variation résiduelle réelle est refusée : {d}")
+        self.assertEqual(d['voie'], 'residuelle')
+        self.assertLess(d['r2_prix_sur_risque'], 0.95)
+        print(f"    POS-L3b variation résiduelle : R²="
+              f"{d['r2_prix_sur_risque']:.4f} → exploitable ({d['voie']}) ✅")
+
+    def test_un_TEST_DE_PRIX_identifie_meme_si_le_prix_suit_le_risque(self):
+        """⚠️ LA VOIE FORTE. Une hausse tirée au sort est exogène par
+        construction : son exogénéité ne se mesure pas, elle se déclare — et
+        c'est la seule situation où c'est vrai."""
+        from core.elasticite import diagnostic_exploitabilite
+        d = diagnostic_exploitabilite(
+            _plan(comportement=_bloc(groupe_test='groupe_prix')),
+            _renouvellements(regime='experimentale'))
+        self.assertTrue(d['exploitable'], f"un test de prix est refusé : {d}")
+        self.assertEqual(d['voie'], 'experimentale')
+        print(f"    POS-L3c test de prix → exploitable ({d['voie']}), "
+              f"{d['n_groupes_test']} groupes ✅")
+
+    def test_SANS_VARIATION_rien_n_est_exploitable_et_le_motif_DIFFERE(self):
+        """⚠️ DEUX RAISONS DE REFUSER, ET ELLES NE SE CONFONDENT PAS. « Le prix
+        n'a pas bougé » et « le prix a bougé comme le risque » appellent des
+        actions différentes du client : la première demande une révision
+        tarifaire, la seconde une variation qui ne suive pas le risque."""
+        from core.elasticite import diagnostic_exploitabilite
+        d = diagnostic_exploitabilite(
+            _plan(comportement=_bloc()),
+            _renouvellements(regime='sans_variation'))
+        self.assertFalse(d['exploitable'])
+        self.assertIn('aucune variation', d['motif'].lower())
+        self.assertNotIn('risque', d['motif'].lower())
+        print("    POS-L3d sans variation → non exploitable, motif distinct "
+              "du déterminisme ✅")
+
+    def test_un_SUPPORT_insuffisant_se_dit_comme_tel(self):
+        """⚠️ TROISIÈME RAISON, TROISIÈME MOTIF. Trente contrats ne portent pas
+        une élasticité, quelle que soit la qualité de leur variation de prix.
+        Un refus qui ne dirait pas LAQUELLE des trois raisons s'applique
+        n'aiderait personne."""
+        from core.elasticite import diagnostic_exploitabilite
+        d = diagnostic_exploitabilite(
+            _plan(comportement=_bloc()),
+            _renouvellements(n=40, regime='residuelle'))
+        self.assertFalse(d['exploitable'])
+        self.assertIn('effectif', d['motif'].lower())
+        print(f"    POS-L3e support insuffisant ({d['n_lignes']} lignes, "
+              f"{d['n_resiliations']} résiliations) → motif « effectif » ✅")
+
+    def test_le_diagnostic_publie_ses_MESURES_et_ses_CONVENTIONS(self):
+        """⚠️ UN VERDICT SANS SES CHIFFRES N'EST PAS VÉRIFIABLE, et un seuil
+        sans son origine se lit comme une norme. Les deux seuils employés ici
+        sont des conventions du module — aucun texte n'en fixe."""
+        from core.elasticite import diagnostic_exploitabilite
+        d = diagnostic_exploitabilite(
+            _plan(comportement=_bloc()), _renouvellements(regime='residuelle'))
+        for cle in ('r2_prix_sur_risque', 'n_lignes', 'n_resiliations',
+                    'ecart_type_residuel', 'conventions'):
+            with self.subTest(cle=cle):
+                self.assertIn(cle, d, f"« {cle} » n'est pas publié")
+        self.assertTrue(d['conventions'], "les seuils ne sont pas nommés")
+        for nom, val in d['conventions'].items():
+            self.assertIsNotNone(val, f"la convention « {nom} » est vide")
+        print(f"    POS-L3f mesures et conventions publiées : "
+              f"{sorted(d['conventions'])} ✅")
+
+    def test_l_etat_devient_NON_IDENTIFIABLE_et_n_accuse_pas_le_logiciel(self):
+        """⚠️ LE PENDANT DE POS-L2j. Là, on refusait d'imputer au portefeuille
+        une limite du logiciel. Ici, la limite EST celle du portefeuille et
+        l'état doit le dire — sinon le client corrigerait la mauvaise chose."""
+        from core.elasticite import (
+            ELASTICITE_NON_EXPLOITEE,
+            ELASTICITE_NON_IDENTIFIABLE,
+            etat_elasticite,
+        )
+        p = _plan(comportement=_bloc())
+        e_det = etat_elasticite(p, _renouvellements(regime='deterministe'))
+        self.assertEqual(e_det['etat'], ELASTICITE_NON_IDENTIFIABLE)
+        self.assertIn('exploitabilite', e_det)
+        e_ok = etat_elasticite(p, _renouvellements(regime='residuelle'))
+        self.assertEqual(
+            e_ok['etat'], ELASTICITE_NON_EXPLOITEE,
+            "une variation exploitable doit rendre la main au logiciel, "
+            "pas accuser le portefeuille")
+        print(f"    POS-L3g déterministe → {e_det['etat']} · "
+              f"exploitable → {e_ok['etat']} ✅")
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
