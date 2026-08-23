@@ -3099,9 +3099,28 @@ class T_La_Date_D_Arrete_Est_Normalisee_A_La_Frontiere(unittest.TestCase):
     << 30/06/2026 >>, le commentaire sortait JUSTE et le run TOMBAIT.
     """
 
+    #: ⚠️⚠️ UN TRIANGLE MINIMAL, ET C'EST MESURE, PAS SUPPOSE. Cette classe
+    #: teste des DATES : la normalisation s'exerce a la frontiere de `run`,
+    #: AVANT que le triangle ne soit lu. Sa taille n'entre dans aucune des
+    #: six proprietes verifiees ici.
+    #:
+    #: ⚠️ VERIFIE AVANT D'ETRE APPLIQUE, sur GenIns ET sur ce triangle :
+    #:     7 formats acceptes .......... identique
+    #:     verdict ROUGE, ISO et FR .... identique
+    #:     date illisible refusee ...... identique
+    #:     sans date -> VERT ........... identique
+    #: Seul le temps change : 77,6 s -> 14,9 s sur les onze runs de la classe.
+    #:
+    #: ⚠️ CE N'EST PAS UN ALLEGEMENT DE CE QUI EST PROUVE. Le jour ou un test
+    #: de cette classe dependrait de la TAILLE du triangle, il lui faudrait
+    #: son propre triangle -- et le dire.
+    TRIANGLE = np.array([[100., 180., 220.],
+                         [120., 200., np.nan],
+                         [130., np.nan, np.nan]])
+
     def _run(self, date_arrete):
         return AgentA7Provisionnement(verbose=False).run(
-            source=np.array(GENINS, dtype=float), mode_declare='cumule',
+            source=self.TRIANGLE, mode_declare='cumule',
             n_sim_bootstrap=20, seed=42, generer_graphiques=False,
             date_arrete=date_arrete)
 
