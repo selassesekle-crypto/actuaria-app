@@ -136,6 +136,10 @@ except ImportError:
 # une colonne 'sexe' numérique atteignait la matrice de features des
 # modèles ML, potentiellement retenus en production par A6).
 from core.conformite_reglementaire import construire_matrice_x
+# ⚠️ SOURCE UNIQUE. L'etat de l'elasticite etait defini ICI au lot L0 ;
+# il vit desormais dans `core/elasticite.py`, avec le catalogue
+# d'exigences qui le fonde. Deux definitions auraient diverge.
+from core.elasticite import ELASTICITE_ESTIMEE, etat_elasticite
 from core.plan_tarifaire import (
     PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
     alerte_modele_ampute,
@@ -498,71 +502,6 @@ class _ModeleFrequenceExposition:
 
     def __repr__(self):
         return f"_ModeleFrequenceExposition({self.base!r})"
-
-
-#: Les trois etats possibles de l'elasticite-prix. Voir `etat_elasticite`.
-ELASTICITE_ESTIMEE          = 'ESTIMEE'
-ELASTICITE_NON_IDENTIFIABLE = 'NON_IDENTIFIABLE'
-ELASTICITE_NON_FOURNIE      = 'NON_FOURNIE'
-
-
-def etat_elasticite(plan=None) -> Dict[str, Any]:
-    """L'elasticite-prix : un ETAT declare, jamais une valeur inventee.
-
-    ⚠️ LE MODULE CONSTATE, IL NE DEMANDE PAS. Une question posee a
-    l'execution invite une reponse fausse — un utilisateur repond « oui » et
-    fournit un fichier inutilisable. C'est l'actuaire qui DECLARE dans le plan
-    tarifaire, et le systeme qui VERIFIE dans les donnees. Meme patron que le
-    lecteur d'inventaire IFRS 17 (`normes/ifrs17/socle/lecture_inventaire.py`,
-    `capacites()` / `exigences_hors_portee()`) : une capacite se declare
-    atteignable ou non, AVEC CE QUE SON ABSENCE COUTE.
-
-    ⚠️ AUCUN BLOCAGE, DANS AUCUN DES TROIS ETATS. La tarification se fait
-    normalement ; seule la dimension elasticite est ignoree et signalee.
-
-    Les trois etats :
-
-      ESTIMEE           les donnees de comportement sont declarees ET la
-                        variation de prix est exploitable : l'elasticite est
-                        estimee, et une optimisation tarifaire devient
-                        legitime.
-      NON_IDENTIFIABLE  les donnees existent, mais le prix est une fonction
-                        (quasi) deterministe du risque : la variation
-                        residuelle ne permet a AUCUNE methode de separer
-                        l'effet-prix de la selection du risque.
-      NON_FOURNIE       aucune donnee de comportement n'est declaree au plan.
-
-    ⚠️ SEUL `NON_FOURNIE` EST ATTEIGNABLE AUJOURD'HUI : le plan tarifaire n'a
-    pas encore de bloc `comportement`. Le parametre `plan` est la couture par
-    laquelle les deux autres arriveront ; il est deja lu pour que le site
-    d'appel n'ait pas a changer.
-    """
-    _declare = getattr(plan, 'comportement', None) if plan is not None else None
-    if not _declare:
-        return {
-            'etat': ELASTICITE_NON_FOURNIE,
-            'motif': (
-                "Aucune donnee de comportement de renouvellement n'est "
-                "declaree au plan tarifaire : ni l'issue du contrat "
-                "(renouvele / resilie), ni la prime precedente, ni la prime "
-                "proposee a l'echeance."
-            ),
-            'ce_que_cela_coute': (
-                "L'elasticite-prix n'est pas estimee, et AUCUNE recommandation "
-                "de variation tarifaire n'est produite. Le reste de la "
-                "tarification n'est pas affecte."
-            ),
-            'ce_quil_faudrait': (
-                "Un historique de renouvellement : une ligne par contrat ET "
-                "par echeance, portant l'issue, la prime precedente et la "
-                "prime proposee. Une elasticite repond a une VARIATION de "
-                "prix, pas a un niveau."
-            ),
-        }
-    raise NotImplementedError(
-        "Un bloc `comportement` est declare au plan, mais son exploitation "
-        "n'est pas encore construite (lots L2 a L5)."
-    )
 
 
 def _envelopper_frequence(modele, col_cible: str):

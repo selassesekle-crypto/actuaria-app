@@ -692,9 +692,7 @@ class T_L_Elasticite_Est_Un_Etat_Declare_Pas_Une_Valeur(unittest.TestCase):
         d'élasticité » ne veut rien dire pour un actuaire ; « aucune
         recommandation tarifaire n'est produite, et voici l'historique qu'il
         faudrait » se comprend et se fournit."""
-        from direction_non_vie.tarification.a4_ml.agent import (
-            ELASTICITE_NON_FOURNIE,
-        )
+        from core.elasticite import ELASTICITE_NON_FOURNIE
         e = self.r.get('elasticite')
         self.assertIsNotNone(e, "l'état de l'élasticité n'est pas publié")
         self.assertEqual(e['etat'], ELASTICITE_NON_FOURNIE)

@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import asdict as dataclasses_asdict
 from dataclasses import dataclass, field
 from typing import Literal, Optional, Sequence
 
@@ -118,6 +119,78 @@ class Facteur:
 
 
 @dataclass(frozen=True)
+class Comportement:
+    """Le comportement de renouvellement, DÉCLARÉ par l'actuaire.
+
+    ⚠️ C'EST LA TROISIÈME NATURE DE CIBLE DU PLAN, et elle n'a rien d'un
+    montant. `cible_frequence` et `cible_cout` sont des grandeurs OBSERVÉES SUR
+    UNE PÉRIODE ; une issue de contrat est une DÉCISION PRISE À UNE DATE.
+    C'est pourquoi elle ne devient pas un troisième `cible_*` : elle ne vient
+    jamais seule.
+
+    ⚠️⚠️ LES TROIS PREMIERS CHAMPS SONT INDISSOCIABLES, et le bloc les exige
+    ensemble. Une élasticité-prix répond à une VARIATION de prix, pas à un
+    niveau : l'issue sans les deux primes ne dit rien, et deux primes sans
+    issue ne disent rien non plus. Un bloc à moitié déclaré promettrait une
+    capacité qu'il ne porte pas — c'est très exactement le défaut que cet
+    audit poursuit. Le bloc ENTIER absent, lui, n'est pas une erreur : aucun
+    des vingt plans du dépôt n'en a, et la chaîne tarife sans.
+
+    ⚠️ PUREMENT DES RÔLES DE DONNÉES — comme `identifiant_contrat` et
+    `echeance`. Ces colonnes n'entrent JAMAIS dans `colonnes_produites()` :
+    si la prime précédente devenait un facteur, elle prédirait la sinistralité
+    et l'on retomberait sur la fuite structurelle que le plan rend
+    inexprimable pour l'exposition (garde B9).
+    """
+    #: L'issue de l'échéance : le contrat a-t-il été renouvelé, ou résilié ?
+    issue:            str
+    #: La prime de l'exercice précédent.
+    prime_precedente: str
+    #: La prime proposée à l'échéance. Avec la précédente, elle donne la
+    #: VARIATION — la seule grandeur à laquelle une élasticité répond.
+    prime_proposee:   str
+    #: Canal de distribution (optionnel). L'élasticité y varie d'un facteur
+    #: plusieurs entre courtage, direct et comparateur : sans lui, l'estimation
+    #: mélange des populations qui ne réagissent pas au même prix.
+    canal:            str | None = None
+    #: Groupe d'un test de prix (optionnel) — remise ou hausse tirée au sort au
+    #: renouvellement. C'est la SEULE source de variation dont l'exogénéité ne
+    #: se discute pas : elle identifie l'effet-prix proprement.
+    groupe_test:      str | None = None
+
+    def __post_init__(self):
+        for champ in ('issue', 'prime_precedente', 'prime_proposee'):
+            if not str(getattr(self, champ) or '').strip():
+                raise ValueError(
+                    f"bloc `comportement` incomplet : '{champ}' n'est pas "
+                    f"déclaré. Les trois champs `issue`, `prime_precedente` et "
+                    f"`prime_proposee` vont ensemble — une élasticité répond à "
+                    f"une VARIATION de prix, pas à un niveau. Retirer le bloc "
+                    f"entier est licite ; le déclarer à moitié ne l'est pas."
+                )
+
+    def colonnes(self) -> tuple[str, ...]:
+        """Les colonnes du fichier client que ce bloc déclare."""
+        return tuple(c for c in (self.issue, self.prime_precedente,
+                                 self.prime_proposee, self.canal,
+                                 self.groupe_test) if c)
+
+    def champs_declares(self) -> frozenset[str]:
+        """Les RÔLES déclarés — le vocabulaire du catalogue d'exigences.
+
+        ⚠️ Ce sont les rôles, pas les noms de colonnes : le catalogue
+        (`core/elasticite.py`) raisonne sur « une prime précédente est-elle
+        déclarée ? », jamais sur « la colonne s'appelle-t-elle prime_n_1 ? ».
+        """
+        return frozenset(
+            r for r, v in (('issue', self.issue),
+                           ('prime_precedente', self.prime_precedente),
+                           ('prime_proposee', self.prime_proposee),
+                           ('canal', self.canal),
+                           ('groupe_test', self.groupe_test)) if v)
+
+
+@dataclass(frozen=True)
 class PlanTarifaire:
     """Le plan de tarification signé par l'actuaire. Une LoB = un plan."""
     lob: str
@@ -148,6 +221,11 @@ class PlanTarifaire:
     # Purement un RÔLE de données, comme `identifiant_contrat` : elle n'entre
     # jamais dans colonnes_produites() et n'est donc jamais un facteur.
     echeance: str | None = None
+    # Le comportement de renouvellement (optionnel). Voir `Comportement` :
+    # c'est la troisieme nature de cible du plan, et la seule qui ouvre
+    # l'estimation d'une elasticite-prix. Son ABSENCE n'est pas une erreur ;
+    # sa declaration A MOITIE en est une.
+    comportement: Comportement | None = None
 
     def __post_init__(self):
         # ── GARDE B9 (offset) : l'exposition n'est JAMAIS un prédicteur ─────────
@@ -210,6 +288,8 @@ class PlanTarifaire:
             cols.append(self.identifiant_contrat)
         if self.echeance:
             cols.append(self.echeance)
+        if self.comportement:
+            cols.extend(self.comportement.colonnes())
         cols.extend(sources_brutes([f.nom for f in self.facteurs]))
         vu: set = set()
         return tuple(x for x in cols if not (x in vu or vu.add(x)))
@@ -251,6 +331,8 @@ class PlanTarifaire:
             "famille_severite": self.famille_severite,
             "identifiant_contrat": self.identifiant_contrat,
             "echeance": self.echeance,
+            "comportement": (dataclasses_asdict(self.comportement)
+                             if self.comportement else None),
             "facteurs": [
                 {"nom": f.nom, "type": f.type, "encodage": f.encodage,
                  "transformation": f.transformation, "modalites": f.modalites,
@@ -285,6 +367,8 @@ class PlanTarifaire:
             famille_severite=d.get("famille_severite", "gamma"),
             identifiant_contrat=d.get("identifiant_contrat"),
             echeance=d.get("echeance"),
+            comportement=(Comportement(**d["comportement"])
+                          if d.get("comportement") else None),
         )
 
     @classmethod
