@@ -934,6 +934,117 @@ class T4_Le_Catalogue_Atteint_Les_Livrables(unittest.TestCase):
                                             'autre')
         print('    OK C3d-8 une figure rendue une fois, une autre distinguee')
 
+    def test_la_session_de_rasterisation_est_reentrante_et_ferme_toujours(self):
+        """⚠️⚠️ UN NAVIGATEUR PAR FIGURE — MESURE, 3,8 s CONTRE 0,6 s.
+
+        Le profil d'un run reel montrait `kaleido.close` a 134,4 s : un
+        navigateur ouvert ET FERME a chaque image. Une session unique ramene
+        les douze figures de 45,8 s a 7,4 s, et LES OCTETS SONT IDENTIQUES --
+        c'etait la condition posee avant de coder.
+
+        ⚠️ CE TEST NE FAIT TOURNER AUCUN AGENT : il substitue le demarrage et
+        l'arret, qui coutent 3,65 s a la fermeture. Un test de mecanisme n'a
+        pas a payer un navigateur.
+        """
+        # ⚠️ UNE PREMIERE VERSION LISAIT `sys.modules` : elle SAUTAIT
+        # toujours, parce que `session_rasterisation` importe kaleido
+        # PARESSEUSEMENT, a l'interieur. Un test saute ne prouve rien -- c'est
+        # un controle qui atteste sans surveiller.
+        if not _RAP.kaleido_disponible():                 # pragma: no cover
+            self.skipTest('kaleido absent : la session est un no-op')
+        import kaleido as kal
+        demarrages, arrets = [], []
+        vrai_start, vrai_stop = kal.start_sync_server, kal.stop_sync_server
+        kal.start_sync_server = lambda **k: demarrages.append(1)
+        kal.stop_sync_server = lambda **k: arrets.append(1)
+        try:
+            class _Fig:
+                def to_image(self, **kw):
+                    return b'PNG'
+
+            self.assertEqual(_RAP._PROFONDEUR_SESSION[0], 0,
+                             'une session est restee ouverte avant ce test')
+
+            # ⚠️⚠️ UNE SESSION SANS RENDU N'OUVRE AUCUN NAVIGATEUR, et c'est
+            # LE correctif de ce lot. Une premiere version demarrait a
+            # l'entree : la gate a fait 888 CYCLES et elle est passee de
+            # 2 886 s a 3 356 s -- PLUS LENTE. La plupart des tests
+            # substituent `rendre_image` et ne rasterisent rien.
+            with _RAP.session_rasterisation():
+                pass
+            self.assertEqual(demarrages, [],
+                             'un navigateur ouvert pour RIEN')
+
+            with _RAP.session_rasterisation():
+                self.assertEqual(_RAP._PROFONDEUR_SESSION[0], 1)
+                _RAP.rendre_image(_Fig())
+                self.assertEqual(len(demarrages), 1, 'aucun navigateur ouvert')
+                with _RAP.session_rasterisation():
+                    # ⚠️ IMBRIQUEE : la profondeur monte, mais AUCUN second
+                    # navigateur. C'est ce qui permet d'englober plusieurs
+                    # livrables sans redemarrer.
+                    self.assertEqual(_RAP._PROFONDEUR_SESSION[0], 2)
+                    _RAP.rendre_image(_Fig())
+                    self.assertEqual(len(demarrages), 1,
+                                     'un second navigateur a ete ouvert')
+                self.assertEqual(len(arrets), 0,
+                                 'la session interne a ferme le navigateur')
+            self.assertEqual(_RAP._PROFONDEUR_SESSION[0], 0)
+            self.assertEqual((len(demarrages), len(arrets)), (1, 1),
+                             'un demarrage, un arret, et pas davantage')
+
+            # ⚠️⚠️ LE `finally` EST LE POINT CRITIQUE : un serveur laisse
+            # ouvert retiendrait le processus apres la fin des tests --
+            # exactement le defaut de gate observe une fois et jamais
+            # explique. On ne l'introduit pas.
+            with self.assertRaises(ValueError), \
+                    _RAP.session_rasterisation():
+                _RAP.rendre_image(_Fig())      # il y a donc bien a fermer
+                raise ValueError('incident pendant le rendu')
+            self.assertEqual(_RAP._PROFONDEUR_SESSION[0], 0,
+                             'une exception laisse la session ouverte')
+            self.assertEqual(len(arrets), 2,
+                             'le navigateur survit a une exception')
+        finally:
+            kal.start_sync_server, kal.stop_sync_server = vrai_start, vrai_stop
+        print('    OK C3d-10 session reentrante, et fermee meme sur exception')
+
+    def test_les_livrables_sont_produits_SOUS_session(self):
+        """⚠️ SANS CE VERROU, LE GAIN SE PERDRAIT EN SILENCE.
+
+        Retirer la session ne casserait RIEN : les rapports sortiraient
+        pareils, en rouvrant simplement un navigateur par figure. Un cout qui
+        revient sans bruit est celui qu'on ne voit jamais.
+
+        ⚠️ ON MESURE LA PROFONDEUR DEPUIS L'INTERIEUR DE LA RASTERISATION,
+        c'est-a-dire le FAIT d'etre sous session -- pas la presence d'un mot
+        dans le source. Le rendeur est substitue : aucune image reelle n'est
+        produite, le test coute quelques secondes et non une minute.
+        """
+        profondeurs = []
+        vrai = _RAP.rendre_image
+
+        def _sonde(figure):
+            profondeurs.append(_RAP._PROFONDEUR_SESSION[0])
+            return png_de_test(200 + len(profondeurs), 100)
+
+        _RAP.rendre_image = _sonde
+        try:
+            AgentA7Provisionnement(verbose=False).run(
+                source=np.asarray(GENINS, dtype=float), mode_declare='cumule',
+                generer_graphiques=True, n_sim_bootstrap=20, seed=42)
+        finally:
+            _RAP.rendre_image = vrai
+        self.assertTrue(profondeurs, 'aucune figure rasterisee : mesure vide')
+        self.assertTrue(all(p >= 1 for p in profondeurs),
+                        f'des figures rendues HORS session : {profondeurs}')
+        # ⚠️ ET LA SESSION SE REFERME : une session laissee ouverte
+        # retiendrait le processus apres la gate.
+        self.assertEqual(_RAP._PROFONDEUR_SESSION[0], 0,
+                         'une session est restee ouverte apres le run')
+        print(f'    OK C3d-11 les {len(profondeurs)} figures sont rendues '
+              f'sous session, refermee ensuite')
+
     def test_le_cache_d_images_ne_survit_pas_a_sa_figure(self):
         """⚠️ LA CLE EST `id()`, ET UN `id` SE RECYCLE.
 

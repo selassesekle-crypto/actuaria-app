@@ -57,6 +57,7 @@ from .n5_rapport        import export_word, export_html
 # La narration est produite ICI, une seule fois, et transmise aux deux
 # formats — voir le commentaire à son point de génération.
 from .n5_rapport        import (ARRETE_ABSENT, _generer_narration, _lob,
+                                session_rasterisation,
                                 avec_mention_provenance,
                                 controle_narration)
 # ⚠️ IMPORTÉ COMME MODULE, PAS COMME VALEUR. `from … import kaleido_disponible`
@@ -264,8 +265,35 @@ def _produire_livrable(nom: str, fabrique, **kwargs):
         logger.warning(f"N5 {nom} non produit : {manquante} n'est pas installé.")
         return b'', f"dependance_absente: {manquante}"
 
+    # ⚠️⚠️ UNE SEULE SESSION DE RASTERISATION PAR LIVRABLE, AU LIEU D'UN
+    # NAVIGATEUR PAR IMAGE. Profilage d'un run reel : 134,4 s passees dans
+    # `kaleido.close` -- kaleido ouvrait ET FERMAIT un navigateur a CHAQUE
+    # figure. Mesure sur les douze figures d'un run :
+    #     un serveur par image   45,8 s   (3,8 s par figure)
+    #     UN serveur pour douze   7,4 s   (0,6 s par figure)
+    #
+    # ⚠️ LES OCTETS SONT IDENTIQUES, et c'etait la condition posee avant de
+    # coder : les douze empreintes SHA-256 des images du HTML et celles du
+    # Word coincident, avec session et sans.
+    #
+    # ⚠️ ELLE EST ICI, ET NON DANS LES EXPORTS, POUR UNE RAISON MESUREE. Une
+    # premiere version enveloppait `export_html` et `export_word` eux-memes,
+    # derriere un `*args` : elle a fait TOMBER
+    # `test_les_parametres_declares_sont_LUS`, qui lit l'AST du module et n'y
+    # trouvait plus les parametres declares. Ce garde a ete bati apres CINQ
+    # occurrences du motif << un parametre declare et jamais lu >>. On ne le
+    # contourne pas -- on deplace la session.
+    #
+    # ⚠️ ET C'EST LE POINT UNIQUE : les trois livrables passent par ici. Le
+    # placer plus haut aurait exige de reindenter quatre-vingts lignes, ou le
+    # moindre defaut se serait cache.
+    #
+    # ⚠️ CONSEQUENCE ASSUMEE : l'application, qui appelle les exports
+    # DIRECTEMENT, n'en profite pas. Ecart de VITESSE, jamais de justesse --
+    # son document reste identique. Signale, non ouvert.
     try:
-        octets = fabrique(**kwargs) or b''
+        with session_rasterisation():
+            octets = fabrique(**kwargs) or b''
     except ImportError as e:                       # dépendance de second rang
         logger.error(f"N5 {nom} : dépendance absente — {e}")
         return b'', f"dependance_absente: {e}"

@@ -18,7 +18,7 @@
 # =============================================================================
 
 from __future__ import annotations
-import base64, io, logging, re, weakref
+import base64, contextlib, io, logging, re, weakref
 from datetime import datetime
 from typing import Dict, List, NamedTuple, Tuple
 
@@ -3137,6 +3137,103 @@ def _script_plotly(blocs: dict) -> str:
     return ('<script src="' + URL_PLOTLY + '"></script>\n')
 
 
+#: La profondeur d'imbrication de `session_rasterisation`. Une LISTE et non
+#: un entier : elle se modifie sans `global`, et le compteur reste visible
+#: pour les tests.
+_PROFONDEUR_SESSION = [0]
+
+#: Le navigateur a-t-il ete REELLEMENT demarre ? Distinct de la profondeur :
+#: on peut etre sous session sans avoir rien rasterise.
+_SESSION_DEMARREE = [False]
+
+
+def _amorcer_session_si_besoin() -> None:
+    """Demarre le navigateur AU PREMIER rendu reel, jamais a l'entree.
+
+    ⚠️⚠️ CETTE PARESSE N'EST PAS UNE OPTIMISATION, C'EST LE CORRECTIF D'UN
+    DEFAUT MESURE. Une premiere version demarrait le serveur a l'ENTREE de
+    la session : la gate a fait 888 CYCLES d'ouverture/fermeture de
+    navigateur, et elle est passee de 2 886 s a 3 356 s -- PLUS LENTE.
+
+    La raison : la plupart des tests SUBSTITUENT `rendre_image` et ne
+    rasterisent rien. Ouvrir un navigateur pour eux etait un cout pur, sans
+    le moindre benefice -- et 888 cycles de navigateur rendaient la suite
+    instable (quatre echecs qui passaient tous ISOLES).
+
+    Desormais : aucun rendu reel, aucun navigateur.
+    """
+    if _PROFONDEUR_SESSION[0] > 0 and not _SESSION_DEMARREE[0]:
+        import kaleido
+        kaleido.start_sync_server(silence_warnings=True)
+        _SESSION_DEMARREE[0] = True
+
+
+@contextlib.contextmanager
+def session_rasterisation():
+    """UN SEUL navigateur pour toutes les figures, au lieu d'un PAR figure.
+
+    ⚠️⚠️ LE COUT N'ETAIT PAS LE RENDU, C'ETAIT L'OUVERTURE. Profilage d'un
+    run reel : `kaleido.close` et `browser_async.__aexit__` totalisaient
+    134,4 s -- kaleido ouvrait ET FERMAIT un navigateur A CHAQUE IMAGE.
+    Mesure sur les douze vraies figures d'un run :
+
+        un serveur par image   45,8 s   (3,8 s par figure)
+        UN serveur pour douze   7,4 s   (0,6 s par figure)   -- 84 %
+
+    ⚠️ ET LES OCTETS SONT IDENTIQUES : les douze empreintes SHA-256
+    coincident entre les deux chemins. C'etait la condition d'acceptation du
+    lot, posee avant de le coder -- un seul octet different et le lot
+    s'arretait.
+
+    ⚠️⚠️ ELLE EST POSEE DANS `agent._produire_livrable`, LE POINT UNIQUE PAR
+    LEQUEL PASSENT LES TROIS LIVRABLES -- et NON autour des exports. Ce
+    paragraphe a d'abord decrit l'autre dessin, et il est corrige : une
+    premiere version enveloppait `export_html` et `export_word` derriere un
+    `*args`, et elle a fait TOMBER `test_les_parametres_declares_sont_LUS`,
+    qui lit l'AST du module et n'y trouvait plus les parametres declares. Ce
+    garde a ete bati apres CINQ occurrences du motif << un parametre declare
+    et jamais lu >> : on ne le contourne pas, on deplace la session.
+
+    ⚠️ CONSEQUENCE ASSUMEE, ET ELLE EST DITE : l'application appelle les
+    exports DIRECTEMENT et ne beneficie donc PAS de la session. C'est un
+    ecart de VITESSE, jamais de justesse -- son document reste identique au
+    bit pres. Signale, non ouvert : l'application attend sa migration.
+
+    ⚠️ REENTRANTE MALGRE TOUT, et ce n'est pas gratuit : les trois livrables
+    ouvrent chacun la leur, et un appel imbrique (aujourd'hui inexistant, un
+    jour possible) ne redemarrerait rien.
+
+    ⚠️⚠️ ELLE FERME TOUJOURS, ET C'EST LE `finally` QUI LE GARANTIT. Un
+    serveur laisse ouvert retiendrait le processus apres la fin des tests --
+    exactement le defaut de gate observe une fois et jamais explique. On ne
+    l'introduit pas ici.
+
+    ⚠️ SANS `kaleido`, ELLE NE FAIT RIEN. Le chemin degrade du Word reste
+    celui d'avant : il nomme l'absence au lieu de la taire.
+    """
+    if not kaleido_disponible():
+        yield
+        return
+    _PROFONDEUR_SESSION[0] += 1
+    try:
+        yield
+    finally:
+        _PROFONDEUR_SESSION[0] -= 1
+        if _PROFONDEUR_SESSION[0] == 0 and _SESSION_DEMARREE[0]:
+            _SESSION_DEMARREE[0] = False
+            try:
+                import kaleido
+                kaleido.stop_sync_server(silence_warnings=True)
+            except Exception as _e:  # noqa: BLE001 — voir ci-dessous
+                # ⚠️ `except Exception` EST DELIBERE ET IL EST DECLARE. La
+                # fermeture appartient a une bibliotheque tierce : narrower,
+                # on laisserait un type inattendu FAIRE TOMBER UN RAPPORT
+                # DEJA PRODUIT. L'echec est journalise, jamais tu -- c'est la
+                # meme regle que le `except OSError` de l'archivage, prise
+                # dans l'autre sens parce que le risque n'est pas le meme.
+                logger.warning(f'Session de rasterisation non fermee : {_e}')
+
+
 def kaleido_disponible() -> bool:
     """Le module qui convertit une figure Plotly en image est-il là ?
 
@@ -3215,6 +3312,7 @@ def rendre_image(figure) -> bytes:
     deja = _IMAGES_RASTERISEES.get(cle)
     if deja is not None:
         return deja
+    _amorcer_session_si_besoin()
     png = figure.to_image(format='png', width=1100, height=520, scale=1.5)
     try:
         weakref.finalize(figure, _IMAGES_RASTERISEES.pop, cle, None)
