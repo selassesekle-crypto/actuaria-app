@@ -137,6 +137,17 @@ class PlanTarifaire:
     # (règle 3, signalé et laissé). Purement un RÔLE de données — jamais un facteur
     # tarifaire (n'entre pas dans colonnes_produites()).
     identifiant_contrat: Optional[str] = None
+    # Colonne d'ÉCHÉANCE (optionnelle) — l'observation d'un contrat à une date.
+    # ⚠️ SANS ELLE, « DOUBLON » ET « ÉCHÉANCE » SONT INDISCERNABLES. Un contrat
+    # observé sur trois exercices donne trois lignes de même identifiant : la
+    # couche qualité les compte alors comme des redondances. Mesuré : un
+    # historique de renouvellement sur 3 ans porte ~67 % de « doublons » pour
+    # un seuil ROUGE à 5 % — le fichier est refusé avant d'être lu.
+    #   déclarée   → un doublon est (identifiant, échéance) identiques ;
+    #   non déclarée → un doublon est un identifiant répété, comme avant.
+    # Purement un RÔLE de données, comme `identifiant_contrat` : elle n'entre
+    # jamais dans colonnes_produites() et n'est donc jamais un facteur.
+    echeance: str | None = None
 
     def __post_init__(self):
         # ── GARDE B9 (offset) : l'exposition n'est JAMAIS un prédicteur ─────────
@@ -197,6 +208,8 @@ class PlanTarifaire:
         cols: list[str] = list(self.colonnes_obligatoires())
         if self.identifiant_contrat:
             cols.append(self.identifiant_contrat)
+        if self.echeance:
+            cols.append(self.echeance)
         cols.extend(sources_brutes([f.nom for f in self.facteurs]))
         vu: set = set()
         return tuple(x for x in cols if not (x in vu or vu.add(x)))
@@ -237,6 +250,7 @@ class PlanTarifaire:
             "cibles": [self.cible_frequence, self.cible_cout],
             "famille_severite": self.famille_severite,
             "identifiant_contrat": self.identifiant_contrat,
+            "echeance": self.echeance,
             "facteurs": [
                 {"nom": f.nom, "type": f.type, "encodage": f.encodage,
                  "transformation": f.transformation, "modalites": f.modalites,
@@ -270,6 +284,7 @@ class PlanTarifaire:
             auteur=d.get("auteur", ""), version=str(d.get("version", "1.0")),
             famille_severite=d.get("famille_severite", "gamma"),
             identifiant_contrat=d.get("identifiant_contrat"),
+            echeance=d.get("echeance"),
         )
 
     @classmethod

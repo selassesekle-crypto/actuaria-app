@@ -235,6 +235,7 @@ class AgentA1Ingestion:
         fichier:   str = 'contrats_auto_70k.parquet',
         client_id: str = None,
         dataframe  = None,
+        plan       = None,   # PlanTarifaire signé — l'identité du contrat s'y déclare
     ) -> Dict[str, Any]:
         """
         Pipeline d'ingestion complet.
@@ -379,7 +380,7 @@ class AgentA1Ingestion:
                 rapport['alertes'].extend(rapport_coercition['alertes'])
 
             # ── ÉTAPE 3 : VALIDATION QUALITÉ ─────────────────────────────────
-            qualite = self._valider_qualite(df)
+            qualite = self._valider_qualite(df, plan)
             rapport['etapes'].append('validation_qualite')
 
             # ── ÉTAPE 4 : HASH MD5 ────────────────────────────────────────────
@@ -704,7 +705,7 @@ class AgentA1Ingestion:
 
         return df, rapport
 
-    def _valider_qualite(self, df: pd.DataFrame) -> Dict:
+    def _valider_qualite(self, df: pd.DataFrame, plan=None) -> Dict:
         """
         Calcule les métriques de qualité du DataFrame.
 
@@ -725,12 +726,61 @@ class AgentA1Ingestion:
         taux_complet = (1 - df.isnull().mean()).mean() * 100
 
         # ── 2. Doublons ────────────────────────────────────────────────────────
-        cols_id = [c for c in df.columns if 'id' in c.lower() or 'pol' in c.lower()]
-        if cols_id:
-            nb_doublons = df.duplicated(subset=[cols_id[0]]).sum()
+        # ⚠️⚠️ L'IDENTITÉ D'UN CONTRAT SE DÉCLARE, ELLE NE SE DEVINE PAS.
+        # Cette ligne prenait `[c for c in df.columns if 'id' in c.lower() or
+        # 'pol' in c.lower()]` puis LE PREMIER de la liste. Mesuré sur les
+        # vingt plans du dépôt : QUATRE FACTEURS TARIFAIRES sont attrapés par
+        # cette heuristique — `forme_juridique` et `caution_solidaire`
+        # contiennent « id », `antecedents_accidents_3ans` aussi. L'ordre des
+        # colonnes vient du fichier client : le dédoublonnage pouvait donc se
+        # faire sur une forme juridique. Cela marchait par chance, parce que
+        # l'identifiant est d'ordinaire la première colonne.
+        # ⚠️ ET LE MÉCANISME EXISTAIT DÉJÀ, ENDORMI : `PlanTarifaire` porte
+        # `identifiant_contrat` depuis toujours et `core/qualite_donnees.py`
+        # s'en sert (règle 1). A1 était le SEUL des six agents dont `run()` ne
+        # recevait pas le plan — c'est-à-dire exactement l'agent qui devinait.
+        col_id  = getattr(plan, 'identifiant_contrat', None) if plan else None
+        col_ech = getattr(plan, 'echeance', None) if plan else None
+        source_identifiant = 'plan'
+        if not (col_id and col_id in df.columns):
+            col_id = next((c for c in df.columns
+                           if 'id' in c.lower() or 'pol' in c.lower()), None)
+            source_identifiant = 'devinee' if col_id else 'aucune'
+        if not (col_ech and col_ech in df.columns):
+            col_ech = None
+
+        # ⚠️ UN DOUBLON N'EST PAS UNE ÉCHÉANCE. Le même contrat observé sur
+        # trois exercices donne trois lignes de même identifiant : ce n'est pas
+        # une redondance, c'est un historique. Mesuré : un historique de
+        # renouvellement sur 3 ans porte ~67 % de « doublons » pour un seuil
+        # ROUGE à 5 % — le fichier était refusé avant d'être lu, et c'est
+        # exactement la donnée qu'exige l'estimation d'une élasticité.
+        if col_id and col_ech:
+            nb_doublons = df.duplicated(subset=[col_id, col_ech]).sum()
+            granularite = 'un contrat par échéance'
+        elif col_id:
+            nb_doublons = df.duplicated(subset=[col_id]).sum()
+            granularite = 'un contrat'
         else:
             nb_doublons = df.duplicated().sum()
+            granularite = 'indéterminée — aucun identifiant'
         taux_doublons = nb_doublons / max(n, 1) * 100
+
+        # ⚠️ LE REPLI RESTE LÉGITIME — aucun des vingt plans ne déclare
+        # d'identifiant — MAIS IL NE SE TAIT PLUS. Un lecteur doit savoir que
+        # l'identité du contrat n'a pas été déclarée, donc que le compte de
+        # doublons repose sur un nom de colonne deviné.
+        note_identite = {
+            'plan': (f"Identité du contrat DÉCLARÉE au plan : « {col_id} »"
+                     + (f", échéance « {col_ech} »." if col_ech else
+                        ". Aucune échéance déclarée : deux lignes de même "
+                        "identifiant restent comptées comme un doublon.")),
+            'devinee': (f"⚠ Identité du contrat DEVINÉE : « {col_id} » (nom "
+                        f"contenant « id » ou « pol »). Non déclarée au plan "
+                        f"— déclarer `identifiant_contrat` la rend opposable."),
+            'aucune': ("⚠ Aucun identifiant de contrat : le dédoublonnage "
+                       "porte sur la ligne entière."),
+        }[source_identifiant]
 
         # ── 3. Exposition ∈ [0, 1] ────────────────────────────────────────────
         if 'exposition' in df.columns:
@@ -832,6 +882,14 @@ class AgentA1Ingestion:
             'taux_completude':     round(taux_complet, 2),
             'nb_doublons':         int(nb_doublons),
             'taux_doublons':       round(taux_doublons, 2),
+            # ⚠️ SUR QUOI LE COMPTE A ÉTÉ FAIT — publié avec le compte. Un
+            # taux de doublons ne se lit pas sans savoir ce qui identifie une
+            # ligne, ni si cette identité a été déclarée ou devinée.
+            'identifiant_contrat': col_id,
+            'source_identifiant':  source_identifiant,
+            'echeance':            col_ech,
+            'granularite':         granularite,
+            'note_identite':       note_identite,
             'expo_ok_pct':         round(expo_ok, 2),
             'score_global':        round(score, 2),
             'colonnes':            df.columns.tolist(),
@@ -909,6 +967,12 @@ class AgentA1Ingestion:
             f"Colonnes      : {qualite['nb_colonnes']}\n"
             f"Complétude    : {qualite['taux_completude']:.1f}%\n"
             f"Doublons      : {qualite['nb_doublons']:,} ({qualite['taux_doublons']:.2f}%)\n"
+            # ⚠️ UN TAUX DE DOUBLONS NE SE LIT PAS SANS SON ASSIETTE. Sur quoi
+            # deux lignes sont-elles jugées identiques, et cette identité
+            # a-t-elle été déclarée au plan ou devinée d'un nom de colonne ?
+            # Le compte seul laissait croire à une mesure, sans dire de quoi.
+            f"Granularité   : {qualite.get('granularite', '?')}\n"
+            f"{qualite.get('note_identite', '')}\n"
             f"Score qualité : {qualite['score_global']:.1f}/100"
         )
 

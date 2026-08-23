@@ -185,6 +185,141 @@ class TestA1MultiFormat(unittest.TestCase):
         print("    A1-FMT inconnu (.xyz) → erreur propre + liste des formats ✅")
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+#  CONTRÔLES POSITIFS — L'IDENTITÉ D'UN CONTRAT SE DÉCLARE
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _historique_renouvellement(n_contrats=200, n_echeances=3, seed=4):
+    """Le même contrat, observé à plusieurs échéances — la forme exacte d'un
+    historique de renouvellement.
+
+    ⚠️ MESURÉ : A1 y voyait 67 % de « doublons » pour un seuil ROUGE à 5 %,
+    parce qu'il dédoublonne sur l'identifiant SEUL. Un contrat vu trois fois
+    n'est pas un fichier défectueux : c'est un historique.
+    """
+    rng = np.random.default_rng(seed)
+    lignes = []
+    for c in range(n_contrats):
+        for e in range(n_echeances):
+            lignes.append({
+                'id_contrat':           c,
+                'annee_exercice':       2021 + e,
+                'nb_sinistres':         float(rng.poisson(0.08)),
+                'cout_total_sinistres': float(rng.exponential(800)),
+                'exposition':           float(rng.uniform(0.3, 1.0)),
+                'age':                  float(rng.integers(18, 75)),
+                'bonus_malus':          float(rng.uniform(50, 350)),
+                'zone_geographique':    rng.choice(['A', 'B', 'C', 'D']),
+            })
+    return pd.DataFrame(lignes)
+
+
+class T_L_Identite_D_Un_Contrat_Se_Declare(unittest.TestCase):
+    """CONTRÔLE POSITIF — l'identité est un RÔLE déclaré, pas une devinette.
+
+    ⚠️ MESURÉ SUR LES VINGT PLANS DU DÉPÔT. A1 prend
+    `[c for c in df.columns if 'id' in c.lower() or 'pol' in c.lower()]` puis
+    **le premier de la liste**. Quatre facteurs tarifaires sont attrapés par
+    cette heuristique — `forme_juridique` et `caution_solidaire` contiennent
+    « id », `antecedents_accidents_3ans` aussi. L'ordre des colonnes vient du
+    fichier client : l'identité du contrat est devinée par sous-chaîne, et le
+    résultat dépend de l'ordre des colonnes. Cela marche par chance.
+
+    ⚠️ ET LE MÉCANISME EXISTE DÉJÀ, ENDORMI. `PlanTarifaire` porte
+    `identifiant_contrat` depuis toujours, et `core/qualite_donnees.py` s'en
+    sert (règle 1, QD-8). Mais A1 est le SEUL des six agents dont `run()` ne
+    reçoit pas le plan — c'est exactement l'agent qui doit deviner.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import dataclasses
+
+        from core.plan_tarifaire import PlanTarifaire
+        from direction_non_vie.tarification.a1_ingestion.agent import (
+            AgentA1Ingestion,
+        )
+        cls.agent = AgentA1Ingestion(audit_path='/tmp', verbose=False)
+        _base = PlanTarifaire.depuis_yaml(os.path.join(
+            os.path.abspath(os.path.join(os.path.dirname(__file__),
+                                         '..', '..', '..')),
+            'plans', 'auto.yaml'))
+        cls.plan_declare = dataclasses.replace(
+            _base, identifiant_contrat='id_contrat', echeance='annee_exercice')
+        cls.plan_id_seul = dataclasses.replace(
+            _base, identifiant_contrat='id_contrat')
+
+    def test_un_historique_de_renouvellement_n_est_pas_un_fichier_de_DOUBLONS(self):
+        """⚠️ LE CAS QUI BLOQUE TOUT LE RESTE. Sans cette distinction, la
+        donnée nécessaire à une élasticité est refusée à l'entrée."""
+        df = _historique_renouvellement(200, 3)
+        r = self.agent.run(branche='non_vie', sous_branche='auto',
+                           dataframe=df, plan=self.plan_declare)
+        self.assertTrue(r['success'], f"Erreur : {r.get('erreur')}")
+        q = r['qualite']
+        self.assertEqual(
+            q['nb_doublons'], 0,
+            f"{q['nb_doublons']} « doublons » ({q['taux_doublons']:.1f} %) sur "
+            f"un historique de 200 contrats × 3 échéances — un contrat vu "
+            f"trois fois n'est pas une ligne redondante")
+        self.assertEqual(q.get('granularite'), 'un contrat par échéance')
+        print(f"    POS-A1a historique 200×3 → {q['nb_doublons']} doublon, "
+              f"granularité « {q.get('granularite')} » ✅")
+
+    def test_un_VRAI_doublon_reste_signale(self):
+        """⚠️⚠️ LE GARDE-FOU DE LA DISTINCTION. Elle exempte l'échéance ; il
+        faut donc prouver qu'elle n'exempte pas le doublon réel — même
+        contrat, MÊME échéance. Une liste qui exempte ouvre un trou."""
+        df = _historique_renouvellement(100, 3)
+        df = pd.concat([df, df.iloc[:30]], ignore_index=True)   # 30 vrais doublons
+        r = self.agent.run(branche='non_vie', sous_branche='auto',
+                           dataframe=df, plan=self.plan_declare)
+        q = r['qualite']
+        self.assertEqual(
+            q['nb_doublons'], 30,
+            f"30 lignes (même contrat, MÊME échéance) ont été ajoutées et "
+            f"{q['nb_doublons']} sont signalées — la distinction avale un "
+            f"vrai doublon")
+        print(f"    POS-A1b 30 vrais doublons ajoutés → {q['nb_doublons']} "
+              f"signalés ✅")
+
+    def test_l_identifiant_DECLARE_prime_sur_la_devinette(self):
+        """⚠️ LE DÉFAUT MESURÉ, DANS SA FORME PURE. Une colonne dont le nom
+        contient « id » précède l'identifiant réel dans le fichier : la
+        devinette dédoublonne alors sur un FACTEUR TARIFAIRE."""
+        df = _historique_renouvellement(150, 2)
+        # `forme_juridique` contient « id » — et arrive AVANT `id_contrat`
+        df.insert(0, 'forme_juridique',
+                  np.random.default_rng(1).choice(['SARL', 'SAS'], len(df)))
+        r = self.agent.run(branche='non_vie', sous_branche='auto',
+                           dataframe=df, plan=self.plan_id_seul)
+        q = r['qualite']
+        self.assertEqual(q.get('identifiant_contrat'), 'id_contrat',
+                         f"A1 a retenu « {q.get('identifiant_contrat')} » "
+                         f"comme identité du contrat")
+        self.assertEqual(q.get('source_identifiant'), 'plan')
+        # 150 contrats × 2 échéances, dédoublonnés sur l'identifiant SEUL
+        self.assertEqual(q['nb_doublons'], 150)
+        print(f"    POS-A1c identifiant retenu « {q['identifiant_contrat']} » "
+              f"(source : {q['source_identifiant']}) ✅")
+
+    def test_sans_declaration_A1_DIT_qu_il_devine(self):
+        """⚠️ LE REPLI RESTE, MAIS IL NE SE TAIT PLUS. Il est légitime — les
+        vingt plans du dépôt ne déclarent rien — mais un lecteur doit savoir
+        que l'identité n'a pas été déclarée."""
+        r = self.agent.run(branche='non_vie', sous_branche='auto',
+                           dataframe=_df_auto(300))
+        q = r['qualite']
+        self.assertEqual(q.get('source_identifiant'), 'devinee',
+                         "A1 devine l'identité sans le dire")
+        self.assertTrue(
+            any('devin' in str(a).lower() or 'non déclar' in str(a).lower()
+                for a in (q.get('alertes_aberrants') or []) + [q.get('note_identite', '')]),
+            "aucune mention ne signale que l'identité a été devinée")
+        print(f"    POS-A1d identité devinée « {q.get('identifiant_contrat')} », "
+              f"et A1 le dit ✅")
+
+
 if __name__ == '__main__':
     print("="*65)
     print("  TESTS A1 INGESTION v1.0")
