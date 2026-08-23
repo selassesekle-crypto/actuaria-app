@@ -188,8 +188,8 @@ logger = logging.getLogger('actuaria.a2')
 #
 # ⚠ NOTE (audit V4, 10/07/2026) : la référence de transposition en droit
 # français ("loi du 1er juillet 2012") n'a pas pu être vérifiée par une
-# recherche documentaire formelle — à confirmer par la Commission Tarification
-# IA France ou un juriste avant toute communication externe la citant. L'arrêt
+# recherche documentaire formelle — à confirmer par un juriste avant toute
+# communication externe la citant. L'arrêt
 # CJUE C-236/09 et sa date d'application reposent sur une base plus robuste.
 
 # Stratégies d'imputation par type de variable
@@ -211,7 +211,7 @@ STRATEGIES_IMPUTATION = {
 # ══════════════════════════════════════════════════════════════════════════════
 
 # DATA DICTIONNAIRE — Traçabilité des variables dérivées
-# Exigence : IA France §4.1 ; ACPR-2022-P-01 §3.2
+# Exigence : ACPR-2022-P-01 §3.2
 DATA_DICTIONNAIRE = {
     'log_cout_total_sinistres': {
         'source': 'cout_total_sinistres',
@@ -1235,9 +1235,22 @@ class AgentA2Preprocessing:
         cols_a_exclure = set(cols_id + cols_date_brute)
 
         # Colonnes object restantes non encodées (à exclure du modèle)
+        # ⚠️ UNE COLONNE BRUTE CONSERVÉE À CÔTÉ DE SES ENCODAGES N'EST PAS UNE
+        # COLONNE NON ENCODÉE. A2 encode les facteurs catégoriels en AJOUTANT
+        # `<nom>_<modalite>` (ou `<nom>_enc`) et en CONSERVANT la colonne
+        # source — c'est voulu : le DataFrame complet reste disponible pour le
+        # rapport. `_valider_sortie` comptait pourtant chaque source comme non
+        # encodée. Conséquence mesurée sur les VINGT plans du dépôt, données
+        # complètes et propres : le nombre de « colonnes non encodées »
+        # signalées valait exactement le nombre de facteurs catégoriels, et
+        # **VERT était atteint par 0 plan sur 20** — le statut VERT était
+        # inatteignable. Le critère est désormais une propriété de la SORTIE :
+        # une source est non encodée si AUCUNE colonne `<nom>_*` n'existe.
+        cols_sortie = set(df.columns)
         cols_object_restantes = [
             c for c in df.select_dtypes(include=['object']).columns
             if c not in cols_a_exclure
+            and not any(o.startswith(c + '_') for o in cols_sortie)
         ]
 
         stats['colonnes_non_encodees'] = cols_object_restantes
@@ -1437,7 +1450,14 @@ class AgentA2Preprocessing:
         nb_features_new = len(features_new)
         val             = rapport.get('transformations', {}).get('validation', {})
         winsor          = rapport.get('transformations', {}).get('winsorisation', {})
-        nb_winsor       = len(winsor.get('colonnes_winsorisees', {}))
+        # ⚠️ `winsorisation` EST DÉJÀ LE DICTIONNAIRE DES COLONNES ÉCRÊTÉES —
+        # `_appliquer_plan` y pose {nom_colonne: {borne_inf, borne_sup,
+        # n_valeurs_ecretees}}. La clé `colonnes_winsorisees` n'a jamais
+        # existé : son `.get(..., {})` rendait toujours un dictionnaire vide,
+        # et l'actuaire lisait « Winsorisées : 0 variable(s) » alors que neuf
+        # facteurs continus avaient été plafonnés. C'est le compte lui-même
+        # qui était faux, pas seulement sa mise en forme.
+        nb_winsor       = len(winsor)
         nb_cols_fin     = rapport.get('nb_cols_fin', rapport['nb_cols_debut'])
 
         # ── NIVEAU 1 : LECTURE ────────────────────────────────────────────────

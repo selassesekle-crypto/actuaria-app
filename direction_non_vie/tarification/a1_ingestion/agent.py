@@ -712,9 +712,10 @@ class AgentA1Ingestion:
         1. Complétude (valeurs manquantes)
         2. Doublons
         3. Exposition ∈ [0, 1]
-        4. Valeurs aberrantes actuarielles (exigence IA France §4.2)
+        4. Valeurs aberrantes actuarielles (contrôles du module)
            - Sinistres : nb_sinistres ≥ 0, cout_total_sinistres ≥ 0
-           - Âge conducteur : 16 ≤ age ≤ 99 (Code de la route Art. R.221-1)
+           - Âge conducteur : 16 ≤ age ≤ 99 (borne basse : art. R. 221-5
+             du code de la route ; borne haute : convention du module)
            - Exposition : 0 < exposition ≤ 1 (fraction d'année)
            - Montants : prime_pure > 0 si disponible
         """
@@ -738,7 +739,10 @@ class AgentA1Ingestion:
             expo_ok = 100.0
 
         # ── 4. Valeurs aberrantes actuarielles ────────────────────────────────
-        # Réf. : IA France (2019) §4.2 — «validation des données en entrée»
+        # ⚠️ AUCUNE NORME EXTERNE N'EST INVOQUÉE ICI. Ces lignes citaient
+        # « IA France (2019) §4.2 » — la forme courte du même document non
+        # sourcé que la purge de ce lot retire ailleurs. Ce sont des contrôles
+        # de plausibilité propres au module.
         aberrants = {}
         alertes_aberrants = []
 
@@ -763,15 +767,29 @@ class AgentA1Ingestion:
                         f"{col_cout} : {n_neg} valeur(s) négative(s)."
                     )
 
-        # 4c. Âge hors plage réglementaire [16, 99]
-        # Réf. : Code de la route Art. R.221-1 (permis B dès 17 ans AAC)
+        # 4c. Âge hors plage [16, 99] — UNE BORNE RÉGLEMENTAIRE, UNE CONVENTION
+        # ⚠️ L'ARTICLE CITÉ ÉTAIT LE MAUVAIS, ET LA PARENTHÈSE ÉTAIT FAUSSE.
+        # Vérifié au texte (Légifrance) : l'art. R. 221-1 ne porte AUCUNE
+        # condition d'âge — il énumère les catégories de permis. Les âges sont
+        # à l'art. R. 221-5 : 16 ans pour les catégories A1 et B1, 17 ans pour
+        # la catégorie B elle-même (et non pour la seule conduite
+        # accompagnée, comme le disait la parenthèse), 18, 21 et 24 ans pour
+        # les autres catégories.
+        # ⚠️⚠️ ET AUCUN TEXTE NE FIXE D'ÂGE MAXIMAL. Le 99 n'est PAS
+        # réglementaire : c'est une borne de plausibilité choisie par le
+        # module. La citer comme du droit lui donnait une autorité qu'elle
+        # n'a pas — c'est exactement ce que cet audit traque. La borne basse
+        # de 16 ans reste, elle, celle des catégories A1/B1.
         for col_age in ['age', 'age_conducteur']:
             if col_age in df.columns:
                 n_age = int((~df[col_age].between(16, 99)).sum())
                 if n_age > 0:
                     aberrants[col_age + '_hors_plage'] = n_age
                     alertes_aberrants.append(
-                        f"{col_age} : {n_age} valeur(s) hors [16, 99]. "
+                        f"{col_age} : {n_age} valeur(s) hors [16, 99] "
+                        f"(16 = âge du permis A1/B1, art. R. 221-5 du code de "
+                        f"la route ; 99 = borne de plausibilité du module, "
+                        f"aucun âge maximal n'est fixé par un texte). "
                         f"Min={df[col_age].min():.0f} Max={df[col_age].max():.0f}."
                     )
 
@@ -817,7 +835,7 @@ class AgentA1Ingestion:
             'expo_ok_pct':         round(expo_ok, 2),
             'score_global':        round(score, 2),
             'colonnes':            df.columns.tolist(),
-            # Valeurs aberrantes actuarielles — IA France §4.2
+            # Valeurs aberrantes actuarielles — contrôles du module
             'aberrants':           aberrants,
             'nb_types_aberrants':  len(aberrants),
             'alertes_aberrants':   alertes_aberrants,

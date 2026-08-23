@@ -37,7 +37,7 @@ SHAs v3 : A1=da1993ca · A2=2cd096ee · A3=6a5f2e95 · A4=2e05908f · A5=4ec08c4
 | R3 — Data leakage StandardScaler | ✅ | `4ec08c4d` | Kaufman et al. (2012) ACM TKDD |
 | R2 — Garde-fou ElasticNet → PoissonRegressor | ✅ | `2e05908f` | Agresti (2015) §7 |
 | R5 — Score composite documenté + audit_trail | ✅ | `718b4350` | ACPR-2022-P-01 §4.3 |
-| R1 — Split temporel (A3, A4, A5) | ✅ | `a08c75fe` / `2e05908f` / `4ec08c4d` | IA France Commission Tarification (2019) §3.2.4 |
+| R1 — Split temporel (A3, A4, A5) | ✅ | `a08c75fe` / `2e05908f` / `4ec08c4d` | Fuite temporelle : un split aleatoire fait entrer des observations posterieures dans l'entrainement |
 | SHAP obligatoire — alerte + plafond AMBRE si absent | ✅ | `2e05908f` | ACPR-2022-P-01 §4.3 ; AI Act 2025 Art. 13 |
 
 **Tests A1–A6 : 6/6 ✅**
@@ -87,7 +87,7 @@ SHAs v3 : A1=da1993ca · A2=2cd096ee · A3=6a5f2e95 · A4=2e05908f · A5=4ec08c4
 | LRC test IFRS 17 §47–52 | Test de suffisance des primes absent dans A11. Bloquant pour premier reporting IFRS 17. | Moyen | IFRS 17 §47–52 |
 | Transition IFRS 17 §C3–C22 | Approche rétrospective / juste valeur absente. A11 inutilisable pour premier rapport IFRS 17. | Élevé | IFRS 17 §C3–C22 |
 | `temperature=0` API Claude | ✅ **TRANCHÉ ET CORRIGÉ — mesuré contre l'API le 2026-08-07 :** `anthropic.BadRequestError: 400` — `` `temperature` is deprecated for this model. `` **Le paramètre est refusé par `claude-sonnet-5`, quelle que soit sa valeur.** La prescription précédente de cette ligne était donc fautive : elle ne produisait pas du déterminisme, elle produisait un appel rejeté. ⚠ **TROIS SITES ÉTAIENT EN PANNE**, dont un EN PRODUCTION (`rapport_modeles_tarif.py`, appelé par `a4_ml/agent.py`) qui repliait sur le commentaire d'agent **sans dire pourquoi**. `temperature` retirée des trois ; la frontière refuse désormais la combinaison **en amont** (`RequeteRefusee`), et distingue un repli d'ENVIRONNEMENT d'un repli sur REQUÊTE REFUSÉE — c'est cette distinction qui manquait et qui a permis le silence. ⚠ **RESTE OUVERT : unifier la VALEUR des modèles** (10 sites sur `claude-sonnet-4-6`). Mesuré : **0 bloquant mécanique**, aucun des dix ne transmet de température. Mais le contenu de dix livrables signés changerait, et cela ne se mesure pas sans générer les rapports avant/après. | Corrigé — 3 sites ; unification de la valeur non ouverte | GL EIOPA ORSA GL 56 |
-| Mention limitation réglementaire | Toutes les sorties doivent porter "Outil d'aide — validation actuaire désigné obligatoire". | Très faible | Normes professionnelles IA France §3.2 |
+| Mention limitation réglementaire | Toutes les sorties doivent porter "Outil d'aide — validation actuaire désigné obligatoire". | Très faible | Regle du module : l'outil ne se substitue pas a l'actuaire designe |
 
 ### P1 — Important (avant certification interne)
 

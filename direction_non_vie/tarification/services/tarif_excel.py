@@ -626,7 +626,7 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
         _bandeau(ws3, "Backtesting Walk-Forward", "Test A/E global et par segment",
                  "A6 — Backtesting", aid, now)
         r = 7
-        # ── Résumé recalibration (IA France 2019 §3.2.5) ──────────────────────
+        # ── Résumé recalibration ──────────────────────────────────────────────
         _section(ws3, r, "▶ RECALIBRATION DU MODÈLE (backtesting réel)"); r += 1
         # ⚠ AUDIT V10 (BLOQUANT B3) : le statut était calculé par
         #   statut="VERT" if backtest.get('modele_recalibre') else "AMBRE"
@@ -650,16 +650,19 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
         if backtest.get('gini_wf_moyen') is not None:
             _kpi(ws3, r, "Gini walk-forward moyen (recalibré)",
                  round(backtest.get('gini_wf_moyen', 0), 4), fmt=FMT_DEC4); r += 1
-        _kpi(ws3, r, "Référence méthodologique",
-             "Commission Tarification IA France (2019) §3.2.5 — "
-             "«Le backtesting doit évaluer la robustesse prédictive du modèle "
-             "sur des données hors-échantillon temporellement cohérentes.»",
+        # ⚠️ CETTE LIGNE PUBLIAIT UNE CITATION NON SOURCÉE DANS LE LIVRABLE.
+        # Elle nommait « Commission Tarification IA France (2019) §3.2.5 » et
+        # en donnait une phrase ENTRE GUILLEMETS, puis demandait au lecteur de
+        # faire valider le document par ce corps « avant toute diffusion
+        # externe (ACPR) ». Rien ne confirme qu'un tel document ni un tel corps
+        # existent. La méthode se décrit désormais par ce qu'elle FAIT.
+        _kpi(ws3, r, "Méthode de backtesting",
+             "Walk-forward avec recalibration : le modèle est réajusté sur "
+             "chaque fenêtre d'entraînement puis évalué sur la fenêtre de test "
+             "suivante (Gini et A/E hors échantillon, temporellement "
+             "cohérents). Choix méthodologique du module — aucune norme "
+             "externe n'est invoquée ici.",
              wrap=True); r += 1
-        _kpi(ws3, r, "Statut de la référence ci-dessus",
-             "⚠ Référence de travail — non vérifiée formellement par recherche "
-             "documentaire. À valider par la Commission Tarification IA France "
-             "avant toute diffusion externe (ACPR).",
-             statut="AMBRE", wrap=True); r += 1
         r += 1
         _section(ws3, r, "▶ WALK-FORWARD TEMPOREL"); r += 1
         if backtest.get('walk_forward'):
@@ -867,18 +870,20 @@ def export_excel_a1(result_a1: Dict, audit_id: str = "") -> bytes:
              fmt=FMT_NB); r += 1
 
         # ── Onglet 2 : Qualité & Aberrants ────────────────────────────────────
-        # Réf. : Commission Tarification IA France (2019) §4.2
-        # ⚠ Référence non vérifiée formellement (audit V4) — voir caveat KPI
-        # inséré en corps de feuille ci-dessous.
+        # ⚠️ « §4.2 » NE RENVOYAIT À RIEN. Le numéro apparaissait ici, dans le
+        # sous-titre du bandeau et dans le libellé du KPI, sous un titre de
+        # document que rien ne permet de retrouver — et le même titre portait
+        # §3.2.4 dans A3 et §3.2.5 dans A6. Les contrôles restent ce qu'ils
+        # sont : des contrôles du module, énoncés comme tels.
         ws2 = wb.create_sheet("2-Aberrants")
-        _bandeau(ws2, "Valeurs Aberrantes", "Contrôles actuariels — IA France §4.2",
+        _bandeau(ws2, "Valeurs Aberrantes", "Contrôles actuariels de cohérence",
                  "A1 — Validation Qualité", aid, now)
         r = 7
-        _kpi(ws2, r, "Référence méthodologique (§4.2)",
-             "⚠ Référence de travail — non vérifiée formellement. "
-             "À valider par la Commission Tarification IA France avant "
-             "toute diffusion externe (ACPR).",
-             statut="AMBRE", wrap=True); r += 1
+        _kpi(ws2, r, "Portée de ces contrôles",
+             "Contrôles de cohérence propres au module (bornes de plausibilité "
+             "par variable, types, valeurs extrêmes). Aucune norme externe "
+             "n'est invoquée : ils ne remplacent pas la revue de l'actuaire.",
+             wrap=True); r += 1
         _section(ws2, r, "▶ ANOMALIES DÉTECTÉES"); r += 1
         aberrants = qualite.get('aberrants', {})
         if aberrants:
@@ -1002,11 +1007,12 @@ def export_excel_a2(result_a2: Dict, audit_id: str = "") -> bytes:
         _bandeau(ws2, "Data Dictionnaire", "Traçabilité des variables dérivées — ACPR-2022-P-01 §3.2",
                  "A2 — Traçabilité", aid, now)
         r = 7
-        _kpi(ws2, r, "Référence méthodologique (§3.2)",
-             "⚠ Référence de travail — non vérifiée formellement. "
-             "À valider par la Commission Tarification IA France avant "
-             "toute diffusion externe (ACPR).",
-             statut="AMBRE", wrap=True); r += 1
+        _kpi(ws2, r, "Portée de cette traçabilité",
+             "Chaque variable dérivée est documentée par sa source, son "
+             "opération et son usage — traçabilité exigible en revue ACPR. "
+             "Le détail des opérations relève du module, pas d'une norme "
+             "externe.",
+             wrap=True); r += 1
         _section(ws2, r, "▶ VARIABLES DÉRIVÉES DOCUMENTÉES"); r += 1
         headers = ['Variable', 'Source', 'Opération', 'Usage', 'Justification']
         widths  = [26, 26, 34, 22, 50]

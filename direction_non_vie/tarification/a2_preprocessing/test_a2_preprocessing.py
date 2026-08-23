@@ -148,6 +148,110 @@ class TestA2PrimePureCalculee(unittest.TestCase):
               f"moyenne={df['prime_pure'].mean():.2f}")
 
 
+def _portefeuille_complet(plan, n=400, seed=3):
+    """Un fichier client SAIN : tous les facteurs du plan, aucune valeur
+    manquante, aucune modalité inconnue. Construit DEPUIS le plan — une
+    fixture écrite à la main se périmerait au premier facteur ajouté."""
+    rng = np.random.default_rng(seed)
+    df = pd.DataFrame({
+        'id_contrat':           range(n),
+        'nb_sinistres':         rng.poisson(0.08, n).astype(float),
+        'cout_total_sinistres': rng.exponential(800, n),
+        'exposition':           rng.uniform(0.2, 1.0, n),
+    })
+    for f in plan.facteurs:
+        if f.nom in df.columns:
+            continue
+        if f.type == 'continu':
+            df[f.nom] = rng.uniform(1, 100, n)
+        elif f.type == 'binaire':
+            df[f.nom] = rng.integers(0, 2, n).astype(float)
+        else:
+            df[f.nom] = rng.choice([str(m) for m in f.modalites], n)
+    for col in plan.colonnes_attendues():
+        if col not in df.columns:
+            df[col] = rng.uniform(1, 100, n)
+    return {'success': True, 'dataframe': df, 'branche': plan.lob,
+            'statut_rag': 'VERT', 'erreur': None}
+
+
+class T_Un_Fichier_Sain_Obtient_Un_Bon_Verdict(unittest.TestCase):
+    """CONTRÔLE POSITIF — la leçon V14, étendue à A2.
+
+    ⚠️ ÉCRITE DANS `a4_ml/agent.py` AU CORRECTIF V14, APPLIQUÉE À A6 SEUL :
+
+        « On a beaucoup vérifié que le système REFUSE ce qu'il doit refuser.
+          Personne n'a vérifié qu'il ACCEPTE ce qu'il doit accepter. Un
+          contrôle qui refuse tout est aussi inutile qu'un contrôle qui
+          accepte tout — et bien plus difficile à repérer, parce qu'il donne
+          l'apparence de la rigueur. »
+
+    ⚠️ MESURÉ AVANT CE LOT, SUR LES VINGT PLANS DU DÉPÔT, DONNÉES COMPLÈTES ET
+    PROPRES : **VERT atteint par 0 plan sur 20**. Le nombre de « colonnes non
+    encodées » signalées vaut, plan par plan, exactement le nombre de facteurs
+    CATÉGORIELS — parce qu'A2 ajoute les colonnes encodées et CONSERVE la
+    colonne brute, que `_valider_sortie` compte alors comme non encodée.
+    """
+
+    def test_un_portefeuille_complet_et_propre_atteint_VERT(self):
+        from direction_non_vie.tarification.a2_preprocessing.agent import (
+            AgentA2Preprocessing,
+        )
+        agent = AgentA2Preprocessing(models_path='/tmp', audit_path='/tmp',
+                                     verbose=False)
+        r = agent.run(result_a1=_portefeuille_complet(_PLAN_AUTO),
+                      plan=_PLAN_AUTO)
+        self.assertTrue(r['success'], f"Erreur : {r.get('erreur')}")
+        non_enc = r['rapport']['transformations']['validation'].get(
+            'colonnes_non_encodees', [])
+        produites = set(_PLAN_AUTO.colonnes_produites())
+        # ⚠️ LA PREUVE QUE LE SIGNALEMENT EST FAUX, PAS SEULEMENT LE STATUT :
+        # chaque colonne dite « non encodée » a ses colonnes encodées dans la
+        # sortie. On le montre AVANT d'exiger le VERT — sinon le test ne
+        # dirait pas POURQUOI il tombe.
+        for col in non_enc:
+            issues = sorted(c for c in produites if c.startswith(col + '_'))
+            self.assertEqual(
+                issues, [],
+                f"« {col} » est signalée non encodée alors que le plan produit "
+                f"{issues} — la colonne brute survit à côté de ses encodages")
+        self.assertEqual(
+            r['statut_rag'], 'VERT',
+            f"statut {r['statut_rag']} sur un fichier COMPLET et PROPRE ; "
+            f"colonnes dites non encodées : {non_enc}")
+        print(f"    POS-A2a fichier sain → {r['statut_rag']} ✅")
+
+    def test_le_nombre_de_variables_winsorisees_PUBLIE_est_le_vrai(self):
+        """⚠️ MESURÉ : « Winsorisées : 0 variable(s) » publié à l'actuaire
+        alors que NEUF facteurs continus l'ont été. `_appliquer_plan` retourne
+        un dict indexé par nom de colonne ; le commentaire lit une clé
+        `colonnes_winsorisees` qui n'existe pas, et son `.get(..., {})` rend
+        donc toujours un dictionnaire vide."""
+        import re
+
+        from direction_non_vie.tarification.a2_preprocessing.agent import (
+            AgentA2Preprocessing,
+        )
+        agent = AgentA2Preprocessing(models_path='/tmp', audit_path='/tmp',
+                                     verbose=False)
+        r_a1 = _portefeuille_complet(_PLAN_AUTO, n=500, seed=11)
+        # des queues franches, pour que la winsorisation morde vraiment
+        rng = np.random.default_rng(11)
+        for f in _PLAN_AUTO.facteurs:
+            if f.type == 'continu' and f.nom in r_a1['dataframe'].columns:
+                r_a1['dataframe'][f.nom] = rng.lognormal(3, 1.4, 500)
+        r = agent.run(result_a1=r_a1, plan=_PLAN_AUTO)
+        reel = len(r['rapport']['transformations']['winsorisation'])
+        self.assertGreater(reel, 0, "prémisse : la winsorisation doit mordre")
+        m = re.search(r'Winsoris\w+\s*:\s*(\d+)\s*variable', r['commentaire'])
+        self.assertIsNotNone(m, "le commentaire ne publie pas ce nombre")
+        self.assertEqual(
+            int(m.group(1)), reel,
+            f"le commentaire publie « {m.group(0)} » alors que {reel} "
+            f"facteur(s) ont été écrêté(s)")
+        print(f"    POS-A2b {reel} winsorisées, {m.group(1)} publiées ✅")
+
+
 if __name__ == '__main__':
     print("="*65)
     print("  TESTS A2 PREPROCESSING v1.0")
