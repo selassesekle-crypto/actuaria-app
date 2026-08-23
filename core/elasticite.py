@@ -552,19 +552,30 @@ def estimer_elasticite(plan, df, diag=None,
 #: TENTATIVE D'ESTIMATION ; le quatrième dit que la tentative n'est pas encore
 #: constructible.
 #:
-#: ⚠️⚠️ `NON_EXPLOITEE` EST UN AJOUT, ET C'EST UNE CONTESTATION ASSUMÉE DU
-#: MODÈLE À TROIS ÉTATS. Sans lui, un plan qui déclare correctement son bloc
-#: `comportement` retomberait sur `NON_FOURNIE` — ce qui serait FAUX, la
-#: donnée étant fournie — ou sur `NON_IDENTIFIABLE`, ce qui serait pire :
-#: cela imputerait au PORTEFEUILLE une limite qui est celle du LOGICIEL.
-#: Confondre « les données ne permettent pas » et « le module ne sait pas
-#: encore » est exactement le motif que cet audit poursuit.
-#: ⚠️ IL DISPARAÎT QUAND L4 ATTERRIT : il n'a de sens que tant que
-#: l'estimation n'est pas construite.
+#: ⚠️⚠️ `NON_EXPLOITEE` A CHANGÉ DE SENS AU LOT L4, ET SA JUSTIFICATION EST
+#: RÉÉCRITE PLUTÔT QUE LAISSÉE DERRIÈRE. Elle disait « l'estimation (L3-L5)
+#: n'est pas construite » : elle l'est désormais. Une justification qui
+#: survit à son objet est le défaut que cet audit poursuit — c'est très
+#: exactement ce que fait encore `FIGURES_ECARTEES['monitoring_gini']`, qui
+#: écarte une figure pour des « données FABRIQUÉES » que le correctif
+#: `98dba85` a rendues mesurées. On ne le répète pas ici.
+#: `NON_EXPLOITEE` signifie AUJOURD'HUI : le bloc est déclaré, mais AUCUNE
+#: DONNÉE n'a été fournie à ce calcul — donc rien n'a été examiné.
+#:
+#: ⚠️ CE QUI RESTE VRAI, ET QUI VALAIT LA CONTESTATION DU MODÈLE À TROIS
+#: ÉTATS : ce cas ne doit retomber ni sur `NON_FOURNIE` — la donnée EST
+#: déclarée — ni sur `NON_IDENTIFIABLE`, qui imputerait au PORTEFEUILLE une
+#: limite qui n'est pas la sienne. Rien n'a été mesuré sur lui.
 ELASTICITE_ESTIMEE          = 'ESTIMEE'
 ELASTICITE_NON_IDENTIFIABLE = 'NON_IDENTIFIABLE'
 ELASTICITE_NON_FOURNIE      = 'NON_FOURNIE'
 ELASTICITE_NON_EXPLOITEE    = 'NON_EXPLOITEE'
+#: ⚠️ LE CINQUIÈME. La donnée est là, la variation est exploitable, et
+#: l'estimation a bien été tentée — mais le signal ne permet pas de conclure
+#: (pas de convergence, intervalle contenant zéro, ou trop large). Il
+#: n'accuse NI l'absence de données NI le portefeuille : il constate un
+#: manque de signal, et c'est une troisième chose.
+ELASTICITE_NON_CONCLUANTE   = 'NON_CONCLUANTE'
 
 
 def _cout_des_absences(hors: dict[str, tuple[str, ...]]) -> str:
@@ -681,21 +692,45 @@ def etat_elasticite(plan=None, df=None) -> dict:
             ),
         }
 
+    # ── LA VARIATION EST EXPLOITABLE : ON ESTIME ─────────────────────────────
+    est = estimer_elasticite(plan, df, diag)
+    socle = {**socle, 'estimation': est}
+
+    if not est['concluante']:
+        # ⚠️ LE CINQUIÈME CAS. Ni une absence de données, ni un défaut du
+        # portefeuille : la variation était exploitable et l'estimation a bien
+        # été tentée. Ce qui manquait, c'est du SIGNAL.
+        return {
+            **socle,
+            'etat': ELASTICITE_NON_CONCLUANTE,
+            'motif': est['motif'],
+            'ce_que_cela_coute': (
+                "L'élasticité-prix n'est pas publiée, et AUCUNE recommandation "
+                "de variation tarifaire n'est produite. ⚠️ Ni les données ni "
+                "leur variation de prix ne sont en cause : l'estimation a été "
+                "tentée et son résultat est trop imprécis pour décider."
+            ),
+            'ce_quil_faudrait': (
+                "Plus d'observations, ou une variation de prix de plus grande "
+                "amplitude. Une élasticité faible demande davantage de "
+                "renouvellements pour être tranchée qu'une élasticité forte."
+            ),
+        }
+
     return {
         **socle,
-        'etat': ELASTICITE_NON_EXPLOITEE,
-        'motif': (
-            f"Le bloc `comportement` est déclaré, et la variation de prix est "
-            f"exploitable par la voie « {diag['voie']} » : {diag['motif']} "
-            f"L'estimation elle-même (lots L4-L5) n'est pas construite."
-        ),
+        'etat': ELASTICITE_ESTIMEE,
+        'motif': est['motif'],
         'ce_que_cela_coute': (
-            "L'élasticité-prix n'est pas estimée, et AUCUNE recommandation de "
-            "variation tarifaire n'est produite. ⚠️ Ce n'est PAS une limite du "
-            "portefeuille : sa variation de prix a été examinée et elle "
-            "convient. " + _cout_des_absences(hors)
+            "Rien : l'élasticité-prix est estimée, avec son intervalle de "
+            "confiance. Une analyse de sensibilité tarifaire devient "
+            "légitime. " + _cout_des_absences(hors)
         ),
         'ce_quil_faudrait': (
-            "Rien de plus du client. Ce qui manque est dans le module."
+            "Rien de plus pour l'estimation elle-même. "
+            + ("Un test de prix au renouvellement (`groupe_test`) rendrait "
+               "l'exogénéité garantie plutôt que supposée."
+               if est['voie'] != VOIE_EXPERIMENTALE else
+               "L'identification repose déjà sur un tirage au sort.")
         ),
     }

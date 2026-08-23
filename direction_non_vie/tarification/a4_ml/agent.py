@@ -1801,6 +1801,21 @@ class AgentA4ML:
                 f"\n  {_elast.get('motif', '')}"
                 f"\n  {_elast.get('ce_que_cela_coute', '')}"
             )
+        elif _elast.get('etat') == ELASTICITE_ESTIMEE:
+            # ⚠️ CE QUI EST MESURÉ SE PUBLIE AVEC SON INCERTITUDE ET SA
+            # RÉSERVE. Un ε seul se lirait comme une certitude ; c'est
+            # exactement ce que le « Tarif optimal : −20 % » faisait.
+            _est = _elast.get('estimation') or {}
+            niveau1 += (
+                f"\n\nÉLASTICITÉ-PRIX : ESTIMÉE"
+                f"\n  ε = {_est.get('elasticite'):+.4f}"
+                f"  IC 95 % [{_est.get('ic_bas'):+.4f} ; "
+                f"{_est.get('ic_haut'):+.4f}]"
+                f"\n  Voie d'identification : {_est.get('voie')} — "
+                f"{_est.get('n_lignes'):,} renouvellements, "
+                f"{_est.get('n_resiliations'):,} résiliations"
+                f"\n  {_est.get('reserve', '')}"
+            )
 
         # ── NIVEAU 2 : DIAGNOSTIC ─────────────────────────────────────────────
         meilleur_nom  = meilleur.get('modele', 'N/A')

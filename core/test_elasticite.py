@@ -400,6 +400,8 @@ class T_L_Exploitabilite_Se_Mesure_Avant_Toute_Estimation(unittest.TestCase):
         une limite du logiciel. Ici, la limite EST celle du portefeuille et
         l'état doit le dire — sinon le client corrigerait la mauvaise chose."""
         from core.elasticite import (
+            ELASTICITE_ESTIMEE,
+            ELASTICITE_NON_CONCLUANTE,
             ELASTICITE_NON_EXPLOITEE,
             ELASTICITE_NON_IDENTIFIABLE,
             etat_elasticite,
@@ -408,11 +410,20 @@ class T_L_Exploitabilite_Se_Mesure_Avant_Toute_Estimation(unittest.TestCase):
         e_det = etat_elasticite(p, _renouvellements(regime='deterministe'))
         self.assertEqual(e_det['etat'], ELASTICITE_NON_IDENTIFIABLE)
         self.assertIn('exploitabilite', e_det)
+        # ⚠️ CE QUI EST VÉRIFIÉ N'A PAS BOUGÉ : une variation exploitable
+        # n'accuse PAS le portefeuille. Ce qui a bougé, c'est l'état exact —
+        # avant L4 le logiciel ne savait pas estimer (`NON_EXPLOITEE`) ; il
+        # sait désormais, et rend `ESTIMEE` ou `NON_CONCLUANTE` selon le
+        # signal. `_renouvellements` n'encode aucun effet-prix, d'où le
+        # second. Épingler `NON_EXPLOITEE` aurait figé un détail
+        # d'implémentation à la place de la propriété.
         e_ok = etat_elasticite(p, _renouvellements(regime='residuelle'))
-        self.assertEqual(
-            e_ok['etat'], ELASTICITE_NON_EXPLOITEE,
-            "une variation exploitable doit rendre la main au logiciel, "
-            "pas accuser le portefeuille")
+        self.assertNotEqual(
+            e_ok['etat'], ELASTICITE_NON_IDENTIFIABLE,
+            "une variation exploitable ne doit pas accuser le portefeuille")
+        self.assertIn(e_ok['etat'], (ELASTICITE_ESTIMEE,
+                                     ELASTICITE_NON_CONCLUANTE,
+                                     ELASTICITE_NON_EXPLOITEE))
         print(f"    POS-L3g déterministe → {e_det['etat']} · "
               f"exploitable → {e_ok['etat']} ✅")
 
@@ -633,6 +644,145 @@ class T_L_Estimateur_Retrouve_Un_Eps_Qu_On_A_Pose(unittest.TestCase):
             "exogénéité garantie par tirage au sort")
         print("    POS-L4f la réserve accompagne l'ε, et elle différencie "
               "les deux voies ✅")
+
+
+class T_L_Etat_Atteint_Enfin_ESTIMEE(unittest.TestCase):
+    """CONTRÔLE POSITIF — les cinq états, tous atteignables.
+
+    ⚠️⚠️ UN ÉTAT QUI NE PEUT PAS ÊTRE ATTEINT EST UN ÉTAT QUI N'EXISTE PAS.
+    Depuis L0, `ESTIMEE` était déclaré et inatteignable ; ce lot le rend
+    joignable, et chacun des cinq doit désormais se prouver par un chemin.
+    """
+
+    def _etat(self, **kw):
+        from core.elasticite import etat_elasticite
+        return etat_elasticite(*kw.pop('args', ()), **kw)
+
+    def test_un_signal_FRANC_rend_ESTIMEE_avec_son_intervalle(self):
+        from core.elasticite import ELASTICITE_ESTIMEE, etat_elasticite
+        df, vrai = _eps_connu(-0.35, n=30000, seed=4)
+        e = etat_elasticite(_plan(comportement=_bloc()), df)
+        self.assertEqual(e['etat'], ELASTICITE_ESTIMEE)
+        est = e['estimation']
+        self.assertLessEqual(est['ic_bas'], vrai)
+        self.assertGreaterEqual(est['ic_haut'], vrai)
+        self.assertIn('elasticite', est)
+        print(f"    POS-L4g ε vrai {vrai:+.4f} → état {e['etat']}, "
+              f"ε={est['elasticite']:+.4f} IC [{est['ic_bas']:+.4f}, "
+              f"{est['ic_haut']:+.4f}] ✅")
+
+    def test_les_CINQ_etats_sont_atteignables_par_un_chemin_distinct(self):
+        """⚠️ CHACUN DIT AUTRE CHOSE, ET LE CHEMIN LE PROUVE. Un état qui se
+        confondrait avec un autre ferait corriger au client la mauvaise
+        chose."""
+        from core.elasticite import (
+            ELASTICITE_ESTIMEE,
+            ELASTICITE_NON_CONCLUANTE,
+            ELASTICITE_NON_EXPLOITEE,
+            ELASTICITE_NON_FOURNIE,
+            ELASTICITE_NON_IDENTIFIABLE,
+            etat_elasticite,
+        )
+        p = _plan(comportement=_bloc())
+        chemins = {
+            ELASTICITE_NON_FOURNIE:
+                etat_elasticite(_plan(), _renouvellements()),
+            ELASTICITE_NON_EXPLOITEE:
+                etat_elasticite(p, None),
+            ELASTICITE_NON_IDENTIFIABLE:
+                etat_elasticite(p, _renouvellements(regime='deterministe')),
+            ELASTICITE_NON_CONCLUANTE:
+                etat_elasticite(p, _eps_connu(-0.004, n=900, seed=13)[0]),
+            ELASTICITE_ESTIMEE:
+                etat_elasticite(p, _eps_connu(-0.35, n=30000, seed=4)[0]),
+        }
+        for attendu, obtenu in chemins.items():
+            with self.subTest(etat=attendu):
+                self.assertEqual(obtenu['etat'], attendu,
+                                 f"chemin de « {attendu} » : {obtenu['motif']}")
+                self.assertTrue((obtenu.get('motif') or '').strip())
+        self.assertEqual(len({e['etat'] for e in chemins.values()}), 5)
+        print(f"    POS-L4h les 5 états atteints par 5 chemins distincts : "
+              f"{sorted(chemins)} ✅")
+
+    def test_NON_CONCLUANTE_n_accuse_ni_les_donnees_ni_l_absence(self):
+        """⚠️ LE CINQUIÈME CAS DIT CE QU'IL EST. La variation était
+        exploitable — le troisième cas ne s'applique pas — et la donnée était
+        déclarée — le premier non plus. Ce qui manquait, c'est du signal."""
+        from core.elasticite import ELASTICITE_NON_CONCLUANTE, etat_elasticite
+        e = etat_elasticite(_plan(comportement=_bloc()),
+                            _eps_connu(-0.004, n=900, seed=13)[0])
+        self.assertEqual(e['etat'], ELASTICITE_NON_CONCLUANTE)
+        self.assertTrue(e['exploitabilite']['exploitable'],
+                        "prémisse : la variation DOIT être exploitable")
+        self.assertIn('estimation', e)
+        self.assertFalse(e['estimation']['concluante'])
+        print(f"    POS-L4i {e['etat']} : variation exploitable, signal "
+              f"insuffisant ✅")
+
+    def test_la_RESERVE_est_dans_l_etat_quand_un_eps_est_publie(self):
+        """⚠️ LA LIMITE N°2 SUIT LE CHIFFRE. Un ε publié sans sa réserve
+        laisserait croire que l'exogénéité a été démontrée."""
+        from core.elasticite import ELASTICITE_ESTIMEE, etat_elasticite
+        e = etat_elasticite(_plan(comportement=_bloc()),
+                            _eps_connu(-0.35, n=30000, seed=4)[0])
+        self.assertEqual(e['etat'], ELASTICITE_ESTIMEE)
+        self.assertIn('reserve', e['estimation'])
+        self.assertIn('pas démontr', e['estimation']['reserve'].lower())
+        print("    POS-L4j la réserve suit l'ε publié ✅")
+
+    def test_la_justification_de_NON_EXPLOITEE_N_A_PAS_SURVECU_a_son_objet(self):
+        """⚠️⚠️ LE DÉFAUT QUE J'AI TROUVÉ AILLEURS, ET QUE JE M'INTERDIS ICI.
+        `FIGURES_ECARTEES['monitoring_gini']` justifie encore son exclusion par
+        « données FABRIQUÉES » alors que le correctif `98dba85` les a rendues
+        mesurées — et son test l'épingle par le MOT, pas par le FAIT.
+
+        `NON_EXPLOITEE` disait « l'estimation (L3-L5) n'est pas construite ».
+        Elle l'est. Son motif doit donc dire ce qui est VRAI maintenant :
+        aucune donnée n'a été fournie à ce calcul."""
+        from core.elasticite import ELASTICITE_NON_EXPLOITEE, etat_elasticite
+        e = etat_elasticite(_plan(comportement=_bloc()), None)
+        self.assertEqual(e['etat'], ELASTICITE_NON_EXPLOITEE)
+        motif = e['motif'].lower()
+        self.assertNotIn('l3', motif)
+        self.assertNotIn('l4', motif)
+        self.assertNotIn('pas encore construite', motif)
+        self.assertIn('aucun', motif)
+        print(f"    POS-L4k le motif de {ELASTICITE_NON_EXPLOITEE} dit ce qui "
+              f"est vrai aujourd'hui ✅")
+
+    def test_A4_publie_l_eps_de_bout_en_bout_ET_tarife_normalement(self):
+        """⚠️ LE CHEMIN COMPLET, ET IL NE BLOQUE RIEN. Un état qui n'arriverait
+        pas jusqu'au commentaire actuaire n'existerait que pour les tests. Et
+        la règle tient dans les cinq états : aucun blocage."""
+        import importlib
+
+        from core.elasticite import ELASTICITE_ESTIMEE
+        from direction_non_vie.tarification.a4_ml.agent import AgentA4ML
+        T4 = importlib.import_module(
+            'direction_non_vie.tarification.a4_ml.test_a4_ml')
+
+        df, vrai = _eps_connu(-0.35, n=30000, seed=4)
+        r_a2 = T4._make_r_a2(600)
+        # le portefeuille de comportement porte AUSSI les colonnes ML
+        for col in r_a2['dataframe'].columns:
+            if col not in df.columns:
+                df[col] = r_a2['dataframe'][col].reindex(df.index).ffill().bfill()
+        r_a2['dataframe'] = df
+
+        r = AgentA4ML(models_path='/tmp', audit_path='/tmp', verbose=False).run(
+            result_a2=r_a2, result_a3=T4._make_r_a3(),
+            plan=_plan(comportement=_bloc()),
+            calcul_shap=False, generer_graphiques=False)
+        self.assertTrue(r['success'], f"Erreur : {r.get('erreur')}")
+        self.assertTrue(r['classement'], "aucun modèle classé")
+        e = r['elasticite']
+        self.assertEqual(e['etat'], ELASTICITE_ESTIMEE, e.get('motif'))
+        self.assertIn('ÉLASTICITÉ-PRIX : ESTIMÉE', r['commentaire'])
+        self.assertIn('IC 95 %', r['commentaire'])
+        print(f"    POS-L4l A4 de bout en bout : ε vrai {vrai:+.4f} → "
+              f"{e['estimation']['elasticite']:+.4f}, statut "
+              f"{r['statut_rag']}, {len(r['classement'])} modèles ✅")
 
 
 if __name__ == '__main__':
