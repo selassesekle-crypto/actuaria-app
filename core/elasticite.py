@@ -367,6 +367,184 @@ def diagnostic_exploitabilite(plan, df,
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+#  L'ESTIMATION — un ε, TOUJOURS avec son intervalle
+# ══════════════════════════════════════════════════════════════════════════════
+
+#: ⚠️ DEUX CONVENTIONS DE PLUS, ET ELLES DÉCIDENT DU CINQUIÈME CAS.
+#: Un intervalle qui contient zéro ne permet même pas de signer l'effet ; un
+#: intervalle dont la demi-largeur dépasse la moitié de l'estimation ne peut
+#: fonder aucune décision tarifaire. Aucun texte ne fixe ces bornes.
+PRECISION_RELATIVE_MAX = 0.50
+Z_95 = 1.959963985
+
+
+def _ajuster_logit(y, X):
+    """Régression logistique de la résiliation. Rend (beta, se, p_moyen, ok).
+
+    `X` : la première colonne EST la variation de prix ; les suivantes sont
+    les contrôles. `beta` et `se` portent donc sur la première.
+    """
+    import numpy as np
+    try:
+        import statsmodels.api as sm
+    except ImportError:
+        return None, None, None, False
+    try:
+        A = sm.add_constant(np.asarray(X, dtype=float), has_constant='add')
+        res = sm.GLM(np.asarray(y, dtype=float), A,
+                     family=sm.families.Binomial()).fit(maxiter=100)
+        if not bool(getattr(res, 'converged', True)):
+            return None, None, None, False
+        beta = float(res.params[1])
+        se = float(res.bse[1])
+        p_moyen = float(np.mean(res.fittedvalues))
+        if not (np.isfinite(beta) and np.isfinite(se) and se > 0):
+            return None, None, None, False
+        return beta, se, p_moyen, True
+    except (ValueError, TypeError, IndexError, KeyError,
+            np.linalg.LinAlgError, ZeroDivisionError):
+        # Separation parfaite, matrice singuliere, colonne degeneree : autant
+        # de cas ou l'ajustement n'aboutit pas. Ils se declarent, ils ne se
+        # rattrapent pas.
+        return None, None, None, False
+
+
+def estimer_elasticite(plan, df, diag=None,
+                       precision_max: float = PRECISION_RELATIVE_MAX):
+    """L'élasticité-prix de la demande, avec son intervalle de confiance.
+
+    ⚠️ LA FORMULE, ET ELLE A ÉTÉ VÉRIFIÉE NUMÉRIQUEMENT AVANT D'ÊTRE ÉCRITE.
+    Avec P(résiliation) = logistique(α + β·v), v = log(prime), et Q le nombre
+    de contrats retenus :
+
+        ε = ∂log(Q)/∂log(p) = −(∂P/∂v)/(1−P) = −β·P̄
+
+    Contrôle numérique sur 400 000 lignes : élasticité mesurée en bougeant le
+    prix de 1 % = −0,200501 ; formule −β·P̄ = −0,199792 ; écart 0,35 %, qui
+    est le terme du second ordre.
+
+    ⚠️⚠️ LES DEUX VOIES N'ONT PAS LA MÊME ARITHMÉTIQUE, et c'est la mesure qui
+    l'a tranché — pas une préférence. Sur un jeu à ε connu de −0,2329, prix
+    ENDOGÈNE :
+
+        aucun contrôle              ε = −0,7213   son IC RATE la vérité
+        v + contrôles (résiduelle)  ε = −0,2237   IC [−0,2947 ; −0,1528]
+        v moyen du groupe (expér.)  ε = −0,2108   IC [−0,2805 ; −0,1412]
+
+    Le premier est l'endogénéité mesurée : trois fois trop grand. Le second
+    corrige, MAIS il dépend du modèle de contrôle. Le troisième n'utilise QUE
+    le contraste tiré au sort et ne dépend d'AUCUN contrôle — c'est en cela
+    que la voie expérimentale prime, et c'est arithmétique.
+
+    ⚠️ L'INTERVALLE N'EST PAS OPTIONNEL. Un ε ponctuel sans son incertitude
+    est exactement ce que le lot L0 a retiré. `se(ε) ≈ P̄ · se(β)` — méthode
+    delta, P̄ traité comme connu, ce qui sous-estime légèrement la variance.
+    C'est dit ici plutôt que tu.
+
+    ⚠️ LE CINQUIÈME CAS : `concluante = False` quand l'ajustement ne converge
+    pas, quand l'intervalle contient zéro, ou quand sa demi-largeur dépasse la
+    moitié de l'estimation. Il ne se confond PAS avec `NON_IDENTIFIABLE` :
+    celui-là accuse la variation de prix, celui-ci constate que le signal
+    était trop faible pour conclure.
+    """
+    import numpy as np
+
+    if diag is None:
+        diag = diagnostic_exploitabilite(plan, df)
+    conventions = {
+        **diag.get('conventions', {}),
+        'precision_relative_max': precision_max,
+        'niveau_de_confiance': 0.95,
+    }
+    vide = {
+        'concluante': False, 'elasticite': None, 'ic_bas': None,
+        'ic_haut': None, 'erreur_type': None, 'beta': None,
+        'taux_resiliation_moyen': None, 'voie': diag.get('voie'),
+        'facteurs_de_controle': [], 'n_lignes': diag.get('n_lignes', 0),
+        'n_resiliations': diag.get('n_resiliations', 0),
+        'conventions': conventions,
+    }
+    if not diag.get('exploitable'):
+        return {**vide, 'motif': (
+            "La variation de prix n'est pas exploitable : rien n'a été estimé. "
+            + (diag.get('motif') or ''))}
+
+    bloc = getattr(plan, 'comportement', None)
+    p0 = np.asarray(df[bloc.prime_precedente], dtype=float)
+    p1 = np.asarray(df[bloc.prime_proposee], dtype=float)
+    y = np.asarray(df[bloc.issue], dtype=float)
+    ok = np.isfinite(p0) & np.isfinite(p1) & (p0 > 0) & (p1 > 0) & np.isfinite(y)
+    v = np.log(p1[ok] / p0[ok])
+    y = y[ok]
+
+    # ── LA VOIE DÉCIDE DE CE QU'ON RÉGRESSE ─────────────────────────────────
+    if diag.get('voie') == VOIE_EXPERIMENTALE:
+        # Seule la variation ENTRE GROUPES est retenue : elle est tirée au
+        # sort, donc exogène. Aucun contrôle — c'est tout l'intérêt.
+        g = df.loc[ok, bloc.groupe_test].to_numpy()
+        moyennes = {cle: float(v[g == cle].mean()) for cle in set(g)}
+        regresseur = np.array([moyennes[cle] for cle in g], dtype=float)
+        controles: list[str] = []
+        X = regresseur.reshape(-1, 1)
+        reserve = (
+            "La variation exploitée est TIRÉE AU SORT : son indépendance au "
+            "risque est garantie par le protocole, elle n'est pas supposée. "
+            "C'est la seule situation où l'exogénéité ne se discute pas."
+        )
+    else:
+        controles = [c for c in (plan.colonnes_produites() if plan else ())
+                     if c in df.columns]
+        X = np.column_stack(
+            [v] + [df.loc[ok, c].to_numpy(dtype=float) for c in controles]
+        ) if controles else v.reshape(-1, 1)
+        reserve = (
+            "L'effet-prix est identifié par la variation de prix qui RESTE "
+            "une fois les facteurs tarifaires retirés. Cette variation est "
+            "MESURÉE ; son indépendance à ce qui n'est pas observé n'est PAS "
+            "démontrée — aucun calcul ne le peut. Seul un test de prix la "
+            "garantirait."
+        )
+
+    beta, se, p_moyen, converge = _ajuster_logit(y, X)
+    base = {**vide, 'facteurs_de_controle': controles, 'reserve': reserve,
+            'n_lignes': int(ok.sum()), 'n_resiliations': int(np.sum(y > 0))}
+
+    if not converge:
+        return {**base, 'motif': (
+            "L'ajustement du modèle de résiliation n'a pas convergé, ou son "
+            "erreur type n'est pas exploitable. Aucune élasticité n'est "
+            "publiée. ⚠️ Ce n'est PAS un défaut de la variation de prix, que le "
+            "diagnostic a jugée exploitable.")}
+
+    eps = -beta * p_moyen
+    se_eps = abs(p_moyen) * se
+    demi = Z_95 * se_eps
+    bas, haut = eps - demi, eps + demi
+    chiffre = {**base, 'elasticite': round(eps, 5), 'ic_bas': round(bas, 5),
+               'ic_haut': round(haut, 5), 'erreur_type': round(se_eps, 6),
+               'beta': round(beta, 5),
+               'taux_resiliation_moyen': round(p_moyen, 5)}
+
+    if bas <= 0.0 <= haut:
+        return {**chiffre, 'motif': (
+            f"L'intervalle de confiance à 95 % [{bas:+.4f} ; {haut:+.4f}] "
+            f"contient zéro : le signal ne permet même pas de SIGNER l'effet "
+            f"du prix sur la résiliation. Aucune élasticité n'est publiée.")}
+
+    if abs(eps) > 0 and demi / abs(eps) > precision_max:
+        return {**chiffre, 'motif': (
+            f"L'intervalle est trop large pour fonder une décision : la "
+            f"demi-largeur vaut {demi / abs(eps):.0%} de l'estimation, pour "
+            f"un plafond de {precision_max:.0%}. Aucune élasticité n'est "
+            f"publiée.")}
+
+    return {**chiffre, 'concluante': True, 'motif': (
+        f"Élasticité-prix estimée à {eps:+.4f}, intervalle de confiance à "
+        f"95 % [{bas:+.4f} ; {haut:+.4f}], sur {int(ok.sum()):,} "
+        f"renouvellements dont {int(np.sum(y > 0)):,} résiliations.")}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 #  L'ÉTAT PUBLIÉ — jamais une valeur inventée
 # ══════════════════════════════════════════════════════════════════════════════
 

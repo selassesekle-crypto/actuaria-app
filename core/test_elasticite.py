@@ -417,5 +417,223 @@ class T_L_Exploitabilite_Se_Mesure_Avant_Toute_Estimation(unittest.TestCase):
               f"exploitable → {e_ok['etat']} ✅")
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+#  L4 — L'ESTIMATION, ET SON ORACLE
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _eps_connu(eps_cible=-0.25, n=25000, seed=5, avec_test_de_prix=False,
+               taux_resil=0.15, bruit_prix=0.12):
+    """Un portefeuille dont on CONNAÎT l'élasticité, et le prix y est ENDOGÈNE.
+
+    ⚠️⚠️ C'EST L'ORACLE, ET IL EST NON NÉGOCIABLE. Un estimateur qui ne
+    retrouve pas un ε qu'on a posé soi-même ne vaut rien. La construction est
+    l'inverse exact de la formule : P = logistique(a + b·v + g·risque), d'où
+    ε = −b·P̄ ; on choisit ε, on en déduit b.
+
+    ⚠️ LE PRIX SUIT LE RISQUE, À DESSEIN. Un oracle où le prix serait
+    indépendant du risque ne prouverait rien : c'est précisément l'endogénéité
+    qui fait échouer l'estimateur naïf, et c'est elle qu'il faut reproduire.
+    Mesuré : sans contrôle du risque, ε sort à −0,7213 pour une vérité de
+    −0,2329, soit trois fois trop grand, et son intervalle rate la cible.
+    """
+    import numpy as np
+    import pandas as pd
+    rng = np.random.default_rng(seed)
+    risque = rng.normal(0, 1, n)
+    age = 45.0 + 12.0 * risque
+    bm = 200.0 + 45.0 * risque
+
+    groupe = np.array(['—'] * n, dtype=object)
+    v = bruit_prix * risque                       # le prix SUIT le risque
+    if avec_test_de_prix:
+        tire = rng.integers(0, 2, n)
+        groupe = np.where(tire == 1, 'hausse', 'temoin')
+        v = v + 0.10 * tire                       # la hausse est TIREE AU SORT
+    else:
+        v = v + rng.normal(0, 0.08, n)            # variation residuelle
+
+    b = 1.5
+    g = 0.45                                      # effet PROPRE du risque
+    a = np.log(taux_resil / (1 - taux_resil))
+    P = 1.0 / (1.0 + np.exp(-(a + b * v + g * risque)))
+    # ⚠️ ON RECALE b POUR ATTEINDRE L'eps VOULU : eps = -b * P_moyen.
+    b = -eps_cible / float(P.mean())
+    P = 1.0 / (1.0 + np.exp(-(a + b * v + g * risque)))
+    eps_vrai = -b * float(P.mean())
+
+    p0 = rng.uniform(300, 900, n)
+    df = pd.DataFrame({
+        'id_contrat':     np.arange(n),
+        'annee_exercice': 2023,
+        'age':            age,
+        'bonus_malus':    bm,
+        'prime_n_1':      p0,
+        'prime_n':        p0 * np.exp(v),
+        'resilie':        (rng.random(n) < P).astype(float),
+        'groupe_prix':    groupe,
+        'exposition':     rng.uniform(0.3, 1.0, n),
+        'nb_sinistres':   rng.poisson(0.08, n).astype(float),
+        'cout_total_sinistres': rng.exponential(600, n),
+    })
+    return df, eps_vrai
+
+
+class T_L_Estimateur_Retrouve_Un_Eps_Qu_On_A_Pose(unittest.TestCase):
+    """CONTRÔLE POSITIF — L'ORACLE. Le seul qui compte vraiment.
+
+    ⚠️⚠️ UN ESTIMATEUR QUI NE RETROUVE PAS UN ε QU'ON A POSÉ SOI-MÊME NE VAUT
+    RIEN. Aucun texte ne fixe une élasticité, donc aucun oracle externe
+    n'existe : la seule vérification possible est de fabriquer la vérité, puis
+    d'exiger que l'estimateur la retrouve DANS SON INTERVALLE.
+    """
+
+    def test_l_estimateur_retrouve_l_eps_VRAI_dans_son_intervalle(self):
+        """⚠️⚠️ DEUX PROPRIÉTÉS, ET ELLES NE SE CONFONDENT PAS — ma première
+        version les mélangeait, et c'est le contrôle qui me l'a appris.
+
+          COUVERTURE  l'intervalle contient-il la vérité ? C'est l'oracle, et
+                      il doit tenir DANS TOUS LES CAS.
+          CONCLUSIVITÉ l'intervalle est-il assez étroit pour décider ? C'est
+                      une question de politique, réglée par une convention.
+
+        MESURÉ : à ε = −0,147, l'estimateur rend −0,1315 avec IC
+        [−0,2013 ; −0,0618] sur 25 000 renouvellements. La vérité EST dans
+        l'intervalle — l'estimateur est juste — mais la demi-largeur vaut
+        53 % de l'estimation, au-dessus du plafond de 50 %. À 60 000 elle
+        tombe à 31 %, à 150 000 à 20 %. **Une petite élasticité demande plus
+        de données** : ce n'est pas un défaut de l'estimateur, c'est une
+        propriété du signal, et le tableau ci-dessous l'épingle.
+        """
+        from core.elasticite import diagnostic_exploitabilite, estimer_elasticite
+        p = _plan(comportement=_bloc())
+        for eps_cible, n, conclut in ((-0.15, 25000, False),
+                                      (-0.15, 60000, True),
+                                      (-0.30, 25000, True),
+                                      (-0.55, 25000, True)):
+            with self.subTest(eps=eps_cible, n=n):
+                df, vrai = _eps_connu(eps_cible, n=n, seed=7)
+                r = estimer_elasticite(p, df, diagnostic_exploitabilite(p, df))
+                # ── L'ORACLE : la couverture, TOUJOURS ────────────────────
+                self.assertLessEqual(
+                    r['ic_bas'], vrai,
+                    f"ε vrai {vrai:.4f} au-dessus de l'IC [{r['ic_bas']:.4f}, "
+                    f"{r['ic_haut']:.4f}] (estimé {r['elasticite']:.4f})")
+                self.assertGreaterEqual(
+                    r['ic_haut'], vrai,
+                    f"ε vrai {vrai:.4f} en dessous de l'IC [{r['ic_bas']:.4f}, "
+                    f"{r['ic_haut']:.4f}] (estimé {r['elasticite']:.4f})")
+                # ── LA CONCLUSIVITÉ : une AUTRE propriété ─────────────────
+                self.assertEqual(
+                    r['concluante'], conclut,
+                    f"conclusivité attendue {conclut} sur n={n} pour "
+                    f"ε={vrai:.4f} : {r.get('motif')}")
+                demi = (r['ic_haut'] - r['ic_bas']) / 2
+                print(f"    POS-L4a ε vrai {vrai:+.4f} n={n:,} → estimé "
+                      f"{r['elasticite']:+.4f} IC [{r['ic_bas']:+.4f}, "
+                      f"{r['ic_haut']:+.4f}] précision "
+                      f"{demi / abs(r['elasticite']):.0%} concluante="
+                      f"{r['concluante']} ✅")
+
+    def test_l_intervalle_est_OBLIGATOIRE_et_non_degenere(self):
+        """⚠️ UN ε PONCTUEL SANS SON INCERTITUDE EST EXACTEMENT CE QU'ON VIENT
+        DE RETIRER. La grille à ±20 % ne portait aucune incertitude non plus."""
+        from core.elasticite import diagnostic_exploitabilite, estimer_elasticite
+        df, _ = _eps_connu(-0.25)
+        p = _plan(comportement=_bloc())
+        r = estimer_elasticite(p, df, diagnostic_exploitabilite(p, df))
+        for cle in ('elasticite', 'ic_bas', 'ic_haut', 'erreur_type',
+                    'n_lignes', 'n_resiliations', 'voie', 'conventions'):
+            with self.subTest(cle=cle):
+                self.assertIn(cle, r, f"« {cle} » n'est pas publié")
+                self.assertIsNotNone(r[cle], f"« {cle} » est vide")
+        self.assertLess(r['ic_bas'], r['elasticite'])
+        self.assertLess(r['elasticite'], r['ic_haut'])
+        print(f"    POS-L4b IC non dégénéré, largeur "
+              f"{r['ic_haut'] - r['ic_bas']:.4f} ✅")
+
+    def test_l_estimateur_VARIE_avec_les_donnees(self):
+        """⚠️⚠️ LE GARDE-FOU DU GARDE-FOU. Un estimateur qui rendrait toujours
+        le même ε serait aussi inutile que la constante qu'on vient de retirer
+        — et bien plus difficile à repérer. Même contrôle que pour le PSI."""
+        from core.elasticite import diagnostic_exploitabilite, estimer_elasticite
+        p = _plan(comportement=_bloc())
+        vus = []
+        for cible in (-0.15, -0.55):
+            df, vrai = _eps_connu(cible, seed=21)
+            r = estimer_elasticite(p, df, diagnostic_exploitabilite(p, df))
+            vus.append((vrai, r['elasticite']))
+        (v1, e1), (v2, e2) = vus
+        self.assertGreater(
+            abs(e1 - e2), 0.15,
+            f"deux portefeuilles d'élasticités vraies {v1:.3f} et {v2:.3f} "
+            f"rendent {e1:.4f} et {e2:.4f} — l'estimateur ne dépend pas des "
+            f"données qu'il prétend mesurer")
+        self.assertLess(e2, e1, "l'ordre des deux estimations est inversé")
+        print(f"    POS-L4c ε vrais {v1:+.3f}/{v2:+.3f} → estimés "
+              f"{e1:+.4f}/{e2:+.4f} — il varie ✅")
+
+    def test_la_voie_EXPERIMENTALE_prime_et_n_a_pas_la_meme_arithmetique(self):
+        """⚠️ LA SUBORDINATION, TENUE DANS L'ESTIMATION. La voie expérimentale
+        n'utilise QUE le contraste tiré au sort et ne dépend d'AUCUN modèle de
+        contrôle : c'est sa supériorité, et elle est arithmétique."""
+        from core.elasticite import diagnostic_exploitabilite, estimer_elasticite
+        df, vrai = _eps_connu(-0.30, seed=9, avec_test_de_prix=True)
+        p = _plan(comportement=_bloc(groupe_test='groupe_prix'))
+        r = estimer_elasticite(p, df, diagnostic_exploitabilite(p, df))
+        self.assertEqual(r['voie'], 'experimentale')
+        self.assertEqual(
+            r['facteurs_de_controle'], [],
+            "la voie expérimentale ne doit dépendre d'AUCUN contrôle")
+        self.assertTrue(r['concluante'])
+        self.assertLessEqual(r['ic_bas'], vrai)
+        self.assertGreaterEqual(r['ic_haut'], vrai)
+        print(f"    POS-L4d voie expérimentale, 0 contrôle : ε vrai "
+              f"{vrai:+.4f} → [{r['ic_bas']:+.4f}, {r['ic_haut']:+.4f}] ✅")
+
+    def test_un_signal_TROP_FAIBLE_rend_NON_CONCLUANTE_pas_autre_chose(self):
+        """⚠️⚠️ LE CINQUIÈME CAS, ET IL NE SE CONFOND PAS AVEC LE TROISIÈME.
+        « La variation ne permet pas d'identifier » et « l'estimation n'a pas
+        abouti » disent des choses différentes : la première accuse les
+        données, la seconde constate que le signal était trop faible pour
+        conclure. Les faire retomber l'un sur l'autre tromperait le lecteur."""
+        from core.elasticite import diagnostic_exploitabilite, estimer_elasticite
+        # eps quasi nul + petit effectif : l'IC contiendra zero
+        df, vrai = _eps_connu(-0.004, n=900, seed=13)
+        p = _plan(comportement=_bloc())
+        d = diagnostic_exploitabilite(p, df)
+        self.assertTrue(d['exploitable'],
+                        "prémisse : la variation DOIT être exploitable, sinon "
+                        "on testerait le troisième cas et non le cinquième")
+        r = estimer_elasticite(p, df, d)
+        self.assertFalse(r['concluante'])
+        self.assertTrue((r.get('motif') or '').strip())
+        print(f"    POS-L4e ε vrai {vrai:+.4f}, IC "
+              f"[{r['ic_bas']:+.4f}, {r['ic_haut']:+.4f}] → non concluante : "
+              f"{r['motif'][:56]}… ✅")
+
+    def test_la_RESERVE_accompagne_tout_eps_publie(self):
+        """⚠️ LA LIMITE N°2, DANS LE RÉSULTAT ET PAS DANS UN COMMENTAIRE. On
+        mesure la variation résiduelle ; on ne démontre pas son indépendance à
+        ce qu'on n'observe pas. Aucun calcul ne le peut."""
+        from core.elasticite import diagnostic_exploitabilite, estimer_elasticite
+        p_res = _plan(comportement=_bloc())
+        df_res, _ = _eps_connu(-0.25)
+        r_res = estimer_elasticite(p_res, df_res,
+                                   diagnostic_exploitabilite(p_res, df_res))
+        self.assertIn('reserve', r_res)
+        self.assertIn('pas démontr', r_res['reserve'].lower())
+
+        p_exp = _plan(comportement=_bloc(groupe_test='groupe_prix'))
+        df_exp, _ = _eps_connu(-0.30, avec_test_de_prix=True)
+        r_exp = estimer_elasticite(p_exp, df_exp,
+                                   diagnostic_exploitabilite(p_exp, df_exp))
+        self.assertNotEqual(
+            r_res['reserve'], r_exp['reserve'],
+            "la réserve doit DIFFÉRER entre une exogénéité supposée et une "
+            "exogénéité garantie par tirage au sort")
+        print("    POS-L4f la réserve accompagne l'ε, et elle différencie "
+              "les deux voies ✅")
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
