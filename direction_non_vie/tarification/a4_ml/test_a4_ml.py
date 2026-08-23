@@ -537,6 +537,109 @@ class TestAntiFuiteV9(unittest.TestCase):
               f"{len(out2)}/{len(legitimes)} facteurs légitimes conservés ✅")
 
 
+class T_Ce_Qui_Est_Publie_Vient_De_La_Mesure(unittest.TestCase):
+    """CONTRÔLE POSITIF — la leçon V14 est écrite DANS CE FICHIER-CI.
+
+    ⚠️ ELLE Y EST DEPUIS LE CORRECTIF V14, dans `agent.py`, et n'a été
+    appliquée qu'à A6 :
+
+        « On a beaucoup vérifié que le système REFUSE ce qu'il doit refuser.
+          Personne n'a vérifié qu'il ACCEPTE ce qu'il doit accepter. »
+
+    ⚠️ CE CONTRÔLE PORTE SUR LA PROVENANCE DES CHIFFRES, pas sur leur valeur.
+    Un test qui exigerait « le PSI doit être bas » serait satisfait par un PSI
+    TIRÉ AU SORT — c'est précisément ce que `_monitoring_derive` produit
+    aujourd'hui. La seule forme qui ne puisse pas être satisfaite à faux est :
+    « une grandeur publiée doit DÉPENDRE du portefeuille ».
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from direction_non_vie.tarification.a4_ml.agent import AgentA4ML
+        cls.agent = AgentA4ML(models_path='/tmp', audit_path='/tmp',
+                              verbose=False)
+        cls.r = cls.agent.run(result_a2=_make_r_a2(600), result_a3=_make_r_a3(),
+                              plan=_PLAN_AUTO, calcul_shap=False,
+                              generer_graphiques=True)
+
+    def test_le_monitoring_DEPEND_du_portefeuille(self):
+        """⚠️ MESURÉ : PSI IDENTIQUE SUR DEUX PORTEFEUILLES DIFFÉRENTS.
+        `_monitoring_derive` tire ses deux distributions de `np.random.beta`
+        sous graine 42 — aucune donnée du client n'entre dans le calcul, et
+        l'« historique Gini 12 mois » est une simulation. Le résultat est donc
+        une CONSTANTE du module, publiée sous le titre « Monitoring de la
+        dérive des modèles ML en production »."""
+        autre = _make_r_a2(600)
+        rng = np.random.default_rng(99)
+        autre['dataframe']['bonus_malus'] = rng.uniform(50, 350, 600)
+        autre['dataframe']['age'] = rng.integers(18, 75, 600).astype(float)
+        r2 = self.agent.run(result_a2=autre, result_a3=_make_r_a3(),
+                            plan=_PLAN_AUTO, calcul_shap=False,
+                            generer_graphiques=False)
+        psi_1 = self.r['monitoring']['psi']
+        psi_2 = r2['monitoring']['psi']
+        self.assertNotEqual(
+            psi_1, psi_2,
+            f"PSI={psi_1} sur DEUX portefeuilles différents — la grandeur ne "
+            f"dépend pas des données qu'elle prétend surveiller")
+        print(f"    POS-A4a PSI {psi_1} vs {psi_2} — dépend du portefeuille ✅")
+
+    def test_les_deux_validations_du_resultat_ne_se_contredisent_pas(self):
+        """⚠️ `_valider_modele_ml` EST APPELÉE QUATRE FOIS DANS LE MÊME
+        `return`, dont trois SANS `X_test`/`y_test`. Le dict retourné porte
+        donc deux verdicts pour la même hypothèse : `hypotheses` (calculé avec
+        les données de test) et `validation_ml` (sans). L'Excel lit le second,
+        le verrou d'A6 lit le premier."""
+        # ⚠️ SANS RÉFÉRENCE GLM : sinon « GLM Poisson (référence A3) » gagne le
+        # classement, n'existe pas dans `self.modeles`, et H4 ne calcule RIEN
+        # des deux côtés — le contrôle passerait alors pour une raison
+        # étrangère au défaut. Mesuré : c'est exactement ce qui arrivait.
+        r = self.agent.run(result_a2=_make_r_a2(600), result_a3=None,
+                           plan=_PLAN_AUTO, calcul_shap=False,
+                           generer_graphiques=False)
+        self.assertIn(r['classement'][0]['modele'], r['modeles'],
+                      "prémisse : le modèle retenu doit être un vrai modèle ML, "
+                      "sinon H4 ne calcule rien et le contrôle ne prouve rien")
+        h4_hyp = r['hypotheses']['h4_calibration']
+        h4_val = r['validation_ml']['h4_calibration']
+        self.assertIsNotNone(
+            h4_hyp['ecart_moy_pct'],
+            "prémisse : « hypotheses » reçoit X_test/y_test, il DOIT mesurer")
+        # ⚠️ ON COMPARE LA GRANDEUR, PAS LE STATUT : les deux appels peuvent
+        # tomber sur le même statut par coïncidence de seuil, alors que l'un
+        # a MESURÉ l'écart et l'autre non. C'est `ecart_moy_pct` qui distingue
+        # « calibration testée » de « calibration non testée » — un contrôle
+        # qui ne regarderait que le statut passerait sur le code fautif.
+        self.assertEqual(
+            h4_hyp['ecart_moy_pct'], h4_val['ecart_moy_pct'],
+            f"« hypotheses » publie un écart de {h4_hyp['ecart_moy_pct']} "
+            f"(statut {h4_hyp['statut']}) et « validation_ml » publie "
+            f"{h4_val['ecart_moy_pct']} (statut {h4_val['statut']}) — la même "
+            f"hypothèse, deux mesures, dans le même dictionnaire de retour. "
+            f"L'Excel lit « validation_ml », le verrou d'A6 lit « hypotheses »")
+        self.assertEqual(h4_hyp['statut'], h4_val['statut'])
+        print(f"    POS-A4b une seule mesure par hypothèse "
+              f"(écart={h4_hyp['ecart_moy_pct']}) ✅")
+
+    def test_le_graphique_d_overfitting_porte_les_Gini_REELS(self):
+        """⚠️ MESURÉ : la trace « Gini Test » vaut [0, 0, 0, 0, 0, 0] pour des
+        valeurs réelles de 0,12 à 0,34, et les couleurs — calculées sur ce zéro
+        — sortent toutes en ROUGE. Le classement porte `gini_test` ; la figure
+        lit `gini`."""
+        fig = self.r.get('graphiques_validation', {}).get(
+            'overfitting_train_test')
+        self.assertIsNotNone(fig, "la figure d'overfitting n'est pas produite")
+        traces = {t.name: [v for v in t.y] for t in fig.data if t.name}
+        reels = [m['gini_test'] for m in self.r['classement'][:6]]
+        self.assertTrue(any(v > 0 for v in reels),
+                        "prémisse : au moins un modèle doit discriminer")
+        self.assertTrue(
+            any(v != 0 for v in traces.get('Gini Test', [])),
+            f"la trace « Gini Test » est intégralement à zéro alors que les "
+            f"valeurs réelles valent {[round(v, 4) for v in reels]}")
+        print(f"    POS-A4c Gini Test tracés = "
+              f"{[round(v, 4) for v in traces['Gini Test']]} ✅")
+
 if __name__ == '__main__':
     print("="*65)
     print("  TESTS A4 ML v1.0 — MACHINE LEARNING ×8 MODÈLES")

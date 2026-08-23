@@ -334,8 +334,8 @@ def _fabriquer_estimateur_nu(nom: str, col_cible: str = 'nb_sinistres'):
     #   · l'incitation était INVERSÉE : pour obtenir un VERT, l'actuaire devait
     #     choisir une boîte noire. Une plateforme de conformité qui pénalise le
     #     modèle interprétable et récompense la boîte noire prend le problème à
-    #     l'envers — et à rebours de la Commission Tarification IA France 2019
-    #     qu'elle cite en référence ;
+    #     l'envers, et à rebours de l'exigence d'explicabilité que l'ACPR
+    #     applique aux modèles de tarification ;
     #   · l'AMBRE devenait une couleur SANS INFORMATION : un GLM sain et un
     #     modèle à Gini 0,91 (fuite probable) sortaient tous deux AMBRE.
     #
@@ -916,10 +916,37 @@ class AgentA4ML:
                 result_a3, rapport
             )
 
+            # ── LES TROIS GRANDEURS AVANCÉES, MESURÉES UNE SEULE FOIS ────────
+            # ⚠️ LE COMMENTAIRE DU `return` DISAIT DÉJÀ « calculées une seule
+            # fois » ALORS QUE LE CODE APPELAIT `_monitoring_derive` CINQ FOIS,
+            # `_valider_modele_ml` TROIS et `_optimisation_tarifaire` DEUX —
+            # et trois des appels à `_valider_modele_ml` se faisaient SANS
+            # X_test/y_test. Le résultat portait donc deux verdicts pour la
+            # même hypothèse : `hypotheses` (mesuré) et `validation_ml` (non
+            # mesuré). L'Excel lit le second, le verrou d'A6 lit le premier.
+            _psi_glob, _psi_det = self._psi_reel(X_train, X_test)
+            _scores_ref = _scores_act = None
+            if classement and classement[0].get('modele') in self.modeles:
+                try:
+                    _m_ret = self.modeles[classement[0]['modele']]
+                    _scores_ref = np.maximum(_m_ret.predict(X_train), 0)
+                    _scores_act = np.maximum(_m_ret.predict(X_test), 0)
+                except (ValueError, TypeError, AttributeError, KeyError,
+                        IndexError, RuntimeError) as e_sc:
+                    logger.debug(f"Scores du modèle retenu indisponibles : {e_sc}")
+            _monitoring = self._monitoring_derive(
+                {}, gini_reference=gini_reference_a3,
+                psi_reel=_psi_glob, details_psi=_psi_det,
+                scores_ref=_scores_ref, scores_actuels=_scores_act,
+                gini_actuel=(classement[0].get('gini_test') if classement else None),
+            )
+            _optimisation = self._optimisation_tarifaire(
+                classement[0].get('gini_test', 0.25) if classement else 0.25,
+            )
+
             # ── Standard ActuarIA — excel_bytes ──────────────────────────────
             _val_ml_tmp = self._valider_modele_ml(
-                classement,
-                self._monitoring_derive({}, gini_reference=gini_reference_a3),
+                classement, _monitoring,
                 X_train=X_train, X_test=X_test, y_test=y_test,
             )
             _excel_a4 = b''
@@ -984,30 +1011,16 @@ class AgentA4ML:
                 'classement':      classement,
                 'meilleur_modele': classement[0]['modele'] if classement else None,
                 'shap_values':     shap_summary,
-                # Nouvelles méthodes avancées — calculées une seule fois
-                'monitoring':      self._monitoring_derive(
-                                       {m['modele']: m for m in classement[:1]}
-                                       if classement else {},
-                                       gini_reference=gini_reference_a3,
-                                   ),
-                'optimisation':    self._optimisation_tarifaire(
-                                       classement[0].get('gini', 0.25)
-                                       if classement else 0.25,
-                                   ),
-                'validation_ml':   self._valider_modele_ml(
-                                       classement,
-                                       self._monitoring_derive({}, gini_reference=gini_reference_a3),
-                                   ),
+                # Nouvelles méthodes avancées — mesurées une seule fois, plus
+                # haut. `validation_ml` et `hypotheses` portent DÉSORMAIS le
+                # même objet : une hypothèse ne peut plus recevoir deux
+                # verdicts dans le même dictionnaire de retour.
+                'monitoring':      _monitoring,
+                'optimisation':    _optimisation,
+                'validation_ml':   _val_ml_tmp,
                 'graphiques_validation': self._graphiques_validation_ml(
-                                       self._valider_modele_ml(
-                                           classement,
-                                           self._monitoring_derive({}, gini_reference=gini_reference_a3),
-                                       ),
-                                       classement,
-                                       self._monitoring_derive({}, gini_reference=gini_reference_a3),
-                                       self._optimisation_tarifaire(
-                                           classement[0].get('gini', 0.25) if classement else 0.25,
-                                       ),
+                                       _val_ml_tmp, classement,
+                                       _monitoring, _optimisation,
                                    ) if generer_graphiques else {},
                 'graphiques':      graphiques,
                 'rapport':         rapport,
@@ -1141,7 +1154,7 @@ class AgentA4ML:
         if len(feature_names) == 0:
             raise ValueError("Aucune feature numérique disponible pour ML.")
 
-        # ── SPLIT TEMPOREL (R1 — Commission Tarification IA France 2019 §3.2.4) ──
+        # ── SPLIT TEMPOREL (R1) ──────────────────────────────────────────────
         # Tri du DataFrame avant extraction de X pour garantir que la coupure
         # temporelle s'applique bien (les 80% anciens = train, 20% récents = test).
         _col_temp = next(
@@ -2309,49 +2322,114 @@ class AgentA4ML:
     # ═══════════════════════════════════════════════════════════════════════════
     # MONITORING DÉRIVE DES MODÈLES (PSI + KS Test)
     # ═══════════════════════════════════════════════════════════════════════════
+    def _psi_reel(
+        self,
+        X_train:   object = None,
+        X_test:    object = None,
+        n_buckets: int    = 10,
+        n_features_max: int = 10,
+    ) -> tuple:
+        """
+        PSI (Population Stability Index) MESURÉ entre train et test.
+
+        Rend `(psi_moyen, {feature: psi})`, ou `(None, {})` si la mesure n'a
+        pas pu être faite — jamais une valeur par défaut : c'est la règle du
+        module, une grandeur non mesurée se publie `None`.
+
+        Les bornes sont les déciles de la distribution d'ENTRAÎNEMENT (la
+        référence), et le PSI de chaque feature est moyenné.
+        Réf. : Siddiqi (2006) — Credit Risk Scorecards.
+        """
+        import numpy as np
+
+        details: dict = {}
+        try:
+            if X_train is None or X_test is None or not hasattr(X_train, 'shape'):
+                return None, details
+            import pandas as pd
+            if hasattr(X_train, 'columns'):
+                cols = X_train.columns.tolist()
+            else:
+                cols = [f"f{i}" for i in range(X_train.shape[1])]
+                X_train = pd.DataFrame(X_train, columns=cols)
+                X_test  = pd.DataFrame(X_test,  columns=cols)
+
+            psis = []
+            for col in cols[:n_features_max]:
+                try:
+                    tr_vals = X_train[col].dropna().values
+                    te_vals = X_test[col].dropna().values
+                    if len(tr_vals) < 20 or len(te_vals) < 20:
+                        continue
+                    bins = np.unique(
+                        np.percentile(tr_vals, np.linspace(0, 100, n_buckets + 1)))
+                    if len(bins) < 3:
+                        continue
+                    f_tr = np.histogram(tr_vals, bins=bins)[0] / len(tr_vals)
+                    f_te = np.histogram(te_vals, bins=bins)[0] / len(te_vals)
+                    f_tr = np.clip(f_tr, 1e-6, None)
+                    f_te = np.clip(f_te, 1e-6, None)
+                    psi_col = float(np.sum((f_te - f_tr) * np.log(f_te / f_tr)))
+                    psis.append(psi_col)
+                    details[col] = round(psi_col, 4)
+                except Exception:
+                    pass
+
+            return (float(np.mean(psis)) if psis else None), details
+        except Exception as e_psi:
+            logger.debug(f"PSI réel échoué : {e_psi}")
+            return None, details
+
     def _monitoring_derive(
         self,
         metriques_actuelles: Dict,
         gini_reference:      float = 0.2651,
         seuil_alerte_gini:   float = 0.05,
-        n_buckets:           int   = 10,
-        seed:                int   = 42,
+        psi_reel:            float | None = None,
+        details_psi:         dict | None  = None,
+        scores_ref:          object = None,
+        scores_actuels:      object = None,
+        gini_actuel:         float | None = None,
     ) -> Dict:
         """
-        Monitoring de la dérive des modèles ML en production.
-        
-        Métriques calculées :
-        1. PSI (Population Stability Index) — dérive des données
-           PSI < 0.10 : Stable · PSI [0.10-0.25] : Attention · PSI > 0.25 : Dérive
-        
-        2. KS Test — dérive de la distribution des scores
-        
-        3. Évolution du Gini — performance du modèle dans le temps
-        
-        4. Recommandation de ré-entraînement
-        
+        Stabilité train → test du modèle retenu.
+
+        ⚠️⚠️ CE N'EST PAS — ET N'A JAMAIS ÉTÉ — UN MONITORING DE PRODUCTION.
+        Le titre publié disait « Monitoring de la dérive des modèles ML en
+        production » ; aucune donnée de production n'entre dans ce module, et
+        les trois grandeurs étaient SIMULÉES :
+
+          • PSI et KS sortaient de `np.random.beta(...)` sous graine 42 →
+            MESURÉ : PSI IDENTIQUE sur deux portefeuilles différents. La
+            grandeur était une constante du module.
+          • l'« historique Gini 12 mois » était `gini_reference × (1 − 0.002·i
+            + bruit)` — une courbe de dégradation inventée, tracée sous le
+            titre « Évolution Gini 12 mois » avec un seuil d'alerte.
+          • `metriques_actuelles` était lu par la clé `gini_moyen`, que le
+            site d'appel ne pose pas : même ce point-là était le défaut.
+
+        Ce qui est mesuré maintenant, et rien d'autre :
+        1. PSI train → test sur les features RÉELLES (`_psi_reel`), le même
+           calcul que celui d'H2 — un seul PSI dans le résultat.
+        2. KS train → test sur les SCORES RÉELS du modèle retenu, quand ils
+           sont fournis.
+        3. Le Gini de référence (A3) et le Gini RÉEL du modèle retenu — deux
+           points mesurés, pas treize points simulés.
+        4. Recommandation de ré-entraînement, sur ces grandeurs-là.
+
+        Une grandeur non mesurée vaut `None` et son statut est AMBRE.
         Référence : Siddiqi (2006) — Credit Risk Scorecards
         """
-        np.random.seed(seed)
-
-        # 1. PSI simulé (Population Stability Index)
-        # Simule les distributions de scores référence vs actuelle
-        scores_ref     = np.random.beta(2, 5, 1000)   # Distribution référence (calibration)
-        scores_actuels = np.random.beta(2.2, 4.8, 1000)  # Distribution actuelle (légère dérive)
-
-        # Calcul PSI par buckets
-        bins = np.linspace(0, 1, n_buckets + 1)
-        freq_ref = np.histogram(scores_ref, bins=bins)[0] / len(scores_ref)
-        freq_act = np.histogram(scores_actuels, bins=bins)[0] / len(scores_actuels)
-
-        # Éviter les divisions par zéro
-        freq_ref = np.clip(freq_ref, 1e-6, None)
-        freq_act = np.clip(freq_act, 1e-6, None)
-
-        psi = float(np.sum((freq_act - freq_ref) * np.log(freq_act / freq_ref)))
+        # 1. PSI RÉEL (Population Stability Index) train → test
+        psi = psi_reel
+        details_psi = details_psi or {}
 
         # Statut PSI
-        if psi < 0.10:
+        if psi is None:
+            statut_psi = "AMBRE"
+            interpretation_psi = ("Stabilité NON mesurée — features train/test "
+                                  "indisponibles")
+        elif psi < 0.10:
             statut_psi = "VERT"
             interpretation_psi = "Distribution stable — pas d'action requise"
         elif psi < 0.25:
@@ -2361,26 +2439,36 @@ class AgentA4ML:
             statut_psi = "ROUGE"
             interpretation_psi = "Dérive significative — ré-entraînement requis"
 
-        # 2. KS Test (Kolmogorov-Smirnov)
-        from scipy import stats
-        ks_stat, ks_pvalue = stats.ks_2samp(scores_ref, scores_actuels)
-        statut_ks = "VERT" if ks_pvalue > 0.05 else "AMBRE" if ks_pvalue > 0.01 else "ROUGE"
+        # 2. KS Test (Kolmogorov-Smirnov) sur les SCORES RÉELS
+        ks_stat, ks_pvalue, statut_ks = None, None, "AMBRE"
+        if scores_ref is not None and scores_actuels is not None:
+            try:
+                from scipy import stats
+                _ks = stats.ks_2samp(np.asarray(scores_ref, dtype=float),
+                                     np.asarray(scores_actuels, dtype=float))
+                ks_stat, ks_pvalue = float(_ks[0]), float(_ks[1])
+                statut_ks = ("VERT"  if ks_pvalue > 0.05 else
+                             "AMBRE" if ks_pvalue > 0.01 else "ROUGE")
+            except (ValueError, TypeError) as e_ks:
+                logger.debug(f"KS sur scores réels échoué : {e_ks}")
 
-        # 3. Évolution Gini (simulation historique 12 mois)
-        mois = [f"M-{12-i}" for i in range(12)] + ["M actuel"]
-        # Simulation légère dégradation progressive
-        gini_historique = [
-            gini_reference * (1 - 0.002 * i + np.random.normal(0, 0.003))
-            for i in range(12)
-        ] + [metriques_actuelles.get('gini_moyen', gini_reference)]
-        gini_historique = [max(0, g) for g in gini_historique]
+        # 3. Gini : la référence A3 et le Gini RÉEL du modèle retenu
+        mois = ["Référence A3", "Modèle retenu (test)"]
+        gini_courant = (gini_actuel if gini_actuel is not None
+                        else metriques_actuelles.get('gini_moyen'))
+        gini_historique = [gini_reference,
+                           gini_courant if gini_courant is not None else gini_reference]
 
-        variation_gini = gini_historique[-1] - gini_reference
-        statut_gini = (
-            "VERT"  if abs(variation_gini) <= seuil_alerte_gini * 0.5 else
-            "AMBRE" if abs(variation_gini) <= seuil_alerte_gini else
-            "ROUGE"
-        )
+        if gini_courant is None:
+            variation_gini = None
+            statut_gini    = "AMBRE"
+        else:
+            variation_gini = gini_courant - gini_reference
+            statut_gini = (
+                "VERT"  if abs(variation_gini) <= seuil_alerte_gini * 0.5 else
+                "AMBRE" if abs(variation_gini) <= seuil_alerte_gini else
+                "ROUGE"
+            )
 
         # 4. Recommandation globale
         statuts = [statut_psi, statut_ks, statut_gini]
@@ -2395,23 +2483,32 @@ class AgentA4ML:
             statut_global  = "VERT"
 
         return {
-            "psi":                  round(psi, 4),
+            "psi":                  round(psi, 4) if psi is not None else None,
+            "details_psi":          details_psi,
             "statut_psi":           statut_psi,
             "interpretation_psi":   interpretation_psi,
-            "ks_stat":              round(float(ks_stat), 4),
-            "ks_pvalue":            round(float(ks_pvalue), 4),
+            "ks_stat":              round(ks_stat, 4) if ks_stat is not None else None,
+            "ks_pvalue":            round(ks_pvalue, 4) if ks_pvalue is not None else None,
             "statut_ks":            statut_ks,
             "gini_reference":       gini_reference,
-            "gini_actuel":          gini_historique[-1],
-            "variation_gini":       round(variation_gini, 4),
-            "variation_gini_pct":   round(variation_gini / max(gini_reference, 1e-6) * 100, 1),
+            "gini_actuel":          gini_courant,
+            "variation_gini":       round(variation_gini, 4) if variation_gini is not None else None,
+            "variation_gini_pct":   (round(variation_gini / max(gini_reference, 1e-6) * 100, 1)
+                                     if variation_gini is not None else None),
             "statut_gini":          statut_gini,
             "gini_historique":      gini_historique,
             "mois_historique":      mois,
             "statut_global":        statut_global,
             "recommandation":       recommandation,
             "seuil_alerte_gini":    seuil_alerte_gini,
-            "methode":              "PSI (Siddiqi 2006) + KS Test (scipy) + Gini monitoring",
+            # ⚠️ LA MÉTHODE NOMME CE QUI EST MESURÉ, et la portée avec.
+            "methode":              ("PSI train→test sur features réelles "
+                                     "(Siddiqi 2006) + KS train→test sur les "
+                                     "scores du modèle retenu + comparaison du "
+                                     "Gini à la référence A3"),
+            "portee":               ("Stabilité train → test. AUCUNE donnée de "
+                                     "production n'entre dans ce calcul : la "
+                                     "dérive en production n'est pas mesurée ici."),
         }
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -2555,48 +2652,28 @@ class AgentA4ML:
         # toute façon été inoffensif : le plafond RAG d'A6 ne se déclenche
         # que sur ROUGE, et 0.0 donne VERT. `[...]` échoue bruyamment si un
         # appelant futur oublie la clé — c'est le comportement voulu.
-        psi_global = monitoring['psi']
-        psi_source = "simulé"
-        h2_details = {}
-        try:
-            if X_train is not None and X_test is not None and hasattr(X_train, 'shape'):
-                import pandas as pd
-                if hasattr(X_train, 'columns'):
-                    cols = X_train.columns.tolist()
-                else:
-                    cols = [f"f{i}" for i in range(X_train.shape[1])]
-                    X_train = pd.DataFrame(X_train, columns=cols)
-                    X_test  = pd.DataFrame(X_test,  columns=cols)
+        # ⚠️ LE CALCUL EST DÉSORMAIS PARTAGÉ, PAS DUPLIQUÉ. Il vivait ici, en
+        # ligne, et `_monitoring_derive` en SIMULAIT un second sous
+        # `np.random.beta` : deux grandeurs nommées « PSI » dans le même
+        # résultat, dont une seule regardait le portefeuille. Le corps de ce
+        # bloc est passé dans `_psi_reel`, appelé des deux côtés.
+        psi_global, h2_details = self._psi_reel(X_train, X_test)
+        psi_source = (f"réel ({len(h2_details)} features)"
+                      if psi_global is not None else "non mesuré")
+        if psi_global is None:
+            # dernier recours : la valeur portée par le monitoring, qui est
+            # elle-même mesurée ou None depuis ce lot.
+            psi_global = monitoring['psi']
+            psi_source = "réel (monitoring)" if psi_global is not None else "non mesuré"
 
-                psis = []
-                n_buckets = 10
-                for col in cols[:10]:  # Top 10 features max
-                    try:
-                        tr_vals = X_train[col].dropna().values
-                        te_vals = X_test[col].dropna().values
-                        if len(tr_vals) < 20 or len(te_vals) < 20:
-                            continue
-                        bins = np.percentile(tr_vals, np.linspace(0, 100, n_buckets + 1))
-                        bins = np.unique(bins)
-                        if len(bins) < 3:
-                            continue
-                        f_tr = np.histogram(tr_vals, bins=bins)[0] / len(tr_vals)
-                        f_te = np.histogram(te_vals, bins=bins)[0] / len(te_vals)
-                        f_tr = np.clip(f_tr, 1e-6, None)
-                        f_te = np.clip(f_te, 1e-6, None)
-                        psi_col = float(np.sum((f_te - f_tr) * np.log(f_te / f_tr)))
-                        psis.append(psi_col)
-                        h2_details[col] = round(psi_col, 4)
-                    except Exception:
-                        pass
-
-                if psis:
-                    psi_global = float(np.mean(psis))
-                    psi_source = f"réel ({len(psis)} features)"
-        except Exception as e_psi:
-            logger.debug(f"PSI réel échoué : {e_psi}")
-
-        if psi_global < 0.10:
+        if psi_global is None:
+            # ⚠️ UNE DÉRIVE NON MESURÉE N'EST PAS UNE ABSENCE DE DÉRIVE.
+            h2_statut = "AMBRE"
+            h2_msg    = ("PSI NON mesuré — X_train/X_test indisponibles ou "
+                         "effectif insuffisant ⚠️")
+            h2_conseil= ("Fournir X_train et X_test pour que la stabilité des "
+                         "distributions soit testée")
+        elif psi_global < 0.10:
             h2_statut = "VERT"
             h2_msg    = f"PSI moyen = {psi_global:.4f} < 0.10 → Distribution stable ✅ ({psi_source})"
             h2_conseil= "Pas de dérive détectée — modèle applicable sur les nouvelles données"
@@ -2655,7 +2732,6 @@ class AgentA4ML:
                     classement[0].get('modele', ''), None
                 )
                 if meilleur_mod is not None and hasattr(meilleur_mod, 'predict'):
-                    import pandas as pd
                     if hasattr(X_test, 'values'):
                         X_te_arr = X_test.values
                     else:
@@ -2778,8 +2854,14 @@ class AgentA4ML:
         # G1 — Overfitting : Gini train vs test par modèle
         try:
             modeles  = [m.get('modele','?') for m in classement[:6]]
-            ginis_t  = [m.get('gini', 0)          for m in classement[:6]]
-            ginis_tr = [m.get('gini_train', m.get('gini',0)*1.1) for m in classement[:6]]
+            # ⚠️ LA CLÉ DU CLASSEMENT EST `gini_test`, PAS `gini`. Mesuré : la
+            # trace « Gini Test » valait [0, 0, 0, 0, 0, 0] pour des valeurs
+            # réelles de 0,18 à −0,27, et les couleurs — calculées sur ce zéro
+            # — sortaient TOUTES en rouge, sous une légende qui dit « un grand
+            # écart = surapprentissage ». `_classer_modeles` pose `gini_test`
+            # et `gini_train` ; `gini` n'a jamais existé dans ce dictionnaire.
+            ginis_t  = [m.get('gini_test', 0)     for m in classement[:6]]
+            ginis_tr = [m.get('gini_train', 0)    for m in classement[:6]]
             colors   = [VERT if (t/max(tr,0.001))>=0.90 else AMBRE if (t/max(tr,0.001))>=0.80 else ROUGE
                        for t,tr in zip(ginis_t, ginis_tr)]
 
@@ -2828,8 +2910,14 @@ class AgentA4ML:
         try:
             mois  = monitoring.get('mois_historique', [])
             ginis = monitoring.get('gini_historique', [])
-            psi   = monitoring.get('psi', 0)
+            psi   = monitoring.get('psi')
             statut_psi = monitoring.get('statut_psi', 'VERT')
+            # ⚠️ LE TITRE ANNONÇAIT « Évolution Gini 12 mois » POUR UNE COURBE
+            # SIMULÉE. Les deux points tracés sont désormais mesurés : la
+            # référence A3 et le Gini du modèle retenu sur le test. Et un PSI
+            # non mesuré ne s'affiche pas comme un nombre.
+            txt_psi = f"PSI={psi:.4f} ({statut_psi})" if psi is not None else \
+                      f"PSI non mesuré ({statut_psi})"
             couleur_psi = VERT if statut_psi=="VERT" else AMBRE if statut_psi=="AMBRE" else ROUGE
             gini_ref   = monitoring.get('gini_reference', 0.265)
             seuil_al   = gini_ref - monitoring.get('seuil_alerte_gini', 0.05)
@@ -2853,7 +2941,7 @@ class AgentA4ML:
             l2 = dict(**LAYOUT)
             l2.update(dict(
                 title=dict(
-                    text=f"Évolution Gini 12 mois · PSI={psi:.4f} ({statut_psi}) · {val_ml['h3_gini']['titre_graphique']}",
+                    text=f"Gini — référence A3 → modèle retenu · {txt_psi} · {val_ml['h3_gini']['titre_graphique']}",
                     font=dict(color=couleur_h3, size=10), x=0.01
                 ),
                 xaxis=dict(tickfont=dict(color=GRIS, size=8), showgrid=True,
@@ -2862,7 +2950,7 @@ class AgentA4ML:
                           showgrid=True, gridcolor="rgba(255,255,255,0.05)"),
                 showlegend=False,
                 annotations=[dict(
-                    text="💡 La courbe doit rester au-dessus du seuil rouge. Si elle descend = modèle qui se dégrade → ré-entraînement requis.",
+                    text="💡 Le Gini du modèle retenu doit rester au-dessus du seuil rouge. Comparaison train→test : ce graphique ne mesure PAS la dérive en production.",
                     xref="paper", yref="paper", x=0.01, y=-0.22,
                     font=dict(color=GRIS, size=9), showarrow=False, align="left"
                 )],
