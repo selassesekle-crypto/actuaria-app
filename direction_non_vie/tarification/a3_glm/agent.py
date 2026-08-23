@@ -719,13 +719,18 @@ class AgentA3GLM:
 
         logger.info(f"Variables candidates GLM : {len(vars_pred)}")
 
-        # ── SPLIT TEMPOREL (R1 — Commission Tarification IA France 2019 §3.2.4) ──
+        # ── SPLIT TEMPOREL (R1) ──────────────────────────────────────────────
         # La validation doit être temporelle : les données les plus récentes
         # constituent le jeu de test, les plus anciennes le jeu d'entraînement.
         # Un split aléatoire mélange des observations futures dans l'entraînement
         # et produit un optimisme artificiel du Gini (data leakage temporel).
-        # Réf. : Commission Tarification IA France (2019) §3.2.4
-        #        «Validation temporelle obligatoire pour les modèles de tarification»
+        # ⚠️ AUCUNE SOURCE EXTERNE N'EST CITÉE ICI, ET C'EST VOULU. Ces lignes
+        # portaient « Réf. : Commission Tarification IA France (2019) §3.2.4 »
+        # avec une citation entre guillemets. Rien ne confirme qu'un document
+        # existe derrière ce titre, le numéro de section variait d'un fichier à
+        # l'autre (§3.2.4, §3.2.5, §4.2), et la citation n'a jamais été sourcée.
+        # La règle, elle, se justifie seule : un split aléatoire fait fuir de
+        # l'information future dans l'entraînement. C'est elle qu'on garde.
         _col_temp = next(
             (c for c in ['annee_souscription', 'date_souscription', 'annee', 'year']
              if c in df.columns),
@@ -748,8 +753,8 @@ class AgentA3GLM:
             # Fallback aléatoire documenté si colonne temporelle absente
             logger.warning(
                 "[R1] Colonne temporelle absente (annee_souscription, etc.). "
-                "Fallback sur split aléatoire seed=42. "
-                "Réf. : Commission Tarification IA France (2019) §3.2.4."
+                "Fallback sur split aléatoire seed=42 — le Gini mesuré "
+                "peut alors être optimiste (fuite temporelle possible)."
             )
             df_train, df_test = train_test_split(
                 df, test_size=1 - TRAIN_SIZE, random_state=42, shuffle=True
@@ -1458,8 +1463,18 @@ class AgentA3GLM:
                     df[vars_tweedie].fillna(0), has_constant='add'
                 )
                 try:
+                    # ⚠️ PAS D'OFFSET AU PREDICT NON PLUS. Le correctif
+                    # `0d2b9c2` n'avait été appliqué qu'au FIT :
+                    # `_calibrer_tweedie` ajuste sans offset — sa docstring
+                    # l'exige mot pour mot (« Ajouter offset=log(expo)
+                    # appliquerait l'exposition DEUX FOIS ») — et cette ligne
+                    # prédisait AVEC. Mesuré : corr(prime_pure_tweedie,
+                    # exposition) = +0,51, un contrat à forte exposition
+                    # recevant une prime 4,4× celle d'un contrat identique à
+                    # faible exposition. La prime pure est un TAUX ANNUEL :
+                    # elle est exposure-indépendante par construction.
                     predictions['prime_pure_tweedie'] = self.modeles['tweedie'].predict(
-                        X, offset=offset
+                        X
                     ).values
                 except Exception as e:
                     logger.warning(f"Erreur prédiction Tweedie : {e}")
@@ -2323,11 +2338,25 @@ class AgentA3GLM:
                 var_y      = float(np.var(y))
                 ratio_disp = var_y / max(mean_y, 1e-6)
             else:
-                mean_y, var_y, ratio_disp = 0.05, 0.065, 1.30
+                mean_y, var_y, ratio_disp = None, None, None
         except Exception:
-            mean_y, var_y, ratio_disp = 0.05, 0.065, 1.30
+            mean_y, var_y, ratio_disp = None, None, None
 
-        if ratio_disp < 2.0:
+        # ⚠️ UNE HYPOTHÈSE NON MESURÉE NE REND PLUS VERT. Le repli posait
+        # `(0.05, 0.065, 1.30)` en dur : sans colonne de fréquence, H1
+        # publiait « Var/E = 1.30 < 2 → Distribution Poisson valide ✅ » sur
+        # trois chiffres que personne n'avait calculés — et H1 plafonne le
+        # statut global. C'est le défaut déjà corrigé dans A4 (« une
+        # calibration non testée n'est pas une calibration validée », défaut
+        # AMBRE et écart None) et jamais reporté ici. Le sentinel `None`
+        # traverse jusqu'à la publication, comme pour H5.
+        if ratio_disp is None:
+            h1_statut = "AMBRE"
+            h1_msg    = ("Sur-dispersion NON mesurée — aucune colonne de "
+                         "fréquence exploitable dans df_train ⚠️")
+            h1_conseil= ("Fournir df_train avec 'nb_sinistres' (ou 'frequence', "
+                         "'freq') : sans elle, l'hypothèse Var=E n'est pas testée")
+        elif ratio_disp < 2.0:
             h1_statut = "VERT"
             h1_msg    = f"Var/E = {ratio_disp:.2f} < 2 → Distribution Poisson valide ✅"
             h1_conseil= "GLM Poisson adapté — hypothèse Var=E vérifiée"
@@ -2380,13 +2409,25 @@ class AgentA3GLM:
                         max(var_par_quintile) / max(min(var_par_quintile), 1e-9)
                         if len(var_par_quintile) >= 2 else 1.0)
                 else:
-                    ratio_variance, var_par_quintile = 1.0, []
+                    ratio_variance, var_par_quintile = None, []
             else:
-                ratio_variance, var_par_quintile = 1.0, []
+                ratio_variance, var_par_quintile = None, []
         except Exception:
-            ratio_variance, var_par_quintile = 1.0, []
+            ratio_variance, var_par_quintile = None, []
 
-        if ratio_variance < 2.0:
+        # ⚠️ MÊME DÉFAUT QUE H1, DANS LA MÊME FONCTION : le repli posait
+        # `ratio_variance = 1.0`, c'est-à-dire la valeur d'un modèle
+        # PARFAITEMENT homoscédastique. Sans modèle Poisson ajusté, sans
+        # résidus, ou sur moins de 50 observations, H2 publiait donc
+        # « ratio = 1.00 < 2.0 → Homoscédasticité ✅ » sans avoir regardé un
+        # seul résidu.
+        if ratio_variance is None:
+            h2_statut = "AMBRE"
+            h2_msg    = ("Homoscédasticité NON mesurée — résidus de Pearson "
+                         "indisponibles ou effectif insuffisant (< 50) ⚠️")
+            h2_conseil= ("Le GLM Poisson doit être ajusté et df_train fourni "
+                         "pour que la variance résiduelle soit testée")
+        elif ratio_variance < 2.0:
             h2_statut = "VERT"
             h2_msg    = f"Ratio variance résidus Pearson (max/min quintiles) = {ratio_variance:.2f} < 2.0 → Homoscédasticité ✅"
             h2_conseil= "Dispersion homogène entre bandes de risque — le GLM est bien spécifié sur toute la plage"
@@ -2405,13 +2446,22 @@ class AgentA3GLM:
         gini_tweedie = metriques.get('tweedie', {}).get('gini', 0)
         gini_max     = max(gini_poisson, gini_gamma, gini_tweedie)
 
+        # ⚠️ LE SEUIL ANNONCÉ EST DÉSORMAIS LE SEUIL APPLIQUÉ. La docstring
+        # ci-dessus décrit TROIS bandes — « Gini ∈ [0.08,0.15] → acceptable
+        # ⚠️ » — et le code en appliquait QUATRE, dont une seconde bande VERTE
+        # sur [0.10, 0.15]. Mesuré : un Gini de 0,12 sortait VERT là où
+        # l'échelle publiée le donne AMBRE. C'est le statut, pas le message,
+        # que lit le verrou d'A6 : un ajustement que le module lui-même dit
+        # « à enrichir » certifiait la chaîne entière. Les deux messages fins
+        # sont conservés — ils distinguent [0.10,0.15] de [0.08,0.10] — mais
+        # ils rendent tous deux le statut que l'échelle annonce.
         if gini_max >= 0.15:
             h3_statut = "VERT"
             h3_msg    = f"Gini max = {gini_max:.4f} ≥ 0.15 → Bon ajustement GLM ✅"
             h3_conseil= "Le GLM explique bien la sinistralité — défendable devant l'ACPR"
         elif gini_max >= 0.10:
-            h3_statut = "VERT"
-            h3_msg    = f"Gini max = {gini_max:.4f} ∈ [0.10, 0.15] → Ajustement acceptable ✅"
+            h3_statut = "AMBRE"
+            h3_msg    = f"Gini max = {gini_max:.4f} ∈ [0.10, 0.15] → Ajustement acceptable ⚠️"
             h3_conseil= "GLM utilisable — enrichir avec plus de variables actuarielles"
         elif gini_max >= 0.08:
             h3_statut = "AMBRE"
@@ -2426,10 +2476,16 @@ class AgentA3GLM:
         # 5 sous-échantillons bootstrap à 80% du train.
         # CV des relativités exp(β) par variable.
         # Réf. : Goldburd et al. (2016) — GLM for P&C Insurance Ratemaking.
-        h4_statut    = "VERT"
-        h4_msg       = "Stabilité relativités non testée (modèle ou données non disponibles)"
+        # ⚠️ LE DÉFAUT LE PLUS VISIBLE DES TROIS : le statut par défaut était
+        # "VERT" ALORS QUE SON PROPRE MESSAGE DIT « non testée ». Le verdict
+        # et le message se contredisaient dans le même dictionnaire, et c'est
+        # le VERDICT que lit le verrou d'A6. `rel_cv_max` valait 0.0 — le CV
+        # d'une relativité parfaitement stable — pour un bootstrap jamais
+        # lancé. Défaut AMBRE et sentinel None, comme H4 dans A4.
+        h4_statut    = "AMBRE"
+        h4_msg       = "Stabilité relativités NON testée (modèle ou données non disponibles) ⚠️"
         h4_conseil   = "Fournir df_train avec données pour le test bootstrap"
-        rel_cv_max   = 0.0
+        rel_cv_max   = None
         rel_instables= []
         try:
             import statsmodels.api as sm
@@ -2528,22 +2584,33 @@ class AgentA3GLM:
         }[statut_global]
 
         return {
+            # ⚠️ UNE GRANDEUR NON MESURÉE SE PUBLIE `None`, ET SON TITRE DIT
+            # « non mesurée » — il ne montre pas un nombre. C'est le motif que
+            # H5 portait déjà seul dans cette fonction.
             "h1_poisson": {
-                "ratio_disp": round(ratio_disp, 3),
-                "mean_y":     round(mean_y, 6),
-                "var_y":      round(var_y, 6),
+                "ratio_disp": round(ratio_disp, 3) if ratio_disp is not None else None,
+                "mean_y":     round(mean_y, 6) if mean_y is not None else None,
+                "var_y":      round(var_y, 6) if var_y is not None else None,
                 "statut":     h1_statut,
                 "message":    h1_msg,
                 "conseil":    h1_conseil,
-                "titre_graphique": f"{'✅' if h1_statut=='VERT' else '⚠️' if h1_statut=='AMBRE' else '❌'} Distribution Poisson — Var/E = {ratio_disp:.2f}",
+                "titre_graphique": (
+                    f"{'✅' if h1_statut=='VERT' else '⚠️' if h1_statut=='AMBRE' else '❌'} "
+                    + (f"Distribution Poisson — Var/E = {ratio_disp:.2f}"
+                       if ratio_disp is not None
+                       else "Distribution Poisson — Var/E non mesurée")),
             },
             "h2_homosc": {
-                "ratio_variance":   round(ratio_variance, 4),
+                "ratio_variance":   round(ratio_variance, 4) if ratio_variance is not None else None,
                 "var_par_quintile": [round(v, 4) for v in var_par_quintile],
                 "statut":        h2_statut,
                 "message":       h2_msg,
                 "conseil":       h2_conseil,
-                "titre_graphique": f"{'✅' if h2_statut=='VERT' else '⚠️' if h2_statut=='AMBRE' else '❌'} Homoscédasticité — ratio variance max/min = {ratio_variance:.2f}",
+                "titre_graphique": (
+                    f"{'✅' if h2_statut=='VERT' else '⚠️' if h2_statut=='AMBRE' else '❌'} "
+                    + (f"Homoscédasticité — ratio variance max/min = {ratio_variance:.2f}"
+                       if ratio_variance is not None
+                       else "Homoscédasticité — ratio variance non mesuré")),
             },
             "h3_ajustement": {
                 "gini_poisson": round(gini_poisson, 4),
@@ -2556,13 +2623,17 @@ class AgentA3GLM:
                 "titre_graphique": f"{'✅' if h3_statut=='VERT' else '⚠️' if h3_statut=='AMBRE' else '❌'} Gini GLM = {gini_max:.4f}",
             },
             "h4_stabilite": {
-                "cv_max":           round(rel_cv_max, 4),
+                "cv_max":           round(rel_cv_max, 4) if rel_cv_max is not None else None,
                 "vars_instables":   rel_instables,
                 "n_instables":      len(rel_instables),
                 "statut":           h4_statut,
                 "message":          h4_msg,
                 "conseil":          h4_conseil,
-                "titre_graphique":  f"{'✅' if h4_statut=='VERT' else '⚠️' if h4_statut=='AMBRE' else '❌'} Stabilité relativités — CV max = {rel_cv_max:.3f}",
+                "titre_graphique":  (
+                    f"{'✅' if h4_statut=='VERT' else '⚠️' if h4_statut=='AMBRE' else '❌'} "
+                    + (f"Stabilité relativités — CV max = {rel_cv_max:.3f}"
+                       if rel_cv_max is not None
+                       else "Stabilité relativités — CV non mesuré")),
             },
             "h5_deviance": {
                 "ratio_deviance_df": round(ratio_dev, 3) if ratio_dev is not None else None,
@@ -2645,6 +2716,12 @@ class AgentA3GLM:
         # G2 — Jauge sur-dispersion Poisson
         try:
             ratio = val_glm["h1_poisson"]["ratio_disp"]
+            # ⚠️ PAS DE JAUGE SUR UNE GRANDEUR NON MESURÉE : H1 publie
+            # désormais `None` quand la sur-dispersion n'a pas été calculée.
+            # Une aiguille posée sur une valeur par défaut se lit comme une
+            # mesure.
+            if ratio is None:
+                raise ValueError("sur-dispersion non mesurée — jauge non produite")
             statut_h1  = val_glm["h1_poisson"]["statut"]
             couleur_h1 = VERT if statut_h1=="VERT" else AMBRE if statut_h1=="AMBRE" else ROUGE
 

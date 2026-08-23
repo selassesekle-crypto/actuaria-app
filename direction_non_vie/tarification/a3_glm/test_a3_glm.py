@@ -415,6 +415,122 @@ class TestAuditV10_B1_ContournementA3(unittest.TestCase):
         print(f"    V10-B1 Colonne *_enc prohibée écartée du GLM ✅ | vars={vars_glm}")
 
 
+class T_Un_Verdict_Ne_Se_Rend_Pas_Sans_Mesure(unittest.TestCase):
+    """CONTRÔLE POSITIF — la leçon V14, étendue à A3.
+
+    ⚠️ ELLE N'A ÉTÉ APPLIQUÉE QU'À A6, et A3 porte les deux formes du défaut
+    qu'elle nomme : un contrôle qui ACCEPTE sans avoir rien mesuré. Deux des
+    cinq hypothèses d'A3 rendent VERT sur une absence — et trois d'entre elles
+    plafonnent le statut d'A6.
+
+    ⚠️ LE CORRECTIF EXISTE DÉJÀ, DANS A4 : « une calibration non testée n'est
+    pas une calibration validée » — H4 y vaut AMBRE par défaut, et son écart
+    sort `None` plutôt que `0.0`. Il n'a jamais été reporté sur A3.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from direction_non_vie.tarification.a3_glm.agent import AgentA3GLM
+        cls.agent = AgentA3GLM(models_path='/tmp', audit_path='/tmp',
+                               verbose=False)
+
+    def test_H1_sans_donnee_ne_rend_pas_un_verdict_FAVORABLE(self):
+        """⚠️ MESURÉ : sans colonne de fréquence, H1 publie « Var/E = 1.30 < 2
+        → Distribution Poisson valide ✅ » sur les valeurs `(1.30, 0.05,
+        0.065)` codées en dur. Une hypothèse plafonnante rend donc VERT sur des
+        chiffres que personne n'a calculés."""
+        v = self.agent._valider_hypotheses_glm(
+            pd.DataFrame({'sans_cible': [1, 2, 3]}), {}, {})
+        h1 = v['h1_poisson']
+        self.assertNotEqual(
+            h1['statut'], 'VERT',
+            f"H1 rend VERT sans donnée, sur ratio={h1['ratio_disp']}, "
+            f"moyenne={h1['mean_y']}, variance={h1['var_y']} — trois valeurs "
+            f"fabriquées publiées comme une mesure")
+        print(f"    POS-A3a H1 sans donnée → {h1['statut']} ✅")
+
+    def test_H4_non_testee_ne_vaut_pas_VALIDEE(self):
+        """⚠️ LE DÉFAUT EXACT CORRIGÉ DANS A4 ET NON REPORTÉ ICI. A3 initialise
+        `h4_statut = "VERT"` avec le message « Stabilité relativités NON
+        testée » : le verdict et le message se contredisent, et c'est le
+        verdict que le verrou d'A6 lirait."""
+        v = self.agent._valider_hypotheses_glm(
+            pd.DataFrame({'x': [1, 2, 3]}), {}, {})
+        h4 = v['h4_stabilite']
+        self.assertIn('test', h4['message'].lower(),
+                      "prémisse : ce cas doit bien être un « non testé »")
+        self.assertNotEqual(
+            h4['statut'], 'VERT',
+            f"H4 vaut VERT avec le message « {h4['message'][:56]} » — une "
+            f"stabilité non testée n'est pas une stabilité validée")
+        print(f"    POS-A3b H4 non testée → {h4['statut']} ✅")
+
+    def test_le_seuil_H3_annonce_est_le_seuil_APPLIQUE(self):
+        """⚠️ LA DOCSTRING ANNONCE TROIS BANDES, LE CODE EN A QUATRE.
+        « Gini ∈ [0.08, 0.15] → acceptable ⚠️ » dit la docstring ; mesuré, un
+        Gini de 0,12 sort VERT. Une phrase de portée se mesure comme un
+        chiffre."""
+        bandes = {}
+        for g in (0.20, 0.12, 0.09, 0.05):
+            v = self.agent._valider_hypotheses_glm(
+                pd.DataFrame({'x': [1]}), {}, {'poisson': {'gini': g}})
+            bandes[g] = v['h3_ajustement']['statut']
+        self.assertEqual(
+            bandes[0.12], 'AMBRE',
+            f"Gini 0,12 sort {bandes[0.12]} alors que la docstring place "
+            f"[0.08 ; 0.15] en « acceptable ⚠️ » : {bandes}")
+        print(f"    POS-A3c bandes H3 conformes à l'annonce : {bandes} ✅")
+
+    def test_la_prime_pure_Tweedie_NE_DEPEND_PAS_de_l_exposition(self):
+        """⚠️ CORRECTIF `0d2b9c2` APPLIQUÉ AU FIT, PAS AU PREDICT.
+        `_calibrer_tweedie` ajuste et prédit SANS offset — sa propre docstring
+        l'exige : « Ajouter offset=log(expo) appliquerait l'exposition DEUX
+        FOIS → la prime pure prédite deviendrait proportionnelle à
+        l'exposition ». Or `_calculer_predictions` la prédit AVEC
+        `offset=offset`.
+
+        ⚠️ MESURÉ : corr(prime_pure_tweedie, exposition) = +0,51 ; un contrat
+        à forte exposition reçoit une prime 4,4× celle d'un contrat identique
+        à faible exposition. La prime pure est un TAUX ANNUEL : elle est
+        exposure-indépendante par construction."""
+        # ⚠️ UNE FIXTURE OÙ LE TWEEDIE RETIENT QUELQUE CHOSE. `_make_r_a2` tire
+        # le coût indépendamment des facteurs : le Tweedie n'y garde aucune
+        # variable, `prime_pure_tweedie` n'est pas produite, et le contrôle se
+        # sauterait — donc ne prouverait rien. Ici le COÛT dépend du
+        # bonus-malus, comme la fréquence.
+        rng = np.random.default_rng(17)
+        n = 3000
+        expo_f = rng.uniform(0.15, 1.0, n)
+        bm = rng.uniform(50, 350, n)
+        nb = rng.poisson(0.10 * expo_f * (bm / 100.0)).astype(float)
+        cout_f = np.where(nb > 0, rng.gamma(2, 200 * (bm / 100.0)), 0.0)
+        r_a2 = _make_r_a2(n)
+        r_a2['dataframe'] = pd.DataFrame({
+            'nb_sinistres': nb, 'cout_total_sinistres': cout_f,
+            'exposition': expo_f, 'bonus_malus': bm,
+            'age': rng.integers(18, 75, n).astype(float),
+            'puissance_fiscale': rng.integers(4, 15, n).astype(float),
+            'log_exposition': np.log(np.maximum(expo_f, 1e-6)),
+            'prime_pure': cout_f / np.maximum(expo_f, 1e-6),
+        })
+        r = self.agent.run(result_a2=r_a2, plan=_PLAN_AUTO,
+                           generer_graphiques=False)
+        self.assertTrue(r['success'], f"Erreur : {r.get('erreur')}")
+        pred = r['predictions'].get('prime_pure_tweedie')
+        self.assertIsNotNone(
+            pred, "prémisse du contrôle : le Tweedie doit avoir retenu au "
+                  "moins une variable, sinon rien n'est prédit et le test "
+                  "ne prouverait rien")
+        expo = r['dataframe']['exposition'].values
+        corr = float(np.corrcoef(np.asarray(pred, dtype=float), expo)[0, 1])
+        self.assertLess(
+            abs(corr), 0.15,
+            f"corr(prime_pure_tweedie, exposition) = {corr:+.4f} — la prime "
+            f"pure prédite suit l'exposition, ce que le fit interdit "
+            f"explicitement (correctif 0d2b9c2)")
+        print(f"    POS-A3d corr(prime Tweedie, exposition) = {corr:+.4f} ✅")
+
+
 if __name__ == '__main__':
     print("="*65)
     print("  TESTS A3 GLM v1.0 — TARIFICATION POISSON/GAMMA/TWEEDIE")

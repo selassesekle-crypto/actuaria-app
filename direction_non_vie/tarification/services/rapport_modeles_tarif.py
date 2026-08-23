@@ -1037,10 +1037,15 @@ def _construire_contexte_tarif(
         f"AIC={F.nombre(met3.get('tweedie',{}).get('aic'), 0)}",
         "",
         "=== HYPOTHÈSES GLM ===",
-        f"H1 Sur-dispersion : {hyp3.get('h1_poisson',{}).get('statut','?')} | Var/E={hyp3.get('h1_poisson',{}).get('ratio_disp','—')}",
-        f"H2 Homoscédasticité : {hyp3.get('h2_homosc',{}).get('statut','?')} | Ratio var={hyp3.get('h2_homosc',{}).get('ratio_variance','—')}",
-        f"H3 Gini : {hyp3.get('h3_ajustement',{}).get('statut','?')} | Gini max={hyp3.get('h3_ajustement',{}).get('gini_max','—')}",
-        f"H4 Stabilité relativités : {hyp3.get('h4_stabilite',{}).get('statut','?')} | CV max={hyp3.get('h4_stabilite',{}).get('cv_max','—')} | Instables={hyp3.get('h4_stabilite',{}).get('vars_instables',[])}",
+        # ⚠️ `.get(cle, '—')` NE COUVRE PAS UNE CLÉ PRÉSENTE VALANT `None` :
+        # le défaut ne s'applique qu'à une clé ABSENTE. Depuis qu'A3 publie
+        # `None` pour une hypothèse non mesurée — au lieu d'une valeur par
+        # défaut qui se lisait comme une mesure — ces quatre lignes rendraient
+        # « Var/E=None ». Le `or` couvre les deux cas.
+        f"H1 Sur-dispersion : {hyp3.get('h1_poisson',{}).get('statut','?')} | Var/E={hyp3.get('h1_poisson',{}).get('ratio_disp') or '—'}",
+        f"H2 Homoscédasticité : {hyp3.get('h2_homosc',{}).get('statut','?')} | Ratio var={hyp3.get('h2_homosc',{}).get('ratio_variance') or '—'}",
+        f"H3 Gini : {hyp3.get('h3_ajustement',{}).get('statut','?')} | Gini max={hyp3.get('h3_ajustement',{}).get('gini_max') or '—'}",
+        f"H4 Stabilité relativités : {hyp3.get('h4_stabilite',{}).get('statut','?')} | CV max={hyp3.get('h4_stabilite',{}).get('cv_max') or '—'} | Instables={hyp3.get('h4_stabilite',{}).get('vars_instables',[])}",
         "",
         "=== RELATIVITÉS POISSON (top 5) ===",
     ]
