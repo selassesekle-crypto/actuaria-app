@@ -640,6 +640,93 @@ class T_Ce_Qui_Est_Publie_Vient_De_La_Mesure(unittest.TestCase):
         print(f"    POS-A4c Gini Test tracés = "
               f"{[round(v, 4) for v in traces['Gini Test']]} ✅")
 
+class T_L_Elasticite_Est_Un_Etat_Declare_Pas_Une_Valeur(unittest.TestCase):
+    """CONTRÔLE POSITIF — la branche « SI NON », et le faux qui part avec.
+
+    ⚠️ CE QUI A ÉTÉ RETIRÉ, ET POURQUOI. `_optimisation_tarifaire` publiait
+    « Tarif optimal : −20 % » quels que soient le portefeuille, sa taille et
+    la qualité du modèle : avec une élasticité codée en dur à −1,5, le chiffre
+    d'affaires vaut p^(1+ε), strictement décroissant, donc l'optimum était
+    MÉCANIQUEMENT la borne basse de sa propre grille. `gini_meilleur` était
+    reçu et jamais lu ; la prime moyenne (450 €) et le nombre de contrats
+    (10 000) étaient des défauts que l'appelant ne remplaçait jamais ; la
+    marge valait CA × 0,30, donc proportionnelle au CA.
+
+    ⚠️ ET C'ÉTAIT UNE RECOMMANDATION D'ACTION : un actuaire qui la suivait
+    baissait son tarif de 20 %.
+
+    ⚠️ CE QUI LA REMPLACE N'EST PAS UN SILENCE. Le module CONSTATE qu'aucune
+    donnée de comportement n'est déclarée, le dit, dit ce que cela coûte, et
+    tarife normalement. Aucun blocage. C'est le patron du lecteur d'inventaire
+    IFRS 17 : une capacité se déclare atteignable ou non, avec son coût.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from direction_non_vie.tarification.a4_ml.agent import AgentA4ML
+        cls.agent = AgentA4ML(models_path='/tmp', audit_path='/tmp',
+                              verbose=False)
+        cls.r = cls.agent.run(
+            result_a2=_make_r_a2(600), result_a3=_make_r_a3(),
+            plan=_PLAN_AUTO, calcul_shap=False, generer_graphiques=True)
+
+    def test_la_recommandation_tarifaire_FABRIQUEE_a_disparu(self):
+        """⚠️ LE SYMBOLE, LA CLÉ ET LA FIGURE — les trois, sinon le retrait
+        est incomplet et la valeur ressort par un autre chemin."""
+        from direction_non_vie.tarification.a4_ml import agent as A4
+        self.assertFalse(
+            hasattr(A4.AgentA4ML, '_optimisation_tarifaire'),
+            "la méthode qui fabriquait le « tarif optimal » existe encore")
+        self.assertNotIn(
+            'optimisation', self.r,
+            "le résultat publie encore une clé « optimisation »")
+        figs = set(self.r.get('graphiques_validation') or {})
+        self.assertNotIn(
+            'optimisation_tarifaire', figs,
+            f"la figure « Tarif optimal » est encore produite : {sorted(figs)}")
+        print("    POS-A4e le tarif optimal fabriqué a disparu — "
+              "méthode, clé et figure ✅")
+
+    def test_l_elasticite_se_declare_avec_ce_que_son_absence_COUTE(self):
+        """⚠️ UNE ABSENCE QUI NE DIT PAS SON COÛT NE SE CORRIGE PAS. « pas
+        d'élasticité » ne veut rien dire pour un actuaire ; « aucune
+        recommandation tarifaire n'est produite, et voici l'historique qu'il
+        faudrait » se comprend et se fournit."""
+        from direction_non_vie.tarification.a4_ml.agent import (
+            ELASTICITE_NON_FOURNIE,
+        )
+        e = self.r.get('elasticite')
+        self.assertIsNotNone(e, "l'état de l'élasticité n'est pas publié")
+        self.assertEqual(e['etat'], ELASTICITE_NON_FOURNIE)
+        for cle in ('motif', 'ce_que_cela_coute', 'ce_quil_faudrait'):
+            self.assertTrue(
+                (e.get(cle) or '').strip(),
+                f"l'état ne dit pas « {cle} » — une absence muette")
+        print(f"    POS-A4f élasticité {e['etat']}, et son coût est dit ✅")
+
+    def test_le_module_TARIFE_NORMALEMENT_malgre_l_absence(self):
+        """⚠️ AUCUN BLOCAGE. C'est la moitié de la règle : diagnostiquer,
+        jamais refuser. Un module qui s'arrêterait sur une donnée absente
+        serait aussi faux qu'un module qui inventerait une valeur."""
+        self.assertTrue(self.r['success'], f"Erreur : {self.r.get('erreur')}")
+        self.assertTrue(self.r['classement'], "aucun modèle classé")
+        self.assertIn(self.r['statut_rag'], ('VERT', 'AMBRE', 'ROUGE'))
+        print(f"    POS-A4g tarification normale : "
+              f"{len(self.r['classement'])} modèles, statut "
+              f"{self.r['statut_rag']} ✅")
+
+    def test_le_commentaire_actuaire_PORTE_la_mention(self):
+        """⚠️ LE SILENCE LAISSERAIT CROIRE QU'ELLE A ÉTÉ CONSIDÉRÉE. C'est le
+        motif de tout ce chantier : ce qui n'est pas mesuré doit se voir."""
+        c = self.r.get('commentaire', '')
+        self.assertIn('ÉLASTICITÉ-PRIX', c,
+                      "le commentaire actuaire ne mentionne pas l'élasticité")
+        self.assertIn('NON PRISE EN COMPTE', c)
+        self.assertNotIn('Tarif optimal', c,
+                         "le commentaire porte encore une recommandation")
+        print("    POS-A4h le commentaire actuaire porte la mention ✅")
+
+
 if __name__ == '__main__':
     print("="*65)
     print("  TESTS A4 ML v1.0 — MACHINE LEARNING ×8 MODÈLES")

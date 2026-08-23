@@ -595,9 +595,16 @@ FIGURES_ECARTEES: Dict[str, str] = {
     'scores_profils': 'doublon — la grille du profil retenu suffit ; les '
                       'autres profils ne sont pas ceux qui décident',
     'scores_finaux': 'doublon — scores_multicriteres, même grandeur',
-    # hors périmètre du rapport de modèles
-    'optimisation_tarifaire': 'hors périmètre — c\'est du pilotage tarifaire, '
-                              'pas la validation d\'un modèle',
+    # ⚠️ `optimisation_tarifaire` N'EST PLUS ICI PARCE QU'ELLE N'EXISTE PLUS.
+    # Elle y était écartée comme « hors périmètre — du pilotage tarifaire, pas
+    # la validation d'un modèle ». Mesuré depuis : elle ne publiait aucune
+    # grandeur, son « Tarif optimal : −20 % » était la borne basse de sa
+    # propre grille, atteinte mécaniquement pour toute élasticité < −1. La
+    # figure ET la fonction qui la nourrissait sont retirées d'A4.
+    # ⚠️ UNE ENTRÉE QUI SURVIT À SA FIGURE N'EST ATTRAPÉE PAR RIEN. Le
+    # contrôle de `figures_disponibles` signale « produite mais ni publiée ni
+    # écartée » ; il ne signale PAS « écartée mais plus produite ». C'est
+    # pourquoi cette entrée part avec la figure, dans le même lot.
     # A5 n'entre pas dans la chaîne du rapport
     'apprentissage_cann': 'A5 n\'entre pas dans la chaîne du rapport',
     'apprentissage_tabnet': 'A5 n\'entre pas dans la chaîne du rapport',

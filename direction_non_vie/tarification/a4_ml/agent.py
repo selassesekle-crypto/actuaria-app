@@ -500,6 +500,71 @@ class _ModeleFrequenceExposition:
         return f"_ModeleFrequenceExposition({self.base!r})"
 
 
+#: Les trois etats possibles de l'elasticite-prix. Voir `etat_elasticite`.
+ELASTICITE_ESTIMEE          = 'ESTIMEE'
+ELASTICITE_NON_IDENTIFIABLE = 'NON_IDENTIFIABLE'
+ELASTICITE_NON_FOURNIE      = 'NON_FOURNIE'
+
+
+def etat_elasticite(plan=None) -> Dict[str, Any]:
+    """L'elasticite-prix : un ETAT declare, jamais une valeur inventee.
+
+    ⚠️ LE MODULE CONSTATE, IL NE DEMANDE PAS. Une question posee a
+    l'execution invite une reponse fausse — un utilisateur repond « oui » et
+    fournit un fichier inutilisable. C'est l'actuaire qui DECLARE dans le plan
+    tarifaire, et le systeme qui VERIFIE dans les donnees. Meme patron que le
+    lecteur d'inventaire IFRS 17 (`normes/ifrs17/socle/lecture_inventaire.py`,
+    `capacites()` / `exigences_hors_portee()`) : une capacite se declare
+    atteignable ou non, AVEC CE QUE SON ABSENCE COUTE.
+
+    ⚠️ AUCUN BLOCAGE, DANS AUCUN DES TROIS ETATS. La tarification se fait
+    normalement ; seule la dimension elasticite est ignoree et signalee.
+
+    Les trois etats :
+
+      ESTIMEE           les donnees de comportement sont declarees ET la
+                        variation de prix est exploitable : l'elasticite est
+                        estimee, et une optimisation tarifaire devient
+                        legitime.
+      NON_IDENTIFIABLE  les donnees existent, mais le prix est une fonction
+                        (quasi) deterministe du risque : la variation
+                        residuelle ne permet a AUCUNE methode de separer
+                        l'effet-prix de la selection du risque.
+      NON_FOURNIE       aucune donnee de comportement n'est declaree au plan.
+
+    ⚠️ SEUL `NON_FOURNIE` EST ATTEIGNABLE AUJOURD'HUI : le plan tarifaire n'a
+    pas encore de bloc `comportement`. Le parametre `plan` est la couture par
+    laquelle les deux autres arriveront ; il est deja lu pour que le site
+    d'appel n'ait pas a changer.
+    """
+    _declare = getattr(plan, 'comportement', None) if plan is not None else None
+    if not _declare:
+        return {
+            'etat': ELASTICITE_NON_FOURNIE,
+            'motif': (
+                "Aucune donnee de comportement de renouvellement n'est "
+                "declaree au plan tarifaire : ni l'issue du contrat "
+                "(renouvele / resilie), ni la prime precedente, ni la prime "
+                "proposee a l'echeance."
+            ),
+            'ce_que_cela_coute': (
+                "L'elasticite-prix n'est pas estimee, et AUCUNE recommandation "
+                "de variation tarifaire n'est produite. Le reste de la "
+                "tarification n'est pas affecte."
+            ),
+            'ce_quil_faudrait': (
+                "Un historique de renouvellement : une ligne par contrat ET "
+                "par echeance, portant l'issue, la prime precedente et la "
+                "prime proposee. Une elasticite repond a une VARIATION de "
+                "prix, pas a un niveau."
+            ),
+        }
+    raise NotImplementedError(
+        "Un bloc `comportement` est declare au plan, mais son exploitation "
+        "n'est pas encore construite (lots L2 a L5)."
+    )
+
+
 def _envelopper_frequence(modele, col_cible: str):
     """Enveloppe le modèle pour l'offset d'exposition SI la cible est un comptage
     (COLS_COMPTAGE) ; sinon (cible COÛT) le rend nu — la sévérité ne se pondère
@@ -911,19 +976,26 @@ class AgentA4ML:
                 logger.warning("[PLAN INCOMPLET] %s", _al['message'])
             statut_rag = plafonner_statut_si_ampute(statut_rag, _ampute)
 
+            # ⚠️ POSE AVANT LE COMMENTAIRE, ET DANS `rapport` : le
+            # commentaire actuaire le lit de la, le resultat le republie plus
+            # bas. Une seule source, deux lecteurs.
+            rapport['elasticite'] = etat_elasticite(plan)
+            _etat_elasticite = rapport['elasticite']
+
             commentaire = self._commenter_actuaire_senior(
                 classement, sous_branche, statut_rag,
                 result_a3, rapport
             )
 
-            # ── LES TROIS GRANDEURS AVANCÉES, MESURÉES UNE SEULE FOIS ────────
+            # ── LES DEUX GRANDEURS AVANCÉES, MESURÉES UNE SEULE FOIS ─────────
             # ⚠️ LE COMMENTAIRE DU `return` DISAIT DÉJÀ « calculées une seule
-            # fois » ALORS QUE LE CODE APPELAIT `_monitoring_derive` CINQ FOIS,
-            # `_valider_modele_ml` TROIS et `_optimisation_tarifaire` DEUX —
-            # et trois des appels à `_valider_modele_ml` se faisaient SANS
+            # fois » ALORS QUE LE CODE APPELAIT `_monitoring_derive` CINQ FOIS
+            # et `_valider_modele_ml` TROIS — dont trois appels SANS
             # X_test/y_test. Le résultat portait donc deux verdicts pour la
             # même hypothèse : `hypotheses` (mesuré) et `validation_ml` (non
             # mesuré). L'Excel lit le second, le verrou d'A6 lit le premier.
+            # ⚠️ ELLES ÉTAIENT TROIS : l'optimisation tarifaire a été retirée
+            # avec sa figure — voir la clé `elasticite` plus bas.
             _psi_glob, _psi_det = self._psi_reel(X_train, X_test)
             _scores_ref = _scores_act = None
             if classement and classement[0].get('modele') in self.modeles:
@@ -939,9 +1011,6 @@ class AgentA4ML:
                 psi_reel=_psi_glob, details_psi=_psi_det,
                 scores_ref=_scores_ref, scores_actuels=_scores_act,
                 gini_actuel=(classement[0].get('gini_test') if classement else None),
-            )
-            _optimisation = self._optimisation_tarifaire(
-                classement[0].get('gini_test', 0.25) if classement else 0.25,
             )
 
             # ── Standard ActuarIA — excel_bytes ──────────────────────────────
@@ -1016,11 +1085,22 @@ class AgentA4ML:
                 # même objet : une hypothèse ne peut plus recevoir deux
                 # verdicts dans le même dictionnaire de retour.
                 'monitoring':      _monitoring,
-                'optimisation':    _optimisation,
+                # ⚠️ `optimisation` A ETE RETIREE, ET CE QUI LA REMPLACE EST UN
+                # ETAT, PAS UN CHIFFRE. Elle publiait « Tarif optimal : -20 % »
+                # quels que soient le portefeuille, sa taille et la qualite du
+                # modele : avec une elasticite codee en dur a -1,5, le chiffre
+                # d'affaires vaut p^(1+eps), strictement decroissant, donc
+                # l'optimum etait MECANIQUEMENT la borne basse de la grille.
+                # `gini_meilleur` etait recu et jamais lu ; la prime moyenne et
+                # le nombre de contrats etaient des defauts (450 EUR, 10 000)
+                # que l'appelant ne remplacait jamais ; la marge valait
+                # CA x 0,30, donc proportionnelle au CA.
+                # ⚠️ ET C'ETAIT UNE RECOMMANDATION D'ACTION : un actuaire qui
+                # la suivait baissait son tarif de 20 %.
+                'elasticite':      _etat_elasticite,
                 'validation_ml':   _val_ml_tmp,
                 'graphiques_validation': self._graphiques_validation_ml(
-                                       _val_ml_tmp, classement,
-                                       _monitoring, _optimisation,
+                                       _val_ml_tmp, classement, _monitoring,
                                    ) if generer_graphiques else {},
                 'graphiques':      graphiques,
                 'rapport':         rapport,
@@ -1767,6 +1847,18 @@ class AgentA4ML:
             amelioration = (meilleur.get('gini_test', 0) - gini_glm) / max(gini_glm, 1e-6) * 100
             niveau1 += f"\n  Amélioration vs GLM : {amelioration:+.1f}%"
 
+        # ⚠️ CE QUI N'EST PAS PRIS EN COMPTE SE DIT AUSSI. L'actuaire qui lit
+        # ce commentaire doit savoir que la dimension elasticite-prix n'entre
+        # pas dans l'analyse — et pourquoi. Le silence laisserait croire
+        # qu'elle a ete consideree.
+        _elast = rapport.get('elasticite') or {}
+        if _elast.get('etat') and _elast['etat'] != ELASTICITE_ESTIMEE:
+            niveau1 += (
+                f"\n\nÉLASTICITÉ-PRIX : NON PRISE EN COMPTE ({_elast['etat']})"
+                f"\n  {_elast.get('motif', '')}"
+                f"\n  {_elast.get('ce_que_cela_coute', '')}"
+            )
+
         # ── NIVEAU 2 : DIAGNOSTIC ─────────────────────────────────────────────
         meilleur_nom  = meilleur.get('modele', 'N/A')
         meilleur_gini = meilleur.get('gini_test', 0)
@@ -2511,74 +2603,6 @@ class AgentA4ML:
                                      "dérive en production n'est pas mesurée ici."),
         }
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # OPTIMISATION TARIFAIRE (Élasticité-Prix)
-    # ═══════════════════════════════════════════════════════════════════════════
-    def _optimisation_tarifaire(
-        self,
-        gini_meilleur:    float,
-        prime_moyenne:    float = 450.0,
-        nb_contrats:      int   = 10000,
-        elasticite:       float = -1.5,
-    ) -> Dict:
-        """
-        Optimisation tarifaire par analyse d'élasticité-prix.
-        
-        Répond à la question :
-        "Si je monte le tarif de 5%, je perds combien de contrats ?
-         Quel est l'impact sur le chiffre d'affaires et la marge ?"
-        
-        Modèle : Q(p) = Q0 × (p/p0)^élasticité
-        Élasticité standard assurance auto : -1.5 à -2.0
-        """
-        variations = [-0.20, -0.15, -0.10, -0.05, 0, 0.05, 0.10, 0.15, 0.20]
-        scenarios = []
-
-        for delta in variations:
-            prime_new    = prime_moyenne * (1 + delta)
-            # Élasticité-prix : variation contrats proportionnelle
-            nb_new       = nb_contrats * ((prime_new / prime_moyenne) ** elasticite)
-            nb_new       = max(0, int(nb_new))
-            ca_new       = prime_new * nb_new
-            ca_base      = prime_moyenne * nb_contrats
-            variation_ca = (ca_new - ca_base) / ca_base * 100
-
-            # Sinistralité estimée (Loss Ratio cible 70%)
-            sinistres    = ca_new * 0.70
-            marge        = ca_new - sinistres
-            marge_pct    = (marge / ca_new * 100) if ca_new > 0 else 0
-
-            scenarios.append({
-                "variation_tarif_pct": round(delta * 100, 0),
-                "prime_nouvelle":      round(prime_new, 2),
-                "nb_contrats":         nb_new,
-                "perte_contrats":      nb_contrats - nb_new,
-                "ca":                  round(ca_new, 0),
-                "variation_ca_pct":    round(variation_ca, 1),
-                "marge":               round(marge, 0),
-                "marge_pct":           round(marge_pct, 1),
-                "statut":              "VERT" if variation_ca >= 0 else "ROUGE",
-            })
-
-        # Scénario optimal (max CA)
-        optimal = max(scenarios, key=lambda x: x['ca'])
-
-        return {
-            "scenarios":          scenarios,
-            "optimal":            optimal,
-            "prime_base":         prime_moyenne,
-            "nb_contrats_base":   nb_contrats,
-            "elasticite":         elasticite,
-            "recommandation": (
-                f"Tarif optimal : +{optimal['variation_tarif_pct']:.0f}% "
-                f"→ Prime {optimal['prime_nouvelle']:.0f}€ "
-                f"→ CA {optimal['ca']/1e3:.0f}k€ "
-                f"(+{optimal['variation_ca_pct']:.1f}% vs base)"
-            ),
-            "methode": "Élasticité-prix Q(p)=Q0×(p/p0)^ε — ε = " + str(elasticite),
-        }
-
-
     def _valider_modele_ml(
         self,
         classement:     list,
@@ -2831,9 +2855,13 @@ class AgentA4ML:
         val_ml:     Dict,
         classement: list,
         monitoring: Dict,
-        optimisation: Dict,
     ) -> Dict:
-        """4 graphiques auto-explicatifs validation ML."""
+        """Graphiques auto-explicatifs de validation ML.
+
+        ⚠️ ILS ETAIENT QUATRE. G3 « Optimisation tarifaire CA/contrats »
+        titrait « Tarif optimal : X % » sur une grandeur qui ne dependait
+        d'aucune donnee : elle est retiree avec la fonction qui la nourrissait.
+        """
         try:
             import plotly.graph_objects as go
             import numpy as np
@@ -2959,42 +2987,6 @@ class AgentA4ML:
             graphiques["monitoring_gini"] = fig2
         except Exception as e:
             logger.warning(f"G2 monitoring : {e}")
-
-        # G3 — Optimisation tarifaire CA/contrats
-        try:
-            scenarios = optimisation.get("scenarios", [])
-            optimal   = optimisation.get("optimal", {})
-            variations= [s["variation_tarif_pct"] for s in scenarios]
-            cas       = [s["ca"]/1e3 for s in scenarios]
-            colors_o  = [OR if s == optimal else "rgba(52,152,219,0.55)" for s in scenarios]
-
-            fig3 = go.Figure()
-            fig3.add_trace(go.Bar(
-                x=[f"{v:+.0f}%" for v in variations], y=cas,
-                marker_color=colors_o, marker_line=dict(color=NAVY,width=1),
-                width=0.45, opacity=0.88,
-                text=[f"{v:.0f}k€" for v in cas], textposition="outside",
-                textfont=dict(color=BLANC, size=9),
-                hovertemplate="<b>%{x}</b><br>CA : %{y:.0f}k€<extra></extra>",
-            ))
-            l3 = dict(**LAYOUT)
-            l3.update(dict(
-                title=dict(
-                    text=f"✅ Tarif optimal : {optimal.get('variation_tarif_pct',0):+.0f}% → CA max {optimal.get('ca',0)/1e3:.0f}k€",
-                    font=dict(color=OR, size=11), x=0.01
-                ),
-                xaxis=dict(title="Variation de prime", tickfont=dict(color=BLANC,size=9), showgrid=False),
-                yaxis=dict(visible=False), bargap=0.3, showlegend=False,
-                annotations=[dict(
-                    text=f"💡 La barre dorée = tarif optimal. {optimisation.get('recommandation','')}",
-                    xref="paper", yref="paper", x=0.01, y=-0.22,
-                    font=dict(color=GRIS, size=9), showarrow=False, align="left"
-                )],
-            ))
-            fig3.update_layout(**l3)
-            graphiques["optimisation_tarifaire"] = fig3
-        except Exception as e:
-            logger.warning(f"G3 optimisation : {e}")
 
         # G4 — Scorecard validation ML
         try:

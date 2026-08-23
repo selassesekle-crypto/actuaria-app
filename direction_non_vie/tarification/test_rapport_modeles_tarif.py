@@ -676,8 +676,22 @@ class T7a_LeCatalogueDesFigures(unittest.TestCase):
                          'figures ni publiées ni écartées : %s' % non_classees)
         # et rien d'écarté ne doit être au plan en même temps
         self.assertEqual(au_plan & set(R.FIGURES_ECARTEES), set())
+        # ⚠️⚠️ LE SENS QUI MANQUAIT — UN GARDIEN QUI NE VOIT QU'UN SENS LAISSE
+        # PASSER L'AUTRE. Ce test attrapait « produite mais non classée » ; il
+        # ne voyait pas « classée mais PLUS produite ». Une entrée qui survit à
+        # sa figure devient une justification sans objet — et rien ne la
+        # signalait. Mesuré au retrait de `optimisation_tarifaire` : la figure
+        # est partie, son entrée serait restée, et la gate n'aurait rien dit.
+        # Violation plantée avant d'écrire cette ligne : en remettant l'entrée
+        # retirée, l'assertion tombe bien.
+        orphelines = set(R.FIGURES_ECARTEES) - produites
+        self.assertEqual(
+            orphelines, set(),
+            f"entrée(s) au catalogue d'écart pour une figure que la chaîne ne "
+            f"produit plus — la justification a survécu à son objet : "
+            f"{sorted(orphelines)}")
         print('    OK T7a : %d figures produites, %d publiées, %d écartées '
-              'avec leur raison'
+              'avec leur raison, 0 orpheline'
               % (len(produites), len(au_plan), len(produites - au_plan)))
 
     def test_chaque_figure_du_plan_a_un_titre_et_une_source(self):
