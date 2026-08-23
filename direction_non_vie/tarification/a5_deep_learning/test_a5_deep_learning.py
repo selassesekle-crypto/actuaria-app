@@ -258,6 +258,107 @@ class TestA5FiltreGenre(unittest.TestCase):
         print(f"    B1-A5 Genre numérique filtré ✅ | features={features}")
 
 
+class T_Un_Bon_Modele_Obtient_Un_Bon_Verdict(unittest.TestCase):
+    """CONTRÔLE POSITIF — la leçon V14, étendue à A5.
+
+    ⚠️ ELLE EST DÉJÀ DANS LE DÉPÔT, ET ELLE N'A ÉTÉ APPLIQUÉE QU'À A6. Écrite
+    au correctif V14, dans `a4_ml/agent.py` :
+
+        « On a beaucoup vérifié que le système REFUSE ce qu'il doit refuser.
+          Personne n'a vérifié qu'il ACCEPTE ce qu'il doit accepter. Un
+          contrôle qui refuse tout est aussi inutile qu'un contrôle qui
+          accepte tout — et bien plus difficile à repérer, parce qu'il donne
+          l'apparence de la rigueur. »
+
+    ⚠️ ET IL NE PORTE PAS SUR LE STATUT, MAIS SUR LA GRANDEUR. Un contrôle qui
+    exigerait « H1 doit être VERT » serait satisfait par une perte SIMULÉE :
+    `_valider_hypotheses_dl` fabrique `loss_init = 0.50` et
+    `loss_final = 1 - 2·gini` pendant que l'historique RÉEL est disponible et
+    inutilisé. Le contrôle exige donc que la grandeur publiée vienne de la
+    mesure — c'est la seule forme qui ne puisse pas être satisfaite à faux.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        if not TORCH_OK:
+            return
+        from direction_non_vie.tarification.a5_deep_learning.agent import (
+            AgentA5DeepLearning,
+        )
+        r_a2 = _make_r_a2(4000)
+        r_a3 = _make_r_a3(r_a2['dataframe'])      # ancrage GLM : mode RÉEL
+        np.random.seed(1)
+        torch.manual_seed(1)
+        cls.r = AgentA5DeepLearning(
+            models_path='/tmp', audit_path='/tmp', verbose=False).run(
+            result_a2=r_a2, result_a3=r_a3, plan=_PLAN_AUTO,
+            col_cible='nb_sinistres', n_epochs=30, batch_size=128,
+            generer_graphiques=True)
+
+    def setUp(self):
+        if not TORCH_OK:
+            self.skipTest("PyTorch absent")
+
+    def test_le_verdict_DL_suit_le_Gini_REEL_du_modele(self):
+        """⚠️ MESURÉ : un CANN ancré à Gini 0,478 était déclaré « ❌ Deep
+        Learning non recommandé », ses TROIS hypothèses en ROUGE. Cause unique :
+        `_valider_hypotheses_dl` lit `.get('gini', 0)` quand la clé réelle est
+        `gini_test`. Le verdict ne partait donc jamais de la performance."""
+        met = self.r['metriques']
+        gini_dl = max(met[m]['gini_test'] for m in met)
+        gini_glm = self.r['validation_dl']['h3_apport_dl']['gini_glm']
+        self.assertGreater(gini_dl, gini_glm,
+            "prémisse du test : le DL doit ici battre le GLM de référence")
+        h3 = self.r['validation_dl']['h3_apport_dl']
+        self.assertAlmostEqual(
+            h3['gini_dl'], gini_dl, places=4,
+            msg=(f"H3 publie gini_dl={h3['gini_dl']} alors que le meilleur DL "
+                 f"vaut {gini_dl:.4f} — la clé lue n'est pas celle qui existe"))
+        self.assertNotEqual(
+            h3['statut'], 'ROUGE',
+            f"un DL à Gini {gini_dl:.4f} contre un GLM à {gini_glm:.4f} ne peut "
+            f"pas être déclaré « moins performant »")
+        print(f"    POS-A5a Gini DL réel {gini_dl:.4f} > GLM {gini_glm:.4f} "
+              f"→ H3 {h3['statut']} ✅")
+
+    def test_H1_convergence_lit_l_historique_REEL(self):
+        """⚠️ LA GRANDEUR, PAS LE STATUT. L'historique d'entraînement existe
+        (`historique_cann`, une entrée par époque avec ses pertes réelles) et
+        H1 ne le reçoit même pas : `_valider_hypotheses_dl` ne prend que le
+        classement et les métriques. Elle fabrique alors `loss_init = 0.50`,
+        constante, et `loss_final = 1 - 2·gini` — une fonction algébrique du
+        Gini publiée sous le titre « Convergence de l'entraînement »."""
+        hist = self.r['historique_cann']
+        self.assertGreater(len(hist), 1, "prémisse : l'historique doit exister")
+        h1 = self.r['validation_dl']['h1_convergence']
+        self.assertAlmostEqual(
+            h1['loss_init'], hist[0]['train'], places=3,
+            msg=(f"H1 publie loss_init={h1['loss_init']} ; la PREMIÈRE perte "
+                 f"réellement mesurée vaut {hist[0]['train']:.4f}"))
+        self.assertAlmostEqual(
+            h1['loss_final'], hist[-1]['train'], places=3,
+            msg=(f"H1 publie loss_final={h1['loss_final']} ; la DERNIÈRE perte "
+                 f"réellement mesurée vaut {hist[-1]['train']:.4f}"))
+        print(f"    POS-A5b H1 lit l'historique réel "
+              f"({hist[0]['train']:.4f} → {hist[-1]['train']:.4f}) ✅")
+
+    def test_les_courbes_d_apprentissage_portent_les_pertes_REELLES(self):
+        """⚠️ TROIS TRACÉS À ZÉRO. L'historique pose `train` et `val` ; le
+        graphique lit `loss_train`, `loss_val` et `gini_val` — trois clés qui
+        n'existent pas. Le rapport affiche donc « Courbes d'apprentissage »
+        avec trois lignes plates, et une « Best époque » calculée dessus."""
+        fig = self.r.get('graphiques', {}).get('apprentissage_cann')
+        self.assertIsNotNone(fig, "la figure d'apprentissage n'est pas produite")
+        traces = {t.name: [v for v in t.y] for t in fig.data if t.name}
+        self.assertIn('Loss Train', traces)
+        self.assertTrue(
+            any(v != 0 for v in traces['Loss Train']),
+            "la courbe « Loss Train » est intégralement à zéro — elle lit une "
+            "clé absente de l'historique")
+        print(f"    POS-A5c courbes non nulles : "
+              f"{ {k: round(v[0], 4) for k, v in traces.items() if v} } ✅")
+
+
 if __name__ == '__main__':
     print("="*65)
     print("  TESTS A5 DEEP LEARNING v1.0 — CANN + TabNet")

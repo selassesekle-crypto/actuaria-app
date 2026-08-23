@@ -819,6 +819,66 @@ class GOUV_LesRaisonsDuPlafond(unittest.TestCase):
         print("    OK RAISONS-b : la liste est reconstruite a chaque appel")
 
 
+class T_Les_Figures_Portent_Les_Valeurs_REELLES(unittest.TestCase):
+    """CONTRÔLE POSITIF — une figure publiée doit montrer ce qui a été mesuré.
+
+    ⚠️ MESURÉ AVANT CE LOT, sur un classement réel de quatre modèles :
+        barres « Gini »      = [0, 0, 0, 0]   pour [0.21, 0.22, 0.16, 0.15]
+        radar (5 axes)       = [0.0, 0.8, 0.6, 0.8, 0.9]
+    Le catalogue d'A6 porte `gini_test` ; les deux figures lisaient `gini`.
+    Le radar lisait en outre `stabilite` et `rmse_norm`, deux clés que
+    `_calculer_scores_multicriteres` n'a jamais produites — il rendait donc
+    leurs valeurs par défaut, 0,8 et 0,2, sur TOUT modèle.
+
+    ⚠️ ET LE CONTRÔLE C2 DU MÊME FICHIER PORTE DÉJÀ LA BONNE CLÉ, avec le
+    commentaire « Clé correcte : 'gini_test' (pas 'gini') ». La leçon avait
+    été tirée à un endroit et pas à l'autre.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from direction_non_vie.tarification.a6_comparaison.agent import (
+            AgentA6Comparaison,
+        )
+        cls.agent = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp',
+                                       verbose=False)
+        cls.r = cls.agent.run(
+            result_a2=_make_r_a2_avec_annee(800), result_a3=_make_r_a3(),
+            result_a4=_make_r_a4(), result_a5=None,
+            col_cible='prime_pure', generer_graphiques=True,
+            generer_rapport_equipe=False, profil_valide_par='Actuaire Test')
+
+    def test_les_barres_de_Gini_portent_le_Gini_du_classement(self):
+        fig = self.r['graphiques_validation'].get('gini_comparaison')
+        self.assertIsNotNone(fig, "la figure des Gini n'est pas produite")
+        traces = list(fig.data[0].y)
+        reels = [m['gini_test'] for m in self.r['classement']]
+        self.assertTrue(any(v > 0 for v in reels),
+                        "prémisse : au moins un modèle doit discriminer")
+        self.assertEqual(
+            [round(float(v), 4) for v in traces],
+            [round(float(v), 4) for v in reels],
+            f"les barres valent {list(traces)} pour des Gini réels de {reels}")
+        print(f"    POS-A6a barres Gini = {[round(float(v), 4) for v in traces]} ✅")
+
+    def test_le_radar_du_modele_retenu_ne_montre_pas_des_valeurs_par_defaut(self):
+        """⚠️ UN AXE QUI VAUT SA VALEUR PAR DÉFAUT NE DÉCRIT AUCUN MODÈLE.
+        Le contrôle compare les cinq rayons aux cinq composantes que la grille
+        multicritères a réellement calculées pour le modèle retenu."""
+        fig = self.r['graphiques_validation'].get('radar_modele_retenu')
+        self.assertIsNotNone(fig, "le radar n'est pas produit")
+        rayons = [round(float(v), 4) for v in fig.data[0].r][:5]
+        prod = self.r['modele_production']
+        attendus = [round(float(prod.get(c, 0)), 4) for c in (
+            'score_gini', 'score_stabilite', 'score_interpretabilite',
+            'score_rmse', 'score_global')]
+        self.assertEqual(
+            rayons, attendus,
+            f"le radar trace {rayons} ; les composantes mesurées du modèle "
+            f"retenu valent {attendus}")
+        print(f"    POS-A6b radar = {rayons} — les composantes mesurées ✅")
+
+
 if __name__ == '__main__':
     print("="*65)
     print("  TESTS A6 COMPARAISON v1.0 — SÉLECTION FINALE")

@@ -31,7 +31,6 @@ import numpy as np
 import pandas as pd
 try:
     import plotly.graph_objects as go
-    from plotly.subplots import make_subplots
     PLOTLY_OK = True
 except ImportError:
     PLOTLY_OK = False
@@ -611,7 +610,11 @@ class AgentA5DeepLearning:
             _val_dl_ = self._valider_hypotheses_dl(
                 classement, self.metriques,
                 n_epochs if 'n_epochs' in dir() else 50,
-                result_a3=result_a3)
+                result_a3=result_a3,
+                historiques={
+                    'cann':   res_cann.get('historique', []),
+                    'tabnet': res_tabnet.get('historique', []),
+                })
             _gv_dl_  = self._graphiques_validation_dl(
                 _val_dl_, classement, self.metriques) if generer_graphiques else {}
 
@@ -764,7 +767,7 @@ class AgentA5DeepLearning:
         self.alertes_conformite = _mx.alertes
         feature_names = list(_mx)
 
-        # ── SPLIT TEMPOREL (R1 — Commission Tarification IA France 2019 §3.2.4) ──
+        # ── SPLIT TEMPOREL (R1) ──────────────────────────────────────────────
         # Même approche que A3/A4 : tri temporel avant extraction de X.
         _col_temp = next(
             (c for c in ['annee_souscription', 'date_souscription', 'annee', 'year']
@@ -1569,11 +1572,21 @@ class AgentA5DeepLearning:
             hist_cann = res_cann.get('historique', [])
             if hist_cann:
                 epochs     = list(range(1, len(hist_cann) + 1))
-                loss_train = [h.get('loss_train', 0) for h in hist_cann]
-                loss_val   = [h.get('loss_val', 0)   for h in hist_cann]
-                gini_val   = [h.get('gini_val', 0)   for h in hist_cann]
+                # ⚠️ L'HISTORIQUE PORTE `train` ET `val`, PAS `loss_train` ni
+                # `loss_val` : `_calibrer_cann` empile {'epoch','train','val'}.
+                # Les listes sortaient donc à zéro sur toute leur longueur, et
+                # la figure « Courbes d'apprentissage » montrait des droites
+                # plates quelle que soit la calibration.
+                # ⚠️ UN GINI PAR ÉPOQUE N'A JAMAIS ÉTÉ ENREGISTRÉ : la trace
+                # « Gini Val » était une ligne de zéros, et la « Best époque »
+                # qu'elle plaçait — index du maximum de ces zéros — valait
+                # toujours 1. L'époque réellement retenue est celle que
+                # l'early stopping restaure : le minimum de la perte de
+                # validation. C'est elle qui est marquée ici.
+                loss_train = [h.get('train', 0.0) for h in hist_cann]
+                loss_val   = [h.get('val',   0.0) for h in hist_cann]
 
-                fig1 = make_subplots(specs=[[{"secondary_y": True}]])
+                fig1 = go.Figure()
 
                 # Loss train
                 fig1.add_trace(go.Scatter(
@@ -1581,7 +1594,7 @@ class AgentA5DeepLearning:
                     mode='lines', name='Loss Train',
                     line=dict(color=OR, width=2, shape='spline', smoothing=0.4),
                     hovertemplate="Époque %{x}<br>Loss Train : <b>%{y:.4f}</b><extra></extra>",
-                ), secondary_y=False)
+                ))
 
                 # Loss val
                 fig1.add_trace(go.Scatter(
@@ -1589,22 +1602,13 @@ class AgentA5DeepLearning:
                     mode='lines', name='Loss Val',
                     line=dict(color=ROUGE, width=2, shape='spline', smoothing=0.4, dash='dash'),
                     hovertemplate="Époque %{x}<br>Loss Val : <b>%{y:.4f}</b><extra></extra>",
-                ), secondary_y=False)
+                ))
 
-                # Gini val (axe droit)
-                fig1.add_trace(go.Scatter(
-                    x=epochs, y=gini_val,
-                    mode='lines+markers', name='Gini Val',
-                    line=dict(color=VERT, width=1.5, shape='spline', smoothing=0.4),
-                    marker=dict(color=VERT, size=4),
-                    hovertemplate="Époque %{x}<br>Gini Val : <b>%{y:.4f}</b><extra></extra>",
-                ), secondary_y=True)
-
-                # Meilleure époque
-                best_epoch = gini_val.index(max(gini_val)) + 1
+                # Époque retenue = minimum de la perte de validation
+                best_epoch = loss_val.index(min(loss_val)) + 1
                 fig1.add_vline(
                     x=best_epoch, line_dash="dot", line_color=VERT, line_width=1.5,
-                    annotation_text=f"Best époque {best_epoch}",
+                    annotation_text=f"Époque retenue {best_epoch}",
                     annotation_font=dict(color=VERT, size=9),
                 )
 
@@ -1627,11 +1631,7 @@ class AgentA5DeepLearning:
                 fig1.update_yaxes(
                     title_text="Loss", title_font=dict(color=GRIS, size=10),
                     showgrid=True, gridcolor="rgba(255,255,255,0.05)",
-                    tickfont=dict(color=GRIS), secondary_y=False,
-                )
-                fig1.update_yaxes(
-                    title_text="Gini", title_font=dict(color=GRIS, size=10),
-                    showgrid=False, tickfont=dict(color=GRIS), secondary_y=True,
+                    tickfont=dict(color=GRIS),
                 )
                 graphiques['apprentissage_cann'] = fig1
 
@@ -1643,35 +1643,29 @@ class AgentA5DeepLearning:
             hist_tab = res_tabnet.get('historique', [])
             if hist_tab:
                 epochs_t   = list(range(1, len(hist_tab) + 1))
-                loss_tr_t  = [h.get('loss_train', 0) for h in hist_tab]
-                loss_va_t  = [h.get('loss_val', 0)   for h in hist_tab]
-                gini_va_t  = [h.get('gini_val', 0)   for h in hist_tab]
+                # ⚠️ Même défaut que G1 : `_calibrer_tabnet` empile
+                # {'epoch','train','val'}. Voir le commentaire de G1.
+                loss_tr_t  = [h.get('train', 0.0) for h in hist_tab]
+                loss_va_t  = [h.get('val',   0.0) for h in hist_tab]
 
-                fig2 = make_subplots(specs=[[{"secondary_y": True}]])
+                fig2 = go.Figure()
 
                 fig2.add_trace(go.Scatter(
                     x=epochs_t, y=loss_tr_t, mode='lines', name='Loss Train',
                     line=dict(color=BLEU, width=2, shape='spline', smoothing=0.4),
                     hovertemplate="Époque %{x}<br>Loss Train : <b>%{y:.4f}</b><extra></extra>",
-                ), secondary_y=False)
+                ))
 
                 fig2.add_trace(go.Scatter(
                     x=epochs_t, y=loss_va_t, mode='lines', name='Loss Val',
                     line=dict(color=ROUGE, width=2, shape='spline', smoothing=0.4, dash='dash'),
                     hovertemplate="Époque %{x}<br>Loss Val : <b>%{y:.4f}</b><extra></extra>",
-                ), secondary_y=False)
+                ))
 
-                fig2.add_trace(go.Scatter(
-                    x=epochs_t, y=gini_va_t, mode='lines+markers', name='Gini Val',
-                    line=dict(color=VERT, width=1.5, shape='spline', smoothing=0.4),
-                    marker=dict(color=VERT, size=4),
-                    hovertemplate="Époque %{x}<br>Gini Val : <b>%{y:.4f}</b><extra></extra>",
-                ), secondary_y=True)
-
-                best_t = gini_va_t.index(max(gini_va_t)) + 1
+                best_t = loss_va_t.index(min(loss_va_t)) + 1
                 fig2.add_vline(
                     x=best_t, line_dash="dot", line_color=VERT, line_width=1.5,
-                    annotation_text=f"Best époque {best_t}",
+                    annotation_text=f"Époque retenue {best_t}",
                     annotation_font=dict(color=VERT, size=9),
                 )
 
@@ -1694,11 +1688,7 @@ class AgentA5DeepLearning:
                 fig2.update_yaxes(
                     title_text="Loss", title_font=dict(color=GRIS, size=10),
                     showgrid=True, gridcolor="rgba(255,255,255,0.05)",
-                    tickfont=dict(color=GRIS), secondary_y=False,
-                )
-                fig2.update_yaxes(
-                    title_text="Gini", title_font=dict(color=GRIS, size=10),
-                    showgrid=False, tickfont=dict(color=GRIS), secondary_y=True,
+                    tickfont=dict(color=GRIS),
                 )
                 graphiques['apprentissage_tabnet'] = fig2
 
@@ -1851,11 +1841,12 @@ class AgentA5DeepLearning:
 
     def _valider_hypotheses_dl(
         self,
-        classement:  list,
-        metriques:   Dict,
-        n_epochs:    int = 0,
-        result_a3:   Optional[Dict] = None,
-    ) -> Dict:
+        classement:   list,
+        metriques:    dict,
+        n_epochs:     int = 0,
+        result_a3:    dict | None = None,
+        historiques:  dict | None = None,
+    ) -> dict:
         """
         Validation complète des hypothèses Deep Learning actuariel.
 
@@ -1863,9 +1854,13 @@ class AgentA5DeepLearning:
              Loss décroissante sur les époques d'entraînement ✅
              Loss finale < Loss initiale / 2 → bonne convergence
 
-        H2 — Absence de surapprentissage (val_loss stable)
-             Ratio val_loss / train_loss < 1.3 → pas de surapprentissage ✅
-             Ratio > 1.5 → surapprentissage significatif ❌
+        H2 — Absence de surapprentissage (Gini test / Gini train)
+             ⚠️ La docstring annonçait un ratio de LOSS (val/train, seuils 1.3
+             et 1.5) ; le code compare depuis toujours les GINI, avec des
+             seuils de sens inverse (0.88 et 0.75). Le libellé publié disait
+             lui aussi « Ratio val/train ». C'est le Gini qui est comparé.
+             Ratio ≥ 0.88 → pas de surapprentissage ✅
+             Ratio < 0.75 → surapprentissage significatif ❌
 
         H3 — Performance vs GLM de référence
              Gini DL > Gini GLM référence (0.12) → apport du DL ✅
@@ -1874,15 +1869,25 @@ class AgentA5DeepLearning:
         import numpy as np
 
         # H1 — Convergence
-        if classement:
-            meilleur = classement[0]
-            modele_nm = meilleur.get('modele', 'DL')
-            gini_dl   = meilleur.get('gini', 0)
-            # Simuler les losses à partir des métriques disponibles
-            # (en prod on utiliserait l'historique réel d'entraînement)
-            loss_init  = 0.50
-            loss_final = max(0.05, 1 - gini_dl * 2)
-            ratio_conv = loss_final / loss_init
+        # ⚠️ H1 NE SIMULE PLUS SES LOSSES. Le code posait `loss_init = 0.50`
+        # en dur et déduisait `loss_final` du Gini : la « convergence » ne
+        # regardait donc PAS l'entraînement, et son verdict était une
+        # fonction du seul Gini — deux calibrations aux historiques opposés
+        # rendaient le même statut. L'historique réel est empilé époque par
+        # époque par `_calibrer_cann` / `_calibrer_tabnet` ({'epoch','train',
+        # 'val'}) ; c'est lui qui est lu ici, sur le modèle de tête.
+        histo_h1 = []
+        if classement and historiques:
+            _cle_h1  = str(classement[0].get('modele', '')).strip().lower()
+            histo_h1 = historiques.get(_cle_h1) or []
+
+        if classement and histo_h1:
+            meilleur   = classement[0]
+            modele_nm  = meilleur.get('modele', 'DL')
+            _pertes    = [float(h.get('train', 0.0)) for h in histo_h1]
+            loss_init  = _pertes[0]
+            loss_final = _pertes[-1]
+            ratio_conv = loss_final / loss_init if loss_init else 1.0
 
             if ratio_conv < 0.5:
                 h1_statut = "VERT"
@@ -1897,31 +1902,51 @@ class AgentA5DeepLearning:
                 h1_msg    = f"Loss finale = {loss_final:.3f} ({ratio_conv*100:.0f}% de la loss initiale) → Pas de convergence ❌"
                 h1_conseil= "Vérifier l'architecture · Normaliser les features · Réduire le learning rate"
         else:
-            gini_dl, modele_nm = 0, "DL"
-            ratio_conv, loss_init, loss_final = 1.0, 0.5, 0.5
-            h1_statut = "ROUGE"
-            h1_msg    = "Aucun modèle DL calibré"
-            h1_conseil= "Vérifier les données d'entrée et les dépendances PyTorch"
+            # ⚠️ `modele_nm` EST RELU DU CLASSEMENT, PAS ÉCRASÉ EN "DL" : il
+            # nomme le modèle retenu jusque dans le verdict global et dans la
+            # synthèse publiée (l. 1986, 2021). Un repli qui l'écrase ferait
+            # publier « DL » à la place du modèle réellement calibré.
+            # Une hypothèse non mesurée se dit non mesurée : elle ne devient
+            # pas VERTE, et le message le nomme.
+            modele_nm  = classement[0].get('modele', 'DL') if classement else "DL"
+            ratio_conv, loss_init, loss_final = 1.0, 0.0, 0.0
+            h1_statut  = "ROUGE"
+            if classement:
+                h1_msg     = ("Historique d'entraînement indisponible → "
+                              "convergence NON mesurée ❌")
+                h1_conseil = (f"Le verdict de convergence de {modele_nm} ne peut "
+                              f"pas être rendu : relancer la calibration pour "
+                              f"disposer des pertes par époque")
+            else:
+                h1_msg    = "Aucun modèle DL calibré"
+                h1_conseil= "Vérifier les données d'entrée et les dépendances PyTorch"
 
-        # H2 — Surapprentissage (val_loss / train_loss)
-        # En pratique ce ratio vient de l'historique d'entraînement
-        # On l'approxime depuis les métriques train/test
-        gini_cann   = metriques.get('cann',   {}).get('gini', 0)
-        gini_tabnet = metriques.get('tabnet', {}).get('gini', 0)
-        gini_train  = max(gini_cann, gini_tabnet) * 1.15  # approximation
-        ratio_of    = max(gini_cann, gini_tabnet) / max(gini_train, 0.001)
+        # H2 — Surapprentissage (Gini test / Gini train du modèle de tête)
+        # ⚠️ LE GINI D'APPRENTISSAGE N'EST PLUS FABRIQUÉ. Le code posait
+        # `gini_train = gini_test * 1.15`, si bien que le ratio valait
+        # 1/1,15 = 0,870 QUELLES QUE SOIENT LES DONNÉES : une constante, juste
+        # sous le seuil VERT de 0,88 — H2 sortait AMBRE sur tout portefeuille,
+        # y compris un modèle sans le moindre surapprentissage. Le vrai Gini
+        # d'apprentissage est calculé et stocké par `_calibrer_*`
+        # (clé `gini_train`) : c'est lui qui est lu.
+        gini_cann   = metriques.get('cann',   {}).get('gini_test', 0)
+        gini_tabnet = metriques.get('tabnet', {}).get('gini_test', 0)
+        _tete_h2    = 'cann' if gini_cann >= gini_tabnet else 'tabnet'
+        gini_test_h2 = metriques.get(_tete_h2, {}).get('gini_test', 0)
+        gini_train  = metriques.get(_tete_h2, {}).get('gini_train', 0)
+        ratio_of    = gini_test_h2 / max(gini_train, 0.001)
 
         if ratio_of >= 0.88:
             h2_statut = "VERT"
-            h2_msg    = f"Ratio val/train = {ratio_of:.3f} ≥ 0.88 → Pas de surapprentissage ✅"
+            h2_msg    = f"Gini test/train = {ratio_of:.3f} ≥ 0.88 → Pas de surapprentissage ✅"
             h2_conseil= "Le modèle DL généralise correctement sur données non vues"
         elif ratio_of >= 0.75:
             h2_statut = "AMBRE"
-            h2_msg    = f"Ratio val/train = {ratio_of:.3f} ∈ [0.75, 0.88] → Surapprentissage léger ⚠️"
+            h2_msg    = f"Gini test/train = {ratio_of:.3f} ∈ [0.75, 0.88] → Surapprentissage léger ⚠️"
             h2_conseil= "Augmenter le dropout · Réduire la taille du réseau · Ajouter régularisation L2"
         else:
             h2_statut = "ROUGE"
-            h2_msg    = f"Ratio val/train = {ratio_of:.3f} < 0.75 → Surapprentissage ❌"
+            h2_msg    = f"Gini test/train = {ratio_of:.3f} < 0.75 → Surapprentissage ❌"
             h2_conseil= "Modèle trop complexe pour les données — simplifier l'architecture"
 
         # H3 — Apport du DL vs GLM de référence
@@ -1978,7 +2003,7 @@ class AgentA5DeepLearning:
                 "statut":      h2_statut,
                 "message":     h2_msg,
                 "conseil":     h2_conseil,
-                "titre_graphique": f"{'✅' if h2_statut=='VERT' else '⚠️' if h2_statut=='AMBRE' else '❌'} Surapprentissage — Ratio val/train = {ratio_of:.3f}",
+                "titre_graphique": f"{'✅' if h2_statut=='VERT' else '⚠️' if h2_statut=='AMBRE' else '❌'} Surapprentissage — Gini test/train = {ratio_of:.3f}",
             },
             "h3_apport_dl": {
                 "gini_dl":     round(gini_dl_max, 4),
@@ -2079,8 +2104,8 @@ class AgentA5DeepLearning:
             modeles_comp = ["GLM Poisson (ref)", "CANN (Wüthrich)", "TabNet"]
             ginis_comp   = [
                 h3["gini_glm"],
-                metriques.get("cann",   {}).get("gini", 0),
-                metriques.get("tabnet", {}).get("gini", 0),
+                metriques.get("cann",   {}).get("gini_test", 0),
+                metriques.get("tabnet", {}).get("gini_test", 0),
             ]
             colors_comp = [GRIS, BLEU, OR]
             statut_h3   = h3["statut"]

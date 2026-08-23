@@ -1011,9 +1011,12 @@ class AgentA6Comparaison:
         # Pour chaque fenêtre : recalibrer le meilleur modèle sur train,
         # prédire sur test, calculer Gini et A/E sur les prédictions.
         # C'est un vrai backtesting de modèle — pas un test de stationnarité.
-        # Réf. : Commission Tarification IA France (2019) §3.2.5
-        #        «Le backtesting doit évaluer la robustesse prédictive du modèle
-        #         sur des données hors-échantillon temporellement cohérentes.»
+        # ⚠️ LA CITATION QUI ÉTAIT ICI EST RETIRÉE. Elle donnait, ENTRE
+        # GUILLEMETS, une phrase attribuée à « Commission Tarification IA
+        # France (2019) §3.2.5 » — un texte que rien ne permet de retrouver.
+        # Une phrase entre guillemets engage plus qu'une référence : elle
+        # affirme que quelqu'un l'a écrite. La règle qu'elle habillait tient
+        # sans elle, et elle est énoncée ci-dessus.
         walk_forward = []
 
         # ── Recalibration sur le MODÈLE RÉELLEMENT RETENU (audit V4 reco #7) ──
@@ -2749,7 +2752,7 @@ class AgentA6Comparaison:
 
         # G2 — Gini par modèle avec écart
         try:
-            ginis  = [m.get('gini', 0) for m in classement]
+            ginis  = [m.get('gini_test', 0) for m in classement]
             colors_g = [OR if m.get('modele') == val_sel["c3_coherence"]["modele"]
                        else "rgba(52,152,219,0.6)" for m in classement]
             ecart  = val_sel["c2_ecart_gini"]["ecart"]
@@ -2799,11 +2802,19 @@ class AgentA6Comparaison:
                           if m.get('modele') == val_sel["c3_coherence"]["modele"]),
                          classement[0] if classement else {})
             categories = ["Gini", "Stabilité", "Interprét.", "RMSE", "Score global"]
+            # ⚠️ TROIS AXES SUR CINQ LISAIENT UNE CLÉ ABSENTE, et affichaient
+            # donc leur VALEUR PAR DÉFAUT : `gini` (le catalogue porte
+            # `gini_test`) sortait 0, `stabilite` sortait 0,8 et `rmse_norm`
+            # sortait 0,2 — deux constantes. Le radar « Profil du modèle
+            # retenu » décrivait ainsi un modèle qui n'était pas celui-là.
+            # `_calculer_scores_multicriteres` produit les cinq composantes
+            # DÉJÀ normalisées dans [0,1] : ce sont elles que la grille
+            # pondère, et donc elles que ce profil doit montrer.
             vals_radar = [
-                retenu.get('gini', 0) / 0.30,
-                retenu.get('stabilite', 0.8),
-                retenu.get('interpretabilite', 0.9),
-                1 - retenu.get('rmse_norm', 0.2),
+                retenu.get('score_gini', 0),
+                retenu.get('score_stabilite', 0),
+                retenu.get('score_interpretabilite', 0),
+                retenu.get('score_rmse', 0),
                 retenu.get('score_global', 0),
             ]
             vals_radar = [min(max(v, 0), 1) for v in vals_radar]
