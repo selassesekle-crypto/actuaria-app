@@ -27,6 +27,7 @@ une convention du module, opposable comme telle et pas davantage.
 """
 from __future__ import annotations
 
+from itertools import pairwise
 from typing import NamedTuple
 
 #: ⚠️ LE VOCABULAIRE DES SOURCES, REPRIS DU SOCLE — il existe pour empêcher
@@ -379,34 +380,91 @@ Z_95 = 1.959963985
 
 
 def _ajuster_logit(y, X):
-    """Régression logistique de la résiliation. Rend (beta, se, p_moyen, ok).
+    """Régression logistique de la résiliation.
 
-    `X` : la première colonne EST la variation de prix ; les suivantes sont
-    les contrôles. `beta` et `se` portent donc sur la première.
+    Rend `(beta, se, p_moyen, ok, probabilites)`. `X` : la première colonne EST
+    la variation de prix ; les suivantes sont les contrôles. `beta` et `se`
+    portent donc sur la première.
     """
     import numpy as np
     try:
         import statsmodels.api as sm
     except ImportError:
-        return None, None, None, False
+        return None, None, None, False, None
     try:
         A = sm.add_constant(np.asarray(X, dtype=float), has_constant='add')
         res = sm.GLM(np.asarray(y, dtype=float), A,
                      family=sm.families.Binomial()).fit(maxiter=100)
         if not bool(getattr(res, 'converged', True)):
-            return None, None, None, False
+            return None, None, None, False, None
         beta = float(res.params[1])
         se = float(res.bse[1])
         p_moyen = float(np.mean(res.fittedvalues))
         if not (np.isfinite(beta) and np.isfinite(se) and se > 0):
-            return None, None, None, False
-        return beta, se, p_moyen, True
+            return None, None, None, False, None
+        # ⚠️ LES PROBABILITÉS AJUSTÉES SONT RENDUES AVEC LE RESTE, ET C'EST
+        # CE QUI PERMET À L5 DE TRACER LA VRAIE COURBE. Sans elles il faudrait
+        # une approximation à élasticité constante — celle qui, mesurée, ne
+        # redescend jamais et fait tomber l'optimum sur une borne.
+        return beta, se, p_moyen, True, np.asarray(res.fittedvalues, dtype=float)
     except (ValueError, TypeError, IndexError, KeyError,
             np.linalg.LinAlgError, ZeroDivisionError):
         # Separation parfaite, matrice singuliere, colonne degeneree : autant
         # de cas ou l'ajustement n'aboutit pas. Ils se declarent, ils ne se
         # rattrapent pas.
-        return None, None, None, False
+        return None, None, None, False, None
+
+
+def _construire_regression(plan, df, diag):
+    """La régression de résiliation — SOURCE UNIQUE des deux consommateurs.
+
+    ⚠️ `estimer_elasticite` ET `sensibilite_tarifaire` doivent ajuster LA MÊME
+    régression. Deux constructions divergeraient un jour, et la courbe publiée
+    ne serait plus celle dont l'élasticité a été tirée — c'est exactement le
+    motif que cet audit poursuit.
+
+    ⚠️ LA VOIE DÉCIDE DE CE QU'ON RÉGRESSE, et les deux n'ont pas la même
+    arithmétique. Mesuré sur un jeu à ε connu = −0,2329, prix ENDOGÈNE : sans
+    contrôle ε sort à −0,7213 (trois fois trop grand, son IC rate la vérité) ;
+    avec contrôles −0,2237 ; par la moyenne de groupe −0,2108.
+    """
+    import numpy as np
+
+    bloc = getattr(plan, 'comportement', None)
+    p0 = np.asarray(df[bloc.prime_precedente], dtype=float)
+    p1 = np.asarray(df[bloc.prime_proposee], dtype=float)
+    y = np.asarray(df[bloc.issue], dtype=float)
+    ok = np.isfinite(p0) & np.isfinite(p1) & (p0 > 0) & (p1 > 0) & np.isfinite(y)
+    v = np.log(p1[ok] / p0[ok])
+    y = y[ok]
+
+    if diag.get('voie') == VOIE_EXPERIMENTALE:
+        # Seule la variation ENTRE GROUPES est retenue : elle est tirée au
+        # sort, donc exogène. Aucun contrôle — c'est tout l'intérêt.
+        g = df.loc[ok, bloc.groupe_test].to_numpy()
+        moyennes = {cle: float(v[g == cle].mean()) for cle in set(g)}
+        X = np.array([moyennes[cle] for cle in g], dtype=float).reshape(-1, 1)
+        controles: list[str] = []
+        reserve = (
+            "La variation exploitée est TIRÉE AU SORT : son indépendance au "
+            "risque est garantie par le protocole, elle n'est pas supposée. "
+            "C'est la seule situation où l'exogénéité ne se discute pas."
+        )
+    else:
+        controles = [c for c in (plan.colonnes_produites() if plan else ())
+                     if c in df.columns]
+        X = np.column_stack(
+            [v] + [df.loc[ok, c].to_numpy(dtype=float) for c in controles]
+        ) if controles else v.reshape(-1, 1)
+        reserve = (
+            "L'effet-prix est identifié par la variation de prix qui RESTE "
+            "une fois les facteurs tarifaires retirés. Cette variation est "
+            "MESURÉE ; son indépendance à ce qui n'est pas observé n'est PAS "
+            "démontrée — aucun calcul ne le peut. Seul un test de prix la "
+            "garantirait."
+        )
+    return {'y': y, 'X': X, 'v': v, 'ok': ok, 'controles': controles,
+            'reserve': reserve, 'primes': p1[ok]}
 
 
 def estimer_elasticite(plan, df, diag=None,
@@ -469,43 +527,11 @@ def estimer_elasticite(plan, df, diag=None,
             "La variation de prix n'est pas exploitable : rien n'a été estimé. "
             + (diag.get('motif') or ''))}
 
-    bloc = getattr(plan, 'comportement', None)
-    p0 = np.asarray(df[bloc.prime_precedente], dtype=float)
-    p1 = np.asarray(df[bloc.prime_proposee], dtype=float)
-    y = np.asarray(df[bloc.issue], dtype=float)
-    ok = np.isfinite(p0) & np.isfinite(p1) & (p0 > 0) & (p1 > 0) & np.isfinite(y)
-    v = np.log(p1[ok] / p0[ok])
-    y = y[ok]
-
-    # ── LA VOIE DÉCIDE DE CE QU'ON RÉGRESSE ─────────────────────────────────
-    if diag.get('voie') == VOIE_EXPERIMENTALE:
-        # Seule la variation ENTRE GROUPES est retenue : elle est tirée au
-        # sort, donc exogène. Aucun contrôle — c'est tout l'intérêt.
-        g = df.loc[ok, bloc.groupe_test].to_numpy()
-        moyennes = {cle: float(v[g == cle].mean()) for cle in set(g)}
-        regresseur = np.array([moyennes[cle] for cle in g], dtype=float)
-        controles: list[str] = []
-        X = regresseur.reshape(-1, 1)
-        reserve = (
-            "La variation exploitée est TIRÉE AU SORT : son indépendance au "
-            "risque est garantie par le protocole, elle n'est pas supposée. "
-            "C'est la seule situation où l'exogénéité ne se discute pas."
-        )
-    else:
-        controles = [c for c in (plan.colonnes_produites() if plan else ())
-                     if c in df.columns]
-        X = np.column_stack(
-            [v] + [df.loc[ok, c].to_numpy(dtype=float) for c in controles]
-        ) if controles else v.reshape(-1, 1)
-        reserve = (
-            "L'effet-prix est identifié par la variation de prix qui RESTE "
-            "une fois les facteurs tarifaires retirés. Cette variation est "
-            "MESURÉE ; son indépendance à ce qui n'est pas observé n'est PAS "
-            "démontrée — aucun calcul ne le peut. Seul un test de prix la "
-            "garantirait."
-        )
-
-    beta, se, p_moyen, converge = _ajuster_logit(y, X)
+    reg = _construire_regression(plan, df, diag)
+    y, X, controles, reserve = (reg['y'], reg['X'], reg['controles'],
+                                reg['reserve'])
+    ok = reg['ok']
+    beta, se, p_moyen, converge, _ = _ajuster_logit(y, X)
     base = {**vide, 'facteurs_de_controle': controles, 'reserve': reserve,
             'n_lignes': int(ok.sum()), 'n_resiliations': int(np.sum(y > 0))}
 
@@ -733,4 +759,230 @@ def etat_elasticite(plan=None, df=None) -> dict:
                if est['voie'] != VOIE_EXPERIMENTALE else
                "L'identification repose déjà sur un tirage au sort.")
         ),
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  LA SENSIBILITÉ TARIFAIRE — ce qui a été retiré en L0, fondé cette fois
+# ══════════════════════════════════════════════════════════════════════════════
+
+#: La grille par défaut, en variation relative du tarif. ⚠️ C'EST UNE
+#: CONVENTION, ET L'ACTUAIRE PEUT LA DÉCLARER AUTREMENT. Elle ne décide de
+#: rien : chaque point porte séparément l'indication de savoir s'il est appuyé
+#: par les données.
+VARIATIONS_DEFAUT = (-0.15, -0.10, -0.05, 0.0, 0.05, 0.10, 0.15)
+
+#: Le domaine observé est délimité par ces centiles de la variation de prix
+#: réellement subie. Les queues sont écartées : deux contrats atypiques ne
+#: font pas un domaine d'appui. Convention du module.
+CENTILE_DOMAINE_BAS, CENTILE_DOMAINE_HAUT = 5.0, 95.0
+
+
+def _charge_moyenne(df, plan, ok):
+    """Charge sinistre moyenne par contrat — la vraie, prise dans les données.
+
+    ⚠️ ELLE NE BAISSE PAS QUAND LE PRIX BAISSE, et c'est tout l'enjeu : une
+    marge calculée comme une fraction du chiffre d'affaires n'apporte rien que
+    le chiffre d'affaires ne porte déjà.
+    """
+    import numpy as np
+
+    for col in (getattr(plan, 'cible_cout', None), 'prime_pure',
+                'cout_total_sinistres'):
+        if col and col in df.columns:
+            valeurs = np.asarray(df.loc[ok, col], dtype=float)
+            valeurs = valeurs[np.isfinite(valeurs)]
+            if valeurs.size and float(np.mean(valeurs)) > 0:
+                return float(np.mean(valeurs))
+    return 0.0
+
+
+def _lire_optimum(scenarios, domaine):
+    """L'optimum n'est publié QUE s'il est intérieur ET appuyé par les données.
+
+    ⚠️⚠️ UNE BORNE N'EST PAS UN OPTIMUM : c'est le bord de ce qu'on a regardé.
+    L'ancienne fonction rendait « −20 % » parce que son optimum tombait
+    mécaniquement sur la borne basse de sa grille — et une version fondée
+    rendrait « +20 % » pour exactement la même raison si on la laissait faire.
+    """
+    if len(scenarios) < 3:
+        return {'optimum': None, 'marge_monotone_croissante': None,
+                'motif_optimum': ("Grille trop courte pour distinguer un "
+                                  "optimum d'une borne.")}
+    marges = [s['marge_technique'] for s in scenarios]
+    i = max(range(len(marges)), key=marges.__getitem__)
+    croissante = all(b >= a for a, b in pairwise(marges))
+    if i in (0, len(marges) - 1):
+        suite = ("Elle croît sur toute la plage examinée — élargir la grille "
+                 "déplacerait simplement le maximum."
+                 if croissante else
+                 "Élargir la grille dans cette direction montrerait si un "
+                 "optimum existe au-delà.")
+        return {
+            'optimum': None, 'marge_monotone_croissante': croissante,
+            'motif_optimum': (
+                f"La marge est maximale à la BORNE "
+                f"{scenarios[i]['variation_pct']:+.0f} % de la grille : ce "
+                f"n'est pas un optimum, c'est le bord de ce qui a été "
+                f"examiné. " + suite),
+        }
+    if not scenarios[i]['dans_le_domaine_observe']:
+        return {
+            'optimum': None, 'marge_monotone_croissante': croissante,
+            'motif_optimum': (
+                f"La marge est maximale à "
+                f"{scenarios[i]['variation_pct']:+.0f} %, HORS du domaine de "
+                f"variation de prix réellement observé "
+                f"([{domaine['delta_min']:+.1%} ; "
+                f"{domaine['delta_max']:+.1%}]). Le modèle y extrapole : le "
+                f"chiffre n'est pas appuyé par les données qui l'ont "
+                f"produit."),
+        }
+    return {'optimum': scenarios[i], 'marge_monotone_croissante': croissante,
+            'motif_optimum': None}
+
+
+def sensibilite_tarifaire(plan, df, etat, variations=VARIATIONS_DEFAUT,
+                          chargements=None):
+    """Ce que deviendraient volume, chiffre d'affaires et marge si le tarif
+    bougeait — avec l'incertitude de l'estimation, et ce qui l'appuie.
+
+    ⚠️⚠️ QUATRE DÉFAUTS DE L'ANCIENNE FONCTION, ET AUCUN NE REVIENT.
+    Mesurés avant son retrait au lot L0 : élasticité codée en dur à −1,5 ·
+    portefeuille fictif de 450 € et 10 000 contrats · marge = CA × 0,30, donc
+    proportionnelle au CA et sans information · et un optimum qui tombait
+    MÉCANIQUEMENT sur la borne basse de sa propre grille.
+
+    ⚠️⚠️ LA COURBE VIENT DU LOGIT AJUSTÉ, PAS D'UNE ÉLASTICITÉ CONSTANTE — et
+    c'est la correction qui a débloqué ce lot. `Q = Q0·(p/p0)^ε` ne redescend
+    JAMAIS quand ε > −1 : sa marge croît sans borne, et tout « optimum » est
+    alors une borne de grille. Le logit, lui, SATURE : quand le prix monte, la
+    résiliation tend vers 1 et la rétention s'effondre. Mesuré à +500 % :
+    46,8 M€ et toujours croissant pour l'approximation, contre 10,6 M€ après
+    un maximum de 12,9 M€ à +200 % pour le modèle réellement ajusté.
+
+    ⚠️ LA MARGE SUIT LA STRUCTURE DE CHARGEMENTS DU DÉPÔT
+    (`pipeline_tarifaire.CHARGEMENTS_DEFAUT`), pas une fraction du CA :
+
+        marge_technique = prime × (1 − commission) − charge × (1 + frais)
+
+    LA CHARGE SINISTRE NE BAISSE PAS QUAND LE PRIX BAISSE. C'est toute la
+    différence avec `CA × 0,30`, qui ne portait aucune information que le CA
+    ne portât déjà. ⚠️ Elle est AVANT coût du capital et frais d'acquisition,
+    et son nom le dit.
+
+    ⚠️⚠️ CE QUI RESTE VRAI ET QU'AUCUNE FORME NE RÈGLE : β est estimé sur les
+    variations de prix RÉELLEMENT observées. Évaluer la courbe au-delà, c'est
+    extrapoler hors du domaine où elle a été mesurée — et la déclaration d'une
+    plage par l'actuaire n'efface pas ce fait. La grille est celle qu'il
+    déclare ; chaque point dit s'il est appuyé.
+
+    ⚠️ LES PRIMES DÉCLARÉES SONT SUPPOSÉES HORS TAXES. Si elles sont TTC, la
+    marge est surestimée — les taxes sont collectées pour le compte de l'État.
+    L'élasticité, elle, n'en dépend pas : les taxes étant proportionnelles,
+    une variation relative du HT est la même variation relative du TTC.
+    """
+    import numpy as np
+
+    from direction_non_vie.tarification.pipeline_tarifaire import (
+        CHARGEMENTS_DEFAUT,
+    )
+
+    ch = dict(CHARGEMENTS_DEFAUT if chargements is None else chargements)
+    conventions = {
+        'chargements': ch,
+        'centiles_domaine': [CENTILE_DOMAINE_BAS, CENTILE_DOMAINE_HAUT],
+        'primes_supposees': 'hors taxes',
+        'origine': "conventions du module — aucun texte n'en fixe",
+    }
+    vide = {
+        'disponible': False, 'scenarios': [], 'optimum': None,
+        'motif_optimum': None, 'portefeuille': {}, 'domaine_observe': {},
+        'marge_monotone_croissante': None, 'conventions': conventions,
+    }
+
+    etat_nom = (etat or {}).get('etat')
+    if etat_nom != ELASTICITE_ESTIMEE:
+        # ⚠️ LES CINQ ÉTATS COMMANDENT. Une sensibilité sans élasticité estimée
+        # serait exactement la constante qu'on a retirée.
+        return {**vide, 'motif': (
+            f"Aucune sensibilité tarifaire : l'élasticité-prix est en état "
+            f"{etat_nom}. {(etat or {}).get('motif', '')}")}
+
+    est = etat['estimation']
+    diag = etat['exploitabilite']
+    reg = _construire_regression(plan, df, diag)
+    beta, se, p_moyen, converge, prob = _ajuster_logit(reg['y'], reg['X'])
+    if not converge:
+        return {**vide, 'motif': (
+            "L'ajustement n'a pas convergé au moment de tracer la courbe.")}
+
+    # ── LE PORTEFEUILLE RÉEL — jamais 450 EUR et 10 000 contrats ────────────
+    primes = np.asarray(reg['primes'], dtype=float)
+    bloc = plan.comportement
+    charge = _charge_moyenne(df, plan, reg['ok'])
+    pf = {
+        'n_contrats': len(primes),
+        'prime_moyenne': round(float(np.mean(primes)), 2),
+        'charge_moyenne': round(float(charge), 2),
+        # ⚠️ LE TAUX DE RESILIATION ACTUEL — le point de depart de la courbe.
+        # Sans lui, une variation de volume ne se lit pas.
+        'taux_resiliation_actuel': round(float(p_moyen), 5),
+        'source': (f"colonnes declarees au plan : « {bloc.prime_proposee} » "
+                   f"pour la prime, cible de cout pour la charge"),
+    }
+
+    # ── LE DOMAINE OBSERVÉ — ce qui appuie la courbe ────────────────────────
+    v_obs = np.asarray(reg['v'], dtype=float)
+    d_bas = float(np.expm1(np.percentile(v_obs, CENTILE_DOMAINE_BAS)))
+    d_haut = float(np.expm1(np.percentile(v_obs, CENTILE_DOMAINE_HAUT)))
+    domaine = {'delta_min': round(d_bas, 5), 'delta_max': round(d_haut, 5),
+               'centile_bas': CENTILE_DOMAINE_BAS,
+               'centile_haut': CENTILE_DOMAINE_HAUT}
+
+    # ── LA COURBE, DEPUIS LE LOGIT AJUSTÉ ───────────────────────────────────
+    prob = np.clip(np.asarray(prob, dtype=float), 1e-9, 1 - 1e-9)
+    eta0 = np.log(prob / (1.0 - prob))       # prédicteur linéaire au tarif actuel
+    a, f = 1.0 - ch['commission'], 1.0 + ch['frais']
+
+    def _point(delta, b):
+        """Volume, CA et marge au tarif (1+delta), pour un beta donné."""
+        eta = eta0 + b * np.log1p(delta)
+        retenus = 1.0 - 1.0 / (1.0 + np.exp(-eta))
+        p_new = primes * (1.0 + delta)
+        return (float(np.sum(retenus)),
+                float(np.sum(retenus * p_new)),
+                float(np.sum(retenus * (p_new * a - charge * f))))
+
+    b_bas, b_haut = beta - Z_95 * se, beta + Z_95 * se
+    scenarios = []
+    for delta in variations:
+        q, ca, mg = _point(delta, beta)
+        bornes = [_point(delta, b_bas), _point(delta, b_haut)]
+        scenarios.append({
+            'variation_pct':  round(delta * 100, 2),
+            'dans_le_domaine_observe': bool(d_bas <= delta <= d_haut),
+            'contrats':       round(q, 1),
+            'contrats_bas':   round(min(x[0] for x in bornes), 1),
+            'contrats_haut':  round(max(x[0] for x in bornes), 1),
+            'ca':             round(ca, 2),
+            'ca_bas':         round(min(x[1] for x in bornes), 2),
+            'ca_haut':        round(max(x[1] for x in bornes), 2),
+            'marge_technique': round(mg, 2),
+            'marge_bas':      round(min(x[2] for x in bornes), 2),
+            'marge_haut':     round(max(x[2] for x in bornes), 2),
+        })
+
+    return {
+        **vide, 'disponible': True, 'scenarios': scenarios,
+        'portefeuille': pf, 'domaine_observe': domaine,
+        'reserve': est.get('reserve'),
+        'elasticite': est.get('elasticite'),
+        'elasticite_ic': [est.get('ic_bas'), est.get('ic_haut')],
+        'motif': (
+            f"Sensibilite tracee depuis le modele de resiliation ajuste, sur "
+            f"{pf['n_contrats']:,} contrats, avec l'incertitude de "
+            f"l'estimation (eps = {est.get('elasticite'):+.4f}, IC 95 % "
+            f"[{est.get('ic_bas'):+.4f} ; {est.get('ic_haut'):+.4f}])."),
+        **_lire_optimum(scenarios, domaine),
     }

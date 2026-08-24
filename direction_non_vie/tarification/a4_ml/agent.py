@@ -139,7 +139,11 @@ from core.conformite_reglementaire import construire_matrice_x
 # ⚠️ SOURCE UNIQUE. L'etat de l'elasticite etait defini ICI au lot L0 ;
 # il vit desormais dans `core/elasticite.py`, avec le catalogue
 # d'exigences qui le fonde. Deux definitions auraient diverge.
-from core.elasticite import ELASTICITE_ESTIMEE, etat_elasticite
+from core.elasticite import (
+    ELASTICITE_ESTIMEE,
+    etat_elasticite,
+    sensibilite_tarifaire,
+)
 from core.plan_tarifaire import (
     PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
     alerte_modele_ampute,
@@ -924,6 +928,11 @@ class AgentA4ML:
             # ne peut pas être atteint est un état qui n'existe pas.
             rapport['elasticite'] = etat_elasticite(plan, df)
             _etat_elasticite = rapport['elasticite']
+            # ⚠️ LA SENSIBILITE NE SE PUBLIE QUE SUR ESTIMEE, et elle le
+            # verifie elle-meme : sur les quatre autres etats elle rend
+            # `disponible=False` avec l'etat en cause. Aucun blocage.
+            rapport['sensibilite_tarifaire'] = sensibilite_tarifaire(
+                plan, df, _etat_elasticite)
 
             commentaire = self._commenter_actuaire_senior(
                 classement, sous_branche, statut_rag,
@@ -1041,6 +1050,11 @@ class AgentA4ML:
                 # ⚠️ ET C'ETAIT UNE RECOMMANDATION D'ACTION : un actuaire qui
                 # la suivait baissait son tarif de 20 %.
                 'elasticite':      _etat_elasticite,
+                # ⚠️ CE QUI A ETE RETIRE AU LOT L0 REVIENT ICI, FONDE : la
+                # courbe vient du logit ajuste, le portefeuille est le vrai,
+                # la marge suit les chargements du depot, et chaque point dit
+                # s'il est appuye par les donnees observees.
+                'sensibilite_tarifaire': rapport['sensibilite_tarifaire'],
                 'validation_ml':   _val_ml_tmp,
                 'graphiques_validation': self._graphiques_validation_ml(
                                        _val_ml_tmp, classement, _monitoring,

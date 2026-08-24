@@ -785,5 +785,188 @@ class T_L_Etat_Atteint_Enfin_ESTIMEE(unittest.TestCase):
               f"{r['statut_rag']}, {len(r['classement'])} modèles ✅")
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+#  L5 — LA SENSIBILITÉ TARIFAIRE, FONDÉE CETTE FOIS
+# ══════════════════════════════════════════════════════════════════════════════
+
+class T_La_Sensibilite_Ne_Reproduit_Aucun_Defaut_De_L_Ancienne(
+        unittest.TestCase):
+    """CONTRÔLE POSITIF — tout ce qui a été retiré en L0 revient, fondé.
+
+    ⚠️ CE QUE L'ANCIENNE FONCTION FAISAIT, MESURÉ AVANT SON RETRAIT :
+    élasticité codée en dur à −1,5 · portefeuille fictif de 450 € et 10 000
+    contrats · marge = CA × 0,30, donc proportionnelle au CA · et un optimum
+    qui tombait MÉCANIQUEMENT sur la borne basse de sa propre grille. Chacun
+    de ces quatre défauts a ici son contrôle.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.p = _plan(comportement=_bloc())
+        cls.df, cls.eps_vrai = _eps_connu(-0.35, n=30000, seed=4)
+
+    def _sens(self, df=None, plan=None, **kw):
+        from core.elasticite import etat_elasticite, sensibilite_tarifaire
+        df = self.df if df is None else df
+        plan = self.p if plan is None else plan
+        return sensibilite_tarifaire(plan, df, etat_elasticite(plan, df), **kw)
+
+    def test_elle_ne_se_publie_QUE_sur_ESTIMEE(self):
+        """⚠️ LES CINQ ÉTATS COMMANDENT. Sur les quatre autres, l'optimisation
+        ne s'exécute pas et le rapport le dit — c'est acquis depuis L0."""
+        from core.elasticite import etat_elasticite, sensibilite_tarifaire
+        cas = {
+            'NON_FOURNIE':      (_plan(), _renouvellements()),
+            'NON_IDENTIFIABLE': (self.p, _renouvellements(regime='deterministe')),
+            'NON_CONCLUANTE':   (self.p, _eps_connu(-0.004, n=900, seed=13)[0]),
+        }
+        for attendu, (pl, d) in cas.items():
+            with self.subTest(etat=attendu):
+                e = etat_elasticite(pl, d)
+                self.assertEqual(e['etat'], attendu)
+                s = sensibilite_tarifaire(pl, d, e)
+                self.assertFalse(s['disponible'],
+                                 f"une sensibilité est publiée sur {attendu}")
+                self.assertIn(attendu, s['motif'])
+                self.assertEqual(s['scenarios'], [])
+        self.assertTrue(self._sens()['disponible'])
+        print("    POS-L5a sensibilité publiée sur ESTIMEE seulement ✅")
+
+    def test_le_portefeuille_est_le_VRAI_pas_450_et_10000(self):
+        """⚠️ LE DEUXIÈME DÉFAUT. `prime_moyenne=450.0` et `nb_contrats=10000`
+        étaient des défauts que l'appelant ne remplaçait JAMAIS."""
+        import numpy as np
+        s = self._sens()
+        pf = s['portefeuille']
+        self.assertEqual(pf['n_contrats'], len(self.df))
+        self.assertNotEqual(pf['n_contrats'], 10000)
+        attendue = float(np.mean(self.df['prime_n']))
+        self.assertAlmostEqual(pf['prime_moyenne'], attendue, places=2)
+        self.assertNotAlmostEqual(pf['prime_moyenne'], 450.0, places=0)
+        self.assertGreater(pf['charge_moyenne'], 0)
+        print(f"    POS-L5b portefeuille réel : {pf['n_contrats']:,} contrats, "
+              f"prime {pf['prime_moyenne']:.0f} €, charge "
+              f"{pf['charge_moyenne']:.0f} € ✅")
+
+    def test_la_marge_N_EST_PAS_proportionnelle_au_CA(self):
+        """⚠️ LE TROISIÈME DÉFAUT, ET IL ÉTAIT INVISIBLE. `marge = CA × 0,30`
+        n'apportait RIEN que le CA ne portait déjà : le ratio marge/CA valait
+        0,30 partout. Ici la charge sinistre NE BAISSE PAS quand le prix
+        baisse — c'est toute la différence."""
+        s = self._sens()
+        ratios = [sc['marge_technique'] / sc['ca'] for sc in s['scenarios']
+                  if sc['ca'] > 0]
+        self.assertGreater(len(ratios), 3, "prémisse : assez de scénarios")
+        self.assertGreater(
+            max(ratios) - min(ratios), 0.05,
+            f"le ratio marge/CA varie de {min(ratios):.4f} à {max(ratios):.4f} "
+            f"— une marge proportionnelle au CA n'apporte aucune information")
+        print(f"    POS-L5c ratio marge/CA de {min(ratios):.1%} à "
+              f"{max(ratios):.1%} — il varie ✅")
+
+    def test_chaque_point_DIT_s_il_est_appuye_par_les_donnees(self):
+        """⚠️⚠️ CE QUI RESTE VRAI DE MON ALERTE, ET AUCUNE FORME NE LE RÈGLE.
+        β est estimé sur les variations de prix RÉELLEMENT observées. Évaluer
+        la courbe très au-delà, c'est extrapoler hors du domaine où elle a été
+        mesurée — et la déclaration d'une plage par l'actuaire n'efface pas ce
+        fait. La grille est celle qu'il déclare ; chaque point dit s'il est
+        appuyé."""
+        s = self._sens(variations=(-0.10, -0.05, 0.0, 0.05, 0.10, 1.50))
+        dom = s['domaine_observe']
+        self.assertIsNotNone(dom['delta_min'])
+        self.assertIsNotNone(dom['delta_max'])
+        dedans = [sc for sc in s['scenarios'] if sc['dans_le_domaine_observe']]
+        dehors = [sc for sc in s['scenarios'] if not sc['dans_le_domaine_observe']]
+        self.assertTrue(dedans, "aucun point n'est appuyé")
+        self.assertTrue(dehors, "prémisse : +150 % doit sortir du domaine")
+        self.assertTrue(any(abs(sc['variation_pct'] - 150) < 1 for sc in dehors))
+        print(f"    POS-L5d domaine observé [{dom['delta_min']:+.1%} ; "
+              f"{dom['delta_max']:+.1%}] — {len(dedans)} points appuyés, "
+              f"{len(dehors)} extrapolés ✅")
+
+    def test_l_optimum_n_est_publie_QUE_s_il_est_interieur_ET_appuye(self):
+        """⚠️ LE QUATRIÈME DÉFAUT, ET C'EST LE PLUS GRAVE. L'ancien optimum
+        tombait sur la borne basse de sa propre grille, mécaniquement. Une
+        borne n'est pas un optimum : c'est le bord de ce qu'on a regardé."""
+        s = self._sens(variations=(-0.10, -0.05, 0.0, 0.05, 0.10))
+        if s['optimum'] is not None:
+            deltas = [sc['variation_pct'] for sc in s['scenarios']]
+            self.assertNotIn(s['optimum']['variation_pct'],
+                             (min(deltas), max(deltas)),
+                             "l'optimum publié est une BORNE de la grille")
+            self.assertTrue(s['optimum']['dans_le_domaine_observe'])
+        else:
+            self.assertTrue((s['motif_optimum'] or '').strip(),
+                            "aucun optimum, et aucune raison donnée")
+        print(f"    POS-L5e optimum = "
+              f"{s['optimum']['variation_pct'] if s['optimum'] else 'aucun'} "
+              f"— {(s['motif_optimum'] or 'intérieur et appuyé')[:60]} ✅")
+
+    def test_l_incertitude_de_l_eps_SUIT_jusqu_a_la_recommandation(self):
+        """⚠️ PUBLIER UN OPTIMUM PONCTUEL SUR UNE ÉLASTICITÉ INCERTAINE FERAIT
+        DISPARAÎTRE CE QUE L4 VIENT D'ÉTABLIR. Chaque grandeur porte sa bande,
+        issue de l'incertitude sur β."""
+        s = self._sens()
+        for sc in s['scenarios']:
+            if abs(sc['variation_pct']) < 1e-9:
+                continue          # a delta = 0 la bande se referme, c'est juste
+            with self.subTest(delta=sc['variation_pct']):
+                self.assertLessEqual(sc['contrats_bas'], sc['contrats'])
+                self.assertLessEqual(sc['contrats'], sc['contrats_haut'])
+                self.assertLess(sc['marge_bas'], sc['marge_haut'])
+        large = max(sc['marge_haut'] - sc['marge_bas'] for sc in s['scenarios'])
+        self.assertGreater(large, 0, "toutes les bandes sont dégénérées")
+        print(f"    POS-L5f bandes non dégénérées, amplitude max "
+              f"{large / 1e3:,.0f} k€ ✅")
+
+    def test_la_courbe_vient_du_LOGIT_pas_d_une_elasticite_constante(self):
+        """⚠️⚠️ LA CORRECTION QUI A DÉBLOQUÉ CE LOT, ÉPINGLÉE. Une forme à
+        élasticité constante Q=Q0(p/p0)^ε ne redescend JAMAIS quand ε > −1 :
+        sa marge croît sans borne, et tout « optimum » est alors une borne de
+        grille. Le logit ajusté, lui, SATURE — la résiliation tend vers 1, la
+        rétention s'effondre, et la marge finit par retomber.
+
+        ⚠️ IL FAUT ALLER LOIN POUR LE VOIR SUR CETTE FIXTURE, et c'est une
+        propriété du portefeuille, pas du code : sa charge moyenne vaut 599 €
+        pour une prime de 607 €, soit un ratio de sinistralité de 98,8 %.
+        Augmenter le tarif y est si profitable que le maximum ne tombe qu'à
+        +500 %. Mesuré : 11,30 M€ à +500 %, puis 8,35 M€ à +1000 % et 2,30 M€
+        à +5000 % — la descente est nette. ⚠️ ET LE MÉCANISME REFUSE
+        CORRECTEMENT DE PUBLIER CET OPTIMUM : il est hors du domaine observé
+        [−21,1 % ; +26,6 %], donc extrapolé."""
+        s = self._sens(variations=(0.0, 1.0, 2.0, 5.0, 10.0, 20.0))
+        marges = [sc['marge_technique'] for sc in s['scenarios']]
+        i = marges.index(max(marges))
+        self.assertNotIn(
+            i, (0, len(marges) - 1),
+            f"la marge ne redescend jamais : {[round(m/1e6, 2) for m in marges]} "
+            f"— la courbe suit une élasticité constante, pas le logit ajusté")
+        self.assertLess(marges[-1], max(marges))
+        self.assertIsNone(s['optimum'],
+                          "un optimum extrapolé ne doit pas être publié")
+        print(f"    POS-L5g la marge culmine puis redescend : "
+              f"{[f'{m/1e6:.1f}M' for m in marges]} — c'est bien le logit, et "
+              f"l'optimum extrapolé n'est pas publié ✅")
+
+    def test_la_sensibilite_VARIE_avec_le_portefeuille(self):
+        """⚠️⚠️ LE GARDE-FOU. C'est exactement le défaut de l'ancienne
+        fonction : elle rendait −20 % pour tout portefeuille. Deux
+        portefeuilles d'élasticités différentes ne peuvent pas rendre la même
+        courbe."""
+        d1, v1 = _eps_connu(-0.15, n=30000, seed=31)
+        d2, v2 = _eps_connu(-0.90, n=30000, seed=31)
+        s1, s2 = self._sens(df=d1), self._sens(df=d2)
+        m1 = [round(sc['marge_technique'], 2) for sc in s1['scenarios']]
+        m2 = [round(sc['marge_technique'], 2) for sc in s2['scenarios']]
+        self.assertNotEqual(
+            m1, m2,
+            f"deux portefeuilles d'élasticités vraies {v1:.3f} et {v2:.3f} "
+            f"rendent la MÊME courbe de marge")
+        ecart = max(abs(a - b) / max(abs(a), 1.0) for a, b in zip(m1, m2))
+        self.assertGreater(ecart, 0.02)
+        print(f"    POS-L5h ε vrais {v1:+.3f}/{v2:+.3f} → courbes distinctes, "
+              f"écart max {ecart:.1%} ✅")
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
