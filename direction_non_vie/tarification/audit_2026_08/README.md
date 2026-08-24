@@ -1,5 +1,12 @@
 # AUDIT DU MODULE TARIFICATION — août 2026
 
+> ## ⚠️⚠️ [**LA CARTE — L'ORDRE DE CE QUI RESTE**](CARTE.md)
+> **125 constats ouverts · 12 lots · 12 passages groupés · 1 tri.**
+> Les deux vagues **mélangées**, ordonnées par *ce qui est publié faux*.
+> On y trouve aussi **où se place l'architecture** (rang 6, motivé) et
+> **la recommandation sur l'assiette de l'écrêtement** (mesurée, et elle
+> réfute mon alerte initiale).
+
 Sept relevés, **28 560 lignes lues à 100 %**, **141 affirmations mesurées**,
 **85 constats** et **55 affirmations vérifiées bonnes**.
 
@@ -82,11 +89,20 @@ un troisième état, et il se distingue.
 
 | état | compte | ce que ça veut dire |
 |---|---|---|
-| ✅ **FERMÉ** | **17** | corrigé **et** épinglé par un contrôle positif nommé |
+| ✅ **FERMÉ** | **18** | corrigé **et** épinglé par un contrôle positif nommé |
 | ⚠️ **CORRIGÉ, NON ÉPINGLÉ** | **1** | le code a changé, **rien n'empêche la régression** |
-| ⛔ **OUVERT** | **67** | ni corrigé ni épinglé |
+| ⛔ **OUVERT** | **66** | ni corrigé ni épinglé |
 
-### Les 17 fermés
+⚠️⚠️ **CORRIGÉ LE 24/08/2026 — CE TABLEAU DISAIT 17 / 1 / 67, ET IL SE TROMPAIT
+D'UN.** Le tableau ci-dessous porte **18 lignes**, mesurées, **toutes
+distinctes** (aucun doublon `(relevé, constat)`). Donc `85 − 18 − 1 = 66`.
+
+> **L'erreur était dans le COMPTE, pas dans la liste** : les 18 fermetures sont
+> réelles et chacune porte son contrôle positif et son commit. C'est le titre et
+> la ligne du tableau qui en annonçaient 17. *Un index se mesure comme un
+> chiffre — y compris quand c'est moi qui l'ai écrit.*
+
+### Les 18 fermés
 
 | relevé | constat | contrôle | commit |
 |---|---|---|---|
@@ -124,7 +140,7 @@ un troisième état, et il se distingue.
 
 ---
 
-## ⚠️⚠️ DÉCISION — LES 67 OUVERTS SERONT TOUS TRAITÉS
+## ⚠️⚠️ DÉCISION — LES 66 OUVERTS SERONT TOUS TRAITÉS
 
 **Aucun ne sera abandonné, y compris ceux qu'un lecteur classerait comme du
 bruit.** Ni maintenant, ni dans l'ordre de gravité — mais tous.
@@ -150,16 +166,16 @@ dans un passage plutôt que vingt lots.
 | **Écriture disque à l'instanciation** | `a1/C7` `a2/C16` | `/tmp/actuaria` créé par un simple `__init__` |
 | **Exemples d'usage périmés** | `a2/C10` `a3/C17` | l'en-tête montre un appel qui ne marche plus |
 
-**Environ 30 constats en 9 passages.** Les ~37 autres sont substantiels et
+**Environ 30 constats en 9 passages.** Les ~36 autres sont substantiels et
 demandent un traitement propre — parmi eux, ceux à ouvrir en premier sont
 signalés plus bas.
 
 ⚠️ **CETTE TABLE A ÉTÉ CONSTRUITE PAR EXPRESSION RÉGULIÈRE, ET ELLE A MANQUÉ
-DEUX CONSTATS SUR 67** (dont `a1/C8`, dont le gras est imbriqué). C'est la
+DEUX CONSTATS SUR 66** (dont `a1/C8`, dont le gras est imbriqué). C'est la
 leçon du relevé par symbole, appliquée à l'outil qui indexe l'audit :
 **la liste qui fait foi est dans les sept relevés, pas dans cette table.**
 
-## ⛔ LES 67 OUVERTS
+## ⛔ LES 66 OUVERTS DE LA VAGUE 1
 
 Ils sont **dans les relevés, avec leur mesure**. Ce qui suit n'est qu'un index
 — *la preuve est dans le relevé, pas ici.*
@@ -182,13 +198,16 @@ n'est fixé : le modèle n'est pas reproductible d'un run à l'autre).
 
 ## ② LE RELEVÉ DU CHEMIN DÉCLARATIF — ✅ **CLOS, 7/7**
 
-**3 883 lignes lues intégralement · 58 constats · 89 affirmations vérifiées
-bonnes · 147 affirmations mesurées.**
+**3 883 lignes lues intégralement · 59 constats · 89 affirmations vérifiées
+bonnes · 148 affirmations mesurées.**
+
+⚠️ **59 et non 58** : `conformite/C14` a été inscrit le 24/08/2026 sur arbitrage
+de Selasse — voir [CARTE.md](CARTE.md).
 
 | fichier | lignes | état | constats |
 |---|---|---|---|
 | [`pipeline_tarifaire.py`](releve_pipeline_tarifaire.md) | 343 | ✅ **RELEVÉ** | **9** · 10 vérifiées bonnes |
-| [`core/conformite_reglementaire.py`](releve_conformite_reglementaire.md) | 1 318 | ✅ **RELEVÉ** | **13** · 14 vérifiées bonnes |
+| [`core/conformite_reglementaire.py`](releve_conformite_reglementaire.md) | 1 318 | ✅ **RELEVÉ** | **14** · 14 vérifiées bonnes |
 | [`core/plan_tarifaire.py`](releve_plan_tarifaire.md) | 486 | ✅ **RELEVÉ** | **11** · 13 vérifiées bonnes |
 | [`core/charts_tarif.py`](releve_charts_tarif.md) | 476 | ✅ **RELEVÉ** | **8** · 11 vérifiées bonnes |
 | [`core/qualite_donnees.py`](releve_qualite_donnees.md) | 334 | ✅ **RELEVÉ** | **6** · 14 vérifiées bonnes |

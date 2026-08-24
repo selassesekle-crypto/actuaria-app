@@ -44,8 +44,39 @@ Ce qui est écrêté sur ce portefeuille n'est pas la **sévérité**, c'est la
 `prime_grave_unitaire` — donc mutualisé au lieu d'être porté par les contrats
 qui le génèrent.
 
-⚠️⚠️ **JE NE TRANCHE PAS, ET JE VOUS LE RENDS.** C'est un point de méthode
-actuarielle, pas un point de code :
+## ⚠️⚠️ INSTRUIT LE 24/08/2026 — ET LA MESURE M'A RÉFUTÉ
+
+**Selasse a demandé une recommandation motivée avant d'arbitrer. Elle est dans
+[CARTE.md](CARTE.md#️️-lassiette-de-lécrêtement--ma-recommandation-motivée).
+Ce qui suit corrige ce relevé.**
+
+⚠️⚠️ **LE CHIFFRE −9,1 % CI-DESSUS EST JUSTE ET MAL CADRÉ.** C'est l'écart **sur
+les contrats effectivement écrêtés**, pas la moyenne du segment — et il suppose
+une sévérité **strictement constante**, régime où le quantile du total n'est
+plus qu'un quantile du **nombre**. Mesuré sur `data/PG_2017_CLAIMS_YEAR0.csv`
+(**14 243 sinistres versionnés, une ligne = un sinistre**, cv réel = **2,41**) :
+
+```
+  severite moyenne, par nombre de sinistres :  +0,44 % · -0,53 % · -1,01 % · -0,90 %
+  prime pure                                :  +0,22 % · -0,63 % · -1,07 % · -0,95 %
+  contrats ecretes sans porter un sinistre grave : 12 sur 55 (0,10 % du portefeuille)
+```
+
+Et sur toute la grille (fréquence 0,15→8, dispersion cv 0→2,5), **l'écart moyen
+ne dépasse jamais 2,4 %**, et **change de signe** : négatif à basse fréquence,
+positif à haute fréquence et forte dispersion. **Aucun des deux régimes n'est
+uniformément prudent.**
+
+⚠️ **Ma recommandation** : **garder l'assiette, corriger la phrase, publier
+combien de contrats sont écrêtés parce que NOMBREUX plutôt que GRAVES (12/55 =
+22 %).** Le gain plafonne à 2,4 % ; le coût est un **contrat de données
+nouveau**. *Détail et motivation dans [CARTE.md](CARTE.md).*
+
+*Preuves : `preuves/audit_ecretement.py` et `audit_ecretement_bis.py`.*
+
+### Ce qui suit était mon analyse initiale — conservée, et corrigée ci-dessus
+
+C'est un point de méthode actuarielle, pas un point de code :
 
 - La donnée du dépôt est **au contrat** (`cout_total_sinistres`, `nb_sinistres`)
   — **un écrêtement par sinistre n'y est pas calculable**. L'implémentation fait

@@ -10,9 +10,13 @@ quatre « sources uniques » de texte pour les livrables.
 
 ## ① Le compte
 
-**27 affirmations mesurées** — **13 constats** · **14 vérifiées bonnes**.
+**28 affirmations mesurées** — **14 constats** · **14 vérifiées bonnes**.
 **1 de mes soupçons réfuté par la mesure** · **1 de mes hypothèses réfutée puis
-établie par instruction** · **1 point que je ne tranche pas et vous rends.**
+établie par instruction.**
+
+⚠️ **MIS À JOUR LE 24/08/2026** : le point que j'avais laissé à l'arbitrage en
+§③ a été tranché par Selasse — **la direction Vie est hors périmètre**, mais
+**un constat en sort et il est du périmètre** : c'est `C14`, ci-dessous.
 
 ## ② Le classement
 
@@ -81,7 +85,7 @@ B7 a jugé pire que le silence : une instruction erronée.**
 sinistralité passée est protégée parce qu'elle *dit* qu'elle est passée. Une
 variable de volume, elle, ne dit rien — et rien ne la protège.
 
-### B — Affirme plus que le code ne porte (5)
+### B — Affirme plus que le code ne porte (6)
 
 **C3 — La « RÈGLE DE PRINCIPE » ferme le garde-fou n°3 et laisse le n°1
 ouvert.** Le module écrit l.228-232 qu'il remplace la liste de noms exacts par
@@ -179,6 +183,48 @@ l'actuaire* ». Relevé **par AST** sur 418 fichiers :
 correctif a rendu l'information disponible dans l'objet et s'est arrêté là :
 elle n'est ni dans le log (il n'y a pas de WARNING quand la propriété ment,
 cf. C1), ni dans le rapport.
+
+**C14 — « POUR TOUTE BRANCHE » : le module énonce une règle universelle et n'en
+surveille qu'une.** *(Inscrit le 24/08/2026 sur arbitrage de Selasse.)*
+
+Trois phrases de l'en-tête portent une **portée universelle**, à l'impératif :
+
+```
+  l.5-8   « SOURCE UNIQUE, POUR LES TROIS DIRECTIONS. Ce module doit etre
+            importe par TOUT agent, de TOUTE direction »
+  l.41-43 « Interdit comme critere de tarification en assurance depuis le
+            21 decembre 2012, POUR TOUTE BRANCHE »
+```
+
+Mesuré par AST sur **418 fichiers** :
+
+```
+  direction_non_vie/           13 importateur(s)
+  direction_vie_epre/           0
+  direction_sante_prevoyance/   0
+```
+
+⚠️ **Le module se donne une exemption, et elle est motivée par le MÉCANISME
+alors que la règle porte sur le CRITÈRE.** L.30-37 : « *Elles ne sont pas
+exposées aujourd'hui parce que leurs agents de tarification sont PARAMÉTRIQUES
+(ils ne construisent pas de matrice X)* ». **Ce fait est vrai et je l'ai
+vérifié** — 0 estimateur statistique dans les deux directions. Mais l'absence de
+matrice X ne dit **rien** de l'usage du critère : c'est une propriété de la
+forme du modèle, pas de ses facteurs.
+
+**Ce qui est donc affirmé et non porté** : la phrase « POUR TOUTE BRANCHE »
+décrit l'étendue de la **règle CJUE**, et se lit — dans un module qui s'appelle
+`conformite_reglementaire` et qui s'annonce « SOURCE UNIQUE POUR LES TROIS
+DIRECTIONS » — comme l'étendue de la **surveillance**. Les deux ne coïncident
+pas, et rien dans le fichier ne le dit.
+
+⚠️ **Le correctif est une phrase, pas un mécanisme** : borner explicitement la
+portée surveillée (« *ce module est appliqué en Non-Vie ; les autres directions
+relèvent de la même règle et ne sont pas couvertes ici* »). ⚠️ *Ce que fait la
+direction Vie est **hors du périmètre de cet audit** — voir §③.*
+
+*Preuve : `preuves/audit_conformite_ter.py` (P1) et `audit_conformite_quater.py`
+(Q2).*
 
 ### C — Imprécis, daté, ou non documenté (6)
 
@@ -283,9 +329,23 @@ canonique `sexe`. Le contraire d'un filtre.
 justification tient aussi — **0 fichier** de ces deux directions n'instancie un
 estimateur statistique : leurs agents sont bien paramétriques.
 
-## ③ Ce que je ne tranche pas, et que je vous rends
+## ③ TRANCHÉ LE 24/08/2026 — HORS PÉRIMÈTRE, ET NOTÉ
 
-**Le module accuse une autre direction, et je ne décide pas s'il a raison.**
+> **Arbitrage de Selasse** : *« Les agents de tarification sont A1 à A6 ; A7 est
+> le provisionnement. La direction Vie n'a rien à faire dans cet audit — tu l'as
+> trouvée en vérifiant qui respecte une règle, pas en auditant ton périmètre.
+> À NOTER dans l'archive, pas à traiter. »*
+
+⚠️ **Ce qui suit est donc une NOTE, pas un constat, et rien n'en découle pour ce
+chantier.** Ce qui EST du périmètre en a été extrait : c'est `C14` ci-dessus.
+
+⚠️ **Et la manière dont je l'ai trouvé est elle-même à retenir** : je vérifiais
+*qui respecte la règle du module*, pas *ce que mon périmètre contient*. Un
+balayage qui suit une affirmation sort du périmètre par construction. Le
+résultat n'est pas nul — il a produit `C14` — mais il n'autorise pas à traiter
+ce qu'il a rencontré en chemin.
+
+**La note.**
 
 Il affirme l.41-43 que le genre est « *interdit comme critère de tarification en
 assurance depuis le 21 décembre 2012, **POUR TOUTE BRANCHE*** ». Mesuré :
@@ -300,17 +360,14 @@ L'agent **sélectionne la table de mortalité par le sexe** et publie « Sexe »
 comme ligne de son livrable. `sexe` apparaît aussi dans `v2` (épargne), `v3`
 (provisions mathématiques), `v9` (embedded value) et `ep1_ias19`.
 
-⚠️ **Je ne tranche pas**, et c'est délibéré : la question — une table TH/TF
-dans un agent nommé « tarification décès » relève-t-elle de Test-Achats, ou de
-l'usage licite de tables sexuées en provisionnement et en évaluation IAS 19 ? —
-est un point de méthode actuarielle et réglementaire, pas un point de code.
-**Vous m'avez demandé de m'arrêter là.**
+⚠️⚠️ **CE FAIT EST NOTÉ, IL N'EST PAS INSTRUIT.** Savoir si une table TH/TF
+dans un agent nommé « tarification décès » relève de Test-Achats ou de l'usage
+licite des tables sexuées en provisionnement et en évaluation IAS 19 est un
+point de méthode actuarielle **et il appartient à la direction Vie**, pas à cet
+audit. **Aucun lot de ce chantier ne le portera.**
 
-⚠️ **Ce que je peux dire sans trancher** : l'exemption que le module s'accorde
-pour Vie/Santé est motivée par un **mécanisme** (« ils ne construisent pas de
-matrice X »), alors que la règle qu'il invoque porte sur un **critère** (le sexe
-comme facteur de prix). L'exemption est donc plus étroite que la règle. Que le
-mécanisme soit absent — c'est mesuré et vrai — ne dit rien du critère.
+⚠️ **Il reste consigné ici pour une seule raison** : si quelqu'un ouvre un jour
+l'audit de la direction Vie, la mesure existe déjà et n'est pas à refaire.
 
 ## ④ Ce que je n'ai pas lu, et ce qui reste ouvert
 
