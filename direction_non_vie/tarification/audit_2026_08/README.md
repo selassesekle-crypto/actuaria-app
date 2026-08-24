@@ -189,7 +189,7 @@ n'est fixé : le modèle n'est pas reproductible d'un run à l'autre).
 | [`core/plan_tarifaire.py`](releve_plan_tarifaire.md) | 486 | ✅ **RELEVÉ** | **11** · 13 vérifiées bonnes |
 | [`core/charts_tarif.py`](releve_charts_tarif.md) | 476 | ✅ **RELEVÉ** | **8** · 11 vérifiées bonnes |
 | [`core/qualite_donnees.py`](releve_qualite_donnees.md) | 334 | ✅ **RELEVÉ** | **6** · 14 vérifiées bonnes |
-| `pipeline_agents.py` | 317 | ⛔ à lire | l'orchestrateur |
+| [`pipeline_agents.py`](releve_pipeline_agents.md) | 317 | ✅ **RELEVÉ** | **6** · 10 vérifiées bonnes |
 | `mapping_client` · `mapping_llm` · `severite` · `derivations` | 609 | ⛔ à lire | |
 
 ⚠️⚠️ **LE CONSTAT LE PLUS GRAVE DU PREMIER RELEVÉ** : `tarifer()` accepte un
@@ -312,6 +312,35 @@ n'a AUCUNE couche qualité**. `controler_qualite` a **un seul appelant de
 production** — `pipeline_tarifaire`. A1 porte sa propre détection, qui *score*
 sans agir : exactement le défaut que l'en-tête lui reproche. *(Rejoint le
 chantier ④, arbitré non codé.)*
+
+⚠️⚠️ **LE SIXIÈME RELEVÉ — UN CORRECTIF CORRECT, TESTÉ, ET CÂBLÉ NULLE PART.**
+`pipeline_agents.py` tient ses **trois règles non négociables** (vérifiables par
+AST en trois lignes), son contrat `json.dumps` est **plus solide qu'annoncé**,
+ses deux noms de cible correspondent **exactement** à ce qu'A3 déclare, et
+**10 tests l'exécutent vraiment**.
+
+**Et il a ZÉRO appelant de production.** Les trois défauts que son en-tête
+décrit sont **exactement aussi présents qu'avant son écriture** :
+
+- *« chaque appelant assemblait la chaîne à la main »* → 3 fichiers de
+  production le font encore (`actuaria_app.py`, une démo, un script).
+- *« `result_a5` valait `None` PARTOUT »* → toujours `None` dans
+  `demos/pipeline_3lob_a1_a6_demo.py:151` et `scripts/rapport_tarif_local.py:111`.
+- *« LA MOITIÉ DU TARIF N'ÉTAIT JAMAIS CHALLENGÉE »* → les deux n'arbitrent que
+  `col_cible='nb_sinistres'`.
+
+⚠️⚠️ **Et l'application fait moins que cela** : pour le besoin `selection` elle
+enchaîne A2 → A3 → **A6 en passant `result_a3` SEUL** — ni A4, ni A5, ni
+`col_cible`. **Dans l'application, l'arbitrage ne reçoit que le GLM.**
+
+⚠️ Aussi : `.success` vaut **`True`** quand A6 a échoué (la propriété teste
+`a6 is not None`), et `resume()` **génère un horodatage** là où deux modules
+frères refusent explicitement de le faire.
+
+⚠️ **C'est une variante du motif du chantier, peut-être la plus coûteuse** :
+d'habitude un instrument affirme plus que le code ne porte ; ici le code porte
+**exactement** ce qu'il affirme, et **rien ne l'appelle**. *Un correctif câblé
+nulle part se lit, dans le dépôt, comme un correctif appliqué.*
 
 ## ⚠️ CE QUI N'A JAMAIS ÉTÉ AUDITÉ — et qui tarife
 
