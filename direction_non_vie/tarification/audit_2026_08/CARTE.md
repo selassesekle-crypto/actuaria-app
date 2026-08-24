@@ -1,4 +1,12 @@
-# LA CARTE — L'ORDRE DE CE QUI RESTE
+# LA CARTE — L'INVENTAIRE DE CE QUI RESTE
+
+> ## ⚠️⚠️ L'ORDRE VIT DANS [**FEUILLE_DE_ROUTE.md**](FEUILLE_DE_ROUTE.md)
+> Reconstruite depuis zéro le 24/08 au soir, elle **remplace l'ordre de ce
+> document** — avec un **rang 0 (les prérequis)**, les **8 révisions nommées**,
+> la répartition **Selasse / moi**, et la **recommandation sur la charte**.
+> **Ce document reste l'INVENTAIRE** : les constats, leurs mesures, les preuves.
+> *Deux documents qui ordonnent la même chose seraient exactement le défaut
+> que cet audit poursuit.*
 
 **Établie le 24/08/2026**, sur demande de Selasse : *« Donne-moi l'ORDRE
 COMPLET de ce qui reste, tous constats confondus — les 67 de la première vague
