@@ -12,12 +12,15 @@ import anthropic
 from core import arrete as _arrete_core
 from core import frontiere_llm
 
-st.set_page_config(
-    page_title="ActuarIA — Plateforme Actuarielle IA",
-    page_icon="⚡",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+def _configurer_page() -> None:
+    """⚠️ DOIT rester le PREMIER appel Streamlit exécuté — c'est une contrainte
+    de l'API `set_page_config`. C'est pourquoi `main()` l'appelle en tête."""
+    st.set_page_config(
+        page_title="ActuarIA — Plateforme Actuarielle IA",
+        page_icon="⚡",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
 
 # ── COULEURS ──────────────────────────────────────────────────────────────────
 NAVY    = "#0F2E52"
@@ -34,14 +37,15 @@ BLEU    = "#3498DB"
 VIOLET  = "#9B59B6"
 
 # ── SESSION STATE ─────────────────────────────────────────────────────────────
-for k, v in {
-    "page": "accueil",
-    "agent_selec": None,
-    "dir_selec": None,
-    "messages_aria": [],
-}.items():
-    if k not in st.session_state:
-        st.session_state[k] = v
+def _initialiser_session() -> None:
+    for k, v in {
+        "page": "accueil",
+        "agent_selec": None,
+        "dir_selec": None,
+        "messages_aria": [],
+    }.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
 
 # ── LA DATE D'ARRÊTÉ — LUE ET TYPÉE, LE LIBELLÉ EN DÉCOULE ──────────────────
 #
@@ -214,7 +218,8 @@ def _afficher_mapping_interactif(df, besoin):
 
 
 # ── CSS ───────────────────────────────────────────────────────────────────────
-st.markdown(f"""
+def _appliquer_style() -> None:
+    st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@700&display=swap');
 .stApp {{background:{NAVY};color:{BLANC};font-family:'Inter',sans-serif;}}
@@ -5166,16 +5171,38 @@ def page_rapports():
                 st.markdown(f"<div style='font-size:0.72rem;color:{GRIS};text-align:center;padding:10px;'>⏸ Bientôt</div>", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# ROUTEUR PRINCIPAL
+# ROUTEUR PRINCIPAL — POINT D'ENTRÉE UNIQUE
 # ══════════════════════════════════════════════════════════════════════════════
-render_sidebar()
+# ⚠️⚠️ POURQUOI CE GARDE EXISTE. Ce fichier s'exécutait À L'IMPORT : six
+# instructions vivaient au niveau module (`set_page_config`, l'init du
+# `session_state`, le style, `render_sidebar()`, la lecture de `page` et le
+# routeur). Conséquence mesurée : **aucune gate ne pouvait le découvrir**, et
+# ses 25 fonctions — 91 % du fichier — n'étaient atteignables par AUCUN test.
+# `core/test_arrete.py` le disait déjà et contournait en RELISANT le fichier
+# comme du texte.
+#
+# ⚠️ Ce que ce garde change, et ce qu'il ne change pas : le module devient
+# IMPORTABLE (donc testable) ; il ne rend rien de son comportement visuel
+# vérifiable pour autant. Le contrôle positif qui l'épingle est STRUCTUREL
+# (`core/test_imports_app.py`) — il prouve que rien ne s'exécute à l'import,
+# pas que l'interface est correcte. C'est assumé : Streamlit sera remplacée.
+def main() -> None:
+    """Lance l'application. `set_page_config` DOIT rester le premier appel."""
+    _configurer_page()
+    _initialiser_session()
+    _appliquer_style()
+    render_sidebar()
 
-page = st.session_state.page
-if   page == "accueil":      page_accueil()
-elif page == "dashboard":    page_dashboard()
-elif page == "analyse":      page_analyse()
-elif page == "rapports":     page_rapports()
-elif page == "direction":    page_direction()
-elif page == "agent_detail": page_agent_detail()
-elif page == "resultats":    page_resultats()
-else:                        page_accueil()
+    page = st.session_state.page
+    if   page == "accueil":      page_accueil()
+    elif page == "dashboard":    page_dashboard()
+    elif page == "analyse":      page_analyse()
+    elif page == "rapports":     page_rapports()
+    elif page == "direction":    page_direction()
+    elif page == "agent_detail": page_agent_detail()
+    elif page == "resultats":    page_resultats()
+    else:                        page_accueil()
+
+
+if __name__ == "__main__":
+    main()
