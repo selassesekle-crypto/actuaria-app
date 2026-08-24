@@ -124,6 +124,41 @@ un troisième état, et il se distingue.
 
 ---
 
+## ⚠️⚠️ DÉCISION — LES 67 OUVERTS SERONT TOUS TRAITÉS
+
+**Aucun ne sera abandonné, y compris ceux qu'un lecteur classerait comme du
+bruit.** Ni maintenant, ni dans l'ordre de gravité — mais tous.
+
+> **Ceci n'est PAS une dette assumée.** C'est une file d'attente. Quiconque lit
+> cette liste dans six mois doit le savoir : un constat resté ouvert n'a pas
+> été jugé négligeable, il n'a pas encore eu son tour.
+
+**Le bruit documentaire se traitera EN LOTS GROUPÉS** — vingt en-têtes périmés
+dans un passage plutôt que vingt lots.
+
+### Les regroupements naturels, mesurés
+
+| lot groupé | constats | pourquoi ils vont ensemble |
+|---|---|---|
+| **En-têtes de test périmés** | `a1/C10` `a2/C14` `a3/C18` `a4/C13` `a5/C9` `a6/C10` | six fichiers annoncent « 7 tests » et en portent 9, ?, 4, 11, 3, ? — **même défaut, même correction** |
+| **Symboles jamais lus** | `a1/C9` `a2/C7` `a2/C8` `a3/C11` `a3/C13` `a6/C9` | `verifier_tous_fichiers`, `STRATEGIES_IMPUTATION`, `VARS_GLM`, `durbin_watson`, `INTERPRETABILITE` — du mort qui se retire d'un geste |
+| **En-têtes de module annonçant l'absent** | `a2/C3` `a2/C4` `a4/C6` `a4/C7` `services/C3` | WoE, Target Encoding, Winsorisation IQR, « ML ×8 » (12 mentions, 6 modèles), « 8 modèles » republié dans trois livrables |
+| **`COLS_A_EXCLURE`** | `a3/C16` `a4/C12` `a5/C8` | le même symbole dans trois agents |
+| **Scorecards « 3 ✅ = validé »** | `a3/C9` `a4/C8` | annoncent 3, listent 4, et 5 hypothèses sont calculées |
+| **Figures qui n'affichent pas ce qu'elles nomment** | `a3/C5` `a4/C5` `a6/C3` | Lorenz tracée et non mesurée (×2), « Score par profil » qui n'affiche pas le score |
+| **`filterwarnings('ignore')` au niveau module** | `a1/C6` `a2/C15` | **tout le process** devient muet, pas seulement l'agent |
+| **Écriture disque à l'instanciation** | `a1/C7` `a2/C16` | `/tmp/actuaria` créé par un simple `__init__` |
+| **Exemples d'usage périmés** | `a2/C10` `a3/C17` | l'en-tête montre un appel qui ne marche plus |
+
+**Environ 30 constats en 9 passages.** Les ~37 autres sont substantiels et
+demandent un traitement propre — parmi eux, ceux à ouvrir en premier sont
+signalés plus bas.
+
+⚠️ **CETTE TABLE A ÉTÉ CONSTRUITE PAR EXPRESSION RÉGULIÈRE, ET ELLE A MANQUÉ
+DEUX CONSTATS SUR 67** (dont `a1/C8`, dont le gras est imbriqué). C'est la
+leçon du relevé par symbole, appliquée à l'outil qui indexe l'audit :
+**la liste qui fait foi est dans les sept relevés, pas dans cette table.**
+
 ## ⛔ LES 67 OUVERTS
 
 Ils sont **dans les relevés, avec leur mesure**. Ce qui suit n'est qu'un index
