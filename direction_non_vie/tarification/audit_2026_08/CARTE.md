@@ -20,6 +20,102 @@ aujourd'hui se valent s'ils publient le même faux. »*
 La vague 1 compte donc **66 ouverts, pas 67**. *Le total que vous citiez —
 125 — tombe juste, mais par un autre chemin : 66 + 58 + 1.*
 
+---
+
+# ⚠️⚠️ RÉVISION DU 24/08/2026 (SOIR) — J'AVAIS MESURÉ TROP ÉTROIT
+
+**Selasse a demandé : « la roadmap complète et l'architecture d'abord — ou bien
+il y a encore autre chose ? »** Il y avait autre chose, **et cela déplace deux
+rangs de cette carte.**
+
+## ① L'ARCHITECTURE N'EST PAS CELLE QUE J'AI MESURÉE
+
+J'ai placé l'architecture au **rang 6** en mesurant les appelants de
+`pipeline_agents.py` (**0**). **Je n'avais pas mesuré les branches de
+l'application.** Mesuré maintenant, par AST :
+
+```
+  besoin == 'prime_glm'   l.3554  ->  A3 + pipeline_complet
+                                      (COMPLET : qualite, conformite, 2 cibles)
+  besoin == 'prime_ml'    l.3572  ->  A4 SEUL            -> resultats["principal"]
+  besoin == 'prime_dl'    l.3578  ->  A5 SEUL            -> resultats["principal"]
+  besoin == 'selection'   l.3593  ->  A3 + A6 avec result_a3 SEUL
+  besoin == 'sinistres'   l.3421  ->  A1 + A2
+```
+
+⚠️⚠️ **L'APPLICATION ASSEMBLE LA CHAÎNE DE CINQ FAÇONS. UNE SEULE EST
+COMPLÈTE.** Les quatre autres n'ont ni couche qualité, ni challenger, ni
+arbitrage — et **deux d'entre elles écrivent leur résultat dans
+`resultats["principal"]`**, c'est-à-dire dans ce que l'actuaire lit.
+
+⚠️⚠️ **ET LA PIRE EST `prime_dl`.** Elle publie un prix **Deep Learning** comme
+résultat principal, et A5 porte **deux constats de classe A OUVERTS** :
+
+| | |
+|---|---|
+| `a5/C6` | **l'early stopping se règle sur le jeu de TEST** — une fuite |
+| `a5/C7` | **aucun seed** — deux exécutions, deux modèles, deux prix |
+
+**Ce n'est pas « une absence d'arbitrage ». C'est un prix faux, publié,
+aujourd'hui.** Mon argument du rang 6 — *« un arbitrage manquant est moins grave
+qu'un arbitrage faux »* — **ne s'applique pas ici** : il y a les deux.
+
+## ② CE QUI CHANGE DANS L'ORDRE
+
+| ce qui bouge | avant | après | pourquoi |
+|---|---|---|---|
+| **les branches de l'app** | rang 6 (« architecture ») | ⬆️ **RANG 1** | `prime_dl` et `prime_ml` publient un prix non arbitré, et A5 est en fuite |
+| `a5/C6` `a5/C7` | rang 1, lot L1.4 | **rang 1, couplé aux branches** | même défaut vivant, même lot |
+| `pipeline/C1` (`tarifer()`) | rang 1, lot L1.1 | ⬇️ **rang 3** | **`tarifer()` a 1 appelant, et c'est une démo.** L'app ne l'appelle **jamais**. Le +128 % est **latent**, pas vivant |
+| câbler l'orchestrateur | rang 6 | **reste rang 6** | c'est le *remède*, pas le *défaut* |
+
+⚠️ **Ce que je maintiens** : câbler `pipeline_agents` **avant** de fermer les
+rangs 1-4 reste une erreur. Mais **fermer les branches de l'app** n'est pas
+câbler l'orchestrateur — c'est **supprimer les assemblages qui publient sans
+arbitrage**, ce qui peut se faire en amont et se fait plus vite.
+
+## ③ CE QUI N'A TOUJOURS PAS ÉTÉ AUDITÉ — mesuré
+
+Le périmètre atteint depuis les deux pipelines : **21 modules, 23 863 lignes.**
+**18 audités (22 693 l) · 3 non audités (1 170 l)** — plus l'application.
+
+| lignes | fichier | état |
+|---|---|---|
+| **5 181** | `actuaria_app.py` | ⛔ **jamais dans le périmètre**, et c'est lui qui assemble les cinq branches |
+| **989** | `core/elasticite.py` | ⛔ **jamais audité, et VIVANT** — appelé par A4 (`etat_elasticite`, `sensibilite_tarifaire`), publié dans `resultats["principal"]` |
+| 139 | `services/excel_helpers.py` | ⛔ |
+| 42 | `core/__init__.py` | ⛔ |
+
+⚠️⚠️ **`core/elasticite.py`, C'EST MON CODE — écrit il y a deux jours dans le
+chantier ⑤, et jamais tenu au standard que j'ai appliqué à tout le reste.**
+8 fonctions publiques, 16 constantes, **56 tests** — et l'archive écrit
+elle-même : *« testé n'a jamais voulu dire audité »*. Au taux mesuré (1 constat
+/ 225 l en vague 1, **1 / 66 l** en vague 2), **4 à 15 constats y sont
+attendus**.
+
+⚠️ **Et je suis mal placé pour l'auditer.** Le relire, c'est relire mes propres
+intentions. **Recommandation de méthode : ne pas le lire — le mesurer.** Planter
+les violations d'abord, lire ensuite seulement ce que la mesure a désigné.
+
+⚠️ **Mesuré aussi** : sur ses 8 fonctions publiques, **6 n'ont aucun appelant de
+production**. Seules `etat_elasticite` et `sensibilite_tarifaire` sortent, via
+A4 — et **les trois livrables ne les lisent pas**. La sensibilité tarifaire
+n'atteint donc **que l'écran de l'application**.
+
+## ④ UNE ERREUR DE MESURE DE MA PART, CORRIGÉE
+
+J'ai d'abord relevé que `capacites` et `exigences_hors_portee` de
+`core/elasticite.py` étaient appelées par `normes/ifrs17/socle/lecture_inventaire.py`.
+**C'est faux** : ce fichier importe de `normes.ifrs17.socle.contrat`. **Ce sont
+des HOMONYMES.**
+
+> ⚠️⚠️ **TROISIÈME FORME DE LA MÊME ERREUR CETTE SEMAINE.** Un relevé par
+> symbole ne voit pas ce qui est écrit en français ; il ne voit pas ce qui est
+> importé **sous alias** ; et **il confond les HOMONYMES entre modules.**
+> Un relevé par nom doit résoudre l'import, ou il ne prouve rien.
+
+---
+
 ## L'AXE DE L'ORDRE
 
 **Ce qui est publié faux, et à qui.** Pas la vague, pas le fichier, pas la date.
@@ -278,7 +374,14 @@ d'entrée du prix, et rien ne la garde.
 | ferme | `agents/C1` `qualite/C4` `socle/C2` `conformite/C10` + le chantier **④ l'équilibre du chemin agent** (arbitré, non codé) |
 | ce que ça ferme | l'orchestrateur a **0 appelant** et les trois défauts de son en-tête sont intacts · l'app enchaîne A2→A3→**A6 avec `result_a3` seul** (ni A4, ni A5, ni `col_cible`) · le chemin agent n'a **aucune couche qualité** · le moteur de mapping (419 l) a **0 appelant** (déclaré « couche 2 ») · `FACTEURS_TARIFAIRES_AUTORISES` gouverne encore le chemin sans plan |
 
-## ⚠️⚠️ POURQUOI L'ARCHITECTURE EST AU RANG 6, ET PAS AU RANG 1
+## ⚠️⚠️ CE QUI SUIT EST RÉVISÉ — LIRE D'ABORD LA RÉVISION EN TÊTE
+
+**L'argument ci-dessous reste valable pour le CÂBLAGE de l'orchestrateur.** Il
+ne l'est **pas** pour les **branches de l'application**, que je n'avais pas
+mesurées : `prime_dl` et `prime_ml` publient un prix non arbitré, et A5 porte
+deux constats de classe A ouverts. **Elles remontent au rang 1.**
+
+## POURQUOI LE CÂBLAGE DE L'ORCHESTRATEUR RESTE AU RANG 6
 
 **Ma recommandation, et elle conteste le placement naturel.**
 
