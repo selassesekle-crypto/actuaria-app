@@ -187,7 +187,7 @@ n'est fixé : le modèle n'est pas reproductible d'un run à l'autre).
 | [`pipeline_tarifaire.py`](releve_pipeline_tarifaire.md) | 343 | ✅ **RELEVÉ** | **9** · 10 vérifiées bonnes |
 | [`core/conformite_reglementaire.py`](releve_conformite_reglementaire.md) | 1 318 | ✅ **RELEVÉ** | **13** · 14 vérifiées bonnes |
 | [`core/plan_tarifaire.py`](releve_plan_tarifaire.md) | 486 | ✅ **RELEVÉ** | **11** · 13 vérifiées bonnes |
-| `core/charts_tarif.py` | 476 | ⛔ à lire | les figures publiées |
+| [`core/charts_tarif.py`](releve_charts_tarif.md) | 476 | ✅ **RELEVÉ** | **8** · 11 vérifiées bonnes |
 | `core/qualite_donnees.py` | 334 | ⛔ à lire | les 4 règles |
 | `pipeline_agents.py` | 317 | ⛔ à lire | l'orchestrateur |
 | `mapping_client` · `mapping_llm` · `severite` · `derivations` | 609 | ⛔ à lire | |
@@ -262,6 +262,32 @@ pourtant sa mesure (« ~67 % de doublons, fichier refusé »), et rien ne l'acti
 Le contrat A2→A3 est honoré **au caractère près**. ⚠️ **Et deux de mes
 accusations ont été réfutées par la mesure**, dont une par le site d'appel
 lui-même (`a2.fit` calcule les dérivées AVANT `valider_contre`).
+
+⚠️⚠️ **LE QUATRIÈME RELEVÉ — LE MOTIF N'EST PLUS LE FAUX, C'EST LE MUET.**
+
+- **Une figure vide est indiscernable d'une figure pleine.** Les **7/7**
+  fonctions rendent un panneau titré, aux axes légendés, avec **zéro point**,
+  et aucune ne le dit. Un QQ-plot sans résidu ressemble à un QQ-plot.
+- **Quatre troncatures silencieuses** : 23 relativités → **15 tracées**,
+  4 fenêtres → 2, 1 000 prédictions → 500, 30 features SHAP → 15. Aucune
+  n'apparaît sur la figure. *Personne ne compte les barres d'un graphique.*
+- **La bande verte est plus large que le gate.** Rectangle **[0,85 ; 1,15]** ·
+  point VERT [0,95 ; 1,05] · `avertissement_walk_forward` **[0,90 ; 1,10]**.
+  À A/E = 0,87 le rapport publie « ⚠ BIAIS DE TARIFICATION » **et** un point
+  dans la bande dite d'acceptabilité.
+- **Le badge « % du discriminable » n'a aucune borne** : mesuré à **125 %**,
+  **−5 %**, et **18 000 000 %**.
+- **« SOURCE UNIQUE du style » alors que les 4 agents portent leur propre
+  charte**, dupliquée 4 fois, sur **32 figures** contre 7 par ce module — et
+  dont un gris diffère du sien **d'un seul caractère** (`#8A9AB0` /
+  `#8A9BB0`).
+
+⚠️ **Ce fichier est pourtant le plus honnête du module sur ce qu'il a
+corrigé** : les **quatre mesures chiffrées** de son docstring de Lorenz se
+reproduisent (0,9517 · 0,4393 · plafond indépendant de la prédiction · étendue
+annoncée plus prudente que la vraie), et `_qnorm` **tient sa promesse en erreur
+relative** (1,129e-9). ⚠️ *Sa docstring écrit « |err| » sans dire laquelle : en
+absolu, c'est 4,7 fois plus.*
 
 ## ⚠️ CE QUI N'A JAMAIS ÉTÉ AUDITÉ — et qui tarife
 
