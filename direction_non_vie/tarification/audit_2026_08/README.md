@@ -188,7 +188,7 @@ n'est fixé : le modèle n'est pas reproductible d'un run à l'autre).
 | [`core/conformite_reglementaire.py`](releve_conformite_reglementaire.md) | 1 318 | ✅ **RELEVÉ** | **13** · 14 vérifiées bonnes |
 | [`core/plan_tarifaire.py`](releve_plan_tarifaire.md) | 486 | ✅ **RELEVÉ** | **11** · 13 vérifiées bonnes |
 | [`core/charts_tarif.py`](releve_charts_tarif.md) | 476 | ✅ **RELEVÉ** | **8** · 11 vérifiées bonnes |
-| `core/qualite_donnees.py` | 334 | ⛔ à lire | les 4 règles |
+| [`core/qualite_donnees.py`](releve_qualite_donnees.md) | 334 | ✅ **RELEVÉ** | **6** · 14 vérifiées bonnes |
 | `pipeline_agents.py` | 317 | ⛔ à lire | l'orchestrateur |
 | `mapping_client` · `mapping_llm` · `severite` · `derivations` | 609 | ⛔ à lire | |
 
@@ -288,6 +288,30 @@ reproduisent (0,9517 · 0,4393 · plafond indépendant de la prédiction · éte
 annoncée plus prudente que la vraie), et `_qnorm` **tient sa promesse en erreur
 relative** (1,129e-9). ⚠️ *Sa docstring écrit « |err| » sans dire laquelle : en
 absolu, c'est 4,7 fois plus.*
+
+⚠️⚠️ **LE CINQUIÈME RELEVÉ — LE FICHIER LE PLUS SOLIDE DES CINQ.** Les quatre
+règles font exactement ce qu'elles annoncent, une par une, dans les deux sens ;
+le seuil bloque **au centième près** (4,9 % passe, 5,0 % bloque) ; `df` n'est
+jamais muté ; **aucun nom de colonne n'est codé en dur** — les quatre rôles
+viennent du plan sans exception ; l'échappatoire est nominative, tracée, et non
+contournable par un `try/except`.
+
+⚠️ **Les deux constats graves portent sur CE QUE LE CONTRÔLE NE MESURE PAS —
+la même question posée deux fois : quelle est l'ASSIETTE ?**
+
+- **Il mesure des valeurs PRÉSENTES.** 100 % d'expositions `NaN` → **0
+  anomalie**, `bloque=False`, synthèse `None`. Une exposition écrite
+  `'douze mois'` de même. *(Le GLM, lui, s'arrête loud en aval — mais avec un
+  message `statsmodels`, pas un rapport de qualité.)*
+- **Il mesure PAR TYPE, jamais l'union.** Quatre anomalies à **4,9 %** chacune
+  → **19,6 % du portefeuille exclu**, `escalade=False`. La synthèse le **dit**
+  (« 196 lignes exclues ») ; le gate ne s'**arrête** pas.
+
+⚠️ **Et un point que ce fichier révèle sans être le sien** : le **chemin agent
+n'a AUCUNE couche qualité**. `controler_qualite` a **un seul appelant de
+production** — `pipeline_tarifaire`. A1 porte sa propre détection, qui *score*
+sans agir : exactement le défaut que l'en-tête lui reproche. *(Rejoint le
+chantier ④, arbitré non codé.)*
 
 ## ⚠️ CE QUI N'A JAMAIS ÉTÉ AUDITÉ — et qui tarife
 
