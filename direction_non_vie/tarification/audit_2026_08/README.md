@@ -186,7 +186,7 @@ n'est fixé : le modèle n'est pas reproductible d'un run à l'autre).
 |---|---|---|---|
 | [`pipeline_tarifaire.py`](releve_pipeline_tarifaire.md) | 343 | ✅ **RELEVÉ** | **9** · 10 vérifiées bonnes |
 | [`core/conformite_reglementaire.py`](releve_conformite_reglementaire.md) | 1 318 | ✅ **RELEVÉ** | **13** · 14 vérifiées bonnes |
-| `core/plan_tarifaire.py` | 486 | ⛔ à lire | la source unique |
+| [`core/plan_tarifaire.py`](releve_plan_tarifaire.md) | 486 | ✅ **RELEVÉ** | **11** · 13 vérifiées bonnes |
 | `core/charts_tarif.py` | 476 | ⛔ à lire | les figures publiées |
 | `core/qualite_donnees.py` | 334 | ⛔ à lire | les 4 règles |
 | `pipeline_agents.py` | 317 | ⛔ à lire | l'orchestrateur |
@@ -230,6 +230,38 @@ fuites qui lui échappent** — vérifié, elles échappent toujours — et il d
 son jeton rend le contournement *délibéré*, pas impossible. C'est ce qui rend
 les deux constats ci-dessus notables : ce sont les deux endroits où **il a écrit
 la règle et ne l'a pas tenue sur lui-même**.
+
+⚠️⚠️ **LES DEUX CONSTATS GRAVES DU TROISIÈME RELEVÉ** — et ils ont la même
+origine : *un garde-fou qui regarde une LISTE au lieu d'une PROPRIÉTÉ.*
+
+- **La garde B9 est contournée par les INTERACTIONS.** Le plan interdit de
+  déclarer l'exposition comme facteur, mais `interactions=(('age','expo'),)`
+  passe : `inter_age_expo` est **retenu par le pipeline réel**, et le symptôme
+  que le commentaire nomme apparaît — la prime cesse d'être proportionnelle à
+  l'exposition, **rapport 1,8339 au lieu de 2,0000 (−8,3 %)**.
+- **Le plan accepte de déclarer LA CIBLE comme facteur**, et ce qui l'arrête est
+  fragile : c'est la **deuxième cible qui dénonce la première**. A3 et
+  `pipeline_tarifaire` passent les deux ; **A4, A5 et A6 n'en passent qu'une**
+  (`col_cible: str`). Et la protection s'effondre quand la seconde cible est de
+  variance nulle — la cible entre alors dans sa propre matrice X, **exclusions
+  vides**, `controle_effet_execute = True`.
+
+⚠️ **Un motif propre à ce fichier** : il valide la **cohérence des
+combinaisons**, jamais l'**appartenance des valeurs**. Un `type` inexistant, un
+`encodage` inexistant, une clé YAML mal orthographiée — les trois passent, et
+les trois font disparaître quelque chose **en silence**. `verifier_completude_plan`
+annonce alors `ampute=False`.
+
+⚠️ **Trois rôles déclarés par AUCUN des 20 plans** : `identifiant_contrat`,
+`echeance`, `comportement` — **0/20 chacun**. Le mécanisme d'échéance porte
+pourtant sa mesure (« ~67 % de doublons, fichier refusé »), et rien ne l'active.
+
+⚠️ **Et le meilleur résultat des trois relevés est ici** : `_slug` produit
+**exactement** les noms qu'A2 crée, y compris sur `Île-de-France`,
+`Provence-Alpes-Côte d'Azur` et `RHÔNE` — 4 annoncées, 4 produites, 0 en trop.
+Le contrat A2→A3 est honoré **au caractère près**. ⚠️ **Et deux de mes
+accusations ont été réfutées par la mesure**, dont une par le site d'appel
+lui-même (`a2.fit` calcule les dérivées AVANT `valider_contre`).
 
 ## ⚠️ CE QUI N'A JAMAIS ÉTÉ AUDITÉ — et qui tarife
 
