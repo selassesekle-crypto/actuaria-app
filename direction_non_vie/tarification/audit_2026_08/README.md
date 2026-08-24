@@ -180,6 +180,30 @@ n'est fixé : le modèle n'est pas reproductible d'un run à l'autre).
 
 ---
 
+## ② LE RELEVÉ DU CHEMIN DÉCLARATIF — en cours
+
+| fichier | lignes | état | constats |
+|---|---|---|---|
+| [`pipeline_tarifaire.py`](releve_pipeline_tarifaire.md) | 343 | ✅ **RELEVÉ** | **9** · 10 vérifiées bonnes |
+| `core/conformite_reglementaire.py` | 1 318 | ⛔ à lire | les garde-fous genre / fuite / antériorité |
+| `core/plan_tarifaire.py` | 486 | ⛔ à lire | la source unique |
+| `core/charts_tarif.py` | 476 | ⛔ à lire | les figures publiées |
+| `core/qualite_donnees.py` | 334 | ⛔ à lire | les 4 règles |
+| `pipeline_agents.py` | 317 | ⛔ à lire | l'orchestrateur |
+| `mapping_client` · `mapping_llm` · `severite` · `derivations` | 609 | ⛔ à lire | |
+
+⚠️⚠️ **LE CONSTAT LE PLUS GRAVE DU PREMIER RELEVÉ** : `tarifer()` accepte un
+facteur tarifaire écrit **en toutes lettres** et rend un prix en disant
+`success: True`. Mesuré — `bonus_malus = 'beaucoup'` → prime **+128 %** ;
+`-999` → **−19,4 %** ; `1e12` → **+425,6 %**. **Aucune borne de plausibilité
+n'existe sur le chemin déclaratif** : A1 en porte, mais ce chemin ne passe pas
+par A1 et son propre commentaire l'assume.
+
+⚠️ **Et ce fichier est par ailleurs le meilleur du module sur ce qui décide** —
+équilibre technique à **1,0000**, fréquence exactement par unité d'exposition,
+filtre genre qui tient, couche qualité qui bloque vraiment, ajustement
+reproductible **au bit près**.
+
 ## ⚠️ CE QUI N'A JAMAIS ÉTÉ AUDITÉ — et qui tarife
 
 Les sept relevés couvrent **19 150 lignes** : A1→A6 et les services de
