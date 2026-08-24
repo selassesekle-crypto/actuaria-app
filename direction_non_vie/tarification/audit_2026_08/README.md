@@ -1,11 +1,12 @@
 # AUDIT DU MODULE TARIFICATION — août 2026
 
-> ## ⚠️⚠️ [**LA CARTE — L'ORDRE DE CE QUI RESTE**](CARTE.md)
-> **125 constats ouverts · 12 lots · 12 passages groupés · 1 tri.**
-> Les deux vagues **mélangées**, ordonnées par *ce qui est publié faux*.
-> On y trouve aussi **où se place l'architecture** (rang 6, motivé) et
-> **la recommandation sur l'assiette de l'écrêtement** (mesurée, et elle
-> réfute mon alerte initiale).
+> ## ⚠️⚠️ [**LA FEUILLE DE ROUTE**](FEUILLE_DE_ROUTE.md) — À OUVRIR AVANT TOUT LOT
+> **129 constats ouverts · 14 lots · 12 passages · 3 audits · 1 tri.**
+> Elle définit **« ultra solide » en cinq critères mesurables (S1→S5)**, porte
+> un **rang 0 de prérequis**, mes **révisions nommées**, et les **cinq
+> arbitrages** avec ma recommandation pour chacun.
+> ⚠️ [`CARTE.md`](CARTE.md) reste l'**inventaire** (constats, mesures, preuves)
+> — **elle n'ordonne plus.**
 
 Sept relevés, **28 560 lignes lues à 100 %**, **141 affirmations mesurées**,
 **85 constats** et **55 affirmations vérifiées bonnes**.
@@ -198,8 +199,8 @@ n'est fixé : le modèle n'est pas reproductible d'un run à l'autre).
 
 ## ② LE RELEVÉ DU CHEMIN DÉCLARATIF — ✅ **CLOS, 7/7**
 
-**3 883 lignes lues intégralement · 59 constats · 89 affirmations vérifiées
-bonnes · 148 affirmations mesurées.**
+**3 883 lignes lues intégralement · 61 constats · 89 affirmations vérifiées
+bonnes · 150 affirmations mesurées.**
 
 ⚠️ **59 et non 58** : `conformite/C14` a été inscrit le 24/08/2026 sur arbitrage
 de Selasse — voir [CARTE.md](CARTE.md).
@@ -209,7 +210,7 @@ de Selasse — voir [CARTE.md](CARTE.md).
 | [`pipeline_tarifaire.py`](releve_pipeline_tarifaire.md) | 343 | ✅ **RELEVÉ** | **9** · 10 vérifiées bonnes |
 | [`core/conformite_reglementaire.py`](releve_conformite_reglementaire.md) | 1 318 | ✅ **RELEVÉ** | **14** · 14 vérifiées bonnes |
 | [`core/plan_tarifaire.py`](releve_plan_tarifaire.md) | 486 | ✅ **RELEVÉ** | **11** · 13 vérifiées bonnes |
-| [`core/charts_tarif.py`](releve_charts_tarif.md) | 476 | ✅ **RELEVÉ** | **8** · 11 vérifiées bonnes |
+| [`core/charts_tarif.py`](releve_charts_tarif.md) | 476 | ✅ **RELEVÉ** | **10** · 11 vérifiées bonnes |
 | [`core/qualite_donnees.py`](releve_qualite_donnees.md) | 334 | ✅ **RELEVÉ** | **6** · 14 vérifiées bonnes |
 | [`pipeline_agents.py`](releve_pipeline_agents.md) | 317 | ✅ **RELEVÉ** | **6** · 10 vérifiées bonnes |
 | [`mapping_client` · `mapping_llm` · `severite` · `derivations`](releve_socle_core.md) | 609 | ✅ **RELEVÉ** | **5** · 17 vérifiées bonnes |

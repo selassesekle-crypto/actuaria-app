@@ -9,7 +9,10 @@ système.
 
 ## ① Le compte
 
-**19 affirmations mesurées** — **8 constats** · **11 vérifiées bonnes**.
+**21 affirmations mesurées** — **10 constats** · **11 vérifiées bonnes**.
+
+⚠️ **MIS À JOUR LE 24/08/2026 (soir)** : `C9` et `C10` ajoutés — deux défauts
+de **lisibilité** trouvés en rendant les deux chartes côte à côte. Voir plus bas.
 **1 de mes mesures fausse et corrigée** (un import sous alias).
 
 ## ② Le classement
@@ -202,6 +205,56 @@ demain.
 | « fréquence 1,50 → 0,44 » | mesuré **0,4393** |
 | « sur huit tirages, le plafond varie de 1,8 % » | mesuré **0,6 %** — l'annonce est **plus prudente** que la mesure |
 | « une fenêtre sans A/E n'est pas une fenêtre à 1,0 » | le correctif tient : 2 fenêtres à `None` **sortent du tracé**, aucune n'est dessinée à 1,0 |
+
+### ⚠️⚠️ AJOUTÉ LE 24/08/2026 (SOIR) — DEUX CONSTATS DE LISIBILITÉ, MESURÉS AU RENDU
+
+*Trouvés en rendant les deux chartes côte à côte sur de vraies figures, à la
+demande de Selasse. Ce sont des défauts de **la V3 elle-même**, et je les ai
+trouvés **en la défendant**.*
+
+**C9 — Le gradient n'est pas monotone en luminance : deux déciles différents se
+lisent pareil.** `_GRAD_ANCRES` (l.47-51) va bleu → turquoise → orange. Mesuré
+sur les 10 déciles que `chart_lift_decile` produit :
+
+```
+  luminance D1->D10 : 0.13 0.17 0.22 0.28 0.35 0.34 0.28 0.24 0.23 0.25
+  inversions = 4        ecart minimal entre deux deciles VOISINS = 0,0035
+```
+
+**Une échelle ORDONNÉE doit être monotone**, sinon le rang cesse d'être
+lisible. Ici la luminance **monte jusqu'à D5 puis redescend**, et D8/D9 sont
+séparés de **0,0035** — indiscernables à l'œil. ⚠️ *La palette de
+l'application a le même défaut (4 inversions), donc ce n'est pas un argument
+entre les deux : c'est un défaut à corriger dans le rôle.*
+
+**Correctif mesuré** : une rampe bleu → violet → rouge → ambre clair donne
+**0 inversion** et un écart minimal de **0,0086** — et le pire décile s'y lit
+**chaud ET clair**, ce que la monotonie seule ne garantit pas.
+
+**C10 — L'ambre du RAG *est* l'or des axes.** Dans `chart_walkforward_ae`
+(l.346-351), le point AMBRE utilise `COULEURS['or_accent']` — la **même
+couleur** que les lignes de bande et les barres d'erreur d'IC :
+
+```
+  rag_ambre #D4AF37  vs  or_accent #D4AF37
+      ecart de teinte = 0 deg      contraste = 1,00
+```
+
+Un point « AMBRE » a donc exactement la teinte du décor. Il ne se lit pas
+comme un avertissement. ⚠️ **Et c'est le seul point où la palette de
+l'application fait mieux** : son ambre est un orange (`#F39C12`), sémantiquement
+non ambigu. **Le principe entre dans le correctif ; la valeur, non.**
+
+**Correctif mesuré** : `#FFC145` — contraste sur le graphique **6,79 → 8,82**,
+et il sort de l'or (**1,00 → 1,30**).
+
+*Preuves : les rendus PNG et les mesures de contraste WCAG, `preuves/`.*
+
+⚠️ **Ce que je RETIRE de cet exercice** : j'ai voulu mesurer si les trois RAG
+survivent au daltonisme. **Deux implémentations de la même formule m'ont donné
+deux résultats différents.** Je ne publie pas la mesure. **Le principe tient
+sans elle** : un RAG encodé par la **seule couleur** est un risque connu, et le
+remède n'est pas une couleur — c'est un **second canal** (forme du marqueur).
 
 ### Ma mesure fausse, corrigée
 
