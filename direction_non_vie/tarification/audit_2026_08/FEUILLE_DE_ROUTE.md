@@ -17,7 +17,7 @@ l'état d'aujourd'hui.*
 | **S2** | **Rien de fermé ne peut régresser** | 🟡 **18 fermés sur 19 sont épinglés** par un contrôle positif nommé — `a5/C5` ne l'est pas |
 | **S3** | **Un tarif signé se rejoue à l'identique** | ⛔ **1 sur 4** : le tarif déclaratif est reproductible **au bit près** (0,00e+00) ; le tarif DL ne l'est pas (aucun seed) ; le livrable porte un horodatage ; l'empreinte du plan n'a pas de version de schéma |
 | **S4** | **Un seul chemin — ou des chemins également gardés** | ⛔ **5 assemblages dans l'app**, un seul complet ; l'orchestrateur a **0 appelant** ; le chemin agent n'a **aucune couche qualité** |
-| **S5** | **Tout ce qui tarife est atteignable par une gate** | ⛔ `actuaria_app.py` **non gatable par construction** ; **3 modules jamais audités** (1 170 l) |
+| **S5** | **Tout ce qui tarife est atteignable par une gate** | 🟡 `actuaria_app.py` est **importable depuis le lot 0.1** (`07be8c0`) — **29 fonctions atteignables contre 0** ; restent **3 modules jamais audités** (1 170 l) |
 
 ⚠️⚠️ **ET UN CRITÈRE QUI N'EN EST PAS UN : LE NOMBRE DE TESTS.** Mesuré par
 résolution d'import vers un chemin de fichier : **23 882 lignes, 1 940 tests,
@@ -54,15 +54,39 @@ lui-même**.
 classe A sur une fonction que personne n'appelle passe **après** un constat de
 classe B sur le chemin de l'écran.
 
-## RANG 0 — LES PRÉREQUIS · **2 lots**
+## RANG 0 — LES PRÉREQUIS · **2 lots** · ✅ **CLOS le 25/08/2026**
 
 *Ni des constats, ni des correctifs : les conditions sans lesquelles on ne peut
 ni fermer ni prouver.*
 
 | lot | ferme | pourquoi en premier |
 |---|---|---|
-| **0.1 Le garde `__main__`** | *(condition)* | **aucun `if __name__`** : `set_page_config`, l'init du `session_state`, le style, **`render_sidebar()`** et le dispatch s'exécutent à l'import. **34 fonctions, 4 727 lignes, 0 test possible.** Sans lui, tout constat de l'app n'est épinglable que par un test qui **relit du texte** |
-| **0.2 Rétablir le compte de la gate NV** | *(condition)* | **1 395 mesuré, ~1 440 attendu**, non revérifié depuis L0. *On n'ouvre pas quatorze lots sur un compte de référence inconnu* |
+| **0.1 Le garde `__main__`** | ✅ **CLOS** (`07be8c0`) | **SIX** instructions exécutantes au niveau module (et non cinq : `page = st.session_state.page` m'avait échappé). Elles passent sous `main()` + garde ; les **21 affectations de données restent**. Contrôle positif **structurel par AST**, calibré dans les deux sens : il **échouait** avant, il attrape **4 violations plantées sur 4**. **29 fonctions désormais importables, contre 0.** ⚠️ Réserve assumée : il prouve que rien ne s'exécute à l'import, **pas** que l'interface fonctionne |
+| **0.2 Le compte de référence de la gate NV** | ✅ **CLOS** | **`Ran 1403 tests` — `OK (skipped=3)`**, 2 089 s. Voir ci-dessous |
+
+### ⚠️ LOT 0.2 — CE QUE LE COMPTE DE RÉFÉRENCE A TRANCHÉ
+
+```
+  gate direction_non_vie   ->   Ran 1403 tests in 2088.882s
+                                OK (skipped=3)
+```
+
+| | |
+|---|---|
+| **référence établie** | **1403** |
+| mesuré à L0 | 1395 — **+8** |
+| ce que j'annonçais attendre | ~1440 — **−37, mon attente était FAUSSE** |
+
+⚠️ **L'incertitude « 1395 mesuré, ~1440 attendu » est close.** Le ~1440 était
+une **estimation de ma part**, jamais mesurée. *C'est exactement le motif de cet
+audit, appliqué à mon propre chiffre.*
+
+⚠️ **3 tests sont SKIPPÉS, et la sortie ne les nomme pas.** Je ne les identifie
+donc pas et je ne le devine pas. Mesuré en revanche : l'environnement porte
+`openpyxl`, `plotly`, `kaleido`, `python-docx`, `torch`, `xgboost`, `lightgbm`,
+`catboost`, `shap`, `optuna` — et **il lui manque `xlsxwriter`, `weasyprint` et
+`streamlit`**. *Un test sauté est un contrôle qui ne surveille pas : à verser au
+tri.*
 
 ## RANG 1 — LE PRIX SORT FAUX, DEVANT UN ACTUAIRE, AUJOURD'HUI · **3 lots · 10 constats**
 
