@@ -102,7 +102,98 @@ production**. Seules `etat_elasticite` et `sensibilite_tarifaire` sortent, via
 A4 — et **les trois livrables ne les lisent pas**. La sensibilité tarifaire
 n'atteint donc **que l'écran de l'application**.
 
-## ④ UNE ERREUR DE MESURE DE MA PART, CORRIGÉE
+## ④ L'APPLICATION — MES RECOMMANDATIONS, MESURÉES
+
+**Demandées le 24/08. `actuaria_app.py` : 5 181 l · 34 fonctions · 0 classe ·
+91 % du volume dans des fonctions · 699 appels Streamlit · 35 valeurs de
+`besoin` sur les TROIS directions, dont 5 seulement en tarification.**
+
+### ⚠️⚠️ ① JE CONTESTE L'AUDIT DU FICHIER ENTIER
+
+Au taux mesuré de la vague 2 (**1 constat / 66 lignes**), 5 181 lignes
+annoncent **~78 constats** — *plus que toute la vague 2*. Et l'app est l'UI de
+**toute la plateforme** : 20 de ses 35 branches ne sont ni Non-Vie ni
+tarification. Sur 699 appels Streamlit (143 `markdown`, 89 `columns`), la
+majorité de la récolte serait de la **mise en page**.
+
+**Coût estimé : 6 à 8 lots. Rendement en constats qui publient un prix :
+faible.** ⚠️ *C'est le seul endroit de cet audit où je recommande de ne PAS
+lire intégralement — et je le motive par une mesure, pas par le volume.*
+
+### ⚠️⚠️ ② LE FAIT QUI COMMANDE TOUT : L'APP N'EST PAS GATABLE PAR CONSTRUCTION
+
+**Il n'y a aucun `if __name__ == "__main__"`.** Mesuré par AST, ce qui
+s'exécute au niveau module :
+
+```
+  l.15     st.set_page_config(...)
+  l.37     for k, v in {...}.items()      -- initialisation du session_state
+  l.217    st.markdown("<style>...")
+  l.5171   render_sidebar()               <-- ELLE REND
+  l.5173   page = st.session_state.page
+  l.5174   if page == 'accueil': ...      <-- le dispatch
+```
+
+**Importer `actuaria_app` exécute l'application.** Donc **aucune gate ne peut
+la découvrir**, et **les 34 fonctions — 4 727 lignes, 91 % du fichier — ne sont
+atteignables par aucun test.**
+
+⚠️ **Le dépôt le sait déjà et l'a écrit** : `core/test_arrete.py:180` —
+*« `actuaria_app.py` VIT A LA RACINE ET AUCUNE GATE NE LE DECOUVRE »*, et son
+test **relit le fichier au lieu de l'importer**.
+
+> **MA RECOMMANDATION LA PLUS FORTE N'EST PAS UN AUDIT, C'EST UN GARDE.**
+> Mettre ces **cinq instructions** sous `if __name__ == "__main__":` rend les 34
+> fonctions importables et testables. Les 20 `Assign` de données (palette,
+> `AGENTS`, `STRUCTURE`, prompts) restent au niveau module — elles sont pures.
+>
+> ⚠️ **Contrainte connue** : `st.set_page_config` doit rester le **premier**
+> appel Streamlit exécuté — il descend donc dans le `main()`, en tête, pas
+> avant lui.
+>
+> **Un lot, quelques lignes, et il débloque tout le reste** : sans lui, tout
+> constat trouvé dans l'app sera épinglé par un test qui **relit du texte**,
+> jamais par un test qui **exécute**.
+
+### ③ AUDITER L'ASSEMBLAGE, PAS LE FICHIER — périmètre mesuré
+
+| | |
+|---|---|
+| `_executer_analyse` (l.3398) | **799 l** — c'est là que les 5 branches s'assemblent |
+| le bloc de tarification | l.3529 → 4375, **846 l** |
+| **total** | **~980 lignes · 1 lot** |
+
+C'est là que vivent les constats **déjà mesurés** (`prime_ml` → A4 seul,
+`prime_dl` → A5 seul), et ~134 lignes y publient un nombre formaté.
+
+**Le reste de l'app — navigation, mise en page, les 20 branches des autres
+directions — HORS PÉRIMÈTRE, déclaré comme tel.**
+
+### ④ CE QUE JE NE RECOMMANDE PAS
+
+- **Les 11 handlers `except: pass`** : mesurés un par un, ils gardent des
+  boutons de téléchargement et des rendus de graphique. **Bénins.** Un seul
+  mérite un œil : `l.4161` (« *A13 non bloquant* » — un résultat d'agent avalé).
+- **Découper le fichier** : 4 fonctions font 71 % du volume
+  (`page_analyse` 1052 l, `page_resultats` 919, `page_dashboard` 898,
+  `_executer_analyse` 799). Le découpage ne ferme **aucun** constat. *Après le
+  garde, pas avant.*
+
+### ⑤ DEUX DE MES MESURES ÉTAIENT FAUSSES
+
+| ce que j'avais dit | ce que la mesure dit |
+|---|---|
+| « 243 seuils RAG réénoncés dans l'app » | **faux** — ~78 usages de **variables de couleur**, 80 chaînes littérales, et **35 vraies décisions RAG** |
+| « les 4 agents portent leur propre charte » | **faux** — ils portent **celle de l'application**, intégralement (11/11, 12/12, 10/10, 12/12, **0 couleur inconnue**). Voir [`releve_charts_tarif.md`](releve_charts_tarif.md) |
+
+### ⑥ L'ORDRE QUE JE RECOMMANDE POUR L'APP
+
+1. **Le garde `__main__`** — quelques lignes, et il rend testable tout le reste.
+2. **Les branches `prime_ml` / `prime_dl`** — déjà au rang 1 révisé.
+3. **L'audit de l'assemblage** (~980 l, 1 lot).
+4. **Le reste : hors périmètre**, et écrit comme tel dans l'archive.
+
+## ⑤ UNE ERREUR DE MESURE DE MA PART, CORRIGÉE
 
 J'ai d'abord relevé que `capacites` et `exigences_hors_portee` de
 `core/elasticite.py` étaient appelées par `normes/ifrs17/socle/lecture_inventaire.py`.

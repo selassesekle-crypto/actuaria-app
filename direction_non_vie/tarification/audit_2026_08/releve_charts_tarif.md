@@ -92,11 +92,45 @@ tarification, en comparant leurs couleurs à la charte V3 :
 
 Les quatre partagent **la même palette étrangère**, répétée à l'identique :
 `#0F2E52 #1B3A5C #243F6A #2ECC71 #3498DB #8A9AB0 #C9A84C #E74C3C #E8C96A
-#F39C12`. **C'est une seconde charte, dupliquée quatre fois.**
+#F39C12`.
 
-⚠️ **Et la preuve de la copie est dans un caractère** : les agents portent
-`#8A9AB0`, la charte porte `#8A9BB0` — **un `B` déplacé**. Deux gris-bleu
-imperceptiblement différents, dans le même rapport.
+## ⚠️⚠️ COMPLÉTÉ LE 24/08/2026 (SOIR) — CE N'EST PAS « UNE SECONDE CHARTE »
+
+**J'avais écrit « une seconde charte, dupliquée quatre fois ». C'est faux, et
+la vérité est plus simple : c'est LA PREMIÈRE.** Mesuré par AST — la palette
+est déclarée au **niveau module de `actuaria_app.py`, l.23-34** :
+
+```
+  NAVY #0F2E52 · NAVY_L #1B3A5C · NAVY_LL #243F6A · OR #C9A84C · OR_L #E8C96A
+  BLANC #F0F4F8 · GRIS #8A9AB0 · VERT #2ECC71 · AMBRE #F39C12 · ROUGE #E74C3C
+  BLEU #3498DB · VIOLET #9B59B6
+```
+
+Et les quatre agents l'utilisent **intégralement, sans une seule couleur
+étrangère** :
+
+```
+  a3_glm            11 couleurs · 11 de l'APP · 1 de la charte V3 · 0 inconnue
+  a4_ml             12 couleurs · 12 de l'APP · 1 de la charte V3 · 0 inconnue
+  a5_deep_learning  10 couleurs · 10 de l'APP · 1 de la charte V3 · 0 inconnue
+  a6_comparaison    12 couleurs · 12 de l'APP · 1 de la charte V3 · 0 inconnue
+
+  charte V3 ∩ palette de l'app  =  {#F0F4F8}   -- UNE couleur sur douze
+```
+
+⚠️⚠️ **Il n'y a donc pas une source unique et des dérives : il y a DEUX
+CHARTES.** Celle de l'application (12 couleurs, utilisée par l'app **et** les
+quatre agents) et celle de `charts_tarif` (8 couleurs, utilisée par **ses 7
+fonctions et rien d'autre**). Et c'est la seconde qui s'annonce « SOURCE UNIQUE
+du style graphique de la tarification ».
+
+⚠️ **Le gris à un caractère près s'explique enfin** : `GRIS = '#8A9AB0'` dans
+l'application, `'texte_2': '#8A9BB0'` dans la charte. **Deux gris, un
+caractère, deux systèmes** — et les deux sortent dans le même rapport.
+
+⚠️ **Ce que ça change au remède** : ce n'est pas « ramener les agents à la
+charte ». C'est **choisir laquelle des deux est la source**, et le dire une
+fois. *Preuve : `preuves/audit_app.py`.*
 
 ⚠️ Ces agents produisent **32 figures** de leur cru (`go.Figure` : 9 + 7 + 8 +
 8) contre **7** passant par ce module. Seul a6 référence `COULEURS[...]`, trois
