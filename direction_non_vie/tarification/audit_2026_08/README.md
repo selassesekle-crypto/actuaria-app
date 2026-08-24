@@ -185,7 +185,7 @@ n'est fixé : le modèle n'est pas reproductible d'un run à l'autre).
 | fichier | lignes | état | constats |
 |---|---|---|---|
 | [`pipeline_tarifaire.py`](releve_pipeline_tarifaire.md) | 343 | ✅ **RELEVÉ** | **9** · 10 vérifiées bonnes |
-| `core/conformite_reglementaire.py` | 1 318 | ⛔ à lire | les garde-fous genre / fuite / antériorité |
+| [`core/conformite_reglementaire.py`](releve_conformite_reglementaire.md) | 1 318 | ✅ **RELEVÉ** | **13** · 14 vérifiées bonnes |
 | `core/plan_tarifaire.py` | 486 | ⛔ à lire | la source unique |
 | `core/charts_tarif.py` | 476 | ⛔ à lire | les figures publiées |
 | `core/qualite_donnees.py` | 334 | ⛔ à lire | les 4 règles |
@@ -203,6 +203,33 @@ par A1 et son propre commentaire l'assume.
 équilibre technique à **1,0000**, fréquence exactement par unité d'exposition,
 filtre genre qui tient, couche qualité qui bloque vraiment, ajustement
 reproductible **au bit près**.
+
+⚠️⚠️ **LES DEUX CONSTATS GRAVES DU DEUXIÈME RELEVÉ** — et ils ont la forme même
+que ce fichier combat depuis sept cycles d'audit :
+
+- **`controle_effet_execute` atteste sans surveiller.** La propriété dit
+  « exécuté » alors que le contrôle n'a examiné **aucune colonne** : cible
+  absente de `df`, ou cible constante → `detecter_fuites_par_effet` rend `{}`
+  **sans un mot**, la fuite entre dans la matrice X, et aucun WARNING n'est
+  émis. Le module nomme lui-même ce défaut deux fois (bug V6, BLOQUANT B2).
+- **Une variable de TAILLE est écartée comme « la cible déguisée ».**
+  `effectif` et `nb_salaries` sont déclarés légitimes et ne portent aucun
+  marqueur de passé : rien ne les protège. Bascule mesurée **à partir de ~6
+  sinistres/an/contrat** (0,7875 à 4/an — la flotte que le module cite —
+  **0,8332 à 6/an**). Le rapport conclut alors « *Exclusion obligatoire, aucune
+  action* » : c'est le texte même que B7 a jugé **pire que le silence**.
+
+⚠️ **Un point est RENDU À L'ARBITRAGE, non tranché** : le module affirme que le
+genre est interdit en tarification **pour toute branche**, et
+`v1_tarification_deces` sélectionne la table de mortalité **par le sexe**
+(`TH0002`/`TF0002`). Table sexuée licite en provisionnement et IAS 19, ou
+manquement Test-Achats ? **Point de méthode, pas point de code.**
+
+⚠️ **Ce fichier écrit mieux ses limites qu'aucun autre** : il nomme les **11
+fuites qui lui échappent** — vérifié, elles échappent toujours — et il dit que
+son jeton rend le contournement *délibéré*, pas impossible. C'est ce qui rend
+les deux constats ci-dessus notables : ce sont les deux endroits où **il a écrit
+la règle et ne l'a pas tenue sur lui-même**.
 
 ## ⚠️ CE QUI N'A JAMAIS ÉTÉ AUDITÉ — et qui tarife
 
