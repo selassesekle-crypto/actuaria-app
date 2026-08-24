@@ -180,7 +180,10 @@ n'est fixé : le modèle n'est pas reproductible d'un run à l'autre).
 
 ---
 
-## ② LE RELEVÉ DU CHEMIN DÉCLARATIF — en cours
+## ② LE RELEVÉ DU CHEMIN DÉCLARATIF — ✅ **CLOS, 7/7**
+
+**3 883 lignes lues intégralement · 58 constats · 89 affirmations vérifiées
+bonnes · 147 affirmations mesurées.**
 
 | fichier | lignes | état | constats |
 |---|---|---|---|
@@ -190,7 +193,41 @@ n'est fixé : le modèle n'est pas reproductible d'un run à l'autre).
 | [`core/charts_tarif.py`](releve_charts_tarif.md) | 476 | ✅ **RELEVÉ** | **8** · 11 vérifiées bonnes |
 | [`core/qualite_donnees.py`](releve_qualite_donnees.md) | 334 | ✅ **RELEVÉ** | **6** · 14 vérifiées bonnes |
 | [`pipeline_agents.py`](releve_pipeline_agents.md) | 317 | ✅ **RELEVÉ** | **6** · 10 vérifiées bonnes |
-| `mapping_client` · `mapping_llm` · `severite` · `derivations` | 609 | ⛔ à lire | |
+| [`mapping_client` · `mapping_llm` · `severite` · `derivations`](releve_socle_core.md) | 609 | ✅ **RELEVÉ** | **5** · 17 vérifiées bonnes |
+
+### ⚠️ LES DEUX POINTS RENDUS À L'ARBITRAGE — non tranchés, délibérément
+
+1. **Test-Achats et les tables sexuées.** `core/conformite_reglementaire.py`
+   affirme le genre interdit en tarification **pour toute branche**, et
+   `direction_vie_epre/vie/v1_tarification_deces/agent.py:107` sélectionne la
+   table de mortalité **par le sexe** (`TH0002`/`TF0002`). Usage licite en
+   provisionnement et IAS 19, ou manquement ? **Méthode, pas code.**
+2. **L'assiette de l'écrêtement.** `core/severite.py` écrête au quantile du
+   **coût total du contrat** et sa docstring dit « un **sinistre** est dit
+   GRAVE ». Sur une flotte où chaque sinistre vaut 800 €, **12 contrats sont
+   écrêtés sans qu'aucun sinistre ne soit grave** (sévérité 727,27 au lieu de
+   800). La donnée étant au contrat, c'est la seule chose calculable — mais la
+   décomposition `E[S]=E[N]×E[C|N>0]` suppose que l'écrêtement porte sur `C`.
+
+### ⚠️⚠️ CE QUI REVIENT DANS LES SEPT RELEVÉS
+
+**Un contrôle exact sur ce qu'il regarde, et un regard plus étroit que sa
+promesse.** La question à poser à chaque garde-fou est : **quelle est son
+assiette ?**
+
+- `controle_effet_execute` atteste **la fourniture des arguments**, pas
+  l'exécution du contrôle.
+- L'escalade qualité mesure **par type**, jamais l'union — 19,6 % exclus sans
+  blocage.
+- La couche qualité mesure les valeurs **présentes** — 100 % de NaN = 0 anomalie.
+- La garde B9 énumère **quatre noms** et ne voit pas l'interaction.
+- `PlanTarifaire` valide **la cohérence des combinaisons**, jamais
+  l'appartenance des valeurs.
+- Les figures **omettent** sans le dire — 4 troncatures, 7 figures vides.
+
+**Et sa variante la plus coûteuse** : un correctif **correct, testé, et câblé
+nulle part** — `pipeline_agents.py` (0 appelant) et le moteur de mapping
+(0 appelant, mais celui-là le déclare).
 
 ⚠️⚠️ **LE CONSTAT LE PLUS GRAVE DU PREMIER RELEVÉ** : `tarifer()` accepte un
 facteur tarifaire écrit **en toutes lettres** et rend un prix en disant
