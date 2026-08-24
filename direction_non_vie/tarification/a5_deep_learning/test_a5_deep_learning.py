@@ -94,10 +94,12 @@ class TestA5DeepLearning(unittest.TestCase):
         cls.r_a2   = _make_r_a2(4000)
         cls.r_a3   = _make_r_a3(cls.r_a2['dataframe'])   # avec ANCRAGE GLM (mode reel du CANN)
         if TORCH_OK:
-            # REPRODUCTIBILITE : seed numpy (portefeuille, deja dans _make_r_a2)
-            # ET seed torch (init des poids + shuffle du DataLoader). A5 n'en fixe
-            # AUCUN -> sans ces lignes le Gini differe a chaque execution. Un test
-            # doit etre deterministe, pas "probablement dans la bonne fourchette".
+            # ⚠️ CE COMMENTAIRE DISAIT « A5 n'en fixe AUCUN » — CE N'EST PLUS
+            # VRAI depuis le lot 1.1 : A5.run pose lui-meme `torch.manual_seed`
+            # et `np.random.seed` a partir de son parametre `seed` (defaut 42),
+            # et l'inscrit dans son rapport. Le determinisme ne vient plus de
+            # l'exterieur ; ces deux lignes sont conservees pour le TIRAGE DU
+            # PORTEFEUILLE, qui, lui, est fait ici.
             np.random.seed(1)
             torch.manual_seed(1)
             cls.r = cls.agent.run(
@@ -357,6 +359,178 @@ class T_Un_Bon_Modele_Obtient_Un_Bon_Verdict(unittest.TestCase):
             "clé absente de l'historique")
         print(f"    POS-A5c courbes non nulles : "
               f"{ {k: round(v[0], 4) for k, v in traces.items() if v} } ✅")
+
+
+def _tenseur_de_l_arret_anticipe(source):
+    """Le tenseur que chaque boucle d'entraînement lit pour choisir
+    `best_state`. Relevé PAR AST, sur la ligne `pred_val = modele(...)`."""
+    import ast as _ast
+    trouves = {}
+    arbre = _ast.parse(source)
+    for fn in _ast.walk(arbre):
+        if not isinstance(fn, _ast.FunctionDef):
+            continue
+        if fn.name not in ('_calibrer_cann', '_calibrer_tabnet'):
+            continue
+        for n in _ast.walk(fn):
+            if (isinstance(n, _ast.Assign) and len(n.targets) == 1
+                    and isinstance(n.targets[0], _ast.Name)
+                    and n.targets[0].id == 'pred_val'
+                    and isinstance(n.value, _ast.Call)):
+                trouves[fn.name] = [_ast.unparse(a) for a in n.value.args]
+    return trouves
+
+
+class POS_A5e_LArretAnticipeNeLitPasLeTest(unittest.TestCase):
+    """⚠️ CONTRÔLE POSITIF DU LOT 1.1 — constat `a5/C6`.
+
+    AVANT LE CORRECTIF : il n'existait que TRAIN et TEST. `val_loss` était
+    calculée sur `X_test_t`, et `best_state` retenu dessus. Le Gini test
+    publié était donc le MAXIMUM sur les époques — une valeur SÉLECTIONNÉE sur
+    le jeu qu'elle prétend estimer, pas une performance hors échantillon. Le
+    module citait pourtant Kaufman et al. (2012) sur la fuite, et l'évitait
+    correctement pour le scaler.
+
+    ⚠️⚠️ L'OPTIMISME, MESURÉ à seed constant (donc imputable au seul C6) :
+
+        CANN     0,3019 -> 0,2998    -0,0021   (-0,7 %)
+        TabNet   0,2269 -> 0,1970    -0,0299   (-13,2 %)
+
+    Le CANN bougeait peu, il est ancré sur un GLM gelé. **TabNet publiait un
+    Gini 13 % trop haut.**
+    """
+
+    CHEMIN = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'agent.py')
+
+    def _source(self):
+        with open(self.CHEMIN, encoding='utf-8') as f:
+            return f.read()
+
+    def test_les_deux_boucles_valident_sur_X_val(self):
+        t = _tenseur_de_l_arret_anticipe(self._source())
+        self.assertEqual(set(t), {'_calibrer_cann', '_calibrer_tabnet'},
+                         f"boucle(s) d'arret anticipe introuvable(s) : {set(t)}")
+        for nom, args in t.items():
+            self.assertNotIn(
+                'X_test_t', args,
+                f"{nom} regle son arret anticipe sur le TEST ({args}) — le "
+                f"Gini publie redevient une valeur SELECTIONNEE sur le jeu "
+                f"qu'elle pretend estimer")
+            self.assertIn('X_val_t', args,
+                          f"{nom} ne valide pas sur X_val ({args})")
+        print(f"    POS-A5e arret anticipe sur la VALIDATION : {t} ✅")
+
+    def test_le_controle_ATTRAPE_un_retour_au_test(self):
+        """⚠️ LE SECOND SENS. Sans lui, ce contrôle pourrait devenir aveugle si
+        quelqu'un recâblait la boucle — c'est le motif que cet audit poursuit."""
+        plante = self._source().replace('pred_val = modele(X_val_t)',
+                                        'pred_val = modele(X_test_t)')
+        self.assertNotEqual(plante, self._source(), 'la violation n a pas ete plantee')
+        t = _tenseur_de_l_arret_anticipe(plante)
+        self.assertIn('X_test_t', t['_calibrer_tabnet'],
+                      'le releve ne voit pas le retour au test')
+        print('    POS-A5e violation plantee (retour au test) : ATTRAPEE ✅')
+
+    def test_les_trois_jeux_existent_et_sont_disjoints(self):
+        if not TORCH_OK:
+            self.skipTest("PyTorch absent")
+        from direction_non_vie.tarification.a5_deep_learning.agent import (
+            AgentA5DeepLearning,
+        )
+        np.random.seed(5)
+        r_a2 = _make_r_a2(2000)
+        r = AgentA5DeepLearning(models_path='/tmp', audit_path='/tmp',
+                                verbose=False).run(
+            result_a2=r_a2, result_a3=_make_r_a3(r_a2['dataframe']),
+            plan=_PLAN_AUTO, col_cible='nb_sinistres', n_epochs=3,
+            batch_size=128, generer_graphiques=False)
+        rap = r.get('rapport', {})
+        n_tr, n_va, n_te = rap.get('n_train'), rap.get('n_val'), rap.get('n_test')
+        for nom, v in (('n_train', n_tr), ('n_val', n_va), ('n_test', n_te)):
+            self.assertIsNotNone(v, f"{nom} n'est pas trace dans le rapport")
+            self.assertGreater(v, 0, f"{nom} est vide")
+        total = n_tr + n_va + n_te
+        self.assertAlmostEqual(n_te / total, 0.20, delta=0.02,
+                               msg=f"test = {n_te}/{total}, attendu ~20 %")
+        self.assertAlmostEqual(n_va / total, 0.12, delta=0.02,
+                               msg=f"validation = {n_va}/{total}, attendu ~12 %")
+        print(f"    POS-A5e trois jeux : train {n_tr} · val {n_va} · "
+              f"test {n_te}  ({n_tr/total:.0%}/{n_va/total:.0%}/{n_te/total:.0%}) ✅")
+
+
+class POS_A5d_LeCalibrageEstReproductible(unittest.TestCase):
+    """⚠️ CONTRÔLE POSITIF DU LOT 1.1 — constat `a5/C7`.
+
+    MESURÉ AVANT LE CORRECTIF, trois exécutions strictement identiques :
+
+        CANN    0,3027 · 0,3018 · 0,3033   étendue 0,0015  (0,5 %)
+        TabNet  0,2158 · 0,2379 · 0,2420   étendue 0,0262  (11 % DE LA MOYENNE)
+
+    Le CANN bougeait peu — il est ancré sur un GLM gelé. **TabNet variait de
+    11 %**, et c'est sur ce Gini qu'A6 ARBITRE : deux exécutions du même
+    portefeuille pouvaient retenir deux modèles différents. Le dépôt écrit
+    pourtant ailleurs « Exigence S2 : tout calcul actuariel doit être
+    reproductible ».
+
+    ⚠️ CE TEST SE MESURE DANS LES DEUX SENS. Même seed → identique ; seed
+    différent → différent. Sans le second sens, un `seed` qui ne serait jamais
+    lu passerait le premier.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        if not TORCH_OK:
+            return
+        from direction_non_vie.tarification.a5_deep_learning.agent import (
+            AgentA5DeepLearning,
+        )
+        np.random.seed(3)
+        cls.r_a2 = _make_r_a2(1500)
+        cls.r_a3 = _make_r_a3(cls.r_a2['dataframe'])
+
+        def _run(seed):
+            return AgentA5DeepLearning(
+                models_path='/tmp', audit_path='/tmp', verbose=False).run(
+                result_a2=cls.r_a2, result_a3=cls.r_a3, plan=_PLAN_AUTO,
+                col_cible='nb_sinistres', n_epochs=8, batch_size=128,
+                generer_graphiques=False, seed=seed)
+
+        cls.a = _run(7)
+        cls.b = _run(7)
+        cls.c = _run(8)
+
+    def setUp(self):
+        if not TORCH_OK:
+            self.skipTest("PyTorch absent")
+
+    @staticmethod
+    def _ginis(r):
+        return {m: v.get('gini_test') for m, v in r.get('metriques', {}).items()}
+
+    def test_meme_seed_meme_calibrage(self):
+        ga, gb = self._ginis(self.a), self._ginis(self.b)
+        self.assertEqual(
+            ga, gb,
+            f"deux executions au MEME seed divergent : {ga} vs {gb} — le "
+            f"calibrage n'est pas reproductible")
+        print(f"    POS-A5d meme seed → identique : {ga} ✅")
+
+    def test_seed_DIFFERENT_donne_un_calibrage_DIFFERENT(self):
+        """⚠️ LE SECOND SENS : sans lui, un `seed` jamais lu passerait le
+        premier test — deux exécutions seraient identiques par hasard de
+        l'implémentation, pas par déclaration."""
+        ga, gc = self._ginis(self.a), self._ginis(self.c)
+        self.assertNotEqual(
+            ga, gc,
+            f"changer le seed ne change RIEN ({ga}) — le parametre n'est pas lu")
+        print(f"    POS-A5d seed 7 vs 8 → different : {ga} vs {gc} ✅")
+
+    def test_le_seed_est_INSCRIT_dans_le_rapport(self):
+        """Un actuaire qui rejoue un tarif doit pouvoir retrouver le seed :
+        ce qui n'est que dans le code n'existe pas pour lui."""
+        self.assertEqual(self.a.get('rapport', {}).get('seed'), 7,
+                         "le seed n'est pas trace dans le rapport")
+        print("    POS-A5d le seed est inscrit au rapport ✅")
 
 
 if __name__ == '__main__':

@@ -380,9 +380,10 @@ d'entrée du prix, et rien ne la garde.
 
 | | |
 |---|---|
-| ferme | `a5/C6` `a5/C7` |
+| ferme | ✅ `a5/C6` `a5/C7` — **FERMÉS au lot 1.1** |
 | ce que ça ferme | l'**early stopping réglé sur le jeu de TEST** (une fuite) · **aucun seed** : deux exécutions, deux modèles, deux prix |
 | pourquoi ensemble | même fichier, même passe |
+| ce que la fermeture a mesuré | l'optimisme caché par la fuite : **TabNet −13,2 %** (Gini 0,2269 → 0,1970), CANN −0,7 % · l'irreproductibilité : **11 % d'étendue** sur TabNet. Détail et contrôles positifs dans [`releve_a5_deep_learning.md`](releve_a5_deep_learning.md) |
 
 ---
 

@@ -426,6 +426,7 @@ class AgentA5DeepLearning:
         batch_size:     int = 512,
         learning_rate:      float = 1e-3,
         generer_graphiques: bool  = True,
+        seed:               int   = 42,
     ) -> Dict[str, Any]:
         """
         Pipeline Deep Learning complet.
@@ -501,6 +502,33 @@ class AgentA5DeepLearning:
         df      = result_a2['dataframe'].copy()
         rapport = {'etapes': [], 'alertes': []}
 
+        # ── REPRODUCTIBILITÉ — LE SEED EST DÉCLARÉ, PAS SUBI ─────────────────
+        # ⚠️⚠️ MESURÉ AVANT CE CORRECTIF : trois exécutions strictement
+        # identiques rendaient TabNet à 0,2158 · 0,2379 · 0,2420 — une étendue
+        # de 0,0262, soit **11 % de la moyenne**. Le CANN, lui, ne bougeait que
+        # de 0,5 % (il est ancré sur un GLM gelé). Or c'est sur ce Gini qu'A6
+        # ARBITRE : deux exécutions du même portefeuille pouvaient retenir deux
+        # modèles différents, et le dépôt écrit ailleurs « Exigence S2 : tout
+        # calcul actuariel doit être reproductible ».
+        #
+        # ⚠️ Le seed est un PARAMÈTRE, pas une constante cachée : il est
+        # déclaré, surchargeable, et inscrit dans les métriques — un actuaire
+        # qui rejoue un tarif doit pouvoir le retrouver. Il est posé ICI, dans
+        # `run()`, et jamais au niveau module : un module qui fixe l'aléa du
+        # process à l'import est le défaut a1/C6, sous un autre nom.
+        #
+        # ⚠️⚠️ CE QU'IL GOUVERNE, ET CE QU'IL NE GOUVERNE PAS. Il gouverne
+        # l'initialisation des poids et le brassage des batches. Il ne
+        # gouverne PAS le découpage des jeux : `_preparer_donnees` garde un
+        # `random_state=42` fixe, DÉLIBÉRÉMENT. Une partition qui suivrait le
+        # seed changerait le jeu de TEST d'une exécution à l'autre — comparer
+        # deux seeds ne voudrait alors plus rien dire, puisqu'on ne mesurerait
+        # plus sur le même échantillon. La partition est une propriété du
+        # PROTOCOLE, l'aléa d'optimisation est une propriété du CALIBRAGE.
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        rapport['seed'] = int(seed)
+
         # Device (GPU si disponible, sinon CPU)
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         logger.info(f"Device : {device}")
@@ -508,9 +536,13 @@ class AgentA5DeepLearning:
         try:
             # ── PRÉPARATION ───────────────────────────────────────────────────
             logger.info(f"[{audit_id}] Préparation données")
-            X_train, X_test, y_train, y_test, feature_names, expo_train, expo_test = \
+            (X_train, X_val, X_test, y_train, y_val, y_test, feature_names,
+             expo_train, expo_val, expo_test) = \
                 self._preparer_donnees(df, sous_branche, col_cible, col_exposition, plan)
             rapport['etapes'].append('preparation')
+            rapport['n_train'] = len(X_train)
+            rapport['n_val']   = len(X_val)
+            rapport['n_test']  = len(X_test)
             rapport['n_features']    = len(feature_names)
             rapport['feature_names'] = feature_names
 
@@ -529,6 +561,7 @@ class AgentA5DeepLearning:
                     feature_names, device, n_epochs, batch_size, learning_rate,
                     result_a3=result_a3,
                     expo_train=expo_train, expo_test=expo_test,
+                    X_val=X_val, y_val=y_val, expo_val=expo_val,
                 )
                 self.modeles['cann']   = res_cann['modele']
                 self.metriques['cann'] = res_cann['metriques']
@@ -551,7 +584,8 @@ class AgentA5DeepLearning:
             logger.info(f"[{audit_id}] Calibration TabNet ({n_epochs} époques)")
             res_tabnet = self._calibrer_tabnet(
                 X_train, X_test, y_train, y_test,
-                feature_names, device, n_epochs, batch_size, learning_rate
+                feature_names, device, n_epochs, batch_size, learning_rate,
+                X_val=X_val, y_val=y_val,
             )
             self.modeles['tabnet']   = res_tabnet['modele']
             self.metriques['tabnet'] = res_tabnet['metriques']
@@ -784,28 +818,63 @@ class AgentA5DeepLearning:
             1e-6
         )
 
-        # Coupure temporelle (80/20) ou aléatoire si colonne absente
-        # Kaufman et al. (2012) : le split doit précéder toute normalisation.
+        # ── TROIS JEUX, ET PAS DEUX ──────────────────────────────────────────
+        # ⚠️⚠️ CORRECTIF DU LOT 1.1 — constat `a5/C6`. Avant : il n'existait
+        # que TRAIN et TEST, et l'early stopping choisissait `best_state` sur
+        # la perte calculée **sur le TEST**. Le Gini test publié était donc le
+        # MAXIMUM sur les époques, pas une estimation hors échantillon — et le
+        # module citait pourtant Kaufman et al. (2012) sur la fuite, qu'il
+        # évitait correctement pour le scaler et pas pour l'arrêt.
+        #
+        # Désormais : 80/20 train+val / test, puis 85/15 à l'intérieur du
+        # premier — soit **68 % train · 12 % validation · 20 % test**. La
+        # validation est découpée AVANT le scaler, comme le test, pour la même
+        # raison et la même référence.
         if _col_temp is not None:
-            n_train = int(len(X) * 0.80)
-            X_raw_train, X_raw_test = X[:n_train],    X[n_train:]
-            y_train,     y_test     = y[:n_train],    y[n_train:]
-            expo_train,  expo_test  = expo[:n_train], expo[n_train:]
+            n_tv = int(len(X) * 0.80)
+            X_raw_tv, X_raw_test = X[:n_tv],    X[n_tv:]
+            y_tv,     y_test     = y[:n_tv],    y[n_tv:]
+            expo_tv,  expo_test  = expo[:n_tv], expo[n_tv:]
+            # Coupure TEMPORELLE aussi pour la validation : la valider sur un
+            # tirage aléatoire du passé alors que le test est le futur ferait
+            # arrêter l'entraînement sur un régime que le test ne partage pas.
+            n_fit = int(len(X_raw_tv) * 0.85)
+            X_raw_train, X_raw_val = X_raw_tv[:n_fit], X_raw_tv[n_fit:]
+            y_train,     y_val     = y_tv[:n_fit],     y_tv[n_fit:]
+            expo_train,  expo_val  = expo_tv[:n_fit],  expo_tv[n_fit:]
         else:
-            X_raw_train, X_raw_test, y_train, y_test, expo_train, expo_test = \
+            X_raw_tv, X_raw_test, y_tv, y_test, expo_tv, expo_test = \
                 train_test_split(
                     X, y, expo, test_size=0.20, random_state=42
                 )
+            X_raw_train, X_raw_val, y_train, y_val, expo_train, expo_val = \
+                train_test_split(
+                    X_raw_tv, y_tv, expo_tv, test_size=0.15, random_state=42
+                )
 
-        # Normalisation StandardScaler — ajusté sur train, appliqué sur test
-        # Réf. : Kaufman et al. (2012), ACM TKDD 6(4) — «Leakage in Data Mining»
+        # ⚠️ UNE VALIDATION TROP PETITE NE SE TAIT PAS. Sous ce seuil, l'arrêt
+        # anticipé se règle sur du bruit — on le DIT plutôt que de revenir en
+        # silence au test, ce qui rétablirait la fuite qu'on vient de fermer.
+        if len(X_raw_val) < 30:
+            logger.warning(
+                f"[A5] Jeu de VALIDATION de {len(X_raw_val)} ligne(s) : "
+                f"l'early stopping s'y règle sur du bruit. Le calibrage reste "
+                f"honnête (aucune fuite du test), mais l'arrêt anticipé n'est "
+                f"pas fiable sur un portefeuille de cette taille."
+            )
+
+        # Normalisation StandardScaler — ajusté sur TRAIN seul, appliqué au
+        # reste. Réf. : Kaufman et al. (2012), ACM TKDD 6(4) — «Leakage in
+        # Data Mining». La validation est traitée comme le test : elle ne
+        # participe PAS à l'ajustement du scaler.
         scaler = StandardScaler()
         X_train = scaler.fit_transform(X_raw_train).astype(np.float32)
+        X_val   = scaler.transform(X_raw_val).astype(np.float32)
         X_test  = scaler.transform(X_raw_test).astype(np.float32)
         self.scalers['standard'] = scaler
 
-        return (X_train, X_test, y_train, y_test, feature_names,
-                expo_train, expo_test)
+        return (X_train, X_val, X_test, y_train, y_val, y_test, feature_names,
+                expo_train, expo_val, expo_test)
 
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -826,6 +895,11 @@ class AgentA5DeepLearning:
         result_a3:   Optional[Dict] = None,  # GLM Tweedie calibré par A3 (Wüthrich)
         expo_train:  Optional[np.ndarray] = None,
         expo_test:   Optional[np.ndarray] = None,
+        # ⚠️ LOT 1.1 — l'early stopping se règle sur CES jeux, jamais sur le
+        # test (constat `a5/C6`). Voir `_preparer_donnees`.
+        X_val:       np.ndarray | None = None,
+        y_val:       np.ndarray | None = None,
+        expo_val:    np.ndarray | None = None,
     ) -> Dict:
         """
         Calibre le CANN (Combined Actuarial Neural Network).
@@ -882,6 +956,20 @@ class AgentA5DeepLearning:
         Réf. : Wüthrich & Merz (2019), "Editorial: Yes, we CANN!",
                ASTIN Bulletin 49(1).
         """
+        # ⚠️⚠️ LE JEU DE VALIDATION EST EXIGE, JAMAIS DEDUIT. Un repli
+        # silencieux -- « si X_val est absent, on valide sur le test » --
+        # rouvrirait exactement la fuite que le lot 1.1 ferme (constat
+        # `a5/C6`), et il le ferait SANS QUE PERSONNE NE LE VOIE. Le depot
+        # applique deja cette regle a `col_cible` : un defaut que personne
+        # n'utilise et qui contredit la methode est un piege, pas une
+        # commodite.
+        if X_val is None or y_val is None:
+            raise ValueError(
+                "_calibrer_cann exige X_val et y_val : l'arret anticipe se regle sur un "
+                "jeu de VALIDATION distinct, jamais sur le test. Les trois jeux "
+                "sont produits par _preparer_donnees (68 / 12 / 20)."
+            )
+
         n_features = X_train.shape[1]
 
         # ── Construction offset (log-exposition), séparé des features ────────
@@ -1022,9 +1110,22 @@ class AgentA5DeepLearning:
         )
         train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
 
+        # ⚠️ `y_test` N'EST VOLONTAIREMENT PAS TENSORISE : plus aucune ligne de
+        # cette fonction n'a besoin de lire la CIBLE du test. Ne pas le
+        # recreer -- c'est par ce tenseur que la fuite `a5/C6` passait.
         X_test_t      = torch.FloatTensor(X_test).to(device)
-        y_test_t      = torch.FloatTensor(y_test).to(device)
         offset_test_t = torch.FloatTensor(offset_test_np).to(device)
+
+        # ⚠️⚠️ L'ARRET ANTICIPE SE REGLE SUR LA VALIDATION, JAMAIS SUR LE TEST
+        # (constat `a5/C6`). Ces trois tenseurs sont ceux que la boucle lit
+        # pour choisir `best_state` ; `X_test_t` ne sert plus qu'a la mesure
+        # FINALE, une seule fois, apres l'entrainement.
+        offset_val_np = (np.log(np.maximum(expo_val, 1e-6)).astype(np.float32)
+                         if (expo_val is not None and offset_train_np.any())
+                         else np.zeros(len(X_val), dtype=np.float32))
+        X_val_t      = torch.FloatTensor(X_val).to(device)
+        y_val_t      = torch.FloatTensor(y_val).to(device)
+        offset_val_t = torch.FloatTensor(offset_val_np).to(device)
 
         # Entraînement avec early stopping
         best_val_loss = float('inf')
@@ -1059,9 +1160,9 @@ class AgentA5DeepLearning:
             # ── VALIDATION ────────────────────────────────────────────────────
             modele.eval()
             with torch.no_grad():
-                pred_val = modele(X_test_t, offset_test_t)
+                pred_val = modele(X_val_t, offset_val_t)
                 pred_pos = torch.clamp(pred_val, min=1e-7)
-                y_pos    = torch.clamp(y_test_t, min=1e-7)
+                y_pos    = torch.clamp(y_val_t, min=1e-7)
                 val_loss = torch.mean(
                     2 * (y_pos * torch.log(y_pos / pred_pos) - (y_pos - pred_pos))
                 ).item()
@@ -1132,12 +1233,30 @@ class AgentA5DeepLearning:
         device:  torch.device,
         n_epochs: int,
         batch_size: int,
-        lr: float
+        lr: float,
+        # ⚠️ LOT 1.1 — l'early stopping se règle sur CE jeu, jamais sur le
+        # test (constat `a5/C6`). Voir `_preparer_donnees`.
+        X_val: np.ndarray | None = None,
+        y_val: np.ndarray | None = None,
     ) -> Dict:
         """
         Calibre TabNet avec mécanisme d'attention séquentielle.
         Même logique d'entraînement que CANN.
         """
+        # ⚠️⚠️ LE JEU DE VALIDATION EST EXIGE, JAMAIS DEDUIT. Un repli
+        # silencieux -- « si X_val est absent, on valide sur le test » --
+        # rouvrirait exactement la fuite que le lot 1.1 ferme (constat
+        # `a5/C6`), et il le ferait SANS QUE PERSONNE NE LE VOIE. Le depot
+        # applique deja cette regle a `col_cible` : un defaut que personne
+        # n'utilise et qui contredit la methode est un piege, pas une
+        # commodite.
+        if X_val is None or y_val is None:
+            raise ValueError(
+                "_calibrer_tabnet exige X_val et y_val : l'arret anticipe se regle sur un "
+                "jeu de VALIDATION distinct, jamais sur le test. Les trois jeux "
+                "sont produits par _preparer_donnees (68 / 12 / 20)."
+            )
+
         n_features = X_train.shape[1]
 
         modele = TabNetSimple(
@@ -1161,8 +1280,14 @@ class AgentA5DeepLearning:
         )
         train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
 
+        # ⚠️ `y_test` n'est volontairement pas tensorise -- voir `_calibrer_cann`.
         X_test_t = torch.FloatTensor(X_test).to(device)
-        y_test_t = torch.FloatTensor(y_test).to(device)
+
+        # ⚠️⚠️ L'ARRET ANTICIPE SE REGLE SUR LA VALIDATION, JAMAIS SUR LE TEST
+        # (constat `a5/C6`) -- meme correctif que le CANN. `X_test_t` ne sert
+        # plus qu'a la mesure FINALE, apres l'entrainement.
+        X_val_t = torch.FloatTensor(X_val).to(device)
+        y_val_t = torch.FloatTensor(y_val).to(device)
 
         best_val_loss = float('inf')
         patience_cnt  = 0
@@ -1189,9 +1314,9 @@ class AgentA5DeepLearning:
 
             modele.eval()
             with torch.no_grad():
-                pred_val = modele(X_test_t)
+                pred_val = modele(X_val_t)
                 pred_pos = torch.clamp(pred_val, min=1e-7)
-                y_pos    = torch.clamp(y_test_t, min=1e-7)
+                y_pos    = torch.clamp(y_val_t, min=1e-7)
                 val_loss = torch.mean(
                     2 * (y_pos * torch.log(y_pos / pred_pos) - (y_pos - pred_pos))
                 ).item()

@@ -54,6 +54,15 @@ La légende dit « Les barres bleue/dorée doivent dépasser la ligne pointillé
 ```
 La docstring annonce « la perte de **validation** ». Il n'y a pas de jeu de validation : les poids retenus sont ceux qui minimisent la perte **sur le test**, et le Gini test publié est donc optimiste. Le module cite pourtant Kaufman et al. (2012) sur la fuite — et l'évite correctement pour le scaler.
 
+> ✅ **FERMÉ — lot 1.1.** Trois jeux désormais : **68 % train · 12 % validation · 20 % test**, la validation découpée **avant** le scaler comme le test. Les deux calibrateurs **exigent** `X_val`/`y_val` (`raise ValueError`) : aucun repli silencieux vers le test ne peut rouvrir la fuite. `y_test` n'est même plus tensorisé.
+> **⚠️ L'OPTIMISME QUE CETTE FUITE CACHAIT, mesuré à seed constant :**
+> ```
+>   CANN     0.3019 -> 0.2998    -0.0021    -0.7 %
+>   TabNet   0.2269 -> 0.1970    -0.0299   -13.2 %
+> ```
+> Le CANN bouge peu, il est ancré sur un GLM gelé. **TabNet publiait un Gini 13 % trop haut.** Contrôle positif `POS_A5e` (3 tests), relevé **par AST** sur la ligne `pred_val = modele(...)`, avec **violation plantée** — un retour au test est attrapé.
+> ⚠️ **POS-A5a survit** : le DL reste devant le GLM (0,2998 > 0,1400). La correction **baisse le chiffre sans inverser le verdict**.
+
 ### B — Affirme plus que le code ne porte (1)
 
 **C7 — Aucun seed n'est fixé : le modèle n'est pas reproductible.**
@@ -62,6 +71,16 @@ La docstring annonce « la perte de **validation** ». Il n'y a pas de jeu de va
   deux runs IDENTIQUES -> Gini TabNet 0.0432 puis 0.0649
 ```
 Le fichier de test le note lui-même : *« A5 n'en fixe AUCUN → sans ces lignes le Gini diffère à chaque exécution »* — et le compense de l'extérieur. Le dépôt invoque ailleurs « Exigence S2 : tout calcul actuariel doit être reproductible ».
+
+> ✅ **FERMÉ — lot 1.1.** `run(seed=42)` : paramètre **déclaré, surchargeable, et inscrit au rapport** — un actuaire qui rejoue un tarif retrouve le seed. Posé dans `run()`, **jamais au niveau module** (ce serait le défaut `a1/C6` sous un autre nom).
+> **⚠️ CE QUE LA NON-REPRODUCTIBILITÉ COÛTAIT**, trois exécutions strictement identiques :
+> ```
+>   CANN    0.3027 · 0.3018 · 0.3033   etendue 0.0015    0.5 %
+>   TabNet  0.2158 · 0.2379 · 0.2420   etendue 0.0262     11 %
+> ```
+> **C'est sur ce Gini qu'A6 ARBITRE** : deux exécutions du même portefeuille pouvaient retenir deux modèles différents. Après correctif, étendue **0,0000**.
+> ⚠️ **CE QUE LE SEED NE GOUVERNE PAS**, et c'est délibéré : la **partition** des jeux garde un `random_state=42` fixe. Une partition qui suivrait le seed changerait le jeu de test d'une exécution à l'autre — comparer deux seeds ne voudrait plus rien dire. *La partition est une propriété du protocole, l'aléa d'optimisation une propriété du calibrage.*
+> Contrôle positif `POS_A5d` (3 tests), **dans les deux sens** : même seed → identique, **seed 7 vs 8 → différent** (sans ce second sens, un `seed` jamais lu passerait le premier).
 
 ### C — Imprécis ou daté (2)
 

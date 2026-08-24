@@ -260,6 +260,14 @@ class TestCANNGeleVsStatsmodels(unittest.TestCase):
         agent.scalers["standard"] = scaler
         result_a3 = {"success": True, "modeles": {"tweedie": glm}}
 
+        # ⚠️ LOT 1.1 — `_calibrer_cann` EXIGE desormais un jeu de VALIDATION
+        # distinct : l'arret anticipe ne se regle plus sur le test (constat
+        # `a5/C6`). Ce test tourne a n_epochs=0 -- aucun entrainement, donc la
+        # validation n'est JAMAIS lue -- mais on la fournit quand meme, decoupee
+        # sur le TRAIN et jamais sur le test, pour ne pas donner l'exemple
+        # inverse. **CE QUE CE TEST PROUVE EST INCHANGE** : CANN a l'epoque 0
+        # reproduit le GLM Tweedie de statsmodels.
+        j = int(len(Xstd_tr) * 0.85)
         # n_epochs=0 → aucun entraînement → résiduel reste nul → CANN ≡ GLM gelé
         res = agent._calibrer_cann(
             X_train=Xstd_tr, X_test=Xstd_te,
@@ -268,6 +276,8 @@ class TestCANNGeleVsStatsmodels(unittest.TestCase):
             device=torch.device("cpu"),
             n_epochs=0, batch_size=256, lr=1e-3,
             result_a3=result_a3, expo_train=ex_tr, expo_test=ex_te,
+            X_val=Xstd_tr[j:], y_val=y_tr[j:].astype(np.float32),
+            expo_val=ex_tr[j:],
         )
         modele = res["modele"]
         met    = res["metriques"]

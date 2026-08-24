@@ -187,13 +187,17 @@ Ils sont **dans les relevés, avec leur mesure**. Ce qui suit n'est qu'un index
 | [A2](releve_a2_preprocessing.md) | C3 à C16 — WoE/Target Encoding annoncés, Winsorisation IQR annoncée, `STRATEGIES_IMPUTATION` jamais lu, une moyenne sous la clé `medianes`, … |
 | [A3](releve_a3_glm.md) | C4 IC 95 % faux · C5 Lorenz tracée non mesurée · C6 Gini Tweedie nul · C7 Gini incomparables · C9 scorecard · C10 « 3 modèles », 2 lus · C11 `VARS_GLM` · C12 `0.05` en dur · C13 figure jamais produite · C14 p-value fabriquée · C15 repli cassé · C16 · C17 · C18 |
 | [A4](releve_a4_ml.md) | C5 Lorenz · C6 « 6/8 » · C7 « ML ×8 » (12 mentions, 6 modèles) · C8 scorecard · C9 ROUGE inatteignable · C10 deux bases de rang · C12 · C13 |
-| [A5](releve_a5_deep_learning.md) | C4 « Convergence » exponentielle analytique · **C6 early stopping réglé sur le jeu de TEST** · **C7 aucun seed : non reproductible** · C8 · C9 |
+| [A5](releve_a5_deep_learning.md) | C4 « Convergence » exponentielle analytique · ~~C6 early stopping réglé sur le jeu de TEST~~ ✅ · ~~C7 aucun seed~~ ✅ (**fermés au lot 1.1**) · C8 · C9 |
 | [A6](releve_a6_comparaison.md) | C3 « Score par profil » n'affiche pas le score · C5 conformité affirmée sans condition · C6 chaîne muette · C7 « 3 meilleurs modèles » non utilisés · C8 plafond de vraisemblance · C9 · C10 |
 | [services](releve_services_rapport.md) | C1 « Arrêté : » publie l'horodatage · C2 référence Wüthrich · C3 « 8 modèles » dans trois livrables · C4 `h5_deviance` absente du tableau · C5 · C6 · C7 · C8 · C9 |
 
-⚠️ **Deux ouverts d'A5 méritent d'être lus en premier** : `C6` (l'early
-stopping se règle sur le jeu de TEST — c'est une fuite) et `C7` (aucun seed
-n'est fixé : le modèle n'est pas reproductible d'un run à l'autre).
+✅ **Les deux d'A5 qui étaient à lire en premier sont FERMÉS (lot 1.1)** : `C6`
+(l'early stopping se réglait sur le jeu de TEST — une fuite) et `C7` (aucun
+seed : le modèle n'était pas reproductible d'un run à l'autre).
+⚠️ **Et la fermeture a chiffré ce que la fuite cachait** : le Gini test de
+TabNet passe de **0,2269 à 0,1970 — il était publié 13,2 % trop haut**. Le
+CANN ne perd que 0,7 %, il est ancré sur un GLM gelé. *Ce chiffre-là n'était
+pas dans le constat : il fallait fermer pour l'obtenir.*
 
 ---
 
