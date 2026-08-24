@@ -53,11 +53,29 @@ l'application.** Mesuré maintenant, par AST :
 
 ⚠️⚠️ **L'APPLICATION ASSEMBLE LA CHAÎNE DE CINQ FAÇONS. UNE SEULE EST
 COMPLÈTE.** Les quatre autres n'ont ni couche qualité, ni challenger, ni
-arbitrage — et **deux d'entre elles écrivent leur résultat dans
-`resultats["principal"]`**, c'est-à-dire dans ce que l'actuaire lit.
+arbitrage.
 
-⚠️⚠️ **ET LA PIRE EST `prime_dl`.** Elle publie un prix **Deep Learning** comme
-résultat principal, et A5 porte **deux constats de classe A OUVERTS** :
+> ⚠️⚠️ **CORRECTION DU 25/08/2026 — CETTE CARTE A DIT FAUX ICI.** Elle écrivait
+> que *« deux d'entre elles écrivent leur résultat dans `resultats["principal"]`,
+> c'est-à-dire dans ce que l'actuaire lit »*. **Mesuré : `resultats["principal"]`
+> est écrit à 36 endroits** — c'est le **slot générique de chaque page** (A7, A8,
+> A9, Vie, Santé…), relu en `agent_results[<prénom de l'agent>]`. `prime_glm` et
+> `selection` y écrivent aussi. **La clé ne distingue rien.**
+> *J'avais lu l'étiquette `principal` au lieu de mesurer qui écrit dedans —
+> le motif même que cet audit poursuit, sur mon propre document.*
+>
+> ⚠️ **ET LA CORRECTION DURCIT LE CONSTAT.** Le défaut n'est pas qu'une clé soit
+> écrasée : c'est que **l'arbitrage est une entrée de menu comme les autres**.
+> `selection` (A3 + A6) est au MÊME niveau que `prime_ml` et `prime_dl` — un
+> utilisateur qui ne la choisit pas obtient un prix d'une seule famille de
+> modèles, sans jamais rien voir manquer. *L'arbitrage n'est pas contourné :
+> il est facultatif.*
+
+⚠️⚠️ **ET LA PIRE ÉTAIT `prime_dl`.** Elle tarife en **Deep Learning** sans
+challenger ni arbitrage, et A5 portait **deux constats de classe A** —
+✅ **fermés au lot 1.1 le 25/08/2026** (voir la fiche A5). Ce qui reste
+d'ouvert ici n'est donc plus la fuite du modèle, mais **le fait que cette page
+existe et sorte un prix sans passer par A6** :
 
 | | |
 |---|---|
@@ -478,8 +496,10 @@ d'entrée du prix, et rien ne la garde.
 
 **L'argument ci-dessous reste valable pour le CÂBLAGE de l'orchestrateur.** Il
 ne l'est **pas** pour les **branches de l'application**, que je n'avais pas
-mesurées : `prime_dl` et `prime_ml` publient un prix non arbitré, et A5 porte
-deux constats de classe A ouverts. **Elles remontent au rang 1.**
+mesurées : `prime_dl` et `prime_ml` publient un prix non arbitré, et A5 portait
+deux constats de classe A — ✅ **fermés au lot 1.1**. **Elles remontent au
+rang 1**, et ce qui y reste ouvert est une **question de conception**, pas un
+correctif : *quel prix a le droit de sortir de cette application.*
 
 ## POURQUOI LE CÂBLAGE DE L'ORCHESTRATEUR RESTE AU RANG 6
 
