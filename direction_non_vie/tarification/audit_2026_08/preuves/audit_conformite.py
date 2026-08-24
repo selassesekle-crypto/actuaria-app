@@ -10,7 +10,8 @@ import warnings
 
 sys.path.insert(0, r'C:\Users\selse\actuaria-app')
 warnings.filterwarnings('ignore')
-logging.disable(logging.CRITICAL)   # les WARNING sont mesures separement (M11)
+if __name__ == '__main__':
+    logging.disable(logging.CRITICAL)   # les WARNING sont mesures separement (M11)
 
 import numpy as np
 import pandas as pd
@@ -250,7 +251,8 @@ for lib, kw in (
 # ══════════════════════════════════════════════════════════════════════════════
 titre("M10 -- LA JOURNALISATION EST-ELLE REELLE ? (traçabilite ACPR)")
 # ══════════════════════════════════════════════════════════════════════════════
-logging.disable(logging.NOTSET)
+if __name__ == '__main__':
+    logging.disable(logging.NOTSET)
 import io as _io
 flux = _io.StringIO()
 h = logging.StreamHandler(flux)
@@ -264,6 +266,7 @@ sortie = flux.getvalue()
 for marque in ('C-236/09', 'data leakage', 'LISTE BLANCHE', "ANTI-FUITE PAR L'EFFET"):
     print(f"    {'[BON    ]' if marque in sortie else '[CONSTAT]'} "
           f"le log porte {marque!r} : {marque in sortie}")
-logging.disable(logging.CRITICAL)
+if __name__ == '__main__':
+    logging.disable(logging.CRITICAL)
 print()
 print(f"  {len(sortie.splitlines())} ligne(s) de WARNING emises.")

@@ -11,7 +11,8 @@ import warnings
 
 sys.path.insert(0, r'C:\Users\selse\actuaria-app')
 warnings.filterwarnings('ignore')
-logging.disable(logging.CRITICAL)
+if __name__ == '__main__':
+    logging.disable(logging.CRITICAL)
 
 import numpy as np
 import pandas as pd

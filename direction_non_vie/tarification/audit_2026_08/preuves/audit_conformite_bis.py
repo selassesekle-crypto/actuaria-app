@@ -11,7 +11,8 @@ import warnings
 
 sys.path.insert(0, r'C:\Users\selse\actuaria-app')
 warnings.filterwarnings('ignore')
-logging.disable(logging.CRITICAL)
+if __name__ == '__main__':
+    logging.disable(logging.CRITICAL)
 
 import numpy as np
 import pandas as pd
@@ -48,23 +49,32 @@ SUPP = ['zorglub']
 print("  Le module ecrit l.870 : « Un controle dont on ne verifie pas")
 print("  l'execution n'est pas un controle. »  Trois appels :")
 print()
-for lib, cible in (("cible presente dans df ", 'nb_sinistres'),
-                   ("cible ABSENTE de df    ", 'cible_qui_nexiste_pas'),
-                   ("cible CONSTANTE        ", 'cible_constante')):
-    flux = io.StringIO()
-    logging.disable(logging.NOTSET)
-    lg = logging.getLogger(f'h1.{cible}')
-    lg.handlers[:] = []
-    h = logging.StreamHandler(flux)
-    lg.addHandler(h)
-    lg.setLevel(logging.WARNING)
-    mx = C.construire_matrice_x(COLS, contexte='H1', df=df, col_cible=cible,
-                                logger_agent=lg, facteurs_supplementaires=SUPP)
-    logging.disable(logging.CRITICAL)
-    fuite_vue = 'zorglub' not in list(mx)
-    avert = "ANTI-FUITE PAR L'EFFET" in flux.getvalue() and 'NON' in flux.getvalue()
-    print(f"  {lib} controle_effet_execute = {str(mx.controle_effet_execute):5s}  "
-          f"fuite ecartee = {str(fuite_vue):5s}  avertissement = {avert}")
+# ⚠️ CETTE MESURE VIT SOUS LA GARDE `__main__`, et pas dans une fonction
+# appelee au niveau module : elle bascule le journal global (NOTSET puis
+# CRITICAL) pour capturer les WARNING, et la cacher dans un helper aurait
+# satisfait le detecteur F5 SANS corriger le defaut -- le module aurait
+# continue d'eteindre le journal a l'import. Un controle battu par la forme
+# est exactement ce que cet audit poursuit.
+if __name__ == '__main__':
+    for lib, cible in (("cible presente dans df ", 'nb_sinistres'),
+                       ("cible ABSENTE de df    ", 'cible_qui_nexiste_pas'),
+                       ("cible CONSTANTE        ", 'cible_constante')):
+        flux = io.StringIO()
+        logging.disable(logging.NOTSET)
+        lg = logging.getLogger(f'h1.{cible}')
+        lg.handlers[:] = []
+        h = logging.StreamHandler(flux)
+        lg.addHandler(h)
+        lg.setLevel(logging.WARNING)
+        mx = C.construire_matrice_x(COLS, contexte='H1', df=df, col_cible=cible,
+                                    logger_agent=lg, facteurs_supplementaires=SUPP)
+        logging.disable(logging.CRITICAL)
+        fuite_vue = 'zorglub' not in list(mx)
+        avert = ("ANTI-FUITE PAR L'EFFET" in flux.getvalue()
+                 and 'NON' in flux.getvalue())
+        print(f"  {lib} controle_effet_execute = "
+              f"{str(mx.controle_effet_execute):5s}  "
+              f"fuite ecartee = {str(fuite_vue):5s}  avertissement = {avert}")
 
 print()
 print("  -> LE MEME OBJET dit « controle execute » dans les trois cas.")
