@@ -1,5 +1,13 @@
 # CLASSEMENT DES 40 CONSTATS D'A3, A4 ET A5 — ce qui décide, mesuré
 
+> ⚠️⚠️ **CE DOCUMENT EST DÉPASSÉ SUR UN POINT ESSENTIEL — LIRE
+> [`REMESURE_A3_A4_A5.md`](REMESURE_A3_A4_A5.md) D'ABORD.**
+> Il classait les constats **sur ce que les relevés disaient**, sans re-mesurer
+> le code. La re-mesure du 25/08 établit que **15 des 40 sont déjà fermés**,
+> dont `a3/C1` — le seul que ce document désignait comme déplaçant un euro.
+> *Ce qui reste valable ici : la mesure du banc (quel champ atteint un
+> livrable) et la distinction des surfaces non outillées.*
+
 **Établi le 25/08/2026, une fois le banc opérationnel.** Ce document **ne ferme
 aucun constat** : il dit, pour chacun, **ce qui doit décider de son rang**.
 

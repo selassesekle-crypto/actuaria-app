@@ -154,6 +154,19 @@ leurs ~40 constats** · puis les **11 latents**.
 restent À INSTRUIRE, pas en constats** : le banc ne prouve pas qu'aucune autre
 forme d'entrée ne les publie ailleurs.
 
+## ⚠️⚠️ RE-MESURE DES 40 (25/08) — [REMESURE_A3_A4_A5.md](REMESURE_A3_A4_A5.md)
+
+**15 des 40 sont DÉJÀ FERMÉS**, corrigés dans le code et jamais reportés dans
+les relevés — dont **`a3/C1`**, le seul que j'avais désigné comme déplaçant un
+euro. **21 ouverts, 4 à lire.**
+
+⚠️⚠️ **ET LA RE-MESURE ELLE-MÊME A FAILLI MENTIR** : un premier passage par
+sondes `regex` a rendu **deux faux « fermés »** (`a3/C5`, `a4/C5` — la courbe de
+Lorenz analytique est toujours là, ma regex était fausse). *Une absence de
+`grep` n'est pas une absence de défaut.* **Chaque « fermé » est confirmé par une
+SECONDE méthode** ; ceux qui ne le sont pas sont marqués « à lire », jamais
+fermés.
+
 ## ⚠️⚠️ CLASSEMENT DES 40 CONSTATS D'A3/A4/A5 (25/08) — [CLASSEMENT_A3_A4_A5.md](CLASSEMENT_A3_A4_A5.md)
 
 Le banc a été appliqué. **Il tranche 12 constats sur 40**, et le dire est le
