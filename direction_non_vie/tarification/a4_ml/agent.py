@@ -192,6 +192,12 @@ COLS_A_EXCLURE_ML = [
 # Utilisé pour peupler la clé 'famille' du classement (absente jusqu'ici,
 # colonne vide dans l'export Excel A4 et dans le classement retourné par
 # _classer_modeles ; seul A6, dans son agrégat indépendant, la renseignait).
+#: ⚠️ SEUIL QUI DECIDE D'UN STATUT REGLEMENTAIRE — il etait un litteral
+#: `0.10` enfoui dans une branche de `_calculer_statut_rag` (constat
+#: `a4/C9`). Un chiffre qui fait la difference entre AMBRE et ROUGE se
+#: nomme, sinon personne ne peut le discuter.
+SEUIL_GINI_ML_EXPLOITABLE = 0.10
+
 FAMILLES_MODELES_ML = {
     'gbm':             'Arbres / Boosting',
     'xgboost':         'Arbres / Boosting',
@@ -1264,6 +1270,9 @@ class AgentA4ML:
     ) -> None:
         """Calibre séquentiellement les 6 modèles ML de la boucle ci-dessous."""
 
+        # ⚠️ La liste des candidats est la SOURCE du denominateur publie
+        # (constat `a4/C6`) : elle est enregistree au rapport, jamais
+        # recopiee sous forme de litteral dans un commentaire.
         modeles_a_calibrer = [
             ('gbm',              self._creer_gbm,           True),
             ('xgboost',          lambda: self._creer_xgboost(col_cible), True),
@@ -1302,6 +1311,7 @@ class AgentA4ML:
                 self.modeles[nom]   = modele
                 self.metriques[nom] = metriques
                 rapport['modeles_testes'].append(nom)
+                rapport['modeles_candidats'] = len(modeles_a_calibrer)
 
                 logger.info(
                     f"  {nom.upper():<15} "
@@ -1732,7 +1742,16 @@ class AgentA4ML:
         VERT  : Meilleur ML améliore le GLM de >5% ET pas d'overfitting
                 ET interprétabilité SHAP disponible
         AMBRE : Amélioration < 5% OU overfitting OU SHAP absent
-        ROUGE : Aucun modèle ML ne bat le GLM
+        ROUGE : aucun ML ne bat le GLM **ET** le meilleur Gini ML
+                reste <= SEUIL_GINI_ML_EXPLOITABLE.
+                ⚠️⚠️ LA SECONDE CONDITION MANQUAIT — constat `a4/C9`.
+                La phrase disait « aucun modele ML ne bat le GLM », et le
+                code rend AMBRE des que le meilleur Gini ML depasse le
+                seuil, meme sans battre le GLM. **C'est defendable** — un
+                ML qui discrimine honnetement sans battre le GLM n'est pas
+                sans valeur — mais la docstring ne le disait pas, et le
+                seuil etait un litteral invisible dans une branche qui
+                decide d'un statut reglementaire.
 
         Réf. : ACPR-2022-P-01 §4.3 — interprétabilité obligatoire
                AI Act 2025 Art. 13 — transparence systèmes IA haut risque
@@ -1765,7 +1784,7 @@ class AgentA4ML:
         # Réf. : ACPR-2022-P-01 §4.3 ; AI Act 2025 Art. 13
         if amelioration > 0.05 and not overfitting and not shap_absent:
             return 'VERT'
-        elif amelioration > 0 or (amelioration <= 0 and meilleur_gini_ml > 0.10):
+        elif amelioration > 0 or (amelioration <= 0 and meilleur_gini_ml > SEUIL_GINI_ML_EXPLOITABLE):
             return 'AMBRE'
         else:
             return 'ROUGE'
@@ -1792,10 +1811,16 @@ class AgentA4ML:
 
         # ── NIVEAU 1 : LECTURE ────────────────────────────────────────────────
         nb_modeles = len(rapport.get('modeles_testes', []))
+        # ⚠️⚠️ LE DENOMINATEUR ETAIT LE LITTERAL `8` — constat `a4/C6`.
+        # Mesure : la liste des candidats en porte **6**, le catalogue
+        # `FAMILLES_MODELES_ML` en declare **10**, et un run reel en teste
+        # **6**. Le `8` ne correspondait a AUCUN des trois. *Le numerateur
+        # etait deja derive ; seul le denominateur etait invente.*
+        nb_candidats = rapport.get('modeles_candidats') or nb_modeles
         niveau1 = (
             f"{emoji} ML TARIFICATION — {statut_rag}\n"
             f"Sous-branche    : {sous_branche}\n"
-            f"Modèles testés  : {nb_modeles}/8\n"
+            f"Modèles testés  : {nb_modeles}/{nb_candidats}\n"
             f"\n"
             f"CLASSEMENT (Gini décroissant) :\n"
         )
@@ -3005,7 +3030,8 @@ class AgentA4ML:
                 yaxis=dict(tickfont=dict(color=BLANC,size=10), showgrid=False),
                 barmode="overlay", height=260,
                 annotations=[dict(
-                    text="💡 3 ✅ = modèle validé, prêt pour la production actuarielle.",
+                    text=(f"💡 {len(items)} ✅ = modèle validé, prêt pour la "
+                          f"production actuarielle."),
                     xref="paper", yref="paper", x=0.01, y=-0.22,
                     font=dict(color=GRIS, size=9), showarrow=False, align="left"
                 )],

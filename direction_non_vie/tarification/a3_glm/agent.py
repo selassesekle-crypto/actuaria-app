@@ -1676,7 +1676,17 @@ class AgentA3GLM:
         """
         Statut RAG basé sur la qualité des modèles GLM.
 
-        VERT  : Gini Poisson ≥ 0.15 ET convergence des 3 modèles
+        VERT  : Gini Poisson >= 0.15 ET convergence de DEUX modeles
+                (Poisson et Gamma). ⚠️⚠️ CE N'EST PAS « LES TROIS » —
+                constat `a3/C10`. La docstring annoncait la convergence
+                des TROIS modeles ; le code lit `metriques['poisson']` et
+                `metriques['gamma']`, jamais le Tweedie.
+                ⚠️ ET ON NE CORRIGE PAS DANS L'AUTRE SENS : faire entrer
+                le Tweedie dans le statut importerait son Gini, dont le
+                constat `a3/C6` etablit qu'il **vaut 0 partout**. On
+                aligne donc la phrase sur le code, pas l'inverse — et le
+                jour ou `a3/C6` sera ferme, la question de l'inclure se
+                reposera. *Deux constats couples : l'ordre est contraint.*
         AMBRE : Gini ∈ [0.05, 0.15] ou 1 modèle non convergé
         ROUGE : Gini < 0.05 ou 2+ modèles non convergés
         """
@@ -2810,16 +2820,32 @@ class AgentA3GLM:
 
         # G4 — Scorecard validation GLM
         try:
+            # ⚠️⚠️ LA SCORECARD SE CONSTRUIT DEPUIS CE QUI EST CALCULÉ — constat
+            # `a3/C9`. Elle portait une liste ÉCRITE EN DUR de 4 entrées, une
+            # légende annonçant « 3 ✅ », et le module calcule **5 hypothèses** :
+            # `h5_deviance` — une PLAFONNANTE — n'apparaissait nulle part.
+            # Trois comptes différents pour la même chose, dans le même
+            # graphique. On les dérive donc tous du dictionnaire de validation.
+            #
+            # ⚠️ ET CELA SUPPRIME AUSSI UN FAUX VERT : la ligne H4 lisait
+            # `.get("h4_stabilite", {}).get("statut", "VERT")` — une hypothèse
+            # ABSENTE s'affichait VERTE. En construisant depuis les clés
+            # réellement présentes, une hypothèse absente **n'apparaît plus**
+            # au lieu d'apparaître verte. *Le constat `a3/C3` reste ouvert sur
+            # le calcul lui-même ; ce que ce correctif ferme, c'est la
+            # scorecard qui l'affichait.*
+            _LIBELLES_H = {
+                "h1_poisson":     "H1 — Distribution Poisson",
+                "h2_homosc":      "H2 — Homoscédasticité résidus",
+                "h3_ajustement":  "H3 — Qualité ajustement Gini",
+                "h4_stabilite":   "H4 — Stabilité relativités",
+                "h5_deviance":    "H5 — Déviance résiduelle",
+            }
             items = [
-                ("H1 — Distribution Poisson", val_glm["h1_poisson"]["statut"],
-                 val_glm["h1_poisson"]["message"], val_glm["h1_poisson"]["conseil"]),
-                ("H2 — Homoscédasticité résidus", val_glm["h2_homosc"]["statut"],
-                 val_glm["h2_homosc"]["message"], val_glm["h2_homosc"]["conseil"]),
-                ("H3 — Qualité ajustement Gini", val_glm["h3_ajustement"]["statut"],
-                 val_glm["h3_ajustement"]["message"], val_glm["h3_ajustement"]["conseil"]),
-                ("H4 — Stabilité relativités", val_glm.get("h4_stabilite", {}).get("statut", "VERT"),
-                 val_glm.get("h4_stabilite", {}).get("message", ""),
-                 val_glm.get("h4_stabilite", {}).get("conseil", "")),
+                (_LIBELLES_H.get(cle, cle), val.get("statut", "AMBRE"),
+                 val.get("message", ""), val.get("conseil", ""))
+                for cle, val in val_glm.items()
+                if isinstance(val, dict) and "statut" in val
             ]
             fig4 = go.Figure()
             for nom, statut, msg, conseil in items:
@@ -2846,7 +2872,8 @@ class AgentA3GLM:
                 yaxis=dict(tickfont=dict(color=BLANC, size=10), showgrid=False),
                 barmode="overlay", height=260,
                 annotations=[dict(
-                    text="💡 3 ✅ = GLM validé, défendable devant l'ACPR et l'actuaire désigné.",
+                    text=(f"💡 {len(items)} ✅ = GLM validé, défendable devant "
+                          f"l'ACPR et l'actuaire désigné."),
                     xref="paper", yref="paper", x=0.01, y=-0.22,
                     font=dict(color=GRIS, size=9), showarrow=False, align="left"
                 )],

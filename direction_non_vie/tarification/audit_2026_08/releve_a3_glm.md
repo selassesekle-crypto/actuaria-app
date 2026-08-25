@@ -49,7 +49,12 @@ Les vraies bornes existent (`ic95_low`/`ic95_high`) et ne sont pas passées.
 
 **C8 — H3 : le seuil annoncé n'est pas le seuil appliqué.** La docstring dit « Gini ∈ [0.08, 0.15] → acceptable ⚠️ ». Mesuré : `0.12 → VERT`. Le code a **quatre** bandes, la docstring **trois**.
 
+> ✅ **FERMÉ.** La scorecard se construit désormais **depuis les hypothèses réellement calculées** (`val_glm.items()`), et la légende dérive de `len(items)`. Mesuré : **5 hypothèses calculées → 5 listées → légende « 5 ✅ »** (avant : légende 3, liste 4, calculées 5 — *trois comptes pour la même chose dans le même graphique*). `h5_deviance`, une plafonnante, apparaît enfin.
+> ⚠️ **Effet de bord voulu** : la ligne H4 lisait `.get("h4_stabilite", {}).get("statut", "VERT")` — une hypothèse ABSENTE s'affichait VERTE. En construisant depuis les clés présentes, elle **n'apparaît plus** au lieu d'apparaître verte. *`a3/C3` reste ouvert sur le CALCUL ; ce qui est fermé, c'est la scorecard qui l'affichait.*
+
 **C9 — La scorecard annonce « 3 ✅ = GLM validé », liste 4 items, et 5 hypothèses sont calculées.** H5 (déviance) — une plafonnante — **n'apparaît pas** dans la scorecard.
+
+> ✅ **FERMÉ — en alignant la PHRASE sur le CODE, et je dis pourquoi ce sens-là.** Faire entrer le Tweedie dans le statut importerait son Gini, dont **`a3/C6` établit qu'il vaut 0 partout** : on ferait décider un verdict réglementaire par une métrique connue comme cassée. ⚠️ **Deux constats couplés, l'ordre est contraint** — le jour où `a3/C6` sera fermé, la question de l'inclure se reposera. Un test épingle l'absence du Tweedie dans le statut et échouera si on l'y met.
 
 **C10 — `_calculer_statut_rag` annonce « convergence des 3 modèles », en lit 2** : `['gamma', 'poisson']`. Le Tweedie n'entre jamais dans le statut.
 

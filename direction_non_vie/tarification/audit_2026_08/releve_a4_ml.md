@@ -46,13 +46,19 @@ Cause : `m.get('gini', 0)` — la clé du classement est `gini_test`. Les couleu
 
 **C5 — La courbe de Lorenz est tracée, pas mesurée** — même formule qu'A3 (`t ** (1/(1+2g))`). Ici s'ajoute une contradiction d'axe : l'abscisse annonce « % contrats (**du moins au plus risqué**) » alors que le Gini trie **décroissant**, le plus risqué d'abord.
 
+> ✅ **FERMÉ.** Le dénominateur était le littéral `8`, qui ne correspondait **à aucun des trois comptes réels** : 6 candidats dans `modeles_a_calibrer`, 10 dans le catalogue `FAMILLES_MODELES_ML`, 6 réellement testés. Il dérive maintenant de la **liste des candidats**, enregistrée au rapport. Mesuré : « Modèles testés : **6/6** ». *Le numérateur était déjà dérivé ; seul le dénominateur était inventé.*
+
 **C6 — « Modèles testés : 6/8 »** publié dans le commentaire actuaire, alors que la boucle n'en déclare que **6**. Le dénominateur est faux, pas le numérateur.
 
 ### B — Affirme plus que le code ne porte (4)
 
 **C7 — « ML ×8 » : 12 mentions de « 8 » dans le module, 6 modèles réels.** La boucle et sa propre docstring disent 6 ; le bloc `__main__` en liste 6. L'en-tête annonce nommément **RandomForest, GAM et RégQuantile**, qui ne sont dans aucune boucle — **GAM n'existe nulle part**, pas même dans `FAMILLES_MODELES_ML`.
 
+> ✅ **FERMÉ** — même geste qu'`a3/C9` : la légende dérive de `len(items)`. Mesuré : 4 hypothèses → légende « 4 ✅ ».
+
 **C8 — La scorecard annonce « 3 ✅ = modèle validé » et liste 4 items.** Même défaut qu'A3.
+
+> ✅ **FERMÉ — la docstring porte enfin la SECONDE condition**, et le seuil devient `SEUIL_GINI_ML_EXPLOITABLE = 0.10`, nommé au niveau module. ⚠️ **La règle du code est défendable** — un ML qui discrimine honnêtement sans battre le GLM n'est pas sans valeur — **mais elle était invisible** : un littéral enfoui dans une branche qui décide d'un statut réglementaire. *Un chiffre qui fait la différence entre AMBRE et ROUGE se nomme, sinon personne ne peut le discuter.*
 
 **C9 — Le statut RAG ROUGE annoncé n'est pas atteint.** La docstring dit « ROUGE : Aucun modèle ML ne bat le GLM ». Mesuré : ML 0.14 contre GLM 0.30 → **AMBRE**, parce que la seconde branche accepte `meilleur_gini_ml > 0.10`.
 
