@@ -58,25 +58,37 @@ précisément ce que M1 interdit.
 écritures**, c'est le slot générique de chaque page. *Un audit antérieur avait
 lu cette étiquette au lieu de mesurer qui écrit dedans.*
 
-### ⚠️ MON AJOUT À L'EXIGENCE — l'assiette de l'avertissement
+### ⚠️⚠️ M1-bis — L'ASSIETTE DE L'AVERTISSEMENT EST L'OBJET RÉSULTAT, PAS L'ÉCRAN
 
-L'exigence dit « **l'écran** affiche toujours ». Je recommande de l'étendre, et
-voici pourquoi : **un message d'écran n'est pas une propriété du résultat.**
+**Arbitré par Selasse le 25/08/2026, retenu sans réserve** : *« un contrôleur
+lit le document, pas l'écran »*.
 
-La question que cet audit pose à tout garde-fou est **« sur quelle ASSIETTE ? »**.
-Si l'assiette de l'avertissement est l'écran, alors **tout ce qui sort de
-l'écran en est exempt** : l'export PDF, le rapport d'équipe, la piste d'audit,
-et tout agent en aval qui relit le résultat. Le CAC ne lit pas l'écran de
-l'actuaire — il lit le livrable.
+**Un message d'écran n'est pas une propriété du résultat.** La question que cet
+audit pose à tout garde-fou est **« sur quelle ASSIETTE ? »**. Si l'assiette de
+l'avertissement est l'écran, alors **tout ce qui sort de l'écran en est
+exempt** : l'export PDF, le rapport d'équipe, la piste d'audit, et tout agent
+en aval qui relit le résultat.
 
-> **RECOMMANDATION : l'absence de comparaison doit être portée par L'OBJET
-> RÉSULTAT lui-même**, pas seulement affichée. Un résultat non comparé doit
-> être *structurellement* reconnaissable — de sorte qu'un livrable qui ne
-> mentionnerait pas sa non-comparaison soit **impossible à produire**, et non
-> pas seulement déconseillé.
+> **EXIGENCE : l'absence de comparaison est portée par L'OBJET RÉSULTAT
+> lui-même**, pas seulement affichée. Un résultat non comparé doit être
+> *structurellement* reconnaissable, **de sorte qu'un livrable sans cette
+> mention devienne IMPOSSIBLE À PRODUIRE** — et non pas seulement déconseillé.
+
+**Ce que cela veut dire concrètement, pour que la conception ne puisse pas s'en
+échapper** :
+
+| ce qui est exigé | ce qui ne suffit PAS |
+|---|---|
+| l'état « comparé / non comparé » est un **champ du résultat**, renseigné à la production | un `st.warning()`, une bannière, un texte d'écran |
+| **tout producteur de livrable lit ce champ** — PDF, rapport d'équipe, piste d'audit, API | « le gabarit PDF affiche la mention » |
+| un livrable produit à partir d'un résultat non comparé **et qui ne porte pas la mention doit échouer**, pas se dégrader en silence | un défaut à `comparé` quand le champ est absent |
+| l'état est **non falsifiable par omission** : absent ⇒ traité comme non comparé | l'absence de champ traitée comme « ancien format, on laisse passer » |
 
 *Un avertissement dont l'assiette est l'écran est un contrôle qui atteste sans
-surveiller.*
+surveiller.* ⚠️ **Et un défaut permissif sur ce champ rouvrirait exactement le
+trou que M1 ferme** — c'est le même raisonnement qui a fait rendre `X_val`
+obligatoire dans A5 au lot 1.1 : *un défaut que personne n'utilise et qui
+contredit la méthode est un piège, pas une commodité.*
 
 ---
 
@@ -142,13 +154,14 @@ Si ces ordres de grandeur se confirment, **le chemin critique est
 A1→A2→A3→A5, et A5 le domine seul.** Paralléliser A4 avec A5 économise au
 mieux la durée d'A4 — **environ 45 s sur 4 à 6 minutes**.
 
-> **MA RECOMMANDATION, ET ELLE CONTESTE L'ORDRE INSCRIT :** ① est la piste la
-> plus sûre, mais probablement **la moins rentable des trois ici**, parce que
-> le temps n'est pas réparti — il est concentré dans A5. **L'ordre de
-> préférence ①②③ devrait être re-arbitré APRÈS la mesure, pas avant.**
-> C'est d'ailleurs ce que l'exigence elle-même demande : *mesurer, pas
-> deviner.* Je n'ai pas mesuré les durées — **c'est hors périmètre du lot
-> 1.1** — j'ai seulement mesuré **la structure qui les contraint**.
+> **CONTESTATION RETENUE PAR SELASSE LE 25/08/2026 :** ① est la piste la plus
+> sûre, mais probablement **la moins rentable des trois ici**, parce que le
+> temps n'est pas réparti — il est concentré dans A5.
+> ⚠️⚠️ **L'ORDRE DE PRÉFÉRENCE ①②③ SE RE-ARBITRE APRÈS LA MESURE, PAS AVANT —
+> et cette exigence-là ne se lève pas.** C'est ce que l'exigence demande
+> elle-même : *mesurer, pas deviner.* Les durées ci-dessus sont **déclarées et
+> ne doivent pas être prises pour acquises** ; seule **la structure** a été
+> mesurée (par AST), pas les temps.
 
 ⚠️ **Et une piste ④ que la mesure fera probablement apparaître d'elle-même** :
 si A5 domine, la question utile n'est plus « comment paralléliser les
