@@ -235,6 +235,29 @@ COLS_FAMILLE_CIBLE_EXCEPTIONS = [
 # ainsi nommée se révélait tout de même être la cible déguisée, le CONTRÔLE PAR
 # L'EFFET la rattraperait (corrélation ≥ 0,80) : la règle de nom donne le sens,
 # l'effet donne la vérité.
+#
+# ⚠️⚠️ CE QUE CETTE RÈGLE DE PRINCIPE CORRIGE, ET CE QU'ELLE NE CORRIGE PAS —
+# PRÉCISION DU LOT 1.3 (constat `conformite/C3`). Le texte ci-dessus se lisait
+# comme si la destruction des six variables avait cessé. Mesuré, elle n'a cessé
+# que sur UN garde-fou :
+#
+#   garde-fou n°3 (anti-fuite par le nom)  ->  6/6 SURVIVENT   <- corrigé ici
+#   garde-fou n°1 (liste blanche codée)    ->  0/6 PASSENT     <- NON corrigé
+#
+# `MARQUEURS_EXPERIENCE_PASSEE` n'est pas consulté par `est_facteur_autorise` :
+# `charge_sinistres_n1` n'y échoue pas *parce qu'elle ressemble à une fuite*,
+# mais parce que `charge` n'est tout simplement pas un facteur déclaré. Élargir
+# la liste blanche à « tout ce qui porte un marqueur de passé » y ferait entrer
+# `prime_anterieure` — la prime précédente, que le plan interdit explicitement
+# comme facteur (voir `Comportement` dans `core/plan_tarifaire.py`). **On ne
+# l'élargit donc pas.**
+#
+# ⚠️ ET CE N'EST PAS UN DÉFAUT DE PRODUCTION : mesuré, les six appelants de
+# production passent tous `plan=`, et sur ce chemin la liste blanche EST le plan
+# signé — une variable d'expérience passée déclarée au plan entre dans la
+# matrice X (`exclusions = {}`). Le garde-fou n°1 codé en dur ne gouverne que le
+# chemin rétrocompat. **Le remède n'est pas d'allonger la liste : c'est de
+# déclarer un plan.**
 MARQUEURS_EXPERIENCE_PASSEE = (
     'anterieur', 'antecedent', 'historique', 'precedent',
     '_passe', '_n1', '_n2', '_n3', '_3ans', '_5ans',
@@ -428,6 +451,40 @@ MOTS_METRIQUES_INTERDITS = (
 )
 
 
+def mots_metriques_du_suffixe(suffixe: str) -> list:
+    """Les mots métriques présents dans un suffixe de one-hot, **en MOTS
+    ENTIERS** — jamais en sous-chaîne.
+
+    ⚠️⚠️ CORRECTIF DU LOT 1.3 — constat `conformite/C5`. Le test était
+    `any(m in suffixe for m in MOTS_METRIQUES_INTERDITS)`, c'est-à-dire une
+    recherche de SOUS-CHAÎNE. Mesuré sur des modalités réelles de RC Pro :
+
+        secteur_activite_imprimerie   ->  'imprimerie' contient 'prime'
+        secteur_activite_couture      ->  'couture'    contient 'cout'
+        secteur_activite_primeur      ->  'primeur'    contient 'prime'
+
+    **Trois secteurs d'activité légitimes détruits parce qu'un mot métrique se
+    cachait DANS un autre mot.** Une modalité de one-hot est composée de mots
+    séparés par `_` : on teste donc les MOTS, pas les lettres.
+
+    ⚠️ CE QUE CE CORRECTIF NE CHANGE PAS, ET C'EST VOULU : `garantie_montant_regle`
+    (le BLOQUANT B6, Gini 0,0709 → 0,9222) reste détruit — `montant` et `regle`
+    y sont des mots entiers. **Le second sens de ce contrôle est l'objet même du
+    lot** : réparer un faux positif sans ouvrir un vrai négatif.
+
+    ⚠️ RESTE CONNU, NON CORRIGÉ ICI, ET LE MOTIF LE DIT MAINTENANT :
+    `garantie_perte_exploitation` et `garantie_perte_financiere` — la garantie
+    CENTRALE de la RC Pro — portent `perte` en mot entier et restent écartées
+    **sur ce chemin**. Ce n'est pas réparable par le nom : `perte_exploitation`
+    est un péril, `perte_moyenne` et `perte_annuelle` sont des montants, et rien
+    dans le nom ne les sépare (mesuré). Le remède est le PLAN SIGNÉ — sur le
+    chemin déclaratif, la colonne déclarée passe (mesuré : `exclusions = {}`) —
+    et c'est désormais ce que le motif d'exclusion indique.
+    """
+    jetons = set(suffixe.split('_'))
+    return [m for m in MOTS_METRIQUES_INTERDITS if m in jetons]
+
+
 def est_facteur_autorise(nom: str) -> bool:
     """
     True si la colonne est (ou dérive d')un facteur tarifaire déclaré légitime.
@@ -483,11 +540,45 @@ def est_facteur_autorise(nom: str) -> bool:
             # contenant 'sinistre'. Le rejeter recréerait exactement le BLOQUANT
             # B5 — c'est ce qu'a fait ma première version, et l'invariant INV-1c
             # l'a attrapée immédiatement.
-            if (any(m in suffixe for m in MOTS_METRIQUES_INTERDITS)
+            if (mots_metriques_du_suffixe(suffixe)
                     and not _est_experience_passee(suffixe)):
                 continue   # 'garantie_montant_regle' → suffixe 'montant_regle'
             return True
     return False
+
+
+def motif_mot_metrique(nom: str) -> str | None:
+    """Si `nom` dérive d'un facteur AUTORISÉ mais a été écarté à cause d'un mot
+    métrique dans son suffixe, rend le motif EXACT. Sinon None.
+
+    ⚠️⚠️ POURQUOI CETTE FONCTION EXISTE — c'est la leçon du BLOQUANT B7.
+    Le motif publié était « *non déclarée comme facteur tarifaire légitime
+    (liste blanche) — à déclarer si elle est valide* », et la synthèse invitait
+    l'actuaire à la déclarer dans `FACTEURS_TARIFAIRES_AUTORISES`. Or pour
+    `garantie_perte_exploitation`, **`garantie` Y EST DÉJÀ DÉCLARÉ** : suivre
+    l'instruction ne change rien. *Une instruction erronée est pire qu'un
+    silence* — c'est exactement ce que B7 a établi.
+    """
+    n = nom.lower()
+    base = _base_facteur(n)
+    for f in FACTEURS_TARIFAIRES_AUTORISES:
+        if base.startswith(f + '_'):
+            suffixe = base[len(f) + 1:]
+            mots = mots_metriques_du_suffixe(suffixe)
+            if mots and not _est_experience_passee(suffixe):
+                return (
+                    f"suffixe de one-hot contenant un mot de GRANDEUR "
+                    f"MONÉTAIRE ({', '.join(mots)}) — une modalité de facteur "
+                    f"nomme un péril ou une catégorie, jamais un montant "
+                    f"(BLOQUANT B6). Le facteur de base '{f}' EST déjà "
+                    f"autorisé : la redéclarer en liste blanche ne changera "
+                    f"RIEN. Si '{suffixe}' est bien une modalité légitime (ex. "
+                    f"la garantie « perte d'exploitation » en RC Pro), "
+                    f"DÉCLAREZ-LA DANS LE PLAN DE TARIFICATION SIGNÉ et "
+                    f"relancez : le chemin déclaratif l'accepte."
+                )
+            return None
+    return None
 
 
 def selectionner_features_autorisees(
@@ -911,8 +1002,15 @@ def construire_matrice_x(
             exclusions[c] = ("non déclarée dans le plan de tarification signé "
                              "(liste blanche) — à déclarer si elle est valide")
         elif declarees is None and not (est_facteur_autorise(c) or c.lower() in autorises_extra):
-            exclusions[c] = ("non déclarée comme facteur tarifaire légitime "
-                             "(liste blanche) — à déclarer si elle est valide")
+            # ⚠️ LOT 1.3 — LE MOTIF NOMME LA VRAIE CAUSE, PAS UNE CAUSE
+            # GÉNÉRIQUE. Une colonne dérivée d'un facteur DÉJÀ autorisé et
+            # écartée pour un mot métrique recevait « à déclarer si elle est
+            # valide » — instruction que l'actuaire ne pouvait pas suivre,
+            # puisque le facteur de base était déjà déclaré. C'est le défaut
+            # que le BLOQUANT B7 a jugé pire que le silence.
+            exclusions[c] = motif_mot_metrique(c) or (
+                "non déclarée comme facteur tarifaire légitime "
+                "(liste blanche) — à déclarer si elle est valide")
         else:
             exclusions[c] = "exclue par le filtre de conformité"
     return MatriceX(conformes, exclusions, contexte, _jeton=_JETON,
@@ -944,11 +1042,33 @@ def synthese_exclusions(exclusions: Optional[dict]) -> Optional[str]:
     if not exc:
         return None
 
-    genre = sorted(c for c, m in exc.items() if 'C-236/09' in m)
-    fuite = sorted(c for c, m in exc.items() if 'fuite' in m.lower())
-    a_verifier = sorted(c for c, m in exc.items() if 'liste blanche' in m)
-    autres = sorted(c for c in exc
-                    if c not in genre and c not in fuite and c not in a_verifier)
+    # ⚠️⚠️ LOT 1.3 — LES QUATRE MOTIFS SONT TRIÉS SÉPARÉMENT (constat `C6`).
+    # Le tri se faisait par sous-chaîne `'fuite' in m.lower()`, qui capturait
+    # AUSSI BIEN « dérivée de la sinistralité — fuite de données » (obligatoire,
+    # aucune action) QUE « FUITE DÉTECTÉE PAR L'EFFET » (mesurée, et qui PEUT
+    # frapper une variable légitime). Les deux recevaient donc le même texte —
+    # « exclusion obligatoire, aucune action » — alors qu'une seule le mérite.
+    # ⚠️⚠️ LE TRI EST ORDONNÉ ET EXCLUSIF, et il doit l'être.
+    # Ma première version de ce correctif classait par sous-chaîne indépendante,
+    # et `garantie_perte_exploitation` ressortait dans DEUX lignes à la fois :
+    # son motif contient « ne changera RIEN — il y est déjà », mais aussi les
+    # mots « liste blanche ». **Le défaut que ce bloc corrige, reproduit dans le
+    # correctif lui-même.** Chaque colonne appartient désormais à UN seul motif,
+    # le premier qui la reconnaît, par ordre de spécificité décroissante.
+    _restant = dict(exc)
+
+    def _prendre(predicat) -> list:
+        pris = sorted(c for c, m in _restant.items() if predicat(m))
+        for c in pris:
+            _restant.pop(c, None)
+        return pris
+
+    genre = _prendre(lambda m: 'C-236/09' in m)
+    effet = _prendre(lambda m: "PAR L'EFFET" in m)
+    metrique = _prendre(lambda m: 'GRANDEUR MONÉTAIRE' in m)
+    fuite = _prendre(lambda m: 'fuite' in m.lower())
+    a_verifier = _prendre(lambda m: 'liste blanche' in m)
+    autres = sorted(_restant)
 
     lignes = []
     if a_verifier:
@@ -959,6 +1079,30 @@ def synthese_exclusions(exclusions: Optional[dict]) -> Optional[str]:
             f"votre portefeuille, le modèle en est amputé — déclarez-la "
             f"(FACTEURS_TARIFAIRES_AUTORISES) et relancez la tarification."
         )
+    if metrique:
+        # ⚠️ Le motif porte déjà l'action exacte (déclarer AU PLAN, pas en liste
+        # blanche) : on ne le remplace pas par un texte générique qui la perdrait.
+        lignes.append(
+            f"⚠ ACTION REQUISE — {len(metrique)} modalité(s) écartée(s) parce "
+            f"que leur nom contient un mot de grandeur monétaire : "
+            f"{', '.join(metrique)}. Redéclarer le facteur de base en liste "
+            f"blanche NE CHANGERA RIEN — il y est déjà. Si ce sont des "
+            f"modalités légitimes, déclarez-les DANS LE PLAN DE TARIFICATION "
+            f"SIGNÉ et relancez."
+        )
+    if effet:
+        lignes.append(
+            f"⚠ ACTION REQUISE — {len(effet)} colonne(s) écartée(s) par le "
+            f"CONTRÔLE PAR L'EFFET : {', '.join(effet)}. Cette exclusion est "
+            f"MESURÉE (corrélation avec la cible), pas déduite d'un nom — et "
+            f"elle ne distingue pas une fuite d'une variable de VOLUME "
+            f"légitime. En RC Pro, l'effectif joue le rôle que l'exposition "
+            f"joue en auto : il corrèle fortement avec le nombre de sinistres "
+            f"PARCE QUE la relation est réelle et connue à la souscription. "
+            f"VÉRIFIEZ chaque colonne : si elle est connue au moment de "
+            f"tarifer un contrat neuf, déclarez-la au plan comme exemptée "
+            f"(`anteriorite=True`) et relancez ; sinon, l'exclusion est juste."
+        )
     if genre:
         lignes.append(
             f"✔ {len(genre)} colonne(s) exclue(s) au titre de l'interdiction du "
@@ -966,6 +1110,11 @@ def synthese_exclusions(exclusions: Optional[dict]) -> Optional[str]:
             f"{', '.join(genre)}. Exclusion obligatoire, aucune action."
         )
     if fuite:
+        # ⚠️ « Aucune action » n'est légitime QUE pour l'exclusion par le NOM
+        # d'une grandeur de la période observée : celle-là est, par
+        # construction, inconnue au moment de tarifer. L'exclusion par l'EFFET,
+        # elle, est mesurée et peut frapper du légitime — elle a sa propre
+        # ligne ci-dessus, avec une action.
         lignes.append(
             f"✔ {len(fuite)} colonne(s) exclue(s) comme dérivée(s) de la "
             f"sinistralité observée (fuite de données — inconnues au moment de "

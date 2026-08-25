@@ -85,6 +85,24 @@ B7 a jugé pire que le silence : une instruction erronée.**
 sinistralité passée est protégée parce qu'elle *dit* qu'elle est passée. Une
 variable de volume, elle, ne dit rien — et rien ne la protège.
 
+> ⚠️ **TRAITÉ AU LOT 1.3 — ET IL FAUT DIRE EXACTEMENT CE QUI A CHANGÉ.**
+> **La variable reste écartée** : le contrôle par l'effet est une mesure, pas
+> une opinion, et le laisser passer par défaut rouvrirait la porte aux vraies
+> fuites. **Ce qui change, c'est le texte publié.** Il disait
+> « *Exclusion obligatoire, aucune action* » — le texte que B7 a jugé **pire
+> que le silence**, puisqu'une action existe et qu'il la niait.
+> Il dit maintenant que l'exclusion est **MESURÉE et ne distingue pas une
+> fuite d'une variable de VOLUME légitime**, que **l'effectif joue en RC Pro le
+> rôle que l'exposition joue en auto**, et que si la variable est **connue à la
+> souscription**, l'action est de **la déclarer exemptée au plan
+> (`anteriorite=True`) et de relancer**.
+> ⚠️⚠️ **CE QUI N'A PAS ÉTÉ FAIT, ET POURQUOI** : je n'ai pas exempté les
+> variables de volume automatiquement. Il n'existe **aucun critère par le nom**
+> qui sépare `effectif` (volume, légitime) d'une vraie fuite — et en inventer un
+> serait refaire la faute que ce module documente à chaque page. *C'est
+> l'actuaire qui sait si sa variable est connue à la souscription ; le plan est
+> l'endroit où il le dit, et il est désormais renvoyé là.*
+
 ### B — Affirme plus que le code ne porte (6)
 
 **C3 — La « RÈGLE DE PRINCIPE » ferme le garde-fou n°3 et laisse le n°1
@@ -110,6 +128,21 @@ action* » à « **⚠ ACTION REQUISE** — … déclarez-la et relancez la
 tarification ». L'actuaire est désormais invité à réagir. Mais la variable est
 toujours hors du modèle, et le texte du module se lit comme si la destruction
 avait cessé.
+
+> ✅ **FERMÉ — lot 1.3, PAR LA PRÉCISION DU TEXTE, PAS PAR UN ÉLARGISSEMENT.**
+> Le commentaire du module inscrit maintenant les deux chiffres côte à côte —
+> *garde-fou n°3 : 6/6 survivent · garde-fou n°1 : 0/6 passent* — et dit
+> lequel la règle de principe a corrigé.
+> ⚠️⚠️ **ET LA MESURE A RECADRÉ LE CONSTAT** : ce n'est **pas** un défaut de
+> production. Les six appelants passent tous `plan=`, et sur ce chemin la liste
+> blanche **EST le plan signé** : une variable d'expérience passée déclarée
+> entre dans la matrice X — mesuré, `exclusions = {}`. Le garde-fou n°1 codé en
+> dur ne gouverne que le chemin rétrocompat.
+> ⚠️ **JE N'AI PAS ÉLARGI LA LISTE BLANCHE, ET C'EST DÉLIBÉRÉ** : accepter
+> « tout ce qui porte un marqueur de passé » y ferait entrer **`prime_anterieure`**
+> — la prime précédente, que `core/plan_tarifaire.py` interdit explicitement
+> comme facteur. *Le remède n'est pas d'allonger la liste, c'est de déclarer un
+> plan.*
 
 **C4 — L'exemption par le plan est SILENCIEUSE, celle par le nom est
 signalée.** Deux chemins exemptent du contrôle par l'effet.
@@ -149,6 +182,48 @@ Le garde-fou de B6 fonctionne. Mais **la perte d'exploitation est la garantie
 centrale de la RC Pro**, et le module déclare précisément la RC Pro dans sa
 liste blanche. L'exclusion est journalisée en « ACTION REQUISE » — donc
 visible — mais l'actuaire doit deviner que le motif est un mot dans le nom.
+
+> ✅ **FERMÉ — lot 1.3, EN DEUX TEMPS, ET LES DEUX DOIVENT ÊTRE DITS.**
+>
+> **① Le bug de SOUS-CHAÎNE — 3 des 6 récupérées.** Le test était
+> `any(m in suffixe for m in MOTS_METRIQUES_INTERDITS)`. Mesuré :
+> ```
+>   secteur_activite_imprimerie   'imprimerie' contient 'prime'   -> RECUPEREE
+>   secteur_activite_couture      'couture'    contient 'cout'    -> RECUPEREE
+>   secteur_activite_primeur      'primeur'    contient 'prime'   -> RECUPEREE
+> ```
+> Une modalité est faite de **mots** séparés par `_` : on teste les mots.
+> ⚠️ **LE SECOND SENS EST VÉRIFIÉ ET C'EST L'OBJET DU LOT** :
+> `garantie_montant_regle` (**BLOQUANT B6, Gini 0,0709 → 0,9222**) reste
+> détruit, ainsi que `garantie_perte_charge`, `garantie_perte_ratio`,
+> `garantie_montant_perte`. *Récupérer un faux positif en rouvrant un vrai
+> négatif aurait été pire que le défaut.*
+>
+> **② `perte_exploitation` et `perte_financiere` — NON récupérées, et j'ai
+> mesuré pourquoi je ne le fais pas.** `perte` y est un **mot entier**. Retirer
+> `perte` de la liste laisserait passer :
+> ```
+>   garantie_perte_moyenne    garantie_perte_annuelle    garantie_perte
+> ```
+> — des **montants**. *Rien dans le nom ne sépare le péril « perte
+> d'exploitation » du montant « perte moyenne ».* Et je n'ai pas ajouté de
+> liste de garanties normalisées : ce serait la maladie que ce module nomme
+> lui-même à chaque page.
+> ⚠️⚠️ **CE QUI EST CORRIGÉ À LA PLACE : LE MOTIF, ET C'EST LA LEÇON DE B7.**
+> Il disait « *à déclarer dans `FACTEURS_TARIFAIRES_AUTORISES`* » — or
+> **`garantie` Y EST DÉJÀ** : suivre l'instruction ne changeait rien.
+> **Une instruction qu'on ne peut pas suivre est pire qu'un silence.** Le motif
+> dit maintenant que la redéclaration en liste blanche **ne changera RIEN**, et
+> renvoie à l'action qui marche : **déclarer la modalité DANS LE PLAN SIGNÉ** —
+> mesuré, le chemin déclaratif l'accepte.
+>
+> **③ Et le tri des motifs devait suivre**, sinon le nouveau texte tombait dans
+> « Autres exclusions » et perdait son ACTION REQUISE. Les **quatre** motifs
+> sont désormais triés séparément et **exclusivement** — ce qui ferme aussi
+> **`C6`**. ⚠️ *Ma première version classait `garantie_perte_exploitation` dans
+> DEUX lignes, son motif contenant les mots « liste blanche » : le défaut du
+> tri par sous-chaîne, reproduit dans le correctif du tri par sous-chaîne.*
+> Contrôles positifs `POS_Conf_C5` (4 tests) et `POS_Conf_C2_C5` (5 tests).
 
 **C6 — Une fuite détectée PAR L'EFFET est présentée comme une dérivée de la
 sinistralité, « aucune action ».** `construire_matrice_x` produit **quatre**
