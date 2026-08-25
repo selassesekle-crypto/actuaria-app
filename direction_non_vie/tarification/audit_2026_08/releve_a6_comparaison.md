@@ -44,6 +44,66 @@ Chaque segment est comparé à **la moyenne globale du train**, pas à ce que le
 
 **C5 — Une conformité réglementaire affirmée sans condition.** La fiche de décision publie *« Conformité S2 Pilier 1 : modèle validé sur données de test indépendantes »* **toujours** — `_generer_fiche_decision` ne reçoit ni le backtest, ni le statut. Elle l'écrit même quand le walk-forward a échoué et que le statut est plafonné.
 
+> ⚠️⚠️ **MESURÉ LE 25/08/2026 — CETTE PHRASE N'ATTEINT AUCUN LIVRABLE, ET CE
+> QUI L'EN EMPÊCHE EST UN ACCIDENT.** Produit et lu par exécution sur **cinq
+> livrables** (Excel A6, HTML et Word équipe *décompressés*, HTML et Word
+> modèles) : `justification_regl` n'y figure nulle part.
+>
+> **Le seul lecteur générique est `tarif_excel.py` l.734** — `for k, v in
+> fiche.items()` — **et il filtre `if isinstance(v, str)` (l.735).**
+> `justification_regl` est une **liste**. C'est ce filtre de TYPE, et lui seul,
+> qui retient l'affirmation.
+>
+> ⚠️⚠️ **UN ACCIDENT DE TYPAGE QUI DÉCIDE CE QUI EST PUBLIÉ EST PLUS DANGEREUX
+> QU'UNE DÉCISION EXPLICITE, PARCE QUE PERSONNE NE LE SAIT.** Écrire
+> `"\n".join(justif_regl)` — un refactor parfaitement naturel — **publierait
+> une affirmation de conformité Solvabilité 2 fausse dans le classeur qui part
+> au CAC**, sans qu'aucun test ne l'attrape.
+> **Le constat reste donc ENTIER, et sa correction reste due** : on ne laisse
+> pas une affirmation réglementaire fausse en place parce qu'un `isinstance` la
+> retient.
+>
+> ⚠️ **ET TROIS MÉTHODES ONT DONNÉ TROIS RÉPONSES SUR CE SEUL CHAMP** :
+> `grep` du nom → « aucun lecteur » (faux, il est atteint par `.items()`) ;
+> lecture de la boucle → « publié » (faux, le filtre l'écarte) ; **exécution →
+> non publié**. *Un chemin de publication se conclut par exécution.*
+
+**C11 — LA FICHE D'AIDE À LA DÉCISION EST PUBLIÉE À 25 % DE SON CONTENU.**
+*(Inscrit le 25/08/2026 — trouvé par le passage libellés, absent des 134
+constats précédents.)*
+
+Mesuré par exécution sur les cinq livrables :
+
+```
+  publies : modele_recommande · profil_utilise · decision_finale
+  MUETS   : score_final · gini · overfit_ratio · forces · faiblesses ·
+            risques · alternatives · questions_actuaire · justification_regl
+
+  -> 3 / 12 champs  (25 %)
+```
+
+L'agent A6 construit **forces, faiblesses, risques, alternatives et questions à
+poser avant signature** — c'est le contenu même d'une aide à la décision — et
+l'actuaire n'en voit **aucun**. Ce que le classeur porte de la fiche se réduit
+à trois lignes : le nom du modèle, le profil, et « À VALIDER PAR L'ACTUAIRE
+RESPONSABLE ».
+
+⚠️ **Portée plus large, mesurée dans le même banc** : sur 24 champs porteurs de
+texte du résultat d'A6, **18 n'atteignent aucun des cinq livrables** — dont
+`alertes_modele` (le message d'amputation), `validation_selection.verdict` et
+`backtest.stabilite`, **muets jusque dans leur clé**.
+
+⚠️⚠️ **CE QUI EST MESURÉ ET CE QUI NE L'EST PAS.** Le banc détecte le passage
+**verbatim** d'une valeur. Un champ **consommé puis reformaté** paraît muet à
+tort : `exclusions_conformite` en est le cas — `synthese_exclusions` republie
+le **nom de colonne**, pas le motif. Le script lève l'ambiguïté en marquant
+**aussi les clés**, et c'est ainsi qu'`exclusions_conformite` a été reclassé
+**CONSOMMÉ**. *Les trois « muets jusque dans leur clé » ci-dessus ont passé ce
+second contrôle ; ils restent néanmoins à instruire agent par agent avant
+d'être portés en constats à part entière.*
+
+**Preuve** : `preuves/passage_libelles.py`, relançable seul.
+
 ### B — Affirme plus que le code ne porte (3)
 
 **C6 — Une chaîne qui ne matche pas, et elle rend deux choses muettes.**

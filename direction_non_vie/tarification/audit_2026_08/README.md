@@ -35,6 +35,26 @@ l'hypothèse qu'il est bon et prouver le contraire, jamais l'inverse.**
   141 affirmations sont dans ce cas, et elles comptent.
 - **Aucun filtre** : tests, fixtures, docstrings et commentaires compris.
 - **Balayage par symbole ET en prose** — l'un ne voit pas ce que l'autre voit.
+- ⚠️⚠️ **UN CHEMIN DE PUBLICATION SE CONCLUT PAR EXÉCUTION** *(règle ajoutée le
+  25/08/2026, après qu'un seul champ a reçu trois réponses contradictoires)* :
+  `grep` du nom → « aucun lecteur » **faux**, il était atteint par `.items()` ;
+  lecture de la boucle → « publié » **faux**, un `isinstance` l'écartait ;
+  **exécution du livrable → non publié**, vérifié dans les cellules produites.
+  *On produit le livrable et on lit ce qu'il contient.* Voir
+  [`preuves/passage_libelles.py`](preuves/passage_libelles.py).
+- ⚠️⚠️ **UN ACCIDENT DE TYPAGE QUI DÉCIDE CE QUI EST PUBLIÉ EST PLUS DANGEREUX
+  QU'UNE DÉCISION EXPLICITE, PARCE QUE PERSONNE NE LE SAIT.** Mesuré sur
+  `a6/C5` : une affirmation de conformité Solvabilité 2 fausse n'est retenue
+  hors des livrables que par un `if isinstance(v, str)` — elle est une liste.
+  Un `"\n".join(...)` la publierait au CAC, sans qu'aucun test ne bronche.
+- ⚠️ **LE CHEMIN SE MESURE AU CHAMP, PAS AU MODULE NI AU DICT.** Savoir qu'un
+  service lit `fiche_decision` ne dit **pas** que `fiche_decision['justification_regl']`
+  est publié — mesuré, il ne l'est pas. *Un appelant mesuré n'est pas un chemin
+  mesuré, et un dict lu n'est pas un champ lu.*
+- ⚠️ **CE QUE LE BANC NE VOIT PAS, ET COMMENT ON LE LÈVE** : il détecte le
+  passage **verbatim**. Un champ **consommé puis reformaté** paraît muet à tort.
+  On marque donc **aussi les clés** — c'est ainsi qu'`exclusions_conformite`,
+  d'abord classé muet, a été reclassé **consommé**.
 
 ## Les preuves
 

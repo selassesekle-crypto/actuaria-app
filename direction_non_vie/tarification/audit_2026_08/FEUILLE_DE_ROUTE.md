@@ -96,6 +96,35 @@ tri.*
 | **1.2 Le plan ne laisse plus déclarer ce qu'il interdit** | ✅ **FERMÉS** `plan/C1` `plan/C2` `plan/C3` — **et `plan/C9` en prime** | la garde B9 contournée par les **interactions** → **prime non proportionnelle à l'exposition (1,8339 au lieu de 2,0000)** · la **cible** déclarable en facteur · un `type` mal orthographié **détruit un facteur en silence**, `ampute=False`. **Regroupement franc** : même geste — valider l'**appartenance**, pas la combinaison. ✅ **Fermé au lot 1.2** : contrôle sur **trois surfaces** (nom source · opérandes d'interaction · colonnes produites), valeurs admises **dérivées des `Literal`** et jamais recopiées, et un **filet** — *un facteur qui ne produit aucune colonne est refusé*. ⚠️⚠️ **LA RACINE ÉTAIT DANS LA SPEC, PAS DANS LE CODE** : `plan_execution_6_actions.md` l.294 demandait le contrôle **sur `colonnes_produites()`** — le code le faisait exactement. **11 contrôles positifs**, 20/20 plans intacts |
 | **1.3 Les exclusions qui détruisent un facteur légitime** | ✅ **FERMÉS** `conformite/C2` `C3` `C5` — **et `C6` en prime** | la variable de **TAILLE** écartée comme « la cible déguisée » · les **6 variables de B5** toujours détruites · **6 modalités légitimes** tuées par les mots métriques. *Un facteur détruit ampute le tarif — B5 l'a chiffré à −17,4 % de Gini*. ✅ **Fermé au lot 1.3** : le test des mots métriques passe de la **sous-chaîne au MOT ENTIER** (`imprimerie` ⊅ `prime`) → **3 modalités récupérées**, et **B6 reste bloqué** (le second sens, vérifié). ⚠️⚠️ **RECADRAGE MESURÉ : sur le chemin déclaratif — celui des 6 appelants de production — RIEN n'est détruit** (`exclusions = {}`) ; C3 et C5 ne vivent que sur le chemin rétrocompat. Le reste est corrigé **par le motif** (leçon B7) : plus de « aucune action » quand une action existe, et plus d'instruction impossible à suivre. **9 contrôles positifs** |
 
+## ⚠️⚠️ PASSAGE LIBELLÉS (25/08/2026) — LE RANG 2 EST RECOMPOSÉ
+
+**Fait AVANT d'ouvrir le rang 2, à la granularité du CHAMP, conclu par
+EXÉCUTION** (`preuves/passage_libelles.py`). Il a invalidé le classement que
+j'avais proposé :
+
+| ce que j'affirmais | mesuré |
+|---|---|
+| `a6/C5` est « le seul publié dans un livrable » | **il n'atteint aucun des 5 livrables** — retenu par un `isinstance(v, str)` |
+| `agents/C2` mérite le rang 2 | `pipeline_agents.py` : **0 importeur de production** |
+| `conformite/C1` mérite le rang 2 | la propriété qui ment a **0 lecteur** — couverte par `C7` |
+
+⚠️ **LE LOT 2.1 TEL QUE COMPOSÉ EST À DÉFAIRE** : il réunissait un constat
+couvert, un vivant et un sur module mort. Ils n'ont pas la même urgence.
+
+⚠️⚠️ **QUATRE COUPLAGES MESURÉS — un constat peut être rendu inoffensif par un
+autre, et le corriger seul PUBLIE le défaut** : `conformite/C1` ← `C7` ·
+`agents/C2..C6` ← `agents/C1` · `socle/C4` `C5` ← `socle/C2` · **`a6/C5` ← un
+filtre de type**, le plus fragile des quatre.
+
+⚠️ **AUCUN CONSTAT N'EST DISQUALIFIÉ.** Un latent reste vrai : le plan est un
+document opposable, « exprimable » suffit. Le passage change **l'ordre**, pas
+la **validité**. **11 latents nommés, en attente.**
+
+✅ **ET IL A PRODUIT UN CONSTAT NEUF** : `a6/C11` — **la fiche d'aide à la
+décision est publiée à 25 %** (3 champs sur 12 ; forces, faiblesses, risques,
+alternatives et questions à poser n'atteignent aucun livrable). Sur 24 champs
+porteurs de texte d'A6, **18 sont muets**.
+
 ## RANG 2 — CE QUI AUTORISE CE PRIX · **3 lots · 9 constats**
 
 | lot | constats | ce que ça ferme |
