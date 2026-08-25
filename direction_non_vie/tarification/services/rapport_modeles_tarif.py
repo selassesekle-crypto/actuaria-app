@@ -545,22 +545,27 @@ FIGURES_CONDITIONNELLES: dict[str, str] = {
 #: une figure nouvelle qui ne serait ni au plan ni ici fait tomber la gate.
 #: C'est ce qui empêche la liste de se périmer en silence.
 FIGURES_ECARTEES: Dict[str, str] = {
-    # ⚠️ LA SEULE ÉCARTÉE POUR SA SOURCE DE DONNÉES, ET NON POUR SON CONTENU.
-    # Publiée par T7a, retirée après mesure : ses treize points « M-12 … M
-    # actuel » sont FABRIQUÉS. `_monitoring_derive` tire le PSI de deux lois
-    # bêta (`np.random.beta(2,5)` contre `beta(2.2,4.8)`, graine 42) sans
-    # qu'aucune donnée du client n'entre, et la courbe de Gini est une
-    # « simulation légère dégradation progressive » — le commentaire du code
-    # le dit. Le portefeuille est observé UNE fois ; il n'a pas d'historique
-    # de douze mois. Mesuré sur le rapport du 09/08 : la figure affichait
-    # « PSI=0.0792 » quand le tableau du même chapitre affichait 0,0051 —
-    # deux valeurs pour la même grandeur dans un document signé, et le mot
-    # « simulé » n'apparaissait pas une seule fois dans les 236 ko.
-    # ⚠️ ET ELLE NE PEUT PAS DEVENIR VRAIE : le dépôt ne possède pas
-    # l'historique nécessaire. La déclarer illustrative aurait laissé un
-    # objet sans raison d'être dans un rapport signé.
-    'monitoring_gini': 'données FABRIQUÉES — treize mois d\'historique '
-                       'simulés pour un portefeuille observé une fois',
+    # ⚠️⚠️ LE MOTIF D'ORIGINE NE TIENT PLUS — MESURÉ LE 26/08/2026.
+    # Cette figure était écartée parce que ses données étaient FABRIQUÉES :
+    # `_monitoring_derive` tirait le PSI de deux lois bêta
+    # (`np.random.beta(2,5)` contre `beta(2.2,4.8)`, graine 42) et traçait
+    # treize points « M-12 … M actuel » simulés. **Ce code n'existe plus** :
+    # zéro appel `np.random.*` dans tout `a4_ml/agent.py`, le PSI vient de
+    # `_psi_reel` sur les features réelles, et la courbe ne porte plus que
+    # DEUX points mesurés — la référence A3 et le Gini du modèle retenu.
+    # Mesuré par exécution : PSI = 0,056 sur deux portefeuilles proches
+    # contre 7,59 sur deux éloignés. La grandeur répond aux données.
+    # ⚠️ CE QUI RESTE VRAI : le dépôt n'a toujours pas d'historique de
+    # production, et cette figure compare TRAIN → TEST, pas M-12 → M. Elle
+    # le dit désormais elle-même, en annotation.
+    # ⚠️⚠️ POURQUOI ELLE RESTE ÉCARTÉE MALGRÉ TOUT : parce que la remettre
+    # au plan d'un rapport SIGNÉ est une décision, et qu'elle n'est pas
+    # prise. Le motif ci-dessous énonce donc l'état, pas un défaut — écarter
+    # sur une accusation périmée reviendrait à discréditer une figure
+    # mesurée, et à apprendre au lecteur à se méfier des avertissements.
+    'monitoring_gini': 'en attente d\'arbitrage — ses données ne sont plus '
+                       'fabriquées (mesuré le 26/08/2026), mais son retour '
+                       'au plan d\'un rapport signé n\'est pas décidé',
     # les neuf variantes de Lorenz / Gini — une seule est publiée
     'lorenz': 'doublon — chart_lorenz_gini porte la courbe de Lorenz',
     'lorenz_glm': 'doublon — chart_lorenz_gini porte la courbe de Lorenz',

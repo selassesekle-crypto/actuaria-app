@@ -30,6 +30,32 @@ Avec ε = −1.5, le CA vaut `p^(1+ε) = p^(−0,5)` — **décroissant en p** :
 ```
 `scores_ref = np.random.beta(2, 5, 1000)`, `scores_actuels = np.random.beta(2.2, 4.8, 1000)`, `seed=42` → **le PSI est une constante du module**. Les 12 mois d'« historique Gini » sont eux aussi simulés (`gini_reference * (1 − 0.002·i + N(0, 0.003))`). Publié sous le titre « Monitoring de la dérive des modèles ML **en production** », avec la recommandation « ✅ Modèle stable — prochaine révision dans 3 mois ». **À décharge** : `psi_source = "simulé"` figure dans le message H2, et la docstring le dit. Le graphique `monitoring_gini`, lui, ne porte aucune marque.
 
+> ✅ **FERMÉ — vérifié le 26/08/2026 par DEUX méthodes indépendantes.**
+> **① Lecture du code** : zéro appel `np.random.*` dans tout `a4_ml/agent.py`
+> (relevé **par AST**). Le PSI vient de `_psi_reel(X_train, X_test)` sur les
+> features réelles ; le KS des scores réels ; et la courbe ne porte plus que
+> **deux points mesurés** — « Référence A3 » et « Modèle retenu (test) », pas
+> treize points simulés. La figure porte enfin sa marque : *« ce graphique ne
+> mesure PAS la dérive en production »*. Un PSI non mesuré affiche
+> « PSI non mesuré », jamais un nombre.
+> **② Exécution** : PSI = **0,056** sur deux portefeuilles proches contre
+> **7,59** sur deux éloignés. *La grandeur répond aux données* — le
+> « PSI identique sur 2 portefeuilles = True » du constat est mort.
+> Épinglé par `test_monitoring_derive_reel.py` (6 contrôles).
+>
+> ⚠️⚠️ **MAIS LA FERMETURE S'ÉTAIT PÉRIMÉE EN SILENCE AILLEURS.** Six
+> semaines après la correction, `FIGURES_ECARTEES` retirait toujours
+> `monitoring_gini` du rapport **SIGNÉ** au motif de « données FABRIQUÉES »,
+> en citant `np.random.beta(2,5)` — **un code qui n'existe plus**. *Une figure
+> mesurée restait accusée.* Le motif énonce désormais l'état réel, et un
+> nouveau contrôle **fait tomber la gate sur toute accusation périmée**.
+> ⚠️ Le garde-fou qui existait ne pouvait pas le voir : il tombe sur une
+> figure **nouvelle** ni au plan ni écartée, jamais sur un **motif qui
+> vieillit**. Son assiette couvrait les ajouts, pas le vieillissement —
+> *un garde-fou qui exclut la seule chose qui compte n'en est pas un.*
+> ⚠️ **RESTE À ARBITRER** : le retour de `monitoring_gini` au plan du rapport
+> signé. La figure est mesurée et marquée ; la décision n'est pas prise.
+
 **C3 — Le graphique d'overfitting affiche un Gini test nul pour tous les modèles.**
 ```
   trace "Gini Test"  = [0, 0, 0, 0, 0, 0]

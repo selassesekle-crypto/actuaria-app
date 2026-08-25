@@ -259,6 +259,29 @@ dis** plutôt que de les ranger au jugé.
 Et par lot, le livrable est invariable : **① propreté · ② diff indexé vérifié ·
 ③ preuve · ④ gate lue au fichier — puis STOP.**
 
+## ⚠️⚠️ LA QUESTION À POSER À TOUT GARDE-FOU, ET SA FORMULE
+
+> ### **Un garde-fou qui exclut la seule chose qui compte n'en est pas un.**
+
+**Arbitré par Selasse le 26/08/2026, à porter à chaque lot.** Un contrôle peut
+être présent, correct, motivé et testé — et ne rien surveiller, parce que son
+**assiette** exclut le cas qui survient. Trois instances mesurées dans ce
+module, toutes trouvées en cherchant l'assiette et non le contrôle :
+
+| garde-fou | assiette apparente | ce qu'elle excluait |
+|---|---|---|
+| anti-sélection A6 (`gini < 0` → ROUGE) | tout modèle de production | ceux dont le Gini est un **littéral** — donc le Tweedie, **seul candidat** sur la cible par défaut (`a3/C6`) |
+| catalogue des figures | « empêche la liste de se périmer » | les **motifs périmés** : il tombe sur une figure *nouvelle*, jamais sur une *accusation qui vieillit* (`a4/C2`) |
+| contrôle par l'effet | « toutes les cibles » | une cible **présente mais vide** — `NaN == 0.0` est faux |
+
+⚠️ **DEUX QUESTIONS, PAS UNE.** À « **sur quelle assiette ?** » s'ajoute
+« **cette valeur est-elle mesurée, ou est-ce un défaut de `get` ?** » — un
+`dict.get(clef, 0)` fabrique une valeur **indiscernable d'une mesure**, et le
+garde-fou la lit sans broncher.
+
+⚠️ **ET LA VALEUR FABRIQUÉE EST PRESQUE TOUJOURS FLATTEUSE** : le `0` du
+Tweedie masquait un Gini **négatif**, comme le plancher d'A5 masquait un écart.
+
 ---
 
 # ⑤ LES CINQ ARBITRAGES QUI VOUS APPARTIENNENT
