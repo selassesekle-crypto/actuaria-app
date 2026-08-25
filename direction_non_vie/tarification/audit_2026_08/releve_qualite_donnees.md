@@ -43,6 +43,20 @@ zéro anomalie**, et la synthèse destinée aux livrables rend `None` — c'est-
 exclusion, donc rien de silencieux au sens strict. Mais la couche dont c'est le
 métier de juger la qualité des données **déclare bonnes des données absentes**.
 
+> ✅ **FERMÉ — lot ③.** Nouveau détecteur `detecter_illisible` : **le seul qui
+> regarde ce que `to_numeric(coerce)` a détruit**, sur les quatre colonnes de
+> RÔLE. Mesuré : les quatre formes d'absence (NaN partiel, NaN total, texte
+> `« douze mois »`, chaîne vide) sont désormais signalées, et un portefeuille
+> complet ne déclenche **rien**.
+> ⚠️ **RÈGLE 3, PAS RÈGLE 1 — et c'est un choix, pas un oubli.** Une valeur
+> manquante est **ambiguë** : vrai zéro mal encodé, erreur de transmission, ou
+> grandeur réellement inconnue — *rien dans la donnée ne le dit*. La doctrine
+> du module est explicite (impossible → exclure · implausible → corriger ·
+> **ambigu → signaler et laisser**). Exclure trancherait à la place de
+> l'actuaire et **déplacerait des lignes** sur un jugement que la donnée ne
+> porte pas. **Aucun euro n'est déplacé par ce correctif.**
+> Contrôles : `POS_Qualite_C1_UneValeurAbsenteEstVUE`, 4 tests.
+
 ⚠️ **Sans conséquence catastrophique en aval, et il faut le dire** : mesuré au
 relevé de `pipeline_tarifaire`, une exposition illisible provoque un arrêt
 *loud* — `ValueError: NaN, inf or invalid value detected in endog`. Le GLM
@@ -66,6 +80,23 @@ exactement ce que fait `[a.code for a in anomalies if a.proportion >= seuil]`
 
 **Un cinquième du portefeuille est exclu, et rien n'est escaladé.** Aucun type
 n'atteint le seuil ; leur union le dépasse de quatre fois.
+
+> ✅ **FERMÉ — lot ③.** L'escalade regarde désormais **l'union des lignes
+> touchées** en plus de chaque type. Mesuré sur le cas exact du constat :
+> escalade **déclenchée**, motif publié
+> `union_des_anomalies (196/1000 lignes, 19.6%)`.
+> ⚠️ **LES DEUX CRITÈRES SONT CONSERVÉS, PAS SUBSTITUÉS** : un type unique à
+> 6 % escalade toujours **sous son propre nom** — sinon le motif publié
+> désignerait la mauvaise cause. Le nouveau critère ne peut qu'**ajouter** des
+> escalades, jamais en retirer : *c'est la règle d'asymétrie — une liste qui
+> accuse ne peut pas ouvrir de trou.*
+> ⚠️ **Second sens vérifié dans les deux directions** : un portefeuille sain
+> n'escalade pas, et un type isolé à 2 % non plus.
+> ⚠️⚠️ **MON PREMIER BANC ÉTAIT FAUX** : mes données de témoin portaient
+> `cout > 0` avec `nb = 0` sur ~80 % des lignes, si bien que l'incohérence
+> dominait tout et que **mon union n'a jamais été exercée**. *Un témoin qui
+> n'est pas sain ne mesure rien.*
+> Contrôles : `POS_Qualite_C2_L_EscaladeVoitL_UNION`, 4 tests.
 
 ⚠️ **Ce n'est PAS silencieux** — la synthèse dit bien « ✔ 196 ligne(s)
 EXCLUE(S) (impossible) ». La couche **informe**, elle ne **s'arrête** pas. La

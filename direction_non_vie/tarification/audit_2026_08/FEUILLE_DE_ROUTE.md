@@ -144,7 +144,11 @@ La propriété `controle_effet_execute` atteste désormais **l'EXÉCUTION** et n
 ⚠️⚠️ **LA GATE A ATTRAPÉ UNE RÉGRESSION QUE J'AVAIS INTRODUITE** — `INV-11c`, un invariant écrit il y a des cycles : *l'échec du contrôle par l'effet doit LEVER*. Ma source unique s'exécutait avant et changeait le type levé. **Le test existait ; je ne l'ai pas dupliqué.** 9 contrôles positifs.
 
 **Reste ouvert dans l'ordre arbitré** :
-③ `qualite/C1` `C2` `a1/C3` `C4` · puis **le banc étendu à A3/A4/A5 avant
+### ✅ LOT ③ CLOS — `qualite/C1` `C2` · `a1/C3` `C4`
+
+**Les valeurs LIMITES et les valeurs ABSENTES.** `detecter_illisible` voit enfin ce que `to_numeric(coerce)` détruisait ; l'escalade regarde **l'union** en plus de chaque type (motif mesuré : `union_des_anomalies (196/1000, 19.6%)`) ; et les deux bornes d'A1 disent enfin ce que leur docstring déclare. ⚠️ **Aucun euro déplacé** : l'absence est SIGNALÉE (règle 3), jamais exclue. **12 contrôles positifs, chacun avec son second sens.**
+
+**Reste ouvert dans l'ordre arbitré** : · puis **le banc étendu à A3/A4/A5 avant
 leurs ~40 constats** · puis les **11 latents**.
 ⚠️ **`alertes_modele`, `validation_selection.verdict`, `backtest.stabilite`
 restent À INSTRUIRE, pas en constats** : le banc ne prouve pas qu'aucune autre

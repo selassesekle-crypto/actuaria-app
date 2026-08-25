@@ -782,9 +782,17 @@ class AgentA1Ingestion:
                        "porte sur la ligne entière."),
         }[source_identifiant]
 
-        # ── 3. Exposition ∈ [0, 1] ────────────────────────────────────────────
+        # ── 3. Exposition ∈ ]0, 1] ────────────────────────────────────────────
+        # ⚠️⚠️ CORRECTIF — constat `a1/C4`. `between(0, 1)` est INCLUSIF des
+        # deux bornes : une exposition NULLE comptait comme saine, et
+        # `expo_ok_pct` valait 100,0 sur un portefeuille où le contrôle 4d
+        # signalait au même instant `exposition_nulle_ou_negative`.
+        # **Deux verdicts contradictoires dans la même fonction** — le score
+        # disait sain, l'alerte disait aberrant, et rien ne les réconciliait.
+        # La docstring, elle, était juste depuis le début : « Exposition :
+        # 0 < exposition ≤ 1 ». **C'est le code qui contredisait le contrat.**
         if 'exposition' in df.columns:
-            expo_ok = (df['exposition'].between(0, 1)).mean() * 100
+            expo_ok = (df['exposition'].between(0, 1, inclusive='right')).mean() * 100
         else:
             expo_ok = 100.0
 
@@ -807,8 +815,17 @@ class AgentA1Ingestion:
                     )
 
         # 4b. Coûts négatifs
+        # ⚠️⚠️ CORRECTIF — constat `a1/C3`. La docstring déclare « Montants :
+        # **prime_pure > 0** si disponible », et le code testait `< 0` : une
+        # prime pure NULLE traversait le contrôle sans un mot (mesuré : 100
+        # lignes à `prime_pure = 0` → `aberrants = aucun`).
+        # ⚠️ ET LES QUATRE COLONNES NE PARTAGENT PAS LE MÊME CONTRAT :
+        # `cout_total_sinistres = 0` est NORMAL — un contrat sans sinistre —
+        # tandis qu'une prime pure nulle signifie un coût espéré nul, ce que
+        # la docstring exclut. Les traiter en bloc, c'était appliquer à l'une
+        # le contrat de l'autre.
         for col_cout in ['cout_total_sinistres', 'cout_moyen_attendu',
-                         'prime_pure', 'prime_commerciale']:
+                         'prime_commerciale']:
             if col_cout in df.columns:
                 n_neg = int((df[col_cout] < 0).sum())
                 if n_neg > 0:
@@ -816,6 +833,16 @@ class AgentA1Ingestion:
                     alertes_aberrants.append(
                         f"{col_cout} : {n_neg} valeur(s) négative(s)."
                     )
+        # `prime_pure` : le contrat DÉCLARÉ est « > 0 », on le teste tel quel.
+        if 'prime_pure' in df.columns:
+            n_np = int((df['prime_pure'] <= 0).sum())
+            if n_np > 0:
+                aberrants['prime_pure_non_positive'] = n_np
+                alertes_aberrants.append(
+                    f"prime_pure : {n_np} valeur(s) ≤ 0 — une prime pure nulle "
+                    f"signifie un coût espéré nul, ce que le contrôle déclare "
+                    f"impossible (« prime_pure > 0 »)."
+                )
 
         # 4c. Âge hors plage [16, 99] — UNE BORNE RÉGLEMENTAIRE, UNE CONVENTION
         # ⚠️ L'ARTICLE CITÉ ÉTAIT LE MAUVAIS, ET LA PARENTHÈSE ÉTAIT FAUSSE.

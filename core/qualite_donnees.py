@@ -158,6 +158,23 @@ def detecter_doublons_id(df: pd.DataFrame, col_id: str) -> np.ndarray:
     return df.duplicated(subset=[col_id], keep='first').to_numpy()
 
 
+def detecter_illisible(df: pd.DataFrame, col: str) -> np.ndarray:
+    """Valeurs MANQUANTES ou NON NUMÉRISABLES d'une colonne de rôle.
+
+    ⚠️⚠️ LE SEUL DÉTECTEUR QUI REGARDE CE QUE `to_numeric` A DÉTRUIT. Tous les
+    autres comparent la série *après* `errors='coerce'`, et **une comparaison
+    sur un NaN est toujours fausse** : le trou devenait invisible à la couche
+    dont c'est le métier de juger la qualité (constat `qualite/C1`).
+
+    On compte comme illisible ce qui est vide À L'ARRIVÉE et ne l'était pas
+    forcément au départ : `None`, `NaN`, chaîne vide, et toute valeur que
+    `to_numeric` n'a pas su convertir (« douze mois »).
+    """
+    brut = df[col]
+    return np.asarray(_num(df, col).isna() | brut.isna()
+                      | (brut.astype(str).str.strip() == ''))
+
+
 def detecter_doublons_ligne(df: pd.DataFrame) -> np.ndarray:
     """Lignes strictement identiques à une précédente (garde la 1re)."""
     return df.duplicated(keep='first').to_numpy()
@@ -235,6 +252,40 @@ def controler_qualite(
                  correction="plafond a 1.0")
 
     # ── RÈGLE 3 : AMBIGU → signaler, laisser tel quel ────────────────────────
+    # ⚠️⚠️ LA VALEUR MANQUANTE OU ILLISIBLE — constat `qualite/C1`.
+    # Aucune des quatre règles ne la voyait : tous les détecteurs passent par
+    # `pd.to_numeric(errors='coerce')`, et **toute comparaison est FAUSSE sur
+    # un NaN** (`NaN < 0`, `NaN <= 0`, `NaN > 1` — toutes fausses), tandis que
+    # `detecter_non_entier` exclut explicitement les NaN par `s.notna()`.
+    # Mesuré : **une colonne d'exposition entièrement vide traversait la couche
+    # avec ZÉRO anomalie**, et la synthèse des livrables rendait `None` —
+    # c'est-à-dire « rien à signaler ». Une exposition écrite « douze mois »
+    # faisait de même.
+    #
+    # ⚠️ POURQUOI RÈGLE 3, ET PAS RÈGLE 1. Une valeur manquante est **AMBIGUË**,
+    # pas impossible : elle peut être un vrai zéro mal encodé, une erreur de
+    # transmission, ou une grandeur réellement inconnue — **rien dans la donnée
+    # ne le dit**. La doctrine du module est explicite : impossible → exclure,
+    # implausible établi → corriger, **ambigu → signaler et laisser tel quel**.
+    # Exclure serait trancher à la place de l'actuaire, et déplacerait des
+    # lignes sur un jugement que la donnée ne porte pas.
+    # ⚠️ Le garde-fou en aval demeure : le GLM s'arrête *loud* sur un NaN
+    # (`ValueError: NaN, inf or invalid value detected in endog`). Ce qui
+    # change, c'est que l'actuaire reçoit désormais un rapport de QUALITÉ, et
+    # non une erreur `statsmodels` qui ne nomme pas la colonne fautive.
+    for _role, _col in (('exposition', col_expo),
+                        ('cible_frequence', col_freq),
+                        ('cible_cout', col_cout),
+                        ('identifiant_contrat', col_id)):
+        if not _col or _col not in df.columns:
+            continue
+        _manquant = detecter_illisible(df, _col)
+        _ajouter(f'valeur_illisible_{_role}', 3, _role, _col, _manquant,
+                 f"{_role} ('{_col}') : valeur MANQUANTE ou ILLISIBLE — "
+                 f"ambigu (ni exclu ni corrige). Aucune regle ne peut trancher "
+                 f"entre un vrai zero, une erreur de saisie et une grandeur "
+                 f"inconnue : c'est a l'actuaire de le dire.")
+
     if col_freq in df.columns and col_cout in df.columns:
         cout_sans_sin, sin_sans_cout = detecter_incoherence(df, col_freq, col_cout)
         _ajouter('incoherence_cout_sans_sin', 3, 'cible_cout', col_cout, cout_sans_sin,
@@ -252,7 +303,29 @@ def controler_qualite(
                  "ligne strictement identique a une autre — ambigu sans identifiant pour trancher.")
 
     # ── RÈGLE 4 : ESCALADE PAR PROPORTION (avant toute mutation) ─────────────
+    # ⚠️⚠️ L'UNION COMPTE AUTANT QUE CHAQUE TYPE — constat `qualite/C2`.
+    # La règle ne regardait que `a.proportion` type par type. Mesuré avec
+    # quatre types à **4,9 % chacun** : **196 lignes sur 1 000 exclues, soit
+    # 19,6 % du portefeuille, et `escalade = False`.** Aucun type n'atteignait
+    # le seuil ; leur union le dépassait de quatre fois.
+    # *Un garde-fou qui ne regarde qu'une anomalie à la fois ne voit pas
+    # l'état du portefeuille — c'est la question « sur quelle ASSIETTE ? »
+    # posée à un seuil.*
+    #
+    # ⚠️ LES DEUX CRITÈRES SONT CONSERVÉS, PAS SUBSTITUÉS : un seul type à
+    # 6 % doit toujours escalader, même si l'union n'ajoute rien. Le nouveau
+    # critère ne peut donc qu'AJOUTER des escalades, jamais en retirer — c'est
+    # la règle d'asymétrie : une liste qui accuse ne peut pas ouvrir de trou.
     au_dela = [a.code for a in anomalies if a.proportion >= seuil_escalade]
+    lignes_touchees = set()
+    for a in anomalies:
+        lignes_touchees.update(a.index)
+    proportion_union = len(lignes_touchees) / max(n0, 1)
+    if proportion_union >= seuil_escalade and not au_dela:
+        # On ne le signale que si aucun type ne l'avait déjà déclenché, pour
+        # que le motif publié nomme la VRAIE raison de l'escalade.
+        au_dela = [(f'union_des_anomalies ({len(lignes_touchees)}/{n0} lignes, '
+                    f'{proportion_union:.1%})')]
     escalade = len(au_dela) > 0
     exclusions = [a for a in anomalies if a.regle == 1]
     corrections = [a for a in anomalies if a.regle == 2]
