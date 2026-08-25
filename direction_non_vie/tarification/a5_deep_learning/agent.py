@@ -2090,7 +2090,19 @@ class AgentA5DeepLearning:
                 .get('poisson', {})
                 .get('gini', 0.10)
             )
-        gini_dl_max  = max(gini_cann, gini_tabnet, 0)
+        # ⚠️⚠️ LE PLANCHER À ZÉRO PUBLIAIT UN CHIFFRE QU'AUCUN MODÈLE N'AVAIT
+        # ATTEINT — part vivante du constat `a5/C1`. `max(..., 0)` écrasait un
+        # Gini NÉGATIF vers 0, et le message publié disait « Gini DL = 0.0000 »
+        # là où la mesure valait **−0,1103** (mesuré sur un portefeuille où le
+        # DL ne discrimine pas). Le VERDICT restait ROUGE — il l'est dans les
+        # deux cas — mais **le nombre montré à l'actuaire était faux**.
+        #
+        # ⚠️ C'est la même famille que `a3/C6` (« le Gini du Tweedie vaut 0
+        # partout ») : *un zéro qui signifie « écrêté » est indiscernable d'un
+        # zéro mesuré*. On publie donc la valeur RÉELLE, y compris négative —
+        # un Gini négatif est une information, pas une erreur d'affichage :
+        # il dit que le modèle classe À L'ENVERS.
+        gini_dl_max  = max(gini_cann, gini_tabnet)
         gain_dl      = gini_dl_max - gini_glm_ref
 
         if gain_dl >= 0.05:

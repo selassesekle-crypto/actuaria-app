@@ -37,6 +37,9 @@ Avec ε = −1.5, le CA vaut `p^(1+ε) = p^(−0,5)` — **décroissant en p** :
 ```
 Cause : `m.get('gini', 0)` — la clé du classement est `gini_test`. Les couleurs, calculées sur ce zéro, sortent toutes en **rouge**. Le graphique est intitulé « Barres Train vs Test » avec la légende « un grand écart = surapprentissage ».
 
+> ✅ **DÉJÀ FERMÉ — constaté le 25/08/2026 en le RE-MESURANT, pas en le relisant.** Mesuré sur un vrai run : `validation_ml` et `hypotheses` sont **identiques sur toutes les clés** — h1 VERT, h2 VERT, h3 ROUGE, h4 AMBRE, statut_global ROUGE. Aucune divergence.
+> ⚠️ *Le correctif était dans le code, jamais reporté ici. L'archive prévient elle-même : « ils mesurent l'état ACTUEL, pas celui du jour de l'audit — lire le chiffre, pas l'étiquette ». Épinglé désormais par `test_hypotheses_non_testees.py`.*
+
 **C4 — Deux validations contradictoires dans le même dictionnaire de retour.**
 ```
   hypotheses.h4    = ROUGE  (ecart = 55.56 %)   <- calculee AVEC X_test/y_test

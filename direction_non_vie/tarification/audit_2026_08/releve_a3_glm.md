@@ -23,7 +23,13 @@
 
 Sa propre docstring l'interdit : *« Ajouter offset=log(expo) appliquerait l'exposition DEUX FOIS »*. **Portée mesurée** : aucun consommateur hors A3 ; à l'intérieur, c'est la **2ᵉ source du lissage géographique** quand `prime_pure` est indisponible ([l.3014](direction_non_vie/tarification/a3_glm/agent.py:3014)). **Le tarif principal n'est pas touché.**
 
+> ✅ **DÉJÀ FERMÉ — constaté le 25/08/2026 en le RE-MESURANT, pas en le relisant.** Mesuré : sans colonne de fréquence, H1 rend **AMBRE** — « Sur-dispersion NON mesurée » — et `ratio_disp` vaut `None`. Aucun chiffre inventé n'est publié.
+> ⚠️ *Le correctif était dans le code, jamais reporté ici. L'archive prévient elle-même : « ils mesurent l'état ACTUEL, pas celui du jour de l'audit — lire le chiffre, pas l'étiquette ». Épinglé désormais par `test_hypotheses_non_testees.py`.*
+
 **C2 — H1 rend VERT sur des valeurs codées en dur quand la donnée manque.** Sans colonne de fréquence : `ratio=1.30, moyenne=0.05, variance=0.065` → *« Var/E = 1.30 < 2 → Distribution Poisson valide ✅ »*. **H1 est l'une des six plafonnantes d'A6.**
+
+> ✅ **DÉJÀ FERMÉ — constaté le 25/08/2026 en le RE-MESURANT, pas en le relisant.** Mesuré : H4 rend **AMBRE** par défaut — « Stabilité relativités NON testée » — et `cv_max` vaut `None`.
+> ⚠️ *Le correctif était dans le code, jamais reporté ici. L'archive prévient elle-même : « ils mesurent l'état ACTUEL, pas celui du jour de l'audit — lire le chiffre, pas l'étiquette ». Épinglé désormais par `test_hypotheses_non_testees.py`.*
 
 **C3 — H4 « non testée » vaut VERT.** C'est **exactement** le défaut corrigé dans A4 par le lot A de la série A→B→C→D, et **non reporté sur A3** :
 
@@ -46,6 +52,9 @@ Les vraies bornes existent (`ic95_low`/`ic95_high`) et ne sont pas passées.
 **C7 — `meilleur_modele` compare deux Gini incomparables.** `{'poisson': 0.3856, 'gamma': 0.0507}` → « meilleur = poisson ». Le Poisson est évalué sur **tout** le test (fréquence), le Gamma sur les **sinistrés seuls** (sévérité). Ce ne sont pas deux candidats pour la même tâche.
 
 ### B — Affirme plus que le code ne porte (5)
+
+> ✅ **DÉJÀ FERMÉ — constaté le 25/08/2026 en le RE-MESURANT, pas en le relisant.** Mesuré sur les cinq bornes : `0.07→ROUGE · 0.09→AMBRE · 0.12→AMBRE · 0.16→VERT · 0.30→VERT`. **`0.12` ne sort plus VERT**, et les quatre bandes sont cohérentes avec le commentaire.
+> ⚠️ *Le correctif était dans le code, jamais reporté ici. L'archive prévient elle-même : « ils mesurent l'état ACTUEL, pas celui du jour de l'audit — lire le chiffre, pas l'étiquette ». Épinglé désormais par `test_hypotheses_non_testees.py`.*
 
 **C8 — H3 : le seuil annoncé n'est pas le seuil appliqué.** La docstring dit « Gini ∈ [0.08, 0.15] → acceptable ⚠️ ». Mesuré : `0.12 → VERT`. Le code a **quatre** bandes, la docstring **trois**.
 

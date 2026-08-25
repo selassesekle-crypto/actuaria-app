@@ -10,6 +10,27 @@
 
 ### A — Publie du FAUX à un actuaire qui signe (6)
 
+> ✅ **LA CAUSE NOMMÉE PAR CE CONSTAT EST DÉJÀ FERMÉE.** Mesuré le 25/08/2026 :
+> `_valider_hypotheses_dl` lit `metriques.get('cann', {}).get('gini_test', 0)` —
+> **la bonne clé**. Le `.get('gini', 0)` a disparu. *Correctif présent dans le
+> code, jamais reporté ici.*
+>
+> ⚠️⚠️ **MAIS LA MESURE A TROUVÉ UN DÉFAUT ADJACENT, ET JE LE DISTINGUE DU
+> CONSTAT** : `gini_dl_max = max(gini_cann, gini_tabnet, **0**)` — un plancher
+> à zéro qui publiait « Gini DL = **0.0000** » là où la mesure valait
+> **−0,1083**. *Un zéro qui signifie « écrêté » est indiscernable d'un zéro
+> mesuré* — même famille qu'`a3/C6`. Un Gini négatif est une **information** :
+> il dit que le modèle classe à l'envers ; l'écrêter le fait passer pour « sans
+> pouvoir discriminant », ce qui est plus flatteur que la réalité. **Corrigé.**
+> ⚠️ **CE QUI CHANGE ET CE QUI NE CHANGE PAS, séparément** : le **VERDICT** est
+> identique (ROUGE avant, ROUGE après) ; **le NOMBRE PUBLIÉ** change.
+>
+> ⚠️⚠️ **ET LE SYMPTÔME DU CONSTAT N'EST PAS REPRODUIT** : « trois hypothèses
+> ROUGE sur un CANN **excellent** ». Sur le portefeuille du banc, le CANN
+> obtient **−0,1103** — il n'est pas excellent, et le ROUGE y est justifié.
+> *Je ne peux donc pas vérifier que la correction de clé suffit : il faudrait un
+> portefeuille où le DL discrimine réellement.* **À instruire, pas à clore.**
+
 **C1 — Les trois hypothèses DL sont ROUGE sur un CANN excellent. Une clé, trois verdicts faux.**
 
 ```
