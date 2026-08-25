@@ -40,6 +40,41 @@ A1** — le commentaire l.276 le dit lui-même.
 
 *Preuve : `preuves/audit_pipeline_ter.py`.*
 
+> ✅ **FERMÉ POUR L'ILLISIBILITÉ — lot `pipeline/C1`. ET PAS POUR LA
+> PLAUSIBILITÉ : les deux ne se confondent pas.**
+>
+> `tarifer()` refuse désormais **avant** de tarifer, via
+> `anomalies_du_contrat()` qui compare le contrat **au plan signé** — comme A2
+> le fait déjà en refusant une modalité inconnue (piège V9). Mesuré :
+> ```
+>   bonus_malus = 'beaucoup'   success=False   « valeur ILLISIBLE »
+>   bonus_malus = ''           success=False   « valeur ABSENTE »
+>   bonus_malus = None         success=False   « valeur ABSENTE »
+> ```
+> ⚠️ Le motif dit **pourquoi le prix serait faux** : *« la prime rendue serait
+> celle du contrat MOYEN, pas celle de ce contrat »*. Un refus sans motif
+> renvoie l'actuaire à la devinette.
+> ⚠️ Le contrat de sortie **reste stable en refus** — `success`,
+> `plan_empreinte`, `date_calcul`, sérialisable JSON : c'est ce que la
+> docstring promet, succès comme erreur.
+>
+> ⚠️⚠️ **CE QUI RESTE OUVERT, ET C'EST DÉLIBÉRÉ** : `-999` et `1e12` sont
+> encore tarifés. Ils sont **lisibles** — et **aucune borne de plausibilité
+> n'est déclarée dans le plan**. En inventer une ici serait poser un chiffre
+> actuariel que personne n'a signé. **Un test épingle cette limite** : s'il se
+> met à échouer, c'est qu'une borne a été ajoutée, et il faudra vérifier
+> qu'elle vient du PLAN.
+>
+> ⚠️ **`predire_portefeuille` N'EST PAS TRAITÉ, et c'est une question de
+> conception** : il reçoit un portefeuille entier par le même chemin. Refuser
+> tout parce qu'une ligne est illisible serait faux ; signaler ligne par ligne
+> demande de décider ce que le contrat de sortie vectoriel doit porter. Rendu.
+>
+> ⚠️ **La modalité catégorielle inconnue était DÉJÀ couverte** par `INV-7c` —
+> je ne l'ai pas dupliquée, et elle passe toujours.
+> Contrôle positif : `test_tarifer_contrat.py`, **6 tests**, dont **3 dans le
+> second sens** (contrat valide, nombre écrit en texte, limite épinglée).
+
 ### B — Affirme plus que le code ne porte (5)
 
 **C2 — Le repli « dégénéré mais défini » n'est JAMAIS atteint.** Le commentaire

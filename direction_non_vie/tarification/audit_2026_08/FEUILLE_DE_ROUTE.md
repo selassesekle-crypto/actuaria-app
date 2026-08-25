@@ -168,7 +168,7 @@ forme d'entrée ne les publie ailleurs.
 |---|---|
 | **3.1 Les statistiques fausses d'A3** | `a3/C4` IC 95 % faux · `a3/C6` Gini Tweedie nul · `a3/C7` deux Gini incomparables comparés · `a3/C14` p-value fabriquée |
 | **3.2 Les scores et les rangs d'A4/A6** | `a4/C6` `a4/C9` `a4/C10` `a6/C6` `a6/C7` `a6/C8` |
-| **3.3 L'API latente** | `pipeline/C1` (**`tarifer()`**, +128 % sur un facteur illisible) — **descendu du rang 1** : 1 appelant, une **démo**. *Une API publique sans borne est une régression qui attend un appelant* |
+| **3.3 L'API latente** | ✅ **`pipeline/C1` FERMÉ pour l'ILLISIBILITÉ** (la plausibilité reste ouverte, faute de borne déclarée au plan ; `predire_portefeuille` rendu en conception) · `pipeline/C1` (**`tarifer()`**, +128 % sur un facteur illisible) — **descendu du rang 1** : 1 appelant, une **démo**. *Une API publique sans borne est une régression qui attend un appelant* |
 
 ## RANG 4 — LES FIGURES ET LA CHARTE · **1 lot · 11 constats** · le meilleur ratio
 

@@ -17,6 +17,7 @@ Rien ici ne « sait » ce qu'est une voiture ou un chantier : tout vient du plan
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -131,6 +132,67 @@ class TarifNonVie:
             "prime_pure": prime_pure, "exposition": expo,
         }, index=df.index)
 
+    def anomalies_du_contrat(self, contrat: dict) -> list:
+        """Ce qui, dans ce contrat, n'est pas LISIBLE au regard du plan signé.
+
+        ⚠️⚠️ CONSTAT `pipeline/C1`. `tarifer()` acceptait n'importe quoi et
+        rendait un prix sans un mot. Mesuré sur un contrat de référence à
+        28,50 € :
+
+            bonus_malus = 'beaucoup'   ->  64,99 €   success=True   +128 %
+            bonus_malus = ''           ->  64,99 €   success=True   +128 %
+            bonus_malus = None         ->  64,99 €   success=True   +128 %
+            bonus_malus = -999         ->  22,96 €   success=True   -19,4 %
+            bonus_malus = 1e12         ->  149,79 €  success=True   +425,6 %
+
+        **Les trois premières rendent LA MÊME prime** : elles sont coercées
+        vers le même repli — l'imputation d'A2. *Le souscripteur reçoit la
+        prime du contrat MOYEN en croyant tarifer le sien, et rien ne le
+        signale.*
+
+        ⚠️ Le plan porte déjà la vérité : un facteur `categoriel` déclare ses
+        **modalités figées**, un `continu` attend un nombre. On ne devine
+        rien — on compare au plan signé, comme A2 le fait déjà en refusant
+        une modalité inconnue (piège V9).
+
+        ⚠️ CE QUE CETTE FONCTION NE FAIT PAS : elle ne juge pas la
+        PLAUSIBILITÉ. `bonus_malus = -999` et `1e12` sont *lisibles* — ils
+        sont refusés par aucune borne, et **aucune borne n'est déclarée dans
+        le plan**. En inventer une ici serait poser un chiffre actuariel que
+        personne n'a signé. Rendu comme question de conception.
+        """
+        anomalies = []
+        for f in self.plan.facteurs:
+            if f.nom not in contrat:
+                continue                       # absence = amputation, autre sujet
+            valeur = contrat[f.nom]
+            if f.type == 'categoriel' and f.modalites:
+                if valeur not in f.modalites:
+                    anomalies.append(
+                        f"facteur '{f.nom}' : modalite {valeur!r} INCONNUE — "
+                        f"le plan declare {list(f.modalites)}. Tarifer "
+                        f"reviendrait a imputer une valeur que l'assure n'a "
+                        f"pas fournie.")
+                continue
+            if valeur is None or (isinstance(valeur, str) and not valeur.strip()):
+                anomalies.append(
+                    f"facteur '{f.nom}' : valeur ABSENTE ({valeur!r}) — elle "
+                    f"serait imputee, et la prime rendue serait celle du "
+                    f"contrat MOYEN, pas celle de ce contrat.")
+                continue
+            try:
+                x = float(valeur)
+            except (TypeError, ValueError):
+                anomalies.append(
+                    f"facteur '{f.nom}' : valeur ILLISIBLE ({valeur!r}) — un "
+                    f"facteur numerique attend un nombre. Elle serait imputee "
+                    f"en silence.")
+                continue
+            if not math.isfinite(x):
+                anomalies.append(
+                    f"facteur '{f.nom}' : valeur non finie ({valeur!r}).")
+        return anomalies
+
     def tarifer(self, contrat: dict, exposition: float = 1.0) -> dict:
         """« Tarifez-moi ce contrat. » Le livrable qui vend (étape 5).
 
@@ -145,6 +207,21 @@ class TarifNonVie:
         """
         date_calcul = datetime.now(timezone.utc).isoformat()   # ISO 8601 (UTC)
         empreinte = self.plan.empreinte()
+        # ⚠️⚠️ ON REFUSE AVANT DE TARIFER — constat `pipeline/C1`. Un facteur
+        # illisible etait impute en silence par A2, et la prime du contrat
+        # MOYEN sortait avec `success: True`. Le contrat de sortie declare
+        # deja la voie de l'echec (`{success: False, erreur}`) : on l'emprunte
+        # plutot que de signer un prix qu'on sait faux.
+        _anomalies = self.anomalies_du_contrat(contrat)
+        if _anomalies:
+            return {
+                "success": False,
+                "erreur": ("contrat NON TARIFABLE — "
+                           + " · ".join(_anomalies)),
+                "anomalies_contrat": _anomalies,
+                "plan_empreinte": empreinte,
+                "date_calcul": date_calcul,
+            }
         try:
             df = pd.DataFrame([{**contrat, self.plan.exposition: exposition}])
             Xc = self._design(df)
