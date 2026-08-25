@@ -7,6 +7,13 @@
 > arbitrages** avec ma recommandation pour chacun.
 > ⚠️ [`CARTE.md`](CARTE.md) reste l'**inventaire** (constats, mesures, preuves)
 > — **elle n'ordonne plus.**
+>
+> ⚠️⚠️ **[`EXIGENCES_MIGRATION.md`](EXIGENCES_MIGRATION.md) — À OUVRIR AVANT DE
+> CONCEVOIR LA NOUVELLE APPLICATION.** Ce document **n'ordonne aucun lot** : il
+> contraint le code qui n'existe pas encore. **Deux modes (rapide / complet), et
+> l'absence de comparaison JAMAIS silencieuse.** Il porte aussi les **trois
+> pistes de temps** à mesurer avant toute conception, et **l'exclusion
+> absolue : ne jamais réduire la précision d'un modèle pour aller plus vite.**
 
 Sept relevés, **28 560 lignes lues à 100 %**, **141 affirmations mesurées**,
 **85 constats** et **55 affirmations vérifiées bonnes**.

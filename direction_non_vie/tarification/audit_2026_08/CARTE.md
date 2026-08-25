@@ -82,9 +82,19 @@ existe et sorte un prix sans passer par A6** :
 | `a5/C6` | **l'early stopping se règle sur le jeu de TEST** — une fuite |
 | `a5/C7` | **aucun seed** — deux exécutions, deux modèles, deux prix |
 
-**Ce n'est pas « une absence d'arbitrage ». C'est un prix faux, publié,
-aujourd'hui.** Mon argument du rang 6 — *« un arbitrage manquant est moins grave
-qu'un arbitrage faux »* — **ne s'applique pas ici** : il y a les deux.
+**Ce n'était pas « une absence d'arbitrage ». C'était un prix faux, publié.**
+Mon argument du rang 6 — *« un arbitrage manquant est moins grave qu'un
+arbitrage faux »* — **ne s'appliquait pas ici** : il y avait les deux.
+
+> ✅⏭️ **ARBITRÉ LE 25/08/2026 — LE PRIX FAUX EST FERMÉ, L'ARBITRAGE MANQUANT
+> EST REPORTÉ.** `a5/C6` et `a5/C7` sont **corrigés** (`59059c3`) : il n'y a
+> plus de prix faux. Reste l'arbitrage facultatif — et **Selasse a tranché de
+> NE PAS y toucher** : l'application Streamlit disparaît à la migration, y
+> écrire même une phrase courte n'est pas utile.
+> ⚠️⚠️ **NE PAS CORRIGER `prime_ml` / `prime_dl` DANS L'APP ACTUELLE.**
+> L'exigence est écrite pour la nouvelle :
+> [`EXIGENCES_MIGRATION.md`](EXIGENCES_MIGRATION.md) — **deux modes, et
+> l'absence de comparaison jamais silencieuse.**
 
 ## ② CE QUI CHANGE DANS L'ORDRE
 
