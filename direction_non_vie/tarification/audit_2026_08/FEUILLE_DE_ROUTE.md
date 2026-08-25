@@ -138,7 +138,12 @@ le constat annonçait. `C5` posé **d'abord**, dans le même changement.
 **9 contrôles positifs**, dont une classe entière qui **lit le classeur** pour
 qu'on ne puisse plus les dissocier.
 
-**Reste ouvert dans l'ordre arbitré** : ② `conformite/C1`+`C7` ensemble ·
+### ✅ LOT ② CLOS — `conformite/C1` + `conformite/C7`, ENSEMBLE
+
+La propriété `controle_effet_execute` atteste désormais **l'EXÉCUTION** et non la fourniture des arguments, et elle **atteint le livrable** avec son MOTIF. ⚠️ Le couplage était orienté : la publier avant de la rendre véridique aurait attesté un contrôle qui n'avait examiné aucune colonne.
+⚠️⚠️ **LA GATE A ATTRAPÉ UNE RÉGRESSION QUE J'AVAIS INTRODUITE** — `INV-11c`, un invariant écrit il y a des cycles : *l'échec du contrôle par l'effet doit LEVER*. Ma source unique s'exécutait avant et changeait le type levé. **Le test existait ; je ne l'ai pas dupliqué.** 9 contrôles positifs.
+
+**Reste ouvert dans l'ordre arbitré** :
 ③ `qualite/C1` `C2` `a1/C3` `C4` · puis **le banc étendu à A3/A4/A5 avant
 leurs ~40 constats** · puis les **11 latents**.
 ⚠️ **`alertes_modele`, `validation_selection.verdict`, `backtest.stabilite`

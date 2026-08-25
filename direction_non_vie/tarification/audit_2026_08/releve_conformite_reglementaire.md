@@ -42,6 +42,48 @@ l.862 **avant l'appel**, sur la seule présence des arguments :
 `not (df is None or not cibles)`. La propriété atteste donc la fourniture des
 arguments, pas l'exécution du contrôle.
 
+> ✅✅ **`C1` ET `C7` FERMÉS ENSEMBLE — le couplage est ORIENTÉ.**
+> Publier `C7` sans corriger `C1` aurait mis dans le livrable l'attestation
+> **fausse** « garde-fou n°4 exécuté » sur une matrice où il n'avait examiné
+> aucune colonne. **`C1` a donc été corrigé d'abord, dans le même changement.**
+>
+> **`C1`** — nouvelle **source unique** `motif_controle_effet_impossible(df,
+> col_cible)`, consultée par **les deux** endroits qui divergeaient :
+> `detecter_fuites_par_effet` pour ses deux `return {}` muets, et
+> `construire_matrice_x` pour calculer la propriété. Elle vaut désormais
+> « au moins une cible a réellement été examinée », plus « les arguments ont
+> été passés ». Mesuré :
+> ```
+>   cible presente et variable   execute=True    aucun motif
+>   cible ABSENTE du df          execute=False   motif nomme
+>   cible CONSTANTE              execute=False   motif nomme
+>   df absent                    execute=False   motif nomme
+> ```
+> ⚠️ **Le motif voyage avec le drapeau** : un booléen dit QUE, jamais POURQUOI.
+> Et la couverture **partielle** (une cible sur deux, cas réel d'A3 qui en passe
+> deux) est déclarée, pas arrondie au meilleur.
+>
+> **`C7`** — nouvelle source unique `avertissement_controle_effet`, **à côté de
+> `avertissement_walk_forward`**, et le drapeau propagé sur la chaîne qui
+> existait déjà et était éprouvée : `MatriceX` → A3/A4/A5 → A6 → l'Excel.
+> ⚠️ **L'agrégation d'A6 se fait par le PIRE** : si un seul des trois agents n'a
+> pas pu faire tourner le garde-fou, le tarif n'en est pas protégé.
+>
+> ⚠️⚠️ **ET LA GATE A ATTRAPÉ UNE RÉGRESSION QUE J'AVAIS INTRODUITE.**
+> `INV-11c` — *« l'échec du contrôle par l'effet doit LEVER, jamais retourner
+> aucune fuite »* — a échoué : ma fonction s'exécutant **avant**
+> `detecter_fuites_par_effet`, une exception brute la traversait et changeait
+> le type levé. Corrigé : elle lève `EchecControleEffet`, comme l'autre.
+> *Une source unique doit honorer le contrat aux DEUX endroits, pas seulement
+> là où il était écrit.* **Le test existait ; je ne l'ai pas dupliqué.**
+>
+> ⚠️ Et mon propre message d'alerte affirmait « appelée SANS df et/ou SANS
+> col_cible » alors que les deux étaient fournis — **un en-tête qui contredit
+> le motif qu'il porte.** Corrigé, et verrouillé par un contrôle.
+>
+> Contrôles positifs : `test_controle_effet.py`, **9 tests**, dont
+> `POS_Effet_LeCouplageEstVerrouille` qui **lit le classeur produit**.
+
 ⚠️ **C'est le motif que ce module a été écrit pour interdire, reproduit dans la
 fonction qui l'interdit** : le module nomme lui-même ce défaut deux fois — bug
 V6 (l.1223) et BLOQUANT B2 (l.869) — « un résultat indiscernable de *le contrôle
@@ -243,6 +285,9 @@ docstring l.936 le dit : « Trois motifs »). Le tri se fait par sous-chaîne :
 l'actuaire peut légitimement contester : B7 l'a prouvé au prix fort, et C2
 ci-dessus montre que le cas se reproduit. **Le seul motif discutable est celui
 qui est publié comme indiscutable.**
+
+> ✅ **FERMÉ — lot ②, INDISSOCIABLE DE `C1`.** Voir le bloc sous `C1` : la propriété est propagée `MatriceX` → A3/A4/A5 → A6 → l'Excel, via la nouvelle source unique `avertissement_controle_effet`. ⚠️ **Elle n'a pu être publiée qu'une fois rendue VÉRIDIQUE** — la publier avant aurait attesté un contrôle qui n'avait examiné aucune colonne.
+> ⚠️ **Et l'état SAIN est publié lui aussi** (« exécuté sur toutes les cibles ») : sans cela, l'actuaire ne pourrait pas distinguer « tout va bien » de « rien n'a été vérifié » — le défaut même que `C1` décrivait.
 
 **C7 — La propriété `controle_effet_execute` n'atteint aucun livrable.** Elle a
 été ajoutée par l'audit V14 (I7) avec la mention explicite « ⚠ À REMONTER DANS

@@ -671,6 +671,51 @@ def filtrer_features(
 # validation temporelle, et TOUS les livrables l'appellent. Il devient impossible
 # qu'un format de rapport diverge des autres — ou du gate de certification.
 
+def avertissement_controle_effet(rapport: dict | None) -> str | None:
+    """SOURCE UNIQUE du texte « le garde-fou n°4 n'a pas tourné », à afficher
+    dans TOUT livrable. `None` s'il n'y a rien à signaler.
+
+    ⚠️⚠️ POURQUOI CETTE FONCTION EXISTE — constat `conformite/C7`. La propriété
+    `MatriceX.controle_effet_execute` a été ajoutée par l'audit V14 avec la
+    mention explicite « ⚠ À REMONTER DANS LES RAPPORTS », et la raison écrite
+    dans ce module : *« le WARNING existait dans les logs, mais l'objet n'en
+    portait aucune trace — donc rien n'atteignait l'actuaire »*. Mesuré le
+    25/08/2026 : **elle n'était lue par aucun agent, aucun service, aucun
+    livrable.** Elle est restée une trace interne pendant tout ce temps.
+
+    ⚠️⚠️ ET ELLE NE POUVAIT PAS ÊTRE PUBLIÉE SEULE. Tant que
+    `controle_effet_execute` attestait la simple fourniture des arguments
+    (constat `conformite/C1`), la remonter dans les rapports aurait publié une
+    ATTESTATION FAUSSE : « garde-fou n°4 exécuté » sur une matrice où il
+    n'avait examiné aucune colonne. **`C1` a donc été corrigé d'abord, dans le
+    même changement.** Ne jamais revenir sur l'un sans l'autre.
+
+    `rapport` est le dict porté par `result_a3/a4/a5['controle_effet']` et
+    relayé par A6 : `{'execute': bool, 'motifs': {cible: pourquoi}}`.
+    """
+    r = rapport or {}
+    if not r:
+        return None
+    if r.get('execute') and not r.get('motifs'):
+        return None
+    motifs = r.get('motifs') or {}
+    detail = (" MOTIF(S) : " + " · ".join(f"{k} — {v}" for k, v in motifs.items())
+              if motifs else "")
+    if not r.get('execute'):
+        return (
+            "⚠ CONTRÔLE ANTI-FUITE PAR L'EFFET — NON EXÉCUTÉ. Le garde-fou n°4, "
+            "le SEUL qui ne dépende d'aucun nom de colonne, n'a examiné AUCUNE "
+            "colonne. Seuls les contrôles par le nom protègent ce tarif, et "
+            "l'audit a démontré qu'ils sont structurellement insuffisants "
+            "('garantie_montant_regle' : Gini 0,0709 → 0,9222)." + detail
+        )
+    return (
+        f"⚠ CONTRÔLE ANTI-FUITE PAR L'EFFET — PARTIEL. Il a tourné, mais "
+        f"{len(motifs)} cible(s) n'ont PAS été examinées : la couverture n'est "
+        f"pas complète." + detail
+    )
+
+
 def avertissement_walk_forward(backtest: Optional[dict]) -> Optional[str]:
     """
     Retourne l'avertissement à afficher dans TOUT livrable (Excel, Word, HTML,
@@ -788,10 +833,10 @@ class MatriceX:
     Toute tentative de modification après construction échoue — c'est le but.
     """
     __slots__ = ('_features', '_exclusions', '_contexte', '_alertes',
-                 '_controle_effet_execute')
+                 '_controle_effet_execute', '_motifs_controle_effet')
 
     def __init__(self, features, exclusions, contexte, _jeton=None, alertes=None,
-                 controle_effet_execute=True):
+                 controle_effet_execute=True, motifs_controle_effet=None):
         # ⚠ AUDIT V12 (I6) — le jeton était un ATTRIBUT DE CLASSE public
         # (MatriceX._JETON), et la docstring affirmait « seul ce module y a
         # accès ». C'ÉTAIT FAUX : MatriceX([...], _jeton=MatriceX._JETON)
@@ -820,6 +865,11 @@ class MatriceX:
         object.__setattr__(self, '_alertes', dict(alertes or {}))
         object.__setattr__(self, '_controle_effet_execute',
                            bool(controle_effet_execute))
+        # ⚠️ LE MOTIF VOYAGE AVEC LE DRAPEAU — constat `conformite/C7`.
+        # Un booléen seul dit QU'IL n'a pas tourné, jamais POURQUOI :
+        # l'actuaire ne peut alors rien en faire.
+        object.__setattr__(self, '_motifs_controle_effet',
+                           dict(motifs_controle_effet or {}))
 
     # ── Lecture seule ────────────────────────────────────────────────────────
     @property
@@ -853,6 +903,14 @@ class MatriceX:
         n'existe pas ». Une matrice X construite sans ce contrôle n'offre que des
         garde-fous par le NOM, structurellement insuffisants (audit V12)."""
         return self._controle_effet_execute
+
+    @property
+    def motifs_controle_effet(self):
+        """{cible: pourquoi le contrôle par l'effet n'a pas pu l'examiner}.
+
+        Vide quand tout a été examiné. Alimente `avertissement_controle_effet`,
+        qui est la SOURCE UNIQUE du texte à publier."""
+        return dict(self._motifs_controle_effet)
 
     @property
     def contexte(self):
@@ -950,24 +1008,62 @@ def construire_matrice_x(
     cibles = ([col_cible] if isinstance(col_cible, str)
               else list(col_cible or []))
 
-    controle_effet_execute = not (df is None or not cibles)
-    if df is None or not cibles:
+    # ⚠️⚠️ LA PROPRIÉTÉ ATTESTE L'EXÉCUTION, PLUS LA FOURNITURE DES ARGUMENTS —
+    # constat `conformite/C1`. Elle valait `not (df is None or not cibles)`,
+    # c'est-à-dire « les arguments ont été passés ». Or `detecter_fuites_par_effet`
+    # renonce en silence quand la cible est absente du DataFrame ou de variance
+    # nulle : le contrôle n'examinait AUCUNE colonne et se déclarait exécuté.
+    # On interroge donc la SOURCE UNIQUE, cible par cible.
+    motifs_effet = {}
+    for _c in cibles:
+        _m = motif_controle_effet_impossible(df, _c)
+        if _m is not None:
+            motifs_effet[str(_c)] = _m
+    # Exécuté = au moins une cible a réellement pu être examinée. Une seule
+    # cible exploitable suffit à faire tourner le garde-fou ; aucune ne le
+    # laisse muet, et c'est alors qu'il faut le DIRE.
+    controle_effet_execute = bool(cibles) and len(motifs_effet) < len(cibles)
+    if motifs_effet and controle_effet_execute:
+        # Cas partiel : une cible sur deux. Le contrôle a tourné, mais pas sur
+        # tout — le taire ferait croire à une couverture complète.
+        _log.warning(
+            f"[ANTI-FUITE PAR L'EFFET — PARTIEL] "
+            f"{len(motifs_effet)}/{len(cibles)} cible(s) non examinée(s)"
+            f"{' (' + contexte + ')' if contexte else ''} : "
+            + " · ".join(f"{k} — {v}" for k, v in motifs_effet.items())
+        )
+    if not controle_effet_execute:
         # ⚠ LE GARDE-FOU NE DOIT JAMAIS SE DÉSACTIVER EN SILENCE.
+        # ⚠️⚠️ LA CONDITION PORTE DÉSORMAIS SUR L'EXÉCUTION, plus sur la seule
+        # absence d'arguments : une cible fournie mais ABSENTE des données, ou
+        # CONSTANTE, laissait le contrôle muet et cette branche non prise.
         # `df` et `col_cible` sont techniquement optionnels — un agent peut donc
         # les omettre, et le contrôle par l'effet (le SEUL qui ne dépende d'aucun
         # nom de colonne) ne tourne alors PAS. Sans cet avertissement, cette
         # désactivation serait indiscernable d'un contrôle qui n'a rien trouvé :
         # c'est très exactement le motif du bug V6 et du BLOQUANT B2.
         # Un contrôle dont on ne vérifie pas l'exécution n'est pas un contrôle.
+        # ⚠️ L'EN-TÊTE DOIT DIRE LA VRAIE CAUSE. Il annonçait « appelée SANS df
+        # et/ou SANS col_cible » — or depuis le correctif de `C1`, cette branche
+        # est aussi prise quand les DEUX ont été fournis mais que la cible est
+        # absente des données ou constante. Un message qui contredit le motif
+        # qu'il porte est le défaut que ce module poursuit.
+        _cause = ("appelée SANS df et/ou SANS col_cible"
+                  if (df is None or not cibles)
+                  else "appelée AVEC df et col_cible, mais aucune cible "
+                       "exploitable")
         _log.warning(
             f"[ANTI-FUITE PAR L'EFFET — NON EXÉCUTÉ] "
-            f"construire_matrice_x() appelée SANS df et/ou SANS col_cible"
+            f"construire_matrice_x() {_cause}"
             f"{' (' + contexte + ')' if contexte else ''}. Le garde-fou n°4 — le "
             f"seul qui ne dépende d'aucun nom de colonne — N'A PAS TOURNÉ. Seuls "
             f"les contrôles par le nom protègent cette matrice X, et l'audit V12 "
             f"a démontré qu'ils sont structurellement insuffisants "
             f"('garantie_montant_regle' : Gini 0,0709 → 0,9222). "
             f"Fournissez df= et col_cible=."
+            + (" MOTIF(S) : " + " · ".join(
+                f"{k} — {v}" for k, v in motifs_effet.items())
+               if motifs_effet else "")
         )
     else:
         for _cible in cibles:
@@ -1014,6 +1110,7 @@ def construire_matrice_x(
         else:
             exclusions[c] = "exclue par le filtre de conformité"
     return MatriceX(conformes, exclusions, contexte, _jeton=_JETON,
+                    motifs_controle_effet=motifs_effet,
                     alertes=alertes_experience,
                     controle_effet_execute=controle_effet_execute)
 
@@ -1244,6 +1341,64 @@ class EchecControleEffet(RuntimeError):
     """
 
 
+def motif_controle_effet_impossible(df, col_cible) -> str | None:
+    """Pourquoi le contrôle par l'effet ne peut PAS s'exécuter sur cette cible —
+    ou `None` s'il le peut.
+
+    ⚠️⚠️ SOURCE UNIQUE DU CONSTAT `conformite/C1`. `detecter_fuites_par_effet`
+    rendait `{}` **sans un mot** dans deux cas — cible absente du DataFrame, et
+    cible de variance nulle — pendant que `construire_matrice_x` calculait
+    `controle_effet_execute` AVANT l'appel, sur la seule présence des
+    arguments : `not (df is None or not cibles)`. **La propriété attestait la
+    FOURNITURE DES ARGUMENTS, pas l'EXÉCUTION DU CONTRÔLE.**
+
+    Mesuré : cible absente du `df` → `controle_effet_execute = True`, fuite
+    NON écartée, aucun avertissement. La fuite entrait dans la matrice X et
+    l'objet livré à l'actuaire déclarait le garde-fou exécuté.
+
+    ⚠️ C'est le motif que ce module est écrit pour interdire, reproduit dans la
+    fonction qui l'interdit — le module le nomme lui-même deux fois (bug V6,
+    BLOQUANT B2) : *« un résultat indiscernable de : le contrôle n'a pas
+    tourné »*. Un contrôle dont on ne vérifie pas l'exécution n'est pas un
+    contrôle.
+    """
+    if df is None:
+        return ("aucun DataFrame fourni — le garde-fou n°4 ne peut pas "
+                "s'exécuter")
+    if not col_cible:
+        return "aucune cible fournie — le garde-fou n°4 ne peut pas s'exécuter"
+    if col_cible not in getattr(df, 'columns', []):
+        return (f"la cible '{col_cible}' est ABSENTE des données soumises : "
+                f"aucune corrélation ne peut être calculée, et AUCUNE colonne "
+                f"n'a donc été examinée par le contrôle par l'effet")
+    try:
+        if float(df[col_cible].astype(float).std()) == 0.0:
+            return (f"la cible '{col_cible}' est CONSTANTE (variance nulle) : "
+                    f"la corrélation est indéfinie, et aucune colonne n'a été "
+                    f"examinée par le contrôle par l'effet")
+    except (TypeError, ValueError) as exc:
+        return (f"la cible '{col_cible}' n'est pas numérisable ({exc}) : le "
+                f"contrôle par l'effet n'a examiné aucune colonne")
+    except Exception as exc:
+        # ⚠️⚠️ UN ÉCHEC INATTENDU RESTE BRUYANT ET TYPÉ — INV-11c.
+        # `detecter_fuites_par_effet` lève `EchecControleEffet` dans ce cas
+        # depuis le bug V6, et l'invariant l'exige : *« l'échec du contrôle par
+        # l'effet doit LEVER, jamais retourner "aucune fuite" »*. Cette
+        # fonction s'exécutant AVANT lui, une exception brute la traversait et
+        # changeait le type levé. **La gate l'a attrapé, l'invariant a fait son
+        # travail** : une source unique doit honorer le contrat aux DEUX
+        # endroits, pas seulement là où il était écrit.
+        _log = logger
+        _log.error(
+            f"[ANTI-FUITE PAR L'EFFET] ÉCHEC DU CONTRÔLE — "
+            f"{type(exc).__name__}: {exc}. Le garde-fou principal contre les "
+            f"fuites de données n'a PAS pu s'exécuter. Ne pas poursuivre comme "
+            f"si tout allait bien."
+        )
+        raise EchecControleEffet(str(exc)) from exc
+    return None
+
+
 def detecter_fuites_par_effet(
     df,
     feature_names: List[str],
@@ -1274,14 +1429,16 @@ def detecter_fuites_par_effet(
     }
     fuites = {}
     signaux_experience = {}   # expérience passée à signal fort : informer, pas exclure
-    if col_cible not in getattr(df, 'columns', []):
+    # ⚠️ SOURCE UNIQUE DES DEUX SORTIES MUETTES — constat `conformite/C1`.
+    # Ces deux `return {}` existaient ici, et `construire_matrice_x` attestait
+    # malgré tout l'exécution du contrôle. Le motif est désormais calculé par
+    # UNE fonction que les deux endroits consultent : la sortie ne peut plus
+    # être muette d'un côté et attestée de l'autre.
+    if motif_controle_effet_impossible(df, col_cible) is not None:
         return (fuites, signaux_experience) if retourner_alertes else fuites
     try:
         import numpy as np
         y = df[col_cible].astype(float)
-        if float(y.std()) == 0.0:
-            # cible constante : corrélation indéfinie
-            return (fuites, signaux_experience) if retourner_alertes else fuites
         rang_y = y.rank()
         y_arr = y.to_numpy(dtype=float)
         _trapz = getattr(np, 'trapezoid', None) or getattr(np, 'trapz')

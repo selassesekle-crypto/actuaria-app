@@ -501,6 +501,13 @@ class AgentA6Comparaison:
             _exclusions_conformite = {}
             _alertes_conformite = {}
             _alertes_modele = []
+            # ⚠️⚠️ LE CONTRÔLE PAR L'EFFET S'AGRÈGE PAR LE PIRE, JAMAIS PAR LE
+            # MEILLEUR — constat `conformite/C7`. Si UN SEUL des trois agents
+            # n'a pas pu faire tourner le garde-fou n°4, le tarif qui en sort
+            # n'est pas protégé par lui. Agréger par « au moins un l'a fait »
+            # publierait une couverture que le calcul ne porte pas.
+            _controle_effet = {'execute': True, 'motifs': {}}
+            _vu_controle = False
             for _r_src in (result_a3, result_a4, result_a5):
                 if isinstance(_r_src, dict):
                     _exclusions_conformite.update(
@@ -508,6 +515,18 @@ class AgentA6Comparaison:
                     _alertes_conformite.update(
                         _r_src.get('alertes_conformite') or {})
                     _alertes_modele.extend(_r_src.get('alertes_modele') or [])
+                    _ce = _r_src.get('controle_effet')
+                    if isinstance(_ce, dict):
+                        _vu_controle = True
+                        if not _ce.get('execute'):
+                            _controle_effet['execute'] = False
+                        _controle_effet['motifs'].update(_ce.get('motifs') or {})
+            if not _vu_controle:
+                # Aucun agent n'a rendu l'information : on ne peut pas attester.
+                _controle_effet = {
+                    'execute': False,
+                    'motifs': {'(tous)': "aucun agent n'a rapporte l'etat du "
+                                         "controle par l'effet"}}
 
             # ── ALERTE A6 : modèle Deep Learning retenu en production ─────────
             # Garde-fou DÉLIBÉRÉ (point 1), distinct du plafond wf-fidélité
@@ -534,6 +553,7 @@ class AgentA6Comparaison:
 
                 'audit_trail': _audit_trail_a6,  # Gouvernance exposée aux exports
                 'exclusions_conformite': _exclusions_conformite,
+                'controle_effet': _controle_effet,
                 'alertes_conformite': _alertes_conformite,
                 'alertes_modele': _alertes_modele,
                 'exclusions_cible': exclusions_cible,
@@ -642,6 +662,7 @@ class AgentA6Comparaison:
                 # 'antecedents_sinistres_3ans', LE facteur de la RC Pro, était
                 # détruit (−17,4 % de Gini) sans qu'aucun rapport ne l'indique.
                 'exclusions_conformite': _exclusions_conformite,
+                'controle_effet': _controle_effet,
                 'alertes_conformite': _alertes_conformite,
                 'alertes_modele':     _alertes_modele,
                 # Modèles écartés de la comparaison pour cible non conforme

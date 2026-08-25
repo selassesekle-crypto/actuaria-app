@@ -707,6 +707,8 @@ class AgentA5DeepLearning:
                 # qui a rendu le BLOQUANT B5 si coûteux (facteur central de la RC Pro
                 # détruit, −17,4 % de Gini, sans que rien ne l'indique nulle part).
                 'exclusions_conformite': getattr(self, 'exclusions_conformite', {}),
+                'controle_effet': getattr(self, 'controle_effet',
+                                          {'execute': False, 'motifs': {}}),
                 'alertes_conformite': getattr(self, 'alertes_conformite', {}),
                 'alertes_modele':      _alertes_modele,
                 'modele_ampute':       _ampute,
@@ -798,6 +800,11 @@ class AgentA5DeepLearning:
             df=df, col_cible=col_cible,   # garde-fou n°4 : contrôle par l'EFFET
         )
         self.exclusions_conformite = _mx.exclusions
+        # ⚠️ LE CONTRÔLE PAR L'EFFET VOYAGE AVEC SON MOTIF — `conformite/C7`.
+        # La propriété existait depuis l'audit V14 avec la mention « À
+        # REMONTER DANS LES RAPPORTS » ; mesuré, aucun agent ne la lisait.
+        self.controle_effet = {'execute': _mx.controle_effet_execute,
+                               'motifs': _mx.motifs_controle_effet}
         self.alertes_conformite = _mx.alertes
         feature_names = list(_mx)
 

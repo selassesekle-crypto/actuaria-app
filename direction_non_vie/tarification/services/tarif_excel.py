@@ -13,7 +13,8 @@ ONGLETS PAR AGENT :
 
 import io
 from core.conformite_reglementaire import (
-    avertissement_walk_forward, synthese_exclusions, synthese_alertes_experience,
+    avertissement_controle_effet, avertissement_walk_forward,
+    synthese_exclusions, synthese_alertes_experience,
     synthese_modele_dl,
 )
 from core.qualite_donnees import synthese_qualite_donnees
@@ -562,6 +563,7 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
         backtest     = result_a6.get('backtest', {})
         val_sel      = result_a6.get('validation_selection', {})
         fiche        = result_a6.get('fiche_decision', {})
+        ctrl_effet   = result_a6.get('controle_effet', {})
         audit_trail  = result_a6.get('audit_trail', {})
 
         # ── Onglet 1 : Synthèse ───────────────────────────────────────────────
@@ -654,6 +656,19 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
         if _avert_wf:
             _kpi(ws3, r, "⚠ Portée de la validation temporelle", _avert_wf,
                  statut="AMBRE", wrap=True); r += 1
+        # ⚠️⚠️ LE GARDE-FOU N°4 SE DÉCLARE — constat `conformite/C7`.
+        # La propriété `controle_effet_execute` portait « À REMONTER DANS
+        # LES RAPPORTS » depuis l'audit V14 : mesuré, aucun livrable ne la
+        # lisait. Elle n'a pu être publiée qu'une fois rendue VÉRIDIQUE
+        # (constat `conformite/C1`) — la publier avant aurait attesté un
+        # contrôle qui n'avait examiné aucune colonne.
+        _avert_ce = avertissement_controle_effet(ctrl_effet)
+        if _avert_ce:
+            _kpi(ws3, r, "⚠ Contrôle anti-fuite par l'effet", _avert_ce,
+                 statut="ROUGE", wrap=True); r += 1
+        elif ctrl_effet:
+            _kpi(ws3, r, "Contrôle anti-fuite par l'effet",
+                 "exécuté sur toutes les cibles", statut="VERT"); r += 1
         if backtest.get('gini_wf_moyen') is not None:
             _kpi(ws3, r, "Gini walk-forward moyen (recalibré)",
                  round(backtest.get('gini_wf_moyen', 0), 4), fmt=FMT_DEC4); r += 1
