@@ -81,6 +81,129 @@ def texte_livrable(sortie) -> str:
     return str(sortie)
 
 
+class HarnaisNonValide(RuntimeError):
+    """Le banc n'a pas pu prouver qu'il regarde au bon endroit.
+
+    ⚠️⚠️ CETTE EXCEPTION EST LA LEÇON LA PLUS CHÈRE DE CE BANC. Le premier
+    essai sur A3/A4/A5 a rendu **tous les champs muets** — non parce qu'ils le
+    sont, mais parce que ma fixture posait ses marqueurs sur des clés que les
+    exportateurs ne lisent pas : ils lisent `validation_glm.conclusion`, PAS
+    `commentaire`, et ils le lisent **niché**, pas à la racine.
+    **J'aurais fabriqué une quarantaine de faux constats, tous avec
+    l'apparence de la mesure.**
+
+    *Un banc qui rend « muet » parce qu'il regarde au mauvais endroit est
+    indiscernable d'un banc qui a trouvé quelque chose.* La garde est donc
+    BLOQUANTE, pas informative : on ne publie aucun verdict muet tant qu'au
+    moins un champ connu n'a pas été retrouvé PUBLIÉ.
+    """
+
+
+def chemins_lus(chemin_service: str, nom_export: str, racine: str) -> list:
+    """Les CHEMINS DE LECTURE, y compris NICHÉS, d'un exportateur — par AST.
+
+    ⚠️ Relever les NOMS lus ne suffit pas : `export_excel_a3` lit
+    `result_a3['validation_glm']['conclusion']`. Un marqueur posé à la racine
+    sur `conclusion` n'apparaît jamais. On suit donc les alias
+    (`val = result_a3.get('validation_glm', {})`) pour reconstituer le chemin.
+    """
+    import ast
+    arbre = ast.parse(pathlib.Path(chemin_service).read_text(encoding='utf-8'))
+    fn = next(n for n in ast.walk(arbre)
+              if isinstance(n, ast.FunctionDef) and n.name == nom_export)
+    alias = {racine: ()}
+    for _ in range(4):                      # les alias se chaînent
+        for n in ast.walk(fn):
+            if (isinstance(n, ast.Assign) and len(n.targets) == 1
+                    and isinstance(n.targets[0], ast.Name)
+                    and isinstance(n.value, ast.Call)
+                    and isinstance(n.value.func, ast.Attribute)
+                    and n.value.func.attr == 'get' and n.value.args
+                    and isinstance(n.value.args[0], ast.Constant)
+                    and isinstance(n.value.func.value, ast.Name)
+                    and n.value.func.value.id in alias):
+                alias[n.targets[0].id] = (alias[n.value.func.value.id]
+                                          + (n.value.args[0].value,))
+    trouves = set()
+    for n in ast.walk(fn):
+        if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                and n.func.attr == 'get' and n.args
+                and isinstance(n.args[0], ast.Constant)
+                and isinstance(n.args[0].value, str)
+                and isinstance(n.func.value, ast.Name)
+                and n.func.value.id in alias):
+            trouves.add(alias[n.func.value.id] + (n.args[0].value,))
+    return sorted(trouves)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ⚠️⚠️ POURQUOI IL N'Y A PAS ICI DE DERIVATION AUTOMATIQUE DE FIXTURE
+# ══════════════════════════════════════════════════════════════════════════
+# J'ai ecrit puis RETIRE une fonction `chemins_conteneurs()` censee deviner,
+# par AST, quels chemins l'exportateur traite comme des conteneurs plutot que
+# comme des valeurs. **Elle rendait zero.** Et la cause n'est pas un bug de
+# detail : elle est structurelle.
+#
+#     met = result_a3.get('metriques', {})       <- ce chemin, l'AST le voit
+#     for nom, m in met.items():
+#         m.get('gini')                          <- CELUI-CI, non
+#
+# `m` est une VARIABLE DE BOUCLE. L'acces se fait au niveau de l'ELEMENT, pas
+# du chemin : aucun relevé par chemin ne peut le reconstituer. Poser un
+# marqueur CHAINE sur `metriques` fait donc lever `AttributeError: 'str'
+# object has no attribute 'get'`, exception que le `try` de l'exportateur
+# avale, et `export_excel_a3` rend `b''`.
+#
+# ⚠️ **LE BANC CONCLURAIT ALORS « TOUT EST MUET » SUR UN LIVRABLE QUI N'A
+# JAMAIS ETE PRODUIT.** C'est exactement ce que `exiger_harnais_valide`
+# empeche -- et c'est ce qui s'est produit : trois refus sur trois agents.
+#
+# LA VOIE QUI RESTE : ne pas DEVINER la fixture, la PRENDRE d'un vrai
+# resultat d'agent. C'est un lot en soi, et il n'est pas fait.
+# Une fixture devinee ne s'ameliore pas : elle se remplace.
+
+
+def fixture_marquee(chemins: list, agent: str) -> dict:
+    """Un résultat dont CHAQUE chemin réellement lu porte son marqueur.
+
+    ⚠️ Les chemins INTERMÉDIAIRES deviennent des dicts, les FEUILLES portent
+    le marqueur. **Cela ne suffit PAS** — voir le bloc ci-dessus : une feuille
+    qui est en réalité un conteneur casse l'exportateur. Cette fonction est
+    donc un point de départ, jamais une fixture valide en soi.
+    """
+    intermediaires = {c[:i] for c in chemins for i in range(1, len(c))}
+    vides = intermediaires
+    racine: dict = {}
+    for c in chemins:
+        noeud = racine
+        for seg in c[:-1]:
+            noeud = noeud.setdefault(seg, {})
+        if c in vides:
+            noeud.setdefault(c[-1], {})
+        else:
+            noeud[c[-1]] = M(f"{agent}.{'.'.join(c)}")
+    return racine
+
+
+def exiger_harnais_valide(agent: str, textes: dict, chemins: list) -> list:
+    """⚠️⚠️ BLOQUANT. Rend les champs retrouvés PUBLIÉS, ou LÈVE.
+
+    Tant qu'aucun champ connu n'est retrouvé, le banc n'a rien prouvé et ses
+    « muets » ne valent rien. *C'est cette garde qui a fait la différence entre
+    un vrai arrêt et quarante faux constats.*
+    """
+    tout = "\n".join(textes.values())
+    publies = [c for c in chemins if M(f"{agent}.{'.'.join(c)}") in tout]
+    if not publies:
+        raise HarnaisNonValide(
+            f"[{agent}] AUCUN des {len(chemins)} champs lus par l'exportateur "
+            f"n'a ete retrouve dans les livrables produits ({len(tout)} "
+            f"caracteres). Le harnais regarde au mauvais endroit, ou les "
+            f"livrables ont pris un chemin degrade. AUCUN VERDICT « MUET » "
+            f"N'EST PUBLIABLE DANS CET ETAT.")
+    return publies
+
+
 def lecture_par_l_ecran(chemin_app: str, champs) -> dict:
     """Ce que l'ECRAN lit d'un resultat d'agent -- releve PAR AST.
 
@@ -325,5 +448,70 @@ def main() -> None:
         print(f"  [{etat:8s}] {quoi}")
 
 
+def temoin_croise_par_agent() -> None:
+    """⚠️⚠️ LE TÉMOIN CROISÉ SUR A3, A4 ET A5 — avec un harnais VALIDÉ.
+
+    Le premier essai avait rendu tous les champs muets, faute d'un harnais
+    correct. Ici la fixture est DÉRIVÉE de ce que chaque exportateur lit
+    réellement, et `exiger_harnais_valide` LÈVE si rien n'est retrouvé.
+    """
+    from direction_non_vie.tarification.services import tarif_excel as TE
+
+    SERVICE = str(pathlib.Path(__file__).resolve().parents[4]
+                  / 'direction_non_vie' / 'tarification' / 'services'
+                  / 'tarif_excel.py')
+    AGENTS = (('A3', 'export_excel_a3', 'result_a3'),
+              ('A4', 'export_excel_a4', 'result_a4'),
+              ('A5', 'export_excel_a5', 'result_a5'))
+
+    print()
+    print("=" * 78)
+    print("  TEMOIN CROISE SUR A3 / A4 / A5 — harnais DERIVE, garde BLOQUANTE")
+    print("=" * 78)
+    racines_ecran = set()
+    resume = []
+    for agent, export, racine in AGENTS:
+        chemins = chemins_lus(SERVICE, export, racine)
+        fixture = fixture_marquee(chemins, agent)
+        fixture.setdefault('success', True)
+        try:
+            txt = texte_livrable(getattr(TE, export)(fixture, audit_id=agent))
+        except Exception as exc:
+            print(f"  [{agent}] l'export a LEVE : {type(exc).__name__}: {exc}")
+            txt = ''
+        try:
+            publies = exiger_harnais_valide(agent, {'excel': txt}, chemins)
+        except HarnaisNonValide as exc:
+            print(f"  [{agent}] ⛔ HARNAIS NON VALIDE — aucun verdict publie.")
+            print(f"        {exc}")
+            resume.append((agent, None, None))
+            continue
+        muets = [c for c in chemins if c not in publies]
+        print(f"  [{agent}] harnais VALIDE : {len(publies)}/{len(chemins)} "
+              f"chemins retrouves publies")
+        print(f"        temoin PUBLIE  : {'.'.join(publies[0])}")
+        if muets:
+            print(f"        temoin MUET    : {'.'.join(muets[0])}")
+        racines_ecran.update(c[0] for c in muets)
+        resume.append((agent, len(publies), len(muets)))
+
+    if racines_ecran:
+        ecran = lecture_par_l_ecran(
+            str(pathlib.Path(__file__).resolve().parents[4] / 'actuaria_app.py'),
+            sorted(racines_ecran))
+        lus = sorted(k for k, v in ecran.items() if v != 'absent')
+        print()
+        print(f"  croise ECRAN : {len(lus)} racine(s) muette(s) en document "
+              f"sont NEANMOINS lues par l'app -> ne pas les declarer perdues")
+        for k in lus:
+            print(f"      {k}")
+
+    print()
+    for agent, pub, muet in resume:
+        etat = "NON VALIDE" if pub is None else f"{pub} publies / {muet} muets"
+        print(f"    {agent} : {etat}")
+
+
 if __name__ == '__main__':
     main()
+    temoin_croise_par_agent()
