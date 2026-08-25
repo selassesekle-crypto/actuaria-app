@@ -294,6 +294,18 @@ démos — quel que soit le nombre de configs ajoutées.
   qui va disparaître. (Sauf B9 — l'offset — qui reste, lui : `exposition` et
   `log_exposition` ne doivent **jamais** figurer dans `colonnes_produites()`. À
   inscrire comme garde dans `PlanTarifaire.__post_init__`.)
+
+  > ⚠️⚠️ **CETTE INSTRUCTION ÉTAIT TROP ÉTROITE — corrigée au lot 1.2 (audit
+  > d'août 2026).** La garde a été écrite exactement comme demandé ici, et elle
+  > restait contournable : une **interaction** produit `inter_age_expo`, qui
+  > n'est ni `exposition` ni `log_exposition`. Mesuré jusqu'à la prime :
+  > **rapport 1,8339 au lieu de 2,0000** quand l'exposition double, soit
+  > **−8,3 %**. *Ne pas ré-appliquer la formulation ci-dessus telle quelle* :
+  > le contrôle doit porter sur la **propriété** — « cette déclaration
+  > dérive-t-elle d'un rôle fixe ? » — sur les **trois** surfaces (nom source
+  > du facteur, opérandes d'interaction, colonnes produites), et il vaut aussi
+  > pour `cible_frequence` et `cible_cout`. Voir
+  > `direction_non_vie/tarification/audit_2026_08/releve_plan_tarifaire.md`.
 - ❌ **Ne pas faire les 12 LoB d'un coup.** Fais l'auto + la décennale. Si la
   décennale marche par YAML seul, les 10 autres sont un après-midi de YAML chacune.
 - ❌ **Ne pas rester sur du synthétique.** À l'étape 7, fais tourner l'auto sur

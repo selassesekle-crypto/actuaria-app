@@ -45,6 +45,22 @@ d'être proportionnelle à l'exposition* ». Écart mesuré : **−8,3 %**. Le
 garde-fou existe, il est correct, et il regarde une liste où l'interaction ne
 figure pas.
 
+> ✅ **FERMÉ — lot 1.2.** Le contrôle porte désormais sur **trois surfaces** :
+> le **nom source** du facteur, les **opérandes d'interaction**, et les
+> **colonnes produites** (le contrôle d'origine, conservé). Refusé au
+> chargement du plan, donc avant qu'aucune prime ne soit calculée.
+> ⚠️⚠️ **ET LA RACINE N'ÉTAIT PAS DANS LE CODE, ELLE ÉTAIT DANS LA SPEC.**
+> `plan_execution_6_actions.md` l.294 demandait : « *`exposition` et
+> `log_exposition` ne doivent jamais figurer dans `colonnes_produites()`* ».
+> **Le code faisait EXACTEMENT cela.** L'implémentation était fidèle ; c'est la
+> spécification qui décrivait une liste là où il fallait une propriété.
+> ⚠️ **`C9` se ferme du même geste** — le relevé l'annonçait comme « la même
+> faille de forme que C1 », et la mesure le confirme : `expo` en one-hot
+> (`expo_long`) est refusé par la surface n°1.
+> Contrôle positif `POS_Plan_C1` (3 tests), dont **les trois surfaces** et
+> **une interaction légitime préservée** (`age × bonus_malus`, déclarée par
+> `auto.yaml`).
+
 **C2 — Le plan accepte de déclarer LA CIBLE comme facteur, et ce qui l'arrête
 ensuite est fragile.** Aucune garde ne protège `cible_frequence` ni
 `cible_cout`, là où l'exposition en a une :
@@ -102,6 +118,22 @@ exclu, et l'objet déclare le contrôle exécuté.
 anti-fuite **par le nom**. `nb` et `cout` ne le sont pas — et le plan laisse
 l'actuaire nommer ses cibles librement.
 
+> ✅ **FERMÉ — lot 1.2.** Les deux cibles ont désormais **la même garde que
+> l'exposition**, sur les mêmes trois surfaces. Refusé au chargement du plan —
+> donc la protection ne dépend plus du nombre d'arguments que l'appelant a
+> passés, et **A4/A5/A6 (`col_cible: str`, une seule cible) sont couverts comme
+> A3**.
+> ⚠️ **POURQUOI CE N'EST PAS UN ARBITRAGE DE MÉTHODE** : `exposition` entre
+> comme **OFFSET**, `cible_frequence` comme **RÉPONSE** du modèle de fréquence
+> et comme **POIDS** du modèle de coût moyen, `cible_cout` comme **RÉPONSE**.
+> Les trois entrent avec un **rôle FIXE** ; les refuser comme facteurs libres,
+> c'est refuser de prédire une grandeur par elle-même. **La sinistralité passée
+> légitime est une autre colonne, sur une autre période** — le plan la porte
+> déjà (`anteriorite=True`, critère V14), et le contrôle positif vérifie
+> qu'elle n'est **pas** cassée : le BLOQUANT B5 a coûté **−17,4 % de Gini**
+> pour un seul facteur d'antériorité détruit.
+> Contrôle positif `POS_Plan_C2` (3 tests).
+
 ### B — Affirme plus que le code ne porte (5)
 
 **C3 — Un `type` ou un `encodage` mal orthographié fait disparaître le facteur
@@ -131,6 +163,28 @@ et le facteur perdu n'est justement pas dans `colonnes_produites()`.
 ⚠️ C'est le BLOQUANT B5 dans une forme nouvelle : **un seul facteur détruit avait
 coûté −17,4 % de Gini**, et le module s'est doté d'un détecteur pour cela. Ce
 détecteur ne voit pas cette amputation-ci.
+
+> ✅ **FERMÉ — lot 1.2.** `Facteur.__post_init__` valide désormais
+> **l'APPARTENANCE avant la combinaison** : `type`, `encodage` et
+> `transformation` doivent être des valeurs connues. ⚠️ **Les jeux de valeurs
+> sont DÉRIVÉS des `Literal` par `get_args`, jamais recopiés** — une valeur
+> ajoutée au type est acceptée sans toucher au contrôle. *Recopier ces listes
+> aurait rouvert la désynchronisation que ce fichier existe pour supprimer ;
+> `famille_severite`, qui recopiait son tuple à la main, est passée au même
+> régime.*
+> ⚠️ Le cas **`binaire` + encodage** est refusé aussi : l'encodage y était
+> **silencieusement ignoré** — l'actuaire signait un one-hot et obtenait autre
+> chose, sur un document opposable.
+>
+> ⚠️⚠️ **ET UN FILET AU NIVEAU DE LA PROPRIÉTÉ, PARCE QUE LE DÉTECTEUR RESTE
+> AVEUGLE.** `verifier_completude_plan` est *structurellement* incapable de voir
+> cette perte : il compare `colonnes_produites()` aux données, et le facteur
+> perdu n'est justement plus dedans. Nommer les trois causes mesurées ne
+> suffisait donc pas. **Un facteur déclaré qui ne produit AUCUNE colonne est
+> refusé, quelle qu'en soit la cause** — et ce filet a immédiatement attrapé un
+> cas qui n'est dans aucun constat : *un one-hot à modalité unique égale à la
+> référence*, qui ne produit rien et qu'aucun contrôle nommé ne refusait.
+> Contrôle positif `POS_Plan_C3` (4 tests) + `POS_Plan_LesVingtPlansDuDepotChargent`.
 
 **C4 — `config_encodage()` annonce être « ce que A2 consomme », et personne ne
 l'appelle.** Relevé par AST sur 418 fichiers :
@@ -216,6 +270,12 @@ cette mesure le confirme, elle ne l'ouvre pas.*
 **C9 — `'expo' en one_hot` échappe à la garde B9.** `expo_long` n'est pas dans
 la liste des interdits. Sans conséquence pratique — une exposition catégorielle
 n'a pas de sens actuariel — mais c'est la même faille de forme que C1.
+
+> ✅ **FERMÉ — lot 1.2, SANS CORRECTIF PROPRE.** Le contrôle de C1 porte
+> maintenant sur le **nom source** du facteur, pas seulement sur les colonnes
+> produites : `expo` déclaré en one-hot est refusé avant d'avoir produit
+> `expo_long`. *C'est la preuve que le correctif visait la propriété et non le
+> symptôme — un correctif par liste aurait exigé une seconde entrée.*
 
 **C10 — La quatrième liste annoncée remplacée existe toujours.** L'en-tête
 (l.4-8) annonce quatre listes remplacées. Mesuré :

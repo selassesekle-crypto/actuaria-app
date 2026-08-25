@@ -30,7 +30,7 @@ import hashlib
 import json
 from dataclasses import asdict as dataclasses_asdict
 from dataclasses import dataclass, field
-from typing import Literal, Optional, Sequence
+from typing import Literal, Optional, Sequence, get_args
 
 from core.derivations import sources_brutes
 
@@ -47,6 +47,18 @@ FamilleSeverite = Literal["gamma", "lognormal", "inverse_gaussienne"]
 
 # Transformations dérivées : suffixe appliqué par A2
 _SUFFIXE_TRANSFO = {"log": "log_{}", "carre": "{}_carre", "racine": "{}_racine"}
+
+# ⚠️⚠️ LES VALEURS ADMISES SONT DÉRIVÉES DES `Literal`, JAMAIS RECOPIÉES.
+# Python n'applique PAS les `Literal` à l'exécution : `type="ordinal"` passait
+# sans un mot, et le facteur disparaissait ensuite en silence (constat
+# `plan/C3`). On valide donc l'appartenance — et on la valide contre le type
+# lui-même, de sorte qu'une valeur ajoutée au `Literal` soit acceptée sans
+# qu'on ait à toucher au contrôle. Recopier ces listes ici rouvrirait très
+# exactement la désynchronisation que ce fichier existe pour supprimer.
+_TYPES_FACTEUR = frozenset(get_args(TypeFacteur))
+_ENCODAGES = frozenset(get_args(Encodage))
+_TRANSFORMATIONS = frozenset(get_args(Transformation))
+_FAMILLES_SEVERITE = frozenset(get_args(FamilleSeverite))
 
 
 def _slug(valeur: str) -> str:
@@ -73,6 +85,32 @@ class Facteur:
     commentaire: str = ""
 
     def __post_init__(self):
+        # ── ① L'APPARTENANCE D'ABORD, LA COMBINAISON ENSUITE ───────────────────
+        # ⚠️⚠️ CORRECTIF DU LOT 1.2 — constat `plan/C3`. Ce bloc ne validait que
+        # la COHÉRENCE des combinaisons, jamais l'APPARTENANCE des valeurs.
+        # `TypeFacteur`, `Encodage` et `Transformation` sont des `Literal`, que
+        # Python n'applique pas : `type="ordinal"` et `encodage="onehot"` étaient
+        # acceptés sans un mot, et `colonnes_produites()` rendait alors `()` —
+        # le facteur, pourtant présent dans les données et déclaré au plan,
+        # n'atteignait AUCUN modèle. C'est le BLOQUANT B5 sous une forme neuve :
+        # un seul facteur détruit avait coûté −17,4 % de Gini.
+        for champ, valeur, admises in (
+            ("type", self.type, _TYPES_FACTEUR),
+            ("encodage", self.encodage, _ENCODAGES),
+            ("transformation", self.transformation, _TRANSFORMATIONS | {None}),
+        ):
+            if valeur not in admises:
+                connues = sorted(x for x in admises if x is not None)
+                raise ValueError(
+                    f"'{self.nom}' : {champ}='{valeur}' inconnu — attendu "
+                    f"{' ou '.join(repr(x) for x in connues)}"
+                    f"{' (ou aucune)' if None in admises else ''}. "
+                    f"Une valeur inconnue ne leve pas d'erreur de typage a "
+                    f"l'execution : sans ce controle, le facteur disparait EN "
+                    f"SILENCE et aucun modele ne le voit."
+                )
+
+        # ── ② Cohérence des combinaisons ──────────────────────────────────────
         if self.type == "categoriel" and self.encodage == "aucun":
             raise ValueError(
                 f"'{self.nom}' : un facteur catégoriel doit déclarer un encodage "
@@ -83,10 +121,39 @@ class Facteur:
                 f"'{self.nom}' : un facteur continu ne s'encode pas "
                 f"(encodage='{self.encodage}')."
             )
+        # ⚠️ `binaire` + un encodage était accepté, et l'encodage était ensuite
+        # IGNORÉ par `colonnes_produites()` (mesuré : binaire + one_hot +
+        # modalités → ('x',)). L'actuaire signait un one-hot et obtenait autre
+        # chose : le plan est opposable, il ne peut pas dire deux choses.
+        if self.type == "binaire" and self.encodage != "aucun":
+            raise ValueError(
+                f"'{self.nom}' : un facteur binaire ne s'encode pas "
+                f"(encodage='{self.encodage}') — il produit sa seule colonne "
+                f"telle quelle. Un encodage declare ici serait IGNORE."
+            )
         if self.encodage == "one_hot" and not self.modalites:
             raise ValueError(
                 f"'{self.nom}' : un one-hot exige des modalites figées "
                 f"(sinon le contrat A2→A3 est indéterminé)."
+            )
+
+        # ── ③ LE FILET : un facteur déclaré qui ne produit RIEN est un défaut ──
+        # ⚠️⚠️ Les contrôles ci-dessus nomment les causes que j'ai mesurées. Ce
+        # filet-ci attrape la PROPRIÉTÉ, y compris les causes que je n'ai pas
+        # vues — par exemple un one-hot à modalité unique égale à la référence,
+        # qui ne produit aucune colonne et n'est refusé par aucun contrôle
+        # nommé. Il le faut, parce que `verifier_completude_plan` est
+        # STRUCTURELLEMENT aveugle à cette perte : il compare
+        # `colonnes_produites()` aux données, et le facteur perdu n'est
+        # justement plus dans `colonnes_produites()` — il annonce `ampute=False`.
+        if not self.colonnes_produites():
+            raise ValueError(
+                f"'{self.nom}' : ce facteur est declare mais ne produit AUCUNE "
+                f"colonne (type='{self.type}', encodage='{self.encodage}', "
+                f"modalites={self.modalites}). Il n'atteindrait aucun modele, et "
+                f"le detecteur d'amputation ne le verrait pas : il compare les "
+                f"colonnes PRODUITES aux donnees, or ce facteur n'en produit "
+                f"aucune — il annoncerait `ampute=False`."
             )
 
     # ── LE CŒUR : les noms exacts que A2 produira ──────────────────────────
@@ -228,34 +295,84 @@ class PlanTarifaire:
     comportement: Comportement | None = None
 
     def __post_init__(self):
-        # ── GARDE B9 (offset) : l'exposition n'est JAMAIS un prédicteur ─────────
-        # exposition / log_exposition servent d'OFFSET au GLM (terme dont le
-        # coefficient est fixé à 1), jamais de facteur tarifaire. S'ils figuraient
-        # dans colonnes_produites(), ils entreraient dans la matrice de conception
-        # comme variables LIBRES — c'est très exactement la fuite structurelle B9
-        # (le modèle « explique » la sinistralité par la durée d'exposition au
-        # lieu de la porter en offset, et la prime cesse d'être proportionnelle à
-        # l'exposition). Le plan rend cette erreur INEXPRIMABLE dès la déclaration.
-        produites = set(self.colonnes_produites())
-        interdits = {
-            "exposition", "log_exposition",
-            self.exposition, f"log_{self.exposition}",
-        }
-        collision = produites & interdits
-        if collision:
-            raise ValueError(
-                f"Plan '{self.lob}' : {sorted(collision)} ne peut(vent) pas être "
-                f"déclaré(s) comme facteur(s) tarifaire(s) — l'exposition sert "
-                f"d'OFFSET au GLM (coefficient fixé à 1), jamais de prédicteur. "
-                f"La déclarer comme facteur rouvrirait la fuite structurelle B9 "
-                f"(prime non proportionnelle à l'exposition)."
-            )
+        # ── LES RÔLES FIXES DU PLAN : jamais des prédicteurs LIBRES ────────────
+        # Trois colonnes déclarées portent un rôle FIXE dans les modèles :
+        #   · `exposition`      → OFFSET du GLM de fréquence (coefficient figé à 1)
+        #   · `cible_frequence` → RÉPONSE du modèle de fréquence, et POIDS du
+        #                         modèle de coût moyen
+        #   · `cible_cout`      → RÉPONSE du modèle de coût moyen
+        # Aucune ne peut devenir un facteur libre. Pour l'exposition, ce serait la
+        # fuite structurelle B9 : le modèle « explique » la sinistralité par la
+        # durée d'exposition au lieu de la porter en offset, et la prime cesse
+        # d'être proportionnelle à l'exposition. Pour les cibles, ce serait
+        # prédire une grandeur PAR ELLE-MÊME.
+        #
+        # ⚠️⚠️ ET LE CONTRÔLE PORTE SUR TROIS SURFACES, PAS UNE — C'EST LE
+        # CORRECTIF DU LOT 1.2 (constats `plan/C1` et `plan/C2`).
+        # La spec (`plan_execution_6_actions.md` l.294) demandait : « `exposition`
+        # et `log_exposition` ne doivent jamais figurer dans
+        # `colonnes_produites()` ». Le code faisait EXACTEMENT cela — et c'était
+        # insuffisant : une interaction produit `inter_age_expo`, qui n'est ni
+        # `expo` ni `log_expo`, et passait donc la garde. Mesuré jusqu'à la prime :
+        # rapport de 1,8339 au lieu de 2,0000 quand l'exposition double, soit
+        # −8,3 %. **Le garde-fou était exact sur les formes prévues et muet sur
+        # les autres** — il regardait une LISTE de noms au lieu d'une PROPRIÉTÉ.
+        # On contrôle donc « cette déclaration dérive-t-elle d'un rôle fixe ? »
+        # sur les trois surfaces par lesquelles un rôle fixe peut entrer :
+        #   1. le NOM SOURCE du facteur    → attrape `expo` en one_hot (`expo_long`)
+        #   2. les OPÉRANDES d'interaction → attrape `age × expo` (`inter_age_expo`)
+        #   3. les COLONNES PRODUITES      → le contrôle d'origine, CONSERVÉ
+        for role, interdits in (
+            ("l'exposition (offset du GLM, coefficient figé à 1)",
+             {"exposition", "log_exposition",
+              self.exposition, f"log_{self.exposition}"}),
+            ("la cible de FRÉQUENCE (réponse du modèle, poids du coût moyen)",
+             {self.cible_frequence, f"log_{self.cible_frequence}"}),
+            ("la cible de COÛT MOYEN (réponse du modèle)",
+             {self.cible_cout, f"log_{self.cible_cout}"}),
+        ):
+            interdits = {x for x in interdits if x}
+            self._refuser_role_fixe(
+                role, "facteur", interdits,
+                sorted({f.nom for f in self.facteurs if f.nom in interdits}))
+            self._refuser_role_fixe(
+                role, "operande d'interaction", interdits,
+                sorted({f"{a} x {b}" for a, b in self.interactions
+                        if a in interdits or b in interdits}))
+            self._refuser_role_fixe(
+                role, "colonne produite", interdits,
+                sorted(set(self.colonnes_produites()) & interdits))
+
         # Cohérence : la famille de sévérité doit être une valeur connue.
-        if self.famille_severite not in ("gamma", "lognormal", "inverse_gaussienne"):
+        # ⚠️ Le jeu de valeurs est DÉRIVÉ du `Literal`, jamais recopié : une
+        # famille ajoutée au type est acceptée sans toucher à ce contrôle. Une
+        # liste recopiée ici se désynchroniserait — c'est le défaut que ce
+        # fichier tout entier existe pour supprimer.
+        if self.famille_severite not in _FAMILLES_SEVERITE:
             raise ValueError(
                 f"Plan '{self.lob}' : famille_severite='{self.famille_severite}' "
-                f"inconnue — attendu 'gamma', 'lognormal' ou 'inverse_gaussienne'."
+                f"inconnue — attendu {' ou '.join(repr(x) for x in sorted(_FAMILLES_SEVERITE))}."
             )
+
+    def _refuser_role_fixe(self, role: str, surface: str,
+                           interdits: set, coupables: list) -> None:
+        """Refuse une déclaration qui ferait entrer un rôle fixe comme prédicteur.
+
+        ⚠️ La `surface` est nommée dans le message : un actuaire qui déclare une
+        interaction avec l'exposition doit lire « operande d'interaction », pas
+        un message générique qui l'enverrait chercher dans ses facteurs.
+        """
+        if not coupables:
+            return
+        raise ValueError(
+            f"Plan '{self.lob}' : {coupables} — declaration refusee comme "
+            f"{surface}. Cette colonne est {role} : elle entre dans les modeles "
+            f"avec un ROLE FIXE, jamais comme predicteur libre. "
+            f"Noms reserves pour ce role : {sorted(interdits)}. "
+            f"Une interaction compte : `inter_a_b` fait entrer A ET B dans la "
+            f"matrice de conception, et la prime cesse d'etre proportionnelle a "
+            f"l'exposition (mesure : rapport 1,8339 au lieu de 2,0000)."
+        )
 
     # ── Contrat A2 → A3 → conformité : une seule vérité ────────────────────
     def colonnes_produites(self) -> tuple[str, ...]:
