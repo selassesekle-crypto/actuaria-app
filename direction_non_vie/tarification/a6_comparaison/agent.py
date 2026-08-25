@@ -98,7 +98,8 @@ except ImportError:
 # genre pré-encodée (scénario V7) traversait donc intacte jusqu'à la
 # recalibration walk-forward.
 from core.conformite_reglementaire import (
-    avertissement_walk_forward, construire_matrice_x, gini_est_plausible,
+    agreger_controle_effet, avertissement_walk_forward,
+    construire_matrice_x, gini_est_plausible,
     GINI_PLAUSIBLE_MAX_FREQUENCE,
 )
 
@@ -501,13 +502,11 @@ class AgentA6Comparaison:
             _exclusions_conformite = {}
             _alertes_conformite = {}
             _alertes_modele = []
-            # ⚠️⚠️ LE CONTRÔLE PAR L'EFFET S'AGRÈGE PAR LE PIRE, JAMAIS PAR LE
-            # MEILLEUR — constat `conformite/C7`. Si UN SEUL des trois agents
-            # n'a pas pu faire tourner le garde-fou n°4, le tarif qui en sort
-            # n'est pas protégé par lui. Agréger par « au moins un l'a fait »
-            # publierait une couverture que le calcul ne porte pas.
-            _controle_effet = {'execute': True, 'motifs': {}}
-            _vu_controle = False
+            # ⚠️ L'AGRÉGATION DU CONTRÔLE PAR L'EFFET EST UNE SOURCE UNIQUE
+            # (`agreger_controle_effet`) : par le PIRE, et clés par
+            # (AGENT, CIBLE). Elle vivait ici en ligne, et deux agents en
+            # échec sur la MÊME cible s'écrasaient l'un l'autre — un motif
+            # sur deux disparaissait.
             for _r_src in (result_a3, result_a4, result_a5):
                 if isinstance(_r_src, dict):
                     _exclusions_conformite.update(
@@ -515,18 +514,11 @@ class AgentA6Comparaison:
                     _alertes_conformite.update(
                         _r_src.get('alertes_conformite') or {})
                     _alertes_modele.extend(_r_src.get('alertes_modele') or [])
-                    _ce = _r_src.get('controle_effet')
-                    if isinstance(_ce, dict):
-                        _vu_controle = True
-                        if not _ce.get('execute'):
-                            _controle_effet['execute'] = False
-                        _controle_effet['motifs'].update(_ce.get('motifs') or {})
-            if not _vu_controle:
-                # Aucun agent n'a rendu l'information : on ne peut pas attester.
-                _controle_effet = {
-                    'execute': False,
-                    'motifs': {'(tous)': "aucun agent n'a rapporte l'etat du "
-                                         "controle par l'effet"}}
+            _controle_effet = agreger_controle_effet({
+                'A3': (result_a3 or {}).get('controle_effet'),
+                'A4': (result_a4 or {}).get('controle_effet'),
+                'A5': (result_a5 or {}).get('controle_effet'),
+            })
 
             # ── ALERTE A6 : modèle Deep Learning retenu en production ─────────
             # Garde-fou DÉLIBÉRÉ (point 1), distinct du plafond wf-fidélité

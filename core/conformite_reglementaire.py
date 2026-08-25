@@ -671,6 +671,44 @@ def filtrer_features(
 # validation temporelle, et TOUS les livrables l'appellent. Il devient impossible
 # qu'un format de rapport diverge des autres — ou du gate de certification.
 
+def agreger_controle_effet(sources: dict) -> dict:
+    """Agrège l'état du contrôle par l'effet sur plusieurs agents.
+
+    `sources` : {nom d'agent: son `result['controle_effet']`}.
+
+    ⚠️⚠️ ON AGRÈGE PAR LE PIRE, JAMAIS PAR LE MEILLEUR. Si UN SEUL agent n'a
+    pas pu faire tourner le garde-fou n°4, le tarif qui en sort n'est pas
+    protégé par lui. Agréger par « au moins un l'a fait » publierait une
+    couverture que le calcul ne porte pas.
+
+    ⚠️⚠️ ET LES MOTIFS SONT CLÉS PAR (AGENT, CIBLE), PAS PAR CIBLE SEULE.
+    Ma première version faisait `motifs.update(...)` sur des clés de cible :
+    **deux agents en échec sur la MÊME cible écrasaient l'un l'autre, et un
+    motif sur deux disparaissait.** Le drapeau restait juste — rien de faux
+    n'était publié — mais l'actuaire perdait une des deux causes, et aucun
+    motif ne nommait l'agent concerné. *Un agrégat qui perd une cause est un
+    agrégat qui masque.*
+
+    ⚠️ Aucune source renseignée → on ne peut RIEN attester : `execute=False`.
+    Le silence ne vaut jamais accord pour un garde-fou.
+    """
+    resultat = {'execute': True, 'motifs': {}}
+    vu = False
+    for agent, rapport in (sources or {}).items():
+        if not isinstance(rapport, dict):
+            continue
+        vu = True
+        if not rapport.get('execute'):
+            resultat['execute'] = False
+        for cible, motif in (rapport.get('motifs') or {}).items():
+            resultat['motifs'][f"{agent} / {cible}"] = motif
+    if not vu:
+        return {'execute': False,
+                'motifs': {'(tous)': "aucun agent n'a rapporte l'etat du "
+                                     "controle par l'effet"}}
+    return resultat
+
+
 def avertissement_controle_effet(rapport: dict | None) -> str | None:
     """SOURCE UNIQUE du texte « le garde-fou n°4 n'a pas tourné », à afficher
     dans TOUT livrable. `None` s'il n'y a rien à signaler.

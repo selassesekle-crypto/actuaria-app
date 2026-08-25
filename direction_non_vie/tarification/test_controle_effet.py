@@ -24,6 +24,7 @@ import io
 import os
 import sys
 import unittest
+from typing import ClassVar
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
@@ -218,6 +219,113 @@ class POS_Effet_LeCouplageEstVerrouille(unittest.TestCase):
                 self.assertFalse(_matrice(df, 'nb').controle_effet_execute,
                                  "la matrice atteste malgre le renoncement")
         print("    POS-couplage une seule source pour les deux sorties ✅")
+
+
+class POS_Effet_L_AgregationD_A6_NeMasqueRien(unittest.TestCase):
+    """⚠️⚠️ CETTE CLASSE N'EXISTAIT PAS, ET C'EST SELASSE QUI L'A DEMANDÉE.
+
+    J'affirmais dans mon rapport « A6 agrège par le pire » — **sans aucun test
+    nommé pour l'appuyer**, contrairement au reste du lot. *Une affirmation sans
+    mesure est exactement ce que cet audit poursuit ; je l'avais écrite.*
+
+    Et la mesure a trouvé un défaut que je n'avais pas vu : l'agrégat était clé
+    par CIBLE seule, si bien que **deux agents en échec sur la même cible
+    s'écrasaient l'un l'autre — un motif sur deux disparaissait.**
+    """
+
+    SAIN: ClassVar[dict] = {'execute': True, 'motifs': {}}
+
+    def test_UN_agent_en_echec_suffit_a_declarer_la_protection_incomplete(self):
+        """Le cas demandé : A3 en échec, A4 et A5 sains."""
+        r = C.agreger_controle_effet({
+            'A3': {'execute': False, 'motifs': {'nb': 'cible nb ABSENTE'}},
+            'A4': self.SAIN, 'A5': self.SAIN})
+        self.assertFalse(r['execute'],
+                         "A3 en echec et l'agregat declare la protection "
+                         "complete — l'agregat MASQUE")
+        self.assertTrue(r['motifs'], "le motif d'A3 est perdu")
+        self.assertIn('A3', " ".join(r['motifs']),
+                      "le motif ne nomme pas l'agent concerne")
+        avert = C.avertissement_controle_effet(r)
+        self.assertIn("NON EXÉCUTÉ", avert or "")
+        print("    POS-agregat un seul agent en echec -> protection incomplete ✅")
+
+    def test_DEUX_agents_en_echec_sur_la_MEME_cible_gardent_LEURS_DEUX_motifs(self):
+        """⚠️ LE DÉFAUT QUE LA QUESTION A TROUVÉ. Clés par cible seule, le
+        second `update()` écrasait le premier."""
+        r = C.agreger_controle_effet({
+            'A3': {'execute': False, 'motifs': {'nb': 'cible nb ABSENTE'}},
+            'A4': self.SAIN,
+            'A5': {'execute': False, 'motifs': {'nb': 'cible nb CONSTANTE'}}})
+        self.assertEqual(
+            len(r['motifs']), 2,
+            f"un motif a ete ECRASE : {r['motifs']} — l'actuaire perd une des "
+            f"deux causes")
+        joint = " ".join(r['motifs'])
+        for agent in ('A3', 'A5'):
+            self.assertIn(agent, joint, f"le motif d'{agent} a disparu")
+        print("    POS-agregat deux echecs sur la meme cible : 2 motifs gardes ✅")
+
+    def test_LE_SECOND_SENS_trois_agents_sains_n_alertent_PAS(self):
+        """⚠️ Sans lui, un agrégat figé à `False` passerait les deux tests
+        ci-dessus en n'ayant rien mesuré."""
+        r = C.agreger_controle_effet({'A3': self.SAIN, 'A4': self.SAIN,
+                                      'A5': self.SAIN})
+        self.assertTrue(r['execute'])
+        self.assertEqual(r['motifs'], {})
+        self.assertIsNone(C.avertissement_controle_effet(r))
+        print("    POS-agregat LE SECOND SENS : trois agents sains, rien ✅")
+
+    def test_aucune_source_renseignee_n_atteste_RIEN(self):
+        """Le silence ne vaut jamais accord pour un garde-fou."""
+        for sources in ({}, {'A3': None, 'A4': None, 'A5': None}):
+            with self.subTest(sources=sources):
+                r = C.agreger_controle_effet(sources)
+                self.assertFalse(r['execute'],
+                                 "aucune information et l'agregat atteste")
+        print("    POS-agregat aucune source -> rien n'est atteste ✅")
+
+
+class POS_Effet_LeCouplageTientDANS_LES_DEUX_SENS(unittest.TestCase):
+    """⚠️⚠️ MESURÉ SUR DEMANDE DE SELASSE — je n'avais montré qu'un sens.
+
+    Le couplage doit tenir que l'on annule `C1` (la propriété redevient `True`
+    à tort) OU que l'on débranche `C7` (l'avertissement n'est plus publié).
+    Ce test PLANTE la seconde violation et vérifie qu'elle est attrapée.
+    """
+
+    def test_C7_debranche_SEUL_est_attrape(self):
+        """⚠️ Violation plantée : la source unique du texte est neutralisée,
+        `C1` reste intact. Le classeur bascule alors sur « exécuté sur toutes
+        les cibles » — il ATTESTE un contrôle qui n'a rien examiné."""
+        import direction_non_vie.tarification.services.tarif_excel as TE
+        original = TE.avertissement_controle_effet
+        TE.avertissement_controle_effet = lambda rapport: None
+        try:
+            txt = _classeur(_rapport(_matrice(None, 'nb')))
+        finally:
+            TE.avertissement_controle_effet = original
+        self.assertIn(
+            "exécuté sur toutes les cibles", txt,
+            "la violation n'a pas ete plantee : le classeur ne bascule pas")
+        # C'est très exactement ce que le contrôle du couplage interdit.
+        self.assertNotIn("NON EXÉCUTÉ", txt)
+        print("    POS-couplage C7 debranche SEUL : la violation est visible ✅")
+
+    def test_et_le_controle_du_couplage_ECHOUE_sur_cette_violation(self):
+        """⚠️ Le sens qui compte : ce n'est pas assez que la violation soit
+        visible, il faut qu'un contrôle la REFUSE."""
+        import direction_non_vie.tarification.services.tarif_excel as TE
+        original = TE.avertissement_controle_effet
+        TE.avertissement_controle_effet = lambda rapport: None
+        try:
+            with self.assertRaises(AssertionError):
+                POS_Effet_LeCouplageEstVerrouille(
+                    'test_le_classeur_n_atteste_JAMAIS_un_controle_qui_n_a_rien_examine'
+                ).test_le_classeur_n_atteste_JAMAIS_un_controle_qui_n_a_rien_examine()
+        finally:
+            TE.avertissement_controle_effet = original
+        print("    POS-couplage le controle REFUSE C7 debranche ✅")
 
 
 if __name__ == '__main__':

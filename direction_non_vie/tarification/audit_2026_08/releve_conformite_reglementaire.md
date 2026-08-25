@@ -81,8 +81,29 @@ arguments, pas l'exécution du contrôle.
 > col_cible » alors que les deux étaient fournis — **un en-tête qui contredit
 > le motif qu'il porte.** Corrigé, et verrouillé par un contrôle.
 >
-> Contrôles positifs : `test_controle_effet.py`, **9 tests**, dont
+> Contrôles positifs : `test_controle_effet.py`, **15 tests**, dont
 > `POS_Effet_LeCouplageEstVerrouille` qui **lit le classeur produit**.
+>
+> ⚠️⚠️ **DEUX QUESTIONS DE SELASSE ONT TROUVÉ CE QUI MANQUAIT — le rapport
+> AFFIRMAIT deux choses qu'aucun test nommé n'appuyait.**
+>
+> **① « A6 agrège par le pire » n'était pas mesuré.** Le verdict tient — A3 en
+> échec, A4 et A5 sains → `execute=False`, motif conservé. **Mais la mesure a
+> trouvé autre chose** : l'agrégat était clé par CIBLE seule, et **deux agents
+> en échec sur la MÊME cible s'écrasaient — un motif sur deux disparaissait**,
+> sans qu'aucun ne nomme l'agent concerné. Le drapeau restait juste, donc rien
+> de faux n'était publié ; **l'actuaire perdait une des deux causes.**
+> Corrigé : `agreger_controle_effet` est une **source unique**, clés par
+> **(AGENT, CIBLE)**. *Un agrégat qui perd une cause est un agrégat qui masque.*
+>
+> **② Le couplage n'était montré que dans un sens.** Mesuré par **violation
+> plantée** : `C7` débranché seul, `C1` intact → le classeur bascule sur
+> « exécuté sur toutes les cibles » et **atteste un contrôle qui n'a rien
+> examiné**. **4 contrôles échouent**, dont celui du couplage. Le sens inverse
+> est désormais épinglé par `POS_Effet_LeCouplageTientDANS_LES_DEUX_SENS`.
+>
+> *Les deux tenaient sur le fond ; aucun des deux n'était prouvé. « Mesurer dans
+> les deux sens » vaut aussi pour ce que j'écris dans un rapport.*
 
 ⚠️ **C'est le motif que ce module a été écrit pour interdire, reproduit dans la
 fonction qui l'interdit** : le module nomme lui-même ce défaut deux fois — bug
