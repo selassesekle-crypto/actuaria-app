@@ -51,10 +51,23 @@ l'hypothèse qu'il est bon et prouver le contraire, jamais l'inverse.**
   service lit `fiche_decision` ne dit **pas** que `fiche_decision['justification_regl']`
   est publié — mesuré, il ne l'est pas. *Un appelant mesuré n'est pas un chemin
   mesuré, et un dict lu n'est pas un champ lu.*
-- ⚠️ **CE QUE LE BANC NE VOIT PAS, ET COMMENT ON LE LÈVE** : il détecte le
-  passage **verbatim**. Un champ **consommé puis reformaté** paraît muet à tort.
-  On marque donc **aussi les clés** — c'est ainsi qu'`exclusions_conformite`,
-  d'abord classé muet, a été reclassé **consommé**.
+- ⚠️⚠️ **UN « MUET » N'EST UNE TROUVAILLE QU'APRÈS TROIS ANGLES MORTS ÉCARTÉS** :
+  ① **itération générique** — un champ atteint par `.items()` n'est jamais
+  nommé, `grep` ne le voit pas ; ② **clé vs valeur** — un champ *consommé puis
+  reformaté* paraît muet à tort (`exclusions_conformite`, reclassé **consommé**
+  après marquage des clés) ; ③ **mise en forme** — un marqueur posé sur un
+  **NOMBRE** est détruit par l'arrondi (`1.5757` sort en `1.576`). *Les
+  marqueurs doivent être des CHAÎNES ; pour un champ numérique, vérifier si
+  l'information arrive par une autre source.*
+- ⚠️ **LE DOCUMENT N'EST PAS LE SEUL CHEMIN VERS L'ACTUAIRE — L'ÉCRAN EN EST UN
+  AUTRE.** Mesuré : `actuaria_app.py` ne lit jamais `fiche_decision`, mais lit
+  `commentaire`, `gini`, `classement`, `statut_rag`, `rapport` et `audit_trail`
+  directement. Un champ muet dans les documents peut être vu à l'écran — et
+  l'inverse : muet dans les deux est un verdict **plus fort**.
+- ⚠️⚠️ **COMPTER DES CHAMPS N'EST PAS COMPTER DE L'INFORMATION.** `a6/C11`
+  annonçait « 3/12 publiés » ; mesuré, **3 des 9 muets étaient des doublons**
+  dont l'information arrivait déjà autrement. *La perte réelle était de 6
+  champs, tous de contenu unique — un constat plus étroit et plus solide.*
 
 ## Les preuves
 

@@ -10,6 +10,25 @@ On PRODUIT donc le livrable et on lit ce qu'il contient.
 
 ⚠️ Un .docx et un .xlsx sont des ARCHIVES ZIP : chercher un marqueur dans
 leurs octets bruts ne prouve rien. On decompresse.
+
+⚠️⚠️ LES TROIS ANGLES MORTS DE CE BANC, ET COMMENT ON LES LEVE. Un « muet »
+n'est une trouvaille que si les trois sont ecartes :
+
+  1. ITERATION GENERIQUE -- un champ atteint par `for k, v in d.items()` n'est
+     jamais NOMME : `grep` ne le voit pas. On execute.
+  2. CLE vs VALEUR -- un champ CONSOMME PUIS REFORMATE parait muet a tort
+     (`synthese_exclusions` republie le nom de colonne, pas le motif). On
+     marque AUSSI les cles -- voir `main()` en fin de fichier.
+  3. MISE EN FORME -- un marqueur pose sur un NOMBRE est detruit par
+     l'arrondi : `1.5757` sort en `1.576`. **Les marqueurs doivent etre des
+     CHAINES.** Pour un champ numerique, le banc ne conclut pas : il faut
+     verifier si l'information arrive par une AUTRE source (mesure : le Gini,
+     le score et le RMSE de la fiche arrivaient deja par `modele_production`).
+
+⚠️ ET LE DOCUMENT N'EST PAS LE SEUL CHEMIN VERS L'ACTUAIRE : l'ECRAN en est un
+autre. Mesure complementaire par AST sur `actuaria_app.py` -- elle ne lit
+jamais `fiche_decision`, mais elle lit `commentaire`, `gini`, `classement`,
+`statut_rag`, `rapport` et `audit_trail` directement.
 """
 import io
 import logging

@@ -104,6 +104,42 @@ d'être portés en constats à part entière.*
 
 **Preuve** : `preuves/passage_libelles.py`, relançable seul.
 
+> ⚠️⚠️ **CORRECTION DU 25/08/2026 — « 3/12 » COMPTAIT DES CHAMPS, PAS DE
+> L'INFORMATION.** Deux questions de Selasse ont borné le banc, et la mesure
+> m'a corrigé **dans les deux sens** :
+>
+> **① L'ÉCRAN EST UN AUTRE CHEMIN QUE LE DOCUMENT.** Le banc ne testait que les
+> livrables documentaires. Mesuré par AST sur `actuaria_app.py` : elle lit
+> `commentaire`, `gini`, `classement`, `statut_rag`, `rapport`, `audit_trail`,
+> mais **jamais `fiche_decision` ni aucun de ses sous-champs**. → le verdict
+> tient pour la fiche, et **se renforce** pour `hypotheses`,
+> `validation_selection`, `alertes_modele` et `backtest.stabilite` : *ni
+> document, ni écran.*
+>
+> **② UNE INFORMATION SURVIT SOUS UNE AUTRE MISE EN FORME.** Mesuré fiche
+> VIDE : l'Excel publie quand même `gini_test`, `score_global` et `rmse_test`
+> depuis `modele_production` — et `overfit_ratio` sous la forme **`1.576`**,
+> arrondi à 3 décimales. **Un marqueur verbatim posé sur un NOMBRE ne le voit
+> pas.** *Troisième angle mort du banc, après l'itération générique et la
+> distinction clé/valeur.*
+>
+> **LE COMPTE CORRIGÉ :**
+> ```
+>   3 champs publies verbatim
+>   3 champs numeriques  -> l'information arrivait DEJA par modele_production
+>   6 champs de contenu UNIQUE -> perdus en totalite
+> ```
+> **La perte réelle est de 6 champs sur 12** : `forces`, `faiblesses`,
+> `risques`, `alternatives`, `questions_actuaire`, `justification_regl`.
+> ⚠️ **Et cette perte-là est totale, mesurée** : **10 énoncés sur 10** produits
+> par la fiche ne figurent nulle part ailleurs — **pas même dans le
+> `commentaire`**, qui est pourtant publié dans quatre livrables et lu six fois
+> par l'application.
+>
+> *Le constat est plus étroit que ce que j'avais écrit, et plus solide : ce qui
+> était perdu n'est pas « 75 % de la fiche », c'est exactement le contenu que
+> rien d'autre ne produit — l'aide à la décision elle-même.*
+
 > ✅✅ **`C5` ET `C11` FERMÉS ENSEMBLE — ET ILS NE POUVAIENT PAS L'ÊTRE
 > AUTREMENT.** Mesuré après correctif, par exécution : **12/12 champs de la
 > fiche atteignent le classeur** (3/12 avant), listes rendues **ligne à ligne**
