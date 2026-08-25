@@ -204,6 +204,118 @@ def exiger_harnais_valide(agent: str, textes: dict, chemins: list) -> list:
     return publies
 
 
+# ══════════════════════════════════════════════════════════════════════════
+#  LE HARNAIS REEL — on ne DEVINE plus la fixture, on la PREND d'un vrai run
+# ══════════════════════════════════════════════════════════════════════════
+# ⚠️⚠️ CE QUI A DEBLOQUE CECI TIENT EN UNE MESURE. A2 refusait mon
+# portefeuille synthetique avec :
+#     Facteur 'garantie' : modalite(s) INCONNUE(S) [...] -- non declaree(s)
+#     dans le plan (modalites figees : ['Tiers', 'TousRisques']).
+#     On leve plutot que de produire une colonne one-hot silencieusement
+#     fausse (piege V9).
+# Ma fixture remplissait TOUTES les colonnes de nombres aleatoires, y compris
+# un facteur declare CATEGORIEL A MODALITES FIGEES. **A2 a raison de refuser.**
+# La cause n'etait pas structurelle : le plan porte lui-meme les types et les
+# modalites, la fixture s'en deduit.
+#
+# ⚠️ J'avais annonce « un lot en soi, je ne peux pas le chiffrer » APRES UN
+# SEUL ESSAI RATE, NON INSTRUIT.
+# *Une estimation posee sur un echec non instruit n'est pas une estimation.*
+
+
+def portefeuille_du_plan(plan, n=800, graine=0):
+    """Un portefeuille que la chaine ACCEPTE, derive du plan lui-meme.
+
+    ⚠️ Chaque facteur recoit ce que son TYPE DECLARE, jamais un nombre au
+    hasard : un categoriel recoit ses modalites figees, un binaire un 0/1.
+    C'est le plan qui porte la verite, pas la devinette du banc.
+    """
+    import numpy as np
+    import pandas as pd
+    rng = np.random.default_rng(graine)
+    d = {}
+    for f in plan.facteurs:
+        if f.type == 'categoriel' and f.modalites:
+            d[f.nom] = rng.choice(list(f.modalites), n)
+        elif f.type == 'binaire':
+            d[f.nom] = rng.integers(0, 2, n).astype(float)
+        else:
+            d[f.nom] = rng.uniform(18, 70, n)
+    for c in plan.colonnes_attendues():
+        d.setdefault(c, rng.uniform(1, 10, n))
+    d[plan.exposition] = np.ones(n)
+    d[plan.cible_frequence] = rng.poisson(0.2, n).astype(float)
+    d[plan.cible_cout] = np.where(d[plan.cible_frequence] > 0,
+                                  rng.gamma(2, 300, n), 0.0)
+    return pd.DataFrame(d)
+
+
+def resultats_reels(chemin_plan='plans/auto.yaml'):
+    """Les VRAIS resultats d'A3, A4 et A5. Mesure : ~20 s pour les trois."""
+    from core.plan_tarifaire import PlanTarifaire
+    from direction_non_vie.tarification.a2_preprocessing.agent import (
+        AgentA2Preprocessing,
+    )
+    from direction_non_vie.tarification.a3_glm.agent import AgentA3GLM
+    from direction_non_vie.tarification.a4_ml.agent import AgentA4ML
+    from direction_non_vie.tarification.a5_deep_learning.agent import (
+        AgentA5DeepLearning,
+    )
+    racine = pathlib.Path(__file__).resolve().parents[4]
+    plan = PlanTarifaire.depuis_yaml(racine / chemin_plan)
+    r2 = AgentA2Preprocessing().run(
+        {'dataframe': portefeuille_du_plan(plan), 'branche': 'auto',
+         'success': True},
+        cible_frequence=plan.cible_frequence,
+        cible_cout=plan.cible_cout, plan=plan)
+    if not r2.get('success'):
+        raise HarnaisNonValide(f"A2 a refuse le portefeuille : {r2.get('erreur')}")
+    r3 = AgentA3GLM(audit_path='/tmp', verbose=False).run(
+        r2, plan=plan, generer_graphiques=False)
+    r4 = AgentA4ML(audit_path='/tmp', verbose=False).run(
+        r2, result_a3=r3, plan=plan, col_cible=plan.cible_frequence,
+        generer_graphiques=False, calcul_shap=False, optuna_trials=0)
+    r5 = AgentA5DeepLearning(audit_path='/tmp', verbose=False).run(
+        r2, result_a3=r3, plan=plan, col_cible=plan.cible_frequence,
+        n_epochs=3, generer_graphiques=False)
+    return {'A3': r3, 'A4': r4, 'A5': r5}
+
+
+def marquer_chaines(obj, agent, chemin=()):
+    """Remplace chaque FEUILLE de type chaine par un marqueur tracable.
+
+    ⚠️ La STRUCTURE du vrai resultat est preservee -- c'est tout l'interet :
+    dicts, listes et nombres restent tels quels. Une fixture devinee cassait
+    l'exportateur ; celle-ci ne le peut pas, elle vient de lui.
+    """
+    if isinstance(obj, dict):
+        return {k: marquer_chaines(v, agent, chemin + (str(k),))
+                for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [marquer_chaines(v, agent, chemin + (str(i),))
+                for i, v in enumerate(obj)]
+    if isinstance(obj, str) and obj.strip():
+        return M(f"{agent}.{'.'.join(chemin)}")
+    return obj
+
+
+def champs_chaines(obj, chemin=()):
+    """Les chemins de toutes les feuilles-chaines d'un resultat."""
+    if isinstance(obj, dict):
+        out = []
+        for k, v in obj.items():
+            out += champs_chaines(v, chemin + (str(k),))
+        return out
+    if isinstance(obj, list):
+        out = []
+        for i, v in enumerate(obj):
+            out += champs_chaines(v, chemin + (str(i),))
+        return out
+    if isinstance(obj, str) and obj.strip():
+        return ['.'.join(chemin)]
+    return []
+
+
 def lecture_par_l_ecran(chemin_app: str, champs) -> dict:
     """Ce que l'ECRAN lit d'un resultat d'agent -- releve PAR AST.
 
@@ -449,62 +561,74 @@ def main() -> None:
 
 
 def temoin_croise_par_agent() -> None:
-    """⚠️⚠️ LE TÉMOIN CROISÉ SUR A3, A4 ET A5 — avec un harnais VALIDÉ.
+    """⚠️⚠️ LE TEMOIN CROISE SUR A3, A4 ET A5 — harnais REEL, garde BLOQUANTE.
 
-    Le premier essai avait rendu tous les champs muets, faute d'un harnais
-    correct. Ici la fixture est DÉRIVÉE de ce que chaque exportateur lit
-    réellement, et `exiger_harnais_valide` LÈVE si rien n'est retrouvé.
+    Le premier essai avait rendu TOUS les champs muets, faute d'un harnais
+    valide : une fixture derivee par AST casse l'exportateur, car les
+    variables de boucle portent des acces qu'aucun releve par chemin ne voit.
+    **La garde a refuse trois fois -- et elle avait raison.**
+
+    Ici la fixture vient d'un VRAI resultat d'agent, dont seules les feuilles
+    CHAINES sont remplacees par des marqueurs : la structure est exactement
+    celle que l'exportateur attend, puisqu'elle vient de lui.
     """
+    from direction_non_vie.tarification.services import rapport_equipe_tarif as RE
+    from direction_non_vie.tarification.services import rapport_modeles_tarif as RM
     from direction_non_vie.tarification.services import tarif_excel as TE
-
-    SERVICE = str(pathlib.Path(__file__).resolve().parents[4]
-                  / 'direction_non_vie' / 'tarification' / 'services'
-                  / 'tarif_excel.py')
-    AGENTS = (('A3', 'export_excel_a3', 'result_a3'),
-              ('A4', 'export_excel_a4', 'result_a4'),
-              ('A5', 'export_excel_a5', 'result_a5'))
 
     print()
     print("=" * 78)
-    print("  TEMOIN CROISE SUR A3 / A4 / A5 — harnais DERIVE, garde BLOQUANTE")
+    print("  TEMOIN CROISE A3 / A4 / A5 — harnais REEL, garde BLOQUANTE")
     print("=" * 78)
-    racines_ecran = set()
-    resume = []
-    for agent, export, racine in AGENTS:
-        chemins = chemins_lus(SERVICE, export, racine)
-        fixture = fixture_marquee(chemins, agent)
-        fixture.setdefault('success', True)
+    reels = resultats_reels()
+    resume, racines_muettes = [], set()
+    for agent, export in (('A3', 'export_excel_a3'), ('A4', 'export_excel_a4'),
+                          ('A5', 'export_excel_a5')):
+        reel = reels[agent]
+        marque = marquer_chaines(reel, agent)
+        champs = champs_chaines(reel)
+        textes = {}
+        for nom, appel in (
+            ('excel', lambda e=export, m=marque, a=agent:
+                getattr(TE, e)(m, audit_id=a)),
+            ('html equipe', lambda m=marque, a=agent:
+                RE.export_html_equipe({a.lower(): m}, branche='auto')),
+            ('html modeles', lambda m=marque: RM.export_html(m)),
+        ):
+            try:
+                textes[nom] = texte_livrable(appel())
+            except Exception as exc:
+                textes[nom] = ''
+                print(f"  [{agent}] {nom} a leve : {type(exc).__name__}: {exc}")
         try:
-            txt = texte_livrable(getattr(TE, export)(fixture, audit_id=agent))
-        except Exception as exc:
-            print(f"  [{agent}] l'export a LEVE : {type(exc).__name__}: {exc}")
-            txt = ''
-        try:
-            publies = exiger_harnais_valide(agent, {'excel': txt}, chemins)
+            publies = exiger_harnais_valide(
+                agent, textes, [tuple(c.split('.')) for c in champs])
         except HarnaisNonValide as exc:
             print(f"  [{agent}] ⛔ HARNAIS NON VALIDE — aucun verdict publie.")
             print(f"        {exc}")
             resume.append((agent, None, None))
             continue
-        muets = [c for c in chemins if c not in publies]
-        print(f"  [{agent}] harnais VALIDE : {len(publies)}/{len(chemins)} "
-              f"chemins retrouves publies")
-        print(f"        temoin PUBLIE  : {'.'.join(publies[0])}")
+        pub = {'.'.join(c) for c in publies}
+        muets = [c for c in champs if c not in pub]
+        print(f"  [{agent}] harnais VALIDE — {len(pub)}/{len(champs)} champs "
+              f"publies ({100 * len(pub) // max(len(champs), 1)} %)")
+        print(f"        temoin PUBLIE : {sorted(pub)[0]}")
         if muets:
-            print(f"        temoin MUET    : {'.'.join(muets[0])}")
-        racines_ecran.update(c[0] for c in muets)
-        resume.append((agent, len(publies), len(muets)))
+            print(f"        temoin MUET   : {muets[0]}")
+        racines_muettes.update(c.split('.')[0] for c in muets)
+        resume.append((agent, len(pub), len(muets)))
 
-    if racines_ecran:
+    if racines_muettes:
         ecran = lecture_par_l_ecran(
             str(pathlib.Path(__file__).resolve().parents[4] / 'actuaria_app.py'),
-            sorted(racines_ecran))
+            sorted(racines_muettes))
         lus = sorted(k for k, v in ecran.items() if v != 'absent')
         print()
-        print(f"  croise ECRAN : {len(lus)} racine(s) muette(s) en document "
-              f"sont NEANMOINS lues par l'app -> ne pas les declarer perdues")
-        for k in lus:
-            print(f"      {k}")
+        print(f"  CROISE ECRAN : {len(lus)}/{len(racines_muettes)} racine(s) "
+              f"muette(s) en document sont NEANMOINS lues par l'app.")
+        print("  ⚠️ Un nom lu n'est pas une preuve d'affichage : cela suffit a")
+        print("     NE PAS declarer ces champs perdus, jamais a affirmer")
+        print("     qu'ils atteignent l'actuaire.")
 
     print()
     for agent, pub, muet in resume:

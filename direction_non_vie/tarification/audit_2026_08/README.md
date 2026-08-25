@@ -77,6 +77,24 @@ l'hypothèse qu'il est bon et prouver le contraire, jamais l'inverse.**
   `commentaire`, `gini`, `classement`, `statut_rag`, `rapport` et `audit_trail`
   directement. Un champ muet dans les documents peut être vu à l'écran — et
   l'inverse : muet dans les deux est un verdict **plus fort**.
+- ⚠️⚠️ **UNE FIXTURE NE SE DEVINE PAS — ELLE SE PREND D'UN VRAI RÉSULTAT.**
+  Une fixture dérivée par AST **casse l'exportateur** : les variables de
+  boucle (`for nom, m in met.items(): m.get(...)`) portent des accès qu'aucun
+  relevé par chemin ne voit. Le harnais vient donc d'un **vrai run**
+  A1→A2→A3/A4/A5 sur un **portefeuille dérivé du plan** — chaque facteur
+  reçoit ce que son **type déclaré** exige, jamais un nombre au hasard.
+  ⚠️ *A2 refusait le portefeuille improvisé, et il avait raison* : `garantie`
+  est déclaré en one-hot à modalités figées, et A2 lève plutôt que de produire
+  une colonne silencieusement fausse (piège V9). **La cause n'était pas
+  structurelle ; ma fixture ignorait le plan.**
+- ⚠️⚠️ **NE JAMAIS CHIFFRER UN LOT SUR UN ÉCHEC NON INSTRUIT.** J'avais annoncé
+  « un lot en soi, je ne peux pas le chiffrer » après **un seul essai raté**.
+  Trente minutes d'instruction : quinze lignes, une vingtaine de secondes.
+- ⚠️ **ET LE BANC MESURE, IL NE JUGE PAS ENCORE.** Il rend « 53 champs publiés
+  sur 288 » pour A3 — mais ces 288 incluent des internes profondément nichés
+  (`metriques.poisson.vars_exclues.0.variable`) qui **n'ont pas vocation à être
+  publiés**. *Un taux brut n'est pas un constat* : quels champs DOIVENT sortir
+  se tranche champ par champ.
 - ⚠️⚠️ **COMPTER DES CHAMPS N'EST PAS COMPTER DE L'INFORMATION.** `a6/C11`
   annonçait « 3/12 publiés » ; mesuré, **3 des 9 muets étaient des doublons**
   dont l'information arrivait déjà autrement. *La perte réelle était de 6
