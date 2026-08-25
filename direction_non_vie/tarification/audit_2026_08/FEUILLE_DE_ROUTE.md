@@ -154,6 +154,22 @@ leurs ~40 constats** · puis les **11 latents**.
 restent À INSTRUIRE, pas en constats** : le banc ne prouve pas qu'aucune autre
 forme d'entrée ne les publie ailleurs.
 
+## ⚠️⚠️ CLASSEMENT DES 40 CONSTATS D'A3/A4/A5 (25/08) — [CLASSEMENT_A3_A4_A5.md](CLASSEMENT_A3_A4_A5.md)
+
+Le banc a été appliqué. **Il tranche 12 constats sur 40**, et le dire est le
+résultat principal :
+
+- **10 VIVANTS** — le champ atteint l'actuaire (`hypotheses`, `validation_*`,
+  `commentaire`, `statut_rag`), dont quatre sur des **scorecards et statuts**
+  qu'un actuaire lit pour signer ;
+- **2 LATENTS** — `monitoring` **0/10 publié**, `sensibilite_tarifaire` **0/3** ;
+- **28 HORS PORTÉE** — valeurs numériques, figures, hygiène.
+
+⚠️⚠️ **DEUX SURFACES NE SONT PAS OUTILLÉES, ET C'EST DIT PLUTÔT QUE CONTOURNÉ** :
+les **figures** (8 constats) et les **valeurs numériques** (5). Le banc marque
+des chaînes — *un marqueur posé sur un nombre est détruit par l'arrondi*, et
+`metriques` **1/83 n'est pas un verdict, c'est un angle mort.**
+
 ## RANG 2 — CE QUI AUTORISE CE PRIX · **3 lots · 9 constats**
 
 | lot | constats | ce que ça ferme |
