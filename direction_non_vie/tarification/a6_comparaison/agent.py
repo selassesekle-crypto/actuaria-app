@@ -343,12 +343,45 @@ class AgentA6Comparaison:
         try:
             # ── ÉTAPE 1 : AGRÉGATION (filtrée sur la cible d'A6) ──────────────
             logger.info("Étape 1/5 : Agrégation des résultats")
-            catalogue, exclusions_cible = self._agreger_resultats(
-                result_a3, result_a4, result_a5, col_cible=col_cible
+            catalogue, exclusions_cible, exclusions_metrique = (
+                self._agreger_resultats(
+                    result_a3, result_a4, result_a5, col_cible=col_cible
+                )
             )
             rapport['etapes'].append('agregation')
             rapport['nb_modeles'] = len(catalogue)
             rapport['exclusions_cible'] = exclusions_cible
+            rapport['exclusions_metrique'] = exclusions_metrique
+            if exclusions_metrique:
+                logger.warning(
+                    f"{len(exclusions_metrique)} modèle(s) écarté(s) — Gini non "
+                    f"mesuré : "
+                    + ", ".join(x['modele'] for x in exclusions_metrique))
+            # ⚠️⚠️ UN ARBITRAGE ENTRE UN SEUL CANDIDAT N'EST PAS UN ARBITRAGE.
+            # Mesuré : sur la cible par DÉFAUT (`prime_pure`), le seul modèle
+            # d'A3 est le Tweedie — le Poisson vise la fréquence, le Gamma le
+            # coût moyen, et le filtre par cible les écarte. A6 « sélectionnait »
+            # donc parmi UN, et rien ne le disait. **Ce n'est ni un refus, ni un
+            # silence : c'est une réserve, et elle se publie** — même geste que
+            # le contrôle par l'effet qui déclare sa couverture partielle.
+            reserve_arbitrage = None
+            if len(catalogue) == 1:
+                reserve_arbitrage = (
+                    f"⚠ ARBITRAGE À UN SEUL CANDIDAT — un seul modèle est "
+                    f"ajusté sur la cible '{col_cible}' : "
+                    f"{catalogue[0]['modele']}. Il est donc « retenu » sans "
+                    f"avoir été comparé à quoi que ce soit. "
+                    f"{len(exclusions_cible)} modèle(s) écarté(s) pour cible "
+                    f"non conforme, {len(exclusions_metrique)} pour Gini non "
+                    f"mesuré. *Une sélection sans alternative n'est pas une "
+                    f"sélection.*")
+            # ⚠️ PAS de branche « catalogue vide » ici : `_agreger_resultats`
+            # LÈVE déjà dans ce cas, donc elle serait inatteignable — et une
+            # branche qui ne peut pas s'exécuter affirme un traitement que le
+            # code ne rend jamais. Le refus est en amont, il y reste.
+            rapport['reserve_arbitrage'] = reserve_arbitrage
+            if reserve_arbitrage:
+                logger.warning(reserve_arbitrage)
             logger.info(f"{len(catalogue)} modèles agrégés (cible='{col_cible}')")
             if exclusions_cible:
                 # Surfacé, jamais silencieux : on trace chaque modèle écarté pour
@@ -546,6 +579,9 @@ class AgentA6Comparaison:
                 'audit_trail': _audit_trail_a6,  # Gouvernance exposée aux exports
                 'exclusions_conformite': _exclusions_conformite,
                 'controle_effet': _controle_effet,
+                # ⚠️ La reserve d'arbitrage VOYAGE : une reserve que
+                # personne ne lit serait `conformite/C7` recommence.
+                'reserve_arbitrage': rapport.get('reserve_arbitrage'),
                 'alertes_conformite': _alertes_conformite,
                 'alertes_modele': _alertes_modele,
                 'exclusions_cible': exclusions_cible,
@@ -655,6 +691,9 @@ class AgentA6Comparaison:
                 # détruit (−17,4 % de Gini) sans qu'aucun rapport ne l'indique.
                 'exclusions_conformite': _exclusions_conformite,
                 'controle_effet': _controle_effet,
+                # ⚠️ La reserve d'arbitrage VOYAGE : une reserve que
+                # personne ne lit serait `conformite/C7` recommence.
+                'reserve_arbitrage': rapport.get('reserve_arbitrage'),
                 'alertes_conformite': _alertes_conformite,
                 'alertes_modele':     _alertes_modele,
                 # Modèles écartés de la comparaison pour cible non conforme
@@ -812,14 +851,36 @@ class AgentA6Comparaison:
                     })
             catalogue = retenus
 
+        # ⚠️⚠️ UN GINI NON MESURÉ NE SE NOTE PAS ZÉRO — il s'écarte, déclaré.
+        # Depuis `a3/C6`, un agent qui n'a PAS pu calculer son Gini publie
+        # `None`, jamais `0` : un zéro est indiscernable d'un pouvoir
+        # discriminant nul, et le modèle entrait alors dans l'arbitrage avec
+        # une note fabriquée. **Le filtre est ici, en UN point, et non recopié
+        # sur les trois sites d'ajout** : A3, A4 et A5 sont traités pareil.
+        # Il protège aussi `_calculer_scores_multicriteres`, qui divise par
+        # `max(ginis)` et lèverait un TypeError sur un `None`.
+        exclusions_metrique = [
+            {'modele':         m['modele'],
+             'famille':        m['famille'],
+             'metrique':       'gini_test',
+             'raison':         "Gini non mesuré (publié à None par l'agent "
+                               "source) : un modèle non noté ne peut pas être "
+                               "classé, et le noter zéro serait une note "
+                               "fabriquée."}
+            for m in catalogue if m.get('gini_test') is None
+        ]
+        if exclusions_metrique:
+            catalogue = [m for m in catalogue if m.get('gini_test') is not None]
+
         if not catalogue:
             raise ValueError(
                 f"Aucun modèle ajusté sur la cible '{col_cible}'. "
                 f"{len(exclusions_cible)} modèle(s) écarté(s) pour cible non conforme. "
+                f"{len(exclusions_metrique)} écarté(s) pour Gini non mesuré. "
                 "Vérifiez qu'A3/A4/A5 ont été lancés sur la même cible qu'A6."
             )
 
-        return catalogue, exclusions_cible
+        return catalogue, exclusions_cible, exclusions_metrique
 
     # ══════════════════════════════════════════════════════════════════════════
     # ÉTAPE 2 : SCORE MULTICRITÈRES

@@ -1365,10 +1365,39 @@ class AgentA3GLM:
         except Exception:
             pred_test = np.full(len(df_test), df_train[col_target_tweedie].mean())
 
+        # ⚠️⚠️ LE TWEEDIE POSE ENFIN SON GINI — constat `a3/C6`.
+        # Il n'en posait AUCUN, et A6 lisait `met.get('gini', 0)` : le modèle
+        # entrait dans l'arbitrage **noté zéro**, d'un zéro que personne n'avait
+        # mesuré. *Un 0 qui signifie « jamais mesuré » est indiscernable d'un 0
+        # qui signifie « sans pouvoir discriminant »* — et A6 ARBITRE là-dessus.
+        #
+        # ⚠️ CE GINI EST BIEN DÉFINI, et j'avais écrit l'inverse : il compare la
+        # prime pure PRÉDITE à la prime pure OBSERVÉE, exactement comme le
+        # Poisson compare des fréquences et le Gamma des coûts moyens. Ce qui
+        # n'aurait aucun sens serait de le comparer à un Gini de FRÉQUENCE —
+        # et **le filtre par cible d'A6 l'empêche déjà** : un modèle dont la
+        # `cible` diffère est écarté avec le motif `cible_differente`. *Mesuré
+        # avant de le réaffirmer.*
+        try:
+            gini_tw = self._calculer_gini(
+                df_test[col_target_tweedie].values,
+                np.asarray(pred_test, dtype=float),
+            )
+        except Exception as exc:                       # noqa: BLE001
+            # ⚠️ UN ÉCHEC NE SE PUBLIE PAS EN ZÉRO. On rend `None` — la valeur
+            # que le catalogue d'A6 saura distinguer d'un zéro mesuré.
+            logger.warning(
+                f"[A3] Gini Tweedie NON CALCULÉ ({type(exc).__name__}: {exc}) — "
+                f"publié à None, jamais à 0 : un zéro serait indiscernable "
+                f"d'une absence de pouvoir discriminant.")
+            gini_tw = None
+
         metriques = {
             'aic':              round(float(modele_final.aic), 2),
             'bic':              round(float(modele_final.bic), 2),
             'deviance':         round(float(modele_final.deviance), 4),
+            'gini':             (round(float(gini_tw), 4)
+                                 if gini_tw is not None else None),
             'tweedie_p':        TWEEDIE_P,
             'nb_vars_retenues': len(vars_actives),
             'nb_vars_exclues':  len(vars_exclues),

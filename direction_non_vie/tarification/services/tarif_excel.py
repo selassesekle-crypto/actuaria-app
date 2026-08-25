@@ -564,6 +564,7 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
         val_sel      = result_a6.get('validation_selection', {})
         fiche        = result_a6.get('fiche_decision', {})
         ctrl_effet   = result_a6.get('controle_effet', {})
+        reserve_arb  = result_a6.get('reserve_arbitrage')
         audit_trail  = result_a6.get('audit_trail', {})
 
         # ── Onglet 1 : Synthèse ───────────────────────────────────────────────
@@ -662,6 +663,12 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
         # lisait. Elle n'a pu être publiée qu'une fois rendue VÉRIDIQUE
         # (constat `conformite/C1`) — la publier avant aurait attesté un
         # contrôle qui n'avait examiné aucune colonne.
+        # ⚠️⚠️ LA RÉSERVE D'ARBITRAGE SE PUBLIE — un arbitrage entre un seul
+        # candidat n'est pas un arbitrage, et l'actuaire doit le lire avant
+        # de signer « modèle de production retenu ».
+        if reserve_arb:
+            _kpi(ws3, r, "⚠ Réserve sur l'arbitrage", reserve_arb,
+                 statut="AMBRE", wrap=True); r += 1
         _avert_ce = avertissement_controle_effet(ctrl_effet)
         if _avert_ce:
             _kpi(ws3, r, "⚠ Contrôle anti-fuite par l'effet", _avert_ce,
