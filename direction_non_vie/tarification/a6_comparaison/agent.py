@@ -98,7 +98,8 @@ except ImportError:
 # genre pré-encodée (scénario V7) traversait donc intacte jusqu'à la
 # recalibration walk-forward.
 from core.conformite_reglementaire import (
-    construire_matrice_x, gini_est_plausible, GINI_PLAUSIBLE_MAX_FREQUENCE,
+    avertissement_walk_forward, construire_matrice_x, gini_est_plausible,
+    GINI_PLAUSIBLE_MAX_FREQUENCE,
 )
 
 warnings.filterwarnings('ignore')
@@ -396,13 +397,6 @@ class AgentA6Comparaison:
                 self._charts_tarif_v3(graphiques, backtest, courbes,
                                       modele_production)
 
-            # ── AIDE À LA DÉCISION v3 ─────────────────────────────────────────
-            fiche_decision = {}
-            if aide_decision:
-                fiche_decision = self._generer_fiche_decision(
-                    classement, modele_production, profil
-                )
-
             # Rapport final
             # Amputation du plan : relevée à l'identique par A3/A4/A5 (chacun
             # vérifie SON plan contre SES données). On prend la première info
@@ -423,6 +417,19 @@ class AgentA6Comparaison:
                 hypotheses_glm=(result_a3 or {}).get('hypotheses'),
                 hypotheses_ml=(result_a4 or {}).get('hypotheses'),
             )
+            # ── AIDE À LA DÉCISION v3 ─────────────────────────────────────────
+            # ⚠️⚠️ DÉPLACÉE ICI, APRÈS `statut_rag` — constat `a6/C5`. Elle
+            # était construite AVANT que le statut soit calculé : elle ne
+            # pouvait donc pas en tenir compte, et affirmait la conformité S2
+            # même sur un modèle plafonné. Rien entre les deux points n'utilise
+            # `fiche_decision` ; le déplacement est sans autre effet.
+            fiche_decision = {}
+            if aide_decision:
+                fiche_decision = self._generer_fiche_decision(
+                    classement, modele_production, profil,
+                    backtest=backtest, statut_rag=statut_rag,
+                )
+
             commentaire = self._commenter_actuaire_senior(
                 classement, modele_production, sous_branche,
                 statut_rag, backtest
@@ -2582,6 +2589,9 @@ class AgentA6Comparaison:
         classement:  List[Dict],
         modele_prod: Dict,
         profil:      str,
+        *,
+        backtest:   dict | None,
+        statut_rag: str | None,
     ) -> Dict:
         """
         Génère la fiche d'aide à la décision pour l'actuaire.
@@ -2593,6 +2603,16 @@ class AgentA6Comparaison:
         → Alternatives si le modèle recommandé ne convient pas
         → Questions à poser avant signature
         → Justification réglementaire (S2, AI Act 2025)
+
+        ⚠️⚠️ `backtest` ET `statut_rag` SONT EXIGÉS, SANS DÉFAUT — constat
+        `a6/C5`. Cette fiche portait « Conformité S2 Pilier 1 : modèle validé
+        sur données de test indépendantes » **inconditionnellement**, parce
+        qu'elle ne recevait ni l'un ni l'autre : elle l'écrivait même quand le
+        walk-forward avait échoué et que le statut était plafonné.
+        Un défaut à `None` rouvrirait la porte en silence ; on impose donc de
+        les déclarer. `backtest=None` reste licite et SIGNIFIANT — c'est
+        « aucune validation temporelle », et `avertissement_walk_forward` le
+        dit. Ce qui n'est plus possible, c'est de ne rien dire du tout.
         """
         nom_prod  = modele_prod.get('modele', 'N/A')
         gini_prod = modele_prod.get('gini_test', 0)
@@ -2654,8 +2674,39 @@ class AgentA6Comparaison:
             )
 
         # ── JUSTIFICATION RÉGLEMENTAIRE ───────────────────────────────────────
+        # ⚠️⚠️ LA CONFORMITÉ S2 EST CONDITIONNELLE — constat `a6/C5`.
+        # Cette ligne était écrite TOUJOURS. Elle affirme que le modèle a été
+        # « validé sur données de test indépendantes » : c'est précisément ce
+        # que le walk-forward établit ou infirme. On la conditionne donc à la
+        # SOURCE UNIQUE du dépôt, `avertissement_walk_forward`, déjà utilisée
+        # par les trois services de rapport — la fiche était le seul livrable
+        # à ne pas la consulter.
+        #
+        # ⚠️ ET L'ABSENCE D'AFFIRMATION NE DOIT JAMAIS ÊTRE SILENCIEUSE : on ne
+        # retire pas la ligne, on écrit qu'elle N'EST PAS ÉTABLIE et pourquoi.
+        # Une ligne manquante se lit comme un oubli ; une ligne qui se dénonce
+        # se lit comme un fait. C'est le BLOQUANT B3 sous une autre forme —
+        # l'Excel y estampillait « ✓ Conforme » sur une recalibration sur proxy.
         justif_regl = []
-        justif_regl.append("Conformité S2 Pilier 1 : modèle validé sur données de test indépendantes")
+        _avert_wf = avertissement_walk_forward(backtest)
+        if _avert_wf is None and (statut_rag or '').upper() == 'VERT':
+            justif_regl.append(
+                "Conformité S2 Pilier 1 : modèle validé sur données de test "
+                "indépendantes (validation temporelle walk-forward réussie, "
+                f"statut {statut_rag})")
+        else:
+            _motifs = []
+            if _avert_wf is not None:
+                _motifs.append(_avert_wf)
+            if (statut_rag or '').upper() != 'VERT':
+                _motifs.append(
+                    f"statut du modèle = {statut_rag or 'NON CALCULÉ'} "
+                    f"(un modèle non VERT n'est pas certifié)")
+            justif_regl.append(
+                "⚠ CONFORMITÉ S2 PILIER 1 : NON ÉTABLIE À CE STADE — "
+                + " · ".join(_motifs)
+                + ". Cette fiche NE PEUT PAS attester que le modèle a été "
+                  "validé sur données de test indépendantes.")
         justif_regl.append("AI Act 2025 Art. 13 : " + (
             "✅ Modèle linéaire — exigences d'explicabilité satisfaites"
             if 'GLM' in fam_prod.upper() or 'lineaire_regularise' in nom_prod.lower()

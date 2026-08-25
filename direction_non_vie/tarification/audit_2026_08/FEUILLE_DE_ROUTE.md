@@ -125,6 +125,26 @@ décision est publiée à 25 %** (3 champs sur 12 ; forces, faiblesses, risques,
 alternatives et questions à poser n'atteignent aucun livrable). Sur 24 champs
 porteurs de texte d'A6, **18 sont muets**.
 
+### ✅ LOT ① CLOS — `a6/C11` + `a6/C5`, ENSEMBLE
+
+**12/12 champs** de la fiche atteignent le classeur (3/12 avant), et
+l'attestation de conformité S2 est **conditionnée** à `avertissement_walk_forward`
+et au statut.
+
+⚠️⚠️ **L'ORDRE INTERNE ÉTAIT LE FOND DU LOT** : publier la fiche sans
+conditionner son attestation aurait **mis une conformité Solvabilité 2 fausse
+dans le classeur qui part au CAC**. Le correctif aurait *créé* le dommage que
+le constat annonçait. `C5` posé **d'abord**, dans le même changement.
+**9 contrôles positifs**, dont une classe entière qui **lit le classeur** pour
+qu'on ne puisse plus les dissocier.
+
+**Reste ouvert dans l'ordre arbitré** : ② `conformite/C1`+`C7` ensemble ·
+③ `qualite/C1` `C2` `a1/C3` `C4` · puis **le banc étendu à A3/A4/A5 avant
+leurs ~40 constats** · puis les **11 latents**.
+⚠️ **`alertes_modele`, `validation_selection.verdict`, `backtest.stabilite`
+restent À INSTRUIRE, pas en constats** : le banc ne prouve pas qu'aucune autre
+forme d'entrée ne les publie ailleurs.
+
 ## RANG 2 — CE QUI AUTORISE CE PRIX · **3 lots · 9 constats**
 
 | lot | constats | ce que ça ferme |

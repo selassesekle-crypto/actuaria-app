@@ -731,9 +731,38 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
 
         if fiche:
             _section(ws4, r, "▶ FICHE ACTUARIELLE"); r += 1
+            # ⚠️⚠️ CE BLOC N'ÉCRIVAIT QUE LES VALEURS `str` — constat `a6/C11`.
+            # Mesuré par exécution : 3 champs publiés sur 12, soit 25 %.
+            # Les 9 muets étaient `forces`, `faiblesses`, `risques`,
+            # `alternatives`, `questions_actuaire`, `justification_regl` (des
+            # LISTES) et les trois numériques. Or c'est exactement ce que la
+            # docstring d'A6 annonce comme contenu de l'aide à la décision :
+            # « forces et faiblesses · risques identifiés · alternatives ·
+            # questions à poser AVANT SIGNATURE ». L'actuaire n'en voyait
+            # aucun. Ce n'était pas une décision de mise en page : c'était un
+            # `isinstance` qui triait par TYPE, et personne ne le savait.
+            #
+            # ⚠️⚠️ ET CE CORRECTIF NE PEUT PAS ÊTRE APPLIQUÉ SEUL. En publiant
+            # les listes, il publie `justification_regl` — qui portait une
+            # affirmation de conformité S2 INCONDITIONNELLE (constat `a6/C5`).
+            # Ce garde-fou-là a été posé D'ABORD, dans le même changement :
+            # `_generer_fiche_decision` exige désormais `backtest` et
+            # `statut_rag`. **Ne jamais revenir sur l'un sans l'autre.**
             for k, v in fiche.items():
+                label = k.replace('_', ' ').title()
                 if isinstance(v, str):
-                    _kpi(ws4, r, k.replace('_',' ').title(), v, wrap=True); r += 1
+                    _kpi(ws4, r, label, v, wrap=True); r += 1
+                elif isinstance(v, bool):
+                    _kpi(ws4, r, label, 'oui' if v else 'non'); r += 1
+                elif isinstance(v, (int, float)):
+                    _kpi(ws4, r, label, v); r += 1
+                elif isinstance(v, (list, tuple)):
+                    # Le libellé une fois, puis chaque élément sur sa ligne.
+                    # Aucun écrêtement : une liste tronquée en silence
+                    # redonnerait une fiche incomplète sans le dire.
+                    for i, item in enumerate(v):
+                        _kpi(ws4, r, label if i == 0 else "",
+                             str(item), wrap=True); r += 1
         # ── Gouvernance du profil de pondération (ACPR-2022-P-01 §4.3) ────────
         _section(ws4, r, "▶ GOUVERNANCE — PROFIL DE PONDÉRATION"); r += 1
         _gov = audit_trail.get('gouvernance_ok')

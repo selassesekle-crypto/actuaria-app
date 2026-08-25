@@ -104,6 +104,43 @@ d'être portés en constats à part entière.*
 
 **Preuve** : `preuves/passage_libelles.py`, relançable seul.
 
+> ✅✅ **`C5` ET `C11` FERMÉS ENSEMBLE — ET ILS NE POUVAIENT PAS L'ÊTRE
+> AUTREMENT.** Mesuré après correctif, par exécution : **12/12 champs de la
+> fiche atteignent le classeur** (3/12 avant), listes rendues **ligne à ligne**
+> et non en `repr` Python.
+>
+> ⚠️⚠️ **L'ORDRE À L'INTÉRIEUR DU LOT EST LE FOND DU SUJET.** Publier la fiche
+> (`C11`) sans conditionner son attestation (`C5`) aurait mis une **conformité
+> Solvabilité 2 fausse dans le classeur qui part au CAC** — le correctif aurait
+> créé le dommage que le constat annonçait seulement. `C5` a donc été posé
+> **d'abord**, dans le même changement.
+>
+> **`C5`** : `_generer_fiche_decision` **exige** désormais `backtest` et
+> `statut_rag` (mots-clés sans défaut — un défaut à `None` rouvrirait la porte
+> en silence, même doctrine que le `X_val` d'A5 au lot 1.1). L'appel est
+> **déplacé après le calcul de `statut_rag`** : il était construit avant, et ne
+> pouvait donc pas en tenir compte. L'attestation est conditionnée à
+> `avertissement_walk_forward` — **la source unique que les trois services de
+> rapport utilisaient déjà, et que la fiche était seule à ignorer.**
+> ⚠️ **L'absence d'attestation ne se fait pas par retrait** : la ligne devient
+> « ⚠ CONFORMITÉ S2 PILIER 1 : NON ÉTABLIE À CE STADE — … », motif nommé.
+> *Une ligne manquante se lit comme un oubli ; une ligne qui se dénonce se lit
+> comme un fait.*
+>
+> **Contrôles positifs** — `test_fiche_decision.py`, **9 tests, par exécution
+> du classeur** :
+> ⚠️ le **second sens est premier** ici : `walk-forward réussi + statut VERT →
+> la conformité EST attestée`. Sans lui, une garde qui refuserait tout
+> passerait les tests négatifs sans rien prouver.
+> ⚠️⚠️ Et une classe entière, `POS_Fiche_LeCouplageEstVerrouille`, **lit le
+> CLASSEUR et non la fiche** : elle échoue si l'on revient sur `C5`, ou si la
+> fiche est publiée par un autre chemin. *On ne peut plus dissocier les deux.*
+>
+> ⚠️ **Le contrôle positif a fait son travail dès sa première exécution** : mon
+> témoin « backtest conforme » ne l'était pas — il lui manquait
+> `modele_recalibre_fidele`, et la validation portait donc sur un **proxy**.
+> **J'ai corrigé le témoin, pas l'assertion.**
+
 ### B — Affirme plus que le code ne porte (3)
 
 **C6 — Une chaîne qui ne matche pas, et elle rend deux choses muettes.**
