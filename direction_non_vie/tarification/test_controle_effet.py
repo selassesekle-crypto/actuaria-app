@@ -39,6 +39,16 @@ _FEATURES = ['age', 'bonus_malus']
 
 
 def _donnees(n=300, cible='variable'):
+    """⚠️⚠️ LE TÉMOIN `vide` A MANQUÉ TROIS FOIS DANS LA MÊME JOURNÉE.
+
+    Mes fixtures ne portaient que « cible ABSENTE de la table » et « cible
+    CONSTANTE » — jamais **cible PRÉSENTE mais entièrement vide**. C'est ce
+    trou précis qui a laissé passer `NaN == 0.0` (toujours faux), donc un
+    contrôle par l'effet qui s'attestait exécuté sur une cible inexistante,
+    **et le classeur du CAC écrivait « exécuté sur toutes les cibles »**.
+
+    Les cinq états sont désormais dans la fixture, et chacun a son test.
+    """
     rng = np.random.default_rng(1)
     df = pd.DataFrame({'age': rng.uniform(20, 70, n),
                        'bonus_malus': rng.uniform(50, 200, n)})
@@ -46,6 +56,11 @@ def _donnees(n=300, cible='variable'):
         df['nb'] = rng.poisson(0.3, n).astype(float)
     elif cible == 'constante':
         df['nb'] = np.zeros(n)
+    elif cible == 'vide':                     # présente, et entièrement NaN
+        df['nb'] = np.nan
+    elif cible == 'moitie_vide':              # couverture partielle
+        df['nb'] = [np.nan if i % 2 else float(i % 7) for i in range(n)]
+    # cible == 'absente' : la colonne n'est pas créée du tout
     return df
 
 
@@ -326,6 +341,85 @@ class POS_Effet_LeCouplageTientDANS_LES_DEUX_SENS(unittest.TestCase):
         finally:
             TE.avertissement_controle_effet = original
         print("    POS-couplage le controle REFUSE C7 debranche ✅")
+
+
+class POS_Effet_UneCibleVIDE_NeSAttestePas(unittest.TestCase):
+    """⚠️⚠️ LE TROU QUE SELASSE A TROUVÉ, ET QUI M'A ÉCHAPPÉ TROIS FOIS.
+
+    Le garde testait `float(serie.std()) == 0.0`. Sur une colonne entièrement
+    vide, `std()` vaut **NaN**, et **`NaN == 0.0` est FAUX** : aucun motif,
+    `controle_effet_execute = True`, et le classeur qui part au CAC écrivait
+    « exécuté sur toutes les cibles » **sur une cible qui n'existe pas**.
+
+    ⚠️ C'est `qualite/C1` — l'aveuglement au NaN — reproduit dans la correction
+    de `conformite/C1`, qui portait précisément sur un contrôle qui s'atteste
+    sans avoir rien examiné. *On ne teste jamais une borne sur des données qui
+    peuvent manquer : on teste ce qui RESTE.*
+    """
+
+    def test_une_cible_PRESENTE_mais_VIDE_n_est_pas_attestee(self):
+        mx = _matrice(_donnees(cible='vide'), 'nb')
+        self.assertFalse(
+            mx.controle_effet_execute,
+            "une cible entierement vide et le controle se declare execute")
+        motif = " ".join(mx.motifs_controle_effet.values())
+        self.assertIn("ENTIÈREMENT", motif,
+                      "le motif ne nomme pas la vraie cause")
+        print("    POS-vide une cible presente et VIDE n'est pas attestee ✅")
+
+    def test_le_CLASSEUR_ne_l_atteste_pas_non_plus(self):
+        """⚠️ Le sens qui compte : le défaut atteignait le LIVRABLE."""
+        txt = _classeur(_rapport(_matrice(_donnees(cible='vide'), 'nb')))
+        self.assertIn("NON EXÉCUTÉ", txt)
+        self.assertNotIn("exécuté sur toutes les cibles", txt,
+                         "LE CLASSEUR ATTESTE un controle sur une cible vide")
+        print("    POS-vide le classeur ne l'atteste pas non plus ✅")
+
+    def test_une_couverture_PARTIELLE_est_DECLAREE_pas_arrondie(self):
+        """⚠️⚠️ NI AU PIRE, NI AU MIEUX. Une cible à moitié vide laissait le
+        contrôle tourner sur la moitié des lignes **sans le dire**. L'arrondir
+        au pire ferait croire que rien n'a été vérifié ; au mieux, que tout
+        l'a été. *Une couverture partielle est un fait à publier.*"""
+        mx = _matrice(_donnees(cible='moitie_vide'), 'nb')
+        self.assertTrue(mx.controle_effet_execute,
+                        "le controle a bien tourne : il ne doit pas etre "
+                        "declare non execute")
+        motif = " ".join(mx.motifs_controle_effet.values())
+        self.assertIn("INCOMPLÈTE", motif, "la reserve n'est pas publiee")
+        txt = _classeur(_rapport(mx))
+        self.assertIn("PARTIEL", txt, "le classeur n'annonce pas le partiel")
+        self.assertNotIn("exécuté sur toutes les cibles", txt)
+        print("    POS-vide couverture partielle : DECLAREE, pas arrondie ✅")
+
+    def test_LE_SECOND_SENS_une_cible_PLEINE_reste_attestee_sans_reserve(self):
+        """⚠️ Sans lui, une réserve émise sur tout portefeuille rendrait
+        l'avertissement permanent — donc illisible."""
+        mx = _matrice(_donnees(), 'nb')
+        self.assertTrue(mx.controle_effet_execute)
+        self.assertEqual(mx.motifs_controle_effet, {},
+                         "une cible pleine porte une reserve")
+        self.assertIn("exécuté sur toutes les cibles",
+                      _classeur(_rapport(mx)))
+        print("    POS-vide LE SECOND SENS : une cible pleine, aucune reserve ✅")
+
+    def test_les_CINQ_etats_de_la_fixture_sont_distincts(self):
+        """⚠️ Le témoin manquant est la cause de ce défaut : on épingle donc
+        la fixture elle-même, pour qu'aucun état ne disparaisse en silence."""
+        attendus = {
+            'variable':    (True,  ''),
+            'moitie_vide': (True,  'INCOMPLÈTE'),
+            'vide':        (False, 'ENTIÈREMENT'),
+            'constante':   (False, 'CONSTANTE'),
+            'absente':     (False, 'ABSENTE'),
+        }
+        for etat, (execute, mot) in attendus.items():
+            with self.subTest(etat=etat):
+                mx = _matrice(_donnees(cible=etat), 'nb')
+                self.assertEqual(mx.controle_effet_execute, execute)
+                if mot:
+                    self.assertIn(mot,
+                                  " ".join(mx.motifs_controle_effet.values()))
+        print(f"    POS-vide les {len(attendus)} etats de cible sont distincts ✅")
 
 
 if __name__ == '__main__':

@@ -81,7 +81,31 @@ arguments, pas l'exécution du contrôle.
 > col_cible » alors que les deux étaient fournis — **un en-tête qui contredit
 > le motif qu'il porte.** Corrigé, et verrouillé par un contrôle.
 >
-> Contrôles positifs : `test_controle_effet.py`, **15 tests**, dont
+> ⚠️⚠️ **RÉOUVERT PUIS REFERMÉ LE MÊME JOUR — LE CORRECTIF PORTAIT LE DÉFAUT
+> QU'IL CORRIGEAIT.** Une question de Selasse sur l'interaction avec la couche
+> qualité l'a trouvé : mon garde testait `float(serie.std()) == 0.0`, et sur
+> une colonne **entièrement vide** `std()` vaut **NaN** — or **`NaN == 0.0` est
+> FAUX**. Aucun motif n'était produit, `controle_effet_execute` valait `True`,
+> **et le classeur qui part au CAC écrivait « exécuté sur toutes les cibles »
+> sur une cible qui n'existe pas.** *C'est `qualite/C1` — l'aveuglement au NaN
+> — reproduit dans la correction de `conformite/C1`, qui portait précisément
+> sur un contrôle qui s'atteste sans avoir rien examiné.*
+> **Le garde teste désormais ce qui RESTE** (`.dropna()`), jamais une borne.
+>
+> ⚠️ **ET LA COUVERTURE PARTIELLE EST DÉCLARÉE, PAS ARRONDIE.** Une cible à
+> moitié vide laissait le contrôle tourner sur la moitié des lignes **sans le
+> dire**. `reserve_controle_effet` distingue désormais l'**empêchement** (rien
+> n'a été examiné → non exécuté) de la **réserve** (il a tourné sur un
+> sous-ensemble → PARTIEL). *Ni au pire, ni au mieux.*
+>
+> ⚠️⚠️ **POURQUOI MES 15 CONTRÔLES NE L'AVAIENT PAS VU : LE TÉMOIN MANQUAIT.**
+> Mes fixtures portaient « cible ABSENTE de la table » et « cible CONSTANTE » —
+> **jamais « cible PRÉSENTE mais entièrement vide »**. Ce trou précis m'a
+> échappé **trois fois dans la même journée**. La fixture porte maintenant les
+> **CINQ états** (variable · moitié vide · vide · constante · absente), et un
+> test épingle la fixture elle-même pour qu'aucun n'en disparaisse.
+>
+> Contrôles positifs : `test_controle_effet.py`, **20 tests**, dont
 > `POS_Effet_LeCouplageEstVerrouille` qui **lit le classeur produit**.
 >
 > ⚠️⚠️ **DEUX QUESTIONS DE SELASSE ONT TROUVÉ CE QUI MANQUAIT — le rapport

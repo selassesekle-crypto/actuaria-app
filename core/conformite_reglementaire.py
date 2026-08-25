@@ -1052,15 +1052,26 @@ def construire_matrice_x(
     # renonce en silence quand la cible est absente du DataFrame ou de variance
     # nulle : le contrôle n'examinait AUCUNE colonne et se déclarait exécuté.
     # On interroge donc la SOURCE UNIQUE, cible par cible.
+    # ⚠️ DEUX NATURES, UN SEUL CANAL DE PUBLICATION. Un EMPÊCHEMENT rend le
+    # contrôle non exécuté ; une RÉSERVE dit qu'il a tourné sur un
+    # sous-ensemble. Les deux sont publiés, **seuls les empêchements pilotent
+    # `controle_effet_execute`** — sinon une cible à moitié vide ferait croire
+    # que rien n'a été vérifié.
     motifs_effet = {}
+    empechements = 0
     for _c in cibles:
         _m = motif_controle_effet_impossible(df, _c)
         if _m is not None:
             motifs_effet[str(_c)] = _m
+            empechements += 1
+            continue
+        _r = reserve_controle_effet(df, _c)
+        if _r is not None:
+            motifs_effet[str(_c)] = _r
     # Exécuté = au moins une cible a réellement pu être examinée. Une seule
     # cible exploitable suffit à faire tourner le garde-fou ; aucune ne le
     # laisse muet, et c'est alors qu'il faut le DIRE.
-    controle_effet_execute = bool(cibles) and len(motifs_effet) < len(cibles)
+    controle_effet_execute = bool(cibles) and empechements < len(cibles)
     if motifs_effet and controle_effet_execute:
         # Cas partiel : une cible sur deux. Le contrôle a tourné, mais pas sur
         # tout — le taire ferait croire à une couverture complète.
@@ -1410,7 +1421,24 @@ def motif_controle_effet_impossible(df, col_cible) -> str | None:
                 f"aucune corrélation ne peut être calculée, et AUCUNE colonne "
                 f"n'a donc été examinée par le contrôle par l'effet")
     try:
-        if float(df[col_cible].astype(float).std()) == 0.0:
+        # ⚠️⚠️ ON TESTE L'ABSENCE DE VALEUR EXPLOITABLE, PAS L'ÉGALITÉ À ZÉRO.
+        # Ma première version écrivait `float(serie.std()) == 0.0`. Sur une
+        # colonne ENTIÈREMENT VIDE, `std()` vaut **NaN**, et `NaN == 0.0` est
+        # **FAUX** : aucun motif n'était produit, `controle_effet_execute`
+        # valait `True`, et le classeur qui part au CAC écrivait
+        # « exécuté sur toutes les cibles » sur une cible qui n'existe pas.
+        # ⚠️ **C'est `qualite/C1` — l'aveuglement au NaN — reproduit dans la
+        # correction de `conformite/C1`, qui portait précisément sur un
+        # contrôle qui s'atteste sans avoir rien examiné.** Le motif de cet
+        # audit, dans le correctif de ce motif. *Toute comparaison sur un NaN
+        # est fausse : on ne teste jamais une borne, on teste ce qui RESTE.*
+        _valides = df[col_cible].astype(float).dropna()
+        if _valides.empty:
+            return (f"la cible '{col_cible}' est PRÉSENTE mais ENTIÈREMENT "
+                    f"VIDE : aucune valeur exploitable, aucune corrélation "
+                    f"calculable, et aucune colonne examinée par le contrôle "
+                    f"par l'effet")
+        if float(_valides.std()) == 0.0:
             return (f"la cible '{col_cible}' est CONSTANTE (variance nulle) : "
                     f"la corrélation est indéfinie, et aucune colonne n'a été "
                     f"examinée par le contrôle par l'effet")
@@ -1435,6 +1463,36 @@ def motif_controle_effet_impossible(df, col_cible) -> str | None:
         )
         raise EchecControleEffet(str(exc)) from exc
     return None
+
+
+def reserve_controle_effet(df, col_cible) -> str | None:
+    """Le contrôle par l'effet PEUT s'exécuter — mais pas sur toutes les lignes.
+
+    ⚠️⚠️ UN EMPÊCHEMENT ET UNE RÉSERVE NE SONT PAS LA MÊME CHOSE, et les
+    confondre casserait l'un ou l'autre. Un **empêchement** (voir
+    `motif_controle_effet_impossible`) veut dire que le garde-fou n'a rien
+    examiné : il rend `controle_effet_execute` faux. Une **réserve** veut dire
+    qu'il a tourné sur un SOUS-ENSEMBLE : il s'est exécuté, et sa couverture
+    est incomplète.
+
+    ⚠️ *Une couverture partielle est un FAIT À PUBLIER, pas un défaut à
+    arrondir* — dans un sens comme dans l'autre : l'arrondir au pire ferait
+    croire que rien n'a été vérifié, l'arrondir au mieux ferait croire que tout
+    l'a été. Une cible à moitié vide laissait le contrôle tourner sur la moitié
+    des lignes **sans le dire**.
+    """
+    try:
+        serie = df[col_cible].astype(float)
+    except (TypeError, ValueError, KeyError):
+        return None                      # l'empêchement l'aura déjà signalé
+    n_total = len(serie)
+    n_valides = int(serie.notna().sum())
+    if n_total == 0 or n_valides == n_total:
+        return None
+    return (f"la cible '{col_cible}' porte {n_total - n_valides} valeur(s) "
+            f"manquante(s) sur {n_total} : le contrôle par l'effet n'a examiné "
+            f"que {n_valides} ligne(s) ({n_valides / n_total:.1%}). Sa "
+            f"couverture est INCOMPLÈTE.")
 
 
 def detecter_fuites_par_effet(
