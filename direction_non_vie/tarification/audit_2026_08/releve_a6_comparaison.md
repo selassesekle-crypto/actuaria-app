@@ -93,6 +93,15 @@ texte du résultat d'A6, **18 n'atteignent aucun des cinq livrables** — dont
 `alertes_modele` (le message d'amputation), `validation_selection.verdict` et
 `backtest.stabilite`, **muets jusque dans leur clé**.
 
+⚠️⚠️ **VERDICT CROISÉ APRÈS OUTILLAGE DU BANC POUR L'ÉCRAN (25/08)** : sur les
+18 champs muets en document, **11 le sont AUSSI à l'écran** — `fiche.score_final`,
+`fiche.gini`, `fiche.overfit_ratio`, `backtest.stabilite`, `lift_statut`,
+`exclusions_conformite`, `alertes_modele.message`, `exclusions_cible`,
+`valide_par_actuaire_dl`, `validation_selection.verdict`, `hypotheses.h1`.
+⚠️ **`rapport.etapes` sort de la liste des perdus** : un nom identique est lu
+par l'app. *Ce n'est pas une preuve d'affichage — le relevé matche un NOM, pas
+une provenance — mais cela suffit à retirer l'accusation.*
+
 ⚠️⚠️ **CE QUI EST MESURÉ ET CE QUI NE L'EST PAS.** Le banc détecte le passage
 **verbatim** d'une valeur. Un champ **consommé puis reformaté** paraît muet à
 tort : `exclusions_conformite` en est le cas — `synthese_exclusions` republie

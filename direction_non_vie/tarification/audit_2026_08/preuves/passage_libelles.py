@@ -25,13 +25,28 @@ n'est une trouvaille que si les trois sont ecartes :
      verifier si l'information arrive par une AUTRE source (mesure : le Gini,
      le score et le RMSE de la fiche arrivaient deja par `modele_production`).
 
-⚠️ ET LE DOCUMENT N'EST PAS LE SEUL CHEMIN VERS L'ACTUAIRE : l'ECRAN en est un
-autre. Mesure complementaire par AST sur `actuaria_app.py` -- elle ne lit
-jamais `fiche_decision`, mais elle lit `commentaire`, `gini`, `classement`,
-`statut_rag`, `rapport` et `audit_trail` directement.
+⚠️⚠️ QUATRIEME ANGLE MORT : LE DOCUMENT N'EST PAS LE SEUL CHEMIN VERS
+L'ACTUAIRE -- L'ECRAN EN EST UN AUTRE. Un champ muet dans les cinq livrables
+peut etre affiche par l'application, et le declarer « perdu » serait faux.
+
+⚠️⚠️ ET LA METHODE Y CHANGE, IL FAUT LE DIRE : le chemin DOCUMENT se conclut
+par EXECUTION ; le chemin ECRAN se mesure par AST SEULEMENT.
+    POURQUOI : `streamlit` est ABSENT de l'environnement (mesure au lot 0.2),
+    l'application ne peut donc pas etre executee ici. Et elle disparait a la
+    migration -- installer une bibliotheque pour executer du code condamne
+    n'a pas ete juge utile (arbitrage du 25/08).
+    CE QUE CELA COUTE : un relevé statique voit ce qui est NOMME et ce qui est
+    ITERE, il ne voit pas ce que l'ecran affiche REELLEMENT a l'execution.
+    C'est une borne du banc, pas un resultat -- elle est publiee comme telle.
+
+⚠️ LE MEME ANGLE MORT S'Y APPLIQUE : l'app porte 12 iterations generiques
+(`for k, v in <dict>.items()`), dont sur `graphiques`. Un champ atteint par
+l'une d'elles n'est JAMAIS NOMME : un relevé par `.get('X')` le dirait muet a
+tort. On releve donc les DEUX, et on les distingue dans le verdict.
 """
 import io
 import logging
+import pathlib
 import sys
 import warnings
 import zipfile
@@ -64,6 +79,51 @@ def texte_livrable(sortie) -> str:
                              for n in z.namelist() if n.endswith('.xml'))
         return sortie.decode('utf-8', 'replace')
     return str(sortie)
+
+
+def lecture_par_l_ecran(chemin_app: str, champs) -> dict:
+    """Ce que l'ECRAN lit d'un resultat d'agent -- releve PAR AST.
+
+    Rend {champ: 'nomme' | 'generique' | 'absent'} :
+      · `nomme`     -- lu explicitement (`.get('X')` ou `['X']`) ;
+      · `generique` -- le champ est un CONTENEUR itere (`for k, v in X.items()`),
+                       donc son CONTENU atteint l'ecran sans etre nomme ;
+      · `absent`    -- ni l'un ni l'autre.
+
+    ⚠️⚠️ CE RELEVE EST ASYMETRIQUE, ET C'EST CE QUI LE REND UTILISABLE.
+    Il matche des NOMS DE CLE n'importe ou dans l'application -- il ne sait pas
+    si le `rapport` lu l.1961 est celui d'A6 ou d'un autre agent.
+      · `absent`  est FIABLE : un nom jamais lu nulle part n'est certainement
+        pas lu pour A6. C'est le seul sens qui autorise a conclure.
+      · `nomme` / `generique` sont un DOUTE, pas une preuve : ils suffisent a
+        NE PAS declarer un champ perdu, jamais a affirmer qu'il est affiche.
+    On ne se sert donc de ce relevé que pour RETIRER des accusations, jamais
+    pour en ajouter -- c'est la regle d'asymetrie appliquee a un banc.
+    """
+    import ast
+    src = pathlib.Path(chemin_app).read_text(encoding='utf-8')
+    arbre = ast.parse(src)
+    nommes, conteneurs = set(), set()
+    for n in ast.walk(arbre):
+        if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                and n.func.attr == 'get' and n.args
+                and isinstance(n.args[0], ast.Constant)):
+            nommes.add(n.args[0].value)
+        if isinstance(n, ast.Subscript) and isinstance(n.slice, ast.Constant):
+            nommes.add(n.slice.value)
+        # ⚠️ L'ITERATION GENERIQUE : le contenu passe sans etre nomme.
+        if (isinstance(n, ast.For) and isinstance(n.iter, ast.Call)
+                and isinstance(n.iter.func, ast.Attribute)
+                and n.iter.func.attr in ('items', 'values', 'keys')):
+            texte = ast.unparse(n.iter.func.value)
+            for c in champs:
+                if f"'{c}'" in texte or f'.{c}' in texte or texte.endswith(c):
+                    conteneurs.add(c)
+    etat = {}
+    for c in champs:
+        etat[c] = ('nomme' if c in nommes
+                   else ('generique' if c in conteneurs else 'absent'))
+    return etat
 
 
 def fiche_marquee() -> dict:
@@ -172,6 +232,54 @@ def main() -> None:
     print("=" * 78)
     for c in muets:
         print(f"    {c}")
+
+    # ── ⚠️⚠️ LE QUATRIEME CHEMIN : L'ECRAN ──────────────────────────────────
+    # Un champ muet dans les cinq livrables peut etre affiche par l'app. Le
+    # declarer « perdu » sans avoir regarde ce chemin serait faux.
+    print()
+    print("=" * 78)
+    print("  L'ECRAN  (actuaria_app.py) -- releve PAR AST, PAS par execution")
+    print("=" * 78)
+    print("  ⚠️ streamlit est ABSENT de l'environnement : l'app ne peut pas etre")
+    print("     executee ici. Ce releve voit ce qui est NOMME et ce qui est")
+    print("     ITERE, pas ce que l'ecran affiche reellement. Borne du banc.")
+    print()
+    # ⚠️ La racine des marqueurs (`fiche.`) n'est PAS la cle du resultat
+    # (`fiche_decision`) : sans cette table, le banc interrogerait un nom qui
+    # n'existe nulle part et conclurait « absent » pour la mauvaise raison.
+    CLE_REELLE = {'fiche': 'fiche_decision'}
+    racines = sorted({CLE_REELLE.get(c.split('.')[0], c.split('.')[0])
+                      for c in CHAMPS})
+    ecran = lecture_par_l_ecran(
+        str(pathlib.Path(__file__).resolve().parents[4] / 'actuaria_app.py'),
+        racines)
+    for cle, etat in sorted(ecran.items()):
+        marque = {'nomme': '[LU NOMME  ]', 'generique': '[LU GENERIQUE]',
+                  'absent': '[non lu     ]'}[etat]
+        print(f"  {marque} {cle}")
+
+    print()
+    print("=" * 78)
+    print("  VERDICT CROISE — muet dans les livrables ET non lu a l'ecran")
+    print("=" * 78)
+    perdus, ecran_seul = [], []
+    for c in muets:
+        _racine = CLE_REELLE.get(c.split('.')[0], c.split('.')[0])
+        if ecran.get(_racine, 'absent') == 'absent':
+            perdus.append(c)
+        else:
+            ecran_seul.append(c)
+    print(f"  PERDUS des deux cotes ({len(perdus)}) :")
+    for c in perdus:
+        print(f"      {c}")
+    if ecran_seul:
+        print(f"  muets en document, mais un nom identique est lu par l'app "
+              f"({len(ecran_seul)}) :")
+        for c in ecran_seul:
+            print(f"      {c}   <-- NE PAS les declarer perdus")
+        print("  ⚠️ Ce n'est pas une preuve d'affichage : le relevé matche un")
+        print("     NOM, pas la provenance. Il suffit a retirer l'accusation,")
+        print("     jamais a affirmer que l'actuaire le voit.")
 
     fiche = [c for c in CHAMPS if c.startswith('fiche.')]
     publies = [c for c in fiche if c not in muets]

@@ -59,6 +59,19 @@ l'hypothèse qu'il est bon et prouver le contraire, jamais l'inverse.**
   **NOMBRE** est détruit par l'arrondi (`1.5757` sort en `1.576`). *Les
   marqueurs doivent être des CHAÎNES ; pour un champ numérique, vérifier si
   l'information arrive par une autre source.*
+- ⚠️⚠️ **LE BANC EST OUTILLÉ POUR L'ÉCRAN — ET SA MÉTHODE Y CHANGE, C'EST
+  PUBLIÉ.** Le chemin **document** se conclut par **exécution** ; le chemin
+  **écran** se mesure **par AST seulement**, parce que `streamlit` est absent
+  de l'environnement et que l'app disparaît à la migration. *C'est une borne
+  du banc, pas un résultat.*
+  ⚠️ **Et ce relevé-là est ASYMÉTRIQUE, ce qui le rend utilisable** : il matche
+  des **noms de clé** n'importe où dans l'app, sans savoir de quel agent ils
+  viennent. **`absent` est fiable** — un nom jamais lu n'est certainement pas
+  lu pour A6 — **`lu` n'est qu'un doute**. On s'en sert donc pour **RETIRER
+  une accusation, jamais pour en ajouter**.
+  ⚠️ **Le même angle mort s'y applique** : l'app porte **12 itérations
+  génériques**, dont sur `graphiques`. Un champ atteint par l'une d'elles
+  n'est jamais nommé — le banc les relève séparément.
 - ⚠️ **LE DOCUMENT N'EST PAS LE SEUL CHEMIN VERS L'ACTUAIRE — L'ÉCRAN EN EST UN
   AUTRE.** Mesuré : `actuaria_app.py` ne lit jamais `fiche_decision`, mais lit
   `commentaire`, `gini`, `classement`, `statut_rag`, `rapport` et `audit_trail`
