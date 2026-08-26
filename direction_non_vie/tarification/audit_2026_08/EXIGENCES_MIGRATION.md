@@ -171,6 +171,54 @@ décider ici.*
 
 ---
 
+## M3 — MONITORING DANS LE TEMPS : TRACE AUTOMATIQUE, JAMAIS BLOQUANTE
+
+**Le système garde une trace de chaque analyse lancée — automatiquement, sans
+case à cocher.** Ce n'est pas une fonction que l'actuaire active : c'est un
+effet de bord de toute analyse, produit qu'on le demande ou non. C'est ce qui
+rend le suivi dans le temps possible **sans dépendre de la discipline de qui
+lance**.
+
+### ⚠️⚠️ LE RYTHME NE SE FIXE PAS DANS LE CODE
+
+> **La cadence n'est jamais écrite en dur — ni « mensuel », ni aucun intervalle.
+> La trace se pose « à CHAQUE relance », peu importe qui la lance ou quand.**
+> *La cadence se révèle par l'usage ; elle ne se décrète pas.*
+
+Coder un rythme, c'est deviner ; laisser la trace suivre les relances, c'est
+mesurer — **le même principe que M2** (« mesurer, pas deviner »). Une analyse
+relancée trois fois dans la journée laisse trois traces ; une relancée une fois
+par trimestre en laisse une par trimestre. Le code n'a pas d'opinion sur
+l'intervalle.
+
+### ⚠️⚠️ RÈGLES NON NÉGOCIABLES
+
+| exigence | ce qui ne suffit PAS / ce qui est interdit |
+|---|---|
+| **si l'écriture de la trace échoue, l'analyse principale continue normalement** — la trace est un effet de bord, jamais un maillon du calcul | une trace dont l'échec fait échouer, bloquer ou dégrader l'analyse |
+| **une trace doit pouvoir être VIDÉE par le client** — l'effacement est un droit prévu dès la conception | un journal que le client ne peut pas purger, ou que seul l'éditeur peut purger |
+| **ça vit dans le MODULE DE CALCUL, jamais dans l'interface** — l'app actuelle disparaît à la migration ; la suivante doit HÉRITER du mécanisme sans rien reconstruire | un compteur/journal câblé dans l'écran, à réécrire à chaque nouvelle interface |
+| **couplé au chantier PERSISTANCE déjà prévu** — la trace attend ce chantier, elle ne s'invente pas un stockage à part | un bout de stockage isolé (fichier, table ad hoc) bâti avant l'ouverture de la persistance |
+
+### ⚠️ L'ASSIETTE DE LA TRACE EST LE MODULE DE CALCUL — MÊME RAISONNEMENT QUE M1-bis
+
+La question de cet audit à tout mécanisme reste **« sur quelle ASSIETTE ? »**.
+Si l'assiette de la trace était l'écran, **tout ce qui ne passe pas par l'écran
+en serait exempt** — un appel programmatique, un agent en aval, la future
+interface. En la posant dans le module de calcul (là où l'analyse *tourne*, pas
+là où elle *s'affiche*), **toute relance la produit, quelle que soit la surface
+qui l'a déclenchée**. *Une trace dont l'assiette est l'écran est un suivi qui
+atteste sans surveiller.*
+
+### ⚠️ RIEN À CODER AVANT L'OUVERTURE FORMELLE DE CE CHANTIER
+
+Comme le reste de ce document, M3 **contraint, il n'ordonne pas**. La trace se
+construit **avec** le chantier persistance, pas avant : bâtir un stockage isolé
+maintenant serait précisément le « bout de stockage à part » que la dernière
+règle non négociable interdit.
+
+---
+
 ## Ce que ce document ne dit pas
 
 - Il ne dit **pas** quelle méthode l'arbitrage doit retenir — c'est A6, et A6 a
@@ -178,3 +226,6 @@ décider ici.*
 - Il ne dit **pas** comment l'interface se construit — il dit ce qu'elle ne
   peut pas taire.
 - Il ne mesure **pas** les durées : il mesure le graphe qui les contraint.
+- Il ne dit **pas** où ni comment la trace de M3 est stockée — c'est le chantier
+  persistance qui le fixera. Il dit qu'elle doit se poser à chaque relance, ne
+  jamais bloquer, et pouvoir être vidée par le client.
