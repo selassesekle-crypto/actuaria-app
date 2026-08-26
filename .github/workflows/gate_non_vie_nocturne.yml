@@ -105,6 +105,14 @@ jobs:
           s=${s:-0}
           echo "tests=$n" >> "$GITHUB_OUTPUT"
           echo "sautes=$s" >> "$GITHUB_OUTPUT"
+          # /!\ NE PAS se contenter de `tail` : les `print` stdout sont
+          # bufferises et vides EN FIN, APRES les tracebacks stderr -- un tail
+          # ne montre alors que des lignes vertes sur une gate ROUGE. Cet angle
+          # mort a cache cette panne nocturne depuis le 12/08. On surface les echecs.
+          if [ "$code" -ne 0 ]; then
+            echo "===== ECHECS (blocs FAIL/ERROR + traceback stderr) ====="
+            awk '/^={20,}/{f=1} f' /tmp/nv.txt | head -400
+          fi
           tail -30 /tmp/nv.txt
           exit $code
 
