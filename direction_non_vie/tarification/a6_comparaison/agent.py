@@ -87,6 +87,16 @@ except ImportError:
         RAPPORT_EQUIPE_OK = False
 
 try:
+    from .services.archive_livrable import archiver_livrable
+    ARCHIVE_OK = True
+except ImportError:
+    try:
+        from direction_non_vie.tarification.services.archive_livrable import archiver_livrable
+        ARCHIVE_OK = True
+    except ImportError:
+        ARCHIVE_OK = False
+
+try:
     from ..services.tarif_excel import export_excel_a6
     TARIF_EXCEL_OK = True
 except ImportError:
@@ -262,6 +272,10 @@ class AgentA6Comparaison:
         rapport_mapping:     Optional[Any] = None,
         generer_rapport_equipe: bool = True,
         formats_equipe:      Optional[List[str]] = None,
+        # ⚠️ Archivage vérifiable du livrable signé (dossier + empreintes),
+        # DORMANT par défaut — comme l'arrête de C1, aucun appelant de
+        # production ne l'active encore. Voir services/archive_livrable.
+        archiver:            bool = False,
     ) -> Dict[str, Any]:
         """
         Pipeline de comparaison et validation finale.
@@ -659,6 +673,18 @@ class AgentA6Comparaison:
                 except Exception as e_eq:
                     logger.warning(f"Rapport équipe échoué : {e_eq}")
 
+            # ── Archive vérifiable du livrable signé (voie B, modèle A7) ──────
+            # ⚠️ APRÈS les rapports (les octets existent) ; le manifeste
+            # {audit_id}.archive.json est SÉPARÉ du dossier {audit_id}/. On NE
+            # réordonne PAS _sauvegarder_audit (voie B, arbitrée). L'échec
+            # REMONTE dans le résultat (`archive_erreur`), il n'est pas avalé.
+            _archive, _archive_erreur = ({}, None)
+            if archiver and ARCHIVE_OK:
+                _archive, _archive_erreur = archiver_livrable(
+                    self.audit_path, audit_id, _rapport_equipe)
+                if _archive_erreur:
+                    logger.warning(f"[{audit_id}] Archivage échoué : {_archive_erreur}")
+
 
 
             if self.verbose:
@@ -727,6 +753,10 @@ class AgentA6Comparaison:
                 'audit_trail':        _audit_trail_a6,
                 # Rapport consolidé équipe A1→A6 (dashboard, sans narration IA dupliquée)
                 'rapport_equipe':     _rapport_equipe,
+                # Archive vérifiable du livrable signé (dossier + empreintes) ;
+                # {} si archiver=False (défaut dormant). archive_erreur REMONTE.
+                'archive':            _archive,
+                'archive_erreur':     _archive_erreur,
             }
 
         except Exception as e:
