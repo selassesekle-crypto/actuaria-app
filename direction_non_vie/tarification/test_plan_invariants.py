@@ -33,7 +33,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
-from core.plan_tarifaire import PlanTarifaire, Facteur
+from core.plan_tarifaire import PlanTarifaire, Facteur, EMPREINTE_SCHEMA
 
 TMP = tempfile.mkdtemp(prefix='actuaria_plan_inv_')
 
@@ -1901,6 +1901,76 @@ class TestGarantieLoyersImpayes_PlanDeclaratif(unittest.TestCase):
         self.assertGreater(res['prime_ttc'], 0)
         self.assertIsInstance(json.dumps(res), str)
         print(f"    GLI tarifer() : success, prime_ttc={res['prime_ttc']} € ✅")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  VERSIONNAGE DU SCHÉMA D'EMPREINTE (S3) — préfixe sN:, comparateur, LE SCEAU
+# ═══════════════════════════════════════════════════════════════════════════════
+# Le plan-golden est GELÉ ICI, indépendant de tout YAML et du plan AUTO, pour que
+# l'empreinte de référence ne dépende QUE de la logique d'`empreinte()`. Il peuple
+# chaque champ haché (dont le bloc `comportement` niché) afin qu'une dérive de
+# n'importe quelle partie du payload le fasse bouger.
+_PLAN_GOLDEN_DICT = {
+    "lob": "golden_sceau", "version": "1.0", "auteur": "sceau-schema",
+    "exposition": "expo",
+    "cible_frequence": "nb_sin", "cible_cout": "cout_sin",
+    "famille_severite": "lognormal",
+    "identifiant_contrat": "id_police",
+    "echeance": "date_echeance",
+    "comportement": {
+        "issue": "issue_renouv", "prime_precedente": "prime_n_1",
+        "prime_proposee": "prime_n", "canal": "direct", "groupe_test": "grp_prix",
+    },
+    "facteurs": [
+        {"nom": "age", "type": "continu", "transformation": "carre"},
+        {"nom": "zone", "type": "categoriel", "encodage": "one_hot",
+         "modalites": ["A", "B"], "reference": "A"},
+    ],
+    "interactions": [["age", "zone"]],
+}
+
+
+class TestEmpreinteVersionneeSchema(unittest.TestCase):
+    """S3 — le versionnage de schéma de l'empreinte, et son SCEAU.
+
+    Préfixe `sN:` lisible + version dans le hash + ce golden. Sans le golden,
+    une dérive de STRUCTURE sans bump produirait deux `sN:` identiques pour des
+    structures différentes, et le comparateur rendrait un faux CONTENU_DIFFERENT
+    — le versionnage se retournerait contre son but. Ce test EST le sceau.
+    """
+
+    def test_empreinte_prefixee_par_le_schema(self):
+        emp = PlanTarifaire.depuis_dict(dict(_PLAN_GOLDEN_DICT)).empreinte()
+        self.assertTrue(emp.startswith(f"s{EMPREINTE_SCHEMA}:"),
+                        f"l'empreinte doit porter le préfixe de schéma : {emp}")
+        self.assertEqual(len(emp.split(":", 1)[1]), 16,
+                         "le hash reste 16 hex après le préfixe")
+        print(f"    S3a empreinte préfixée par le schéma : {emp} ✅")
+
+    def test_golden_scelle_la_structure(self):
+        # ⚠️⚠️ CE GOLDEN EST LE SCEAU. S'il rougit, c'est l'UN de deux
+        # événements, tous deux voulus bloquants :
+        #   · une dérive de STRUCTURE du payload d'empreinte() SANS bump de
+        #     EMPREINTE_SCHEMA — le versionnage mentirait ;
+        #   · un bump de EMPREINTE_SCHEMA sans mise à jour de ce golden.
+        # Dans les deux cas : mettre à jour le golden ET la constante dans le
+        # MÊME commit, jamais l'un sans l'autre.
+        emp = PlanTarifaire.depuis_dict(dict(_PLAN_GOLDEN_DICT)).empreinte()
+        self.assertEqual(EMPREINTE_SCHEMA, 1)
+        self.assertEqual(emp, "s1:605a7c6b1ad46e45",
+            "empreinte du plan de reference gele changee : derive de structure "
+            "sans bump, OU bump sans mise a jour du golden. Voir le commentaire.")
+        print(f"    S3b golden scellé : {emp} ✅")
+
+    def test_comparer_empreinte_les_quatre_etats(self):
+        cmp = PlanTarifaire.comparer_empreinte
+        self.assertEqual(cmp("s1:aaaabbbbccccdddd", "s1:aaaabbbbccccdddd"), "IDENTIQUE")
+        self.assertEqual(cmp("s1:aaaabbbbccccdddd", "s1:0000111122223333"), "CONTENU_DIFFERENT")
+        self.assertEqual(cmp("s1:aaaabbbbccccdddd", "s2:aaaabbbbccccdddd"), "SCHEMA_DIFFERENT")
+        self.assertEqual(cmp("aaaabbbbccccdddd", "s1:aaaabbbbccccdddd"), "HERITE_NON_VERSIONNE")
+        self.assertEqual(cmp("s1:aaaabbbbccccdddd", "deadbeefdeadbeef"), "HERITE_NON_VERSIONNE")
+        print("    S3c comparateur : IDENTIQUE · CONTENU_DIFFERENT · "
+              "SCHEMA_DIFFERENT · HERITE_NON_VERSIONNE ✅")
 
 
 if __name__ == '__main__':

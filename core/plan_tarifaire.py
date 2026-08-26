@@ -45,6 +45,17 @@ Transformation = Literal["log", "carre", "racine"]
 # plan signé — donc opposable, et inscrit dans l'empreinte.
 FamilleSeverite = Literal["gamma", "lognormal", "inverse_gaussienne"]
 
+#: VERSION DE SCHÉMA DE L'EMPREINTE — la génération de la STRUCTURE hachée par
+#: `empreinte()`, distincte du champ `version` (le CONTENU signé par l'actuaire).
+#: ⚠️⚠️ À BUMPER quand, et seulement quand, la COMPOSITION du payload de
+#: `empreinte()` change (un champ ajouté / retiré / renommé, un attribut de
+#: facteur). JAMAIS pour du contenu, jamais pour du code hors payload. Un bump
+#: SANS mise à jour du test-golden (`test_plan_invariants`), OU une dérive de
+#: structure SANS bump, fait rougir la gate : c'est le SCEAU. Une empreinte sans
+#: préfixe `sN:` est HÉRITÉE (pré-versionnement), non revalidable — voir
+#: `PlanTarifaire.comparer_empreinte`.
+EMPREINTE_SCHEMA = 1
+
 # Transformations dérivées : suffixe appliqué par A2
 _SUFFIXE_TRANSFO = {"log": "log_{}", "carre": "{}_carre", "racine": "{}_racine"}
 
@@ -440,8 +451,21 @@ class PlanTarifaire:
 
     # ── Traçabilité ACPR : le plan est opposable ───────────────────────────
     def empreinte(self) -> str:
-        """SHA-256 du plan — à inscrire dans l'audit_trail et les rapports."""
+        """SHA-256 du plan, préfixé par la version de SCHÉMA — `sN:hash`.
+
+        À inscrire dans l'audit_trail et les rapports. Deux axes, longtemps
+        confondus dans un seul champ :
+          · le CONTENU signé par l'actuaire — `version`, haché comme le reste ;
+          · la STRUCTURE de ce qui est haché — `EMPREINTE_SCHEMA`, qui bouge
+            quand la COMPOSITION du payload change (un champ ajouté / retiré).
+        La version de schéma est À LA FOIS dans le payload haché — elle scelle
+        l'empreinte et la fait bouger avec la constante — ET en préfixe lisible
+        `sN:`, pour qu'un comparateur lise le schéma SANS recalculer. Une
+        empreinte sans préfixe est HÉRITÉE, non revalidable — voir
+        `comparer_empreinte`.
+        """
         payload = json.dumps({
+            "schema": EMPREINTE_SCHEMA,
             "lob": self.lob, "version": self.version, "auteur": self.auteur,
             "exposition": self.exposition,
             "cibles": [self.cible_frequence, self.cible_cout],
@@ -458,7 +482,34 @@ class PlanTarifaire:
             ],
             "interactions": [list(i) for i in self.interactions],
         }, sort_keys=True, ensure_ascii=False)
-        return hashlib.sha256(payload.encode()).hexdigest()[:16]
+        digest = hashlib.sha256(payload.encode()).hexdigest()[:16]
+        return f"s{EMPREINTE_SCHEMA}:{digest}"
+
+    @staticmethod
+    def comparer_empreinte(reference: str, actuelle: str) -> str:
+        """Verdict schéma-conscient entre une empreinte signée et l'actuelle.
+
+        Transforme un mismatch MUET (deux hex qui diffèrent, sans raison dite)
+        en un verdict qui dit POURQUOI — c'est ce que le versionnage sert à
+        publier. Quatre états, chacun appelant une action distincte :
+          · IDENTIQUE            : même schéma, même hash — le tarif se rejoue ;
+          · CONTENU_DIFFERENT    : même schéma, hash différent — la structure
+                                   est la même, la différence est VRAIMENT du
+                                   contenu (le plan a changé) ;
+          · SCHEMA_DIFFERENT     : schémas différents — les hash ne se comparent
+                                   pas (la composition diffère) ; pour comparer
+                                   le contenu, RE-TARIFER le plan sous ce code ;
+          · HERITE_NON_VERSIONNE : au moins une empreinte sans préfixe `sN:`
+                                   (pré-versionnement) — non revalidable
+                                   automatiquement (voie « retrait », arbitrée).
+        """
+        if ":" not in reference or ":" not in actuelle:
+            return "HERITE_NON_VERSIONNE"
+        schema_ref, hash_ref = reference.split(":", 1)
+        schema_act, hash_act = actuelle.split(":", 1)
+        if schema_ref != schema_act:
+            return "SCHEMA_DIFFERENT"
+        return "IDENTIQUE" if hash_ref == hash_act else "CONTENU_DIFFERENT"
 
     # ── Chargement depuis YAML/JSON ────────────────────────────────────────
     @classmethod
