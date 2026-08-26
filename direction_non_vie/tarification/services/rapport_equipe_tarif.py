@@ -32,6 +32,12 @@ from core.mapping_client import synthese_mapping
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
+# Source unique de l'arrêté (« non déclaré » si absent) — jamais un now() masquant.
+try:
+    from .entete_livrable import libelle_arrete
+except ImportError:
+    from direction_non_vie.tarification.services.entete_livrable import libelle_arrete
+
 logger = logging.getLogger('actuaria.tarif.rapport_equipe')
 
 try:
@@ -157,8 +163,7 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
         r5 = results.get('a5') or {}
         r6 = results.get('a6') or {}
 
-        now = datetime.now().strftime("%d/%m/%Y %H:%M")
-        arr = arrete or now
+        arr = libelle_arrete(arrete)   # « Généré le » figure dans le bandeau
         branche_f = branche or (r6 or r3 or r1).get('branche', 'non_vie')
         statuts = _collecter_statuts(results)
         statut_global = _statut_global(list(statuts.values()))
@@ -173,7 +178,7 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
         ws1 = wb.active
         ws1.title = "1-Vue d'ensemble"
         _bandeau(ws1, "Rapport Consolidé Équipe Tarification", "Synthèse A1 → A6",
-                 "Équipe Tarification Non-Vie", audit_id, now)
+                 "Équipe Tarification Non-Vie", audit_id, arrete)
         r = 7
         _section(ws1, r, "▶ STATUT GLOBAL ÉQUIPE"); r += 1
         _kpi(ws1, r, "Statut consolidé", statut_global, statut=statut_global); r += 1
@@ -203,7 +208,7 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
         # ── Onglet 2 : Qualité des données (A1) ───────────────────────────────
         ws2 = wb.create_sheet("2-Qualité Données (A1)")
         _bandeau(ws2, "Qualité des Données", "Agent A1 — Ingestion & Validation",
-                 "A1", audit_id, now)
+                 "A1", audit_id, arrete)
         r = 7
         qualite = r1.get('qualite', {})
         _section(ws2, r, "▶ SCORE QUALITÉ"); r += 1
@@ -227,7 +232,7 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
         # ── Onglet 3 : Preprocessing (A2) ─────────────────────────────────────
         ws3 = wb.create_sheet("3-Preprocessing (A2)")
         _bandeau(ws3, "Preprocessing & Feature Engineering", "Agent A2",
-                 "A2", audit_id, now)
+                 "A2", audit_id, arrete)
         r = 7
         data_dict = r2.get('data_dictionnaire', {})
         _section(ws3, r, "▶ VARIABLES DÉRIVÉES DOCUMENTÉES"); r += 1
@@ -245,7 +250,7 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
         # ── Onglet 4 : Tarification GLM/ML/DL (A3/A4/A5) ──────────────────────
         ws4 = wb.create_sheet("4-Tarification (A3-A5)")
         _bandeau(ws4, "Tarification — GLM vs ML vs DL", "Agents A3, A4, A5",
-                 "A3/A4/A5", audit_id, now)
+                 "A3/A4/A5", audit_id, arrete)
         r = 7
         met3 = r3.get('metriques', {})
         _section(ws4, r, "▶ GLM (A3)"); r += 1
@@ -291,7 +296,7 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
         # ── Onglet 5 : Décision finale (A6) ───────────────────────────────────
         ws5 = wb.create_sheet("5-Décision Finale (A6)")
         _bandeau(ws5, "Décision Finale", "Agent A6 — Comparaison & Gouvernance",
-                 "A6", audit_id, now)
+                 "A6", audit_id, arrete)
         r = 7
         prod = r6.get('modele_production', {})
         bt6  = r6.get('backtest', {})
@@ -380,7 +385,7 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
         # ── Onglet 6 : Audit trail consolidé ──────────────────────────────────
         ws6 = wb.create_sheet("6-Audit Trail Consolidé")
         _bandeau(ws6, "Audit Trail Consolidé", "Traçabilité complète A1 → A6",
-                 "Équipe", audit_id, now)
+                 "Équipe", audit_id, arrete)
         r = 7
         for col, txt, w in [(1,"Agent",14),(2,"Audit ID",26),(3,"Statut",14),(4,"Timestamp",22)]:
             _header(ws6, r, col, txt, width=w)
@@ -422,7 +427,7 @@ def export_html_equipe(results: Dict[str, Dict], branche: str = '',
         r6 = results.get('a6') or {}
 
         now = datetime.now().strftime('%d/%m/%Y %H:%M')
-        arr = arrete or datetime.now().strftime('%d/%m/%Y')
+        arr = libelle_arrete(arrete)
         branche_f = branche or (r6 or r3 or r1).get('branche', 'non_vie')
         statuts = _collecter_statuts(results)
         statut_global = _statut_global(list(statuts.values()))
@@ -643,7 +648,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
   </div>
 
   <div class="footer">
-    ActuarIA · Équipe Tarification Non-Vie · {branche_f.replace('_',' ').title()} · Arrêté {arr} · {now} · CONFIDENTIEL
+    ActuarIA · Équipe Tarification Non-Vie · {branche_f.replace('_',' ').title()} · Arrêté {arr} · Généré le {now} · CONFIDENTIEL
   </div>
 </div>
 </body>
@@ -677,8 +682,8 @@ def export_word_equipe(results: Dict[str, Dict], branche: str = '',
         r5 = results.get('a5') or {}
         r6 = results.get('a6') or {}
 
-        now = datetime.now().strftime('%d/%m/%Y')
-        arr = arrete or now
+        now = datetime.now().strftime('%d/%m/%Y %H:%M')
+        arr = libelle_arrete(arrete)
         branche_f = branche or (r6 or r3 or r1).get('branche', 'non_vie')
         statuts = _collecter_statuts(results)
         statut_global = _statut_global(list(statuts.values()))
@@ -704,7 +709,7 @@ def export_word_equipe(results: Dict[str, Dict], branche: str = '',
 
         p2 = doc.add_paragraph()
         p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run2 = p2.add_run(f"Vue d'ensemble A1 → A6 — {branche_f.replace('_',' ').title()} — Arrêté {arr}")
+        run2 = p2.add_run(f"Vue d'ensemble A1 → A6 — {branche_f.replace('_',' ').title()} — Arrêté {arr} — Généré le {now}")
         run2.font.size = Pt(12); run2.font.color.rgb = GrR
 
         doc.add_paragraph()
@@ -863,7 +868,7 @@ def export_word_equipe(results: Dict[str, Dict], branche: str = '',
         doc.add_paragraph()
         footer = doc.add_paragraph()
         footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        fr = footer.add_run(f"ActuarIA · Équipe Tarification Non-Vie · {branche_f} · Arrêté {arr} · {now} · CONFIDENTIEL")
+        fr = footer.add_run(f"ActuarIA · Équipe Tarification Non-Vie · {branche_f} · Arrêté {arr} · Généré le {now} · CONFIDENTIEL")
         fr.font.size = Pt(8); fr.font.color.rgb = GrR
 
         buf = io.BytesIO()

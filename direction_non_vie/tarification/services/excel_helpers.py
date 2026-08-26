@@ -26,6 +26,16 @@ except ImportError:
     OPENPYXL_OK = False
     logger.warning("openpyxl non disponible — helpers Excel désactivés")
 
+# ── La date d'arrêté et la date de génération : SOURCE UNIQUE ────────────────
+# Le bandeau ne calcule aucune date lui-même — il dérive tout d'`entete_livrable`
+# (lui-même sur `core/arrete.py`). C'est ce qui empêche « Arrêté : » de porter la
+# date du jour (constat services/C1).
+try:
+    from .entete_livrable import libelle_arrete, genere_le
+except ImportError:
+    from direction_non_vie.tarification.services.entete_livrable import (
+        libelle_arrete, genere_le)
+
 # ── Palette ActuarIA (hexadécimal sans '#', format attendu par openpyxl) ─────
 NAVY   = "0F2E52"
 OR     = "C9A84C"
@@ -118,18 +128,21 @@ def _kpi(ws, row, label, value, statut=None, fmt=None, wrap=False):
               fill=_statut_fill(statut), ah="center")
         _col_w(ws, 3, 18)
 
-def _bandeau(ws, titre, sous_titre, agent, audit_id, date_str, n_cols=8):
-    ws.row_dimensions[1].height = 32
-    ws.row_dimensions[2].height = 22
-    ws.row_dimensions[3].height = 18
-    ws.row_dimensions[4].height = 16
-    ws.row_dimensions[5].height = 14
+def _bandeau(ws, titre, sous_titre, agent, audit_id, arrete=None, n_cols=8):
+    # ⚠️ DEUX DATES, JAMAIS CONFONDUES (constat services/C1) :
+    #   · « Arrêté » = date de RÉFÉRENCE déclarée ; absente → « non déclaré »,
+    #     VISIBLE, jamais la date du jour glissée sous cette étiquette ;
+    #   · « Généré le » = date d'IMPRESSION, honnête, sur TOUT document.
+    # Les deux dérivent de la source unique `entete_livrable` (sur `core/arrete`).
+    for _r, _h in ((1, 32), (2, 22), (3, 18), (4, 16), (5, 14), (6, 14)):
+        ws.row_dimensions[_r].height = _h
     for r, (txt, sz, bold) in enumerate([
-        (f"ActuarIA — {titre}", 14, True),
-        (sous_titre,             11, False),
-        (f"Agent : {agent}",      10, False),
-        (f"Arrêté : {date_str}",  9, False),
-        (f"Audit ID : {audit_id}", 9, False),
+        (f"ActuarIA — {titre}",                14, True),
+        (sous_titre,                            11, False),
+        (f"Agent : {agent}",                    10, False),
+        (f"Arrêté : {libelle_arrete(arrete)}",   9, False),
+        (f"Généré le : {genere_le()}",           9, False),
+        (f"Audit ID : {audit_id}",               9, False),
     ], 1):
         c = ws.cell(row=r, column=1, value=txt)
         c.font      = _font(bold=bold, color=OR if bold else BLANC, size=sz)

@@ -59,7 +59,7 @@ if not OPENPYXL_OK:
 #              Hypothèses H1-H4 · Audit Trail
 # =============================================================================
 
-def export_excel_a3(result_a3: Dict, audit_id: str = "") -> bytes:
+def export_excel_a3(result_a3: Dict, audit_id: str = "", arrete: Optional[str] = None) -> bytes:
     """Génère le rapport Excel A3 GLM (5 onglets). Retourne bytes ou b''."""
     if not OPENPYXL_OK or not result_a3 or not result_a3.get('success'):
         return b''
@@ -74,7 +74,7 @@ def export_excel_a3(result_a3: Dict, audit_id: str = "") -> bytes:
         ws1 = wb.active
         ws1.title = "1-Synthèse"
         _bandeau(ws1, "Rapport Tarification GLM", "Synthèse des résultats",
-                 "A3 — GLM Poisson/Gamma/Tweedie", aid, now)
+                 "A3 — GLM Poisson/Gamma/Tweedie", aid, arrete)
         r = 7
         _section(ws1, r, "▶ MÉTRIQUES GLM"); r += 1
         for modele, label in [('poisson','GLM Poisson'), ('gamma','GLM Gamma'), ('tweedie','GLM Tweedie')]:
@@ -99,7 +99,7 @@ def export_excel_a3(result_a3: Dict, audit_id: str = "") -> bytes:
         # ── Onglet 2 : Relativités Poisson ───────────────────────────────────
         ws2 = wb.create_sheet("2-Relativités Poisson")
         _bandeau(ws2, "Relativités Tarifaires", "GLM Poisson — exp(β) avec IC 95%",
-                 "A3 — GLM Poisson", aid, now)
+                 "A3 — GLM Poisson", aid, arrete)
         rels_p = result_a3.get('relativites_poisson', {})
         r = 7
         _section(ws2, r, "▶ RELATIVITÉS GLM POISSON — exp(β)  [Source : Mildenhall 1999]"); r += 1
@@ -126,7 +126,7 @@ def export_excel_a3(result_a3: Dict, audit_id: str = "") -> bytes:
         # ── Onglet 3 : Relativités Gamma ─────────────────────────────────────
         ws3 = wb.create_sheet("3-Relativités Gamma")
         _bandeau(ws3, "Relativités Tarifaires", "GLM Gamma — exp(β) avec IC 95%",
-                 "A3 — GLM Gamma", aid, now)
+                 "A3 — GLM Gamma", aid, arrete)
         rels_g = result_a3.get('relativites_gamma', {})
         r = 7
         _section(ws3, r, "▶ RELATIVITÉS GLM GAMMA — exp(β) (coût moyen)"); r += 1
@@ -149,7 +149,7 @@ def export_excel_a3(result_a3: Dict, audit_id: str = "") -> bytes:
         # ── Onglet 4 : Hypothèses H1-H4 ──────────────────────────────────────
         ws4 = wb.create_sheet("4-Hypothèses H1-H4")
         _bandeau(ws4, "Validation Hypothèses GLM", "H1 Distribution · H2 Homoscédasticité · H3 Gini · H4 Stabilité",
-                 "A3 — Validation réglementaire", aid, now)
+                 "A3 — Validation réglementaire", aid, arrete)
         r = 7
         hyp_map = [
             ("h1_poisson",  "H1 — Sur-dispersion Poisson",         "ratio_disp"),
@@ -175,7 +175,7 @@ def export_excel_a3(result_a3: Dict, audit_id: str = "") -> bytes:
         # ── Onglet 5 : Audit Trail ────────────────────────────────────────────
         ws5 = wb.create_sheet("5-Audit Trail")
         _bandeau(ws5, "Audit Trail", "Traçabilité ACPR — Agent A3 GLM",
-                 "A3 — Audit", aid, now)
+                 "A3 — Audit", aid, arrete)
         r = 7
         _section(ws5, r, "▶ INFORMATIONS AUDIT"); r += 1
         _kpi(ws5, r, "Audit ID",    aid);  r += 1
@@ -198,7 +198,7 @@ def export_excel_a3(result_a3: Dict, audit_id: str = "") -> bytes:
         geo  = result_a3.get('lissage_geo', {})
         ws6 = wb.create_sheet("6-Crédibilité & Géo")
         _bandeau(ws6, "Crédibilité & Lissage Géo", "Modules avancés P2 — Agent A3 GLM",
-                 "A3 — Bühlmann-Straub / Krigeage", aid, now)
+                 "A3 — Bühlmann-Straub / Krigeage", aid, arrete)
         r = 7
         _section(ws6, r, "▶ CRÉDIBILITÉ BÜHLMANN-STRAUB"); r += 1
         if cred.get('appliquee'):
@@ -273,7 +273,7 @@ def export_excel_a3(result_a3: Dict, audit_id: str = "") -> bytes:
 #  5 onglets : Synthèse · Classement · SHAP · Hypothèses H1-H4 · Audit
 # =============================================================================
 
-def export_excel_a4(result_a4: Dict, audit_id: str = "") -> bytes:
+def export_excel_a4(result_a4: Dict, audit_id: str = "", arrete: Optional[str] = None) -> bytes:
     """Génère le rapport Excel A4 ML (5 onglets). Retourne bytes ou b''."""
     if not OPENPYXL_OK or not result_a4 or not result_a4.get('success'):
         return b''
@@ -287,7 +287,7 @@ def export_excel_a4(result_a4: Dict, audit_id: str = "") -> bytes:
         ws1 = wb.active
         ws1.title = "1-Synthèse"
         _bandeau(ws1, "Rapport Tarification ML", "8 modèles comparés — Sélection multicritères",
-                 "A4 — Machine Learning", aid, now)
+                 "A4 — Machine Learning", aid, arrete)
         r = 7
         _section(ws1, r, "▶ MODÈLE SÉLECTIONNÉ"); r += 1
         classement = result_a4.get('classement', [])
@@ -306,7 +306,7 @@ def export_excel_a4(result_a4: Dict, audit_id: str = "") -> bytes:
         # ── Onglet 2 : Classement ─────────────────────────────────────────────
         ws2 = wb.create_sheet("2-Classement modèles")
         _bandeau(ws2, "Classement des modèles ML", "Grille multicritères actuarielle",
-                 "A4 — Comparaison", aid, now)
+                 "A4 — Comparaison", aid, arrete)
         r = 7
         _section(ws2, r, "▶ CLASSEMENT MULTICRITÈRES (Gini 40% · Stabilité 30% · Interprét. 20% · RMSE 10%)"); r += 1
         for col, txt, w in [(1,"#",6),(2,"Modèle",28),(3,"Famille",14),
@@ -330,7 +330,7 @@ def export_excel_a4(result_a4: Dict, audit_id: str = "") -> bytes:
         # ── Onglet 3 : SHAP Values ────────────────────────────────────────────
         ws3 = wb.create_sheet("3-SHAP Values")
         _bandeau(ws3, "Feature Importance SHAP", "Interprétabilité AI Act 2025",
-                 "A4 — SHAP (Shapley 1953)", aid, now)
+                 "A4 — SHAP (Shapley 1953)", aid, arrete)
         shap_vals = result_a4.get('shap_values', {})
         r = 7
         _section(ws3, r, "▶ IMPORTANCE FEATURES (SHAP moyen |valeur|)"); r += 1
@@ -357,7 +357,7 @@ def export_excel_a4(result_a4: Dict, audit_id: str = "") -> bytes:
         ws4 = wb.create_sheet("4-Hypothèses H1-H4")
         _bandeau(ws4, "Validation Hypothèses ML",
                  "H1 Overfitting · H2 PSI réel · H3 Gini · H4 Calibration",
-                 "A4 — Validation", aid, now)
+                 "A4 — Validation", aid, arrete)
         r = 7
         hyp_map = [
             ("h1_overfitting",  "H1 — Absence d'overfitting",         "ratio"),
@@ -384,7 +384,7 @@ def export_excel_a4(result_a4: Dict, audit_id: str = "") -> bytes:
         # ── Onglet 5 : Audit Trail ────────────────────────────────────────────
         ws5 = wb.create_sheet("5-Audit Trail")
         _bandeau(ws5, "Audit Trail", "Traçabilité ACPR — Agent A4 ML",
-                 "A4 — Audit", aid, now)
+                 "A4 — Audit", aid, arrete)
         r = 7
         _section(ws5, r, "▶ INFORMATIONS AUDIT"); r += 1
         _kpi(ws5, r, "Audit ID",       aid); r += 1
@@ -419,7 +419,7 @@ def export_excel_a4(result_a4: Dict, audit_id: str = "") -> bytes:
 #  Audit V7 MINEUR #2 — A5 était le seul agent sans export Excel.
 # =============================================================================
 
-def export_excel_a5(result_a5: Dict, audit_id: str = "") -> bytes:
+def export_excel_a5(result_a5: Dict, audit_id: str = "", arrete: Optional[str] = None) -> bytes:
     """
     Génère le rapport Excel A5 Deep Learning (4 onglets). Retourne bytes ou b''.
 
@@ -444,7 +444,7 @@ def export_excel_a5(result_a5: Dict, audit_id: str = "") -> bytes:
         ws1 = wb.active
         ws1.title = "1-Synthèse"
         _bandeau(ws1, "Rapport Tarification Deep Learning", "CANN Wüthrich + TabNet",
-                 "A5 — Deep Learning", aid, now)
+                 "A5 — Deep Learning", aid, arrete)
         r = 7
         _section(ws1, r, "▶ MODÈLE SÉLECTIONNÉ"); r += 1
         if classement:
@@ -462,7 +462,7 @@ def export_excel_a5(result_a5: Dict, audit_id: str = "") -> bytes:
         # ── Onglet 2 : Classement CANN / TabNet ────────────────────────────────
         ws2 = wb.create_sheet("2-Classement CANN-TabNet")
         _bandeau(ws2, "Classement des modèles Deep Learning", "CANN (Wüthrich) vs TabNet",
-                 "A5 — Comparaison", aid, now)
+                 "A5 — Comparaison", aid, arrete)
         r = 7
         _section(ws2, r, "▶ CLASSEMENT"); r += 1
         for col, txt, w in [(1,"#",6),(2,"Modèle",20),(3,"Type",18),
@@ -493,7 +493,7 @@ def export_excel_a5(result_a5: Dict, audit_id: str = "") -> bytes:
         # (interprétabilité S2 préservée malgré le résiduel non-linéaire).
         ws3 = wb.create_sheet("3-Fidélité CANN Wüthrich")
         _bandeau(ws3, "Fidélité CANN Wüthrich (2019)", "Gel GLM + résiduel init zéro",
-                 "A5 — CANN", aid, now)
+                 "A5 — CANN", aid, arrete)
         r = 7
         met_cann = metriques.get('cann', {})
         _section(ws3, r, "▶ GEL DE LA COUCHE GLM (offset non-entraînable)"); r += 1
@@ -521,7 +521,7 @@ def export_excel_a5(result_a5: Dict, audit_id: str = "") -> bytes:
         # ── Onglet 4 : Audit Trail ──────────────────────────────────────────────
         ws4 = wb.create_sheet("4-Audit Trail")
         _bandeau(ws4, "Audit Trail", "Traçabilité ACPR — Agent A5 Deep Learning",
-                 "A5 — Audit", aid, now)
+                 "A5 — Audit", aid, arrete)
         r = 7
         _section(ws4, r, "▶ INFORMATIONS AUDIT"); r += 1
         _kpi(ws4, r, "Audit ID",       aid); r += 1
@@ -550,7 +550,7 @@ def export_excel_a5(result_a5: Dict, audit_id: str = "") -> bytes:
 #  5 onglets : Synthèse · Classement final · Backtesting A/E · Fiche décision · Audit
 # =============================================================================
 
-def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
+def export_excel_a6(result_a6: Dict, audit_id: str = "", arrete: Optional[str] = None) -> bytes:
     """Génère le rapport Excel A6 Comparaison (5 onglets). Retourne bytes ou b''."""
     if not OPENPYXL_OK or not result_a6 or not result_a6.get('success'):
         return b''
@@ -571,7 +571,7 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
         ws1 = wb.active
         ws1.title = "1-Synthèse"
         _bandeau(ws1, "Rapport Comparaison Finale", "Sélection modèle de production",
-                 "A6 — Comparaison & Validation", aid, now)
+                 "A6 — Comparaison & Validation", aid, arrete)
         r = 7
         _section(ws1, r, "▶ MODÈLE DE PRODUCTION RETENU"); r += 1
         if modele_prod:
@@ -607,7 +607,7 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
         # ── Onglet 2 : Classement final ───────────────────────────────────────
         ws2 = wb.create_sheet("2-Classement final")
         _bandeau(ws2, "Classement Final", "Tous modèles — Score multicritères",
-                 "A6 — Sélection", aid, now)
+                 "A6 — Sélection", aid, arrete)
         r = 7
         _section(ws2, r, "▶ CLASSEMENT GLOBAL (GLM · ML · DL)"); r += 1
         for col, txt, w in [(1,"#",6),(2,"Modèle",28),(3,"Famille",12),
@@ -634,7 +634,7 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
         # ── Onglet 3 : Backtesting A/E ────────────────────────────────────────
         ws3 = wb.create_sheet("3-Backtesting AE")
         _bandeau(ws3, "Backtesting Walk-Forward", "Test A/E global et par segment",
-                 "A6 — Backtesting", aid, now)
+                 "A6 — Backtesting", aid, arrete)
         r = 7
         # ── Résumé recalibration ──────────────────────────────────────────────
         _section(ws3, r, "▶ RECALIBRATION DU MODÈLE (backtesting réel)"); r += 1
@@ -738,7 +738,7 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
         # ── Onglet 4 : Fiche décision ─────────────────────────────────────────
         ws4 = wb.create_sheet("4-Fiche décision")
         _bandeau(ws4, "Fiche de Décision", "À valider par l'actuaire responsable",
-                 "A6 — Décision production", aid, now)
+                 "A6 — Décision production", aid, arrete)
         r = 7
         _section(ws4, r, "▶ CONTRÔLES SÉLECTION"); r += 1
         for ckey, clabel in [("c1_nb_modeles","C1 — Nb modèles"),
@@ -810,7 +810,7 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
         # ── Onglet 5 : Audit Trail ────────────────────────────────────────────
         ws5 = wb.create_sheet("5-Audit Trail")
         _bandeau(ws5, "Audit Trail", "Traçabilité ACPR — Agent A6 Comparaison",
-                 "A6 — Audit", aid, now)
+                 "A6 — Audit", aid, arrete)
         r = 7
         _section(ws5, r, "▶ INFORMATIONS AUDIT"); r += 1
         _kpi(ws5, r, "Audit ID",       aid); r += 1
@@ -898,7 +898,7 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "") -> bytes:
 #  4 onglets : Synthèse · Qualité & Aberrants · Coercition Types · Audit Trail
 # =============================================================================
 
-def export_excel_a1(result_a1: Dict, audit_id: str = "") -> bytes:
+def export_excel_a1(result_a1: Dict, audit_id: str = "", arrete: Optional[str] = None) -> bytes:
     """Génère le rapport Excel A1 Ingestion (4 onglets). Retourne bytes ou b''."""
     if not OPENPYXL_OK or not result_a1 or not result_a1.get('success'):
         return b''
@@ -914,7 +914,7 @@ def export_excel_a1(result_a1: Dict, audit_id: str = "") -> bytes:
         ws1 = wb.active
         ws1.title = "1-Synthèse"
         _bandeau(ws1, "Rapport Ingestion & Validation", "Synthèse qualité des données",
-                 "A1 — Ingestion", aid, now)
+                 "A1 — Ingestion", aid, arrete)
         r = 7
         _section(ws1, r, "▶ QUALITÉ DES DONNÉES"); r += 1
         _kpi(ws1, r, "Score global qualité", round(qualite.get('score_global', 0), 1),
@@ -937,7 +937,7 @@ def export_excel_a1(result_a1: Dict, audit_id: str = "") -> bytes:
         # sont : des contrôles du module, énoncés comme tels.
         ws2 = wb.create_sheet("2-Aberrants")
         _bandeau(ws2, "Valeurs Aberrantes", "Contrôles actuariels de cohérence",
-                 "A1 — Validation Qualité", aid, now)
+                 "A1 — Validation Qualité", aid, arrete)
         r = 7
         _kpi(ws2, r, "Portée de ces contrôles",
              "Contrôles de cohérence propres au module (bornes de plausibilité "
@@ -971,7 +971,7 @@ def export_excel_a1(result_a1: Dict, audit_id: str = "") -> bytes:
         # ── Onglet 3 : Coercition de Types ────────────────────────────────────
         ws3 = wb.create_sheet("3-Coercition Types")
         _bandeau(ws3, "Coercition de Types", "Forçage explicite des types de données",
-                 "A1 — Coercition", aid, now)
+                 "A1 — Coercition", aid, arrete)
         r = 7
         _section(ws3, r, "▶ COLONNES FORCÉES"); r += 1
         cols_forcees = coercition.get('colonnes_forcees', [])
@@ -1002,7 +1002,7 @@ def export_excel_a1(result_a1: Dict, audit_id: str = "") -> bytes:
         # ── Onglet 4 : Audit Trail ─────────────────────────────────────────────
         ws4 = wb.create_sheet("4-Audit Trail")
         _bandeau(ws4, "Audit Trail", "Traçabilité ACPR — Agent A1 Ingestion",
-                 "A1 — Audit", aid, now)
+                 "A1 — Audit", aid, arrete)
         r = 7
         _section(ws4, r, "▶ INFORMATIONS AUDIT"); r += 1
         _kpi(ws4, r, "Audit ID", aid); r += 1
@@ -1027,7 +1027,7 @@ def export_excel_a1(result_a1: Dict, audit_id: str = "") -> bytes:
 #  3 onglets : Synthèse · Data Dictionnaire · Audit Trail
 # =============================================================================
 
-def export_excel_a2(result_a2: Dict, audit_id: str = "") -> bytes:
+def export_excel_a2(result_a2: Dict, audit_id: str = "", arrete: Optional[str] = None) -> bytes:
     """Génère le rapport Excel A2 Preprocessing (3 onglets). Retourne bytes ou b''."""
     if not OPENPYXL_OK or not result_a2 or not result_a2.get('success'):
         return b''
@@ -1042,7 +1042,7 @@ def export_excel_a2(result_a2: Dict, audit_id: str = "") -> bytes:
         ws1 = wb.active
         ws1.title = "1-Synthèse"
         _bandeau(ws1, "Rapport Preprocessing", "Synthèse des transformations",
-                 "A2 — Preprocessing", aid, now)
+                 "A2 — Preprocessing", aid, arrete)
         r = 7
         _section(ws1, r, "▶ TRANSFORMATIONS APPLIQUÉES"); r += 1
         _kpi(ws1, r, "Statut RAG", result_a2.get('statut_rag', 'N/A'),
@@ -1065,7 +1065,7 @@ def export_excel_a2(result_a2: Dict, audit_id: str = "") -> bytes:
         # inséré en corps de feuille ci-dessous.
         ws2 = wb.create_sheet("2-Data Dictionnaire")
         _bandeau(ws2, "Data Dictionnaire", "Traçabilité des variables dérivées — ACPR-2022-P-01 §3.2",
-                 "A2 — Traçabilité", aid, now)
+                 "A2 — Traçabilité", aid, arrete)
         r = 7
         _kpi(ws2, r, "Portée de cette traçabilité",
              "Chaque variable dérivée est documentée par sa source, son "
@@ -1095,7 +1095,7 @@ def export_excel_a2(result_a2: Dict, audit_id: str = "") -> bytes:
         # ── Onglet 3 : Audit Trail ─────────────────────────────────────────────
         ws3 = wb.create_sheet("3-Audit Trail")
         _bandeau(ws3, "Audit Trail", "Traçabilité ACPR — Agent A2 Preprocessing",
-                 "A2 — Audit", aid, now)
+                 "A2 — Audit", aid, arrete)
         r = 7
         _section(ws3, r, "▶ INFORMATIONS AUDIT"); r += 1
         _kpi(ws3, r, "Audit ID", aid); r += 1

@@ -1108,7 +1108,10 @@ class T7d_LaPageDeGardeEtLesBordures(unittest.TestCase):
         for libelle in R.titres('garde'):
             self.assertIn(f'<span class="lbl">{libelle}</span>', html,
                           libelle)
-        for valeur in ('CLIENT DE DEMONSTRATION', '31/12/2025',
+        # ⚠️ L'arrêté « 31/12/2025 » se rend en libellé DÉRIVÉ « T4 2025 » (fin
+        # de trimestre) — services/C1 : une date de RÉFÉRENCE, jamais la date
+        # brute ni un now() glissé dessous. Voir `entete_livrable` / `core/arrete`.
+        for valeur in ('CLIENT DE DEMONSTRATION', 'T4 2025',
                        'A6_20260809_101112'):
             self.assertIn(valeur, html, valeur)
         print(f'    OK T7d : les {len(R.titres("garde"))} champs de garde '

@@ -122,7 +122,10 @@ def main():
     rapports = generer_rapport_tarification(
         result_a3=r3, result_a4=r4, result_a6=r6,
         ref_client='PORTEFEUILLE DE DEMONSTRATION',
-        arrete=maintenant.strftime('%d/%m/%Y'),
+        # ⚠️ Arrêté NON déclaré, VOLONTAIREMENT : ce script est une VÉRIFICATION,
+        # pas un livrable signé (cf. profil_valide_par ci-dessus). Le rapport
+        # affichera « Arrêté : non déclaré » plutôt que la date du jour glissée
+        # sous cette étiquette — l'absence honnête, jamais un now() masquant.
         audit_id=f'LOCAL_{horodatage}',
         formats=['html', 'word'],          # PDF exclu : weasyprint absent
     )

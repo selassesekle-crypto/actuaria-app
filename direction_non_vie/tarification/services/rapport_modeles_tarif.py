@@ -31,6 +31,13 @@ from core import narration as _md
 from core import frontiere_llm
 from core import traitement_ia
 
+# Source unique de la date d'arrêté (« non déclaré » si absente) — jamais un now()
+# masquant sous l'étiquette « Arrêté ». Voir `entete_livrable` / `core/arrete`.
+try:
+    from .entete_livrable import libelle_arrete
+except ImportError:
+    from direction_non_vie.tarification.services.entete_livrable import libelle_arrete
+
 
 logger = logging.getLogger('actuaria.tarif.rapport')
 
@@ -1341,8 +1348,8 @@ def export_html(
     le commentaire. `generer_rapport_tarification` calcule donc UNE fois et
     transmet ; appelé seul, cet export calcule pour lui-même comme avant.
     """
-    now    = datetime.now().strftime('%d/%m/%Y %H:%M')
-    arr    = arrete or datetime.now().strftime('%d/%m/%Y')
+    now    = datetime.now().strftime('%d/%m/%Y %H:%M')   # GÉNÉRÉ LE (impression)
+    arr    = libelle_arrete(arrete)                       # ARRÊTÉ (réf. ou « non déclaré »)
     branche = (result_a6 or result_a3 or {}).get('branche', 'non_vie')
     statut  = (result_a6 or result_a3 or {}).get('statut_rag', 'AMBRE')
     s_col   = _statut_col(statut)
@@ -1701,7 +1708,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
   <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px;">
     <div>
       <h1>📊 Rapport de Tarification Non-Vie</h1>
-      <div class="sub">{branche.replace('_',' ').title()} · Arrêté {arr}</div>
+      <div class="sub">{branche.replace('_',' ').title()} · Arrêté {arr} · Généré le {now}</div>
     </div>
     <div style="text-align:right;">
       <span class="badge badge-{statut.lower()}">{s_emoji} {statut}</span>
@@ -1882,7 +1889,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
 </div>
 
 <div class="footer">
-  ActuarIA · {ref_client or 'Client'} · {branche.replace('_',' ').title()} · Arrêté {arr} · {now} · CONFIDENTIEL
+  ActuarIA · {ref_client or 'Client'} · {branche.replace('_',' ').title()} · Arrêté {arr} · Généré le {now} · CONFIDENTIEL
 </div>
 </div>
 </body>
@@ -1915,8 +1922,8 @@ def export_word(
         logger.error(f'python-docx absent : {e}'); return b''
 
     try:
-        now    = datetime.now().strftime('%d/%m/%Y')
-        arr    = arrete or now
+        now    = datetime.now().strftime('%d/%m/%Y %H:%M')   # GÉNÉRÉ LE (impression)
+        arr    = libelle_arrete(arrete)                       # ARRÊTÉ (réf. ou « non déclaré »)
         branche= (result_a6 or result_a3 or {}).get('branche', 'non_vie')
         statut = (result_a6 or result_a3 or {}).get('statut_rag', 'AMBRE')
         met3   = (result_a3 or {}).get('metriques', {})
@@ -2356,7 +2363,7 @@ def export_word(
         _sep()
         p=doc.add_paragraph(); p.alignment=WD_ALIGN_PARAGRAPH.CENTER
         _run(p, f'ActuarIA · {ref_client or "Client"} · {branche.replace("_"," ").title()} · '
-                f'Arrêté {arr} · {now} · CONFIDENTIEL',
+                f'Arrêté {arr} · Généré le {now} · CONFIDENTIEL',
              sz=7, italic=True, col=GrR)
 
         buf=io.BytesIO(); doc.save(buf); buf.seek(0)
@@ -2452,7 +2459,7 @@ def generer_rapport_tarification(
     # le format qui part chez un commissaire n'avait pas le commentaire. Deux
     # narrations divergentes dans un même livrable deviennent désormais
     # IMPOSSIBLES PAR CONSTRUCTION, et le nombre d'appels est divisé par deux.
-    arr_narr = arrete or datetime.now().strftime('%d/%m/%Y')
+    arr_narr = libelle_arrete(arrete)
     branche_narr = (result_a6 or result_a3 or {}).get('branche', 'non_vie')
     narration_calculee = _narration_claude(
         result_a3, result_a4, result_a6, branche_narr, arr_narr)
@@ -2488,12 +2495,12 @@ def generer_rapport_tarification(
         try:
             from .tarif_excel import export_excel_a6
             if result_a6:
-                out['excel_bytes'] = export_excel_a6(result_a6, audit_id)
+                out['excel_bytes'] = export_excel_a6(result_a6, audit_id, arrete)
         except ImportError:
             try:
                 from direction_non_vie.tarification.services.tarif_excel import export_excel_a6
                 if result_a6:
-                    out['excel_bytes'] = export_excel_a6(result_a6, audit_id)
+                    out['excel_bytes'] = export_excel_a6(result_a6, audit_id, arrete)
             except ImportError:
                 pass
 
