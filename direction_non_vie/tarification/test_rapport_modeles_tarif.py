@@ -1615,16 +1615,19 @@ class V4_LaNoteDuClassement(unittest.TestCase):
 
 
 class V5_LaFigureAuxDonneesFabriquees(unittest.TestCase):
-    """V5 — `monitoring_gini` écartée pour sa SOURCE DE DONNÉES.
+    """V5 — `monitoring_gini` écartée du rapport signé, AUJOURD'HUI par DÉCISION.
 
     ⚠️ T7a A CATALOGUÉ QUATORZE FIGURES SANS INTERROGER LEUR PROVENANCE.
     Celle-ci traçait treize points « M-12 … M actuel » pour un portefeuille
-    observé UNE fois : `_monitoring_derive` tire son PSI de deux lois bêta
-    (graine 42, aucune donnée client) et sa courbe de Gini d'une
-    « simulation légère dégradation progressive ». Mesuré sur le rapport du
-    09/08 : la figure affichait « PSI=0.0792 » quand le tableau du même
-    chapitre affichait 0,0051, et le mot « simulé » n'apparaissait pas une
-    fois dans les 236 ko.
+    observé UNE fois : `_monitoring_derive` tirait son PSI de deux lois bêta
+    (graine 42, aucune donnée client) et sa courbe de Gini d'une simulation.
+    Mesuré sur le rapport du 09/08 : la figure affichait « PSI=0.0792 » quand
+    le tableau du même chapitre affichait 0,0051.
+
+    ⚠️ DEPUIS, LA SOURCE A ÉTÉ CORRIGÉE (données mesurées) ET LA DÉCISION PRISE
+    (`EXIGENCES_MIGRATION` §M4) : la figure reste écartée du rapport signé, non
+    plus faute de données mais parce qu'elle sert à qui CONSTRUIT le modèle. Le
+    motif doit énoncer cette décision — c'est ce que ce test épingle.
     """
 
     def test_elle_est_ECARTEE_avec_sa_raison_dans_le_code(self):
@@ -1634,7 +1637,9 @@ class V5_LaFigureAuxDonneesFabriquees(unittest.TestCase):
                          [c for _, cles in R.PLAN_FIGURES for c in cles])
         raison = R.FIGURES_ECARTEES.get('monitoring_gini', '')
         self.assertTrue(raison, 'écartée sans raison écrite')
-        self.assertIn('FABRIQU', raison.upper())
+        self.assertIn('ARBITR', raison.upper(),
+                      'la raison doit nommer la DÉCISION (arbitré), pas '
+                      'seulement l\'ancienne source de données')
         print(f'    OK V5 : écartée, et la raison vit dans le code — '
               f'« {raison[:52]} »')
 

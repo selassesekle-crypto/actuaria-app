@@ -733,9 +733,9 @@ class T_L_Etat_Atteint_Enfin_ESTIMEE(unittest.TestCase):
 
     def test_la_justification_de_NON_EXPLOITEE_N_A_PAS_SURVECU_a_son_objet(self):
         """⚠️⚠️ LE DÉFAUT QUE J'AI TROUVÉ AILLEURS, ET QUE JE M'INTERDIS ICI.
-        `FIGURES_ECARTEES['monitoring_gini']` justifie encore son exclusion par
-        « données FABRIQUÉES » alors que le correctif `98dba85` les a rendues
-        mesurées — et son test l'épingle par le MOT, pas par le FAIT.
+        `FIGURES_ECARTEES['monitoring_gini']` justifiait son exclusion par
+        « données FABRIQUÉES » alors que le correctif `98dba85` les avait
+        rendues mesurées — corrigé depuis : son motif énonce la DÉCISION (M4).
 
         `NON_EXPLOITEE` disait « l'estimation (L3-L5) n'est pas construite ».
         Elle l'est. Son motif doit donc dire ce qui est VRAI maintenant :

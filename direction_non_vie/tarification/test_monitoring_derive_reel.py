@@ -167,16 +167,20 @@ class TestMonitoringDeriveReel(unittest.TestCase):
 
     def test_le_motif_de_monitoring_gini_dit_l_etat_mesure(self):
         """Second sens du controle precedent : le motif doit dire ce qui est
-        vrai, pas seulement eviter le mot interdit."""
+        VRAI. La decision est desormais PRISE (EXIGENCES_MIGRATION, M4) : la
+        figure est hors du rapport signe destine au client, et elle sert a qui
+        CONSTRUIT le modele. Le motif doit l'enoncer comme une decision -- plus
+        'en attente' -- et nommer son public."""
         from direction_non_vie.tarification.services.rapport_modeles_tarif import (
             FIGURES_ECARTEES,
         )
 
-        motif = FIGURES_ECARTEES['monitoring_gini']
-        self.assertIn('ne sont plus', motif)
-        self.assertIn('arbitrage', motif.lower(), (
-            "Le motif doit dire que la figure attend une DECISION, sinon son "
-            "exclusion redevient un jugement implicite."))
+        motif = FIGURES_ECARTEES['monitoring_gini'].lower()
+        self.assertIn('ne sont plus', motif)        # les donnees reelles, dites
+        self.assertIn('arbitr', motif)              # l'arbitrage est nomme...
+        self.assertIn('construit', motif, (         # ...et TRANCHE, pour qui
+            "La decision est prise (M4) : le motif doit dire pour QUI la figure "
+            "est faite -- celui qui construit le modele -- plus 'en attente'."))
 
 
 if __name__ == '__main__':

@@ -558,14 +558,17 @@ FIGURES_ECARTEES: Dict[str, str] = {
     # ⚠️ CE QUI RESTE VRAI : le dépôt n'a toujours pas d'historique de
     # production, et cette figure compare TRAIN → TEST, pas M-12 → M. Elle
     # le dit désormais elle-même, en annotation.
-    # ⚠️⚠️ POURQUOI ELLE RESTE ÉCARTÉE MALGRÉ TOUT : parce que la remettre
-    # au plan d'un rapport SIGNÉ est une décision, et qu'elle n'est pas
-    # prise. Le motif ci-dessous énonce donc l'état, pas un défaut — écarter
-    # sur une accusation périmée reviendrait à discréditer une figure
-    # mesurée, et à apprendre au lecteur à se méfier des avertissements.
-    'monitoring_gini': 'en attente d\'arbitrage — ses données ne sont plus '
-                       'fabriquées (mesuré le 26/08/2026), mais son retour '
-                       'au plan d\'un rapport signé n\'est pas décidé',
+    # ⚠️⚠️ POURQUOI ELLE RESTE ÉCARTÉE : la décision EST prise (Selasse,
+    # EXIGENCES_MIGRATION §M4) — hors du rapport signé destiné au client, la
+    # figure sert à celui qui construit et vérifie le modèle. Le motif
+    # ci-dessous énonce donc une DÉCISION, plus une attente — et écarter sur
+    # une accusation périmée (« données fabriquées », corrigées depuis)
+    # reviendrait à discréditer une figure mesurée.
+    'monitoring_gini': 'arbitré : hors du rapport signé destiné au client — la '
+                       'figure sert à celui qui construit et vérifie le modèle '
+                       '(décidé dans EXIGENCES_MIGRATION, M4). Ses données ne '
+                       'sont plus fabriquées (mesuré le 26/08/2026) ; l\'exclusion '
+                       'est une décision prise, non un arbitrage en attente',
     # les neuf variantes de Lorenz / Gini — une seule est publiée
     'lorenz': 'doublon — chart_lorenz_gini porte la courbe de Lorenz',
     'lorenz_glm': 'doublon — chart_lorenz_gini porte la courbe de Lorenz',

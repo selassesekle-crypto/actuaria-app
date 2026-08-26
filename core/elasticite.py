@@ -581,10 +581,10 @@ def estimer_elasticite(plan, df, diag=None,
 #: ⚠️⚠️ `NON_EXPLOITEE` A CHANGÉ DE SENS AU LOT L4, ET SA JUSTIFICATION EST
 #: RÉÉCRITE PLUTÔT QUE LAISSÉE DERRIÈRE. Elle disait « l'estimation (L3-L5)
 #: n'est pas construite » : elle l'est désormais. Une justification qui
-#: survit à son objet est le défaut que cet audit poursuit — c'est très
-#: exactement ce que fait encore `FIGURES_ECARTEES['monitoring_gini']`, qui
-#: écarte une figure pour des « données FABRIQUÉES » que le correctif
-#: `98dba85` a rendues mesurées. On ne le répète pas ici.
+#: survit à son objet est le défaut que cet audit poursuit — le même que
+#: portait `FIGURES_ECARTEES['monitoring_gini']`, dont le motif citait des
+#: « données FABRIQUÉES » rendues mesurées depuis (`98dba85`) : corrigé,
+#: il énonce désormais la DÉCISION (M4), plus une accusation. Pas ici non plus.
 #: `NON_EXPLOITEE` signifie AUJOURD'HUI : le bloc est déclaré, mais AUCUNE
 #: DONNÉE n'a été fournie à ce calcul — donc rien n'a été examiné.
 #:
