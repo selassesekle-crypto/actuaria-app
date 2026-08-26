@@ -219,6 +219,61 @@ règle non négociable interdit.
 
 ---
 
+## M4 — DOCUMENT TECHNIQUE DE VALIDATION, PRODUIT TOUJOURS, TRANSMISSION OPTIONNELLE PAR LE TITULAIRE DE LA LICENCE
+
+**Contenu : les figures et indicateurs destinés à celui qui CONSTRUIT et VÉRIFIE
+le modèle** — `monitoring_gini` en est le premier exemple — **jamais mélangés au
+rapport signé destiné au client par défaut.** Deux documents, deux publics : le
+rapport signé pour le client, le document technique pour l'actuaire
+modélisateur et le contrôleur.
+
+### ⚠️ CE DOCUMENT N'EST PAS « STRICTEMENT INTERNE »
+
+C'est le piège de nommage à éviter. « Technique » ne veut pas dire « caché ». Le
+document **peut parfaitement partir au client** — sur demande d'un audit
+externe, selon le client ou le contexte. Ce qui est vrai, c'est seulement qu'il
+**ne part pas au client PAR DÉFAUT** ; sa transmission est une décision, pas un
+état figé.
+
+### ⚠️⚠️ RÈGLE NON NÉGOCIABLE
+
+> **La plateforme ne décide JAMAIS à la place du titulaire de la licence si ce document part au
+> client. Elle le REND DISPONIBLE, toujours.**
+> *Produire est le travail du logiciel ; transmettre est le choix du titulaire de la licence.*
+
+C'est le même principe que M1 (*« le mode rapide est un choix assumé par
+l'actuaire, jamais un défaut caché »*) : **la plateforme surface, l'humain
+décide.** Un logiciel qui trancherait à la place — en cachant le document OU en
+l'envoyant d'office — retirerait au titulaire de la licence un arbitrage qui lui revient.
+
+| exigence | ce qui ne suffit PAS / ce qui est interdit |
+|---|---|
+| **le document est PRODUIT systématiquement**, exactement comme les autres livrables | un document conditionnel, généré « seulement si on le demande » |
+| **aucun filtre logiciel n'empêche de le transmettre** au client — rien ne le verrouille | un verrou technique qui bloque l'envoi, ou un « interne » qui interdit la sortie |
+| **le titulaire de la licence choisit** de le partager ou non, selon le client, le contexte, ou une demande d'audit externe | la plateforme qui tranche par défaut — caché d'office **ou** envoyé d'office |
+| **son contenu est séparé du rapport signé** — public technique, jamais fondu dans le document client par défaut | des indicateurs techniques (Gini train→test, dérive, diagnostics) glissés dans le rapport client |
+
+### Ce que l'état actuel apprend à la migration
+
+Mesuré le 26/08/2026 — **à titre de constat, pas de correctif à porter sur
+l'app condamnée** : `monitoring_gini` est **produite** (`r4['graphiques']`, dans
+le module de calcul) et **correctement écartée** du rapport signé
+(`FIGURES_ECARTEES`) — mais **aucun livrable ne la reçoit** : le rapport équipe
+et l'Excel ne portent AUCUNE figure, et la seule surface qui en rend est l'app,
+qui disparaît. *Le document technique de M4 n'existe pas encore : c'est
+précisément la place qui manque.* ⚠️ Et l'écartement du rapport signé n'est PAS
+une transmission bloquée — c'est l'exclusion du **document client par défaut** ;
+M4 est le second document, toujours disponible, dont le titulaire de la licence décide l'envoi.
+
+### ⚠️ RIEN À CODER AVANT L'OUVERTURE FORMELLE DE CE CHANTIER
+
+Comme M3, M4 **contraint, il n'ordonne pas.** Le document technique se
+construira quand ce chantier s'ouvrira — et il lira le module de calcul
+(`r4['graphiques']` et ses semblables), pas une surface reconstruite dans
+l'interface condamnée.
+
+---
+
 ## Ce que ce document ne dit pas
 
 - Il ne dit **pas** quelle méthode l'arbitrage doit retenir — c'est A6, et A6 a
@@ -229,3 +284,6 @@ règle non négociable interdit.
 - Il ne dit **pas** où ni comment la trace de M3 est stockée — c'est le chantier
   persistance qui le fixera. Il dit qu'elle doit se poser à chaque relance, ne
   jamais bloquer, et pouvoir être vidée par le client.
+- Il ne fige **pas** la liste des indicateurs du document technique de M4 —
+  `monitoring_gini` est le premier, d'autres suivront. Il dit qu'il est produit
+  toujours, séparé du rapport client, et jamais transmis d'office par le logiciel.
