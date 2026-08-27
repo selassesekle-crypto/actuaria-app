@@ -135,7 +135,9 @@ except ImportError:
 # filtre genre avant ce correctif (fuite confirmée par exécution réelle :
 # une colonne 'sexe' numérique atteignait la matrice de features des
 # modèles ML, potentiellement retenus en production par A6).
-from core.charts_tarif import FOND_SOMBRE, couleur_rag, couleur_texte_rag
+from core.charts_tarif import (
+    FOND_SOMBRE, couleur_rag, couleur_texte_rag, glyphe_rag,
+)
 from core.conformite_reglementaire import (
     BASE_GINI_UNITAIRE,
     construire_matrice_x,
@@ -3045,7 +3047,10 @@ class AgentA4ML:
                 # ⚠️ AUCUN TEXTE EN ROUGE — arbitré. La couleur ci-dessus reste
                 # pour les OBJETS (barre, ligne, jauge) ; celle-ci sert au TEXTE.
                 couleur_txt = couleur_texte_rag(statut)
-                icone   = "✅" if statut=="VERT" else "⚠️" if statut=="AMBRE" else "❌"
+                # ⚠️ Le glyphe vient de la SOURCE UNIQUE — il était recopié à
+                # l'identique dans les quatre agents. Correct partout ce jour-là,
+                # et rien n'empêchait la cinquième copie de diverger.
+                icone   = glyphe_rag(statut)
                 score   = 1.0 if statut=="VERT" else 0.5 if statut=="AMBRE" else 0.0
                 fig4.add_trace(go.Bar(
                     x=[score], y=[nom], orientation="h",

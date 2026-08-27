@@ -3297,7 +3297,10 @@ class AgentA6Comparaison:
                 # ⚠️ AUCUN TEXTE EN ROUGE — arbitré. La couleur ci-dessus reste
                 # pour les OBJETS (barre, ligne, jauge) ; celle-ci sert au TEXTE.
                 couleur_txt = couleur_texte_rag(statut)
-                icone   = "✅" if statut=="VERT" else "⚠️" if statut=="AMBRE" else "❌"
+                # ⚠️ Le glyphe vient de la SOURCE UNIQUE — il était recopié à
+                # l'identique dans les quatre agents. Correct partout ce jour-là,
+                # et rien n'empêchait la cinquième copie de diverger.
+                icone   = glyphe_rag(statut)
                 score   = 1.0 if statut=="VERT" else 0.5 if statut=="AMBRE" else 0.0
                 fig4.add_trace(go.Bar(
                     x=[score], y=[nom], orientation="h",
