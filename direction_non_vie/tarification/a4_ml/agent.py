@@ -135,6 +135,7 @@ except ImportError:
 # filtre genre avant ce correctif (fuite confirmée par exécution réelle :
 # une colonne 'sexe' numérique atteignait la matrice de features des
 # modèles ML, potentiellement retenus en production par A6).
+from core.charts_tarif import FOND_SOMBRE, couleur_rag
 from core.conformite_reglementaire import (
     BASE_GINI_UNITAIRE,
     construire_matrice_x,
@@ -2008,9 +2009,11 @@ class AgentA4ML:
         OR_L    = "#E8C96A"
         BLANC   = "#F0F4F8"
         GRIS    = "#8A9AB0"
-        VERT    = "#2ECC71"
-        ROUGE   = "#E74C3C"
-        AMBRE   = "#F39C12"
+        # ⚠️ Couleurs RAG lues à la SOURCE UNIQUE (`core/charts_tarif`), jamais
+        # redéfinies : 30 définitions locales et 7 valeurs distinctes existaient.
+        VERT = couleur_rag("VERT", FOND_SOMBRE)
+        ROUGE = couleur_rag("ROUGE", FOND_SOMBRE)
+        AMBRE = couleur_rag("AMBRE", FOND_SOMBRE)
 
         # Palette de couleurs pour les modèles
         COULEURS_MODELES = [OR, VERT, "#3498DB", "#9B59B6", AMBRE, ROUGE]
@@ -2881,7 +2884,9 @@ class AgentA4ML:
 
         NAVY="#0F2E52"; NAVY_L="#1B3A5C"; NAVY_LL="#243F6A"
         OR="#C9A84C"; BLANC="#F0F4F8"; GRIS="#8A9AB0"
-        VERT="#2ECC71"; ROUGE="#E74C3C"; AMBRE="#F39C12"; BLEU="#3498DB"
+        VERT = couleur_rag("VERT", FOND_SOMBRE)
+        ROUGE = couleur_rag("ROUGE", FOND_SOMBRE)
+        AMBRE = couleur_rag("AMBRE", FOND_SOMBRE); BLEU="#3498DB"
         LAYOUT = dict(
             paper_bgcolor=NAVY, plot_bgcolor=NAVY_L,
             font=dict(family="Inter, Arial", color=BLANC, size=11),

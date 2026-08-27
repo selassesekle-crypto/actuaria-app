@@ -21,6 +21,7 @@ Version  : 1.0.0
 """
 
 from __future__ import annotations
+from core.charts_tarif import FOND_CLAIR, couleur_rag
 import io, logging, re
 from core.conformite_reglementaire import (
     avertissement_walk_forward, synthese_exclusions, synthese_alertes_experience,
@@ -71,9 +72,9 @@ NAVY      = '#0F2E52'
 NAVY_MID  = '#1B3A5C'
 GOLD      = '#C9A84C'
 GOLD_L    = '#E2C97E'
-ROUGE     = '#C0392B'
-VERT      = '#1E8449'
-ORANGE    = '#E67E22'
+ROUGE     = couleur_rag("ROUGE", FOND_CLAIR)
+VERT      = couleur_rag("VERT",  FOND_CLAIR)
+ORANGE    = couleur_rag("AMBRE", FOND_CLAIR)
 SLATE     = '#8A9BB0'
 BG        = '#F5F7FA'
 WHITE     = '#FFFFFF'

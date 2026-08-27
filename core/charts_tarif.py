@@ -43,6 +43,143 @@ COULEURS = {
     'ligne_predite': '#00E5A0',   # vert lumineux (ligne prédite, avec halo)
 }
 
+# ════════════════════════════════════════════════════════════════════════════
+# STATUT RAG — LA SOURCE UNIQUE (couleur · motif · symbole · glyphe)
+# ════════════════════════════════════════════════════════════════════════════
+# ⚠️⚠️ POURQUOI CE BLOC EXISTE — arbitrage 2 de la feuille de route, tranché
+# le 27/08/2026. Relevé PAR AST avant d'écrire : **30 définitions locales** de
+# VERT/AMBRE/ROUGE dans 7 fichiers, **7 valeurs distinctes**, et AUCUNE source.
+# Rien ne pouvait vérifier ni le contraste, ni la cohérence, ni même quelle
+# palette s'applique à quel fond.
+#
+# ⚠️ LA PALETTE NE CHANGE PAS, ET C'EST UNE DÉCISION MOTIVÉE. Remesurée sur
+# les vraies valeurs de production, elle tient : 6,80 / 6,51 / 3,74 sur le fond
+# des figures, 4,72 / 5,44 sur le blanc des rapports. Le défaut n'était pas
+# leur valeur — c'est qu'elles n'étaient tenues par rien.
+# ⚠️ Les valeurs `#FFC145` / `#E8452F` d'un arbitrage antérieur sont ÉCARTÉES :
+# elles avaient été mesurées sur la table d'une SONDE D'AUDIT, pas sur la
+# palette de production. *Une recommandation fondée sur la mauvaise table ne
+# se recycle pas.*
+#
+# ⚠️⚠️ LE DÉFAUT RÉEL, MESURÉ : le VERT et l'AMBRE ont un contraste mutuel de
+# **1,04** — LA MÊME LUMINANCE. Seule la teinte les sépare (108°). En niveaux
+# de gris, à l'impression, ou pour qui a le canal chromatique réduit, **le
+# statut VERT devient indiscernable de l'AMBRE**. Et le VERT est à **1,00**
+# contre l'or des axes. *C'est la démonstration mesurée qu'un second canal est
+# nécessaire — la couleur seule ne suffit pas.*
+
+#: Le fond décide de la palette, et cette dépendance est ÉCRITE, pas implicite.
+FOND_SOMBRE = 'sombre'      # figures : papier #0B1E3D / tracé #122A4F
+FOND_CLAIR = 'clair'        # rapports HTML et Word : fond blanc
+
+#: Contraste minimal EXIGÉ, par usage. WCAG 2.1 : 1.4.11 (objet non textuel)
+#: = 3:1 · 1.4.3 (texte normal) = 4,5:1. Le contrôle les RECALCULE.
+CONTRASTE_MIN_OBJET = 3.0
+CONTRASTE_MIN_TEXTE = 4.5
+
+#: ⚠️ Chaque couleur porte SA MESURE, et `usage_texte` dit si elle a le droit
+#: de servir à écrire. ROUGE sombre est à 3,74 : il passe pour une barre,
+#: il ÉCHOUE pour du texte. *Interdire l'usage vaut mieux que changer une
+#: couleur qui va bien là où elle sert.*
+#: ⚠️⚠️ ET L'AMBRE CLAIR EST À 2,85 — LE PLUS BAS DE LA TABLE. C'est
+#: `ORANGE = '#E67E22'` des rapports, mesuré, pas choisi. Il sert de BORDURE et
+#: d'accent sur des fonds pâles (`#faeeda`), jamais de couleur de texte sur
+#: blanc — `usage_texte` le dit. ⚠️ J'avais d'abord écrit ici une couleur que
+#: j'avais INVENTÉE (`#B9770E`, déclarée à 4,51, mesurée à 3,68) : le contrôle
+#: de contraste l'a attrapée avant tout commit. *Une couleur fabriquée est une
+#: valeur fabriquée, même quand elle a l'air raisonnable.*
+STATUT_RAG = {
+    FOND_SOMBRE: {
+        'VERT':  {'couleur': '#2ECC71', 'contraste': 6.80,
+                  'usage_texte': True,  'usage_objet': True},
+        'AMBRE': {'couleur': '#F39C12', 'contraste': 6.51,
+                  'usage_texte': True,  'usage_objet': True},
+        'ROUGE': {'couleur': '#E74C3C', 'contraste': 3.74,
+                  'usage_texte': False, 'usage_objet': True},
+    },
+    FOND_CLAIR: {
+        'VERT':  {'couleur': '#1E8449', 'contraste': 4.72,
+                  'usage_texte': True,  'usage_objet': True},
+        # ⚠️⚠️ NON CONFORME, ET DÉCLARÉ PLUTÔT QU'AJUSTÉ : 2,85 est SOUS le
+        # seuil 1.4.11 (3:1) — cette couleur ne satisfait aucun des deux
+        # usages sur blanc. Elle sert de bordure et d'accent sur des fonds
+        # PÂLES (`#faeeda`), où son contraste réel est autre. *On ne change
+        # pas une couleur de production sans arbitrage ; on dit qu'elle ne
+        # passe pas.*
+        'AMBRE': {'couleur': '#E67E22', 'contraste': 2.85,
+                  'usage_texte': False, 'usage_objet': False},
+        'ROUGE': {'couleur': '#C0392B', 'contraste': 5.44,
+                  'usage_texte': True,  'usage_objet': True},
+    },
+}
+
+#: Le fond de référence de chaque palette — le contrôle recalcule contre lui.
+FOND_REFERENCE = {FOND_SOMBRE: '#122A4F', FOND_CLAIR: '#FFFFFF'}
+
+#: ⚠️ SECOND CANAL — BARRES. Une barre n'a pas de forme : son canal est le
+#: MOTIF de remplissage (plotly `marker.pattern.shape`).
+MOTIF_RAG = {'VERT': '', 'AMBRE': '/', 'ROUGE': 'x'}
+
+#: ⚠️ SECOND CANAL — POINTS. `marker.symbol` : trois silhouettes distinctes.
+SYMBOLE_RAG = {'VERT': 'circle', 'AMBRE': 'triangle-up', 'ROUGE': 'square'}
+
+#: ⚠️⚠️ SECOND CANAL — TEXTE. On ADOPTE la convention déjà majoritaire plutôt
+#: que d'en créer une quatrième : relevé le 27/08, **585 occurrences dans 50
+#: fichiers**, et elle est réellement distincte par la FORME (coche · triangle
+#: · croix). *585 sites déjà conformes valent mieux qu'une migration.*
+GLYPHE_RAG = {'VERT': '✅', 'AMBRE': '⚠️', 'ROUGE': '❌'}
+
+#: ⚠️ EXCEPTION NOMMÉE — l'Excel. `excel_helpers` utilise `✓ △ ✗` (12 sites) :
+#: plus sobres, plus sûrs à l'impression, et sans dépendance à une police
+#: emoji. On la CONSERVE et on la DÉCLARE ici — une exception écrite n'est pas
+#: une divergence subie.
+GLYPHE_RAG_EXCEL = {'VERT': '✓', 'AMBRE': '△', 'ROUGE': '✗'}
+
+#: ⚠️⚠️ CE QUI N'EST PAS UN SECOND CANAL, ET QUI EST NOMMÉ SANS ÊTRE TRAITÉ :
+#: `🟢 🟡 🔴` — relevé **230 occurrences dans 39 fichiers**. Leurs noms Unicode
+#: le disent : LARGE GREEN CIRCLE · LARGE YELLOW CIRCLE · LARGE RED CIRCLE.
+#: **Trois cercles identiques** : c'est la COULEUR SEULE, sous forme de rond.
+#: En niveaux de gris, ils sont indiscernables. *C'est un chantier à part — il
+#: touche 39 fichiers dont l'app et d'autres directions.* NON OUVERT.
+GLYPHES_SANS_SECOND_CANAL = ('🟢', '🟡', '🔴')
+
+
+def _luminance(hexa: str) -> float:
+    """Luminance relative WCAG 2.1 d'une couleur `#RRGGBB` ou `RRGGBB`."""
+    h = hexa.lstrip('#')
+    canaux = [int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+    lin = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+           for c in canaux]
+    return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+
+
+def contraste(hexa: str, fond: str) -> float:
+    """Rapport de contraste WCAG entre deux couleurs. ⚠️ CALCULÉ, jamais
+    recopié : c'est ce qui permet au contrôle de RE-mesurer ce qui est déclaré.
+    """
+    a, b = _luminance(hexa), _luminance(fond)
+    return round((max(a, b) + 0.05) / (min(a, b) + 0.05), 2)
+
+
+def couleur_rag(statut: str, fond: str = FOND_SOMBRE, *, avec_diese: bool = True):
+    """La couleur d'un statut sur un fond donné — ou `None` si inconnu.
+
+    ⚠️ `None` plutôt qu'une couleur par défaut : un statut non reconnu ne doit
+    pas se peindre comme un autre. *Une valeur de repli serait indiscernable
+    d'une valeur mesurée.*
+    """
+    entree = STATUT_RAG.get(fond, {}).get(str(statut).upper())
+    if entree is None:
+        return None
+    return entree['couleur'] if avec_diese else entree['couleur'].lstrip('#')
+
+
+def glyphe_rag(statut: str, *, cible: str = 'texte') -> str:
+    """Le glyphe du statut. `cible='excel'` rend l'exception nommée."""
+    table = GLYPHE_RAG_EXCEL if cible == 'excel' else GLYPHE_RAG
+    return table.get(str(statut).upper(), '')
+
+
 # Gradient des barres ORDONNÉES (déciles / catégories ordonnées) : bleu → orange
 _GRAD_ANCRES = [
     (0.0, (30, 100, 180)),   # bas  — bleu profond

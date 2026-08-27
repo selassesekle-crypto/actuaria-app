@@ -16,6 +16,8 @@ Utilisé par : tarif_excel.py, rapport_equipe_tarif.py
 import logging
 from typing import Optional
 
+from core.charts_tarif import FOND_SOMBRE, couleur_rag
+
 logger = logging.getLogger('actuaria.tarif.excel_helpers')
 
 try:
@@ -41,9 +43,9 @@ NAVY   = "0F2E52"
 OR     = "C9A84C"
 BLANC  = "F0F4F8"
 GRIS   = "8A9AB0"
-VERT_H = "2ECC71"
-AMBRE  = "F39C12"
-ROUGE  = "E74C3C"
+VERT_H = couleur_rag("VERT",  FOND_SOMBRE, avec_diese=False)
+AMBRE  = couleur_rag("AMBRE", FOND_SOMBRE, avec_diese=False)
+ROUGE  = couleur_rag("ROUGE", FOND_SOMBRE, avec_diese=False)
 NAVY_L = "1B3A5C"
 GRIS_L = "EAF0F6"
 NOIR   = "1A1A1A"

@@ -107,6 +107,7 @@ except ImportError:
 # filtrer_famille_cible ; l'audit V9 (BLOQUANT) a prouvé qu'une colonne
 # genre pré-encodée (scénario V7) traversait donc intacte jusqu'à la
 # recalibration walk-forward.
+from core.charts_tarif import FOND_SOMBRE, couleur_rag
 from core.conformite_reglementaire import (
     agreger_controle_effet, avertissement_walk_forward,
     construire_matrice_x, verdict_vraisemblance_gini,
@@ -2487,9 +2488,11 @@ class AgentA6Comparaison:
         OR_L    = "#E8C96A"
         BLANC   = "#F0F4F8"
         GRIS    = "#8A9AB0"
-        VERT    = "#2ECC71"
-        ROUGE   = "#E74C3C"
-        AMBRE   = "#F39C12"
+        # ⚠️ Couleurs RAG lues à la SOURCE UNIQUE (`core/charts_tarif`), jamais
+        # redéfinies : 30 définitions locales et 7 valeurs distinctes existaient.
+        VERT = couleur_rag("VERT", FOND_SOMBRE)
+        ROUGE = couleur_rag("ROUGE", FOND_SOMBRE)
+        AMBRE = couleur_rag("AMBRE", FOND_SOMBRE)
         BLEU    = "#3498DB"
 
         COULEURS = [OR, VERT, BLEU, AMBRE, ROUGE, "#9B59B6", GRIS]
@@ -3100,7 +3103,9 @@ class AgentA6Comparaison:
 
         NAVY="#0F2E52"; NAVY_L="#1B3A5C"; NAVY_LL="#243F6A"
         OR="#C9A84C"; BLANC="#F0F4F8"; GRIS="#8A9AB0"
-        VERT="#2ECC71"; ROUGE="#E74C3C"; AMBRE="#F39C12"; BLEU="#3498DB"
+        VERT = couleur_rag("VERT", FOND_SOMBRE)
+        ROUGE = couleur_rag("ROUGE", FOND_SOMBRE)
+        AMBRE = couleur_rag("AMBRE", FOND_SOMBRE); BLEU="#3498DB"
         LAYOUT = dict(
             paper_bgcolor=NAVY, plot_bgcolor=NAVY_L,
             font=dict(family="Inter, Arial", color=BLANC, size=11),

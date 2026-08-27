@@ -44,6 +44,7 @@ from sklearn.preprocessing import StandardScaler
 # exécution DL bloquée dans l'environnement d'audit V7 par l'absence de
 # PyTorch, mais la logique de sélection est identique à celle d'A4,
 # vérifiée empiriquement).
+from core.charts_tarif import FOND_SOMBRE, couleur_rag
 from core.conformite_reglementaire import (
     BASE_GINI_COMPTAGE, BASE_GINI_UNITAIRE,
     construire_matrice_x,
@@ -1694,9 +1695,11 @@ class AgentA5DeepLearning:
         OR      = "#C9A84C"
         BLANC   = "#F0F4F8"
         GRIS    = "#8A9AB0"
-        VERT    = "#2ECC71"
-        ROUGE   = "#E74C3C"
-        AMBRE   = "#F39C12"
+        # ⚠️ Couleurs RAG lues à la SOURCE UNIQUE (`core/charts_tarif`), jamais
+        # redéfinies : 30 définitions locales et 7 valeurs distinctes existaient.
+        VERT = couleur_rag("VERT", FOND_SOMBRE)
+        ROUGE = couleur_rag("ROUGE", FOND_SOMBRE)
+        AMBRE = couleur_rag("AMBRE", FOND_SOMBRE)
         BLEU    = "#3498DB"
 
         LAYOUT_BASE = dict(
@@ -2194,7 +2197,9 @@ class AgentA5DeepLearning:
 
         NAVY="#0F2E52"; NAVY_L="#1B3A5C"; NAVY_LL="#243F6A"
         OR="#C9A84C"; BLANC="#F0F4F8"; GRIS="#8A9AB0"
-        VERT="#2ECC71"; ROUGE="#E74C3C"; AMBRE="#F39C12"; BLEU="#3498DB"
+        VERT = couleur_rag("VERT", FOND_SOMBRE)
+        ROUGE = couleur_rag("ROUGE", FOND_SOMBRE)
+        AMBRE = couleur_rag("AMBRE", FOND_SOMBRE); BLEU="#3498DB"
         LAYOUT = dict(
             paper_bgcolor=NAVY, plot_bgcolor=NAVY_L,
             font=dict(family="Inter, Arial", color=BLANC, size=11),
