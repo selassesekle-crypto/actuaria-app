@@ -263,6 +263,10 @@ HYPOTHESES: Tuple[Tuple[str, str, str], ...] = (
      'ratio_variance'),
     ('h3_ajustement',  'H3 GLM — Qualité ajustement (Gini)',        'gini_max'),
     ('h4_stabilite',   'H4 GLM — Stabilité relativités bootstrap',  'cv_max'),
+    # ⚠️ h5_deviance est une PLAFONNANTE (A6) : elle peut bloquer le VERT. Elle
+    # manquait au tableau qui part au CAC — corrigée sur la SCORECARD A3 (lot ①)
+    # mais PAS ici. Motif : un correctif appliqué À CÔTÉ de la surface qui compte.
+    ('h5_deviance',    'H5 GLM — Déviance résiduelle / df',          'ratio_deviance_df'),
     ('h1_overfitting', 'H1 ML — Overfitting',                       'ratio'),
     ('h2_psi',         'H2 ML — PSI réel',                          'psi'),
     ('h3_gini',        'H3 ML — Performance Gini',                  'gini'),
@@ -595,12 +599,12 @@ FIGURES_ECARTEES: Dict[str, str] = {
     'residus_deviance': 'doublon — chart_residus_qq porte le même diagnostic '
                         'sous une forme lisible',
     'durbin_watson': 'hors catalogue — l\'autocorrélation n\'est pas une des '
-                     'huit hypothèses que le chapitre 4 publie',
+                     'hypothèses que le chapitre 4 publie',
     # le lift
     'lift_chart': 'doublon — chart_lift_decile, même mesure',
     # les scorecards : des tableaux déguisés en figures
     'scorecard_validation_glm': 'tableau déguisé — le chapitre 4 porte déjà '
-                                'les huit hypothèses en tableau',
+                                'les hypothèses en tableau',
     'scorecard_validation_ml': 'tableau déguisé — même tableau, chapitre 4',
     'scorecard_validation_dl': 'tableau déguisé — et produite par A5',
     'scorecard_selection': 'tableau déguisé — les trois contrôles de '
@@ -1127,11 +1131,16 @@ def _construire_contexte_tarif(
         lines.append("aucun classement transmis — la comparaison des modèles "
                      "ne peut pas être commentée")
 
+    # ⚠️ NE PAS MASQUER UN ABSENT PAR 0.0000 (constat C5) : une clé absente
+    # s'affiche « — », jamais un zéro — ce que le module condamne ailleurs.
+    _sc = f"{prod['score_global']:.4f}" if 'score_global' in prod else '—'
+    _gi = f"{prod['gini_test']:.4f}"     if 'gini_test' in prod else '—'
+    _ov = f"{prod['overfit_ratio']:.3f}" if 'overfit_ratio' in prod else '—'
     lines += [
         "",
         "=== ML — MODÈLE RETENU ===",
-        f"Modèle production : {prod.get('modele','—')} | Score={prod.get('score_global',0):.4f} | Gini={prod.get('gini_test',0):.4f}",
-        f"Overfit ratio : {prod.get('overfit_ratio',0):.3f}",
+        f"Modèle production : {prod.get('modele','—')} | Score={_sc} | Gini={_gi}",
+        f"Overfit ratio : {_ov}",
     ]
 
     # ⚠️ LES TROIS CONTRÔLES DE SÉLECTION, EUX AUSSI EXTRAITS PUIS JETÉS. Ils
@@ -2274,9 +2283,10 @@ def export_word(
                  [['Modèle retenu', nom_modele(prod.get('modele')),
                    'Famille', prod.get('famille','—')],
                   ['Score global', _score_txt,
-                   'Gini test', f"{prod.get('gini_test',0):.4f}"],
-                  ['Overfit ratio', f"{prod.get('overfit_ratio',0):.3f}",
-                   'Interprétabilité', f"{prod.get('interpretabilite',0):.2f}/1.0"]],
+                   'Gini test', f"{prod['gini_test']:.4f}" if 'gini_test' in prod else '—'],
+                  ['Overfit ratio', f"{prod['overfit_ratio']:.3f}" if 'overfit_ratio' in prod else '—',
+                   'Interprétabilité',
+                   f"{prod['interpretabilite']:.2f}/1.0" if 'interpretabilite' in prod else '—']],
                  ws=[4.0,4.0,4.0,4.0])
             # Audit V7 IMPORTANT #1 : qualification du score composite —
             # normalisation RELATIVE au meilleur modèle du profil retenu

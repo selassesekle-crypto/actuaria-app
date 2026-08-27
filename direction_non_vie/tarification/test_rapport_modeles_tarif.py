@@ -434,17 +434,19 @@ class T5_LeVocabulaire(unittest.TestCase):
         print(f'    OK T5b : {len(h - w)} propre HTML + '
               f'{len(w - h)} propres Word, tous déclarés')
 
-    def test_les_huit_hypotheses_portent_HUIT_noms(self):
-        """⚠️ QUATRE S'APPELAIENT « H1 » À « H4 » ET QUATRE « H1 ML » À
-        « H4 ML », sous un titre qui annonçait « H1–H4 »."""
+    def test_les_hypotheses_portent_des_noms_UNIQUES_avec_leur_famille(self):
+        """⚠️ Les libellés nomment la famille (GLM/ML) et sont uniques. Le compte
+        n'est PLUS figé à 8 : h5_deviance (déviance résiduelle, PLAFONNANTE) a
+        rejoint les GLM — constat C4 du relevé services. On DÉRIVE le compte,
+        pour qu'une hypothèse ajoutée ne re-périme pas ce test."""
         libelles = [lib for _, lib, _ in R.HYPOTHESES]
-        self.assertEqual(len(libelles), 8)
-        self.assertEqual(len(set(libelles)), 8)
+        self.assertEqual(len(libelles), len(set(libelles)))          # tous uniques
+        self.assertIn('H5 GLM — Déviance résiduelle / df', libelles)  # C4 : la plafonnante y est
         for lib in libelles:
-            self.assertRegex(lib, r'^H[1-4] (GLM|ML) — ')
+            self.assertRegex(lib, r'^H[1-5] (GLM|ML) — ')
         html, _ = _les_deux_formats()
-        self.assertNotRegex(html, r'>H[1-4] — ')
-        print('    OK T5c : 8 hypothèses, 8 noms, la famille dans chacun')
+        self.assertNotRegex(html, r'>H[1-5] — ')                     # jamais un H sans famille
+        print(f'    OK T5c : {len(libelles)} hypothèses, noms uniques, famille dans chacun')
 
     def test_les_deux_formats_annoncent_les_MEMES_chapitres(self):
         """⚠️ « §1 — Résultats GLM Poisson / Gamma / Tweedie » en HTML et
@@ -556,8 +558,8 @@ class T5_LeVocabulaire(unittest.TestCase):
         self.assertIn('NON CALCULÉE', texte)
         for _, libelle, _ in R.HYPOTHESES:
             self.assertIn(libelle, texte, libelle)
-        print('    OK T5j : 8 hypothèses nommées dans le Word, calculées ou '
-              'non')
+        print(f'    OK T5j : {len(R.HYPOTHESES)} hypothèses nommées dans le '
+              f'Word, calculées ou non')
 
 
 # ── T7a : le catalogue des figures ─────────────────────────────────────────

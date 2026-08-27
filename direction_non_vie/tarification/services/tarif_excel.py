@@ -286,7 +286,8 @@ def export_excel_a4(result_a4: Dict, audit_id: str = "", arrete: Optional[str] =
         # ── Onglet 1 : Synthèse ───────────────────────────────────────────────
         ws1 = wb.active
         ws1.title = "1-Synthèse"
-        _bandeau(ws1, "Rapport Tarification ML", "8 modèles comparés — Sélection multicritères",
+        _bandeau(ws1, "Rapport Tarification ML",
+                 f"{len(result_a4.get('classement', []))} modèles comparés — Sélection multicritères",
                  "A4 — Machine Learning", aid, arrete)
         r = 7
         _section(ws1, r, "▶ MODÈLE SÉLECTIONNÉ"); r += 1
@@ -389,7 +390,7 @@ def export_excel_a4(result_a4: Dict, audit_id: str = "", arrete: Optional[str] =
         _section(ws5, r, "▶ INFORMATIONS AUDIT"); r += 1
         _kpi(ws5, r, "Audit ID",       aid); r += 1
         _kpi(ws5, r, "Date",           now); r += 1
-        _kpi(ws5, r, "Agent",          "A4 — Machine Learning ×8 modèles"); r += 1
+        _kpi(ws5, r, "Agent",          "A4 — Machine Learning"); r += 1
         _kpi(ws5, r, "Branche",        result_a4.get('branche', 'N/A')); r += 1
         _kpi(ws5, r, "Statut RAG",     result_a4.get('statut_rag', 'N/A'),
              statut=result_a4.get('statut_rag')); r += 1
@@ -514,7 +515,7 @@ def export_excel_a5(result_a5: Dict, audit_id: str = "", arrete: Optional[str] =
         r += 1
         _section(ws3, r, "▶ RÉFÉRENCE MÉTHODOLOGIQUE"); r += 1
         _kpi(ws3, r, "Référence",
-             "Wüthrich (2019), 'Neural Networks Applied to Chain-Ladder Reserving' "
+             "Wüthrich, M.V. & Merz, M. (2019), 'Editorial: Yes, we CANN!' "
              "— principe de gel GLM adapté à la tarification (offset + résiduel).",
              wrap=True); r += 1
 
