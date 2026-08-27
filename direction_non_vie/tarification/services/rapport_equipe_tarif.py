@@ -142,12 +142,72 @@ def _md_to_html_light(txt: str) -> str:
     return '\n'.join(paragraphs)
 
 
+# ── LES 7 SYNTHÈSES RÉGLEMENTAIRES : source unique, calculées UNE fois ───────
+# ⚠️⚠️ constat C6 : elles ne vivaient QUE dans l'Excel équipe. La LOGIQUE (les
+# fonctions de synthèse) était déjà partagée ; c'est le CALCUL et le RENDU qui
+# manquaient à html/word/pdf — les formats qui partent au CAC. Voie (b) :
+# l'orchestrateur les calcule UNE fois et les passe à tous les formats — même
+# patron que `narration_calculee`, pour qu'aucun format ne dise autre chose
+# qu'un autre (le défaut C6 lui-même).
+_LABELS_SYNTHESES = (
+    ('walk_forward', 'Portée de la validation walk-forward'),
+    ('exclusions',   'Colonnes écartées de la matrice X'),
+    ('alertes',      'Sinistralité passée conservée — à vérifier'),
+    ('modele_dl',    'Modèle Deep Learning — validation actuarielle'),
+    ('qualite',      'Qualité des données — traitements appliqués'),
+    ('plan_ampute',  'Colonnes du plan non produites — modèle amputé'),
+    ('mapping',      'Mapping client appliqué'),
+)
+
+
+def syntheses_reglementaires(results: Dict[str, Dict]) -> Dict[str, str]:
+    """Les 7 synthèses réglementaires, calculées UNE fois depuis result_a6 ;
+    seules les non-vides sont renvoyées. Clés : voir `_LABELS_SYNTHESES`."""
+    r6 = (results or {}).get('a6') or {}
+    if not isinstance(r6, dict):
+        r6 = {}
+    bt6 = r6.get('backtest') if isinstance(r6.get('backtest'), dict) else {}
+    at6 = r6.get('audit_trail') if isinstance(r6.get('audit_trail'), dict) else {}
+    brut = {
+        'walk_forward': avertissement_walk_forward(bt6),
+        'exclusions':   synthese_exclusions(r6.get('exclusions_conformite')),
+        'alertes':      synthese_alertes_experience(r6.get('alertes_conformite')),
+        'modele_dl':    synthese_modele_dl(r6.get('modele_production'),
+                                           r6.get('valide_par_actuaire_dl'),
+                                           at6.get('timestamp')),
+        'qualite':      synthese_qualite_donnees(r6.get('rapport_qualite')),
+        'plan_ampute':  synthese_colonnes_plan_manquantes(
+                            r6.get('colonnes_plan_manquantes')),
+        'mapping':      synthese_mapping(r6.get('rapport_mapping')),
+    }
+    return {k: v for k, v in brut.items() if v}
+
+
+def _syntheses_ou_calcul(syntheses, results) -> Dict[str, str]:
+    """Repli : les synthèses PASSÉES (voie b, orchestrateur) ou CALCULÉES
+    (appel isolé d'un format). Les deux chemins marchent."""
+    return syntheses if syntheses is not None else syntheses_reglementaires(results)
+
+
+def _syntheses_html(synth: Dict[str, str]) -> str:
+    """Les synthèses réglementaires en HTML — le RENDU qui manquait (C6)."""
+    if not synth:
+        return ('<p style="color:#8a9bb0; font-style:italic;">Aucune synthèse '
+                'réglementaire à signaler.</p>')
+    lignes = ''.join(
+        f'<tr><td style="font-weight:600; white-space:nowrap;">{lib}</td>'
+        f'<td>{_md_to_html_light(str(synth[cle]))}</td></tr>'
+        for cle, lib in _LABELS_SYNTHESES if cle in synth)
+    return f'<table>{lignes}</table>'
+
+
 # =============================================================================
 #  EXCEL — Rapport consolidé équipe
 # =============================================================================
 
 def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
-                          arrete: str = '', audit_id: str = '') -> bytes:
+                          arrete: str = '', audit_id: str = '',
+                          syntheses: Optional[Dict[str, str]] = None) -> bytes:
     """
     Génère le rapport Excel consolidé équipe (6 onglets).
     results : dict avec clés 'a1','a2','a3','a4','a5','a6' → dict de retour de chaque agent.
@@ -164,6 +224,7 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
         r6 = results.get('a6') or {}
 
         arr = libelle_arrete(arrete)   # « Généré le » figure dans le bandeau
+        synth = _syntheses_ou_calcul(syntheses, results)   # voie (b) : partagées
         branche_f = branche or (r6 or r3 or r1).get('branche', 'non_vie')
         statuts = _collecter_statuts(results)
         statut_global = _statut_global(list(statuts.values()))
@@ -316,7 +377,7 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
              statut=("VERT" if bt6.get('modele_recalibre_fidele') else "AMBRE")); r += 1
         # Source UNIQUE partagée avec Excel A6 / Word / HTML (audit V11 — le
         # correctif V10 B3 n'avait été appliqué qu'à l'export Excel d'A6).
-        _avert_wf6 = avertissement_walk_forward(bt6)
+        _avert_wf6 = synth.get('walk_forward', '')
         if _avert_wf6:
             _kpi(ws5, r, "⚠ Portée de la validation", _avert_wf6,
                  statut="AMBRE", wrap=True); r += 1
@@ -328,14 +389,12 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
              '— non calcule' if _ae6 is None else round(_ae6, 4),
              fmt=None if _ae6 is None else FMT_DEC4); r += 1
         r += 1
-        _synth_exc6 = synthese_exclusions(r6.get('exclusions_conformite')
-                                          if isinstance(r6, dict) else None)
+        _synth_exc6 = synth.get('exclusions', '')
         if _synth_exc6:
             _kpi(ws5, r, "⚠ Colonnes écartées de la matrice X", _synth_exc6,
                  statut=("AMBRE" if "ACTION REQUISE" in _synth_exc6 else "VERT"),
                  wrap=True); r += 1
-        _synth_alert6 = synthese_alertes_experience(
-            r6.get('alertes_conformite') if isinstance(r6, dict) else None)
+        _synth_alert6 = synth.get('alertes', '')
         if _synth_alert6:
             _kpi(ws5, r, "ℹ Sinistralité passée conservée — à vérifier",
                  _synth_alert6, statut="AMBRE", wrap=True); r += 1
@@ -350,18 +409,14 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
         # Validation humaine d'un modèle Deep Learning en production (2026-07) —
         # source UNIQUE partagée avec Excel A6 / Word / HTML. Ne s'affiche que si
         # le modèle retenu est un DL ; sinon rien (pas de bruit).
-        _synth_dl6 = synthese_modele_dl(
-            r6.get('modele_production') if isinstance(r6, dict) else None,
-            r6.get('valide_par_actuaire_dl') if isinstance(r6, dict) else None,
-            at6.get('timestamp'))
+        _synth_dl6 = synth.get('modele_dl', '')
         if _synth_dl6:
             _kpi(ws5, r, "Modèle Deep Learning — validation actuarielle", _synth_dl6,
                  statut=("AMBRE" if "ACTION REQUISE" in _synth_dl6 else "VERT"),
                  wrap=True); r += 1
         # Qualité des données (couche générique, chemin déclaratif) — source UNIQUE
         # partagée avec Excel A6 / Word / HTML. Rien affiché si la couche n'a pas tourné.
-        _synth_q6 = synthese_qualite_donnees(
-            r6.get('rapport_qualite') if isinstance(r6, dict) else None)
+        _synth_q6 = synth.get('qualite', '')
         if _synth_q6:
             _kpi(ws5, r, "Qualité des données — traitements appliqués", _synth_q6,
                  statut=("AMBRE" if ("EXCLUE" in _synth_q6 or "SIGNALEE" in _synth_q6
@@ -369,15 +424,13 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
                  wrap=True); r += 1
         # Colonnes du plan non produites (fichier client incomplet → modèle
         # amputé) — source UNIQUE partagée avec Excel A6 / Word / HTML.
-        _synth_cp6 = synthese_colonnes_plan_manquantes(
-            r6.get('colonnes_plan_manquantes') if isinstance(r6, dict) else None)
+        _synth_cp6 = synth.get('plan_ampute', '')
         if _synth_cp6:
             _kpi(ws5, r, "Colonnes du plan non produites — modèle amputé",
                  _synth_cp6, statut="AMBRE", wrap=True); r += 1
         # Mapping client (couche 2) — renommage du fichier avant A1. Même
         # source-unique partagée avec Excel A6 / Word / HTML. Rien si pas de mapping.
-        _synth_map6 = synthese_mapping(
-            r6.get('rapport_mapping') if isinstance(r6, dict) else None)
+        _synth_map6 = synth.get('mapping', '')
         if _synth_map6:
             _kpi(ws5, r, "Mapping client appliqué", _synth_map6,
                  statut=("AMBRE" if "⚠" in _synth_map6 else "VERT"), wrap=True); r += 1
@@ -416,7 +469,8 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
 # =============================================================================
 
 def export_html_equipe(results: Dict[str, Dict], branche: str = '',
-                         arrete: str = '', audit_id: str = '') -> str:
+                         arrete: str = '', audit_id: str = '',
+                         syntheses: Optional[Dict[str, str]] = None) -> str:
     """Génère le rapport HTML consolidé équipe. Retourne str HTML ou ''."""
     try:
         r1 = results.get('a1') or {}
@@ -638,6 +692,11 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
   </div>
 
   <div class="section">
+    <div class="section-head">Synthèses réglementaires — contrôles ACPR</div>
+    <div class="section-body">{_syntheses_html(_syntheses_ou_calcul(syntheses, results))}</div>
+  </div>
+
+  <div class="section">
     <div class="section-head">§6 — Audit Trail Consolidé</div>
     <div class="section-body">{section_audit}</div>
   </div>
@@ -665,7 +724,8 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
 # =============================================================================
 
 def export_word_equipe(results: Dict[str, Dict], branche: str = '',
-                         arrete: str = '', audit_id: str = '') -> bytes:
+                         arrete: str = '', audit_id: str = '',
+                         syntheses: Optional[Dict[str, str]] = None) -> bytes:
     """Génère le rapport Word consolidé équipe (.docx). Retourne bytes ou b''."""
     try:
         from docx import Document
@@ -812,6 +872,22 @@ def export_word_equipe(results: Dict[str, Dict], branche: str = '',
         doc.add_paragraph(f"Validé par : {at6.get('profil_valide_par') or '⚠ NON VALIDÉ'}")
         doc.add_paragraph(f"Gouvernance conforme : {'Oui' if at6.get('gouvernance_ok') else 'Non'}")
 
+        # ── Synthèses réglementaires (constat C6 : elles manquaient au Word) ──
+        _synth_eq = _syntheses_ou_calcul(syntheses, results)
+        doc.add_heading("Synthèses réglementaires — contrôles ACPR", level=1).runs[0].font.color.rgb = NR
+        if _synth_eq:
+            for _cle, _lib in _LABELS_SYNTHESES:
+                if _cle in _synth_eq:
+                    _p = doc.add_paragraph()
+                    _rh = _p.add_run(f"{_lib} : ")
+                    _rh.bold = True; _rh.font.size = Pt(9)
+                    _rt = _p.add_run(str(_synth_eq[_cle]))
+                    _rt.font.size = Pt(9)
+        else:
+            _pn = doc.add_paragraph()
+            _rn = _pn.add_run("Aucune synthèse réglementaire à signaler.")
+            _rn.italic = True; _rn.font.size = Pt(9)
+
         # §6 — Audit trail
         doc.add_heading("§6 — Audit Trail Consolidé", level=1).runs[0].font.color.rgb = NR
         tbl6 = doc.add_table(rows=1, cols=3)
@@ -933,13 +1009,18 @@ def generer_rapport_equipe_tarification(
         'html_bytes': b'', 'word_bytes': b'', 'pdf_bytes': b'', 'excel_bytes': b'',
     }
 
+    # ⚠️ VOIE (b) — les 7 synthèses réglementaires calculées UNE fois ici et
+    # passées à tous les formats, pour qu'aucun ne dise autre chose qu'un autre
+    # (constat C6). Un appel isolé d'un format recalcule (repli).
+    _synth = syntheses_reglementaires(results)
+
     html_str = ''
     if 'html' in formats or 'pdf' in formats:
-        html_str = export_html_equipe(results, branche, arrete, audit_id)
+        html_str = export_html_equipe(results, branche, arrete, audit_id, syntheses=_synth)
         out['html_bytes'] = html_str.encode('utf-8') if html_str else b''
 
     if 'word' in formats:
-        out['word_bytes'] = export_word_equipe(results, branche, arrete, audit_id)
+        out['word_bytes'] = export_word_equipe(results, branche, arrete, audit_id, syntheses=_synth)
 
     if 'pdf' in formats:
         if html_str:
@@ -955,7 +1036,7 @@ def generer_rapport_equipe_tarification(
             out['pdf_bytes'] = export_pdf_equipe(results, branche, arrete, audit_id)
 
     if 'excel' in formats:
-        out['excel_bytes'] = export_excel_equipe(results, branche, arrete, audit_id)
+        out['excel_bytes'] = export_excel_equipe(results, branche, arrete, audit_id, syntheses=_synth)
 
     logger.info(
         f"Rapport équipe : HTML={len(out['html_bytes']):,}b "
