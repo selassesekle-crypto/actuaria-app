@@ -17,12 +17,28 @@
 ```
 `_bandeau` rend « Arrêté : {date_str} » et **28 sites** lui passent `now`. L'arrêté réel, transmis par l'appelant, n'apparaît qu'**une seule fois** (un KPI de l'onglet 1 du rapport équipe). Sur un livrable réglementaire, l'arrêté est une date de référence, pas une date d'impression.
 
+> ✅ **FERMÉ le 27/08/2026 — `ea37564`. Deux méthodes.**
+> **① AST** : **0** site `_bandeau(… now …)` — *l'origine en mesurait 28.*
+> **② Exécution** de `libelle_arrete` : absent → « non déclaré » · vide →
+> « non déclaré » · illisible → « non déclaré (illisible : …) » · déclaré →
+> la date d'arrêté. **Un `now()` ne peut plus se glisser sous l'étiquette** ;
+> les horodatages restants sont étiquetés « GÉNÉRÉ LE (impression) ».
+> Épinglé par `test_horodatage_livrable.py` (8 contrôles).
+
 **C2 — La référence Wüthrich de l'Excel A5 n'est pas celle du modèle.**
 ```
   AGENT A5 : Wüthrich, M.V. & Merz, M. (2019), "Editorial: Yes, we CANN!"
   EXCEL A5 : Wüthrich (2019), 'Neural Networks Applied to Chain-Ladder Reserving'
 ```
 L'onglet s'intitule « Fidélité CANN Wüthrich (2019) » et cite un article de **provisionnement chain-ladder**, pas l'article CANN de tarification que l'agent implémente. C'est le motif `Art. 77` : une citation attribuée au mauvais texte, dans un document signé.
+
+> ✅ **FERMÉ le 27/08/2026 — `f63be18` (+ `d2dc672`). Deux méthodes.**
+> **① Lecture** : la citation chain-ladder a disparu du source.
+> **② Exécution** : l'Excel A5 cite « Wüthrich, M.V. & Merz, M. (2019),
+> *Editorial: Yes, we CANN!*, ASTIN Bulletin 49(1), 1-3, doi:10.1017/asb.2018.42 ».
+> ⚠️ **Référence vérifiée EN EXTERNE** (Cambridge Core, site officiel d'ASTIN
+> Bulletin), pas par simple appariement à ce que l'agent cite.
+> Épinglé par `test_lot1_services.py`.
 
 **C3 — « 8 modèles » republié dans trois livrables.**
 ```
@@ -32,6 +48,14 @@ L'onglet s'intitule « Fidélité CANN Wüthrich (2019) » et cite un article de
 ```
 La boucle d'A4 en calibre **6**. Le rapport consolidé « destiné à l'actuaire responsable et à la Direction » republie le faux compte dans ses trois formats.
 
+> ✅ **FERMÉ le 27/08/2026 — `d2dc672`. Deux méthodes.**
+> **① Lecture** : **0** littéral « 8 modèles » / « ×8 » hors commentaire dans
+> les **trois** producteurs (`tarif_excel`, `rapport_equipe_tarif`,
+> `rapport_modeles_tarif`).
+> **② Exécution** : le compte **dérive** du classement réel — 3 modèles →
+> « 3 modèles comparés », 6 → « 6 », 11 → « 11 ». *Le dénominateur n'est plus
+> inventé.* Épinglé par `test_lot1_services.py`.
+
 **C4 — `h5_deviance` : plafonnante chez A6, absente du tableau des hypothèses.**
 ```
   8 hypotheses au tableau du chapitre 4
@@ -39,6 +63,12 @@ La boucle d'A4 en calibre **6**. Le rapport consolidé « destiné à l'actuaire
   plafonnante(s) ABSENTE(S) du tableau = ['h5_deviance']
 ```
 C'est le fait du lot ①, retrouvé par l'autre bout : `HYPOTHESES` énumère H1–H4 GLM et H1–H4 ML. La déviance résiduelle, qui peut plafonner le statut, n'a pas de ligne.
+
+> ✅ **FERMÉ le 27/08/2026 — `d2dc672`. Deux méthodes.**
+> **① Lecture** : `h5_deviance` figure dans `HYPOTHESES`, avec le commentaire
+> qui dit pourquoi — *« PLAFONNANTE (A6) : elle peut bloquer le VERT »*.
+> **② Exécution** : le tableau compte **9** hypothèses, contre **8** à l'origine.
+> Épinglé par `test_lot1_services.py` (`TestC4_H5DevianceDansLeTableau`).
 
 **C5 — Trois valeurs du modèle retenu échappent à la règle du module.**
 ```
@@ -51,6 +81,20 @@ C'est le fait du lot ①, retrouvé par l'autre bout : `HYPOTHESES` énumère H1
 
 ### B — Ce qu'une surface dit et qu'une autre tait (2)
 
+> ✅ **FERMÉ le 27/08/2026 — `d2dc672`. Deux méthodes.**
+> **① Lecture, sur SON assiette** — les valeurs du modèle retenu : **0** site
+> `.get(champ, 0)` sur `score_global`, `overfit_ratio`, `gini_test` et
+> `interpretabilite`. Elles passent par `F.nombre`.
+> **② Exécution** : `F.nombre(None)` → **« — »**, quand `F.nombre(0.0)` →
+> « 0.0000 ». ⚠️ **Les deux sont désormais DISCERNABLES** — c'était tout
+> l'enjeu : un zéro fabriqué se lisait comme un zéro mesuré.
+> ⚠️⚠️ **ET UN SITE DE LA MÊME FAMILLE SURVIT, HORS DE CETTE ASSIETTE** :
+> `rapport_modeles_tarif.py:1088` formate `cred6.get('k', 0):.4f` et
+> `cred6.get('z_moyen', 0):.4f` — crédibilité Bühlmann-Straub, pas le modèle
+> retenu. Il est gardé par `if cred6.get('appliquee')`, mais **il fabrique
+> quand même un `0` là où ses voisins appellent `F.nombre`**. *Constat NEUF, ni
+> corrigé ni classé ici — rendu à l'arbitrage.*
+
 **C6 — Le rapport ÉQUIPE : l'Excel avertit, le HTML et le Word se taisent.**
 ```
   avertissement proxy walk-forward   : xl=True  html=False  word=False
@@ -58,6 +102,16 @@ C'est le fait du lot ①, retrouvé par l'autre bout : `HYPOTHESES` énumère H1
   colonnes du plan non produites     : xl=True  html=False  word=False
 ```
 L'Excel équipe porte **six synthèses réglementaires** (`avertissement_walk_forward`, exclusions, alertes d'expérience, DL, qualité, mapping, plan amputé) que ses trois autres formats — HTML, Word, PDF — **n'ont pas du tout**. Trois d'entre elles sont mesurées ci-dessus. C'est le même rapport, sous quatre formes, dont une seule avertit.
+
+> ✅ **FERMÉ le 27/08/2026 — `4534ea7`. Deux méthodes.**
+> **① AST** : les **quatre** exports (`excel`, `html`, `word`, et `pdf` via
+> `html`) délèguent au constructeur partagé `_syntheses_ou_calcul` —
+> l'orchestrateur les calcule **une fois** et les partage.
+> ⚠️ *Un relevé par symbole disait « html 2/7 » : il ne voyait pas
+> l'indirection. C'est l'exécution qui tranche.*
+> **② Exécution** sur un jeu déclenchant 3 synthèses : **3/3 retrouvées dans
+> l'Excel, le HTML ET le Word** — l'origine mesurait `xl=True html=False
+> word=False`. Épinglé par `test_c6_syntheses.py` (5 contrôles).
 
 **C7 — `raisons_plafond` atteint 2 surfaces sur 6** (mesuré au lot ①, avec témoin positif) : `modeles.export_html` et `modeles.export_word`. Ni l'Excel A6, ni les trois formats du rapport équipe.
 

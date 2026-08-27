@@ -15,9 +15,9 @@ l'état d'aujourd'hui.*
 |---|---|---|
 | **S1** | **Rien de faux n'est publié** | ⛔ **107 constats ouverts** — *recomptés le 27/08, méthode au §②* |
 | **S2** | **Rien de fermé ne peut régresser** | 🟡 **40 fermés sur 41 sont épinglés** par un contrôle positif nommé — `a5/C5` ne l'est toujours pas |
-| **S3** | **Un tarif signé se rejoue à l'identique** | ⚠️ **CHIFFRE NON REMESURÉ — au moins 2 des 4 ont bougé depuis** : l'empreinte porte sa version de schéma (`s1:`, `2cb43ef`) et l'horodatage du livrable a son lot (`ea37564`, `test_horodatage_livrable.py`). *Le « 1 sur 4 » ci-dessous date d'avant ; S3, S4 et S5 demandent leur propre re-mesure, elle n'est pas faite.* État d'origine, **corrigé de ce qui a bougé** : le tarif déclaratif est reproductible **au bit près** (0,00e+00) · le tarif DL ne l'est toujours pas (**aucun seed**) · ~~le livrable porte un horodatage~~ **traité** (`ea37564`) · ~~l'empreinte du plan n'a pas de version de schéma~~ **elle l'a** (`s1:`, `2cb43ef`). ⚠️ *Le compte global reste à refaire.* |
-| **S4** | **Un seul chemin — ou des chemins également gardés** | ⛔ **5 assemblages dans l'app**, un seul complet ; l'orchestrateur a **0 appelant** ; le chemin agent n'a **aucune couche qualité** |
-| **S5** | **Tout ce qui tarife est atteignable par une gate** | 🟡 `actuaria_app.py` est **importable depuis le lot 0.1** (`07be8c0`) — **29 fonctions atteignables contre 0** ; restent **3 modules jamais audités** (1 170 l) |
+| **S3** | **Un tarif signé se rejoue à l'identique** | 🟡 **RE-MESURÉ LE 27/08 — 2 fermés, 1 hérité, 1 PARTIEL.** ✅ **l'empreinte du plan est versionnée** : `s1:9b6d4f70080ad771`, **rejouée identique** sur les 20 plans (`2cb43ef`). ✅ **le livrable ne publie plus un `now()` sous l'étiquette « Arrêté »** : **0** site `_bandeau(… now …)`, contre **28** à l'origine ; absent → « non déclaré », illisible → « non déclaré (illisible : …) » (`ea37564`). ⬜ *hérité, non re-mesuré ici* : le tarif **déclaratif** reproductible au bit près (0,00e+00). ⚠️ **PARTIEL — le tarif DL** : le `seed` est **déclaré** (paramètre de `A5.run`), **appliqué** à `torch.manual_seed` et `np.random.seed` (l.528-529) et **inscrit au rapport**. ⚠️⚠️ **Mais la reproductibilité bout-en-bout n'est PAS prouvée ici** : elle demande un double run d'A5, non fait. *Le seed posé n'est pas la reproductibilité mesurée.* |
+| **S4** | **Un seul chemin — ou des chemins également gardés** | ⛔ **RE-MESURÉ LE 27/08 — inchangé, et l'asymétrie est nette.** **L'orchestrateur a toujours 0 appelant de production** (2 importeurs au total, tous hors production — relevé par AST). ⚠️⚠️ **Et la couche qualité départage les deux chemins** : `pipeline_tarifaire` (déclaratif) importe `core.qualite_donnees` **et** `core.conformite_reglementaire` ; `pipeline_agents` **n'en importe AUCUN**. *Deux chemins vers un tarif signé, un seul gardé.* ⬜ *non re-derivable* : le « 5 assemblages dans l'app » date d'une définition non consignée — **je ne le réaffirme pas sans la refaire**. |
+| **S5** | **Tout ce qui tarife est atteignable par une gate** | 🟡 **RE-MESURÉ LE 27/08, ET LA NUANCE COMPTE.** `actuaria_app.py` (**5 208 l**) est **importable** depuis le lot 0.1 (`07be8c0`) — mais **AUCUN test ne l'importe** ; **4 le LISENT comme un fichier** (`core/test_imports_app.py` le dit lui-même : *« ce test relit le fichier, il ne l'importe pas »*). ⚠️ *Ce qui est exercé, c'est sa STRUCTURE, pas son comportement.* ✅ `core/elasticite.py` (**988 l**) n'est plus hors de portée : **2 tests l'importent** (`test_elasticite.py`, `test_a4_ml.py`) — ⚠️ **testé n'est toujours pas audité**, il reste à l'ouverture HORS RANG. ⛔ `services/excel_helpers.py` (**151 l**) : **0 test ne l'importe**. |
 
 ⚠️⚠️ **ET UN CRITÈRE QUI N'EN EST PAS UN : LE NOMBRE DE TESTS.** Mesuré par
 résolution d'import vers un chemin de fichier : **23 882 lignes, 1 940 tests,
@@ -55,10 +55,12 @@ quatre lots.** La méthode, pour qu'on puisse la refaire :
 - **147 constats** = en-têtes des 14 `releve_*.md`, **DEUX formes** :
   `**Cn — …**` (135) *et* `**Cn** — …` (12). ⚠️ *Ne compter que la première en
   rate 12* — c'est l'erreur que ce recompte a faite d'abord. Aucun doublon.
-- **40 fermés** = union de trois sources : le marqueur ✅ dans le relevé (**26**)
+- **40 fermés** = union de trois sources : le marqueur ✅ dans le relevé (**32**)
   · la section FERMÉS de `REMESURE` (**+8** que le relevé ne marquait pas) ·
-  les fermetures **épinglées par un contrôle positif nommé** mais non reportées
-  (**+6** : `services/C1`…`C6`).
+  les fermetures épinglées mais non reportées (**+0** — *plus aucune*).
+  ⚠️ **LE 27/08, REPORTER `services/C1`…`C6` DANS LEUR RELEVÉ N'A PAS CHANGÉ LE
+  TOTAL** : 26+8+6 et 32+8+0 donnent le même **40**. *C'est la vérification que
+  le compte est bien une UNION et non une addition.*
   ⚠️ **CE CHIFFRE A ÉTÉ FAUX UNE PREMIÈRE FOIS (41).** Je l'avais composé *en
   prose*, en additionnant les sources — et `a4/C2` figurait déjà dans deux
   d'entre elles. **Une union se calcule sur des ENSEMBLES, jamais par addition
@@ -70,9 +72,15 @@ et c'est le bon sens de l'erreur : **se tromper vers « ouvert » fait rouvrir u
 dossier clos ; se tromper vers « fermé » laisse un défaut dans un livrable
 signé.** Le compte est donc une **borne basse des fermetures**.
 
-⚠️ **UN relevé est en retard sur le code, mesuré** : `services_rapport` marque
-**0 fermé** alors que `C1`…`C6` le sont et sont épinglés. *Les y reporter est un
-lot à part — il n'est pas fait.* (`a3_glm` l'était aussi ; corrigé le 27/08.)
+✅ **PLUS AUCUN RELEVÉ N'EST EN RETARD SUR LE CODE** (mesuré le 27/08) :
+`services/C1`…`C6` et `a3/C6` y sont désormais reportés, chacun **avec ses deux
+méthodes de vérification** et son contrôle positif nommé.
+
+⚠️⚠️ **ET LE REPORT A PRODUIT UN CONSTAT NEUF** — `rapport_modeles_tarif.py:1088`
+formate `cred6.get('k', 0):.4f` : même famille que `services/C5`, mais **hors de
+son assiette** (crédibilité Bühlmann-Straub, pas les valeurs du modèle retenu).
+Ses voisins immédiats appellent `F.nombre`. *Ni corrigé ni classé — rendu à
+l'arbitrage.*
 
 ---
 
