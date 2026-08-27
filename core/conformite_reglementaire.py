@@ -1721,6 +1721,85 @@ def reserve_bases_gini_melangees(catalogue) -> str | None:
           "*L'écart de convention ne se lit pas comme un écart de qualité.*")
 
 
+def meilleur_par_base(classement, modele_production=None) -> list:
+    """Le MEILLEUR modèle de chaque base de Gini — constat `a4/C10`, suite.
+
+    ⚠️⚠️ POURQUOI CE CHAMP NE S'APPELLE PAS `finalistes_par_base`. Mesuré sur
+    un catalogue réel de 9 modèles : `GLM_POISSON` (comptage) score **1,0000**
+    contre **0,1912** pour le meilleur unitaire. Ce ne sont pas deux
+    finalistes — c'est un gagnant et un second lointain. *Une étiquette qui
+    affirme une égalité que les chiffres ne montrent pas est le défaut que cet
+    audit poursuit.*
+
+    ⚠️ AUCUN SEUIL DE PROXIMITÉ. On présente TOUJOURS le meilleur de chaque
+    base, quel que soit l'écart — même règle qu'`alternatives`, qui montre les
+    trois suivants sans condition. *L'actuaire juge la proximité ; le code ne
+    l'invente pas.* Le score étant normalisé par le gagnant, un écart de 10 %
+    ne veut pas la même chose selon la dispersion du catalogue : fixer une
+    coupure ici serait fabriquer un nombre.
+
+    ⚠️ `rang_global` est publié À CÔTÉ du score : sans lui, deux lignes se
+    liraient à égalité alors que l'une est 2ᵉ et l'autre 9ᵉ.
+
+    ⚠️ `est_retenu` se DÉRIVE par comparaison au modèle de production — jamais
+    écrit à la main : un booléen posé deviendrait faux le jour où le choix
+    change ailleurs.
+
+    ⚠️ Une base NON DÉCLARÉE (`None`) a sa propre ligne — jamais fondue dans
+    une autre. Voir [`reserve_bases_gini_melangees`].
+    """
+    retenu = (modele_production or {}).get('modele')
+    vu: dict = {}
+    for rang, modele in enumerate(classement or [], start=1):
+        base = modele.get('base_gini')
+        if base in vu:                      # le classement est déjà trié
+            continue
+        vu[base] = {
+            'base':         base,
+            'base_libelle': (LIBELLES_BASE_GINI.get(base)
+                             if base is not None else 'base NON DÉCLARÉE'),
+            'modele':       modele.get('modele'),
+            'score_global': modele.get('score_global'),
+            'gini_test':    modele.get('gini_test'),
+            'rang_global':  rang,
+            'est_retenu':   modele.get('modele') == retenu,
+        }
+    return list(vu.values())
+
+
+def reserve_arbitrage_contestable(meilleurs, modele_production=None) -> str | None:
+    """SOURCE UNIQUE — la phrase qui dit qu'un choix automatique est discutable.
+
+    ⚠️ Elle NE BLOQUE RIEN, ne plafonne aucun statut et ne change aucun euro :
+    `modele_production` reste choisi automatiquement. *Un fail-safe qui met la
+    chaîne hors service n'est pas un fail-safe.* Elle rend seulement le choix
+    CONTESTABLE À VOIX HAUTE, pour que l'actuaire garde la main.
+
+    ⚠️ `None` quand une seule base est représentée : il n'y a alors rien à
+    contester, et une réserve qui se déclenche toujours n'informe plus de rien.
+    """
+    if not meilleurs or len(meilleurs) < 2:
+        return None
+    retenu = (modele_production or {}).get('modele') or '?'
+    lignes = []
+    for m in meilleurs:
+        score = m.get('score_global')
+        lignes.append(
+            f"{m['modele']} ({m['base_libelle']}) score "
+            f"{score if score is None else round(float(score), 4)}, "
+            f"rang {m['rang_global']}")
+    return (
+        f"⚠ ARBITRAGE CONTESTABLE — le modèle retenu ({retenu}) l'a été par un "
+        f"tri automatique sur `score_global`, alors que le catalogue contient "
+        f"{len(meilleurs)} bases de Gini différentes : "
+        + " · ".join(lignes)
+        + ". Un Gini de base comptage est SYSTÉMATIQUEMENT flatté par rapport "
+          "à un Gini unitaire dès que l'exposition varie — mesuré à +18,1 %, "
+          "et 0,0 % à exposition constante. Le score est en outre normalisé "
+          "par le gagnant : l'écart affiché n'est pas une distance absolue. "
+          "*Le choix automatique tient ; il n'est pas pour autant établi.*")
+
+
 #: Les trois verdicts du plafond de vraisemblance. ⚠️⚠️ IL Y EN A TROIS, ET PAS
 #: DEUX : « je ne sais pas juger cette cible » n'est ni « plausible » ni
 #: « implausible », et le confondre avec l'un des deux publie un faux.

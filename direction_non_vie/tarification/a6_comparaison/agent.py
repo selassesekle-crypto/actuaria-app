@@ -111,6 +111,7 @@ from core.conformite_reglementaire import (
     agreger_controle_effet, avertissement_walk_forward,
     construire_matrice_x, verdict_vraisemblance_gini,
     reserve_bases_gini_melangees,
+    meilleur_par_base, reserve_arbitrage_contestable,
     VRAISEMBLANCE_IMPLAUSIBLE, VRAISEMBLANCE_NON_CALIBRE,
     reserve_vraisemblance_non_calibree,
     GINI_PLAUSIBLE_MAX_FREQUENCE,
@@ -488,6 +489,21 @@ class AgentA6Comparaison:
             rapport['reserve_bases_gini'] = _reserve_bases
             if _reserve_bases:
                 logger.warning(_reserve_bases)
+
+            # ⚠️⚠️ LE MEILLEUR DE CHAQUE BASE, ET LE CHOIX QUI SE DÉCLARE
+            # CONTESTABLE — constat `a4/C10`, suite. Le tri global reste seul
+            # à décider ; ce bloc n'y touche pas. Il AJOUTE une vue par base,
+            # SANS seuil de proximité : on présente toujours le meilleur de
+            # chaque base, comme `alternatives` présente toujours les trois
+            # suivants. *L'actuaire juge la proximité, le code ne l'invente
+            # pas.*
+            _meilleurs = meilleur_par_base(classement, modele_production)
+            rapport['meilleur_par_base'] = _meilleurs
+            _contestable = reserve_arbitrage_contestable(
+                _meilleurs, modele_production)
+            rapport['arbitrage_contestable'] = _contestable
+            if _contestable:
+                logger.warning(_contestable)
             if _reserve_vrais:
                 logger.warning(_reserve_vrais)
 
@@ -635,6 +651,8 @@ class AgentA6Comparaison:
                 'reserve_arbitrage': rapport.get('reserve_arbitrage'),
                 'reserve_vraisemblance': rapport.get('reserve_vraisemblance'),
                 'reserve_bases_gini': rapport.get('reserve_bases_gini'),
+                'meilleur_par_base': rapport.get('meilleur_par_base'),
+                'arbitrage_contestable': rapport.get('arbitrage_contestable'),
                 'alertes_conformite': _alertes_conformite,
                 'alertes_modele': _alertes_modele,
                 'exclusions_cible': exclusions_cible,
@@ -761,6 +779,8 @@ class AgentA6Comparaison:
                 'reserve_arbitrage': rapport.get('reserve_arbitrage'),
                 'reserve_vraisemblance': rapport.get('reserve_vraisemblance'),
                 'reserve_bases_gini': rapport.get('reserve_bases_gini'),
+                'meilleur_par_base': rapport.get('meilleur_par_base'),
+                'arbitrage_contestable': rapport.get('arbitrage_contestable'),
                 'alertes_conformite': _alertes_conformite,
                 'alertes_modele':     _alertes_modele,
                 # Modèles écartés de la comparaison pour cible non conforme
