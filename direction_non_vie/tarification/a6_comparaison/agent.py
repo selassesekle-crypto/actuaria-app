@@ -109,7 +109,9 @@ except ImportError:
 # recalibration walk-forward.
 from core.conformite_reglementaire import (
     agreger_controle_effet, avertissement_walk_forward,
-    construire_matrice_x, gini_est_plausible,
+    construire_matrice_x, verdict_vraisemblance_gini,
+    VRAISEMBLANCE_IMPLAUSIBLE, VRAISEMBLANCE_NON_CALIBRE,
+    reserve_vraisemblance_non_calibree,
     GINI_PLAUSIBLE_MAX_FREQUENCE,
 )
 
@@ -455,10 +457,25 @@ class AgentA6Comparaison:
                 (r.get('modele_ampute') for r in (result_a3, result_a4, result_a5)
                  if isinstance(r, dict) and r.get('modele_ampute')), None)
 
+            # ⚠️⚠️ LA CIBLE EST MESURÉE, PAS SUPPOSÉE — constat `a6/C8`.
+            # `plan.cible_frequence` est la seule autorité sur ce qu'est une
+            # cible de fréquence ; comparer à un littéral la re-fabriquerait.
+            _cible_freq_plan = getattr(plan, 'cible_frequence', None)
+            _cible_est_freq = bool(
+                _cible_freq_plan is not None and col_cible == _cible_freq_plan)
+            _reserve_vrais = (
+                reserve_vraisemblance_non_calibree(
+                    col_cible, (modele_production or {}).get('gini_test'))
+                if not _cible_est_freq else None)
+            rapport['reserve_vraisemblance'] = _reserve_vrais
+            if _reserve_vrais:
+                logger.warning(_reserve_vrais)
+
             statut_rag  = self._calculer_statut_rag(
                 modele_production, classement,
                 profil_valide_par=profil_valide_par,
                 environnement=environnement,
+                cible_est_frequence=_cible_est_freq,
                 backtest=backtest,
                 valide_par_actuaire_dl=valide_par_actuaire_dl,
                 modele_ampute=_modele_ampute,
@@ -596,6 +613,7 @@ class AgentA6Comparaison:
                 # ⚠️ La reserve d'arbitrage VOYAGE : une reserve que
                 # personne ne lit serait `conformite/C7` recommence.
                 'reserve_arbitrage': rapport.get('reserve_arbitrage'),
+                'reserve_vraisemblance': rapport.get('reserve_vraisemblance'),
                 'alertes_conformite': _alertes_conformite,
                 'alertes_modele': _alertes_modele,
                 'exclusions_cible': exclusions_cible,
@@ -720,6 +738,7 @@ class AgentA6Comparaison:
                 # ⚠️ La reserve d'arbitrage VOYAGE : une reserve que
                 # personne ne lit serait `conformite/C7` recommence.
                 'reserve_arbitrage': rapport.get('reserve_arbitrage'),
+                'reserve_vraisemblance': rapport.get('reserve_vraisemblance'),
                 'alertes_conformite': _alertes_conformite,
                 'alertes_modele':     _alertes_modele,
                 # Modèles écartés de la comparaison pour cible non conforme
@@ -1836,6 +1855,7 @@ class AgentA6Comparaison:
         modele_ampute:      Optional[Dict] = None,
         hypotheses_glm:     Optional[Dict] = None,   # r3['hypotheses'] (A3 GLM)
         hypotheses_ml:      Optional[Dict] = None,   # r4['hypotheses'] (A4 ML)
+        cible_est_frequence: bool = True,
     ) -> str:
         """
         Statut RAG basé sur le score global du modèle de production.
@@ -2095,8 +2115,35 @@ class AgentA6Comparaison:
         # traversé tous les filtres se trahit par une performance impossible.
         # Il ne dépend d'aucun nom de colonne — donc il attrapera aussi les
         # fuites que personne n'a encore imaginées.
-        _gini_plausible = gini_est_plausible(gini, cible_est_frequence=True)
-        if not _gini_plausible:
+        # ⚠️⚠️ LA CIBLE N'EST PLUS SUPPOSÉE — constat `a6/C8`. Elle arrive du
+        # site d'appel, qui seul sait ce qu'A6 compare. Le défaut par défaut
+        # reste `True` : les invariants de fuite (test_invariants) appellent
+        # cette méthode SANS la cible, et ils doivent continuer à prouver
+        # EXACTEMENT ce qu'ils prouvaient. `run()`, lui, passe la valeur
+        # MESURÉE — un contrôle positif l'épingle.
+        _verdict = verdict_vraisemblance_gini(
+            gini, cible_est_frequence=cible_est_frequence)
+        if _verdict == VRAISEMBLANCE_NON_CALIBRE:
+            logger.warning(
+                f"[VRAISEMBLANCE] Gini = {gini:.4f} sur une cible NON de "
+                f"fréquence : le plafond {GINI_PLAUSIBLE_MAX_FREQUENCE} ne "
+                f"s'y applique pas et aucune borne publiée ne le remplace. "
+                f"Le contrôle anti-fuite par la performance N'A PAS ÉTÉ "
+                f"EXERCÉ — il reste à faire sur les variables. Le VERT est "
+                f"donc BLOQUÉ à ce titre, et le statut plafonne à AMBRE : "
+                f"une absence de contrôle n'est pas un contrôle satisfait. "
+                f"Ce n'est pas un défaut établi — c'est une vérification qui "
+                f"n'a pas eu lieu, et elle se dit.")
+        # ⚠️⚠️ UN CONTRÔLE QUI N'A PAS PU S'EXERCER NE VAUT PAS UN CONTRÔLE
+        # SATISFAIT. Le VERT affirme que TOUT a été vérifié ; si le plafond ne
+        # sait pas juger cette cible, il bloque le VERT **en le disant** —
+        # exactement comme le fait déjà `_backtest_ok` quand la validation
+        # temporelle est indisponible. Ce n'est PAS une mise hors service :
+        # le statut plafonne à AMBRE, jamais à ROUGE.
+        _cible_modele = modele_production.get('cible') or 'inconnue'
+        _vraisemblance_ok = _verdict not in (
+            VRAISEMBLANCE_IMPLAUSIBLE, VRAISEMBLANCE_NON_CALIBRE)
+        if _verdict == VRAISEMBLANCE_IMPLAUSIBLE:
             logger.warning(
                 f"[VRAISEMBLANCE] Gini = {gini:.4f} > {GINI_PLAUSIBLE_MAX_FREQUENCE} "
                 f"— performance actuariellement IMPLAUSIBLE pour un modèle de "
@@ -2157,8 +2204,12 @@ class AgentA6Comparaison:
             (_wf_resultat_ok,
              ("Le backtesting walk-forward a été conduit et son résultat "
               "n'est pas satisfaisant.")),
-            (_gini_plausible,
-             "Gini hors des bornes plausibles pour la branche."),
+            (_vraisemblance_ok,
+             ("Gini hors des bornes plausibles pour la branche."
+              if _verdict == VRAISEMBLANCE_IMPLAUSIBLE else
+              f"Plafond de vraisemblance NON CALIBRÉ pour la cible "
+              f"'{_cible_modele}' — le contrôle anti-fuite par la "
+              f"performance n'a pas pu être exercé.")),
             (_cann_ancre_ok,
              "Modèle CANN non ancré sur un GLM vérifié."),
             (_dl_confirme_ok,
@@ -2175,7 +2226,7 @@ class AgentA6Comparaison:
 
         if (score >= 0.60 and gini >= 0.15 and _gouvernance_ok
                 and _backtest_ok and _wf_fidele_ok and _wf_resultat_ok
-                and _gini_plausible and _cann_ancre_ok and _dl_confirme_ok
+                and _vraisemblance_ok and _cann_ancre_ok and _dl_confirme_ok
                 and _plan_complet_ok and _hypotheses_ok and _lift_ok):
             return 'VERT'
         # ── ANTI-SÉLECTION : DISQUALIFIANT (auto-audit 11/07/2026) ────────────

@@ -1662,20 +1662,77 @@ def detecter_fuites_par_effet(
     return (fuites, signaux_experience) if retourner_alertes else fuites
 
 
-def gini_est_plausible(gini: Optional[float],
-                       cible_est_frequence: bool = True) -> bool:
+#: Les trois verdicts du plafond de vraisemblance. ⚠️⚠️ IL Y EN A TROIS, ET PAS
+#: DEUX : « je ne sais pas juger cette cible » n'est ni « plausible » ni
+#: « implausible », et le confondre avec l'un des deux publie un faux.
+VRAISEMBLANCE_PLAUSIBLE = 'PLAUSIBLE'
+VRAISEMBLANCE_IMPLAUSIBLE = 'IMPLAUSIBLE'
+VRAISEMBLANCE_NON_CALIBRE = 'NON_CALIBRE'
+VRAISEMBLANCE_SANS_OBJET = 'SANS_OBJET'
+
+
+def verdict_vraisemblance_gini(gini: float | None,
+                               *,
+                               cible_est_frequence: bool) -> str:
     """
-    Le Gini est-il actuariellement plausible, ou trahit-il une fuite ?
+    Le Gini trahit-il une fuite — ou ne sait-on pas en juger sur cette cible ?
 
     Un Gini de fréquence > 0,60 sur un portefeuille Non-Vie n'est pas un exploit :
     c'est une alerte. Les deux fuites bloquantes de l'histoire de ce module
-    affichaient 0,91 (V8) et 0,92 (V12), contre 0,20 et 0,07 une fois corrigées.
+    affichaient 0,91 (V8, `prime_pure`) et 0,92 (V12), contre 0,20 et 0,07 une
+    fois corrigées.
+
+    ⚠️⚠️ POURQUOI CETTE FONCTION A REMPLACÉ `gini_est_plausible` (constat
+    `a6/C8`, 27/08/2026). L'ancienne rendait un **booléen** et son appelant
+    unique passait `cible_est_frequence=True` **codé en dur**, alors que la
+    cible peut valoir `cout_moyen` ou `prime_pure`. Les deux corrections
+    évidentes étaient fausses, et c'est mesuré :
+
+      · passer la vraie cible → l'ancienne rendait `True` **sans plafond**
+        pour toute cible non-fréquence. MESURÉ : 0,91 et 0,99 passaient alors
+        **sans une alerte** — sur `prime_pure`, LA CIBLE MÊME de la fuite V8
+        qui a motivé ce garde-fou. *Le correctif évident retirait le filet là
+        où il avait été tendu.*
+      · laisser `True` → on applique à une prime pure un seuil calibré sur
+        une fréquence.
+
+    ⚠️ Le seuil `GINI_PLAUSIBLE_MAX_FREQUENCE` n'est PAS transposable : la
+    littérature citée (GLM de fréquence auto entre 0,15 et 0,35) ne dit rien
+    de la prime pure. **Inventer un nombre ici serait le défaut que cet audit
+    poursuit.** La fonction DÉCLARE donc qu'elle ne sait pas juger, au lieu de
+    répondre « plausible ».
+
+    ⚠️ ET LE NOM A CHANGÉ EXPRÈS. `gini_est_plausible` était un prédicat : tout
+    appelant écrivait `if not gini_est_plausible(...)`. Un retour à trois états
+    sous ce nom aurait été **silencieusement faux** — `NON_CALIBRE` est une
+    chaîne vraie, l'alerte n'aurait plus jamais tiré. En renommant, tout
+    appelant resté en arrière échoue **bruyamment**, jamais en silence.
+
+    Référence : ACPR-2022-P-01 §4.3 (vraisemblance des performances publiées).
     """
     if gini is None:
-        return True   # rien à juger ici (traité par le gate de disponibilité)
+        return VRAISEMBLANCE_SANS_OBJET   # rien à juger (gate de disponibilité)
     if not cible_est_frequence:
-        return True
-    return float(gini) <= GINI_PLAUSIBLE_MAX_FREQUENCE
+        return VRAISEMBLANCE_NON_CALIBRE
+    return (VRAISEMBLANCE_PLAUSIBLE
+            if float(gini) <= GINI_PLAUSIBLE_MAX_FREQUENCE
+            else VRAISEMBLANCE_IMPLAUSIBLE)
+
+
+def reserve_vraisemblance_non_calibree(cible: str | None,
+                                       gini: float | None) -> str | None:
+    """SOURCE UNIQUE — la phrase que lit l'actuaire quand le plafond ne sait
+    pas juger sa cible. ⚠️ Sans elle, l'absence de contrôle serait INVISIBLE,
+    et c'est précisément ce qui distingue une réserve d'un silence.
+    """
+    if cible is None or gini is None:
+        return None
+    return (f"⚠ PLAFOND DE VRAISEMBLANCE NON CALIBRÉ pour la cible "
+            f"'{cible}' — Gini = {float(gini):.4f}. Le seuil "
+            f"{GINI_PLAUSIBLE_MAX_FREQUENCE} est calibré sur la FRÉQUENCE ; "
+            f"aucune borne publiée ne s'applique à cette cible. Le contrôle "
+            f"anti-fuite par la performance n'a donc PAS été exercé ici : "
+            f"il reste à faire par l'examen des variables.")
 
 
 def synthese_alertes_experience(alertes: Optional[dict]) -> Optional[str]:
