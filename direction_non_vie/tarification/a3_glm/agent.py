@@ -887,12 +887,36 @@ class AgentA3GLM:
 
             except Exception as e:
                 logger.warning(f"Erreur calibration Poisson iter {iteration}: {e}")
-                # Suppression de la dernière variable en cas d'erreur numérique
                 if vars_actives:
+                    # ⚠️⚠️ TROIS AFFIRMATIONS FAUSSES TENAIENT ICI — constat
+                    # `a3/C14`. On DÉCLARE, on ne devine pas.
+                    #  ① `pvalue: 1.0` n'a JAMAIS été calculée. Une p-value
+                    #     fabriquée à 1,0 se lit « variable non significative »,
+                    #     alors que rien n'a été testé. Elle vaut `None`.
+                    #  ② « erreur numérique » AFFIRMAIT UNE CAUSE NON ÉTABLIE.
+                    #     Mesuré : `statsmodels` ne lève NI sur colinéarité
+                    #     parfaite, NI sur colonne constante, NI sur séparation
+                    #     totale. Les seuls déclencheurs trouvés sont des
+                    #     défauts de DONNÉES — `MissingDataError` (NaN/Inf),
+                    #     deviance NaN, matrice vide. Et le `try` couvre ~30
+                    #     lignes avec un `except Exception` nu : il attrape
+                    #     aussi bien un `KeyError` de `.drop`. On nomme donc le
+                    #     TYPE réel, sans conclure sur la cause.
+                    #  ③ LA VARIABLE RETIRÉE EST ARBITRAIRE. `vars_actives[-1]`
+                    #     n'est pas celle qui a échoué — l'exception ne le dit
+                    #     pas. Le comportement est INCHANGÉ ici (le changer
+                    #     modifierait le modèle ajusté, donc un prix) : il est
+                    #     DÉCLARÉ, pour qu'un actuaire ne lise pas ce retrait
+                    #     comme un diagnostic.
                     vars_exclues.append({
-                        'variable': vars_actives[-1],
-                        'pvalue':   1.0,
-                        'raison':   f'erreur numérique: {str(e)[:50]}'
+                        'variable':          vars_actives[-1],
+                        'pvalue':            None,
+                        'pvalue_non_testee': True,
+                        'variable_arbitraire': True,
+                        'raison': (f"echec de l'ajustement ({type(e).__name__}: "
+                                   f"{str(e)[:60]}) — variable retiree "
+                                   f"ARBITRAIREMENT (la derniere), la cause "
+                                   f"reelle n'est pas etablie"),
                     })
                     vars_actives.pop()
                 else:
@@ -1129,10 +1153,35 @@ class AgentA3GLM:
             except Exception as e:
                 logger.warning(f"Erreur Gamma iter {iteration}: {e}")
                 if vars_actives:
+                    # ⚠️⚠️ TROIS AFFIRMATIONS FAUSSES TENAIENT ICI — constat
+                    # `a3/C14`. On DÉCLARE, on ne devine pas.
+                    #  ① `pvalue: 1.0` n'a JAMAIS été calculée. Une p-value
+                    #     fabriquée à 1,0 se lit « variable non significative »,
+                    #     alors que rien n'a été testé. Elle vaut `None`.
+                    #  ② « erreur numérique » AFFIRMAIT UNE CAUSE NON ÉTABLIE.
+                    #     Mesuré : `statsmodels` ne lève NI sur colinéarité
+                    #     parfaite, NI sur colonne constante, NI sur séparation
+                    #     totale. Les seuls déclencheurs trouvés sont des
+                    #     défauts de DONNÉES — `MissingDataError` (NaN/Inf),
+                    #     deviance NaN, matrice vide. Et le `try` couvre ~30
+                    #     lignes avec un `except Exception` nu : il attrape
+                    #     aussi bien un `KeyError` de `.drop`. On nomme donc le
+                    #     TYPE réel, sans conclure sur la cause.
+                    #  ③ LA VARIABLE RETIRÉE EST ARBITRAIRE. `vars_actives[-1]`
+                    #     n'est pas celle qui a échoué — l'exception ne le dit
+                    #     pas. Le comportement est INCHANGÉ ici (le changer
+                    #     modifierait le modèle ajusté, donc un prix) : il est
+                    #     DÉCLARÉ, pour qu'un actuaire ne lise pas ce retrait
+                    #     comme un diagnostic.
                     vars_exclues.append({
-                        'variable': vars_actives[-1],
-                        'pvalue':   1.0,
-                        'raison':   f'erreur numérique'
+                        'variable':          vars_actives[-1],
+                        'pvalue':            None,
+                        'pvalue_non_testee': True,
+                        'variable_arbitraire': True,
+                        'raison': (f"echec de l'ajustement ({type(e).__name__}: "
+                                   f"{str(e)[:60]}) — variable retiree "
+                                   f"ARBITRAIREMENT (la derniere), la cause "
+                                   f"reelle n'est pas etablie"),
                     })
                     vars_actives.pop()
                 else:
