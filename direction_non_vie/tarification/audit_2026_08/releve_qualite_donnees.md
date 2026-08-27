@@ -43,7 +43,7 @@ zéro anomalie**, et la synthèse destinée aux livrables rend `None` — c'est-
 exclusion, donc rien de silencieux au sens strict. Mais la couche dont c'est le
 métier de juger la qualité des données **déclare bonnes des données absentes**.
 
-> ✅ **FERMÉ — lot ③.** Nouveau détecteur `detecter_illisible` : **le seul qui
+> ✅ **`qualite/C1`** · **FERMÉ — lot ③.** Nouveau détecteur `detecter_illisible` : **le seul qui
 > regarde ce que `to_numeric(coerce)` a détruit**, sur les quatre colonnes de
 > RÔLE. Mesuré : les quatre formes d'absence (NaN partiel, NaN total, texte
 > `« douze mois »`, chaîne vide) sont désormais signalées, et un portefeuille
@@ -81,7 +81,7 @@ exactement ce que fait `[a.code for a in anomalies if a.proportion >= seuil]`
 **Un cinquième du portefeuille est exclu, et rien n'est escaladé.** Aucun type
 n'atteint le seuil ; leur union le dépasse de quatre fois.
 
-> ✅ **FERMÉ — lot ③.** L'escalade regarde désormais **l'union des lignes
+> ✅ **`qualite/C2`** · **FERMÉ — lot ③.** L'escalade regarde désormais **l'union des lignes
 > touchées** en plus de chaque type. Mesuré sur le cas exact du constat :
 > escalade **déclenchée**, motif publié
 > `union_des_anomalies (196/1000 lignes, 19.6%)`.

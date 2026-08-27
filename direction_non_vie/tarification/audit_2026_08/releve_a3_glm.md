@@ -23,12 +23,17 @@
 
 Sa propre docstring l'interdit : *« Ajouter offset=log(expo) appliquerait l'exposition DEUX FOIS »*. **Portée mesurée** : aucun consommateur hors A3 ; à l'intérieur, c'est la **2ᵉ source du lissage géographique** quand `prime_pure` est indisponible ([l.3014](direction_non_vie/tarification/a3_glm/agent.py:3014)). **Le tarif principal n'est pas touché.**
 
-> ✅ **DÉJÀ FERMÉ — constaté le 25/08/2026 en le RE-MESURANT, pas en le relisant.** Mesuré : sans colonne de fréquence, H1 rend **AMBRE** — « Sur-dispersion NON mesurée » — et `ratio_disp` vaut `None`. Aucun chiffre inventé n'est publié.
+> ✅ **`a3/C1`** · **FERMÉ — vérifié le 27/08/2026 par deux méthodes.**
+> **① Code d'aujourd'hui, par AST** : `self.modeles['tweedie'].predict(X)` à la l.1512 — **sans `offset`**. Le Poisson garde le sien (l.1455), ce qui est correct : c'est lui qui modélise un comptage.
+> **② `REMESURE_A3_A4_A5.md` (25/08)** l'établissait déjà par deux méthodes : le correctif est complet, **au fit ET au predict**.
+> ⚠️ *C'était le seul constat que j'avais désigné comme déplaçant un euro — et il était fermé avant que je l'ouvre.*
+
+> ✅ **`a3/C2`** · **DÉJÀ FERMÉ — constaté le 25/08/2026 en le RE-MESURANT, pas en le relisant.** Mesuré : sans colonne de fréquence, H1 rend **AMBRE** — « Sur-dispersion NON mesurée » — et `ratio_disp` vaut `None`. Aucun chiffre inventé n'est publié.
 > ⚠️ *Le correctif était dans le code, jamais reporté ici. L'archive prévient elle-même : « ils mesurent l'état ACTUEL, pas celui du jour de l'audit — lire le chiffre, pas l'étiquette ». Épinglé désormais par `test_hypotheses_non_testees.py`.*
 
 **C2 — H1 rend VERT sur des valeurs codées en dur quand la donnée manque.** Sans colonne de fréquence : `ratio=1.30, moyenne=0.05, variance=0.065` → *« Var/E = 1.30 < 2 → Distribution Poisson valide ✅ »*. **H1 est l'une des six plafonnantes d'A6.**
 
-> ✅ **DÉJÀ FERMÉ — constaté le 25/08/2026 en le RE-MESURANT, pas en le relisant.** Mesuré : H4 rend **AMBRE** par défaut — « Stabilité relativités NON testée » — et `cv_max` vaut `None`.
+> ✅ **`a3/C3`** · **DÉJÀ FERMÉ — constaté le 25/08/2026 en le RE-MESURANT, pas en le relisant.** Mesuré : H4 rend **AMBRE** par défaut — « Stabilité relativités NON testée » — et `cv_max` vaut `None`.
 > ⚠️ *Le correctif était dans le code, jamais reporté ici. L'archive prévient elle-même : « ils mesurent l'état ACTUEL, pas celui du jour de l'audit — lire le chiffre, pas l'étiquette ». Épinglé désormais par `test_hypotheses_non_testees.py`.*
 
 **C3 — H4 « non testée » vaut VERT.** C'est **exactement** le défaut corrigé dans A4 par le lot A de la série A→B→C→D, et **non reporté sur A3** :
@@ -49,7 +54,7 @@ Les vraies bornes existent (`ic95_low`/`ic95_high`) et ne sont pas passées.
 
 **C6 — Le Gini du Tweedie n'existe pas et vaut 0 partout.** `_calibrer_tweedie` ne pose aucune clé `gini`. G3, G4 et H3 lisent `.get('gini', 0)` → le Tweedie est publié à **0.0000** dans trois endroits, y compris `h3_ajustement['gini_tweedie']`.
 
-> ✅ **FERMÉ le 26/08/2026 — `b0ae396`.** `_calibrer_tweedie` calcule désormais
+> ✅ **`a3/C6`** · **FERMÉ le 26/08/2026 — `b0ae396`.** `_calibrer_tweedie` calcule désormais
 > son Gini sur (prime pure observée, prédite). **Mesuré : −0,078** — *négatif*.
 > Le `0` fabriqué par `.get('gini', 0)` n'était donc pas neutre, il était
 > **flatteur**, comme le plancher d'A5.
@@ -66,17 +71,17 @@ Les vraies bornes existent (`ic95_low`/`ic95_high`) et ne sont pas passées.
 
 ### B — Affirme plus que le code ne porte (5)
 
-> ✅ **DÉJÀ FERMÉ — constaté le 25/08/2026 en le RE-MESURANT, pas en le relisant.** Mesuré sur les cinq bornes : `0.07→ROUGE · 0.09→AMBRE · 0.12→AMBRE · 0.16→VERT · 0.30→VERT`. **`0.12` ne sort plus VERT**, et les quatre bandes sont cohérentes avec le commentaire.
+> ✅ **`a3/C8`** · **DÉJÀ FERMÉ — constaté le 25/08/2026 en le RE-MESURANT, pas en le relisant.** Mesuré sur les cinq bornes : `0.07→ROUGE · 0.09→AMBRE · 0.12→AMBRE · 0.16→VERT · 0.30→VERT`. **`0.12` ne sort plus VERT**, et les quatre bandes sont cohérentes avec le commentaire.
 > ⚠️ *Le correctif était dans le code, jamais reporté ici. L'archive prévient elle-même : « ils mesurent l'état ACTUEL, pas celui du jour de l'audit — lire le chiffre, pas l'étiquette ». Épinglé désormais par `test_hypotheses_non_testees.py`.*
 
 **C8 — H3 : le seuil annoncé n'est pas le seuil appliqué.** La docstring dit « Gini ∈ [0.08, 0.15] → acceptable ⚠️ ». Mesuré : `0.12 → VERT`. Le code a **quatre** bandes, la docstring **trois**.
 
-> ✅ **FERMÉ.** La scorecard se construit désormais **depuis les hypothèses réellement calculées** (`val_glm.items()`), et la légende dérive de `len(items)`. Mesuré : **5 hypothèses calculées → 5 listées → légende « 5 ✅ »** (avant : légende 3, liste 4, calculées 5 — *trois comptes pour la même chose dans le même graphique*). `h5_deviance`, une plafonnante, apparaît enfin.
+> ✅ **`a3/C9`** · **FERMÉ.** La scorecard se construit désormais **depuis les hypothèses réellement calculées** (`val_glm.items()`), et la légende dérive de `len(items)`. Mesuré : **5 hypothèses calculées → 5 listées → légende « 5 ✅ »** (avant : légende 3, liste 4, calculées 5 — *trois comptes pour la même chose dans le même graphique*). `h5_deviance`, une plafonnante, apparaît enfin.
 > ⚠️ **Effet de bord voulu** : la ligne H4 lisait `.get("h4_stabilite", {}).get("statut", "VERT")` — une hypothèse ABSENTE s'affichait VERTE. En construisant depuis les clés présentes, elle **n'apparaît plus** au lieu d'apparaître verte. *`a3/C3` reste ouvert sur le CALCUL ; ce qui est fermé, c'est la scorecard qui l'affichait.*
 
 **C9 — La scorecard annonce « 3 ✅ = GLM validé », liste 4 items, et 5 hypothèses sont calculées.** H5 (déviance) — une plafonnante — **n'apparaît pas** dans la scorecard.
 
-> ✅ **FERMÉ — en alignant la PHRASE sur le CODE, et je dis pourquoi ce sens-là.** Faire entrer le Tweedie dans le statut importerait son Gini, dont **`a3/C6` établit qu'il vaut 0 partout** : on ferait décider un verdict réglementaire par une métrique connue comme cassée. ⚠️ **Deux constats couplés, l'ordre est contraint** — le jour où `a3/C6` sera fermé, la question de l'inclure se reposera. Un test épingle l'absence du Tweedie dans le statut et échouera si on l'y met.
+> ✅ **`a3/C10`** · **FERMÉ — en alignant la PHRASE sur le CODE, et je dis pourquoi ce sens-là.** Faire entrer le Tweedie dans le statut importerait son Gini, dont **`a3/C6` établit qu'il vaut 0 partout** : on ferait décider un verdict réglementaire par une métrique connue comme cassée. ⚠️ **Deux constats couplés, l'ordre est contraint** — le jour où `a3/C6` sera fermé, la question de l'inclure se reposera. Un test épingle l'absence du Tweedie dans le statut et échouera si on l'y met.
 
 **C10 — `_calculer_statut_rag` annonce « convergence des 3 modèles », en lit 2** : `['gamma', 'poisson']`. Le Tweedie n'entre jamais dans le statut.
 

@@ -22,6 +22,11 @@
 
 Avec ε = −1.5, le CA vaut `p^(1+ε) = p^(−0,5)` — **décroissant en p** : l'optimum est mécaniquement la borne basse de la grille. `gini_meilleur` est reçu **et jamais utilisé** (1 occurrence, la signature). `prime_moyenne=450`, `nb_contrats=10000`, `elasticite=−1.5`, `Loss Ratio 70 %` sont codés en dur. Le graphique `optimisation_tarifaire` titre « ✅ Tarif optimal : −20 % → CA max ». **Recommander une baisse tarifaire de 20 % à un actuaire, indépendamment de ses données, est le constat le plus lourd de cet agent.**
 
+> ✅ **`a4/C1`** · **FERMÉ — vérifié le 27/08/2026 par deux méthodes.**
+> **① Code d'aujourd'hui, par AST** : **aucune** définition contenant `optimisation` dans A4, et **0** mention textuelle de `_optimisation_tarifaire`. La fonction n'existe plus.
+> **② `REMESURE_A3_A4_A5.md` (25/08)** : retirée au lot L0.
+> ⚠️ *Le « tarif optimal −20 %, toujours » ne peut plus être publié : il n'a plus de producteur.*
+
 **C2 — Le monitoring de dérive est intégralement simulé.**
 ```
   distributions tirees par np.random.beta = True
@@ -30,7 +35,7 @@ Avec ε = −1.5, le CA vaut `p^(1+ε) = p^(−0,5)` — **décroissant en p** :
 ```
 `scores_ref = np.random.beta(2, 5, 1000)`, `scores_actuels = np.random.beta(2.2, 4.8, 1000)`, `seed=42` → **le PSI est une constante du module**. Les 12 mois d'« historique Gini » sont eux aussi simulés (`gini_reference * (1 − 0.002·i + N(0, 0.003))`). Publié sous le titre « Monitoring de la dérive des modèles ML **en production** », avec la recommandation « ✅ Modèle stable — prochaine révision dans 3 mois ». **À décharge** : `psi_source = "simulé"` figure dans le message H2, et la docstring le dit. Le graphique `monitoring_gini`, lui, ne porte aucune marque.
 
-> ✅ **FERMÉ — vérifié le 26/08/2026 par DEUX méthodes indépendantes.**
+> ✅ **`a4/C2`** · **FERMÉ — vérifié le 26/08/2026 par DEUX méthodes indépendantes.**
 > **① Lecture du code** : zéro appel `np.random.*` dans tout `a4_ml/agent.py`
 > (relevé **par AST**). Le PSI vient de `_psi_reel(X_train, X_test)` sur les
 > features réelles ; le KS des scores réels ; et la courbe ne porte plus que
@@ -63,7 +68,7 @@ Avec ε = −1.5, le CA vaut `p^(1+ε) = p^(−0,5)` — **décroissant en p** :
 ```
 Cause : `m.get('gini', 0)` — la clé du classement est `gini_test`. Les couleurs, calculées sur ce zéro, sortent toutes en **rouge**. Le graphique est intitulé « Barres Train vs Test » avec la légende « un grand écart = surapprentissage ».
 
-> ✅ **DÉJÀ FERMÉ — constaté le 25/08/2026 en le RE-MESURANT, pas en le relisant.** Mesuré sur un vrai run : `validation_ml` et `hypotheses` sont **identiques sur toutes les clés** — h1 VERT, h2 VERT, h3 ROUGE, h4 AMBRE, statut_global ROUGE. Aucune divergence.
+> ✅ **`a4/C4`** · **DÉJÀ FERMÉ — constaté le 25/08/2026 en le RE-MESURANT, pas en le relisant.** Mesuré sur un vrai run : `validation_ml` et `hypotheses` sont **identiques sur toutes les clés** — h1 VERT, h2 VERT, h3 ROUGE, h4 AMBRE, statut_global ROUGE. Aucune divergence.
 > ⚠️ *Le correctif était dans le code, jamais reporté ici. L'archive prévient elle-même : « ils mesurent l'état ACTUEL, pas celui du jour de l'audit — lire le chiffre, pas l'étiquette ». Épinglé désormais par `test_hypotheses_non_testees.py`.*
 
 **C4 — Deux validations contradictoires dans le même dictionnaire de retour.**
@@ -75,7 +80,7 @@ Cause : `m.get('gini', 0)` — la clé du classement est `gini_test`. Les couleu
 
 **C5 — La courbe de Lorenz est tracée, pas mesurée** — même formule qu'A3 (`t ** (1/(1+2g))`). Ici s'ajoute une contradiction d'axe : l'abscisse annonce « % contrats (**du moins au plus risqué**) » alors que le Gini trie **décroissant**, le plus risqué d'abord.
 
-> ✅ **FERMÉ.** Le dénominateur était le littéral `8`, qui ne correspondait **à aucun des trois comptes réels** : 6 candidats dans `modeles_a_calibrer`, 10 dans le catalogue `FAMILLES_MODELES_ML`, 6 réellement testés. Il dérive maintenant de la **liste des candidats**, enregistrée au rapport. Mesuré : « Modèles testés : **6/6** ». *Le numérateur était déjà dérivé ; seul le dénominateur était inventé.*
+> ✅ **`a4/C6`** · **FERMÉ.** Le dénominateur était le littéral `8`, qui ne correspondait **à aucun des trois comptes réels** : 6 candidats dans `modeles_a_calibrer`, 10 dans le catalogue `FAMILLES_MODELES_ML`, 6 réellement testés. Il dérive maintenant de la **liste des candidats**, enregistrée au rapport. Mesuré : « Modèles testés : **6/6** ». *Le numérateur était déjà dérivé ; seul le dénominateur était inventé.*
 
 **C6 — « Modèles testés : 6/8 »** publié dans le commentaire actuaire, alors que la boucle n'en déclare que **6**. Le dénominateur est faux, pas le numérateur.
 
@@ -83,11 +88,11 @@ Cause : `m.get('gini', 0)` — la clé du classement est `gini_test`. Les couleu
 
 **C7 — « ML ×8 » : 12 mentions de « 8 » dans le module, 6 modèles réels.** La boucle et sa propre docstring disent 6 ; le bloc `__main__` en liste 6. L'en-tête annonce nommément **RandomForest, GAM et RégQuantile**, qui ne sont dans aucune boucle — **GAM n'existe nulle part**, pas même dans `FAMILLES_MODELES_ML`.
 
-> ✅ **FERMÉ** — même geste qu'`a3/C9` : la légende dérive de `len(items)`. Mesuré : 4 hypothèses → légende « 4 ✅ ».
+> ✅ **`a4/C8`** · **FERMÉ** — même geste qu'`a3/C9` : la légende dérive de `len(items)`. Mesuré : 4 hypothèses → légende « 4 ✅ ».
 
 **C8 — La scorecard annonce « 3 ✅ = modèle validé » et liste 4 items.** Même défaut qu'A3.
 
-> ✅ **FERMÉ — la docstring porte enfin la SECONDE condition**, et le seuil devient `SEUIL_GINI_ML_EXPLOITABLE = 0.10`, nommé au niveau module. ⚠️ **La règle du code est défendable** — un ML qui discrimine honnêtement sans battre le GLM n'est pas sans valeur — **mais elle était invisible** : un littéral enfoui dans une branche qui décide d'un statut réglementaire. *Un chiffre qui fait la différence entre AMBRE et ROUGE se nomme, sinon personne ne peut le discuter.*
+> ✅ **`a4/C9`** · **FERMÉ — la docstring porte enfin la SECONDE condition**, et le seuil devient `SEUIL_GINI_ML_EXPLOITABLE = 0.10`, nommé au niveau module. ⚠️ **La règle du code est défendable** — un ML qui discrimine honnêtement sans battre le GLM n'est pas sans valeur — **mais elle était invisible** : un littéral enfoui dans une branche qui décide d'un statut réglementaire. *Un chiffre qui fait la différence entre AMBRE et ROUGE se nomme, sinon personne ne peut le discuter.*
 
 **C9 — Le statut RAG ROUGE annoncé n'est pas atteint.** La docstring dit « ROUGE : Aucun modèle ML ne bat le GLM ». Mesuré : ML 0.14 contre GLM 0.30 → **AMBRE**, parce que la seconde branche accepte `meilleur_gini_ml > 0.10`.
 

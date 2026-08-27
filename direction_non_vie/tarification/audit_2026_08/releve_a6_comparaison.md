@@ -149,7 +149,7 @@ d'être portés en constats à part entière.*
 > était perdu n'est pas « 75 % de la fiche », c'est exactement le contenu que
 > rien d'autre ne produit — l'aide à la décision elle-même.*
 
-> ✅✅ **`C5` ET `C11` FERMÉS ENSEMBLE — ET ILS NE POUVAIENT PAS L'ÊTRE
+> ✅ **`a6/C5` + `a6/C11`** ·  **`C5` ET `C11` FERMÉS ENSEMBLE — ET ILS NE POUVAIENT PAS L'ÊTRE
 > AUTREMENT.** Mesuré après correctif, par exécution : **12/12 champs de la
 > fiche atteignent le classeur** (3/12 avant), listes rendues **ligne à ligne**
 > et non en `repr` Python.

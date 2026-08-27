@@ -17,7 +17,7 @@
 ```
 `_bandeau` rend « Arrêté : {date_str} » et **28 sites** lui passent `now`. L'arrêté réel, transmis par l'appelant, n'apparaît qu'**une seule fois** (un KPI de l'onglet 1 du rapport équipe). Sur un livrable réglementaire, l'arrêté est une date de référence, pas une date d'impression.
 
-> ✅ **FERMÉ le 27/08/2026 — `ea37564`. Deux méthodes.**
+> ✅ **`services/C1`** · **FERMÉ le 27/08/2026 — `ea37564`. Deux méthodes.**
 > **① AST** : **0** site `_bandeau(… now …)` — *l'origine en mesurait 28.*
 > **② Exécution** de `libelle_arrete` : absent → « non déclaré » · vide →
 > « non déclaré » · illisible → « non déclaré (illisible : …) » · déclaré →
@@ -32,7 +32,7 @@
 ```
 L'onglet s'intitule « Fidélité CANN Wüthrich (2019) » et cite un article de **provisionnement chain-ladder**, pas l'article CANN de tarification que l'agent implémente. C'est le motif `Art. 77` : une citation attribuée au mauvais texte, dans un document signé.
 
-> ✅ **FERMÉ le 27/08/2026 — `f63be18` (+ `d2dc672`). Deux méthodes.**
+> ✅ **`services/C2`** · **FERMÉ le 27/08/2026 — `f63be18` (+ `d2dc672`). Deux méthodes.**
 > **① Lecture** : la citation chain-ladder a disparu du source.
 > **② Exécution** : l'Excel A5 cite « Wüthrich, M.V. & Merz, M. (2019),
 > *Editorial: Yes, we CANN!*, ASTIN Bulletin 49(1), 1-3, doi:10.1017/asb.2018.42 ».
@@ -48,7 +48,7 @@ L'onglet s'intitule « Fidélité CANN Wüthrich (2019) » et cite un article de
 ```
 La boucle d'A4 en calibre **6**. Le rapport consolidé « destiné à l'actuaire responsable et à la Direction » republie le faux compte dans ses trois formats.
 
-> ✅ **FERMÉ le 27/08/2026 — `d2dc672`. Deux méthodes.**
+> ✅ **`services/C3`** · **FERMÉ le 27/08/2026 — `d2dc672`. Deux méthodes.**
 > **① Lecture** : **0** littéral « 8 modèles » / « ×8 » hors commentaire dans
 > les **trois** producteurs (`tarif_excel`, `rapport_equipe_tarif`,
 > `rapport_modeles_tarif`).
@@ -64,7 +64,7 @@ La boucle d'A4 en calibre **6**. Le rapport consolidé « destiné à l'actuaire
 ```
 C'est le fait du lot ①, retrouvé par l'autre bout : `HYPOTHESES` énumère H1–H4 GLM et H1–H4 ML. La déviance résiduelle, qui peut plafonner le statut, n'a pas de ligne.
 
-> ✅ **FERMÉ le 27/08/2026 — `d2dc672`. Deux méthodes.**
+> ✅ **`services/C4`** · **FERMÉ le 27/08/2026 — `d2dc672`. Deux méthodes.**
 > **① Lecture** : `h5_deviance` figure dans `HYPOTHESES`, avec le commentaire
 > qui dit pourquoi — *« PLAFONNANTE (A6) : elle peut bloquer le VERT »*.
 > **② Exécution** : le tableau compte **9** hypothèses, contre **8** à l'origine.
@@ -81,7 +81,7 @@ C'est le fait du lot ①, retrouvé par l'autre bout : `HYPOTHESES` énumère H1
 
 ### B — Ce qu'une surface dit et qu'une autre tait (2)
 
-> ✅ **FERMÉ le 27/08/2026 — `d2dc672`. Deux méthodes.**
+> ✅ **`services/C5`** · **FERMÉ le 27/08/2026 — `d2dc672`. Deux méthodes.**
 > **① Lecture, sur SON assiette** — les valeurs du modèle retenu : **0** site
 > `.get(champ, 0)` sur `score_global`, `overfit_ratio`, `gini_test` et
 > `interpretabilite`. Elles passent par `F.nombre`.
@@ -103,7 +103,7 @@ C'est le fait du lot ①, retrouvé par l'autre bout : `HYPOTHESES` énumère H1
 ```
 L'Excel équipe porte **six synthèses réglementaires** (`avertissement_walk_forward`, exclusions, alertes d'expérience, DL, qualité, mapping, plan amputé) que ses trois autres formats — HTML, Word, PDF — **n'ont pas du tout**. Trois d'entre elles sont mesurées ci-dessus. C'est le même rapport, sous quatre formes, dont une seule avertit.
 
-> ✅ **FERMÉ le 27/08/2026 — `4534ea7`. Deux méthodes.**
+> ✅ **`services/C6`** · **FERMÉ le 27/08/2026 — `4534ea7`. Deux méthodes.**
 > **① AST** : les **quatre** exports (`excel`, `html`, `word`, et `pdf` via
 > `html`) délèguent au constructeur partagé `_syntheses_ou_calcul` —
 > l'orchestrateur les calcule **une fois** et les partage.

@@ -45,7 +45,7 @@ d'être proportionnelle à l'exposition* ». Écart mesuré : **−8,3 %**. Le
 garde-fou existe, il est correct, et il regarde une liste où l'interaction ne
 figure pas.
 
-> ✅ **FERMÉ — lot 1.2.** Le contrôle porte désormais sur **trois surfaces** :
+> ✅ **`plan/C1`** · **FERMÉ — lot 1.2.** Le contrôle porte désormais sur **trois surfaces** :
 > le **nom source** du facteur, les **opérandes d'interaction**, et les
 > **colonnes produites** (le contrôle d'origine, conservé). Refusé au
 > chargement du plan, donc avant qu'aucune prime ne soit calculée.
@@ -118,7 +118,7 @@ exclu, et l'objet déclare le contrôle exécuté.
 anti-fuite **par le nom**. `nb` et `cout` ne le sont pas — et le plan laisse
 l'actuaire nommer ses cibles librement.
 
-> ✅ **FERMÉ — lot 1.2.** Les deux cibles ont désormais **la même garde que
+> ✅ **`plan/C2`** · **FERMÉ — lot 1.2.** Les deux cibles ont désormais **la même garde que
 > l'exposition**, sur les mêmes trois surfaces. Refusé au chargement du plan —
 > donc la protection ne dépend plus du nombre d'arguments que l'appelant a
 > passés, et **A4/A5/A6 (`col_cible: str`, une seule cible) sont couverts comme
@@ -164,7 +164,7 @@ et le facteur perdu n'est justement pas dans `colonnes_produites()`.
 coûté −17,4 % de Gini**, et le module s'est doté d'un détecteur pour cela. Ce
 détecteur ne voit pas cette amputation-ci.
 
-> ✅ **FERMÉ — lot 1.2.** `Facteur.__post_init__` valide désormais
+> ✅ **`plan/C3`** · **FERMÉ — lot 1.2.** `Facteur.__post_init__` valide désormais
 > **l'APPARTENANCE avant la combinaison** : `type`, `encodage` et
 > `transformation` doivent être des valeurs connues. ⚠️ **Les jeux de valeurs
 > sont DÉRIVÉS des `Literal` par `get_args`, jamais recopiés** — une valeur
@@ -271,7 +271,7 @@ cette mesure le confirme, elle ne l'ouvre pas.*
 la liste des interdits. Sans conséquence pratique — une exposition catégorielle
 n'a pas de sens actuariel — mais c'est la même faille de forme que C1.
 
-> ✅ **FERMÉ — lot 1.2, SANS CORRECTIF PROPRE.** Le contrôle de C1 porte
+> ✅ **`plan/C9`** · **FERMÉ — lot 1.2, SANS CORRECTIF PROPRE.** Le contrôle de C1 porte
 > maintenant sur le **nom source** du facteur, pas seulement sur les colonnes
 > produites : `expo` déclaré en one-hot est refusé avant d'avoir produit
 > `expo_long`. *C'est la preuve que le correctif visait la propriété et non le

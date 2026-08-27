@@ -42,7 +42,7 @@ l.862 **avant l'appel**, sur la seule présence des arguments :
 `not (df is None or not cibles)`. La propriété atteste donc la fourniture des
 arguments, pas l'exécution du contrôle.
 
-> ✅✅ **`C1` ET `C7` FERMÉS ENSEMBLE — le couplage est ORIENTÉ.**
+> ✅ **`conformite/C1` + `conformite/C7`** ·  **`C1` ET `C7` FERMÉS ENSEMBLE — le couplage est ORIENTÉ.**
 > Publier `C7` sans corriger `C1` aurait mis dans le livrable l'attestation
 > **fausse** « garde-fou n°4 exécuté » sur une matrice où il n'avait examiné
 > aucune colonne. **`C1` a donc été corrigé d'abord, dans le même changement.**
@@ -216,7 +216,7 @@ tarification ». L'actuaire est désormais invité à réagir. Mais la variable 
 toujours hors du modèle, et le texte du module se lit comme si la destruction
 avait cessé.
 
-> ✅ **FERMÉ — lot 1.3, PAR LA PRÉCISION DU TEXTE, PAS PAR UN ÉLARGISSEMENT.**
+> ✅ **`conformite/C3`** · **FERMÉ — lot 1.3, PAR LA PRÉCISION DU TEXTE, PAS PAR UN ÉLARGISSEMENT.**
 > Le commentaire du module inscrit maintenant les deux chiffres côte à côte —
 > *garde-fou n°3 : 6/6 survivent · garde-fou n°1 : 0/6 passent* — et dit
 > lequel la règle de principe a corrigé.
@@ -270,7 +270,7 @@ centrale de la RC Pro**, et le module déclare précisément la RC Pro dans sa
 liste blanche. L'exclusion est journalisée en « ACTION REQUISE » — donc
 visible — mais l'actuaire doit deviner que le motif est un mot dans le nom.
 
-> ✅ **FERMÉ — lot 1.3, EN DEUX TEMPS, ET LES DEUX DOIVENT ÊTRE DITS.**
+> ✅ **`conformite/C5`** · **FERMÉ — lot 1.3, EN DEUX TEMPS, ET LES DEUX DOIVENT ÊTRE DITS.**
 >
 > **① Le bug de SOUS-CHAÎNE — 3 des 6 récupérées.** Le test était
 > `any(m in suffixe for m in MOTS_METRIQUES_INTERDITS)`. Mesuré :
@@ -331,7 +331,7 @@ l'actuaire peut légitimement contester : B7 l'a prouvé au prix fort, et C2
 ci-dessus montre que le cas se reproduit. **Le seul motif discutable est celui
 qui est publié comme indiscutable.**
 
-> ✅ **FERMÉ — lot ②, INDISSOCIABLE DE `C1`.** Voir le bloc sous `C1` : la propriété est propagée `MatriceX` → A3/A4/A5 → A6 → l'Excel, via la nouvelle source unique `avertissement_controle_effet`. ⚠️ **Elle n'a pu être publiée qu'une fois rendue VÉRIDIQUE** — la publier avant aurait attesté un contrôle qui n'avait examiné aucune colonne.
+> ✅ **`conformite/C7`** · **FERMÉ — lot ②, INDISSOCIABLE DE `C1`.** Voir le bloc sous `C1` : la propriété est propagée `MatriceX` → A3/A4/A5 → A6 → l'Excel, via la nouvelle source unique `avertissement_controle_effet`. ⚠️ **Elle n'a pu être publiée qu'une fois rendue VÉRIDIQUE** — la publier avant aurait attesté un contrôle qui n'avait examiné aucune colonne.
 > ⚠️ **Et l'état SAIN est publié lui aussi** (« exécuté sur toutes les cibles ») : sans cela, l'actuaire ne pourrait pas distinguer « tout va bien » de « rien n'a été vérifié » — le défaut même que `C1` décrivait.
 
 **C7 — La propriété `controle_effet_execute` n'atteint aucun livrable.** Elle a

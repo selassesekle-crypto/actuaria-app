@@ -13,8 +13,8 @@ l'état d'aujourd'hui.*
 
 | # | critère | état mesuré aujourd'hui |
 |---|---|---|
-| **S1** | **Rien de faux n'est publié** | ⛔ **107 constats ouverts** — *recomptés le 27/08, méthode au §②* |
-| **S2** | **Rien de fermé ne peut régresser** | 🟡 **40 fermés sur 41 sont épinglés** par un contrôle positif nommé — `a5/C5` ne l'est toujours pas |
+| **S1** | **Rien de faux n'est publié** | ⛔ **110 constats ouverts** — *dérivés le 27/08 des clés de fermeture, méthode au §②* |
+| **S2** | **Rien de fermé ne peut régresser** | 🟡 **37 fermés, 1 partiel (`pipeline/C1`), et `a5/C5` corrigé sans être épinglé.** ⚠️ L'archive elle-même est désormais épinglée : `test_archive_cles_fermeture.py` fait tomber la gate sur un bloc de fermeture qui ne nomme pas son constat |
 | **S3** | **Un tarif signé se rejoue à l'identique** | 🟡 **RE-MESURÉ LE 27/08 — 2 fermés, 1 hérité, 1 PARTIEL.** ✅ **l'empreinte du plan est versionnée** : `s1:9b6d4f70080ad771`, **rejouée identique** sur les 20 plans (`2cb43ef`). ✅ **le livrable ne publie plus un `now()` sous l'étiquette « Arrêté »** : **0** site `_bandeau(… now …)`, contre **28** à l'origine ; absent → « non déclaré », illisible → « non déclaré (illisible : …) » (`ea37564`). ⬜ *hérité, non re-mesuré ici* : le tarif **déclaratif** reproductible au bit près (0,00e+00). ⚠️ **PARTIEL — le tarif DL** : le `seed` est **déclaré** (paramètre de `A5.run`), **appliqué** à `torch.manual_seed` et `np.random.seed` (l.528-529) et **inscrit au rapport**. ⚠️⚠️ **Mais la reproductibilité bout-en-bout n'est PAS prouvée ici** : elle demande un double run d'A5, non fait. *Le seed posé n'est pas la reproductibilité mesurée.* |
 | **S4** | **Un seul chemin — ou des chemins également gardés** | ⛔ **RE-MESURÉ LE 27/08 — inchangé, et l'asymétrie est nette.** **L'orchestrateur a toujours 0 appelant de production** (2 importeurs au total, tous hors production — relevé par AST). ⚠️⚠️ **Et la couche qualité départage les deux chemins** : `pipeline_tarifaire` (déclaratif) importe `core.qualite_donnees` **et** `core.conformite_reglementaire` ; `pipeline_agents` **n'en importe AUCUN**. *Deux chemins vers un tarif signé, un seul gardé.* ⬜ *non re-derivable* : le « 5 assemblages dans l'app » date d'une définition non consignée — **je ne le réaffirme pas sans la refaire**. |
 | **S5** | **Tout ce qui tarife est atteignable par une gate** | 🟡 **RE-MESURÉ LE 27/08, ET LA NUANCE COMPTE.** `actuaria_app.py` (**5 208 l**) est **importable** depuis le lot 0.1 (`07be8c0`) — mais **AUCUN test ne l'importe** ; **4 le LISENT comme un fichier** (`core/test_imports_app.py` le dit lui-même : *« ce test relit le fichier, il ne l'importe pas »*). ⚠️ *Ce qui est exercé, c'est sa STRUCTURE, pas son comportement.* ✅ `core/elasticite.py` (**988 l**) n'est plus hors de portée : **2 tests l'importent** (`test_elasticite.py`, `test_a4_ml.py`) — ⚠️ **testé n'est toujours pas audité**, il reste à l'ouverture HORS RANG. ⛔ `services/excel_helpers.py` (**151 l**) : **0 test ne l'importe**. |
@@ -39,48 +39,57 @@ lui-même**.
 | | |
 |---|---|
 | constats relevés (vagues 1 + 2) | **147** — *recomptés le 27/08* |
-| fermés **et épinglés** | **40** |
-| corrigé, **non épinglé** | **1** (`a5/C5`) |
-| **⛔ OUVERTS** | **107** |
+| fermés **et épinglés** | **37** |
+| corrigé, **non épinglé** | **1** (`a5/C5`) · **partiel** : `pipeline/C1` |
+| **⛔ OUVERTS** | **110** |
 | lignes lues intégralement | **22 693** sur 23 863 du périmètre |
 | jamais auditées | **1 170 l** + `actuaria_app.py` (5 181 l) |
 | preuves qui se relancent | **35, 0 échec** |
 | gates de lot au 27/08 | `core` **187 OK** · `tarification` **466 OK** (skipped=2) |
 
-## ⚠️⚠️ CES CHIFFRES ONT UNE ASSIETTE, ET ELLE SE DÉCLARE
+## ⚠️⚠️ CES CHIFFRES SE DÉRIVENT — ET LE MÉCANISME EST DANS LA GATE
 
-**Recomptés le 27/08/2026 — les précédents (« 146 · 18 · 129 ») dataient d'avant
-quatre lots.** La méthode, pour qu'on puisse la refaire :
+**Recomptés le 27/08/2026. Les précédents — « 146 · 18 · 129 », puis « 147 · 40
+· 107 » — étaient FAUX, et pour la même raison.**
 
 - **147 constats** = en-têtes des 14 `releve_*.md`, **DEUX formes** :
-  `**Cn — …**` (135) *et* `**Cn** — …` (12). ⚠️ *Ne compter que la première en
-  rate 12* — c'est l'erreur que ce recompte a faite d'abord. Aucun doublon.
-- **40 fermés** = union de trois sources : le marqueur ✅ dans le relevé (**32**)
-  · la section FERMÉS de `REMESURE` (**+8** que le relevé ne marquait pas) ·
-  les fermetures épinglées mais non reportées (**+0** — *plus aucune*).
-  ⚠️ **LE 27/08, REPORTER `services/C1`…`C6` DANS LEUR RELEVÉ N'A PAS CHANGÉ LE
-  TOTAL** : 26+8+6 et 32+8+0 donnent le même **40**. *C'est la vérification que
-  le compte est bien une UNION et non une addition.*
-  ⚠️ **CE CHIFFRE A ÉTÉ FAUX UNE PREMIÈRE FOIS (41).** Je l'avais composé *en
-  prose*, en additionnant les sources — et `a4/C2` figurait déjà dans deux
-  d'entre elles. **Une union se calcule sur des ENSEMBLES, jamais par addition
-  de comptes** : deux sources qui se recouvrent ne s'ajoutent pas.
+  `**Cn — …**` et `**Cn** — …`. *N'en compter qu'une en rate douze.*
+- **37 fermés** = les **38 clés d'attribution** portées par les blocs `> ✅`,
+  **moins `pipeline/C1`** qui n'est fermé que **pour l'illisibilité**.
+- **1 partiel** : `pipeline/C1`. ⚠️ **Arbitré : il compte OUVERT** — c'est le
+  sens sûr de l'erreur.
+
+⚠️⚠️ **POURQUOI LE COMPTE A ÉTÉ FAUX DEUX FOIS, ET CE QUI L'EMPÊCHE MAINTENANT**
+
+Les blocs de fermeture ne **nommaient pas** leur constat : ils étaient
+seulement *placés à côté*. Et le placement n'était pas uniforme —
+**le lot du 25/08 écrit le bloc AVANT l'en-tête du constat qu'il ferme**, tous
+les autres APRÈS. Un parseur « en-tête → en-tête suivant » attribuait donc dix
+blocs au mauvais constat. *Le chiffre était faux dans un document qui fait foi,
+et rien ne pouvait le montrer.*
+
+⚠️ **UNIFORMISER LE PLACEMENT AURAIT DÉPLACÉ LE PROBLÈME, PAS RÉSOLU** : la
+main suivante n'aurait eu aucun moyen de savoir dans quel sens écrire.
+**Chaque bloc porte désormais SA CLÉ** — `> ✅ **`a3/C8`** · …` — et la position
+n'a plus d'importance, pour un parseur comme pour un lecteur.
+
+✅ **ÉPINGLÉ** par `test_archive_cles_fermeture.py` (6 contrôles) : un bloc sans
+clé, ou une clé qui ne désigne aucun constat du fichier, **fait tomber la
+gate**. ⚠️ Il distingue **l'attribution** (le marqueur d'ouverture, avant le
+`·`) du **renvoi** (« même geste qu'`a3/C9` ») — écrit sans cette distinction,
+il accusait quatre renvois légitimes.
+
+⚠️ **ET LE COMPTE NE DÉPEND PLUS QUE D'UNE SOURCE** : les trois constats que
+seul `REMESURE` déclarait fermés (`a3/C1`, `a4/C1`, `a5/C2`) ont reçu leur
+propre bloc, chacun **re-vérifié au code d'aujourd'hui** — `predict(X)` sans
+offset l.1512 · `_optimisation_tarifaire` **0 mention** · `historiques.get(…)`
+l.2014.
 
 ⚠️⚠️ **CE COMPTE MESURE CE QUI EST ENREGISTRÉ, PAS CE QUE LE CODE FAIT.** Une
-fermeture réalisée sans être reportée reste comptée **OUVERTE**. C'est délibéré,
-et c'est le bon sens de l'erreur : **se tromper vers « ouvert » fait rouvrir un
-dossier clos ; se tromper vers « fermé » laisse un défaut dans un livrable
-signé.** Le compte est donc une **borne basse des fermetures**.
+fermeture non reportée reste comptée **OUVERTE** — se tromper vers « ouvert »
+rouvre un dossier clos ; vers « fermé », on laisse un défaut dans un livrable
+signé.
 
-✅ **PLUS AUCUN RELEVÉ N'EST EN RETARD SUR LE CODE** (mesuré le 27/08) :
-`services/C1`…`C6` et `a3/C6` y sont désormais reportés, chacun **avec ses deux
-méthodes de vérification** et son contrôle positif nommé.
-
-⚠️⚠️ **ET LE REPORT A PRODUIT UN CONSTAT NEUF** — `rapport_modeles_tarif.py:1088`
-formate `cred6.get('k', 0):.4f` : même famille que `services/C5`, mais **hors de
-son assiette** (crédibilité Bühlmann-Straub, pas les valeurs du modèle retenu).
-Ses voisins immédiats appellent `F.nombre`. *Ni corrigé ni classé — rendu à
-l'arbitrage.*
 
 ---
 

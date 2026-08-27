@@ -10,7 +10,11 @@
 
 ### A — Publie du FAUX à un actuaire qui signe (6)
 
-> ✅ **LA CAUSE NOMMÉE PAR CE CONSTAT EST DÉJÀ FERMÉE.** Mesuré le 25/08/2026 :
+> ✅ **`a5/C2`** · **FERMÉ — vérifié le 27/08/2026 par deux méthodes.**
+> **① Code d'aujourd'hui** : `histo_h1 = historiques.get(_cle_h1) or []` (l.2014) — H1 lit l'historique **réel**, elle n'en simule plus.
+> **② `REMESURE_A3_A4_A5.md` (25/08)** l'établissait déjà, l.2004-2014.
+
+> ✅ **`a5/C1`** · **LA CAUSE NOMMÉE PAR CE CONSTAT EST DÉJÀ FERMÉE.** Mesuré le 25/08/2026 :
 > `_valider_hypotheses_dl` lit `metriques.get('cann', {}).get('gini_test', 0)` —
 > **la bonne clé**. Le `.get('gini', 0)` a disparu. *Correctif présent dans le
 > code, jamais reporté ici.*
@@ -75,7 +79,7 @@ La légende dit « Les barres bleue/dorée doivent dépasser la ligne pointillé
 ```
 La docstring annonce « la perte de **validation** ». Il n'y a pas de jeu de validation : les poids retenus sont ceux qui minimisent la perte **sur le test**, et le Gini test publié est donc optimiste. Le module cite pourtant Kaufman et al. (2012) sur la fuite — et l'évite correctement pour le scaler.
 
-> ✅ **FERMÉ — lot 1.1.** Trois jeux désormais : **68 % train · 12 % validation · 20 % test**, la validation découpée **avant** le scaler comme le test. Les deux calibrateurs **exigent** `X_val`/`y_val` (`raise ValueError`) : aucun repli silencieux vers le test ne peut rouvrir la fuite. `y_test` n'est même plus tensorisé.
+> ✅ **`a5/C6`** · **FERMÉ — lot 1.1.** Trois jeux désormais : **68 % train · 12 % validation · 20 % test**, la validation découpée **avant** le scaler comme le test. Les deux calibrateurs **exigent** `X_val`/`y_val` (`raise ValueError`) : aucun repli silencieux vers le test ne peut rouvrir la fuite. `y_test` n'est même plus tensorisé.
 > **⚠️ L'OPTIMISME QUE CETTE FUITE CACHAIT, mesuré à seed constant :**
 > ```
 >   CANN     0.3019 -> 0.2998    -0.0021    -0.7 %
@@ -93,7 +97,7 @@ La docstring annonce « la perte de **validation** ». Il n'y a pas de jeu de va
 ```
 Le fichier de test le note lui-même : *« A5 n'en fixe AUCUN → sans ces lignes le Gini diffère à chaque exécution »* — et le compense de l'extérieur. Le dépôt invoque ailleurs « Exigence S2 : tout calcul actuariel doit être reproductible ».
 
-> ✅ **FERMÉ — lot 1.1.** `run(seed=42)` : paramètre **déclaré, surchargeable, et inscrit au rapport** — un actuaire qui rejoue un tarif retrouve le seed. Posé dans `run()`, **jamais au niveau module** (ce serait le défaut `a1/C6` sous un autre nom).
+> ✅ **`a5/C7`** · **FERMÉ — lot 1.1.** `run(seed=42)` : paramètre **déclaré, surchargeable, et inscrit au rapport** — un actuaire qui rejoue un tarif retrouve le seed. Posé dans `run()`, **jamais au niveau module** (ce serait le défaut `a1/C6` sous un autre nom).
 > **⚠️ CE QUE LA NON-REPRODUCTIBILITÉ COÛTAIT**, trois exécutions strictement identiques :
 > ```
 >   CANN    0.3027 · 0.3018 · 0.3033   etendue 0.0015    0.5 %

@@ -29,7 +29,7 @@ Mesuré sur le vocabulaire réel (261 noms, 20 plans + `SYNONYMES_COLONNES`) : *
 
 **C3 — `prime_pure > 0` annoncé, `< 0` testé.** Docstring [l.719](direction_non_vie/tarification/a1_ingestion/agent.py:719). Mesuré : 100 lignes à `prime_pure = 0` → `aberrants = aucun`.
 
-> ✅ **`C3` ET `C4` FERMÉS — lot ③. Dans les deux cas, LE CODE CONTREDISAIT SA PROPRE DOCSTRING.**
+> ✅ **`a1/C3` + `a1/C4`** · **`C3` ET `C4` FERMÉS — lot ③. Dans les deux cas, LE CODE CONTREDISAIT SA PROPRE DOCSTRING.**
 > `C4` : la docstring déclarait « Exposition : **0 < exposition ≤ 1** » et le code écrivait `between(0, 1)`, **inclusif des deux bornes**. Corrigé en `inclusive='right'` — mesuré, `expo_ok_pct` passe de 100,0 à 80,0 sur 20 % d'expositions nulles, et **concorde enfin avec l'alerte 4d**. ⚠️ Second sens : une exposition de **1,0 reste saine** — la borne haute ne bouge pas.
 > `C3` : la docstring déclarait « Montants : **prime_pure > 0** » et le code testait `< 0` sur un groupe de quatre colonnes. ⚠️ **Les quatre ne partagent pas le même contrat** : `cout_total_sinistres = 0` est le cas **NORMAL** d'un contrat sans sinistre. Les traiter en bloc, c'était appliquer à l'une le contrat de l'autre. `prime_pure` est sortie du groupe et testée `<= 0` ; les trois autres restent en `< 0`.
 > ⚠️ **`prime_commerciale = 0` reste À INSTRUIRE, pas corrigé** : une prime commerciale nulle est probablement aberrante, mais aucune docstring ne le déclare — je ne l'étends pas de moi-même.

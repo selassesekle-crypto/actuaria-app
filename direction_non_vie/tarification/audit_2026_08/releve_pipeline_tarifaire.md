@@ -40,7 +40,7 @@ A1** — le commentaire l.276 le dit lui-même.
 
 *Preuve : `preuves/audit_pipeline_ter.py`.*
 
-> ✅ **FERMÉ POUR L'ILLISIBILITÉ — lot `pipeline/C1`. ET PAS POUR LA
+> ✅ **`pipeline/C1`** · **FERMÉ POUR L'ILLISIBILITÉ — lot `pipeline/C1`. ET PAS POUR LA
 > PLAUSIBILITÉ : les deux ne se confondent pas.**
 >
 > `tarifer()` refuse désormais **avant** de tarifer, via
