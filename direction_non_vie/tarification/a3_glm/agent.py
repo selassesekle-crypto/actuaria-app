@@ -119,7 +119,10 @@ except ImportError:
 # 'civilite' entrait dans le GLM. A3 appelle désormais filtrer_genre(),
 # comme A2/A4/A5/A6 : une seule implémentation, pour tous.
 from core.charts_tarif import (
-    FOND_SOMBRE, couleur_rag, couleur_texte_rag, glyphe_rag,
+    FOND_SOMBRE,
+    couleur_rag,
+    couleur_texte_rag,
+    glyphe_rag,
 )
 from core.conformite_reglementaire import (
     BASE_GINI_COMPTAGE, BASE_GINI_COUT_MOYEN, BASE_GINI_UNITAIRE,
@@ -1807,7 +1810,7 @@ class AgentA3GLM:
         df_test:      pd.DataFrame
     ) -> str:
         """Commentaire actuaire sénior en 3 niveaux sur les GLM."""
-        emoji  = {'VERT': '🟢', 'AMBRE': '🟡', 'ROUGE': '🔴'}[statut_rag]
+        emoji  = glyphe_rag(statut_rag)
         m_poi  = res_poisson['metriques']
         m_gam  = res_gamma['metriques']
         m_twe  = res_tweedie['metriques']
@@ -1917,7 +1920,7 @@ class AgentA3GLM:
         statut_rag, commentaire, res_poisson, res_gamma
     ) -> None:
         """Affiche le rapport dans la console Colab."""
-        emoji = {'VERT': '🟢', 'AMBRE': '🟡', 'ROUGE': '🔴'}[statut_rag]
+        emoji = glyphe_rag(statut_rag)
         sep   = "═" * 65
 
         print(f"\n{sep}")

@@ -38,6 +38,7 @@ from typing import Dict, Any, Optional, List, Tuple
 
 import numpy as np
 import pandas as pd
+from core.charts_tarif import glyphe_rag
 
 try:
     from ..services.tarif_excel import export_excel_a1
@@ -984,7 +985,7 @@ class AgentA1Ingestion:
         df:           pd.DataFrame,
         client_id:    Optional[str]
     ) -> str:
-        emoji = {'VERT': '🟢', 'AMBRE': '🟡', 'ROUGE': '🔴'}[statut_rag]
+        emoji = glyphe_rag(statut_rag)
 
         n1 = (
             f"{emoji} INGESTION — {statut_rag}\n"
@@ -1039,7 +1040,7 @@ class AgentA1Ingestion:
         self, audit_id, sous_branche, qualite,
         statut_rag, score_qual, commentaire, client_id
     ) -> None:
-        emoji = {'VERT': '🟢', 'AMBRE': '🟡', 'ROUGE': '🔴'}[statut_rag]
+        emoji = glyphe_rag(statut_rag)
         sep   = "═" * 65
         print(f"\n{sep}")
         print(f"  ACTUARIA — AGENT A1 INGESTION v2 | {audit_id}")

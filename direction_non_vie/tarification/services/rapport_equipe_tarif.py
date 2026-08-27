@@ -21,7 +21,7 @@ Version  : 1.0.0
 """
 
 from __future__ import annotations
-from core.charts_tarif import FOND_CLAIR, couleur_rag
+from core.charts_tarif import glyphe_rag, FOND_CLAIR, couleur_rag
 import io, logging, re
 from core.conformite_reglementaire import (
     avertissement_walk_forward, synthese_exclusions, synthese_alertes_experience,
@@ -90,7 +90,7 @@ def _statut_col(s: str) -> str:
     return {'VERT': VERT, 'AMBRE': ORANGE, 'ROUGE': ROUGE}.get((s or '').upper(), SLATE)
 
 def _statut_emoji(s: str) -> str:
-    return {'VERT': '🟢', 'AMBRE': '🟡', 'ROUGE': '🔴'}.get((s or '').upper(), '⚪')
+    return glyphe_rag((s or '').upper()) or '⚪'
 
 def _s(v) -> str:
     if v is None:

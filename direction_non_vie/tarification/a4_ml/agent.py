@@ -136,7 +136,10 @@ except ImportError:
 # une colonne 'sexe' numérique atteignait la matrice de features des
 # modèles ML, potentiellement retenus en production par A6).
 from core.charts_tarif import (
-    FOND_SOMBRE, couleur_rag, couleur_texte_rag, glyphe_rag,
+    FOND_SOMBRE,
+    couleur_rag,
+    couleur_texte_rag,
+    glyphe_rag,
 )
 from core.conformite_reglementaire import (
     BASE_GINI_UNITAIRE,
@@ -1808,7 +1811,7 @@ class AgentA4ML:
         rapport:      Dict
     ) -> str:
         """Commentaire actuaire sénior en 3 niveaux sur les ML."""
-        emoji = {'VERT': '🟢', 'AMBRE': '🟡', 'ROUGE': '🔴'}[statut_rag]
+        emoji = glyphe_rag(statut_rag)
 
         # Meilleur modèle ML
         classement_ml = [c for c in classement if 'GLM' not in c['modele']]
@@ -1960,7 +1963,7 @@ class AgentA4ML:
         statut_rag, commentaire, result_a3
     ) -> None:
         """Affiche le rapport dans la console Colab."""
-        emoji = {'VERT': '🟢', 'AMBRE': '🟡', 'ROUGE': '🔴'}[statut_rag]
+        emoji = glyphe_rag(statut_rag)
         sep   = "═" * 65
 
         print(f"\n{sep}")
@@ -2581,7 +2584,12 @@ class AgentA4ML:
         # 4. Recommandation globale
         statuts = [statut_psi, statut_ks, statut_gini]
         if "ROUGE" in statuts:
-            recommandation = "🔴 Ré-entraînement URGENT — dérive significative détectée"
+            # ⚠️ Les deux autres branches utilisaient déjà le jeu commun
+            # (⚠️ et ✅) ; seule celle du ROUGE portait un rond coloré, qui
+            # n'est PAS un second canal — trois cercles identiques en
+            # niveaux de gris. Elle lit la source comme les deux autres.
+            recommandation = (f"{glyphe_rag('ROUGE')} Ré-entraînement URGENT"
+                              f" — dérive significative détectée")
             statut_global  = "ROUGE"
         elif statuts.count("AMBRE") >= 2:
             recommandation = "⚠️ Ré-entraînement recommandé dans les 30 jours"

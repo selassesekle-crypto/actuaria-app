@@ -61,6 +61,7 @@ from typing import Dict, Any, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+from core.charts_tarif import glyphe_rag
 
 try:
     from ..services.tarif_excel import export_excel_a2
@@ -1445,7 +1446,7 @@ class AgentA2Preprocessing:
         """
         Commentaire actuaire sénior en 3 niveaux sur le preprocessing.
         """
-        emoji = {'VERT': '🟢', 'AMBRE': '🟡', 'ROUGE': '🔴'}[statut_rag]
+        emoji = glyphe_rag(statut_rag)
         features_new    = rapport.get('features_creees', [])
         nb_features_new = len(features_new)
         val             = rapport.get('transformations', {}).get('validation', {})
@@ -1549,7 +1550,7 @@ class AgentA2Preprocessing:
         commentaire: str
     ) -> None:
         """Affiche le rapport dans la console Colab."""
-        emoji = {'VERT': '🟢', 'AMBRE': '🟡', 'ROUGE': '🔴'}[statut_rag]
+        emoji = glyphe_rag(statut_rag)
         sep   = "═" * 65
 
         print(f"\n{sep}")

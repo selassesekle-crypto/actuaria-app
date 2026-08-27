@@ -126,6 +126,15 @@ from core.conformite_reglementaire import (
 #: s'exécutaient jamais, et, dans l'agent, le bloc qui publie les fenêtres du
 #: walk-forward. *Une chaîne recopiée à la main dans quatre fichiers finit par
 #: diverger ; une constante ne le peut pas.*
+#: ⚠️⚠️ LE SEUIL DE STABILITÉ, NOMMÉ — site 9 de l'inventaire des ronds.
+#: `stabilite_wf` est un LIBELLÉ D'AFFICHAGE (« 🔴 Instable »), et le verrou du
+#: statut RAG décidait en cherchant `'🔴' in _stab` : **une décision
+#: réglementaire suspendue à la présence d'un emoji dans une chaîne**. Qu'on
+#: réécrive « Instable ❌ » et le garde-fou cesse de bloquer, EN SILENCE —
+#: exactement le défaut `a6/C6`. Le seuil est nommé ici pour que le libellé et
+#: la décision lisent LE MÊME nombre et ne puissent plus diverger.
+SEUIL_CV_INSTABLE = 0.10
+
 SPLIT_ALEATOIRE = 'aléatoire_80_20'
 SPLIT_WALK_FORWARD = 'walk_forward_temporel_avec_recalibration'
 
@@ -1720,7 +1729,7 @@ class AgentA6Comparaison:
                 '⚠️ Stabilité NON mesurée — aucune fenêtre avec A/E'
                 if ae_cv is None else
                 '🟢 Stable'     if ae_cv <= 0.05 and n_rouge == 0 else
-                '🟡 Acceptable' if ae_cv <= 0.10 else
+                '🟡 Acceptable' if ae_cv <= SEUIL_CV_INSTABLE else
                 '🔴 Instable'
             ),
         })
@@ -2111,6 +2120,7 @@ class AgentA6Comparaison:
             _ae_moy  = _bt.get('ae_moyen_wf')       # moyenne sur TOUTES les fenêtres
             _n_rouge = _bt.get('n_fenetres_rouge', 0) or 0
             _stab    = str(_bt.get('stabilite_wf', ''))
+            _cv      = _bt.get('ae_cv_wf')   # ⚠️ le CHAMP, pas son libellé
             if _gini_wf is None:
                 _wf_resultat_ok = False
                 _wf_motif = ("aucune métrique de discrimination produite "
@@ -2139,9 +2149,17 @@ class AgentA6Comparaison:
                 _wf_resultat_ok = False
                 _wf_motif = (f"A/E MOYEN sur toutes les fenêtres = {_ae_moy}, hors "
                              f"bande acceptable [0,90 ; 1,10] — biais persistant")
-            elif '🔴' in _stab:
+            # ⚠️⚠️ ON LIT LE CHAMP, PLUS L'EMOJI. Avant : `'🔴' in _stab` —
+            # une décision qui bloque le VERT dépendait de la présence d'un
+            # symbole dans un LIBELLÉ D'AFFICHAGE. Le libellé est fait pour
+            # être lu par un humain, pas interrogé par un verrou.
+            # ⚠️ `_cv` peut valoir None (CV non mesurable) : on ne dégrade
+            # alors PAS — une absence de mesure n'est pas une instabilité.
+            elif _cv is not None and float(_cv) > SEUIL_CV_INSTABLE:
                 _wf_resultat_ok = False
-                _wf_motif = f"stabilité inter-fenêtres dégradée ({_stab})"
+                _wf_motif = (f"stabilité inter-fenêtres dégradée — CV A/E = "
+                             f"{float(_cv):.4f} > {SEUIL_CV_INSTABLE} "
+                             f"({_stab})")
         if not _wf_resultat_ok:
             logger.warning(
                 f"[VALIDATION TEMPORELLE] Le walk-forward a tourné mais son "
@@ -2302,7 +2320,7 @@ class AgentA6Comparaison:
         statut_rag:        str,
         backtest:          Dict
     ) -> str:
-        emoji  = {'VERT': '🟢', 'AMBRE': '🟡', 'ROUGE': '🔴'}[statut_rag]
+        emoji  = glyphe_rag(statut_rag)
         mp     = modele_production
 
         # ── NIVEAU 1 : LECTURE ────────────────────────────────────────────────
@@ -2402,7 +2420,7 @@ class AgentA6Comparaison:
         self, audit_id, sous_branche, classement,
         modele_production, statut_rag, commentaire
     ) -> None:
-        emoji = {'VERT': '🟢', 'AMBRE': '🟡', 'ROUGE': '🔴'}[statut_rag]
+        emoji = glyphe_rag(statut_rag)
         sep   = "═" * 65
         print(f"\n{sep}")
         print(f"  ACTUARIA — AGENT A6 COMPARAISON | {audit_id}")

@@ -45,7 +45,10 @@ from sklearn.preprocessing import StandardScaler
 # PyTorch, mais la logique de sélection est identique à celle d'A4,
 # vérifiée empiriquement).
 from core.charts_tarif import (
-    FOND_SOMBRE, couleur_rag, couleur_texte_rag, glyphe_rag,
+    FOND_SOMBRE,
+    couleur_rag,
+    couleur_texte_rag,
+    glyphe_rag,
 )
 from core.conformite_reglementaire import (
     BASE_GINI_COMPTAGE, BASE_GINI_UNITAIRE,
@@ -1569,7 +1572,7 @@ class AgentA5DeepLearning:
         result_a3:    Optional[Dict],
         result_a4:    Optional[Dict]
     ) -> str:
-        emoji  = {'VERT': '🟢', 'AMBRE': '🟡', 'ROUGE': '🔴'}[statut_rag]
+        emoji  = glyphe_rag(statut_rag)
         # res_cann peut être VIDE : le CANN est exclu des cibles de sévérité
         # (offset log-exposition incompatible). On le DIT, on ne l'invente pas.
         m_cann = res_cann.get('metriques') or {}
@@ -1647,7 +1650,7 @@ class AgentA5DeepLearning:
     def _afficher_rapport_console(
         self, audit_id, sous_branche, classement, statut_rag, commentaire
     ) -> None:
-        emoji = {'VERT': '🟢', 'AMBRE': '🟡', 'ROUGE': '🔴'}[statut_rag]
+        emoji = glyphe_rag(statut_rag)
         sep   = "═" * 65
         print(f"\n{sep}")
         print(f"  ACTUARIA — AGENT A5 DEEP LEARNING | {audit_id}")
