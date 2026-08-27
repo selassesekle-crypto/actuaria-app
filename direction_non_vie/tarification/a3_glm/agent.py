@@ -2014,10 +2014,18 @@ class AgentA3GLM:
                         thickness = 1.5,
                         width     = 5,
                     ),
+                    # ⚠️⚠️ LES VRAIES BORNES, PAR `customdata` — constat `a3/C4`.
+                    # L'infobulle publiait `IC 95% : [0.0000, 0.0000]` sur CHAQUE
+                    # barre : deux zéros codés en dur. Une f-string ne peut porter
+                    # qu'un scalaire, jamais une valeur PAR POINT — c'est pour cela
+                    # que le zéro était là. `customdata` le permet, et les bornes
+                    # existaient déjà : elles servent aux barres d'erreur juste
+                    # au-dessus. *Aucun nombre n'est calculé ici, il est AFFICHÉ.*
+                    customdata    = list(zip(ci_low, ci_high)),
                     hovertemplate = (
                         "<b>%{y}</b><br>"
                         "Coefficient β : <b>%{x:.4f}</b><br>"
-                        f"IC 95% : [{'{:.4f}'.format(0)}, {'{:.4f}'.format(0)}]"
+                        "IC 95% : [%{customdata[0]:.4f}, %{customdata[1]:.4f}]"
                         "<extra></extra>"
                     ),
                     text          = [f"{v:.3f}" for v in vals],
@@ -2096,10 +2104,14 @@ class AgentA3GLM:
                     text          = [f"{r:.3f}" for r in rel_v],
                     textposition  = 'outside',
                     textfont      = dict(color=BLANC, size=9),
+                    # ⚠️ Même correctif : l'infobulle publiait « IC 95% : [ »
+                    # — un crochet ouvert, rien dedans. `ic_low`/`ic_high` sont
+                    # lus vingt lignes plus haut pour les barres d'erreur.
+                    customdata    = list(zip(ic_low, ic_high)),
                     hovertemplate = (
                         "<b>%{y}</b><br>"
                         "Relativité exp(β) : <b>%{x:.4f}</b><br>"
-                        "IC 95% : [" +
+                        "IC 95% : [%{customdata[0]:.4f}, %{customdata[1]:.4f}]"
                         "<br>Rouge = aggravant · Vert = allégant"
                         "<extra></extra>"
                     ),
