@@ -163,28 +163,45 @@ class TestSecondCanalFigures(unittest.TestCase):
     # L'ASSIETTE — mesurée, et beaucoup plus petite qu'annoncé
     # ══════════════════════════════════════════════════════════════════════
 
-    def test_la_plupart_des_traductions_alimentent_des_figures_HORS_plan(self):
-        """⚠️ Ce test FIGE l'assiette mesurée : 4 sites au plan sur 19.
+    def test_l_assiette_mesuree_des_couleurs_de_statut(self):
+        """⚠️⚠️ CE TEST A FAIT TOMBER LA GATE — ET IL AVAIT RAISON.
 
-        S'il tombait, c'est que le plan ou les figures ont changé — et que
-        l'étape 2 doit être re-mesurée avant d'être étendue.
+        Il figeait l'assiette à 19 traductions statut→couleur, mesurée le
+        27/08. L'étape 2c en a retiré **12** : leurs seuls usages étaient du
+        TEXTE, et ce texte lit désormais la variante `_txt`. Une couleur
+        d'objet qui ne sert jamais d'objet n'a pas lieu d'être.
+
+        ⚠️⚠️ ET C'EST UN CONSTAT EN SOI : **12 des 19 variables de couleur ne
+        coloraient AUCUN objet**. Elles existaient uniquement pour écrire —
+        en rouge un quart du temps, mesuré. *Le rouge de ce module servait
+        surtout à écrire, pas à dessiner.*
+
+        Le seuil est REBASÉ sur la mesure, avec sa raison — il n'est pas
+        affaibli : il tombera encore si l'assiette rebouge.
         """
-        total = 0
+        objets = variantes = 0
         for agent in _AGENTS:
             arbre = ast.parse(_source(agent))
             for noeud in ast.walk(arbre):
-                if not (isinstance(noeud, ast.Assign)
-                        and isinstance(noeud.value, ast.IfExp)):
+                if not isinstance(noeud, ast.Assign):
                     continue
                 cible = ast.unparse(noeud.targets[0])
-                texte = ast.unparse(noeud.value)
-                if cible.startswith('couleur') and 'VERT' in texte \
-                        and 'ROUGE' in texte:
-                    total += 1
-        self.assertGreaterEqual(
-            total, 15,
-            f"{total} traductions statut→couleur relevées, 19 mesurées le "
-            f"27/08. L'assiette de l'étape 2 a changé : la re-mesurer.")
+                valeur = ast.unparse(noeud.value)
+                if cible.endswith('_txt') and 'couleur_texte_rag' in valeur:
+                    variantes += 1
+                elif (isinstance(noeud.value, ast.IfExp)
+                        and cible.startswith('couleur')
+                        and 'VERT' in valeur and 'ROUGE' in valeur):
+                    objets += 1
+        self.assertEqual(
+            objets, 7,
+            f"{objets} couleurs de statut servant encore un OBJET (7 mesurées "
+            f"après l'étape 2c, 19 avant). L'assiette a bougé : la re-mesurer "
+            f"avant d'étendre l'étape 2.")
+        self.assertEqual(
+            variantes, 20,
+            f"{variantes} variantes TEXTE (20 mesurées). Une variante perdue, "
+            f"et un texte redevient susceptible de s'afficher en rouge.")
 
 
 if __name__ == '__main__':

@@ -107,7 +107,7 @@ except ImportError:
 # filtrer_famille_cible ; l'audit V9 (BLOQUANT) a prouvé qu'une colonne
 # genre pré-encodée (scénario V7) traversait donc intacte jusqu'à la
 # recalibration walk-forward.
-from core.charts_tarif import FOND_SOMBRE, couleur_rag, glyphe_rag
+from core.charts_tarif import FOND_SOMBRE, couleur_rag, couleur_texte_rag, glyphe_rag
 from core.conformite_reglementaire import (
     agreger_controle_effet, avertissement_walk_forward,
     construire_matrice_x, verdict_vraisemblance_gini,
@@ -3126,7 +3126,12 @@ class AgentA6Comparaison:
             modele_p = val_sel["c3_coherence"]["modele"]
             colors_s = [OR if m == modele_p else "rgba(52,152,219,0.6)" for m in modeles]
             statut_g = val_sel["statut_global"]
-            couleur_g= VERT if statut_g=="VERT" else AMBRE if statut_g=="AMBRE" else ROUGE
+            # ⚠️ `couleur_g` RETIRÉE : tous ses usages étaient du TEXTE, et ils
+            # lisent désormais `couleur_g_txt`. *Une couleur d'objet qui ne sert
+            # jamais d'objet n'a pas lieu d'être.*
+            # ⚠️ AUCUN TEXTE EN ROUGE — arbitré. La couleur ci-dessus reste
+            # pour les OBJETS (barre, ligne, jauge) ; celle-ci sert au TEXTE.
+            couleur_g_txt = couleur_texte_rag(statut_g)
 
             fig1 = go.Figure(go.Bar(
                 x=modeles, y=scores,
@@ -3145,7 +3150,7 @@ class AgentA6Comparaison:
             l1.update(dict(
                 title=dict(
                     text=f"{glyphe_rag(statut_g)} Scores multicritères — Barre dorée = modèle retenu",
-                    font=dict(color=couleur_g, size=11), x=0.01
+                    font=dict(color=couleur_g_txt, size=11), x=0.01
                 ),
                 xaxis=dict(tickfont=dict(color=BLANC, size=9), showgrid=False),
                 yaxis=dict(visible=False), bargap=0.3, showlegend=False,
@@ -3167,7 +3172,12 @@ class AgentA6Comparaison:
                        else "rgba(52,152,219,0.6)" for m in classement]
             ecart  = val_sel["c2_ecart_gini"]["ecart"]
             statut_c2 = val_sel["c2_ecart_gini"]["statut"]
-            couleur_c2= VERT if statut_c2=="VERT" else AMBRE
+            # ⚠️ `couleur_c2` RETIRÉE : tous ses usages étaient du TEXTE, et ils
+            # lisent désormais `couleur_c2_txt`. *Une couleur d'objet qui ne sert
+            # jamais d'objet n'a pas lieu d'être.*
+            # ⚠️ AUCUN TEXTE EN ROUGE — arbitré. La couleur ci-dessus reste
+            # pour les OBJETS (barre, ligne, jauge) ; celle-ci sert au TEXTE.
+            couleur_c2_txt = couleur_texte_rag(statut_c2)
 
             fig2 = go.Figure(go.Bar(
                 x=modeles, y=ginis,
@@ -3184,14 +3194,14 @@ class AgentA6Comparaison:
                 fig2.add_annotation(
                     x=len(ginis)//2, y=max(ginis)*1.05,
                     text=f"Écart max-min = {ecart:.4f}",
-                    font=dict(color=couleur_c2, size=10),
+                    font=dict(color=couleur_c2_txt, size=10),
                     showarrow=False,
                 )
             l2 = dict(**LAYOUT)
             l2.update(dict(
                 title=dict(
                     text=val_sel["c2_ecart_gini"]["titre_graphique"] + " — Différenciation des modèles",
-                    font=dict(color=couleur_c2, size=11), x=0.01
+                    font=dict(color=couleur_c2_txt, size=11), x=0.01
                 ),
                 xaxis=dict(tickfont=dict(color=BLANC, size=9), showgrid=False),
                 yaxis=dict(visible=False), bargap=0.3, showlegend=False,
@@ -3240,7 +3250,12 @@ class AgentA6Comparaison:
             ))
             modele_nm = val_sel["c3_coherence"]["modele"]
             statut_c3 = val_sel["c3_coherence"]["statut"]
-            couleur_c3= VERT if statut_c3=="VERT" else AMBRE if statut_c3=="AMBRE" else ROUGE
+            # ⚠️ `couleur_c3` RETIRÉE : tous ses usages étaient du TEXTE, et ils
+            # lisent désormais `couleur_c3_txt`. *Une couleur d'objet qui ne sert
+            # jamais d'objet n'a pas lieu d'être.*
+            # ⚠️ AUCUN TEXTE EN ROUGE — arbitré. La couleur ci-dessus reste
+            # pour les OBJETS (barre, ligne, jauge) ; celle-ci sert au TEXTE.
+            couleur_c3_txt = couleur_texte_rag(statut_c3)
             fig3.update_layout(
                 polar=dict(
                     bgcolor=NAVY_L,
@@ -3253,7 +3268,7 @@ class AgentA6Comparaison:
                 paper_bgcolor=NAVY, showlegend=False,
                 title=dict(
                     text=f"{glyphe_rag(statut_c3)} Profil multicritères — {modele_nm}",
-                    font=dict(color=couleur_c3, size=11), x=0.01
+                    font=dict(color=couleur_c3_txt, size=11), x=0.01
                 ),
                 margin=dict(l=40, r=40, t=60, b=50), height=300,
                 annotations=[dict(
@@ -3279,23 +3294,31 @@ class AgentA6Comparaison:
             fig4 = go.Figure()
             for nom, statut, msg, conseil in items:
                 couleur = VERT if statut=="VERT" else AMBRE if statut=="AMBRE" else ROUGE
+                # ⚠️ AUCUN TEXTE EN ROUGE — arbitré. La couleur ci-dessus reste
+                # pour les OBJETS (barre, ligne, jauge) ; celle-ci sert au TEXTE.
+                couleur_txt = couleur_texte_rag(statut)
                 icone   = "✅" if statut=="VERT" else "⚠️" if statut=="AMBRE" else "❌"
                 score   = 1.0 if statut=="VERT" else 0.5 if statut=="AMBRE" else 0.0
                 fig4.add_trace(go.Bar(
                     x=[score], y=[nom], orientation="h",
                     marker_color=couleur, width=0.5,
                     text=f"{icone} {statut}", textposition="outside",
-                    textfont=dict(color=couleur, size=10),
+                    textfont=dict(color=couleur_txt, size=10),
                     hovertemplate=f"<b>{nom}</b><br>{msg}<br>💡 {conseil}<extra></extra>",
                     showlegend=False,
                 ))
             statut_g  = val_sel["statut_global"]
-            couleur_g = VERT if statut_g=="VERT" else AMBRE if statut_g=="AMBRE" else ROUGE
+            # ⚠️ `couleur_g` RETIRÉE : tous ses usages étaient du TEXTE, et ils
+            # lisent désormais `couleur_g_txt`. *Une couleur d'objet qui ne sert
+            # jamais d'objet n'a pas lieu d'être.*
+            # ⚠️ AUCUN TEXTE EN ROUGE — arbitré. La couleur ci-dessus reste
+            # pour les OBJETS (barre, ligne, jauge) ; celle-ci sert au TEXTE.
+            couleur_g_txt = couleur_texte_rag(statut_g)
             l4 = dict(**LAYOUT)
             l4.update(dict(
                 title=dict(
                     text=f"Scorecard Sélection — {val_sel['conclusion']}",
-                    font=dict(color=couleur_g, size=10), x=0.01
+                    font=dict(color=couleur_g_txt, size=10), x=0.01
                 ),
                 xaxis=dict(range=[0, 1.6], visible=False),
                 yaxis=dict(tickfont=dict(color=BLANC, size=10), showgrid=False),

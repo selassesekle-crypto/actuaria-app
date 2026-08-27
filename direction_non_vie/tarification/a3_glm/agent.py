@@ -118,7 +118,7 @@ except ImportError:
 # une colonne 'sexe_M' pré-encodée par le client, 'Sexe', 'sex' ou
 # 'civilite' entrait dans le GLM. A3 appelle désormais filtrer_genre(),
 # comme A2/A4/A5/A6 : une seule implémentation, pour tous.
-from core.charts_tarif import FOND_SOMBRE, couleur_rag
+from core.charts_tarif import FOND_SOMBRE, couleur_rag, couleur_texte_rag
 from core.conformite_reglementaire import (
     BASE_GINI_COMPTAGE, BASE_GINI_COUT_MOYEN, BASE_GINI_UNITAIRE,
     construire_matrice_x,
@@ -2809,7 +2809,12 @@ class AgentA3GLM:
             gini_max = val_glm["h3_ajustement"]["gini_max"]
             colors_glm = [OR if g == gini_max else "rgba(52,152,219,0.6)" for g in ginis_glm]
             statut_h3  = val_glm["h3_ajustement"]["statut"]
-            couleur_h3 = VERT if statut_h3=="VERT" else AMBRE if statut_h3=="AMBRE" else ROUGE
+            # ⚠️ `couleur_h3` RETIRÉE : tous ses usages étaient du TEXTE, et ils
+            # lisent désormais `couleur_h3_txt`. *Une couleur d'objet qui ne sert
+            # jamais d'objet n'a pas lieu d'être.*
+            # ⚠️ AUCUN TEXTE EN ROUGE — arbitré. La couleur ci-dessus reste
+            # pour les OBJETS (barre, ligne, jauge) ; celle-ci sert au TEXTE.
+            couleur_h3_txt = couleur_texte_rag(statut_h3)
 
             fig1 = go.Figure(go.Bar(
                 x=modeles_glm, y=ginis_glm,
@@ -2831,7 +2836,7 @@ class AgentA3GLM:
             l1.update(dict(
                 title=dict(
                     text=val_glm["h3_ajustement"]["titre_graphique"] + " — Barre dorée = meilleur GLM",
-                    font=dict(color=couleur_h3, size=11), x=0.01
+                    font=dict(color=couleur_h3_txt, size=11), x=0.01
                 ),
                 xaxis=dict(tickfont=dict(color=BLANC), showgrid=False),
                 yaxis=dict(visible=False), bargap=0.35, showlegend=False,
@@ -2857,15 +2862,18 @@ class AgentA3GLM:
                 raise ValueError("sur-dispersion non mesurée — jauge non produite")
             statut_h1  = val_glm["h1_poisson"]["statut"]
             couleur_h1 = VERT if statut_h1=="VERT" else AMBRE if statut_h1=="AMBRE" else ROUGE
+            # ⚠️ AUCUN TEXTE EN ROUGE — arbitré. La couleur ci-dessus reste
+            # pour les OBJETS (barre, ligne, jauge) ; celle-ci sert au TEXTE.
+            couleur_h1_txt = couleur_texte_rag(statut_h1)
 
             fig2 = go.Figure(go.Indicator(
                 mode="gauge+number",
                 value=ratio,
                 title=dict(
                     text=val_glm["h1_poisson"]["titre_graphique"],
-                    font=dict(color=couleur_h1, size=11)
+                    font=dict(color=couleur_h1_txt, size=11)
                 ),
-                number=dict(font=dict(color=couleur_h1, size=28), valueformat=".2f"),
+                number=dict(font=dict(color=couleur_h1_txt, size=28), valueformat=".2f"),
                 gauge=dict(
                     axis=dict(range=[0, 8], tickfont=dict(color=GRIS, size=8),
                              tickvals=[0, 1, 2, 5, 8],
@@ -2898,15 +2906,18 @@ class AgentA3GLM:
             dw = val_glm["h2_homosc"]["dw_stat"]
             statut_h2  = val_glm["h2_homosc"]["statut"]
             couleur_h2 = VERT if statut_h2=="VERT" else AMBRE if statut_h2=="AMBRE" else ROUGE
+            # ⚠️ AUCUN TEXTE EN ROUGE — arbitré. La couleur ci-dessus reste
+            # pour les OBJETS (barre, ligne, jauge) ; celle-ci sert au TEXTE.
+            couleur_h2_txt = couleur_texte_rag(statut_h2)
 
             fig3 = go.Figure(go.Indicator(
                 mode="gauge+number",
                 value=dw,
                 title=dict(
                     text=val_glm["h2_homosc"]["titre_graphique"],
-                    font=dict(color=couleur_h2, size=11)
+                    font=dict(color=couleur_h2_txt, size=11)
                 ),
-                number=dict(font=dict(color=couleur_h2, size=28), valueformat=".3f"),
+                number=dict(font=dict(color=couleur_h2_txt, size=28), valueformat=".3f"),
                 gauge=dict(
                     axis=dict(range=[0, 4], tickfont=dict(color=GRIS, size=8),
                              tickvals=[0, 1, 1.5, 2, 2.5, 3, 4],
@@ -2966,23 +2977,31 @@ class AgentA3GLM:
             fig4 = go.Figure()
             for nom, statut, msg, conseil in items:
                 couleur = VERT if statut=="VERT" else AMBRE if statut=="AMBRE" else ROUGE
+                # ⚠️ AUCUN TEXTE EN ROUGE — arbitré. La couleur ci-dessus reste
+                # pour les OBJETS (barre, ligne, jauge) ; celle-ci sert au TEXTE.
+                couleur_txt = couleur_texte_rag(statut)
                 icone   = "✅" if statut=="VERT" else "⚠️" if statut=="AMBRE" else "❌"
                 score   = 1.0 if statut=="VERT" else 0.5 if statut=="AMBRE" else 0.0
                 fig4.add_trace(go.Bar(
                     x=[score], y=[nom], orientation="h",
                     marker_color=couleur, width=0.5,
                     text=f"{icone} {statut}", textposition="outside",
-                    textfont=dict(color=couleur, size=10),
+                    textfont=dict(color=couleur_txt, size=10),
                     hovertemplate=f"<b>{nom}</b><br>{msg}<br>💡 {conseil}<extra></extra>",
                     showlegend=False,
                 ))
             statut_g  = val_glm["statut_global"]
-            couleur_g = VERT if statut_g=="VERT" else AMBRE if statut_g=="AMBRE" else ROUGE
+            # ⚠️ `couleur_g` RETIRÉE : tous ses usages étaient du TEXTE, et ils
+            # lisent désormais `couleur_g_txt`. *Une couleur d'objet qui ne sert
+            # jamais d'objet n'a pas lieu d'être.*
+            # ⚠️ AUCUN TEXTE EN ROUGE — arbitré. La couleur ci-dessus reste
+            # pour les OBJETS (barre, ligne, jauge) ; celle-ci sert au TEXTE.
+            couleur_g_txt = couleur_texte_rag(statut_g)
             l4 = dict(**LAYOUT)
             l4.update(dict(
                 title=dict(
                     text=f"Scorecard GLM — {val_glm['conclusion']}",
-                    font=dict(color=couleur_g, size=10), x=0.01
+                    font=dict(color=couleur_g_txt, size=10), x=0.01
                 ),
                 xaxis=dict(range=[0, 1.6], visible=False),
                 yaxis=dict(tickfont=dict(color=BLANC, size=10), showgrid=False),

@@ -135,7 +135,7 @@ except ImportError:
 # filtre genre avant ce correctif (fuite confirmée par exécution réelle :
 # une colonne 'sexe' numérique atteignait la matrice de features des
 # modèles ML, potentiellement retenus en production par A6).
-from core.charts_tarif import FOND_SOMBRE, couleur_rag
+from core.charts_tarif import FOND_SOMBRE, couleur_rag, couleur_texte_rag
 from core.conformite_reglementaire import (
     BASE_GINI_UNITAIRE,
     construire_matrice_x,
@@ -2926,12 +2926,17 @@ class AgentA4ML:
                           annotation_text="Seuil acceptable 0.20",
                           annotation_font=dict(color=AMBRE, size=9))
             statut_h1 = val_ml["h1_overfitting"]["statut"]
-            couleur_h1 = VERT if statut_h1=="VERT" else AMBRE if statut_h1=="AMBRE" else ROUGE
+            # ⚠️ `couleur_h1` RETIRÉE : tous ses usages étaient du TEXTE, et ils
+            # lisent désormais `couleur_h1_txt`. *Une couleur d'objet qui ne sert
+            # jamais d'objet n'a pas lieu d'être.*
+            # ⚠️ AUCUN TEXTE EN ROUGE — arbitré. La couleur ci-dessus reste
+            # pour les OBJETS (barre, ligne, jauge) ; celle-ci sert au TEXTE.
+            couleur_h1_txt = couleur_texte_rag(statut_h1)
             l1 = dict(**LAYOUT)
             l1.update(dict(
                 title=dict(
                     text=val_ml["h1_overfitting"]["titre_graphique"] + " — Barres Train vs Test",
-                    font=dict(color=couleur_h1, size=11), x=0.01
+                    font=dict(color=couleur_h1_txt, size=11), x=0.01
                 ),
                 xaxis=dict(tickfont=dict(color=BLANC, size=9), showgrid=False),
                 yaxis=dict(title="Gini", tickfont=dict(color=GRIS), showgrid=True,
@@ -2962,7 +2967,12 @@ class AgentA4ML:
             # non mesuré ne s'affiche pas comme un nombre.
             txt_psi = f"PSI={psi:.4f} ({statut_psi})" if psi is not None else \
                       f"PSI non mesuré ({statut_psi})"
-            couleur_psi = VERT if statut_psi=="VERT" else AMBRE if statut_psi=="AMBRE" else ROUGE
+            # ⚠️ `couleur_psi` RETIRÉE : tous ses usages étaient du TEXTE, et ils
+            # lisent désormais `couleur_psi_txt`. *Une couleur d'objet qui ne sert
+            # jamais d'objet n'a pas lieu d'être.*
+            # ⚠️ AUCUN TEXTE EN ROUGE — arbitré. La couleur ci-dessus reste
+            # pour les OBJETS (barre, ligne, jauge) ; celle-ci sert au TEXTE.
+            couleur_psi_txt = couleur_texte_rag(statut_psi)
             gini_ref   = monitoring.get('gini_reference', 0.265)
             seuil_al   = gini_ref - monitoring.get('seuil_alerte_gini', 0.05)
 
@@ -2988,12 +2998,17 @@ class AgentA4ML:
                           annotation_text=f"Seuil alerte {seuil_al:.4f}",
                           annotation_font=dict(color=BLANC, size=9))
             statut_h3 = val_ml["h3_gini"]["statut"]
-            couleur_h3 = VERT if statut_h3=="VERT" else AMBRE if statut_h3=="AMBRE" else ROUGE
+            # ⚠️ `couleur_h3` RETIRÉE : tous ses usages étaient du TEXTE, et ils
+            # lisent désormais `couleur_h3_txt`. *Une couleur d'objet qui ne sert
+            # jamais d'objet n'a pas lieu d'être.*
+            # ⚠️ AUCUN TEXTE EN ROUGE — arbitré. La couleur ci-dessus reste
+            # pour les OBJETS (barre, ligne, jauge) ; celle-ci sert au TEXTE.
+            couleur_h3_txt = couleur_texte_rag(statut_h3)
             l2 = dict(**LAYOUT)
             l2.update(dict(
                 title=dict(
                     text=f"Gini — référence A3 → modèle retenu · {txt_psi} · {val_ml['h3_gini']['titre_graphique']}",
-                    font=dict(color=couleur_h3, size=10), x=0.01
+                    font=dict(color=couleur_h3_txt, size=10), x=0.01
                 ),
                 xaxis=dict(tickfont=dict(color=GRIS, size=8), showgrid=True,
                           gridcolor="rgba(255,255,255,0.05)"),
@@ -3027,23 +3042,31 @@ class AgentA4ML:
             fig4 = go.Figure()
             for nom, statut, msg, conseil in items:
                 couleur = VERT if statut=="VERT" else AMBRE if statut=="AMBRE" else ROUGE
+                # ⚠️ AUCUN TEXTE EN ROUGE — arbitré. La couleur ci-dessus reste
+                # pour les OBJETS (barre, ligne, jauge) ; celle-ci sert au TEXTE.
+                couleur_txt = couleur_texte_rag(statut)
                 icone   = "✅" if statut=="VERT" else "⚠️" if statut=="AMBRE" else "❌"
                 score   = 1.0 if statut=="VERT" else 0.5 if statut=="AMBRE" else 0.0
                 fig4.add_trace(go.Bar(
                     x=[score], y=[nom], orientation="h",
                     marker_color=couleur, width=0.5,
                     text=f"{icone} {statut}", textposition="outside",
-                    textfont=dict(color=couleur, size=10),
+                    textfont=dict(color=couleur_txt, size=10),
                     hovertemplate=f"<b>{nom}</b><br>{msg}<br>💡 {conseil}<extra></extra>",
                     showlegend=False,
                 ))
             statut_g   = val_ml["statut_global"]
-            couleur_g  = VERT if statut_g=="VERT" else AMBRE if statut_g=="AMBRE" else ROUGE
+            # ⚠️ `couleur_g` RETIRÉE : tous ses usages étaient du TEXTE, et ils
+            # lisent désormais `couleur_g_txt`. *Une couleur d'objet qui ne sert
+            # jamais d'objet n'a pas lieu d'être.*
+            # ⚠️ AUCUN TEXTE EN ROUGE — arbitré. La couleur ci-dessus reste
+            # pour les OBJETS (barre, ligne, jauge) ; celle-ci sert au TEXTE.
+            couleur_g_txt = couleur_texte_rag(statut_g)
             l4 = dict(**LAYOUT)
             l4.update(dict(
                 title=dict(
                     text=f"Scorecard ML — {val_ml['conclusion']}",
-                    font=dict(color=couleur_g, size=10), x=0.01
+                    font=dict(color=couleur_g_txt, size=10), x=0.01
                 ),
                 xaxis=dict(range=[0,1.6], visible=False),
                 yaxis=dict(tickfont=dict(color=BLANC,size=10), showgrid=False),

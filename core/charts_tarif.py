@@ -174,6 +174,36 @@ def couleur_rag(statut: str, fond: str = FOND_SOMBRE, *, avec_diese: bool = True
     return entree['couleur'] if avec_diese else entree['couleur'].lstrip('#')
 
 
+def couleur_texte_rag(statut: str, fond: str = FOND_SOMBRE) -> str:
+    """La couleur d'un statut QUAND ELLE SERT À ÉCRIRE.
+
+    ⚠️⚠️ AUCUN TEXTE EN ROUGE, NULLE PART — arbitré par Selasse le 27/08/2026,
+    sans exception ni cas par cas. `ROUGE #E74C3C` vaut **3,74** sur le fond
+    des figures : il passe comme OBJET (WCAG 1.4.11, 3:1) et échoue comme
+    TEXTE (1.4.3, 4,5:1).
+
+    ⚠️ CETTE FONCTION NE BLANCHIT PAS TOUT. Le VERT (6,80) et l'AMBRE (6,51)
+    sont parfaitement lisibles : ils gardent leur couleur, donc leur signal.
+    Seul un statut dont la couleur échoue au seuil bascule vers le texte de la
+    charte (**12,93**). *On retire ce qui n'est pas lisible, pas ce qui porte
+    du sens.*
+
+    ⚠️ ET LE SENS DU ROUGE NE SE PERD PAS : partout où cette fonction
+    s'applique, le glyphe `❌` et/ou le mot « ROUGE » figurent déjà dans le
+    texte affiché. Le second canal porte l'information que la couleur ne peut
+    plus porter.
+
+    ⚠️ Les deux voies alternatives ont été ÉCARTÉES PAR LA MESURE, pas par
+    goût : `#C0392B` (le rouge des rapports) tombe à **2,63** sur ce fond —
+    pire que l'actuel — et inventer un rouge plus clair serait fabriquer une
+    couleur.
+    """
+    entree = STATUT_RAG.get(fond, {}).get(str(statut).upper())
+    if entree is not None and entree['usage_texte']:
+        return entree['couleur']
+    return COULEURS['texte']
+
+
 def glyphe_rag(statut: str, *, cible: str = 'texte') -> str:
     """Le glyphe du statut. `cible='excel'` rend l'exception nommée."""
     table = GLYPHE_RAG_EXCEL if cible == 'excel' else GLYPHE_RAG

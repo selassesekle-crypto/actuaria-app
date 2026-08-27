@@ -44,7 +44,7 @@ from sklearn.preprocessing import StandardScaler
 # exécution DL bloquée dans l'environnement d'audit V7 par l'absence de
 # PyTorch, mais la logique de sélection est identique à celle d'A4,
 # vérifiée empiriquement).
-from core.charts_tarif import FOND_SOMBRE, couleur_rag
+from core.charts_tarif import FOND_SOMBRE, couleur_rag, couleur_texte_rag
 from core.conformite_reglementaire import (
     BASE_GINI_COMPTAGE, BASE_GINI_UNITAIRE,
     construire_matrice_x,
@@ -2222,7 +2222,12 @@ class AgentA5DeepLearning:
             val_loss   = [max(0.01, l) for l in val_loss]
 
             statut_h1  = h1["statut"]
-            couleur_h1 = VERT if statut_h1=="VERT" else AMBRE if statut_h1=="AMBRE" else ROUGE
+            # ⚠️ `couleur_h1` RETIRÉE : tous ses usages étaient du TEXTE, et ils
+            # lisent désormais `couleur_h1_txt`. *Une couleur d'objet qui ne sert
+            # jamais d'objet n'a pas lieu d'être.*
+            # ⚠️ AUCUN TEXTE EN ROUGE — arbitré. La couleur ci-dessus reste
+            # pour les OBJETS (barre, ligne, jauge) ; celle-ci sert au TEXTE.
+            couleur_h1_txt = couleur_texte_rag(statut_h1)
 
             fig1 = go.Figure()
             fig1.add_trace(go.Scatter(
@@ -2244,7 +2249,7 @@ class AgentA5DeepLearning:
             l1.update(dict(
                 title=dict(
                     text=h1["titre_graphique"],
-                    font=dict(color=couleur_h1, size=11), x=0.01
+                    font=dict(color=couleur_h1_txt, size=11), x=0.01
                 ),
                 xaxis=dict(title="Époques", tickfont=dict(color=GRIS), showgrid=True,
                           gridcolor="rgba(255,255,255,0.05)"),
@@ -2274,7 +2279,12 @@ class AgentA5DeepLearning:
             ]
             colors_comp = [GRIS, BLEU, OR]
             statut_h3   = h3["statut"]
-            couleur_h3  = VERT if statut_h3=="VERT" else AMBRE if statut_h3=="AMBRE" else ROUGE
+            # ⚠️ `couleur_h3` RETIRÉE : tous ses usages étaient du TEXTE, et ils
+            # lisent désormais `couleur_h3_txt`. *Une couleur d'objet qui ne sert
+            # jamais d'objet n'a pas lieu d'être.*
+            # ⚠️ AUCUN TEXTE EN ROUGE — arbitré. La couleur ci-dessus reste
+            # pour les OBJETS (barre, ligne, jauge) ; celle-ci sert au TEXTE.
+            couleur_h3_txt = couleur_texte_rag(statut_h3)
 
             fig2 = go.Figure(go.Bar(
                 x=modeles_comp, y=ginis_comp,
@@ -2293,7 +2303,7 @@ class AgentA5DeepLearning:
             l2.update(dict(
                 title=dict(
                     text=h3["titre_graphique"],
-                    font=dict(color=couleur_h3, size=11), x=0.01
+                    font=dict(color=couleur_h3_txt, size=11), x=0.01
                 ),
                 xaxis=dict(tickfont=dict(color=BLANC), showgrid=False),
                 yaxis=dict(visible=False), bargap=0.35, showlegend=False,
@@ -2314,15 +2324,18 @@ class AgentA5DeepLearning:
             ratio = h2["ratio_of"]
             statut_h2  = h2["statut"]
             couleur_h2 = VERT if statut_h2=="VERT" else AMBRE if statut_h2=="AMBRE" else ROUGE
+            # ⚠️ AUCUN TEXTE EN ROUGE — arbitré. La couleur ci-dessus reste
+            # pour les OBJETS (barre, ligne, jauge) ; celle-ci sert au TEXTE.
+            couleur_h2_txt = couleur_texte_rag(statut_h2)
 
             fig3 = go.Figure(go.Indicator(
                 mode="gauge+number",
                 value=ratio,
                 title=dict(
                     text=h2["titre_graphique"],
-                    font=dict(color=couleur_h2, size=11)
+                    font=dict(color=couleur_h2_txt, size=11)
                 ),
-                number=dict(font=dict(color=couleur_h2, size=28), valueformat=".3f"),
+                number=dict(font=dict(color=couleur_h2_txt, size=28), valueformat=".3f"),
                 gauge=dict(
                     axis=dict(range=[0, 1.5], tickfont=dict(color=GRIS, size=8),
                              tickvals=[0, 0.75, 0.88, 1.0, 1.3, 1.5],
@@ -2363,23 +2376,31 @@ class AgentA5DeepLearning:
             fig4 = go.Figure()
             for nom, statut, msg, conseil in items:
                 couleur = VERT if statut=="VERT" else AMBRE if statut=="AMBRE" else ROUGE
+                # ⚠️ AUCUN TEXTE EN ROUGE — arbitré. La couleur ci-dessus reste
+                # pour les OBJETS (barre, ligne, jauge) ; celle-ci sert au TEXTE.
+                couleur_txt = couleur_texte_rag(statut)
                 icone   = "✅" if statut=="VERT" else "⚠️" if statut=="AMBRE" else "❌"
                 score   = 1.0 if statut=="VERT" else 0.5 if statut=="AMBRE" else 0.0
                 fig4.add_trace(go.Bar(
                     x=[score], y=[nom], orientation="h",
                     marker_color=couleur, width=0.5,
                     text=f"{icone} {statut}", textposition="outside",
-                    textfont=dict(color=couleur, size=10),
+                    textfont=dict(color=couleur_txt, size=10),
                     hovertemplate=f"<b>{nom}</b><br>{msg}<br>💡 {conseil}<extra></extra>",
                     showlegend=False,
                 ))
             statut_g  = val_dl["statut_global"]
-            couleur_g = VERT if statut_g=="VERT" else AMBRE if statut_g=="AMBRE" else ROUGE
+            # ⚠️ `couleur_g` RETIRÉE : tous ses usages étaient du TEXTE, et ils
+            # lisent désormais `couleur_g_txt`. *Une couleur d'objet qui ne sert
+            # jamais d'objet n'a pas lieu d'être.*
+            # ⚠️ AUCUN TEXTE EN ROUGE — arbitré. La couleur ci-dessus reste
+            # pour les OBJETS (barre, ligne, jauge) ; celle-ci sert au TEXTE.
+            couleur_g_txt = couleur_texte_rag(statut_g)
             l4 = dict(**LAYOUT)
             l4.update(dict(
                 title=dict(
                     text=f"Scorecard Deep Learning — {val_dl['conclusion']}",
-                    font=dict(color=couleur_g, size=10), x=0.01
+                    font=dict(color=couleur_g_txt, size=10), x=0.01
                 ),
                 xaxis=dict(range=[0, 1.6], visible=False),
                 yaxis=dict(tickfont=dict(color=BLANC, size=10), showgrid=False),
