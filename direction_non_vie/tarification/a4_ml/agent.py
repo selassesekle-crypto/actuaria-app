@@ -135,7 +135,10 @@ except ImportError:
 # filtre genre avant ce correctif (fuite confirmée par exécution réelle :
 # une colonne 'sexe' numérique atteignait la matrice de features des
 # modèles ML, potentiellement retenus en production par A6).
-from core.conformite_reglementaire import construire_matrice_x
+from core.conformite_reglementaire import (
+    BASE_GINI_UNITAIRE,
+    construire_matrice_x,
+)
 # ⚠️ SOURCE UNIQUE. L'etat de l'elasticite etait defini ICI au lot L0 ;
 # il vit desormais dans `core/elasticite.py`, avec le catalogue
 # d'exigences qui le fonde. Deux definitions auraient diverge.
@@ -1425,6 +1428,9 @@ class AgentA4ML:
         # Gini train et test — sur le taux (rang de risque)
         gini_train = self._calculer_gini(y_train, pred_train)
         gini_test  = self._calculer_gini(y_test,  pred_test)
+        # ⚠️ BASE MESURÉE, et le module la DIT deux lignes plus haut :
+        # « Gini sur le TAUX » — tri UNITAIRE, hors exposition (`a4/C10`).
+        base_gini = BASE_GINI_UNITAIRE
 
         # Overfit ratio : Gini_train / Gini_test
         # Si gini_train = 0 (modèle non discriminant sur train, ex. PoissonRegressor
@@ -1464,6 +1470,7 @@ class AgentA4ML:
         return {
             'gini_train':        round(float(gini_train), 4),
             'gini_test':         round(float(gini_test), 4),
+            'base_gini':         base_gini,
             'overfit_ratio':     round(float(overfit), 3),
             'rmse_train':        round(float(rmse_train), 4),
             'rmse_test':         round(float(rmse_test), 4),

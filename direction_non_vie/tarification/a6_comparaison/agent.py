@@ -110,6 +110,7 @@ except ImportError:
 from core.conformite_reglementaire import (
     agreger_controle_effet, avertissement_walk_forward,
     construire_matrice_x, verdict_vraisemblance_gini,
+    reserve_bases_gini_melangees,
     VRAISEMBLANCE_IMPLAUSIBLE, VRAISEMBLANCE_NON_CALIBRE,
     reserve_vraisemblance_non_calibree,
     GINI_PLAUSIBLE_MAX_FREQUENCE,
@@ -468,6 +469,13 @@ class AgentA6Comparaison:
                     col_cible, (modele_production or {}).get('gini_test'))
                 if not _cible_est_freq else None)
             rapport['reserve_vraisemblance'] = _reserve_vrais
+            # ⚠️⚠️ LE MÉLANGE DE BASES SE DÉCLARE — constat `a4/C10`. Il ne
+            # bloque rien et ne change aucun nombre : il rend VISIBLE que deux
+            # colonnes du même tableau ne sont pas sur le même pied.
+            _reserve_bases = reserve_bases_gini_melangees(classement)
+            rapport['reserve_bases_gini'] = _reserve_bases
+            if _reserve_bases:
+                logger.warning(_reserve_bases)
             if _reserve_vrais:
                 logger.warning(_reserve_vrais)
 
@@ -614,6 +622,7 @@ class AgentA6Comparaison:
                 # personne ne lit serait `conformite/C7` recommence.
                 'reserve_arbitrage': rapport.get('reserve_arbitrage'),
                 'reserve_vraisemblance': rapport.get('reserve_vraisemblance'),
+                'reserve_bases_gini': rapport.get('reserve_bases_gini'),
                 'alertes_conformite': _alertes_conformite,
                 'alertes_modele': _alertes_modele,
                 'exclusions_cible': exclusions_cible,
@@ -739,6 +748,7 @@ class AgentA6Comparaison:
                 # personne ne lit serait `conformite/C7` recommence.
                 'reserve_arbitrage': rapport.get('reserve_arbitrage'),
                 'reserve_vraisemblance': rapport.get('reserve_vraisemblance'),
+                'reserve_bases_gini': rapport.get('reserve_bases_gini'),
                 'alertes_conformite': _alertes_conformite,
                 'alertes_modele':     _alertes_modele,
                 # Modèles écartés de la comparaison pour cible non conforme
@@ -824,6 +834,7 @@ class AgentA6Comparaison:
                         'famille':         'GLM',
                         'cible':           met.get('cible'),   # déclarée par A3 (poisson=freq, gamma=cout_moyen, tweedie=prime_pure)
                         'gini_test':       met.get('gini', 0),
+                        'base_gini':       met.get('base_gini'),
                         'gini_train':      met.get('gini', 0),
                         'relativites':     relativites,  # exp(β) par variable
                         'rmse_test':       met.get('rmse_test', 999),
@@ -842,6 +853,7 @@ class AgentA6Comparaison:
                     'famille':         'ML',
                     'cible':           _cible_a4,
                     'gini_test':       met.get('gini_test', 0),
+                    'base_gini':       met.get('base_gini'),
                     'gini_train':      met.get('gini_train', 0),
                     'rmse_test':       met.get('rmse_test', 999),
                     'overfit_ratio':   met.get('overfit_ratio', 1.0),
@@ -859,6 +871,7 @@ class AgentA6Comparaison:
                     'famille':         'Deep Learning',
                     'cible':           _cible_a5,
                     'gini_test':       met.get('gini_test', 0),
+                    'base_gini':       met.get('base_gini'),
                     'gini_train':      met.get('gini_train', 0),
                     'rmse_test':       met.get('rmse_test', 999),
                     'overfit_ratio':   met.get('overfit_ratio', 1.0),

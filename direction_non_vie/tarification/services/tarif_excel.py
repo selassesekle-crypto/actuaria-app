@@ -572,6 +572,7 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "", arrete: Optional[str] =
         ctrl_effet   = result_a6.get('controle_effet', {})
         reserve_arb  = result_a6.get('reserve_arbitrage')
         reserve_vra  = result_a6.get('reserve_vraisemblance')
+        reserve_bas  = result_a6.get('reserve_bases_gini')
         audit_trail  = result_a6.get('audit_trail', {})
 
         # ── Onglet 1 : Synthèse ───────────────────────────────────────────────
@@ -680,6 +681,9 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "", arrete: Optional[str] =
         # lirait un statut sans savoir qu'un garde-fou n'a pas pu s'exercer.
         if reserve_vra:
             _kpi(ws3, r, "⚠ Réserve sur la vraisemblance", reserve_vra,
+                 statut="AMBRE", wrap=True); r += 1
+        if reserve_bas:
+            _kpi(ws3, r, "⚠ Bases de Gini mélangées", reserve_bas,
                  statut="AMBRE", wrap=True); r += 1
         _avert_ce = avertissement_controle_effet(ctrl_effet)
         if _avert_ce:

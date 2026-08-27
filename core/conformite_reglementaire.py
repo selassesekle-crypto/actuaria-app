@@ -1662,6 +1662,65 @@ def detecter_fuites_par_effet(
     return (fuites, signaux_experience) if retourner_alertes else fuites
 
 
+#: ⚠️⚠️ LA BASE D'UN GINI — CONSTAT `a4/C10`. Un Gini est un indice de
+#: CONCORDANCE : il trie par la prédiction et cumule l'observé. Deux modèles
+#: qui trient sur des grandeurs différentes ne rendent donc PAS le même
+#: nombre, même à qualité identique.
+#: MESURÉ le 27/08/2026 sur un portefeuille à exposition variable :
+#:     base COMPTAGE 0,4339 · base UNITAIRE 0,3675 — soit +18,1 %
+#:     à exposition CONSTANTE l'écart tombe à 0,0000
+#: L'écart vient donc ENTIÈREMENT de la variation d'exposition, et il est
+#: SYSTÉMATIQUEMENT favorable à la base comptage.
+#: ⚠️ Ces constantes ne CORRIGENT rien : elles DÉCLARENT. Aligner les bases
+#: changerait un Gini publié, donc potentiellement le modèle retenu, donc un
+#: prix — c'est une décision, pas un nettoyage.
+BASE_GINI_COMPTAGE = 'comptage'          # prédiction × exposition (offset)
+BASE_GINI_UNITAIRE = 'unitaire'          # prédiction par unité d'exposition
+BASE_GINI_COUT_MOYEN = 'cout_moyen'      # sévérité, sur les sinistrés seuls
+BASE_GINI_NON_DECLAREE = None            # ⚠️ jamais supposée
+
+
+#: Libellé lisible par un actuaire, pour chaque base.
+LIBELLES_BASE_GINI = {
+    BASE_GINI_COMPTAGE: "comptage prédit (exposition incorporée)",
+    BASE_GINI_UNITAIRE: "prédiction unitaire (hors exposition)",
+    BASE_GINI_COUT_MOYEN: "coût moyen (sinistrés seuls)",
+}
+
+
+def reserve_bases_gini_melangees(catalogue) -> str | None:
+    """SOURCE UNIQUE — la phrase que lit l'actuaire quand un classement
+    compare des Gini qui ne mesurent pas la même chose.
+
+    ⚠️ Elle NE BLOQUE RIEN et ne change aucun nombre : elle rend VISIBLE que
+    deux colonnes d'un même tableau ne sont pas sur le même pied. *Un écart de
+    18 % qui vient de la convention, et non du modèle, ne doit pas se lire
+    comme un écart de qualité.*
+
+    ⚠️ Une base NON DÉCLARÉE est signalée comme telle — jamais assimilée à
+    l'une des autres.
+    """
+    par_base: dict = {}
+    for modele in catalogue or []:
+        par_base.setdefault(modele.get('base_gini'), []).append(
+            modele.get('modele', '?'))
+    if len(par_base) <= 1:
+        return None
+    morceaux = []
+    for base, modeles in par_base.items():
+        libelle = (LIBELLES_BASE_GINI.get(base)
+                   if base is not None else "base NON DÉCLARÉE")
+        morceaux.append(f"{libelle} : {', '.join(sorted(modeles))}")
+    return (
+        "⚠ BASES DE GINI MÉLANGÉES DANS UN MÊME CLASSEMENT — "
+        + " · ".join(morceaux)
+        + ". Un Gini trie par la prédiction : deux modèles qui trient sur des "
+          "grandeurs différentes ne rendent pas le même nombre à qualité "
+          "égale. Mesuré sur un portefeuille à exposition variable : +18,1 % "
+          "pour la base comptage, et 0,0 % à exposition constante. "
+          "*L'écart de convention ne se lit pas comme un écart de qualité.*")
+
+
 #: Les trois verdicts du plafond de vraisemblance. ⚠️⚠️ IL Y EN A TROIS, ET PAS
 #: DEUX : « je ne sais pas juger cette cible » n'est ni « plausible » ni
 #: « implausible », et le confondre avec l'un des deux publie un faux.

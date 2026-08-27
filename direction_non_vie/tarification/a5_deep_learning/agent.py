@@ -44,7 +44,10 @@ from sklearn.preprocessing import StandardScaler
 # exécution DL bloquée dans l'environnement d'audit V7 par l'absence de
 # PyTorch, mais la logique de sélection est identique à celle d'A4,
 # vérifiée empiriquement).
-from core.conformite_reglementaire import construire_matrice_x
+from core.conformite_reglementaire import (
+    BASE_GINI_COMPTAGE, BASE_GINI_UNITAIRE,
+    construire_matrice_x,
+)
 from core.plan_tarifaire import (
     PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
     alerte_modele_ampute,
@@ -1378,7 +1381,17 @@ class AgentA5DeepLearning:
         pred_test:  np.ndarray,
         nom:        str
     ) -> Dict:
-        """Calcule les métriques de performance."""
+        """Calcule les métriques de performance.
+
+        ⚠️⚠️ LA BASE DU GINI DIFFÈRE ENTRE LES DEUX MODÈLES D'A5, ET C'EST
+        MESURÉ (constat `a4/C10`, élargi le 27/08/2026) :
+          · CANN   — `modele(X_test_t, offset_test_t)` : l'offset log(exposition)
+            est appliqué dans le `forward`, donc le tri porte sur un COMPTAGE ;
+          · TabNet — `modele(X_test_t)` : aucun offset, tri UNITAIRE.
+        **A5 compare donc déjà deux bases entre ses propres modèles.** On ne
+        corrige pas ici — aligner changerait un Gini publié, donc le modèle
+        retenu, donc un prix. On DÉCLARE.
+        """
         gini_train = self._calculer_gini(y_train, pred_train)
         gini_test  = self._calculer_gini(y_test,  pred_test)
         overfit    = gini_train / max(gini_test, 1e-6)
@@ -1387,6 +1400,9 @@ class AgentA5DeepLearning:
         return {
             'gini_train':    round(gini_train, 4),
             'gini_test':     round(gini_test,  4),
+            # ⚠️ Base MESURÉE par modèle, jamais supposée — voir la docstring.
+            'base_gini':     (BASE_GINI_COMPTAGE if nom == 'cann'
+                              else BASE_GINI_UNITAIRE),
             'overfit_ratio': round(overfit,     3),
             'rmse_test':     round(rmse_test,   2),
             'pred_mean':     round(float(pred_test.mean()), 2),

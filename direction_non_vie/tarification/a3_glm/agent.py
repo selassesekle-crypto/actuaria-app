@@ -118,7 +118,10 @@ except ImportError:
 # une colonne 'sexe_M' pré-encodée par le client, 'Sexe', 'sex' ou
 # 'civilite' entrait dans le GLM. A3 appelle désormais filtrer_genre(),
 # comme A2/A4/A5/A6 : une seule implémentation, pour tous.
-from core.conformite_reglementaire import construire_matrice_x
+from core.conformite_reglementaire import (
+    BASE_GINI_COMPTAGE, BASE_GINI_COUT_MOYEN, BASE_GINI_UNITAIRE,
+    construire_matrice_x,
+)
 from core.plan_tarifaire import (
     PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
     alerte_modele_ampute,
@@ -941,6 +944,9 @@ class AgentA3GLM:
                 1 - modele_final.deviance / modele_final.null_deviance, 4
             ),
             'gini':             round(gini, 4),
+            # ⚠️ BASE MESURÉE : `predict(X_test, offset=offset_test)` incorpore
+            # l'exposition — le tri se fait sur un COMPTAGE (constat `a4/C10`).
+            'base_gini':        BASE_GINI_COMPTAGE,
             'rmse_test':        round(rmse, 4),
             'nb_vars_retenues': len(vars_actives),
             'nb_vars_exclues':  len(vars_exclues),
@@ -1177,6 +1183,9 @@ class AgentA3GLM:
                 1 - modele_final.deviance / modele_final.null_deviance, 4
             ),
             'gini':             round(gini, 4),
+            # ⚠️ BASE MESURÉE : `predict(X_test)` SANS offset, sur les sinistrés
+            # seuls — le tri se fait sur un COÛT MOYEN.
+            'base_gini':        BASE_GINI_COUT_MOYEN,
             'rmse_test':        round(rmse, 2),
             'nb_vars_retenues': len(vars_actives),
             'nb_vars_exclues':  len(vars_exclues),
@@ -1398,6 +1407,9 @@ class AgentA3GLM:
             'deviance':         round(float(modele_final.deviance), 4),
             'gini':             (round(float(gini_tw), 4)
                                  if gini_tw is not None else None),
+            # ⚠️ BASE MESURÉE : `predict(X_test)` SANS offset — le tri se fait
+            # sur une prédiction UNITAIRE, hors exposition.
+            'base_gini':        BASE_GINI_UNITAIRE,
             'tweedie_p':        TWEEDIE_P,
             'nb_vars_retenues': len(vars_actives),
             'nb_vars_exclues':  len(vars_exclues),
