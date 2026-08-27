@@ -49,6 +49,19 @@ Les vraies bornes existent (`ic95_low`/`ic95_high`) et ne sont pas passées.
 
 **C6 — Le Gini du Tweedie n'existe pas et vaut 0 partout.** `_calibrer_tweedie` ne pose aucune clé `gini`. G3, G4 et H3 lisent `.get('gini', 0)` → le Tweedie est publié à **0.0000** dans trois endroits, y compris `h3_ajustement['gini_tweedie']`.
 
+> ✅ **FERMÉ le 26/08/2026 — `b0ae396`.** `_calibrer_tweedie` calcule désormais
+> son Gini sur (prime pure observée, prédite). **Mesuré : −0,078** — *négatif*.
+> Le `0` fabriqué par `.get('gini', 0)` n'était donc pas neutre, il était
+> **flatteur**, comme le plancher d'A5.
+> ⚠️⚠️ **ET IL RENDAIT INERTE UN GARDE-FOU QUI EXISTAIT** : A6 force le statut à
+> **ROUGE** dès qu'un Gini est négatif (anti-sélection, auto-audit du
+> 11/07/2026). La règle n'avait jamais pu se déclencher sur le Tweedie —
+> *le garde-fou surveillait un littéral.* Statut mesuré sur le chemin de l'app,
+> candidat unique : **AMBRE → ROUGE**.
+> ⚠️ Un Gini non mesurable vaut désormais `None`, **jamais `0`**, et A6 écarte
+> le modèle **en le déclarant**. Épinglé par `test_gini_tweedie_arbitrage.py`
+> (8 contrôles, violation plantée dans chacun).
+
 **C7 — `meilleur_modele` compare deux Gini incomparables.** `{'poisson': 0.3856, 'gamma': 0.0507}` → « meilleur = poisson ». Le Poisson est évalué sur **tout** le test (fréquence), le Gamma sur les **sinistrés seuls** (sévérité). Ce ne sont pas deux candidats pour la même tâche.
 
 ### B — Affirme plus que le code ne porte (5)

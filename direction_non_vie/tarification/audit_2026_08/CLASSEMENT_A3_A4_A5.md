@@ -63,8 +63,16 @@ trancher**, et le banc n'en décide qu'une partie.
 
 | constat | ce qu'il dit | canal mesuré |
 |---|---|---|
-| `a4/C2` | le monitoring de dérive est **intégralement simulé** | `monitoring` **0/10 — muet** |
+| ~~`a4/C2`~~ | ✅ **FERMÉ le 26/08 — `16c6566`** | *voir ci-dessous* |
 | — | *(la sensibilité tarifaire est muette aussi : 0/3)* | `sensibilite_tarifaire` |
+
+> ✅ **`a4/C2` FERMÉ (`16c6566`), et le latent n'était pas où ce tableau le
+> plaçait.** Le monitoring ne simulait plus depuis six semaines : zéro
+> `np.random.*` dans A4 (AST), PSI mesuré par `_psi_reel` — **0,056 sur deux
+> portefeuilles proches contre 7,59 sur deux éloignés** (exécution). Ce qui
+> restait, c'était son **étiquette** : `FIGURES_ECARTEES` l'accusait encore de
+> « données FABRIQUÉES ». ⚠️ *Un latent classé sur le canal peut être clos sur
+> sa source.* Épinglé par `test_monitoring_derive_reel.py` (6 contrôles).
 
 ⚠️ **Un latent reste vrai** : un monitoring fabriqué est un défaut, même
 inatteignable. Il descend dans l'ordre, il ne sort pas de la liste.
@@ -78,7 +86,7 @@ l'**hygiène de code**. Le banc mesure des chaînes dans des livrables : il est
 | famille | constats | ce qui devra décider |
 |---|---|---|
 | **calcul faux — déplace des euros** | `a3/C1` (Tweedie ajusté sans offset) | une **mesure de prime**, comme au lot 1.2 |
-| **valeurs numériques** | `a3/C6` `a3/C7` `a3/C14` · `a4/C10` `a4/C11` | comparer la valeur **publiée** à la valeur **réelle** — le banc ne marque pas les nombres |
+| **valeurs numériques** | ~~`a3/C6`~~ ✅ **FERMÉ `b0ae396`** · `a3/C7` `a3/C14` · `a4/C10` `a4/C11` | comparer la valeur **publiée** à la valeur **réelle** — le banc ne marque pas les nombres. ⚠️ **`a3/C6` a été fermé exactement par cette méthode** : le Gini du Tweedie mesuré vaut **−0,078**, quand A6 en publiait **0** par défaut de `get`. *Le zéro fabriqué était flatteur.* |
 | **figures** | `a3/C4` `a3/C5` `a3/C13` · `a4/C3` `a4/C5` · `a5/C3` `a5/C4` `a5/C5` | produire la figure et **lire ce qu'elle trace** — une seconde surface, non outillée |
 | **hygiène / docstring** | `a3/C11` `a3/C12` `a3/C15` `a3/C16` `a3/C17` `a3/C18` · `a4/C7` `a4/C12` `a4/C13` · `a5/C8` `a5/C9` | lecture directe ; aucun livrable en jeu |
 | **fermés** | `a5/C6` `a5/C7` | lot 1.1 |

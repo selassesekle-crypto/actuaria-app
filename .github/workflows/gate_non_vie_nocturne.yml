@@ -111,7 +111,18 @@ jobs:
           # mort a cache cette panne nocturne depuis le 12/08. On surface les echecs.
           if [ "$code" -ne 0 ]; then
             echo "===== ECHECS (blocs FAIL/ERROR + traceback stderr) ====="
-            awk '/^={20,}/{f=1} f' /tmp/nv.txt | head -400
+            # /!\ NE PAS TRONQUER EN SILENCE : une sortie coupee sans le dire
+            # est indiscernable d'une sortie complete -- le lecteur croit avoir
+            # tout vu. On borne (un log n'est pas infini) et ON DECLARE.
+            awk '/^={20,}/{f=1} f' /tmp/nv.txt > /tmp/echecs_nv.txt
+            _tot=$(wc -l < /tmp/echecs_nv.txt)
+            head -400 /tmp/echecs_nv.txt
+            if [ "$_tot" -gt 400 ]; then
+              echo "----- SORTIE TRONQUEE : $_tot lignes d'echec, 400 affichees,"
+              echo "----- $((_tot - 400)) MASQUEES. Relancer en local pour le reste."
+            else
+              echo "----- sortie COMPLETE : $_tot ligne(s) d'echec, aucune masquee."
+            fi
           fi
           tail -30 /tmp/nv.txt
           exit $code

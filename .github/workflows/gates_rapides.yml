@@ -95,7 +95,18 @@ jobs:
           # angle mort qui a cache pyyaml des jours. On surface les echecs.
           if [ "$code" -ne 0 ]; then
             echo "===== ECHECS (blocs FAIL/ERROR + traceback stderr) ====="
-            awk '/^={20,}/{f=1} f' /tmp/normes.txt | head -300
+            # /!\ NE PAS TRONQUER EN SILENCE : une sortie coupee sans le dire
+            # est indiscernable d'une sortie complete -- le lecteur croit avoir
+            # tout vu. On borne (un log n'est pas infini) et ON DECLARE.
+            awk '/^={20,}/{f=1} f' /tmp/normes.txt > /tmp/echecs_normes.txt
+            _tot=$(wc -l < /tmp/echecs_normes.txt)
+            head -300 /tmp/echecs_normes.txt
+            if [ "$_tot" -gt 300 ]; then
+              echo "----- SORTIE TRONQUEE : $_tot lignes d'echec, 300 affichees,"
+              echo "----- $((_tot - 300)) MASQUEES. Relancer en local pour le reste."
+            else
+              echo "----- sortie COMPLETE : $_tot ligne(s) d'echec, aucune masquee."
+            fi
           fi
           tail -20 /tmp/normes.txt
           exit $code
@@ -112,7 +123,18 @@ jobs:
           echo "tests=$n" >> "$GITHUB_OUTPUT"
           if [ "$code" -ne 0 ]; then
             echo "===== ECHECS (blocs FAIL/ERROR + traceback stderr) ====="
-            awk '/^={20,}/{f=1} f' /tmp/core.txt | head -300
+            # /!\ NE PAS TRONQUER EN SILENCE : une sortie coupee sans le dire
+            # est indiscernable d'une sortie complete -- le lecteur croit avoir
+            # tout vu. On borne (un log n'est pas infini) et ON DECLARE.
+            awk '/^={20,}/{f=1} f' /tmp/core.txt > /tmp/echecs_core.txt
+            _tot=$(wc -l < /tmp/echecs_core.txt)
+            head -300 /tmp/echecs_core.txt
+            if [ "$_tot" -gt 300 ]; then
+              echo "----- SORTIE TRONQUEE : $_tot lignes d'echec, 300 affichees,"
+              echo "----- $((_tot - 300)) MASQUEES. Relancer en local pour le reste."
+            else
+              echo "----- sortie COMPLETE : $_tot ligne(s) d'echec, aucune masquee."
+            fi
           fi
           tail -20 /tmp/core.txt
           exit $code

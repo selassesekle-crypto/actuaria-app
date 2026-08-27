@@ -13,16 +13,16 @@ l'état d'aujourd'hui.*
 
 | # | critère | état mesuré aujourd'hui |
 |---|---|---|
-| **S1** | **Rien de faux n'est publié** | ⛔ **129 constats ouverts** |
-| **S2** | **Rien de fermé ne peut régresser** | 🟡 **18 fermés sur 19 sont épinglés** par un contrôle positif nommé — `a5/C5` ne l'est pas |
-| **S3** | **Un tarif signé se rejoue à l'identique** | ⛔ **1 sur 4** : le tarif déclaratif est reproductible **au bit près** (0,00e+00) ; le tarif DL ne l'est pas (aucun seed) ; le livrable porte un horodatage ; l'empreinte du plan n'a pas de version de schéma |
+| **S1** | **Rien de faux n'est publié** | ⛔ **107 constats ouverts** — *recomptés le 27/08, méthode au §②* |
+| **S2** | **Rien de fermé ne peut régresser** | 🟡 **40 fermés sur 41 sont épinglés** par un contrôle positif nommé — `a5/C5` ne l'est toujours pas |
+| **S3** | **Un tarif signé se rejoue à l'identique** | ⚠️ **CHIFFRE NON REMESURÉ — au moins 2 des 4 ont bougé depuis** : l'empreinte porte sa version de schéma (`s1:`, `2cb43ef`) et l'horodatage du livrable a son lot (`ea37564`, `test_horodatage_livrable.py`). *Le « 1 sur 4 » ci-dessous date d'avant ; S3, S4 et S5 demandent leur propre re-mesure, elle n'est pas faite.* État d'origine, **corrigé de ce qui a bougé** : le tarif déclaratif est reproductible **au bit près** (0,00e+00) · le tarif DL ne l'est toujours pas (**aucun seed**) · ~~le livrable porte un horodatage~~ **traité** (`ea37564`) · ~~l'empreinte du plan n'a pas de version de schéma~~ **elle l'a** (`s1:`, `2cb43ef`). ⚠️ *Le compte global reste à refaire.* |
 | **S4** | **Un seul chemin — ou des chemins également gardés** | ⛔ **5 assemblages dans l'app**, un seul complet ; l'orchestrateur a **0 appelant** ; le chemin agent n'a **aucune couche qualité** |
 | **S5** | **Tout ce qui tarife est atteignable par une gate** | 🟡 `actuaria_app.py` est **importable depuis le lot 0.1** (`07be8c0`) — **29 fonctions atteignables contre 0** ; restent **3 modules jamais audités** (1 170 l) |
 
 ⚠️⚠️ **ET UN CRITÈRE QUI N'EN EST PAS UN : LE NOMBRE DE TESTS.** Mesuré par
 résolution d'import vers un chemin de fichier : **23 882 lignes, 1 940 tests,
 12 lignes par test.** Le périmètre est **densément testé** — et il a livré
-**143 constats**. *L'archive l'écrivait dès le premier jour : « testé n'a jamais
+**147 constats**. *L'archive l'écrivait dès le premier jour : « testé n'a jamais
 voulu dire audité ».* **Ajouter des tests ne rendra pas ce module solide.
 Fermer ce qui est faux, et l'épingler, oui.**
 
@@ -38,13 +38,41 @@ lui-même**.
 
 | | |
 |---|---|
-| constats relevés (vagues 1 + 2) | **146** (85 + 61) |
-| fermés **et épinglés** | **18** |
+| constats relevés (vagues 1 + 2) | **147** — *recomptés le 27/08* |
+| fermés **et épinglés** | **40** |
 | corrigé, **non épinglé** | **1** (`a5/C5`) |
-| **⛔ OUVERTS** | **129** |
+| **⛔ OUVERTS** | **107** |
 | lignes lues intégralement | **22 693** sur 23 863 du périmètre |
 | jamais auditées | **1 170 l** + `actuaria_app.py` (5 181 l) |
 | preuves qui se relancent | **35, 0 échec** |
+| gates de lot au 27/08 | `core` **187 OK** · `tarification` **466 OK** (skipped=2) |
+
+## ⚠️⚠️ CES CHIFFRES ONT UNE ASSIETTE, ET ELLE SE DÉCLARE
+
+**Recomptés le 27/08/2026 — les précédents (« 146 · 18 · 129 ») dataient d'avant
+quatre lots.** La méthode, pour qu'on puisse la refaire :
+
+- **147 constats** = en-têtes des 14 `releve_*.md`, **DEUX formes** :
+  `**Cn — …**` (135) *et* `**Cn** — …` (12). ⚠️ *Ne compter que la première en
+  rate 12* — c'est l'erreur que ce recompte a faite d'abord. Aucun doublon.
+- **40 fermés** = union de trois sources : le marqueur ✅ dans le relevé (**26**)
+  · la section FERMÉS de `REMESURE` (**+8** que le relevé ne marquait pas) ·
+  les fermetures **épinglées par un contrôle positif nommé** mais non reportées
+  (**+6** : `services/C1`…`C6`).
+  ⚠️ **CE CHIFFRE A ÉTÉ FAUX UNE PREMIÈRE FOIS (41).** Je l'avais composé *en
+  prose*, en additionnant les sources — et `a4/C2` figurait déjà dans deux
+  d'entre elles. **Une union se calcule sur des ENSEMBLES, jamais par addition
+  de comptes** : deux sources qui se recouvrent ne s'ajoutent pas.
+
+⚠️⚠️ **CE COMPTE MESURE CE QUI EST ENREGISTRÉ, PAS CE QUE LE CODE FAIT.** Une
+fermeture réalisée sans être reportée reste comptée **OUVERTE**. C'est délibéré,
+et c'est le bon sens de l'erreur : **se tromper vers « ouvert » fait rouvrir un
+dossier clos ; se tromper vers « fermé » laisse un défaut dans un livrable
+signé.** Le compte est donc une **borne basse des fermetures**.
+
+⚠️ **UN relevé est en retard sur le code, mesuré** : `services_rapport` marque
+**0 fermé** alors que `C1`…`C6` le sont et sont épinglés. *Les y reporter est un
+lot à part — il n'est pas fait.* (`a3_glm` l'était aussi ; corrigé le 27/08.)
 
 ---
 
@@ -195,7 +223,8 @@ des chaînes — *un marqueur posé sur un nombre est détruit par l'arrondi*, e
 
 | lot | constats |
 |---|---|
-| **3.1 Les statistiques fausses d'A3** | `a3/C4` IC 95 % faux · `a3/C6` Gini Tweedie nul · `a3/C7` deux Gini incomparables comparés · `a3/C14` p-value fabriquée |
+| **3.1 Les statistiques fausses d'A3** | ~~`a3/C6` Gini Tweedie nul~~ ✅ **FERMÉ `b0ae396`** (mesuré **−0,078** — le zéro venait d'un défaut de `get`, et il était **flatteur** ; épinglé par `test_gini_tweedie_arbitrage.py`) · restent `a3/C4` IC 95 % faux · `a3/C7` deux Gini incomparables comparés · `a3/C14` p-value fabriquée |
+| *(hors 3.1)* | ~~`a4/C2` monitoring simulé~~ ✅ **FERMÉ `16c6566`** — PSI mesuré **0,056 vs 7,59** par exécution ; ce qui restait était son **étiquette**, pas son code. Épinglé par `test_monitoring_derive_reel.py` |
 | **3.2 Les scores et les rangs d'A4/A6** | `a4/C6` `a4/C9` `a4/C10` `a6/C6` `a6/C7` `a6/C8` |
 | **3.3 L'API latente** | ✅ **`pipeline/C1` FERMÉ pour l'ILLISIBILITÉ** (la plausibilité reste ouverte, faute de borne déclarée au plan ; `predire_portefeuille` rendu en conception) · `pipeline/C1` (**`tarifer()`**, +128 % sur un facteur illisible) — **descendu du rang 1** : 1 appelant, une **démo**. *Une API publique sans borne est une régression qui attend un appelant* |
 
