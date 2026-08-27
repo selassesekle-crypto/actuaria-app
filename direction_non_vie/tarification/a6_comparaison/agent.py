@@ -107,7 +107,7 @@ except ImportError:
 # filtrer_famille_cible ; l'audit V9 (BLOQUANT) a prouvé qu'une colonne
 # genre pré-encodée (scénario V7) traversait donc intacte jusqu'à la
 # recalibration walk-forward.
-from core.charts_tarif import FOND_SOMBRE, couleur_rag
+from core.charts_tarif import FOND_SOMBRE, couleur_rag, glyphe_rag
 from core.conformite_reglementaire import (
     agreger_controle_effet, avertissement_walk_forward,
     construire_matrice_x, verdict_vraisemblance_gini,
@@ -3066,7 +3066,12 @@ class AgentA6Comparaison:
                 "statut":  c2_statut,
                 "message": c2_msg,
                 "conseil": c2_conseil,
-                "titre_graphique": f"{'✅' if c2_statut=='VERT' else '⚠️'} Écart Gini = {ecart_gini:.4f}",
+                # ⚠️⚠️ GLYPHE À TROIS ÉTATS, pris à la SOURCE UNIQUE — étape 2a de
+                # l'arbitrage 2. L'expression était BINAIRE : `'✅' if VERT else '⚠️'`.
+                # Un statut ROUGE affichait donc le glyphe de l'AMBRE, sur une figure
+                # du plan du rapport SIGNÉ. *Le second canal existait, et il mentait.*
+                "titre_graphique": (f"{glyphe_rag(c2_statut)} Écart Gini = "
+                                    f"{ecart_gini:.4f}"),
             },
             "c3_coherence": {
                 # ⚠️ LE NOM, PAS LE DICT — ET C'EST LA CAUSE DES TROIS AUTRES
@@ -3139,7 +3144,7 @@ class AgentA6Comparaison:
             l1 = dict(**LAYOUT)
             l1.update(dict(
                 title=dict(
-                    text=f"{'✅' if statut_g=='VERT' else '⚠️'} Scores multicritères — Barre dorée = modèle retenu",
+                    text=f"{glyphe_rag(statut_g)} Scores multicritères — Barre dorée = modèle retenu",
                     font=dict(color=couleur_g, size=11), x=0.01
                 ),
                 xaxis=dict(tickfont=dict(color=BLANC, size=9), showgrid=False),
@@ -3247,7 +3252,7 @@ class AgentA6Comparaison:
                 ),
                 paper_bgcolor=NAVY, showlegend=False,
                 title=dict(
-                    text=f"{'✅' if statut_c3=='VERT' else '⚠️'} Profil multicritères — {modele_nm}",
+                    text=f"{glyphe_rag(statut_c3)} Profil multicritères — {modele_nm}",
                     font=dict(color=couleur_c3, size=11), x=0.01
                 ),
                 margin=dict(l=40, r=40, t=60, b=50), height=300,

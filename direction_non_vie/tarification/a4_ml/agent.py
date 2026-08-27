@@ -2977,9 +2977,16 @@ class AgentA4ML:
             fig2.add_hline(y=gini_ref, line_color=VERT, line_width=1.5, line_dash="dash",
                           annotation_text=f"Référence {gini_ref:.4f}",
                           annotation_font=dict(color=VERT, size=9))
+            # ⚠️⚠️ LA LIGNE RESTE ROUGE, LE TEXTE NON — étape 2b. Mesuré :
+            # ROUGE #E74C3C vaut 3,74 sur le tracé : il PASSE comme objet
+            # (WCAG 1.4.11, 3:1) et ÉCHOUE comme texte (1.4.3, 4,5:1).
+            # ⚠️ Les deux autres voies sont écartées PAR LA MESURE : #C0392B des
+            # rapports tombe à 2,63 sur ce fond — PIRE que l'actuel — et inventer
+            # un rouge plus clair serait fabriquer une couleur. *La ligne rouge
+            # porte déjà le sens ; l'étiquette n'a qu'à être lisible.*
             fig2.add_hline(y=seuil_al, line_color=ROUGE, line_width=1.5, line_dash="dot",
                           annotation_text=f"Seuil alerte {seuil_al:.4f}",
-                          annotation_font=dict(color=ROUGE, size=9))
+                          annotation_font=dict(color=BLANC, size=9))
             statut_h3 = val_ml["h3_gini"]["statut"]
             couleur_h3 = VERT if statut_h3=="VERT" else AMBRE if statut_h3=="AMBRE" else ROUGE
             l2 = dict(**LAYOUT)

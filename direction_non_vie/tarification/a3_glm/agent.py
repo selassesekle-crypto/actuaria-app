@@ -2233,10 +2233,19 @@ class AgentA3GLM:
 
                 # Lignes de référence ±2σ
                 fig2.add_hline(y=0,  line_color=BLANC, line_width=1.5, line_dash="dot")
+                # ⚠️⚠️ LA LIGNE RESTE ROUGE, LE TEXTE NON — étape 2b. Mesuré :
+                # ROUGE #E74C3C vaut 3,74 sur le tracé : il PASSE comme objet
+                # (WCAG 1.4.11, 3:1) et ÉCHOUE comme texte (1.4.3, 4,5:1).
+                # ⚠️ Les deux autres voies sont écartées PAR LA MESURE : #C0392B des
+                # rapports tombe à 2,63 sur ce fond — PIRE que l'actuel — et inventer
+                # un rouge plus clair serait fabriquer une couleur. *La ligne rouge
+                # porte déjà le sens ; l'étiquette n'a qu'à être lisible.*
                 fig2.add_hline(y=2,  line_color=ROUGE, line_width=1, line_dash="dot",
-                               annotation_text="+2σ", annotation_font=dict(color=ROUGE, size=9))
+                               annotation_text="+2σ",
+                               annotation_font=dict(color=BLANC, size=9))
                 fig2.add_hline(y=-2, line_color=ROUGE, line_width=1, line_dash="dot",
-                               annotation_text="-2σ", annotation_font=dict(color=ROUGE, size=9))
+                               annotation_text="-2σ",
+                               annotation_font=dict(color=BLANC, size=9))
 
                 layout2 = dict(**LAYOUT_BASE)
                 layout2.update(dict(
