@@ -32,10 +32,15 @@ def _texte_xl(blob: bytes) -> str:
 class TestC2_ReferenceWuthrich(unittest.TestCase):
     """C2 — l'Excel A5 citait un article de PROVISIONNEMENT chain-ladder."""
 
-    def test_excel_a5_cite_l_article_CANN_pas_le_chain_ladder(self):
+    def test_excel_a5_cite_l_article_CANN_ANCRE_a_sa_source(self):
+        """La bonne réf CANN est ANCRÉE à sa source, vérifiée EN EXTERNE
+        (Cambridge Core / ASTIN Bulletin, DOI 10.1017/asb.2018.42) — pas par
+        simple appariement à ce que l'agent cite déjà."""
         r5 = {'success': True, 'metriques': {}, 'classement': [], 'audit_id': 'CTRL'}
         txt = _texte_xl(export_excel_a5(r5))
         self.assertIn("Yes, we CANN", txt, "la vraie référence CANN manque")
+        self.assertIn("10.1017/asb.2018.42", txt,
+                      "la citation n'est pas ancrée à sa source (DOI)")
         self.assertNotIn("Chain-Ladder Reserving", txt,
                          "l'article provisionnement (faux) est encore cité")
 

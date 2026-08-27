@@ -514,9 +514,14 @@ def export_excel_a5(result_a5: Dict, audit_id: str = "", arrete: Optional[str] =
                  statut='VERT' if (err is not None and err < 1e-3) else 'AMBRE'); r += 1
         r += 1
         _section(ws3, r, "▶ RÉFÉRENCE MÉTHODOLOGIQUE"); r += 1
+        # ⚠️ Référence VÉRIFIÉE EN EXTERNE le 27/08/2026 (Cambridge Core, le site
+        # officiel d'ASTIN Bulletin — DOI 10.1017/asb.2018.42), PAS par simple
+        # appariement à ce que l'agent A5 cite. C'est bien l'article CANN (gel GLM
+        # + résiduel neuronal), pas un article de provisionnement chain-ladder.
         _kpi(ws3, r, "Référence",
-             "Wüthrich, M.V. & Merz, M. (2019), 'Editorial: Yes, we CANN!' "
-             "— principe de gel GLM adapté à la tarification (offset + résiduel).",
+             "Wüthrich, M.V. & Merz, M. (2019), 'Editorial: Yes, we CANN!', "
+             "ASTIN Bulletin 49(1), 1-3, doi:10.1017/asb.2018.42 — principe de "
+             "gel GLM adapté à la tarification (offset + résiduel).",
              wrap=True); r += 1
 
         # ── Onglet 4 : Audit Trail ──────────────────────────────────────────────
