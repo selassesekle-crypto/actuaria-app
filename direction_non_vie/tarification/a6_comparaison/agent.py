@@ -116,6 +116,18 @@ from core.conformite_reglementaire import (
     GINI_PLAUSIBLE_MAX_FREQUENCE,
 )
 
+#: ⚠️⚠️ LE VOCABULAIRE DES SPLITS, NOMMÉ — constat `a6/C6`.
+#: Trois sites comparaient `backtest['split']` au littéral
+#: `'walk_forward_temporel'`, alors que le code n'écrit JAMAIS cette chaîne :
+#: il écrit `'aléatoire_80_20'` ou `'walk_forward_temporel_avec_recalibration'`.
+#: Les trois branches étaient donc MORTES — deux assertions de test qui ne
+#: s'exécutaient jamais, et, dans l'agent, le bloc qui publie les fenêtres du
+#: walk-forward. *Une chaîne recopiée à la main dans quatre fichiers finit par
+#: diverger ; une constante ne le peut pas.*
+SPLIT_ALEATOIRE = 'aléatoire_80_20'
+SPLIT_WALK_FORWARD = 'walk_forward_temporel_avec_recalibration'
+
+
 warnings.filterwarnings('ignore')
 logging.basicConfig(
     level=logging.INFO,
@@ -1127,7 +1139,7 @@ class AgentA6Comparaison:
                 "Pour un backtesting temporel réel, ajouter une colonne "
                 "'annee_souscription' ou 'annee_survenance'."
             )
-            backtest['split'] = 'aléatoire_80_20'
+            backtest['split'] = SPLIT_ALEATOIRE
             df_train, df_test = train_test_split(df, test_size=0.2, random_state=42)
             backtest['n_train'] = len(df_train)
             backtest['n_test']  = len(df_test)
@@ -1627,7 +1639,7 @@ class AgentA6Comparaison:
 
         backtest.update({
             'disponible':        True,
-            'split':             'walk_forward_temporel_avec_recalibration',
+            'split':             SPLIT_WALK_FORWARD,
             'col_annee':         col_annee,
             'annees_disponibles':[int(a) for a in annees],
             'annee_test':        int(annee_test),
@@ -2287,14 +2299,23 @@ class AgentA6Comparaison:
             f"  Overfit ratio    : {mp['overfit_ratio']:.2f}\n"
         )
 
+        def _fmt4(v):
+            """Un nombre absent se DIT — il ne lève pas et ne s'invente pas."""
+            return (f"{float(v):.4f}" if isinstance(v, (int, float))
+                    else "non mesuré")
+
         if backtest.get('disponible'):
             wf_info = ""
-            if backtest.get('split') == 'walk_forward_temporel':
+            if backtest.get('split') == SPLIT_WALK_FORWARD:
                 wf_info = (
                     f"  Fenêtres WF      : {backtest.get('n_fenetres', 'N/A')} "
                     f"({backtest.get('n_fenetres_rouge', 0)} ROUGE)\n"
                     f"  Stabilité WF     : {backtest.get('stabilite_wf', 'N/A')}\n"
-                    f"  CV A/E WF        : {backtest.get('ae_cv_wf', 'N/A'):.4f}\n"
+                    # ⚠️⚠️ `get(cle, 'N/A')` NE PROTÈGE PAS ICI : la clé EXISTE
+                    # et vaut `None` quand le CV n'a pas pu être calculé.
+                    # Un `:.4f` sur `None` LÈVE. Troisième fois que
+                    # « présent mais VIDE » revient dans cet audit.
+                    f"  CV A/E WF        : {_fmt4(backtest.get('ae_cv_wf'))}\n"
                 )
             n_seg = len(backtest.get('ae_par_segment', {}))
             n1 += (

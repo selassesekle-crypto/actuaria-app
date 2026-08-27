@@ -7,6 +7,9 @@ import numpy as np
 import pandas as pd
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../')))
 from core.plan_tarifaire import PlanTarifaire
+from direction_non_vie.tarification.a6_comparaison.agent import (
+    SPLIT_WALK_FORWARD,
+)
 
 # Phase 1 : A3.run() reçoit le PLAN signé. Fixtures auto → plan auto.
 _PLAN_AUTO = PlanTarifaire.depuis_yaml(os.path.join(
@@ -144,7 +147,14 @@ class TestA6Comparaison(unittest.TestCase):
         ae = bt['ae_ratio']
         self.assertGreater(ae, 0)
         # Walk-forward si colonne annee disponible
-        if bt.get('split') == 'walk_forward_temporel':
+        # ⚠️⚠️ CETTE ASSERTION NE S'EST JAMAIS EXÉCUTÉE — constat `a6/C6`.
+        # Le garde comparait au littéral `'walk_forward_temporel'`, que le
+        # code n'écrit JAMAIS : il écrit `SPLIT_WALK_FORWARD`. Le test
+        # passait sans vérifier ce qu'il annonce — *le silence ressemblait
+        # au succès.* On compare désormais à la CONSTANTE de l'agent : une
+        # chaîne recopiée peut diverger, une constante importée ne le peut
+        # pas.
+        if bt.get('split') == SPLIT_WALK_FORWARD:
             wf = bt.get('walk_forward', [])
             self.assertGreater(len(wf), 0)
             print(f"    ST4 Walk-forward ✅ | {len(wf)} fenêtres | "
@@ -157,7 +167,8 @@ class TestA6Comparaison(unittest.TestCase):
         # en walk-forward, au moins 'quintiles_risque' doit être produit.
         segs = bt.get('ae_par_segment', {})
         self.assertIsInstance(segs, dict)
-        if bt.get('split') == 'walk_forward_temporel' and bt.get('disponible'):
+        # ⚠️ Même garde mort, même correctif (ST5).
+        if bt.get('split') == SPLIT_WALK_FORWARD and bt.get('disponible'):
             self.assertGreater(len(segs), 0,
                 "Au moins 1 segment A/E attendu avec annee_souscription dans les données")
         print(f"    ST5 A/E segments ✅ | {len(segs)} segment(s) : {list(segs.keys())}")
