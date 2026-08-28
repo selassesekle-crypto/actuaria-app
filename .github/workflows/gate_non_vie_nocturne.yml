@@ -1,8 +1,17 @@
 # ══════════════════════════════════════════════════════════════════════════════
 # ActuarIA — GATE `direction_non_vie`, NOCTURNE
 #
-# CE QU'ELLE VERIFIE : les 1 128 tests de `direction_non_vie` -- la zone que le
+# CE QU'ELLE VERIFIE : la zone `direction_non_vie` en entier -- celle que le
 # workflow `gates_rapides.yml` NE COUVRE PAS.
+#
+# /!\ AUCUN NOMBRE DE TESTS N'EST ECRIT EN DUR ICI, ET C'EST DELIBERE. Cette
+#     ligne annoncait << les 1 128 tests >> ; la mesure du 28/08/2026 en compte
+#     1 610. Un compte fige dans un commentaire ou dans un nom d'etape se
+#     PERIME a chaque lot, sans que rien ne tombe -- c'est une affirmation que
+#     personne ne verifie. Le compte REEL est derive a l'execution par l'etape
+#     de resume (`steps.gate.outputs.tests`) et publie dans le job summary :
+#     il ne peut pas mentir. Le nom d'une etape, lui, est evalue AVANT que
+#     l'etape ne tourne : il ne PEUT PAS porter un compte vivant.
 #
 # POURQUOI LA NUIT : mesure locale, 23 a 26 min d'execution + 5 a 8 min
 # d'installation (torch pese ~800 Mo, kaleido embarque Chrome). Attendre 30 a
@@ -91,7 +100,10 @@ jobs:
             echo "Les $poses paquets optionnels sont installes."
           fi
 
-      - name: "Gate direction_non_vie — 1 128 tests"
+      # /!\ PAS DE COMPTE DANS CE NOM : il est evalue AVANT l'execution de
+      #     l'etape, il ne peut donc pas porter le nombre de tests qu'elle va
+      #     lancer. Le compte reel est publie par l'etape de resume.
+      - name: "Gate direction_non_vie"
         id: gate
         run: |
           set +e

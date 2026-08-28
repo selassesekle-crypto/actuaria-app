@@ -3,7 +3,14 @@
 #
 # CE QUE CE FICHIER VERIFIE, ET CE QU'IL NE VERIFIE PAS :
 #   OUI  normes . core . pytest Vie/EP-RE + Sante-Prevoyance   = 521 tests
-#   NON  direction_non_vie (1 128 tests) -> workflow nocturne separe
+#   NON  direction_non_vie -> workflow nocturne separe
+#
+# /!\ LE COMPTE DE LA ZONE NON COUVERTE N'EST PLUS ECRIT. Cette ligne annoncait
+#     << 1 128 tests >> ; la nocturne du 28/08/2026 en a execute 1 610. Un
+#     compte qu'on ne LANCE PAS ici ne peut pas etre derive ici : ce ne peut
+#     donc etre qu'une affirmation, et une affirmation se perime. Ce que cette
+#     phrase doit dire est ce qu'elle LIMITE -- la zone n'est pas verifiee --
+#     et cela reste vrai sans aucun nombre.
 #
 # /!\ IL NE DOIT JAMAIS AFFIRMER PLUS QU'IL N'A VERIFIE. Le resume nomme les
 #     zones executees ET LE NOMBRE DE TESTS de chacune. Un vert sans compte est
@@ -168,7 +175,7 @@ jobs:
             echo "| core | ${{ steps.core.outputs.tests }} |"
             echo "| pytest Vie/EP-RE + Sante-Prev. | ${{ steps.pytest.outputs.tests }} passes, ${{ steps.pytest.outputs.echecs }} echoues |"
             echo ""
-            echo "**NON VERIFIE ICI : \`direction_non_vie\` (1 128 tests).**"
+            echo "**NON VERIFIE ICI : \`direction_non_vie\`.**"
             echo "Ce workflow ne couvre pas la plus grosse zone du depot —"
             echo "elle tourne dans le workflow nocturne. Un vert ici ne dit"
             echo "rien d'A7, de la tarification ni de la reglementation Non-Vie."
