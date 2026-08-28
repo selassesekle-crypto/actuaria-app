@@ -288,6 +288,52 @@ def _appliquer_theme(fig: go.Figure, titre: Optional[str] = None) -> go.Figure:
     return fig
 
 
+def _declarer_assiette(fig: go.Figure, *, fournis: int, traces: int,
+                       quoi: str) -> go.Figure:
+    """Écrit SUR LA FIGURE ce qu'elle ne montre pas — vide, ou tronquée.
+
+    ⚠️⚠️ DEUX CONSTATS, UNE SEULE PROPRIÉTÉ. `charts/C3` : les sept fonctions
+    rendaient un objet COMPLET — fond navy, titre or, axes titrés, bande verte
+    — avec **zéro point tracé**, et aucune ne le disait : *une figure vide
+    était visuellement indiscernable d'une figure pleine.* `charts/C5` : trois
+    troncatures silencieuses, mesurées — relativités **23 → 15**, SHAP
+    **30 → 15**, walk-forward **4 fenêtres fournies → 2 tracées** quand deux
+    n'ont pas de A/E.
+
+    *Dans les deux cas le lecteur ne peut pas savoir que quelque chose manque.*
+
+    ⚠️ ON N'ÉLARGIT PAS LA TRONCATURE, ON LA DÉCLARE. Tracer 23 relativités
+    rendrait la figure illisible — le `top=15` est un choix de lisibilité
+    défendable. Ce qui ne l'est pas, c'est qu'il soit MUET.
+
+    ⚠️ ET LE CAS (c) DU RELEVÉ N'EST PAS REPRODUIT : `chart_distribution_
+    predictions` trace bien **1 000 valeurs sur 1 000**, il ne coupe pas à 500.
+    *Un sous-cas qui ne se reproduit pas se déclare, il ne se corrige pas.*
+    """
+    if traces <= 0:
+        # RIEN à montrer : l'annonce va AU CENTRE, en badge — elle doit être
+        # impossible à manquer, c'est tout l'objet du constat.
+        fig.add_annotation(
+            x=0.5, y=0.5, xref='paper', yref='paper',
+            text=f'<b>AUCUNE DONNÉE — {quoi}</b>',
+            showarrow=False, xanchor='center', yanchor='middle',
+            font={'family': POLICE, 'color': COULEURS['texte'], 'size': 13},
+            bgcolor=BADGE['fond'], bordercolor=BADGE['bordure'],
+            borderwidth=2, borderpad=8,
+        )
+    elif traces < fournis:
+        # TRONQUÉE : la figure reste lisible, la mention va SOUS l'axe pour ne
+        # pas recouvrir ce qui, lui, est bien tracé.
+        fig.add_annotation(
+            x=0.5, y=-0.16, xref='paper', yref='paper',
+            text=(f'{traces} {quoi} sur {fournis} — les {fournis - traces} '
+                  f'autres ne sont pas tracées'),
+            showarrow=False, xanchor='center', yanchor='top',
+            font={'family': POLICE, 'color': COULEURS['texte_2'], 'size': 11},
+        )
+    return fig
+
+
 def _badge_kpi(fig: go.Figure, texte: str, x: float = 0.985, y: float = 0.96) -> go.Figure:
     """Badge KPI (fond orange, bordure or) façon badge LIFT du prototype V3."""
     fig.add_annotation(
@@ -360,6 +406,8 @@ def chart_lift_decile(
     fig.update_yaxes(title='Sinistralité observée')
     if lift_ratio is not None:
         _badge_kpi(fig, f'LIFT ×{float(lift_ratio):.2f}')
+    _declarer_assiette(fig, fournis=len(vals), traces=len(vals),
+                       quoi='déciles')
     return fig
 
 
@@ -467,6 +515,8 @@ def chart_lorenz_gini(
             else:
                 texte += f' — soit {100.0 * mod / obs:.0f} % du discriminable'
         _badge_kpi(fig, texte)
+    _declarer_assiette(fig, fournis=len(xs), traces=len(xs),
+                       quoi='points de la courbe')
     return fig
 
 
@@ -516,6 +566,8 @@ def chart_relativites_glm(
     fig.update_layout(showlegend=False)
     fig.add_vline(x=1.0, line=dict(color=COULEURS['texte_2'], dash='dash', width=1))
     fig.update_xaxes(title='Relativité exp(β)   (1 = neutre)')
+    _declarer_assiette(fig, fournis=len(relativites), traces=len(items),
+                       quoi='variables')
     return fig
 
 
@@ -597,6 +649,8 @@ def chart_walkforward_ae(
     fig.update_layout(showlegend=False)
     fig.update_xaxes(title='Fenêtre (année test)', type='category')
     fig.update_yaxes(title='Ratio A/E  (attendu / prédit)')
+    _declarer_assiette(fig, fournis=len(fenetres), traces=len(_mesurees),
+                       quoi='fenêtres')
     return fig
 
 
@@ -627,6 +681,8 @@ def chart_shap_summary(
     _appliquer_theme(fig, titre)
     fig.update_layout(showlegend=False)
     fig.update_xaxes(title='Importance moyenne |SHAP|')
+    _declarer_assiette(fig, fournis=len(importance), traces=len(items),
+                       quoi='variables')
     return fig
 
 
@@ -664,6 +720,8 @@ def chart_distribution_predictions(
             )
     fig.update_xaxes(title=f'Prime prédite ({unite})')
     fig.update_yaxes(title='Nombre de contrats')
+    _declarer_assiette(fig, fournis=int(np.size(np.asarray(predictions))),
+                       traces=int(p.size), quoi='prédictions')
     return fig
 
 
@@ -704,4 +762,6 @@ def chart_residus_qq(
     fig.update_layout(showlegend=False)
     fig.update_xaxes(title='Quantiles théoriques (normale)')
     fig.update_yaxes(title='Quantiles observés (résidus)')
+    _declarer_assiette(fig, fournis=int(np.size(np.asarray(residus))),
+                       traces=int(r.size), quoi='résidus')
     return fig

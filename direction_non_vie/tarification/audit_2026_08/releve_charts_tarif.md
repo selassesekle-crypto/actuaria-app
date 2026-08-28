@@ -123,6 +123,22 @@ de Pearson » et conclut que le diagnostic a été fait.
 
 ### B — Affirme plus que le code ne porte (2)
 
+> ✅ **`charts/C3`** · **FERMÉ le 28/08/2026.** Les **sept** fonctions déclarent
+> désormais « **AUCUNE DONNÉE — …** » au centre de la figure quand rien n'est
+> tracé, **et le message NOMME ce qui manque** (résidus · déciles · variables ·
+> fenêtres · points de la courbe · prédictions).
+> ⚠️ **UN SEUL ENDROIT DÉCIDE** — `_declarer_assiette`, et les sept l'appellent.
+> Sept messages recopiés auraient divergé, comme les 30 définitions de couleurs
+> avant `STATUT_RAG`.
+> ⚠️⚠️ **SECOND SENS, ET IL COMPTE PLUS QUE LE PREMIER** : une annotation posée
+> sur TOUTES les figures ne vaudrait rien — elle cesserait d'être un signal. Un
+> témoin vérifie qu'une figure PLEINE ne déclare **rien**.
+> ⚠️ **ET J'AI PRODUIT DEUX FAUSSES LECTURES EN TRAÇANT CE LOT** :
+> `chart_distribution_predictions([])` et `chart_lift_decile` semblaient LEVER
+> — c'était ma sonde (`or` sur un tableau numpy, et un `[]` passé là où un
+> `float` était attendu). *Une sonde qui lève accuse le code à tort aussi
+> sûrement qu'une sonde qui ne trouve rien l'absout à tort.*
+
 **C4 — « SOURCE UNIQUE du style graphique de la tarification » : les quatre
 agents portent leur propre charte.** Relevé sur tout le dépôt : **52 fichiers**
 construisent une figure plotly hors de ce module. Pour les quatre agents de
@@ -200,6 +216,22 @@ qui a été mesuré* » — mais l'axe est `type='category'` : une année écart
 moitié du portefeuille sans un mot.
 
 ### C — Imprécis ou daté (3)
+
+> ✅ **`charts/C5`** · **FERMÉ le 28/08/2026 — TROIS sous-cas sur quatre, et le
+> quatrième est DÉCLARÉ INEXISTANT.** Les troncatures s'écrivent désormais sous
+> la figure : « **15 variables sur 23 — les 8 autres ne sont pas tracées** ».
+> Mesuré : relativités **23 → 15**, SHAP **30 → 15**, walk-forward **4 → 2**.
+> ⚠️ **ON DÉCLARE, ON N'ÉLARGIT PAS.** Tracer 23 relativités rendrait la figure
+> illisible : `top=15` est un choix de lisibilité défendable. Ce qui ne l'était
+> pas, c'est qu'il soit MUET. *Fermer le constat en supprimant la troncature
+> aurait échangé un défaut contre un autre* — un test l'interdit.
+> ⚠️⚠️ **LE SOUS-CAS (c) DU RELEVÉ N'EST PAS REPRODUIT** : il annonçait
+> « distribution : 1 000 valeurs → 500 tracées ». Mesure d'aujourd'hui :
+> **1 000 sur 1 000**, aucune coupe. *Un sous-cas qui ne se reproduit pas se
+> DÉCLARE, il ne se corrige pas* — et un test **fige cette absence**, pour
+> qu'on n'introduise pas une troncature en croyant fermer un défaut inexistant.
+> ⚠️ **Et le nombre ANNONCÉ est comparé au nombre TRACÉ** : une déclaration
+> fausse serait pire que le silence.
 
 **C6 — `_qnorm` tient sa promesse, mais pas celle qui est écrite.** La docstring
 annonce « *|err| < 1.2e-9* ». Mesuré sur **405 003 points** contre
