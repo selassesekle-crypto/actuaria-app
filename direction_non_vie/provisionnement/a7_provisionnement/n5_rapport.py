@@ -858,10 +858,16 @@ def marquer_prescriptions_chiffrees(narration: str,
     """La narration, chaque prescription chiffree non sourcee suivie de sa marque.
 
     ⚠️⚠️ ON MARQUE LA PHRASE, JAMAIS LE CHIFFRE, ET C'EST MESURE. Dans la
-    phrase du run reel, `2 909 990` est orphelin mais JUSTE (17 740 889 -
-    14 830 899). Marquer les nombres un a un l'aurait denonce a tort. Marquer
-    la phrase dit exactement ce qu'on sait : elle porte au moins un nombre
-    absent du dossier.
+    phrase du run reel releve a l'epoque, `2 909 990` etait orphelin mais
+    JUSTE (17 740 889 - 14 830 899). Marquer les nombres un a un l'aurait
+    denonce a tort. Marquer la phrase dit exactement ce qu'on sait : elle
+    porte au moins un nombre absent du dossier.
+
+    ⚠️ CE RELEVE EST HISTORIQUE, ET SON ARITHMETIQUE N'EST PLUS CELLE DU RUN
+    D'AUJOURD'HUI : le lot << Clark cherche enfin son maximum >> porte la
+    reserve Clark de 17 740 889 a 18 261 617, donc l'ecart Clark - BE de
+    2 909 990 a 3 430 718. Le BE, lui, ne bouge pas -- Clark n'y entre pas.
+    La lecon, elle, ne depend d'aucun de ces chiffres.
 
     ⚠️ ON NE RETIRE RIEN, ET C'EST UN ARBITRAGE. La phrase visee portait AUSSI
     un avertissement legitime (<< ne valide pas ce BE sans resolution des

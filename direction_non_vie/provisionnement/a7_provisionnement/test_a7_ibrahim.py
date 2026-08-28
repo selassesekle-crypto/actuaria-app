@@ -201,17 +201,34 @@ class T3_Clark_GenIns(unittest.TestCase):
     """Clark 2003 sur GenIns : IBNR de l'année totalement développée."""
 
     def test_clark_annee0_developpee(self):
-        """L'année 0 est totalement développée -> IBNR ~ tail seul (quelques milliers).
+        """L'année 0 est totalement développée -> son IBNR EST la queue.
 
         Vérifie le correctif B3 (clark.py, _calculer_resultats) : le paramètre
         MLE U_i EST déjà l'ultime à l'infini (G->1), donc IBNR_i = U_i - obs_last
         (sans re-multiplier par tail_factor, qui reste calculé pour le diagnostic).
-        Avant correctif, l'année 0 recevait ~59 904 EUR d'IBNR (double comptage
-        du tail) au lieu de ~7 546 EUR (tail résiduel seul).
+        Avant correctif, l'année 0 recevait un IBNR de double comptage du tail.
+
+        ⚠️⚠️ CE TEST BORNAIT L'IBNR A 10 000 EUR, ET CETTE BORNE MASQUAIT UNE
+        INCOHERENCE. L'année 0 étant entièrement développée, son IBNR vaut par
+        construction `cumul x (tail - 1)`. Avec le `tail_factor` que le module
+        publiait lui-même (1,013394), cela fait 52 256 EUR — et il publiait
+        7 546 EUR. Le nombre borné contredisait le modèle qui le portait : les
+        `U_i` n'étaient pas convergés (cf. `_estimer_parametres`).
+
+        ⚠️ IL VERIFIE DESORMAIS L'IDENTITE, PAS UNE BORNE. Une identité ne se
+        périme pas quand l'estimateur s'améliore, et elle attrape exactement
+        le défaut que la borne laissait passer.
         """
         r = clark_ldf(GENINS)
-        self.assertLess(r['ibnr_par_annee'][0], 10_000)
-        print(f"    OK T5 Clark GenIns : IBNR annee 0 = {r['ibnr_par_annee'][0]:,.0f} EUR")
+        cumul_annee0 = float(np.asarray(GENINS, dtype=float)[0, -1])
+        attendu = cumul_annee0 * (float(r['tail_factor']) - 1.0)
+        self.assertAlmostEqual(
+            r['ibnr_par_annee'][0], attendu, delta=max(attendu * 0.01, 1.0),
+            msg="l'IBNR de l'année 0 ne vaut pas la queue que le module "
+                "publie : les ultimes ne sont pas ceux de ce tail_factor")
+        print(f"    OK T5 Clark GenIns : IBNR annee 0 = "
+              f"{r['ibnr_par_annee'][0]:,.0f} EUR = cumul x (tail - 1) = "
+              f"{attendu:,.0f} EUR")
 
 
 # =============================================================================
@@ -1651,27 +1668,101 @@ class T25_Clark_IBNR_Brut_Expose(unittest.TestCase):
         print("    OK T25a signal brut exposé et cohérent (GENINS, recours : n_sur_dev=0)")
 
     def test_sur_developpement_expose_le_negatif(self):
-        """(b) RAA année 0 sur-développe (ultime MLE < cumul observé) : le brut
-        expose la valeur négative (~ -92) alors que le champ planché reste 0, et
-        n_sur_developpement compte l'année."""
-        r = clark_ldf(RAA, annee_base=1)
-        self.assertEqual(r['ibnr_par_annee'][0], 0.0)                 # planché à 0
-        self.assertLess(r['ibnr_brut_par_annee'][0], 0)               # brut < 0 (robuste)
-        self.assertAlmostEqual(r['ibnr_brut_par_annee'][0], -92.0, delta=5.0)  # valeur mesurée
-        self.assertGreaterEqual(r['n_sur_developpement'], 1)
-        print(f"    OK T25b sur-développement : RAA an.0 brut={r['ibnr_brut_par_annee'][0]:.0f} "
-              f"(planché {r['ibnr_par_annee'][0]:.0f}), n_sur_dev={r['n_sur_developpement']}")
+        """(b) Quand un ultime tombe SOUS le cumul observé, le brut expose le
+        négatif, le champ planché reste 0, et n_sur_developpement le compte.
+
+        ⚠️⚠️ CE TEST S'APPUYAIT SUR UN ACCIDENT DE RAA, ET IL L'A PERDU. Il
+        prouvait « RAA année 0 sur-développe (brut ~ -92) ». Ce -92 n'était pas
+        une propriété de RAA : c'était un artefact d'ultimes non convergés.
+        Avec l'estimateur certifié, l'année 0 de RAA rend +118, et AUCUN des
+        onze triangles réels du dépôt ne sur-développe plus — mesuré, un par
+        un. Le test n'a pas perdu une valeur attendue : il a perdu son SUJET.
+
+        ⚠️ IL EXERCE DESORMAIS LE MECANISME LUI-MEME, sans passer par un
+        triangle. On construit un vecteur de paramètres dont l'ultime de
+        l'année 0 tombe sous son cumul observé, et on lit les trois sorties de
+        `_calculer_resultats`. Trois avantages, et ce sont des mesures :
+          - il teste EXACTEMENT les lignes qu'il prétend garder ;
+          - il est déterministe : aucun optimiseur, donc aucune plateforme ;
+          - il est immunisé contre la prochaine amélioration de l'estimateur,
+            qui est précisément ce qui vient de le casser.
+        """
+        from direction_non_vie.provisionnement.a7_provisionnement.n3.clark import (
+            _calculer_resultats,
+        )
+
+        C = np.asarray(GENINS, dtype=float)
+        n, m = C.shape
+        Ci = C.copy()
+        for i in range(n):
+            for j in range(m):
+                if j > m - 1 - i:
+                    Ci[i, j] = np.nan
+        Y = np.full((n, m), np.nan)
+        Y[:, 0] = Ci[:, 0]
+        for j in range(1, m):
+            Y[:, j] = Ci[:, j] - Ci[:, j - 1]
+        mask = np.isfinite(Y) & (Y > 0)
+        t = np.array([j + 1.0 for j in range(m)], dtype=float)
+
+        # ⚠️ L'ANNEE 0 EST FORCEE SOUS SON CUMUL, LES AUTRES AU-DESSUS.
+        obs = np.array([C[i, max(j for j in range(m)
+                                 if not np.isnan(C[i, j]) and C[i, j] > 0)]
+                        for i in range(n)], dtype=float)
+        U = obs * 1.10
+        U[0] = obs[0] - 250.0            # sur-développement FORCE, valeur connue
+
+        r = _calculer_resultats(Ci, Y, t, np.concatenate(([1.5, 4.0], U)),
+                                'weibull', None, 1, mask, n + 2)
+
+        self.assertEqual(r['ibnr_par_annee'][0], 0.0,
+                         'le champ planché publie un IBNR négatif')
+        self.assertEqual(r['ibnr_brut_par_annee'][0], -250.0,
+                         'le brut n\'expose pas le négatif qu\'on a injecté')
+        self.assertEqual(r['n_sur_developpement'], 1,
+                         'le compteur ne voit pas l\'année sur-développée')
+        # ⚠️ SECOND SENS : sans sur-développement, le compteur reste à 0 et le
+        # brut coïncide avec le planché. Sinon le test passerait sur un
+        # compteur toujours à 1.
+        r2 = _calculer_resultats(Ci, Y, t, np.concatenate(([1.5, 4.0], obs * 1.10)),
+                                 'weibull', None, 1, mask, n + 2)
+        self.assertEqual(r2['n_sur_developpement'], 0)
+        self.assertEqual(r2['ibnr_brut_par_annee'], r2['ibnr_par_annee'])
+        print(f"    OK T25b sur-développement FORCE : brut="
+              f"{r['ibnr_brut_par_annee'][0]:.0f} (planché "
+              f"{r['ibnr_par_annee'][0]:.0f}), n_sur_dev="
+              f"{r['n_sur_developpement']} ; témoin sans sur-dev : "
+              f"n_sur_dev={r2['n_sur_developpement']}")
 
     def test_reserve_brute_no_op_hors_sur_developpement(self):
         """(c) Là où aucune année de réserve ne sur-développe (cas quasi général),
-        reserve_totale (brut) == réserve planchée — bascule sans effet. Ancré GENINS."""
+        reserve_totale (brut) == réserve planchée — bascule sans effet. Ancré GENINS.
+
+        ⚠️⚠️ L'ANCRAGE PORTE UNE TOLERANCE DE 100 EUR, ET C'EST MESURE, PAS
+        PRUDENT. La valeur certifiée en précision arbitraire (mpmath, 30/50/80
+        chiffres concordants à 2,9e-27 EUR) vaut 18 261 617,578. Mais le module
+        tourne en DOUBLE : 24 raffinements depuis des départs dispersés de
+        +/-15 % rendent une étendue de 4,86 EUR, soit SIX entiers différents
+        (18 261 615 a 18 261 620). L'euro n'est pas déterminé sur ce triangle
+        — la vraisemblance y est trop plate près de son sommet, et c'est une
+        borne arithmétique, pas un défaut de recherche.
+
+        ⚠️ RESSERRER CETTE TOLERANCE RECONSTRUIRAIT LE DEFAUT QU'ON VIENT DE
+        CORRIGER : un test vert par chance de plateforme. RAA, lui, garde
+        l'euro (étendue mesurée 0,0103 EUR, un seul entier).
+        """
         r = clark_ldf(GENINS, annee_base=1)
         brut = np.array(r['ibnr_brut_par_annee'], dtype=float)
         res_planchee = float(np.sum(np.maximum(brut, 0.0)[1:]))
         self.assertAlmostEqual(r['reserve_totale'], res_planchee, delta=2.0)   # no-op
-        self.assertAlmostEqual(r['reserve_totale'], 17_740_889, delta=2.0)     # ancrage
+        self.assertAlmostEqual(r['reserve_totale'], 18_261_617, delta=100.0)   # ancrage
         self.assertEqual(r['reserve_totale'], r['reserve_be_clark'])            # alias
-        print(f"    OK T25c réserve brute == planchée hors sur-dev : {r['reserve_totale']:,.0f}")
+        # ⚠️ RAA garde l'euro : son étendue mesurée est de 1 centime.
+        r_raa = clark_ldf(RAA, annee_base=1)
+        self.assertEqual(r_raa['reserve_totale'], 54_468.0)
+        print(f"    OK T25c réserve brute == planchée hors sur-dev : "
+              f"GenIns {r['reserve_totale']:,.0f} (+/-100) · "
+              f"RAA {r_raa['reserve_totale']:,.0f} (a l'euro)")
 
 
 if __name__ == '__main__':

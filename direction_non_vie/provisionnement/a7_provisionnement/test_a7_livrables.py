@@ -3461,10 +3461,14 @@ class T_Les_Ecarts_Sont_Transmis_Pas_Calcules(unittest.TestCase):
     def test_les_quatre_ecarts_sont_dans_la_charge_utile(self):
         # ⚠️ CE SONT EXACTEMENT CEUX QUE LES MODELES CALCULAIENT, releves
         # sur deux narrations reelles.
+        # ⚠️ LA RESERVE CLARK A CHANGE, et le terme haut avec elle : le lot
+        # << Clark cherche enfin son maximum >> la porte de 17 740 889 a
+        # 18 261 617. Les trois autres ecarts sont intacts -- Clark n'est pas
+        # dans le Best Estimate, le BE de 14 830 899 ne bouge pas.
         for lib, haut, bas in (('CL - BF', 18680856, 8057830),
                                ('P99,5 - BE', 22318991, 14830899),
                                ('P75 - BE', 16343466, 14830899),
-                               ('Clark - BE', 17740889, 14830899)):
+                               ('Clark - BE', 18261617, 14830899)):
             with self.subTest(ecart=lib):
                 self.assertIn(str(haut - bas), self.cles,
                               f'{lib} n est pas transmis : le modele devra '
