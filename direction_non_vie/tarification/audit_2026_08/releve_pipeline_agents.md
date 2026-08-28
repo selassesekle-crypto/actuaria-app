@@ -119,6 +119,28 @@ Mesuré, deux appels sur **le même objet** :
 
 Deux exécutions identiques produisent deux livrables d'audit différents.
 
+> ✅ **`agents/C4`** · **FERMÉ le 28/08/2026.** `ResultatAgents` porte désormais
+> `date_calcul`, **capturé UNE FOIS par le run** et transporté ; `resume()` le
+> RÉUTILISE. Deux rendus du même objet sont identiques, champ par champ.
+> ⚠️⚠️ **CE QUI N'ÉTAIT PAS LE DÉFAUT, ET LA DISTINCTION EST DE FOND** : le run
+> lit bien l'horloge (`t0`, pour `audit_id`) — c'est légitime, un RUN a le droit
+> d'avoir une date. Le défaut était de la RELIRE À CHAQUE RENDU. *Un livrable
+> doit pouvoir se re-rendre à l'identique.*
+> ⚠️ **LE CHAMP EST REQUIS, PAS À DÉFAUT** : `''` ou `None` laisserait un site
+> de construction l'omettre en silence et publier un vide sous une étiquette de
+> date. *« Présent mais VIDE » a déjà mordu trois fois dans cet audit.* Les cinq
+> sites de construction le passent explicitement.
+> ⚠️⚠️ **ET IL N'EST PAS DÉRIVÉ DE `audit_id`, BIEN QUE CELUI-CI L'ENCODE** :
+> `audit_id` est une ÉTIQUETTE, faite pour être lue. *Lire une donnée dans une
+> étiquette est exactement le défaut que cet audit poursuit* (cf. la décision
+> réglementaire qui lisait un emoji, `236dcf2`).
+> ⚠️ `astimezone()` rend l'horodatage non ambigu (offset explicite) **sans
+> toucher `audit_id`** : la chaîne locale `%Y%m%d_%H%M%S` est identique, vérifié.
+> **Épinglé par `test_horodatage_agents.py` (5 contrôles), dont deux SECONDS
+> SENS** : omettre le champ LÈVE, et deux runs distincts portent bien deux dates
+> — *un correctif qui figerait la date fermerait le constat en détruisant
+> l'information.*
+
 ### C — Imprécis (2)
 
 **C5 — `_vue_sinistres` annonce un dict et rend un tuple.**

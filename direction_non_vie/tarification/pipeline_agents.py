@@ -106,6 +106,20 @@ class ResultatAgents:
     cout:       ArbitrageCible
     prime_pure: ArbitrageCible
     audit_id:   str
+    #: ⚠️⚠️ L'INSTANT DU RUN, CAPTURÉ UNE FOIS PAR L'APPELANT — jamais généré
+    #: ici. `resume()` faisait `datetime.now()` À CHAQUE APPEL : deux appels sur
+    #: le MÊME objet rendaient deux livrables d'audit différents (constat
+    #: `agents/C4`). Les deux modules frères l'écrivent noir sur blanc —
+    #: `core/qualite_donnees` : « ne génère aucun horodatage », et
+    #: `core/conformite_reglementaire` : « aucune date n'est générée ici ».
+    #: ⚠️ CHAMP REQUIS, ET C'EST DÉLIBÉRÉ. Un défaut (`''` ou `None`) laisserait
+    #: un site de construction l'omettre en silence, et publier un vide sous
+    #: une étiquette de date. *« Présent mais VIDE » a déjà mordu trois fois
+    #: dans cet audit.* Cinq sites le construisent, tous dans le dépôt.
+    #: ⚠️ IL N'EST PAS DÉRIVÉ DE `audit_id`, BIEN QU'IL L'ENCODE : `audit_id`
+    #: est une ÉTIQUETTE, faite pour être lue. Lire une donnée dans une
+    #: étiquette est le défaut même que cet audit poursuit.
+    date_calcul: str
 
     @property
     def success(self) -> bool:
@@ -154,7 +168,9 @@ class ResultatAgents:
         return {
             "success":        bool(self.success),
             "audit_id":       self.audit_id,
-            "date_calcul":    datetime.now().isoformat(),
+            # ⚠️ RÉUTILISÉ, JAMAIS GÉNÉRÉ : deux appels sur le même objet
+            # rendaient deux livrables différents (constat `agents/C4`).
+            "date_calcul":    self.date_calcul,
             "plan_lob":       self.plan.lob,
             "plan_empreinte": self.plan.empreinte(),
             "frequence":      _arb(self.frequence),
@@ -218,8 +234,13 @@ def pipeline_agents(
     jamais masqué, et n'empêche pas les autres d'aboutir. `.success` ne dépend que
     d'A3 + fréquence (le tarif primaire reste fréquence×coût).
     """
-    t0 = datetime.now()
+    # ⚠️ UN SEUL INSTANT POUR TOUT LE RUN, capturé ici et transporté.
+    # `astimezone()` rend l'horodatage NON AMBIGU (offset explicite) sans
+    # toucher `audit_id` : la chaîne locale `%Y%m%d_%H%M%S` est identique,
+    # vérifié.
+    t0 = datetime.now().astimezone()
     audit_id = f"AGENTS_{t0.strftime('%Y%m%d_%H%M%S')}"
+    date_calcul = t0.isoformat()
     _a = dict(models_path=models_path, audit_path=audit_path, verbose=verbose)
 
     # ── SOCLE COMMUN : A1 → A2 → A3 ─────────────────────────────────────────
@@ -244,7 +265,7 @@ def pipeline_agents(
                               frequence=_echec(plan.cible_frequence, msg),
                               cout=_echec(CIBLE_COUT, msg),
                               prime_pure=_echec(CIBLE_PRIME_PURE, msg),
-                              audit_id=audit_id)
+                              audit_id=audit_id, date_calcul=date_calcul)
 
     def _arbitrer(cible, r2_cible, *, modeles_dl, ponderer) -> ArbitrageCible:
         """Une cible : A4 → A5 → A6. Les échecs sont rendus, jamais masqués."""
@@ -314,4 +335,5 @@ def pipeline_agents(
 
     return ResultatAgents(plan=plan, a1=r1, a2=r2, a3=r3,
                           frequence=frequence, cout=cout,
-                          prime_pure=prime_pure, audit_id=audit_id)
+                          prime_pure=prime_pure, audit_id=audit_id,
+                          date_calcul=date_calcul)

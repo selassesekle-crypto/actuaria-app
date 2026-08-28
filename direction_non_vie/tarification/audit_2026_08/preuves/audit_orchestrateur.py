@@ -74,7 +74,8 @@ def _echec_complet():
                             statut_rag=None, n_candidats=0, erreur='A3 a echoue')
     return PA.ResultatAgents(
         plan=PLAN, a1={'success': False}, a2={}, a3={'success': False},
-        frequence=ech, cout=ech, prime_pure=ech, audit_id='TEST')
+        frequence=ech, cout=ech, prime_pure=ech, audit_id='TEST',
+        date_calcul='2026-08-28T00:00:00+02:00')
 
 
 r = _echec_complet()
@@ -102,7 +103,8 @@ a6_lourd = {
 arb = PA.ArbitrageCible(cible='nb', a4={'m': np.array([1, 2])}, a5=None,
                         a6=a6_lourd, statut_rag='VERT', n_candidats=1)
 r2 = PA.ResultatAgents(plan=PLAN, a1={}, a2={}, a3={'success': True},
-                       frequence=arb, cout=arb, prime_pure=arb, audit_id='T2')
+                       frequence=arb, cout=arb, prime_pure=arb, audit_id='T2',
+                       date_calcul='2026-08-28T00:00:00+02:00')
 try:
     s = json.dumps(r2.resume())
     print(f"  [BON    ] resume() avec DataFrame/np dans a6 : json.dumps OK "
@@ -136,7 +138,8 @@ arb_rate = PA.ArbitrageCible(cible='nb', a4={}, a5=None, a6=a6_rate,
                              statut_rag=None, n_candidats=0)
 r3 = PA.ResultatAgents(plan=PLAN, a1={}, a2={}, a3={'success': True},
                        frequence=arb_rate, cout=arb_rate, prime_pure=arb_rate,
-                       audit_id='T3')
+                       audit_id='T3',
+                       date_calcul='2026-08-28T00:00:00+02:00')
 print(f"  a6 = {{'success': False, 'erreur': 'A6 a echoue', 'classement': []}}")
 print(f"  {'[CONSTAT]' if r3.success else '[BON    ]'} "
       f"ResultatAgents.success = {r3.success}")
