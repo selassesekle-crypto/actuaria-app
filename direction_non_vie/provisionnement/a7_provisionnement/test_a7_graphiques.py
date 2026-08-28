@@ -1108,6 +1108,30 @@ class T4_Le_Catalogue_Atteint_Les_Livrables(unittest.TestCase):
         déduplique les média identiques. Avec quatorze images identiques le
         `.docx` n'en contient qu'UNE, ce qui ferait croire à un bug qui
         n'existe pas — mesuré.
+
+        ⚠️⚠️ CE TEST COMPTAIT TOUT `word/media/`, ET SON ASSIETTE ÉTAIT
+        FAUSSE. La page de garde insère un LOGO quand `cairosvg` est
+        installé (n5_rapport, page de garde). Le `.docx` porte alors 15
+        média pour 14 figures, et `assertEqual(len(media), len(g))` tombe —
+        en annonçant l'INVERSE de ce qui s'est produit : son message parle
+        de figures MANQUANTES là où il y a une image EN TROP.
+
+        Ce test passait donc uniquement sur une machine SANS `cairosvg` —
+        mon poste, et la gate rapide. `cairosvg` est déclaré dans
+        `requirements-optional.txt`, que la nocturne installe depuis le
+        11/08 : ce test n'a jamais été vert sur une machine équipée.
+
+        ⚠️ IL VÉRIFIE DÉSORMAIS LA PROPRIÉTÉ QUE SON MESSAGE ANNONCE :
+        chacune des images RENDUES est présente dans le document, octet pour
+        octet. Le logo, lui, n'est pas rendu par le rasteriseur : il ne peut
+        plus fausser le verdict. Le rendeur produit des PNG de tailles
+        distinctes et connues, ce qui rend la comparaison exacte.
+
+        ⚠️ ET LA DÉGRADATION EST CONTRÔLÉE EN PREMIER. Dans l'ordre
+        précédent, le comptage tombait d'abord et le contrôle des notes ne
+        s'exécutait JAMAIS : la nocturne était incapable de dire si une
+        figure avait été silencieusement absorbée par le repli par figure
+        de `n5_rapport` (`except Exception` -> "Figure non rendue").
         """
         import zipfile
         r = _run(True)
@@ -1118,21 +1142,31 @@ class T4_Le_Catalogue_Atteint_Les_Livrables(unittest.TestCase):
             mot = _RAP.export_word(r.get('n1'), r['n2'], r['n3'], r['n4'],
                                    commentaire=r.get('commentaire', ''),
                                    graphiques=g, lob_label='Test')
-        media = [n for n in zipfile.ZipFile(io.BytesIO(mot)).namelist()
-                 if n.startswith('word/media/')]
-        self.assertEqual(len(media), len(g),
-                         'toutes les figures ne sont pas entrées dans le .docx')
-        self.assertEqual(len(rendeur.appels), len(g),
-                         'le rasteriseur n\'a pas été appelé pour chaque figure')
+
+        # ── la DÉGRADATION d'abord : c'est elle qui peut se taire ──────────
         import docx
         notes = [p.text for p in docx.Document(io.BytesIO(mot)).paragraphs
                  if p.text.startswith('Figure non rendue')]
         self.assertEqual(notes, [],
-                         'une dégradation est annoncée alors que le rendeur '
-                         'répond')
-        print('    OK C3d-6 chemin nominal FORCÉ : %d images dans le .docx, '
-              'le rasteriseur appelé %d fois, aucune dégradation'
-              % (len(media), len(rendeur.appels)))
+                         f'une dégradation est annoncée alors que le rendeur '
+                         f'répond : {notes!r}')
+        self.assertEqual(len(rendeur.appels), len(g),
+                         'le rasteriseur n\'a pas été appelé pour chaque figure')
+
+        # ── puis les images DES FIGURES, jamais tout `word/media/` ─────────
+        with zipfile.ZipFile(io.BytesIO(mot)) as archive:
+            media = {nom: archive.read(nom) for nom in archive.namelist()
+                     if nom.startswith('word/media/')}
+        rendues = {png_de_test(200 + 3 * k, 100 + k)
+                   for k in range(1, len(rendeur.appels) + 1)}
+        manquantes = rendues - set(media.values())
+        self.assertEqual(
+            manquantes, set(),
+            f'{len(manquantes)} figure(s) rendue(s) sur {len(g)} ne sont pas '
+            f'entrées dans le .docx')
+        print(f'    OK C3d-6 chemin nominal FORCÉ : {len(rendues)}/{len(g)} '
+              f'figures rendues retrouvées dans le .docx ({len(media)} média '
+              f'au total), aucune dégradation')
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
