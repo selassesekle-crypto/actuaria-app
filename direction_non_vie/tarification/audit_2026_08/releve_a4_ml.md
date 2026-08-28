@@ -97,6 +97,21 @@ Cause : `m.get('gini', 0)` — la clé du classement est `gini_test`. Les couleu
 **C9 — Le statut RAG ROUGE annoncé n'est pas atteint.** La docstring dit « ROUGE : Aucun modèle ML ne bat le GLM ». Mesuré : ML 0.14 contre GLM 0.30 → **AMBRE**, parce que la seconde branche accepte `meilleur_gini_ml > 0.10`.
 
 **C10 — Le classement mélange deux bases de rang.** A3 classe sur le **comptage prédit** (avec offset), A4 sur le **taux** — et les deux entrent dans un seul tableau trié par `gini_test`. Le code d'A4 le dit lui-même : « Gini sur le TAUX (rang de risque) ».
+> ✅ **`a4/C10`** · **FERMÉ le 27/08/2026 — `6d5eeb9`, DÉCLARATION seule.**
+> Chaque Gini déclare sa `base_gini`, et le mélange se dit.
+> **AUCUN NOMBRE NE BOUGE, et un test le prouve.**
+> ⚠️ **L'ÉCART EST MESURÉ** : base COMPTAGE **0,4339** contre base UNITAIRE
+> **0,3675**, soit **+18,1 %** ; à exposition CONSTANTE il tombe à **0,0000**.
+> Il vient donc ENTIÈREMENT de la variation d'exposition, et il est
+> SYSTÉMATIQUEMENT favorable au comptage. A6 trie sur `gini_test`, pondéré
+> 40 % : *une convention non mesurée flattait un camp.*
+> ⚠️⚠️ **ET LE DÉFAUT EST PLUS LARGE QUE LE CONSTAT NE LE DIT** : A5 compare
+> DÉJÀ deux bases entre SES PROPRES modèles — CANN applique l'offset dans son
+> forward, TabNet non. Le constat ne parlait que d'A3 contre A4.
+> ⚠️⚠️ **CE QUE CE BLOC NE FERME PAS, ET IL FAUT LE LIRE** : le constat portait
+> sur le mélange NON DIT ; il est dit. **L'ALIGNEMENT des bases reste OUVERT**,
+> arbitré ainsi parce qu'il DÉPLAÇAIT UN PRIX — mesuré. Il attend une décision
+> sur ce que « rang de risque » doit signifier.
 
 ### C — Imprécis ou daté (3)
 

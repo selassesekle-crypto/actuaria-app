@@ -49,6 +49,16 @@ Sa propre docstring l'interdit : *« Ajouter offset=log(expo) appliquerait l'exp
   relativites_poisson : 'IC 95% : ['                  <- crochet ouvert, rien dedans
 ```
 Les vraies bornes existent (`ic95_low`/`ic95_high`) et ne sont pas passées.
+> ✅ **`a3/C4`** · **FERMÉ le 27/08/2026 — `271d50d`.** Les deux infobulles
+> publient les VRAIES bornes, passées par `customdata`.
+> ⚠️⚠️ **ET LE DÉFAUT NE VENAIT PAS D'UNE NÉGLIGENCE — c'est ce qu'il apprend.**
+> Un `hovertemplate` plotly est UNE chaîne pour TOUTES les barres : une f-string
+> n'y place qu'un SCALAIRE, jamais une valeur PAR POINT. L'auteur n'avait pas de
+> mécanisme, il a mis `0`. *Une valeur fabriquée faute de mécanisme reste une
+> valeur fabriquée : elle se déclare, ou on trouve le mécanisme.*
+> ⚠️ **Aucun euro déplacé, aucun statut modifié.** Seule la valeur AFFICHÉE
+> change — de `[0.0000, 0.0000]` aux bornes que traçaient DÉJÀ les barres
+> d'erreur du même graphique.
 
 **C5 — La courbe de Lorenz publiée n'est pas mesurée, elle est tracée.** [l.2161](direction_non_vie/tarification/a3_glm/agent.py:2161) : `lorenz = t ** (1 / (1 + gini * 2))`. C'est une fonction analytique du seul scalaire Gini — **deux portefeuilles différents de même Gini donnent la même courbe au pixel près**. Le graphique s'intitule « Courbe de Lorenz » et son infobulle annonce « % contrats / % sinistres cumulés ». Les vrais cumuls sont calculés dans `_calculer_gini` et jetés.
 
@@ -93,6 +103,17 @@ Les vraies bornes existent (`ic95_low`/`ic95_high`) et ne sont pas passées.
 
 **C13 — Le graphique `durbin_watson` n'est jamais produit.** Il lit `val_glm["h2_homosc"]["dw_stat"]` ; H2 rend `ratio_variance` depuis la réparation `87e0609`. `KeyError` avalé → `graphiques_validation = ['gini_comparaison_glm', 'scorecard_validation_glm', 'sur_dispersion_poisson']`. Trois graphiques sur quatre.
 **C14 — Une p-value fabriquée à 1.0** sur erreur numérique, 2 sites — elle n'a pas été calculée. La variable écartée est aussi arbitraire (`vars_actives[-1]`), pas celle qui a échoué.
+> ✅ **`a3/C14`** · **FERMÉ le 27/08/2026 — `b3dc60c`, en DÉCLARATION SEULE.**
+> `pvalue` vaut `None` avec `pvalue_non_testee=True` ; la raison nomme le TYPE
+> réel de l'exception sans conclure sur la cause ; le retrait se déclare
+> ARBITRAIRE. **Le stepwise est INCHANGÉ, aucun euro déplacé.**
+> ⚠️ **LA FRÉQUENCE D'ATTEINTE A ÉTÉ MESURÉE AVANT TOUT CODE** : **0 sur 36**
+> exclusions du portefeuille du banc. `statsmodels` ne lève NI sur colinéarité
+> parfaite, NI sur colonne constante, NI sur séparation totale — mesuré.
+> ⚠️⚠️ **MAIS « JAMAIS ATTEINT SUR CE TEST » N'EST PAS « INATTEIGNABLE »** : le
+> `try` couvre ~30 lignes derrière un `except Exception` nu, il attrape aussi
+> bien un `KeyError` de `.drop`. *« Erreur numérique » étiquetait une cause que
+> rien n'établissait.*
 **C15 — Le repli de `predict` casse lui-même** : `np.full(...)` puis `.values` (l.912 et 1146) — un `ndarray` n'a pas `.values`.
 **C16 — `COLS_A_EXCLURE`** : 5 entrées sur 23 sont Vie/Santé (`id_salarie`, `id_beneficiaire`, `id_adherent`, `cotisation_mensuelle_eur`, `charge_ij_annuelle_eur`).
 **C17 — L'exemple d'usage `run(result_a2)`**, 3 fois dans le module, est refusé par le module.

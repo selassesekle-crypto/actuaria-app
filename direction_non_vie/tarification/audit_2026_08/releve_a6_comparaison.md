@@ -195,10 +195,39 @@ d'être portés en constats à part entière.*
   le commentaire publie-t-il les fenetres WF = False
 ```
 Côté agent : **le commentaire actuaire ne publie jamais** le nombre de fenêtres, le nombre de fenêtres ROUGE ni la stabilité — exactement les quantités sur lesquelles le verrou plafonne. Côté test : **les assertions ST4 (fenêtres) et ST5 (segments) ne s'exécutent jamais** — le test passe sans vérifier ce qu'il annonce.
+> ✅ **`a6/C6`** · **FERMÉ le 27/08/2026 — `e808fc7`.** Les trois sites comparent
+> désormais à `SPLIT_WALK_FORWARD`, la constante NOMMÉE que le code écrit
+> réellement.
+> ⚠️⚠️ **TROIS BRANCHES ÉTAIENT MORTES, ET LA GATE ÉTAIT VERTE** : deux GARDES
+> de test (ST4, ST5) dont les assertions ne s'exécutaient jamais, et le bloc de
+> l'agent qui publie les fenêtres du walk-forward.
+> ⚠️ **CE QUE LA BRANCHE RÉVEILLÉE A RÉVÉLÉ**, sur le même jeu : **3 fenêtres,
+> 3 ROUGE, stabilité « Instable », CV A/E 0,1885** — et rien ne le disait à
+> l'actuaire, alors que ce sont exactement les grandeurs sur lesquelles le
+> verrou du statut plafonne.
+> ⚠️⚠️ **ET RÉVEILLER UNE BRANCHE MORTE PEUT CASSER** : elle formatait
+> `backtest.get('ae_cv_wf', 'N/A'):.4f`. La clé EXISTE et vaut `None` quand le
+> CV n'a pas pu être calculé — le défaut du `get` ne tire jamais, et `:.4f` sur
+> `None` LÈVE. *Troisième fois que « présent mais VIDE » revient dans cet audit.*
 
 **C7 — `_calculer_courbes` annonce « les 3 meilleurs modèles » et ne les utilise pas.** `top_modeles` est reçu, cité une seule fois — sa signature. La courbe est le tri de la **valeur observée** : `gini_observe = 0.9734` contre `0.21` pour le modèle. *À décharge* : le nom `gini_observe` est honnête, et `chart_lorenz_gini` reçoit bien **les deux** Gini avec un commentaire qui explique pourquoi. C'est la docstring qui sur-annonce, pas le graphique.
 
 **C8 — Le plafond de vraisemblance du Gini traite toute cible comme une fréquence.** `gini_est_plausible(gini, cible_est_frequence=True)` — codé en dur, alors que `col_cible` peut valoir `cout_moyen` ou `prime_pure`. Le seuil 0,60 est calibré sur la fréquence.
+> ✅ **`a6/C8`** · **FERMÉ le 27/08/2026 — `c41a6a5`, option C.**
+> `verdict_vraisemblance_gini` rend PLAUSIBLE / IMPLAUSIBLE / NON_CALIBRÉ /
+> SANS_OBJET : **le garde-fou DÉCLARE qu'il ne sait pas juger** au lieu de
+> répondre « plausible ».
+> ⚠️⚠️ **LES DEUX CORRECTIFS ÉVIDENTS ÉTAIENT FAUX, ET C'EST MESURÉ.**
+> **(A)** passer la vraie cible **RETIRAIT LE FILET** : l'ancienne fonction
+> rendait `True` sans plafond pour toute cible non-fréquence — **0,91 et 0,99
+> passaient sans une alerte**, sur `prime_pure`, LA CIBLE MÊME de la fuite V8
+> qui a motivé ce garde-fou. **(B)** laisser `True` applique à une prime pure un
+> seuil calibré sur une fréquence.
+> ⚠️ **AUCUN SEUIL INVENTÉ** : la littérature citée (GLM de fréquence auto,
+> 0,15–0,35) ne dit rien de la prime pure.
+> ⚠️ **LE NOM A CHANGÉ EXPRÈS** : `gini_est_plausible` était un PRÉDICAT ; trois
+> états sous ce nom auraient été SILENCIEUSEMENT faux. En renommant, un appelant
+> resté en arrière échoue BRUYAMMENT.
 
 ### C — Imprécis ou daté (2)
 
