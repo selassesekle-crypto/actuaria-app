@@ -2,15 +2,26 @@
 # ActuarIA — GATES RAPIDES, a chaque push
 #
 # CE QUE CE FICHIER VERIFIE, ET CE QU'IL NE VERIFIE PAS :
-#   OUI  normes . core . pytest Vie/EP-RE + Sante-Prevoyance   = 521 tests
+#   OUI  normes . core . pytest Vie/EP-RE + Sante-Prevoyance
 #   NON  direction_non_vie -> workflow nocturne separe
 #
-# /!\ LE COMPTE DE LA ZONE NON COUVERTE N'EST PLUS ECRIT. Cette ligne annoncait
-#     << 1 128 tests >> ; la nocturne du 28/08/2026 en a execute 1 610. Un
-#     compte qu'on ne LANCE PAS ici ne peut pas etre derive ici : ce ne peut
-#     donc etre qu'une affirmation, et une affirmation se perime. Ce que cette
-#     phrase doit dire est ce qu'elle LIMITE -- la zone n'est pas verifiee --
-#     et cela reste vrai sans aucun nombre.
+# /!\ AUCUN COMPTE DE TESTS N'EST ECRIT DANS CET EN-TETE, ET C'EST LA MEME
+#     RAISON DANS LES DEUX SENS.
+#
+#     - La zone NON couverte ne peut pas etre comptee ici, puisque ce workflow
+#       ne la lance pas : ce ne peut etre qu'une affirmation. Elle annoncait
+#       << 1 128 tests >> ; la nocturne du 28/08/2026 en a execute 1 610.
+#
+#     - La zone COUVERTE, elle, EST comptee -- mais a l'EXECUTION, zone par
+#       zone, dans le resume (`steps.<zone>.outputs.tests`). L'en-tete
+#       annoncait << = 521 tests >> pour les trois ensemble ; la mesure du
+#       28/08/2026 donne 728 pour `normes` SEUL, et 197 pour `core`, soit deja
+#       925 sans les deux zones pytest. Un total fige dans un commentaire se
+#       perime a chaque lot sans que rien ne tombe.
+#
+#     Une phrase d'en-tete dit ce qu'elle LIMITE -- QUELLES zones tournent --
+#     et cela reste vrai sans aucun nombre. Le COMBIEN se lit dans le resume,
+#     ou il est derive, jamais recopie.
 #
 # /!\ IL NE DOIT JAMAIS AFFIRMER PLUS QU'IL N'A VERIFIE. Le resume nomme les
 #     zones executees ET LE NOMBRE DE TESTS de chacune. Un vert sans compte est
@@ -19,8 +30,8 @@
 # POURQUOI CE DECOUPAGE : mesure locale, `direction_non_vie` prend 23 a 26 min
 # et pese 90,9 % de son temps dans `provisionnement` seul -- paralleliser ne
 # donnerait rien. Attendre 30-45 min pour savoir si un push est bon est trop
-# lent ; 521 tests en moins de cinq minutes attrapent la majorite des
-# regressions, et le reste suit dans la nuit.
+# lent ; les trois zones rapides, en moins de cinq minutes, attrapent la
+# majorite des regressions, et le reste suit dans la nuit.
 #
 # /!\ AUCUNE CLE N'ENTRE ICI, ET C'EST VERIFIE AU DEMARRAGE. Le depot est
 #     PUBLIC : ces journaux le sont aussi. La garantie la plus forte n'est pas
