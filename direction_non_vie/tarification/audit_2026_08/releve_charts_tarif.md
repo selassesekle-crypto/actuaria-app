@@ -36,6 +36,26 @@ donc s'inverser. Et le cas négatif est celui que le module de conformité
 documente noir sur blanc (BLOQUANT B7 : « *GLM réellement livré : Gini
 −0,0105* »).
 
+> ✅ **`charts/C1`** · **FERMÉ le 28/08/2026.** Le badge ne publie une part que
+> si c'en est une. **Une seule condition couvre les trois cas mesurés, et elle
+> n'invente AUCUN seuil** : le rapport n'est une part que si `0 <= mod <= obs`.
+> ⚠️⚠️ **ON N'ÉCRÊTE PAS À [0, 100], ET C'EST LA LEÇON DU LOT F1 D'A7** : juger
+> une valeur écrêtée est une tautologie, et l'écrêtement **cache** la
+> divergence au lieu de la dire. Le 125 % n'était pas une aberration de calcul
+> — le relevé le disait déjà : *« le plafond est calculé sur le portefeuille
+> entier, le Gini du modèle sur la seule base de test »*. **Deux assiettes.**
+> ⚠️ **REJOUÉ** : 21 % publié · 125 %, −5 % et 18 000 000 % remplacés par un
+> motif qui NOMME la cause.
+> ⚠️⚠️ **ET LES TROIS CAS DONNENT DEUX MOTIFS, PAS TROIS — c'est une décision.**
+> `obs = 1e-6, mod = 0,18` tombe dans « dépasse le plafond », et c'est exact
+> (`0,18 > 1e-6`). Distinguer « plafond dégénéré » exigerait un **seuil sur ce
+> qu'est un plafond trop petit** : *un seuil fabriqué serait le défaut même que
+> cet audit poursuit.* Un test fige cette décision pour qu'on ne la « corrige »
+> pas par accident.
+> **Épinglé par `test_bandes_et_badge.py`, 4 contrôles**, dont un SECOND SENS
+> en premier : le cas nominal publie toujours sa part — *un correctif qui
+> éteindrait le badge fermerait le constat en détruisant l'information.*
+
 **C2 — La bande verte de la figure est PLUS LARGE que la tolérance du gate.**
 Trois bandes coexistent dans le même système :
 
@@ -58,6 +78,30 @@ Mesuré, en confrontant la figure au gate :
 acceptable [0,90 ; 1,10] » **et** une figure où le point tombe à l'intérieur du
 rectangle que le docstring appelle « bande d'acceptabilité ». ⚠️ *La couleur du
 point, elle, est juste* — c'est le rectangle qui dit autre chose que le texte.
+
+> ✅ **`charts/C2`** · **FERMÉ le 28/08/2026.** La figure **ne possède plus
+> aucun seuil** : elle REÇOIT les deux bandes de qui décide
+> (`AE_FENETRE_ACCEPTABLE`, `AE_FENETRE_STRICTE` dans
+> `core/conformite_reglementaire`). Rectangle dessiné mesuré : **(0,90 ; 1,10)
+> = la bande de la règle**. Le cas du relevé, **A/E = 0,87**, sort désormais du
+> rectangle ET est peint en ROUGE.
+> ⚠️ **LE REMÈDE N'EST PAS DE RECOPIER LE BON NOMBRE** : une copie correcte
+> aujourd'hui diverge au premier ajustement — exactement les 30 définitions
+> locales de couleurs avant `STATUT_RAG`. Les bandes sont **requises**, sans
+> défaut : *« présent mais VIDE » a déjà mordu trois fois dans cet audit.*
+> ⚠️ **ET LE MODULE RESTE PUR.** Les bornes arrivent en PARAMÈTRE plutôt que par
+> un import : la dépendance irait dans le bon sens (la présentation lit la
+> règle), mais elle rendrait **fausse** la phrase d'en-tête qui promet que
+> `charts_tarif` ne dépend que de plotly et numpy.
+> ⚠️⚠️ **UN HOMONYME A ÉTÉ ÉPARGNÉ, ET C'EST LE POINT DÉLICAT DU LOT.** A6
+> gradue aussi le A/E **PAR SEGMENT** sur `0,90 – 1,10` — mais là c'est le
+> **VERT** (« non biaisé sur ce segment »), avec un AMBRE à `0,80 – 1,20`. Sur
+> une **FENÊTRE**, `0,90 – 1,10` est l'**AMBRE**. *Deux échelles, deux objets,
+> les mêmes nombres.* Unifier les six sites sous une constante les aurait
+> mélangés : **quatre sites rewirés, celui du segment INTOUCHÉ**, et un test
+> fige la distinction.
+> ⚠️ **Et le libellé publié suit** : « Recalibrer si A/E sort de [0.90, 1.10] »
+> dérive désormais de la constante — même geste que `SEUIL_CV_INSTABLE`.
 
 **C3 — Une figure vide est visuellement indiscernable d'une figure pleine.**
 Les **sept** fonctions rendent un objet complet — fond navy, titre or, axes

@@ -116,6 +116,7 @@ from core.conformite_reglementaire import (
     VRAISEMBLANCE_IMPLAUSIBLE, VRAISEMBLANCE_NON_CALIBRE,
     reserve_vraisemblance_non_calibree,
     GINI_PLAUSIBLE_MAX_FREQUENCE,
+    AE_FENETRE_ACCEPTABLE, AE_FENETRE_STRICTE,
 )
 
 #: ⚠️⚠️ LE VOCABULAIRE DES SPLITS, NOMMÉ — constat `a6/C6`.
@@ -1482,8 +1483,10 @@ class AgentA6Comparaison:
                 'modele_recalibre_fidele': _recalibration_est_fidele,
                 'statut':             (
                     'AMBRE' if ae is None else
-                    'VERT'  if 0.95 <= ae <= 1.05 else
-                    'AMBRE' if 0.90 <= ae <= 1.10 else
+                    'VERT'  if AE_FENETRE_STRICTE[0] <= ae
+                               <= AE_FENETRE_STRICTE[1] else
+                    'AMBRE' if AE_FENETRE_ACCEPTABLE[0] <= ae
+                               <= AE_FENETRE_ACCEPTABLE[1] else
                     'ROUGE'
                 ),
             })
@@ -1721,8 +1724,10 @@ class AgentA6Comparaison:
             'interpretation': (
                 '⚠️ A/E NON calculé — aucune prédiction hors échantillon '
                 'disponible sur la dernière fenêtre' if ae_ratio is None else
-                '🟢 Non biaisé'       if 0.95 <= ae_ratio <= 1.05 else
-                '🟡 Légère déviation' if 0.90 <= ae_ratio <= 1.10 else
+                '🟢 Non biaisé'       if AE_FENETRE_STRICTE[0] <= ae_ratio
+                                      <= AE_FENETRE_STRICTE[1] else
+                '🟡 Légère déviation' if AE_FENETRE_ACCEPTABLE[0] <= ae_ratio
+                                      <= AE_FENETRE_ACCEPTABLE[1] else
                 '🔴 Déviation majeure'
             ),
             'stabilite_wf': (
@@ -2125,7 +2130,8 @@ class AgentA6Comparaison:
                 _wf_resultat_ok = False
                 _wf_motif = ("aucune métrique de discrimination produite "
                              "(gini_wf_moyen=None) — le walk-forward n'a rien validé")
-            elif _ae is None or not (0.90 <= float(_ae) <= 1.10):
+            elif _ae is None or not (AE_FENETRE_ACCEPTABLE[0] <= float(_ae)
+                                 <= AE_FENETRE_ACCEPTABLE[1]):
                 _wf_resultat_ok = False
                 _wf_motif = (f"A/E walk-forward (dernière fenêtre) = {_ae} hors bande "
                              f"acceptable [0,90 ; 1,10] — biais de tarification "
@@ -2145,7 +2151,9 @@ class AgentA6Comparaison:
                              f"modèle a échoué la validation temporelle sur au "
                              f"moins un exercice, même si la dernière année est "
                              f"bonne")
-            elif _ae_moy is not None and not (0.90 <= float(_ae_moy) <= 1.10):
+            elif _ae_moy is not None and not (
+                AE_FENETRE_ACCEPTABLE[0] <= float(_ae_moy)
+                <= AE_FENETRE_ACCEPTABLE[1]):
                 _wf_resultat_ok = False
                 _wf_motif = (f"A/E MOYEN sur toutes les fenêtres = {_ae_moy}, hors "
                              f"bande acceptable [0,90 ; 1,10] — biais persistant")
@@ -2403,7 +2411,12 @@ class AgentA6Comparaison:
                 f"→ Déployer {mp['modele']} comme modèle de tarification.\n"
                 f"→ Passer à l'Agent A7 (Provisionnement).\n"
                 f"→ Surveiller le ratio A/E trimestriellement.\n"
-                f"→ Recalibrer annuellement ou si A/E sort de [0.90, 1.10].\n"
+                # ⚠️ LE LIBELLÉ ET LA DÉCISION LISENT LE MÊME NOMBRE. Recopié,
+                # ce texte deviendrait faux au premier ajustement de la bande
+                # sans que rien ne tombe — même geste que `SEUIL_CV_INSTABLE`.
+                f"→ Recalibrer annuellement ou si A/E sort de "
+                f"[{AE_FENETRE_ACCEPTABLE[0]:.2f}, "
+                f"{AE_FENETRE_ACCEPTABLE[1]:.2f}].\n"
                 f"→ Conserver les modèles GLM comme benchmark réglementaire."
             )
         else:
@@ -2478,7 +2491,12 @@ class AgentA6Comparaison:
         try:
             wf = bt.get('walk_forward')
             if wf:
-                graphiques['chart_walkforward_ae'] = chart_walkforward_ae(wf)
+                # ⚠️ LA FIGURE NE POSSÈDE PLUS DE SEUIL : elle reçoit celui
+                # de la règle. Constat `charts/C2` -- son rectangle vert
+                # promettait 0,85-1,15 là où le verrou refuse hors 0,90-1,10.
+                graphiques['chart_walkforward_ae'] = chart_walkforward_ae(
+                    wf, bande_acceptable=AE_FENETRE_ACCEPTABLE,
+                    bande_stricte=AE_FENETRE_STRICTE)
         except Exception as e:
             logger.debug(f"chart_walkforward_ae non produit : {e}")
 

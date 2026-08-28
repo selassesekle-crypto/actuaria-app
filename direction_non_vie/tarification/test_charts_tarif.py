@@ -101,18 +101,31 @@ class TestChartsTarifFigures(unittest.TestCase):
         self.assertIn('discriminable', badges)
 
     def test_2c_sans_gini_modele_aucun_ratio_invente(self):
-        """Un ratio ne se produit que si les DEUX nombres existent."""
+        """Un ratio ne se produit que si les DEUX nombres existent.
+
+        ⚠️ CE TEST PROUVE EXACTEMENT CE QU'IL PROUVAIT — son sujet est
+        « AUCUN RATIO INVENTÉ », pas « le mot *discriminable* est absent ».
+        Le lot `charts/C1` publie désormais, quand le rapport n'est PAS une
+        part, un motif qui NOMME la cause : « part du discriminable non
+        publiée — ... ». Le mot réapparaît donc, et aucune division n'a lieu.
+        L'assertion vise maintenant le SUJET (pas de pourcentage publié) au
+        lieu du PROXY (le mot absent), ce qui la rend plus stricte, pas moins.
+        """
         x = np.linspace(0, 1, 50)
         fig = ct.chart_lorenz_gini(x.tolist(), (x ** 1.8).tolist(),
                                    gini_observe=0.832)
         badges = ' '.join(a.text or '' for a in fig.layout.annotations)
+        # sans Gini de modèle, le badge ne dit RIEN du discriminable
         self.assertNotIn('discriminable', badges)
         self.assertNotIn('%', badges)
         # et un plafond nul ne produit pas une division
         fig0 = ct.chart_lorenz_gini(x.tolist(), (x ** 1.8).tolist(),
                                     gini_observe=0.0, gini_modele=0.1775)
-        self.assertNotIn('discriminable',
-                         ' '.join(a.text or '' for a in fig0.layout.annotations))
+        badges0 = ' '.join(a.text or '' for a in fig0.layout.annotations)
+        self.assertNotRegex(badges0, r'soit\s+-?\d+\s*%',
+                            'un ratio a été publié sur un plafond nul')
+        self.assertIn('non publiée', badges0,
+                      'le badge se tait sans dire pourquoi')
 
     def test_3_relativites_glm(self):
         rel = {
@@ -132,8 +145,26 @@ class TestChartsTarifFigures(unittest.TestCase):
             {'annee_test': 2022, 'ae_ratio': 1.08},
             {'annee_test': 2023, 'ae_ratio': 1.19},   # hors bande → rouge
         ]
-        fig = ct.chart_walkforward_ae(fen)
+        # ⚠️ LES DEUX BANDES SONT DÉSORMAIS REQUISES (lot `charts/C2`) : la
+        # figure ne possède plus aucun seuil, elle dessine celui qu'on lui
+        # donne. Ce test reste un test du module PUR : il passe des bornes
+        # EXPLICITES plutôt que d'importer la règle, et vérifie que la figure
+        # dessine exactement ce qu'elle a reçu.
+        fig = ct.chart_walkforward_ae(fen, bande_acceptable=(0.90, 1.10),
+                                      bande_stricte=(0.95, 1.05))
         self._assert_figure(fig)
+        rects = [(round(float(s.y0), 6), round(float(s.y1), 6))
+                 for s in (fig.layout.shapes or ())
+                 if getattr(s, 'type', '') == 'rect']
+        self.assertEqual(rects, [(0.90, 1.10)],
+                         'la figure ne dessine pas la bande reçue')
+        autre = ct.chart_walkforward_ae(fen, bande_acceptable=(0.80, 1.20),
+                                        bande_stricte=(0.95, 1.05))
+        rects2 = [(round(float(s.y0), 6), round(float(s.y1), 6))
+                  for s in (autre.layout.shapes or ())
+                  if getattr(s, 'type', '') == 'rect']
+        self.assertEqual(rects2, [(0.80, 1.20)],
+                         'la figure ignore la bande reçue : elle en garde une')
 
     def test_5_shap_summary(self):
         imp = {'bonus_malus': 0.42, 'age': 0.31, 'puissance': 0.12,

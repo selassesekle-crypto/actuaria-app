@@ -431,10 +431,41 @@ def chart_lorenz_gini(
         obs = float(gini_observe)
         # 4 décimales : la convention des tableaux du rapport pour un Gini.
         texte = f'Concentration observée {obs:.4f}'
-        if gini_modele is not None and obs > 0:
+        if gini_modele is not None:
             mod = float(gini_modele)
-            texte += (f'<br>Modèle {mod:.4f} — soit {100.0 * mod / obs:.0f} %'
-                      f' du discriminable')
+            texte += f'<br>Modèle {mod:.4f}'
+            # ⚠️⚠️ CONSTAT `charts/C1` — LE BADGE N'AVAIT AUCUNE BORNE. Il
+            # écrivait `100 * mod / obs` sous le seul garde `obs > 0`. Mesuré :
+            #     obs=0,2000  mod=0,2500  ->  « 125 % du discriminable »
+            #     obs=0,2000  mod=-0,0105 ->  « -5 % du discriminable »
+            #     obs=1e-6    mod=0,1800  ->  « 18 000 000 % du discriminable »
+            #
+            # ⚠️ ON N'ÉCRÊTE PAS À [0, 100], ET C'EST LA LEÇON DU LOT F1 D'A7 :
+            # juger une valeur écrêtée est une tautologie, et l'écrêtement
+            # CACHE la divergence au lieu de la dire. Le 125 % n'est pas une
+            # aberration de calcul — la docstring l'explique : « le plafond est
+            # calculé sur le portefeuille entier, le Gini du modèle sur la
+            # seule base de test ». *Deux assiettes différentes.*
+            #
+            # ⚠️⚠️ UNE SEULE CONDITION COUVRE LES TROIS CAS, et elle n'invente
+            # AUCUN SEUIL : le rapport n'est une PART que si `0 <= mod <= obs`.
+            #   mod < 0    -> le modèle discrimine à l'envers
+            #   obs <= 0   -> il n'y a pas de plafond à rapporter
+            #   mod > obs  -> les deux Gini n'ont pas la même assiette
+            # *Un seuil fabriqué ici aurait été le défaut que cet audit
+            # poursuit ; la condition, elle, est la définition d'une part.*
+            if mod < 0:
+                texte += ('<br><i>part du discriminable non publiée — '
+                          'le modèle discrimine à l\'envers</i>')
+            elif obs <= 0:
+                texte += ('<br><i>part du discriminable non publiée — '
+                          'aucun plafond observé à rapporter</i>')
+            elif mod > obs:
+                texte += ('<br><i>part du discriminable non publiée — le '
+                          'modèle dépasse le plafond : les deux Gini n\'ont '
+                          'pas la même assiette</i>')
+            else:
+                texte += f' — soit {100.0 * mod / obs:.0f} % du discriminable'
         _badge_kpi(fig, texte)
     return fig
 
@@ -494,13 +525,42 @@ def chart_relativites_glm(
 def chart_walkforward_ae(
     fenetres: Sequence[Dict],
     *,
+    bande_acceptable: tuple,
+    bande_stricte: tuple,
     titre: str = 'Backtesting walk-forward — ratio A/E par fenêtre',
 ) -> go.Figure:
     """
     fenetres : [{'annee'|'annee_test': …, 'ae_ratio': …}] — une par fenêtre WF.
-    Bande d'acceptabilité ±15 % (0.85–1.15), cible à 1.0, points colorés
-    VERT (0.95–1.05) / AMBRE (0.90–1.10) / ROUGE sinon.
+    bande_acceptable / bande_stricte : les DEUX bandes, fournies par l'appelant.
+
+    ⚠️⚠️ CETTE FIGURE NE POSSÈDE PLUS AUCUN SEUIL, ET C'EST LE FOND DU CONSTAT
+    `charts/C2`. Elle en portait TROIS, et le plus visible était le plus large :
+
+        rectangle vert dessiné ici       0,85 – 1,15   <- le plus LARGE
+        point VERT dessiné ici           0,95 – 1,05
+        le verrou qui plafonne le statut 0,90 – 1,10   <- la DÉCISION
+
+    Mesuré : un A/E de **0,87** se dessinait DANS la bande verte, et le verrou
+    avertissait. *La figure promettait une acceptabilité que la règle refusait,
+    et c'est la figure que l'actuaire regarde en premier.*
+
+    ⚠️ LE REMÈDE N'EST PAS DE RECOPIER LE BON NOMBRE ICI — une copie correcte
+    aujourd'hui diverge au premier ajustement, exactement comme les 30
+    définitions locales de couleurs avant `STATUT_RAG`. La figure REÇOIT les
+    bornes de qui décide (`core.conformite_reglementaire`), et n'en invente
+    aucune.
+
+    ⚠️ LES DEUX BANDES SONT REQUISES, sans défaut. Un défaut laisserait un
+    appelant dessiner une bande qui n'est plus celle de la règle, en silence.
+    *« Présent mais VIDE » a déjà mordu trois fois dans cet audit.*
+
+    ⚠️ ET LE MODULE RESTE PUR : il ne dépend toujours que de plotly et numpy.
+    C'est pourquoi les bornes arrivent en PARAMÈTRE plutôt que par un import —
+    la dépendance irait dans le bon sens (la présentation lit la règle), mais
+    elle rendrait fausse la phrase d'en-tête qui promet la pureté.
     """
+    bas_a, haut_a = float(bande_acceptable[0]), float(bande_acceptable[1])
+    bas_s, haut_s = float(bande_stricte[0]), float(bande_stricte[1])
     # ⚠️ UNE FENÊTRE SANS A/E N'EST PAS UNE FENÊTRE À 1,0. Le défaut `1.0`
     # aurait tracé un point PARFAIT là où rien n'a été mesuré — et depuis
     # qu'A6 publie `None` pour une fenêtre dont le modèle n'a pu être
@@ -511,16 +571,20 @@ def chart_walkforward_ae(
     ae = [float(f['ae_ratio']) for f in _mesurees]
 
     def _coul(v: float) -> str:
-        if 0.95 <= v <= 1.05:
+        # ⚠️ Les seuils viennent de l'appelant, jamais d'ici.
+        if bas_s <= v <= haut_s:
             return COULEURS['ligne_predite']
-        if 0.90 <= v <= 1.10:
+        if bas_a <= v <= haut_a:
             return COULEURS['or_accent']
         return 'rgba(240,85,35,0.95)'
 
     fig = go.Figure()
-    fig.add_hrect(y0=0.85, y1=1.15, fillcolor='rgba(0,229,160,0.06)', line_width=0)
+    # ⚠️ LE RECTANGLE EST CELUI DE LA DÉCISION, plus celui d'une bande plus
+    # large dessinée ici : c'était le constat `charts/C2`.
+    fig.add_hrect(y0=bas_a, y1=haut_a, fillcolor='rgba(0,229,160,0.06)',
+                  line_width=0)
     fig.add_hline(y=1.0, line=dict(color=COULEURS['texte_2'], dash='dash', width=1))
-    for yv in (0.85, 1.15):
+    for yv in (bas_a, haut_a):
         fig.add_hline(y=yv, line=dict(color=COULEURS['or_accent'], dash='dot', width=1))
     fig.add_trace(go.Scatter(
         x=annees, y=ae, mode='lines+markers', name='A/E',

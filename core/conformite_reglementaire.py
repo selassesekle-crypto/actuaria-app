@@ -1379,6 +1379,36 @@ SEUIL_CORRELATION_FUITE = 0.80
 GINI_PLAUSIBLE_MAX_FREQUENCE = 0.60
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+#  LES BANDES DU RATIO A/E — SOURCE UNIQUE DE CE QUI EST « ACCEPTABLE »
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# ⚠️⚠️ CONSTAT `charts/C2` : TROIS BANDES COEXISTAIENT DANS LE MÊME SYSTÈME.
+#   · le rectangle vert de la figure       0,85 – 1,15   (le plus LARGE)
+#   · le point VERT de la même figure      0,95 – 1,05
+#   · le verrou qui plafonne le statut     0,90 – 1,10   (la DÉCISION)
+# Mesuré : un A/E de 0,87 se dessinait DANS la bande verte, et le verrou
+# avertissait. *La figure promettait une acceptabilité que la règle refusait.*
+#
+# ⚠️ LA DÉCISION VIT ICI, LA FIGURE LA LIT — jamais l'inverse. `charts_tarif`
+# importe ces bornes ; ce module n'importe rien de lui (vérifié, aucun cycle).
+#
+# ⚠️⚠️ ET IL Y A UN HOMONYME, QUI NE DOIT PAS ÊTRE FUSIONNÉ. L'analyse PAR
+# SEGMENT d'A6 gradue elle aussi sur `0,90 – 1,10` — mais là, c'est la bande
+# VERTE (« modèle non biaisé sur ce segment »), avec un AMBRE à 0,80 – 1,20.
+# Ici, sur une FENÊTRE de walk-forward, `0,90 – 1,10` est l'AMBRE et le VERT
+# est plus serré. *Deux échelles, deux objets, les mêmes nombres.* Unifier les
+# six sites sur une seule constante aurait mélangé les deux.
+
+#: Bande ACCEPTABLE du ratio A/E d'une FENÊTRE de walk-forward. C'est elle qui
+#: décide : hors de cette bande, le verrou refuse de conclure au VERT.
+AE_FENETRE_ACCEPTABLE = (0.90, 1.10)
+
+#: Bande STRICTE, le grain fin À L'INTÉRIEUR de la précédente : un A/E qui y
+#: tombe est « non biaisé », pas seulement « acceptable ».
+AE_FENETRE_STRICTE = (0.95, 1.05)
+
+
 class EchecControleEffet(RuntimeError):
     """Le contrôle anti-fuite par l'effet n'a pas pu s'exécuter.
 
