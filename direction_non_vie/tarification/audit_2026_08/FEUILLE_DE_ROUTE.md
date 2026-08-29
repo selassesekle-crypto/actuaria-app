@@ -13,8 +13,8 @@ l'état d'aujourd'hui.*
 
 | # | critère | état mesuré aujourd'hui |
 |---|---|---|
-| **S1** | **Rien de faux n'est publié** | ⛔ **95 constats ouverts** — *dérivés le 29/08 des clés de fermeture, méthode au §②* |
-| **S2** | **Rien de fermé ne peut régresser** | 🟡 **56 fermés, 1 partiel (`pipeline/C1`).** ✅ `a5/C5` n'est plus « corrigé sans être épinglé » : il est fermé ET épinglé, et le lot a montré qu'il se reproduisait encore par une SECONDE cause. ✅ **Et l'archive ne peut plus RETARDER sur le code** : `test_archive_fermeture_reportee.py` fait tomber la gate dès qu'un constat épinglé par un test n'a pas son bloc de fermeture -- le défaut mesuré le 28/08, où douze lots avaient été poussés sans être reportés. ⚠️ L'archive elle-même est désormais épinglée : `test_archive_cles_fermeture.py` fait tomber la gate sur un bloc de fermeture qui ne nomme pas son constat |
+| **S1** | **Rien de faux n'est publié** | ⛔ **92 constats ouverts** — *dérivés le 29/08 des clés de fermeture, méthode au §②* |
+| **S2** | **Rien de fermé ne peut régresser** | 🟡 **59 fermés, 1 partiel (`pipeline/C1`).** ✅ `a5/C5` n'est plus « corrigé sans être épinglé » : il est fermé ET épinglé, et le lot a montré qu'il se reproduisait encore par une SECONDE cause. ✅ **Et l'archive ne peut plus RETARDER sur le code** : `test_archive_fermeture_reportee.py` fait tomber la gate dès qu'un constat épinglé par un test n'a pas son bloc de fermeture -- le défaut mesuré le 28/08, où douze lots avaient été poussés sans être reportés. ⚠️ L'archive elle-même est désormais épinglée : `test_archive_cles_fermeture.py` fait tomber la gate sur un bloc de fermeture qui ne nomme pas son constat |
 | **S3** | **Un tarif signé se rejoue à l'identique** | 🟡 **RE-MESURÉ LE 27/08 — 2 fermés, 1 hérité, 1 PARTIEL.** ✅ **l'empreinte du plan est versionnée** : `s1:9b6d4f70080ad771`, **rejouée identique** sur les 20 plans (`2cb43ef`). ✅ **le livrable ne publie plus un `now()` sous l'étiquette « Arrêté »** : **0** site `_bandeau(… now …)`, contre **28** à l'origine ; absent → « non déclaré », illisible → « non déclaré (illisible : …) » (`ea37564`). ⬜ *hérité, non re-mesuré ici* : le tarif **déclaratif** reproductible au bit près (0,00e+00). ⚠️ **PARTIEL — le tarif DL** : le `seed` est **déclaré** (paramètre de `A5.run`), **appliqué** à `torch.manual_seed` et `np.random.seed` (l.528-529) et **inscrit au rapport**. ⚠️⚠️ **Mais la reproductibilité bout-en-bout n'est PAS prouvée ici** : elle demande un double run d'A5, non fait. *Le seed posé n'est pas la reproductibilité mesurée.* |
 | **S4** | **Un seul chemin — ou des chemins également gardés** | ⛔ **RE-MESURÉ LE 27/08 — inchangé, et l'asymétrie est nette.** **L'orchestrateur a toujours 0 appelant de production** (2 importeurs au total, tous hors production — relevé par AST). ⚠️⚠️ **Et la couche qualité départage les deux chemins** : `pipeline_tarifaire` (déclaratif) importe `core.qualite_donnees` **et** `core.conformite_reglementaire` ; `pipeline_agents` **n'en importe AUCUN**. *Deux chemins vers un tarif signé, un seul gardé.* ⬜ *non re-derivable* : le « 5 assemblages dans l'app » date d'une définition non consignée — **je ne le réaffirme pas sans la refaire**. |
 | **S5** | **Tout ce qui tarife est atteignable par une gate** | 🟡 **RE-MESURÉ LE 27/08, ET LA NUANCE COMPTE.** `actuaria_app.py` (**5 208 l**) est **importable** depuis le lot 0.1 (`07be8c0`) — mais **AUCUN test ne l'importe** ; **4 le LISENT comme un fichier** (`core/test_imports_app.py` le dit lui-même : *« ce test relit le fichier, il ne l'importe pas »*). ⚠️ *Ce qui est exercé, c'est sa STRUCTURE, pas son comportement.* ✅ `core/elasticite.py` (**988 l**) n'est plus hors de portée : **2 tests l'importent** (`test_elasticite.py`, `test_a4_ml.py`) — ⚠️ **testé n'est toujours pas audité**, il reste à l'ouverture HORS RANG. ⛔ `services/excel_helpers.py` (**151 l**) : **0 test ne l'importe**. |
@@ -39,9 +39,9 @@ lui-même**.
 | | |
 |---|---|
 | constats relevés (vagues 1 + 2) | **151** — *recomptés le 29/08 ; `a3/C19`, `services/C10`, `a5/C10` et `services/C11` sont des constats NEUFS, ouverts et fermés dans leur propre lot* |
-| fermés **et épinglés** | **56** |
+| fermés **et épinglés** | **59** |
 | corrigé, **non épinglé** | **0** — `a5/C5` épinglé le 29/08 · **partiel** : `pipeline/C1` |
-| **⛔ OUVERTS** | **95** |
+| **⛔ OUVERTS** | **92** |
 | lignes lues intégralement | **22 693** sur 23 863 du périmètre |
 | jamais auditées | **1 170 l** + `actuaria_app.py` (5 181 l) |
 | preuves qui se relancent | **35, 0 échec** |
@@ -297,7 +297,7 @@ des chaînes — *un marqueur posé sur un nombre est détruit par l'arrondi*, e
 | *(A3, hors 3.1)* | ✅ **FERMÉS** `a3/C4` (`271d50d`) · `a3/C14` (`b3dc60c`, déclaration seule) — ⚠️ `a3/C7` reste **LATENT** |
 | **3.3 L'API latente** | ✅ **`pipeline/C1` FERMÉ pour l'ILLISIBILITÉ** (la plausibilité reste ouverte, faute de borne déclarée au plan ; `predire_portefeuille` rendu en conception) · `pipeline/C1` (**`tarifer()`**, +128 % sur un facteur illisible) — **descendu du rang 1** : 1 appelant, une **démo**. *Une API publique sans borne est une régression qui attend un appelant* |
 
-## RANG 4 — LES FIGURES ET LA CHARTE · 🟡 **8 sur 11 CLOS · 3 GELÉS**
+## RANG 4 — LES FIGURES ET LA CHARTE · ✅ **CLOS le 29/08/2026 — 11 sur 11**
 
 ✅ **LOT 4.1 CLOS le 28/08/2026** — `charts/C1` et `charts/C2`, les deux seuls constats du rang qui publiaient un **nombre ou un verdict FAUX** sur une figure signée.
 
@@ -316,13 +316,32 @@ des chaînes — *un marqueur posé sur un nombre est détruit par l'arrondi*, e
 
 ✅ **LOT 4.5 CLOS le 29/08/2026** (`462841a`) — **`a5/C4`**, l'un des latents, **ROUVERT PAR SELASSE**. La courbe de convergence trace les **vraies pertes** au lieu d'une exponentielle bruitée sur 50 époques codées en dur. ⚠️ **Le remède évident était le mauvais** : semer le bruit aurait rendu une courbe FABRIQUÉE reproductible, donc crédible.
 
-## ⛔⛔ CE QUI RESTE AU RANG 4 : **3 CONSTATS, GELÉS PAR ARBITRAGE**
+## ✅ LE RANG 4 EST CLOS — LES TROIS GELÉS FERMÉS **PAR SUPPRESSION** (4.8)
 
-| constat | figure | statut |
+✅ **LOT 4.8 CLOS le 29/08/2026** — `a3/C5`, `a4/C5`, `a6/C3`. Arbitrage de
+Selasse : **plutôt que de les garder gelés indéfiniment, supprimer le code qui
+produisait ces figures.** Ce n'étaient pas des doublons inoffensifs :
+
+| constat | figure | ce qu'elle publiait |
 |---|---|---|
-| `a3/C5` | `lorenz_glm` | ⛔ **GELÉ — aucune ouverture sans accord explicite de Selasse** |
-| `a4/C5` | `lorenz` | ⛔ **GELÉ — idem** |
-| `a6/C3` | `scores_profils` | ⛔ **GELÉ — idem** |
+| `a3/C5` | `lorenz_glm` | une courbe **reconstruite du seul Gini** — deux portefeuilles de même Gini, même courbe au pixel près |
+| `a4/C5` | `lorenz` | idem, plus une contradiction d'axe |
+| `a6/C3` | `scores_profils` | **0,56** là où le score réel du même modèle valait **0,9001** |
+
+⚠️⚠️ **SUPPRIMÉ PAR SITE, JAMAIS PAR NOM** — A6 définit un homonyme `'lorenz'`
+qui porte les points **mesurés** de la figure publiée. Un test plante la
+confusion. **222 lignes retirées**, entrées d'écart comprises, et la formule
+`t ** (1/(1+gini*2))` **n'existe plus dans le code de production**.
+
+⚠️⚠️ **ET LA QUESTION DE `a6/C3` EST PUBLIÉE À LA PLACE.** Elle était la seule à
+demander *« le classement changerait-il sous un autre profil ? »*. Mesuré sur
+quatre portefeuilles : **le vainqueur bascule dans 3 cas sur 4 sur la cible
+coût**, marges #1-#2 à **0,008 · 0,016 · 0,021**. *Le profil est un levier sur
+le prix.* La trace existante n'y répondait pas — `gouvernance_validee` vérifie
+**un nom non vide**, elle dit QUI a assumé, jamais CE QUE le choix a changé.
+Un **tableau** (pas une figure : quatre points seraient un « tableau déguisé »)
+est publié au **chapitre 6**, HTML et Word, recalculé avec
+`_calculer_scores_multicriteres` — **la formule qui décide**.
 
 ⚠️⚠️ **« GELÉ » N'EST PAS « FERMÉ », ET CE N'EST PAS NON PLUS « DÉFINITIF ».**
 Les trois restent **comptés OUVERTS** dans le total : le défaut existe toujours

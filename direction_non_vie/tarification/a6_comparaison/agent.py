@@ -780,6 +780,12 @@ class AgentA6Comparaison:
                 'branche':            sous_branche,
                 'statut_rag':         statut_rag,
                 'classement':         classement,
+                # ⚠️⚠️ SANS CETTE LIGNE, LA TABLE N'ATTEINT RIEN. Leçon du lot
+                # 4.7 : le catalogue peut nommer, le rendu peut être écrit —
+                # si la donnée ne monte pas dans le résultat, le rapport en
+                # publie une de moins, EN SILENCE.
+                'sensibilite_profils': self._sensibilite_profils(
+                    classement, _nom_profil_retenu),
                 'modele_production':  modele_production,
                 'backtest':           backtest,
                 'lift_ratio':         backtest.get('lift_ratio'),
@@ -1082,6 +1088,60 @@ class AgentA6Comparaison:
             modele['score_global']          = round(score_global, 4)
 
         return catalogue
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # SENSIBILITÉ DU CLASSEMENT AU PROFIL DE PONDÉRATION
+    # ══════════════════════════════════════════════════════════════════════════
+
+    def _sensibilite_profils(self, classement: list[dict],
+                             profil_actif: str) -> list[dict]:
+        """Le modèle retenu sous CHACUN des profils de pondération.
+
+        ⚠️⚠️ POURQUOI CETTE TABLE EXISTE — MESURÉ LE 29/08/2026. Le profil est
+        choisi par un humain, et son nom est tracé (`profil_valide_par`). Mais
+        `gouvernance_validee` ne vérifie qu'**un nom non vide** : elle
+        enregistre QUI a assumé le choix, jamais CE QUE le choix a changé.
+        Mesuré sur quatre portefeuilles, en recalculant avec la formule qui
+        décide : **le vainqueur bascule dans 3 cas sur 4 sur la cible coût**,
+        et les marges #1-#2 tombent à 0,008 · 0,016 · 0,021 selon le profil.
+        *Le profil est un levier sur le prix ; rien ne le montrait.*
+
+        ⚠️ CE N'EST PAS UNE FIGURE, ET C'EST DÉLIBÉRÉ. Quatre profils, quatre
+        lignes : un graphique à quatre points serait un **tableau déguisé** —
+        le motif même par lequel cet audit a écarté les quatre scorecards.
+
+        ⚠️⚠️ ET ON RECALCULE AVEC `_calculer_scores_multicriteres`, LA FORMULE
+        QUI DÉCIDE. C'est ce qui manquait à l'ancienne figure `scores_profils`
+        (constat `a6/C3`, supprimée) : elle en inventait une autre — Gini brut
+        au lieu de normalisé, `1/overfit`, `1 - rmse/400` — et publiait 0,56
+        là où le score réel valait 0,9001.
+
+        ⚠️⚠️ LA COPIE PROFONDE N'EST PAS UNE PRÉCAUTION, C'EST UNE NÉCESSITÉ :
+        `_calculer_scores_multicriteres` écrit `score_global` **dans les
+        dictionnaires reçus**. Sans copie, quatre appels écraseraient le
+        classement publié avec les scores du dernier profil — *un prix
+        déplacé.* Un test l'épingle.
+        """
+        import copy as _copy
+        if not classement or len(classement) < 2:
+            return []
+        table = []
+        for nom, poids in PROFILS_PONDERATION.items():
+            note = self._calculer_scores_multicriteres(
+                _copy.deepcopy(classement), poids)
+            note = sorted(note, key=lambda m: m.get('score_global', 0),
+                          reverse=True)
+            table.append({
+                'profil':  nom,
+                'modele':  note[0].get('modele', ''),
+                'score':   round(float(note[0].get('score_global', 0)), 4),
+                # ⚠️ LA MARGE EST LA MOITIÉ DE L'INFORMATION. « Même vainqueur »
+                # à 0,008 d'écart et à 0,381 ne se lisent pas pareil.
+                'marge':   round(float(note[0].get('score_global', 0))
+                                 - float(note[1].get('score_global', 0)), 4),
+                'actif':   nom == profil_actif,
+            })
+        return table
 
     # ══════════════════════════════════════════════════════════════════════════
     # ÉTAPE 4 : BACKTESTING TEMPOREL
@@ -2643,80 +2703,6 @@ class AgentA6Comparaison:
 
         except Exception as e:
             logger.warning(f"G1 radar échoué : {e}")
-
-        # ── G2 : SCORES PAR PROFIL ────────────────────────────────────────────
-        try:
-            profils_labels = list(PROFILS_PONDERATION.keys())
-            noms_mod       = [c['modele'] for c in classement[:5]]
-
-            fig2 = go.Figure()
-
-            for idx, nom in enumerate(noms_mod):
-                scores_profils = []
-                c = next((x for x in classement if x['modele'] == nom), None)
-                if not c:
-                    continue
-
-                for p in profils_labels:
-                    poids = PROFILS_PONDERATION[p]
-                    gini  = c.get('gini_test', 0)
-                    stab  = 1 / max(c.get('overfit_ratio', 1), 0.5)
-                    interp= c.get('score_interpretabilite', 0.6)
-                    rmse_n= 1 - min(c.get('rmse_test', 0) / 400, 1)
-                    sc = (
-                        gini  * poids['gini'] +
-                        stab  * poids['stabilite'] +
-                        interp* poids['interpretabilite'] +
-                        rmse_n* poids['rmse']
-                    )
-                    scores_profils.append(round(sc, 3))
-
-                est_prod = nom == modele_prod.get('modele', '')
-                couleur  = OR if est_prod else COULEURS[idx % len(COULEURS)]
-
-                fig2.add_trace(go.Scatter(
-                    x    = profils_labels,
-                    y    = scores_profils,
-                    mode = 'lines+markers',
-                    name = f"{'⭐ ' if est_prod else ''}{nom}",
-                    line = dict(color=couleur, width=3 if est_prod else 1.5,
-                                shape='spline', smoothing=0.5),
-                    marker= dict(color=couleur, size=9 if est_prod else 6,
-                                 line=dict(color=NAVY, width=2)),
-                    hovertemplate=(
-                        f"<b>{nom}</b> — profil %{{x}}<br>"
-                        "Score : <b>%{y:.3f}</b><extra></extra>"
-                    ),
-                ))
-
-            layout2 = dict(**LAYOUT_BASE)
-            layout2.update(dict(
-                title=dict(
-                    text="📊 Score par profil de pondération — Quel profil pour votre client ?",
-                    font=dict(color=BLANC, size=13), x=0.01,
-                ),
-                xaxis=dict(
-                    tickfont=dict(color=BLANC, size=10), showgrid=False,
-                    tickvals=profils_labels,
-                    ticktext=['Équilibré', 'Performance', 'Audit S2', 'Cie Vie'],
-                ),
-                yaxis=dict(
-                    title=dict(text="Score global", font=dict(color=GRIS, size=10)),
-                    showgrid=True, gridcolor="rgba(255,255,255,0.05)",
-                    tickfont=dict(color=GRIS),
-                ),
-                annotations=[dict(
-                    x=profil, y=1.05, xref='x', yref='paper',
-                    text="← Profil actuel",
-                    showarrow=True, arrowcolor=OR,
-                    font=dict(color=OR, size=10),
-                )],
-            ))
-            fig2.update_layout(**layout2)
-            graphiques['scores_profils'] = fig2
-
-        except Exception as e:
-            logger.warning(f"G2 scores profils échoué : {e}")
 
         # ── G3 : SCATTER GINI vs STABILITÉ ───────────────────────────────────
         try:

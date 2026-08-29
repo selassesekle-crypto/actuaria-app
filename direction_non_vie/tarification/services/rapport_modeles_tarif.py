@@ -533,6 +533,29 @@ def _bloc_raisons_html(raisons: tuple[str, ...]) -> str:
             f'</div>\n')
 
 
+#: Le titre du tableau de sensibilite, rendu a l'identique dans les deux formats.
+TITRE_SENSIBILITE = 'Sensibilité de la sélection au profil de pondération'
+
+
+def sensibilite_profils(result_a6) -> tuple:
+    """La table « quel modèle sous quel profil », telle qu'A6 l'a calculée.
+
+    ⚠️⚠️ POURQUOI ELLE EST PUBLIÉE — MESURÉ LE 29/08/2026. Le profil de
+    pondération est choisi par un humain et son nom est tracé
+    (`profil_valide_par`) ; mais `gouvernance_validee` ne vérifie qu'un **nom
+    non vide**. Elle dit QUI a assumé le choix, jamais CE QUE le choix a
+    changé. Recalculé sur quatre portefeuilles avec la formule qui décide :
+    **le modèle retenu bascule dans 3 cas sur 4 sur la cible coût**, et les
+    marges #1-#2 tombent à 0,008 · 0,016 · 0,021 selon le profil.
+    *Le profil est un levier sur le prix ; rien ne le montrait au lecteur.*
+
+    ⚠️ RIEN N'EST RECALCULÉ ICI. A6 produit la table avec
+    `_calculer_scores_multicriteres`, la formule qui décide ; ce service la
+    rend. Une seconde formule de présentation serait `a6/C3` recommencé.
+    """
+    return tuple((result_a6 or {}).get('sensibilite_profils') or ())
+
+
 def avertissement_dl(result_a6) -> str:
     """L'avertissement de validation humaine du DL — vide s'il n'y a rien à dire.
 
@@ -654,9 +677,15 @@ FIGURES_ECARTEES: Dict[str, str] = {
                        '(décidé dans EXIGENCES_MIGRATION, M4). Ses données ne '
                        'sont plus fabriquées (mesuré le 26/08/2026) ; l\'exclusion '
                        'est une décision prise, non un arbitrage en attente',
-    # les neuf variantes de Lorenz / Gini — une seule est publiée
-    'lorenz': 'doublon — chart_lorenz_gini porte la courbe de Lorenz',
-    'lorenz_glm': 'doublon — chart_lorenz_gini porte la courbe de Lorenz',
+    # ⚠️⚠️ `lorenz` ET `lorenz_glm` NE SONT PLUS ÉCARTÉES : ELLES N'EXISTENT
+    # PLUS. Arbitré le 29/08/2026 après mesure — leur courbe n'était pas
+    # mesurée mais RECONSTRUITE du seul scalaire Gini
+    # (`t ** (1/(1+gini*2))`) : deux portefeuilles différents de même Gini
+    # donnaient la même courbe au pixel près. Un doublon FAUX d'une figure
+    # publiée qui, elle, reçoit des points mesurés. Le code qui les
+    # produisait est supprimé — *une entrée qui survit à sa figure est une
+    # justification sans objet*, et le contrôle du catalogue la signale.
+    # les variantes de Gini — une seule est publiée
     'gini_comparaison': 'doublon — le Gini par modèle est au tableau du '
                         'chapitre 3',
     'gini_comparaison_glm': 'doublon — le Gini des GLM est au tableau du '
@@ -685,8 +714,6 @@ FIGURES_ECARTEES: Dict[str, str] = {
                            'sélection sont au tableau du chapitre 6',
     # les trois vues supplémentaires du même classement
     'radar_multicriteres': 'doublon — scores_multicriteres porte la grille',
-    'scores_profils': 'doublon — la grille du profil retenu suffit ; les '
-                      'autres profils ne sont pas ceux qui décident',
     'scores_finaux': 'doublon — scores_multicriteres, même grandeur',
     # ⚠️ `optimisation_tarifaire` N'EST PLUS ICI PARCE QU'ELLE N'EXISTE PLUS.
     # Elle y était écartée comme « hors périmètre — du pilotage tarifaire, pas
@@ -1980,6 +2007,33 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
                           f'<span class="badge badge-{st.lower()}">{_statut_emoji(st)} {st}</span>',
                           F.tronque(cv.get('message'), 80)])
         html += '    </table>'
+    # ⚠️⚠️ LE TABLEAU DE SENSIBILITÉ — ET C'EST UN TABLEAU, PAS UNE FIGURE.
+    # Quatre profils, quatre lignes : un graphique à quatre points serait un
+    # « tableau déguisé », le motif même par lequel cet audit a écarté les
+    # quatre scorecards. *On ne referme pas un défaut en le reproduisant.*
+    _sens = sensibilite_profils(result_a6)
+    if _sens:
+        html += (
+            '\n    <p style="margin-top:14px; font-size:11px; '
+            'font-weight:600; color:' + NAVY + '">' + TITRE_SENSIBILITE
+            + '</p>\n    <table>\n      '
+            + _row(['Profil de pondération', 'Modèle qui serait retenu',
+                    'Score', 'Marge sur le 2e'], header=True) + '\n')
+        for _l in _sens:
+            _actif = ' (profil retenu)' if _l.get('actif') else ''
+            html += _row([str(_l.get('profil', '')) + _actif,
+                          nom_modele(_l.get('modele')),
+                          F.nombre(_l.get('score'), 4),
+                          F.nombre(_l.get('marge'), 4)])
+        html += (
+            '    </table>\n    <p style="margin-top:6px; font-size:10px; '
+            'color:' + SLATE + '; font-style:italic;">\n'
+            '      ✦ Le profil de pondération est choisi et validé par un '
+            'actuaire nommé. Ce tableau montre ce que ce choix CHANGE : '
+            'recalculé avec la même grille multicritères, il indique quel '
+            'modèle chaque profil aurait retenu, et de combien il devance le '
+            'suivant. Une marge faible signale une sélection que le profil '
+            'suffit à faire basculer.\n    </p>\n')
     html += _fermer_chapitre(6, avec_table=False)
     html += _ouvrir_chapitre(7, ' narration')
     html += narr_html
@@ -2431,6 +2485,30 @@ def export_word(
                 rows_ct.append([cl, cv.get('statut','?'),
                                 F.tronque(cv.get('message'), 80)])
             _tbl(titres('controles'), rows_ct, ws=[5.0,2.5,9.0])
+        # ⚠️⚠️ LE TABLEAU DE SENSIBILITÉ, DANS LE WORD AUSSI. Le .docx part au
+        # CAC comme le HTML : le rendre d'un seul côté aurait laissé la moitié
+        # du livrable signé sans l'information qui justifie la sélection.
+        _sens_w = sensibilite_profils(result_a6)
+        if _sens_w:
+            p = doc.add_paragraph()
+            _run(p, TITRE_SENSIBILITE, bold=True, sz=10)
+            _tbl(['Profil de pondération', 'Modèle qui serait retenu',
+                  'Score', 'Marge sur le 2e'],
+                 [[str(_l.get('profil', ''))
+                   + (' (profil retenu)' if _l.get('actif') else ''),
+                   nom_modele(_l.get('modele')),
+                   F.nombre(_l.get('score'), 4),
+                   F.nombre(_l.get('marge'), 4)] for _l in _sens_w],
+                 ws=[5.0, 5.5, 3.0, 3.0])
+            p = doc.add_paragraph()
+            _run(p,
+                 "✦ Le profil de pondération est choisi et validé par un "
+                 "actuaire nommé. Ce tableau montre ce que ce choix CHANGE : "
+                 "recalculé avec la même grille multicritères, il indique "
+                 "quel modèle chaque profil aurait retenu, et de combien il "
+                 "devance le suivant. Une marge faible signale une sélection "
+                 "que le profil suffit à faire basculer.",
+                 sz=9, italic=True)
         _figures_du_chapitre(6)
         doc.add_page_break()
 

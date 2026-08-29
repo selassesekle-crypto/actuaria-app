@@ -34,6 +34,46 @@ Chaque segment est comparé à **la moyenne globale du train**, pas à ce que le
 ```
 `_generer_graphiques` recalcule le score avec une **formule différente** de `_calculer_scores_multicriteres` (Gini brut au lieu de normalisé, `1/overfit`, `1 − rmse/400`). Deux formules pour la même grandeur, dont une seule décide.
 
+> ✅ **`a6/C3`** · **FERMÉ le 29/08/2026 PAR SUPPRESSION — ET LA QUESTION EST
+> PUBLIÉE À LA PLACE.** *Preuve : `test_sensibilite_profils.py`, 12 contrôles.*
+>
+> ⚠️⚠️ **SUPPRIMER LA FIGURE AURAIT FAIT DISPARAÎTRE UNE QUESTION AVEC UN
+> DÉFAUT.** Elle était la seule à demander : *« le classement changerait-il
+> sous un autre profil de pondération ? »*. Mesuré sur quatre portefeuilles,
+> en recalculant avec **la formule qui décide** :
+>
+> ```
+>   seed  3 cout  vainqueurs=2  ['DL_TABNET', 'GLM_GAMMA']
+>   seed 11 cout  vainqueurs=2  ['GLM_GAMMA', 'ML_LINEAIRE_REGULARISE']
+>   seed 21 cout  vainqueurs=1  ['DL_TABNET']
+>   seed 42 cout  vainqueurs=2  ['DL_TABNET', 'ML_XGBOOST']
+>   -> 3 bascules sur 8 cas ; marges #1-#2 a 0,008 · 0,016 · 0,021
+> ```
+>
+> **Le profil est un levier sur le prix.** ⚠️ Et la trace existante n'y
+> répondait PAS : `gouvernance_validee` se réduit à
+> `bool(str(profil_valide_par or '').strip())` — elle vérifie **un nom non
+> vide**. Elle dit QUI a assumé le choix, jamais CE QUE le choix a changé.
+> *Valider cette équivalence aurait été une fausse équivalence.*
+>
+> ⚠️⚠️ **ET C'EST UN TABLEAU, PAS UNE FIGURE — délibérément.** Quatre profils,
+> quatre lignes : un graphique à quatre points serait un « tableau déguisé »,
+> le motif même par lequel cet audit a écarté les quatre scorecards. *On ne
+> referme pas un défaut en le reproduisant.* Publié au **chapitre 6**, dans le
+> HTML **et** dans le Word.
+>
+> ⚠️⚠️ **LA COPIE PROFONDE N'EST PAS UNE PRÉCAUTION.**
+> `_calculer_scores_multicriteres` **écrit `score_global` dans les
+> dictionnaires reçus** : sans copie, quatre appels auraient écrasé le
+> classement publié avec les scores du dernier profil — **un prix déplacé.**
+> Violation plantée, le filet tombe.
+> ⚠️ **AUCUNE SECONDE FORMULE** : la table recalcule avec
+> `_calculer_scores_multicriteres`, et un test exige l'égalité **au quatrième
+> chiffre**. C'est exactement ce qui manquait à la figure supprimée.
+> ⚠️ **SECOND SENS** : sous deux modèles, la table est **vide** — « la marge
+> sur le 2e » n'existe pas, et *un zéro qui signifie « pas de second » est
+> indiscernable d'un ex aequo.*
+
 **C4 — Les graphiques de validation de la sélection lisent une clé qui n'existe pas.**
 ```
   barres Gini        = [0, 0, 0, 0]

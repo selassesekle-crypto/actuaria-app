@@ -62,6 +62,23 @@ Les vraies bornes existent (`ic95_low`/`ic95_high`) et ne sont pas passées.
 
 **C5 — La courbe de Lorenz publiée n'est pas mesurée, elle est tracée.** [l.2161](direction_non_vie/tarification/a3_glm/agent.py:2161) : `lorenz = t ** (1 / (1 + gini * 2))`. C'est une fonction analytique du seul scalaire Gini — **deux portefeuilles différents de même Gini donnent la même courbe au pixel près**. Le graphique s'intitule « Courbe de Lorenz » et son infobulle annonce « % contrats / % sinistres cumulés ». Les vrais cumuls sont calculés dans `_calculer_gini` et jetés.
 
+> ✅ **`a3/C5`** · **FERMÉ le 29/08/2026 PAR SUPPRESSION — arbitrage de Selasse.**
+> *Preuve : `test_sensibilite_profils.py`, 4 contrôles.*>
+> ⚠️⚠️ **CE N'ÉTAIT PAS UN DOUBLON INOFFENSIF, C'ÉTAIT UN DOUBLON FAUX.** La
+> courbe n'était pas mesurée mais **reconstruite du seul scalaire Gini**
+> (`t ** (1/(1+gini*2))`) : deux portefeuilles différents de même Gini
+> donnaient la même courbe **au pixel près**. La figure publiée,
+> `chart_lorenz_gini`, reçoit elle des points **mesurés**
+> (`np.cumsum(y_sort)/np.sum(y_sort)`).
+>
+> ⚠️⚠️ **SUPPRIMÉ PAR SITE, JAMAIS PAR NOM.** A6 définit aussi une clé
+> `'lorenz'` — mais c'est le dictionnaire des points RÉELS qui alimente la
+> figure publiée. *Une suppression par le nom aurait détruit la bonne courbe.*
+> Un test plante cet homonyme.
+> ⚠️ **ET LA FORMULE PART AVEC LA FIGURE** : balayée sur tout le dépôt (code de
+> production), `t ** (1/(1+gini*2))` n'existe **plus nulle part**. *Supprimer
+> le graphique seul aurait laissé le vrai défaut en place, caché.*
+
 **C6 — Le Gini du Tweedie n'existe pas et vaut 0 partout.** `_calibrer_tweedie` ne pose aucune clé `gini`. G3, G4 et H3 lisent `.get('gini', 0)` → le Tweedie est publié à **0.0000** dans trois endroits, y compris `h3_ajustement['gini_tweedie']`.
 
 > ✅ **`a3/C6`** · **FERMÉ le 26/08/2026 — `b0ae396`.** `_calibrer_tweedie` calcule désormais

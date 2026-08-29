@@ -80,6 +80,25 @@ Cause : `m.get('gini', 0)` — la clé du classement est `gini_test`. Les couleu
 
 **C5 — La courbe de Lorenz est tracée, pas mesurée** — même formule qu'A3 (`t ** (1/(1+2g))`). Ici s'ajoute une contradiction d'axe : l'abscisse annonce « % contrats (**du moins au plus risqué**) » alors que le Gini trie **décroissant**, le plus risqué d'abord.
 
+> ✅ **`a4/C5`** · **FERMÉ le 29/08/2026 PAR SUPPRESSION — arbitrage de Selasse.**
+> *Preuve : `test_sensibilite_profils.py`, 4 contrôles.*
+>
+> ⚠️ La contradiction d'axe disparaît avec la figure : **il n'y a plus d'axe.**>
+> ⚠️⚠️ **CE N'ÉTAIT PAS UN DOUBLON INOFFENSIF, C'ÉTAIT UN DOUBLON FAUX.** La
+> courbe n'était pas mesurée mais **reconstruite du seul scalaire Gini**
+> (`t ** (1/(1+gini*2))`) : deux portefeuilles différents de même Gini
+> donnaient la même courbe **au pixel près**. La figure publiée,
+> `chart_lorenz_gini`, reçoit elle des points **mesurés**
+> (`np.cumsum(y_sort)/np.sum(y_sort)`).
+>
+> ⚠️⚠️ **SUPPRIMÉ PAR SITE, JAMAIS PAR NOM.** A6 définit aussi une clé
+> `'lorenz'` — mais c'est le dictionnaire des points RÉELS qui alimente la
+> figure publiée. *Une suppression par le nom aurait détruit la bonne courbe.*
+> Un test plante cet homonyme.
+> ⚠️ **ET LA FORMULE PART AVEC LA FIGURE** : balayée sur tout le dépôt (code de
+> production), `t ** (1/(1+gini*2))` n'existe **plus nulle part**. *Supprimer
+> le graphique seul aurait laissé le vrai défaut en place, caché.*
+
 > ✅ **`a4/C6`** · **FERMÉ.** Le dénominateur était le littéral `8`, qui ne correspondait **à aucun des trois comptes réels** : 6 candidats dans `modeles_a_calibrer`, 10 dans le catalogue `FAMILLES_MODELES_ML`, 6 réellement testés. Il dérive maintenant de la **liste des candidats**, enregistrée au rapport. Mesuré : « Modèles testés : **6/6** ». *Le numérateur était déjà dérivé ; seul le dénominateur était inventé.*
 
 **C6 — « Modèles testés : 6/8 »** publié dans le commentaire actuaire, alors que la boucle n'en déclare que **6**. Le dénominateur est faux, pas le numérateur.
