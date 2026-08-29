@@ -496,7 +496,7 @@ coupable (3) · annotations et exports morts (3).
 | **l'assemblage de l'app** | ~980 | `_executer_analyse` (799 l) + le bloc tarification (846 l). **Le reste de l'app : hors périmètre, déclaré** |
 | `services/excel_helpers.py` | 139 | complète le périmètre |
 
-## HORS RANG — LE TRI · 🟡 **A2 (16/16), PIPELINE (9/9), A1 (8/8) TRACÉS · 54 restants**
+## HORS RANG — LE TRI · 🟡 **A2, PIPELINE, A1 et A3 TRACÉS · 46 restants**
 
 ⚠️⚠️ **ET LE COMPTE ÉTAIT DE 40 : IL EST DE 77.** Le document répartissait
 les non alloués en « 38 de bruit » + « 40 non triés », mais **aucun des deux
@@ -511,8 +511,8 @@ cherchées comme mot entier dans ce fichier, **avant** puis **après** le titre
 | lecture | compte | comment il se dérive |
 |---|---|---|
 | constats **ouverts** | **80** | clés réelles moins clés fermées — **tenu par `ARCH-5`** |
-| dont **zones TRIÉES** (`a2` 11 · `pipeline` 9 · `a1` 6) | **26** | préfixe de la clé |
-| ⛔ **jamais tracés** | **54** | le complément — *exact, sans heuristique* |
+| dont **zones TRIÉES** (`a2` 11 · `pipeline` 9 · `a1` 6 · `a3` 8) | **34** | préfixe de la clé |
+| ⛔ **jamais tracés** | **46** | le complément — *exact, sans heuristique* |
 
 ⚠️⚠️ **ET LE DÉCOUPAGE « ALLOUÉ / NON ALLOUÉ » A ÉTÉ RETIRÉ : IL N'EST PAS
 DÉRIVABLE.** Mesuré le 29/08 — **trois méthodes plausibles rendent 7, 9 et
@@ -621,6 +621,31 @@ précisément ce que le tri sert à trouver.*
 > alors que le constat porte sur les **valeurs des listes**. *Un compte juste sur
 > le mauvais objet est un compte faux*, et il aurait fermé un constat vrai.
 
+### ✅ A3 — LES 8, TRACÉS AU SITE (30/08)
+
+⚠️⚠️ **QUATRIÈME ZONE, ET TROIS CONSTATS CONFIRMÉS *PAR EXÉCUTION*, PAS PAR
+LECTURE.** Deux d'entre eux, je les avais d'abord mal lus (voir l'encadré).
+
+| constat | mesuré au site le 30/08 | rang proposé |
+|---|---|---|
+| **`a3/C15`** | ⛔ **VRAI — LE REPLI DU REPLI CASSE.** `pred_test = np.full(...)` dans un `except Exception` ([l.1055](direction_non_vie/tarification/a3_glm/agent.py:1055)), puis `pred_test.values` à la ligne suivante ([l.1058](direction_non_vie/tarification/a3_glm/agent.py:1058)) — *un `ndarray` n'a pas `.values`*. **Il est atteint exactement quand `modele_final.predict` échoue**, c'est-à-dire dans le seul cas qu'il existe pour couvrir. ⚠️ **Le relevé comptait 2 sites, il en reste 1** : les quatre autres `np.full` sont sains | **2** |
+| **`a3/C7`** | ⛔ **VRAI, MESURÉ PAR EXÉCUTION** : `comparaison_gini = {'poisson': 0.1688, 'gamma': 0.042}` → `meilleur_modele = 'poisson'`. Le Poisson est évalué sur **tout** le test (fréquence), le Gamma sur **les sinistrés seuls** (sévérité) : un `max()` sur deux populations et deux cibles différentes. ⚠️ **ET LE TWEEDIE PUBLIE UN GINI (0,0696) QUI N'ENTRE PAS DANS LA COMPARAISON** — il est pourtant dans `metriques` deux lignes plus haut. ⚠️ **BORNE** : `metriques_globales` n'a **aucun consommateur nommé** dans le dépôt. *Latent.* ⚠️ Attention à l'homonyme : le `meilleur_modele` d'A4 est **un autre objet** | **3** |
+| **`a3/C13`** | ⛔ **VRAI, MESURÉ PAR EXÉCUTION** : `graphiques_validation` rend **3 sur 4**, `durbin_watson` **absent**. La jauge lit `h2_homosc["dw_stat"]` ([l.2959](direction_non_vie/tarification/a3_glm/agent.py:2959)), H2 rend `ratio_variance` depuis `87e0609`, le `KeyError` est avalé par le `try`. ⚠️⚠️ **ET LE CORRIGER N'EST PAS UN RENOMMAGE** : la jauge est graduée **0 à 4, « 2 Idéal », bandes 1,5-2,5** — l'échelle d'un Durbin-Watson. Un ratio de variance a des seuils **2,0 / 3,0**. *L'échelle appartient à une statistique que H2 ne calcule plus.* | **4** |
+| **`a3/C12`** | ⛔ **VRAI** : `significatif` code `0.05` **en dur** (l.1109, l.1378) alors que `SEUIL_PVALUE` existe (l.200) — et le stepwise ne retenant que `p <= SEUIL_PVALUE`, **le champ est toujours vrai**. *Un champ sans information.* | **5** |
+| **`a3/C11`** | ⚠️ **PARTIELLEMENT CORRIGÉ** : sur les 5 renvois, **3 racontent désormais la suppression** (« Phase 1, `VARS_GLM` supprimé ») ; **2 restent faux** — l.699 « On part des variables prioritaires de la sous-branche (VARS_GLM) » et l.724 | **7** |
+| **`a3/C16`** | ⛔ **VRAI, 5 entrées sur 23.** ⚠️ **Et mon filtre en avait compté 6** : `cotisation_annuelle` est un terme de prime **non-vie parfaitement légitime**, il ne fait pas partie du constat. *Un filtre par sous-chaîne sur-compte.* | **7** |
+| **`a3/C17`** | ⛔ **VRAI**, 3 occurrences (l.48, 322, 3516). ⚠️ **Nuance mesurée** : `plan` a un défaut `None`, donc `run(result_a2)` est **syntaxiquement valide** ; c'est à l'exécution que le module refuse — `success=False`, « A3.run exige un plan ». *L'exemple documenté est un appel que le module rejette.* | **7** |
+| **`a3/C18`** | ⛔ **VRAI, ET LA DÉRIVE A CHANGÉ DE SENS** : en-tête « 7 tests » ; le relevé en comptait **4** ; il y en a **8** aujourd'hui. *Troisième zone où un compte annoncé rattaché à rien vieillit tout seul* (`a1/C10`, `a2/C14`) | **7** |
+
+> ⚠️⚠️ **DEUX FOIS DANS CE LOT, MA PREMIÈRE LECTURE A FAILLI FERMER UN CONSTAT
+> VRAI — ET LES DEUX FOIS PAR MON INSTRUMENT, PAS PAR LE CODE.**
+> ① `a3/C13` : j'ai lu « `dw_stat` : **aucune occurrence** » — ma recherche
+> s'arrêtait à ses 14 premières lignes, remplies par `ratio_variance`, **avant**
+> d'atteindre la l.2959. *Une limite d'affichage n'est pas une absence.*
+> ② `a3/C16` : mon filtre par sous-chaîne comptait `cotisation_annuelle` comme
+> Vie/Santé. *Un relevé par symbole sur-compte au texte.*
+> **Les deux ont été tranchés en allant au SITE, puis en EXÉCUTANT.**
+
 ### ⛔ À FAIRE EN FIN DE TRI — LES JUMEAUX ENTRE CHEMINS
 
 > **Arbitré le 30/08 : pas maintenant, mais noté.** `pipeline/C2` a montré qu'un
@@ -631,13 +656,13 @@ précisément ce que le tri sert à trouver.*
 > entre deux chemins qui font le même métier.* À lancer **quand le tri est
 > terminé**, pas avant.
 
-### ⛔ LES 54 AUTRES NE SONT PAS TRACÉS, ET JE LE DIS
+### ⛔ LES 46 AUTRES NE SONT PAS TRACÉS, ET JE LE DIS
 
-**Dérivé le 30/08 par préfixe de clé sur les 82 ouverts — exact, sans
-heuristique de texte** ; `a2`, `pipeline` et `a1` en sortent, ils sont tracés :
+**Dérivé le 30/08 par préfixe de clé sur les 80 ouverts — exact, sans
+heuristique de texte** ; `a2`, `pipeline`, `a1` et `a3` en sortent, tracés :
 
-`a3` 8 · `plan` 7 · `a6` 6 · `conformite` 6 · `a4` 5 · `socle` 5 · `agents` 4 ·
-`qualite` 4 · `a5` 3 · `charts` 3 · `services` 3. **Total 54.**
+`plan` 7 · `a6` 6 · `conformite` 6 · `a4` 5 · `socle` 5 · `agents` 4 ·
+`qualite` 4 · `a5` 3 · `charts` 3 · `services` 3. **Total 46.**
 
 ⚠️ **La répartition publiée avant celle-ci était fausse** (`a1` 8, `pipeline` 8,
 `a3` 7, `a6` 5, `socle` 3...) : elle retranchait en silence les constats nommés
