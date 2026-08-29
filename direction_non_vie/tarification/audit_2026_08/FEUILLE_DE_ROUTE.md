@@ -496,7 +496,7 @@ coupable (3) · annotations et exports morts (3).
 | **l'assemblage de l'app** | ~980 | `_executer_analyse` (799 l) + le bloc tarification (846 l). **Le reste de l'app : hors périmètre, déclaré** |
 | `services/excel_helpers.py` | 139 | complète le périmètre |
 
-## HORS RANG — LE TRI · 🟡 **A2, PIPELINE, A1 et A3 TRACÉS · 46 restants**
+## HORS RANG — LE TRI · 🟡 **A2, PIPELINE, A1, A3 et PLAN TRACÉS · 39 restants**
 
 ⚠️⚠️ **ET LE COMPTE ÉTAIT DE 40 : IL EST DE 77.** Le document répartissait
 les non alloués en « 38 de bruit » + « 40 non triés », mais **aucun des deux
@@ -511,8 +511,8 @@ cherchées comme mot entier dans ce fichier, **avant** puis **après** le titre
 | lecture | compte | comment il se dérive |
 |---|---|---|
 | constats **ouverts** | **80** | clés réelles moins clés fermées — **tenu par `ARCH-5`** |
-| dont **zones TRIÉES** (`a2` 11 · `pipeline` 9 · `a1` 6 · `a3` 8) | **34** | préfixe de la clé |
-| ⛔ **jamais tracés** | **46** | le complément — *exact, sans heuristique* |
+| dont **zones TRIÉES** (`a2` 11 · `pipeline` 9 · `a3` 8 · `plan` 7 · `a1` 6) | **41** | préfixe de la clé |
+| ⛔ **jamais tracés** | **39** | le complément — *exact, sans heuristique* |
 
 ⚠️⚠️ **ET LE DÉCOUPAGE « ALLOUÉ / NON ALLOUÉ » A ÉTÉ RETIRÉ : IL N'EST PAS
 DÉRIVABLE.** Mesuré le 29/08 — **trois méthodes plausibles rendent 7, 9 et
@@ -646,6 +646,53 @@ LECTURE.** Deux d'entre eux, je les avais d'abord mal lus (voir l'encadré).
 > Vie/Santé. *Un relevé par symbole sur-compte au texte.*
 > **Les deux ont été tranchés en allant au SITE, puis en EXÉCUTANT.**
 
+### ⛔⛔ PLAN — LES 7, TRACÉS AU SITE (30/08) · **ARRÊT DEMANDÉ**
+
+> ## ⛔⛔ `plan/C5` — LA PORTE DU DOCUMENT OPPOSABLE ACCEPTE N'IMPORTE QUOI, ET L'EURO BOUGE.
+
+**Mesuré par exécution, pas lu.** `PlanTarifaire.depuis_dict` accepte **en
+silence** toute clé inconnue :
+
+```
+  famille_severity (anglais)      ACCEPTE   -> famille_severite = 'gamma'
+  identifiant_contract (anglais)  ACCEPTE   -> identifiant_contrat = None
+  echeances (pluriel)             ACCEPTE   -> echeance = None
+  cle totalement inventee         ACCEPTE   -> aucun signal
+```
+
+**L'actuaire qui écrit `famille_severity: lognormal` signe une log-normale et
+obtient une gamma.** Ce que cela déplace, mesuré sur 1 500 contrats, même
+portefeuille, même graine :
+
+| famille | prime totale | prime moyenne |
+|---|---|---|
+| `gamma` (ce qu'il obtient) | **4 217 405,34 €** | 702,90 € |
+| `lognormal` (ce qu'il a signé) | **4 259 529,66 €** | 709,92 € |
+
+> ### ⛔ **+1,00 % de prime totale · +42 124 € · jusqu'à 525,35 € d'écart sur UN SEUL contrat — pour une faute de frappe que rien ne signale.**
+
+⚠️⚠️ **BORNE, ET ELLE COMPTE** : les **20 plans livrés sont sains** — 0 clé
+inconnue, vérifié fichier par fichier contre les 12 champs de la dataclasse.
+**Le défaut est un MÉCANISME, pas un dégât constaté aujourd'hui.** *C'est
+pourquoi je propose le rang 1 sans affirmer qu'un prix est faux en ce moment :
+la porte est ouverte, personne n'est encore entré.*
+
+| constat | mesuré au site le 30/08 | rang proposé |
+|---|---|---|
+| **`plan/C5`** | voir l'encadré — **mesuré par exécution**, l'écart de prime est chiffré | **1** *(à arbitrer)* |
+| **`plan/C7`** | **RE-MESURÉ : 0/20 pour les trois rôles** (`identifiant_contrat`, `echeance`, `comportement`), lu dans les 20 YAML. Le mécanisme d'échéance existe et est correct ; **aucun plan ne l'active**, donc tout client apportant un **historique de renouvellement** (~67 % de « doublons » pour un seuil ROUGE à 5 %) est **refusé avant d'être lu**. ⚠️ *Le corriger n'est pas du code : c'est déclarer, LoB par LoB, quelle colonne porte l'identité et l'échéance.* **Question rendue** | *(conception)* |
+| **`plan/C8`** | **DÉJÀ À L'ARDOISE**, arbitré « VERSIONNER, ne pas omettre ». Non re-ouvert ici | *(arbitré)* |
+| **`plan/C4`** | ⛔ **VRAI** : `config_encodage` **existe toujours** sur `PlanTarifaire` et n'a **aucune référence dans le dépôt** — ni appel, ni test, ni mention. Sa docstring dit « *Ce que A2 consomme* » : A2 honore le plan mais **le lit directement**. *Même famille qu'`a2/C7` et `a3/C11` : une déclaration morte qui décrit un contrat qui passe ailleurs* | **7** |
+| **`plan/C6`** | ⛔ **VRAI, et les deux côtés vivent** : `verifier_completude_plan` produit sa forme pour **3 sites de production** (a3, a4, a5) ; `synthese_colonnes_plan_manquantes` en consomme une autre pour **3 sites de production** (les trois services de rapport). Le mélange rend `None` — « rien à signaler » — sur un plan amputé. ⚠️ **Aucun appelant ne fait l'erreur** : le défaut est **la forme du piège** | **7** |
+| **`plan/C10`** | ⛔ **VRAI** : `FACTEURS_TARIFAIRES_AUTORISES` existe et pèse **6 références de production**, toutes dans `core/conformite_reglementaire.py`. La phrase de l'en-tête — « *la désynchronisation devient IMPOSSIBLE PAR CONSTRUCTION* » — décrit le chemin déclaratif, pas le module | **7** |
+| **`plan/C11`** | ⛔ **VRAI** : `colonnes_obligatoires` — **production 0**, définition 2 (usage interne), test 1. *Pas du code mort, pas une interface non plus* | **7** |
+
+> ⚠️ **ET MON COMPTEUR D'APPELANTS A DOUBLÉ, RATTRAPÉ AVANT PUBLICATION.** Un
+> `ast.Call` dont la fonction est un `ast.Name` était compté **deux fois** :
+> j'ai lu « 6 appelants de production » là où il y en a **3**. Corrigé en
+> dédupliquant par `(fichier, ligne)`. *Un compte se rend rejouable — et se
+> relit avant d'être écrit.*
+
 ### ⛔ À FAIRE EN FIN DE TRI — LES JUMEAUX ENTRE CHEMINS
 
 > **Arbitré le 30/08 : pas maintenant, mais noté.** `pipeline/C2` a montré qu'un
@@ -656,13 +703,13 @@ LECTURE.** Deux d'entre eux, je les avais d'abord mal lus (voir l'encadré).
 > entre deux chemins qui font le même métier.* À lancer **quand le tri est
 > terminé**, pas avant.
 
-### ⛔ LES 46 AUTRES NE SONT PAS TRACÉS, ET JE LE DIS
+### ⛔ LES 39 AUTRES NE SONT PAS TRACÉS, ET JE LE DIS
 
 **Dérivé le 30/08 par préfixe de clé sur les 80 ouverts — exact, sans
-heuristique de texte** ; `a2`, `pipeline`, `a1` et `a3` en sortent, tracés :
+heuristique de texte** ; `a2`, `pipeline`, `a1`, `a3` et `plan` en sortent :
 
-`plan` 7 · `a6` 6 · `conformite` 6 · `a4` 5 · `socle` 5 · `agents` 4 ·
-`qualite` 4 · `a5` 3 · `charts` 3 · `services` 3. **Total 46.**
+`a6` 6 · `conformite` 6 · `a4` 5 · `socle` 5 · `agents` 4 · `qualite` 4 ·
+`a5` 3 · `charts` 3 · `services` 3. **Total 39.**
 
 ⚠️ **La répartition publiée avant celle-ci était fausse** (`a1` 8, `pipeline` 8,
 `a3` 7, `a6` 5, `socle` 3...) : elle retranchait en silence les constats nommés
