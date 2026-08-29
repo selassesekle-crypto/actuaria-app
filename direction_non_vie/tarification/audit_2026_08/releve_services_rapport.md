@@ -120,6 +120,65 @@ L'Excel équipe porte **six synthèses réglementaires** (`avertissement_walk_fo
 **C8 — `export_excel_a3` annonce 5 onglets, en produit 6.** Corrigé après ma première mesure : **c'est le seul écart** — a1, a2, a4, a5 et a6 sont exacts.
 **C9 — Un ROUGE se publie « ✗ Attention ».** `_kpi` traduit `{VERT: '✓ Conforme', AMBRE: '△ À surveiller', ROUGE: '✗ Attention'}`. « Attention » est plus faible que « À surveiller » ; le mot le plus fort du triptyque est le moins alarmant.
 
+**C10 — Un garde-fou réglementaire ne sortait que par le prompt du LLM.**
+
+⚠️⚠️ **CONSTAT NEUF, mesuré le 29/08/2026 par EXÉCUTION du pipeline réel** —
+ouvert et fermé dans le même lot. Les modèles d'A5 concourent **déjà** au choix
+du modèle de production, et ce n'est pas une hypothèse :
+
+```
+  frequence   9 candidats {GLM 1, Deep Learning 2, ML 6}   DL_CANN rang 2
+  cout        8 candidats {Deep Learning 1, GLM 1, ML 6}   DL_TABNET RANG 1
+              -> modele_production = DL_TABNET
+```
+
+Sur ce dossier, le rapport signé publiait *« Chapitre 6 — Modèle de production
+retenu : DL_TABNET, Deep Learning »* puis *« RECOMMANDATION : → **Déployer
+DL_TABNET** comme modèle de tarification »*. L'alerte
+`dl_validation_humaine_requise` s'était **bien déclenchée** dans
+`alertes_modele`, et `synthese_modele_dl` produisait le bon texte.
+
+**Le HTML contenait pourtant ZÉRO occurrence** de « validation actuarielle
+humaine », « ACTION REQUISE », « alerte », « requise ».
+
+⚠️⚠️ **LA CAUSE, VÉRIFIÉE AU SITE** : dans ce rapport, `synthese_modele_dl`
+n'avait **qu'un seul point de sortie** — `_construire_contexte_tarif`, qui
+construit **le prompt envoyé au LLM**. Sans clé, sans réseau, ou sur une
+narration tronquée, l'avertissement disparaissait. *Un garde-fou réglementaire
+ne peut pas dépendre d'un appel réseau.*
+
+⚠️ **LE RAPPORT D'ÉQUIPE ET L'EXCEL LE PUBLIENT, EUX** (`rapport_equipe_tarif`
+l.157/176/413, `tarif_excel` l.861). C'est exactement
+[[correctif-a-cote-de-la-surface]] : présent sur deux surfaces, **absent de la
+troisième, la signée**.
+
+> ✅ **`services/C10`** · **FERMÉ le 29/08/2026.**
+> *Preuve : `test_avertissement_dl_et_courbe.py`, 6 contrôles.*
+>
+> `avertissement_dl(result_a6)` + `_bloc_dl_html` rendent l'avertissement
+> **dans le HTML ET dans le Word**, à côté du bloc `raisons_plafond` dont ils
+> reprennent exactement le patron. Mesuré sans aucune narration : l'ACTION
+> REQUISE est présente dans les deux formats.
+>
+> ⚠️ **LE TEXTE N'EST PAS RÉÉCRIT** : il vient de `synthese_modele_dl`, la
+> source unique déjà partagée. Un test compare **caractère pour caractère**.
+> ⚠️⚠️ **SECOND SENS** : sur un modèle GLM, le bloc est **totalement absent**.
+> *Un avertissement affiché toujours cesse d'être un signal.* Et une fois la
+> validation faite, l'ACTION REQUISE disparaît mais **la trace factuelle reste
+> visible** (qui, quand) — les deux états sont épinglés.
+> ⚠️ **LES DEUX FORMATS**, parce que le Word part au CAC comme le HTML :
+> corriger un seul aurait laissé la moitié du livrable signé sans garde-fou.
+>
+> ⛔⛔ **ET L'ASSIETTE RÉELLE EST DE SIX, PAS D'UNE — NOMMÉ, NON TRAITÉ.**
+> Relevé par AST : les **six** synthèses du rapport (`mapping`, `exclusions`,
+> `alertes_experience`, `modele_dl`, `qualite_donnees`,
+> `colonnes_plan_manquantes`) vivaient TOUTES dans ce seul prompt. Ce lot n'en
+> câble **qu'une**, celle que Selasse a autorisée. **Les cinq autres restent
+> invisibles hors narration** — dont `exclusions` (colonnes écartées pour
+> conformité) et `alertes_experience` (sinistralité passée conservée), qui
+> portent le même type d'obligation. Un test FIGE ce compte de 1 sur 6, pour
+> que le fait ne se perde pas entre deux lots.
+
 ### D — Vérifié comme BON (8)
 
 | affirmation | mesure |

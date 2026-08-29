@@ -64,6 +64,53 @@
 ```
 Publié avec la légende « 💡 La loss doit diminuer régulièrement (courbe descend) ».
 
+> ✅ **`a5/C4`** · **FERMÉ le 29/08/2026 — ET PAS EN SEMANT LE BRUIT.**
+> *Preuve : `test_avertissement_dl_et_courbe.py`, 5 contrôles.*
+>
+> ⚠️⚠️ **LE REMÈDE ÉVIDENT ÉTAIT LE MAUVAIS.** J'avais moi-même annoncé
+> « semer le bruit » — c'était faux, et je le corrige ici : semer aurait rendu
+> une courbe **fabriquée** reproductible, donc **crédible**. On aurait échangé
+> un défaut visible contre un défaut invisible. *Un aléa retiré d'une donnée
+> inventée ne la rend pas mesurée.*
+>
+> ⚠️⚠️ **LES VRAIES PERTES EXISTAIENT DÉJÀ, ET ÉTAIENT JETÉES.**
+> `_calibrer_cann` et `_calibrer_tabnet` empilent `{'epoch','train','val'}`
+> époque par époque (l.1188 et l.1342) ; le résultat les porte sous
+> `historique_cann` / `historique_tabnet`, avec `n_epochs_reels`. La figure
+> les ignorait et simulait.
+>
+> ⚠️ **ET LE CORRECTIF ÉTAIT DÉJÀ ARRIVÉ À CÔTÉ UNE FOIS.** Un lot antérieur
+> avait fait cesser la simulation dans **la validation** — le commentaire
+> l'annonce noir sur blanc : *« H1 NE SIMULE PLUS SES LOSSES »*. La **FIGURE**,
+> elle, continuait. *Corrigé dans ce qui juge, pas dans ce qui est montré* —
+> le motif de [[correctif-a-cote-de-la-surface]].
+>
+> **Mesuré après correctif, deux exécutions identiques :**
+>
+> ```
+>   epoques tracees = (1, 2, 3)          <- le releve en simulait 50
+>   train tracee = [1727.661, 1623.403, 1466.265]
+>   train REELLE = [1727.661, 1623.403, 1466.265]   <- egalite exacte
+>   val   tracee = [1717.849, 1588.604, 1441.543]
+>   val   REELLE = [1717.849, 1588.604, 1441.543]
+>   COURBES IDENTIQUES ENTRE LES DEUX RUNS : True
+> ```
+>
+> ⚠️ **LA ZONE « CONVERGENCE » NE S'AFFICHE PLUS SOUS 6 ÉPOQUES** : sur 3, un
+> « dernier tiers » couvrirait presque toute la courbe. *Un repère qui couvre
+> tout ne repère rien.*
+> ⚠️ **SANS HISTORIQUE, LA FIGURE LE DÉCLARE** (« AUCUNE DONNÉE — historique
+> d'entraînement ») et ne trace **aucun** point — elle ne se rabat sur aucune
+> formule. Leçon de `charts/C3`.
+> ⚠️ **`numpy` A DISPARU DE L'IMPORT DES FIGURES A5**, et c'est le signal du
+> lot : il ne servait qu'à fabriquer. *Ces figures ne calculent plus rien.*
+> ⚠️ **DEUX FILETS, PAS UN** : un test par l'EFFET (deux appels, même figure)
+> et un test par AST (`0 np.random.*`). Un tirage **semé** passerait le second
+> et serait pourtant une courbe fabriquée — les deux ensemble disent « ni
+> fabriqué, ni aléatoire ».
+> ⚠️ **CE CONSTAT ÉTAIT L'UN DES QUATRE LATENTS**, fermés à toute ouverture.
+> Selasse l'a rouvert explicitement le 29/08. Il en reste **trois**.
+
 **C5 — Le graphique « DL vs GLM » met les deux modèles DL à zéro.**
 ```
   barres [GLM, CANN, TabNet] = [0.14, 0, 0]

@@ -2159,6 +2159,23 @@ class AgentA5DeepLearning:
                 "loss_init":   round(loss_init, 4),
                 "loss_final":  round(loss_final, 4),
                 "ratio_conv":  round(ratio_conv, 4),
+                # ⚠️⚠️ LA COURBE RÉELLE, PORTÉE JUSQU'À LA FIGURE — constat
+                # `a5/C4`. H1 avait cessé de simuler ses losses ; la FIGURE,
+                # elle, continuait de tracer une exponentielle analytique
+                # bruitée sur 50 époques codées en dur. *Le correctif était
+                # arrivé à côté de la surface qu'il devait couvrir.*
+                # ⚠️ Elle passe par `h1_convergence` plutôt que par un
+                # nouveau paramètre : la figure lit DÉJÀ ce dictionnaire, et
+                # loss_init/loss_final en viennent. Une seconde voie
+                # d'alimentation aurait pu diverger de la première.
+                # ⚠️ VIDE quand l'historique manque — la figure le DÉCLARE
+                # alors, elle ne fabrique plus rien.
+                "courbe": [
+                    {"epoch": int(h.get("epoch", i + 1)),
+                     "train": float(h.get("train", 0.0)),
+                     "val":   float(h.get("val", 0.0))}
+                    for i, h in enumerate(histo_h1)
+                ],
                 "statut":      h1_statut,
                 "message":     h1_msg,
                 "conseil":     h1_conseil,
@@ -2194,9 +2211,13 @@ class AgentA5DeepLearning:
         metriques:  Dict,
     ) -> Dict:
         """4 graphiques auto-explicatifs validation Deep Learning."""
+        # ⚠️ `numpy` A DISPARU DE CET IMPORT, ET C'EST UN SIGNAL. Il ne servait
+        # qu'à FABRIQUER la courbe de convergence (`np.exp`, `np.random`).
+        # Depuis `a5/C4`, ces figures ne calculent plus rien : elles tracent ce
+        # qu'on leur donne. *Une dépendance qui disparaît parce qu'on a cessé
+        # d'inventer est une bonne nouvelle, pas un nettoyage.*
         try:
             import plotly.graph_objects as go
-            import numpy as np
         except ImportError:
             return {}
 
@@ -2213,18 +2234,32 @@ class AgentA5DeepLearning:
         )
         graphiques = {}
 
-        # G1 — Courbe de convergence (loss simulée)
+        # ══════════════════════════════════════════════════════════════════════
+        # G1 — COURBE DE CONVERGENCE : LES VRAIES PERTES, PLUS AUCUNE SIMULATION
+        # ══════════════════════════════════════════════════════════════════════
+        # ⚠️⚠️ CONSTAT `a5/C4`. Cette figure traçait une EXPONENTIELLE
+        # ANALYTIQUE — `loss_init * exp(-3e/50) + loss_final * (1 - exp(-3e/50))`
+        # — bruitée par un `np.random.normal()` NON SEMÉ, sur **50 époques
+        # codées en dur**. Mesuré : le run réel en faisait **3**. La légende
+        # promettait pourtant « La loss doit diminuer régulièrement ».
+        #
+        # ⚠️⚠️ ET LE REMÈDE N'EST PAS DE SEMER LE BRUIT. Semer rendrait une
+        # courbe FABRIQUÉE reproductible, donc crédible — on aurait échangé un
+        # défaut visible contre un défaut invisible. Les vraies pertes existent
+        # déjà : `_calibrer_cann` / `_calibrer_tabnet` empilent
+        # `{'epoch','train','val'}` époque par époque, et `h1_convergence` les
+        # porte désormais sous `courbe`.
+        #
+        # ⚠️ QUAND L'HISTORIQUE MANQUE, ON LE DIT. La figure ne se rabat sur
+        # aucune formule : elle déclare l'absence, comme les sept figures de
+        # `core/charts_tarif` depuis `charts/C3`.
         try:
             h1 = val_dl["h1_convergence"]
-            n_ep  = 50
-            loss_init  = h1["loss_init"]
-            loss_final = h1["loss_final"]
-            # Courbe exponentielle décroissante
-            epochs     = list(range(1, n_ep + 1))
-            train_loss = [loss_init * np.exp(-3 * e / n_ep) + loss_final * (1 - np.exp(-3 * e / n_ep))
-                         for e in range(n_ep)]
-            val_loss   = [l * (1 + 0.08 * np.random.normal()) for l in train_loss]
-            val_loss   = [max(0.01, l) for l in val_loss]
+            _courbe = h1.get("courbe") or []
+            epochs     = [int(p["epoch"]) for p in _courbe]
+            train_loss = [float(p["train"]) for p in _courbe]
+            val_loss   = [float(p["val"]) for p in _courbe]
+            n_ep       = len(epochs)
 
             statut_h1  = h1["statut"]
             # ⚠️ `couleur_h1` RETIRÉE : tous ses usages étaient du TEXTE, et ils
@@ -2245,11 +2280,15 @@ class AgentA5DeepLearning:
                 line=dict(color=BLEU, width=2, dash="dash"),
                 hovertemplate="Époque %{x}<br>Loss Val : %{y:.4f}<extra></extra>",
             ))
-            # Zone de convergence
-            fig1.add_vrect(x0=n_ep*0.7, x1=n_ep,
-                          fillcolor="rgba(46,204,113,0.06)", line_width=0,
-                          annotation_text="Convergence",
-                          annotation_font=dict(color=VERT, size=9))
+            # Zone de convergence — sur le DERNIER TIERS RÉEL, plus sur 50.
+            # ⚠️ Elle n'a de sens qu'avec assez d'époques pour qu'un « dernier
+            # tiers » existe : sur 3 époques, elle désignerait presque toute la
+            # courbe. Un repère qui couvre tout ne repère rien.
+            if n_ep >= 6:
+                fig1.add_vrect(x0=epochs[int(n_ep * 0.7)], x1=epochs[-1],
+                               fillcolor="rgba(46,204,113,0.06)", line_width=0,
+                               annotation_text="Convergence",
+                               annotation_font=dict(color=VERT, size=9))
             l1 = dict(**LAYOUT)
             l1.update(dict(
                 title=dict(
@@ -2262,13 +2301,36 @@ class AgentA5DeepLearning:
                           gridcolor="rgba(255,255,255,0.05)"),
                 legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color=BLANC, size=9),
                            orientation="h", yanchor="bottom", y=1.0),
+                # ⚠️ LA FIGURE DIT SUR COMBIEN D'ÉPOQUES ELLE PORTE. Le
+                # nombre venait d'un `50` codé en dur qui ne correspondait à
+                # aucun run ; il est désormais celui de l'historique tracé.
                 annotations=[dict(
-                    text="💡 La loss doit diminuer régulièrement (courbe descend). Si elle remonte = surapprentissage.",
+                    text=(f"💡 La loss doit diminuer régulièrement (courbe "
+                          f"descend). Si elle remonte = surapprentissage. — "
+                          f"{n_ep} époque(s) réellement effectuée(s)."),
                     xref="paper", yref="paper", x=0.01, y=-0.22,
                     font=dict(color=GRIS, size=9), showarrow=False, align="left"
                 )],
             ))
             fig1.update_layout(**l1)
+            # ⚠️⚠️ L'ABSENCE SE DÉCLARE AU CENTRE DE LA FIGURE — leçon de
+            # `charts/C3`. Un graphique vide est indiscernable d'un graphique
+            # plein pour qui feuillette le rapport.
+            # ⚠️ APRÈS `update_layout` À DESSEIN : `l1` porte sa propre liste
+            # `annotations`, qui REMPLACE. Je l'ai posée avant en écrivant ce
+            # lot, et le test l'a attrapée — *une annotation silencieusement
+            # écrasée est exactement le défaut qu'on corrige ici.*
+            if not _courbe:
+                fig1.add_annotation(
+                    text=("AUCUNE DONNÉE — historique d'entraînement<br>"
+                          "<i>la convergence n'est pas mesurée</i>"),
+                    xref="paper", yref="paper", x=0.5, y=0.5,
+                    showarrow=False, align="center",
+                    # ⚠️ Littéral et non `dict(...)` : le fichier compte 112
+                    # `dict()` que ruff signale (C408), tous antérieurs. En
+                    # ajouter un 113e ferait échouer la propreté du lot. On ne
+                    # convertit pas les 112 ici — ce n'est pas ce chantier.
+                    font={'color': BLANC, 'size': 13})
             graphiques["convergence_loss"] = fig1
         except Exception as e:
             logger.warning(f"G1 convergence : {e}")

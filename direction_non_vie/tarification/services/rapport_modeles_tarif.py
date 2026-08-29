@@ -497,6 +497,11 @@ SOURCES_FIGURES: Dict[str, Tuple[str, str]] = {
 #: Le titre du bloc qui dit POURQUOI le rapport n'est pas VERT.
 TITRE_RAISONS_PLAFOND = 'Pourquoi ce rapport n\'est pas classé VERT'
 
+#: Le titre du bloc d'avertissement Deep Learning. ⚠️ Le TEXTE de
+#: l'avertissement, lui, vient de `synthese_modele_dl` — source unique partagée
+#: avec le rapport d'équipe et l'Excel. Voir `avertissement_dl`.
+TITRE_DL_PRODUCTION = 'Modèle Deep Learning retenu en production'
+
 #: La phrase posée quand le statut n'est pas VERT sans qu'aucune cause n'ait
 #: été enregistrée — un cas qui ne doit pas arriver, et qui se voit s'il
 #: arrive plutôt que de laisser un bloc vide.
@@ -512,6 +517,50 @@ def _bloc_raisons_html(raisons: tuple[str, ...]) -> str:
     return (f'<div class="raisons-plafond">\n'
             f'  <div class="raisons-titre">⚠️ {TITRE_RAISONS_PLAFOND}</div>\n'
             f'    <ul>\n{puces}\n    </ul>\n'
+            f'</div>\n')
+
+
+def avertissement_dl(result_a6) -> str:
+    """L'avertissement de validation humaine du DL — vide s'il n'y a rien à dire.
+
+    ⚠️⚠️ POURQUOI CETTE FONCTION EXISTE — MESURÉ LE 29/08/2026. Le garde-fou
+    existait, il se déclenchait (`alertes_modele` portait bien
+    `dl_validation_humaine_requise`), et `synthese_modele_dl` produisait le bon
+    texte. Mais dans CE rapport, son seul point de sortie était
+    `_construire_contexte_tarif` — **le prompt envoyé au LLM**. Mesuré sur un
+    dossier où `DL_TABNET` EST le modèle de production : le HTML publiait
+    « RECOMMANDATION : Déployer DL_TABNET comme modèle de tarification » avec
+    **zéro** occurrence de « validation actuarielle humaine ».
+
+    *Un garde-fou réglementaire ne peut pas dépendre d'un appel réseau.* Sans
+    clé, sans réseau, ou sur une narration tronquée, l'avertissement
+    disparaissait — et le rapport signé recommandait de déployer une boîte
+    noire sans le dire.
+
+    ⚠️ LE TEXTE N'EST PAS RÉÉCRIT ICI. Il vient de `synthese_modele_dl`, la
+    source unique déjà utilisée par le rapport d'équipe et l'Excel — une
+    reformulation locale aurait divergé, comme les 30 définitions de couleurs
+    avant `STATUT_RAG`.
+
+    ⚠️ ET ELLE SE TAIT QUAND IL N'Y A RIEN : `synthese_modele_dl` rend `None`
+    si le modèle retenu n'est pas Deep Learning. *Un avertissement affiché
+    toujours cesse d'être un signal* — c'est la leçon de `charts/C3`.
+    """
+    at6 = (result_a6 or {}).get('audit_trail') or {}
+    return synthese_modele_dl(
+        (result_a6 or {}).get('modele_production'),
+        (result_a6 or {}).get('valide_par_actuaire_dl'),
+        at6.get('timestamp'),
+    ) or ''
+
+
+def _bloc_dl_html(texte: str) -> str:
+    """L'avertissement DL en HTML. Vide quand il n'y a rien à dire."""
+    if not texte:
+        return ''
+    return (f'<div class="raisons-plafond">\n'
+            f'  <div class="raisons-titre">{TITRE_DL_PRODUCTION}</div>\n'
+            f'    <ul>\n      <li>{texte}</li>\n    </ul>\n'
             f'</div>\n')
 
 
@@ -1733,7 +1782,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
   </div>
 </div>
 
-{_bloc_raisons_html(raisons_plafond(result_a6))}{_ouvrir_chapitre(1)}    <table>
+{_bloc_raisons_html(raisons_plafond(result_a6))}{_bloc_dl_html(avertissement_dl(result_a6))}{_ouvrir_chapitre(1)}    <table>
       {_row(titres('glm'), header=True, num=colonnes_numeriques('glm'))}
 """
     for modele in ['poisson', 'gamma', 'tweedie']:
@@ -2124,6 +2173,16 @@ def export_word(
                 _passage = _run(p, '   · ' + _r, sz=9, col=NR)
                 if _i < len(_raisons_w) - 1:
                     _passage.add_break()
+
+        # ⚠️⚠️ L'AVERTISSEMENT DL, DANS LES DEUX FORMATS. Le Word part au CAC
+        # comme le HTML : corriger un seul des deux aurait laissé la moitié du
+        # livrable signé recommander un déploiement sans son garde-fou.
+        _dl_w = avertissement_dl(result_a6)
+        if _dl_w:
+            p = doc.add_paragraph()
+            _run(p, '⚠ ' + TITRE_DL_PRODUCTION, bold=True, sz=10,
+                 col=AR).add_break()
+            _run(p, '   · ' + _dl_w, sz=9, col=NR)
 
         doc.add_page_break()
 
