@@ -4,7 +4,7 @@
 
 ## ① Le compte
 
-**23 affirmations mesurées** — 16 constats · 7 vérifiées bonnes · 2 de mes instruments réfutés en cours de route.
+**24 affirmations mesurées** — 17 constats · 7 vérifiées bonnes · 2 de mes instruments réfutés en cours de route. ⚠️ **`C17` a été ouvert le 29/08 par la re-mesure de `C8` et `C9`** : il n'était dans aucun relevé.
 
 ## ② Le classement
 
@@ -75,7 +75,7 @@ Le diagnostic VERT dirait de même « La Winsorisation sur **0** variable(s) ré
 > exacte que le `Pandas4Warning` de ce module dénonce, et dans laquelle ma
 > sonde est tombée. Le test porte désormais sur « **pas numérique** ».
 
-### B — Affirme plus que le code ne porte (7)
+### B — Affirme plus que le code ne porte (8)
 
 **C3 — L'en-tête annonce « Weight of Evidence (WoE) · Target Encoding · One-Hot ».** Le code n'implémente que `label` et `one_hot` ; les 20 plans n'utilisent que ces deux-là. **Ni WoE ni Target Encoding n'existent.** Le commentaire [l.144](direction_non_vie/tarification/a2_preprocessing/agent.py:144) va plus loin : « l'encodage WoE est préféré pour les GLM ».
 
@@ -89,7 +89,76 @@ Le diagnostic VERT dirait de même « La Winsorisation sur **0** variable(s) ré
 
 **C8 — La stratégie `'binaire' → 'mode'` n'est appliquée à rien.** Mesuré sur une colonne 0/1 (mode = 1.0) : imputée par la **moyenne, 0.789**.
 
+> ⛔ **`a2/C8` — RE-MESURÉ LE 29/08/2026 SUR UNE VRAIE FIXTURE D'IMPUTATION.**
+> **RANG 2**, classement accepté par Selasse. *Sur données propres, `_imputer`
+> sort avant toute imputation : le constat ne s'y reproduit pas — c'est
+> pourquoi la première re-mesure ne concluait rien.*
+>
+> Fixture : 40 NaN dans quatre colonnes de quatre natures, chemin `A1 -> A2.run`.
+> ⚠️ **A1 ne nettoie pas les NaN** — les 40 survivent. La protection amont notée
+> pour `a2/C5` portait sur l'exposition nulle, elle ne s'étend pas ici.
+>
+> Colonne 0/1, mode = 1.0 : **imputée par la moyenne 0,8152**. La colonne sort
+> avec **trois valeurs distinctes** `[0.0, 0.8152, 1.0]` — **40 lignes portent
+> une valeur qui n'est pas une modalité**.
+>
+> ⚠️⚠️ **ET RIEN NE L'ATTRAPE, ALORS QUE LE VOISIN EST GARDÉ.**
+> `_appliquer_facteur` vérifie les modalités connues pour l'encodage `label`
+> ([l.906](direction_non_vie/tarification/a2_preprocessing/agent.py:906)) et ne
+> vérifie **rien** pour `binaire`
+> ([l.891](direction_non_vie/tarification/a2_preprocessing/agent.py:891) :
+> `pd.to_numeric(...).astype(float)`). *Un GLM reçoit une variable dite binaire
+> dont le coefficient ne contraste plus deux états.*
+>
+> ⚠️ **PORTÉE, BORNÉE** : l'imputation est l'**étape 1**, les binaires du plan
+> auto (`jeune_conducteur`...) sont **dérivés à l'étape 5** — ils ne peuvent
+> pas porter de NaN. `C8` n'est atteignable que par un binaire **présent à la
+> source**. Le dépôt ne livre aucun catalogue de plans, mais le seul plan MRH
+> qu'il contient (`test_plan_invariants.py`) déclare **`alarme`,
+> `double_vitrage`, `garantie_vol`** en `binaire`, et **aucun des trois n'est
+> dans le catalogue de dérivations** (9 entrées) : ce sont des colonnes de
+> source.
+>
+> ⚠️⚠️ **`C7` ET `C8` SONT LE MÊME DÉFAUT VU DES DEUX CÔTÉS** — la table n'est
+> pas lue (`C7`), donc la seule entrée sans équivalent en dur n'est jamais
+> appliquée (`C8`). Le tri classait `C7` au rang 6 ; **un correctif qui fait
+> lire la table ferme les deux**. *Point rendu à l'arbitrage, non tranché.*
+
 **C9 — Une moyenne rangée sous la clé `medianes`.** `parametres['medianes']['age'] = 45.83` — la médiane réelle vaut 45.0. Ce dict est le paramètre de reproductibilité invoqué au titre de l'exigence S2.
+
+> ⚠️ **`a2/C9` — RE-MESURÉ LE 29/08/2026. RANG 5**, classement accepté par
+> Selasse. Sur la fixture d'imputation : `age = 49,926` pour une médiane réelle
+> de **50,0**, `alarme = 0,8152` pour une médiane de **1,0** — **2 entrées sur
+> 3 mal nommées**, seul `valeur_venale` est une vraie médiane.
+>
+> ⚠️⚠️ **CE QUE CE N'EST PAS : un nombre faux.** Les deux branches relisent la
+> même clé, donc la valeur *appliquée* est correcte. C'est un **libellé faux**.
+>
+> ⚠️ **ET IL NE REMONTE PAS AU LIVRABLE, MESURÉ** : le dict n'est lu que dans
+> A2 ([l.1028-1039](direction_non_vie/tarification/a2_preprocessing/agent.py:1028))
+> et par le script d'audit ; **`median` a zéro occurrence dans `services/`**.
+> Même borne déclarée que `conformite/C10`. *Le renommer touche le format d'un
+> JSON persisté : c'est une décision de conception, pas une retouche.*
+
+**C17 — « Cela évite la fuite de données » : la fuite a lieu.** La docstring de `_imputer` ([l.975-978](direction_non_vie/tarification/a2_preprocessing/agent.py:975)) garantit que les paramètres sont calculés en `train` et **réutilisés** en `predict`, « ce qui évite la fuite de données (data leakage) qui invaliderait la validation du modèle ».
+
+> ⛔ **`a2/C17` — CONSTAT NEUF, OUVERT LE 29/08/2026** par la re-mesure de `C8`
+> et `C9`. **Il n'était dans aucun relevé.** Rang non attribué.
+>
+> Une colonne saine au `train` ne laisse **aucun paramètre** ; en `predict`, le
+> `.get(col, df[col].mean())` **recalcule sur les données de prédiction** :
+>
+> ```
+> en PREDICT, 'age' impute par 51.281818
+> moyenne du TRAIN   = 50.654000
+> moyenne du PREDICT = 51.281818   <-- la valeur vient des donnees de PREDICT
+> ```
+>
+> ⚠️ **LATENT AUJOURD'HUI, ET C'EST BORNÉ** : `mode='predict'` n'est appelé
+> **nulle part** (AST, 0 appel) et `charger_parametres` a **0 appelant**. Le
+> mécanisme entier est du code mort — mais la phrase, elle, est publiée dans le
+> code que l'actuaire lit. *Le réparer ou le retirer avec sa promesse est une
+> question rendue à l'arbitrage.*
 
 ### C — Imprécis ou daté (7)
 

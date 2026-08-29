@@ -13,7 +13,7 @@ l'état d'aujourd'hui.*
 
 | # | critère | état mesuré aujourd'hui |
 |---|---|---|
-| **S1** | **Rien de faux n'est publié** | ⛔ **84 constats ouverts** — *dérivés le 29/08 des clés de fermeture, méthode au §②* |
+| **S1** | **Rien de faux n'est publié** | ⛔ **85 constats ouverts** — *dérivés le 29/08 des clés de fermeture, méthode au §②* |
 | **S2** | **Rien de fermé ne peut régresser** | 🟡 **67 fermés, 1 partiel (`pipeline/C1`).** ✅ `a5/C5` n'est plus « corrigé sans être épinglé » : il est fermé ET épinglé, et le lot a montré qu'il se reproduisait encore par une SECONDE cause. ✅ **Et l'archive ne peut plus RETARDER sur le code** : `test_archive_fermeture_reportee.py` fait tomber la gate dès qu'un constat épinglé par un test n'a pas son bloc de fermeture -- le défaut mesuré le 28/08, où douze lots avaient été poussés sans être reportés. ⚠️ L'archive elle-même est désormais épinglée : `test_archive_cles_fermeture.py` fait tomber la gate sur un bloc de fermeture qui ne nomme pas son constat. ⚠️⚠️ **ET SON EXEMPTION EST SCOPÉE PAR FICHIER, mesuré le 29/08** : une exemption portant la seule clé aurait laissé passer un futur test qui ÉPINGLERAIT vraiment ce constat sans écrire son bloc — le défaut même que ce filet attrape. *Un garde-fou qui exclut la seule chose qui compte n'en est pas un.* Le fichier du garde-fou sort de sa propre assiette, sinon déclarer une exemption pour `x/Cn` créerait la mention que le filet reproche aussitôt |
 | **S3** | **Un tarif signé se rejoue à l'identique** | 🟡 **RE-MESURÉ LE 27/08 — 2 fermés, 1 hérité, 1 PARTIEL.** ✅ **l'empreinte du plan est versionnée** : `s1:9b6d4f70080ad771`, **rejouée identique** sur les 20 plans (`2cb43ef`). ✅ **le livrable ne publie plus un `now()` sous l'étiquette « Arrêté »** : **0** site `_bandeau(… now …)`, contre **28** à l'origine ; absent → « non déclaré », illisible → « non déclaré (illisible : …) » (`ea37564`). ⬜ *hérité, non re-mesuré ici* : le tarif **déclaratif** reproductible au bit près (0,00e+00). ⚠️ **PARTIEL — le tarif DL** : le `seed` est **déclaré** (paramètre de `A5.run`), **appliqué** à `torch.manual_seed` et `np.random.seed` (l.528-529) et **inscrit au rapport**. ⚠️⚠️ **Mais la reproductibilité bout-en-bout n'est PAS prouvée ici** : elle demande un double run d'A5, non fait. *Le seed posé n'est pas la reproductibilité mesurée.* |
 | **S4** | **Un seul chemin — ou des chemins également gardés** | ⛔ **RE-MESURÉ LE 27/08 — inchangé, et l'asymétrie est nette.** **L'orchestrateur a toujours 0 appelant de production** (2 importeurs au total, tous hors production — relevé par AST). ⚠️⚠️ **Et la couche qualité départage les deux chemins** : `pipeline_tarifaire` (déclaratif) importe `core.qualite_donnees` **et** `core.conformite_reglementaire` ; `pipeline_agents` **n'en importe AUCUN**. *Deux chemins vers un tarif signé, un seul gardé.* ⬜ *non re-derivable* : le « 5 assemblages dans l'app » date d'une définition non consignée — **je ne le réaffirme pas sans la refaire**. |
@@ -38,10 +38,10 @@ lui-même**.
 
 | | |
 |---|---|
-| constats relevés (vagues 1 + 2) | **151** — *recomptés le 29/08 ; `a3/C19`, `services/C10`, `a5/C10` et `services/C11` sont des constats NEUFS, ouverts et fermés dans leur propre lot* |
+| constats relevés (vagues 1 + 2) | **152** — *`a2/C17` ouvert le 29/08 par la re-mesure de `a2/C8` et `a2/C9` ; recomptés le 29/08 ; `a3/C19`, `services/C10`, `a5/C10` et `services/C11` sont des constats NEUFS, ouverts et fermés dans leur propre lot* |
 | fermés **et épinglés** | **67** |
 | corrigé, **non épinglé** | **0** — `a5/C5` épinglé le 29/08 · **partiel** : `pipeline/C1` |
-| **⛔ OUVERTS** | **84** |
+| **⛔ OUVERTS** | **85** |
 | lignes lues intégralement | **22 693** sur 23 863 du périmètre |
 | jamais auditées | **1 170 l** + `actuaria_app.py` (5 181 l) |
 | preuves qui se relancent | **35, 0 échec** |
@@ -52,7 +52,7 @@ lui-même**.
 **Recomptés le 27/08/2026. Les précédents — « 146 · 18 · 129 », puis « 147 · 40
 · 107 » — étaient FAUX, et pour la même raison.**
 
-- **151 constats** = en-têtes des 14 `releve_*.md`, **DEUX formes** :
+- **152 constats** = en-têtes des 14 `releve_*.md`, **DEUX formes** :
   `**Cn — …**` et `**Cn** — …`. *N'en compter qu'une en rate douze.*
 - **37 fermés** = les **38 clés d'attribution** portées par les blocs `> ✅`,
   **moins `pipeline/C1`** qui n'est fermé que **pour l'illisibilité**.
@@ -281,12 +281,19 @@ les **figures** (8 constats) et les **valeurs numériques** (5). Le banc marque
 des chaînes — *un marqueur posé sur un nombre est détruit par l'arrondi*, et
 `metriques` **1/83 n'est pas un verdict, c'est un angle mort.**
 
-## RANG 2 — CE QUI AUTORISE CE PRIX · ✅ **CLOS le 29/08/2026 — 9 sur 9**
+## RANG 2 — CE QUI AUTORISE CE PRIX · ⛔ **ROUVERT le 29/08/2026 — 9 fermés sur 10**
+
+> ⛔⛔ **IL ÉTAIT CLOS 9 SUR 9, ET IL NE L'EST PLUS.** La re-mesure d'`a2/C8`
+> sur une vraie fixture d'imputation l'a classé **rang 2** (accepté par
+> Selasse) : un rang clos peut être rouvert par une mesure, et *le dire vaut
+> mieux que garder un compte flatteur*. Le lot 2.4 ci-dessous est **ouvert,
+> non commencé** — deux questions lui sont rendues à l'arbitrage.
 
 | lot | constats | ce que ça ferme |
 |---|---|---|
 | **2.1 Les garde-fous qui attestent sans surveiller** | ✅ **FERMÉS** `conformite/C1` `qualite/C2` · ✅ **`agents/C2` FERMÉ le 29/08** (`is not None` répondait à la mauvaise question : `_arbitrer` rend TOUJOURS un dict `a6`, échec compris) | `controle_effet_execute` atteste **la fourniture des arguments** · l'escalade compte **par type** (19,6 % exclus sans blocage) · `.success = True` **alors qu'A6 a échoué**. *Un contrôle qui atteste sans surveiller est pire qu'un contrôle absent : il ferme la question* |
 | **2.2 La couche qualité ne voit pas l'absence** | `qualite/C1` `a1/C3` `a1/C4` | **100 % de NaN → 0 anomalie** · `prime_pure > 0` · le double verdict sur `exposition = 0` |
+| **2.4 Un binaire imputé cesse d'être binaire** ⛔ **OUVERT** | ⛔ `a2/C8` — *et `a2/C7` devrait voyager avec lui, non tranché* | une colonne 0/1 imputée par la **moyenne 0,8152** sort avec **trois valeurs**, **40 lignes hors modalité**, et `_appliquer_facteur` ne vérifie les modalités **que** pour l'encodage `label`, **jamais** pour `binaire`. *Le GLM reçoit une variable dite binaire dont le coefficient ne contraste plus deux états.* ⚠️ **Atteignable par un binaire de SOURCE** — le plan MRH du dépôt en déclare trois |
 | **2.3 La conformité affirmée sans condition** | ✅ **FERMÉS** `a6/C5` `conformite/C7` · ✅ **`conformite/C14` FERMÉ le 29/08** — l'en-tête borne enfin sa portée surveillée (**Non-Vie seule** ; `direction_vie_epre` **0** et `direction_sante_prevoyance` **0** importateurs, re-mesuré sur **446** fichiers), la règle CJUE restant universelle | conformité **affirmée sans condition** dans la fiche de décision · « **POUR TOUTE BRANCHE** » alors que seule la Non-Vie est surveillée · `controle_effet_execute` **n'atteint aucun livrable**. *C'est ce qui part au CAC et à l'ACPR* |
 
 ## RANG 3 — LA STATISTIQUE, ET LES API LATENTES · ✅ **CLOS le 27/08/2026**
@@ -383,6 +390,8 @@ différents se lisent pareil*) · ⚠️ **`C10` l'ambre du RAG EST l'or des axe
 
 ✅ **FERMÉS** — `services/C1` `C2` `C3` `C4` `C5` **et `C6`** (`ea37564`, `d2dc672`, `f63be18`, `4534ea7`, reportés par `4ede1cb`).
 
+⛔ **`a2/C9` ALLOUÉ ICI le 29/08** (classement accepté) — une **moyenne** rangée sous la clé `medianes` : `age = 49,926` pour une médiane réelle de **50,0**, `alarme = 0,8152` pour **1,0**. ⚠️ **Libellé faux, pas nombre faux** — la valeur appliquée est correcte. ⚠️ **Et il ne remonte pas au livrable, mesuré** : `median` a **zéro occurrence dans `services/`**. *Le renommer touche le format d'un JSON persisté : décision de conception.*
+
 ✅ **`agents/C4` FERMÉ** — `resume()` ne génère plus de date, elle est capturée une fois par le run et réutilisée. ⚠️ **Et le nouveau garde-fou a tiré sur ce lot même**, une heure après avoir été écrit : le test épinglait `agents/C4` avant que son bloc n'existe. *Il fonctionne sur un cas réel, pas seulement sur sa violation plantée.*
 
 ## RANG 6 — LE CÂBLAGE · 🟡 **1 sur 4 CLOS · les 3 autres RE-MESURÉS, INCHANGÉS**
@@ -462,7 +471,7 @@ coupable (3) · annotations et exports morts (3).
 | **l'assemblage de l'app** | ~980 | `_executer_analyse` (799 l) + le bloc tarification (846 l). **Le reste de l'app : hors périmètre, déclaré** |
 | `services/excel_helpers.py` | 139 | complète le périmètre |
 
-## HORS RANG — LE TRI · 🟡 **A2 TRACÉ (16/16) · 64 restants**
+## HORS RANG — LE TRI · 🟡 **A2 TRACÉ (16/16) · 71 ouverts hors A2, aucun tracé**
 
 ⚠️⚠️ **ET LE COMPTE ÉTAIT DE 40 : IL EST DE 77.** Le document répartissait
 les non alloués en « 38 de bruit » + « 40 non triés », mais **aucun des deux
@@ -474,13 +483,25 @@ fermeture d'`a2/C1` et d'`a2/C2`. Méthode rejouable : les clés ouvertes du §�
 cherchées comme mot entier dans ce fichier, **avant** puis **après** le titre
 `## HORS RANG`.
 
-| lecture | compte |
-|---|---|
-| constats **ouverts** | **84** |
-| dont **alloués à un rang** (nommés avant `## HORS RANG`) | **7** |
-| ⛔ **NON alloués — c'est l'assiette du tri** | **77** |
-| dont **tracés au site** par le tri A2 du 29/08 | **13** |
-| ⛔ **ni alloués, ni tracés** | **64** |
+| lecture | compte | comment il se dérive |
+|---|---|---|
+| constats **ouverts** | **85** | clés réelles moins clés fermées — **tenu par `ARCH-5`** |
+| dont **zone A2**, tous tracés au site le 29/08 | **14** | préfixe de la clé |
+| ⛔ **hors A2, aucun tracé** | **71** | le complément — *exact, sans heuristique* |
+
+⚠️⚠️ **ET LE DÉCOUPAGE « ALLOUÉ / NON ALLOUÉ » A ÉTÉ RETIRÉ : IL N'EST PAS
+DÉRIVABLE.** Mesuré le 29/08 — **trois méthodes plausibles rendent 7, 9 et
+11**. Cause : *ce document ne distingue pas une ALLOCATION d'une MENTION.*
+`socle/C4` n'y figure que dans un **graphe de dépendances** ; `a2/C7` est nommé
+dans la section du rang 2 **avec les mots « non tranché »**. Un `grep` voit les
+deux comme un rangement.
+
+> ### **Un compte identique là où les objets diffèrent est un compte faux.**
+
+⚠️ Le chiffre « 64 » que ce document publiait était celui-là, et il portait la
+même fragilité. **Tant que l'allocation n'est pas écrite comme une DONNÉE
+(constat -> rang), aucun de ces trois nombres n'a le droit d'être publié comme
+un fait.** *Recommandation ouverte, non exécutée : elle demande un accord.*
 
 ⚠️ **ET MA PREMIÈRE MESURE DE CE TABLEAU S'EST TROMPÉE, PAR LE PIÈGE CONNU :**
 elle cherchait chaque clé comme mot entier et n'en trouvait que **7** tracées,
@@ -503,7 +524,9 @@ ce qui le contredit.* Le motif du chantier, appliqué à la carte elle-même.
 | `a2/C15` | ⛔ **40 sites, 39 fichiers** — voir ci-dessous | **✅ FERMÉ ce jour** |
 | `a2/C1` | ⚠️ **CORRIGÉ** : « Winsorisées : **7** » pour **7** réelles (le relevé mesurait 0 pour 9) | **✅ FERMÉ ce jour, épinglé** |
 | `a2/C2` | ⚠️ **CORRIGÉ** : `colonnes_non_encodees = []`, **VERT atteint** | **✅ FERMÉ ce jour, épinglé** |
-| `a2/C8` `a2/C9` | ⚠️ **NON REPRODUITS** sur données propres | **à re-mesurer avec une fixture d'imputation** — rang 2 si vrais |
+| `a2/C8` | ⛔ **VRAI, re-mesuré sur fixture d'imputation** : moyenne 0,8152 sur une colonne 0/1, **40 lignes hors modalité** | **✅ ALLOUÉ RANG 2** |
+| `a2/C9` | ⛔ **VRAI** : 2 entrées sur 3 mal nommées ; borné, ne remonte pas au livrable | **✅ ALLOUÉ RANG 5** |
+| `a2/C17` | ⛔ **CONSTAT NEUF** — « Cela évite la fuite de données » : la fuite a lieu. **Latent** (`mode='predict'` : 0 appel) | **rang non attribué** |
 | `a2/C5` | vrai (ni exclu, ni imputé ; `lignes_exclues` = compteur mort) — ⚠️ **mais les deux chemins de production sont protégés en amont** : A1 corrige, `controler_qualite` exclut (400 → 360). *Cette dépendance n'est pas dite dans A2.* | **7** |
 | `a2/C3 C4 C6 C10 C11 C12 C14` | docstrings et commentaires que le code contredit — ⚠️ **C10 vécu** : ma sonde a suivi l'exemple d'usage, A2 l'a refusé | **7** |
 | `a2/C7` `a2/C13` | code et déclaration morts | **6** |
@@ -514,10 +537,18 @@ sur un site, il en avait **40**. Il cachait un `FutureWarning` statsmodels sur
 **le calcul du BIC, nombre publié au rapport signé**. *Un tri n'est pas un
 rangement : c'est une re-mesure.*
 
-### ⛔ LES 64 AUTRES NE SONT PAS TRACÉS, ET JE LE DIS
+### ⛔ LES 71 AUTRES NE SONT PAS TRACÉS, ET JE LE DIS
 
-`a1` 8 · `pipeline` 8 · `a3` 7 · `plan` 7 · `conformite` 6 · `a4` 5 · `a6` 5 ·
-puis `a5`, `agents`, `charts`, `qualite`, `services`, `socle` à 3 chacun.
+**Dérivé le 29/08 par préfixe de clé sur les 85 ouverts — exact, sans
+heuristique de texte** :
+
+`pipeline` 9 · `a1` 8 · `a3` 8 · `plan` 7 · `a6` 6 · `conformite` 6 · `a4` 5 ·
+`socle` 5 · `agents` 4 · `qualite` 4 · `a5` 3 · `charts` 3 · `services` 3.
+
+⚠️ **La répartition publiée avant celle-ci était fausse** (`a1` 8, `pipeline` 8,
+`a3` 7, `a6` 5, `socle` 3...) : elle retranchait en silence les constats nommés
+dans une section de rang, c'est-à-dire qu'elle appliquait l'heuristique
+mention/allocation que le §② vient d'écarter.
 **Aucun rang ne leur sera attribué sans être allé au site** — les classer par
 habitude serait exactement ce que ce tri doit éviter.
 
