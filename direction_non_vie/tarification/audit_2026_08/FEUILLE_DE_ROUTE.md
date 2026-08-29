@@ -496,7 +496,7 @@ coupable (3) · annotations et exports morts (3).
 | **l'assemblage de l'app** | ~980 | `_executer_analyse` (799 l) + le bloc tarification (846 l). **Le reste de l'app : hors périmètre, déclaré** |
 | `services/excel_helpers.py` | 139 | complète le périmètre |
 
-## HORS RANG — LE TRI · 🟡 **A2 TRACÉ (16/16) · 71 ouverts hors A2, aucun tracé**
+## HORS RANG — LE TRI · 🟡 **A2 (16/16) et PIPELINE (9/9) TRACÉS · 62 restants**
 
 ⚠️⚠️ **ET LE COMPTE ÉTAIT DE 40 : IL EST DE 77.** Le document répartissait
 les non alloués en « 38 de bruit » + « 40 non triés », mais **aucun des deux
@@ -563,13 +563,35 @@ sur un site, il en avait **40**. Il cachait un `FutureWarning` statsmodels sur
 **le calcul du BIC, nombre publié au rapport signé**. *Un tri n'est pas un
 rangement : c'est une re-mesure.*
 
-### ⛔ LES 71 AUTRES NE SONT PAS TRACÉS, ET JE LE DIS
+### ✅ PIPELINE — LES 9, TRACÉS AU SITE (30/08)
 
-**Dérivé le 29/08 par préfixe de clé sur les 85 ouverts — exact, sans
-heuristique de texte** :
+⚠️⚠️ **ET LE TRI A ENCORE RAPPORTÉ UN RANG 2.** *Un tri n'est pas un rangement :
+c'est une re-mesure.* Deuxième zone, deuxième trouvaille de rang.
 
-`pipeline` 9 · `a1` 8 · `a3` 8 · `plan` 7 · `a6` 6 · `conformite` 6 · `a4` 5 ·
-`socle` 5 · `agents` 4 · `qualite` 4 · `a5` 3 · `charts` 3 · `services` 3.
+| constat | mesuré au site le 30/08 | rang proposé |
+|---|---|---|
+| **`pipeline/C2`** | ⛔⛔ **LE CORRECTIF DU MOIS N'EST PAS ARRIVÉ ICI.** Portefeuille sans aucun sinistre, **les deux chemins mesurés côte à côte** : le chemin **agent** rend `success=False` et *nomme la cause* — « aucun evenement observe : le maximum de vraisemblance de l'intercept vaut log(0) » ; le chemin **déclaratif** meurt sur `pipeline_tarifaire.py:382` avec un `ValueError` **statsmodels** brut — *« This could be a boundary problem and should be reported »*, c'est-à-dire une invitation à signaler un bug à statsmodels. ⚠️ Et le repli « dégénéré mais défini » que le code annonce est **l.400**, dix-huit lignes plus loin : **inatteignable dans le seul cas qu'il prétend couvrir**. ⚠️ `pipeline_complet` est appelé en production par `actuaria_app.py:3574` | **2** |
+| **`pipeline/C4`** `pipeline/C5` | `PlanTarifaire` **ne porte aucun champ `chargements`** (12 champs, vérifié) : l'« étape 6 » annoncée n'existe pas, le repli est le seul chemin. Et ce repli met **`"taxes": 0.33` en dur pour toute LoB**, alors que le commentaire annonce « auto 33 %, MRH 30 %, RC 9 % » — **la LoB n'entre jamais dans le calcul**. Une MRH reçoit la taxe auto. ⚠️ **Surchargeable** (`chargements=` l.339) et **personne ne le surcharge** : les deux appels de production passent `kw=[]`. ⚠️ **BORNE** : `prime_ttc` n'existe que dans ce fichier et deux tests — **il n'atteint aucun livrable**, et `tarifer()` n'est appelé en production que par une démo. *API latente.* | **3** *(ensemble)* |
+| **`pipeline/C6`** | `grille()` — « Relativités exportables (ce que l'assureur met dans son SI) » — ne rend que `relativite_frequence`, lue du seul `glm_frequence`. La prime pure est *fréquence × coût moyen* : **la moitié du tarif manque à la grille**. ⚠️ **BORNE** : `relativite_frequence` n'existe **que** dans ce fichier, et `grille()` n'a **aucun appelant de production**. *API latente.* | **3** |
+| **`pipeline/C9`** | `tarifer()` pose `date_calcul` en **UTC** (l.208) ; `pipeline_complet` passe `horodatage=datetime.now()` en **heure locale** (l.356) au rapport qualité — celui qui porte la **confirmation actuarielle nominative** de la règle 4. Deux traces du même calcul, **deux heures d'écart en été**. ⚠️ *Ce n'est pas cosmétique : c'est l'horodatage d'un acte de validation signé.* | **5** |
+| **`pipeline/C3`** | 5 définitions du Gini en production (AST, chemins réels : `pipeline_tarifaire`, `a3`, `a4`, `a5`, `a6`). La docstring l.271 dit « **UNE SEULE définition** … c'est ce qui rend **impossible** la métrique divergente ». Vrai dans le fichier, **faux à l'échelle du module** — et la phrase affirme une impossibilité. | **5** |
+| **`pipeline/C7`** | Docstring l.124 : « MÊME chemin que `tarifer()`, pour que l'un reproduise l'autre à **1e-6** » ; `tarifer()` **arrondit à 2 décimales** (l.239). ⚠️ **Les oracles, eux, distinguent les deux précisions** — c'est la docstring qui les confond. | **5** |
+| **`pipeline/C8`** | `fillna(0.0)` sur `cout_total` (l.391), **absent** sur `expo` (l.376) et `y_freq` (l.377) ; les trois passent par `to_numeric(errors="coerce")`. ⚠️ **Sans conséquence observée** — une exposition illisible provoque un arrêt *loud*. *La protection tient par accident, pas par construction.* | **7** |
+| `pipeline/C1` | **PARTIEL, et son reste est déjà rendu** : `-999` et `1e12` restent tarifés faute de **borne de plausibilité déclarée au plan** (en inventer une serait poser un chiffre que personne n'a signé), et `predire_portefeuille` demande de décider ce que le contrat de sortie **vectoriel** doit porter. *Deux questions de conception, pas du travail non trié.* | *(rendu)* |
+
+⚠️⚠️ **CE QUE CE TRI APPREND, AU-DELÀ DES NEUF** : `pipeline/C2` est la **même
+panne** que le repli d'A3 réparé ce mois-ci, restée vivante sur l'autre chemin
+de production. *« Corrigé OÙ ? » — la question vaut aussi entre deux chemins qui
+font le même métier.* Chercher, pour chaque correctif de ce chantier, s'il a un
+jumeau sur le chemin déclaratif est une piste **bon marché et non explorée**.
+
+### ⛔ LES 62 AUTRES NE SONT PAS TRACÉS, ET JE LE DIS
+
+**Dérivé le 30/08 par préfixe de clé sur les 82 ouverts — exact, sans
+heuristique de texte** ; `pipeline` en sort, il est tracé :
+
+`a1` 8 · `a3` 8 · `plan` 7 · `a6` 6 · `conformite` 6 · `a4` 5 · `socle` 5 ·
+`agents` 4 · `qualite` 4 · `a5` 3 · `charts` 3 · `services` 3. **Total 62.**
 
 ⚠️ **La répartition publiée avant celle-ci était fausse** (`a1` 8, `pipeline` 8,
 `a3` 7, `a6` 5, `socle` 3...) : elle retranchait en silence les constats nommés
