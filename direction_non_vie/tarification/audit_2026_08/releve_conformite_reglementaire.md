@@ -190,6 +190,23 @@ variable de volume, elle, ne dit rien — et rien ne la protège.
 > l'actuaire qui sait si sa variable est connue à la souscription ; le plan est
 > l'endroit où il le dit, et il est désormais renvoyé là.*
 
+> ✅ **`conformite/C2`** · **FERMÉ le 29/08/2026 — LE CODE ÉTAIT CORRIGÉ,
+> RIEN NE L'ÉPINGLAIT.** *Preuve : `test_exclusions_motif_par_motif.py`,
+> 3 contrôles.*
+>
+> ⚠️⚠️ **LA FEUILLE DE ROUTE LE DISAIT FERMÉ, L'ARCHIVE NE PORTAIT AUCUN BLOC.**
+> Deux issues étaient possibles — code jamais corrigé, ou code corrigé jamais
+> épinglé. **Mesuré au site : la seconde.** Le texte publié dit « ⚠ ACTION
+> REQUISE », que l'exclusion est **MESURÉE** et **ne distingue pas une fuite
+> d'une variable de VOLUME légitime**, et il renvoie au PLAN
+> (`anteriorite=True`). *C'était le troisième état — celui que la règle de
+> fermeture du §④ nomme, et qui compte OUVERT.*
+>
+> ⚠️⚠️ **SECOND SENS, ET IL EST LE CŒUR DU CONSTAT** : le genre et la dérivée
+> de sinistralité gardent « aucune action ». *Un correctif qui alerterait sur
+> tout fermerait le constat en détruisant l'information* — c'est précisément
+> le signal que `C2` veut rendre lisible.
+
 ### B — Affirme plus que le code ne porte (6)
 
 **C3 — La « RÈGLE DE PRINCIPE » ferme le garde-fou n°3 et laisse le n°1
@@ -330,6 +347,29 @@ docstring l.936 le dit : « Trois motifs »). Le tri se fait par sous-chaîne :
 l'actuaire peut légitimement contester : B7 l'a prouvé au prix fort, et C2
 ci-dessus montre que le cas se reproduit. **Le seul motif discutable est celui
 qui est publié comme indiscutable.**
+
+> ✅ **`conformite/C6`** · **FERMÉ le 29/08/2026 — CODE CORRIGÉ AU LOT 1.3,
+> MAIS UN TEXTE ÉTAIT RESTÉ FAUX.** *Preuve :
+> `test_exclusions_motif_par_motif.py`, 5 contrôles.*
+>
+> Le tri est **exclusif et ordonné** depuis le lot 1.3 : chaque colonne
+> appartient à UN seul motif, le premier qui la reconnaît. La colonne écartée
+> **PAR L'EFFET** a sa propre ligne et n'est plus fondue dans « dérivée de la
+> sinistralité, aucune action ». Mesuré : **5 motifs → 5 lignes distinctes**,
+> et chaque colonne apparaît **exactement une fois**.
+>
+> ⚠️⚠️ **MAIS LA DOCSTRING ANNONÇAIT ENCORE « TROIS MOTIFS » — et c'était la
+> PREUVE CITÉE PAR LE CONSTAT.** Le comportement avait changé, le texte qui
+> l'accompagne était resté. *Quand un comportement change, relire le texte,
+> pas seulement le code qui l'exécute.* Corrigé : cinq motifs, avec leur
+> gravité, et le motif contestable nommé.
+>
+> ⚠️ **ET MA PREMIÈRE SONDE A ACCUSÉ LE CODE À TORT** : j'avais écrit le motif
+> `'FUITE DETECTEE PAR L EFFET'` (sans apostrophe) là où le module teste
+> `"PAR L'EFFET"`. La colonne retombait dans « aucune action » et le défaut
+> semblait vivant. *Une sonde qui invente un motif mesure sa propre
+> invention.* Les fixtures reprennent désormais les motifs **tels que le
+> module les écrit**.
 
 > ✅ **`conformite/C7`** · **FERMÉ — lot ②, INDISSOCIABLE DE `C1`.** Voir le bloc sous `C1` : la propriété est propagée `MatriceX` → A3/A4/A5 → A6 → l'Excel, via la nouvelle source unique `avertissement_controle_effet`. ⚠️ **Elle n'a pu être publiée qu'une fois rendue VÉRIDIQUE** — la publier avant aurait attesté un contrôle qui n'avait examiné aucune colonne.
 > ⚠️ **Et l'état SAIN est publié lui aussi** (« exécuté sur toutes les cibles ») : sans cela, l'actuaire ne pourrait pas distinguer « tout va bien » de « rien n'a été vérifié » — le défaut même que `C1` décrivait.

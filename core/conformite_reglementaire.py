@@ -1208,12 +1208,23 @@ def synthese_exclusions(exclusions: Optional[dict]) -> Optional[str]:
     blanche, coûtant 17,4 % du pouvoir discriminant du GLM. Aucun rapport ne le
     mentionnait : seul un WARNING de log, que personne ne lit.
 
-    Trois motifs, trois niveaux de gravité pour l'actuaire lecteur :
+    ⚠⚠ CINQ MOTIFS, ET CETTE PHRASE EN ANNONÇAIT TROIS — constat `C6`, dont
+    elle était la preuve citée. Le lot 1.3 a rendu le tri EXCLUSIF et ordonné ;
+    la docstring, elle, est restée sur « Trois motifs » jusqu'au 29/08/2026.
+    *Quand un comportement change, le texte qui l'accompagne se relit.*
+
+    Cinq motifs, trois niveaux de gravité pour l'actuaire lecteur :
       · genre / proxy de genre  → exclusion OBLIGATOIRE (CJUE C-236/09). RAS.
       · dérivée de sinistralité → exclusion OBLIGATOIRE (fuite). RAS.
+      · FUITE DÉTECTÉE PAR L'EFFET → ⚠ ACTION REQUISE. Exclusion **mesurée**,
+        pas déduite d'un nom : elle ne distingue pas une fuite d'une variable
+        de VOLUME légitime (en RC Pro, l'effectif joue le rôle que l'exposition
+        joue en auto). *C'est le seul motif que l'actuaire peut légitimement
+        contester, et il était publié comme indiscutable.*
+      · mot de grandeur MONÉTAIRE → ⚠ ACTION REQUISE, à déclarer AU PLAN.
       · non déclarée en liste blanche → ⚠ À VÉRIFIER : si la variable est un
         facteur tarifaire légitime, elle doit être déclarée, sinon le modèle est
-        amputé en silence. C'est le seul motif qui appelle une ACTION.
+        amputé en silence.
     """
     exc = exclusions or {}
     if not exc:
