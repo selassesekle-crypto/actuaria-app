@@ -22,7 +22,7 @@
 ╚══════════════════════════════════════════════════════════════════════════════╝
 """
 
-import os, json, pickle, logging, warnings
+import os, json, pickle, logging
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
@@ -71,7 +71,26 @@ except ImportError:
     except ImportError:
         TARIF_EXCEL_OK_A5 = False
 
-warnings.filterwarnings('ignore')
+# ⚠️⚠️ CONSTAT `a2/C15` — LE FILTRE GLOBAL D'AVERTISSEMENTS EST RETIRÉ.
+# `warnings.filterwarnings('ignore')` posé ICI, au niveau module, s'appliquait
+# au PROCESSUS ENTIER dès l'import : tout appelant de cet agent perdait les
+# avertissements de TOUS ses modules, y compris ceux qu'il n'a jamais importés.
+# *Une bibliothèque ne change pas l'état global du processus à l'import.*
+#
+# ⚠️ CE QU'IL CACHAIT, MESURÉ SUR UN RUN RÉEL (pipeline complet, 1 200 lignes) :
+#     7x Pandas4Warning   `select_dtypes` — NOTRE code, rupture pandas 4
+#     6x UserWarning       sklearn : « X does not have valid feature names »
+#     3x FutureWarning     statsmodels : le calcul du BIC change apres 0.13
+# ⚠️ Le 3e porte sur `bic`, PUBLIÉ dans les métriques d'A3 (trois sites) et au
+# chapitre 1 du rapport signé. *Un nombre publié dont la définition change.*
+#
+# ⚠️ ET JE CORRIGE MON PROPRE SOUPÇON : je pensais y trouver des avertissements
+# de NON-CONVERGENCE. Il n'y en a aucun sur ce portefeuille. Le mécanisme est
+# réel, la trouvaille est ailleurs — *une hypothèse mesurée vaut mieux qu'une
+# hypothèse plausible.*
+#
+# ⚠️ RIEN DE NOTRE CODE N'APPELLE `warnings.warn` : relevé sur tarification et
+# core, zéro site. Ce qui remonte est donc TIERS, et peu volumineux.
 
 try:
     import torch

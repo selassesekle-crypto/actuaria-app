@@ -66,6 +66,54 @@ Le diagnostic VERT dirait de même « La Winsorisation sur **0** variable(s) ré
 **C13** — `log_cout_total_sinistres` est documenté au `DATA_DICTIONNAIRE` (traçabilité ACPR §3.2) et **produit par aucun plan, aucune dérivée**.
 **C14** — En-tête du fichier de test : « 7 tests », **2 méthodes**.
 **C15** — `warnings.filterwarnings('ignore')` au niveau module ([l.86](direction_non_vie/tarification/a2_preprocessing/agent.py:86)) — mécanisme identique à A1, où je l'ai mesuré : filtre global du process.
+
+> ✅ **`a2/C15`** · **FERMÉ le 29/08/2026 — ET IL ÉTAIT BIEN PLUS LARGE QUE SON
+> LIBELLÉ.** *Preuve : `test_avertissements_non_avales.py`, 6 contrôles.*
+>
+> ⚠️⚠️ **CLASSÉ « C — IMPRÉCIS OU DATÉ », SUR UN SITE. RELEVÉ PAR AST : 40
+> SITES DANS 39 FICHIERS DE PRODUCTION**, tous de la même forme nue —
+> `direction_sante_prevoyance` **20** · `direction_non_vie` **13** ·
+> `direction_vie_epre` **5** · `demos` **2**. *Un filtre posé au niveau module
+> s'applique au PROCESSUS ENTIER dès l'import : tout appelant perdait les
+> avertissements de modules qu'il n'a jamais importés.*
+>
+> **CE QU'IL CACHAIT, MESURÉ SUR UN RUN RÉEL** :
+>
+> ```
+>   7x Pandas4Warning   `select_dtypes` -- NOTRE code, rupture pandas 4
+>   6x UserWarning      sklearn : « X does not have valid feature names »
+>   3x FutureWarning    statsmodels : le calcul du BIC change apres 0.13
+> ```
+>
+> ⚠️⚠️ **LE TROISIÈME PORTE SUR UN NOMBRE PUBLIÉ** : `bic` est écrit à **trois
+> sites** des métriques d'A3 et paraît au chapitre 1 du rapport signé. *Un
+> nombre publié dont la définition change, et l'avertissement était avalé.*
+>
+> ⚠️ **ET JE CORRIGE MON PROPRE SOUPÇON** : j'avais avancé qu'un GLM non
+> convergent préviendrait sans que personne ne le voie. **Aucun avertissement
+> de non-convergence sur ce portefeuille.** Le mécanisme est réel, la
+> trouvaille est ailleurs. *Une hypothèse mesurée vaut mieux qu'une hypothèse
+> plausible.*
+>
+> ⚠️ **ASSIETTE DU LOT, DÉCLARÉE** : seuls les **6 agents de tarification**
+> sont traités — le chantier en cours. Les **34 sites hors assiette** sont
+> **nommés et figés par un test** : s'il en apparaît un de plus, le défaut se
+> propage ; s'il en disparaît, quelqu'un les a traités hors relevé.
+> ⚠️ **12 filtres subsistent après correctif, TOUS TIERS** (torch 4, numpy 3,
+> scipy 2, pandas 1, plotly 1, IPython 1) — vérifié qu'**aucun ne vient de
+> nous**. Une bibliothèque tierce qui règle ses propres avertissements n'est
+> pas notre affaire.
+>
+> ⚠️⚠️ **ET UN DE MES FILETS A ÉTÉ RÉÉCRIT PAR SA PROPRE VIOLATION PLANTÉE** :
+> il faisait `catch_warnings() + simplefilter('always')`, donc il
+> **neutralisait lui-même** le filtre qu'il prétendait détecter — le filtre
+> remis, **il ne tombait pas**. Il tourne désormais en SOUS-PROCESSUS, sans
+> toucher aux filtres. *Un test qui installe ses propres conditions ne mesure
+> plus celles du code.*
+>
+> ⛔ **NOMMÉ, NON TRAITÉ** : le `Pandas4Warning` vient de NOTRE `select_dtypes`
+> et annonce une rupture pandas 4. Le corriger changerait **quelles colonnes
+> A2 encode** — un euro peut bouger. **Arbitrage requis, hors de ce lot.**
 **C16** — `__init__` crée `/tmp/actuaria` ([l.363](direction_non_vie/tarification/a2_preprocessing/agent.py:363)) — même mécanisme qu'A1.
 
 ### D — Vérifié comme BON (7)
