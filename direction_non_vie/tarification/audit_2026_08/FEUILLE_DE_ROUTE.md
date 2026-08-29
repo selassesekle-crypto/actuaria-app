@@ -13,8 +13,8 @@ l'état d'aujourd'hui.*
 
 | # | critère | état mesuré aujourd'hui |
 |---|---|---|
-| **S1** | **Rien de faux n'est publié** | ⛔ **85 constats ouverts** — *dérivés le 29/08 des clés de fermeture, méthode au §②* |
-| **S2** | **Rien de fermé ne peut régresser** | 🟡 **67 fermés, 1 partiel (`pipeline/C1`).** ✅ `a5/C5` n'est plus « corrigé sans être épinglé » : il est fermé ET épinglé, et le lot a montré qu'il se reproduisait encore par une SECONDE cause. ✅ **Et l'archive ne peut plus RETARDER sur le code** : `test_archive_fermeture_reportee.py` fait tomber la gate dès qu'un constat épinglé par un test n'a pas son bloc de fermeture -- le défaut mesuré le 28/08, où douze lots avaient été poussés sans être reportés. ⚠️ L'archive elle-même est désormais épinglée : `test_archive_cles_fermeture.py` fait tomber la gate sur un bloc de fermeture qui ne nomme pas son constat. ⚠️⚠️ **ET SON EXEMPTION EST SCOPÉE PAR FICHIER, mesuré le 29/08** : une exemption portant la seule clé aurait laissé passer un futur test qui ÉPINGLERAIT vraiment ce constat sans écrire son bloc — le défaut même que ce filet attrape. *Un garde-fou qui exclut la seule chose qui compte n'en est pas un.* Le fichier du garde-fou sort de sa propre assiette, sinon déclarer une exemption pour `x/Cn` créerait la mention que le filet reproche aussitôt |
+| **S1** | **Rien de faux n'est publié** | ⛔ **82 constats ouverts** — *dérivés le 29/08 des clés de fermeture, méthode au §②* |
+| **S2** | **Rien de fermé ne peut régresser** | 🟡 **70 fermés, 1 partiel (`pipeline/C1`).** ✅ `a5/C5` n'est plus « corrigé sans être épinglé » : il est fermé ET épinglé, et le lot a montré qu'il se reproduisait encore par une SECONDE cause. ✅ **Et l'archive ne peut plus RETARDER sur le code** : `test_archive_fermeture_reportee.py` fait tomber la gate dès qu'un constat épinglé par un test n'a pas son bloc de fermeture -- le défaut mesuré le 28/08, où douze lots avaient été poussés sans être reportés. ⚠️ L'archive elle-même est désormais épinglée : `test_archive_cles_fermeture.py` fait tomber la gate sur un bloc de fermeture qui ne nomme pas son constat. ⚠️⚠️ **ET SON EXEMPTION EST SCOPÉE PAR FICHIER, mesuré le 29/08** : une exemption portant la seule clé aurait laissé passer un futur test qui ÉPINGLERAIT vraiment ce constat sans écrire son bloc — le défaut même que ce filet attrape. *Un garde-fou qui exclut la seule chose qui compte n'en est pas un.* Le fichier du garde-fou sort de sa propre assiette, sinon déclarer une exemption pour `x/Cn` créerait la mention que le filet reproche aussitôt |
 | **S3** | **Un tarif signé se rejoue à l'identique** | 🟡 **RE-MESURÉ LE 27/08 — 2 fermés, 1 hérité, 1 PARTIEL.** ✅ **l'empreinte du plan est versionnée** : `s1:9b6d4f70080ad771`, **rejouée identique** sur les 20 plans (`2cb43ef`). ✅ **le livrable ne publie plus un `now()` sous l'étiquette « Arrêté »** : **0** site `_bandeau(… now …)`, contre **28** à l'origine ; absent → « non déclaré », illisible → « non déclaré (illisible : …) » (`ea37564`). ⬜ *hérité, non re-mesuré ici* : le tarif **déclaratif** reproductible au bit près (0,00e+00). ⚠️ **PARTIEL — le tarif DL** : le `seed` est **déclaré** (paramètre de `A5.run`), **appliqué** à `torch.manual_seed` et `np.random.seed` (l.528-529) et **inscrit au rapport**. ⚠️⚠️ **Mais la reproductibilité bout-en-bout n'est PAS prouvée ici** : elle demande un double run d'A5, non fait. *Le seed posé n'est pas la reproductibilité mesurée.* |
 | **S4** | **Un seul chemin — ou des chemins également gardés** | ⛔ **RE-MESURÉ LE 27/08 — inchangé, et l'asymétrie est nette.** **L'orchestrateur a toujours 0 appelant de production** (2 importeurs au total, tous hors production — relevé par AST). ⚠️⚠️ **Et la couche qualité départage les deux chemins** : `pipeline_tarifaire` (déclaratif) importe `core.qualite_donnees` **et** `core.conformite_reglementaire` ; `pipeline_agents` **n'en importe AUCUN**. *Deux chemins vers un tarif signé, un seul gardé.* ⬜ *non re-derivable* : le « 5 assemblages dans l'app » date d'une définition non consignée — **je ne le réaffirme pas sans la refaire**. |
 | **S5** | **Tout ce qui tarife est atteignable par une gate** | 🟡 **RE-MESURÉ LE 27/08, ET LA NUANCE COMPTE.** `actuaria_app.py` (**5 208 l**) est **importable** depuis le lot 0.1 (`07be8c0`) — mais **AUCUN test ne l'importe** ; **4 le LISENT comme un fichier** (`core/test_imports_app.py` le dit lui-même : *« ce test relit le fichier, il ne l'importe pas »*). ⚠️ *Ce qui est exercé, c'est sa STRUCTURE, pas son comportement.* ✅ `core/elasticite.py` (**988 l**) n'est plus hors de portée : **2 tests l'importent** (`test_elasticite.py`, `test_a4_ml.py`) — ⚠️ **testé n'est toujours pas audité**, il reste à l'ouverture HORS RANG. ⛔ `services/excel_helpers.py` (**151 l**) : **0 test ne l'importe**. |
@@ -39,9 +39,9 @@ lui-même**.
 | | |
 |---|---|
 | constats relevés (vagues 1 + 2) | **152** — *`a2/C17` ouvert le 29/08 par la re-mesure de `a2/C8` et `a2/C9` ; recomptés le 29/08 ; `a3/C19`, `services/C10`, `a5/C10` et `services/C11` sont des constats NEUFS, ouverts et fermés dans leur propre lot* |
-| fermés **et épinglés** | **67** |
+| fermés **et épinglés** | **70** |
 | corrigé, **non épinglé** | **0** — `a5/C5` épinglé le 29/08 · **partiel** : `pipeline/C1` |
-| **⛔ OUVERTS** | **85** |
+| **⛔ OUVERTS** | **82** |
 | lignes lues intégralement | **22 693** sur 23 863 du périmètre |
 | jamais auditées | **1 170 l** + `actuaria_app.py` (5 181 l) |
 | preuves qui se relancent | **35, 0 échec** |
@@ -281,19 +281,18 @@ les **figures** (8 constats) et les **valeurs numériques** (5). Le banc marque
 des chaînes — *un marqueur posé sur un nombre est détruit par l'arrondi*, et
 `metriques` **1/83 n'est pas un verdict, c'est un angle mort.**
 
-## RANG 2 — CE QUI AUTORISE CE PRIX · ⛔ **ROUVERT le 29/08/2026 — 9 fermés sur 10**
+## RANG 2 — CE QUI AUTORISE CE PRIX · ✅ **RE-CLOS le 29/08/2026 — 10 sur 10**
 
-> ⛔⛔ **IL ÉTAIT CLOS 9 SUR 9, ET IL NE L'EST PLUS.** La re-mesure d'`a2/C8`
-> sur une vraie fixture d'imputation l'a classé **rang 2** (accepté par
-> Selasse) : un rang clos peut être rouvert par une mesure, et *le dire vaut
-> mieux que garder un compte flatteur*. Le lot 2.4 ci-dessous est **ouvert,
-> non commencé** — deux questions lui sont rendues à l'arbitrage.
+> ⚠️⚠️ **IL A ÉTÉ ROUVERT PUIS REFERMÉ LE MÊME JOUR.** Clos 9/9, la re-mesure
+> d'`a2/C8` sur une vraie fixture d'imputation l'a rouvert à **9 sur 10** ; le
+> lot 2.4 le referme à **10 sur 10**. *Un rang clos peut être rouvert par une
+> mesure — le dire vaut mieux que garder un compte flatteur.*
 
 | lot | constats | ce que ça ferme |
 |---|---|---|
 | **2.1 Les garde-fous qui attestent sans surveiller** | ✅ **FERMÉS** `conformite/C1` `qualite/C2` · ✅ **`agents/C2` FERMÉ le 29/08** (`is not None` répondait à la mauvaise question : `_arbitrer` rend TOUJOURS un dict `a6`, échec compris) | `controle_effet_execute` atteste **la fourniture des arguments** · l'escalade compte **par type** (19,6 % exclus sans blocage) · `.success = True` **alors qu'A6 a échoué**. *Un contrôle qui atteste sans surveiller est pire qu'un contrôle absent : il ferme la question* |
 | **2.2 La couche qualité ne voit pas l'absence** | `qualite/C1` `a1/C3` `a1/C4` | **100 % de NaN → 0 anomalie** · `prime_pure > 0` · le double verdict sur `exposition = 0` |
-| **2.4 Un binaire imputé cesse d'être binaire** ⛔ **OUVERT** | ⛔ `a2/C8` — *et `a2/C7` devrait voyager avec lui, non tranché* | une colonne 0/1 imputée par la **moyenne 0,8152** sort avec **trois valeurs**, **40 lignes hors modalité**, et `_appliquer_facteur` ne vérifie les modalités **que** pour l'encodage `label`, **jamais** pour `binaire`. *Le GLM reçoit une variable dite binaire dont le coefficient ne contraste plus deux états.* ⚠️ **Atteignable par un binaire de SOURCE** — le plan MRH du dépôt en déclare trois |
+| **2.4 Un binaire imputé cesse d'être binaire** ✅ **CLOS** | ✅ **FERMÉS** `a2/C8` **et `a2/C7`** — arbitré : *ils voyagent ensemble, même défaut vu des deux côtés* · ✅ **`a2/C17` fermé PAR RETRAIT** dans le même lot | la table `STRATEGIES_IMPUTATION` est **lue** (prouvé en la changeant : `age` bascule de *moyenne 49,926* à *médiane 50,000*), le binaire reçoit le **mode** et sort en `[0.0, 1.0]`, et `_verifier_modalites_binaires` **lève** comme le fait `label` depuis toujours. *L'asymétrie entre les deux contrôles était le vrai défaut.* ⚠️ **7 violations plantées, 7 chutes** |
 | **2.3 La conformité affirmée sans condition** | ✅ **FERMÉS** `a6/C5` `conformite/C7` · ✅ **`conformite/C14` FERMÉ le 29/08** — l'en-tête borne enfin sa portée surveillée (**Non-Vie seule** ; `direction_vie_epre` **0** et `direction_sante_prevoyance` **0** importateurs, re-mesuré sur **446** fichiers), la règle CJUE restant universelle | conformité **affirmée sans condition** dans la fiche de décision · « **POUR TOUTE BRANCHE** » alors que seule la Non-Vie est surveillée · `controle_effet_execute` **n'atteint aucun livrable**. *C'est ce qui part au CAC et à l'ACPR* |
 
 ## RANG 3 — LA STATISTIQUE, ET LES API LATENTES · ✅ **CLOS le 27/08/2026**
@@ -485,8 +484,8 @@ cherchées comme mot entier dans ce fichier, **avant** puis **après** le titre
 
 | lecture | compte | comment il se dérive |
 |---|---|---|
-| constats **ouverts** | **85** | clés réelles moins clés fermées — **tenu par `ARCH-5`** |
-| dont **zone A2**, tous tracés au site le 29/08 | **14** | préfixe de la clé |
+| constats **ouverts** | **82** | clés réelles moins clés fermées — **tenu par `ARCH-5`** |
+| dont **zone A2**, tous tracés au site le 29/08 | **11** | préfixe de la clé |
 | ⛔ **hors A2, aucun tracé** | **71** | le complément — *exact, sans heuristique* |
 
 ⚠️⚠️ **ET LE DÉCOUPAGE « ALLOUÉ / NON ALLOUÉ » A ÉTÉ RETIRÉ : IL N'EST PAS
@@ -524,9 +523,10 @@ ce qui le contredit.* Le motif du chantier, appliqué à la carte elle-même.
 | `a2/C15` | ⛔ **40 sites, 39 fichiers** — voir ci-dessous | **✅ FERMÉ ce jour** |
 | `a2/C1` | ⚠️ **CORRIGÉ** : « Winsorisées : **7** » pour **7** réelles (le relevé mesurait 0 pour 9) | **✅ FERMÉ ce jour, épinglé** |
 | `a2/C2` | ⚠️ **CORRIGÉ** : `colonnes_non_encodees = []`, **VERT atteint** | **✅ FERMÉ ce jour, épinglé** |
-| `a2/C8` | ⛔ **VRAI, re-mesuré sur fixture d'imputation** : moyenne 0,8152 sur une colonne 0/1, **40 lignes hors modalité** | **✅ ALLOUÉ RANG 2** |
+| `a2/C8` | ⛔ **VRAI, re-mesuré sur fixture d'imputation** : moyenne 0,8152 sur une colonne 0/1, **40 lignes hors modalité** | **✅ FERMÉ, rang 2** |
 | `a2/C9` | ⛔ **VRAI** : 2 entrées sur 3 mal nommées ; borné, ne remonte pas au livrable | **✅ ALLOUÉ RANG 5** |
-| `a2/C17` | ⛔ **CONSTAT NEUF** — « Cela évite la fuite de données » : la fuite a lieu. **Latent** (`mode='predict'` : 0 appel) | **rang non attribué** |
+| `a2/C17` | ⛔ **CONSTAT NEUF** — « Cela évite la fuite de données » : la fuite a lieu. **Latent** (`mode='predict'` : 0 appel) | **✅ FERMÉ par retrait** |
+| `a2/C7` `a2/C13` *(C7 seul)* | `a2/C7` était classé rang 6 : c'était le **même défaut** que `a2/C8` | **✅ FERMÉ avec `a2/C8`** |
 | `a2/C5` | vrai (ni exclu, ni imputé ; `lignes_exclues` = compteur mort) — ⚠️ **mais les deux chemins de production sont protégés en amont** : A1 corrige, `controler_qualite` exclut (400 → 360). *Cette dépendance n'est pas dite dans A2.* | **7** |
 | `a2/C3 C4 C6 C10 C11 C12 C14` | docstrings et commentaires que le code contredit — ⚠️ **C10 vécu** : ma sonde a suivi l'exemple d'usage, A2 l'a refusé | **7** |
 | `a2/C7` `a2/C13` | code et déclaration morts | **6** |

@@ -224,6 +224,25 @@ STRATEGIES_IMPUTATION = {
     'binaire':               'mode',     # Fumeur, alarme, garanties 0/1
 }
 
+#: Les modalites d'un facteur `binaire`. Implicites, parce que le plan interdit
+#: a un binaire de porter un encodage : il produit sa colonne telle quelle, il
+#: n'y a donc aucune liste de modalites a declarer. C'est une definition, pas un
+#: reglage -- d'ou la constante plutot qu'un litteral disperse.
+_MODALITES_BINAIRES: frozenset = frozenset({0.0, 1.0})
+
+#: La table ci-dessus dit QUOI ; celles-ci disent COMMENT et sous quel nom.
+#: Les separer est ce qui permet a `_imputer` de LIRE la strategie declaree au
+#: lieu de la reecrire -- le defaut `a2/C7` etait exactement l'absence de ce
+#: lien.
+_CALCUL_IMPUTATION = {
+    'median': lambda s: s.median(),
+    'mean':   lambda s: s.mean(),
+    'mode':   lambda s: (s.mode().iloc[0] if not s.mode().empty else None),
+}
+
+#: Le libelle publie a l'actuaire pour chaque strategie.
+_LIBELLE_IMPUTATION = {'median': 'mediane', 'mean': 'moyenne', 'mode': 'mode'}
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CLASSE PRINCIPALE : AGENT A2 PREPROCESSING
@@ -408,7 +427,6 @@ class AgentA2Preprocessing:
         result_a1: Dict[str, Any],
         cible_frequence: str = 'nb_sinistres',
         cible_cout:      str = 'cout_total_sinistres',
-        mode:            str = 'train',
         plan: Optional["PlanTarifaire"] = None,   # Phase 2 : plan signé explicite
     ) -> Dict[str, Any]:
         """
@@ -426,10 +444,6 @@ class AgentA2Preprocessing:
         cible_cout : str
             Nom de la colonne cible pour le modèle de coût (GLM Gamma).
             Par défaut : 'cout_total_sinistres'
-
-        mode : str
-            'train' : calcule et sauvegarde les paramètres
-            'predict' : utilise les paramètres sauvegardés (nouvelles données)
 
         Retourne
         ────────
@@ -482,7 +496,7 @@ class AgentA2Preprocessing:
         try:
             # ── ÉTAPE 1 : IMPUTATION ──────────────────────────────────────────
             logger.info(f"[{audit_id}] Étape 1/6 : Imputation valeurs manquantes")
-            df, stats_imput = self._imputer(df, sous_branche, mode)
+            df, stats_imput = self._imputer(df, sous_branche, plan)
             rapport['etapes'].append('imputation')
             rapport['transformations']['imputation'] = stats_imput
 
@@ -531,9 +545,9 @@ class AgentA2Preprocessing:
                 len(df.columns) - rapport['nb_cols_debut']
             )
 
-            # Sauvegarde paramètres si mode train
-            if mode == 'train':
-                self._sauvegarder_parametres(sous_branche)
+            # Trace d'audit. ⚠️ Ce n'est plus conditionne a un mode : le
+            # mecanisme 'predict' a ete retire avec sa promesse (`a2/C17`).
+            self._sauvegarder_parametres(sous_branche)
 
             # Commentaire actuaire sénior
             statut_rag  = self._calculer_statut_rag(rapport, df)
@@ -890,6 +904,7 @@ class AgentA2Preprocessing:
         col = f.nom
         if f.type == "binaire":
             out[col] = pd.to_numeric(out[col], errors="coerce").astype(float)
+            self._verifier_modalites_binaires(f, out[col])
 
         elif f.type == "continu":
             # La colonne de base existe déjà (imputée/winsorisée). On n'ajoute que
@@ -940,42 +955,117 @@ class AgentA2Preprocessing:
                 f"{sorted(declarees)}). On lève plutôt que de produire une colonne "
                 f"one-hot/label silencieusement fausse (piège V9).")
 
+    @staticmethod
+    def _verifier_modalites_binaires(f: "Facteur", vals: pd.Series) -> None:
+        """Le pendant de `_verifier_modalites_connues`, pour le type `binaire`.
+
+        ⚠️⚠️ L'ASYMÉTRIE ÉTAIT LE DÉFAUT (`a2/C8`). Un facteur `label` dont une
+        modalité est inconnue fait LEVER ; un facteur `binaire` ne passait par
+        AUCUN contrôle. Mesuré : une colonne 0/1 imputée par la moyenne sortait
+        en `[0.0, 0.8152, 1.0]` — 40 lignes portant une valeur qui n'est pas une
+        modalité — et le GLM recevait une variable dite binaire dont le
+        coefficient ne contraste plus deux états.
+
+        ⚠️ Les modalités d'un binaire sont **implicites {0, 1}**, et c'est le
+        plan qui l'impose : un facteur binaire ne porte AUCUN encodage
+        (`plan_tarifaire`, « un facteur binaire ne s'encode pas ») et produit sa
+        seule colonne telle quelle. Il n'y a donc pas de modalités déclarées à
+        lire — il y a une définition à faire respecter.
+
+        On lève, comme pour `label` : produire une colonne silencieusement
+        fausse est pire que s'arrêter.
+        """
+        etrangeres = sorted(set(vals.dropna().unique()) - _MODALITES_BINAIRES)
+        if etrangeres:
+            # ⚠️ `float(...)` : sans lui le message publie « np.float64(2.0) ».
+            # Il est lu par un actuaire, pas par un interpreteur.
+            lisibles = [float(v) for v in etrangeres]
+            raise ValueError(
+                f"Facteur '{f.nom}' declare 'binaire' : valeur(s) HORS "
+                f"MODALITE {lisibles} — un binaire ne prend que "
+                f"{sorted(_MODALITES_BINAIRES)}. On leve plutot que de livrer "
+                f"aux modeles une variable dite binaire qui n'en est plus une "
+                f"(son coefficient ne contrasterait plus deux etats). Cause la "
+                f"plus frequente : une imputation par la moyenne au lieu du "
+                f"mode.")
+
     # ══════════════════════════════════════════════════════════════════════════
     # ÉTAPE 1 : IMPUTATION
     # ══════════════════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def _categorie_imputation(col: str, serie: pd.Series, cols_cat,
+                              binaires: set, mots_asymetriques: list):
+        """La categorie de `STRATEGIES_IMPUTATION` a laquelle cette colonne
+        appartient, ou None si aucune (type non gere -> repli).
+
+        ⚠️⚠️ L'ORDRE N'EST PAS LIBRE : `binaire` SE TESTE EN PREMIER. Un binaire
+        est numerique ; teste apres le dtype, il tombait dans
+        `numerique_symetrique` et recevait la MOYENNE. C'est exactement par la
+        que `a2/C8` passait.
+        ⚠️ Et c'est le PLAN qui dit ce qui est binaire, pas la forme des donnees
+        : le plan signe est l'autorite, deviner sur les valeurs observees ferait
+        dependre une strategie d'imputation du hasard d'un lot.
+        """
+        if col in binaires:
+            return 'binaire'
+        if col in cols_cat:
+            return 'categorielle'
+        if serie.dtype in ['int64', 'float64', 'int32', 'float32']:
+            return ('numerique_asymetrique'
+                    if any(mot in col.lower() for mot in mots_asymetriques)
+                    else 'numerique_symetrique')
+        return None
 
     def _imputer(
         self,
         df: pd.DataFrame,
         sous_branche: str,
-        mode: str
+        plan: "PlanTarifaire"
     ) -> Tuple[pd.DataFrame, Dict]:
         """
         Imputation des valeurs manquantes par type de variable.
 
-        STRATÉGIE ACTUARIELLE :
-        ────────────────────────
-        Variables numériques asymétriques (coûts, primes) → MÉDIANE
-        Justification : les distributions de coûts sont fortement
-        asymétriques à droite (quelques sinistres très coûteux).
-        La médiane est robuste aux outliers contrairement à la moyenne.
-        Imputer avec la moyenne introduirait un biais vers le haut.
+        ⚠️⚠️ LES STRATEGIES SONT LUES DANS `STRATEGIES_IMPUTATION`, PLUS
+        RECOPIEES ICI. C'etait `a2/C7` + `a2/C8`, un seul defaut vu des deux
+        cotes : la table n'etait lue par personne (mesure par AST -- une seule
+        occurrence dans tout le depot, sa propre definition) et cette fonction
+        en reecrivait TROIS entrees en dur. La quatrieme, `binaire -> mode`,
+        n'existait donc NULLE PART : une colonne 0/1 recevait la MOYENNE et
+        sortait avec une valeur qui n'est pas une modalite.
 
-        Variables numériques symétriques (âge, durée) → MOYENNE
-        Justification : les distributions d'âge sont quasi-normales.
-        La moyenne est un estimateur efficace pour ces distributions.
+        STRATEGIE ACTUARIELLE -- la justification de chaque entree de la table :
 
-        Variables catégorielles → MODE (modalité la plus fréquente)
-        Justification : on conserve la structure de distribution
-        sans introduire de nouvelle catégorie artificielle.
+        Variables numeriques asymetriques (couts, primes) -> MEDIANE
+        Les distributions de couts sont fortement asymetriques a droite
+        (quelques sinistres tres couteux). La mediane est robuste aux outliers ;
+        imputer par la moyenne introduirait un biais vers le haut.
 
-        Variables binaires (0/1) → MODE
-        Justification : on conserve la valeur majoritaire.
+        Variables numeriques symetriques (age, duree) -> MOYENNE
+        Les distributions d'age sont quasi-normales : la moyenne y est un
+        estimateur efficace.
 
-        NOTE IMPORTANTE :
-        Les paramètres d'imputation sont calculés en mode 'train'
-        et réutilisés en mode 'predict'. Cela évite la fuite de
-        données (data leakage) qui invaliderait la validation du modèle.
+        Variables categorielles -> MODE
+        On conserve la structure de distribution sans creer de categorie
+        artificielle.
+
+        Variables binaires (0/1) -> MODE
+        On conserve la valeur majoritaire. ⚠️ Et surtout : le mode EST une
+        modalite, la moyenne ne l'est pas. `_verifier_modalites_binaires`
+        refuse desormais le second cas.
+
+        ⚠️⚠️ CE QUI A ETE RETIRE ICI, ET POURQUOI (`a2/C17`) : cette docstring
+        promettait que les parametres calcules en 'train' etaient REUTILISES en
+        'predict', « ce qui evite la fuite de donnees ». Mesure : une colonne
+        saine au train ne laissait aucun parametre, et le repli
+        `.get(col, df[col].mean())` recalculait sur les donnees de PREDICT --
+        la fuite exacte que la phrase disait eviter. Le mecanisme etait mort
+        (aucun appelant en 'predict', `charger_parametres` sans appelant) : il a
+        ete retire AVEC sa promesse, plutot que repare. *Une garantie qu'on ne
+        tient pas vaut moins que pas de garantie du tout.*
+
+        `self.parametres` reste alimente : c'est une TRACE d'audit, sauvegardee
+        en JSON. Ce n'est plus une promesse de reproductibilite.
         """
         stats = {
             'nb_cellules_avant': int(df.isnull().sum().sum()),
@@ -1001,56 +1091,45 @@ class AgentA2Preprocessing:
         # Variables catégorielles
         cols_cat = df.select_dtypes(include=['object', 'category']).columns
 
+        # ⚠️ Le PLAN dit ce qui est binaire (cf. `_categorie_imputation`).
+        binaires = {f.nom for f in plan.facteurs if f.type == 'binaire'}
+
         for col in cols_avec_na:
-            nb_na = int(df[col].isnull().sum())
+            nb_na  = int(df[col].isnull().sum())
             pct_na = nb_na / len(df) * 100
+            valeur = None
 
-            if col in cols_cat:
-                # Imputation par le mode
-                if mode == 'train':
-                    valeur = df[col].mode()[0] if not df[col].mode().empty else 'INCONNU'
-                    self.parametres['modes'][col] = valeur
-                else:
-                    valeur = self.parametres['modes'].get(col, 'INCONNU')
+            categorie = self._categorie_imputation(
+                col, df[col], cols_cat, binaires, mots_asymetriques)
 
-                df[col] = df[col].fillna(valeur)
-                methode = 'mode'
-
-            elif df[col].dtype in ['int64', 'float64', 'int32', 'float32']:
-                # Choix médiane vs moyenne selon la nature de la variable
-                est_asymetrique = any(
-                    mot in col.lower() for mot in mots_asymetriques
-                )
-
-                if est_asymetrique:
-                    if mode == 'train':
-                        valeur = df[col].median()
-                        self.parametres['medianes'][col] = valeur
-                    else:
-                        valeur = self.parametres['medianes'].get(
-                            col, df[col].median()
-                        )
-                    methode = 'mediane'
-                else:
-                    if mode == 'train':
-                        valeur = df[col].mean()
-                        self.parametres['medianes'][col] = valeur
-                    else:
-                        valeur = self.parametres['medianes'].get(
-                            col, df[col].mean()
-                        )
-                    methode = 'moyenne'
-
-                df[col] = df[col].fillna(valeur)
-
-            else:
-                # Type inconnu → médiane si possible
+            if categorie is None:
+                # Type non gere par la table -> repli mediane si possible.
                 try:
                     valeur = df[col].median()
                     df[col] = df[col].fillna(valeur)
                     methode = 'mediane_fallback'
                 except Exception:
                     methode = 'non_imputee'
+            else:
+                strategie = STRATEGIES_IMPUTATION[categorie]
+                valeur    = _CALCUL_IMPUTATION[strategie](df[col])
+
+                # Comportement conserve : une categorielle sans mode calculable
+                # recoit une modalite explicite plutot que de rester vide.
+                if valeur is None and categorie == 'categorielle':
+                    valeur = 'INCONNU'
+
+                if valeur is None or (not isinstance(valeur, str)
+                                      and pd.isna(valeur)):
+                    methode = 'non_imputee'
+                else:
+                    df[col] = df[col].fillna(valeur)
+                    methode = _LIBELLE_IMPUTATION[strategie]
+                    # ⚠️ `medianes` heberge aussi les MOYENNES : c'est `a2/C9`,
+                    # classe rang 5, deliberement NON corrige ici. Renommer la
+                    # cle change le format d'un JSON persiste.
+                    cle = 'modes' if strategie == 'mode' else 'medianes'
+                    self.parametres[cle][col] = valeur
 
             stats['colonnes_imputees'][col] = {
                 'nb_na':   nb_na,
@@ -1358,27 +1437,6 @@ class AgentA2Preprocessing:
             return obj.tolist()
         else:
             return obj
-
-    def charger_parametres(self, sous_branche: str) -> bool:
-        """
-        Charge les paramètres sauvegardés pour le mode 'predict'.
-        Retourne True si les paramètres ont été chargés avec succès.
-        """
-        nom_fichier = f"params_a2_{sous_branche}.json"
-        chemin      = self.models_path / nom_fichier
-
-        if not chemin.exists():
-            logger.error(
-                f"Paramètres introuvables : {chemin}\n"
-                "Lancez d'abord le preprocessing en mode 'train'."
-            )
-            return False
-
-        with open(chemin, 'r', encoding='utf-8') as f:
-            self.parametres = json.load(f)
-
-        logger.info(f"Paramètres A2 chargés depuis : {chemin}")
-        return True
 
     def _sauvegarder_audit(
         self,

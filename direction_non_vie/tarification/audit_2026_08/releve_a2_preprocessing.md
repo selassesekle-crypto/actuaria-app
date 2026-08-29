@@ -87,6 +87,21 @@ Le diagnostic VERT dirait de même « La Winsorisation sur **0** variable(s) ré
 
 **C7 — `STRATEGIES_IMPUTATION` n'est jamais lu.** 1 seule mention dans le fichier : sa propre définition. Les stratégies sont ré-écrites en dur dans `_imputer`.
 
+> ✅ **`a2/C7`** · **FERMÉ le 29/08/2026, AVEC `a2/C8`** — arbitré : *« il
+> voyage avec `a2/C8`, même défaut vu des deux côtés »*. Il était classé rang 6
+> (« déclaration morte ») ; c'était le **même** défaut que `C8`, pas un voisin.
+> *Preuve : `test_imputation_par_la_table.py`, 2 contrôles.*
+>
+> ⚠️⚠️ **LE CONTRÔLE QUI FERME N'EST PAS « la table existe » — C'EST « la table
+> est LUE ».** On remplace `numerique_symetrique: 'mean'` par `'median'` dans la
+> table déclarée et **le comportement doit suivre** : mesuré, `age` passe de
+> *moyenne 49,926* à *médiane 50,000*. *Aucun `grep` ne peut prouver cela ; une
+> exécution si.* La violation plantée — réécrire la stratégie en dur — le fait
+> tomber.
+> ⚠️ Un second contrôle exerce **les quatre** catégories déclarées par le chemin
+> de production : une table dont trois entrées sur quatre seraient mortes serait
+> le même défaut, en plus discret.
+
 **C8 — La stratégie `'binaire' → 'mode'` n'est appliquée à rien.** Mesuré sur une colonne 0/1 (mode = 1.0) : imputée par la **moyenne, 0.789**.
 
 > ⛔ **`a2/C8` — RE-MESURÉ LE 29/08/2026 SUR UNE VRAIE FIXTURE D'IMPUTATION.**
@@ -122,7 +137,33 @@ Le diagnostic VERT dirait de même « La Winsorisation sur **0** variable(s) ré
 > ⚠️⚠️ **`C7` ET `C8` SONT LE MÊME DÉFAUT VU DES DEUX CÔTÉS** — la table n'est
 > pas lue (`C7`), donc la seule entrée sans équivalent en dur n'est jamais
 > appliquée (`C8`). Le tri classait `C7` au rang 6 ; **un correctif qui fait
-> lire la table ferme les deux**. *Point rendu à l'arbitrage, non tranché.*
+> lire la table ferme les deux**. *Arbitré : ils voyagent ensemble.*
+
+> ✅ **`a2/C8`** · **FERMÉ le 29/08/2026** (rang 2). *Preuve :
+> `test_imputation_par_la_table.py`, 5 contrôles, 7 violations plantées.*
+>
+> **Deux gestes, et l'arbitrage exigeait les deux** :
+> ① `_imputer` **lit** `STRATEGIES_IMPUTATION` — le `binaire -> mode` déclaré
+> s'applique enfin. Mesuré : la colonne 0/1 passe de *moyenne 0,8152* à
+> **mode 1,0**, et sort en `[0.0, 1.0]`.
+> ② `_verifier_modalites_binaires` **lève**, sur le modèle exact de
+> `_verifier_modalites_connues` : *l'asymétrie était le défaut* — un `label` à
+> modalité inconnue s'arrêtait, un `binaire` ne passait par aucun contrôle.
+>
+> ⚠️⚠️ **L'ORDRE DE CLASSEMENT N'EST PAS LIBRE** : un binaire **est** numérique.
+> Testé après le dtype, il retombait dans `numerique_symetrique` et recevait la
+> moyenne — *c'est exactement par là que le constat passait*. La violation
+> plantée « le binaire n'est plus testé en premier » le prouve.
+> ⚠️ **Et c'est le PLAN qui dit ce qui est binaire**, pas la forme des données :
+> deviner sur les valeurs observées ferait dépendre une stratégie d'imputation
+> du hasard d'un lot.
+>
+> ⚠️ **CE QUE LA MESURE A CORRIGÉ DANS MON PROPRE TEST** : j'attendais une
+> `ValueError` à travers `run`. Mesuré, `run` **échoue proprement** —
+> `success=False`, **statut ROUGE**, motif dans le `commentaire` que lit
+> l'actuaire. C'est le contrat d'agent, et c'est mieux : épingler la seule levée
+> aurait laissé passer une A2 qui **plante le pipeline** au lieu de rendre un
+> statut. Les deux niveaux sont désormais épinglés.
 
 **C9 — Une moyenne rangée sous la clé `medianes`.** `parametres['medianes']['age'] = 45.83` — la médiane réelle vaut 45.0. Ce dict est le paramètre de reproductibilité invoqué au titre de l'exigence S2.
 
@@ -159,6 +200,29 @@ Le diagnostic VERT dirait de même « La Winsorisation sur **0** variable(s) ré
 > mécanisme entier est du code mort — mais la phrase, elle, est publiée dans le
 > code que l'actuaire lit. *Le réparer ou le retirer avec sa promesse est une
 > question rendue à l'arbitrage.*
+
+> ✅ **`a2/C17`** · **FERMÉ le 29/08/2026 PAR RETRAIT** — arbitré : *« retire le
+> mécanisme mort avec sa fausse promesse, plutôt que de le réparer »*.
+> *Preuve : `test_imputation_par_la_table.py`, 3 contrôles.*
+>
+> Retirés : le paramètre `mode` de `run`, les branches `predict` d'`_imputer`,
+> `charger_parametres` (**21 lignes**), et **la phrase**. ⚠️ **Vérifié avant le
+> retrait, comme demandé** : `'predict'`, `charger_parametres` et `params_a2_`
+> n'apparaissaient **que dans A2** — 6 occurrences, **0 appelant**, et aucun
+> appelant du dépôt ne passait `mode` à `run` (mesuré par AST : tous passent
+> `plan=` en mot-clé, donc **aucun décalage d'argument positionnel**).
+>
+> ⚠️ **CE QUI N'A PAS ÉTÉ RETIRÉ, ET POURQUOI** : `_sauvegarder_parametres`
+> reste. C'est une **trace d'audit**, pas une promesse — le retirer aurait
+> dépassé l'arbitrage et supprimé une piste. Elle n'est simplement plus
+> conditionnée à un mode.
+>
+> ⚠️⚠️ **ET LE FILET N'ÉPINGLE PAS LE MOT « fuite » : IL ÉPINGLE L'AFFIRMATION.**
+> Le fichier en parle encore — il raconte pourquoi le mécanisme est parti, et
+> c'est voulu. Un filet qui chercherait le mot tomberait sur ce récit et ne
+> discriminerait rien. Il cherche les **phrases qui affirment** (« Cela évite la
+> fuite », « utilise les paramètres sauvegardés ») et **exige que `a2/C17` reste
+> cité** : sans sa raison écrite, quelqu'un remettra le mécanisme.
 
 ### C — Imprécis ou daté (7)
 

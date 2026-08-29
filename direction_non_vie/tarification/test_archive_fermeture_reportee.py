@@ -66,6 +66,12 @@ _HORS_ASSIETTE: dict[tuple[str, str], str] = {
         "l'exposition nulle pareil), pas epingle. `a2/C5` reste OUVERT. "
         "Retirer la mention detruirait une vraie trace ; une mention n'est "
         "pas une fermeture.",
+    ('a2/C9', 'test_imputation_par_la_table.py'):
+        "Cite pour dire POURQUOI le mode d'un binaire est range sous `modes` "
+        "et non sous `medianes` : l'y mettre aurait AJOUTE une occurrence a "
+        "`a2/C9` au lieu d'en retirer. `a2/C9` reste OUVERT, rang 5, "
+        "deliberement non corrige -- renommer la cle change le format d'un "
+        "JSON persiste. La mention est la trace de cette retenue.",
 }
 
 
