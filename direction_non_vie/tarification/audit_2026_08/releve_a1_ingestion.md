@@ -21,6 +21,28 @@
 
 Mesuré sur le vocabulaire réel (261 noms, 20 plans + `SYNONYMES_COLONNES`) : **4 faux positifs, tous facteurs déclarés** — `forme_juridique` (rcpro), `caution_solidaire` (GLI), `antecedents_accidents_3ans` (auto), `poids`. Tous contiennent `id` (jur**id**ique, sol**id**aire, acc**id**ents, po**id**s).
 
+> ✅ **`a1/C1`** · **FERMÉ le 30/08/2026 — ET IL ÉTAIT CORRIGÉ *ET* ÉPINGLÉ
+> DEPUIS UN MOMENT.** *Preuve : `test_a1_ingestion.py`, classe
+> `T_L_Identite_D_Un_Contrat_Se_Declare`, 3 violations plantées.*
+>
+> Le correctif, lu au site : l'identifiant vient **d'abord** de
+> `plan.identifiant_contrat` ([l.761](direction_non_vie/tarification/a1_ingestion/agent.py:761)),
+> la devinette par sous-chaîne n'est plus qu'un **repli qui ne se tait plus** —
+> `source_identifiant` vaut `plan`, `devinee` ou `aucune`, **chacun avec son
+> avertissement**. Le contrôle plante exactement le scénario du relevé :
+> `forme_juridique` (qui contient « id ») **avant** `id_contrat`, et A1 retient
+> `id_contrat`.
+>
+> ⚠️⚠️ **CE QUI MANQUAIT N'ÉTAIT NI LE CODE NI LE CONTRÔLE : C'ÉTAIT LE LIEN.**
+> Aucun test ne **nommait** `a1/C1`. `ARCH-1` n'exige un bloc de fermeture que
+> pour un constat **nommé** par un test : il ne pouvait donc pas voir celui-ci,
+> et le constat comptait OUVERT alors qu'il était fait. **Quatrième état,
+> distinct du troisième** (« corrigé, aucun contrôle »). Le nommage est posé
+> dans la classe de test — c'est lui, autant que le bloc, qui ferme.
+>
+> ⚠️ **Le repli reste, et c'est délibéré** : les vingt plans du dépôt ne
+> déclarent rien. *Il est légitime tant qu'il se déclare.*
+
 ⚠️ **Atteint la production** : l'app appelle `a1.run(dataframe=df, …)` ([actuaria_app.py:3540](actuaria_app.py:3540)) avec le fichier client **dans son ordre d'origine**. Le sens de l'erreur est un **faux ROUGE** — il rejette du bon, il ne laisse pas passer du mauvais.
 
 ### B — Affirme plus que le code ne porte (4)
@@ -43,6 +65,22 @@ Mesuré sur le vocabulaire réel (261 noms, 20 plans + `SYNONYMES_COLONNES`) : *
 
 **C5** — `SYNONYMES_COLONNES` porte 2 doublons : `id_police` et `nb_sin`, chacun deux fois.
 **C6** — `warnings.filterwarnings('ignore')` au niveau **module** ([l.52](direction_non_vie/tarification/a1_ingestion/agent.py:52)) : mesuré, après l'import le premier filtre du process est `('ignore', None, <class 'Warning'>, None, 0)`. **Tout le process** est muet, pas seulement A1.
+
+> ✅ **`a1/C6`** · **FERMÉ le 30/08/2026 — ET IL AVAIT ÉTÉ CORRIGÉ PAR LE LOT
+> D'UNE AUTRE ZONE, SANS QUE PERSONNE NE LE SACHE.**
+> *Preuve : `test_avertissements_non_avales.py`, violation plantée sur A1 seul.*
+>
+> ⚠️⚠️ **LE JUMEAU INTER-ZONES.** Le lot mesurait **`a2/C15`** — le *même*
+> défaut, relevé dans la zone A2, à **40 sites** — et son correctif a traité
+> **les six agents**, donc A1. Le site porte le numéro `a2/C15` ; `a1/C6` est
+> resté **OUVERT au compte** tout ce temps.
+>
+> > ### **Un correctif mesuré dans une zone peut fermer un constat d'une AUTRE zone. Si rien ne le nomme, le compte publié reste faux.**
+>
+> Mesuré au site : **aucun `filterwarnings` actif** dans A1, il ne reste que le
+> commentaire qui raconte le retrait. Le filet couvre les six agents, et la
+> violation plantée le confirme **sur A1 seul** — *un filet qui ne tirerait que
+> sur le total n'aurait rien prouvé pour cette zone.*
 **C7** — Instancier A1 **écrit sur le disque** : `/tmp/actuaria/{audit,config}` créés. L'app le fait à chaque run (`base_path` non passé).
 **C8** — **L'audit trail persisté est perdu en silence.** Dossier écrivable → `A1_….json` écrit. Dossier inécrivable → aucun fichier, `success=True`, `erreur=None`, `alertes=[]`. Le dict `audit_trail` reste dans le résultat ; c'est la **trace persistée** qui disparaît sans un mot.
 **C9** — `verifier_tous_fichiers` : **1 mention, 0 appel**, et elle annonce des fichiers Vie/Santé hors périmètre depuis le 11/07.

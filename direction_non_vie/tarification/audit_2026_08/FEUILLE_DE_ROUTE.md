@@ -13,8 +13,8 @@ l'état d'aujourd'hui.*
 
 | # | critère | état mesuré aujourd'hui |
 |---|---|---|
-| **S1** | **Rien de faux n'est publié** | ⛔ **82 constats ouverts** — *dérivés le 29/08 des clés de fermeture, méthode au §②* |
-| **S2** | **Rien de fermé ne peut régresser** | 🟡 **70 fermés, 1 partiel (`pipeline/C1`).** ✅ `a5/C5` n'est plus « corrigé sans être épinglé » : il est fermé ET épinglé, et le lot a montré qu'il se reproduisait encore par une SECONDE cause. ✅ **Et l'archive ne peut plus RETARDER sur le code** : `test_archive_fermeture_reportee.py` fait tomber la gate dès qu'un constat épinglé par un test n'a pas son bloc de fermeture -- le défaut mesuré le 28/08, où douze lots avaient été poussés sans être reportés. ⚠️ L'archive elle-même est désormais épinglée : `test_archive_cles_fermeture.py` fait tomber la gate sur un bloc de fermeture qui ne nomme pas son constat. ⚠️⚠️ **ET SON EXEMPTION EST SCOPÉE PAR FICHIER, mesuré le 29/08** : une exemption portant la seule clé aurait laissé passer un futur test qui ÉPINGLERAIT vraiment ce constat sans écrire son bloc — le défaut même que ce filet attrape. *Un garde-fou qui exclut la seule chose qui compte n'en est pas un.* Le fichier du garde-fou sort de sa propre assiette, sinon déclarer une exemption pour `x/Cn` créerait la mention que le filet reproche aussitôt |
+| **S1** | **Rien de faux n'est publié** | ⛔ **80 constats ouverts** — *dérivés le 29/08 des clés de fermeture, méthode au §②* |
+| **S2** | **Rien de fermé ne peut régresser** | 🟡 **72 fermés, 1 partiel (`pipeline/C1`).** ✅ `a5/C5` n'est plus « corrigé sans être épinglé » : il est fermé ET épinglé, et le lot a montré qu'il se reproduisait encore par une SECONDE cause. ✅ **Et l'archive ne peut plus RETARDER sur le code** : `test_archive_fermeture_reportee.py` fait tomber la gate dès qu'un constat épinglé par un test n'a pas son bloc de fermeture -- le défaut mesuré le 28/08, où douze lots avaient été poussés sans être reportés. ⚠️ L'archive elle-même est désormais épinglée : `test_archive_cles_fermeture.py` fait tomber la gate sur un bloc de fermeture qui ne nomme pas son constat. ⚠️⚠️ **ET SON EXEMPTION EST SCOPÉE PAR FICHIER, mesuré le 29/08** : une exemption portant la seule clé aurait laissé passer un futur test qui ÉPINGLERAIT vraiment ce constat sans écrire son bloc — le défaut même que ce filet attrape. *Un garde-fou qui exclut la seule chose qui compte n'en est pas un.* Le fichier du garde-fou sort de sa propre assiette, sinon déclarer une exemption pour `x/Cn` créerait la mention que le filet reproche aussitôt |
 | **S3** | **Un tarif signé se rejoue à l'identique** | 🟡 **RE-MESURÉ LE 27/08 — 2 fermés, 1 hérité, 1 PARTIEL.** ✅ **l'empreinte du plan est versionnée** : `s1:9b6d4f70080ad771`, **rejouée identique** sur les 20 plans (`2cb43ef`). ✅ **le livrable ne publie plus un `now()` sous l'étiquette « Arrêté »** : **0** site `_bandeau(… now …)`, contre **28** à l'origine ; absent → « non déclaré », illisible → « non déclaré (illisible : …) » (`ea37564`). ⬜ *hérité, non re-mesuré ici* : le tarif **déclaratif** reproductible au bit près (0,00e+00). ⚠️ **PARTIEL — le tarif DL** : le `seed` est **déclaré** (paramètre de `A5.run`), **appliqué** à `torch.manual_seed` et `np.random.seed` (l.528-529) et **inscrit au rapport**. ⚠️⚠️ **Mais la reproductibilité bout-en-bout n'est PAS prouvée ici** : elle demande un double run d'A5, non fait. *Le seed posé n'est pas la reproductibilité mesurée.* |
 | **S4** | **Un seul chemin — ou des chemins également gardés** | ⛔ **RE-MESURÉ LE 27/08 — inchangé, et l'asymétrie est nette.** **L'orchestrateur a toujours 0 appelant de production** (2 importeurs au total, tous hors production — relevé par AST). ⚠️⚠️ **Et la couche qualité départage les deux chemins** : `pipeline_tarifaire` (déclaratif) importe `core.qualite_donnees` **et** `core.conformite_reglementaire` ; `pipeline_agents` **n'en importe AUCUN**. *Deux chemins vers un tarif signé, un seul gardé.* ⬜ *non re-derivable* : le « 5 assemblages dans l'app » date d'une définition non consignée — **je ne le réaffirme pas sans la refaire**. |
 | **S5** | **Tout ce qui tarife est atteignable par une gate** | 🟡 **RE-MESURÉ LE 27/08, ET LA NUANCE COMPTE.** `actuaria_app.py` (**5 208 l**) est **importable** depuis le lot 0.1 (`07be8c0`) — mais **AUCUN test ne l'importe** ; **4 le LISENT comme un fichier** (`core/test_imports_app.py` le dit lui-même : *« ce test relit le fichier, il ne l'importe pas »*). ⚠️ *Ce qui est exercé, c'est sa STRUCTURE, pas son comportement.* ✅ `core/elasticite.py` (**988 l**) n'est plus hors de portée : **2 tests l'importent** (`test_elasticite.py`, `test_a4_ml.py`) — ⚠️ **testé n'est toujours pas audité**, il reste à l'ouverture HORS RANG. ⛔ `services/excel_helpers.py` (**151 l**) : **0 test ne l'importe**. |
@@ -39,9 +39,9 @@ lui-même**.
 | | |
 |---|---|
 | constats relevés (vagues 1 + 2) | **152** — *`a2/C17` ouvert le 29/08 par la re-mesure de `a2/C8` et `a2/C9` ; recomptés le 29/08 ; `a3/C19`, `services/C10`, `a5/C10` et `services/C11` sont des constats NEUFS, ouverts et fermés dans leur propre lot* |
-| fermés **et épinglés** | **70** |
+| fermés **et épinglés** | **72** |
 | corrigé, **non épinglé** | **0** — `a5/C5` épinglé le 29/08 · **partiel** : `pipeline/C1` |
-| **⛔ OUVERTS** | **82** |
+| **⛔ OUVERTS** | **80** |
 | lignes lues intégralement | **22 693** sur 23 863 du périmètre |
 | jamais auditées | **1 170 l** + `actuaria_app.py` (5 181 l) |
 | preuves qui se relancent | **35, 0 échec** |
@@ -510,9 +510,9 @@ cherchées comme mot entier dans ce fichier, **avant** puis **après** le titre
 
 | lecture | compte | comment il se dérive |
 |---|---|---|
-| constats **ouverts** | **82** | clés réelles moins clés fermées — **tenu par `ARCH-5`** |
-| dont **zone A2**, tous tracés au site le 29/08 | **11** | préfixe de la clé |
-| ⛔ **hors A2, aucun tracé** | **71** | le complément — *exact, sans heuristique* |
+| constats **ouverts** | **80** | clés réelles moins clés fermées — **tenu par `ARCH-5`** |
+| dont **zones TRIÉES** (`a2` 11 · `pipeline` 9 · `a1` 6) | **26** | préfixe de la clé |
+| ⛔ **jamais tracés** | **54** | le complément — *exact, sans heuristique* |
 
 ⚠️⚠️ **ET LE DÉCOUPAGE « ALLOUÉ / NON ALLOUÉ » A ÉTÉ RETIRÉ : IL N'EST PAS
 DÉRIVABLE.** Mesuré le 29/08 — **trois méthodes plausibles rendent 7, 9 et
@@ -587,8 +587,12 @@ jumeau sur le chemin déclaratif est une piste **bon marché et non explorée**.
 
 ### ✅ A1 — LES 8, TRACÉS AU SITE (30/08)
 
-⚠️⚠️ **CE QUE CETTE ZONE APPREND : DEUX CONSTATS SONT DÉJÀ CORRIGÉS *ET*
-ÉPINGLÉS — SEUL LE REPORT MANQUE.** C'est un **quatrième état**, distinct du
+✅ **LES DEUX FERMABLES ONT ÉTÉ FERMÉS LE 30/08** (`a1/C1`, `a1/C6`) : trois
+violations plantées, trois chutes — *l'épinglage était réel, seul le lien
+manquait*. **Il reste 6 constats ouverts en A1.**
+
+⚠️⚠️ **CE QUE CETTE ZONE APPREND : DEUX CONSTATS ÉTAIENT DÉJÀ CORRIGÉS *ET*
+ÉPINGLÉS — SEUL LE REPORT MANQUAIT.** C'est un **quatrième état**, distinct du
 troisième : ni « corrigé sans contrôle », ni « ouvert », mais **corrigé, épinglé,
 non reporté**. ⚠️ Et `ARCH-1` ne peut pas l'attraper : il exige un bloc de
 fermeture pour tout constat **nommé** par un test — or ces tests-là **ne nomment
@@ -597,14 +601,20 @@ précisément ce que le tri sert à trouver.*
 
 | constat | mesuré au site le 30/08 | rang proposé |
 |---|---|---|
-| **`a1/C1`** | ✅ **CORRIGÉ** : l'identifiant vient d'abord de `plan.identifiant_contrat` (l.761), la devinette n'est qu'un repli **qui ne se tait plus** (`source_identifiant` publié : `plan` / `devinee` / `aucune`, chacun avec son avertissement). ✅ **ÉPINGLÉ** : `POS-A1c` et `POS-A1d` dans `test_a1_ingestion.py`. ⛔ **NON REPORTÉ**, et **aucun test ne nomme `a1/C1`** | **FERMABLE** — bloc + nommage |
-| **`a1/C6`** | ✅ **CORRIGÉ** : plus aucun `filterwarnings` actif dans A1 (il ne reste que le commentaire qui raconte son retrait). ✅ **ÉPINGLÉ** : `test_avertissements_non_avales.py` couvre **les six agents**, `a1_ingestion` compris. ⛔ **NON REPORTÉ** | **FERMABLE** — bloc + nommage |
+| **`a1/C1`** | ✅ **CORRIGÉ** : l'identifiant vient d'abord de `plan.identifiant_contrat` (l.761), la devinette n'est qu'un repli **qui ne se tait plus**. ✅ **ÉPINGLÉ** : `POS-A1c` et `POS-A1d`. ⚠️ Il manquait **le lien**, pas le travail | **✅ FERMÉ le 30/08** |
+| **`a1/C6`** | ✅ **CORRIGÉ PAR LE LOT D'UNE AUTRE ZONE** — le correctif d'`a2/C15` a traité **les six agents**, donc A1 ; le site porte le numéro `a2/C15` et `a1/C6` est resté ouvert au compte. ✅ **ÉPINGLÉ**, violation plantée **sur A1 seul** | **✅ FERMÉ le 30/08** |
 | **`a1/C8`** | ⛔ **VRAI** — `_sauvegarder_audit` l.1091-1095 : `try / except Exception: pass`. **La trace d'audit persistée disparaît sans un mot**, `success=True`, `erreur=None`, `alertes=[]`. *C'est la pièce que le CAC et l'ACPR viennent chercher.* | **5** |
 | **`a1/C2`** | ⛔ **VRAI, inchangé** — le commentaire l.180 dit « Empêche qu'un portefeuille Vie ou Santé soit ingéré » ; `_charger_fichier` parcourt `['non_vie', 'vie', 'sante_prevoyance']` (l.496). Le garde bloque le **paramètre** `branche`, pas le **chemin**. ⚠️ **BORNE** : l'app ne passe **jamais** `fichier=`. *Latent.* | **3** |
 | **`a1/C10`** | ⛔ **VRAI, ET LA DÉRIVE CONTINUE** : l'en-tête annonce « 7 tests », le relevé en comptait **9**, il y en a **13** aujourd'hui. *Un compte annoncé qui n'est rattaché à rien vieillit tout seul.* | **7** |
 | **`a1/C5`** | ⛔ **VRAI** — `'id_police'` **2 fois** dans `id_contrat`, `'nb_sin'` **2 fois** dans `nb_sinistres`. ⚠️ **BORNE MESURÉE** : les doublons sont **intra-liste**, **aucun synonyme n'est revendiqué par deux colonnes standard** — donc **aucun effet sur le mapping**. Redondance pure. | **7** |
 | **`a1/C7`** | ⛔ **VRAI** — `__init__` fait `mkdir` (l.244-245). **Même famille qu'`a2/C16`**, déjà classé 7 : *ils doivent voyager ensemble.* | **7** |
 | **`a1/C9`** | ⛔ **VRAI** — `verifier_tous_fichiers` : **1 définition, 0 appel** (AST, tout le dépôt), et elle annonce des fichiers Vie/Santé hors périmètre. | **7** |
+
+> ⚠️⚠️ **ET `a1/C6` DONNE UNE DEUXIÈME FORME AU JUMEAU** : `pipeline/C2` montre
+> un correctif qui n'atteint qu'**un chemin sur deux** ; `a1/C6` montre un
+> correctif qui **ferme un constat d'une autre zone sans que le compte le
+> sache**. *Les deux se cherchent de la même façon — en partant du SITE, pas du
+> numéro.*
 
 > ⚠️⚠️ **ET J'AI FAILLI DÉCLARER `a1/C5` CORRIGÉ, SUR LE MAUVAIS OBJET.**
 > Ma première mesure comptait les **clés** du dictionnaire — 15, aucun doublon —
@@ -616,7 +626,8 @@ précisément ce que le tri sert à trouver.*
 > **Arbitré le 30/08 : pas maintenant, mais noté.** `pipeline/C2` a montré qu'un
 > correctif peut n'atterrir que sur **un** des deux chemins de production.
 > **Reprendre TOUS les constats fermés en août et vérifier, pour chacun, s'il a
-> un jumeau vivant sur le chemin déclaratif.** *« Corrigé OÙ ? » vaut aussi
+> un jumeau vivant sur le chemin déclaratif** — ⚠️ **et aussi un jumeau dans une
+> AUTRE ZONE resté ouvert au compte**, comme `a1/C6` fermé par le lot d'`a2/C15`. *« Corrigé OÙ ? » vaut aussi
 > entre deux chemins qui font le même métier.* À lancer **quand le tri est
 > terminé**, pas avant.
 

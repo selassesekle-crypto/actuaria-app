@@ -215,7 +215,15 @@ def _historique_renouvellement(n_contrats=200, n_echeances=3, seed=4):
 
 
 class T_L_Identite_D_Un_Contrat_Se_Declare(unittest.TestCase):
-    """CONTRÔLE POSITIF — l'identité est un RÔLE déclaré, pas une devinette.
+    """CONTRÔLE POSITIF — `a1/C1` — l'identité est un RÔLE déclaré, pas une
+    devinette.
+
+    ⚠️⚠️ LE CONSTAT EST NOMMÉ ICI DEPUIS LE 30/08/2026, ET C'EST LE POINT.
+    Ces contrôles gardaient déjà `a1/C1`, mais **aucun ne le nommait** : rien ne
+    reliait le contrôle au constat qu'il protège, `ARCH-1` ne pouvait donc pas
+    voir qu'il manquait un bloc de fermeture, et le constat comptait OUVERT
+    alors qu'il était corrigé ET épinglé. *Un quatrième état, distinct du
+    troisième — qui est « corrigé, aucun contrôle ».*
 
     ⚠️ MESURÉ SUR LES VINGT PLANS DU DÉPÔT. A1 prend
     `[c for c in df.columns if 'id' in c.lower() or 'pol' in c.lower()]` puis

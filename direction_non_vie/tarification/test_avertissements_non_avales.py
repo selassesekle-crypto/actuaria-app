@@ -84,7 +84,17 @@ class TestAucunEffetDeBordGlobal(unittest.TestCase):
     """`a2/C15` — les six agents ne touchent plus l'état du processus."""
 
     def test_les_SIX_agents_ne_posent_plus_de_filtre(self):
-        """⚠️⚠️ LE TEST QUI FERME LE CONSTAT — au niveau module, par AST."""
+        """⚠️⚠️ LE TEST QUI FERME LE CONSTAT — au niveau module, par AST.
+
+        ⚠️⚠️ ET IL FERME AUSSI `a1/C6`, CE QUE PERSONNE N'AVAIT VU. Le lot
+        mesurait `a2/C15` -- le meme defaut, releve dans la zone A2, a 40
+        sites -- et son correctif a traite les SIX agents, donc A1 aussi. Mais
+        le site porte le numero `a2/C15` : `a1/C6`, le jumeau du meme defaut
+        dans la zone A1, est reste OUVERT au compte pendant tout ce temps.
+
+        ⚠️ *Un correctif mesure dans une zone peut fermer un constat d'une
+        AUTRE zone. Si rien ne le nomme, le compte publie reste faux.*
+        """
         fautifs = {}
         for agent in _AGENTS:
             lignes = _filtres_niveau_module(_RACINE / agent / 'agent.py')
