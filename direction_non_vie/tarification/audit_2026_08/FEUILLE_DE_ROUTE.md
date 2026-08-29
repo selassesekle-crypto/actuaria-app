@@ -385,7 +385,7 @@ différents se lisent pareil*) · ⚠️ **`C10` l'ambre du RAG EST l'or des axe
 
 ✅ **`agents/C4` FERMÉ** — `resume()` ne génère plus de date, elle est capturée une fois par le run et réutilisée. ⚠️ **Et le nouveau garde-fou a tiré sur ce lot même**, une heure après avoir été écrit : le test épinglait `agents/C4` avant que son bloc n'existe. *Il fonctionne sur un cas réel, pas seulement sur sa violation plantée.*
 
-## RANG 6 — LE CÂBLAGE · 🟡 **1 sur 4 CLOS · les 3 autres À RE-MESURER**
+## RANG 6 — LE CÂBLAGE · 🟡 **1 sur 4 CLOS · les 3 autres RE-MESURÉS, INCHANGÉS**
 
 `agents/C1` `qualite/C4` `socle/C2` + le chantier ④.
 ✅ **`conformite/C10` FERMÉ le 29/08/2026, ET IL N'APPARTENAIT PAS À CE RANG** :
@@ -395,18 +395,51 @@ est nommée. ⚠️ **Ampleur mesurée, non gonflée** : 0 colonne texte sur 22 
 réels du détecteur (agent ET déclaratif) — défaut réel dans la fonction,
 **latent** sur les chemins.
 
-⛔⛔ **ET LES TROIS RESTANTS ONT CHANGÉ DE STATUT SANS QUE CE DOCUMENT LE
-SACHE** — re-mesuré le 29/08, vérifié au site :
+## ⚠️⚠️ RE-MESURE COMPLÈTE DU RANG 6 (29/08/2026) — ET ELLE CORRIGE MA PROPRE MESURE
 
-| constat | ce que ce document disait | mesuré |
-|---|---|---|
-| `agents/C1` | `pipeline_agents` : 0 appelant de production | ✅ **toujours 0** |
-| `qualite/C4` | les 7 détecteurs : **0 appel** | ⚠️ `detecter_negatifs` **2**, les 3 autres **1** — `core/qualite_donnees.py:231/235` |
-| `socle/C2` | le moteur de mapping : 0 production | ⚠️ `valider_mapping` **2**, `appliquer_mapping` **1**, `charger_mapping` **1** ; seul `preparer_fichier_client` reste à 0 |
+> ### ⛔⛔ CE DOCUMENT A PORTÉ, PENDANT UN LOT, UNE AFFIRMATION FAUSSE QUE J'Y AI ÉCRITE.
 
-*Le câblage s'est fait EN CHEMIN, pendant les lots des rangs 1 et 2.* **Ce rang
-demande une RE-MESURE avant d'être ouvert** — deux de ses constats sont
-peut-être fermables par un simple contrôle positif (le troisième état, encore).
+J'avais annoncé que `qualite/C4` et `socle/C2` **avaient changé de statut** —
+« `detecter_negatifs` 2 appels », « `valider_mapping` 2 ». **C'est FAUX.** Mon
+compteur additionnait les appels **internes au module qui définit la fonction** :
+`controler_qualite` appelle ses propres détecteurs, `mapping_llm` appelle
+`valider_mapping` de `mapping_client`. Ce ne sont pas des appelants — c'est un
+module qui se sert de lui-même.
+
+> ### **Un compte d'APPELANTS doit exclure le module qui DÉFINIT la fonction — sinon tout module cohérent paraît câblé.**
+
+**RE-MESURE, MÉTHODE REJOUABLE** : parcourir les `.py` hors `.venv`, **exclure
+les fichiers `test_*` ET les modules de définition**, compter les `ast.Call`
+dont le nom est celui de la fonction.
+
+| constat | appelants EXTERNES de production |
+|---|---|
+| `agents/C1` — `pipeline_agents` | **0** |
+| `qualite/C4` — les 7 détecteurs | **0** |
+| `socle/C2` — le moteur de mapping (5 symboles) | **0** |
+
+**LES TROIS SONT INCHANGÉS DEPUIS LEUR RELEVÉ. Aucun n'est dans le « troisième
+état ».** Le câblage ne s'est pas fait en chemin : je l'avais cru sur une mesure
+fausse.
+
+### ⚠️ ET LES TROIS DÉFAUTS D'`agents/C1` SONT INTACTS, VÉRIFIÉS UN PAR UN
+
+**①** quatre fichiers de production assemblent la chaîne à la main —
+`actuaria_app.py` **6/6**, `demos/pipeline_3lob_a1_a6_demo.py` **5/6**,
+`scripts/rapport_tarif_local.py` **5/6**, et `demos/fremtpl2_demo.py` **3/6**
+(celui-là est NOUVEAU depuis le relevé).
+**②** `result_a5=None` subsiste en production : `pipeline_3lob_a1_a6_demo.py:152`
+et `rapport_tarif_local.py:112`.
+**③** les trois appelants ne passent que `col_cible='nb_sinistres'` : **la moitié
+du tarif — le COÛT — n'est toujours jamais challengée.**
+
+### ⛔ CE QUE LE RANG 6 DEMANDE VRAIMENT
+
+Ce n'est pas un lot de correction : **c'est un câblage**, et il touche des
+surfaces arbitrées. `actuaria_app.py` est **intouchable** (arbitré, l'app
+disparaît). Restent les deux scripts et les démos — et la question de fond,
+*qui doit appeler l'orchestrateur*, est une décision d'architecture, pas une
+correction de constat. **Rien n'est ouvert ici sans arbitrage explicite.**
 
 **Toujours dernier des rangs** : c'est le **remède**, pas le défaut. Câbler
 l'orchestrateur avant les rangs 1-4 propagerait leurs défauts sur **trois**
