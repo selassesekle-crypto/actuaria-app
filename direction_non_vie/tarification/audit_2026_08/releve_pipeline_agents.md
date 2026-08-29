@@ -82,6 +82,29 @@ Le `resume()` — que la docstring appelle **« le livrable d'audit »** — pub
 d'A3, en revanche, `.success` est correctement `False`** : c'est le seul des
 deux échecs que la propriété regarde.
 
+> ✅ **`agents/C2`** · **FERMÉ le 29/08/2026.**
+> *Preuve : `test_succes_et_portee.py`, 5 contrôles.*
+>
+> ⚠️⚠️ **`is not None` RÉPONDAIT À LA MAUVAISE QUESTION.** `_arbitrer` rend
+> **toujours** un dict `a6` — A6 en échec en rend un aussi, avec
+> `success: False`. La propriété lit désormais **le drapeau d'A6**, pas la
+> présence de l'objet. *Un objet présent n'est pas un objet qui a réussi.*
+>
+> ⚠️ **ON LIT LE DRAPEAU, PAS UNE FORME.** A6 pose `success` sur ses deux
+> sorties (nominal et `_erreur`) — **vérifié par exécution avant d'écrire le
+> correctif**. Déduire l'échec d'un `classement` vide aurait été deviner par
+> un symptôme.
+> ⚠️ **LES TROIS FORMES D'ÉCHEC** sont couvertes : `a6` absent, `a6` vide,
+> `a6` en échec. L'ancienne n'attrapait que la première — la seule que le
+> pipeline produit lui-même, donc la seule qui marchait **par accident**.
+> ⚠️⚠️ **SECOND SENS** : le cas nominal publie toujours un succès. *Un
+> correctif qui rendrait tout faux fermerait le constat en détruisant
+> l'information.*
+> ⚠️ **LA PORTÉE NE CHANGE PAS** : `.success` ne regarde que A3 et la
+> FRÉQUENCE, comme la docstring de la classe l'explique. Un test fait tomber
+> la gate si `cout` ou `prime_pure` y entraient en silence. *Ce lot corrige ce
+> qui est TESTÉ, pas ce qui est REGARDÉ.*
+
 ### B — Affirme plus que le code ne porte (2)
 
 **C3 — La cible FRÉQUENCE n'est pas protégée, les deux autres le sont.** La

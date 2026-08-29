@@ -123,7 +123,35 @@ class ResultatAgents:
 
     @property
     def success(self) -> bool:
-        return bool(self.a3.get("success")) and self.frequence.a6 is not None
+        """Le socle A3 a tenu, ET l'arbitrage FRÉQUENCE a réellement abouti.
+
+        ⚠️⚠️ CONSTAT `agents/C2` — ELLE TESTAIT LA PRÉSENCE, PAS LE SUCCÈS.
+        L'ancienne condition était `self.frequence.a6 is not None`. Or
+        `_arbitrer` rend **toujours** un dict `a6` : A6 en échec en rend un
+        aussi, avec `success: False`. Mesuré :
+
+            a6 = {'success': False, 'erreur': 'A6 a echoue', 'classement': []}
+            -> ResultatAgents.success       = True
+               resume()['success']          = True
+               resume()[...]['modele_production'] = None
+
+        Le `resume()` — que sa propre docstring appelle **« le livrable
+        d'audit »** — publiait donc un succès sur un dossier sans modèle et
+        sans classement. *Un objet présent n'est pas un objet qui a réussi ;
+        `is not None` répond à la mauvaise question.*
+
+        ⚠️ ON LIT LE DRAPEAU D'A6, PAS UNE FORME. A6 pose `success` sur ses
+        deux sorties — le retour nominal et `_erreur` — vérifié par exécution
+        avant d'écrire cette ligne. Déduire l'échec d'un `classement` vide
+        serait deviner par un symptôme.
+
+        ⚠️ LA PORTÉE NE CHANGE PAS : `.success` ne regarde toujours QUE A3 et
+        la FRÉQUENCE, comme la docstring de la classe l'explique — la prime
+        pure directe est un challengeur additif. Ce lot corrige *ce qui est
+        testé*, pas *ce qui est regardé*.
+        """
+        return (bool(self.a3.get("success"))
+                and bool((self.frequence.a6 or {}).get("success")))
 
     def resume(self) -> Dict[str, Any]:
         """Vue JSON-SÉRIALISABLE des deux arbitrages — le livrable d'audit.

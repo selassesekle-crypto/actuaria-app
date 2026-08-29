@@ -391,6 +391,35 @@ direction Vie est **hors du périmètre de cet audit** — voir §③.*
 *Preuve : `preuves/audit_conformite_ter.py` (P1) et `audit_conformite_quater.py`
 (Q2).*
 
+> ✅ **`conformite/C14`** · **FERMÉ le 29/08/2026 — PAR UNE PHRASE, COMME LE
+> CONSTAT LE DEMANDAIT.** *Preuve : `test_succes_et_portee.py`, 4 contrôles.*
+>
+> L'en-tête **borne désormais la portée surveillée** : « *CE QUE CE MODULE
+> SURVEILLE AUJOURD'HUI : la direction NON-VIE, elle seule* », suivi du relevé
+> par AST et de sa méthode rejouable, et des deux directions nommées comme
+> **non couvertes**.
+>
+> ⚠️ **LE COMPTE A ÉTÉ RE-MESURÉ, PAS RECOPIÉ** : le relevé disait « 418
+> fichiers, 13 importateurs Non-Vie ». Mesuré le 29/08 : **446 fichiers**,
+> `core` **2** · `demos` **1** · `direction_non_vie` **19** ·
+> `direction_vie_epre` **0** · `direction_sante_prevoyance` **0**.
+> *Les chiffres avaient vieilli, la conclusion tient.*
+>
+> ⚠️⚠️ **SECOND SENS, ET IL EST ESSENTIEL** : borner la SURVEILLANCE ne doit
+> pas laisser croire que la RÈGLE est bornée. Test-Achats s'applique à toute
+> l'assurance ; affaiblir cette phrase serait un **défaut réglementaire**, pas
+> un correctif. Un test l'épingle.
+> ⚠️⚠️ **ET CE TEST A ÉTÉ CORRIGÉ PAR SA PROPRE VIOLATION PLANTÉE** : il
+> cherchait le fragment « POUR TOUTE BRANCHE », présent **deux fois** depuis
+> le correctif. En affaiblissant la phrase qui fait autorité, **le filet ne
+> tombait pas** — il trouvait l'autre. Il s'attache désormais à la phrase
+> entière. *Un relevé par fragment sur-compte.*
+> ⚠️ **L'EXEMPTION PAR LE MÉCANISME EST DÉCLARÉE INSUFFISANTE** : « leurs
+> agents sont paramétriques » est vrai, et ne couvre rien — l'absence de
+> matrice X est une propriété de la FORME du modèle, pas de l'usage du
+> critère. ⚠️ **Le compte de 0 hors Non-Vie est re-dérivé par un test** : il
+> tombera le jour où la phrase deviendra fausse.
+
 ### C — Imprécis, daté, ou non documenté (6)
 
 **C8 — Le motif lu par l'actuaire contient un dictionnaire Python.**

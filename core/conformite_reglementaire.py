@@ -7,6 +7,34 @@ Ce module doit être importé par TOUT agent, de TOUTE direction (Non-Vie,
 Vie/EP-RE, Santé-Prévoyance), qui construit une matrice de features à partir
 de données client. Il ne doit jamais être dupliqué ni réimplémenté localement.
 
+⚠⚠ ET CE QUI PRÉCÈDE EST UNE EXIGENCE, PAS UN ÉTAT — constat `conformite/C14`.
+La phrase est à l'impératif (« doit être importé ») ; lue dans un module qui
+s'appelle `conformite_reglementaire`, elle se lit comme la description de ce
+qui EST surveillé. Les deux ne coïncident pas, et rien ici ne le disait.
+
+  CE QUE CE MODULE SURVEILLE AUJOURD'HUI : la direction NON-VIE, elle seule.
+
+Relevé par AST le 29/08/2026 — méthode rejouable : parcourir tous les `.py`
+hors `.venv`, retenir ceux dont un `import` / `from ... import` cite
+`conformite_reglementaire`, compter par répertoire de tête.
+
+    446 fichiers balayés
+      core                          2 importateur(s)
+      demos                         1
+      direction_non_vie            19
+      direction_vie_epre            0   <-- AUCUNE surveillance
+      direction_sante_prevoyance    0   <-- AUCUNE surveillance
+
+⚠ LES DEUX AUTRES DIRECTIONS RELÈVENT DE LA MÊME RÈGLE ET NE SONT PAS
+COUVERTES ICI. Test-Achats s'applique à toute l'assurance ; ce module n'y est
+pas appelé. *Une règle universelle surveillée sur un tiers du périmètre reste
+une règle universelle — mais la surveillance, elle, doit dire son assiette.*
+
+⚠ L'EXEMPTION CI-DESSOUS EST MOTIVÉE PAR LE MÉCANISME, LA RÈGLE PORTE SUR LE
+CRITÈRE. « Leurs agents sont PARAMÉTRIQUES (pas de matrice X) » est vrai et
+vérifié — mais l'absence de matrice X est une propriété de la FORME du modèle,
+elle ne dit rien de l'usage du critère genre. *Ce n'est pas une couverture.*
+
 Pourquoi au niveau plateforme (promu depuis
 direction_non_vie/tarification/services/ le 11/07/2026) :
 
@@ -41,6 +69,9 @@ Deux familles de règles y sont centralisées :
   1. GENRE (filtrer_genre) — CJUE C-236/09, arrêt Test-Achats du 1er mars 2011,
      Directive 2004/113/CE. Interdit comme critère de tarification en assurance
      depuis le 21 décembre 2012, POUR TOUTE BRANCHE (pas seulement la RC Auto).
+     ⚠ « POUR TOUTE BRANCHE » décrit l'étendue de la RÈGLE CJUE, pas celle de
+     la surveillance exercée par ce module — bornée à la Non-Vie, voir l'encadré
+     de l'en-tête. *La règle est universelle ; le filtre ne l'est pas.*
 
   2. FAMILLE CIBLE (filtrer_famille_cible) — prévention du data leakage : toute
      grandeur dérivée de la sinistralité de la période observée est interdite
