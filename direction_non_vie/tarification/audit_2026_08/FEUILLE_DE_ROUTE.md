@@ -150,7 +150,27 @@ tri.*
 |---|---|---|
 | **1.1 Les branches de l'app + les fuites d'A5** | ✅ `a5/C6` `a5/C7` **FERMÉS** · ✅ `app/prime_ml` `app/prime_dl` **ARBITRÉS — REPORTÉS À LA MIGRATION** | A5 : trois jeux **68/12/20**, jeu de validation **exigé** (`raise`, aucun repli) ; `seed` déclaré et **inscrit au rapport**. **⚠️ L'optimisme mesuré : TabNet −13,2 %** (0,2269 → 0,1970) ; l'irreproductibilité valait **11 % d'étendue** sur le Gini **qui sert à A6 pour arbitrer**. POS-A5d + POS-A5e (6 contrôles, 2 violations plantées). **⚠️⚠️ LES BRANCHES DE L'APP NE SERONT PAS CORRIGÉES : arbitrage de Selasse du 25/08 — l'app Streamlit disparaît, on n'y touche pas, même pour une phrase.** L'exigence est écrite pour la suivante : [`EXIGENCES_MIGRATION.md`](EXIGENCES_MIGRATION.md) — **deux modes, et l'absence de comparaison jamais silencieuse** |
 | **1.2 Le plan ne laisse plus déclarer ce qu'il interdit** | ✅ **FERMÉS** `plan/C1` `plan/C2` `plan/C3` — **et `plan/C9` en prime** | la garde B9 contournée par les **interactions** → **prime non proportionnelle à l'exposition (1,8339 au lieu de 2,0000)** · la **cible** déclarable en facteur · un `type` mal orthographié **détruit un facteur en silence**, `ampute=False`. **Regroupement franc** : même geste — valider l'**appartenance**, pas la combinaison. ✅ **Fermé au lot 1.2** : contrôle sur **trois surfaces** (nom source · opérandes d'interaction · colonnes produites), valeurs admises **dérivées des `Literal`** et jamais recopiées, et un **filet** — *un facteur qui ne produit aucune colonne est refusé*. ⚠️⚠️ **LA RACINE ÉTAIT DANS LA SPEC, PAS DANS LE CODE** : `plan_execution_6_actions.md` l.294 demandait le contrôle **sur `colonnes_produites()`** — le code le faisait exactement. **11 contrôles positifs**, 20/20 plans intacts |
-| **1.3 Les exclusions qui détruisent un facteur légitime** | ✅ **FERMÉS** `conformite/C2` `C3` `C5` — **et `C6` en prime** | la variable de **TAILLE** écartée comme « la cible déguisée » · les **6 variables de B5** toujours détruites · **6 modalités légitimes** tuées par les mots métriques. *Un facteur détruit ampute le tarif — B5 l'a chiffré à −17,4 % de Gini*. ✅ **Fermé au lot 1.3** : le test des mots métriques passe de la **sous-chaîne au MOT ENTIER** (`imprimerie` ⊅ `prime`) → **3 modalités récupérées**, et **B6 reste bloqué** (le second sens, vérifié). ⚠️⚠️ **RECADRAGE MESURÉ : sur le chemin déclaratif — celui des 6 appelants de production — RIEN n'est détruit** (`exclusions = {}`) ; C3 et C5 ne vivent que sur le chemin rétrocompat. Le reste est corrigé **par le motif** (leçon B7) : plus de « aucune action » quand une action existe, et plus d'instruction impossible à suivre. **9 contrôles positifs** |
+| **1.3 Les exclusions qui détruisent un facteur légitime** | ✅ **FERMÉS** `conformite/C3` `C5` · ⛔⛔ **`C2` ET `C6` NE LE SONT PAS** (voir l'encadré sous ce tableau) | la variable de **TAILLE** écartée comme « la cible déguisée » · les **6 variables de B5** toujours détruites · **6 modalités légitimes** tuées par les mots métriques. *Un facteur détruit ampute le tarif — B5 l'a chiffré à −17,4 % de Gini*. ✅ **Fermé au lot 1.3** : le test des mots métriques passe de la **sous-chaîne au MOT ENTIER** (`imprimerie` ⊅ `prime`) → **3 modalités récupérées**, et **B6 reste bloqué** (le second sens, vérifié). ⚠️⚠️ **RECADRAGE MESURÉ : sur le chemin déclaratif — celui des 6 appelants de production — RIEN n'est détruit** (`exclusions = {}`) ; C3 et C5 ne vivent que sur le chemin rétrocompat. Le reste est corrigé **par le motif** (leçon B7) : plus de « aucune action » quand une action existe, et plus d'instruction impossible à suivre. **9 contrôles positifs** |
+
+> ⛔⛔ **CE TABLEAU AFFIRMAIT `conformite/C2` ET `C6` FERMÉS. C'EST FAUX —
+> mesuré le 29/08/2026.** Ni l'un ni l'autre n'a de bloc de fermeture dans
+> `releve_conformite_reglementaire.md` : le relevé n'y porte que `C1`+`C7`,
+> `C3`, `C5`, `C7`. Le compte publié (**56 fermés / 95 ouverts**) est donc
+> **juste** — il se dérive de l'archive, pas de cette prose ; c'était **la
+> phrase qui mentait**, pas le chiffre.
+>
+> ⚠️ **DEUX LECTURES POSSIBLES, ET JE NE TRANCHE PAS SANS MESURE** : soit
+> l'affirmation était prématurée, soit le code est corrigé mais **non épinglé**
+> — l'état exact où `a5/C5` a été trouvé, et qui l'a fait compter OUVERT
+> pendant des jours. *Distinguer les deux demande d'aller au SITE de chaque
+> constat ; c'est un lot, pas un état des lieux.*
+>
+> ⚠️ **CE QU'ILS DISENT** : `C2`, une variable de TAILLE (`effectif`,
+> `nb_salaries`) écartée comme « la cible déguisée » alors qu'en RC Pro
+> l'effectif joue le rôle de l'exposition — et l'exposition, elle, est
+> exemptée. `C6`, une fuite détectée PAR L'EFFET présentée comme une dérivée
+> de la sinistralité, le tri se faisant par **sous-chaîne** (`'fuite' in
+> m.lower()`) sur quatre motifs dont la docstring n'en connaît que trois.
 
 ## ⚠️⚠️ PASSAGE LIBELLÉS (25/08/2026) — LE RANG 2 EST RECOMPOSÉ
 
@@ -175,6 +195,24 @@ filtre de type**, le plus fragile des quatre.
 ⚠️ **AUCUN CONSTAT N'EST DISQUALIFIÉ.** Un latent reste vrai : le plan est un
 document opposable, « exprimable » suffit. Le passage change **l'ordre**, pas
 la **validité**. **11 latents nommés, en attente.**
+
+> ⛔⛔ **CE « 11 » N'EST PAS RE-DÉRIVABLE, ET C'EST DÉCLARÉ PLUTÔT QUE CORRIGÉ
+> (29/08/2026).** Les onze ne sont **énumérés nulle part** — ni ici, ni dans
+> `CARTE.md`, ni dans les relevés. Un relevé par le mot « latent » sur la même
+> ligne qu'une clé rend **six** constats (`a3/C4` `a3/C7` `a3/C14` `a4/C2`
+> `a5/C4` `pipeline/C1`), et cette méthode **sur-compte** (un simple renvoi
+> suffit) **et sous-compte** (un latent décrit sans le mot).
+>
+> ⚠️ **AU MOINS UN DES ONZE EST FERMÉ DEPUIS** : `a5/C4`, rouvert par Selasse
+> et clos le 29/08 (`462841a`). Le chiffre est donc **périmé d'au moins un**,
+> mais *je ne publie pas « 10 » à la place : je ne peux pas le prouver.*
+> **Ne pas publier un chiffre incertain à la place d'un autre.**
+>
+> ⚠️ **CE QU'IL FAUDRAIT POUR LE RENDRE VRAI** : énumérer les onze clés à cet
+> endroit, une fois, puis les dériver comme le compte global l'est déjà par
+> `ARCH-5`. Tant que la liste n'existe pas, **cette phrase est une affirmation
+> de portée non mesurable** — la même dette que les comptes figés que ce
+> document a déjà purgés ailleurs.
 
 ✅ **ET IL A PRODUIT UN CONSTAT NEUF** : `a6/C11` — **la fiche d'aide à la
 décision est publiée à 25 %** (3 champs sur 12 ; forces, faiblesses, risques,
@@ -259,7 +297,7 @@ des chaînes — *un marqueur posé sur un nombre est détruit par l'arrondi*, e
 | *(A3, hors 3.1)* | ✅ **FERMÉS** `a3/C4` (`271d50d`) · `a3/C14` (`b3dc60c`, déclaration seule) — ⚠️ `a3/C7` reste **LATENT** |
 | **3.3 L'API latente** | ✅ **`pipeline/C1` FERMÉ pour l'ILLISIBILITÉ** (la plausibilité reste ouverte, faute de borne déclarée au plan ; `predire_portefeuille` rendu en conception) · `pipeline/C1` (**`tarifer()`**, +128 % sur un facteur illisible) — **descendu du rang 1** : 1 appelant, une **démo**. *Une API publique sans borne est une régression qui attend un appelant* |
 
-## RANG 4 — LES FIGURES ET LA CHARTE · 🟡 **4.1, 4.2 et 4.3 CLOS · 5 restants**
+## RANG 4 — LES FIGURES ET LA CHARTE · 🟡 **8 sur 11 CLOS · 3 GELÉS**
 
 ✅ **LOT 4.1 CLOS le 28/08/2026** — `charts/C1` et `charts/C2`, les deux seuls constats du rang qui publiaient un **nombre ou un verdict FAUX** sur une figure signée.
 
@@ -274,9 +312,37 @@ des chaînes — *un marqueur posé sur un nombre est détruit par l'arrondi*, e
 
 ⚠️⚠️ **UN TEST DE CE LOT A RÉFUTÉ MON ATTENTE, ET C'EST LE RÉSULTAT LE PLUS UTILE** : passer de l'or à l'ambre RAG ne sépare PAS le point du décor — contraste **1,04**, et le VERT est à **1,00** contre l'or. *La couleur ne ferme pas `charts/C10` ; le SYMBOLE le ferme.* `SYMBOLE_RAG`, déclaré depuis le lot de la charte et employé nulle part, l'est enfin — et il est **nécessaire, pas décoratif**.
 
-**RESTENT 5 CONSTATS** : les quatre latents (`a3/C5` `a4/C5` `a5/C4` `a6/C3`, figures écartées du rapport signé) et **`charts/C4`**.
+✅ **LOT 4.4 CLOS le 29/08/2026** (`9c0a278`) — **`charts/C4`**, et le défaut n'était **pas l'esthétique** : les listes décoratives d'A4 et A6 contenaient `couleur_rag('VERT'/'AMBRE'/'ROUGE')` — **les couleurs de STATUT** — consommées en cycle POSITIONNEL. *Le modèle n° 5 était peint en rouge RAG parce qu'il était cinquième.* Refus motivé de migrer vers la charte : la prémisse du constat est périmée (les quatre partagent UNE palette) et l'or des agents est à **1,09** de contraste de celui de la charte. ⚠️ **Deux de mes accusations retirées par la mesure** — les trois navies sont des FONDS, et 0 paire sur 15 fusionne en deuteranopie.
 
-⚠️⚠️ **`charts/C4` REDÉCRIT LE 29/08, ET JE CORRIGE MON PROPRE CHIFFRE DE LA VEILLE.** J'avais écrit « a3 3/10, a4 3/11 — l'arbitrage 2 l'a amélioré ». **C'est FAUX** : je comparais à une base ÉLARGIE (V3 **+** RAG) là où le constat compare aux **8 couleurs V3**. Sur SA base : **1 sur 10 · 1 sur 11 · 1 sur 7 · 1 sur 9** — *identique au relevé*. Le constat n'a pas bougé. *Un compte n'est comparable que si l'assiette est la même — appliqué à mon propre chiffre.* Le balayage passe de **52 à 54 fichiers**. **NON CLASSÉ.**
+✅ **LOT 4.5 CLOS le 29/08/2026** (`462841a`) — **`a5/C4`**, l'un des latents, **ROUVERT PAR SELASSE**. La courbe de convergence trace les **vraies pertes** au lieu d'une exponentielle bruitée sur 50 époques codées en dur. ⚠️ **Le remède évident était le mauvais** : semer le bruit aurait rendu une courbe FABRIQUÉE reproductible, donc crédible.
+
+## ⛔⛔ CE QUI RESTE AU RANG 4 : **3 CONSTATS, GELÉS PAR ARBITRAGE**
+
+| constat | figure | statut |
+|---|---|---|
+| `a3/C5` | `lorenz_glm` | ⛔ **GELÉ — aucune ouverture sans accord explicite de Selasse** |
+| `a4/C5` | `lorenz` | ⛔ **GELÉ — idem** |
+| `a6/C3` | `scores_profils` | ⛔ **GELÉ — idem** |
+
+⚠️⚠️ **« GELÉ » N'EST PAS « FERMÉ », ET CE N'EST PAS NON PLUS « DÉFINITIF ».**
+Les trois restent **comptés OUVERTS** dans le total : le défaut existe toujours
+dans le code, vérifié au site le 29/08. Ce qui est arbitré, c'est qu'on **ne les
+ouvre pas** — leurs figures sont **écartées du rapport signé**, chacune avec son
+motif écrit dans `FIGURES_ECARTEES`, et le motif a été vérifié PAR EXÉCUTION :
+`chart_lorenz_gini`, la courbe qui EST publiée, reçoit des points **mesurés**
+(`np.cumsum(y_sort)/np.sum(y_sort)`) ; `scores_multicriteres`, la grille
+publiée, lit `score_global` — **la formule qui décide**, sans la recalculer.
+
+⚠️⚠️ **ET LE GEL SE LÈVE — IL S'EST DÉJÀ LEVÉ UNE FOIS.** `a5/C4` était le
+quatrième latent ; Selasse l'a rouvert le 29/08 et il est CLOS. *Un latent
+n'est pas une catégorie définitive, c'est une décision de ne pas ouvrir
+aujourd'hui.*
+
+⚠️ **BORNE DÉCLARÉE, INCHANGÉE** : la latence est bornée **au rapport signé**.
+Je n'ai mesuré ni le chemin Excel ni l'app. Un lot qui voudrait les classer
+définitivement devrait d'abord mesurer ces deux surfaces.
+
+⚠️⚠️ **`charts/C4` REDÉCRIT LE 29/08, ET JE CORRIGE MON PROPRE CHIFFRE DE LA VEILLE.** J'avais écrit « a3 3/10, a4 3/11 — l'arbitrage 2 l'a amélioré ». **C'est FAUX** : je comparais à une base ÉLARGIE (V3 **+** RAG) là où le constat compare aux **8 couleurs V3**. Sur SA base : **1 sur 10 · 1 sur 11 · 1 sur 7 · 1 sur 9** — *identique au relevé*. Le constat n'a pas bougé. *Un compte n'est comparable que si l'assiette est la même — appliqué à mon propre chiffre.* Le balayage passe de **52 à 54 fichiers**. ✅ **CLASSÉ ET CLOS** par le lot 4.4.
 
 `a3/C5` `a4/C5` `a5/C4` `a6/C3` `charts/C1` `C2` `C3` **`C4`** `C5` **`C9`** **`C10`**
 
