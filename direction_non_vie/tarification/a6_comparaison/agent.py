@@ -693,6 +693,14 @@ class AgentA6Comparaison:
                     # document n'en est pas.
                     _rapports = generer_rapport_tarification(
                         result_a3=result_a3, result_a4=result_a4,
+                        # ⚠️⚠️ SANS CETTE LIGNE, TOUT LE RESTE DU CÂBLAGE EST
+                        # INERTE. Le catalogue peut nommer les figures d'A5 et
+                        # le plan les attendre : si `result_a5` n'arrive pas
+                        # jusqu'ici, `figures_disponibles` ne les trouve pas et
+                        # le rapport en publie deux de moins, en silence.
+                        # *Le correctif doit atteindre la surface, pas la
+                        # frôler.*
+                        result_a5=result_a5,
                         result_a6=_tmp_a6,
                         arrete=datetime.now().strftime('%d/%m/%Y'),
                         audit_id=audit_id, formats=['html','word'],

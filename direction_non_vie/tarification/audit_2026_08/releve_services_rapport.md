@@ -179,6 +179,53 @@ troisième, la signée**.
 > portent le même type d'obligation. Un test FIGE ce compte de 1 sur 6, pour
 > que le fait ne se perde pas entre deux lots.
 
+**C11 — Les figures d'A5 ne pouvaient pas atteindre le rapport, par construction.**
+
+⚠️⚠️ **CONSTAT NEUF, ouvert et fermé le 29/08/2026.** Le motif d'écart disait
+« A5 n'entre pas dans la chaîne du rapport ». Il disait vrai de la chaîne des
+FIGURES — mais **la cause n'était pas un choix, c'était une signature** :
+`generer_rapport_tarification(result_a3, result_a4, result_a6, …)` **n'avait
+aucun paramètre `result_a5`**, et `figures_disponibles` ne construisait son
+dictionnaire de résultats qu'avec `a3`, `a4`, `a6`. *Aucune décision n'aurait pu
+publier une figure d'A5 : l'interface l'interdisait.*
+
+⚠️ Et le motif était **ambigu** : lu comme « A5 ne participe pas », il est
+FAUX — mesuré par exécution, les modèles d'A5 concourent au choix du modèle de
+production et `DL_TABNET` a gagné la cible coût.
+
+> ✅ **`services/C11`** · **FERMÉ le 29/08/2026.**
+> *Preuve : `test_figures_dl_publiees.py`, 10 contrôles.*
+>
+> `result_a5` descend désormais par `generer_rapport_tarification` →
+> `export_html` / `export_word` / `export_pdf` → `figures_disponibles`.
+> **Vérifié par exécution sur un pipeline réel** où le DL est candidat :
+> 14 figures trouvées, les deux présentes, HTML **1 à 14 sans trou**, et le
+> `.docx` porte **14 images** contre 13 avant.
+>
+> ⚠️⚠️ **`result_a5` EST EN MOT-CLÉ SEUL, ET APRÈS `result_a6`** — jamais entre
+> `a4` et `a6` malgré l'ordre de lecture. Relevé par AST **avant** d'écrire la
+> première ligne : `export_html` est appelée avec **neuf arguments
+> positionnels** en production et dans une trentaine de tests. L'insérer au
+> milieu aurait fait glisser `result_a6` dans `result_a5` — *deux
+> dictionnaires, aucune erreur de type, et un rapport signé bâti sur les
+> mauvaises données.* Le `*` rend l'accident impossible, et un test épingle la
+> décision sur les **cinq** fonctions de la chaîne.
+>
+> ⚠️ **`proprete` A ATTRAPÉ UN TROU DU CÂBLAGE AVANT LA GATE** : `export_pdf`
+> passait `result_a5=result_a5` sans avoir le paramètre — `F821`, nom
+> indéfini. **Le PDF aurait levé un `NameError` à la première génération.**
+>
+> ⚠️⚠️ **ET UNE VIOLATION PLANTÉE A RÉVÉLÉ UN TROU DANS MON PROPRE FILET** :
+> en retirant `result_a5=result_a5` du site d'appel d'A6, **aucun test du dépôt
+> ne tombait**. Tout le câblage pouvait être juste et les figures n'arriver
+> jamais, parce que le SEUL appel de production ne les passait pas. Un contrôle
+> AST sur ce site ferme le trou. *Je vérifiais le mécanisme, pas le site.*
+>
+> ⚠️ **LES SIX AUTRES FIGURES D'A5 RESTENT ÉCARTÉES**, et leur motif est
+> précisé : elles sont destinées à qui CONSTRUIT le modèle. Leur place est le
+> document technique de validation (M4), chantier ouvert sur les 25 écartées.
+> Un test fait tomber la gate si le motif ambigu revient.
+
 ### D — Vérifié comme BON (8)
 
 | affirmation | mesure |

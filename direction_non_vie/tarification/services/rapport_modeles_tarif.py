@@ -436,6 +436,12 @@ TITRES_FIGURES: Dict[str, str] = {
     'chart_residus_qq': 'H2 GLM — QQ-plot des résidus de Pearson',
     'overfitting_train_test': 'H1 ML — surapprentissage, apprentissage '
                               'contre test',
+    # ⚠️ La nomenclature du chapitre 4 est « H<n> <famille> » : A5 nomme ces
+    # deux hypotheses H1 et H3 de sa propre validation, on garde ses numeros.
+    'convergence_loss': "H1 DL — convergence de l'entraînement, pertes "
+                        'réellement observées',
+    'comparaison_dl_glm': 'H3 DL — apport du Deep Learning face au GLM de '
+                          'référence',
     # chapitre 5 — le backtesting
     'chart_walkforward_ae': 'Backtesting walk-forward — ratio A/E par fenêtre',
     'chart_lift_decile': 'Lift par décile de risque prédit',
@@ -469,8 +475,13 @@ PLAN_FIGURES: Tuple[Tuple[int, Tuple[str, ...]], ...] = (
     (2, ('chart_relativites_glm',)),
     (3, ('scores_multicriteres', 'scatter_gini_stabilite',
          'chart_lorenz_gini')),
+    # ⚠️ LES DEUX FIGURES D'A5 REJOIGNENT LES HYPOTHESES, PAS LE CLASSEMENT.
+    # Le chapitre 4 porte deja H1 GLM, H2 GLM et H1 ML ; A5 nomme les siennes
+    # H1 et H3. Les mettre au chapitre 3 (le classement) aurait separe une
+    # hypothese de ses soeurs pour la coller a un tableau de rangs.
     (4, ('sur_dispersion_poisson', 'chart_residus_qq',
-         'overfitting_train_test')),
+         'overfitting_train_test', 'convergence_loss',
+         'comparaison_dl_glm')),
     (5, ('chart_walkforward_ae', 'chart_lift_decile')),
     (6, ('radar_modele_retenu', 'chart_shap_summary')),
 )
@@ -486,6 +497,8 @@ SOURCES_FIGURES: Dict[str, Tuple[str, str]] = {
     'sur_dispersion_poisson': ('a3', 'graphiques_validation'),
     'chart_shap_summary': ('a4', 'graphiques'),
     'overfitting_train_test': ('a4', 'graphiques_validation'),
+    'convergence_loss': ('a5', 'graphiques_validation'),
+    'comparaison_dl_glm': ('a5', 'graphiques_validation'),
     'chart_lorenz_gini': ('a6', 'graphiques'),
     'chart_lift_decile': ('a6', 'graphiques'),
     'chart_walkforward_ae': ('a6', 'graphiques'),
@@ -597,6 +610,17 @@ def raisons_plafond(result_a6) -> tuple[str, ...]:
 FIGURES_CONDITIONNELLES: dict[str, str] = {
     'chart_shap_summary': 'produite seulement si SHAP a été calculé — '
                           '`calcul_shap=True` et le paquet `shap` installé',
+    # ⚠️⚠️ A5 N'EST PAS SUR TOUS LES CHEMINS, ET IL FAUT LE DIRE. Le chemin
+    # agent (`pipeline_agents`) l'exécute ; `scripts/rapport_tarif_local.py`
+    # passe explicitement `result_a5=None`, et `PyTorch` peut être absent —
+    # A5 le journalise alors et ne calibre rien. Sans cette déclaration, le
+    # contrôle d'absence de `figures_disponibles` crierait au défaut à chaque
+    # exécution sans DL. *Une absence ATTENDUE se déclare ; toute autre est un
+    # défaut* — c'est la règle que ce dictionnaire porte déjà.
+    'convergence_loss': 'produite seulement si A5 a tourné — PyTorch installé '
+                        'et l\'agent Deep Learning exécuté sur cette cible',
+    'comparaison_dl_glm': 'produite seulement si A5 a tourné — PyTorch '
+                          'installé et l\'agent Deep Learning exécuté',
 }
 
 #: Ce que la chaîne produit et que le rapport NE PUBLIE PAS, avec la raison.
@@ -674,13 +698,28 @@ FIGURES_ECARTEES: Dict[str, str] = {
     # contrôle de `figures_disponibles` signale « produite mais ni publiée ni
     # écartée » ; il ne signale PAS « écartée mais plus produite ». C'est
     # pourquoi cette entrée part avec la figure, dans le même lot.
-    # A5 n'entre pas dans la chaîne du rapport
-    'apprentissage_cann': 'A5 n\'entre pas dans la chaîne du rapport',
-    'apprentissage_tabnet': 'A5 n\'entre pas dans la chaîne du rapport',
-    'importance_tabnet': 'A5 n\'entre pas dans la chaîne du rapport',
-    'convergence_loss': 'A5 n\'entre pas dans la chaîne du rapport',
-    'comparaison_dl_glm': 'A5 n\'entre pas dans la chaîne du rapport',
-    'jauge_surapprentissage': 'A5 n\'entre pas dans la chaîne du rapport',
+    # ⚠️⚠️ LE MOTIF « A5 n'entre pas dans la chaîne du rapport » A CHANGÉ DE
+    # PORTÉE LE 29/08/2026, ET IL ÉTAIT DÉJÀ AMBIGU. Il disait vrai de la
+    # chaîne des FIGURES, et faux si on le lisait « A5 ne participe pas » :
+    # mesuré par exécution, les modèles d'A5 concourent au choix du modèle de
+    # production et l'un d'eux l'a emporté sur la cible coût.
+    # ⚠️ DEUX FIGURES SONT SORTIES D'ICI, arbitrées par Selasse après mesure :
+    # `convergence_loss` (H1 DL) et `comparaison_dl_glm` (H3 DL) sont
+    # désormais AU PLAN, chapitre 4. Elles n'y sont entrées qu'une fois leurs
+    # constats fermés — `a5/C4` (courbe simulée), `a5/C5` (barres à zéro),
+    # `a5/C10` (verdict sur le mauvais modèle).
+    # ⚠️ LES SIX AUTRES RESTENT ÉCARTÉES, et leur motif est PRÉCISÉ : ce n'est
+    # pas qu'A5 serait hors de la chaîne, c'est que le rapport SIGNÉ est
+    # destiné au client. Elles ont leur place dans le document technique de
+    # validation (arbitrage M4), chantier ouvert sur les 25 figures écartées.
+    'apprentissage_cann': 'destinée à qui construit le modèle, pas au rapport '
+                          'signé — document technique de validation (M4)',
+    'apprentissage_tabnet': 'destinée à qui construit le modèle, pas au '
+                            'rapport signé — document technique (M4)',
+    'importance_tabnet': 'destinée à qui construit le modèle, pas au rapport '
+                         'signé — document technique de validation (M4)',
+    'jauge_surapprentissage': 'doublon — le surapprentissage est déjà publié '
+                              'par `overfitting_train_test` au chapitre 4',
 }
 
 
@@ -788,15 +827,26 @@ class FigureNumerotee(NamedTuple):
     objet: object
 
 
-def figures_disponibles(result_a3, result_a4, result_a6) -> Dict[str, object]:
+def figures_disponibles(result_a3, result_a4, result_a6, *,
+                        result_a5=None) -> Dict[str, object]:
     """Rassemble les figures du catalogue, où qu'elles se trouvent.
 
     ⚠️ ELLE OUVRE LES DEUX DICTIONNAIRES. `graphiques_validation` n'avait
     aucun lecteur dans tout le dépôt ; cinq des quatorze figures publiées en
     viennent, dont les preuves de H1 GLM et de H1 ML.
+
+    ⚠️⚠️ `result_a5` EST EN MOT-CLÉ SEUL, ET EN FIN — jamais entre `a4` et
+    `a6`, malgré l'ordre de lecture. Relevé par AST avant d'écrire cette
+    ligne : cette fonction est appelée **positionnellement** (3 arguments) en
+    production comme dans les tests, et `export_html` l'est avec **neuf**.
+    Insérer un paramètre au milieu aurait fait glisser `result_a6` dans
+    `result_a5` — deux dictionnaires, aucune erreur de type, et un rapport
+    publié sur les mauvaises données. *Un accident de typage qui décide de ce
+    qui est publié est plus dangereux qu'une décision explicite.*
+    Le `*` rend en outre l'accident IMPOSSIBLE à l'avenir.
     """
     resultats = {'a3': result_a3 or {}, 'a4': result_a4 or {},
-                 'a6': result_a6 or {}}
+                 'a5': result_a5 or {}, 'a6': result_a6 or {}}
     trouvees: Dict[str, object] = {}
     for cle, (agent, dictionnaire) in SOURCES_FIGURES.items():
         objet = ((resultats.get(agent) or {}).get(dictionnaire) or {}).get(cle)
@@ -1396,8 +1446,13 @@ def export_html(
     ref_client: str = '', arrete: str = '', audit_id: str = '',
     narration_calculee: Optional[Tuple[str, str]] = None,
     actuaire_nom: str = '', actuaire_numero_ia: str = '',
+    *, result_a5: dict | None = None,
 ) -> str:
     """Génère le rapport HTML tarification. Retourne str HTML ou ''.
+
+    ⚠️ `result_a5` en MOT-CLÉ SEUL et en FIN : cette fonction est appelée avec
+    NEUF arguments positionnels, ici et dans une trentaine de tests. Voir
+    `figures_disponibles` pour la mesure qui a decide de cette place.
 
     `narration_calculee` : le couple (texte, source) déjà obtenu, à réutiliser.
     ⚠️ SANS LUI, CHAQUE FORMAT PAIE SA PROPRE NARRATION — et rien ne garantit
@@ -1459,7 +1514,8 @@ def export_html(
     _genres = []
     if _CHARTS_HTML_OK:
         _figures = numeroter(figures_disponibles(result_a3, result_a4,
-                                                 result_a6))
+                                                 result_a6,
+                                                 result_a5=result_a5))
         with serveur_de_rendu(sum(len(x) for x in _figures.values())):
             for _fs in _figures.values():
                 for _f in _fs:
@@ -1965,8 +2021,12 @@ def export_word(
     ref_client: str = '', arrete: str = '', audit_id: str = '',
     narration_calculee: Optional[Tuple[str, str]] = None,
     actuaire_nom: str = '', actuaire_numero_ia: str = '',
+    *, result_a5: dict | None = None,
 ) -> bytes:
     """Génère le rapport Word tarification (.docx). Retourne bytes ou b''.
+
+    ⚠️ `result_a5` en MOT-CLÉ SEUL et en FIN, pour la même raison qu'en HTML :
+    les appels positionnels à neuf arguments sont nombreux.
 
     `narration_calculee` : voir `export_html`. C'est ce format-ci qui payait le
     plus cher l'appel séparé — il partait sans le commentaire actuariel.
@@ -2002,7 +2062,8 @@ def export_word(
         # compteurs indépendants — le choix d'A7 — se rattrapent par un test ;
         # une numérotation unique ne peut pas diverger.
         figures_numerotees = numeroter(
-            figures_disponibles(result_a3, result_a4, result_a6))
+            figures_disponibles(result_a3, result_a4, result_a6,
+                                result_a5=result_a5))
         with serveur_de_rendu(sum(len(x) for x
                                   in figures_numerotees.values())):
             rendus_figures = {f.cle: rendre_figure(f.objet)
@@ -2455,8 +2516,14 @@ def export_pdf(
     ref_client: str = '', arrete: str = '', audit_id: str = '',
     narration_calculee: Optional[Tuple[str, str]] = None,
     actuaire_nom: str = '', actuaire_numero_ia: str = '',
+    *, result_a5: dict | None = None,
 ) -> bytes:
     """Génère le rapport PDF via weasyprint (HTML→PDF). Retourne bytes ou b''.
+
+    ⚠️ `result_a5` EST REQUIS ICI AUSSI : le PDF est un rendu de l'HTML, il
+    doit porter les MEMES figures. Je l'avais oublie en cablant, et
+    `proprete` l'a attrape (`F821`, nom indefini) avant la gate — le PDF
+    aurait leve un `NameError` a la premiere generation.
 
     `narration_calculee` : transmis à `export_html` — le PDF est un rendu de
     l'HTML, il doit porter exactement le même commentaire.
@@ -2465,7 +2532,8 @@ def export_pdf(
         from weasyprint import HTML as WP_HTML
         html = export_html(result_a3, result_a4, result_a6, ref_client, arrete,
                            audit_id, narration_calculee,
-                           actuaire_nom, actuaire_numero_ia)
+                           actuaire_nom, actuaire_numero_ia,
+                           result_a5=result_a5)
         if not html:
             return b''
         buf = io.BytesIO()
@@ -2495,6 +2563,7 @@ def generer_rapport_tarification(
     audit_id: str = '',
     formats: List[str] = None,
     actuaire_nom: str = '', actuaire_numero_ia: str = '',
+    *, result_a5: dict | None = None,
 ) -> Dict[str, bytes]:
     """
     Génère tous les formats demandés en un seul appel.
@@ -2539,13 +2608,15 @@ def generer_rapport_tarification(
     if 'html' in formats or 'pdf' in formats:
         html_str = export_html(result_a3, result_a4, result_a6, ref_client, arrete,
                                audit_id, narration_calculee,
-                               actuaire_nom, actuaire_numero_ia)
+                               actuaire_nom, actuaire_numero_ia,
+                               result_a5=result_a5)
         out['html_bytes'] = html_str.encode('utf-8') if html_str else b''
 
     if 'word' in formats:
         out['word_bytes'] = export_word(result_a3, result_a4, result_a6, ref_client,
                                         arrete, audit_id, narration_calculee,
-                                        actuaire_nom, actuaire_numero_ia)
+                                        actuaire_nom, actuaire_numero_ia,
+                                        result_a5=result_a5)
 
     if 'pdf' in formats:
         if html_str:
@@ -2559,7 +2630,8 @@ def generer_rapport_tarification(
                 logger.warning('weasyprint absent — PDF non généré')
         else:
             out['pdf_bytes'] = export_pdf(result_a3, result_a4, result_a6, ref_client,
-                                          arrete, audit_id, narration_calculee)
+                                          arrete, audit_id, narration_calculee,
+                                          result_a5=result_a5)
 
     if 'excel' in formats:
         try:

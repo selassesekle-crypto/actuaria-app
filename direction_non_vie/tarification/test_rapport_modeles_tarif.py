@@ -638,13 +638,29 @@ class _FigureFactice:
 
 
 def _payload_figures(cles=None):
-    """Les trois résultats d'agent, portant les figures demandées."""
+    """Les résultats d'agent portant les figures demandées.
+
+    ⚠️⚠️ QUATRE CHARGES DEPUIS LE 29/08/2026, ET `a5` EST EN DERNIER — jamais
+    inseree entre `a4` et `a6` malgre l'ordre de lecture. Les 22 appels a
+    `export_html`/`export_word` de ce fichier passent leurs trois premieres
+    charges POSITIONNELLEMENT : glisser la quatrieme au milieu aurait fait
+    passer `a6` pour `a5`, deux dictionnaires, sans aucune erreur de type.
+    *C'est la meme raison qui a mis `result_a5` en mot-cle seul cote
+    production.*
+    """
     cles = list(R.SOURCES_FIGURES) if cles is None else list(cles)
-    res = {'a3': {}, 'a4': {}, 'a6': {}}
+    res = {'a3': {}, 'a4': {}, 'a5': {}, 'a6': {}}
     for cle in cles:
         agent, dico = R.SOURCES_FIGURES[cle]
         res[agent].setdefault(dico, {})[cle] = _FigureFactice(cle)
-    return res['a3'], res['a4'], res['a6']
+    return res['a3'], res['a4'], res['a6'], res['a5']
+
+
+def _dispo(cles=None):
+    """`figures_disponibles` sur la fixture — le seul endroit qui connait
+    l'ordre des charges."""
+    _3, _4, _6, _5 = _payload_figures(cles)
+    return R.figures_disponibles(_3, _4, _6, result_a5=_5)
 
 
 class T7a_LeCatalogueDesFigures(unittest.TestCase):
@@ -711,19 +727,28 @@ class T7a_LeCatalogueDesFigures(unittest.TestCase):
         """⚠️ `graphiques_validation` : 25 sites de production dans le dépôt,
         ZÉRO lecture. Le chapitre 4 publiait huit verdicts sans preuve.
 
-        Elles étaient CINQ à la clôture de T7a ; elles sont QUATRE depuis que
+        Elles étaient CINQ à la clôture de T7a ; QUATRE depuis que
         `monitoring_gini` a été écartée pour ses données fabriquées — T7a
-        cataloguait les figures sans interroger leur source de données.
+        cataloguait les figures sans interroger leur source de données ; SIX
+        depuis le 29/08/2026, les deux hypothèses d'A5 rejoignant le plan.
+
+        ⚠️ ON NOMME L'ENSEMBLE ATTENDU AU LIEU DE COMPTER. Un `len(...) == 4`
+        se contentait d'un nombre : il fallait le réécrire à chaque
+        mouvement, et il ne disait pas LESQUELLES. *Un compte codé en dur est
+        exactement ce que cet audit poursuit ailleurs.*
         """
-        validation = [c for c, (_, d) in R.SOURCES_FIGURES.items()
-                      if d == 'graphiques_validation']
-        self.assertEqual(len(validation), 4)
+        validation = {c for c, (_, d) in R.SOURCES_FIGURES.items()
+                      if d == 'graphiques_validation'}
+        self.assertEqual(
+            validation,
+            {'sur_dispersion_poisson', 'overfitting_train_test',
+             'scores_multicriteres', 'radar_modele_retenu',
+             'convergence_loss', 'comparaison_dl_glm'},
+            "l'ensemble tiré de `graphiques_validation` a changé : le "
+            "déclarer ici plutôt que d'ajuster un nombre")
         self.assertNotIn('monitoring_gini', validation)
-        for attendue in ('sur_dispersion_poisson', 'overfitting_train_test',
-                         'scores_multicriteres'):
-            self.assertIn(attendue, validation)
-        a3, a4, a6 = _payload_figures()
-        trouvees = R.figures_disponibles(a3, a4, a6)
+        a3, a4, a6, a5 = _payload_figures()
+        trouvees = R.figures_disponibles(a3, a4, a6, result_a5=a5)
         self.assertEqual(len(trouvees), len(R.SOURCES_FIGURES))
         print('    OK T7a-c : %d figures tirées de `graphiques_validation`'
               % len(validation))
@@ -736,8 +761,7 @@ class T7a_LeCatalogueDesFigures(unittest.TestCase):
         for retiree in ('chart_shap_summary', 'sur_dispersion_poisson',
                         'aic_comparaison'):
             restantes = [c for c in toutes if c != retiree]
-            plan = R.numeroter(R.figures_disponibles(
-                *_payload_figures(restantes)))
+            plan = R.numeroter(_dispo(restantes))
             numeros = [f.numero for fs in plan.values() for f in fs]
             self.assertEqual(sorted(numeros),
                              list(range(1, len(restantes) + 1)),
@@ -748,7 +772,7 @@ class T7a_LeCatalogueDesFigures(unittest.TestCase):
               'figure qui manque')
 
     def test_les_numeros_suivent_l_ordre_du_PLAN(self):
-        plan = R.numeroter(R.figures_disponibles(*_payload_figures()))
+        plan = R.numeroter(_dispo())
         attendu = [c for _, cles in R.PLAN_FIGURES for c in cles]
         obtenu = [f.cle for _, fs in sorted(plan.items()) for f in fs]
         self.assertEqual(obtenu, attendu)
@@ -790,15 +814,15 @@ class T7a_LeCatalogueDesFigures(unittest.TestCase):
         """⚠️ LE POINT DU LOT. A7 tient deux compteurs positionnels
         indépendants, rattrapés par un test. Ici la numérotation est calculée
         UNE fois : « Figure 7 » ne PEUT pas désigner deux choses."""
-        a3, a4, a6 = _payload_figures()
+        a3, a4, a6, a5 = _payload_figures()
         a3.update(A3_COMPLET)
         a6.update({k: v for k, v in A6_COMPLET.items()
                    if k not in ('graphiques', 'graphiques_validation')})
         with rendu_simule():
             html = R.export_html(a3, a4, a6, 'DEMO', '31/12/2025', 'T7a',
-                                 narration_calculee=('Texte.', 'temoin'))
+                                 result_a5=a5, narration_calculee=('Texte.', 'temoin'))
             word = R.export_word(a3, a4, a6, 'DEMO', '31/12/2025', 'T7a',
-                                 narration_calculee=('Texte.', 'temoin'))
+                                 result_a5=a5, narration_calculee=('Texte.', 'temoin'))
         legendes_html = re.findall(r'Figure (\d+) — ([^<]{4,120})', html)
         texte_word = _texte_docx(word)
         self.assertTrue(legendes_html, 'aucune figure dans l\'HTML')
@@ -814,10 +838,10 @@ class T7a_LeCatalogueDesFigures(unittest.TestCase):
     def test_le_word_porte_bien_les_images(self):
         """⚠️ LE WORD NE PORTAIT AUCUNE FIGURE — zéro image mesurée sur
         39 414 octets, quand l'HTML en portait six."""
-        a3, a4, a6 = _payload_figures()
+        a3, a4, a6, a5 = _payload_figures()
         with rendu_simule():
             word = R.export_word(a3, a4, a6, 'DEMO', '31/12/2025', 'T7a',
-                                 narration_calculee=('Texte.', 'temoin'))
+                                 result_a5=a5, narration_calculee=('Texte.', 'temoin'))
         medias = [n for n in zipfile.ZipFile(io.BytesIO(word)).namelist()
                   if n.startswith('word/media/')]
         self.assertEqual(len(medias), len(R.SOURCES_FIGURES),
@@ -829,13 +853,13 @@ class T7a_LeCatalogueDesFigures(unittest.TestCase):
     def test_plotly_n_est_charge_QUE_si_une_figure_reste_interactive(self):
         """Une image n'a besoin d'aucune bibliothèque : un rapport qui n'en
         porte plus ne doit pas réclamer le réseau pour rien."""
-        a3, a4, a6 = _payload_figures()
+        a3, a4, a6, a5 = _payload_figures()
         with rendu_simule():
             html_images = R.export_html(a3, a4, a6, 'D', '31/12/2025', 'T',
-                                        narration_calculee=('T.', 'temoin'))
+                                        result_a5=a5, narration_calculee=('T.', 'temoin'))
         with rendu_simule(present=False):
             html_replis = R.export_html(a3, a4, a6, 'D', '31/12/2025', 'T',
-                                        narration_calculee=('T.', 'temoin'))
+                                        result_a5=a5, narration_calculee=('T.', 'temoin'))
         self.assertNotIn('cdn.plot.ly', html_images)
         self.assertIn('cdn.plot.ly', html_replis)
         print('    OK T7a-j : aucun appel réseau quand les figures sont des '
@@ -856,12 +880,12 @@ class T7b_LePlacementDesFigures(unittest.TestCase):
                 if R.chapitre(n) in texte}
 
     def test_chaque_figure_est_DANS_son_chapitre_en_HTML(self):
-        a3, a4, a6 = _payload_figures()
+        a3, a4, a6, a5 = _payload_figures()
         with rendu_simule():
             html = R.export_html(a3, a4, a6, 'DEMO', '31/12/2025', 'T7b',
-                                 narration_calculee=('Texte.', 'temoin'))
+                                 result_a5=a5, narration_calculee=('Texte.', 'temoin'))
         bornes = self._positions(html, range(1, 9))
-        plan = R.numeroter(R.figures_disponibles(a3, a4, a6))
+        plan = R.numeroter(R.figures_disponibles(a3, a4, a6, result_a5=a5))
         for numero, figures in plan.items():
             debut = bornes[numero]
             # la borne haute : le titre du chapitre suivant qui existe
@@ -877,13 +901,13 @@ class T7b_LePlacementDesFigures(unittest.TestCase):
               'suivant' % sum(len(f) for f in plan.values()))
 
     def test_chaque_figure_est_DANS_son_chapitre_en_WORD(self):
-        a3, a4, a6 = _payload_figures()
+        a3, a4, a6, a5 = _payload_figures()
         with rendu_simule():
             word = R.export_word(a3, a4, a6, 'DEMO', '31/12/2025', 'T7b',
-                                 narration_calculee=('Texte.', 'temoin'))
+                                 result_a5=a5, narration_calculee=('Texte.', 'temoin'))
         texte = _texte_docx(word)
         bornes = self._positions(texte, range(1, 9))
-        plan = R.numeroter(R.figures_disponibles(a3, a4, a6))
+        plan = R.numeroter(R.figures_disponibles(a3, a4, a6, result_a5=a5))
         for numero, figures in plan.items():
             debut = bornes[numero]
             suivants = [p for _, p in sorted(bornes.items()) if p > debut]
@@ -901,14 +925,14 @@ class T7b_LePlacementDesFigures(unittest.TestCase):
         """⚠️ SANS CE VERROU, LES DEUX PLACEMENTS POURRAIENT COEXISTER —
         chaque figure publiée deux fois, et le lecteur incapable de savoir
         laquelle fait foi."""
-        a3, a4, a6 = _payload_figures()
+        a3, a4, a6, a5 = _payload_figures()
         with rendu_simule():
             html = R.export_html(a3, a4, a6, 'DEMO', '31/12/2025', 'T7b',
-                                 narration_calculee=('Texte.', 'temoin'))
+                                 result_a5=a5, narration_calculee=('Texte.', 'temoin'))
             word = R.export_word(a3, a4, a6, 'DEMO', '31/12/2025', 'T7b',
-                                 narration_calculee=('Texte.', 'temoin'))
+                                 result_a5=a5, narration_calculee=('Texte.', 'temoin'))
         self.assertNotIn('<div class="section-head">Figures</div>', html)
-        for f in R.numeroter(R.figures_disponibles(a3, a4, a6))[1]:
+        for f in R.numeroter(R.figures_disponibles(a3, a4, a6, result_a5=a5))[1]:
             self.assertEqual(html.count(R.legende(f)), 1,
                              '%s publiée deux fois' % R.legende(f))
             self.assertEqual(_texte_docx(word).count(R.legende(f)), 1)
@@ -920,10 +944,10 @@ class T7b_LePlacementDesFigures(unittest.TestCase):
         parcourt le plan AVANT tout rendu : déplacer le geste de rendu ne peut
         pas décaler un numéro. Une numérotation faite au fil du document
         n'aurait pas offert cette garantie."""
-        a3, a4, a6 = _payload_figures()
+        a3, a4, a6, a5 = _payload_figures()
         with rendu_simule():
             html = R.export_html(a3, a4, a6, 'DEMO', '31/12/2025', 'T7b',
-                                 narration_calculee=('Texte.', 'temoin'))
+                                 result_a5=a5, narration_calculee=('Texte.', 'temoin'))
         numeros = [int(n) for n in re.findall(r'Figure (\d+) — ', html)]
         self.assertEqual(numeros, list(range(1, len(numeros) + 1)),
                          'numérotation à trous : %s' % numeros)
@@ -931,10 +955,10 @@ class T7b_LePlacementDesFigures(unittest.TestCase):
         for retiree in ('aic_comparaison', 'chart_lorenz_gini',
                         'radar_modele_retenu'):
             restantes = [c for c in R.SOURCES_FIGURES if c != retiree]
-            b3, b4, b6 = _payload_figures(restantes)
+            b3, b4, b6, b5 = _payload_figures(restantes)
             with rendu_simule():
                 h = R.export_html(b3, b4, b6, 'D', '31/12/2025', 'T',
-                                  narration_calculee=('T.', 'temoin'))
+                                  result_a5=b5, narration_calculee=('T.', 'temoin'))
             n = [int(x) for x in re.findall(r'Figure (\d+) — ', h)]
             self.assertEqual(n, list(range(1, len(n) + 1)),
                              'trou sans %s : %s' % (retiree, n))
@@ -947,12 +971,12 @@ class T7c_LImpressionEtLesTroncatures(unittest.TestCase):
     des lignes coupées sans le dire."""
 
     def _html(self, **kw):
-        a3, a4, a6 = _payload_figures()
+        a3, a4, a6, a5 = _payload_figures()
         a3.update(kw.pop('a3', {}))
         a6.update(kw.pop('a6', {}))
         with rendu_simule():
             return R.export_html(a3, a4, a6, 'DEMO', '31/12/2025', 'T7c',
-                                 narration_calculee=('Texte.', 'temoin'))
+                                 result_a5=a5, narration_calculee=('Texte.', 'temoin'))
 
     def test_les_fonds_colores_survivent_a_l_impression(self):
         """⚠️ LE SEUL DÉFAUT DE CE CHANTIER QUI PUISSE TROMPER UN LECTEUR.
@@ -1020,14 +1044,14 @@ class T7c_LImpressionEtLesTroncatures(unittest.TestCase):
             'beta': 0.5 - i * 0.01, 'relativite': 1.0 + i * 0.01,
             'ic95_low': 0.9, 'ic95_high': 1.1, 'pvalue': 0.01,
             'significatif': True, 'sens': 'aggravant'} for i in range(22)}
-        a3, a4, a6 = _payload_figures()
+        a3, a4, a6, a5 = _payload_figures()
         a3['relativites_poisson'] = rels
         with rendu_simule():
             word = _texte_docx(R.export_word(
                 a3, a4, a6, 'DEMO', '31/12/2025', 'T7c',
-                narration_calculee=('Texte.', 'temoin')))
+                result_a5=a5, narration_calculee=('Texte.', 'temoin')))
             html = R.export_html(a3, a4, a6, 'DEMO', '31/12/2025', 'T7c',
-                                 narration_calculee=('Texte.', 'temoin'))
+                                 result_a5=a5, narration_calculee=('Texte.', 'temoin'))
         self.assertIn('15 relativités sur 22', word)
         self.assertIn('|β| décroissant', word)
         # l'HTML les porte toutes, et n'a donc rien à déclarer
@@ -1040,12 +1064,12 @@ class T7c_LImpressionEtLesTroncatures(unittest.TestCase):
                'gini_test': 0.2 - i * 0.01, 'rmse_test': 0.4,
                'overfit_ratio': 1.0, 'score_global': 1.0 - i * 0.05}
               for i in range(14)]
-        a3, a4, a6 = _payload_figures()
+        a3, a4, a6, a5 = _payload_figures()
         a6['classement'] = cl
         with rendu_simule():
             word = _texte_docx(R.export_word(
                 a3, a4, a6, 'DEMO', '31/12/2025', 'T7c',
-                narration_calculee=('Texte.', 'temoin')))
+                result_a5=a5, narration_calculee=('Texte.', 'temoin')))
         self.assertIn('10 modèles sur 14', word)
         self.assertIn('ordre du classement', word)
         print('    OK T7c-e : « 10 modèles sur 14 » — la coupe est DITE')
@@ -1056,11 +1080,11 @@ class T7c_LImpressionEtLesTroncatures(unittest.TestCase):
         self.assertEqual(R.note_troncature(15, 8, 'relativités', 'triées'), '')
         self.assertEqual(R.note_troncature(15, 15, 'relativités', 'triées'), '')
         self.assertIn('sur 16', R.note_troncature(15, 16, 'x', 'y'))
-        a3, a4, a6 = _payload_figures()
+        a3, a4, a6, a5 = _payload_figures()
         with rendu_simule():
             word = _texte_docx(R.export_word(
                 a3, a4, a6, 'DEMO', '31/12/2025', 'T7c',
-                narration_calculee=('Texte.', 'temoin')))
+                result_a5=a5, narration_calculee=('Texte.', 'temoin')))
         self.assertNotIn('sur 0', word)
         self.assertNotIn('relativités sur', word)
         print('    OK T7c-f : aucune déclaration là où rien n\'est coupé')
@@ -1073,11 +1097,11 @@ class T7c_LImpressionEtLesTroncatures(unittest.TestCase):
                               'ic95_low': 0.9, 'ic95_high': 1.1,
                               'pvalue': 0.01, 'significatif': True,
                               'sens': 'aggravant'} for i in range(30)}
-        a3, a4, a6 = _payload_figures()
+        a3, a4, a6, a5 = _payload_figures()
         a3['relativites_poisson'] = rels
         with rendu_simule():
             octets = R.export_word(a3, a4, a6, 'DEMO', '31/12/2025', 'T7c',
-                                   narration_calculee=('Texte.', 'temoin'))
+                                   result_a5=a5, narration_calculee=('Texte.', 'temoin'))
         from docx import Document
         doc = Document(io.BytesIO(octets))
         # le tableau des relativités : autant de lignes que la constante
@@ -1096,11 +1120,11 @@ class T7d_LaPageDeGardeEtLesBordures(unittest.TestCase):
     """T7d — le Word ouvre sur une page de garde, l'HTML enchaînait."""
 
     def _html(self):
-        a3, a4, a6 = _payload_figures()
+        a3, a4, a6, a5 = _payload_figures()
         with rendu_simule():
             return R.export_html(a3, a4, a6, 'CLIENT DE DEMONSTRATION',
                                  '31/12/2025', 'A6_20260809_101112',
-                                 narration_calculee=('Texte.', 'temoin'))
+                                 result_a5=a5, narration_calculee=('Texte.', 'temoin'))
 
     def test_les_quatre_champs_d_identite_sont_NOMMES(self):
         """⚠️ « 🔑 A6_20260808_063434 » NE DIT PAS À UN LECTEUR CE QU'IL
@@ -1122,11 +1146,11 @@ class T7d_LaPageDeGardeEtLesBordures(unittest.TestCase):
     def test_les_libelles_viennent_de_LA_MEME_source_que_le_Word(self):
         """⚠️ SANS CELA, LES DEUX PAGES DE GARDE DÉRIVERAIENT — c'est le
         motif que T5 a fermé sur les en-têtes de tableaux."""
-        a3, a4, a6 = _payload_figures()
+        a3, a4, a6, a5 = _payload_figures()
         with rendu_simule():
             word = _texte_docx(R.export_word(
                 a3, a4, a6, 'CLIENT', '31/12/2025', 'AUDIT-1',
-                narration_calculee=('Texte.', 'temoin')))
+                result_a5=a5, narration_calculee=('Texte.', 'temoin')))
         html = self._html()
         for libelle in R.titres('garde'):
             self.assertIn(libelle, html, f'HTML · {libelle}')
@@ -1163,10 +1187,10 @@ class T7e_LaNavigationDansLeWord(unittest.TestCase):
     construire ni volet de navigation ni table des matières."""
 
     def _word(self):
-        a3, a4, a6 = _payload_figures()
+        a3, a4, a6, a5 = _payload_figures()
         with rendu_simule():
             return R.export_word(a3, a4, a6, 'DEMO', '31/12/2025', 'T7e',
-                                 narration_calculee=(
+                                 result_a5=a5, narration_calculee=(
                                      '§1 — CONTEXTE\nTexte.\n'
                                      '§2 — SUITE\nEncore.', 'temoin'))
 
@@ -1224,16 +1248,16 @@ class T8_LaRelectureActuarielle(unittest.TestCase):
     HORODATAGE = '2026-08-09T10:11:12.131415'
 
     def _rendu(self, nom='', ia='', environnement='production'):
-        a3, a4, a6 = _payload_figures()
+        a3, a4, a6, a5 = _payload_figures()
         a6['audit_trail'] = {'timestamp': self.HORODATAGE,
                              'environnement': environnement}
         with rendu_simule():
             html = R.export_html(a3, a4, a6, 'CLIENT', '31/12/2025', 'AUD',
-                                 narration_calculee=('Texte.', 'temoin'),
+                                 result_a5=a5, narration_calculee=('Texte.', 'temoin'),
                                  actuaire_nom=nom, actuaire_numero_ia=ia)
             word = _texte_docx(R.export_word(
                 a3, a4, a6, 'CLIENT', '31/12/2025', 'AUD',
-                narration_calculee=('Texte.', 'temoin'),
+                result_a5=a5, narration_calculee=('Texte.', 'temoin'),
                 actuaire_nom=nom, actuaire_numero_ia=ia))
         return html, word
 
@@ -1313,7 +1337,7 @@ class T8_LaRelectureActuarielle(unittest.TestCase):
         « CE DOCUMENT EST-IL DIFFUSABLE ». Les huit plafonds d'A6 portent sur
         ce qui change la valeur du résultat ; la relecture d'un document n'en
         est pas."""
-        a3, a4, a6 = _payload_figures()
+        a3, a4, a6, a5 = _payload_figures()
         a6['statut_rag'] = 'VERT'
         a6['audit_trail'] = {'timestamp': self.HORODATAGE,
                              'environnement': 'production'}
@@ -1322,7 +1346,7 @@ class T8_LaRelectureActuarielle(unittest.TestCase):
             with rendu_simule():
                 rendus[cle] = R.export_html(
                     a3, a4, a6, 'CLIENT', '31/12/2025', 'AUD',
-                    narration_calculee=('Texte.', 'temoin'),
+                    result_a5=a5, narration_calculee=('Texte.', 'temoin'),
                     actuaire_nom=nom)
         for html in rendus.values():
             self.assertIn('badge badge-vert', html,
@@ -1357,10 +1381,10 @@ class V1_LeRenduDesFigures(unittest.TestCase):
     ZONE_UTILE = 1060 - 2 * 24 - 2 * 18
 
     def _html(self):
-        a3, a4, a6 = _payload_figures()
+        a3, a4, a6, a5 = _payload_figures()
         with rendu_simule():
             return R.export_html(a3, a4, a6, 'DEMO', '31/12/2025', 'V1',
-                                 narration_calculee=('Texte.', 'temoin'))
+                                 result_a5=a5, narration_calculee=('Texte.', 'temoin'))
 
     def test_une_figure_ne_depasse_JAMAIS_la_zone_utile(self):
         """⚠️ LE TEST QUI MANQUAIT, ET QUI AURAIT ATTRAPÉ LE DÉFAUT.
@@ -1516,11 +1540,11 @@ class V3_LaSentinelleDeCalibration(unittest.TestCase):
                                   'conseil': ''}}
 
     def _ligne_h4(self, hypotheses_ml):
-        a3, a4, a6 = _payload_figures()
+        a3, a4, a6, a5 = _payload_figures()
         a4['hypotheses'] = hypotheses_ml
         with rendu_simule():
             html = R.export_html(a3, a4, a6, 'DEMO', '31/12/2025', 'V3',
-                                 narration_calculee=('Texte.', 'temoin'))
+                                 result_a5=a5, narration_calculee=('Texte.', 'temoin'))
         bloc = html[html.index('H4 ML — Calibration'):][:600]
         return [re.sub(r'<[^>]+>', '', c).strip()
                 for c in re.findall(r'<td[^>]*>(.*?)</td>', bloc, re.S)]
@@ -1591,7 +1615,7 @@ class V4_LaNoteDuClassement(unittest.TestCase):
         Linéaire régularisé (Gini 0,1491) — son surapprentissage vaut 2,757
         contre 1,112. Le classement est JUSTE ; c'est sa lecture qui
         trompait."""
-        a3, a4, a6 = _payload_figures()
+        a3, a4, a6, a5 = _payload_figures()
         a6['classement'] = [
             {'modele': 'GLM_POISSON', 'famille': 'GLM', 'gini_test': 0.1491,
              'rmse_test': 0.45, 'overfit_ratio': 1.112, 'score_global': 0.90},
@@ -1600,19 +1624,19 @@ class V4_LaNoteDuClassement(unittest.TestCase):
         ]
         with rendu_simule():
             html = R.export_html(a3, a4, a6, 'DEMO', '31/12/2025', 'V4',
-                                 narration_calculee=('Texte.', 'temoin'))
+                                 result_a5=a5, narration_calculee=('Texte.', 'temoin'))
             word = _texte_docx(R.export_word(
                 a3, a4, a6, 'DEMO', '31/12/2025', 'V4',
-                narration_calculee=('Texte.', 'temoin')))
+                result_a5=a5, narration_calculee=('Texte.', 'temoin')))
         for nom, texte in (('HTML', html), ('WORD', word)):
             self.assertIn(R.NOTE_CLASSEMENT, texte, nom)
         print('    OK V4 : la note explique l\'ordre, dans les deux formats')
 
     def test_la_note_est_DANS_le_chapitre_du_classement(self):
-        a3, a4, a6 = _payload_figures()
+        a3, a4, a6, a5 = _payload_figures()
         with rendu_simule():
             html = R.export_html(a3, a4, a6, 'DEMO', '31/12/2025', 'V4',
-                                 narration_calculee=('Texte.', 'temoin'))
+                                 result_a5=a5, narration_calculee=('Texte.', 'temoin'))
         debut = html.index(R.chapitre(3))
         fin = html.index(R.chapitre(4))
         self.assertTrue(debut < html.index(R.NOTE_CLASSEMENT) < fin)
@@ -1649,13 +1673,13 @@ class V5_LaFigureAuxDonneesFabriquees(unittest.TestCase):
               f'« {raison[:52]} »')
 
     def test_elle_ne_paraît_dans_AUCUN_des_deux_formats(self):
-        a3, a4, a6 = _payload_figures()
+        a3, a4, a6, a5 = _payload_figures()
         with rendu_simule():
             html = R.export_html(a3, a4, a6, 'DEMO', '31/12/2025', 'V5',
-                                 narration_calculee=('Texte.', 'temoin'))
+                                 result_a5=a5, narration_calculee=('Texte.', 'temoin'))
             word = _texte_docx(R.export_word(
                 a3, a4, a6, 'DEMO', '31/12/2025', 'V5',
-                narration_calculee=('Texte.', 'temoin')))
+                result_a5=a5, narration_calculee=('Texte.', 'temoin')))
         for nom, texte in (('HTML', html), ('WORD', word)):
             self.assertNotIn('dérive du pouvoir discriminant', texte, nom)
             self.assertNotIn('Évolution Gini 12 mois', texte, nom)
@@ -1665,14 +1689,22 @@ class V5_LaFigureAuxDonneesFabriquees(unittest.TestCase):
         """⚠️ LE CAS OÙ LE COMPTEUR POSITIONNEL SE PROUVE : la figure retirée
         était au MILIEU du chapitre 4, pas à la fin. Un numéro figé aurait
         laissé un trou entre le chapitre 4 et le chapitre 5."""
-        plan = R.numeroter(R.figures_disponibles(*_payload_figures()))
+        plan = R.numeroter(_dispo())
         numeros = [f.numero for fs in plan.values() for f in fs]
         self.assertEqual(sorted(numeros),
                          list(range(1, len(R.SOURCES_FIGURES) + 1)))
-        # le chapitre 4 en garde trois, et le chapitre 5 enchaîne sans trou
+        # le chapitre 4 garde TOUTES les siennes, et le chapitre 5 enchaîne
+        # sans trou.
+        # ⚠️ LE COMPTE SE DÉRIVE DU PLAN, il n'est plus écrit ici. Il valait
+        # `3` en dur ; le chapitre 4 en porte cinq depuis que les deux
+        # hypothèses d'A5 l'ont rejoint. *Un littéral aurait fait tomber ce
+        # test pour la seule raison que le plan a grandi — alors que la
+        # propriété qu'il prouve, l'absence de trou, n'avait pas bougé.*
+        attendu_ch4 = len([c for n, cles in R.PLAN_FIGURES
+                           if n == 4 for c in cles])
         ch4 = [f.numero for f in plan.get(4, [])]
         ch5 = [f.numero for f in plan.get(5, [])]
-        self.assertEqual(len(ch4), 3)
+        self.assertEqual(len(ch4), attendu_ch4)
         self.assertEqual(ch5[0], ch4[-1] + 1,
                          'trou entre le chapitre 4 et le chapitre 5')
         print(f'    OK V5-c : 1..{len(numeros)} sans trou, ch.4 en garde '
