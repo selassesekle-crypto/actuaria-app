@@ -210,11 +210,29 @@ def glyphe_rag(statut: str, *, cible: str = 'texte') -> str:
     return table.get(str(statut).upper(), '')
 
 
-# Gradient des barres ORDONNÉES (déciles / catégories ordonnées) : bleu → orange
+# ══════════════════════════════════════════════════════════════════════════════
+# GRADIENT DES BARRES ORDONNÉES — MONOTONE EN LUMINANCE, PAR CONSTRUCTION
+# ══════════════════════════════════════════════════════════════════════════════
+# ⚠️⚠️ CONSTAT `charts/C9` : DEUX DÉCILES DIFFÉRENTS SE LISAIENT PAREIL.
+# L'ancre médiane était un TURQUOISE de luminance **0,3854** — plus CLAIR que
+# les deux extrémités (0,1269 et 0,2514). La rampe montait jusqu'à D5 puis
+# redescendait : **4 inversions**, et D8/D9 séparés de **0,0035**.
+# *Une échelle ORDONNÉE doit être monotone, sinon le rang cesse d'être lisible.*
+#
+# ⚠️ LES DEUX EXTRÉMITÉS NE CHANGENT PAS : elles portent le sens (bleu = bas
+# risque, orange = haut). Seule l'ancre médiane bouge, et vers une luminance
+# COMPRISE entre les deux — c'est la condition de la monotonie, pas un goût.
+#
+# ⚠️⚠️ ET LE REMÈDE N'EST PAS L'ANCRE, C'EST L'ÉCHANTILLONNAGE. Une ancre
+# monotone ne suffit pas : l'interpolation est linéaire en RGB, pas en
+# luminance, donc les pas restent inégaux (mesuré : écart minimal 0,0044 avec
+# la bonne ancre mais un échantillonnage régulier en `t`). `_gradient_ordonne`
+# échantillonne désormais à LUMINANCE RÉGULIÈRE — 0 inversion et écart minimal
+# **0,0109**, contre 0,0035 avant, pour un maximum théorique de 0,0138.
 _GRAD_ANCRES = [
-    (0.0, (30, 100, 180)),   # bas  — bleu profond
-    (0.5, (70, 185, 160)),   # mid  — turquoise
-    (1.0, (240, 85, 35)),    # haut — orange danger
+    (0.0, (30, 100, 180)),   # bas  — bleu profond      · luminance 0,1269
+    (0.5, (150, 95, 185)),   # mid  — violet            · luminance 0,1817
+    (1.0, (240, 85, 35)),    # haut — orange danger     · luminance 0,2514
 ]
 BARRE_OR       = 'rgba(212,175,55,0.85)'    # barres NON ordonnées — or
 BARRE_BORDURE  = 'rgba(255,255,255,0.15)'
@@ -248,11 +266,53 @@ def _couleur_gradient(t: float) -> str:
     return f'rgba({r},{g},{b},0.90)'
 
 
+def _luminance_rgba(couleur: str) -> float:
+    """Luminance relative WCAG d'une chaîne `rgba(r,g,b,a)` — l'alpha est ignoré.
+
+    ⚠️ Parsé sans `re` À DESSEIN : l'en-tête de ce module promet qu'il ne
+    dépend que de plotly et numpy. Ajouter un import pour trois entiers
+    rendrait cette phrase moins vraie pour rien.
+    """
+    r, g, b = (int(v) for v in
+               couleur.split('(', 1)[1].split(')', 1)[0].split(',')[:3])
+    return _luminance(f'#{r:02X}{g:02X}{b:02X}')
+
+
 def _gradient_ordonne(n: int) -> List[str]:
-    """n couleurs interpolées bas → haut (barres ordonnées)."""
+    """n couleurs bas → haut, à LUMINANCE RÉGULIÈREMENT ESPACÉE.
+
+    ⚠️⚠️ CONSTAT `charts/C9`. Échantillonner régulièrement en `t` laissait des
+    pas de luminance INÉGAUX — deux déciles voisins séparés de 0,0035 se
+    lisent pareil. On inverse donc la question : au lieu de prendre des `t`
+    réguliers et de subir les luminances, on VISE des luminances régulières et
+    on cherche le `t` correspondant.
+
+    ⚠️ Ce n'est possible que parce que `_GRAD_ANCRES` est monotone en
+    luminance — la recherche par dichotomie suppose une fonction croissante.
+    Un test épingle les deux propriétés ENSEMBLE : monotonie des ancres, et
+    régularité du pas obtenu.
+
+    Mesuré sur 10 déciles : **0 inversion, écart minimal 0,0109** (avant :
+    4 inversions, 0,0035 ; maximum théorique atteignable 0,0138).
+    """
     if n <= 1:
         return [_couleur_gradient(0.5)]
-    return [_couleur_gradient(i / (n - 1)) for i in range(n)]
+    bas = _luminance_rgba(_couleur_gradient(0.0))
+    haut = _luminance_rgba(_couleur_gradient(1.0))
+
+    def _t_pour(cible: float) -> float:
+        """Le `t` dont la couleur atteint cette luminance — par dichotomie."""
+        lo, hi = 0.0, 1.0
+        for _ in range(60):
+            mid = (lo + hi) / 2.0
+            if _luminance_rgba(_couleur_gradient(mid)) < cible:
+                lo = mid
+            else:
+                hi = mid
+        return (lo + hi) / 2.0
+
+    return [_couleur_gradient(_t_pour(bas + (haut - bas) * i / (n - 1)))
+            for i in range(n)]
 
 
 def _appliquer_theme(fig: go.Figure, titre: Optional[str] = None) -> go.Figure:
@@ -622,13 +682,13 @@ def chart_walkforward_ae(
     annees = [f.get('annee', f.get('annee_test')) for f in _mesurees]
     ae = [float(f['ae_ratio']) for f in _mesurees]
 
-    def _coul(v: float) -> str:
-        # ⚠️ Les seuils viennent de l'appelant, jamais d'ici.
+    def _statut(v: float) -> str:
+        """Le statut RAG d'une fenêtre. ⚠️ Les seuils viennent de l'appelant."""
         if bas_s <= v <= haut_s:
-            return COULEURS['ligne_predite']
+            return 'VERT'
         if bas_a <= v <= haut_a:
-            return COULEURS['or_accent']
-        return 'rgba(240,85,35,0.95)'
+            return 'AMBRE'
+        return 'ROUGE'
 
     fig = go.Figure()
     # ⚠️ LE RECTANGLE EST CELUI DE LA DÉCISION, plus celui d'une bande plus
@@ -641,7 +701,25 @@ def chart_walkforward_ae(
     fig.add_trace(go.Scatter(
         x=annees, y=ae, mode='lines+markers', name='A/E',
         line=dict(color=COULEURS['ligne_predite'], width=2),
-        marker=dict(color=[_coul(v) for v in ae], size=13,
+        # ⚠️⚠️ CONSTAT `charts/C10` — ET IL ÉTAIT PLUS LARGE QUE SON LIBELLÉ.
+        # Le relevé disait « l'ambre du RAG EST l'or des axes » : le point
+        # AMBRE prenait `COULEURS['or_accent']` (#D4AF37), la teinte EXACTE
+        # des lignes de bande et des barres d'erreur — écart de teinte 0°,
+        # contraste 1,00. *Un point « AMBRE » avait la couleur du décor.*
+        # Mesuré ici : les TROIS couleurs contournaient la source RAG —
+        # VERT prenait `ligne_predite` (#00E5A0), ROUGE un littéral
+        # `rgba(240,85,35,0.95)`. Trois définitions locales de plus, que le
+        # lot de la charte n'avait pas atteintes.
+        #
+        # ⚠️⚠️ ET LA COULEUR SEULE NE SUFFIT PAS — c'est mesuré, pas supposé :
+        # VERT et AMBRE ont un contraste mutuel de **1,04**, la MÊME
+        # luminance. En niveaux de gris, à l'impression, ou pour qui a le
+        # canal chromatique réduit, les deux statuts fusionnent. `SYMBOLE_RAG`
+        # existait dans la source depuis le lot de la charte et n'était employé
+        # NULLE PART : une figure à POINTS est exactement son usage.
+        marker=dict(color=[couleur_rag(_statut(v), FOND_SOMBRE) for v in ae],
+                    symbol=[SYMBOLE_RAG[_statut(v)] for v in ae],
+                    size=13,
                     line=dict(color=COULEURS['texte'], width=1)),
         hovertemplate='%{x}<br>A/E = %{y:.4f}<extra></extra>',
     ))

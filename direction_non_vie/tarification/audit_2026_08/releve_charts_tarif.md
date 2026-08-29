@@ -199,6 +199,27 @@ fois. *Preuve : `preuves/audit_app.py`.*
 8) contre **7** passant par ce module. Seul a6 référence `COULEURS[...]`, trois
 fois.
 
+> ⚠️⚠️ **`charts/C4` — REDESCRIPTION AU CODE DU 29/08/2026, SANS CLASSEMENT.**
+> Le constat n'a **PAS** bougé, et je corrige mon propre relevé de la veille.
+>
+> | agent | couleurs | dont V3 *(base du constat)* | dont V3+RAG |
+> |---|---|---|---|
+> | `a3_glm` | 10 | **1** | 3 |
+> | `a4_ml` | 11 | **1** | 3 |
+> | `a5_deep_learning` | 7 | **1** | 1 |
+> | `a6_comparaison` | 9 | **1** | 1 |
+>
+> ⚠️ **J'avais écrit « a3 3/10, a4 3/11 — l'arbitrage 2 l'a amélioré ». C'EST
+> FAUX** : je comparais à une base ÉLARGIE (V3 **+** les six couleurs RAG), là
+> où le constat compare aux **8 couleurs V3**. Sur SA base, c'est toujours
+> **1 sur 7 à 11**, à l'identique. *Un compte n'est comparable que si l'assiette
+> est la même — appliqué à mon propre chiffre.*
+> ⚠️ Ce qui a réellement changé : `a3` et `a4` partagent maintenant **2
+> couleurs RAG** via `couleur_rag`. C'est un progrès sur l'axe RAG, **aucun** sur
+> l'axe palette.
+> ⚠️ Et le balayage : **54 fichiers** construisent une figure plotly hors du
+> module, contre **52** au relevé. **NON CLASSÉ, NON OUVERT.**
+
 **C5 — Quatre troncatures silencieuses, aucune écrite sur la figure.**
 
 ```
@@ -307,6 +328,23 @@ entre les deux : c'est un défaut à corriger dans le rôle.*
 **0 inversion** et un écart minimal de **0,0086** — et le pire décile s'y lit
 **chaud ET clair**, ce que la monotonie seule ne garantit pas.
 
+> ✅ **`charts/C9`** · **FERMÉ le 29/08/2026.** **0 inversion, écart minimal
+> 0,0109** sur dix déciles — contre 4 inversions et 0,0035 au relevé, pour un
+> maximum théorique de 0,0138 avec ces extrémités.
+> ⚠️ **LES DEUX EXTRÉMITÉS NE CHANGENT PAS** : elles portent le SENS — bleu =
+> bas risque, orange = haut. Seule l'ancre médiane bouge, du turquoise
+> (luminance **0,3854**, plus clair que les deux bouts — c'était la bosse) vers
+> un violet à **0,1817**, *comprise entre les deux*. Ce n'est pas un goût,
+> c'est la condition de la monotonie.
+> ⚠️⚠️ **ET LE REMÈDE N'EST PAS L'ANCRE, C'EST L'ÉCHANTILLONNAGE.** Mesuré :
+> avec la bonne ancre mais un échantillonnage régulier en `t`, l'écart minimal
+> ne monte qu'à **0,0044** — l'interpolation est linéaire en RGB, pas en
+> luminance. `_gradient_ordonne` vise désormais des **luminances régulières** et
+> cherche le `t` correspondant. *La monotonie est obtenue par construction, pas
+> par une ancre chanceuse.*
+> ⚠️ Un test épingle les deux propriétés ENSEMBLE — monotonie des ancres (que la
+> dichotomie SUPPOSE) et régularité du pas obtenu.
+
 **C10 — L'ambre du RAG *est* l'or des axes.** Dans `chart_walkforward_ae`
 (l.346-351), le point AMBRE utilise `COULEURS['or_accent']` — la **même
 couleur** que les lignes de bande et les barres d'erreur d'IC :
@@ -388,3 +426,21 @@ quatre fois, et dont un gris diffère du sien **d'un seul caractère**. C'est le
 mode de défaillance que `conformite_reglementaire` documente sur six cycles —
 « *une règle correcte à un endroit, jamais propagée ailleurs* » — appliqué
 cette fois à ce qui se voit.
+
+> ✅ **`charts/C10`** · **FERMÉ le 29/08/2026 — et le constat était PLUS LARGE
+> que son libellé.** Mesuré au site : les **TROIS** couleurs de point
+> contournaient la source RAG — l'AMBRE prenait `or_accent` (#D4AF37), le VERT
+> `ligne_predite` (#00E5A0), le ROUGE un littéral `rgba(240,85,35,0.95)`.
+> **Trois définitions locales que le lot de la charte n'avait pas atteintes.**
+> Elles lisent désormais `couleur_rag(…, FOND_SOMBRE)`.
+> ⚠️⚠️ **ET LA COULEUR NE FERME PAS CE CONSTAT — LE SYMBOLE LE FERME.** J'avais
+> écrit un test attendant que l'ambre RAG se sépare de l'or ; **il a réfuté mon
+> attente**. Mesuré : teinte 0° → **9,1°**, mais contraste **1,04** — la
+> luminance ne bouge pratiquement pas. Pire, le **VERT est à 1,00** contre l'or :
+> *exactement la même luminance que le décor.*
+> ⚠️ `SYMBOLE_RAG` (cercle · triangle · carré) existait dans la source depuis le
+> lot de la charte et **n'était employé nulle part** — une figure à POINTS est
+> exactement son usage. Le second canal est donc **nécessaire, pas décoratif**,
+> et c'est mesuré.
+> ⚠️ **SECOND SENS** : les lignes de bande gardent l'or — c'est du DÉCOR, l'or
+> y est légitime. *Repeindre le décor aurait échangé un défaut contre un autre.*

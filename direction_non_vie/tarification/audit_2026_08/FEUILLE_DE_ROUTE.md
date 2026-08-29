@@ -13,8 +13,8 @@ l'état d'aujourd'hui.*
 
 | # | critère | état mesuré aujourd'hui |
 |---|---|---|
-| **S1** | **Rien de faux n'est publié** | ⛔ **100 constats ouverts** — *dérivés le 28/08 des clés de fermeture, méthode au §②* |
-| **S2** | **Rien de fermé ne peut régresser** | 🟡 **47 fermés, 1 partiel (`pipeline/C1`), et `a5/C5` corrigé sans être épinglé.** ✅ **Et l'archive ne peut plus RETARDER sur le code** : `test_archive_fermeture_reportee.py` fait tomber la gate dès qu'un constat épinglé par un test n'a pas son bloc de fermeture -- le défaut mesuré le 28/08, où douze lots avaient été poussés sans être reportés. ⚠️ L'archive elle-même est désormais épinglée : `test_archive_cles_fermeture.py` fait tomber la gate sur un bloc de fermeture qui ne nomme pas son constat |
+| **S1** | **Rien de faux n'est publié** | ⛔ **98 constats ouverts** — *dérivés le 28/08 des clés de fermeture, méthode au §②* |
+| **S2** | **Rien de fermé ne peut régresser** | 🟡 **49 fermés, 1 partiel (`pipeline/C1`), et `a5/C5` corrigé sans être épinglé.** ✅ **Et l'archive ne peut plus RETARDER sur le code** : `test_archive_fermeture_reportee.py` fait tomber la gate dès qu'un constat épinglé par un test n'a pas son bloc de fermeture -- le défaut mesuré le 28/08, où douze lots avaient été poussés sans être reportés. ⚠️ L'archive elle-même est désormais épinglée : `test_archive_cles_fermeture.py` fait tomber la gate sur un bloc de fermeture qui ne nomme pas son constat |
 | **S3** | **Un tarif signé se rejoue à l'identique** | 🟡 **RE-MESURÉ LE 27/08 — 2 fermés, 1 hérité, 1 PARTIEL.** ✅ **l'empreinte du plan est versionnée** : `s1:9b6d4f70080ad771`, **rejouée identique** sur les 20 plans (`2cb43ef`). ✅ **le livrable ne publie plus un `now()` sous l'étiquette « Arrêté »** : **0** site `_bandeau(… now …)`, contre **28** à l'origine ; absent → « non déclaré », illisible → « non déclaré (illisible : …) » (`ea37564`). ⬜ *hérité, non re-mesuré ici* : le tarif **déclaratif** reproductible au bit près (0,00e+00). ⚠️ **PARTIEL — le tarif DL** : le `seed` est **déclaré** (paramètre de `A5.run`), **appliqué** à `torch.manual_seed` et `np.random.seed` (l.528-529) et **inscrit au rapport**. ⚠️⚠️ **Mais la reproductibilité bout-en-bout n'est PAS prouvée ici** : elle demande un double run d'A5, non fait. *Le seed posé n'est pas la reproductibilité mesurée.* |
 | **S4** | **Un seul chemin — ou des chemins également gardés** | ⛔ **RE-MESURÉ LE 27/08 — inchangé, et l'asymétrie est nette.** **L'orchestrateur a toujours 0 appelant de production** (2 importeurs au total, tous hors production — relevé par AST). ⚠️⚠️ **Et la couche qualité départage les deux chemins** : `pipeline_tarifaire` (déclaratif) importe `core.qualite_donnees` **et** `core.conformite_reglementaire` ; `pipeline_agents` **n'en importe AUCUN**. *Deux chemins vers un tarif signé, un seul gardé.* ⬜ *non re-derivable* : le « 5 assemblages dans l'app » date d'une définition non consignée — **je ne le réaffirme pas sans la refaire**. |
 | **S5** | **Tout ce qui tarife est atteignable par une gate** | 🟡 **RE-MESURÉ LE 27/08, ET LA NUANCE COMPTE.** `actuaria_app.py` (**5 208 l**) est **importable** depuis le lot 0.1 (`07be8c0`) — mais **AUCUN test ne l'importe** ; **4 le LISENT comme un fichier** (`core/test_imports_app.py` le dit lui-même : *« ce test relit le fichier, il ne l'importe pas »*). ⚠️ *Ce qui est exercé, c'est sa STRUCTURE, pas son comportement.* ✅ `core/elasticite.py` (**988 l**) n'est plus hors de portée : **2 tests l'importent** (`test_elasticite.py`, `test_a4_ml.py`) — ⚠️ **testé n'est toujours pas audité**, il reste à l'ouverture HORS RANG. ⛔ `services/excel_helpers.py` (**151 l**) : **0 test ne l'importe**. |
@@ -39,9 +39,9 @@ lui-même**.
 | | |
 |---|---|
 | constats relevés (vagues 1 + 2) | **147** — *recomptés le 28/08* |
-| fermés **et épinglés** | **47** |
+| fermés **et épinglés** | **49** |
 | corrigé, **non épinglé** | **1** (`a5/C5`) · **partiel** : `pipeline/C1` |
-| **⛔ OUVERTS** | **100** |
+| **⛔ OUVERTS** | **98** |
 | lignes lues intégralement | **22 693** sur 23 863 du périmètre |
 | jamais auditées | **1 170 l** + `actuaria_app.py` (5 181 l) |
 | preuves qui se relancent | **35, 0 échec** |
@@ -259,7 +259,7 @@ des chaînes — *un marqueur posé sur un nombre est détruit par l'arrondi*, e
 | *(A3, hors 3.1)* | ✅ **FERMÉS** `a3/C4` (`271d50d`) · `a3/C14` (`b3dc60c`, déclaration seule) — ⚠️ `a3/C7` reste **LATENT** |
 | **3.3 L'API latente** | ✅ **`pipeline/C1` FERMÉ pour l'ILLISIBILITÉ** (la plausibilité reste ouverte, faute de borne déclarée au plan ; `predire_portefeuille` rendu en conception) · `pipeline/C1` (**`tarifer()`**, +128 % sur un facteur illisible) — **descendu du rang 1** : 1 appelant, une **démo**. *Une API publique sans borne est une régression qui attend un appelant* |
 
-## RANG 4 — LES FIGURES ET LA CHARTE · 🟡 **lots 4.1 et 4.2 CLOS · 7 restants**
+## RANG 4 — LES FIGURES ET LA CHARTE · 🟡 **4.1, 4.2 et 4.3 CLOS · 5 restants**
 
 ✅ **LOT 4.1 CLOS le 28/08/2026** — `charts/C1` et `charts/C2`, les deux seuls constats du rang qui publiaient un **nombre ou un verdict FAUX** sur une figure signée.
 
@@ -270,9 +270,13 @@ des chaînes — *un marqueur posé sur un nombre est détruit par l'arrondi*, e
 ⚠️ **ET MA SONDE A PRODUIT QUATRE FAUX « FERMÉS »**, dont `a3/C5` et `a4/C5` — *les deux constats sur lesquels ce document m'avait déjà averti*. Ma regex attendait `1/(1+2g)` ; le code écrit `(1 + gini * 2)`. **Troisième fois.** Les 11 sont ouverts, aucun n'était fermé.
 
 🔓 **SON SEUL PRÉREQUIS DÉCLARÉ — l'arbitrage 2 — EST CLOS** (27/08). Le rang est ouvrable.
-**RESTENT 7 CONSTATS**, dont deux re-mesurés au site : `C9` rend **4 inversions** et un écart minimal de **0,0035**, *identique au relevé à la 4e décimale* ; `C10` — `chart_walkforward_ae` fait toujours `return COULEURS['or_accent']` pour le point AMBRE.
+✅ **LOT 4.3 CLOS le 29/08/2026** — `charts/C9` et `charts/C10`, la LISIBILITÉ. Le gradient rend **0 inversion et un écart minimal de 0,0109** (relevé : 4 et 0,0035) ⚠️ **par ÉCHANTILLONNAGE à luminance régulière, pas par une ancre chanceuse** — les deux extrémités, qui portent le sens, ne bougent pas. Et les **trois** couleurs de point lisent la source RAG.
 
-⚠️ **`charts/C4` A CHANGÉ DE NATURE et attend sa redescription** : le relevé disait « 1 couleur de la charte sur 10-12 » ; mesuré le 28/08, **a3 3/10 · a4 3/11 · a5 1/7 · a6 1/9**. *L'arbitrage 2 l'a amélioré sans le fermer* — il ne se classe pas sur une mesure périmée.
+⚠️⚠️ **UN TEST DE CE LOT A RÉFUTÉ MON ATTENTE, ET C'EST LE RÉSULTAT LE PLUS UTILE** : passer de l'or à l'ambre RAG ne sépare PAS le point du décor — contraste **1,04**, et le VERT est à **1,00** contre l'or. *La couleur ne ferme pas `charts/C10` ; le SYMBOLE le ferme.* `SYMBOLE_RAG`, déclaré depuis le lot de la charte et employé nulle part, l'est enfin — et il est **nécessaire, pas décoratif**.
+
+**RESTENT 5 CONSTATS** : les quatre latents (`a3/C5` `a4/C5` `a5/C4` `a6/C3`, figures écartées du rapport signé) et **`charts/C4`**.
+
+⚠️⚠️ **`charts/C4` REDÉCRIT LE 29/08, ET JE CORRIGE MON PROPRE CHIFFRE DE LA VEILLE.** J'avais écrit « a3 3/10, a4 3/11 — l'arbitrage 2 l'a amélioré ». **C'est FAUX** : je comparais à une base ÉLARGIE (V3 **+** RAG) là où le constat compare aux **8 couleurs V3**. Sur SA base : **1 sur 10 · 1 sur 11 · 1 sur 7 · 1 sur 9** — *identique au relevé*. Le constat n'a pas bougé. *Un compte n'est comparable que si l'assiette est la même — appliqué à mon propre chiffre.* Le balayage passe de **52 à 54 fichiers**. **NON CLASSÉ.**
 
 `a3/C5` `a4/C5` `a5/C4` `a6/C3` `charts/C1` `C2` `C3` **`C4`** `C5` **`C9`** **`C10`**
 
