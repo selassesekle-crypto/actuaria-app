@@ -393,7 +393,29 @@ différents se lisent pareil*) · ⚠️ **`C10` l'ambre du RAG EST l'or des axe
 
 ✅ **`agents/C4` FERMÉ** — `resume()` ne génère plus de date, elle est capturée une fois par le run et réutilisée. ⚠️ **Et le nouveau garde-fou a tiré sur ce lot même**, une heure après avoir été écrit : le test épinglait `agents/C4` avant que son bloc n'existe. *Il fonctionne sur un cas réel, pas seulement sur sa violation plantée.*
 
-## RANG 6 — LE CÂBLAGE · 🟡 **1 sur 4 CLOS · les 3 autres RE-MESURÉS, INCHANGÉS**
+## RANG 6 — LE CÂBLAGE · ❄️ **GELÉ PAR ARBITRAGE le 29/08/2026 — PAS OUBLIÉ**
+
+> ### ❄️ **ARBITRÉ PAR SELASSE : le branchement de l'orchestrateur attend la VRAIE migration d'interface, pas un point d'entrée temporaire.**
+>
+> **LA RAISON, TELLE QU'ELLE A ÉTÉ DONNÉE** : finir toute la direction Non-Vie,
+> puis **attaquer l'interface prochainement, avant les autres directions**.
+> Construire un point d'entrée séparé maintenant serait **du travail jeté
+> presque aussitôt**.
+>
+> **LA CONDITION DE LEVÉE, UNE SEULE** : ⚠️ **le début du chantier de migration
+> d'interface**. Le rang 6 se rouvre à ce moment-là, et pas avant.
+>
+> ⚠️⚠️ **GELÉ N'EST PAS FERMÉ, ET LE COMPTE NE DOIT PAS L'OUBLIER.**
+> `agents/C1`, `qualite/C4` et `socle/C2` **restent OUVERTS** dans les 82 : ils
+> sont comptés, mesurés, intacts. *Un rang gelé qui glisserait vers « clos »
+> serait exactement le compte flatteur que cet audit poursuit.*
+>
+> ⚠️ **ET LES TROIS DÉFAUTS D'`agents/C1` CONTINUENT DE COÛTER PENDANT LE GEL** —
+> notamment le troisième : **la moitié du tarif, le COÛT, n'est jamais
+> challengée**. Le gel décale le remède, il ne suspend pas le défaut. *Ce qui
+> suit reste vrai et doit être relu tel quel le jour de la levée.*
+
+### L'ÉTAT AU MOMENT DU GEL · 🟡 **1 sur 4 CLOS · les 3 autres RE-MESURÉS, INCHANGÉS**
 
 `agents/C1` `qualite/C4` `socle/C2` + le chantier ④.
 ✅ **`conformite/C10` FERMÉ le 29/08/2026, ET IL N'APPARTENAIT PAS À CE RANG** :
@@ -447,7 +469,11 @@ Ce n'est pas un lot de correction : **c'est un câblage**, et il touche des
 surfaces arbitrées. `actuaria_app.py` est **intouchable** (arbitré, l'app
 disparaît). Restent les deux scripts et les démos — et la question de fond,
 *qui doit appeler l'orchestrateur*, est une décision d'architecture, pas une
-correction de constat. **Rien n'est ouvert ici sans arbitrage explicite.**
+correction de constat.
+
+✅ **ET ELLE A ÉTÉ TRANCHÉE LE 29/08/2026** : l'orchestrateur sera branché **par
+la migration d'interface**, pas par un point d'entrée intermédiaire. La question
+n'est donc plus ouverte — elle est **datée**. Voir le gel en tête de rang.
 
 **Toujours dernier des rangs** : c'est le **remède**, pas le défaut. Câbler
 l'orchestrateur avant les rangs 1-4 propagerait leurs défauts sur **trois**
