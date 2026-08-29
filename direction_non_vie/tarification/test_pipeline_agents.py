@@ -222,15 +222,37 @@ class TestPipelineAgentsSansSinistre(unittest.TestCase):
         self.assertIn(res.cout.statut_rag, [None])
         # Contrat n°3 : l'erreur reste sérialisable (comme tarifer en échec).
         self.assertIsInstance(json.dumps(res.resume()), str)
-        print(f"    PA-4 Sans sinistre → erreur propre ✅ | "
-              f"cout.erreur = {res.cout.erreur[:70]}…")
+        # ⚠️⚠️ CONTRAT N°4, AJOUTÉ LE 29/08/2026 — CE TEST S'APPELAIT
+        # « erreur_propre » ET NE VÉRIFIAIT QUE `is not None`. Mesuré, le
+        # message publié était :
+        #     « A3 a échoué : The first guess on the deviance function
+        #       returned a nan. This could be a boundary problem and SHOULD BE
+        #       REPORTED. »
+        # — un message interne de statsmodels, qui invite l'actuaire à
+        # signaler un bogue pour un portefeuille qui n'a pas de sinistre.
+        # *Le nom du test affirmait ce que le contenu ne portait pas.*
+        self.assertNotIn('should be reported', res.cout.erreur,
+            "Le message interne de statsmodels remonte jusqu'a l'actuaire : il "
+            "l'invite a signaler un bogue pour un portefeuille sans sinistre.")
+        for attendu in ('intercept seul', '0 strictement positive'):
+            self.assertIn(attendu, res.cout.erreur,
+                f"L'erreur ne NOMME pas « {attendu} » : elle constate sans dire "
+                f"ce qui a ete observe.")
+        print(f"    PA-4 Sans sinistre → erreur propre ET NOMMÉE ✅ | "
+              f"cout.erreur = {res.cout.erreur[:78]}…")
 
     def test_trop_peu_de_sinistres_le_seuil_est_atteint(self):
         """⚠ Ce test existe parce que le précédent NE COUVRE PAS le seuil : à zéro
-        sinistre, le Gamma d'A3 meurt AVANT (déviance nan) et c'est SON échec qui
-        remonte — le garde-fou des 100 n'est jamais atteint. Ici A3 survit, et on
-        vérifie que c'est bien NOTRE seuil qui refuse de modéliser une sévérité sur
-        30 sinistres, en le NOMMANT. Sans ce test, le garde-fou serait mort-né."""
+        sinistre, A3 meurt AVANT et c'est SON échec qui remonte — le garde-fou des
+        100 n'est jamais atteint. Ici A3 survit, et on vérifie que c'est bien NOTRE
+        seuil qui refuse de modéliser une sévérité sur 30 sinistres, en le NOMMANT.
+        Sans ce test, le garde-fou serait mort-né.
+
+        ⚠️⚠️ CETTE PHRASE DISAIT « le GAMMA d'A3 meurt avant ». MESURÉ le
+        29/08/2026, en instrumentant les trois calibrations : c'est le POISSON qui
+        lève, à l'étape 2 — `_calibrer_gamma` n'est JAMAIS atteint. La conclusion
+        du test ne bouge pas (A3 meurt avant le seuil), seul le site nommé était
+        faux. *Vérifier au site que le texte nomme, pas au mécanisme général.*"""
         df = _portefeuille_auto(3000, seed=5)
         idx = np.where(df['nb_sinistres'].to_numpy() > 0)[0]
         a_annuler = idx[30:]                       # on ne garde que 30 sinistres

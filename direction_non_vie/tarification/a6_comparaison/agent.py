@@ -2527,11 +2527,26 @@ class AgentA6Comparaison:
         # ⚠️ Couleurs RAG lues à la SOURCE UNIQUE (`core/charts_tarif`), jamais
         # redéfinies : 30 définitions locales et 7 valeurs distinctes existaient.
         VERT = couleur_rag("VERT", FOND_SOMBRE)
-        ROUGE = couleur_rag("ROUGE", FOND_SOMBRE)
         AMBRE = couleur_rag("AMBRE", FOND_SOMBRE)
         BLEU    = "#3498DB"
+        # ⚠️ `ROUGE` n'est plus défini ici : il ne servait QUE dans le cycle
+        # décoratif ci-dessous. Une couleur de statut qu'on retire d'un cycle
+        # ne se garde pas « au cas où » — elle deviendrait une locale morte,
+        # et la prochaine main la remettrait dans la liste.
 
-        COULEURS = [OR, VERT, BLEU, AMBRE, ROUGE, "#9B59B6", GRIS]
+        # ⚠️⚠️ CONSTAT `charts/C4` — MÊME DÉFAUT QU'EN A4, MÊME CORRECTIF.
+        # `VERT`, `AMBRE` et `ROUGE` (soit `couleur_rag(...)`) servaient de
+        # cycle DÉCORATIF : `COULEURS[idx % len(COULEURS)]`. Un modèle était
+        # peint en rouge de statut à cause de son RANG DANS UNE LISTE.
+        # ⚠️ `#9B59B6` ne passait pas non plus : 2,49 sur `#1B3A5C`, sous 3:1.
+        # Le cycle est identique à celui d'A4 plus le BLANC — mesuré de la
+        # même façon (aucun `couleur_rag`, aucune teinte de statut hors l'OR
+        # maison, les sept au-dessus de 3:1, min L1 deuteranope 59).
+        # ⚠️ L'OR garde son sens ICI : `OR if est_prod else COULEURS[...]` —
+        # il marque le modèle de PRODUCTION, ce qui est une information, pas
+        # une décoration. Il reste donc aussi en tête du cycle.
+        COULEURS = [OR, BLEU, "#C89BD4", "#B8C4F0",
+                    "#C2678F", GRIS, BLANC]
 
         LAYOUT_BASE = dict(
             paper_bgcolor = NAVY,

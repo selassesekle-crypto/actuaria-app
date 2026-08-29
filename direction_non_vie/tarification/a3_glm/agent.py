@@ -207,6 +207,77 @@ TRAIN_SIZE = 0.80
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# QUAND MÊME L'INTERCEPT SEUL NE S'AJUSTE PAS — ON RÉPOND, ON NE PLANTE PAS
+# ══════════════════════════════════════════════════════════════════════════════
+# ⚠️⚠️ CE QUI ÉTAIT MESURÉ. Les trois calibrations (Poisson, Gamma, Tweedie)
+# se replient sur un « intercept seul » quand aucun modèle n'a convergé. Ce
+# repli était HORS de leur `try` : quand il échouait à son tour, une exception
+# BRUTE de statsmodels remontait jusqu'à `run`, qui la republiait telle quelle.
+#
+# ⚠️ LE DÉCLENCHEUR N'EST PAS UNE DONNÉE CORROMPUE — mesuré : un PORTEFEUILLE
+# SANS AUCUN SINISTRE suffit (segment neuf, branche à faible fréquence). Le
+# message publié était alors :
+#
+#     « A3 a échoué : The first guess on the deviance function returned a nan.
+#       This could be a boundary problem and should be reported. »
+#
+# ⚠️⚠️ CE MESSAGE INVITE L'ACTUAIRE À SIGNALER UN BOGUE À `statsmodels` pour
+# un portefeuille qui n'a simplement pas de sinistre. *Un message est une
+# affirmation de portée : il se mesure comme un chiffre.*
+#
+# ⚠️⚠️ ET ON NE FABRIQUE PAS DE MODÈLE POUR AUTANT. À zéro sinistre, le maximum
+# de vraisemblance de l'intercept vaut log(0) : il n'existe pas de valeur
+# finie. Publier « fréquence = 0 » donnerait une PRIME PURE NULLE — la règle
+# de trois donne une borne haute de 3/n, pas zéro. Le contrat verrouillé par
+# `test_pipeline_agents` est le bon : *on ne bricole pas un modèle sur rien,
+# on le DIT.* Ce qui change ici est le CONTENU de l'aveu, pas sa nature.
+
+class CalibrationImpossible(ValueError):
+    """Aucun modèle ajustable, pas même l'intercept seul.
+
+    ⚠️ Hérite de `ValueError` À DESSEIN : c'est ce que `statsmodels` levait
+    déjà. Un appelant qui filtrait `except ValueError` continue de fonctionner
+    — le correctif enrichit le message, il ne déplace pas le type.
+    """
+
+
+def _faits_sur_la_cible(y, quoi: str) -> str:
+    """Les faits OBSERVABLES sur une cible — jamais une cause supposée.
+
+    ⚠️⚠️ MÊME DISCIPLINE QUE LE CONSTAT `a3/C14` : on nomme ce qui se mesure,
+    et on s'arrête là. Une condition suffisante n'est annoncée que lorsqu'elle
+    est *vérifiée* ; sinon la phrase dit explicitement que la cause n'est pas
+    établie, plutôt que d'en désigner une au hasard.
+    """
+    arr = np.asarray(y, dtype=float).ravel()
+    n = int(arr.size)
+    if n == 0:
+        return f"{quoi} : aucune observation"
+    finis = np.isfinite(arr)
+    non_finies = int((~finis).sum())
+    positives = int((arr[finis] > 0).sum())
+    faits = [f"{n} observation(s)", f"{positives} strictement positive(s)"]
+    if non_finies:
+        faits.append(f"{non_finies} valeur(s) non finie(s)")
+    texte = f"{quoi} : " + ", ".join(faits)
+    if positives == 0 and non_finies == 0:
+        texte += (" — aucun evenement observe : le maximum de vraisemblance "
+                  "de l'intercept vaut log(0), aucune valeur finie n'existe")
+    return texte
+
+
+def _calibration_impossible(modele: str, cible, quoi: str,
+                            e: Exception) -> CalibrationImpossible:
+    """L'aveu NOMMÉ que `run` republiera — mesuré, et sans cause inventée."""
+    faits = _faits_sur_la_cible(cible, quoi)
+    return CalibrationImpossible(
+        f"{modele} : aucun modele ajustable, pas meme l'intercept seul. "
+        f"{faits}. Echec de type {type(e).__name__}, dont la cause n'est pas "
+        f"etablie par cette exception."
+    )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # CLASSE PRINCIPALE : AGENT A3 GLM
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -934,12 +1005,20 @@ class AgentA3GLM:
             X_intercept = sm.add_constant(
                 pd.DataFrame({'intercept': np.ones(len(df_train))})
             )
-            modele_final = sm.GLM(
-                df_train[col_freq],
-                X_intercept,
-                family=families.Poisson(link=families.links.Log()),
-                offset=offset_train
-            ).fit(maxiter=200, disp=False)
+            # ⚠️⚠️ CE `try` EST LE CORRECTIF. Le repli était NU : quand il
+            # échouait, statsmodels remontait jusqu'à l'actuaire. Voir
+            # `CalibrationImpossible` en tête de module.
+            try:
+                modele_final = sm.GLM(
+                    df_train[col_freq],
+                    X_intercept,
+                    family=families.Poisson(link=families.links.Log()),
+                    offset=offset_train
+                ).fit(maxiter=200, disp=False)
+            except Exception as e:
+                raise _calibration_impossible(
+                    'GLM Poisson (frequence)', df_train[col_freq],
+                    f"cible '{col_freq}'", e) from e
             vars_actives = []
 
         # ── MÉTRIQUES ─────────────────────────────────────────────────────────
@@ -1198,10 +1277,18 @@ class AgentA3GLM:
             X_int = sm.add_constant(
                 pd.DataFrame({'i': np.ones(len(df_sin_train))})
             )
-            modele_final = sm.GLM(
-                y_sev_train, X_int,
-                family=families.Gamma(link=families.links.Log())
-            ).fit(maxiter=200, disp=False)
+            # ⚠️ Même repli nu que le Poisson — même correctif. Sur la cible
+            # SÉVÉRITÉ, l'assiette est celle des SINISTRÉS : un portefeuille
+            # sans sinistre y arrive avec zéro ligne.
+            try:
+                modele_final = sm.GLM(
+                    y_sev_train, X_int,
+                    family=families.Gamma(link=families.links.Log())
+                ).fit(maxiter=200, disp=False)
+            except Exception as e:
+                raise _calibration_impossible(
+                    'GLM Gamma (cout moyen)', y_sev_train,
+                    'cout par sinistre, sur les contrats SINISTRES', e) from e
             vars_actives = []
 
         # ── MÉTRIQUES ─────────────────────────────────────────────────────────
@@ -1405,13 +1492,20 @@ class AgentA3GLM:
             X_int = sm.add_constant(
                 pd.DataFrame({'i': np.ones(len(df_train))})
             )
-            modele_final = sm.GLM(
-                df_train[col_target_tweedie], X_int,
-                family=families.Tweedie(
-                    link=families.links.Log(),
-                    var_power=TWEEDIE_P
-                ),
-            ).fit(maxiter=200, disp=False)
+            # ⚠️ Troisième occurrence du même repli nu — le constat portait
+            # sur le Poisson, l'assiette réelle est LES TROIS.
+            try:
+                modele_final = sm.GLM(
+                    df_train[col_target_tweedie], X_int,
+                    family=families.Tweedie(
+                        link=families.links.Log(),
+                        var_power=TWEEDIE_P
+                    ),
+                ).fit(maxiter=200, disp=False)
+            except Exception as e:
+                raise _calibration_impossible(
+                    'GLM Tweedie (prime pure)', df_train[col_target_tweedie],
+                    f"cible '{col_target_tweedie}'", e) from e
             vars_actives = []
 
         # Métriques

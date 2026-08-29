@@ -2020,8 +2020,33 @@ class AgentA4ML:
         ROUGE = couleur_rag("ROUGE", FOND_SOMBRE)
         AMBRE = couleur_rag("AMBRE", FOND_SOMBRE)
 
-        # Palette de couleurs pour les modèles
-        COULEURS_MODELES = [OR, VERT, "#3498DB", "#9B59B6", AMBRE, ROUGE]
+        # ══════════════════════════════════════════════════════════════════
+        # PALETTE DES MODÈLES — AUCUNE COULEUR DE STATUT DANS UN CYCLE
+        # ══════════════════════════════════════════════════════════════════
+        # ⚠️⚠️ CONSTAT `charts/C4`, ET LE DÉFAUT N'ÉTAIT PAS L'ESTHÉTIQUE.
+        # Cette liste contenait `VERT`, `AMBRE` et `ROUGE` — c'est-à-dire
+        # `couleur_rag(...)`, LES COULEURS DE STATUT — utilisées comme cycle
+        # DÉCORATIF : `COULEURS_MODELES[idx % len(...)]`. Le modèle numéro 5
+        # était donc peint en ROUGE RAG **parce qu'il était cinquième**.
+        # *Un lecteur entraîné par tout le reste du rapport y lit une alerte.*
+        #
+        # ⚠️ ET `#9B59B6` NE PASSAIT PAS : contraste 2,49 sur le fond de tracé
+        # `#1B3A5C`, sous le seuil WCAG 1.4.11 (3:1 pour un objet non textuel).
+        #
+        # Le cycle ci-dessous est MESURÉ, pas choisi au goût :
+        #   · aucune valeur n'est un `couleur_rag` ;
+        #   · aucune teinte dans les familles rouge/ambre (< 50 deg) ni verte
+        #     (90-175 deg) — sauf l'OR (44 deg), qui est l'accent maison du
+        #     rapport et n'a jamais été un statut ;
+        #   · contraste sur `#1B3A5C` : 5,09 · 3,69 · 5,04 · 6,75 · 3,12 · 4,06
+        #     — les six au-dessus de 3:1 ;
+        #   · six familles de teinte distinctes, et en deuteranopie la paire
+        #     la plus proche reste à 59 de distance L1 (seuil pratique 40).
+        # ⚠️ L'OR reste en tête : `idx == 0` est le meilleur modèle, et il
+        # porte déjà `width=3` puis un `dash` distinct — la couleur n'est pas
+        # le seul canal.
+        COULEURS_MODELES = [OR, "#3498DB", "#C89BD4",
+                            "#B8C4F0", "#C2678F", GRIS]
 
         LAYOUT_BASE = dict(
             paper_bgcolor = NAVY,

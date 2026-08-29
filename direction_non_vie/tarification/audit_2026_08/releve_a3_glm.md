@@ -119,6 +119,72 @@ Les vraies bornes existent (`ic95_low`/`ic95_high`) et ne sont pas passées.
 **C17 — L'exemple d'usage `run(result_a2)`**, 3 fois dans le module, est refusé par le module.
 **C18 — En-tête de test : « 7 tests », 4 méthodes.**
 
+**C19 — Le repli « intercept seul » etait HORS du `try` : les trois calibrations laissaient fuir statsmodels.**
+
+⚠️⚠️ **CONSTAT NEUF, OUVERT ET FERMÉ LE 29/08/2026.** Il ne venait pas du relevé
+d'origine : il avait été trouvé lors d'un lot antérieur, noté en mémoire, et
+**jamais versé au dépôt**. Il l'est ici. *Une trouvaille qui ne vit que dans une
+note n'existe pas pour le prochain lecteur.*
+
+> ✅ **`a3/C19`** · **FERMÉ le 29/08/2026, DANS LE LOT QUI L'A OUVERT.**
+> *Preuve : `test_repli_et_palette.py`, 5 contrôles.*
+>
+> Les trois calibrations d'A3 se replient sur un « intercept seul » quand aucun
+> modèle n'a convergé. **Ce repli était HORS de leur `try`** : quand il échouait
+> à son tour, une exception BRUTE de statsmodels remontait jusqu'à l'actuaire.
+>
+> ⚠️⚠️ **LE DÉCLENCHEUR N'EST PAS UNE DONNÉE CORROMPUE** — mesuré sur la vraie
+> `_calibrer_poisson` :
+>
+> ```
+>   portefeuille normal                 -> REPOND
+>   aucune variable predictive fournie  -> REPOND        (le repli SAIN)
+>   PORTEFEUILLE SANS AUCUN SINISTRE    -> *** LEVE ***
+>   portefeuille VIDE (0 contrat)       -> *** LEVE ***
+>   un NaN dans la cible                -> *** LEVE ***
+> ```
+>
+> Un segment neuf, une branche à faible fréquence : **cas actuariels
+> ordinaires**.
+>
+> ⚠️⚠️ **ET LE MESSAGE PUBLIÉ ÉTAIT CELUI-CI**, mesuré de bout en bout par le
+> pipeline :
+>
+> ```
+>   A3 a echoue : The first guess on the deviance function returned a nan.
+>   This could be a boundary problem and SHOULD BE REPORTED.
+> ```
+>
+> *Un message interne de statsmodels, qui invite l'actuaire à signaler un bogue
+> pour un portefeuille qui n'a simplement pas de sinistre.*
+>
+> ⚠️⚠️ **ON NE FABRIQUE PAS DE MODÈLE POUR AUTANT — c'est la décision
+> actuarielle du lot.** À zéro sinistre, le maximum de vraisemblance de
+> l'intercept vaut **log(0)** : aucune valeur finie n'existe. Publier
+> « fréquence = 0 » donnerait une **prime pure nulle**, alors que la règle de
+> trois donne une borne haute de **3/n**. Le contrat verrouillé par
+> `test_pipeline_agents` (PA-4) est le bon : *on ne bricole pas un modèle sur
+> rien, on le DIT.* **Ce lot change le CONTENU de l'aveu, pas sa nature.**
+>
+> ⚠️ **ET LE CONSTAT ÉTAIT PLUS LARGE QUE SON LIBELLÉ** : relevé par AST, les
+> **trois** calibrations portaient le même repli nu — Poisson, Gamma, Tweedie.
+> Corriger le seul Poisson aurait laissé deux jumeaux identiques.
+>
+> ⚠️⚠️ **ET J'AI CORRIGÉ UN TEXTE FAUX QUE LA MESURE A DÉMASQUÉ** :
+> `test_trop_peu_de_sinistres_le_seuil_est_atteint` disait « à zéro sinistre, **le
+> GAMMA** d'A3 meurt avant ». En instrumentant les trois calibrations : c'est le
+> **POISSON** qui lève, à l'étape 2 — `_calibrer_gamma` **n'est jamais atteint**.
+> La conclusion du test ne bouge pas ; seul le site nommé était faux.
+>
+> ⚠️ **ET PA-4 S'APPELAIT `erreur_propre` SANS LE VÉRIFIER** : il ne testait que
+> `is not None`. Il exige désormais que le message ne contienne pas
+> « should be reported » **et** qu'il nomme ce qui a été observé.
+>
+> ⚠️ `CalibrationImpossible` hérite de `ValueError` **à dessein** : c'est ce que
+> statsmodels levait déjà. Un appelant qui filtrait `except ValueError` continue
+> de fonctionner — *le correctif enrichit le message, il ne déplace pas le
+> type.*
+
 ### D — Vérifié comme BON (6)
 
 | affirmation | mesure |

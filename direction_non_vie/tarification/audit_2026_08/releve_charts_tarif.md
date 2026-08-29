@@ -220,6 +220,78 @@ fois.
 > ⚠️ Et le balayage : **54 fichiers** construisent une figure plotly hors du
 > module, contre **52** au relevé. **NON CLASSÉ, NON OUVERT.**
 
+> ✅ **`charts/C4`** · **FERMÉ le 29/08/2026, ET PAS PAR OÙ IL ÉTAIT ÉCRIT.**
+> *Preuve : `test_repli_et_palette.py`, 5 contrôles.*
+>
+> **Selasse a arbitré : la couleur est mon choix, l'exigence est « pertinent et
+> beau pour le client ».** J'ai donc mesuré avant de décider, et la mesure a
+> déplacé le constat.
+>
+> ### ⛔ CE QUE JE NE FAIS PAS : migrer les quatre agents vers la charte
+>
+> ⚠️ **La prémisse du constat est PÉRIMÉE.** Il dit « les quatre agents portent
+> leur propre charte ». Re-mesuré au code du 29/08 : ils partagent **UNE seule**
+> palette — 3 fonds `NAVY/NAVY_L/NAVY_LL` + 4 accents (`OR` `BLANC` `GRIS`
+> `BLEU`) **identiques chez les quatre**. Il n'y a pas quatre chartes.
+>
+> ⚠️ **Et la migration n'achèterait presque rien à l'œil** : l'or des agents
+> `#C9A84C` est à **1,09** de contraste de l'or de la charte `#D4AF37`.
+> *Toucher ~54 fichiers pour un écart invisible n'est pas un correctif, c'est
+> un déplacement.*
+>
+> ### ⚠️⚠️ CE QUE JE CORRIGE : LE DÉFAUT EST SÉMANTIQUE, PAS ESTHÉTIQUE
+>
+> Les deux listes décoratives contenaient **`couleur_rag('VERT'/'AMBRE'/
+> 'ROUGE')` — les couleurs de STATUT** — consommées en cycle **positionnel** :
+>
+> ```
+>   a4 : COULEURS_MODELES = [OR, VERT, "#3498DB", "#9B59B6", AMBRE, ROUGE]
+>   a6 : COULEURS         = [OR, VERT, BLEU, AMBRE, ROUGE, "#9B59B6", GRIS]
+>        ... consommees par  COULEURS[idx % len(COULEURS)]
+> ```
+>
+> **Le modèle n° 5 était peint en ROUGE RAG parce qu'il était cinquième.** Un
+> lecteur entraîné par tout le reste du rapport y lit une alerte. *C'est le
+> motif de `charts/C10`, retourné : là un statut portait la couleur du décor,
+> ici le décor porte la couleur d'un statut.*
+>
+> ⚠️ **Second défaut, dur et mesuré** : `#9B59B6` vaut **2,49** sur le fond de
+> tracé `#1B3A5C` — sous le seuil WCAG 1.4.11 (3:1, objet non textuel).
+>
+> ### Le cycle retenu — **choisi par mesure, pas au goût**
+>
+> `[OR #C9A84C, BLEU #3498DB, MAUVE #C89BD4, PERVENCHE #B8C4F0, ROSE #C2678F,
+> GRIS #8A9AB0]`, plus `BLANC #F0F4F8` en 7ᵉ pour a6.
+>
+> | critère | mesure |
+> |---|---|
+> | aucune valeur `couleur_rag` | 0 sur 7 |
+> | WCAG 1.4.11 sur `#1B3A5C` | minimum **3,12** — les 7 au-dessus de 3:1 |
+> | familles de teinte | **6** distinctes (44°, 204°, 215°, 227°, 287°, 334°) |
+> | deuteranopie, paire la plus proche | **L1 = 59** (seuil pratique 40) |
+>
+> ⚠️ **L'OR RESTE, ET L'EXCEPTION EST DÉCLARÉE** : sa teinte (44°) est dans la
+> famille ambre. Il n'a jamais désigné un statut, c'est l'accent maison, et en
+> A6 il **porte une information** (`OR if est_prod else ...` marque le modèle de
+> production). *On déclare l'exception, on ne la cache pas dans un seuil.*
+>
+> ⚠️⚠️ **ET DEUX DE MES PROPRES ACCUSATIONS SONT RETIRÉES PAR LA MESURE :**
+> - j'ai accusé `#0F2E52 #1B3A5C #243F6A` d'être à 1,21 / 1,43 / 1,57, sous le
+>   seuil. **Vérifié au site : ce sont `NAVY / NAVY_L / NAVY_LL`, les FONDS.**
+>   Le critère 1.4.11 ne les concerne pas — *j'appliquais un seuil de série à
+>   une toile* ;
+> - j'ai accusé **six paires** d'être « trop proches » (contraste < 1,5).
+>   Simulé en deuteranopie : **0 paire sur 15 fusionne**. Le contraste mesure la
+>   **luminance**, pas la couleur — il **sur-accusait**.
+>
+> ⚠️ Et deux cycles que j'avais proposés ont été **refusés par le critère
+> daltonien** avant d'être écrits : mauve/cyan à L1 = 20, puis mauve/ardoise à
+> 17. *La palette a été mesurée, pas choisie.*
+>
+> ⚠️ **RESTE HORS ASSIETTE, NOMMÉ** : `#9B59B6` vit aussi dans `a9` `a10` `a11`
+> `a12` et `provisionnement/n5_graphiques.py` — **hors du chantier
+> tarification**, non touché.
+
 **C5 — Quatre troncatures silencieuses, aucune écrite sur la figure.**
 
 ```
