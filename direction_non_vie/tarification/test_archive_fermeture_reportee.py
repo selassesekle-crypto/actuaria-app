@@ -50,10 +50,23 @@ _CLE = re.compile(r'\b(' + '|'.join(_ZONES) + r')/C(\d+)\b')
 #: L'en-tete d'un constat, DEUX formes -- n'en compter qu'une en rate douze.
 _ENTETE = re.compile(r'^\*\*(C\d+)\*\*\s*—|^\*\*(C\d+)\s*—')
 
-#: ⚠️ EXCEPTIONS DECLAREES : une cle nommee dans un test SANS etre fermee.
-#: Vide aujourd'hui, et c'est mesure. Toute entree doit porter SA RAISON --
-#: une exception muette est exactement ce que cet audit poursuit.
-_HORS_ASSIETTE: dict[str, str] = {}
+#: ⚠️ EXCEPTIONS DECLAREES : une cle NOMMEE dans un test sans y etre FERMEE.
+#: Toute entree doit porter SA RAISON -- une exception muette est exactement ce
+#: que cet audit poursuit.
+#:
+#: ⚠️⚠️ ET ELLE EST SCOPEE PAR FICHIER, PAS PAR CLE. Une exemption portant la
+#: seule cle laisserait passer un futur test qui EPINGLERAIT vraiment ce
+#: constat en oubliant son bloc d'archive -- c'est-a-dire exactement le defaut
+#: que ce fichier existe pour attraper. La cle (constat, fichier) fait qu'un
+#: AUTRE fichier nommant la meme cle rallume le filet.
+_HORS_ASSIETTE: dict[tuple[str, str], str] = {
+    ('a2/C5', 'test_comptes_a2_publies.py'):
+        "Cite comme RAISON du chemin choisi par l'aide `_executer` (A1 -> A2 "
+        "plutot que fit/transform : les deux chemins ne traitent pas "
+        "l'exposition nulle pareil), pas epingle. `a2/C5` reste OUVERT. "
+        "Retirer la mention detruirait une vraie trace ; une mention n'est "
+        "pas une fermeture.",
+}
 
 
 def _texte(chemin: pathlib.Path) -> str:
@@ -102,10 +115,22 @@ def _cles_fermees() -> set[str]:
 
 
 def _cles_nommees_par_les_tests() -> dict[str, set[str]]:
-    """Chaque cle nommee dans un test de tarification, et par qui."""
+    """Chaque cle nommee dans un test de tarification, et par qui.
+
+    ⚠️⚠️ CE FICHIER-CI EST HORS DE SA PROPRE ASSIETTE, ET C'EST STRUCTUREL.
+    Les cles qui y figurent sont des DECLARATIONS d'exemption ou des temoins de
+    controle -- jamais des epinglages. Sans cette sortie, declarer une exemption
+    pour `x/Cn` CREERAIT une mention de `x/Cn` que le filet reprocherait
+    aussitot : le garde-fou s'accuserait lui-meme, et l'exemption serait
+    impossible a ecrire. *Mesure : le defaut s'est produit des la premiere
+    entree ecrite.*
+    ⚠️ La sortie ne couvre QUE ce fichier : tout autre test nommant une cle
+    reste dans l'assiette, et la violation plantee le prouve.
+    """
     par_cle: dict[str, set[str]] = {}
     for fichier in sorted(_TARIF.rglob('test_*.py')):
-        if 'audit_2026_08' in fichier.as_posix():
+        if ('audit_2026_08' in fichier.as_posix()
+                or fichier.name == pathlib.Path(__file__).name):
             continue
         for zone, num in _CLE.findall(_texte(fichier)):
             par_cle.setdefault(f'{zone}/C{num}', set()).add(fichier.name)
@@ -124,8 +149,10 @@ class TestFermetureReportee(unittest.TestCase):
         fermees = _cles_fermees()
         manquants = {
             cle: sorted(fichiers)
-            for cle, fichiers in _cles_nommees_par_les_tests().items()
-            if cle in reels and cle not in fermees and cle not in _HORS_ASSIETTE
+            for cle, fichiers in (
+                (c, {f for f in fs if (c, f) not in _HORS_ASSIETTE})
+                for c, fs in _cles_nommees_par_les_tests().items())
+            if fichiers and cle in reels and cle not in fermees
         }
         self.assertEqual(
             manquants, {},
@@ -137,8 +164,14 @@ class TestFermetureReportee(unittest.TestCase):
 
     def test_les_exceptions_declarees_portent_leur_raison(self):
         """⚠️ Une exception muette est le défaut que cet audit poursuit."""
-        for cle, raison in _HORS_ASSIETTE.items():
+        for (cle, fichier), raison in _HORS_ASSIETTE.items():
             self.assertRegex(cle, r'^\w+/C\d+$', f'clé mal formée : {cle}')
+            self.assertRegex(fichier, r'^test_\w+\.py$',
+                             f'{cle} : fichier mal formé : {fichier}')
+            self.assertTrue(
+                (_TARIF / fichier).exists() or any(
+                    _TARIF.rglob(fichier)),
+                f'{cle} : exemption sur un fichier absent : {fichier}')
             self.assertGreaterEqual(
                 len(raison.strip()), 20,
                 f'{cle} : exception sans raison lisible')

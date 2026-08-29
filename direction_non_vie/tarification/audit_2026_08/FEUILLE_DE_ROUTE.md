@@ -13,8 +13,8 @@ l'état d'aujourd'hui.*
 
 | # | critère | état mesuré aujourd'hui |
 |---|---|---|
-| **S1** | **Rien de faux n'est publié** | ⛔ **86 constats ouverts** — *dérivés le 29/08 des clés de fermeture, méthode au §②* |
-| **S2** | **Rien de fermé ne peut régresser** | 🟡 **65 fermés, 1 partiel (`pipeline/C1`).** ✅ `a5/C5` n'est plus « corrigé sans être épinglé » : il est fermé ET épinglé, et le lot a montré qu'il se reproduisait encore par une SECONDE cause. ✅ **Et l'archive ne peut plus RETARDER sur le code** : `test_archive_fermeture_reportee.py` fait tomber la gate dès qu'un constat épinglé par un test n'a pas son bloc de fermeture -- le défaut mesuré le 28/08, où douze lots avaient été poussés sans être reportés. ⚠️ L'archive elle-même est désormais épinglée : `test_archive_cles_fermeture.py` fait tomber la gate sur un bloc de fermeture qui ne nomme pas son constat |
+| **S1** | **Rien de faux n'est publié** | ⛔ **84 constats ouverts** — *dérivés le 29/08 des clés de fermeture, méthode au §②* |
+| **S2** | **Rien de fermé ne peut régresser** | 🟡 **67 fermés, 1 partiel (`pipeline/C1`).** ✅ `a5/C5` n'est plus « corrigé sans être épinglé » : il est fermé ET épinglé, et le lot a montré qu'il se reproduisait encore par une SECONDE cause. ✅ **Et l'archive ne peut plus RETARDER sur le code** : `test_archive_fermeture_reportee.py` fait tomber la gate dès qu'un constat épinglé par un test n'a pas son bloc de fermeture -- le défaut mesuré le 28/08, où douze lots avaient été poussés sans être reportés. ⚠️ L'archive elle-même est désormais épinglée : `test_archive_cles_fermeture.py` fait tomber la gate sur un bloc de fermeture qui ne nomme pas son constat. ⚠️⚠️ **ET SON EXEMPTION EST SCOPÉE PAR FICHIER, mesuré le 29/08** : une exemption portant la seule clé aurait laissé passer un futur test qui ÉPINGLERAIT vraiment ce constat sans écrire son bloc — le défaut même que ce filet attrape. *Un garde-fou qui exclut la seule chose qui compte n'en est pas un.* Le fichier du garde-fou sort de sa propre assiette, sinon déclarer une exemption pour `x/Cn` créerait la mention que le filet reproche aussitôt |
 | **S3** | **Un tarif signé se rejoue à l'identique** | 🟡 **RE-MESURÉ LE 27/08 — 2 fermés, 1 hérité, 1 PARTIEL.** ✅ **l'empreinte du plan est versionnée** : `s1:9b6d4f70080ad771`, **rejouée identique** sur les 20 plans (`2cb43ef`). ✅ **le livrable ne publie plus un `now()` sous l'étiquette « Arrêté »** : **0** site `_bandeau(… now …)`, contre **28** à l'origine ; absent → « non déclaré », illisible → « non déclaré (illisible : …) » (`ea37564`). ⬜ *hérité, non re-mesuré ici* : le tarif **déclaratif** reproductible au bit près (0,00e+00). ⚠️ **PARTIEL — le tarif DL** : le `seed` est **déclaré** (paramètre de `A5.run`), **appliqué** à `torch.manual_seed` et `np.random.seed` (l.528-529) et **inscrit au rapport**. ⚠️⚠️ **Mais la reproductibilité bout-en-bout n'est PAS prouvée ici** : elle demande un double run d'A5, non fait. *Le seed posé n'est pas la reproductibilité mesurée.* |
 | **S4** | **Un seul chemin — ou des chemins également gardés** | ⛔ **RE-MESURÉ LE 27/08 — inchangé, et l'asymétrie est nette.** **L'orchestrateur a toujours 0 appelant de production** (2 importeurs au total, tous hors production — relevé par AST). ⚠️⚠️ **Et la couche qualité départage les deux chemins** : `pipeline_tarifaire` (déclaratif) importe `core.qualite_donnees` **et** `core.conformite_reglementaire` ; `pipeline_agents` **n'en importe AUCUN**. *Deux chemins vers un tarif signé, un seul gardé.* ⬜ *non re-derivable* : le « 5 assemblages dans l'app » date d'une définition non consignée — **je ne le réaffirme pas sans la refaire**. |
 | **S5** | **Tout ce qui tarife est atteignable par une gate** | 🟡 **RE-MESURÉ LE 27/08, ET LA NUANCE COMPTE.** `actuaria_app.py` (**5 208 l**) est **importable** depuis le lot 0.1 (`07be8c0`) — mais **AUCUN test ne l'importe** ; **4 le LISENT comme un fichier** (`core/test_imports_app.py` le dit lui-même : *« ce test relit le fichier, il ne l'importe pas »*). ⚠️ *Ce qui est exercé, c'est sa STRUCTURE, pas son comportement.* ✅ `core/elasticite.py` (**988 l**) n'est plus hors de portée : **2 tests l'importent** (`test_elasticite.py`, `test_a4_ml.py`) — ⚠️ **testé n'est toujours pas audité**, il reste à l'ouverture HORS RANG. ⛔ `services/excel_helpers.py` (**151 l**) : **0 test ne l'importe**. |
@@ -39,9 +39,9 @@ lui-même**.
 | | |
 |---|---|
 | constats relevés (vagues 1 + 2) | **151** — *recomptés le 29/08 ; `a3/C19`, `services/C10`, `a5/C10` et `services/C11` sont des constats NEUFS, ouverts et fermés dans leur propre lot* |
-| fermés **et épinglés** | **65** |
+| fermés **et épinglés** | **67** |
 | corrigé, **non épinglé** | **0** — `a5/C5` épinglé le 29/08 · **partiel** : `pipeline/C1` |
-| **⛔ OUVERTS** | **86** |
+| **⛔ OUVERTS** | **84** |
 | lignes lues intégralement | **22 693** sur 23 863 du périmètre |
 | jamais auditées | **1 170 l** + `actuaria_app.py` (5 181 l) |
 | preuves qui se relancent | **35, 0 échec** |
@@ -464,20 +464,45 @@ coupable (3) · annotations et exports morts (3).
 
 ## HORS RANG — LE TRI · 🟡 **A2 TRACÉ (16/16) · 64 restants**
 
-⚠️⚠️ **ET LE COMPTE ÉTAIT DE 40 : IL EST DE 80.** Dérivé le 29/08 —
-**86 constats ouverts, dont 6 seulement sont nommés dans ce document.** Les 80
-autres ne le sont nulle part. Le document les répartit en « 38 de bruit » +
-« 40 non triés », mais **aucun des deux ensembles n'est énuméré** : ils sont
-donc **indiscernables tant que le tri n'est pas fait**. *Le tri est la seule
-façon de savoir lequel est lequel.*
+⚠️⚠️ **ET LE COMPTE ÉTAIT DE 40 : IL EST DE 77.** Le document répartissait
+les non alloués en « 38 de bruit » + « 40 non triés », mais **aucun des deux
+ensembles n'est énuméré** : ils sont **indiscernables tant que le tri n'est pas
+fait**. *Le tri est la seule façon de savoir lequel est lequel.*
+
+⚠️ **LE CHIFFRE ET SA MÉTHODE, CÔTE À CÔTE** — re-dérivés le 29/08 après la
+fermeture d'`a2/C1` et d'`a2/C2`. Méthode rejouable : les clés ouvertes du §②,
+cherchées comme mot entier dans ce fichier, **avant** puis **après** le titre
+`## HORS RANG`.
+
+| lecture | compte |
+|---|---|
+| constats **ouverts** | **84** |
+| dont **alloués à un rang** (nommés avant `## HORS RANG`) | **7** |
+| ⛔ **NON alloués — c'est l'assiette du tri** | **77** |
+| dont **tracés au site** par le tri A2 du 29/08 | **13** |
+| ⛔ **ni alloués, ni tracés** | **64** |
+
+⚠️ **ET MA PREMIÈRE MESURE DE CE TABLEAU S'EST TROMPÉE, PAR LE PIÈGE CONNU :**
+elle cherchait chaque clé comme mot entier et n'en trouvait que **7** tracées,
+donc **70** nulle part. Six A2 ouverts sont écrits en **ligne groupée** —
+`a2/C3 C4 C6 C10 C11 C12 C14` — que la recherche par clé **ne voit pas**.
+*Un relevé par symbole ne voit ni les alias, ni les formes groupées.* Le compte
+juste est **13 tracés, 64 restants**, et il tombe sur le même 64 que la section
+ci-dessous : les deux se recoupent au lieu de se contredire.
+
+⚠️⚠️ **ET LA PHRASE QUE CE TABLEAU REMPLACE ÉTAIT FAUSSE QUAND JE L'AI ÉCRITE :**
+elle disait « **6** seulement sont nommés dans ce document, les **80** autres
+ne le sont nulle part » — or le tableau du tri A2, **dans ce même document et
+juste en dessous**, en nommait déjà sept de plus. *Un compte publié à côté de
+ce qui le contredit.* Le motif du chantier, appliqué à la carte elle-même.
 
 ### ✅ A2 — LES 16, TRACÉS AU SITE (29/08)
 
 | constat | mesure | classement |
 |---|---|---|
 | `a2/C15` | ⛔ **40 sites, 39 fichiers** — voir ci-dessous | **✅ FERMÉ ce jour** |
-| `a2/C1` | ⚠️ **CORRIGÉ** : « Winsorisées : **7** » pour **7** réelles (le relevé mesurait 0 pour 9) | **troisième état** — à épingler |
-| `a2/C2` | ⚠️ **CORRIGÉ** : `colonnes_non_encodees = []`, **VERT atteint** | **troisième état** — à épingler |
+| `a2/C1` | ⚠️ **CORRIGÉ** : « Winsorisées : **7** » pour **7** réelles (le relevé mesurait 0 pour 9) | **✅ FERMÉ ce jour, épinglé** |
+| `a2/C2` | ⚠️ **CORRIGÉ** : `colonnes_non_encodees = []`, **VERT atteint** | **✅ FERMÉ ce jour, épinglé** |
 | `a2/C8` `a2/C9` | ⚠️ **NON REPRODUITS** sur données propres | **à re-mesurer avec une fixture d'imputation** — rang 2 si vrais |
 | `a2/C5` | vrai (ni exclu, ni imputé ; `lignes_exclues` = compteur mort) — ⚠️ **mais les deux chemins de production sont protégés en amont** : A1 corrige, `controler_qualite` exclut (400 → 360). *Cette dépendance n'est pas dite dans A2.* | **7** |
 | `a2/C3 C4 C6 C10 C11 C12 C14` | docstrings et commentaires que le code contredit — ⚠️ **C10 vécu** : ma sonde a suivi l'exemple d'usage, A2 l'a refusé | **7** |

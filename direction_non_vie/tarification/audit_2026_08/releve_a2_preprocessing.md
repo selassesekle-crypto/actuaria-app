@@ -22,6 +22,19 @@
 
 Le diagnostic VERT dirait de même « La Winsorisation sur **0** variable(s) réduit l'influence des valeurs extrêmes ».
 
+> ✅ **`a2/C1`** · **FERMÉ le 29/08/2026 — LE CODE ÉTAIT CORRIGÉ, RIEN NE
+> L'ÉPINGLAIT.** *Preuve : `test_comptes_a2_publies.py`, 3 contrôles.*
+>
+> Le troisième état, trouvé par le tri : `nb_winsor = len(winsor)` — le
+> dictionnaire EST celui des colonnes écrêtées, la clé `colonnes_winsorisees`
+> n'a jamais existé. Mesuré : « Winsorisées : **7** » pour **7** facteurs
+> réellement plafonnés.
+> ⚠️ **ON N'ÉPINGLE PAS LE NOMBRE 7** — il dépend du plan et du portefeuille.
+> On épingle l'**égalité** entre ce qui est écrit et ce qui a été fait. *Ce qui
+> LIMITE est sûr, ce qui AFFIRME est une dette.*
+> ⚠️ Un contrôle vérifie aussi que chaque entrée porte ses **bornes** et son
+> compte : sans elles, `len()` compterait encore — mais sur quoi ?
+
 **C2 — « 5 colonne(s) n'ont pas pu être encodées » — les 5 sont encodées. Et cette phrase fausse plafonne le statut.**
 
 ```
@@ -41,6 +54,26 @@ Le diagnostic VERT dirait de même « La Winsorisation sur **0** variable(s) ré
   -> VERT atteint par 0/20 plans : AUCUN
   (colonnes_object_restantes == nombre de facteurs categoriels, plan par plan)
 ```
+
+> ✅ **`a2/C2`** · **FERMÉ le 29/08/2026 — MÊME TROISIÈME ÉTAT.**
+> *Preuve : `test_comptes_a2_publies.py`, 4 contrôles.*
+>
+> Le critère est devenu une propriété de la **SORTIE** : une source est non
+> encodée si **aucune** colonne `<nom>_*` n'existe. Mesuré sur données propres :
+> `colonnes_non_encodees = []` et **statut VERT** — il était structurellement
+> inatteignable.
+>
+> ⚠️⚠️ **LE PLAFOND N'A PAS ÉTÉ SUPPRIMÉ, IL A ÉTÉ RENDU JUSTE.** Une colonne
+> vraiment non encodable doit TOUJOURS plafonner à AMBRE : les modèles ne
+> mangent pas de chaînes. Mesuré — une colonne `commentaire_libre` injectée est
+> signalée **et** fait tomber à AMBRE. *Un correctif qui aurait retiré le
+> plafond aurait fermé le constat en détruisant le signal.* La violation
+> plantée le confirme.
+>
+> ⚠️ **ET MON PROPRE TEST A ÉTÉ CORRIGÉ PAR SON ÉCHEC** : il filtrait sur
+> `dtype == object`, or les colonnes sortent en **dtype `str`** — l'hypothèse
+> exacte que le `Pandas4Warning` de ce module dénonce, et dans laquelle ma
+> sonde est tombée. Le test porte désormais sur « **pas numérique** ».
 
 ### B — Affirme plus que le code ne porte (7)
 
