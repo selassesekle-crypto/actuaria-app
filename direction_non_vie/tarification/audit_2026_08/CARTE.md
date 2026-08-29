@@ -19,7 +19,7 @@ aujourd'hui se valent s'ils publient le même faux. »*
 |---|---|
 | constats relevés (vague 1 + vague 2) | **143** (85 + 58) |
 | fermés, épinglés par un contrôle positif | **18** |
-| corrigés, **non épinglés** | **1** (`a5/C5`) |
+| corrigés, **non épinglés** | **0** — `a5/C5` épinglé le 29/08 |
 | **ouverts** | **124** (66 + 58) |
 | **+ inscrit le 24/08** sur arbitrage | **1** (`conformite/C14`) |
 | **⛔ OUVERTS AU TOTAL** | **125** |

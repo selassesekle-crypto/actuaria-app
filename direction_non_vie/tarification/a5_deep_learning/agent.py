@@ -2032,14 +2032,42 @@ class AgentA5DeepLearning:
         # rendaient le même statut. L'historique réel est empilé époque par
         # époque par `_calibrer_cann` / `_calibrer_tabnet` ({'epoch','train',
         # 'val'}) ; c'est lui qui est lu ici, sur le modèle de tête.
+        # ⚠️⚠️ ON CHERCHE LE MEILLEUR MODÈLE **DL**, PAS LE PREMIER DU
+        # CLASSEMENT. Mesuré le 29/08/2026 sur deux runs réels : le classement
+        # d'A5 contient aussi le GLM d'A3 et le meilleur ML d'A4.
+        #
+        #   portefeuille 2500 : tete = CANN               -> courbe 3 points
+        #   portefeuille 3000 : tete = 'GLM Poisson (A3)' -> courbe 0 point
+        #                       (cann=3 et tabnet=3 historiques EXISTAIENT)
+        #
+        # `historiques.get('glm poisson (a3)')` ne trouvait rien, et H1
+        # publiait « convergence NON mesurée », statut ROUGE — **un verdict
+        # sur la convergence du DL rendu faux par la victoire d'un GLM.**
+        # *Le verdict portait sur le mauvais objet.*
+        #
+        # ⚠️ ON FILTRE PAR LA DONNÉE PRÉSENTE, PAS PAR UNE ÉTIQUETTE. Le
+        # classement porte bien un champ `type == 'Deep Learning'`, mais s'y
+        # fier ferait dépendre un verdict d'un libellé — le défaut que ce
+        # chantier poursuit. Seuls les modèles DL ont un historique
+        # d'entraînement : **avoir une entrée dans `historiques` EST le
+        # critère**, et il ne peut pas mentir.
+        # ⚠️ On parcourt dans l'ORDRE DU CLASSEMENT : le premier trouvé est
+        # donc bien le MEILLEUR des DL, pas un DL au hasard.
         histo_h1 = []
+        _modele_h1 = ''
         if classement and historiques:
-            _cle_h1  = str(classement[0].get('modele', '')).strip().lower()
-            histo_h1 = historiques.get(_cle_h1) or []
+            for _c in classement:
+                _cle = str(_c.get('modele', '')).strip().lower()
+                if historiques.get(_cle):
+                    histo_h1, _modele_h1 = historiques[_cle], _c.get('modele', '')
+                    break
 
         if classement and histo_h1:
-            meilleur   = classement[0]
-            modele_nm  = meilleur.get('modele', 'DL')
+            # ⚠️ LE NOM SUIT L'HISTORIQUE. H1 parle de la convergence du modèle
+            # DONT ON LIT LES PERTES — nommer `classement[0]` ferait dire
+            # « GLM Poisson (A3) a bien convergé » sur l'historique du CANN.
+            # *Le libellé doit désigner l'objet mesuré, pas son voisin.*
+            modele_nm  = _modele_h1 or classement[0].get('modele', 'DL')
             _pertes    = [float(h.get('train', 0.0)) for h in histo_h1]
             loss_init  = _pertes[0]
             loss_final = _pertes[-1]
@@ -2335,16 +2363,48 @@ class AgentA5DeepLearning:
         except Exception as e:
             logger.warning(f"G1 convergence : {e}")
 
-        # G2 — Comparaison Gini DL vs GLM vs ML
+        # ══════════════════════════════════════════════════════════════════════
+        # G2 — DL vs GLM : UN MODÈLE NON CALIBRÉ N'EST PAS UN MODÈLE À ZÉRO
+        # ══════════════════════════════════════════════════════════════════════
+        # ⚠️⚠️ CONSTAT `a5/C5`, ET SA PREMIÈRE CAUSE ÉTAIT DÉJÀ CORRIGÉE. Le
+        # relevé mesurait `barres [GLM, CANN, TabNet] = [0.14, 0, 0]` pour des
+        # Gini réels `[0.4781, 0.0950]` : la figure lisait alors la mauvaise
+        # clé. Elle lit la bonne aujourd'hui.
+        #
+        # ⚠️⚠️ MAIS LE SYMPTÔME SE REPRODUISAIT ENCORE, PAR UNE AUTRE CAUSE —
+        # mesuré le 29/08/2026 :
+        #
+        #   les deux modeles ENTRAINES        barres = [0.14, 0.4781, 0.095]
+        #   CANN ABSENT (calibration echouee) barres = [0.14, 0.0,    0.095]
+        #   LES DEUX ABSENTS                  barres = [0.14, 0.0,    0.0]
+        #
+        # `self.metriques['cann']` n'existe QUE si la calibration a réussi ;
+        # le `.get(..., 0)` transformait une absence en performance nulle.
+        # **La dernière ligne reproduit exactement les nombres du relevé.**
+        # *Un zéro qui signifie « jamais entraîné » est indiscernable d'un zéro
+        # mesuré* — c'est la leçon d'`a3/C6` (le Gini du Tweedie) et du
+        # plancher d'A5.
+        #
+        # ⚠️ ON N'INVENTE PAS DE VALEUR : le modèle absent est RETIRÉ de la
+        # figure, et son absence est ÉCRITE sous l'axe — patron de `charts/C5`
+        # (« n tracées sur m fournies »). La légende, elle, promet que les
+        # barres DL « doivent dépasser la ligne GLM » : une barre fantôme à
+        # zéro la faisait mentir.
         try:
             h3 = val_dl["h3_apport_dl"]
-            modeles_comp = ["GLM Poisson (ref)", "CANN (Wüthrich)", "TabNet"]
-            ginis_comp   = [
-                h3["gini_glm"],
-                metriques.get("cann",   {}).get("gini_test", 0),
-                metriques.get("tabnet", {}).get("gini_test", 0),
-            ]
-            colors_comp = [GRIS, BLEU, OR]
+            _dl_possibles = (("CANN (Wüthrich)", "cann"), ("TabNet", "tabnet"))
+            _absents = [lib for lib, cle in _dl_possibles
+                        if "gini_test" not in (metriques.get(cle) or {})]
+            modeles_comp = ["GLM Poisson (ref)"] + [
+                lib for lib, cle in _dl_possibles
+                if "gini_test" in (metriques.get(cle) or {})]
+            ginis_comp   = [h3["gini_glm"]] + [
+                metriques[cle]["gini_test"] for _, cle in _dl_possibles
+                if "gini_test" in (metriques.get(cle) or {})]
+            # ⚠️ La palette suit le nombre de barres RÉELLEMENT tracées : une
+            # liste de trois couleurs sur deux barres laisserait la troisième
+            # sans usage, et une barre retirée décalerait les couleurs.
+            colors_comp = [GRIS, BLEU, OR][:len(modeles_comp)]
             statut_h3   = h3["statut"]
             # ⚠️ `couleur_h3` RETIRÉE : tous ses usages étaient du TEXTE, et ils
             # lisent désormais `couleur_h3_txt`. *Une couleur d'objet qui ne sert
@@ -2374,13 +2434,32 @@ class AgentA5DeepLearning:
                 ),
                 xaxis=dict(tickfont=dict(color=BLANC), showgrid=False),
                 yaxis=dict(visible=False), bargap=0.35, showlegend=False,
+                # ⚠️ CE QUI N'EST PAS TRACÉ EST ÉCRIT. Un modèle absent de la
+                # figure sans un mot laisserait croire qu'il n'existe pas,
+                # alors qu'il a été TENTÉ et a échoué — deux choses très
+                # différentes pour qui valide le modèle.
                 annotations=[dict(
-                    text="💡 Les barres bleue/dorée doivent dépasser la ligne pointillée (GLM). Si non → DL non justifié.",
+                    text=("💡 Les barres bleue/dorée doivent dépasser la ligne "
+                          "pointillée (GLM). Si non → DL non justifié."
+                          + (f"<br>⚠ Non tracé(s), car non calibré(s) : "
+                             f"{', '.join(_absents)} — absence, pas Gini nul."
+                             if _absents else "")),
                     xref="paper", yref="paper", x=0.01, y=-0.22,
                     font=dict(color=GRIS, size=9), showarrow=False, align="left"
                 )],
             ))
             fig2.update_layout(**l2)
+            # ⚠️⚠️ AUCUN MODÈLE DL TRACÉ : la figure le DÉCLARE au centre plutôt
+            # que de montrer une barre GLM solitaire sous une légende qui parle
+            # de « barres bleue/dorée » inexistantes. Leçon de `charts/C3`, et
+            # posée APRÈS `update_layout`, qui remplace les annotations.
+            if len(modeles_comp) == 1:
+                fig2.add_annotation(
+                    text=("AUCUNE DONNÉE — aucun modèle Deep Learning calibré"
+                          "<br><i>l'apport du DL n'est pas mesurable ici</i>"),
+                    xref="paper", yref="paper", x=0.5, y=0.5,
+                    showarrow=False, align="center",
+                    font={'color': BLANC, 'size': 13})
             graphiques["comparaison_dl_glm"] = fig2
         except Exception as e:
             logger.warning(f"G2 comparaison : {e}")

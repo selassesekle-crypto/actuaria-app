@@ -118,6 +118,38 @@ Publié avec la légende « 💡 La loss doit diminuer régulièrement (courbe d
 ```
 La légende dit « Les barres bleue/dorée doivent dépasser la ligne pointillée (GLM). Si non → DL non justifié. » — **elles ne le peuvent pas.**
 
+> ✅ **`a5/C5`** · **FERMÉ le 29/08/2026 — ET IL SE REPRODUISAIT ENCORE.**
+> *Preuve : `test_convergence_et_barres_dl.py`, 4 contrôles.*
+>
+> ⚠️ **LA PREMIÈRE CAUSE ÉTAIT DÉJÀ CORRIGÉE, JAMAIS ÉPINGLÉE.** L'archive le
+> classait « corrigé, non épinglé » : la figure lisait la mauvaise clé, elle
+> lit la bonne depuis. Mesuré : `[0,14 · 0,4781 · 0,0950]`, les Gini réels.
+>
+> ⚠️⚠️ **MAIS LE SYMPTÔME DU RELEVÉ SE REPRODUISAIT, PAR UNE AUTRE CAUSE** —
+> mesuré AVANT ce lot :
+>
+> ```
+>   les deux modeles ENTRAINES        barres = [0.14, 0.4781, 0.095]
+>   CANN ABSENT (calibration echouee) barres = [0.14, 0.0,    0.095]
+>   LES DEUX ABSENTS                  barres = [0.14, 0.0,    0.0]
+> ```
+>
+> `self.metriques['cann']` n'existe **que** si la calibration a réussi ; le
+> `.get(..., 0)` transformait une absence en performance nulle. **La dernière
+> ligne rend EXACTEMENT les nombres du relevé** (`[0.14, 0, 0]`).
+> *Épingler sans fermer cette cause aurait certifié un constat qui se
+> reproduit encore* — un filet à l'assiette trop étroite.
+>
+> **CORRECTIF** : un modèle non calibré est **retiré** de la figure, et son
+> absence est **écrite sous l'axe** (« Non tracé(s), car non calibré(s) : … —
+> absence, pas Gini nul »), patron de `charts/C5`. Si **aucun** DL n'est
+> calibré, la figure déclare « AUCUNE DONNÉE » au centre — la légende promet
+> des « barres bleue/dorée » qui n'existeraient pas.
+> ⚠️ *Un zéro qui signifie « jamais entraîné » est indiscernable d'un zéro
+> mesuré* — même leçon qu'`a3/C6` et que le plancher d'A5.
+> ⚠️ La palette suit le nombre de barres : sans cela, le modèle restant
+> aurait pris la couleur de l'absent.
+
 **C6 — L'early stopping se règle sur le jeu de TEST.**
 ```
   _calibrer_cann   : val_loss sur X_test_t (X_test_t <- X_test) · best_state selectionne dessus
@@ -158,6 +190,52 @@ Le fichier de test le note lui-même : *« A5 n'en fixe AUCUN → sans ces ligne
 
 **C8 — `COLS_A_EXCLURE`** : 5 entrées Vie/Santé sur 20, comme A3 et A4.
 **C9 — En-tête de test : « 7 tests », 3 méthodes.**
+
+**C10 — Le verdict de convergence portait sur le mauvais modèle.**
+
+⚠️⚠️ **CONSTAT NEUF, TROUVÉ PARCE QU'UN CORRECTIF DE LA VEILLE A RENDU VISIBLE
+UN DÉFAUT CACHÉ.** Le lot 4.5 a fait tracer les vraies pertes au lieu d'une
+courbe simulée. Mesuré ensuite sur deux runs réels :
+
+```
+  portefeuille 2500 : classement A5 tete = CANN               -> 3 points
+  portefeuille 3000 : classement A5 tete = 'GLM Poisson (A3)' -> 0 point
+                      (cann=3 et tabnet=3 historiques EXISTAIENT)
+```
+
+`_cle_h1 = classement[0]['modele'].lower()` : le classement **interne** d'A5
+contient aussi le GLM d'A3 et le meilleur ML d'A4. Quand l'un d'eux gagne,
+`historiques.get('glm poisson (a3)')` ne trouve rien — et H1 publie
+« convergence NON mesurée », **statut ROUGE**, sur une hypothèse qui parle de
+la convergence du **Deep Learning**. *Le verdict portait sur le mauvais objet,
+et il atteint l'Excel (`tarif_excel.py:440`).*
+
+⚠️ **AVANT LE LOT 4.5, CE CAS FABRIQUAIT UNE COURBE PLATE À ZÉRO** étiquetée
+« Convergence ». Le correctif a échangé un mensonge silencieux contre un trou
+visible — c'est le trou qui a livré le défaut.
+
+> ✅ **`a5/C10`** · **FERMÉ le 29/08/2026.**
+> *Preuve : `test_convergence_et_barres_dl.py`, 5 contrôles.*
+>
+> On parcourt le classement **dans son ordre** et on retient le premier modèle
+> qui **possède un historique** : c'est donc le MEILLEUR des DL.
+> ⚠️⚠️ **ON FILTRE PAR LA DONNÉE PRÉSENTE, PAS PAR UNE ÉTIQUETTE.** Le
+> classement porte bien `type == 'Deep Learning'`, mais s'y fier ferait
+> dépendre un verdict réglementaire d'un **libellé** — le défaut que ce
+> chantier poursuit (`controle-assiette-et-exemption`, 7ᵉ forme). Seuls les
+> modèles DL ont un historique : **avoir une entrée dans `historiques` EST le
+> critère**, et il ne peut pas mentir.
+> ⚠️ **LE NOM SUIT L'HISTORIQUE** : `modele_nm` valait `classement[0]`, donc
+> le conseil aurait dit « GLM Poisson (A3) a bien convergé » en lisant les
+> pertes du CANN.
+> ⚠️⚠️ **SECOND SENS** : sans aucun DL au classement, le verdict reste ROUGE
+> « non mesurée » — le correctif ne fabrique pas de verdict. C'est ce que
+> `test_epinglage_fermes_vivants` épingle déjà ; **il passe inchangé**, et le
+> nouveau lot le revérifie parce qu'il touche la recherche qu'il exerce.
+> ⚠️ **ET UNE VIOLATION PLANTÉE N'EST PAS TOMBÉE** : remplacer
+> `historiques.get(_cle)` par `_cle in historiques` ne change rien, parce que
+> le `if classement and histo_h1` en aval retient déjà le cas. *J'attribuais
+> la protection au mauvais mécanisme* — le test le dit désormais lui-même.
 
 ### D — Vérifié comme BON (8)
 
