@@ -495,6 +495,52 @@ qui fait `continue`. Mesuré, avec la cible binarisée en texte :
   -> 'libelle_gravite' est la cible binarisee, en texte. INVISIBLE au garde-fou n.4.
 ```
 
+> ✅ **`conformite/C10`** · **FERMÉ le 29/08/2026 — LE SILENCE EST SUPPRIMÉ,
+> ET L'AMPLEUR EST DÉCLARÉE SANS ÊTRE GONFLÉE.**
+> *Preuve : `test_couverture_garde_fou_effet.py`, 7 contrôles.*
+>
+> ⚠️⚠️ **LE DÉFAUT CONTREDISAIT LA DOCTRINE ÉCRITE DIX LIGNES PLUS BAS.** Le
+> `except` GLOBAL de cette même fonction porte *« ÉCHEC VISIBLE, JAMAIS
+> SILENCIEUX »* ; le `except (TypeError, ValueError): continue` interne, lui,
+> faisait disparaître une colonne **sans un mot**. Reproduit : la cible
+> binarisée en texte est invisible, là où la MÊME information en numérique est
+> attrapée à **Spearman 0,988**.
+>
+> **CORRECTIF** : les colonnes non lisibles sont **collectées et NOMMÉES** dans
+> un avertissement qui dit aussi **pourquoi c'est grave** (« une fuite en texte
+> y serait INVISIBLE ; seuls les contrôles par le NOM protègent alors »).
+> ⚠️ **LE `continue` RESTE** : lever désactiverait le garde-fou pour toutes les
+> autres colonnes — le défaut V6 que le `except` global raconte. *Ce qui change
+> n'est pas le comportement, c'est le silence.*
+>
+> ⚠️⚠️ **L'AMPLEUR RÉELLE, MESURÉE À LA DEMANDE DE SELASSE ET NON GONFLÉE.**
+> Instrumentation du détecteur sur des runs réels :
+>
+> ```
+>   chemin AGENT       20 appels · 22 features · 0 colonne texte
+>   chemin DECLARATIF   2 appels · 23 features · 0 colonne texte
+> ```
+>
+> **Aucun chemin de production n'expose le trou aujourd'hui** : `feature_names`
+> vient de `plan.colonnes_produites()` et A2 encode les facteurs déclarés. Le
+> défaut est **réel dans la fonction, latent sur les chemins** — même état que
+> la fuite Optuna d'A4.
+>
+> ⛔ **CE QUI N'EST DONC PAS FAIT, ET C'EST UNE BORNE DÉCLARÉE** : l'information
+> **ne remonte pas au livrable**. Le canal existe (`controle_effet` → `MatriceX`
+> → agents → A6 → `avertissement_controle_effet`) mais l'y brancher toucherait
+> **cinq sites** pour publier « 0 colonne sautée » sur chaque rapport, d'un fait
+> jamais observé. *La leçon de `conformite/C7` — un WARNING seul n'atteint pas
+> l'actuaire — vaut pour un fait QUI SE PRODUIT.* Le jour où il se produira, le
+> journal le **nommera** : ce sera le signal d'ouvrir le câblage.
+>
+> ⚠️ **ET `motifs` N'A PAS ÉTÉ RÉUTILISÉ** : il compte des **CIBLES** non
+> examinées (« N/M cible(s) »). Y glisser des colonnes aurait fait mentir son
+> propre compte — l'exact défaut d'assiette que cet audit poursuit. Un test
+> fige la séparation.
+> ⚠️ **SECOND SENS DOUBLE** : la même fuite en numérique reste attrapée, et un
+> jeu entièrement numérique ne déclenche **aucun** avertissement.
+
 Le module présente ce garde-fou comme « *le seul qui ne dépende d'aucun nom* ».
 Il dépend en revanche du **type**, et ce n'est écrit nulle part.
 

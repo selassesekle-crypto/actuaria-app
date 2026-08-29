@@ -1627,6 +1627,17 @@ def detecter_fuites_par_effet(
         # qui rend la mesure insensible aux ex aequo de la cible.
         gini_parfait = _gini_trie_par(y_arr)
 
+        # ⚠️⚠️ CONSTAT `conformite/C10` — CE QUE LE GARDE-FOU NE PEUT PAS LIRE,
+        # IL LE DIT. Une colonne non numérique tombait dans le
+        # `except (TypeError, ValueError): continue` en bas de boucle et
+        # disparaissait SANS UN MOT. Mesuré : une cible binarisée en texte
+        # (`libelle_gravite`) est totalement invisible, là où la MÊME
+        # information en numérique est attrapée à Spearman 0,988.
+        # *Un contrôle qui saute ce qu'il ne sait pas lire, en silence, rend
+        # « aucune fuite trouvée » indiscernable de « pas regardé ».* C'est
+        # mot pour mot la doctrine que le `except` global de cette fonction
+        # écrit déjà — le saut interne la contredisait.
+        non_examinees = []
         for c in feature_names:
             if c in exemptees or c not in df.columns:
                 continue
@@ -1688,7 +1699,23 @@ def detecter_fuites_par_effet(
                 fuites[c] = {'spearman': round(rho, 4),
                              'gini_normalise': round(g_norm, 4)}
             except (TypeError, ValueError):
+                # ⚠️ ON ENREGISTRE, ON NE SE TAIT PLUS. Le `continue` reste :
+                # une colonne illisible ne PEUT pas être corrélée, et lever
+                # ici désactiverait le garde-fou entier pour une seule
+                # colonne. Ce qui change, c'est qu'elle est NOMMÉE.
+                non_examinees.append(c)
                 continue
+        if non_examinees:
+            _log.warning(
+                f"[ANTI-FUITE PAR L'EFFET — COUVERTURE INCOMPLÈTE] "
+                f"{len(non_examinees)} colonne(s) NON NUMÉRIQUE(S) n'ont PAS "
+                f"pu être examinées par le garde-fou n°4 sur la cible "
+                f"'{col_cible}' : {', '.join(sorted(non_examinees))}. Une "
+                f"fuite en texte — par exemple la cible binarisée en libellés "
+                f"— y serait INVISIBLE. Ces colonnes ne sont protégées que par "
+                f"les contrôles par le NOM, que l'audit V12 a démontrés "
+                f"structurellement insuffisants."
+            )
     except Exception as e:   # pragma: no cover
         # ⚠ ÉCHEC VISIBLE, JAMAIS SILENCIEUX (relecture, 11/07/2026).
         # Ce bloc retournait {} — c'est-à-dire « aucune fuite trouvée », un
