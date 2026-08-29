@@ -496,7 +496,7 @@ coupable (3) · annotations et exports morts (3).
 | **l'assemblage de l'app** | ~980 | `_executer_analyse` (799 l) + le bloc tarification (846 l). **Le reste de l'app : hors périmètre, déclaré** |
 | `services/excel_helpers.py` | 139 | complète le périmètre |
 
-## HORS RANG — LE TRI · 🟡 **A2 (16/16) et PIPELINE (9/9) TRACÉS · 62 restants**
+## HORS RANG — LE TRI · 🟡 **A2 (16/16), PIPELINE (9/9), A1 (8/8) TRACÉS · 54 restants**
 
 ⚠️⚠️ **ET LE COMPTE ÉTAIT DE 40 : IL EST DE 77.** Le document répartissait
 les non alloués en « 38 de bruit » + « 40 non triés », mais **aucun des deux
@@ -585,13 +585,48 @@ de production. *« Corrigé OÙ ? » — la question vaut aussi entre deux chemi
 font le même métier.* Chercher, pour chaque correctif de ce chantier, s'il a un
 jumeau sur le chemin déclaratif est une piste **bon marché et non explorée**.
 
-### ⛔ LES 62 AUTRES NE SONT PAS TRACÉS, ET JE LE DIS
+### ✅ A1 — LES 8, TRACÉS AU SITE (30/08)
+
+⚠️⚠️ **CE QUE CETTE ZONE APPREND : DEUX CONSTATS SONT DÉJÀ CORRIGÉS *ET*
+ÉPINGLÉS — SEUL LE REPORT MANQUE.** C'est un **quatrième état**, distinct du
+troisième : ni « corrigé sans contrôle », ni « ouvert », mais **corrigé, épinglé,
+non reporté**. ⚠️ Et `ARCH-1` ne peut pas l'attraper : il exige un bloc de
+fermeture pour tout constat **nommé** par un test — or ces tests-là **ne nomment
+pas** leur constat. *Rien ne relie le contrôle au constat qu'il garde ; c'est
+précisément ce que le tri sert à trouver.*
+
+| constat | mesuré au site le 30/08 | rang proposé |
+|---|---|---|
+| **`a1/C1`** | ✅ **CORRIGÉ** : l'identifiant vient d'abord de `plan.identifiant_contrat` (l.761), la devinette n'est qu'un repli **qui ne se tait plus** (`source_identifiant` publié : `plan` / `devinee` / `aucune`, chacun avec son avertissement). ✅ **ÉPINGLÉ** : `POS-A1c` et `POS-A1d` dans `test_a1_ingestion.py`. ⛔ **NON REPORTÉ**, et **aucun test ne nomme `a1/C1`** | **FERMABLE** — bloc + nommage |
+| **`a1/C6`** | ✅ **CORRIGÉ** : plus aucun `filterwarnings` actif dans A1 (il ne reste que le commentaire qui raconte son retrait). ✅ **ÉPINGLÉ** : `test_avertissements_non_avales.py` couvre **les six agents**, `a1_ingestion` compris. ⛔ **NON REPORTÉ** | **FERMABLE** — bloc + nommage |
+| **`a1/C8`** | ⛔ **VRAI** — `_sauvegarder_audit` l.1091-1095 : `try / except Exception: pass`. **La trace d'audit persistée disparaît sans un mot**, `success=True`, `erreur=None`, `alertes=[]`. *C'est la pièce que le CAC et l'ACPR viennent chercher.* | **5** |
+| **`a1/C2`** | ⛔ **VRAI, inchangé** — le commentaire l.180 dit « Empêche qu'un portefeuille Vie ou Santé soit ingéré » ; `_charger_fichier` parcourt `['non_vie', 'vie', 'sante_prevoyance']` (l.496). Le garde bloque le **paramètre** `branche`, pas le **chemin**. ⚠️ **BORNE** : l'app ne passe **jamais** `fichier=`. *Latent.* | **3** |
+| **`a1/C10`** | ⛔ **VRAI, ET LA DÉRIVE CONTINUE** : l'en-tête annonce « 7 tests », le relevé en comptait **9**, il y en a **13** aujourd'hui. *Un compte annoncé qui n'est rattaché à rien vieillit tout seul.* | **7** |
+| **`a1/C5`** | ⛔ **VRAI** — `'id_police'` **2 fois** dans `id_contrat`, `'nb_sin'` **2 fois** dans `nb_sinistres`. ⚠️ **BORNE MESURÉE** : les doublons sont **intra-liste**, **aucun synonyme n'est revendiqué par deux colonnes standard** — donc **aucun effet sur le mapping**. Redondance pure. | **7** |
+| **`a1/C7`** | ⛔ **VRAI** — `__init__` fait `mkdir` (l.244-245). **Même famille qu'`a2/C16`**, déjà classé 7 : *ils doivent voyager ensemble.* | **7** |
+| **`a1/C9`** | ⛔ **VRAI** — `verifier_tous_fichiers` : **1 définition, 0 appel** (AST, tout le dépôt), et elle annonce des fichiers Vie/Santé hors périmètre. | **7** |
+
+> ⚠️⚠️ **ET J'AI FAILLI DÉCLARER `a1/C5` CORRIGÉ, SUR LE MAUVAIS OBJET.**
+> Ma première mesure comptait les **clés** du dictionnaire — 15, aucun doublon —
+> alors que le constat porte sur les **valeurs des listes**. *Un compte juste sur
+> le mauvais objet est un compte faux*, et il aurait fermé un constat vrai.
+
+### ⛔ À FAIRE EN FIN DE TRI — LES JUMEAUX ENTRE CHEMINS
+
+> **Arbitré le 30/08 : pas maintenant, mais noté.** `pipeline/C2` a montré qu'un
+> correctif peut n'atterrir que sur **un** des deux chemins de production.
+> **Reprendre TOUS les constats fermés en août et vérifier, pour chacun, s'il a
+> un jumeau vivant sur le chemin déclaratif.** *« Corrigé OÙ ? » vaut aussi
+> entre deux chemins qui font le même métier.* À lancer **quand le tri est
+> terminé**, pas avant.
+
+### ⛔ LES 54 AUTRES NE SONT PAS TRACÉS, ET JE LE DIS
 
 **Dérivé le 30/08 par préfixe de clé sur les 82 ouverts — exact, sans
-heuristique de texte** ; `pipeline` en sort, il est tracé :
+heuristique de texte** ; `a2`, `pipeline` et `a1` en sortent, ils sont tracés :
 
-`a1` 8 · `a3` 8 · `plan` 7 · `a6` 6 · `conformite` 6 · `a4` 5 · `socle` 5 ·
-`agents` 4 · `qualite` 4 · `a5` 3 · `charts` 3 · `services` 3. **Total 62.**
+`a3` 8 · `plan` 7 · `a6` 6 · `conformite` 6 · `a4` 5 · `socle` 5 · `agents` 4 ·
+`qualite` 4 · `a5` 3 · `charts` 3 · `services` 3. **Total 54.**
 
 ⚠️ **La répartition publiée avant celle-ci était fausse** (`a1` 8, `pipeline` 8,
 `a3` 7, `a6` 5, `socle` 3...) : elle retranchait en silence les constats nommés
