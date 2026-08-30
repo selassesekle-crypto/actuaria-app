@@ -497,7 +497,7 @@ coupable (3) · annotations et exports morts (3).
 | **l'assemblage de l'app** | ~980 | `_executer_analyse` (799 l) + le bloc tarification (846 l). **Le reste de l'app : hors périmètre, déclaré** |
 | `services/excel_helpers.py` | 139 | complète le périmètre |
 
-## HORS RANG — LE TRI · 🟡 **10 ZONES TRACÉES sur 14 · 13 restants**
+## HORS RANG — LE TRI · 🟡 **11 ZONES TRACÉES sur 14 · 9 restants**
 
 ⚠️⚠️ **ET LE COMPTE ÉTAIT DE 40 : IL EST DE 77.** Le document répartissait
 les non alloués en « 38 de bruit » + « 40 non triés », mais **aucun des deux
@@ -512,8 +512,8 @@ pour les fermés ; **moins `pipeline/C1`**, partiel et arbitré OUVERT.
 | lecture | compte | comment il se dérive |
 |---|---|---|
 | constats **ouverts** | **74** | clés réelles moins clés fermées — **tenu par `ARCH-5`** |
-| dont **zones TRIÉES** (`a2` 11 · `pipeline` 9 · `a3` 8 · `a1` 6 · `conformite` 6 · `plan` 6 · `socle` 5 · `a4` 4 · `agents` 4 · `a6` 2) | **61** | préfixe de la clé |
-| ⛔ **jamais tracés** | **13** | le complément — *exact, sans heuristique* |
+| dont **zones TRIÉES** (`a2` 11 · `pipeline` 9 · `a3` 8 · `a1` 6 · `conformite` 6 · `plan` 6 · `socle` 5 · `a4` 4 · `agents` 4 · `qualite` 4 · `a6` 2) | **65** | préfixe de la clé |
+| ⛔ **jamais tracés** | **9** | le complément — *exact, sans heuristique* |
 
 > ⚠️⚠️ **ET LA VERSION PRÉCÉDENTE DE CE TABLEAU NE TOMBAIT PAS JUSTE.** Elle
 > publiait **80** ouverts, **46** triés et **33** non tracés : `80 − 46 = 34`.
@@ -1014,6 +1014,37 @@ déclare sur lui-même, sur une porte réglementaire. **Arbitrage rendu.**
 > *Chercher ce qui protège le voisin et pas celui-ci reste le révélateur le
 > moins cher de cet audit — et il marche même quand le code se documente bien.*
 
+### ⚠️ QUALITE — LES 4, TRACÉS AU SITE (30/08) · **UN EURO QUI BOUGE, ×10**
+
+| constat | mesuré au site le 30/08 | rang |
+|---|---|---|
+| **`qualite/C3`** | ⛔⛔ **VRAI, ET L'EURO BOUGE — mesuré par exécution, pire que le relevé.** Le plafond `1.0` est une hypothèse d'**unité** sur un rôle dont le plan déclare le RÔLE et jamais l'UNITÉ. Même portefeuille exprimé en **mois** : exposition **10 083 → 1 000**, soit **90,1 % perdue** (87 % au relevé). **Prime pure × 10,08** — de **87,88 €** à **886,04 €** par unité. ⚠️⚠️ **Et voici les DEUX SEULES lignes que l'actuaire lit avant de signer** : `✔ 1000 ligne(s) CORRIGEE(S) : 1000x exposition_sup_1 (plafond a 1.0).` puis `✔ Poursuite malgre anomalie(s) >= 5% VALIDEE par « … »`. **Ni « exposition totale », ni « 10 083 », ni « 1 000 » n'y figurent** — vérifié mot par mot. *Il valide une ligne de rapport, il obtient une prime multipliée par dix.* ⚠️ Le garde-fou lui-même **fonctionne** : il bloque, l'échappatoire est nominative et tracée. **Ce qui manque est dans le MESSAGE** | **1 proposé** |
+| **`qualite/C4`** | ⛔ **VRAI, ET RE-CADRÉ PAR LA MESURE.** Les 9 détecteurs sont à **0 appelant hors de leur module** — mais ils sont **tous appelés DEDANS** par `controler_qualite` : *ce ne sont pas des fonctions mortes, ce sont des auxiliaires internes.* Le défaut est la **promesse** l.27-28 : « *les détecteurs sont purs […] **A1 pourra les réutiliser (convergence future)*** ». Mesuré : **A1 porte toujours son propre `_valider_qualite`** (l.744) et n'importe pas ce module. ⚠️⚠️ **Et `controler_qualite` n'a QU'UN appelant de production — le chemin déclaratif.** *Le chemin agent A1→A6 ne passe jamais par la couche qualité : deux implémentations coexistent, et celle qui BLOQUE n'est que sur un des deux chemins.* **C'est le jumeau entre chemins, sur le garde-fou lui-même** | **2** |
+| **`qualite/C5`** | ⛔ **VRAI, exact** : `_evaluer_qualite` n'existe **que dans la phrase qui le cite** (`core/qualite_donnees.py:25`) et dans la preuve d'audit. A1 porte `_valider_qualite` (l.744). *La fonction a été renommée, la référence ne l'a pas suivie* | **7** |
+| **`qualite/C6`** | ⛔ **VRAI** : les **11** clés de `resume()` — vérifiées par exécution — ne portent **aucune part du portefeuille touchée**. `lignes_initiales` et `lignes_retenues` y sont ; leur rapport, non. ⚠️ *Borne : ma fixture n'a pas reproduit le cas à 19,6 % du relevé ; la mesure porte sur la LISTE DES CLÉS, qui suffit* | **7** |
+
+> ### ⛔⛔ RANG 1 PROPOSÉ — `qualite/C3` : LA VALIDATION NE DIT PAS CE QU'ELLE VALIDE
+>
+> Le mécanisme est irréprochable : détection, blocage, échappatoire **nominative
+> et horodatée**. **C'est le texte de l'échappatoire qui ne porte pas l'enjeu.**
+>
+> ```
+>   exposition declaree par le client (mois) : 10 083
+>   exposition apres plafond a 1.0           :  1 000   (90,1 % perdue)
+>   prime pure : 87,88 EUR/unite  ->  886,04 EUR/unite   (x 10,08)
+> ```
+>
+> ⚠️ **Mécanisme, pas dégât** — comme `plan/C5` et `a6/C9` : les 20 plans livrés
+> supposent une exposition annuelle. Le jour où un fichier client arrive en
+> mois, rien ne le dit à personne. **Aucun code sans arbitrage.**
+>
+> **Deux questions rendues, non tranchées par moi :**
+> ① le message doit-il publier l'**effet agrégé** d'une correction (exposition
+> totale avant/après), et pas seulement son compte de lignes ?
+> ② le plan doit-il déclarer l'**UNITÉ** de l'exposition, comme il déclare
+> désormais l'échéance — *ce serait le vrai correctif, et c'est un contrat de
+> données, donc une conception.*
+
 ### ⛔ À FAIRE EN FIN DE TRI — LES JUMEAUX ENTRE CHEMINS
 
 > **Arbitré le 30/08 : pas maintenant, mais noté.** `pipeline/C2` a montré qu'un
@@ -1024,12 +1055,12 @@ déclare sur lui-même, sur une porte réglementaire. **Arbitrage rendu.**
 > entre deux chemins qui font le même métier.* À lancer **quand le tri est
 > terminé**, pas avant.
 
-### ⛔ LES 13 AUTRES NE SONT PAS TRACÉS, ET JE LE DIS
+### ⛔ LES 9 AUTRES NE SONT PAS TRACÉS, ET JE LE DIS
 
 **Dérivé le 30/08 par préfixe de clé sur les 74 ouverts — exact, sans
-heuristique de texte** ; les dix zones triées en sortent :
+heuristique de texte** ; les onze zones triées en sortent :
 
-`qualite` 4 · `a5` 3 · `charts` 3 · `services` 3. **Total 13.**
+`a5` 3 · `charts` 3 · `services` 3. **Total 9.**
 
 ⚠️ **ET J'AI ÉCRIT CETTE RÉPARTITION AVANT DE LA DÉRIVER, UNE FOIS DE PLUS.**
 J'y avais mis `qualite` 3 et un `plan` 1 qui n'a rien à y faire — `plan` est
