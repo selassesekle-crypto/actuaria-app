@@ -496,7 +496,7 @@ coupable (3) · annotations et exports morts (3).
 | **l'assemblage de l'app** | ~980 | `_executer_analyse` (799 l) + le bloc tarification (846 l). **Le reste de l'app : hors périmètre, déclaré** |
 | `services/excel_helpers.py` | 139 | complète le périmètre |
 
-## HORS RANG — LE TRI · 🟡 **A2, PIPELINE, A1, A3 et PLAN TRACÉS · 39 restants**
+## HORS RANG — LE TRI · 🟡 **A2, PIPELINE, A1, A3, PLAN et CONFORMITE · 33 restants**
 
 ⚠️⚠️ **ET LE COMPTE ÉTAIT DE 40 : IL EST DE 77.** Le document répartissait
 les non alloués en « 38 de bruit » + « 40 non triés », mais **aucun des deux
@@ -511,8 +511,8 @@ cherchées comme mot entier dans ce fichier, **avant** puis **après** le titre
 | lecture | compte | comment il se dérive |
 |---|---|---|
 | constats **ouverts** | **80** | clés réelles moins clés fermées — **tenu par `ARCH-5`** |
-| dont **zones TRIÉES** (`a2` 11 · `pipeline` 9 · `a3` 8 · `plan` 7 · `a1` 6) | **41** | préfixe de la clé |
-| ⛔ **jamais tracés** | **39** | le complément — *exact, sans heuristique* |
+| dont **zones TRIÉES** (`a2` 11 · `pipeline` 9 · `a3` 8 · `a1` 6 · `conformite` 6 · `plan` 6) | **46** | préfixe de la clé |
+| ⛔ **jamais tracés** | **33** | le complément — *exact, sans heuristique* |
 
 ⚠️⚠️ **ET LE DÉCOUPAGE « ALLOUÉ / NON ALLOUÉ » A ÉTÉ RETIRÉ : IL N'EST PAS
 DÉRIVABLE.** Mesuré le 29/08 — **trois méthodes plausibles rendent 7, 9 et
@@ -812,6 +812,28 @@ tant que `echeance` n'est pas déclarée (étape 5).
 jamais en retirer »*. L'exempter aurait contredit une règle que le module
 déclare sur lui-même, sur une porte réglementaire. **Arbitrage rendu.**
 
+### ✅ CONFORMITE — LES 6, TRACÉS AU SITE (30/08) · **4 confirmés PAR EXÉCUTION**
+
+| constat | mesuré au site le 30/08 | rang |
+|---|---|---|
+| **`conformite/C4`** | ⛔ **VRAI, ET PLUS GRAVE QUE « SILENCIEUX ».** L'exemption ne supprime pas seulement l'exclusion : elle supprime l'**ALERTE**. Mesuré sur une colonne **identique à la cible** (`nb_sinistres + 1e-6`) — *sans* exemption : `alertes = {'antecedents_sinistres_n1': {'spearman': 1.0, 'gini_normalise': 1.0}}` ; *avec* : **`fuites={}` ET `alertes={}`**. Elle traverse **sans une trace**. ⚠️ **Le chemin par le NOM, lui, alimente `alertes`** — *l'asymétrie entre deux contrôles voisins, et c'est le révélateur* | **2** |
+| **`conformite/C12`** | ⛔ **VRAI, ET PLUS ÉTROIT QUE LE RELEVÉ.** Sur les **4 branches** de `synthese_exclusions`, **une seule** pointe encore la constante (« *déclarez-la (FACTEURS_TARIFAIRES_AUTORISES)* », l.1267-1268). Les autres disent déjà « *déclarez-les DANS LE PLAN DE TARIFICATION SIGNÉ* » (l.1278) et « *déclarez-la au plan* » (l.1291). *Deux branches corrigées, une oubliée : l'asymétrie entre voisines, encore* | **5** |
+| **`conformite/C9`** | ⛔ **VRAI, mesuré par exécution** : la fonction rend `{'zorglub': {'spearman': 1.0, 'gini_normalise': 1.0}}` — un **dict** — quand la docstring annonce `{colonne: corrélation}` et un critère de Spearman ; le code applique `max(spearman, gini_normalise)`. *Le texte ne mentait pas quand il a été écrit ; il est devenu faux.* | **5** |
+| **`conformite/C8`** | ⛔ **VRAI, MAIS BORNÉ — et la borne renverse le classement.** Le motif porte bien `{'spearman': 1.0, ...}` et `['nb_sinistres']`, de la syntaxe Python dans un texte. ⚠️ **Il n'atteint AUCUN livrable** : les **trois** surfaces (`rapport_equipe_tarif:174`, `rapport_modeles_tarif:1365`, `tarif_excel:853`) passent par `synthese_exclusions`, qui **réécrit sa propre phrase** — mesuré : **0 accolade, 0 crochet**. Le motif brut reste dans `MatriceX.exclusions` → `exclusions_conformite`. ⚠️ **Le relevé disait « 5 fichiers de production »** ; par AST, en écartant l'**homonyme** `RapportQualite.exclusions`, ils sont **4** | **7** |
+| **`conformite/C11`** | ⛔ **VRAI, borné, re-mesuré** : le log porte `LISTE BLANCHE`, **pas** `C-236/09` ni « traçabilité ». ⚠️ **Mais `MatriceX.exclusions` porte bien « genre ou proxy de genre — CJUE C-236/09 »**, et c'est lui qui atteint l'actuaire. *La traçabilité existe — pas là où la docstring la place* | **7** |
+| **`conformite/C13`** | ⛔ **VRAI** : A2 **n'écrit jamais** `valeur_mobilier` — **0 affectation**, mesuré ; elle la **lit** (l.664-666) pour construire `valeur_par_m2`. Colonne **source**, pas dérivée. Autorisée dans les deux cas, donc sans conséquence | **7** |
+
+> ⚠️⚠️ **CE QUE CETTE ZONE APPREND : L'ASYMÉTRIE ENTRE VOISINS, DEUX FOIS.**
+> `C4` — le chemin par le nom alerte, celui par le plan se tait.
+> `C12` — trois branches disent « au plan », la quatrième dit encore « en liste
+> blanche ». *Chercher ce qui protège le voisin et pas celui-ci reste le
+> révélateur le moins cher de cet audit.*
+>
+> ⚠️ **ET UNE BORNE A RENVERSÉ UN CLASSEMENT** : `conformite/C8` semblait un
+> défaut de texte publié — jusqu'à ce que la mesure montre que **la synthèse
+> réécrit**. *Vérifier ce qui atteint le livrable, pas ce qui est écrit dans le
+> code.*
+
 ### ⛔ À FAIRE EN FIN DE TRI — LES JUMEAUX ENTRE CHEMINS
 
 > **Arbitré le 30/08 : pas maintenant, mais noté.** `pipeline/C2` a montré qu'un
@@ -822,13 +844,18 @@ déclare sur lui-même, sur une porte réglementaire. **Arbitrage rendu.**
 > entre deux chemins qui font le même métier.* À lancer **quand le tri est
 > terminé**, pas avant.
 
-### ⛔ LES 39 AUTRES NE SONT PAS TRACÉS, ET JE LE DIS
+### ⛔ LES 33 AUTRES NE SONT PAS TRACÉS, ET JE LE DIS
 
-**Dérivé le 30/08 par préfixe de clé sur les 80 ouverts — exact, sans
-heuristique de texte** ; `a2`, `pipeline`, `a1`, `a3` et `plan` en sortent :
+**Dérivé le 30/08 par préfixe de clé sur les 79 ouverts — exact, sans
+heuristique de texte** ; les six zones triées en sortent :
 
-`a6` 6 · `conformite` 6 · `a4` 5 · `socle` 5 · `agents` 4 · `qualite` 4 ·
-`a5` 3 · `charts` 3 · `services` 3. **Total 39.**
+`a6` 6 · `a4` 5 · `socle` 5 · `agents` 4 · `qualite` 4 · `a5` 3 · `charts` 3 ·
+`services` 3. **Total 33.**
+
+⚠️ **ET J'AI ÉCRIT CETTE RÉPARTITION AVANT DE LA DÉRIVER, UNE FOIS DE PLUS.**
+J'y avais mis `qualite` 3 et un `plan` 1 qui n'a rien à y faire — `plan` est
+tracé. *Dérive d'abord, écris ensuite : la règle vaut aussi quand le chiffre
+paraît évident.*
 
 ⚠️ **La répartition publiée avant celle-ci était fausse** (`a1` 8, `pipeline` 8,
 `a3` 7, `a6` 5, `socle` 3...) : elle retranchait en silence les constats nommés
