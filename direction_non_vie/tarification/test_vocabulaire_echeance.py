@@ -50,6 +50,12 @@ from direction_non_vie.tarification.test_pipeline_agents import _PLAN_AUTO
 _PLAN_ROLES = dataclasses.replace(_PLAN_AUTO, identifiant_contrat='id_contrat',
                                   echeance='date_echeance')
 
+# ⚠️⚠️ `_PLAN_AUTO` EST LE PLAN LIVRE, et depuis l'etape 5 il declare son
+# echeance. « Un plan sans echeance » doit donc etre construit EXPLICITEMENT :
+# s'appuyer sur une absence implicite fait dependre le test d'un fichier livre.
+_PLAN_SANS_ROLE = dataclasses.replace(_PLAN_AUTO, identifiant_contrat=None,
+                                      echeance=None)
+
 
 def _sans_cle():
     env = {k: v for k, v in os.environ.items()
@@ -151,13 +157,13 @@ class TestLeVocabulaireDuMappingLLM(unittest.TestCase):
     def test_SECOND_SENS_un_plan_SANS_echeance_n_en_invente_pas(self):
         """⚠️⚠️ Les 20 plans du depot n'en declarent aucune (etape 5). Le
         vocabulaire ne doit rien ajouter tant que le plan se tait."""
-        roles = mapping_llm._roles_attendus(_PLAN_AUTO)
+        roles = mapping_llm._roles_attendus(_PLAN_SANS_ROLE)
         self.assertFalse(any('echeance' in str(v) for v in roles.values()),
                          "un role d'echeance apparait alors que le plan n'en "
                          'declare aucune')
         with _sans_cle():
             p = mapping_llm._prompt_utilisateur(
-                _fichier_client(('X', '2024-03-01', 'Y')), _PLAN_AUTO, 5)
+                _fichier_client(('X', '2024-03-01', 'Y')), _PLAN_SANS_ROLE, 5)
         self.assertNotIn('date_echeance', p)
         print("    V-7 second sens : plan sans echeance -> aucun role inedit, "
               "rien dans le prompt")

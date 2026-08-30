@@ -54,7 +54,13 @@ from direction_non_vie.tarification.test_pipeline_agents import (
     _portefeuille_auto,
 )
 
-_PLAN_ID = dataclasses.replace(_PLAN_AUTO, identifiant_contrat='id_contrat')
+# ⚠️⚠️ `_PLAN_AUTO` EST LE PLAN LIVRE (`plans/auto.yaml`), et depuis l'etape 5
+# il declare SES DEUX ROLES. Un fixture qui veut « un plan SANS echeance » doit
+# donc le DIRE (`echeance=None`) au lieu de compter sur le plan livre pour en
+# manquer. *Cette suite est tombee le jour ou les plans ont ete enrichis : elle
+# reposait sur une absence implicite.*
+_PLAN_ID = dataclasses.replace(_PLAN_AUTO, identifiant_contrat='id_contrat',
+                               echeance=None)
 _PLAN_PAIRE = dataclasses.replace(_PLAN_ID, echeance='date_echeance')
 
 

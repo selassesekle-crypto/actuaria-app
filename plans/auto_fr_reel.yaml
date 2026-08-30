@@ -11,6 +11,26 @@ auteur: "S. Sekle, IA — freMTPL2"
 exposition: Exposure
 cible_frequence: ClaimNb
 cible_cout: ClaimAmountTotal
+# ══════════════════════════════════════════════════════════════════════════════
+# ROLES DE DONNEES — declares le 30/08/2026 (chantier `plan/C7`).
+# ⚠️ CE NE SONT PAS DES FACTEURS. Ils n'entrent JAMAIS dans
+# `colonnes_produites()` et ne sont jamais modelises : ils servent au
+# dedoublonnage de la couche qualite, et a rien d'autre.
+#
+# ⚠️ L'IDENTITE A DEDOUBLONNER EST l'IDENTIFIANT DU JEU freMTPL2 — arbitre par Selasse le 30/08/2026.
+#   le jeu reel est joint par `IDpol` (678 013 contrats) : c'est la colonne
+#   d'identite du dataset, documentee dans `demos/fremtpl2_demo.py`.
+identifiant_contrat: IDpol
+#
+# ⚠️ LA CLE COMPLETE EST (identifiant, echeance). Sans echeance, deux lignes de
+# meme identifiant sont AMBIGUES — doublon, ou HISTORIQUE de renouvellement ?
+# Mesure : un historique sur 3 exercices porte 66,7 % de faux doublons. Elles
+# sont alors CONSERVEES et signalees, jamais exclues.
+# ⚠️ Declarer la colonne ici ne l'exige pas du client : si elle est absente du
+# fichier, le systeme le DIT et conserve les lignes. Mesure : aucune fausse
+# amputation du plan.
+echeance: date_echeance
+# ══════════════════════════════════════════════════════════════════════════════
 famille_severite: gamma      # comme l'ancien A3 (Gamma), pour une comparaison equitable
 facteurs:
   - {nom: DrivAge,    type: continu}

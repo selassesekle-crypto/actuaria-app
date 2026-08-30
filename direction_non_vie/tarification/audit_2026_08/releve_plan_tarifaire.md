@@ -238,6 +238,44 @@ pas un dégât constaté.
   identifiant_contrat : 0/20      echeance : 0/20      comportement : 0/20
 ```
 
+> ✅ **`plan/C7`** · **FERMÉ le 30/08/2026 — au terme d'un chantier de CINQ
+> étapes, dans un ordre mesuré.** *Preuve : `test_roles_declares_aux_plans.py`,
+> 9 contrôles, 8 violations plantées sur les plans eux-mêmes.*
+>
+> **`identifiant_contrat` : 20/20.** `IDpol` pour `auto_fr_reel` (le seul plan
+> adossé à un jeu réel, freMTPL2 joint par cette colonne) ; `id_contrat` pour
+> les 19 autres. **`echeance` : 20/20**, `date_echeance`.
+>
+> ⚠️⚠️ **L'ORDRE ÉTAIT LE SUJET, PAS LE DÉTAIL.** Appliquée en premier, cette
+> déclaration aurait **cassé** tout client à identifiant alphanumérique (100 %
+> d'illisibles, mesuré) et tout historique de renouvellement (66,7 % de faux
+> doublons). Quatre étapes l'ont rendue sûre :
+> `qualite/C7` (l'identifiant est un libellé) · la paire `(identifiant,
+> échéance)` et le passage règle 1 → règle 3 · `services/C12` (l'avertissement
+> atteint le rapport signé **sans IA**) · le vocabulaire **dans les deux
+> systèmes**.
+>
+> ⚠️⚠️ **L'IDENTITÉ N'EST PAS « LE CONTRAT » PARTOUT, ET C'EST ÉCRIT DANS LE
+> PLAN SIGNÉ** — *une décision qui n'est pas dans le document opposable n'est
+> pas opposable.* Sept LoB arbitrées une par une, chacune avec sa raison
+> mesurée : la **flotte** (les facteurs sont des agrégats), l'**immeuble** (7
+> facteurs sur 8 décrivent le bâti), la **machine** (un contrat de 12 machines
+> en perdrait 11), le **bail**, la **police d'abonnement**
+> (`nb_expeditions_an` est un agrégat annuel) ; et deux nuances assumées —
+> `decennale` et `risques_agricoles` **dépendent du fichier client**.
+>
+> ⚠️ **Déclarer `echeance` ne l'EXIGE pas du client.** Absente du fichier, le
+> système le **dit** et **conserve** les lignes : mesuré, 900/900, 0 exclusion,
+> signalement en règle 3. *Aucune fausse amputation du plan* — les rôles sont
+> hors de `colonnes_produites()` par doctrine, et un contrôle l'épingle sur les
+> 20 plans : **une identité qui prédirait la sinistralité serait une fuite
+> structurelle.**
+>
+> ⚠️ **CE QUI RESTE, ET JE LE DIS** : le rôle `comportement` demeure **0/20**.
+> Il n'entrait pas dans ce chantier — le plan lui-même déclare que ses trois
+> champs sont **indissociables** et qu'un bloc à moitié déclaré promettrait une
+> capacité qu'il ne porte pas.
+
 Le commentaire de `echeance` (l.214-218) porte pourtant une mesure : « *un
 historique de renouvellement sur 3 ans porte ~67 % de « doublons » pour un seuil
 ROUGE à 5 % — le fichier est refusé avant d'être lu.* » Le mécanisme existe,

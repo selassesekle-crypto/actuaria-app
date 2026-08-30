@@ -8,6 +8,27 @@ auteur: "S. Sekle, IA"
 exposition: exposition
 cible_frequence: nb_sinistres
 cible_cout: cout_total_sinistres
+# ══════════════════════════════════════════════════════════════════════════════
+# ROLES DE DONNEES — declares le 30/08/2026 (chantier `plan/C7`).
+# ⚠️ CE NE SONT PAS DES FACTEURS. Ils n'entrent JAMAIS dans
+# `colonnes_produites()` et ne sont jamais modelises : ils servent au
+# dedoublonnage de la couche qualite, et a rien d'autre.
+#
+# ⚠️ L'IDENTITE A DEDOUBLONNER EST la MACHINE — arbitre par Selasse le 30/08/2026.
+#   les 6 facteurs sont PAR MACHINE (`valeur_machine_eur`, `age_machine_ans`,
+#   `heures_fonctionnement_an`). Un contrat couvrant 12 machines verrait
+#   11 lignes traitees comme des doublons.
+identifiant_contrat: id_contrat
+#
+# ⚠️ LA CLE COMPLETE EST (identifiant, echeance). Sans echeance, deux lignes de
+# meme identifiant sont AMBIGUES — doublon, ou HISTORIQUE de renouvellement ?
+# Mesure : un historique sur 3 exercices porte 66,7 % de faux doublons. Elles
+# sont alors CONSERVEES et signalees, jamais exclues.
+# ⚠️ Declarer la colonne ici ne l'exige pas du client : si elle est absente du
+# fichier, le systeme le DIT et conserve les lignes. Mesure : aucune fausse
+# amputation du plan.
+echeance: date_echeance
+# ══════════════════════════════════════════════════════════════════════════════
 # Queue lourde possible (destruction totale d'une machine de forte valeur) : gamma
 # par defaut, ecretement q0.995 borne les graves. inverse_gaussienne/lognormal
 # declarables si la vraie donnee montre une queue plus lourde.
