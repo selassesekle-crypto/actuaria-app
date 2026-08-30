@@ -135,6 +135,64 @@ Cause : `m.get('gini', 0)` — la clé du classement est `gini_test`. Les couleu
 ### C — Imprécis ou daté (3)
 
 **C11 — La clé `gini` n'existe pas dans le classement**, et **9 sites** lisent `.get('gini', défaut)`. Les clés réelles sont `gini_test` / `gini_train`. Le défaut `0.25` est ce qui alimente `_optimisation_tarifaire`.
+
+> ✅ **`a4/C11`** · **FERMÉ le 30/08/2026 — RANG 1, arbitré par Selasse.**
+> *Preuve : `test_reference_a3_monitoring.py`, 14 contrôles, 4 violations
+> plantées.*
+>
+> ⚠️⚠️ **LE RELEVÉ SE TROMPAIT DEUX FOIS, ET CE QUI ÉTAIT DESSOUS ÉTAIT PIRE.**
+> ① Pas 9 sites mais **5** (AST, dédoublonné) : **4 lisent `gini` dans les
+> métriques d'A3, où `gini` EST la bonne clé** — A3 la pose bien. *Homonyme :
+> la même clé nomme deux objets différents.* ② Le consommateur n'est pas
+> `_optimisation_tarifaire` mais **`_monitoring_derive`**.
+>
+> **LE VRAI DÉFAUT : TROIS NOMBRES INVENTÉS, À TROIS VALEURS DIFFÉRENTES**,
+> dans une chaîne qui décide d'un **statut RAG** — celui qui autorise ou
+> plafonne une mise en production :
+>
+> ```
+>   l. 737  gini_reference_a3 = 0.25         affectation chez l'appelant
+>   l. 740  .get('gini', 0.25)               repli
+>   l.2453  gini_reference = 0.2651          defaut de signature
+>   l.2945  .get('gini_reference', 0.265)    repli de la FIGURE
+> ```
+>
+> Le `0.2651` est **le hardcodage freMTPL2 que le commentaire de l'appelant dit
+> précisément vouloir éviter** : *le correctif avait atterri sur l'appelant,
+> jamais sur l'appelé.* Et le libellé publié était **« Référence A3 »** — une
+> provenance que le code ne portait pas.
+>
+> ⚠️⚠️ **ET LE TEST PORTAIT SUR `abs(variation)`** : un modèle qui discrimine
+> **MIEUX** sortait ROUGE comme un modèle dégradé. Mesuré : Gini 0,34 contre
+> une référence inventée à 0,25 → `statut_global = ROUGE`. *Un bon modèle
+> pouvait être refusé par un nombre que personne n'avait mesuré.*
+>
+> **Les deux arbitrages, appliqués.** ① Référence absente → `None` + **AMBRE**,
+> sur le modèle **déjà validé** pour l'A/E non calculable d'A6 — c'est la règle
+> que la docstring énonçait depuis toujours, et le Gini était le seul des trois
+> indicateurs à ne pas l'appliquer. ② Test **asymétrique** : la dégradation
+> reste surveillée (3 bandes toutes atteignables, mesuré), l'amélioration est
+> **signalée sans jamais plafonner**.
+>
+> ⚠️ **L'ASYMÉTRIE ENTRE VOISINS A DÉSIGNÉ LE CHAMP MANQUANT** : le PSI publiait
+> `interpretation_psi` — « Stabilité NON mesurée » en toutes lettres — et le
+> Gini, voisin dans le MÊME dictionnaire, n'avait **aucune prose**. Il ne
+> pouvait rien dire quand il ne pouvait rien mesurer. Le champ existe.
+>
+> ⚠️ **Le texte lu par l'actuaire est une CONSTANTE NOMMÉE**, et quatre
+> contrôles vérifient séparément ses trois points exigés + son remède, plus un
+> cinquième qui refuse tout nom de variable.
+>
+> ⛔⛔ **SCEAU — ET LE PREMIER PLANT A ÉLARGI MON PROPRE FILET.**
+> `gini_reference_a3 = 0.25` replanté chez l'appelant — **la forme exacte du
+> défaut d'origine** — **n'a PAS fait tomber** le contrôle AST : il ne regardait
+> que la signature et les replis `.get`. *Le motif de ce chantier appliqué au
+> filet.* Élargi aux trois formes, il tombe. Puis `abs(variation)` rejoué →
+> **2 contrôles tombent** ; dégradation neutralisée → **3 tombent**.
+> ⚠️ *Un premier plant `if False` n'était pas fidèle — il envoyait
+> l'amélioration dans une branche où la dégradation devient négative, donc
+> VERT. **Repro infidèle : un vert qui ment.** Rejoué sous sa vraie forme.*
+
 **C12 — `COLS_A_EXCLURE_ML`** : 5 entrées Vie/Santé sur 22, comme A3.
 **C13 — En-tête de test : « 7 tests », 11 méthodes.**
 

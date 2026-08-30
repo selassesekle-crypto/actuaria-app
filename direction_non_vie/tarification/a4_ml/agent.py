@@ -200,6 +200,29 @@ logger = logging.getLogger('actuaria.a4')
 # CONSTANTES DE CONFIGURATION
 # ══════════════════════════════════════════════════════════════════════════════
 
+# ⚠️⚠️ CE MESSAGE EST LU PAR UN ACTUAIRE, PAS PAR UN DÉVELOPPEUR — exigence
+# explicite de Selasse, 30/08/2026, constat `a4/C11` (rang 1). Il doit dire
+# TROIS choses, et il est relu ici parce qu'une seule manquante le rend
+# trompeur :
+#   ① le modèle A BIEN ÉTÉ jugé sur tous ses autres critères ;
+#   ② SEULE la comparaison à la référence A3 n'a pas pu être faite, et
+#     POURQUOI — A3 n'a pas tourné pour cette exécution ;
+#   ③ ce n'est PAS un défaut du modèle évalué : c'est une pièce de
+#     comparaison qui manque.
+# ⚠️ La quatrième phrase — le remède — suit la règle de ce dépôt : un message
+# qui signale dit aussi QUOI FAIRE. Sans elle, l'actuaire lit un constat sans
+# issue.
+# ⚠️ Constante NOMMÉE, jamais une chaîne enfouie dans une branche : un contrôle
+# doit pouvoir la citer, et les trois surfaces doivent lire LA MÊME.
+MSG_REFERENCE_A3_INDISPONIBLE = (
+    "Comparaison au Gini de référence NON FAITE : l'agent A3 (GLM) n'a pas "
+    "tourné pour cette exécution, il n'existe donc aucun Gini de référence à "
+    "comparer. Le modèle retenu a bien été évalué sur tous ses autres "
+    "critères — seule cette comparaison manque. Ce n'est pas un défaut du "
+    "modèle évalué, c'est une pièce de comparaison absente. Pour l'obtenir, "
+    "relancer A3 avant A4."
+)
+
 # Colonnes à exclure de la modélisation ML
 # Même liste que A3 + colonnes supplémentaires spécifiques ML
 COLS_A_EXCLURE_ML = [
@@ -732,15 +755,26 @@ class AgentA4ML:
         audit_id     = f"A4_{t_debut.strftime('%Y%m%d_%H%M%S')}"
         sous_branche = result_a2.get('branche', 'inconnue')
 
-        # Gini de référence GLM — dynamique depuis A3 (priorité) ou défaut 0.25
-        # Évite le hardcodage freMTPL2 (0.2651) sur un autre portefeuille
-        gini_reference_a3 = 0.25  # défaut neutre si A3 non fourni
+        # Gini de référence GLM — lu chez A3, ou ABSENT.
+        # ⚠️⚠️ IL N'Y A PLUS DE VALEUR PAR DÉFAUT — constat `a4/C11`, rang 1.
+        # Ce `0.25` était un nombre inventé qui servait de référence à un
+        # statut RAG, sous le libellé publié « Référence A3 ». *Une référence
+        # absente est absente ; elle ne vaut pas un chiffre plausible.*
+        # ⚠️ Le `.get('gini')` sans repli est volontaire : si A3 a réussi mais
+        # n'a pas produit de Poisson, il n'y a pas davantage de référence.
+        gini_reference_a3 = None
         if result_a3 and result_a3.get('success'):
             gini_reference_a3 = (
                 result_a3.get('metriques', {})
                 .get('poisson', {})
-                .get('gini', 0.25)
+                .get('gini')
             )
+        if gini_reference_a3 is None:
+            logger.info(
+                f"[{audit_id}] Gini GLM référence (A3) INDISPONIBLE — la "
+                f"comparaison ne sera pas faite, et elle sera dite."
+            )
+        else:
             logger.info(
                 f"[{audit_id}] Gini GLM référence (A3) = {gini_reference_a3:.4f}"
             )
@@ -2453,7 +2487,7 @@ class AgentA4ML:
     def _monitoring_derive(
         self,
         metriques_actuelles: Dict,
-        gini_reference:      float = 0.2651,
+        gini_reference:      float | None = None,
         seuil_alerte_gini:   float = 0.05,
         psi_reel:            float | None = None,
         details_psi:         dict | None  = None,
@@ -2523,22 +2557,72 @@ class AgentA4ML:
                 logger.debug(f"KS sur scores réels échoué : {e_ks}")
 
         # 3. Gini : la référence A3 et le Gini RÉEL du modèle retenu
-        mois = ["Référence A3", "Modèle retenu (test)"]
+        #
+        # ⚠️⚠️ CONSTAT `a4/C11`, RANG 1 — LA RÉFÉRENCE ÉTAIT FABRIQUÉE, ET ELLE
+        # DÉCIDAIT D'UN STATUT. Trois nombres inventés coexistaient dans la
+        # chaîne, à trois valeurs différentes : `0.25` chez l'appelant,
+        # `0.2651` en défaut de signature ici — le hardcodage freMTPL2 que
+        # l'appelant dit précisément vouloir éviter — et `0.265` dans la
+        # figure. Quand A3 n'avait pas tourné, l'un d'eux servait quand même de
+        # référence, sous le libellé publié « Référence A3 » : *une provenance
+        # que le code ne portait pas*, sur un statut qui autorise ou plafonne
+        # la mise en production d'un modèle.
+        #
+        # ⚠️ LE COMPORTEMENT EST CELUI DÉJÀ ARBITRÉ POUR L'A/E NON CALCULABLE
+        # D'A6 : une grandeur non mesurée vaut `None` et son statut est AMBRE.
+        # C'est la règle que cette docstring énonce depuis toujours ; le Gini
+        # était le seul des trois indicateurs à ne pas l'appliquer.
         gini_courant = (gini_actuel if gini_actuel is not None
                         else metriques_actuelles.get('gini_moyen'))
-        gini_historique = [gini_reference,
-                           gini_courant if gini_courant is not None else gini_reference]
+        reference_disponible = gini_reference is not None
 
-        if gini_courant is None:
+        # ⚠️ AUCUN POINT FANTÔME SUR LA COURBE. Elle ne trace que ce qui est
+        # mesuré : sans référence, un seul point — pas deux dont un inventé.
+        mois, gini_historique = [], []
+        if reference_disponible:
+            mois.append("Référence A3")
+            gini_historique.append(gini_reference)
+        if gini_courant is not None:
+            mois.append("Modèle retenu (test)")
+            gini_historique.append(gini_courant)
+
+        if not reference_disponible:
             variation_gini = None
             statut_gini    = "AMBRE"
+            interpretation_gini = MSG_REFERENCE_A3_INDISPONIBLE
+        elif gini_courant is None:
+            variation_gini = None
+            statut_gini    = "AMBRE"
+            interpretation_gini = ("Gini du modèle retenu NON mesuré — la "
+                                   "comparaison à la référence A3 n'a pas pu "
+                                   "être faite.")
         else:
             variation_gini = gini_courant - gini_reference
-            statut_gini = (
-                "VERT"  if abs(variation_gini) <= seuil_alerte_gini * 0.5 else
-                "AMBRE" if abs(variation_gini) <= seuil_alerte_gini else
-                "ROUGE"
-            )
+            # ⚠️⚠️ LE TEST EST ASYMÉTRIQUE, ET CE N'EST PAS UN DÉTAIL — arbitré
+            # le 30/08/2026. Il portait sur `abs(variation)` : un modèle qui
+            # discrimine MIEUX que la référence sortait ROUGE exactement comme
+            # un modèle dégradé. Mesuré : Gini 0,34 contre une référence à
+            # 0,25 rendait `statut_global = ROUGE`. *Une amélioration n'est pas
+            # une dérive.* Elle se SIGNALE — pour qu'une hausse suspecte reste
+            # visible — mais elle ne plafonne JAMAIS le statut.
+            if variation_gini >= 0:
+                statut_gini = "VERT"
+                interpretation_gini = (
+                    f"Gini SUPÉRIEUR à la référence A3 de "
+                    f"{variation_gini:+.4f} — le modèle discrimine mieux que "
+                    f"le GLM de référence. Aucun plafonnement : une "
+                    f"amélioration n'est pas une dérive. À rapprocher des "
+                    f"contrôles de fuite si l'écart surprend.")
+            else:
+                degradation = -variation_gini
+                statut_gini = (
+                    "VERT"  if degradation <= seuil_alerte_gini * 0.5 else
+                    "AMBRE" if degradation <= seuil_alerte_gini else
+                    "ROUGE"
+                )
+                interpretation_gini = (
+                    f"Gini INFÉRIEUR à la référence A3 de {degradation:.4f} "
+                    f"(seuil d'alerte {seuil_alerte_gini:.2f}).")
 
         # 4. Recommandation globale
         statuts = [statut_psi, statut_ks, statut_gini]
@@ -2569,8 +2653,15 @@ class AgentA4ML:
             "gini_actuel":          gini_courant,
             "variation_gini":       round(variation_gini, 4) if variation_gini is not None else None,
             "variation_gini_pct":   (round(variation_gini / max(gini_reference, 1e-6) * 100, 1)
-                                     if variation_gini is not None else None),
+                                     if variation_gini is not None
+                                     and gini_reference is not None else None),
             "statut_gini":          statut_gini,
+            # ⚠️⚠️ CE CHAMP N'EXISTAIT PAS, ET C'EST L'ASYMÉTRIE QUI L'A
+            # DÉSIGNÉ : le PSI publiait `interpretation_psi` — « Stabilité NON
+            # mesurée » en toutes lettres — et le Gini, indicateur voisin dans
+            # le MÊME dictionnaire, n'avait aucune prose. Il ne pouvait donc
+            # rien dire quand il ne pouvait rien mesurer.
+            "interpretation_gini":  interpretation_gini,
             "gini_historique":      gini_historique,
             "mois_historique":      mois,
             "statut_global":        statut_global,
@@ -2942,8 +3033,14 @@ class AgentA4ML:
             # ⚠️ AUCUN TEXTE EN ROUGE — arbitré. La couleur ci-dessus reste
             # pour les OBJETS (barre, ligne, jauge) ; celle-ci sert au TEXTE.
             couleur_psi_txt = couleur_texte_rag(statut_psi)
-            gini_ref   = monitoring.get('gini_reference', 0.265)
-            seuil_al   = gini_ref - monitoring.get('seuil_alerte_gini', 0.05)
+            # ⚠️⚠️ LE QUATRIÈME NOMBRE INVENTÉ ÉTAIT ICI — `0.265`, une TROISIÈME
+            # valeur, différente des deux autres de la chaîne. La figure
+            # traçait une ligne « Référence 0.2650 », à quatre décimales, sur
+            # un portefeuille dont A3 n'avait jamais mesuré le Gini. *Une
+            # figure ne fabrique pas la grandeur qu'elle est censée montrer.*
+            gini_ref   = monitoring.get('gini_reference')
+            seuil_al   = (gini_ref - monitoring.get('seuil_alerte_gini', 0.05)
+                          if gini_ref is not None else None)
 
             fig2 = go.Figure()
             fig2.add_trace(go.Scatter(
@@ -2953,9 +3050,10 @@ class AgentA4ML:
                 marker=dict(color=OR, size=7, line=dict(color=NAVY, width=2)),
                 hovertemplate="<b>%{x}</b><br>Gini : %{y:.4f}<extra></extra>",
             ))
-            fig2.add_hline(y=gini_ref, line_color=VERT, line_width=1.5, line_dash="dash",
-                          annotation_text=f"Référence {gini_ref:.4f}",
-                          annotation_font=dict(color=VERT, size=9))
+            if gini_ref is not None:
+                fig2.add_hline(y=gini_ref, line_color=VERT, line_width=1.5, line_dash="dash",
+                              annotation_text=f"Référence {gini_ref:.4f}",
+                              annotation_font=dict(color=VERT, size=9))
             # ⚠️⚠️ LA LIGNE RESTE ROUGE, LE TEXTE NON — étape 2b. Mesuré :
             # ROUGE #E74C3C vaut 3,74 sur le tracé : il PASSE comme objet
             # (WCAG 1.4.11, 3:1) et ÉCHOUE comme texte (1.4.3, 4,5:1).
@@ -2963,9 +3061,12 @@ class AgentA4ML:
             # rapports tombe à 2,63 sur ce fond — PIRE que l'actuel — et inventer
             # un rouge plus clair serait fabriquer une couleur. *La ligne rouge
             # porte déjà le sens ; l'étiquette n'a qu'à être lisible.*
-            fig2.add_hline(y=seuil_al, line_color=ROUGE, line_width=1.5, line_dash="dot",
-                          annotation_text=f"Seuil alerte {seuil_al:.4f}",
-                          annotation_font=dict(color=BLANC, size=9))
+            # ⚠️ SANS RÉFÉRENCE, PAS DE SEUIL D'ALERTE : il en dérive. Un seuil
+            # tracé sur une référence absente serait une seconde invention.
+            if seuil_al is not None:
+                fig2.add_hline(y=seuil_al, line_color=ROUGE, line_width=1.5, line_dash="dot",
+                              annotation_text=f"Seuil alerte {seuil_al:.4f}",
+                              annotation_font=dict(color=BLANC, size=9))
             statut_h3 = val_ml["h3_gini"]["statut"]
             # ⚠️ `couleur_h3` RETIRÉE : tous ses usages étaient du TEXTE, et ils
             # lisent désormais `couleur_h3_txt`. *Une couleur d'objet qui ne sert
@@ -2973,10 +3074,18 @@ class AgentA4ML:
             # ⚠️ AUCUN TEXTE EN ROUGE — arbitré. La couleur ci-dessus reste
             # pour les OBJETS (barre, ligne, jauge) ; celle-ci sert au TEXTE.
             couleur_h3_txt = couleur_texte_rag(statut_h3)
+            # ⚠️⚠️ LE TITRE AFFIRMAIT LA COMPARAISON EN TOUTES CIRCONSTANCES.
+            # « Gini — référence A3 → modèle retenu » se lit comme un fait ; il
+            # restait affiché quand A3 n'avait pas tourné. *Quand un
+            # comportement change, le texte qui l'accompagne se relit : il ne
+            # ment pas quand on l'écrit, il devient faux ensuite.*
+            _titre_gini = ("Gini — référence A3 → modèle retenu"
+                           if gini_ref is not None else
+                           "Gini du modèle retenu — SANS référence A3")
             l2 = dict(**LAYOUT)
             l2.update(dict(
                 title=dict(
-                    text=f"Gini — référence A3 → modèle retenu · {txt_psi} · {val_ml['h3_gini']['titre_graphique']}",
+                    text=f"{_titre_gini} · {txt_psi} · {val_ml['h3_gini']['titre_graphique']}",
                     font=dict(color=couleur_h3_txt, size=10), x=0.01
                 ),
                 xaxis=dict(tickfont=dict(color=GRIS, size=8), showgrid=True,

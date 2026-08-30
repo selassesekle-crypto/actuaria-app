@@ -39,10 +39,10 @@ lui-même**.
 | | |
 |---|---|
 | constats relevés (vagues 1 + 2) | **154** — *`services/C12` ouvert ET fermé le 30/08 (la synthèse qualité ne sortait que par le prompt) ; `qualite/C7` ouvert ET fermé le 30/08 (l'identifiant jugé par le détecteur des grandeurs) ; `a2/C17` ouvert le 29/08 par la re-mesure de `a2/C8` et `a2/C9` ; recomptés le 29/08 ; `a3/C19`, `services/C10`, `a5/C10` et `services/C11` sont des constats NEUFS, ouverts et fermés dans leur propre lot* |
-| fermés **et épinglés** | **79** |
+| fermés **et épinglés** | **80** |
 | corrigé, **non épinglé** | **0** — `a5/C5` épinglé le 29/08 · **partiel** : `pipeline/C1` |
 | corrigé, épinglé, **NON REPORTÉ** (4e état) | **0** — `a6/C1` `a6/C2` `a6/C4` nommés le 30/08 |
-| **⛔ OUVERTS** | **75** |
+| **⛔ OUVERTS** | **74** |
 | lignes lues intégralement | **22 693** sur 23 863 du périmètre |
 | jamais auditées | **1 170 l** + `actuaria_app.py` (5 181 l) |
 | preuves qui se relancent | **35, 0 échec** |
@@ -511,8 +511,8 @@ pour les fermés ; **moins `pipeline/C1`**, partiel et arbitré OUVERT.
 
 | lecture | compte | comment il se dérive |
 |---|---|---|
-| constats **ouverts** | **75** | clés réelles moins clés fermées — **tenu par `ARCH-5`** |
-| dont **zones TRIÉES** (`a2` 11 · `pipeline` 9 · `a3` 8 · `a1` 6 · `conformite` 6 · `plan` 6 · `a4` 5 · `a6` 2) | **53** | préfixe de la clé |
+| constats **ouverts** | **74** | clés réelles moins clés fermées — **tenu par `ARCH-5`** |
+| dont **zones TRIÉES** (`a2` 11 · `pipeline` 9 · `a3` 8 · `a1` 6 · `conformite` 6 · `plan` 6 · `a4` 4 · `a6` 2) | **52** | préfixe de la clé |
 | ⛔ **jamais tracés** | **22** | le complément — *exact, sans heuristique* |
 
 > ⚠️⚠️ **ET LA VERSION PRÉCÉDENTE DE CE TABLEAU NE TOMBAIT PAS JUSTE.** Elle
@@ -923,11 +923,11 @@ déclare sur lui-même, sur une porte réglementaire. **Arbitrage rendu.**
 > *Nommer un constat sur la foi d'un test qu'on n'a pas vu tomber, ce serait
 > refaire le défaut qu'on ferme.*
 
-### ⚠️ A4 — LES 5, TRACÉS AU SITE (30/08) · **UN RANG 1 PROPOSÉ, ARBITRAGE EN ATTENTE**
+### ✅ A4 — LES 5, TRACÉS AU SITE (30/08) · **LE RANG 1 ACTÉ ET FERMÉ LE MÊME JOUR**
 
 | constat | mesuré au site le 30/08 | rang |
 |---|---|---|
-| **`a4/C11`** | ⛔⛔ **VRAI, ET LE RELEVÉ SE TROMPE DEUX FOIS — le vrai défaut est PLUS GRAVE.** ① *Pas 9 sites mais **5** (AST, dédoublonné)* : **4 lisent `result_a3['metriques']['poisson']['gini']`, où `gini` EST la bonne clé** — A3 la pose bien (l.1073, 1345, 1575). **Homonyme** : la même clé nomme deux objets différents. ② *Le consommateur n'est pas `_optimisation_tarifaire`* mais **`_monitoring_derive`** (AST : `gini_reference_a3` n'a qu'**un** usage, l.995). ⚠️⚠️ **MAIS CE QUI EST DESSOUS EST UN RANG 1** — voir l'encadré | **1 proposé** |
+| **`a4/C11`** | ✅ **FERMÉ le 30/08 — RANG 1 acté par Selasse, corrigé et scellé le jour même** (`None` + AMBRE, test asymétrique, 14 contrôles, 4 plants). **LE RELEVÉ SE TROMPAIT DEUX FOIS — et le vrai défaut était PLUS GRAVE.** ① *Pas 9 sites mais **5** (AST, dédoublonné)* : **4 lisent `result_a3['metriques']['poisson']['gini']`, où `gini` EST la bonne clé** — A3 la pose bien (l.1073, 1345, 1575). **Homonyme** : la même clé nomme deux objets différents. ② *Le consommateur n'est pas `_optimisation_tarifaire`* mais **`_monitoring_derive`** (AST : `gini_reference_a3` n'a qu'**un** usage, l.995). ⚠️⚠️ **MAIS CE QUI EST DESSOUS EST UN RANG 1** — voir l'encadré | ✅ **FERMÉ** |
 | **`a4/C7`** | ⛔ **VRAI, ET PLUS LARGE.** **10 sites** du module annoncent « 8 » pour **6** modèles calibrés (liste `modeles_a_calibrer` dérivée par AST). L'en-tête nomme **RandomForest, GAM, RégQuantile** comme calibrés : les deux premiers ne sont dans aucune boucle, et **`GAM` n'existe NULLE PART comme code**. ⚠️⚠️ **Et le fantôme a QUITTÉ le module** : `deploy_actuaria.py:95` le publie dans une `description`, écrite (`json.dump`) **dans l'en-tête markdown d'un notebook généré**. ⚠️ *Borne : ce chemin n'atteint PAS le livrable signé, et je n'ai pas vérifié que ce script est encore lancé* | **5** |
 | **`a4/C3`** | ✅ **CORRIGÉ, ÉPINGLÉ, JAMAIS REPORTÉ — le QUATRIÈME ÉTAT, et c'est le JUMEAU d'`a6/C4`.** La figure G1 lit `gini_test`/`gini_train` (l.2876-2877) avec le commentaire qui cite la mesure. `test_le_graphique_d_overfitting_porte_les_Gini_REELS` la tient. ⚠️ **Sceau** : `gini_test`→`gini` replanté, **le contrôle tombe**. **Aucun test ne nomme `a4/C3`** | **4e état** |
 | **`a4/C13`** | ⛔ **VRAI, et l'écart a grandi** : **7** annoncés, **18** réels (11 au relevé). Même **gabarit** qu'`a6/C10` — 6 des 7 fichiers qui portent la ligne `N tests ·` sont faux, et ce sont les six agents de tarification | **7** |
