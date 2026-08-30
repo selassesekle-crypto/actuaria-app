@@ -497,7 +497,7 @@ coupable (3) · annotations et exports morts (3).
 | **l'assemblage de l'app** | ~980 | `_executer_analyse` (799 l) + le bloc tarification (846 l). **Le reste de l'app : hors périmètre, déclaré** |
 | `services/excel_helpers.py` | 139 | complète le périmètre |
 
-## HORS RANG — LE TRI · 🟡 **8 ZONES TRACÉES sur 14 · 22 restants**
+## HORS RANG — LE TRI · 🟡 **9 ZONES TRACÉES sur 14 · 17 restants**
 
 ⚠️⚠️ **ET LE COMPTE ÉTAIT DE 40 : IL EST DE 77.** Le document répartissait
 les non alloués en « 38 de bruit » + « 40 non triés », mais **aucun des deux
@@ -512,8 +512,8 @@ pour les fermés ; **moins `pipeline/C1`**, partiel et arbitré OUVERT.
 | lecture | compte | comment il se dérive |
 |---|---|---|
 | constats **ouverts** | **74** | clés réelles moins clés fermées — **tenu par `ARCH-5`** |
-| dont **zones TRIÉES** (`a2` 11 · `pipeline` 9 · `a3` 8 · `a1` 6 · `conformite` 6 · `plan` 6 · `a4` 4 · `a6` 2) | **52** | préfixe de la clé |
-| ⛔ **jamais tracés** | **22** | le complément — *exact, sans heuristique* |
+| dont **zones TRIÉES** (`a2` 11 · `pipeline` 9 · `a3` 8 · `a1` 6 · `conformite` 6 · `plan` 6 · `socle` 5 · `a4` 4 · `a6` 2) | **57** | préfixe de la clé |
+| ⛔ **jamais tracés** | **17** | le complément — *exact, sans heuristique* |
 
 > ⚠️⚠️ **ET LA VERSION PRÉCÉDENTE DE CE TABLEAU NE TOMBAIT PAS JUSTE.** Elle
 > publiait **80** ouverts, **46** triés et **33** non tracés : `80 − 46 = 34`.
@@ -969,6 +969,30 @@ déclare sur lui-même, sur une porte réglementaire. **Arbitrage rendu.**
 > comportement est-il `None` + AMBRE (« référence non disponible », comme A6
 > fait pour l'A/E non calculable), ou une levée comme `a6/C9` ?
 
+### ✅ SOCLE — LES 5, TRACÉS AU SITE (30/08) · **4 rang 7 · 1 arbitrage OUBLIÉ ICI**
+
+| constat | mesuré au site le 30/08 | rang |
+|---|---|---|
+| **`socle/C1`** | ⛔⛔ **QUESTION DE CONCEPTION RENDUE LE 24/08, JAMAIS ARBITRÉE — ET CE DOCUMENT NE LA PORTAIT PAS.** La recommandation motivée est dans [`CARTE.md`](CARTE.md) : la donnée au sinistre **existe et est versionnée** (`PG_2017_CLAIMS_YEAR0.csv`, 14 243 lignes, une ligne = un sinistre), mais **aucun plan ne peut la déclarer** — 0/20 plans, 0/12 champs de `PlanTarifaire` ; *ce n'est pas un correctif, c'est un contrat de données nouveau.* Écart mesuré sur la donnée réelle : **≤ 2,4 % dans TOUS les régimes** de fréquence et de CV. ⚠️ *L'auteur du relevé — moi — s'y était réfuté lui-même : le « −9,1 % » annoncé était juste mais mal cadré.* **Rien ne bougera sans arbitrage** | **hors rang, EN ATTENTE** |
+| **`socle/C2`** | ⛔ **VRAI, ET BORNÉ PAR EXÉCUTION.** Six symboles du moteur de mapping à **0 appelant de production hors de leur module de définition** (AST) : `preparer_fichier_client`, `appliquer_mapping`, `charger_mapping`, `proposer_mapping`, `MappingIncoherent`, `MappingLLMIndisponible`. ⚠️⚠️ **MAIS AUCUN LIVRABLE N'EST TROMPÉ** : les **trois** consommateurs de `synthese_mapping` gardent tous sur la fausseté (`if v` · `if _synth_map6 else []` · `if _synth_map:`), et `synthese_mapping(None)` rend **`None`** — mesuré par exécution. *Les rapports savent afficher un rapport de mapping que rien ne produit, et ils n'affichent rien.* ⚠️ Et le non-câblage est **DÉCLARÉ** dans le code (« câblage = couche 2 ») : un état annoncé, pas une omission | **7** |
+| **`socle/C4`** | ⛔ **VRAI, et c'est l'asymétrie qui le rend lisible.** `proposer_mapping` promet en docstring (l.189) « *Température 0 pour la reproductibilité* » ; `_TEMPERATURE_DEFAUT` vaut **`None`** (l.51). ⚠️ **Le commentaire du module, 140 lignes plus haut, est JUSTE et porte sa mesure** (« *l'API REFUSE le paramètre — 400, deprecated for this model* »), et sa **phrase de portée est vraie, vérifiée** : les **trois** constantes de température du dépôt valent `None`. *Le correctif a atterri sur le commentaire, jamais sur la surface d'API.* Borné par `C2` : 0 appelant de production | **7** |
+| **`socle/C5`** | ⛔ **VRAI** : `n_lignes_exemple: int = 5` est passé à `_prompt_utilisateur`, dont la **première ligne** est `del n_lignes_exemple  # conservé pour l'API, sans effet`. La docstring publique ne le mentionne **pas**. Même borne que `C4` | **7** |
+| **`socle/C3`** | ⛔ **VRAI, sans conséquence** : `DERIVATIONS` et `CibleSeverite` sont dans un `__all__` avec **0 usage hors de leur module**. `CibleSeverite` est le type de retour de `construire_cible_severite`, qui a bien des appelants — ils l'utilisent sans le nommer | **7** |
+
+> ### ⚠️⚠️ CE QUE CETTE ZONE APPREND — MA PROPRE SONDE A ACCUSÉ LE RELEVÉ À TORT
+>
+> Ma première mesure d'AST donnait `MappingIncoherent` à **8** appelants de
+> production, `valider_mapping` à **2** — donc un relevé faux. **Elle comptait
+> le module qui DÉFINIT.** C'est très exactement le piège mesuré le 29/08 sur
+> le rang 6, et je l'ai refait.
+>
+> **Un compte d'appelants exclut le module qui définit — sinon tout module
+> cohérent paraît câblé.** Corrigée, la sonde **confirme le relevé** : 0 partout.
+>
+> ⚠️ *La violation plantée et la re-mesure marchent DANS LES DEUX SENS : elles
+> démasquent un filet trop étroit, et elles réfutent une accusation fausse —
+> ici la mienne.*
+
 ### ⛔ À FAIRE EN FIN DE TRI — LES JUMEAUX ENTRE CHEMINS
 
 > **Arbitré le 30/08 : pas maintenant, mais noté.** `pipeline/C2` a montré qu'un
@@ -979,13 +1003,13 @@ déclare sur lui-même, sur une porte réglementaire. **Arbitrage rendu.**
 > entre deux chemins qui font le même métier.* À lancer **quand le tri est
 > terminé**, pas avant.
 
-### ⛔ LES 22 AUTRES NE SONT PAS TRACÉS, ET JE LE DIS
+### ⛔ LES 17 AUTRES NE SONT PAS TRACÉS, ET JE LE DIS
 
-**Dérivé le 30/08 par préfixe de clé sur les 75 ouverts — exact, sans
-heuristique de texte** ; les huit zones triées en sortent :
+**Dérivé le 30/08 par préfixe de clé sur les 74 ouverts — exact, sans
+heuristique de texte** ; les neuf zones triées en sortent :
 
-`socle` 5 · `agents` 4 · `qualite` 4 · `a5` 3 · `charts` 3 · `services` 3.
-**Total 22.**
+`agents` 4 · `qualite` 4 · `a5` 3 · `charts` 3 · `services` 3.
+**Total 17.**
 
 ⚠️ **ET J'AI ÉCRIT CETTE RÉPARTITION AVANT DE LA DÉRIVER, UNE FOIS DE PLUS.**
 J'y avais mis `qualite` 3 et un `plan` 1 qui n'a rien à y faire — `plan` est
