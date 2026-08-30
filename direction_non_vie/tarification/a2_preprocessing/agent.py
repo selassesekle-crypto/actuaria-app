@@ -513,7 +513,7 @@ class AgentA2Preprocessing:
 
             # ── ÉTAPE 3 : EXPOSITION ──────────────────────────────────────────
             logger.info(f"[{audit_id}] Étape 3/6 : Calcul/validation exposition")
-            df, stats_expo = self._traiter_exposition(df, sous_branche)
+            df, stats_expo = self._traiter_exposition(df, sous_branche, plan)
             rapport['etapes'].append('exposition')
             rapport['transformations']['exposition'] = stats_expo
 
@@ -1191,7 +1191,8 @@ class AgentA2Preprocessing:
     def _traiter_exposition(
         self,
         df: pd.DataFrame,
-        sous_branche: str
+        sous_branche: str,
+        plan: PlanTarifaire | None = None,
     ) -> Tuple[pd.DataFrame, Dict]:
         """
         Traitement et validation de la variable exposition.
@@ -1258,12 +1259,26 @@ class AgentA2Preprocessing:
                 index=tuple(int(i) for i in idx), description=description,
                 correction=correction, effet_agrege=effet))
 
-        # Recherche de la colonne exposition
+        # ── RECHERCHE DE LA COLONNE : LE PLAN D'ABORD ────────────────────────
+        # ⚠️⚠️ ÉTAPE 1c — A2 CHERCHAIT UNE SOUS-CHAÎNE, PAS LE RÔLE DÉCLARÉ.
+        # `if 'exposition' in col.lower()` ne trouve pas `Exposure` :
+        # `'exposition' in 'exposure'` vaut **False**. Mesuré sur les 20 plans,
+        # **1 y échappe** — `auto_fr_reel`, celui bâti sur le jeu de données
+        # français réel. A2 y inventait donc une exposition de 1,0 pour TOUS les
+        # contrats, alors que la vraie colonne était là, déclarée au plan.
+        # Effet mesuré : fréquence sous-estimée de **16 %**, toujours dans le
+        # sens du sous-tarif.
+        # ⚠️ La recherche par sous-chaîne est CONSERVÉE en second recours : un
+        # fichier client peut nommer sa colonne `exposition_annuelle` sans que
+        # le plan l'ait prévu. *Le plan prime ; l'heuristique complète.*
         col_expo = None
-        for col in df.columns:
-            if 'exposition' in col.lower():
-                col_expo = col
-                break
+        if plan is not None and plan.exposition in df.columns:
+            col_expo = plan.exposition
+        else:
+            for col in df.columns:
+                if 'exposition' in col.lower():
+                    col_expo = col
+                    break
 
         if col_expo is None:
             # Pas de colonne exposition trouvée
@@ -1275,22 +1290,39 @@ class AgentA2Preprocessing:
                 "Vérifiez vos données — l'exposition est indispensable "
                 "pour le GLM Poisson."
             )
-            df['exposition'] = 1.0
-            col_expo = 'exposition'
-            stats['exposition_creee'] = True
-            # ⚠️⚠️ AUCUN EFFET AGRÉGÉ ICI, ET C'EST DÉLIBÉRÉ : il n'y a pas de
-            # « total avant ». Publier un rapport avant/après sur une colonne
-            # qui n'existait pas fabriquerait un facteur qui ne veut rien dire.
-            # *Ce qui doit être dit, c'est qu'une grandeur a été INVENTÉE.*
-            _noter('exposition_inventee', 'exposition', col_expo,
+            # ⚠️⚠️ ÉTAPE 1c — ON N'INVENTE PLUS. Arbitré par Selasse le
+            # 30/08/2026 : *lire le plan plutôt qu'inventer 1.0.* Créer une
+            # exposition pleine pour tout le monde SOUS-ESTIME le risque des
+            # contrats partiels — exactement le biais que la docstring de cette
+            # méthode explique vouloir supprimer. **Le code contredisait son
+            # propre texte.**
+            #
+            # ⚠️ CE N'EST PAS UN BLOCAGE, C'EST UNE DÉCLARATION. Le mécanisme
+            # employé existe déjà dans cet agent (`colonnes_plan_manquantes`),
+            # remonte à A6 et aux trois livrables, et **ne fait échouer
+            # personne** : le plan déclare une colonne, le fichier ne l'a pas,
+            # on le DIT. *La chaîne s'arrêtera loud en aval si le modèle en a
+            # besoin — jamais sur un chiffre inventé.*
+            stats['exposition_absente'] = True
+            stats['exposition_creee'] = False
+            _noter('exposition_absente', 'exposition',
+                   (plan.exposition if plan is not None else 'exposition'),
                    np.ones(_n0, dtype=bool),
-                   f"Colonne d'exposition INTROUVABLE : une exposition de 1,0 "
-                   f"(un an plein) a ete INVENTEE pour les {_n0} contrats. "
-                   f"L'exposition est le denominateur de la frequence : la "
-                   f"supposer pleine SOUS-ESTIME le risque des contrats "
-                   f"partiels. Aucune comparaison avant/apres n'est possible, "
-                   f"la grandeur n'existait pas.",
-                   correction='exposition creee a 1.0')
+                   f"Colonne d'exposition INTROUVABLE : le plan declare "
+                   f"'{plan.exposition if plan is not None else '?'}' et le "
+                   f"fichier ne la porte pas. AUCUNE exposition n'a ete "
+                   f"inventee -- une exposition pleine supposee pour tous "
+                   f"SOUS-ESTIME le risque des contrats partiels. Fournissez "
+                   f"la colonne, ou corrigez le nom declare au plan.",
+                   correction='aucune -- absence DECLAREE, rien invente')
+            stats['anomalies'] = _anomalies
+            self.parametres['stats_expo'] = stats
+            logger.warning(
+                "Colonne d'exposition INTROUVABLE — absence DECLAREE, aucune "
+                "valeur inventee. Le plan declare "
+                f"'{plan.exposition if plan is not None else '?'}'."
+            )
+            return df, stats
         else:
             stats['col_exposition_trouvee'] = True
 
@@ -1299,30 +1331,42 @@ class AgentA2Preprocessing:
         _masque_neg = (df[col_expo] <= 0).to_numpy()
         nb_negatifs = int(_masque_neg.sum())
         if nb_negatifs > 0:
-            mediane_expo = df[col_expo][df[col_expo] > 0].median()
+            # ⚠️⚠️ ÉTAPE 1b — EXCLURE, PLUS REMPLACER PAR LA MÉDIANE. Arbitré
+            # par Selasse le 30/08/2026, et ce n'est pas une doctrine neuve :
+            # c'est celle que la couche qualité applique depuis toujours sur la
+            # même grandeur — « IMPOSSIBLE MATHÉMATIQUEMENT (… exposition ≤ 0)
+            # → règle 1, exclure ». *Les deux chemins tarifaient différemment
+            # le même fichier ; ce lot les met d'accord sur le voisin qui avait
+            # raison.*
+            #
+            # ⚠️ POURQUOI LA MÉDIANE ÉTAIT LE MAUVAIS GESTE, MESURÉ. Un contrat
+            # d'exposition nulle n'a jamais été en vigueur : lui attribuer une
+            # durée médiane FABRIQUE une expérience de non-sinistre, ajoute de
+            # l'exposition au dénominateur et **sous-estime la fréquence de
+            # 10,4 %** — toujours dans le sens du sous-tarif.
+            # ⚠️ Et si `0` était un encodage de valeur manquante plutôt qu'un
+            # contrat jamais en vigueur, la doctrine dirait « ambigu →
+            # SIGNALER », jamais « inventer ». *Dans les deux lectures, la
+            # médiane est le mauvais geste : c'est ce qui rend l'arbitrage sûr.*
             _avant = float(df[col_expo].sum())
-            df.loc[df[col_expo] <= 0, col_expo] = mediane_expo
-            stats['valeurs_corrigees'] += nb_negatifs
-            # ⚠️⚠️ LA DOCTRINE DIVERGE ICI ENTRE LES DEUX CHEMINS, ET CE LOT NE
-            # LA TRANCHE PAS. La couche qualité classe `exposition <= 0` en
-            # REGLE 1 -- impossible, donc EXCLUE la ligne. A2 la REMPLACE par
-            # la médiane. Mesuré : la médiane sous-estime la fréquence de
-            # 10,4 % en ajoutant de l'exposition qui n'existe pas. *Le lot rend
-            # le geste VISIBLE ; le choisir est un arbitrage à part.*
-            _noter('exposition_non_positive_mediane', 'exposition', col_expo,
+            _noter('exposition_non_positive_exclue', 'exposition', col_expo,
                    _masque_neg,
-                   f"{nb_negatifs} exposition(s) <= 0 REMPLACEE(S) par la "
-                   f"mediane ({mediane_expo:.4f}). Un contrat d'exposition "
-                   f"nulle n'a jamais ete en vigueur : lui attribuer une duree "
-                   f"ajoute de l'exposition au denominateur, donc BAISSE la "
-                   f"prime. La couche qualite du chemin declaratif EXCLUT ces "
-                   f"lignes ; les deux chemins divergent.",
-                   correction=f'remplacee par la mediane {mediane_expo:.4f}',
-                   effet=EffetAgrege(colonne=col_expo, total_avant=_avant,
-                                     total_apres=float(df[col_expo].sum())))
+                   f"{nb_negatifs} ligne(s) d'exposition <= 0 EXCLUE(S). Un "
+                   f"contrat d'exposition nulle n'a jamais ete en vigueur : "
+                   f"lui attribuer une duree fabriquerait une experience de "
+                   f"non-sinistre et baisserait la prime. Meme regle que la "
+                   f"couche qualite du chemin declaratif -- impossible, donc "
+                   f"exclu.",
+                   correction='ligne EXCLUE (impossible)',
+                   effet=EffetAgrege(
+                       colonne=col_expo, total_avant=_avant,
+                       total_apres=float(df.loc[~_masque_neg, col_expo].sum())))
+            df = df.loc[~_masque_neg].reset_index(drop=True)
+            _masque_neg = np.zeros(len(df), dtype=bool)
+            stats['lignes_exclues'] += nb_negatifs
             logger.warning(
-                f"{nb_negatifs} valeurs d'exposition ≤ 0 remplacées "
-                f"par la médiane ({mediane_expo:.4f})"
+                f"{nb_negatifs} ligne(s) d'exposition ≤ 0 EXCLUE(S) "
+                f"(impossible) — meme regle que la couche qualite"
             )
 
         # exposition > 1 : contrat de plus d'un an
