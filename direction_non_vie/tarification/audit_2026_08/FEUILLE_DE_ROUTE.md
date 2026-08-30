@@ -496,23 +496,30 @@ coupable (3) · annotations et exports morts (3).
 | **l'assemblage de l'app** | ~980 | `_executer_analyse` (799 l) + le bloc tarification (846 l). **Le reste de l'app : hors périmètre, déclaré** |
 | `services/excel_helpers.py` | 139 | complète le périmètre |
 
-## HORS RANG — LE TRI · 🟡 **A2, PIPELINE, A1, A3, PLAN et CONFORMITE · 33 restants**
+## HORS RANG — LE TRI · 🟡 **A2, PIPELINE, A1, A3, PLAN, CONFORMITE et A6 · 27 restants**
 
 ⚠️⚠️ **ET LE COMPTE ÉTAIT DE 40 : IL EST DE 77.** Le document répartissait
 les non alloués en « 38 de bruit » + « 40 non triés », mais **aucun des deux
 ensembles n'est énuméré** : ils sont **indiscernables tant que le tri n'est pas
 fait**. *Le tri est la seule façon de savoir lequel est lequel.*
 
-⚠️ **LE CHIFFRE ET SA MÉTHODE, CÔTE À CÔTE** — re-dérivés le 29/08 après la
-fermeture d'`a2/C1` et d'`a2/C2`. Méthode rejouable : les clés ouvertes du §②,
-cherchées comme mot entier dans ce fichier, **avant** puis **après** le titre
-`## HORS RANG`.
+⚠️ **LE CHIFFRE ET SA MÉTHODE, CÔTE À CÔTE** — re-dérivés le 30/08 après le tri
+d'A6. Méthode rejouable : en-têtes `**Cn —**` des quatorze relevés pour les
+constats réels ; clés portées par le **marqueur d'ouverture** des blocs `> ✅`
+pour les fermés ; **moins `pipeline/C1`**, partiel et arbitré OUVERT.
 
 | lecture | compte | comment il se dérive |
 |---|---|---|
-| constats **ouverts** | **80** | clés réelles moins clés fermées — **tenu par `ARCH-5`** |
-| dont **zones TRIÉES** (`a2` 11 · `pipeline` 9 · `a3` 8 · `a1` 6 · `conformite` 6 · `plan` 6) | **46** | préfixe de la clé |
-| ⛔ **jamais tracés** | **33** | le complément — *exact, sans heuristique* |
+| constats **ouverts** | **79** | clés réelles moins clés fermées — **tenu par `ARCH-5`** |
+| dont **zones TRIÉES** (`a2` 11 · `pipeline` 9 · `a3` 8 · `a1` 6 · `a6` 6 · `conformite` 6 · `plan` 6) | **52** | préfixe de la clé |
+| ⛔ **jamais tracés** | **27** | le complément — *exact, sans heuristique* |
+
+> ⚠️⚠️ **ET LA VERSION PRÉCÉDENTE DE CE TABLEAU NE TOMBAIT PAS JUSTE.** Elle
+> publiait **80** ouverts, **46** triés et **33** non tracés : `80 − 46 = 34`.
+> *Trois nombres dont deux seulement pouvaient être vrais, dans un tableau qui
+> fait autorité.* Le complément était bon, l'un des deux autres non — et rien
+> ne le signalait parce que **`ARCH-5` tient le total, jamais la répartition**.
+> Le tableau est re-dérivé ci-dessus d'un seul geste, ligne à ligne.
 
 ⚠️⚠️ **ET LE DÉCOUPAGE « ALLOUÉ / NON ALLOUÉ » A ÉTÉ RETIRÉ : IL N'EST PAS
 DÉRIVABLE.** Mesuré le 29/08 — **trois méthodes plausibles rendent 7, 9 et
@@ -834,6 +841,66 @@ déclare sur lui-même, sur une porte réglementaire. **Arbitrage rendu.**
 > réécrit**. *Vérifier ce qui atteint le livrable, pas ce qui est écrit dans le
 > code.*
 
+### ✅ A6 — LES 6, TRACÉS AU SITE (30/08) · **3 sont un QUATRIÈME ÉTAT, prouvé**
+
+| constat | mesuré au site le 30/08 | rang |
+|---|---|---|
+| **`a6/C1`** | ✅ **CORRIGÉ ET ÉPINGLÉ — jamais reporté.** `ae` vaut `somme_obs / somme_att` où l'attendu est `pred x exposition` (l.1549-1555), et l'unité est **mesurée, pas supposée** (`Σy/Σ(pred×expo) = 1,0000` contre `Σy/Σpred = 0,5533`). Le chemin sans colonne temporelle rend `ae_ratio = None` et publie le rapport de stationnarité **sous son propre nom**. ⚠️ **Violation plantée** (`ae = m_te / m_tr`) : **2 contrôles tombent** | **4e état** |
+| **`a6/C2`** | ✅ **CORRIGÉ ET ÉPINGLÉ — jamais reporté.** La prédiction de la fenêtre est **conservée** (`preds_par_annee`, l.1584) ; chaque segment se compare à ce que **le modèle prédit POUR LUI** (l.1617-1621). Les quintiles sont découpés sur le risque **prédit**, plus sur la cible observée. ⚠️ **Violation plantée** (attendu = moyenne du train) : **1 contrôle tombe** | **4e état** |
+| **`a6/C4`** | ✅ **CORRIGÉ ET ÉPINGLÉ — jamais reporté.** Barres `gini_test` (l.3234), radar sur `score_stabilite` / `score_rmse` (l.3299-3301). ⚠️ **Deux violations plantées séparément** — `gini_test`→`gini`, puis `score_*`→`stabilite`/`rmse_norm` : **un contrôle tombe à chaque fois** | **4e état** |
+| **`a6/C9`** | ⛔ **VRAI, ET LA MOITIÉ QUI DÉCIDE N'EST PAS CELLE QUI EST RELEVÉE.** Les 3 entrées mortes sont exactes (`random_forest`, `quantile_50`, `quantile_90` : A4 en calibre **6**, pas ces trois-là). ⚠️⚠️ **Mais `xgboost_tweedie`, lui, EST calibré, EST classé, et est ABSENT de la table** : il retombe sur un **défaut**. Et le même fichier en porte **trois** — `0.5` pour A3, `0.6` pour A4, `0.7` pour A5 — **nus, sans une ligne de justification**, sur un critère pesé à **20 %** du score qui choisit le modèle qui tarife | **2** |
+| **`a6/C7`** | ⛔ **VRAI, borné.** `top_modeles` est reçu (l.1848) et **jamais lu** : 0 usage dans les 47 lignes du corps, mesuré par AST. La docstring annonce « les 3 meilleurs modèles ». ⚠️ **Aucun livrable n'est touché** : `courbes` n'a **aucun consommateur de production** hors A6 (AST, chemins réels), et `chart_lorenz_gini` reçoit **les deux** Gini avec le commentaire qui dit lequel est le plafond | **7** |
+| **`a6/C10`** | ⛔ **VRAI, et l'écart a DOUBLÉ depuis le relevé** : **7** annoncés, **30** réels (24 au relevé). ⚠️ **Ce n'est pas un défaut d'A6 — c'est un gabarit** : la ligne `N tests ·` existe dans **7** fichiers du dépôt, **6 sont faux**, et les 6 sont les six agents de tarification, **tous à « 7 »**. Le seul juste annonce « 1 test » et en a 1 | **7** |
+
+> ### ⚠️⚠️ CE QUE CETTE ZONE APPREND ① — L'ASYMÉTRIE ENTRE VOISINS, ET ELLE EST ICI DANS SA FORME LA PLUS NETTE
+>
+> Deux tables jumelles, même forme, même risque de dérive :
+>
+> | table | `xgboost_tweedie` | ce qu'elle décide | son défaut est-il DÉCLARÉ ? |
+> |---|---|---|---|
+> | `FAMILLES_MODELES_ML` (A4) | **présent** | un **libellé** de famille | ✅ oui — la docstring nomme le risque (« *tout modèle ajouté ultérieurement sans mise à jour immédiate* ») et le défaut s'appelle `'Autre ML'` |
+> | `INTERPRETABILITE` (A6) | ⛔ **absent** | **20 %** du score qui **choisit le modèle qui tarife** | ⛔ non — trois défauts nus, `0.5` / `0.6` / `0.7`, pas un mot |
+>
+> **La table décorative est gardée et couvre le modèle ; la table qui décide
+> n'est ni gardée ni complète.** ⚠️ Et **aucun test n'exerce la table** :
+> `INTERPRETABILITE` n'est **nommée par aucun test** (0 occurrence), et les
+> **14** sites de fixture qui portent la clé `interpretabilite` la
+> **fournissent en dur** — pas un seul ne passe par la recherche qui a le
+> défaut. ⚠️ *Compté par AST en écartant l'**homonyme** : la même clé désigne
+> un **poids** dans un dict de pondération (1 site) et une **valeur** dans un
+> dict de modèle (14). Un `grep` les additionnait à 15.*
+>
+> ### ⚠️⚠️ ② LA VALEUR EST JUSTE — PAR COÏNCIDENCE, ET JE NE LA JUSTIFIE PAS
+>
+> `xgboost_tweedie` reçoit `0.6`, exactement ce que `xgboost` déclare. **Rien ne
+> l'a voulu** : c'est le défaut d'A4 qui vaut la valeur modale des modèles d'A4.
+> Mesuré, sur une fixture où stabilité et RMSE sont **égales** entre les deux
+> rivaux, pour que le seul écart soit celui qui vient du défaut :
+>
+> ```
+>   defaut=0.5 (celui ecrit pour A3)  -> #1 ML_XGBOOST          marge +0.0138
+>   defaut=0.6 (celui d'A4, ACTIF)    -> #1 ML_XGBOOST_TWEEDIE  marge +0.0062
+>   defaut=0.7 (celui ecrit pour A5)  -> #1 ML_XGBOOST_TWEEDIE  marge +0.0262
+> ```
+>
+> **Le vainqueur bascule d'une ligne de défaut à l'autre.** Un pas de `0,1`
+> vaut `0,1 × 0,20 = 0,0200` sur le score global — et les marges #1-#2
+> **mesurées sur cet agent** au lot `a6/C3` valaient **0,008 · 0,016 · 0,021**.
+> *Un pas de défaut dépasse deux des trois marges réelles.*
+>
+> ⛔ **AUCUN EURO N'A BOUGÉ, ET JE LE DIS AUSSI** : la valeur active est `0.6`,
+> déterministe, et c'est celle que la famille porterait. C'est un **mécanisme,
+> pas un dégât** — la même forme que `plan/C5`.
+>
+> ### ⚠️ ③ LE QUATRIÈME ÉTAT, TROIS FOIS DANS UNE SEULE ZONE
+>
+> `C1`, `C2` et `C4` sont **corrigés**, **épinglés par des contrôles qui
+> discriminent** (5 contrôles, 4 violations plantées, tous tombent) — et
+> **aucun test ne les NOMME**. `ARCH-1` ne peut donc pas les voir, et le compte
+> les porte ouverts. *C'est la moitié d'A6 : trois constats de la classe A —
+> « publie du faux à un actuaire qui signe » — déjà réparés sans que le
+> document le sache.*
+
 ### ⛔ À FAIRE EN FIN DE TRI — LES JUMEAUX ENTRE CHEMINS
 
 > **Arbitré le 30/08 : pas maintenant, mais noté.** `pipeline/C2` a montré qu'un
@@ -844,13 +911,13 @@ déclare sur lui-même, sur une porte réglementaire. **Arbitrage rendu.**
 > entre deux chemins qui font le même métier.* À lancer **quand le tri est
 > terminé**, pas avant.
 
-### ⛔ LES 33 AUTRES NE SONT PAS TRACÉS, ET JE LE DIS
+### ⛔ LES 27 AUTRES NE SONT PAS TRACÉS, ET JE LE DIS
 
 **Dérivé le 30/08 par préfixe de clé sur les 79 ouverts — exact, sans
-heuristique de texte** ; les six zones triées en sortent :
+heuristique de texte** ; les sept zones triées en sortent :
 
-`a6` 6 · `a4` 5 · `socle` 5 · `agents` 4 · `qualite` 4 · `a5` 3 · `charts` 3 ·
-`services` 3. **Total 33.**
+`a4` 5 · `socle` 5 · `agents` 4 · `qualite` 4 · `a5` 3 · `charts` 3 ·
+`services` 3. **Total 27.**
 
 ⚠️ **ET J'AI ÉCRIT CETTE RÉPARTITION AVANT DE LA DÉRIVER, UNE FOIS DE PLUS.**
 J'y avais mis `qualite` 3 et un `plan` 1 qui n'a rien à y faire — `plan` est
