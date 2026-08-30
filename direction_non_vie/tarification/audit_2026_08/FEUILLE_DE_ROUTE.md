@@ -497,7 +497,7 @@ coupable (3) · annotations et exports morts (3).
 | **l'assemblage de l'app** | ~980 | `_executer_analyse` (799 l) + le bloc tarification (846 l). **Le reste de l'app : hors périmètre, déclaré** |
 | `services/excel_helpers.py` | 139 | complète le périmètre |
 
-## HORS RANG — LE TRI · 🟡 **9 ZONES TRACÉES sur 14 · 17 restants**
+## HORS RANG — LE TRI · 🟡 **10 ZONES TRACÉES sur 14 · 13 restants**
 
 ⚠️⚠️ **ET LE COMPTE ÉTAIT DE 40 : IL EST DE 77.** Le document répartissait
 les non alloués en « 38 de bruit » + « 40 non triés », mais **aucun des deux
@@ -512,8 +512,8 @@ pour les fermés ; **moins `pipeline/C1`**, partiel et arbitré OUVERT.
 | lecture | compte | comment il se dérive |
 |---|---|---|
 | constats **ouverts** | **74** | clés réelles moins clés fermées — **tenu par `ARCH-5`** |
-| dont **zones TRIÉES** (`a2` 11 · `pipeline` 9 · `a3` 8 · `a1` 6 · `conformite` 6 · `plan` 6 · `socle` 5 · `a4` 4 · `a6` 2) | **57** | préfixe de la clé |
-| ⛔ **jamais tracés** | **17** | le complément — *exact, sans heuristique* |
+| dont **zones TRIÉES** (`a2` 11 · `pipeline` 9 · `a3` 8 · `a1` 6 · `conformite` 6 · `plan` 6 · `socle` 5 · `a4` 4 · `agents` 4 · `a6` 2) | **61** | préfixe de la clé |
+| ⛔ **jamais tracés** | **13** | le complément — *exact, sans heuristique* |
 
 > ⚠️⚠️ **ET LA VERSION PRÉCÉDENTE DE CE TABLEAU NE TOMBAIT PAS JUSTE.** Elle
 > publiait **80** ouverts, **46** triés et **33** non tracés : `80 − 46 = 34`.
@@ -993,6 +993,27 @@ déclare sur lui-même, sur une porte réglementaire. **Arbitrage rendu.**
 > démasquent un filet trop étroit, et elles réfutent une accusation fausse —
 > ici la mienne.*
 
+### ✅ AGENTS — LES 4, TRACÉS AU SITE (30/08) · **l'asymétrie ÉCRITE PAR LE CODE LUI-MÊME**
+
+| constat | mesuré au site le 30/08 | rang |
+|---|---|---|
+| **`agents/C3`** | ⛔ **VRAI, ET PLUS GRAVE QUE « DEUX SUR TROIS ».** La docstring l.260-262 promet qu'un arbitrage en échec *« n'empêche pas les autres d'aboutir »*. Mesuré par AST — les lignes ont bougé depuis le relevé (272/288/308 → **321/337/357**) : `_arbitrer` l.**321** FRÉQUENCE **hors `try`** · l.**337** COÛT dans un `try` · l.**357** PRIME PURE dans un `try`. ⚠️⚠️ **Et la fréquence est la PREMIÈRE des trois** : si elle lève, `pipeline_agents` **ne retourne jamais** et les **trois** cibles sont perdues, pas deux. La promesse n'est donc pas tenue « pour 2 sur 3 » — elle ne tient sur AUCUNE quand c'est la première qui casse | **2** |
+| **`agents/C6`** | ⛔ **VRAI, confirmé par exécution sur les 20 plans.** L.353-354 accuse *« contrat de données V7 B2 rompu — `_calculer_prime_pure` »*. La vraie cause est ailleurs : `A2._calculer_prime_pure` lit **`'cout_total_sinistres'` et `'exposition'` EN DUR** (l.697-700), pas `plan.cible_cout` / `plan.exposition`. Mesuré : **19/20 plans passent**, le seul bloqué est **`auto_fr_reel.yaml`** (`Exposure` / `ClaimAmountTotal`) — *celui bâti sur le jeu de données français réel.* ⚠️ Et A2 **déclare** « HORS PLAN » dans sa propre docstring : le fait est assumé, c'est le **message** qui oriente vers le mauvais coupable | **5** |
+| **`agents/C5`** | ⛔ **VRAI, et c'est plus fort qu'une docstring** : `_vue_sinistres` porte l'**annotation de type** `-> Dict[str, Any]` (l.210) et retourne un **tuple** (l.227). Un vérificateur de types le prendrait ; la docstring, elle, est juste sur le fond et tait seulement le second membre | **7** |
+| **`agents/C1`** | ❄️ **GELÉ — rang 6, arbitré le 29/08.** Ses trois défauts sont intacts et continuent de coûter pendant le gel ; il reste **compté OUVERT**. *Rien à re-trancher ici : la levée du gel est le début du chantier INTERFACE* | **6, GELÉ** |
+
+> ### ⚠️⚠️ CE QUE CETTE ZONE APPREND — LE CODE AVAIT ÉCRIT L'ASYMÉTRIE SANS QUE PERSONNE NE LA VOIE
+>
+> Le commentaire de la troisième cible dit, l.349 :
+> *« **Enveloppé comme le coût** : un échec est DIT, pas masqué. »*
+>
+> **Deux des trois cibles nomment explicitement leur voisine comme modèle.** La
+> première — écrite avant elles — n'a jamais été alignée, et **aucune relecture
+> ne l'a remarqué parce que le motif était énoncé du côté des deux qui l'ont.**
+>
+> *Chercher ce qui protège le voisin et pas celui-ci reste le révélateur le
+> moins cher de cet audit — et il marche même quand le code se documente bien.*
+
 ### ⛔ À FAIRE EN FIN DE TRI — LES JUMEAUX ENTRE CHEMINS
 
 > **Arbitré le 30/08 : pas maintenant, mais noté.** `pipeline/C2` a montré qu'un
@@ -1003,13 +1024,12 @@ déclare sur lui-même, sur une porte réglementaire. **Arbitrage rendu.**
 > entre deux chemins qui font le même métier.* À lancer **quand le tri est
 > terminé**, pas avant.
 
-### ⛔ LES 17 AUTRES NE SONT PAS TRACÉS, ET JE LE DIS
+### ⛔ LES 13 AUTRES NE SONT PAS TRACÉS, ET JE LE DIS
 
 **Dérivé le 30/08 par préfixe de clé sur les 74 ouverts — exact, sans
-heuristique de texte** ; les neuf zones triées en sortent :
+heuristique de texte** ; les dix zones triées en sortent :
 
-`agents` 4 · `qualite` 4 · `a5` 3 · `charts` 3 · `services` 3.
-**Total 17.**
+`qualite` 4 · `a5` 3 · `charts` 3 · `services` 3. **Total 13.**
 
 ⚠️ **ET J'AI ÉCRIT CETTE RÉPARTITION AVANT DE LA DÉRIVER, UNE FOIS DE PLUS.**
 J'y avais mis `qualite` 3 et un `plan` 1 qui n'a rien à y faire — `plan` est
