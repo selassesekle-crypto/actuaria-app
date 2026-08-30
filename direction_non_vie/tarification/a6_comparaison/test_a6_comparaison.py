@@ -831,7 +831,13 @@ class GOUV_LesRaisonsDuPlafond(unittest.TestCase):
 
 
 class T_Les_Figures_Portent_Les_Valeurs_REELLES(unittest.TestCase):
-    """CONTRÔLE POSITIF — une figure publiée doit montrer ce qui a été mesuré.
+    """CONTRÔLE POSITIF — `a6/C4` : une figure montre ce qui a été mesuré.
+
+    ⚠️⚠️ CE QUI MANQUAIT ICI N'ÉTAIT PAS LE CONTRÔLE, C'ÉTAIT SON NOM. Les deux
+    contrôles ci-dessous existaient et DISCRIMINAIENT — mais aucun ne nommait
+    `a6/C4`, donc `ARCH-1` ne pouvait pas le voir et l'archive le comptait
+    OUVERT. *Un correctif épinglé mais non reporté est un quatrième état : ni
+    ouvert, ni fermé, ni visible.* Nommé le 30/08/2026.
 
     ⚠️ MESURÉ AVANT CE LOT, sur un classement réel de quatre modèles :
         barres « Gini »      = [0, 0, 0, 0]   pour [0.21, 0.22, 0.16, 0.15]
@@ -947,7 +953,15 @@ def _a2_age_pilote(n=2000, seed=5, mix_risque_derniere_annee=False,
 
 
 class T_L_A_E_Compare_L_OBSERVE_AU_PREDIT(unittest.TestCase):
-    """CONTRÔLE POSITIF — A/E veut dire Actual / Expected.
+    """CONTRÔLE POSITIF — `a6/C1` : A/E veut dire Actual / Expected.
+
+    ⚠️⚠️ NOMMÉ LE 30/08/2026, SANS QUE LE CODE NI LES CONTRÔLES CHANGENT. Les
+    deux contrôles de calibration ci-dessous existaient et DISCRIMINAIENT
+    (violation replantée : `ae = m_te / m_tr`, les deux tombent) — mais aucun
+    ne portait la clé, donc `ARCH-1` ne pouvait pas le voir et l'archive le
+    comptait OUVERT. *Le constat le plus grave de la zone était réparé depuis
+    des semaines sans que le document le sache.*
+    ⚠️ `a6/C2` est nommé plus bas, sur le contrôle qui l'épingle : le segment.
 
     ⚠️ LE COMMENTAIRE DU CODE DIT DÉJÀ CE QUE LE CODE NE FAIT PAS (a6:1012) :
     « prédire sur test, calculer Gini et A/E SUR LES PRÉDICTIONS. C'est un vrai
@@ -1017,7 +1031,14 @@ class T_L_A_E_Compare_L_OBSERVE_AU_PREDIT(unittest.TestCase):
         print(f"    POS-A6d A/E = {obs:,.0f} / {att:,.0f} = {obs/att:.4f} ✅")
 
     def test_un_segment_BIEN_TARIFE_n_est_pas_juge_sur_la_moyenne_GLOBALE(self):
-        """⚠️ MESURÉ : les trois segmentations divisent par `moy_ref`, la
+        """CONTRÔLE POSITIF — `a6/C2`, le A/E PAR SEGMENT.
+
+        ⚠️⚠️ NOMMÉ LE 30/08/2026 : le contrôle existait et DISCRIMINAIT
+        (violation replantée — attendu du segment ramené à la moyenne du train
+        — il tombe), mais il ne portait pas la clé. Le relevé mesurait
+        **11 segments ROUGE sur 12** sur un portefeuille sans hétérogénéité.
+
+        ⚠️ MESURÉ : les trois segmentations divisaient par `moy_ref`, la
         moyenne OBSERVÉE du train (a6:1265) — jamais par une prédiction. Un
         segment réellement plus risqué sort donc ROUGE même si le modèle le
         tarife parfaitement : la grandeur mesure l'HÉTÉROGÉNÉITÉ du

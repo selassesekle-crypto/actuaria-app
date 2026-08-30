@@ -19,6 +19,26 @@
 ```
 C'est un **test de stationnarité de la cible**, pas une mesure de calibration du modèle. Le commentaire du code dit pourtant, deux lignes plus haut : « C'est un vrai backtesting de modèle — **pas un test de stationnarité** ». Le Gini walk-forward, lui, utilise bien la prédiction.
 
+> ✅ **`a6/C1`** · **FERMÉ le 30/08/2026 — ET LE CODE N'A PAS BOUGÉ CE JOUR-LÀ.**
+> *Preuve : `test_a6_comparaison.py`, classe `T_L_A_E_Compare_L_OBSERVE_AU_PREDIT`.*
+>
+> ⚠️⚠️ **CE CONSTAT ÉTAIT DANS UN QUATRIÈME ÉTAT : corrigé, ÉPINGLÉ, jamais
+> REPORTÉ.** Le correctif était en place et deux contrôles le tenaient — mais
+> **aucun ne portait la clé**, donc `ARCH-1` ne pouvait pas le voir et le compte
+> le portait OUVERT. *Ni ouvert, ni fermé, ni visible : le pire des trois.*
+>
+> **Ce que le code fait aujourd'hui, mesuré :** `ae = somme_obs / somme_att`,
+> l'attendu étant `pred × exposition` — et **l'unité est mesurée, pas
+> supposée** : `Σy/Σ(pred×expo) = 1,0000` contre `Σy/Σpred = 0,5533` sur données
+> de vérité connue. Le chemin sans colonne temporelle ne recalibre rien : il
+> rend `ae_ratio = None` et publie le rapport de stationnarité **sous son propre
+> nom**, avec un motif qui dit pourquoi.
+>
+> ⚠️ **SCEAU — violation replantée le 30/08** (`py -B`, bytecode désactivé) :
+> `ae = round(m_te / max(m_tr, 1e-6), 4)`, c'est-à-dire le défaut d'origine.
+> **Les DEUX contrôles tombent.** *Un contrôle qui ne peut pas échouer est du
+> décor ; celui-ci échoue sur le bon défaut.*
+
 **C2 — Le A/E par segment déclare ROUGE 11 segments sur 12, sur un portefeuille sans hétérogénéité.**
 ```
   quintiles_risque : ['ROUGE']
@@ -26,6 +46,24 @@ C'est un **test de stationnarité de la cible**, pas une mesure de calibration d
   tranches_age     : ['ROUGE','ROUGE','ROUGE','ROUGE','ROUGE','ROUGE']
 ```
 Chaque segment est comparé à **la moyenne globale du train**, pas à ce que le modèle prédit pour lui. Un segment réellement plus risqué sortira donc ROUGE **même si le modèle le tarife parfaitement**. Ce tableau est publié à l'actuaire comme « A/E par segment ».
+
+> ✅ **`a6/C2`** · **FERMÉ le 30/08/2026 — quatrième état, comme son voisin.**
+> *Preuve : `test_un_segment_BIEN_TARIFE_n_est_pas_juge_sur_la_moyenne_GLOBALE`.*
+>
+> **Ce que le code fait aujourd'hui :** la prédiction de chaque fenêtre est
+> **conservée** (`preds_par_annee`) — *elle était jetée à chaque tour de boucle,
+> et c'est précisément pourquoi les segments se rabattaient sur une moyenne
+> observée*. Chaque segment se compare désormais à ce que **le modèle prédit
+> POUR LUI**, et les quintiles sont découpés sur le risque **PRÉDIT** : trier
+> par l'observé puis comparer l'observé garantissait que le quintile haut sorte
+> au-dessus, **même pour un modèle parfait**.
+>
+> ⚠️ **SCEAU — violation replantée le 30/08** : attendu du segment ramené à
+> `derniere['moy_train']`, la moyenne observée du train. **Le contrôle tombe.**
+>
+> ⚠️ **Et le plancher de crédibilité a son propre second sens** : une zone
+> réellement sous-tarifée, invisible du modèle parce qu'elle est une CHAÎNE,
+> doit toujours sortir ROUGE. *Une exemption qui n'est pas bornée ouvre un trou.*
 
 **C3 — Le graphique « Score par profil » n'affiche pas le score.**
 ```
@@ -81,6 +119,21 @@ Chaque segment est comparé à **la moyenne globale du train**, pas à ce que le
   radar (5 axes)     = [0.0, 0.8, 0.6, 0.8, 0.9]
 ```
 `m.get('gini', 0)` alors que la clé est `gini_test`. Le radar est pire : sur ses cinq axes, **trois sont des valeurs par défaut** (`stabilite`, `rmse_norm` n'existent pas dans le catalogue ; `score_stabilite`/`score_rmse` si). Le contrôle C2, dans le même fichier, commente explicitement « Clé correcte : `gini_test` (pas `gini`) » — la leçon a été tirée à un endroit et pas à l'autre.
+
+> ✅ **`a6/C4`** · **FERMÉ le 30/08/2026 — quatrième état, le troisième de la
+> zone.** *Preuve : `T_Les_Figures_Portent_Les_Valeurs_REELLES`, 2 contrôles.*
+>
+> **Ce que le code fait aujourd'hui :** les barres lisent `gini_test`, et le
+> radar trace les **cinq composantes que la grille multicritères a réellement
+> calculées** pour le modèle retenu (`score_gini`, `score_stabilite`,
+> `score_interpretabilite`, `score_rmse`, `score_global`). *Un axe qui vaut sa
+> valeur par défaut ne décrit AUCUN modèle — il décrit le défaut.*
+>
+> ⚠️ **SCEAU — DEUX violations replantées séparément le 30/08**, parce qu'un
+> seul plant n'aurait discriminé que la moitié du constat :
+> `gini_test` → `gini` fait tomber le contrôle des barres ; `score_stabilite` /
+> `score_rmse` → `stabilite` / `rmse_norm` fait tomber celui du radar.
+> *Le verdict ne discrimine pas, le motif si — et un plant par surface.*
 
 **C5 — Une conformité réglementaire affirmée sans condition.** La fiche de décision publie *« Conformité S2 Pilier 1 : modèle validé sur données de test indépendantes »* **toujours** — `_generer_fiche_decision` ne reçoit ni le backtest, ni le statut. Elle l'écrit même quand le walk-forward a échoué et que le statut est plafonné.
 

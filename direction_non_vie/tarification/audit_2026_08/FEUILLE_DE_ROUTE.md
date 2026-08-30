@@ -39,9 +39,10 @@ lui-même**.
 | | |
 |---|---|
 | constats relevés (vagues 1 + 2) | **154** — *`services/C12` ouvert ET fermé le 30/08 (la synthèse qualité ne sortait que par le prompt) ; `qualite/C7` ouvert ET fermé le 30/08 (l'identifiant jugé par le détecteur des grandeurs) ; `a2/C17` ouvert le 29/08 par la re-mesure de `a2/C8` et `a2/C9` ; recomptés le 29/08 ; `a3/C19`, `services/C10`, `a5/C10` et `services/C11` sont des constats NEUFS, ouverts et fermés dans leur propre lot* |
-| fermés **et épinglés** | **75** |
+| fermés **et épinglés** | **78** |
 | corrigé, **non épinglé** | **0** — `a5/C5` épinglé le 29/08 · **partiel** : `pipeline/C1` |
-| **⛔ OUVERTS** | **79** |
+| corrigé, épinglé, **NON REPORTÉ** (4e état) | **0** — `a6/C1` `a6/C2` `a6/C4` nommés le 30/08 |
+| **⛔ OUVERTS** | **76** |
 | lignes lues intégralement | **22 693** sur 23 863 du périmètre |
 | jamais auditées | **1 170 l** + `actuaria_app.py` (5 181 l) |
 | preuves qui se relancent | **35, 0 échec** |
@@ -510,8 +511,8 @@ pour les fermés ; **moins `pipeline/C1`**, partiel et arbitré OUVERT.
 
 | lecture | compte | comment il se dérive |
 |---|---|---|
-| constats **ouverts** | **79** | clés réelles moins clés fermées — **tenu par `ARCH-5`** |
-| dont **zones TRIÉES** (`a2` 11 · `pipeline` 9 · `a3` 8 · `a1` 6 · `a6` 6 · `conformite` 6 · `plan` 6) | **52** | préfixe de la clé |
+| constats **ouverts** | **76** | clés réelles moins clés fermées — **tenu par `ARCH-5`** |
+| dont **zones TRIÉES** (`a2` 11 · `pipeline` 9 · `a3` 8 · `a1` 6 · `conformite` 6 · `plan` 6 · `a6` 3) | **49** | préfixe de la clé |
 | ⛔ **jamais tracés** | **27** | le complément — *exact, sans heuristique* |
 
 > ⚠️⚠️ **ET LA VERSION PRÉCÉDENTE DE CE TABLEAU NE TOMBAIT PAS JUSTE.** Elle
@@ -841,13 +842,22 @@ déclare sur lui-même, sur une porte réglementaire. **Arbitrage rendu.**
 > réécrit**. *Vérifier ce qui atteint le livrable, pas ce qui est écrit dans le
 > code.*
 
-### ✅ A6 — LES 6, TRACÉS AU SITE (30/08) · **3 sont un QUATRIÈME ÉTAT, prouvé**
+### ✅ A6 — LES 6, TRACÉS AU SITE (30/08) · **3 FERMÉS LE JOUR MÊME, par leur nom**
+
+> ### ✅ **`a6/C1`, `a6/C2` et `a6/C4` FERMÉS le 30/08/2026 — SANS TOUCHER AU CODE DE PRODUCTION.**
+>
+> Le tri les avait mesurés en **quatrième état** : corrigés, épinglés par des
+> contrôles qui **discriminent**, mais **nommés par aucun test**. Le lot court
+> n'a fait qu'une chose : **écrire la clé à côté du contrôle qui la tient**, et
+> le bloc de fermeture dans le relevé. **0 ligne de production modifiée.**
+> *Trois constats de la classe A — « publie du faux à un actuaire qui signe » —
+> passent de invisibles à fermés pour le coût d'une docstring.*
 
 | constat | mesuré au site le 30/08 | rang |
 |---|---|---|
-| **`a6/C1`** | ✅ **CORRIGÉ ET ÉPINGLÉ — jamais reporté.** `ae` vaut `somme_obs / somme_att` où l'attendu est `pred x exposition` (l.1549-1555), et l'unité est **mesurée, pas supposée** (`Σy/Σ(pred×expo) = 1,0000` contre `Σy/Σpred = 0,5533`). Le chemin sans colonne temporelle rend `ae_ratio = None` et publie le rapport de stationnarité **sous son propre nom**. ⚠️ **Violation plantée** (`ae = m_te / m_tr`) : **2 contrôles tombent** | **4e état** |
-| **`a6/C2`** | ✅ **CORRIGÉ ET ÉPINGLÉ — jamais reporté.** La prédiction de la fenêtre est **conservée** (`preds_par_annee`, l.1584) ; chaque segment se compare à ce que **le modèle prédit POUR LUI** (l.1617-1621). Les quintiles sont découpés sur le risque **prédit**, plus sur la cible observée. ⚠️ **Violation plantée** (attendu = moyenne du train) : **1 contrôle tombe** | **4e état** |
-| **`a6/C4`** | ✅ **CORRIGÉ ET ÉPINGLÉ — jamais reporté.** Barres `gini_test` (l.3234), radar sur `score_stabilite` / `score_rmse` (l.3299-3301). ⚠️ **Deux violations plantées séparément** — `gini_test`→`gini`, puis `score_*`→`stabilite`/`rmse_norm` : **un contrôle tombe à chaque fois** | **4e état** |
+| **`a6/C1`** | ✅ **FERMÉ — corrigé et épinglé de longue date, nommé ce jour.** `ae` vaut `somme_obs / somme_att` où l'attendu est `pred x exposition` (l.1549-1555), et l'unité est **mesurée, pas supposée** (`Σy/Σ(pred×expo) = 1,0000` contre `Σy/Σpred = 0,5533`). Le chemin sans colonne temporelle rend `ae_ratio = None` et publie le rapport de stationnarité **sous son propre nom**. ⚠️ **Violation plantée** (`ae = m_te / m_tr`) : **2 contrôles tombent** | ✅ **FERMÉ** |
+| **`a6/C2`** | ✅ **FERMÉ — corrigé et épinglé de longue date, nommé ce jour.** La prédiction de la fenêtre est **conservée** (`preds_par_annee`, l.1584) ; chaque segment se compare à ce que **le modèle prédit POUR LUI** (l.1617-1621). Les quintiles sont découpés sur le risque **prédit**, plus sur la cible observée. ⚠️ **Violation plantée** (attendu = moyenne du train) : **1 contrôle tombe** | ✅ **FERMÉ** |
+| **`a6/C4`** | ✅ **FERMÉ — corrigé et épinglé de longue date, nommé ce jour.** Barres `gini_test` (l.3234), radar sur `score_stabilite` / `score_rmse` (l.3299-3301). ⚠️ **Deux violations plantées séparément** — `gini_test`→`gini`, puis `score_*`→`stabilite`/`rmse_norm` : **un contrôle tombe à chaque fois** | ✅ **FERMÉ** |
 | **`a6/C9`** | ⛔ **VRAI, ET LA MOITIÉ QUI DÉCIDE N'EST PAS CELLE QUI EST RELEVÉE.** Les 3 entrées mortes sont exactes (`random_forest`, `quantile_50`, `quantile_90` : A4 en calibre **6**, pas ces trois-là). ⚠️⚠️ **Mais `xgboost_tweedie`, lui, EST calibré, EST classé, et est ABSENT de la table** : il retombe sur un **défaut**. Et le même fichier en porte **trois** — `0.5` pour A3, `0.6` pour A4, `0.7` pour A5 — **nus, sans une ligne de justification**, sur un critère pesé à **20 %** du score qui choisit le modèle qui tarife | **2** |
 | **`a6/C7`** | ⛔ **VRAI, borné.** `top_modeles` est reçu (l.1848) et **jamais lu** : 0 usage dans les 47 lignes du corps, mesuré par AST. La docstring annonce « les 3 meilleurs modèles ». ⚠️ **Aucun livrable n'est touché** : `courbes` n'a **aucun consommateur de production** hors A6 (AST, chemins réels), et `chart_lorenz_gini` reçoit **les deux** Gini avec le commentaire qui dit lequel est le plafond | **7** |
 | **`a6/C10`** | ⛔ **VRAI, et l'écart a DOUBLÉ depuis le relevé** : **7** annoncés, **30** réels (24 au relevé). ⚠️ **Ce n'est pas un défaut d'A6 — c'est un gabarit** : la ligne `N tests ·` existe dans **7** fichiers du dépôt, **6 sont faux**, et les 6 sont les six agents de tarification, **tous à « 7 »**. Le seul juste annonce « 1 test » et en a 1 | **7** |
@@ -892,14 +902,26 @@ déclare sur lui-même, sur une porte réglementaire. **Arbitrage rendu.**
 > déterministe, et c'est celle que la famille porterait. C'est un **mécanisme,
 > pas un dégât** — la même forme que `plan/C5`.
 >
-> ### ⚠️ ③ LE QUATRIÈME ÉTAT, TROIS FOIS DANS UNE SEULE ZONE
+> ### ✅ ③ LE QUATRIÈME ÉTAT, TROIS FOIS — ET REFERMÉ LE JOUR MÊME
 >
-> `C1`, `C2` et `C4` sont **corrigés**, **épinglés par des contrôles qui
+> `C1`, `C2` et `C4` étaient **corrigés**, **épinglés par des contrôles qui
 > discriminent** (5 contrôles, 4 violations plantées, tous tombent) — et
-> **aucun test ne les NOMME**. `ARCH-1` ne peut donc pas les voir, et le compte
-> les porte ouverts. *C'est la moitié d'A6 : trois constats de la classe A —
+> **nommés par aucun test**. `ARCH-1` ne pouvait donc pas les voir, et le compte
+> les portait ouverts. *C'était la moitié d'A6 : trois constats de la classe A —
 > « publie du faux à un actuaire qui signe » — déjà réparés sans que le
 > document le sache.*
+>
+> ⚠️⚠️ **CE QUE CE LOT COÛTE ET CE QU'IL PROUVE.** Il n'a modifié **aucune ligne
+> de production** : il a écrit **trois clés** dans les docstrings des contrôles
+> qui les tenaient déjà, et **trois blocs** dans le relevé. *Le quatrième état
+> n'est pas un défaut de code — c'est un défaut de CHAÎNAGE entre le correctif
+> et le document qui fait autorité.* Le chercher coûte une lecture ; le laisser
+> coûte un compte faux à l'ACPR.
+>
+> ⚠️ **Le sceau n'a pas été repris de confiance** : les 4 violations ont été
+> replantées **ce jour-là**, en `py -B` avec `PYTHONDONTWRITEBYTECODE=1`.
+> *Nommer un constat sur la foi d'un test qu'on n'a pas vu tomber, ce serait
+> refaire le défaut qu'on ferme.*
 
 ### ⛔ À FAIRE EN FIN DE TRI — LES JUMEAUX ENTRE CHEMINS
 
