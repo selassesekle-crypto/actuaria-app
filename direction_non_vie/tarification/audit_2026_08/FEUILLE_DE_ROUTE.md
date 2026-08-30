@@ -406,6 +406,51 @@ différents se lisent pareil*) · ⚠️ **`C10` l'ambre du RAG EST l'or des axe
 > **LA CONDITION DE LEVÉE, UNE SEULE** : ⚠️ **le début du chantier de migration
 > d'interface**. Le rang 6 se rouvre à ce moment-là, et pas avant.
 >
+> ### ⚠️⚠️ CE QUE CE GEL COUVRE, ET CE QU'IL N'A JAMAIS COUVERT — clarifié le 30/08/2026
+>
+> **Selasse a demandé pourquoi la FUSION des deux orchestrateurs attendrait la
+> migration. La mesure répond : elle ne l'attend pas, et elle ne l'a jamais
+> attendue.**
+>
+> | | dépend de la migration ? | mesuré |
+> |---|---|---|
+> | **CÂBLER** l'orchestrateur (qui l'appelle) | ✅ **OUI — reste GELÉ** | les appelants candidats sont `actuaria_app.py` (**intouchable, l'app disparaît**) et deux scripts |
+> | **FUSIONNER** les deux orchestrateurs | ⛔ **NON — jamais gelé, jamais posé** | `actuaria_app.py` ne contient **0 occurrence** de `pipeline_agents` sur **5 208 lignes** |
+>
+> **Mesure du 30/08 :**
+>
+> ```
+>   actuaria_app.py            5 208 lignes
+>     pipeline_agents          0 occurrence      <- l interface ne l appelle JAMAIS
+>     pipeline_complet         1 appel, l.3574   <- sous try/except, EN PARALLELE
+>     AgentA1..A6              38 references     <- elle assemble a la MAIN
+>
+>   pipeline_agents   : 0 appelant de production
+>   pipeline_complet  : 2 appelants de production reels
+> ```
+>
+> ⚠️ **Fusionner ne touche donc pas l'interface** — elle n'appelle pas celui
+> qu'on déplacerait. *Le gel était juste ; sa formulation a été lue plus large
+> que sa portée.*
+>
+> ⚠️ **Et ce ne sont pas deux implémentations de la même chose** :
+> `pipeline_agents` (367 l) **oriente et arbitre** trois cibles → un classement ;
+> `pipeline_complet` (420 l) **prend un plan et rend un `TarifNonVie`** → un
+> exécuteur. *L'un choisit, l'autre exécute — et le second prend DÉJÀ un plan en
+> entrée.*
+>
+> ### ✅ LA FUSION EST OUVERTE, AVEC SA PROPRE CONDITION
+>
+> **Condition : la DOCTRINE tranchée** (étape 1 du chantier `unite_exposition`).
+> ⚠️⚠️ *On ne fusionne pas deux chemins qui ne sont pas d'accord : ils divergent
+> sur trois cas d'exposition, et fusionner avant de trancher choisirait par
+> accident laquelle des deux doctrines survit.*
+>
+> **Ordre arbitré par Selasse le 30/08** : ① étape 1 (doctrine) → ② **la
+> fusion** → ③ étapes 2 à 5 de `unite_exposition` → ④ le câblage, **qui reste
+> gelé**. *L'étape 3 exige de toucher les deux chemins simultanément ; sur un
+> chemin unique, le jumeau devient impossible au lieu d'être seulement évité.*
+>
 > ⚠️⚠️ **GELÉ N'EST PAS FERMÉ, ET LE COMPTE NE DOIT PAS L'OUBLIER.**
 > `agents/C1`, `qualite/C4` et `socle/C2` **restent OUVERTS** dans les 82 : ils
 > sont comptés, mesurés, intacts. *Un rang gelé qui glisserait vers « clos »
@@ -1130,7 +1175,9 @@ index, aucun identifiant. **La conversion n'ajoute aucun champ client.**
 
 | # | étape | pourquoi ICI, et pas ailleurs |
 |---|---|---|
-| **1** | **A2 cesse d'être muet** : son plafond publie l'effet agrégé, comme la couche qualité | **Le pire état actuel, et il ne dépend d'AUCUNE unité.** Corrige seul, tout de suite. ⚠️ Le faire APRÈS l'unité laisserait le chemin agent détruire l'exposition en silence pendant tout le chantier |
+| **1** | ✅ **FAIT — A2 cesse d'être muet.** ⚠️ **La trace a élargi le sujet : TROIS mutations, pas une** (colonne absente → **inventée à 1.0** ; `expo <= 0` → **médiane** ; `expo > 1` → plafond), chacune réduite à un `logger.warning`, et `stats_expo` n'atteignait **aucun livrable**. Les trois publient désormais leur effet agrégé par la **source unique** de la couche qualité. ⚠️⚠️ **Le canal existait déjà** : `A6.run` accepte `rapport_qualite` et le relaie aux 3 livrables — `pipeline_agents` ne le passait **jamais**. *La plomberie était posée, rien ne l'alimentait ; A2 nommait même le modèle à suivre deux lignes au-dessus de son propre retour.* **Aucun comportement changé, contrôlé** | **Le pire état actuel, et il ne dépend d'AUCUNE unité.** ⚠️ Le faire APRÈS l'unité aurait laissé le chemin agent détruire l'exposition en silence pendant tout le chantier |
+| **1b** | ⛔ **`expo <= 0` : exclure (comme la qualité) au lieu de la médiane** — **ARBITRAGE REQUIS** | **L'euro bouge** : la médiane sous-estime la fréquence de **10,4 %**, toujours vers le sous-tarif |
+| **1c** | ⛔ **A2 lit `plan.exposition`** (il cherche la sous-chaîne `'exposition'`) ; colonne absente → `colonnes_plan_manquantes`, jamais 1.0 — **ARBITRAGE REQUIS** | **L'euro bouge** : sur `auto_fr_reel` (`Exposure`), A2 invente **aujourd'hui** → fréquence sous-estimée de **16 %** |
 | **2** | `unite_exposition` au plan, ensemble fermé, valeur inconnue **LÈVE**, **et lue par la borne** de la couche qualité | Déclarer sans lire créerait un champ qui **promet** — le défaut que cet audit poursuit. Déclaration et première lecture dans le même geste |
 | **3** | La borne dérive de l'unité **dans LES DEUX chemins** | ⚠️ **Simultané, obligatoirement** : la corriger sur un seul chemin recrée le jumeau qu'on vient de fermer |
 | **4** | Conversion explicite vers l'année, publiée avec son effet | L'aval (offset GLM, prime pure) exige une exposition annualisée. Après 3, sinon on convertit sur une borne fausse |

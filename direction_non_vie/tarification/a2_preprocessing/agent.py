@@ -82,6 +82,10 @@ from core.conformite_reglementaire import filtrer_genre
 # plan.colonnes_produites() — le même _slug et les mêmes suffixes que ceux
 # qu'annonce le plan, sinon le contrat A2→A3 redevient implicite.
 from core.plan_tarifaire import PlanTarifaire, Facteur, _slug, _SUFFIXE_TRANSFO
+# ⚠️ MÊME VOCABULAIRE QUE LA COUCHE QUALITÉ, jamais un second. Ces trois
+# structures sont celles que `synthese_qualite_donnees` sait rendre : les
+# réécrire ici aurait fait diverger les deux chemins DANS LE TEXTE.
+from core.qualite_donnees import Anomalie, EffetAgrege, RapportQualite
 
 # ⚠️⚠️ CONSTAT `a2/C15` — LE FILTRE GLOBAL D'AVERTISSEMENTS EST RETIRÉ.
 # `warnings.filterwarnings('ignore')` posé ICI, au niveau module, s'appliquait
@@ -513,6 +517,22 @@ class AgentA2Preprocessing:
             rapport['etapes'].append('exposition')
             rapport['transformations']['exposition'] = stats_expo
 
+            # ⚠️ Le rapport qualité d'A2 : `None` quand il n'a RIEN fait à
+            # l'exposition. *Un avertissement affiché toujours cesse d'être un
+            # signal — la règle est déjà celle de `synthese_qualite_donnees`.*
+            _anos_expo = stats_expo.get('anomalies') or []
+            _rapport_qualite_expo = RapportQualite(
+                lignes_initiales=len(df), lignes_retenues=len(df),
+                exclusions=[], corrections=_anos_expo, signalements=[],
+                escalade_declenchee=False, anomalies_au_dela_seuil=[],
+                seuil=0.05, validee_par=None,
+                # ⚠️ `t_debut`, jamais un second appel à l'horloge : deux
+                # horodatages dans un même run se contrediraient. C'est la
+                # leçon déjà épinglée par le contrôle des dates (`C4-4` : un
+                # seul appel à l'horloge, les deux grandeurs en dérivent).
+                horodatage=t_debut.isoformat(),
+                bloque=False, dataframe_propre=None) if _anos_expo else None
+
             # ── ÉTAPE 4 : CONTRAT DE DONNÉES — prime_pure (HORS plan) ─────────
             # prime_pure n'est PAS un facteur tarifaire : c'est une grandeur de
             # la famille cible, exclue des modèles par le garde-fou anti-fuite.
@@ -608,6 +628,16 @@ class AgentA2Preprocessing:
                 # n'est que dans les logs n'existe pas"). A6 le relaie jusqu'aux
                 # 3 livrables, comme rapport_qualite et alertes_modele.
                 'colonnes_plan_manquantes': stats_plan['manquantes'],
+                # ⚠️⚠️ ÉTAPE 1 DU CHANTIER `unite_exposition` — A2 PUBLIE CE
+                # QU'IL FAIT À L'EXPOSITION. Le canal existait déjà et ce
+                # module le nommait deux lignes plus haut (« comme
+                # rapport_qualite ») : `A6.run` accepte un `rapport_qualite`,
+                # et les TROIS livrables le rendent par
+                # `synthese_qualite_donnees`. Rien de neuf n'a été plombé.
+                # ⚠️ `bloque=False` est HONNÊTE, pas complaisant : A2 ne bloque
+                # pas, et ce lot ne change aucun comportement. Le rapport dit
+                # ce qui A ÉTÉ FAIT, avec son effet agrégé.
+                'rapport_qualite': _rapport_qualite_expo,
                 # Traçabilité des variables dérivées — ACPR-2022-P-01 §3.2
                 'data_dictionnaire': _dico_a2,
                 'excel_bytes':       _excel_a2,
@@ -1189,11 +1219,44 @@ class AgentA2Preprocessing:
         Pour la branche Vie, l'exposition est gérée différemment :
         on utilise la durée résiduelle du contrat en années.
         """
+        # ⚠️⚠️ ÉTAPE 1 DU CHANTIER `unite_exposition` — A2 CESSE D'ÊTRE MUET.
+        # Mesuré le 30/08/2026 : cette méthode fait **TROIS** mutations de
+        # l'exposition, et chacune ne produisait qu'un `logger.warning`. Or
+        # « ce qui n'est que dans les logs n'existe pas » est une règle déjà
+        # écrite de cet audit. `stats_expo` n'atteignait, par AST, **AUCUN
+        # livrable**.
+        #
+        # ⚠️ CE LOT NE CHANGE AUCUN COMPORTEMENT — il rend visible. Les trois
+        # mutations restent exactement ce qu'elles étaient ; elles publient
+        # désormais leur EFFET AGRÉGÉ par la même source unique que la couche
+        # qualité (`synthese_qualite_donnees`), et par le canal que ce module
+        # nomme déjà lui-même : « A6 le relaie jusqu'aux 3 livrables, comme
+        # rapport_qualite ». *La doctrine — exclure ou remplacer, signaler ou
+        # inventer — est une DÉCISION SÉPARÉE, non prise ici.*
         stats = {
             'col_exposition_trouvee': False,
             'valeurs_corrigees':      0,
             'lignes_exclues':         0,
         }
+        _anomalies: list[Anomalie] = []
+        _n0 = len(df)
+
+        def _noter(code, role, colonne, mask, description, correction,
+                   effet=None):
+            """Une mutation d'A2, dite dans le vocabulaire de la couche qualité.
+
+            ⚠️ MÊME CLASSE, MÊME SYNTHÈSE. Écrire ici un second vocabulaire
+            aurait fait diverger les deux chemins DANS LE TEXTE, après les
+            avoir fait diverger dans le comportement.
+            """
+            idx = np.flatnonzero(np.asarray(mask, dtype=bool))
+            if idx.size == 0:
+                return
+            _anomalies.append(Anomalie(
+                code=code, regle=2, role=role, colonne=colonne,
+                nb_lignes=int(idx.size), proportion=idx.size / max(_n0, 1),
+                index=tuple(int(i) for i in idx), description=description,
+                correction=correction, effet_agrege=effet))
 
         # Recherche de la colonne exposition
         col_expo = None
@@ -1215,16 +1278,48 @@ class AgentA2Preprocessing:
             df['exposition'] = 1.0
             col_expo = 'exposition'
             stats['exposition_creee'] = True
+            # ⚠️⚠️ AUCUN EFFET AGRÉGÉ ICI, ET C'EST DÉLIBÉRÉ : il n'y a pas de
+            # « total avant ». Publier un rapport avant/après sur une colonne
+            # qui n'existait pas fabriquerait un facteur qui ne veut rien dire.
+            # *Ce qui doit être dit, c'est qu'une grandeur a été INVENTÉE.*
+            _noter('exposition_inventee', 'exposition', col_expo,
+                   np.ones(_n0, dtype=bool),
+                   f"Colonne d'exposition INTROUVABLE : une exposition de 1,0 "
+                   f"(un an plein) a ete INVENTEE pour les {_n0} contrats. "
+                   f"L'exposition est le denominateur de la frequence : la "
+                   f"supposer pleine SOUS-ESTIME le risque des contrats "
+                   f"partiels. Aucune comparaison avant/apres n'est possible, "
+                   f"la grandeur n'existait pas.",
+                   correction='exposition creee a 1.0')
         else:
             stats['col_exposition_trouvee'] = True
 
         # Correction des valeurs aberrantes
         # exposition <= 0 : impossible — on remplace par la médiane
-        nb_negatifs = (df[col_expo] <= 0).sum()
+        _masque_neg = (df[col_expo] <= 0).to_numpy()
+        nb_negatifs = int(_masque_neg.sum())
         if nb_negatifs > 0:
             mediane_expo = df[col_expo][df[col_expo] > 0].median()
+            _avant = float(df[col_expo].sum())
             df.loc[df[col_expo] <= 0, col_expo] = mediane_expo
-            stats['valeurs_corrigees'] += int(nb_negatifs)
+            stats['valeurs_corrigees'] += nb_negatifs
+            # ⚠️⚠️ LA DOCTRINE DIVERGE ICI ENTRE LES DEUX CHEMINS, ET CE LOT NE
+            # LA TRANCHE PAS. La couche qualité classe `exposition <= 0` en
+            # REGLE 1 -- impossible, donc EXCLUE la ligne. A2 la REMPLACE par
+            # la médiane. Mesuré : la médiane sous-estime la fréquence de
+            # 10,4 % en ajoutant de l'exposition qui n'existe pas. *Le lot rend
+            # le geste VISIBLE ; le choisir est un arbitrage à part.*
+            _noter('exposition_non_positive_mediane', 'exposition', col_expo,
+                   _masque_neg,
+                   f"{nb_negatifs} exposition(s) <= 0 REMPLACEE(S) par la "
+                   f"mediane ({mediane_expo:.4f}). Un contrat d'exposition "
+                   f"nulle n'a jamais ete en vigueur : lui attribuer une duree "
+                   f"ajoute de l'exposition au denominateur, donc BAISSE la "
+                   f"prime. La couche qualite du chemin declaratif EXCLUT ces "
+                   f"lignes ; les deux chemins divergent.",
+                   correction=f'remplacee par la mediane {mediane_expo:.4f}',
+                   effet=EffetAgrege(colonne=col_expo, total_avant=_avant,
+                                     total_apres=float(df[col_expo].sum())))
             logger.warning(
                 f"{nb_negatifs} valeurs d'exposition ≤ 0 remplacées "
                 f"par la médiane ({mediane_expo:.4f})"
@@ -1232,10 +1327,24 @@ class AgentA2Preprocessing:
 
         # exposition > 1 : contrat de plus d'un an
         # On plafonne à 1.0 (exposition maximale pour contrat annuel)
-        nb_sup1 = (df[col_expo] > 1.0).sum()
+        _masque_sup1 = (df[col_expo] > 1.0).to_numpy()
+        nb_sup1 = int(_masque_sup1.sum())
         if nb_sup1 > 0:
+            _avant = float(df[col_expo].sum())
             df.loc[df[col_expo] > 1.0, col_expo] = 1.0
-            stats['valeurs_corrigees'] += int(nb_sup1)
+            stats['valeurs_corrigees'] += nb_sup1
+            # ⚠️ LE JUMEAU DU PLAFOND DE LA COUCHE QUALITE — constat
+            # `qualite/C3`. Là-bas il BLOQUE et exige une signature ; ici il ne
+            # produisait qu'un log. L'effet agrégé est le même calcul, par la
+            # même classe, pour que les deux chemins disent la même phrase.
+            _noter('exposition_sup_1', 'exposition', col_expo, _masque_sup1,
+                   f"exposition ('{col_expo}') > 1 -- implausible pour un "
+                   f"contrat annuel. Le plan declare le ROLE de l'exposition, "
+                   f"jamais son UNITE : un fichier exprime en mois est "
+                   f"ecrase ici sans que rien ne l'ait verifie.",
+                   correction='plafond a 1.0',
+                   effet=EffetAgrege(colonne=col_expo, total_avant=_avant,
+                                     total_apres=float(df[col_expo].sum())))
             logger.warning(
                 f"{nb_sup1} valeurs d'exposition > 1 plafonnées à 1.0"
             )
@@ -1250,6 +1359,9 @@ class AgentA2Preprocessing:
         stats['exposition_mean']   = round(float(df[col_expo].mean()), 4)
 
         self.parametres['stats_expo'] = stats
+        # ⚠️ Les anomalies voyagent DANS `stats`, qui est déjà relayé au
+        # rapport : aucun canal neuf, aucune plomberie à inventer.
+        stats['anomalies'] = _anomalies
 
         logger.info(
             f"Exposition : min={stats['exposition_min']} · "

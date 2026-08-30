@@ -621,8 +621,17 @@ def synthese_qualite_donnees(rapport: Optional["RapportQualite"]) -> Optional[st
         # ⚠️ LA MÊME PHRASE QU'EN AMONT, PAS UNE REFORMULATION. Le rapport signé
         # doit porter ce que l'actuaire a validé, mot pour mot — sinon les deux
         # surfaces divergent et la trace ne prouve plus rien.
-        lignes.extend(f"   ⚠ {p}" for p in
-                      (_phrase_effet_agrege(a) for a in rapport.corrections) if p)
+        # ⚠️⚠️ ET UNE CORRECTION SANS EFFET CHIFFRÉ PUBLIE SON MOTIF. Mesuré en
+        # branchant A2 : une exposition INVENTÉE (la colonne n'existait pas)
+        # n'a aucun « total avant », donc aucune phrase d'effet — et la
+        # synthèse ne rendait plus que « 600x exposition_inventee ». *C'est
+        # précisément le cas où il n'y a aucun nombre pour porter le sens : le
+        # motif doit parler à sa place.* La branche BLOQUÉE publiait déjà les
+        # descriptions ; celle-ci ne le faisait pas — l'asymétrie entre les
+        # deux moitiés de la même fonction.
+        for a in rapport.corrections:
+            _p = _phrase_effet_agrege(a)
+            lignes.append(f"   ⚠ {_p}" if _p else f"   ⚠ {a.description}")
     if rapport.signalements:
         tot = sum(a.nb_lignes for a in rapport.signalements)
         det = " ; ".join(f"{a.nb_lignes}x {a.code}" for a in rapport.signalements)

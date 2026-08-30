@@ -312,6 +312,13 @@ def pipeline_agents(
             profil_valide_par=profil_valide_par,
             valide_par_actuaire_dl=valide_par_actuaire_dl,
             rapport_mapping=rapport_mapping,
+            # ⚠️⚠️ ÉTAPE 1 DU CHANTIER `unite_exposition` — LE CHAÎNON QUI
+            # MANQUAIT. `A6.run` accepte `rapport_qualite` depuis toujours et
+            # le relaie aux TROIS livrables ; le chemin déclaratif le
+            # remplissait, **le chemin agent ne le passait jamais** (0 mention
+            # mesurée). *La plomberie était posée, rien ne l'alimentait.*
+            # A2 le produit désormais pour ses mutations d'exposition.
+            rapport_qualite=(r2 or {}).get('rapport_qualite'),
             generer_graphiques=generer_graphiques, generer_rapport_equipe=False)
         return ArbitrageCible(cible=cible, a4=r4, a5=r5, a6=r6,
                               statut_rag=r6.get("statut_rag"),
