@@ -73,6 +73,17 @@ def _roles_attendus(plan: PlanTarifaire) -> Dict[str, str]:
     }
     if plan.identifiant_contrat:
         roles[plan.identifiant_contrat] = "identifiant de contrat"
+    # ⚠️⚠️ SANS CETTE LIGNE, L'ECHEANCE ETAIT PRESENTEE COMME « facteur ».
+    # Mesure du 30/08/2026 : `_prompt_utilisateur` etiquette
+    # `roles.get(c, 'facteur')`, donc TOUT role non nomme ici devient un
+    # facteur tarifaire aux yeux du modele -- c'est-a-dire une grandeur A
+    # MODELISER, exactement ce que le plan interdit a ces colonnes (« purement
+    # des roles de donnees ; elles n'entrent JAMAIS dans colonnes_produites() »).
+    # *Declarer l'echeance sans la nommer ici aurait appris au modele le
+    # contraire de ce que le plan dit.*
+    if plan.echeance:
+        roles[plan.echeance] = ("echeance de contrat (periode de couverture, "
+                                "ne pas modeliser)")
     for f in plan.facteurs:
         for src in sources_brutes([f.nom]):     # dérivée → source brute
             roles.setdefault(src, f.type)

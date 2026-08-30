@@ -139,6 +139,23 @@ SYNONYMES_COLONNES = {
                                'annee_exposition', 'duree_contrat', 'years_exposed'],
     'annee_survenance':       ['annee', 'year', 'id_year', 'annee_sinistre',
                                'year_occ', 'occurrence_year', 'loss_year'],
+    # ⚠️⚠️ `date_echeance` N'EST PAS `annee_survenance`, ET LES CONFONDRE
+    # SERAIT GRAVE. L'une est la PERIODE DE COUVERTURE du contrat, l'autre
+    # l'annee ou le sinistre est SURVENU. Le role `echeance` du plan sert a
+    # distinguer un doublon d'un HISTORIQUE de renouvellement ; le rattacher a
+    # l'annee de survenance dedoublonnerait sur la mauvaise grandeur.
+    # ⚠️ LA VALEUR EST UN DISCRIMINANT OPAQUE : jamais parsee, jamais comparee,
+    # jamais soustraite. Une annee (2024), une date (2024-03-01) ou un libelle
+    # de periode conviennent egalement -- on ne fait qu'y distinguer des
+    # groupes. *Cela evite d'introduire un contrat de date la ou une simple
+    # cle de partition suffit.*
+    # ⚠️ Aucun de ces 12 synonymes n'est revendique par une autre entree :
+    # verifie contre les 114 synonymes existants avant ajout.
+    'date_echeance':          ['echeance', 'date_renouvellement', 'date_effet',
+                               'date_debut_couverture', 'exercice',
+                               'annee_exercice', 'annee_souscription',
+                               'millesime', 'periode', 'renewal_date',
+                               'effective_date', 'policy_year'],
     'age':                    ['drimage', 'age_conducteur', 'age_cdt', 'age_driver',
                                'age_assure', 'age_client', 'age_assuré', 'driver_age'],
     'bonus_malus':            ['bonusmalus', 'crm', 'bm', 'bonus_malus_coeff',

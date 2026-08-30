@@ -702,7 +702,7 @@ intermédiaire est **strictement meilleur** que le précédent.
 |---|---|---|
 | **1** | assiette de l'illisibilité + détecteur d'absence (`qualite/C7`) | ✅ **CLOSE le 30/08** |
 | **2+3** | paire `(identifiant, échéance)`, règle 1 → 3, **et** sortie non-IA (`services/C12`) | ✅ **CLOSES le 30/08** |
-| **4** | vocabulaire : `date_echeance` dans `SYNONYMES_COLONNES` **et** `_roles_attendus` | ⛔ à faire |
+| **4** | vocabulaire : `date_echeance` dans `SYNONYMES_COLONNES` **et** `_roles_attendus` | ✅ **CLOSE le 30/08** |
 | **5** | les 20 plans, avec les 7 arbitrages | ⛔ à faire |
 
 ⚠️⚠️ **POURQUOI L'ÉTAPE 1 VIENT D'ABORD, MESURÉ** : elle frappe **tout
@@ -710,6 +710,22 @@ fichier**, même mono-exercice. Placée après l'étape 5, elle aurait livré 20
 plans **cassés à la livraison** ; placée après l'étape 4, elle aurait rendu le
 mapping LLM **activement trompeur** — Claude proposant la bonne correspondance
 et la chaîne la refusant, sans que rien ne désigne le vrai coupable.
+
+✅ **ÉTAPE 4 — LE VOCABULAIRE, DANS LES DEUX SYSTÈMES.** Ajouter le nom
+canonique à un seul des deux est **inopérant** : `mapping_llm` n'importe pas
+`SYNONYMES_COLONNES`, il dérive du plan. ⚠️⚠️ **Et c'était pire que muet** :
+`roles.get(c, 'facteur')` présentait l'échéance au modèle comme un **facteur
+tarifaire**, c'est-à-dire une grandeur **à modéliser** — l'inverse exact de ce
+que le plan déclare pour ces colonnes. Mesuré : `date_echeance` était la
+**seule** colonne à tomber sur ce défaut ; il est désormais **vide**, et un
+contrôle épingle la propriété plutôt que le seul cas.
+⚠️ **12 synonymes, aucune collision** sur les 126 existants, et **l'échéance
+n'a aucun synonyme commun avec `annee_survenance`** — *l'une est la période de
+couverture du CONTRAT, l'autre l'année où le SINISTRE est survenu ; dédoublonner
+sur la seconde trancherait sur la mauvaise grandeur.*
+⚠️ **La valeur est un DISCRIMINANT OPAQUE** : jamais parsée, jamais comparée,
+jamais soustraite. *Cela évite un contrat de date là où une clé de partition
+suffit.*
 
 ⚠️ **RGPD vérifié avant tout code, par sentinelles sur un prompt réel** :
 aucun identifiant, aucun nom, aucun montant, aucune date ne sort — seuls des

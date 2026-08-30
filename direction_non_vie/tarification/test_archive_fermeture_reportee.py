@@ -78,6 +78,13 @@ _HORS_ASSIETTE: dict[tuple[str, str], str] = {
         "et reste OUVERTE. Ce fichier epingle la couche qualite, pas les "
         "plans. Retirer la mention couperait le lot de la raison qui le rend "
         "necessaire.",
+    ('a1/C5', 'test_vocabulaire_echeance.py'):
+        "Cite pour DECLARER CE QUE LE CONTROLE NE COUVRE PAS : il refuse qu'un "
+        "synonyme soit revendique par DEUX entrees canoniques, il ne juge pas "
+        "les doublons INTRA-liste, qui sont `a1/C5` (rang 7, OUVERT). Deux "
+        "fois le meme nom sous la MEME cle ne cree aucune ambiguite de "
+        "mapping. Nommer la borne est ce qui empeche de croire le filet plus "
+        "large qu'il n'est.",
 }
 
 
