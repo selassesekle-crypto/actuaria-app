@@ -707,9 +707,55 @@ la porte est ouverte, personne n'est encore entré.*
 > (l'identifiant jugé par le détecteur des grandeurs) et `services/C12` (la
 > synthèse qualité ne sortait que par le prompt).
 >
-> ⚠️ **`comportement` reste 0/20**, et c'est déclaré : ses trois champs sont
-> **indissociables**, un bloc à moitié déclaré promettrait une capacité qu'il
-> ne porte pas.
+### ⚠️⚠️ `comportement` RESTE 0/20 — DÉCISION ASSUMÉE, PAS UN OUBLI
+
+**Confirmé et consigné le 30/08/2026 pour qu'il ne redevienne pas une
+question.** Le bloc `comportement` porte **trois champs indissociables** —
+`issue` (le contrat a-t-il été renouvelé ou résilié ?), `prime_precedente`,
+`prime_proposee` — et `core/plan_tarifaire.py` le dit lui-même :
+
+> *« Une élasticité-prix répond à une VARIATION de prix, pas à un niveau :
+> l'issue sans les deux primes ne dit rien, et deux primes sans issue ne disent
+> rien non plus. Un bloc à moitié déclaré promettrait une capacité qu'il ne
+> porte pas — c'est très exactement le défaut que cet audit poursuit. Le bloc
+> ENTIER absent, lui, n'est pas une erreur : aucun des vingt plans n'en a, et
+> la chaîne tarife sans. »*
+
+**La raison de ne pas le déclarer maintenant** : les trois champs exigent des
+données que le dépôt ne possède pas — l'issue d'échéance et les deux primes
+d'un exercice à l'autre. En déclarer un ou deux **promettrait une élasticité**
+que rien ne pourrait calculer. *Zéro sur trois est cohérent ; deux sur trois
+serait une capacité affichée et absente.*
+
+⚠️ **Condition de réouverture** : le jour où un fichier client porte les
+**trois** champs. Pas avant, et pas partiellement.
+
+### ✅ LE POINT D'ESCALADE — PROUVÉ PAR EXÉCUTION SUR LES 20 PLANS LIVRÉS
+
+**Mesuré le 30/08/2026**, portefeuille conforme à chaque plan, 200 contrats ×
+3 exercices :
+
+| cas | résultat sur les **20 plans** |
+|---|---|
+| historique multi-exercice, **la colonne est là** | ✅ **20/20** : escalade `False`, bloque `False`, **600/600 conservées**, aucune anomalie |
+| **second sens** — 30 vrais doublons (même exercice) | ✅ **20/20** : exclus en **règle 1** |
+| le plan déclare l'échéance, **le fichier ne l'a pas** | ⚠️ **20/20 escaladent** — mais **0 exclusion, 600/600 conservées** ; une confirmation nominative débloque |
+
+> ### ⚠️⚠️ ET J'AVAIS ÉCRIT UNE PHRASE TROP LARGE — JE LA CORRIGE ICI.
+>
+> Mon rapport de l'étape 5 disait : *« le point d'escalade a disparu de fait :
+> l'échéance étant déclarée, un historique ne déclenche plus rien »*. **C'est
+> vrai du premier cas, faux du troisième.** Ce qui fait disparaître l'escalade
+> n'est pas la **déclaration au plan** — c'est la **présence de la colonne dans
+> le fichier client**. *Une affirmation plus large que ce que le code porte :
+> le motif même de cet audit, sur ma propre phrase.*
+>
+> ⚠️ **Et le comportement résiduel reste acceptable, mesuré** : rien n'est
+> exclu, rien n'est perdu, le motif nomme le remède, et une signature
+> actuarielle débloque. *C'est une demande de confirmation, pas un refus.*
+
+⚠️ **Les 20 déclarent l'échéance — il n'y a AUCUN plan sans**, contrairement à
+ce que mon rapport laissait entendre en évoquant « le seul plan restant ».
 
 **Plan validé par Selasse le 30/08**, dans l'ordre mesuré : chaque état
 intermédiaire est **strictement meilleur** que le précédent.
