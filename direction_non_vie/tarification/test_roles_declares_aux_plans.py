@@ -37,6 +37,7 @@ import pathlib
 import unittest
 import warnings
 
+import numpy as np
 import pandas as pd
 
 from core.plan_tarifaire import PlanTarifaire
@@ -139,8 +140,132 @@ class TestLesVingtPlansDeclarentLeursRoles(unittest.TestCase):
               "sur les 20 plans")
 
 
+def _portefeuille_conforme(plan, n=200, exercices=(2023, 2024, 2025)):
+    """Un portefeuille SAIN conforme a `plan`, replique sur plusieurs exercices.
+
+    ⚠️ SAIN VEUT DIRE SAIN : `cout = 0` quand `nb = 0`, sinon l'incoherence
+    « cout sans sinistre » domine et masque ce qu'on mesure. C'est le defaut que
+    le banc de `test_valeurs_limites_qualite` a deja paye une fois.
+
+    ⚠️ IL LEVE SUR UN TYPE DE FACTEUR INCONNU plutot que de fabriquer du bruit :
+    un generateur qui invente silencieusement rendrait la mesure fausse sans le
+    dire.
+    ⚠️⚠️ ET CE GARDE EST INATTEIGNABLE AUJOURD HUI — je le dis plutot que de le
+    laisser passer pour prouve. `TypeFacteur` est un `Literal` de trois valeurs
+    et `Facteur` valide au chargement : un type inconnu fait lever le PLAN avant
+    que ce generateur ne le voie. La violation plantee tombe donc sur la
+    validation du plan, PAS sur cette ligne. Elle redevient atteignable le jour
+    ou `TypeFacteur` s elargit — c est-a-dire exactement quand elle sert.
+    """
+    rng = np.random.default_rng(7)
+    roles = {plan.identifiant_contrat, plan.echeance}
+    d = {}
+    for f in plan.facteurs:
+        if f.type == 'categoriel' and f.modalites:
+            d[f.nom] = rng.choice(list(f.modalites), n)
+        elif f.type in ('categoriel', 'continu'):
+            d[f.nom] = rng.uniform(1, 100, n)
+        elif f.type == 'binaire':
+            d[f.nom] = rng.integers(0, 2, n).astype(float)
+        else:
+            raise AssertionError(
+                f"type de facteur inconnu « {f.type} » ({plan.lob}/{f.nom}) : "
+                f"ce generateur doit etre etendu, pas contourne")
+    for c in plan.colonnes_attendues():
+        if c not in roles:
+            d.setdefault(c, rng.uniform(1, 100, n))
+    d[plan.exposition] = np.ones(n)
+    nb = rng.poisson(0.2, n).astype(float)
+    d[plan.cible_frequence] = nb
+    d[plan.cible_cout] = np.where(nb > 0, rng.gamma(2, 300, n), 0.0)
+    d[plan.identifiant_contrat] = [f'P2024-{i:05d}' for i in range(n)]
+    base = pd.DataFrame(d)
+    return pd.concat([base.assign(**{plan.echeance: an}) for an in exercices],
+                     ignore_index=True)
+
+
+class TestLesVingtPlansSurUnHISTORIQUE(unittest.TestCase):
+    """⚠️⚠️ LA PREUVE DU CHANTIER, RENDUE PERMANENTE — SUR LES VINGT PLANS.
+
+    Elle existait comme mesure de session : elle ne serait pas tombee si
+    quelqu'un retirait une echeance d'un plan demain, parce que les controles de
+    comportement ne couvraient que `plans/auto.yaml`.
+
+    ⚠️ CETTE CLASSE ET `TestLeComportementSurUnVRAIFichier` NE FONT PAS DOUBLON.
+    L'autre mesure sur le portefeuille auto REEL — distributions realistes,
+    facteurs derives, encodages. Celle-ci mesure la LARGEUR : les vingt LoB, sur
+    un portefeuille synthetique conforme a chaque plan. *L'une teste la
+    profondeur, l'autre la couverture.*
+    """
+
+    def test_LE_TEST_QUI_FERME_aucun_des_20_n_escalade_sur_un_HISTORIQUE(self):
+        """⚠️⚠️ LE POINT D'ESCALADE, PROUVE PARTOUT. Avant le chantier, un
+        historique de renouvellement portait 66,7 % de « doublons » et bloquait
+        le fichier."""
+        ko = []
+        for f in _PLANS:
+            plan = _charge(f)
+            r = _controler(_portefeuille_conforme(plan), plan)
+            if r.escalade_declenchee or r.bloque or r.exclusions:
+                ko.append((f.stem, r.anomalies_au_dela_seuil,
+                           [a.code for a in r.exclusions]))
+        self.assertEqual(ko, [], f'{len(ko)} plan(s) escaladent ou excluent sur '
+                                 f'un historique normal : {ko}')
+        print(f"    P-10 les {len(_PLANS)} plans : historique 200 contrats x 3 "
+              f"exercices, 0 escalade, 0 exclusion")
+
+    def test_SECOND_SENS_les_20_excluent_toujours_un_VRAI_doublon(self):
+        """⚠️⚠️ SANS CE SENS, LA PAIRE OUVRIRAIT UN TROU SUR VINGT LoB."""
+        ko = []
+        for f in _PLANS:
+            plan = _charge(f)
+            h = _portefeuille_conforme(plan)
+            r = _controler(pd.concat([h, h.iloc[:30]], ignore_index=True), plan)
+            excl = {a.code: (a.regle, a.nb_lignes) for a in r.exclusions}
+            if excl.get('doublon_identifiant') != (1, 30):
+                ko.append((f.stem, excl))
+        self.assertEqual(ko, [], f'{len(ko)} plan(s) n excluent pas 30 vrais '
+                                 f'doublons en regle 1 : {ko}')
+        print(f"    P-11 les {len(_PLANS)} plans : 30 vrais doublons (meme "
+              f"exercice) exclus en regle 1")
+
+    def test_la_colonne_ABSENTE_du_fichier_ne_fait_perdre_AUCUNE_ligne(self):
+        """⚠️⚠️ LE CAS RESIDUEL, ET LA NUANCE QUE J'AVAIS D'ABORD MAL DITE.
+
+        Ce qui fait disparaitre l'escalade n'est pas la DECLARATION au plan,
+        c'est la PRESENCE de la colonne dans le fichier client. Quand elle
+        manque, l'escalade demeure — et c'est legitime : on ne peut pas
+        distinguer un doublon d'un historique. Ce qui doit tenir, c'est
+        qu'aucune ligne ne soit perdue et qu'une signature debloque.
+        """
+        ko = []
+        for f in _PLANS:
+            plan = _charge(f)
+            h = _portefeuille_conforme(plan).drop(columns=[plan.echeance])
+            r = _controler(h, plan)
+            codes = {a.code for a in r.signalements}
+            if (r.exclusions or r.lignes_retenues != r.lignes_initiales
+                    or 'doublon_identifiant_sans_echeance' not in codes):
+                ko.append((f.stem, [a.code for a in r.exclusions],
+                           r.lignes_retenues, r.lignes_initiales, sorted(codes)))
+        self.assertEqual(ko, [], f'{len(ko)} plan(s) perdent des lignes ou ne '
+                                 f'signalent pas l ambiguite : {ko}')
+        # ⚠️ ET UNE SIGNATURE DEBLOQUE — sinon ce serait un refus deguise.
+        plan = _charge(pathlib.Path('plans/auto.yaml'))
+        h = _portefeuille_conforme(plan).drop(columns=[plan.echeance])
+        r = _controler(h, plan, qualite_validee_par='actuaire test')
+        self.assertFalse(r.bloque, 'une confirmation nominative ne debloque pas')
+        self.assertEqual(r.lignes_retenues, r.lignes_initiales)
+        print(f"    P-12 les {len(_PLANS)} plans, colonne absente : 0 exclusion, "
+              f"0 ligne perdue, ambiguite signalee ; une signature debloque")
+
+
 class TestLeComportementSurUnVRAIFichier(unittest.TestCase):
-    """⚠️ On mesure avec le plan LIVRE, pas avec une fixture de test."""
+    """⚠️ On mesure avec le plan LIVRE, pas avec une fixture de test.
+
+    ⚠️ Le portefeuille auto REEL, avec ses distributions et ses derivees — la
+    PROFONDEUR. La classe ci-dessus couvre la LARGEUR, sur les vingt LoB.
+    """
 
     def setUp(self):
         self.plan = _charge(pathlib.Path('plans/auto.yaml'))
