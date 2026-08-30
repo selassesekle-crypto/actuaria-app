@@ -1045,6 +1045,104 @@ déclare sur lui-même, sur une porte réglementaire. **Arbitrage rendu.**
 > désormais l'échéance — *ce serait le vrai correctif, et c'est un contrat de
 > données, donc une conception.*
 
+## ⛔⛔ CHANTIER `unite_exposition` — CONCEPTION, ARBITRÉ LE 30/08/2026
+
+> **Selasse tranche : OUI, le plan doit déclarer l'unité de l'exposition.**
+> Chantier complet, pas une correction rapide. **Aucun code sur cette partie
+> avant validation du plan ci-dessous.**
+
+### ✅ FAIT D'ABORD, INDÉPENDANT — le message publie l'EFFET (moitié de `qualite/C3`)
+
+`EffetAgrege` + `_phrase_effet_agrege`, publiés dans **les deux** branches.
+⚠️⚠️ **L'effet se calcule à la DÉTECTION, jamais à l'application** : le message
+qui DÉCIDE est celui du rapport **BLOQUÉ**, et un rapport bloqué n'applique par
+construction aucune correction. Le mesurer à l'application l'aurait rendu
+absent du seul moment où il sert.
+
+```
+   ⚠ SI VOUS VALIDEZ — EFFET SUR LE TOTAL de « exposition » : 10 083 -> 1 000
+   (-90.1 %). L'exposition est le DENOMINATEUR de la frequence et de la prime
+   pure : une prime calculee sur ce total serait multipliee par 10.08.
+```
+
+⚠️ **`qualite/C3` RESTE OUVERT** — exemption déclarée dans `_HORS_ASSIETTE`, et
+`ARCH-1` l'a exigée en faisant **tomber la gate**. *Le fermer sur la moitié
+visible ferait croire que l'unité est traitée.*
+
+### ① CE QUE LES 20 PLANS SUPPOSENT AUJOURD'HUI — mesuré
+
+| mesure | résultat |
+|---|---|
+| plans déclarant une unité d'exposition | **0 / 20** |
+| champs de `PlanTarifaire` nommant une unité | **0 / 12** |
+| colonne d'exposition déclarée | `exposition` **19/20** · `Exposure` (`auto_fr_reel`) **1/20** |
+| fixtures du dépôt | **toutes en [0, 1]** — l'année est une convention *implicite* |
+
+⛔ **Le risque n'est pas théorique, et ce n'est PAS l'unité qui le rend réel — c'est le SILENCE du chemin agent.** Mesuré :
+
+| chemin | plafonne ? | ce que l'actuaire reçoit |
+|---|---|---|
+| **déclaratif** (`controler_qualite`) | oui, à 1.0 | **BLOQUE** + signature nominative + (depuis ce lot) l'effet agrégé |
+| **agent** (`A2._traiter_exposition`, l.1233-1241) | oui, à 1.0 | ⛔ **un `logger.warning`, rien d'autre** |
+
+Exécuté sur le portefeuille en mois : `1000 valeurs d'exposition > 1 plafonnées
+à 1.0` — **une ligne de log, aucun blocage, aucune signature.** *Et « ce qui
+n'est que dans les logs n'existe pas » est une règle déjà écrite de cet audit.*
+**C'est le jumeau entre chemins, sur le plafond lui-même.**
+
+⚠️ **Borne déclarée** : aucun portefeuille client réel n'est versionné (il reste
+hors dépôt, par consigne). Je ne peux donc PAS mesurer l'unité d'un vrai
+fichier — je mesure que **rien dans la chaîne ne peut la connaître**.
+
+### ② LE MÉCANISME PROPOSÉ
+
+**Déclaration.** `PlanTarifaire.unite_exposition: str | None = None`, sur un
+**ensemble fermé** — `'annee'` · `'mois'` · `'jour'`. Une valeur inconnue
+**LÈVE** (jamais de défaut silencieux sur un champ qui décide : c'est la règle
+déjà arbitrée pour `a6/C9`).
+
+**Quand elle EST déclarée — vérifier et convertir, dans cet ordre :**
+1. l'unité fixe la **borne de plausibilité** (`annee` → 1 · `mois` → 12 ·
+   `jour` → 366) : le plafond cesse de détruire une donnée légitime ;
+2. la conversion vers l'année est **explicite, appliquée une seule fois, et
+   publiée avec son effet agrégé** — le mécanisme construit ci-dessus ;
+3. ⚠️ **une CONTRADICTION entre l'unité déclarée et la donnée observée est un
+   signal, pas une correction** : `unite: mois` avec un maximum à 0,9 veut dire
+   que quelqu'un se trompe. *Sans ce troisième point, le mécanisme serait
+   décoratif : il ne pourrait jamais rien attraper.*
+
+**Quand elle N'EST PAS déclarée — le comportement d'aujourd'hui, PLUS une phrase.**
+Le plafond à 1.0 reste appliqué (hypothèse annuelle), l'escalade à 5 % reste,
+la signature nominative reste — et le message **dit que l'unité n'a pas été
+déclarée et que l'hypothèse annuelle a été supposée**. *Aucun rejet silencieux,
+aucun blocage total : exactement le patron déjà validé pour la référence A3
+absente d'`a4/C11`.*
+
+### ③ RGPD
+
+**Rien de neuf, et c'est vérifié.** L'unité est une déclaration de **plan** (un
+fichier du dépôt, aucune donnée client). Le message publie un **total** et un
+**pourcentage** — des agrégats — plus un **nom de colonne**. Le contrôle
+sentinelle du lot ci-dessus le prouve déjà : aucune valeur de ligne, aucun
+index, aucun identifiant. **La conversion n'ajoute aucun champ client.**
+
+### ④ L'ORDRE — chaque état intermédiaire strictement meilleur
+
+| # | étape | pourquoi ICI, et pas ailleurs |
+|---|---|---|
+| **1** | **A2 cesse d'être muet** : son plafond publie l'effet agrégé, comme la couche qualité | **Le pire état actuel, et il ne dépend d'AUCUNE unité.** Corrige seul, tout de suite. ⚠️ Le faire APRÈS l'unité laisserait le chemin agent détruire l'exposition en silence pendant tout le chantier |
+| **2** | `unite_exposition` au plan, ensemble fermé, valeur inconnue **LÈVE**, **et lue par la borne** de la couche qualité | Déclarer sans lire créerait un champ qui **promet** — le défaut que cet audit poursuit. Déclaration et première lecture dans le même geste |
+| **3** | La borne dérive de l'unité **dans LES DEUX chemins** | ⚠️ **Simultané, obligatoirement** : la corriger sur un seul chemin recrée le jumeau qu'on vient de fermer |
+| **4** | Conversion explicite vers l'année, publiée avec son effet | L'aval (offset GLM, prime pure) exige une exposition annualisée. Après 3, sinon on convertit sur une borne fausse |
+| **5** | Les 20 plans déclarent `annee` | **En dernier**, comme l'étape 5 de `plan/C7`. `annee` → borne 1.0 → *comportement identique à aujourd'hui* : cette étape ne déplace aucun euro, par construction |
+
+⛔⛔ **UNE DÉPENDANCE À NOMMER AVANT DE CODER L'ÉTAPE 2** : `plan/C5` (rang 1,
+**arbitrage toujours en attente**) a mesuré que `depuis_dict` **accepte en
+silence toute clé inconnue**. Écrire `unite_expo:` au lieu de
+`unite_exposition:` serait donc **ignoré sans un mot**, et le plan paraîtrait
+« non déclaré ». *Le nouveau champ hérite du défaut le jour où il naît.*
+**Recommandation : traiter `plan/C5` avant ou pendant l'étape 2.**
+
 ### ⛔ À FAIRE EN FIN DE TRI — LES JUMEAUX ENTRE CHEMINS
 
 > **Arbitré le 30/08 : pas maintenant, mais noté.** `pipeline/C2` a montré qu'un

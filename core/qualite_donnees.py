@@ -63,6 +63,40 @@ class QualiteBloquante(Exception):
 #  STRUCTURES DU RAPPORT (jamais silencieux)
 # ══════════════════════════════════════════════════════════════════════════════
 @dataclass(frozen=True)
+class EffetAgrege:
+    """Ce qu'une correction fait au TOTAL d'une colonne — pas à son compte de lignes.
+
+    ⚠️⚠️ CONSTAT `qualite/C3`. Un compte de lignes ne dit pas l'enjeu. Mesuré sur
+    un portefeuille exprimé en MOIS : « 1000 ligne(s) CORRIGEE(S) » cachait une
+    exposition totale passant de **10 083 à 1 000** — 90,1 % détruite, et une
+    prime pure **multipliée par 10,08**. *L'actuaire validait une ligne de
+    rapport et obtenait un tarif multiplié par dix.*
+    """
+    colonne: str
+    total_avant: float
+    total_apres: float
+
+    @property
+    def variation_pct(self) -> float | None:
+        """Variation relative du total, ou None si le total de départ est nul."""
+        if not self.total_avant:
+            return None
+        return (self.total_apres - self.total_avant) / self.total_avant * 100.0
+
+    @property
+    def facteur_sur_un_ratio(self) -> float | None:
+        """De combien est multipliée une grandeur qui DIVISE par cette colonne.
+
+        ⚠️ C'est la lecture qui compte pour une exposition : fréquence et prime
+        pure la portent au dénominateur. Diviser par un total dix fois plus
+        petit multiplie le résultat par dix.
+        """
+        if not self.total_apres:
+            return None
+        return self.total_avant / self.total_apres
+
+
+@dataclass(frozen=True)
 class Anomalie:
     """Une anomalie détectée, avec sa règle, le rôle/colonne concerné, le volume
     et les index — pour une traçabilité complète dans le rapport."""
@@ -75,6 +109,11 @@ class Anomalie:
     index: Tuple[int, ...]           # positions (0-based) des lignes concernées
     description: str
     correction: Optional[str] = None  # règle 2 : la règle appliquée
+    #: ⚠️ Règle 2 uniquement : l'effet de la correction sur le TOTAL de la
+    #: colonne. Calculé À LA DÉTECTION, jamais à l'application — parce que le
+    #: message qui DÉCIDE est celui du rapport BLOQUÉ, et qu'un rapport bloqué
+    #: n'applique par construction aucune correction.
+    effet_agrege: EffetAgrege | None = None
 
 
 @dataclass
@@ -95,10 +134,18 @@ class RapportQualite:
     def resume(self) -> dict:
         """Dict sérialisable (sans les index bruts) pour audit_trail / rapports."""
         def _a(a: Anomalie) -> dict:
-            return {'code': a.code, 'regle': a.regle, 'role': a.role,
-                    'colonne': a.colonne, 'nb_lignes': a.nb_lignes,
-                    'proportion': round(a.proportion, 4),
-                    'description': a.description, 'correction': a.correction}
+            d = {'code': a.code, 'regle': a.regle, 'role': a.role,
+                 'colonne': a.colonne, 'nb_lignes': a.nb_lignes,
+                 'proportion': round(a.proportion, 4),
+                 'description': a.description, 'correction': a.correction}
+            # ⚠️ L'audit_trail porte l'effet agrégé quand il existe : ce qui est
+            # publié à l'actuaire doit être retrouvable dans la trace.
+            if a.effet_agrege is not None:
+                d['effet_agrege'] = {
+                    'colonne':     a.effet_agrege.colonne,
+                    'total_avant': round(a.effet_agrege.total_avant, 4),
+                    'total_apres': round(a.effet_agrege.total_apres, 4)}
+            return d
         return {
             'lignes_initiales': self.lignes_initiales,
             'lignes_retenues':  self.lignes_retenues,
@@ -239,6 +286,13 @@ def detecter_doublons_ligne(df: pd.DataFrame) -> np.ndarray:
 #  RÈGLE 2 — registre des corrections ÉTABLIES (extensible). Phase 0 : 1 entrée.
 #  Chaque entrée : (rôle, code, seuil, valeur_plafond, description).
 # ══════════════════════════════════════════════════════════════════════════════
+#: ⚠️ LE PLAFOND VIVAIT EN QUATRE LITTÉRAUX `1.0` — la docstring du module, la
+#: détection, le libellé de la correction et son application. Trois d'entre eux
+#: DÉCIDENT ; si l'un change, les autres divergent en silence. Ce lot en a
+#: besoin d'une source unique parce que l'effet agrégé se DÉRIVE du plafond :
+#: le calculer à côté aurait ajouté un cinquième littéral.
+#: ⚠️ La valeur est INCHANGÉE — aucun euro ne bouge, et c'est vérifié.
+PLAFOND_EXPOSITION = 1.0
 # (Gardé explicite plutôt que data-driven pour rester lisible en Phase 0 ;
 #  l'unique correction établie est le plafond d'exposition, déjà présent côté
 #  legacy dans A2._traiter_exposition.)
@@ -274,7 +328,8 @@ def controler_qualite(
 
     anomalies: List[Anomalie] = []
 
-    def _ajouter(code, regle, role, colonne, mask, description, correction=None):
+    def _ajouter(code, regle, role, colonne, mask, description, correction=None,
+                 effet_agrege=None):
         idx = np.flatnonzero(np.asarray(mask, dtype=bool))
         if idx.size == 0:
             return
@@ -282,7 +337,8 @@ def controler_qualite(
             code=code, regle=regle, role=role, colonne=colonne,
             nb_lignes=int(idx.size), proportion=idx.size / max(n0, 1),
             index=tuple(int(i) for i in idx),
-            description=description, correction=correction))
+            description=description, correction=correction,
+            effet_agrege=effet_agrege))
 
     # ── RÈGLE 1 : IMPOSSIBLE → exclure ───────────────────────────────────────
     if col_freq in df.columns:
@@ -323,10 +379,29 @@ def controler_qualite(
     # ── RÈGLE 2 : IMPLAUSIBLE établi → corriger (plafond exposition) ──────────
     mask_corr_expo = None
     if col_expo in df.columns:
-        mask_corr_expo = detecter_sup(df, col_expo, 1.0)
+        mask_corr_expo = detecter_sup(df, col_expo, PLAFOND_EXPOSITION)
+        # ⚠️⚠️ L'EFFET AGRÉGÉ SE CALCULE ICI, À LA DÉTECTION — constat
+        # `qualite/C3`. Le message qui DÉCIDE est celui du rapport BLOQUÉ, et un
+        # rapport bloqué n'applique aucune correction : le mesurer à
+        # l'application l'aurait rendu absent du seul moment où il sert.
+        # Il se dérive du MÊME masque et du MÊME plafond que l'application.
+        _effet = None
+        _brut = pd.to_numeric(df[col_expo], errors='coerce')
+        if _brut.notna().any():
+            _apres = _brut.where(~pd.Series(mask_corr_expo, index=df.index),
+                                 PLAFOND_EXPOSITION)
+            _effet = EffetAgrege(colonne=col_expo,
+                                 total_avant=float(_brut.sum()),
+                                 total_apres=float(_apres.sum()))
         _ajouter('exposition_sup_1', 2, 'exposition', col_expo, mask_corr_expo,
-                 f"exposition ('{col_expo}') > 1 — implausible pour un contrat annuel.",
-                 correction="plafond a 1.0")
+                 f"exposition ('{col_expo}') > {PLAFOND_EXPOSITION:g} — "
+                 f"implausible pour un contrat annuel.",
+                 # ⚠️ `{PLAFOND_EXPOSITION}` et NON `:g` : le libellé publié
+                 # disait « plafond a 1.0 », et `:g` l'aurait rendu « plafond a
+                 # 1 ». *Dériver un texte d'une constante ne donne pas le droit
+                 # d'en changer la forme : c'est une surface que l'actuaire lit.*
+                 correction=f"plafond a {PLAFOND_EXPOSITION}",
+                 effet_agrege=_effet)
 
     # ── RÈGLE 3 : AMBIGU → signaler, laisser tel quel ────────────────────────
     # ⚠️⚠️ LA VALEUR MANQUANTE OU ILLISIBLE — constat `qualite/C1`.
@@ -436,7 +511,7 @@ def controler_qualite(
     dfp = df.copy()
     # Règle 2 d'abord (les lignes exclues ensuite seront de toute façon retirées).
     if mask_corr_expo is not None and mask_corr_expo.any():
-        dfp.loc[mask_corr_expo, col_expo] = 1.0
+        dfp.loc[mask_corr_expo, col_expo] = PLAFOND_EXPOSITION
     # Règle 1 : union des masques d'exclusion.
     excl = np.zeros(n0, dtype=bool)
     for a in exclusions:
@@ -467,6 +542,41 @@ def _date_lisible(ts: Optional[str]) -> Optional[str]:
     return f"{p[2]}/{p[1]}/{p[0]}" if len(p) == 3 else jour
 
 
+def _phrase_effet_agrege(a: Anomalie) -> str | None:
+    """Ce qu'une correction fait au TOTAL de sa colonne, en toutes lettres.
+
+    ⚠️⚠️ CONSTAT `qualite/C3` — EXIGENCE DE SELASSE, 30/08/2026. Un compte de
+    lignes ne dit pas l'enjeu : « 1000 ligne(s) CORRIGEE(S) » cachait une
+    exposition totale divisée par dix. *L'actuaire doit lire CE QU'IL VALIDE.*
+
+    ⚠️ LA SECONDE PHRASE NE S'AJOUTE QUE POUR L'EXPOSITION, ET C'EST DÉLIBÉRÉ.
+    Le mécanisme est générique — toute correction de règle 2 publie son effet
+    sur le total. Mais « ce total est un DÉNOMINATEUR » est une propriété du
+    rôle `exposition`, pas de la règle : l'affirmer pour une colonne dont on ne
+    sait rien serait exactement le défaut que cet audit poursuit.
+
+    ⚠️ RGPD : un total et un pourcentage. Aucune valeur de ligne, aucun index,
+    aucun identifiant — vérifié par sentinelle.
+    """
+    e = a.effet_agrege
+    if e is None:
+        return None
+    pct = e.variation_pct
+    phrase = (f"EFFET SUR LE TOTAL de « {e.colonne} » : "
+              f"{e.total_avant:,.0f} -> {e.total_apres:,.0f}"
+              .replace(',', ' '))
+    if pct is not None:
+        phrase += f" ({pct:+.1f} %)"
+    phrase += "."
+    if a.role == 'exposition':
+        facteur = e.facteur_sur_un_ratio
+        if facteur is not None and abs(facteur - 1.0) > 0.005:
+            phrase += (f" L'exposition est le DENOMINATEUR de la frequence et "
+                       f"de la prime pure : une prime calculee sur ce total "
+                       f"serait multipliee par {facteur:.2f}.")
+    return phrase
+
+
 def synthese_qualite_donnees(rapport: Optional["RapportQualite"]) -> Optional[str]:
     """Texte à afficher dans TOUT livrable quand la couche qualité a agi. None si
     rien à signaler. Un traitement silencieux est un défaut en soi : l'actuaire
@@ -485,6 +595,16 @@ def synthese_qualite_donnees(rapport: Optional["RapportQualite"]) -> Optional[st
         _motifs = [a.description for a in _toutes
                    if a.code in rapport.anomalies_au_dela_seuil]
         _detail = ''.join(f"\n   · {m}" for m in _motifs)
+        # ⚠️⚠️ C'EST ICI QUE SE PREND LA DÉCISION, ET C'EST ICI QUE L'ENJEU
+        # MANQUAIT LE PLUS — constat `qualite/C3`. Mesuré : le message bloqué
+        # en disait MOINS que celui d'après validation. Il ne portait ni compte
+        # de lignes ni effet ; l'actuaire signait sur « implausible pour un
+        # contrat annuel » et obtenait une prime multipliée par dix.
+        # *Un avertissement qui ne dit pas ce qu'on valide n'avertit de rien.*
+        _effets = [p for p in (_phrase_effet_agrege(a) for a in _toutes
+                               if a.code in rapport.anomalies_au_dela_seuil)
+                   if p]
+        _detail += ''.join(f"\n   ⚠ SI VOUS VALIDEZ — {p}" for p in _effets)
         return (f"⚠ CONTROLE QUALITE BLOQUE — anomalie(s) "
                 f"[{', '.join(rapport.anomalies_au_dela_seuil)}] touchant >= "
                 f"{rapport.seuil:.0%} des lignes. Confirmation actuarielle nominative "
@@ -498,6 +618,11 @@ def synthese_qualite_donnees(rapport: Optional["RapportQualite"]) -> Optional[st
         tot = sum(a.nb_lignes for a in rapport.corrections)
         det = " ; ".join(f"{a.nb_lignes}x {a.code} ({a.correction})" for a in rapport.corrections)
         lignes.append(f"✔ {tot} ligne(s) CORRIGEE(S) : {det}.")
+        # ⚠️ LA MÊME PHRASE QU'EN AMONT, PAS UNE REFORMULATION. Le rapport signé
+        # doit porter ce que l'actuaire a validé, mot pour mot — sinon les deux
+        # surfaces divergent et la trace ne prouve plus rien.
+        lignes.extend(f"   ⚠ {p}" for p in
+                      (_phrase_effet_agrege(a) for a in rapport.corrections) if p)
     if rapport.signalements:
         tot = sum(a.nb_lignes for a in rapport.signalements)
         det = " ; ".join(f"{a.nb_lignes}x {a.code}" for a in rapport.signalements)

@@ -78,6 +78,16 @@ _HORS_ASSIETTE: dict[tuple[str, str], str] = {
         "et reste OUVERTE. Ce fichier epingle la couche qualite, pas les "
         "plans. Retirer la mention couperait le lot de la raison qui le rend "
         "necessaire.",
+    ('qualite/C3', 'test_effet_agrege_correction.py'):
+        "Cite comme NOM DU CHANTIER dont ce lot est le PREMIER geste. `qualite/"
+        "C3` dit que le plafond a 1.0 est une hypothese d'UNITE sur un role "
+        "dont le plan ne declare jamais l'unite : ce lot ne corrige PAS cela, "
+        "il rend seulement l'effet VISIBLE avant la signature (exposition "
+        "totale avant/apres, et le facteur sur le tarif). Le vrai correctif -- "
+        "declarer `unite_exposition` au plan -- est un chantier de CONCEPTION "
+        "arbitre le 30/08, dont le plan complet est dans FEUILLE_DE_ROUTE.md. "
+        "`qualite/C3` reste donc OUVERT, et il doit le rester : le fermer sur "
+        "la moitie visible ferait croire que l'unite est traitee.",
     ('a1/C5', 'test_vocabulaire_echeance.py'):
         "Cite pour DECLARER CE QUE LE CONTROLE NE COUVRE PAS : il refuse qu'un "
         "synonyme soit revendique par DEUX entrees canoniques, il ne juge pas "
