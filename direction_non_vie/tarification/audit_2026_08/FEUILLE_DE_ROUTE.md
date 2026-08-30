@@ -39,10 +39,10 @@ lui-même**.
 | | |
 |---|---|
 | constats relevés (vagues 1 + 2) | **154** — *`services/C12` ouvert ET fermé le 30/08 (la synthèse qualité ne sortait que par le prompt) ; `qualite/C7` ouvert ET fermé le 30/08 (l'identifiant jugé par le détecteur des grandeurs) ; `a2/C17` ouvert le 29/08 par la re-mesure de `a2/C8` et `a2/C9` ; recomptés le 29/08 ; `a3/C19`, `services/C10`, `a5/C10` et `services/C11` sont des constats NEUFS, ouverts et fermés dans leur propre lot* |
-| fermés **et épinglés** | **78** |
+| fermés **et épinglés** | **79** |
 | corrigé, **non épinglé** | **0** — `a5/C5` épinglé le 29/08 · **partiel** : `pipeline/C1` |
 | corrigé, épinglé, **NON REPORTÉ** (4e état) | **0** — `a6/C1` `a6/C2` `a6/C4` nommés le 30/08 |
-| **⛔ OUVERTS** | **76** |
+| **⛔ OUVERTS** | **75** |
 | lignes lues intégralement | **22 693** sur 23 863 du périmètre |
 | jamais auditées | **1 170 l** + `actuaria_app.py` (5 181 l) |
 | preuves qui se relancent | **35, 0 échec** |
@@ -511,8 +511,8 @@ pour les fermés ; **moins `pipeline/C1`**, partiel et arbitré OUVERT.
 
 | lecture | compte | comment il se dérive |
 |---|---|---|
-| constats **ouverts** | **76** | clés réelles moins clés fermées — **tenu par `ARCH-5`** |
-| dont **zones TRIÉES** (`a2` 11 · `pipeline` 9 · `a3` 8 · `a1` 6 · `conformite` 6 · `plan` 6 · `a6` 3) | **49** | préfixe de la clé |
+| constats **ouverts** | **75** | clés réelles moins clés fermées — **tenu par `ARCH-5`** |
+| dont **zones TRIÉES** (`a2` 11 · `pipeline` 9 · `a3` 8 · `a1` 6 · `conformite` 6 · `plan` 6 · `a6` 2) | **48** | préfixe de la clé |
 | ⛔ **jamais tracés** | **27** | le complément — *exact, sans heuristique* |
 
 > ⚠️⚠️ **ET LA VERSION PRÉCÉDENTE DE CE TABLEAU NE TOMBAIT PAS JUSTE.** Elle
@@ -842,7 +842,7 @@ déclare sur lui-même, sur une porte réglementaire. **Arbitrage rendu.**
 > réécrit**. *Vérifier ce qui atteint le livrable, pas ce qui est écrit dans le
 > code.*
 
-### ✅ A6 — LES 6, TRACÉS AU SITE (30/08) · **3 FERMÉS LE JOUR MÊME, par leur nom**
+### ✅ A6 — LES 6, TRACÉS AU SITE (30/08) · **4 FERMÉS LE JOUR MÊME**
 
 > ### ✅ **`a6/C1`, `a6/C2` et `a6/C4` FERMÉS le 30/08/2026 — SANS TOUCHER AU CODE DE PRODUCTION.**
 >
@@ -858,7 +858,7 @@ déclare sur lui-même, sur une porte réglementaire. **Arbitrage rendu.**
 | **`a6/C1`** | ✅ **FERMÉ — corrigé et épinglé de longue date, nommé ce jour.** `ae` vaut `somme_obs / somme_att` où l'attendu est `pred x exposition` (l.1549-1555), et l'unité est **mesurée, pas supposée** (`Σy/Σ(pred×expo) = 1,0000` contre `Σy/Σpred = 0,5533`). Le chemin sans colonne temporelle rend `ae_ratio = None` et publie le rapport de stationnarité **sous son propre nom**. ⚠️ **Violation plantée** (`ae = m_te / m_tr`) : **2 contrôles tombent** | ✅ **FERMÉ** |
 | **`a6/C2`** | ✅ **FERMÉ — corrigé et épinglé de longue date, nommé ce jour.** La prédiction de la fenêtre est **conservée** (`preds_par_annee`, l.1584) ; chaque segment se compare à ce que **le modèle prédit POUR LUI** (l.1617-1621). Les quintiles sont découpés sur le risque **prédit**, plus sur la cible observée. ⚠️ **Violation plantée** (attendu = moyenne du train) : **1 contrôle tombe** | ✅ **FERMÉ** |
 | **`a6/C4`** | ✅ **FERMÉ — corrigé et épinglé de longue date, nommé ce jour.** Barres `gini_test` (l.3234), radar sur `score_stabilite` / `score_rmse` (l.3299-3301). ⚠️ **Deux violations plantées séparément** — `gini_test`→`gini`, puis `score_*`→`stabilite`/`rmse_norm` : **un contrôle tombe à chaque fois** | ✅ **FERMÉ** |
-| **`a6/C9`** | ⛔ **VRAI, ET LA MOITIÉ QUI DÉCIDE N'EST PAS CELLE QUI EST RELEVÉE.** Les 3 entrées mortes sont exactes (`random_forest`, `quantile_50`, `quantile_90` : A4 en calibre **6**, pas ces trois-là). ⚠️⚠️ **Mais `xgboost_tweedie`, lui, EST calibré, EST classé, et est ABSENT de la table** : il retombe sur un **défaut**. Et le même fichier en porte **trois** — `0.5` pour A3, `0.6` pour A4, `0.7` pour A5 — **nus, sans une ligne de justification**, sur un critère pesé à **20 %** du score qui choisit le modèle qui tarife | **2** |
+| **`a6/C9`** | ✅ **FERMÉ le 30/08 — arbitrage de Selasse : LEVER, pas retomber.** Les 3 entrées mortes étaient exactes ; **la moitié qui décide** ne l'était pas : `xgboost_tweedie`, calibré à **chaque** run (59 occ. dans une gate réelle), classé, et **absent de la table**. Trois défauts nus `0.5`/`0.6`/`0.7` remplacés par **une porte unique sans défaut**, `interpretabilite_de`. ⚠️ **Aucun euro déplacé, et c'est un contrôle** : `0.60` reproduit exactement l'ancien défaut d'A4. **2 violations plantées** (4 contrôles tombent, puis 1) | ✅ **FERMÉ** |
 | **`a6/C7`** | ⛔ **VRAI, borné.** `top_modeles` est reçu (l.1848) et **jamais lu** : 0 usage dans les 47 lignes du corps, mesuré par AST. La docstring annonce « les 3 meilleurs modèles ». ⚠️ **Aucun livrable n'est touché** : `courbes` n'a **aucun consommateur de production** hors A6 (AST, chemins réels), et `chart_lorenz_gini` reçoit **les deux** Gini avec le commentaire qui dit lequel est le plafond | **7** |
 | **`a6/C10`** | ⛔ **VRAI, et l'écart a DOUBLÉ depuis le relevé** : **7** annoncés, **30** réels (24 au relevé). ⚠️ **Ce n'est pas un défaut d'A6 — c'est un gabarit** : la ligne `N tests ·` existe dans **7** fichiers du dépôt, **6 sont faux**, et les 6 sont les six agents de tarification, **tous à « 7 »**. Le seul juste annonce « 1 test » et en a 1 | **7** |
 

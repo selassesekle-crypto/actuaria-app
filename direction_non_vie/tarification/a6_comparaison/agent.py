@@ -225,6 +225,28 @@ POIDS_CRITERES = PROFILS_PONDERATION['equilibre']
 # Justification : le GLM est le plus interprétable (coefficients β lisibles)
 # Les modèles ML sont partiellement interprétables via SHAP
 # Le Deep Learning pur est moins interprétable (boîte noire)
+#
+# ⚠️⚠️ CETTE TABLE DÉCIDE D'UN PRIX — constat `a6/C9`. Elle pèse de **10 %**
+# (profil `performance`) à **30 %** (profil `auditabilite_s2`) du score
+# multicritères, 20 % sur le profil par défaut — et ce score choisit le modèle
+# qui tarife. Elle n'est PAS documentaire.
+#
+# ⚠️⚠️ ELLE N'A PLUS DE VALEUR PAR DÉFAUT, ET C'EST TOUT LE SUJET. Elle en
+# portait TROIS — `.get(nom, 0.5)` pour A3, `0.6` pour A4, `0.7` pour A5 —
+# nues, sans une ligne de justification. Un modèle absent recevait donc une
+# interprétabilité qui dépendait de QUEL AGENT l'avait produit, et non de CE
+# QU'EST LE MODÈLE. Mesuré le 30/08/2026 : `xgboost_tweedie` est calibré à
+# chaque run d'A4 (59 occurrences dans une gate réelle), il entre au classement,
+# et il était absent de la table. Sur une fixture où stabilité et RMSE sont
+# égales entre deux rivaux, le vainqueur BASCULE d'une ligne de défaut à
+# l'autre : 0.5 rend `ML_XGBOOST`, 0.6 et 0.7 rendent `ML_XGBOOST_TWEEDIE`.
+#
+# ⚠️ CE QUE LA TABLE DOIT GARANTIR EST UNE COUVERTURE, PAS UNE ÉGALITÉ. Elle a
+# le droit d'être PLUS LARGE que ce que les agents calibrent aujourd'hui :
+# `random_forest`, `quantile_50` et `quantile_90` ont une fabrique et des
+# hyperparamètres dans A4 sans être dans sa liste de candidats. Leurs valeurs
+# sont des jugements déjà posés — les effacer ne fermerait rien et perdrait une
+# décision. Ce qui est interdit, c'est l'inverse : un modèle PRODUIT et absent.
 INTERPRETABILITE = {
     'poisson':        1.00,   # GLM — coefficients directement lisibles
     'gamma':          1.00,
@@ -233,13 +255,45 @@ INTERPRETABILITE = {
     'tabnet':         0.75,   # TabNet — attention weights
     'gbm':            0.60,   # ML avec SHAP
     'xgboost':        0.60,
+    # ⚠️ MÊME STRUCTURE QUE `xgboost`, DONC MÊME LISIBILITÉ : seul l'objectif
+    # change (déviance de Tweedie au lieu du carré). `FAMILLES_MODELES_ML` le
+    # range d'ailleurs sous « Arbres / Boosting », comme lui. La valeur 0.60
+    # REPRODUIT EXACTEMENT ce que le défaut d'A4 rendait : ce lot déclare ce
+    # qui était accidentel, il ne déplace aucun euro.
+    'xgboost_tweedie': 0.60,
     'lightgbm':       0.60,
-    'catboost':        0.60,
+    'catboost':       0.60,
     'random_forest':  0.55,
     'lineaire_regularise': 0.85,   # Poisson ridge (comptage) ou ElasticNet (continu)
     'quantile_50':    0.80,
     'quantile_90':    0.80,
 }
+
+
+def interpretabilite_de(nom: str) -> float:
+    """L'interprétabilité d'un modèle — ou une LEVÉE, jamais un défaut.
+
+    ⚠️⚠️ SOURCE UNIQUE, POUR LES TROIS AGENTS. A3, A4 et A5 lisaient la même
+    table avec TROIS défauts différents ; la valeur d'un modèle non déclaré
+    dépendait donc de son producteur. Une seule porte, et elle ne devine rien.
+
+    ⚠️ POURQUOI LEVER PLUTÔT QUE RETOMBER. Un défaut silencieux sur une table
+    qui décide d'un prix produit un tarif que personne n'a choisi, et rien ne
+    le signale. `run` intercepte la levée et rend `success=False` avec le
+    motif : l'agent échoue PROPREMENT, il n'explose pas et il ne tarife pas au
+    hasard. *Un modèle sans interprétabilité déclarée est une question pour
+    l'actuaire, pas une valeur à inventer.*
+    """
+    try:
+        return INTERPRETABILITE[nom]
+    except KeyError:
+        raise ValueError(
+            f"Modele '{nom}' absent de INTERPRETABILITE. Ce score pese jusqu'a "
+            f"30 % de la grille qui choisit le modele de production : aucune "
+            f"valeur par defaut ne peut etre inventee a la place de "
+            f"l'actuaire. Declarez '{nom}' dans INTERPRETABILITE "
+            f"(a6_comparaison/agent.py) avec la justification de sa valeur."
+        ) from None
 
 
 class AgentA6Comparaison:
@@ -917,7 +971,7 @@ class AgentA6Comparaison:
                         'overfit_ratio':   1.0,
                         'nb_vars':         met.get('nb_vars_retenues', 0),
                         'agent_source':    'A3',
-                        'interpretabilite': INTERPRETABILITE.get(nom, 0.5),
+                        'interpretabilite': interpretabilite_de(nom),
                     })
 
         # ── RÉSULTATS A4 (ML) ─────────────────────────────────────────────────
@@ -935,7 +989,7 @@ class AgentA6Comparaison:
                     'overfit_ratio':   met.get('overfit_ratio', 1.0),
                     'nb_vars':         0,
                     'agent_source':    'A4',
-                    'interpretabilite': INTERPRETABILITE.get(nom, 0.6),
+                    'interpretabilite': interpretabilite_de(nom),
                 })
 
         # ── RÉSULTATS A5 (DL) ─────────────────────────────────────────────────
@@ -953,7 +1007,7 @@ class AgentA6Comparaison:
                     'overfit_ratio':   met.get('overfit_ratio', 1.0),
                     'nb_vars':         0,
                     'agent_source':    'A5',
-                    'interpretabilite': INTERPRETABILITE.get(nom, 0.7),
+                    'interpretabilite': interpretabilite_de(nom),
                     'glm_gele':        met.get('glm_gele'),   # CANN : True/False ; TabNet : None
                 })
 

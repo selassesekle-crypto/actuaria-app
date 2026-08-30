@@ -325,6 +325,58 @@ Côté agent : **le commentaire actuaire ne publie jamais** le nombre de fenêtr
 ### C — Imprécis ou daté (2)
 
 **C9 — `INTERPRETABILITE`** : 3 entrées sur 13 pour des modèles supprimés (`random_forest`, `quantile_50`, `quantile_90`).
+
+> ✅ **`a6/C9`** · **FERMÉ le 30/08/2026 — ET LA MOITIÉ QUI DÉCIDAIT N'ÉTAIT PAS
+> CELLE QUI ÉTAIT RELEVÉE.** *Preuve : `test_table_interpretabilite.py`,
+> 9 contrôles, 2 violations plantées.*
+>
+> Les 3 entrées mortes sont exactes : A4 calibre **6** modèles, aucun de ces
+> trois. ⚠️⚠️ **Mais l'autre sens était le dangereux** : `xgboost_tweedie` est
+> calibré à **chaque** run (59 occurrences dans une gate réelle du 30/08),
+> entre au classement, et était **absent de la table** — il retombait sur un
+> **défaut**. Et le fichier en portait **trois**, nus : `0.5` pour A3, `0.6`
+> pour A4, `0.7` pour A5. *L'interprétabilité d'un modèle non déclaré dépendait
+> de QUEL AGENT l'avait produit, jamais de ce qu'est le modèle.*
+>
+> **Mesuré, fixture isolante** (stabilité et RMSE égales entre les deux
+> rivaux, pour que le seul écart vienne du défaut) :
+>
+> ```
+>   defaut=0.5 (ecrit pour A3)  -> #1 ML_XGBOOST           marge +0.0138
+>   defaut=0.6 (celui d'A4)     -> #1 ML_XGBOOST_TWEEDIE   marge +0.0062
+>   defaut=0.7 (ecrit pour A5)  -> #1 ML_XGBOOST_TWEEDIE   marge +0.0262
+> ```
+>
+> **Le vainqueur bascule d'une ligne de défaut à l'autre.** Le critère pèse de
+> **10 %** (`performance`) à **30 %** (`auditabilite_s2`) ; même au plus léger,
+> un pas de 0,1 vaut **0,0100** quand la plus petite marge #1-#2 mesurée sur
+> cet agent valait **0,008**.
+>
+> **Le correctif — arbitré par Selasse le 30/08 : lever, pas retomber.** Une
+> porte unique `interpretabilite_de(nom)` pour les trois agents, **sans aucun
+> défaut** ; `xgboost_tweedie` déclaré à **0.60**. ⚠️ **AUCUN EURO DÉPLACÉ, et
+> c'est un contrôle** : `0.60` est exactement ce que le défaut d'A4 rendait —
+> *le lot déclare ce qui était accidentel.* `run` intercepte la levée et rend
+> `success=False` avec le motif : l'agent **refuse de tarifer**, il ne casse
+> pas le pipeline.
+>
+> ⚠️ **L'INVARIANT EST UNE COUVERTURE, PAS UNE ÉGALITÉ.** Les 3 entrées mortes
+> sont **conservées et nommées** par un contrôle : elles portent des jugements
+> déjà posés, et *on ne supprime pas une question en supprimant ce qui la
+> porte*. Le sens interdit est l'autre — un modèle produit et absent.
+>
+> ⚠️ **SCEAU — deux violations plantées, restaurées depuis une sauvegarde HORS
+> DÉPÔT** : retirer `xgboost_tweedie` de la table fait tomber **4** contrôles ;
+> réintroduire un `INTERPRETABILITE.get(nom, 0.6)` en fait tomber **1**.
+> *La première tentative avait été restaurée par `git checkout`, qui ramène à
+> `HEAD` et a donc détruit le correctif non commité — la sauvegarde hors dépôt
+> est la seule méthode juste quand le lot lui-même n'est pas encore commité.*
+>
+> ⚠️ **L'asymétrie entre voisins avait désigné le trou** : `FAMILLES_MODELES_ML`
+> (A4), qui ne décide qu'un **libellé**, contient `xgboost_tweedie` ET déclare
+> son défaut dans sa docstring. *La table décorative était gardée ; celle qui
+> décide ne l'était pas.*
+
 **C10 — En-tête de test : « 7 tests », **24** méthodes.** L'écart le plus large du lot — et dans le bon sens.
 
 ### D — Vérifié comme BON (7)
