@@ -18,7 +18,59 @@ en docstring comme des appels.
 
 ## ② Le classement
 
-### A — Ce que les quatre règles ne voient pas (2)
+### A — Ce que les quatre règles ne voient pas (3)
+
+**C7 — L'identifiant de contrat est jugé par le détecteur des GRANDEURS, et un numéro de police normal fait BLOQUER le fichier.**
+
+⚠️⚠️ **CONSTAT NEUF, ouvert le 30/08/2026** par la conception du chantier
+`plan/C7`, et **fermé dans le même lot**. Il n'était dans aucun relevé.
+
+`controler_qualite` faisait passer `identifiant_contrat` par
+`detecter_illisible`, aux côtés de trois **grandeurs**. Ce détecteur compte
+comme illisible « ce que `to_numeric` a détruit ». Or un numéro de police est
+un **libellé** — `P2024-00123`, `AUTO/45/8891` — jamais un nombre.
+
+```
+  400 contrats, AUCUN doublon reel
+  identifiant « C0001 » (alphanumerique)  -> 100 % d'illisibles -> BLOQUE
+  identifiant « 1..400 » (numerique)      -> 0 anomalie         -> passe
+```
+
+⚠️ **Portée** : latent tant qu'aucun plan ne déclare l'identifiant (**0/20**) —
+mais **il bloquait tout le chantier `plan/C7`** : déclarer le rôle rendait
+inutilisable tout fichier client à identifiant alphanumérique, c'est-à-dire la
+quasi-totalité.
+
+> ✅ **`qualite/C7`** · **FERMÉ le 30/08/2026** — *preuve :
+> `test_identifiant_est_un_libelle.py`, 6 contrôles, 7 violations plantées.*
+>
+> **Deux gestes, et le second est le plus important** : ① l'identifiant sort de
+> la boucle des grandeurs ; ② il reçoit `detecter_absent` — `None`, `NaN`,
+> chaîne vide — en **règle 3**. *Retirer le rôle sans le remplacer aurait fermé
+> le constat en détruisant une détection légitime : une ligne sans identifiant
+> ne peut être rattachée à aucun contrat, et le dédoublonnage ne peut pas en
+> juger.*
+>
+> ⚠️ **SECOND SENS ÉPINGLÉ** : les trois grandeurs **gardent** leur détection
+> d'illisibilité — resserrer une assiette ne doit pas la raboter.
+>
+> ⚠️ **RGPD, vérifié par sentinelle** : le message ne cite **ni valeur ni
+> index** — un rôle, un nom de colonne, un compte. Une violation plantée qui y
+> insère deux valeurs client fait tomber le contrôle.
+>
+> ⚠️⚠️ **ET J'AI RETIRÉ UN CONTRÔLE QUE J'AVAIS ÉCRIT.** J'avais composé
+> `detecter_illisible` à partir de `detecter_absent` et épinglé cette
+> composition. **La violation plantée ne l'a pas fait tomber** : mesuré sur
+> **25 formes**, `_num().isna()` seul est **équivalent** — tout absent est déjà
+> détruit par `to_numeric`. Le terme ajouté ne servait à rien et le test ne
+> prouvait rien. *Un contrôle qui ne peut pas échouer est du décor.*
+> **`detecter_illisible` est rendu INTACT** ; la relation entre les deux
+> détecteurs est écrite, mesurée, dans la docstring de `detecter_absent`.
+>
+> ⚠️ **BORNE DÉCLARÉE** : `'None'`, `'null'`, `'NaN'` écrits **en texte** sont
+> comptés PRÉSENTS. Ce sont peut-être des artefacts de sérialisation — *mais
+> rien dans la donnée ne le dit, et accuser sans savoir serait pire que se
+> taire.*
 
 **C1 — Une valeur MANQUANTE ou ILLISIBLE n'est vue par AUCUNE des quatre
 règles.** Tous les détecteurs passent par `pd.to_numeric(..., errors="coerce")`,

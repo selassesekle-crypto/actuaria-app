@@ -158,6 +158,41 @@ def detecter_doublons_id(df: pd.DataFrame, col_id: str) -> np.ndarray:
     return df.duplicated(subset=[col_id], keep='first').to_numpy()
 
 
+def detecter_absent(df: pd.DataFrame, col: str) -> np.ndarray:
+    """Valeur ABSENTE d'une colonne de rôle : `None`, `NaN`, ou chaîne vide.
+
+    ⚠️⚠️ CE DÉTECTEUR EST CELUI DES RÔLES-LIBELLÉS, ET IL NE TESTE PAS LA
+    NUMÉRISABILITÉ. C'est toute la différence avec `detecter_illisible`, et
+    elle vient d'un défaut mesuré : `identifiant_contrat` passait par le
+    détecteur des GRANDEURS, qui compte comme illisible « ce que `to_numeric`
+    a détruit ». Un numéro de police est un **libellé** — `P2024-00123`,
+    `AUTO/45/8891` — jamais un nombre. Mesuré : sur 400 contrats sans le
+    moindre doublon, un identifiant alphanumérique rendait **100 %
+    d'illisibles** et BLOQUAIT le fichier ; le même en `1..400` passait sans
+    une anomalie.
+
+    ⚠️ UNE ABSENCE, ELLE, RESTE UNE VRAIE AMBIGUÏTÉ. Une ligne sans
+    identifiant ne peut être rattachée à aucun contrat : le dédoublonnage ne
+    peut pas en juger. Signalée (règle 3), jamais exclue.
+
+    ⚠️⚠️ RELATION AVEC `detecter_illisible`, MESURÉE SUR 25 FORMES, PAS
+    SUPPOSÉE : tout ce que ce détecteur voit, l'autre le voit aussi —
+    `None`, `NaN`, `''`, `'   '` sont tous détruits par `to_numeric`. L'inverse
+    est faux, et c'est le point : `'douze mois'`, `'P2024-001'`, `'null'` sont
+    ILLISIBLES pour une grandeur et PRÉSENTS pour un libellé. *J'avais d'abord
+    composé `detecter_illisible` à partir d'ici ; la mesure a montré que le
+    terme ajouté ne changeait rien — il a été retiré plutôt que gardé pour la
+    forme.*
+
+    ⚠️ BORNE DÉCLARÉE : `'None'`, `'null'`, `'NaN'` écrits en TEXTE sont
+    comptés PRÉSENTS. Ce sont peut-être des artefacts de sérialisation d'une
+    valeur manquante — mais rien dans la donnée ne le dit, et accuser sans
+    savoir serait pire que se taire.
+    """
+    brut = df[col]
+    return np.asarray(brut.isna() | (brut.astype(str).str.strip() == ''))
+
+
 def detecter_illisible(df: pd.DataFrame, col: str) -> np.ndarray:
     """Valeurs MANQUANTES ou NON NUMÉRISABLES d'une colonne de rôle.
 
@@ -273,10 +308,12 @@ def controler_qualite(
     # (`ValueError: NaN, inf or invalid value detected in endog`). Ce qui
     # change, c'est que l'actuaire reçoit désormais un rapport de QUALITÉ, et
     # non une erreur `statsmodels` qui ne nomme pas la colonne fautive.
+    # ⚠️⚠️ DEUX ASSIETTES, PARCE QU'IL Y A DEUX NATURES DE ROLE.
+    # Les trois roles ci-dessous sont des GRANDEURS : y compter comme illisible
+    # ce que `to_numeric` a detruit est exactement leur metier.
     for _role, _col in (('exposition', col_expo),
                         ('cible_frequence', col_freq),
-                        ('cible_cout', col_cout),
-                        ('identifiant_contrat', col_id)):
+                        ('cible_cout', col_cout)):
         if not _col or _col not in df.columns:
             continue
         _manquant = detecter_illisible(df, _col)
@@ -285,6 +322,19 @@ def controler_qualite(
                  f"ambigu (ni exclu ni corrige). Aucune regle ne peut trancher "
                  f"entre un vrai zero, une erreur de saisie et une grandeur "
                  f"inconnue : c'est a l'actuaire de le dire.")
+
+    # ⚠️⚠️ L'IDENTIFIANT EST UN LIBELLE, PAS UNE GRANDEUR. Il figurait dans la
+    # boucle ci-dessus, ou `detecter_illisible` le declarait illisible des
+    # qu'il n'etait pas numerique : mesure, 100 % sur des identifiants tout a
+    # fait normaux, et le fichier BLOQUAIT. Seule son ABSENCE est ambigue.
+    # ⚠️ RGPD : ce message ne cite NI valeur NI index -- un compte suffit.
+    if col_id and col_id in df.columns:
+        _ajouter('valeur_absente_identifiant_contrat', 3, 'identifiant_contrat',
+                 col_id, detecter_absent(df, col_id),
+                 f"identifiant_contrat ('{col_id}') : valeur ABSENTE — la ligne "
+                 f"ne peut etre rattachee a aucun contrat, le dedoublonnage ne "
+                 f"peut donc pas en juger. Ambigu : signale, jamais exclu. Un "
+                 f"identifiant NON NUMERIQUE est normal et n'est pas signale.")
 
     if col_freq in df.columns and col_cout in df.columns:
         cout_sans_sin, sin_sans_cout = detecter_incoherence(df, col_freq, col_cout)

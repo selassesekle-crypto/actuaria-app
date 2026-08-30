@@ -14,7 +14,7 @@ l'état d'aujourd'hui.*
 | # | critère | état mesuré aujourd'hui |
 |---|---|---|
 | **S1** | **Rien de faux n'est publié** | ⛔ **80 constats ouverts** — *dérivés le 29/08 des clés de fermeture, méthode au §②* |
-| **S2** | **Rien de fermé ne peut régresser** | 🟡 **72 fermés, 1 partiel (`pipeline/C1`).** ✅ `a5/C5` n'est plus « corrigé sans être épinglé » : il est fermé ET épinglé, et le lot a montré qu'il se reproduisait encore par une SECONDE cause. ✅ **Et l'archive ne peut plus RETARDER sur le code** : `test_archive_fermeture_reportee.py` fait tomber la gate dès qu'un constat épinglé par un test n'a pas son bloc de fermeture -- le défaut mesuré le 28/08, où douze lots avaient été poussés sans être reportés. ⚠️ L'archive elle-même est désormais épinglée : `test_archive_cles_fermeture.py` fait tomber la gate sur un bloc de fermeture qui ne nomme pas son constat. ⚠️⚠️ **ET SON EXEMPTION EST SCOPÉE PAR FICHIER, mesuré le 29/08** : une exemption portant la seule clé aurait laissé passer un futur test qui ÉPINGLERAIT vraiment ce constat sans écrire son bloc — le défaut même que ce filet attrape. *Un garde-fou qui exclut la seule chose qui compte n'en est pas un.* Le fichier du garde-fou sort de sa propre assiette, sinon déclarer une exemption pour `x/Cn` créerait la mention que le filet reproche aussitôt |
+| **S2** | **Rien de fermé ne peut régresser** | 🟡 **73 fermés, 1 partiel (`pipeline/C1`).** ✅ `a5/C5` n'est plus « corrigé sans être épinglé » : il est fermé ET épinglé, et le lot a montré qu'il se reproduisait encore par une SECONDE cause. ✅ **Et l'archive ne peut plus RETARDER sur le code** : `test_archive_fermeture_reportee.py` fait tomber la gate dès qu'un constat épinglé par un test n'a pas son bloc de fermeture -- le défaut mesuré le 28/08, où douze lots avaient été poussés sans être reportés. ⚠️ L'archive elle-même est désormais épinglée : `test_archive_cles_fermeture.py` fait tomber la gate sur un bloc de fermeture qui ne nomme pas son constat. ⚠️⚠️ **ET SON EXEMPTION EST SCOPÉE PAR FICHIER, mesuré le 29/08** : une exemption portant la seule clé aurait laissé passer un futur test qui ÉPINGLERAIT vraiment ce constat sans écrire son bloc — le défaut même que ce filet attrape. *Un garde-fou qui exclut la seule chose qui compte n'en est pas un.* Le fichier du garde-fou sort de sa propre assiette, sinon déclarer une exemption pour `x/Cn` créerait la mention que le filet reproche aussitôt |
 | **S3** | **Un tarif signé se rejoue à l'identique** | 🟡 **RE-MESURÉ LE 27/08 — 2 fermés, 1 hérité, 1 PARTIEL.** ✅ **l'empreinte du plan est versionnée** : `s1:9b6d4f70080ad771`, **rejouée identique** sur les 20 plans (`2cb43ef`). ✅ **le livrable ne publie plus un `now()` sous l'étiquette « Arrêté »** : **0** site `_bandeau(… now …)`, contre **28** à l'origine ; absent → « non déclaré », illisible → « non déclaré (illisible : …) » (`ea37564`). ⬜ *hérité, non re-mesuré ici* : le tarif **déclaratif** reproductible au bit près (0,00e+00). ⚠️ **PARTIEL — le tarif DL** : le `seed` est **déclaré** (paramètre de `A5.run`), **appliqué** à `torch.manual_seed` et `np.random.seed` (l.528-529) et **inscrit au rapport**. ⚠️⚠️ **Mais la reproductibilité bout-en-bout n'est PAS prouvée ici** : elle demande un double run d'A5, non fait. *Le seed posé n'est pas la reproductibilité mesurée.* |
 | **S4** | **Un seul chemin — ou des chemins également gardés** | ⛔ **RE-MESURÉ LE 27/08 — inchangé, et l'asymétrie est nette.** **L'orchestrateur a toujours 0 appelant de production** (2 importeurs au total, tous hors production — relevé par AST). ⚠️⚠️ **Et la couche qualité départage les deux chemins** : `pipeline_tarifaire` (déclaratif) importe `core.qualite_donnees` **et** `core.conformite_reglementaire` ; `pipeline_agents` **n'en importe AUCUN**. *Deux chemins vers un tarif signé, un seul gardé.* ⬜ *non re-derivable* : le « 5 assemblages dans l'app » date d'une définition non consignée — **je ne le réaffirme pas sans la refaire**. |
 | **S5** | **Tout ce qui tarife est atteignable par une gate** | 🟡 **RE-MESURÉ LE 27/08, ET LA NUANCE COMPTE.** `actuaria_app.py` (**5 208 l**) est **importable** depuis le lot 0.1 (`07be8c0`) — mais **AUCUN test ne l'importe** ; **4 le LISENT comme un fichier** (`core/test_imports_app.py` le dit lui-même : *« ce test relit le fichier, il ne l'importe pas »*). ⚠️ *Ce qui est exercé, c'est sa STRUCTURE, pas son comportement.* ✅ `core/elasticite.py` (**988 l**) n'est plus hors de portée : **2 tests l'importent** (`test_elasticite.py`, `test_a4_ml.py`) — ⚠️ **testé n'est toujours pas audité**, il reste à l'ouverture HORS RANG. ⛔ `services/excel_helpers.py` (**151 l**) : **0 test ne l'importe**. |
@@ -38,8 +38,8 @@ lui-même**.
 
 | | |
 |---|---|
-| constats relevés (vagues 1 + 2) | **152** — *`a2/C17` ouvert le 29/08 par la re-mesure de `a2/C8` et `a2/C9` ; recomptés le 29/08 ; `a3/C19`, `services/C10`, `a5/C10` et `services/C11` sont des constats NEUFS, ouverts et fermés dans leur propre lot* |
-| fermés **et épinglés** | **72** |
+| constats relevés (vagues 1 + 2) | **153** — *`qualite/C7` ouvert ET fermé le 30/08 (l'identifiant jugé par le détecteur des grandeurs) ; `a2/C17` ouvert le 29/08 par la re-mesure de `a2/C8` et `a2/C9` ; recomptés le 29/08 ; `a3/C19`, `services/C10`, `a5/C10` et `services/C11` sont des constats NEUFS, ouverts et fermés dans leur propre lot* |
+| fermés **et épinglés** | **73** |
 | corrigé, **non épinglé** | **0** — `a5/C5` épinglé le 29/08 · **partiel** : `pipeline/C1` |
 | **⛔ OUVERTS** | **80** |
 | lignes lues intégralement | **22 693** sur 23 863 du périmètre |
@@ -52,7 +52,7 @@ lui-même**.
 **Recomptés le 27/08/2026. Les précédents — « 146 · 18 · 129 », puis « 147 · 40
 · 107 » — étaient FAUX, et pour la même raison.**
 
-- **152 constats** = en-têtes des 14 `releve_*.md`, **DEUX formes** :
+- **153 constats** = en-têtes des 14 `releve_*.md`, **DEUX formes** :
   `**Cn — …**` et `**Cn** — …`. *N'en compter qu'une en rate douze.*
 - **37 fermés** = les **38 clés d'attribution** portées par les blocs `> ✅`,
   **moins `pipeline/C1`** qui n'est fermé que **pour l'illisibilité**.
@@ -692,6 +692,35 @@ la porte est ouverte, personne n'est encore entré.*
 > j'ai lu « 6 appelants de production » là où il y en a **3**. Corrigé en
 > dédupliquant par `(fichier, ligne)`. *Un compte se rend rejouable — et se
 > relit avant d'être écrit.*
+
+## ⛔ CHANTIER `plan/C7` — LES RÔLES DE DONNÉES · 🟡 **ÉTAPE 1 sur 5 CLOSE**
+
+**Plan validé par Selasse le 30/08**, dans l'ordre mesuré : chaque état
+intermédiaire est **strictement meilleur** que le précédent.
+
+| # | étape | état |
+|---|---|---|
+| **1** | assiette de l'illisibilité + détecteur d'absence (`qualite/C7`) | ✅ **CLOSE le 30/08** |
+| **2+3** | paire `(identifiant, échéance)`, règle 1 → 3, **et** sortie non-IA du message | ⛔ à faire, **ensemble** |
+| **4** | vocabulaire : `date_echeance` dans `SYNONYMES_COLONNES` **et** `_roles_attendus` | ⛔ à faire |
+| **5** | les 20 plans, avec les 7 arbitrages | ⛔ à faire |
+
+⚠️⚠️ **POURQUOI L'ÉTAPE 1 VIENT D'ABORD, MESURÉ** : elle frappe **tout
+fichier**, même mono-exercice. Placée après l'étape 5, elle aurait livré 20
+plans **cassés à la livraison** ; placée après l'étape 4, elle aurait rendu le
+mapping LLM **activement trompeur** — Claude proposant la bonne correspondance
+et la chaîne la refusant, sans que rien ne désigne le vrai coupable.
+
+⚠️ **RGPD vérifié avant tout code, par sentinelles sur un prompt réel** :
+aucun identifiant, aucun nom, aucun montant, aucune date ne sort — seuls des
+noms de colonnes et des formes. `apercu_caviarde` est la frontière unique, et
+plus aucun `to_csv()` / `.head(` ne mène à un prompt.
+
+⛔ **RESTE À OUVRIR, ACCORDÉ, POUR L'ÉTAPE 2+3** : `synthese_qualite_donnees`
+n'atteint le **rapport de modèles signé** que par `_construire_contexte_tarif`,
+c'est-à-dire **le prompt LLM** — `services/C10` mot pour mot, sur une autre
+fonction. Le rapport d'équipe et l'Excel la publient sans IA ; le document qui
+part au CAC et à l'ACPR, non.
 
 ### ⛔ À FAIRE EN FIN DE TRI — LES JUMEAUX ENTRE CHEMINS
 
