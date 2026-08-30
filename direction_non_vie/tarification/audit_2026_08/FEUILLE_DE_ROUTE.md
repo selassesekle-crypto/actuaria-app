@@ -497,7 +497,7 @@ coupable (3) · annotations et exports morts (3).
 | **l'assemblage de l'app** | ~980 | `_executer_analyse` (799 l) + le bloc tarification (846 l). **Le reste de l'app : hors périmètre, déclaré** |
 | `services/excel_helpers.py` | 139 | complète le périmètre |
 
-## HORS RANG — LE TRI · 🟡 **A2, PIPELINE, A1, A3, PLAN, CONFORMITE et A6 · 27 restants**
+## HORS RANG — LE TRI · 🟡 **8 ZONES TRACÉES sur 14 · 22 restants**
 
 ⚠️⚠️ **ET LE COMPTE ÉTAIT DE 40 : IL EST DE 77.** Le document répartissait
 les non alloués en « 38 de bruit » + « 40 non triés », mais **aucun des deux
@@ -512,8 +512,8 @@ pour les fermés ; **moins `pipeline/C1`**, partiel et arbitré OUVERT.
 | lecture | compte | comment il se dérive |
 |---|---|---|
 | constats **ouverts** | **75** | clés réelles moins clés fermées — **tenu par `ARCH-5`** |
-| dont **zones TRIÉES** (`a2` 11 · `pipeline` 9 · `a3` 8 · `a1` 6 · `conformite` 6 · `plan` 6 · `a6` 2) | **48** | préfixe de la clé |
-| ⛔ **jamais tracés** | **27** | le complément — *exact, sans heuristique* |
+| dont **zones TRIÉES** (`a2` 11 · `pipeline` 9 · `a3` 8 · `a1` 6 · `conformite` 6 · `plan` 6 · `a4` 5 · `a6` 2) | **53** | préfixe de la clé |
+| ⛔ **jamais tracés** | **22** | le complément — *exact, sans heuristique* |
 
 > ⚠️⚠️ **ET LA VERSION PRÉCÉDENTE DE CE TABLEAU NE TOMBAIT PAS JUSTE.** Elle
 > publiait **80** ouverts, **46** triés et **33** non tracés : `80 − 46 = 34`.
@@ -923,6 +923,52 @@ déclare sur lui-même, sur une porte réglementaire. **Arbitrage rendu.**
 > *Nommer un constat sur la foi d'un test qu'on n'a pas vu tomber, ce serait
 > refaire le défaut qu'on ferme.*
 
+### ⚠️ A4 — LES 5, TRACÉS AU SITE (30/08) · **UN RANG 1 PROPOSÉ, ARBITRAGE EN ATTENTE**
+
+| constat | mesuré au site le 30/08 | rang |
+|---|---|---|
+| **`a4/C11`** | ⛔⛔ **VRAI, ET LE RELEVÉ SE TROMPE DEUX FOIS — le vrai défaut est PLUS GRAVE.** ① *Pas 9 sites mais **5** (AST, dédoublonné)* : **4 lisent `result_a3['metriques']['poisson']['gini']`, où `gini` EST la bonne clé** — A3 la pose bien (l.1073, 1345, 1575). **Homonyme** : la même clé nomme deux objets différents. ② *Le consommateur n'est pas `_optimisation_tarifaire`* mais **`_monitoring_derive`** (AST : `gini_reference_a3` n'a qu'**un** usage, l.995). ⚠️⚠️ **MAIS CE QUI EST DESSOUS EST UN RANG 1** — voir l'encadré | **1 proposé** |
+| **`a4/C7`** | ⛔ **VRAI, ET PLUS LARGE.** **10 sites** du module annoncent « 8 » pour **6** modèles calibrés (liste `modeles_a_calibrer` dérivée par AST). L'en-tête nomme **RandomForest, GAM, RégQuantile** comme calibrés : les deux premiers ne sont dans aucune boucle, et **`GAM` n'existe NULLE PART comme code**. ⚠️⚠️ **Et le fantôme a QUITTÉ le module** : `deploy_actuaria.py:95` le publie dans une `description`, écrite (`json.dump`) **dans l'en-tête markdown d'un notebook généré**. ⚠️ *Borne : ce chemin n'atteint PAS le livrable signé, et je n'ai pas vérifié que ce script est encore lancé* | **5** |
+| **`a4/C3`** | ✅ **CORRIGÉ, ÉPINGLÉ, JAMAIS REPORTÉ — le QUATRIÈME ÉTAT, et c'est le JUMEAU d'`a6/C4`.** La figure G1 lit `gini_test`/`gini_train` (l.2876-2877) avec le commentaire qui cite la mesure. `test_le_graphique_d_overfitting_porte_les_Gini_REELS` la tient. ⚠️ **Sceau** : `gini_test`→`gini` replanté, **le contrôle tombe**. **Aucun test ne nomme `a4/C3`** | **4e état** |
+| **`a4/C13`** | ⛔ **VRAI, et l'écart a grandi** : **7** annoncés, **18** réels (11 au relevé). Même **gabarit** qu'`a6/C10` — 6 des 7 fichiers qui portent la ligne `N tests ·` sont faux, et ce sont les six agents de tarification | **7** |
+| **`a4/C12`** | ⛔ **VRAI, et sans conséquence — mesuré** : **5** entrées Vie/Santé (`id_salarie`, `id_beneficiaire`, `id_adherent`, `cotisation_mensuelle_eur`, `charge_ij_annuelle_eur`) sur **22**. ⚠️ **Le sens est le bon** : une liste d'EXCLUSION plus large que le portefeuille est **sans effet** (exclure une colonne absente est un no-op) ; c'est l'inverse qui fuirait. *Même raisonnement que la couverture d'`INTERPRETABILITE`, appliqué dans l'autre sens* | **7** |
+
+> ### ⛔⛔ RANG 1 PROPOSÉ — UNE RÉFÉRENCE FABRIQUÉE, PUBLIÉE SOUS LE NOM « Référence A3 », QUI DÉCIDE D'UN STATUT RAG
+>
+> `gini_reference_a3` vaut **`0.25`** dès qu'A3 est absent ou en échec
+> (`a4_ml/agent.py:737`), et le paramètre qu'il alimente porte **un second
+> chiffre fabriqué en défaut** : `gini_reference: float = 0.2651`
+> (`_monitoring_derive`, l.2456) — **le hardcodage freMTPL2 que le commentaire
+> de la l.736 dit précisément vouloir éviter.** *Le correctif a atterri sur
+> l'appelant, jamais sur l'appelé.*
+>
+> **Ce que la valeur décide, mesuré par exécution** — `abs(gini_courant −
+> gini_reference)` contre un seuil de 0,05 :
+>
+> ```
+>   Gini reel 0.24 -> variation -0.01  statut_gini VERT   statut_global AMBRE
+>   Gini reel 0.28 -> variation +0.03  statut_gini AMBRE  statut_global AMBRE
+>   Gini reel 0.34 -> variation +0.09  statut_gini ROUGE  statut_global ROUGE
+>   Gini reel 0.12 -> variation -0.13  statut_gini ROUGE  statut_global ROUGE
+> ```
+>
+> ⚠️⚠️ **ET LE LIBELLÉ PUBLIÉ EST `'Référence A3'`** (l.2526) — *une provenance
+> que le code ne porte pas.* C'est le motif de tout cet audit dans sa forme la
+> plus pure : **un instrument qui affirme plus que ce qu'il mesure**, ici sur
+> un statut réglementaire.
+>
+> ⚠️⚠️ **ET LE TEST EST SUR LA VALEUR ABSOLUE.** Un modèle qui discrimine
+> **MIEUX** que la référence fantôme sort **ROUGE** exactement comme un modèle
+> dégradé : `Gini 0.34` contre une référence inventée à `0.25` rend
+> `statut_global = ROUGE`. *Un bon modèle peut être refusé par un nombre que
+> personne n'a mesuré.*
+>
+> **Aucun euro n'est déplacé directement** — c'est un **statut**, pas un tarif.
+> Mais le statut RAG est ce qui autorise ou plafonne la mise en production d'un
+> modèle. **Question de conception rendue, non tranchée par moi** : le bon
+> comportement est-il `None` + AMBRE (« référence non disponible », comme A6
+> fait pour l'A/E non calculable), ou une levée comme `a6/C9` ?
+
 ### ⛔ À FAIRE EN FIN DE TRI — LES JUMEAUX ENTRE CHEMINS
 
 > **Arbitré le 30/08 : pas maintenant, mais noté.** `pipeline/C2` a montré qu'un
@@ -933,13 +979,13 @@ déclare sur lui-même, sur une porte réglementaire. **Arbitrage rendu.**
 > entre deux chemins qui font le même métier.* À lancer **quand le tri est
 > terminé**, pas avant.
 
-### ⛔ LES 27 AUTRES NE SONT PAS TRACÉS, ET JE LE DIS
+### ⛔ LES 22 AUTRES NE SONT PAS TRACÉS, ET JE LE DIS
 
-**Dérivé le 30/08 par préfixe de clé sur les 79 ouverts — exact, sans
-heuristique de texte** ; les sept zones triées en sortent :
+**Dérivé le 30/08 par préfixe de clé sur les 75 ouverts — exact, sans
+heuristique de texte** ; les huit zones triées en sortent :
 
-`a4` 5 · `socle` 5 · `agents` 4 · `qualite` 4 · `a5` 3 · `charts` 3 ·
-`services` 3. **Total 27.**
+`socle` 5 · `agents` 4 · `qualite` 4 · `a5` 3 · `charts` 3 · `services` 3.
+**Total 22.**
 
 ⚠️ **ET J'AI ÉCRIT CETTE RÉPARTITION AVANT DE LA DÉRIVER, UNE FOIS DE PLUS.**
 J'y avais mis `qualite` 3 et un `plan` 1 qui n'a rien à y faire — `plan` est
