@@ -126,10 +126,13 @@ class TestUneAbsenceResteDetectee(unittest.TestCase):
         for i in range(20, 30):
             ids[i] = '   '          # blanc : absent, pas illisible
         r = _controler(_portefeuille_auto(400, seed=3).assign(id_contrat=ids))
-        vus = _sur_identifiant(r)
+        # ⚠️ ON SELECTIONNE PAR CODE, JAMAIS PAR POSITION. Ce test prenait
+        # `vus[0]` ; l'etape 2 a ajoute une seconde anomalie sur le MEME role
+        # et il est tombe sur la mauvaise. *Attacher la cle a la donnee.*
+        vus = [a for a in _sur_identifiant(r)
+               if a.code == 'valeur_absente_identifiant_contrat']
         self.assertTrue(vus, "30 identifiants absents ne sont vus par PERSONNE")
         a = vus[0]
-        self.assertEqual(a.code, 'valeur_absente_identifiant_contrat')
         self.assertEqual(a.nb_lignes, 30,
                          f'{a.nb_lignes} lignes vues pour 30 absences')
         self.assertEqual(

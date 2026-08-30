@@ -79,7 +79,56 @@ C'est le fait du lot ①, retrouvé par l'autre bout : `HYPOTHESES` énumère H1
 ```
 `.get(clé, 0)` formaté en `:.4f` — exactement ce que le module condamne quinze lignes plus haut et que ses tests V3/T4 verrouillent partout ailleurs. Le contexte lu par le modèle de narration reçoit donc « Gini=0.0000 » là où rien n'a été calculé.
 
-### B — Ce qu'une surface dit et qu'une autre tait (2)
+### B — Ce qu'une surface dit et qu'une autre tait (3)
+
+**C12 — La synthèse QUALITÉ n'atteint le rapport signé que par le prompt du LLM.**
+
+⚠️⚠️ **CONSTAT NEUF, ouvert le 30/08/2026 en vérifiant autre chose** — la
+question de Selasse sur l'indépendance vis-à-vis de l'IA — **et fermé dans le
+même lot**. *C'est `services/C10` mot pour mot, sur une autre fonction.*
+
+`synthese_qualite_donnees` a **trois** points de sortie de production, mesurés
+par AST :
+
+```
+  rapport_equipe_tarif.py:179   syntheses_reglementaires   -> sans IA ✅
+  tarif_excel.py:872            export_excel_a6            -> sans IA ✅
+  rapport_modeles_tarif.py:1326 _construire_contexte_tarif -> LE PROMPT ⛔
+```
+
+**Le document qui part au CAC et à l'ACPR n'avait qu'un chemin, et c'était le
+prompt.** Sans clé, sans réseau, ou sur une narration tronquée, l'information
+disparaissait — pendant que le rapport d'équipe et l'Excel la publiaient, ce
+qui rendait le trou d'autant plus difficile à voir.
+
+⚠️ **Ce que cela couvre désormais** : l'étape 2 du chantier `plan/C7` crée
+`doublon_identifiant_sans_echeance` — des lignes **conservées** dont on ne peut
+dire si elles sont un doublon ou un historique. *Créer cet avertissement sans
+lui donner un chemin non-IA aurait construit un garde-fou qui s'évapore : c'est
+pourquoi les deux étapes sont un seul lot.*
+
+> ✅ **`services/C12`** · **FERMÉ le 30/08/2026** — *preuve :
+> `test_echeance_et_avertissement_qualite.py`, 9 contrôles, 9 violations
+> plantées.*
+>
+> `avertissement_qualite` + `_bloc_qualite_html`, **sur le modèle exact de
+> `avertissement_dl` / `_bloc_dl_html`**, insérés **dans les deux formats** —
+> HTML et Word. *Le Word part au CAC comme le HTML : n'en corriger qu'un
+> laisserait la moitié du livrable signé muette.*
+>
+> ⚠️⚠️ **LA PREUVE SE FAIT SANS CLÉ API**, méthode exacte qui a démasqué
+> `services/C10` : on lit **le livrable**, pas la table des fonctions. Mesuré —
+> le HTML et le `.docx` portent le titre, le code et le remède.
+>
+> ⚠️ **LE TEXTE N'EST PAS RÉÉCRIT** : il vient de `synthese_qualite_donnees`,
+> la source unique déjà partagée avec le rapport d'équipe et l'Excel — un
+> contrôle vérifie l'égalité **caractère pour caractère**.
+>
+> ⚠️ **SECOND SENS** : portefeuille sain → **aucun bloc**, ni texte ni HTML.
+> *Un avertissement affiché toujours cesse d'être un signal.*
+>
+> ⚠️ **RGPD** : aucun identifiant client dans le bloc ni dans le HTML signé,
+> vérifié par sentinelle.
 
 > ✅ **`services/C5`** · **FERMÉ le 27/08/2026 — `d2dc672`. Deux méthodes.**
 > **① Lecture, sur SON assiette** — les valeurs du modèle retenu : **0** site

@@ -153,9 +153,29 @@ def detecter_incoherence(df: pd.DataFrame, col_freq: str,
     return cout_sans_sin, sin_sans_cout
 
 
-def detecter_doublons_id(df: pd.DataFrame, col_id: str) -> np.ndarray:
-    """Lignes en doublon sur l'identifiant déclaré (garde la 1re occurrence)."""
-    return df.duplicated(subset=[col_id], keep='first').to_numpy()
+def detecter_doublons_id(df: pd.DataFrame, col_id: str,
+                         col_ech: str | None = None) -> np.ndarray:
+    """Lignes en doublon sur la CLÉ DU CONTRAT (garde la 1re occurrence).
+
+    ⚠️⚠️ UN DOUBLON N'EST PAS UNE ÉCHÉANCE, ET C'EST TOUTE LA DIFFÉRENCE. Le
+    même contrat observé sur trois exercices donne trois lignes de même
+    identifiant : ce n'est pas une redondance, c'est un **historique**. Mesuré :
+    un historique de renouvellement sur 3 ans porte **66,7 % de « doublons »**
+    pour un seuil ROUGE à 5 % — le fichier était refusé avant d'être lu, et
+    c'est justement la donnée qu'exige l'estimation d'une élasticité.
+
+    ⚠️ A1 FAISAIT DÉJÀ CE CALCUL, PAS CETTE COUCHE-CI. Le mécanisme existait,
+    correct, sur le chemin agent ; il était absent du chemin déclaratif — où il
+    est en RÈGLE 1, c'est-à-dire **exclusion sans discussion**. *« Corrigé
+    OÙ ? » vaut aussi entre deux chemins qui font le même métier.*
+
+    La clé est `(identifiant, échéance)` dès que l'échéance est déclarée ET
+    présente ; l'identifiant seul sinon.
+    """
+    cles = [col_id]
+    if col_ech and col_ech in df.columns:
+        cles.append(col_ech)
+    return df.duplicated(subset=cles, keep='first').to_numpy()
 
 
 def detecter_absent(df: pd.DataFrame, col: str) -> np.ndarray:
@@ -247,6 +267,10 @@ def controler_qualite(
     col_cout = plan.cible_cout
     col_expo = plan.exposition
     col_id = getattr(plan, "identifiant_contrat", None)
+    col_ech = getattr(plan, "echeance", None)
+    #: L'échéance est-elle utilisable ? Déclarée AU PLAN **et** présente dans
+    #: les données — déclarer une colonne absente ne change rien au calcul.
+    echeance_utilisable = bool(col_ech and col_ech in df.columns)
 
     anomalies: List[Anomalie] = []
 
@@ -273,10 +297,28 @@ def controler_qualite(
         _ajouter('exposition_non_positive', 1, 'exposition', col_expo,
                  detecter_non_positif(df, col_expo),
                  f"exposition ('{col_expo}') <= 0 — duree nulle/negative, casse l'offset log, impossible.")
+    # ⚠️⚠️ LA RÈGLE CHANGE AVEC CE QUE LE PLAN DÉCLARE, ET C'EST VOULU.
+    # Avec une échéance, deux lignes de même clé sont un VRAI doublon :
+    # impossible, donc règle 1, exclu. Sans échéance, on ne peut PAS distinguer
+    # un doublon d'un historique de renouvellement : la constatation devient
+    # AMBIGUË, donc règle 3 — signalée, la ligne est CONSERVÉE.
+    # *Exclure sans pouvoir trancher, c'est trancher à la place de l'actuaire.*
     if col_id and col_id in df.columns:
-        _ajouter('doublon_identifiant', 1, 'identifiant_contrat', col_id,
-                 detecter_doublons_id(df, col_id),
-                 f"doublon sur l'identifiant de contrat ('{col_id}') — ligne redondante.")
+        if echeance_utilisable:
+            _ajouter('doublon_identifiant', 1, 'identifiant_contrat', col_id,
+                     detecter_doublons_id(df, col_id, col_ech),
+                     f"doublon sur la cle de contrat ('{col_id}', '{col_ech}') "
+                     f"— meme contrat, MEME echeance : ligne redondante.")
+        else:
+            _ajouter('doublon_identifiant_sans_echeance', 3,
+                     'identifiant_contrat', col_id,
+                     detecter_doublons_id(df, col_id),
+                     f"lignes portant le MEME identifiant de contrat "
+                     f"('{col_id}'). AUCUNE echeance n'est declaree au plan : "
+                     f"impossible de distinguer un doublon d'un HISTORIQUE de "
+                     f"renouvellement. Ces lignes sont CONSERVEES et signalees. "
+                     f"Declarer `echeance` au plan rend la distinction "
+                     f"opposable.")
 
     # ── RÈGLE 2 : IMPLAUSIBLE établi → corriger (plafond exposition) ──────────
     mask_corr_expo = None
@@ -432,10 +474,21 @@ def synthese_qualite_donnees(rapport: Optional["RapportQualite"]) -> Optional[st
     if rapport is None:
         return None
     if rapport.bloque:
+        # ⚠️⚠️ LE MOTIF, PAS SEULEMENT LE CODE. Le message nommait le code de
+        # l'anomalie et s'arretait la : l'actuaire lisait QUOI sans lire QUE
+        # FAIRE. Les descriptions portent le remede (« declarer `echeance` au
+        # plan rend la distinction opposable ») et n'etaient publiees nulle
+        # part quand la couche bloquait. ⚠️ RGPD : elles ne citent ni valeur
+        # ni index — verifie par sentinelle.
+        _toutes = ((rapport.exclusions or []) + (rapport.corrections or [])
+                   + (rapport.signalements or []))
+        _motifs = [a.description for a in _toutes
+                   if a.code in rapport.anomalies_au_dela_seuil]
+        _detail = ''.join(f"\n   · {m}" for m in _motifs)
         return (f"⚠ CONTROLE QUALITE BLOQUE — anomalie(s) "
                 f"[{', '.join(rapport.anomalies_au_dela_seuil)}] touchant >= "
                 f"{rapport.seuil:.0%} des lignes. Confirmation actuarielle nominative "
-                f"requise (qualite_validee_par) pour poursuivre.")
+                f"requise (qualite_validee_par) pour poursuivre." + _detail)
     lignes: List[str] = []
     if rapport.exclusions:
         tot = sum(a.nb_lignes for a in rapport.exclusions)

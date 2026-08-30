@@ -141,14 +141,35 @@ class TestQualite_Escalade(unittest.TestCase):
 class TestQualite_Doublons(unittest.TestCase):
 
     def test_doublon_identifiant_declare_regle1(self):
+        """⚠️⚠️ MIS A JOUR LE 30/08/2026 — LA REGLE A CHANGE, PAS LE TEST.
+
+        Il prouvait qu'un identifiant DECLARE rend le dedoublonnage plus fin
+        que `doublon_ligne`. Il le prouve toujours — mais la clef complete est
+        desormais la PAIRE `(identifiant, echeance)` : sans echeance on ne peut
+        pas distinguer un doublon d'un HISTORIQUE de renouvellement (mesure :
+        66,7 % de faux doublons sur 3 exercices), et la constatation devient
+        AMBIGUE, donc regle 3. Les deux cas sont epingles ci-dessous plutot que
+        l'ancien seul.
+        """
         df = _df(50)
         df = pd.concat([df, df.iloc[[5, 6]]], ignore_index=True)   # 2 doublons (id inclus)
-        plan = _plan(identifiant_contrat='id_contrat')
-        r = controler_qualite(df, plan, horodatage='t')
+
+        # ① CLEF COMPLETE : meme contrat, MEME echeance -> impossible, exclu.
+        plan = _plan(identifiant_contrat='id_contrat', echeance='annee')
+        r = controler_qualite(df.assign(annee=2025), plan, horodatage='t')
         excl = {a.code: a.nb_lignes for a in r.exclusions}
         self.assertEqual(excl.get('doublon_identifiant'), 2)
         self.assertEqual(r.lignes_retenues, 50)     # 52 - 2 exclus
-        print("    QD-8 Doublon sur identifiant déclaré → règle 1 (exclu) ✅")
+
+        # ② SANS ECHEANCE : ambigu -> signale, et les lignes RESTENT.
+        r2 = controler_qualite(df, _plan(identifiant_contrat='id_contrat'),
+                               horodatage='t', qualite_validee_par='ctrl')
+        sig = {a.code: a.nb_lignes for a in r2.signalements}
+        self.assertEqual(sig.get('doublon_identifiant_sans_echeance'), 2)
+        self.assertEqual([a.code for a in r2.exclusions], [])
+        self.assertEqual(r2.lignes_retenues, 52)
+        print("    QD-8 Doublon : avec echeance → règle 1 (exclu) ; sans "
+              "echeance → règle 3 (signalé, conservé) ✅")
 
     def test_doublon_ligne_sans_identifiant_regle3(self):
         df = _df(50)

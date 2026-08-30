@@ -172,10 +172,17 @@ class TestAvertissementDLSurLaSurfaceSignee(unittest.TestCase):
                 self.assertIn(attendu, xml)
         print("    A-5 le .docx porte le meme avertissement que le HTML")
 
-    def test_les_CINQ_AUTRES_syntheses_restent_dans_le_prompt_SEUL(self):
+    def test_les_QUATRE_AUTRES_syntheses_restent_dans_le_prompt_SEUL(self):
         """⚠️⚠️ L'ASSIETTE REELLE DU DEFAUT, RELEVEE PAR AST ET NON TRAITEE.
 
-        Ce lot cable UNE synthese sur SIX. Les cinq autres n'ont toujours pour
+        ⚠️⚠️ MIS A JOUR LE 30/08/2026 — ET CE TEST A FAIT EXACTEMENT CE QU'IL
+        ANNONCAIT. `synthese_qualite_donnees` a ete cablee hors du prompt par
+        le lot des roles de donnees (constat `services/C12`), et ce
+        filet est tombe le jour meme, en nommant la synthese ajoutee.
+        *Un defaut connu et non traite se declare ; celui-ci s'est aussi
+        souvenu du jour ou on le traiterait.*
+
+        Ce lot en cable DEUX sur SIX. Les quatre autres n'ont toujours pour
         seul point de sortie que `_construire_contexte_tarif` — le prompt.
         Ce test FIGE ce fait pour qu'il ne se perde pas : il tombera le jour ou
         l'une d'elles sera cablee, et il faudra alors mettre a jour le compte.
@@ -201,11 +208,11 @@ class TestAvertissementDLSurLaSurfaceSignee(unittest.TestCase):
                         and enclos(n.lineno) != '_construire_contexte_tarif'):
                     dehors.add(nom)
         self.assertEqual(
-            dehors, {'synthese_modele_dl'},
+            dehors, {'synthese_modele_dl', 'synthese_qualite_donnees'},
             f"L'assiette a change : synthese(s) hors du prompt = {sorted(dehors)}. "
             f"Si une autre a ete cablee, mettre a jour le releve et ce test.")
-        print("    A-6 1 synthese sur 6 est cablee ; les 5 autres restent dans "
-              "le prompt SEUL, et c'est declare")
+        print("    A-6 2 syntheses sur 6 sont cablees ; les 4 autres restent "
+              "dans le prompt SEUL, et c'est declare")
 
 
 class TestCourbeConvergenceMesuree(unittest.TestCase):

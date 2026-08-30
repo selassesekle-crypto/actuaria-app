@@ -72,6 +72,12 @@ _HORS_ASSIETTE: dict[tuple[str, str], str] = {
         "`a2/C9` au lieu d'en retirer. `a2/C9` reste OUVERT, rang 5, "
         "deliberement non corrige -- renommer la cle change le format d'un "
         "JSON persiste. La mention est la trace de cette retenue.",
+    ('plan/C7', 'test_echeance_et_avertissement_qualite.py'):
+        "Cite comme NOM DU CHANTIER dont ce lot est l'etape 2+3. `plan/C7` "
+        "est la declaration des roles dans les 20 plans : elle est l'ETAPE 5, "
+        "et reste OUVERTE. Ce fichier epingle la couche qualite, pas les "
+        "plans. Retirer la mention couperait le lot de la raison qui le rend "
+        "necessaire.",
 }
 
 

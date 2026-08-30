@@ -600,6 +600,59 @@ def _bloc_dl_html(texte: str) -> str:
             f'</div>\n')
 
 
+#: Le titre du bloc qualite des donnees. ⚠️ Le TEXTE vient de
+#: `synthese_qualite_donnees` — source unique deja partagee avec le rapport
+#: d'equipe et l'Excel. Voir `avertissement_qualite`.
+TITRE_QUALITE_DONNEES = 'Controle qualite des donnees'
+
+
+def avertissement_qualite(result_a6) -> str:
+    """Ce que la couche qualite a exclu, corrige ou SIGNALE — vide s'il n'y a
+    rien a dire.
+
+    ⚠️⚠️ POURQUOI CETTE FONCTION EXISTE — CONSTAT `services/C12`, MESURE LE
+    30/08/2026. `synthese_qualite_donnees` avait TROIS points de sortie de
+    production, et celui de CE rapport etait `_construire_contexte_tarif`,
+    c'est-a-dire **le prompt envoye au LLM**. Le rapport d'equipe et l'Excel la
+    publiaient sans IA ; **le document qui part au CAC et a l'ACPR, non.**
+
+    *C'est `services/C10` mot pour mot, sur une autre fonction.* La-bas c'etait
+    `synthese_modele_dl` ; le meme site, la meme consequence : sans cle, sans
+    reseau, ou sur une narration tronquee, l'information disparaissait du
+    livrable signe.
+
+    ⚠️ CE QUE CELA COUVRE MAINTENANT : la regle 3 porte desormais
+    `doublon_identifiant_sans_echeance` — des lignes CONSERVEES dont on ne peut
+    pas dire si elles sont un doublon ou un historique de renouvellement.
+    *Creer cet avertissement sans lui donner un chemin non-IA aurait construit
+    un garde-fou qui s'evapore.*
+
+    ⚠️ LE TEXTE N'EST PAS REECRIT ICI. Il vient de `synthese_qualite_donnees`,
+    la source unique — une reformulation locale aurait diverge.
+
+    ⚠️ ET ELLE SE TAIT QUAND IL N'Y A RIEN : la synthese rend `None` si la
+    couche n'a ni exclu, ni corrige, ni signale. *Un avertissement affiche
+    toujours cesse d'etre un signal.*
+    """
+    return synthese_qualite_donnees((result_a6 or {}).get('rapport_qualite')) or ''
+
+
+def _bloc_qualite_html(texte: str) -> str:
+    """Le bloc qualite en HTML. Vide quand il n'y a rien a dire.
+
+    ⚠️ Le texte est MULTI-LIGNES (une par nature de traitement, plus les motifs
+    quand la couche bloque) : chaque ligne devient une puce, sinon le lecteur
+    recoit un pave."""
+    if not texte:
+        return ''
+    puces = "\n".join(f'      <li>{l.strip()}</li>'
+                        for l in texte.split("\n") if l.strip())
+    return (f'<div class="raisons-plafond">\n'
+            f'  <div class="raisons-titre">{TITRE_QUALITE_DONNEES}</div>\n'
+            f'    <ul>\n{puces}\n    </ul>\n'
+            f'</div>\n')
+
+
 def raisons_plafond(result_a6) -> tuple[str, ...]:
     """Les causes qui empêchent le statut VERT, telles qu'A6 les a nommées.
 
@@ -1865,7 +1918,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
   </div>
 </div>
 
-{_bloc_raisons_html(raisons_plafond(result_a6))}{_bloc_dl_html(avertissement_dl(result_a6))}{_ouvrir_chapitre(1)}    <table>
+{_bloc_raisons_html(raisons_plafond(result_a6))}{_bloc_dl_html(avertissement_dl(result_a6))}{_bloc_qualite_html(avertissement_qualite(result_a6))}{_ouvrir_chapitre(1)}    <table>
       {_row(titres('glm'), header=True, num=colonnes_numeriques('glm'))}
 """
     for modele in ['poisson', 'gamma', 'tweedie']:
@@ -2298,6 +2351,16 @@ def export_word(
             _run(p, '⚠ ' + TITRE_DL_PRODUCTION, bold=True, sz=10,
                  col=AR).add_break()
             _run(p, '   · ' + _dl_w, sz=9, col=NR)
+
+        # ⚠️⚠️ LA QUALITE DES DONNEES, DANS LES DEUX FORMATS AUSSI. Meme raison
+        # que ci-dessus : le Word part au CAC comme le HTML. `services/C12`.
+        _q_w = avertissement_qualite(result_a6)
+        if _q_w:
+            p = doc.add_paragraph()
+            _run(p, '⚠ ' + TITRE_QUALITE_DONNEES, bold=True, sz=10,
+                 col=AR).add_break()
+            for _ligne in [x.strip() for x in _q_w.split("\n") if x.strip()]:
+                _run(p, '   · ' + _ligne, sz=9, col=NR).add_break()
 
         doc.add_page_break()
 
