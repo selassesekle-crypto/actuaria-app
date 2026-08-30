@@ -214,6 +214,46 @@ obtient une gamma**. Un actuaire qui déclare `echeances` obtient le
 comportement de doublon que le commentaire l.214-218 décrit comme refusant le
 fichier à 67 %.
 
+> ✅ **`plan/C5`** · **FERMÉ le 30/08/2026 — RANG 1 acté par Selasse.**
+> *Preuve : `test_plan_cles_inconnues.py`, 8 contrôles et 52 sous-cas,
+> 3 violations plantées.*
+>
+> **La porte lève désormais**, et les quatre cas du relevé sont épinglés un par
+> un. Le motif **nomme la clé fautive, dit l'enjeu, liste les clés acceptées et
+> propose la plus proche** :
+>
+> ```
+>   Cle(s) inconnue(s) dans le plan : 'famille_severity'
+>   (vouliez-vous 'famille_severite' ?). Le plan est le document que vous
+>   signez : une cle mal orthographiee serait ignoree en silence et vous
+>   obtiendriez un autre tarif. Cles acceptees ici : ...
+> ```
+>
+> ⚠️⚠️ **L'ASYMÉTRIE ENTRE VOISINS ÉTAIT DANS LE MÊME FICHIER, ET ELLE PENCHAIT
+> DU BON CÔTÉ.** Mesuré : `PlanTarifaire` et `Facteur` acceptaient en silence,
+> **`Comportement` LEVAIT DÉJÀ** (`TypeError` de son constructeur). *Le
+> correctif n'invente aucun comportement : il aligne les deux qui se taisaient
+> sur le troisième, qui avait raison.* Les trois passent par la même porte et
+> rendent le même motif.
+>
+> ⚠️ **LE JUMEAU UN NIVEAU PLUS BAS EST TRAITÉ DANS LE MÊME GESTE** : un
+> `encodages` (pluriel) sur un **facteur** lève aussi, et le motif dit *quel*
+> facteur. *Corriger la seule racine aurait été « corrigé OÙ ? ».*
+>
+> ⚠️⚠️ **LES CLÉS CONNUES SONT DÉRIVÉES DE `dataclasses.fields`, JAMAIS
+> RECOPIÉES** — et un contrôle refuse tout nom de champ écrit en dur dans le
+> garde-fou. *C'est ce qui protège le chantier suivant : `unite_exposition`
+> sera couvert sans qu'on y pense.*
+>
+> ⚠️ **AUCUN PLAN LIVRÉ N'EST CASSÉ, mesuré AVANT de coder** : **0/20**
+> portaient une clé inconnue, et **20/20** chargent après. *L'état intermédiaire
+> ne peut pas être pire que le précédent.*
+>
+> ⚠️ **SCEAU — trois violations plantées, une par voisin** : la racine ravale
+> → **8 contrôles tombent** ; le facteur ravale → **1** ; les clés recopiées au
+> lieu d'être dérivées → **32 tombent, dont les 20 plans livrés**. *Le second
+> sens a attrapé la régression que le premier n'aurait pas vue.*
+
 **C6 — Deux formes de dict pour « plan amputé », dans le même fichier, et le
 mélange échoue vers « rien à signaler ».**
 

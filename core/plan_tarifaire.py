@@ -26,6 +26,8 @@ plan de tarification explicite, versionné, opposable.
 """
 from __future__ import annotations
 
+import dataclasses
+import difflib
 import hashlib
 import json
 from dataclasses import asdict as dataclasses_asdict
@@ -266,6 +268,43 @@ class Comportement:
                            ('prime_proposee', self.prime_proposee),
                            ('canal', self.canal),
                            ('groupe_test', self.groupe_test)) if v)
+
+
+def _refuser_cles_inconnues(d: dict, classe, ou: str) -> None:
+    """Refuse toute clé que la structure ne connaît pas — constat `plan/C5`.
+
+    ⚠️⚠️ POURQUOI LEVER, ET NON AVERTIR. Le plan est le document que l'actuaire
+    SIGNE, et il est opposable. Une clé mal orthographiée ne produit pas une
+    approximation : elle produit **un autre tarif, sans un mot**. Mesuré sur
+    `famille_severity` (l'anglais) : log-normale signée, **gamma appliquée**,
+    **+1,00 % de prime totale et +42 124 EUR sur 1 500 contrats**. C'est la
+    règle déjà arbitrée pour `INTERPRETABILITE` (`a6/C9`) : *aucune valeur par
+    défaut ne s'invente à la place de l'actuaire.*
+
+    ⚠️ LES CLÉS CONNUES SONT DÉRIVÉES DE LA DATACLASSE, JAMAIS RECOPIÉES. Une
+    liste en dur divergerait au premier champ ajouté — et c'est exactement ce
+    qui va arriver : `unite_exposition` est le prochain. *Le garde-fou suit la
+    structure sans qu'on y pense.*
+
+    ⚠️ LE MOTIF DIT QUOI FAIRE. Il nomme la clé fautive, l'endroit, et propose
+    la plus proche des clés connues : une erreur d'orthographe se corrige si on
+    voit le bon mot, pas si on lit « clé invalide ».
+    """
+    connues = {f.name for f in dataclasses.fields(classe)}
+    inconnues = [k for k in d if k not in connues]
+    if not inconnues:
+        return
+    details = []
+    for k in sorted(inconnues):
+        proches = difflib.get_close_matches(str(k), sorted(connues), n=1,
+                                            cutoff=0.6)
+        details.append(f"'{k}'" + (f" (vouliez-vous '{proches[0]}' ?)"
+                                   if proches else ""))
+    raise ValueError(
+        f"Cle(s) inconnue(s) dans {ou} : {', '.join(details)}. "
+        f"Le plan est le document que vous signez : une cle mal orthographiee "
+        f"serait ignoree en silence et vous obtiendriez un autre tarif. "
+        f"Cles acceptees ici : {', '.join(sorted(connues))}.")
 
 
 @dataclass(frozen=True)
@@ -514,6 +553,25 @@ class PlanTarifaire:
     # ── Chargement depuis YAML/JSON ────────────────────────────────────────
     @classmethod
     def depuis_dict(cls, d: dict) -> "PlanTarifaire":
+        # ⚠️⚠️ CONSTAT `plan/C5`, RANG 1 — LA PORTE AVALAIT LES CLÉS INCONNUES.
+        # Le plan est le document OPPOSABLE : l'actuaire le signe. Mesuré,
+        # `famille_severity: lognormal` (l'anglais) était accepté sans un mot
+        # et rendait une **gamma** — soit **+1,00 % de prime totale, +42 124 €
+        # sur 1 500 contrats**, jusqu'à 525,35 € sur un seul. *Il signait une
+        # log-normale et obtenait autre chose.*
+        #
+        # ⚠️ ET LE CORRECTIF N'INVENTE RIEN : `Comportement` LEVAIT DÉJÀ sur une
+        # clé inconnue (`TypeError` de son constructeur). Deux des trois
+        # sous-objets du plan se taisaient, le troisième refusait. *L'asymétrie
+        # entre voisins, dans le même fichier — et c'est le voisin qui a raison.*
+        # Les trois passent désormais par la même porte, avec le même motif.
+        _refuser_cles_inconnues(d, PlanTarifaire, "le plan")
+        for _i, _f in enumerate(d.get("facteurs") or [], 1):
+            _refuser_cles_inconnues(_f, Facteur, f"le facteur n°{_i} "
+                                                f"('{_f.get('nom', '?')}')")
+        if d.get("comportement"):
+            _refuser_cles_inconnues(d["comportement"], Comportement,
+                                    "le bloc `comportement`")
         facteurs = tuple(
             Facteur(
                 nom=f["nom"], type=f["type"],

@@ -39,10 +39,10 @@ lui-même**.
 | | |
 |---|---|
 | constats relevés (vagues 1 + 2) | **154** — *`services/C12` ouvert ET fermé le 30/08 (la synthèse qualité ne sortait que par le prompt) ; `qualite/C7` ouvert ET fermé le 30/08 (l'identifiant jugé par le détecteur des grandeurs) ; `a2/C17` ouvert le 29/08 par la re-mesure de `a2/C8` et `a2/C9` ; recomptés le 29/08 ; `a3/C19`, `services/C10`, `a5/C10` et `services/C11` sont des constats NEUFS, ouverts et fermés dans leur propre lot* |
-| fermés **et épinglés** | **80** |
+| fermés **et épinglés** | **81** |
 | corrigé, **non épinglé** | **0** — `a5/C5` épinglé le 29/08 · **partiel** : `pipeline/C1` |
 | corrigé, épinglé, **NON REPORTÉ** (4e état) | **0** — `a6/C1` `a6/C2` `a6/C4` nommés le 30/08 |
-| **⛔ OUVERTS** | **74** |
+| **⛔ OUVERTS** | **73** |
 | lignes lues intégralement | **22 693** sur 23 863 du périmètre |
 | jamais auditées | **1 170 l** + `actuaria_app.py` (5 181 l) |
 | preuves qui se relancent | **35, 0 échec** |
@@ -511,7 +511,7 @@ pour les fermés ; **moins `pipeline/C1`**, partiel et arbitré OUVERT.
 
 | lecture | compte | comment il se dérive |
 |---|---|---|
-| constats **ouverts** | **74** | clés réelles moins clés fermées — **tenu par `ARCH-5`** |
+| constats **ouverts** | **73** | clés réelles moins clés fermées — **tenu par `ARCH-5`** |
 | dont **zones TRIÉES** (`a2` 11 · `pipeline` 9 · `a3` 8 · `a1` 6 · `conformite` 6 · `plan` 6 · `socle` 5 · `a4` 4 · `agents` 4 · `qualite` 4 · `a6` 2) | **65** | préfixe de la clé |
 | ⛔ **jamais tracés** | **9** | le complément — *exact, sans heuristique* |
 
@@ -1136,7 +1136,13 @@ index, aucun identifiant. **La conversion n'ajoute aucun champ client.**
 | **4** | Conversion explicite vers l'année, publiée avec son effet | L'aval (offset GLM, prime pure) exige une exposition annualisée. Après 3, sinon on convertit sur une borne fausse |
 | **5** | Les 20 plans déclarent `annee` | **En dernier**, comme l'étape 5 de `plan/C7`. `annee` → borne 1.0 → *comportement identique à aujourd'hui* : cette étape ne déplace aucun euro, par construction |
 
-⛔⛔ **UNE DÉPENDANCE À NOMMER AVANT DE CODER L'ÉTAPE 2** : `plan/C5` (rang 1,
+✅ **DÉPENDANCE LEVÉE LE 30/08 —  EST FERMÉ.** La porte lève désormais
+sur toute clé inconnue, au plan **et** sur chaque facteur, avec suggestion de la
+plus proche. Les clés connues sont **dérivées de ** : le
+futur  sera couvert **sans qu'on y pense**, et un contrôle
+refuse tout nom de champ recopié en dur. *L'étape 2 peut être écrite.*
+
+⛔ **CE QUE LA DÉPENDANCE DISAIT, GARDÉ POUR LA LEÇON** : `plan/C5` (rang 1,
 **arbitrage toujours en attente**) a mesuré que `depuis_dict` **accepte en
 silence toute clé inconnue**. Écrire `unite_expo:` au lieu de
 `unite_exposition:` serait donc **ignoré sans un mot**, et le plan paraîtrait
