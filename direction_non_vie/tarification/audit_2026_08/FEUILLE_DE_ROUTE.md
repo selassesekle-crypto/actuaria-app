@@ -1196,6 +1196,161 @@ silence toute clé inconnue**. Écrire `unite_expo:` au lieu de
 « non déclaré ». *Le nouveau champ hérite du défaut le jour où il naît.*
 **Recommandation : traiter `plan/C5` avant ou pendant l'étape 2.**
 
+## ⛔⛔ FUSION DES ORCHESTRATIONS — PLAN VALIDÉ, **ET SON ÉTAPE 1 EST À RE-ARBITRER**
+
+> **Fusionner ≠ câbler.** Le gel du rang 6 couvre le **câblage** vers l'app ;
+> la **fusion** n'en dépend pas (mesuré : `actuaria_app.py` ne contient
+> **0 occurrence** de `pipeline_agents` sur 5 208 lignes).
+
+**Ce que la fusion ne peut PAS être, mesuré** : `TarifNonVie` porte
+`glm_frequence` et `glm_cout` — **c'est structurellement un tarif GLM**, il ne
+peut pas porter un XGBoost ; et **aucun champ du plan** ne désigne un moteur.
+*L'agent SÉLECTIONNE, le déclaratif TARIFE : ce sont deux moitiés qui ne se sont
+jamais rencontrées.* **La fusion est un JOINT, pas une déduplication.**
+
+| # | étape | euro |
+|---|---|---|
+| **1** | **Extraire le préambule commun** (`controler_qualite` avant A2) en une porte unique | ⛔ **VOIR L'ENCADRÉ — pas « aucun »** |
+| **2** | La **porte unique** : un point d'entrée qui appelle le préambule puis délègue | aucun |
+| **3** | Le chemin agent gagne l'**équilibre `k`** — ou déclare pourquoi il n'en a pas | ⛔ bouge, **~11 %** mesuré |
+| **4** | *(remplacé par l'architecture de comparaison des primes, ci-dessous)* | — |
+| **5** | Étapes 2 à 5 de `unite_exposition`, **sur un chemin unique** | aucun |
+
+> ### ⛔⛔ J'AVAIS ÉCRIT « AUCUN EURO » SUR L'ÉTAPE 1. C'EST FAUX, ET LA MESURE LE DIT.
+>
+> Ma justification était : *« les deux chemins font déjà ces gestes, alignés
+> depuis 1b/1c »*. **Le geste de la couche qualité, non.** `controler_qualite`
+> n'a qu'**un** appelant de production — le déclaratif (`qualite/C4`).
+>
+> Mesuré le 31/08 sur un même fichier (30 fréquences < 0, 30 coûts < 0,
+> 30 expositions ≤ 0) :
+>
+> ```
+>   couche qualite : 90 lignes IMPOSSIBLES detectees -> BLOQUE (9 % >= 5 %)
+>     exclusions : frequence_negative 30 · cout_negatif 30 · exposition_non_positive 30
+>
+>   chemin agent   : 1000 -> 970 lignes
+>     il n exclut que les 30 d exposition
+> ```
+>
+> ⛔ **Le chemin agent tarife donc aujourd'hui sur 60 lignes à fréquence ou coût
+> NÉGATIFS.** Lui brancher la couche qualité **déplace un euro ET introduit un
+> blocage** avec signature nominative.
+>
+> **L'étape 1 doit être scindée**, et seule la première moitié est sans euro :
+>
+> | | geste | euro |
+> |---|---|---|
+> | **1-A** | extraire le préambule en une fonction partagée, **appelée par le seul chemin déclaratif** | ✅ **aucun** — refactor pur, comportement identique |
+> | **1-B** | **brancher le chemin agent dessus** | ⛔ **bouge** : exclusions neuves + blocage à 5 % |
+>
+> **Recommandation : faire 1-A maintenant, et 1-B après arbitrage explicite.**
+> *Je ne déplace pas un prix sur une validation obtenue quand j'annonçais
+> « aucun euro ».*
+
+## ⛔⛔ ARCHITECTURE DE COMPARAISON DES PRIMES — VALIDÉE LE 31/08/2026, **AUCUN CODE SANS NOUVEAU GO**
+
+> **Remplace l'arbitrage ④ de la fusion.** Le système tarife **toujours** et rend
+> une prime finale. Le GLM reste le **défaut**, avec sa raison écrite
+> (lisibilité). Les autres modèles publient **aussi** leur prime, avec l'écart
+> chiffré. **L'actuaire peut choisir explicitement une autre prime**, en
+> connaissance de cause.
+
+### LA FORMULE — composition pour TOUS les modèles
+
+```
+  prime_pure(x) = lambda(x) x severite(x) + prime_grave_unitaire
+                  le tout x k propre x exposition
+```
+
+| composante | d'où elle vient | à construire ? |
+|---|---|---|
+| `lambda(x)` | **CANN**, TabNet, GLM Poisson, ou tout ML de la **cible 1** | non |
+| `severite(x)` | **GLM de sévérité, famille déclarée au plan** (`famille_severite`) | non |
+| `prime_grave_unitaire` | `core/severite.py` — **déjà partagé par les deux chemins** | non |
+| `k` | **par APPARIEMENT** fréquence × coût | ⛔ **oui — le seul vrai travail** |
+
+### ⚠️⚠️ LES TROIS PIÈCES EXISTAIENT DÉJÀ, PERSONNE NE LES ASSEMBLAIT
+
+Mesuré le 31/08 : `pipeline_agents` arbitre **trois** cibles, et la deuxième est
+exactement la sévérité qu'il faut —
+
+```
+  CIBLE 1  FREQUENCE  modeles_dl=("cann","tabnet")  ponderer=True   portefeuille entier
+  CIBLE 2  COUT       modeles_dl=("tabnet",)        ponderer=False  SINISTRES seulement
+  CIBLE 3  PRIME PURE modeles_dl=("tabnet",)                        portefeuille entier
+
+  core/severite.py : « CIBLE — cout_ecrete / nb_sinistres, le cout PAR SINISTRE »
+  CibleSeverite    : severite, seuil_ecretement, prime_grave_unitaire, ...
+```
+
+**La décomposition existait. Personne ne la multipliait.**
+
+### POURQUOI LE COÛT EST FIXÉ AU GLM DU PLAN, ET PAS AU « MEILLEUR » MODÈLE DE COÛT
+
+> **Un tableau de comparaison fait varier UNE chose à la fois.** Si la prime CANN
+> changeait *à la fois* de fréquence et de coût, l'écart avec le GLM deviendrait
+> **inattribuable** : l'actuaire ne saurait plus ce qu'il achète.
+
+⚠️ Et un argument de **stabilité** : le vainqueur de la cible 2 peut changer d'un
+run à l'autre. La prime CANN bougerait alors **sans que le CANN ait changé** —
+un prix qui varie pour une raison invisible, le motif même de cet audit.
+
+### ✅ CE QUE CETTE ARCHITECTURE RÉPARE — et une limite que j'avais annoncée À TORT
+
+J'avais écrit : *« une prime ML sortira sans `frequence_annuelle` ni
+`cout_moyen` »*. **C'est faux dès qu'on compose.** En multipliant fréquence ×
+sévérité : **tous** les modèles retrouvent la décomposition, le contrat de
+sortie de `tarifer()` est respecté **à l'identique** (mêmes sept champs), et la
+condition « décomposition dite si absente » **devient sans objet**.
+
+⚠️ **Le CANN redevient un producteur de prime COMPLÈTE.** Il est un modèle de
+**fréquence par construction** — `exp(GLM_gele + offset·log(expo) + residu)` —
+et c'est exactement ce que la composition attend de lui.
+
+⚠️ **La cible 3 (prime pure directe) ne se décompose pas** : elle prédit un seul
+nombre. Elle garde son rôle de **VÉRIFICATION** — *« ce modèle n'est pas
+décomposable ; il sert à contrôler que la composition ne perd rien »* — et cela
+doit être écrit au livrable, jamais laissé à deviner.
+
+### ⛔ LES QUATRE CONDITIONS, SANS LESQUELLES CETTE ARCHITECTURE NE DOIT PAS ÊTRE CODÉE
+
+| # | condition | pourquoi, mesuré |
+|---|---|---|
+| **1** | **un `k` par APPARIEMENT** fréquence × coût, calculé et tracé | les `k` mesurés vont de **0,79 à 1,13** entre modèles ML ; réutiliser celui du GLM serait un nombre fabriqué |
+| **2** | **le nombre d'ÉPOQUES publié à côté de tout `k` DL** | mesuré : TabNet/prime_pure rend `k = 808,98` à **5 époques** et `k = 1,65` à **40**. *À 5 époques le coefficient mesure l'entraînement, pas le modèle* |
+| **3** | **`A5` doit exposer `feature_names`** dans son résultat, comme `A4` | mesuré : la liste n'existe que dans `rapport['feature_names']`. **Sans elle, aucune prime DL n'est reproductible** |
+| **4** | **le choix de l'actuaire NOMINATIF et TRACÉ**, comme `profil_valide_par` et `qualite_validee_par` | sinon on aurait créé **un levier sur le prix sans signature** — pire que le défaut corrigé |
+
+### ⚠️ CE QUE LA COMPARAISON MONTRERA, ET QUI N'EXISTE NULLE PART AUJOURD'HUI
+
+Mesuré sur 1 200 contrats, **après calage propre à chaque modèle** — les totaux
+convergent tous vers la charge observée, et les primes **individuelles**
+divergent :
+
+```
+  modele                  ecart median /GLM     p90       max
+  lineaire_regularise                 8,9%     23,2%      67%
+  catboost                           30,5%     78,1%     943%
+  gbm                                40,2%    100,0%     469%
+  xgboost                            54,1%    124,4%     621%
+  xgboost_tweedie                    74,8%    155,9%   2 619%
+```
+
+> **Les modèles sont d'accord sur le total et en profond désaccord sur QUI paie.**
+> C'est ce que le classement par Gini **masque** : deux modèles de Gini voisins
+> peuvent tarifer le même contrat du simple au double.
+
+⚠️ **Borne déclarée** : ces écarts sont **relatifs**, donc ils explosent quand la
+prime de référence est minuscule — le `2 619 %` est un cas de ce genre. **Ce
+sont la médiane et le p90 qui portent le message, pas le maximum.**
+
+### ⛔ ORDRE : APRÈS L'ÉTAPE 1 DE LA FUSION
+
+Les primes comparées doivent venir des **mêmes données**, passées par la **même
+couche qualité** — sinon une part de l'écart affiché viendrait des deux chemins,
+pas des modèles. **Aucun code sur cette architecture avant un go explicite.**
+
 ### ⛔ À FAIRE EN FIN DE TRI — LES JUMEAUX ENTRE CHEMINS
 
 > **Arbitré le 30/08 : pas maintenant, mais noté.** `pipeline/C2` a montré qu'un
