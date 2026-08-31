@@ -14,10 +14,10 @@
 ║     Imputation valeurs manquantes · Correction types · Doublons             ║
 ║                                                                              ║
 ║  2. TRAITEMENT DES OUTLIERS                                                  ║
-║     Winsorisation (méthode IQR) · Plafonnement réglementaire                ║
+║     Winsorisation par QUANTILES (0,01 / 0,99) · Plafonnement reglementaire  ║
 ║                                                                              ║
 ║  3. ENCODAGE VARIABLES CATÉGORIELLES                                        ║
-║     Weight of Evidence (WoE) · Target Encoding · One-Hot                   ║
+║     Encodages IMPLEMENTES : one_hot et label. Rien d'autre.                ║
 ║                                                                              ║
 ║  4. CALCUL DE L'EXPOSITION                                                   ║
 ║     Offset GLM Poisson · Fraction d'année · Validation                      ║
@@ -42,7 +42,7 @@
 ║  %run '/tmp/actuaria/agents/a2_preprocessing.py'          ║
 ║                                                                              ║
 ║  agent_a2 = AgentA2Preprocessing()                                          ║
-║  result   = agent_a2.run(result_a1)  # Passe le résultat de A1             ║
+║  result   = agent_a2.run(result_a1, plan=plan)   # `plan` est EXIGE        ║
 ║                                                                              ║
 ║  AUTEUR   : ActuarIA — Système Actuariel IA                                 ║
 ║  VERSION  : 1.0                                                              ║
@@ -166,7 +166,11 @@ logger = logging.getLogger('actuaria.a2')
 # par pipeline_complet. Écrêter sans réinjecter, c'est écrêter les graves du
 # PRIX mais pas de la RÉALITÉ.
 #
-# ⚠ RESTE À TRAITER (reliquat de Phase 2, hors périmètre de ce correctif) : les
+# ⚠️⚠️ CONSTAT `a2/C12` — CE COMMENTAIRE DECRIVAIT UNE LISTE DEJA SUPPRIMEE.
+# Il annoncait << RESTE A TRAITER ... les trois entrees ci-dessous >> et
+# renvoyait a `SEUILS_WINSOR`, retire depuis. *Deux commentaires du meme
+# fichier se contredisaient ; celui-ci decrivait un etat revolu.*
+# CE QUI RESTE VRAI, et qui est la raison de le garder : les
 # trois entrées ci-dessous sont des FACTEURS, et c'est une liste codée en dur
 # SPÉCIFIQUE À UNE LoB (valeur_venale/kilometrage_annuel = auto ; ca_annuel_eur
 # = rcpro). A2.fit/transform winsorise déjà les facteurs GÉNÉRIQUEMENT, depuis le
@@ -180,8 +184,11 @@ logger = logging.getLogger('actuaria.a2')
 # agents de la Direction Non-Vie et ne traitent que du Non-Vie.
 #
 # Ces variables seront encodées selon la méthode appropriée
-# Justification : l'encodage WoE est préféré pour les GLM car il
-# préserve la relation monotone avec la variable cible.
+# ⚠️⚠️ CONSTAT `a2/C3` — CETTE JUSTIFICATION PORTAIT SUR UN ENCODAGE QUI
+# N'EXISTE PAS. Le module n'implemente que `label` et `one_hot`, et les
+# 20 plans n'utilisent que ces deux-la. *Justifier un choix qu'on n'a pas
+# fait laisse croire qu'on l'a fait.* Si WoE devient souhaitable, il se
+# declarera au plan (`Encodage` est un `Literal`, donc une porte).
 # Le One-Hot est utilisé pour les variables à faible cardinalité (< 5 modalités).
 #
 # ⚠ 'sexe' NE FIGURE VOLONTAIREMENT DANS AUCUNE LISTE D'ENCODAGE.
@@ -271,7 +278,15 @@ _LIBELLE_IMPUTATION = {'median': 'mediane', 'mean': 'moyenne', 'mode': 'mode'}
 # DATA DICTIONNAIRE — Traçabilité des variables dérivées
 # Exigence : ACPR-2022-P-01 §3.2
 DATA_DICTIONNAIRE = {
+    # ⚠️⚠️ CONSTAT `a2/C13` — DOCUMENTEE ICI, PRODUITE PAR PERSONNE.
+    # Mesure du 01/09 : AUCUN des 20 plans ne la produit, aucune derivee
+    # ne la fabrique. *Un dictionnaire de tracabilite ACPR qui decrit une
+    # colonne inexistante fait croire qu'elle circule.* L'entree est
+    # CONSERVEE et MARQUEE : la retirer effacerait la trace du contrat
+    # qu'un plan pourra vouloir honorer ; la laisser muette la ferait
+    # passer pour une colonne vivante.
     'log_cout_total_sinistres': {
+        'statut': 'DECLAREE, produite par aucun plan au 01/09/2026',
         'source': 'cout_total_sinistres',
         'operation': 'log1p(max(x, 0))',
         'justification': (
@@ -383,7 +398,10 @@ class AgentA2Preprocessing:
         models_path='/tmp/actuaria',
         audit_path ='/tmp/actuaria',
     )
-    result_a2 = agent_a2.run(result_a1)
+    # ⚠️ Constat `a2/C10` : `plan=` est EXIGE depuis la Phase 2 ;
+    # sans lui le module rend `success=False`. L'exemple
+    # montrait un appel que le code REFUSE.
+    result_a2 = agent_a2.run(result_a1, plan=plan)
 
     df_pret   = result_a2['dataframe']     # Données prêtes pour GLM/ML
     rapport   = result_a2['rapport']       # Rapport des transformations
@@ -529,6 +547,8 @@ class AgentA2Preprocessing:
 
             # ── ÉTAPE 3 : EXPOSITION ──────────────────────────────────────────
             logger.info(f"[{audit_id}] Étape 3/6 : Calcul/validation exposition")
+            # ⚠️ LE COMPTE SE PREND AVANT LE GESTE — constat `a2/C5`, residu.
+            _lignes_avant_expo = len(df)
             df, stats_expo = self._traiter_exposition(df, sous_branche, plan)
             rapport['etapes'].append('exposition')
             rapport['transformations']['exposition'] = stats_expo
@@ -537,9 +557,17 @@ class AgentA2Preprocessing:
             # l'exposition. *Un avertissement affiché toujours cesse d'être un
             # signal — la règle est déjà celle de `synthese_qualite_donnees`.*
             _anos_expo = stats_expo.get('anomalies') or []
+            # ⚠️⚠️ ON TRIE PAR REGLE — constat `a2/C5`, residu. Tout partait
+            # dans `corrections`, quelle que soit la regle portee par
+            # l'anomalie : le rapport signe nommait mal l'acte.
+            # ⚠️ Et `lignes_initiales` valait `len(df)` APRES exclusion : le
+            # rapport annoncait << 360 -> 360 >> sur un fichier qui en portait
+            # 400. *Un compte pris apres le geste ne peut pas montrer le geste.*
             _rapport_qualite_expo = RapportQualite(
-                lignes_initiales=len(df), lignes_retenues=len(df),
-                exclusions=[], corrections=_anos_expo, signalements=[],
+                lignes_initiales=_lignes_avant_expo, lignes_retenues=len(df),
+                exclusions=[a for a in _anos_expo if a.regle == 1],
+                corrections=[a for a in _anos_expo if a.regle == 2],
+                signalements=[a for a in _anos_expo if a.regle == 3],
                 escalade_declenchee=False, anomalies_au_dela_seuil=[],
                 seuil=0.05, validee_par=None,
                 # ⚠️ `t_debut`, jamais un second appel à l'horloge : deux
@@ -1259,7 +1287,7 @@ class AgentA2Preprocessing:
         _n0 = len(df)
 
         def _noter(code, role, colonne, mask, description, correction,
-                   effet=None):
+                   effet=None, regle=2):
             """Une mutation d'A2, dite dans le vocabulaire de la couche qualité.
 
             ⚠️ MÊME CLASSE, MÊME SYNTHÈSE. Écrire ici un second vocabulaire
@@ -1270,7 +1298,14 @@ class AgentA2Preprocessing:
             if idx.size == 0:
                 return
             _anomalies.append(Anomalie(
-                code=code, regle=2, role=role, colonne=colonne,
+                # ⚠️⚠️ LA REGLE VIENT DE L'APPELANT — constat `a2/C5`, residu.
+                # Elle valait `2` EN DUR : toute mutation d'A2 devenait donc une
+                # << correction >>, y compris une EXCLUSION et une DECLARATION.
+                # Le rapport signe annoncait << 40 ligne(s) CORRIGEE(S) >> deux
+                # lignes au-dessus de son propre detail qui disait << EXCLUE(S) >>.
+                # *La classe portait deja le champ ; c'est l'appelant qui ne le
+                # remplissait pas.*
+                code=code, regle=regle, role=role, colonne=colonne,
                 nb_lignes=int(idx.size), proportion=idx.size / max(_n0, 1),
                 index=tuple(int(i) for i in idx), description=description,
                 correction=correction, effet_agrege=effet))
@@ -1330,7 +1365,9 @@ class AgentA2Preprocessing:
                    f"inventee -- une exposition pleine supposee pour tous "
                    f"SOUS-ESTIME le risque des contrats partiels. Fournissez "
                    f"la colonne, ou corrigez le nom declare au plan.",
-                   correction='aucune -- absence DECLAREE, rien invente')
+                   correction='aucune -- absence DECLAREE, rien invente',
+                   # ⚠️ REGLE 3 : elle CONSTATE, elle ne corrige rien.
+                   regle=3)
             stats['anomalies'] = _anomalies
             self.parametres['stats_expo'] = stats
             logger.warning(
@@ -1374,9 +1411,14 @@ class AgentA2Preprocessing:
                    f"couche qualite du chemin declaratif -- impossible, donc "
                    f"exclu.",
                    correction='ligne EXCLUE (impossible)',
-                   effet=EffetAgrege(
-                       colonne=col_expo, total_avant=_avant,
-                       total_apres=float(df.loc[~_masque_neg, col_expo].sum())))
+                   # ⚠️⚠️ REGLE 1 : elle EXCLUT. Et AUCUN effet agrege — celui
+                   # d'avant publiait << EFFET SUR LE TOTAL : 299 -> 299
+                   # (+0,0 %) >> sur un geste qui retire 10 % du fichier.
+                   # *Retirer des lignes d'exposition NULLE ne change aucun
+                   # total d'exposition : le chiffre rassurait sur la mauvaise
+                   # grandeur.* Ce qui bouge est le COMPTE DE LIGNES, et la
+                   # description le dit deja.
+                   regle=1)
             df = df.loc[~_masque_neg].reset_index(drop=True)
             _masque_neg = np.zeros(len(df), dtype=bool)
             stats['lignes_exclues'] += nb_negatifs
@@ -1499,7 +1541,14 @@ class AgentA2Preprocessing:
         3. L'exposition est bien dans ]0, 1]
         4. Le DataFrame est prêt pour les agents A3/A4/A5
 
-        Supprime également les colonnes non utilisables par les modèles :
+        ⚠️⚠️ CONSTAT `a2/C6` — CETTE PHRASE DISAIT L'INVERSE DU CODE, TROIS
+        LIGNES PLUS BAS. Elle annoncait << Supprime egalement les colonnes
+        non utilisables >> ; le code dit << On ne supprime pas >> et cree un
+        DataFrame de modelisation separe. `colonnes_supprimees` reste vide,
+        `id_contrat` est toujours la. *Deux phrases du meme docstring se
+        contredisaient ; c'est la premiere qui mentait.*
+        NE supprime AUCUNE colonne. Les colonnes non utilisables par les
+        modeles sont simplement laissees hors du DataFrame de modelisation :
         - Identifiants (id_contrat, id_assure)
         - Dates brutes (date_souscription)
         - Colonnes object non encodées
@@ -1804,8 +1853,9 @@ class AgentA2Preprocessing:
                 "→ Procéder avec précaution à l'agent A3.\n"
                 "→ Les colonnes non encodées seront ignorées par le GLM.\n"
                 "→ Investiguer manuellement leur pertinence actuarielle.\n"
-                "→ Relancer A2 avec une configuration d'encodage étendue "
-                "  si ces colonnes sont importantes."
+                "→ DECLARER ces colonnes au PLAN (`facteurs`, avec leur "
+                "`encodage`) si elles sont importantes : c'est la seule "
+                "voie depuis la Phase 1."
             )
         else:
             niveau3 = (
@@ -1902,7 +1952,10 @@ if __name__ == '__main__':
         audit_path  = '/tmp/actuaria',
         verbose     = True
     )
-    result_a2 = agent_a2.run(result_a1)
+    # ⚠️ Constat `a2/C10` : `plan=` est EXIGE depuis la Phase 2 ;
+    # sans lui le module rend `success=False`. L'exemple
+    # montrait un appel que le code REFUSE.
+    result_a2 = agent_a2.run(result_a1, plan=plan)
 
     # Cellule 5 — Résultats
     df_pret = result_a2['dataframe']

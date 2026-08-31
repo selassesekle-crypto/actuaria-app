@@ -66,6 +66,26 @@ _HORS_ASSIETTE: dict[tuple[str, str], str] = {
         "l'exposition nulle pareil), pas epingle. `a2/C5` reste OUVERT. "
         "Retirer la mention detruirait une vraie trace ; une mention n'est "
         "pas une fermeture.",
+    ('a2/C9', 'test_a2_neuf_constats.py'):
+        "Cite dans la section << CE QUI RESTE OUVERT >> de l'en-tete, avec sa "
+        "raison, jamais epingle. `a2/C9` -- une moyenne rangee sous la cle "
+        "`medianes` -- est RANG 5, arbitre par Selasse : renommer la cle change "
+        "le format d'un JSON persiste. Il reste OUVERT. *Un lot qui ferme neuf "
+        "constats doit dire lesquels il ne ferme pas, et pourquoi.*",
+    ('a2/C16', 'test_a2_neuf_constats.py'):
+        "Cite dans la section << CE QUI RESTE OUVERT >>, avec sa raison, jamais "
+        "epingle. `__init__` cree `/tmp/actuaria` -- et le constat a un JUMEAU "
+        "OUVERT chez le voisin, `a1/C7`, MEME MECANISME. Le corriger d'un seul "
+        "cote recreerait tres exactement l'asymetrie entre voisins que cet "
+        "audit poursuit ; et ce n'est pas un texte : instancier cesserait "
+        "d'ecrire sur le disque, ce qui est un changement de comportement. "
+        "**Les deux ensemble, dans leur propre lot.**",
+    ('a1/C7', 'test_a2_neuf_constats.py'):
+        "Cite comme LE JUMEAU de `a2/C16`, jamais epingle -- et c'est la "
+        "mention qui rend la retenue lisible. `a1/C7` dit qu'instancier A1 "
+        "ecrit sur le disque (`/tmp/actuaria/{audit,config}`) ; `a2/C16` dit "
+        "la meme chose d'A2. *Nommer le jumeau est ce qui empeche de fermer "
+        "l'un en laissant l'autre.* Les deux restent OUVERTS.",
     ('a2/C5', 'test_portes_du_plan.py'):
         "Cite comme MOTIF DU REJET d'une des deux solutions envisagees pour "
         "`pipeline/C8`, jamais epingle. Face a des NaN qui tuent le GLM, un "

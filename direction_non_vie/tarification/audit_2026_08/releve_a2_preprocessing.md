@@ -280,6 +280,68 @@ Le diagnostic VERT dirait de même « La Winsorisation sur **0** variable(s) ré
 > ⛔ **NOMMÉ, NON TRAITÉ** : le `Pandas4Warning` vient de NOTRE `select_dtypes`
 > et annonce une rupture pandas 4. Le corriger changerait **quelles colonnes
 > A2 encode** — un euro peut bouger. **Arbitrage requis, hors de ce lot.**
+> ✅ **`a2/C3` `a2/C4` `a2/C5` `a2/C6` `a2/C10` `a2/C11` `a2/C12` `a2/C13` `a2/C14`** · **FERMÉS le 01/09/2026.** *Preuve : `test_a2_neuf_constats.py`,
+> 13 contrôles, **13 violations plantées**, une par contrôle.*
+>
+> ### ⛔⛔ `C5` — LE CODE ÉTAIT CORRIGÉ, LE RAPPORT MENTAIT, ET C'EST MON LOT
+>
+> Le constat disait « exposition = 0 → à exclure » quand le code **imputait par
+> la médiane**. L'étape 1b du chantier `unite_exposition` l'a corrigé : mesuré,
+> **400 lignes → 360**, la ligne est bien exclue. ⚠️ **Mais le rapport SIGNÉ
+> disait autre chose — trois défauts dans un seul message :**
+>
+> ```
+>   ✔ 40 ligne(s) CORRIGEE(S) : 40x exposition_non_positive_exclue
+>                               (ligne EXCLUE (impossible)).
+>      ⚠ EFFET SUR LE TOTAL de « exposition » : 299 -> 299 (+0.0 %).
+>   lignes : 360 -> 360
+> ```
+>
+> **①** « CORRIGÉE(S) » pour des lignes **EXCLUES** — le verbe contredit son
+> propre détail deux lignes plus bas. *Racine : `_noter` codait `regle=2` **en
+> dur**, et le rapport rangeait tout dans `corrections` sans regarder la règle.
+> La classe portait déjà le champ ; c'est l'appelant qui ne le remplissait pas.*
+>
+> **②** « **+0,0 %** » sur un geste qui retire **10 % du fichier**. *Retirer des
+> lignes d'exposition NULLE ne change évidemment aucun total d'exposition : la
+> grandeur qui bouge est le COMPTE DE LIGNES.* C'est `qualite/C3` **à
+> l'envers** — là un compte cachait un effet, ici un effet cachait un compte.
+>
+> **③** `lignes_initiales` valait **360**, pris **après** le geste. *Un compte
+> pris après l'acte ne peut pas montrer l'acte.*
+>
+> ⚠️⚠️ **ET UNE TROISIÈME ASYMÉTRIE, TROUVÉE DANS MON PROPRE CORRECTIF.**
+> L'étape 4 d'`unite_exposition` a fait publier leur description aux
+> **corrections**, puis aux **signalements** — et a laissé les **exclusions**
+> muettes. *Une exclusion est pourtant le geste le plus fort des trois : elle
+> RETIRE des contrats du calcul.*
+>
+> ### LES HUIT AUTRES — des phrases qui décrivaient un AUTRE code
+>
+> `C3` WoE et Target Encoding annoncés, **jamais implémentés** · `C4` « méthode
+> IQR » pour des **quantiles 0,01 / 0,99** · `C6` « Supprime également les
+> colonnes » **trois lignes au-dessus de « On ne supprime pas »** · `C10` un
+> exemple, **3 fois**, que le module **refuse** (`A2-9` le vérifie *par
+> exécution*) · `C11` un conseil renvoyant à une configuration **supprimée** ·
+> `C12` deux commentaires du même fichier qui **se contredisaient** · `C13` une
+> colonne au dictionnaire ACPR **produite par aucun des 20 plans** · `C14`
+> « 7 tests » pour **2 méthodes**.
+>
+> ⚠️ **`C13` est MARQUÉ, pas effacé** : *la retirer effacerait la trace du
+> contrat qu'un plan pourra vouloir honorer ; la laisser muette la ferait
+> passer pour une colonne vivante.* `A2-12` **re-dérive l'orphelinat** au lieu
+> de recopier une mesure d'hier.
+>
+> ### ⛔ CE QUI RESTE OUVERT, ET POURQUOI
+>
+> **`a2/C9`** — rang 5, arbitré : renommer la clé change un JSON persisté.
+>
+> **`a2/C16`** — `__init__` crée `/tmp/actuaria`. **Il a un JUMEAU OUVERT chez
+> le voisin : `a1/C7`, même mécanisme.** *Le corriger d'un seul côté recréerait
+> exactement l'asymétrie que cet audit poursuit* — et ce n'est pas un texte :
+> instancier cesserait d'écrire sur le disque. **Les deux ensemble, dans leur
+> propre lot.**
+
 **C16** — `__init__` crée `/tmp/actuaria` ([l.363](direction_non_vie/tarification/a2_preprocessing/agent.py:363)) — même mécanisme qu'A1.
 
 ### D — Vérifié comme BON (7)

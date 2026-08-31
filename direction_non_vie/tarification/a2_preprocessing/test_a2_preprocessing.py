@@ -1,6 +1,10 @@
 """
 Tests A2 Preprocessing v1.0 — Feature Engineering Non-Vie
-7 tests · données synthétiques freMTPL2
+donnees synthetiques freMTPL2
+
+⚠️⚠️ CONSTAT `a2/C14` : cet en-tete annoncait << 7 tests >>. Le nombre est
+RETIRE, pas remplace par un autre compte a la main : `unittest` le publie
+a chaque execution, et lui ne perime pas. *Meme geste que `a5/C9`.*
 """
 import sys, os, unittest
 import numpy as np

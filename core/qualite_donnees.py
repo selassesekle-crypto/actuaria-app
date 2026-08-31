@@ -950,6 +950,14 @@ def synthese_qualite_donnees(rapport: Optional["RapportQualite"]) -> Optional[st
         tot = sum(a.nb_lignes for a in rapport.exclusions)
         det = " ; ".join(f"{a.nb_lignes}x {a.code}" for a in rapport.exclusions)
         lignes.append(f"✔ {tot} ligne(s) EXCLUE(S) (impossible) : {det}.")
+        # ⚠️⚠️ LA TROISIÈME BRANCHE, TROUVÉE DANS MON PROPRE CORRECTIF.
+        # L'étape 4 du chantier `unite_exposition` a fait publier leur
+        # description aux CORRECTIONS puis aux SIGNALEMENTS — et a laissé les
+        # EXCLUSIONS muettes. *Une exclusion est pourtant le geste le plus
+        # fort des trois : elle RETIRE des contrats du calcul.* Le rapport
+        # signé nommait le code sans dire pourquoi la ligne était impossible.
+        for a in rapport.exclusions:
+            lignes.append(f"   ⚠ {a.description}")
     if rapport.corrections:
         tot = sum(a.nb_lignes for a in rapport.corrections)
         det = " ; ".join(f"{a.nb_lignes}x {a.code} ({a.correction})" for a in rapport.corrections)
