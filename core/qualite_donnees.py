@@ -8,9 +8,13 @@ QUATRE RÈGLES (toutes pilotées par les RÔLES du plan — exposition,
 cible_frequence, cible_cout, identifiant_contrat — jamais par un nom de colonne
 codé en dur ; un plan futur jamais vu en bénéficie automatiquement) :
 
-  1. IMPOSSIBLE MATHÉMATIQUEMENT (fréquence < 0, coût < 0, exposition ≤ 0,
-     doublon sur l'identifiant de contrat déclaré) → exclut la LIGNE. Comptée
-     et listée dans le rapport.
+  1. IMPOSSIBLE MATHÉMATIQUEMENT (fréquence < 0, exposition ≤ 0, doublon sur
+     l'identifiant de contrat déclaré) → exclut la LIGNE. Comptée et listée
+     dans le rapport.
+     ⚠️⚠️ LE COÛT A QUITTÉ CETTE RÈGLE LE 31/08/2026 (`qualite/C8`, rang 1).
+     Un COÛT est ≥ 0 ; une CHARGE NETTE — paiements moins recours — ne l'est
+     pas. Mesuré sur donnée réelle : 8,82 % des contrats, et les exclure
+     sur-tarifait de 14,9 %. Il est désormais règle 3.
   2. IMPLAUSIBLE MAIS PAS IMPOSSIBLE, règle établie (exposition > 1) → corrige
      automatiquement (plafond 1.0) et signale la correction.
   3. AMBIGU (coût > 0 sans sinistre, ou l'inverse ; fréquence non entière ;
@@ -29,6 +33,8 @@ et paramétrés par colonne — A1 pourra les réutiliser (convergence future).
 """
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
 from typing import Optional, List, Tuple, TYPE_CHECKING
 
@@ -52,10 +58,19 @@ class QualiteBloquante(Exception):
     def __init__(self, rapport: "RapportQualite"):
         self.rapport = rapport
         codes = ", ".join(rapport.anomalies_au_dela_seuil) or "?"
+        # ⚠️⚠️ LA QUESTION EST POSÉE ICI, ET C'EST LE SEUL ENDROIT QUI AIT DU
+        # SENS — constat `qualite/C8`. `vulture` a signalé
+        # `question_charges_negatives` comme fonction MORTE : elle n'avait
+        # **aucun appelant de production**. *C'est la forme de `socle/C2` — de
+        # la plomberie posée que rien n'alimente — dans le lot même qui ferme
+        # ce motif.* Le blocage est le moment où l'actuaire décide : la
+        # question doit y être, pas ailleurs.
+        _q = question_charges_negatives(rapport)
         super().__init__(
             f"Controle qualite BLOQUE : anomalie(s) [{codes}] touchant >= "
             f"{rapport.seuil:.0%} des lignes. Confirmation actuarielle nominative "
             f"requise (qualite_validee_par) pour poursuivre."
+            + (f"\n\n{_q}" if _q else "")
         )
 
 
@@ -114,6 +129,9 @@ class Anomalie:
     #: message qui DÉCIDE est celui du rapport BLOQUÉ, et qu'un rapport bloqué
     #: n'applique par construction aucune correction.
     effet_agrege: EffetAgrege | None = None
+    #: Regle 3 des charges nettes negatives : le total et la borne, calcules a
+    #: la DETECTION pour que la question se pose sur un rapport BLOQUE.
+    resume_charges_negatives: ResumeChargesNegatives | None = None
 
 
 @dataclass
@@ -329,7 +347,7 @@ def controler_qualite(
     anomalies: List[Anomalie] = []
 
     def _ajouter(code, regle, role, colonne, mask, description, correction=None,
-                 effet_agrege=None):
+                 effet_agrege=None, resume_cn=None):
         idx = np.flatnonzero(np.asarray(mask, dtype=bool))
         if idx.size == 0:
             return
@@ -338,17 +356,45 @@ def controler_qualite(
             nb_lignes=int(idx.size), proportion=idx.size / max(n0, 1),
             index=tuple(int(i) for i in idx),
             description=description, correction=correction,
-            effet_agrege=effet_agrege))
+            effet_agrege=effet_agrege, resume_charges_negatives=resume_cn))
 
     # ── RÈGLE 1 : IMPOSSIBLE → exclure ───────────────────────────────────────
     if col_freq in df.columns:
         _ajouter('frequence_negative', 1, 'cible_frequence', col_freq,
                  detecter_negatifs(df, col_freq),
                  f"cible_frequence ('{col_freq}') < 0 — nombre de sinistres negatif, impossible.")
+    # ⚠️⚠️ LE COÛT A QUITTÉ LA RÈGLE 1 — constat `qualite/C8`, RANG 1, 31/08/2026.
+    # La doctrine confondait deux grandeurs : un COÛT (un prix) est >= 0, mais
+    # `cout_total_sinistres` est une CHARGE NETTE — paiements moins recours — et
+    # elle peut légitimement être négative. Subrogation, sauvetage, récupération
+    # sur tiers : l'assureur encaisse plus qu'il n'a payé.
+    #
+    # Mesuré sur la seule donnée réelle versionnée (14 243 sinistres) :
+    #   1 116 contrats-annee sur 12 654 = 8,82 %, soit -563 749 EUR
+    #   les EXCLURE fait monter la prime moyenne de 926,55 a 1 065,03 EUR : +14,9 %
+    #
+    # ⚠️ ET AUCUN INDICE NE PERMET DE TRANCHER AUTOMATIQUEMENT. Les deux
+    # discriminants mesurés se chevauchent entièrement, et les deux groupes se
+    # disqualifient : 44 des 80 cas « couverts » réclament plus que ce qui a été
+    # payé, et AUCUN des 1 036 « non couverts » n'est aberrant (tous sous 1,87 x
+    # le coût moyen positif — une erreur de saisie produirait une queue).
+    # *Erreurs et recours coexistent ; ni l'un ni l'autre n'est la règle.*
+    #
+    # ⚠️⚠️ RÈGLE 3, DONC : signaler, CONSERVER, et ne décider à la place de
+    # personne. La doctrine du module l'écrit déjà — « AMBIGU -> NE DÉCIDE
+    # RIEN ». C'est exactement cela.
     if col_cout in df.columns:
-        _ajouter('cout_negatif', 1, 'cible_cout', col_cout,
-                 detecter_negatifs(df, col_cout),
-                 f"cible_cout ('{col_cout}') < 0 — cout negatif, impossible.")
+        _m_cout_neg = detecter_negatifs(df, col_cout)
+        _vals_cout = pd.to_numeric(df[col_cout], errors='coerce')
+        _ajouter('cout_net_negatif', 3, 'cible_cout', col_cout,
+                 _m_cout_neg,
+                 f"cible_cout ('{col_cout}') < 0 sur certaines lignes — une "
+                 f"charge NETTE negative peut etre un RECOURS legitime "
+                 f"(subrogation, sauvetage) ou une ERREUR DE SAISIE. Les deux "
+                 f"existent. Ces lignes sont CONSERVEES et signalees : ce "
+                 f"controle voit le portefeuille agrege, jamais le detail des "
+                 f"sinistres, et ne peut donc pas trancher.",
+                 resume_cn=_resume_charges_negatives(_vals_cout, _m_cout_neg))
     if col_expo in df.columns:
         _ajouter('exposition_non_positive', 1, 'exposition', col_expo,
                  detecter_non_positif(df, col_expo),
@@ -540,6 +586,138 @@ def _date_lisible(ts: Optional[str]) -> Optional[str]:
     jour = str(ts).split('T')[0]
     p = jour.split('-')
     return f"{p[2]}/{p[1]}/{p[0]}" if len(p) == 3 else jour
+
+
+#: ⚠️ Version de SCHÉMA de l'empreinte des positions — même patron que
+#: `EMPREINTE_SCHEMA` du plan. Elle bouge quand la COMPOSITION de ce qui est
+#: haché change, pour qu'une empreinte ancienne se reconnaisse comme HÉRITÉE au
+#: lieu de paraître simplement différente.
+EMPREINTE_REVUE_SCHEMA = 1
+
+
+def empreinte_positions(positions) -> str:
+    """SHA-256 des positions concernées, préfixé par sa version de schéma.
+
+    ⚠️⚠️ SANS ELLE, ON SAIT QU'UN ACTUAIRE A RÉPONDU, PAS SUR QUOI. Si le
+    fichier change et qu'on rejoue, la réponse **ne doit plus valoir** — et le
+    système doit le DÉTECTER, pas le supposer. C'est ce qui rend la réponse
+    opposable devant un commissaire : elle est attachée à un contenu, pas à une
+    intention.
+
+    ⚠️ Le préfixe `rN:` reprend la leçon de `PlanTarifaire.empreinte()` : un
+    comparateur lit le schéma **sans recalculer**, et une empreinte sans préfixe
+    est reconnue comme héritée plutôt que fausse.
+    """
+    charge = json.dumps({"schema": EMPREINTE_REVUE_SCHEMA,
+                         "positions": sorted(int(p) for p in positions)},
+                        sort_keys=True)
+    return (f"r{EMPREINTE_REVUE_SCHEMA}:"
+            f"{hashlib.sha256(charge.encode()).hexdigest()[:16]}")
+
+
+def annexe_revue_charges_negatives(rapport, df) -> list[dict]:
+    """Un cas par ligne, pour que l'actuaire VOIE ce qu'on lui demande de juger.
+
+    ⚠️⚠️ DEUX SURFACES, DEUX AUDIENCES — et la règle RGPD déjà posée n'est PAS
+    affaiblie. La SYNTHÈSE (rapport signé, circulé) ne cite ni valeur ni index,
+    et deux sentinelles le vérifient. Cette ANNEXE, elle, ne quitte pas le poste
+    de l'actuaire : elle porte la **position de la ligne dans SON fichier** —
+    une coordonnée que lui seul peut résoudre, jamais un identifiant client.
+
+    ⚠️⚠️ ET ELLE NE PROMET QUE CE QU'ELLE PEUT PRODUIRE. J'y avais d'abord prévu
+    « la somme des montants POSITIFS du contrat », mesurée comme le meilleur
+    discriminant. **Cette couche ne la voit pas** : elle reçoit une ligne par
+    CONTRAT, jamais le détail des sinistres. Le substitut testé —
+    `nb_sinistres > 0` — est vrai pour **100 %** des cas : il ne sépare rien.
+    *Une colonne que le code ne peut pas remplir est exactement le défaut que
+    cet audit poursuit.* Elle a été retirée.
+    """
+    cas = [a for a in (rapport.signalements or [])
+           if a.code == 'cout_net_negatif']
+    if not cas or df is None:
+        return []
+    a = cas[0]
+    col = a.colonne
+    valeurs = pd.to_numeric(df[col], errors='coerce')
+    positifs = valeurs[valeurs > 0]
+    moyen = float(positifs.mean()) if len(positifs) else 0.0
+    lignes = []
+    for pos in a.index:
+        nette = float(valeurs.iloc[pos])
+        lignes.append({
+            'position':    int(pos),
+            'charge_nette': round(nette, 2),
+            'ratio_cout_moyen_positif': (round(-nette / moyen, 3)
+                                         if moyen > 0 else None),
+        })
+    return lignes
+
+
+#: ⚠️⚠️ CE QUE LA QUESTION A BESOIN DE SAVOIR, CALCULÉ À LA DÉTECTION. Même
+#: leçon que `EffetAgrege` (`qualite/C3`) : le message qui DÉCIDE est celui du
+#: rapport BLOQUÉ, et un rapport bloqué ne reçoit pas le dataframe. Porter ces
+#: deux agrégats sur l'anomalie rend la question calculable sans lui.
+@dataclass(frozen=True)
+class ResumeChargesNegatives:
+    """Le total et la borne, pour que la question se pose sans le dataframe."""
+    total: float
+    ratio_max: float | None
+
+
+def _resume_charges_negatives(valeurs, mask) -> ResumeChargesNegatives:
+    """Le total et la borne des charges négatives, à la DÉTECTION."""
+    neg = valeurs[mask]
+    pos = valeurs[valeurs > 0]
+    moyen = float(pos.mean()) if len(pos) else 0.0
+    return ResumeChargesNegatives(
+        total=float(neg.sum()),
+        ratio_max=(round(float((-neg).max()) / moyen, 2)
+                   if moyen > 0 and len(neg) else None))
+
+
+def question_charges_negatives(rapport, df=None) -> str | None:
+    """La question posée à l'actuaire — NEUTRE, jamais orientée.
+
+    ⚠️⚠️ LA FORMULATION EST LE POINT DE CONCEPTION LE PLUS IMPORTANT DE CE LOT.
+    La version d'abord envisagée disait : « ces cas SEMBLENT ÊTRE DES RECOURS
+    LÉGITIMES — confirmez-vous ? ». **La mesure interdit cette phrase** : les
+    deux discriminants se chevauchent entièrement et les deux groupes se
+    disqualifient. Faire dire au système une conclusion que la donnée ne porte
+    pas serait le motif exact de cet audit.
+
+    ⚠️ Le texte dit donc ce qu'il SAIT et ce qu'il NE SAIT PAS, et il ne cite
+    aucun chiffre qu'il ne sache produire à cette couche.
+    """
+    cas = [a for a in (rapport.signalements or [])
+           if a.code == 'cout_net_negatif']
+    if not cas:
+        return None
+    a = cas[0]
+    # ⚠️ LU SUR L'ANOMALIE, PAS RECALCULÉ SUR LE DATAFRAME : un rapport BLOQUÉ
+    # n'en a pas, et c'est lui qui pose la question.
+    r = a.resume_charges_negatives
+    total = r.total if r else 0.0
+    borne = (f"Aucun ne depasse {r.ratio_max:.2f} fois le cout moyen positif du "
+             f"portefeuille." if (r and r.ratio_max) else "")
+    # ⚠️ LES NOMBRES SE FORMATENT UN PAR UN. Ma premiere version appliquait un
+    # `.replace(',', ' ')` sur TOUT le message pour l'espace des milliers : il
+    # mangeait les virgules de la PROSE — « (subrogation  sauvetage) »,
+    # « CONSERVER tout  EXCLURE tout ». *Un formatage global abime le texte
+    # qu'il traverse ; c'est une surface que l'actuaire lit.*
+    _n = f"{a.nb_lignes:,}".replace(',', ' ')
+    _t = f"{total:,.0f}".replace(',', ' ')
+    return (
+        f"{_n} contrat(s) ({a.proportion:.2%}) portent une charge "
+        f"nette NEGATIVE, pour un total de {_t}. {borne} "
+        f"Une charge nette negative peut etre un RECOURS legitime "
+        f"(subrogation, sauvetage) ou une ERREUR DE SAISIE : les deux "
+        f"existent. CE CONTROLE NE PEUT PAS TRANCHER — il voit le "
+        f"portefeuille agrege, jamais le detail des sinistres ; distinguer "
+        f"les deux demande les paiements et les recuperations ligne a ligne. "
+        f"Trois reponses possibles : CONSERVER tout, EXCLURE tout, ou "
+        f"fournir la LISTE des positions que vous conservez. "
+        f"Empreinte des cas : {empreinte_positions(a.index)}."
+    )
 
 
 def _phrase_effet_agrege(a: Anomalie) -> str | None:

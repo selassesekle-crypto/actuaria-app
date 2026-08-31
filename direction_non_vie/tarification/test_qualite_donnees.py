@@ -56,21 +56,41 @@ class TestQualite_ReglesDeBase(unittest.TestCase):
         print("    QD-1 Propre → df intact, aucune action, synthèse None ✅")
 
     def test_regle1_impossible_exclut_la_ligne(self):
+        """⚠️⚠️ CE CONTRÔLE A CHANGE DE CONTENU LE 31/08/2026, ET C'EST DÉLIBÉRÉ
+        — constat `qualite/C8`, rang 1, arbitré par Selasse.
+
+        Il épinglait `cout_negatif` en **règle 1**, donc EXCLU. La mesure sur la
+        seule donnée réelle versionnée a montré que c'était faux : un COÛT est
+        ≥ 0, mais une CHARGE NETTE — paiements moins recours — ne l'est pas.
+        **8,82 % des contrats-année**, et les exclure **sur-tarifait de 14,9 %**.
+
+        *Un contrôle suit la règle arbitrée ; il ne fige pas un comportement
+        qu'on vient de mesurer faux.* Le coût est désormais **règle 3** :
+        signalé, CONSERVÉ — et les deux autres impossibilités, elles, restent
+        en règle 1. **C'est ce que ce contrôle vérifie maintenant, dans les deux
+        sens.**
+        """
         df = _df(100)
         df['nb_sinistres'] = df['nb_sinistres'].astype(object)
         df['cout_total_sinistres'] = df['cout_total_sinistres'].astype(object)
         df['exposition'] = df['exposition'].astype(object)
         df.loc[[0, 1], 'nb_sinistres'] = -1.       # freq < 0
-        df.loc[[2], 'cout_total_sinistres'] = -5.   # cout < 0
+        df.loc[[2], 'cout_total_sinistres'] = -5.   # charge NETTE < 0
         df.loc[[3], 'exposition'] = 0.0             # expo <= 0 (casse l'offset)
         r = controler_qualite(df, _plan(), horodatage='t')
         codes = {a.code: a.nb_lignes for a in r.exclusions}
         self.assertEqual(codes.get('frequence_negative'), 2)
-        self.assertEqual(codes.get('cout_negatif'), 1)
         self.assertEqual(codes.get('exposition_non_positive'), 1)
-        self.assertEqual(r.lignes_retenues, 96)     # 4 lignes exclues
+        # ⚠️ LE COÛT N'EST PLUS EXCLU — il est SIGNALÉ et la ligne CONSERVÉE.
+        self.assertIsNone(codes.get('cout_negatif'),
+                          'la charge nette negative est de nouveau EXCLUE')
+        signales = {a.code: a.nb_lignes for a in r.signalements}
+        self.assertEqual(signales.get('cout_net_negatif'), 1,
+                         'la charge nette negative n est plus signalee')
+        self.assertEqual(r.lignes_retenues, 97)     # 3 exclues, la 4e conservee
         self.assertFalse(r.bloque)
-        print("    QD-2 Règle 1 (impossible) → 4 lignes exclues, comptées ✅")
+        print("    QD-2 Règle 1 → 3 lignes exclues ; la charge nette négative "
+              "est SIGNALÉE et conservée ✅")
 
     def test_regle2_implausible_corrige_et_signale(self):
         df = _df(100)

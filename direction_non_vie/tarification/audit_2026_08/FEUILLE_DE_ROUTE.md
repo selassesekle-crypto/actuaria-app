@@ -38,8 +38,8 @@ lui-même**.
 
 | | |
 |---|---|
-| constats relevés (vagues 1 + 2) | **154** — *`services/C12` ouvert ET fermé le 30/08 (la synthèse qualité ne sortait que par le prompt) ; `qualite/C7` ouvert ET fermé le 30/08 (l'identifiant jugé par le détecteur des grandeurs) ; `a2/C17` ouvert le 29/08 par la re-mesure de `a2/C8` et `a2/C9` ; recomptés le 29/08 ; `a3/C19`, `services/C10`, `a5/C10` et `services/C11` sont des constats NEUFS, ouverts et fermés dans leur propre lot* |
-| fermés **et épinglés** | **81** |
+| constats relevés (vagues 1 + 2) | **155** — *`services/C12` ouvert ET fermé le 30/08 (la synthèse qualité ne sortait que par le prompt) ; `qualite/C7` ouvert ET fermé le 30/08 (l'identifiant jugé par le détecteur des grandeurs) ; `a2/C17` ouvert le 29/08 par la re-mesure de `a2/C8` et `a2/C9` ; recomptés le 29/08 ; `a3/C19`, `services/C10`, `a5/C10` et `services/C11` sont des constats NEUFS, ouverts et fermés dans leur propre lot* |
+| fermés **et épinglés** | **82** |
 | corrigé, **non épinglé** | **0** — `a5/C5` épinglé le 29/08 · **partiel** : `pipeline/C1` |
 | corrigé, épinglé, **NON REPORTÉ** (4e état) | **0** — `a6/C1` `a6/C2` `a6/C4` nommés le 30/08 |
 | **⛔ OUVERTS** | **73** |
@@ -1195,6 +1195,136 @@ silence toute clé inconnue**. Écrire `unite_expo:` au lieu de
 `unite_exposition:` serait donc **ignoré sans un mot**, et le plan paraîtrait
 « non déclaré ». *Le nouveau champ hérite du défaut le jour où il naît.*
 **Recommandation : traiter `plan/C5` avant ou pendant l'étape 2.**
+
+## ✅ `qualite/C8` — RANG 1, **OUVERT ET FERMÉ LE 31/08/2026** · les trois gestes posés
+
+> **Constat neuf, produit par la mesure et non par une relecture.** La règle 1
+> classe `cout_total_sinistres < 0` comme **IMPOSSIBLE MATHÉMATIQUEMENT** et
+> exclut la ligne. **Une charge NETTE peut légitimement être négative** — c'est
+> un recours. Détail complet dans [`releve_qualite_donnees.md`](releve_qualite_donnees.md).
+>
+> **Mesuré sur la seule donnée réelle versionnée** (14 243 sinistres) :
+> **8,82 %** des contrats-année, **−563 749 €**, et l'exclusion **sur-tarife de
+> 14,9 %**.
+
+### LES TROIS PIÈCES SONT INDISSOCIABLES
+
+*Livrer l'une sans les autres dégrade le système : reclasser sans outil de revue
+laisserait l'actuaire devant 1 116 lignes ; publier les cas sans reclasser les
+exclurait quand même.*
+
+| # | geste | ce qu'il change |
+|---|---|---|
+| **A** | `cout < 0` : **règle 1 → règle 3** (signaler, conserver) | ⛔ **l'euro bouge** : −14,9 % vs l'exclusion |
+| **B** | **l'annexe de revue** : une ligne par cas, avec ses indices | rien — publication |
+| **C** | **la question neutre à trois issues**, avec empreinte | la levée du blocage |
+
+### ⚠️⚠️ B — L'ANNEXE DE REVUE : DEUX SURFACES, DEUX AUDIENCES
+
+**La règle RGPD déjà posée n'est PAS affaiblie** — deux sentinelles vérifient que
+la synthèse « *ne cite NI valeur NI index* ». **On sépare les surfaces.**
+
+| surface | contenu | qui la lit |
+|---|---|---|
+| **la synthèse** (rapport signé, circulé) | compte, taux, effet agrégé — **aucun index, aucune valeur** | CAC, ACPR, direction |
+| **l'annexe de revue** *(nouvelle)* | **une ligne par cas** | l'actuaire, à son poste |
+
+> ### ⛔⛔ ET LA MESURE A RÉFUTÉ MA PREMIÈRE ANNEXE — corrigée le 31/08 avant tout code
+>
+> J'avais listé cinq colonnes, dont **« somme des montants POSITIFS du contrat »**
+> que j'appelais *le discriminant n° 1*. **La couche qualité ne peut pas la
+> produire** : elle reçoit **une ligne par CONTRAT** (`nb_sinistres`,
+> `cout_total_sinistres`, `exposition`) — **jamais le détail des sinistres**.
+>
+> J'ai cherché un substitut disponible. Il n'y en a pas :
+>
+> ```
+>   contrats a charge nette negative   : 1 116
+>   avec paiement positif (VRAI)       :    80  (  7,2 %)
+>   avec nb_sinistres > 0 (SUBSTITUT)  : 1 116  (100,0 %)
+>   les deux d accord                  :    80  (  7,2 %)
+> ```
+>
+> **`nb_sinistres > 0` est vrai partout : il ne sépare rien.** *Ma première
+> annexe promettait une colonne que le code ne peut pas remplir — le motif exact
+> de cet audit, dans ma propre conception.*
+
+**Les colonnes de l'annexe, corrigées — celles qui sont RÉELLEMENT calculables :**
+
+| colonne | ce qu'elle apporte |
+|---|---|
+| **position de la ligne** dans le fichier fourni | une **coordonnée dans le fichier de l'actuaire** — pas une donnée client : lui seul peut la résoudre |
+| **charge nette du contrat** | l'ampleur du cas |
+| **ratio \|négatif\| / coût moyen positif du portefeuille** | q99 **1,13** · **0 cas au-delà de 3×** — *l'absence de queue est en soi une information* |
+
+⚠️⚠️ **ET L'ANNEXE DOIT DIRE CE QU'ELLE NE PEUT PAS MONTRER** : *« distinguer un
+recours d'une erreur de saisie demande le DÉTAIL DES SINISTRES — paiements et
+récupérations ligne à ligne. Ce contrôle ne voit que le portefeuille agrégé. »*
+**C'est actionnable** : cela dit à l'actuaire **où regarder**, au lieu de lui
+laisser croire que l'annexe suffit.
+
+⚠️ **Aucun identifiant client dans l'annexe.** La position suffit : l'identité est
+dans le fichier de l'actuaire, à cette ligne.
+
+### ⚠️⚠️ C — LA QUESTION EST NEUTRE, JAMAIS ORIENTÉE
+
+**Corrigé par la mesure, et c'est le point de conception le plus important.**
+La formulation d'abord envisagée — *« ces cas **semblent être des recours
+légitimes** — confirmez-vous ? »* — **ferait affirmer au système une conclusion
+que la donnée ne porte pas.** *Le motif exact que cet audit poursuit.*
+
+**Le texte doit dire ce qu'il sait ET ce qu'il ne sait pas :**
+
+```
+  1 116 contrats (8,82 %) portent une charge nette NEGATIVE.
+  Aucun ne depasse 1,87 fois le cout moyen positif du portefeuille --
+  AUCUNE valeur aberrante.
+  Une charge nette negative peut etre un RECOURS legitime (subrogation,
+  sauvetage) ou une ERREUR DE SAISIE. Les deux existent.
+  ⚠️ CE CONTROLE NE PEUT PAS TRANCHER : il voit le portefeuille agrege,
+  jamais le detail des sinistres. Distinguer les deux demande les
+  paiements et les recuperations ligne a ligne.
+  Que decidez-vous ?
+```
+
+⚠️ **Le comptage « 80 couverts / 1 036 non couverts » ne figure PAS dans la
+question** : il n'est pas calculable à cette couche. *Annoncer un chiffre qu'on
+ne sait pas produire serait le défaut qu'on corrige.*
+
+**Trois issues — deux forceraient un faux choix :**
+
+| réponse | effet |
+|---|---|
+| **conserver tout** | recours — la charge nette reste à −563 749 € |
+| **exclure tout** | erreurs — prime moyenne **+14,9 %**, 1 116 contrats perdus |
+| **liste de positions fournie par l'actuaire** | ⚠️ *une échappatoire, jamais un critère suggéré par le système* |
+
+⚠️ La troisième n'est **pas** « garder les 80 couverts » : **la mesure ne valide
+pas ce découpage** — 44 des 80 dépassent le paiement du contrat.
+
+### ⛔ L'EMPREINTE — CONDITION DE VALIDITÉ DE LA RÉPONSE
+
+| ce qui se trace | pourquoi |
+|---|---|
+| **qui** | le nom, comme `qualite_validee_par` |
+| **quand** | ⚠️ **`t_debut`**, jamais un second appel à l'horloge (leçon `C4-4`) |
+| **la réponse** | conserver / exclure / liste |
+| **la base exacte** : le compte de cas, la charge nette totale, le ratio maximal | *ce qu'il avait sous les yeux — et rien qu'on ne sache produire* |
+| ⛔ **l'EMPREINTE des positions concernées** | **le point décisif** |
+
+> **Sans l'empreinte, on sait QU'IL a répondu, pas SUR QUOI.** Si le fichier
+> change et qu'on rejoue, la réponse **ne doit plus valoir** — et le système
+> doit le **détecter**, pas le supposer. Précédent : `PlanTarifaire.empreinte()`.
+
+### ⚠️ POURQUOI PAS UNE RÈGLE DÉCLARÉE AVEC SEUILS — ma proposition, écartée
+
+J'avais proposé que l'actuaire **déclare un critère** (seuils, conditions).
+**Écarté, et j'en donne la raison contre moi** : un seuil déclaré aurait donné
+**l'illusion d'un critère objectif** là où la mesure montre qu'il n'y en a
+aucun — les deux distributions se chevauchent entièrement. Et il aurait fallu
+**un moteur d'évaluation de règles** : une surface neuve à auditer, dans un dépôt
+dont l'audit poursuit justement les mécanismes qui décident en silence.
+*La question directe est plus petite ET plus honnête.*
 
 ## ⛔⛔ FUSION DES ORCHESTRATIONS — PLAN VALIDÉ, **ET SON ÉTAPE 1 EST À RE-ARBITRER**
 

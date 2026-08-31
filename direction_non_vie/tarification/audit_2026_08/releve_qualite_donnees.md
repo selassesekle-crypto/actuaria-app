@@ -235,6 +235,99 @@ le cas de C2, il faut soustraire deux entiers pour découvrir les 19,6 %.
                     'signalements','validee_par']
 ```
 
+**C8 — La règle 1 classe `cout_total_sinistres < 0` comme IMPOSSIBLE MATHÉMATIQUEMENT, et exclut. Une charge NETTE peut légitimement être négative.**
+
+⛔⛔ **CONSTAT NEUF, OUVERT LE 31/08/2026 — RANG 1.** Il ne vient d'aucune
+relecture : **il vient d'une mesure sur la seule donnée réelle versionnée**,
+`data/PG_2017_CLAIMS_YEAR0.csv` (14 243 sinistres).
+
+```
+  AU SINISTRE : 1 263 montants negatifs / 14 243  =  8,9 %
+                median -516,32 EUR · total -645 510 EUR · 5,2 % de la charge positive
+
+  AU CONTRAT  : 1 116 / 12 654  =  8,82 %      <- au-dessus du seuil d escalade (5 %)
+                nb_sinistres < 0 : 0
+```
+
+⚠️ **La doctrine confond deux grandeurs.** L'en-tête du module range `cout < 0`
+sous « *IMPOSSIBLE MATHÉMATIQUEMENT* ». Un **coût** (un prix) est ≥ 0 ; une
+**charge nette** (paiements − recours) est de **signe quelconque**. Un recours,
+un sauvetage, une subrogation la rendent négative — et c'est **normal**.
+
+**Ce que l'exclusion coûte, mesuré :**
+
+```
+  charge NETTE (tous)  : 11 724 608 EUR  ->  prime moyenne   926,55 EUR
+  charge si on EXCLUT  : 12 288 358 EUR  ->  prime moyenne 1 065,03 EUR
+  -> la prime moyenne AUGMENTE de 14,9 %, et 1 116 contrats sont perdus
+```
+
+⚠️⚠️ **ET AUCUN INDICE NE PERMET DE TRANCHER AUTOMATIQUEMENT.** Arbitré par
+Selasse : *erreurs de saisie ET vrais recours coexistent, le second cas est
+rare, ni l'un ni l'autre n'est la règle par défaut.* Mesure des deux
+discriminants sur les 1 116 cas :
+
+```
+                                        n     part   ratio median
+  AVEC paiement positif au contrat      80    7,2%       0,33
+  SANS aucun paiement positif        1 036   92,8%       0,52
+
+  parmi les 80 couverts : 44 DEPASSENT le paiement du contrat
+  distributions du ratio  couverts     0,02 -> 1,05
+                          non couverts 0,00 -> 1,87
+```
+
+> ### **Les deux distributions se chevauchent entièrement. Aucun seuil ne les sépare, et les deux groupes se disqualifient mutuellement** — 44 des 80 « couverts » réclament plus que ce qui a été payé ; et **aucun** des 1 036 « non couverts » n'est aberrant, tous bornés sous 1,87 × le sinistre moyen. *Une erreur de saisie produirait une queue : il n'y en a pas.*
+
+⚠️ **Borne déclarée** : le fichier est un extrait « **Year 0** » — **une seule
+année, vérifié**. Les paiements auxquels ces recours se rapportent peuvent être
+**hors de l'extrait**. Une seule LoB, un seul fichier : **je ne généralise pas.**
+
+> ✅ **`qualite/C8`** · **FERMÉ le 31/08/2026 — RANG 1, arbitré par Selasse.**
+> *Preuve : `test_charge_nette_negative.py`, 15 contrôles, 4 violations
+> plantées.*
+>
+> **Les trois gestes, indissociables, sont posés :**
+>
+> **A — `cout < 0` passe en RÈGLE 3.** Mesuré sur la vraie donnée : **12 654
+> contrats retenus, 0 exclusion**, `cout_net_negatif` signalé sur 1 116. ⚠️ **Et
+> les vraies impossibilités restent en règle 1** — `frequence_negative` et
+> `exposition_non_positive` sont vérifiées par un second sens.
+>
+> **B — l'annexe de revue** : **1 116 cas**, chacun avec sa **position**, sa
+> charge nette et son ratio. ⚠️⚠️ **Deux surfaces, deux audiences** : la synthèse
+> signée reste **sans index ni position** (les deux sentinelles RGPD tiennent,
+> vérifié) ; l'annexe ne quitte pas le poste de l'actuaire et **ne porte aucun
+> identifiant client**.
+>
+> ⚠️ **ET LA MESURE A RÉFUTÉ MA PREMIÈRE ANNEXE.** J'y avais mis « la somme des
+> montants POSITIFS », que j'appelais *le discriminant n° 1*. **Cette couche ne
+> la voit pas** — elle reçoit une ligne par CONTRAT. Le substitut testé,
+> `nb_sinistres > 0`, est vrai pour **100 %** des cas : il ne sépare rien.
+> *Une colonne que le code ne peut pas remplir est le défaut même de cet audit.*
+> Retirée — et l'annexe **dit désormais ce qu'elle ne peut pas montrer**.
+>
+> **C — la question NEUTRE, à trois issues, avec EMPREINTE.** ⚠️⚠️ La
+> formulation d'abord envisagée — *« ces cas SEMBLENT ÊTRE des recours
+> légitimes »* — **est interdite par la mesure** : les deux distributions se
+> chevauchent entièrement et les deux groupes se disqualifient. Le texte dit
+> donc ce qu'il sait **et ce qu'il ne sait pas** : « *CE CONTRÔLE NE PEUT PAS
+> TRANCHER — il voit le portefeuille agrégé, jamais le détail des sinistres* ».
+>
+> ⚠️ **L'empreinte `r1:…` reprend la leçon de `PlanTarifaire.empreinte()`** : un
+> préfixe de schéma lisible **sans recalcul**. *Sans elle, on saurait QU'il a
+> répondu, pas SUR QUOI — et une réponse survivrait à un changement de fichier.*
+>
+> ⛔⛔ **ET `vulture` A ATTRAPÉ MON PROPRE DÉFAUT** : `question_charges_negatives`
+> n'avait **aucun appelant de production** — *la forme exacte de `socle/C2`,
+> dans le lot qui ferme ce motif.* Câblée sur `QualiteBloquante`, **le seul
+> endroit qui ait du sens** : le blocage est le moment où l'actuaire décide.
+>
+> ⚠️ **SCEAU — quatre violations plantées, une par geste** : le coût redevient
+> règle 1 → **18 contrôles tombent** ; un identifiant client entre dans l'annexe
+> → **1** ; la question redevient orientée → **2** ; l'empreinte disparaît →
+> **1**.
+
 ### D — Vérifié comme BON (14)
 
 | affirmation | mesure |

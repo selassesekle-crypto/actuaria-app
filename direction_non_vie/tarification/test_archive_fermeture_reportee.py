@@ -78,6 +78,13 @@ _HORS_ASSIETTE: dict[tuple[str, str], str] = {
         "et reste OUVERTE. Ce fichier epingle la couche qualite, pas les "
         "plans. Retirer la mention couperait le lot de la raison qui le rend "
         "necessaire.",
+    ('socle/C2', 'test_charge_nette_negative.py'):
+        "Cite comme COMPARAISON, jamais epingle : `vulture` avait signale "
+        "`question_charges_negatives` comme fonction MORTE, et le controle de "
+        "cablage explique que c'est LA FORME de `socle/C2` -- de la plomberie "
+        "posee que rien n'alimente. `socle/C2` designe le moteur de MAPPING, "
+        "un tout autre code, et reste OUVERT au rang 7. Retirer la mention "
+        "couperait le controle de la lecon qui le justifie.",
     ('qualite/C3', 'test_effet_agrege_correction.py'):
         "Cite comme NOM DU CHANTIER dont ce lot est le PREMIER geste. `qualite/"
         "C3` dit que le plafond a 1.0 est une hypothese d'UNITE sur un role "
