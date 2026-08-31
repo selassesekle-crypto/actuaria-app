@@ -1371,8 +1371,17 @@ jamais rencontrées.* **La fusion est un JOINT, pas une déduplication.**
 >
 > | | geste | euro |
 > |---|---|---|
-> | **1-A** | extraire le préambule en une fonction partagée, **appelée par le seul chemin déclaratif** | ✅ **aucun** — refactor pur, comportement identique |
+> | **1-A** | ✅ **FAIT le 31/08** — `preambule_qualite` dans `core/qualite_donnees.py`, appelée par le **seul** chemin déclaratif | ✅ **aucun**, contrôlé : `k` inchangé, prime totale = charge à ±1 % |
 > | **1-B** | **brancher le chemin agent dessus** | ⛔ **bouge** : exclusions neuves + blocage à 5 % |
+>
+> ⚠️⚠️ **ET UN CONTRÔLE SURVEILLE QUE 1-B NE SOIT PAS GLISSÉE.** `PQ-6` vérifie
+> que `pipeline_agents` **n'appelle pas** la porte. *Il tombera le jour de 1-B —
+> et ce sera le signal qu'elle a été DÉCIDÉE, pas glissée.* Violation plantée :
+> un branchement discret le fait tomber.
+>
+> ⚠️ La porte **déclare elle-même** qu'elle n'est pas branchée et pourquoi
+> (`PQ-7`) : *une porte prête mais muette ressemble à de la plomberie morte —
+> le motif de `socle/C2`.*
 >
 > **Recommandation : faire 1-A maintenant, et 1-B après arbitrage explicite.**
 > *Je ne déplace pas un prix sur une validation obtenue quand j'annonçais

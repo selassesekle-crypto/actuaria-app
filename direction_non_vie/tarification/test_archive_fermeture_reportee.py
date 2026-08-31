@@ -85,6 +85,28 @@ _HORS_ASSIETTE: dict[tuple[str, str], str] = {
         "posee que rien n'alimente. `socle/C2` designe le moteur de MAPPING, "
         "un tout autre code, et reste OUVERT au rang 7. Retirer la mention "
         "couperait le controle de la lecon qui le justifie.",
+    ('qualite/C4', 'test_preambule_qualite.py'):
+        "Cite comme RAISON D'ETRE de l'etape 1-A, jamais epingle -- et la "
+        "distinction est le coeur du lot. `qualite/C4` dit que LE CHEMIN AGENT "
+        "N'A AUCUNE COUCHE QUALITE. Or 1-A extrait seulement la porte et la "
+        "branche au chemin DECLARATIF, qui l'avait deja : elle ne donne "
+        "toujours rien a l'autre chemin. **C'est l'etape 1-B qui fermerait "
+        "`qualite/C4`, et elle deplace un prix** -- mesure du 31/08 : le "
+        "chemin agent tarife sur 60 lignes a frequence ou cout negatifs que "
+        "cette couche ecarte, et le branchement introduirait un blocage a "
+        "5 %. `qualite/C4` reste donc OUVERT, au rang 6 GELE. *Le fermer sur "
+        "l'extraction ferait croire que le chemin agent est protege.*",
+    ('socle/C2', 'test_preambule_qualite.py'):
+        "Cite comme MOTIF que le controle PQ-7 existe pour eviter, jamais "
+        "epingle. L'etape 1-A pose une porte `preambule_qualite` que SEUL le "
+        "chemin declaratif appelle : branchee a moitie, elle a exactement la "
+        "silhouette de `socle/C2` -- de la plomberie posee que rien "
+        "n'alimente. PQ-7 exige donc que la porte DECLARE elle-meme qu'elle "
+        "attend l'etape 1-B, et pourquoi (1-B deplace un prix). `socle/C2` "
+        "designe le moteur de MAPPING, un tout autre code, et reste OUVERT au "
+        "rang 7. C'est la SECONDE mention de cette cle, apres "
+        "test_charge_nette_negative.py : la cle (constat, fichier) a bien "
+        "rallume le filet sur un fichier neuf, comme prevu.",
     ('qualite/C3', 'test_effet_agrege_correction.py'):
         "Cite comme NOM DU CHANTIER dont ce lot est le PREMIER geste. `qualite/"
         "C3` dit que le plafond a 1.0 est une hypothese d'UNITE sur un role "

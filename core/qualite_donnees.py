@@ -720,6 +720,37 @@ def question_charges_negatives(rapport, df=None) -> str | None:
     )
 
 
+def preambule_qualite(portefeuille, plan, qualite_validee_par=None,
+                      horodatage=None):
+    """Le préambule COMMUN aux deux chemins de tarification — étape 1-A.
+
+    ⚠️⚠️ POURQUOI UNE PORTE UNIQUE. `controler_qualite` n'a **qu'un appelant de
+    production** — le chemin déclaratif (constat `qualite/C4`). Le chemin agent
+    n'a **aucune couche qualité**, et c'est ainsi que les deux ont pu diverger
+    toute une journée sur la même grandeur : l'exposition. *Une porte unique
+    rend la divergence IMPOSSIBLE au lieu de la rendre seulement évitable.*
+
+    ⚠️ CETTE ÉTAPE NE CHANGE AUCUN COMPORTEMENT, et c'est sa condition d'entrée.
+    Elle extrait les trois gestes que `pipeline_complet` faisait déjà, dans le
+    même ordre, avec les mêmes arguments — contrôler, lever si bloqué, rendre le
+    dataframe propre. **Aucun euro ne bouge.**
+
+    ⚠️⚠️ ET ELLE N'EST PAS BRANCHÉE AU CHEMIN AGENT — c'est l'étape 1-B, laissée
+    ouverte à dessein. La brancher **déplacerait un prix** : mesuré, le chemin
+    agent tarife aujourd'hui sur des lignes à fréquence ou coût négatifs que
+    cette couche écarte. *Extraire et brancher sont deux décisions ; seule la
+    première est sans euro.*
+
+    Retourne le `RapportQualite`. L'appelant y lit `dataframe_propre`.
+    """
+    rapport = controler_qualite(
+        portefeuille, plan, qualite_validee_par=qualite_validee_par,
+        horodatage=horodatage)
+    if rapport.bloque:
+        raise QualiteBloquante(rapport)      # arrêt loud, jamais silencieux
+    return rapport
+
+
 def _phrase_effet_agrege(a: Anomalie) -> str | None:
     """Ce qu'une correction fait au TOTAL de sa colonne, en toutes lettres.
 

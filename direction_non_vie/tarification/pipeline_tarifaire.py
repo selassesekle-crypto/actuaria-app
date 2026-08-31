@@ -29,7 +29,11 @@ from statsmodels.genmod import families as _families
 
 from core.plan_tarifaire import PlanTarifaire
 from core.conformite_reglementaire import construire_matrice_x
-from core.qualite_donnees import controler_qualite, QualiteBloquante
+# ⚠️ `QualiteBloquante` n'est plus importée ici : la levée a suivi le préambule
+# dans `core.qualite_donnees`. Vérifié avant de la retirer — **aucun module ne
+# l'importait DEPUIS ce fichier** (mesuré). *Un ré-export tacite se casse en
+# silence ; celui-ci n'existait pas.*
+from core.qualite_donnees import preambule_qualite
 from core.severite import construire_cible_severite
 from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
 
@@ -351,11 +355,17 @@ def pipeline_complet(portefeuille: pd.DataFrame, plan: PlanTarifaire,
     # signale les ambiguës (règle 3), et BLOQUE si une anomalie touche ≥ 5 % des
     # lignes sans confirmation actuarielle nominative (règle 4). Court-circuité
     # jusqu'ici : le chemin déclaratif ne passe pas par A1. A2 reçoit un df PROPRE.
-    rapport_qualite = controler_qualite(
+    # ⚠️⚠️ ÉTAPE 1-A DE LA FUSION — LE PRÉAMBULE EST DÉSORMAIS UNE PORTE UNIQUE.
+    # Ces trois gestes — contrôler, lever si bloqué, prendre le dataframe propre
+    # — vivaient ici seuls. `controler_qualite` n'avait qu'UN appelant de
+    # production, et le chemin agent n'a AUCUNE couche qualité : c'est ainsi que
+    # les deux ont pu diverger sur la même grandeur. *Une porte unique rend la
+    # divergence impossible plutôt que seulement évitable.*
+    # ⚠️ Ce lot ne branche PAS le chemin agent — c'est l'étape 1-B, et elle
+    # déplace un prix. **Extraire et brancher sont deux décisions.**
+    rapport_qualite = preambule_qualite(
         portefeuille, plan, qualite_validee_par=qualite_validee_par,
         horodatage=datetime.now().isoformat())
-    if rapport_qualite.bloque:
-        raise QualiteBloquante(rapport_qualite)      # arrêt loud, jamais silencieux
     df = rapport_qualite.dataframe_propre
     col_freq, col_cout, col_expo = (plan.cible_frequence, plan.cible_cout,
                                     plan.exposition)
