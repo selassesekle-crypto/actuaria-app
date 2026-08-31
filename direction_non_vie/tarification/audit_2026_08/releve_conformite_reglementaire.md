@@ -758,3 +758,79 @@ comparer `plan.colonnes_produites()` aux colonnes qui lui parviennent, et
 publier l'écart comme une exclusion nommée. ⚠️ **Cela touche les trois agents
 A3/A4/A5 et une surface signée** : c'est un lot à part entière, de la famille de
 l'étape 4 d'`unite_exposition`. **Rien ne bougera sans arbitrage.**
+
+> ✅ **`conformite/C15`** · **FERMÉ le 31/08/2026 — arbitré par Selasse.**
+> *Preuve : `test_colonnes_plan_ecartees.py`, 10 contrôles, **9 violations
+> plantées**, une par contrôle.*
+>
+> ⚠️⚠️ **LA TRACE A CORRIGÉ CE CONSTAT SUR DEUX POINTS, ET IL FAUT LES DIRE.**
+>
+> **① « Trois agents » était faux : la porte a SIX appelants de production**,
+> tous passant `plan`. Et l'**asymétrie entre chemins localise le défaut** :
+> `pipeline_tarifaire` et la démo passent `plan.colonnes_produites()` — *le
+> contrat lui-même, rien ne peut être mangé en amont* — tandis que `a3`, `a4`,
+> `a5` et `a6` passent une liste **obtenue par soustraction**.
+>
+> **② Le correctif est passé de QUATRE pièces à TROIS**, parce qu'une de mes
+> mesures était fausse — voir l'encadré ci-dessous.
+>
+> ### LES TROIS PIÈCES
+>
+> **A · La porte CONSTATE, elle ne tranche pas.** `MatriceX.ecartees_amont`
+> rend `{colonne: motif}` pour ce que le plan déclare et qui n'est **jamais
+> parvenu** au filtre. ⚠️ **Jamais rangé dans `exclusions`** : *un instrument ne
+> revendique pas un acte qu'il n'a pas commis.* ⚠️ **Aucune levée** — un fichier
+> client peut légitimement ne pas porter une colonne déclarée.
+>
+> **B · Le canal EXISTANT, jamais un second.** La clé `colonnes_plan_ecartees`
+> emprunte le trajet **déjà prouvé** de `colonnes_plan_manquantes` : A3/A4/A5 →
+> A6 → les deux dicts de livrables → les **trois** services. ⚠️ **Cause
+> distincte, libellé distinct** : *le fichier ne l'a pas* (`manquantes`) contre
+> *un filtre l'a retirée* (`ecartees`) — l'actuaire ne corrige pas la même
+> chose. `CPE-9` vérifie par AST que les trois services publient.
+>
+> **D · Le contrôle porte sur la surface signée**, la leçon du jour.
+>
+> ### ⚠️⚠️ ET LA MESURE A CORRIGÉ LA CONCEPTION UNE SECONDE FOIS
+>
+> Première version : une liste nue, publiée en « ACTION REQUISE ». **Exécutée
+> sur un portefeuille NORMAL, elle criait déjà** — `carburant_electrique`,
+> modalité one-hot d'un portefeuille sans véhicule électrique, donc
+> **CONSTANTE**, et légitimement écartée. *Un avertissement permanent est un
+> avertissement qu'on cesse de lire.*
+>
+> **Le motif voyage donc avec le fait, et la GRAVITÉ suit le MOTIF** : seule une
+> colonne déclarée, **présente et exploitable**, retirée par un filtre amont
+> appelle une action. ⚠️ La cause est dérivée **dans la porte** — elle reçoit
+> déjà `df` pour le garde-fou n°4 — donc **en un seul endroit**, et non dans les
+> quatre agents qui soustraient.
+>
+> ⚠️ **AUCUN EURO, MESURÉ** : version d'avant tirée du commit, chargée sous un
+> nom de module distinct, 3 portefeuilles — **features retenues, exclusions,
+> alertes et exécution du garde-fou n°4 IDENTIQUES, 0 écart.**
+
+> ### ⛔⛔ CE QUE J'AVAIS AFFIRME EN CONCEVANT CE CORRECTIF, ET QUE LA MESURE A RÉFUTÉ
+>
+> J'avais annoncé que `exclusions_conformite`, `alertes_conformite` et
+> `controle_effet` s'écrivaient **9 fois et n'étaient lus NULLE PART** — donc
+> que le filtre de genre (**CJUE C-236/09**) était invisible dans tous les
+> livrables — et recommandé de **rouvrir `conformite/C7`**.
+>
+> **C'ÉTAIT FAUX, sur les trois points.** Ma sonde cherchait des
+> `ast.Attribute` ; le code fait `getattr(self, 'exclusions_conformite', {})` —
+> un **`Call`** — puis range la valeur sous une **clé de dict**, que les trois
+> services lisent et publient via `synthese_exclusions`. *Le canal était complet
+> et vivant ; ma sonde mesurait sa propre grammaire.*
+>
+> **`conformite/C7` reste FERMÉ, correctement.** *Rouvrir un constat justement
+> fermé aurait mis dans l'archive exactement la fausseté que cet audit
+> poursuit.* La pièce C du correctif — « brancher le canal mort » — était **sans
+> objet**, et a été retirée avant tout code.
+>
+> ⚠️ **Un second contre-exemple, retiré lui aussi** : j'avais injecté une
+> colonne `sexe` pour montrer que le livrable mentait. Faux — `sexe` n'est
+> **pas déclaré au plan**, donc jamais candidat : la phrase « toutes les
+> variables candidates sont conformes » disait alors **vrai**. *Avant de
+> conclure d'un cas négatif, vérifier qu'il RELÈVE de la règle testée.*
+>
+> ### **L'absence d'une FORME SYNTAXIQUE n'est pas l'absence du FAIT.**

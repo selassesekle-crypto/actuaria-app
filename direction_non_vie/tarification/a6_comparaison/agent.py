@@ -691,6 +691,7 @@ class AgentA6Comparaison:
             # (AGENT, CIBLE). Elle vivait ici en ligne, et deux agents en
             # échec sur la MÊME cible s'écrasaient l'un l'autre — un motif
             # sur deux disparaissait.
+            _cols_plan_ecartees: set = set()
             for _r_src in (result_a3, result_a4, result_a5):
                 if isinstance(_r_src, dict):
                     _exclusions_conformite.update(
@@ -698,6 +699,12 @@ class AgentA6Comparaison:
                     _alertes_conformite.update(
                         _r_src.get('alertes_conformite') or {})
                     _alertes_modele.extend(_r_src.get('alertes_modele') or [])
+                    # ⚠️ Constat `conformite/C15` — même trajet que les
+                    # exclusions, cause DISTINCTE : déclarée au plan, jamais
+                    # parvenue au filtre. Les confondre effacerait ce que
+                    # l'actuaire doit corriger.
+                    _cols_plan_ecartees.update(
+                        _r_src.get('colonnes_plan_ecartees') or ())
             _controle_effet = agreger_controle_effet({
                 'A3': (result_a3 or {}).get('controle_effet'),
                 'A4': (result_a4 or {}).get('controle_effet'),
@@ -744,6 +751,7 @@ class AgentA6Comparaison:
                 'rapport_qualite': rapport_qualite,
                 'rapport_mapping': rapport_mapping,
                 'colonnes_plan_manquantes': _cols_plan_manquantes,
+                'colonnes_plan_ecartees': sorted(_cols_plan_ecartees),
             }
             _excel_a6 = b''
             _word_a6  = b''
@@ -895,6 +903,7 @@ class AgentA6Comparaison:
                 # result_a2 : contrairement à rapport_qualite (produit par aucun
                 # agent, donc transitant par un paramètre), A6 reçoit déjà A2.
                 'colonnes_plan_manquantes': _cols_plan_manquantes,
+                'colonnes_plan_ecartees': sorted(_cols_plan_ecartees),
                 'courbes':            courbes,
                 'graphiques':            graphiques,
                 'validation_selection':  _val_sel_,

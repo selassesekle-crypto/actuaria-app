@@ -25,7 +25,7 @@ from core.charts_tarif import glyphe_rag, FOND_CLAIR, couleur_rag
 import io, logging, re
 from core.conformite_reglementaire import (
     avertissement_walk_forward, synthese_exclusions, synthese_alertes_experience,
-    synthese_modele_dl,
+    synthese_colonnes_plan_ecartees, synthese_modele_dl,
 )
 from core.qualite_donnees import synthese_qualite_donnees
 from core.plan_tarifaire import synthese_colonnes_plan_manquantes
@@ -179,6 +179,11 @@ def syntheses_reglementaires(results: Dict[str, Dict]) -> Dict[str, str]:
         'qualite':      synthese_qualite_donnees(r6.get('rapport_qualite')),
         'plan_ampute':  synthese_colonnes_plan_manquantes(
                             r6.get('colonnes_plan_manquantes')),
+        # ⚠️ Constat `conformite/C15` — cause DISTINCTE de la précédente :
+        # la colonne EXISTE, un filtre l'a retirée avant la conformité.
+        'plan_ecarte':  synthese_colonnes_plan_ecartees(
+                            r6.get('colonnes_plan_ecartees'),
+                            (r6.get('plan') or {}).get('lob', '')),
         'mapping':      synthese_mapping(r6.get('rapport_mapping')),
     }
     return {k: v for k, v in brut.items() if v}

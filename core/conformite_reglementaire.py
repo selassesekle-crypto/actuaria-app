@@ -902,10 +902,12 @@ class MatriceX:
     Toute tentative de modification après construction échoue — c'est le but.
     """
     __slots__ = ('_features', '_exclusions', '_contexte', '_alertes',
-                 '_controle_effet_execute', '_motifs_controle_effet')
+                 '_controle_effet_execute', '_motifs_controle_effet',
+                 '_ecartees_amont')
 
     def __init__(self, features, exclusions, contexte, _jeton=None, alertes=None,
-                 controle_effet_execute=True, motifs_controle_effet=None):
+                 controle_effet_execute=True, motifs_controle_effet=None,
+                 ecartees_amont=None):
         # ⚠ AUDIT V12 (I6) — le jeton était un ATTRIBUT DE CLASSE public
         # (MatriceX._JETON), et la docstring affirmait « seul ce module y a
         # accès ». C'ÉTAIT FAUX : MatriceX([...], _jeton=MatriceX._JETON)
@@ -939,6 +941,8 @@ class MatriceX:
         # l'actuaire ne peut alors rien en faire.
         object.__setattr__(self, '_motifs_controle_effet',
                            dict(motifs_controle_effet or {}))
+        object.__setattr__(self, '_ecartees_amont',
+                           dict(ecartees_amont or {}))
 
     # ── Lecture seule ────────────────────────────────────────────────────────
     @property
@@ -960,6 +964,31 @@ class MatriceX:
         bien sur le passé, ou est-elle mal étiquetée ?).
         Constat I5 : ce qui n'est que dans les logs n'existe pas."""
         return dict(self._alertes)
+
+    @property
+    def ecartees_amont(self):
+        """Colonnes DÉCLARÉES AU PLAN qui n'ont jamais été soumises à ce filtre.
+
+        ⚠️⚠️ CONSTAT `conformite/C15` — CE GARDE-FOU SURVEILLAIT L'INTERSECTION,
+        JAMAIS L'ABSENCE. La liste blanche compare ce qu'elle REÇOIT à ce qui est
+        PERMIS : une colonne retirée EN AMONT lui est structurellement invisible.
+        Violation plantée le 31/08 — on retire une colonne déclarée avant
+        l'appel : 22 reçues au lieu de 23, **0 exclusion, 0 alerte**. *Un facteur
+        du plan SIGNÉ disparaissait sans un mot.*
+
+        ⚠️ CE N'EST PAS UNE EXCLUSION, ET ELLE N'EST DONC PAS DANS `exclusions`.
+        Cette porte n'a pas écarté ce qu'elle n'a jamais reçu : *un instrument ne
+        revendique pas un acte qu'il n'a pas commis* — c'est le motif que ce
+        module tout entier poursuit.
+
+        ⚠️ ELLE CONSTATE, ELLE NE TRANCHE PAS : aucune levée. Un fichier client
+        peut légitimement ne pas porter une colonne déclarée, et A2 le déclare
+        déjà (`colonnes_plan_manquantes`). Lever casserait des exécutions justes.
+
+        ⚠️ Vide quand `plan` n'est pas fourni : sans contrat, il n'y a rien à
+        comparer, et le dire vaut mieux que de rendre une liste trompeuse.
+        """
+        return dict(self._ecartees_amont)
 
     @property
     def controle_effet_execute(self):
@@ -1050,11 +1079,30 @@ def construire_matrice_x(
     _log = logger_agent or logger
     declarees = None
     cols_exemptees_effet = None
+    #: Vide sans plan : sans contrat, il n'y a rien a comparer.
+    ecartees_amont: dict = {}
     if plan is not None:
         # DÉCLARATIVE : n'est légitime que ce que le plan SIGNÉ annonce. Les
         # garde-fous 2·3 restent appliqués — non contournables par le plan.
         declarees = set(plan.colonnes_produites())
         cols_exemptees_effet = list(plan.facteurs_anteriorite())
+        # ⚠️⚠️ CONSTAT `conformite/C15` — CE QUI N'EST JAMAIS ARRIVÉ JUSQU'ICI.
+        # La ligne suivante compare les CANDIDATES aux DÉCLARÉES : elle ne peut
+        # rien dire de ce qui a été retiré AVANT l'appel. Or quatre appelants sur
+        # six construisent leur liste PAR SOUSTRACTION (`a3`, `a4`, `a5`, `a6`),
+        # là où `pipeline_tarifaire` et la démo passent le contrat lui-même.
+        # *C'est l'asymétrie entre chemins qui localise le défaut.*
+        # ⚠️ On CONSTATE ici, on ne tranche pas — voir `MatriceX.ecartees_amont`.
+        # ⚠️⚠️ ET LE MOTIF VOYAGE AVEC LE FAIT. Mesuré le 31/08 : sur un
+        # portefeuille NORMAL, `carburant_electrique` est écartée — modalité
+        # one-hot d'un portefeuille sans véhicule électrique, donc CONSTANTE.
+        # C'est légitime. *Publier « ACTION REQUISE » là-dessus à chaque
+        # exécution ferait un avertissement permanent, donc un avertissement
+        # qu'on cesse de lire.* La cause est dérivable ICI — cette porte reçoit
+        # déjà `df` pour le garde-fou n°4 — et elle l'est en UN SEUL endroit
+        # plutôt que dans les trois agents qui soustraient.
+        ecartees_amont = {c: _motif_ecartee_amont(c, df)
+                          for c in sorted(declarees - set(candidates))}
         conformes = [c for c in candidates if c in declarees]
         conformes = filtrer_genre(conformes, contexte=contexte,
                                   logger_agent=logger_agent)             # ② INV-3
@@ -1192,7 +1240,81 @@ def construire_matrice_x(
     return MatriceX(conformes, exclusions, contexte, _jeton=_JETON,
                     motifs_controle_effet=motifs_effet,
                     alertes=alertes_experience,
-                    controle_effet_execute=controle_effet_execute)
+                    controle_effet_execute=controle_effet_execute,
+                    ecartees_amont=ecartees_amont)
+
+
+#: ⚠️⚠️ LE SEUL MOTIF QUI APPELLE UNE ACTION. Les autres décrivent une donnée
+#: (absente, constante, non numérique) : l'actuaire ne peut rien y faire, et le
+#: lui présenter comme une faute serait du bruit. Celui-ci dit qu'un facteur
+#: DÉCLARÉ, présent et exploitable, a été retiré par un filtre en amont — c'est
+#: `conformite/C15` dans sa forme active.
+MOTIF_ECARTEE_FILTRE = 'retiree par un filtre en amont'
+
+
+def _motif_ecartee_amont(colonne: str, df) -> str:
+    """POURQUOI une colonne déclarée n'est jamais parvenue au filtre.
+
+    ⚠️ Un drapeau sans son motif ne se traite pas — c'est la leçon déjà écrite
+    pour `controle_effet` (`conformite/C7`). On dérive donc la cause plutôt que
+    de rendre une liste nue.
+
+    ⚠️ `df` absent : on le DIT, plutôt que de deviner. *Une cause inventée est
+    pire qu'une cause manquante.*
+    """
+    if df is None:
+        return 'cause non determinable (df non fourni a la porte)'
+    if colonne not in getattr(df, 'columns', ()):
+        return 'absente du dataframe en entree'
+    serie = df[colonne]
+    if str(serie.dtype) not in ('int64', 'float64', 'int32', 'float32'):
+        return f'non numerique (dtype {serie.dtype})'
+    try:
+        if float(serie.std()) == 0.0:
+            return 'constante (variance nulle) sur ce portefeuille'
+    except (TypeError, ValueError):          # pragma: no cover
+        return 'variance non calculable'
+    return MOTIF_ECARTEE_FILTRE
+
+
+def synthese_colonnes_plan_ecartees(ecartees, plan_nom: str = '') -> str | None:
+    """SOURCE UNIQUE du libellé « colonnes du plan écartées AVANT le filtre ».
+
+    ⚠️⚠️ CONSTAT `conformite/C15`. Partagée par l'Excel A6, le rapport équipe et
+    le Word/HTML — comme `synthese_exclusions` pour les exclusions et
+    `synthese_colonnes_plan_manquantes` pour les colonnes absentes du fichier.
+
+    ⚠️⚠️ DEUX CAUSES VOISINES, DEUX LIBELLÉS, ET LES CONFONDRE EFFACERAIT CE QUI
+    COMPTE. L'actuaire ne corrige pas la même chose dans les deux cas :
+
+    | libellé | ce qu'il dit | ce que l'actuaire corrige |
+    |---|---|---|
+    | `..._manquantes` | le plan déclare, **le fichier** ne l'a pas | son EXTRACTION |
+    | `..._ecartees`   | le fichier l'a, **un filtre** l'a retirée | son PLAN, ou le filtre |
+
+    Retourne None quand rien n'a été écarté : *un avertissement permanent est un
+    avertissement qu'on cesse de lire.*
+    """
+    motifs = dict(ecartees or {})
+    if not motifs:
+        return None
+    # ⚠️⚠️ LA GRAVITE SUIT LE MOTIF, PAS LE COMPTE. Une modalite one-hot absente
+    # du portefeuille est CONSTANTE : c'est normal, et le crier a chaque
+    # execution rendrait l'avertissement invisible. Seul un retrait par un
+    # filtre amont appelle une action.
+    actives = sorted(c for c, m in motifs.items() if m == MOTIF_ECARTEE_FILTRE)
+    detail = " ; ".join(f"{c} ({m})" for c, m in sorted(motifs.items()))
+    tete = (f"⚠ ACTION REQUISE — plan '{plan_nom or '?'}' : "
+            f"{len(actives)} facteur(s) DECLARE(S), exploitable(s), RETIRE(S) "
+            f"par un filtre en amont"
+            if actives else
+            f"Colonnes declarees au plan '{plan_nom or '?'}' non parvenues au "
+            f"filtre de conformite (aucune action requise)")
+    return (
+        f"{tete} : {len(motifs)} colonne(s) declaree(s) n'ont jamais atteint "
+        f"le filtre, et n'ont donc ete ni retenues ni ecartees explicitement. "
+        f"{detail}."
+    )
 
 
 def synthese_exclusions(exclusions: Optional[dict]) -> Optional[str]:

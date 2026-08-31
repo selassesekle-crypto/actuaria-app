@@ -85,6 +85,16 @@ _HORS_ASSIETTE: dict[tuple[str, str], str] = {
         "posee que rien n'alimente. `socle/C2` designe le moteur de MAPPING, "
         "un tout autre code, et reste OUVERT au rang 7. Retirer la mention "
         "couperait le controle de la lecon qui le justifie.",
+    ('socle/C2', 'test_colonnes_plan_ecartees.py'):
+        "Cite comme MOTIF que `CPE-9` existe pour eviter, jamais epingle. Ce "
+        "lot ajoute une SOURCE UNIQUE de libelle "
+        "(`synthese_colonnes_plan_ecartees`) : une source unique que personne "
+        "n'appellerait serait de la plomberie posee que rien n'alimente -- la "
+        "forme de `socle/C2`. `CPE-9` verifie donc PAR AST que les TROIS "
+        "services la publient. `socle/C2` designe le moteur de MAPPING, un "
+        "tout autre code, et reste OUVERT au rang 7. C'est la TROISIEME "
+        "mention de cette cle : la portee (constat, fichier) rallume bien le "
+        "filet sur chaque fichier neuf.",
     ('charts/C8', 'test_tri_a5_charts_services.py'):
         "Cite comme constat LAISSE OUVERT par la passe de tri, avec sa raison, "
         "et un controle qui en garde le SECOND SENS -- jamais epingle. "

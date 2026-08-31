@@ -15,7 +15,7 @@ import io
 from core.conformite_reglementaire import (
     avertissement_controle_effet, avertissement_walk_forward,
     synthese_exclusions, synthese_alertes_experience,
-    synthese_modele_dl,
+    synthese_colonnes_plan_ecartees, synthese_modele_dl,
 )
 from core.qualite_donnees import synthese_qualite_donnees
 from core.plan_tarifaire import synthese_colonnes_plan_manquantes
@@ -887,6 +887,13 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "", arrete: Optional[str] =
         if _synth_cp:
             _kpi(ws5, r, "Colonnes du plan non produites — modèle amputé",
                  _synth_cp, statut="AMBRE", wrap=True); r += 1
+        # ⚠️ Constat `conformite/C15` — la colonne EXISTE, un filtre l'a
+        # retirée avant la conformité : ni retenue, ni écartée explicitement.
+        _synth_ce = synthese_colonnes_plan_ecartees(
+            result_a6.get('colonnes_plan_ecartees'))
+        if _synth_ce:
+            _kpi(ws5, r, "Colonnes du plan écartées avant le filtre",
+                 _synth_ce, statut="AMBRE", wrap=True); r += 1
 
         # Mapping client (couche 2) — renommage du fichier avant A1. Même
         # mécanisme source-unique. Rien affiché si aucun mapping n'a été appliqué.

@@ -661,6 +661,8 @@ class AgentA3GLM:
                 # qui a rendu le BLOQUANT B5 si coûteux (facteur central de la RC Pro
                 # détruit, −17,4 % de Gini, sans que rien ne l'indique nulle part).
                 'exclusions_conformite': getattr(self, 'exclusions_conformite', {}),
+                'colonnes_plan_ecartees': getattr(
+                    self, 'colonnes_plan_ecartees', ()),
                 'controle_effet': getattr(self, 'controle_effet',
                                           {'execute': False, 'motifs': {}}),
                 'alertes_conformite': getattr(self, 'alertes_conformite', {}),
@@ -808,6 +810,12 @@ class AgentA3GLM:
             df=df, col_cible=[col_freq, col_cout],
         )
         self.exclusions_conformite = _mx.exclusions
+        # ⚠️⚠️ CONSTAT `conformite/C15` — CE QUE LA PORTE N'A JAMAIS REÇU.
+        # `exclusions` dit ce qu'elle a écarté ; `ecartees_amont` dit ce qui
+        # était DECLARE AU PLAN et ne lui est jamais parvenu. Cet agent
+        # construit sa liste PAR SOUSTRACTION : c'est ici que la perte peut
+        # se produire, et c'est donc ici qu'elle doit être dite.
+        self.colonnes_plan_ecartees = _mx.ecartees_amont
         # ⚠️ LE CONTRÔLE PAR L'EFFET VOYAGE AVEC SON MOTIF — `conformite/C7`.
         # La propriété existait depuis l'audit V14 avec la mention « À
         # REMONTER DANS LES RAPPORTS » ; mesuré, aucun agent ne la lisait.
