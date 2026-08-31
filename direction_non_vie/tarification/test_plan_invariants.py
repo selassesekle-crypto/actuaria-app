@@ -1919,6 +1919,10 @@ _PLAN_GOLDEN_DICT = {
     # payload que si elle porte une valeur qui puisse DÉRIVER. `'mois'` plutôt
     # que `'annee'` pour que la valeur diffère aussi du plafond par défaut.
     "unite_exposition": "mois",
+    # ⚠️ PEUPLÉS, comme `unite_exposition` : ce golden ne scelle une partie du
+    # payload que si elle porte une valeur qui puisse DÉRIVER.
+    "chargements": {"frais": 0.11, "commission": 0.07, "marge": 0.02,
+                    "taxes": 0.09},
     "identifiant_contrat": "id_police",
     "echeance": "date_echeance",
     "comportement": {
@@ -1926,7 +1930,8 @@ _PLAN_GOLDEN_DICT = {
         "prime_proposee": "prime_n", "canal": "direct", "groupe_test": "grp_prix",
     },
     "facteurs": [
-        {"nom": "age", "type": "continu", "transformation": "carre"},
+        {"nom": "age", "type": "continu", "transformation": "carre",
+         "bornes": [18, 110]},
         {"nom": "zone", "type": "categoriel", "encodage": "one_hot",
          "modalites": ["A", "B"], "reference": "A"},
     ],
@@ -1967,8 +1972,12 @@ class TestEmpreinteVersionneeSchema(unittest.TestCase):
         # tarifent differemment. Mesure faite AVANT le bump : aucune empreinte
         # `s1:` persistee dans `models/` ni `data/`.
         emp = PlanTarifaire.depuis_dict(dict(_PLAN_GOLDEN_DICT)).empreinte()
-        self.assertEqual(EMPREINTE_SCHEMA, 2)
-        self.assertEqual(emp, "s2:db1239540886145f",
+        # ⚠️⚠️ BUMP `s2` -> `s3` LE 31/08/2026, golden et constante dans le
+        # MEME commit. Motif : `chargements` (plan) et `bornes` (facteur)
+        # entrent dans le payload — une TAXE decide de la prime payee, une
+        # BORNE refuse un contrat. Les deux changent ce qui est tarife.
+        self.assertEqual(EMPREINTE_SCHEMA, 3)
+        self.assertEqual(emp, "s3:3b0da8bb5cfd6325",
             "empreinte du plan de reference gele changee : derive de structure "
             "sans bump, OU bump sans mise a jour du golden. Voir le commentaire.")
         print(f"    S3b golden scellé : {emp} ✅")

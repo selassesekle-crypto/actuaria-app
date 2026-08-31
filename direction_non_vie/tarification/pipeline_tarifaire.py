@@ -25,6 +25,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
+import dataclasses
 from statsmodels.genmod import families as _families
 
 from core.plan_tarifaire import PlanTarifaire
@@ -159,11 +160,19 @@ class TarifNonVie:
         rien — on compare au plan signé, comme A2 le fait déjà en refusant
         une modalité inconnue (piège V9).
 
-        ⚠️ CE QUE CETTE FONCTION NE FAIT PAS : elle ne juge pas la
-        PLAUSIBILITÉ. `bonus_malus = -999` et `1e12` sont *lisibles* — ils
-        sont refusés par aucune borne, et **aucune borne n'est déclarée dans
-        le plan**. En inventer une ici serait poser un chiffre actuariel que
-        personne n'a signé. Rendu comme question de conception.
+        ⚠️⚠️ ELLE JUGE DESORMAIS LA PLAUSIBILITE — MAIS SEULEMENT CE QUE LE
+        PLAN DECLARE. `bonus_malus = -999` et `1e12` sont *lisibles* : aucune
+        borne ne les refusait, et **aucune borne n'était déclarable**.
+        `Facteur.bornes` existe depuis le 31/08/2026.
+
+        *Le plan déclarait le TYPE d'un facteur continu, jamais son DOMAINE* —
+        exactement la forme d'`unite_exposition`, qui déclarait le RÔLE de
+        l'exposition et jamais son UNITÉ.
+
+        ⚠️ AUCUNE BORNE N'EST INVENTÉE ICI : ce sont des choix actuariels qui
+        demandent une source. Facteur sans borne déclarée = comportement
+        d'aujourd'hui, à l'identique. **0/20 plans en déclarent : aucun euro
+        ne bouge le jour de la pose.**
         """
         anomalies = []
         for f in self.plan.facteurs:
@@ -195,6 +204,19 @@ class TarifNonVie:
             if not math.isfinite(x):
                 anomalies.append(
                     f"facteur '{f.nom}' : valeur non finie ({valeur!r}).")
+                continue
+            # ⚠️⚠️ LA PLAUSIBILITE, ET SEULEMENT SI LE PLAN L'A DECLAREE —
+            # constat `pipeline/C1`, residu. Le motif dit la BORNE SIGNEE :
+            # l'actuaire doit pouvoir vérifier le refus contre son plan.
+            if f.bornes is not None:
+                bas, haut = f.bornes
+                if not (bas <= x <= haut):
+                    anomalies.append(
+                        f"facteur '{f.nom}' : valeur {x!r} HORS DU DOMAINE "
+                        f"declare au plan [{bas}, {haut}]. Elle est lisible, "
+                        f"mais le modele n'a jamais vu cette plage : la prime "
+                        f"rendue serait une EXTRAPOLATION, pas une "
+                        f"tarification.")
         return anomalies
 
     def tarifer(self, contrat: dict, exposition: float = 1.0) -> dict:
@@ -243,6 +265,14 @@ class TarifNonVie:
                 "prime_pure": round(prime_pure, 2),
                 "prime_commerciale_ht": round(pc, 2),
                 "prime_ttc": round(pc * (1 + ch["taxes"]), 2),
+                # ⚠️ L'HYPOTHESE VOYAGE AVEC LE PRIX — constat `pipeline/C5`.
+                # `None` quand le plan declare : rien a signaler.
+                "chargements_supposes": phrase_chargements_non_declares(
+                    self.plan),
+                # ⚠️ Constat `pipeline/C1`, residu : la porte existe, aucun
+                # plan ne la remplit — l'hypothese doit donc etre DITE.
+                "domaines_non_declares": phrase_domaines_non_declares(
+                    self.plan),
                 "plan_empreinte": empreinte,          # traçabilité ACPR (ex-clé 'plan')
                 "date_calcul": date_calcul,
             }
@@ -339,6 +369,112 @@ def evaluer_stabilite_temporelle(portefeuille: pd.DataFrame, plan: PlanTarifaire
 # ══════════════════════════════════════════════════════════════════════════════
 #  pipeline_complet — de A1 au tarif, piloté PAR LE PLAN (étapes 2→6)
 # ══════════════════════════════════════════════════════════════════════════════
+def _chargements_effectifs(explicites, plan) -> dict[str, float]:
+    """L'appelant, puis LE PLAN, puis le repli — et le repli se DIT.
+
+    ⚠️⚠️ CONSTATS `pipeline/C4` + `C5`, LA MEME QUESTION. `CHARGEMENTS_DEFAUT`
+    porte `taxes: 0.33` -- le taux AUTO -- et servait de defaut aux 20 LoB,
+    alors que son propre commentaire enumerait << auto 33 %, MRH 30 %,
+    RC 9 % >>. Impact mesure sur la prime TTC : MRH +2,31 %, RC +22,02 %.
+
+    ⚠️ AUCUN TAUX N'EST INVENTE ICI. Tant qu'un plan ne declare rien, le repli
+    d'aujourd'hui s'applique a l'identique -- **aucun euro ne bouge** -- mais
+    `tarifer()` publie desormais que la taxe a ete SUPPOSEE.
+    """
+    if explicites is not None:
+        return dict(explicites)
+    declares = getattr(plan, 'chargements', None)
+    if declares is not None:
+        return dataclasses.asdict(declares)
+    return dict(CHARGEMENTS_DEFAUT)
+
+
+def phrase_chargements_non_declares(plan) -> str | None:
+    """L'hypothese de chargement, DITE — le coeur de `pipeline/C5`.
+
+    ⚠️ Ne s'ajoute QUE si le plan ne declare rien : *un avertissement permanent
+    est un avertissement qu'on cesse de lire.*
+    """
+    if getattr(plan, 'chargements', None) is not None:
+        return None
+    return (f"CHARGEMENTS NON DECLARES au plan '{getattr(plan, 'lob', '?')}' : "
+            f"le repli AUTO a ete suppose, dont une taxe de "
+            f"{CHARGEMENTS_DEFAUT['taxes']:.0%}. Les taux varient par LoB "
+            f"(auto 33 %, MRH 30 %, RC 9 %) : declarez `chargements` au plan, "
+            f"sans quoi la prime TTC d'une LoB non-auto est surestimee.")
+
+
+def phrase_domaines_non_declares(plan) -> str | None:
+    """Les facteurs continus dont le plan ne borne pas le domaine — `C1` residu.
+
+    ⚠️⚠️ SANS CETTE PHRASE, LA FERMETURE SERAIT A MOITIE. La porte `bornes`
+    existe, mais **0/20 plans en declarent** : `bonus_malus = -999` rend donc
+    toujours un prix, et rien ne le dirait. *Le meme piege qu'`unite_exposition`
+    aurait eu si l'hypothese annuelle etait restee muette.*
+
+    ⚠️ Se tait des que TOUS les continus sont bornes : un avertissement
+    permanent est un avertissement qu'on cesse de lire.
+    """
+    sans = [f.nom for f in getattr(plan, 'facteurs', ())
+            if f.type == 'continu' and f.bornes is None]
+    if not sans:
+        return None
+    return (f"DOMAINES NON DECLARES au plan '{getattr(plan, 'lob', '?')}' : "
+            f"{len(sans)} facteur(s) continu(s) sans bornes -- "
+            + ", ".join(sorted(sans)) +
+            ". Une valeur LISIBLE mais implausible (par exemple -999) est donc "
+            "tarifee : la prime rendue serait une EXTRAPOLATION. Declarez "
+            "`bornes` sur ces facteurs pour qu'elle soit refusee.")
+
+
+class DonneeIllisibleBloquante(Exception):
+    """Une valeur illisible sur un rôle que le GLM consomme — constat
+    `pipeline/C8`.
+
+    ⚠️ Elle porte le rapport, comme `QualiteBloquante` : *l'actuaire doit
+    voir ce sur quoi il décide, pas seulement qu'on a refusé.*
+    """
+
+    def __init__(self, rapport, message: str):
+        self.rapport = rapport
+        super().__init__(message)
+
+
+def _refuser_illisibles_sur_roles_du_glm(rapport, roles_par_colonne, lob):
+    """Refuse de tarifer si un rôle CONSOMMÉ par le GLM porte de l'illisible.
+
+    ⚠️⚠️ ON N'INTERROGE QUE LES RÔLES QU'ON VA UTILISER. Un signalement sur une
+    colonne que le GLM ne lit pas ne casse rien : refuser dessus serait un
+    garde-fou plus large que sa raison — la 8e forme du piège d'assiette.
+
+    ⚠️ Rapport absent (appel hors `pipeline_complet`) : on ne refuse rien et on
+    ne prétend rien. *Un contrôle qui n'a pas tourné ne doit pas ressembler à
+    un contrôle qui n'a rien trouvé.*
+    """
+    if rapport is None:
+        return
+    coupables = [
+        a for a in getattr(rapport, 'signalements', []) or []
+        if str(a.code).startswith('valeur_illisible_')
+        and a.role in set(roles_par_colonne.values())
+    ]
+    if not coupables:
+        return
+    detail = " ; ".join(
+        f"{a.colonne} ({a.role}) : {a.nb_lignes} ligne(s), "
+        f"{a.proportion:.1%} du portefeuille" for a in coupables)
+    raise DonneeIllisibleBloquante(
+        rapport,
+        f"Tarification REFUSEE pour le plan '{lob}' : une ou plusieurs valeurs "
+        f"ILLISIBLES portent sur un role que le modele consomme -- {detail}. "
+        f"La couche qualite les a SIGNALEES (regle 3 : ambigu, ni exclu ni "
+        f"corrige) ; le calcul, lui, ne peut pas les ignorer. Sans ce refus, "
+        f"le GLM echouait sur << the deviance function returned a nan >>, un "
+        f"message qui accuse la bibliotheque et non le fichier. Corrigez ces "
+        f"valeurs, ou retirez ces lignes en amont -- ActuarIA ne les impute "
+        f"pas : imputer une valeur illisible fabriquerait une donnee.")
+
+
 def pipeline_complet(portefeuille: pd.DataFrame, plan: PlanTarifaire,
                      chargements: Optional[dict] = None,
                      quantile_ecretement: float = 0.995,
@@ -382,6 +518,29 @@ def pipeline_complet(portefeuille: pd.DataFrame, plan: PlanTarifaire,
         contexte=f"pipeline_complet — {plan.lob}")
     features = list(mx)
 
+    # ⚠️⚠️ CONSTAT `pipeline/C8` — LE SIGNAL EXISTE, PERSONNE NE L'ÉCOUTAIT.
+    # Le constat annonçait une asymétrie de `fillna` ; la mesure dit autre
+    # chose. La couche qualité **détecte** la valeur illisible et la SIGNALE
+    # (règle 3) — c'est sa doctrine, elle ne décide rien. Mais elle la laisse
+    # donc dans `dataframe_propre`, et le GLM mourait dessus :
+    #
+    #   valeur_illisible_exposition        5 lignes   (regle 3, signalee)
+    #   valeur_illisible_cible_frequence   4 lignes   (regle 3, signalee)
+    #   -> ValueError: deviance function returned a nan ... should be reported
+    #
+    # *L'actuaire recevait une invitation à signaler un bug à `statsmodels` là
+    # où son fichier portait 5 expositions illisibles.* Le défaut n'est pas la
+    # DÉTECTION, c'est l'INDIFFÉRENCE au signal détecté.
+    #
+    # ⚠️ CE QUE CE REFUS N'EST PAS : ni une exclusion (un euro bougerait, et
+    # « illisible » est AMBIGU, pas IMPOSSIBLE — la doctrine tranchée par
+    # `qualite/C8`), ni un `fillna` (imputer en silence sur une donnée
+    # illisible, le motif d'`a2/C5`). *Il n'y avait pas de prix : il n'y en a
+    # toujours pas, mais on dit pourquoi.*
+    _refuser_illisibles_sur_roles_du_glm(
+        rapport_qualite, {col_expo: 'exposition', col_freq: 'cible_frequence',
+                          col_cout: 'cible_cout'}, plan.lob)
+
     Xc = sm.add_constant(X[features], has_constant="add")
     expo = pd.to_numeric(X[col_expo], errors="coerce").clip(lower=1e-9)
     y_freq = pd.to_numeric(X[col_freq], errors="coerce").astype(float)
@@ -415,7 +574,11 @@ def pipeline_complet(portefeuille: pd.DataFrame, plan: PlanTarifaire,
         plan=plan, a2=a2, glm_frequence=glm_freq, glm_cout=glm_cout,
         features=features, ecretement=prime_grave_unitaire,
         coefficient_equilibre=1.0,
-        chargements=dict(chargements or CHARGEMENTS_DEFAUT),
+        # ⚠️⚠️ TROIS SOURCES, UN ORDRE EXPLICITE — constats `pipeline/C4`
+        # et `C5`. L'appelant prime (rétrocompat), puis LE PLAN SIGNÉ,
+        # puis le repli. *Le repli n'est plus le seul chemin, et quand il
+        # s'applique il est DIT — `tarifer()` le publie.*
+        chargements=_chargements_effectifs(chargements, plan),
         rapport_qualite=rapport_qualite)
 
     # ── Coefficient d'ÉQUILIBRE technique k (INV-8) ─────────────────────────

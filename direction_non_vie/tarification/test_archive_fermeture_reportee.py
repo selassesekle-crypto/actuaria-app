@@ -66,6 +66,14 @@ _HORS_ASSIETTE: dict[tuple[str, str], str] = {
         "l'exposition nulle pareil), pas epingle. `a2/C5` reste OUVERT. "
         "Retirer la mention detruirait une vraie trace ; une mention n'est "
         "pas une fermeture.",
+    ('a2/C5', 'test_portes_du_plan.py'):
+        "Cite comme MOTIF DU REJET d'une des deux solutions envisagees pour "
+        "`pipeline/C8`, jamais epingle. Face a des NaN qui tuent le GLM, un "
+        "`fillna` en aval etait la reparation evidente -- et c'est exactement "
+        "`a2/C5` : imputer EN SILENCE sur une donnee illisible. Le lot a donc "
+        "choisi de REFUSER en nommant la cause. `a2/C5` reste OUVERT, rang 5. "
+        "*Retirer la mention couperait le correctif de la raison qui a ecarte "
+        "l'autre solution.*",
     ('a2/C9', 'test_imputation_par_la_table.py'):
         "Cite pour dire POURQUOI le mode d'un binaire est range sous `modes` "
         "et non sous `medianes` : l'y mettre aurait AJOUTE une occurrence a "
@@ -304,8 +312,12 @@ class TestFermetureReportee(unittest.TestCase):
         """
         reels = _constats_reels()
         fermees = _cles_fermees()
-        # `pipeline/C1` est PARTIEL : arbitré, il compte OUVERT.
-        n_fermes = len(fermees - {'pipeline/C1'})
+        # ⚠️⚠️ L'EXCEPTION `pipeline/C1` A ÉTÉ RETIRÉE LE 31/08/2026. Elle
+        # disait « PARTIEL : arbitré, il compte OUVERT » — devenu FAUX le jour
+        # où son résidu (la plausibilité) a été fermé par `Facteur.bornes`.
+        # *Une exception dont la raison est périmée ment sur l'état du compte,
+        # exactement comme une exemption d'archive périmée.*
+        n_fermes = len(fermees)
         n_ouverts = len(reels) - n_fermes
         feuille = _texte(_ARCHIVE / 'FEUILLE_DE_ROUTE.md')
         self.assertIn(
@@ -333,7 +345,7 @@ class TestFermetureReportee(unittest.TestCase):
         contrôle pas les autres comptes en prose du document — ceux-là restent
         non tenus, et c'est dit plutôt que supposé.
         """
-        ouverts = _constats_reels() - (_cles_fermees() - {'pipeline/C1'})
+        ouverts = _constats_reels() - _cles_fermees()
         par_zone: dict[str, int] = {}
         for cle in ouverts:
             zone = cle.split('/')[0]

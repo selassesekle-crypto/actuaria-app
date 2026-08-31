@@ -58,6 +58,57 @@ FamilleSeverite = Literal["gamma", "lognormal", "inverse_gaussienne"]
 # DIT — le patron déjà validé pour la référence A3 absente d'`a4/C11`.
 UniteExposition = Literal["annee", "mois", "jour"]
 
+
+@dataclass(frozen=True)
+class Chargements:
+    """Le passage de la prime PURE à la prime que paie l'assuré.
+
+    ⚠️⚠️ CONSTATS `pipeline/C4` ET `pipeline/C5` — LA MÊME QUESTION, PAS DEUX.
+    `C4` disait que les chargements « déclarables dans le plan (étape 6) » ne
+    l'étaient pas ; `C5` en est la CONSÉQUENCE sur l'entrée la plus chère :
+    `CHARGEMENTS_DEFAUT` portait `taxes: 0.33` — le taux AUTO — pour **les 20
+    LoB**, alors que son propre commentaire énumérait « auto 33 %, MRH 30 %,
+    RC 9 % ». *Les corriger séparément aurait réparé deux fois le même défaut.*
+
+    Impact mesuré le 31/08 sur la prime TTC :
+
+        MRH : 33 % au lieu de 30 %  ->  x 1,0231   (+2,31 %)
+        RC  : 33 % au lieu de  9 %  ->  x 1,2202  (+22,02 %)
+
+    ⚠️ LATENT AUJOURD'HUI, ET IL FAUT LE DIRE : `prime_ttc` n'a **qu'une
+    occurrence** dans le dépôt — sa propre construction. Aucun service ne la
+    lit ; seuls des tests l'assertent `> 0`. *C'est la surface publique de
+    `tarifer()`, pas un rapport signé.*
+
+    ⚠️⚠️ CETTE CLASSE NE REMPLIT RIEN. Les vrais taux par LoB demandent une
+    SOURCE DE RÉFÉRENCE (le CGI pour les taxes) : aucun n'est inventé ici.
+    Tant qu'un plan ne déclare pas ses chargements, le repli d'aujourd'hui
+    s'applique — **et il est DIT**, jamais supposé en silence.
+    """
+    frais: float = 0.15
+    commission: float = 0.10
+    marge: float = 0.03
+    taxes: float = 0.33
+
+    def __post_init__(self):
+        # ⚠️ Une commission de 100 % divise par zéro dans `tarifer()` : la borne
+        # n'est pas une préférence, c'est le domaine de définition du calcul.
+        for nom, valeur in dataclasses_asdict(self).items():
+            if not isinstance(valeur, (int, float)) or isinstance(valeur, bool):
+                # ⚠️ `TypeError` et non `ValueError` : ce n'est pas une valeur
+                # hors domaine, c'est le mauvais TYPE. La distinction compte
+                # pour l'appelant qui rattrape.
+                raise TypeError(
+                    f"chargements : '{nom}' doit être un nombre, reçu "
+                    f"{valeur!r}.")
+            if valeur < 0:
+                raise ValueError(
+                    f"chargements : '{nom}' = {valeur} est négatif.")
+        if self.commission >= 1.0:
+            raise ValueError(
+                f"chargements : commission = {self.commission} >= 1 — la prime "
+                f"commerciale divise par (1 - commission).")
+
 #: VERSION DE SCHÉMA DE L'EMPREINTE — la génération de la STRUCTURE hachée par
 #: `empreinte()`, distincte du champ `version` (le CONTENU signé par l'actuaire).
 #: ⚠️⚠️ À BUMPER quand, et seulement quand, la COMPOSITION du payload de
@@ -72,7 +123,11 @@ UniteExposition = Literal["annee", "mois", "jour"]
 #: une empreinte recalculée — état PRÉVU par `comparer_empreinte`, qui
 #: prescrit l'action (re-tarifer le plan sous ce code). Mesuré avant le bump :
 #: **aucune empreinte `s1:` persistée** dans `models/` ni `data/`.
-EMPREINTE_SCHEMA = 2
+#: ⚠️ `2` -> `3` LE 31/08/2026 : `chargements` (plan) et `bornes` (facteur)
+#: entrent dans le payload. Une TAXE decide de la prime payee, une BORNE
+#: refuse un contrat : les deux changent ce qui est tarife, donc les deux
+#: sont opposables. Golden mis a jour dans le MEME commit.
+EMPREINTE_SCHEMA = 3
 
 # Transformations dérivées : suffixe appliqué par A2
 _SUFFIXE_TRANSFO = {"log": "log_{}", "carre": "{}_carre", "racine": "{}_racine"}
@@ -112,6 +167,21 @@ class Facteur:
     modalites: Optional[tuple] = None          # figées à l'apprentissage (one_hot/label)
     anteriorite: bool = False                  # sinistralité passée légitime (V14)
     reference: Optional[str] = None            # modalité de référence du one-hot
+    #: ⚠️⚠️ LE DOMAINE DE VALIDITÉ — constat `pipeline/C1`, résidu.
+    #: `C1` est fermé pour l'ILLISIBILITÉ : `tarifer()` refuse désormais
+    #: `bonus_malus = 'beaucoup'`. Il reste ouvert pour la PLAUSIBILITÉ —
+    #: `-999` est un flottant parfaitement LISIBLE, et rendait toujours un
+    #: prix (−19,4 % sur le contrat de référence).
+    #:
+    #: *Le plan déclarait le TYPE d'un facteur continu, jamais son DOMAINE* —
+    #: exactement la forme d'`unite_exposition`, qui déclarait le RÔLE de
+    #: l'exposition et jamais son UNITÉ. `modalites` borne les catégoriels ;
+    #: le continu n'avait rien.
+    #:
+    #: ⚠️ NON DÉCLARÉ = comportement d'aujourd'hui, mais DIT. Aucune borne
+    #: n'est inventée ici : ce sont des choix ACTUARIELS qui demandent une
+    #: source, pas une valeur plausible au jugé.
+    bornes: tuple | None = None
     commentaire: str = ""
 
     def __post_init__(self):
@@ -139,6 +209,33 @@ class Facteur:
                     f"l'execution : sans ce controle, le facteur disparait EN "
                     f"SILENCE et aucun modele ne le voit."
                 )
+
+        # ── ①bis LE DOMAINE, QUAND IL EST DÉCLARÉ ─────────────────────────────
+        # ⚠️ La porte refuse une borne ABSURDE avant qu'elle ne refuse un
+        # contrat : *un garde-fou mal déclaré est pire qu'aucun garde-fou.*
+        if self.bornes is not None:
+            bornes = tuple(self.bornes)
+            if len(bornes) != 2:
+                raise ValueError(
+                    f"'{self.nom}' : bornes={self.bornes!r} — attendu un couple "
+                    f"(minimum, maximum).")
+            bas, haut = bornes
+            for etiquette, valeur in (("minimum", bas), ("maximum", haut)):
+                if not isinstance(valeur, (int, float)) or isinstance(valeur, bool):
+                    raise TypeError(
+                        f"'{self.nom}' : bornes — le {etiquette} doit etre un "
+                        f"nombre, recu {valeur!r}.")
+            if not bas < haut:
+                raise ValueError(
+                    f"'{self.nom}' : bornes=({bas}, {haut}) — le minimum doit "
+                    f"etre STRICTEMENT inferieur au maximum, sinon aucune "
+                    f"valeur n'est admise.")
+            if self.type == "categoriel":
+                raise ValueError(
+                    f"'{self.nom}' : `bornes` ne s'applique qu'a un facteur "
+                    f"CONTINU ou BINAIRE ; un categoriel borne ses valeurs par "
+                    f"`modalites`. *Deux mecanismes pour la meme chose "
+                    f"divergeraient.*")
 
         # ── ② Cohérence des combinaisons ──────────────────────────────────────
         if self.type == "categoriel" and self.encodage == "aucun":
@@ -350,6 +447,11 @@ class PlanTarifaire:
     # déjà `echeance` deux champs plus bas. *La dette du voisin n'autorise pas
     # à en ajouter une.*
     unite_exposition: UniteExposition | None = None
+    # ⚠️⚠️ LES CHARGEMENTS — constats `pipeline/C4` + `C5`, LA MEME question.
+    # Non déclarés : le repli d'aujourd'hui s'applique, mais il est DIT.
+    # ⚠️ Ils sont DANS L'EMPREINTE : la taxe décide de la prime que paie
+    # l'assuré, donc elle est opposable. Voir `Chargements`.
+    chargements: Chargements | None = None
     # Colonne identifiant de contrat/police (optionnelle). Si déclarée, la couche
     # qualité (core/qualite_donnees.py) dédoublonne PAR CET IDENTIFIANT (règle 1,
     # exclusion sans discussion) ; sinon un doublon de LIGNE entière reste ambigu
@@ -564,6 +666,9 @@ class PlanTarifaire:
             # exactement la distinction que `EMPREINTE_SCHEMA` existe pour
             # porter.
             "unite_exposition": self.unite_exposition,
+            # ⚠️ Un chargement décide du prix payé : opposable, donc haché.
+            "chargements": (dataclasses_asdict(self.chargements)
+                            if self.chargements else None),
             "cibles": [self.cible_frequence, self.cible_cout],
             "famille_severite": self.famille_severite,
             "identifiant_contrat": self.identifiant_contrat,
@@ -573,7 +678,10 @@ class PlanTarifaire:
             "facteurs": [
                 {"nom": f.nom, "type": f.type, "encodage": f.encodage,
                  "transformation": f.transformation, "modalites": f.modalites,
-                 "anteriorite": f.anteriorite, "reference": f.reference}
+                 "anteriorite": f.anteriorite, "reference": f.reference,
+                 # ⚠️ Une borne REFUSE un contrat : elle change ce qui est
+                 # tarifé, donc elle appartient a l'empreinte.
+                 "bornes": list(f.bornes) if f.bornes else None}
                 for f in self.facteurs
             ],
             "interactions": [list(i) for i in self.interactions],
@@ -637,6 +745,7 @@ class PlanTarifaire:
                 modalites=tuple(f["modalites"]) if f.get("modalites") else None,
                 anteriorite=bool(f.get("anteriorite", False)),
                 reference=f.get("reference"),
+                bornes=tuple(f["bornes"]) if f.get("bornes") else None,
                 commentaire=f.get("commentaire", ""),
             )
             for f in d["facteurs"]
@@ -654,6 +763,8 @@ class PlanTarifaire:
             # LÈVE au lieu d'être avalé — c'est pourquoi il fallait le fermer
             # AVANT d'ajouter ce champ.
             unite_exposition=d.get("unite_exposition"),
+            chargements=(Chargements(**d["chargements"])
+                         if d.get("chargements") else None),
             identifiant_contrat=d.get("identifiant_contrat"),
             echeance=d.get("echeance"),
             comportement=(Comportement(**d["comportement"])

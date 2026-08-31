@@ -107,6 +107,32 @@ L'affirmation est vraie **à l'intérieur de ce fichier** — le test et le
 walk-forward y partagent bien `gini_lorenz`. Elle est fausse à l'échelle du
 module, et c'est ainsi qu'elle se lit.
 
+> ✅ **`pipeline/C1` — LE RÉSIDU EST FERMÉ le 31/08/2026.** Il n'est donc plus
+> PARTIEL : *l'exception codée en dur qui l'excluait du compte a été retirée.*
+> *Preuve : `PTE-5`, `PTE-6`, `PTE-7`, `PTE-12`.*
+>
+> Il était fermé pour l'**illisibilité**, ouvert pour la **plausibilité** :
+> `bonus_malus = -999` est un flottant parfaitement LISIBLE et rendait toujours
+> un prix (−19,4 %). *Le plan déclarait le TYPE d'un facteur continu, jamais son
+> DOMAINE* — exactement la forme d'`unite_exposition`. `modalites` bornait les
+> catégoriels ; **le continu n'avait rien**.
+>
+> `Facteur.bornes` existe, est validé à la déclaration (triplet, `min >= max`,
+> non-nombre, borne sur un catégoriel : refusés), **est dans l'empreinte** — une
+> borne refuse un contrat, donc elle change ce qui est tarifé — et le refus
+> **nomme la borne signée** : *l'actuaire doit pouvoir vérifier le refus contre
+> son plan.*
+>
+> ⚠️⚠️ **ET LA FERMETURE AURAIT ÉTÉ À MOITIÉ SANS LA PHRASE.** **0/20 plans
+> déclarent des bornes** : `-999` est donc toujours tarifé aujourd'hui. Sans le
+> dire, on aurait fermé sur le mécanisme seul. `tarifer()` publie désormais
+> `domaines_non_declares` — 9 facteurs continus sans bornes sur `auto` — et se
+> tait dès que tous sont bornés (`PTE-12`). *Le même piège qu'`unite_exposition`
+> aurait eu si l'hypothèse annuelle était restée muette.*
+>
+> ⚠️ **Aucune borne n'est inventée** : ce sont des choix actuariels qui
+> demandent une source. **Aucun euro ne bouge**, `PTE-6` et `PTE-11` le tiennent.
+
 **C4 — Les chargements « déclarables dans le plan » ne le sont pas.** Le
 commentaire l.35-36 dit « Déclarables dans le plan (étape 6) ; ici en repli
 neutre ». Mesuré : `PlanTarifaire` **ne porte aucun champ `chargements`** — le
@@ -116,6 +142,39 @@ repli est le seul chemin, et l'étape 6 annoncée n'existe pas.
 Le commentaire l.36 énumère trois taux par LoB. `CHARGEMENTS_DEFAUT` porte
 `"taxes": 0.33` **en dur, pour toute LoB**. Une MRH tarifée par ce chemin
 reçoit la taxe auto.
+
+> ✅ **`pipeline/C4` + `pipeline/C5`** · **FERMÉS ENSEMBLE le 31/08/2026 — C'EST
+> UNE SEULE QUESTION, PAS DEUX.** *Preuve : `test_portes_du_plan.py`,
+> 11 contrôles, **10 violations plantées**.*
+>
+> `C4` disait que les chargements « déclarables dans le plan (étape 6) » ne
+> l'étaient pas ; `C5` en est la **conséquence** sur l'entrée la plus chère.
+> *Les corriger séparément aurait réparé deux fois le même défaut.*
+>
+> **Impact mesuré sur la prime TTC** — `PTE-4` le vérifie par exécution :
+>
+> ```
+>   MRH : 33 % au lieu de 30 %  ->  x 1,0231   (+2,31 %)
+>   RC  : 33 % au lieu de  9 %  ->  x 1,2202  (+22,02 %)
+> ```
+>
+> ⚠️ **LATENT, ET IL FAUT LE DIRE** : `prime_ttc` n'a **qu'une occurrence**
+> dans le dépôt — sa propre construction. Aucun service ne la lit ; seuls des
+> tests l'assertent `> 0`. *C'est la surface publique de `tarifer()`, pas un
+> rapport signé.*
+>
+> **`PlanTarifaire.chargements`** est déclarable, validé (`commission >= 1`
+> divise par zéro → refusé), **et dans l'empreinte** : une taxe décide de la
+> prime payée, donc elle est opposable. Ordre explicite : **l'appelant, puis
+> le PLAN, puis le repli** — et *quand le repli s'applique, il est DIT*
+> (`chargements_supposes`, publié par `tarifer()`, `None` si le plan déclare).
+>
+> ⚠️⚠️ **AUCUN TAUX N'EST INVENTÉ.** Les vrais taux par LoB demandent une
+> source (le CGI) : **0/20 plans déclarent**, le repli s'applique partout à
+> l'identique, **aucun euro ne bouge**. `PTE-11` le tient. *Le jour où un plan
+> déclarera sa vraie taxe, l'euro bougera — jusqu'à −22 % sur la RC — et ce
+> sera un ARBITRAGE, pas un effet de bord.*
+
 
 **C6 — `grille()` annonce des relativités exportables et ne porte que la
 fréquence.** Docstring l.177 : « Relativités exportables (ce que l'assureur met
@@ -136,6 +195,46 @@ est un test **séparé**, au centime. Les tests distinguent les deux précisions
 la docstring les confond.
 
 **C8 — Asymétrie de protection contre les NaN dans la même fonction.**
+
+> ✅ **`pipeline/C8`** · **FERMÉ le 31/08/2026 — ET LA RACINE N'ÉTAIT PAS CELLE
+> QUE CE CONSTAT DÉCRIT.** *Preuve : `PTE-8`, `PTE-9`, `PTE-10`.*
+>
+> Le constat annonce une asymétrie de `fillna`. **Mesuré** :
+>
+> ```
+>   couche qualite -> valeur_illisible_exposition        5 lignes  (regle 3)
+>                     valeur_illisible_cible_frequence   4 lignes  (regle 3)
+>   NaN SURVIVANTS dans le dataframe PROPRE : exposition=5  freq=4
+>   puis : ValueError « deviance function returned a nan ... should be reported »
+> ```
+>
+> **La couche qualité fait son travail : elle SIGNALE et ne décide rien**
+> (règle 3, la doctrine tranchée par `qualite/C8`). *Le défaut n'est pas la
+> DÉTECTION, c'est l'INDIFFÉRENCE au signal détecté.* L'actuaire recevait une
+> invitation à signaler un bug à `statsmodels` là où son fichier portait cinq
+> expositions illisibles.
+>
+> `pipeline_complet` **lit désormais les signalements qu'il vient de recevoir**
+> et refuse, avec le rôle, le compte et la proportion.
+>
+> ⚠️ **CE QUI A ÉTÉ REJETÉ** : reclasser en règle 1 (⛔ un euro bougerait, et
+> « illisible » est **ambigu**, pas **impossible**) · un `fillna` en aval
+> (⛔ imputer en silence sur une donnée illisible — le motif d'`a2/C5`).
+> ⚠️ **Aucun euro : ça mourait déjà. Ça meurt maintenant en disant
+> pourquoi.** *(Le `✅` est réservé au MARQUEUR d'ouverture d'un bloc de
+> fermeture : `test_archive_cles_fermeture` lit toute ligne `> ✅` comme
+> une fermeture et lui réclame sa clé. Un glyphe décoratif y devient un
+> constat fantôme.)*
+>
+> ⚠️⚠️ **ET LE SCEAU A MONTRÉ QU'UN DE MES CONTRÔLES ÉTAIT DU DÉCOR.** Le
+> filtre de rôle — ne refuser que sur un rôle que le GLM consomme — **ne peut
+> rien filtrer aujourd'hui** : le détecteur `valeur_illisible_*` ne tourne que
+> sur `exposition`, `cible_frequence` et `cible_cout`, exactement les trois
+> rôles consommés. Le plant qui RETIRE le filtre ne faisait tomber aucun
+> contrôle. *Le filtre reste — c'est la bonne assiette pour le jour où un autre
+> rôle gagnera un détecteur — mais son cas est désormais **construit**, pas
+> emprunté à une couche qui ne le produit jamais.*
+
 Mesuré : `fillna` présent sur `cout_total` (l.314), **absent** sur `expo`
 (l.299) et sur `y_freq` (l.300). Les trois passent par `pd.to_numeric(...,
 errors="coerce")`, qui produit des NaN silencieux ; un seul les traite.

@@ -162,7 +162,12 @@ class TestLePlanDeclareLUnite(unittest.TestCase):
         self.assertNotEqual(a, b, "l'unite ne bouge pas l'empreinte : elle "
                                   "n'est donc pas opposable")
         self.assertNotEqual(a, c)
-        self.assertTrue(all(x.startswith('s2:') for x in (a, b, c)))
+        # ⚠️⚠️ DERIVE, PLUS ECRIT EN DUR. J'avais fige `s2:` ici dans le lot
+        # meme ou je denoncais un litteral `s1:` ailleurs et le derivais.
+        # Le bump `2` -> `3` des trois portes l'a fait rougir. *Ce que je
+        # corrige chez le voisin, je dois le corriger chez moi.*
+        prefixe = f's{EMPREINTE_SCHEMA}:'
+        self.assertTrue(all(x.startswith(prefixe) for x in (a, b, c)))
         print(f"    UX-1 l'unite est DANS l'empreinte : annee={a} mois={b}")
 
     def test_une_unite_inconnue_LEVE_avec_l_attendu_nomme(self):
@@ -366,7 +371,9 @@ class TestLEmpreinteEstVersionnee(unittest.TestCase):
         """⚠️ Le golden de `test_plan_invariants` est le sceau ; celui-ci
         verifie que le bump a bien eu lieu ET que le type reste ferme."""
         from typing import get_args
-        self.assertEqual(EMPREINTE_SCHEMA, 2)
+        # ⚠️ Le SCEAU du numero vit dans `test_plan_invariants` (golden) :
+        # le figer ICI aussi creerait un second endroit a bumper.
+        self.assertGreaterEqual(EMPREINTE_SCHEMA, 2)
         self.assertEqual(set(get_args(UniteExposition)),
                          {'annee', 'mois', 'jour'})
         self.assertEqual(
