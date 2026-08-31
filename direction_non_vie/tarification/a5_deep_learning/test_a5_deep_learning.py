@@ -1,6 +1,11 @@
 """
 Tests A5 Deep Learning v1.0 — CANN + TabNet Non-Vie
-7 tests · fallback si PyTorch absent · données synthétiques
+fallback si PyTorch absent · données synthétiques
+
+⚠️⚠️ CONSTAT `a5/C9` : cet en-tête annonçait « 7 tests ». Il y en avait 3 au
+relevé, il y en a 12 aujourd'hui. *Un compte écrit à la main périme à chaque
+lot ; on ne le remplace pas par un autre compte à la main.* Le nombre est
+retiré : `unittest` le publie à chaque exécution, et lui ne se trompe pas.
 """
 import sys, os, unittest
 import numpy as np

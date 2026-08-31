@@ -167,7 +167,29 @@ L'Excel équipe porte **six synthèses réglementaires** (`avertissement_walk_fo
 ### C — Imprécis ou daté (2)
 
 **C8 — `export_excel_a3` annonce 5 onglets, en produit 6.** Corrigé après ma première mesure : **c'est le seul écart** — a1, a2, a4, a5 et a6 sont exacts.
+
+> ✅ **`services/C8`** · **FERMÉ le 31/08/2026.** *Preuve : `TRI-5`.*
+> ⚠️⚠️ **LES DEUX CÔTÉS SONT DÉRIVÉS, jamais l'annonce seule.** Écrire « 6 » en
+> dur aurait reproduit le défaut au lot suivant : `TRI-5` **compte les
+> `create_sheet` du code** par AST et les compare au nombre de la docstring.
+> *Un compte écrit à la main ne se répare pas par un autre compte écrit à la
+> main — il se remplace par une dérivation.*
+
 **C9 — Un ROUGE se publie « ✗ Attention ».** `_kpi` traduit `{VERT: '✓ Conforme', AMBRE: '△ À surveiller', ROUGE: '✗ Attention'}`. « Attention » est plus faible que « À surveiller » ; le mot le plus fort du triptyque est le moins alarmant.
+
+> ✅ **`services/C9`** · **FERMÉ le 31/08/2026 — DEUX DÉFAUTS SUR LA MÊME LIGNE.**
+> *Preuve : `TRI-6`.*
+>
+> **① Le mot.** ROUGE dit désormais **« Non conforme »**, qui domine sans
+> ambiguïté le « À surveiller » d'AMBRE. *L'escalade s'inversait sur le seul mot
+> que l'actuaire lit en diagonale.*
+>
+> **② Le glyphe, trouvé en corrigeant le mot.** `_kpi` **redéclarait** `✓ △ ✗`
+> en littéral, alors que `GLYPHE_RAG_EXCEL` est l'exception **nommée** de la
+> charte. Il vient maintenant de `glyphe_rag(statut, cible='excel')`. *Le lot de
+> la charte avait annoncé « 30 définitions locales → 0 » : il en restait une,
+> cachée dans une chaîne qui portait aussi un mot.*
+
 
 **C10 — Un garde-fou réglementaire ne sortait que par le prompt du LLM.**
 

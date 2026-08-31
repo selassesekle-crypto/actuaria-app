@@ -16,7 +16,7 @@ Utilisé par : tarif_excel.py, rapport_equipe_tarif.py
 import logging
 from typing import Optional
 
-from core.charts_tarif import FOND_SOMBRE, couleur_rag
+from core.charts_tarif import FOND_SOMBRE, couleur_rag, glyphe_rag
 
 logger = logging.getLogger('actuaria.tarif.excel_helpers')
 
@@ -125,7 +125,20 @@ def _kpi(ws, row, label, value, statut=None, fmt=None, wrap=False):
           fmt=fmt, wrap=wrap)
     _col_w(ws, 2, 50 if wrap else 22)
     if statut:
-        txt = {"VERT": "✓ Conforme", "AMBRE": "△ À surveiller", "ROUGE": "✗ Attention"}.get(statut, statut)
+        # ⚠️⚠️ CONSTAT `services/C9` — LE MOT LE PLUS FORT ÉTAIT LE MOINS
+        # ALARMANT. Le triptyque publiait « ✗ Attention » pour ROUGE, contre
+        # « △ À surveiller » pour AMBRE : *l'escalade s'inversait sur le seul
+        # mot que l'actuaire lit en diagonale.* ROUGE dit désormais « Non
+        # conforme », qui domine « À surveiller » sans ambiguïté.
+        #
+        # ⚠️ ET LE GLYPHE VIENT DE SA SOURCE UNIQUE, plus d'un littéral local.
+        # `GLYPHE_RAG_EXCEL` est l'exception NOMMÉE de la charte (`✓ △ ✗`,
+        # sobres à l'impression) ; la recopier ici rouvrait très exactement la
+        # divergence que le lot « 30 définitions locales -> 0 » avait fermée.
+        _MOT_RAG = {"VERT": "Conforme", "AMBRE": "À surveiller",
+                    "ROUGE": "Non conforme"}
+        _mot = _MOT_RAG.get(statut)
+        txt = f"{glyphe_rag(statut, cible='excel')} {_mot}" if _mot else statut
         _cell(ws, row, 3, txt, bold=True, cf=BLANC,
               fill=_statut_fill(statut), ah="center")
         _col_w(ws, 3, 18)

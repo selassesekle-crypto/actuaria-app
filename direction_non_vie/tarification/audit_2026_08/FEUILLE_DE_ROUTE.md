@@ -39,10 +39,10 @@ lui-même**.
 | | |
 |---|---|
 | constats relevés (vagues 1 + 2) | **155** — *`services/C12` ouvert ET fermé le 30/08 (la synthèse qualité ne sortait que par le prompt) ; `qualite/C7` ouvert ET fermé le 30/08 (l'identifiant jugé par le détecteur des grandeurs) ; `a2/C17` ouvert le 29/08 par la re-mesure de `a2/C8` et `a2/C9` ; recomptés le 29/08 ; `a3/C19`, `services/C10`, `a5/C10` et `services/C11` sont des constats NEUFS, ouverts et fermés dans leur propre lot* |
-| fermés **et épinglés** | **83** |
+| fermés **et épinglés** | **90** |
 | corrigé, **non épinglé** | **0** — `a5/C5` épinglé le 29/08 · **partiel** : `pipeline/C1` |
 | corrigé, épinglé, **NON REPORTÉ** (4e état) | **0** — `a6/C1` `a6/C2` `a6/C4` nommés le 30/08 |
-| **⛔ OUVERTS** | **72** |
+| **⛔ OUVERTS** | **66** |
 | lignes lues intégralement | **22 693** sur 23 863 du périmètre |
 | jamais auditées | **1 170 l** + `actuaria_app.py` (5 181 l) |
 | preuves qui se relancent | **35, 0 échec** |
@@ -542,7 +542,52 @@ coupable (3) · annotations et exports morts (3).
 | **l'assemblage de l'app** | ~980 | `_executer_analyse` (799 l) + le bloc tarification (846 l). **Le reste de l'app : hors périmètre, déclaré** |
 | `services/excel_helpers.py` | 139 | complète le périmètre |
 
-## HORS RANG — LE TRI · 🟡 **11 ZONES TRACÉES sur 14 · 9 restants**
+## HORS RANG — LE TRI · ✅ **CLOS le 31/08/2026 — LES 14 ZONES SONT TRACÉES**
+
+> ### 🟢 **LES 9 DERNIERS CONSTATS SONT ALLÉS AU SITE. 7 fermés, 2 laissés ouverts avec leur raison, ET 1 CONSTAT NEUF OUVERT PAR LA TRACE.**
+>
+> **Fermés** : `a5/C3` `a5/C8` `a5/C9` · `charts/C6` `charts/C7` ·
+> `services/C8` `services/C9`. *Preuve :
+> [`test_tri_a5_charts_services.py`](../test_tri_a5_charts_services.py),
+> 8 contrôles, **9 violations plantées**.*
+>
+> ⚠️⚠️ **`a5/C3` ÉTAIT AU QUATRIÈME ÉTAT** — corrigé **et** épinglé par
+> `test_les_courbes_d_apprentissage_portent_les_pertes_REELLES`, mais **jamais
+> nommé** : `ARCH-1` ne pouvait pas le voir, et il comptait ouvert. *Le
+> quatrième état ne se distingue du troisième que par une clé écrite quelque
+> part.*
+>
+> ⛔⛔ **ET LA TRACE DE `a5/C8` A OUVERT `conformite/C15`, PLUS SÉRIEUX QUE LE
+> CONSTAT QU'ELLE TRAÇAIT.** A3/A4/A5 filtrent par liste noire **puis** croisent
+> avec la liste blanche du plan : *cette dernière ne voit que ce qui a survécu.*
+> Violation plantée — on retire **une** colonne déclarée avant l'appel :
+>
+> ```
+>   temoin  (23 colonnes) -> 23 retenues | exclusions 0 | alertes 0
+>   amputee (22 colonnes) -> 22 retenues | exclusions 0 | alertes 0   <-- RIEN
+> ```
+>
+> **C'est `plan/C3` rouvert un étage plus bas.** ⚠️ **Ampleur mesurée, non
+> gonflée : 0 victime sur 20 plans** — le défaut est **latent**, et `TRI-7`
+> monte la garde pour qu'il ne devienne pas actif en silence. **Le correctif
+> touche trois agents et une surface signée : rien ne bougera sans arbitrage.**
+>
+> ### ⛔ LES DEUX LAISSÉS OUVERTS, ET POURQUOI
+>
+> **`charts/C8`** — il vit dans `actuaria_app.py`, **hors périmètre par
+> arbitrage du 25/08**. ⚠️ **Et le constat est RÉFUTÉ sur un point** : il disait
+> « même valeur aujourd'hui » — `CONFIG_PLOTLY` porte `responsive: True` que le
+> littéral de l'app **n'a pas**, sur **deux** sites et non un. *Ce ne sont pas
+> deux endroits à changer demain, ce sont deux comportements différents
+> aujourd'hui.* `TRI-8` en garde le second sens.
+>
+> **`services/C7`** — porter `raisons_plafond` aux 4 surfaces manquantes ajoute
+> une phrase à **quatre livrables signés** : c'est un lot de **publication** à
+> lui seul, de la famille de l'étape 4 d'`unite_exposition`. *La leçon du jour
+> étant qu'une surface signée peut changer sous 812 tests verts, il doit porter
+> ses propres contrôles — pas être empilé dans une passe de tri.*
+
+## HORS RANG — LE TRI · l'état d'avant, gardé pour la méthode
 
 ⚠️⚠️ **ET LE COMPTE ÉTAIT DE 40 : IL EST DE 77.** Le document répartissait
 les non alloués en « 38 de bruit » + « 40 non triés », mais **aucun des deux
@@ -556,9 +601,24 @@ pour les fermés ; **moins `pipeline/C1`**, partiel et arbitré OUVERT.
 
 | lecture | compte | comment il se dérive |
 |---|---|---|
-| constats **ouverts** | **72** | clés réelles moins clés fermées — **tenu par `ARCH-5`** |
-| dont **zones TRIÉES** (`a2` 11 · `pipeline` 9 · `a3` 8 · `a1` 6 · `conformite` 6 · `plan` 6 · `socle` 5 · `a4` 4 · `agents` 4 · `qualite` 4 · `a6` 2) | **65** | préfixe de la clé |
-| ⛔ **jamais tracés** | **9** | le complément — *exact, sans heuristique* |
+| constats **ouverts** | **66** | clés réelles moins clés fermées — **tenu par `ARCH-5`** |
+| dont **zones TRIÉES** (`a2` 11 · `pipeline` 9 · `a3` 8 · `conformite` 7 · `a1` 6 · `plan` 5 · `socle` 5 · `a4` 4 · `agents` 4 · `qualite` 3 · `a6` 2 · `charts` 1 · `services` 1) | **66** | préfixe de la clé |
+| ✅ **jamais tracés** () | **0** | le complément — *exact, sans heuristique* |
+
+> ### ⛔⛔ CE TABLEAU A ÉTÉ PÉRIMÉ UNE SECONDE FOIS, ET AU MÊME ENDROIT (31/08)
+>
+> Il publiait `plan` **6**, `qualite` **4**, total **65** : les fermetures de
+> `plan/C5` (30/08) et `qualite/C3` (31/08) ne l'avaient pas atteint. Les vrais
+> chiffres sont **5**, **3** et **63**.
+>
+> ⚠️⚠️ **ET L'AVERTISSEMENT ÉTAIT DÉJÀ ÉCRIT DEUX PARAGRAPHES PLUS BAS** —
+> « *`ARCH-5` tient le total, jamais la répartition* » — après une première
+> correction où `80 − 46 ≠ 33`. **Le défaut est revenu au même endroit, dans le
+> paragraphe qui le nommait.** *Un avertissement écrit n'est pas un garde-fou :
+> seul un contrôle qui ÉCHOUE en est un.*
+>
+> ✅ **Il en est un désormais** : `ARCH-6` re-dérive la répartition par zone et
+> la compare à cette ligne. Elle ne peut plus périmer en silence.
 
 > ⚠️⚠️ **ET LA VERSION PRÉCÉDENTE DE CE TABLEAU NE TOMBAIT PAS JUSTE.** Elle
 > publiait **80** ouverts, **46** triés et **33** non tracés : `80 − 46 = 34`.

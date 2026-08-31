@@ -55,12 +55,15 @@ if not OPENPYXL_OK:
 
 # =============================================================================
 #  EXPORT A3 — GLM
-#  5 onglets : Synthèse · Relativités Poisson · Relativités Gamma
-#              Hypothèses H1-H4 · Audit Trail
+#  6 onglets : Synthèse · Relativités Poisson · Relativités Gamma
+#              Hypothèses H1-H4 · Audit Trail · Crédibilité & Géo
+#  ⚠️⚠️ Constat `services/C8` : l'en-tête et la docstring annonçaient 5. Le
+#  code crée ws1..ws6 — « 6-Crédibilité & Géo » a été ajouté sans que le
+#  compte suive. Mesuré : c'est le SEUL écart, a1/a2/a4/a5/a6 sont exacts.
 # =============================================================================
 
 def export_excel_a3(result_a3: Dict, audit_id: str = "", arrete: Optional[str] = None) -> bytes:
-    """Génère le rapport Excel A3 GLM (5 onglets). Retourne bytes ou b''."""
+    """Génère le rapport Excel A3 GLM (6 onglets). Retourne bytes ou b''."""
     if not OPENPYXL_OK or not result_a3 or not result_a3.get('success'):
         return b''
     try:

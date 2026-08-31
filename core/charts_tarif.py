@@ -12,7 +12,13 @@ Les agents (A3/A4/A6) appellent ces fonctions avec leurs données EN PORTÉE
 (relativités, résidus, courbes, SHAP…) et stockent la figure dans leur dict
 `graphiques`. Les services rendent la figure :
   • HTML / app  : natif interactif  → fig.to_html(config=CONFIG_PLOTLY)
-  • Excel / Word : image statique (kaleido) — SUIVI (kaleido absent aujourd'hui).
+  • Excel / Word : image statique (kaleido) — DISPONIBLE.
+    ⚠️⚠️ Constat `charts/C7` : cette ligne portait « SUIVI (kaleido absent
+    aujourd'hui) ». Mesuré le 31/08/2026 : kaleido est installé en **1.3.0**,
+    et `to_image(png)` rend 20 826 octets — l'image statique EST produisible.
+    *Le suivi était clos, la note ne l'était pas.* ⚠️ Que l'Excel et le Word
+    rendent effectivement ces images relève de LEURS services, pas d'ici :
+    ce n'est pas tranché par cette ligne, et c'est dit.
 
 7 fonctions :
   1. chart_lift_decile               5. chart_shap_summary
@@ -406,7 +412,22 @@ def _badge_kpi(fig: go.Figure, texte: str, x: float = 0.985, y: float = 0.96) ->
 
 
 def _qnorm(p: np.ndarray) -> np.ndarray:
-    """Inverse de la CDF normale (Acklam) — numpy pur, sans scipy. |err| < 1.2e-9."""
+    """Inverse de la CDF normale (Acklam) — numpy pur, sans scipy.
+
+    ⚠️⚠️ CONSTAT `charts/C6` — LA PROMESSE ÉTAIT TENUE, MAIS PAS CELLE QUI
+    ÉTAIT ÉCRITE. Cette docstring annonçait « *|err| < 1.2e-9* » sans dire de
+    QUELLE erreur il s'agissait. Mesuré sur **405 003 points** contre
+    `scipy.stats.norm.ppf` :
+
+        erreur RELATIVE : 1,129e-09 partout        <- la promesse d'Acklam
+        erreur ABSOLUE  : jusqu'a 5,621e-09        <- x 4,7 l'annonce
+
+    **L'algorithme est correct et bien transcrit** : Acklam publie une erreur
+    RELATIVE de 1,15e-9, et l'implémentation atteint 1,129e-9. *C'était le mot
+    manquant qui rendait le chiffre faux — pas le calcul.*
+
+    Erreur **relative** < 1,15e-9 (borne d'Acklam), sur tout le domaine.
+    """
     p = np.asarray(p, dtype=float)
     a = [-3.969683028665376e+01,  2.209460984245205e+02, -2.759285104469687e+02,
           1.383577518672690e+02, -3.066479806614716e+01,  2.506628277459239e+00]

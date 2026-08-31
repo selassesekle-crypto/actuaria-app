@@ -85,6 +85,26 @@ _HORS_ASSIETTE: dict[tuple[str, str], str] = {
         "posee que rien n'alimente. `socle/C2` designe le moteur de MAPPING, "
         "un tout autre code, et reste OUVERT au rang 7. Retirer la mention "
         "couperait le controle de la lecon qui le justifie.",
+    ('charts/C8', 'test_tri_a5_charts_services.py'):
+        "Cite comme constat LAISSE OUVERT par la passe de tri, avec sa raison, "
+        "et un controle qui en garde le SECOND SENS -- jamais epingle. "
+        "`charts/C8` vit dans `actuaria_app.py`, et **l'app Streamlit est hors "
+        "perimetre par arbitrage de Selasse du 25/08** : elle disparait, on n'y "
+        "touche pas, meme pour une phrase. ⚠️ Le constat est par ailleurs "
+        "REFUTE sur un point : il disait << Meme valeur aujourd'hui >>, or "
+        "`CONFIG_PLOTLY` porte `responsive: True` que le litteral de l'app n'a "
+        "pas, sur DEUX sites et non un. `TRI-8` epingle cette divergence : le "
+        "jour ou les deux coincideront, il tombera, et ce sera le signal qu'il "
+        "faut reecrire le constat.",
+    ('services/C7', 'test_tri_a5_charts_services.py'):
+        "Cite comme constat LAISSE OUVERT par la passe de tri, avec sa raison, "
+        "jamais epingle. `raisons_plafond` atteint 2 surfaces sur 6 ; le porter "
+        "aux quatre autres (Excel A6 + les trois formats du rapport equipe) "
+        "ajoute une phrase a QUATRE LIVRABLES SIGNES. C'est un lot de "
+        "PUBLICATION a lui seul, de la meme famille que l'etape 4 du chantier "
+        "`unite_exposition`, et il doit porter ses propres controles -- la "
+        "lecon du jour etant precisement qu'une surface signee peut changer "
+        "sous 812 tests verts. **Ne pas l'empiler dans une passe de tri.**",
     ('qualite/C4', 'test_preambule_qualite.py'):
         "Cite comme RAISON D'ETRE de l'etape 1-A, jamais epingle -- et la "
         "distinction est le coeur du lot. `qualite/C4` dit que LE CHEMIN AGENT "
@@ -286,6 +306,66 @@ class TestFermetureReportee(unittest.TestCase):
             f"la feuille de route ne publie pas {n_ouverts} ouverts")
         print(f"    OK ARCH-5 feuille et archive concordent : {len(reels)} "
               f"constats, {n_fermes} fermés, {n_ouverts} ouverts")
+
+    def test_la_REPARTITION_par_zone_ne_peut_plus_perimer_en_silence(self):
+        """⚠️⚠️ `ARCH-5` TIENT LE TOTAL, JAMAIS LA RÉPARTITION — et le tableau
+        du TRI a péri DEUX fois pour cette raison exacte.
+
+        Le 29/08 il publiait `80 − 46 = 33` (trois nombres dont deux seulement
+        pouvaient être vrais). Corrigé, il a re-péri le 31/08 : `plan` 6 et
+        `qualite` 4 alors que `plan/C5` et `qualite/C3` venaient d'être fermés.
+
+        ⚠️ **ET L'AVERTISSEMENT ÉTAIT ÉCRIT DANS LE DOCUMENT, deux paragraphes
+        sous la ligne fautive.** *Un avertissement écrit n'est pas un garde-fou :
+        seul un contrôle qui ÉCHOUE en est un.* Celui-ci échoue.
+
+        ⚠️ Assiette déclarée : la LIGNE de répartition du tableau du TRI. Il ne
+        contrôle pas les autres comptes en prose du document — ceux-là restent
+        non tenus, et c'est dit plutôt que supposé.
+        """
+        ouverts = _constats_reels() - (_cles_fermees() - {'pipeline/C1'})
+        par_zone: dict[str, int] = {}
+        for cle in ouverts:
+            zone = cle.split('/')[0]
+            par_zone[zone] = par_zone.get(zone, 0) + 1
+
+        feuille = _texte(_ARCHIVE / 'FEUILLE_DE_ROUTE.md')
+        ligne = next((l for l in feuille.split('\n')
+                      if 'zones TRIÉES' in l), None)
+        self.assertIsNotNone(
+            ligne, "la ligne de répartition du tableau du TRI a disparu : "
+                   "ce contrôle ne surveille plus rien")
+
+        # ⚠️⚠️ LES ZONES NON TRACÉES SE LISENT AU DOCUMENT, ELLES NE SONT PAS
+        # ÉCRITES ICI. Ma première version portait `('a5','charts','services')`
+        # en dur : la passe de tri du 31/08 les a toutes tracées, et le
+        # contrôle serait devenu faux le jour même où le document devenait
+        # juste. *Un garde-fou qui recopie ce qu'il surveille périme avec lui.*
+        ligne_non_tracees = next(
+            (l for l in feuille.split('\n') if 'jamais tracés' in l), '')
+        non_tracees = tuple(re.findall(r'`(\w+)` \d+', ligne_non_tracees))
+
+        # ⚠️⚠️ ON PARSE, ON NE CHERCHE PAS DES SOUS-CHAÎNES. Ma première version
+        # testait `` `zone` n `` avec un espace final : elle ratait `` `a6` 2) ``
+        # en fin de parenthèse et accusait une ligne JUSTE. *Un relevé par
+        # sous-chaîne se casse sur la ponctuation ; on dérive les deux côtés et
+        # on compare des structures.*
+        publiee = {z: int(n) for z, n in re.findall(r'`(\w+)` (\d+)', ligne)}
+        attendue = {z: n for z, n in par_zone.items() if z not in non_tracees}
+        self.assertEqual(
+            publiee, attendue,
+            f"la répartition publiée ne correspond plus à l'archive.\n"
+            f"  publiée : {dict(sorted(publiee.items()))}\n"
+            f"  dérivée : {dict(sorted(attendue.items()))}")
+
+        total_trie = sum(attendue.values())
+        self.assertIn(
+            f'| **{total_trie}** |', ligne,
+            f"le total des zones triées vaut {total_trie}, la feuille publie "
+            f"autre chose : {ligne.strip()[:200]}")
+        print(f"    OK ARCH-6 répartition par zone concordante : "
+              f"{total_trie} triés + "
+              f"{sum(par_zone.get(z, 0) for z in non_tracees)} jamais tracés")
 
 
 if __name__ == '__main__':

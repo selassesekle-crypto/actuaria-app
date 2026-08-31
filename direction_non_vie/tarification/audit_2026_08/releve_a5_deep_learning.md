@@ -56,6 +56,23 @@
 ```
 `gini_val` n'est d'ailleurs enregistré nulle part. Le graphique s'intitule « 📈 CANN — Courbes d'apprentissage » et trace une « Best époque » sur ces zéros. Idem TabNet.
 
+> ✅ **`a5/C3`** · **FERMÉ le 31/08/2026 — et il était au QUATRIÈME ÉTAT.**
+> *Preuve : `test_tri_a5_charts_services.py` (`TRI-1`), par AST.*
+>
+> ⚠️⚠️ **LE CODE ÉTAIT CORRIGÉ *ET* ÉPINGLÉ, MAIS JAMAIS NOMMÉ.**
+> `test_les_courbes_d_apprentissage_portent_les_pertes_REELLES` le tenait déjà ;
+> ce fichier de test ne nomme que `a5/C6` et `a5/C7`. **`ARCH-1` ne pouvait donc
+> pas le voir, et le constat comptait OUVERT.** *Le quatrième état ne se
+> distingue du troisième que par une clé écrite quelque part.*
+>
+> **Mesuré par AST** : les deux figures lisent `['train', 'val']`, **4 traces**
+> nommées (`Loss Train` / `Loss Val` par modèle), **aucune « Gini Val »** — un
+> Gini par époque n'ayant jamais été enregistré, la trace ne pouvait être
+> qu'une ligne de zéros. La « Best époque » — index du maximum de ces zéros,
+> donc toujours 1 — est remplacée par **l'époque réellement restaurée** par
+> l'early stopping (minimum de la perte de validation).
+
+
 **C4 — Le graphique « Convergence » est une exponentielle analytique bruitée.**
 ```
   courbe = loss_init·exp(-3e/50) + loss_final·(1-exp(-3e/50))     -> analytique
@@ -189,7 +206,31 @@ Le fichier de test le note lui-même : *« A5 n'en fixe AUCUN → sans ces ligne
 ### C — Imprécis ou daté (2)
 
 **C8 — `COLS_A_EXCLURE`** : 5 entrées Vie/Santé sur 20, comme A3 et A4.
+
+> ✅ **`a5/C8`** · **FERMÉ le 31/08/2026 — LES ENTRÉES RESTENT, ET C'EST MOTIVÉ.**
+> *Preuve : `TRI-7`, un témoin sur les 20 plans.*
+>
+> ⚠️⚠️ **LES RETIRER DÉPLACERAIT UN PRIX.** La liste noire **exclut** : en ôter
+> une entrée **ajouterait** une variable au modèle si un fichier client portait
+> cette colonne. *Le geste « propre » est ici le geste risqué.*
+>
+> **Mesuré** : **0 / 20 plans** ne nomme une de ces colonnes, et la donnée
+> réelle versionnée n'en porte aucune. Les entrées sont donc inoffensives — et
+> `TRI-7` le **vérifie à chaque gate** au lieu de le supposer.
+>
+> ⛔⛔ **MAIS SA TRACE A OUVERT UN CONSTAT NEUF, PLUS SÉRIEUX** — voir
+> `conformite/C14` : *un facteur DÉCLARÉ AU PLAN dont le nom figure dans cette
+> liste noire disparaît SANS UN MOT.*
+
 **C9 — En-tête de test : « 7 tests », 3 méthodes.**
+
+> ✅ **`a5/C9`** · **FERMÉ le 31/08/2026.** *Preuve : `TRI-2`.*
+> **3 méthodes au relevé, 12 aujourd'hui**, sous un en-tête qui annonçait
+> toujours 7. ⚠️ *On ne remplace pas un compte écrit à la main par un autre
+> compte écrit à la main* : le nombre est **retiré**, `unittest` le publie à
+> chaque exécution. `TRI-2` refuse tout chiffre suivi de « tests » dans la
+> **ligne de titre**.
+
 
 **C10 — Le verdict de convergence portait sur le mauvais modèle.**
 

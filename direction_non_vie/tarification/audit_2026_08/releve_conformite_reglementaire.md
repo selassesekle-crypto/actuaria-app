@@ -707,3 +707,54 @@ toujours**. Il dit que Python n'offre pas de privé strict et que son jeton rend
 le contournement *délibéré*, pas impossible. Cette honnêteté est ce qui rend
 C1 et C7 remarquables : **ce sont les deux endroits où il a écrit la règle et
 ne l'a pas tenue sur lui-même.**
+
+---
+
+## ⛔⛔ CONSTAT OUVERT LE 31/08/2026 — trouvé par la TRACE de `a5/C8`, pas par une relecture
+
+**C15 — `construire_matrice_x` surveille l'INTERSECTION, jamais l'ABSENCE : un
+facteur DÉCLARÉ AU PLAN mangé en amont disparaît sans un mot.**
+
+A3, A4 et A5 construisent leurs features en prenant *tout le dataframe SAUF*
+une liste noire statique (`COLS_A_EXCLURE`, `COLS_CONTAMINEES`), **puis**
+croisent le résultat avec la liste blanche du plan. La liste blanche ne voit
+donc que ce qui a survécu au filtre — *ce qui a été retiré avant elle lui est
+invisible.*
+
+**Violation plantée le 31/08**, plan `auto`, 23 colonnes produites :
+
+```
+  temoin  (23 colonnes) -> 23 retenues | exclusions 0 | alertes 0
+  amputee (22 colonnes) -> 22 retenues | exclusions 0 | alertes 0   <-- RIEN
+```
+
+⚠️⚠️ **C'est `plan/C3` rouvert un étage plus bas.** Ce constat-là disait
+« *un `type` mal orthographié détruit un facteur en silence* » et il a été
+fermé **au niveau du plan** : la porte lève désormais sur toute clé inconnue.
+Mais un facteur parfaitement déclaré peut encore être écarté sans un mot **plus
+loin dans la chaîne**, par une liste noire qui ne sait rien du plan.
+
+### ⚠️ AMPLEUR MESURÉE, NON GONFLÉE — le défaut est LATENT, pas actif
+
+| mesure | résultat |
+|---|---|
+| plans dont un facteur figure dans la liste noire | **0 / 20** |
+| `COLS_CONTAMINEES` : mots génériques ? | **non** — `log_cout`, `log_prime`, `cout_moyen_attendu`, `lambda_freq`, `prime_pure_obs` |
+| donnée réelle versionnée portant une colonne noire | **aucune** |
+
+*La sous-chaîne est donc bien moins dangereuse ici que dans `conformite/C3`,
+où les mots étaient génériques (`prime` attrapait `imprimerie`).*
+
+### ⚠️⚠️ UN TÉMOIN MONTE LA GARDE EN ATTENDANT LE CORRECTIF
+
+`TRI-7` (`test_tri_a5_charts_services.py`) vérifie **à chaque gate** qu'aucun
+des 20 plans ne déclare une colonne que la liste noire mangerait. *Il ne répare
+rien — il empêche le défaut latent de devenir actif sans qu'on le sache.*
+
+### CE QUE LE CORRECTIF DEMANDERAIT — non fait, non arbitré
+
+Faire dire à `construire_matrice_x` ce qu'elle **attendait et n'a pas reçu** :
+comparer `plan.colonnes_produites()` aux colonnes qui lui parviennent, et
+publier l'écart comme une exclusion nommée. ⚠️ **Cela touche les trois agents
+A3/A4/A5 et une surface signée** : c'est un lot à part entière, de la famille de
+l'étape 4 d'`unite_exposition`. **Rien ne bougera sans arbitrage.**

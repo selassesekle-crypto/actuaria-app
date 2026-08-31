@@ -341,6 +341,15 @@ que l'implémentation atteint (**1,129e-9**). **L'algorithme est correct et bien
 transcrit** ; la docstring écrit « |err| » sans dire de laquelle il s'agit, et
 le chiffre est faux si on le lit en absolu.
 
+> ✅ **`charts/C6`** · **FERMÉ le 31/08/2026 — C'ÉTAIT LE MOT, PAS LE CALCUL.**
+> *Preuve : `TRI-3`.* La docstring nomme désormais l'erreur **RELATIVE** et sa
+> borne d'Acklam (1,15e-9), atteinte à **1,129e-9**. L'erreur **absolue** — qui
+> monte à 5,62e-9, soit ×4,7 l'ancienne annonce — est publiée à côté, pour que
+> le lecteur ne puisse plus confondre les deux.
+> ⚠️ **Second sens sans dépendance neuve** : `_qnorm` composée avec la CDF
+> redonne `x` à 1e-6 sur sept points, *sans scipy* — le module reste pur.
+
+
 **C7 — « kaleido absent aujourd'hui » : il est présent, en 1.3.0.** L'en-tête
 l.15 dit « *Excel / Word : image statique (kaleido) — SUIVI (kaleido absent
 aujourd'hui)* ». Mesuré :
@@ -353,6 +362,14 @@ aujourd'hui)* ». Mesuré :
 Le suivi est clos et la note ne l'est pas. ⚠️ *Savoir si l'Excel et le Word
 rendent effectivement ces images est une question de leurs services, pas de ce
 fichier — je ne la tranche pas ici.*
+
+> ✅ **`charts/C7`** · **FERMÉ le 31/08/2026.** *Preuve : `TRI-4`.* L'en-tête
+> dit **DISPONIBLE**, et le contrôle vérifie **les deux sens** : la ligne qui
+> affirme ne dit plus « absent », **et kaleido est bien installé** (1.3.0) —
+> *une en-tête corrigée redeviendrait fausse dans l'autre sens si le paquet
+> disparaissait.* ⚠️ La borne du constat est conservée : ce que l'Excel et le
+> Word font de ces images relève de **leurs** services, non tranché ici.
+
 
 **C8 — La valeur de `CONFIG_PLOTLY` est réécrite en dur dans l'application.**
 `actuaria_app.py:4243` passe `config={"displayModeBar":False}` littéralement, au
