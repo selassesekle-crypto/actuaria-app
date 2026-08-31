@@ -112,6 +112,51 @@ Les vraies bornes existent (`ic95_low`/`ic95_high`) et ne sont pas passées.
 
 **C10 — `_calculer_statut_rag` annonce « convergence des 3 modèles », en lit 2** : `['gamma', 'poisson']`. Le Tweedie n'entre jamais dans le statut.
 
+> ✅ **`a3/C7` `a3/C11` `a3/C12` `a3/C13` `a3/C15` `a3/C16` `a3/C17` `a3/C18`** · **FERMÉS le 01/09/2026 — LA ZONE `a3` EST CLOSE.** *Preuve : `test_a3_huit_constats.py`, 12 contrôles, **12 violations plantées**.*
+>
+> ### ⛔⛔ `C7` — LE « MEILLEUR MODÈLE » ÉTAIT PRÉDÉTERMINÉ
+>
+> `max()` sur `{'poisson': 0,1688, 'gamma': 0,042}` — mais le **Poisson est
+> évalué sur TOUT le test** (fréquence) et le **Gamma sur les SINISTRÉS SEULS**
+> (sévérité). *Ce ne sont pas deux candidats pour la même tâche : ce sont les
+> deux FACTEURS d'un même produit — prime = fréquence × coût.* Un Gini de
+> fréquence sur le portefeuille entier dépasse presque toujours un Gini de
+> sévérité sur les seuls sinistrés : **`max()` ne mesurait rien, il rendait
+> toujours le même nom.**
+>
+> La clé est **conservée et mise à `None`**, avec son motif — le patron déjà
+> validé pour la référence A3 absente d'`a4/C11`. *La retirer casserait un
+> lecteur en silence ; la laisser mentir est pire.* Et `comparaison_gini` porte
+> désormais **sa population**, pour qu'on ne puisse plus lire deux nombres côte
+> à côte comme un classement.
+>
+> ### ⛔⛔ `C13` — UNE FIGURE ABSENTE QUE PERSONNE NE RÉCLAMAIT
+>
+> La jauge lisait `h2_homosc["dw_stat"]` ; H2 rend `ratio_variance` depuis
+> `87e0609`. Le `KeyError` tombait dans un `except` large : **trois figures de
+> validation produites, jamais celle-ci.** *Un `except` large transforme une
+> figure ABSENTE en figure JAMAIS RÉCLAMÉE.* ⚠️ **Et le nom change avec la
+> grandeur** — Durbin-Watson mesure l'**autocorrélation**, pas
+> l'homoscédasticité : garder l'ancien titre sur la nouvelle mesure aurait fait
+> publier un nom faux. **Quatre figures désormais.**
+>
+> ### ⛔ `C15` — LE REPLI CASSAIT LUI-MÊME, ET IL AVAIT UN JUMEAU
+>
+> `np.full(...)` rend un `ndarray`, qui n'a pas `.values`. *Le chemin de secours
+> levait un `AttributeError` à la place de l'erreur qu'il était censé absorber*
+> — **la forme de `pipeline/C2`, sur un autre agent.** ⚠️⚠️ **Le constat n'en
+> nommait qu'un ; il y en avait DEUX** — la branche fréquence *et* la branche
+> sévérité. *Corriger une seule aurait laissé le défaut vivant sur la sévérité,
+> et l'asymétrie serait devenue invisible.* `A3-7` les compte par AST.
+>
+> ### LES CINQ AUTRES
+>
+> `C11` cinq renvois à `VARS_GLM`, **supprimée** · `C12` `0.05` en dur à deux
+> sites à côté de `SEUIL_PVALUE` · `C16` cinq entrées Vie/Santé **conservées et
+> dites** (même arbitrage qu'`a5/C8` : en ôter une **ajouterait** une variable ;
+> `A3-8` monte la garde) · `C17` un exemple, 3 fois, que le module **refuse**
+> (`A3-11` le vérifie *par exécution*) · `C18` « 7 tests » pour **4** méthodes.
+
 **C11 — `VARS_GLM` est supprimé, et 5 lignes y renvoient encore** (l.289, 295, 599, 616, 624) — dont la docstring de `_preparer_donnees` : « On part des variables prioritaires de la sous-branche (VARS_GLM) ».
 
 **C12 — `significatif` code `0.05` en dur** (2 sites) alors que `SEUIL_PVALUE` existe — et il est **toujours vrai**, le stepwise ne retenant que p ≤ 0.05. Un champ sans information.

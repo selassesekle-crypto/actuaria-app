@@ -754,8 +754,18 @@ FIGURES_ECARTEES: Dict[str, str] = {
     # les résidus
     'residus_deviance': 'doublon — chart_residus_qq porte le même diagnostic '
                         'sous une forme lisible',
-    'durbin_watson': 'hors catalogue — l\'autocorrélation n\'est pas une des '
-                     'hypothèses que le chapitre 4 publie',
+    # ⚠️⚠️ RENOMMÉE ET RE-MOTIVÉE le 01/09/2026 — constat `a3/C13`. La figure
+    # s'appelait `durbin_watson` et sa raison d'exclusion disait « l'auto-
+    # corrélation n'est pas une des hypothèses publiées ». Or elle ne mesure
+    # PAS l'autocorrélation : elle lit `ratio_variance`, donc
+    # l'HOMOSCÉDASTICITÉ — qui est H2, et que le chapitre 4 publie.
+    # *Le correctif du nom a rendu FAUSSE la raison de l'exclusion : une raison
+    # périmée exclut pour un motif qui n'existe plus.*
+    # La vraie raison est un doublon : « H2 Homoscédasticité : statut | Ratio
+    # var=… » est déjà imprimé en toutes lettres au chapitre 4.
+    'homoscedasticite_ratio_variance':
+        'doublon — le chapitre 4 imprime déjà le statut H2 et son ratio de '
+        'variance en toutes lettres',
     # le lift
     'lift_chart': 'doublon — chart_lift_decile, même mesure',
     # les scorecards : des tableaux déguisés en figures

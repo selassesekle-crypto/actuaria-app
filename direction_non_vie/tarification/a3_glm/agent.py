@@ -45,7 +45,7 @@
 ║  ─────────────────────────────────────────────────────────────────────────  ║
 ║  %run '/tmp/actuaria/agents/a3_glm.py'                    ║
 ║  agent_a3 = AgentA3GLM()                                                    ║
-║  result_a3 = agent_a3.run(result_a2)                                        ║
+║  result_a3 = agent_a3.run(result_a2, plan=plan)   # `plan` est EXIGE        ║
 ║                                                                              ║
 ║  AUTEUR   : ActuarIA — Système Actuariel IA                                 ║
 ║  VERSION  : 1.0                                                              ║
@@ -170,6 +170,15 @@ logger = logging.getLogger('actuaria.a3')
 # Variables à exclure de la modélisation GLM
 # Ces colonnes sont des identifiants, des cibles ou des variables dérivées
 # qui ne doivent pas entrer comme prédicteurs
+# ⚠️⚠️ CONSTAT `a3/C16` — CINQ ENTREES SONT DU VOCABULAIRE VIE/SANTE dans
+# un agent Non-Vie (`id_salarie`, `id_beneficiaire`, `id_adherent`,
+# `cotisation_mensuelle_eur`, `charge_ij_annuelle_eur`).
+# ⚠️ ELLES RESTENT, ET C'EST MOTIVE -- meme arbitrage que `a5/C8`. Cette
+# liste EXCLUT : en oter une entree AJOUTERAIT une variable au modele si
+# un fichier client portait cette colonne. *Le geste << propre >> est ici
+# le geste RISQUE.* Mesure du 01/09 : 0 / 20 plans ne nomme l'une d'elles,
+# et la donnee reelle versionnee n'en porte aucune -- un temoin le verifie
+# a chaque gate (`A3-8`).
 COLS_A_EXCLURE = [
     # Identifiants
     'id_contrat', 'id_assure', 'id_salarie', 'id_beneficiaire', 'id_adherent',
@@ -319,7 +328,9 @@ class AgentA3GLM:
         models_path = '/tmp/actuaria',
         audit_path  = '/tmp/actuaria',
     )
-    result_a3 = agent_a3.run(result_a2)
+    # ⚠️ Constat `a3/C17` : `plan=` est EXIGE ; sans lui le module rend
+    # `success=False`. L'exemple montrait un appel que le code REFUSE.
+    result_a3 = agent_a3.run(result_a2, plan=plan)
 
     # Accès aux modèles calibrés
     modele_freq  = result_a3['modeles']['poisson']
@@ -384,13 +395,13 @@ class AgentA3GLM:
         if not result_a2.get('success', False):
             return self._erreur("L'agent A2 a échoué.", audit_id)
 
-        # Phase 1 : A3 dérive ses variables du PLAN signé — plus de VARS_GLM codé.
+        # Phase 1 : A3 dérive ses variables du PLAN signé — plus de les variables declarees au PLAN (`VARS_GLM` a ete SUPPRIME -- constat `a3/C11`) codé.
         # Plan absent/corrompu → erreur propre, JAMAIS de repli silencieux (le
         # repli réintroduirait la désynchronisation liste/plan que le refactor a tuée).
         if plan is None:
             return self._erreur(
                 "A3.run exige un plan (PlanTarifaire) : les variables GLM sont "
-                "dérivées de plan.colonnes_produites() (Phase 1, VARS_GLM supprimé). "
+                "dérivées de plan.colonnes_produites() (Phase 1, les variables declarees au PLAN (`VARS_GLM` a ete SUPPRIME -- constat `a3/C11`) supprimé). "
                 "Fournissez plan=PlanTarifaire.depuis_yaml('plans/<lob>.yaml').", audit_id)
 
         if not STATSMODELS_OK:
@@ -698,7 +709,7 @@ class AgentA3GLM:
 
         SÉLECTION DES VARIABLES :
         ──────────────────────────
-        1. On part des variables prioritaires de la sous-branche (VARS_GLM)
+        1. On part des variables prioritaires de la sous-branche (les variables declarees au PLAN (`VARS_GLM` a ete SUPPRIME -- constat `a3/C11`))
         2. On filtre celles qui existent dans le DataFrame
         3. On exclut les colonnes non-numériques non encodées
         4. On vérifie l'absence de NaN
@@ -715,7 +726,7 @@ class AgentA3GLM:
         Les 14 000 contrats en test permettent une validation fiable du Gini.
         """
         # Sélection des variables candidates : dérivées À LA VOLÉE du PLAN signé
-        # (Phase 1) — plus de VARS_GLM codé en dur ni de matching flou de
+        # (Phase 1) — plus de les variables declarees au PLAN (`VARS_GLM` a ete SUPPRIME -- constat `a3/C11`) codé en dur ni de matching flou de
         # sous-branche. plan.colonnes_produites() est le contrat A2→A3 (INV-1).
         vars_prioritaires = list(plan.colonnes_produites())
 
@@ -723,7 +734,7 @@ class AgentA3GLM:
         # Exclusion inconditionnelle du genre, en plus du filtrage déjà fait
         # en amont par A2. Protège contre :
         #  (a) le fallback ci-dessus qui prend TOUTES les colonnes numériques
-        #      si sous_branche n'est pas reconnue dans VARS_GLM ;
+        #      si sous_branche n'est pas reconnue dans les variables declarees au PLAN (`VARS_GLM` a ete SUPPRIME -- constat `a3/C11`) ;
         #  (b) des données arrivant pré-encodées hors du pipeline A2 standard ;
         #  (c) une sous-branche mal nommée qui échapperait à un filtre scopé
         #      par nom de branche (cas testé et confirmé lors de l'audit V4).
@@ -1063,7 +1074,15 @@ class AgentA3GLM:
             pred_test = np.full(len(df_test), df_train[col_freq].mean())
 
         # Gini (coefficient de discrimination)
-        gini = self._calculer_gini(df_test[col_freq].values, pred_test.values)
+        # ⚠️⚠️ CONSTAT `a3/C15` — LE REPLI CASSAIT LUI-MEME. Quand
+        # `modele_final.predict` echoue, `pred_test` devient un `np.full`,
+        # c'est-a-dire un `ndarray` -- qui n'a PAS d'attribut `.values`.
+        # *Le chemin de secours levait donc un `AttributeError` a la place
+        # de l'erreur qu'il etait cense absorber.* C'est la forme de
+        # `pipeline/C2`, sur un autre agent.
+        # `np.asarray` accepte les deux natures, et n'en suppose aucune.
+        gini = self._calculer_gini(df_test[col_freq].values,
+                                   np.asarray(pred_test))
 
         # RMSE sur le test
         rmse = np.sqrt(mean_squared_error(
@@ -1114,7 +1133,11 @@ class AgentA3GLM:
                         'ic95_low':     round(float(np.exp(ci_low)),  4),
                         'ic95_high':    round(float(np.exp(ci_high)), 4),
                         'pvalue':       round(float(pvalues[var]),    4),
-                        'significatif': bool(float(pvalues[var]) <= 0.05),
+                        # ⚠️ Constat `a3/C12` : `0.05` etait ecrit en dur alors que
+                        # `SEUIL_PVALUE` existe -- deux endroits a changer
+                        # le jour ou le seuil bouge.
+                        'significatif': bool(
+                            float(pvalues[var]) <= SEUIL_PVALUE),
                         'sens':         'aggravant' if beta > 0 else 'allegant',
                     }
         except Exception as e_rel:
@@ -1339,8 +1362,12 @@ class AgentA3GLM:
             y_sev_test, pred_test
         )) if nb_sin_test > 0 else 0.0
 
+        # ⚠️⚠️ LE JUMEAU DE LA BRANCHE FREQUENCE — constat `a3/C15`. Le meme
+        # `.values` sur un `np.full`, le meme `AttributeError` dans le chemin
+        # de secours. *Corriger une seule des deux aurait laisse le defaut
+        # vivant sur la severite, et l'asymetrie serait devenue invisible.*
         gini = self._calculer_gini(
-            y_sev_test.values, pred_test.values
+            y_sev_test.values, np.asarray(pred_test)
         ) if nb_sin_test > 0 else 0.0
 
         metriques = {
@@ -1383,7 +1410,8 @@ class AgentA3GLM:
                         'ic95_low':     round(float(np.exp(ci_low_g)),     4),
                         'ic95_high':    round(float(np.exp(ci_high_g)),    4),
                         'pvalue':       round(float(pvalues_g[var]),       4),
-                        'significatif': bool(float(pvalues_g[var]) <= 0.05),
+                        'significatif': bool(
+                            float(pvalues_g[var]) <= SEUIL_PVALUE),
                         'sens':         'aggravant' if beta_g > 0 else 'allegant',
                     }
         except Exception as e_relg:
@@ -1641,8 +1669,13 @@ class AgentA3GLM:
                 try:
                     pred_freq = self.modeles['poisson'].predict(X, offset=offset)
                     # Annualisation : λ_annuel = λ_observé / exposition
-                    predictions['frequence_annuelle'] = pred_freq.values / np.maximum(expo, 1e-6)
-                    predictions['frequence_brute']    = pred_freq.values
+                    # ⚠️ `np.asarray` plutot que `.values` : il accepte une
+                    # Series comme un ndarray. Ici l'`except` rattraperait,
+                    # mais *un invariant simple vaut mieux qu'un invariant
+                    # vrai seulement a certains endroits.*
+                    _pf = np.asarray(pred_freq)
+                    predictions['frequence_annuelle'] = _pf / np.maximum(expo, 1e-6)
+                    predictions['frequence_brute']    = _pf
                 except Exception as e:
                     logger.warning(f"Erreur prédiction Poisson : {e}")
                     predictions['frequence_annuelle'] = np.full(
@@ -1802,10 +1835,32 @@ class AgentA3GLM:
             'gamma':   self.metriques.get('gamma',   {}).get('gini', 0),
         }
 
-        # Meilleur modèle selon le Gini
-        ginis  = metriques['comparaison_gini']
-        meilleur = max(ginis, key=ginis.get)
-        metriques['meilleur_modele'] = meilleur
+        # ⚠️⚠️ CONSTAT `a3/C7` — CES DEUX GINI NE SONT PAS COMPARABLES, ET LE
+        # << MEILLEUR >> ETAIT DONC PREDETERMINE. Le Poisson est evalue sur
+        # TOUT le test (frequence) ; le Gamma sur les SINISTRES SEULS
+        # (severite). *Ce ne sont pas deux candidats pour la meme tache : ce
+        # sont les deux FACTEURS d'un meme produit, prime = frequence x cout.*
+        # Un Gini de frequence sur le portefeuille entier depasse presque
+        # toujours un Gini de severite sur les seuls sinistres : `max()` ne
+        # mesurait rien, il rendait toujours le meme nom.
+        #
+        # ⚠️ LA CLE EST CONSERVEE ET MISE A `None`, jamais retiree -- le patron
+        # deja valide pour la reference A3 absente d'`a4/C11`. La retirer
+        # casserait un lecteur en silence ; la laisser mentir est pire.
+        metriques['meilleur_modele'] = None
+        metriques['meilleur_modele_motif'] = (
+            "AUCUN : les deux Gini portent sur des POPULATIONS DIFFERENTES -- "
+            "Poisson sur tout le test (frequence), Gamma sur les sinistres "
+            "seuls (severite). Ils ne sont pas deux candidats pour la meme "
+            "tache, mais les deux facteurs d'un meme produit "
+            "(prime = frequence x cout). Les comparer rendait toujours le "
+            "meme nom, sans rien mesurer.")
+        # ⚠️ Et la comparaison porte desormais SA POPULATION, pour qu'on ne
+        # puisse plus lire deux nombres cote a cote comme un classement.
+        metriques['comparaison_gini_populations'] = {
+            'poisson': 'tout le jeu de test (frequence)',
+            'gamma': 'sinistres seuls (severite)',
+        }
 
         return metriques
 
@@ -2962,9 +3017,19 @@ class AgentA3GLM:
         except Exception as e:
             logger.warning(f"G2 Poisson : {e}")
 
-        # G3 — Jauge Durbin-Watson
+        # G3 — Jauge d'HOMOSCEDASTICITE (ratio de variance)
+        # ⚠️⚠️ CONSTAT `a3/C13` — CETTE FIGURE N'ETAIT JAMAIS PRODUITE, ET
+        # PERSONNE NE LE VOYAIT. Elle lisait `h2_homosc["dw_stat"]` ; H2 rend
+        # `ratio_variance` depuis la reparation `87e0609`. Le `KeyError`
+        # tombait dans le `except` ci-dessous et la figure disparaissait EN
+        # SILENCE : mesure du 01/09, `graphiques_validation` en produit trois,
+        # jamais celle-ci. *Un `except` large transforme une figure absente en
+        # figure jamais reclamee.*
+        # ⚠️ ET LE NOM CHANGE AVEC LA GRANDEUR : Durbin-Watson mesure
+        # l'AUTOCORRELATION, pas l'homoscedasticite. Garder l'ancien titre sur
+        # la nouvelle mesure aurait fait publier un nom faux.
         try:
-            dw = val_glm["h2_homosc"]["dw_stat"]
+            dw = val_glm["h2_homosc"]["ratio_variance"]
             statut_h2  = val_glm["h2_homosc"]["statut"]
             couleur_h2 = VERT if statut_h2=="VERT" else AMBRE if statut_h2=="AMBRE" else ROUGE
             # ⚠️ AUCUN TEXTE EN ROUGE — arbitré. La couleur ci-dessus reste
@@ -3002,7 +3067,7 @@ class AgentA3GLM:
                     font=dict(color=GRIS, size=9), showarrow=False, align="center"
                 )],
             )
-            graphiques["durbin_watson"] = fig3
+            graphiques["homoscedasticite_ratio_variance"] = fig3
         except Exception as e:
             logger.warning(f"G3 DW : {e}")
 
@@ -3521,4 +3586,4 @@ if __name__ == '__main__':
     print("Modèles : GLM Poisson + GLM Gamma + GLM Tweedie")
     print("Usage   : %run 'chemin/a3_glm.py'")
     print("          agent_a3 = AgentA3GLM()")
-    print("          result_a3 = agent_a3.run(result_a2)")
+    print("          result_a3 = agent_a3.run(result_a2, plan=plan)")

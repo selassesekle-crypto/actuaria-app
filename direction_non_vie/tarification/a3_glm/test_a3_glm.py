@@ -1,6 +1,11 @@
 """
 Tests A3 GLM v1.0 — Tarification GLM Poisson/Gamma/Tweedie Non-Vie
-7 tests · données synthétiques freMTPL2 · 500 contrats
+donnees synthetiques freMTPL2 - 500 contrats
+
+⚠️⚠️ CONSTAT `a3/C18` : cet en-tete annoncait << 7 tests >> pour 4
+methodes. Le nombre est RETIRE, pas remplace par un autre compte a la
+main : `unittest` le publie a chaque execution, et lui ne perime pas.
+*Meme geste que `a2/C14` et `a5/C9`.*
 """
 import sys, os, unittest
 import numpy as np
