@@ -9,6 +9,10 @@ lob: auto_fr_reel
 version: "1.0"
 auteur: "S. Sekle, IA — freMTPL2"
 exposition: Exposure
+# UNITE de l'exposition -- chantier `unite_exposition`, etape 5.
+# 'annee' -> borne de plausibilite 1.0 : EXACTEMENT le comportement
+# d'hier, mais DECLARE au lieu d'etre suppose. Valeur inconnue -> LEVE.
+unite_exposition: annee
 cible_frequence: ClaimNb
 cible_cout: ClaimAmountTotal
 # ══════════════════════════════════════════════════════════════════════════════

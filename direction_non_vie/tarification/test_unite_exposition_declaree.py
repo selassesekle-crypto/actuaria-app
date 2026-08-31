@@ -43,8 +43,19 @@ et l'echappatoire nominative reste la voie normale.
 
 ═══ CE QUE CE LOT DEPLACE, ET CE QU'IL NE DEPLACE PAS ═══
 
-⚠️⚠️ AUCUN EURO SUR L'EXISTANT, ET C'EST MESURE : **0 des 20 plans ne declare
-d'unite**, donc la borne vaut partout `PLAFOND_EXPOSITION`, comme hier.
+⚠️⚠️ AUCUN EURO SUR L'EXISTANT, ET C'EST MESURE. A l'etape 2 : **0 des 20 plans
+ne declarait d'unite**, donc la borne valait partout `PLAFOND_EXPOSITION`.
+**L'ETAPE 5 a fait declarer `annee` aux 20**, et la preuve est devenue plus
+forte : ils declarent tous une unite **dont la borne EST le plafond annuel**.
+`UX-4` compare la borne OBTENUE, jamais la seule chaine declaree -- *c'est la
+borne qui decide d'un prix.* Le comportement n'a pas change ; il a cesse d'etre
+suppose.
+
+⚠️ ET SIX CONTROLES SONT TOMBES LE JOUR DE L'ETAPE 5, tous pour la meme raison :
+ils testaient la branche << unite non declaree >> en EMPRUNTANT le plan `auto`
+du depot. *Un cas qui doit exister independamment du depot se CONSTRUIT
+(`_SANS_UNITE`), il ne s'emprunte pas a un fichier qui peut changer sous lui.*
+La branche existe toujours -- un plan client peut ne rien declarer.
 
 ⚠️⚠️ MAIS IL DEPLACE UN TEXTE PUBLIE, DELIBEREMENT. Le message de la regle 2
 porte desormais la phrase C. *C'est le but du constat `qualite/C3` : rendre
@@ -89,6 +100,14 @@ from direction_non_vie.tarification.test_pipeline_agents import (
 )
 
 _PLAN = PlanTarifaire.depuis_yaml('plans/auto.yaml')
+
+#: ⚠️⚠️ CONSTRUIT, JAMAIS LU AU DEPOT — et l'etape 5 explique pourquoi. Ces
+#: controles testaient la branche << unite non declaree >> en prenant le plan
+#: `auto` du depot, qui n'en declarait pas. L'etape 5 a fait declarer `annee`
+#: aux 20 plans : six controles sont tombes d'un coup. **La branche existe
+#: toujours** -- un plan client peut ne rien declarer -- mais son cas doit etre
+#: CONSTRUIT, pas emprunte a un fichier qui peut changer sous lui.
+_SANS_UNITE = dataclasses.replace(_PLAN_AUTO, unite_exposition=None)
 
 
 def _sans_bruit(fn, *a, **kw):
@@ -161,23 +180,37 @@ class TestLePlanDeclareLUnite(unittest.TestCase):
 
     def test_l_absence_reste_un_ETAT_legitime(self):
         """⚠️ « Non declaree » et « declaree a tort » sont DEUX etats. Le
-        premier conserve le comportement d'aujourd'hui."""
-        self.assertIsNone(_PLAN.unite_exposition)
-        self.assertEqual(borne_exposition(_PLAN), PLAFOND_EXPOSITION)
+        premier conserve le comportement d'aujourd'hui, et il reste ATTEIGNABLE
+        meme apres l'etape 5 : un plan client peut ne rien declarer."""
+        self.assertIsNone(_SANS_UNITE.unite_exposition)
+        self.assertEqual(borne_exposition(_SANS_UNITE), PLAFOND_EXPOSITION)
         print("    UX-3 unite absente : borne = plafond annuel, inchangee")
 
-    def test_les_20_plans_ne_declarent_AUCUNE_unite(self):
-        """⚠️⚠️ C'EST LA PREUVE D'AUCUN EURO SUR L'EXISTANT. Si un plan en
-        declarait une, sa borne changerait et ce lot deplacerait un prix."""
+    def test_LE_TEST_QUI_FERME_L_ETAPE_5_les_20_plans_declarent_annee(self):
+        """⚠️⚠️ CE CONTROLE A CHANGE DE SENS AVEC L'ETAPE 5, ET IL PROUVE LA
+        MEME CHOSE : *aucun euro*. Il verifiait que **0 / 20** plans declaraient
+        une unite -- la borne valait donc partout le plafond annuel. Les 20 la
+        declarent desormais, et la preuve devient plus forte : ils declarent
+        tous `annee`, **dont la borne EST le plafond annuel**. Le comportement
+        n'a pas change, il a cesse d'etre suppose.
+
+        ⚠️ On compare la borne OBTENUE, jamais la seule chaine declaree : c'est
+        la borne qui decide d'un prix.
+        """
         import glob
-        declarants = [f for f in sorted(glob.glob('plans/*.yaml'))
-                      if PlanTarifaire.depuis_yaml(f).unite_exposition
-                      is not None]
-        self.assertEqual(declarants, [],
-                         f"{len(declarants)} plan(s) declarent une unite : ce "
-                         f"lot n'est plus sans euro -> {declarants}")
-        print(f"    UX-4 0 / {len(glob.glob('plans/*.yaml'))} plan declare une "
-              f"unite : aucune borne ne change")
+        fichiers = sorted(glob.glob('plans/*.yaml'))
+        plans = {f: PlanTarifaire.depuis_yaml(f) for f in fichiers}
+        muets = [f for f, p in plans.items() if p.unite_exposition is None]
+        self.assertEqual(muets, [],
+                         f"{len(muets)} plan(s) ne declarent toujours pas leur "
+                         f"unite -> {muets}")
+        bornes = {borne_exposition(p) for p in plans.values()}
+        self.assertEqual(
+            bornes, {PLAFOND_EXPOSITION},
+            f"les plans du depot n'ont plus tous la borne annuelle : {bornes}. "
+            f"L'etape 5 devait etre sans euro PAR CONSTRUCTION.")
+        print(f"    UX-4 {len(fichiers)} / {len(fichiers)} plans declarent "
+              f"leur unite, borne obtenue = {bornes} (inchangee)")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -232,7 +265,7 @@ class TestLaBorneDeriveDeLUnite(unittest.TestCase):
 class TestLHypotheseEstPUBLIEE(unittest.TestCase):
 
     def test_unite_absente_le_message_le_DIT_et_dit_la_consequence(self):
-        rq = _sans_bruit(controler_qualite, _en_mois(), _PLAN_AUTO,
+        rq = _sans_bruit(controler_qualite, _en_mois(), _SANS_UNITE,
                          horodatage='t', qualite_validee_par='X')
         d = _code(rq, 'exposition_sup_1').description
         self.assertIn('UNITE NON DECLAREE', d)
@@ -256,9 +289,9 @@ class TestLHypotheseEstPUBLIEE(unittest.TestCase):
     def test_LES_DEUX_CHEMINS_publient_la_MEME_phrase(self):
         """⚠️ Apres avoir cesse de diverger dans le NOMBRE (1d), les jumeaux
         ne doivent pas diverger dans le TEXTE."""
-        rq = _sans_bruit(controler_qualite, _en_mois(), _PLAN_AUTO,
+        rq = _sans_bruit(controler_qualite, _en_mois(), _SANS_UNITE,
                          horodatage='t', qualite_validee_par='X')
-        r2 = _a2(_en_mois(), _PLAN_AUTO)
+        r2 = _a2(_en_mois(), _SANS_UNITE)
         a_qual = _code(rq, 'exposition_sup_1')
         a_agent = _code(r2['rapport_qualite'], 'exposition_sup_1')
         self.assertIsNotNone(a_agent)

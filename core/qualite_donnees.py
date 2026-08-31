@@ -965,13 +965,39 @@ def synthese_qualite_donnees(rapport: Optional["RapportQualite"]) -> Optional[st
         # motif doit parler à sa place.* La branche BLOQUÉE publiait déjà les
         # descriptions ; celle-ci ne le faisait pas — l'asymétrie entre les
         # deux moitiés de la même fonction.
+        # ⚠️⚠️ ÉTAPE 4 DU CHANTIER `unite_exposition` — LES DEUX, PLUS « L'UN OU
+        # L'AUTRE ». Ce `if/else` publiait l'effet OU la description, jamais
+        # les deux. La branche BLOQUÉE, elle, publie les deux depuis toujours.
+        # *Le commentaire ci-dessus disait déjà « LA MÊME PHRASE QU'EN AMONT,
+        # PAS UNE REFORMULATION » : le code publiait strictement MOINS que ce
+        # qu'il promettait.*
+        #
+        # ⚠️ CE QUE LA MESURE A MONTRÉ, ET POURQUOI ÇA COMPTE. La description
+        # est la SEULE surface qui nomme l'unité de l'exposition — « implausible
+        # pour une exposition exprimee en mois », ou la phrase d'hypothèse
+        # annuelle quand rien n'est déclaré. Mesuré le 31/08 : `UNITE NON
+        # DECLAREE` présent dans le message bloqué, **absent du rapport
+        # SIGNÉ**. *Le document que lisent le CAC et l'ACPR ne disait pas sous
+        # quelle unité la correction avait été faite.*
         for a in rapport.corrections:
+            lignes.append(f"   ⚠ {a.description}")
             _p = _phrase_effet_agrege(a)
-            lignes.append(f"   ⚠ {_p}" if _p else f"   ⚠ {a.description}")
+            if _p:
+                lignes.append(f"   ⚠ {_p}")
     if rapport.signalements:
         tot = sum(a.nb_lignes for a in rapport.signalements)
         det = " ; ".join(f"{a.nb_lignes}x {a.code}" for a in rapport.signalements)
         lignes.append(f"⚠ {tot} ligne(s) SIGNALEE(S) (ambigu, laissees telles quelles) : {det}.")
+        # ⚠️⚠️ LA MÊME ASYMÉTRIE, UN CRAN PLUS BAS — trouvée en mesurant
+        # l'étape 4. Les signalements ne publiaient que leur CODE : le rapport
+        # signé disait « 400x unite_exposition_contredite » sans dire ce que
+        # ça voulait dire. *Un code nu nomme une anomalie ; il ne la dit pas.*
+        # La branche BLOQUÉE publie les descriptions de TOUTES les règles ; il
+        # n'y a aucune raison que la règle 3 soit muette une fois validée.
+        # ⚠️ Coût mesuré avant de le faire : 59 à 332 caractères par
+        # signalement, sur les trois qui existent.
+        for a in rapport.signalements:
+            lignes.append(f"   ⚠ {a.description}")
     if rapport.escalade_declenchee and rapport.validee_par:
         d = _date_lisible(rapport.horodatage)
         lignes.append(

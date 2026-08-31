@@ -194,18 +194,30 @@ class TestAucunePhrasePublieeNeCHANGE(unittest.TestCase):
         """⚠️ Chaines relevees sur la version tiree du commit. `:g` rend
         « > 1 » dans la comparaison, mais le libelle de correction garde
         « plafond a 1.0 » : `:g` l'aurait ecrit « plafond a 1 »."""
+        # ⚠️⚠️ LES DEUX ETATS SONT EPINGLES, ET L'ETAPE 5 EXPLIQUE POURQUOI.
+        # Ce controle prenait `_PLAN_AUTO` du depot, qui ne declarait rien ; les
+        # 20 plans declarent `annee` depuis l'etape 5, et il est tombe. *Epingler
+        # UN etat en empruntant un fichier qui peut changer, c'est epingler le
+        # fichier, pas le comportement.* On epingle donc le cas de PRODUCTION
+        # (unite declaree) ET le cas du plan client muet, chacun construit.
         a = _plafond(_a2(_en_mois(), _PLAN_AUTO))
         self.assertIsNotNone(a, 'A2 ne signale plus le plafonnement')
         self.assertEqual(a.correction, 'plafond a 1.0')
-        # ⚠️⚠️ LE LIBELLE DE CORRECTION EST INCHANGE, LA DESCRIPTION NON --
-        # ET C'EST L'ETAPE 2 QUI L'A CHANGEE, DELIBEREMENT. L'ancienne disait
-        # « Le plan declare le ROLE de l'exposition, jamais son UNITE » :
-        # cette phrase est devenue FAUSSE le jour ou le plan a pu la declarer.
-        # *Un texte qui accompagne un comportement se relit quand le
-        # comportement change.* La nouvelle publie l'hypothese annuelle et sa
-        # consequence sur la prime -- c'est le but du constat `qualite/C3`.
         self.assertEqual(
             a.description,
+            "exposition ('exposition') > 1 -- implausible pour un contrat "
+            "annuel.")
+
+        # ⚠️ LE LIBELLE DE CORRECTION EST INCHANGE DEPUIS 1d, LA DESCRIPTION
+        # NON -- et c'est l'etape 2 qui l'a changee, DELIBEREMENT. L'ancienne
+        # disait « Le plan declare le ROLE de l'exposition, jamais son UNITE » :
+        # devenue FAUSSE le jour ou le plan a pu la declarer. *Un texte qui
+        # accompagne un comportement se relit quand le comportement change.*
+        muet = dataclasses.replace(_PLAN_AUTO, unite_exposition=None)
+        b = _plafond(_a2(_en_mois(), muet))
+        self.assertEqual(b.correction, 'plafond a 1.0')
+        self.assertEqual(
+            b.description,
             "exposition ('exposition') > 1 -- implausible pour un contrat "
             "annuel. UNITE NON DECLAREE au plan : l'hypothese ANNUELLE a ete "
             "supposee, et c'est elle qui fixe cette borne. Si ce fichier est "
@@ -213,8 +225,8 @@ class TestAucunePhrasePublieeNeCHANGE(unittest.TestCase):
             "plan -- sans quoi cette correction detruit une donnee JUSTE, et "
             "l'exposition etant le denominateur de la prime, celle-ci est "
             "multipliee d'autant.")
-        print(f"    BEX-3 libelle inchange ({a.correction!r}), description "
-              f"mise a jour par l'etape 2")
+        print(f"    BEX-3 libelle inchange ({a.correction!r}) ; description "
+              f"epinglee dans les DEUX etats (declaree / muette)")
 
     def test_les_DEUX_chemins_publient_le_MEME_libelle(self):
         """⚠️⚠️ LE VRAI INVARIANT DU JUMEAU. Meme code, meme regle, meme

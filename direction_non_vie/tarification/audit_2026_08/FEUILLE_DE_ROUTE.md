@@ -1181,8 +1181,8 @@ index, aucun identifiant. **La conversion n'ajoute aucun champ client.**
 | **1d** | ✅ **FAIT le 31/08** — **la borne d'exposition a UNE SEULE SOURCE** : A2 consomme `PLAFOND_EXPOSITION` au lieu de ses quatre littéraux `1.0` | ✅ **aucun euro**, mesuré AVANT/APRÈS sur 4 portefeuilles, **0 écart** — y compris les phrases publiées |
 | **2** | ✅ **FAIT le 31/08 — `qualite/C3` EST FERMÉ.** `unite_exposition` au plan (`annee` · `mois` · `jour`), dérivé du `Literal`, inconnue **LÈVE** ; la borne en dérive **à la source unique**, donc aux deux chemins d'un seul geste ; l'hypothèse annuelle est **DITE** ; une donnée qui **contredit** l'unité est **signalée** | ✅ **aucun euro** — **0 / 20 plans** ne déclare d'unité, mesuré. ⛔ **Mais un TEXTE publié bouge, délibérément**, et **`EMPREINTE_SCHEMA` bumpe 1 → 2** |
 | **3** | ⚠️ **RÉDUITE À SA VRAIE PORTÉE PAR 1d** — il n'y a plus deux bornes à faire dériver, seulement la conséquence sur les fichiers dont l'unité déclarée contredit la donnée | ⚠️ **La partie « simultané, obligatoirement » est CONSOMMÉE par 1d** : la simultanéité est désormais structurelle, plus une précaution d'ordonnancement |
-| **4** | ⚠️⚠️ **SA JUSTIFICATION EST RÉFUTÉE PAR LA MESURE — VOIR L'ENCADRÉ** | ~~L'aval exige une exposition annualisée~~ · **mesuré le 31/08 : il ne l'exige pas** |
-| **5** | Les 20 plans déclarent `annee` | **En dernier**, comme l'étape 5 de `plan/C7`. `annee` → borne 1.0 → *comportement identique à aujourd'hui* : cette étape ne déplace aucun euro, par construction |
+| **4** | ✅ **FAIT le 31/08 — et ce n'était PAS une conversion.** Sa justification était fausse (voir l'encadré). Le vrai défaut : **le rapport SIGNÉ ne disait pas sous quelle unité il avait corrigé** — la branche validée publiait l'effet **OU** la description, jamais les deux, et la description est la **seule** surface qui nomme l'unité | ✅ **aucun euro** — que du texte, contrôlé par `RS-6` |
+| **5** | ✅ **FAIT le 31/08 — les 20 plans déclarent `annee`.** Borne obtenue **1.0 partout**, vérifiée par chargement | ✅ **aucun euro par construction** : `annee` → borne 1.0, le comportement d'hier **cessé d'être supposé** |
 
 > ### ⛔⛔ LA JUSTIFICATION DE L'ÉTAPE 4 EST RÉFUTÉE PAR LA MESURE (31/08/2026)
 >
@@ -1208,6 +1208,39 @@ index, aucun identifiant. **La conversion n'ajoute aucun champ client.**
 > « exposition totale : 10 083 » sans dire « en mois » reste ambigu. **L'étape 4
 > se réduit donc à une question de PUBLICATION, plus de calcul** — et c'est un
 > lot bien plus petit que celui qui était prévu.
+>
+> ### ⛔⛔ ET LA TRACE DE L'ÉTAPE 4 A TROUVÉ PIRE QUE PRÉVU (31/08)
+>
+> `synthese_qualite_donnees` a **deux moitiés**. La branche **bloquée** publie
+> les descriptions **et** les effets. La branche **validée** publiait l'effet
+> **OU** la description — jamais les deux :
+>
+> ```
+>   message BLOQUE : « UNITE NON DECLAREE » present -> True
+>   rapport SIGNE  : « UNITE NON DECLAREE » present -> False
+> ```
+>
+> Or **la description est la seule surface qui nomme l'unité**. *Le document que
+> lisent le CAC et l'ACPR ne disait pas sous quelle unité la correction avait
+> été faite.* ⚠️ **Et le commentaire sur place promettait déjà l'inverse** —
+> « *LA MÊME PHRASE QU'EN AMONT, PAS UNE REFORMULATION* » : **le code publiait
+> strictement moins que ce qu'il promettait**, troisième code de ce chantier à
+> contredire son propre texte.
+>
+> ⚠️⚠️ **LA MÊME ASYMÉTRIE UN CRAN PLUS BAS** : les **signalements** ne
+> publiaient que leur **code** — « 400x `unite_exposition_contredite` » — sans
+> dire ce que ça veut dire. *Un code nu nomme une anomalie ; il ne la dit pas.*
+>
+> ### ⛔⛔ LA VRAIE TROUVAILLE : LE RAPPORT SIGNÉ N'ÉTAIT ÉPINGLÉ PAR RIEN
+>
+> J'ai ajouté **deux blocs de texte** au document le plus opposable du module,
+> et **les 812 tests de la gate sont restés verts.** Les contrôles existants
+> cherchent des phrases par `assertIn` : aucun ne dit ce que le rapport **doit**
+> contenir, aucun ne verrait une phrase **disparaître** tant qu'une autre reste.
+> *Un contrôle qui ATTESTE sans SURVEILLER, sur la surface que signe
+> l'actuaire.* `test_rapport_signe_dit_l_unite.py` l'épingle désormais, dont
+> `RS-2` : **tout ce que le message bloqué publie se retrouve mot pour mot dans
+> le rapport signé.**
 >
 > ### ⛔⛔ L'ORDRE A ÉTÉ RÉVISÉ LE 31/08 — L'ÉTAPE 2 AURAIT RECRÉÉ LE JUMEAU QU'ON VENAIT DE FERMER
 >
