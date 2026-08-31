@@ -126,7 +126,26 @@ class TarifNonVie:
 
     def predire_portefeuille(self, df: pd.DataFrame) -> pd.DataFrame:
         """Prédictions vectorisées sur un portefeuille — MÊME chemin que
-        tarifer(), pour que l'un reproduise l'autre à 1e-6 (INV-7)."""
+        `tarifer()`.
+
+        ⚠️⚠️ CONSTAT `pipeline/C7` — LA PRÉCISION ANNONCÉE N'ÉTAIT PAS
+        OBSERVABLE SUR LA SORTIE DE `tarifer()`. Cette phrase promettait « que
+        l'un reproduise l'autre à 1e-6 » ; or `tarifer()` **arrondit
+        `prime_pure` à deux décimales** (l.265). *Une promesse au milliardième
+        sur un nombre publié au centime ne peut pas être vérifiée par celui qui
+        la lit.*
+
+        Ce qui est vrai, et ce que l'oracle du dépôt mesure réellement : **les
+        deux chemins sont le MÊME calcul** — `_design` puis `_taux_frequence`
+        puis `glm_cout` — et c'est cette identité qui vaut 1e-6, entre valeurs
+        NON arrondies. `test_scoring_unitaire_reproduit_le_portefeuille_a_1e6`
+        compare le chemin vectoriel à lui-même ; l'écart mesuré entre
+        `tarifer()` et ce chemin est **0,0036 €** sur 6 contrats — l'arrondi au
+        centime, rien de plus.
+
+        ⚠️ *L'oracle était juste ; c'est la phrase qui promettait au-delà de ce
+        qu'elle pouvait montrer.* (INV-7)
+        """
         Xc = self._design(df)
         expo = pd.to_numeric(df[self.plan.exposition], errors="coerce").to_numpy(dtype=float)
         freq = self._taux_frequence(Xc)
@@ -285,16 +304,40 @@ class TarifNonVie:
             }
 
     def grille(self, variable: str) -> pd.DataFrame:
-        """Relativités exportables (ce que l'assureur met dans son SI)."""
-        rel = {}
+        """Relativités exportables (ce que l'assureur met dans son SI).
+
+        ⚠️⚠️ CONSTAT `pipeline/C6` — LA MOITIÉ DU TARIF MANQUAIT À LA GRILLE.
+        Elle ne rendait que `relativite_frequence`, alors que la prime pure est
+        **fréquence × coût moyen**. *L'assureur était invité à mettre dans son
+        SI une grille dont il manquait un facteur sur deux.*
+
+        Trois colonnes désormais, et la troisième est le produit des deux
+        premières : c'est elle qui porte le tarif complet. ⚠️ **Aucun euro** —
+        `grille()` n'entre dans aucun calcul de prime ; elle EXPOSE ce que les
+        deux GLM portent déjà.
+        """
+        lignes = []
         for f in self.plan.facteurs:
             if f.nom != variable:
                 continue
             for col in f.colonnes_produites():
-                if col in self.features:
-                    coef = float(getattr(self.glm_frequence, "params", {}).get(col, 0.0))
-                    rel[col] = round(float(np.exp(coef)), 4)
-        return pd.DataFrame({"colonne": list(rel), "relativite_frequence": list(rel.values())})
+                if col not in self.features:
+                    continue
+                # ⚠️ Lien log des deux cotes (et OLS sur log pour la
+                # lognormale) : `exp(coef)` est la relativite MULTIPLICATIVE
+                # dans les trois familles declarables.
+                c_freq = float(
+                    getattr(self.glm_frequence, "params", {}).get(col, 0.0))
+                c_cout = float(
+                    getattr(getattr(self.glm_cout, "_res", None), "params",
+                            {}).get(col, 0.0))
+                r_freq, r_cout = float(np.exp(c_freq)), float(np.exp(c_cout))
+                lignes.append((col, round(r_freq, 4), round(r_cout, 4),
+                               round(r_freq * r_cout, 4)))
+        return pd.DataFrame(
+            lignes,
+            columns=["colonne", "relativite_frequence", "relativite_cout",
+                     "relativite_prime_pure"])
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -302,9 +345,31 @@ class TarifNonVie:
 # ══════════════════════════════════════════════════════════════════════════════
 def gini_lorenz(y_true, y_pred) -> float:
     """Gini de concentration (2·aire de Lorenz − 1), en triant les contrats par
-    la PRÉDICTION. UNE SEULE définition, utilisée à l'identique pour le Gini de
-    test ET le Gini walk-forward — c'est ce qui rend impossible la « métrique
-    divergente » de B9 (INV-6)."""
+    la PRÉDICTION.
+
+    ⚠️⚠️ CONSTAT `pipeline/C3` — CETTE PHRASE AFFIRMAIT PLUS QUE SA PORTÉE.
+    Elle disait « UNE SEULE définition ». C'est vrai **dans ce module** — le
+    Gini de test et le Gini walk-forward passent tous deux par ICI, et c'est ce
+    qui rend impossible la « métrique divergente » de B9 (INV-6). Ce n'est
+    **pas** vrai à l'échelle du dépôt.
+
+    Mesuré par AST le 01/09/2026 — **méthode publiée avec le chiffre** : sur
+    les fonctions de production dont le nom porte `gini`, **8 calculent
+    réellement un coefficient** (critère retenu : leur corps emploie `cumsum`,
+    `trapz` ou une courbe de Lorenz) et 2 n'en calculent pas (une réserve, un
+    verdict). Parmi les 8 : `a3`, `a4`, `a5` ont chacune leur `_calculer_gini`,
+    `a6` son `_gini_lorenz`, `conformite` son `_gini_trie_par`, `charts` la
+    sienne pour la figure — plus celle-ci et son enveloppe locale `_gini_sur`.
+
+    ⚠️ **LE CRITÈRE EST UNE HEURISTIQUE, ET LE SENS DE SON ERREUR EST DIT** :
+    il peut compter une aide qui n'est pas une définition à part entière ; il
+    ne peut pas en manquer une qui calcule vraiment. *Il SUR-compte, il ne
+    sous-compte pas.*
+
+    **Ce qui est garanti ici est l'identité ENTRE LES DEUX USAGES DE CE
+    MODULE**, pas l'unicité dans le dépôt. *Une phrase qui LIMITE est sûre ;
+    une phrase qui AFFIRME au-delà de ce qu'elle tient est une dette.*
+    """
     y_true = np.asarray(y_true, dtype=float)
     y_pred = np.asarray(y_pred, dtype=float)
     if len(y_true) == 0:
@@ -427,6 +492,38 @@ def phrase_domaines_non_declares(plan) -> str | None:
             "`bornes` sur ces facteurs pour qu'elle soit refusee.")
 
 
+class CalculImpossibleBloquant(Exception):
+    """Le modele ne peut PAS etre ajuste sur cette donnee — `pipeline/C2`.
+
+    ⚠️ Distincte de `DonneeIllisibleBloquante` : la donnee est parfaitement
+    LISIBLE, c'est le calcul qui n'a pas d'objet. *Deux causes, deux
+    exceptions : l'appelant qui rattrape ne traite pas les deux pareil.*
+    """
+
+
+def _refuser_frequence_sans_sinistre(y_freq, lob, col_freq):
+    """Un portefeuille SANS AUCUN sinistre ne peut pas ajuster un GLM Poisson.
+
+    ⚠️⚠️ Mesure du 01/09 : il mourait sur `The first guess on the deviance
+    function returned a nan. This could be a boundary problem and should be
+    reported.` *L'actuaire etait invite a signaler un bug a statsmodels la ou
+    son portefeuille n'avait simplement aucun sinistre.*
+
+    ⚠️ AUCUN EURO : il n'y avait pas de prix, il n'y en a toujours pas — mais
+    on dit pourquoi.
+    """
+    total = float(np.nansum(np.asarray(y_freq, dtype=float)))
+    if total > 0:
+        return
+    raise CalculImpossibleBloquant(
+        f"Tarification REFUSEE pour le plan '{lob}' : la cible de frequence "
+        f"'{col_freq}' est NULLE sur tout le portefeuille (somme = 0). Un GLM "
+        f"de Poisson a lien log n'a alors pas de solution -- son intercept "
+        f"tendrait vers moins l'infini. Sans sinistre observe, il n'y a aucune "
+        f"frequence a estimer : ce n'est pas un defaut de donnee, c'est "
+        f"l'absence d'experience.")
+
+
 class DonneeIllisibleBloquante(Exception):
     """Une valeur illisible sur un rôle que le GLM consomme — constat
     `pipeline/C8`.
@@ -501,7 +598,13 @@ def pipeline_complet(portefeuille: pd.DataFrame, plan: PlanTarifaire,
     # déplace un prix. **Extraire et brancher sont deux décisions.**
     rapport_qualite = preambule_qualite(
         portefeuille, plan, qualite_validee_par=qualite_validee_par,
-        horodatage=datetime.now().isoformat())
+        # ⚠️⚠️ CONSTAT `pipeline/C9` — DEUX HORODATAGES, DEUX FUSEAUX.
+        # `tarifer()` posait `datetime.now(timezone.utc)` et cette ligne
+        # `datetime.now()`, en heure LOCALE : *deux traces du meme calcul ne
+        # portaient pas la meme heure*, et rien ne disait laquelle etait
+        # laquelle. UTC des deux cotes -- un horodatage sans fuseau n'est pas
+        # un horodatage, c'est une supposition sur la machine qui l'a ecrit.
+        horodatage=datetime.now(timezone.utc).isoformat())
     df = rapport_qualite.dataframe_propre
     col_freq, col_cout, col_expo = (plan.cible_frequence, plan.cible_cout,
                                     plan.exposition)
@@ -545,6 +648,9 @@ def pipeline_complet(portefeuille: pd.DataFrame, plan: PlanTarifaire,
     expo = pd.to_numeric(X[col_expo], errors="coerce").clip(lower=1e-9)
     y_freq = pd.to_numeric(X[col_freq], errors="coerce").astype(float)
 
+    # ⚠️ CONSTAT `pipeline/C2` — l'impossibilite se DIT avant le solveur.
+    _refuser_frequence_sans_sinistre(y_freq, plan.lob, col_freq)
+
     # ── GLM FRÉQUENCE (Poisson, offset log-exposition) ──────────────────────
     glm_freq = sm.GLM(y_freq, Xc,
                       family=_families.Poisson(link=_families.links.Log()),
@@ -566,9 +672,31 @@ def pipeline_complet(portefeuille: pd.DataFrame, plan: PlanTarifaire,
     if cible_sev.n_retenus:
         glm_cout = ajuster_glm_cout(Xc[cible_sev.masque], cible_sev.severite,
                                     plan.famille_severite)
-    else:   # aucun coût observé : coût moyen constant (dégénéré mais défini)
-        glm_cout = ajuster_glm_cout(Xc.iloc[:1], pd.Series([1.0]),
-                                    plan.famille_severite)
+    else:
+        # ⚠️⚠️ CONSTAT `pipeline/C2` — CE REPLI N'ÉTAIT NI DÉGÉNÉRÉ NI DÉFINI.
+        # Il annonçait « coût moyen constant (dégénéré mais défini) ». Mesuré
+        # le 01/09 : il ajustait un GLM Gamma sur **UNE observation** et ~24
+        # paramètres, et **mourait lui-même** sur `deviance function returned
+        # a nan`.
+        #
+        # ⚠️ ET LE CONSTAT SE TROMPAIT DE CAS. Il disait la branche « JAMAIS
+        # atteinte », mesuré sur un portefeuille SANS aucun sinistre — celui-là
+        # meurt vingt lignes plus tôt, sur le GLM de fréquence. La branche est
+        # bien atteinte par l'AUTRE cas : des sinistres COMPTÉS, aucun coût
+        # POSITIF. *Le constat visait juste et se trompait de porte.*
+        #
+        # On refuse, et on dit quoi. La couche qualité signale déjà ce cas
+        # (`incoherence_sin_sans_cout`, règle 3) : elle constate, le calcul
+        # assume — la doctrine posée pour `pipeline/C8`.
+        raise CalculImpossibleBloquant(
+            f"Tarification REFUSEE pour le plan '{plan.lob}' : "
+            f"{int((y_freq > 0).sum())} sinistre(s) sont COMPTES, mais AUCUN "
+            f"cout strictement positif n'est observe. Le GLM de cout moyen n'a "
+            f"donc rien a ajuster. Le repli precedent pretendait un << cout "
+            f"moyen constant, degenere mais defini >> : il ajustait en fait un "
+            f"GLM sur UNE observation et echouait lui-meme. Verifiez la colonne "
+            f"'{col_cout}' -- des sinistres sans montant sont signales par la "
+            f"couche qualite (`incoherence_sin_sans_cout`).")
 
     tarif = TarifNonVie(
         plan=plan, a2=a2, glm_frequence=glm_freq, glm_cout=glm_cout,

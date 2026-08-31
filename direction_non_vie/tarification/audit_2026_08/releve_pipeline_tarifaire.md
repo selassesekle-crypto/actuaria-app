@@ -91,6 +91,30 @@ défini) ». Mesuré sur un portefeuille sans aucun sinistre :
 d'atteindre le repli du coût. Le repli existe, il est correct, et il est
 inaccessible dans le seul cas qu'il prétend couvrir.
 
+> ✅ **`pipeline/C2`** · **FERMÉ le 01/09/2026 — ET LE CONSTAT EST RÉFUTÉ SUR
+> SA FORME, CE QUI RESTE ÉTANT PIRE.** *Preuve : `PC-1`, `PC-2`, `PC-3`.*
+>
+> Il concluait « branche JAMAIS atteinte » à partir d'un portefeuille **sans
+> aucun sinistre**. Ce cas-là meurt bien vingt lignes plus tôt — mais sur le
+> **GLM de fréquence**, pas faute d'atteindre le repli. *Le constat visait
+> juste et se trompait de porte.*
+>
+> **La branche EST atteinte par l'autre cas** : des sinistres **comptés**,
+> aucun coût **positif**. Et mesuré le 01/09 — **elle meurt elle-même**, l.570,
+> parce qu'elle ajustait un GLM Gamma sur **UNE observation** et ~24
+> paramètres. *« Dégénéré mais défini » n'était ni l'un ni l'autre.*
+>
+> ⚠️⚠️ **ET LES DEUX MORTS PORTAIENT LE MESSAGE DE `pipeline/C8`** — « *the
+> deviance function returned a nan … should be reported* ». *L'actuaire était
+> invité à signaler un bug à `statsmodels` là où son portefeuille n'avait
+> simplement aucun sinistre.* Les deux impossibilités sont désormais **nommées
+> avant le solveur**, et la seconde renvoie au signalement que la couche
+> qualité produit déjà (`incoherence_sin_sans_cout`).
+>
+> ⚠️ **Aucun euro : il n'y avait pas de prix, il n'y en a toujours pas — mais
+> on dit pourquoi.** `PC-3` vérifie le second sens : un portefeuille normal
+> tarife.
+
 **C3 — « UNE SEULE définition » du Gini, et il y en a cinq.** La docstring
 l.193-196 dit : « UNE SEULE définition, utilisée à l'identique pour le Gini de
 test ET le Gini walk-forward — c'est ce qui rend impossible la *métrique
@@ -176,6 +200,25 @@ reçoit la taxe auto.
 > sera un ARBITRAGE, pas un effet de bord.*
 
 
+> ✅ **`pipeline/C3`** · **FERMÉ le 01/09/2026 — LA PHRASE LIMITE DÉSORMAIS SA
+> PORTÉE.** *Preuve : `PC-4`, `PC-5`.*
+>
+> Elle disait « UNE SEULE définition ». C'est **vrai dans ce module** — le Gini
+> de test et le Gini walk-forward passent tous deux par là, et c'est ce qui rend
+> impossible la « métrique divergente » de B9. Ce n'est **pas vrai à l'échelle
+> du dépôt**.
+>
+> ⚠️ **LE CHIFFRE ET SA MÉTHODE, CÔTE À CÔTE.** Le constat annonçait cinq
+> définitions ; mesuré par AST le 01/09, **8 fonctions de production calculent
+> réellement un coefficient** — critère publié : leur corps emploie `cumsum`,
+> `trapz` ou une courbe de Lorenz — et 2 autres portent `gini` dans leur nom
+> sans en calculer (une réserve, un verdict). ⚠️ **Le sens de l'erreur est
+> dit** : le critère **sur-compte**, il ne sous-compte pas. `PC-5` re-dérive le
+> nombre au lieu de croire la phrase.
+>
+> ⚠️ *Une phrase qui LIMITE est sûre ; une phrase qui AFFIRME au-delà de ce
+> qu'elle tient est une dette.*
+
 **C6 — `grille()` annonce des relativités exportables et ne porte que la
 fréquence.** Docstring l.177 : « Relativités exportables (ce que l'assureur met
 dans son SI) ». Mesuré : `colonnes = ['colonne', 'relativite_frequence']`. La
@@ -183,6 +226,19 @@ prime pure est `fréquence × coût moyen` — **la moitié du tarif manque à l
 grille que l'assureur est invité à mettre dans son SI.**
 
 ### C — Imprécis ou daté (3)
+
+> ✅ **`pipeline/C6`** · **FERMÉ le 01/09/2026 — LA GRILLE PORTE LES DEUX
+> MOITIÉS DU TARIF.** *Preuve : `PC-6`, `PC-7`.*
+>
+> Elle ne rendait que `relativite_frequence`, alors que la prime pure est
+> **fréquence × coût moyen**. *L'assureur était invité à mettre dans son SI une
+> grille dont il manquait un facteur sur deux.*
+>
+> Trois colonnes désormais — et `PC-6` vérifie que la troisième **est le
+> produit** des deux premières, pas deux nombres posés côte à côte. ⚠️ **Aucun
+> euro** : `grille()` n'entre dans aucun calcul de prime, elle EXPOSE ce que les
+> deux GLM portent déjà. `PC-7` tient le second sens : une variable inconnue
+> rend une grille **vide**, colonnes stables.
 
 **C7 — La docstring attribue à `tarifer()` une précision que seul le chemin
 vectoriel tient.** L.122-123 : « MÊME chemin que `tarifer()`, pour que l'un
@@ -241,10 +297,28 @@ errors="coerce")`, qui produit des NaN silencieux ; un seul les traite.
 ⚠️ **Sans conséquence observée** : une exposition illisible provoque un arrêt
 *loud* (voir D). Mais la protection tient par accident, pas par construction.
 
+> ✅ **`pipeline/C7`** · **FERMÉ le 01/09/2026.** *Preuve : `PC-8`.*
+> La docstring promettait « que l'un reproduise l'autre à 1e-6 » ; `tarifer()`
+> **arrondit `prime_pure` au centime**. *Une promesse au milliardième sur un
+> nombre publié au centime ne peut pas être vérifiée par celui qui la lit.*
+> Elle dit maintenant ce qui est vrai — **les deux chemins sont le MÊME
+> calcul**, et c'est cette identité qui vaut 1e-6, entre valeurs non arrondies ;
+> l'écart observable entre les deux sorties est **0,0036 €** sur 6 contrats.
+> ⚠️ *L'oracle du dépôt était juste ; c'est la phrase qui promettait au-delà de
+> ce qu'elle pouvait montrer.*
+
 **C9 — Deux horodatages, deux fuseaux, dans la même chaîne.** `tarifer()` pose
 `datetime.now(timezone.utc)` (l.146) ; `pipeline_complet` passe
 `horodatage=datetime.now()` (l.279), en heure locale. Deux traces du même
 calcul ne portent pas la même heure.
+
+
+> ✅ **`pipeline/C9`** · **FERMÉ le 01/09/2026.** *Preuve : `PC-9`.*
+> `tarifer()` posait `datetime.now(timezone.utc)`, `pipeline_complet`
+> `datetime.now()` — en heure **locale**. *Deux traces du même calcul ne
+> portaient pas la même heure, et rien ne disait laquelle était laquelle.* UTC
+> des deux côtés : **un horodatage sans fuseau n'est pas un horodatage, c'est
+> une supposition sur la machine qui l'a écrit.**
 
 ### D — Vérifié comme BON (10)
 
