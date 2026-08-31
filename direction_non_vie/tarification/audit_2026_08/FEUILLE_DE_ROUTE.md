@@ -1178,10 +1178,48 @@ index, aucun identifiant. **La conversion n'ajoute aucun champ client.**
 | **1** | ✅ **FAIT — A2 cesse d'être muet.** ⚠️ **La trace a élargi le sujet : TROIS mutations, pas une** (colonne absente → **inventée à 1.0** ; `expo <= 0` → **médiane** ; `expo > 1` → plafond), chacune réduite à un `logger.warning`, et `stats_expo` n'atteignait **aucun livrable**. Les trois publient désormais leur effet agrégé par la **source unique** de la couche qualité. ⚠️⚠️ **Le canal existait déjà** : `A6.run` accepte `rapport_qualite` et le relaie aux 3 livrables — `pipeline_agents` ne le passait **jamais**. *La plomberie était posée, rien ne l'alimentait ; A2 nommait même le modèle à suivre deux lignes au-dessus de son propre retour.* **Aucun comportement changé, contrôlé** | **Le pire état actuel, et il ne dépend d'AUCUNE unité.** ⚠️ Le faire APRÈS l'unité aurait laissé le chemin agent détruire l'exposition en silence pendant tout le chantier |
 | **1b** | ✅ **FAIT — `expo <= 0` : exclure (comme la qualité) au lieu de la médiane** (arbitre le 30/08) | **L'euro bouge** : la médiane sous-estime la fréquence de **10,4 %**, toujours vers le sous-tarif |
 | **1c** | ✅ **FAIT — A2 lit `plan.exposition`** (il cherche la sous-chaîne `'exposition'`) ; colonne absente → `colonnes_plan_manquantes`, jamais 1.0 (arbitre le 30/08) | **L'euro bouge** : sur `auto_fr_reel` (`Exposure`), A2 invente **aujourd'hui** → fréquence sous-estimée de **16 %** |
-| **2** | `unite_exposition` au plan, ensemble fermé, valeur inconnue **LÈVE**, **et lue par la borne** de la couche qualité | Déclarer sans lire créerait un champ qui **promet** — le défaut que cet audit poursuit. Déclaration et première lecture dans le même geste |
-| **3** | La borne dérive de l'unité **dans LES DEUX chemins** | ⚠️ **Simultané, obligatoirement** : la corriger sur un seul chemin recrée le jumeau qu'on vient de fermer |
+| **1d** | ✅ **FAIT le 31/08** — **la borne d'exposition a UNE SEULE SOURCE** : A2 consomme `PLAFOND_EXPOSITION` au lieu de ses quatre littéraux `1.0` | ✅ **aucun euro**, mesuré AVANT/APRÈS sur 4 portefeuilles, **0 écart** — y compris les phrases publiées |
+| **2** | `unite_exposition` au plan, ensemble fermé, valeur inconnue **LÈVE**, **et lue par la borne** — **désormais À LA SOURCE UNIQUE, donc les deux chemins d'un seul geste** | Déclarer sans lire créerait un champ qui **promet** — le défaut que cet audit poursuit. Déclaration et première lecture dans le même geste |
+| **3** | ⚠️ **RÉDUITE À SA VRAIE PORTÉE PAR 1d** — il n'y a plus deux bornes à faire dériver, seulement la conséquence sur les fichiers dont l'unité déclarée contredit la donnée | ⚠️ **La partie « simultané, obligatoirement » est CONSOMMÉE par 1d** : la simultanéité est désormais structurelle, plus une précaution d'ordonnancement |
 | **4** | Conversion explicite vers l'année, publiée avec son effet | L'aval (offset GLM, prime pure) exige une exposition annualisée. Après 3, sinon on convertit sur une borne fausse |
 | **5** | Les 20 plans déclarent `annee` | **En dernier**, comme l'étape 5 de `plan/C7`. `annee` → borne 1.0 → *comportement identique à aujourd'hui* : cette étape ne déplace aucun euro, par construction |
+
+> ### ⛔⛔ L'ORDRE A ÉTÉ RÉVISÉ LE 31/08 — L'ÉTAPE 2 AURAIT RECRÉÉ LE JUMEAU QU'ON VENAIT DE FERMER
+>
+> **Trouvé en traçant l'étape 2, pas en la codant.** La borne vivait à **deux**
+> endroits : `PLAFOND_EXPOSITION` côté couche qualité, et **quatre littéraux
+> `1.0`** dans A2 — dont un masque **recalculé à l'identique** juste après le
+> premier. Faire dériver la borne de l'unité d'un seul côté aurait laissé A2
+> plafonner à 1.0 pendant tout l'intervalle : *deux bornes pour la même
+> grandeur, sur le plafond que l'étape 1 vient de rendre visible.*
+>
+> ⚠️ **Et le commentaire d'import de A2 condamnait déjà le littéral** : « *MÊME
+> VOCABULAIRE QUE LA COUCHE QUALITÉ, jamais un second […] les réécrire ici
+> aurait fait diverger les deux chemins DANS LE TEXTE* ». A2 empruntait les
+> **classes** et réécrivait le **nombre**. *Le code contredisait son propre
+> texte — le même défaut qu'à l'étape 1c.*
+>
+> **Arbitré par Selasse le 31/08 : 1d d'abord, sans euro, puis l'étape 2
+> réduite à sa vraie portée.**
+>
+> ⚠️ **Borne du contrôle `BEX-5`, déclarée** : A2 fait `from … import
+> PLAFOND_EXPOSITION`, donc le nom est lié **à l'import**. Le contrôle prouve
+> qu'aucun littéral ne subsiste, **pas** un lien vif vers l'attribut du module.
+> *Ça cessera de suffire à l'étape 2 : la borne y dépendra du PLAN, donc d'un
+> appel, plus d'une constante de module.*
+>
+> ### ⚠️ TROUVÉ PENDANT LA TRACE, NON TRAITÉ — deux divergences nommées
+>
+> **① `demos/fremtpl2_demo.py:110` plafonne `Exposure` à 1.0 AVANT d'appeler
+> `pipeline_complet`** (l.123). La couche qualité reçoit donc un fichier **déjà
+> aplati** et ne peut plus rien en dire : ni anomalie, ni effet agrégé, ni
+> blocage. **Troisième doctrine sur la même grandeur**, et c'est la démo qui
+> produit les chiffres du jeu français réel.
+>
+> **② Les deux jumeaux publient un texte différent pour le MÊME code
+> `exposition_sup_1`** : la couche qualité écrit `> 1 —`, A2 `> 1 --`. *Le
+> corriger déplacerait une phrase publiée — l'inverse exact de ce que 1d
+> prouve.* À traiter dans un lot qui assume ce déplacement.
 
 ✅ **DÉPENDANCE LEVÉE LE 30/08 — `plan/C5` EST FERMÉ** (`7b7cec4`). La porte
 lève désormais sur toute clé inconnue, au plan **et** sur chaque facteur, avec

@@ -85,7 +85,17 @@ from core.plan_tarifaire import PlanTarifaire, Facteur, _slug, _SUFFIXE_TRANSFO
 # ⚠️ MÊME VOCABULAIRE QUE LA COUCHE QUALITÉ, jamais un second. Ces trois
 # structures sont celles que `synthese_qualite_donnees` sait rendre : les
 # réécrire ici aurait fait diverger les deux chemins DANS LE TEXTE.
-from core.qualite_donnees import Anomalie, EffetAgrege, RapportQualite
+#
+# ⚠️⚠️ ET LE MÊME NOMBRE, PAS SEULEMENT LE MÊME VOCABULAIRE (31/08/2026).
+# A2 empruntait les CLASSES de la couche qualité et RÉÉCRIVAIT sa borne : le
+# plafond d'exposition vivait ici en quatre littéraux `1.0`, à côté de la
+# source unique `PLAFOND_EXPOSITION`. *Le commentaire ci-dessus condamnait
+# déjà le littéral ; le code contredisait son propre texte.* Le faire
+# consommer ne déplace aucun euro — même valeur, mêmes phrases publiées,
+# vérifié — mais c'est ce qui permettra à la borne de DÉRIVER de
+# `unite_exposition` en un seul endroit, pour les deux chemins à la fois.
+from core.qualite_donnees import (Anomalie, EffetAgrege, PLAFOND_EXPOSITION,
+                                  RapportQualite)
 
 # ⚠️⚠️ CONSTAT `a2/C15` — LE FILTRE GLOBAL D'AVERTISSEMENTS EST RETIRÉ.
 # `warnings.filterwarnings('ignore')` posé ICI, au niveau module, s'appliquait
@@ -1369,28 +1379,42 @@ class AgentA2Preprocessing:
                 f"(impossible) — meme regle que la couche qualite"
             )
 
-        # exposition > 1 : contrat de plus d'un an
-        # On plafonne à 1.0 (exposition maximale pour contrat annuel)
-        _masque_sup1 = (df[col_expo] > 1.0).to_numpy()
+        # exposition > le plafond : contrat de plus d'un an
+        # ⚠️⚠️ LA BORNE VIENT DE LA SOURCE UNIQUE, PLUS D'UN LITTÉRAL ICI. Elle
+        # valait `1.0` en dur à quatre endroits de ce bloc, dont un masque
+        # RECALCULÉ à l'identique juste après le premier. *Deux littéraux pour
+        # une même borne, c'est deux endroits à changer le jour où elle dérive
+        # de l'unité — et un seul suffira pour la faire diverger.*
+        _masque_sup1 = (df[col_expo] > PLAFOND_EXPOSITION).to_numpy()
         nb_sup1 = int(_masque_sup1.sum())
         if nb_sup1 > 0:
             _avant = float(df[col_expo].sum())
-            df.loc[df[col_expo] > 1.0, col_expo] = 1.0
+            # ⚠️ Le masque déjà calculé, jamais un second : le recalculer
+            # laissait deux prédicats à garder d'accord pour rien.
+            df.loc[_masque_sup1, col_expo] = PLAFOND_EXPOSITION
             stats['valeurs_corrigees'] += nb_sup1
             # ⚠️ LE JUMEAU DU PLAFOND DE LA COUCHE QUALITE — constat
             # `qualite/C3`. Là-bas il BLOQUE et exige une signature ; ici il ne
             # produisait qu'un log. L'effet agrégé est le même calcul, par la
             # même classe, pour que les deux chemins disent la même phrase.
+            # ⚠️ DEUX FORMATS, ET C'EST DÉLIBÉRÉ — les mêmes que la couche
+            # qualité, au caractère près. `:g` rend « > 1 » dans la
+            # comparaison ; le libellé de correction garde « plafond a 1.0 »,
+            # car `:g` l'écrirait « plafond a 1 » et CHANGERAIT UNE PHRASE
+            # PUBLIÉE. *Un refactor sans euro peut quand même déplacer un
+            # texte signé : celui-ci est vérifié identique.*
             _noter('exposition_sup_1', 'exposition', col_expo, _masque_sup1,
-                   f"exposition ('{col_expo}') > 1 -- implausible pour un "
+                   f"exposition ('{col_expo}') > {PLAFOND_EXPOSITION:g} -- "
+                   f"implausible pour un "
                    f"contrat annuel. Le plan declare le ROLE de l'exposition, "
                    f"jamais son UNITE : un fichier exprime en mois est "
                    f"ecrase ici sans que rien ne l'ait verifie.",
-                   correction='plafond a 1.0',
+                   correction=f'plafond a {PLAFOND_EXPOSITION}',
                    effet=EffetAgrege(colonne=col_expo, total_avant=_avant,
                                      total_apres=float(df[col_expo].sum())))
             logger.warning(
-                f"{nb_sup1} valeurs d'exposition > 1 plafonnées à 1.0"
+                f"{nb_sup1} valeurs d'exposition > {PLAFOND_EXPOSITION:g} "
+                f"plafonnées à {PLAFOND_EXPOSITION}"
             )
 
         # Calcul du log de l'exposition (offset pour GLM Poisson)
