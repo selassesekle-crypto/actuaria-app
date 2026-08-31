@@ -107,16 +107,13 @@ _HORS_ASSIETTE: dict[tuple[str, str], str] = {
         "rang 7. C'est la SECONDE mention de cette cle, apres "
         "test_charge_nette_negative.py : la cle (constat, fichier) a bien "
         "rallume le filet sur un fichier neuf, comme prevu.",
-    ('qualite/C3', 'test_effet_agrege_correction.py'):
-        "Cite comme NOM DU CHANTIER dont ce lot est le PREMIER geste. `qualite/"
-        "C3` dit que le plafond a 1.0 est une hypothese d'UNITE sur un role "
-        "dont le plan ne declare jamais l'unite : ce lot ne corrige PAS cela, "
-        "il rend seulement l'effet VISIBLE avant la signature (exposition "
-        "totale avant/apres, et le facteur sur le tarif). Le vrai correctif -- "
-        "declarer `unite_exposition` au plan -- est un chantier de CONCEPTION "
-        "arbitre le 30/08, dont le plan complet est dans FEUILLE_DE_ROUTE.md. "
-        "`qualite/C3` reste donc OUVERT, et il doit le rester : le fermer sur "
-        "la moitie visible ferait croire que l'unite est traitee.",
+    # ⚠️⚠️ L'EXEMPTION DE `qualite/C3` A ETE RETIREE LE 31/08/2026. Elle disait
+    # << `qualite/C3` reste donc OUVERT >> : c'est devenu FAUX le jour ou
+    # l'etape 2 a declare `unite_exposition` au plan et fait deriver la borne.
+    # Le constat porte desormais son bloc de fermeture dans
+    # `releve_qualite_donnees.md`, et ce filet n'a plus rien a exempter.
+    # *Une exemption dont la RAISON est perimee ment sur l'etat de l'audit --
+    # exactement ce que ce fichier existe pour empecher.*
     ('a1/C5', 'test_vocabulaire_echeance.py'):
         "Cite pour DECLARER CE QUE LE CONTROLE NE COUVRE PAS : il refuse qu'un "
         "synonyme soit revendique par DEUX entrees canoniques, il ne juge pas "

@@ -46,6 +46,17 @@ Transformation = Literal["log", "carre", "racine"]
 # épaisse, grands risques). C'est un choix de modélisation qui fait partie du
 # plan signé — donc opposable, et inscrit dans l'empreinte.
 FamilleSeverite = Literal["gamma", "lognormal", "inverse_gaussienne"]
+# ⚠️⚠️ L'UNITÉ DE L'EXPOSITION — constat `qualite/C3`, étape 2 du chantier.
+# Le plan déclarait le RÔLE de l'exposition (quelle colonne) et jamais son
+# UNITÉ. Les deux chemins plafonnaient donc à 1,0 sur une hypothèse ANNUELLE
+# que rien n'avait vérifiée : un fichier exprimé en mois y perdait 90 % de son
+# exposition — et l'exposition est le DÉNOMINATEUR de la fréquence, donc de la
+# prime. *Le plan promettait d'être opposable sur une grandeur dont il ne
+# disait pas l'unité.*
+# ⚠️ `None` reste le défaut : non déclarée n'est PAS une valeur. Le
+# comportement d'aujourd'hui (hypothèse annuelle) est conservé, mais il est
+# DIT — le patron déjà validé pour la référence A3 absente d'`a4/C11`.
+UniteExposition = Literal["annee", "mois", "jour"]
 
 #: VERSION DE SCHÉMA DE L'EMPREINTE — la génération de la STRUCTURE hachée par
 #: `empreinte()`, distincte du champ `version` (le CONTENU signé par l'actuaire).
@@ -56,7 +67,12 @@ FamilleSeverite = Literal["gamma", "lognormal", "inverse_gaussienne"]
 #: structure SANS bump, fait rougir la gate : c'est le SCEAU. Une empreinte sans
 #: préfixe `sN:` est HÉRITÉE (pré-versionnement), non revalidable — voir
 #: `PlanTarifaire.comparer_empreinte`.
-EMPREINTE_SCHEMA = 1
+#: ⚠️ `1` -> `2` LE 31/08/2026 : `unite_exposition` entre dans le payload.
+#: Toute empreinte `s1:` signée auparavant devient `SCHEMA_DIFFERENT` face à
+#: une empreinte recalculée — état PRÉVU par `comparer_empreinte`, qui
+#: prescrit l'action (re-tarifer le plan sous ce code). Mesuré avant le bump :
+#: **aucune empreinte `s1:` persistée** dans `models/` ni `data/`.
+EMPREINTE_SCHEMA = 2
 
 # Transformations dérivées : suffixe appliqué par A2
 _SUFFIXE_TRANSFO = {"log": "log_{}", "carre": "{}_carre", "racine": "{}_racine"}
@@ -72,6 +88,7 @@ _TYPES_FACTEUR = frozenset(get_args(TypeFacteur))
 _ENCODAGES = frozenset(get_args(Encodage))
 _TRANSFORMATIONS = frozenset(get_args(Transformation))
 _FAMILLES_SEVERITE = frozenset(get_args(FamilleSeverite))
+_UNITES_EXPOSITION = frozenset(get_args(UniteExposition))
 
 
 def _slug(valeur: str) -> str:
@@ -321,6 +338,18 @@ class PlanTarifaire:
     # Famille du GLM de coût moyen — déclarée, plus codée en dur dans A3.
     # Défaut "gamma" : aucune LoB existante ne change de comportement.
     famille_severite: FamilleSeverite = "gamma"
+    # UNITÉ de l'exposition (optionnelle) — `'annee'`, `'mois'` ou `'jour'`.
+    # ⚠️⚠️ ELLE FIXE LA BORNE DE PLAUSIBILITÉ, donc ce que la couche qualité
+    # considère comme une donnée à corriger. Non déclarée (`None`) : hypothèse
+    # ANNUELLE, comportement d'aujourd'hui INCHANGÉ — mais l'hypothèse est
+    # publiée dans le message, plus supposée en silence.
+    # ⚠️ Elle n'est PAS un facteur tarifaire (n'entre pas dans
+    # `colonnes_produites()`), mais elle est DANS L'EMPREINTE : elle décide
+    # d'un prix, donc elle est opposable.
+    # ⚠️ `| None` et non `Optional[...]` : la forme moderne, celle qu'emploie
+    # déjà `echeance` deux champs plus bas. *La dette du voisin n'autorise pas
+    # à en ajouter une.*
+    unite_exposition: UniteExposition | None = None
     # Colonne identifiant de contrat/police (optionnelle). Si déclarée, la couche
     # qualité (core/qualite_donnees.py) dédoublonne PAR CET IDENTIFIANT (règle 1,
     # exclusion sans discussion) ; sinon un doublon de LIGNE entière reste ambigu
@@ -402,6 +431,22 @@ class PlanTarifaire:
             raise ValueError(
                 f"Plan '{self.lob}' : famille_severite='{self.famille_severite}' "
                 f"inconnue — attendu {' ou '.join(repr(x) for x in sorted(_FAMILLES_SEVERITE))}."
+            )
+
+        # ⚠️⚠️ `None` DOIT PASSER, et c'est la différence avec la famille de
+        # sévérité : celle-ci a une valeur par défaut, l'unité n'en a pas.
+        # « Non déclarée » et « déclarée à une valeur inconnue » sont deux
+        # états distincts — le premier est légitime et sera DIT dans le
+        # message, le second est une faute de saisie qui doit lever.
+        # *Un défaut silencieux sur un champ qui décide d'un prix est ce que
+        # `a6/C9` a fermé ; on ne le rouvre pas ici.*
+        if (self.unite_exposition is not None
+                and self.unite_exposition not in _UNITES_EXPOSITION):
+            raise ValueError(
+                f"Plan '{self.lob}' : unite_exposition="
+                f"'{self.unite_exposition}' inconnue — attendu "
+                f"{' ou '.join(repr(x) for x in sorted(_UNITES_EXPOSITION))}, "
+                f"ou l'omettre (hypothèse annuelle, qui sera publiée)."
             )
 
     def _refuser_role_fixe(self, role: str, surface: str,
@@ -507,6 +552,18 @@ class PlanTarifaire:
             "schema": EMPREINTE_SCHEMA,
             "lob": self.lob, "version": self.version, "auteur": self.auteur,
             "exposition": self.exposition,
+            # ⚠️⚠️ L'UNITÉ EST DANS L'EMPREINTE, ET C'EST CE QUI A FORCÉ LE
+            # BUMP `s1` -> `s2`. Elle fixe la borne de plausibilité, donc ce
+            # que la couche qualité écrase : la changer CHANGE UN PRIX. Un
+            # plan signé dont la déclaration décisive resterait hors de sa
+            # propre empreinte rendrait `IDENTIQUE` pour deux plans qui
+            # tarifent différemment — *un mensonge dans un artefact opposable.*
+            # ⚠️ Incluse INCONDITIONNELLEMENT, `None` compris. L'inclure
+            # seulement quand elle est déclarée aurait épargné le bump, au
+            # prix d'une COMPOSITION de payload dépendant du CONTENU : très
+            # exactement la distinction que `EMPREINTE_SCHEMA` existe pour
+            # porter.
+            "unite_exposition": self.unite_exposition,
             "cibles": [self.cible_frequence, self.cible_cout],
             "famille_severite": self.famille_severite,
             "identifiant_contrat": self.identifiant_contrat,
@@ -591,6 +648,12 @@ class PlanTarifaire:
             interactions=tuple(tuple(i) for i in d.get("interactions", [])),
             auteur=d.get("auteur", ""), version=str(d.get("version", "1.0")),
             famille_severite=d.get("famille_severite", "gamma"),
+            # ⚠️ Sans défaut, comme `echeance` : l'absence est un ÉTAT, pas une
+            # valeur de repli. `_refuser_cles_inconnues` (constat `plan/C5`,
+            # fermé le 30/08) garantit qu'un `unite_expo:` mal orthographié
+            # LÈVE au lieu d'être avalé — c'est pourquoi il fallait le fermer
+            # AVANT d'ajouter ce champ.
+            unite_exposition=d.get("unite_exposition"),
             identifiant_contrat=d.get("identifiant_contrat"),
             echeance=d.get("echeance"),
             comportement=(Comportement(**d["comportement"])

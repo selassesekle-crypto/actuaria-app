@@ -39,10 +39,10 @@ lui-même**.
 | | |
 |---|---|
 | constats relevés (vagues 1 + 2) | **155** — *`services/C12` ouvert ET fermé le 30/08 (la synthèse qualité ne sortait que par le prompt) ; `qualite/C7` ouvert ET fermé le 30/08 (l'identifiant jugé par le détecteur des grandeurs) ; `a2/C17` ouvert le 29/08 par la re-mesure de `a2/C8` et `a2/C9` ; recomptés le 29/08 ; `a3/C19`, `services/C10`, `a5/C10` et `services/C11` sont des constats NEUFS, ouverts et fermés dans leur propre lot* |
-| fermés **et épinglés** | **82** |
+| fermés **et épinglés** | **83** |
 | corrigé, **non épinglé** | **0** — `a5/C5` épinglé le 29/08 · **partiel** : `pipeline/C1` |
 | corrigé, épinglé, **NON REPORTÉ** (4e état) | **0** — `a6/C1` `a6/C2` `a6/C4` nommés le 30/08 |
-| **⛔ OUVERTS** | **73** |
+| **⛔ OUVERTS** | **72** |
 | lignes lues intégralement | **22 693** sur 23 863 du périmètre |
 | jamais auditées | **1 170 l** + `actuaria_app.py` (5 181 l) |
 | preuves qui se relancent | **35, 0 échec** |
@@ -556,7 +556,7 @@ pour les fermés ; **moins `pipeline/C1`**, partiel et arbitré OUVERT.
 
 | lecture | compte | comment il se dérive |
 |---|---|---|
-| constats **ouverts** | **73** | clés réelles moins clés fermées — **tenu par `ARCH-5`** |
+| constats **ouverts** | **72** | clés réelles moins clés fermées — **tenu par `ARCH-5`** |
 | dont **zones TRIÉES** (`a2` 11 · `pipeline` 9 · `a3` 8 · `a1` 6 · `conformite` 6 · `plan` 6 · `socle` 5 · `a4` 4 · `agents` 4 · `qualite` 4 · `a6` 2) | **65** | préfixe de la clé |
 | ⛔ **jamais tracés** | **9** | le complément — *exact, sans heuristique* |
 
@@ -1179,11 +1179,36 @@ index, aucun identifiant. **La conversion n'ajoute aucun champ client.**
 | **1b** | ✅ **FAIT — `expo <= 0` : exclure (comme la qualité) au lieu de la médiane** (arbitre le 30/08) | **L'euro bouge** : la médiane sous-estime la fréquence de **10,4 %**, toujours vers le sous-tarif |
 | **1c** | ✅ **FAIT — A2 lit `plan.exposition`** (il cherche la sous-chaîne `'exposition'`) ; colonne absente → `colonnes_plan_manquantes`, jamais 1.0 (arbitre le 30/08) | **L'euro bouge** : sur `auto_fr_reel` (`Exposure`), A2 invente **aujourd'hui** → fréquence sous-estimée de **16 %** |
 | **1d** | ✅ **FAIT le 31/08** — **la borne d'exposition a UNE SEULE SOURCE** : A2 consomme `PLAFOND_EXPOSITION` au lieu de ses quatre littéraux `1.0` | ✅ **aucun euro**, mesuré AVANT/APRÈS sur 4 portefeuilles, **0 écart** — y compris les phrases publiées |
-| **2** | `unite_exposition` au plan, ensemble fermé, valeur inconnue **LÈVE**, **et lue par la borne** — **désormais À LA SOURCE UNIQUE, donc les deux chemins d'un seul geste** | Déclarer sans lire créerait un champ qui **promet** — le défaut que cet audit poursuit. Déclaration et première lecture dans le même geste |
+| **2** | ✅ **FAIT le 31/08 — `qualite/C3` EST FERMÉ.** `unite_exposition` au plan (`annee` · `mois` · `jour`), dérivé du `Literal`, inconnue **LÈVE** ; la borne en dérive **à la source unique**, donc aux deux chemins d'un seul geste ; l'hypothèse annuelle est **DITE** ; une donnée qui **contredit** l'unité est **signalée** | ✅ **aucun euro** — **0 / 20 plans** ne déclare d'unité, mesuré. ⛔ **Mais un TEXTE publié bouge, délibérément**, et **`EMPREINTE_SCHEMA` bumpe 1 → 2** |
 | **3** | ⚠️ **RÉDUITE À SA VRAIE PORTÉE PAR 1d** — il n'y a plus deux bornes à faire dériver, seulement la conséquence sur les fichiers dont l'unité déclarée contredit la donnée | ⚠️ **La partie « simultané, obligatoirement » est CONSOMMÉE par 1d** : la simultanéité est désormais structurelle, plus une précaution d'ordonnancement |
-| **4** | Conversion explicite vers l'année, publiée avec son effet | L'aval (offset GLM, prime pure) exige une exposition annualisée. Après 3, sinon on convertit sur une borne fausse |
+| **4** | ⚠️⚠️ **SA JUSTIFICATION EST RÉFUTÉE PAR LA MESURE — VOIR L'ENCADRÉ** | ~~L'aval exige une exposition annualisée~~ · **mesuré le 31/08 : il ne l'exige pas** |
 | **5** | Les 20 plans déclarent `annee` | **En dernier**, comme l'étape 5 de `plan/C7`. `annee` → borne 1.0 → *comportement identique à aujourd'hui* : cette étape ne déplace aucun euro, par construction |
 
+> ### ⛔⛔ LA JUSTIFICATION DE L'ÉTAPE 4 EST RÉFUTÉE PAR LA MESURE (31/08/2026)
+>
+> J'avais écrit : *« L'aval (offset GLM, prime pure) exige une exposition
+> annualisée. »* **C'est faux, et voici la mesure.** Même portefeuille, 1 500
+> contrats, tarifé deux fois — une fois en années sans unité déclarée, une fois
+> en mois avec `unite_exposition: mois` :
+>
+> ```
+>   k              annee = 0.899503      mois = 0.899503
+>   prime TOTALE   1 232 727.09          1 232 727.09      ecart +0.0000 %
+>   ratio par CONTRAT : min = mediane = max = 1.000000
+> ```
+>
+> **Identique à l'euro près, contrat par contrat.** Le décalage constant
+> `log(12)` de l'offset est absorbé par l'intercept du GLM, et le coefficient
+> d'équilibre recalibre le niveau. *L'exposition n'a pas besoin d'être
+> annualisée pour que le tarif soit juste.*
+>
+> ⚠️ **CE QUE LA MESURE NE DIT PAS, ET QUI RESTE À FAIRE.** Elle porte sur
+> `predire_portefeuille` — **le tarif**. Elle ne dit rien des surfaces qui
+> **AFFICHENT** une exposition ou une durée à l'actuaire : un rapport qui écrit
+> « exposition totale : 10 083 » sans dire « en mois » reste ambigu. **L'étape 4
+> se réduit donc à une question de PUBLICATION, plus de calcul** — et c'est un
+> lot bien plus petit que celui qui était prévu.
+>
 > ### ⛔⛔ L'ORDRE A ÉTÉ RÉVISÉ LE 31/08 — L'ÉTAPE 2 AURAIT RECRÉÉ LE JUMEAU QU'ON VENAIT DE FERMER
 >
 > **Trouvé en traçant l'étape 2, pas en la codant.** La borne vivait à **deux**

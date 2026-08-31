@@ -32,33 +32,48 @@ ensemble. Empreinte comparee : lignes rendues, somme d'exposition, maximum,
 somme de `log_exposition`, et **chaque anomalie avec sa description et son
 libelle de correction**. **0 ecart.** Les nombres sont figes en `BEX-6`.
 
-⚠️ IL NE DECLARE PAS L'UNITE -- c'est l'etape 2, desormais reduite a sa vraie
-portee : declarer `unite_exposition` et faire deriver la borne A LA SOURCE
-UNIQUE, ce qui couvrira les deux chemins d'un seul geste.
+⚠️ IL NE DECLARE PAS L'UNITE -- c'etait l'etape 2, **faite depuis** : le plan
+porte `unite_exposition` et la borne en derive, A LA SOURCE UNIQUE, donc pour
+les deux chemins d'un seul geste. Voir `test_unite_exposition_declaree.py`.
 
-⚠️ BORNE DE `BEX-5`, DECLAREE. A2 fait `from core.qualite_donnees import
-PLAFOND_EXPOSITION` : le nom est lie a l'IMPORT, pas relu a chaque appel.
-`BEX-5` prouve donc que A2 lit **son nom** et qu'aucun litteral ne subsiste ;
-il ne prouve pas un lien vif vers l'attribut du module qualite. *C'est
-suffisant ici, et ca cessera de l'etre a l'etape 3 : la borne y dependra du
-PLAN, donc d'un appel, plus d'une constante de module.*
+═══ CE QUE L'ETAPE 2 A CHANGE DANS CE FICHIER, ET POURQUOI ═══
 
-⚠️ TROUVE, NON TRAITE -- deux divergences nommees pour ne pas etre oubliees :
-  1. `demos/fremtpl2_demo.py` plafonne `Exposure` a 1.0 AVANT d'appeler
-     `pipeline_complet` : la couche qualite recoit un fichier deja aplati et ne
-     peut plus rien dire. **Troisieme doctrine sur la meme grandeur.**
-  2. Les deux jumeaux publient un texte legerement different pour le MEME code
-     `exposition_sup_1` : la couche qualite ecrit `>  1 —`, A2 `> 1 --`. Le
-     corriger deplacerait une phrase publiee -- l'inverse de ce lot.
+⚠️⚠️ CE FICHIER A ETE MIS A JOUR, JAMAIS AFFAIBLI. La borne etait une CONSTANTE
+importee ; elle est devenue une PORTE appelee avec le plan. **L'invariant
+epingle -- une seule source, aucun litteral -- est inchange ; seule son
+expression a bouge**, et chaque controle prouve exactement ce qu'il prouvait :
+
+```
+  BEX-1  0 litteral   -> plus : 1 seul appel a la porte, borne reutilisee
+  BEX-2  meme CONSTANTE -> meme FONCTION, et memes deux phrases partagees
+  BEX-5  on remplacait la constante dans le module (un geste de test)
+         -> on declare `unite_exposition` au plan (ce que fait la PRODUCTION)
+  BEX-3  la description a change, DELIBEREMENT (voir le commentaire sur place)
+```
+
+⚠️ **LA BORNE QUE CE FICHIER DECLARAIT EST TOMBEE.** Il disait que `BEX-5` ne
+prouvait pas un lien vif, la constante etant liee a l'import. La borne depend
+desormais du plan **a chaque appel** : la reserve n'a plus d'objet.
+
+⚠️ TROUVE, NON TRAITE -- une divergence nommee pour ne pas etre oubliee :
+`demos/fremtpl2_demo.py` plafonne `Exposure` a 1.0 AVANT d'appeler
+`pipeline_complet` : la couche qualite recoit un fichier deja aplati et ne peut
+plus rien dire. **Troisieme doctrine sur la meme grandeur.**
+
+✅ **ET LA SECONDE DIVERGENCE NOMMEE ICI EST FERMEE PAR L'ETAPE 2** : les
+jumeaux publiaient un texte different pour le MEME code `exposition_sup_1`. Ils
+tirent desormais leurs DEUX phrases de la couche qualite, jamais reecrites --
+`BEX-2` l'epingle. *Apres avoir cesse de diverger dans le nombre, ils ont cesse
+de diverger dans le texte.*
 """
 
 from __future__ import annotations
 
 import ast
+import dataclasses
 import logging
 import pathlib
 import unittest
-import unittest.mock
 import warnings
 
 import core.qualite_donnees as _qd
@@ -135,20 +150,41 @@ class TestLaBorneNEstPlusUnLitteral(unittest.TestCase):
             f"la borne d'exposition est encore un litteral dans A2 : "
             f"{flottants}. Elle doit venir de `PLAFOND_EXPOSITION`, sinon "
             f"l'etape 3 devra la faire deriver a DEUX endroits.")
+        # ⚠️⚠️ MIS A JOUR PAR L'ETAPE 2, ET IL PROUVE LA MEME CHOSE. La borne
+        # etait une CONSTANTE importee ; elle est devenue une PORTE appelee avec
+        # le plan, parce qu'elle depend desormais de `unite_exposition`.
+        # L'invariant epingle -- *une seule source, aucun litteral* -- est
+        # inchange ; seule son expression a bouge.
+        appels = [n for n in ast.walk(fn) if isinstance(n, ast.Call)
+                  and isinstance(n.func, ast.Name)
+                  and n.func.id == 'borne_exposition']
+        self.assertEqual(
+            len(appels), 1,
+            f"la borne doit etre derivee UNE fois puis reutilisee, pas "
+            f"recalculee ({len(appels)} appels)")
         noms = [n.id for n in ast.walk(fn)
-                if isinstance(n, ast.Name) and n.id == 'PLAFOND_EXPOSITION']
+                if isinstance(n, ast.Name) and n.id == '_borne']
         self.assertGreaterEqual(
             len(noms), 3,
-            f"A2 ne nomme la source que {len(noms)} fois : le masque, "
+            f"A2 ne nomme la borne que {len(noms)} fois : le masque, "
             f"l'affectation et les phrases publiees doivent TOUTES en venir")
-        print(f"    BEX-1 0 litteral de borne dans A2, source nommee "
-              f"{len(noms)} fois")
+        print(f"    BEX-1 0 litteral de borne dans A2, 1 appel a la porte, "
+              f"borne nommee {len(noms)} fois")
 
-    def test_la_constante_de_A2_EST_celle_de_la_couche_qualite(self):
-        """⚠️ Une copie de la valeur passerait `BEX-1` sans rien resoudre."""
-        self.assertIs(_a2mod.PLAFOND_EXPOSITION, _qd.PLAFOND_EXPOSITION)
-        print(f"    BEX-2 A2 et la couche qualite partagent la meme source "
-              f"({PLAFOND_EXPOSITION})")
+    def test_la_PORTE_de_A2_EST_celle_de_la_couche_qualite(self):
+        """⚠️ Une copie de la fonction passerait `BEX-1` sans rien resoudre.
+
+        ⚠️⚠️ CE CONTROLE EST DEVENU PLUS FORT AVEC L'ETAPE 2. Il comparait deux
+        CONSTANTES, donc deux valeurs liees a l'import ; il compare desormais
+        deux FONCTIONS. *La borne depend du plan a chaque appel : il n'y a plus
+        de liaison figee a l'import, et la borne declaree de `BEX-5` tombe.*
+        """
+        self.assertIs(_a2mod.borne_exposition, _qd.borne_exposition)
+        self.assertIs(_a2mod.phrase_plausibilite, _qd.phrase_plausibilite)
+        self.assertIs(_a2mod.phrase_unite_non_declaree,
+                      _qd.phrase_unite_non_declaree)
+        print(f"    BEX-2 A2 et la couche qualite partagent la porte ET les "
+              f"deux phrases (plafond annuel = {PLAFOND_EXPOSITION})")
 
 
 class TestAucunePhrasePublieeNeCHANGE(unittest.TestCase):
@@ -158,21 +194,32 @@ class TestAucunePhrasePublieeNeCHANGE(unittest.TestCase):
         """⚠️ Chaines relevees sur la version tiree du commit. `:g` rend
         « > 1 » dans la comparaison, mais le libelle de correction garde
         « plafond a 1.0 » : `:g` l'aurait ecrit « plafond a 1 »."""
-        a = _plafond(_a2(_en_mois()))
+        a = _plafond(_a2(_en_mois(), _PLAN_AUTO))
         self.assertIsNotNone(a, 'A2 ne signale plus le plafonnement')
         self.assertEqual(a.correction, 'plafond a 1.0')
+        # ⚠️⚠️ LE LIBELLE DE CORRECTION EST INCHANGE, LA DESCRIPTION NON --
+        # ET C'EST L'ETAPE 2 QUI L'A CHANGEE, DELIBEREMENT. L'ancienne disait
+        # « Le plan declare le ROLE de l'exposition, jamais son UNITE » :
+        # cette phrase est devenue FAUSSE le jour ou le plan a pu la declarer.
+        # *Un texte qui accompagne un comportement se relit quand le
+        # comportement change.* La nouvelle publie l'hypothese annuelle et sa
+        # consequence sur la prime -- c'est le but du constat `qualite/C3`.
         self.assertEqual(
             a.description,
             "exposition ('exposition') > 1 -- implausible pour un contrat "
-            "annuel. Le plan declare le ROLE de l'exposition, jamais son "
-            "UNITE : un fichier exprime en mois est ecrase ici sans que rien "
-            "ne l'ait verifie.")
-        print(f"    BEX-3 phrases inchangees : correction={a.correction!r}")
+            "annuel. UNITE NON DECLAREE au plan : l'hypothese ANNUELLE a ete "
+            "supposee, et c'est elle qui fixe cette borne. Si ce fichier est "
+            "exprime en mois ou en jours, declarez `unite_exposition` au "
+            "plan -- sans quoi cette correction detruit une donnee JUSTE, et "
+            "l'exposition etant le denominateur de la prime, celle-ci est "
+            "multipliee d'autant.")
+        print(f"    BEX-3 libelle inchange ({a.correction!r}), description "
+              f"mise a jour par l'etape 2")
 
     def test_les_DEUX_chemins_publient_le_MEME_libelle(self):
         """⚠️⚠️ LE VRAI INVARIANT DU JUMEAU. Meme code, meme regle, meme
         libelle de correction : c'est ce que la source unique garantit."""
-        a2 = _plafond(_a2(_en_mois()))
+        a2 = _plafond(_a2(_en_mois(), _PLAN_AUTO))
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             rq = controler_qualite(_en_mois(), _PLAN_AUTO, horodatage='t')
@@ -190,18 +237,25 @@ class TestLaBorneEstLUE_ET_NON_RECOPIEE(unittest.TestCase):
     def test_si_la_borne_change_A2_SUIT(self):
         """⚠️ Portefeuille en mois, maximum a ~11,99. Avec une borne a 12,
         A2 ne doit plafonner AUCUNE ligne. *Un A2 qui garderait un 1.0 cache
-        continuerait d'ecraser 600 lignes ici.*"""
-        avec_1 = _plafond(_a2(_en_mois()))
+        continuerait d'ecraser 600 lignes ici.*
+
+        ⚠️⚠️ L'ETAPE 2 A RENDU CE CONTROLE PLUS HONNETE. Il portait la borne a
+        12 en REMPLACANT une constante dans le module -- un geste de test, que
+        rien en production ne fait. Il la porte desormais a 12 comme la
+        production le fera : *en declarant `unite_exposition` au plan.* Le
+        controle ne simule plus le mecanisme, il l'exerce.
+        """
+        avec_1 = _plafond(_a2(_en_mois(), _PLAN_AUTO))
         self.assertIsNotNone(avec_1)
-        with unittest.mock.patch.object(_a2mod, 'PLAFOND_EXPOSITION', 12.0):
-            avec_12 = _plafond(_a2(_en_mois()))
+        en_mois = dataclasses.replace(_PLAN_AUTO, unite_exposition='mois')
+        avec_12 = _plafond(_a2(_en_mois(), en_mois))
         self.assertIsNone(
             avec_12,
-            f"la borne a ete portee a 12 et A2 plafonne encore "
+            f"le plan declare 'mois' (borne 12) et A2 plafonne encore "
             f"{getattr(avec_12, 'nb_lignes', '?')} ligne(s) : il garde une "
             f"borne a lui")
-        print(f"    BEX-5 borne a 1.0 -> {avec_1.nb_lignes} lignes "
-              f"plafonnees ; borne a 12.0 -> aucune")
+        print(f"    BEX-5 plan sans unite -> {avec_1.nb_lignes} lignes "
+              f"plafonnees ; plan 'mois' -> aucune")
 
 
 class TestAucunEuroDeplace(unittest.TestCase):

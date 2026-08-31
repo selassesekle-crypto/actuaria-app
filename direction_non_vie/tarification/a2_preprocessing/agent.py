@@ -94,8 +94,14 @@ from core.plan_tarifaire import PlanTarifaire, Facteur, _slug, _SUFFIXE_TRANSFO
 # consommer ne déplace aucun euro — même valeur, mêmes phrases publiées,
 # vérifié — mais c'est ce qui permettra à la borne de DÉRIVER de
 # `unite_exposition` en un seul endroit, pour les deux chemins à la fois.
-from core.qualite_donnees import (Anomalie, EffetAgrege, PLAFOND_EXPOSITION,
-                                  RapportQualite)
+#
+# ⚠️⚠️ ÉTAPE 2 — LA BORNE N'EST PLUS UNE CONSTANTE MAIS UNE PORTE. Elle dépend
+# désormais du PLAN (`unite_exposition`), donc d'un appel et non d'un import.
+# *C'est 1d qui a rendu ce remplacement possible en un seul geste : tant que A2
+# portait ses propres littéraux, il aurait fallu le faire à deux endroits.*
+from core.qualite_donnees import (Anomalie, borne_exposition, EffetAgrege,
+                                  phrase_plausibilite,
+                                  phrase_unite_non_declaree, RapportQualite)
 
 # ⚠️⚠️ CONSTAT `a2/C15` — LE FILTRE GLOBAL D'AVERTISSEMENTS EST RETIRÉ.
 # `warnings.filterwarnings('ignore')` posé ICI, au niveau module, s'appliquait
@@ -1385,13 +1391,20 @@ class AgentA2Preprocessing:
         # RECALCULÉ à l'identique juste après le premier. *Deux littéraux pour
         # une même borne, c'est deux endroits à changer le jour où elle dérive
         # de l'unité — et un seul suffira pour la faire diverger.*
-        _masque_sup1 = (df[col_expo] > PLAFOND_EXPOSITION).to_numpy()
+        # ⚠️⚠️ ÉTAPE 2 — LA BORNE DÉRIVE DE L'UNITÉ DÉCLARÉE AU PLAN. Un seul
+        # appel la fixe pour la détection, l'application ET l'effet agrégé.
+        # `plan=None` : `borne_exposition` rend le plafond annuel, comportement
+        # d'aujourd'hui. *La valeur par défaut de `plan` reste un risque latent
+        # — il n'y a qu'UN site d'appel et il passe toujours le plan, mesuré.*
+        _borne = borne_exposition(plan)
+        _unite = getattr(plan, 'unite_exposition', None)
+        _masque_sup1 = (df[col_expo] > _borne).to_numpy()
         nb_sup1 = int(_masque_sup1.sum())
         if nb_sup1 > 0:
             _avant = float(df[col_expo].sum())
             # ⚠️ Le masque déjà calculé, jamais un second : le recalculer
             # laissait deux prédicats à garder d'accord pour rien.
-            df.loc[_masque_sup1, col_expo] = PLAFOND_EXPOSITION
+            df.loc[_masque_sup1, col_expo] = _borne
             stats['valeurs_corrigees'] += nb_sup1
             # ⚠️ LE JUMEAU DU PLAFOND DE LA COUCHE QUALITE — constat
             # `qualite/C3`. Là-bas il BLOQUE et exige une signature ; ici il ne
@@ -1403,18 +1416,25 @@ class AgentA2Preprocessing:
             # car `:g` l'écrirait « plafond a 1 » et CHANGERAIT UNE PHRASE
             # PUBLIÉE. *Un refactor sans euro peut quand même déplacer un
             # texte signé : celui-ci est vérifié identique.*
+            # ⚠️⚠️ LA PHRASE QUI ÉTAIT ICI EST DEVENUE FAUSSE, ET C'EST L'ÉTAPE
+            # 2 QUI L'A RENDUE FAUSSE. Elle disait : « Le plan declare le ROLE
+            # de l'exposition, jamais son UNITE ». Il peut désormais la
+            # déclarer. *Un texte qui accompagne un comportement se relit
+            # quand le comportement change — sinon le rapport décrit un code
+            # qui n'existe plus.*
+            # ⚠️ Les DEUX phrases viennent de la couche qualité, jamais
+            # réécrites ici : c'est ce qui empêche les jumeaux de diverger dans
+            # le texte après avoir cessé de diverger dans le nombre.
             _noter('exposition_sup_1', 'exposition', col_expo, _masque_sup1,
-                   f"exposition ('{col_expo}') > {PLAFOND_EXPOSITION:g} -- "
-                   f"implausible pour un "
-                   f"contrat annuel. Le plan declare le ROLE de l'exposition, "
-                   f"jamais son UNITE : un fichier exprime en mois est "
-                   f"ecrase ici sans que rien ne l'ait verifie.",
-                   correction=f'plafond a {PLAFOND_EXPOSITION}',
+                   f"exposition ('{col_expo}') > {_borne:g} -- "
+                   f"{phrase_plausibilite(_unite)}"
+                   f"{phrase_unite_non_declaree(_unite)}",
+                   correction=f'plafond a {_borne}',
                    effet=EffetAgrege(colonne=col_expo, total_avant=_avant,
                                      total_apres=float(df[col_expo].sum())))
             logger.warning(
-                f"{nb_sup1} valeurs d'exposition > {PLAFOND_EXPOSITION:g} "
-                f"plafonnées à {PLAFOND_EXPOSITION}"
+                f"{nb_sup1} valeurs d'exposition > {_borne:g} "
+                f"plafonnées à {_borne}"
             )
 
         # Calcul du log de l'exposition (offset pour GLM Poisson)

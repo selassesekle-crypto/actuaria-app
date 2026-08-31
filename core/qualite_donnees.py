@@ -15,8 +15,15 @@ codé en dur ; un plan futur jamais vu en bénéficie automatiquement) :
      Un COÛT est ≥ 0 ; une CHARGE NETTE — paiements moins recours — ne l'est
      pas. Mesuré sur donnée réelle : 8,82 % des contrats, et les exclure
      sur-tarifait de 14,9 %. Il est désormais règle 3.
-  2. IMPLAUSIBLE MAIS PAS IMPOSSIBLE, règle établie (exposition > 1) → corrige
-     automatiquement (plafond 1.0) et signale la correction.
+  2. IMPLAUSIBLE MAIS PAS IMPOSSIBLE, règle établie (exposition > la borne) →
+     corrige automatiquement (plafond à la borne) et signale la correction.
+     ⚠️⚠️ LA BORNE DÉRIVE DE `plan.unite_exposition` DEPUIS LE 31/08/2026
+     (`qualite/C3`, étape 2) : `annee` → 1 · `mois` → 12 · `jour` → 366.
+     Unité NON déclarée : hypothèse annuelle, comportement inchangé — mais
+     l'hypothèse est PUBLIÉE dans le message au lieu d'être supposée en
+     silence. Et une donnée qui CONTREDIT l'unité déclarée est signalée
+     (règle 3), jamais corrigée : sans cela, déclarer `mois` élargirait la
+     borne et le mécanisme ne pourrait plus rien attraper.
   3. AMBIGU (coût > 0 sans sinistre, ou l'inverse ; fréquence non entière ;
      doublon de ligne entière SANS identifiant pour trancher) → NE DÉCIDE RIEN :
      compte, affiche, laisse tel quel.
@@ -315,6 +322,91 @@ PLAFOND_EXPOSITION = 1.0
 #  l'unique correction établie est le plafond d'exposition, déjà présent côté
 #  legacy dans A2._traiter_exposition.)
 
+#: ⚠️⚠️ LA BORNE DÉRIVE DE L'UNITÉ DÉCLARÉE AU PLAN — étape 2 du chantier
+#: `unite_exposition`, constat `qualite/C3`. Jusqu'ici la borne valait 1,0 sur
+#: une hypothèse ANNUELLE que rien n'avait vérifiée : un fichier en mois y
+#: perdait 90 % de son exposition, donc voyait sa prime multipliée par ~10.
+#: ⚠️ `366` et non `365` : une année bissextile est un cas normal, pas une
+#: aberration. *Une borne trop serrée d'un jour écraserait une donnée juste.*
+#: ⚠️ Ces clés NE PEUVENT PAS être dérivées du `Literal` — une correspondance
+#: n'est pas une appartenance. Un contrôle vérifie donc qu'elles LUI SONT
+#: ÉGALES : ajouter une unité sans sa borne fait rougir la gate au lieu de
+#: lever en production.
+BORNES_EXPOSITION: dict[str, float] = {
+    'annee': PLAFOND_EXPOSITION,
+    'mois': 12.0,
+    'jour': 366.0,
+}
+
+
+def borne_exposition(plan) -> float:
+    """La borne de plausibilité de l'exposition, DÉRIVÉE de l'unité du plan.
+
+    ⚠️ Unité non déclarée -> `PLAFOND_EXPOSITION` : le comportement
+    d'aujourd'hui, à l'identique. *L'hypothèse annuelle n'est pas retirée, elle
+    cesse d'être MUETTE* — `phrase_unite_non_declaree` la publie.
+    """
+    unite = getattr(plan, 'unite_exposition', None)
+    if unite is None:
+        return PLAFOND_EXPOSITION
+    if unite not in BORNES_EXPOSITION:
+        # ⚠️ Inatteignable via `PlanTarifaire`, dont la porte lève déjà. Gardé
+        # pour l'appelant qui passerait un objet quelconque : un défaut
+        # silencieux sur une borne qui décide d'un prix est ce que `a6/C9` a
+        # fermé.
+        raise ValueError(
+            f"unite_exposition='{unite}' sans borne connue — attendu "
+            f"{' ou '.join(repr(x) for x in sorted(BORNES_EXPOSITION))}.")
+    return BORNES_EXPOSITION[unite]
+
+
+#: Comment se dit l'implausibilité, selon l'unité. ⚠️ Le texte d'aujourd'hui —
+#: « implausible pour un contrat annuel » — devient FAUX dès qu'une unité autre
+#: est déclarée : la phrase doit suivre la borne qu'elle explique.
+_PLAUSIBILITE = {
+    'annee': 'implausible pour un contrat annuel.',
+    'mois': 'implausible pour une exposition exprimee en mois.',
+    'jour': 'implausible pour une exposition exprimee en jours.',
+}
+
+
+def phrase_plausibilite(unite: str | None) -> str:
+    """⚠️ Unité non déclarée : la phrase d'AUJOURD'HUI, au caractère près."""
+    return _PLAUSIBILITE[unite or 'annee']
+
+
+def phrase_unite_non_declaree(unite: str | None) -> str:
+    """L'hypothèse annuelle, DITE — le coeur de `qualite/C3`.
+
+    ⚠️⚠️ ELLE NE S'AJOUTE QUE SI L'UNITÉ MANQUE. Une phrase qui apparaîtrait
+    aussi quand l'unité EST déclarée ne dirait plus rien : *un avertissement
+    permanent est un avertissement qu'on cesse de lire.*
+    """
+    if unite is not None:
+        return ''
+    return (" UNITE NON DECLAREE au plan : l'hypothese ANNUELLE a ete "
+            "supposee, et c'est elle qui fixe cette borne. Si ce fichier est "
+            "exprime en mois ou en jours, declarez `unite_exposition` au "
+            "plan -- sans quoi cette correction detruit une donnee JUSTE, et "
+            "l'exposition etant le denominateur de la prime, celle-ci est "
+            "multipliee d'autant.")
+
+
+def unite_apparente(maximum_observe: float) -> str | None:
+    """L'unité à laquelle la DONNÉE ressemble, lue dans le jeu des bornes.
+
+    ⚠️⚠️ AUCUN SEUIL INVENTÉ, ET C'EST LE POINT. On rend l'unité la plus
+    GROSSIÈRE dont la borne contient le maximum observé : un maximum de 0,9
+    ressemble à `annee`, 11,5 à `mois`, 200 à `jour`. *Le signal se dérive
+    entièrement de l'ensemble fermé ; il n'y a pas de constante à justifier.*
+
+    Rend `None` si aucune unité ne convient (maximum au-delà de la plus large).
+    """
+    for unite, borne in sorted(BORNES_EXPOSITION.items(), key=lambda x: x[1]):
+        if maximum_observe <= borne:
+            return unite
+    return None
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  ORCHESTRATEUR
@@ -423,9 +515,16 @@ def controler_qualite(
                      f"opposable.")
 
     # ── RÈGLE 2 : IMPLAUSIBLE établi → corriger (plafond exposition) ──────────
+    # ⚠️⚠️ LA BORNE VIENT DÉSORMAIS DE L'UNITÉ DÉCLARÉE AU PLAN — étape 2.
+    # Non déclarée : `PLAFOND_EXPOSITION`, comportement d'aujourd'hui à
+    # l'identique. **Aucun des 20 plans ne déclare d'unité**, donc aucun euro
+    # ne bouge sur l'existant — mesuré. Ce qui change est le TEXTE : l'hypothèse
+    # annuelle cesse d'être muette.
+    _borne = borne_exposition(plan)
+    _unite = getattr(plan, 'unite_exposition', None)
     mask_corr_expo = None
     if col_expo in df.columns:
-        mask_corr_expo = detecter_sup(df, col_expo, PLAFOND_EXPOSITION)
+        mask_corr_expo = detecter_sup(df, col_expo, _borne)
         # ⚠️⚠️ L'EFFET AGRÉGÉ SE CALCULE ICI, À LA DÉTECTION — constat
         # `qualite/C3`. Le message qui DÉCIDE est celui du rapport BLOQUÉ, et un
         # rapport bloqué n'applique aucune correction : le mesurer à
@@ -435,19 +534,44 @@ def controler_qualite(
         _brut = pd.to_numeric(df[col_expo], errors='coerce')
         if _brut.notna().any():
             _apres = _brut.where(~pd.Series(mask_corr_expo, index=df.index),
-                                 PLAFOND_EXPOSITION)
+                                 _borne)
             _effet = EffetAgrege(colonne=col_expo,
                                  total_avant=float(_brut.sum()),
                                  total_apres=float(_apres.sum()))
         _ajouter('exposition_sup_1', 2, 'exposition', col_expo, mask_corr_expo,
-                 f"exposition ('{col_expo}') > {PLAFOND_EXPOSITION:g} — "
-                 f"implausible pour un contrat annuel.",
-                 # ⚠️ `{PLAFOND_EXPOSITION}` et NON `:g` : le libellé publié
-                 # disait « plafond a 1.0 », et `:g` l'aurait rendu « plafond a
+                 f"exposition ('{col_expo}') > {_borne:g} — "
+                 f"{phrase_plausibilite(_unite)}"
+                 f"{phrase_unite_non_declaree(_unite)}",
+                 # ⚠️ `{_borne}` et NON `:g` : le libellé publié disait
+                 # « plafond a 1.0 », et `:g` l'aurait rendu « plafond a
                  # 1 ». *Dériver un texte d'une constante ne donne pas le droit
                  # d'en changer la forme : c'est une surface que l'actuaire lit.*
-                 correction=f"plafond a {PLAFOND_EXPOSITION}",
+                 correction=f"plafond a {_borne}",
                  effet_agrege=_effet)
+
+    # ── RÈGLE 3 (unité) : LA DONNÉE CONTREDIT L'UNITÉ DÉCLARÉE → signaler ─────
+    # ⚠️⚠️ SANS CE CONTRÔLE, LE MÉCANISME SERAIT DÉCORATIF. Déclarer `mois`
+    # élargit la borne à 12 : plus rien ne peut être attrapé, et une déclaration
+    # fausse passerait pour une déclaration juste. *Un instrument qui ne peut
+    # plus rien signaler cesse d'être un instrument.*
+    # ⚠️ SIGNALER, JAMAIS CORRIGER (règle 3). Un portefeuille d'assistance dont
+    # tous les contrats durent moins d'un mois ressemble légitimement à des
+    # années : c'est à l'actuaire de trancher, pas à la couche.
+    if _unite is not None and col_expo in df.columns:
+        _obs = pd.to_numeric(df[col_expo], errors='coerce')
+        if _obs.notna().any():
+            _apparente = unite_apparente(float(_obs.max()))
+            if _apparente is not None and _apparente != _unite:
+                _ajouter(
+                    'unite_exposition_contredite', 3, 'exposition', col_expo,
+                    np.ones(len(df), dtype=bool),
+                    f"le plan declare unite_exposition='{_unite}' (borne "
+                    f"{_borne:g}) mais le maximum observe est "
+                    f"{float(_obs.max()):.4g} : la donnee ressemble a "
+                    f"'{_apparente}'. Rien n'a ete corrige — si l'unite "
+                    f"declaree est fausse, la borne l'est aussi, et "
+                    f"l'exposition sera ecrasee ou laissee passer a tort.",
+                    correction='aucune -- contradiction SIGNALEE')
 
     # ── RÈGLE 3 : AMBIGU → signaler, laisser tel quel ────────────────────────
     # ⚠️⚠️ LA VALEUR MANQUANTE OU ILLISIBLE — constat `qualite/C1`.
@@ -557,7 +681,10 @@ def controler_qualite(
     dfp = df.copy()
     # Règle 2 d'abord (les lignes exclues ensuite seront de toute façon retirées).
     if mask_corr_expo is not None and mask_corr_expo.any():
-        dfp.loc[mask_corr_expo, col_expo] = PLAFOND_EXPOSITION
+        # ⚠️ LA MÊME borne qu'à la détection et qu'à l'effet agrégé : les trois
+        # se dérivent de `_borne`. *Trois endroits, une seule valeur — c'est
+        # exactement ce que 1d a rendu possible.*
+        dfp.loc[mask_corr_expo, col_expo] = _borne
     # Règle 1 : union des masques d'exclusion.
     excl = np.zeros(n0, dtype=bool)
     for a in exclusions:

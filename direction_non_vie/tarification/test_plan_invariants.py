@@ -1915,6 +1915,10 @@ _PLAN_GOLDEN_DICT = {
     "exposition": "expo",
     "cible_frequence": "nb_sin", "cible_cout": "cout_sin",
     "famille_severite": "lognormal",
+    # ⚠️ PEUPLÉ, et pas laissé à None : ce golden ne scelle une partie du
+    # payload que si elle porte une valeur qui puisse DÉRIVER. `'mois'` plutôt
+    # que `'annee'` pour que la valeur diffère aussi du plafond par défaut.
+    "unite_exposition": "mois",
     "identifiant_contrat": "id_police",
     "echeance": "date_echeance",
     "comportement": {
@@ -1955,9 +1959,16 @@ class TestEmpreinteVersionneeSchema(unittest.TestCase):
         #   · un bump de EMPREINTE_SCHEMA sans mise à jour de ce golden.
         # Dans les deux cas : mettre à jour le golden ET la constante dans le
         # MÊME commit, jamais l'un sans l'autre.
+        # ⚠️⚠️ BUMP `s1` -> `s2` LE 31/08/2026, golden et constante dans le
+        # MEME commit comme ce bloc l'exige. Motif : `unite_exposition` entre
+        # dans le payload — elle fixe la borne de plausibilité de l'exposition,
+        # donc elle DECIDE D'UN PRIX, donc elle doit etre opposable. La laisser
+        # hors de l'empreinte aurait rendu `IDENTIQUE` pour deux plans qui
+        # tarifent differemment. Mesure faite AVANT le bump : aucune empreinte
+        # `s1:` persistee dans `models/` ni `data/`.
         emp = PlanTarifaire.depuis_dict(dict(_PLAN_GOLDEN_DICT)).empreinte()
-        self.assertEqual(EMPREINTE_SCHEMA, 1)
-        self.assertEqual(emp, "s1:605a7c6b1ad46e45",
+        self.assertEqual(EMPREINTE_SCHEMA, 2)
+        self.assertEqual(emp, "s2:db1239540886145f",
             "empreinte du plan de reference gele changee : derive de structure "
             "sans bump, OU bump sans mise a jour du golden. Voir le commentaire.")
         print(f"    S3b golden scellé : {emp} ✅")

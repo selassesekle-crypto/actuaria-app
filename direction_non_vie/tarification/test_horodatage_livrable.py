@@ -129,7 +129,14 @@ class TestSceauReproductibiliteContenu(unittest.TestCase):
         self.assertEqual(r1['prime_pure'], r2['prime_pure'])
         self.assertEqual(r1['prime_ttc'], r2['prime_ttc'])
         # et l'empreinte porte le schéma versionné (chantier S3, `2cb43ef`)
-        self.assertTrue(r1['plan_empreinte'].startswith('s1:'))
+        # ⚠️⚠️ DÉRIVÉ DE LA CONSTANTE, PLUS ÉCRIT EN DUR (31/08/2026). Ce test
+        # épinglait `'s1:'` en littéral, dans un fichier que le sceau du golden
+        # (`test_plan_invariants`) ne nomme nulle part : le bump `s1` -> `s2` de
+        # l'étape `unite_exposition` l'a fait rougir sans que rien n'ait prévenu
+        # qu'il faudrait le toucher. *Une copie en dur de la constante même que
+        # le sceau existe pour protéger.*
+        from core.plan_tarifaire import EMPREINTE_SCHEMA
+        self.assertTrue(r1['plan_empreinte'].startswith(f's{EMPREINTE_SCHEMA}:'))
         # GÉNÉRATION : varie — c'est une métadonnée, exclue du contenu
         self.assertNotEqual(r1['date_calcul'], r2['date_calcul'])
 

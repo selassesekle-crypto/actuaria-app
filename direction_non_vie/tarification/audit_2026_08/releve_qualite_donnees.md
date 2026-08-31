@@ -187,6 +187,47 @@ Il valide une ligne de rapport, il obtient une prime divisée par huit.
 constantes numériques de `controler_qualite` sont `[0, 1.0, 2, 3]`, où 1/2/3
 sont les numéros de règle.
 
+> ✅ **`qualite/C3`** · **FERMÉ le 31/08/2026 — chantier `unite_exposition`,
+> étapes 1 à 2.** *Preuve : `test_unite_exposition_declaree.py` (15 contrôles)
+> et `test_borne_exposition_source_unique.py` (6), violations plantées sur les
+> deux.*
+>
+> **Le constat disait deux choses ; les deux sont corrigées.**
+>
+> **① Le message ne disait pas l'enjeu** — « 1000 lignes corrigées » pour une
+> exposition passant de 7 777 à 1 000. `EffetAgrege` publie désormais le TOTAL
+> avant/après, le pourcentage, et — l'exposition étant un **dénominateur** — le
+> facteur sur la prime. ⚠️ **Calculé à la DÉTECTION** : le message qui décide
+> est celui du rapport **bloqué**, et un rapport bloqué n'applique rien.
+>
+> **② Le plan ne déclarait jamais l'unité.** Il porte `unite_exposition`
+> (`annee` · `mois` · `jour`), ensemble fermé **dérivé du `Literal`**, valeur
+> inconnue qui **LÈVE**. La borne de plausibilité en **dérive** — 1 · 12 · 366 —
+> **à la source unique**, donc pour les **deux** chemins d'un seul geste.
+>
+> ⚠️⚠️ **ET LA CONTRADICTION EST SIGNALÉE, sans quoi le mécanisme serait
+> décoratif.** Déclarer `mois` porte la borne à 12 : plus rien ne peut être
+> attrapé, et une déclaration FAUSSE passerait pour juste. Une donnée dont le
+> maximum ressemble à une autre unité est donc **signalée (règle 3)**, jamais
+> corrigée — *un portefeuille d'assistance à contrats courts ressemble
+> légitimement à des années : c'est à l'actuaire de trancher.* Le signal se
+> dérive **entièrement de l'ensemble fermé** : aucun seuil inventé.
+>
+> ⚠️ **Unité non déclarée : comportement d'aujourd'hui, mais DIT.** Borne
+> annuelle inchangée, et le message publie l'hypothèse et sa conséquence.
+> **0 des 20 plans ne déclare d'unité — aucun euro ne bouge, mesuré.**
+>
+> ⚠️⚠️ **`EMPREINTE_SCHEMA` a bumpé `1` → `2`.** L'unité entre dans le payload :
+> elle décide d'un prix, donc elle est **opposable**. *L'en exclure aurait rendu
+> `IDENTIQUE` pour deux plans qui tarifent différemment.*
+>
+> ⚠️ **RESTE OUVERT, ET NOMMÉ** — les étapes 4 et 5 du chantier (conversion
+> explicite vers l'année, puis les 20 plans déclarent `annee`) ne sont **pas**
+> `qualite/C3` : mesuré le 31/08, un plan déclarant `mois` produit **exactement
+> le même tarif** qu'un plan annuel — `k` identique, ratio par contrat
+> `min = médiane = max = 1,000000`. *Le décalage constant `log(12)` est absorbé
+> par l'intercept, et le coefficient d'équilibre recalibre le niveau.*
+
 **C4 — Les sept détecteurs « purs et réutilisables » n'ont aucun appelant, et
 `controler_qualite` n'en a qu'un.** Relevé **par AST** :
 
