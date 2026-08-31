@@ -1183,14 +1183,28 @@ index, aucun identifiant. **La conversion n'ajoute aucun champ client.**
 | **4** | Conversion explicite vers l'année, publiée avec son effet | L'aval (offset GLM, prime pure) exige une exposition annualisée. Après 3, sinon on convertit sur une borne fausse |
 | **5** | Les 20 plans déclarent `annee` | **En dernier**, comme l'étape 5 de `plan/C7`. `annee` → borne 1.0 → *comportement identique à aujourd'hui* : cette étape ne déplace aucun euro, par construction |
 
-✅ **DÉPENDANCE LEVÉE LE 30/08 —  EST FERMÉ.** La porte lève désormais
-sur toute clé inconnue, au plan **et** sur chaque facteur, avec suggestion de la
-plus proche. Les clés connues sont **dérivées de ** : le
-futur  sera couvert **sans qu'on y pense**, et un contrôle
-refuse tout nom de champ recopié en dur. *L'étape 2 peut être écrite.*
+✅ **DÉPENDANCE LEVÉE LE 30/08 — `plan/C5` EST FERMÉ** (`7b7cec4`). La porte
+lève désormais sur toute clé inconnue, au plan **et** sur chaque facteur, avec
+suggestion de la plus proche. Les clés connues sont **dérivées de
+`dataclasses.fields`** : le futur `unite_exposition` sera couvert **sans qu'on y
+pense**, et un contrôle refuse tout nom de champ recopié en dur. *L'étape 2 peut
+être écrite.*
 
-⛔ **CE QUE LA DÉPENDANCE DISAIT, GARDÉ POUR LA LEÇON** : `plan/C5` (rang 1,
-**arbitrage toujours en attente**) a mesuré que `depuis_dict` **accepte en
+> ### ⛔⛔ CE PARAGRAPHE A PORTÉ TROIS TROUS ET UNE CONTRADICTION, JUSQU'AU 31/08
+>
+> Il se lisait « *DÉPENDANCE LEVÉE — ␣␣EST FERMÉ* », « *dérivées de ␣* », « *le
+> futur ␣ sera couvert* » : **trois passages entre backticks avalés par le
+> shell** au moment où je l'ai écrit. Et le paragraphe suivant disait `plan/C5`
+> « *arbitrage toujours en attente* » **six lignes sous sa propre fermeture.**
+>
+> *C'est mon piège documenté, matérialisé dans la pièce qui ORDONNE le travail :
+> le lecteur y trouvait un constat fermé et ouvert dans le même encadré.*
+> **Écrire un document du dépôt avec l'outil d'édition, jamais par le shell —
+> et relire ce qu'on vient d'écrire, pas ce qu'on a voulu écrire.**
+
+⛔ **CE QUE LA DÉPENDANCE DISAIT, GARDÉ POUR LA LEÇON — `plan/C5` est FERMÉ
+depuis, la citation ci-dessous décrit l'état d'AVANT** : `plan/C5` (rang 1) a
+mesuré que `depuis_dict` **accepte en
 silence toute clé inconnue**. Écrire `unite_expo:` au lieu de
 `unite_exposition:` serait donc **ignoré sans un mot**, et le plan paraîtrait
 « non déclaré ». *Le nouveau champ hérite du défaut le jour où il naît.*
