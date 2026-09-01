@@ -595,20 +595,50 @@ def controler_qualite(
     # ⚠️ SIGNALER, JAMAIS CORRIGER (règle 3). Un portefeuille d'assistance dont
     # tous les contrats durent moins d'un mois ressemble légitimement à des
     # années : c'est à l'actuaire de trancher, pas à la couche.
+    # ⚠️⚠️ LE MASQUE PORTE LES LIGNES QUI SONT LA PREUVE — étape ② du chantier
+    # 1-B, 01/09/2026. Il valait `np.ones(len(df))` : **toutes** les lignes.
+    # Mesuré sur 20 000 contrats dont UNE SEULE à 1,02 an — 0,005 % — le signal
+    # sortait à **100 %**, donc au-dessus du seuil d'escalade, donc le fichier
+    # entier était BLOQUÉ par une ligne. *Un signal qui désigne tout le monde
+    # ne désigne personne, et il escalade sur sa propre imprécision.*
+    #
+    # ⚠️⚠️ ET L'ASSIETTE EST ASYMÉTRIQUE, POUR UNE RAISON QUI SE MESURE. La
+    # contradiction se lit dans DEUX sens, et la preuve n'a pas la même forme :
+    #
+    #   · DONNÉE TROP GRANDE pour l'unité déclarée (`annee` déclarée,
+    #     max 1,02) — les lignes AU-DESSUS de la borne sont la preuve, et
+    #     elles seules. Ce sont exactement celles que la règle 2 plafonne.
+    #   · DONNÉE TROP PETITE (`mois` déclarée, max 0,9) — **aucune** ligne ne
+    #     dépasse la borne de 12 : la preuve est que TOUTES sont petites.
+    #     Le masque reste donc total, et l'escalade avec lui.
+    #
+    # *Restreindre les deux sens aurait fait disparaître le second signal :
+    # `_ajouter` ignore un masque vide, et une déclaration `mois` fausse serait
+    # redevenue muette — exactement le décor que ce contrôle existe pour
+    # empêcher (`UX-12` l'exige bloquant).*
     if _unite is not None and col_expo in df.columns:
         _obs = pd.to_numeric(df[col_expo], errors='coerce')
         if _obs.notna().any():
-            _apparente = unite_apparente(float(_obs.max()))
+            _max = float(_obs.max())
+            _apparente = unite_apparente(_max)
             if _apparente is not None and _apparente != _unite:
+                _trop_grand = _max > _borne
+                _preuve = (detecter_sup(df, col_expo, _borne) if _trop_grand
+                           else np.ones(len(df), dtype=bool))
+                _ou = ("les lignes au-dessus de la borne, et elles seules"
+                       if _trop_grand else
+                       "TOUTES les lignes : aucune ne depasse la borne, et "
+                       "c'est precisement la preuve")
                 _ajouter(
                     'unite_exposition_contredite', 3, 'exposition', col_expo,
-                    np.ones(len(df), dtype=bool),
+                    _preuve,
                     f"le plan declare unite_exposition='{_unite}' (borne "
                     f"{_borne:g}) mais le maximum observe est "
-                    f"{float(_obs.max()):.4g} : la donnee ressemble a "
-                    f"'{_apparente}'. Rien n'a ete corrige — si l'unite "
-                    f"declaree est fausse, la borne l'est aussi, et "
-                    f"l'exposition sera ecrasee ou laissee passer a tort.",
+                    f"{_max:.4g} : la donnee ressemble a "
+                    f"'{_apparente}'. Signale sur {_ou}. Rien n'a ete "
+                    f"corrige — si l'unite declaree est fausse, la borne "
+                    f"l'est aussi, et l'exposition sera ecrasee ou laissee "
+                    f"passer a tort.",
                     correction='aucune -- contradiction SIGNALEE')
 
     # ── RÈGLE 3 : AMBIGU → signaler, laisser tel quel ────────────────────────

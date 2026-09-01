@@ -541,6 +541,61 @@ du même chantier, et rien ne le mesurait.**
 > `auto_fr_reel`) et `pipeline_agents.py` (« 19 des 20 plans »). Elles sont
 > hors de la zone de ce lot ; les nommer vaut mieux que de les élargir.
 
+**C11 — `unite_exposition_contredite` sort avec un masque TOTAL
+(`np.ones(len(df))`) : une seule ligne d'arrondi fait escalader le signal à
+100 % et BLOQUE le fichier entier.**
+
+> ✅ **`qualite/C11`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 01/09/2026 —
+> étape ② du chantier 1-B, décidée par Selasse.**
+>
+> ```
+>   20 000 contrats, UNE SEULE ligne a 1,02 an  =  0,0050 %
+>     AVANT : signal 20 000 l. = 100,0000 %  ->  escalade  ->  BLOQUE
+>     APRES : signal      1 l. =   0,0050 %  ->  signale, rien de bloque
+> ```
+>
+> *Une ligne d'arrondi refusait le tarif de vingt mille contrats, et elle le
+> refusait par l'IMPRÉCISION DU SIGNAL, pas par la gravité du fait.*
+>
+> ⚠️⚠️ **L'ASSIETTE EST ASYMÉTRIQUE, ET C'EST LA CONCEPTION.** La
+> contradiction se lit dans DEUX sens, et **la preuve n'a pas la même forme** :
+>
+> | sens | exemple | ce qui est la preuve | escalade |
+> |---|---|---|---|
+> | donnée **trop grande** | `annee` déclarée, max 1,02 | les lignes au-dessus de la borne, **et elles seules** | non, si elles sont rares |
+> | donnée **trop petite** | `mois` déclarée, max 0,9 | **TOUTES** — aucune ne dépasse 12, et c'est précisément ça | oui |
+>
+> ⛔⛔ **RESTREINDRE LES DEUX SENS AURAIT DÉTRUIT LA SECONDE MOITIÉ EN
+> SILENCE** : `_ajouter` ignore un masque vide, donc une déclaration `mois`
+> fausse serait redevenue **muette** — exactement le décor que `UX-12` existe
+> pour empêcher, et il l'exige bloquant. *Le correctif du sens évident aurait
+> emporté le sens que personne ne regardait.* `MP-3` tient cette moitié, et le
+> sceau la plante.
+>
+> ⚠️ **ET `MP-4` EMPÊCHE QUE `MP-1` NE DEVIENNE UNE PASSOIRE** : une donnée
+> réellement mensuelle sous un plan `annee` désigne **19 985 à 20 000 lignes
+> sur 20 000** et bloque toujours. *Sinon le correctif aurait échangé un faux
+> blocage contre un vrai silence.*
+>
+> ⚠️⚠️ **AUCUN EURO, PROUVÉ DEUX FOIS** (`MP-5`) :
+> ① la règle 3 n'écrit nulle part — vérifié par AST sur les **cibles**
+> d'affectation ; *mon premier contrôle lisait `df[col]` en LECTURE et le
+> comptait comme une écriture : refait sur `ast.Assign.targets`* ;
+> ② le dataframe produit **sans signature** après le correctif est identique
+> **ligne à ligne** à celui produit **avec signature** — 20 000 lignes,
+> exposition totale 20 000,0000, la ligne à 1,02 toujours plafonnée à 1,0 par
+> la règle 2.
+>
+> *Ce que ce correctif retire est une SIGNATURE, pas une correction.* Aucun
+> prix ne change sur une ligne déjà tarifée ; un calcul qui était REFUSÉ
+> aboutit, et il aboutit exactement au résultat que la signature donnait.
+>
+> Épinglé par `MP-1` à `MP-7`, dont `MP-2` (le masque nomme les BONNES lignes
+> — *un compte juste sur les mauvaises lignes reste faux*), `MP-6` (second
+> sens, dans les deux directions) et `MP-7` (le texte publié DIT sur quelle
+> assiette il porte — *passer de 20 000 à 1 sans le dire laisserait croire à
+> une perte de détection*).
+
 ## ③ Ce que je ne tranche pas ici
 
 **Rien n'est resté non lu** : 334 lignes, intégralement.
