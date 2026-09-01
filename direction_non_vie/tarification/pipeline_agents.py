@@ -44,6 +44,28 @@
 ║     pas une sévérité. Aligné sur pipeline_complet, qui ne pondère pas non    ║
 ║     plus son GLM de coût.                                                    ║
 ║                                                                              ║
+║                                                                              ║
+║  CONSTAT `agents/C1` -- CE MODULE N'A AUCUN APPELANT DE PRODUCTION, ET       ║
+║  LES TROIS DEFAUTS QU'IL REPARE SONT INTACTS PARTOUT. Releve par AST         ║
+║  sur tout le depot le 01/09/2026 : `pipeline_agents`, `ResultatAgents`,      ║
+║  `ArbitrageCible`, `CIBLE_COUT` et `CIBLE_PRIME_PURE` ont chacun             ║
+║  production=0. Les trois defauts decrits ci-dessus restent vrais chez        ║
+║  les DEUX appelants de production hors app :                                 ║
+║                                                                              ║
+║    demos/pipeline_3lob_a1_a6_demo.py   5 agents sur 6, result_a5=None,       ║
+║                                        A6 col_cible='nb_sinistres' seul      ║
+║    scripts/rapport_tarif_local.py      idem, l.111                           ║
+║                                                                              ║
+║  Autrement dit : LA MOITIE DU TARIF N'EST TOUJOURS PAS CHALLENGEE chez       ║
+║  eux -- ce module existe, il repare, et personne ne l'appelle.               ║
+║                                                                              ║
+║  CE N'EST PAS CORRIGE ICI, ET C'EST DELIBERE. Y brancher ces deux            ║
+║  appelants leur ferait produire TROIS cibles et un A5 la ou ils n'en         ║
+║  produisent qu'une : c'est un changement de SORTIE sur des livrables,        ║
+║  pas un correctif de texte. Et `actuaria_app.py`, le troisieme, est          ║
+║  hors assiette par arbitrage. *Un module qui repare sans etre appele         ║
+║  n'est pas un defaut de code : c'est un cablage qui manque, et le dire       ║
+║  vaut mieux que de laisser croire que la reparation a eu lieu.*              ║
 ║  AUTEUR    : ActuarIA                                                        ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 """
@@ -55,7 +77,7 @@ import numpy as np
 import pandas as pd
 
 from core.plan_tarifaire import PlanTarifaire
-from core.severite import construire_cible_severite
+from core.severite import CibleSeverite, construire_cible_severite
 from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
 from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
 from direction_non_vie.tarification.a3_glm.agent import AgentA3GLM
@@ -207,8 +229,19 @@ class ResultatAgents:
         }
 
 
-def _vue_sinistres(result_a2: Dict[str, Any], plan: PlanTarifaire) -> Dict[str, Any]:
+def _vue_sinistres(
+    result_a2: Dict[str, Any], plan: PlanTarifaire
+) -> tuple[Dict[str, Any], CibleSeverite]:
     """Vue SINISTRÉS de result_a2, prête pour un entraînement sur la sévérité.
+
+    ⚠️⚠️ CONSTAT `agents/C5` — ELLE ANNONÇAIT UN DICT ET RENDAIT UN TUPLE.
+    L'annotation disait `Dict[str, Any]` ; la fonction rend
+    `({**result_a2, 'dataframe': df_sin}, cible)`. La docstring était juste
+    sur le premier membre — « un result_a2 de MÊME FORME » — et TAISAIT le
+    second, qui est l'objet `CibleSeverite` dont l'appelant lit `n_retenus`
+    juste après, pour le seuil des 100 sinistrés. *Une annotation qui dit
+    la moitié du contrat est plus traître qu'une annotation absente : elle
+    fait croire que le contrat est connu.*
 
     Le masque, l'écrêtement et la cible viennent de construire_cible_severite() —
     la SOURCE UNIQUE, la même qu'A3 et pipeline_complet. On ne recalcule rien :
@@ -325,13 +358,27 @@ def pipeline_agents(
                               n_candidats=_n_candidats(r6))
 
     # ── CIBLE 1 : FRÉQUENCE — le portefeuille entier, pondéré par l'exposition ─
-    frequence = _arbitrer(plan.cible_frequence, r2,
-                          modeles_dl=("cann", "tabnet"), ponderer=True)
+    # ⚠️⚠️ CONSTAT `agents/C3` — ELLE ÉTAIT LA SEULE DES TROIS SANS FILET.
+    # La docstring de ce module promet : « Un arbitrage peut échouer là où un
+    # autre réussit [...] c'est rendu dans `<cible>.erreur`, jamais masqué, et
+    # n'empêche pas les autres d'aboutir. » Mesuré : le COÛT et la PRIME PURE
+    # sont enveloppés, la FRÉQUENCE ne l'était pas — une exception y remontait
+    # hors de `pipeline_agents` et TUAIT les deux autres cibles.
+    # ⚠️ AUCUN SUCCÈS N'EST MASQUÉ : `_echec` pose `a6=None`, et
+    # `ResultatAgents.success` lit `frequence.a6['success']` — il reste donc
+    # `False`. *Rendre l'erreur n'est pas l'avaler.*
+    try:
+        frequence = _arbitrer(plan.cible_frequence, r2,
+                              modeles_dl=("cann", "tabnet"), ponderer=True)
+    except Exception as e:  # noqa: BLE001  # pragma: no cover
+        frequence = _echec(
+            plan.cible_frequence,
+            f"Fréquence non modélisable : {type(e).__name__}: {e}")
 
     # ── CIBLE 2 : COÛT — sinistrés seulement, sans poids, TabNet seul ────────
     try:
         r2_cout, cible_sev = _vue_sinistres(r2, plan)
-    except Exception as e:      # pragma: no cover — donnée dégénérée
+    except Exception as e:  # noqa: BLE001  # pragma: no cover
         cout = _echec(CIBLE_COUT, f"Vue sinistrés impossible : {type(e).__name__}: {e}")
     else:
         if cible_sev.n_retenus < 100:
@@ -355,15 +402,35 @@ def pipeline_agents(
     # fournit toujours des lignes ; le signal (fonction du nombre de sinistrés) est
     # évalué par le RAG d'A6. Enveloppé comme le coût : un échec est DIT, pas masqué.
     if CIBLE_PRIME_PURE not in r2["dataframe"].columns:
+        # ⚠️⚠️ CONSTAT `agents/C6` — CE MESSAGE ACCUSAIT LE MAUVAIS
+        # COUPABLE. Il disait « contrat de données V7 B2 rompu », ce qui
+        # envoie l'actuaire chercher une rupture de contrat entre A2 et
+        # A3. Mesuré le 01/09 : `A2._calculer_prime_pure` lit
+        # `'cout_total_sinistres'` et `'exposition'` EN DUR, pas
+        # `plan.cible_cout` / `plan.exposition`. Sur 19 des 20 plans les
+        # deux coïncident ; sur `auto_fr_reel.yaml` — celui bâti sur le
+        # jeu français réel — ils s'appellent `ClaimAmountTotal` et
+        # `Exposure`, et la TROISIÈME CIBLE est perdue.
+        # *Une instruction que l'actuaire ne peut pas suivre est pire
+        # que le silence* — le jugement déjà porté par le BLOQUANT B7.
+        # ⚠️ LA CAUSE, ELLE, N'EST PAS CORRIGÉE ICI : faire lire le plan à
+        # `_calculer_prime_pure` FERAIT APPARAÎTRE une troisième cible là
+        # où il n'y en a aucune aujourd'hui. C'est un changement de
+        # SORTIE sur un plan signé : il est nommé, pas décidé ici.
         prime_pure = _echec(
             CIBLE_PRIME_PURE,
-            f"Colonne '{CIBLE_PRIME_PURE}' absente d'A2 (contrat de données V7 B2 "
-            f"rompu — _calculer_prime_pure).")
+            f"Colonne '{CIBLE_PRIME_PURE}' absente d'A2. CAUSE MESURÉE : "
+            f"A2._calculer_prime_pure lit 'cout_total_sinistres' et "
+            f"'exposition' EN DUR ; ce plan déclare "
+            f"cible_cout='{plan.cible_cout}' et "
+            f"exposition='{plan.exposition}'. Tant que les deux ne "
+            f"coïncident pas, la cible prime pure ne peut pas être "
+            f"produite — ce n'est PAS un contrat de données rompu.")
     else:
         try:
             prime_pure = _arbitrer(CIBLE_PRIME_PURE, r2,
                                    modeles_dl=("tabnet",), ponderer=False)
-        except Exception as e:      # pragma: no cover — donnée dégénérée
+        except Exception as e:  # noqa: BLE001  # pragma: no cover
             prime_pure = _echec(
                 CIBLE_PRIME_PURE,
                 f"Prime pure non modélisable : {type(e).__name__}: {e}")

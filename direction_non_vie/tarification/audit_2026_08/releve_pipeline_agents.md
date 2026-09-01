@@ -18,6 +18,8 @@ trois défauts nommés dans son propre en-tête.
 **C1 — L'orchestrateur n'a AUCUN appelant de production, et les trois défauts
 qu'il répare sont intacts partout.** Relevé **par AST** sur tout le dépôt :
 
+> ✅ **`agents/C1`** · **FERMÉ le 01/09/2026 — NOMMÉ, pas câblé.** Le module dit désormais qu'il n'a **aucun appelant de production**, et il NOMME les deux appelants hors app chez qui ses trois défauts restent vrais : `demos/pipeline_3lob_a1_a6_demo.py` et `scripts/rapport_tarif_local.py` — 5 agents sur 6, `result_a5=None`, et A6 sur la seule fréquence. *La moitié du tarif n'est toujours pas challengée chez eux.* ⚠️ **Y brancher ces deux appelants leur ferait produire TROIS cibles et un A5 là où ils n'en produisent qu'une** : c'est un changement de SORTIE sur des livrables, pas un correctif de texte — nommé, pas décidé ici. Le troisième, `actuaria_app.py`, est hors assiette par arbitrage. `AG-6` tient la phrase DANS LES DEUX SENS : le jour où l'un d'eux appellera, c'est elle qui tombera.
+
 ```
   [CONSTAT] pipeline_agents    production=0  tests=1
   [CONSTAT] ResultatAgents     production=0  tests=1
@@ -112,6 +114,8 @@ docstring l.216-219 : « *Un arbitrage peut échouer là où un autre réussit [
 c'est rendu dans `<cible>.erreur`, jamais masqué, et n'empêche pas les autres
 d'aboutir.* » Mesuré par AST :
 
+> ✅ **`agents/C3`** · **FERMÉ le 01/09/2026.** La FRÉQUENCE était la SEULE des trois cibles sans filet : le coût et la prime pure sont enveloppés, elle non — une exception y remontait hors de `pipeline_agents` et **tuait les deux autres**, quand l'en-tête promet qu'un échec « n'empêche pas les autres d'aboutir ». *Une promesse d'indépendance tenue sur deux tiers des cas n'est pas une promesse d'indépendance.* ⚠️ **AUCUN SUCCÈS N'EST MASQUÉ** : `_echec` pose `a6=None` et `success` lit ce drapeau — il reste `False`. `AG-1` vérifie les trois appels par AST ; `AG-2` vérifie le SECOND SENS, *rendre l'erreur n'est pas l'avaler*.
+
 ```
   les trois appels a _arbitrer sont aux lignes [272, 288, 308]
   [CONSTAT] _arbitrer l.272  protege par un try : False    <-- FREQUENCE
@@ -168,6 +172,8 @@ Deux exécutions identiques produisent deux livrables d'audit différents.
 
 **C5 — `_vue_sinistres` annonce un dict et rend un tuple.**
 
+> ✅ **`agents/C5`** · **FERMÉ le 01/09/2026.** L'annotation disait `Dict[str, Any]`, la fonction rend `({**result_a2, 'dataframe': df_sin}, cible)`. La docstring était juste sur le PREMIER membre et **taisait le second** — l'objet `CibleSeverite` dont l'appelant lit `n_retenus` juste après, pour le seuil des 100 sinistrés. *Une annotation qui dit la moitié du contrat est plus traître qu'une annotation absente : elle fait croire que le contrat est connu.* `AG-5` lit l'annotation RÉSOLUE, pas le texte.
+
 ```
   annonce  -> Dict[str, Any]
   retourne -> ({**result_a2, 'dataframe': df_sin}, cible)
@@ -183,6 +189,8 @@ colonne manque, l'erreur dit « *contrat de données V7 B2 rompu —
 `_calculer_prime_pure`* ». Mesuré, la vraie cause est ailleurs :
 `A2._calculer_prime_pure` (l.663-667) lit **`'cout_total_sinistres'` et
 `'exposition'` en dur**, pas `plan.cible_cout` / `plan.exposition`.
+
+> ✅ **`agents/C6`** · **FERMÉ le 01/09/2026 — le MESSAGE, pas la cause, et c'est dit.** Il accusait « un contrat de données V7 B2 rompu », ce qui envoie l'actuaire chercher une rupture entre A2 et A3. Cause mesurée : `A2._calculer_prime_pure` lit `'cout_total_sinistres'` et `'exposition'` **EN DUR**, pas `plan.cible_cout` / `plan.exposition`. Sur 19 des 20 plans les deux coïncident ; sur `auto_fr_reel.yaml` — celui bâti sur le jeu français RÉEL — ils s'appellent `ClaimAmountTotal` et `Exposure`. Le message nomme désormais la cause **et les deux noms en conflit**. ⚠️⚠️ **LA CAUSE N'EST PAS CORRIGÉE, DÉLIBÉRÉMENT** : faire lire le plan à `_calculer_prime_pure` FERAIT APPARAÎTRE une troisième cible là où il n'y en a aucune — un changement de SORTIE sur un plan signé. `AG-4` garde la phrase : le jour où A2 lira le plan, c'est le message qui deviendra faux, et le contrôle tombera.
 
 ```
   plans ou A2 peut calculer prime_pure : 19/20
