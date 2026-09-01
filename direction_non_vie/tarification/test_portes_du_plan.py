@@ -151,8 +151,21 @@ class TestPorte1Chargements(unittest.TestCase):
         self.assertNotEqual(auto, rc, "la taxe ne bouge pas l'empreinte : "
                                       "elle n'est donc pas opposable")
         self.assertNotEqual(base, auto)
-        self.assertTrue(all(e.startswith('s3:') for e in (base, auto, rc)))
-        self.assertEqual(EMPREINTE_SCHEMA, 3)
+        # ⚠️⚠️ DERIVE, JAMAIS ECRIT EN DUR. Ces deux lignes epinglaient `'s3:'`
+        # et `EMPREINTE_SCHEMA == 3` en LITTERAL. Le bump `s3` -> `s4` du
+        # constat `plan/C8` les a fait rougir -- alors que RIEN de ce que ce
+        # test prouve n'avait bouge. C'est la TROISIEME occurrence du meme
+        # defaut (`'s1:'` dans `test_horodatage_livrable`, puis ici) :
+        # *un numero de schema epingle ailleurs que dans le golden fait de
+        # chaque bump une edition a deux sites, sans la discipline du sceau.*
+        # Le SEUL endroit qui doit connaitre le numero est le golden de
+        # `test_plan_invariants`, ou constante et empreinte bougent ensemble.
+        prefixe = f's{EMPREINTE_SCHEMA}:'
+        self.assertTrue(all(e.startswith(prefixe) for e in (base, auto, rc)))
+        # Ce qui est VRAI ET DURABLE : les chargements sont entres au schema 3,
+        # donc le schema ne peut pas etre anterieur. Un bump futur ne rend pas
+        # cette phrase fausse.
+        self.assertGreaterEqual(EMPREINTE_SCHEMA, 3)
         print(f"    PTE-1 taxe dans l'empreinte : auto={auto} rc={rc}")
 
     def test_un_chargement_ABSURDE_est_refuse_a_la_declaration(self):

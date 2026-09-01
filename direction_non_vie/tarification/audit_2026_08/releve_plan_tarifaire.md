@@ -189,6 +189,8 @@ détecteur ne voit pas cette amputation-ci.
 **C4 — `config_encodage()` annonce être « ce que A2 consomme », et personne ne
 l'appelle.** Relevé par AST sur 418 fichiers :
 
+> ✅ **`plan/C4`** · **FERMÉ le 01/09/2026 — supprimée.** 0 appelant en production, 0 en test, et une docstring qui affirmait « ce que A2 consomme ». Mesuré : A2 lit `f.encodage` **directement sur les facteurs** (cinq sites) — il n'a jamais consommé ce dict. *Une méthode que personne n'appelle, qui affirme être consommée, est pire que du code mort : elle fait croire à un contrat qui n'existe pas.* `PL-1` vérifie l'absence du symbole **et** le fait qui a justifié le retrait.
+
 ```
   [CONSTAT] config_encodage    production= 0  tests= 0
 ```
@@ -256,6 +258,8 @@ fichier à 67 %.
 
 **C6 — Deux formes de dict pour « plan amputé », dans le même fichier, et le
 mélange échoue vers « rien à signaler ».**
+
+> ✅ **`plan/C6`** · **FERMÉ le 01/09/2026.** Mesuré par exécution : passer la forme de `verifier_completude_plan` à `synthese_colonnes_plan_manquantes` rend **`None`** — « rien à signaler » — sur un plan dont AUCUNE colonne déclarée n'est présente. Les deux formes ont chacune leurs producteurs et leurs lecteurs ; les fondre casserait `alerte_modele_ampute` et `plafonner_statut_si_ampute`. **Ce qui est corrigé est le SILENCE** : une forme non reconnue LÈVE, et le message nomme les deux structures. `PL-2` épingle la levée, `PL-3` le SECOND SENS — une levée trop large transformerait un libellé utile en panne.
 
 ```
   verifier_completude_plan -> {'plan','n_attendues','n_presentes','colonnes_manquantes','ampute'}
@@ -331,6 +335,8 @@ retombe toujours sur la règle 3 (ambiguë, signalée et laissée).
 **C8 — L'empreinte n'a pas de numéro de version de schéma, et elle est aveugle
 au commentaire.** Mesuré sur 10 variations :
 
+> ✅ **`plan/C8`** · **FERMÉ le 01/09/2026, et il était à MOITIÉ FERMÉ SANS Être REPORTÉ.** La version de schéma existait déjà (préfixe `sN:`, posée par le chantier `unite_exposition`) — *le troisième état, une fois de plus*. Restait la seconde moitié : le `commentaire` du facteur, **la justification écrite par l'actuaire**, était hors du payload. Deux plans qui n'en différaient que par elle portaient la même empreinte, et l'audit trail les déclarait IDENTIQUES. Il entre dans le payload : `s3` → **`s4`**, golden et constante dans le MÊME commit. ⚠️ C'est le SEUL champ haché qui ne change pas un prix — il y est parce que l'empreinte scelle **le document SIGNÉ**, pas seulement le calcul. Arbitrage « VERSIONNER, ne pas omettre ». `PL-4` épingle l'effet, `PL-5` refait la mesure qu'un bump exige : aucune empreinte d'un schéma antérieur persistée.
+
 ```
   version · auteur · famille_severite · identifiant_contrat · echeance ·
   comportement · anteriorite · interactions · ORDRE des facteurs  -> change
@@ -358,6 +364,8 @@ n'a pas de sens actuariel — mais c'est la même faille de forme que C1.
 **C10 — La quatrième liste annoncée remplacée existe toujours.** L'en-tête
 (l.4-8) annonce quatre listes remplacées. Mesuré :
 
+> ✅ **`plan/C10`** · **FERMÉ le 01/09/2026 — et c'était le plus traître des cinq.** L'en-tête rangeait sous une seule flèche TROIS états différents : trois listes SUPPRIMÉES du dépôt, et `FACTEURS_TARIFAIRES_AUTORISES` qui **existe toujours**, comme repli de `construire_matrice_x`. ⚠️ Mesuré par AST : **les six appelants de production passent tous `plan=`**, donc elle ne gouverne aucune exécution réelle — mais écrire « dérivée du plan » comme pour les trois autres laissait croire qu'elle avait disparu. *La liste la plus dangereuse est celle qu'on croit supprimée.* `PL-6` **dérive** l'état des quatre au lieu de le relire, et il tombe dans les deux sens.
+
 ```
   MOTS_CLES_DETECTION            : (introuvable)
   VARS_CATEGORIELLES             : (introuvable)
@@ -375,6 +383,8 @@ propriété du chemin déclaratif, pas du module.
 tests = 1. Elle est utilisée en interne par `colonnes_attendues()` et
 `valider_contre()` ; ce n'est pas du code mort, mais ce n'est pas non plus une
 interface.
+
+> ✅ **`plan/C11`** · **FERMÉ le 01/09/2026.** Ni code mort (deux appelants internes) ni interface (zéro appelant externe, mesuré par AST) : la docstring **dit lequel des deux**. *Nommer ce qu'un symbole EST vaut mieux que de laisser deviner ce qu'il n'est pas.* `PL-7` tient la phrase de portée comme un chiffre : si un appelant externe apparaît, c'est la phrase qui doit tomber.
 
 ### D — Vérifié comme BON (13)
 

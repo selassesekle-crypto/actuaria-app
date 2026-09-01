@@ -1930,8 +1930,12 @@ _PLAN_GOLDEN_DICT = {
         "prime_proposee": "prime_n", "canal": "direct", "groupe_test": "grp_prix",
     },
     "facteurs": [
+        # ⚠️ `commentaire` PEUPLÉ, comme `unite_exposition` et `chargements` :
+        # ce golden ne scelle une partie du payload que si elle porte une
+        # valeur qui puisse DÉRIVER. Constat `plan/C8`, bump `s3` -> `s4`.
         {"nom": "age", "type": "continu", "transformation": "carre",
-         "bornes": [18, 110]},
+         "bornes": [18, 110],
+         "commentaire": "justification actuarielle scellee par le golden"},
         {"nom": "zone", "type": "categoriel", "encodage": "one_hot",
          "modalites": ["A", "B"], "reference": "A"},
     ],
@@ -1976,8 +1980,15 @@ class TestEmpreinteVersionneeSchema(unittest.TestCase):
         # MEME commit. Motif : `chargements` (plan) et `bornes` (facteur)
         # entrent dans le payload — une TAXE decide de la prime payee, une
         # BORNE refuse un contrat. Les deux changent ce qui est tarife.
-        self.assertEqual(EMPREINTE_SCHEMA, 3)
-        self.assertEqual(emp, "s3:3b0da8bb5cfd6325",
+        # ⚠️⚠️ BUMP `s3` -> `s4` LE 01/09/2026, golden et constante dans le
+        # MEME commit. Motif : le `commentaire` du facteur entre dans le
+        # payload -- constat `plan/C8`. C'est le SEUL champ hache qui ne
+        # change pas un prix : il y est parce que l'empreinte scelle LE
+        # DOCUMENT SIGNE, et le commentaire est la JUSTIFICATION ECRITE PAR
+        # L'ACTUAIRE. Deux plans dont elle differait portaient la MEME
+        # empreinte, et l'audit trail les declarait IDENTIQUES.
+        self.assertEqual(EMPREINTE_SCHEMA, 4)
+        self.assertEqual(emp, "s4:eba8352b8daae395",
             "empreinte du plan de reference gele changee : derive de structure "
             "sans bump, OU bump sans mise a jour du golden. Voir le commentaire.")
         print(f"    S3b golden scellé : {emp} ✅")

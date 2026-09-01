@@ -42,7 +42,7 @@ _TAILLE_MIN_LIVRABLE = 512
 PORTEE_ARCHIVE_TARIF = (
     "dossier conserve et verifiable : l'empreinte du DOCUMENT prouve que le "
     "fichier relu est celui qui a ete ecrit. Elle ne prouve NI que le tarif "
-    "est JUSTE (cela, c'est l'empreinte du PLAN, prefixe 's1:', et la "
+    "est JUSTE (cela, c'est l'empreinte du PLAN, prefixe 'sN:', et la "
     "reproductibilite du contenu), NI que le document a ete SIGNE ou assume, "
     "NI qu'il est opposable au sens juridique. La relecture publiee dans le "
     "rapport reste DECLARATIVE : le nom saisi n'est verifie par personne."

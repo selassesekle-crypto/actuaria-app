@@ -1,11 +1,19 @@
 """
 core/plan_tarifaire.py — LA SOURCE UNIQUE.
 
-Remplace les QUATRE listes codées en dur qui se désynchronisaient :
-    A1   MOTS_CLES_DETECTION          → supprimée (l'actuaire déclare sa LoB)
-    A2   VARS_CATEGORIELLES           → dérivée du plan
-    A3   VARS_GLM                     → dérivée du plan
-    core FACTEURS_TARIFAIRES_AUTORISES → dérivée du plan
+Remplace les QUATRE listes codées en dur qui se désynchronisaient — et les
+QUATRE ne sont PAS dans le même état, ce qui doit être dit (constat `plan/C10`,
+mesuré le 01/09/2026) :
+    A1   MOTS_CLES_DETECTION          → SUPPRIMÉE du dépôt
+    A2   VARS_CATEGORIELLES           → SUPPRIMÉE du dépôt
+    A3   VARS_GLM                     → SUPPRIMÉE du dépôt
+    core FACTEURS_TARIFAIRES_AUTORISES → EXISTE TOUJOURS
+Cette quatrième survit comme repli de `construire_matrice_x` quand aucun plan
+n'est passé. ⚠️ Mesuré par AST : **les six appelants de production passent tous
+`plan=`**, donc elle ne gouverne aucune exécution réelle — mais écrire
+« dérivée du plan » comme pour les trois autres laissait croire qu'elle avait
+disparu. *Trois états différents sous une seule flèche : la liste la plus
+dangereuse est celle qu'on croit supprimée.*
 
 Les trois classes de bloquants trouvées en audit venaient TOUTES d'une
 désynchronisation entre ces listes :
@@ -127,7 +135,15 @@ class Chargements:
 #: entrent dans le payload. Une TAXE decide de la prime payee, une BORNE
 #: refuse un contrat : les deux changent ce qui est tarife, donc les deux
 #: sont opposables. Golden mis a jour dans le MEME commit.
-EMPREINTE_SCHEMA = 3
+#: ⚠️ `3` -> `4` LE 01/09/2026 : le `commentaire` du facteur entre dans le
+#: payload -- constat `plan/C8`. C'est le SEUL champ hache qui ne change pas un
+#: prix, et il y est parce que l'empreinte scelle LE DOCUMENT SIGNE : deux plans
+#: dont la JUSTIFICATION ECRITE PAR L'ACTUAIRE differe portaient la meme
+#: empreinte, et l'audit trail les declarait IDENTIQUES. Arbitrage
+#: << VERSIONNER, ne pas omettre >>. Mesure faite AVANT le bump : aucune
+#: empreinte `s3:` persistee dans `models/` ni `data/`. Golden mis a jour dans
+#: le MEME commit.
+EMPREINTE_SCHEMA = 4
 
 # Transformations dérivées : suffixe appliqué par A2
 _SUFFIXE_TRANSFO = {"log": "log_{}", "carre": "{}_carre", "racine": "{}_racine"}
@@ -585,6 +601,16 @@ class PlanTarifaire:
         return tuple(f.nom for f in self.facteurs)
 
     def colonnes_obligatoires(self) -> tuple[str, ...]:
+        """Les trois colonnes sans lesquelles aucun GLM ne se calibre.
+
+        ⚠️ CONSTAT `plan/C11` — USAGE INTERNE, PAS UNE INTERFACE. Relevé par
+        AST : **0 appelant hors de ce module**. Elle sert à
+        `colonnes_attendues()` et `valider_contre()`, ici même. Ce n'est donc
+        pas du code mort — mais la laisser passer pour une porte publique
+        ferait attendre d'elle une stabilité que rien ne garantit. *Nommer ce
+        qu'un symbole EST vaut mieux que de laisser deviner ce qu'il n'est
+        pas.*
+        """
         return (self.exposition, self.cible_frequence, self.cible_cout)
 
     def colonnes_attendues(self) -> tuple[str, ...]:
@@ -616,24 +642,15 @@ class PlanTarifaire:
                 cols.extend(f.colonnes_produites())
         return tuple(cols)
 
-    def config_encodage(self) -> dict:
-        """Ce que A2 consomme — remplace VARS_CATEGORIELLES."""
-        return {
-            "one_hot": [f.nom for f in self.facteurs if f.encodage == "one_hot"],
-            "label":   [f.nom for f in self.facteurs if f.encodage == "label"],
-            "transformations": {
-                f.nom: f.transformation
-                for f in self.facteurs if f.transformation
-            },
-            "modalites": {
-                f.nom: f.modalites
-                for f in self.facteurs if f.modalites
-            },
-            "references": {
-                f.nom: (f.reference or f.modalites[0])
-                for f in self.facteurs if f.encodage == "one_hot"
-            },
-        }
+    # ── `config_encodage()` SUPPRIMÉE (01/09/2026) — constat `plan/C4` ────────
+    # Relevé par AST sur tout le dépôt : **0 appelant en production, 0 en
+    # test**. Et sa docstring affirmait « Ce que A2 consomme — remplace
+    # VARS_CATEGORIELLES ». Mesuré : A2 lit `f.encodage` DIRECTEMENT sur les
+    # facteurs du plan (cinq sites), il n'a jamais consommé ce dict.
+    # *Une méthode que personne n'appelle, qui affirme être consommée, est
+    # pire que du code mort : elle fait croire à un contrat qui n'existe pas.*
+    # ⚠️ Rien n'est perdu : chaque clé qu'elle construisait est une
+    # compréhension d'une ligne sur `self.facteurs`, disponible à qui la veut.
 
     # ── Traçabilité ACPR : le plan est opposable ───────────────────────────
     def empreinte(self) -> str:
@@ -681,7 +698,21 @@ class PlanTarifaire:
                  "anteriorite": f.anteriorite, "reference": f.reference,
                  # ⚠️ Une borne REFUSE un contrat : elle change ce qui est
                  # tarifé, donc elle appartient a l'empreinte.
-                 "bornes": list(f.bornes) if f.bornes else None}
+                 "bornes": list(f.bornes) if f.bornes else None,
+                 # ⚠️⚠️ CONSTAT `plan/C8` — LE COMMENTAIRE EST DANS L'EMPREINTE
+                 # DEPUIS `s4`, ET C'EST LE SEUL CHAMP QUI NE CHANGE PAS UN
+                 # PRIX. Il y est parce que l'empreinte scelle LE DOCUMENT
+                 # SIGNÉ, pas seulement le calcul : le commentaire est la
+                 # JUSTIFICATION ÉCRITE PAR L'ACTUAIRE. Deux plans dont la
+                 # justification diffère portaient la même empreinte, et
+                 # l'audit trail les déclarait IDENTIQUES.
+                 # ⚠️ CE QUE CELA COÛTE, ET C'EST VOULU : toute empreinte
+                 # archivée sous `s3` cesse de correspondre. C'est très
+                 # exactement ce que le préfixe `sN:` existe pour dire --
+                 # arbitrage << VERSIONNER, ne pas omettre >>. Omettre pour
+                 # épargner le bump aurait fait taire un changement du
+                 # document opposable.
+                 "commentaire": f.commentaire}
                 for f in self.facteurs
             ],
             "interactions": [list(i) for i in self.interactions],
@@ -871,6 +902,31 @@ def synthese_colonnes_plan_manquantes(rapport) -> Optional[str]:
     """
     if not rapport:
         return None
+    # ⚠️⚠️ CONSTAT `plan/C6` — DEUX FORMES DE DICT POUR << PLAN AMPUTÉ >>,
+    # DANS CE MÊME FICHIER, ET LE MÉLANGE ÉCHOUAIT VERS << RIEN À SIGNALER >>.
+    #   verifier_completude_plan  rend  {plan, n_attendues, n_presentes,
+    #                                    colonnes_manquantes, ampute}
+    #   cette fonction            lit   {plan, colonnes_non_produites,
+    #                                    facteurs_absents}
+    # Mesuré le 01/09 : lui passer le PREMIER rend `None` sur un plan
+    # massivement amputé. *Un « rien à signaler » silencieux sur un modèle
+    # amputé est exactement le défaut que ce libellé existe pour empêcher.*
+    # Les deux formes ont chacune leurs producteurs et leurs lecteurs ; les
+    # fondre casserait `alerte_modele_ampute` et `plafonner_statut_si_ampute`.
+    # Ce qui est corrigé est le SILENCE : une forme non reconnue LÈVE.
+    if (isinstance(rapport, dict)
+            and 'colonnes_non_produites' not in rapport
+            and ('colonnes_manquantes' in rapport or 'ampute' in rapport)):
+        raise TypeError(
+            "synthese_colonnes_plan_manquantes a recu la forme rendue par "
+            "`verifier_completude_plan` ({plan, n_attendues, n_presentes, "
+            "colonnes_manquantes, ampute}). Elle attend celle portee par "
+            "result_a2['colonnes_plan_manquantes'] ({plan, "
+            "colonnes_non_produites, facteurs_absents}). Les deux disent "
+            "<< plan ampute >> et n'ont AUCUNE cle en commun hors 'plan' : "
+            "sans cette levee, l'appel rendait None, c'est-a-dire "
+            "<< rien a signaler >> sur un modele ampute."
+        )
     non_produites = rapport.get("colonnes_non_produites") or []
     if not non_produites:
         return None
