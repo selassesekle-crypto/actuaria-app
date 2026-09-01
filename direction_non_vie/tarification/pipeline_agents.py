@@ -77,7 +77,7 @@ import numpy as np
 import pandas as pd
 
 from core.plan_tarifaire import PlanTarifaire
-from core.qualite_donnees import exiger_canal_sans_objet
+from core.qualite_donnees import exiger_canal_sans_objet, observer_qualite
 from core.severite import CibleSeverite, construire_cible_severite
 from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
 from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
@@ -332,8 +332,36 @@ def pipeline_agents(
     # ── SOCLE COMMUN : A1 → A2 → A3 ─────────────────────────────────────────
     r1 = AgentA1Ingestion(audit_path=audit_path, verbose=verbose).run(
         branche=branche, sous_branche=sous_branche, dataframe=dataframe)
+
     r2 = AgentA2Preprocessing(audit_path=audit_path, verbose=verbose).run(
         result_a1=r1, plan=plan)
+
+    # ── 1-B-OBSERVATION : LA COUCHE REGARDE, ELLE N'APPLIQUE RIEN ────────────
+    # ⚠️⚠️ ÉTAPE 4 DU CHANTIER 1-B, décidée par Selasse le 02/09/2026. Le
+    # chemin agent ne saura JAMAIS s'il faut brancher la couche tant qu'il ne
+    # mesure pas ce qu'elle ferait. *Une décision qui déplace un prix se prend
+    # sur des fréquences réelles, pas sur une intuition.*
+    #
+    # ⚠️⚠️ APRÈS A2, ET L'ASSIETTE EST TOUT LE SUJET. Mesuré le 02/09 sur un
+    # fichier à 30 expositions nulles + 60 fréquences négatives :
+    #
+    #     observee AVANT A2 : exposition_non_positive 30 + frequence_negative 60
+    #     observee APRÈS A2 :                              frequence_negative 60
+    #
+    # A2 exclut DÉJÀ les expositions non positives. Observer avant lui aurait
+    # fait publier « 30 lignes, et RIEN n'a été appliqué » sur des lignes que
+    # le tarif ne porte plus — *un chiffre juste sur la mauvaise assiette dit
+    # une chose fausse.* L'observation mesure donc CE QUI ATTEINT LE TARIF et
+    # que la couche complète aurait écarté : c'est le chiffre de l'arbitrage.
+    #
+    # ⚠️ AUCUN EURO, ET C'EST STRUCTUREL : `_obs` n'est jamais relu ici, et
+    # `observer_qualite` rend un `dataframe_propre` à `None` pour qu'aucun
+    # appelant ne puisse s'y tromper. Le tarif descend sur `r2`, intact.
+    _df_obs = (r2 or {}).get('dataframe')
+    _obs = (observer_qualite(_df_obs, plan, horodatage=date_calcul)
+            if isinstance(_df_obs, pd.DataFrame) and not _df_obs.empty
+            else None)
+
     # A3 entraîne DÉJÀ ses trois modèles (Poisson fréquence, Gamma coût, Tweedie
     # prime pure) en un seul run : c'est son architecture, on ne la double pas.
     r3 = AgentA3GLM(**_a).run(
@@ -377,6 +405,7 @@ def pipeline_agents(
             # mesurée). *La plomberie était posée, rien ne l'alimentait.*
             # A2 le produit désormais pour ses mutations d'exposition.
             rapport_qualite=(r2 or {}).get('rapport_qualite'),
+            observation_qualite=_obs,
             generer_graphiques=generer_graphiques, generer_rapport_equipe=False)
         return ArbitrageCible(cible=cible, a4=r4, a5=r5, a6=r6,
                               statut_rag=r6.get("statut_rag"),

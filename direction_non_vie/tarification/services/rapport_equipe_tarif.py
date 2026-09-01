@@ -29,6 +29,7 @@ from core.conformite_reglementaire import (
     synthese_modele_dl,
 )
 from core.qualite_donnees import (MARQUEUR_QUALITE_NON_EXECUTEE,
+                                  MARQUEUR_QUALITE_OBSERVEE,
                                   synthese_qualite_donnees)
 from core.plan_tarifaire import synthese_colonnes_plan_manquantes
 from core.mapping_client import synthese_mapping
@@ -203,7 +204,9 @@ def syntheses_reglementaires(results: Dict[str, Dict]) -> Dict[str, str]:
         'modele_dl':    synthese_modele_dl(r6.get('modele_production'),
                                            r6.get('valide_par_actuaire_dl'),
                                            at6.get('timestamp')),
-        'qualite':      synthese_qualite_donnees(r6.get('rapport_qualite')),
+        'qualite':      synthese_qualite_donnees(
+                            r6.get('rapport_qualite'),
+                            r6.get('observation_qualite')),
         'plan_ampute':  synthese_colonnes_plan_manquantes(
                             r6.get('colonnes_plan_manquantes')),
         # ⚠️ Constat `conformite/C15` — cause DISTINCTE de la précédente :
@@ -469,7 +472,8 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
             _kpi(ws5, r, "Qualité des données — traitements appliqués", _synth_q6,
                  statut=("AMBRE" if ("EXCLUE" in _synth_q6 or "SIGNALEE" in _synth_q6
                                      or "BLOQUE" in _synth_q6
-                                     or MARQUEUR_QUALITE_NON_EXECUTEE in _synth_q6)
+                                     or MARQUEUR_QUALITE_NON_EXECUTEE in _synth_q6
+                                     or MARQUEUR_QUALITE_OBSERVEE in _synth_q6)
                          else "VERT"),
                  wrap=True); r += 1
         # Colonnes du plan non produites (fichier client incomplet → modèle

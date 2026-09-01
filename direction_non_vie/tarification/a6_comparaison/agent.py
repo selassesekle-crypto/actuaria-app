@@ -365,6 +365,14 @@ class AgentA6Comparaison:
         # (pipeline_complet). A6 ne l'UTILISE pas — il le fait TRANSITER vers les
         # 3 rapports (synthese_qualite_donnees), même mécanisme que le champ DL.
         rapport_qualite:     Optional[Any] = None,
+        # ⚠️⚠️ CE QUE LA COUCHE AURAIT FAIT — étape 1-B-observation, 02/09/2026.
+        # DISTINCT de `rapport_qualite`, et le rester est tout l'objet : celui-ci
+        # dit ce qui a ÉTÉ FAIT (A2 exclut les expositions non positives), celui-là
+        # ce qui AURAIT été fait par la couche complète, et qui ne l'a pas été.
+        # *Les fondre ferait affirmer au rapport signé des exclusions que personne
+        # n'a faites.* A6 ne l'UTILISE pas — il le TRANSITE, comme les deux
+        # précédents.
+        observation_qualite: Any | None = None,
         # RapportMapping (core/mapping_client.py) produit AVANT A1 par le mapping
         # du fichier client. A6 ne l'UTILISE pas non plus — il le TRANSITE vers les
         # 3 rapports (synthese_mapping), exactement comme rapport_qualite. None sur
@@ -755,6 +763,7 @@ class AgentA6Comparaison:
                 'exclusions_cible': exclusions_cible,
                 'valide_par_actuaire_dl': valide_par_actuaire_dl,
                 'rapport_qualite': rapport_qualite,
+                'observation_qualite': observation_qualite,
                 'rapport_mapping': rapport_mapping,
                 'colonnes_plan_manquantes': _cols_plan_manquantes,
                 'colonnes_plan_ecartees': sorted(_cols_plan_ecartees),
@@ -902,6 +911,7 @@ class AgentA6Comparaison:
                 'exclusions_cible':   exclusions_cible,
                 'valide_par_actuaire_dl': valide_par_actuaire_dl,
                 'rapport_qualite':    rapport_qualite,
+                'observation_qualite': observation_qualite,
                 # RapportMapping du renommage client (avant A1) — transité comme
                 # rapport_qualite (produit par aucun agent). None = pas de mapping.
                 'rapport_mapping':    rapport_mapping,

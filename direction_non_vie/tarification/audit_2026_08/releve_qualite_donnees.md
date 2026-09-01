@@ -647,6 +647,70 @@ jumeau, et rien ne dit pourquoi.**
 > Épinglé par `SG-1` à `SG-7`. **L'étape ⑤ remplace le refus par l'appel
 > réel** — et elle déplace un prix, donc elle attend un arbitrage nominatif.
 
+**C13 — Le chemin agent ne MESURE pas ce que la couche qualité ferait :
+la décision de la brancher (1-B) se prendrait sans chiffre, et le troisième
+état — PARTIELLEMENT exécuté — se lit comme un contrôle complet.**
+
+> ✅ **`qualite/C13`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 02/09/2026 —
+> étape ④ du chantier 1-B (1-B-observation), décidée par Selasse.**
+>
+> *Une décision qui déplace un prix se prend sur des fréquences réelles, pas
+> sur une intuition.* La couche applique désormais ses règles **pour voir**, et
+> n'applique **rien** : aucune ligne exclue, corrigée, ni bloquée.
+>
+> ⚠️⚠️ **L'ASSIETTE ÉTAIT TOUT LE SUJET, ET LA MESURE L'A TRANCHÉE.**
+>
+> ```
+>   fichier : 30 expositions nulles + 60 frequences negatives
+>     observee AVANT A2 : exposition_non_positive 30 + frequence_negative 60
+>     observee APRES A2 :                              frequence_negative 60
+> ```
+>
+> A2 exclut **déjà** les expositions non positives. Observer avant lui aurait
+> fait publier « 30 lignes, et RIEN n'a été appliqué » sur des lignes que le
+> tarif ne porte plus. *Un chiffre juste sur la mauvaise assiette dit une
+> chose fausse.* L'observation mesure **ce qui atteint le tarif** et que la
+> couche complète aurait écarté — c'est le chiffre de l'arbitrage ⑤.
+>
+> ⚠️⚠️ **LE DÉFAUT DE `qualite/C9` A REPARU UN CRAN PLUS HAUT, DANS MON PROPRE
+> CORRECTIF.** Ma première version rendait `PHRASE_QUALITE_NON_EXECUTEE` dès
+> que l'observation ne trouvait rien — c'est-à-dire **sur un portefeuille
+> sain**. « Observé, rien trouvé » redisait « pas observé ». *C'est
+> l'EXISTENCE de l'observation qui prouve que la couche a tourné, jamais son
+> contenu.* `OB-7` tient la distinction.
+>
+> ⚠️ **LE TROISIÈME ÉTAT, NOMMÉ : PARTIELLEMENT EXÉCUTÉ.** A2 excluait les
+> expositions non positives et le publiait **seul** — un actuaire y lisait que
+> la couche entière avait tourné. Les deux textes se publient désormais côte à
+> côte (`OB-6`), et ils ne disent pas la même chose : **ce qui a ÉTÉ FAIT**,
+> puis **ce qui AURAIT été fait**.
+>
+> ⚠️ **CE QUE LE TEXTE PUBLIE, ET POURQUOI** : par anomalie, le code, la
+> règle, le nombre de lignes, la proportion, **et si elle aurait déclenché
+> l'escalade**. *La liste des alertes qui doivent bloquer se décide sur des
+> fréquences réelles* — c'est la matière de l'arbitrage de Selasse.
+>
+> ⚠️ **UN JETON, PAS UN NOM** : `controler_qualite` refuse un rapport complet
+> sans signature dès que l'escalade se déclenche. L'observation fournit un
+> jeton TECHNIQUE, puis le retire (`validee_par=None`). *Un jeton qui
+> ressemblerait à un nom finirait par être lu comme une validation* (`OB-3`).
+>
+> ⚠️⚠️ **AUCUN EURO, PROUVÉ PAR LA STRUCTURE** (`OB-1`, `OB-8`) : le
+> dataframe donné à l'observation est **inchangé**, `dataframe_propre` vaut
+> `None` pour qu'aucun appelant ne s'y trompe, et l'orchestrateur ne relit
+> jamais l'observation — **1 lecture, 0 attribut lu**, vérifié par AST.
+>
+> ⛔⛔ **ET LE SCEAU A DÉMASQUÉ UN DE MES PROPRES CONTRÔLES.** `OB-4`, qui
+> garde l'assiette, lisait l'APPEL `observer_qualite(_df_obs, ...)` puis y
+> remplaçait `_df_obs` par `r2` avant d'y chercher `r2` : **il était vrai quoi
+> qu'il arrive**, y compris sur `r1`. *Un contrôle qui regarde le NOM d'une
+> variable au lieu de sa SOURCE ne mesure rien.* Refait sur l'AFFECTATION ; le
+> plant le fait désormais tomber.
+>
+> Épinglé par `OB-1` à `OB-11`. **L'étape ⑤ — appliquer — déplace un prix et
+> attend l'arbitrage de Selasse, y compris LA LISTE des alertes qui doivent
+> bloquer.**
+
 ## ③ Ce que je ne tranche pas ici
 
 **Rien n'est resté non lu** : 334 lignes, intégralement.
