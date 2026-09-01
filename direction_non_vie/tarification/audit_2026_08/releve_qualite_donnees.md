@@ -36,7 +36,8 @@ un **libellé** — `P2024-00123`, `AUTO/45/8891` — jamais un nombre.
   identifiant « 1..400 » (numerique)      -> 0 anomalie         -> passe
 ```
 
-⚠️ **Portée** : latent tant qu'aucun plan ne déclare l'identifiant (**0/20**) —
+⚠️ **Portée** : latent tant qu'aucun plan ne déclarait l'identifiant (**0/20 au 30/08 ;
+**20/20 au 01/09**) —
 mais **il bloquait tout le chantier `plan/C7`** : déclarer le rôle rendait
 inutilisable tout fichier client à identifiant alphanumérique, c'est-à-dire la
 quasi-totalité.
@@ -215,7 +216,10 @@ sont les numéros de règle.
 >
 > ⚠️ **Unité non déclarée : comportement d'aujourd'hui, mais DIT.** Borne
 > annuelle inchangée, et le message publie l'hypothèse et sa conséquence.
-> **0 des 20 plans ne déclare d'unité — aucun euro ne bouge, mesuré.**
+> **0 des 20 plans ne déclarait d'unité AU 31/08 — aucun euro n'a bougé,
+> mesuré.** ⚠️⚠️ **Au 01/09 ils la déclarent TOUS (`annee`, étape 5) :
+> toujours aucun euro, mais la règle 3 est VIVANTE.** *La phrase avait survécu
+> quatre jours à sa propre mesure ; `PM-1` la dérive désormais des plans réels.*
 >
 > ⚠️⚠️ **`EMPREINTE_SCHEMA` a bumpé `1` → `2`.** L'unité entre dans le payload :
 > elle décide d'un prix, donc elle est **opposable**. *L'en exclure aurait rendu
@@ -466,6 +470,76 @@ pas << pas vérifié >> de << vérifié, rien à signaler >>.**
 > n'a pas tourné, bloc ABSENT sur un portefeuille sain) et **`QNE-7`, le second
 > sens** — *un correctif qui ferait parler la couche dans les DEUX cas serait
 > aussi faux que le silence.*
+
+**C10 — Le commentaire de la règle 2 affirme « Aucun des 20 plans ne
+déclare d'unité » pour justifier « aucun euro » : c'est faux depuis l'étape 5
+du même chantier, et rien ne le mesurait.**
+
+> ✅ **`qualite/C10`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 01/09/2026 —
+> étape ① du chantier 1-B, décidée par Selasse.** Je l'avais signalé moi-même
+> en vérifiant son résumé ; il a demandé de le refermer avant d'avancer.
+>
+> ```
+>   core/qualite_donnees.py, regle 2 -- ecrit a l ETAPE 2 du chantier :
+>       << Aucun des 20 plans ne declare d unite, donc aucun euro ne bouge
+>          sur l existant -- mesure >>
+>
+>   RE-MESURE DU 01/09, sur les 20 fichiers de plan :
+>       unite_exposition    20 / 20   (toutes 'annee')   <- l ETAPE 5
+>       identifiant_contrat 20 / 20
+>       echeance            20 / 20
+>       cout_par_sinistre    0 / 20   cha* 0 / 20   bornes 0 / 20
+> ```
+>
+> ⚠️⚠️ **LA CONCLUSION TENAIT, LA JUSTIFICATION NON.**
+> `borne_exposition('annee')` vaut 1,0, exactement `PLAFOND_EXPOSITION` :
+> **aucun euro n'a jamais bougé.** Mais la phrase qui le justifiait était morte
+> depuis quatre jours. *Une conclusion juste tenue par une prémisse fausse est
+> une dette, pas une garantie* — et `PM-2` prouve désormais le zéro euro **par
+> la borne**, plus par le compte de plans.
+>
+> ⚠️ **ET LA CONSÉQUENCE N'ÉTAIT PAS QUE TEXTUELLE** : puisque l'unité EST
+> déclarée, la **règle 3 est VIVANTE en production**, ce que le commentaire ne
+> disait nulle part. Mesuré : **une seule ligne à 1,02 an sur 20 000 produit un
+> signal sur 100 % des lignes**, donc une escalade, donc un blocage à
+> signature. C'est l'objet de l'étape ②.
+>
+> **SECOND DÉFAUT DE LA MÊME FAMILLE, TROUVÉ EN TRAÇANT.** La feuille de route
+> affirmait que le chemin agent tarifie sur **60 lignes** à fréquence ou coût
+> négatifs. `qualite/C8`, fermé le 31/08 **après** cette mesure, a sorti le
+> coût de la règle 1 : il est SIGNALÉ et GARDÉ par les DEUX chemins.
+>
+> ```
+>   RE-MESURE, fichier identique (1 000 lignes, 30 + 30 + 30) :
+>     couche qualite : 60 EXCLUSIONS + 30 SIGNALEMENTS (cout net, gardes)
+>                      escalade par l UNION 90/1000 = 9 %  (aucun type >= 5 %)
+>     chemin agent   : A1 1000 -> 1000 (il n exclut RIEN)
+>                      A2 1000 ->  970 (les 30 d exposition)
+>     DELTA REEL DE 1-B :  30 lignes, pas 60
+> ```
+>
+> ⚠️⚠️ **LE REMÈDE N'EST PAS DE RÉÉCRIRE LA PHRASE.** Le patron existait déjà
+> deux fois dans le dépôt — `A3-8` et `A4-3` re-vérifient leur mesure à chaque
+> gate *« au lieu de recopier cette mesure »*. Ici, rien ne le faisait.
+> `PM-1` à `PM-4` dérivent désormais les quatre affirmations des **fichiers de
+> plan réels** et du **comportement exécuté**.
+>
+> ⚠️ **DEUX NATURES DE PHRASE, ET SEULE LA SECONDE ÉTAIT FAUSSE** : une phrase
+> HISTORIQUE (vraie à sa date) se **date** ; une phrase VIVANTE se
+> **re-mesure**. Les trois historiques ont reçu leur date, les deux vivantes
+> ont été corrigées. `PM-4` interdit la forme qui affirme au présent **et
+> autorise la forme datée** — second sens prouvé au sceau : *un remède qui
+> interdirait de tracer l'histoire du défaut détruirait la trace qu'il existe
+> pour garder.*
+>
+> ⚠️ **AUCUN EURO** : aucune ligne de code exécutable n'a changé dans ce lot —
+> seuls des commentaires, des documents et un fichier de contrôles neuf.
+> Vérifié par AST : **0 corps de fonction modifié**.
+>
+> ⛔ **NOMMÉ, NON TRAITÉ** : quatre affirmations voisines de la même forme
+> restent non dérivées — `a2/agent.py` (encodages, colonne `a2/C13`,
+> `auto_fr_reel`) et `pipeline_agents.py` (« 19 des 20 plans »). Elles sont
+> hors de la zone de ce lot ; les nommer vaut mieux que de les élargir.
 
 ## ③ Ce que je ne tranche pas ici
 

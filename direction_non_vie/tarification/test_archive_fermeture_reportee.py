@@ -150,10 +150,15 @@ _HORS_ASSIETTE: dict[tuple[str, str], str] = {
         "branche au chemin DECLARATIF, qui l'avait deja : elle ne donne "
         "toujours rien a l'autre chemin. **C'est l'etape 1-B qui fermerait "
         "`qualite/C4`, et elle deplace un prix** -- mesure du 31/08 : le "
-        "chemin agent tarife sur 60 lignes a frequence ou cout negatifs que "
-        "cette couche ecarte, et le branchement introduirait un blocage a "
-        "5 %. `qualite/C4` est au rang 6 GELE. *Le fermer sur "
-        "l'extraction ferait croire que le chemin agent est protege.*",
+        "chemin agent tarife sur 30 lignes a frequence negative que cette "
+        "couche ecarte, et le branchement introduirait un blocage. "
+        "-- RE-MESURE DU 01/09 : la mesure du 31/08 disait 60 lignes "
+        "<< a frequence OU COUT negatifs >>, et `qualite/C8`, ferme le meme "
+        "soir APRES elle, a sorti le cout de la regle 1 : il est SIGNALE et "
+        "GARDE par les deux chemins. Le blocage vient de l'UNION (9 %), aucun "
+        "type seul n'atteignant 5 %. `qualite/C4` est au rang 6 GELE. *Le "
+        "fermer sur l'extraction ferait croire que le chemin agent est "
+        "protege.*",
     ('qualite/C4', 'test_qualite_non_executee.py'):
         "Cite comme CAUSE NOMMEE de l'absence de rapport qualite, jamais "
         "epingle. La phrase publiee dans les livrables dit POURQUOI la couche "

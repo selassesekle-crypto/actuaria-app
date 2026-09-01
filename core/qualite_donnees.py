@@ -542,11 +542,22 @@ def controler_qualite(
                      f"opposable.")
 
     # ── RÈGLE 2 : IMPLAUSIBLE établi → corriger (plafond exposition) ──────────
-    # ⚠️⚠️ LA BORNE VIENT DÉSORMAIS DE L'UNITÉ DÉCLARÉE AU PLAN — étape 2.
-    # Non déclarée : `PLAFOND_EXPOSITION`, comportement d'aujourd'hui à
-    # l'identique. **Aucun des 20 plans ne déclare d'unité**, donc aucun euro
-    # ne bouge sur l'existant — mesuré. Ce qui change est le TEXTE : l'hypothèse
-    # annuelle cesse d'être muette.
+    # ⚠️⚠️ LA BORNE VIENT DE L'UNITÉ DÉCLARÉE AU PLAN. Non déclarée :
+    # `PLAFOND_EXPOSITION`, comportement historique à l'identique.
+    #
+    # ⛔ CE COMMENTAIRE A AFFIRMÉ « Aucun des 20 plans ne déclare d'unité » DE
+    # L'ÉTAPE 2 JUSQU'AU 01/09/2026, ET C'EST DEVENU FAUX À L'ÉTAPE 5 DU MÊME
+    # CHANTIER : **les 20 plans déclarent `annee`** (re-mesuré le 01/09). La
+    # conclusion tient — `borne_exposition('annee')` vaut 1,0, exactement
+    # `PLAFOND_EXPOSITION`, donc aucun euro n'a bougé — mais elle tenait par
+    # une raison que la phrase ne disait plus. *Une phrase de portée se mesure
+    # comme un chiffre, et celle-ci a survécu quatre jours à sa propre mesure.*
+    # `PM-1` la dérive désormais des plans réels.
+    #
+    # ⚠️⚠️ ET LA CONSÉQUENCE N'EST PAS QUE TEXTUELLE : puisque l'unité EST
+    # déclarée, la RÈGLE 3 ci-dessous est VIVANTE en production. Mesuré :
+    # une seule ligne à 1,02 an sur 20 000 produit un signal sur 100 % des
+    # lignes, donc une escalade, donc un blocage à signature.
     _borne = borne_exposition(plan)
     _unite = getattr(plan, 'unite_exposition', None)
     mask_corr_expo = None

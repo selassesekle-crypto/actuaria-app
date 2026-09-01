@@ -39,7 +39,7 @@ lui-même**.
 | | |
 |---|---|
 | constats relevés (vagues 1 + 2) | **155** — *`services/C12` ouvert ET fermé le 30/08 (la synthèse qualité ne sortait que par le prompt) ; `qualite/C7` ouvert ET fermé le 30/08 (l'identifiant jugé par le détecteur des grandeurs) ; `a2/C17` ouvert le 29/08 par la re-mesure de `a2/C8` et `a2/C9` ; recomptés le 29/08 ; `a3/C19`, `services/C10`, `a5/C10` et `services/C11` sont des constats NEUFS, ouverts et fermés dans leur propre lot* |
-| fermés **et épinglés** | **155** |
+| fermés **et épinglés** | **156** |
 | corrigé, **non épinglé** | **0** — `a5/C5` épinglé le 29/08 · **partiel** : `pipeline/C1` |
 | corrigé, épinglé, **NON REPORTÉ** (4e état) | **0** — `a6/C1` `a6/C2` `a6/C4` nommés le 30/08 |
 | **⛔ OUVERTS** | **2** |
@@ -1239,7 +1239,7 @@ index, aucun identifiant. **La conversion n'ajoute aucun champ client.**
 | **1b** | ✅ **FAIT — `expo <= 0` : exclure (comme la qualité) au lieu de la médiane** (arbitre le 30/08) | **L'euro bouge** : la médiane sous-estime la fréquence de **10,4 %**, toujours vers le sous-tarif |
 | **1c** | ✅ **FAIT — A2 lit `plan.exposition`** (il cherche la sous-chaîne `'exposition'`) ; colonne absente → `colonnes_plan_manquantes`, jamais 1.0 (arbitre le 30/08) | **L'euro bouge** : sur `auto_fr_reel` (`Exposure`), A2 invente **aujourd'hui** → fréquence sous-estimée de **16 %** |
 | **1d** | ✅ **FAIT le 31/08** — **la borne d'exposition a UNE SEULE SOURCE** : A2 consomme `PLAFOND_EXPOSITION` au lieu de ses quatre littéraux `1.0` | ✅ **aucun euro**, mesuré AVANT/APRÈS sur 4 portefeuilles, **0 écart** — y compris les phrases publiées |
-| **2** | ✅ **FAIT le 31/08 — `qualite/C3` EST FERMÉ.** `unite_exposition` au plan (`annee` · `mois` · `jour`), dérivé du `Literal`, inconnue **LÈVE** ; la borne en dérive **à la source unique**, donc aux deux chemins d'un seul geste ; l'hypothèse annuelle est **DITE** ; une donnée qui **contredit** l'unité est **signalée** | ✅ **aucun euro** — **0 / 20 plans** ne déclare d'unité, mesuré. ⛔ **Mais un TEXTE publié bouge, délibérément**, et **`EMPREINTE_SCHEMA` bumpe 1 → 2** |
+| **2** | ✅ **FAIT le 31/08 — `qualite/C3` EST FERMÉ.** `unite_exposition` au plan (`annee` · `mois` · `jour`), dérivé du `Literal`, inconnue **LÈVE** ; la borne en dérive **à la source unique**, donc aux deux chemins d'un seul geste ; l'hypothèse annuelle est **DITE** ; une donnée qui **contredit** l'unité est **signalée** | ✅ **aucun euro** — **0 / 20 plans** ne déclarait d'unité À CETTE DATE. ⚠️⚠️ **L'étape 5 les a tous fait déclarer `annee` : 20/20 au 01/09, re-mesuré.** La conclusion tient — `borne_exposition('annee')` vaut 1,0, exactement `PLAFOND_EXPOSITION` — mais **la règle 3 est dès lors VIVANTE en production**. ⛔ **Mais un TEXTE publié bouge, délibérément**, et **`EMPREINTE_SCHEMA` bumpe 1 → 2** |
 | **3** | ⚠️ **RÉDUITE À SA VRAIE PORTÉE PAR 1d** — il n'y a plus deux bornes à faire dériver, seulement la conséquence sur les fichiers dont l'unité déclarée contredit la donnée | ⚠️ **La partie « simultané, obligatoirement » est CONSOMMÉE par 1d** : la simultanéité est désormais structurelle, plus une précaution d'ordonnancement |
 | **4** | ✅ **FAIT le 31/08 — et ce n'était PAS une conversion.** Sa justification était fausse (voir l'encadré). Le vrai défaut : **le rapport SIGNÉ ne disait pas sous quelle unité il avait corrigé** — la branche validée publiait l'effet **OU** la description, jamais les deux, et la description est la **seule** surface qui nomme l'unité | ✅ **aucun euro** — que du texte, contrôlé par `RS-6` |
 | **5** | ✅ **FAIT le 31/08 — les 20 plans déclarent `annee`.** Borne obtenue **1.0 partout**, vérifiée par chargement | ✅ **aucun euro par construction** : `annee` → borne 1.0, le comportement d'hier **cessé d'être supposé** |
@@ -1533,9 +1533,30 @@ jamais rencontrées.* **La fusion est un JOINT, pas une déduplication.**
 >     il n exclut que les 30 d exposition
 > ```
 >
-> ⛔ **Le chemin agent tarife donc aujourd'hui sur 60 lignes à fréquence ou coût
-> NÉGATIFS.** Lui brancher la couche qualité **déplace un euro ET introduit un
-> blocage** avec signature nominative.
+> ⛔ **Le chemin agent tarifait donc, AU 31/08, sur 60 lignes à fréquence ou
+> coût NÉGATIFS.** Lui brancher la couche qualité **déplace un euro ET
+> introduit un blocage** avec signature nominative.
+>
+> ### ⛔⛔ CE CHIFFRE A PÉRIMÉ EN VINGT-QUATRE HEURES — RE-MESURÉ LE 01/09/2026
+>
+> **`qualite/C8`, fermé le 31/08 APRÈS cette mesure, a sorti le coût de la
+> règle 1** : `cout_negatif` est devenu `cout_net_negatif`, **SIGNALÉ et
+> GARDÉ**. Sur le fichier identique (1 000 lignes, 30 + 30 + 30) :
+>
+> ```
+>   couche qualite : 60 EXCLUSIONS (frequence_negative 30, exposition 30)
+>                  + 30 SIGNALEMENTS (cout_net_negatif) -- gardes
+>     escalade par l UNION : 90/1000 = 9,0 %   (aucun type seul n atteint 5 %)
+>
+>   chemin agent   : A1 1000 -> 1000 (il n exclut RIEN, statut AMBRE 97,30)
+>                    A2 1000 ->  970 (les 30 d exposition)
+>
+>   DELTA REEL DE 1-B :  30 lignes, pas 60  -- les 30 a frequence < 0
+> ```
+>
+> *Une phrase qui dit « aujourd'hui » doit être re-mesurée le jour où on s'en
+> sert pour décider.* Le coût négatif n'est plus un enjeu de 1-B : les deux
+> chemins le gardent.
 >
 > **L'étape 1 doit être scindée**, et seule la première moitié est sans euro :
 >
