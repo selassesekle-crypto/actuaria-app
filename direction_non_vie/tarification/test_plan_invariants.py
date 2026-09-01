@@ -1925,6 +1925,10 @@ _PLAN_GOLDEN_DICT = {
                     "taxes": 0.09},
     "identifiant_contrat": "id_police",
     "echeance": "date_echeance",
+    # ⚠️ PEUPLÉ, comme `unite_exposition`, `chargements` et `commentaire` : ce
+    # golden ne scelle une partie du payload que si elle porte une valeur qui
+    # puisse DÉRIVER. Constat `socle/C1`, bump `s4` -> `s5`.
+    "cout_par_sinistre": "montant_sinistre",
     "comportement": {
         "issue": "issue_renouv", "prime_precedente": "prime_n_1",
         "prime_proposee": "prime_n", "canal": "direct", "groupe_test": "grp_prix",
@@ -1987,8 +1991,14 @@ class TestEmpreinteVersionneeSchema(unittest.TestCase):
         # DOCUMENT SIGNE, et le commentaire est la JUSTIFICATION ECRITE PAR
         # L'ACTUAIRE. Deux plans dont elle differait portaient la MEME
         # empreinte, et l'audit trail les declarait IDENTIQUES.
-        self.assertEqual(EMPREINTE_SCHEMA, 4)
-        self.assertEqual(emp, "s4:eba8352b8daae395",
+        # ⚠️⚠️ BUMP `s4` -> `s5` LE 01/09/2026, golden et constante dans le
+        # MEME commit. Motif : `cout_par_sinistre` entre dans le payload --
+        # constat `socle/C1`, arbitre. Elle decide de l'ASSIETTE du seuil
+        # d'ecretement : declaree, le seuil porte sur CHAQUE SINISTRE ;
+        # absente, sur le TOTAL du contrat. Deux plans qui n'en different que
+        # par elle n'ecretent pas les memes contrats.
+        self.assertEqual(EMPREINTE_SCHEMA, 5)
+        self.assertEqual(emp, "s5:442cd2bb70f0c0b5",
             "empreinte du plan de reference gele changee : derive de structure "
             "sans bump, OU bump sans mise a jour du golden. Voir le commentaire.")
         print(f"    S3b golden scellé : {emp} ✅")

@@ -131,7 +131,8 @@ from core.plan_tarifaire import (
     PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
     alerte_modele_ampute,
 )
-from core.severite import construire_cible_severite
+from core.severite import (construire_cible_severite,
+                           synthese_assiette_ecretement)
 
 # ⚠️⚠️ CONSTAT `a2/C15` — LE FILTRE GLOBAL D'AVERTISSEMENTS EST RETIRÉ.
 # `warnings.filterwarnings('ignore')` posé ICI, au niveau module, s'appliquait
@@ -676,6 +677,8 @@ class AgentA3GLM:
                     self, 'colonnes_plan_ecartees', ()),
                 'colonnes_exemptees_effet': getattr(
                     self, 'colonnes_exemptees_effet', ()),
+                # Constat socle/C1 : l assiette du seuil et son diagnostic
+                'ecretement_severite': getattr(self, 'ecretement_severite', {}),
                 'controle_effet': getattr(self, 'controle_effet',
                                           {'execute': False, 'motifs': {}}),
                 'alertes_conformite': getattr(self, 'alertes_conformite', {}),
@@ -1239,9 +1242,25 @@ class AgentA3GLM:
         # _calculer_predictions. Sans elle, on écrêterait les graves du prix mais
         # pas de la réalité.
         self.prime_grave_unitaire = cible_tr.prime_grave_unitaire
+        # ⚠️⚠️ CONSTAT `socle/C1` — L'ASSIETTE DU SEUIL SORT DU LOG.
+        # Le seuil d'écrêtement ne vivait que dans le `logger.info` ci-dessous :
+        # aucun livrable ne disait sur QUOI il porte, ni combien de contrats
+        # sont écrêtés parce que NOMBREUX plutôt que GRAVES. *Un `logger.info`
+        # n'est pas dans le rapport que l'actuaire signe* — la leçon de
+        # `services/C7`, fermée ce matin sur `raisons_plafond`.
+        self.ecretement_severite = {
+            'assiette':                  cible_tr.assiette_seuil,
+            'seuil':                     cible_tr.seuil_ecretement,
+            'n_graves':                  cible_tr.n_graves,
+            'n_ecretes_par_nombre':      cible_tr.n_ecretes_par_nombre,
+            'seuil_en_sinistres_moyens': cible_tr.seuil_en_sinistres_moyens,
+            'prime_grave_unitaire':      cible_tr.prime_grave_unitaire,
+            'synthese':                  synthese_assiette_ecretement(cible_tr),
+        }
         logger.info(
             f"Sévérité : {cible_tr.n_retenus:,} contrats retenus | seuil écrêtement "
-            f"{cible_tr.seuil_ecretement:,.0f} € | {cible_tr.n_graves} grave(s) | "
+            f"{cible_tr.seuil_ecretement:,.0f} € ({cible_tr.assiette_seuil}) | "
+            f"{cible_tr.n_graves} grave(s) | "
             f"prime grave unitaire {cible_tr.prime_grave_unitaire:,.2f} €/expo")
 
         nb_sin_train = cible_tr.n_retenus

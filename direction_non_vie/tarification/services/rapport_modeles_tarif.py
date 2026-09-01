@@ -1419,6 +1419,14 @@ def _construire_contexte_tarif(
             result_a6.get('colonnes_plan_manquantes') if result_a6 else None)
          or "Aucune : toutes les colonnes déclarées au plan ont été produites."),
         "",
+        # ⚠️ Constat `socle/C1` — l'assiette du seuil d'écrêtement ne vivait
+        # que dans un `logger.info` d'A3. Le rapport DIT désormais sur quoi le
+        # seuil porte, et combien de contrats sont écrêtés parce que NOMBREUX.
+        "=== ASSIETTE DU SEUIL D'ECRETEMENT (socle/C1) ===",
+        ((result_a3 or {}).get('ecretement_severite', {}).get('synthese')
+         or "Le seuil porte sur chaque sinistre, ou aucun contrat n'est "
+            "ecrete par son seul NOMBRE de sinistres."),
+        "",
         "=== COLONNES EXEMPTEES DU CONTROLE PAR L'EFFET (conformite/C4) ===",
         (synthese_exemptions_effet(
             result_a6.get('colonnes_exemptees_effet') if result_a6

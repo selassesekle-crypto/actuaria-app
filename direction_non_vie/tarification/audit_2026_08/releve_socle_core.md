@@ -25,6 +25,27 @@ sinistre** est dit GRAVE* ». Le code l.110 calcule
 `cout[cout > 0].quantile(0.995)` où `cout` est le **coût total du contrat**.
 Mesuré sur une flotte où **chaque sinistre coûte exactement 800 €** :
 
+> ✅ **`socle/C1`** · **FERMÉ le 01/09/2026 — ARBITRÉ PAR SELASSE, ET SON ARBITRAGE RENVERSE MA RECOMMANDATION DU 24/08** (« garder l'assiette, corriger la phrase »). Décision : **le seuil s'applique à CHAQUE SINISTRE individuellement, jamais au cumul d'un contrat sur l'année.**
+>
+> ⚠️⚠️ **ET LA MESURE DU 01/09 LUI DONNE RAISON PLUS FORT QUE MON RELEVÉ.** Sur `data/PG_2017_CLAIMS_YEAR0.csv` — **12 391 sinistres versionnés, une ligne = un sinistre** — sévérités réelles, fréquence balayée :
+>
+> ```
+>   sin./contrat   vrais graves   RATES par l'assiette << total >>
+>            1.1             37                                18
+>            4.0            101                                76
+>            8.0            198                               173
+> ```
+>
+> **À 8 sinistres par contrat, l'assiette « total » rate 87 % des vrais sinistres graves.** Elle n'écrête pas les graves, elle écrête les NOMBREUX. Mon chiffre de 2,4 % portait sur la SÉVÉRITÉ moyenne — il était juste, et il regardait la mauvaise grandeur : ce qui bouge est la **charge mutualisée (+55 % à 6 sinistres/contrat)** et le nombre de graves **ratés**.
+>
+> ⚠️⚠️ **ET AUCUN CALCUL NE RATTRAPE ÇA DEPUIS LA DONNÉE AU CONTRAT.** Le coût MOYEN par sinistre (`cout/nb`), seule forme calculable sans montants individuels, n'attrape que **25 des 193** graves à 8 sinistres/contrat : *l'information du maximum n'est ni dans la somme, ni dans le compte.* D'où une **SOURCE déclarée au plan** — `cout_par_sinistre` — et jamais une reconstruction. Patron déjà validé quatre fois : `unite_exposition`, `Chargements`, `identifiant_contrat`, `echeance`.
+>
+> ⚠️ **AUCUN EURO NE BOUGE, ET C'EST ÉPINGLÉ PAR UN CHIFFRE, PAS PAR UNE PHRASE** : `SC-2` fige les trois grandeurs publiées sans la source sur la donnée réelle versionnée (seuil **7 390 EUR**, sévérité moyenne **950,95 EUR**, **56** contrats écrêtés), et `SC-3` vérifie que **0/20 plans** déclarent la source.
+>
+> Ce qui change sans la source, c'est ce que le rapport **DIT** : **18 contrats sur 56 (32 %)** sont écrêtés parce que NOMBREUX, et le seuil vaut **7,3 sinistres moyens** — mais **26,8 à 8 sinistres/contrat**. *Il croît avec la fréquence : c'est la mesure même du défaut.* ⚠️ Ce diagnostic vivait dans un `logger.info` d'A3 ; il est désormais dans `result_a3` et dans le rapport — la leçon de `services/C7`, fermée le matin même.
+>
+> Épinglé par `SC-1` à `SC-9` ; bump d'empreinte `s4` → **`s5`**, golden dans le MÊME commit.
+
 ```
   flotte : 3,97 sinistres/contrat, CHAQUE sinistre = 800 EUR
   seuil d'ecretement (q0,995 du cout TOTAL par contrat) = 8 000 EUR

@@ -44,9 +44,9 @@ dire lequel des deux il est, si.*
 Deux parametres du meme nom, un mort et un vif -- raison de plus pour dire
 lequel est lequel.
 
-⚠️ `socle/C1` reste OUVERT : l'ecretement porte sur le TOTAL DU CONTRAT quand
-la docstring dit << un SINISTRE >>, et le corriger DEPLACE UN SEUIL DE GRAVITE.
-Il attend son arbitrage, il n'est pas dans ce lot.
+⚠️ `socle/C1` n'etait PAS dans ce lot -- il attendait son arbitrage. Selasse a
+tranche le 01/09/2026 : le seuil porte sur CHAQUE SINISTRE. Il est ferme par
+`test_socle_c1_assiette_ecretement`, qui porte les controles `SC-1` a `SC-9`.
 """
 
 from __future__ import annotations

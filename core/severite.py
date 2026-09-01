@@ -27,7 +27,6 @@
 ╚══════════════════════════════════════════════════════════════════════════════╝
 """
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -38,7 +37,8 @@ import pandas as pd
 # `construire_cible_severite` : ses trois appelants l'utilisent — ils lisent
 # `.n_retenus`, `.seuil` — sans jamais écrire son nom. *L'exporter est ce qui
 # permet de l'annoter ; ne pas dire pourquoi la ferait passer pour un oubli.*
-__all__ = ["CibleSeverite", "construire_cible_severite"]
+__all__ = ["CibleSeverite", "construire_cible_severite",
+           "synthese_assiette_ecretement"]
 
 
 @dataclass(frozen=True)
@@ -67,6 +67,20 @@ class CibleSeverite:
     prime_grave_unitaire: float
     n_retenus:            int
     n_graves:             int
+    #: ⚠️⚠️ CONSTAT `socle/C1` — SUR QUOI LE SEUIL A RÉELLEMENT PORTÉ.
+    #: `'par_sinistre'` quand le plan a déclaré une source de coûts par
+    #: sinistre et qu'elle a été fournie ; `'total_contrat'` sinon. *Un seuil
+    #: dont on ne sait pas sur quoi il porte ne peut pas être contesté.*
+    assiette_seuil:       str = 'total_contrat'
+    #: Contrats écrêtés dont le coût MOYEN par sinistre reste SOUS le seuil :
+    #: leur total dépasse parce qu'ils sont NOMBREUX, pas parce qu'un sinistre
+    #: est grave. `0` quand l'assiette est déjà `par_sinistre`.
+    n_ecretes_par_nombre: int = 0
+    #: Le seuil, exprimé en nombre de sinistres MOYENS — le chiffre le plus
+    #: lisible du diagnostic. Mesuré le 01/09 : 7,3 sur le portefeuille réel
+    #: versionné, mais **26,8 à 8 sinistres/contrat**. Il croît avec la
+    #: fréquence : c'est la mesure même du défaut que `socle/C1` décrit.
+    seuil_en_sinistres_moyens: float = 0.0
 
 
 def construire_cible_severite(
@@ -75,7 +89,8 @@ def construire_cible_severite(
     exposition,
     *,
     quantile_ecretement: float = 0.995,
-    seuil: Optional[float] = None,
+    seuil: float | None = None,
+    couts_par_sinistre=None,
 ) -> CibleSeverite:
     """E[coût PAR SINISTRE], écrêté, là où un coût est OBSERVÉ.
 
@@ -107,17 +122,80 @@ def construire_cible_severite(
         float → le seuil FOURNI est appliqué, sans recalcul.
         ⚠ C'est le piège V9, payé cher : on apprend sur le TRAIN et on applique
         au TEST. Recalculer un seuil sur le test y ferait fuiter sa distribution.
+    couts_par_sinistre : séquence de séquences, optionnel
+        Les montants INDIVIDUELS, une séquence par contrat, dans l'ordre de
+        `cout_total`. Fournie → **le seuil porte sur CHAQUE SINISTRE**, comme
+        arbitré le 01/09/2026. Absente → l'assiette reste le TOTAL du contrat,
+        et le diagnostic ci-dessous le dit.
+
+        ⚠️⚠️ CONSTAT `socle/C1` — POURQUOI CE PARAMÈTRE EXISTE. La docstring de
+        `seuil_ecretement` annonce « au-delà duquel **un sinistre** est dit
+        GRAVE », et le code écrêtait le **total du contrat**. Mesuré le
+        01/09/2026 sur `data/PG_2017_CLAIMS_YEAR0.csv` (12 391 sinistres
+        versionnés, une ligne = un sinistre), sévérités réelles, fréquence
+        balayée :
+
+            sin./contrat   vrais graves   RATÉS par l'assiette « total »
+                     1.1             37                               18
+                     4.0            101                               76
+                     8.0            198                              173
+
+        **À 8 sinistres par contrat, l'assiette « total » rate 87 % des vrais
+        sinistres graves** : elle n'écrête pas les graves, elle écrête les
+        nombreux.
+
+        ⚠️ ET AUCUN ESTIMATEUR NE RATTRAPE ÇA DEPUIS LA DONNÉE AU CONTRAT.
+        Mesuré : le coût MOYEN par sinistre (`cout/nb`), seule forme calculable
+        sans montants individuels, n'attrape que **25 des 193** graves à 8
+        sinistres/contrat — la moyenne dilue le grave. *L'information du
+        maximum n'est ni dans la somme, ni dans le compte.* D'où une SOURCE
+        déclarée au plan, jamais une reconstruction.
     """
     cout = pd.to_numeric(pd.Series(cout_total), errors="coerce").astype(float).fillna(0.0)
     nb   = pd.to_numeric(pd.Series(nb_sinistres), errors="coerce").astype(float).fillna(0.0)
     expo = pd.to_numeric(pd.Series(exposition), errors="coerce").astype(float)
 
+    # ── L'ASSIETTE DU SEUIL — constat `socle/C1`, arbitré le 01/09/2026 ──────
+    par_sinistre = couts_par_sinistre is not None
+    montants = None
+    if par_sinistre:
+        montants = [np.asarray(m, dtype=float) for m in couts_par_sinistre]
+        if len(montants) != len(cout):
+            raise ValueError(
+                f"`couts_par_sinistre` porte {len(montants)} contrats et "
+                f"`cout_total` en porte {len(cout)} : les deux sont alignés "
+                f"POSITIONNELLEMENT, un décalage tarifierait le mauvais "
+                f"contrat.")
+        # ⚠️ LE CONTRAT DE DONNÉES SE VÉRIFIE, IL NE SE SUPPOSE PAS. Des
+        # montants dont la somme ne fait pas le total du contrat signalent une
+        # jointure fausse — et une jointure fausse écrêterait au hasard.
+        somme = np.array([float(m.sum()) for m in montants])
+        ecart = np.abs(somme - cout.to_numpy(dtype=float))
+        pire = int(np.argmax(ecart)) if len(ecart) else 0
+        if len(ecart) and ecart[pire] > max(1e-6, 1e-6 * abs(float(cout.iloc[pire]))):
+            raise ValueError(
+                f"`couts_par_sinistre` ne somme pas à `cout_total` : écart "
+                f"maximal {ecart[pire]:,.4f} EUR sur un contrat à "
+                f"{float(cout.iloc[pire]):,.2f} EUR. La jointure entre la "
+                f"table des sinistres et celle des contrats est fausse.")
+
     if seuil is None:
-        seuil = (float(cout[cout > 0].quantile(quantile_ecretement))
-                 if (cout > 0).any() else 0.0)
+        if par_sinistre:
+            tous = np.concatenate(montants) if montants else np.empty(0)
+            tous = tous[tous > 0]
+            seuil = float(np.quantile(tous, quantile_ecretement)) if tous.size else 0.0
+        else:
+            seuil = (float(cout[cout > 0].quantile(quantile_ecretement))
+                     if (cout > 0).any() else 0.0)
     seuil = float(seuil)
 
-    cout_ecrete = cout.clip(upper=seuil) if seuil > 0 else cout
+    if par_sinistre and seuil > 0:
+        # CHAQUE sinistre est écrêté, jamais le cumul de l'année.
+        cout_ecrete = pd.Series(
+            [float(np.minimum(m, seuil).sum()) for m in montants],
+            index=cout.index)
+    else:
+        cout_ecrete = cout.clip(upper=seuil) if seuil > 0 else cout
     charge_grave = float((cout - cout_ecrete).sum())
     total_expo = float(expo.sum())
     prime_grave_unitaire = charge_grave / total_expo if total_expo > 0 else 0.0
@@ -126,11 +204,62 @@ def construire_cible_severite(
     severite = (cout_ecrete.to_numpy()[masque] / nb.to_numpy()[masque]).astype(float) \
         if masque.any() else np.empty(0, dtype=float)
 
+    # ── LE DIAGNOSTIC — il ne s'allume que sur l'assiette « total » ─────────
+    cps = (cout / nb.replace(0.0, np.nan)) if seuil > 0 else None
+    if par_sinistre:
+        n_graves = int(sum(int((m > seuil).sum()) for m in montants)) if seuil > 0 else 0
+        n_par_nombre = 0
+    else:
+        n_graves = int((cout > seuil).sum()) if seuil > 0 else 0
+        # Écrêté alors que son coût MOYEN par sinistre reste sous le seuil :
+        # le total ne dépasse que parce que les sinistres sont NOMBREUX.
+        n_par_nombre = (int(((cout > seuil) & (cps <= seuil)).sum())
+                        if seuil > 0 else 0)
+    cout_moyen_sinistre = float(cps[cps.notna()].mean()) if cps is not None and cps.notna().any() else 0.0
+    en_sinistres = (seuil / cout_moyen_sinistre) if cout_moyen_sinistre > 0 else 0.0
+
     return CibleSeverite(
         masque=masque,
         severite=severite,
         seuil_ecretement=seuil,
         prime_grave_unitaire=prime_grave_unitaire,
         n_retenus=int(masque.sum()),
-        n_graves=int((cout > seuil).sum()) if seuil > 0 else 0,
+        n_graves=n_graves,
+        assiette_seuil='par_sinistre' if par_sinistre else 'total_contrat',
+        n_ecretes_par_nombre=n_par_nombre,
+        seuil_en_sinistres_moyens=round(float(en_sinistres), 2),
+    )
+
+
+def synthese_assiette_ecretement(cible: CibleSeverite) -> str | None:
+    """SOURCE UNIQUE — ce que l'actuaire doit lire sur l'assiette du seuil.
+
+    ⚠️⚠️ CONSTAT `socle/C1`, ARBITRÉ LE 01/09/2026. Tant qu'aucun plan ne
+    déclare de source de coûts par sinistre, l'assiette reste le TOTAL du
+    contrat — **et le rapport doit dire combien de contrats sont écrêtés parce
+    que NOMBREUX plutôt que vraiment GRAVES.** Sans cette phrase, l'écrêtement
+    de la fréquence passe pour un écrêtement de la sévérité.
+
+    ⚠️ La phrase ne s'allume QUE sur l'assiette « total », et seulement s'il y
+    a quelque chose à dire : *un avertissement permanent est un avertissement
+    qu'on cesse de lire.* Sur l'assiette « par sinistre », il n'y a rien à
+    signaler — le seuil porte sur ce que son nom annonce.
+    """
+    if cible is None or cible.seuil_ecretement <= 0:
+        return None
+    if cible.assiette_seuil == 'par_sinistre':
+        return None
+    if not cible.n_ecretes_par_nombre:
+        return None
+    part = cible.n_ecretes_par_nombre / max(cible.n_graves, 1)
+    return (
+        f"⚠ ASSIETTE DE L'ÉCRÊTEMENT — le seuil porte sur le COÛT TOTAL du "
+        f"contrat, pas sur chaque sinistre. {cible.n_ecretes_par_nombre} "
+        f"contrat(s) sur {cible.n_graves} écrêté(s) ({part:.0%}) le sont parce "
+        f"qu'ils sont NOMBREUX : leur coût moyen par sinistre reste SOUS le "
+        f"seuil. Celui-ci vaut {cible.seuil_en_sinistres_moyens:.1f} sinistres "
+        f"moyens — plus la fréquence est élevée, plus il écrête le NOMBRE au "
+        f"lieu de la GRAVITÉ. Pour que le seuil porte sur chaque sinistre, "
+        f"déclarez `cout_par_sinistre` au plan et fournissez les montants "
+        f"individuels."
     )

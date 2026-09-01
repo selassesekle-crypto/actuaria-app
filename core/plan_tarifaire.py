@@ -143,7 +143,15 @@ class Chargements:
 #: << VERSIONNER, ne pas omettre >>. Mesure faite AVANT le bump : aucune
 #: empreinte `s3:` persistee dans `models/` ni `data/`. Golden mis a jour dans
 #: le MEME commit.
-EMPREINTE_SCHEMA = 4
+#: ⚠️ `4` -> `5` LE 01/09/2026 : `cout_par_sinistre` entre dans le payload --
+#: constat `socle/C1`, arbitre. Elle decide de l'ASSIETTE du seuil
+#: d'ecretement : declaree, le seuil porte sur CHAQUE SINISTRE ; absente, sur
+#: le TOTAL du contrat. Deux plans qui n'en different que par elle n'ecretent
+#: pas les memes contrats, donc n'ont pas les memes relativites de cout : c'est
+#: opposable. Mesure faite AVANT le bump, comme les trois precedents : aucune
+#: empreinte `s4:` persistee dans `models/` ni `data/`. Golden mis a jour dans
+#: le MEME commit.
+EMPREINTE_SCHEMA = 5
 
 # Transformations dérivées : suffixe appliqué par A2
 _SUFFIXE_TRANSFO = {"log": "log_{}", "carre": "{}_carre", "racine": "{}_racine"}
@@ -485,6 +493,23 @@ class PlanTarifaire:
     # Purement un RÔLE de données, comme `identifiant_contrat` : elle n'entre
     # jamais dans colonnes_produites() et n'est donc jamais un facteur.
     echeance: str | None = None
+    # ⚠️⚠️ CONSTAT `socle/C1`, ARBITRÉ LE 01/09/2026 — LA SOURCE DES COÛTS PAR
+    # SINISTRE. Colonne d'une table AU SINISTRE (une ligne = un sinistre),
+    # jointe aux contrats par `identifiant_contrat`, portant le montant
+    # INDIVIDUEL de chaque sinistre.
+    #   déclarée     → le seuil d'écrêtement porte sur CHAQUE SINISTRE ;
+    #   non déclarée → il porte sur le TOTAL du contrat, et le rapport DIT
+    #                  combien de contrats sont écrêtés parce que NOMBREUX.
+    # ⚠️ POURQUOI UNE SOURCE, ET PAS UN CALCUL. Mesuré le 01/09 sur les 12 391
+    # sinistres versionnés : le coût MOYEN par sinistre (`cout/nb`), seule
+    # forme calculable sans montants individuels, n'attrape que 25 des 193
+    # sinistres graves à 8 sinistres/contrat. *L'information du maximum n'est
+    # ni dans la somme, ni dans le compte* — aucune reconstruction ne la rend.
+    # ⚠️ OPPOSABLE, DONC DANS L'EMPREINTE : elle change l'assiette du seuil,
+    # donc ce qui est écrêté, donc les relativités du modèle de coût.
+    # Purement un RÔLE de données : elle n'entre jamais dans
+    # colonnes_produites() et n'est donc jamais un facteur tarifaire.
+    cout_par_sinistre: str | None = None
     # Le comportement de renouvellement (optionnel). Voir `Comportement` :
     # c'est la troisieme nature de cible du plan, et la seule qui ouvre
     # l'estimation d'une elasticite-prix. Son ABSENCE n'est pas une erreur ;
@@ -567,6 +592,26 @@ class PlanTarifaire:
                 f"ou l'omettre (hypothèse annuelle, qui sera publiée)."
             )
 
+        # ── `cout_par_sinistre` : un RÔLE, jamais un facteur — `socle/C1` ─────
+        # ⚠️⚠️ LA DÉCLARER COMME FACTEUR SERAIT UNE FUITE DE LA FAMILLE CIBLE.
+        # C'est un MONTANT DE SINISTRE : le modèle qui l'aurait en prédicteur
+        # « expliquerait » le coût par le coût. `filtrer_famille_cible`
+        # l'attraperait en aval sur son nom — mais un garde-fou qui rattrape
+        # en aval ne dispense pas de refuser à la déclaration : *le plan est le
+        # document opposable, c'est là que la faute doit lever.*
+        if self.cout_par_sinistre is not None:
+            if not isinstance(self.cout_par_sinistre, str) or not self.cout_par_sinistre.strip():
+                raise TypeError(
+                    f"Plan '{self.lob}' : cout_par_sinistre doit être un nom "
+                    f"de colonne non vide, reçu {self.cout_par_sinistre!r}.")
+            if self.cout_par_sinistre in {f.nom for f in self.facteurs}:
+                raise ValueError(
+                    f"Plan '{self.lob}' : cout_par_sinistre="
+                    f"'{self.cout_par_sinistre}' est AUSSI déclarée comme "
+                    f"facteur tarifaire. C'est un montant de sinistre : la "
+                    f"garder en prédicteur ferait expliquer le coût par le "
+                    f"coût. Elle porte un RÔLE, jamais un facteur.")
+
     def _refuser_role_fixe(self, role: str, surface: str,
                            interdits: set, coupables: list) -> None:
         """Refuse une déclaration qui ferait entrer un rôle fixe comme prédicteur.
@@ -628,6 +673,10 @@ class PlanTarifaire:
             cols.append(self.identifiant_contrat)
         if self.echeance:
             cols.append(self.echeance)
+        # ⚠️ `cout_par_sinistre` N'EST PAS ICI, ET C'EST VOULU : elle vit dans
+        # une table AU SINISTRE, pas dans le fichier des contrats. L'ajouter
+        # ferait chercher cette colonne dans le mauvais fichier, et rapporter
+        # une colonne « manquante » qui n'a rien à y faire.
         if self.comportement:
             cols.extend(self.comportement.colonnes())
         cols.extend(sources_brutes([f.nom for f in self.facteurs]))
@@ -690,6 +739,10 @@ class PlanTarifaire:
             "famille_severite": self.famille_severite,
             "identifiant_contrat": self.identifiant_contrat,
             "echeance": self.echeance,
+            # ⚠️ Constat `socle/C1` : elle décide de l'ASSIETTE du seuil
+            # d'écrêtement, donc de ce qui est écrêté, donc des relativités du
+            # modèle de coût. Opposable — d'où le bump `s4` → `s5`.
+            "cout_par_sinistre": self.cout_par_sinistre,
             "comportement": (dataclasses_asdict(self.comportement)
                              if self.comportement else None),
             "facteurs": [
@@ -798,6 +851,7 @@ class PlanTarifaire:
                          if d.get("chargements") else None),
             identifiant_contrat=d.get("identifiant_contrat"),
             echeance=d.get("echeance"),
+            cout_par_sinistre=d.get("cout_par_sinistre"),
             comportement=(Comportement(**d["comportement"])
                           if d.get("comportement") else None),
         )
