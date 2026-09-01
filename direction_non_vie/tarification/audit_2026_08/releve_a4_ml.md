@@ -68,6 +68,8 @@ Avec ε = −1.5, le CA vaut `p^(1+ε) = p^(−0,5)` — **décroissant en p** :
 ```
 Cause : `m.get('gini', 0)` — la clé du classement est `gini_test`. Les couleurs, calculées sur ce zéro, sortent toutes en **rouge**. Le graphique est intitulé « Barres Train vs Test » avec la légende « un grand écart = surapprentissage ».
 
+> ✅ **`a4/C3`** · **FERMÉ le 01/09/2026 — IL ETAIT DANS LE QUATRIÈME ÉTAT.** Mesuré : le code était **déjà corrigé** (`gini_test`, avec son commentaire) et **déjà épinglé** par `test_le_graphique_d_overfitting_porte_les_Gini_REELS`. Mais la clé `a4/C3` n'était écrite NULLE PART : invisible pour `ARCH-1`, donc comptée OUVERTE. *Un correctif sans le nom de son constat est un correctif que l'archive ne peut pas voir* — seconde occurrence après `a5/C3`. Le nom est posé, et `A4-1` ajoute une SECONDE assiette : par AST, plus aucun `m.get('gini', ...)` dans le module.
+
 > ✅ **`a4/C4`** · **DÉJÀ FERMÉ — constaté le 25/08/2026 en le RE-MESURANT, pas en le relisant.** Mesuré sur un vrai run : `validation_ml` et `hypotheses` sont **identiques sur toutes les clés** — h1 VERT, h2 VERT, h3 ROUGE, h4 AMBRE, statut_global ROUGE. Aucune divergence.
 > ⚠️ *Le correctif était dans le code, jamais reporté ici. L'archive prévient elle-même : « ils mesurent l'état ACTUEL, pas celui du jour de l'audit — lire le chiffre, pas l'étiquette ». Épinglé désormais par `test_hypotheses_non_testees.py`.*
 
@@ -106,6 +108,8 @@ Cause : `m.get('gini', 0)` — la clé du classement est `gini_test`. Les couleu
 ### B — Affirme plus que le code ne porte (4)
 
 **C7 — « ML ×8 » : 12 mentions de « 8 » dans le module, 6 modèles réels.** La boucle et sa propre docstring disent 6 ; le bloc `__main__` en liste 6. L'en-tête annonce nommément **RandomForest, GAM et RégQuantile**, qui ne sont dans aucune boucle — **GAM n'existe nulle part**, pas même dans `FAMILLES_MODELES_ML`.
+
+> ✅ **`a4/C7`** · **FERMÉ le 01/09/2026, et le compte se trompait DANS LES DEUX SENS.** La boucle de calibration en tient **six** ; l'en-tête en annonçait huit, dont **trois qui n'y sont pas** (RandomForest, GAM, RégQuantile — et `GAM` n'existe **nulle part** dans le dépôt), tout en **omettant** `xgboost_tweedie`, qui EST calibré. *Une liste qui se trompe dans les deux sens ne se corrige pas au chiffre : elle se RÉÉCRIT depuis la source.* ⚠️ `FAMILLES_MODELES_ML` en déclare DIX et c'est JUSTE — c'est une table de FAMILLES, pas une liste de candidats. *Les deux comptes sont vrais ; les confondre produisait « 8 ».* `A4-2` compare l'en-tête à la boucle PAR AST, dans les deux sens ; `A4-3` interdit tout compte de modèles ailleurs dans la zone (il y en avait dix).
 
 > ✅ **`a4/C8`** · **FERMÉ** — même geste qu'`a3/C9` : la légende dérive de `len(items)`. Mesuré : 4 hypothèses → légende « 4 ✅ ».
 
@@ -195,6 +199,10 @@ Cause : `m.get('gini', 0)` — la clé du classement est `gini_test`. Les couleu
 
 **C12 — `COLS_A_EXCLURE_ML`** : 5 entrées Vie/Santé sur 22, comme A3.
 **C13 — En-tête de test : « 7 tests », 11 méthodes.**
+
+> ✅ **`a4/C12`** · **FERMÉ le 01/09/2026 — JUMEAU EXACT d'`a3/C16`, même arbitrage.** Les cinq entrées Vie/Santé **RESTENT** : cette liste EXCLUT, et en ôter une AJOUTERAIT une variable au modèle si un fichier client portait cette colonne. *Le geste « propre » est ici le geste RISQUÉ.* `A4-4` monte la garde comme `A3-8` : il RE-MESURE que 0 / 20 plans n'en nomme aucune, au lieu de recopier la mesure d'un jour.
+
+> ✅ **`a4/C13`** · **FERMÉ le 01/09/2026 — et le constat lui-même avait péri : 18 méthodes, pas 11.** C'est précisément l'argument contre les comptes en en-tête. Aucun n'est plus annoncé dans la zone, ni pour les tests, ni pour les modèles. `A4-5` le tient.
 
 ### D — Vérifié comme BON (6)
 

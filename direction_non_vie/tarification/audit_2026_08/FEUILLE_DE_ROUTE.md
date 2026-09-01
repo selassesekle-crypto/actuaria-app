@@ -39,10 +39,10 @@ lui-même**.
 | | |
 |---|---|
 | constats relevés (vagues 1 + 2) | **155** — *`services/C12` ouvert ET fermé le 30/08 (la synthèse qualité ne sortait que par le prompt) ; `qualite/C7` ouvert ET fermé le 30/08 (l'identifiant jugé par le détecteur des grandeurs) ; `a2/C17` ouvert le 29/08 par la re-mesure de `a2/C8` et `a2/C9` ; recomptés le 29/08 ; `a3/C19`, `services/C10`, `a5/C10` et `services/C11` sont des constats NEUFS, ouverts et fermés dans leur propre lot* |
-| fermés **et épinglés** | **139** |
+| fermés **et épinglés** | **143** |
 | corrigé, **non épinglé** | **0** — `a5/C5` épinglé le 29/08 · **partiel** : `pipeline/C1` |
 | corrigé, épinglé, **NON REPORTÉ** (4e état) | **0** — `a6/C1` `a6/C2` `a6/C4` nommés le 30/08 |
-| **⛔ OUVERTS** | **17** |
+| **⛔ OUVERTS** | **13** |
 | lignes lues intégralement | **22 693** sur 23 863 du périmètre |
 | jamais auditées | **1 170 l** + `actuaria_app.py` (5 181 l) |
 | preuves qui se relancent | **35, 0 échec** |
@@ -602,7 +602,7 @@ pour les fermés ; **moins `pipeline/C1`**, partiel et arbitré OUVERT.
 | lecture | compte | comment il se dérive |
 |---|---|---|
 | constats **ouverts** | **39** | clés réelles moins clés fermées — **tenu par `ARCH-5`** |
-| dont **zones TRIÉES** (`a4` 4 · `agents` 4 · `qualite` 3 · `a6` 2 · `a2` 1 · `charts` 1 · `services` 1 · `socle` 1) | **17** | préfixe de la clé |
+| dont **zones TRIÉES** (`agents` 4 · `qualite` 3 · `a6` 2 · `a2` 1 · `charts` 1 · `services` 1 · `socle` 1) | **13** | préfixe de la clé |
 | ✅ **jamais tracés** () | **0** | le complément — *exact, sans heuristique* |
 
 > ### ⛔⛔ CE TABLEAU A ÉTÉ PÉRIMÉ UNE SECONDE FOIS, ET AU MÊME ENDROIT (31/08)

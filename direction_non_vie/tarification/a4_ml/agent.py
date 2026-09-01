@@ -1,24 +1,37 @@
 """
 ╔══════════════════════════════════════════════════════════════════════════════╗
-║                ACTUARIA — AGENT A4 : TARIFICATION ML ×8                     ║
+║                  ACTUARIA — AGENT A4 : TARIFICATION ML                      ║
 ║                        Version 1.0 — Production                             ║
 ╠══════════════════════════════════════════════════════════════════════════════╣
 ║                                                                              ║
 ║  RÔLE DE CET AGENT                                                           ║
 ║  ─────────────────────────────────────────────────────────────────────────  ║
-║  L'agent A4 calibre 8 modèles de Machine Learning pour la tarification      ║
-║  et les compare systématiquement au GLM de référence (Agent A3).            ║
+║  L'agent A4 calibre les modeles de Machine Learning listes ci-dessous et     ║
+║  les compare systematiquement au GLM de reference (Agent A3).                ║
 ║                                                                              ║
-║  8 MODÈLES CALIBRÉS :                                                        ║
+║  CONSTAT a4/C7 -- CET EN-TETE ANNONCAIT << 8 MODELES >>, ET SE TROMPAIT      ║
+║  DANS LES DEUX SENS. Mesure du 01/09/2026 sur la SEULE boucle de             ║
+║  calibration (_calibrer_tous_modeles) : SIX modeles. Trois noms annonces     ║
+║  ici n'y sont PAS -- RandomForest, GAM, RegQuantile -- et GAM n'existe       ║
+║  NULLE PART dans le depot, pas meme dans FAMILLES_MODELES_ML. Un modele      ║
+║  REELLEMENT calibre, xgboost_tweedie, n'y etait PAS annonce.                 ║
+║  Une liste qui se trompe dans les deux sens ne se corrige pas au chiffre :   ║
+║  elle se REECRIT depuis la source. A4-2 compare desormais cet en-tete a la   ║
+║  boucle, PAR AST -- il tombe si l'un des deux bouge sans l'autre.            ║
 ║                                                                              ║
-║  1. GBM         — Gradient Boosting Machine (sklearn)                        ║
-║  2. XGBoost     — eXtreme Gradient Boosting                                 ║
-║  3. LightGBM    — Light Gradient Boosting Machine (Microsoft)               ║
-║  4. CatBoost    — Categorical Boosting (Yandex)                             ║
-║  5. RandomForest— Forêt aléatoire (Breiman 2001)                            ║
-║  6. Lineaire regularise — ElasticNet (continu) / Poisson ridge (comptage)   ║
-║  7. GAM         — Generalized Additive Model                                ║
-║  8. RégQuantile — Régression Quantile (P50, P75, P90)                       ║
+║  MODELES CALIBRES (la boucle de _calibrer_tous_modeles) :                    ║
+║                                                                              ║
+║  1. gbm                 -- Gradient Boosting Machine (sklearn)               ║
+║  2. xgboost             -- eXtreme Gradient Boosting                         ║
+║  3. xgboost_tweedie     -- XGBoost a objectif Tweedie (prime pure)           ║
+║  4. lightgbm            -- Light Gradient Boosting Machine (Microsoft)       ║
+║  5. catboost            -- Categorical Boosting (Yandex)                     ║
+║  6. lineaire_regularise -- ElasticNet (continu) / Poisson ridge (comptage)   ║
+║                                                                              ║
+║  FAMILLES_MODELES_ML en declare DIX : c'est une table de FAMILLES, pas une   ║
+║  liste de candidats -- elle nomme aussi ce qui pourrait arriver d'ailleurs   ║
+║  (xgboost_optuna, quantile_50...). Les deux comptes sont justes ; les        ║
+║  confondre est ce qui produisait << 8 >>.                                    ║
 ║                                                                              ║
 ║  MÉTRIQUES DE COMPARAISON :                                                  ║
 ║  • Gini (pouvoir discriminant — référence actuarielle)                      ║
@@ -225,6 +238,15 @@ MSG_REFERENCE_A3_INDISPONIBLE = (
 
 # Colonnes à exclure de la modélisation ML
 # Même liste que A3 + colonnes supplémentaires spécifiques ML
+# ⚠️⚠️ CONSTAT `a4/C12` — CINQ ENTREES SONT DU VOCABULAIRE VIE/SANTE dans
+# un agent Non-Vie (`id_salarie`, `id_beneficiaire`, `id_adherent`,
+# `cotisation_mensuelle_eur`, `charge_ij_annuelle_eur`). C'est le JUMEAU
+# EXACT d'`a3/C16`, sur la meme liste heritee -- et l'arbitrage est le
+# meme, pour la meme raison : cette liste EXCLUT. En oter une entree
+# AJOUTERAIT une variable au modele si un fichier client portait cette
+# colonne. *Le geste << propre >> est ici le geste RISQUE.*
+# ⚠️ Mesure du 01/09 : 0 / 20 plans ne nomme l'une d'elles. Un temoin le
+# reverifie a chaque gate (`A4-3`), au lieu de recopier cette mesure.
 COLS_A_EXCLURE_ML = [
     'id_contrat', 'id_assure', 'id_salarie', 'id_beneficiaire', 'id_adherent',
     'date_souscription', 'date_survenance', 'date_mouvement', 'date_evaluation',
@@ -666,7 +688,10 @@ COLS_COMPTAGE = {
 
 class AgentA4ML:
     """
-    Agent A4 — Tarification Machine Learning ×8.
+    Agent A4 — Tarification Machine Learning.
+
+    ⚠ Le compte de modeles n'est plus annonce ici : il vit dans la boucle
+    de `_calibrer_tous_modeles`, seule source (constat `a4/C7`).
 
     Compare 8 algorithmes ML sur la tâche de tarification actuarielle
     et les benchmark contre le GLM de référence (Agent A3).
@@ -707,7 +732,7 @@ class AgentA4ML:
         self.shap_vals  = {}
 
         if self.verbose:
-            logger.info("Agent A4 ML ×8 initialisé")
+            logger.info("Agent A4 ML initialise")
 
     # ══════════════════════════════════════════════════════════════════════════
     # MÉTHODE PRINCIPALE : run()
@@ -834,8 +859,8 @@ class AgentA4ML:
                 f"Features={len(feature_names)}"
             )
 
-            # ── ÉTAPE 2 : CALIBRATION DES 8 MODÈLES ──────────────────────────
-            logger.info(f"[{audit_id}] Étape 2/4 : Calibration ×8 modèles")
+            # ── ÉTAPE 2 : CALIBRATION DES MODÈLES ───────────────────────────
+            logger.info(f"[{audit_id}] Étape 2/4 : calibration des modèles")
             self._calibrer_tous_modeles(
                 X_train, X_test, y_train, y_test,
                 w_train, w_test, rapport,
@@ -1332,7 +1357,7 @@ class AgentA4ML:
         return X_train, X_test, y_train, y_test, w_train, w_test, feature_names
 
     # ══════════════════════════════════════════════════════════════════════════
-    # ÉTAPE 2 : CALIBRATION DES 8 MODÈLES
+    # ÉTAPE 2 : CALIBRATION DES MODÈLES
     # ══════════════════════════════════════════════════════════════════════════
 
     def _calibrer_tous_modeles(
@@ -2048,7 +2073,7 @@ class AgentA4ML:
         sep   = "═" * 65
 
         print(f"\n{sep}")
-        print(f"  ACTUARIA — AGENT A4 ML ×8 | {audit_id}")
+        print(f"  ACTUARIA — AGENT A4 ML | {audit_id}")
         print(sep)
         print(f"  Sous-branche : {sous_branche}")
         print(f"  {emoji} STATUT : {statut_rag}")
@@ -3218,7 +3243,7 @@ class AgentA4ML:
 # ══════════════════════════════════════════════════════════════════════════════
 
 if __name__ == '__main__':
-    print("Agent A4 — ML ×8 Tarification ActuarIA v1.0")
+    print("Agent A4 — ML Tarification ActuarIA v1.0")
     print("Modèles v2 : GBM · XGBoost · XGBoost Tweedie · LightGBM · CatBoost · Linéaire régularisé")
     print("Usage   : %run 'chemin/a4_ml.py'")
     print("          agent_a4 = AgentA4ML()")

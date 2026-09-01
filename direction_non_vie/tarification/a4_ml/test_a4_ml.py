@@ -1,6 +1,8 @@
 """
-Tests A4 ML v1.0 — Tarification Machine Learning ×8 modèles Non-Vie
-7 tests · données synthétiques · comparaison GLM référence
+Tests A4 ML v1.0 — Tarification Machine Learning Non-Vie
+Données synthétiques, comparaison GLM référence. Ni le compte de tests ni
+celui des modèles ne sont annoncés ici : les deux ont péri en silence
+(constats `a4/C13` et `a4/C7`).
 """
 import sys, os, unittest
 import numpy as np
@@ -54,7 +56,7 @@ def _make_r_a3():
 
 
 class TestA4ML(unittest.TestCase):
-    """A4 ML — 8 modèles, Gini, overfit, SHAP, H1-H4, standard ActuarIA."""
+    """A4 ML — Gini, overfit, SHAP, H1-H4, standard ActuarIA."""
 
     @classmethod
     def setUpClass(cls):
@@ -622,7 +624,12 @@ class T_Ce_Qui_Est_Publie_Vient_De_La_Mesure(unittest.TestCase):
               f"(écart={h4_hyp['ecart_moy_pct']}) ✅")
 
     def test_le_graphique_d_overfitting_porte_les_Gini_REELS(self):
-        """⚠️ MESURÉ : la trace « Gini Test » vaut [0, 0, 0, 0, 0, 0] pour des
+        """⚠️⚠️ CONSTAT `a4/C3` — IL ETAIT DANS LE QUATRIEME ETAT :
+        corrige, epingle par CE test... et NOMME NULLE PART, donc invisible
+        pour `ARCH-1` et compte OUVERT. *Un correctif sans le nom de son
+        constat est un correctif que l'archive ne peut pas voir.*
+
+        ⚠️ MESURÉ : la trace « Gini Test » vaut [0, 0, 0, 0, 0, 0] pour des
         valeurs réelles de 0,12 à 0,34, et les couleurs — calculées sur ce zéro
         — sortent toutes en ROUGE. Le classement porte `gini_test` ; la figure
         lit `gini`."""
@@ -727,7 +734,7 @@ class T_L_Elasticite_Est_Un_Etat_Declare_Pas_Une_Valeur(unittest.TestCase):
 
 if __name__ == '__main__':
     print("="*65)
-    print("  TESTS A4 ML v1.0 — MACHINE LEARNING ×8 MODÈLES")
+    print("  TESTS A4 ML v1.0 — MACHINE LEARNING")
     print("="*65)
     runner = unittest.TextTestRunner(verbosity=2)
     result = runner.run(unittest.TestLoader().loadTestsFromModule(__import__('__main__')))
