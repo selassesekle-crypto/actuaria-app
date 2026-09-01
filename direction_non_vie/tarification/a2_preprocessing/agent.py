@@ -270,6 +270,104 @@ _CALCUL_IMPUTATION = {
 #: Le libelle publie a l'actuaire pour chaque strategie.
 _LIBELLE_IMPUTATION = {'median': 'mediane', 'mean': 'moyenne', 'mode': 'mode'}
 
+#: ⚠️⚠️ CONSTAT `a2/C9`, ARBITRE LE 01/09/2026 -- SOUS QUEL NOM CHAQUE VALEUR
+#: EST RANGEE. Le code faisait `cle = 'modes' if strategie == 'mode' else
+#: 'medianes'` : la stratégie `mean` atterrissait donc sous `medianes`. Mesuré
+#: sur un portefeuille avec valeurs manquantes : `medianes = {'age': 50.6468}`
+#: pour une médiane RÉELLE de 50,0 — **une moyenne rangée sous une étiquette
+#: qui dit médiane**, dans le dict invoqué au titre de la reproductibilité S2.
+#: ⚠️ La clé DÉRIVE de la stratégie, exactement comme `_LIBELLE_IMPUTATION`
+#: juste au-dessus : trois stratégies, trois noms, aucun `if` pour les répartir.
+_CLE_PARAMETRE = {'median': 'medianes', 'mean': 'moyennes', 'mode': 'modes'}
+
+#: ⚠️⚠️ VERSION DE SCHÉMA DU FICHIER DE PARAMÈTRES — `params_a2_{lob}.json`.
+#: Distincte du champ `version`, qui n'a jamais bougé et n'est donc qu'une
+#: étiquette. Celle-ci BOUGE, et c'est ce qui permet de lire un ancien fichier
+#: sans deviner. Patron d'`EMPREINTE_SCHEMA`, déjà scellé par un golden.
+#: ⚠️ `1` -> `2` LE 01/09/2026 : deux changements indissociables (`a2/C9`).
+#:   · la clé dérive de la stratégie (`moyennes` cesse d'être `medianes`) ;
+#:   · chaque entrée porte SA stratégie : `{'valeur': v, 'strategie': 'mean'}`.
+#: ⚠️⚠️ POURQUOI LA SECONDE EST LA VRAIE RÉPARATION. Un fichier de schéma 1
+#: porte `{'age': 50.6468}` **sans dire** si c'est une médiane ou une moyenne,
+#: et la stratégie n'est PAS re-dérivable depuis le JSON seul :
+#: `_categorie_imputation` a besoin de la SÉRIE DE DONNÉES pour trancher.
+#: *Une migration qui répartirait l'ancien bloc devinerait* — elle ne le fait
+#: donc pas : `lire_parametres_a2` le conserve tel quel et DIT ce qu'il est.
+PARAMS_SCHEMA = 2
+
+#: Le seau où atterrit l'ancien bloc ambigu, à la migration. Nommé pour ce
+#: qu'il EST, jamais réparti au jugé.
+CLE_HERITEE = 'imputations_heritees'
+
+
+def lire_parametres_a2(chemin) -> dict:
+    """Lit un `params_a2_{lob}.json`, quel que soit son schéma — SANS deviner.
+
+    ⚠️⚠️ CONSTAT `a2/C9` — CE LECTEUR N'EXISTAIT PAS. `charger_parametres` a
+    été supprimée (mécanisme mort, aucun appelant en `predict`), et le fichier
+    était donc **écrit et relu par personne**. Renommer une clé sans écrire le
+    lecteur aurait rendu illisibles les fichiers déjà sauvegardés : *un format
+    persisté sans lecteur n'est pas un format, c'est un dépôt.*
+
+    ⚠️⚠️ CE QUE LA MIGRATION NE FAIT PAS, ET POURQUOI. Un fichier de schéma 1
+    porte `medianes = {'age': 50.6468}` **sans dire** si c'est une médiane ou
+    une moyenne — la stratégie n'y a jamais été persistée, et elle n'est PAS
+    re-dérivable : `_categorie_imputation` a besoin de la SÉRIE DE DONNÉES,
+    pas seulement du nom de colonne. Répartir ce bloc entre `medianes` et
+    `moyennes` serait une DEVINETTE sur un paramètre de reproductibilité.
+    Il est donc **conservé tel quel** sous `imputations_heritees`, et le
+    lecteur DIT ce qu'il est. *Marqué, jamais effacé — le patron d'`a2/C13`.*
+
+    ⚠️ `modes`, LUI, MIGRE SANS PERTE, et ce n'est pas une supposition : en
+    schéma 1, la ligne `cle = 'modes' if strategie == 'mode' else 'medianes'`
+    n'y mettait QUE la stratégie `mode`. L'information est certaine.
+
+    ⚠️ UN SCHÉMA PLUS RÉCENT QUE CE CODE LÈVE. Lire un fichier qu'on ne sait
+    pas lire en le traitant comme un ancien produirait des paramètres faux en
+    silence — exactement ce que ce constat reproche à l'étiquette.
+    """
+    with open(chemin, encoding='utf-8') as f:
+        brut = json.load(f)
+    if not isinstance(brut, dict):
+        raise TypeError(
+            f"{chemin} : un fichier de parametres A2 est un objet JSON, "
+            f"recu {type(brut).__name__}.")
+
+    schema = brut.get('schema', 1)
+    try:
+        schema = int(schema)
+    except (TypeError, ValueError):
+        raise ValueError(
+            f"{chemin} : schema={schema!r} illisible.") from None
+    if schema > PARAMS_SCHEMA:
+        raise ValueError(
+            f"{chemin} : schema {schema}, ce code lit jusqu'au "
+            f"{PARAMS_SCHEMA}. Le fichier a ete ecrit par une version plus "
+            f"recente — le lire comme un ancien produirait des parametres "
+            f"faux en silence.")
+    if schema == PARAMS_SCHEMA:
+        return brut
+
+    # ── schema 1 -> 2 : on migre ce qui est CERTAIN, on nomme le reste ──────
+    migre = dict(brut)
+    migre[CLE_HERITEE] = {
+        'valeurs': dict(brut.get('medianes') or {}),
+        'strategie': None,
+        'note': (
+            "Schema 1 : ce bloc melange MEDIANES et MOYENNES, indiscernables. "
+            "La strategie n'y a jamais ete persistee et n'est pas "
+            "re-derivable depuis ce fichier. Aucune repartition n'a ete "
+            "devinee."),
+    }
+    for cle in _CLE_PARAMETRE.values():
+        migre[cle] = {}
+    # `modes` etait CORRECTEMENT nomme en schema 1 : migration sans perte.
+    migre['modes'] = {
+        col: {'valeur': v, 'strategie': 'mode'}
+        for col, v in (brut.get('modes') or {}).items()}
+    migre['schema'] = PARAMS_SCHEMA
+    return migre
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CLASSE PRINCIPALE : AGENT A2 PREPROCESSING
@@ -444,13 +542,19 @@ class AgentA2Preprocessing:
         # Dictionnaire des paramètres appris
         # Contient toutes les valeurs calculées sur les données d'entraînement
         # pour pouvoir les réappliquer sur de nouvelles données
+        # ⚠️ Les trois seaux DÉRIVENT de `_CLE_PARAMETRE` : les recopier ici
+        # rouvrirait la porte par laquelle `a2/C9` est entré — une clé écrite
+        # à la main quelque part, et qui cesse un jour de dire ce qu'elle
+        # contient.
         self.parametres = {
-            'medianes':      {},   # Médianes pour imputation numérique
-            'modes':         {},   # Modes pour imputation catégorielle
+            **{cle: {} for cle in _CLE_PARAMETRE.values()},
             'winsor_bounds': {},   # Bornes Winsorisation
             'encodeurs':     {},   # Encodeurs label/one-hot
             'stats_expo':    {},   # Statistiques exposition
+            #: ⚠️ `version` est l'ÉTIQUETTE historique, jamais bougée ; le
+            #: schéma qui BOUGE — et qui permet de migrer — est `schema`.
             'version':       '1.0',
+            'schema':        PARAMS_SCHEMA,
             'timestamp':     None,
             'sous_branche':  None,
         }
@@ -1201,11 +1305,21 @@ class AgentA2Preprocessing:
                 else:
                     df[col] = df[col].fillna(valeur)
                     methode = _LIBELLE_IMPUTATION[strategie]
-                    # ⚠️ `medianes` heberge aussi les MOYENNES : c'est `a2/C9`,
-                    # classe rang 5, deliberement NON corrige ici. Renommer la
-                    # cle change le format d'un JSON persiste.
-                    cle = 'modes' if strategie == 'mode' else 'medianes'
-                    self.parametres[cle][col] = valeur
+                    # ⚠️⚠️ CONSTAT `a2/C9`, ARBITRE ET CORRIGE LE 01/09/2026.
+                    # La ligne etait `cle = 'modes' if strategie == 'mode'
+                    # else 'medianes'` : toute strategie non-mode -- donc la
+                    # MOYENNE -- atterrissait sous une etiquette qui dit
+                    # mediane. La cle DERIVE desormais de la strategie.
+                    # ⚠️ ET LA VALEUR PORTE SA PROPRE STRATEGIE. Le nom du
+                    # seau ne suffit pas : un fichier de schema 1 ne dit pas
+                    # ce qui l'a produit, et rien ne permet de le retrouver
+                    # apres coup. *Ce qui manquait n'etait pas un nom, c'etait
+                    # une information.* La redondance entre le seau et la cle
+                    # `strategie` est voulue : les deux en desaccord est un
+                    # etat DETECTABLE, la ou un nom seul se contente de mentir.
+                    cle = _CLE_PARAMETRE[strategie]
+                    self.parametres[cle][col] = {
+                        'valeur': valeur, 'strategie': strategie}
 
             stats['colonnes_imputees'][col] = {
                 'nb_na':   nb_na,

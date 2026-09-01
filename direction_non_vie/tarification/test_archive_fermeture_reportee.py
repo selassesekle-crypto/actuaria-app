@@ -63,19 +63,19 @@ _HORS_ASSIETTE: dict[tuple[str, str], str] = {
     ('a2/C5', 'test_comptes_a2_publies.py'):
         "Cite comme RAISON du chemin choisi par l'aide `_executer` (A1 -> A2 "
         "plutot que fit/transform : les deux chemins ne traitent pas "
-        "l'exposition nulle pareil), pas epingle. `a2/C5` reste OUVERT. "
+        "l'exposition nulle pareil), pas epingle. "
         "Retirer la mention detruirait une vraie trace ; une mention n'est "
         "pas une fermeture.",
     ('a2/C9', 'test_a2_neuf_constats.py'):
         "Cite dans la section << CE QUI RESTE OUVERT >> de l'en-tete, avec sa "
         "raison, jamais epingle. `a2/C9` -- une moyenne rangee sous la cle "
         "`medianes` -- est RANG 5, arbitre par Selasse : renommer la cle change "
-        "le format d'un JSON persiste. Il reste OUVERT. *Un lot qui ferme neuf "
+        "le format d'un JSON persiste. *Un lot qui ferme neuf "
         "constats doit dire lesquels il ne ferme pas, et pourquoi.*",
     ('a2/C16', 'test_a2_neuf_constats.py'):
         "Cite dans la section << CE QUI RESTE OUVERT >>, avec sa raison, jamais "
         "epingle. `__init__` cree `/tmp/actuaria` -- et le constat a un JUMEAU "
-        "OUVERT chez le voisin, `a1/C7`, MEME MECANISME. Le corriger d'un seul "
+        "chez le voisin, `a1/C7`, MEME MECANISME. Le corriger d'un seul "
         "cote recreerait tres exactement l'asymetrie entre voisins que cet "
         "audit poursuit ; et ce n'est pas un texte : instancier cesserait "
         "d'ecrire sur le disque, ce qui est un changement de comportement. "
@@ -85,25 +85,25 @@ _HORS_ASSIETTE: dict[tuple[str, str], str] = {
         "mention qui rend la retenue lisible. `a1/C7` dit qu'instancier A1 "
         "ecrit sur le disque (`/tmp/actuaria/{audit,config}`) ; `a2/C16` dit "
         "la meme chose d'A2. *Nommer le jumeau est ce qui empeche de fermer "
-        "l'un en laissant l'autre.* Les deux restent OUVERTS.",
+        "l'un en laissant l'autre.*",
     ('a2/C5', 'test_portes_du_plan.py'):
         "Cite comme MOTIF DU REJET d'une des deux solutions envisagees pour "
         "`pipeline/C8`, jamais epingle. Face a des NaN qui tuent le GLM, un "
         "`fillna` en aval etait la reparation evidente -- et c'est exactement "
         "`a2/C5` : imputer EN SILENCE sur une donnee illisible. Le lot a donc "
-        "choisi de REFUSER en nommant la cause. `a2/C5` reste OUVERT, rang 5. "
+        "choisi de REFUSER en nommant la cause. `a2/C5` est rang 5. "
         "*Retirer la mention couperait le correctif de la raison qui a ecarte "
         "l'autre solution.*",
     ('a2/C9', 'test_imputation_par_la_table.py'):
         "Cite pour dire POURQUOI le mode d'un binaire est range sous `modes` "
         "et non sous `medianes` : l'y mettre aurait AJOUTE une occurrence a "
-        "`a2/C9` au lieu d'en retirer. `a2/C9` reste OUVERT, rang 5, "
+        "`a2/C9` au lieu d'en retirer. `a2/C9` est rang 5, "
         "deliberement non corrige -- renommer la cle change le format d'un "
         "JSON persiste. La mention est la trace de cette retenue.",
     ('plan/C7', 'test_echeance_et_avertissement_qualite.py'):
         "Cite comme NOM DU CHANTIER dont ce lot est l'etape 2+3. `plan/C7` "
         "est la declaration des roles dans les 20 plans : elle est l'ETAPE 5, "
-        "et reste OUVERTE. Ce fichier epingle la couche qualite, pas les "
+        "Ce fichier epingle la couche qualite, pas les "
         "plans. Retirer la mention couperait le lot de la raison qui le rend "
         "necessaire.",
     ('socle/C2', 'test_charge_nette_negative.py'):
@@ -111,7 +111,7 @@ _HORS_ASSIETTE: dict[tuple[str, str], str] = {
         "`question_charges_negatives` comme fonction MORTE, et le controle de "
         "cablage explique que c'est LA FORME de `socle/C2` -- de la plomberie "
         "posee que rien n'alimente. `socle/C2` designe le moteur de MAPPING, "
-        "un tout autre code, et reste OUVERT au rang 7. Retirer la mention "
+        "un tout autre code, au rang 7. Retirer la mention "
         "couperait le controle de la lecon qui le justifie.",
     ('socle/C2', 'test_colonnes_plan_ecartees.py'):
         "Cite comme MOTIF que `CPE-9` existe pour eviter, jamais epingle. Ce "
@@ -120,11 +120,11 @@ _HORS_ASSIETTE: dict[tuple[str, str], str] = {
         "n'appellerait serait de la plomberie posee que rien n'alimente -- la "
         "forme de `socle/C2`. `CPE-9` verifie donc PAR AST que les TROIS "
         "services la publient. `socle/C2` designe le moteur de MAPPING, un "
-        "tout autre code, et reste OUVERT au rang 7. C'est la TROISIEME "
+        "tout autre code, au rang 7. C'est la TROISIEME "
         "mention de cette cle : la portee (constat, fichier) rallume bien le "
         "filet sur chaque fichier neuf.",
     ('charts/C8', 'test_tri_a5_charts_services.py'):
-        "Cite comme constat LAISSE OUVERT par la passe de tri, avec sa raison, "
+        "Cite par la passe de tri, avec sa raison, "
         "et un controle qui en garde le SECOND SENS -- jamais epingle. "
         "`charts/C8` vit dans `actuaria_app.py`, et **l'app Streamlit est hors "
         "perimetre par arbitrage de Selasse du 25/08** : elle disparait, on n'y "
@@ -135,7 +135,7 @@ _HORS_ASSIETTE: dict[tuple[str, str], str] = {
         "jour ou les deux coincideront, il tombera, et ce sera le signal qu'il "
         "faut reecrire le constat.",
     ('services/C7', 'test_tri_a5_charts_services.py'):
-        "Cite comme constat LAISSE OUVERT par la passe de tri, avec sa raison, "
+        "Cite par la passe de tri, avec sa raison, "
         "jamais epingle. `raisons_plafond` atteint 2 surfaces sur 6 ; le porter "
         "aux quatre autres (Excel A6 + les trois formats du rapport equipe) "
         "ajoute une phrase a QUATRE LIVRABLES SIGNES. C'est un lot de "
@@ -152,7 +152,7 @@ _HORS_ASSIETTE: dict[tuple[str, str], str] = {
         "`qualite/C4`, et elle deplace un prix** -- mesure du 31/08 : le "
         "chemin agent tarife sur 60 lignes a frequence ou cout negatifs que "
         "cette couche ecarte, et le branchement introduirait un blocage a "
-        "5 %. `qualite/C4` reste donc OUVERT, au rang 6 GELE. *Le fermer sur "
+        "5 %. `qualite/C4` est au rang 6 GELE. *Le fermer sur "
         "l'extraction ferait croire que le chemin agent est protege.*",
     ('socle/C2', 'test_preambule_qualite.py'):
         "Cite comme MOTIF que le controle PQ-7 existe pour eviter, jamais "
@@ -161,7 +161,7 @@ _HORS_ASSIETTE: dict[tuple[str, str], str] = {
         "silhouette de `socle/C2` -- de la plomberie posee que rien "
         "n'alimente. PQ-7 exige donc que la porte DECLARE elle-meme qu'elle "
         "attend l'etape 1-B, et pourquoi (1-B deplace un prix). `socle/C2` "
-        "designe le moteur de MAPPING, un tout autre code, et reste OUVERT au "
+        "designe le moteur de MAPPING, un tout autre code, au "
         "rang 7. C'est la SECONDE mention de cette cle, apres "
         "test_charge_nette_negative.py : la cle (constat, fichier) a bien "
         "rallume le filet sur un fichier neuf, comme prevu.",
@@ -296,6 +296,45 @@ class TestFermetureReportee(unittest.TestCase):
                 f'{cle} : exception sans raison lisible')
         print(f"    OK ARCH-2 {len(_HORS_ASSIETTE)} exception(s) déclarée(s), "
               f"toutes motivées")
+
+    def test_ARCH_7_aucune_raison_ne_REAFFIRME_un_etat(self):
+        """⚠️⚠️ LE CONTRÔLE QUI MANQUAIT, ET 11 RAISONS SUR 13 ÉTAIENT FAUSSES.
+
+        `ARCH-2` vérifie qu'une exception porte une raison. Il ne dit rien de
+        la VÉRACITÉ de cette raison. Mesuré le 01/09/2026, après la fermeture
+        de `socle/C1` et `a2/C9` : **onze des treize raisons affirmaient
+        « reste OUVERT » sur des clés désormais FERMÉES.**
+
+        > *Une exemption dont la raison est périmée ment sur l'état de
+        > l'audit — exactement ce que ce fichier existe pour empêcher.*
+
+        Le remède n'est pas de réécrire onze textes à chaque fermeture : ce
+        serait une dette perpétuelle. **Une raison ne réaffirme jamais un état
+        qui vit ailleurs** — elle dit POURQUOI le fichier cite la clé sans
+        l'épingler, et l'état se dérive de l'archive.
+
+        ⚠️ L'ASSIETTE EXCLUT LES CITATIONS. Une raison peut nommer une section
+        intitulée « CE QUI RESTE OUVERT » : c'est un TITRE cité, pas une
+        affirmation. *Une citation n'est pas une affirmation* — huitième
+        occurrence de la session, et la première sur ce fichier-ci.
+        """
+        citation = re.compile(r'<<.*?>>', re.DOTALL)
+        affirmation = re.compile(
+            r'reste[nt]?\s+OUVERTE?S?|LAISSE\s+OUVERT|JUMEAU\s+OUVERT',
+            re.IGNORECASE)
+        fautives = []
+        for (cle, fichier), raison in _HORS_ASSIETTE.items():
+            nu = citation.sub('', raison)
+            trouve = affirmation.search(nu)
+            if trouve:
+                fautives.append(f'{cle} @ {fichier} : « {trouve.group(0)} »')
+        self.assertEqual(
+            fautives, [],
+            f"raison(s) d'exemption qui RÉAFFIRMENT un état vivant ailleurs : "
+            f"{fautives}. L'état d'un constat se DÉRIVE de l'archive ; le "
+            f"recopier dans une raison le condamne à périmer en silence.")
+        print(f"    OK ARCH-7 {len(_HORS_ASSIETTE)} raison(s), aucune ne "
+              f"réaffirme un état")
 
     def test_le_controle_voit_une_fermeture_NON_reportee(self):
         """⚠️⚠️ SECOND SENS — le filet discrimine, il ne dit pas toujours OUI.

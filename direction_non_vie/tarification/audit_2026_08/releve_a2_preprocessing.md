@@ -167,6 +167,21 @@ Le diagnostic VERT dirait de même « La Winsorisation sur **0** variable(s) ré
 
 **C9 — Une moyenne rangée sous la clé `medianes`.** `parametres['medianes']['age'] = 45.83` — la médiane réelle vaut 45.0. Ce dict est le paramètre de reproductibilité invoqué au titre de l'exigence S2.
 
+> ✅ **`a2/C9`** · **FERMÉ le 01/09/2026 — version complète arbitrée par Selasse (renommage + format auto-descriptif + mécanisme de version).**
+>
+> **La cause** : `cle = 'modes' if strategie == 'mode' else 'medianes'` — toute stratégie non-mode, donc la MOYENNE, atterrissait sous une étiquette qui dit médiane. Mesuré en déclenchant l'imputation : `medianes = {'age': 50,6468}` pour une médiane RÉELLE de **50,0**. La clé DÉRIVE désormais de la stratégie (`_CLE_PARAMETRE`), comme `_LIBELLE_IMPUTATION` juste à côté.
+>
+> ⚠️⚠️ **CE N'ÉTAIT PAS UN NOM QUI MANQUAIT, C'ÉTAIT UNE INFORMATION.** Un fichier de schéma 1 porte `{'age': 50,6468}` **sans dire** si c'est une médiane ou une moyenne, et la stratégie n'est **pas re-dérivable** depuis le JSON : `_categorie_imputation` a besoin de la SÉRIE DE DONNÉES, pas du nom de colonne. Chaque entrée porte donc désormais SA stratégie — `{'valeur': v, 'strategie': 'mean'}` — et la redondance avec le nom du seau est **voulue** : *deux sources en désaccord est un état DÉTECTABLE, là où un nom seul se contente de mentir* (`AC-3`).
+>
+> **La transition** : `PARAMS_SCHEMA` — patron d'`EMPREINTE_SCHEMA` — passe à **2**, et un lecteur, `lire_parametres_a2`, migre **sans jamais deviner** :
+> · `modes` migre **sans perte** — en schéma 1, la ligne n'y mettait QUE la stratégie `mode` : l'information est CERTAINE ;
+> · `medianes`, ambigu, est **conservé tel quel** sous `imputations_heritees`, avec `strategie: None` et la note qui dit pourquoi. *Marché, jamais effacé — le patron d'`a2/C13`* ;
+> · un schéma **plus récent que le code LÈVE** : le lire comme un ancien produirait des paramètres faux en silence.
+>
+> ⚠️ **LE LECTEUR N'EXISTAIT PAS.** `charger_parametres` avait été supprimée (mécanisme mort), donc le fichier était **écrit et relu par personne** : *un format persisté sans lecteur n'est pas un format, c'est un dépôt.* Vérifié sur les **deux fichiers réels** de `C:/tmp/actuaria` et sur 155 artefacts de test — tous en schéma 1, tous relus après le renommage.
+>
+> Épinglé par `AC-1` à `AC-7`, dont `AC-5` (rien n'est deviné) et `AC-7` (un fichier déjà au schéma courant passe INTACT — *migrer ce qui n'en a pas besoin serait pire*).
+
 > ⚠️ **`a2/C9` — RE-MESURÉ LE 29/08/2026. RANG 5**, classement accepté par
 > Selasse. Sur la fixture d'imputation : `age = 49,926` pour une médiane réelle
 > de **50,0**, `alarme = 0,8152` pour une médiane de **1,0** — **2 entrées sur
