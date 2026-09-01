@@ -321,8 +321,8 @@ class AgentA6Comparaison:
         self.models_path = Path(models_path)
         self.audit_path  = Path(audit_path)
         self.verbose     = verbose
-        self.models_path.mkdir(parents=True, exist_ok=True)
-        self.audit_path.mkdir(parents=True, exist_ok=True)
+        # ⚠️ INSTANCIER N'ÉCRIT PAS SUR LE DISQUE (jumeau d'`a1/C7` et
+        # d'`a2/C16`). Les dossiers sont créés PAR CELUI QUI ÉCRIT.
 
         if self.verbose:
             logger.info("Agent A6 Comparaison initialisé")
@@ -2001,6 +2001,7 @@ class AgentA6Comparaison:
         }
         chemin = self.models_path / f"a6_comparaison_{sous_branche}.json"
         try:
+            self.models_path.mkdir(parents=True, exist_ok=True)
             with open(chemin, 'w', encoding='utf-8') as f:
                 json.dump(rapport_json, f, indent=2, ensure_ascii=False, default=str)
             logger.info(f"Rapport A6 sauvegardé : {chemin}")
@@ -2019,11 +2020,19 @@ class AgentA6Comparaison:
             'etapes':       rapport['etapes'],
             'nb_modeles':   rapport.get('nb_modeles', 0),
         }
+        chemin = self.audit_path / f"{audit_id}.json"
         try:
-            with open(self.audit_path / f"{audit_id}.json", 'w') as f:
+            self.audit_path.mkdir(parents=True, exist_ok=True)
+            with open(chemin, 'w') as f:
                 json.dump(log, f, indent=2, default=str)
-        except Exception:
-            pass
+        except Exception as e:
+            _msg = (
+                f"Audit trail NON persisté ({chemin}) : "
+                f"{type(e).__name__} : {e}. La trace ACPR de ce run n'existe "
+                f"que dans le résultat en mémoire."
+            )
+            logger.warning(f"[{audit_id}] {_msg}")
+            rapport.setdefault('alertes', []).append(_msg)
 
     # ══════════════════════════════════════════════════════════════════════════
     # STATUT RAG & COMMENTAIRES

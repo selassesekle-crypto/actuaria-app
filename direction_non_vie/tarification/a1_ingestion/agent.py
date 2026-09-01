@@ -125,11 +125,11 @@ def _charger_config(config_path: str = None) -> Dict:
 SYNONYMES_COLONNES = {
     'id_contrat':             ['num_police', 'id_police', 'policy_id', 'num_contrat',
                                'idpol', 'id_pol', 'num_pol', 'contract_id',
-                               'id_client', 'client_id', 'id_assuré', 'id_police'],
+                               'id_client', 'client_id', 'id_assuré'],
     'id_sinistre':            ['id_claim', 'claim_id', 'num_sinistre', 'sinistre_id',
                                'id_sin', 'num_sin'],
     'nb_sinistres':           ['claimnb', 'nb_claims', 'sinistres', 'claim_count',
-                               'nbre_sinistres', 'nb_sin', 'claim_nb', 'nb_sin',
+                               'nbre_sinistres', 'nb_sin', 'claim_nb',
                                'nombre_sinistres', 'freq', 'count_claims', 'sinistre_nb'],
     'cout_total_sinistres':   ['claimamount', 'montant_sinistres', 'cout_sinistres',
                                'claim_amount', 'montant', 'charge', 'cout_sinistre',
@@ -258,8 +258,12 @@ class AgentA1Ingestion:
             str(self.base_path.parent / 'config')))
         self.verbose    = verbose
 
-        self.audit_path.mkdir(parents=True, exist_ok=True)
-        self.config_path_dir.mkdir(parents=True, exist_ok=True)
+        # ⚠️ INSTANCIER N'ÉCRIT PAS SUR LE DISQUE. Ces deux dossiers étaient
+        # créés ici : importer puis construire A1 suffisait à faire naître
+        # /tmp/actuaria/{audit,config}, y compris quand aucun run n'avait
+        # lieu. Ils sont désormais créés PAR CELUI QUI ÉCRIT, juste avant
+        # d'écrire (_sauvegarder_audit, mapping suggéré) — même effet pour
+        # qui produit un fichier, aucun effet pour qui ne fait que construire.
 
         if self.verbose:
             logger.info(f"Agent A1 Ingestion v2 initialisé | base={self.base_path}")
@@ -508,10 +512,19 @@ class AgentA1Ingestion:
         branche:  str
     ):
         """Charge le fichier de données depuis le bon sous-dossier."""
-        # Cherche dans toutes les branches
+        # ── PÉRIMÈTRE — C'EST ICI QUE L'INGESTION A LIEU ──────────────────────
+        # Le garde-fou de run() ne voit que l'ARGUMENT `branche`. Tant que ce
+        # chargeur énumérait 'vie' et 'sante_prevoyance' en repli, un fichier
+        # posé dans data/vie/ était chargé sous branche='non_vie' : la garde
+        # portait sur une chaîne, l'acte portait sur un chemin. La liste des
+        # dossiers explorés DÉRIVE désormais de BRANCHES_SUPPORTEES.
+        if branche not in BRANCHES_SUPPORTEES:
+            raise ValueError(
+                f"Branche '{branche}' hors périmètre : A1 ne lit que "
+                f"{list(BRANCHES_SUPPORTEES)}."
+            )
         branches_ordre = [branche] + [
-            b for b in ['non_vie', 'vie', 'sante_prevoyance']
-            if b != branche
+            b for b in BRANCHES_SUPPORTEES if b != branche
         ]
 
         df = None
@@ -528,6 +541,22 @@ class AgentA1Ingestion:
                 df = self._lire_fichier(chemin)
 
         if df is None:
+            # « Absent » et « présent hors périmètre » ne sont pas la même
+            # chose. Dire le second évite de faire chercher un fichier qui
+            # est là, dans un dossier que l'on REFUSE de lire.
+            hors = sorted(
+                d.name for d in self.base_path.glob('*')
+                if d.is_dir() and d.name not in branches_ordre
+                and (d / fichier).exists()
+            ) if self.base_path.exists() else []
+            if hors:
+                raise FileNotFoundError(
+                    f"Fichier '{fichier}' TROUVÉ dans {hors} — HORS PÉRIMÈTRE, "
+                    f"donc NON chargé. A1 est un agent de la Direction Non-Vie "
+                    f"et ne lit que {list(BRANCHES_SUPPORTEES)} ; les "
+                    f"directions Vie/EP-RE et Santé-Prévoyance disposent de "
+                    f"leur propre traitement de données depuis le 11/07/2026."
+                )
             raise FileNotFoundError(
                 f"Fichier '{fichier}' non trouvé dans {self.base_path}. "
                 f"Branches cherchées : {branches_ordre}"
@@ -628,15 +657,27 @@ class AgentA1Ingestion:
                 # Sauvegarde le mapping suggéré pour validation
                 chemin_suggere = self.config_path_dir / f"{client_id}_mapping_SUGGERE.json"
                 try:
-                    with open(chemin_suggere, 'w') as f:
+                    self.config_path_dir.mkdir(parents=True, exist_ok=True)
+                    # ⚠️ `ensure_ascii=False` SANS encoding écrivait selon la
+                    # locale : un nom de colonne accentué (« id_assuré ») fait
+                    # lever cp1252 sous Windows, et l'échec partait dans le
+                    # `pass` ci-dessous. Le format est UTF-8, il est déclaré.
+                    with open(chemin_suggere, 'w', encoding='utf-8') as f:
                         json.dump(mapping_suggere, f, indent=2, ensure_ascii=False)
                     logger.info(
                         f"Mapping suggéré sauvegardé : {chemin_suggere}\n"
                         f"→ Renommer en '{client_id}_mapping.json' après validation"
                     )
                     mapping_info['mapping_source'] = f"SUGGÉRÉ (à valider) : {chemin_suggere}"
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(
+                        f"Mapping suggéré NON écrit ({chemin_suggere}) : "
+                        f"{type(e).__name__} : {e}"
+                    )
+                    mapping_info['mapping_source'] = (
+                        f"SUGGÉRÉ mais NON ÉCRIT ({type(e).__name__}) — "
+                        f"la suggestion n'existe que dans ce résultat"
+                    )
 
         return df, mapping_info
 
@@ -1105,11 +1146,19 @@ class AgentA1Ingestion:
             'hash_md5':     hash_md5,
             'mapping_applique': rapport.get('mapping_applique', False),
         }
+        chemin = self.audit_path / f"{audit_id}.json"
         try:
-            with open(self.audit_path / f"{audit_id}.json", 'w') as f:
+            self.audit_path.mkdir(parents=True, exist_ok=True)
+            with open(chemin, 'w') as f:
                 json.dump(log, f, indent=2, default=str)
-        except Exception:
-            pass
+        except Exception as e:
+            _msg = (
+                f"Audit trail NON persisté ({chemin}) : "
+                f"{type(e).__name__} : {e}. La trace ACPR de ce run n'existe "
+                f"que dans le résultat en mémoire."
+            )
+            logger.warning(f"[{audit_id}] {_msg}")
+            rapport.setdefault('alertes', []).append(_msg)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1169,49 +1218,11 @@ def creer_mapping_client(
     return str(chemin)
 
 
-def verifier_tous_fichiers(base_path: str = None) -> None:
-    """Vérifie la présence de tous les fichiers de données."""
-    config = _charger_config()
-    bp     = Path(base_path or config['data_path'])
-
-    fichiers_attendus = {
-        'non_vie': [
-            'contrats_auto_70k.parquet', 'sinistres_auto.parquet',
-            'contrats_mrh_70k.parquet',  'sinistres_mrh.parquet',
-            'contrats_rcpro_70k.parquet','sinistres_rcpro.parquet',
-        ],
-        'vie': [
-            'contrats_vie_indiv_70k.parquet', 'contrats_vie_coll_70k.parquet',
-            'mouvements_vie.parquet', 'contrats_art39_70k.parquet',
-            'contrats_art83_per_70k.parquet',
-        ],
-        'sante_prevoyance': [
-            'contrats_sante_coll_70k.parquet', 'contrats_sante_indiv_70k.parquet',
-            'contrats_prev_coll_70k.parquet',   'contrats_prev_indiv_70k.parquet',
-            'sinistres_sante_prev.parquet',
-        ],
-    }
-
-    print("VÉRIFICATION DES FICHIERS DE DONNÉES")
-    print("=" * 50)
-    total_ok = 0
-    total    = 0
-
-    for branche, fichiers in fichiers_attendus.items():
-        print(f"\n  [{branche.upper()}]")
-        for fichier in fichiers:
-            chemin = bp / branche / fichier
-            existe = chemin.exists()
-            total += 1
-            if existe:
-                total_ok += 1
-                taille = chemin.stat().st_size // 1024
-                print(f"  ✅ {fichier:<45} ({taille:,} Ko)")
-            else:
-                print(f"  ❌ {fichier:<45} MANQUANT")
-
-    print(f"\n  Score : {total_ok}/{total} fichiers présents")
-    print("=" * 50)
+# ── verifier_tous_fichiers SUPPRIMÉE (01/09/2026) ─────────────────────────────
+# 1 définition, 0 appel dans tout le dépôt (AST) -- et elle imprimait la
+# présence de 10 fichiers Vie et Santé-Prévoyance, hors du périmètre de A1
+# depuis le 11/07/2026. Un inventaire mort qui annonce ce que cet agent
+# REFUSE de lire ne rend pas un service : il décrit un autre logiciel.
 
 
 if __name__ == '__main__':

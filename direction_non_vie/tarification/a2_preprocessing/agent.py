@@ -435,9 +435,11 @@ class AgentA2Preprocessing:
         self.audit_path  = Path(audit_path)
         self.verbose     = verbose
 
-        # Création des dossiers si inexistants
-        self.models_path.mkdir(parents=True, exist_ok=True)
-        self.audit_path.mkdir(parents=True, exist_ok=True)
+        # ⚠️ INSTANCIER N'ÉCRIT PAS SUR LE DISQUE (jumeau d'`a1/C7`). Ces deux
+        # dossiers étaient créés ici : construire A2 suffisait à faire naître
+        # /tmp/actuaria, même sans aucun run. Ils sont désormais créés PAR
+        # CELUI QUI ÉCRIT, juste avant d'écrire (_sauvegarder_params,
+        # _sauvegarder_audit) — même effet pour qui produit un fichier.
 
         # Dictionnaire des paramètres appris
         # Contient toutes les valeurs calculées sur les données d'entraînement
@@ -1663,6 +1665,7 @@ class AgentA2Preprocessing:
             # Conversion des types numpy en types Python natifs
             params_serialisables = self._serialiser_params(self.parametres)
 
+            self.models_path.mkdir(parents=True, exist_ok=True)
             with open(chemin, 'w', encoding='utf-8') as f:
                 json.dump(params_serialisables, f, indent=2,
                           ensure_ascii=False, default=str)
@@ -1717,10 +1720,17 @@ class AgentA2Preprocessing:
         }
         chemin = self.audit_path / f"{audit_id}.json"
         try:
+            self.audit_path.mkdir(parents=True, exist_ok=True)
             with open(chemin, 'w', encoding='utf-8') as f:
                 json.dump(log, f, indent=2, ensure_ascii=False, default=str)
         except Exception as e:
-            logger.warning(f"Audit trail non sauvegardé : {e}")
+            _msg = (
+                f"Audit trail NON persisté ({chemin}) : "
+                f"{type(e).__name__} : {e}. La trace ACPR de ce run n'existe "
+                f"que dans le résultat en mémoire."
+            )
+            logger.warning(f"[{audit_id}] {_msg}")
+            rapport.setdefault('alertes', []).append(_msg)
 
     # ══════════════════════════════════════════════════════════════════════════
     # STATUT RAG & COMMENTAIRES

@@ -344,6 +344,8 @@ Le diagnostic VERT dirait de même « La Winsorisation sur **0** variable(s) ré
 
 **C16** — `__init__` crée `/tmp/actuaria` ([l.363](direction_non_vie/tarification/a2_preprocessing/agent.py:363)) — même mécanisme qu'A1.
 
+> ✅ **`a2/C16`** · **FERMÉ le 01/09/2026, avec son jumeau `a1/C7`** — traités ensemble, comme annoncé, *parce que corriger un seul côté recréerait exactement l'asymétrie que cet audit poursuit*. ⚠️ Et la mesure a trouvé **quatre jumeaux de plus** : `a3`, `a4`, `a5` et `a6` créaient aussi leurs dossiers dans `__init__`. Six agents corrigés, deux constats numérotés. Épinglé par `A1-5` · `A1-6` · `A1-7` de `test_a1_six_constats.py`.
+
 ### D — Vérifié comme BON (7)
 
 | affirmation | mesure |

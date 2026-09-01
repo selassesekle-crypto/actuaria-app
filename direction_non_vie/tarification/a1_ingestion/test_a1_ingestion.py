@@ -1,6 +1,7 @@
 """
 Tests A1 Ingestion v1.0 — Ingestion & Validation Non-Vie
-7 tests · données synthétiques freMTPL2
+Données synthétiques freMTPL2. Le compte de tests n'est pas annoncé ici : il
+change à chaque ajout, et un en-tête périmé se lit comme une couverture.
 """
 import sys, os, unittest
 import numpy as np

@@ -417,8 +417,8 @@ class AgentA5DeepLearning:
         self.audit_path  = Path(audit_path)
         self.verbose     = verbose
 
-        self.models_path.mkdir(parents=True, exist_ok=True)
-        self.audit_path.mkdir(parents=True, exist_ok=True)
+        # ⚠️ INSTANCIER N'ÉCRIT PAS SUR LE DISQUE (jumeau d'`a1/C7` et
+        # d'`a2/C16`). Les dossiers sont créés PAR CELUI QUI ÉCRIT.
 
         self.modeles   = {}
         self.metriques = {}
@@ -1537,6 +1537,11 @@ class AgentA5DeepLearning:
 
     def _sauvegarder_modeles(self, sous_branche: str) -> None:
         """Sauvegarde les modèles PyTorch sur Drive."""
+        try:
+            self.models_path.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            logger.warning(f"Dossier modèles non créé ({self.models_path}) : {e}")
+
         for nom, modele in self.modeles.items():
             chemin = self.models_path / f"dl_{nom}_{sous_branche}.pt"
             try:
@@ -1568,11 +1573,19 @@ class AgentA5DeepLearning:
             'statut_rag':   statut_rag,
             'etapes':       rapport['etapes'],
         }
+        chemin = self.audit_path / f"{audit_id}.json"
         try:
-            with open(self.audit_path / f"{audit_id}.json", 'w') as f:
+            self.audit_path.mkdir(parents=True, exist_ok=True)
+            with open(chemin, 'w') as f:
                 json.dump(log, f, indent=2, default=str)
-        except Exception:
-            pass
+        except Exception as e:
+            _msg = (
+                f"Audit trail NON persisté ({chemin}) : "
+                f"{type(e).__name__} : {e}. La trace ACPR de ce run n'existe "
+                f"que dans le résultat en mémoire."
+            )
+            logger.warning(f"[{audit_id}] {_msg}")
+            rapport.setdefault('alertes', []).append(_msg)
 
     # ══════════════════════════════════════════════════════════════════════════
     # STATUT RAG & COMMENTAIRES

@@ -49,6 +49,8 @@ Mesuré sur le vocabulaire réel (261 noms, 20 plans + `SYNONYMES_COLONNES`) : *
 
 **C2 — Le garde-fou de périmètre n'empêche pas ce qu'il annonce.** Le commentaire [l.161](direction_non_vie/tarification/a1_ingestion/agent.py:161) dit « Empêche qu'un portefeuille Vie ou Santé soit ingéré ». Mesuré : un fichier placé dans `data/vie/` est **chargé** — `_charger_fichier` parcourt `['non_vie','vie','sante_prevoyance']` ([l.475](direction_non_vie/tarification/a1_ingestion/agent.py:475)). Le garde bloque le *paramètre* `branche`, pas le *chemin*. **Non atteint par l'app** (elle ne passe jamais `fichier=`).
 
+> ✅ **`a1/C2`** · **FERMÉ le 01/09/2026.** Le garde-fou gardait l'**argument**, pas l'**acte** : `_charger_fichier` énumérait nommément `['non_vie', 'vie', 'sante_prevoyance']` en repli. Mesuré par exécution le 01/09 — un CSV placé dans `data/vie/` était **chargé** sous `branche='non_vie'`. La liste explorée **dérive désormais de `BRANCHES_SUPPORTEES`**, et le refus distingue deux états que l'ancien message confondait : « absent » et « présent hors périmètre ». Épinglé par `A1-1` (AST), `A1-2` et `A1-3` (exécution, dans les deux sens).
+
 **C3 — `prime_pure > 0` annoncé, `< 0` testé.** Docstring [l.719](direction_non_vie/tarification/a1_ingestion/agent.py:719). Mesuré : 100 lignes à `prime_pure = 0` → `aberrants = aucun`.
 
 > ✅ **`a1/C3` + `a1/C4`** · **`C3` ET `C4` FERMÉS — lot ③. Dans les deux cas, LE CODE CONTREDISAIT SA PROPRE DOCSTRING.**
@@ -61,9 +63,13 @@ Mesuré sur le vocabulaire réel (261 noms, 20 plans + `SYNONYMES_COLONNES`) : *
 
 **C10 — L'en-tête du fichier de test annonce « 7 tests », il y en a 9.**
 
+> ✅ **`a1/C10`** · **FERMÉ le 01/09/2026 — et le constat lui-même avait périmé : 13 méthodes, pas 9.** L'en-tête n'annonce plus aucun compte. `A1-12` interdit tout compte de tests dans les en-têtes de la zone.
+
 ### C — Imprécis ou daté (5)
 
 **C5** — `SYNONYMES_COLONNES` porte 2 doublons : `id_police` et `nb_sin`, chacun deux fois.
+
+> ✅ **`a1/C5`** · **FERMÉ le 01/09/2026.** Les deux doublons sont **intra-liste** — mesuré AVANT de retirer, donc sans effet sur le renommage. `A1-4` garde les **deux** formes : intra-liste **et inter-clés**, la seconde étant celle qui ferait taire un renommage vers la dernière clé rencontrée. ⚠️ Relevé au passage, non traité : `region` est à la fois clé canonique et son propre synonyme — sans effet.
 **C6** — `warnings.filterwarnings('ignore')` au niveau **module** ([l.52](direction_non_vie/tarification/a1_ingestion/agent.py:52)) : mesuré, après l'import le premier filtre du process est `('ignore', None, <class 'Warning'>, None, 0)`. **Tout le process** est muet, pas seulement A1.
 
 > ✅ **`a1/C6`** · **FERMÉ le 30/08/2026 — ET IL AVAIT ÉTÉ CORRIGÉ PAR LE LOT
@@ -82,8 +88,14 @@ Mesuré sur le vocabulaire réel (261 noms, 20 plans + `SYNONYMES_COLONNES`) : *
 > violation plantée le confirme **sur A1 seul** — *un filet qui ne tirerait que
 > sur le total n'aurait rien prouvé pour cette zone.*
 **C7** — Instancier A1 **écrit sur le disque** : `/tmp/actuaria/{audit,config}` créés. L'app le fait à chaque run (`base_path` non passé).
+
+> ✅ **`a1/C7`** · **FERMÉ le 01/09/2026, avec `a2/C16` ET QUATRE JUMEAUX QUE PERSONNE N'AVAIT COMPTÉS.** Mesuré : `a3`, `a4`, `a5` et `a6` créaient eux aussi leurs dossiers dans `__init__` — **six agents pour deux constats numérotés**. Les dossiers sont désormais créés **par celui qui écrit**, juste avant d'écrire. `A1-5` (AST, et il couvre `os.makedirs` autant que `.mkdir`), `A1-6` (exécution, les six) et `A1-7` (anti-régression : celui qui écrit crée encore son dossier).
 **C8** — **L'audit trail persisté est perdu en silence.** Dossier écrivable → `A1_….json` écrit. Dossier inécrivable → aucun fichier, `success=True`, `erreur=None`, `alertes=[]`. Le dict `audit_trail` reste dans le résultat ; c'est la **trace persistée** qui disparaît sans un mot.
+
+> ✅ **`a1/C8`** · **FERMÉ le 01/09/2026, et il y avait SIX SITES.** Relevé par AST sur les sept `_sauvegarder_audit` du dépôt : **cinq avalaient l'échec** par `except: pass` (`a1` `a3` `a4` `a5` `a6`), deux le passaient au `logger` (`a2`, `a7`) — et **aucun ne le faisait remonter dans le résultat signé**. *Un `logger.warning` n'est pas dans le livrable que l'actuaire signe.* Le patron appliqué est celui que `a6` porte déjà, arbitré, pour son archive : « L'échec REMONTE dans le résultat, il n'est pas avalé. » ⚠️ **A7 n'est pas touché** — hors assiette de gate, et il porte les oracles. Épinglé par `A1-8` (AST) et `A1-9` (exécution, les six) ; `A1-10` couvre le même geste sur un autre artefact, la suggestion de mapping, dont l'écriture était de surcroît **non encodée**.
 **C9** — `verifier_tous_fichiers` : **1 mention, 0 appel**, et elle annonce des fichiers Vie/Santé hors périmètre depuis le 11/07.
+
+> ✅ **`a1/C9`** · **FERMÉ le 01/09/2026 — supprimée.** 1 définition, 0 appel dans tout le dépôt, et elle imprimait la présence de **10 fichiers Vie et Santé-Prévoyance**, hors périmètre depuis le 11/07/2026. *Un inventaire mort qui annonce ce que l'agent REFUSE de lire décrit un autre logiciel.* `A1-11` vérifie l'absence du symbole **et** des noms de fichiers.
 
 ### D — Vérifié comme BON (13)
 

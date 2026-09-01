@@ -172,13 +172,12 @@ _HORS_ASSIETTE: dict[tuple[str, str], str] = {
     # `releve_qualite_donnees.md`, et ce filet n'a plus rien a exempter.
     # *Une exemption dont la RAISON est perimee ment sur l'etat de l'audit --
     # exactement ce que ce fichier existe pour empecher.*
-    ('a1/C5', 'test_vocabulaire_echeance.py'):
-        "Cite pour DECLARER CE QUE LE CONTROLE NE COUVRE PAS : il refuse qu'un "
-        "synonyme soit revendique par DEUX entrees canoniques, il ne juge pas "
-        "les doublons INTRA-liste, qui sont `a1/C5` (rang 7, OUVERT). Deux "
-        "fois le meme nom sous la MEME cle ne cree aucune ambiguite de "
-        "mapping. Nommer la borne est ce qui empeche de croire le filet plus "
-        "large qu'il n'est.",
+    # ⚠️ L'EXEMPTION `('a1/C5', 'test_vocabulaire_echeance.py')` A ETE RETIREE
+    # LE 01/09/2026. Elle disait « les doublons INTRA-liste, qui sont `a1/C5`
+    # (rang 7, OUVERT) » -- devenu FAUX le jour ou `a1/C5` a ete ferme et
+    # epingle par `A1-4` de `test_a1_six_constats.py`. La mention subsiste dans
+    # le voisin, mais elle n'a plus besoin d'etre exemptee : la cle porte
+    # desormais son bloc de fermeture.
 }
 
 

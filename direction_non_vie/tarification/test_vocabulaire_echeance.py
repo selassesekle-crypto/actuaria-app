@@ -84,9 +84,11 @@ class TestLeVocabulaireD_A1(unittest.TestCase):
 
         Ce controle porte sur TOUTE la table, pas seulement sur l'ajout : il
         tombera aussi le jour ou une autre entree revendiquera un nom deja pris.
-        ⚠️ Il ne juge PAS les doublons INTRA-liste (`a1/C5`, rang 7, ouvert et
-        deliberement non traite ici) : deux fois le meme nom sous la MEME cle ne
-        cree aucune ambiguite.
+        ⚠️ Il ne juge PAS les doublons INTRA-liste : deux fois le meme nom sous
+        la MEME cle ne cree aucune ambiguite de mapping. C'etait `a1/C5`, FERME
+        le 01/09/2026 et epingle par `A1-4` de `test_a1_six_constats.py` -- qui
+        garde les DEUX formes. *Nommer la borne d'un filet reste ce qui empeche
+        de le croire plus large qu'il n'est.*
         """
         vu, partages = {}, {}
         for cle, syns in SYNONYMES_COLONNES.items():

@@ -699,8 +699,8 @@ class AgentA4ML:
         self.audit_path  = Path(audit_path)
         self.verbose     = verbose
 
-        self.models_path.mkdir(parents=True, exist_ok=True)
-        self.audit_path.mkdir(parents=True, exist_ok=True)
+        # ⚠️ INSTANCIER N'ÉCRIT PAS SUR LE DISQUE (jumeau d'`a1/C7` et
+        # d'`a2/C16`). Les dossiers sont créés PAR CELUI QUI ÉCRIT.
 
         self.modeles    = {}
         self.metriques  = {}
@@ -1752,6 +1752,11 @@ class AgentA4ML:
     ) -> None:
         """Sauvegarde les modèles ML et les métriques sur Drive."""
 
+        try:
+            self.models_path.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            logger.warning(f"Dossier modèles non créé ({self.models_path}) : {e}")
+
         # Sauvegarde de tous les modèles
         for nom, modele in self.modeles.items():
             chemin = self.models_path / f"ml_{nom}_{sous_branche}.pkl"
@@ -1794,10 +1799,17 @@ class AgentA4ML:
         }
         chemin = self.audit_path / f"{audit_id}.json"
         try:
+            self.audit_path.mkdir(parents=True, exist_ok=True)
             with open(chemin, 'w', encoding='utf-8') as f:
                 json.dump(log, f, indent=2, ensure_ascii=False, default=str)
-        except Exception:
-            pass
+        except Exception as e:
+            _msg = (
+                f"Audit trail NON persisté ({chemin}) : "
+                f"{type(e).__name__} : {e}. La trace ACPR de ce run n'existe "
+                f"que dans le résultat en mémoire."
+            )
+            logger.warning(f"[{audit_id}] {_msg}")
+            rapport.setdefault('alertes', []).append(_msg)
 
     # ══════════════════════════════════════════════════════════════════════════
     # STATUT RAG & COMMENTAIRES
