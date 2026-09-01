@@ -38,6 +38,7 @@ from typing import Dict, Any, Optional, List, Tuple
 import numpy as np
 import pandas as pd
 from core.charts_tarif import glyphe_rag
+from core.qualite_donnees import exiger_canal_sans_objet
 
 try:
     from ..services.tarif_excel import export_excel_a1
@@ -276,9 +277,25 @@ class AgentA1Ingestion:
         client_id: str = None,
         dataframe  = None,
         plan       = None,   # PlanTarifaire signé — l'identité du contrat s'y déclare
+        #: ⚠️⚠️ LE CANAL DE SIGNATURE QUALITE — etape 3 du chantier 1-B.
+        #: Meme nom, meme sens que sur le chemin declaratif. Il n'a PAS ENCORE
+        #: d'objet ici : A1 SCORE la qualite (statut RAG) mais n'exclut rien,
+        #: et la couche `controler_qualite` n'est pas branchee (`qualite/C4`).
+        #: Il LEVE plutot que d'avaler un nom en silence.
+        qualite_validee_par = None,
     ) -> Dict[str, Any]:
         """
         Pipeline d'ingestion complet.
+
+        ⚠️⚠️ `qualite_validee_par` : LE CANAL EXISTE, IL N'A PAS ENCORE D'OBJET.
+        A1 mesure la qualité et publie un statut RAG, mais **il n'exclut aucune
+        ligne** — mesuré le 01/09 : 600 fréquences négatives sur 10 000 le font
+        virer au ROUGE, et les 10 000 lignes ressortent. Il n'y a donc aucun
+        blocage à lever, et une signature ne validerait rien. Elle LÈVE
+        `SignatureSansObjet` plutôt que d'avaler un nom en silence.
+        **L'étape qui lui donnera un objet est 1-B**, le branchement de la
+        couche qualité au chemin agent — et elle déplace un prix. Pour tarifer
+        AVEC la couche aujourd'hui : `pipeline_tarifaire.pipeline_complet`.
 
         Paramètres
         ──────────
@@ -306,6 +323,10 @@ class AgentA1Ingestion:
             Si fourni → charge le mapping depuis
             config/client_id_mapping.json
         """
+        # ⚠️ LE CANAL REFUSE AVANT TOUT, MEME AVANT L'HORODATAGE. Un refus
+        # tardif aurait laissé une trace d'audit d'un run qui n'a pas eu lieu.
+        exiger_canal_sans_objet(qualite_validee_par, 'A1.run')
+
         t_debut  = datetime.now()
         audit_id = f"A1_{t_debut.strftime('%Y%m%d_%H%M%S')}"
 

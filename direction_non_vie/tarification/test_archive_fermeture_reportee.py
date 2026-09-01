@@ -168,6 +168,14 @@ _HORS_ASSIETTE: dict[tuple[str, str], str] = {
         "couperait l'avertissement de sa cause. `qualite/C9` corrige ce que le "
         "livrable DIT de l'absence ; il ne touche pas a l'absence elle-meme, "
         "qui est la fusion 1-B.",
+    ('qualite/C4', 'test_canal_signature_agent.py'):
+        "Cite comme CAUSE du refus, jamais epingle. Le canal de signature du "
+        "chemin agent n'a pas d'objet PARCE QUE ce chemin n'appelle pas la "
+        "couche qualite : le message de `SignatureSansObjet` nomme la cle, et "
+        "`SG-3` exige qu'il la nomme -- *un refus qui ne dit pas POURQUOI "
+        "transforme un garde-fou en mur.* `qualite/C12` pose le canal et le "
+        "fait refuser ; c'est l'etape 5 qui lui donnera un objet, et elle "
+        "deplace un prix.",
     ('socle/C2', 'test_preambule_qualite.py'):
         "Cite comme MOTIF que le controle PQ-7 existe pour eviter, jamais "
         "epingle. L'etape 1-A pose une porte `preambule_qualite` que SEUL le "

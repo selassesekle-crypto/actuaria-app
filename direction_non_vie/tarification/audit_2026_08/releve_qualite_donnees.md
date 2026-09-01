@@ -596,6 +596,57 @@ du même chantier, et rien ne le mesurait.**
 > assiette il porte — *passer de 20 000 à 1 sans le dire laisserait croire à
 > une perte de détection*).
 
+**C12 — Le chemin agent n'a AUCUN canal de signature qualité : le
+geste qui existe sur le chemin déclaratif (`qualite_validee_par`) n'a pas de
+jumeau, et rien ne dit pourquoi.**
+
+> ✅ **`qualite/C12`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 01/09/2026 —
+> étape ③ du chantier 1-B, décidée par Selasse.**
+>
+> `pipeline_agents` portait déjà **deux** canaux de signature nominative
+> (`profil_valide_par`, `valide_par_actuaire_dl`) : la convention existait,
+> celui de la qualité manquait. *L'asymétrie entre voisins, encore.*
+>
+> ⚠️⚠️ **ET C'EST LA CONCEPTION QUI ÉTAIT LE SUJET, PAS LE PARAMÈTRE.** Un
+> canal accepté que **rien ne consomme** est exactement la silhouette de
+> `socle/C2` — de la plomberie posée que rien n'alimente. **Pire ici
+> qu'ailleurs**, parce qu'il porte un NOM D'ACTUAIRE :
+>
+> > *Un canal qui avale une signature sans rien valider laisse croire à une
+> > validation qui n'a pas eu lieu.*
+>
+> Le canal existe donc — typé, documenté, **au même nom et au même sens** que
+> sur le chemin déclaratif — et il **REFUSE** (`SignatureSansObjet`), en
+> nommant la cause (`qualite/C4`), l'étape qui lui donnera un objet (1-B,
+> étape ⑤) et **où aller aujourd'hui** (`pipeline_complet`, qui porte la
+> couche). *Un refus qui ne dit pas où aller transforme un garde-fou en mur.*
+>
+> ⚠️ **POURQUOI IL N'A PAS ENCORE D'OBJET — MESURÉ, PAS SUPPOSÉ.** Le chemin
+> agent n'appelle pas `controler_qualite`, et A1 **score sans agir** : 600
+> fréquences négatives sur 10 000 le font virer au ROUGE et **les 10 000
+> lignes ressortent**. Il n'y a donc aucun blocage à lever.
+>
+> ⚠️ **SOURCE UNIQUE** : les deux entrées partagent
+> `exiger_canal_sans_objet` — *deux messages divergents auraient donné deux
+> doctrines*. `SG-4` vérifie **par AST** qu'aucune ne recopie la levée.
+>
+> ⚠️ **AUCUN EURO** (`SG-5`) : le paramètre vaut `None` par défaut et le run
+> est identique **ligne à ligne**, score inchangé, avec et sans lui. *Le canal
+> ne gêne personne tant qu'on ne lui demande rien.*
+>
+> ⛔ **ET LE SECOND SENS EST INDISPENSABLE** (`SG-7`) : un garde-fou qui
+> refuserait la signature PARTOUT aurait cassé le seul chemin où elle a un
+> objet. *Le refus porte sur le chemin agent, pas sur le geste.* Le sceau le
+> plante : déplacer le refus dans `controler_qualite` fait tomber `SG-7`.
+>
+> ⚠️ **`SG-6` A ATTRAPÉ MA PROPRE OMISSION** : la docstring d'`A1.run` disait
+> « en nommant l'étape qui lui donnera un objet » **sans jamais la nommer**.
+> *Une phrase qui annonce qu'elle va dire quelque chose n'est pas cette
+> chose.* Corrigée avant la gate.
+>
+> Épinglé par `SG-1` à `SG-7`. **L'étape ⑤ remplace le refus par l'appel
+> réel** — et elle déplace un prix, donc elle attend un arbitrage nominatif.
+
 ## ③ Ce que je ne tranche pas ici
 
 **Rien n'est resté non lu** : 334 lignes, intégralement.

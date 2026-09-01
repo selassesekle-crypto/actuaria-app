@@ -77,6 +77,7 @@ import numpy as np
 import pandas as pd
 
 from core.plan_tarifaire import PlanTarifaire
+from core.qualite_donnees import exiger_canal_sans_objet
 from core.severite import CibleSeverite, construire_cible_severite
 from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
 from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
@@ -273,6 +274,18 @@ def pipeline_agents(
     environnement: str = "production",
     profil_valide_par: Optional[str] = None,
     valide_par_actuaire_dl: Optional[str] = None,
+    #: ⚠️⚠️ LE CANAL DE SIGNATURE QUALITE — etape 3 du chantier 1-B, 01/09/2026.
+    #: Meme nom, meme sens que sur le chemin declaratif
+    #: (`pipeline_tarifaire.pipeline_complet`) : *deux noms pour le meme geste
+    #: auraient cree deux doctrines.* Il n'a PAS ENCORE d'objet -- le chemin
+    #: agent n'appelle pas la couche qualite (`qualite/C4`), donc aucun blocage
+    #: n'est a lever -- et il REFUSE plutot que d'avaler un nom en silence.
+    #: *Un canal qui accepte une signature sans rien valider laisse croire a
+    #: une validation qui n'a pas eu lieu ; c'est la silhouette de `socle/C2`.*
+    #: ⚠️ `str | None` et non `Optional[str]` comme ses voisines : la proprete
+    #: refuse un ecart sur une ligne de correction, et l'ancienne forme en est
+    #: un. *Les voisines sont une dette arbitree ; la rejoindre l'aggraverait.*
+    qualite_validee_par: str | None = None,
     rapport_mapping: Optional[Any] = None,
     n_epochs_dl: int = 200,
     batch_size_dl: int = 512,
@@ -294,7 +307,19 @@ def pipeline_agents(
     sinistres ; PRIME PURE : donnée dégénérée) : c'est rendu dans `<cible>.erreur`,
     jamais masqué, et n'empêche pas les autres d'aboutir. `.success` ne dépend que
     d'A3 + fréquence (le tarif primaire reste fréquence×coût).
+
+    ⚠️⚠️ `qualite_validee_par` : LE CANAL EXISTE, IL N'A PAS ENCORE D'OBJET.
+    Le chemin agent n'appelle pas la couche qualité (constat `qualite/C4`),
+    donc aucun blocage n'est à lever et une signature ne validerait rien. Il
+    LÈVE `SignatureSansObjet` plutôt que d'avaler un nom en silence — **c'est
+    l'étape 1-B, et elle déplace un prix**. Pour tarifer AVEC la couche
+    qualité aujourd'hui : `pipeline_tarifaire.pipeline_complet`, qui la porte.
     """
+    # ⚠️ LE CANAL REFUSE AVANT TOUT CALCUL. Le placer ici et non plus bas est
+    # délibéré : *un refus qui arrive après trois agents aurait laissé croire
+    # que le run avait commencé sous signature.*
+    exiger_canal_sans_objet(qualite_validee_par, 'pipeline_agents')
+
     # ⚠️ UN SEUL INSTANT POUR TOUT LE RUN, capturé ici et transporté.
     # `astimezone()` rend l'horodatage NON AMBIGU (offset explicite) sans
     # toucher `audit_id` : la chaîne locale `%Y%m%d_%H%M%S` est identique,

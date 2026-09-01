@@ -60,6 +60,51 @@ if TYPE_CHECKING:                       # évite un import cyclique à l'exécut
 SEUIL_ESCALADE = 0.05
 
 
+class SignatureSansObjet(RuntimeError):
+    """⚠️⚠️ UNE SIGNATURE QUI NE VALIDE RIEN EST PIRE QUE PAS DE SIGNATURE.
+
+    Étape ③ du chantier 1-B, 01/09/2026. Le chemin agent reçoit désormais le
+    canal `qualite_validee_par` — même nom, même sens que sur le chemin
+    déclaratif. Mais la couche qualité n'y est **pas encore branchée** (c'est
+    1-B, étape ⑤, et elle déplace un prix) : il n'y a donc **aucun blocage à
+    lever**, et une signature n'aurait aucun objet.
+
+    *Un canal qui avale un nom sans rien valider laisse croire à l'actuaire
+    qu'il a valid* — c'est exactement la silhouette de `socle/C2`, de la
+    plomberie posée que rien n'alimente, et le motif que cet audit poursuit.
+
+    Le canal EXISTE donc, typé, documenté et transporté ; il REFUSE, en
+    nommant l'étape qui lui donnera un objet. L'étape ⑤ remplace ce refus par
+    l'appel réel.
+    """
+
+    def __init__(self, appelant: str, nom: str):
+        super().__init__(
+            f"{appelant} a recu qualite_validee_par='{nom}', mais le chemin "
+            f"agent n'appelle PAS ENCORE la couche qualite (constat "
+            f"`qualite/C4`, etape 1-B). Il n'y a donc AUCUN blocage a lever, "
+            f"et cette signature ne validerait rien. Le canal existe et sera "
+            f"branche a l'etape 5, qui deplace un prix et attend un arbitrage "
+            f"nominatif. Pour tarifer AVEC la couche qualite aujourd'hui, "
+            f"passer par `pipeline_tarifaire.pipeline_complet`, qui la porte. "
+            f"*Accepter ce nom en silence ferait croire a une validation qui "
+            f"n'a pas eu lieu.*")
+        self.appelant = appelant
+        self.nom = nom
+
+
+def exiger_canal_sans_objet(qualite_validee_par, appelant: str) -> None:
+    """SOURCE UNIQUE du refus — jamais recopiée chez les appelants.
+
+    ⚠️ Deux points d'entrée du chemin agent la partagent (`pipeline_agents` et
+    `A1.run`) ; deux messages divergents auraient donné deux doctrines. `None`
+    passe sans rien changer : *le second sens de ce garde-fou est qu'il ne
+    gêne personne tant qu'on ne lui demande rien.*
+    """
+    if qualite_validee_par is not None:
+        raise SignatureSansObjet(appelant, str(qualite_validee_par))
+
+
 class QualiteBloquante(Exception):
     """Levée par pipeline_complet quand une anomalie ≥ seuil n'est PAS validée par
     un actuaire nommé. Porte le RapportQualite — ce que l'actuaire doit voir pour
