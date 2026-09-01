@@ -19,7 +19,8 @@ from core.charts_tarif import glyphe_rag, FOND_CLAIR, couleur_rag
 import base64, io, logging, re
 from core.conformite_reglementaire import (
     avertissement_walk_forward, synthese_exclusions, synthese_alertes_experience,
-    synthese_colonnes_plan_ecartees, synthese_modele_dl,
+    synthese_colonnes_plan_ecartees, synthese_exemptions_effet,
+    synthese_modele_dl,
 )
 from core.qualite_donnees import synthese_qualite_donnees
 from core.plan_tarifaire import synthese_colonnes_plan_manquantes
@@ -1393,6 +1394,12 @@ def _construire_contexte_tarif(
         (synthese_colonnes_plan_manquantes(
             result_a6.get('colonnes_plan_manquantes') if result_a6 else None)
          or "Aucune : toutes les colonnes déclarées au plan ont été produites."),
+        "",
+        "=== COLONNES EXEMPTEES DU CONTROLE PAR L'EFFET (conformite/C4) ===",
+        (synthese_exemptions_effet(
+            result_a6.get('colonnes_exemptees_effet') if result_a6
+            else None)
+         or "Aucune : toute colonne candidate a ete soumise au controle."),
         "",
         "=== COLONNES DU PLAN ECARTEES AVANT LE FILTRE (conformite/C15) ===",
         (synthese_colonnes_plan_ecartees(

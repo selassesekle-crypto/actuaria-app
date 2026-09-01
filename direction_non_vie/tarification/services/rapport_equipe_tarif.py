@@ -25,7 +25,8 @@ from core.charts_tarif import glyphe_rag, FOND_CLAIR, couleur_rag
 import io, logging, re
 from core.conformite_reglementaire import (
     avertissement_walk_forward, synthese_exclusions, synthese_alertes_experience,
-    synthese_colonnes_plan_ecartees, synthese_modele_dl,
+    synthese_colonnes_plan_ecartees, synthese_exemptions_effet,
+    synthese_modele_dl,
 )
 from core.qualite_donnees import synthese_qualite_donnees
 from core.plan_tarifaire import synthese_colonnes_plan_manquantes
@@ -143,7 +144,9 @@ def _md_to_html_light(txt: str) -> str:
     return '\n'.join(paragraphs)
 
 
-# ── LES 7 SYNTHÈSES RÉGLEMENTAIRES : source unique, calculées UNE fois ───────
+# ── LES SYNTHÈSES RÉGLEMENTAIRES : source unique, calculées UNE fois ─────────
+# ⚠️ Le compte n'est plus annoncé ici : il a valu « 7 » pendant que le tuple
+# en portait 6 puis 9. Un compte dans un titre périme sans un mot.
 # ⚠️⚠️ constat C6 : elles ne vivaient QUE dans l'Excel équipe. La LOGIQUE (les
 # fonctions de synthèse) était déjà partagée ; c'est le CALCUL et le RENDU qui
 # manquaient à html/word/pdf — les formats qui partent au CAC. Voie (b) :
@@ -157,12 +160,24 @@ _LABELS_SYNTHESES = (
     ('modele_dl',    'Modèle Deep Learning — validation actuarielle'),
     ('qualite',      'Qualité des données — traitements appliqués'),
     ('plan_ampute',  'Colonnes du plan non produites — modèle amputé'),
+    # ⚠️⚠️ CES DEUX LIGNES MANQUAIENT, ET C'EST MON PROPRE CORRECTIF QUI LES
+    # AVAIT OUBLIÉES. `plan_ecarte` (constat `conformite/C15`, commit
+    # `9a69162`) était bien calculé par `syntheses_reglementaires` — mais
+    # `_syntheses_html` et l'Excel équipe n'itèrent PAS le dictionnaire : ils
+    # itèrent CE TUPLE. Une clé sans libellé est donc rendue NULLE PART, en
+    # silence, dans les formats qui partent au CAC.
+    # *Le correctif atterrissait a cote de la surface signee -- le motif que
+    # cet audit poursuit, commis par l'audit lui-meme.* `CF-9` derive
+    # desormais l'inclusion au lieu de la supposer : toute cle produite sans
+    # libelle fait tomber la gate.
+    ('plan_ecarte',  'Colonnes du plan écartées avant le filtre'),
+    ('exempt_effet', "Colonnes exemptées du contrôle par l'effet"),
     ('mapping',      'Mapping client appliqué'),
 )
 
 
 def syntheses_reglementaires(results: Dict[str, Dict]) -> Dict[str, str]:
-    """Les 7 synthèses réglementaires, calculées UNE fois depuis result_a6 ;
+    """Les synthèses réglementaires, calculées UNE fois depuis result_a6 ;
     seules les non-vides sont renvoyées. Clés : voir `_LABELS_SYNTHESES`."""
     r6 = (results or {}).get('a6') or {}
     if not isinstance(r6, dict):
@@ -184,6 +199,12 @@ def syntheses_reglementaires(results: Dict[str, Dict]) -> Dict[str, str]:
         'plan_ecarte':  synthese_colonnes_plan_ecartees(
                             r6.get('colonnes_plan_ecartees'),
                             (r6.get('plan') or {}).get('lob', '')),
+        # ⚠️ Constat `conformite/C4` — sens INVERSE des deux précédentes :
+        # la colonne est CONSERVÉE, soustraite au contrôle par l'effet
+        # sur décision du plan signé. Ce qui se vérifie n'est pas son
+        # rétablissement, c'est que son ANTÉRIORITÉ soit vraie.
+        'exempt_effet': synthese_exemptions_effet(
+                            r6.get('colonnes_exemptees_effet')),
         'mapping':      synthese_mapping(r6.get('rapport_mapping')),
     }
     return {k: v for k, v in brut.items() if v}
@@ -1015,7 +1036,7 @@ def generer_rapport_equipe_tarification(
         'html_bytes': b'', 'word_bytes': b'', 'pdf_bytes': b'', 'excel_bytes': b'',
     }
 
-    # ⚠️ VOIE (b) — les 7 synthèses réglementaires calculées UNE fois ici et
+    # ⚠️ VOIE (b) — les synthèses réglementaires calculées UNE fois ici et
     # passées à tous les formats, pour qu'aucun ne dise autre chose qu'un autre
     # (constat C6). Un appel isolé d'un format recalcule (repli).
     _synth = syntheses_reglementaires(results)

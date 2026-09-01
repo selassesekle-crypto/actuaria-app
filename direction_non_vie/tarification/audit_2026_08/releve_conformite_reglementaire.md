@@ -255,6 +255,8 @@ signalée.** Deux chemins exemptent du contrôle par l'effet.
 ni log**. Le chemin par le nom, lui, alimente `alertes` et produit un texte de
 rapport. Mesuré sur **deux colonnes qui sont la même grandeur** (la cible + 1e-6) :
 
+> ✅ **`conformite/C4`** · **FERMÉ le 01/09/2026.** Mesuré par exécution sur un portefeuille auto portant `antecedents_sinistres_n1` (déclarée `anteriorite=True` au plan) : **0 mention en log, 0 dans `exclusions`, 0 dans `alertes`**. Le canal est neuf — `MatriceX.exemptees_effet` — sur le patron exact d'`ecartees_amont` (`C15`), **et ce n'est PAS une exclusion** : ces colonnes sont CONSERVÉES, les ranger dans `exclusions` dirait le contraire de ce qui s'est passé. Publié sur les **trois** surfaces signées (équipe, modèles, Excel). Épinglé par `CF-1` `CF-2` `CF-3` et `CF-11`.
+
 ```
   matrice X : ['age', 'sinistres_anterieurs_3ans', 'score_experience']
   alertes   : {'sinistres_anterieurs_3ans': {'spearman': 0.9945, 'gini_normalise': 1.0}}
@@ -464,6 +466,8 @@ direction Vie est **hors du périmètre de cet audit** — voir §③.*
 
 **C8 — Le motif lu par l'actuaire contient un dictionnaire Python.**
 
+> ✅ **`conformite/C8`** · **FERMÉ le 01/09/2026, et il y avait DEUX structures Python sur la même ligne**, pas une : le `dict` de `fuites_effet[c]` ET la `list` de `{cibles}`. Le motif dit désormais « signal mesuré Spearman 1.000 et Gini normalisé 1.000 (critère : le plus élevé des deux, ici Spearman) avec la cible « nb_sinistres » ». ⚠️ Et le MOT était faux aussi : « corrélation » au singulier pour un critère qui est `max(spearman, gini_normalise)`. `CF-6` interdit `{`, `}`, `[`, `]` dans le motif et exige les DEUX noms de mesure.
+
 ```
   FUITE DÉTECTÉE PAR L'EFFET — corrélation de {'spearman': 0.4563,
   'gini_normalise': 1.0} avec la cible ['nb_sinistres'].
@@ -476,6 +480,8 @@ production**.
 **C9 — La docstring de `detecter_fuites_par_effet` décrit un critère qui n'est
 plus le sien.** Elle annonce « *Retourne {colonne: corrélation}* … *dont la
 corrélation de Spearman … dépasse `seuil`* » (l.1110-1112). Mesuré :
+
+> ✅ **`conformite/C9`** · **FERMÉ le 01/09/2026.** Même cause que `C8` — l'ajout du Gini normalisé — sur un second texte resté en arrière. La docstring décrit le critère réel, et `CF-7` vérifie les deux moitiés : le TEXTE (il nomme `gini_normalise` et `max(spearman, gini_normalise)`) **et le FAIT** (la valeur rendue porte bien les deux clés). ⚠️ L'assiette du contrôle est ce que la docstring **annonce**, pas ce qu'elle **cite** : ma première version tombait sur le correctif lui-même, qui cite le défaut qu'il répare. *Une citation n'est pas une affirmation — quatrième fois.*
 
 ```
   valeur reellement retournee : {'zorglub': {'spearman': 0.4563, 'gini_normalise': 1.0}}
@@ -550,6 +556,8 @@ effective — traçabilité requise pour l'audit ACPR* » (l.113-115). Mais la l
 blanche s'applique **avant** (l.547), et elle a déjà retiré `sexe`. Mesuré sur
 un appel complet à `construire_matrice_x` :
 
+> ✅ **`conformite/C11`** · **FERMÉ le 01/09/2026.** `filtrer_genre` était placé **après** l'intersection avec le plan, qui lui avait déjà ôté son objet : mesuré sur un portefeuille qui PORTE `sexe`, **0 log citant C-236/09**. *Un filtre placé après celui qui lui ôte son objet ne peut plus rien tracer — et un contrôle qui ne peut pas se déclencher est du décor.* Il s'applique désormais aux CANDIDATES. ⚠️ **AUCUN EURO NE BOUGE**, et c'est prouvé : filtrer puis intersecter et intersecter puis filtrer donnent le même jeu — `CF-5` le vérifie dans les deux sens sur les colonnes réelles. Seule la TRACE change. `CF-4` épingle le déclenchement.
+
 ```
   [CONSTAT] le log porte 'C-236/09'     : False
   [CONSTAT] le log porte 'data leakage' : False
@@ -568,12 +576,16 @@ de vérité est `plan.colonnes_produites()` : éditer la constante ne change rie
 Le motif d'exclusion, lui, est correct (« non déclarée dans le plan de
 tarification signé ») ; c'est le texte de remédiation qui ne l'est pas.
 
+> ✅ **`conformite/C12`** · **FERMÉ le 01/09/2026.** Le motif du chemin déclaratif portait « (liste blanche) », et `synthese_exclusions` en tirait « déclarez-la (FACTEURS_TARIFAIRES_AUTORISES) » — sans effet ici, où la vérité est `plan.colonnes_produites()`. Le motif nomme le PLAN, la synthèse a son propre seau, prélevé EN PREMIER, et elle **prévient explicitement** que la constante est sans effet. ⚠️ `CF-8` vérifie le SECOND SENS : le chemin sans plan garde son instruction propre — *corriger l'un en cassant l'autre serait la même faute, déplacée*.
+
 **C13 — `valeur_mobilier` est déclarée comme dérivée d'A2, et A2 ne la produit
 pas.** Elle figure l.391 sous « *Indicateurs DÉRIVÉS générés par A2
 (_feature_engineering) — recensés exhaustivement sur le code d'A2* ». Mesuré :
 A2 la **lit** (l.631-633, pour construire `valeur_par_m2`) et ne l'écrit jamais.
 C'est une colonne source, pas une dérivée. Sans conséquence — elle est
 autorisée dans les deux cas.
+
+> ✅ **`conformite/C13`** · **FERMÉ le 01/09/2026** — `valeur_mobilier` rejoint les colonnes SOURCES MRH. Sans conséquence sur l'autorisation (elle passe dans les deux cas), mais *un inventaire qui se dit « recensé exhaustivement sur le code d'A2 » doit dire vrai*. `CF-10` vérifie le rangement **et le fait** : par AST sur A2, `valeur_mobilier` n'est jamais une cible d'affectation.
 
 ### D — Vérifié comme BON (14)
 

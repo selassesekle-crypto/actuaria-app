@@ -692,6 +692,10 @@ class AgentA6Comparaison:
             # échec sur la MÊME cible s'écrasaient l'un l'autre — un motif
             # sur deux disparaissait.
             _cols_plan_ecartees: set = set()
+            #: `conformite/C4` — même trajet, sens INVERSE : celles-ci
+            #: sont CONSERVEES, pas ecartees. Les fondre dans le meme
+            #: seau dirait le contraire de ce qui s'est passe.
+            _cols_exemptees_effet: set = set()
             for _r_src in (result_a3, result_a4, result_a5):
                 if isinstance(_r_src, dict):
                     _exclusions_conformite.update(
@@ -705,6 +709,8 @@ class AgentA6Comparaison:
                     # l'actuaire doit corriger.
                     _cols_plan_ecartees.update(
                         _r_src.get('colonnes_plan_ecartees') or ())
+                    _cols_exemptees_effet.update(
+                        _r_src.get('colonnes_exemptees_effet') or ())
             _controle_effet = agreger_controle_effet({
                 'A3': (result_a3 or {}).get('controle_effet'),
                 'A4': (result_a4 or {}).get('controle_effet'),
@@ -752,6 +758,7 @@ class AgentA6Comparaison:
                 'rapport_mapping': rapport_mapping,
                 'colonnes_plan_manquantes': _cols_plan_manquantes,
                 'colonnes_plan_ecartees': sorted(_cols_plan_ecartees),
+                'colonnes_exemptees_effet': sorted(_cols_exemptees_effet),
             }
             _excel_a6 = b''
             _word_a6  = b''
@@ -904,6 +911,7 @@ class AgentA6Comparaison:
                 # agent, donc transitant par un paramètre), A6 reçoit déjà A2.
                 'colonnes_plan_manquantes': _cols_plan_manquantes,
                 'colonnes_plan_ecartees': sorted(_cols_plan_ecartees),
+                'colonnes_exemptees_effet': sorted(_cols_exemptees_effet),
                 'courbes':            courbes,
                 'graphiques':            graphiques,
                 'validation_selection':  _val_sel_,

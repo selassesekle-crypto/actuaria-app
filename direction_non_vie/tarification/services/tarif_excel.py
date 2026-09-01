@@ -15,7 +15,8 @@ import io
 from core.conformite_reglementaire import (
     avertissement_controle_effet, avertissement_walk_forward,
     synthese_exclusions, synthese_alertes_experience,
-    synthese_colonnes_plan_ecartees, synthese_modele_dl,
+    synthese_colonnes_plan_ecartees, synthese_exemptions_effet,
+    synthese_modele_dl,
 )
 from core.qualite_donnees import synthese_qualite_donnees
 from core.plan_tarifaire import synthese_colonnes_plan_manquantes
@@ -889,6 +890,14 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "", arrete: Optional[str] =
                  _synth_cp, statut="AMBRE", wrap=True); r += 1
         # ⚠️ Constat `conformite/C15` — la colonne EXISTE, un filtre l'a
         # retirée avant la conformité : ni retenue, ni écartée explicitement.
+        # ⚠️ Constat `conformite/C4` — CONSERVÉES, pas écartées : le
+        # statut est AMBRE parce qu'il y a quelque chose à vérifier
+        # (l'antériorité déclarée), pas parce qu'il manque un facteur.
+        _synth_ex = synthese_exemptions_effet(
+            result_a6.get('colonnes_exemptees_effet'))
+        if _synth_ex:
+            _kpi(ws5, r, "Colonnes exemptees du controle par l'effet",
+                 _synth_ex, statut="AMBRE", wrap=True); r += 1
         _synth_ce = synthese_colonnes_plan_ecartees(
             result_a6.get('colonnes_plan_ecartees'))
         if _synth_ce:

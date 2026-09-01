@@ -1140,6 +1140,8 @@ class AgentA4ML:
                 'exclusions_conformite': getattr(self, 'exclusions_conformite', {}),
                 'colonnes_plan_ecartees': getattr(
                     self, 'colonnes_plan_ecartees', ()),
+                'colonnes_exemptees_effet': getattr(
+                    self, 'colonnes_exemptees_effet', ()),
                 'controle_effet': getattr(self, 'controle_effet',
                                           {'execute': False, 'motifs': {}}),
                 'alertes_conformite': getattr(self, 'alertes_conformite', {}),
@@ -1262,6 +1264,13 @@ class AgentA4ML:
         # construit sa liste PAR SOUSTRACTION : c'est ici que la perte peut
         # se produire, et c'est donc ici qu'elle doit être dite.
         self.colonnes_plan_ecartees = _mx.ecartees_amont
+        # ⚠️⚠️ CONSTAT `conformite/C4` — L'EXEMPTION SE DIT AUSSI.
+        # `ecartees_amont` dit ce qui n'est jamais parvenu au filtre ;
+        # celle-ci dit ce qui lui a été SOUSTRAIT délibérément, par une
+        # décision écrite au plan signé. Ces colonnes sont CONSERVÉES :
+        # les taire ferait passer le garde-fou le plus fort du module pour
+        # avoir examiné ce qu'il n'a pas regardé.
+        self.colonnes_exemptees_effet = _mx.exemptees_effet
         # ⚠️ LE CONTRÔLE PAR L'EFFET VOYAGE AVEC SON MOTIF — `conformite/C7`.
         # La propriété existait depuis l'audit V14 avec la mention « À
         # REMONTER DANS LES RAPPORTS » ; mesuré, aucun agent ne la lisait.

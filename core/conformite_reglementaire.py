@@ -429,6 +429,13 @@ FACTEURS_TARIFAIRES_AUTORISES = {
     'surface_m2', 'type_logement', 'statut_occupation', 'etage', 'nb_pieces',
     'annee_construction', 'alarme', 'capital_assure_biens_eur',
     'age_logement', 'dependances',
+    # ⚠️ CONSTAT `conformite/C13` — `valeur_mobilier` était rangée plus bas,
+    # sous « Indicateurs DÉRIVÉS générés par A2 ». Mesuré : A2 la LIT
+    # (`_feature_engineering`, pour construire `valeur_par_m2`) et ne l'écrit
+    # jamais. C'est une colonne SOURCE du fichier client. Sans conséquence sur
+    # l'autorisation — elle passe dans les deux cas — mais un inventaire qui
+    # se dit « recensé exhaustivement sur le code d'A2 » doit dire vrai.
+    'valeur_mobilier',
     'double_vitrage', 'garantie_vol',   # déclarés par VARS_GLM['mrh'] (audit V11)
     # ── RC Pro ────────────────────────────────────────────────────────────────
     'ca_annuel_eur', 'nb_salaries', 'secteur_activite', 'forme_juridique',
@@ -442,7 +449,7 @@ FACTEURS_TARIFAIRES_AUTORISES = {
     # selectionner_features_autorisees le rendra visible immédiatement).
     'jeune_conducteur', 'senior_conducteur',
     'vehicule_recent', 'vehicule_ancien',
-    'logement_ancien', 'valeur_mobilier', 'valeur_par_m2',
+    'logement_ancien', 'valeur_par_m2',
     'km_par_an_normalise',
 }
 
@@ -903,11 +910,11 @@ class MatriceX:
     """
     __slots__ = ('_features', '_exclusions', '_contexte', '_alertes',
                  '_controle_effet_execute', '_motifs_controle_effet',
-                 '_ecartees_amont')
+                 '_ecartees_amont', '_exemptees_effet')
 
     def __init__(self, features, exclusions, contexte, _jeton=None, alertes=None,
                  controle_effet_execute=True, motifs_controle_effet=None,
-                 ecartees_amont=None):
+                 ecartees_amont=None, exemptees_effet=None):
         # ⚠ AUDIT V12 (I6) — le jeton était un ATTRIBUT DE CLASSE public
         # (MatriceX._JETON), et la docstring affirmait « seul ce module y a
         # accès ». C'ÉTAIT FAUX : MatriceX([...], _jeton=MatriceX._JETON)
@@ -943,6 +950,18 @@ class MatriceX:
                            dict(motifs_controle_effet or {}))
         object.__setattr__(self, '_ecartees_amont',
                            dict(ecartees_amont or {}))
+        # ⚠️⚠️ CONSTAT `conformite/C4` — L'EXEMPTION SILENCIEUSE.
+        # Deux chemins exemptent du controle par l'effet. Celui par le NOM
+        # alimente `alertes` et produit un texte de rapport ; celui par le
+        # PLAN (`plan.facteurs_anteriorite()`) faisait un `continue` nu :
+        # ni exclusion, ni alerte, ni log. Mesure du 01/09 sur un
+        # portefeuille auto reel : `antecedents_sinistres_n1` est exemptee
+        # et n'apparait NULLE PART -- 0 mention dans les logs, 0 dans
+        # `exclusions`, 0 dans `alertes`.
+        # *Une variable soustraite au garde-fou le plus fort du module ne
+        # peut pas l'etre sans que le lecteur du rapport le sache.*
+        object.__setattr__(self, '_exemptees_effet',
+                           dict(exemptees_effet or {}))
 
     # ── Lecture seule ────────────────────────────────────────────────────────
     @property
@@ -991,6 +1010,31 @@ class MatriceX:
         return dict(self._ecartees_amont)
 
     @property
+    def exemptees_effet(self):
+        """Colonnes SOUSTRAITES au contrôle par l'effet, et pourquoi.
+
+        ⚠️⚠️ CONSTAT `conformite/C4` — L'EXEMPTION PAR LE PLAN ÉTAIT MUETTE,
+        CELLE PAR LE NOM EST SIGNALÉE. Deux chemins exemptent du garde-fou le
+        plus fort du module. Celui par le NOM (`exposition`, la cible) est
+        structurel et documenté ; celui par le PLAN — `facteurs_anteriorite()`
+        — faisait un `continue` nu. Mesuré le 01/09 sur un portefeuille auto
+        réel : `antecedents_sinistres_n1` est exemptée et **n'apparaît nulle
+        part** — 0 mention en log, 0 dans `exclusions`, 0 dans `alertes`.
+
+        > *L'asymétrie entre deux chemins qui font le même geste est ce qui
+        > localise le défaut : ici, l'un parle et l'autre se tait.*
+
+        ⚠️ CE N'EST PAS UNE EXCLUSION : ces colonnes sont **conservées**. Les
+        mettre dans `exclusions` dirait le contraire de ce qui s'est passé.
+        C'est une DÉCISION déclarée au plan signé, et elle se lit comme telle.
+
+        ⚠️ Vide quand `plan` n'est pas fourni : sans contrat, aucune exemption
+        déclarative n'existe, et les exemptions structurelles ne sont pas des
+        décisions de l'actuaire.
+        """
+        return dict(self._exemptees_effet)
+
+    @property
     def controle_effet_execute(self):
         """Le garde-fou n°4 (contrôle par l'effet — le SEUL indépendant des noms)
         a-t-il réellement tourné ? Faux si df/col_cible n'ont pas été fournis.
@@ -1032,6 +1076,43 @@ class MatriceX:
     __delattr__ = __setattr__
 
 
+def _phrase_signal(mesures) -> str:
+    """Rend LISIBLE le signal d'une fuite par l'effet.
+
+    ⚠️⚠️ CONSTAT `conformite/C8` — LE MOTIF LU PAR L'ACTUAIRE CONTENAIT UN
+    DICTIONNAIRE PYTHON. `fuites_effet[c]` est un `dict` depuis l'ajout du Gini
+    normalisé, et il partait tel quel dans un texte qui voyage jusqu'au rapport
+    signé, lu par cinq fichiers de production :
+
+        corrélation de {'spearman': 0.4563, 'gini_normalise': 1.0}
+
+    > *Un dict Python n'est pas une phrase.*
+
+    ⚠️ ET LE MOT ÉTAIT FAUX AUSSI. Le texte disait « corrélation » au
+    singulier, alors que le critère appliqué est `max(spearman, gini_normalise)`
+    depuis que la seconde mesure existe. Le motif NOMME désormais les deux
+    grandeurs et celle qui a déclenché. *Quand un comportement change, le
+    texte qui l'accompagne se relit.*
+    """
+    if not isinstance(mesures, dict):
+        return f"corrélation de {mesures}"
+    nommees = [('Spearman', mesures.get('spearman')),
+               ('Gini normalisé', mesures.get('gini_normalise'))]
+    presentes = [(nom, float(v)) for nom, v in nommees if v is not None]
+    if not presentes:
+        return f"signal de {mesures}"
+    declencheur = max(presentes, key=lambda kv: kv[1])[0]
+    return (f"signal mesuré {' et '.join(f'{n} {v:.3f}' for n, v in presentes)}"
+            f" (critère : le plus élevé des deux, ici {declencheur})")
+
+
+def _phrase_cibles(cibles) -> str:
+    """« la cible ['nb_sinistres'] » : la LISTE Python arrivait telle quelle.
+
+    Même constat que `_phrase_signal`, sur la même ligne — `conformite/C8`.
+    """
+    noms = [cibles] if isinstance(cibles, str) else list(cibles)
+    return ' et '.join(f"\u00ab {c} \u00bb" for c in noms)
 def construire_matrice_x(
     colonnes,
     contexte: str = '',
@@ -1081,11 +1162,23 @@ def construire_matrice_x(
     cols_exemptees_effet = None
     #: Vide sans plan : sans contrat, il n'y a rien a comparer.
     ecartees_amont: dict = {}
+    #: Idem — sans plan, aucune exemption DECLARATIVE n'existe. Les exemptions
+    #: structurelles (exposition, cible) ne sont pas des decisions d'actuaire
+    #: et n'ont donc rien a faire dans un canal qui publie des DECISIONS.
+    exemptees_effet: dict = {}
     if plan is not None:
         # DÉCLARATIVE : n'est légitime que ce que le plan SIGNÉ annonce. Les
         # garde-fous 2·3 restent appliqués — non contournables par le plan.
         declarees = set(plan.colonnes_produites())
         cols_exemptees_effet = list(plan.facteurs_anteriorite())
+        # ⚠️⚠️ CONSTAT `conformite/C4` — L'EXEMPTION SE DIT. On ne publie que
+        # celles qui étaient RÉELLEMENT présentées : exempter une colonne
+        # absente du fichier n'est pas un acte, et l'annoncer ferait un
+        # avertissement permanent — donc un avertissement qu'on cesse de lire.
+        exemptees_effet = {
+            c: MOTIF_EXEMPTEE_ANTERIORITE
+            for c in sorted(set(cols_exemptees_effet) & set(candidates))
+        }
         # ⚠️⚠️ CONSTAT `conformite/C15` — CE QUI N'EST JAMAIS ARRIVÉ JUSQU'ICI.
         # La ligne suivante compare les CANDIDATES aux DÉCLARÉES : elle ne peut
         # rien dire de ce qui a été retiré AVANT l'appel. Or quatre appelants sur
@@ -1103,9 +1196,21 @@ def construire_matrice_x(
         # plutôt que dans les trois agents qui soustraient.
         ecartees_amont = {c: _motif_ecartee_amont(c, df)
                           for c in sorted(declarees - set(candidates))}
-        conformes = [c for c in candidates if c in declarees]
-        conformes = filtrer_genre(conformes, contexte=contexte,
+        # ⚠️⚠️ CONSTAT `conformite/C11` — LA TRACE ACPR PASSAIT APRÈS LE
+        # FILTRE QUI LUI ÔTAIT SON OBJET. `filtrer_genre` journalise « toute
+        # suppression effective — traçabilité requise pour l'audit ACPR »,
+        # mais il recevait une liste dont l'intersection avec le plan avait
+        # DÉJÀ retiré `sexe`. Mesuré le 01/09 sur un portefeuille qui PORTE
+        # la colonne : 0 log citant C-236/09.
+        # *Un filtre placé après celui qui lui ôte son objet ne peut plus rien
+        # tracer — et un contrôle qui ne peut pas se déclencher est du décor.*
+        # ⚠️ L'ENSEMBLE RETENU EST LE MÊME : filtrer puis intersecter et
+        # intersecter puis filtrer donnent le même résultat. Seule la TRACE
+        # change — aucun euro ne bouge, et `A1-2` du lot voisin le prouve
+        # par exécution ici même (CF-4, CF-5).
+        conformes = filtrer_genre(list(candidates), contexte=contexte,
                                   logger_agent=logger_agent)             # ② INV-3
+        conformes = [c for c in conformes if c in declarees]
         conformes = filtrer_famille_cible(conformes, contexte=contexte,
                                           logger_agent=logger_agent)     # ③ (par le nom)
     else:
@@ -1212,10 +1317,12 @@ def construire_matrice_x(
             continue
         if c in fuites_effet:
             exclusions[c] = (
-                f"FUITE DÉTECTÉE PAR L'EFFET — corrélation de {fuites_effet[c]} "
-                f"avec la cible {cibles}. Aucun facteur tarifaire légitime "
-                f"n'atteint ce niveau : cette variable EST la cible déguisée, et "
-                f"n'existe pas encore au moment de tarifer un contrat neuf."
+                f"FUITE DÉTECTÉE PAR L'EFFET — "
+                f"{_phrase_signal(fuites_effet[c])} "
+                f"avec la cible {_phrase_cibles(cibles)}. Aucun facteur "
+                f"tarifaire légitime n'atteint ce niveau : cette variable EST "
+                f"la cible déguisée, et n'existe pas encore au moment de "
+                f"tarifer un contrat neuf."
             )
         elif _est_variable_genre(c):
             exclusions[c] = "genre ou proxy de genre — CJUE C-236/09 (Test-Achats)"
@@ -1223,8 +1330,16 @@ def construire_matrice_x(
             exclusions[c] = ("dérivée de la sinistralité observée — fuite de "
                              "données (inconnue au moment de tarifer)")
         elif declarees is not None and c not in declarees:
-            exclusions[c] = ("non déclarée dans le plan de tarification signé "
-                             "(liste blanche) — à déclarer si elle est valide")
+            # ⚠️⚠️ CONSTAT `conformite/C12` — L'INSTRUCTION ÉTAIT FAUSSE SUR
+            # CE CHEMIN. Le motif portait « (liste blanche) », et
+            # `synthese_exclusions` en déduisait « déclarez-la
+            # (FACTEURS_TARIFAIRES_AUTORISES) et relancez ». Or ici la source
+            # de vérité est `plan.colonnes_produites()` : éditer la constante
+            # ne change RIEN. *Une instruction que l'actuaire ne peut pas
+            # suivre est pire que le silence — c'est le jugement déjà porté
+            # par le BLOQUANT B7, ici sur un autre chemin.*
+            exclusions[c] = ("non déclarée dans le PLAN DE TARIFICATION SIGNÉ "
+                             "— à déclarer DANS LE PLAN si elle est valide")
         elif declarees is None and not (est_facteur_autorise(c) or c.lower() in autorises_extra):
             # ⚠️ LOT 1.3 — LE MOTIF NOMME LA VRAIE CAUSE, PAS UNE CAUSE
             # GÉNÉRIQUE. Une colonne dérivée d'un facteur DÉJÀ autorisé et
@@ -1241,7 +1356,8 @@ def construire_matrice_x(
                     motifs_controle_effet=motifs_effet,
                     alertes=alertes_experience,
                     controle_effet_execute=controle_effet_execute,
-                    ecartees_amont=ecartees_amont)
+                    ecartees_amont=ecartees_amont,
+                    exemptees_effet=exemptees_effet)
 
 
 #: ⚠️⚠️ LE SEUL MOTIF QUI APPELLE UNE ACTION. Les autres décrivent une donnée
@@ -1250,6 +1366,16 @@ def construire_matrice_x(
 #: DÉCLARÉ, présent et exploitable, a été retiré par un filtre en amont — c'est
 #: `conformite/C15` dans sa forme active.
 MOTIF_ECARTEE_FILTRE = 'retiree par un filtre en amont'
+
+# ⚠️ CONSTAT `conformite/C4` — le motif de l'exemption par le plan, en UN seul
+# endroit : le publier et le tester au même texte est ce qui empêche qu'il
+# dérive du geste qu'il décrit.
+MOTIF_EXEMPTEE_ANTERIORITE = (
+    "CONSERVEE, exemptee du controle par l'effet -- declaree `anteriorite=True` "
+    "au plan signe : sa valeur est connue a la DATE D'EFFET du contrat. "
+    "La correlation avec la cible est alors un SYMPTOME d'heterogeneite "
+    "persistante (Buhlmann-Straub), pas une fuite."
+)
 
 
 def _motif_ecartee_amont(colonne: str, df) -> str:
@@ -1377,10 +1503,29 @@ def synthese_exclusions(exclusions: Optional[dict]) -> Optional[str]:
     effet = _prendre(lambda m: "PAR L'EFFET" in m)
     metrique = _prendre(lambda m: 'GRANDEUR MONÉTAIRE' in m)
     fuite = _prendre(lambda m: 'fuite' in m.lower())
+    # ⚠️⚠️ CONSTAT `conformite/C12` — DEUX SOURCES DE VÉRITÉ, UNE SEULE
+    # INSTRUCTION. Les deux motifs de non-déclaration portaient « (liste
+    # blanche) », et cette synthèse en tirait « déclarez-la
+    # (FACTEURS_TARIFAIRES_AUTORISES) ». Sur le chemin `plan`, éditer cette
+    # constante NE CHANGE RIEN : la vérité est `plan.colonnes_produites()`.
+    # Le seau du plan se prélève EN PREMIER — l'ordre est ce qui rend le tri
+    # exclusif, comme pour les cinq motifs d'exclusion.
+    a_declarer_au_plan = _prendre(lambda m: 'PLAN DE TARIFICATION SIGNÉ' in m)
     a_verifier = _prendre(lambda m: 'liste blanche' in m)
     autres = sorted(_restant)
 
     lignes = []
+    if a_declarer_au_plan:
+        lignes.append(
+            f"⚠ ACTION REQUISE — {len(a_declarer_au_plan)} colonne(s) "
+            f"écartée(s) de la matrice X car NON DÉCLARÉE(S) dans le PLAN DE "
+            f"TARIFICATION SIGNÉ : {', '.join(a_declarer_au_plan)}. Si l'une "
+            f"d'elles est un facteur valide de votre portefeuille, le modèle "
+            f"en est amputé — déclarez-la DANS LE PLAN (le YAML signé), "
+            f"resignez-le, et relancez. ⚠ Modifier la constante "
+            f"FACTEURS_TARIFAIRES_AUTORISES NE CHANGERA RIEN sur ce chemin : "
+            f"la source de vérité est le plan."
+        )
     if a_verifier:
         lignes.append(
             f"⚠ ACTION REQUISE — {len(a_verifier)} colonne(s) écartée(s) de la "
@@ -1435,6 +1580,41 @@ def synthese_exclusions(exclusions: Optional[dict]) -> Optional[str]:
         lignes.append(f"· Autres exclusions : {', '.join(autres)}.")
     return "\n".join(lignes)
 
+
+
+def synthese_exemptions_effet(exemptees) -> str | None:
+    """SOURCE UNIQUE — texte disant quelles colonnes ont été SOUSTRAITES au
+    contrôle par l'effet, et pourquoi. `None` s'il n'y en a aucune.
+
+    ⚠️⚠️ CONSTAT `conformite/C4` — L'UN DES DEUX CHEMINS SE TAISAIT.
+    L'exemption par le NOM alimente `alertes` et produit un texte ; celle par
+    le PLAN (`facteurs_anteriorite()`) faisait un `continue` nu. Mesuré le
+    01/09 sur un portefeuille auto réel : `antecedents_sinistres_n1` est
+    exemptée et n'apparaît NULLE PART — 0 log, 0 exclusion, 0 alerte.
+
+    > *Une variable soustraite au garde-fou le plus fort du module ne peut pas
+    > l'être sans que le lecteur du rapport signé le sache.*
+
+    ⚠️ LE TON N'EST PAS CELUI D'UNE EXCLUSION : ces colonnes sont CONSERVÉES,
+    délibérément, par une décision écrite au plan. Ce qui se demande à
+    l'actuaire n'est pas de les rétablir, c'est de VÉRIFIER que l'antériorité
+    déclarée est vraie — une colonne nommée « antérieure » mais remplie avec
+    la période observée est exactement la fuite que le contrôle cherchait.
+    """
+    exc = exemptees or {}
+    if not exc:
+        return None
+    noms = ', '.join(sorted(exc))
+    return (
+        f"i {len(exc)} colonne(s) SOUSTRAITE(S) au contrôle par l'effet parce "
+        f"que le plan signé les déclare `anteriorite=True` : {noms}. Elles "
+        f"sont CONSERVÉES — leur valeur est connue à la date d'effet du "
+        f"contrat, et leur corrélation avec la cible est alors un symptôme "
+        f"d'hétérogénéité persistante (Buhlmann-Straub), pas une fuite. "
+        f"⚠ VÉRIFIEZ que chacune porte bien sur le PASSÉ et non, par erreur de "
+        f"mapping, sur la période observée : c'est le seul cas où cette "
+        f"exemption ferait entrer une vraie fuite."
+    )
 
 def synthese_modele_dl(modele_production: Optional[dict],
                        valide_par: Optional[str],
@@ -1701,9 +1881,20 @@ def detecter_fuites_par_effet(
     """
     Détecte les fuites de données par leur EFFET, non par leur nom.
 
-    Retourne {colonne: corrélation} pour toute feature dont la corrélation de
-    Spearman avec la cible dépasse `seuil` en valeur absolue — c'est-à-dire toute
-    variable qui « connaît » déjà la réponse.
+    Retourne `{colonne: {'spearman': float, 'gini_normalise': float}}` pour
+    toute feature dont le SIGNAL dépasse `seuil`. Le signal est
+    `max(spearman, gini_normalise)` : on déclenche si l'UNE OU L'AUTRE des
+    deux mesures dépasse — c'est-à-dire toute variable qui « connaît » déjà
+    la réponse, que ce soit de façon monotone (Spearman) ou par son pouvoir
+    de tri (Gini).
+
+    ⚠️⚠️ CONSTAT `conformite/C9` — CE TEXTE DÉCRIVAIT UN CRITÈRE QUI N'ÉTAIT
+    PLUS LE SIEN. Il annonçait « Retourne {colonne: corrélation} » et « la
+    corrélation de Spearman … dépasse `seuil` ». Mesuré le 01/09 : la valeur
+    rendue est un DICT de deux mesures, et le critère est leur MAXIMUM. Le
+    Gini a été ajouté parce que Spearman seul ne pouvait pas se déclencher sur
+    une cible à fort ex aequo (voir le bloc de commentaire du seuil).
+    *Quand un comportement change, le texte qui l'accompagne se relit.*
 
     Ce contrôle est INDÉPENDANT du nom de la colonne : il attrape les fuites que
     personne n'a imaginées, ce qu'aucune liste ne peut faire.
