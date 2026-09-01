@@ -28,7 +28,8 @@ from core.conformite_reglementaire import (
     synthese_colonnes_plan_ecartees, synthese_exemptions_effet,
     synthese_modele_dl,
 )
-from core.qualite_donnees import synthese_qualite_donnees
+from core.qualite_donnees import (MARQUEUR_QUALITE_NON_EXECUTEE,
+                                  synthese_qualite_donnees)
 from core.plan_tarifaire import synthese_colonnes_plan_manquantes
 from core.mapping_client import synthese_mapping
 from datetime import datetime
@@ -456,13 +457,20 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
             _kpi(ws5, r, "Modèle Deep Learning — validation actuarielle", _synth_dl6,
                  statut=("AMBRE" if "ACTION REQUISE" in _synth_dl6 else "VERT"),
                  wrap=True); r += 1
-        # Qualité des données (couche générique, chemin déclaratif) — source UNIQUE
-        # partagée avec Excel A6 / Word / HTML. Rien affiché si la couche n'a pas tourné.
+        # Qualité des données — source UNIQUE partagée avec Excel A6 / Word /
+        # HTML.
+        # ⚠️⚠️ CETTE LIGNE DISAIT « Rien affiché si la couche n'a pas tourné » :
+        # c'était le défaut, corrigé le 01/09/2026. La couche NON EXÉCUTÉE
+        # publie désormais sa phrase, et le badge la reçoit en AMBRE — sans
+        # cette seconde moitié, « rien n'a été vérifié » sortait en VERT.
+        # *Le correctif et son badge sont la MÊME correction.*
         _synth_q6 = synth.get('qualite', '')
         if _synth_q6:
             _kpi(ws5, r, "Qualité des données — traitements appliqués", _synth_q6,
                  statut=("AMBRE" if ("EXCLUE" in _synth_q6 or "SIGNALEE" in _synth_q6
-                                     or "BLOQUE" in _synth_q6) else "VERT"),
+                                     or "BLOQUE" in _synth_q6
+                                     or MARQUEUR_QUALITE_NON_EXECUTEE in _synth_q6)
+                         else "VERT"),
                  wrap=True); r += 1
         # Colonnes du plan non produites (fichier client incomplet → modèle
         # amputé) — source UNIQUE partagée avec Excel A6 / Word / HTML.

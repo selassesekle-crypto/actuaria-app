@@ -403,6 +403,70 @@ synthese_qualite_donnees() pour la qualité de données* ») sans jamais l'appel
 ⚠️ Un relevé au texte **sur-compte** exactement là où un relevé par symbole
 **sous-compte**. Les deux se vérifient l'un l'autre ; aucun ne se suffit.
 
+**C9 — `synthese_qualite_donnees` rend `None` quand la couche N'A PAS
+TOURNÉ comme quand elle a tourné SANS RIEN TROUVER : le livrable ne distingue
+pas << pas vérifié >> de << vérifié, rien à signaler >>.**
+
+> ✅ **`qualite/C9`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 01/09/2026 —
+> arbitré par Selasse.** Il ne vient d'aucune relecture : il vient de la
+> **vérification chiffrée** que Selasse a demandée sur son propre résumé du
+> sujet.
+>
+> ```
+>   10 000 contrats, 600 a frequence negative (6 %), chemin AGENT :
+>      A1 DETECTE      aberrants = {'nb_sinistres_negatifs': 600}
+>      A1 ESCALADE     score 100,00 -> 99,25   statut VERT -> ROUGE
+>      A1 N AGIT PAS   10 000 lignes entrent, 10 000 sortent, les 600 restent
+>      controler_qualite / preambule_qualite : appeles par AUCUN des deux
+>                                              modules du chemin agent (AST)
+>      synthese_qualite_donnees(None) = None  <- IDENTIQUE a un portefeuille sain
+> ```
+>
+> ⚠️⚠️ **LE SILENCE PAR DÉFAUT N'ÉTAIT PAS UNE ABSENCE D'INFORMATION, C'ÉTAIT
+> UNE AFFIRMATION — ET ELLE ÉTAIT FAUSSE.** Un actuaire qui lit une section
+> qualité vide comprend << la couche a regardé et n'a rien trouvé >>. Sur le
+> chemin agent, elle n'avait rien regardé du tout.
+>
+> **Quatre surfaces de production, TROIS traitements différents** — relevées
+> par AST avant tout code :
+>
+> | surface | ce qu'elle faisait du `None` |
+> |---|---|
+> | `services/tarif_excel.py` | ligne **absente** de l'Excel A6 |
+> | `services/rapport_equipe_tarif.py` | ligne **absente** de l'Excel équipe |
+> | `rapport_modeles_tarif` (Word + HTML) | **bloc absent du rapport SIGNÉ** |
+> | `rapport_modeles_tarif` (prompt LLM) | « *Aucun traitement de qualité de données à signaler (ou couche non exécutée sur ce chemin)* » |
+>
+> ⚠️ **La dernière ligne est le défaut ÉCRIT EN TOUTES LETTRES** : la
+> parenthèse offrait les deux lectures dans une seule phrase. *Une phrase qui
+> offre deux lectures n'en affirme aucune — et celui qui signe ne peut pas
+> savoir laquelle il signe.*
+>
+> **Le correctif** : `synthese_qualite_donnees(None)` rend désormais
+> `PHRASE_QUALITE_NON_EXECUTEE`, et `None` ne subsiste QUE pour le silence
+> légitime. C'est le patron d'`avertissement_fuite_par_effet`, déjà en
+> service : *un contrôle qui n'a pas eu lieu le dit ; un contrôle qui n'a rien
+> trouvé se tait.*
+>
+> ⚠️⚠️ **ET LE BADGE ÉTAIT LA MOITIÉ DU CORRECTIF.** Les deux Excel dérivent
+> leur pastille du TEXTE (`"EXCLUE" in ...`). La phrase « non exécuté » ne
+> contient aucun de ces trois mots : **elle serait sortie en VERT**. *Publier
+> « rien n'a été vérifié » sous une pastille verte aurait été pire que le
+> silence corrigé* — le correctif à côté de la surface signée, le motif que
+> cet audit poursuit. Le marqueur est une **source unique** importée, jamais un
+> littéral recopié (`QNE-5`).
+>
+> ⚠️ **AUCUN EURO, ET C'EST `QNE-8` QUI LE PROUVE** :
+> `synthese_qualite_donnees` n'appelle rien qui touche aux données (vérifié par
+> AST sur son corps, docstring exclue), et le badge Excel est une couleur de
+> cellule sans effet sur le statut RAG. **2 000 lignes avant, 2 000 après.**
+>
+> Épinglé par `QNE-1` à `QNE-8`, dont **`QNE-3` sur le rapport SIGNÉ** (exigé
+> par Selasse : bloc présent et nommant l'absence de contrôle quand la couche
+> n'a pas tourné, bloc ABSENT sur un portefeuille sain) et **`QNE-7`, le second
+> sens** — *un correctif qui ferait parler la couche dans les DEUX cas serait
+> aussi faux que le silence.*
+
 ## ③ Ce que je ne tranche pas ici
 
 **Rien n'est resté non lu** : 334 lignes, intégralement.

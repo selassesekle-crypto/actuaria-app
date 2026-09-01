@@ -631,9 +631,16 @@ def avertissement_qualite(result_a6) -> str:
     ⚠️ LE TEXTE N'EST PAS REECRIT ICI. Il vient de `synthese_qualite_donnees`,
     la source unique — une reformulation locale aurait diverge.
 
-    ⚠️ ET ELLE SE TAIT QUAND IL N'Y A RIEN : la synthese rend `None` si la
-    couche n'a ni exclu, ni corrige, ni signale. *Un avertissement affiche
-    toujours cesse d'etre un signal.*
+    ⚠️ ET ELLE SE TAIT QUAND IL N'Y A RIEN A DIRE : la synthese rend `None` si
+    la couche A TOURNE et n'a ni exclu, ni corrige, ni signale. *Un
+    avertissement affiche toujours cesse d'etre un signal.*
+
+    ⚠️⚠️ MAIS ELLE NE SE TAIT PLUS QUAND LA COUCHE N'A PAS TOURNE — 01/09/2026.
+    Ce `or ''` rendait la chaine vide sur le chemin agent, c'est-a-dire **le
+    meme rendu qu'un portefeuille sain**. Mesure : 600 lignes a frequence
+    negative sur 10 000, et cette section du rapport signe etait VIDE. La
+    synthese rend desormais `PHRASE_QUALITE_NON_EXECUTEE`, et le `or ''` ne
+    couvre plus que le silence LEGITIME.
     """
     return synthese_qualite_donnees((result_a6 or {}).get('rapport_qualite')) or ''
 
@@ -1411,8 +1418,15 @@ def _construire_contexte_tarif(
          or "Aucun modèle Deep Learning retenu : pas de validation humaine spécifique requise."),
         "",
         "=== QUALITÉ DES DONNÉES (traitements de la couche générique, chemin déclaratif) ===",
+        # ⚠️⚠️ LE MENSONGE ÉTAIT ÉCRIT ICI, EN TOUTES LETTRES, DANS LE RAPPORT
+        # SIGNÉ. Ce repli disait « Aucun traitement de qualité de données à
+        # signaler (ou couche non exécutée sur ce chemin) » : **la parenthèse
+        # fondait les deux états dans une seule phrase**, et l'actuaire qui
+        # signe ne pouvait pas savoir lequel des deux il signait. La synthèse
+        # distingue désormais à la source ; ce repli ne couvre plus QUE le cas
+        # vérifié-et-propre, et il le dit sans alternative.
         (synthese_qualite_donnees(result_a6.get('rapport_qualite') if result_a6 else None)
-         or "Aucun traitement de qualité de données à signaler (ou couche non exécutée sur ce chemin)."),
+         or "Couche qualité exécutée : aucune ligne exclue, corrigée ni signalée."),
         "",
         "=== COLONNES DU PLAN NON PRODUITES (modèle amputé) ===",
         (synthese_colonnes_plan_manquantes(

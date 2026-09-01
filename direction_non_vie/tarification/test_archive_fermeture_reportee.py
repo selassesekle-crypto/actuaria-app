@@ -154,6 +154,15 @@ _HORS_ASSIETTE: dict[tuple[str, str], str] = {
         "cette couche ecarte, et le branchement introduirait un blocage a "
         "5 %. `qualite/C4` est au rang 6 GELE. *Le fermer sur "
         "l'extraction ferait croire que le chemin agent est protege.*",
+    ('qualite/C4', 'test_qualite_non_executee.py'):
+        "Cite comme CAUSE NOMMEE de l'absence de rapport qualite, jamais "
+        "epingle. La phrase publiee dans les livrables dit POURQUOI la couche "
+        "n'a pas tourne, et `QNE-2` exige qu'elle le dise : *un avertissement "
+        "qui annonce une absence sans sa raison envoie l'actuaire chercher un "
+        "defaut de donnees la ou il manque un branchement.* Retirer la mention "
+        "couperait l'avertissement de sa cause. `qualite/C9` corrige ce que le "
+        "livrable DIT de l'absence ; il ne touche pas a l'absence elle-meme, "
+        "qui est la fusion 1-B.",
     ('socle/C2', 'test_preambule_qualite.py'):
         "Cite comme MOTIF que le controle PQ-7 existe pour eviter, jamais "
         "epingle. L'etape 1-A pose une porte `preambule_qualite` que SEUL le "

@@ -18,7 +18,8 @@ from core.conformite_reglementaire import (
     synthese_colonnes_plan_ecartees, synthese_exemptions_effet,
     synthese_modele_dl,
 )
-from core.qualite_donnees import synthese_qualite_donnees
+from core.qualite_donnees import (MARQUEUR_QUALITE_NON_EXECUTEE,
+                                  synthese_qualite_donnees)
 from core.plan_tarifaire import synthese_colonnes_plan_manquantes
 from core.mapping_client import synthese_mapping
 import logging
@@ -879,15 +880,26 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "", arrete: Optional[str] =
             _kpi(ws5, r, "Modèle Deep Learning — validation actuarielle", _synth_dl,
                  statut=("AMBRE" if "ACTION REQUISE" in _synth_dl else "VERT"),
                  wrap=True); r += 1
-        # ── QUALITÉ DES DONNÉES (couche générique, chemin déclaratif) ─────────
+        # ── QUALITÉ DES DONNÉES (couche générique) ────────────────────────────
         # Lignes exclues (impossible) / corrigées (implausible) / signalées
-        # (ambigu) + escalade validée : jamais un traitement silencieux. None
-        # (donc rien affiché) si la couche n'a pas tourné (ex. chemin agent A6).
+        # (ambigu) + escalade validée : jamais un traitement silencieux.
+        # ⚠️⚠️ ET LA COUCHE NON EXÉCUTÉE PARLE AUSSI, DEPUIS LE 01/09/2026. Ce
+        # commentaire disait « None (donc rien affiché) si la couche n'a pas
+        # tourné (ex. chemin agent A6) » : c'était le défaut même. Un tarif du
+        # chemin agent rendait cette ligne ABSENTE — indiscernable d'un
+        # portefeuille sain. La synthèse rend désormais une phrase.
+        # ⚠️ LE BADGE DEVAIT SUIVRE, SINON LE CORRECTIF ATTERRISSAIT À CÔTÉ DE
+        # LA SURFACE : aucun des trois mots ci-dessous n'apparaît dans la
+        # phrase « non exécuté », qui serait donc sortie en **VERT**. *Publier
+        # « rien n'a été vérifié » sous une pastille verte serait pire que le
+        # silence qu'on corrige.* Le marqueur vient de sa SOURCE UNIQUE.
         _synth_q = synthese_qualite_donnees(result_a6.get('rapport_qualite'))
         if _synth_q:
             _kpi(ws5, r, "Qualité des données — traitements appliqués", _synth_q,
                  statut=("AMBRE" if ("EXCLUE" in _synth_q or "SIGNALEE" in _synth_q
-                                     or "BLOQUE" in _synth_q) else "VERT"),
+                                     or "BLOQUE" in _synth_q
+                                     or MARQUEUR_QUALITE_NON_EXECUTEE in _synth_q)
+                         else "VERT"),
                  wrap=True); r += 1
         # ── COLONNES DU PLAN NON PRODUITES (modèle amputé) ────────────────────
         # Un fichier client incomplet fait tourner les modèles SANS certains

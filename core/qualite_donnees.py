@@ -940,12 +940,55 @@ def _phrase_effet_agrege(a: Anomalie) -> str | None:
     return phrase
 
 
+#: ⚠️⚠️ LE MARQUEUR EST UNE SOURCE UNIQUE, PAS UN LITTÉRAL RECOPIÉ. Les deux
+#: Excel dérivent leur badge du TEXTE de la synthèse (`"EXCLUE" in ...`) ; y
+#: recopier `'NON EXECUTE'` rouvrirait très exactement la divergence que le lot
+#: « 30 définitions locales -> 0 » a fermée. Les consommateurs l'IMPORTENT.
+MARQUEUR_QUALITE_NON_EXECUTEE = 'NON EXECUTE'
+
+#: ⚠️⚠️ CE QUE LE LIVRABLE DIT QUAND LA COUCHE N'A PAS TOURNÉ — constat de
+#: Selasse, 01/09/2026. Le patron est celui d'`avertissement_fuite_par_effet`
+#: (`conformite/C1`) : un contrôle qui n'a pas eu lieu le DIT, il ne se tait pas.
+PHRASE_QUALITE_NON_EXECUTEE = (
+    f"⚠ CONTROLE QUALITE DES DONNEES — {MARQUEUR_QUALITE_NON_EXECUTEE}. Aucun "
+    f"rapport de qualite n'accompagne ce tarif : les regles d'exclusion "
+    f"(impossible), de correction (implausible) et de signalement (ambigu) "
+    f"n'ont examine AUCUNE ligne. Ce n'est PAS « rien a signaler » — rien n'a "
+    f"ete verifie, et le nombre de lignes fautives est INCONNU. Le chemin "
+    f"agent (A1-A6) n'appelle pas cette couche (constat `qualite/C4`) : un "
+    f"tarif produit par ce chemin porte cet avertissement tant que le "
+    f"branchement n'est pas fait."
+)
+
+
 def synthese_qualite_donnees(rapport: Optional["RapportQualite"]) -> Optional[str]:
-    """Texte à afficher dans TOUT livrable quand la couche qualité a agi. None si
-    rien à signaler. Un traitement silencieux est un défaut en soi : l'actuaire
-    doit voir ce qui a été exclu, corrigé, signalé, et qui a validé une poursuite."""
+    """Texte à afficher dans TOUT livrable. Un traitement silencieux est un
+    défaut en soi : l'actuaire doit voir ce qui a été exclu, corrigé, signalé,
+    et qui a validé une poursuite.
+
+    ⚠️⚠️ DEUX ÉTATS, DEUX VALEURS — ET C'EST TOUT L'OBJET DE CETTE FONCTION.
+    Elle rendait `None` dans DEUX cas que rien ne distinguait :
+
+        * `rapport is None`   -> la couche N'A PAS TOURNÉ ;
+        * `rapport` sans anomalie -> elle a tourné et n'a RIEN trouvé.
+
+    Mesuré le 01/09/2026 sur 10 000 contrats dont 600 à fréquence négative
+    (6 %) : le chemin agent ne les exclut pas, et la section qualité du rapport
+    SIGNÉ rendait la chaîne vide — **le même rendu qu'un portefeuille sain.**
+    *« Pas vérifié » et « vérifié, rien à signaler » avaient la même valeur ;
+    le silence par défaut affirmait donc quelque chose de faux.*
+
+    Désormais : `PHRASE_QUALITE_NON_EXECUTEE` pour le premier cas, `None` — et
+    donc rien d'affiché — pour le second seulement. *Un contrôle qui n'a pas eu
+    lieu le dit ; un contrôle qui n'a rien trouvé se tait.* C'est le patron
+    d'`avertissement_fuite_par_effet` (`conformite/C1`), déjà en service.
+
+    ⚠️ AUCUN EURO. Aucune ligne n'est exclue, corrigée ni conservée
+    différemment : la fonction ne fait que RENDRE UN TEXTE, et le badge Excel
+    qu'elle alimente est une couleur de cellule, sans effet sur le statut RAG.
+    """
     if rapport is None:
-        return None
+        return PHRASE_QUALITE_NON_EXECUTEE
     if rapport.bloque:
         # ⚠️⚠️ LE MOTIF, PAS SEULEMENT LE CODE. Le message nommait le code de
         # l'anomalie et s'arretait la : l'actuaire lisait QUOI sans lire QUE
