@@ -186,8 +186,24 @@ def proposer_mapping(
     Le résultat passe par valider_mapping() avant d'être rendu : une cible
     inconnue du plan (ou une collision) lève MappingIncoherent — même garde-fou
     que le mapping manuel. Service indisponible → MappingLLMIndisponible (jamais
-    un crash). Température 0 pour la reproductibilité (même convention que le
-    reste du projet).
+    un crash).
+
+    ⚠️⚠️ CONSTAT `socle/C4` — CETTE DOCSTRING PROMETTAIT UNE << TEMPÉRATURE 0
+    POUR LA REPRODUCTIBILITÉ >> QUE LE FICHIER AVAIT RETIRÉE. Mesuré le
+    01/09/2026 : `_TEMPERATURE_DEFAUT` vaut `None`, et le défaut du paramètre
+    aussi. La température a été retirée le 07/08/2026 parce que **le modèle la
+    REFUSE** (400, « deprecated for this model ») : `None` signifie
+    « paramètre non transmis », et la frontière refuse en amont un appelant
+    qui en passerait une. *Quand un comportement change, le texte qui
+    l'accompagne se relit.*
+
+    ⚠️ CONSTAT `socle/C5` — `n_lignes_exemple` EST SANS EFFET, et la docstring
+    n'en disait rien. `_prompt_utilisateur` le reçoit puis fait `del` : l'aperçu
+    caviardé ne dépend PAS du nombre de lignes demandé — c'est ce que le RGPD
+    exige ici, aucune valeur du fichier ne sort. Le paramètre reste dans la
+    signature publique pour ne casser aucun appelant. ⚠️ Son HOMONYME de
+    `nv_triangle_mapping_llm`, lui, est VIVANT : deux paramètres du même nom,
+    un mort et un vif — raison de plus pour le dire ici.
     """
     if df is None or df.shape[1] == 0:
         raise MappingLLMIndisponible(

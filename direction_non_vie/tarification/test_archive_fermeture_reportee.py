@@ -172,6 +172,14 @@ _HORS_ASSIETTE: dict[tuple[str, str], str] = {
     # `releve_qualite_donnees.md`, et ce filet n'a plus rien a exempter.
     # *Une exemption dont la RAISON est perimee ment sur l'etat de l'audit --
     # exactement ce que ce fichier existe pour empecher.*
+    ('socle/C1', 'test_socle_quatre_constats.py'):
+        "Cite pour DECLARER CE QUE LE LOT NE COUVRE PAS : quatre des cinq "
+        "constats de `socle` y sont fermes, et le cinquieme est nomme avec sa "
+        "raison -- l'ecretement porte sur le TOTAL DU CONTRAT quand la "
+        "docstring dit << un SINISTRE >>, et le corriger DEPLACE UN SEUIL DE "
+        "GRAVITE. Il attend son arbitrage. Nommer ce qu'un lot laisse ouvert "
+        "vaut mieux que de laisser croire qu'il a tout pris.",
+
     # ⚠️ L'EXEMPTION `('a1/C5', 'test_vocabulaire_echeance.py')` A ETE RETIREE
     # LE 01/09/2026. Elle disait « les doublons INTRA-liste, qui sont `a1/C5`
     # (rang 7, OUVERT) » -- devenu FAUX le jour ou `a1/C5` a ete ferme et

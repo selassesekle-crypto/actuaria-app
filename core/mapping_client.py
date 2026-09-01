@@ -214,7 +214,22 @@ def preparer_fichier_client(df: pd.DataFrame, chemin_mapping: Optional[str],
                             ) -> Tuple[pd.DataFrame, Optional[RapportMapping]]:
     """Point d'entrée AVANT A1. chemin_mapping=None → (df, None) : RÉTRO-COMPAT
     totale, le df passe tel quel. Sinon : charge + applique + rend le rapport,
-    à surfacer à côté des livrables (câblage = couche 2)."""
+    à surfacer à côté des livrables (câblage = couche 2).
+
+    ⚠️⚠️ CONSTAT `socle/C2` — CETTE PORTE N'A AUCUN APPELANT DE PRODUCTION
+    DANS CE DÉPÔT, et c'est mesuré par AST (01/09/2026), pas supposé. Ce n'est
+    PAS du code mort : la couche est conçue pour être appelée par CELUI QUI
+    APPELLE le pipeline, avant lui — la jonction prévue est
+    `pipeline_agents(rapport_mapping=...)`, dont le rapport voyage jusqu'aux
+    trois livrables via `synthese_mapping`. **Aucun code de ce dépôt ne joue
+    ce rôle d'appelant aujourd'hui.**
+
+    ⚠️ ET IL EXISTE UN SECOND MÉCANISME DE MAPPING, DANS A1. Mesuré :
+    `a1_ingestion.agent._appliquer_mapping_client` fait le même métier avec un
+    autre format (`{client_id}_mapping.json`, JSON) et A1 n'importe PAS ce
+    module. *Deux moteurs pour un seul geste, et rien ne le disait.* Les
+    unifier déplacerait un comportement : c'est nommé ici, pas tranché.
+    """
     if chemin_mapping is None:
         return df, None
     return appliquer_mapping(df, charger_mapping(chemin_mapping), plan)

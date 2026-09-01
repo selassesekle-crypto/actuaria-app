@@ -95,6 +95,8 @@ jeu, pas le niveau.
 **C2 — Le moteur de mapping — 419 lignes, deux fichiers — n'a aucun appelant de
 production.** Relevé par AST :
 
+> ✅ **`socle/C2`** · **FERMÉ le 01/09/2026 — NOMMÉ, pas supprimé.** Ce n'est pas du code mort : la couche est conçue pour être appelée par CELUI QUI APPELLE le pipeline, avant lui, et sa jonction est `pipeline_agents(rapport_mapping=...)` — dont le rapport voyage jusqu'aux trois livrables via `synthese_mapping`. **Aucun code de ce dépôt ne joue ce rôle**, et la docstring le dit désormais, avec la jonction attendue. ⚠️⚠️ ET LA MESURE A TROUVÉ PLUS QUE LE CONSTAT : **il existe un SECOND moteur de mapping, dans A1** — `_appliquer_mapping_client`, même métier, autre format (`{client_id}_mapping.json`), et A1 n'importe PAS ce module. *Deux moteurs pour un seul geste, et rien ne le disait.* Les unifier déplacerait un comportement : c'est nommé, pas tranché. `SO-1` et `SO-2` tiennent les deux phrases dans LES DEUX SENS.
+
 ```
   [CONSTAT] preparer_fichier_client   production=0  tests=1
   [CONSTAT] appliquer_mapping         production=0  tests=1
@@ -122,11 +124,15 @@ tests 1) et `CibleSeverite` (production **0**, tests **0**) figurent dans les
 `construire_cible_severite`, qui a trois appelants : ils l'utilisent sans jamais
 le nommer. Sans gravité — mais un `__all__` annonce une interface.
 
+> ✅ **`socle/C3`** · **FERMÉ le 01/09/2026 — et il ne se fermait PAS en retirant les symboles.** `DERIVATIONS` est LA TABLE que `sources_brutes` interroge ; `CibleSeverite` est LE TYPE DE RETOUR de `construire_cible_severite`, que ses trois appelants utilisent — ils lisent `.n_retenus`, `.seuil` — **sans jamais écrire son nom**. *Un symbole exporté sans consommateur n'est pas un défaut ; ne pas dire lequel des deux il est, si.* Chaque `__all__` porte son motif, et `SO-3` le tient dans les deux sens : si un consommateur externe apparaît, c'est le motif qui doit tomber.
+
 ### C — Deux docstrings que le code contredit (2)
 
 **C4 — `proposer_mapping` promet une « Température 0 » que le fichier a
 retirée.** L.178 : « *Température 0 pour la reproductibilité (même convention
 que le reste du projet)* ». Mesuré :
+
+> ✅ **`socle/C4`** · **FERMÉ le 01/09/2026.** La docstring promettait une « Température 0 pour la reproductibilité » que le fichier avait retirée le 07/08/2026 — **parce que le modèle la REFUSE** (400, « deprecated for this model »). Elle dit maintenant pourquoi `None` signifie « paramètre non transmis ». `SO-4` vérifie le TEXTE **et le FAIT** (`_TEMPERATURE_DEFAUT is None`), et son assiette est ce que la docstring ANNONCE, pas ce qu'elle CITE — même distinction qu'à `conformite/C9`.
 
 ```
   _TEMPERATURE_DEFAUT (l.51) = None
@@ -144,6 +150,8 @@ n'en dit rien.** Signature : `n_lignes_exemple: int = 5`. Première ligne de la
 fonction qui le reçoit : `del n_lignes_exemple  # conservé pour l'API, sans
 effet`. La docstring publique ne le mentionne **pas du tout** — un appelant qui
 le règle à 50 croit élargir l'aperçu.
+
+> ✅ **`socle/C5`** · **FERMÉ le 01/09/2026.** Le FAIT était déjà épinglé par `test_apercu_caviarde` (T4 : la valeur du paramètre n'influence pas l'aperçu) ; c'est le TEXTE qui manquait — la docstring publique n'en disait **rien du tout**. Elle dit désormais que le paramètre est sans effet, pourquoi (le caviardage RGPD), et pourquoi il reste dans la signature. ⚠️ **Et il a un HOMONYME VIVANT** dans `nv_triangle_mapping_llm`, où deux fonctions le lisent vraiment : *un relevé par symbole ne voit pas l'homonyme.* `SO-5` porte sur le texte sans redire T4, `SO-6` tient l'homonyme.
 
 ### D — Vérifié comme BON (17)
 

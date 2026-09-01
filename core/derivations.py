@@ -23,6 +23,13 @@ AUTEUR : ActuarIA
 """
 from typing import Dict, List, Sequence, Tuple
 
+# ⚠️ CONSTAT `socle/C3` — `DERIVATIONS` EST EXPORTÉE SANS CONSOMMATEUR
+# EXTERNE, ET C'EST DÉLIBÉRÉ. Mesuré par AST le 01/09/2026 : ses seuls
+# lecteurs sont `sources_brutes`, ici même, et les tests. Elle reste dans
+# `__all__` parce qu'elle est LA TABLE que `sources_brutes` interroge : un
+# lecteur qui veut savoir de quoi dérive une colonne la lit directement,
+# plutôt que d'appeler la fonction pour chaque nom. *Un symbole exporté sans
+# consommateur n'est pas un défaut ; ne pas dire lequel des deux il est, si.*
 __all__ = ["DERIVATIONS", "sources_brutes"]
 
 # dérivée → sources BRUTES. Miroir EXACT de a2._calculer_indicateurs_derives.

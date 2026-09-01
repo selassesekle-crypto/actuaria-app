@@ -32,6 +32,12 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
+# ⚠️ CONSTAT `socle/C3` — `CibleSeverite` EST EXPORTÉE SANS ÊTRE NOMMÉE.
+# Mesuré par AST le 01/09/2026 : zéro occurrence hors de ce module, tests
+# compris. Elle reste dans `__all__` parce qu'elle est LE TYPE DE RETOUR de
+# `construire_cible_severite` : ses trois appelants l'utilisent — ils lisent
+# `.n_retenus`, `.seuil` — sans jamais écrire son nom. *L'exporter est ce qui
+# permet de l'annoter ; ne pas dire pourquoi la ferait passer pour un oubli.*
 __all__ = ["CibleSeverite", "construire_cible_severite"]
 
 
