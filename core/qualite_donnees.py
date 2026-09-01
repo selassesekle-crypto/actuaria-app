@@ -33,7 +33,12 @@ codé en dur ; un plan futur jamais vu en bénéficie automatiquement) :
      nominatif absent par défaut est l'unique échappatoire, et il est TRACÉ (qui,
      quand). MÊME PATTERN que valide_par_actuaire_dl (garde-fou DL).
 
-Réutilise la logique de détection déjà pensée dans A1 (`_evaluer_qualite`), mais
+⚠️ CONSTAT `qualite/C5` — CETTE PHRASE CITAIT `A1._evaluer_qualite`, QUI
+N'EXISTE NULLE PART. Mesuré sur tout le dépôt le 01/09/2026 : une seule
+occurrence du nom, cette phrase elle-même. *Un renvoi à une fonction qui
+n'existe pas envoie le lecteur chercher une source d'autorité qu'il ne
+trouvera jamais.* Ce module ne réutilise donc RIEN d'A1 : il porte sa
+propre détection, pilotée par les RÔLES du plan, mais
 SANS son défaut : ici la détection DÉCLENCHE une action (exclure / corriger /
 bloquer), là où A1 se contentait de scorer (flag-only). Les détecteurs sont purs
 et paramétrés par colonne — A1 pourra les réutiliser (convergence future).
@@ -171,9 +176,31 @@ class RapportQualite:
                     'total_avant': round(a.effet_agrege.total_avant, 4),
                     'total_apres': round(a.effet_agrege.total_apres, 4)}
             return d
+        # ⚠️⚠️ CONSTAT `qualite/C6` — AUCUNE PROPORTION TOTALE N'ÉTAIT
+        # PUBLIÉE. Le dict portait `lignes_initiales`, `lignes_retenues`
+        # et une `proportion` PAR ANOMALIE — jamais la part du
+        # portefeuille touchée. Il fallait la soustraire à la main, et
+        # *additionner les proportions donne un chiffre FAUX* : deux
+        # anomalies peuvent frapper la MÊME ligne.
+        # ⚠️ MESURÉ le 01/09 sur un cas construit : somme des `nb_lignes`
+        # = 20, UNION des index = 15 — un recouvrement de 5 lignes. La
+        # part publiée est donc une UNION, jamais une somme.
+        # ⚠️ LES INDEX SONT COMPARABLES, ET C'EST VÉRIFIÉ : toutes les
+        # anomalies sont calculées sur le dataframe D'ENTRÉE, que
+        # `controler_qualite` ne réaffecte jamais (mesuré par AST). Une
+        # union d'index pris dans deux référentiels n'aurait aucun sens.
+        _touchees = {i for a in (self.exclusions + self.corrections
+                                 + self.signalements) for i in a.index}
+        _n0 = max(self.lignes_initiales, 1)
         return {
             'lignes_initiales': self.lignes_initiales,
             'lignes_retenues':  self.lignes_retenues,
+            #: UNION des lignes touchées par au moins une anomalie,
+            #: rapportée aux lignes INITIALES. Jamais une somme.
+            'lignes_touchees':     len(_touchees),
+            'proportion_touchee':  round(len(_touchees) / _n0, 4),
+            'proportion_exclue':   round(
+                (self.lignes_initiales - self.lignes_retenues) / _n0, 4),
             'exclusions':   [_a(a) for a in self.exclusions],
             'corrections':  [_a(a) for a in self.corrections],
             'signalements': [_a(a) for a in self.signalements],

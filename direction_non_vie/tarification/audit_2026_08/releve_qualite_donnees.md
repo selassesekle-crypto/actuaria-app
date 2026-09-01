@@ -257,6 +257,8 @@ implémentations coexistent**, et A1 n'importe pas ce module.
 « *Réutilise la logique de détection déjà pensée dans A1 (`_evaluer_qualite`)* ».
 Mesuré sur tout le dépôt :
 
+> ✅ **`qualite/C5`** · **FERMÉ le 01/09/2026.** L'en-tête citait `A1._evaluer_qualite` comme source d'autorité : **une seule occurrence du nom dans tout le dépôt, cette phrase elle-même.** *Un renvoi à une fonction qui n'existe pas envoie le lecteur chercher une autorité qu'il ne trouvera jamais.* `DL-3` **dérive** l'existence du symbole au lieu de la supposer, et tombe dans les deux sens : si la fonction naît un jour, l'en-tête pourra la citer.
+
 ```
   _evaluer_qualite : 1 seule occurrence -> core/qualite_donnees.py:25 (cette phrase)
   A1 porte en realite : ['def _valider_qualite']
@@ -268,6 +270,8 @@ La fonction a été renommée ; la référence ne l'a pas suivie.
 l'`audit_trail` et les rapports publie `lignes_initiales`, `lignes_retenues`, et
 une `proportion` **par anomalie** — jamais la part du portefeuille touchée. Sur
 le cas de C2, il faut soustraire deux entiers pour découvrir les 19,6 %.
+
+> ✅ **`qualite/C6`** · **FERMÉ le 01/09/2026 — et la calculer par SOMME aurait donné un chiffre FAUX.** `resume()` publie désormais `lignes_touchees`, `proportion_touchee` et `proportion_exclue`. ⚠️⚠️ LA PART EST UNE **UNION**, jamais une somme : mesuré le 01/09 sur un cas où deux anomalies se recouvrent, **somme = 20, union = 15**. *Ne jamais additionner des sources qui se recoupent.* ⚠️ ET L'UNION N'A DE SENS QUE SI LES INDEX SONT COMPARABLES : vérifié PAR AST **avant** de l'écrire — `controler_qualite` ne réaffecte jamais `df`, donc toutes les anomalies vivent dans le référentiel d'entrée. `DL-2` garde cette prémisse : le jour où elle tombe, c'est la proportion qui perd son sens.
 
 ```
   cles du resume : ['anomalies_au_dela_seuil','bloque','corrections',

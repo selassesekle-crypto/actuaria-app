@@ -853,6 +853,30 @@ class TraceRelecture(NamedTuple):
     alerte: bool
 
 
+
+def synthese_raisons_plafond(result_a6) -> str | None:
+    """SOURCE UNIQUE — les causes du plafond, en UNE phrase publiable.
+
+    ⚠⚠ CONSTAT `services/C7` — `raisons_plafond` N'ATTEIGNAIT QUE DEUX
+    SURFACES SUR SIX : `modeles.export_html` et `modeles.export_word`. Ni
+    l'Excel A6, ni les TROIS formats du rapport d'équipe — c'est-à-dire ni
+    les formats qui partent au CAC. *Une cause de plafond qui n'atteint qu'un
+    tiers des livrables laisse les deux autres tiers afficher AMBRE sans dire
+    pourquoi* — exactement le défaut que `raisons_plafond` existe pour fermer.
+
+    Rend `None` quand il n'y a rien à dire : un statut VERT, ou aucune cause.
+    """
+    raisons = raisons_plafond(result_a6)
+    if not raisons:
+        return None
+    statut = (result_a6 or {}).get('statut_rag', '')
+    return (
+        f"⚠ STATUT {statut or 'NON VERT'} — {len(raisons)} cause(s) empêchent "
+        f"le VERT : " + " | ".join(raisons) +
+        ". Ces causes sont nommées par A6 AU MOMENT de la décision, pas "
+        "reconstituées ici."
+    )
+
 def trace_relecture(nom, numero_ia=None, horodatage=None,
                     environnement='production') -> TraceRelecture:
     """Les trois états de la relecture actuarielle, en toutes lettres.

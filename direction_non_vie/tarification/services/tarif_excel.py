@@ -25,6 +25,16 @@ import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
+# ⚠️ Constat `services/C7` — la cause du plafond n'atteignait que deux
+# surfaces sur six. La SOURCE reste `rapport_modeles_tarif` : on l'importe,
+# on ne la reconstitue pas.
+try:
+    from .rapport_modeles_tarif import synthese_raisons_plafond
+except ImportError:
+    from direction_non_vie.tarification.services.rapport_modeles_tarif import (
+        synthese_raisons_plafond,
+    )
+
 logger = logging.getLogger('actuaria.tarif.excel')
 
 try:
@@ -893,6 +903,11 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "", arrete: Optional[str] =
         # ⚠️ Constat `conformite/C4` — CONSERVÉES, pas écartées : le
         # statut est AMBRE parce qu'il y a quelque chose à vérifier
         # (l'antériorité déclarée), pas parce qu'il manque un facteur.
+        # ⚠️ Constat `services/C7` — sixième surface.
+        _synth_pl = synthese_raisons_plafond(result_a6)
+        if _synth_pl:
+            _kpi(ws5, r, "Causes du plafond de statut",
+                 _synth_pl, statut="AMBRE", wrap=True); r += 1
         _synth_ex = synthese_exemptions_effet(
             result_a6.get('colonnes_exemptees_effet'))
         if _synth_ex:

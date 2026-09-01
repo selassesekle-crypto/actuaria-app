@@ -1,6 +1,8 @@
 """
 Tests A6 Comparaison v1.0 — Sélection finale modèle production Non-Vie
-7 tests · walk-forward A/E · grille multicritères · standard ActuarIA
+Walk-forward A/E, grille multicritères, standard ActuarIA. Le compte de
+tests n'est plus annoncé : il disait 7 pour 30 méthodes — l'écart le plus
+large du lot, et dans le bon sens (constat `a6/C10`).
 """
 import sys, os, unittest
 import numpy as np

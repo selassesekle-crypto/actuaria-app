@@ -530,7 +530,7 @@ class AgentA6Comparaison:
 
             # ── ÉTAPE 5 : COURBES DE VALIDATION ──────────────────────────────
             logger.info("Étape 5/5 : Courbes de validation")
-            courbes = self._calculer_courbes(df, col_cible, classement[:3])
+            courbes = self._calculer_courbes(df, col_cible)
             rapport['etapes'].append('courbes')
 
             # ── GRAPHIQUES v3 ─────────────────────────────────────────────
@@ -1916,10 +1916,19 @@ class AgentA6Comparaison:
         self,
         df:         pd.DataFrame,
         col_cible:  str,
-        top_modeles: List[Dict]
     ) -> Dict:
         """
-        Calcule les courbes de Lorenz et de lift pour les 3 meilleurs modèles.
+        Courbes de Lorenz et de lift de la VALEUR OBSERVÉE.
+
+        ⚠️⚠️ CONSTAT `a6/C7` — CETTE DOCSTRING ANNONÇAIT << les 3 meilleurs
+        modèles >> ET NE LES UTILISAIT PAS. `top_modeles` était reçu et cité
+        UNE seule fois : sa propre signature. La courbe trie la CIBLE
+        OBSERVÉE, pas une prédiction : `gini_observe = 0,9734` contre `0,21`
+        pour le modèle. *À décharge, le nom `gini_observe` était honnête, et
+        `chart_lorenz_gini` reçoit bien LES DEUX Gini : c'était la docstring
+        qui sur-annonçait, pas le graphique.* Le paramètre est retiré : un
+        argument qu'on passe sans qu'il serve fait croire à un calcul qui
+        n'a pas lieu.
 
         COURBE DE LORENZ :
         ───────────────────

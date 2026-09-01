@@ -34,6 +34,16 @@ from core.mapping_client import synthese_mapping
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
+# ⚠️ Constat `services/C7` — la cause du plafond n'atteignait que deux
+# surfaces sur six. La SOURCE reste `rapport_modeles_tarif` (elle y vit
+# avec `raisons_plafond`) : on l'importe, on ne la reconstitue pas.
+try:
+    from .rapport_modeles_tarif import synthese_raisons_plafond
+except ImportError:
+    from direction_non_vie.tarification.services.rapport_modeles_tarif import (
+        synthese_raisons_plafond,
+    )
+
 # Source unique de l'arrêté (« non déclaré » si absent) — jamais un now() masquant.
 try:
     from .entete_livrable import libelle_arrete
@@ -172,6 +182,7 @@ _LABELS_SYNTHESES = (
     # libelle fait tomber la gate.
     ('plan_ecarte',  'Colonnes du plan écartées avant le filtre'),
     ('exempt_effet', "Colonnes exemptées du contrôle par l'effet"),
+    ('plafond',      'Causes du plafond de statut'),
     ('mapping',      'Mapping client appliqué'),
 )
 
@@ -205,6 +216,10 @@ def syntheses_reglementaires(results: Dict[str, Dict]) -> Dict[str, str]:
         # rétablissement, c'est que son ANTÉRIORITÉ soit vraie.
         'exempt_effet': synthese_exemptions_effet(
                             r6.get('colonnes_exemptees_effet')),
+        # ⚠️ Constat `services/C7` — un statut AMBRE sans sa cause laisse
+        # l'actuaire chercher un défaut de modèle là où il manque une
+        # signature. Elle est publiée ici comme les autres.
+        'plafond':      synthese_raisons_plafond(r6),
         'mapping':      synthese_mapping(r6.get('rapport_mapping')),
     }
     return {k: v for k, v in brut.items() if v}

@@ -305,6 +305,8 @@ Côté agent : **le commentaire actuaire ne publie jamais** le nombre de fenêtr
 
 **C7 — `_calculer_courbes` annonce « les 3 meilleurs modèles » et ne les utilise pas.** `top_modeles` est reçu, cité une seule fois — sa signature. La courbe est le tri de la **valeur observée** : `gini_observe = 0.9734` contre `0.21` pour le modèle. *À décharge* : le nom `gini_observe` est honnête, et `chart_lorenz_gini` reçoit bien **les deux** Gini avec un commentaire qui explique pourquoi. C'est la docstring qui sur-annonce, pas le graphique.
 
+> ✅ **`a6/C7`** · **FERMÉ le 01/09/2026.** `top_modeles` était reçu et cité **une seule fois : sa propre signature**. La courbe trie la CIBLE OBSERVÉE. *À décharge, le nom `gini_observe` était honnête et `chart_lorenz_gini` reçoit bien LES DEUX Gini : c'est la docstring qui sur-annonçait, pas le graphique.* Le paramètre est retiré — *un argument qu'on passe sans qu'il serve fait croire à un calcul qui n'a pas lieu.* `DL-4` tient la signature ET l'annonce.
+
 **C8 — Le plafond de vraisemblance du Gini traite toute cible comme une fréquence.** `gini_est_plausible(gini, cible_est_frequence=True)` — codé en dur, alors que `col_cible` peut valoir `cout_moyen` ou `prime_pure`. Le seuil 0,60 est calibré sur la fréquence.
 > ✅ **`a6/C8`** · **FERMÉ le 27/08/2026 — `c41a6a5`, option C.**
 > `verdict_vraisemblance_gini` rend PLAUSIBLE / IMPLAUSIBLE / NON_CALIBRÉ /
@@ -378,6 +380,8 @@ Côté agent : **le commentaire actuaire ne publie jamais** le nombre de fenêtr
 > décide ne l'était pas.*
 
 **C10 — En-tête de test : « 7 tests », **24** méthodes.** L'écart le plus large du lot — et dans le bon sens.
+
+> ✅ **`a6/C10`** · **FERMÉ le 01/09/2026** — « 7 tests » pour **30** méthodes, l'écart le plus large de tout l'audit. Aucun compte n'est plus annoncé. `DL-5` le tient.
 
 ### D — Vérifié comme BON (7)
 

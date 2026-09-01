@@ -164,6 +164,8 @@ L'Excel équipe porte **six synthèses réglementaires** (`avertissement_walk_fo
 
 **C7 — `raisons_plafond` atteint 2 surfaces sur 6** (mesuré au lot ①, avec témoin positif) : `modeles.export_html` et `modeles.export_word`. Ni l'Excel A6, ni les trois formats du rapport équipe.
 
+> ✅ **`services/C7`** · **FERMÉ le 01/09/2026.** `raisons_plafond` n'atteignait que `modeles.export_html` et `modeles.export_word` — **ni l'Excel A6, ni les trois formats du rapport d'équipe**, c'est-à-dire ni les formats qui partent au CAC. *Une cause de plafond qui n'atteint qu'un tiers des livrables laisse les deux autres tiers afficher AMBRE sans dire pourquoi* — le défaut même que `raisons_plafond` existe pour fermer. La SOURCE reste `rapport_modeles_tarif` : les deux autres surfaces l'IMPORTENT, elles ne la reconstituent pas. ⚠️ `DL-7` tient le SECOND SENS — la synthèse se TAIT quand il n'y a rien à dire, *un avertissement permanent est un avertissement qu'on cesse de lire.* Et la clé porte son LIBELLÉ, sans quoi elle serait calculée et rendue nulle part — la leçon de `conformite/C15`.
+
 ### C — Imprécis ou daté (2)
 
 **C8 — `export_excel_a3` annonce 5 onglets, en produit 6.** Corrigé après ma première mesure : **c'est le seul écart** — a1, a2, a4, a5 et a6 sont exacts.
