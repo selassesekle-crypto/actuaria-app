@@ -1367,6 +1367,11 @@ def construire_matrice_x(
 #: `conformite/C15` dans sa forme active.
 MOTIF_ECARTEE_FILTRE = 'retiree par un filtre en amont'
 
+#: ⚠️ Le motif rendu quand une source ne fournit que des NOMS, sans sa table.
+#: `fusionner_ecartees_amont` ne devine pas la cause : elle dit qu'elle
+#: l'ignore. *Une cause inventee est pire qu'une cause manquante.*
+MOTIF_MOTIF_ABSENT = 'cause non transmise par l agent source'
+
 # ⚠️ CONSTAT `conformite/C4` — le motif de l'exemption par le plan, en UN seul
 # endroit : le publier et le tester au même texte est ce qui empêche qu'il
 # dérive du geste qu'il décrit.
@@ -1403,6 +1408,49 @@ def _motif_ecartee_amont(colonne: str, df) -> str:
     return MOTIF_ECARTEE_FILTRE
 
 
+def fusionner_ecartees_amont(*sources) -> dict:
+    """Fusionne les `ecartees_amont` de PLUSIEURS agents — **par le PIRE**.
+
+    ⚠️⚠️ CONSTAT `conformite/C16`. A3, A4 et A5 dérivent chacun leur table
+    `{colonne: motif}` sur LEUR dataframe. A6 les agrégeait dans un `set`, ce
+    qui ne gardait que les clés : *le motif était détruit avant d'atteindre le
+    rapport signé, et `synthese_colonnes_plan_ecartees` levait sur la liste
+    ainsi produite.* Mesuré : Excel A6 de 10 977 octets a **0 octet** dès
+    qu'une seule colonne est écartée.
+
+    ⚠️⚠️ POURQUOI « PAR LE PIRE » ET PAS « LE DERNIER GAGNE ». Deux agents
+    peuvent donner deux motifs pour la même colonne — leurs dataframes
+    diffèrent. `update()` garderait celui du dernier agent de la boucle, sans
+    que rien ne le dise. *C'est exactement la leçon déjà écrite dans A6 pour
+    `agreger_controle_effet` : deux agents en échec sur la même clé
+    s'écrasaient, un motif sur deux disparaissait.*
+
+    Un seul motif appelle une action — `MOTIF_ECARTEE_FILTRE`, un facteur
+    DÉCLARÉ et exploitable retiré par un filtre amont. Il l'emporte donc sur
+    tout autre : *un garde-fou se trompe du côté qui fait regarder.* À gravité
+    égale, l'ordre des sources tranche, et il est déterministe.
+
+    ⚠️ Accepte indifféremment un `dict` ou un itérable de noms : un appelant
+    qui n'aurait que des noms reçoit un motif qui DIT qu'il n'y en a pas,
+    plutôt qu'une table trompeuse. *Une cause inventée est pire qu'une cause
+    manquante* — c'est la règle de `_motif_ecartee_amont`.
+    """
+    fusion: dict = {}
+    for src in sources:
+        if not src:
+            continue
+        if isinstance(src, dict):
+            paires = src.items()
+        else:
+            paires = ((c, MOTIF_MOTIF_ABSENT) for c in src)
+        for colonne, motif in paires:
+            ancien = fusion.get(colonne)
+            if ancien is None or (motif == MOTIF_ECARTEE_FILTRE
+                                  and ancien != MOTIF_ECARTEE_FILTRE):
+                fusion[colonne] = motif
+    return dict(sorted(fusion.items()))
+
+
 def synthese_colonnes_plan_ecartees(ecartees, plan_nom: str = '') -> str | None:
     """SOURCE UNIQUE du libellé « colonnes du plan écartées AVANT le filtre ».
 
@@ -1420,8 +1468,20 @@ def synthese_colonnes_plan_ecartees(ecartees, plan_nom: str = '') -> str | None:
 
     Retourne None quand rien n'a été écarté : *un avertissement permanent est un
     avertissement qu'on cesse de lire.*
+
+    ⚠️⚠️ ELLE NORMALISE SON ENTRÉE, ET CE N'EST PAS DE LA COMPLAISANCE. Elle
+    faisait `dict(ecartees or {})`, qui **lève** sur une liste de noms — et A6
+    lui en passait une. Les trois surfaces l'appellent dans un `try` qui rend
+    `b''` : *le rapport signé disparaissait en entier, sur un `logger.warning`.*
+    Mesuré le 02/09 : Excel A6 de **10 977 octets à 0**.
+
+    On délègue donc à `fusionner_ecartees_amont`, qui accepte les deux formes
+    **sans inventer de cause** : des noms nus reçoivent un motif qui DIT que la
+    cause n'a pas été transmise. *Rendre l'échec impossible vaut mieux que le
+    rendre rare, et un texte qui dit « cause non transmise » vaut mieux qu'un
+    rapport absent.*
     """
-    motifs = dict(ecartees or {})
+    motifs = fusionner_ecartees_amont(ecartees)
     if not motifs:
         return None
     # ⚠️⚠️ LA GRAVITE SUIT LE MOTIF, PAS LE COMPTE. Une modalite one-hot absente

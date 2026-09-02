@@ -110,6 +110,7 @@ except ImportError:
 from core.charts_tarif import FOND_SOMBRE, couleur_rag, couleur_texte_rag, glyphe_rag
 from core.conformite_reglementaire import (
     agreger_controle_effet, avertissement_walk_forward,
+    fusionner_ecartees_amont,
     construire_matrice_x, verdict_vraisemblance_gini,
     reserve_bases_gini_melangees,
     meilleur_par_base, reserve_arbitrage_contestable,
@@ -698,11 +699,34 @@ class AgentA6Comparaison:
             # (AGENT, CIBLE). Elle vivait ici en ligne, et deux agents en
             # échec sur la MÊME cible s'écrasaient l'un l'autre — un motif
             # sur deux disparaissait.
-            _cols_plan_ecartees: set = set()
+            # ⚠️⚠️ CONSTAT `conformite/C16` — CES DEUX SEAUX ETAIENT DES `set`,
+            # LEURS SOURCES SONT DES `dict`. A3, A4 et A5 rendent chacun une
+            # table {colonne: motif} -- une sentinelle l'exige deja d'A3 --
+            # et `set().update(dict)` ne garde QUE LES CLES.
+            #
+            #   *Le motif etait detruit ICI, avant d'atteindre le rapport.*
+            #
+            # Mesure du 02/09 : Excel A6 de 10 977 octets a **0 octet** des
+            # qu'une seule colonne est ecartee, parce que
+            # `synthese_colonnes_plan_ecartees` fait `dict(liste)` et leve --
+            # et les trois surfaces sont dans des `try` qui rendent `b''` avec
+            # un simple warning. *Un echec bruyant se voit ; un rapport qui
+            # disparait en silence, non.*
+            #
+            # ⚠️ Et meme sans la levee, l'alerte << ACTION REQUISE : facteur
+            # DECLARE, exploitable, RETIRE par un filtre amont >> ne pouvait
+            # PLUS JAMAIS se declencher sur le chemin agent : elle se decide
+            # sur le motif, et le motif n'arrivait pas.
+            _cols_plan_ecartees: dict = {}
             #: `conformite/C4` — même trajet, sens INVERSE : celles-ci
             #: sont CONSERVEES, pas ecartees. Les fondre dans le meme
             #: seau dirait le contraire de ce qui s'est passe.
-            _cols_exemptees_effet: set = set()
+            #: ⚠️ Elle porte AUJOURD'HUI un motif unique et constant
+            #: (`MOTIF_EXEMPTEE_ANTERIORITE`), et l'aplatissement n'y perdait
+            #: donc rien de mesurable -- c'est cette asymetrie entre voisins
+            #: qui a localise le defaut. Elle passe au `dict` avec sa jumelle :
+            #: *deplacer une asymetrie n'est pas la fermer.*
+            _cols_exemptees_effet: dict = {}
             for _r_src in (result_a3, result_a4, result_a5):
                 if isinstance(_r_src, dict):
                     _exclusions_conformite.update(
@@ -714,10 +738,12 @@ class AgentA6Comparaison:
                     # exclusions, cause DISTINCTE : déclarée au plan, jamais
                     # parvenue au filtre. Les confondre effacerait ce que
                     # l'actuaire doit corriger.
-                    _cols_plan_ecartees.update(
-                        _r_src.get('colonnes_plan_ecartees') or ())
-                    _cols_exemptees_effet.update(
-                        _r_src.get('colonnes_exemptees_effet') or ())
+                    _cols_plan_ecartees = fusionner_ecartees_amont(
+                        _cols_plan_ecartees,
+                        _r_src.get('colonnes_plan_ecartees'))
+                    _cols_exemptees_effet = fusionner_ecartees_amont(
+                        _cols_exemptees_effet,
+                        _r_src.get('colonnes_exemptees_effet'))
             _controle_effet = agreger_controle_effet({
                 'A3': (result_a3 or {}).get('controle_effet'),
                 'A4': (result_a4 or {}).get('controle_effet'),
@@ -764,8 +790,8 @@ class AgentA6Comparaison:
                 'rapport_qualite': rapport_qualite,
                 'rapport_mapping': rapport_mapping,
                 'colonnes_plan_manquantes': _cols_plan_manquantes,
-                'colonnes_plan_ecartees': sorted(_cols_plan_ecartees),
-                'colonnes_exemptees_effet': sorted(_cols_exemptees_effet),
+                'colonnes_plan_ecartees': dict(_cols_plan_ecartees),
+                'colonnes_exemptees_effet': dict(_cols_exemptees_effet),
             }
             _excel_a6 = b''
             _word_a6  = b''
@@ -917,8 +943,8 @@ class AgentA6Comparaison:
                 # result_a2 : contrairement à rapport_qualite (produit par aucun
                 # agent, donc transitant par un paramètre), A6 reçoit déjà A2.
                 'colonnes_plan_manquantes': _cols_plan_manquantes,
-                'colonnes_plan_ecartees': sorted(_cols_plan_ecartees),
-                'colonnes_exemptees_effet': sorted(_cols_exemptees_effet),
+                'colonnes_plan_ecartees': dict(_cols_plan_ecartees),
+                'colonnes_exemptees_effet': dict(_cols_exemptees_effet),
                 'courbes':            courbes,
                 'graphiques':            graphiques,
                 'validation_selection':  _val_sel_,

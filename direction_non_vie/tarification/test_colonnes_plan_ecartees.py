@@ -65,6 +65,7 @@ import logging
 import pathlib
 import unittest
 import warnings
+from typing import ClassVar
 from unittest import mock
 
 import numpy as np
@@ -72,7 +73,9 @@ import pandas as pd
 
 from core.conformite_reglementaire import (
     MOTIF_ECARTEE_FILTRE,
+    MOTIF_MOTIF_ABSENT,
     construire_matrice_x,
+    fusionner_ecartees_amont,
     synthese_colonnes_plan_ecartees,
 )
 from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
@@ -279,6 +282,160 @@ class TestAucunEuroDeplace(unittest.TestCase):
         self.assertEqual(len(ampute.exclusions), 0)
         print(f"    CPE-10 features inchangees : {len(list(complet))} "
               f"retenues, 0 exclusion, l'absence ne retire rien")
+
+
+class TestLeMotifSURVIT_a_A6(unittest.TestCase):
+    """PIECE D -- `conformite/C16` : LE TRAJET QUE PERSONNE NE TRAVERSAIT.
+
+    ⚠️⚠️ CE FICHIER PORTAIT DEJA DIX CONTROLES, ET AUCUN N'A VU LE DEFAUT.
+    `CPE-7` verifie qu'A3 porte la cle ; `CPE-9` verifie **PAR AST** que les
+    trois services appellent la synthese. Entre les deux il y a A6 -- et
+    *un appel ECRIT dans le source n'est pas un appel qui REUSSIT.*
+
+    A6 agregeait les tables `{colonne: motif}` d'A3, A4 et A5 dans un `set` :
+    il n'en restait que les cles. La synthese faisait `dict(liste)` et LEVAIT.
+
+    ```
+      Excel A6, colonnes_plan_ecartees vide         : 10 977 octets
+      Excel A6, UNE colonne ecartee (cas ORDINAIRE) :      0 octet
+    ```
+
+    ⚠️⚠️ ET CE N'ETAIT PAS UN CRASH : les trois surfaces appellent dans un
+    `try` qui rend `b''` sur un `logger.warning`. *Un echec bruyant se voit ;
+    un rapport signe qui disparait en silence, non.*
+
+    ⚠️ Le second effet est pire que le premier : la gravite se decide **sur le
+    motif**, donc l'alerte << ACTION REQUISE -- facteur DECLARE, exploitable,
+    RETIRE par un filtre amont >> ne pouvait plus JAMAIS se declencher sur le
+    chemin agent.
+    """
+
+    _A3: ClassVar[dict] = {'carburant_electrique': 'constante (variance nulle)'}
+
+    def test_CPE_11_A6_rend_une_TABLE_comme_ses_sources_pas_des_noms(self):
+        """⚠️⚠️ L'ASYMETRIE, LA OU ELLE ETAIT. Une sentinelle exige deja d'A3
+        un `dict` (`CPE-7`) ; A6 etait le SEUL a rompre le contrat.
+
+        Assiette : les valeurs des deux cles de sortie d'A6, par AST.
+        """
+        src = (_RACINE / 'direction_non_vie' / 'tarification' / 'a6_comparaison'
+               / 'agent.py').read_text(encoding='utf-8')
+        vus = [ast.unparse(v)
+               for n in ast.walk(ast.parse(src)) if isinstance(n, ast.Dict)
+               for c, v in zip(n.keys, n.values)
+               if isinstance(c, ast.Constant)
+               and c.value in ('colonnes_plan_ecartees',
+                               'colonnes_exemptees_effet')]
+        self.assertTrue(vus, "les cles de sortie d'A6 ont disparu")
+        aplatis = [v for v in vus if v.startswith('sorted(')]
+        self.assertEqual(
+            aplatis, [],
+            f"A6 aplatit encore une table en noms : {aplatis} -- le motif "
+            f"n'atteindra pas le rapport signe")
+        print(f"    CPE-11 les {len(vus)} sorties d'A6 portent une TABLE, "
+              f"0 aplatissement")
+
+    def test_CPE_12_la_fusion_prend_LE_PIRE_et_l_ordre_ne_decide_pas(self):
+        """⚠️⚠️ `update()` GARDAIT LE DERNIER AGENT DE LA BOUCLE, EN SILENCE.
+
+        Deux agents peuvent donner deux motifs : leurs dataframes different.
+        *C'est la lecon deja ecrite dans A6 pour `agreger_controle_effet` --
+        deux agents sur la meme cle s'ecrasaient, un motif sur deux
+        disparaissait.* Un seul motif appelle une action : il l'emporte.
+        """
+        anodin = {'x': 'constante (variance nulle)'}
+        grave = {'x': MOTIF_ECARTEE_FILTRE}
+        self.assertEqual(fusionner_ecartees_amont(anodin, grave)['x'],
+                         MOTIF_ECARTEE_FILTRE)
+        self.assertEqual(
+            fusionner_ecartees_amont(grave, anodin)['x'], MOTIF_ECARTEE_FILTRE,
+            "l'ordre des agents decide du motif publie : le resultat depend "
+            "de la boucle, pas des faits")
+        # ⚠️ SECOND SENS : le pire ne doit pas ETEINDRE les autres colonnes.
+        melange = fusionner_ecartees_amont(anodin, grave, {'y': 'absente'})
+        self.assertEqual(sorted(melange), ['x', 'y'])
+        print("    CPE-12 le PIRE l'emporte dans les DEUX ordres, "
+              "les autres colonnes survivent")
+
+    def test_CPE_13_des_noms_nus_ne_font_PAS_inventer_une_cause(self):
+        """⚠️⚠️ *Une cause inventee est pire qu'une cause manquante.*
+
+        La normalisation rend l'echec impossible ; elle ne doit pas rendre le
+        texte faux. Des noms sans table recoivent un motif qui DIT que la
+        cause n'a pas ete transmise -- jamais un motif plausible.
+        """
+        t = fusionner_ecartees_amont(['zone'])
+        self.assertEqual(t, {'zone': MOTIF_MOTIF_ABSENT})
+        self.assertNotEqual(
+            t['zone'], MOTIF_ECARTEE_FILTRE,
+            "des noms nus declenchent << ACTION REQUISE >> : le systeme "
+            "invente la gravite qu'il ne connait pas")
+        texte = synthese_colonnes_plan_ecartees(t, 'auto')
+        self.assertNotIn('ACTION REQUISE', texte)
+        self.assertIn('non transmise', texte)
+        print("    CPE-13 noms nus -> cause DITE absente, jamais devinee, "
+              "et pas d'ACTION REQUISE inventee")
+
+    def test_CPE_14_le_rapport_signe_NE_DISPARAIT_PLUS(self):
+        """⚠️⚠️ LA REGRESSION EN EUROS DE LECTEUR : l'Excel entier.
+
+        C'est la mesure qui a ouvert le constat, devenue controle. Le cas
+        ORDINAIRE -- une modalite one-hot constante -- suffisait a le vider.
+        """
+        from direction_non_vie.tarification.services.tarif_excel import (
+            export_excel_a6,
+        )
+        base = {
+            'success': True, 'statut_rag': 'VERT', 'classement': [],
+            'modele_production': {}, 'backtest': {}, 'branche': 'auto',
+            'audit_id': 'X', 'commentaire': '', 'courbes': {},
+            'graphiques': {}, 'audit_trail': {}, 'exclusions_conformite': {},
+            'controle_effet': {}, 'alertes_conformite': {},
+            'alertes_modele': [], 'exclusions_cible': {},
+            'colonnes_plan_manquantes': [], 'colonnes_exemptees_effet': {},
+        }
+        tailles = {}
+        for etiquette, valeur in (('vide', {}), ('ordinaire', self._A3),
+                                  ('grave', {'age': MOTIF_ECARTEE_FILTRE}),
+                                  ('noms_nus', ['carburant_electrique'])):
+            tailles[etiquette] = len(_sans_bruit(
+                export_excel_a6, {**base, 'colonnes_plan_ecartees': valeur},
+                'X'))
+        for etiquette, taille in tailles.items():
+            self.assertGreater(
+                taille, 0,
+                f"l'Excel A6 est VIDE sur le cas '{etiquette}' : le rapport "
+                f"signe a disparu sur un logger.warning")
+        print(f"    CPE-14 Excel A6 non vide sur les 4 formes : "
+              f"{ {k: f'{v:,}' for k, v in tailles.items()} }")
+
+    def test_CPE_15_ACTION_REQUISE_atteint_la_surface_par_le_TRAJET_REEL(self):
+        """⚠️⚠️ LE CONTROLE QUI FERME `conformite/C16`.
+
+        Il ne teste ni A3 seul ni la synthese seule : il rejoue **la
+        transformation d'A6** entre les deux, puis lit le texte publie.
+        *C'est le maillon que dix controles encadraient sans le traverser.*
+        """
+        a3 = {'age': MOTIF_ECARTEE_FILTRE}
+        a4 = {'carburant_electrique': 'constante (variance nulle)'}
+        traverse = fusionner_ecartees_amont(a3, a4)      # ce que A6 fait
+        texte = synthese_colonnes_plan_ecartees(traverse, 'auto')
+        self.assertIsNotNone(texte)
+        self.assertIn(
+            'ACTION REQUISE', texte,
+            "un facteur DECLARE retire par un filtre amont ne se dit pas dans "
+            "le rapport signe du chemin agent")
+        self.assertIn('age', texte)
+        self.assertIn('carburant_electrique', texte,
+                      "le cas anodin a ete efface par le grave")
+        # ⚠️ SECOND SENS : sans motif grave, aucune ACTION REQUISE.
+        calme = synthese_colonnes_plan_ecartees(
+            fusionner_ecartees_amont(a4), 'auto')
+        self.assertNotIn('ACTION REQUISE', calme,
+                         "l'alerte crie sur un portefeuille normal : un "
+                         "avertissement permanent cesse d'etre lu")
+        print("    CPE-15 ACTION REQUISE traverse A6 et atteint le texte ; "
+              "silencieuse sur le cas ordinaire")
 
 
 if __name__ == '__main__':

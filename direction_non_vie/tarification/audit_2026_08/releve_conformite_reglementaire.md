@@ -846,3 +846,70 @@ l'étape 4 d'`unite_exposition`. **Rien ne bougera sans arbitrage.**
 > conclure d'un cas négatif, vérifier qu'il RELÈVE de la règle testée.*
 >
 > ### **L'absence d'une FORME SYNTAXIQUE n'est pas l'absence du FAIT.**
+
+---
+
+**C16 — Le MOTIF est détruit à A6, et le rapport signé du chemin agent
+disparaît en entier sur le cas le plus ordinaire.**
+
+> ✅ **`conformite/C16`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 02/09/2026 —
+> point ② des quatre restants, arbitré par Selasse.**
+>
+> **Le constat.** A3, A4 et A5 rendent chacun une table `{colonne: motif}`
+> (`MatriceX.ecartees_amont`) — *une sentinelle l'exige déjà d'A3* (`CPE-7`).
+> A6 les agrégeait dans un **`set`** : il n'en restait que les clés.
+> `synthese_colonnes_plan_ecartees` faisait alors `dict(liste_de_noms)` et
+> **levait**.
+>
+> ⚠️⚠️ **ET CE N'ÉTAIT PAS UN CRASH.** Les trois surfaces appellent dans un
+> `try` qui rend `b''` sur un `logger.warning`. *Un échec bruyant se voit ; un
+> rapport signé qui disparaît en silence, non.*
+>
+> ```
+>   Excel A6, colonnes_plan_ecartees vide          : 10 977 octets
+>   Excel A6, UNE colonne ecartee (cas ORDINAIRE)  :      0 octet
+>   -- apres correctif --
+>   vide 10 977 | ordinaire 11 154 | grave 11 160 | noms nus 11 159
+> ```
+>
+> ⚠️⚠️ **LE SECOND EFFET EST PIRE QUE LE PREMIER.** La gravité se décide **sur
+> le motif** : l'alerte « **ACTION REQUISE — facteur DÉCLARÉ, exploitable,
+> RETIRÉ par un filtre en amont** » ne pouvait plus **jamais** se déclencher sur
+> le chemin agent. *Un facteur tarifaire disparaissait du modèle et le rapport
+> signé ne pouvait pas le dire.*
+>
+> **Le cas ordinaire suffit** : `carburant_electrique`, modalité one-hot d'un
+> portefeuille sans véhicule électrique, donc constante. Mesuré par exécution
+> A1→A2→A3 sur 800 lignes conformes au plan.
+>
+> ⚠️⚠️ **L'ASYMÉTRIE ENTRE VOISINS, DANS LA MÊME BOUCLE.**
+> `_exclusions_conformite` et `_alertes_conformite` sont des **dicts** qui
+> gardent leurs valeurs ; `_cols_plan_ecartees` était un **`set`**, trois lignes
+> plus bas. *Le révélateur le moins cher, une fois de plus.*
+>
+> **Le correctif** : `fusionner_ecartees_amont` en source unique, **par le
+> PIRE** — le précédent d'`agreger_controle_effet`, dans la même fonction d'A6.
+> *`update()` gardait le motif du dernier agent de la boucle, en silence : deux
+> agents, deux dataframes, deux motifs possibles.*
+>
+> ⚠️ **`colonnes_exemptees_effet` passe au `dict` avec sa jumelle**, alors que
+> son motif est unique et constant aujourd'hui — donc **sans effet mesurable**.
+> *Déplacer une asymétrie n'est pas la fermer.*
+>
+> ⚠️ **La synthèse NORMALISE désormais son entrée**, sans jamais inventer de
+> cause : des noms nus reçoivent `MOTIF_MOTIF_ABSENT`, qui **dit** que la cause
+> n'a pas été transmise. *Rendre l'échec impossible vaut mieux que le rendre
+> rare ; et un texte qui dit « cause non transmise » vaut mieux qu'un rapport
+> absent.*
+>
+> ⛔⛔ **POURQUOI DIX CONTRÔLES N'ONT RIEN VU, ET C'EST LE VRAI ENSEIGNEMENT.**
+> `CPE-7` vérifie qu'**A3** porte la clé ; `CPE-9` vérifie **PAR AST** que les
+> trois services **appellent** la synthèse. Entre les deux il y a A6, et
+> **aucun contrôle ne le traversait**.
+>
+> ### *Un appel ÉCRIT dans le source n'est pas un appel qui RÉUSSIT.*
+>
+> Épinglé par `CPE-11` à `CPE-15`, dont `CPE-15` qui rejoue **la
+> transformation d'A6** entre la source et le texte. Sceau : six violations
+> plantées, cinq tombent, et la sixième — le mot `sorted` remis dans un
+> **commentaire** — ne tombe pas.
