@@ -987,15 +987,27 @@ def export_excel_a1(result_a1: Dict, audit_id: str = "", arrete: Optional[str] =
         _bandeau(ws1, "Rapport Ingestion & Validation", "Synthèse qualité des données",
                  "A1 — Ingestion", aid, arrete)
         r = 7
-        _section(ws1, r, "▶ QUALITÉ DES DONNÉES"); r += 1
-        _kpi(ws1, r, "Score global qualité", round(qualite.get('score_global', 0), 1),
+        # ⚠️⚠️ DEUX VERDICTS, DEUX QUESTIONS -- arbitre par Selasse le
+        # 02/09/2026. Ce bloc disait « QUALITE DES DONNEES », exactement
+        # comme la ligne que publie la couche qualite quatre onglets plus
+        # loin. *Deux pastilles cote a cote sous le meme titre se lisent
+        # comme une contradiction, meme quand les deux ont raison.* A1 dit
+        # si le FICHIER est lisible ; la couche dit si les LIGNES sont
+        # tarifables.
+        _section(ws1, r, "▶ QUALITÉ DU FICHIER (lisibilité, complétude, identité)"); r += 1
+        _kpi(ws1, r, "Score qualité du fichier", round(qualite.get('score_global', 0), 1),
              statut=result_a1.get('statut_rag'), fmt=FMT_DEC4); r += 1
         _kpi(ws1, r, "Nb lignes", qualite.get('nb_lignes', 0), fmt=FMT_NB); r += 1
         _kpi(ws1, r, "Nb colonnes", qualite.get('nb_colonnes', 0), fmt=FMT_NB); r += 1
         _kpi(ws1, r, "Taux complétude", qualite.get('taux_completude', 0) / 100, fmt=FMT_PCT); r += 1
         _kpi(ws1, r, "Nb doublons", qualite.get('nb_doublons', 0), fmt=FMT_NB); r += 1
         _kpi(ws1, r, "Taux doublons", qualite.get('taux_doublons', 0) / 100, fmt=FMT_PCT); r += 1
-        _kpi(ws1, r, "Exposition conforme [0,1]", qualite.get('expo_ok_pct', 0) / 100, fmt=FMT_PCT); r += 1
+        # ⚠️ LE LIBELLE PORTAIT « [0,1] » EN DUR, comme le code qu'il
+        # decrivait. La borne vient desormais de l'unite declaree au plan :
+        # ecrire une borne fixe a cote d'un chiffre qui n'en depend plus,
+        # c'est le rendre faux sans le toucher.
+        _kpi(ws1, r, "Exposition dans la borne déclarée au plan",
+             qualite.get('expo_ok_pct', 0) / 100, fmt=FMT_PCT); r += 1
         _kpi(ws1, r, "Nb types d'anomalies détectées", qualite.get('nb_types_aberrants', 0),
              statut="VERT" if qualite.get('nb_types_aberrants', 0) == 0 else "AMBRE",
              fmt=FMT_NB); r += 1
@@ -1080,7 +1092,10 @@ def export_excel_a1(result_a1: Dict, audit_id: str = "", arrete: Optional[str] =
         _kpi(ws4, r, "Date", now); r += 1
         _kpi(ws4, r, "Agent", "A1 — Ingestion & Validation"); r += 1
         _kpi(ws4, r, "Branche", result_a1.get('branche', 'N/A')); r += 1
-        _kpi(ws4, r, "Statut RAG", result_a1.get('statut_rag', 'N/A'),
+        # ⚠️ Le meme libelle qu'en tete d'onglet : un statut qui ne dit pas
+        # SUR QUOI il porte se lit comme un verdict global.
+        _kpi(ws4, r, "Statut RAG — qualité du fichier",
+             result_a1.get('statut_rag', 'N/A'),
              statut=result_a1.get('statut_rag')); r += 1
         _kpi(ws4, r, "Hash MD5", result_a1.get('hash_md5', 'N/A')); r += 1
 

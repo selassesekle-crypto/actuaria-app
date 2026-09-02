@@ -38,7 +38,8 @@ from typing import Dict, Any, Optional, List, Tuple
 import numpy as np
 import pandas as pd
 from core.charts_tarif import glyphe_rag
-from core.qualite_donnees import exiger_canal_sans_objet
+from core.qualite_donnees import (borne_exposition,
+                                  exiger_canal_sans_objet)
 
 try:
     from ..services.tarif_excel import export_excel_a1
@@ -206,12 +207,15 @@ SEUILS_QUALITE = {
     'completude_ambre': 95.0,
     'doublons_rouge':    5.0,
     'doublons_ambre':    1.0,
-    # Audit V4 point #9 — avant ce correctif, les aberrants actuariels
-    # (§4.2) pénalisaient le score_global (jusqu'à -3 pts) mais n'avaient
-    # AUCUN impact sur le statut RAG affiché, qui ne dépendait que de la
-    # complétude et des doublons. Un fichier avec sinistres négatifs, âges
-    # impossibles ou exposition nulle pouvait obtenir VERT.
-    'aberrants_taux_rouge': 5.0,  # % de lignes affectées par 1 type → ROUGE
+    # ⚠️⚠️ `aberrants_taux_rouge` A ÉTÉ RETIRÉ LE 02/09/2026 — arbitré par
+    # Selasse. Il avait été AJOUTÉ (audit V4 point #9) pour qu'un fichier à
+    # sinistres négatifs ne puisse plus obtenir VERT : à l'époque, personne
+    # d'autre ne jugeait cette question. La couche qualité le fait désormais,
+    # avec une liste disqualifiante arbitrée — et A1 mettait un vrai
+    # portefeuille au ROUGE sur des types qu'elle a délibérément écartés.
+    # *Un seuil juste au moment où on l'écrit devient un doublon le jour où
+    # quelqu'un d'autre répond à la même question.* Le retirer, c'est rendre
+    # la question à son autorité, pas renoncer au contrôle.
 }
 
 
@@ -889,9 +893,26 @@ class AgentA1Ingestion:
         # disait sain, l'alerte disait aberrant, et rien ne les réconciliait.
         # La docstring, elle, était juste depuis le début : « Exposition :
         # 0 < exposition ≤ 1 ». **C'est le code qui contredisait le contrat.**
+        # ⚠️⚠️ ET LA BORNE VIENT DU PLAN, PLUS D'UN 1 CODÉ EN DUR — 02/09/2026.
+        # Mesuré sur des données EN MOIS avec un plan déclarant `mois` :
+        #
+        #     A1     : expo_ok_pct = 0,00 %   score 82,35
+        #     couche : AUCUNE anomalie        borne declaree = 12
+        #
+        # *A1 ne dupliquait pas seulement la question de l'exposition : il y
+        # répondait FAUX.* C'est exactement le défaut que `qualite/C3` a fermé
+        # dans la couche — une hypothèse annuelle muette — et il survivait ici.
+        # La borne se dérive désormais de la MÊME source unique
+        # (`borne_exposition`), donc des deux côtés d'un seul geste.
+        #
+        # ⚠️ CE CHIFFRE RESTE UN FAIT PUBLIÉ, IL N'ENTRE PLUS DANS LE SCORE :
+        # la plausibilité de l'exposition appartient à la couche qualité.
         if 'exposition' in df.columns:
-            expo_ok = (df['exposition'].between(0, 1, inclusive='right')).mean() * 100
+            _borne_expo = borne_exposition(plan) if plan is not None else 1.0
+            expo_ok = (df['exposition']
+                       .between(0, _borne_expo, inclusive='right')).mean() * 100
         else:
+            _borne_expo = 1.0
             expo_ok = 100.0
 
         # ── 4. Valeurs aberrantes actuarielles ────────────────────────────────
@@ -990,14 +1011,29 @@ class AgentA1Ingestion:
                     "— biais GLM Gamma."
                 )
 
-        # ── Score global — intègre la qualité actuarielle ─────────────────────
-        # Pénalité aberrants : -5 points par type d'anomalie, max -20
-        penalite_aberrants = min(len(aberrants) * 5.0, 20.0)
+        # ── Score global — LA QUALITÉ DU FICHIER, PAS CELLE DU TARIF ──────────
+        # ⚠️⚠️ LA PÉNALITÉ « ABERRANTS » A ÉTÉ RETIRÉE LE 02/09/2026, MÊME
+        # RAISON QUE POUR LE STATUT. Elle pesait **15 %** du score : deux types
+        # d'anomalie faisaient tomber la donnée réelle à 98,50/100 alors que la
+        # couche qualité, seule autorité sur cette question, ne bloque pas.
+        # *Un score est un verdict ; le retirer du statut sans le retirer du
+        # score aurait laissé la contradiction sous une autre forme.*
+        #
+        # ⚠️ LES POIDS SONT RENORMALISÉS SUR 0,85, PAS REDISTRIBUÉS À LA MAIN :
+        # un fichier parfait vaut toujours 100,0, et les trois dimensions
+        # gardent leur importance RELATIVE. *Réécrire trois constantes aurait
+        # changé la pondération en silence, sous couvert de retirer la
+        # quatrième.*
+        # ⚠️⚠️ `expo_ok` EST SORTI DU SCORE POUR LA MÊME RAISON QUE LES
+        # ABERRANTS. La plausibilité de l'exposition est jugée par la couche
+        # qualité, sur la borne DÉCLARÉE au plan (`exposition_non_positive`,
+        # `exposition_sup_1`). *Le garder ici, c'était garder un quinzième du
+        # score sur une question dont A1 n'est pas l'autorité — et il y
+        # répondait faux.* Le TAUX reste publié comme un fait.
+        _poids = 0.45 + 0.25
         score = min(
-            taux_complet * 0.45
-            + (100 - taux_doublons) * 0.25
-            + expo_ok * 0.15
-            + (100 - penalite_aberrants) * 0.15,
+            (taux_complet * 0.45
+             + (100 - taux_doublons) * 0.25) / _poids,
             100.0
         )
 
@@ -1038,39 +1074,47 @@ class AgentA1Ingestion:
     # ══════════════════════════════════════════════════════════════════════════
 
     def _calculer_statut_rag(self, qualite: Dict) -> str:
-        """
-        Statut RAG basé sur complétude, doublons ET aberrants actuariels.
+        """QUALITÉ DU FICHIER : lisibilité, complétude, identité. RIEN D'AUTRE.
 
-        AVANT (audit V4 point #9) : seuls la complétude et les doublons
-        déterminaient le statut. Les aberrants actuariels détectés en
-        §4 (sinistres négatifs, âges impossibles, exposition nulle,
-        incohérences sinistre/coût) ne pesaient que sur score_global
-        (max -3 pts sur 100) sans jamais empêcher un statut VERT.
+        ⚠️⚠️ A1 A CESSÉ DE JUGER LES ABERRANTS ACTUARIELS LE 02/09/2026 —
+        arbitré par Selasse, étape ⑤-③ du chantier 1-B. Il les DÉTECTE et les
+        PUBLIE toujours ; il ne rend plus de verdict dessus.
 
-        APRÈS : la présence d'au moins un type d'anomalie plafonne le
-        statut à AMBRE. Si un type d'anomalie affecte plus de
-        `aberrants_taux_rouge` % des lignes, le statut passe à ROUGE —
-        une proportion significative de données actuariellement
-        impossibles ne peut pas être couverte par un simple avertissement.
+        Mesuré sur la seule donnée réelle du dépôt (12 654 contrats) :
+
+            A1 disait   : ROUGE, score 98,50
+            la couche   : ne bloque pas
+            cause du ROUGE : cout_total_sinistres_negatifs 1 116 (8,82 %)
+                             incoh_sin_sans_cout             436 (3,45 %)
+
+        **Ni l'un ni l'autre n'est dans `CODES_DISQUALIFIANTS`** : A1 mettait un
+        vrai portefeuille au ROUGE sur exactement les types que l'arbitrage a
+        délibérément écartés. Et la contradiction jouait dans les DEUX sens —
+        sur le fichier témoin A1 disait AMBRE pendant que la couche BLOQUAIT.
+
+        > *Deux verdicts sur la même question, dans le même rapport signé.
+        > La contradiction ne venait pas de deux mécanismes qui coexistent,
+        > mais d'un mécanisme qui répondait à la question de l'autre.*
+
+        ⚠️ CE N'EST NI UNE RÉPARATION NI UNE SUPPRESSION. A1 garde ce dont il
+        est la SEULE source — complétude de **toutes** les colonnes,
+        granularité, provenance de l'identité, coercition de types. La couche
+        qualité devient la seule autorité sur « ces lignes sont-elles
+        tarifables ». *Une question, un verdict.*
+
+        ⚠️ CE QUE CE STATUT NE DIT PLUS, ET QUI EST PUBLIÉ AILLEURS : les
+        anomalies actuarielles restent dans `aberrants` et
+        `alertes_aberrants`, et le rapport signé porte le verdict de la couche.
+        *Retirer un verdict n'efface pas le fait ; c'est même tout l'objet.*
         """
         c = qualite['taux_completude']
         d = qualite['taux_doublons']
-        n = max(qualite.get('nb_lignes', 1), 1)
-        aberrants = qualite.get('aberrants', {})
-        n_types_aberrants = qualite.get('nb_types_aberrants', 0)
-        # Taux du type d'anomalie le plus fréquent (évite le double-comptage
-        # d'une même ligne affectée par plusieurs contrôles simultanément)
-        taux_aberrant_max = (
-            max(aberrants.values()) / n * 100 if aberrants else 0.0
-        )
 
         if (c < SEUILS_QUALITE['completude_rouge']
-                or d > SEUILS_QUALITE['doublons_rouge']
-                or taux_aberrant_max > SEUILS_QUALITE['aberrants_taux_rouge']):
+                or d > SEUILS_QUALITE['doublons_rouge']):
             return 'ROUGE'
         elif (c < SEUILS_QUALITE['completude_ambre']
-                or d > SEUILS_QUALITE['doublons_ambre']
-                or n_types_aberrants > 0):
+                or d > SEUILS_QUALITE['doublons_ambre']):
             return 'AMBRE'
         return 'VERT'
 

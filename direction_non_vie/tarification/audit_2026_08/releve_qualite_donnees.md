@@ -878,6 +878,93 @@ tarif sans qu'aucun livrable ne le dise.**
 > absente, les 20 plans actuels tournent inchangés — *un refus trop large
 > arrêterait tout le monde.*
 
+**C16 — A1 et la couche qualité rendent DEUX VERDICTS SUR LA MÊME
+QUESTION, et ils se contredisent dans les deux sens.**
+
+> ✅ **`qualite/C16`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 02/09/2026 —
+> étape ⑤-③ du chantier 1-B, arbitrée par Selasse.**
+>
+> ```
+>   DONNEE REELLE, 12 654 contrats -- AVANT
+>     A1     : ROUGE, score 98,50
+>     couche : ne bloque pas
+>     cause du ROUGE : cout_total_sinistres_negatifs 1 116 (8,82 %)
+>                      incoh_sin_sans_cout             436 (3,45 %)
+>     -> NI L'UN NI L'AUTRE n'est dans CODES_DISQUALIFIANTS
+>
+>   FICHIER TEMOIN -- AVANT
+>     A1     : AMBRE        couche : BLOQUE
+> ```
+>
+> **A1 mettait un vrai portefeuille au ROUGE sur exactement les types que
+> l'arbitrage de `qualite/C14` avait délibérément écartés** — et la
+> contradiction jouait **dans les deux sens** : il criait quand la couche se
+> taisait, et se taisait quand elle criait.
+>
+> > *La contradiction ne venait pas de deux mécanismes qui coexistent, mais
+> > d'un mécanisme qui répondait à la question de l'autre.*
+>
+> ⚠️⚠️ **NI RÉPARER NI SUPPRIMER — RENDRE À CHACUN SA QUESTION.** Selasse a
+> écarté ma première recommandation (faire dériver le statut d'A1 de la même
+> liste) : *elle réparait la contradiction en pérennisant la dualité*, alors
+> que la décision antérieure était de FUSIONNER les deux chemins. A1 garde ce
+> dont il est la **seule source** — complétude de toutes les colonnes,
+> doublons de forme, granularité, provenance de l'identité, coercition. La
+> couche devient la seule autorité sur *« ces lignes sont-elles tarifables »*.
+>
+> ### ⛔⛔ ET IL N'Y RÉPONDAIT PAS SEULEMENT EN DOUBLE : IL Y RÉPONDAIT FAUX
+>
+> ```
+>   donnees EN MOIS, plan declarant `mois` (borne de la couche = 12)
+>     A1     : expo_ok_pct = 0,00 %   score 82,35   <- borne (0,1] CODEE EN DUR
+>     couche : AUCUNE anomalie
+> ```
+>
+> C'est le défaut que **`qualite/C3` a fermé dans la couche** — une hypothèse
+> annuelle muette — et il survivait dans A1. La borne se dérive désormais de
+> la même **source unique**, `borne_exposition` : les deux côtés d'un seul
+> geste. `QF-4` le tient dans les DEUX sens.
+>
+> **Ce qui a changé, mesuré :**
+>
+> | fichier | A1 avant | A1 après | la couche |
+> |---|---|---|---|
+> | sain | VERT 100,00 | VERT 100,00 | ne bloque pas |
+> | témoin | AMBRE 97,30 | **VERT 100,00** | **BLOQUE** |
+> | réel | **ROUGE 98,50** | **VERT 100,00** | ne bloque pas |
+> | données en mois | — (expo_ok 0,00 %) | **expo_ok 100,00 %** | ne bloque pas |
+>
+> ⚠️ **LE FAIT SURVIT, SEUL LE VERDICT PART** (`QF-2`) : `aberrants`,
+> `alertes_aberrants` et `expo_ok_pct` restent publiés. *Retirer un verdict
+> n'efface pas le fait — c'est même tout l'objet.*
+>
+> ⚠️ **LE SCORE AUSSI EST UN VERDICT.** La pénalité aberrants pesait **15 %**,
+> `expo_ok` **15 %** : les retirer du statut sans les retirer du score aurait
+> laissé la contradiction sous une autre forme. Les poids sont **renormalisés**
+> (0,45 + 0,25), pas réécrits à la main — *réécrire trois constantes aurait
+> changé la pondération en silence, sous couvert d'en retirer une quatrième.*
+>
+> ⚠️ **LES LIBELLÉS DISTINGUENT LES DEUX VERDICTS** (`QF-8`) : « QUALITÉ DU
+> FICHIER (lisibilité, complétude, identité) » pour A1. *Deux pastilles côte
+> à côte sous le même titre se lisent comme une contradiction, même quand les
+> deux ont raison.*
+>
+> ⚠️ **SECOND SENS** (`QF-6`) : A1 juge TOUJOURS ce qui est à lui — une
+> colonne entièrement vide le fait passer AMBRE, 10 % de doublons ROUGE. *Un
+> lot qui l'aurait désarmé complètement serait aussi faux que la contradiction
+> qu'il corrige.*
+>
+> ⛔⛔ **ET LE SCEAU A ENCORE DÉMASQUÉ UN DE MES CONTRÔLES.** `QF-3` cherchait
+> le nom de COLONNE d'A1 comme sous-chaîne des codes de la couche :
+> `cout_total_sinistres` n'apparaît nulle part dans `cout_net_negatif`, donc
+> l'assertion passait quoi qu'il arrive. *Deux vocabulaires ne se rapprochent
+> pas par ressemblance de chaînes ; il faut dire QUI correspond à QUI.* Refait
+> sur une table de correspondance explicite — le plant le fait tomber.
+>
+> Épinglé par `QF-1` à `QF-9`, dont `QF-9` : le seuil `aberrants_taux_rouge`
+> est retiré **et son retrait est expliqué sur place** — *un seuil qui ne
+> gouverne plus rien mais reste écrit laisse croire qu'un contrôle existe.*
+
 ## ③ Ce que je ne tranche pas ici
 
 **Rien n'est resté non lu** : 334 lignes, intégralement.
