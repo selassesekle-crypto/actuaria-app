@@ -104,6 +104,7 @@ from core.qualite_donnees import (Anomalie, annexe_revue_facteurs_absents,
                                   borne_exposition, EffetAgrege,
                                   exiger_valeurs_absentes_declarees,
                                   facteurs_valeurs_absentes,
+                                  masque_lignes_facteurs_absents,
                                   phrase_plausibilite,
                                   phrase_unite_non_declaree, RapportQualite,
                                   ROLES_GRANDEURS)
@@ -1371,7 +1372,14 @@ class AgentA2Preprocessing:
             }
             if _decl in (None, 'exclure'):
                 _avant_f = len(df)
-                _restant = df.dropna(subset=_cols_f)
+                # ⚠️⚠️ LE GESTE DERIVE DU MASQUE QUI A COMPTE, PAS DE `dropna`.
+                # `dropna` ne voit que les vrais NaN ; le compte publie voit
+                # AUSSI une chaine inconvertible sur un facteur `continu`.
+                # Mesure : 9 comptees, **5 retirees** -- le rapport signe
+                # aurait annonce neuf exclusions dont quatre n'avaient pas eu
+                # lieu. *Le chiffre et la ligne qu'il decrit viennent de la
+                # meme source, ou ils finiront par se contredire.*
+                _restant = df[~masque_lignes_facteurs_absents(df, plan)]
                 # ⚠️⚠️ TOUT EXCLURE N'EST PAS UNE EXCLUSION, C'EST UN ARRET.
                 # Un facteur entierement vide viderait le portefeuille, et
                 # tarifer sur zero ligne n'a aucun sens. *Le dire vaut mieux

@@ -73,6 +73,7 @@ from core.qualite_donnees import (
     empreinte_positions,
     exiger_valeurs_absentes_declarees,
     facteurs_valeurs_absentes,
+    masque_lignes_facteurs_absents,
     synthese_qualite_donnees,
 )
 from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
@@ -432,6 +433,67 @@ class TestValeursAbsentesDeclarees(unittest.TestCase):
         self.assertEqual(len(r2.get('dataframe')), 0)
         print(f"    OK VA-15 facteur entierement vide -> success=False et la "
               f"cause est nommee ({len(msg)} car.)")
+
+    def test_VA_17_le_COMPTE_publie_et_le_GESTE_viennent_du_MEME_masque(self):
+        """⛔⛔ LE DEFAUT QUE J'AI LIVRE, ET QUE SELASSE M'A FAIT CHERCHER.
+
+        A la question << est-ce que tout va bien avec certitude ? >>, la
+        verification a trouve ceci : A2 excluait par `dropna`, qui ne voit que
+        les vrais `NaN`, alors que le compte publie et l'annexe venaient de
+        `_masque_absence_facteur`, qui voit AUSSI une chaine inconvertible sur
+        un facteur `continu`.
+
+        ```
+          facteur `age` : 5 vrais vides + 4 chaines
+            compte publie  : 9 lignes
+            annexe publiee : 9 positions
+            action reelle  : 5 lignes retirees
+        ```
+
+        > *Le rapport signe aurait annonce neuf exclusions dont quatre
+        > n'avaient pas eu lieu -- et ces quatre lignes portaient un TEXTE dans
+        > une colonne numerique du tarif.*
+
+        ⚠️⚠️ SUR LE CHEMIN COMPLET, LA DIVERGENCE N'ETAIT PAS ATTEIGNABLE : A1
+        coerce les types avant A2. **Mais rien ne gardait cette dependance.**
+        Ce controle assemble donc A2 SANS A1 -- le cas que `agents/C1`
+        documente deja -- parce que c'est la seule assiette ou l'invariant est
+        reellement teste. *On ne compte pas sur un agent amont pour tenir un
+        invariant qu'on peut rendre impossible ici.*
+        """
+        df = _portefeuille_auto(200, seed=5)
+        df['age'] = df['age'].astype(object)
+        df.loc[df.index[0:5], 'age'] = np.nan
+        df.loc[df.index[10:14], 'age'] = 'non renseigne'
+        compte = facteurs_valeurs_absentes(df, _PLAN_AUTO)
+        self.assertEqual(compte, {'age': 9},
+                         'le temoin ne separe plus les deux detecteurs')
+        # ⚠️ La premisse EST le controle : `dropna` doit voir MOINS que le
+        # compte, sinon le cas ne prouve rien.
+        self.assertEqual(
+            len(df.dropna(subset=['age'])), 195,
+            "`dropna` voit autant que le compte : le temoin ne peut pas "
+            'distinguer les deux sources')
+        masque = masque_lignes_facteurs_absents(df, _PLAN_AUTO)
+        self.assertEqual(int(np.asarray(masque, dtype=bool).sum()), 9)
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            precedent = logging.root.manager.disable
+            logging.disable(logging.CRITICAL)
+            try:
+                r2 = AgentA2Preprocessing().run(
+                    {'dataframe': df.copy(), 'success': True}, plan=_PLAN_AUTO)
+            finally:
+                logging.disable(precedent)
+        self.assertTrue(r2.get('success'), r2.get('erreur'))
+        self.assertEqual(
+            len(r2['dataframe']), 200 - 9,
+            f"A2 a retire {200 - len(r2['dataframe'])} ligne(s) pour un compte "
+            f"publie de 9 : le chiffre et le geste ne viennent pas de la meme "
+            f"source, et le rapport signe annoncerait des exclusions qui n'ont "
+            f"pas eu lieu")
+        print(f"    OK VA-17 compte 9 = geste 9 (dropna n'en aurait vu que "
+              f"{200 - len(df.dropna(subset=['age']))}), sans A1")
 
     def test_VA_16_la_modalite_inventee_INCONNU_a_disparu_du_CODE(self):
         """⚠️⚠️ ARBITRE PAR SELASSE : le systeme n'invente plus de modalite.

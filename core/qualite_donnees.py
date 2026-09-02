@@ -206,6 +206,44 @@ def _masque_absence_facteur(df, facteur):
     return np.asarray(df[facteur.nom].isna(), dtype=bool)
 
 
+def masque_lignes_facteurs_absents(df, plan):
+    """Les lignes à retirer — DÉRIVÉES DU MASQUE QUI A SERVI À COMPTER.
+
+    ⚠️⚠️ SANS ELLE, LE COMPTE ET LE GESTE VENAIENT DE DEUX SOURCES. A2
+    excluait par `dropna`, qui ne voit que les vrais `NaN` ; le compte publié
+    et l'annexe venaient de `_masque_absence_facteur`, qui voit **aussi** une
+    chaîne inconvertible sur un facteur `continu`. Mesuré le 02/09/2026 sur un
+    facteur portant 5 vrais vides et 4 chaînes :
+
+        compte publie  : 9 lignes absentes
+        annexe publiee : 9 positions
+        action reelle  : 5 lignes retirees
+
+    *Le rapport signé aurait dit « 9 ligne(s) EXCLUE(S) » pendant que quatre
+    d'entre elles restaient dans le tarif, avec un texte dans une colonne
+    numérique.*
+
+    ⚠️ SUR LE CHEMIN COMPLET, LA DIVERGENCE N'ÉTAIT PAS ATTEIGNABLE : A1
+    coerce les types avant A2 et rend ces chaînes en `NaN`. **Mais rien ne
+    gardait cette dépendance** — un assemblage manuel des agents sans A1
+    (constat `agents/C1`) la rouvrait en silence. *On ne compte pas sur un
+    agent amont pour tenir un invariant qu'on peut rendre impossible ici.*
+
+    C'est la doctrine déjà écrite dans `_entete_alerte` : **le chiffre et la
+    ligne qu'il décrit viennent de la même source, ou ils finiront par se
+    contredire.**
+    """
+    n = 0 if df is None else len(df)
+    total = np.zeros(n, dtype=bool)
+    if df is None or plan is None:
+        return total
+    touches = facteurs_valeurs_absentes(df, plan)
+    for f in getattr(plan, 'facteurs', ()) or ():
+        if f.nom in touches:
+            total |= _masque_absence_facteur(df, f)
+    return total
+
+
 def annexe_revue_facteurs_absents(df, plan) -> list[dict]:
     """Un cas par ligne exclue pour facteur absent — même doctrine que sa
     jumelle des grandeurs, sujet distinct.
