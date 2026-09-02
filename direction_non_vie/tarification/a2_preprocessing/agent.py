@@ -99,9 +99,13 @@ from core.plan_tarifaire import PlanTarifaire, Facteur, _slug, _SUFFIXE_TRANSFO
 # désormais du PLAN (`unite_exposition`), donc d'un appel et non d'un import.
 # *C'est 1d qui a rendu ce remplacement possible en un seul geste : tant que A2
 # portait ses propres littéraux, il aurait fallu le faire à deux endroits.*
-from core.qualite_donnees import (Anomalie, borne_exposition, EffetAgrege,
+from core.qualite_donnees import (Anomalie, annexe_revue_valeurs_absentes,
+                                  borne_exposition, EffetAgrege,
+                                  exiger_valeurs_absentes_declarees,
                                   phrase_plausibilite,
-                                  phrase_unite_non_declaree, RapportQualite)
+                                  phrase_unite_non_declaree, RapportQualite,
+                                  ROLES_GRANDEURS)
+from core.qualite_donnees import _LIBELLE_GRANDEUR as _LIBELLE_GRANDEUR_A2
 
 # ⚠️⚠️ CONSTAT `a2/C15` — LE FILTRE GLOBAL D'AVERTISSEMENTS EST RETIRÉ.
 # `warnings.filterwarnings('ignore')` posé ICI, au niveau module, s'appliquait
@@ -662,7 +666,14 @@ class AgentA2Preprocessing:
             # ⚠️ Le rapport qualité d'A2 : `None` quand il n'a RIEN fait à
             # l'exposition. *Un avertissement affiché toujours cesse d'être un
             # signal — la règle est déjà celle de `synthese_qualite_donnees`.*
-            _anos_expo = stats_expo.get('anomalies') or []
+            # ⚠️⚠️ CE QUE LE PLAN A FAIT DES VALEURS ABSENTES REJOINT LE MEME
+            # CANAL — etape 5-2, 02/09/2026. Ce canal atteint DEJA les quatre
+            # surfaces signees ; en ouvrir un second aurait cree une seconde
+            # doctrine. *L'actuaire a declare, le rapport doit le DIRE : une
+            # instruction suivie en silence ne se distingue pas d'une
+            # invention.*
+            _anos_expo = ((stats_imput.get('anomalies_valeurs_absentes') or [])
+                          + (stats_expo.get('anomalies') or []))
             # ⚠️⚠️ ON TRIE PAR REGLE — constat `a2/C5`, residu. Tout partait
             # dans `corrections`, quelle que soit la regle portee par
             # l'anomalie : le rapport signe nommait mal l'acte.
@@ -1260,6 +1271,68 @@ class AgentA2Preprocessing:
             stats['nb_cellules_apres'] = 0
             return df, stats
 
+        # ── LE SYSTÈME N'INVENTE JAMAIS SUR LES TROIS GRANDEURS ─────────────
+        # ⚠️⚠️ ÉTAPE ⑤-② DU CHANTIER 1-B, arbitrée par Selasse le 02/09/2026.
+        # Mesuré avant l'arbitrage, sur 30 expositions absentes parmi 1 000 :
+        # l'exposition totale passait de **970 à 1 000** — trente années de
+        # couverture INVENTÉES au dénominateur du tarif — et le rapport signé
+        # n'en disait RIEN. *Une valeur absente est ambiguë ; choisir à la
+        # place de l'actuaire, c'est trancher une question actuarielle par
+        # défaut.*
+        #
+        # ⚠️ LE REFUS EST ICI, AVANT LA BOUCLE. Un contrôle placé après elle
+        # aurait laissé la valeur inventée dans le tarif avant de protester.
+        #
+        # ⚠️ PORTÉE : les trois grandeurs seulement. Les FACTEURS restent
+        # imputés comme avant — Selasse les a laissés hors de ce lot, et le
+        # dire vaut mieux que de laisser croire qu'il a tout pris.
+        _absentes = exiger_valeurs_absentes_declarees(df, plan)
+        if _absentes:
+            _choix = plan.valeurs_absentes
+            stats['valeurs_absentes'] = {
+                'declaration': _choix,
+                'par_grandeur': dict(_absentes),
+                'positions': annexe_revue_valeurs_absentes(df, plan),
+            }
+            # ⚠️ RGPD : la description porte un COMPTE et la DECLARATION,
+            # jamais une position. Les positions vivent dans l'annexe, qui ne
+            # circule pas. Deux surfaces, deux audiences.
+            _regle = 1 if _choix == 'exclure' else 2
+            _quoi = ('retirees du calcul' if _choix == 'exclure'
+                     else f"completees par la "
+                          f"{'mediane' if _choix.endswith('mediane') else 'moyenne'}")
+            stats['anomalies_valeurs_absentes'] = [
+                Anomalie(
+                    code=f'valeur_absente_{_choix}',
+                    regle=_regle, role=role, colonne=getattr(plan, role),
+                    nb_lignes=n, proportion=n / max(len(df), 1),
+                    index=tuple(x['position'] for x in
+                                stats['valeurs_absentes']['positions']
+                                if x['grandeur'] == role),
+                    description=(
+                        f"Valeur absente sur « "
+                        f"{_LIBELLE_GRANDEUR_A2.get(role, role)} » — {n} "
+                        f"ligne(s) sur {len(df)}. AUCUNE valeur n'a ete "
+                        f"devinee : ces lignes sont {_quoi} SUR VOTRE "
+                        f"INSTRUCTION, declaree au plan "
+                        f"(valeurs_absentes='{_choix}'). L'annexe de revue "
+                        f"jointe a ce run en donne la liste, ligne par "
+                        f"ligne."),
+                    correction=f"declaration du plan : {_choix}")
+                for role, n in sorted(_absentes.items())]
+            if _choix == 'exclure':
+                _cols = [getattr(plan, r) for r in _absentes]
+                _avant = len(df)
+                df = df.dropna(subset=_cols).reset_index(drop=True)
+                stats['valeurs_absentes']['lignes_retirees'] = _avant - len(df)
+                logger.info(
+                    "valeurs absentes : %d ligne(s) RETIREE(S) sur "
+                    "declaration du plan", _avant - len(df))
+                cols_avec_na = df.columns[df.isnull().any()].tolist()
+                if not cols_avec_na:
+                    stats['nb_cellules_apres'] = 0
+                    return df, stats
+
         # Variables numériques asymétriques (coûts, primes, capitaux)
         # Identifiées par leur nom
         mots_asymetriques = [
@@ -1278,6 +1351,27 @@ class AgentA2Preprocessing:
             nb_na  = int(df[col].isnull().sum())
             pct_na = nb_na / len(df) * 100
             valeur = None
+
+            # ⚠️⚠️ SUR LES TROIS GRANDEURS, C'EST LE PLAN QUI DIT LA
+            # STRATEGIE — jamais la table de categories. *Deriver la strategie
+            # d'un nom de colonne, c'est encore choisir a la place de
+            # l'actuaire ; il a declare, on obeit.*
+            _grandeur = next(
+                (r for r in ROLES_GRANDEURS if getattr(plan, r, None) == col),
+                None)
+            if _grandeur is not None:
+                _declare = {'imputer_mediane': 'median',
+                            'imputer_moyenne': 'mean'}[plan.valeurs_absentes]
+                valeur = _CALCUL_IMPUTATION[_declare](df[col])
+                df[col] = df[col].fillna(valeur)
+                methode = _LIBELLE_IMPUTATION[_declare] + ' (declaree au plan)'
+                self.parametres[_CLE_PARAMETRE[_declare]][col] = {
+                    'valeur': valeur, 'strategie': _declare}
+                stats['colonnes_imputees'][col] = {
+                    'nb_na': nb_na, 'pct_na': round(pct_na, 2),
+                    'methode': methode, 'valeur': float(valeur),
+                }
+                continue
 
             categorie = self._categorie_imputation(
                 col, df[col], cols_cat, binaires, mots_asymetriques)

@@ -60,6 +60,115 @@ if TYPE_CHECKING:                       # évite un import cyclique à l'exécut
 SEUIL_ESCALADE = 0.05
 
 
+#: Les trois grandeurs que ce lot couvre. ⚠️ Les FACTEURS tarifaires restent
+#: imputés comme avant : Selasse les a explicitement laissés hors de ce lot.
+ROLES_GRANDEURS = ('exposition', 'cible_frequence', 'cible_cout')
+
+#: ⚠️ Libellés lisibles — le message parle à l'actuaire, pas au code.
+_LIBELLE_GRANDEUR = {
+    'exposition': 'durée de couverture',
+    'cible_frequence': 'nombre de sinistres',
+    'cible_cout': 'charge de sinistres',
+}
+
+
+class ValeurAbsenteNonDeclaree(RuntimeError):
+    """⚠️⚠️ LE SYSTÈME N'INVENTE JAMAIS UNE VALEUR À LA PLACE DE L'ACTUAIRE.
+
+    Arbitré par Selasse le 02/09/2026. Mesuré avant l'arbitrage, sur 30
+    expositions absentes parmi 1 000 :
+
+        exposition totale AVANT : 970,0
+        exposition totale APRES : 1 000,0    <- 30 ANNEES inventees
+        ce que le rapport signe en disait : RIEN
+
+    Les valeurs absentes étaient remplacées par la moyenne, en silence, et
+    entraient au dénominateur du tarif. *Une valeur absente est AMBIGUË : ni le
+    code ni la donnée ne savent si c'est un vrai zéro, une erreur de saisie ou
+    une grandeur inconnue. Choisir à la place de l'actuaire, c'est trancher une
+    question actuarielle par défaut.*
+
+    Le plan déclare désormais `valeurs_absentes` — `exclure`,
+    `imputer_mediane`, `imputer_moyenne`. **Non déclaré, on s'arrête ici**, en
+    nommant les grandeurs, les comptes, et l'empreinte des positions.
+
+    ⚠️ RGPD : le message porte des COMPTES et une EMPREINTE, jamais une
+    position ni une valeur. L'annexe, elle, porte les positions — et elle ne
+    quitte pas le poste de l'actuaire.
+    """
+
+    def __init__(self, manquants: dict, total: int, empreinte: str):
+        self.manquants = dict(manquants)
+        self.total = int(total)
+        self.empreinte = empreinte
+        detail = " ; ".join(
+            f"{_LIBELLE_GRANDEUR.get(r, r)} : {n} ligne(s)"
+            for r, n in sorted(manquants.items()))
+        super().__init__(
+            f"Valeurs absentes sur des grandeurs qui decident du tarif, et le "
+            f"plan ne dit pas quoi en faire. {detail} — sur {total} ligne(s). "
+            f"AUCUNE VALEUR N'A ETE INVENTEE. Declarez `valeurs_absentes` au "
+            f"plan : 'exclure' (ces lignes sortent du calcul), "
+            f"'imputer_mediane' ou 'imputer_moyenne' (elles recoivent une "
+            f"valeur, et le rapport signe le dira). L'annexe de revue jointe a "
+            f"ce run liste les lignes concernees, position par position, pour "
+            f"que vous les repreniez vous-meme. Empreinte des cas : "
+            f"{empreinte}.")
+
+
+def annexe_revue_valeurs_absentes(df, plan) -> list[dict]:
+    """Un cas par ligne absente — pour que l'actuaire REPRENNE les siennes.
+
+    ⚠️⚠️ MÊME DOCTRINE QUE `annexe_revue_charges_negatives`, GÉNÉRALISÉE AUX
+    TROIS GRANDEURS. Deux surfaces, deux audiences : la SYNTHÈSE (rapport
+    signé, circulé) ne cite ni valeur ni position ; cette ANNEXE ne quitte pas
+    le poste de l'actuaire et porte **la position de la ligne dans SON
+    fichier** — une coordonnée que lui seul peut résoudre.
+
+    ⚠️ LA POSITION EST POSITIONNELLE, jamais l'étiquette du dataframe. Mesuré :
+    même sur un dataframe indexé par des numéros de police, elle reste un rang.
+    *Aucun identifiant client ne peut fuir par ce canal.*
+
+    ⚠️ ET ELLE NE PROMET QUE CE QU'ELLE PEUT PRODUIRE. Pas de « valeur
+    trouvée » : il n'y en a pas — c'est tout l'objet. Elle donne la position et
+    la grandeur, et rien d'autre.
+    """
+    if df is None:
+        return []
+    lignes = []
+    for role in ROLES_GRANDEURS:
+        col = getattr(plan, role, None)
+        if not col or col not in df.columns:
+            continue
+        for pos in np.flatnonzero(detecter_illisible(df, col)):
+            lignes.append({'position': int(pos), 'grandeur': role,
+                           'colonne': col})
+    return sorted(lignes, key=lambda x: (x['position'], x['grandeur']))
+
+
+def exiger_valeurs_absentes_declarees(df, plan) -> dict:
+    """SOURCE UNIQUE du refus — les trois grandeurs, jamais les facteurs.
+
+    Rend le compte par grandeur (vide si rien n'est absent). LÈVE si le plan
+    ne déclare pas quoi en faire. *Un refus qui arrive après l'imputation
+    aurait laissé la valeur inventée dans le tarif.*
+    """
+    manquants = {}
+    for role in ROLES_GRANDEURS:
+        col = getattr(plan, role, None)
+        if not col or col not in df.columns:
+            continue
+        n = int(np.asarray(detecter_illisible(df, col), dtype=bool).sum())
+        if n:
+            manquants[role] = n
+    if manquants and getattr(plan, 'valeurs_absentes', None) is None:
+        positions = [x['position'] for x in
+                     annexe_revue_valeurs_absentes(df, plan)]
+        raise ValeurAbsenteNonDeclaree(
+            manquants, len(df), empreinte_positions(positions))
+    return manquants
+
+
 class SignatureSansObjet(RuntimeError):
     """⚠️⚠️ UNE SIGNATURE QUI NE VALIDE RIEN EST PIRE QUE PAS DE SIGNATURE.
 

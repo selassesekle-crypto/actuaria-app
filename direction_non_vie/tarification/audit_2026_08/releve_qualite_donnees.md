@@ -790,6 +790,94 @@ qu'elle publie sont écrits pour un développeur, pas pour celui qui signe.**
 > Selasse** : l'anomalie est plantée à la position 777 avec la valeur
 > − 424 242, et aucun message ne les cite.
 
+**C15 — Une valeur ABSENTE sur une des trois grandeurs est remplacée
+en SILENCE par la moyenne, et la valeur inventée entre au dénominateur du
+tarif sans qu'aucun livrable ne le dise.**
+
+> ✅ **`qualite/C15`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 02/09/2026 —
+> étape ⑤-② du chantier 1-B, arbitrée par Selasse.**
+>
+> ```
+>   30 expositions ABSENTES sur 1 000, AVANT l'arbitrage :
+>     exposition totale AVANT :   970,0
+>     exposition totale APRES : 1 000,0    <- 30 ANNEES inventees
+>     ce que le rapport signe en disait : RIEN
+> ```
+>
+> *Une valeur absente est AMBIGUË : ni le code ni la donnée ne savent si c'est
+> un vrai zéro, une erreur de saisie ou une grandeur inconnue. Choisir à la
+> place de l'actuaire, c'est trancher une question actuarielle par défaut.*
+>
+> ⚠️ **CE N'EST PAS `a2/C5`**, qui portait sur `exposition = 0` — une valeur
+> PRÉSENTE et impossible, bien fermée. Ici la valeur est **absente**.
+>
+> **Le plan déclare désormais** `valeurs_absentes` — `exclure`,
+> `imputer_mediane`, `imputer_moyenne`. **Non déclaré, le run S'ARRÊTE** et
+> nomme la grandeur, le compte et l'empreinte des cas. C'est le patron déjà
+> validé quatre fois — `unite_exposition`, `Chargements`,
+> `identifiant_contrat`, `echeance`.
+>
+> | déclaration | comportement mesuré (3 absentes / 1 000) |
+> |---|---|
+> | **non déclaré** (les 20 plans actuels) | le run s'arrête |
+> | `exclure` | 1 000 -> **997** lignes, exposition totale 997,00 |
+> | `imputer_mediane` | 1 000 lignes, valeur **1,0000** |
+> | `imputer_moyenne` | 1 000 lignes, valeur **0,9198** |
+>
+> ⚠️⚠️ **LA STRATÉGIE VIENT DU PLAN, PLUS D'UNE TABLE DE MOTS-CLÉS.** A2
+> classait la colonne par son NOM et en déduisait médiane ou moyenne. *Dériver
+> la stratégie d'un nom de colonne, c'est encore choisir à la place de
+> l'actuaire.*
+>
+> **BUMP D'EMPREINTE `s5` -> `s6`**, golden et constante dans le MÊME commit.
+> Motif : `valeurs_absentes` décide si une ligne sort du calcul ou reçoit une
+> valeur — donc d'un prix. Mesure faite AVANT le bump : **aucune empreinte
+> `s5:` persistée** dans `models/` ni `data/`.
+>
+> ### ⚠️ L'ANNEXE EXISTAIT DÉJÀ, ET ELLE N'ÉTAIT BRANCHÉE À RIEN
+>
+> `annexe_revue_charges_negatives` portait mot pour mot la doctrine demandée :
+> *« la position de la ligne dans SON fichier — une coordonnée que lui seul
+> peut résoudre, jamais un identifiant client »*. Relevé par AST : **3 appels,
+> tous dans des tests, zéro appelant de production.** C'est la forme de
+> `socle/C2` dans l'outil même dont on avait besoin. Elle est **généralisée**
+> aux trois grandeurs, pas réinventée.
+>
+> **Deux surfaces, deux audiences** : la SYNTHÈSE circule et ne porte qu'un
+> COMPTE (`VA-7`) ; l'ANNEXE ne quitte pas le poste de l'actuaire et porte les
+> positions (`VA-5`).
+>
+> ⚠️⚠️ **LE PLANT RGPD EXIGÉ PAR SELASSE** (`VA-6`) : le dataframe est indexé
+> par des **numéros de police** et porte une colonne d'identifiants ; l'annexe
+> rend des **rangs**, et aucun de ces libellés n'y apparaît. Le sceau plante la
+> fuite : publier `df.index[pos]` au lieu du rang fait tomber le contrôle.
+>
+> ⚠️ **ET J'AI DÛ RÉÉCRIRE MA PROPRE PHRASE, PAS LE GARDE-FOU.** Ma
+> description disait « la liste, position par position » : la sentinelle RGPD
+> interdit ce mot dans un document circulé. Elle le **mentionnait** sans rien
+> publier — *affaiblir un garde-fou RGPD pour faire passer son propre
+> correctif est le geste qu'on ne fait jamais.* Seconde fois de la journée.
+>
+> ⚠️ **ET `VA-3` ÉTAIT DU DÉCOR AVANT QUE JE NE LE RENFORCE** : son témoin
+> avait une exposition constante à 1,0, où médiane et moyenne valent toutes
+> deux 1,0000. *Un contrôle qui ne peut pas distinguer les deux cas qu'il
+> oppose ne prouve rien.*
+>
+> ⛔ **PORTÉE TENUE, ET C'EST `VA-9` QUI LA GARDE** : les trois grandeurs
+> seulement. Les **facteurs tarifaires** restent imputés comme avant — une
+> modalité inventée change aussi une relativité, mais le rayon de souffle
+> diffère et Selasse les a explicitement laissés hors de ce lot.
+>
+> ⚠️ **IMPACT MESURÉ DU REFUS** : **0 %** de valeurs illisibles sur la seule
+> donnée réelle du dépôt (12 654 contrats), **0** parmi 35 artefacts A2
+> antérieurs, et **1 003 tests verts** — aucun jeu d'essai ne porte de valeur
+> absente sur les trois grandeurs. *Sur tout ce qu'on peut observer, ce refus
+> ne bloque rien.*
+>
+> Épinglé par `VA-1` à `VA-10`, dont `VA-8`, le second sens : sans valeur
+> absente, les 20 plans actuels tournent inchangés — *un refus trop large
+> arrêterait tout le monde.*
+
 ## ③ Ce que je ne tranche pas ici
 
 **Rien n'est resté non lu** : 334 lignes, intégralement.

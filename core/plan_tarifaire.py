@@ -66,6 +66,21 @@ FamilleSeverite = Literal["gamma", "lognormal", "inverse_gaussienne"]
 # DIT — le patron déjà validé pour la référence A3 absente d'`a4/C11`.
 UniteExposition = Literal["annee", "mois", "jour"]
 
+#: ⚠️⚠️ CE QUE L'ACTUAIRE DÉCIDE D'UNE VALEUR ABSENTE — arbitré par Selasse le
+#: 02/09/2026. **Le système n'invente jamais.** Mesuré avant l'arbitrage : une
+#: exposition absente était remplacée en silence par la MOYENNE, et 30 lignes
+#: vides devenaient 30 années de couverture au dénominateur du tarif — sans un
+#: mot dans le rapport signé.
+#:
+#: *Une valeur absente est AMBIGUË : ni le code ni la donnée ne savent si c'est
+#: un vrai zéro, une erreur de saisie ou une grandeur inconnue. Choisir à la
+#: place de l'actuaire, c'est trancher une question actuarielle par défaut.*
+#:
+#: **Non déclaré, le run S'ARRÊTE et nomme les lignes.** C'est le patron déjà
+#: validé quatre fois — `unite_exposition`, `Chargements`, `identifiant_contrat`,
+#: `echeance` : le plan est le document opposable, c'est là que le choix vit.
+ValeursAbsentes = Literal["exclure", "imputer_mediane", "imputer_moyenne"]
+
 
 @dataclass(frozen=True)
 class Chargements:
@@ -151,7 +166,7 @@ class Chargements:
 #: opposable. Mesure faite AVANT le bump, comme les trois precedents : aucune
 #: empreinte `s4:` persistee dans `models/` ni `data/`. Golden mis a jour dans
 #: le MEME commit.
-EMPREINTE_SCHEMA = 5
+EMPREINTE_SCHEMA = 6
 
 # Transformations dérivées : suffixe appliqué par A2
 _SUFFIXE_TRANSFO = {"log": "log_{}", "carre": "{}_carre", "racine": "{}_racine"}
@@ -168,6 +183,7 @@ _ENCODAGES = frozenset(get_args(Encodage))
 _TRANSFORMATIONS = frozenset(get_args(Transformation))
 _FAMILLES_SEVERITE = frozenset(get_args(FamilleSeverite))
 _UNITES_EXPOSITION = frozenset(get_args(UniteExposition))
+_VALEURS_ABSENTES = frozenset(get_args(ValeursAbsentes))
 
 
 def _slug(valeur: str) -> str:
@@ -471,6 +487,16 @@ class PlanTarifaire:
     # déjà `echeance` deux champs plus bas. *La dette du voisin n'autorise pas
     # à en ajouter une.*
     unite_exposition: UniteExposition | None = None
+    # ⚠️⚠️ CE QU'ON FAIT D'UNE VALEUR ABSENTE SUR LES TROIS GRANDEURS — durée,
+    # fréquence, coût. Non déclaré : **le run s'arrête**, il n'invente pas.
+    # Elle est DANS L'EMPREINTE : elle décide si des lignes sortent du calcul
+    # ou reçoivent une valeur, donc elle décide d'un prix.
+    # ⚠️ PORTÉE DE CE LOT : les trois grandeurs seulement. Les FACTEURS
+    # tarifaires restent imputés comme avant — une modalité inventée change
+    # aussi une relativité, mais le rayon de souffle n'est pas le même et
+    # Selasse l'a explicitement laissé hors de ce lot. *Nommer ce qu'un lot ne
+    # couvre pas vaut mieux que de laisser croire qu'il a tout pris.*
+    valeurs_absentes: ValeursAbsentes | None = None
     # ⚠️⚠️ LES CHARGEMENTS — constats `pipeline/C4` + `C5`, LA MEME question.
     # Non déclarés : le repli d'aujourd'hui s'applique, mais il est DIT.
     # ⚠️ Ils sont DANS L'EMPREINTE : la taxe décide de la prime que paie
@@ -590,6 +616,22 @@ class PlanTarifaire:
                 f"'{self.unite_exposition}' inconnue — attendu "
                 f"{' ou '.join(repr(x) for x in sorted(_UNITES_EXPOSITION))}, "
                 f"ou l'omettre (hypothèse annuelle, qui sera publiée)."
+            )
+
+        # ── `valeurs_absentes` : le système n'invente jamais ─────────────────
+        # ⚠️ Le message d'omission ne dit PAS « qui sera publiée » comme son
+        # voisin : il n'y a pas de repli. *Une omission dont la conséquence est
+        # un ARRÊT ne se décrit pas comme une omission dont la conséquence est
+        # un défaut.*
+        if (self.valeurs_absentes is not None
+                and self.valeurs_absentes not in _VALEURS_ABSENTES):
+            raise ValueError(
+                f"Plan '{self.lob}' : valeurs_absentes="
+                f"'{self.valeurs_absentes}' inconnue — attendu "
+                f"{' ou '.join(repr(x) for x in sorted(_VALEURS_ABSENTES))}. "
+                f"L'omettre est permis : le traitement s'arrêtera alors sur "
+                f"toute valeur absente des trois grandeurs, en nommant les "
+                f"lignes, plutôt que d'inventer une valeur."
             )
 
         # ── `cout_par_sinistre` : un RÔLE, jamais un facteur — `socle/C1` ─────
@@ -732,6 +774,7 @@ class PlanTarifaire:
             # exactement la distinction que `EMPREINTE_SCHEMA` existe pour
             # porter.
             "unite_exposition": self.unite_exposition,
+            "valeurs_absentes": self.valeurs_absentes,
             # ⚠️ Un chargement décide du prix payé : opposable, donc haché.
             "chargements": (dataclasses_asdict(self.chargements)
                             if self.chargements else None),
@@ -847,6 +890,7 @@ class PlanTarifaire:
             # LÈVE au lieu d'être avalé — c'est pourquoi il fallait le fermer
             # AVANT d'ajouter ce champ.
             unite_exposition=d.get("unite_exposition"),
+            valeurs_absentes=d.get("valeurs_absentes"),
             chargements=(Chargements(**d["chargements"])
                          if d.get("chargements") else None),
             identifiant_contrat=d.get("identifiant_contrat"),

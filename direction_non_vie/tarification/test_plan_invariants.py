@@ -1929,6 +1929,8 @@ _PLAN_GOLDEN_DICT = {
     # golden ne scelle une partie du payload que si elle porte une valeur qui
     # puisse DÉRIVER. Constat `socle/C1`, bump `s4` -> `s5`.
     "cout_par_sinistre": "montant_sinistre",
+    # ⚠️ PEUPLE pour la meme raison, bump `s5` -> `s6` : constat `qualite/C15`.
+    "valeurs_absentes": "imputer_mediane",
     "comportement": {
         "issue": "issue_renouv", "prime_precedente": "prime_n_1",
         "prime_proposee": "prime_n", "canal": "direct", "groupe_test": "grp_prix",
@@ -1997,8 +1999,16 @@ class TestEmpreinteVersionneeSchema(unittest.TestCase):
         # d'ecretement : declaree, le seuil porte sur CHAQUE SINISTRE ;
         # absente, sur le TOTAL du contrat. Deux plans qui n'en different que
         # par elle n'ecretent pas les memes contrats.
-        self.assertEqual(EMPREINTE_SCHEMA, 5)
-        self.assertEqual(emp, "s5:442cd2bb70f0c0b5",
+        # ⚠️⚠️ BUMP `s5` -> `s6` LE 02/09/2026, golden et constante dans le
+        # MEME commit. Motif : `valeurs_absentes` entre dans le payload --
+        # constat `qualite/C15`, arbitre par Selasse. Elle decide si une ligne
+        # a valeur absente est EXCLUE, IMPUTEE, ou si le run S'ARRETE. Deux
+        # plans qui n'en different que par elle ne tarifent pas les memes
+        # contrats.
+        # ⚠️ Mesure faite AVANT le bump, comme les quatre precedents : aucune
+        # empreinte `s5:` persistee dans `models/` ni `data/`.
+        self.assertEqual(EMPREINTE_SCHEMA, 6)
+        self.assertEqual(emp, "s6:e46b58638abdf2ac",
             "empreinte du plan de reference gele changee : derive de structure "
             "sans bump, OU bump sans mise a jour du golden. Voir le commentaire.")
         print(f"    S3b golden scellé : {emp} ✅")
