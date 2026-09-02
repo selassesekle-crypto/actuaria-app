@@ -256,3 +256,66 @@ rends.**
 « 0 » retirée 130 lignes plus haut, et un paramètre public supprimé dès la
 première ligne. Le motif du chantier, dans sa forme la plus bénigne : *le code a
 été corrigé, le texte qui le décrit ne l'a pas été.*
+
+---
+
+**C6 — 49 imports payaient une surface publique que PERSONNE n'utilise :
+importer `core.arrete` (233 l) en chargeait 4 429.**
+
+> ✅ **`socle/C6`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 03/09/2026 — premier
+> lot de l'audit des 1 170 lignes « jamais auditées », ouvert par Selasse.**
+>
+> **Le constat.** `core/__init__.py` ré-exportait vingt symboles par des
+> `from .x import y` exécutés **à l'import du paquet**. Or importer n'importe
+> quel sous-module (`from core import arrete`) exécute ce fichier.
+>
+> ```
+>   from core import arrete   AVANT : 6 modules, 4 429 lignes, 0,183 s
+>                             APRES : 1 module,    233 lignes, 0,013 s
+> ```
+>
+> ⚠️⚠️ **ET LA SURFACE AINSI PAYÉE A ZÉRO CONSOMMATEUR.** Relevé par AST sur
+> tout le dépôt : **49 imports `from core import X`, et les 49 importent un
+> SOUS-MODULE** (`arrete`, `frontiere_llm`, `traitement_ia`, `format_fr`…).
+> Aucun n'importe un symbole d'`__all__`.
+>
+> ### *Une porte que personne ne franchit et que tout le monde paye.*
+>
+> ⚠️⚠️ **LE RÉ-EXPORT N'EST PAS SUPPRIMÉ, IL EST RENDU PARESSEUX (PEP 562),
+> ET C'EST UNE DÉCISION.** Le dépôt est **public** : `from core import
+> PlanTarifaire` peut vivre dans un carnet qu'on ne voit pas. *Retirer une API
+> publique parce qu'aucun appelant INTERNE ne l'utilise, c'est mesurer sur la
+> mauvaise assiette.* Le contrat est conservé à l'identique, le coût disparaît,
+> et `SC6-6` fige la mesure qui a justifié ce choix — **le jour où un appelant
+> interne utilisera la surface, il tombera, et ce sera le signal que la
+> justification a changé.**
+>
+> **SECOND DÉFAUT, DANS LE FICHIER QUI SERT À DÉCLARER LA SURFACE.**
+> `construire_lx` et `insee_qx_prospectif` étaient importés **sans figurer dans
+> `__all__`**. Prouvé par exécution : joignables par `from core import X`,
+> **invisibles** à `from core import *`. Les deux sont vivants (`a14_mortalite`,
+> `v1_tarification_deces`). *Une surface déclarée qui ment sur la surface
+> réelle.* `import *` passe de **18 à 20** symboles.
+>
+> ⚠️ **`__all__` RESTE UN LITTÉRAL, ET C'EST `PLE0605` QUI A RAISON** : un
+> `__all__` calculé est invisible à l'outillage statique. La divergence est
+> interdite par `SC6-1`, sur le patron du golden d'`EMPREINTE_SCHEMA`.
+> *Ce qui doit rester lisible se déclare ; ce qui doit rester vrai se teste.*
+>
+> ⚠️ **`SC6-2` MESURE DANS UN INTERPRÉTEUR NEUF** : dans celui de la gate, les
+> modules sont déjà chargés par les tests voisins et la mesure ne prouverait
+> rien. *Un témoin contaminé par ses voisins ne mesure que ses voisins.*
+>
+> ⛔ **ET JE ME SUIS TROMPÉ DE NUMÉRO, LA SECONDE FOIS DE LA SESSION.** J'avais
+> écrit `socle/C3` — **qui existe déjà** et désigne un autre constat. La
+> collision est pire qu'un trou : corrigée sur 15 mentions avant la gate.
+>
+> ═══ CE QUE CE LOT MESURE AUSSI, ET QUI RÉFUTE LA CARTE ═══
+>
+> La carte annonçait `core/__init__.py` à **42 l** et `excel_helpers.py` à
+> **139 l** ; mesuré : **41** et **166**. *Les comptes de la carte sont
+> périmés* — le total « 1 170 » est approximatif.
+>
+> Épinglé par `SC6-1` à `SC6-6`. Sceau : six violations plantées, cinq
+> tombent, et la sixième — un import avide remis dans un **commentaire** — ne
+> tombe pas.
