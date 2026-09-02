@@ -412,3 +412,64 @@ rien.**
 > ⚠️ **NOMMÉ, NON TRAITÉ** : les **6 autres avalements** (A1-A5 Excel, et les
 > helpers `core/format_fr`, `core/courbe_rfr`, `core/base_agent`). Ce lot
 > couvre le **chemin signé**, pas les annexes par agent.
+
+---
+
+**C14 — Les deux moitiés de la pastille ne normalisaient pas pareil : la
+couleur affirmait « conforme » sous un mot qui se taisait.**
+
+> ✅ **`services/C14`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 03/09/2026 —
+> deuxième lot de l'audit des 1 170 lignes « jamais auditées ».**
+>
+> **Le constat.** La pastille des deux Excel a deux moitiés : le **FOND**
+> (`_statut_fill`) et le **MOT** (`_MOT_RAG`). La première faisait `.upper()`,
+> la seconde non.
+>
+> ```
+>   statut='vert'  ->  FOND VERT  +  TEXTE 'vert'   (au lieu de ✓ Conforme)
+> ```
+>
+> ### *La couleur disait « conforme » et le mot ne le disait pas — sur la pastille que l'actuaire lit en diagonale.*
+>
+> C'est la famille de `services/C9`. Ici ce n'est pas le mot qui est faux :
+> c'est qu'il **disparaît** au profit d'une chaîne brute, **sous une couleur
+> qui, elle, affirme**.
+>
+> ⚠️⚠️ **LE DÉFAUT EST LATENT, ET LE DIRE FAIT PARTIE DU CONSTAT.** Relevé sur
+> tout le dépôt : les valeurs littérales écrites en `statut_rag` sont toutes en
+> MAJUSCULES, et aucun des **45 chemins dynamiques** mesurés ne produit de
+> minuscule. *Une asymétrie qui ne tire pas aujourd'hui reste une asymétrie :
+> elle attend un appelant.*
+>
+> **Le correctif** : `_normaliser_statut`, **une seule** normalisation pour les
+> deux moitiés. ⚠️ Le repli garde le statut **BRUT** — *un repli qui reformule
+> efface la trace de l'anomalie qu'il signale* (`BD-4`).
+>
+> ⛔⛔ **ET LE SCEAU A DÉMASQUÉ MON PROPRE CONTRÔLE, DANS SA FORME LA PLUS
+> VICIEUSE.** `BD-1` calculait `mots.get(_normaliser_statut(forme))`
+> **lui-même** : il testait sa PROPRE réimplémentation, pas `_kpi`. Le plant
+> qui remettait le défaut d'origine ne le faisait pas tomber.
+>
+> ### *Un contrôle qui refait le calcul qu'il surveille ne surveille que lui-même.*
+>
+> Il écrit désormais dans une **vraie feuille openpyxl** et relit la cellule
+> que l'actuaire verra. ⚠️ **Et `BD-3` avait le même défaut d'un cran** : il
+> vérifiait que `_normaliser_statut` était **mentionné** dans `_kpi`, pas que
+> sa valeur était **utilisée** — *une mention n'est pas un appel*, et la
+> variable pouvait être calculée puis jetée.
+>
+> ═══ CE QUE CE LOT A MESURÉ SANS TROUVER DE DÉFAUT ═══
+>
+> ⚠️ **Les 9 alias `_HEX` « conservés pour compatibilité historique » sont tous
+> VIVANTS** — `rapport_equipe_tarif.py` les importe, `tarif_excel.py` importe
+> les noms courts. Et ils **ne peuvent pas diverger** : `NAVY_HEX = NAVY`.
+> *Ce n'est pas un constat, et le dire évite d'en fabriquer un.*
+>
+> ⚠️ **Premier relevé écarté comme faux** : compter les `ast.Name` donnait
+> `NAVY` à 343 et `BLANC` à 720 — c'étaient les définitions LOCALES des autres
+> modules. *Le piège d'homonyme, la seconde fois de la journée.* Seul le relevé
+> **par les imports** dit quelque chose.
+>
+> Épinglé par `BD-1` à `BD-4`. Sceau : cinq violations plantées, quatre
+> tombent, et la cinquième — `.upper()` remis dans un **commentaire** — ne
+> tombe pas.

@@ -83,9 +83,27 @@ def _border():
 def _align(h="left", v="center", wrap=False):
     return Alignment(horizontal=h, vertical=v, wrap_text=wrap)
 
+#: ⚠️⚠️ CONSTAT `services/C14` — LES DEUX MOITIÉS DU BADGE NE NORMALISAIENT
+#: PAS PAREIL. `_statut_fill` faisait `.upper()`, `_MOT_RAG` non. Mesuré :
+#:
+#:     statut='vert'  ->  FOND VERT  +  TEXTE 'vert'   (au lieu de ✓ Conforme)
+#:
+#: *La couleur disait « conforme » et le mot ne le disait pas — sur la pastille
+#: que l'actuaire lit en diagonale.* C'est la famille de `services/C9`, où le
+#: mot le plus fort était le moins alarmant.
+#:
+#: ⚠️ LE DÉFAUT EST LATENT, ET LE DIRE FAIT PARTIE DU CONSTAT. Relevé sur tout
+#: le dépôt : les valeurs littérales écrites en `statut_rag` sont toutes en
+#: MAJUSCULES, et aucun chemin mesuré ne produit de minuscule. *Une asymétrie
+#: qui ne tire pas aujourd'hui reste une asymétrie : elle attend un appelant.*
+def _normaliser_statut(statut: str | None) -> str:
+    """La forme canonique d'un statut RAG — UNE seule, pour les deux moitiés."""
+    return (statut or '').strip().upper()
+
+
 def _statut_fill(statut: Optional[str]) -> str:
     return {"VERT": VERT_H, "AMBRE": AMBRE, "ROUGE": ROUGE}.get(
-        (statut or '').upper(), GRIS)
+        _normaliser_statut(statut), GRIS)
 
 def _col_w(ws, col: int, width: float):
     ws.column_dimensions[get_column_letter(col)].width = width
@@ -135,10 +153,23 @@ def _kpi(ws, row, label, value, statut=None, fmt=None, wrap=False):
         # `GLYPHE_RAG_EXCEL` est l'exception NOMMÉE de la charte (`✓ △ ✗`,
         # sobres à l'impression) ; la recopier ici rouvrait très exactement la
         # divergence que le lot « 30 définitions locales -> 0 » avait fermée.
+        #
+        # ⚠️⚠️ CONSTAT `services/C14` — LA MÊME NORMALISATION QUE LE FOND.
+        # Cette ligne faisait `_MOT_RAG.get(statut)` sur le statut BRUT
+        # pendant que `_statut_fill` faisait `.upper()` : un `'vert'`
+        # minuscule donnait un fond VERT portant le texte `'vert'`.
+        # *Deux moitiés d'un même badge ne peuvent pas normaliser
+        # différemment — c'est ainsi qu'une pastille cesse de dire ce que sa
+        # couleur affirme.*
         _MOT_RAG = {"VERT": "Conforme", "AMBRE": "À surveiller",
                     "ROUGE": "Non conforme"}
-        _mot = _MOT_RAG.get(statut)
-        txt = f"{glyphe_rag(statut, cible='excel')} {_mot}" if _mot else statut
+        _norme = _normaliser_statut(statut)
+        _mot = _MOT_RAG.get(_norme)
+        # ⚠️ Le repli reste le statut BRUT, délibérément : un statut inconnu
+        # doit rester LISIBLE tel qu'il a été reçu, pour que l'actuaire voie
+        # ce que le système n'a pas su interpréter. *Un repli qui reformule
+        # efface la trace de l'anomalie qu'il signale.*
+        txt = f"{glyphe_rag(_norme, cible='excel')} {_mot}" if _mot else statut
         _cell(ws, row, 3, txt, bold=True, cf=BLANC,
               fill=_statut_fill(statut), ah="center")
         _col_w(ws, 3, 18)
