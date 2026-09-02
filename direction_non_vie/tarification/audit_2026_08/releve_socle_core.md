@@ -319,3 +319,79 @@ importer `core.arrete` (233 l) en chargeait 4 429.**
 > Épinglé par `SC6-1` à `SC6-6`. Sceau : six violations plantées, cinq
 > tombent, et la sixième — un import avide remis dans un **commentaire** — ne
 > tombe pas.
+
+---
+
+**C7 — Une bibliothèque absente se disait « le modèle n'a pas convergé » : le
+rapport signé affirmait une chose FAUSSE sur la donnée de l'actuaire.**
+
+> ✅ **`socle/C7`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 03/09/2026 —
+> troisième et dernier lot de l'audit des 1 170 lignes « jamais auditées ».**
+>
+> **Le constat.** `_ajuster_logit` rendait le **même tuple**
+> `(None, None, None, False, None)` dans **quatre** situations, dont l'absence
+> de `statsmodels`. L'appelant publiait pour toutes :
+>
+> > « L'ajustement du modèle de résiliation n'a pas convergé »
+>
+> **Prouvé par exécution** : `statsmodels` rendu introuvable, le rapport
+> annonçait une **non-convergence du modèle** — c'est-à-dire une affirmation
+> sur **la donnée de l'actuaire**, pour une cause qui lui est totalement
+> étrangère.
+>
+> ### *Un contrôle qui n'a pas eu lieu le DIT ; il ne se confond pas avec un contrôle qui n'a rien trouvé.*
+>
+> C'est `conformite/C1` et `qualite/C9`, la même leçon un étage plus bas.
+>
+> **Le correctif** : quatre causes nommées, un motif par cause en **source
+> unique**. Celui de l'outil absent **disculpe explicitement la donnée** :
+> *« Aucune conclusion ne peut être tirée de cette absence sur le comportement
+> de votre portefeuille. »* `EC-2` tient les deux sens — les trois autres
+> motifs, eux, parlent bien du **modèle**.
+>
+> Épinglé par `EC-1`, `EC-2`, `EC-3`.
+
+---
+
+**C8 — `SOURCES_ADMISES` existait « pour empêcher qu'une règle maison passe
+pour une obligation », et RIEN ne l'appliquait.**
+
+> ✅ **`socle/C8`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 03/09/2026.**
+>
+> **Le constat.** Mesuré : `SOURCES_ADMISES` avait **zéro usage interne, zéro
+> import**. Le champ `Exigence.source` portait le commentaire « l'un de
+> `SOURCES_ADMISES` », et une exigence déclarant `source='IFRS 17 §32'` serait
+> entrée **sans un mot**.
+>
+> ### *Une contrainte écrite dans un commentaire n'est pas une contrainte ; c'est une intention.*
+>
+> ⚠️⚠️ **ET C'EST LE MOTIF QUE CE MODULE POURSUIT LUI-MÊME.** Son en-tête
+> insiste qu'**aucun texte réglementaire ne fixe une élasticité-prix**.
+> Laisser passer une source normative inventée aurait donné à une convention
+> maison **l'apparence d'une obligation**, dans un document signé.
+>
+> **Le correctif** : `_exigence()`, seule porte d'entrée du catalogue, qui
+> **vérifie** la source et lève. ⚠️ `EC-5` tient les **deux** moitiés — que les
+> sources soient admises, **et** que toutes les entrées passent par la porte.
+>
+> ⛔ **LE SCEAU A DÉMASQUÉ CE CONTRÔLE.** Sa première version ne vérifiait que
+> l'**état final** : une entrée écrite `Exigence(...)` au lieu de
+> `_exigence(...)` contournait la porte et passait. *Un contrôle qui lit
+> l'état final ne voit pas la porte qu'on a contournée pour l'atteindre.*
+>
+> ═══ CE QUE CE LOT A MESURÉ SANS TROUVER DE DÉFAUT ═══
+>
+> ⚠️⚠️ **ET J'AI DÛ ME CORRIGER SUR `_et`.** Je l'avais annoncée **morte** à
+> Selasse, sur une marche d'atteignabilité qui ne suivait que les corps de
+> fonctions. **Elle est appelée QUATRE FOIS au niveau module**, à la
+> construction d'`EXIGENCES`. *Une mesure qui ignore le code exécuté à
+> l'import déclare morte une fonction vivante.*
+>
+> ⚠️ Restent nommés, non traités sur ce module : **`sensibilite_tarifaire` est
+> calculée puis lue par personne** (forme de `socle/C2`, sur une vraie
+> computation), et **6 des 8 fonctions publiques n'ont aucun importateur
+> externe** — elles sont internes, et publiques sans nécessité.
+>
+> Épinglé par `EC-4` et `EC-5`. Sceau (commun à `C7` et `C8`) : six violations
+> plantées, cinq tombent, et la sixième — la cause nommée dans un
+> **commentaire** — ne tombe pas.

@@ -36,6 +36,50 @@ from typing import NamedTuple
 SOURCE_CONVENTION = 'CONVENTION_MODULE'
 SOURCES_ADMISES = (SOURCE_CONVENTION,)
 
+#: ⚠️⚠️ CONSTAT `socle/C7` — POURQUOI L'AJUSTEMENT N'A RIEN RENDU. Ces quatre
+#: causes rendaient auparavant le MÊME tuple, et l'appelant publiait pour
+#: toutes : « L'ajustement du modèle de résiliation n'a pas convergé ». Or
+#: `CAUSE_OUTIL_ABSENT` ne dit RIEN de la donnée — il dit qu'une bibliothèque
+#: manque sur la machine.
+#:
+#:   *Un contrôle qui n'a pas eu lieu le DIT ; il ne se confond pas avec un
+#:   contrôle qui n'a rien trouvé.* (`conformite/C1`, `qualite/C9`.)
+#:
+#: ⚠️ Prouvé par exécution le 03/09/2026 : `statsmodels` rendu introuvable, le
+#: rapport annonçait une non-convergence du modèle — une affirmation sur LA
+#: DONNÉE de l'actuaire, pour une cause qui lui est totalement étrangère.
+CAUSE_OUTIL_ABSENT = 'outil_absent'
+CAUSE_NON_CONVERGENCE = 'non_convergence'
+CAUSE_ERREUR_TYPE = 'erreur_type_inexploitable'
+CAUSE_AJUSTEMENT_ECHOUE = 'ajustement_echoue'
+
+#: Le motif publié pour chaque cause. ⚠️ SOURCE UNIQUE : le texte ne se
+#: réécrit pas au site d'appel, sinon deux messages diraient deux choses du
+#: même fait — le défaut que le lot « 30 définitions locales -> 0 » a fermé.
+MOTIF_PAR_CAUSE = {
+    CAUSE_OUTIL_ABSENT: (
+        "⚠ L'ÉLASTICITÉ N'A PAS ÉTÉ ESTIMÉE, ET CE N'EST PAS UN DÉFAUT DE VOS "
+        "DONNÉES : la bibliothèque `statsmodels`, nécessaire à l'ajustement, "
+        "n'est pas installée sur la machine qui a produit ce tarif. Aucune "
+        "conclusion ne peut être tirée de cette absence sur le comportement de "
+        "votre portefeuille. Installez `statsmodels` et relancez pour obtenir "
+        "une réponse."),
+    CAUSE_NON_CONVERGENCE: (
+        "L'ajustement du modèle de résiliation n'a pas convergé. Aucune "
+        "élasticité n'est publiée. ⚠️ Ce n'est PAS un défaut de la variation "
+        "de prix, que le diagnostic a jugée exploitable."),
+    CAUSE_ERREUR_TYPE: (
+        "L'ajustement a convergé mais son erreur type n'est pas exploitable "
+        "(nulle ou non finie) : l'intervalle de confiance serait faux. Aucune "
+        "élasticité n'est publiée. ⚠️ Ce n'est PAS un défaut de la variation "
+        "de prix, que le diagnostic a jugée exploitable."),
+    CAUSE_AJUSTEMENT_ECHOUE: (
+        "L'ajustement du modèle de résiliation a échoué (séparation parfaite, "
+        "matrice singulière ou colonne dégénérée). Aucune élasticité n'est "
+        "publiée. ⚠️ Ce n'est PAS un défaut de la variation de prix, que le "
+        "diagnostic a jugée exploitable."),
+}
+
 
 class Exigence(NamedTuple):
     """Une capacité que le module peut ou non atteindre, et à quel prix.
@@ -45,9 +89,36 @@ class Exigence(NamedTuple):
     doivent être satisfaits. Même forme que le socle IFRS 17.
     """
     reference: str      # d'où vient la règle, telle qu'elle se cite
-    source:    str      # l'un de SOURCES_ADMISES
+    source:    str      # l'un de SOURCES_ADMISES — VÉRIFIÉ par `_exigence`
     libelle:   str
     requiert:  tuple[frozenset[str], ...]
+
+
+def _exigence(reference: str, source: str, libelle: str,
+              requiert: tuple[frozenset[str], ...]) -> Exigence:
+    """La SEULE porte d'entrée du catalogue — et elle VÉRIFIE la source.
+
+    ⚠️⚠️ CONSTAT `socle/C8`. `SOURCES_ADMISES` existait « pour empêcher qu'une
+    règle maison passe silencieusement pour une obligation » — et **rien ne
+    l'appliquait** : mesuré, zéro usage interne, zéro import. Le champ `source`
+    portait le commentaire « l'un de `SOURCES_ADMISES` », et une exigence
+    déclarant `source='IFRS 17 §32'` serait entrée sans un mot.
+
+    > *Une contrainte écrite dans un commentaire n'est pas une contrainte ;
+    > c'est une intention.*
+
+    C'est le motif que ce module poursuit lui-même : son en-tête insiste
+    qu'**aucun texte réglementaire ne fixe une élasticité-prix**. Laisser
+    passer une source normative inventée aurait donné à une convention maison
+    l'apparence d'une obligation — dans un document signé.
+    """
+    if source not in SOURCES_ADMISES:
+        raise ValueError(
+            f"Exigence '{libelle[:40]}...' : source {source!r} hors des "
+            f"sources admises {SOURCES_ADMISES}. Aucun texte reglementaire ne "
+            f"fixe une elasticite-prix : une exigence de ce module est une "
+            f"CONVENTION, et elle doit se dire comme telle.")
+    return Exigence(reference, source, libelle, requiert)
 
 
 def _et(*groupes: tuple[str, ...]) -> tuple[frozenset[str], ...]:
@@ -61,20 +132,20 @@ def _et(*groupes: tuple[str, ...]) -> tuple[frozenset[str], ...]:
 #: prime précédente est-elle déclarée ? », jamais sur « la colonne s'appelle-
 #: t-elle prime_n_1 ? » — c'est `Comportement.champs_declares()` qui traduit.
 EXIGENCES: dict[str, Exigence] = {
-    'variation_de_prix_observable': Exigence(
+    'variation_de_prix_observable': _exigence(
         'conception L2', SOURCE_CONVENTION,
         "Observer la VARIATION de prix subie à l'échéance. Une élasticité "
         "répond à une variation, jamais à un niveau : deux prix sont "
         "nécessaires, celui d'avant et celui qui a été proposé",
         _et(('prime_precedente',), ('prime_proposee',))),
 
-    'elasticite_estimable': Exigence(
+    'elasticite_estimable': _exigence(
         'conception L2', SOURCE_CONVENTION,
         "Estimer une élasticité-prix : relier la décision de renouvellement "
         "à la variation de prix qui l'a précédée",
         _et(('issue',), ('prime_precedente',), ('prime_proposee',))),
 
-    'identification_experimentale': Exigence(
+    'identification_experimentale': _exigence(
         'conception L2', SOURCE_CONVENTION,
         "Identifier l'effet-prix SANS hypothèse d'exogénéité : un test de "
         "prix au renouvellement (remise ou hausse tirée au sort) est la "
@@ -84,7 +155,7 @@ EXIGENCES: dict[str, Exigence] = {
         _et(('issue',), ('prime_precedente',), ('prime_proposee',),
             ('groupe_test',))),
 
-    'elasticite_par_canal': Exigence(
+    'elasticite_par_canal': _exigence(
         'conception L2', SOURCE_CONVENTION,
         "Distinguer l'élasticité par canal de distribution. Elle varie d'un "
         "facteur plusieurs entre courtage, direct et comparateur : une "
@@ -390,29 +461,39 @@ def _ajuster_logit(y, X):
     try:
         import statsmodels.api as sm
     except ImportError:
-        return None, None, None, False, None
+        # ⚠️⚠️ CONSTAT `socle/C7` — L'OUTIL ABSENT SE DISAIT << N'A PAS
+        # CONVERGE >>. Ce chemin rendait le MEME tuple que l'echec
+        # d'ajustement, et l'appelant publiait alors : << L'ajustement du
+        # modele de resiliation n'a pas converge >> -- une affirmation sur LA
+        # DONNEE, alors que la bibliotheque manquait.
+        #
+        #   *Un controle qui n'a pas eu lieu le DIT ; il ne se confond pas
+        #   avec un controle qui n'a rien trouve.* (`conformite/C1`,
+        #   `qualite/C9`, la meme lecon un etage plus bas.)
+        return None, None, None, False, None, CAUSE_OUTIL_ABSENT
     try:
         A = sm.add_constant(np.asarray(X, dtype=float), has_constant='add')
         res = sm.GLM(np.asarray(y, dtype=float), A,
                      family=sm.families.Binomial()).fit(maxiter=100)
         if not bool(getattr(res, 'converged', True)):
-            return None, None, None, False, None
+            return None, None, None, False, None, CAUSE_NON_CONVERGENCE
         beta = float(res.params[1])
         se = float(res.bse[1])
         p_moyen = float(np.mean(res.fittedvalues))
         if not (np.isfinite(beta) and np.isfinite(se) and se > 0):
-            return None, None, None, False, None
+            return None, None, None, False, None, CAUSE_ERREUR_TYPE
         # ⚠️ LES PROBABILITÉS AJUSTÉES SONT RENDUES AVEC LE RESTE, ET C'EST
         # CE QUI PERMET À L5 DE TRACER LA VRAIE COURBE. Sans elles il faudrait
         # une approximation à élasticité constante — celle qui, mesurée, ne
         # redescend jamais et fait tomber l'optimum sur une borne.
-        return beta, se, p_moyen, True, np.asarray(res.fittedvalues, dtype=float)
+        return (beta, se, p_moyen, True,
+                np.asarray(res.fittedvalues, dtype=float), None)
     except (ValueError, TypeError, IndexError, KeyError,
             np.linalg.LinAlgError, ZeroDivisionError):
         # Separation parfaite, matrice singuliere, colonne degeneree : autant
         # de cas ou l'ajustement n'aboutit pas. Ils se declarent, ils ne se
         # rattrapent pas.
-        return None, None, None, False, None
+        return None, None, None, False, None, CAUSE_AJUSTEMENT_ECHOUE
 
 
 def _construire_regression(plan, df, diag):
@@ -531,16 +612,17 @@ def estimer_elasticite(plan, df, diag=None,
     y, X, controles, reserve = (reg['y'], reg['X'], reg['controles'],
                                 reg['reserve'])
     ok = reg['ok']
-    beta, se, p_moyen, converge, _ = _ajuster_logit(y, X)
+    beta, se, p_moyen, converge, _, _cause = _ajuster_logit(y, X)
     base = {**vide, 'facteurs_de_controle': controles, 'reserve': reserve,
             'n_lignes': int(ok.sum()), 'n_resiliations': int(np.sum(y > 0))}
 
     if not converge:
-        return {**base, 'motif': (
-            "L'ajustement du modèle de résiliation n'a pas convergé, ou son "
-            "erreur type n'est pas exploitable. Aucune élasticité n'est "
-            "publiée. ⚠️ Ce n'est PAS un défaut de la variation de prix, que le "
-            "diagnostic a jugée exploitable.")}
+        # ⚠️⚠️ CONSTAT `socle/C7` — LE MOTIF SUIT LA CAUSE. Cette branche
+        # publiait UN SEUL texte pour quatre causes, dont `statsmodels`
+        # ABSENT : le rapport signé affirmait alors que le modèle n'avait pas
+        # convergé, c'est-à-dire une chose FAUSSE sur la donnée de l'actuaire.
+        # *Un contrôle qui n'a pas eu lieu le dit.*
+        return {**base, 'motif': MOTIF_PAR_CAUSE[_cause]}
 
     eps = -beta * p_moyen
     se_eps = abs(p_moyen) * se
@@ -912,7 +994,7 @@ def sensibilite_tarifaire(plan, df, etat, variations=VARIATIONS_DEFAUT,
     est = etat['estimation']
     diag = etat['exploitabilite']
     reg = _construire_regression(plan, df, diag)
-    beta, se, p_moyen, converge, prob = _ajuster_logit(reg['y'], reg['X'])
+    beta, se, p_moyen, converge, prob, _ = _ajuster_logit(reg['y'], reg['X'])
     if not converge:
         return {**vide, 'motif': (
             "L'ajustement n'a pas convergé au moment de tracer la courbe.")}
