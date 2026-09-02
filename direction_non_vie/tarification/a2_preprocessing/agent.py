@@ -99,9 +99,11 @@ from core.plan_tarifaire import PlanTarifaire, Facteur, _slug, _SUFFIXE_TRANSFO
 # désormais du PLAN (`unite_exposition`), donc d'un appel et non d'un import.
 # *C'est 1d qui a rendu ce remplacement possible en un seul geste : tant que A2
 # portait ses propres littéraux, il aurait fallu le faire à deux endroits.*
-from core.qualite_donnees import (Anomalie, annexe_revue_valeurs_absentes,
+from core.qualite_donnees import (Anomalie, annexe_revue_facteurs_absents,
+                                  annexe_revue_valeurs_absentes,
                                   borne_exposition, EffetAgrege,
                                   exiger_valeurs_absentes_declarees,
+                                  facteurs_valeurs_absentes,
                                   phrase_plausibilite,
                                   phrase_unite_non_declaree, RapportQualite,
                                   ROLES_GRANDEURS)
@@ -1283,9 +1285,13 @@ class AgentA2Preprocessing:
         # ⚠️ LE REFUS EST ICI, AVANT LA BOUCLE. Un contrôle placé après elle
         # aurait laissé la valeur inventée dans le tarif avant de protester.
         #
-        # ⚠️ PORTÉE : les trois grandeurs seulement. Les FACTEURS restent
-        # imputés comme avant — Selasse les a laissés hors de ce lot, et le
-        # dire vaut mieux que de laisser croire qu'il a tout pris.
+        # ⚠️ PORTÉE : les trois grandeurs seulement. Les FACTEURS ont leur
+        # propre porte, plus bas — ARRÊT ici, EXCLUSION là-bas, et cette
+        # asymétrie est arbitrée, pas subie. (Ce commentaire disait « les
+        # FACTEURS restent imputés comme avant, Selasse les a laissés hors de
+        # ce lot » : vrai jusqu'au 02/09/2026, faux depuis. *Le texte qui
+        # accompagne un comportement se relit quand il change.*)
+        _n0 = len(df)
         _absentes = exiger_valeurs_absentes_declarees(df, plan)
         if _absentes:
             _choix = plan.valeurs_absentes
@@ -1333,6 +1339,91 @@ class AgentA2Preprocessing:
                     stats['nb_cellules_apres'] = 0
                     return df, stats
 
+        # ══════════════════════════════════════════════════════════════════
+        # ⚠️⚠️ LES FACTEURS : LA LIGNE EST EXCLUE, ET LE SYSTEME LE DIT.
+        # Arbitre par Selasse le 02/09/2026, apres la mesure de l'ecart entre
+        # les deux regimes : sur les TROIS grandeurs un trou non declare
+        # ARRETE le run ; sur les ~160 facteurs des 20 plans, il etait comble
+        # en SILENCE par une valeur derivee du NOM DE LA COLONNE.
+        #
+        #   *Un systeme qui refuse d'inventer sur trois colonnes et invente
+        #   sur cent soixante n'a pas une doctrine, il en a deux.*
+        #
+        # ⚠️ POURQUOI EXCLURE PLUTOT QU'ARRETER, ET C'EST LA NUANCE ARBITREE :
+        # arreter sur 160 colonnes rendrait tout fichier client imparfait
+        # intarifable. La ligne est donc retiree -- le systeme n'invente
+        # toujours rien, il refuse de tarifer une ligne dont un facteur
+        # manque -- et l'exclusion est PUBLIEE aux quatre surfaces.
+        #
+        # ⚠️ QUAND LE PLAN DECLARE, LE PLAN GAGNE. La declaration est GLOBALE
+        # (decision (a) de Selasse) : elle gouverne les grandeurs ET les
+        # facteurs. *Il a declare, on obeit* -- c'est deja la doctrine des
+        # trois grandeurs, et deux doctrines pour un meme mot seraient pires
+        # que pas de doctrine du tout.
+        _facteurs_absents = facteurs_valeurs_absentes(df, plan)
+        if _facteurs_absents:
+            _decl = getattr(plan, 'valeurs_absentes', None)
+            _cols_f = list(_facteurs_absents)
+            stats['facteurs_absents'] = {
+                'declaration': _decl,
+                'par_facteur': dict(_facteurs_absents),
+                'positions': annexe_revue_facteurs_absents(df, plan),
+            }
+            if _decl in (None, 'exclure'):
+                _avant_f = len(df)
+                _restant = df.dropna(subset=_cols_f)
+                # ⚠️⚠️ TOUT EXCLURE N'EST PAS UNE EXCLUSION, C'EST UN ARRET.
+                # Un facteur entierement vide viderait le portefeuille, et
+                # tarifer sur zero ligne n'a aucun sens. *Le dire vaut mieux
+                # que de rendre un dataframe vide qu'un agent aval prendra
+                # pour un portefeuille sans risque.*
+                if len(_restant) == 0:
+                    raise ValueError(
+                        f"Facteur(s) {_cols_f} : toutes les lignes portent une "
+                        f"valeur absente, les exclure viderait le "
+                        f"portefeuille ({_avant_f} ligne(s)). Corrigez "
+                        f"l'extraction, ou retirez ce(s) facteur(s) du plan "
+                        f"signe.")
+                df = _restant.reset_index(drop=True)
+                stats['facteurs_absents']['lignes_retirees'] = (
+                    _avant_f - len(df))
+                logger.info(
+                    "facteurs absents : %d ligne(s) EXCLUE(S) sur %s",
+                    _avant_f - len(df), _cols_f)
+            # ⚠️ RGPD : la description porte un COMPTE et le NOM du facteur,
+            # jamais une position ni une valeur. Les positions vivent dans
+            # l'annexe, qui ne circule pas. Deux surfaces, deux audiences.
+            _quoi = ('EXCLUE(S) du calcul' if _decl in (None, 'exclure')
+                     else f"completee(s) par la "
+                          f"{'mediane' if _decl.endswith('mediane') else 'moyenne'}")
+            _pourquoi = ("Aucune strategie n'est declaree au plan : le "
+                         "systeme n'invente pas la valeur d'un facteur"
+                         if _decl is None else
+                         f"SUR VOTRE INSTRUCTION, declaree au plan "
+                         f"(valeurs_absentes='{_decl}')")
+            stats.setdefault('anomalies_valeurs_absentes', []).extend([
+                Anomalie(
+                    code='facteur_valeur_absente',
+                    regle=1 if _decl in (None, 'exclure') else 2,
+                    role='facteur', colonne=col,
+                    nb_lignes=n, proportion=n / max(_n0, 1),
+                    index=tuple(x['position'] for x in
+                                stats['facteurs_absents']['positions']
+                                if x['facteur'] == col),
+                    description=(
+                        f"Valeur absente sur le facteur tarifaire "
+                        f"<< {col} >> -- {n} ligne(s). Ces lignes sont "
+                        f"{_quoi}. {_pourquoi}. AUCUNE valeur n'a ete "
+                        f"devinee. L'annexe de revue jointe a ce run en "
+                        f"donne la liste, ligne par ligne."),
+                    correction=(f"declaration du plan : {_decl}" if _decl
+                                else 'exclusion, aucune declaration au plan'))
+                for col, n in sorted(_facteurs_absents.items())])
+            cols_avec_na = df.columns[df.isnull().any()].tolist()
+            if not cols_avec_na:
+                stats['nb_cellules_apres'] = 0
+                return df, stats
+
         # Variables numériques asymétriques (coûts, primes, capitaux)
         # Identifiées par leur nom
         mots_asymetriques = [
@@ -1356,10 +1447,39 @@ class AgentA2Preprocessing:
             # STRATEGIE — jamais la table de categories. *Deriver la strategie
             # d'un nom de colonne, c'est encore choisir a la place de
             # l'actuaire ; il a declare, on obeit.*
+            # ⚠️⚠️ ET LES FACTEURS DECLARES SUIVENT LA MEME PORTE DEPUIS LE
+            # 02/09/2026. La declaration est GLOBALE au plan : la laisser
+            # gouverner les grandeurs et pas les facteurs ferait imputer par
+            # la MEDIANE une colonne dont l'actuaire a ecrit << moyenne >>.
+            # *Un mot declare une fois doit valoir partout, ou il ne declare
+            # rien.* Les facteurs NON declares n'arrivent pas ici : leurs
+            # lignes sont deja exclues.
             _grandeur = next(
                 (r for r in ROLES_GRANDEURS if getattr(plan, r, None) == col),
                 None)
-            if _grandeur is not None:
+            # ⛔⛔ ET LA DECLARATION NE GOUVERNE QUE LES NOMBRES. LA GATE A
+            # TROUVE CETTE REGRESSION, QUE J'AVAIS INTRODUITE LE JOUR MEME.
+            # Ma premiere version routait TOUT facteur declare vers
+            # mediane/moyenne : un facteur BINAIRE aurait donc recu **0,8152**,
+            # c'est-a-dire tres exactement le defaut que `a2/C8` avait ferme
+            # (<< une colonne 0/1 imputee reste 0/1 >>), et cette valeur serait
+            # entree dans le GLM comme une grandeur continue.
+            #
+            #   *Le plan declare comment completer un NOMBRE ; une MODALITE ne
+            #   se moyenne pas.*
+            #
+            # La table garde donc les modalites -- elle y repond par le MODE,
+            # qui est une modalite REELLE de la colonne, jamais une valeur
+            # fabriquee. C'est aussi ce qui garde vivante la 4e entree de
+            # `STRATEGIES_IMPUTATION` : sans cela, `binaire` devenait
+            # structurellement inatteignable.
+            _type_facteur = next((f.type for f in plan.facteurs
+                                  if f.nom == col), None)
+            _facteur_declare = (col in _facteurs_absents
+                                and _type_facteur == 'continu'
+                                and getattr(plan, 'valeurs_absentes', None)
+                                in ('imputer_mediane', 'imputer_moyenne'))
+            if _grandeur is not None or _facteur_declare:
                 _declare = {'imputer_mediane': 'median',
                             'imputer_moyenne': 'mean'}[plan.valeurs_absentes]
                 valeur = _CALCUL_IMPUTATION[_declare](df[col])
@@ -1388,11 +1508,21 @@ class AgentA2Preprocessing:
                 strategie = STRATEGIES_IMPUTATION[categorie]
                 valeur    = _CALCUL_IMPUTATION[strategie](df[col])
 
-                # Comportement conserve : une categorielle sans mode calculable
-                # recoit une modalite explicite plutot que de rester vide.
-                if valeur is None and categorie == 'categorielle':
-                    valeur = 'INCONNU'
-
+                # ⚠️⚠️ LA MODALITE INVENTEE 'INCONNU' A ETE SUPPRIMEE LE
+                # 02/09/2026, SUR ARBITRAGE DE SELASSE. Le code disait :
+                # << une categorielle sans mode calculable recoit une modalite
+                # explicite plutot que de rester vide >>. C'est-a-dire que le
+                # systeme FABRIQUAIT une modalite qu'aucun contrat ne porte, et
+                # la faisait entrer dans l'encodage comme une vraie.
+                #
+                #   *Inventer une valeur categorielle est le meme geste
+                #   qu'inventer une valeur numerique -- il est simplement plus
+                #   difficile a voir, parce qu'il porte un nom.*
+                #
+                # Un facteur DECLARE n'atteint plus cette branche : ses lignes
+                # sont exclues en amont (`facteurs_valeurs_absentes`). Ce qui
+                # reste est une colonne NON declaree, et elle demeure
+                # `non_imputee` -- l'absence est PUBLIEE, jamais comblee.
                 if valeur is None or (not isinstance(valeur, str)
                                       and pd.isna(valeur)):
                     methode = 'non_imputee'

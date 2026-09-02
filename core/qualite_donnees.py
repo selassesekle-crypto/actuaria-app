@@ -146,6 +146,94 @@ def annexe_revue_valeurs_absentes(df, plan) -> list[dict]:
     return sorted(lignes, key=lambda x: (x['position'], x['grandeur']))
 
 
+def facteurs_valeurs_absentes(df, plan) -> dict:
+    """Les FACTEURS déclarés au plan qui portent une valeur absente.
+
+    ⚠️⚠️ DEUXIÈME MOITIÉ DE L'ARBITRAGE DU 02/09/2026, ET ELLE NE SE CONFOND
+    PAS AVEC LA PREMIÈRE. Sur les trois GRANDEURS, un trou non déclaré
+    **arrête le run** : la durée, la fréquence et le coût sont le tarif
+    lui-même. Sur un FACTEUR, l'arrêt serait disproportionné — *une vingtaine
+    de facteurs par plan, environ cent soixante au total : arrêter sur chacun
+    rendrait tout fichier client imparfait intarifable.*
+
+    Décision de Selasse : **la ligne est EXCLUE et le système le DIT.** Il
+    n'invente toujours rien ; il refuse simplement de tarifer une ligne dont
+    un facteur manque, plutôt que de deviner ce facteur.
+
+    ⚠️ ASSIETTE : les facteurs DÉCLARÉS, jamais les trois grandeurs — celles-ci
+    ont leur propre porte (`exiger_valeurs_absentes_declarees`), et les
+    compter deux fois publierait deux gestes pour un seul trou.
+
+    ⚠️⚠️ ET « ABSENT » NE VEUT PAS DIRE LA MÊME CHOSE SELON LE TYPE DÉCLARÉ.
+    `detecter_illisible` signifie *non convertible en nombre* — juste pour les
+    trois grandeurs, qui sont numériques par construction. Appliqué à un
+    facteur CATÉGORIEL, il marque **100 % de la colonne** : mesuré le
+    02/09/2026 sur un témoin dont une seule colonne était trouée, il nommait
+    **six facteurs au lieu d'un**, dont cinq intacts.
+
+    > *Le rapport signé aurait dit « valeur absente sur `carburant`, 1 000
+    > lignes » d'une colonne pleine de « Essence » et « Diesel ».*
+
+    Le TYPE vient donc du PLAN — jamais du dtype, qui dépend du fichier reçu.
+    C'est déjà la doctrine de `_categorie_imputation` pour les binaires.
+    """
+    if df is None or plan is None:
+        return {}
+    grandeurs = {getattr(plan, r, None) for r in ROLES_GRANDEURS}
+    manquants = {}
+    for f in getattr(plan, 'facteurs', ()) or ():
+        col = f.nom
+        if col in grandeurs or col not in getattr(df, 'columns', ()):
+            continue
+        masque = _masque_absence_facteur(df, f)
+        n = int(np.asarray(masque, dtype=bool).sum())
+        if n:
+            manquants[col] = n
+    return dict(sorted(manquants.items()))
+
+
+def _masque_absence_facteur(df, facteur):
+    """Le masque d'absence d'UN facteur, selon le TYPE que le plan déclare.
+
+    ⚠️⚠️ Un facteur `continu` vaut par son nombre : une chaîne inconvertible y
+    est aussi inutilisable qu'un vide, et `detecter_illisible` les voit tous
+    les deux. Un facteur `categoriel` ou `binaire` vaut par sa MODALITÉ :
+    « Essence » n'est pas une absence. *Confondre les deux fait dire à un
+    rapport signé qu'une colonne pleine est vide.*
+    """
+    if getattr(facteur, 'type', None) == 'continu':
+        return np.asarray(detecter_illisible(df, facteur.nom), dtype=bool)
+    return np.asarray(df[facteur.nom].isna(), dtype=bool)
+
+
+def annexe_revue_facteurs_absents(df, plan) -> list[dict]:
+    """Un cas par ligne exclue pour facteur absent — même doctrine que sa
+    jumelle des grandeurs, sujet distinct.
+
+    ⚠️ RGPD, identique et non négociable : la position est **positionnelle**,
+    jamais l'étiquette du dataframe. *Aucun identifiant client ne peut fuir
+    par ce canal.* Elle donne la position et le facteur, et rien d'autre.
+
+    ⚠️ ELLE EST SÉPARÉE DE `annexe_revue_valeurs_absentes` PARCE QUE LES DEUX
+    GESTES DIFFÈRENT : l'une accompagne un ARRÊT que l'actuaire doit lever,
+    l'autre une EXCLUSION déjà faite qu'il doit vérifier. *Les fondre ferait
+    lire un arrêt là où il y a eu une exclusion.*
+    """
+    if df is None:
+        return []
+    touches = facteurs_valeurs_absentes(df, plan)
+    lignes = []
+    for f in getattr(plan, 'facteurs', ()) or ():
+        if f.nom not in touches:
+            continue
+        # ⚠️ LE MEME MASQUE QUE LE COMPTE, ET C'EST LA CONDITION. Un compte
+        # derive d'un masque et des positions derivees d'un AUTRE finiraient
+        # par se contredire dans un document signe.
+        for pos in np.flatnonzero(_masque_absence_facteur(df, f)):
+            lignes.append({'position': int(pos), 'facteur': f.nom})
+    return sorted(lignes, key=lambda x: (x['position'], x['facteur']))
+
+
 def exiger_valeurs_absentes_declarees(df, plan) -> dict:
     """SOURCE UNIQUE du refus — les trois grandeurs, jamais les facteurs.
 

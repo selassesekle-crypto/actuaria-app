@@ -28,10 +28,32 @@ l'actuaire et porte **la position dans SON fichier**.
 même sur un dataframe indexé par des numéros de police, l'annexe rend des
 rangs. *Aucun identifiant client ne peut fuir par ce canal.*
 
-⚠️ PORTÉE DE CE LOT : les trois grandeurs. Les FACTEURS tarifaires restent
-imputés comme avant — Selasse les a explicitement laissés hors de ce lot, et
-`VA-9` tient cette limite pour qu'elle ne dérive pas en silence.
+⚠️⚠️ PORTÉE ÉTENDUE AUX FACTEURS LE 02/09/2026, PAR ARBITRAGE DE SELASSE. Ce
+texte disait : « les FACTEURS tarifaires restent imputés comme avant — Selasse
+les a explicitement laissés hors de ce lot ». Il a ensuite ouvert les facteurs,
+avec un régime **délibérément différent** :
+
+```
+  les 3 GRANDEURS   trou non declare -> le run S'ARRETE
+  les ~160 FACTEURS trou non declare -> la ligne est EXCLUE, le run continue
+```
+
+*Arrêter sur trois colonnes protège le tarif ; arrêter sur cent soixante
+rendrait tout fichier client imparfait intarifable.* `VA-9` ne tient donc plus
+une limite, il tient une **distinction** — et `VA-11` à `VA-16` la peuplent.
+
+⚠️⚠️ ET « ABSENT » NE VEUT PAS DIRE LA MÊME CHOSE SELON LE TYPE DÉCLARÉ.
+`detecter_illisible` signifie *non convertible en nombre* : appliqué à un
+facteur catégoriel il marque **100 % de la colonne**. Mesuré sur mon propre
+correctif, il nommait **six facteurs au lieu d'un**, dont cinq intacts. `VA-12`
+le plante. *Le type vient du PLAN, jamais du dtype.*
+
+⚠️ La modalité inventée `'INCONNU'` a été **supprimée** dans le même lot
+(`VA-16`) : *inventer une valeur catégorielle est le même geste qu'inventer une
+valeur numérique — il est simplement plus difficile à voir, parce qu'il porte
+un nom.*
 """
+import ast
 import contextlib
 import dataclasses
 import io
@@ -46,14 +68,20 @@ from core.plan_tarifaire import PlanTarifaire
 from core.qualite_donnees import (
     ROLES_GRANDEURS,
     ValeurAbsenteNonDeclaree,
+    annexe_revue_facteurs_absents,
     annexe_revue_valeurs_absentes,
     empreinte_positions,
     exiger_valeurs_absentes_declarees,
+    facteurs_valeurs_absentes,
     synthese_qualite_donnees,
 )
 from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
 from direction_non_vie.tarification.a2_preprocessing.agent import (
     AgentA2Preprocessing,
+)
+from direction_non_vie.tarification.test_pipeline_agents import (
+    _PLAN_AUTO,
+    _portefeuille_auto,
 )
 
 _RACINE = pathlib.Path(__file__).resolve().parents[2]
@@ -245,9 +273,24 @@ class TestValeursAbsentesDeclarees(unittest.TestCase):
         print("    OK VA-8 second sens : sans valeur absente, les 20 plans "
               "actuels tournent inchanges")
 
-    def test_VA_9_la_PORTEE_est_tenue_les_facteurs_restent_hors_lot(self):
-        """⚠️ Selasse a limité ce lot aux trois grandeurs. *Une portée qui
-        déborde en silence est une décision prise sans arbitrage.*"""
+    def test_VA_9_DEUX_PORTES_un_ARRET_et_une_EXCLUSION_jamais_fondues(self):
+        """⚠️⚠️ CE CONTROLE A CHANGE DE SENS LE 02/09/2026, ET C'EST UN
+        ARBITRAGE DE SELASSE QUI L'A FAIT.
+
+        Il s'appelait « la PORTEE est tenue, les facteurs restent hors lot » et
+        prouvait que Selasse avait limite le lot aux trois grandeurs. Il a
+        ensuite ouvert les FACTEURS, avec un regime DIFFERENT : un trou non
+        declare y EXCLUT la ligne au lieu d'ARRETER le run.
+
+        > *Arreter sur trois colonnes protege le tarif ; arreter sur cent
+        > soixante rendrait tout fichier client imparfait intarifable.*
+
+        Ce que le controle prouve reste EXACTEMENT le meme fait mecanique --
+        la porte des grandeurs ignore les facteurs -- mais il dit desormais
+        pourquoi : **deux portes, deux gestes, et les fondre effacerait la
+        difference entre un arret que l'actuaire doit lever et une exclusion
+        qu'il doit verifier.**
+        """
         self.assertEqual(ROLES_GRANDEURS,
                          ('exposition', 'cible_frequence', 'cible_cout'))
         df = _cadre()
@@ -257,9 +300,156 @@ class TestValeursAbsentesDeclarees(unittest.TestCase):
         df.loc[_TROUS, facteur] = np.nan
         self.assertEqual(
             exiger_valeurs_absentes_declarees(df, _PLAN), {},
-            "un FACTEUR declenche le refus : la portee du lot a deborde")
-        print(f"    OK VA-9 portee tenue : un trou sur le facteur "
-              f"'{facteur}' ne declenche rien")
+            "un FACTEUR fait ARRETER le run : les deux portes sont fondues")
+        # ⚠️ SECOND SENS : et la porte des FACTEURS, elle, le voit.
+        self.assertEqual(
+            facteurs_valeurs_absentes(df, _PLAN), {facteur: len(_TROUS)},
+            "la porte des facteurs ne voit pas le trou : elle est du decor")
+        print(f"    OK VA-9 deux portes : '{facteur}' ignore par l'ARRET, "
+              f"vu par l'EXCLUSION ({len(_TROUS)} lignes)")
+
+    def test_VA_11_un_facteur_troue_EXCLUT_la_ligne_sans_arreter_le_run(self):
+        """⚠️⚠️ LE CŒUR DE L'ARBITRAGE : la ligne sort, le run continue.
+
+        *Le systeme n'invente toujours rien ; il refuse de tarifer une ligne
+        dont un facteur manque, plutot que de deviner ce facteur.*
+        """
+        base = _portefeuille_auto(600, seed=4)
+        troue = base.copy()
+        troue.loc[10:39, 'age'] = np.nan
+        sain = _socle(base.copy(), _PLAN_AUTO)
+        avec = _socle(troue, _PLAN_AUTO)
+        self.assertEqual(len(sain['dataframe']), 600,
+                         'le temoin sain perd deja des lignes')
+        self.assertEqual(
+            len(avec['dataframe']), 570,
+            "les 30 lignes a facteur absent n'ont pas ete exclues")
+        self.assertTrue(avec.get('success'),
+                        'le run s est ARRETE : ce devait etre une exclusion')
+        print(f"    OK VA-11 600 -> {len(avec['dataframe'])} lignes, le run "
+              f"aboutit ; temoin sain intact a {len(sain['dataframe'])}")
+
+    def test_VA_12_ABSENT_ne_veut_pas_dire_la_meme_chose_selon_le_TYPE(self):
+        """⛔⛔ LE DEFAUT QUE LA MESURE A TROUVE DANS MON PROPRE CORRECTIF.
+
+        `detecter_illisible` signifie *non convertible en nombre*. Applique a
+        un facteur CATEGORIEL il marque **100 % de la colonne** : sur un
+        temoin dont UNE colonne etait trouee, il nommait **six facteurs, dont
+        cinq intacts**.
+
+        > *Le rapport signe aurait dit « valeur absente sur `carburant`,
+        > 1 000 lignes » d'une colonne pleine de « Essence » et « Diesel ».*
+
+        Le type vient du PLAN, jamais du dtype.
+        """
+        df = _portefeuille_auto(200, seed=8)
+        self.assertEqual(facteurs_valeurs_absentes(df, _PLAN_AUTO), {},
+                         'le temoin sain nomme deja des facteurs : la '
+                         'detection confond MODALITE et ABSENCE')
+        cat = next(f.nom for f in _PLAN_AUTO.facteurs
+                   if f.type == 'categoriel' and f.nom in df.columns)
+        con = next(f.nom for f in _PLAN_AUTO.facteurs
+                   if f.type == 'continu' and f.nom in df.columns)
+        d2 = df.copy()
+        d2.loc[0:4, cat] = None
+        d2.loc[0:2, con] = np.nan
+        comptes = facteurs_valeurs_absentes(d2, _PLAN_AUTO)
+        self.assertEqual(comptes,
+                         {con: 3, cat: 5} if con < cat else {cat: 5, con: 3})
+        # ⚠️⚠️ LE COMPTE ET LES POSITIONS VIENNENT DU MEME MASQUE, ET LE SCEAU
+        # A DU ME L'APPRENDRE. Le plant qui faisait diverger l'annexe ne
+        # tombait sur AUCUN controle : `VA-14` ne trouait qu'un facteur
+        # CONTINU, ou les deux detecteurs coincident. *Un temoin qui ne peut
+        # pas distinguer les deux cas qu'il oppose ne prouve rien* -- c'est
+        # la lecon de `VA-3`, reapprise sur un autre couple.
+        annexe = annexe_revue_facteurs_absents(d2, _PLAN_AUTO)
+        self.assertEqual(
+            len(annexe), sum(comptes.values()),
+            f"l'annexe rend {len(annexe)} position(s) pour "
+            f"{sum(comptes.values())} absence(s) comptee(s) : le compte et "
+            f"les positions ne viennent pas du meme masque, et un document "
+            f"signe porterait les deux")
+        self.assertEqual(
+            sorted(x['facteur'] for x in annexe),
+            sorted([cat] * 5 + [con] * 3),
+            "l'annexe nomme des facteurs que le compte ignore")
+        print(f"    OK VA-12 categoriel '{cat}' 5 absences (pas 200), "
+              f"continu '{con}' 3, annexe {len(annexe)} positions du MEME "
+              f"masque")
+
+    def test_VA_13_le_rapport_SIGNE_nomme_le_facteur_le_compte_et_la_raison(
+            self):
+        """⚠️ *Un actuaire doit lire CE QU'IL VALIDE* : quel facteur, combien
+        de lignes, ce qui leur est arrive, et pourquoi."""
+        troue = _portefeuille_auto(500, seed=6)
+        troue.loc[0:19, 'age'] = np.nan
+        r2 = _socle(troue, _PLAN_AUTO)
+        texte = synthese_qualite_donnees(r2.get('rapport_qualite')) or ''
+        for attendu in ('age', '20 ligne(s)', 'EXCLUE(S)',
+                        "n'invente pas", 'devinee'):
+            self.assertIn(attendu, texte,
+                          f"le rapport signe ne dit pas << {attendu} >>")
+        print(f"    OK VA-13 le rapport nomme le facteur, le compte, le geste "
+              f"et la raison ({len(texte)} car.)")
+
+    def test_VA_14_RGPD_l_annexe_rend_des_RANGS_jamais_un_identifiant(self):
+        """⚠️⚠️ MEME EXIGENCE QUE `VA-6`, SUR LE CANAL NEUF. Un index de
+        dataframe peut porter un numero de police : la position est un RANG."""
+        df = _portefeuille_auto(120, seed=2)
+        df.index = [f'POLICE-{90000 + i}' for i in range(len(df))]
+        df.loc[df.index[3], 'age'] = np.nan
+        annexe = annexe_revue_facteurs_absents(df, _PLAN_AUTO)
+        self.assertEqual(annexe, [{'position': 3, 'facteur': 'age'}])
+        brut = repr(annexe)
+        self.assertNotIn('POLICE', brut,
+                         "un identifiant client fuit par l'annexe")
+        print(f"    OK VA-14 RGPD : index 'POLICE-90003' -> rang 3, "
+              f"0 identifiant dans {len(annexe)} entree(s)")
+
+    def test_VA_15_tout_exclure_est_un_ARRET_jamais_un_portefeuille_vide(self):
+        """⚠️⚠️ *Rendre zero ligne n'est pas une exclusion, c'est une panne.*
+
+        Un agent aval prendrait un dataframe vide pour un portefeuille sans
+        risque. Le systeme le DIT au lieu de le rendre.
+        """
+        df = _portefeuille_auto(80, seed=3)
+        df['age'] = np.nan
+        r2 = _socle(df, _PLAN_AUTO)
+        # ⚠️⚠️ CE CONTROLE A ETE REECRIT APRES SA PREMIERE EXECUTION : il
+        # attendait une levee, or `A2.run` CONVERTIT ses exceptions en
+        # `success=False` -- son contrat etabli, le meme que sur une modalite
+        # inconnue. *Un controle qui teste le mauvais canal echoue sur un code
+        # juste, et j'aurais pu conclure au defaut inverse.*
+        self.assertFalse(
+            r2.get('success'),
+            'A2 rend un succes sur un portefeuille entierement vide')
+        msg = str(r2.get('erreur') or '')
+        self.assertIn('age', msg)
+        self.assertIn('viderait le portefeuille', msg)
+        # ⚠️ Le dataframe rendu EST vide : c'est pourquoi l'echec doit etre
+        # DECLARE. *Un appelant qui lirait `dataframe` sans lire `success`
+        # tarifierait sur zero ligne.*
+        self.assertEqual(len(r2.get('dataframe')), 0)
+        print(f"    OK VA-15 facteur entierement vide -> success=False et la "
+              f"cause est nommee ({len(msg)} car.)")
+
+    def test_VA_16_la_modalite_inventee_INCONNU_a_disparu_du_CODE(self):
+        """⚠️⚠️ ARBITRE PAR SELASSE : le systeme n'invente plus de modalite.
+
+        Assiette : le CODE d'A2 par AST, docstrings et commentaires exclus --
+        *une citation n'est pas une affirmation*, et ce fichier EXPLIQUE le
+        retrait en nommant ce qui a ete retire.
+        """
+        src = (_RACINE / 'direction_non_vie' / 'tarification'
+               / 'a2_preprocessing' / 'agent.py').read_text(encoding='utf-8')
+        litteraux = [n.lineno for n in ast.walk(ast.parse(src))
+                     if isinstance(n, ast.Constant) and n.value == 'INCONNU']
+        self.assertEqual(
+            litteraux, [],
+            f"la modalite inventee 'INCONNU' subsiste dans le code "
+            f"(ligne(s) {litteraux}) : le systeme fabrique encore une "
+            f"modalite qu'aucun contrat ne porte")
+        print("    OK VA-16 'INCONNU' absent du code d'A2 (0 litteral)")
 
     def test_VA_10_l_empreinte_change_si_le_fichier_change(self):
         """⚠️⚠️ CE QUI REND LA RÉPONSE OPPOSABLE. Si le fichier bouge et qu'on

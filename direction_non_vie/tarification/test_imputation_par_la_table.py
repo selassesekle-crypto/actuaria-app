@@ -60,10 +60,31 @@ from direction_non_vie.tarification.test_pipeline_agents import (
 #: apres l'imputation qui est l'etape 1 : ils ne portent jamais de NaN et ne
 #: peuvent donc pas reproduire le constat. Le plan MRH du depot, lui, declare
 #: `alarme`, `double_vitrage` et `garantie_vol` -- des colonnes de source.
-def _plan_avec_binaire_source(nom: str = 'alarme'):
+def _plan_avec_binaire_source(nom: str = 'alarme',
+                              valeurs_absentes='imputer_moyenne'):
+    """⚠️⚠️ LE PLAN DECLARE DESORMAIS `valeurs_absentes`, ET C'EST OBLIGATOIRE.
+
+    Depuis `a2/C18` (02/09/2026), un FACTEUR declare dont la valeur manque voit
+    sa ligne EXCLUE quand le plan ne dit rien. Sans declaration, ces temoins ne
+    mesureraient donc plus rien : les lignes trouees sortiraient avant
+    d'atteindre la table. *Un temoin qui n'atteint plus le mecanisme qu'il
+    surveille est du decor.*
+
+    Ce que ces controles prouvent est INCHANGE -- la table est LUE, ses quatre
+    entrees vivent, un binaire reste 0/1 -- mais la surface ou la table
+    gouverne s'est deplacee, et le temoin la suit :
+
+        colonne NON declaree au plan     -> la TABLE decide (les 2 numeriques)
+        facteur declare, type `continu`  -> le PLAN decide
+        facteur declare, MODALITE        -> la TABLE decide (mode)
+
+    ⚠️ Cette derniere ligne n'est pas un detail : router un binaire vers la
+    moyenne lui donnerait **0,8152**, tres exactement le defaut de `a2/C8`.
+    """
     modele = next(f for f in _PLAN_AUTO.facteurs if f.type == 'binaire')
     return dataclasses.replace(
         _PLAN_AUTO,
+        valeurs_absentes=valeurs_absentes,
         facteurs=tuple(_PLAN_AUTO.facteurs)
         + (dataclasses.replace(modele, nom=nom),))
 
@@ -79,7 +100,16 @@ def _portefeuille_troue(n: int = 500, valeurs=None, graine: int = 11):
     df = _portefeuille_auto(n, seed=3)
     df['alarme'] = ((rng.random(n) < 0.79).astype(float) if valeurs is None
                     else valeurs)
-    for col in ('alarme', 'age', 'valeur_venale', 'csp'):
+    # ⚠️⚠️ DEUX COLONNES NON DECLAREES AU PLAN, AJOUTEES LE 02/09/2026. Les
+    # deux entrees NUMERIQUES de la table ne sont plus atteintes par un facteur
+    # declare -- le plan y decide desormais. Elles restent atteintes par toute
+    # colonne que le plan ne nomme pas, et c'est la que le temoin doit les
+    # exercer. *Un controle mesure le mecanisme la ou il gouverne, pas la ou il
+    # gouvernait.*
+    df['cout_reparation'] = np.round(rng.uniform(100, 9000, n), 2)   # asym
+    df['duree_mois'] = np.round(rng.uniform(1, 60, n), 1)            # sym
+    for col in ('alarme', 'age', 'valeur_venale', 'csp',
+                'cout_reparation', 'duree_mois'):
         df.loc[df.index[rng.choice(n, 40, replace=False)], col] = np.nan
     return df
 
@@ -120,8 +150,12 @@ class TestLaTableEstLue(unittest.TestCase):
         plan = _plan_avec_binaire_source()
         df = _portefeuille_troue()
 
+        # ⚠️ LE TEMOIN EST UNE COLONNE **NON DECLAREE** DEPUIS `a2/C18` : sur un
+        # facteur declare, c'est le PLAN qui decide, et changer la table ne
+        # prouverait plus rien. Ce que ce controle prouve est inchange.
+        _col = 'duree_mois'
         _, avant = _executer(df.copy(), plan)
-        self.assertEqual(_imputees(avant)['age']['methode'], 'moyenne',
+        self.assertEqual(_imputees(avant)[_col]['methode'], 'moyenne',
                          'premisse : la table declare `mean` pour un symetrique')
 
         table = dict(mod_a2.STRATEGIES_IMPUTATION)
@@ -130,18 +164,18 @@ class TestLaTableEstLue(unittest.TestCase):
             _, apres = _executer(df.copy(), plan)
 
         self.assertEqual(
-            _imputees(apres)['age']['methode'], 'mediane',
+            _imputees(apres)[_col]['methode'], 'mediane',
             "la table a ete changee et le comportement n'a pas suivi : elle "
             "n'est donc pas lue, elle est recopiee en dur (`a2/C7`)")
-        self.assertNotEqual(_imputees(avant)['age']['valeur'],
-                            _imputees(apres)['age']['valeur'],
+        self.assertNotEqual(_imputees(avant)[_col]['valeur'],
+                            _imputees(apres)[_col]['valeur'],
                             'meme methode annoncee, meme valeur : rien de reel '
                             "n'a change")
-        print(f"    IMP-1 table modifiee -> `age` passe de "
-              f"{_imputees(avant)['age']['methode']} "
-              f"({_imputees(avant)['age']['valeur']:.3f}) a "
-              f"{_imputees(apres)['age']['methode']} "
-              f"({_imputees(apres)['age']['valeur']:.3f})")
+        print(f"    IMP-1 table modifiee -> `{_col}` passe de "
+              f"{_imputees(avant)[_col]['methode']} "
+              f"({_imputees(avant)[_col]['valeur']:.3f}) a "
+              f"{_imputees(apres)[_col]['methode']} "
+              f"({_imputees(apres)[_col]['valeur']:.3f})")
 
     def test_les_QUATRE_categories_de_la_table_sont_atteintes(self):
         """⚠️ Une table dont trois entrees sur quatre sont mortes serait le
@@ -149,11 +183,18 @@ class TestLaTableEstLue(unittest.TestCase):
         est effectivement exercee par le chemin de production."""
         _, r = _executer(_portefeuille_troue(), _plan_avec_binaire_source())
         imp = _imputees(r)
+        # ⚠️⚠️ LES QUATRE ENTREES VIVENT ENCORE, MAIS PLUS AUX MEMES ENDROITS.
+        # Depuis `a2/C18`, un facteur declare de type `continu` est gouverne
+        # par le PLAN : les deux entrees NUMERIQUES s'exercent desormais sur
+        # des colonnes que le plan ne nomme pas. Les deux entrees de MODALITE,
+        # elles, restent celles de la table meme pour un facteur declare --
+        # *une modalite ne se moyenne pas*, et c'est ce qui empeche `a2/C8` de
+        # se rouvrir.
         attendu = {
-            'alarme':        'mode',      # binaire        (plan)
-            'csp':           'mode',      # categorielle   (dtype)
-            'valeur_venale': 'mediane',   # asymetrique    (nom)
-            'age':           'moyenne',   # symetrique     (defaut)
+            'alarme':          'mode',      # binaire      (facteur declare)
+            'csp':             'mode',      # categorielle (facteur declare)
+            'cout_reparation': 'mediane',   # asymetrique  (NON declaree, nom)
+            'duree_mois':      'moyenne',   # symetrique   (NON declaree)
         }
         for col, methode in attendu.items():
             with self.subTest(colonne=col):

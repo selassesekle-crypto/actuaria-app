@@ -40,6 +40,7 @@ jamais efface, jamais devine.
 from __future__ import annotations
 
 import ast
+import dataclasses
 import json
 import pathlib
 import tempfile
@@ -109,8 +110,19 @@ class TestA2C9ParametresAutodescriptifs(unittest.TestCase):
     # ── Pièce 2 : chaque valeur porte SA stratégie ─────────────────────────
 
     def test_AC_2_LE_TEST_QUI_FERME_une_moyenne_va_sous_moyennes(self):
-        """`a2/C9` : par EXECUTION, sur le vrai chemin d'imputation."""
-        plan = PlanTarifaire.depuis_yaml(str(_RACINE / 'plans' / 'auto.yaml'))
+        """`a2/C9` : par EXECUTION, sur le vrai chemin d'imputation.
+
+        ⚠️⚠️ LE PLAN DECLARE `imputer_moyenne` DEPUIS `a2/C18` (02/09/2026).
+        Sans declaration, un facteur troue voit sa ligne EXCLUE : `age` ne
+        serait plus impute du tout, et ce controle mesurerait un seau vide en
+        croyant mesurer un rangement. *Un temoin qui n'atteint plus le
+        mecanisme qu'il surveille est du decor.* Ce qu'il prouve -- une
+        MOYENNE va sous `moyennes`, et la valeur EST la moyenne -- est
+        inchange ; c'est desormais l'actuaire qui a demande cette moyenne.
+        """
+        plan = dataclasses.replace(
+            PlanTarifaire.depuis_yaml(str(_RACINE / 'plans' / 'auto.yaml')),
+            valeurs_absentes='imputer_moyenne')
         d = pathlib.Path(tempfile.mkdtemp())
         df = portefeuille_auto(3000, np.random.default_rng(3))
         df.loc[df.index[:200], 'age'] = np.nan
@@ -137,8 +149,15 @@ class TestA2C9ParametresAutodescriptifs(unittest.TestCase):
             msg='la valeur egale la mediane : le cas ne prouve rien')
 
     def test_AC_3_le_seau_et_la_strategie_ne_peuvent_pas_se_contredire(self):
-        """⚠️ La redondance EST le controle : deux sources, un desaccord visible."""
-        plan = PlanTarifaire.depuis_yaml(str(_RACINE / 'plans' / 'auto.yaml'))
+        """⚠️ La redondance EST le controle : deux sources, un desaccord visible.
+
+        ⚠️ Meme raison qu'`AC-2` pour la declaration au plan. Elle exerce ici
+        les DEUX seaux : `age` (continu, gouverne par le plan) sous `moyennes`,
+        `csp` (modalite, gouverne par la table) sous `modes`.
+        """
+        plan = dataclasses.replace(
+            PlanTarifaire.depuis_yaml(str(_RACINE / 'plans' / 'auto.yaml')),
+            valeurs_absentes='imputer_moyenne')
         d = pathlib.Path(tempfile.mkdtemp())
         df = portefeuille_auto(2000, np.random.default_rng(5))
         df.loc[df.index[:150], 'age'] = np.nan

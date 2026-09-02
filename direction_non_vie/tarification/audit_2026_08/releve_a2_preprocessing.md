@@ -386,3 +386,120 @@ Mon test « le code calcule-t-il un IQR ? » rendait **BON à tort** : le regex 
 ---
 
 **Mon appréciation** : le cœur de A2 — celui que la Phase 2 a refondu — est **solide et vérifié** : une seule autorité d'encodage pour les deux chemins, l'ordre du plan qui fait foi, la modalité inconnue qui lève, INV-1 qui tient. **Tous les constats portent sur la couche de compte rendu**, pas sur la transformation. Deux d'entre eux publient un chiffre ou une phrase faux à l'actuaire, et le second a un effet de bord réel : le statut VERT n'existe pas.
+
+---
+
+**C18 — Le système refuse d'inventer sur TROIS colonnes et invente sur CENT
+SOIXANTE : la valeur d'un facteur tarifaire absent est comblée en silence,
+par une stratégie déduite du NOM de la colonne.**
+
+> ✅ **`a2/C18`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 02/09/2026 — point ①
+> des quatre restants, arbitré par Selasse sur trois questions posées avant
+> tout code.**
+>
+> **Le constat.** `a2/C17` (`valeurs_absentes`) a fermé l'invention silencieuse
+> sur les **trois grandeurs** — un trou non déclaré y **arrête le run**. Les
+> **~160 facteurs des 20 plans** restaient hors portée : leur valeur absente
+> était comblée par `_categorie_imputation`, qui déduit médiane, moyenne ou
+> mode **du NOM de la colonne** (`'cout'`, `'prime'`, `'valeur'`…) ou du dtype.
+>
+> ### *Un système qui refuse d'inventer sur trois colonnes et invente sur cent soixante n'a pas une doctrine, il en a deux.*
+>
+> ⚠️ **ET IL FABRIQUAIT UNE MODALITÉ.** Une catégorielle sans mode calculable
+> recevait la valeur littérale `'INCONNU'` — une modalité qu'aucun contrat ne
+> porte, qui entrait ensuite dans l'encodage comme une vraie. *Inventer une
+> valeur catégorielle est le même geste qu'inventer une valeur numérique ; il
+> est simplement plus difficile à voir, parce qu'il porte un nom.*
+>
+> **LES TROIS ARBITRAGES DE SELASSE, POSÉS AVANT TOUT CODE :**
+>
+> | question | décision |
+> |---|---|
+> | (a) portée de la déclaration | **GLOBALE au plan**, pas facteur par facteur |
+> | (b) un facteur non déclaré | **EXCLUT la ligne et le dit** ; l'ARRÊT reste aux 3 grandeurs |
+> | (c) la modalité `'INCONNU'` | **SUPPRIMÉE** |
+>
+> *Arrêter sur trois colonnes protège le tarif ; arrêter sur cent soixante
+> rendrait tout fichier client imparfait intarifable.* **Deux portes, deux
+> gestes** — et `VA-9` ne tient plus une limite, il tient cette distinction.
+>
+> ⚠️⚠️ **CE QUE LA MESURE A TROUVÉ DANS MON PROPRE CORRECTIF, ET C'EST LE
+> POINT LE PLUS UTILE DE CE LOT.** Ma première version comptait les absences
+> avec `detecter_illisible` — qui signifie *non convertible en nombre*. Sur un
+> témoin dont **une seule** colonne était trouée, elle nommait **six facteurs,
+> dont cinq intacts** :
+>
+> ```
+>   log observe : facteurs absents : 40 ligne(s) EXCLUE(S) sur
+>                 ['age', 'carburant', 'csp', 'garantie',
+>                  'milieu_geographique', 'usage']
+>   trouees reellement : age, et age seul
+> ```
+>
+> **Le rapport signé aurait dit « valeur absente sur `carburant`, 1 000
+> lignes » d'une colonne pleine de « Essence » et « Diesel ».** Le type vient
+> désormais du **PLAN**, jamais du dtype — déjà la doctrine de
+> `_categorie_imputation` pour les binaires. `VA-12` le plante.
+>
+> ⚠️ *Cette coïncidence — six noms pour un trou — a été instruite, pas
+> commentée. C'est elle qui a livré le défaut.*
+>
+> **AUCUN EURO SUR LA DONNÉE RÉELLE, ET C'EST MESURÉ :**
+>
+> ```
+>   donnee reelle du depot, 14 243 lignes x 20 plans : 0 facteur absent
+>   temoin sain, 1 000 lignes                        : 1 000 -> 1 000, DELTA 0
+>   temoin a 40 trous sur `age`                      : 1 000 ->   960
+> ```
+>
+> Ce qui apparaît est une **exclusion publiée** sur les fichiers portant des
+> trous — jamais une valeur inventée.
+>
+> ⚠️ **UN FACTEUR ENTIÈREMENT VIDE EST UN ARRÊT, PAS UNE EXCLUSION** (`VA-15`)
+> : tout exclure viderait le portefeuille, et *un agent aval prendrait un
+> dataframe vide pour un portefeuille sans risque.*
+>
+> ⛔ **LE SCEAU A DÉMASQUÉ UN DE MES CONTRÔLES, UNE FOIS DE PLUS.** Le plant
+> qui faisait diverger les positions de l'annexe du compte publié ne tombait
+> sur **aucun** contrôle : `VA-14` ne trouait qu'un facteur **continu**, où les
+> deux détecteurs coïncident. *Un témoin qui ne peut pas distinguer les deux
+> cas qu'il oppose ne prouve rien* — la leçon de `VA-3`, réapprise sur un autre
+> couple. `VA-12` porte désormais les deux types.
+>
+> ⛔⛔ **ET LA GATE A TROUVÉ UNE RÉGRESSION EN EUROS QUE J'AVAIS INTRODUITE LE
+> JOUR MÊME.** Neuf contrôles de la famille `IMP` / `AC` sont tombés d'un coup.
+> Ma première version routait **tout** facteur déclaré vers médiane/moyenne dès
+> que le plan déclarait `imputer_*` :
+>
+> ### *un facteur BINAIRE aurait donc reçu **0,8152** — très exactement le défaut que `a2/C8` avait fermé*
+>
+> — et cette valeur serait entrée dans le GLM comme une grandeur continue.
+> *Le plan déclare comment compléter un NOMBRE ; une MODALITÉ ne se moyenne
+> pas.* La table garde donc les modalités et y répond par le **MODE**, qui est
+> une modalité RÉELLE de la colonne.
+>
+> ⚠️⚠️ **CE N'EST PAS UN ÉCHEC DE TEST, C'EST LE FILET QUI A FONCTIONNÉ.** Les
+> neuf contrôles disaient tous la même chose : *la table d'imputation n'était
+> exercée QUE par des facteurs déclarés*, et ce lot leur retire ce chemin.
+>
+> **CE QUE LA SURFACE DE LA TABLE EST DEVENUE, ET LES TÉMOINS L'ONT SUIVIE :**
+>
+> ```
+>   colonne NON declaree au plan     -> la TABLE decide (les 2 numeriques)
+>   facteur declare, type `continu`  -> le PLAN decide
+>   facteur declare, MODALITE        -> la TABLE decide (mode)
+> ```
+>
+> Les quatre entrées de `STRATEGIES_IMPUTATION` vivent donc toujours, mais plus
+> aux mêmes endroits. *Un contrôle mesure le mécanisme là où il gouverne, pas
+> là où il gouvernait* — et sans ce déplacement, `IMP-1` à `IMP-4` et `AC-2`,
+> `AC-3` seraient devenus du décor tout en restant verts sur un autre témoin.
+>
+> ⚠️ **Sans le correctif, `binaire` devenait structurellement inatteignable** :
+> `_categorie_imputation` n'a qu'un appelant, et son ensemble `binaires` ne
+> vient que du plan. *La forme de `socle/C2`, créée par le lot même qui
+> poursuit ce motif — la seconde fois de la journée.*
+>
+> Épinglé par `VA-9` (réécrit) et `VA-11` à `VA-16`, plus `IMP-1` à `IMP-4` et
+> `AC-2`/`AC-3` redirigés. Sceau : six violations plantées, cinq tombent, et la
+> sixième — `'INCONNU'` remis dans un **commentaire** — ne tombe pas.
