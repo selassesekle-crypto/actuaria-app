@@ -170,7 +170,13 @@ class TestLeRapportSigneDitLUnite(unittest.TestCase):
         plan = dataclasses.replace(_PLAN_AUTO, unite_exposition='mois')
         texte = _signe(_portefeuille_auto(400, seed=3), plan)
         self.assertIn('unite_exposition_contredite', texte)
-        self.assertIn("la donnee ressemble a 'annee'", texte)
+        # ⚠️ LE MESSAGE A ÉTÉ RÉÉCRIT POUR L'ACTUAIRE LE 02/09 (arbitré par
+        # Selasse) : plus de jargon, un compte, et ce qu'il faut faire. *Ce
+        # que ce contrôle prouve est INCHANGÉ — le rapport signé dit ce que la
+        # contradiction SIGNIFIE, pas seulement son code.* Seule la phrase
+        # cherchée suit la nouvelle formulation.
+        self.assertIn('ressemblent à des « annee »', texte)
+        self.assertIn('LE DÉNOMINATEUR DU TARIF', texte)
         print("    RS-4 signalement : le rapport dit CE QUE la contradiction "
               "signifie")
 

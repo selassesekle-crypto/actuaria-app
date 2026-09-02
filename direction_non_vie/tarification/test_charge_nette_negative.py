@@ -215,7 +215,11 @@ class TestC_LaQuestionNeutre(unittest.TestCase):
 
     def test_les_TROIS_issues_sont_proposees(self):
         q = question_charges_negatives(_controler(_reel()), _reel())
-        for issue in ('CONSERVER tout', 'EXCLURE tout', 'LISTE des positions'):
+        # La troisieme issue disait << LISTE des positions >> ; le mot a ete
+        # retire le 02/09 parce que la question CIRCULE desormais et que la
+        # sentinelle RGPD voisine interdit ce mot dans la synthese. *Les trois
+        # issues proposees sont INCHANGEES.*
+        for issue in ('CONSERVER tout', 'EXCLURE tout', 'LISTE des cas'):
             with self.subTest(issue=issue):
                 self.assertIn(issue, q)
         print("    C8-9 trois issues proposees, aucune n'est suggeree")
@@ -276,7 +280,16 @@ class TestLaQuestionATTEINT_LE_BLOCAGE(unittest.TestCase):
     def test_la_levee_QualiteBloquante_PORTE_la_question(self):
         from core.qualite_donnees import QualiteBloquante
         from direction_non_vie.tarification.pipeline_tarifaire import pipeline_complet
-        g = _reel()
+        # ⚠️⚠️ LE VÉHICULE DU BLOCAGE A CHANGÉ LE 02/09, ET C'EST L'ARBITRAGE
+        # DE SELASSE. Une charge NETTE négative n'escalade plus : mesurée à
+        # 8,82 % sur cette même donnée réelle, elle est légitime et bloquait un
+        # vrai portefeuille. On co-plante donc une anomalie DISQUALIFIANTE pour
+        # obtenir un blocage. *Ce que ce contrôle prouve est inchangé : quand
+        # un blocage survient, sa levée PORTE la question.* Et `LD-11` tient
+        # désormais l'autre moitié — la question atteint l'actuaire même SANS
+        # blocage, puisque son ancien porteur ne se déclenche plus seul.
+        g = _reel().copy()
+        g.loc[g.index[:len(g) // 5], 'nb_sinistres'] = -1.0
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
             precedent = logging.root.manager.disable

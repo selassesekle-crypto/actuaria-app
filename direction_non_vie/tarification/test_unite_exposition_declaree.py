@@ -337,8 +337,12 @@ class TestLaDonneeQuiContreditLUnite(unittest.TestCase):
                                 "decoratif")
         self.assertEqual(a.regle, 3, 'la contradiction se SIGNALE, jamais ne '
                                      'se corrige')
-        self.assertIn("'mois'", a.description)
-        self.assertIn("'annee'", a.description)
+        # ⚠️ Le message a été réécrit pour l'actuaire le 02/09 (arbitré par
+        # Selasse) : les unités sont désormais entre guillemets français. *Ce
+        # que ce contrôle prouve est inchangé — la description nomme l'unité
+        # DÉCLARÉE et celle à laquelle la donnée RESSEMBLE.*
+        self.assertIn('« mois »', a.description)
+        self.assertIn('« annee »', a.description)
         self.assertTrue(rq.bloque, "une unite fausse mesestime TOUT le "
                                    "portefeuille : elle doit escalader")
         print(f"    UX-12 contradiction SIGNALEE (regle {a.regle}) et "

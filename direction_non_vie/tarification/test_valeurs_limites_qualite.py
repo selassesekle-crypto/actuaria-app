@@ -133,8 +133,26 @@ class POS_Qualite_C2_L_EscaladeVoitL_UNION(unittest.TestCase):
         motifs = " ".join(r.anomalies_au_dela_seuil)
         self.assertIn('union', motifs,
                       f"le motif ne nomme pas la vraie raison : {motifs}")
-        self.assertIn('19.6%', motifs, "le motif ne chiffre pas l'union")
-        print("    POS-C2q quatre types a 4,9 % escaladent par l'union ✅")
+        # ⚠️⚠️ LE CHIFFRE SE DÉRIVE, IL NE SE RETAPE PLUS. Il valait `19.6%`
+        # en dur ; l'arbitrage du 02/09 a restreint l'union aux quatre types
+        # DISQUALIFIANTS, et deux des quatre plantés ici n'en sont pas — la
+        # part tombe mécaniquement. *Ce que ce contrôle prouve est inchangé :
+        # aucun type seul n'atteint le seuil, et leur union escalade quand
+        # même. Le nombre en dur ne prouvait que lui-même.*
+        from core.qualite_donnees import CODES_DISQUALIFIANTS
+        _touchees = set()
+        for a in ((r.exclusions or []) + (r.corrections or [])
+                  + (r.signalements or [])):
+            self.assertLess(a.proportion, 0.05,
+                            f"{a.code} atteint le seuil SEUL : ce test ne "
+                            f"mesure plus l'union")
+            if a.code in CODES_DISQUALIFIANTS:
+                _touchees.update(a.index)
+        _part = len(_touchees) / 1000
+        self.assertIn(f'{_part:.1%}', motifs,
+                      f"le motif ne chiffre pas l'union ({_part:.1%})")
+        print(f"    POS-C2q quatre types a 4,9 %, union des DISQUALIFIANTS "
+              f"{_part:.1%} -> escalade ✅")
 
     def test_LE_SENS_CONSERVE_un_seul_type_au_dessus_du_seuil_escalade_encore(self):
         """⚠️ Le nouveau critère AJOUTE, il ne remplace pas. Un type unique à

@@ -711,6 +711,85 @@ la décision de la brancher (1-B) se prendrait sans chiffre, et le troisième
 > attend l'arbitrage de Selasse, y compris LA LISTE des alertes qui doivent
 > bloquer.**
 
+**C14 — N'IMPORTE QUELLE alerte peut arrêter un tarif, et les messages
+qu'elle publie sont écrits pour un développeur, pas pour celui qui signe.**
+
+> ✅ **`qualite/C14`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 02/09/2026 —
+> étape ⑤-① du chantier 1-B, arbitrée par Selasse sur les chiffres de
+> l'étape ④.**
+>
+> ```
+>   DONNEE REELLE, 12 654 contrats
+>     AVANT : cout_net_negatif 8,82 % >= 5 %  ->  escalade  ->  BLOQUE
+>     APRES : hors liste  ->  bloque = False  ->  12 654 / 12 654 lignes tarifees
+> ```
+>
+> **Aucun euro ne bouge** : 12 654 entrent, 12 654 sortent, aucune ligne
+> exclue. Ce qui disparaît est une **exigence de signature** sur une charge
+> nette négative parfaitement légitime (recours, sauvetage, subrogation).
+> *Un blocage qu'on lève chaque semaine n'est plus un blocage, c'est une
+> formalité.*
+>
+> **La liste disqualifiante — 4 types sur 15**, arbitrés sur le critère :
+> l'alerte établit un fait **impossible** (pas ambigu) ET le laisser passer
+> fausse le tarif de façon non détectable en aval. *Bloquer sur l'ambiguïté
+> transfère à la machine une décision actuarielle.* Sur la donnée réelle,
+> ces quatre types tirent à **0 %**.
+>
+> ⚠️⚠️ **LE FILTRE PORTE SUR LES DEUX CRITÈRES.** Laisser un type hors liste
+> entrer dans l'UNION le rendrait bloquant **par la bande** : *un garde-fou
+> qu'on croit désarmé et qui tire.* `LD-4` le tient.
+>
+> **Les quatre messages ont été réécrits pour celui qui signe.** L'ancien
+> disait `cible_frequence ('nb_sinistres') < 0` : une colonne technique, aucun
+> compte, aucune conséquence, aucune consigne. *Un message que l'actuaire doit
+> traduire avant de décider n'est pas un message, c'est un code source.* Le
+> code technique subsiste comme **étiquette** de traçabilité (`LD-10`), et le
+> compte publié **se dérive du masque** (`LD-6`) — *un nombre écrit à la main
+> à côté d'un masque finit par mentir.*
+>
+> ### ⛔⛔ DEUX CONSÉQUENCES QUE LA GATE A RÉVÉLÉES, ET LA PREMIÈRE EST UNE
+> ### RÉGRESSION QUE J'AVAIS INTRODUITE
+>
+> **① Le message de blocage s'est mis à TAIRE ce qu'on valide.** Son détail
+> filtrait sur `anomalies_au_dela_seuil`. Tant que TOUT type au-dessus du seuil
+> y figurait, le filtre publiait de fait tout ce qui allait s'appliquer. La
+> liste a réduit cet ensemble aux quatre types qui BLOQUENT — et le message a
+> cessé de publier les autres. **Mesuré par la gate** : un blocage sur
+> `unite_exposition_contredite` ne publiait plus l'effet d'`exposition_sup_1`,
+> qui divisait pourtant le total d'exposition par dix (**− 90,1 %**).
+>
+> > *L'actuaire aurait signé sans voir ce qu'il validait — le défaut exact
+> > que `qualite/C3` a fermé, rouvert par un correctif qui regardait ailleurs.*
+>
+> L'en-tête nomme désormais ce qui BLOQUE ; le détail publie TOUT ce que la
+> validation appliquera.
+>
+> **② La question sur les charges négatives n'atteignait plus personne.**
+> `qualite/C8` l'avait posée **dans la levée `QualiteBloquante`**, avec ce
+> motif : *« le blocage est le moment où l'actuaire décide : la question doit y
+> être. »* Vrai tant que `cout_net_negatif` pouvait bloquer. La liste le lui a
+> retiré. *Un correctif qui retire un blocage emporte tout ce que ce blocage
+> portait.* La question suit désormais l'anomalie, plus le blocage (`LD-11`).
+>
+> ⚠️⚠️ **ET UNE SENTINELLE RGPD A TIRÉ SUR MOI, À RAISON.** La question
+> circule maintenant dans la synthèse signée ; elle contenait le mot
+> « positions » (« fournir la LISTE des positions que vous conservez ») que la
+> sentinelle interdit dans un document circulé. Elle **mentionnait** le mot
+> sans publier aucune position — mais *affaiblir un garde-fou RGPD pour faire
+> passer son propre correctif est le geste qu'on ne fait jamais* : c'est la
+> phrase qui a cédé, pas le contrôle. Les trois issues proposées sont
+> inchangées.
+>
+> ⚠️ **LE SCEAU A ENCORE DÉMASQUÉ UN DE MES CONTRÔLES.** `LD-10` n'observait
+> qu'un rapport BLOQUÉ — dont l'en-tête publie déjà les codes : retirer le
+> code du DÉTAIL ne faisait rien tomber. *Un contrôle qui n'observe qu'un
+> régime laisse l'autre sans garde.* Refait sur les DEUX.
+>
+> Épinglé par `LD-1` à `LD-11`, dont `LD-7` — **le plant RGPD exigé par
+> Selasse** : l'anomalie est plantée à la position 777 avec la valeur
+> − 424 242, et aucun message ne les cite.
+
 ## ③ Ce que je ne tranche pas ici
 
 **Rien n'est resté non lu** : 334 lignes, intégralement.

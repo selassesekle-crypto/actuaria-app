@@ -524,9 +524,26 @@ def controler_qualite(
 
     # ── RÈGLE 1 : IMPOSSIBLE → exclure ───────────────────────────────────────
     if col_freq in df.columns:
-        _ajouter('frequence_negative', 1, 'cible_frequence', col_freq,
-                 detecter_negatifs(df, col_freq),
-                 f"cible_frequence ('{col_freq}') < 0 — nombre de sinistres negatif, impossible.")
+        # ⚠️⚠️ MESSAGE RÉÉCRIT POUR L'ACTUAIRE — arbitré par Selasse, 02/09.
+        # L'ancien disait : « cible_frequence ('nb_sinistres') < 0 — nombre de
+        # sinistres negatif, impossible. » Il nommait une COLONNE TECHNIQUE, ne
+        # disait NI combien de contrats, NI ce que ça coûte, NI quoi faire.
+        # *Un message que l'actuaire doit traduire avant de décider n'est pas
+        # un message, c'est un code source.* Le code technique subsiste comme
+        # ÉTIQUETTE de traçabilité, publiée à part par la synthèse.
+        _m_freq = detecter_negatifs(df, col_freq)
+        _ajouter('frequence_negative', 1, 'cible_frequence', col_freq, _m_freq,
+                 _entete_alerte(_m_freq, n0, "Nombre de sinistres négatif")
+                 + " Un contrat ne peut pas avoir moins de zéro sinistre. Cela"
+                   " vient presque toujours d'une annulation enregistrée en"
+                   " soustraction au lieu d'être supprimée. Ces contrats font"
+                   " baisser la sinistralité moyenne du portefeuille, donc la"
+                   " prime de tous les autres."
+                   " CE QUI SE PASSE SI LE TARIF EST PRODUIT : ces contrats"
+                   " sont retirés du calcul."
+                   " CE QUE VOUS DEVEZ FAIRE : reprendre l'extraction pour ces"
+                   " lignes, ou confirmer nommément que le tarif peut être"
+                   " produit sans elles.")
     # ⚠️⚠️ LE COÛT A QUITTÉ LA RÈGLE 1 — constat `qualite/C8`, RANG 1, 31/08/2026.
     # La doctrine confondait deux grandeurs : un COÛT (un prix) est >= 0, mais
     # `cout_total_sinistres` est une CHARGE NETTE — paiements moins recours — et
@@ -560,9 +577,22 @@ def controler_qualite(
                  f"sinistres, et ne peut donc pas trancher.",
                  resume_cn=_resume_charges_negatives(_vals_cout, _m_cout_neg))
     if col_expo in df.columns:
-        _ajouter('exposition_non_positive', 1, 'exposition', col_expo,
-                 detecter_non_positif(df, col_expo),
-                 f"exposition ('{col_expo}') <= 0 — duree nulle/negative, casse l'offset log, impossible.")
+        # ⚠️ L'ancien message parlait d'« offset log » : du jargon de modèle
+        # dans un document que signe un actuaire et que lit le CAC.
+        _m_expo = detecter_non_positif(df, col_expo)
+        _ajouter('exposition_non_positive', 1, 'exposition', col_expo, _m_expo,
+                 _entete_alerte(_m_expo, n0,
+                                "Durée de couverture nulle ou négative")
+                 + " Un contrat dont la durée est nulle n'a jamais été en"
+                   " vigueur. Le garder reviendrait à enregistrer une période"
+                   " sans sinistre qui n'a pas existé : la sinistralité"
+                   " paraîtrait plus faible qu'elle ne l'est, et la prime de"
+                   " tous les autres contrats baisserait."
+                   " CE QUI SE PASSE SI LE TARIF EST PRODUIT : ces contrats"
+                   " sont retirés du calcul."
+                   " CE QUE VOUS DEVEZ FAIRE : vérifier les dates d'effet et"
+                   " d'échéance de ces lignes, ou confirmer nommément que le"
+                   " tarif peut être produit sans elles.")
     # ⚠️⚠️ LA RÈGLE CHANGE AVEC CE QUE LE PLAN DÉCLARE, ET C'EST VOULU.
     # Avec une échéance, deux lignes de même clé sont un VRAI doublon :
     # impossible, donc règle 1, exclu. Sans échéance, on ne peut PAS distinguer
@@ -571,10 +601,23 @@ def controler_qualite(
     # *Exclure sans pouvoir trancher, c'est trancher à la place de l'actuaire.*
     if col_id and col_id in df.columns:
         if echeance_utilisable:
+            _m_dbl = detecter_doublons_id(df, col_id, col_ech)
             _ajouter('doublon_identifiant', 1, 'identifiant_contrat', col_id,
-                     detecter_doublons_id(df, col_id, col_ech),
-                     f"doublon sur la cle de contrat ('{col_id}', '{col_ech}') "
-                     f"— meme contrat, MEME echeance : ligne redondante.")
+                     _m_dbl,
+                     _entete_alerte(
+                         _m_dbl, n0,
+                         "Le même contrat compté deux fois pour la même "
+                         "échéance", unite='ligne')
+                     + " Ces lignes portent le même numéro de contrat et la"
+                       " même date d'échéance : c'est la même période comptée"
+                       " deux fois. La durée de couverture ET les sinistres"
+                       " sont doublés pour ces contrats — ils pèsent deux fois"
+                       " plus lourd que les autres dans le tarif."
+                       " CE QUI SE PASSE SI LE TARIF EST PRODUIT : une seule"
+                       " ligne est conservée par contrat et par échéance."
+                       " CE QUE VOUS DEVEZ FAIRE : vérifier s'il s'agit d'un"
+                       " doublon d'extraction ou de deux garanties distinctes"
+                       " du même contrat.")
         else:
             _ajouter('doublon_identifiant_sans_echeance', 3,
                      'identifiant_contrat', col_id,
@@ -677,13 +720,27 @@ def controler_qualite(
                 _ajouter(
                     'unite_exposition_contredite', 3, 'exposition', col_expo,
                     _preuve,
-                    f"le plan declare unite_exposition='{_unite}' (borne "
-                    f"{_borne:g}) mais le maximum observe est "
-                    f"{_max:.4g} : la donnee ressemble a "
-                    f"'{_apparente}'. Signale sur {_ou}. Rien n'a ete "
-                    f"corrige — si l'unite declaree est fausse, la borne "
-                    f"l'est aussi, et l'exposition sera ecrasee ou laissee "
-                    f"passer a tort.",
+                    _entete_alerte(
+                        _preuve, n0,
+                        "Les durées de couverture ne ressemblent pas à "
+                        "l'unité déclarée au plan", unite='ligne')
+                    + f" Le plan tarifaire déclare que les durées sont"
+                      f" exprimées en « {_unite} » ; les valeurs observées"
+                      f" ressemblent à des « {_apparente} » (durée maximale"
+                      f" relevée : {_max:.4g}). Signalé sur {_ou}."
+                      f" Si l'unité déclarée est fausse, la limite de"
+                      f" plausibilité l'est aussi : des durées légitimes"
+                      f" seront écrasées, ou des durées aberrantes passeront"
+                      f" sans être vues. LA DURÉE EST LE DÉNOMINATEUR DU"
+                      f" TARIF : si elle est fausse, toutes les primes le"
+                      f" sont."
+                      f" CE QUI SE PASSE SI LE TARIF EST PRODUIT : rien n'est"
+                      f" corrigé — le système ne devine pas l'unité à votre"
+                      f" place."
+                      f" CE QUE VOUS DEVEZ FAIRE : corriger"
+                      f" `unite_exposition` dans le plan tarifaire, ou"
+                      f" confirmer nommément que l'unité déclarée est la"
+                      f" bonne.",
                     correction='aucune -- contradiction SIGNALEE')
 
     # ── RÈGLE 3 : AMBIGU → signaler, laisser tel quel ────────────────────────
@@ -766,9 +823,21 @@ def controler_qualite(
     # 6 % doit toujours escalader, même si l'union n'ajoute rien. Le nouveau
     # critère ne peut donc qu'AJOUTER des escalades, jamais en retirer — c'est
     # la règle d'asymétrie : une liste qui accuse ne peut pas ouvrir de trou.
-    au_dela = [a.code for a in anomalies if a.proportion >= seuil_escalade]
+    # ⚠️⚠️ ET DEPUIS LE 02/09, SEULS QUATRE TYPES PEUVENT FAIRE ESCALADER —
+    # `CODES_DISQUALIFIANTS`, arbitré par Selasse sur les chiffres de l'étape 4.
+    # Le filtre porte sur LES DEUX critères : un type hors liste n'escalade pas
+    # seul, ET n'entre pas dans l'union. *Le laisser dans l'union le rendrait
+    # bloquant par la bande — un garde-fou qu'on croit désarmé et qui tire.*
+    #
+    # ⚠️ CE FILTRE NE PEUT QU'ENLEVER DES ESCALADES, JAMAIS EN AJOUTER : il
+    # restreint deux ensembles, il n'en élargit aucun. Mesuré sur la donnée
+    # réelle : `cout_net_negatif` y touche 8,82 % des contrats et escaladait ;
+    # il n'escalade plus, et c'est le but — une charge nette négative est
+    # légitime. *Un blocage qu'on lève chaque semaine n'est plus un blocage.*
+    _bloquantes = [a for a in anomalies if a.code in CODES_DISQUALIFIANTS]
+    au_dela = [a.code for a in _bloquantes if a.proportion >= seuil_escalade]
     lignes_touchees = set()
-    for a in anomalies:
+    for a in _bloquantes:
         lignes_touchees.update(a.index)
     proportion_union = len(lignes_touchees) / max(n0, 1)
     if proportion_union >= seuil_escalade and not au_dela:
@@ -954,8 +1023,16 @@ def question_charges_negatives(rapport, df=None) -> str | None:
         f"existent. CE CONTROLE NE PEUT PAS TRANCHER — il voit le "
         f"portefeuille agrege, jamais le detail des sinistres ; distinguer "
         f"les deux demande les paiements et les recuperations ligne a ligne. "
+        # ⚠️⚠️ « positions » A DISPARU DE CETTE PHRASE LE 02/09/2026, ET LE
+        # GARDE-FOU N'A PAS ÉTÉ TOUCHÉ. La question ne circulait qu'avec le
+        # blocage ; depuis la liste disqualifiante elle est publiée dans la
+        # SYNTHÈSE, que la sentinelle RGPD garde en interdisant le mot
+        # « position ». Elle a tiré, à raison de son assiette — ce texte MENTIONNE
+        # le mot sans publier aucune position. *Affaiblir un garde-fou RGPD
+        # pour faire passer son propre correctif est le geste qu'on ne fait
+        # jamais : c'est la phrase qui cède, pas le contrôle.*
         f"Trois reponses possibles : CONSERVER tout, EXCLURE tout, ou "
-        f"fournir la LISTE des positions que vous conservez. "
+        f"fournir la LISTE des cas que vous conservez. "
         f"Empreinte des cas : {empreinte_positions(a.index)}."
     )
 
@@ -1120,6 +1197,54 @@ MARQUEUR_QUALITE_NON_EXECUTEE = 'NON EXECUTE'
 #: source unique que son jumeau — les badges Excel l'importent.
 MARQUEUR_QUALITE_OBSERVEE = 'OBSERVEE, NON APPLIQUEE'
 
+#: ⚠️⚠️ LA LISTE DISQUALIFIANTE — arbitrée par Selasse le 02/09/2026 sur les
+#: chiffres de l'étape 4. **Seuls ces quatre types peuvent faire escalader un
+#: run** ; les onze autres signalent et n'arrêtent jamais rien.
+#:
+#: Le critère retenu : une alerte bloque si et seulement si elle établit un
+#: fait IMPOSSIBLE (pas ambigu) **et** que le laisser passer fausse le tarif de
+#: façon non détectable en aval. *Bloquer sur l'ambiguïté transfère à la
+#: machine une décision actuarielle.*
+#:
+#: ⚠️ MESURÉ AVANT L'ARBITRAGE, sur la seule donnée réelle du dépôt
+#: (12 654 contrats) : ces quatre types y tirent à **0 %**. La liste ne bloque
+#: aucun portefeuille réel connu. *Un garde-fou se juge sur ce qu'il laisse
+#: passer, pas sur ce qu'il arrête.*
+#:
+#: ⚠️⚠️ ET `cout_net_negatif` EN EST DÉLIBÉRÉMENT ABSENT : il tire à **8,82 %**
+#: sur cette même donnée, au-dessus du seuil, pour un phénomène parfaitement
+#: légitime (recours, sauvetage, subrogation). L'y mettre bloquerait un vrai
+#: portefeuille sur une charge nette normale.
+CODES_DISQUALIFIANTS: frozenset[str] = frozenset({
+    'frequence_negative',
+    'exposition_non_positive',
+    'doublon_identifiant',
+    'unite_exposition_contredite',
+})
+
+
+def _entete_alerte(mask, total: int, titre: str, unite: str = 'contrat') -> str:
+    """L'en-tête chiffré d'une alerte — LE COMPTE SE DÉRIVE DU MASQUE.
+
+    ⚠️⚠️ Il ne se retape pas au site d'appel. Un nombre écrit à la main à côté
+    d'un masque diverge le jour où le détecteur change, et le rapport SIGNÉ
+    porterait alors un compte faux. *Le chiffre et la ligne qu'il décrit
+    viennent de la même source, ou ils finiront par se contredire.*
+
+    ⚠️ RGPD : un compte et un pourcentage. Aucune valeur, aucun index, aucun
+    identifiant.
+    """
+    # ⚠️ CONVENTION FRANÇAISE, ET C'EST UNE DÉCISION : ce texte est lu par un
+    # actuaire, un commissaire aux comptes et l'ACPR. « 3.0% sur 1000 » n'est
+    # pas du français. Le séparateur d'espace reprend celui que
+    # `_phrase_effet_agrege` utilise déjà pour les totaux.
+    n = int(np.asarray(mask, dtype=bool).sum())
+    _n = f"{n:,}".replace(',', ' ')
+    _tot = f"{total:,}".replace(',', ' ')
+    _pct = f"{n / max(total, 1):.1%}".replace('.', ',').replace('%', ' %')
+    return f"{titre} — {_n} {unite}(s) sur {_tot} ({_pct})."
+
+
 #: ⚠️ LE JETON QUI DÉBLOQUE L'OBSERVATION — jamais un nom de personne.
 #: `controler_qualite` refuse de rendre un rapport complet sans signature dès
 #: que l'escalade se déclenche ; l'observation en fournit une TECHNIQUE, puis
@@ -1197,8 +1322,24 @@ def synthese_qualite_donnees(
         # ni index — verifie par sentinelle.
         _toutes = ((rapport.exclusions or []) + (rapport.corrections or [])
                    + (rapport.signalements or []))
-        _motifs = [a.description for a in _toutes
-                   if a.code in rapport.anomalies_au_dela_seuil]
+        # ⚠️⚠️ POURQUOI ÇA BLOQUE ET CE QUE LA VALIDATION FERA SONT DEUX
+        # CHOSES — séparées le 02/09/2026, et c'est une RÉGRESSION QUE J'AI
+        # INTRODUITE LE JOUR MÊME. Le détail filtrait sur
+        # `anomalies_au_dela_seuil`. Tant que TOUT type au-dessus du seuil y
+        # figurait, le filtre publiait de fait tout ce qui allait s'appliquer.
+        # La liste disqualifiante a réduit cet ensemble aux quatre types qui
+        # BLOQUENT — et le message s'est mis à taire les autres.
+        #
+        # Mesuré par la gate : un message bloqué sur `unite_exposition_contredite`
+        # ne publiait plus l'effet d'`exposition_sup_1`, qui divisait pourtant
+        # le total d'exposition par dix (**-90,1 %**). *L'actuaire aurait signé
+        # sans voir ce qu'il validait — le défaut exact que `qualite/C3` a
+        # fermé, rouvert par un correctif qui regardait ailleurs.*
+        #
+        # L'en-tête nomme donc ce qui BLOQUE ; le détail publie TOUT ce que la
+        # validation appliquera. *Un avertissement qui ne dit pas ce qu'on
+        # valide n'avertit de rien.*
+        _motifs = [a.description for a in _toutes]
         _detail = ''.join(f"\n   · {m}" for m in _motifs)
         # ⚠️⚠️ C'EST ICI QUE SE PREND LA DÉCISION, ET C'EST ICI QUE L'ENJEU
         # MANQUAIT LE PLUS — constat `qualite/C3`. Mesuré : le message bloqué
@@ -1206,10 +1347,11 @@ def synthese_qualite_donnees(
         # de lignes ni effet ; l'actuaire signait sur « implausible pour un
         # contrat annuel » et obtenait une prime multipliée par dix.
         # *Un avertissement qui ne dit pas ce qu'on valide n'avertit de rien.*
-        _effets = [p for p in (_phrase_effet_agrege(a) for a in _toutes
-                               if a.code in rapport.anomalies_au_dela_seuil)
-                   if p]
+        _effets = [p for p in (_phrase_effet_agrege(a) for a in _toutes) if p]
         _detail += ''.join(f"\n   ⚠ SI VOUS VALIDEZ — {p}" for p in _effets)
+        _q = question_charges_negatives(rapport)
+        if _q:
+            _detail += f"\n   ? {_q}"
         return (f"⚠ CONTROLE QUALITE BLOQUE — anomalie(s) "
                 f"[{', '.join(rapport.anomalies_au_dela_seuil)}] touchant >= "
                 f"{rapport.seuil:.0%} des lignes. Confirmation actuarielle nominative "
@@ -1287,6 +1429,16 @@ def synthese_qualite_donnees(
     # << 30 ligne(s) EXCLUE(S) >> et rien d'autre -- *un actuaire y lisait que
     # la couche entiere avait tourne, alors que seule l'exposition avait ete
     # regardee.* C'est le TROISIEME ETAT, partiellement execute.
+    # ⚠️⚠️ LA QUESTION SUIT L'ANOMALIE, PLUS LE BLOCAGE — 02/09/2026.
+    # `qualite/C8` l'avait posée dans `QualiteBloquante`, avec ce motif : *« le
+    # blocage est le moment où l'actuaire décide : la question doit y être. »*
+    # Vrai tant que `cout_net_negatif` pouvait bloquer. La liste disqualifiante
+    # le lui a retiré — et **la question ne pouvait plus atteindre personne**.
+    # *Un correctif qui retire un blocage emporte tout ce que ce blocage
+    # portait.* Elle est donc publiée partout où la charge négative l'est.
+    _q = question_charges_negatives(rapport)
+    if _q:
+        lignes.append(f"? {_q}")
     if _obs is not None:
         lignes.append(_obs)
     return "\n".join(lignes) if lignes else None

@@ -243,7 +243,15 @@ class TestQualite_PiloteParLePlan(unittest.TestCase):
             'sinistres_3ans_anterieurs': rng.integers(0, 3, n).astype(float),
             'exposition': rng.uniform(0.6, 1.0, n), 'nb_sinistres': nb,
             'cout_total_sinistres': np.where(nb > 0, rng.gamma(2, 12000, n), 0.).astype(object)})
-        df.loc[list(range(20)), 'cout_total_sinistres'] = -100.   # 10% cout<0
+        # ⚠️⚠️ LE DÉCLENCHEUR A CHANGÉ LE 02/09, ET C'EST LA DÉCISION DE
+        # SELASSE, PAS UNE RÉGRESSION. Ce test bloquait sur `cout < 0` à 10 %.
+        # Depuis l'arbitrage de la liste disqualifiante, une charge NETTE
+        # négative n'escalade plus : mesuré à **8,82 % sur la donnée réelle**,
+        # elle est légitime (recours, sauvetage, subrogation) et bloquait un
+        # vrai portefeuille. *Ce que ce test prouve — un blocage bout-en-bout
+        # et son échappatoire nominative — est INCHANGÉ ; seul le véhicule
+        # devient un type qui bloque VRAIMENT.*
+        df.loc[list(range(20)), 'nb_sinistres'] = -1.     # 10 % de freq < 0
         with self.assertRaises(QualiteBloquante):
             pipeline_complet(df, plan, equilibrer=False)
         # avec confirmation nominative → passe (l'échappatoire tracée)
