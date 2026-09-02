@@ -1253,3 +1253,55 @@ portefeuille disparaît.**
 > désormais ce chiffre ; il ne le juge pas.*
 >
 > Épinglé par `UN-1` à `UN-5`. Sceau : cinq violations plantées, cinq tombent.
+
+---
+
+**C19 — La pastille est AMBRE à 0,1 % comme à 67 % : le rapport publie la
+part exclue, mais rien ne la hiérarchise.**
+
+> ✅ **`qualite/C19`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 02-03/09/2026 —
+> ouvert par Selasse : « plus question de laisser du travail en suspens ».**
+>
+> **Le constat.** `qualite/C18` a fait publier la part du portefeuille exclue.
+> Mais le badge des deux Excel se déclenche sur le mot « EXCLUE », **jamais
+> sur l'ampleur** — il vaut AMBRE à 0,1 % comme à 67 %.
+>
+> ### *L'information était là, la hiérarchie n'y était pas.*
+>
+> ⛔⛔ **LA GRADATION PAR LA COULEUR A ÉTÉ ÉCARTÉE, APRÈS MESURE.** Le badge
+> ROUGE publie littéralement **« Non conforme »** (`_MOT_RAG`, `services/C9`).
+> Un tarif calibré sur un portefeuille réduit n'est pas *non conforme*, il est
+> *réduit*. *Le rendre rouge affirmerait plus que ce qu'on sait — exactement
+> le défaut que cet audit poursuit.* La hiérarchie va donc dans le **TEXTE**,
+> où la nuance existe. `AM-4` épingle ce choix.
+>
+> ⚠️⚠️ **LE REPÈRE N'EST PAS INVENTÉ, IL EST RÉUTILISÉ, ET C'EST DIT.**
+> `SEUIL_ESCALADE` est la définition que ce module s'est **déjà** donnée d'une
+> proportion qui *« exige une confirmation actuarielle nominative »*. Aucun
+> seuil neuf : *un chiffre inventé pour trancher une question actuarielle est
+> précisément ce que ce module a supprimé quatre fois.*
+>
+> ```
+>    0,1 % -> aucune phrase (sous le repere, et le silence est voulu)
+>    5,0 % -> 1,0 fois le seuil
+>   22,6 % -> 4,5 fois le seuil, tarif calibre sur 77,4 % du portefeuille
+>   67,3 % -> 13,5 fois le seuil, tarif calibre sur 32,7 % du portefeuille
+> ```
+>
+> ⚠️ **ELLE COMPARE, ELLE NE JUGE PAS** (`AM-3`) : elle dit explicitement que
+> l'exigence **n'a PAS** été déclenchée, que les retraits sont légitimes ligne
+> à ligne, et rend la question — *« VÉRIFIEZ que cette assiette réduite reste
+> représentative de votre risque avant de signer. »*
+>
+> **La question de méthode reste donc ouverte et NOMMÉE** : à partir de quelle
+> perte un portefeuille cesse d'être tarifable ? Elle appartient à l'actuaire
+> signataire, et se déclarerait au plan le jour où elle sera tranchée. *Le
+> système publie ce chiffre, le compare à son propre repère, et s'arrête là.*
+>
+> ⛔ **LE SCEAU A ENCORE TROUVÉ UN TROU DANS MON CONTRÔLE.** Le plant qui
+> figeait le seuil affiché (`_s = '5 %'`) ne tombait sur aucun contrôle :
+> `AM-2` vérifiait le **ratio** sous le patch, et le **seuil** hors patch.
+> *Deux moitiés justes ne font pas un contrôle juste.*
+>
+> Épinglé par `AM-1` à `AM-4`. Sceau : six violations plantées, cinq tombent,
+> et la sixième — « non conforme » dans un **commentaire** — ne tombe pas.

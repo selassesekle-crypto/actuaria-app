@@ -27,10 +27,12 @@ un garde-fou qu'on croit désarmé et qui tire. `LD-4` le tient.
 aucune conséquence, aucune consigne. *Un message que l'actuaire doit traduire
 avant de décider n'est pas un message, c'est un code source.*
 """
+import ast
 import dataclasses
 import pathlib
 import re
 import unittest
+from unittest import mock
 
 import numpy as np
 import pandas as pd
@@ -43,6 +45,7 @@ from core.qualite_donnees import (
     RapportQualite,
     compte_union_lignes,
     controler_qualite,
+    phrase_ampleur_exclusion,
     synthese_qualite_donnees,
 )
 
@@ -487,3 +490,126 @@ class TestUnionJamaisSomme(unittest.TestCase):
         self.assertIn('15,0 % du portefeuille', texte,
                       "la part n'est pas publiee, ou pas au format francais")
         print(f"    UN-4 rapport signe : {texte.splitlines()[0][:70]}")
+
+
+class TestAmpleurDeLExclusion(unittest.TestCase):
+    """⚠️⚠️ `qualite/C19` — LA PASTILLE EST AMBRE A 0,1 % COMME A 67 %.
+
+    `qualite/C18` a fait publier la PART du portefeuille exclue. Mais le badge
+    des deux Excel se declenche sur le mot << EXCLUE >>, jamais sur l'ampleur :
+    *l'information etait la, la hierarchie n'y etait pas.* Un actuaire qui
+    signe vite lit le meme signal aux deux extremites.
+
+    ⛔⛔ LA GRADATION PAR LA COULEUR A ETE ECARTEE, APRES MESURE. Le badge
+    ROUGE publie litteralement << Non conforme >> (`_MOT_RAG`, `services/C9`).
+    Un tarif calibre sur un portefeuille reduit n'est pas *non conforme*, il
+    est *reduit*.
+
+    > *Le rendre rouge affirmerait plus que ce qu'on sait -- exactement le
+    > defaut que cet audit poursuit.*
+
+    ⚠️⚠️ ET LE REPERE N'EST PAS INVENTE, IL EST REUTILISE. `SEUIL_ESCALADE`
+    est la definition que ce module s'est DEJA donnee d'une proportion qui
+    exige une confirmation nominative. *Un chiffre invente pour trancher une
+    question actuarielle est precisement ce que ce module a supprime quatre
+    fois.*
+    """
+
+    @staticmethod
+    def _rapport(n, total=4000):
+        a = Anomalie(code='facteur_valeur_absente', regle=1, role='facteur',
+                     colonne='age', nb_lignes=n, proportion=n / total,
+                     index=tuple(range(n)), description='d')
+        return RapportQualite(
+            lignes_initiales=total, lignes_retenues=total - n, exclusions=[a],
+            corrections=[], signalements=[], escalade_declenchee=False,
+            anomalies_au_dela_seuil=[], seuil=SEUIL_ESCALADE,
+            validee_par=None, horodatage=None, bloque=False,
+            dataframe_propre=None)
+
+    def test_AM_1_sous_le_repere_la_phrase_se_TAIT(self):
+        """⚠️ *Un avertissement permanent est un avertissement qu'on cesse de
+        lire.* A 0,1 %, il n'y a rien a hierarchiser."""
+        self.assertIsNone(phrase_ampleur_exclusion(0.001))
+        self.assertIsNone(phrase_ampleur_exclusion(SEUIL_ESCALADE - 1e-9))
+        self.assertIsNone(phrase_ampleur_exclusion(None),
+                          'une part indisponible declenche la phrase')
+        texte = synthese_qualite_donnees(self._rapport(4)) or ''
+        self.assertNotIn('AMPLEUR', texte)
+        print("    AM-1 second sens : 0,1 % -> aucune phrase d'ampleur")
+
+    def test_AM_2_au_dela_elle_COMPARE_a_un_repere_EXISTANT(self):
+        """⚠️⚠️ *Le repere n'est pas invente, il est reutilise.*
+
+        Assiette : la phrase doit porter le seuil REEL du module, pas un
+        littéral. On le fait varier et on verifie que le texte suit.
+        """
+        p = phrase_ampleur_exclusion(0.226) or ''
+        self.assertIn('4,5 fois', p, 'le rapport a la reference ne se derive '
+                                     'pas de la part')
+        self.assertIn(f"{SEUIL_ESCALADE:.0%}".replace('%', ' %'), p)
+        self.assertIn('77,4 %', p, "l'assiette restante n'est pas publiee")
+        # ⚠️ LE REPERE EST LU, PAS RECOPIE : on le deplace et le texte suit.
+        with mock.patch('core.qualite_donnees.SEUIL_ESCALADE', 0.10):
+            p2 = phrase_ampleur_exclusion(0.20) or ''
+        self.assertIn('2,0 fois', p2,
+                      f"le seuil a ete deplace a 10 % et le RATIO n'a pas "
+                      f"suivi : il recopie un litteral. Obtenu : {p2[:80]}")
+        # ⚠️⚠️ ET LE SEUIL AFFICHE AUSSI — le sceau a du me l'apprendre. Un
+        # plant qui figeait `_s = '5 %'` ne tombait sur AUCUN controle : je
+        # verifiais le RATIO sous le patch, et le SEUIL hors patch. *Deux
+        # moities justes ne font pas un controle juste.*
+        self.assertIn('10 %', p2,
+                      f"le seuil AFFICHE ne suit pas son deplacement : il est "
+                      f"recopie. Obtenu : {p2[:110]}")
+        self.assertNotIn('seuil de 5 %', p2)
+        print("    AM-2 4,5x le seuil de 5 % ; seuil deplace a 10 % -> 2,0x "
+              "ET << seuil de 10 % >>")
+
+    def test_AM_3_elle_COMPARE_et_ne_JUGE_pas(self):
+        """⚠️⚠️ *Le systeme publie ce chiffre ; il ne le juge pas.*
+
+        La decision -- a partir de quelle perte un portefeuille cesse d'etre
+        tarifable -- appartient a l'actuaire signataire. La phrase doit donc
+        dire que l'exigence n'a PAS ete declenchee, et rendre la question.
+        """
+        p = phrase_ampleur_exclusion(0.673) or ''
+        self.assertIn('ne declenchent PAS', p,
+                      "la phrase laisse croire qu'une exigence s'est "
+                      'declenchee')
+        self.assertIn('VERIFIEZ', p, "la question n'est pas rendue a "
+                                     "l'actuaire")
+        for interdit in ('non conforme', 'invalide', 'inacceptable', 'refuse'):
+            self.assertNotIn(interdit, p.lower(),
+                             f"la phrase JUGE (<< {interdit} >>) au lieu de "
+                             f"comparer")
+        print("    AM-3 elle compare, dit que rien ne s'est declenche, et "
+              "rend la question")
+
+    def test_AM_4_la_PASTILLE_reste_AMBRE_et_c_est_DELIBERE(self):
+        """⛔⛔ LA LIMITE, EPINGLEE PLUTOT QUE TUE.
+
+        Le badge ROUGE publie << Non conforme >>. Le passer au rouge sur une
+        assiette reduite affirmerait plus que ce qu'on sait.
+        """
+        from core.qualite_donnees import MARQUEUR_QUALITE_NON_EXECUTEE
+        texte = synthese_qualite_donnees(self._rapport(2691)) or ''
+        self.assertIn('AMPLEUR', texte, 'la phrase n atteint pas la surface')
+        for nom, ancre in (('tarif_excel.py', '_synth_q'),
+                           ('rapport_equipe_tarif.py', '_synth_q6')):
+            src = (_RACINE / 'direction_non_vie' / 'tarification' / 'services'
+                   / nom).read_text(encoding='utf-8')
+            expr = next((ast.unparse(n) for n in ast.walk(ast.parse(src))
+                         if isinstance(n, ast.IfExp) and 'AMBRE' in
+                         ast.unparse(n) and ancre in ast.unparse(n)), None)
+            self.assertIsNotNone(expr, f'{nom} : badge introuvable')
+            verdict = eval(expr, {}, {
+                ancre: texte,
+                'MARQUEUR_QUALITE_NON_EXECUTEE': MARQUEUR_QUALITE_NON_EXECUTEE})
+            self.assertEqual(
+                verdict, 'AMBRE',
+                f"{nom} : la pastille vaut '{verdict}' sur une assiette "
+                f"reduite -- ROUGE publierait << Non conforme >>, ce que le "
+                f"module ne sait pas")
+        print("    AM-4 67 % de perte : phrase d'ampleur PUBLIEE, pastille "
+              "AMBRE (jamais << Non conforme >>)")

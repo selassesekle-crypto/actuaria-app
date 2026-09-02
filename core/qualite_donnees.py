@@ -1446,6 +1446,53 @@ def compte_union_lignes(anomalies) -> tuple[int, float | None]:
     return len(union), part
 
 
+def phrase_ampleur_exclusion(part: float | None) -> str | None:
+    """La MESURE DE L'AMPLEUR, comparée au seul repère que le module possède.
+
+    ⚠️⚠️ CONSTAT `qualite/C19`. `qualite/C18` a fait publier la part du
+    portefeuille exclue — mais **la pastille reste AMBRE à 0,1 % comme à
+    67 %** : elle se déclenche sur le mot « EXCLUE », jamais sur l'ampleur.
+    *L'information était là, la hiérarchie n'y était pas.*
+
+    ⛔⛔ ET LA GRADATION PAR LA COULEUR A ÉTÉ ÉCARTÉE, APRÈS MESURE. Le badge
+    ROUGE publie littéralement **« Non conforme »** (`_MOT_RAG`, `services/C9`)
+    — or un tarif calculé sur un portefeuille réduit n'est pas *non conforme*,
+    il est *réduit*. *Le rendre rouge affirmerait plus que ce qu'on sait :
+    exactement le défaut que cet audit poursuit.* La hiérarchie va donc dans
+    le TEXTE, où la nuance existe.
+
+    ⚠️⚠️ LE REPÈRE N'EST PAS INVENTÉ, IL EST RÉUTILISÉ, ET C'EST DIT.
+    `SEUIL_ESCALADE` est la définition que ce module s'est déjà donnée d'une
+    proportion qui *« exige une confirmation actuarielle nominative »*.
+    Aucun seuil neuf n'est créé : *un chiffre inventé pour trancher une
+    question actuarielle est précisément ce que ce module a supprimé quatre
+    fois.*
+
+    ⚠️ ET ELLE NE JUGE PAS. Elle compare, elle dit que l'exigence n'a PAS été
+    déclenchée ici, et elle rend la question à l'actuaire. *Le système publie
+    ce chiffre ; il ne le juge pas.* La décision — à partir de quelle perte un
+    portefeuille cesse d'être tarifable — appartient à l'actuaire signataire,
+    et resterait à déclarer au plan le jour où elle sera prise.
+
+    Rend `None` sous le repère : *un avertissement permanent cesse d'être lu.*
+    """
+    if part is None or part < SEUIL_ESCALADE:
+        return None
+    _p = f"{part:.1%}".replace('.', ',').replace('%', ' %')
+    _s = f"{SEUIL_ESCALADE:.0%}".replace('%', ' %')
+    _reste = f"{1 - part:.1%}".replace('.', ',').replace('%', ' %')
+    _fois = f"{part / SEUIL_ESCALADE:.1f}".replace('.', ',')
+    return (
+        f"⚠ AMPLEUR — cette part ({_p}) vaut {_fois} fois le seuil de {_s} "
+        f"au-dela duquel ce module exige une confirmation actuarielle "
+        f"nominative pour les anomalies disqualifiantes. Ces retraits-ci ne "
+        f"declenchent PAS cette exigence : ils sont legitimes ligne a ligne. "
+        f"Le tarif publie est donc calibre sur {_reste} du portefeuille "
+        f"initial. VERIFIEZ que cette assiette reduite reste representative "
+        f"de votre risque avant de signer."
+    )
+
+
 def _phrase_union(n: int, part: float | None, verbe: str, detail: str) -> str:
     """L'en-tête d'un lot d'anomalies — compte DISTINCT, et part quand elle
     se dérive. *Un compte sans son total ne dit pas l'enjeu.*"""
@@ -1598,6 +1645,13 @@ def synthese_qualite_donnees(rapport: RapportQualite | None) -> str | None:
         tot, part = compte_union_lignes(rapport.exclusions)
         det = " ; ".join(f"{a.nb_lignes}x {a.code}" for a in rapport.exclusions)
         lignes.append(_phrase_union(tot, part, 'EXCLUE(S) (impossible)', det))
+        # ⚠️⚠️ `qualite/C19` — LA HIERARCHIE, PAS SEULEMENT LE CHIFFRE. La
+        # pastille reste AMBRE a 0,1 % comme a 67 % : elle se declenche sur le
+        # mot << EXCLUE >>, jamais sur l'ampleur. *L'information etait la, la
+        # hierarchie n'y etait pas.*
+        _ampleur = phrase_ampleur_exclusion(part)
+        if _ampleur:
+            lignes.append(f"   {_ampleur}")
         # ⚠️⚠️ LA TROISIÈME BRANCHE, TROUVÉE DANS MON PROPRE CORRECTIF.
         # L'étape 4 du chantier `unite_exposition` a fait publier leur
         # description aux CORRECTIONS puis aux SIGNALEMENTS — et a laissé les
