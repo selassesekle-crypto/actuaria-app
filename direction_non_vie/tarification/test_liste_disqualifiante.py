@@ -39,7 +39,11 @@ from core.plan_tarifaire import PlanTarifaire
 from core.qualite_donnees import (
     CODES_DISQUALIFIANTS,
     SEUIL_ESCALADE,
+    Anomalie,
+    RapportQualite,
+    compte_union_lignes,
     controler_qualite,
+    synthese_qualite_donnees,
 )
 
 _RACINE = pathlib.Path(__file__).resolve().parents[2]
@@ -353,3 +357,133 @@ class TestListeDisqualifiante(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
+
+
+class TestUnionJamaisSomme(unittest.TestCase):
+    """⛔⛔ `qualite/C18` — LE RAPPORT SIGNE ADDITIONNAIT DES COMPTES QUI SE
+    RECOUPENT.
+
+    Trouve le 02/09/2026 en fermant le point 1 (la courbe de sensibilite de
+    `a2/C18`). Cinq facteurs troues a 5 % sur 4 000 contrats :
+
+    ```
+      somme publiee            : 1 000 ligne(s) EXCLUE(S)
+      union reelle             :   904
+      lignes vraiment retirees :   904
+    ```
+
+    > *Le rapport signe annoncait quatre-vingt-seize exclusions qui n'avaient
+    > pas eu lieu -- et il ne disait nulle part que 22,6 % du portefeuille
+    > venait de disparaitre.*
+
+    ⚠️⚠️ L'ASYMETRIE ETAIT ENTRE DECIDER ET DIRE : `controler_qualite` calcule
+    DEJA l'union pour trancher l'escalade (`qualite/C14`). Elle ne la
+    calculait pas pour PUBLIER. *Le defaut n'etait pas dans la regle, il etait
+    dans sa restitution.*
+
+    ⚠️ Il PRE-EXISTAIT au lot des facteurs : deux anomalies de regle 1 peuvent
+    toucher la meme ligne depuis toujours (frequence negative ET exposition
+    nulle sur le meme contrat).
+    """
+
+    @staticmethod
+    def _anos(chevauchement: bool):
+        """Deux anomalies de regle 1, avec ou sans lignes communes."""
+        a = Anomalie(code='a', regle=1, role='exposition', colonne='x',
+                     nb_lignes=100, proportion=0.10,
+                     index=tuple(range(100)), description='a')
+        deb = 50 if chevauchement else 100
+        b = Anomalie(code='b', regle=1, role='exposition', colonne='y',
+                     nb_lignes=100, proportion=0.10,
+                     index=tuple(range(deb, deb + 100)), description='b')
+        return [a, b]
+
+    def test_UN_1_l_union_remplace_la_somme_des_que_deux_lots_se_recoupent(self):
+        """⚠️⚠️ *Ne jamais additionner des sources qui se recoupent.*"""
+        n, part = compte_union_lignes(self._anos(chevauchement=True))
+        self.assertEqual(n, 150, f'union attendue 150, obtenue {n} : la somme '
+                                 f'(200) compte deux fois les lignes communes')
+        self.assertAlmostEqual(part, 0.15, places=6)
+        print(f"    UN-1 deux lots de 100 avec 50 communs -> {n} lignes "
+              f"({part:.1%}), jamais 200")
+
+    def test_UN_2_second_sens_sans_chevauchement_l_union_EGALE_la_somme(self):
+        """⚠️ Sans ce sens, un controle qui rend toujours moins passerait pour
+        bon. Deux lots DISJOINTS doivent rendre exactement la somme."""
+        n, part = compte_union_lignes(self._anos(chevauchement=False))
+        self.assertEqual(n, 200, "l'union ampute des lignes reellement "
+                                 'distinctes')
+        self.assertAlmostEqual(part, 0.20, places=6)
+        print(f"    UN-2 second sens : deux lots DISJOINTS -> {n} lignes "
+              f"({part:.1%}) = la somme")
+
+    def test_UN_3_sans_index_le_repli_est_EXPLICITE_et_la_part_se_TAIT(self):
+        """⚠️⚠️ *Un pourcentage qu'on ne peut pas deriver ne se publie pas.*
+
+        Une anomalie sans `index` rend l'union incalculable : on retombe sur
+        la somme -- la seule mesure disponible -- et on NE publie PAS de part,
+        plutot que d'en inventer une.
+        """
+        muette = Anomalie(code='c', regle=1, role='exposition', colonne='z',
+                          nb_lignes=40, proportion=0.04, index=(),
+                          description='c')
+        n, part = compte_union_lignes(self._anos(chevauchement=True) + [muette])
+        self.assertEqual(n, 240, 'le repli doit rendre la SOMME')
+        self.assertIsNone(part, "une part est publiee alors que l'union n'est "
+                                'pas calculable')
+        print(f"    UN-3 anomalie sans index -> repli sur la somme ({n}), "
+              f"part = {part}")
+
+    def test_UN_5_deux_DENOMINATEURS_differents_la_part_se_TAIT(self):
+        """⛔⛔ LE CAS QUE LE SCEAU M'A FAIT AJOUTER.
+
+        `UN-3` couvrait l'absence d'index ; il ne couvrait PAS deux anomalies
+        en desaccord sur leur denominateur. Un plant rendant `0.5` au lieu de
+        `None` ne tombait donc sur aucun controle.
+
+        Ce n'est pas un cas theorique : deux anomalies calculees a des etapes
+        differentes portent deux `n0` differents -- c'est exactement ce qui
+        s'est produit aujourd'hui entre `_n0` et `len(df)` dans A2.
+
+        > *Un pourcentage calcule sur deux denominateurs n'a pas de sens ; le
+        > taire vaut mieux que d'en choisir un au hasard.*
+        """
+        a = Anomalie(code='a', regle=1, role='exposition', colonne='x',
+                     nb_lignes=100, proportion=0.10,       # n0 = 1 000
+                     index=tuple(range(100)), description='a')
+        b = Anomalie(code='b', regle=1, role='exposition', colonne='y',
+                     nb_lignes=100, proportion=0.05,       # n0 = 2 000
+                     index=tuple(range(200, 300)), description='b')
+        n, part = compte_union_lignes([a, b])
+        self.assertEqual(n, 200, "l'union des index reste juste")
+        self.assertIsNone(
+            part,
+            f'une part ({part}) est publiee alors que les anomalies portent '
+            f'DEUX denominateurs (1 000 et 2 000) : le chiffre serait faux '
+            f"pour l'une des deux")
+        # ⚠️ SECOND SENS : un denominateur COMMUN redonne bien une part.
+        b2 = dataclasses.replace(b, proportion=0.10)
+        self.assertAlmostEqual(compte_union_lignes([a, b2])[1], 0.20, places=6)
+        print(f"    UN-5 deux denominateurs -> part={part} ; un seul -> "
+              f"{compte_union_lignes([a, b2])[1]:.1%}")
+
+    def test_UN_4_le_rapport_SIGNE_porte_l_union_ET_la_part(self):
+        """⚠️⚠️ LE CONTROLE QUI FERME LE CONSTAT — sur la surface signee.
+
+        *Un compte sans son total ne dit pas l'enjeu* : << 904 lignes >> et
+        << 22,6 % du portefeuille >> ne se lisent pas de la meme facon.
+        """
+        rapport = RapportQualite(
+            lignes_initiales=1000, lignes_retenues=850,
+            exclusions=self._anos(chevauchement=True), corrections=[],
+            signalements=[], escalade_declenchee=False,
+            anomalies_au_dela_seuil=[], seuil=0.05, validee_par=None,
+            horodatage=None, bloque=False, dataframe_propre=None)
+        texte = synthese_qualite_donnees(rapport) or ''
+        self.assertIn('150 ligne(s) EXCLUE(S)', texte,
+                      f"le rapport publie la somme au lieu de l'union : "
+                      f"{texte[:90]}")
+        self.assertNotIn('200 ligne(s) EXCLUE(S)', texte)
+        self.assertIn('15,0 % du portefeuille', texte,
+                      "la part n'est pas publiee, ou pas au format francais")
+        print(f"    UN-4 rapport signe : {texte.splitlines()[0][:70]}")

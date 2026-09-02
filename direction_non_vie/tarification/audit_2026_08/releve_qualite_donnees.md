@@ -1170,3 +1170,86 @@ hors de sa vue.**
 > Épinglé par `PM-5` et `PM-6`. Sceau : six violations plantées, cinq tombent,
 > et la sixième — l'un des nombres cité dans une **prose de test**, hors du
 > site surveillé — ne tombe pas.
+
+---
+
+**C18 — Le rapport signé ADDITIONNE des comptes qui se recoupent : il annonce
+des exclusions qui n'ont pas eu lieu, et ne dit jamais quelle part du
+portefeuille disparaît.**
+
+> ✅ **`qualite/C18`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 02/09/2026 — trouvé
+> en fermant le point 1 (la courbe de sensibilité de `a2/C18`).**
+>
+> **Le constat.** Les trois en-têtes de `synthese_qualite_donnees` faisaient
+> `sum(a.nb_lignes for a in ...)`. Mesuré sur 4 000 contrats, cinq facteurs
+> troués à 5 % :
+>
+> ```
+>   somme publiee            : 1 000 ligne(s) EXCLUE(S)
+>   union reelle             :   904
+>   lignes vraiment retirees :   904   (22,6 % du portefeuille)
+> ```
+>
+> ### *Le rapport signé annonçait quatre-vingt-seize exclusions qui n'avaient pas eu lieu — et il ne disait nulle part que 22,6 % du portefeuille venait de disparaître.*
+>
+> ⚠️⚠️ **L'ASYMÉTRIE ÉTAIT ENTRE DÉCIDER ET DIRE.** `controler_qualite`
+> calcule **déjà** l'union pour trancher l'escalade (`qualite/C14`,
+> `lignes_touchees`). Elle ne la calculait pas pour **publier**. *Le défaut
+> n'était pas dans la règle, il était dans sa restitution.*
+>
+> ⚠️ **IL PRÉ-EXISTAIT AU LOT DES FACTEURS** : deux anomalies de règle 1
+> peuvent toucher la même ligne depuis toujours — une fréquence négative ET
+> une exposition nulle sur le même contrat.
+>
+> **Le correctif** : `compte_union_lignes` en source unique, appliquée aux
+> **trois** en-têtes (exclusions, corrections, signalements) — *laisser deux
+> en-têtes sur trois additionner déplacerait l'asymétrie au lieu de la
+> fermer.*
+>
+> ⚠️ **`RapportQualite.lignes_initiales` NE CONVIENT PAS, ET C'EST MESURÉ** :
+> sur le chemin agent la couche reçoit le dataframe APRÈS les exclusions d'A2,
+> si bien que `lignes_initiales − lignes_retenues` vaut **0** là où 904 lignes
+> ont disparu. *Une source plausible n'est pas une source vérifiée.*
+>
+> ⚠️ **LA PART N'EST PUBLIÉE QUE SI ELLE SE DÉRIVE** : on retrouve `n0` par
+> `nb_lignes / proportion`, et on ne publie rien si les anomalies s'accordent
+> pas dessus. *Un pourcentage qu'on ne peut pas dériver ne se publie pas.*
+>
+> ⛔ **LE SCEAU A ENCORE TROUVÉ UN TROU DANS MON CONTRÔLE.** Le plant qui
+> inventait une part sur deux dénominateurs divergents ne tombait sur aucun
+> contrôle : `UN-3` couvrait l'absence d'index, pas le désaccord de
+> dénominateur. `UN-5` le couvre — et ce n'est pas théorique, c'est ce qui
+> s'est produit le jour même entre `_n0` et `len(df)` dans A2.
+>
+> ═══ LA COURBE DE SENSIBILITÉ, QUI FERME LE POINT 1 ═══
+>
+> Le « aucun euro » de `a2/C18` était mesuré sur la seule donnée réelle du
+> dépôt, qui porte **zéro** valeur absente : elle ne pouvait pas exercer le
+> changement. Mesure sur 4 000 contrats, MCAR, `k` facteurs troués à `p` :
+>
+> ```
+>     p      k   % perdu   attendu 1-(1-p)^k   ecart prime pure
+>   0,1 %    1     0,10 %      0,10 %              -0,03 %
+>   1,0 %    5     4,95 %      4,90 %              -0,41 %
+>   5,0 %    5    22,70 %     22,62 %              -1,23 %
+>  10,0 %    5    40,62 %     40,95 %              +4,01 %
+>  20,0 %    5    67,27 %     67,23 %              -6,86 %
+> ```
+>
+> **La perte suit exactement la formule d'union** — l'implémentation est juste,
+> sans double compte ni ligne oubliée. **L'amplification par le nombre de
+> facteurs est le vrai risque** : 5 % de trous sur cinq facteurs coûtent
+> **22,7 %** du portefeuille.
+>
+> ⚠️⚠️ **CETTE ÉTUDE NE MESURE QUE LE CAS MCAR** (trous complètement
+> aléatoires). Sur un fichier réel où l'absence est CORRÉLÉE au risque,
+> l'exclusion **biaise** le tarif au lieu de seulement le rendre moins précis.
+> *Cette limite est réelle et n'est pas mesurable ici.*
+>
+> ⛔⛔ **QUESTION DE MÉTHODE ACTUARIELLE, RENDUE À SELASSE, NON TRANCHÉE** :
+> **à partir de quelle perte un portefeuille cesse-t-il d'être tarifable ?**
+> L'arbitrage disait « exclure et le dire, ne pas arrêter » — il portait sur
+> un facteur, pas sur une perte cumulée de 40 ou 67 %. *Le système publie
+> désormais ce chiffre ; il ne le juge pas.*
+>
+> Épinglé par `UN-1` à `UN-5`. Sceau : cinq violations plantées, cinq tombent.

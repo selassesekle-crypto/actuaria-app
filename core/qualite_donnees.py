@@ -1394,6 +1394,70 @@ CODES_DISQUALIFIANTS: frozenset[str] = frozenset({
 })
 
 
+def compte_union_lignes(anomalies) -> tuple[int, float | None]:
+    """Le nombre de lignes DISTINCTES touchées, et sa part du portefeuille.
+
+    ⚠️⚠️ CONSTAT `qualite/C18`. Les trois en-têtes du rapport signé faisaient
+    `sum(a.nb_lignes for a in ...)` — **une addition de comptes qui se
+    recoupent**. Mesuré le 02/09/2026, cinq facteurs troués à 5 % sur 4 000
+    contrats :
+
+    ```
+      somme publiee            : 1 000 ligne(s) EXCLUE(S)
+      union reelle             :   904
+      lignes vraiment retirees :   904
+    ```
+
+    > *Le rapport signé annonçait quatre-vingt-seize exclusions qui n'avaient
+    > pas eu lieu — et il ne disait nulle part que 22,6 % du portefeuille
+    > venait de disparaître.*
+
+    C'est la règle déjà écrite dans [[releve-symbole-vs-prose]] et appliquée
+    par `controler_qualite` pour DÉCIDER de l'escalade : *ne jamais additionner
+    des sources qui se recoupent — calculer l'UNION.* Elle l'était pour la
+    décision, elle ne l'était pas pour la publication. **L'asymétrie était
+    entre décider et dire.**
+
+    ⚠️ LA PART N'EST RENDUE QUE SI ELLE SE DÉRIVE. Chaque anomalie porte
+    `proportion = nb_lignes / n0` ; on retrouve `n0` par division, et on ne
+    publie la part que si toutes les anomalies s'accordent sur ce `n0`.
+    *Un pourcentage qu'on ne peut pas dériver ne se publie pas.*
+
+    ⚠️ `RapportQualite.lignes_initiales` NE CONVIENT PAS ICI, et c'est mesuré :
+    sur le chemin agent la couche reçoit le dataframe APRÈS les exclusions
+    d'A2, si bien que `lignes_initiales - lignes_retenues` vaut **0** là où
+    904 lignes ont disparu.
+    """
+    lot = list(anomalies or [])
+    union: set[int] = set()
+    sans_index = False
+    for a in lot:
+        if a.nb_lignes and not a.index:
+            sans_index = True
+        union.update(a.index or ())
+    if sans_index or not lot:
+        # ⚠️ Repli EXPLICITE : sans index, l'union n'est pas calculable et la
+        # somme redevient la seule mesure disponible. *Publier la méthode à
+        # côté du chiffre plutôt qu'un chiffre dont on ignore le sens.*
+        return sum(a.nb_lignes for a in lot), None
+    n0 = {round(a.nb_lignes / a.proportion) for a in lot
+          if a.proportion and a.nb_lignes}
+    part = (len(union) / n0.pop()) if len(n0) == 1 else None
+    return len(union), part
+
+
+def _phrase_union(n: int, part: float | None, verbe: str, detail: str) -> str:
+    """L'en-tête d'un lot d'anomalies — compte DISTINCT, et part quand elle
+    se dérive. *Un compte sans son total ne dit pas l'enjeu.*"""
+    # ⚠️ CONVENTION FRANÇAISE, comme `_entete_alerte` : ce texte est lu par un
+    # actuaire, un commissaire aux comptes et l'ACPR. « 22.6% » n'est pas du
+    # français, et deux conventions dans le même document en seraient une de
+    # trop.
+    _pct = (f" — {part:.1%} du portefeuille".replace('.', ',')
+            .replace('%', ' %') if part is not None else '')
+    return f"✔ {n} ligne(s) {verbe}{_pct} : {detail}."
+
+
 def _entete_alerte(mask, total: int, titre: str, unite: str = 'contrat') -> str:
     """L'en-tête chiffré d'une alerte — LE COMPTE SE DÉRIVE DU MASQUE.
 
@@ -1527,9 +1591,13 @@ def synthese_qualite_donnees(rapport: RapportQualite | None) -> str | None:
                 f"requise (qualite_validee_par) pour poursuivre." + _detail)
     lignes: List[str] = []
     if rapport.exclusions:
-        tot = sum(a.nb_lignes for a in rapport.exclusions)
+        # ⚠️⚠️ L'UNION, JAMAIS LA SOMME — constat `qualite/C18`. Une ligne
+        # trouee sur DEUX facteurs etait comptee DEUX FOIS : 1 000 annoncees
+        # pour 904 reellement retirees. *Le rapport signe annoncait des
+        # exclusions qui n'avaient pas eu lieu.*
+        tot, part = compte_union_lignes(rapport.exclusions)
         det = " ; ".join(f"{a.nb_lignes}x {a.code}" for a in rapport.exclusions)
-        lignes.append(f"✔ {tot} ligne(s) EXCLUE(S) (impossible) : {det}.")
+        lignes.append(_phrase_union(tot, part, 'EXCLUE(S) (impossible)', det))
         # ⚠️⚠️ LA TROISIÈME BRANCHE, TROUVÉE DANS MON PROPRE CORRECTIF.
         # L'étape 4 du chantier `unite_exposition` a fait publier leur
         # description aux CORRECTIONS puis aux SIGNALEMENTS — et a laissé les
@@ -1539,9 +1607,9 @@ def synthese_qualite_donnees(rapport: RapportQualite | None) -> str | None:
         for a in rapport.exclusions:
             lignes.append(f"   ⚠ {a.description}")
     if rapport.corrections:
-        tot = sum(a.nb_lignes for a in rapport.corrections)
+        tot, part = compte_union_lignes(rapport.corrections)
         det = " ; ".join(f"{a.nb_lignes}x {a.code} ({a.correction})" for a in rapport.corrections)
-        lignes.append(f"✔ {tot} ligne(s) CORRIGEE(S) : {det}.")
+        lignes.append(_phrase_union(tot, part, 'CORRIGEE(S)', det))
         # ⚠️ LA MÊME PHRASE QU'EN AMONT, PAS UNE REFORMULATION. Le rapport signé
         # doit porter ce que l'actuaire a validé, mot pour mot — sinon les deux
         # surfaces divergent et la trace ne prouve plus rien.
@@ -1573,9 +1641,11 @@ def synthese_qualite_donnees(rapport: RapportQualite | None) -> str | None:
             if _p:
                 lignes.append(f"   ⚠ {_p}")
     if rapport.signalements:
-        tot = sum(a.nb_lignes for a in rapport.signalements)
+        tot, part = compte_union_lignes(rapport.signalements)
         det = " ; ".join(f"{a.nb_lignes}x {a.code}" for a in rapport.signalements)
-        lignes.append(f"⚠ {tot} ligne(s) SIGNALEE(S) (ambigu, laissees telles quelles) : {det}.")
+        lignes.append(_phrase_union(
+            tot, part, 'SIGNALEE(S) (ambigu, laissees telles quelles)', det)
+            .replace('✔', '⚠', 1))
         # ⚠️⚠️ LA MÊME ASYMÉTRIE, UN CRAN PLUS BAS — trouvée en mesurant
         # l'étape 4. Les signalements ne publiaient que leur CODE : le rapport
         # signé disait « 400x unite_exposition_contredite » sans dire ce que
