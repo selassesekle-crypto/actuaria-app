@@ -1244,11 +1244,21 @@ def preambule_qualite(portefeuille, plan, qualite_validee_par=None,
     même ordre, avec les mêmes arguments — contrôler, lever si bloqué, rendre le
     dataframe propre. **Aucun euro ne bouge.**
 
-    ⚠️⚠️ ET ELLE N'EST PAS BRANCHÉE AU CHEMIN AGENT — c'est l'étape 1-B, laissée
-    ouverte à dessein. La brancher **déplacerait un prix** : mesuré, le chemin
-    agent tarife aujourd'hui sur des lignes à fréquence ou coût négatifs que
-    cette couche écarte. *Extraire et brancher sont deux décisions ; seule la
-    première est sans euro.*
+    ⚠️⚠️ ELLE EST BRANCHÉE AUX DEUX CHEMINS DEPUIS LE 02/09/2026 — étape 1-B,
+    arbitrée par Selasse, constat `qualite/C4` FERMÉ. `pipeline_agents`
+    l'appelle entre A1 et A2 : après A1 qui rend la donnée lisible sans retirer
+    de ligne, avant A2 qui mute. *Un garde-fou placé après le geste qu'il
+    surveille ne surveille plus rien.*
+
+    Ce que le branchement a déplacé, mesuré AVANT d'être fait :
+
+        DONNEE REELLE, 12 654 contrats : 12 654 / 12 654 retenues, DELTA 0
+        fichier temoin (30 freq<0 + 30 expo<=0) : BLOQUE, union 6,0 %
+
+    **Aucun euro sur le seul portefeuille réel du dépôt.** Ce qui apparaît est
+    un blocage à signature nominative sur des fichiers portant des lignes
+    IMPOSSIBLES — et `CODES_DISQUALIFIANTS`, arbitré à l'étape ⑤-①, dit
+    lesquelles.
 
     Retourne le `RapportQualite`. L'appelant y lit `dataframe_propre`.
     """
@@ -1369,11 +1379,20 @@ PHRASE_QUALITE_NON_EXECUTEE = (
     f"rapport de qualite n'accompagne ce tarif : les regles d'exclusion "
     f"(impossible), de correction (implausible) et de signalement (ambigu) "
     f"n'ont examine AUCUNE ligne. Ce n'est PAS « rien a signaler » — rien n'a "
-    f"ete verifie, et le nombre de lignes fautives est INCONNU. Le chemin "
-    f"agent (A1-A6) n'appelle pas cette couche (constat `qualite/C4`) : un "
-    f"tarif produit par ce chemin porte cet avertissement tant que le "
-    f"branchement n'est pas fait."
+    f"ete verifie, et le nombre de lignes fautives est INCONNU. Ce tarif n'a "
+    f"pas ete produit par un chemin qui applique cette couche : les deux "
+    f"chemins outilles le font (`pipeline_complet` et `pipeline_agents`), un "
+    f"assemblage manuel des agents ne le fait pas."
 )
+#: ⚠️⚠️ CETTE PHRASE A ETE RELUE LE 02/09/2026, LE JOUR DU BRANCHEMENT.
+#: Elle disait : « le chemin agent (A1-A6) n'appelle pas cette couche (constat
+#: `qualite/C4`) [...] tant que le branchement n'est pas fait ». **1-B l'a
+#: fait** : la phrase serait devenue fausse dans un document signe, et elle
+#: aurait renvoye l'actuaire vers une cause qui n'existe plus.
+#: *Le texte qui accompagne un comportement se relit quand il change — surtout
+#: celui qui explique une ABSENCE, parce qu'il survit a la raison de l'absence.*
+#: Elle nomme desormais le vrai cas restant : un assemblage manuel des agents,
+#: hors des deux orchestrateurs (constat `agents/C1`).
 
 
 def synthese_qualite_donnees(

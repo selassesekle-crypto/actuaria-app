@@ -143,39 +143,13 @@ _HORS_ASSIETTE: dict[tuple[str, str], str] = {
         "`unite_exposition`, et il doit porter ses propres controles -- la "
         "lecon du jour etant precisement qu'une surface signee peut changer "
         "sous 812 tests verts. **Ne pas l'empiler dans une passe de tri.**",
-    ('qualite/C4', 'test_preambule_qualite.py'):
-        "Cite comme RAISON D'ETRE de l'etape 1-A, jamais epingle -- et la "
-        "distinction est le coeur du lot. `qualite/C4` dit que LE CHEMIN AGENT "
-        "N'A AUCUNE COUCHE QUALITE. Or 1-A extrait seulement la porte et la "
-        "branche au chemin DECLARATIF, qui l'avait deja : elle ne donne "
-        "toujours rien a l'autre chemin. **C'est l'etape 1-B qui fermerait "
-        "`qualite/C4`, et elle deplace un prix** -- mesure du 31/08 : le "
-        "chemin agent tarife sur 30 lignes a frequence negative que cette "
-        "couche ecarte, et le branchement introduirait un blocage. "
-        "-- RE-MESURE DU 01/09 : la mesure du 31/08 disait 60 lignes "
-        "<< a frequence OU COUT negatifs >>, et `qualite/C8`, ferme le meme "
-        "soir APRES elle, a sorti le cout de la regle 1 : il est SIGNALE et "
-        "GARDE par les deux chemins. Le blocage vient de l'UNION (9 %), aucun "
-        "type seul n'atteignant 5 %. `qualite/C4` est au rang 6 GELE. *Le "
-        "fermer sur l'extraction ferait croire que le chemin agent est "
-        "protege.*",
-    ('qualite/C4', 'test_qualite_non_executee.py'):
-        "Cite comme CAUSE NOMMEE de l'absence de rapport qualite, jamais "
-        "epingle. La phrase publiee dans les livrables dit POURQUOI la couche "
-        "n'a pas tourne, et `QNE-2` exige qu'elle le dise : *un avertissement "
-        "qui annonce une absence sans sa raison envoie l'actuaire chercher un "
-        "defaut de donnees la ou il manque un branchement.* Retirer la mention "
-        "couperait l'avertissement de sa cause. `qualite/C9` corrige ce que le "
-        "livrable DIT de l'absence ; il ne touche pas a l'absence elle-meme, "
-        "qui est la fusion 1-B.",
-    ('qualite/C4', 'test_canal_signature_agent.py'):
-        "Cite comme CAUSE du refus, jamais epingle. Le canal de signature du "
-        "chemin agent n'a pas d'objet PARCE QUE ce chemin n'appelle pas la "
-        "couche qualite : le message de `SignatureSansObjet` nomme la cle, et "
-        "`SG-3` exige qu'il la nomme -- *un refus qui ne dit pas POURQUOI "
-        "transforme un garde-fou en mur.* `qualite/C12` pose le canal et le "
-        "fait refuser ; c'est l'etape 5 qui lui donnera un objet, et elle "
-        "deplace un prix.",
+    # ⚠️⚠️ LES TROIS EXEMPTIONS  ONT ETE RETIREES LE 02/09/2026.
+    # Elles disaient << c'est l'etape 1-B qui FERMERAIT  >>, et
+    # << le chemin agent n'appelle pas la couche >> -- devenus FAUX le jour
+    # ou 1-B a ete branchee. Les cles n'ont plus besoin d'etre exemptees :
+    #  porte desormais son bloc de fermeture. *Troisieme fois de
+    # la session, meme mecanisme -- une exemption survit a la raison qui
+    # l'avait rendue necessaire.*
     ('socle/C2', 'test_preambule_qualite.py'):
         "Cite comme MOTIF que le controle PQ-7 existe pour eviter, jamais "
         "epingle. L'etape 1-A pose une porte `preambule_qualite` que SEUL le "

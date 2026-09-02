@@ -88,21 +88,23 @@ class TestCanalSignatureAgent(unittest.TestCase):
               "sur le chemin declaratif")
 
     def test_SG_2_une_signature_est_REFUSEE_tant_qu_elle_n_a_pas_d_objet(self):
-        """⚠️⚠️ LE CŒUR DU LOT. Avaler le nom en silence serait le défaut."""
-        df = _cadre()
-        with self.assertRaises(SignatureSansObjet) as ctx:
-            PA.pipeline_agents(df.copy(), _PLAN, 'auto',
-                               qualite_validee_par='Selasse Sekle')
-        self.assertEqual(ctx.exception.appelant, 'pipeline_agents')
-        self.assertEqual(ctx.exception.nom, 'Selasse Sekle')
+        """⚠️⚠️ LE CŒUR DU LOT. Avaler le nom en silence serait le défaut.
 
+        ⚠️⚠️ RESSERRÉ SUR `A1.run` LE 02/09/2026. `pipeline_agents` ne refuse
+        plus : depuis 1-B il PASSE le nom à la couche, qui seule peut lever le
+        blocage — c'est `SG-10` qui le tient. *Le canal n'a pas disparu, il a
+        enfin un objet.* `A1.run`, lui, n'appelle toujours pas la couche : pour
+        lui le refus reste la seule réponse honnête.
+        """
+        df = _cadre()
         with self.assertRaises(SignatureSansObjet) as ctx2:
             _muet(AgentA1Ingestion().run, sous_branche='auto',
                   dataframe=df.copy(), plan=_PLAN,
                   qualite_validee_par='Selasse Sekle')
         self.assertEqual(ctx2.exception.appelant, 'A1.run')
-        print("    OK SG-2 les 2 entrees LEVENT SignatureSansObjet et nomment "
-              "leur appelant")
+        self.assertEqual(ctx2.exception.nom, 'Selasse Sekle')
+        print("    OK SG-2 A1.run LEVE SignatureSansObjet et nomme son "
+              "appelant ; pipeline_agents a desormais un objet")
 
     def test_SG_3_le_refus_DIT_pourquoi_et_ou_aller(self):
         """⚠️ Un refus qui ne dit pas où aller transforme un garde-fou en mur.
@@ -110,9 +112,12 @@ class TestCanalSignatureAgent(unittest.TestCase):
         *Le message doit nommer l'étape qui donnera un objet au canal ET le
         chemin qui porte la couche aujourd'hui.*
         """
+        # ⚠️ Le témoin est `A1.run` depuis 1-B : `pipeline_agents` ne refuse
+        # plus, il transmet. *Un refus qui a trouvé son objet cesse d'être un
+        # refus.*
         with self.assertRaises(SignatureSansObjet) as ctx:
-            PA.pipeline_agents(_cadre(), _PLAN, 'auto',
-                               qualite_validee_par='X')
+            _muet(AgentA1Ingestion().run, sous_branche='auto',
+                  dataframe=_cadre(), plan=_PLAN, qualite_validee_par='X')
         msg = str(ctx.exception)
         self.assertIn('qualite/C4', msg, 'le refus ne nomme pas la cause')
         self.assertIn('1-B', msg, "le refus ne nomme pas l'etape")
@@ -127,25 +132,59 @@ class TestCanalSignatureAgent(unittest.TestCase):
 
         Assiette : les APPELS réels, par AST — pas les mentions en prose.
         """
-        for module, chemin in (
-                (PA, 'direction_non_vie/tarification/pipeline_agents.py'),
-                (None, 'direction_non_vie/tarification/a1_ingestion/agent.py')):
-            src = (_RACINE / chemin).read_text(encoding='utf-8')
-            appels = [n for n in ast.walk(ast.parse(src))
-                      if isinstance(n, ast.Call)
-                      and getattr(n.func, 'id', '') == 'exiger_canal_sans_objet']
-            self.assertEqual(
-                len(appels), 1,
-                f'{chemin} : {len(appels)} appels a la source unique')
-            leve = [n for n in ast.walk(ast.parse(src))
-                    if isinstance(n, ast.Raise)
-                    and 'SignatureSansObjet' in ast.unparse(n)]
-            self.assertEqual(
-                leve, [],
-                f'{chemin} recopie la levee au lieu d appeler la source unique')
-            del module
-        print("    OK SG-4 1 appel a la source unique par entree, 0 levee "
-              "recopiee")
+        # ⚠️ `pipeline_agents` a QUITTÉ cette liste le 02/09 : il ne refuse
+        # plus, il transmet (1-B). *Garder son nom ici aurait exigé un refus
+        # qui n'a plus lieu d'être — et le contrôle serait devenu faux.*
+        chemin = 'direction_non_vie/tarification/a1_ingestion/agent.py'
+        src = (_RACINE / chemin).read_text(encoding='utf-8')
+        appels = [n for n in ast.walk(ast.parse(src))
+                  if isinstance(n, ast.Call)
+                  and getattr(n.func, 'id', '') == 'exiger_canal_sans_objet']
+        self.assertEqual(
+            len(appels), 1,
+            f'{chemin} : {len(appels)} appels a la source unique')
+        leve = [n for n in ast.walk(ast.parse(src))
+                if isinstance(n, ast.Raise)
+                and 'SignatureSansObjet' in ast.unparse(n)]
+        self.assertEqual(
+            leve, [],
+            f'{chemin} recopie la levee au lieu d appeler la source unique')
+
+        # ⚠️⚠️ ET `pipeline_agents` NE DOIT PLUS REFUSER DU TOUT : un refus
+        # residuel avalerait la signature avant que la couche ne la voie.
+        src_pa = (_RACINE / 'direction_non_vie' / 'tarification'
+                  / 'pipeline_agents.py').read_text(encoding='utf-8')
+        residu = [n.lineno for n in ast.walk(ast.parse(src_pa))
+                  if isinstance(n, ast.Call)
+                  and getattr(n.func, 'id', '') == 'exiger_canal_sans_objet']
+        self.assertEqual(
+            residu, [],
+            f"pipeline_agents refuse encore (ligne(s) {residu}) alors qu'il "
+            f"transmet : la signature n'atteindrait jamais la couche")
+        print("    OK SG-4 1 appel a la source unique dans A1.run, 0 levee "
+              "recopiee, 0 refus residuel dans pipeline_agents")
+
+    def test_SG_10_pipeline_agents_TRANSMET_la_signature_a_la_couche(self):
+        """⚠️⚠️ CE QUE `SG-2` NE PEUT PLUS PROUVER, ET QUI EST LE VRAI OBJET.
+
+        Le canal a été construit à l'étape ③ pour être branché à l'étape ⑤. Il
+        l'est : `pipeline_agents` passe le nom à `preambule_qualite`, qui seule
+        peut lever le blocage. *Un canal qui refuse toujours et un canal qui
+        avale en silence échouent de la même façon — on vérifie qu'il PORTE.*
+        """
+        src = (_RACINE / 'direction_non_vie' / 'tarification'
+               / 'pipeline_agents.py').read_text(encoding='utf-8')
+        portes = [n for n in ast.walk(ast.parse(src))
+                  if isinstance(n, ast.Call)
+                  and getattr(n.func, 'id', '') == 'preambule_qualite']
+        self.assertEqual(len(portes), 1, 'la porte doit rester unique')
+        passe = [k.arg for k in portes[0].keywords]
+        self.assertIn(
+            'qualite_validee_par', passe,
+            "la porte est appelee SANS la signature : un blocage ne pourrait "
+            "jamais etre leve sur le chemin agent")
+        print(f"    OK SG-10 pipeline_agents transmet {sorted(passe)} a la "
+              f"porte unique")
 
     def test_SG_5_aucun_euro_le_canal_ne_gene_personne_sans_signature(self):
         """⚠️⚠️ « AUCUN EURO » SE PROUVE : sans signature, rien ne change.

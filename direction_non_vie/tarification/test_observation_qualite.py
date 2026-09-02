@@ -182,37 +182,38 @@ class TestObservationQualite(unittest.TestCase):
             "d'après A2 ne mesure plus ce qui atteint le tarif")
         self.assertEqual(apres.get('frequence_negative'), 60)
 
-        # ⚠️⚠️ CE CONTRÔLE A ÉTÉ DU DÉCOR, ET LE SCEAU L'A DÉMASQUÉ. Sa
-        # première version lisait l'APPEL — `observer_qualite(_df_obs, ...)` —
-        # puis y remplaçait `_df_obs` par `r2` avant de chercher `r2` : elle
-        # était donc VRAIE quoi qu'il arrive, y compris sur `r1`. *Un contrôle
-        # qui regarde le nom de la variable au lieu de sa SOURCE ne mesure
-        # rien.* L'assiette est l'AFFECTATION.
+        # ⚠️⚠️ CE CONTRÔLE A CHANGÉ DE SENS LE 02/09/2026, ET C'EST L'ÉTAPE ⑤
+        # QUI L'A FAIT. Il vérifiait que l'observation portait sur la sortie
+        # d'A2. **Le branchement de 1-B a retiré l'observation du chemin
+        # agent** : la couche y est désormais APPLIQUÉE, et la phrase
+        # « OBSERVÉE, NON APPLIQUÉE » serait devenue fausse dans le rapport
+        # signé. *Un mécanisme qui survit à sa raison d'être devient un
+        # mensonge.*
+        #
+        # ⛔⛔ ET IL RESTE DONC UNE MACHINERIE SANS APPELANT DE PRODUCTION.
+        # Relevé par AST le 02/09 : `observer_qualite` = **0 appelant**, et le
+        # canal `observation_qualite` traverse A6 et les quatre surfaces sans
+        # que rien ne le remplisse. *C'est la forme de `socle/C2`, créée par le
+        # lot même qui poursuit ce motif.* Son retrait complet touche
+        # 21 occurrences sur 6 fichiers plus cette sentinelle : **c'est une
+        # décision de portée, elle attend l'arbitrage de Selasse.**
+        #
+        # En attendant, ce contrôle DIT l'état au lieu de le taire — le patron
+        # qu'employait `PQ-6` pendant que 1-B attendait sa décision.
         src = pathlib.Path(
             _RACINE / 'direction_non_vie' / 'tarification'
             / 'pipeline_agents.py').read_text(encoding='utf-8')
-        arbre = ast.parse(src)
-        appel = [n for n in ast.walk(arbre) if isinstance(n, ast.Call)
-                 and getattr(n.func, 'id', '') == 'observer_qualite']
-        self.assertEqual(len(appel), 1, 'un seul site d observation attendu')
-        argument = ast.unparse(appel[0].args[0])
-        source = [ast.unparse(n.value) for n in ast.walk(arbre)
-                  if isinstance(n, ast.Assign)
-                  and any(getattr(t, 'id', '') == argument
-                          for t in n.targets)]
+        appels = [n.lineno for n in ast.walk(ast.parse(src))
+                  if isinstance(n, ast.Call)
+                  and getattr(n.func, 'id', '') == 'observer_qualite']
         self.assertEqual(
-            len(source), 1,
-            f'{argument} est affecte {len(source)} fois : assiette ambigue')
-        self.assertIn(
-            'r2', source[0],
-            f"l'observation porte sur `{source[0]}` : ce n'est pas la sortie "
-            f"d'A2, donc pas ce qui atteint le tarif")
-        self.assertNotIn(
-            'r1', source[0],
-            "l'observation porte sur la sortie d'A1 : elle compterait des "
-            "lignes qu'A2 a deja exclues")
-        print(f"    OK OB-4 avant A2 : {sorted(avant)} | apres A2 : "
-              f"{sorted(apres)} -- l'assiette est ce qui atteint le tarif")
+            appels, [],
+            f"le chemin agent OBSERVE ET APPLIQUE a la fois (ligne(s) "
+            f"{appels}) : le rapport dirait « RIEN n'a ete applique » sur des "
+            f"lignes que la couche a exclues")
+        print(f"    OK OB-4 assiette prouvee sur la fonction (avant A2 "
+              f"{sorted(avant)} | apres {sorted(apres)}) ; le chemin agent ne "
+              f"l'appelle plus -- 1-B l'applique, retrait complet EN ATTENTE")
 
     def test_OB_5_le_texte_publie_CE_QU_IL_FAUT_POUR_DECIDER(self):
         """⚠️⚠️ C'est ce texte qui alimentera l'arbitrage de l'étape ⑤.

@@ -143,27 +143,57 @@ class TestAucunComportementNeCHANGE(unittest.TestCase):
 class TestLaPorteEstPRETE_POUR_LE_CHEMIN_AGENT(unittest.TestCase):
     """⚠️⚠️ 1-B N'EST PAS FAITE, ET CE CONTROLE LE DIT."""
 
-    def test_le_chemin_agent_n_appelle_PAS_ENCORE_la_porte(self):
-        """⚠️ Ce n'est pas un oubli : le brancher DEPLACE UN PRIX. Mesure du
-        31/08 -- le chemin agent tarife sur des lignes a frequence negative que
-        cette couche ecarte, et le brancher introduirait un blocage a 5 %.
-        *Ce controle tombera le jour de 1-B, et ce sera le signal qu'elle a
-        bien ete decidee, pas glissee.*"""
-        src = (_TARIF / 'pipeline_agents.py').read_text(encoding='utf-8')
-        appels = [n.lineno for n in ast.walk(ast.parse(src))
-                  if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
-                  and n.func.id in ('preambule_qualite', 'controler_qualite')]
-        self.assertEqual(
-            appels, [],
-            f"le chemin agent appelle la couche qualite ligne(s) {appels} : "
-            f"si c'est voulu, c'est l'etape 1-B et elle DEPLACE UN PRIX -- "
-            f"elle doit etre arbitree, et ce controle mis a jour avec sa mesure")
-        print("    PQ-6 le chemin agent ne passe PAS encore par la porte "
-              "(1-B, non decidee)")
+    def test_le_chemin_agent_passe_PAR_LA_PORTE_UNIQUE(self):
+        """⚠️⚠️ IL EST TOMBE LE 02/09/2026, ET C'ETAIT LE SIGNAL ATTENDU.
 
-    def test_la_porte_DIT_qu_elle_n_est_pas_branchee(self):
-        """⚠️ Une porte prete mais non branchee doit le DECLARER, sinon elle
-        ressemble a de la plomberie morte -- le motif de `socle/C2`."""
+        Sa version precedente exigeait que `pipeline_agents` n'appelle PAS la
+        couche, avec ce motif ecrit d'avance : *« ce controle tombera le jour
+        de 1-B, et ce sera le signal qu'elle a bien ete decidee, pas
+        glissee. »* Elle a ete decidee, sur des chiffres, et il est reecrit
+        avec sa mesure -- pas supprime.
+
+        Ce que le branchement a deplace, mesure AVANT :
+
+            DONNEE REELLE, 12 654 contrats : 12 654 / 12 654, DELTA 0
+            fichier temoin (30 freq<0 + 30 expo<=0) : BLOQUE, union 6,0 %
+
+        ⚠️ UN SEUL APPEL, ET C'EST TOUT L'OBJET DE LA PORTE UNIQUE : deux
+        appels, c'est deja deux doctrines. *`qualite/C4` disait que la couche
+        n'avait qu'UN appelant de production ; en avoir trois ne le fermerait
+        pas, ca le deplacerait.*
+        """
+        src = (_TARIF / 'pipeline_agents.py').read_text(encoding='utf-8')
+        arbre = ast.parse(src)
+        portes = [n.lineno for n in ast.walk(arbre)
+                  if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                  and n.func.id == 'preambule_qualite']
+        self.assertEqual(
+            len(portes), 1,
+            f"le chemin agent appelle la porte {len(portes)} fois "
+            f"(lignes {portes}) : la porte doit rester UNIQUE")
+        direct = [n.lineno for n in ast.walk(arbre)
+                  if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                  and n.func.id == 'controler_qualite']
+        self.assertEqual(
+            direct, [],
+            f"le chemin agent court-circuite la porte et appelle "
+            f"`controler_qualite` directement (ligne(s) {direct}) : il "
+            f"perdrait la levee sur blocage")
+        print(f"    PQ-6 le chemin agent passe par la porte UNIQUE "
+              f"(1 appel, ligne {portes[0]}), 0 court-circuit")
+
+    def test_la_porte_DIT_qu_elle_est_branchee_et_CE_QUE_CA_A_DEPLACE(self):
+        """⚠️⚠️ CE CONTROLE A CHANGE DE SENS LE 02/09/2026, ET C'EST LE SIGNAL.
+
+        Il exigeait que la porte DECLARE ne pas etre branchee -- *une porte
+        prete mais muette ressemble a de la plomberie morte, le motif de
+        `socle/C2`*. Elle EST branchee depuis 1-B : la meme phrase serait
+        devenue FAUSSE dans le code le plus lu du module.
+
+        Il exige desormais qu'elle dise ce que le branchement A DEPLACE, avec
+        le chiffre. *Une porte branchee sans son chiffre laisse croire que
+        personne n'a mesure.*
+        """
         # ⚠️ Comparaison SANS ACCENTS : ma premiere version cherchait
         # « deplacerait » dans une docstring qui ecrit « déplacerait ». *Un
         # controle sur du texte francais se normalise, sinon il mesure
@@ -173,9 +203,17 @@ class TestLaPorteEstPRETE_POUR_LE_CHEMIN_AGENT(unittest.TestCase):
             'NFKD', inspect.getdoc(preambule_qualite) or '')
         doc = ''.join(c for c in doc if not unicodedata.combining(c)).lower()
         self.assertIn('1-b', doc)
-        self.assertIn('deplacerait un prix', doc)
-        print("    PQ-7 la porte declare qu'elle n'est pas encore branchee, "
-              "et pourquoi")
+        self.assertIn('branchee aux deux chemins', doc,
+                      "la porte ne declare plus qu'elle est branchee")
+        self.assertIn('12 654', doc,
+                      "la porte ne dit pas ce que le branchement a deplace "
+                      "sur la donnee reelle")
+        self.assertIn('delta 0', doc)
+        self.assertNotIn('deplacerait un prix', doc,
+                         "la porte annonce encore un deplacement au futur "
+                         "alors qu'il a eu lieu et qu'il est mesure")
+        print("    PQ-7 la porte declare qu'elle EST branchee, et ce que ca a "
+              "deplace (delta 0 sur la donnee reelle)")
 
 
 if __name__ == '__main__':

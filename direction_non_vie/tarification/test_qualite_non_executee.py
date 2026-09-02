@@ -144,8 +144,19 @@ class TestQualiteNonExecutee(unittest.TestCase):
                          "elle doit la NIER, pas seulement la citer")
         self.assertIn('INCONNU', p,
                       "le nombre de lignes fautives est inconnu, pas nul")
-        self.assertIn('qualite/C4', p,
+        # ⚠️⚠️ LA RAISON A CHANGE LE 02/09, PAS L'EXIGENCE. La phrase nommait
+        # `qualite/C4` -- << le chemin agent n'appelle pas cette couche >>.
+        # 1-B l'a branche : la cause a disparu, et la phrase l'aurait quand
+        # meme nommee dans un document signe. *Ce que ce controle prouve est
+        # inchange : une absence doit dire POURQUOI.* Le vrai cas restant est
+        # l'assemblage manuel des agents, hors des deux orchestrateurs.
+        self.assertIn('pipeline_agents', p,
+                      "la phrase ne nomme plus les chemins qui APPLIQUENT la "
+                      "couche : l'actuaire ne peut pas savoir ce qui manque")
+        self.assertIn('assemblage manuel', p,
                       "la phrase doit dire POURQUOI la couche n'a pas tourne")
+        self.assertNotIn('qualite/C4', p,
+                         "la phrase renvoie a une cause FERMEE le 02/09")
         print("    OK QNE-2 la phrase nie « rien a signaler » et dit INCONNU")
 
     def test_QNE_3_le_rapport_SIGNE_distingue_les_deux_cas(self):

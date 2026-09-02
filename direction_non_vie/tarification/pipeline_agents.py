@@ -77,7 +77,7 @@ import numpy as np
 import pandas as pd
 
 from core.plan_tarifaire import PlanTarifaire
-from core.qualite_donnees import exiger_canal_sans_objet, observer_qualite
+from core.qualite_donnees import preambule_qualite
 from core.severite import CibleSeverite, construire_cible_severite
 from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
 from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
@@ -315,11 +315,6 @@ def pipeline_agents(
     l'étape 1-B, et elle déplace un prix**. Pour tarifer AVEC la couche
     qualité aujourd'hui : `pipeline_tarifaire.pipeline_complet`, qui la porte.
     """
-    # ⚠️ LE CANAL REFUSE AVANT TOUT CALCUL. Le placer ici et non plus bas est
-    # délibéré : *un refus qui arrive après trois agents aurait laissé croire
-    # que le run avait commencé sous signature.*
-    exiger_canal_sans_objet(qualite_validee_par, 'pipeline_agents')
-
     # ⚠️ UN SEUL INSTANT POUR TOUT LE RUN, capturé ici et transporté.
     # `astimezone()` rend l'horodatage NON AMBIGU (offset explicite) sans
     # toucher `audit_id` : la chaîne locale `%Y%m%d_%H%M%S` est identique,
@@ -333,34 +328,55 @@ def pipeline_agents(
     r1 = AgentA1Ingestion(audit_path=audit_path, verbose=verbose).run(
         branche=branche, sous_branche=sous_branche, dataframe=dataframe)
 
+    # ── 1-B : LA COUCHE QUALITÉ, LA MÊME QUE LE CHEMIN DÉCLARATIF ───────────
+    # ⚠️⚠️ ÉTAPE ⑤ DU CHANTIER 1-B, arbitrée par Selasse le 02/09/2026. Elle
+    # FERME `qualite/C4` : `controler_qualite` n'avait qu'UN appelant de
+    # production, et les deux chemins ont pu diverger toute une journée sur la
+    # même grandeur. *Une porte unique rend la divergence IMPOSSIBLE au lieu
+    # de la rendre seulement évitable.*
+    #
+    # ⚠️ APRÈS A1, AVANT A2 — et l'assiette a été mesurée avant d'être choisie.
+    # A1 rend la donnée lisible (types, mapping) sans retirer aucune ligne ;
+    # A2, lui, MUTE. Placer la couche après A2 lui ferait rater ce qu'A2 a
+    # déjà exclu : mesuré sur le fichier témoin, l'union tombait de 6,0 % à
+    # 3,1 % et le blocage disparaissait. *Un garde-fou placé après le geste
+    # qu'il surveille ne surveille plus rien.*
+    #
+    # ⚠️⚠️ CE QUE ÇA DÉPLACE, MESURÉ AVANT D'ÊTRE FAIT :
+    #
+    #     DONNEE REELLE, 12 654 contrats : 12 654 / 12 654 retenues, DELTA 0,
+    #                                      aucun blocage
+    #     fichier temoin (30 freq<0 + 30 expo<=0) : BLOQUE, union 6,0 %,
+    #                                      -60 lignes apres signature
+    #
+    # Aucun euro ne bouge sur le seul portefeuille réel du dépôt. Ce qui
+    # apparaît, c'est un blocage à signature nominative sur des fichiers qui
+    # portent des lignes IMPOSSIBLES — et la liste disqualifiante, arbitrée à
+    # l'étape ⑤-①, dit lesquelles.
+    #
+    # ⚠️ LE CANAL DE SIGNATURE A ENFIN SON OBJET. Il refusait
+    # (`SignatureSansObjet`) tant qu'aucun blocage n'existait ; il porte
+    # désormais le nom jusqu'à la couche, qui seule peut lever le blocage.
+    _rq = preambule_qualite(
+        (r1 or {}).get('dataframe'), plan,
+        qualite_validee_par=qualite_validee_par, horodatage=date_calcul)
+    r1 = {**r1, 'dataframe': _rq.dataframe_propre}
+
     r2 = AgentA2Preprocessing(audit_path=audit_path, verbose=verbose).run(
         result_a1=r1, plan=plan)
 
-    # ── 1-B-OBSERVATION : LA COUCHE REGARDE, ELLE N'APPLIQUE RIEN ────────────
-    # ⚠️⚠️ ÉTAPE 4 DU CHANTIER 1-B, décidée par Selasse le 02/09/2026. Le
-    # chemin agent ne saura JAMAIS s'il faut brancher la couche tant qu'il ne
-    # mesure pas ce qu'elle ferait. *Une décision qui déplace un prix se prend
-    # sur des fréquences réelles, pas sur une intuition.*
+    # ── L'OBSERVATION A ÉTÉ RETIRÉE : LA COUCHE EST APPLIQUÉE ───────────
+    # ⚠⚠ ÉTAPE 4 CLOSE PAR L'ÉTAPE 5, LE 02/09/2026. L'observation publiait
+    # « COUCHE QUALITE OBSERVEE, NON APPLIQUEE [...] RIEN n'a ete applique ».
+    # Depuis le branchement, elle EST appliquee : cette phrase serait FAUSSE
+    # dans le rapport signe.
     #
-    # ⚠️⚠️ APRÈS A2, ET L'ASSIETTE EST TOUT LE SUJET. Mesuré le 02/09 sur un
-    # fichier à 30 expositions nulles + 60 fréquences négatives :
+    #   *Un mecanisme qui survit a sa raison d'etre devient un mensonge.*
     #
-    #     observee AVANT A2 : exposition_non_positive 30 + frequence_negative 60
-    #     observee APRÈS A2 :                              frequence_negative 60
-    #
-    # A2 exclut DÉJÀ les expositions non positives. Observer avant lui aurait
-    # fait publier « 30 lignes, et RIEN n'a été appliqué » sur des lignes que
-    # le tarif ne porte plus — *un chiffre juste sur la mauvaise assiette dit
-    # une chose fausse.* L'observation mesure donc CE QUI ATTEINT LE TARIF et
-    # que la couche complète aurait écarté : c'est le chiffre de l'arbitrage.
-    #
-    # ⚠️ AUCUN EURO, ET C'EST STRUCTUREL : `_obs` n'est jamais relu ici, et
-    # `observer_qualite` rend un `dataframe_propre` à `None` pour qu'aucun
-    # appelant ne puisse s'y tromper. Le tarif descend sur `r2`, intact.
-    _df_obs = (r2 or {}).get('dataframe')
-    _obs = (observer_qualite(_df_obs, plan, horodatage=date_calcul)
-            if isinstance(_df_obs, pd.DataFrame) and not _df_obs.empty
-            else None)
+    # Elle avait un objet precis -- mesurer ce que la couche FERAIT pour que
+    # l'arbitrage se prenne sur des frequences reelles. L'arbitrage est pris.
+    # Le vrai rapport de la couche prend sa place et dit ce qui a ETE fait.
+    _obs = None
 
     # A3 entraîne DÉJÀ ses trois modèles (Poisson fréquence, Gamma coût, Tweedie
     # prime pure) en un seul run : c'est son architecture, on ne la double pas.
@@ -404,7 +420,12 @@ def pipeline_agents(
             # remplissait, **le chemin agent ne le passait jamais** (0 mention
             # mesurée). *La plomberie était posée, rien ne l'alimentait.*
             # A2 le produit désormais pour ses mutations d'exposition.
-            rapport_qualite=(r2 or {}).get('rapport_qualite'),
+            # ⚠⚠ LE RAPPORT DE LA COUCHE PREND LA PLACE DE L'OBSERVATION.
+            # A2 publie encore le sien pour ses propres mutations ; la
+            # couche, elle, dit ce qu'elle a EXCLU, CORRIGE et SIGNALE sur
+            # tout le portefeuille. *Deux rapports, deux gestes -- et la
+            # synthese les publie tous les deux, cote a cote.*
+            rapport_qualite=(_rq or (r2 or {}).get('rapport_qualite')),
             observation_qualite=_obs,
             generer_graphiques=generer_graphiques, generer_rapport_equipe=False)
         return ArbitrageCible(cible=cible, a4=r4, a5=r5, a6=r6,

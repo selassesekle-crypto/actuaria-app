@@ -257,6 +257,68 @@ implémentations coexistent**, et A1 n'importe pas ce module.
 
 ### C — Imprécis (2)
 
+> ✅ **`qualite/C4`** · **FERMÉ le 02/09/2026 — chantier 1-B, arbitré et
+> conduit en CINQ étapes par Selasse.** *C'est le constat le plus ancien
+> encore ouvert du module, et il a fallu cinq lots pour l'atteindre sans
+> déplacer un prix par surprise.*
+>
+> **Le constat** : `controler_qualite` n'avait **qu'un appelant de
+> production** — le chemin déclaratif. Le chemin agent tarifiait sans aucune
+> couche qualité, et *c'est ainsi que les deux ont pu diverger toute une
+> journée sur la même grandeur : l'exposition.*
+>
+> **Le branchement** : `pipeline_agents` appelle désormais `preambule_qualite`
+> **entre A1 et A2** — après l'agent qui rend la donnée lisible sans retirer
+> de ligne, avant celui qui mute.
+>
+> ⚠️⚠️ **L'ASSIETTE A ÉTÉ MESURÉE AVANT D'ÊTRE CHOISIE.** Placée après A2, la
+> couche rate ce qu'A2 a déjà exclu : sur le fichier témoin, l'union tombait
+> de **6,0 % à 3,1 %** et **le blocage disparaissait**. *Un garde-fou placé
+> après le geste qu'il surveille ne surveille plus rien.*
+>
+> ```
+>   DONNEE REELLE, 12 654 contrats : 12 654 / 12 654 retenues, DELTA 0,
+>                                    aucun blocage
+>   fichier temoin (36 freq<0 + 36 expo<=0 sur 1 200) :
+>     sans signature -> QualiteBloquante, union 72/1200 = 6,0 %
+>     avec signature -> 72 lignes EXCLUES, validee_par trace
+> ```
+>
+> **Aucun euro ne bouge sur le seul portefeuille réel du dépôt.** Ce qui
+> apparaît est un blocage à signature nominative sur les fichiers portant des
+> lignes IMPOSSIBLES — et `CODES_DISQUALIFIANTS` (`qualite/C14`) dit
+> lesquelles.
+>
+> ⚠️ **LE CANAL DE SIGNATURE A ENFIN SON OBJET.** Construit à l'étape ③
+> (`qualite/C12`), il REFUSAIT tant qu'aucun blocage n'existait ; il porte
+> désormais le nom jusqu'à la couche. `SG-10` le tient. *Un canal qui refuse
+> toujours et un canal qui avale en silence échouent de la même façon.*
+>
+> ⚠️⚠️ **`PQ-6` EST TOMBÉ, ET C'ÉTAIT LE SIGNAL.** Il avait été écrit avec
+> son propre acte de décès : *« ce contrôle tombera le jour de 1-B, et ce sera
+> le signal qu'elle a bien été décidée, pas glissée. »* Elle a été décidée,
+> sur des chiffres. Il est **réécrit avec sa mesure**, pas supprimé — et il
+> exige désormais **UN SEUL** appel à la porte : *deux appels, c'est déjà deux
+> doctrines.* `PQ-7` a changé de sens de la même façon.
+>
+> ⚠️ **L'OBSERVATION DE L'ÉTAPE ④ A ÉTÉ RETIRÉE DU CHEMIN AGENT.** Elle
+> publiait « OBSERVÉE, **NON APPLIQUÉE** [...] RIEN n'a été appliqué » :
+> faux dès que la couche s'applique. *Un mécanisme qui survit à sa raison
+> d'être devient un mensonge.* Son objet — donner les fréquences réelles pour
+> l'arbitrage — est consommé.
+>
+> ⛔⛔ **ET IL RESTE UNE MACHINERIE SANS APPELANT, QUE CE LOT A CRÉÉE.**
+> Relevé par AST : `observer_qualite` = **0 appelant de production**, et le
+> canal `observation_qualite` traverse A6 et les quatre surfaces sans que rien
+> ne le remplisse. *C'est la forme de `socle/C2`, commise par le lot même qui
+> poursuit ce motif.* Son retrait complet touche **21 occurrences sur
+> 6 fichiers plus une sentinelle de 386 lignes** : **c'est une décision de
+> portée, elle attend l'arbitrage de Selasse**, et `OB-4` DIT cet état au lieu
+> de le taire — le patron qu'employait `PQ-6`.
+>
+> Épinglé par `PQ-6`, `PQ-7`, `SG-10` et `OB-4`, avec sceau : huit violations
+> plantées, six contrôles couverts.
+
 **C5 — L'en-tête cite une fonction d'A1 qui n'existe nulle part.** L.25 :
 « *Réutilise la logique de détection déjà pensée dans A1 (`_evaluer_qualite`)* ».
 Mesuré sur tout le dépôt :
