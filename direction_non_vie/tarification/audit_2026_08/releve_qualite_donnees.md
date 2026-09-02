@@ -1112,3 +1112,61 @@ juste sur ce qu'il regarde, et son regard est plus étroit que sa promesse.
 ⚠️ **Et un point qui n'est pas de ce fichier mais que ce fichier révèle** : le
 chemin agent — A1 à A6, celui qui tourne dans l'application — **n'a pas de
 couche qualité du tout**. Ce module a **un** appelant de production.
+
+---
+
+**C17 — Le garde-fou des phrases de portée n'a qu'une assiette de DEUX
+fichiers et TROIS chaînes mortes : quatre affirmations chiffrées vivent
+hors de sa vue.**
+
+> ✅ **`qualite/C17`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 02/09/2026 —
+> point ③ des quatre restants, arbitré par Selasse.**
+>
+> **Le constat.** `PM-4` (né de `qualite/C10`) interdit **trois phrases
+> nommément mortes**, dans **deux cibles** : `core/qualite_donnees.py` et les
+> documents d'audit. Il ne peut donc attraper que les trois défauts **déjà
+> connus**.
+>
+> ### *Un contrôle bâti sur trois chaînes littérales atteste ; il ne surveille pas.*
+>
+> ⚠️⚠️ **LA QUESTION QUI L'A OUVERT EST TOUJOURS LA MÊME : « SUR QUELLE
+> ASSIETTE ? »** Quatre affirmations chiffrées vivaient hors de la sienne —
+> **trois dans `a2_preprocessing/agent.py`, une dans `pipeline_agents.py`** :
+>
+> ```
+>   a2:1527  << 1 y echappe >>                       mesure : 1   EXACTE
+>   a2:384   << AUCUN des 20 plans ne la produit >>  mesure : 0   EXACTE
+>   a2:207   << aucun plan ne declare le genre >>    mesure : 0   EXACTE
+>   pa:487   << Sur 19 des 20 plans les deux ... >>  mesure : 19  EXACTE
+> ```
+>
+> ⚠️⚠️ **LES QUATRE SONT EXACTES, ET C'EST PRÉCISÉMENT POURQUOI ELLES SONT UNE
+> DETTE.** Rien ne les fait tomber le jour où un 21ᵉ plan arrive. *Ce qui
+> LIMITE est sûr ; ce qui AFFIRME est une dette.* La troisième porte sur le
+> **genre (CJUE C-236/09)** — une affirmation de conformité.
+>
+> **Le correctif : `PM-5` RECALCULE, il n'interdit pas.** Le nombre reste dans
+> la prose — le retirer effacerait une mesure utile ; c'est sa **dérivation**
+> qui manquait. Chaque affirmation est lue **à son site** par une ancre qui
+> capture le nombre, puis recalculée sur les 20 plans réels.
+>
+> ⚠️⚠️ **ET IL NE PEUT PAS DEVENIR VRAI EN SILENCE.** Si une phrase est
+> reformulée, son ancre ne matche plus, et un contrôle naïf passerait sur une
+> liste vide. `PM-5` **lève** dans ce cas — *c'est le défaut d'`OB-4`, qui
+> lisait le NOM d'une variable au lieu de sa SOURCE et était vrai quoi qu'il
+> arrive.* Le plant `P5` le prouve.
+>
+> ⚠️ **L'assiette de `PM-4` est élargie dans le même geste : 21 → 171
+> fichiers**, tout l'arbre de production de la tarification. Il reste **vert** :
+> aucune des trois phrases mortes n'avait repoussé ailleurs. *Un élargissement
+> qui ne trouve rien n'est pas inutile — il transforme une absence supposée en
+> absence mesurée.*
+>
+> ⚠️ **Le fichier s'exclut lui-même**, comme `QNE-9` : il doit NOMMER les
+> phrases qu'il interdit pour les interdire. *Une citation n'est pas une
+> affirmation* — sans cette ligne, l'élargissement se dénonçait lui-même dès la
+> première gate, et c'est ce qui est arrivé.
+>
+> Épinglé par `PM-5` et `PM-6`. Sceau : six violations plantées, cinq tombent,
+> et la sixième — l'un des nombres cité dans une **prose de test**, hors du
+> site surveillé — ne tombe pas.

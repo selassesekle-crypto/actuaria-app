@@ -171,9 +171,23 @@ class TestPorteeMesuree(unittest.TestCase):
             r"|0\s*/?\s*20 plans\*{0,2} ne déclare d'unité"
             r"|60 lignes à fréquence ou coût)",
             re.IGNORECASE)
+        # ⚠️⚠️ ASSIETTE ELARGIE LE 02/09/2026, ET C'EST `PM-5` QUI L'A EXIGE.
+        # Elle valait `core/qualite_donnees.py` + les documents d'audit : une
+        # phrase morte pouvait donc repousser dans `a2_preprocessing` ou
+        # `pipeline_agents` sans que rien ne la voie. *La question a poser a
+        # tout garde-fou est << sur quelle assiette ? >>, et celle-ci ne
+        # couvrait pas les fichiers ou vivent les affirmations chiffrees.*
         cibles = ([_RACINE / 'core' / 'qualite_donnees.py']
                   + sorted((_RACINE / 'direction_non_vie' / 'tarification'
-                            / 'audit_2026_08').glob('*.md')))
+                            / 'audit_2026_08').glob('*.md'))
+                  + sorted((_RACINE / 'direction_non_vie' / 'tarification')
+                           .rglob('*.py')))
+        # ⚠️ CE FICHIER S'EXCLUT, ET C'EST LA MEME DOCTRINE QUE `QNE-9` : il
+        # doit NOMMER les phrases qu'il interdit pour les interdire.
+        # *Une citation n'est pas une affirmation* -- et sans cette ligne
+        # l'elargissement se serait denonce lui-meme des la premiere gate.
+        moi = pathlib.Path(__file__).resolve()
+        cibles = [c for c in cibles if c.resolve() != moi]
         fautifs = []
         for fichier in cibles:
             for i, ligne in enumerate(
@@ -186,6 +200,122 @@ class TestPorteeMesuree(unittest.TestCase):
             f"une phrase perimee affirme encore le present : {fautifs}")
         print(f"    OK PM-4 second sens : 0 affirmation perimee sur "
               f"{len(cibles)} fichiers, les formes DATEES restent permises")
+
+    # ══════════════════════════════════════════════════════════════════════
+    # ⚠️⚠️ PM-5 — LES AFFIRMATIONS **VIVANTES**, RECALCULEES A CHAQUE GATE.
+    #
+    # `PM-4` interdit TROIS phrases MORTES, dans DEUX fichiers. Il ne peut
+    # donc attraper que les trois defauts deja connus : *c'est un controle qui
+    # ATTESTE sans SURVEILLER, et la question a lui poser etait << sur quelle
+    # assiette ? >>*. Quatre affirmations chiffrees vivaient hors de la
+    # sienne -- deux dans `a2_preprocessing`, une dans `pipeline_agents`.
+    #
+    # Elles sont EXACTES au 02/09/2026, et c'est precisement pourquoi elles
+    # sont une dette : rien ne les fait tomber le jour ou un 21e plan arrive.
+    #
+    #   *Ce qui LIMITE est sur ; ce qui AFFIRME est une dette.*
+    #
+    # ⚠️⚠️ ET CE CONTROLE NE DOIT PAS POUVOIR DEVENIR VRAI EN SILENCE. Si une
+    # phrase est reformulee, son ancre ne matche plus : un controle naif
+    # passerait alors sur une liste vide. Il LEVE au contraire -- c'est le
+    # defaut d'`OB-4`, qui lisait le NOM d'une variable au lieu de sa SOURCE
+    # et etait vrai quoi qu'il arrive.
+    # ══════════════════════════════════════════════════════════════════════
+
+    _A2 = 'direction_non_vie/tarification/a2_preprocessing/agent.py'
+    _PA = 'direction_non_vie/tarification/pipeline_agents.py'
+
+    def _affirmations(self):
+        """(fichier, ancre capturant LE NOMBRE, derivation, libelle)."""
+        plans = {p.stem: PlanTarifaire.depuis_yaml(str(p)) for p in _PLANS}
+
+        def echappent_a_la_sous_chaine():
+            return sum(1 for p in plans.values()
+                       if 'exposition' not in (p.exposition or '').lower())
+
+        def produisent_log_cout():
+            return sum(1 for p in plans.values()
+                       if 'log_cout_total_sinistres'
+                       in set(p.colonnes_produites()))
+
+        def declarent_le_genre():
+            genres = {'sexe', 'genre', 'gender', 'sex', 'civilite'}
+            return sum(1 for p in plans.values()
+                       for f in p.facteurs if f.nom.lower() in genres)
+
+        def coincident_en_dur():
+            return sum(1 for p in plans.values()
+                       if p.cible_cout == 'cout_total_sinistres'
+                       and p.exposition == 'exposition')
+
+        return (
+            (self._A2, r'\*\*(\d+) y échappe\*\*',
+             echappent_a_la_sous_chaine,
+             "plans dont l'exposition echappe a la sous-chaine"),
+            (self._A2, r'(AUCUN) des 20 plans ne la produit',
+             produisent_log_cout,
+             "plans produisant log_cout_total_sinistres"),
+            (self._A2, r'(aucun) plan ne déclare le genre',
+             declarent_le_genre,
+             'plans declarant le genre (CJUE C-236/09)'),
+            (self._PA, r'Sur (\d+) des 20 plans les',
+             coincident_en_dur,
+             'plans ou cible_cout et exposition coincident avec le code en dur'),
+        )
+
+    def test_PM_5_les_quatre_affirmations_vivantes_sont_RECALCULEES(self):
+        """⚠️⚠️ QUATRE NOMBRES ECRITS A LA MAIN, QUE RIEN NE FAISAIT TOMBER.
+
+        Chacun affirme un compte SUR LES 20 PLANS. On relit le nombre A SON
+        SITE et on le recalcule depuis les plans reels. *Le chiffre et la
+        chose qu'il decrit viennent de la meme source, ou ils finiront par se
+        contredire.*
+
+        ⚠️ Le nombre reste dans la prose : le retirer effacerait une mesure
+        utile. C'est sa DERIVATION qui manquait, pas sa presence.
+        """
+        mots = {'AUCUN': 0, 'aucun': 0}
+        lus, ecarts = [], []
+        for chemin, ancre, derive, libelle in self._affirmations():
+            texte = (_RACINE / chemin).read_text(encoding='utf-8')
+            trouve = re.search(ancre, texte)
+            # ⚠️ L'ANCRE ABSENTE EST UN ECHEC, JAMAIS UN SILENCE.
+            self.assertIsNotNone(
+                trouve,
+                f"l'affirmation sur « {libelle} » a ete reformulee dans "
+                f"{chemin} : ce controle ne la surveille plus, et il "
+                f"passerait sur une liste vide")
+            brut = trouve.group(1)
+            annonce = mots[brut] if brut in mots else int(brut)
+            reel = derive()
+            lus.append(f'{libelle.split()[0]}={annonce}')
+            if annonce != reel:
+                ecarts.append(f'{chemin}: « {libelle} » annonce {annonce}, '
+                              f'mesure {reel}')
+        self.assertEqual(
+            ecarts, [],
+            f"une affirmation de portee a perime : {ecarts}")
+        print(f"    OK PM-5 4 affirmations recalculees sur "
+              f"{len(_PLANS)} plans : {', '.join(lus)}")
+
+    def test_PM_6_second_sens_une_affirmation_JUSTE_ne_declenche_rien(self):
+        """⚠️ SANS CE SENS, UN CONTROLE QUI CRIE TOUJOURS PASSERAIT POUR BON.
+
+        On derive les quatre comptes deux fois : la mesure doit etre stable,
+        et aucune ne doit dependre de l'ordre de lecture des plans.
+        """
+        premier = [d() for _, _, d, _ in self._affirmations()]
+        second = [d() for _, _, d, _ in self._affirmations()]
+        self.assertEqual(premier, second,
+                         'la derivation n est pas deterministe')
+        # ⚠️ Et elle doit porter sur les VINGT plans, pas sur un sous-ensemble
+        # : une derivation qui ne lirait qu'un plan serait juste par hasard.
+        self.assertEqual(len(_PLANS), 20,
+                         f'{len(_PLANS)} plans au lieu de 20 : les quatre '
+                         f'affirmations nomment « les 20 plans » et devraient '
+                         f'etre relues')
+        print(f"    OK PM-6 second sens : derivation stable {premier}, "
+              f"assiette = les {len(_PLANS)} plans")
 
 
 if __name__ == '__main__':
