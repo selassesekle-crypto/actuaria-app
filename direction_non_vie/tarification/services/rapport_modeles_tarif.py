@@ -643,8 +643,7 @@ def avertissement_qualite(result_a6) -> str:
     couvre plus que le silence LEGITIME.
     """
     _a6 = result_a6 or {}
-    return synthese_qualite_donnees(_a6.get('rapport_qualite'),
-                                    _a6.get('observation_qualite')) or ''
+    return synthese_qualite_donnees(_a6.get('rapport_qualite')) or ''
 
 
 def _bloc_qualite_html(texte: str) -> str:
@@ -1428,8 +1427,7 @@ def _construire_contexte_tarif(
         # distingue désormais à la source ; ce repli ne couvre plus QUE le cas
         # vérifié-et-propre, et il le dit sans alternative.
         (synthese_qualite_donnees(
-            result_a6.get('rapport_qualite') if result_a6 else None,
-            result_a6.get('observation_qualite') if result_a6 else None)
+            result_a6.get('rapport_qualite') if result_a6 else None)
          or "Couche qualité exécutée : aucune ligne exclue, corrigée ni signalée."),
         "",
         "=== COLONNES DU PLAN NON PRODUITES (modèle amputé) ===",

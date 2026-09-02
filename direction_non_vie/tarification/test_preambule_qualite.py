@@ -4,7 +4,7 @@ CE QUE CE FICHIER PROUVE, ET POURQUOI CETTE ETAPE VIENT EN PREMIER
 ──────────────────────────────────────────────────────────────────
 
 `controler_qualite` n'avait qu'**UN** appelant de production -- le chemin
-declaratif (constat `qualite/C4`). Le chemin agent n'a **aucune couche
+declaratif (constat `qualite/C4`). Le chemin agent n'avait **aucune couche
 qualite**. C'est ainsi que les deux ont pu diverger toute une journee sur la
 meme grandeur, l'exposition : trois cas, trois doctrines opposees.
 
@@ -18,18 +18,23 @@ extrait les trois gestes que `pipeline_complet` faisait deja, dans le meme
 ordre, avec les memes arguments : controler, lever si bloque, rendre le
 dataframe propre. **Aucun euro ne bouge**, et c'est verifie ci-dessous.
 
-⚠️⚠️ ELLE NE BRANCHE PAS LE CHEMIN AGENT -- c'est l'etape 1-B, laissee ouverte
-a dessein. Mesure du 31/08 sur un meme fichier portant 30 frequences negatives,
-30 couts negatifs et 30 expositions nulles :
+⚠️⚠️ CE TEXTE A ETE RELU LE 02/09/2026, ET IL DISAIT LE CONTRAIRE DU CODE. Il
+annoncait : << ELLE NE BRANCHE PAS LE CHEMIN AGENT -- c'est l'etape 1-B,
+laissee ouverte a dessein >>, et publiait la mesure du 31/08 qui justifiait
+l'attente :
 
 ```
   couche qualite : 90 lignes impossibles detectees, BLOQUE a 9 %
   chemin agent   : 1000 -> 970, il n'exclut que les 30 d'exposition
 ```
 
-Le chemin agent tarife donc sur des lignes a frequence negative. **Le brancher
-deplacerait un prix et introduirait un blocage** : *extraire et brancher sont
-deux decisions, et seule la premiere est sans euro.*
+**L'etape 1-B a ete arbitree par Selasse et faite** (commit `82a1584`,
+`qualite/C4` FERME) : `pipeline_agents` appelle desormais la porte entre A1 et
+A2. La phrase decrivait une absence qui n'existe plus, dans le fichier meme qui
+garde la porte. *Un texte qui explique une ABSENCE survit a la raison de
+l'absence -- c'est celui qu'il faut relire en premier.* `PQ-6` et `PQ-7`
+portent desormais la mesure du branchement, et `PQ-6` exige **UN SEUL** appel a
+la porte : *deux appels, c'est deja deux doctrines.*
 """
 
 from __future__ import annotations

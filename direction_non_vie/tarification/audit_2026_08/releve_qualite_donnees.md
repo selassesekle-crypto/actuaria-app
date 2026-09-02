@@ -307,16 +307,14 @@ implémentations coexistent**, et A1 n'importe pas ce module.
 > d'être devient un mensonge.* Son objet — donner les fréquences réelles pour
 > l'arbitrage — est consommé.
 >
-> ⛔⛔ **ET IL RESTE UNE MACHINERIE SANS APPELANT, QUE CE LOT A CRÉÉE.**
-> Relevé par AST : `observer_qualite` = **0 appelant de production**, et le
-> canal `observation_qualite` traverse A6 et les quatre surfaces sans que rien
-> ne le remplisse. *C'est la forme de `socle/C2`, commise par le lot même qui
-> poursuit ce motif.* Son retrait complet touche **21 occurrences sur
-> 6 fichiers plus une sentinelle de 386 lignes** : **c'est une décision de
-> portée, elle attend l'arbitrage de Selasse**, et `OB-4` DIT cet état au lieu
-> de le taire — le patron qu'employait `PQ-6`.
+> ⛔⛔ **CE LOT AVAIT LAISSÉ UNE MACHINERIE SANS APPELANT — ELLE A ÉTÉ RETIRÉE
+> LE JOUR MÊME, SUR ARBITRAGE DE SELASSE.** Relevé par AST : `observer_qualite`
+> = **0 appelant de production**, et le canal `observation_qualite` traversait
+> A6 et les quatre surfaces sans que rien ne le remplisse. *C'était la forme de
+> `socle/C2`, commise par le lot même qui poursuit ce motif.* Voir le bloc de
+> `qualite/C13` pour le retrait et sa mesure.
 >
-> Épinglé par `PQ-6`, `PQ-7`, `SG-10` et `OB-4`, avec sceau : huit violations
+> Épinglé par `PQ-6`, `PQ-7`, `SG-10` et `QNE-9`, avec sceau : huit violations
 > plantées, six contrôles couverts.
 
 **C5 — L'en-tête cite une fonction d'A1 qui n'existe nulle part.** L.25 :
@@ -769,9 +767,55 @@ la décision de la brancher (1-B) se prendrait sans chiffre, et le troisième
 > variable au lieu de sa SOURCE ne mesure rien.* Refait sur l'AFFECTATION ; le
 > plant le fait désormais tomber.
 >
-> Épinglé par `OB-1` à `OB-11`. **L'étape ⑤ — appliquer — déplace un prix et
-> attend l'arbitrage de Selasse, y compris LA LISTE des alertes qui doivent
-> bloquer.**
+> ═══════════════════════════════════════════════════════════════════════════
+>
+> ⚠️⚠️ **L'INSTRUMENT A ÉTÉ SUPPRIMÉ LE 02/09/2026, ET LE CONSTAT RESTE FERMÉ.**
+> Selasse a arbitré son retrait le jour même de sa naissance. *Son travail est
+> fait, son chiffre a servi à trancher, et garder un mécanisme sans usage réel
+> serait exactement la dette qu'on a traquée toute la session.*
+>
+> **Pourquoi le constat reste FERMÉ sans lui, et ce n'est pas une facilité.**
+> `C13` disait : *le chemin agent ne MESURE pas ce que la couche ferait.* Il
+> ne le mesure plus — **il l'APPLIQUE** (`qualite/C4`, commit `82a1584`).
+> *Appliquer est strictement plus fort que mesurer : la question « que
+> ferait-elle ? » n'a plus d'objet quand elle le fait.* Ce que `C13` a produit
+> — les fréquences réelles — a servi à `qualite/C14`, qui porte la liste
+> disqualifiante arbitrée sur ces chiffres.
+>
+> ⚠️⚠️ **CE QUE LE RETRAIT AURAIT PU EMPORTER, ET QUI A ÉTÉ RETENU.** *Un
+> correctif qui retire un mécanisme emporte tout ce que ce mécanisme portait.*
+> Sur les **onze** contrôles `OB`, huit avaient perdu leur objet ; **trois
+> gardaient un comportement qui survit** — vérifié un par un avant la
+> suppression :
+>
+> ```
+>   OB-7  observe + rien trouve = silence      -> tenu par QNE-7
+>   OB-9  sans rapport -> phrase NON EXECUTE   -> tenu par QNE-1
+>   OB-10 badge AMBRE derive du TEXTE, 2 Excel -> tenu par QNE-4 (meme
+>                                                 mecanisme : IfExp + eval)
+> ```
+>
+> ⚠️ **ET LE RETRAIT LUI-MÊME EST GARDÉ, PAR `QNE-9`.** Ce qu'il tient n'est pas
+> la suppression, c'est son **caractère complet** : elle touchait sept fichiers,
+> et *une surface qui aurait gardé `result_a6.get('observation_qualite')` lirait
+> `None` sans jamais échouer, sur une clé que plus personne n'écrit.* **Une
+> gate verte ne distingue pas un canal vide d'un canal absent.** Relevé sur
+> **524 fichiers**, 0 occurrence.
+>
+> ⚠️⚠️ **SON ASSIETTE EST LE CODE, ET SANS CELA IL SERAIT FAUX DÈS SA
+> NAISSANCE** : quatre fichiers EXPLIQUENT le retrait en nommant ce qui a été
+> retiré. *Une citation n'est pas une affirmation* — d'où un relevé par AST,
+> commentaires et docstrings exclus. **Le sceau l'a prouvé dans les deux sens :
+> six plants, cinq tombent, et le sixième — le nom retiré placé dans un simple
+> COMMENTAIRE de production — ne tombe pas.**
+>
+> ⛔ **CE QUE LA PROPRETÉ A TROUVÉ ET QUE MON RELEVÉ AVAIT MANQUÉ.** Le canal
+> avait un **second** point de lecture, sous le nom local `_obs`, qui ne
+> contient aucun des symboles cherchés : `F821` l'a fait tomber. *Un alias
+> échappe à un relevé par symbole* — et le garde-fou qui l'a rattrapé n'était
+> pas un test, c'était la propreté.
+>
+> Épinglé par `QNE-9` (et `QNE-1`, `QNE-4`, `QNE-7` pour ce qui survit).
 
 **C14 — N'IMPORTE QUELLE alerte peut arrêter un tarif, et les messages
 qu'elle publie sont écrits pour un développeur, pas pour celui qui signe.**

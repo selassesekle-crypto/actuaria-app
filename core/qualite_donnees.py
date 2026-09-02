@@ -47,7 +47,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass, replace as _remplacer
+from dataclasses import dataclass
 from typing import Optional, List, Tuple, TYPE_CHECKING
 
 import numpy as np
@@ -1146,98 +1146,16 @@ def question_charges_negatives(rapport, df=None) -> str | None:
     )
 
 
-def observer_qualite(portefeuille, plan, horodatage=None, seuil=SEUIL_ESCALADE):
-    """⚠️⚠️ CE QUE LA COUCHE AURAIT FAIT — ÉTAPE 1-B-OBSERVATION, 02/09/2026.
-
-    Décidée par Selasse : *le système observe et publie honnêtement, sans
-    encore rien bloquer ni exclure.* Elle applique les mêmes détecteurs, dans
-    le même ordre, avec le même seuil que `controler_qualite` — et **elle
-    n'applique rien** :
-
-      · aucune ligne n'est exclue, corrigée ni écartée ;
-      · aucun `QualiteBloquante` n'est levé, quel que soit le dépassement ;
-      · le `dataframe_propre` du rapport rendu est **volontairement `None`** —
-        *un appelant qui le lirait croirait tenir une donnée nettoyée.*
-
-    ⚠️ ELLE NE RECALCULE RIEN. Elle DÉLÈGUE à `controler_qualite` avec une
-    signature de témoin, puis neutralise l'application. *Une seconde
-    implémentation des règles aurait divergé de la première — c'est le défaut
-    que cet audit a fermé cinq fois.*
-
-    ⚠️ POURQUOI UNE SIGNATURE DE TÉMOIN, ET POURQUOI CE N'EST PAS UNE
-    VALIDATION. `controler_qualite` bloque quand l'escalade se déclenche sans
-    nom ; on ne peut donc pas obtenir le rapport complet sans en fournir un.
-    Le nom passé est un JETON TECHNIQUE, jamais une personne, et le rapport
-    rendu porte `validee_par=None` : *aucun être humain n'a validé quoi que ce
-    soit ici, et le rapport ne doit pas laisser croire le contraire.*
-
-    Rend un `RapportQualite` dont `escalade_declenchee` dit **si l'escalade se
-    serait déclenchée** — c'est le chiffre qu'attend l'arbitrage de l'étape ⑤.
-    """
-    brut = controler_qualite(
-        portefeuille, plan, qualite_validee_par=_JETON_OBSERVATION,
-        horodatage=horodatage, seuil_escalade=seuil)
-    return _remplacer(
-        brut, validee_par=None, bloque=False, dataframe_propre=None)
-
-
-def synthese_observation_qualite(rapport: RapportQualite | None,
-                                 ) -> str | None:
-    """Le texte de l'observation — **OBSERVÉ, JAMAIS APPLIQUÉ**.
-
-    ⚠️⚠️ IL NE RÉUTILISE PAS `synthese_qualite_donnees`, ET C'EST LE POINT.
-    Celle-là dit « 30 ligne(s) EXCLUE(S) » : au passé, à l'indicatif, sur un
-    geste qui a EU LIEU. La republier ici ferait affirmer au rapport signé des
-    exclusions que personne n'a faites. *Le même rapport, deux régimes de
-    vérité : ce qui a été fait, et ce qui aurait pu l'être.*
-
-    ⚠️ IL PUBLIE CE QU'IL FAUT POUR DÉCIDER, PAS SEULEMENT CE QU'IL A VU :
-    par anomalie, le code, la règle, le nombre de lignes, la proportion, et
-    **si elle aurait déclenché l'escalade**. C'est exactement la matière de
-    l'arbitrage de l'étape ⑤ — *la liste des alertes qui doivent bloquer se
-    décide sur des fréquences réelles, pas sur une intuition.*
-    """
-    if rapport is None:
-        return None
-    lots = ((1, 'EXCLUES', rapport.exclusions),
-            (2, 'CORRIGEES', rapport.corrections),
-            (3, 'SIGNALEES', rapport.signalements))
-    lignes: list[str] = []
-    for regle, verbe, lot in lots:
-        for a in (lot or []):
-            _seuil = a.proportion >= rapport.seuil
-            lignes.append(
-                f"   - {a.code} (regle {regle}, {verbe} par le chemin "
-                f"declaratif) : {a.nb_lignes} ligne(s) = "
-                f"{a.proportion:.2%}"
-                f"{' -- AU-DESSUS du seuil' if _seuil else ''}")
-            lignes.append(f"     {a.description}")
-    if not lignes:
-        return None
-    tete = (f"⚠ COUCHE QUALITE {MARQUEUR_QUALITE_OBSERVEE} sur ce tarif. "
-            f"Les regles ont ete appliquees POUR VOIR, et RIEN n'a ete "
-            f"applique : aucune ligne exclue, aucune corrigee, aucun blocage. "
-            f"Le tarif publie porte donc CES lignes.")
-    if rapport.escalade_declenchee:
-        tete += (f" AU SEUIL DE {rapport.seuil:.0%}, LE CHEMIN DECLARATIF "
-                 f"AURAIT BLOQUE et exige une confirmation actuarielle "
-                 f"nominative "
-                 f"[{', '.join(rapport.anomalies_au_dela_seuil)}].")
-    else:
-        tete += (f" Au seuil de {rapport.seuil:.0%}, le chemin declaratif "
-                 f"n'aurait pas bloque.")
-    return tete + "\n" + "\n".join(lignes)
-
-
 def preambule_qualite(portefeuille, plan, qualite_validee_par=None,
                       horodatage=None):
     """Le préambule COMMUN aux deux chemins de tarification — étape 1-A.
 
-    ⚠️⚠️ POURQUOI UNE PORTE UNIQUE. `controler_qualite` n'a **qu'un appelant de
-    production** — le chemin déclaratif (constat `qualite/C4`). Le chemin agent
-    n'a **aucune couche qualité**, et c'est ainsi que les deux ont pu diverger
-    toute une journée sur la même grandeur : l'exposition. *Une porte unique
-    rend la divergence IMPOSSIBLE au lieu de la rendre seulement évitable.*
+    ⚠️⚠️ POURQUOI UNE PORTE UNIQUE. `controler_qualite` n'avait **qu'un appelant
+    de production** — le chemin déclaratif (constat `qualite/C4`). Le chemin
+    agent n'avait **aucune couche qualité**, et c'est ainsi que les deux ont pu
+    diverger toute une journée sur la même grandeur : l'exposition. *Une porte
+    unique rend la divergence IMPOSSIBLE au lieu de la rendre seulement
+    évitable.* (Au passé depuis le 02/09/2026 : voir le paragraphe suivant.)
 
     ⚠️ CETTE ÉTAPE NE CHANGE AUCUN COMPORTEMENT, et c'est sa condition d'entrée.
     Elle extrait les trois gestes que `pipeline_complet` faisait déjà, dans le
@@ -1311,10 +1229,18 @@ def _phrase_effet_agrege(a: Anomalie) -> str | None:
 #: « 30 définitions locales -> 0 » a fermée. Les consommateurs l'IMPORTENT.
 MARQUEUR_QUALITE_NON_EXECUTEE = 'NON EXECUTE'
 
-#: ⚠️⚠️ LE TROISIÈME ÉTAT, NOMMÉ À L'ÉTAPE 1-B-OBSERVATION. Ni « non exécuté »
-#: ni « exécuté » : la couche a TOUT VU et n'a RIEN FAIT. Même doctrine de
-#: source unique que son jumeau — les badges Excel l'importent.
-MARQUEUR_QUALITE_OBSERVEE = 'OBSERVEE, NON APPLIQUEE'
+#: ⚠️⚠️ IL Y A EU UN TROISIÈME MARQUEUR ICI, ET IL A ÉTÉ RETIRÉ LE 02/09/2026.
+#: `MARQUEUR_QUALITE_OBSERVEE = 'OBSERVEE, NON APPLIQUEE'` nommait l'état d'une
+#: couche qui regarde sans appliquer — l'étape ④ de 1-B, une étape de MESURE
+#: destinée à donner les fréquences réelles sur lesquelles arbitrer.
+#: L'arbitrage est pris (`CODES_DISQUALIFIANTS` ci-dessous), l'étape ⑤ a branché
+#: la couche, et le troisième état est devenu IMPOSSIBLE.
+#: *Garder un instrument après qu'il a rendu son verdict n'est pas de la
+#: prudence, c'est de la dette.* Le retrait est tenu complet par `QNE-9`.
+#:
+#: ⚠️ ET CE BLOC EST UN COMMENTAIRE, PAS UNE CONSTANTE. J'y avais d'abord écrit
+#: `MARQUEUR_QUALITE_NON_EXECUTEE_ETATS = 2`, que rien n'aurait lu : *commettre
+#: le défaut qu'on ferme, dans le commit qui le ferme.*
 
 #: ⚠️⚠️ LA LISTE DISQUALIFIANTE — arbitrée par Selasse le 02/09/2026 sur les
 #: chiffres de l'étape 4. **Seuls ces quatre types peuvent faire escalader un
@@ -1364,13 +1290,6 @@ def _entete_alerte(mask, total: int, titre: str, unite: str = 'contrat') -> str:
     return f"{titre} — {_n} {unite}(s) sur {_tot} ({_pct})."
 
 
-#: ⚠️ LE JETON QUI DÉBLOQUE L'OBSERVATION — jamais un nom de personne.
-#: `controler_qualite` refuse de rendre un rapport complet sans signature dès
-#: que l'escalade se déclenche ; l'observation en fournit une TECHNIQUE, puis
-#: la retire du rapport rendu (`validee_par=None`). *Un jeton qui ressemblerait
-#: à un nom finirait par être lu comme une validation.*
-_JETON_OBSERVATION = '__observation_sans_application__'
-
 #: ⚠️⚠️ CE QUE LE LIVRABLE DIT QUAND LA COUCHE N'A PAS TOURNÉ — constat de
 #: Selasse, 01/09/2026. Le patron est celui d'`avertissement_fuite_par_effet`
 #: (`conformite/C1`) : un contrôle qui n'a pas eu lieu le DIT, il ne se tait pas.
@@ -1395,9 +1314,7 @@ PHRASE_QUALITE_NON_EXECUTEE = (
 #: hors des deux orchestrateurs (constat `agents/C1`).
 
 
-def synthese_qualite_donnees(
-        rapport: RapportQualite | None,
-        observation: RapportQualite | None = None) -> str | None:
+def synthese_qualite_donnees(rapport: RapportQualite | None) -> str | None:
     """Texte à afficher dans TOUT livrable. Un traitement silencieux est un
     défaut en soi : l'actuaire doit voir ce qui a été exclu, corrigé, signalé,
     et qui a validé une poursuite.
@@ -1423,23 +1340,21 @@ def synthese_qualite_donnees(
     différemment : la fonction ne fait que RENDRE UN TEXTE, et le badge Excel
     qu'elle alimente est une couleur de cellule, sans effet sur le statut RAG.
     """
-    # ⚠️⚠️ TROIS ÉTATS, TROIS TEXTES — étape 1-B-observation, 02/09/2026.
-    # `PHRASE_QUALITE_NON_EXECUTEE` était juste tant que le chemin agent ne
-    # regardait rien. Dès qu'il OBSERVE, la dire serait faux : la couche a
-    # tourné, elle n'a simplement rien appliqué. *Le texte qui accompagne un
-    # comportement se relit quand il change.*
+    # ⚠️⚠️ DEUX ÉTATS, ET IL Y EN A EU TROIS PENDANT UNE JOURNÉE. L'étape ④ de
+    # 1-B avait ajouté « OBSERVÉE, NON APPLIQUÉE » et un paramètre `observation`
+    # à cette fonction. L'étape ⑤ a branché la couche : elle s'APPLIQUE, le
+    # troisième état est devenu impossible, et tout son outillage a été retiré
+    # le 02/09/2026. *Un mécanisme qui survit à sa raison d'être devient un
+    # mensonge ; garder l'instrument après son verdict est une dette.*
     #
-    # ⚠️⚠️ ET C'EST L'EXISTENCE DE L'OBSERVATION QUI TRANCHE, PAS SON CONTENU.
-    # Ma première version rendait `PHRASE_QUALITE_NON_EXECUTEE` dès que
-    # l'observation ne trouvait RIEN — c'est-à-dire sur un portefeuille sain.
-    # *Le défaut de `qualite/C9` reparaissait un cran plus haut : « observé,
-    # rien trouvé » redisait « pas observé ».* Une observation qui existe
-    # PROUVE que la couche a tourné ; qu'elle n'ait rien vu la fait se taire,
-    # jamais mentir.
-    _obs = synthese_observation_qualite(observation)
+    # ⚠️⚠️ LA LEÇON DE CETTE ÉTAPE SURVIT À SON MÉCANISME, ET LA VOICI. Ma
+    # première version rendait `PHRASE_QUALITE_NON_EXECUTEE` dès que
+    # l'observation ne trouvait RIEN — c'est-à-dire sur un portefeuille sain :
+    # *le défaut de `qualite/C9` reparaissait un cran plus haut, « observé, rien
+    # trouvé » redisait « pas observé ».* C'est l'EXISTENCE d'un rapport qui
+    # prouve que la couche a tourné, jamais son contenu — et c'est exactement
+    # ce que teste le `rapport is None` ci-dessous, sur le seul état restant.
     if rapport is None:
-        if observation is not None:
-            return _obs
         return PHRASE_QUALITE_NON_EXECUTEE
     if rapport.bloque:
         # ⚠️⚠️ LE MOTIF, PAS SEULEMENT LE CODE. Le message nommait le code de
@@ -1550,13 +1465,6 @@ def synthese_qualite_donnees(
         lignes.append(
             f"✔ Poursuite malgre anomalie(s) >= {rapport.seuil:.0%} VALIDEE par "
             f"« {rapport.validee_par} »" + (f" le {d}" if d else "") + ".")
-    # ⚠️⚠️ LES DEUX SE PUBLIENT, ET NE SE REMPLACENT PAS. `rapport` dit ce qui
-    # a ETE FAIT (A2 exclut les expositions non positives, par exemple) ;
-    # l'observation dit ce que la couche COMPLETE aurait fait. Mesure du
-    # 02/09 : sur un fichier a 30 expositions nulles, le chemin agent publiait
-    # << 30 ligne(s) EXCLUE(S) >> et rien d'autre -- *un actuaire y lisait que
-    # la couche entiere avait tourne, alors que seule l'exposition avait ete
-    # regardee.* C'est le TROISIEME ETAT, partiellement execute.
     # ⚠️⚠️ LA QUESTION SUIT L'ANOMALIE, PLUS LE BLOCAGE — 02/09/2026.
     # `qualite/C8` l'avait posée dans `QualiteBloquante`, avec ce motif : *« le
     # blocage est le moment où l'actuaire décide : la question doit y être. »*
@@ -1567,6 +1475,4 @@ def synthese_qualite_donnees(
     _q = question_charges_negatives(rapport)
     if _q:
         lignes.append(f"? {_q}")
-    if _obs is not None:
-        lignes.append(_obs)
     return "\n".join(lignes) if lignes else None

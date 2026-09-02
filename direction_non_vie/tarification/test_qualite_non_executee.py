@@ -314,6 +314,96 @@ class TestQualiteNonExecutee(unittest.TestCase):
         print(f"    OK QNE-8 aucun euro : {avant} lignes avant et apres, "
               f"0 appel interdit")
 
+    def test_QNE_9_le_TROISIEME_etat_a_ete_retire_et_le_retrait_est_COMPLET(
+            self):
+        """⚠️⚠️ IL Y A EU TROIS ÉTATS PENDANT UNE JOURNÉE, IL N'EN RESTE DEUX.
+
+        L'étape ④ de 1-B avait ajouté « OBSERVÉE, NON APPLIQUÉE » : la couche
+        regardait le chemin agent sans rien lui appliquer, le temps de MESURER
+        les fréquences réelles sur lesquelles arbitrer la liste disqualifiante.
+        L'arbitrage est pris, l'étape ⑤ a branché la couche, et l'outillage a
+        été supprimé le 02/09/2026 sur décision de Selasse.
+
+        > *Garder un instrument après qu'il a rendu son verdict n'est pas de la
+        > prudence, c'est de la dette.*
+
+        ⚠️⚠️ CE QUE CE CONTRÔLE GARDE N'EST PAS LA SUPPRESSION, C'EST SON
+        CARACTÈRE COMPLET. Le retrait touchait **sept fichiers**, et la panne
+        d'un retrait partiel est la plus silencieuse qui soit : une surface qui
+        garderait `result_a6.get('observation_qualite')` lirait `None` sans
+        jamais échouer, sur une clé que plus personne n'écrit. *Une gate verte
+        ne distingue pas un canal vide d'un canal absent.*
+
+        ⚠️⚠️ L'ASSIETTE EST LE CODE, JAMAIS LA PROSE — et sans cela ce contrôle
+        serait faux dès sa naissance. Quatre fichiers EXPLIQUENT le retrait en
+        nommant ce qui a été retiré ; un relevé au texte les compterait comme
+        des réintroductions. *Une citation n'est pas une affirmation* : on lit
+        donc les identifiants et les clés par AST, commentaires et docstrings
+        exclus. Ce fichier-ci s'exclut lui-même, puisqu'il doit nommer ce qu'il
+        interdit.
+        """
+        retires = ('observer_qualite', 'synthese_observation_qualite',
+                   'observation_qualite', 'MARQUEUR_QUALITE_OBSERVEE',
+                   '_JETON_OBSERVATION')
+        moi = pathlib.Path(__file__).resolve()
+        fautes: list[str] = []
+        lus = 0
+        for p in sorted(_RACINE.rglob('*.py')):
+            if p.resolve() == moi or '__pycache__' in p.parts:
+                continue
+            try:
+                arbre = ast.parse(p.read_text(encoding='utf-8'))
+            except (SyntaxError, UnicodeDecodeError):
+                continue
+            lus += 1
+            # ⚠️ Les CONSTANTES retenues sont uniquement celles qui servent de
+            # clé de dict ou d'argument d'appel : `.get('observation_qualite')`
+            # et `'observation_qualite': ...` sont les deux formes par
+            # lesquelles un canal mort survit. Une docstring n'en est ni l'une
+            # ni l'autre.
+            portantes = set()
+            for n in ast.walk(arbre):
+                if isinstance(n, ast.Dict):
+                    portantes.update(id(c) for c in n.keys)
+                elif isinstance(n, ast.Call):
+                    portantes.update(id(c) for c in n.args)
+            for n in ast.walk(arbre):
+                vu = None
+                if isinstance(n, ast.Name):
+                    vu = n.id
+                elif isinstance(n, ast.Attribute):
+                    vu = n.attr
+                elif isinstance(n, (ast.arg, ast.keyword)):
+                    vu = n.arg
+                elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    vu = n.name
+                elif isinstance(n, ast.alias):
+                    vu = n.asname or n.name
+                elif (isinstance(n, ast.Constant) and isinstance(n.value, str)
+                      and id(n) in portantes):
+                    vu = n.value
+                if vu in retires:
+                    fautes.append(
+                        f"{p.relative_to(_RACINE).as_posix()}:{n.lineno} "
+                        f"-> {vu}")
+        self.assertEqual(
+            fautes, [],
+            f"l'outillage d'observation subsiste dans le CODE : {fautes}. "
+            f"Un retrait partiel laisse un canal que plus rien ne remplit, et "
+            f"qui se lit `None` sans jamais echouer.")
+
+        # ⚠️ Le second volet, sur la porte elle-meme : la fonction ne doit plus
+        # accepter le canal. Un parametre optionnel survivrait a tous ses
+        # appelants sans qu'aucune gate ne s'en apercoive.
+        sig = inspect.signature(synthese_qualite_donnees)
+        self.assertEqual(
+            list(sig.parameters), ['rapport'],
+            f"la synthese accepte encore {list(sig.parameters)} : le canal "
+            f"d'observation peut revenir par la porte")
+        print(f"    OK QNE-9 retrait COMPLET : 0 occurrence des "
+              f"{len(retires)} symboles dans le code de {lus} fichiers, "
+              f"synthese a 1 parametre")
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

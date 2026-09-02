@@ -19,7 +19,6 @@ from core.conformite_reglementaire import (
     synthese_modele_dl,
 )
 from core.qualite_donnees import (MARQUEUR_QUALITE_NON_EXECUTEE,
-                                  MARQUEUR_QUALITE_OBSERVEE,
                                   synthese_qualite_donnees)
 from core.plan_tarifaire import synthese_colonnes_plan_manquantes
 from core.mapping_client import synthese_mapping
@@ -894,15 +893,12 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "", arrete: Optional[str] =
         # phrase « non exécuté », qui serait donc sortie en **VERT**. *Publier
         # « rien n'a été vérifié » sous une pastille verte serait pire que le
         # silence qu'on corrige.* Le marqueur vient de sa SOURCE UNIQUE.
-        _synth_q = synthese_qualite_donnees(
-            result_a6.get('rapport_qualite'),
-            result_a6.get('observation_qualite'))
+        _synth_q = synthese_qualite_donnees(result_a6.get('rapport_qualite'))
         if _synth_q:
             _kpi(ws5, r, "Qualité des données — traitements appliqués", _synth_q,
                  statut=("AMBRE" if ("EXCLUE" in _synth_q or "SIGNALEE" in _synth_q
                                      or "BLOQUE" in _synth_q
-                                     or MARQUEUR_QUALITE_NON_EXECUTEE in _synth_q
-                                     or MARQUEUR_QUALITE_OBSERVEE in _synth_q)
+                                     or MARQUEUR_QUALITE_NON_EXECUTEE in _synth_q)
                          else "VERT"),
                  wrap=True); r += 1
         # ── COLONNES DU PLAN NON PRODUITES (modèle amputé) ────────────────────

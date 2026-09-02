@@ -365,18 +365,21 @@ def pipeline_agents(
     r2 = AgentA2Preprocessing(audit_path=audit_path, verbose=verbose).run(
         result_a1=r1, plan=plan)
 
-    # ── L'OBSERVATION A ÉTÉ RETIRÉE : LA COUCHE EST APPLIQUÉE ───────────
+    # ── L'OBSERVATION A ÉTÉ RETIRÉE, PUIS SUPPRIMÉE ────────────────────
     # ⚠⚠ ÉTAPE 4 CLOSE PAR L'ÉTAPE 5, LE 02/09/2026. L'observation publiait
     # « COUCHE QUALITE OBSERVEE, NON APPLIQUEE [...] RIEN n'a ete applique ».
-    # Depuis le branchement, elle EST appliquee : cette phrase serait FAUSSE
-    # dans le rapport signe.
+    # Depuis le branchement ci-dessus, elle EST appliquee : cette phrase serait
+    # FAUSSE dans le rapport signe.
     #
     #   *Un mecanisme qui survit a sa raison d'etre devient un mensonge.*
     #
     # Elle avait un objet precis -- mesurer ce que la couche FERAIT pour que
-    # l'arbitrage se prenne sur des frequences reelles. L'arbitrage est pris.
-    # Le vrai rapport de la couche prend sa place et dit ce qui a ETE fait.
-    _obs = None
+    # l'arbitrage se prenne sur des frequences reelles. L'arbitrage est pris,
+    # et son outillage (`observer_qualite`, le canal `observation_qualite` a
+    # travers A6 et les quatre surfaces) a ete SUPPRIME le jour meme, sur
+    # arbitrage de Selasse : *garder un instrument apres qu'il a rendu son
+    # verdict n'est pas de la prudence, c'est de la dette.* `QNE-9` tient le
+    # retrait complet. Le vrai rapport de la couche dit ce qui a ETE fait.
 
     # A3 entraîne DÉJÀ ses trois modèles (Poisson fréquence, Gamma coût, Tweedie
     # prime pure) en un seul run : c'est son architecture, on ne la double pas.
@@ -426,7 +429,6 @@ def pipeline_agents(
             # tout le portefeuille. *Deux rapports, deux gestes -- et la
             # synthese les publie tous les deux, cote a cote.*
             rapport_qualite=(_rq or (r2 or {}).get('rapport_qualite')),
-            observation_qualite=_obs,
             generer_graphiques=generer_graphiques, generer_rapport_equipe=False)
         return ArbitrageCible(cible=cible, a4=r4, a5=r5, a6=r6,
                               statut_rag=r6.get("statut_rag"),
