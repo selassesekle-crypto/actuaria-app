@@ -792,6 +792,65 @@ def avertissement_controle_effet(rapport: dict | None) -> str | None:
     )
 
 
+#: ⚠️⚠️ LE MARQUEUR DU LIVRABLE MANQUANT — source unique, importée par les
+#: badges Excel comme `MARQUEUR_QUALITE_NON_EXECUTEE`. Y recopier le littéral
+#: rouvrirait la divergence que le lot « 30 définitions locales -> 0 » a fermée.
+MARQUEUR_LIVRABLE_ABSENT = 'LIVRABLE NON PRODUIT'
+
+
+def avertissement_livrables_absents(livrables: dict | None) -> str | None:
+    """⚠️⚠️ UN RUN PEUT ÊTRE VERT ET N'AVOIR PRODUIT AUCUN DOCUMENT.
+
+    Constat `services/C13`. Les **neuf** exportateurs du module partagent une
+    seule et même forme :
+
+    ```
+      try:   ... construire le classeur ...  return octets
+      except Exception as e:
+          logger.error(...);  return b''
+    ```
+
+    Ce n'est pas silencieux dans le JOURNAL — c'est silencieux dans le
+    **verdict du run**. Mesuré le 02/09/2026 : un défaut simulé fait passer
+    l'Excel A6 de **10 976 octets à 0**, `success` reste `True`, le statut RAG
+    ne bouge pas, et l'appelant reçoit un `b''` qui ne distingue pas
+    « non demandé » de « demandé et échoué ».
+
+    > *C'est le mécanisme qui a caché `conformite/C16` : un Excel entier
+    > disparu sur un `logger.warning`, sous une gate verte.*
+
+    ⚠️⚠️ L'ENTRÉE PORTE LA DEMANDE, PAS SEULEMENT LE RÉSULTAT. Une table
+    `{nom: octets}` ne contient QUE les livrables réellement demandés :
+    l'absence d'une clé veut dire « pas demandé », une valeur vide veut dire
+    « demandé et manquant ». *Sans cette distinction, l'avertissement crierait
+    sur chaque run qui ne demande pas de PDF — et un avertissement permanent
+    est un avertissement qu'on cesse de lire.*
+
+    ⚠️ ELLE NE DÉGRADE PAS LE STATUT RAG, ET C'EST DÉLIBÉRÉ. Le RAG mesure la
+    qualité du TARIF ; un document non produit est un incident de RENDU.
+    *Rendre à chacun sa propre question* — c'est l'arbitrage de `qualite/C16`,
+    appliqué ici.
+
+    Retourne `None` quand tout ce qui a été demandé a été produit : *un
+    contrôle qui n'a rien trouvé se tait.*
+    """
+    demandes = livrables or {}
+    absents = sorted(nom for nom, octets in demandes.items()
+                     if not (octets or b''))
+    if not absents:
+        return None
+    total = len(demandes)
+    return (
+        f"⚠ {MARQUEUR_LIVRABLE_ABSENT} — {len(absents)} document(s) sur "
+        f"{total} demandé(s) n'ont PAS été produits : {', '.join(absents)}. "
+        f"L'échec est tracé au journal (niveau ERREUR) mais n'arrête pas le "
+        f"run : le tarif ci-dessus reste valide, c'est sa RESTITUTION qui est "
+        f"incomplète. Ne diffusez pas ce dossier comme complet — relancez la "
+        f"production des documents manquants, ou joignez le motif au dossier "
+        f"signé."
+    )
+
+
 def avertissement_walk_forward(backtest: Optional[dict]) -> Optional[str]:
     """
     Retourne l'avertissement à afficher dans TOUT livrable (Excel, Word, HTML,

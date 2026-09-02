@@ -110,6 +110,7 @@ except ImportError:
 from core.charts_tarif import FOND_SOMBRE, couleur_rag, couleur_texte_rag, glyphe_rag
 from core.conformite_reglementaire import (
     agreger_controle_effet, avertissement_walk_forward,
+    avertissement_livrables_absents,
     fusionner_ecartees_amont,
     construire_matrice_x, verdict_vraisemblance_gini,
     reserve_bases_gini_melangees,
@@ -870,6 +871,57 @@ class AgentA6Comparaison:
                 except Exception as e_eq:
                     logger.warning(f"Rapport équipe échoué : {e_eq}")
 
+            # ══ L'INVENTAIRE DES LIVRABLES, DERIVE DES OCTETS REELS ══════════
+            # ⚠️⚠️ CONSTAT `services/C13`. Les neuf exportateurs du module
+            # partagent la meme forme : `logger.error(...)` puis `return b''`.
+            # Ce n'est pas silencieux dans le JOURNAL, c'est silencieux dans le
+            # VERDICT : `success` reste True, le statut RAG ne bouge pas, et
+            # l'appelant recoit un `b''` qui ne distingue pas << non demande >>
+            # de << demande et echoue >>.
+            #
+            #   *C'est le mecanisme qui a cache `conformite/C16` : un Excel
+            #   entier disparu sur un logger.warning, sous une gate verte.*
+            #
+            # ⚠️ LA TABLE PORTE LA DEMANDE, PAS SEULEMENT LE RESULTAT : une
+            # entree n'existe que si le livrable a ete DEMANDE. Sans cela,
+            # l'avertissement crierait sur chaque run qui ne demande pas de
+            # PDF -- *et un avertissement permanent cesse d'etre lu.*
+            #
+            # ⚠️ IL SE DERIVE DES OCTETS, il ne se declare pas. Un inventaire
+            # tenu a la main divergerait le jour ou un export change.
+            _livrables: dict = {}
+            if TARIF_EXCEL_OK:
+                _livrables['Excel A6'] = _excel_a6
+            if TARIF_RAPPORT_OK:
+                _livrables['Word tarification'] = _word_a6
+                _livrables['HTML tarification'] = _html_a6
+            if generer_rapport_equipe and RAPPORT_EQUIPE_OK:
+                for _fmt in (formats_equipe or ['excel', 'html', 'word',
+                                                'pdf']):
+                    _livrables[f'Rapport equipe ({_fmt})'] = (
+                        _rapport_equipe.get(f'{_fmt}_bytes', b''))
+            _avert_livrables = avertissement_livrables_absents(_livrables)
+            if _avert_livrables:
+                # ⚠️ Le journal dit deja l'echec au niveau ERREUR dans
+                # l'exportateur ; ce qui manquait etait sa remontee AU VERDICT.
+                logger.error("[%s] %s", audit_id, _avert_livrables)
+            # ⛔⛔ ET PAS DANS `_alertes_modele` : LA MESURE A REFUTE MON
+            # PREMIER CHOIX. `pipeline_agents` y lit `x.get('code')` -- ces
+            # alertes sont des DICTS. Y appendre une CHAINE fait lever
+            # `AttributeError` sur le chemin agent. *Un canal existant n'accepte
+            # pas n'importe quelle forme parce qu'il porte un nom qui convient.*
+            #
+            # ⚠️ ET CE N'ETAIT PAS LE BON CANAL NON PLUS : `alertes_modele`
+            # n'atteint aucune des trois surfaces signees. Le patron du module
+            # est l'INVERSE -- chaque surface appelle `avertissement_*()` sur
+            # la donnee qu'elle a deja. L'inventaire voyage donc en clair, et
+            # les surfaces en derivent leur texte.
+            #
+            # ⚠️⚠️ UN DOCUMENT NE PEUT PAS ANNONCER SA PROPRE ABSENCE, ni celle
+            # d'un document rendu apres lui : l'avertissement appartient au
+            # VERDICT DU RUN, pas aux livrables. C'est pourquoi il remonte
+            # jusqu'a l'orchestrateur.
+
             # ── Archive vérifiable du livrable signé (voie B, modèle A7) ──────
             # ⚠️ APRÈS les rapports (les octets existent) ; le manifeste
             # {audit_id}.archive.json est SÉPARÉ du dossier {audit_id}/. On NE
@@ -966,6 +1018,20 @@ class AgentA6Comparaison:
                 # {} si archiver=False (défaut dormant). archive_erreur REMONTE.
                 'archive':            _archive,
                 'archive_erreur':     _archive_erreur,
+                # ⚠️⚠️ `services/C13` — l'inventaire DERIVE des octets reels,
+                # sur le patron d'`archive_erreur` juste au-dessus : une panne
+                # qui doit etre vue REMONTE, elle ne reste pas au journal.
+                # {} quand tout ce qui etait demande a ete produit.
+                'livrables_absents':  sorted(
+                    nom for nom, oct_ in _livrables.items()
+                    if not (oct_ or b'')),
+                # ⚠️ L'INVENTAIRE COMPLET VOYAGE, pas seulement les manquants :
+                # une surface ne peut pas dire << 1 sur 3 >> si elle ignore
+                # combien ont ete DEMANDES. *Un compte sans son total ne dit
+                # rien.* On publie les TAILLES, jamais les octets.
+                'livrables_tailles':  {nom: len(oct_ or b'')
+                                       for nom, oct_ in _livrables.items()},
+                'avertissement_livrables': _avert_livrables,
             }
 
         except Exception as e:

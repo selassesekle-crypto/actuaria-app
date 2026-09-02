@@ -331,3 +331,84 @@ Une fixture malformée (`exclusions_conformite` attend des chaînes, j'ai passé
 Les neuf constats se répartissent en deux familles : **ce que les livrables héritent des agents** (le « ×8 », H5, la référence Wüthrich) et **ce qui diverge entre surfaces** — l'arrêté, les six synthèses du rapport équipe, les causes du plafond.
 
 **Le relevé complet est rendu : sept agents et services, 28 560 lignes lues, aucune omission.** J'attends ton arbitrage sur ce qui vaut d'être ouvert.
+
+---
+
+**C13 — Un run peut être VERT et n'avoir produit AUCUN document : les neuf
+exportateurs rendent `b''` sur un `logger.error`, et le verdict n'en dit
+rien.**
+
+> ✅ **`services/C13`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 02/09/2026 —
+> ouvert par Selasse après la question « est-ce qu'à ce stade tout va bien
+> avec certitude ? ».**
+>
+> **Le constat.** Les **neuf** exportateurs du module partagent une seule et
+> même forme :
+>
+> ```
+>   try:   ... construire le classeur ...  return octets
+>   except Exception as e:
+>       logger.error(...);  return b''
+> ```
+>
+> Ce n'est **pas** silencieux dans le journal — c'est silencieux dans le
+> **verdict**. Mesuré par exécution, défaut simulé dans le rendu :
+>
+> ```
+>   Excel A6 sain  : 15 437 octets
+>   Excel A6 casse :      0 octet
+>   success        : True       <- inchange
+>   statut RAG     : AMBRE      <- inchange
+> ```
+>
+> ### *C'est le mécanisme qui a caché `conformite/C16` : un Excel entier disparu sur un `logger.warning`, sous une gate verte de 1 013 tests.*
+>
+> **La mesure préalable, méthode publiée avec le chiffre** : 232 handlers dans
+> `tarification` + `core`, dont **7 gardes d'import** et **15 vrais
+> avalements** vers une valeur vide, **9 dans les exportateurs**. *Le premier
+> relevé annonçait 216 — il confondait les gardes d'import avec les
+> avalements, et il sur-comptait.*
+>
+> **Le correctif : un inventaire DÉRIVÉ des octets réels.**
+> `avertissement_livrables_absents` en source unique, `livrables_absents` et
+> `livrables_tailles` remontés d'A6 jusqu'au `resume()` de l'orchestrateur —
+> le patron d'`archive_erreur`, déjà dans le même dict.
+>
+> ⚠️ **La table porte la DEMANDE, pas seulement le résultat** : une entrée
+> n'existe que si le livrable a été demandé. *Sans cela l'avertissement
+> crierait sur chaque run sans PDF, et un avertissement permanent cesse d'être
+> lu.*
+>
+> ⚠️ **LE STATUT RAG N'EST PAS DÉGRADÉ, ET C'EST ARBITRÉ.** Le RAG mesure la
+> qualité du TARIF ; un document manquant est un incident de RENDU. Les
+> confondre referait le défaut de `qualite/C16`, où A1 jugeait une question
+> qui n'était pas la sienne. *Rendre à chacun sa propre question.*
+>
+> ⛔⛔ **CE QUE LE CORRECTIF NE FAIT PAS, ET `SC-6` L'ÉPINGLE AU LIEU DE LE
+> TAIRE.** L'avertissement n'entre pas dans les documents : *un document ne
+> peut pas annoncer sa propre absence*, et les surfaces sont rendues **avant**
+> que l'inventaire soit complet. Il appartient au compte rendu du run.
+>
+> ⛔⛔ **ET LA MESURE A RÉFUTÉ MON PREMIER CORRECTIF.** J'avais appendé
+> l'avertissement — une **chaîne** — dans `alertes_modele`. `pipeline_agents`
+> y lit `x.get('code')` : ces alertes sont des **dicts**, et le chemin agent
+> aurait levé `AttributeError`.
+>
+> ### *Un canal existant n'accepte pas n'importe quelle forme parce qu'il porte un nom qui convient.*
+>
+> Et ce n'était pas le bon canal non plus : `alertes_modele` n'atteint **aucune**
+> des trois surfaces signées. `SC-7` tient les deux moitiés de cette leçon.
+>
+> ⛔ **LE SCEAU A DÉMASQUÉ UN DE MES CONTRÔLES, PUIS DEUX DE MES PLANTS.**
+> `SC-7` bouclait d'abord sur une liste **vide** — il passait quoi qu'il
+> arrive. Et deux plants étaient mal ciblés : `[] or sorted(...)` vaut
+> `sorted(...)` en Python (un plant **no-op**), et une ancre écrite sans
+> accents ne trouvait rien. *Un plant qui ne change rien ne prouve pas qu'un
+> contrôle est du décor.*
+>
+> Épinglé par `SC-1` à `SC-7`. Sceau : sept violations plantées, six tombent,
+> et la septième — le mot remis dans un **commentaire** d'A6 — ne tombe pas.
+>
+> ⚠️ **NOMMÉ, NON TRAITÉ** : les **6 autres avalements** (A1-A5 Excel, et les
+> helpers `core/format_fr`, `core/courbe_rfr`, `core/base_agent`). Ce lot
+> couvre le **chemin signé**, pas les annexes par agent.

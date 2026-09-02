@@ -214,6 +214,23 @@ class ResultatAgents:
                 ],
                 "alertes_modele": [str(x.get("code"))
                                    for x in (r6.get("alertes_modele") or [])],
+                # ⚠️⚠️ CONSTAT `services/C13` — UN RUN POUVAIT ETRE VERT SANS
+                # AVOIR PRODUIT UN SEUL DOCUMENT. Les neuf exportateurs du
+                # module font `logger.error(...)` puis `return b''` : ce n'est
+                # pas silencieux dans le JOURNAL, ca l'etait dans le VERDICT.
+                # Mesure : Excel A6 de 10 976 octets a 0, `success` toujours
+                # True, statut RAG inchange.
+                #
+                #   *Un document ne peut pas annoncer sa propre absence ; c'est
+                #   au compte rendu du run de le faire.*
+                #
+                # ⚠️ Il ne DEGRADE PAS le statut RAG, delibrement : le RAG
+                # mesure la qualite du TARIF, un document manquant est un
+                # incident de RENDU. *Rendre a chacun sa propre question.*
+                "livrables_absents": list(r6.get("livrables_absents") or []),
+                "livrables_tailles": {
+                    str(k): int(v) for k, v in
+                    (r6.get("livrables_tailles") or {}).items()},
             }
 
         return {
