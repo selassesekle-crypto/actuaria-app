@@ -191,6 +191,14 @@ _LABELS_SYNTHESES = (
     ('elasticite',   "Élasticité-prix — ce qui entre dans l'analyse"),
     ('plafond',      'Causes du plafond de statut'),
     ('mapping',      'Mapping client appliqué'),
+    # ⚠️⚠️ LES DEUX LIBELLÉS ÉCRITS DANS LE MÊME GESTE QUE LEURS CLÉS —
+    # troisième fois que ce commentaire est nécessaire, et il l'est.
+    # ⚠️ ILS SE LISENT COMME UNE PAIRE, ET LEUR DIFFÉRENCE EST TOUT LE SUJET :
+    # le premier annonce un VERDICT (le statut est ROUGE), le second une
+    # ABSENCE (on ne sait pas, et le statut n'a pas bougé). Deux lignes qui
+    # diraient la même chose autrement seraient pires que le silence.
+    ('anti_selection', 'Anti-sélection — modèle qui discrimine à l\'envers'),
+    ('reserve_gini',   'Réserve — Gini non mesuré (aucun statut dégradé)'),
 )
 
 
@@ -234,6 +242,18 @@ def syntheses_reglementaires(results: Dict[str, Dict]) -> Dict[str, str]:
         # signature. Elle est publiée ici comme les autres.
         'plafond':      synthese_raisons_plafond(r6),
         'mapping':      synthese_mapping(r6.get('rapport_mapping')),
+        # ⚠️⚠️ ARBITRAGE DU 03/09/2026 — DEUX SITUATIONS, DEUX TRAITEMENTS.
+        # Un Gini MESURÉ et NÉGATIF force ROUGE chez A3, même si le modèle
+        # n'est pas retenu : A6 ne surveillait que le modèle de PRODUCTION,
+        # donc un GLM anti-sélectif battu par un ML n'apparaissait dans
+        # AUCUN statut. La raison voyage avec le statut.
+        'anti_selection': r6.get('anti_selection_a3'),
+        # ⚠️ Un Gini NON MESURABLE, lui, ne colore RIEN : il se déclare.
+        # Le confondre avec un pouvoir discriminant nul reproduirait le zéro
+        # fabriqué que `a3/C6` a supprimé.
+        #   *Une absence de mesure se déclare ; elle ne se convertit pas
+        #   en verdict.*
+        'reserve_gini':  r6.get('reserve_gini_a3'),
     }
     return {k: v for k, v in brut.items() if v}
 
@@ -507,6 +527,27 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
         if _synth_map6:
             _kpi(ws5, r, "Mapping client appliqué", _synth_map6,
                  statut=("AMBRE" if "⚠" in _synth_map6 else "VERT"), wrap=True); r += 1
+        # ⚠️⚠️ CET EXCEL NE PARCOURT PAS `_LABELS_SYNTHESES` — il code UN BLOC
+        # PAR CLÉ, à la main. Le html et le word, eux, itèrent le tuple. Une
+        # clé nouvelle atteint donc AUTOMATIQUEMENT deux formats sur trois, et
+        # le troisième reste muet en silence.
+        #   *Un rendu par énumération et un rendu à la main ne se maintiennent
+        #   pas au même rythme : c'est le second qui prend du retard, et rien
+        #   ne le dit.*
+        # Mesuré le 03/09/2026 : Excel 8/13 clés. `SY-3` épingle la couverture
+        # et nomme les trois manquantes ANTÉRIEURES à ce lot.
+        _synth_anti6 = synth.get('anti_selection', '')
+        if _synth_anti6:
+            _kpi(ws5, r, "Anti-sélection — modèle qui discrimine à l'envers",
+                 _synth_anti6, statut="ROUGE", wrap=True); r += 1
+        # ⚠️ Statut VERT sur la réserve, ET C'EST LE POINT : elle DÉCLARE une
+        # absence de mesure, elle ne dégrade rien. Lui donner AMBRE ici
+        # reproduirait, dans la couleur, la confusion que `a3/C6` a supprimée
+        # dans la valeur.
+        _synth_res6 = synth.get('reserve_gini', '')
+        if _synth_res6:
+            _kpi(ws5, r, "Réserve — Gini non mesuré (aucun statut dégradé)",
+                 _synth_res6, statut="VERT", wrap=True); r += 1
 
         # ── Onglet 6 : Audit trail consolidé ──────────────────────────────────
         ws6 = wb.create_sheet("6-Audit Trail Consolidé")

@@ -798,6 +798,15 @@ class AgentA6Comparaison:
                 'elasticite': (result_a4 or {}).get('elasticite'),
                 'sensibilite_tarifaire': (result_a4 or {}).get(
                     'sensibilite_tarifaire'),
+                # ⚠️⚠️ MEME RELAIS, MEME RAISON — arbitrage du 03/09/2026.
+                # A3 force ROUGE sur un GLM anti-selectif meme hors production,
+                # et publie une reserve quand un Gini n'a pas pu etre mesure.
+                # Sans ce relais, aucune des deux n'atteindrait le rapport
+                # signe : `syntheses_reglementaires` ne lit que `result_a6`.
+                # ⚠️ Le RENDU est fait UNE fois, par A3 ; on relaie la phrase,
+                # on ne la recompose pas -- deux rendus, deux verites possibles.
+                'anti_selection_a3': (result_a3 or {}).get('anti_selection'),
+                'reserve_gini_a3': (result_a3 or {}).get('reserve_gini'),
                 'rapport_mapping': rapport_mapping,
                 'colonnes_plan_manquantes': _cols_plan_manquantes,
                 'colonnes_plan_ecartees': dict(_cols_plan_ecartees),
@@ -1001,6 +1010,11 @@ class AgentA6Comparaison:
                 'elasticite': (result_a4 or {}).get('elasticite'),
                 'sensibilite_tarifaire': (result_a4 or {}).get(
                     'sensibilite_tarifaire'),
+                # ⚠️ Le SECOND dict de sortie, sans quoi une moitie des
+                # appelants ne verrait ni le ROUGE anti-selection ni la
+                # reserve de Gini. La lecon du relais `elasticite` d'hier.
+                'anti_selection_a3': (result_a3 or {}).get('anti_selection'),
+                'reserve_gini_a3': (result_a3 or {}).get('reserve_gini'),
                 # RapportMapping du renommage client (avant A1) — transité comme
                 # rapport_qualite (produit par aucun agent). None = pas de mapping.
                 'rapport_mapping':    rapport_mapping,

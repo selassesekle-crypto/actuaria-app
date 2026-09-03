@@ -126,6 +126,7 @@ from core.charts_tarif import (
 from core.conformite_reglementaire import (
     BASE_GINI_COMPTAGE, BASE_GINI_COUT_MOYEN, BASE_GINI_UNITAIRE,
     construire_matrice_x,
+    statut_anti_selection, synthese_anti_selection, synthese_gini_non_mesure,
 )
 from core.plan_tarifaire import (
     PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
@@ -571,6 +572,33 @@ class AgentA3GLM:
                 logger.warning("[PLAN INCOMPLET] %s", _al['message'])
             statut_rag = plafonner_statut_si_ampute(statut_rag, _ampute)
 
+            # ── ANTI-SÉLECTION → ROUGE, MÊME HORS PRODUCTION ──────────────────
+            # ⚠️⚠️ ARBITRAGE DE SELASSE, 03/09/2026, et il ferme un trou mesuré.
+            # A6 force déjà ROUGE sur un Gini négatif — mais SEULEMENT pour le
+            # modèle de PRODUCTION. Un GLM anti-sélectif qui ne gagne pas
+            # l'arbitrage était journalisé par `_calculer_gini` et publié dans
+            # AUCUN statut : ni celui d'A3, qui ne lisait que le Gini du
+            # Poisson, ni celui d'A6, qui ne regarde que le retenu.
+            #
+            # Ce n'est pas un plafond, c'est l'inverse : on force ROUGE depuis
+            # n'importe quel statut. Un modèle qui attribue les primes les plus
+            # faibles aux risques les plus élevés n'est pas « moins bon », il
+            # organise l'anti-sélection.
+            statut_rag = statut_anti_selection(statut_rag, metriques_glob)
+
+            # ⚠️ ET L'ABSENCE DE MESURE NE COLORE RIEN — l'autre moitié de
+            # l'arbitrage. Un Gini `None` (constat `a3/C6`) se DÉCLARE en
+            # réserve ; le confondre avec un pouvoir discriminant nul
+            # reproduirait le zéro fabriqué que `a3/C6` a supprimé.
+            #   *Une absence de mesure se déclare ; elle ne se convertit pas
+            #   en verdict.*
+            _raison_anti_selection = synthese_anti_selection(metriques_glob)
+            _reserve_gini = synthese_gini_non_mesure(metriques_glob)
+            if _raison_anti_selection:
+                logger.error("[ANTI-SÉLECTION] %s", _raison_anti_selection)
+            if _reserve_gini:
+                logger.warning("[RÉSERVE GINI] %s", _reserve_gini)
+
             commentaire = self._commenter_actuaire_senior(
                 rapport, sous_branche, statut_rag,
                 res_poisson, res_gamma, res_tweedie,
@@ -647,6 +675,15 @@ class AgentA3GLM:
                 'dataframe':    df,
                 'branche':      sous_branche,
                 'statut_rag':   statut_rag,
+                # ⚠️⚠️ LA RAISON VOYAGE AVEC LE STATUT, JAMAIS SEULE.
+                # Un ROUGE sans sa cause laisse l'actuaire chercher un défaut
+                # de données là où un modèle discrimine à l'envers — c'est
+                # exactement le défaut que `services/C7` a fermé pour le
+                # plafond AMBRE. `None` quand il n'y a rien à dire.
+                'anti_selection': _raison_anti_selection,
+                # ⚠️ Et la réserve, qui ne colore RIEN : elle nomme le Gini
+                # qui n'a pas pu être mesuré, sans le convertir en verdict.
+                'reserve_gini':   _reserve_gini,
                 'modeles':      self.modeles,
                 'metriques':    self.metriques,
                 'predictions':  self.predictions,

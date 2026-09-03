@@ -26,10 +26,29 @@ rester sans effet ? Un Tweedie ANTI-SELECTIF (Gini < 0) doit-il degrader un
 statut que le Poisson rend VERT ?
 
 Il rend la decision IMPOSSIBLE A PRENDRE EN SILENCE : l'assiette de lecture
-est verrouillee par AST. Le jour ou quelqu'un fait entrer le Tweedie -- ou
-le Gini du Gamma -- `AC6-1` tombe, et il faut venir ecrire ici pourquoi.
+est verrouillee par AST.
 
   *Un garde-fou ne remplace pas un arbitrage ; il l'oblige a etre explicite.*
+
+-----------------------------------------------------------------------------
+⛔⛔ ET CE FICHIER A DEJA MONTRE SON PROPRE TROU -- LE 03/09/2026, MEME JOUR
+-----------------------------------------------------------------------------
+`AC6-1` promettait : << le jour ou quelqu'un fait entrer le Tweedie, il
+tombe >>. Selasse a arbitre le soir meme qu'un Tweedie ANTI-SELECTIF force
+ROUGE. Le Tweedie est donc entre dans le statut d'A3 -- et **`AC6-1` est
+reste VERT**.
+
+Raison : le correctif applique `statut_anti_selection(...)` dans `run()`,
+APRES `_calculer_statut_rag`, comme le fait deja
+`plafonner_statut_si_ampute`. L'assiette d'`AC6-1` est la FONCTION ; le
+statut, lui, se construit par un PIPELINE de trois transformations.
+
+  *Un controle garde ce qu'on a pense a lui donner. << Ce que lit la
+  fonction >> et << ce qui determine le statut >> ne sont pas la meme
+  assiette, et la seconde est celle qui compte.*
+
+`AC6-6` verrouille desormais le pipeline complet : toute fonction ajoutee
+ou retiree de la chaine qui produit `statut_rag` le fait tomber.
 =============================================================================
 """
 
@@ -148,6 +167,51 @@ class T1_Assiette(unittest.TestCase):
             mortes,
             f"{_FONCTION} calcule ces valeurs sans jamais les relire : "
             f"{mortes}")
+
+
+class T1bis_LePipelineDuStatut(unittest.TestCase):
+    """⚠️⚠️ L'ASSIETTE QUI COMPTE VRAIMENT : ce qui DETERMINE le statut.
+
+    `AC6-1` garde ce que LIT `_calculer_statut_rag`. Mais le statut publie
+    par A3 n'est pas ce que rend cette fonction : c'est le resultat d'une
+    CHAINE de transformations appliquees dans `run()`. Une quatrieme
+    fonction glissee dans cette chaine changerait le statut sans qu'`AC6-1`
+    bronche -- et c'est arrive, le jour meme ou ce fichier a ete ecrit.
+    """
+
+    #: La chaine ARBITREE, dans l'ordre. Chaque entree a sa raison :
+    #:   `_calculer_statut_rag`      -- le calcul de base (Gini Poisson)
+    #:   `plafonner_statut_si_ampute` -- plafond AMBRE si le plan est ampute
+    #:   `statut_anti_selection`      -- ROUGE si un Gini mesure est negatif
+    #:                                   (arbitrage Selasse du 03/09/2026)
+    _CHAINE_ARBITREE = (
+        '_calculer_statut_rag',
+        'plafonner_statut_si_ampute',
+        'statut_anti_selection',
+    )
+
+    def test_ac6_6_la_chaine_qui_produit_le_statut_est_verrouillee(self):
+        """AC6-6 : rien ne s'ajoute a la chaine du statut en silence."""
+        source = inspect.getsource(AgentA3GLM)
+        arbre = ast.parse(textwrap.dedent(source)).body[0]
+        appliquees = []
+        for noeud in ast.walk(arbre):
+            if not isinstance(noeud, ast.Assign):
+                continue
+            if not any(getattr(c, 'id', '') == 'statut_rag'
+                       for c in noeud.targets):
+                continue
+            if isinstance(noeud.value, ast.Call):
+                fonc = noeud.value.func
+                appliquees.append(getattr(fonc, 'attr', None)
+                                  or getattr(fonc, 'id', ast.unparse(fonc)))
+        self.assertEqual(
+            tuple(appliquees), self._CHAINE_ARBITREE,
+            f"la chaine qui produit `statut_rag` a change.\n"
+            f"  mesuree : {tuple(appliquees)}\n"
+            f"  arbitree: {self._CHAINE_ARBITREE}\n"
+            f"Toute transformation du statut est une DECISION : elle "
+            f"s'ecrit ici, avec sa raison, dans le meme geste que le code.")
 
 
 class T2_Comportement(unittest.TestCase):

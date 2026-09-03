@@ -2444,3 +2444,151 @@ def synthese_alertes_experience(alertes: Optional[dict]) -> Optional[str]:
         f"non — par erreur de mapping — sur la période observée : dans ce second "
         f"cas, il s'agirait d'une fuite de données et le modèle serait invalide."
     )
+
+
+# =============================================================================
+#  LE GINI D'UN MODÈLE : ANTI-SÉLECTION, ET ABSENCE DE MESURE
+# =============================================================================
+#
+# ⚠️⚠️ DEUX SITUATIONS QUI N'ONT RIEN À VOIR, ET QU'IL NE FAUT SURTOUT PAS
+# TRAITER PAREIL. C'est l'arbitrage de Selasse du 03/09/2026, et il prolonge
+# le constat `a3/C6` :
+#
+#   Gini MESURÉ et NÉGATIF  → le modèle discrimine À L'ENVERS. Ce n'est pas
+#       une question de performance, c'est une question de VALIDITÉ : il fait
+#       payer moins les mauvais risques. **Le statut passe ROUGE**, que le
+#       modèle soit retenu en production ou non.
+#
+#   Gini NON MESURABLE (`None`) → on ne sait pas. **Cela ne colore RIEN.**
+#       Dégrader reviendrait à confondre « pas pu mesurer » avec « mesuré et
+#       mauvais » — exactement la confusion que `a3/C6` a supprimée en
+#       remplaçant le zéro fabriqué par `None`. On publie une RÉSERVE.
+#
+# > *Une absence de mesure se déclare ; elle ne se convertit pas en verdict.*
+#
+# ⚠️ POURQUOI A6 NE SUFFIT PAS, ET C'EST MESURÉ. A6 force ROUGE sur un Gini
+# négatif — mais **seulement pour le modèle de PRODUCTION** (son
+# `_calculer_statut_rag` ne regarde que le retenu). Un GLM anti-sélectif qui
+# ne gagne pas l'arbitrage était donc journalisé par son agent et publié
+# dans AUCUN statut. C'est ce trou que ces fonctions ferment.
+
+#: Les trois GLM d'A3. `poisson` vise la fréquence, `gamma` le coût moyen,
+#: `tweedie` la prime pure — c'est ce dernier qui concourt chez A6 sur la
+#: cible par défaut, les deux autres étant écartés par le filtre de cible.
+MODELES_GLM = ('poisson', 'gamma', 'tweedie')
+
+#: ⚠️ Le vocabulaire de l'état d'un Gini. `ABSENT` n'est PAS `NON_MESURE` :
+#: une clé qui manque dit qu'aucun modèle de ce type n'a été ajusté ; un
+#: `None` dit qu'il l'a été et que son Gini n'a pas pu être calculé.
+GINI_ABSENT = 'ABSENT'
+GINI_NON_MESURE = 'NON_MESURE'
+
+
+def etats_gini(metriques: dict | None,
+               modeles: tuple = MODELES_GLM) -> dict[str, object]:
+    """L'état du Gini de chaque modèle : une valeur, `ABSENT`, ou `NON_MESURE`.
+
+    ⚠️ TROIS ÉTATS, PAS DEUX. Les confondre est la racine du défaut que
+    `a3/C6` a fermé : un modèle jamais ajusté et un modèle dont le Gini n'a
+    pas pu être calculé ne se disent pas de la même façon, et aucun des deux
+    ne vaut zéro.
+    """
+    etats: dict[str, object] = {}
+    m = metriques if isinstance(metriques, dict) else {}
+    for nom in modeles:
+        bloc = m.get(nom)
+        if not isinstance(bloc, dict) or 'gini' not in bloc:
+            etats[nom] = GINI_ABSENT
+            continue
+        valeur = bloc['gini']
+        if valeur is None:
+            etats[nom] = GINI_NON_MESURE
+        elif isinstance(valeur, (int, float)) and not isinstance(valeur, bool):
+            etats[nom] = float(valeur)
+        else:
+            # ⚠️ Un Gini d'un type inattendu ne se convertit pas au jugé : il
+            # est traité comme NON MESURÉ, donc réservé, jamais coloré.
+            etats[nom] = GINI_NON_MESURE
+    return etats
+
+
+def modeles_anti_selectifs(metriques: dict | None,
+                           modeles: tuple = MODELES_GLM) -> list[tuple]:
+    """Les modèles dont le Gini est MESURÉ et STRICTEMENT négatif.
+
+    ⚠️ Un `None` n'entre jamais ici : `None < 0` lève, et surtout une absence
+    de mesure n'est pas un constat d'anti-sélection.
+    """
+    return [(nom, etat) for nom, etat in etats_gini(metriques, modeles).items()
+            if isinstance(etat, float) and etat < 0]
+
+
+def statut_anti_selection(statut: str, metriques: dict | None,
+                          modeles: tuple = MODELES_GLM) -> str:
+    """ROUGE dès qu'un modèle ajusté discrimine à l'envers.
+
+    ⚠️ CE N'EST PAS UN PLAFOND, C'EST UN PLANCHER INVERSÉ. `plafonner_statut_
+    si_ampute` ramène VERT à AMBRE ; ici on force ROUGE depuis n'importe quel
+    statut, parce qu'un modèle anti-sélectif n'est pas « moins bon » : il est
+    ruineux. Un portefeuille tarifé à l'envers organise sa propre
+    anti-sélection.
+
+    ⚠️ Et il s'applique MÊME SI LE MODÈLE N'EST PAS RETENU : le statut d'un
+    agent décrit le travail de cet agent, pas seulement la part qui gagne
+    l'arbitrage aval.
+    """
+    return 'ROUGE' if modeles_anti_selectifs(metriques, modeles) else statut
+
+
+def synthese_anti_selection(metriques: dict | None,
+                            modeles: tuple = MODELES_GLM) -> str | None:
+    """SOURCE UNIQUE — la RAISON du ROUGE, à publier dans tout livrable.
+
+    Rend `None` quand aucun modèle n'est anti-sélectif : il n'y a alors rien
+    à dire, et une ligne vide dans un rapport est du bruit.
+    """
+    fautifs = modeles_anti_selectifs(metriques, modeles)
+    if not fautifs:
+        return None
+    detail = ", ".join(f"{nom} (Gini = {g:+.4f})".replace('.', ',')
+                       for nom, g in fautifs)
+    pluriel = 's' if len(fautifs) > 1 else ''
+    return (
+        f"⚠ ANTI-SÉLECTION — {len(fautifs)} modèle{pluriel} discrimine"
+        f"{'nt' if len(fautifs) > 1 else ''} À L'ENVERS : {detail}. "
+        f"Un Gini négatif signifie que les primes les plus FAIBLES sont "
+        f"attribuées aux risques les plus ÉLEVÉS. Le statut est forcé à "
+        f"ROUGE même si ce modèle n'est pas retenu en production : il est "
+        f"inutilisable en l'état, et le publier sans le dire exposerait le "
+        f"portefeuille à une sélection adverse."
+    )
+
+
+def synthese_gini_non_mesure(metriques: dict | None,
+                             modeles: tuple = MODELES_GLM) -> str | None:
+    """SOURCE UNIQUE — la RÉSERVE, qui ne colore RIEN.
+
+    ⚠️⚠️ ELLE NE JUGE PAS, ET C'EST TOUT SON OBJET. Le statut reste ce qu'il
+    était. Ce qui est publié, c'est ce qui n'a pas pu être mesuré et ce que
+    cette absence coûte à celui qui signe — à lui d'en tirer les
+    conséquences, pas à ce module.
+
+    Rend `None` quand tous les Ginis attendus sont mesurés.
+    """
+    etats = etats_gini(metriques, modeles)
+    non_mesures = [n for n, e in etats.items() if e == GINI_NON_MESURE]
+    if not non_mesures:
+        return None
+    mesures = [n for n, e in etats.items() if isinstance(e, float)]
+    reste = (f"Les {len(mesures)} autre(s) ({', '.join(mesures)}) le sont."
+             if mesures else
+             "AUCUN Gini n'a pu être mesuré : le pouvoir discriminant de "
+             "cette calibration est entièrement inconnu.")
+    return (
+        f"RÉSERVE — Gini NON MESURÉ pour : {', '.join(non_mesures)}. "
+        f"{reste} Un Gini non mesurable n'est pas un Gini nul : il n'est "
+        f"pas publié à zéro, et il ne dégrade AUCUN statut — le confondre "
+        f"avec un pouvoir discriminant nul serait une note fabriquée. "
+        f"Conséquence à connaître : A6 ÉCARTE de l'arbitrage tout modèle "
+        f"non noté, ce qui peut réduire la comparaison à un seul candidat."
+    )
