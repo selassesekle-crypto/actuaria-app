@@ -54,7 +54,7 @@ from core.conformite_reglementaire import (
     BASE_GINI_COMPTAGE, BASE_GINI_UNITAIRE,
     construire_matrice_x,
     colonne_temporelle, diagnostiquer_evaluation, phrase_evaluation_impossible,
-    gini_texte,
+    gini_texte, ratio_sur_apprentissage,
 )
 from core.plan_tarifaire import (
     PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
@@ -1469,8 +1469,9 @@ class AgentA5DeepLearning:
         """
         gini_train = self._calculer_gini(y_train, pred_train)
         gini_test  = self._calculer_gini(y_test,  pred_test)
-        overfit    = (None if gini_train is None or gini_test is None
-                      else gini_train / max(gini_test, 1e-6))
+        # Formule PARTAGEE avec A3 et A4 : A6 normalise ce ratio ENTRE les
+        # modeles, deux calculs differents ne se comparent pas.
+        overfit    = ratio_sur_apprentissage(gini_train, gini_test)
         rmse_test  = float(np.sqrt(mean_squared_error(y_test, pred_test)))
 
         return {

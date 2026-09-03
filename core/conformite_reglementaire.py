@@ -2503,6 +2503,29 @@ def gini_texte(valeur, decimales: int = 4) -> str:
     return f'{valeur:.{decimales}f}'
 
 
+def ratio_sur_apprentissage(gini_train, gini_test):
+    """Le sur-apprentissage MESURÉ : Gini(entraînement) / Gini(test), ou None.
+
+    SOURCE UNIQUE DE LA FORMULE, et c'est tout l'enjeu. A6 NORMALISE ce ratio
+    entre les modèles (``s_stab = 1 - (r - min) / (max - min)``) : deux agents
+    qui le calculeraient différemment feraient comparer des grandeurs qui ne
+    sont pas la même. Le GLM, lui, publiait ``1.0`` SANS l'avoir mesuré, ce qui
+    lui donnait mécaniquement le minimum du catalogue, donc la meilleure note
+    de stabilité — 30 % du score de sélection, offerts (mesuré le 03/09/2026 :
+    le vrai ratio vaut 1,08 pour le Poisson, 1,28 pour le Tweedie et 1,75 pour
+    le Gamma).
+
+    Rend ``None`` — jamais 1.0, jamais 0 — dès qu'un des deux Ginis n'existe
+    pas ou n'est pas fini : une stabilité non mesurée se déclare, elle ne se
+    fabrique pas. Voir :func:`gini_texte` pour le même contrat sur le Gini.
+    """
+    if gini_train is None or gini_test is None:
+        return None
+    if not (math.isfinite(gini_train) and math.isfinite(gini_test)):
+        return None
+    return gini_train / max(gini_test, 1e-6)
+
+
 def gini_arrondi(valeur, decimales: int = 4):
     """Un Gini pour une cellule de classeur : arrondi s'il existe, sinon le mot.
 

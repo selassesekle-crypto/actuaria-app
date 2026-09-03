@@ -473,7 +473,7 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
                 # Audit V7 IMPORTANT : garde NA — 'N/A' si absent, jamais 0.0000.
                 _cell(ws4, r, 3, round(m.get('score_global'),4) if 'score_global' in m else 'N/A',
                       cf=NOIR_HEX, ah="right", fmt=FMT_DEC4 if 'score_global' in m else None)
-                _cell(ws4, r, 4, round(m.get('overfit_ratio',0),3), cf=NOIR_HEX, ah="right", fmt=FMT_DEC4)
+                _cell(ws4, r, 4, gini_arrondi(m.get('overfit_ratio'), 3), cf=NOIR_HEX, ah="right", fmt=FMT_DEC4)
                 r += 1
         r += 1
         _section(ws4, r, "▶ DEEP LEARNING (A5)"); r += 1
@@ -758,7 +758,7 @@ def export_html_equipe(results: Dict[str, Dict], branche: str = '',
             section_a3_a5 += _row([
                 m.get('modele',''), gini_texte(m.get('gini_test',0)),
                 f"{m.get('score_global'):.4f}" if 'score_global' in m else '—',
-                f"{m.get('overfit_ratio',0):.3f}"
+                gini_texte(m.get('overfit_ratio'), 3)
             ])
         section_a3_a5 += '</table>'
 
@@ -1064,7 +1064,7 @@ def export_word_equipe(results: Dict[str, Dict], branche: str = '',
                 row[1].text = gini_texte(m.get('gini_test',0))
                 # Audit V7 IMPORTANT : garde NA cohérent avec les autres formats.
                 row[2].text = f"{m.get('score_global'):.4f}" if 'score_global' in m else '—'
-                row[3].text = f"{m.get('overfit_ratio',0):.3f}"
+                row[3].text = gini_texte(m.get('overfit_ratio'), 3)
 
         # §5 — Décision finale
         doc.add_heading("§5 — Décision Finale & Gouvernance (A6)", level=1).runs[0].font.color.rgb = NR

@@ -176,7 +176,7 @@ from core.conformite_reglementaire import (
     BASE_GINI_UNITAIRE,
     construire_matrice_x,
     colonne_temporelle, diagnostiquer_evaluation, phrase_evaluation_impossible,
-    gini_texte,
+    gini_texte, ratio_sur_apprentissage,
 )
 # ⚠️ SOURCE UNIQUE. L'etat de l'elasticite etait defini ICI au lot L0 ;
 # il vit desormais dans `core/elasticite.py`, avec le catalogue
@@ -1020,6 +1020,21 @@ class AgentA4ML:
             # Comparaison sur df.columns (disponibilité en DONNÉES), pas sur la
             # liste post-garde-fous : une colonne écartée par le filtre genre ou
             # anti-fuite, c'est le contrôle qui fonctionne, pas une amputation.
+            # ── UNE PANNE TECHNIQUE PLAFONNE LE STATUT ───────────────────────
+            # Sans ce plafond, six modèles pouvaient planter et A4 rendre VERT
+            # sur le seul survivant. Le statut ne certifie pas un catalogue
+            # qu'on n'a pas pu calibrer.
+            # Une seule source, deux lecteurs (le commentaire et le resultat).
+            rapport['echecs_modeles'] = list(getattr(self, '_echecs_modeles', []))
+            _echecs_tech = [e for e in rapport['echecs_modeles']
+                            if e.get('nature') == 'technique']
+            if _echecs_tech and statut_rag == 'VERT':
+                statut_rag = 'AMBRE'
+                logger.error(
+                    "[CALIBRATION] Statut plafonne a AMBRE : %d modele(s) en "
+                    "echec TECHNIQUE (%s).", len(_echecs_tech),
+                    ', '.join(str(e.get('modele')) for e in _echecs_tech))
+
             _ampute = verifier_completude_plan(plan, df.columns)
             _alertes_modele = []
             _al = alerte_modele_ampute(_ampute, 'ML')
@@ -1087,6 +1102,9 @@ class AgentA4ML:
                         'classement': classement, 'branche': sous_branche,
                         'shap_values': shap_summary, 'validation_ml': _val_ml_tmp,
                         'rapport': rapport, 'audit_id': audit_id,
+                        # ⚠️ Sans cette clé, l'Excel de l'agent OÙ la panne a
+                        # lieu serait le seul livrable muet sur elle.
+                        'echecs_modeles': rapport.get('echecs_modeles', []),
                     }
                     _excel_a4 = export_excel_a4(_tmp_a4, audit_id)
                     if _excel_a4:
@@ -1190,6 +1208,10 @@ class AgentA4ML:
                 # Modèle amputé (colonnes du plan absentes des données) : alerte
                 # explicite + plafond AMBRE. A6 agrège déjà 'alertes_modele'.
                 'alertes_modele':  _alertes_modele,
+                # ⚠️ LE CANAL DES PANNES, LU PAR A6 : `rapport['alertes']` n'est
+                # lu par AUCUNE surface signée (mesuré), il ne pouvait pas
+                # porter un échec technique.
+                'echecs_modeles':  list(getattr(self, '_echecs_modeles', [])),
                 # ⚠️ Le diagnostic d'evaluation voyage avec le RESULTAT :
                 # A6 en a besoin pour refuser l'arbitrage et nommer la
                 # cause. Un avertissement journalise n'atteint personne.
@@ -1436,6 +1458,9 @@ class AgentA4ML:
             ('lineaire_regularise', lambda: self._creer_lineaire_regularise(col_cible), False),
         ]
 
+        # Les echecs sont COLLECTES, jamais seulement journalises : le journal
+        # n'atteint aucune surface signee et personne ne le lit apres coup.
+        self._echecs_modeles = []
         for nom, creer_fn, supporte_weights in modeles_a_calibrer:
             logger.info(f"  Calibration {nom.upper()}...")
             try:
@@ -1473,9 +1498,44 @@ class AgentA4ML:
                     f"RMSE={metriques['rmse_test']:.4f}"
                 )
 
+            # ⚠️⚠️ DEUX CHOSES TRÈS DIFFÉRENTES SE CACHAIENT DERRIÈRE LE MÊME
+            # `except Exception`, ET LA CONFUSION FABRIQUAIT UNE CONCLUSION.
+            #
+            #  · `ImportError` = la librairie optionnelle n'est pas installée.
+            #    C'est la dégradation gracieuse DOCUMENTÉE du projet : le
+            #    modèle est ABSENT, il n'a pas échoué.
+            #  · tout le reste = PANNE TECHNIQUE. Le modèle aurait dû tourner.
+            #
+            # Avant ce lot les deux atterrissaient en `WARNING` dans
+            # `rapport['alertes']` — un canal qu'AUCUNE surface signée ne lit
+            # (mesuré : Excel A4, Word A4, Excel A6, témoin absent des trois).
+            # Le commentaire concluait alors sur les DONNÉES : « aucun modèle
+            # ML n'améliore le GLM, les features ne permettent pas d'extraire
+            # de la valeur » — alors que les modèles n'avaient jamais tourné.
+            # Deux pannes injectées, statut final A6 : **VERT**.
+            #
+            #   *Un échec technique n'est pas un résultat de modélisation. Il
+            #   remonte, il plafonne, et il se publie.*
+            except ImportError as e_abs:
+                logger.info(
+                    f"  {nom.upper()} ABSENT : {e_abs} — librairie optionnelle "
+                    f"non installée, dégradation prévue.")
+                self._echecs_modeles.append({
+                    'modele': nom, 'nature': 'absence',
+                    'type': type(e_abs).__name__, 'message': str(e_abs)[:200],
+                })
+                rapport['alertes'].append(f"{nom} : librairie absente ({e_abs})")
             except Exception as e:
-                logger.warning(f"  {nom.upper()} échoué : {e}")
-                rapport['alertes'].append(f"{nom} : {str(e)[:80]}")
+                # `logger.exception` joint la trace : redonner l'exception dans
+                # le message la dupliquerait. Le detail voyage dans
+                # `_echecs_modeles`, qui atteint les livrables.
+                logger.exception("  %s EN ECHEC TECHNIQUE", nom.upper())
+                self._echecs_modeles.append({
+                    'modele': nom, 'nature': 'technique',
+                    'type': type(e).__name__, 'message': str(e)[:200],
+                })
+                rapport['alertes'].append(
+                    f"{nom} : ECHEC TECHNIQUE {type(e).__name__} : {str(e)[:80]}")
 
     # ── CRÉATEURS DE MODÈLES ──────────────────────────────────────────────────
 
@@ -1588,12 +1648,18 @@ class AgentA4ML:
         # sur données synthétiques simples), on retourne 1.0 (neutre) pour éviter
         # un ratio nul trompeur. Un ratio nul ne signifie pas l'absence d'overfitting
         # — il signifie que le modèle n'a pas appris sur train non plus.
+        # ⛔ NOMMÉ, NON TRAITÉ (03/09/2026) : ce `1.0` « neutre » n'est pas
+        # neutre chez A6. La normalisation y fait `1 - (r - min)/(max - min)` :
+        # un ratio de 1.0 est en pratique le MINIMUM du catalogue, donc la
+        # MEILLEURE note de stabilité — 30 % du score de sélection. Un modèle
+        # qui n'a rien appris sur le train recevrait la meilleure note de
+        # stabilité. Signalé à Selasse, hors du périmètre de ce lot.
         if gini_train is None or gini_test is None:
             overfit = None  # NON EVALUABLE : un Gini n'est pas mesure
         elif gini_train <= 0:
             overfit = 1.0   # Neutre — modèle non discriminant sur train
         else:
-            overfit = gini_train / max(gini_test, 1e-6)
+            overfit = ratio_sur_apprentissage(gini_train, gini_test)
 
         # RMSE pondéré par l'exposition — sur le comptage prédit (taux × expo)
         rmse_test = np.sqrt(
@@ -1727,18 +1793,26 @@ class AgentA4ML:
 
         # Ajout du GLM Poisson comme référence
         if result_a3 and result_a3.get('success'):
-            gini_glm = result_a3['metriques'].get('poisson', {}).get('gini', 0)
+            _met_glm = result_a3['metriques'].get('poisson', {})
+            gini_glm = _met_glm.get('gini', 0)
             classement.append({
                 'modele':         'GLM Poisson (référence A3)',
                 'famille':        'GLM',
                 'gini_test':      gini_glm,
-                'gini_train':     gini_glm,
-                # Sans Gini mesure (aucun sinistre en test), il n'y a ni
-                # ratio ni alerte : les deux se disent None, pas << stable >>.
-                'overfit_ratio':  (None if gini_glm is None else 1.0),
-                'rmse_test':      result_a3['metriques'].get('poisson', {}).get('rmse_test', 0),
+                # ⚠️⚠️ CES TROIS LIGNES ÉTAIENT FABRIQUÉES. `gini_train`
+                # recopiait le Gini de TEST, `overfit_ratio` valait le littéral
+                # 1.0 et l'alerte `False` : la ligne de référence du GLM se
+                # déclarait « parfaitement stable » sans qu'aucune mesure ne
+                # l'établisse. Mesuré le 03/09/2026, le vrai ratio du Poisson
+                # vaut 1,0842. A3 MESURE désormais les deux (`_stabilite_train`)
+                # et cette ligne les RELAIE — sans mesure, elles valent None,
+                # jamais 1.0 ni « stable ».
+                'gini_train':     _met_glm.get('gini_train'),
+                'overfit_ratio':  _met_glm.get('overfit_ratio'),
+                'rmse_test':      _met_glm.get('rmse_test', 0),
                 'mae_test':       0,
-                'overfit_alerte': (None if gini_glm is None else False),
+                'overfit_alerte': (None if _met_glm.get('overfit_ratio') is None
+                                   else _met_glm['overfit_ratio'] > 1.15),
                 'recommandation': '📊 Référence GLM',
             })
 
@@ -2022,6 +2096,31 @@ class AgentA4ML:
             amelioration = (meilleur.get('gini_test', 0) - gini_glm) / max(gini_glm, 1e-6) * 100
             niveau1 += f"\n  Amélioration vs GLM : {amelioration:+.1f}%"
 
+        # ⚠️⚠️ UNE PANNE SE DIT DANS LE COMMENTAIRE, ET AVANT TOUT DIAGNOSTIC.
+        # « Modèles testés : 4/6 » était la seule trace d'un plantage, et elle
+        # ne dit ni QUI ni POURQUOI : le lecteur l'attribue au catalogue.
+        _echecs_tech = [e for e in (rapport.get('echecs_modeles') or [])
+                        if e.get('nature') == 'technique']
+        _absents = [e for e in (rapport.get('echecs_modeles') or [])
+                    if e.get('nature') == 'absence']
+        if _echecs_tech:
+            niveau1 += (
+                f"\n\nECHEC TECHNIQUE : {len(_echecs_tech)} modele(s) n'ont "
+                f"PAS pu etre calibres.\n  "
+                + "\n  ".join(f"{e['modele']} : {e['type']} — {e['message']}"
+                              for e in _echecs_tech)
+                + "\n  Ce n'est PAS un resultat de modelisation : ces modeles "
+                  "n'ont pas concouru. Le classement et le diagnostic "
+                  "ci-dessous portent sur les modeles restants."
+            )
+        if _absents:
+            niveau1 += (
+                f"\n\nMODELES ABSENTS : {len(_absents)} librairie(s) "
+                f"optionnelle(s) non installee(s) — "
+                + ", ".join(e['modele'] for e in _absents)
+                + ". Degradation prevue, distincte d'une panne."
+            )
+
         # ⚠️ CE QUI N'EST PAS PRIS EN COMPTE SE DIT AUSSI. L'actuaire qui lit
         # ce commentaire doit savoir que la dimension elasticite-prix n'entre
         # pas dans l'analyse — et pourquoi. Le silence laisserait croire
@@ -2095,6 +2194,23 @@ class AgentA4ML:
                     f"hétérogénéité du risque. "
                     f"Le GLM reste compétitif et défendable."
                 )
+        elif _echecs_tech:
+            # ⚠️⚠️ LA PHRASE QUI SUIT ÉTAIT LA FAUSSE CONCLUSION. Elle accusait
+            # LES DONNÉES (« les features ne permettent pas d'extraire de la
+            # valeur ») dans le cas même où des modèles avaient PLANTÉ : le
+            # verdict portait sur un catalogue amputé par une panne, pas sur
+            # le portefeuille. On ne conclut pas sur ce qu'on n'a pas mesuré.
+            niveau2 = (
+                f"DIAGNOSTIC ACTUARIEL :\n"
+                f"AUCUNE conclusion n'est tirée sur les données : "
+                f"{len(_echecs_tech)} modèle(s) sur {nb_candidats} n'ont pas "
+                f"pu être calibrés pour une raison TECHNIQUE "
+                f"({', '.join(e['modele'] for e in _echecs_tech)}). "
+                f"Le classement porte sur un catalogue amputé, et rien ne dit "
+                f"que les modèles manquants n'auraient pas battu le GLM. "
+                f"Corrigez la panne, puis relancez A4 avant de conclure sur "
+                f"la richesse des variables."
+            )
         else:
             niveau2 = (
                 f"DIAGNOSTIC ACTUARIEL :\n"
@@ -3107,10 +3223,15 @@ class AgentA4ML:
             # — sortaient TOUTES en rouge, sous une légende qui dit « un grand
             # écart = surapprentissage ». `_classer_modeles` pose `gini_test`
             # et `gini_train` ; `gini` n'a jamais existé dans ce dictionnaire.
-            ginis_t  = [m.get('gini_test', 0)     for m in classement[:6]]
-            ginis_tr = [m.get('gini_train', 0)    for m in classement[:6]]
-            colors   = [VERT if (t/max(tr,0.001))>=0.90 else AMBRE if (t/max(tr,0.001))>=0.80 else ROUGE
-                       for t,tr in zip(ginis_t, ginis_tr)]
+            ginis_t  = [m.get('gini_test')     for m in classement[:6]]
+            ginis_tr = [m.get('gini_train')    for m in classement[:6]]
+            # ⚠️ Un Gini NON MESURE ne se colore pas : ni vert (« stable »),
+            # ni rouge (« sur-apprend »). La barre reste GRISE — la figure ne
+            # fabrique pas la grandeur qu'elle est censee montrer.
+            colors   = [GRIS if t is None or tr is None else
+                        VERT if (t/max(tr,0.001))>=0.90 else
+                        AMBRE if (t/max(tr,0.001))>=0.80 else ROUGE
+                        for t,tr in zip(ginis_t, ginis_tr)]
 
             fig1 = go.Figure()
             fig1.add_trace(go.Bar(

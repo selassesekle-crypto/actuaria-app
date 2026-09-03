@@ -436,6 +436,25 @@ def export_excel_a4(result_a4: Dict, audit_id: str = "", arrete: Optional[str] =
             _kpi(ws5, r, "Optuna XGBoost — best Gini",
                  _dec(opt.get('best_gini', 0)), fmt=FMT_DEC4); r += 1
 
+        # ⚠️⚠️ UN MODÈLE QUI A PLANTÉ SE DIT DANS L'EXPORT DE SON PROPRE AGENT.
+        # Mesuré le 03/09/2026 : les six surfaces signées portaient l'échec par
+        # la voie du plafond d'A6, et l'Excel A4 — le livrable de l'agent OÙ la
+        # panne a lieu — restait le seul muet. *L'asymétrie entre voisins est
+        # le révélateur le moins cher.*
+        _echecs = [e for e in (result_a4.get('echecs_modeles') or [])
+                   if e.get('nature') == 'technique']
+        if _echecs:
+            r += 1
+            _section(ws5, r, "▶ ECHEC TECHNIQUE — MODELES NON CALIBRES"); r += 1
+            for e in _echecs:
+                _kpi(ws5, r, str(e.get('modele', '?')),
+                     f"{e.get('type', 'Exception')} : {e.get('message', '')}",
+                     statut='ROUGE'); r += 1
+            _kpi(ws5, r, "Portee",
+                 "Ces modeles n'ont PAS concouru : le classement porte sur un "
+                 "catalogue ampute, ce n'est pas un resultat de modelisation.")
+            r += 1
+
         buf = io.BytesIO()
         wb.save(buf)
         return buf.getvalue()

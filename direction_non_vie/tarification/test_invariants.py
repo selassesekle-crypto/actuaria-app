@@ -378,7 +378,7 @@ class TestInvariant_GateLitToutesLesFenetres(unittest.TestCase):
         from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
         self.agent = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp',
                                         verbose=False)
-        self.modele = {'score_global': 0.82, 'gini_test': 0.31}
+        self.modele = {'score_global': 0.82, 'gini_test': 0.31, 'overfit_ratio': 1.05}
 
     def _statut(self, bt):
         return self.agent._calculer_statut_rag(
@@ -566,7 +566,7 @@ class TestInvariant_AntiSelectionVisibleEtDisqualifiante(unittest.TestCase):
               'gini_wf_moyen': 0.2, 'ae_ratio': 1.0, 'ae_moyen_wf': 1.0,
               'n_fenetres_rouge': 0, 'stabilite_wf': '🟢 Stable'}
         # Score composite EXCELLENT mais modèle anti-sélectif → ROUGE.
-        m = {'score_global': 0.99, 'gini_test': -0.30}
+        m = {'score_global': 0.99, 'gini_test': -0.30, 'overfit_ratio': 1.05}
         statut = self.a6._calculer_statut_rag(
             m, [m], profil_valide_par='X', environnement='production', backtest=bt)
         self.assertEqual(statut, 'ROUGE',
@@ -574,7 +574,7 @@ class TestInvariant_AntiSelectionVisibleEtDisqualifiante(unittest.TestCase):
             "(qui est RELATIF au meilleur modèle du profil, et vaut donc ≈1,0 "
             "même si tous les modèles discriminent à l'envers).")
         # Contrôle négatif : un bon modèle reste VERT.
-        m_bon = {'score_global': 0.99, 'gini_test': 0.30}
+        m_bon = {'score_global': 0.99, 'gini_test': 0.30, 'overfit_ratio': 1.05}
         self.assertEqual(self.a6._calculer_statut_rag(
             m_bon, [m_bon], profil_valide_par='X', environnement='production',
             backtest=bt), 'VERT')
@@ -598,7 +598,7 @@ class TestInvariant_AntiSelectionVisibleEtDisqualifiante(unittest.TestCase):
         # ce test ne prouverait plus rien sur l'ancrage seul. Ce n'était pas un
         # choix de ses auteurs, c'était un angle mort sur la confirmation humaine.
         base = {'modele': 'DL_CANN', 'famille': 'Deep Learning',
-                'score_global': 0.95, 'gini_test': 0.30}
+                'score_global': 0.95, 'gini_test': 0.30, 'overfit_ratio': 1.05}
         # DL confirmé → tout est parfait SAUF glm_gele → plafond AMBRE par
         # _cann_ancre_ok, et lui seul.
         degrade = {**base, 'glm_gele': False}
@@ -632,7 +632,7 @@ class TestInvariant_AntiSelectionVisibleEtDisqualifiante(unittest.TestCase):
         # par la confirmation manquante, et non par l'ancrage — hors sujet ici.
         # (1) TabNet sain (pas de glm_gele → None), impeccable ET confirmé → VERT.
         tabnet = {'modele': 'DL_TABNET', 'famille': 'Deep Learning',
-                  'score_global': 0.95, 'gini_test': 0.30}
+                  'score_global': 0.95, 'gini_test': 0.30, 'overfit_ratio': 1.05}
         self.assertEqual(self.a6._calculer_statut_rag(
             tabnet, [tabnet], profil_valide_par='X', environnement='production',
             backtest=bt, valide_par_actuaire_dl='X'), 'VERT',
@@ -641,7 +641,7 @@ class TestInvariant_AntiSelectionVisibleEtDisqualifiante(unittest.TestCase):
         # (2) Borne NOM : même un modèle DL portant fortuitement glm_gele=False,
         #     s'il n'est PAS un CANN, ne déclenche pas le plafond d'ancrage.
         tabnet_faux = {'modele': 'DL_TABNET', 'famille': 'Deep Learning',
-                       'score_global': 0.95, 'gini_test': 0.30, 'glm_gele': False}
+                       'score_global': 0.95, 'gini_test': 0.30, 'glm_gele': False, 'overfit_ratio': 1.05}
         self.assertEqual(self.a6._calculer_statut_rag(
             tabnet_faux, [tabnet_faux], profil_valide_par='X',
             environnement='production', backtest=bt, valide_par_actuaire_dl='X'), 'VERT',
@@ -650,7 +650,7 @@ class TestInvariant_AntiSelectionVisibleEtDisqualifiante(unittest.TestCase):
         # (3) Un GLM sain (aucun glm_gele, pas DL) reste VERT — ni ancrage ni
         #     confirmation DL ne le concernent.
         glm = {'modele': 'GLM_POISSON', 'famille': 'GLM',
-               'score_global': 0.95, 'gini_test': 0.30}
+               'score_global': 0.95, 'gini_test': 0.30, 'overfit_ratio': 1.05}
         self.assertEqual(self.a6._calculer_statut_rag(
             glm, [glm], profil_valide_par='X', environnement='production',
             backtest=bt), 'VERT')
@@ -697,7 +697,7 @@ class TestInvariant_ConfirmationHumaineDL(unittest.TestCase):
         — donc SANS l'accident wf. Non confirmé → AMBRE. C'est la preuve que le
         plafond ne dépend PAS de l'accident de recalibration."""
         cann = {'modele': 'DL_CANN', 'famille': 'Deep Learning', 'glm_gele': True,
-                'score_global': 0.93, 'gini_test': 0.4765}
+                'score_global': 0.93, 'gini_test': 0.4765, 'overfit_ratio': 1.05}
         statut = self.a6._calculer_statut_rag(
             cann, [cann], profil_valide_par='X', environnement='production',
             backtest=self.bt_sain_fidele)   # valide_par_actuaire_dl NON fourni (None)
@@ -721,7 +721,7 @@ class TestInvariant_ConfirmationHumaineDL(unittest.TestCase):
         pour un motif (non-interprétabilité) orthogonal à la confirmation humaine.
         Confirmer un DL ne peut pas blanchir une boîte noire non interprétable."""
         degrade = {'modele': 'DL_CANN', 'famille': 'Deep Learning', 'glm_gele': False,
-                   'score_global': 0.93, 'gini_test': 0.30}
+                   'score_global': 0.93, 'gini_test': 0.30, 'overfit_ratio': 1.05}
         statut = self.a6._calculer_statut_rag(
             degrade, [degrade], profil_valide_par='X', environnement='production',
             backtest=self.bt_sain_fidele, valide_par_actuaire_dl='Actuaire responsable')
@@ -737,9 +737,9 @@ class TestInvariant_ConfirmationHumaineDL(unittest.TestCase):
         (_alerte_dl_production) ET le texte rapport (synthese_modele_dl)."""
         from core.conformite_reglementaire import synthese_modele_dl
         cann = {'modele': 'DL_CANN', 'famille': 'Deep Learning', 'glm_gele': True,
-                'score_global': 0.93, 'gini_test': 0.4765}
+                'score_global': 0.93, 'gini_test': 0.4765, 'overfit_ratio': 1.05}
         glm  = {'modele': 'GLM_POISSON', 'famille': 'GLM',
-                'score_global': 0.93, 'gini_test': 0.30}
+                'score_global': 0.93, 'gini_test': 0.30, 'overfit_ratio': 1.05}
         # DL non confirmé → alerte présente, code dédié, sévérité AMBRE.
         a = self.a6._alerte_dl_production(cann, None)
         self.assertIsNotNone(a)
@@ -929,14 +929,14 @@ class TestInvariant_ControleParLEffet(unittest.TestCase):
         bt = {'disponible': True, 'modele_recalibre_fidele': True,
               'gini_wf_moyen': 0.30, 'ae_ratio': 1.0, 'ae_moyen_wf': 1.0,
               'n_fenetres_rouge': 0, 'stabilite_wf': '🟢 Stable'}
-        m_fuite = {'score_global': 0.99, 'gini_test': 0.92}   # signature de fuite
+        m_fuite = {'score_global': 0.99, 'gini_test': 0.92, 'overfit_ratio': 1.05}   # signature de fuite
         self.assertNotEqual(
             a6._calculer_statut_rag(m_fuite, [m_fuite], profil_valide_par='X',
                                     environnement='production', backtest=bt),
             'VERT',
             "Un Gini de 0,92 en fréquence Non-Vie est actuariellement "
             "impossible : c'est une fuite, pas un exploit.")
-        m_ok = {'score_global': 0.99, 'gini_test': 0.32}      # bon modèle réel
+        m_ok = {'score_global': 0.99, 'gini_test': 0.32, 'overfit_ratio': 1.05}      # bon modèle réel
         self.assertEqual(
             a6._calculer_statut_rag(m_ok, [m_ok], profil_valide_par='X',
                                     environnement='production', backtest=bt),
@@ -1279,7 +1279,7 @@ class TestInvariant_LeSystemeAccepteCeQuIlDoitAccepter(unittest.TestCase):
             'gini_wf_moyen': 0.30, 'ae_ratio': 1.00, 'ae_moyen_wf': 1.00,
             'n_fenetres_rouge': 0, 'stabilite_wf': '🟢 Stable',
         }
-        glm_parfait = {'score_global': 0.95, 'gini_test': 0.32}
+        glm_parfait = {'score_global': 0.95, 'gini_test': 0.32, 'overfit_ratio': 1.05}
         statut = a6._calculer_statut_rag(
             glm_parfait, [glm_parfait], profil_valide_par='Actuaire responsable',
             environnement='production', backtest=bt_impeccable)
@@ -1383,7 +1383,7 @@ class TestInvariant_LeSystemeAccepteCeQuIlDoitAccepter(unittest.TestCase):
               'modele_recalibre': 'GLM_POISSON', 'gini_wf_moyen': 0.30,
               'ae_ratio': 1.00, 'ae_moyen_wf': 1.00, 'n_fenetres_rouge': 0,
               'stabilite_wf': '🟢 Stable'}
-        modele = {'score_global': 0.95, 'gini_test': 0.32}
+        modele = {'score_global': 0.95, 'gini_test': 0.32, 'overfit_ratio': 1.05}
         statut = a6._calculer_statut_rag(
             modele, [modele], profil_valide_par='X', environnement='production',
             backtest=bt, hypotheses_ml={'h1_overfitting': {'statut': 'ROUGE'}})
@@ -1402,7 +1402,7 @@ class TestInvariant_LeSystemeAccepteCeQuIlDoitAccepter(unittest.TestCase):
               'modele_recalibre': 'GLM_POISSON', 'gini_wf_moyen': 0.30,
               'ae_ratio': 1.00, 'ae_moyen_wf': 1.00, 'n_fenetres_rouge': 0,
               'stabilite_wf': '🟢 Stable'}
-        modele = {'score_global': 0.95, 'gini_test': 0.32}
+        modele = {'score_global': 0.95, 'gini_test': 0.32, 'overfit_ratio': 1.05}
         statut = a6._calculer_statut_rag(
             modele, [modele], profil_valide_par='X', environnement='production',
             backtest=bt,
@@ -1426,7 +1426,7 @@ class TestInvariant_LeSystemeAccepteCeQuIlDoitAccepter(unittest.TestCase):
               'modele_recalibre': 'GLM_POISSON', 'gini_wf_moyen': 0.30,
               'ae_ratio': 1.00, 'ae_moyen_wf': 1.00, 'n_fenetres_rouge': 0,
               'stabilite_wf': '🟢 Stable'}
-        modele = {'score_global': 0.95, 'gini_test': 0.32}
+        modele = {'score_global': 0.95, 'gini_test': 0.32, 'overfit_ratio': 1.05}
         statut = a6._calculer_statut_rag(
             modele, [modele], profil_valide_par='X', environnement='production',
             backtest=bt, hypotheses_glm={'h2_homosc': {'statut': 'ROUGE'}})
@@ -1444,7 +1444,7 @@ class TestInvariant_LeSystemeAccepteCeQuIlDoitAccepter(unittest.TestCase):
               'modele_recalibre': 'GLM_POISSON', 'gini_wf_moyen': 0.30,
               'ae_ratio': 1.00, 'ae_moyen_wf': 1.00, 'n_fenetres_rouge': 0,
               'stabilite_wf': '🟢 Stable'}
-        modele = {'score_global': 0.95, 'gini_test': 0.32}
+        modele = {'score_global': 0.95, 'gini_test': 0.32, 'overfit_ratio': 1.05}
         statut = a6._calculer_statut_rag(
             modele, [modele], profil_valide_par='X', environnement='production',
             backtest=bt, hypotheses_glm={'h5_deviance': {'statut': 'ROUGE'}})
@@ -1463,7 +1463,7 @@ class TestInvariant_LeSystemeAccepteCeQuIlDoitAccepter(unittest.TestCase):
                 'modele_recalibre': 'GLM_POISSON', 'gini_wf_moyen': 0.30,
                 'ae_ratio': 1.00, 'ae_moyen_wf': 1.00, 'n_fenetres_rouge': 0,
                 'stabilite_wf': '🟢 Stable'}
-        modele = {'score_global': 0.95, 'gini_test': 0.32}
+        modele = {'score_global': 0.95, 'gini_test': 0.32, 'overfit_ratio': 1.05}
         # (1) Lift de FRÉQUENCE ROUGE → plafonné
         bt1 = {**base, 'lift_statut': 'ROUGE', 'lift_ratio': 1.4,
                'lift_cible_frequence': True}

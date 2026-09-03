@@ -568,7 +568,7 @@ class TestINV5_ChaqueFamilleCertifiable(unittest.TestCase):
             if not dispo:
                 skippees.append(f"{nom} ({motif})")
                 continue
-            modele = {'score_global': 0.95, 'gini_test': 0.32, 'modele': nom}
+            modele = {'score_global': 0.95, 'gini_test': 0.32, 'modele': nom, 'overfit_ratio': 1.05}
             statut = a6._calculer_statut_rag(
                 modele, [modele], profil_valide_par='Actuaire responsable',
                 environnement='production', backtest=self._backtest_sain(nom))
@@ -588,7 +588,7 @@ class TestINV5_ChaqueFamilleCertifiable(unittest.TestCase):
         INFIDÈLE (le GLM retombé sur un proxy GBM) ne doit PAS obtenir un VERT.
         Si ce test échoue, le gate accepte n'importe quoi et INV-5 ne prouve rien."""
         a6 = self._a6()
-        modele = {'score_global': 0.95, 'gini_test': 0.32, 'modele': 'GLM_POISSON'}
+        modele = {'score_global': 0.95, 'gini_test': 0.32, 'modele': 'GLM_POISSON', 'overfit_ratio': 1.05}
         statut = a6._calculer_statut_rag(
             modele, [modele], profil_valide_par='Actuaire responsable',
             environnement='production',

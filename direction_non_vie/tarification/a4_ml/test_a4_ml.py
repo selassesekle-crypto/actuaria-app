@@ -4,10 +4,15 @@ Données synthétiques, comparaison GLM référence. Ni le compte de tests ni
 celui des modèles ne sont annoncés ici : les deux ont péri en silence
 (constats `a4/C13` et `a4/C7`).
 """
-import sys, os, unittest
+import os
+import sys
+import unittest
+
 import numpy as np
 import pandas as pd
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../../')))
+from core.conformite_reglementaire import gini_texte
 from core.plan_tarifaire import PlanTarifaire
 
 # Phase 1 : A4.run() et _preparer_donnees reçoivent le PLAN signé. Fixtures auto
@@ -93,10 +98,23 @@ class TestA4ML(unittest.TestCase):
         print(f"    ST3 Gini ✅ | meilleur={best.get('modele','?')} Gini={gini_best:.4f}")
 
         # ST4 — Overfit ratio cohérent (> 0, jamais aberrant)
+        # ⚠️ RENFORCÉ le 03/09/2026 : `None` est désormais un état LÉGITIME —
+        # la stabilité n'a pas été mesurée — et il n'est PLUS remplacé par 1.0
+        # (qui vaut, chez A6, la meilleure note de stabilité possible). Le
+        # test exige donc que la seule ligne autorisée à ne pas la porter soit
+        # celle qui RELAIE A3, et que toute autre ait un ratio strictement
+        # positif. Sur cette fixture, `_make_r_a3` ne publie pas la mesure.
         for m in classement:
-            of = m.get('overfit_ratio', 1.0)
+            of = m.get('overfit_ratio')
+            if of is None:
+                self.assertEqual(
+                    m.get('famille'), 'GLM',
+                    f"{m.get('modele','?')} : A4 a calibré ce modèle, son "
+                    f"ratio doit être mesuré et non absent")
+                continue
             self.assertGreater(of, 0.0, f"Overfit ratio nul pour {m.get('modele','?')}")
-        print(f"    ST4 Overfit ✅ | best overfit={best.get('overfit_ratio',1):.3f}")
+        print(f"    ST4 Overfit ✅ | best overfit="
+              f"{gini_texte(best.get('overfit_ratio'), 3)}")
 
         # ST5 — gini_reference_a3 utilisée (≠ 0.2651 hardcodé)
         # On vérifie que le monitoring référence le Gini A3 (0.18) et non freMTPL2 (0.2651)
@@ -222,7 +240,9 @@ class TestAntiFuiteFamilleCible(unittest.TestCase):
         """Pipeline A2→A4 réel : prime_pure (calculée par A2) ne doit pas
         entrer dans la matrice X quand la cible est la fréquence, et le Gini
         doit rester actuariellement plausible (borne anti-fuite)."""
-        from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
+        from direction_non_vie.tarification.a2_preprocessing.agent import (
+            AgentA2Preprocessing,
+        )
         from direction_non_vie.tarification.a4_ml.agent import AgentA4ML
         np.random.seed(11)
         n = 3000
@@ -309,7 +329,9 @@ class TestAntiFuiteV9(unittest.TestCase):
             par une autre voie (fichier client pré-encodé), A4 la filtre.
         Ce test verrouille les deux."""
         from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
-        from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
+        from direction_non_vie.tarification.a2_preprocessing.agent import (
+            AgentA2Preprocessing,
+        )
         from direction_non_vie.tarification.a4_ml.agent import AgentA4ML
         np.random.seed(5)
         n = 2000
@@ -370,7 +392,9 @@ class TestAntiFuiteV9(unittest.TestCase):
         Origine : audit V9 (BLOQUANT) — Gini fréquence 0,8093 avec ces
         colonnes vs 0,0725 sans (+0,74), même signature que la fuite V8."""
         from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
-        from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
+        from direction_non_vie.tarification.a2_preprocessing.agent import (
+            AgentA2Preprocessing,
+        )
         from direction_non_vie.tarification.a4_ml.agent import AgentA4ML
         np.random.seed(7)
         n = 3000
@@ -461,7 +485,9 @@ class TestAntiFuiteV9(unittest.TestCase):
         config. Distinct de la voie one-hot identifiée par l'audit V9, et
         couvert par aucun test jusqu'ici."""
         from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
-        from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
+        from direction_non_vie.tarification.a2_preprocessing.agent import (
+            AgentA2Preprocessing,
+        )
         np.random.seed(3)
         n = 800
         df = pd.DataFrame({

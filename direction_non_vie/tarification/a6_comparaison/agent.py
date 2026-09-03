@@ -122,6 +122,7 @@ from core.conformite_reglementaire import (
     reserve_vraisemblance_non_calibree,
     GINI_PLAUSIBLE_MAX_FREQUENCE,
     AE_FENETRE_ACCEPTABLE, AE_FENETRE_STRICTE,
+    gini_texte, gini_arrondi,
 )
 
 #: ⚠️⚠️ LE VOCABULAIRE DES SPLITS, NOMMÉ — constat `a6/C6`.
@@ -653,6 +654,8 @@ class AgentA6Comparaison:
                 modele_ampute=_modele_ampute,
                 hypotheses_glm=(result_a3 or {}).get('hypotheses'),
                 hypotheses_ml=(result_a4 or {}).get('hypotheses'),
+                echecs_modeles=[e for _r in (result_a3, result_a4, result_a5)
+                                for e in ((_r or {}).get('echecs_modeles') or [])],
             )
             # ── AIDE À LA DÉCISION v3 ─────────────────────────────────────────
             # ⚠️⚠️ DÉPLACÉE ICI, APRÈS `statut_rag` — constat `a6/C5`. Elle
@@ -1152,10 +1155,26 @@ class AgentA6Comparaison:
                         'cible':           met.get('cible'),   # déclarée par A3 (poisson=freq, gamma=cout_moyen, tweedie=prime_pure)
                         'gini_test':       met.get('gini', 0),
                         'base_gini':       met.get('base_gini'),
-                        'gini_train':      met.get('gini', 0),
+                        # ⚠️⚠️ CES DEUX LIGNES ÉTAIENT FABRIQUÉES, ET ELLES
+                        # DÉCIDAIENT. `gini_train` recopiait le Gini de TEST et
+                        # `overfit_ratio` valait le littéral `1.0` — sans que
+                        # rien ne l'ait mesuré. Or la normalisation de la
+                        # stabilité fait `1 - (r - min) / (max - min)` : un
+                        # ratio de 1.0 est le minimum du catalogue (les ML
+                        # sur-apprennent, leurs ratios sont > 1), donc le GLM
+                        # recevait `s_stab = 1.0`, la MEILLEURE note possible,
+                        # sur un critère qui pèse 30 % de la sélection du
+                        # modèle de production. Mesuré le 03/09/2026 : le vrai
+                        # ratio vaut 1,0842 (Poisson), 1,2751 (Tweedie) et
+                        # 1,7468 (Gamma) — le Gamma sur-apprend franchement et
+                        # se publiait « parfaitement stable ».
+                        #   *Une valeur qu'on n'a pas mesurée ne vaut pas 1 ;
+                        #   elle vaut None, et un None se déclare.*
+                        # A3 les MESURE désormais (`_stabilite_train`).
+                        'gini_train':      met.get('gini_train'),
                         'relativites':     relativites,  # exp(β) par variable
                         'rmse_test':       met.get('rmse_test', 999),
-                        'overfit_ratio':   1.0,
+                        'overfit_ratio':   met.get('overfit_ratio'),
                         'nb_vars':         met.get('nb_vars_retenues', 0),
                         'agent_source':    'A3',
                         'interpretabilite': interpretabilite_de(nom),
@@ -1171,9 +1190,15 @@ class AgentA6Comparaison:
                     'cible':           _cible_a4,
                     'gini_test':       met.get('gini_test', 0),
                     'base_gini':       met.get('base_gini'),
-                    'gini_train':      met.get('gini_train', 0),
+                    # ⚠️ Pas de repli à 0 : un Gini d'entraînement absent n'est
+                    # pas un pouvoir discriminant nul (même règle que le Gini
+                    # de test, lot du 03/09/2026).
+                    'gini_train':      met.get('gini_train'),
                     'rmse_test':       met.get('rmse_test', 999),
-                    'overfit_ratio':   met.get('overfit_ratio', 1.0),
+                    # ⚠️ PAS de repli à 1.0 : chez A6, 1.0 est la MEILLEURE
+                    # note de stabilité possible (voir le bloc GLM ci-dessus).
+                    # Un ratio absent se déclare `None` et se publie comme tel.
+                    'overfit_ratio':   met.get('overfit_ratio'),
                     'nb_vars':         0,
                     'agent_source':    'A4',
                     'interpretabilite': interpretabilite_de(nom),
@@ -1189,9 +1214,15 @@ class AgentA6Comparaison:
                     'cible':           _cible_a5,
                     'gini_test':       met.get('gini_test', 0),
                     'base_gini':       met.get('base_gini'),
-                    'gini_train':      met.get('gini_train', 0),
+                    # ⚠️ Pas de repli à 0 : un Gini d'entraînement absent n'est
+                    # pas un pouvoir discriminant nul (même règle que le Gini
+                    # de test, lot du 03/09/2026).
+                    'gini_train':      met.get('gini_train'),
                     'rmse_test':       met.get('rmse_test', 999),
-                    'overfit_ratio':   met.get('overfit_ratio', 1.0),
+                    # ⚠️ PAS de repli à 1.0 : chez A6, 1.0 est la MEILLEURE
+                    # note de stabilité possible (voir le bloc GLM ci-dessus).
+                    # Un ratio absent se déclare `None` et se publie comme tel.
+                    'overfit_ratio':   met.get('overfit_ratio'),
                     'nb_vars':         0,
                     'agent_source':    'A5',
                     'interpretabilite': interpretabilite_de(nom),
@@ -1314,30 +1345,47 @@ class AgentA6Comparaison:
         La stabilité est le 2ème critère le plus important
         car un modèle instable produit des primes erratiques
         d'une année sur l'autre.
+
+        ⚠️⚠️ UNE STABILITÉ NON MESURÉE NE SE REMPLACE PAS PAR UNE VALEUR — LE
+        CRITÈRE SORT DU SCORE DE CE MODÈLE, et les trois autres poids sont
+        RENORMALISÉS pour lui. Toute valeur de repli serait un verdict : `1.0`
+        est ici la meilleure note possible (c'est le défaut corrigé le
+        03/09/2026), `0` serait la pire, et aucune des deux n'a été mesurée.
+        Le modèle porte alors `score_stabilite = None` et
+        `criteres_non_mesures = ('stabilite',)`, et
+        :meth:`_calculer_statut_rag` PLAFONNE le statut si c'est ce modèle qui
+        est retenu — sans quoi l'absence de mesure deviendrait un avantage
+        silencieux pour le modèle qui en bénéficie.
         """
-        # Extraction des valeurs pour normalisation
+        # Extraction des valeurs pour normalisation. ⚠️ Les ratios NON MESURÉS
+        # sortent de la normalisation : les y inclure sous une valeur de repli
+        # déplacerait `min_of`/`max_of`, donc le score de TOUS les autres.
         ginis    = [m['gini_test']     for m in catalogue]
         rmses    = [m['rmse_test']     for m in catalogue]
-        overfits = [m['overfit_ratio'] for m in catalogue]
+        overfits = [m['overfit_ratio'] for m in catalogue
+                    if m.get('overfit_ratio') is not None]
 
         max_gini = max(ginis) if max(ginis) > 0 else 1
         min_rmse = min(rmses) if min(rmses) > 0 else 1
-        min_of   = min(overfits)
-        max_of   = max(overfits)
+        min_of   = min(overfits) if overfits else None
+        max_of   = max(overfits) if overfits else None
 
         for modele in catalogue:
             # Score Gini normalisé [0,1]
             s_gini = modele['gini_test'] / max_gini
 
             # Score stabilité [0,1] — inversé (moins d'overfit = mieux)
-            if max_of > min_of:
-                s_stab = 1 - (modele['overfit_ratio'] - min_of) / (max_of - min_of)
+            _of = modele.get('overfit_ratio')
+            if _of is None or min_of is None:
+                s_stab = None          # NON MESURÉE — le critère sortira du score
+            elif max_of > min_of:
+                s_stab = 1 - (_of - min_of) / (max_of - min_of)
             else:
                 s_stab = 1.0
             # Pénalité si overfit_ratio > 1.15
-            if modele['overfit_ratio'] > 1.15:
+            if s_stab is not None and _of > 1.15:
                 s_stab *= 0.7
-            if modele['overfit_ratio'] > 1.30:
+            if s_stab is not None and _of > 1.30:
                 s_stab *= 0.5
 
             # Score interprétabilité (déjà normalisé)
@@ -1357,18 +1405,30 @@ class AgentA6Comparaison:
             # Un score de 0.96 signifie 96% du score maximum possible dans ce profil,
             # pas une performance absolue de 96%.
             # Réf. : ACPR-2022-P-01 §4.3 — documentation des critères de sélection.
-            score_global = (
-                poids['gini']             * s_gini
-                + poids['stabilite']      * s_stab
-                + poids['interpretabilite'] * s_inter
-                + poids['rmse']            * s_rmse
-            )
+            # ⚠️ Le critère NON MESURÉ sort de la somme ET du dénominateur :
+            # le score reste sur [0,1], mais il est calculé sur une assiette
+            # réduite — que le modèle publie (`criteres_non_mesures`).
+            _termes = [(poids['gini'], s_gini),
+                       (poids['stabilite'], s_stab),
+                       (poids['interpretabilite'], s_inter),
+                       (poids['rmse'], s_rmse)]
+            # Les poids restants sont redimensionnés pour retrouver le TOTAL
+            # d'origine : quand tout est mesuré, le facteur vaut exactement 1.0
+            # et le score est identique au bit près à celui d'avant ce lot.
+            _total = sum(w for w, _ in _termes)
+            _poids_mesures = sum(w for w, s in _termes if s is not None)
+            _facteur = (_total / _poids_mesures) if _poids_mesures > 0 else 0.0
+            score_global = _facteur * sum(w * s for w, s in _termes
+                                          if s is not None)
 
             modele['score_gini']            = round(s_gini,  4)
-            modele['score_stabilite']       = round(s_stab,  4)
+            modele['score_stabilite']       = (None if s_stab is None
+                                               else round(s_stab, 4))
             modele['score_interpretabilite']= round(s_inter, 4)
             modele['score_rmse']            = round(s_rmse,  4)
             modele['score_global']          = round(score_global, 4)
+            modele['criteres_non_mesures']  = tuple(
+                nom for nom, s in (('stabilite', s_stab),) if s is None)
 
         return catalogue
 
@@ -2285,6 +2345,7 @@ class AgentA6Comparaison:
         hypotheses_glm:     Optional[Dict] = None,   # r3['hypotheses'] (A3 GLM)
         hypotheses_ml:      Optional[Dict] = None,   # r4['hypotheses'] (A4 ML)
         cible_est_frequence: bool = True,
+        echecs_modeles:     'list[dict] | None' = None,   # pannes TECHNIQUES A4
     ) -> str:
         """
         Statut RAG basé sur le score global du modèle de production.
@@ -2624,6 +2685,37 @@ class AgentA6Comparaison:
                 f"[HYPOTHÈSES] Hypothèse(s) de modélisation en ROUGE {_hyp_rouges} "
                 f"— statut plafonné à AMBRE en environnement 'production'.")
 
+        # ── LA STABILITÉ DU MODÈLE RETENU EST-ELLE MESURÉE ? ─────────────────
+        # ⚠️⚠️ Sans cette condition, l'ABSENCE de mesure deviendrait un
+        # AVANTAGE : `_calculer_scores_multicriteres` retire le critère du
+        # score et renormalise les trois autres, ce qui peut hisser un modèle
+        # dont la stabilité n'a jamais été établie. Le retirer du score est
+        # honnête ; le certifier VERT ne le serait pas.
+        _stabilite_mesuree_ok = modele_production.get('overfit_ratio') is not None
+        if not _stabilite_mesuree_ok:
+            logger.warning(
+                "[STABILITÉ] Le modèle retenu n'a pas de ratio de "
+                "sur-apprentissage mesuré — critère retiré de son score et "
+                "statut plafonné à AMBRE.")
+
+        # ── AUCUN MODÈLE N'A PLANTÉ POUR UNE RAISON TECHNIQUE ? ─────────────
+        # ⚠️⚠️ Une panne technique dans A4 était avalée par l'`except` par
+        # modèle, laissée dans `rapport['alertes']` — un canal qu'AUCUNE
+        # surface signée ne lit — et le commentaire concluait ensuite sur les
+        # DONNÉES (« aucun modèle ML n'améliore le GLM »). Mesuré le
+        # 03/09/2026 : deux modèles plantés, statut A6 **VERT**, témoin absent
+        # de l'Excel A4, du Word A4 et de l'Excel A6.
+        #   *Un échec technique ne devient pas une conclusion scientifique.*
+        _echecs = [e for e in (echecs_modeles or [])
+                   if (e or {}).get('nature') == 'technique']
+        _calibration_ok = not _echecs
+        if not _calibration_ok:
+            logger.error(
+                "[CALIBRATION] %d modele(s) en ECHEC TECHNIQUE : %s — la "
+                "comparaison ne porte pas sur le catalogue attendu, statut "
+                "plafonne a AMBRE.",
+                len(_echecs), ', '.join(str(e.get('modele')) for e in _echecs))
+
         # ⚠️ CE QUI EMPÊCHE LE VERT SE NOMME, ET DANS LE MÊME GESTE QUE LA
         # DÉCISION — une liste construite ailleurs divergerait du test qui
         # suit. Chaque phrase est écrite pour un lecteur du rapport, pas pour
@@ -2663,12 +2755,21 @@ class AgentA6Comparaison:
              + ', '.join(_hyp_rouges) + "."),
             (_lift_ok,
              "Le lift par décile ne confirme pas la hiérarchie des risques."),
+            (_stabilite_mesuree_ok,
+             ("Stabilité du modèle retenu NON MESURÉE — son ratio de "
+              "sur-apprentissage n'existe pas, le critère (30 % de la grille) "
+              "a été retiré de son score au lieu d'être fabriqué.")),
+            (_calibration_ok,
+             (f"{len(_echecs)} modele(s) en ECHEC TECHNIQUE a la calibration "
+              f"({', '.join(str(e.get('modele')) for e in _echecs)}) : la "
+              f"comparaison ne porte pas sur le catalogue attendu.")),
         ) if not satisfait]
 
         if (score >= 0.60 and gini >= 0.15 and _gouvernance_ok
                 and _backtest_ok and _wf_fidele_ok and _wf_resultat_ok
                 and _vraisemblance_ok and _cann_ancre_ok and _dl_confirme_ok
-                and _plan_complet_ok and _hypotheses_ok and _lift_ok):
+                and _plan_complet_ok and _hypotheses_ok and _lift_ok
+                and _stabilite_mesuree_ok and _calibration_ok):
             return 'VERT'
         # ── ANTI-SÉLECTION : DISQUALIFIANT (auto-audit 11/07/2026) ────────────
         # Un Gini NÉGATIF signifie que le modèle discrimine À L'ENVERS : il
@@ -2712,7 +2813,7 @@ class AgentA6Comparaison:
             f"  Gini test        : {mp['gini_test']:.4f}\n"
             f"  RMSE test        : {mp['rmse_test']:.2f}\n"
             f"  Interprétabilité : {mp['interpretabilite']:.2f}/1.0\n"
-            f"  Overfit ratio    : {mp['overfit_ratio']:.2f}\n"
+            f"  Overfit ratio    : {gini_texte(mp['overfit_ratio'], 2)}\n"
         )
 
         def _fmt4(v):
@@ -2946,7 +3047,11 @@ class AgentA6Comparaison:
             for idx, c in enumerate(classement[:5]):
                 nom   = c['modele']
                 gini  = min(c.get('gini_test', 0) / 0.35, 1.0)
-                stab  = min(1 / max(c.get('overfit_ratio', 1), 0.5), 1.0)
+                # Sans ratio mesure, aucune barre de stabilite : la dessiner a
+                # 1 dessinerait le modele le plus stable du graphique.
+                _of_c = c.get('overfit_ratio')
+                stab  = (None if _of_c is None
+                         else min(1 / max(_of_c, 0.5), 1.0))
                 interp= c.get('score_interpretabilite', 0.6)
                 rmse  = 1 - (c.get('rmse_test', 0) / rmse_max)
 
@@ -2966,7 +3071,7 @@ class AgentA6Comparaison:
                     hovertemplate=(
                         f"<b>{'⭐ ' if est_prod else ''}{nom}</b><br>"
                         f"Gini : {c.get('gini_test',0):.3f}<br>"
-                        f"Stabilité : {stab:.2f}<br>"
+                        f"Stabilité : {gini_texte(stab, 2)}<br>"
                         f"Interprét. : {interp:.2f}<br>"
                         f"RMSE norm. : {rmse:.2f}"
                         "<extra></extra>"
@@ -3019,7 +3124,8 @@ class AgentA6Comparaison:
             for idx, c in enumerate(classement):
                 nom    = c['modele']
                 gini   = c.get('gini_test', 0)
-                stab   = 1 / max(c.get('overfit_ratio', 1.0), 0.5)
+                _of_c  = c.get('overfit_ratio')
+                stab   = None if _of_c is None else 1 / max(_of_c, 0.5)
                 est_prod = nom == modele_prod.get('modele', '')
                 couleur  = OR if est_prod else COULEURS[idx % len(COULEURS)]
 
@@ -3039,8 +3145,8 @@ class AgentA6Comparaison:
                     hovertemplate=(
                         f"<b>{nom}</b><br>"
                         f"Gini : <b>{gini:.4f}</b><br>"
-                        f"Stabilité : <b>{stab:.2f}</b><br>"
-                        f"Overfit : {c.get('overfit_ratio',1):.2f}"
+                        f"Stabilité : <b>{gini_texte(stab, 2)}</b><br>"
+                        f"Overfit : {gini_texte(c.get('overfit_ratio'), 2)}"
                         "<extra></extra>"
                     ),
                     showlegend=False,
@@ -3174,7 +3280,7 @@ class AgentA6Comparaison:
         """
         nom_prod  = modele_prod.get('modele', 'N/A')
         gini_prod = modele_prod.get('gini_test', 0)
-        of_prod   = modele_prod.get('overfit_ratio', 1)
+        of_prod   = modele_prod.get('overfit_ratio')
         sc_prod   = modele_prod.get('score_global', 0)
         fam_prod  = modele_prod.get('famille', '')
 
@@ -3188,7 +3294,17 @@ class AgentA6Comparaison:
         else:
             faiblesses.append(f"Pouvoir discriminant faible (Gini={gini_prod:.3f})")
 
-        if of_prod <= 1.10:
+        # ⚠️ Une stabilité NON MESURÉE n'est ni une force ni une faiblesse :
+        # c'est une vérification qui n'a pas eu lieu, et elle se dit comme
+        # telle. La classer « très stable » (ce que faisait le repli à 1.0)
+        # inscrivait une force imaginaire dans la fiche de décision signée.
+        if of_prod is None:
+            faiblesses.append(
+                "Stabilité NON MESURÉE — le ratio de sur-apprentissage du "
+                "modèle retenu n'existe pas ; le critère (30 % de la grille) "
+                "a été retiré de son score au lieu d'être fabriqué")
+            risques.append("Sur-apprentissage ni établi ni écarté sur ce modèle")
+        elif of_prod <= 1.10:
             forces.append(f"Très stable — risque d'overfitting minimal (ratio={of_prod:.2f})")
         elif of_prod <= 1.20:
             forces.append(f"Stablement acceptable (overfit ratio={of_prod:.2f})")
@@ -3213,7 +3329,7 @@ class AgentA6Comparaison:
                 'ecart_score': round(sc_diff, 1),
                 'conseil': (
                     f"Écart de {sc_diff:.1f}% — à considérer si "
-                    f"{'stabilité prioritaire' if c.get('overfit_ratio',1) < of_prod else 'performance prioritaire'}"
+                    f"{'stabilité prioritaire' if (c.get('overfit_ratio') is not None and of_prod is not None and c['overfit_ratio'] < of_prod) else 'performance prioritaire'}"
                 ),
             })
 
@@ -3223,10 +3339,13 @@ class AgentA6Comparaison:
             f"Un auditeur S2 ou ACPR est-il prévu cette année ? (si oui → préférer un modèle interprétable)",
             f"Le Gini de {gini_prod:.3f} est-il suffisant pour la stratégie tarifaire ?",
             "Les données d'entraînement couvrent-elles au moins 3 ans d'historique ?",
-            f"L'overfit ratio de {of_prod:.2f} est-il acceptable au regard du volume de données ?",
+            (f"L'overfit ratio de {of_prod:.2f} est-il acceptable au regard du volume de données ?"
+             if of_prod is not None else
+             "Le ratio de sur-apprentissage n'a PAS été mesuré sur ce modèle : "
+             "pouvez-vous l'établir avant la mise en production ?"),
         ]
 
-        if of_prod > 1.20:
+        if of_prod is not None and of_prod > 1.20:
             questions.append(
                 "Avez-vous envisagé d'augmenter la régularisation (learning_rate=0.01, n_estimators=1000) ?"
             )
@@ -3277,7 +3396,7 @@ class AgentA6Comparaison:
             'profil_utilise':       profil,
             'score_final':          round(sc_prod, 4),
             'gini':                 round(gini_prod, 4),
-            'overfit_ratio':        round(of_prod, 2),
+            'overfit_ratio':        gini_arrondi(of_prod, 2),
             'forces':               forces,
             'faiblesses':           faiblesses,
             'risques':              risques,
@@ -3578,7 +3697,10 @@ class AgentA6Comparaison:
             # pondère, et donc elles que ce profil doit montrer.
             vals_radar = [
                 retenu.get('score_gini', 0),
-                retenu.get('score_stabilite', 0),
+                # ⚠️ Une stabilite NON MESUREE ne se dessine pas a 0 : ce serait
+                # le pire score possible, aussi invente que le 1.0 d'avant.
+                # `None` laisse Plotly interrompre le trace sur cet axe.
+                retenu.get('score_stabilite'),
                 retenu.get('score_interpretabilite', 0),
                 retenu.get('score_rmse', 0),
                 retenu.get('score_global', 0),

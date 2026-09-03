@@ -434,7 +434,7 @@ class TestA6ValidationTemporelleObligatoire(unittest.TestCase):
     def test_backtest_indisponible_plafonne_a_ambre_en_production(self):
         # Modèle de production avec un score/gini excellents — devrait
         # normalement donner VERT si seul le score comptait.
-        modele_excellent = {'score_global': 0.95, 'gini_test': 0.30}
+        modele_excellent = {'score_global': 0.95, 'gini_test': 0.30, 'overfit_ratio': 1.05}
         classement = [modele_excellent]
         backtest_indisponible = {
             'disponible': False,
@@ -465,7 +465,7 @@ class TestA6ValidationTemporelleObligatoire(unittest.TestCase):
         recalibré sur un PROXY (cas des modèles GLM_*/DL_*, non couverts par la
         fabrique sklearn) ne valide pas le modèle de production — voir le test
         suivant. La prémisse de ce test était incomplète, pas fausse."""
-        modele_excellent = {'score_global': 0.95, 'gini_test': 0.30}
+        modele_excellent = {'score_global': 0.95, 'gini_test': 0.30, 'overfit_ratio': 1.05}
         classement = [modele_excellent]
         backtest_disponible = {
             'disponible': True, 'ae_ratio': 1.02,
@@ -502,7 +502,7 @@ class TestA6ValidationTemporelleObligatoire(unittest.TestCase):
         le gate RAG ne le vérifiait pas : VERT restait possible sur la foi d'une
         validation portant sur un autre modèle. Même classe de défaut que le
         BLOQUANT B2 (V7) : contrôle correct, mais non câblé dans la décision."""
-        modele_excellent = {'score_global': 0.95, 'gini_test': 0.30}
+        modele_excellent = {'score_global': 0.95, 'gini_test': 0.30, 'overfit_ratio': 1.05}
         backtest_proxy = {
             'disponible': True, 'ae_ratio': 1.02,
             'modele_recalibre': 'GLM_POISSON → proxy GBM',
@@ -532,7 +532,7 @@ class TestA6ValidationTemporelleObligatoire(unittest.TestCase):
     def test_backtest_absent_du_dict_ne_plante_pas(self):
         """Robustesse : backtest=None (paramètre non transmis par un
         appelant plus ancien) ne doit pas lever d'exception."""
-        modele = {'score_global': 0.95, 'gini_test': 0.30}
+        modele = {'score_global': 0.95, 'gini_test': 0.30, 'overfit_ratio': 1.05}
         try:
             statut = self.agent._calculer_statut_rag(
                 modele, [modele], profil_valide_par='Test',
@@ -617,7 +617,7 @@ class TestAuditV10_B2_GateLitLeResultat(unittest.TestCase):
         from direction_non_vie.tarification.a6_comparaison.agent import AgentA6Comparaison
         self.agent = AgentA6Comparaison(models_path='/tmp', audit_path='/tmp',
                                         verbose=False)
-        self.modele = {'score_global': 0.82, 'gini_test': 0.31}
+        self.modele = {'score_global': 0.82, 'gini_test': 0.31, 'overfit_ratio': 1.05}
 
     def _statut(self, backtest, environnement='production'):
         return self.agent._calculer_statut_rag(

@@ -128,7 +128,7 @@ from core.conformite_reglementaire import (
     construire_matrice_x,
     statut_anti_selection, synthese_anti_selection, synthese_gini_non_mesure,
     colonne_temporelle, diagnostiquer_evaluation, phrase_evaluation_impossible,
-    gini_texte,
+    gini_texte, ratio_sur_apprentissage,
 )
 from core.plan_tarifaire import (
     PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
@@ -1180,6 +1180,7 @@ class AgentA3GLM:
         # `np.asarray` accepte les deux natures, et n'en suppose aucune.
         gini = self._calculer_gini(df_test[col_freq].values,
                                    np.asarray(pred_test))
+        gini_train, overfit_ratio = self._stabilite_train(modele_final, gini)
 
         # RMSE sur le test
         rmse = np.sqrt(mean_squared_error(
@@ -1197,6 +1198,13 @@ class AgentA3GLM:
             # ⚠️ `None` est une ABSENCE DE MESURE, jamais un zero : on la
             # stocke telle quelle, comme le Tweedie le fait deja (`a3/C6`).
             'gini':             (round(gini, 4) if gini is not None else None),
+            # ⚠️ La stabilité est MESURÉE, plus fabriquée à 1.0 (voir
+            # `_stabilite_train`). A6 la lit ; sans elle il posait le meilleur
+            # score de stabilité possible sur 30 % de la décision.
+            'gini_train':       (round(gini_train, 4)
+                                 if gini_train is not None else None),
+            'overfit_ratio':    (round(overfit_ratio, 4)
+                                 if overfit_ratio is not None else None),
             # ⚠️ BASE MESURÉE : `predict(X_test, offset=offset_test)` incorpore
             # l'exposition — le tri se fait sur un COMPTAGE (constat `a4/C10`).
             'base_gini':        BASE_GINI_COMPTAGE,
@@ -1486,6 +1494,7 @@ class AgentA3GLM:
         gini = self._calculer_gini(
             y_sev_test.values, np.asarray(pred_test)
         ) if nb_sin_test > 0 else None
+        gini_train, overfit_ratio = self._stabilite_train(modele_final, gini)
 
         metriques = {
             'aic':              round(float(modele_final.aic), 2),
@@ -1497,6 +1506,12 @@ class AgentA3GLM:
             # ⚠️ `None` est une ABSENCE DE MESURE, jamais un zero : on la
             # stocke telle quelle, comme le Tweedie le fait deja (`a3/C6`).
             'gini':             (round(gini, 4) if gini is not None else None),
+            # ⚠️ Mesurée, plus fabriquée à 1.0 — voir `_stabilite_train`.
+            # Mesuré : le Gamma est le PLUS sur-apprenant des trois (1,75).
+            'gini_train':       (round(gini_train, 4)
+                                 if gini_train is not None else None),
+            'overfit_ratio':    (round(overfit_ratio, 4)
+                                 if overfit_ratio is not None else None),
             # ⚠️ BASE MESURÉE : `predict(X_test)` SANS offset, sur les sinistrés
             # seuls — le tri se fait sur un COÛT MOYEN.
             'base_gini':        BASE_GINI_COUT_MOYEN,
@@ -1723,12 +1738,20 @@ class AgentA3GLM:
                 f"d'une absence de pouvoir discriminant.")
             gini_tw = None
 
+        gini_train_tw, overfit_ratio_tw = self._stabilite_train(
+            modele_final, gini_tw)
+
         metriques = {
             'aic':              round(float(modele_final.aic), 2),
             'bic':              round(float(modele_final.bic), 2),
             'deviance':         round(float(modele_final.deviance), 4),
             'gini':             (round(float(gini_tw), 4)
                                  if gini_tw is not None else None),
+            # ⚠️ Mesurée, plus fabriquée à 1.0 — voir `_stabilite_train`.
+            'gini_train':       (round(float(gini_train_tw), 4)
+                                 if gini_train_tw is not None else None),
+            'overfit_ratio':    (round(float(overfit_ratio_tw), 4)
+                                 if overfit_ratio_tw is not None else None),
             # ⚠️ BASE MESURÉE : `predict(X_test)` SANS offset — le tri se fait
             # sur une prédiction UNITAIRE, hors exposition.
             'base_gini':        BASE_GINI_UNITAIRE,
@@ -1859,6 +1882,40 @@ class AgentA3GLM:
     # ══════════════════════════════════════════════════════════════════════════
     # MÉTRIQUES
     # ══════════════════════════════════════════════════════════════════════════
+
+    def _stabilite_train(self, modele, gini_test):
+        """Gini d'ENTRAÎNEMENT et ratio de sur-apprentissage du GLM.
+
+        ⚠️⚠️ CE RATIO ÉTAIT FABRIQUÉ. A6 posait ``overfit_ratio: 1.0`` pour
+        tout GLM, sans jamais l'avoir mesuré, et ce 1.0 se trouvait être le
+        MINIMUM du catalogue : la normalisation lui donnait donc la meilleure
+        note de stabilité possible, soit 30 % du score de sélection du modèle
+        de production. Mesuré le 03/09/2026 sur la fixture de référence, le
+        vrai ratio vaut **1,0842** (Poisson), **1,2751** (Tweedie) et
+        **1,7468** (Gamma) : le Gamma sur-apprend franchement, et se publiait
+        « parfaitement stable ».
+
+        La mesure ne reconstruit AUCUNE matrice : ``endog`` et
+        ``fittedvalues`` du modèle ajusté portent exactement le jeu
+        d'entraînement et sa prédiction (offset compris). C'est ce qui garantit
+        que le Gini d'entraînement et le Gini de test se calculent sur la même
+        définition, à la seule différence du jeu.
+
+        La formule vient de :func:`ratio_sur_apprentissage`, partagée avec A4
+        et A5 : un ratio normalisé entre modèles doit être calculé pareil pour
+        tous, sinon la comparaison n'en est pas une.
+        """
+        try:
+            y_train  = np.asarray(modele.model.endog,  dtype=float)
+            mu_train = np.asarray(modele.fittedvalues, dtype=float)
+        except Exception as exc:                                  # noqa: BLE001
+            logger.warning(
+                f"[A3] Stabilité NON MESURÉE ({type(exc).__name__}: {exc}) — "
+                f"publiée à None, jamais à 1.0 : un ratio fabriqué à 1.0 est "
+                f"le meilleur score de stabilité possible chez A6.")
+            return None, None
+        gini_train = self._calculer_gini(y_train, mu_train)
+        return gini_train, ratio_sur_apprentissage(gini_train, gini_test)
 
     def _calculer_gini(
         self,

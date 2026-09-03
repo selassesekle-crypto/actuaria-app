@@ -1403,7 +1403,7 @@ def _construire_contexte_tarif(
     # s'affiche « — », jamais un zéro — ce que le module condamne ailleurs.
     _sc = f"{prod['score_global']:.4f}" if 'score_global' in prod else '—'
     _gi = gini_texte(prod['gini_test'])     if 'gini_test' in prod else '—'
-    _ov = f"{prod['overfit_ratio']:.3f}" if 'overfit_ratio' in prod else '—'
+    _ov = gini_texte(prod['overfit_ratio'], 3) if 'overfit_ratio' in prod else '—'
     lines += [
         "",
         "=== ML — MODÈLE RETENU ===",
@@ -2663,7 +2663,7 @@ def export_word(
                    'Famille', prod.get('famille','—')],
                   ['Score global', _score_txt,
                    'Gini test', gini_texte(prod['gini_test']) if 'gini_test' in prod else '—'],
-                  ['Overfit ratio', f"{prod['overfit_ratio']:.3f}" if 'overfit_ratio' in prod else '—',
+                  ['Overfit ratio', gini_texte(prod['overfit_ratio'], 3) if 'overfit_ratio' in prod else '—',
                    'Interprétabilité',
                    f"{prod['interpretabilite']:.2f}/1.0" if 'interpretabilite' in prod else '—']],
                  ws=[4.0,4.0,4.0,4.0])
