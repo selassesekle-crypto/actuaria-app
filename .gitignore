@@ -30,3 +30,29 @@ torch_compile_debug/
 *.pem
 *.p12
 *.pfx
+
+# --- Runtime Python installe DANS le depot par accident -------------------
+# Le 2026-09-03 a 11:15:05, le gestionnaire d'installation Python (26.3) a
+# telecharge Python 3.14.7 dans `actuaria-app/Python/` : 2758 fichiers,
+# 160 Mo. Son journal le dit lui-meme :
+#     Reading installs from C:\Users\selse\actuaria-app\Python
+#     Found 0 installs  ->  Installing Python 3.14.7.
+# CAUSE MESUREE : un script d'audit lancait un sous-processus avec un
+# environnement MINIMAL (PYTHONUTF8, PYTHONDONTWRITEBYTECODE, PATH,
+# SYSTEMROOT) — donc SANS `LOCALAPPDATA`. Prive de sa racine
+# `%LOCALAPPDATA%\Python`, le gestionnaire est retombe sur un chemin
+# RELATIF, resolu contre le repertoire courant : le depot.
+#
+# Un sous-processus prive de LOCALAPPDATA ne perd pas seulement une
+# variable : il perd l'endroit ou son propre outillage vit, et il le
+# RECREE la ou il se trouve.
+#
+# Ces lignes sont un FILET, pas un rangement : le depot est PUBLIC, et
+# `git status` montrait `?? Python/` — non suivi ET non ignore, donc
+# proposable a l'ajout.
+#
+# ⚠️ Verifier l'ignorance sur un FICHIER, jamais sur un repertoire suivi
+# d'une barre : `git check-ignore -v Python/` rendait un motif VIDE avec un
+# code 0 trompeur, alors que le fichier interieur n'etait pas ignore.
+Python/
+python_install_*.log
