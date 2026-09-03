@@ -35,8 +35,10 @@ torch_compile_debug/
 # Le 2026-09-03 a 11:15:05, le gestionnaire d'installation Python (26.3) a
 # telecharge Python 3.14.7 dans `actuaria-app/Python/` : 2758 fichiers,
 # 160 Mo. Son journal le dit lui-meme :
-#     Reading installs from C:\Users\selse\actuaria-app\Python
+#     Reading installs from <racine du depot>\Python
 #     Found 0 installs  ->  Installing Python 3.14.7.
+# (chemin generalise : le depot est PUBLIC, et il ne portait jusqu'ici
+#  AUCUN chemin local du poste — verifie sur les fichiers suivis.)
 # CAUSE MESUREE : un script d'audit lancait un sous-processus avec un
 # environnement MINIMAL (PYTHONUTF8, PYTHONDONTWRITEBYTECODE, PATH,
 # SYSTEMROOT) — donc SANS `LOCALAPPDATA`. Prive de sa racine
