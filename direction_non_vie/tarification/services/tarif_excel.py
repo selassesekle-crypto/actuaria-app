@@ -13,6 +13,7 @@ ONGLETS PAR AGENT :
 
 import io
 from core.conformite_reglementaire import (
+    gini_arrondi,
     avertissement_controle_effet, avertissement_walk_forward,
     synthese_exclusions, synthese_alertes_experience,
     synthese_colonnes_plan_ecartees, synthese_exemptions_effet,
@@ -75,6 +76,12 @@ if not OPENPYXL_OK:
 #  compte suive. Mesuré : c'est le SEUL écart, a1/a2/a4/a5/a6 sont exacts.
 # =============================================================================
 
+# Un Gini ou un ratio de sur-apprentissage None (aucun sinistre observé sur le
+# jeu de test) n'est pas 0 : l'écrire 0,0000 fabriquerait la mesure. Une valeur
+# mesurée est arrondie comme avant. Source unique : core.conformite_reglementaire.
+_dec = gini_arrondi
+
+
 def export_excel_a3(result_a3: Dict, audit_id: str = "", arrete: Optional[str] = None) -> bytes:
     """Génère le rapport Excel A3 GLM (6 onglets). Retourne bytes ou b''."""
     if not OPENPYXL_OK or not result_a3 or not result_a3.get('success'):
@@ -96,7 +103,12 @@ def export_excel_a3(result_a3: Dict, audit_id: str = "", arrete: Optional[str] =
         for modele, label in [('poisson','GLM Poisson'), ('gamma','GLM Gamma'), ('tweedie','GLM Tweedie')]:
             m = met.get(modele, {})
             if m:
-                _kpi(ws1, r, f"{label} — Gini test",     round(m.get('gini', 0), 4), fmt=FMT_DEC4)
+                # Un Gini None n'est pas 0,0000 : aucun sinistre observé sur le
+                # jeu de test, la mesure n'existe pas. On l'écrit.
+                _kpi(ws1, r, f"{label} — Gini test",
+                     (round(m['gini'], 4) if m.get('gini') is not None
+                      else 'non mesuré'),
+                     fmt=FMT_DEC4)
                 r += 1
                 _kpi(ws1, r, f"{label} — AIC",            round(m.get('aic', 0), 0),  fmt=FMT_NB)
                 r += 1
@@ -311,9 +323,9 @@ def export_excel_a4(result_a4: Dict, audit_id: str = "", arrete: Optional[str] =
         if classement:
             best = classement[0]
             _kpi(ws1, r, "Modèle retenu",    best.get('modele', 'N/A')); r += 1
-            _kpi(ws1, r, "Gini test",         round(best.get('gini_test', 0), 4), fmt=FMT_DEC4); r += 1
+            _kpi(ws1, r, "Gini test",         _dec(best.get('gini_test', 0)), fmt=FMT_DEC4); r += 1
             _kpi(ws1, r, "RMSE test",         round(best.get('rmse_test', 0), 4), fmt=FMT_DEC4); r += 1
-            _kpi(ws1, r, "Overfit ratio",     round(best.get('overfit_ratio', 0), 3)); r += 2
+            _kpi(ws1, r, "Overfit ratio",     _dec(best.get('overfit_ratio', 0), 3)); r += 2
 
         _section(ws1, r, "▶ STATUT VALIDATION"); r += 1
         statut = val.get('statut_global', 'N/A')
@@ -333,10 +345,13 @@ def export_excel_a4(result_a4: Dict, audit_id: str = "", arrete: Optional[str] =
         r += 1
         for rank, m in enumerate(classement, 1):
             bg = GRIS_L if rank % 2 == 0 else None
-            alerte = "⚠ Overfit" if m.get('overfit_alerte') else "✓ OK"
+            # None : ratio de sur-apprentissage non évaluable (Gini non mesuré),
+            # ce n'est ni une alerte ni un OK.
+            alerte = ("non évaluable" if m.get('overfit_alerte') is None
+                      else "⚠ Overfit" if m.get('overfit_alerte') else "✓ OK")
             vals = [rank, m.get('modele',''), m.get('famille',''),
-                    round(m.get('gini_test',0),4), round(m.get('rmse_test',0),4),
-                    round(m.get('overfit_ratio',0),3), round(m.get('score_global',0),4), alerte]
+                    _dec(m.get('gini_test',0)), round(m.get('rmse_test',0),4),
+                    _dec(m.get('overfit_ratio',0), 3), round(m.get('score_global',0),4), alerte]
             fmts = [None,None,None,FMT_DEC4,FMT_DEC4,FMT_DEC4,FMT_DEC4,None]
             for j, (v, f) in enumerate(zip(vals, fmts), 1):
                 _cell(ws2, r, j, v, cf=NOIR, fill=bg, fmt=f,
@@ -413,13 +428,13 @@ def export_excel_a4(result_a4: Dict, audit_id: str = "", arrete: Optional[str] =
         _kpi(ws5, r, "Nb modèles",     len(classement), fmt=FMT_NB); r += 1
         if classement:
             _kpi(ws5, r, "Modèle retenu", classement[0].get('modele','')); r += 1
-            _kpi(ws5, r, "Gini retenu",   round(classement[0].get('gini_test',0),4),
+            _kpi(ws5, r, "Gini retenu",   _dec(classement[0].get('gini_test',0)),
                  fmt=FMT_DEC4); r += 1
         opt = result_a4.get('rapport', {}).get('optuna_xgboost')
         if opt:
             _kpi(ws5, r, "Optuna XGBoost — trials", opt.get('trials', 0)); r += 1
             _kpi(ws5, r, "Optuna XGBoost — best Gini",
-                 round(opt.get('best_gini', 0), 4), fmt=FMT_DEC4); r += 1
+                 _dec(opt.get('best_gini', 0)), fmt=FMT_DEC4); r += 1
 
         buf = io.BytesIO()
         wb.save(buf)
@@ -467,9 +482,9 @@ def export_excel_a5(result_a5: Dict, audit_id: str = "", arrete: Optional[str] =
         if classement:
             best = classement[0]
             _kpi(ws1, r, "Modèle retenu",    best.get('modele', 'N/A')); r += 1
-            _kpi(ws1, r, "Gini test",         round(best.get('gini_test', 0), 4), fmt=FMT_DEC4); r += 1
+            _kpi(ws1, r, "Gini test",         _dec(best.get('gini_test', 0)), fmt=FMT_DEC4); r += 1
             _kpi(ws1, r, "RMSE test",         round(best.get('rmse_test', 0), 4), fmt=FMT_DEC4); r += 1
-            _kpi(ws1, r, "Overfit ratio",     round(best.get('overfit_ratio', 0), 3)); r += 2
+            _kpi(ws1, r, "Overfit ratio",     _dec(best.get('overfit_ratio', 0), 3)); r += 2
 
         _section(ws1, r, "▶ STATUT VALIDATION"); r += 1
         statut = val.get('statut_global', 'N/A')
@@ -494,8 +509,8 @@ def export_excel_a5(result_a5: Dict, audit_id: str = "", arrete: Optional[str] =
                 ('✗ Non' if 'glm_gele' in m else '—')
             )
             vals = [rank, m.get('modele',''), m.get('type',''),
-                    round(m.get('gini_test',0),4), round(m.get('rmse_test',0),4),
-                    round(m.get('overfit_ratio',0),3), glm_gele_txt]
+                    _dec(m.get('gini_test',0)), round(m.get('rmse_test',0),4),
+                    _dec(m.get('overfit_ratio',0), 3), glm_gele_txt]
             fmts = [None,None,None,FMT_DEC4,FMT_DEC4,FMT_DEC4,None]
             for j, (v, f) in enumerate(zip(vals, fmts), 1):
                 _cell(ws2, r, j, v, cf=NOIR, fill=bg, fmt=f,
@@ -555,7 +570,7 @@ def export_excel_a5(result_a5: Dict, audit_id: str = "", arrete: Optional[str] =
         _kpi(ws4, r, "Nb modèles",     len(classement), fmt=FMT_NB); r += 1
         if classement:
             _kpi(ws4, r, "Modèle retenu", classement[0].get('modele','')); r += 1
-            _kpi(ws4, r, "Gini retenu",   round(classement[0].get('gini_test',0),4),
+            _kpi(ws4, r, "Gini retenu",   _dec(classement[0].get('gini_test',0)),
                  fmt=FMT_DEC4); r += 1
 
         buf = io.BytesIO()
@@ -604,9 +619,9 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "", arrete: Optional[str] =
             _kpi(ws1, r, "Famille",         modele_prod.get('famille','')); r += 1
             _kpi(ws1, r, "Score global",    round(modele_prod.get('score_global',0),4),
                  fmt=FMT_DEC4); r += 1
-            _kpi(ws1, r, "Gini test",       round(modele_prod.get('gini_test',0),4),
+            _kpi(ws1, r, "Gini test",       _dec(modele_prod.get('gini_test',0)),
                  fmt=FMT_DEC4); r += 1
-            _kpi(ws1, r, "Overfit ratio",   round(modele_prod.get('overfit_ratio',0),3)); r += 1
+            _kpi(ws1, r, "Overfit ratio",   _dec(modele_prod.get('overfit_ratio',0), 3)); r += 1
             _kpi(ws1, r, "Interprétabilité",round(modele_prod.get('interpretabilite',0),2)); r += 2
 
         _section(ws1, r, "▶ BACKTESTING"); r += 1
@@ -644,8 +659,8 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "", arrete: Optional[str] =
             bg = GRIS_L if rank % 2 == 0 else None
             prod = rank == 1
             vals = [rank, m.get('modele',''), m.get('famille',''),
-                    round(m.get('gini_test',0),4), round(m.get('rmse_test',0),4),
-                    round(m.get('overfit_ratio',0),3), round(m.get('interpretabilite',0),2),
+                    _dec(m.get('gini_test',0)), round(m.get('rmse_test',0),4),
+                    _dec(m.get('overfit_ratio',0), 3), round(m.get('interpretabilite',0),2),
                     round(m.get('score_global',0),4)]
             fmts = [None,None,None,FMT_DEC4,FMT_DEC4,FMT_DEC4,FMT_DEC4,FMT_DEC4]
             for j,(v,f) in enumerate(zip(vals,fmts),1):

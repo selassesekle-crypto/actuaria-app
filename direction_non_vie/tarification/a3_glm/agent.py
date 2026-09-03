@@ -128,6 +128,7 @@ from core.conformite_reglementaire import (
     construire_matrice_x,
     statut_anti_selection, synthese_anti_selection, synthese_gini_non_mesure,
     colonne_temporelle, diagnostiquer_evaluation, phrase_evaluation_impossible,
+    gini_texte,
 )
 from core.plan_tarifaire import (
     PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
@@ -1193,7 +1194,9 @@ class AgentA3GLM:
             'pseudo_r2':        round(
                 1 - modele_final.deviance / modele_final.null_deviance, 4
             ),
-            'gini':             round(gini, 4),
+            # ⚠️ `None` est une ABSENCE DE MESURE, jamais un zero : on la
+            # stocke telle quelle, comme le Tweedie le fait deja (`a3/C6`).
+            'gini':             (round(gini, 4) if gini is not None else None),
             # ⚠️ BASE MESURÉE : `predict(X_test, offset=offset_test)` incorpore
             # l'exposition — le tri se fait sur un COMPTAGE (constat `a4/C10`).
             'base_gini':        BASE_GINI_COMPTAGE,
@@ -1470,9 +1473,11 @@ class AgentA3GLM:
                 float(y_sev_train.mean())
             )
 
+        # Sans sinistre en test, le RMSE et le Gini du coût moyen n'existent
+        # pas : un 0.0 affirmerait un ajustement parfait que rien n'a mesuré.
         rmse = np.sqrt(mean_squared_error(
             y_sev_test, pred_test
-        )) if nb_sin_test > 0 else 0.0
+        )) if nb_sin_test > 0 else None
 
         # ⚠️⚠️ LE JUMEAU DE LA BRANCHE FREQUENCE — constat `a3/C15`. Le meme
         # `.values` sur un `np.full`, le meme `AttributeError` dans le chemin
@@ -1480,7 +1485,7 @@ class AgentA3GLM:
         # vivant sur la severite, et l'asymetrie serait devenue invisible.*
         gini = self._calculer_gini(
             y_sev_test.values, np.asarray(pred_test)
-        ) if nb_sin_test > 0 else 0.0
+        ) if nb_sin_test > 0 else None
 
         metriques = {
             'aic':              round(float(modele_final.aic), 2),
@@ -1489,11 +1494,13 @@ class AgentA3GLM:
             'pseudo_r2':        round(
                 1 - modele_final.deviance / modele_final.null_deviance, 4
             ),
-            'gini':             round(gini, 4),
+            # ⚠️ `None` est une ABSENCE DE MESURE, jamais un zero : on la
+            # stocke telle quelle, comme le Tweedie le fait deja (`a3/C6`).
+            'gini':             (round(gini, 4) if gini is not None else None),
             # ⚠️ BASE MESURÉE : `predict(X_test)` SANS offset, sur les sinistrés
             # seuls — le tri se fait sur un COÛT MOYEN.
             'base_gini':        BASE_GINI_COUT_MOYEN,
-            'rmse_test':        round(rmse, 2),
+            'rmse_test':        (round(rmse, 2) if rmse is not None else None),
             'nb_vars_retenues': len(vars_actives),
             'nb_vars_exclues':  len(vars_exclues),
             'vars_retenues':    vars_actives,
@@ -1502,7 +1509,7 @@ class AgentA3GLM:
             'nb_obs_test':      nb_sin_test,
             'cout_moyen_obs':   round(float(y_sev_train.mean()), 2),
             'cout_moyen_pred':  round(float(pred_test.mean()), 2)
-                                if len(pred_test) > 0 else 0.0,
+                                if len(pred_test) > 0 else None,
         }
 
         # ── RELATIVITÉS TARIFAIRES exp(β) Gamma ──────────────────────────────
@@ -1857,7 +1864,7 @@ class AgentA3GLM:
         self,
         y_true: np.ndarray,
         y_pred: np.ndarray
-    ) -> float:
+    ) -> float | None:
         """
         Calcule le coefficient de Gini.
 
@@ -1878,10 +1885,10 @@ class AgentA3GLM:
         Using Copulas, North American Actuarial Journal.
         """
         if len(y_true) == 0 or len(y_pred) == 0:
-            return 0.0
+            return None
         if np.sum(y_true) == 0:
             # Aucun sinistre sur la période de test — Gini incalculable
-            return 0.0
+            return None
 
         try:
             # Tri par prédiction DÉCROISSANTE (convention actuarielle Lorenz)
@@ -1915,7 +1922,7 @@ class AgentA3GLM:
             gini = float(np.clip(gini, -1.0, 1.0))
             if gini < 0:
                 logger.warning(
-                    f"[ANTI-SÉLECTION] Gini NÉGATIF ({gini:.4f}) — le modèle "
+                    f"[ANTI-SÉLECTION] Gini NÉGATIF ({gini_texte(gini)}) — le modèle "
                     f"discrimine À L'ENVERS : il attribue les primes les plus "
                     f"faibles aux risques les plus élevés. Modèle INUTILISABLE "
                     f"en l'état, quelle que soit sa performance par ailleurs."
@@ -1924,7 +1931,7 @@ class AgentA3GLM:
 
         except Exception as e_gini:
             logger.debug(f"_calculer_gini échoué : {e_gini}")
-            return 0.0
+            return None
 
     def _calculer_metriques_globales(
         self,
@@ -2107,14 +2114,16 @@ class AgentA3GLM:
            **non mesurable** vaut pour un statut — ce qui n'est pas une
            question technique.
 
-        2. **`_calculer_gini` fabrique encore des zeros.** Elle rend `0.0`
-           sur tableau vide, sur somme de sinistres nulle (branche
-           commentee « Gini incalculable ») et dans son propre `except`.
-           La phrase de fermeture d'`a3/C6` — *« un Gini non mesurable vaut
-           desormais None, jamais 0 »* — est donc vraie de l'ENVELOPPE du
-           Tweedie, pas du CALCUL. **Signale, non corrige : A6 arbitre le
-           modele de production sur le Gini ; changer ces trois zeros
-           deplacerait le modele retenu, donc le tarif.**
+        2. **`_calculer_gini` ne fabrique plus de zero (03/09/2026, lot
+           « 0.0 fabriques »).** Elle rend `None` sur tableau vide, sur somme
+           de sinistres nulle et dans son propre `except` — la phrase de
+           fermeture d'`a3/C6` est desormais vraie du CALCUL, pas seulement
+           de l'enveloppe du Tweedie. Ici, un Gini Poisson `None` retire le
+           critere de Gini du statut (`_gini_mesure`) : la couleur vient de
+           la convergence et des variables retenues, et `reserve_gini` dit
+           que le pouvoir discriminant n'est pas etabli. Mesure sur un test
+           sans sinistre : aucun euro deplace sur les donnees normales
+           (comparaison HEAD / arbre, cellules Excel comprises).
 
         3. **Ce statut ne lit meme pas le Gini du Gamma.** `gini_gamma`
            etait assigne ligne 2005 et **jamais relu** — un calcul qui
@@ -2133,9 +2142,16 @@ class AgentA3GLM:
         vars_poisson = metriques.get('poisson', {}).get('nb_vars_retenues', 0)
         vars_gamma   = metriques.get('gamma',   {}).get('nb_vars_retenues', 0)
 
-        if gini_poisson < 0.05 or (vars_poisson == 0 and vars_gamma == 0):
+        # ⚠️ Un Gini `None` est une ABSENCE DE MESURE : le critere de Gini
+        # ne s'applique pas, il ne vaut ni 0 ni un verdict (arbitrage du
+        # 03/09/2026 : << un Gini non mesurable RESERVE, ne colore jamais >>).
+        # La reserve est publiee a cote ; ici, seule la convergence decide.
+        _gini_mesure = gini_poisson is not None
+        if ((_gini_mesure and gini_poisson < 0.05)
+                or (vars_poisson == 0 and vars_gamma == 0)):
             return 'ROUGE'
-        elif gini_poisson < 0.15 or vars_poisson == 0 or vars_gamma == 0:
+        elif ((_gini_mesure and gini_poisson < 0.15)
+                or vars_poisson == 0 or vars_gamma == 0):
             return 'AMBRE'
         else:
             return 'VERT'
@@ -2156,6 +2172,10 @@ class AgentA3GLM:
         m_poi  = res_poisson['metriques']
         m_gam  = res_gamma['metriques']
         m_twe  = res_tweedie['metriques']
+        # Coût moyen prédit None : aucun sinistre en test, la prédiction du
+        # coût moyen n'a pas été évaluée — pas « 0 € ».
+        _cp = m_gam.get('cout_moyen_pred', 0)
+        _cout_pred = f"{_cp:,.0f}€" if _cp is not None else "non mesuré"
 
         # ── NIVEAU 1 : LECTURE ────────────────────────────────────────────────
         niveau1 = (
@@ -2166,16 +2186,16 @@ class AgentA3GLM:
             f"GLM POISSON (fréquence) :\n"
             f"  Variables retenues : {m_poi.get('nb_vars_retenues', 0)}\n"
             f"  AIC                : {m_poi.get('aic', 'N/A')}\n"
-            f"  Gini (test)        : {m_poi.get('gini', 0):.4f}\n"
+            f"  Gini (test)        : {gini_texte(m_poi.get('gini'))}\n"
             f"  Fréquence obs/pred : {m_poi.get('frequence_obs',0):.4f} / "
             f"{m_poi.get('frequence_pred',0):.4f}\n"
             f"\n"
             f"GLM GAMMA (coût moyen) :\n"
             f"  Variables retenues : {m_gam.get('nb_vars_retenues', 0)}\n"
             f"  AIC                : {m_gam.get('aic', 'N/A')}\n"
-            f"  Gini (test)        : {m_gam.get('gini', 0):.4f}\n"
+            f"  Gini (test)        : {gini_texte(m_gam.get('gini'))}\n"
             f"  Coût obs/pred      : {m_gam.get('cout_moyen_obs',0):,.0f}€ / "
-            f"{m_gam.get('cout_moyen_pred',0):,.0f}€\n"
+            f"{_cout_pred}\n"
             f"\n"
             f"GLM TWEEDIE (prime pure) :\n"
             f"  Variables retenues : {m_twe.get('nb_vars_retenues', 0)}\n"
@@ -2186,12 +2206,27 @@ class AgentA3GLM:
 
         # ── NIVEAU 2 : DIAGNOSTIC ─────────────────────────────────────────────
         gini_poi = m_poi.get('gini', 0)
-        if statut_rag == 'VERT':
+        # Un Gini NON MESURÉ (aucun sinistre sur le jeu de test) ne se commente
+        # pas avec la phrase écrite pour un nombre : elle affirmerait un pouvoir
+        # discriminant que rien n'a établi. Le diagnostic prend la place.
+        _gini_non_mesure = gini_poi is None
+
+        if _gini_non_mesure:
+            niveau2 = (
+                "DIAGNOSTIC ACTUARIEL :\n"
+                "Les GLM sont CALIBRÉS mais leur ÉVALUATION est impossible : "
+                "aucun sinistre observé sur le jeu de test, le Gini du modèle "
+                f"de fréquence n'a pas pu être mesuré. Le statut {statut_rag} "
+                "tient à la convergence et aux variables retenues, pas au "
+                "pouvoir discriminant, qui n'est PAS établi. Voir le "
+                "diagnostic d'évaluation publié (causes probables et conseil)."
+            )
+        elif statut_rag == 'VERT':
             niveau2 = (
                 "DIAGNOSTIC ACTUARIEL :\n"
                 f"Les 3 modèles GLM ont convergé avec des performances "
                 f"satisfaisantes. Le Gini du modèle de fréquence "
-                f"({gini_poi:.4f}) indique un bon pouvoir discriminant "
+                f"({gini_texte(gini_poi)}) indique un bon pouvoir discriminant "
                 f"pour un portefeuille d'assurance. "
                 f"Le ratio fréquence observée/prédite est proche de 1, "
                 f"ce qui indique l'absence de biais systématique. "
@@ -2206,7 +2241,7 @@ class AgentA3GLM:
             niveau2 = (
                 "DIAGNOSTIC ACTUARIEL :\n"
                 f"Le pouvoir discriminant des modèles est modéré "
-                f"(Gini Poisson = {gini_poi:.4f}). "
+                f"(Gini Poisson = {gini_texte(gini_poi)}). "
                 f"Cela peut indiquer que les variables disponibles "
                 f"ne capturent pas tous les facteurs de risque pertinents, "
                 f"ou que le portefeuille est homogène en termes de risque. "
@@ -2228,11 +2263,21 @@ class AgentA3GLM:
             )
 
         # ── NIVEAU 3 : RECOMMANDATION ─────────────────────────────────────────
-        if statut_rag == 'VERT':
+        if _gini_non_mesure:
+            niveau3 = (
+                "RECOMMANDATION :\n"
+                "→ Aucune référence de Gini à transmettre à A4 : l'évaluation "
+                "est impossible sur ce découpage.\n"
+                "→ Suivre le conseil du diagnostic d'évaluation (un jeu de test "
+                "qui contient des sinistres) avant toute comparaison de modèles.\n"
+                "→ Les modèles sont sauvegardés ; ils ne sont pas une référence "
+                "tant que leur Gini n'est pas mesuré."
+            )
+        elif statut_rag == 'VERT':
             niveau3 = (
                 "RECOMMANDATION :\n"
                 f"→ Passer à l'agent A4 (ML ×8) pour challenger les GLM.\n"
-                f"→ Utiliser le Gini Poisson ({gini_poi:.4f}) comme "
+                f"→ Utiliser le Gini Poisson ({gini_texte(gini_poi)}) comme "
                 f"  référence de comparaison.\n"
                 f"→ Analyser les coefficients β significatifs pour "
                 f"  valider la cohérence actuarielle (signe et amplitude).\n"
@@ -2276,7 +2321,7 @@ class AgentA3GLM:
             print(f"    Variables retenues : {met.get('nb_vars_retenues', 0)}")
             print(f"    AIC                : {met.get('aic', 'N/A')}")
             if 'gini' in met:
-                print(f"    Gini               : {met['gini']:.4f}")
+                print(f"    Gini               : {gini_texte(met['gini'])}")
 
         print(f"\n{sep}")
         print("  COMMENTAIRE ACTUAIRE SÉNIOR")
@@ -2858,7 +2903,13 @@ class AgentA3GLM:
         gini_poisson = metriques.get('poisson', {}).get('gini', 0)
         gini_gamma   = metriques.get('gamma',   {}).get('gini', 0)
         gini_tweedie = metriques.get('tweedie', {}).get('gini', 0)
-        gini_max     = max(gini_poisson, gini_gamma, gini_tweedie)
+        # ⚠️ `None` = NON MESURE : on prend le max des Ginis MESURES, et s'il
+        # n'y en a aucun, l'hypothese est NON EVALUABLE -- pas << insuffisante >>.
+        # Avant : max(0.0, 0.0, 0.0) rendait << Ajustement insuffisant >>, un
+        # verdict fabrique sur un test sans sinistre.
+        _ginis_mesures = [g for g in (gini_poisson, gini_gamma, gini_tweedie)
+                          if g is not None]
+        gini_max     = max(_ginis_mesures) if _ginis_mesures else None
 
         # ⚠️ LE SEUIL ANNONCÉ EST DÉSORMAIS LE SEUIL APPLIQUÉ. La docstring
         # ci-dessus décrit TROIS bandes — « Gini ∈ [0.08,0.15] → acceptable
@@ -2869,21 +2920,28 @@ class AgentA3GLM:
         # « à enrichir » certifiait la chaîne entière. Les deux messages fins
         # sont conservés — ils distinguent [0.10,0.15] de [0.08,0.10] — mais
         # ils rendent tous deux le statut que l'échelle annonce.
-        if gini_max >= 0.15:
+        if gini_max is None:
+            h3_statut = "AMBRE"
+            h3_msg    = ("Gini NON MESURÉ sur les trois GLM → hypothèse H3 non "
+                         "évaluable (aucun sinistre sur le jeu de test) ⚠️")
+            h3_conseil= ("Voir le diagnostic d'évaluation : la période de test ne "
+                         "porte aucun sinistre, le pouvoir discriminant ne peut "
+                         "pas être mesuré. Ce n'est pas un ajustement insuffisant.")
+        elif gini_max >= 0.15:
             h3_statut = "VERT"
-            h3_msg    = f"Gini max = {gini_max:.4f} ≥ 0.15 → Bon ajustement GLM ✅"
+            h3_msg    = f"Gini max = {gini_texte(gini_max)} ≥ 0.15 → Bon ajustement GLM ✅"
             h3_conseil= "Le GLM explique bien la sinistralité — défendable devant l'ACPR"
         elif gini_max >= 0.10:
             h3_statut = "AMBRE"
-            h3_msg    = f"Gini max = {gini_max:.4f} ∈ [0.10, 0.15] → Ajustement acceptable ⚠️"
+            h3_msg    = f"Gini max = {gini_texte(gini_max)} ∈ [0.10, 0.15] → Ajustement acceptable ⚠️"
             h3_conseil= "GLM utilisable — enrichir avec plus de variables actuarielles"
         elif gini_max >= 0.08:
             h3_statut = "AMBRE"
-            h3_msg    = f"Gini max = {gini_max:.4f} ∈ [0.08, 0.10] → Ajustement limite ⚠️"
+            h3_msg    = f"Gini max = {gini_texte(gini_max)} ∈ [0.08, 0.10] → Ajustement limite ⚠️"
             h3_conseil= "Ajouter variables bonus-malus, zone géographique, usage véhicule"
         else:
             h3_statut = "ROUGE"
-            h3_msg    = f"Gini max = {gini_max:.4f} < 0.08 → Ajustement insuffisant ❌"
+            h3_msg    = f"Gini max = {gini_texte(gini_max)} < 0.08 → Ajustement insuffisant ❌"
             h3_conseil= "Données insuffisantes ou modèle mal spécifié — revoir la sélection de variables"
 
         # ── H4 — Stabilité des relativités (bootstrap) ───────────────────────
@@ -3027,14 +3085,14 @@ class AgentA3GLM:
                        else "Homoscédasticité — ratio variance non mesuré")),
             },
             "h3_ajustement": {
-                "gini_poisson": round(gini_poisson, 4),
-                "gini_gamma":   round(gini_gamma, 4),
-                "gini_tweedie": round(gini_tweedie, 4),
-                "gini_max":     round(gini_max, 4),
+                "gini_poisson": (round(gini_poisson, 4) if gini_poisson is not None else None),
+                "gini_gamma":   (round(gini_gamma, 4) if gini_gamma is not None else None),
+                "gini_tweedie": (round(gini_tweedie, 4) if gini_tweedie is not None else None),
+                "gini_max":     (round(gini_max, 4) if gini_max is not None else None),
                 "statut":       h3_statut,
                 "message":      h3_msg,
                 "conseil":      h3_conseil,
-                "titre_graphique": f"{'✅' if h3_statut=='VERT' else '⚠️' if h3_statut=='AMBRE' else '❌'} Gini GLM = {gini_max:.4f}",
+                "titre_graphique": f"{'✅' if h3_statut=='VERT' else '⚠️' if h3_statut=='AMBRE' else '❌'} Gini GLM = {gini_texte(gini_max)}",
             },
             "h4_stabilite": {
                 "cv_max":           round(rel_cv_max, 4) if rel_cv_max is not None else None,

@@ -2489,6 +2489,32 @@ GINI_ABSENT = 'ABSENT'
 GINI_NON_MESURE = 'NON_MESURE'
 
 
+def gini_texte(valeur, decimales: int = 4) -> str:
+    """Un Gini pour un texte : « non mesuré » quand il n'existe pas.
+
+    Un Gini ``None`` (aucun sinistre observé sur le jeu d'évaluation, ou
+    prédictions dégénérées) n'est pas un nombre : le formater en ``0.0000``
+    fabriquerait une mesure que personne n'a faite. Tout format ``:.4f`` d'un
+    Gini dans un livrable passe par ici. Un Gini non fini reçoit le même mot
+    que l'absence — c'est l'état NON_MESURE de :func:`etats_gini`.
+    """
+    if valeur is None or not math.isfinite(valeur):
+        return 'non mesuré'
+    return f'{valeur:.{decimales}f}'
+
+
+def gini_arrondi(valeur, decimales: int = 4):
+    """Un Gini pour une cellule de classeur : arrondi s'il existe, sinon le mot.
+
+    Même contrat que :func:`gini_texte`, pour les cellules numériques d'un
+    Excel : une valeur mesurée reste un nombre (arrondi comme avant), une
+    valeur absente ou non finie devient la chaîne « non mesuré » — jamais 0.
+    """
+    if valeur is None or not math.isfinite(valeur):
+        return 'non mesuré'
+    return round(valeur, decimales)
+
+
 def etats_gini(metriques: dict | None,
                modeles: tuple = MODELES_GLM) -> dict[str, object]:
     """L'état du Gini de chaque modèle : une valeur, `ABSENT`, ou `NON_MESURE`.

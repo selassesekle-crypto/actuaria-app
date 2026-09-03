@@ -119,7 +119,14 @@ class POS_Hyp_a5C1_UnGiniECRETENEstPasUnGiniMESURE(unittest.TestCase):
         self.assertNotIn('max(gini_cann, gini_tabnet, 0)', src,
                          "le plancher a zero subsiste : un Gini negatif serait "
                          "encore publie comme 0.0000")
-        self.assertIn('max(gini_cann, gini_tabnet)', src)
+        # Depuis le lot << 0.0 fabriques >> (03/09/2026), le maximum porte sur
+        # les Ginis MESURES (un None n'est pas un candidat) -- toujours sans
+        # plancher : un Gini negatif reste le maximum s'il est le seul mesure.
+        self.assertIn('gini_dl_max  = max(_dl_mesures) if _dl_mesures else None',
+                      src)
+        ligne = next(l for l in src.splitlines() if 'gini_dl_max  = max(' in l)
+        self.assertNotRegex(ligne, r'max\([^)]*\b0(\.0)?\b',
+                            "un plancher a zero est revenu dans le maximum")
         print("    POS-HYP a5/C1 le plancher a zero a disparu ✅")
 
     def test_un_gini_NEGATIF_est_publie_tel_quel(self):
@@ -130,7 +137,7 @@ class POS_Hyp_a5C1_UnGiniECRETENEstPasUnGiniMESURE(unittest.TestCase):
 
         from direction_non_vie.tarification.a5_deep_learning import agent as A5
         src = inspect.getsource(A5.AgentA5DeepLearning)
-        i = src.index('gini_dl_max  = max(gini_cann, gini_tabnet)')
+        i = src.index('gini_dl_max  = max(_dl_mesures) if _dl_mesures else None')
         bloc = src[max(0, i - 900):i]
         self.assertIn('a5/C1', bloc, "le constat n'est pas trace au code")
         self.assertIn('indiscernable', bloc,

@@ -91,9 +91,13 @@ class T1_A5NeProduitPlusDeNan(unittest.TestCase):
     def test_nf_1_A5_rend_un_nombre_FINI_sur_un_test_sans_sinistre(self):
         """NF-1 : la garde qui manquait, eprouvee sur la VRAIE methode.
 
-        ⚠️ Le controle porte sur `math.isfinite`, pas sur `== 0.0` : ce qui
-        compte est qu'aucune valeur non finie ne sorte, pas la valeur exacte
-        qui la remplace.
+        ⚠️ Contrat RENFORCE le 03/09/2026 (lot « 0.0 fabriques »). Ce test
+        exigeait « un nombre fini, quelle que soit la valeur qui remplace le
+        nan » — et la valeur de remplacement etait un 0.0 qui affirmait un
+        pouvoir discriminant nul que rien n'avait mesure. Sur un test sans
+        sinistre, la mesure N'EXISTE PAS : la methode rend `None`, ni nan
+        (division par zero non gardee) ni 0.0 (mesure fabriquee). Voir
+        test_gini_none_pas_zero.py pour la chaine complete.
         """
         from direction_non_vie.tarification.a5_deep_learning.agent import (
             AgentA5DeepLearning,
@@ -101,11 +105,12 @@ class T1_A5NeProduitPlusDeNan(unittest.TestCase):
         a5 = AgentA5DeepLearning.__new__(AgentA5DeepLearning)
         pred = np.random.RandomState(0).rand(100)
         gini = a5._calculer_gini(np.zeros(100), pred)
-        self.assertTrue(
-            np.isfinite(gini),
-            f"A5 publie un Gini NON FINI ({gini!r}) sur un test sans "
-            f"sinistre : la division par zero n'est pas gardee, et un "
-            f"RuntimeWarning n'est pas une exception")
+        self.assertIsNone(
+            gini,
+            f"A5 publie {gini!r} sur un test sans sinistre : la mesure "
+            f"n'existe pas, elle se dit None — ni un nan (division par zero "
+            f"non gardee, un RuntimeWarning n'est pas une exception) ni un "
+            f"0.0 (pouvoir discriminant nul que rien n'a mesure)")
 
     def test_nf_2_les_trois_agents_ont_LA_MEME_garde(self):
         """NF-2 : l'asymetrie entre voisins etait le revelateur.

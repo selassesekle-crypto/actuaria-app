@@ -467,26 +467,14 @@ class AgentA6Comparaison:
         rapport = {'etapes': [], 'alertes': []}
 
         try:
-            # ── ÉTAPE 1 : AGRÉGATION (filtrée sur la cible d'A6) ──────────────
-            logger.info("Étape 1/5 : Agrégation des résultats")
-            catalogue, exclusions_cible, exclusions_metrique = (
-                self._agreger_resultats(
-                    result_a3, result_a4, result_a5, col_cible=col_cible
-                )
-            )
-            rapport['etapes'].append('agregation')
-            rapport['nb_modeles'] = len(catalogue)
-            rapport['exclusions_cible'] = exclusions_cible
-            rapport['exclusions_metrique'] = exclusions_metrique
-
-            # ── AUCUN MODÈLE ÉVALUABLE → ON REFUSE DE CHOISIR ────────────────
+            # ── AUCUN MODÈLE ÉVALUABLE → ON REFUSE DE CHOISIR, AVANT D'AGRÉGER ──
             # ⚠️⚠️ LE CONTRÔLE PORTE SUR LE DIAGNOSTIC, PAS SUR LE CATALOGUE,
-            # ET C'EST TOUT L'ENJEU. Le refus existant plus bas ne tire que
-            # si le catalogue est VIDE — or `_calculer_gini` rend encore
-            # `0.0` sur un jeu non mesurable dans les trois agents : les
-            # modèles y restent, notés zéro, et l'arbitrage « choisit » entre
-            # des notes fabriquées. Un catalogue plein n'est donc PAS une
-            # preuve qu'il y avait quelque chose à comparer.
+            # ET IL PRÉCÈDE L'AGRÉGATION — c'est l'ordre d'exécution qui décide.
+            # Depuis que `_calculer_gini` rend `None` sur un jeu non mesurable
+            # (03/09/2026), l'agrégation ÉCARTE ces modèles et lève « Aucun
+            # modèle ajusté » sur un catalogue vide : placé APRÈS elle, ce refus
+            # motivé n'arrivait jamais, le message générique parlait à sa place.
+            # Mesuré sur un test sans sinistre, corrigé en le remontant ici.
             #
             # ⚠️ ON REFUSE LA SÉLECTION, PAS LA CALIBRATION. Les modèles
             # restent dans `result_a3` / `result_a4` / `result_a5` : ce qui
@@ -504,10 +492,32 @@ class AgentA6Comparaison:
             # comparaison garde un sens et c'est `reserve_arbitrage` qui le
             # dit. Le refus est réservé au cas où PLUS RIEN n'est mesurable.
             if doit_refuser_arbitrage(_diags, _sources):
-                _modeles = [m.get('modele') for m in catalogue] or [
-                    x['modele'] for x in exclusions_metrique]
+                # Les modèles se nomment depuis les sources, filtrés sur la
+                # cible comme le ferait le catalogue — qui n'existe pas encore.
+                _modeles = [str(nom) for r in _sources
+                            for nom, m in (r.get('metriques') or {}).items()
+                            if not col_cible
+                            or (m or {}).get('cible', col_cible) == col_cible]
+                # ⚠️ Le diagnostic d'A3 porte SA colonne (la frequence) ; le
+                # message doit nommer LA CIBLE DE CET ARBITRAGE, sinon la
+                # prime pure se voit refusee << sur nb_sinistres >>. Mesure.
                 raise ArbitrageImpossible(
-                    message_arbitrage_impossible(_diags[0], _modeles))
+                    message_arbitrage_impossible(
+                        {**_diags[0], 'cible': col_cible or _diags[0]['cible']},
+                        _modeles))
+
+            # ── ÉTAPE 1 : AGRÉGATION (filtrée sur la cible d'A6) ──────────────
+            logger.info("Étape 1/5 : Agrégation des résultats")
+            catalogue, exclusions_cible, exclusions_metrique = (
+                self._agreger_resultats(
+                    result_a3, result_a4, result_a5, col_cible=col_cible
+                )
+            )
+            rapport['etapes'].append('agregation')
+            rapport['nb_modeles'] = len(catalogue)
+            rapport['exclusions_cible'] = exclusions_cible
+            rapport['exclusions_metrique'] = exclusions_metrique
+
             if exclusions_metrique:
                 logger.warning(
                     f"{len(exclusions_metrique)} modèle(s) écarté(s) — Gini non "

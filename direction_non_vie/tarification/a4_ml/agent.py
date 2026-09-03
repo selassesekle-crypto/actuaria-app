@@ -176,6 +176,7 @@ from core.conformite_reglementaire import (
     BASE_GINI_UNITAIRE,
     construire_matrice_x,
     colonne_temporelle, diagnostiquer_evaluation, phrase_evaluation_impossible,
+    gini_texte,
 )
 # ⚠️ SOURCE UNIQUE. L'etat de l'elasticite etait defini ICI au lot L0 ;
 # il vit desormais dans `core/elasticite.py`, avec le catalogue
@@ -802,7 +803,7 @@ class AgentA4ML:
             )
         else:
             logger.info(
-                f"[{audit_id}] Gini GLM référence (A3) = {gini_reference_a3:.4f}"
+                f"[{audit_id}] Gini GLM référence (A3) = {gini_texte(gini_reference_a3)}"
             )
 
         # Réinitialisation pour chaque appel
@@ -898,8 +899,17 @@ class AgentA4ML:
                         m = xgb_local.XGBRegressor(**params_trial)
                         m.fit(X_train, y_train, sample_weight=w_train)
                         pred = np.maximum(m.predict(X_test), 0)
-                        return -self._calculer_gini(y_test, pred)
+                        _g_essai = self._calculer_gini(y_test, pred)
+                        if _g_essai is None:
+                            # Gini non mesurable : l'essai n'a pas de score,
+                            # il ne vaut pas 0.
+                            raise optuna.TrialPruned()
+                        return -_g_essai
 
+                    if float(np.nan_to_num(y_test).sum()) <= 0:
+                        raise ValueError(
+                            "Optuna : aucun sinistre observé sur le jeu de test, "
+                            "le Gini n'y est pas mesurable — optimisation sans objet")
                     study = optuna.create_study(
                         direction='minimize',
                         sampler=optuna.samplers.TPESampler(seed=42)
@@ -914,6 +924,10 @@ class AgentA4ML:
                     m_opt.fit(X_train, y_train, sample_weight=w_train)
                     pred_opt  = np.maximum(m_opt.predict(X_test), 0)
                     gini_opt  = self._calculer_gini(y_test, pred_opt)
+                    if gini_opt is None:
+                        raise ValueError(
+                            "Optuna : Gini du modèle optimisé non mesurable "
+                            "(prédictions dégénérées) — modèle non retenu")
                     rmse_opt  = float(np.sqrt(np.mean((y_test - pred_opt)**2)))
                     of_opt    = gini_opt / max(
                         self._calculer_gini(y_train, np.maximum(m_opt.predict(X_train), 0)),
@@ -932,7 +946,9 @@ class AgentA4ML:
                         'overfit_alerte': bool(of_opt < 0.85),
                         'params_optuna':  best_params,
                     })
-                    classement.sort(key=lambda x: x['gini_test'], reverse=True)
+                    classement.sort(key=lambda x: (x['gini_test'] is not None,
+                                       x['gini_test'] or 0.0),
+                        reverse=True)
                     self.modeles['xgboost_optuna'] = m_opt
                     rapport['optuna_xgboost'] = {
                         'trials':      optuna_trials,
@@ -940,7 +956,7 @@ class AgentA4ML:
                         'best_params': best_params,
                     }
                     logger.info(
-                        f"[{audit_id}] Optuna XGBoost best Gini = {gini_opt:.4f}"
+                        f"[{audit_id}] Optuna XGBoost best Gini = {gini_texte(gini_opt)}"
                     )
                 except Exception as e_opt:
                     logger.warning(
@@ -1453,7 +1469,7 @@ class AgentA4ML:
 
                 logger.info(
                     f"  {nom.upper():<15} "
-                    f"Gini={metriques['gini_test']:.4f} | "
+                    f"Gini={gini_texte(metriques['gini_test'])} | "
                     f"RMSE={metriques['rmse_test']:.4f}"
                 )
 
@@ -1572,7 +1588,9 @@ class AgentA4ML:
         # sur données synthétiques simples), on retourne 1.0 (neutre) pour éviter
         # un ratio nul trompeur. Un ratio nul ne signifie pas l'absence d'overfitting
         # — il signifie que le modèle n'a pas appris sur train non plus.
-        if gini_train <= 0:
+        if gini_train is None or gini_test is None:
+            overfit = None  # NON EVALUABLE : un Gini n'est pas mesure
+        elif gini_train <= 0:
             overfit = 1.0   # Neutre — modèle non discriminant sur train
         else:
             overfit = gini_train / max(gini_test, 1e-6)
@@ -1603,10 +1621,10 @@ class AgentA4ML:
             deviance_poisson = np.nan
 
         return {
-            'gini_train':        round(float(gini_train), 4),
-            'gini_test':         round(float(gini_test), 4),
+            'gini_train':        (None if gini_train is None else round(float(gini_train), 4)),
+            'gini_test':         (None if gini_test is None else round(float(gini_test), 4)),
             'base_gini':         base_gini,
-            'overfit_ratio':     round(float(overfit), 3),
+            'overfit_ratio':     (None if overfit is None else round(float(overfit), 3)),
             'rmse_train':        round(float(rmse_train), 4),
             'rmse_test':         round(float(rmse_test), 4),
             'mae_test':          round(float(mae_test), 4),
@@ -1621,10 +1639,10 @@ class AgentA4ML:
         self,
         y_true: np.ndarray,
         y_pred: np.ndarray
-    ) -> float:
+    ) -> float | None:
         """Calcule le coefficient de Gini (même méthode que A3)."""
         if len(y_true) == 0:
-            return 0.0
+            return None
         # Audit V7 MINEUR : garde manquant — A3 possède ce garde depuis
         # l'origine, A4 ne l'avait pas. Sans lui, np.sum(y_true) == 0
         # (aucun sinistre sur l'échantillon test) produit une division
@@ -1632,7 +1650,7 @@ class AgentA4ML:
         # donc le except Exception ci-dessous ne l'attrapait pas non
         # plus) — confirmé par exécution lors de l'audit V7.
         if np.sum(y_true) == 0:
-            return 0.0
+            return None
         try:
             order   = np.argsort(y_pred)[::-1]  # Décroissant — les plus risqués d'abord
             y_true  = y_true[order]
@@ -1653,14 +1671,14 @@ class AgentA4ML:
             gini = float(np.clip(2 * auc - 1, -1.0, 1.0))
             if gini < 0:
                 logger.warning(
-                    f"[ANTI-SÉLECTION] Gini NÉGATIF ({gini:.4f}) — le modèle "
+                    f"[ANTI-SÉLECTION] Gini NÉGATIF ({gini_texte(gini)}) — le modèle "
                     f"discrimine À L'ENVERS : il attribue les primes les plus "
                     f"faibles aux risques les plus élevés. Modèle INUTILISABLE "
                     f"en l'état, quelle que soit sa performance par ailleurs."
                 )
             return gini
         except Exception:
-            return 0.0
+            return None
 
     # ══════════════════════════════════════════════════════════════════════════
     # CLASSEMENT DES MODÈLES
@@ -1689,7 +1707,8 @@ class AgentA4ML:
         classement = []
 
         for nom, met in self.metriques.items():
-            overfit_alerte = met['overfit_ratio'] > 1.15
+            overfit_alerte = (None if met['overfit_ratio'] is None
+                                      else met['overfit_ratio'] > 1.15)
 
             classement.append({
                 'modele':          nom,
@@ -1700,7 +1719,10 @@ class AgentA4ML:
                 'rmse_test':       met['rmse_test'],
                 'mae_test':        met['mae_test'],
                 'overfit_alerte':  overfit_alerte,
-                'recommandation':  '⚠️ Overfitting détecté' if overfit_alerte else '✅ Stable',
+                'recommandation':  ('⚠️ Sur-apprentissage non évaluable (Gini '
+                                    'non mesuré)' if overfit_alerte is None else
+                                    '⚠️ Overfitting détecté' if overfit_alerte
+                                    else '✅ Stable'),
             })
 
         # Ajout du GLM Poisson comme référence
@@ -1711,15 +1733,19 @@ class AgentA4ML:
                 'famille':        'GLM',
                 'gini_test':      gini_glm,
                 'gini_train':     gini_glm,
-                'overfit_ratio':  1.0,
+                # Sans Gini mesure (aucun sinistre en test), il n'y a ni
+                # ratio ni alerte : les deux se disent None, pas << stable >>.
+                'overfit_ratio':  (None if gini_glm is None else 1.0),
                 'rmse_test':      result_a3['metriques'].get('poisson', {}).get('rmse_test', 0),
                 'mae_test':       0,
-                'overfit_alerte': False,
+                'overfit_alerte': (None if gini_glm is None else False),
                 'recommandation': '📊 Référence GLM',
             })
 
         # Tri par Gini décroissant
-        classement.sort(key=lambda x: x['gini_test'], reverse=True)
+        classement.sort(key=lambda x: (x['gini_test'] is not None,
+                                       x['gini_test'] or 0.0),
+                        reverse=True)
 
         return classement
 
@@ -1929,6 +1955,11 @@ class AgentA4ML:
         if result_a3 and result_a3.get('success'):
             gini_glm = result_a3['metriques'].get('poisson', {}).get('gini', 0)
 
+        if meilleur_gini_ml is None or gini_glm is None:
+            # Gini NON MESURE (aucun sinistre sur le jeu de test) : le critere
+            # de selection n'a pas de base. Un Gini absent reserve, il ne
+            # colore pas (arbitrage du 03/09/2026) : AMBRE + diagnostic publie.
+            return 'AMBRE'
         amelioration = meilleur_gini_ml - gini_glm
 
         # Overfitting sur le meilleur modèle
@@ -1981,12 +2012,13 @@ class AgentA4ML:
         for i, c in enumerate(classement[:5], 1):
             niveau1 += (
                 f"  {i}. {c['modele']:<30} "
-                f"Gini={c['gini_test']:.4f} | "
+                f"Gini={gini_texte(c['gini_test'])} | "
                 f"RMSE={c['rmse_test']:.4f} | "
                 f"{c['recommandation']}\n"
             )
 
-        if gini_glm > 0:
+        if (gini_glm is not None and gini_glm > 0
+                and meilleur.get('gini_test', 0) is not None):
             amelioration = (meilleur.get('gini_test', 0) - gini_glm) / max(gini_glm, 1e-6) * 100
             niveau1 += f"\n  Amélioration vs GLM : {amelioration:+.1f}%"
 
@@ -2021,14 +2053,16 @@ class AgentA4ML:
         meilleur_nom  = meilleur.get('modele', 'N/A')
         meilleur_gini = meilleur.get('gini_test', 0)
         overfit       = meilleur.get('overfit_alerte', False)
+        _gain_glm     = (None if meilleur_gini is None or gini_glm is None
+                         else meilleur_gini - gini_glm)
 
         if statut_rag == 'VERT':
             niveau2 = (
                 f"DIAGNOSTIC ACTUARIEL :\n"
                 f"Le modèle {meilleur_nom} est le meilleur performer "
-                f"avec un Gini de {meilleur_gini:.4f}, supérieur au GLM "
-                f"Poisson de référence ({gini_glm:.4f}). "
-                f"Ce gain de {(meilleur_gini-gini_glm):.4f} points de Gini "
+                f"avec un Gini de {gini_texte(meilleur_gini)}, supérieur au GLM "
+                f"Poisson de référence ({gini_texte(gini_glm)}). "
+                f"Ce gain de {gini_texte(_gain_glm)} points de Gini "
                 f"reflète la capacité des modèles ML à capturer des "
                 f"interactions non-linéaires entre les variables de risque "
                 f"que le GLM ne peut modéliser (ex : effet combiné âge×BM "
@@ -2116,10 +2150,11 @@ class AgentA4ML:
         print(f"  {'Rang':<5} {'Modèle':<30} {'Gini':<8} {'RMSE':<8} {'Overfit'}")
         print(f"  {'-'*60}")
         for i, c in enumerate(classement, 1):
-            ov = f"{c['overfit_ratio']:.2f}" if 'overfit_ratio' in c else 'N/A'
+            ov = (f"{c['overfit_ratio']:.2f}"
+                  if c.get('overfit_ratio') is not None else 'N/A')
             print(
                 f"  {i:<5} {c['modele']:<30} "
-                f"{c['gini_test']:<8.4f} {c['rmse_test']:<8.4f} {ov}"
+                f"{gini_texte(c['gini_test']):<8} {c['rmse_test']:<8.4f} {ov}"
             )
         print(f"\n{sep}")
         for ligne in commentaire.split('\n'):
@@ -2239,7 +2274,7 @@ class AgentA4ML:
                 # Lift décile k = (% sinistres dans décile k) / (10%)
                 # Approximation analytique basée sur la courbe de Lorenz
                 deciles = list(range(1, 11))
-                if gini > 0.01:
+                if gini is not None and gini > 0.01:
                     # Modèle discriminant : lift croissant
                     lifts = [
                         max(0.1, 1 + (gini * 3) * (d - 5.5) / 5.5)
@@ -2254,7 +2289,7 @@ class AgentA4ML:
                     x    = deciles,
                     y    = lifts,
                     mode = 'lines+markers',
-                    name = f"{nom} (Gini={gini:.3f})",
+                    name = f"{nom} (Gini={gini_texte(gini, 3)})",
                     line = dict(
                         color    = couleur,
                         width    = 2.5 if idx == 0 else 1.5,
@@ -2367,13 +2402,13 @@ class AgentA4ML:
             ), secondary_y=True)
 
             # Ligne Gini GLM référence
-            if gini_glm > 0:
+            if gini_glm is not None and gini_glm > 0:
                 fig3.add_hline(
                     y                  = gini_glm,
                     line_dash          = "dash",
                     line_color         = VERT,
                     line_width         = 1.5,
-                    annotation_text    = f"GLM ref = {gini_glm:.3f}",
+                    annotation_text    = f"GLM ref = {gini_texte(gini_glm, 3)}",
                     annotation_font    = dict(color=VERT, size=10),
                     annotation_position= "bottom left",
                     secondary_y        = False,
@@ -2465,9 +2500,9 @@ class AgentA4ML:
                     ),
                     hovertemplate = (
                         f"<b>{nom}</b><br>"
-                        f"Gini : <b>{gini:.4f}</b><br>"
+                        f"Gini : <b>{gini_texte(gini)}</b><br>"
                         f"RMSE : <b>{rmse:.4f}</b><br>"
-                        f"Overfit : <b>{overfit:.2f}</b><extra></extra>"
+                        f"Overfit : <b>{gini_texte(overfit, 2)}</b><extra></extra>"
                     ),
                     showlegend = False,
                 ))
@@ -2807,9 +2842,21 @@ class AgentA4ML:
         if classement:
             meilleur   = classement[0]
             gini_test  = meilleur.get('gini_test', meilleur.get('gini', 0))
-            gini_train = meilleur.get('gini_train', gini_test * 1.10)
-            ratio_of   = gini_test / max(gini_train, 0.001)
-            if ratio_of >= 0.90:
+            gini_train = meilleur.get('gini_train')
+            if gini_train is None and gini_test is not None:
+                gini_train = gini_test * 1.10
+            ratio_of   = (gini_test / max(gini_train, 0.001)
+                          if gini_test is not None and gini_train is not None
+                          else None)
+            if ratio_of is None:
+                h1_statut = "AMBRE"
+                h1_msg = ("Ratio Gini test/train NON MESURABLE : au moins un des deux "
+                          "Ginis n'existe pas (aucun sinistre observé sur le jeu "
+                          "concerné) → hypothèse H1 non évaluable ⚠️")
+                h1_conseil = ("Constituer un jeu de test qui contient des sinistres "
+                              "(découpage temporel avec exposition suffisante) avant de "
+                              "conclure sur le sur-apprentissage")
+            elif ratio_of >= 0.90:
                 h1_statut = "VERT"
                 h1_msg    = f"Ratio test/train = {ratio_of:.3f} ≥ 0.90 → Pas d'overfitting ✅"
                 h1_conseil= f"Le modèle {meilleur.get('modele','?')} généralise bien"
@@ -2874,21 +2921,28 @@ class AgentA4ML:
             h2_conseil= "Ré-entraînement requis — la distribution des données a changé"
 
         # ── H3 — Performance Gini ─────────────────────────────────────────────
-        if gini_test >= 0.25:
+        if gini_test is None:
+            h3_statut = "AMBRE"
+            h3_msg = ("Gini test NON MESURÉ (aucun sinistre observé sur le jeu de "
+                      "test) → hypothèse H3 non évaluable ⚠️")
+            h3_conseil = ("Aucun modèle ML ne peut être évalué ni retenu sur ces "
+                          "données : voir le diagnostic d'évaluation publié par "
+                          "l'agent")
+        elif gini_test >= 0.25:
             h3_statut = "VERT"
-            h3_msg    = f"Gini = {gini_test:.4f} ≥ 0.25 → Performance bonne ✅✅"
+            h3_msg    = f"Gini = {gini_texte(gini_test)} ≥ 0.25 → Performance bonne ✅✅"
             h3_conseil= "Modèle performant — défendable devant l'actuaire désigné et l'ACPR"
         elif gini_test >= 0.20:
             h3_statut = "VERT"
-            h3_msg    = f"Gini = {gini_test:.4f} ∈ [0.20,0.25] → Performance acceptable ✅"
+            h3_msg    = f"Gini = {gini_texte(gini_test)} ∈ [0.20,0.25] → Performance acceptable ✅"
             h3_conseil= "Modèle utilisable — surveiller l'évolution du Gini en production"
         elif gini_test >= 0.15:
             h3_statut = "AMBRE"
-            h3_msg    = f"Gini = {gini_test:.4f} ∈ [0.15,0.20] → Performance limite ⚠️"
+            h3_msg    = f"Gini = {gini_texte(gini_test)} ∈ [0.15,0.20] → Performance limite ⚠️"
             h3_conseil= "Enrichir les données · Ajouter des variables actuarielles"
         else:
             h3_statut = "ROUGE"
-            h3_msg    = f"Gini = {gini_test:.4f} < 0.15 → Performance insuffisante ❌"
+            h3_msg    = f"Gini = {gini_texte(gini_test)} < 0.15 → Performance insuffisante ❌"
             h3_conseil= "Modèle à rejeter — données insuffisantes ou inadaptées"
 
         # ── H4 — Calibration (Reliability diagram) ───────────────────────────
@@ -2969,13 +3023,13 @@ class AgentA4ML:
 
         return {
             "h1_overfitting": {
-                "ratio":      round(ratio_of, 4),
-                "gini_test":  round(gini_test, 4),
-                "gini_train": round(gini_train, 4),
+                "ratio":      (None if ratio_of is None else round(ratio_of, 4)),
+                "gini_test":  (None if gini_test is None else round(gini_test, 4)),
+                "gini_train": (None if gini_train is None else round(gini_train, 4)),
                 "statut":     h1_statut,
                 "message":    h1_msg,
                 "conseil":    h1_conseil,
-                "titre_graphique": f"{'✅' if h1_statut=='VERT' else '⚠️' if h1_statut=='AMBRE' else '❌'} Overfitting — Ratio test/train = {ratio_of:.3f}",
+                "titre_graphique": f"{'✅' if h1_statut=='VERT' else '⚠️' if h1_statut=='AMBRE' else '❌'} Overfitting — Ratio test/train = {gini_texte(ratio_of, 3)}",
             },
             "h2_psi": {
                 "psi":        round(psi_global, 4),
@@ -2987,11 +3041,11 @@ class AgentA4ML:
                 "titre_graphique": f"{'✅' if h2_statut=='VERT' else '⚠️' if h2_statut=='AMBRE' else '❌'} PSI réel = {psi_global:.4f}",
             },
             "h3_gini": {
-                "gini":   round(gini_test, 4),
+                "gini":   (None if gini_test is None else round(gini_test, 4)),
                 "statut": h3_statut,
                 "message":h3_msg,
                 "conseil":h3_conseil,
-                "titre_graphique": f"{'✅' if h3_statut=='VERT' else '⚠️' if h3_statut=='AMBRE' else '❌'} Performance Gini = {gini_test:.4f}",
+                "titre_graphique": f"{'✅' if h3_statut=='VERT' else '⚠️' if h3_statut=='AMBRE' else '❌'} Performance Gini = {gini_texte(gini_test)}",
             },
             "h4_calibration": {
                 # ⚠️ None TRAVERSE : un consommateur doit pouvoir distinguer
@@ -3141,7 +3195,7 @@ class AgentA4ML:
             ))
             if gini_ref is not None:
                 fig2.add_hline(y=gini_ref, line_color=VERT, line_width=1.5, line_dash="dash",
-                              annotation_text=f"Référence {gini_ref:.4f}",
+                              annotation_text=f"Référence {gini_texte(gini_ref)}",
                               annotation_font=dict(color=VERT, size=9))
             # ⚠️⚠️ LA LIGNE RESTE ROUGE, LE TEXTE NON — étape 2b. Mesuré :
             # ROUGE #E74C3C vaut 3,74 sur le tracé : il PASSE comme objet

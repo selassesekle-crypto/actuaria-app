@@ -54,6 +54,7 @@ from core.conformite_reglementaire import (
     BASE_GINI_COMPTAGE, BASE_GINI_UNITAIRE,
     construire_matrice_x,
     colonne_temporelle, diagnostiquer_evaluation, phrase_evaluation_impossible,
+    gini_texte,
 )
 from core.plan_tarifaire import (
     PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
@@ -596,7 +597,7 @@ class AgentA5DeepLearning:
                 self.metriques['cann'] = res_cann['metriques']
                 rapport['etapes'].append('cann')
                 logger.info(
-                    f"CANN | Gini={res_cann['metriques']['gini_test']:.4f} | "
+                    f"CANN | Gini={gini_texte(res_cann['metriques']['gini_test'])} | "
                     f"RMSE={res_cann['metriques']['rmse_test']:.2f}"
                 )
             else:
@@ -620,7 +621,7 @@ class AgentA5DeepLearning:
             self.metriques['tabnet'] = res_tabnet['metriques']
             rapport['etapes'].append('tabnet')
             logger.info(
-                f"TabNet | Gini={res_tabnet['metriques']['gini_test']:.4f} | "
+                f"TabNet | Gini={gini_texte(res_tabnet['metriques']['gini_test'])} | "
                 f"RMSE={res_tabnet['metriques']['rmse_test']:.2f}"
             )
 
@@ -1468,22 +1469,23 @@ class AgentA5DeepLearning:
         """
         gini_train = self._calculer_gini(y_train, pred_train)
         gini_test  = self._calculer_gini(y_test,  pred_test)
-        overfit    = gini_train / max(gini_test, 1e-6)
+        overfit    = (None if gini_train is None or gini_test is None
+                      else gini_train / max(gini_test, 1e-6))
         rmse_test  = float(np.sqrt(mean_squared_error(y_test, pred_test)))
 
         return {
-            'gini_train':    round(gini_train, 4),
-            'gini_test':     round(gini_test,  4),
+            'gini_train':    (None if gini_train is None else round(gini_train, 4)),
+            'gini_test':     (None if gini_test is None else round(gini_test, 4)),
             # ⚠️ Base MESURÉE par modèle, jamais supposée — voir la docstring.
             'base_gini':     (BASE_GINI_COMPTAGE if nom == 'cann'
                               else BASE_GINI_UNITAIRE),
-            'overfit_ratio': round(overfit,     3),
+            'overfit_ratio': (None if overfit is None else round(overfit, 3)),
             'rmse_test':     round(rmse_test,   2),
             'pred_mean':     round(float(pred_test.mean()), 2),
             'obs_mean':      round(float(y_test.mean()),    2),
         }
 
-    def _calculer_gini(self, y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    def _calculer_gini(self, y_true: np.ndarray, y_pred: np.ndarray) -> float | None:
         """Gini décroissant — même méthode que A3/A4.
 
         ⚠️⚠️ IL MANQUAIT LA GARDE QUE SES DEUX VOISINS ONT, ET LE RÉSULTAT
@@ -1510,10 +1512,10 @@ class AgentA5DeepLearning:
         NON FINI, de sorte que la valeur ne décide plus de rien.
         """
         if len(y_true) == 0:
-            return 0.0
+            return None
         if np.sum(y_true) == 0:
             # Aucun sinistre sur la période de test — Gini incalculable.
-            return 0.0
+            return None
         try:
             order   = np.argsort(y_pred)[::-1]
             y_true  = np.array(y_true)[order]
@@ -1535,14 +1537,14 @@ class AgentA5DeepLearning:
             gini = float(np.clip(2 * auc - 1, -1.0, 1.0))
             if gini < 0:
                 logger.warning(
-                    f"[ANTI-SÉLECTION] Gini NÉGATIF ({gini:.4f}) — le modèle "
+                    f"[ANTI-SÉLECTION] Gini NÉGATIF ({gini_texte(gini)}) — le modèle "
                     f"discrimine À L'ENVERS : il attribue les primes les plus "
                     f"faibles aux risques les plus élevés. Modèle INUTILISABLE "
                     f"en l'état, quelle que soit sa performance par ailleurs."
                 )
             return gini
         except Exception:
-            return 0.0
+            return None
 
     # ══════════════════════════════════════════════════════════════════════════
     # CLASSEMENT
@@ -1596,7 +1598,9 @@ class AgentA5DeepLearning:
                 'type':          'Référence A3',
             })
 
-        classement.sort(key=lambda x: x['gini_test'], reverse=True)
+        classement.sort(key=lambda x: (x['gini_test'] is not None,
+                                       x['gini_test'] or 0.0),
+                        reverse=True)
         return classement
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -1663,7 +1667,13 @@ class AgentA5DeepLearning:
         dl_models = [c for c in classement if c.get('type') == 'Deep Learning']
         if not dl_models:
             return 'ROUGE'
-        best_gini = max(m['gini_test'] for m in dl_models)
+        _mesures = [m['gini_test'] for m in dl_models
+                    if m['gini_test'] is not None]
+        if not _mesures:
+            # Gini NON MESURE sur tous les DL : le statut n'a pas de base.
+            # Un Gini absent reserve, il ne colore pas : AMBRE + diagnostic.
+            return 'AMBRE'
+        best_gini = max(_mesures)
         if best_gini >= 0.15:
             return 'VERT'
         elif best_gini >= 0.05:
@@ -1698,7 +1708,7 @@ class AgentA5DeepLearning:
                 gini_ml = ml_only[0]['gini_test']
 
         _l_cann = (
-            f"CANN   : Gini={m_cann['gini_test']:.4f} | "
+            f"CANN   : Gini={gini_texte(m_cann['gini_test'])} | "
             f"RMSE={m_cann['rmse_test']:.2f} | "
             f"Époques={m_cann.get('n_epochs_reels', 'N/A')}\n"
             if m_cann else
@@ -1710,22 +1720,23 @@ class AgentA5DeepLearning:
             f"{emoji} DEEP LEARNING — {statut_rag}\n"
             f"Sous-branche : {sous_branche}\n\n"
             f"{_l_cann}"
-            f"TabNet : Gini={m_tab['gini_test']:.4f} | "
+            f"TabNet : Gini={gini_texte(m_tab['gini_test'])} | "
             f"RMSE={m_tab['rmse_test']:.2f} | "
             f"Époques={m_tab.get('n_epochs_reels', 'N/A')}\n\n"
             f"Références :\n"
-            f"  GLM Poisson (A3) : {gini_glm:.4f}\n"
-            f"  Meilleur ML (A4) : {gini_ml:.4f}"
+            f"  GLM Poisson (A3) : {gini_texte(gini_glm)}\n"
+            f"  Meilleur ML (A4) : {gini_texte(gini_ml)}"
         )
 
         # Max sur les modèles RÉELLEMENT calibrés (le CANN peut être exclu).
-        best_dl_gini = max([m['gini_test'] for m in (m_cann, m_tab) if m] or [0.0])
+        best_dl_gini = max([m['gini_test'] for m in (m_cann, m_tab)
+                    if m and m['gini_test'] is not None] or [None])
 
         if statut_rag == 'VERT':
             n2 = (
                 "DIAGNOSTIC ACTUARIEL :\n"
                 f"Les modèles Deep Learning atteignent un Gini de "
-                f"{best_dl_gini:.4f}, comparable aux meilleurs modèles ML. "
+                f"{gini_texte(best_dl_gini)}, comparable aux meilleurs modèles ML. "
                 f"Le CANN présente l'avantage de conserver une composante GLM "
                 f"interprétable, ce qui facilite la justification devant un "
                 f"auditeur S2. TabNet fournit une importance des features "
@@ -1741,7 +1752,7 @@ class AgentA5DeepLearning:
         else:
             n2 = (
                 "DIAGNOSTIC ACTUARIEL :\n"
-                f"Le Gini des modèles DL ({best_dl_gini:.4f}) reste en dessous "
+                f"Le Gini des modèles DL ({gini_texte(best_dl_gini)}) reste en dessous "
                 f"des modèles ML. 50 époques sur CPU Colab peuvent être "
                 f"insuffisantes pour que les réseaux convergent pleinement. "
                 f"Augmenter n_epochs=100 sur Colab Pro GPU améliorerait les résultats."
@@ -1769,7 +1780,7 @@ class AgentA5DeepLearning:
         for c in classement:
             print(
                 f"  {c['modele']:<35} "
-                f"{c['gini_test']:<10.4f} "
+                f"{gini_texte(c['gini_test']):<10} "
                 f"{c['rmse_test']:<10.2f} "
                 f"{c.get('type','')}"
             )
@@ -1990,7 +2001,9 @@ class AgentA5DeepLearning:
 
             if noms_comp:
                 # Tri par Gini décroissant
-                ordre = sorted(range(len(ginis_comp)), key=lambda i: ginis_comp[i], reverse=True)
+                ordre = sorted(range(len(ginis_comp)), key=lambda i: (ginis_comp[i] is not None,
+                                   ginis_comp[i] or 0.0),
+                    reverse=True)
                 noms_s   = [noms_comp[i]   for i in ordre]
                 ginis_s  = [ginis_comp[i]  for i in ordre]
                 colors_s = [colors_comp[i] for i in ordre]
@@ -2223,12 +2236,25 @@ class AgentA5DeepLearning:
         # (clé `gini_train`) : c'est lui qui est lu.
         gini_cann   = metriques.get('cann',   {}).get('gini_test', 0)
         gini_tabnet = metriques.get('tabnet', {}).get('gini_test', 0)
-        _tete_h2    = 'cann' if gini_cann >= gini_tabnet else 'tabnet'
+        if gini_cann is not None and gini_tabnet is not None:
+            _tete_h2 = 'cann' if gini_cann >= gini_tabnet else 'tabnet'
+        else:
+            _tete_h2 = 'cann' if gini_cann is not None else 'tabnet'
         gini_test_h2 = metriques.get(_tete_h2, {}).get('gini_test', 0)
         gini_train  = metriques.get(_tete_h2, {}).get('gini_train', 0)
-        ratio_of    = gini_test_h2 / max(gini_train, 0.001)
+        ratio_of    = (gini_test_h2 / max(gini_train, 0.001)
+                       if gini_test_h2 is not None and gini_train is not None
+                       else None)
 
-        if ratio_of >= 0.88:
+        if ratio_of is None:
+            h2_statut = "AMBRE"
+            h2_msg = ("Ratio Gini test/train NON MESURABLE : au moins un des deux "
+                      "Ginis n'existe pas (aucun sinistre observé sur le jeu "
+                      "concerné) → hypothèse H2 non évaluable ⚠️")
+            h2_conseil = ("Constituer un jeu de test qui contient des sinistres "
+                          "(découpage temporel avec exposition suffisante) avant de "
+                          "conclure sur le sur-apprentissage")
+        elif ratio_of >= 0.88:
             h2_statut = "VERT"
             h2_msg    = f"Gini test/train = {ratio_of:.3f} ≥ 0.88 → Pas de surapprentissage ✅"
             h2_conseil= "Le modèle DL généralise correctement sur données non vues"
@@ -2262,24 +2288,32 @@ class AgentA5DeepLearning:
         # zéro mesuré*. On publie donc la valeur RÉELLE, y compris négative —
         # un Gini négatif est une information, pas une erreur d'affichage :
         # il dit que le modèle classe À L'ENVERS.
-        gini_dl_max  = max(gini_cann, gini_tabnet)
-        gain_dl      = gini_dl_max - gini_glm_ref
+        _dl_mesures  = [g for g in (gini_cann, gini_tabnet) if g is not None]
+        gini_dl_max  = max(_dl_mesures) if _dl_mesures else None
+        gain_dl      = (None if gini_dl_max is None or gini_glm_ref is None
+                        else gini_dl_max - gini_glm_ref)
 
-        if gain_dl >= 0.05:
+        if gain_dl is None:
+            h3_statut = "AMBRE"
+            h3_msg = ("Gini DL ou GLM NON MESURÉ (aucun sinistre observé sur le "
+                      "jeu de test) → gain du Deep Learning non évaluable ⚠️")
+            h3_conseil = ("Aucune comparaison DL/GLM possible sur ces données : voir "
+                          "le diagnostic d'évaluation publié par l'agent")
+        elif gain_dl >= 0.05:
             h3_statut = "VERT"
-            h3_msg    = f"Gini DL = {gini_dl_max:.4f} vs GLM = {gini_glm_ref:.4f} → Gain = +{gain_dl:.4f} ✅"
+            h3_msg    = f"Gini DL = {gini_texte(gini_dl_max)} vs GLM = {gini_texte(gini_glm_ref)} → Gain = +{gain_dl:.4f} ✅"
             h3_conseil= "Le Deep Learning apporte un gain significatif vs GLM — utilisation justifiée"
         elif gain_dl >= 0.02:
             h3_statut = "VERT"
-            h3_msg    = f"Gini DL = {gini_dl_max:.4f} vs GLM = {gini_glm_ref:.4f} → Gain = +{gain_dl:.4f} ✅"
+            h3_msg    = f"Gini DL = {gini_texte(gini_dl_max)} vs GLM = {gini_texte(gini_glm_ref)} → Gain = +{gain_dl:.4f} ✅"
             h3_conseil= "Gain modéré — peser complexité vs performance pour la production"
         elif gain_dl >= 0:
             h3_statut = "AMBRE"
-            h3_msg    = f"Gini DL = {gini_dl_max:.4f} vs GLM = {gini_glm_ref:.4f} → Gain = +{gain_dl:.4f} ⚠️"
+            h3_msg    = f"Gini DL = {gini_texte(gini_dl_max)} vs GLM = {gini_texte(gini_glm_ref)} → Gain = +{gain_dl:.4f} ⚠️"
             h3_conseil= "DL marginalement meilleur — privilégier GLM pour l'interprétabilité ACPR"
         else:
             h3_statut = "ROUGE"
-            h3_msg    = f"Gini DL = {gini_dl_max:.4f} < GLM = {gini_glm_ref:.4f} → DL moins performant ❌"
+            h3_msg    = f"Gini DL = {gini_texte(gini_dl_max)} < GLM = {gini_texte(gini_glm_ref)} → DL moins performant ❌"
             h3_conseil= "Utiliser le GLM — DL non justifié sur ces données"
 
         statuts = [h1_statut, h2_statut, h3_statut]
@@ -2318,22 +2352,22 @@ class AgentA5DeepLearning:
                 "titre_graphique": f"{'✅' if h1_statut=='VERT' else '⚠️' if h1_statut=='AMBRE' else '❌'} Convergence — Loss finale {loss_final:.3f} ({ratio_conv*100:.0f}% initiale)",
             },
             "h2_surapprentissage": {
-                "ratio_of":    round(ratio_of, 4),
-                "gini_train":  round(gini_train, 4),
-                "gini_val":    round(max(gini_cann, gini_tabnet), 4),
+                "ratio_of":    (None if ratio_of is None else round(ratio_of, 4)),
+                "gini_train":  (None if gini_train is None else round(gini_train, 4)),
+                "gini_val":    (None if gini_dl_max is None else round(gini_dl_max, 4)),
                 "statut":      h2_statut,
                 "message":     h2_msg,
                 "conseil":     h2_conseil,
-                "titre_graphique": f"{'✅' if h2_statut=='VERT' else '⚠️' if h2_statut=='AMBRE' else '❌'} Surapprentissage — Gini test/train = {ratio_of:.3f}",
+                "titre_graphique": f"{'✅' if h2_statut=='VERT' else '⚠️' if h2_statut=='AMBRE' else '❌'} Surapprentissage — Gini test/train = {gini_texte(ratio_of, 3)}",
             },
             "h3_apport_dl": {
-                "gini_dl":     round(gini_dl_max, 4),
-                "gini_glm":    round(gini_glm_ref, 4),
-                "gain":        round(gain_dl, 4),
+                "gini_dl":     (None if gini_dl_max is None else round(gini_dl_max, 4)),
+                "gini_glm":    (None if gini_glm_ref is None else round(gini_glm_ref, 4)),
+                "gain":        (None if gain_dl is None else round(gain_dl, 4)),
                 "statut":      h3_statut,
                 "message":     h3_msg,
                 "conseil":     h3_conseil,
-                "titre_graphique": f"{'✅' if h3_statut=='VERT' else '⚠️' if h3_statut=='AMBRE' else '❌'} Apport DL vs GLM — Gain Gini = {gain_dl:+.4f}",
+                "titre_graphique": f"{'✅' if h3_statut=='VERT' else '⚠️' if h3_statut=='AMBRE' else '❌'} Apport DL vs GLM — Gain Gini = {('non mesuré' if gain_dl is None else f'{gain_dl:+.4f}')}",
             },
             "statut_global": statut_global,
             "conclusion":    conclusion,
@@ -2532,7 +2566,7 @@ class AgentA5DeepLearning:
                 hovertemplate="<b>%{x}</b><br>Gini : %{y:.4f}<extra></extra>",
             ))
             fig2.add_hline(y=h3["gini_glm"], line_color=GRIS, line_width=1.5, line_dash="dot",
-                          annotation_text=f"Référence GLM {h3['gini_glm']:.4f}",
+                          annotation_text=f"Référence GLM {gini_texte(h3['gini_glm'])}",
                           annotation_font=dict(color=GRIS, size=9))
             l2 = dict(**LAYOUT)
             l2.update(dict(

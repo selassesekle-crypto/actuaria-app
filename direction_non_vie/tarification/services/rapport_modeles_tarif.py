@@ -19,6 +19,7 @@ from core.elasticite import synthese_elasticite
 from core.charts_tarif import glyphe_rag, FOND_CLAIR, couleur_rag
 import base64, io, logging, re
 from core.conformite_reglementaire import (
+    gini_texte,
     avertissement_walk_forward, synthese_exclusions, synthese_alertes_experience,
     synthese_colonnes_plan_ecartees, synthese_exemptions_effet,
     synthese_modele_dl,
@@ -1401,7 +1402,7 @@ def _construire_contexte_tarif(
     # ⚠️ NE PAS MASQUER UN ABSENT PAR 0.0000 (constat C5) : une clé absente
     # s'affiche « — », jamais un zéro — ce que le module condamne ailleurs.
     _sc = f"{prod['score_global']:.4f}" if 'score_global' in prod else '—'
-    _gi = f"{prod['gini_test']:.4f}"     if 'gini_test' in prod else '—'
+    _gi = gini_texte(prod['gini_test'])     if 'gini_test' in prod else '—'
     _ov = f"{prod['overfit_ratio']:.3f}" if 'overfit_ratio' in prod else '—'
     lines += [
         "",
@@ -2661,7 +2662,7 @@ def export_word(
                  [['Modèle retenu', nom_modele(prod.get('modele')),
                    'Famille', prod.get('famille','—')],
                   ['Score global', _score_txt,
-                   'Gini test', f"{prod['gini_test']:.4f}" if 'gini_test' in prod else '—'],
+                   'Gini test', gini_texte(prod['gini_test']) if 'gini_test' in prod else '—'],
                   ['Overfit ratio', f"{prod['overfit_ratio']:.3f}" if 'overfit_ratio' in prod else '—',
                    'Interprétabilité',
                    f"{prod['interpretabilite']:.2f}/1.0" if 'interpretabilite' in prod else '—']],
