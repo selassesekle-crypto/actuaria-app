@@ -963,8 +963,33 @@ def plafonner_statut_si_ampute(statut: str, rapport) -> str:
 
 def alerte_modele_ampute(rapport, modele: str) -> Optional[dict]:
     """Entrée `alertes_modele` normalisée (source unique du libellé), au format
-    déjà agrégé par A6 depuis result_a3/a4/a5 et rendu dans les 3 livrables.
-    None si le plan est honoré : rien n'est alors signalé."""
+    agrégé par A6 depuis result_a3/a4/a5.
+    None si le plan est honoré : rien n'est alors signalé.
+
+    ⚠️⚠️ CETTE DOCSTRING DISAIT « ET RENDU DANS LES 3 LIVRABLES ». C'EST FAUX,
+    et mesuré par exécution le 03/09/2026 : un témoin unique déposé dans
+    `alertes_modele` n'apparaît dans **AUCUNE** des six surfaces signées —
+    ni html/word/excel du rapport d'équipe, ni html/word du rapport modèles,
+    ni l'Excel A6. **0 sur 6.** Son seul lecteur est `pipeline_agents`, qui
+    n'en garde que le `code` et jette le message.
+
+    ⚠️ ET CETTE PHRASE A DÉJÀ TROMPÉ, DANS CE DÉPÔT. Le lot `services/C13`
+    avait appendu un avertissement ici en la croyant — le constat le dit :
+    *« ce n'était pas le bon canal non plus »*. Une phrase fausse qui a déjà
+    coûté un lot en coûtera un autre.
+
+    ⚠️ LE CONTENU, LUI, ATTEINT BIEN LES LIVRABLES — par une AUTRE route :
+    `synthese_colonnes_plan_manquantes` alimente la clé `plan_ampute` des
+    synthèses réglementaires, rendue en html, word ET excel (mesuré). Il n'y
+    a donc pas de trou fonctionnel : il y avait une phrase qui décrivait mal
+    le chemin.
+
+      *Un canal existant n'accepte pas n'importe quelle forme parce qu'il
+      porte un nom qui convient — et il ne publie pas parce qu'une docstring
+      l'affirme.*
+
+    `test_canal_alertes_modele.py` dérive les deux moitiés de cette mesure au
+    lieu de les recopier."""
     if not rapport or not rapport.get('ampute'):
         return None
     manq = rapport['colonnes_manquantes']
