@@ -199,6 +199,13 @@ _LABELS_SYNTHESES = (
     # diraient la même chose autrement seraient pires que le silence.
     ('anti_selection', 'Anti-sélection — modèle qui discrimine à l\'envers'),
     ('reserve_gini',   'Réserve — Gini non mesuré (aucun statut dégradé)'),
+    # ⚠️ Les trois réserves d'A6, quatrième fois que le libellé s'écrit dans
+    # le même geste que la clé. Elles ne portent AUCUN verdict : elles
+    # disent ce que l'arbitrage n'a pas pu établir, et le disent au lecteur
+    # du rapport qui circule — pas seulement à l'Excel A6.
+    ('reserve_arbitrage',     "Réserve — l'arbitrage n'avait qu'un candidat"),
+    ('reserve_vraisemblance', 'Réserve — vraisemblance du Gini non calibrée'),
+    ('reserve_bases',         'Réserve — bases de Gini mélangées'),
 )
 
 
@@ -247,6 +254,19 @@ def syntheses_reglementaires(results: Dict[str, Dict]) -> Dict[str, str]:
         # n'est pas retenu : A6 ne surveillait que le modèle de PRODUCTION,
         # donc un GLM anti-sélectif battu par un ML n'apparaissait dans
         # AUCUN statut. La raison voyage avec le statut.
+        # ⚠️⚠️ LES TROIS RÉSERVES D'A6 N'ATTEIGNAIENT QU'UNE SURFACE SUR SIX.
+        # Mesuré le 03/09/2026 : elles sont lues par `tarif_excel` (l'Excel
+        # A6, KPI de l'onglet 3) et par RIEN d'autre — ni les trois formats
+        # du rapport d'équipe, ni les deux du rapport modèles. Or c'est le
+        # rapport d'ÉQUIPE qui circule.
+        # ⚠️ Je l'avais d'abord annoncé à « aucune surface » : relevé fait
+        # sur DEUX services sur trois. *Un relevé partiel conclut faux, et
+        # dans le sens le plus alarmant.*
+        # Elles sont déjà des CHAÎNES dans `result_a6` : rien à recalculer,
+        # seulement à relayer — le rendu reste fait UNE fois, par A6.
+        'reserve_arbitrage': r6.get('reserve_arbitrage'),
+        'reserve_vraisemblance': r6.get('reserve_vraisemblance'),
+        'reserve_bases': r6.get('reserve_bases_gini'),
         'anti_selection': r6.get('anti_selection_a3'),
         # ⚠️ Un Gini NON MESURABLE, lui, ne colore RIEN : il se déclare.
         # Le confondre avec un pouvoir discriminant nul reproduirait le zéro
@@ -548,6 +568,20 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
         if _synth_res6:
             _kpi(ws5, r, "Réserve — Gini non mesuré (aucun statut dégradé)",
                  _synth_res6, statut="VERT", wrap=True); r += 1
+        # ⚠️ Les trois réserves d'A6. Statut AMBRE : contrairement à la
+        # réserve de Gini au-dessus — qui déclare une ABSENCE de mesure —
+        # celles-ci portent sur un arbitrage qui A EU LIEU dans des
+        # conditions dégradées. La nuance est réelle et se lit à la couleur.
+        for _cle_res, _lib_res in (
+                ('reserve_arbitrage',
+                 "Réserve — l'arbitrage n'avait qu'un candidat"),
+                ('reserve_vraisemblance',
+                 'Réserve — vraisemblance du Gini non calibrée'),
+                ('reserve_bases', 'Réserve — bases de Gini mélangées')):
+            _valeur_res = synth.get(_cle_res, '')
+            if _valeur_res:
+                _kpi(ws5, r, _lib_res, _valeur_res,
+                     statut="AMBRE", wrap=True); r += 1
 
         # ── Onglet 6 : Audit trail consolidé ──────────────────────────────────
         ws6 = wb.create_sheet("6-Audit Trail Consolidé")
