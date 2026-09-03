@@ -18,6 +18,7 @@ from core.conformite_reglementaire import (
     synthese_colonnes_plan_ecartees, synthese_exemptions_effet,
     synthese_modele_dl,
 )
+from core.elasticite import synthese_elasticite
 from core.qualite_donnees import (MARQUEUR_QUALITE_NON_EXECUTEE,
                                   synthese_qualite_donnees)
 from core.plan_tarifaire import synthese_colonnes_plan_manquantes
@@ -899,6 +900,20 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "", arrete: Optional[str] =
                  statut=("AMBRE" if ("EXCLUE" in _synth_q or "SIGNALEE" in _synth_q
                                      or "BLOQUE" in _synth_q
                                      or MARQUEUR_QUALITE_NON_EXECUTEE in _synth_q)
+                         else "VERT"),
+                 wrap=True); r += 1
+        # ── ÉLASTICITÉ-PRIX ───────────────────────────────────────────────────
+        # ⚠️⚠️ CONSTAT `socle/C9` — 988 lignes de calcul n'atteignaient AUCUN
+        # livrable. A4 composait un paragraphe, mais son commentaire n'arrive
+        # au rapport qu'en REPLI derrière celui d'A6, qui n'est jamais vide.
+        # *Un calcul qui n'atteint aucun livrable n'existe pas.*
+        _synth_el = synthese_elasticite(
+            result_a6.get('elasticite'),
+            result_a6.get('sensibilite_tarifaire'))
+        if _synth_el:
+            _kpi(ws5, r, "Élasticité-prix — ce qui entre dans l'analyse",
+                 _synth_el,
+                 statut=("AMBRE" if 'NON PRISE EN COMPTE' in _synth_el
                          else "VERT"),
                  wrap=True); r += 1
         # ── COLONNES DU PLAN NON PRODUITES (modèle amputé) ────────────────────

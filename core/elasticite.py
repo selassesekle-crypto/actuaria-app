@@ -1068,3 +1068,81 @@ def sensibilite_tarifaire(plan, df, etat, variations=VARIATIONS_DEFAUT,
             f"[{est.get('ic_bas'):+.4f} ; {est.get('ic_haut'):+.4f}])."),
         **_lire_optimum(scenarios, domaine),
     }
+
+
+def synthese_elasticite(etat, sensibilite=None) -> str | None:
+    """SOURCE UNIQUE — ce que TOUT livrable dit de l'élasticité-prix.
+
+    ⚠️⚠️ CONSTAT `socle/C9`. Ce module calcule 988 lignes, A4 en compose un
+    paragraphe — et **rien de tout cela n'atteignait le rapport signé**. La
+    chaîne, mesurée de bout en bout le 03/09/2026 :
+
+    ```
+      A4 range `elasticite` + `sensibilite_tarifaire` dans son resultat
+         -> A4 compose un paragraphe dans SON commentaire
+            -> ce commentaire n'atteint le rapport QU'EN REPLI, apres A6
+               -> A6 a TOUJOURS un commentaire  =>  le repli ne tire JAMAIS
+         -> et A6 ne relayait NI l'un NI l'autre
+            =>  les 3 surfaces ne pouvaient meme pas les lire
+    ```
+
+    ### *Un calcul qui n'atteint aucun livrable n'existe pas.*
+    (`services/C7`, `socle/C1` — la même leçon, sur le plus gros calcul du
+    module.)
+
+    ⚠️⚠️ ET CE N'EST PAS UN AJOUT DE CONTENU : L'INTENTION ÉTAIT DÉJÀ ÉCRITE.
+    A4 porte en commentaire, mot pour mot : *« CE QUI N'EST PAS PRIS EN COMPTE
+    SE DIT AUSSI. L'actuaire qui lit ce commentaire doit savoir que la
+    dimension élasticité-prix n'entre pas dans l'analyse — et pourquoi. Le
+    silence laisserait croire qu'elle a été considérée. »* Ce lot ne décide
+    rien de neuf : il livre ce qui était conçu pour l'être.
+
+    ⚠️ ELLE NE JUGE PAS ET N'INVENTE RIEN : elle publie l'`etat`, son `motif`
+    et le coût de l'absence, tels que le module les a produits. Quand
+    l'élasticité EST estimée, elle publie ε avec son **intervalle de
+    confiance** et sa **réserve** — *un ε seul se lirait comme une certitude.*
+
+    Retourne `None` si aucun état n'a été produit : *un contrôle qui n'a rien
+    à dire se tait.*
+    """
+    e = etat or {}
+    if not e.get('etat'):
+        return None
+    lignes = []
+    if e['etat'] == ELASTICITE_ESTIMEE:
+        est = e.get('estimation') or {}
+        lignes.append(
+            f"ELASTICITE-PRIX : ESTIMEE. eps = {est.get('elasticite'):+.4f}, "
+            f"IC 95 % [{est.get('ic_bas'):+.4f} ; {est.get('ic_haut'):+.4f}] "
+            f"— voie {est.get('voie')}, {est.get('n_lignes'):,} "
+            f"renouvellements dont {est.get('n_resiliations'):,} "
+            f"resiliations.".replace(',', ' '))
+        if est.get('reserve'):
+            lignes.append(f"   ⚠ {est['reserve']}")
+    else:
+        lignes.append(
+            f"ELASTICITE-PRIX : NON PRISE EN COMPTE ({e['etat']}).")
+        for cle in ('motif', 'ce_que_cela_coute'):
+            if e.get(cle):
+                lignes.append(f"   {e[cle]}")
+
+    # ⚠️ LA SENSIBILITE SUIT L'ETAT, ET ELLE DIT AUSSI SON ABSENCE. Elle porte
+    # deja `disponible` et `motif` : elle a ete CONCUE pour etre publiee.
+    s = sensibilite or {}
+    if s:
+        if s.get('disponible'):
+            opt = s.get('optimum') or {}
+            lignes.append(
+                f"SENSIBILITE TARIFAIRE : tracee sur "
+                f"{(s.get('portefeuille') or {}).get('n_contrats', 0):,} "
+                f"contrats.".replace(',', ' '))
+            if opt:
+                lignes.append(
+                    f"   Optimum de marge : {opt.get('variation_pct')} "
+                    f"— {s.get('motif_optimum') or ''}")
+            if s.get('reserve'):
+                lignes.append(f"   ⚠ {s['reserve']}")
+        elif s.get('motif'):
+            lignes.append(f"SENSIBILITE TARIFAIRE : non disponible. "
+                          f"{s['motif']}")
+    return "\n".join(lignes)

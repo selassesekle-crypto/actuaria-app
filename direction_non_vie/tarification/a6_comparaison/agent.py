@@ -789,6 +789,15 @@ class AgentA6Comparaison:
                 'exclusions_cible': exclusions_cible,
                 'valide_par_actuaire_dl': valide_par_actuaire_dl,
                 'rapport_qualite': rapport_qualite,
+                # ⚠️⚠️ CONSTAT  — A6 NE RELAYAIT NI L'UN NI L'AUTRE.
+                #  calcule 988 lignes, A4 les range dans
+                # son resultat, et les trois surfaces lisent  :
+                # sans ce relais, RIEN de l'elasticite ni de la sensibilite
+                # tarifaire ne pouvait atteindre le rapport signe.
+                # *Un calcul qui n'atteint aucun livrable n'existe pas.*
+                'elasticite': (result_a4 or {}).get('elasticite'),
+                'sensibilite_tarifaire': (result_a4 or {}).get(
+                    'sensibilite_tarifaire'),
                 'rapport_mapping': rapport_mapping,
                 'colonnes_plan_manquantes': _cols_plan_manquantes,
                 'colonnes_plan_ecartees': dict(_cols_plan_ecartees),
@@ -987,6 +996,11 @@ class AgentA6Comparaison:
                 'exclusions_cible':   exclusions_cible,
                 'valide_par_actuaire_dl': valide_par_actuaire_dl,
                 'rapport_qualite':    rapport_qualite,
+                # ⚠️  — meme relais dans le second dict de sortie :
+                # une moitie des appelants ne les verrait pas autrement.
+                'elasticite': (result_a4 or {}).get('elasticite'),
+                'sensibilite_tarifaire': (result_a4 or {}).get(
+                    'sensibilite_tarifaire'),
                 # RapportMapping du renommage client (avant A1) — transité comme
                 # rapport_qualite (produit par aucun agent). None = pas de mapping.
                 'rapport_mapping':    rapport_mapping,

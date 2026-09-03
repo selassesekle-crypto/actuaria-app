@@ -395,3 +395,64 @@ pour une obligation », et RIEN ne l'appliquait.**
 > Épinglé par `EC-4` et `EC-5`. Sceau (commun à `C7` et `C8`) : six violations
 > plantées, cinq tombent, et la sixième — la cause nommée dans un
 > **commentaire** — ne tombe pas.
+
+---
+
+**C9 — 988 lignes de calcul n'atteignaient AUCUN livrable : ni l'élasticité,
+ni la sensibilité tarifaire, ni le coût de leur absence.**
+
+> ✅ **`socle/C9`** · **CONSTAT NEUF, OUVERT ET FERMÉ le 03/09/2026 — il
+> ABSORBE les deux points que j'avais nommés séparément, et il est plus large
+> que chacun.**
+>
+> **La chaîne, mesurée de bout en bout :**
+>
+> ```
+>   core/elasticite.py (988 l) -> A4 range `elasticite` + `sensibilite_tarifaire`
+>      -> A4 compose un paragraphe dans SON commentaire
+>         -> ce commentaire n'atteint le rapport QU'EN REPLI, apres A6
+>            -> A6 a TOUJOURS un commentaire (1 138 car. mesures)
+>               =>  le repli ne tire JAMAIS
+>      -> et A6 ne relayait NI l'un NI l'autre
+>         =>  les 3 surfaces ne pouvaient meme pas les lire
+> ```
+>
+> ### *Un calcul qui n'atteint aucun livrable n'existe pas.*
+> (`services/C7`, `socle/C1` — la même leçon, sur le plus gros calcul du
+> module.)
+>
+> ⚠️⚠️ **ET CE N'EST PAS UN AJOUT DE CONTENU : L'INTENTION ÉTAIT DÉJÀ ÉCRITE.**
+> A4 porte en commentaire, mot pour mot : *« CE QUI N'EST PAS PRIS EN COMPTE SE
+> DIT AUSSI. L'actuaire qui lit ce commentaire doit savoir que la dimension
+> élasticité-prix n'entre pas dans l'analyse — et pourquoi. Le silence
+> laisserait croire qu'elle a été considérée. »* **Ce lot livre ce qui était
+> conçu pour l'être**, il ne décide rien de neuf.
+>
+> **Le correctif**, sur le patron établi de `synthese_qualite_donnees` :
+> `synthese_elasticite()` en source unique · A6 relaie les deux clés dans ses
+> **deux** dicts de sortie · les **trois** surfaces publient.
+>
+> ⚠️ **Estimée, elle publie ε AVEC son IC 95 % et sa RÉSERVE** — *un ε seul se
+> lirait comme une certitude*, ce que le « Tarif optimal : −20 % » faisait.
+> Non prise en compte, elle publie l'état, le motif **et le coût de l'absence**.
+>
+> ⛔⛔ **ET LE FICHIER M'A AVERTI LUI-MÊME.** `_LABELS_SYNTHESES` est un tuple
+> que le HTML et le Word **itèrent** : *« une clé sans libellé est rendue NULLE
+> PART, en silence, dans les formats qui partent au CAC »* (`CF-9`). Sans le
+> libellé, l'élasticité aurait été calculée, relayée, publiée dans l'Excel A6
+> — **et invisible au CAC**. `EP-6` le plante.
+>
+> ### *Publier n'est pas afficher.*
+>
+> ═══ CE QUE J'AI DÛ CORRIGER DANS MES PROPRES MESURES ═══
+>
+> ⚠️ **Un relevé au texte cherchant `'ELASTICIT'` a conclu « A4 n'en parle
+> pas » — FAUX** : le mot publié est `ÉLASTICITÉ`, et `.upper()` conserve
+> l'accent. *Un relevé au texte qui ignore les accents ne voit pas ce qu'il
+> cherche.* La conclusion inverse aurait fermé le constat.
+>
+> ⚠️ **Deux plants du sceau ont dû être reciblés** pour la même raison — des
+> ancres écrites sans accents ne trouvaient rien.
+>
+> Épinglé par `EP-1` à `EP-6`. Sceau : sept violations plantées, cinq tombent,
+> et deux ne doivent pas — dont le nom remis dans un **commentaire**.

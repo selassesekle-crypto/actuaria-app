@@ -15,6 +15,7 @@ Version  : 1.0.0
 """
 
 from __future__ import annotations
+from core.elasticite import synthese_elasticite
 from core.charts_tarif import glyphe_rag, FOND_CLAIR, couleur_rag
 import base64, io, logging, re
 from core.conformite_reglementaire import (
@@ -1429,6 +1430,16 @@ def _construire_contexte_tarif(
         (synthese_qualite_donnees(
             result_a6.get('rapport_qualite') if result_a6 else None)
          or "Couche qualité exécutée : aucune ligne exclue, corrigée ni signalée."),
+        "",
+        # ⚠️⚠️ CONSTAT `socle/C9` — 988 lignes de calcul n'atteignaient AUCUN
+        # livrable. A4 composait un paragraphe sur l'élasticité, mais son
+        # commentaire n'arrive ici qu'en REPLI derrière celui d'A6, qui n'est
+        # jamais vide. *Un calcul qui n'atteint aucun livrable n'existe pas.*
+        "=== ÉLASTICITÉ-PRIX ===",
+        (synthese_elasticite(
+            result_a6.get('elasticite') if result_a6 else None,
+            result_a6.get('sensibilite_tarifaire') if result_a6 else None)
+         or "Aucun état d'élasticité-prix n'a été produit pour ce tarif."),
         "",
         "=== COLONNES DU PLAN NON PRODUITES (modèle amputé) ===",
         (synthese_colonnes_plan_manquantes(

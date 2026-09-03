@@ -28,6 +28,7 @@ from core.conformite_reglementaire import (
     synthese_colonnes_plan_ecartees, synthese_exemptions_effet,
     synthese_modele_dl,
 )
+from core.elasticite import synthese_elasticite
 from core.qualite_donnees import (MARQUEUR_QUALITE_NON_EXECUTEE,
                                   synthese_qualite_donnees)
 from core.plan_tarifaire import synthese_colonnes_plan_manquantes
@@ -183,6 +184,11 @@ _LABELS_SYNTHESES = (
     # libelle fait tomber la gate.
     ('plan_ecarte',  'Colonnes du plan écartées avant le filtre'),
     ('exempt_effet', "Colonnes exemptées du contrôle par l'effet"),
+    # ⚠️ `socle/C9` — LE LIBELLÉ AJOUTÉ DANS LE MÊME GESTE QUE LA CLÉ. Sans
+    # lui, l'élasticité serait calculée, relayée, publiée dans l'Excel A6…
+    # et rendue NULLE PART en html/word/pdf — les formats qui partent au CAC.
+    # *Exactement le piège que le commentaire ci-dessus décrit.*
+    ('elasticite',   "Élasticité-prix — ce qui entre dans l'analyse"),
     ('plafond',      'Causes du plafond de statut'),
     ('mapping',      'Mapping client appliqué'),
 )
@@ -204,6 +210,12 @@ def syntheses_reglementaires(results: Dict[str, Dict]) -> Dict[str, str]:
                                            r6.get('valide_par_actuaire_dl'),
                                            at6.get('timestamp')),
         'qualite':      synthese_qualite_donnees(r6.get('rapport_qualite')),
+        # ⚠️⚠️ CONSTAT `socle/C9` — 988 lignes de calcul n'atteignaient AUCUN
+        # livrable. A4 composait un paragraphe sur l'elasticite, mais son
+        # commentaire n'arrive ici qu'en REPLI derriere celui d'A6, qui n'est
+        # jamais vide. *Un calcul qui n'atteint aucun livrable n'existe pas.*
+        'elasticite':   synthese_elasticite(r6.get('elasticite'),
+                                            r6.get('sensibilite_tarifaire')),
         'plan_ampute':  synthese_colonnes_plan_manquantes(
                             r6.get('colonnes_plan_manquantes')),
         # ⚠️ Constat `conformite/C15` — cause DISTINCTE de la précédente :
@@ -470,6 +482,17 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
                  statut=("AMBRE" if ("EXCLUE" in _synth_q6 or "SIGNALEE" in _synth_q6
                                      or "BLOQUE" in _synth_q6
                                      or MARQUEUR_QUALITE_NON_EXECUTEE in _synth_q6)
+                         else "VERT"),
+                 wrap=True); r += 1
+        # ⚠️⚠️ `socle/C9` — L'ÉLASTICITÉ-PRIX ATTEINT ENFIN LE LIVRABLE.
+        # ⚠️ La pastille est AMBRE quand elle n'est PAS prise en compte, VERT
+        # quand elle est estimée : *le silence laisserait croire qu'elle a été
+        # considérée* (l'intention écrite dans A4, jamais livrée jusqu'ici).
+        _synth_el6 = synth.get('elasticite', '')
+        if _synth_el6:
+            _kpi(ws5, r, "Élasticité-prix — ce qui entre dans l'analyse",
+                 _synth_el6,
+                 statut=("AMBRE" if 'NON PRISE EN COMPTE' in _synth_el6
                          else "VERT"),
                  wrap=True); r += 1
         # Colonnes du plan non produites (fichier client incomplet → modèle
