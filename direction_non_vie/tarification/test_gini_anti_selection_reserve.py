@@ -232,14 +232,22 @@ class T3_LaChaineAtteintLesLivrables(unittest.TestCase):
         iterent le tuple. Une cle nouvelle atteint donc automatiquement deux
         formats sur trois, et le troisieme reste muet EN SILENCE.
 
-        ⛔ TROIS TROUS ANTERIEURS A CE LOT, mesures le 03/09/2026 et NOMMES
-        ici plutot que tus. `plafond` est le plus genant : le constat
-        `services/C7` existe precisement pour que la cause d'un statut
-        atteigne tous les livrables, et sa fermeture est donc PARTIELLE.
-        Signales a Selasse, non traites -- ils appartiennent a leurs
-        constats respectifs.
+        ⛔ TROIS TROUS ETAIENT NOMMES ICI (`plan_ecarte`, `exempt_effet`,
+        `plafond`). **COMBLES le 03/09/2026 (soir)** : l'Excel d'equipe porte
+        un FILET qui rend toute cle qu'aucun bloc a la main n'a prise.
+
+        ⚠️⚠️ ET CE CONTROLE A TIRE POUR L'EXIGER -- APRES `RA-5`, QUI PORTAIT
+        LA MEME LISTE. Deux controles epinglaient les memes trous ; j'ai mis
+        a jour le premier et oublie celui-ci. La gate est passee ROUGE sur
+        << ces trous connus sont COMBLES >>.
+
+          *Une liste dupliquee dans deux controles ne se met a jour qu'a
+          moitie : c'est le second qui reste faux, et il tire.*
+
+        La liste est desormais VIDE ici comme dans `RA-5`. `CS-1` et `CS-2`
+        (test_couverture_syntheses) tiennent la couverture et le MECANISME.
         """
-        connus_manquants = {'plan_ecarte', 'exempt_effet', 'plafond'}
+        connus_manquants: set = set()
         res = {'a6': _r6({})}
         manquants = set()
         for cle, _ in RE._LABELS_SYNTHESES:

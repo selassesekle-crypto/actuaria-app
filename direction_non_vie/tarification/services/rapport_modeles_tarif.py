@@ -524,6 +524,49 @@ RAISON_INCONNUE = ('Statut non VERT sans cause enregistrée — anomalie à '
                    'signaler : le rapport ne peut pas justifier son statut.')
 
 
+#: Les trois réserves d'A6, avec leur libellé. ⚠️ SOURCE UNIQUE, LUE PAR LES
+#: DEUX FORMATS de ce rapport : le HTML et le Word partent tous deux au CAC,
+#: et n'en corriger qu'un laisserait la moitié du livrable signé muette —
+#: c'est exactement ce qui s'est produit pour l'avertissement DL.
+RESERVES_A6 = (
+    ('reserve_arbitrage', "L'arbitrage n'avait qu'un candidat"),
+    ('reserve_vraisemblance', 'Vraisemblance du Gini non calibrée'),
+    ('reserve_bases_gini', 'Bases de Gini mélangées'),
+)
+
+TITRE_RESERVES_A6 = "RÉSERVES SUR L'ARBITRAGE"
+
+
+def reserves_arbitrage(result_a6) -> tuple:
+    """Les réserves d'A6 réellement produites, dans un ordre STABLE.
+
+    ⚠️⚠️ ELLES N'ATTEIGNAIENT QUE L'EXCEL A6 — une surface sur six, mesurée
+    le 03/09/2026. Le rapport d'équipe les porte depuis `46794d4` ; ce
+    rapport-ci était le dernier muet.
+
+    ⚠️ L'ORDRE VIENT DE `RESERVES_A6`, jamais du dictionnaire : deux
+    exécutions doivent produire le même document.
+
+    Rend un tuple vide quand A6 n'a rien à réserver — pas une ligne de bruit.
+    """
+    r6 = result_a6 if isinstance(result_a6, dict) else {}
+    return tuple((libelle, str(r6.get(cle)).strip())
+                 for cle, libelle in RESERVES_A6
+                 if r6.get(cle) and str(r6.get(cle)).strip())
+
+
+def _bloc_reserves_html(reserves: tuple) -> str:
+    """Les réserves d'arbitrage, en HTML. Vide quand il n'y a rien à dire."""
+    if not reserves:
+        return ''
+    puces = '\n'.join(f'      <li><b>{lib}</b> — {txt}</li>'
+                      for lib, txt in reserves)
+    return (f'<div class="raisons-plafond">\n'
+            f'  <div class="raisons-titre">⚠️ {TITRE_RESERVES_A6}</div>\n'
+            f'    <ul>\n{puces}\n    </ul>\n'
+            f'</div>\n')
+
+
 def _bloc_raisons_html(raisons: tuple[str, ...]) -> str:
     """Le bloc des causes, en HTML. Vide quand il n'y a rien à dire."""
     if not raisons:
@@ -1999,7 +2042,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
   </div>
 </div>
 
-{_bloc_raisons_html(raisons_plafond(result_a6))}{_bloc_dl_html(avertissement_dl(result_a6))}{_bloc_qualite_html(avertissement_qualite(result_a6))}{_ouvrir_chapitre(1)}    <table>
+{_bloc_raisons_html(raisons_plafond(result_a6))}{_bloc_dl_html(avertissement_dl(result_a6))}{_bloc_qualite_html(avertissement_qualite(result_a6))}{_bloc_reserves_html(reserves_arbitrage(result_a6))}{_ouvrir_chapitre(1)}    <table>
       {_row(titres('glm'), header=True, num=colonnes_numeriques('glm'))}
 """
     for modele in ['poisson', 'gamma', 'tweedie']:
@@ -2442,6 +2485,22 @@ def export_word(
                  col=AR).add_break()
             for _ligne in [x.strip() for x in _q_w.split("\n") if x.strip()]:
                 _run(p, '   · ' + _ligne, sz=9, col=NR).add_break()
+
+        # ⚠️⚠️ LES RÉSERVES D'A6, DANS LES DEUX FORMATS AUSSI — et ce rapport
+        # était le dernier muet. Mesuré le 03/09/2026 : elles n'atteignaient
+        # QUE l'Excel A6, une surface sur six. Une réserve sur l'arbitrage
+        # qui n'atteint pas le document signé ne réserve rien.
+        # ⚠️ Même source que le HTML (`reserves_arbitrage`) : deux rendus,
+        # ce seraient deux vérités possibles pour le même fait.
+        _res_w = reserves_arbitrage(result_a6)
+        if _res_w:
+            p = doc.add_paragraph()
+            _run(p, '⚠ ' + TITRE_RESERVES_A6, bold=True, sz=10,
+                 col=AR).add_break()
+            for _i, (_lib_w, _txt_w) in enumerate(_res_w):
+                _passage = _run(p, f'   · {_lib_w} — {_txt_w}', sz=9, col=NR)
+                if _i < len(_res_w) - 1:
+                    _passage.add_break()
 
         doc.add_page_break()
 

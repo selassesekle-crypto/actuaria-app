@@ -320,6 +320,36 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
 
         arr = libelle_arrete(arrete)   # « Généré le » figure dans le bandeau
         synth = _syntheses_ou_calcul(syntheses, results)   # voie (b) : partagées
+
+        # ⚠️⚠️ CET EXCEL NE PARCOURT PAS `_LABELS_SYNTHESES`, ET C'EST VOULU :
+        # chaque synthèse y a SA place (le walk-forward dans la section
+        # BACKTESTING, la validation DL dans GOUVERNANCE), SON libellé — avec
+        # ses préfixes « ⚠ » / « ℹ » que le tuple ne porte pas — et SA règle
+        # de badge (« AMBRE si ACTION REQUISE », etc.). Une boucle unique
+        # détruirait les trois.
+        #
+        # ⚠️ MAIS LE RENDU À LA MAIN PREND DU RETARD, ET RIEN NE LE DIT :
+        # mesuré le 03/09/2026, l'Excel rendait 13 clés sur 16. `plan_ecarte`
+        # (`conformite/C15`), `exempt_effet` (`conformite/C4`) et `plafond`
+        # (`services/C7`) n'y arrivaient pas — ce dernier étant le plus
+        # gênant, son constat existant précisément pour qu'une cause de
+        # statut atteigne TOUS les livrables.
+        #
+        # D'où ce compromis : **lire une clé vaut l'enregistrer**, et ce qui
+        # n'a été pris par AUCUN bloc est rendu en fin de section. Un bloc
+        # supprimé emporte son enregistrement, donc sa clé retombe dans le
+        # filet : le mécanisme se répare tout seul.
+        #
+        #   *Un rendu par énumération et un rendu à la main ne se
+        #   maintiennent pas au même rythme ; c'est le second qui prend du
+        #   retard, et il faut un filet SOUS lui, pas à sa place.*
+        _prises: set[str] = set()
+
+        def _prendre(cle: str) -> str:
+            """La valeur de la synthèse, ET la trace qu'un bloc l'a prise."""
+            _prises.add(cle)
+            return synth.get(cle, '')
+
         branche_f = branche or (r6 or r3 or r1).get('branche', 'non_vie')
         statuts = _collecter_statuts(results)
         statut_global = _statut_global(list(statuts.values()))
@@ -472,7 +502,7 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
              statut=("VERT" if bt6.get('modele_recalibre_fidele') else "AMBRE")); r += 1
         # Source UNIQUE partagée avec Excel A6 / Word / HTML (audit V11 — le
         # correctif V10 B3 n'avait été appliqué qu'à l'export Excel d'A6).
-        _avert_wf6 = synth.get('walk_forward', '')
+        _avert_wf6 = _prendre('walk_forward')
         if _avert_wf6:
             _kpi(ws5, r, "⚠ Portée de la validation", _avert_wf6,
                  statut="AMBRE", wrap=True); r += 1
@@ -484,12 +514,12 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
              '— non calcule' if _ae6 is None else round(_ae6, 4),
              fmt=None if _ae6 is None else FMT_DEC4); r += 1
         r += 1
-        _synth_exc6 = synth.get('exclusions', '')
+        _synth_exc6 = _prendre('exclusions')
         if _synth_exc6:
             _kpi(ws5, r, "⚠ Colonnes écartées de la matrice X", _synth_exc6,
                  statut=("AMBRE" if "ACTION REQUISE" in _synth_exc6 else "VERT"),
                  wrap=True); r += 1
-        _synth_alert6 = synth.get('alertes', '')
+        _synth_alert6 = _prendre('alertes')
         if _synth_alert6:
             _kpi(ws5, r, "ℹ Sinistralité passée conservée — à vérifier",
                  _synth_alert6, statut="AMBRE", wrap=True); r += 1
@@ -504,7 +534,7 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
         # Validation humaine d'un modèle Deep Learning en production (2026-07) —
         # source UNIQUE partagée avec Excel A6 / Word / HTML. Ne s'affiche que si
         # le modèle retenu est un DL ; sinon rien (pas de bruit).
-        _synth_dl6 = synth.get('modele_dl', '')
+        _synth_dl6 = _prendre('modele_dl')
         if _synth_dl6:
             _kpi(ws5, r, "Modèle Deep Learning — validation actuarielle", _synth_dl6,
                  statut=("AMBRE" if "ACTION REQUISE" in _synth_dl6 else "VERT"),
@@ -516,7 +546,7 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
         # publie désormais sa phrase, et le badge la reçoit en AMBRE — sans
         # cette seconde moitié, « rien n'a été vérifié » sortait en VERT.
         # *Le correctif et son badge sont la MÊME correction.*
-        _synth_q6 = synth.get('qualite', '')
+        _synth_q6 = _prendre('qualite')
         if _synth_q6:
             _kpi(ws5, r, "Qualité des données — traitements appliqués", _synth_q6,
                  statut=("AMBRE" if ("EXCLUE" in _synth_q6 or "SIGNALEE" in _synth_q6
@@ -528,7 +558,7 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
         # ⚠️ La pastille est AMBRE quand elle n'est PAS prise en compte, VERT
         # quand elle est estimée : *le silence laisserait croire qu'elle a été
         # considérée* (l'intention écrite dans A4, jamais livrée jusqu'ici).
-        _synth_el6 = synth.get('elasticite', '')
+        _synth_el6 = _prendre('elasticite')
         if _synth_el6:
             _kpi(ws5, r, "Élasticité-prix — ce qui entre dans l'analyse",
                  _synth_el6,
@@ -537,13 +567,13 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
                  wrap=True); r += 1
         # Colonnes du plan non produites (fichier client incomplet → modèle
         # amputé) — source UNIQUE partagée avec Excel A6 / Word / HTML.
-        _synth_cp6 = synth.get('plan_ampute', '')
+        _synth_cp6 = _prendre('plan_ampute')
         if _synth_cp6:
             _kpi(ws5, r, "Colonnes du plan non produites — modèle amputé",
                  _synth_cp6, statut="AMBRE", wrap=True); r += 1
         # Mapping client (couche 2) — renommage du fichier avant A1. Même
         # source-unique partagée avec Excel A6 / Word / HTML. Rien si pas de mapping.
-        _synth_map6 = synth.get('mapping', '')
+        _synth_map6 = _prendre('mapping')
         if _synth_map6:
             _kpi(ws5, r, "Mapping client appliqué", _synth_map6,
                  statut=("AMBRE" if "⚠" in _synth_map6 else "VERT"), wrap=True); r += 1
@@ -556,7 +586,7 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
         #   ne le dit.*
         # Mesuré le 03/09/2026 : Excel 8/13 clés. `SY-3` épingle la couverture
         # et nomme les trois manquantes ANTÉRIEURES à ce lot.
-        _synth_anti6 = synth.get('anti_selection', '')
+        _synth_anti6 = _prendre('anti_selection')
         if _synth_anti6:
             _kpi(ws5, r, "Anti-sélection — modèle qui discrimine à l'envers",
                  _synth_anti6, statut="ROUGE", wrap=True); r += 1
@@ -564,7 +594,7 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
         # absence de mesure, elle ne dégrade rien. Lui donner AMBRE ici
         # reproduirait, dans la couleur, la confusion que `a3/C6` a supprimée
         # dans la valeur.
-        _synth_res6 = synth.get('reserve_gini', '')
+        _synth_res6 = _prendre('reserve_gini')
         if _synth_res6:
             _kpi(ws5, r, "Réserve — Gini non mesuré (aucun statut dégradé)",
                  _synth_res6, statut="VERT", wrap=True); r += 1
@@ -578,9 +608,27 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
                 ('reserve_vraisemblance',
                  'Réserve — vraisemblance du Gini non calibrée'),
                 ('reserve_bases', 'Réserve — bases de Gini mélangées')):
-            _valeur_res = synth.get(_cle_res, '')
+            _valeur_res = _prendre(_cle_res)
             if _valeur_res:
                 _kpi(ws5, r, _lib_res, _valeur_res,
+                     statut="AMBRE", wrap=True); r += 1
+
+        # ── LE FILET : CE QU'AUCUN BLOC N'A PRIS ─────────────────────────────
+        # ⚠️⚠️ IL FERME `plan_ecarte`, `exempt_effet` ET `plafond` D'UN COUP,
+        # et il ferme surtout la CLASSE du défaut : une clé ajoutée demain à
+        # `_LABELS_SYNTHESES` atteindra l'Excel sans que personne y pense.
+        # ⚠️ Le badge est AMBRE par défaut, jamais VERT : une synthèse qui
+        # n'a pas de règle de badge écrite n'a pas été jugée — la donner en
+        # VERT affirmerait un examen qui n'a pas eu lieu.
+        # ⚠️ L'ORDRE SUIT `_LABELS_SYNTHESES`, pas celui du dictionnaire :
+        # deux exécutions doivent rendre le même document.
+        _restantes = [(cle, lib) for cle, lib in _LABELS_SYNTHESES
+                      if cle not in _prises and synth.get(cle)]
+        if _restantes:
+            r += 1
+            _section(ws5, r, "▶ AUTRES SYNTHÈSES RÉGLEMENTAIRES"); r += 1
+            for _cle_r, _lib_r in _restantes:
+                _kpi(ws5, r, _lib_r, synth[_cle_r],
                      statut="AMBRE", wrap=True); r += 1
 
         # ── Onglet 6 : Audit trail consolidé ──────────────────────────────────

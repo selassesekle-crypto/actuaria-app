@@ -33,10 +33,17 @@ Il porte les trois reserves de **1/6 a 4/6** : les trois formats du rapport
 d'equipe s'ajoutent a l'Excel A6. Le rendu reste fait UNE fois -- par A6,
 qui produit deja des CHAINES : on relaie, on ne recompose pas.
 
-⛔ IL NE LES PORTE PAS au rapport MODELES (html, word). Ce serait un autre
-mecanisme -- `rapport_modeles_tarif` a ses propres fonctions de synthese --
-et l'elargir n'a pas ete arbitre. `RA-4` epingle la couverture et NOMME les
-deux surfaces manquantes, plutot que de les taire.
+⚠️⚠️ MISE A JOUR DU 03/09/2026 (soir) : la couverture est passee a **6/6**.
+Le rapport MODELES porte desormais les trois reserves, en html ET en word
+(`reserves_arbitrage`, source unique lue par les deux formats). Et l'Excel
+d'equipe a recu un FILET qui rend toute cle qu'aucun bloc a la main n'a
+prise -- ce qui a ferme du meme coup `plan_ecarte`, `exempt_effet` et
+`plafond`.
+
+⚠️ `RA-5` ET `RA-6` ONT TIRE TOUT SEULS POUR L'EXIGER : ecrits pour tomber
+dans les DEUX sens, ils ont echoue des que les trous ont ete combles, et
+ont force leurs propres phrases a suivre le code. *Un controle qui accepte
+la bonne nouvelle en silence devient la description d'un passe.*
 =============================================================================
 """
 
@@ -144,13 +151,22 @@ class T2_LaCouvertureEstEpingleeEtSesTrousNommes(unittest.TestCase):
     def test_ra_5_la_couverture_EXCEL_des_syntheses_ne_regresse_pas(self):
         """RA-5 : L'ASSIETTE. L'Excel code un bloc PAR CLE, a la main.
 
-        ⛔ TROIS TROUS ANTERIEURS, NOMMES plutot que tus : `plan_ecarte`
+        ⛔ TROIS TROUS ETAIENT NOMMES ICI -- `plan_ecarte`
         (`conformite/C15`), `exempt_effet` (`conformite/C4`) et `plafond`
-        (`services/C7`). Ce dernier est le plus genant : son constat existe
-        precisement pour qu'une cause de statut atteigne TOUS les livrables,
-        et sa fermeture est donc PARTIELLE. Signale a Selasse, non traite.
+        (`services/C7`). **Ils sont COMBLES depuis le 03/09/2026** : l'Excel
+        d'equipe porte desormais un FILET qui rend toute cle qu'aucun bloc a
+        la main n'a prise.
+
+        ⚠️⚠️ ET CE CONTROLE A TIRE TOUT SEUL POUR L'EXIGER. Ecrit pour
+        tomber DANS LES DEUX SENS, il a echoue sur << ces trous connus sont
+        COMBLES >> des que le filet a ete pose. *Un controle qui n'accepte
+        pas la bonne nouvelle en silence force la liste a suivre le code.*
+
+        La liste est donc VIDE : plus aucune exemption. `CS-1` et `CS-2`
+        (test_couverture_syntheses) tiennent desormais la couverture et le
+        MECANISME ; celui-ci garde la non-regression.
         """
-        connus_manquants = {'plan_ecarte', 'exempt_effet', 'plafond'}
+        connus_manquants: set = set()
         manquants = set()
         for cle, _ in RE._LABELS_SYNTHESES:
             temoin = f'ZZ{cle.upper().replace("_", "")}ZZ'
@@ -169,28 +185,34 @@ class T2_LaCouvertureEstEpingleeEtSesTrousNommes(unittest.TestCase):
             f"{sorted(connus_manquants - manquants)}. Bonne nouvelle, mais "
             f"la liste se met a jour DANS LE MEME GESTE.")
 
-    def test_ra_6_le_rapport_MODELES_reste_hors_couverture_et_c_est_DIT(self):
-        """RA-6 : ce que ce lot ne fait PAS, epingle comme le reste.
+    def test_ra_6_le_rapport_MODELES_les_porte_AUSSI(self):
+        """RA-6 : la couverture est passee de 4/6 a 6/6 le 03/09/2026.
 
-        ⚠️ Un lot qui elargit une couverture doit dire ou il s'arrete,
-        sinon le lecteur suivant croira la couverture complete.
+        ⚠️⚠️ CE CONTROLE DISAIT L'INVERSE, ET C'EST POUR CELA QU'IL EXISTE.
+        Il epinglait << le rapport MODELES reste hors couverture >>, pour
+        que l'elargissement soit un GESTE CONSCIENT et non un effet de
+        bord. Il a tire des que les blocs ont ete poses, et a exige que sa
+        propre phrase soit reecrite.
+
+          *Un controle qui epingle une limite doit tomber quand la limite
+          est levee : sinon il devient la description d'un passe que plus
+          rien ne verifie.*
+
+        ⚠️ PAS DE `try/except: continue` ICI. Ma premiere version en avait
+        un : sur une exception, le controle passait au suivant EN SILENCE,
+        et un export casse l'aurait rendu vert sans rien verifier. *Un garde
+        pose << au cas ou >> transforme une panne en succes.*
         """
-        from direction_non_vie.tarification.services import rapport_modeles_tarif as RM
-        # ⚠️ PAS DE `try/except: continue` ICI. Ma premiere version en avait
-        # un : sur une exception, le controle passait au suivant EN
-        # SILENCE, et un export casse l'aurait rendu vert sans rien
-        # verifier. Mesure : cet export fonctionne sur cette fixture. *Un
-        # garde pose « au cas ou » transforme une panne en succes.*
+        from direction_non_vie.tarification.services import (
+            rapport_modeles_tarif as RM,
+        )
         for cle in _CLES:
             temoin = f'ZZ{cle.upper().replace("_", "")}ZZ'
             r6 = _r6(**{cle: temoin})
-            html = RM.export_html({}, {}, r6)
             with self.subTest(cle=cle):
-                self.assertNotIn(
-                    temoin, html,
-                    f"« {cle} » atteint desormais le rapport modeles : "
-                    f"c'est un ELARGISSEMENT, et la docstring de ce fichier "
-                    f"doit le dire au lieu d'annoncer 4/6.")
+                self.assertIn(
+                    temoin, RM.export_html({}, {}, r6),
+                    f"« {cle} » n'atteint plus le rapport modeles (html)")
 
 
 if __name__ == '__main__':
