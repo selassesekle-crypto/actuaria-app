@@ -226,18 +226,44 @@ class TestAucunEffetDeBordGlobal(unittest.TestCase):
         self.assertIsNotNone(res.frequence.a6, 'l arbitrage fréquence a échoué')
         print("    W-5 second sens : le pipeline complet aboutit toujours")
 
-    def test_les_33_AUTRES_sites_sont_NOMMES_et_hors_assiette(self):
+    def test_les_AUTRES_sites_sont_NOMMES_et_hors_assiette(self):
         """⚠️ CE LOT NE TRAITE QUE LA TARIFICATION, ET LE DÉCLARE.
 
-        33 sites subsistent hors du chantier (santé-prévoyance, vie/EP-RE,
+        Des sites subsistent hors du chantier (santé-prévoyance, vie/EP-RE,
         réglementation, démos). Les toucher violerait la règle d'un seul
         chantier. Ce test FIGE leur nombre : s'il baisse, quelqu'un les a
         traités et le relevé doit le dire ; s'il monte, le défaut se propage.
+
+        ⚠️ LE NOMBRE NE S'ÉCRIT PLUS DANS LE NOM NI DANS CETTE PHRASE. Le
+        test s'appelait `test_les_33_AUTRES_sites` et sa docstring annonçait
+        « 33 sites » — alors que l'assertion en exigeait **34**. Un nom et
+        une prose qui portent un compte périment sans que rien ne les
+        rattrape ; seule l'assertion est tenue. *Le chiffre vit à UN seul
+        endroit.*
+
+        ⚠️⚠️ ET SON ASSIETTE ÉTAIT TROP LARGE — mesuré le 03/09/2026.
+        Le balayage partait de la racine du dépôt et n'écartait que `.venv`.
+        Une installation Python déposée sous la racine (`Python/`, un
+        runtime du gestionnaire de versions, apparu ce jour-là) a fait
+        entrer **deux fichiers vendorisés de `pip`** dans le compte : 36 au
+        lieu de 34, et la gate est passée au ROUGE sur du code que personne
+        ici ne pourra jamais corriger.
+
+          *Un contrôle qui balaie du code étranger au dépôt ne mesure plus
+          ce qu'il annonce, et son chiffre devient hostage de
+          l'environnement.*
+
+        `site-packages` est donc écarté : cela couvre les runtimes installés
+        ET les environnements virtuels quel que soit leur nom, là où
+        `.venv` seul n'en couvrait qu'un. **Le compte du code du dépôt est
+        inchangé — 34 avant comme après.**
         """
         racine = _RACINE.parent.parent
         hors = []
         for p in racine.rglob('*.py'):
-            if '.venv' in str(p) or 'audit_2026_08' in str(p):
+            chemin = p.as_posix()
+            if ('.venv' in chemin or 'audit_2026_08' in chemin
+                    or 'site-packages' in chemin):
                 continue
             if p.parent.name in _AGENTS:
                 continue

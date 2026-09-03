@@ -850,6 +850,28 @@ def export_word_equipe(results: Dict[str, Dict], branche: str = '',
         # §1 — Statut global
         h1 = doc.add_heading("§1 — Statut Global Équipe", level=1)
         h1.runs[0].font.color.rgb = NR
+
+        # ⚠️⚠️ LE STATUT CONSOLIDÉ MANQUAIT AU SEUL FORMAT QUI CIRCULE.
+        # Mesuré le 03/09/2026 : `statut_global` était calculé ici puis JETÉ,
+        # et `statut_rgb` défini juste au-dessus sans jamais être appelé — le
+        # bloc était prévu, il n'a jamais été écrit. L'Excel le publie
+        # (« Statut consolidé », onglet 1) et le HTML aussi (badge d'en-tête) ;
+        # le Word, celui qu'on envoie au CAC, ne le portait pas.
+        #
+        #   *Un calcul qui n'atteint aucun livrable n'existe pas — et un
+        #   format muet là où ses voisins parlent est un écart, pas un choix.*
+        #
+        # ⚠️ Le libellé est MOT POUR MOT celui de l'Excel : trois documents qui
+        # nomment différemment la même grandeur obligent le lecteur à établir
+        # lui-même qu'il s'agit de la même chose.
+        p_st = doc.add_paragraph()
+        run_lib = p_st.add_run("Statut consolidé : ")
+        run_lib.font.bold = True
+        run_lib.font.color.rgb = NR
+        run_val = p_st.add_run(statut_global)
+        run_val.font.bold = True
+        run_val.font.color.rgb = statut_rgb(statut_global)
+
         tbl = doc.add_table(rows=1, cols=3)
         tbl.style = 'Light Grid Accent 1'
         hdr = tbl.rows[0].cells

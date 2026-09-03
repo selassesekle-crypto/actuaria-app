@@ -60,6 +60,18 @@ _ENTETE = re.compile(r'^\*\*(C\d+)\*\*\s*—|^\*\*(C\d+)\s*—')
 #: que ce fichier existe pour attraper. La cle (constat, fichier) fait qu'un
 #: AUTRE fichier nommant la meme cle rallume le filet.
 _HORS_ASSIETTE: dict[tuple[str, str], str] = {
+    ('charts/C8', 'test_charts_c8_mesure.py'):
+        "Le fichier mesure la DESCRIPTION du constat, il ne corrige pas le "
+        "defaut : celui-ci vit dans `actuaria_app.py`, et Selasse a arbitre "
+        "qu'on ne touche pas a l'app Streamlit. Ses cinq controles derivent "
+        "des fichiers eux-memes le nombre de sites litteraux et la cle "
+        "`responsive` perdue, puis verifient que le releve les publie -- le "
+        "releve est l'assiette, jamais le code de l'app. Le constat "
+        "annoncait un seul site et une divergence future ; la mesure du "
+        "03/09/2026 en trouve deux et la divergence deja presente. "
+        "*Corriger la description d'un defaut n'est pas corriger le defaut, "
+        "et une phrase qui en affirme MOINS que le code porte trompe autant "
+        "qu'une qui en affirme plus.*",
     ('a2/C5', 'test_comptes_a2_publies.py'):
         "Cite comme RAISON du chemin choisi par l'aide `_executer` (A1 -> A2 "
         "plutot que fit/transform : les deux chemins ne traitent pas "

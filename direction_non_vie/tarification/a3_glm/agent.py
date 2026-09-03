@@ -2000,9 +2000,52 @@ class AgentA3GLM:
                 reposera. *Deux constats couples : l'ordre est contraint.*
         AMBRE : Gini ∈ [0.05, 0.15] ou 1 modèle non convergé
         ROUGE : Gini < 0.05 ou 2+ modèles non convergés
+
+        ═══════════════════════════════════════════════════════════════════
+        LA QUESTION EN SUSPENS A ETE REPOSEE LE 03/09/2026 — ET ELLE RESTE
+        OUVERTE, PARCE QU'ELLE N'EST PAS LA MIENNE.
+        ═══════════════════════════════════════════════════════════════════
+
+        La condition posee ci-dessus est REMPLIE : `a3/C6` est **ferme
+        depuis le 26/08/2026 (`b0ae396`)**. Le Tweedie publie desormais un
+        Gini mesure — **−0,078 a la mesure de fermeture**, donc negatif, et
+        non plus « 0 partout ».
+
+        ⚠️ MAIS LE BLOCAGE A CHANGE DE NATURE, IL N'A PAS DISPARU. Trois
+        faits mesures le 03/09/2026 :
+
+        1. **Le contrat du Gini est devenu `float | None`.** `_calibrer_tweedie`
+           pose `None` quand le calcul echoue (jamais `0` — c'est tout le
+           sens d'`a3/C6`). Une comparaison naive `gini_tweedie < 0.05`
+           **leverait** : mesure, `None < 0.05` rend
+           `TypeError: '<' not supported between NoneType and float`.
+           Inclure le Tweedie EXIGE donc de decider d'abord ce qu'un Gini
+           **non mesurable** vaut pour un statut — ce qui n'est pas une
+           question technique.
+
+        2. **`_calculer_gini` fabrique encore des zeros.** Elle rend `0.0`
+           sur tableau vide, sur somme de sinistres nulle (branche
+           commentee « Gini incalculable ») et dans son propre `except`.
+           La phrase de fermeture d'`a3/C6` — *« un Gini non mesurable vaut
+           desormais None, jamais 0 »* — est donc vraie de l'ENVELOPPE du
+           Tweedie, pas du CALCUL. **Signale, non corrige : A6 arbitre le
+           modele de production sur le Gini ; changer ces trois zeros
+           deplacerait le modele retenu, donc le tarif.**
+
+        3. **Ce statut ne lit meme pas le Gini du Gamma.** `gini_gamma`
+           etait assigne ligne 2005 et **jamais relu** — un calcul qui
+           n'atteint aucune decision. Retire le 03/09 : sa presence laissait
+           croire que le Gamma pesait sur le statut, ce qui est faux.
+
+        ⚠️⚠️ **DECISION QUI APPARTIENT A L'ACTUAIRE, PAS A CE MODULE** :
+        un Gini Tweedie non mesurable doit-il rendre le statut AMBRE, ROUGE,
+        ou rester sans effet ? Et un Tweedie anti-selectif (Gini < 0)
+        doit-il degrader un statut que le Poisson rend VERT ? Tant que ces
+        deux points ne sont pas tranches, le Tweedie **reste hors du
+        statut**, et `test_a3_statut_rag_assiette.py` interdit qu'il y entre
+        sans que quelqu'un le decide.
         """
         gini_poisson = metriques.get('poisson', {}).get('gini', 0)
-        gini_gamma   = metriques.get('gamma',   {}).get('gini', 0)
         vars_poisson = metriques.get('poisson', {}).get('nb_vars_retenues', 0)
         vars_gamma   = metriques.get('gamma',   {}).get('nb_vars_retenues', 0)
 

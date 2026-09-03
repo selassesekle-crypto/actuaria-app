@@ -15,6 +15,7 @@ coquille vide).
 """
 import io
 import os
+import re
 import sys
 import unittest
 import zipfile
@@ -98,6 +99,111 @@ class TestC6_LesTroisFormats(unittest.TestCase):
                          ('word', _txt_docx(rap['word_bytes'])),
                          ('excel', _txt_xl(rap['excel_bytes']))):
             self.assertIn(_FRAGMENT, txt, f"{nom} (via orchestrateur) : synthèse manque")
+
+
+#: ⚠️ UN JEU OU LE STATUT CONSOLIDE NE COINCIDE AVEC AUCUN STATUT D'AGENT.
+#: `_collecter_statuts` ne retient que les agents `success` ; sans aucun, la
+#: liste est vide et `_statut_global([])` rend AMBRE, tandis que les six
+#: lignes du tableau par agent affichent « N/A ». C'est ce qui rend le sceau
+#: possible : chercher « AMBRE » dans le document avec le jeu ordinaire
+#: passerait SANS le correctif, puisque le tableau le porte deja.
+def _results_aucun_agent_abouti():
+    return {'a6': {'success': False, 'branche': 'auto', 'statut_rag': 'VERT'}}
+
+
+def _results_un_agent_rouge():
+    return {'a3': {'success': True, 'statut_rag': 'ROUGE', 'branche': 'auto'},
+            'a6': {'success': True, 'statut_rag': 'VERT', 'branche': 'auto'}}
+
+
+def _paragraphes_docx(blob: bytes):
+    """Le texte du .docx, PARAGRAPHE PAR PARAGRAPHE.
+
+    ⚠️ On ne se contente pas de chercher une chaine dans tout le document :
+    le tableau par agent porte deja des mots de statut, et un controle qui
+    cherche « AMBRE » n'importe ou passerait sans le correctif. Un libelle
+    et sa valeur doivent etre dans le MEME paragraphe pour prouver qu'ils
+    sont publies ENSEMBLE.
+    """
+    xml = _txt_docx(blob)
+    paras = []
+    for bloc in re.findall(r'<w:p[ >].*?</w:p>', xml, re.DOTALL):
+        paras.append(''.join(re.findall(r'<w:t[^>]*>(.*?)</w:t>', bloc,
+                                        re.DOTALL)))
+    return paras
+
+
+_LIBELLE_CONSOLIDE = 'Statut consolidé'
+
+
+class TestSTC_LeStatutConsolideDansTousLesFormats(unittest.TestCase):
+    """⚠️⚠️ LE WORD CALCULAIT LE STATUT CONSOLIDE PUIS LE JETAIT.
+
+    Mesure du 03/09/2026, sur le depot a `ff5c9c0` :
+
+      export Excel  L300 : _kpi(..., "Statut consolidé", statut_global)
+      export HTML   L736 : <span class="badge...">{statut_global}</span>
+      export WORD   L822 : statut_global = _statut_global(...)  -> JAMAIS ECRIT
+
+    `statut_rgb`, definie juste au-dessus dans la meme fonction, n'etait
+    appelee nulle part : le bloc etait prevu et n'a jamais ete ecrit. Le Word
+    est le format qui CIRCULE -- c'est celui qui partait sans la synthese.
+
+      *Un format muet la ou ses voisins parlent est un ecart, pas un choix.*
+
+    C'est le meme defaut que `C6` au-dessus, sur une autre grandeur : d'ou
+    ce fichier plutot qu'un nouveau.
+    """
+
+    def test_stc_1_le_word_publie_le_libelle_ET_la_valeur_ensemble(self):
+        """STC-1 : libelle et valeur dans le MEME paragraphe."""
+        paras = _paragraphes_docx(
+            RE.export_word_equipe(_results_aucun_agent_abouti()))
+        porteurs = [p for p in paras if _LIBELLE_CONSOLIDE in p]
+        self.assertTrue(
+            porteurs,
+            f"le Word ne publie pas « {_LIBELLE_CONSOLIDE} » : "
+            f"{[p[:60] for p in paras[:8]]}")
+        self.assertTrue(
+            any('AMBRE' in p for p in porteurs),
+            f"le libelle est present mais SANS sa valeur : {porteurs}")
+
+    def test_stc_2_les_trois_formats_portent_le_statut_consolide(self):
+        """STC-2 : L'ASSIETTE -- parite des trois formats.
+
+        ⚠️ Le jeu n'a AUCUN agent abouti : le consolide vaut AMBRE et le
+        tableau par agent n'affiche que « N/A ». Toute occurrence d'AMBRE
+        dans un document vient donc de la publication du consolide, et de
+        rien d'autre.
+        """
+        r = _results_aucun_agent_abouti()
+        formats = (
+            ('excel', _txt_xl(RE.export_excel_equipe(r))),
+            ('html', RE.export_html_equipe(r)),
+            ('word', _txt_docx(RE.export_word_equipe(r))),
+        )
+        muets = [nom for nom, txt in formats if 'AMBRE' not in txt]
+        self.assertFalse(
+            muets,
+            f"ces formats ne publient pas le statut consolide : {muets}")
+
+    def test_stc_3_la_valeur_publiee_est_DERIVEE_des_agents(self):
+        """STC-3 : elle SUIT les statuts, elle n'est pas ecrite.
+
+        ⚠️ Sans ce controle, publier le litteral « AMBRE » passerait STC-1 et
+        STC-2. Un agent ROUGE doit faire basculer le paragraphe consolide.
+        """
+        paras = _paragraphes_docx(
+            RE.export_word_equipe(_results_un_agent_rouge()))
+        porteurs = [p for p in paras if _LIBELLE_CONSOLIDE in p]
+        self.assertTrue(porteurs, "le paragraphe consolide a disparu")
+        self.assertTrue(
+            any('ROUGE' in p for p in porteurs),
+            f"un agent ROUGE ne fait pas basculer le consolide : {porteurs}")
+        self.assertFalse(
+            any('AMBRE' in p for p in porteurs),
+            f"le consolide porte encore AMBRE malgre un agent ROUGE : "
+            f"{porteurs}")
 
 
 if __name__ == '__main__':

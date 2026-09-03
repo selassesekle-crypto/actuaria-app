@@ -371,10 +371,34 @@ fichier — je ne la tranche pas ici.*
 > Word font de ces images relève de **leurs** services, non tranché ici.
 
 
-**C8 — La valeur de `CONFIG_PLOTLY` est réécrite en dur dans l'application.**
-`actuaria_app.py:4243` passe `config={"displayModeBar":False}` littéralement, au
-lieu d'importer la constante. Même valeur aujourd'hui ; deux endroits à changer
-demain.
+**C8 — La valeur de `CONFIG_PLOTLY` est réécrite en dur dans l'application, et
+elle a DÉJÀ divergé.**
+`actuaria_app.py` passe `config={"displayModeBar": False}` littéralement, au
+lieu d'importer la constante.
+
+> ⚠️⚠️ **CE CONSTAT A ÉTÉ SOUS-ESTIMÉ, ET RE-MESURÉ LE 03/09/2026.** Il
+> annonçait **un** site (`actuaria_app.py:4243`) et concluait « même valeur
+> aujourd'hui ; deux endroits à changer demain ». Les deux affirmations sont
+> fausses :
+>
+> - **il y a DEUX sites**, `actuaria_app.py:4188` et `:4248` *(numéros au
+>   03/09/2026 ; c'est le COMPTE, 2, que le filet dérive — pas la ligne)* ;
+> - **la divergence n'est pas pour demain, elle est là.** La constante vit
+>   dans `core/charts_tarif.py` et vaut
+>   `{'displayModeBar': False, 'responsive': True}` — **DEUX clés**. Les deux
+>   sites n'en passent qu'**une**. `responsive: True` est donc **perdu aux
+>   deux endroits**, et le mot `responsive` n'apparaît **nulle part** dans
+>   `actuaria_app.py`.
+>
+> *Le constat décrivait un risque futur ; la mesure montre un écart présent.*
+> **C'est la forme même que cet audit poursuit : une phrase qui affirme moins
+> que ce que le code porte est aussi trompeuse qu'une qui affirme plus.**
+>
+> ⛔ **IL RESTE OUVERT, ET C'EST UN ARBITRAGE, PAS UN OUBLI.** Le correctif
+> vit dans `actuaria_app.py`, et Selasse a arbitré : **on ne touche pas à
+> l'app Streamlit**. Ce qui est corrigé ici, c'est la DESCRIPTION — épinglée
+> par `test_charts_c8_mesure.py`, qui dérive le compte et la clé perdue des
+> fichiers eux-mêmes et tombera le jour où l'un des deux bougera.
 
 ### D — Vérifié comme BON (11)
 
