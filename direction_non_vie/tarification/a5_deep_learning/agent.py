@@ -53,6 +53,7 @@ from core.charts_tarif import (
 from core.conformite_reglementaire import (
     BASE_GINI_COMPTAGE, BASE_GINI_UNITAIRE,
     construire_matrice_x,
+    colonne_temporelle, diagnostiquer_evaluation, phrase_evaluation_impossible,
 )
 from core.plan_tarifaire import (
     PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
@@ -743,6 +744,8 @@ class AgentA5DeepLearning:
                                           {'execute': False, 'motifs': {}}),
                 'alertes_conformite': getattr(self, 'alertes_conformite', {}),
                 'alertes_modele':      _alertes_modele,
+            # ⚠️ Le diagnostic voyage avec le RESULTAT : A6 en a besoin.
+            'diagnostic_evaluation': getattr(self, '_diag_evaluation', None),
                 'modele_ampute':       _ampute,
                 'dataframe':           df,
                 'branche':             sous_branche,
@@ -855,11 +858,9 @@ class AgentA5DeepLearning:
 
         # ── SPLIT TEMPOREL (R1) ──────────────────────────────────────────────
         # Même approche que A3/A4 : tri temporel avant extraction de X.
-        _col_temp = next(
-            (c for c in ['annee_souscription', 'date_souscription', 'annee', 'year']
-             if c in df.columns),
-            None
-        )
+        # ⚠️ SOURCE UNIQUE (core) : A3, A4, A5 et le diagnostic d'evaluation
+        # lisent la MEME liste. Elle vivait triplee, a l'identique.
+        _col_temp = colonne_temporelle(df.columns)
         if _col_temp is not None:
             df = df.sort_values(_col_temp).reset_index(drop=True)
 
@@ -924,6 +925,37 @@ class AgentA5DeepLearning:
         X_val   = scaler.transform(X_raw_val).astype(np.float32)
         X_test  = scaler.transform(X_raw_test).astype(np.float32)
         self.scalers['standard'] = scaler
+
+        # ── L'ÉVALUATION SERA-T-ELLE POSSIBLE ? ──────────────────────────────
+        # ⚠️⚠️ POSÉ ICI, où la coupure est encore dans la portée. `run()` ne
+        # garde que des tableaux : y redériver les bornes de période
+        # reviendrait à recopier le découpage qu'on décrit.
+        # ⚠️ L'ASSIETTE EST LE TEST, PAS LA VALIDATION. A5 découpe en trois
+        # (68 / 12 / 20) ; c'est le jeu de TEST qui sert au Gini publié, donc
+        # c'est lui qu'on diagnostique. Un jeu de validation vide est un
+        # AUTRE défaut, déjà signalé au-dessus.
+        _n_apprentissage = len(y_train) + len(y_val)
+        self._diag_evaluation = diagnostiquer_evaluation(
+            cible=col_cible,
+            n_train=_n_apprentissage, n_test=len(y_test),
+            sinistres_train=float(np.nan_to_num(y_tv).sum()),
+            sinistres_test=float(np.nan_to_num(y_test).sum()),
+            colonne_temporelle=_col_temp,
+            periode_train=((df[_col_temp].iloc[:n_tv].min(),
+                            df[_col_temp].iloc[:n_tv].max())
+                           if _col_temp is not None and n_tv else None),
+            periode_test=((df[_col_temp].iloc[n_tv:].min(),
+                           df[_col_temp].iloc[n_tv:].max())
+                          if _col_temp is not None
+                          and n_tv < len(df) else None),
+            exposition_test=float(np.nan_to_num(expo_test).sum()),
+            cible_vide_en_test=(len(y_test) > 0
+                                and bool(np.all(pd.isna(y_test)))),
+        )
+        if self._diag_evaluation is not None:
+            logger.warning(
+                "[ÉVALUATION IMPOSSIBLE] %s",
+                phrase_evaluation_impossible(self._diag_evaluation, 'DL'))
 
         return (X_train, X_val, X_test, y_train, y_val, y_test, feature_names,
                 expo_train, expo_val, expo_test)

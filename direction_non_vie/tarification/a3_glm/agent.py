@@ -127,6 +127,7 @@ from core.conformite_reglementaire import (
     BASE_GINI_COMPTAGE, BASE_GINI_COUT_MOYEN, BASE_GINI_UNITAIRE,
     construire_matrice_x,
     statut_anti_selection, synthese_anti_selection, synthese_gini_non_mesure,
+    colonne_temporelle, diagnostiquer_evaluation, phrase_evaluation_impossible,
 )
 from core.plan_tarifaire import (
     PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
@@ -430,6 +431,48 @@ class AgentA3GLM:
                 f"Variables : {len(vars_pred)}"
             )
 
+            # ── L'ÉVALUATION EST-ELLE SEULEMENT POSSIBLE ? ────────────────────
+            # ⚠️⚠️ DEUX IMPOSSIBILITÉS DE NATURE DIFFÉRENTE, ET ELLES NE SE
+            # CONFONDENT PAS. `CalibrationImpossible` (plus bas) dit qu'aucun
+            # modèle n'est AJUSTABLE : le train ne porte aucun sinistre. Ici on
+            # regarde le TEST : s'il n'en porte aucun, les modèles seront
+            # calibrés et utilisables, mais AUCUN ne pourra être départagé.
+            #   *On peut ajuster, on ne peut pas classer.*
+            # Le diagnostic est calculé UNE fois, sur le COMPTE de sinistres :
+            # c'est le même fait pour les trois cibles, la sévérité et la prime
+            # pure en dérivant toutes deux.
+            _diag_eval = None
+            if col_frequence in df_test.columns:
+                _y_tr = pd.to_numeric(df_train[col_frequence], errors='coerce')
+                _y_te = pd.to_numeric(df_test[col_frequence], errors='coerce')
+                _col_t = colonne_temporelle(df.columns)
+                _diag_eval = diagnostiquer_evaluation(
+                    cible=col_frequence,
+                    n_train=len(df_train), n_test=len(df_test),
+                    sinistres_train=float(_y_tr.fillna(0).sum()),
+                    sinistres_test=float(_y_te.fillna(0).sum()),
+                    colonne_temporelle=_col_t,
+                    periode_train=((df_train[_col_t].min(),
+                                    df_train[_col_t].max())
+                                   if _col_t and len(df_train) else None),
+                    periode_test=((df_test[_col_t].min(),
+                                   df_test[_col_t].max())
+                                  if _col_t and len(df_test) else None),
+                    exposition_test=(
+                        float(pd.to_numeric(df_test[col_exposition],
+                                            errors='coerce').fillna(0).sum())
+                        if col_exposition in df_test.columns else None),
+                    # ⚠️ VIDE n'est pas NUL : une colonne absente de valeurs
+                    # (NaN partout) signe une jointure perdue, une colonne à
+                    # zéro signe une période sans sinistre. On les distingue.
+                    cible_vide_en_test=(len(df_test) > 0
+                                        and bool(_y_te.isna().all())),
+                )
+            if _diag_eval is not None:
+                logger.warning("[ÉVALUATION IMPOSSIBLE] %s",
+                               phrase_evaluation_impossible(_diag_eval, 'GLM'))
+                rapport['diagnostic_evaluation'] = _diag_eval
+
             # ── ÉTAPE 2 : GLM POISSON (FRÉQUENCE) ────────────────────────────
             logger.info(f"[{audit_id}] Étape 2/7 : GLM Poisson (fréquence)")
             res_poisson = self._calibrer_poisson(
@@ -684,6 +727,12 @@ class AgentA3GLM:
                 # ⚠️ Et la réserve, qui ne colore RIEN : elle nomme le Gini
                 # qui n'a pas pu être mesuré, sans le convertir en verdict.
                 'reserve_gini':   _reserve_gini,
+                # ⚠️⚠️ LE DIAGNOSTIC VOYAGE AVEC LE RÉSULTAT, PAS DANS UN LOG.
+                # A6 en a besoin pour REFUSER l'arbitrage et nommer la cause :
+                # un avertissement journalisé n'atteint personne, et c'est
+                # exactement ce que cet audit poursuit depuis le début.
+                # `None` quand l'évaluation est possible.
+                'diagnostic_evaluation': _diag_eval,
                 'modeles':      self.modeles,
                 'metriques':    self.metriques,
                 'predictions':  self.predictions,
@@ -904,11 +953,9 @@ class AgentA3GLM:
         # l'autre (§3.2.4, §3.2.5, §4.2), et la citation n'a jamais été sourcée.
         # La règle, elle, se justifie seule : un split aléatoire fait fuir de
         # l'information future dans l'entraînement. C'est elle qu'on garde.
-        _col_temp = next(
-            (c for c in ['annee_souscription', 'date_souscription', 'annee', 'year']
-             if c in df.columns),
-            None
-        )
+        # ⚠️ SOURCE UNIQUE (core) : A3, A4, A5 et le diagnostic d'evaluation
+        # lisent la MEME liste. Elle vivait triplee, a l'identique.
+        _col_temp = colonne_temporelle(df.columns)
         if _col_temp is not None:
             # Tri par année croissante — les 80% anciens = train, 20% récents = test
             df_sorted = df.sort_values(_col_temp).reset_index(drop=True)

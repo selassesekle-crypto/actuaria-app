@@ -110,6 +110,8 @@ except ImportError:
 from core.charts_tarif import FOND_SOMBRE, couleur_rag, couleur_texte_rag, glyphe_rag
 from core.conformite_reglementaire import (
     agreger_controle_effet, avertissement_walk_forward,
+    ArbitrageImpossible, message_arbitrage_impossible,
+    doit_refuser_arbitrage,
     avertissement_livrables_absents,
     fusionner_ecartees_amont,
     construire_matrice_x, verdict_vraisemblance_gini,
@@ -475,6 +477,36 @@ class AgentA6Comparaison:
             rapport['nb_modeles'] = len(catalogue)
             rapport['exclusions_cible'] = exclusions_cible
             rapport['exclusions_metrique'] = exclusions_metrique
+
+            # ── AUCUN MODÈLE ÉVALUABLE → ON REFUSE DE CHOISIR ────────────────
+            # ⚠️⚠️ LE CONTRÔLE PORTE SUR LE DIAGNOSTIC, PAS SUR LE CATALOGUE,
+            # ET C'EST TOUT L'ENJEU. Le refus existant plus bas ne tire que
+            # si le catalogue est VIDE — or `_calculer_gini` rend encore
+            # `0.0` sur un jeu non mesurable dans les trois agents : les
+            # modèles y restent, notés zéro, et l'arbitrage « choisit » entre
+            # des notes fabriquées. Un catalogue plein n'est donc PAS une
+            # preuve qu'il y avait quelque chose à comparer.
+            #
+            # ⚠️ ON REFUSE LA SÉLECTION, PAS LA CALIBRATION. Les modèles
+            # restent dans `result_a3` / `result_a4` / `result_a5` : ce qui
+            # s'arrête, c'est le choix — il revient à l'actuaire.
+            #   *On peut ajuster, on ne peut pas départager.*
+            _diags = [d for d in ((result_a3 or {}).get(
+                                      'diagnostic_evaluation'),
+                                  (result_a4 or {}).get(
+                                      'diagnostic_evaluation'),
+                                  (result_a5 or {}).get(
+                                      'diagnostic_evaluation'))
+                      if d]
+            _sources = [r for r in (result_a3, result_a4, result_a5) if r]
+            # ⚠️ TOUS, pas AU MOINS UN : si un seul agent a pu évaluer, la
+            # comparaison garde un sens et c'est `reserve_arbitrage` qui le
+            # dit. Le refus est réservé au cas où PLUS RIEN n'est mesurable.
+            if doit_refuser_arbitrage(_diags, _sources):
+                _modeles = [m.get('modele') for m in catalogue] or [
+                    x['modele'] for x in exclusions_metrique]
+                raise ArbitrageImpossible(
+                    message_arbitrage_impossible(_diags[0], _modeles))
             if exclusions_metrique:
                 logger.warning(
                     f"{len(exclusions_metrique)} modèle(s) écarté(s) — Gini non "

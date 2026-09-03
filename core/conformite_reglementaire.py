@@ -89,6 +89,10 @@ Usage :
 import logging
 from typing import List, Optional
 
+# ⚠️ Le formatage des nombres passe par le formateur PARTAGE de core :
+# une troisieme convention dans le depot serait une divergence de plus.
+from core.format_fr import nombre
+
 logger = logging.getLogger('actuaria.tarif.conformite')
 
 # ── Colonnes/racines interdites — INCONDITIONNEL ──────────────────────────────
@@ -2591,4 +2595,390 @@ def synthese_gini_non_mesure(metriques: dict | None,
         f"avec un pouvoir discriminant nul serait une note fabriquée. "
         f"Conséquence à connaître : A6 ÉCARTE de l'arbitrage tout modèle "
         f"non noté, ce qui peut réduire la comparaison à un seul candidat."
+    )
+
+
+# =============================================================================
+#  ÉVALUATION IMPOSSIBLE — quand AUCUN modèle ne peut être départagé
+# =============================================================================
+#
+# ⚠️⚠️ DEUX IMPOSSIBILITÉS DE NATURE DIFFÉRENTE, ET C'EST TOUTE LA CONCEPTION.
+#
+#   EN AMONT, DÉJÀ EN PLACE — `CalibrationImpossible` (A3) : le jeu
+#   d'ENTRAÎNEMENT ne porte aucun sinistre. Le maximum de vraisemblance de
+#   l'intercept vaut log(0) : aucun modèle n'existe, aucun tarif n'est
+#   possible. *On ne bricole pas un modèle sur rien, on le DIT.*
+#
+#   ICI — `ArbitrageImpossible` : le jeu d'ENTRAÎNEMENT porte des sinistres,
+#   les modèles sont donc CALIBRÉS et utilisables ; c'est le jeu de TEST qui
+#   n'en porte aucun. Ce qui est impossible n'est pas l'ajustement, c'est le
+#   CLASSEMENT.
+#
+# > *On peut ajuster, on ne peut pas départager. Choisir quand même serait
+# > tirer au sort le modèle qui fixera des primes.*
+#
+# ⚠️ ON REFUSE LA SÉLECTION, PAS LA CALIBRATION. Arbitré le 03/09/2026 :
+# refus sec, sans échappement. Les calibrations restent dans `result_a3`,
+# `result_a4`, `result_a5` — le travail n'est pas détruit, la DÉCISION est
+# rendue à l'actuaire.
+#
+# ⚠️⚠️ ET LE `0.0` FABRIQUÉ N'EST PAS CORRIGÉ ICI — MESURÉ, PAS SUPPOSÉ.
+# `_calculer_gini` rend encore `0.0` sur un jeu non mesurable, dans les trois
+# agents (A3 : 3 branches, A4 : 3, A5 : 2 — et A5 n'a AUCUNE garde sur la
+# somme nulle, il divise par zéro et son `except` rattrape). Le convertir en
+# `None` casserait **196 lignes de production, dont 111 DANS les trois
+# agents**, relevées par AST le 03/09/2026 : chacune exigerait de décider quoi
+# AFFICHER, soit 111 occasions de fabriquer une nouvelle valeur sur le chemin
+# qui produit le tarif. Ce qui compte — *ne jamais SÉLECTIONNER sur une note
+# fabriquée* — est obtenu ici sans y toucher : le diagnostic voyage à côté de
+# la valeur, et l'arbitrage s'arrête avant de la lire.
+
+
+class ArbitrageImpossible(ValueError):
+    """Aucun modèle ne peut être ÉVALUÉ, donc aucun ne peut être choisi.
+
+    ⚠️ Hérite de `ValueError` comme `CalibrationImpossible`, et pour la même
+    raison : c'est déjà le type que lève A6 quand son catalogue est vide. Un
+    appelant qui filtre `except ValueError` continue de fonctionner — on
+    enrichit le message, on ne déplace pas le type.
+    """
+
+
+#: Les causes d'une évaluation impossible. ⚠️ Elles se DÉRIVENT de faits
+#: mesurés sur le fichier, jamais d'une supposition : c'est la différence
+#: entre un diagnostic et une devinette.
+#: ⚠️ LES COLONNES QUI DÉCLENCHENT UN DÉCOUPAGE TEMPOREL, ET LEUR ORDRE.
+#: Cette liste vivait TRIPLÉE — une copie identique dans `_preparer_donnees`
+#: d'A3, d'A4 et d'A5. Elles concordaient au 03/09/2026, vérifié ligne à
+#: ligne. Le diagnostic ci-dessous NOMME la colonne qui a servi au
+#: découpage : le laisser en deviner une quatrième copie l'exposerait à
+#: nommer la mauvaise le jour où une liste dérive.
+#:   *Un diagnostic qui redérive ce qu'il décrit finit par décrire autre
+#:   chose.*
+COLONNES_TEMPORELLES = ('annee_souscription', 'date_souscription',
+                        'annee', 'year')
+
+
+def colonne_temporelle(colonnes) -> str | None:
+    """La colonne qui gouverne le découpage temporel, ou `None`.
+
+    Source unique : A3, A4, A5 et le diagnostic lisent la MÊME.
+    """
+    # ⚠️ PAS DE `colonnes or ()` : sur un `Index` pandas, l'évaluation
+    # booléenne LÈVE (« The truth value of a Index is ambiguous »). Les
+    # trois appelants passent `df.columns`. *Un idiome Python courant n'est
+    # pas neutre sur un objet qui redéfinit `__bool__`.*
+    disponibles = set(colonnes) if colonnes is not None else set()
+    return next((c for c in COLONNES_TEMPORELLES if c in disponibles), None)
+
+
+CAUSE_CIBLE_NON_RENSEIGNEE = 'cible_non_renseignee_en_test'
+CAUSE_PORTEFEUILLE_PETIT = 'portefeuille_trop_petit'
+CAUSE_TEST_PERIODE_RECENTE = 'test_periode_recente'
+CAUSE_DECOUPAGE_ALEATOIRE = 'decoupage_aleatoire'
+CAUSE_INDETERMINEE = 'indeterminee'
+
+#: ⚠️ LA RÈGLE DE TROIS, ET ELLE EST DÉJÀ DOCTRINE ICI : la docstring de
+#: `CalibrationImpossible` l'invoque. À zéro événement observé sur n
+#: expositions, la borne haute à 95 % de la fréquence vaut 3/n — donc aucune
+#: fréquence inférieure à 3/n n'est distinguable de zéro.
+#: Sous 3 sinistres ATTENDUS, observer 0 n'apprend donc rien : ce n'est pas
+#: une information sur le portefeuille, c'est une limite du découpage.
+SEUIL_REGLE_DE_TROIS = 3.0
+
+
+def diagnostiquer_evaluation(
+    *,
+    cible: str,
+    n_train: int,
+    n_test: int,
+    sinistres_train: float,
+    sinistres_test: float,
+    colonne_temporelle: str | None = None,
+    periode_train: tuple | None = None,
+    periode_test: tuple | None = None,
+    exposition_test: float | None = None,
+    cible_vide_en_test: bool = False,
+) -> dict | None:
+    """Pourquoi l'évaluation est-elle impossible ? `None` si elle ne l'est pas.
+
+    ⚠️⚠️ TOUT EST DÉRIVÉ DES FAITS PASSÉS, RIEN N'EST DEVINÉ. La fonction ne
+    reçoit que des grandeurs observables sur le fichier de l'actuaire, et
+    l'ordre de priorité des causes est actuariel, pas arbitraire :
+
+      1. `CIBLE_NON_RENSEIGNEE` — le test porte des lignes et de l'exposition
+         mais la cible y est vide/nulle PARTOUT alors qu'elle est renseignée
+         en entraînement. Signature d'une jointure qui a perdu les sinistres.
+      2. `PORTEFEUILLE_PETIT` — moins de trois sinistres ATTENDUS en test.
+         ⚠️ ELLE PASSE AVANT LA CAUSE TEMPORELLE, et c'est délibéré : sous
+         trois attendus, observer zéro n'est PAS remarquable, donc n'accuse
+         rien. Conclure à une sous-déclaration serait une affirmation que la
+         mesure ne porte pas.
+      3. `TEST_PERIODE_RECENTE` — découpage temporel, et le test est la
+         période la plus récente. Là, zéro EST remarquable, et la cause
+         actuarielle dominante est la sous-déclaration des exercices récents.
+      4. `DECOUPAGE_ALEATOIRE` — pas de colonne temporelle : la cause
+         temporelle ne s'applique pas, et l'absence de cette colonne est un
+         défaut en soi (le Gini mesuré serait optimiste).
+
+    ⚠️ AUCUN SEUIL DE FIABILITÉ N'EST INVENTÉ. `SEUIL_REGLE_DE_TROIS` est le
+    seuil de l'IMPOSSIBILITÉ (rien n'est distinguable en dessous), pas celui
+    de la fiabilité — un Gini sur cinq sinistres est mesurable et ne vaut
+    rien. Ce second seuil est un choix actuariel : le nombre attendu est
+    PUBLIÉ, et l'actuaire juge.
+    """
+    if sinistres_test > 0:
+        return None
+
+    # ⚠️⚠️ L'ARTICULATION AVEC LE REFUS AMONT EST APPLIQUÉE ICI, PAS SUPPOSÉE.
+    # J'avais écrit en concevant que le cas « aucun sinistre NULLE PART » était
+    # « exclu par construction », le refus amont l'ayant déjà arrêté. **C'EST
+    # FAUX, et le pipeline réel l'a montré** : `CalibrationImpossible` tire
+    # pendant l'AJUSTEMENT, donc APRÈS ce diagnostic. Sans cette garde, le
+    # message publiait « le modèle est CALIBRÉ (l'entraînement porte
+    # 0 sinistre) » — une phrase que la ligne suivante du journal démentait.
+    #
+    #   *Une articulation décrite dans une conception n'est pas une
+    #   articulation tenue : c'est l'ordre d'exécution qui décide, et il ne
+    #   se déduit pas d'un schéma.*
+    #
+    # Sans sinistre à l'entraînement, il n'y a pas de problème d'ÉVALUATION :
+    # il n'y a pas de modèle du tout, et c'est `CalibrationImpossible` qui
+    # porte ce message-là.
+    if sinistres_train <= 0:
+        return None
+
+    frequence = (sinistres_train / n_train) if n_train else 0.0
+    attendus = frequence * n_test
+
+    facteurs: list[str] = []
+    if colonne_temporelle is None:
+        facteurs.append(CAUSE_DECOUPAGE_ALEATOIRE)
+    if attendus < SEUIL_REGLE_DE_TROIS:
+        facteurs.append(CAUSE_PORTEFEUILLE_PETIT)
+    if cible_vide_en_test:
+        facteurs.append(CAUSE_CIBLE_NON_RENSEIGNEE)
+    if colonne_temporelle is not None and periode_test:
+        facteurs.append(CAUSE_TEST_PERIODE_RECENTE)
+
+    if cible_vide_en_test:
+        cause = CAUSE_CIBLE_NON_RENSEIGNEE
+    elif attendus < SEUIL_REGLE_DE_TROIS:
+        cause = CAUSE_PORTEFEUILLE_PETIT
+    elif colonne_temporelle is not None:
+        cause = CAUSE_TEST_PERIODE_RECENTE
+    elif colonne_temporelle is None:
+        cause = CAUSE_DECOUPAGE_ALEATOIRE
+    else:                                              # pragma: no cover
+        cause = CAUSE_INDETERMINEE
+
+    return {
+        'cible': cible,
+        'cause': cause,
+        'facteurs': [f for f in facteurs if f != cause],
+        'n_train': int(n_train),
+        'n_test': int(n_test),
+        'sinistres_train': float(sinistres_train),
+        'sinistres_test': float(sinistres_test),
+        'frequence_train': float(frequence),
+        'sinistres_attendus_test': float(attendus),
+        'borne_regle_de_trois': (SEUIL_REGLE_DE_TROIS / n_test
+                                 if n_test else None),
+        'colonne_temporelle': colonne_temporelle,
+        'periode_train': periode_train,
+        'periode_test': periode_test,
+        'exposition_test': exposition_test,
+    }
+
+
+def _periode(bornes: tuple | None) -> str:
+    """« 2019–2022 », ou « 2022 » si les bornes coïncident."""
+    if not bornes:
+        return 'période inconnue'
+    debut, fin = bornes
+    return f'{debut}' if str(debut) == str(fin) else f'{debut}–{fin}'
+
+
+def cause_mesuree(diag: dict) -> str:
+    """La CAUSE, en une phrase, adossée aux chiffres du fichier."""
+    n_test = diag['n_test']
+    cause = diag['cause']
+
+    # ⚠️ LE FORMATAGE PASSE PAR `core/format_fr`, PAS PAR UN `replace` LOCAL.
+    # Ma première version faisait `.replace(',', ' ')` sur la phrase ENTIÈRE
+    # pour transformer les séparateurs de milliers : elle mangeait aussi les
+    # virgules de la prose (« la période 2023  la plus récente »). *Un
+    # remplacement global appliqué à une phrase corrige un chiffre et casse
+    # le texte autour.*
+    n_test_f = nombre(n_test)
+    attendus_f = nombre(diag['sinistres_attendus_test'], 1)
+    sin_train_f = nombre(diag['sinistres_train'])
+
+    if cause == CAUSE_CIBLE_NON_RENSEIGNEE:
+        expo = diag.get('exposition_test')
+        expo_txt = f" et {nombre(expo)} d'exposition" if expo else ""
+        return (
+            f"Le jeu de test porte {n_test_f} ligne(s){expo_txt}, mais la "
+            f"colonne « {diag['cible']} » y est VIDE OU NULLE PARTOUT, alors "
+            f"qu'elle est renseignée sur l'entraînement "
+            f"({sin_train_f} sinistre(s)). Ce motif est la "
+            f"signature d'une jointure qui a perdu les sinistres récents."
+        )
+
+    if cause == CAUSE_PORTEFEUILLE_PETIT:
+        return (
+            f"Le portefeuille compte {nombre(diag['n_train'] + n_test)} "
+            f"ligne(s). Avec un découpage 80/20, le test n'en reçoit que "
+            f"{n_test_f}, pour une fréquence observée de "
+            f"{nombre(diag['frequence_train'], 4)} — soit {attendus_f} "
+            f"sinistre(s) ATTENDU(S). En observer zéro n'est donc pas "
+            f"remarquable : sous la règle de trois, aucune fréquence "
+            f"inférieure à 3/{n_test_f} = "
+            f"{nombre(diag['borne_regle_de_trois'], 5)} n'est distinguable "
+            f"de zéro. Ce ne sont pas vos données qui manquent, c'est le "
+            f"découpage qui est trop fin pour elles."
+        )
+
+    if cause == CAUSE_TEST_PERIODE_RECENTE:
+        return (
+            f"Le découpage est TEMPOREL sur « {diag['colonne_temporelle']} » : "
+            f"le test est la période {_periode(diag['periode_test'])}, la plus "
+            f"récente. Elle porte 0 sinistre, alors que la période "
+            f"d'entraînement {_periode(diag['periode_train'])} en porte "
+            f"{sin_train_f} et que {attendus_f} étaient attendus. "
+            f"Un exercice récent est presque toujours SOUS-DÉCLARÉ : les "
+            f"sinistres survenus n'y sont pas encore tous déclarés ni "
+            f"évalués."
+        )
+
+    if cause == CAUSE_DECOUPAGE_ALEATOIRE:
+        return (
+            f"Aucune colonne temporelle (annee_souscription, "
+            f"date_souscription, annee, year) n'a été trouvée : le découpage "
+            f"est ALÉATOIRE. Le test est un tirage de {n_test_f} ligne(s) qui "
+            f"ne porte aucun sinistre, pour {attendus_f} attendu(s)."
+        )
+
+    return (                                            # pragma: no cover
+        f"Le jeu de test porte {n_test_f} ligne(s) et aucun sinistre, pour "
+        f"{attendus_f} attendu(s). Les signaux disponibles ne désignent pas "
+        f"une cause : elle n'est pas établie."
+    )
+
+
+def conseil_actionnable(diag: dict) -> str:
+    """CE QUE L'ACTUAIRE PEUT FAIRE — apparié à la cause, jamais générique.
+
+    ⚠️ Un message d'erreur qui dit seulement ce qui ne va pas laisse son
+    lecteur devant un fichier qu'il ne sait pas corriger. Chaque conseil
+    ci-dessous nomme un GESTE, pas une intention.
+    """
+    cause = diag['cause']
+
+    if cause == CAUSE_CIBLE_NON_RENSEIGNEE:
+        return (
+            "Vérifiez l'extraction : le nombre de sinistres PAR PÉRIODE doit "
+            "décroître régulièrement vers la fin, jamais tomber à zéro d'un "
+            "coup. Contrôlez la jointure sur la table de sinistres — une "
+            "jointure gauche mal bornée perd les exercices récents."
+        )
+
+    if cause == CAUSE_PORTEFEUILLE_PETIT:
+        return (
+            "N'évaluez pas sur un holdout unique à cette taille : une "
+            "validation croisée ou un bootstrap utilise TOUT le portefeuille "
+            "au lieu d'en réserver 20 %. À défaut, tarifez sur un modèle "
+            "IMPOSÉ et signé plutôt que sélectionné — le choix redevient "
+            "alors une décision d'actuaire, pas un tirage."
+        )
+
+    if cause == CAUSE_TEST_PERIODE_RECENTE:
+        bornes = diag.get('periode_test') or ()
+        recente = bornes[0] if bornes else None
+        relance = (f" Relancez en arrêtant l'observation avant {recente}."
+                   if recente is not None else "")
+        return (
+            "Excluez la période la plus récente de l'évaluation, ou "
+            "fournissez une date d'arrêté et un délai de déclaration pour la "
+            "retraiter." + relance +
+            " Si vous devez conserver cette période, l'évaluation exige des "
+            "sinistres SURVENUS ET DÉCLARÉS, pas seulement des contrats."
+        )
+
+    if cause == CAUSE_DECOUPAGE_ALEATOIRE:
+        return (
+            "Ajoutez une colonne d'année de souscription "
+            "(« annee_souscription ») : sans elle le découpage est aléatoire, "
+            "et un Gini mesuré ainsi est OPTIMISTE — de l'information future "
+            "entre dans l'entraînement."
+        )
+
+    return (                                            # pragma: no cover
+        "Vérifiez que le fichier porte des sinistres sur la période "
+        "d'évaluation, et non seulement sur celle d'entraînement."
+    )
+
+
+def phrase_evaluation_impossible(diag: dict, modele: str) -> str:
+    """Le message AU NIVEAU AGENT — factuel, sans verdict.
+
+    ⚠️ Il dit que le modèle est CALIBRÉ. C'est la moitié qu'on oublie : un
+    actuaire qui lit « Gini non mesuré » sans cette précision croit son
+    modèle inutilisable, alors qu'il ne l'est pas.
+    """
+    return (
+        f"GINI NON MESURÉ — « {modele} » sur la cible « {diag['cible']} ». "
+        f"Le jeu de test porte {nombre(diag['n_test'])} ligne(s) et "
+        f"{nombre(diag['sinistres_test'])} sinistre(s). Le modèle est CALIBRÉ "
+        f"(l'entraînement porte {nombre(diag['sinistres_train'])} sinistre(s) "
+        f"sur {nombre(diag['n_train'])} lignes) : c'est son ÉVALUATION qui "
+        f"est impossible, pas son ajustement. Un Gini n'est pas publié à "
+        f"zéro — un zéro signifierait « aucun pouvoir discriminant mesuré », "
+        f"ce que rien ne fonde ici."
+    )
+
+
+def doit_refuser_arbitrage(diagnostics: list, sources: list) -> bool:
+    """Faut-il refuser de choisir ? `True` si PLUS AUCUNE source n'est évaluable.
+
+    ⚠️⚠️ TOUS, PAS AU MOINS UN. Si un seul agent a pu évaluer ses modèles, la
+    comparaison garde un sens — réduite, et `reserve_arbitrage` le dit déjà.
+    Refuser dès qu'UN agent trébuche interdirait des arbitrages parfaitement
+    fondés.
+
+    ⚠️ ET `sources` NE PEUT PAS ÊTRE VIDE. Sans aucun agent en amont il n'y a
+    rien à arbitrer, mais ce n'est pas ce refus-ci : c'est le refus existant
+    sur catalogue vide, qui porte un autre message.
+
+    Extrait de `run()` À DESSEIN : une décision inline ne s'éprouve que par
+    une intégration lourde, et un contrôle qu'on renonce à écrire est un
+    contrôle qui n'existe pas.
+    """
+    return bool(sources) and len(diagnostics) == len(sources)
+
+
+def message_arbitrage_impossible(diag: dict, modeles: list) -> str:
+    """LE MESSAGE D'A6 — celui que l'actuaire lira quand rien ne sort.
+
+    Trois blocs, dans cet ordre : ce qui est impossible et pourquoi ce n'est
+    PAS une perte de travail ; la cause mesurée ; le geste à faire.
+    """
+    noms = ", ".join(str(m) for m in modeles) if modeles else "aucun"
+    return (
+        f"ARBITRAGE IMPOSSIBLE — aucun des {len(modeles)} modèle(s) ajusté(s) "
+        f"sur la cible « {diag['cible']} » n'a pu être ÉVALUÉ ({noms}).\n"
+        f"\n"
+        f"Ces modèles sont CALIBRÉS et disponibles dans result_a3 / "
+        f"result_a4 / result_a5. Ce qui est impossible, c'est de les "
+        f"CLASSER : leur Gini de test n'existe pas. Les départager sur des "
+        f"notes fabriquées reviendrait à tirer au sort le modèle qui fixera "
+        f"des primes.\n"
+        f"\n"
+        f"CAUSE LA PLUS PROBABLE, MESURÉE SUR VOS DONNÉES — "
+        f"{cause_mesuree(diag)}\n"
+        f"\n"
+        f"CE QUE VOUS POUVEZ FAIRE — {conseil_actionnable(diag)}\n"
+        f"\n"
+        f"AUCUN TARIF N'EST PRODUIT : les calibrations restent valides, "
+        f"c'est la SÉLECTION qui est refusée."
     )

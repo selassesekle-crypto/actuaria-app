@@ -175,6 +175,7 @@ from core.charts_tarif import (
 from core.conformite_reglementaire import (
     BASE_GINI_UNITAIRE,
     construire_matrice_x,
+    colonne_temporelle, diagnostiquer_evaluation, phrase_evaluation_impossible,
 )
 # ⚠️ SOURCE UNIQUE. L'etat de l'elasticite etait defini ICI au lot L0 ;
 # il vit desormais dans `core/elasticite.py`, avec le catalogue
@@ -1173,6 +1174,11 @@ class AgentA4ML:
                 # Modèle amputé (colonnes du plan absentes des données) : alerte
                 # explicite + plafond AMBRE. A6 agrège déjà 'alertes_modele'.
                 'alertes_modele':  _alertes_modele,
+                # ⚠️ Le diagnostic d'evaluation voyage avec le RESULTAT :
+                # A6 en a besoin pour refuser l'arbitrage et nommer la
+                # cause. Un avertissement journalise n'atteint personne.
+                'diagnostic_evaluation': getattr(
+                    self, '_diag_evaluation', None),
                 'modele_ampute':   _ampute,
                 # ── Standard ActuarIA ─────────────────────────────────────────
                 'excel_bytes':     _excel_a4,
@@ -1310,11 +1316,9 @@ class AgentA4ML:
         # ── SPLIT TEMPOREL (R1) ──────────────────────────────────────────────
         # Tri du DataFrame avant extraction de X pour garantir que la coupure
         # temporelle s'applique bien (les 80% anciens = train, 20% récents = test).
-        _col_temp = next(
-            (c for c in ['annee_souscription', 'date_souscription', 'annee', 'year']
-             if c in df.columns),
-            None
-        )
+        # ⚠️ SOURCE UNIQUE (core) : A3, A4, A5 et le diagnostic d'evaluation
+        # lisent la MEME liste. Elle vivait triplee, a l'identique.
+        _col_temp = colonne_temporelle(df.columns)
         if _col_temp is not None:
             df = df.sort_values(_col_temp).reset_index(drop=True)
             logger.info(f"[R1] Tri temporel sur '{_col_temp}' avant split ML.")
@@ -1353,6 +1357,37 @@ class AgentA4ML:
                 X, y, weights,
                 test_size=0.20, random_state=42, shuffle=True
             )
+
+        # ── L'ÉVALUATION SERA-T-ELLE POSSIBLE ? ──────────────────────────────
+        # ⚠️⚠️ CALCULÉ ICI, PAS DANS `run()`, ET C'EST DÉLIBÉRÉ. Le découpage
+        # vient d'avoir lieu : `df` est trié, la coupure est connue, les
+        # bornes de période sont EXACTES. Les redériver dans `run()` — qui ne
+        # garde que des tableaux — reviendrait à recopier le mécanisme qu'on
+        # surveille, et à périmer avec lui.
+        #   *Un diagnostic se pose là où la vérité qu'il décrit est encore
+        #   dans la portée.*
+        self._diag_evaluation = diagnostiquer_evaluation(
+            cible=col_cible,
+            n_train=len(y_train), n_test=len(y_test),
+            sinistres_train=float(np.nan_to_num(y_train).sum()),
+            sinistres_test=float(np.nan_to_num(y_test).sum()),
+            colonne_temporelle=_col_temp,
+            periode_train=((df[_col_temp].iloc[:n_train].min(),
+                            df[_col_temp].iloc[:n_train].max())
+                           if _col_temp is not None and n_train else None),
+            periode_test=((df[_col_temp].iloc[n_train:].min(),
+                           df[_col_temp].iloc[n_train:].max())
+                          if _col_temp is not None
+                          and n_train < len(df) else None),
+            exposition_test=(float(np.nan_to_num(w_test).sum())
+                             if ponderer_par_exposition else None),
+            cible_vide_en_test=(len(y_test) > 0
+                                and bool(np.all(pd.isna(y_test)))),
+        )
+        if self._diag_evaluation is not None:
+            logger.warning(
+                "[ÉVALUATION IMPOSSIBLE] %s",
+                phrase_evaluation_impossible(self._diag_evaluation, 'ML'))
 
         return X_train, X_test, y_train, y_test, w_train, w_test, feature_names
 
