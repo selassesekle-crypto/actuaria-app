@@ -1484,8 +1484,35 @@ class AgentA5DeepLearning:
         }
 
     def _calculer_gini(self, y_true: np.ndarray, y_pred: np.ndarray) -> float:
-        """Gini décroissant — même méthode que A3/A4."""
+        """Gini décroissant — même méthode que A3/A4.
+
+        ⚠️⚠️ IL MANQUAIT LA GARDE QUE SES DEUX VOISINS ONT, ET LE RÉSULTAT
+        N'ÉTAIT PAS UN ZÉRO FABRIQUÉ : C'ÉTAIT UN `nan`. Mesuré le
+        03/09/2026 sur un jeu de test sans sinistre :
+        `np.cumsum(y) / np.sum(y)` divise par zéro, ce qui produit un
+        `RuntimeWarning` — **pas une exception**. L'`except` en fin de
+        fonction ne tirait donc jamais, et `np.clip(nan, -1, 1)` reste
+        `nan`.
+
+        ⚠️ ET UN `nan` TRAVERSE TOUS LES GARDE-FOUS, ceux d'hier compris :
+        `nan < 0` est faux (l'anti-sélection ne tire pas), `nan is None`
+        est faux (A6 ne l'écarte pas du catalogue, la réserve ne se
+        déclenche pas), `sorted` le laisse à sa position initiale — donc
+        **un modèle non évalué pouvait se classer devant un meilleur**, et
+        A5 produit les modèles Deep Learning, candidats à la production.
+
+          *Un `nan` n'est ni un nombre utilisable ni une absence : il
+          franchit les gardes écrites pour l'un ET pour l'autre.*
+
+        ⚠️ La garde rend `0.0` comme A3 et A4 — pas `None`. Le sens de
+        l'absence est porté par `diagnostic_evaluation`, publié par cet
+        agent depuis le lot précédent ; et A6 écarte désormais tout Gini
+        NON FINI, de sorte que la valeur ne décide plus de rien.
+        """
         if len(y_true) == 0:
+            return 0.0
+        if np.sum(y_true) == 0:
+            # Aucun sinistre sur la période de test — Gini incalculable.
             return 0.0
         try:
             order   = np.argsort(y_pred)[::-1]

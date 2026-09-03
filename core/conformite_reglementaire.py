@@ -87,6 +87,7 @@ Usage :
 """
 
 import logging
+import math
 from typing import List, Optional
 
 # ⚠️ Le formatage des nombres passe par le formateur PARTAGE de core :
@@ -2507,11 +2508,21 @@ def etats_gini(metriques: dict | None,
         valeur = bloc['gini']
         if valeur is None:
             etats[nom] = GINI_NON_MESURE
-        elif isinstance(valeur, (int, float)) and not isinstance(valeur, bool):
+        elif (isinstance(valeur, (int, float))
+                and not isinstance(valeur, bool)
+                and math.isfinite(valeur)):
             etats[nom] = float(valeur)
         else:
             # ⚠️ Un Gini d'un type inattendu ne se convertit pas au jugé : il
             # est traité comme NON MESURÉ, donc réservé, jamais coloré.
+            #
+            # ⚠️⚠️ ET `math.isfinite` EST LA MOITIÉ QUI MANQUAIT. Mesuré le
+            # 03/09/2026 : A5 publiait un `nan`, qui EST un `float` et
+            # passait donc par la branche du dessus. Consequence : `nan < 0`
+            # etant faux, l'anti-selection ne tirait pas ; `nan is None`
+            # etant faux, la reserve ne se declenchait pas non plus.
+            #   *Un `nan` franchit les gardes ecrites pour un nombre ET
+            #   celles ecrites pour une absence.*
             etats[nom] = GINI_NON_MESURE
     return etats
 

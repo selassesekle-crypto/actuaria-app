@@ -28,6 +28,7 @@
 """
 
 import os, json, pickle, logging
+import math
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
@@ -1227,18 +1228,41 @@ class AgentA6Comparaison:
         # sur les trois sites d'ajout** : A3, A4 et A5 sont traités pareil.
         # Il protège aussi `_calculer_scores_multicriteres`, qui divise par
         # `max(ginis)` et lèverait un TypeError sur un `None`.
+        # ⚠️⚠️ ET LE FILTRE PORTE SUR << NON FINI >>, PAS SUR << None >>.
+        # Mesuré le 03/09/2026 : A5 publiait un `nan` (division par zéro sur
+        # un test sans sinistre, rattrapée par aucun `except`). Or
+        # `nan is None` est FAUX : le modèle restait candidat, et comme
+        # toute comparaison avec `nan` est fausse, `sorted` le laissait à sa
+        # position initiale — **un modèle non évalué pouvait se classer
+        # devant un meilleur, en silence.**
+        #
+        #   *Un `nan` n'est ni un nombre utilisable ni une absence : il
+        #   franchit les gardes écrites pour l'un ET pour l'autre.*
+        #
+        # ⚠️ La garde est ici, AU POINT D'ÉTRANGLEMENT, et pas seulement
+        # chez A5 : elle couvre toute source future de valeur non finie,
+        # quelle que soit l'agent qui la produit.
+        def _non_evaluable(valeur) -> bool:
+            if valeur is None:
+                return True
+            try:
+                return not math.isfinite(float(valeur))
+            except (TypeError, ValueError):
+                return True
+
         exclusions_metrique = [
             {'modele':         m['modele'],
              'famille':        m['famille'],
              'metrique':       'gini_test',
-             'raison':         "Gini non mesuré (publié à None par l'agent "
-                               "source) : un modèle non noté ne peut pas être "
-                               "classé, et le noter zéro serait une note "
-                               "fabriquée."}
-            for m in catalogue if m.get('gini_test') is None
+             'raison':         f"Gini non mesuré (publié à "
+                               f"{m.get('gini_test')!r} par l'agent source) : "
+                               f"un modèle non noté ne peut pas être classé, "
+                               f"et le noter zéro serait une note fabriquée."}
+            for m in catalogue if _non_evaluable(m.get('gini_test'))
         ]
         if exclusions_metrique:
-            catalogue = [m for m in catalogue if m.get('gini_test') is not None]
+            catalogue = [m for m in catalogue
+                         if not _non_evaluable(m.get('gini_test'))]
 
         if not catalogue:
             raise ValueError(
