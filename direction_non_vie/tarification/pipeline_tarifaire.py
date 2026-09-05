@@ -26,10 +26,14 @@ import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 import dataclasses
-from statsmodels.genmod import families as _families
+# ⚠️ `families` n'est plus importé ici : la seule construction de famille de ce
+# module était celle du GLM de fréquence, partie dans `core/frequence.py` avec
+# le reste du moteur. *Un import qui survit à son usage devient une piste
+# fausse pour qui cherche où le modèle est ajusté.*
 
 from core.plan_tarifaire import CHARGEMENTS_DEFAUT, PlanTarifaire
 from core.conformite_reglementaire import construire_matrice_x, source_exposition
+from core.frequence import ajuster_glm_frequence
 # ⚠️ `QualiteBloquante` n'est plus importée ici : la levée a suivi le préambule
 # dans `core.qualite_donnees`. Vérifié avant de la retirer — **aucun module ne
 # l'importait DEPUIS ce fichier** (mesuré). *Un ré-export tacite se casse en
@@ -636,9 +640,22 @@ def pipeline_complet(portefeuille: pd.DataFrame, plan: PlanTarifaire,
     _refuser_frequence_sans_sinistre(y_freq, plan.lob, col_freq)
 
     # ── GLM FRÉQUENCE (Poisson, offset log-exposition) ──────────────────────
-    glm_freq = sm.GLM(y_freq, Xc,
-                      family=_families.Poisson(link=_families.links.Log()),
-                      offset=np.log(expo)).fit(maxiter=200, disp=False)
+    # ⚠️⚠️ MOTEUR PARTAGÉ AVEC A3 — `core/frequence.py`, symétrique de
+    # `core/severite.py` qui porte déjà le GLM de coût. Les deux chemins
+    # ajustaient la même grandeur avec deux codes ; *deux codes finissent par
+    # diverger*, et c'est ce qui avait coûté −15 % de tarif sur la sévérité.
+    #   ⚠️ `selection=False` N'EST PAS UN REPLI, C'EST LA DOCTRINE DE CE
+    #   CHEMIN. Il exécute un plan SIGNÉ : ses facteurs sont un engagement de
+    #   l'actuaire, pas une hypothèse à tester. Mesuré sur les 18 plans,
+    #   apporter la sélection ici retirerait `sinistres_3ans_anterieurs` en
+    #   décennale (effet réel +0,40) et `statut_occupation` en MRH (+0,30),
+    #   faute de puissance — en retenant `etage`, qui est du bruit.
+    #   *Arbitré par Selasse le 05/09/2026 : on unifie le code, pas la
+    #   méthode.* Aucun euro ne bouge : l'ajustement est le même, mot pour mot.
+    glm_freq = ajuster_glm_frequence(
+        pd.concat([Xc, y_freq.rename(col_freq)], axis=1),
+        [c for c in Xc.columns if c != 'const'], col_freq,
+        np.log(expo), selection=False)['modele']
 
     # ── CIBLE DE SÉVÉRITÉ — SOURCE UNIQUE (core/severite.py) ────────────────
     # Cible (cout_ecrete/nb), masque (coût OBSERVÉ) et écrêtement des graves

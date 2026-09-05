@@ -135,6 +135,7 @@ from core.plan_tarifaire import (
     PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
     alerte_modele_ampute,
 )
+from core.frequence import ajuster_glm_frequence
 from core.severite import (ajuster_glm_cout, construire_cible_severite,
                            phrase_aucun_grave, phrase_seuil_suppose,
                            seuil_declare, synthese_assiette_ecretement)
@@ -1061,118 +1062,36 @@ class AgentA3GLM:
             offset_train = np.zeros(len(df_train))
             offset_test  = np.zeros(len(df_test))
 
-        # ── SÉLECTION STEPWISE BACKWARD ───────────────────────────────────────
-        vars_actives  = [v for v in vars_pred if v in df_train.columns]
-        modele_final  = None
-        iteration     = 0
-        vars_exclues  = []
-
-        while True:
-            iteration += 1
-            if len(vars_actives) == 0:
-                logger.warning("Plus aucune variable active dans le GLM Poisson")
-                break
-
-            # Préparation de la matrice X
-            X_train = sm.add_constant(
-                df_train[vars_actives].fillna(0)
-            )
-
-            try:
-                # Calibration GLM Poisson avec offset
-                modele = sm.GLM(
-                    df_train[col_freq],
-                    X_train,
-                    family=families.Poisson(link=families.links.Log()),
-                    offset=offset_train
-                ).fit(maxiter=200, disp=False)
-
-                # Vérification des p-values
-                pvalues = modele.pvalues.drop('const', errors='ignore')
-
-                # Variable avec la p-value maximale
-                pvalue_max = pvalues.max()
-                var_max    = pvalues.idxmax()
-
-                if pvalue_max > SEUIL_PVALUE:
-                    # Suppression de la variable non significative
-                    logger.debug(
-                        f"  Iter {iteration} : suppression '{var_max}' "
-                        f"(p-value={pvalue_max:.4f})"
-                    )
-                    vars_actives.remove(var_max)
-                    vars_exclues.append({
-                        'variable': var_max,
-                        'pvalue':   round(float(pvalue_max), 4),
-                        'raison':   'p-value > 0.05'
-                    })
-                else:
-                    # Toutes les variables sont significatives → modèle final
-                    modele_final = modele
-                    logger.info(
-                        f"Poisson convergé en {iteration} itérations | "
-                        f"{len(vars_actives)} variables retenues"
-                    )
-                    break
-
-            except Exception as e:
-                logger.warning(f"Erreur calibration Poisson iter {iteration}: {e}")
-                if vars_actives:
-                    # ⚠️⚠️ TROIS AFFIRMATIONS FAUSSES TENAIENT ICI — constat
-                    # `a3/C14`. On DÉCLARE, on ne devine pas.
-                    #  ① `pvalue: 1.0` n'a JAMAIS été calculée. Une p-value
-                    #     fabriquée à 1,0 se lit « variable non significative »,
-                    #     alors que rien n'a été testé. Elle vaut `None`.
-                    #  ② « erreur numérique » AFFIRMAIT UNE CAUSE NON ÉTABLIE.
-                    #     Mesuré : `statsmodels` ne lève NI sur colinéarité
-                    #     parfaite, NI sur colonne constante, NI sur séparation
-                    #     totale. Les seuls déclencheurs trouvés sont des
-                    #     défauts de DONNÉES — `MissingDataError` (NaN/Inf),
-                    #     deviance NaN, matrice vide. Et le `try` couvre ~30
-                    #     lignes avec un `except Exception` nu : il attrape
-                    #     aussi bien un `KeyError` de `.drop`. On nomme donc le
-                    #     TYPE réel, sans conclure sur la cause.
-                    #  ③ LA VARIABLE RETIRÉE EST ARBITRAIRE. `vars_actives[-1]`
-                    #     n'est pas celle qui a échoué — l'exception ne le dit
-                    #     pas. Le comportement est INCHANGÉ ici (le changer
-                    #     modifierait le modèle ajusté, donc un prix) : il est
-                    #     DÉCLARÉ, pour qu'un actuaire ne lise pas ce retrait
-                    #     comme un diagnostic.
-                    vars_exclues.append({
-                        'variable':          vars_actives[-1],
-                        'pvalue':            None,
-                        'pvalue_non_testee': True,
-                        'variable_arbitraire': True,
-                        'raison': (f"echec de l'ajustement ({type(e).__name__}: "
-                                   f"{str(e)[:60]}) — variable retiree "
-                                   f"ARBITRAIREMENT (la derniere), la cause "
-                                   f"reelle n'est pas etablie"),
-                    })
-                    vars_actives.pop()
-                else:
-                    break
-
-        # Si aucun modèle n'a convergé → modèle intercept seul
-        if modele_final is None:
-            logger.warning("GLM Poisson : modèle intercept seul")
-            X_intercept = sm.add_constant(
-                pd.DataFrame({'intercept': np.ones(len(df_train))})
-            )
-            # ⚠️⚠️ CE `try` EST LE CORRECTIF. Le repli était NU : quand il
-            # échouait, statsmodels remontait jusqu'à l'actuaire. Voir
-            # `CalibrationImpossible` en tête de module.
-            try:
-                modele_final = sm.GLM(
-                    df_train[col_freq],
-                    X_intercept,
-                    family=families.Poisson(link=families.links.Log()),
-                    offset=offset_train
-                ).fit(maxiter=200, disp=False)
-            except Exception as e:
-                raise _calibration_impossible(
-                    'GLM Poisson (frequence)', df_train[col_freq],
-                    f"cible '{col_freq}'", e) from e
-            vars_actives = []
+        # ── SÉLECTION STEPWISE BACKWARD — MOTEUR PARTAGÉ ─────────────────────
+        # ⚠️⚠️ CE BLOC VIVAIT ICI EN ENTIER, ET `pipeline_complet` EN AVAIT SA
+        # PROPRE VERSION. `core/frequence.py` porte désormais l'ajustement,
+        # symétrique de `core/severite.py` pour le coût. *Deux chemins qui
+        # ajustent la même grandeur avec deux codes finissent par diverger.*
+        #   ⚠️ A3 SÉLECTIONNE, le chemin déclaratif NON : c'est le paramètre
+        #   `selection`, et c'est un arbitrage rendu le 05/09/2026 — le plan
+        #   signé garde les facteurs que l'actuaire y a inscrits.
+        #   ⚠️ Le seuil reste ICI, chez celui qui sélectionne : `SEUIL_PVALUE`
+        #   est passé explicitement, jamais redéfini dans le socle.
+        #   ⚠️⚠️ ET L'AVEU RESTE NOMMÉ ICI. Le socle ne traduit aucune
+        #   exception — il ne connaît ni la cible ni le vocabulaire de cet
+        #   agent. Quand même le modèle à la seule constante échoue,
+        #   statsmodels remonte, et c'est `_calibration_impossible` qui
+        #   l'habille : mêmes faits, même message qu'avant ce lot.
+        try:
+            _ajuste = ajuster_glm_frequence(
+                df_train, [v for v in vars_pred if v in df_train.columns],
+                col_freq, offset_train,
+                selection=True, seuil_pvalue=SEUIL_PVALUE, journal=logger)
+        except Exception as e:
+            raise _calibration_impossible(
+                'GLM Poisson (frequence)', df_train[col_freq],
+                f"cible '{col_freq}'", e) from e
+        vars_actives = _ajuste['variables']
+        vars_exclues = _ajuste['exclues']
+        modele_final = _ajuste['modele']
+        # ⚠️ `iteration` n'est plus lu : il ne servait qu'à la boucle, qui vit
+        # désormais dans le socle. Le moteur le rend (`_ajuste['iterations']`)
+        # pour qui voudrait le publier — personne ne le faisait ici.
 
         # ── MÉTRIQUES ─────────────────────────────────────────────────────────
         # Prédictions sur le test
