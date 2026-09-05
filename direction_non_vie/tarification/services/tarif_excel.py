@@ -1049,6 +1049,29 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "", arrete: Optional[str] =
             _kpi(ws5, r, "Colonnes du plan écartées avant le filtre",
                  _synth_ce, statut="AMBRE", wrap=True); r += 1
 
+        # ⚠️⚠️ CE QUE LA TARIFICATION PUBLIE À L'USAGE DE LA RÉGLEMENTATION,
+        # AVEC LA PROVENANCE DE CHAQUE CHIFFRE — et ce qu'elle DÉCLARE NE PAS
+        # PRODUIRE. Mesuré le 05/09/2026 : `a8_stress_testing` lit trois clés
+        # qu'A6 ne publie pas et les remplace par des littéraux (0,25 pour un
+        # Gini, 0,72 pour un ratio S/P). *Déclarer ce qu'on ne produit pas
+        # vaut mieux que laisser un consommateur l'inventer.*
+        _pub = result_a6.get('publication_reglementaire') or {}
+        if _pub:
+            _section(ws5, r, "▶ PUBLICATION À L'USAGE DE LA RÉGLEMENTATION")
+            r += 1
+            for _nom, _e in (_pub.get('possede') or {}).items():
+                _kpi(ws5, r, f"{_nom}  (source : {_e.get('provenance')})",
+                     mesure_arrondie(_e.get('valeur'), 4)
+                     if isinstance(_e.get('valeur'), (int, float))
+                     else _e.get('valeur')); r += 1
+            for _nom, _motif in (_pub.get('non_produit') or {}).items():
+                _kpi(ws5, r, f"NON PRODUIT — {_nom}", _motif,
+                     statut="AMBRE", wrap=True); r += 1
+            if _pub.get('avertissement'):
+                _kpi(ws5, r, "Portée de cette publication",
+                     _pub['avertissement'], wrap=True); r += 1
+            r += 1
+
         # Mapping client (couche 2) — renommage du fichier avant A1. Même
         # mécanisme source-unique. Rien affiché si aucun mapping n'a été appliqué.
         _synth_map = synthese_mapping(result_a6.get('rapport_mapping'))

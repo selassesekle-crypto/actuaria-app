@@ -28,6 +28,7 @@ contrat que personne n'a jamais signé.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any
 
@@ -44,6 +45,100 @@ FORMES_VIDES: dict[str, Any] = {
     'graphiques': {},
     'commentaire': '',
 }
+
+
+#: Ce que la tarification NE PRODUIT PAS, et POURQUOI.
+#: ⚠️⚠️ CES TROIS GRANDEURS SONT LUES PAR LA RÉGLEMENTATION, ET FABRIQUÉES.
+#: Mesuré le 05/09/2026 : `a8_stress_testing` fait
+#: ``result_a6.get('loss_ratio_attendu', 0.72)`` — une clé qu'A6 ne publie
+#: JAMAIS, donc le 0,72 se pose à chaque run, et `a8:1084` s'en sert pour
+#: décider s'il faut « resserrer les critères de souscription ».
+#:
+#:   *Déclarer ce qu'on ne produit pas vaut mieux que laisser un
+#:   consommateur l'inventer.*
+NON_PRODUIT_PAR_LA_TARIFICATION: dict[str, str] = {
+    'primes_acquises':
+        "La prime ACQUISE est une grandeur comptable : elle vient du système "
+        "de gestion des contrats, pas d'un modèle de tarification. La "
+        "tarification produit une prime PURE (espérance de charge), pas une "
+        "prime encaissée.",
+    'loss_ratio_attendu':
+        "Le ratio S/P attendu rapporte une charge à une prime COMMERCIALE, "
+        "laquelle dépend des chargements, de la politique commerciale et des "
+        "remises accordées — aucune de ces trois n'est une sortie de la "
+        "tarification technique.",
+    'primes_emises':
+        "Comme la prime acquise : une grandeur du système de gestion.",
+}
+
+
+def publication_reglementaire(result_a6: Mapping[str, Any] | None,
+                              result_a3: Mapping[str, Any] | None = None,
+                              plan: Any = None) -> dict[str, Any]:
+    """Ce que la tarification publie à l'usage de la réglementation.
+
+    ⚠️⚠️ ELLE PUBLIE, ELLE NE CÂBLE PAS. La publication vit sous SA PROPRE
+    CLÉ (`publication_reglementaire`), jamais au premier niveau du résultat
+    d'A6 — et c'est délibéré. `a8_stress_testing` lit
+    ``result_a6.get('gini', 0.25)`` et ``.get('modele_retenu', 'N/A')`` :
+    publier `gini` et `modele_retenu` EN HAUT ferait trouver ces clés et
+    câblerait A8 par la bande. **Mesuré : le câblage de la frontière déplace
+    +36,2 % de SCR, soit 1 435 571 EUR.** Cette décision n'est pas prise ;
+    la porte s'ouvre, on ne la franchit pas.
+
+    ⚠️ CHAQUE VALEUR PORTE SA PROVENANCE. Un chiffre réglementaire sans
+    l'endroit d'où il vient n'est pas contestable — c'est la même exigence
+    que la `source` d'un seuil de sinistre grave.
+
+    ⚠️ ET ELLE PUBLIE CE QU'ELLE POSSÈDE, PAS CE QU'ON LUI DEMANDE. Une
+    grandeur qu'A6 n'a pas est déclarée absente AVEC SON MOTIF, jamais
+    remplie d'un repli.
+    """
+    result_a6 = result_a6 or {}
+    production = result_a6.get('modele_production') or {}
+    metriques_a3 = (result_a3 or {}).get('metriques') or {}
+    tweedie = metriques_a3.get('tweedie') if isinstance(metriques_a3, dict) else None
+
+    def _entree(valeur, provenance):
+        return {'valeur': valeur, 'provenance': provenance}
+
+    possede = {
+        'modele_retenu': _entree(production.get('modele'),
+                                 'A6.modele_production.modele'),
+        'gini_test': _entree(production.get('gini_test'),
+                             'A6.modele_production.gini_test'),
+        'score_global': _entree(production.get('score_global'),
+                                'A6.modele_production.score_global'),
+        'cible': _entree(production.get('cible'),
+                         'A6.modele_production.cible'),
+        'statut_rag': _entree(result_a6.get('statut_rag'), 'A6.statut_rag'),
+        'branche': _entree(result_a6.get('branche'), 'A6.branche'),
+        'audit_id': _entree(result_a6.get('audit_id'), 'A6.audit_id'),
+    }
+    # ⚠️ L'empreinte du plan SCELLE ce qui a été tarifé : sans elle, un
+    # consommateur réglementaire ne peut pas dire SOUS QUEL PLAN le chiffre
+    # a été produit. Elle n'est publiée que si le plan est là — jamais
+    # reconstruite.
+    if plan is not None and hasattr(plan, 'empreinte'):
+        possede['empreinte_plan'] = _entree(plan.empreinte(),
+                                            'PlanTarifaire.empreinte()')
+    # ⚠️ La prime pure moyenne n'existe que si A3 a ajusté un Tweedie : elle
+    # se RELAIE, elle ne se recalcule pas ici.
+    if isinstance(tweedie, dict) and tweedie.get('prime_pure_moy_pred') is not None:
+        possede['prime_pure_moyenne'] = _entree(
+            tweedie['prime_pure_moy_pred'],
+            'A3.metriques.tweedie.prime_pure_moy_pred')
+
+    return {
+        'possede': possede,
+        'non_produit': dict(NON_PRODUIT_PAR_LA_TARIFICATION),
+        'avertissement': (
+            "Cette publication est DESCRIPTIVE : aucun agent de la "
+            "reglementation n'y est cable. Un consommateur qui a besoin "
+            "d'une grandeur declaree NON PRODUITE doit la tirer de son "
+            "propre systeme, jamais d'un repli."
+        ),
+    }
 
 
 def sortie_completee(gabarit: dict[str, Any],

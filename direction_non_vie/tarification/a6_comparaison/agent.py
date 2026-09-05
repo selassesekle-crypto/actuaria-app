@@ -124,6 +124,11 @@ from core.conformite_reglementaire import (
     AE_FENETRE_ACCEPTABLE, AE_FENETRE_STRICTE,
     gini_texte, gini_arrondi, mesure_texte,
 )
+# ⚠️ Le contrat de sortie vit dans la DIRECTION, pas dans `core` : cet import
+# descend, il ne remonte pas. Voir l'en-tete de `contrat_sortie`.
+from direction_non_vie.tarification.contrat_sortie import (
+    publication_reglementaire,
+)
 
 #: ⚠️⚠️ LE VOCABULAIRE DES SPLITS, NOMMÉ — constat `a6/C6`.
 #: Trois sites comparaient `backtest['split']` au littéral
@@ -858,6 +863,14 @@ class AgentA6Comparaison:
                 'colonnes_plan_ecartees': dict(_cols_plan_ecartees),
                 'colonnes_exemptees_effet': dict(_cols_exemptees_effet),
             }
+            # ⚠️⚠️ CALCULÉE **AVANT** LES EXPORTATEURS, ET PAS AILLEURS. Une
+            # clé posée seulement dans le dictionnaire de retour n'atteint
+            # AUCUN livrable signé : `_tmp_a6` est ce que reçoivent
+            # `export_excel_a6`, le rapport modèles et le rapport d'équipe.
+            #   *Un calcul qui n'atteint aucun livrable n'existe pas.*
+            _publication_regl = publication_reglementaire(
+                _tmp_a6, result_a3, plan)
+            _tmp_a6['publication_reglementaire'] = _publication_regl
             _excel_a6 = b''
             _word_a6  = b''
             _html_a6  = b''
@@ -1106,6 +1119,17 @@ class AgentA6Comparaison:
                 'livrables_tailles':  {nom: len(oct_ or b'')
                                        for nom, oct_ in _livrables.items()},
                 'avertissement_livrables': _avert_livrables,
+                # ⚠️⚠️ CE QUE LA TARIFICATION PUBLIE À L'USAGE DE LA
+                # RÉGLEMENTATION — sous SA PROPRE CLÉ, jamais au premier
+                # niveau. `a8_stress_testing` lit `result_a6.get('gini',
+                # 0.25)` et `.get('modele_retenu', 'N/A')` : publier ces noms
+                # EN HAUT câblerait A8 par la bande, et le câblage de la
+                # frontière déplace **+36,2 % de SCR, soit 1 435 571 EUR** —
+                # une décision qui n'est pas prise.
+                #   *La porte s'ouvre, on ne la franchit pas.*
+                # ⚠️ RELAIS, pas second calcul : deux calculs, deux vérités
+                # possibles entre le classeur signé et le résultat rendu.
+                'publication_reglementaire': _publication_regl,
             }
 
         except Exception as e:
