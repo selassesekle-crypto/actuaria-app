@@ -134,9 +134,9 @@ from core.plan_tarifaire import (
     PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
     alerte_modele_ampute,
 )
-from core.severite import (construire_cible_severite, phrase_aucun_grave,
-                           phrase_seuil_suppose, seuil_declare,
-                           synthese_assiette_ecretement)
+from core.severite import (ajuster_glm_cout, construire_cible_severite,
+                           phrase_aucun_grave, phrase_seuil_suppose,
+                           seuil_declare, synthese_assiette_ecretement)
 
 # ⚠️⚠️ CONSTAT `a2/C15` — LE FILTRE GLOBAL D'AVERTISSEMENTS EST RETIRÉ.
 # `warnings.filterwarnings('ignore')` posé ICI, au niveau module, s'appliquait
@@ -422,6 +422,11 @@ class AgentA3GLM:
         # appel : un plan reste d'un run precedent ecreterait sous le seuil
         # d'un AUTRE portefeuille.
         self._plan_run = plan
+        # ⚠️ La famille de severite DECLAREE, pour `_calibrer_gamma` qui ne
+        # recoit pas le plan. Reinitialisee a chaque appel : une famille
+        # restee d'un run precedent ajusterait la loi d'un AUTRE plan.
+        self._famille_severite_run = getattr(plan, 'famille_severite',
+                                             'gamma')
 
         try:
             # ── ÉTAPE 1 : PRÉPARATION ─────────────────────────────────────────
@@ -1417,11 +1422,14 @@ class AgentA3GLM:
             X_train = sm.add_constant(df_sin_train[vars_actives].fillna(0))
 
             try:
-                modele = sm.GLM(
-                    y_sev_train,
-                    X_train,
-                    family=families.Gamma(link=families.links.Log())
-                ).fit(maxiter=200, disp=False)
+                # ⚠⚠ LA FAMILLE VIENT DU PLAN, PLUS DU CODE. A3 ajustait une
+                # Gamma EN DUR alors que le plan declare `famille_severite` et
+                # que le chemin declaratif sait faire gamma,
+                # inverse-gaussienne et lognormale (avec correction de Duan).
+                # *La seule capacite que le chemin a supprimer possedait et
+                # que le moteur retenu n'avait pas.*
+                modele = ajuster_glm_cout(X_train, y_sev_train,
+                                          self._famille_severite_run)
 
                 pvalues   = modele.pvalues.drop('const', errors='ignore')
                 pvalue_max = pvalues.max()
@@ -1484,10 +1492,8 @@ class AgentA3GLM:
             # SÉVÉRITÉ, l'assiette est celle des SINISTRÉS : un portefeuille
             # sans sinistre y arrive avec zéro ligne.
             try:
-                modele_final = sm.GLM(
-                    y_sev_train, X_int,
-                    family=families.Gamma(link=families.links.Log())
-                ).fit(maxiter=200, disp=False)
+                modele_final = ajuster_glm_cout(X_int, y_sev_train,
+                                                self._famille_severite_run)
             except Exception as e:
                 raise _calibration_impossible(
                     'GLM Gamma (cout moyen)', y_sev_train,
@@ -1530,10 +1536,20 @@ class AgentA3GLM:
         metriques = {
             'aic':              round(float(modele_final.aic), 2),
             'bic':              round(float(modele_final.bic), 2),
-            'deviance':         round(float(modele_final.deviance), 4),
-            'pseudo_r2':        round(
-                1 - modele_final.deviance / modele_final.null_deviance, 4
-            ),
+            # ⚠️⚠️ LA DEVIANCE N'EXISTE PAS POUR TOUTE FAMILLE. La lognormale
+            # s'ajuste par MOINDRES CARRES sur log(coût) — un OLS n'a ni
+            # déviance ni déviance nulle. `round(float(None), 4)` levait, et
+            # le run entier échouait dès qu'un plan déclarait cette famille.
+            # *Une grandeur qui n'a pas de sens pour ce modèle n'a pas de
+            # valeur — et surtout pas zéro, qui se lirait comme un ajustement
+            # parfait.* Les lecteurs savent déjà dire « non mesuré ».
+            'deviance':         (round(float(modele_final.deviance), 4)
+                                 if modele_final.deviance is not None
+                                 else None),
+            'pseudo_r2':        (round(
+                1 - modele_final.deviance / modele_final.null_deviance, 4)
+                if (modele_final.deviance is not None
+                    and modele_final.null_deviance) else None),
             # ⚠️ `None` est une ABSENCE DE MESURE, jamais un zero : on la
             # stocke telle quelle, comme le Tweedie le fait deja (`a3/C6`).
             'gini':             (round(gini, 4) if gini is not None else None),

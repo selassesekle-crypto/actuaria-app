@@ -30,6 +30,8 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+import statsmodels.api as sm
+from statsmodels.genmod import families as _families
 
 # ⚠️ CONSTAT `socle/C3` — `CibleSeverite` EST EXPORTÉE SANS ÊTRE NOMMÉE.
 # Mesuré par AST le 01/09/2026 : zéro occurrence hors de ce module, tests
@@ -37,7 +39,8 @@ import pandas as pd
 # `construire_cible_severite` : ses trois appelants l'utilisent — ils lisent
 # `.n_retenus`, `.seuil` — sans jamais écrire son nom. *L'exporter est ce qui
 # permet de l'annoter ; ne pas dire pourquoi la ferait passer pour un oubli.*
-__all__ = ["CibleSeverite", "construire_cible_severite",
+__all__ = ["CibleSeverite", "ModeleCout", "ajuster_glm_cout",
+           "construire_cible_severite",
            "synthese_assiette_ecretement"]
 
 
@@ -369,3 +372,93 @@ def synthese_assiette_ecretement(cible: CibleSeverite) -> str | None:
         f"déclarez `cout_par_sinistre` au plan et fournissez les montants "
         f"individuels."
     )
+
+
+def _famille_cout_statsmodels(famille_severite: str):
+    """Traduit plan.famille_severite en famille statsmodels. 'lognormal' est
+    traité à part (régression gaussienne sur log(coût) + correction de Duan) :
+    statsmodels n'a pas de famille log-normale native, et c'est la façon
+    actuarielle standard de l'ajuster."""
+    if famille_severite == "gamma":
+        return _families.Gamma(link=_families.links.Log())
+    if famille_severite == "inverse_gaussienne":
+        return _families.InverseGaussian(link=_families.links.Log())
+    if famille_severite == "lognormal":
+        return "lognormal"
+    raise ValueError(f"famille_severite inconnue : '{famille_severite}'.")
+
+
+class ModeleCout:
+    """GLM de coût moyen ajusté selon la famille DÉCLARÉE dans le plan. Interface
+    predict() uniforme (retour sur l'échelle du coût, quelle que soit la famille)."""
+
+    def __init__(self, famille_severite: str, resultat, duan: float = 1.0):
+        self.famille_severite = famille_severite
+        self._res = resultat
+        self._duan = duan   # smearing de Duan (lognormal uniquement)
+
+    def predict(self, Xc) -> np.ndarray:
+        mu = np.asarray(self._res.predict(Xc), dtype=float)
+        if self.famille_severite == "lognormal":
+            # OLS sur log(coût) → retour à l'échelle coût avec correction de Duan
+            return np.exp(mu) * self._duan
+        return mu   # gamma / inverse-gaussienne : lien log → déjà en euros
+
+    # ── LA SURFACE DE LECTURE D'UN MODÈLE DE COÛT ───────────────────────────
+    # ⚠️⚠️ ELLE EXISTE PARCE QU'A3 CODAIT LA FAMILLE EN DUR. A3 lit sept
+    # attributs du résultat ajusté — `params`, `pvalues`, `conf_int`, `aic`,
+    # `bic`, `deviance`, `null_deviance` — et ne pouvait donc pas passer par
+    # cette classe tant qu'elle n'exposait que `predict`.
+    #
+    # ⚠️ ET DEUX D'ENTRE EUX N'EXISTENT PAS POUR LA LOGNORMALE : un OLS n'a
+    # ni déviance ni déviance nulle. Ils valent alors `None` — *une grandeur
+    # qui n'a pas de sens pour ce modèle n'a pas de valeur, et surtout pas
+    # zéro*, qui se lirait comme un ajustement parfait.
+
+    @property
+    def params(self):
+        return self._res.params
+
+    @property
+    def pvalues(self):
+        return self._res.pvalues
+
+    def conf_int(self, *args, **kwargs):
+        return self._res.conf_int(*args, **kwargs)
+
+    @property
+    def aic(self) -> float:
+        return float(self._res.aic)
+
+    @property
+    def bic(self) -> float:
+        return float(getattr(self._res, 'bic', np.nan))
+
+    @property
+    def deviance(self):
+        """La déviance — `None` pour la lognormale (un OLS n'en a pas)."""
+        valeur = getattr(self._res, 'deviance', None)
+        return None if valeur is None else float(valeur)
+
+    @property
+    def null_deviance(self):
+        """La déviance du modèle nul — `None` pour la lognormale."""
+        valeur = getattr(self._res, 'null_deviance', None)
+        return None if valeur is None else float(valeur)
+
+
+def ajuster_glm_cout(Xc: pd.DataFrame, y_cout: pd.Series,
+                     famille_severite: str = "gamma") -> ModeleCout:
+    """Ajuste le GLM de COÛT MOYEN sur les sinistres (>0), selon la famille
+    déclarée. Xc : matrice de conception AVEC constante ; y_cout : coût moyen
+    par sinistre (>0)."""
+    fam = _famille_cout_statsmodels(famille_severite)
+    y = np.asarray(y_cout, dtype=float)
+    if fam == "lognormal":
+        ylog = np.log(np.clip(y, 1e-9, None))
+        res = sm.OLS(ylog, Xc).fit()
+        resid = ylog - np.asarray(res.predict(Xc), dtype=float)
+        duan = float(np.mean(np.exp(resid)))   # smearing estimator (Duan, 1983)
+        return ModeleCout("lognormal", res, duan)
+    res = sm.GLM(y, Xc, family=fam).fit(maxiter=200, disp=False)
+    return ModeleCout(famille_severite, res)

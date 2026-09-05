@@ -35,7 +35,12 @@ from core.conformite_reglementaire import construire_matrice_x
 # l'importait DEPUIS ce fichier** (mesuré). *Un ré-export tacite se casse en
 # silence ; celui-ci n'existait pas.*
 from core.qualite_donnees import preambule_qualite
-from core.severite import construire_cible_severite, seuil_declare
+# ⚠️⚠️ LES PRIMITIVES DE SEVERITE VIVENT DESORMAIS DANS `core/severite.py`.
+# Elles etaient ici, dans la direction, et A3 -- l'autre moteur -- codait la
+# famille Gamma EN DUR faute de pouvoir les atteindre. *Deux chemins qui
+# ajustent la meme grandeur avec deux codes finissent par diverger.*
+from core.severite import (ModeleCout, ajuster_glm_cout,
+                           construire_cible_severite, seuil_declare)
 from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
 
 # Chargements par défaut (auto). Déclarables dans le plan (étape 6) ; ici en
@@ -48,54 +53,6 @@ CHARGEMENTS_DEFAUT = {
 # ══════════════════════════════════════════════════════════════════════════════
 #  GLM de COÛT MOYEN — la famille est DÉCLARÉE, plus codée en dur (schéma étendu)
 # ══════════════════════════════════════════════════════════════════════════════
-def _famille_cout_statsmodels(famille_severite: str):
-    """Traduit plan.famille_severite en famille statsmodels. 'lognormal' est
-    traité à part (régression gaussienne sur log(coût) + correction de Duan) :
-    statsmodels n'a pas de famille log-normale native, et c'est la façon
-    actuarielle standard de l'ajuster."""
-    if famille_severite == "gamma":
-        return _families.Gamma(link=_families.links.Log())
-    if famille_severite == "inverse_gaussienne":
-        return _families.InverseGaussian(link=_families.links.Log())
-    if famille_severite == "lognormal":
-        return "lognormal"
-    raise ValueError(f"famille_severite inconnue : '{famille_severite}'.")
-
-
-class ModeleCout:
-    """GLM de coût moyen ajusté selon la famille DÉCLARÉE dans le plan. Interface
-    predict() uniforme (retour sur l'échelle du coût, quelle que soit la famille)."""
-
-    def __init__(self, famille_severite: str, resultat, duan: float = 1.0):
-        self.famille_severite = famille_severite
-        self._res = resultat
-        self._duan = duan   # smearing de Duan (lognormal uniquement)
-
-    def predict(self, Xc) -> np.ndarray:
-        mu = np.asarray(self._res.predict(Xc), dtype=float)
-        if self.famille_severite == "lognormal":
-            # OLS sur log(coût) → retour à l'échelle coût avec correction de Duan
-            return np.exp(mu) * self._duan
-        return mu   # gamma / inverse-gaussienne : lien log → déjà en euros
-
-
-def ajuster_glm_cout(Xc: pd.DataFrame, y_cout: pd.Series,
-                     famille_severite: str = "gamma") -> ModeleCout:
-    """Ajuste le GLM de COÛT MOYEN sur les sinistres (>0), selon la famille
-    déclarée. Xc : matrice de conception AVEC constante ; y_cout : coût moyen
-    par sinistre (>0)."""
-    fam = _famille_cout_statsmodels(famille_severite)
-    y = np.asarray(y_cout, dtype=float)
-    if fam == "lognormal":
-        ylog = np.log(np.clip(y, 1e-9, None))
-        res = sm.OLS(ylog, Xc).fit()
-        resid = ylog - np.asarray(res.predict(Xc), dtype=float)
-        duan = float(np.mean(np.exp(resid)))   # smearing estimator (Duan, 1983)
-        return ModeleCout("lognormal", res, duan)
-    res = sm.GLM(y, Xc, family=fam).fit(maxiter=200, disp=False)
-    return ModeleCout(famille_severite, res)
-
-
 # ══════════════════════════════════════════════════════════════════════════════
 #  TarifNonVie — le livrable commercial (étape 5)
 # ══════════════════════════════════════════════════════════════════════════════
