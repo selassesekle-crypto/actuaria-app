@@ -236,9 +236,14 @@ def syntheses_reglementaires(results: Dict[str, Dict]) -> Dict[str, str]:
                             r6.get('colonnes_plan_manquantes')),
         # ⚠️ Constat `conformite/C15` — cause DISTINCTE de la précédente :
         # la colonne EXISTE, un filtre l'a retirée avant la conformité.
+        # ⚠️⚠️ `r6['plan']` N'EXISTE PAS — A6 ne publie AUCUNE clé `plan`
+        # (mesuré par AST le 05/09/2026 sur ses 51 clés de sortie). Le nom du
+        # plan valait donc toujours `''`, et le libellé publié disait
+        # « plan '?' ». L'identité du plan voyage sous `branche`, que les
+        # quatre agents publient.
         'plan_ecarte':  synthese_colonnes_plan_ecartees(
                             r6.get('colonnes_plan_ecartees'),
-                            (r6.get('plan') or {}).get('lob', '')),
+                            r6.get('branche', '')),
         # ⚠️ Constat `conformite/C4` — sens INVERSE des deux précédentes :
         # la colonne est CONSERVÉE, soustraite au contrôle par l'effet
         # sur décision du plan signé. Ce qui se vérifie n'est pas son

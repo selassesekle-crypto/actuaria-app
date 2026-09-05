@@ -985,8 +985,11 @@ def export_excel_a6(result_a6: Dict, audit_id: str = "", arrete: Optional[str] =
         if _synth_ex:
             _kpi(ws5, r, "Colonnes exemptees du controle par l'effet",
                  _synth_ex, statut="AMBRE", wrap=True); r += 1
+        # ⚠️ Meme correctif que dans le Word/HTML et le rapport equipe : sans
+        # le nom du plan, le libelle publie dit << plan '?' >>.
         _synth_ce = synthese_colonnes_plan_ecartees(
-            result_a6.get('colonnes_plan_ecartees'))
+            result_a6.get('colonnes_plan_ecartees'),
+            result_a6.get('branche', ''))
         if _synth_ce:
             _kpi(ws5, r, "Colonnes du plan écartées avant le filtre",
                  _synth_ce, statut="AMBRE", wrap=True); r += 1

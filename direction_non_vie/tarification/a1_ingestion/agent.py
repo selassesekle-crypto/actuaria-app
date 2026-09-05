@@ -38,6 +38,7 @@ from typing import Dict, Any, Optional, List, Tuple
 import numpy as np
 import pandas as pd
 from core.charts_tarif import glyphe_rag
+from direction_non_vie.tarification.contrat_sortie import sortie_completee
 from core.qualite_donnees import (borne_exposition,
                                   exiger_canal_sans_objet)
 
@@ -200,6 +201,38 @@ SYNONYMES_COLONNES = {
 # ingéré par erreur dans le pipeline de tarification Non-Vie.
 BRANCHES_SUPPORTEES = ('non_vie',)
 
+# ⚠️⚠️ LE GABARIT DE SORTIE D'A1 — SEIZE CLÉS, SUR TOUS SES CHEMINS.
+# **Mesuré le 05/09/2026** : `run` avait QUATRE sorties, une complète à seize
+# clés et trois chemins d'échec à huit. Il y manquait `qualite`, `rapport`,
+# `hash_md5`, `client_id`, `audit_trail` et les trois clés de livrable — que
+# `tarif_excel` et `rapport_equipe_tarif` lisent. Dès qu'A1 échouait, ces
+# lecteurs recevaient donc leur littéral, sans qu'aucun d'eux le sache.
+#
+#   *C'est la racine du défaut du lot précédent : un lecteur ne pose un
+#   littéral que parce qu'aucune clé ne lui est garantie.*
+#
+# ⚠️ `dataframe` n'y figure pas avec une forme vide partagée : un DataFrame
+# est mutable, un gabarit de module le ferait partager entre appels. Chaque
+# sortie construit le sien.
+GABARIT_SORTIE: dict[str, Any] = {
+    'success':     False,
+    'dataframe':   None,
+    'branche':     '',
+    'statut_rag':  'ROUGE',
+    'score_qual':  0,
+    'qualite':     {},
+    'hash_md5':    '',
+    'rapport':     {},
+    'commentaire': '',
+    'audit_id':    '',
+    'client_id':   None,
+    'erreur':      None,
+    'excel_bytes': b'',
+    'word_bytes':  b'',
+    'pdf_bytes':   b'',
+    'audit_trail': {},
+}
+
 FORMATS_SUPPORTES = ['.csv', '.xlsx', '.xls', '.parquet', '.json', '.txt']
 
 SEUILS_QUALITE = {
@@ -352,16 +385,14 @@ class AgentA1Ingestion:
                 f"propre traitement de données depuis leur passage en autonomie."
             )
             logger.error(f"[{audit_id}] {_msg}")
-            return {
-                'success':    False,
-                'dataframe':  pd.DataFrame(),
-                'branche':    branche,
-                'statut_rag': 'ROUGE',
-                'score_qual': 0,
-                'audit_id':   audit_id,
-                'erreur':     _msg,
-                'commentaire': f"❌ ERREUR A1 : {_msg}",
-            }
+            return sortie_completee(
+                GABARIT_SORTIE,
+                dataframe=pd.DataFrame(),
+                branche=branche,
+                audit_id=audit_id,
+                erreur=_msg,
+                commentaire=f"❌ ERREUR A1 : {_msg}",
+            )
 
         # ── PHASE 1 : LA SOUS-BRANCHE EST DÉCLARÉE, PLUS DEVINÉE ──────────────
         # A1 ne détecte plus (MOTS_CLES_DETECTION supprimé) : l'actuaire déclare
@@ -374,16 +405,14 @@ class AgentA1Ingestion:
                 "MOTS_CLES_DETECTION supprimé). L'actuaire la déclare explicitement."
             )
             logger.error(f"[{audit_id}] {_msg}")
-            return {
-                'success':    False,
-                'dataframe':  pd.DataFrame(),
-                'branche':    branche,
-                'statut_rag': 'ROUGE',
-                'score_qual': 0,
-                'audit_id':   audit_id,
-                'erreur':     _msg,
-                'commentaire': f"❌ ERREUR A1 : {_msg}",
-            }
+            return sortie_completee(
+                GABARIT_SORTIE,
+                dataframe=pd.DataFrame(),
+                branche=branche,
+                audit_id=audit_id,
+                erreur=_msg,
+                commentaire=f"❌ ERREUR A1 : {_msg}",
+            )
 
         try:
             # ── ÉTAPE 1 : CHARGEMENT ──────────────────────────────────────────
@@ -516,16 +545,14 @@ class AgentA1Ingestion:
 
         except Exception as e:
             logger.error(f"[{audit_id}] ERREUR : {e}", exc_info=True)
-            return {
-                'success':    False,
-                'dataframe':  pd.DataFrame(),
-                'branche':    branche,
-                'statut_rag': 'ROUGE',
-                'score_qual': 0,
-                'audit_id':   audit_id,
-                'erreur':     str(e),
-                'commentaire':f"❌ ERREUR A1 : {e}",
-            }
+            return sortie_completee(
+                GABARIT_SORTIE,
+                dataframe=pd.DataFrame(),
+                branche=branche,
+                audit_id=audit_id,
+                erreur=str(e),
+                commentaire=f"❌ ERREUR A1 : {e}",
+            )
 
     # ══════════════════════════════════════════════════════════════════════════
     # CHARGEMENT FICHIER

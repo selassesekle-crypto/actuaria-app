@@ -1505,8 +1505,16 @@ def _construire_contexte_tarif(
          or "Aucune : toute colonne candidate a ete soumise au controle."),
         "",
         "=== COLONNES DU PLAN ECARTEES AVANT LE FILTRE (conformite/C15) ===",
+        # ⚠️⚠️ LE NOM DU PLAN MANQUAIT AUX TROIS SURFACES SIGNEES. Le libelle
+        # publie est << ACTION REQUISE -- plan '?' : N facteur(s) DECLARE(S)
+        # ... RETIRE(S) >> : sans le nom, l'actuaire apprend qu'un plan a un
+        # probleme sans savoir LEQUEL, sur un portefeuille qui en compte
+        # vingt. Les six tests de `test_colonnes_plan_ecartees` passaient
+        # 'auto' EN DUR a la fonction : ils attestaient le libelle sans
+        # jamais passer par le site de production.
         (synthese_colonnes_plan_ecartees(
-            result_a6.get('colonnes_plan_ecartees') if result_a6 else None)
+            result_a6.get('colonnes_plan_ecartees') if result_a6 else None,
+            (result_a6 or {}).get('branche', ''))
          or "Aucune : toute colonne declaree a bien atteint le filtre."),
         "",
         *_lignes_map6,
