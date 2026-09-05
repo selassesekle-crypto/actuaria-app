@@ -381,19 +381,49 @@ def export_excel_a4(result_a4: Dict, audit_id: str = "", arrete: Optional[str] =
         _header(ws3, r, 2, "Importance SHAP", 22)
         _header(ws3, r, 3, "Rang", 10)
         r += 1
-        if isinstance(shap_vals, dict) and shap_vals:
-            importance = shap_vals.get('importance_globale', shap_vals)
-            if isinstance(importance, dict):
-                sorted_feats = sorted(importance.items(), key=lambda x: -abs(x[1]))
-                for rang, (feat, imp) in enumerate(sorted_feats[:30], 1):
-                    bg = GRIS_L if rang % 2 == 0 else None
-                    _cell(ws3, r, 1, feat, cf=NOIR, fill=bg)
-                    _cell(ws3, r, 2, round(float(imp), 6), cf=NOIR, fill=bg,
-                          fmt=FMT_DEC4, ah="right")
-                    _cell(ws3, r, 3, rang, cf=NOIR, fill=bg, ah="center")
-                    r += 1
+        # ⚠️⚠️ CE BLOC FAISAIT DISPARAITRE LE CLASSEUR ENTIER. Il lisait
+        # `shap_vals.get('importance_globale', shap_vals)` : quand le calcul
+        # SHAP echoue, il rend `{'erreur': '<message>'}`, et ce repli
+        # renvoyait LE DICTIONNAIRE LUI-MEME. `isinstance(..., dict)` etait
+        # donc vrai, et la ligne suivante faisait `abs('<message>')` ->
+        # TypeError -> l'exportateur rendait `b''`.
+        #
+        #   *Mesure du 05/09/2026 : sur la fixture par defaut, le meilleur
+        #   modele est `lineaire_regularise`, un `Pipeline` que SHAP ne
+        #   savait pas router. Le classeur A4 de la cible PRIMAIRE valait
+        #   donc **0 octet**, et le statut restait AMBRE.*
+        #
+        # ⚠️ On n'accepte plus qu'un dictionnaire de NOMBRES, et l'absence
+        # se DIT avec sa cause — un onglet qui explique vaut mieux qu'un
+        # classeur disparu.
+        _imp = shap_vals.get('importance_globale') if isinstance(shap_vals, dict) else None
+        _lisible = (isinstance(_imp, dict) and _imp
+                    and all(isinstance(v, (int, float)) and not isinstance(v, bool)
+                            for v in _imp.values()))
+        if _lisible:
+            sorted_feats = sorted(_imp.items(), key=lambda x: -abs(x[1]))
+            for rang, (feat, imp) in enumerate(sorted_feats[:30], 1):
+                bg = GRIS_L if rang % 2 == 0 else None
+                _cell(ws3, r, 1, feat, cf=NOIR, fill=bg)
+                _cell(ws3, r, 2, round(float(imp), 6), cf=NOIR, fill=bg,
+                      fmt=FMT_DEC4, ah="right")
+                _cell(ws3, r, 3, rang, cf=NOIR, fill=bg, ah="center")
+                r += 1
+            _explicateur = (shap_vals.get('explicateur')
+                            if isinstance(shap_vals, dict) else None)
+            if _explicateur:
+                r += 1
+                _cell(ws3, r, 1, f"Explicateur SHAP : {_explicateur}",
+                      cf=GRIS, fill=None, border=False)
         else:
-            _cell(ws3, r, 1, "SHAP non disponible — installer le package 'shap'",
+            # ⚠️ Le message DIT la cause. « installer le package 'shap' »
+            # etait un diagnostic faux des que shap etait installe mais que
+            # l'explicateur avait echoue.
+            _cause = ((shap_vals or {}).get('erreur')
+                      if isinstance(shap_vals, dict) else None)
+            _cell(ws3, r, 1,
+                  f"SHAP non calcule : {_cause}" if _cause
+                  else "SHAP non calcule (aucune importance publiee)",
                   cf=GRIS, fill=None, border=False)
 
         # ── Onglet 4 : Hypothèses H1-H4 ──────────────────────────────────────

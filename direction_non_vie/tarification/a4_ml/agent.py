@@ -272,6 +272,65 @@ COLS_A_EXCLURE_ML = [
 #: nomme, sinon personne ne peut le discuter.
 SEUIL_GINI_ML_EXPLOITABLE = 0.10
 
+#: Les capacités qui désignent un modèle d'ARBRES — quel que soit son nom.
+#: ⚠️⚠️ LE ROUTAGE SHAP BRANCHAIT SUR LE NOM DU MODÈLE. **Mesuré le
+#: 05/09/2026** : cinq des dix modèles du catalogue (`lineaire_regularise`,
+#: `quantile_50`, `quantile_90`, `xgboost_optuna`, `xgboost_tweedie`)
+#: tombaient dans le `else` et recevaient un `LinearExplainer` — y compris
+#: des modèles d'arbres. Une capacité ne se renomme pas ; un nom, si.
+_CAPACITES_ARBRE = ('estimators_', 'tree_', 'get_booster', 'booster_',
+                    'tree_count_')
+
+
+def _shap_est_absent(shap_summary) -> bool:
+    """SHAP a-t-il produit une importance UTILISABLE ?
+
+    ⚠️⚠️ CE DRAPEAU SE DÉRIVAIT DE LA PROSE D'UNE ALERTE :
+    ``any('SHAP ABSENT' in a for a in rapport['alertes'])``. Il ne
+    surveillait donc pas SHAP, il surveillait une CHAÎNE DE CARACTÈRES dans
+    un canal annexe — qu'on reformule le message et le garde-fou cesse de se
+    déclencher, en silence. Et si le calcul échouait sans que cette alerte
+    précise soit poussée, le statut pouvait passer VERT sans aucune
+    interprétabilité (``_calculer_statut_rag`` : ``not shap_absent`` est une
+    des trois conditions du VERT).
+
+      *Un contrôle qui lit un texte ne surveille pas un comportement.*
+
+    Il se dérive maintenant du RÉSULTAT : SHAP est absent tant qu'il n'a pas
+    produit un dictionnaire d'importances non vide.
+    """
+    return not (isinstance(shap_summary, dict)
+                and isinstance(shap_summary.get('importance_globale'), dict)
+                and bool(shap_summary['importance_globale']))
+
+
+def _estimateur_et_matrice(modele, X):
+    """L'estimateur que SHAP doit voir, et la matrice DANS SON ESPACE.
+
+    Deux enveloppes se superposent dans ce module :
+
+      · `_ModeleFrequenceExposition` (cible de comptage) expose `.base` ;
+      · un `Pipeline` sklearn, pour les modèles linéaires régularisés.
+
+    ⚠️⚠️ ET DÉBALLER LE PIPELINE NE SUFFIT PAS : il vaut
+    ``StandardScaler → PoissonRegressor``. Expliquer l'estimateur final avec
+    la matrice d'ENTRÉE donnerait des valeurs SHAP calculées dans le mauvais
+    espace — un chiffre faux, publié comme une importance de facteur dans un
+    livrable signé. On applique donc le préfixe du pipeline à la matrice.
+
+    Rend ``(estimateur, matrice, préfixe appliqué)``.
+    """
+    modele = getattr(modele, 'base', modele)
+    prefixe = None
+    if hasattr(modele, 'steps') and len(getattr(modele, 'steps', ())) > 1:
+        prefixe = modele[:-1]
+        X = prefixe.transform(X)
+        modele = modele.steps[-1][1]
+    elif hasattr(modele, 'steps'):
+        modele = modele.steps[-1][1]
+    return modele, X, prefixe
+
+
 FAMILLES_MODELES_ML = {
     'gbm':             'Arbres / Boosting',
     'xgboost':         'Arbres / Boosting',
@@ -1021,11 +1080,11 @@ class AgentA4ML:
                     logger.debug(f"chart_shap_summary non produit : {e}")
 
             # Commentaire actuaire sénior
+            # ⚠️ La règle vit dans `_shap_est_absent`, avec la mesure qui la
+            # fonde : elle se dérivait de la PROSE d'une alerte.
             statut_rag  = self._calculer_statut_rag(
                 classement, result_a3,
-                shap_absent=rapport.get('alertes', []) != []
-                and any('SHAP ABSENT' in a for a in rapport.get('alertes', []))
-            )
+                shap_absent=_shap_est_absent(shap_summary))
 
             # ── MODÈLE AMPUTÉ → PLAFOND AMBRE (cf. A3, même source unique) ────
             # Comparaison sur df.columns (disponibilité en DONNÉES), pas sur la
@@ -1909,28 +1968,27 @@ class AgentA4ML:
         if nom_modele not in self.modeles:
             return {'erreur': f'Modèle {nom_modele} non trouvé'}
 
-        modele  = self.modeles[nom_modele]
-        # Sur cible de comptage, le modèle est enveloppé (_ModeleFrequenceExposition) ;
-        # SHAP (TreeExplainer/LinearExplainer) doit voir l'estimateur NU.
-        modele  = getattr(modele, 'base', modele)
         n_shap  = min(1000, len(X_test))
         X_shap  = X_test[:n_shap]
 
         try:
-            # Explainer selon le type de modèle
-            if nom_modele in ['gbm', 'random_forest']:
+            # ⚠️⚠️ LA ROUTE SE DÉRIVE DU MODÈLE, PLUS DE SON NOM.
+            modele, X_shap, _ = _estimateur_et_matrice(
+                self.modeles[nom_modele], X_shap)
+            if any(hasattr(modele, c) for c in _CAPACITES_ARBRE):
+                explicateur = 'TreeExplainer'
                 explainer   = shap.TreeExplainer(modele)
                 shap_values = explainer.shap_values(X_shap)
-            elif nom_modele in ['xgboost', 'lightgbm']:
-                explainer   = shap.TreeExplainer(modele)
-                shap_values = explainer.shap_values(X_shap)
-            elif nom_modele == 'catboost':
-                explainer   = shap.TreeExplainer(modele)
-                shap_values = explainer.shap_values(X_shap)
-            else:
-                # Modèles linéaires : SHAP linéaire
+            elif hasattr(modele, 'coef_'):
+                explicateur = 'LinearExplainer'
                 explainer   = shap.LinearExplainer(modele, X_shap)
                 shap_values = explainer.shap_values(X_shap)
+            else:
+                # ⚠️ On le DIT, on ne tente pas un explicateur au hasard : un
+                # `LinearExplainer` sur un modèle d'arbres lève, et sa
+                # levée coûtait le classeur entier.
+                return {'erreur': f"aucun explicateur SHAP pour "
+                                  f"{type(modele).__name__}"}
 
             # Importance globale = moyenne |SHAP| par feature
             importance_globale = pd.Series(
@@ -1948,6 +2006,10 @@ class AgentA4ML:
             return {
                 'modele':             nom_modele,
                 'n_contrats':         n_shap,
+                # ⚠️ L'EXPLICATEUR SE PUBLIE. Une importance SHAP calculée par
+                # un explicateur linéaire sur un modèle d'arbres n'aurait pas
+                # le même sens — le livrable doit pouvoir dire lequel a servi.
+                'explicateur':        explicateur,
                 'importance_globale': {k: round(float(v), 4) for k, v in top10.items()},
                 'top_feature':        importance_globale.index[0] if len(importance_globale) > 0 else 'N/A',
             }
