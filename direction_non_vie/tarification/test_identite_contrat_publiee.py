@@ -45,7 +45,9 @@ Tout en `unittest.TestCase` : la gate lance `unittest discover`.
 import io
 import logging
 import os
+import pathlib
 import sys
+import tempfile
 import unittest
 import warnings
 
@@ -95,7 +97,15 @@ class TestLIdentiteAtteintLeClasseur(unittest.TestCase):
         logging.disable(logging.NOTSET)
 
     def test_ID1_la_note_d_identite_atteint_le_classeur_SIGNE(self):
-        """⚠️⚠️ *Un calcul qui n'atteint aucun livrable n'existe pas.*"""
+        """⚠️⚠️ *Un calcul qui n'atteint aucun livrable n'existe pas.*
+
+        ⚠️ `cls.sans` N'EST PLUS << LE CAS DE PRODUCTION >> DEPUIS LE
+        06/09/2026 : `pipeline_agents` transmet desormais le plan. Il reste le
+        cas d'un appelant qui ne le transmet pas -- dont `actuaria_app.py`,
+        ferme par decision. Ce test verifie donc que le REPLI reste correct,
+        pas qu'il est ce que la production fait. Voir `ID-7`, qui mesure les
+        appelants reels.
+        """
         qualite = self.sans.get('qualite') or {}
         self.assertEqual(qualite.get('source_identifiant'), 'devinee',
                          "sans plan, A1 devrait DEVINER l'identite : ce test "
@@ -219,6 +229,190 @@ class TestLeReferentielPorteBienLInformation(unittest.TestCase):
             f"{sans_id} plan(s) sans `identifiant_contrat` et {sans_ech} sans "
             f"`echeance` : la note d'identite d'A1 affirme que les vingt les "
             f"declarent. Corrigez le plan, ou corrigez la note.")
+
+
+class TestQuiTransmetLePlanAA1(unittest.TestCase):
+    """⚠️⚠️ LE CONSTAT `A1.5`, DEVENU CONTROLE — lot 1, 06/09/2026.
+
+    A1 etait le SEUL des six agents dont `run()` ne recevait pas le plan,
+    c'est-a-dire exactement l'agent qui DEVINAIT l'identite du contrat. Le
+    mecanisme existait depuis toujours et les vingt plans declarent
+    `identifiant_contrat` ET `echeance` (`ID-6`) : *l'information existait,
+    elle n'atteignait pas l'agent qui en avait besoin.*
+
+    ⚠️ Releve PAR AST, jamais au grep : un alias ou un `self.` ne se voit pas
+    au texte.
+    """
+
+    #: Les appelants de production de `A1.run`, et ce qu'on exige de chacun.
+    #: ⛔ `actuaria_app.py` est FERME par decision : il ne transmet pas le
+    #: plan, et ce fait est ATTENDU ici plutot que decouvert plus tard.
+    #: *Nommer ce qu'un lot ne couvre pas vaut mieux que de laisser croire
+    #: qu'il a tout pris.*
+    _ATTENDU = {
+        'direction_non_vie/tarification/pipeline_agents.py': True,
+        'actuaria_app.py': False,
+    }
+
+    @staticmethod
+    def _analyser(source):
+        """Les appels a `A1.run` d'UN source, et s'ils transmettent le plan.
+
+        ⚠️ Isole du parcours de fichiers pour etre testable sur un extrait en
+        memoire (`ID-7b`) : *un detecteur dont on n'a jamais vu le second sens
+        peut rendre `False` par accident.*
+        """
+        import ast
+        try:
+            arbre = ast.parse(source)
+        except SyntaxError:                         # pragma: no cover
+            return []
+        trouves = []
+        for n in ast.walk(arbre):
+            if not (isinstance(n, ast.Call)
+                    and isinstance(n.func, ast.Attribute)
+                    and n.func.attr == 'run'):
+                continue
+            cible = ast.unparse(n.func.value)
+            # ⚠️ On accepte l'appel direct `AgentA1Ingestion(...).run(...)`
+            # ET la variable `a1.run(...)` : deux formes, un seul constat.
+            if 'AgentA1Ingestion' not in cible and cible not in ('a1',):
+                continue
+            trouves.append({
+                'ligne': n.lineno,
+                'plan': any(k.arg == 'plan' for k in (n.keywords or [])),
+            })
+        return trouves
+
+    @classmethod
+    def _appels_a1(cls):
+        """Les appels a `A1.run` de tout le depot, par AST."""
+        racine = pathlib.Path(_RACINE)
+        sites = []
+        for chemin in sorted(racine.rglob('*.py')):
+            s = chemin.as_posix()
+            if ('/.venv/' in s or '/audit_2026_08/' in s
+                    or chemin.name.startswith('test_')):
+                continue
+            source = chemin.read_text(encoding='utf-8', errors='replace')
+            if 'AgentA1Ingestion' not in source:
+                continue
+            for t in cls._analyser(source):
+                sites.append({'fichier': s[len(racine.as_posix()) + 1:], **t})
+        return sites
+
+    def test_ID7b_le_detecteur_DISTINGUE_les_deux_formes(self):
+        """⚠️⚠️ LE SECOND SENS DU DETECTEUR, SUR DES EXTRAITS EN MEMOIRE.
+
+        `ID-7` affirme que l'app NE transmet PAS le plan. Cette affirmation
+        serait vraie sans rien mesurer si le detecteur rendait toujours
+        `False`. On le lui fait dire dans les deux sens -- sans ecrire une
+        ligne dans `actuaria_app.py`, **fermee par decision**.
+        """
+        cas = (
+            ("r = AgentA1Ingestion(audit_path='x').run(branche='b')", False),
+            ("r = AgentA1Ingestion(audit_path='x').run(branche='b', "
+             "plan=plan)", True),
+            ("r = a1.run(branche='b', dataframe=df)", False),
+            ("r = a1.run(branche='b', dataframe=df, plan=p)", True),
+        )
+        for source, attendu in cas:
+            with self.subTest(extrait=source[:44]):
+                trouves = self._analyser(source)
+                self.assertEqual(len(trouves), 1,
+                                 f'le detecteur ne voit pas l appel : {source}')
+                self.assertEqual(
+                    trouves[0]['plan'], attendu,
+                    f'le detecteur rend {trouves[0]["plan"]} au lieu de '
+                    f'{attendu} sur : {source}')
+
+    def test_ID7_le_plan_atteint_A1_par_le_pipeline_et_PAS_par_l_app(self):
+        """⚠️⚠️ LES DEUX SENS DANS UN SEUL CONTROLE. Il exige que
+        `pipeline_agents` transmette le plan, ET que l'app ne le fasse pas --
+        parce qu'elle est fermee. Si l'un des deux change, ce test le dit
+        plutot que de laisser la situation deriver en silence."""
+        sites = self._appels_a1()
+        self.assertGreater(len(sites), 0,
+                           'aucun appel a `A1.run` trouve : le releve AST ne '
+                           'traverse plus rien')
+        mesure = {}
+        for site in sites:
+            mesure.setdefault(site['fichier'], []).append(site['plan'])
+        for fichier, attendu in self._ATTENDU.items():
+            with self.subTest(appelant=fichier):
+                self.assertIn(
+                    fichier, mesure,
+                    f'{fichier} n appelle plus `A1.run` : cette liste doit '
+                    f'etre relue')
+                for transmet in mesure[fichier]:
+                    if attendu:
+                        self.assertTrue(
+                            transmet,
+                            f'{fichier} ne transmet PAS le plan a A1 : '
+                            f'l identite du contrat y redevient DEVINEE, et '
+                            f'un historique de renouvellement repasse en '
+                            f'ROUGE sur 66,67 % de faux doublons')
+                    else:
+                        self.assertFalse(
+                            transmet,
+                            f'{fichier} transmet desormais le plan a A1. '
+                            f'C est peut-etre une bonne chose -- mais l app '
+                            f'est FERMEE par decision, donc ce changement n a '
+                            f'pas ete arbitre. Mettre `_ATTENDU` a jour APRES '
+                            f'l avoir fait arbitrer.')
+
+    def test_ID8_AUCUNE_ligne_ne_disparait_quand_le_plan_est_transmis(self):
+        """⚠️⚠️ LA CRAINTE ECRITE DANS `a1` ETAIT FAUSSE, ET ON LA MESURE.
+
+        Le code disait : << passer le plan ferait dedoublonner sur
+        (identifiant, echeance) au lieu du seul identifiant, ce qui change les
+        lignes retenues, donc le modele, donc le prix >>. **A1 SCORE la
+        qualite, il n'exclut rien** -- c'est ecrit dans le meme fichier. Le
+        statut bascule ; aucune ligne ne bouge.
+        """
+        import pandas as pd
+
+        from core.plan_tarifaire import PlanTarifaire
+        from direction_non_vie.tarification import test_plan_invariants as T
+        plan = PlanTarifaire.depuis_yaml(
+            os.path.join(_RACINE, 'plans', 'auto.yaml'))
+        col_id, col_ech = plan.identifiant_contrat, plan.echeance
+        np.random.seed(7)
+        base = T.portefeuille_auto(400, 1)
+        morceaux = []
+        for an in (2023, 2024, 2025):
+            m = base.copy()
+            m[col_id] = [f'P{n:06d}' for n in range(len(m))]
+            m[col_ech] = pd.Timestamp(f'{an}-01-01')
+            morceaux.append(m)
+        hist = pd.concat(morceaux, ignore_index=True)
+
+        from direction_non_vie.tarification.a1_ingestion.agent import (
+            AgentA1Ingestion,
+        )
+        agent = AgentA1Ingestion(audit_path=tempfile.mkdtemp(), verbose=False)
+        sans = agent.run(branche='non_vie', sous_branche='auto',
+                         dataframe=hist)
+        avec = agent.run(branche='non_vie', sous_branche='auto',
+                         dataframe=hist, plan=plan)
+        # ⚠️ La fixture doit TRAVERSER le cas : sans historique, les deux
+        # cotes seraient VERTS et ce test ne prouverait rien.
+        self.assertEqual((sans.get('qualite') or {}).get('source_identifiant'),
+                         'devinee')
+        self.assertEqual((avec.get('qualite') or {}).get('source_identifiant'),
+                         'plan')
+        self.assertEqual(sans.get('statut_rag'), 'ROUGE',
+                         'la fixture ne declenche plus le ROUGE : elle ne '
+                         'porte plus d historique de renouvellement')
+        self.assertEqual(avec.get('statut_rag'), 'VERT')
+        # ⚠️⚠️ ET LE POINT QUI COMPTE : AUCUNE LIGNE NE DISPARAIT.
+        self.assertEqual(
+            len(sans['dataframe']), len(hist),
+            'A1 a EXCLU des lignes sans le plan : il devait seulement SCORER')
+        self.assertEqual(
+            len(avec['dataframe']), len(hist),
+            'A1 a EXCLU des lignes AVEC le plan : le statut devait basculer '
+            'sans qu aucune ligne ne bouge -- un prix pourrait avoir change')
 
 
 if __name__ == '__main__':

@@ -343,8 +343,30 @@ def pipeline_agents(
     _a = dict(models_path=models_path, audit_path=audit_path, verbose=verbose)
 
     # ── SOCLE COMMUN : A1 → A2 → A3 ─────────────────────────────────────────
+    # ⚠️⚠️ LE PLAN EST TRANSMIS A A1 — constat `A1.5`, arbitré le 06/09/2026.
+    # A1 était le SEUL des six agents dont `run()` ne recevait pas le plan,
+    # c'est-à-dire **exactement l'agent qui devinait l'identité du contrat**.
+    # Le mécanisme existait depuis toujours : `PlanTarifaire` porte
+    # `identifiant_contrat` et `echeance`, et les vingt plans du référentiel
+    # les déclarent. *L'information existait, elle n'atteignait pas l'agent
+    # qui en avait besoin.*
+    #
+    # ⚠️ CE QUE ÇA CHANGE, MESURÉ sur un historique de renouvellement de
+    # 1 800 lignes (600 contrats × 3 exercices) :
+    #     sans plan : ROUGE, 1 200 doublons = 66,67 %, identité DEVINÉE,
+    #                 granularité « un contrat », score 76,19
+    #     avec plan : VERT,  0 doublon,       identité du PLAN,
+    #                 granularité « un contrat par échéance », score 100,0
+    # Un contrat observé sur trois exercices donne trois lignes de même
+    # identifiant : ce n'est pas une redondance, c'est un historique.
+    #
+    # ⚠️⚠️ ET AUCUNE LIGNE NE DISPARAÎT — MESURÉ : 1 800 rendues des deux
+    # côtés, et la couche qualité de production rend 1 800 → 1 800. **A1
+    # SCORE, il n'exclut pas.** Ce qui bascule est un STATUT SIGNÉ, pas un
+    # prix. Le passage ROUGE → VERT est arbitré, pas subi.
     r1 = AgentA1Ingestion(audit_path=audit_path, verbose=verbose).run(
-        branche=branche, sous_branche=sous_branche, dataframe=dataframe)
+        branche=branche, sous_branche=sous_branche, dataframe=dataframe,
+        plan=plan)
 
     # ── 1-B : LA COUCHE QUALITÉ, LA MÊME QUE LE CHEMIN DÉCLARATIF ───────────
     # ⚠️⚠️ ÉTAPE ⑤ DU CHANTIER 1-B, arbitrée par Selasse le 02/09/2026. Elle

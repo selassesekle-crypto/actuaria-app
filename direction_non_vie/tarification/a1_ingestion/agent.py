@@ -906,10 +906,21 @@ class AgentA1Ingestion:
         # `A1.run`** (constat `A1.5`, relevé par AST). *L'information existe,
         # elle n'atteint pas l'agent qui en a besoin* — et A1 devine une
         # identité que le plan déclarait.
-        #   Le câblage n'est PAS fait ici : passer le plan ferait dédoublonner
-        #   sur (identifiant, échéance) au lieu du seul identifiant, ce qui
-        #   change les lignes retenues, donc le modèle, donc le prix. C'est
-        #   une décision, pas un correctif.
+        #   ✅ LE CÂBLAGE EST FAIT DEPUIS LE 06/09/2026 dans
+        #   `pipeline_agents.py` — et la crainte écrite ici était FAUSSE.
+        #   Ce commentaire disait « ce qui change les lignes retenues, donc le
+        #   modèle, donc le prix ». **Mesuré : aucune ligne ne bouge.** 1 800
+        #   rendues des deux côtés, et la couche qualité de production rend
+        #   1 800 → 1 800 : *A1 SCORE la qualité, il n'exclut rien* — c'est
+        #   écrit vingt lignes plus haut dans ce même fichier.
+        #     Ce qui bascule est un STATUT SIGNÉ : ROUGE → VERT, 66,67 % de
+        #     faux doublons → 0, score 76,19 → 100,0, sur un historique de
+        #     renouvellement. Arbitré par Selasse, pas subi.
+        #   ⛔ ET LE CÂBLAGE N'EST FAIT QUE POUR UN DES DEUX APPELANTS.
+        #   `actuaria_app.py:3545` ne transmet toujours pas le plan, et l'app
+        #   est FERMÉE par décision : sur ce chemin-là, A1 continue de deviner.
+        #   *Nommer ce qu'un lot ne couvre pas vaut mieux que de laisser croire
+        #   qu'il a tout pris.* `ID-7` mesure les deux appelants.
         note_identite = {
             'plan': (f"Identité du contrat DÉCLARÉE au plan : « {col_id} »"
                      + (f", échéance « {col_ech} »." if col_ech else
@@ -922,7 +933,9 @@ class AgentA1Ingestion:
                         f"référentiel le déclarent pourtant, ainsi que "
                         f"`echeance`. Transmettre le plan rend cette identité "
                         f"opposable, et fait porter le dédoublonnage sur "
-                        f"(identifiant, échéance)."),
+                        f"(identifiant, échéance). ⚠ `pipeline_agents` le "
+                        f"transmet depuis le 06/09/2026 : si vous lisez ceci, "
+                        f"l'appelant n'est PAS celui-là."),
             'aucune': ("⚠ Aucun identifiant de contrat : le dédoublonnage "
                        "porte sur la ligne entière."),
         }[source_identifiant]
