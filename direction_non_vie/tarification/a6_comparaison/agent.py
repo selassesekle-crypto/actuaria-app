@@ -122,7 +122,7 @@ from core.conformite_reglementaire import (
     reserve_vraisemblance_non_calibree,
     GINI_PLAUSIBLE_MAX_FREQUENCE,
     AE_FENETRE_ACCEPTABLE, AE_FENETRE_STRICTE,
-    gini_texte, gini_arrondi,
+    gini_texte, gini_arrondi, mesure_texte,
 )
 
 #: ⚠️⚠️ LE VOCABULAIRE DES SPLITS, NOMMÉ — constat `a6/C6`.
@@ -1153,7 +1153,14 @@ class AgentA6Comparaison:
                         'modele':          f"GLM_{nom.upper()}",
                         'famille':         'GLM',
                         'cible':           met.get('cible'),   # déclarée par A3 (poisson=freq, gamma=cout_moyen, tweedie=prime_pure)
-                        'gini_test':       met.get('gini', 0),
+                        # ⚠️⚠️ NI `0` POUR LE GINI. Zéro est la note du modèle
+                        # qui NE DISCRIMINE PAS — une affirmation, pas une
+                        # absence. A3 rend `None` sur trois branches depuis le
+                        # lot du 03/09 ; le repli ne se déclenchait que sur une
+                        # famille entièrement absente, mais il aurait alors
+                        # inscrit un modèle nul au classement plutôt que de
+                        # dire qu'il n'a pas été mesuré.
+                        'gini_test':       met.get('gini'),
                         'base_gini':       met.get('base_gini'),
                         # ⚠️⚠️ CES DEUX LIGNES ÉTAIENT FABRIQUÉES, ET ELLES
                         # DÉCIDAIENT. `gini_train` recopiait le Gini de TEST et
@@ -1173,7 +1180,7 @@ class AgentA6Comparaison:
                         # A3 les MESURE désormais (`_stabilite_train`).
                         'gini_train':      met.get('gini_train'),
                         'relativites':     relativites,  # exp(β) par variable
-                        'rmse_test':       met.get('rmse_test', 999),
+                        'rmse_test':       met.get('rmse_test'),
                         'overfit_ratio':   met.get('overfit_ratio'),
                         'nb_vars':         met.get('nb_vars_retenues', 0),
                         'agent_source':    'A3',
@@ -1188,13 +1195,13 @@ class AgentA6Comparaison:
                     'modele':          f"ML_{nom.upper()}",
                     'famille':         'ML',
                     'cible':           _cible_a4,
-                    'gini_test':       met.get('gini_test', 0),
+                    'gini_test':       met.get('gini_test'),
                     'base_gini':       met.get('base_gini'),
                     # ⚠️ Pas de repli à 0 : un Gini d'entraînement absent n'est
                     # pas un pouvoir discriminant nul (même règle que le Gini
                     # de test, lot du 03/09/2026).
                     'gini_train':      met.get('gini_train'),
-                    'rmse_test':       met.get('rmse_test', 999),
+                    'rmse_test':       met.get('rmse_test'),
                     # ⚠️ PAS de repli à 1.0 : chez A6, 1.0 est la MEILLEURE
                     # note de stabilité possible (voir le bloc GLM ci-dessus).
                     # Un ratio absent se déclare `None` et se publie comme tel.
@@ -1212,13 +1219,13 @@ class AgentA6Comparaison:
                     'modele':          f"DL_{nom.upper()}",
                     'famille':         'Deep Learning',
                     'cible':           _cible_a5,
-                    'gini_test':       met.get('gini_test', 0),
+                    'gini_test':       met.get('gini_test'),
                     'base_gini':       met.get('base_gini'),
                     # ⚠️ Pas de repli à 0 : un Gini d'entraînement absent n'est
                     # pas un pouvoir discriminant nul (même règle que le Gini
                     # de test, lot du 03/09/2026).
                     'gini_train':      met.get('gini_train'),
-                    'rmse_test':       met.get('rmse_test', 999),
+                    'rmse_test':       met.get('rmse_test'),
                     # ⚠️ PAS de repli à 1.0 : chez A6, 1.0 est la MEILLEURE
                     # note de stabilité possible (voir le bloc GLM ci-dessus).
                     # Un ratio absent se déclare `None` et se publie comme tel.
@@ -1360,18 +1367,35 @@ class AgentA6Comparaison:
         # Extraction des valeurs pour normalisation. ⚠️ Les ratios NON MESURÉS
         # sortent de la normalisation : les y inclure sous une valeur de repli
         # déplacerait `min_of`/`max_of`, donc le score de TOUS les autres.
-        ginis    = [m['gini_test']     for m in catalogue]
-        rmses    = [m['rmse_test']     for m in catalogue]
+        # ⚠️⚠️ LES TROIS LISTES FILTRENT LES NON MESURÉS, PAS SEULEMENT LES
+        # RATIOS. Une seule valeur fabriquée déplace `max`/`min`, donc le
+        # score de TOUS les autres modèles : mesuré le 05/09/2026, un
+        # `rmse_test` absent chez le Tweedie valait le littéral `999`, qui
+        # devenait le maximum du catalogue et aplatissait le critère.
+        ginis    = [m['gini_test']     for m in catalogue
+                    if m.get('gini_test') is not None]
+        rmses    = [m['rmse_test']     for m in catalogue
+                    if m.get('rmse_test') is not None]
         overfits = [m['overfit_ratio'] for m in catalogue
                     if m.get('overfit_ratio') is not None]
 
-        max_gini = max(ginis) if max(ginis) > 0 else 1
-        min_rmse = min(rmses) if min(rmses) > 0 else 1
+        max_gini = max(ginis) if ginis and max(ginis) > 0 else 1
+        min_rmse = min(rmses) if rmses and min(rmses) > 0 else None
         min_of   = min(overfits) if overfits else None
         max_of   = max(overfits) if overfits else None
 
         for modele in catalogue:
-            # Score Gini normalisé [0,1]
+            # Score Gini normalisé [0,1].
+            # ⚠️⚠️ ET LE GINI NE SORT PAS DU SCORE, LUI — À LA DIFFÉRENCE DE
+            # LA STABILITÉ ET DE LA RMSE. J'ai d'abord écrit l'inverse ; le
+            # test `test_gini_tweedie_arbitrage` l'a refusé, et il a raison :
+            # un modèle sans Gini mesuré n'a pas à être CLASSÉ du tout. Il est
+            # écarté en amont par `_construire_catalogue` (l. 1301), et cette
+            # ligne doit continuer de LEVER si l'un passe quand même — un
+            # score calculé sur 60 % des poids le ferait entrer au classement
+            # au lieu de signaler que le filtre a été contourné.
+            #   *Retirer un critère du score et retirer un modèle du
+            #   classement ne sont pas la même décision.*
             s_gini = modele['gini_test'] / max_gini
 
             # Score stabilité [0,1] — inversé (moins d'overfit = mieux)
@@ -1391,9 +1415,15 @@ class AgentA6Comparaison:
             # Score interprétabilité (déjà normalisé)
             s_inter = modele['interpretabilite']
 
-            # Score RMSE normalisé [0,1] — inversé (moins = mieux)
-            s_rmse = min_rmse / max(modele['rmse_test'], 1e-6)
-            s_rmse = min(s_rmse, 1.0)
+            # Score RMSE normalisé [0,1] — inversé (moins = mieux).
+            # ⚠️ Une RMSE absente sortait sous le littéral `999`, qui n'est
+            # pas une RMSE : c'était le pire score possible attribué au
+            # modèle, et un plafond de normalisation offert à tous les autres.
+            _rt = modele.get('rmse_test')
+            if _rt is None or min_rmse is None or _rt <= 0:
+                s_rmse = None      # NON MESURÉE — le critère sortira du score
+            else:
+                s_rmse = min(min_rmse / _rt, 1.0)
 
             # Score global composite — ATTENTION : ce score n'est PAS un R² ni un Gini.
             # C'est une combinaison pondérée de 4 dimensions normalisées [0,1] :
@@ -1421,14 +1451,23 @@ class AgentA6Comparaison:
             score_global = _facteur * sum(w * s for w, s in _termes
                                           if s is not None)
 
-            modele['score_gini']            = round(s_gini,  4)
+            modele['score_gini']            = round(s_gini, 4)
             modele['score_stabilite']       = (None if s_stab is None
                                                else round(s_stab, 4))
             modele['score_interpretabilite']= round(s_inter, 4)
-            modele['score_rmse']            = round(s_rmse,  4)
+            modele['score_rmse']            = (None if s_rmse is None
+                                               else round(s_rmse, 4))
             modele['score_global']          = round(score_global, 4)
+            # ⚠️⚠️ LA LISTE SE DÉRIVE DES TERMES QUI PEUVENT SORTIR DU SCORE,
+            # elle ne se tient plus à la main : quand elle ne nommait que la
+            # stabilité, une RMSE non mesurée réduisait l'assiette du score
+            # SANS que le modèle le déclare — et `_calculer_statut_rag` ne
+            # pouvait pas plafonner sur ce qu'il ne voyait pas.
+            # ⚠️ Le Gini n'y figure pas, et c'est voulu : il ne sort jamais du
+            # score, c'est le MODÈLE qui sort du classement (voir plus haut).
             modele['criteres_non_mesures']  = tuple(
-                nom for nom, s in (('stabilite', s_stab),) if s is None)
+                nom for nom, s in (('stabilite', s_stab), ('rmse', s_rmse))
+                if s is None)
 
         return catalogue
 
@@ -2378,7 +2417,24 @@ class AgentA6Comparaison:
         plafonne désormais le statut à AMBRE.
         """
         score = modele_production.get('score_global', 0)
-        gini  = modele_production.get('gini_test',   0)
+        # ⚠️⚠️ CE GINI DÉCIDE — l. 2803 (`gini >= 0.15` pour le VERT), l. 2818
+        # (`gini < 0` déclenche la réserve d'anti-sélection) et l. 2824
+        # (`gini >= 0.05` pour l'AMBRE) — et il est FORMATÉ en `:.4f` dans
+        # trois textes publiés. Un repli à `0` y écrivait « Gini = 0.0000 » et
+        # faisait plafonner le statut sur une mesure inexistante.
+        #
+        #   *Le catalogue garantit déjà qu'il existe : `_construire_catalogue`
+        #   ÉCARTE tout modèle dont le Gini n'est pas évaluable (l. 1301). Si
+        #   un `None` arrive quand même jusqu'ici, c'est que ce filtre a été
+        #   contourné — on le dit, on ne le comble pas.*
+        gini = modele_production.get('gini_test')
+        if gini is None:
+            raise ValueError(
+                "Le modèle de production n'a pas de Gini mesuré alors que le "
+                "catalogue écarte les modèles non évaluables : le filtre de "
+                "`_construire_catalogue` a été contourné. Aucun statut RAG ne "
+                "peut être prononcé sur une discrimination non mesurée."
+            )
 
         # Gouvernance : blocage VERT si profil non validé en production
         _gouvernance_ok = gouvernance_validee(profil_valide_par, environnement)
@@ -2810,8 +2866,14 @@ class AgentA6Comparaison:
             f"  Nom              : {mp['modele']}\n"
             f"  Famille          : {mp['famille']}\n"
             f"  Score global     : {mp['score_global']:.4f}/1.0\n"
-            f"  Gini test        : {mp['gini_test']:.4f}\n"
-            f"  RMSE test        : {mp['rmse_test']:.2f}\n"
+            # ⚠️⚠️ CES DEUX LIGNES LEVAIENT, ET C'EST LA PREUVE QUE LE LITTÉRAL
+            # LES PROTÉGEAIT. Tant que `rmse_test` valait `999` en l'absence de
+            # mesure, le `:.2f` marchait toujours — et publiait
+            # « RMSE test : 999.00 » sur le modèle de PRODUCTION. Retirer le
+            # littéral fait apparaître le lecteur qui n'a jamais su dire
+            # « je n'ai pas cette mesure ».
+            f"  Gini test        : {mesure_texte(mp['gini_test'])}\n"
+            f"  RMSE test        : {mesure_texte(mp['rmse_test'], 2)}\n"
             f"  Interprétabilité : {mp['interpretabilite']:.2f}/1.0\n"
             f"  Overfit ratio    : {gini_texte(mp['overfit_ratio'], 2)}\n"
         )
@@ -3040,20 +3102,34 @@ class AgentA6Comparaison:
 
             fig1 = go.Figure()
 
-            # Référence max pour normalisation RMSE
-            rmses = [c.get('rmse_test', 1) for c in classement if c.get('rmse_test', 0) > 0]
-            rmse_max = max(rmses) if rmses else 1
+            # Référence max pour normalisation RMSE.
+            # ⚠️ `c.get('rmse_test', 0) > 0` LEVAIT sur un `None` : la
+            # comparaison entre `NoneType` et `int` n'existe pas. Le littéral
+            # `0` du second `.get` ne protégeait que l'ABSENCE de clé, pas la
+            # clé PRÉSENTE ET VIDE — la distinction que tout ce lot installe.
+            rmses = [c['rmse_test'] for c in classement
+                     if isinstance(c.get('rmse_test'), (int, float))
+                     and c['rmse_test'] > 0]
+            rmse_max = max(rmses) if rmses else None
 
             for idx, c in enumerate(classement[:5]):
                 nom   = c['modele']
-                gini  = min(c.get('gini_test', 0) / 0.35, 1.0)
+                _gt_c = c.get('gini_test')
+                gini  = None if _gt_c is None else min(_gt_c / 0.35, 1.0)
                 # Sans ratio mesure, aucune barre de stabilite : la dessiner a
                 # 1 dessinerait le modele le plus stable du graphique.
                 _of_c = c.get('overfit_ratio')
                 stab  = (None if _of_c is None
                          else min(1 / max(_of_c, 0.5), 1.0))
                 interp= c.get('score_interpretabilite', 0.6)
-                rmse  = 1 - (c.get('rmse_test', 0) / rmse_max)
+                # ⚠️ Même règle que la stabilité : sans RMSE mesurée, AUCUNE
+                # branche sur l'axe. La dessiner à 1 - 0/max donnerait au
+                # modèle le sommet de l'axe « RMSE normalisé », c'est-à-dire
+                # la MEILLEURE précision du graphique, sans mesure.
+                _rt_c = c.get('rmse_test')
+                rmse  = (None if rmse_max is None
+                         or not isinstance(_rt_c, (int, float))
+                         else 1 - (_rt_c / rmse_max))
 
                 vals = [gini, stab, interp, rmse]
                 est_prod = nom == modele_prod.get('modele', '')
@@ -3070,10 +3146,10 @@ class AgentA6Comparaison:
                     marker= dict(color=couleur, size=6 if est_prod else 4),
                     hovertemplate=(
                         f"<b>{'⭐ ' if est_prod else ''}{nom}</b><br>"
-                        f"Gini : {c.get('gini_test',0):.3f}<br>"
-                        f"Stabilité : {gini_texte(stab, 2)}<br>"
+                        f"Gini : {mesure_texte(c.get('gini_test'), 3)}<br>"
+                        f"Stabilité : {mesure_texte(stab, 2)}<br>"
                         f"Interprét. : {interp:.2f}<br>"
-                        f"RMSE norm. : {rmse:.2f}"
+                        f"RMSE norm. : {mesure_texte(rmse, 2)}"
                         "<extra></extra>"
                     ),
                 ))
@@ -3123,7 +3199,7 @@ class AgentA6Comparaison:
 
             for idx, c in enumerate(classement):
                 nom    = c['modele']
-                gini   = c.get('gini_test', 0)
+                gini   = c.get('gini_test')
                 _of_c  = c.get('overfit_ratio')
                 stab   = None if _of_c is None else 1 / max(_of_c, 0.5)
                 est_prod = nom == modele_prod.get('modele', '')
@@ -3279,7 +3355,7 @@ class AgentA6Comparaison:
         dit. Ce qui n'est plus possible, c'est de ne rien dire du tout.
         """
         nom_prod  = modele_prod.get('modele', 'N/A')
-        gini_prod = modele_prod.get('gini_test', 0)
+        gini_prod = modele_prod.get('gini_test')
         of_prod   = modele_prod.get('overfit_ratio')
         sc_prod   = modele_prod.get('score_global', 0)
         fam_prod  = modele_prod.get('famille', '')
@@ -3325,7 +3401,7 @@ class AgentA6Comparaison:
             alternatives.append({
                 'modele':     c['modele'],
                 'score':      round(c.get('score_global', 0), 4),
-                'gini':       round(c.get('gini_test', 0), 4),
+                'gini':       gini_arrondi(c.get('gini_test')),
                 'ecart_score': round(sc_diff, 1),
                 'conseil': (
                     f"Écart de {sc_diff:.1f}% — à considérer si "
@@ -3448,7 +3524,7 @@ class AgentA6Comparaison:
         # C2 — Écart Gini entre modèles
         if classement and len(classement) >= 2:
             # Clé correcte : 'gini_test' (pas 'gini')
-            ginis = [m.get('gini_test', m.get('gini', 0)) for m in classement]
+            ginis = [m.get('gini_test', m.get('gini')) for m in classement]
             ecart_gini = max(ginis) - min(ginis)
             gini_max   = max(ginis)
             gini_min   = min(ginis)
@@ -3632,7 +3708,7 @@ class AgentA6Comparaison:
 
         # G2 — Gini par modèle avec écart
         try:
-            ginis  = [m.get('gini_test', 0) for m in classement]
+            ginis  = [m.get('gini_test') for m in classement]
             colors_g = [OR if m.get('modele') == val_sel["c3_coherence"]["modele"]
                        else "rgba(52,152,219,0.6)" for m in classement]
             ecart  = val_sel["c2_ecart_gini"]["ecart"]

@@ -54,7 +54,7 @@ from core.conformite_reglementaire import (
     BASE_GINI_COMPTAGE, BASE_GINI_UNITAIRE,
     construire_matrice_x,
     colonne_temporelle, diagnostiquer_evaluation, phrase_evaluation_impossible,
-    gini_texte, ratio_sur_apprentissage,
+    gini_texte, mesure_texte, ratio_sur_apprentissage,
 )
 from core.plan_tarifaire import (
     PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
@@ -598,7 +598,7 @@ class AgentA5DeepLearning:
                 rapport['etapes'].append('cann')
                 logger.info(
                     f"CANN | Gini={gini_texte(res_cann['metriques']['gini_test'])} | "
-                    f"RMSE={res_cann['metriques']['rmse_test']:.2f}"
+                    f"RMSE={mesure_texte(res_cann['metriques']['rmse_test'], 2)}"
                 )
             else:
                 logger.info(
@@ -622,7 +622,7 @@ class AgentA5DeepLearning:
             rapport['etapes'].append('tabnet')
             logger.info(
                 f"TabNet | Gini={gini_texte(res_tabnet['metriques']['gini_test'])} | "
-                f"RMSE={res_tabnet['metriques']['rmse_test']:.2f}"
+                f"RMSE={mesure_texte(res_tabnet['metriques']['rmse_test'], 2)}"
             )
 
             # ── CLASSEMENT ────────────────────────────────────────────────────
@@ -1584,18 +1584,26 @@ class AgentA5DeepLearning:
                     'modele':        f"ML Best ({best_ml['modele']})",
                     'gini_test':     best_ml['gini_test'],
                     'rmse_test':     best_ml['rmse_test'],
-                    'overfit_ratio': best_ml.get('overfit_ratio', 1.0),
+                    # ⚠️ 1.0 est la note de STABILITÉ PARFAITE dans la
+                    # normalisation d'A6 : la poser sans mesure offrait au
+                    # modèle le meilleur rang possible sur ce critère.
+                    'overfit_ratio': best_ml.get('overfit_ratio'),
                     'type':          'Référence A4',
                 })
 
         # GLM A3
         if result_a3 and result_a3.get('success'):
-            gini_glm = result_a3['metriques'].get('poisson', {}).get('gini', 0)
+            _met_glm_a3 = result_a3['metriques'].get('poisson', {})
+            gini_glm = _met_glm_a3.get('gini')
             classement.append({
                 'modele':        'GLM Poisson (A3)',
                 'gini_test':     gini_glm,
-                'rmse_test':     result_a3['metriques'].get('poisson', {}).get('rmse_test', 0),
-                'overfit_ratio': 1.0,
+                'rmse_test':     _met_glm_a3.get('rmse_test'),
+                # ⚠️⚠️ LE LITTÉRAL LE PLUS DUR DU MODULE : `1.0` écrit en clair,
+                # sans même un `.get` pour faire croire à une lecture. A3
+                # MESURE ce ratio depuis le lot du 03/09 (`_stabilite_train`) ;
+                # cette ligne le RELAIE, et vaut `None` s'il n'a pas pu l'être.
+                'overfit_ratio': _met_glm_a3.get('overfit_ratio'),
                 'type':          'Référence A3',
             })
 
@@ -1698,10 +1706,10 @@ class AgentA5DeepLearning:
         m_tab  = res_tabnet.get('metriques') or {}
 
         # Gini de référence
-        gini_glm = 0
-        gini_ml  = 0
+        gini_glm = None
+        gini_ml  = None
         if result_a3 and result_a3.get('success'):
-            gini_glm = result_a3['metriques'].get('poisson', {}).get('gini', 0)
+            gini_glm = result_a3['metriques'].get('poisson', {}).get('gini')
         if result_a4 and result_a4.get('success'):
             ml_only = [c for c in result_a4.get('classement', [])
                        if 'GLM' not in c['modele']]
@@ -1710,7 +1718,7 @@ class AgentA5DeepLearning:
 
         _l_cann = (
             f"CANN   : Gini={gini_texte(m_cann['gini_test'])} | "
-            f"RMSE={m_cann['rmse_test']:.2f} | "
+            f"RMSE={mesure_texte(m_cann['rmse_test'], 2)} | "
             f"Époques={m_cann.get('n_epochs_reels', 'N/A')}\n"
             if m_cann else
             "CANN   : NON calibré — exclu de cette cible (son offset "
@@ -1722,7 +1730,7 @@ class AgentA5DeepLearning:
             f"Sous-branche : {sous_branche}\n\n"
             f"{_l_cann}"
             f"TabNet : Gini={gini_texte(m_tab['gini_test'])} | "
-            f"RMSE={m_tab['rmse_test']:.2f} | "
+            f"RMSE={mesure_texte(m_tab['rmse_test'], 2)} | "
             f"Époques={m_tab.get('n_epochs_reels', 'N/A')}\n\n"
             f"Références :\n"
             f"  GLM Poisson (A3) : {gini_texte(gini_glm)}\n"
@@ -1978,7 +1986,7 @@ class AgentA5DeepLearning:
             # DL (A5)
             for nom, met in self.metriques.items():
                 noms_comp.append(nom.upper())
-                ginis_comp.append(met.get('gini_test', 0))
+                ginis_comp.append(met.get('gini_test'))
                 colors_comp.append(BLEU)
                 familles.append('Deep Learning')
 
@@ -1987,14 +1995,14 @@ class AgentA5DeepLearning:
                 for c in result_a4.get('classement', [])[:4]:
                     if 'GLM' not in c.get('famille', '').upper():
                         noms_comp.append(c['modele'].upper())
-                        ginis_comp.append(c.get('gini_test', 0))
+                        ginis_comp.append(c.get('gini_test'))
                         colors_comp.append(OR)
                         familles.append('ML')
 
             # GLM (A3)
             if result_a3 and result_a3.get('success'):
                 for nom_g, met_g in result_a3.get('metriques', {}).items():
-                    gini_g = met_g.get('gini', 0) if isinstance(met_g, dict) else 0
+                    gini_g = met_g.get('gini') if isinstance(met_g, dict) else None
                     noms_comp.append(f"GLM {nom_g.upper()}")
                     ginis_comp.append(gini_g)
                     colors_comp.append(GRIS)
@@ -2235,14 +2243,14 @@ class AgentA5DeepLearning:
         # y compris un modèle sans le moindre surapprentissage. Le vrai Gini
         # d'apprentissage est calculé et stocké par `_calibrer_*`
         # (clé `gini_train`) : c'est lui qui est lu.
-        gini_cann   = metriques.get('cann',   {}).get('gini_test', 0)
-        gini_tabnet = metriques.get('tabnet', {}).get('gini_test', 0)
+        gini_cann   = metriques.get('cann',   {}).get('gini_test')
+        gini_tabnet = metriques.get('tabnet', {}).get('gini_test')
         if gini_cann is not None and gini_tabnet is not None:
             _tete_h2 = 'cann' if gini_cann >= gini_tabnet else 'tabnet'
         else:
             _tete_h2 = 'cann' if gini_cann is not None else 'tabnet'
-        gini_test_h2 = metriques.get(_tete_h2, {}).get('gini_test', 0)
-        gini_train  = metriques.get(_tete_h2, {}).get('gini_train', 0)
+        gini_test_h2 = metriques.get(_tete_h2, {}).get('gini_test')
+        gini_train  = metriques.get(_tete_h2, {}).get('gini_train')
         ratio_of    = (gini_test_h2 / max(gini_train, 0.001)
                        if gini_test_h2 is not None and gini_train is not None
                        else None)
@@ -2268,14 +2276,19 @@ class AgentA5DeepLearning:
             h2_msg    = f"Gini test/train = {ratio_of:.3f} < 0.75 → Surapprentissage ❌"
             h2_conseil= "Modèle trop complexe pour les données — simplifier l'architecture"
 
-        # H3 — Apport du DL vs GLM de référence
-        # Gini de référence GLM — dynamique depuis A3 ou défaut 0.10
-        gini_glm_ref = 0.10  # défaut neutre si A3 non fourni
+        # H3 — Apport du DL vs GLM de référence.
+        # ⚠️⚠️ `0.10` N'EST PAS UN « DÉFAUT NEUTRE », C'EST UN GINI D'ALLURE
+        # CRÉDIBLE. Il servait deux fois — A3 absent, et A3 présent sans Gini
+        # Poisson — et il DÉCIDAIT : `gain_dl = gini_dl_max - gini_glm_ref`
+        # fixe le statut de H3. Un chiffre plausible est plus dangereux qu'un
+        # zéro : personne ne le remarque en relecture. Sans référence mesurée,
+        # le gain n'existe pas, et la branche AMBRE ci-dessous le dit déjà.
+        gini_glm_ref = None
         if result_a3 and result_a3.get('success'):
             gini_glm_ref = (
                 result_a3.get('metriques', {})
                 .get('poisson', {})
-                .get('gini', 0.10)
+                .get('gini')
             )
         # ⚠️⚠️ LE PLANCHER À ZÉRO PUBLIAIT UN CHIFFRE QU'AUCUN MODÈLE N'AVAIT
         # ATTEINT — part vivante du constat `a5/C1`. `max(..., 0)` écrasait un

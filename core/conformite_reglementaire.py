@@ -2489,6 +2489,31 @@ GINI_ABSENT = 'ABSENT'
 GINI_NON_MESURE = 'NON_MESURE'
 
 
+#: Le mot unique de l'absence de mesure, dans tout livrable de tarification.
+#: ⚠️ Il vit ICI et nulle part ailleurs : deux orthographes dans deux
+#: classeurs feraient croire à deux états différents.
+NON_MESURE = 'non mesuré'
+
+
+def mesure_texte(valeur, decimales: int = 4) -> str:
+    """UNE mesure pour un texte : « non mesuré » quand elle n'existe pas.
+
+    LA PRIMITIVE GÉNÉRALE. Un Gini, une RMSE, un ratio de sur-apprentissage,
+    une déviance : toute grandeur qu'un modèle peut ne pas avoir produite
+    passe par ici avant d'atteindre un livrable signé.
+
+    ⚠️⚠️ CE N'EST PAS UN CONFORT D'ÉCRITURE, C'EST LE DÉFAUT CENTRAL DU
+    MODULE. Une valeur absente remplacée par un littéral (``0``, ``1.0``,
+    ``999``) devient une mesure que personne n'a faite, et elle DÉCIDE :
+    mesuré le 05/09/2026, un ``rmse_test`` absent chez le Tweedie se
+    publiait « RMSE test : 999.00 » dans le commentaire signé du modèle de
+    PRODUCTION. Une valeur non finie reçoit le même mot que l'absence.
+    """
+    if valeur is None or not math.isfinite(valeur):
+        return NON_MESURE
+    return f'{valeur:.{decimales}f}'
+
+
 def gini_texte(valeur, decimales: int = 4) -> str:
     """Un Gini pour un texte : « non mesuré » quand il n'existe pas.
 
@@ -2497,10 +2522,11 @@ def gini_texte(valeur, decimales: int = 4) -> str:
     fabriquerait une mesure que personne n'a faite. Tout format ``:.4f`` d'un
     Gini dans un livrable passe par ici. Un Gini non fini reçoit le même mot
     que l'absence — c'est l'état NON_MESURE de :func:`etats_gini`.
+
+    ⚠️ Ce n'est plus qu'un NOM pour :func:`mesure_texte` : le contrat est le
+    même pour toutes les grandeurs, et il ne doit exister qu'à un endroit.
     """
-    if valeur is None or not math.isfinite(valeur):
-        return 'non mesuré'
-    return f'{valeur:.{decimales}f}'
+    return mesure_texte(valeur, decimales)
 
 
 def ratio_sur_apprentissage(gini_train, gini_test):
@@ -2517,25 +2543,47 @@ def ratio_sur_apprentissage(gini_train, gini_test):
 
     Rend ``None`` — jamais 1.0, jamais 0 — dès qu'un des deux Ginis n'existe
     pas ou n'est pas fini : une stabilité non mesurée se déclare, elle ne se
-    fabrique pas. Voir :func:`gini_texte` pour le même contrat sur le Gini.
+    fabrique pas. Voir :func:`mesure_texte` pour le même contrat.
+
+    ⚠️⚠️ ET RIEN NE SE DIVISE PAR UN GINI DE TEST NÉGATIF OU NUL. Le repli
+    ``max(gini_test, 1e-6)`` bornait le dénominateur au lieu de refuser :
+    avec le Gamma mesuré à ``-0,0620`` sur la fixture, le ratio valait
+    ``gini_train / 1e-6``, soit des dizaines de milliers. Ce nombre devenait
+    le ``max_of`` de la normalisation ``1 - (r - min) / (max - min)``, ce qui
+    donnait ``s_stab = 0`` à ce modèle et ``s_stab ≈ 1`` à TOUS les autres :
+    le critère qui pèse 30 % de la sélection était APLATI par une valeur que
+    personne n'avait mesurée. Un Gini de test ``<= 0`` dit que le modèle ne
+    discrimine pas sur le jeu d'évaluation — le rapport entraînement/test n'y
+    a alors aucun sens, et un non-sens se déclare au lieu de se borner.
     """
     if gini_train is None or gini_test is None:
         return None
     if not (math.isfinite(gini_train) and math.isfinite(gini_test)):
         return None
-    return gini_train / max(gini_test, 1e-6)
+    if gini_test <= 0:
+        return None
+    return gini_train / gini_test
+
+
+def mesure_arrondie(valeur, decimales: int = 4):
+    """UNE mesure pour une cellule de classeur : le nombre, ou le mot.
+
+    Pendant de :func:`mesure_texte` pour les cellules numériques d'un Excel :
+    une valeur mesurée reste un nombre (arrondi), une valeur absente ou non
+    finie devient la chaîne « non mesuré » — jamais 0, qui se lirait comme
+    une mesure nulle.
+    """
+    if valeur is None or not math.isfinite(valeur):
+        return NON_MESURE
+    return round(valeur, decimales)
 
 
 def gini_arrondi(valeur, decimales: int = 4):
     """Un Gini pour une cellule de classeur : arrondi s'il existe, sinon le mot.
 
-    Même contrat que :func:`gini_texte`, pour les cellules numériques d'un
-    Excel : une valeur mesurée reste un nombre (arrondi comme avant), une
-    valeur absente ou non finie devient la chaîne « non mesuré » — jamais 0.
+    ⚠️ Un NOM pour :func:`mesure_arrondie` — même contrat, une seule source.
     """
-    if valeur is None or not math.isfinite(valeur):
-        return 'non mesuré'
-    return round(valeur, decimales)
+    return mesure_arrondie(valeur, decimales)
 
 
 def etats_gini(metriques: dict | None,

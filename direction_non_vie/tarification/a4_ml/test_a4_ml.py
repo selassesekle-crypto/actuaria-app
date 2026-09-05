@@ -104,15 +104,30 @@ class TestA4ML(unittest.TestCase):
         # test exige donc que la seule ligne autorisée à ne pas la porter soit
         # celle qui RELAIE A3, et que toute autre ait un ratio strictement
         # positif. Sur cette fixture, `_make_r_a3` ne publie pas la mesure.
+        # ⚠️⚠️ AFFINÉ le 05/09/2026, et c'est un RENFORCEMENT. `ratio_sur_
+        # apprentissage` bornait son dénominateur (`max(gini_test, 1e-6)`) :
+        # sur un Gini de test NÉGATIF il produisait donc toujours un nombre —
+        # mesuré, **-9 387,61 pour TabNet** — qui devenait le `min_of` de la
+        # normalisation d'A6 et donnait à ce modèle la MEILLEURE note de
+        # stabilité du catalogue. Il REFUSE désormais, et sur cette fixture
+        # cinq des six ML ont un Gini négatif (-0,1083 à -0,2817).
+        # L'absence reste donc interdite « en général » : elle doit être
+        # TRAÇABLE À UNE MESURE — la ligne qui relaie A3, ou un Gini de test
+        # <= 0 qui prive le rapport entraînement/test de tout sens.
         for m in classement:
             of = m.get('overfit_ratio')
             if of is None:
-                self.assertEqual(
-                    m.get('famille'), 'GLM',
-                    f"{m.get('modele','?')} : A4 a calibré ce modèle, son "
-                    f"ratio doit être mesuré et non absent")
+                _g = m.get('gini_test')
+                self.assertTrue(
+                    m.get('famille') == 'GLM' or (_g is not None and _g <= 0),
+                    f"{m.get('modele','?')} : ratio absent sans cause mesurée "
+                    f"(famille={m.get('famille')!r}, gini_test={_g!r}). A4 a "
+                    f"calibré ce modèle et son Gini de test est exploitable : "
+                    f"le ratio doit être mesuré.")
                 continue
             self.assertGreater(of, 0.0, f"Overfit ratio nul pour {m.get('modele','?')}")
+            self.assertNotEqual(of, 1.0, f"{m.get('modele','?')} : ratio "
+                                         "exactement 1.0 — valeur fabriquée ?")
         print(f"    ST4 Overfit ✅ | best overfit="
               f"{gini_texte(best.get('overfit_ratio'), 3)}")
 

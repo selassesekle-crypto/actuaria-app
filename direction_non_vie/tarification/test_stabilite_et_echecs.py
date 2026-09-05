@@ -37,6 +37,7 @@ import ast
 import inspect
 import io
 import logging
+import math
 import os
 import sys
 import textwrap
@@ -113,8 +114,31 @@ class T1_LaMesure(unittest.TestCase):
                               f"{nom} ne publie pas son Gini d'entrainement")
                 self.assertIn('overfit_ratio', met)
                 r = met['overfit_ratio']
+                # ⚠️⚠️ AFFINE le 05/09/2026 : un ratio ne se calcule PLUS sur
+                # un Gini de test <= 0. `ratio_sur_apprentissage` bornait son
+                # denominateur (`max(gini_test, 1e-6)`) et produisait donc
+                # toujours un nombre -- mesure sur cette fixture, **39 534,31
+                # pour le Gamma** (Gini de test -0,0298). Ce nombre devenait
+                # une borne de la normalisation d'A6.
+                #
+                # L'exigence ne faiblit pas, elle se DEPLACE : le ratio doit
+                # etre mesure exactement quand il PEUT l'etre, et absent
+                # exactement quand il ne le peut pas. Un `None` sur un Gini
+                # positif reste un echec.
+                _gt = met['gini']
+                _mesurable = (_gt is not None and math.isfinite(_gt)
+                              and _gt > 0
+                              and met['gini_train'] is not None)
+                if not _mesurable:
+                    self.assertIsNone(
+                        r, f"{nom} : ratio PUBLIE alors que son Gini de test "
+                           f"vaut {_gt!r} -- un rapport entrainement/test n'a "
+                           f"aucun sens sans discrimination sur le test")
+                    continue
                 self.assertIsNotNone(
-                    r, f"{nom} : ratio non mesure sur une fixture normale")
+                    r, f"{nom} : ratio non mesure alors que son Gini de test "
+                       f"vaut {_gt!r} et son Gini d'entrainement "
+                       f"{met['gini_train']!r}")
                 # La valeur est MESUREE, donc differente du 1.0 fabrique.
                 self.assertNotEqual(
                     round(float(r), 6), 1.0,
@@ -129,6 +153,22 @@ class T1_LaMesure(unittest.TestCase):
                 self.assertAlmostEqual(
                     float(r), _attendu, delta=0.01 * abs(_attendu),
                     msg=f"{nom} : le ratio publie ne derive pas de ses deux Ginis")
+
+    def test_st_1b_au_moins_un_GLM_porte_une_stabilite_MESUREE(self):
+        """⚠️⚠️ SANS CE TEST, ST-1 PASSERAIT SUR TROIS `None`. Le cas
+        « non mesurable » est desormais legitime : il pourrait donc devenir
+        universel -- un bug qui priverait A3 de toute mesure de stabilite
+        laisserait ST-1 vert, chaque GLM etant fidelement absent.
+        *Un relais fidele a une absence est encore une absence.*"""
+        mesures = [nom for nom in ('poisson', 'gamma', 'tweedie')
+                   if self.r3['metriques'].get(nom, {}).get('overfit_ratio')
+                   is not None]
+        self.assertTrue(
+            mesures,
+            "AUCUN des trois GLM ne publie de stabilite mesuree sur une "
+            "fixture normale : ST-1 ne surveille plus rien. Ginis de test : "
+            + repr({n: self.r3['metriques'].get(n, {}).get('gini')
+                    for n in ('poisson', 'gamma', 'tweedie')}))
 
     def test_st_2_les_trois_agents_partagent_LA_formule(self):
         """ST-2 : A6 normalise ENTRE les modeles — un ratio calcule autrement

@@ -441,9 +441,9 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
         r = 7
         met3 = r3.get('metriques', {})
         _section(ws4, r, "▶ GLM (A3)"); r += 1
-        _kpi(ws4, r, "Poisson — Gini", gini_arrondi(met3.get('poisson', {}).get('gini', 0)), fmt=FMT_DEC4); r += 1
-        _kpi(ws4, r, "Gamma — Gini", gini_arrondi(met3.get('gamma', {}).get('gini', 0)), fmt=FMT_DEC4); r += 1
-        _kpi(ws4, r, "Tweedie — Gini", gini_arrondi(met3.get('tweedie', {}).get('gini', 0)), fmt=FMT_DEC4); r += 1
+        _kpi(ws4, r, "Poisson — Gini", gini_arrondi(met3.get('poisson', {}).get('gini')), fmt=FMT_DEC4); r += 1
+        _kpi(ws4, r, "Gamma — Gini", gini_arrondi(met3.get('gamma', {}).get('gini')), fmt=FMT_DEC4); r += 1
+        _kpi(ws4, r, "Tweedie — Gini", gini_arrondi(met3.get('tweedie', {}).get('gini')), fmt=FMT_DEC4); r += 1
         r += 1
         cred = r3.get('credibilite', {})
         geo  = r3.get('lissage_geo', {})
@@ -469,7 +469,7 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
             r += 1
             for m in cl4[:8]:
                 _cell(ws4, r, 1, m.get('modele',''), cf=NOIR_HEX, fill=GRIS_L_HEX)
-                _cell(ws4, r, 2, gini_arrondi(m.get('gini_test',0)), cf=NOIR_HEX, ah="right", fmt=FMT_DEC4)
+                _cell(ws4, r, 2, gini_arrondi(m.get('gini_test')), cf=NOIR_HEX, ah="right", fmt=FMT_DEC4)
                 # Audit V7 IMPORTANT : garde NA — 'N/A' si absent, jamais 0.0000.
                 _cell(ws4, r, 3, round(m.get('score_global'),4) if 'score_global' in m else 'N/A',
                       cf=NOIR_HEX, ah="right", fmt=FMT_DEC4 if 'score_global' in m else None)
@@ -496,7 +496,7 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
         _kpi(ws5, r, "  ↳ Nature du score",
              "Relatif au meilleur modèle du profil (≈1,0000 = meilleur) — "
              "pas une performance absolue.", wrap=True); r += 1
-        _kpi(ws5, r, "Gini test", gini_arrondi(prod.get('gini_test', 0)), fmt=FMT_DEC4); r += 1
+        _kpi(ws5, r, "Gini test", gini_arrondi(prod.get('gini_test')), fmt=FMT_DEC4); r += 1
         r += 1
         _section(ws5, r, "▶ BACKTESTING WALK-FORWARD (recalibré)"); r += 1
         _kpi(ws5, r, "Modèle recalibré", bt6.get('modele_recalibre', 'N/A'),
@@ -744,9 +744,9 @@ def export_html_equipe(results: Dict[str, Dict], branche: str = '',
         cl4  = r4.get('classement', [])
         section_a3_a5 = f"""
         <div class="kpi-grid">
-          <div class="kpi"><b>Poisson Gini</b><br>{gini_texte(met3.get('poisson',{}).get('gini',0))}</div>
-          <div class="kpi"><b>Gamma Gini</b><br>{gini_texte(met3.get('gamma',{}).get('gini',0))}</div>
-          <div class="kpi"><b>Tweedie Gini</b><br>{gini_texte(met3.get('tweedie',{}).get('gini',0))}</div>
+          <div class="kpi"><b>Poisson Gini</b><br>{gini_texte(met3.get('poisson',{}).get('gini'))}</div>
+          <div class="kpi"><b>Gamma Gini</b><br>{gini_texte(met3.get('gamma',{}).get('gini'))}</div>
+          <div class="kpi"><b>Tweedie Gini</b><br>{gini_texte(met3.get('tweedie',{}).get('gini'))}</div>
           <div class="kpi"><b>Crédibilité B-S</b><br>{'✓ Appliquée' if cred.get('appliquee') else '○ N/A'}</div>
           <div class="kpi"><b>Lissage géo</b><br>{'✓ Appliqué' if geo.get('applique') else '○ N/A'}</div>
           <div class="kpi"><b>Deep Learning</b><br>{r5.get('statut_rag','Non exécuté') if r5 else 'Non exécuté'}</div>
@@ -756,7 +756,7 @@ def export_html_equipe(results: Dict[str, Dict], branche: str = '',
         for m in cl4[:8]:
             # Audit V7 IMPORTANT : garde NA cohérent avec les autres formats.
             section_a3_a5 += _row([
-                m.get('modele',''), gini_texte(m.get('gini_test',0)),
+                m.get('modele',''), gini_texte(m.get('gini_test')),
                 f"{m.get('score_global'):.4f}" if 'score_global' in m else '—',
                 gini_texte(m.get('overfit_ratio'), 3)
             ])
@@ -1035,9 +1035,9 @@ def export_word_equipe(results: Dict[str, Dict], branche: str = '',
         # §4 — Tarification GLM/ML/DL
         doc.add_heading("§4 — Tarification GLM · ML · DL (A3, A4, A5)", level=1).runs[0].font.color.rgb = NR
         met3 = r3.get('metriques', {})
-        doc.add_paragraph(f"GLM Poisson — Gini : {gini_texte(met3.get('poisson',{}).get('gini',0))}")
-        doc.add_paragraph(f"GLM Gamma — Gini : {gini_texte(met3.get('gamma',{}).get('gini',0))}")
-        doc.add_paragraph(f"GLM Tweedie — Gini : {gini_texte(met3.get('tweedie',{}).get('gini',0))}")
+        doc.add_paragraph(f"GLM Poisson — Gini : {gini_texte(met3.get('poisson',{}).get('gini'))}")
+        doc.add_paragraph(f"GLM Gamma — Gini : {gini_texte(met3.get('gamma',{}).get('gini'))}")
+        doc.add_paragraph(f"GLM Tweedie — Gini : {gini_texte(met3.get('tweedie',{}).get('gini'))}")
         cred = r3.get('credibilite', {})
         if cred.get('appliquee'):
             doc.add_paragraph(
@@ -1061,7 +1061,7 @@ def export_word_equipe(results: Dict[str, Dict], branche: str = '',
             for m in cl4[:8]:
                 row = tbl4.add_row().cells
                 row[0].text = m.get('modele','')
-                row[1].text = gini_texte(m.get('gini_test',0))
+                row[1].text = gini_texte(m.get('gini_test'))
                 # Audit V7 IMPORTANT : garde NA cohérent avec les autres formats.
                 row[2].text = f"{m.get('score_global'):.4f}" if 'score_global' in m else '—'
                 row[3].text = gini_texte(m.get('overfit_ratio'), 3)

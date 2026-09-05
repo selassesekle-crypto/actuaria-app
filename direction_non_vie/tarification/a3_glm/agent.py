@@ -701,7 +701,7 @@ class AgentA3GLM:
                 'statut_rag': statut_rag,
                 'nb_obs_train': res_poisson.get('metriques',{}).get('nb_obs_train', 0),
                 'nb_obs_test':  res_poisson.get('metriques',{}).get('nb_obs_test', 0),
-                'gini_poisson': self.metriques.get('poisson',{}).get('gini', 0),
+                'gini_poisson': self.metriques.get('poisson',{}).get('gini'),
                 'aic_poisson':  self.metriques.get('poisson',{}).get('aic', 0),
                 'vars_retenues':self.metriques.get('poisson',{}).get('vars_retenues', []),
                 'statut_h1': _val_glm_.get('h1_poisson',{}).get('statut',''),
@@ -2007,8 +2007,8 @@ class AgentA3GLM:
 
         # Comparaison Gini des 3 modèles
         metriques['comparaison_gini'] = {
-            'poisson': self.metriques.get('poisson', {}).get('gini', 0),
-            'gamma':   self.metriques.get('gamma',   {}).get('gini', 0),
+            'poisson': self.metriques.get('poisson', {}).get('gini'),
+            'gamma':   self.metriques.get('gamma',   {}).get('gini'),
         }
 
         # ⚠️⚠️ CONSTAT `a3/C7` — CES DEUX GINI NE SONT PAS COMPARABLES, ET LE
@@ -2107,9 +2107,9 @@ class AgentA3GLM:
             'statut_rag':  statut_rag,
             'etapes':      rapport['etapes'],
             'metriques_resume': {
-                'poisson_gini': self.metriques.get('poisson',{}).get('gini', 0),
+                'poisson_gini': self.metriques.get('poisson',{}).get('gini'),
                 'poisson_aic':  self.metriques.get('poisson',{}).get('aic', 0),
-                'gamma_gini':   self.metriques.get('gamma',{}).get('gini', 0),
+                'gamma_gini':   self.metriques.get('gamma',{}).get('gini'),
                 'gamma_aic':    self.metriques.get('gamma',{}).get('aic', 0),
             }
         }
@@ -2195,7 +2195,7 @@ class AgentA3GLM:
         statut**, et `test_a3_statut_rag_assiette.py` interdit qu'il y entre
         sans que quelqu'un le decide.
         """
-        gini_poisson = metriques.get('poisson', {}).get('gini', 0)
+        gini_poisson = metriques.get('poisson', {}).get('gini')
         vars_poisson = metriques.get('poisson', {}).get('nb_vars_retenues', 0)
         vars_gamma   = metriques.get('gamma',   {}).get('nb_vars_retenues', 0)
 
@@ -2231,7 +2231,7 @@ class AgentA3GLM:
         m_twe  = res_tweedie['metriques']
         # Coût moyen prédit None : aucun sinistre en test, la prédiction du
         # coût moyen n'a pas été évaluée — pas « 0 € ».
-        _cp = m_gam.get('cout_moyen_pred', 0)
+        _cp = m_gam.get('cout_moyen_pred')
         _cout_pred = f"{_cp:,.0f}€" if _cp is not None else "non mesuré"
 
         # ── NIVEAU 1 : LECTURE ────────────────────────────────────────────────
@@ -2262,7 +2262,7 @@ class AgentA3GLM:
         )
 
         # ── NIVEAU 2 : DIAGNOSTIC ─────────────────────────────────────────────
-        gini_poi = m_poi.get('gini', 0)
+        gini_poi = m_poi.get('gini')
         # Un Gini NON MESURÉ (aucun sinistre sur le jeu de test) ne se commente
         # pas avec la phrase écrite pour un nombre : elle affirmerait un pouvoir
         # discriminant que rien n'a établi. Le diagnostic prend la place.
@@ -2735,9 +2735,9 @@ class AgentA3GLM:
                 res_tweedie.get('metriques', {}).get('aic', 0),
             ]
             ginis = [
-                res_poisson.get('metriques', {}).get('gini', 0),
-                res_gamma.get('metriques', {}).get('gini', 0),
-                res_tweedie.get('metriques', {}).get('gini', 0),
+                res_poisson.get('metriques', {}).get('gini'),
+                res_gamma.get('metriques', {}).get('gini'),
+                res_tweedie.get('metriques', {}).get('gini'),
             ]
             colors4 = [OR, VERT, AMBRE]
 
@@ -2957,9 +2957,9 @@ class AgentA3GLM:
             h2_conseil= "Variance résiduelle très inégale entre risques forts et faibles — revoir la spécification / segmentation"
 
         # ── H3 — Qualité d'ajustement (Gini) ─────────────────────────────────
-        gini_poisson = metriques.get('poisson', {}).get('gini', 0)
-        gini_gamma   = metriques.get('gamma',   {}).get('gini', 0)
-        gini_tweedie = metriques.get('tweedie', {}).get('gini', 0)
+        gini_poisson = metriques.get('poisson', {}).get('gini')
+        gini_gamma   = metriques.get('gamma',   {}).get('gini')
+        gini_tweedie = metriques.get('tweedie', {}).get('gini')
         # ⚠️ `None` = NON MESURE : on prend le max des Ginis MESURES, et s'il
         # n'y en a aucun, l'hypothese est NON EVALUABLE -- pas << insuffisante >>.
         # Avant : max(0.0, 0.0, 0.0) rendait << Ajustement insuffisant >>, un

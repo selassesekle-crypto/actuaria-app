@@ -176,7 +176,7 @@ from core.conformite_reglementaire import (
     BASE_GINI_UNITAIRE,
     construire_matrice_x,
     colonne_temporelle, diagnostiquer_evaluation, phrase_evaluation_impossible,
-    gini_texte, ratio_sur_apprentissage,
+    gini_texte, mesure_texte, ratio_sur_apprentissage,
 )
 # ⚠️ SOURCE UNIQUE. L'etat de l'elasticite etait defini ICI au lot L0 ;
 # il vit desormais dans `core/elasticite.py`, avec le catalogue
@@ -1229,7 +1229,7 @@ class AgentA4ML:
                     'statut_rag': statut_rag,
                     'nb_modeles': len(classement),
                     'modele_retenu': classement[0].get('modele','') if classement else '',
-                    'gini_retenu': classement[0].get('gini_test',0) if classement else 0,
+                    'gini_retenu': classement[0].get('gini_test') if classement else None,
                     'optuna_active': optuna_trials > 0 and OPTUNA_OK,
                 },
             }
@@ -1495,7 +1495,7 @@ class AgentA4ML:
                 logger.info(
                     f"  {nom.upper():<15} "
                     f"Gini={gini_texte(metriques['gini_test'])} | "
-                    f"RMSE={metriques['rmse_test']:.4f}"
+                    f"RMSE={mesure_texte(metriques['rmse_test'])}"
                 )
 
             # ⚠️⚠️ DEUX CHOSES TRÈS DIFFÉRENTES SE CACHAIENT DERRIÈRE LE MÊME
@@ -1794,7 +1794,10 @@ class AgentA4ML:
         # Ajout du GLM Poisson comme référence
         if result_a3 and result_a3.get('success'):
             _met_glm = result_a3['metriques'].get('poisson', {})
-            gini_glm = _met_glm.get('gini', 0)
+            # ⚠️ Pas de repli à 0 : A3 sans Poisson, ou avec un Poisson dont le
+            # Gini n'a pas pu être calculé, donne `None`. Un zéro ferait entrer
+            # une référence « sans pouvoir discriminant » dans le classement.
+            gini_glm = _met_glm.get('gini')
             classement.append({
                 'modele':         'GLM Poisson (référence A3)',
                 'famille':        'GLM',
@@ -1809,7 +1812,7 @@ class AgentA4ML:
                 # jamais 1.0 ni « stable ».
                 'gini_train':     _met_glm.get('gini_train'),
                 'overfit_ratio':  _met_glm.get('overfit_ratio'),
-                'rmse_test':      _met_glm.get('rmse_test', 0),
+                'rmse_test':      _met_glm.get('rmse_test'),
                 'mae_test':       0,
                 'overfit_alerte': (None if _met_glm.get('overfit_ratio') is None
                                    else _met_glm['overfit_ratio'] > 1.15),
@@ -2024,10 +2027,14 @@ class AgentA4ML:
 
         meilleur_gini_ml = classement_ml[0]['gini_test']
 
-        # Comparaison avec le GLM
-        gini_glm = 0
+        # Comparaison avec le GLM. ⚠️ `0` disait « le GLM ne discrimine pas »
+        # quand A3 était absent ou en échec — et la branche suivante teste
+        # justement `gini_glm is None` pour réserver. Le littéral la rendait
+        # inatteignable : *une garde écrite pour un None ne se déclenche jamais
+        # si le site d'avant a déjà mis un nombre à la place.*
+        gini_glm = None
         if result_a3 and result_a3.get('success'):
-            gini_glm = result_a3['metriques'].get('poisson', {}).get('gini', 0)
+            gini_glm = result_a3['metriques'].get('poisson', {}).get('gini')
 
         if meilleur_gini_ml is None or gini_glm is None:
             # Gini NON MESURE (aucun sinistre sur le jeu de test) : le critere
@@ -2063,10 +2070,11 @@ class AgentA4ML:
         classement_ml = [c for c in classement if 'GLM' not in c['modele']]
         meilleur = classement_ml[0] if classement_ml else {}
 
-        # Gini GLM de référence
-        gini_glm = 0
+        # Gini GLM de référence. ⚠️ Même correctif qu'au site jumeau : le
+        # lecteur ci-dessous fait `gini_glm is not None and gini_glm > 0`.
+        gini_glm = None
         if result_a3 and result_a3.get('success'):
-            gini_glm = result_a3['metriques'].get('poisson', {}).get('gini', 0)
+            gini_glm = result_a3['metriques'].get('poisson', {}).get('gini')
 
         # ── NIVEAU 1 : LECTURE ────────────────────────────────────────────────
         nb_modeles = len(rapport.get('modeles_testes', []))
@@ -2087,13 +2095,18 @@ class AgentA4ML:
             niveau1 += (
                 f"  {i}. {c['modele']:<30} "
                 f"Gini={gini_texte(c['gini_test'])} | "
-                f"RMSE={c['rmse_test']:.4f} | "
+                f"RMSE={mesure_texte(c['rmse_test'])} | "
                 f"{c['recommandation']}\n"
             )
 
-        if (gini_glm is not None and gini_glm > 0
-                and meilleur.get('gini_test', 0) is not None):
-            amelioration = (meilleur.get('gini_test', 0) - gini_glm) / max(gini_glm, 1e-6) * 100
+        # ⚠️⚠️ LA GARDE SE TESTAIT ELLE-MÊME À TRAVERS SON PROPRE DÉFAUT :
+        # `meilleur.get('gini_test', 0) is not None` est VRAI même quand la
+        # clé manque, puisque le repli vaut `0`. Et `max(gini_glm, 1e-6)`
+        # bornait le dénominateur — un Gini GLM négatif faisait exploser
+        # l'amélioration publiée au lieu de la déclarer non calculable.
+        _gini_meilleur = meilleur.get('gini_test')
+        if gini_glm is not None and gini_glm > 0 and _gini_meilleur is not None:
+            amelioration = (_gini_meilleur - gini_glm) / gini_glm * 100
             niveau1 += f"\n  Amélioration vs GLM : {amelioration:+.1f}%"
 
         # ⚠️⚠️ UNE PANNE SE DIT DANS LE COMMENTAIRE, ET AVANT TOUT DIAGNOSTIC.
@@ -2150,7 +2163,7 @@ class AgentA4ML:
 
         # ── NIVEAU 2 : DIAGNOSTIC ─────────────────────────────────────────────
         meilleur_nom  = meilleur.get('modele', 'N/A')
-        meilleur_gini = meilleur.get('gini_test', 0)
+        meilleur_gini = meilleur.get('gini_test')
         overfit       = meilleur.get('overfit_alerte', False)
         _gain_glm     = (None if meilleur_gini is None or gini_glm is None
                          else meilleur_gini - gini_glm)
@@ -2175,7 +2188,7 @@ class AgentA4ML:
                     f"DIAGNOSTIC ACTUARIEL :\n"
                     f"Le meilleur modèle ML ({meilleur_nom}) présente "
                     f"un overfitting détecté (ratio train/test = "
-                    f"{meilleur.get('overfit_ratio', 0):.2f}). "
+                    f"{mesure_texte(meilleur.get('overfit_ratio'), 2)}). "
                     f"Cela signifie que le modèle a mémorisé les données "
                     f"d'entraînement au lieu d'apprendre les patterns généraux. "
                     f"En production, ses performances seront inférieures "
@@ -2266,11 +2279,11 @@ class AgentA4ML:
         print(f"  {'Rang':<5} {'Modèle':<30} {'Gini':<8} {'RMSE':<8} {'Overfit'}")
         print(f"  {'-'*60}")
         for i, c in enumerate(classement, 1):
-            ov = (f"{c['overfit_ratio']:.2f}"
-                  if c.get('overfit_ratio') is not None else 'N/A')
             print(
                 f"  {i:<5} {c['modele']:<30} "
-                f"{gini_texte(c['gini_test']):<8} {c['rmse_test']:<8.4f} {ov}"
+                f"{gini_texte(c['gini_test']):<8} "
+                f"{mesure_texte(c.get('rmse_test')):<8} "
+                f"{mesure_texte(c.get('overfit_ratio'), 2)}"
             )
         print(f"\n{sep}")
         for ligne in commentaire.split('\n'):
@@ -2384,7 +2397,7 @@ class AgentA4ML:
 
             for idx, c in enumerate(classement[:4]):
                 nom  = c['modele']
-                gini = c.get('gini_test', 0)
+                gini = c.get('gini_test')
 
                 # Lift Chart approximé depuis le Gini
                 # Lift décile k = (% sinistres dans décile k) / (10%)
@@ -2457,8 +2470,8 @@ class AgentA4ML:
         # ── GRAPHIQUE 3 : COMPARAISON GINI — Barres + Ligne GLM ───────────────
         try:
             noms_mod  = [c['modele'] for c in classement]
-            ginis     = [c.get('gini_test', 0) for c in classement]
-            overfits  = [c.get('overfit_ratio', 1) for c in classement]
+            ginis     = [c.get('gini_test') for c in classement]
+            overfits  = [c.get('overfit_ratio') for c in classement]
 
             # Couleurs selon overfit
             colors3 = []
@@ -2590,9 +2603,9 @@ class AgentA4ML:
 
             for idx, c in enumerate(classement):
                 nom    = c['modele']
-                gini   = c.get('gini_test', 0)
-                rmse   = c.get('rmse_test', 0)
-                overfit= c.get('overfit_ratio', 1)
+                gini   = c.get('gini_test')
+                rmse   = c.get('rmse_test')
+                overfit= c.get('overfit_ratio')
 
                 # Taille du point = inverse de l'overfit (plus stable = plus grand)
                 size = max(8, int(20 / max(overfit, 0.5)))
@@ -2957,12 +2970,24 @@ class AgentA4ML:
         # ── H1 — Overfitting ─────────────────────────────────────────────────
         if classement:
             meilleur   = classement[0]
-            gini_test  = meilleur.get('gini_test', meilleur.get('gini', 0))
+            gini_test  = meilleur.get('gini_test', meilleur.get('gini'))
             gini_train = meilleur.get('gini_train')
-            if gini_train is None and gini_test is not None:
-                gini_train = gini_test * 1.10
-            ratio_of   = (gini_test / max(gini_train, 0.001)
+            # ⚠️⚠️ ICI SE FABRIQUAIT UN GINI D'ENTRAÎNEMENT, ET IL RENDAIT
+            # INATTEIGNABLE LA GARDE ÉCRITE JUSTE EN DESSOUS. Le code posait
+            # `gini_train = gini_test * 1.10` quand la mesure manquait : le
+            # ratio valait alors MÉCANIQUEMENT 1/1,10 = 0,909, c'est-à-dire
+            # au-dessus du seuil de 0,90, et H1 publiait « Pas d'overfitting »
+            # sur un modèle dont personne n'avait mesuré l'entraînement.
+            # La branche `if ratio_of is None` — celle qui dit « NON MESURABLE »
+            # — ne pouvait plus se déclencher dès que `gini_test` existait.
+            #   *Une garde ne sert à rien si le site d'avant a déjà mis un
+            #   nombre à la place de l'absence.*
+            # ⚠️ Et `max(gini_train, 0.001)` bornait le dénominateur au lieu de
+            # refuser : sur un Gini d'entraînement négatif ou nul, le ratio
+            # explosait au lieu de se déclarer non mesurable.
+            ratio_of   = (gini_test / gini_train
                           if gini_test is not None and gini_train is not None
+                          and gini_train > 0
                           else None)
             if ratio_of is None:
                 h1_statut = "AMBRE"
