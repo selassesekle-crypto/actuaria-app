@@ -2536,6 +2536,101 @@ def phrase_reference_glm_absente(cible, metriques_a3) -> str:
         f"n'est pas etablie pour cette cible."
     )
 
+#: ⚠️⚠️ LE NOMBRE DE VARIABLES RETENUES AU-DESSOUS DUQUEL LA SÉLECTION SE
+#: DÉCLARE. **Ce n'est pas un seuil de qualité**, et il ne bloque rien : c'est
+#: le nombre au-dessous duquel un tarif ne segmente presque plus, et où le
+#: risque qu'une variable de BRUIT soit la seule retenue devient le vrai sujet.
+#: Deux, parce que le cas « une seule » est le cas TROMPEUR — zéro facteur se
+#: voit, un facteur a l'air d'un vrai tarif.
+SELECTION_PEU_SEGMENTANTE = 2
+
+
+def phrase_puissance_selection(nb_retenues, nb_candidates, n_sinistres_train,
+                               *, seuil, pvalue_meilleure_rejetee=None,
+                               vars_retenues=None) -> str | None:
+    """Ce qu'on écrit quand la sélection ne retient presque rien.
+
+    ⚠️⚠️ POURQUOI ELLE EXISTE — la mesure du 05/09/2026, rendue à l'actuaire
+    signataire. Sur le plan `mrh`, la sélection descendante retient **une ou
+    deux variables, et elles changent à chaque taille d'échantillon** :
+
+        3 000 contrats (235 sinistres)  ->  `alarme` SEULE
+        8 000 contrats (561 sinistres)  ->  les deux vraies variables
+        20 000 contrats (1 406 sin.)    ->  les trois vraies
+
+    Or `alarme` est **du bruit pur** : le générateur la tire à pile ou face,
+    sans aucun effet sur la fréquence. *Un tarif à zéro facteur se voit ; un
+    tarif segmenté sur `alarme` a l'air d'un vrai tarif.* Avec onze candidates
+    testées à 5 %, la probabilité qu'au moins une variable de bruit passe vaut
+    environ **37 %** — et rien ne permettait à l'actuaire de le voir.
+
+    ⚠️ ET LE SEUIL DE 5 % N'EST PAS EN CAUSE — mesuré, puis arbitré. Le
+    relâcher à 20 % sur `auto` achète UNE vraie variable pour TROIS fausses.
+    Ce n'est donc pas le seuil qu'il faut bouger : c'est la PUISSANCE qu'il
+    faut publier. Cette phrase ne juge pas, elle donne à l'actuaire les trois
+    nombres dont il a besoin pour juger lui-même.
+
+    ⚠️ LE DÉNOMINATEUR EST LE NOMBRE DE **SINISTRES**, PAS DE CONTRATS. C'est
+    lui qui gouverne la puissance d'un GLM de fréquence — 3 000 contrats à une
+    fréquence de 0,09 ne donnent que ~235 sinistres, pas assez pour établir un
+    effet de 0,3 en log-fréquence.
+
+    ⚠️⚠️ ``seuil`` EST OBLIGATOIRE, ET C'EST DÉLIBÉRÉ. Le seuil de sélection
+    vit dans le moteur qui sélectionne (`a3_glm.SEUIL_PVALUE`), et un test l'y
+    fige. Lui donner ici une valeur par défaut créerait **une seconde source
+    du même nombre** — exactement le défaut que ce chantier ferme partout
+    ailleurs. L'appelant passe le sien ; le jour où il bouge, la phrase suit.
+
+    Rend ``None`` quand la sélection retient assez de variables : *une phrase
+    qui s'affiche toujours ne se lit plus.*
+    """
+    if nb_retenues is None or nb_retenues >= SELECTION_PEU_SEGMENTANTE:
+        return None
+    quoi = ("AUCUNE variable significative" if not nb_retenues
+            else f"UNE SEULE variable significative "
+                 f"({', '.join(vars_retenues or []) or 'non nommée'})")
+    # ⚠️ Chaque grandeur absente est DITE absente, jamais remplacée par un
+    # nombre : c'est la règle de tout ce module.
+    candidates = (f"{nb_candidates} candidates testées"
+                  if nb_candidates is not None
+                  else f"un nombre de candidates {NON_MESURE}")
+    sinistres = (f"{n_sinistres_train} sinistres au jeu d'entrainement"
+                 if n_sinistres_train is not None
+                 else f"un nombre de sinistres {NON_MESURE}")
+    rejetee = ("" if pvalue_meilleure_rejetee is None else
+               f" La meilleure variable REJETEE avait p = "
+               f"{pvalue_meilleure_rejetee:.4f}.")
+    return (
+        f"SELECTION PEU SEGMENTANTE : {quoi} a {seuil:.0%} sur {candidates}, "
+        f"avec {sinistres}. Ce tarif ne segmente presque pas."
+        f"{rejetee} A CE NIVEAU DE PUISSANCE, une variable retenue peut etre "
+        f"un FAUX POSITIF : avec {candidates} au seuil de {seuil:.0%}, il faut "
+        f"s'attendre a ce qu'une variable sans effet passe de temps en temps. "
+        f"Le nombre de SINISTRES, et non de contrats, est ce qui gouverne "
+        f"cette puissance. A verifier par l'actuaire avant tout usage "
+        f"commercial."
+    )
+
+
+def meilleure_rejetee(vars_exclues) -> float | None:
+    """La plus petite p-value parmi les variables ECARTEES — ou ``None``.
+
+    ⚠️ ELLE SE DERIVE, ELLE NE SE COLLECTE PAS. `vars_exclues` porte deja la
+    p-value de chaque retrait ; en tenir une seconde liste, c'est se donner
+    deux sources qui peuvent diverger.
+
+    ⚠️ Les retraits NON TESTES sont ignores : une variable ecartee parce que
+    l'ajustement a echoue porte `pvalue: None` et `pvalue_non_testee: True`.
+    La confondre avec une p-value mesuree ferait dire a cette phrase quelque
+    chose que personne n'a calcule.
+    """
+    mesurees = [e.get('pvalue') for e in (vars_exclues or [])
+                if isinstance(e, dict)
+                and not e.get('pvalue_non_testee')
+                and isinstance(e.get('pvalue'), (int, float))]
+    return min(mesurees) if mesurees else None
+
+
 #: ⚠️ Le vocabulaire de l'état d'un Gini. `ABSENT` n'est PAS `NON_MESURE` :
 #: une clé qui manque dit qu'aucun modèle de ce type n'a été ajusté ; un
 #: `None` dit qu'il l'a été et que son Gini n'a pas pu être calculé.

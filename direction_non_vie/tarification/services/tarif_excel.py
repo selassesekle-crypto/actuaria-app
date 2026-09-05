@@ -128,7 +128,19 @@ def export_excel_a3(result_a3: Dict, audit_id: str = "", arrete: Optional[str] =
                      mesure_arrondie(m.get('pseudo_r2'), 4))
                 r += 1
                 _kpi(ws1, r, f"{label} — Vars retenues",  m.get('nb_vars_retenues', 0))
-                r += 2
+                r += 1
+                # ⚠️⚠️ LA PUISSANCE DE LA SÉLECTION, DANS LE CLASSEUR SIGNÉ.
+                # « Vars retenues : 1 » ne dit ni sur COMBIEN de candidates, ni
+                # avec COMBIEN de sinistres — or c'est à ce niveau de puissance
+                # qu'une variable de BRUIT peut être la seule retenue (mesuré
+                # sur `mrh` : `alarme`, tirée à pile ou face par le générateur).
+                # Rien n'est affiché quand la sélection retient assez.
+                _puiss = m.get('puissance_selection')
+                if _puiss:
+                    _kpi(ws1, r, f"{label} — Puissance de la sélection",
+                         _puiss, statut="AMBRE", wrap=True)
+                    r += 1
+                r += 1
 
         # ⚠️⚠️ LE SEUIL DE SINISTRE GRAVE, DANS LE CLASSEUR SIGNE. Mesuré le
         # 05/09/2026 : `ecretement_severite` n'atteignait QUE le prompt LLM

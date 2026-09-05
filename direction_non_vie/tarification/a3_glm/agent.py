@@ -129,6 +129,7 @@ from core.conformite_reglementaire import (
     statut_anti_selection, synthese_anti_selection, synthese_gini_non_mesure,
     colonne_temporelle, diagnostiquer_evaluation, phrase_evaluation_impossible,
     gini_texte, ratio_sur_apprentissage,
+    meilleure_rejetee, phrase_puissance_selection,
 )
 from core.plan_tarifaire import (
     PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
@@ -1233,9 +1234,29 @@ class AgentA3GLM:
             'vars_exclues':     vars_exclues,
             'nb_obs_train':     int(len(df_train)),
             'nb_obs_test':      int(len(df_test)),
+            # ⚠️⚠️ LE VRAI DÉNOMINATEUR DE LA PUISSANCE — mesuré le 05/09/2026.
+            # `nb_obs_train` compte des CONTRATS ; ce qui gouverne la puissance
+            # d'un GLM de fréquence, c'est le nombre de SINISTRES. 3 000
+            # contrats à une fréquence de 0,09 n'en donnent que ~235 — pas
+            # assez pour établir un effet de 0,3 en log-fréquence, et c'est
+            # exactement là que la sélection retenait `alarme`, du bruit pur.
+            'nb_sinistres_train': int(df_train[col_freq].sum()),
             'frequence_obs':    round(float(df_train[col_freq].mean()), 4),
             'frequence_pred':   round(float(pred_test.mean()), 4),
         }
+        # ⚠️⚠️ CE QUE LA SÉLECTION NE DISAIT PAS D'ELLE-MÊME. Elle publiait
+        # « 1 variable retenue » sans jamais publier sur COMBIEN de candidates
+        # ni avec COMBIEN de sinistres. *Un tarif à zéro facteur se voit ; un
+        # tarif segmenté sur une seule variable a l'air d'un vrai tarif.*
+        # La phrase est `None` dès que la sélection retient assez : une phrase
+        # qui s'affiche toujours ne se lit plus.
+        metriques['puissance_selection'] = phrase_puissance_selection(
+            len(vars_actives),
+            len(vars_actives) + len(vars_exclues),
+            metriques['nb_sinistres_train'],
+            seuil=SEUIL_PVALUE,
+            pvalue_meilleure_rejetee=meilleure_rejetee(vars_exclues),
+            vars_retenues=vars_actives)
 
         # ── RELATIVITÉS TARIFAIRES exp(β) ─────────────────────────────────────
         # Sortie commerciale standard d'un GLM actuariel.
@@ -1569,10 +1590,26 @@ class AgentA3GLM:
             'vars_exclues':     vars_exclues,
             'nb_obs_train':     nb_sin_train,
             'nb_obs_test':      nb_sin_test,
+            # ⚠️ ICI `nb_obs_train` EST DÉJÀ UN COMPTE DE SINISTRES — le GLM de
+            # sévérité ne s'ajuste que sur les sinistrés. La clé est republiée
+            # sous le nom commun aux trois moteurs pour que la puissance se
+            # lise au même endroit partout : *deux noms pour la même grandeur
+            # font croire à deux grandeurs.*
+            'nb_sinistres_train': nb_sin_train,
             'cout_moyen_obs':   round(float(y_sev_train.mean()), 2),
             'cout_moyen_pred':  round(float(pred_test.mean()), 2)
                                 if len(pred_test) > 0 else None,
         }
+        # ⚠️ MÊME DÉCLARATION QUE POISSON — ne la poser que sur un des trois
+        # moteurs créerait exactement l'asymétrie entre voisins que ce
+        # chantier traque ailleurs.
+        metriques['puissance_selection'] = phrase_puissance_selection(
+            len(vars_actives),
+            len(vars_actives) + len(vars_exclues),
+            nb_sin_train,
+            seuil=SEUIL_PVALUE,
+            pvalue_meilleure_rejetee=meilleure_rejetee(vars_exclues),
+            vars_retenues=vars_actives)
 
         # ── RELATIVITÉS TARIFAIRES exp(β) Gamma ──────────────────────────────
         relativites_gamma = {}
@@ -1806,9 +1843,28 @@ class AgentA3GLM:
             'nb_vars_retenues': len(vars_actives),
             'nb_vars_exclues':  len(vars_exclues),
             'vars_retenues':    vars_actives,
+            # ⚠️⚠️ TROISIÈME ASYMÉTRIE FERMÉE : le Tweedie ne publiait NI ses
+            # variables écartées, NI la taille de son jeu d'entrainement, là où
+            # Poisson et Gamma publient les deux. Il s'ajuste sur TOUS les
+            # contrats, mais ce qui porte l'information reste le nombre de
+            # SINISTRES — c'est donc lui, ici aussi, le dénominateur de la
+            # puissance.
+            'vars_exclues':     vars_exclues,
+            'nb_obs_train':     len(df_train),
+            'nb_obs_test':      len(df_test),
+            # ⚠️ `int()` ici et pas au-dessus : `.sum()` rend un scalaire
+            # numpy, `len()` rend deja un `int`.
+            'nb_sinistres_train': int(df_train[col_freq].sum()),
             'prime_pure_moy_obs':  round(float(df_train[col_target_tweedie].mean()), 2),
             'prime_pure_moy_pred': round(float(pred_test.mean()), 2),
         }
+        metriques['puissance_selection'] = phrase_puissance_selection(
+            len(vars_actives),
+            len(vars_actives) + len(vars_exclues),
+            metriques['nb_sinistres_train'],
+            seuil=SEUIL_PVALUE,
+            pvalue_meilleure_rejetee=meilleure_rejetee(vars_exclues),
+            vars_retenues=vars_actives)
 
         return {
             'modele':    modele_final,

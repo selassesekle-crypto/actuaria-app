@@ -683,4 +683,25 @@ def pipeline_complet(portefeuille: pd.DataFrame, plan: PlanTarifaire,
         somme_observee = float(cout_total.sum())
         if somme_predite > 0 and somme_observee > 0:
             tarif.coefficient_equilibre = somme_observee / somme_predite
+        # ⚠️⚠️ POURQUOI IL N'Y A PAS DE `else` ICI, ET POURQUOI C'EST MESURÉ.
+        # Un `k` resté à 1,0 se lirait « tarif déjà équilibré » alors que
+        # l'équilibrage N'AURAIT PAS EU LIEU : c'est la forme exacte du défaut
+        # que ce chantier ferme partout. J'ai voulu le déclarer — **la mesure
+        # du 05/09/2026 a montré que la branche est INATTEIGNABLE**, et une
+        # déclaration inatteignable est un contrôle qui atteste sans
+        # surveiller :
+        #
+        #   `somme_observee <= 0` : les deux voies sont REFUSÉES en amont, dans
+        #       cette même fonction — `_refuser_frequence_sans_sinistre` (cible
+        #       de fréquence nulle partout) et le refus du GLM de coût
+        #       (sinistres comptés, aucun coût strictement positif).
+        #   `somme_predite <= 0` : impossible. La prime pure sort d'un lien
+        #       log, donc de `exp()`, strictement positif — mesuré sur la
+        #       fixture `auto` : min = 129,28 EUR, 0 valeur nulle ou négative
+        #       sur 1 200 contrats. Une somme nulle exigerait un portefeuille
+        #       VIDE, lui-même refusé plus haut.
+        #
+        # *Ce n'est donc pas un silence : c'est un cas que deux refus nommés
+        # rendent impossible.* `test_equilibrage_non_silencieux` FIGE ce
+        # raisonnement — retirer l'un des deux refus le fait tomber.
     return tarif
