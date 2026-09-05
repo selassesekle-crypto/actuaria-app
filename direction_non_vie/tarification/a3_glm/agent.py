@@ -134,7 +134,8 @@ from core.plan_tarifaire import (
     PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
     alerte_modele_ampute,
 )
-from core.severite import (construire_cible_severite,
+from core.severite import (construire_cible_severite, phrase_aucun_grave,
+                           phrase_seuil_suppose, seuil_declare,
                            synthese_assiette_ecretement)
 
 # ⚠️⚠️ CONSTAT `a2/C15` — LE FILTRE GLOBAL D'AVERTISSEMENTS EST RETIRÉ.
@@ -416,6 +417,11 @@ class AgentA3GLM:
 
         df           = result_a2['dataframe'].copy()
         rapport      = {'etapes': [], 'alertes': [], 'variables': {}}
+        # ⚠️ LE PLAN DU RUN, pour `_calibrer_gamma` qui ne le recoit pas et
+        # doit lire le seuil de sinistre grave DECLARE. Pose ici, a chaque
+        # appel : un plan reste d'un run precedent ecreterait sous le seuil
+        # d'un AUTRE portefeuille.
+        self._plan_run = plan
 
         try:
             # ── ÉTAPE 1 : PRÉPARATION ─────────────────────────────────────────
@@ -685,6 +691,13 @@ class AgentA3GLM:
                 'relativites_poisson': relativites_poisson,
                 'relativites_gamma':   relativites_gamma,
                 'validation_glm': _val_glm_, 'audit_id': audit_id,
+                # ⚠️⚠️ SANS CETTE LIGNE, TOUT LE RESTE EST INERTE. Le bloc du
+                # seuil de sinistre grave peut être écrit dans l'exportateur :
+                # si `ecretement_severite` n'arrive pas jusqu'ici, le classeur
+                # n'en publie rien. C'est le même mécanisme que la figure d'A5
+                # absente du rapport faute de `result_a5` — *le correctif doit
+                # atteindre la surface, pas la frôler.*
+                'ecretement_severite': getattr(self, 'ecretement_severite', {}),
             }
             excel_bytes = b''
             if TARIF_EXCEL_OK:
@@ -1322,11 +1335,18 @@ class AgentA3GLM:
         # (−12,6 % ; vérité DGP 36 772 €) → Σ primes / Σ charge = 0,85 : A3
         # SOUS-TARIFIAIT de 15 %. Le seuil d'écrêtement est APPRIS sur le train et
         # APPLIQUÉ au test — jamais recalculé (piège V9).
+        # ⚠⚠ UN SEUIL DECLARE AU PLAN L'EMPORTE SUR LE QUANTILE, et il ne
+        # s'apprend pas : il vient d'un traite de reassurance ou d'une
+        # politique de souscription. Sans declaration, le quantile est appris
+        # sur le TRAIN et applique au TEST (jamais recalcule, piege V9) -- et
+        # cette supposition est DITE dans le livrable.
+        _seuil_plan = seuil_declare(getattr(self, '_plan_run', None))
         cible_tr = construire_cible_severite(
-            df_train[col_cout], df_train[col_freq], df_train[col_expo])
+            df_train[col_cout], df_train[col_freq], df_train[col_expo],
+            seuil=_seuil_plan)
         cible_te = construire_cible_severite(
             df_test[col_cout], df_test[col_freq], df_test[col_expo],
-            seuil=cible_tr.seuil_ecretement)
+            seuil=_seuil_plan or cible_tr.seuil_ecretement)
 
         df_sin_train = df_train[cible_tr.masque].copy().reset_index(drop=True)
         df_sin_test  = df_test[cible_te.masque].copy().reset_index(drop=True)
@@ -1343,14 +1363,25 @@ class AgentA3GLM:
         # sont écrêtés parce que NOMBREUX plutôt que GRAVES. *Un `logger.info`
         # n'est pas dans le rapport que l'actuaire signe* — la leçon de
         # `services/C7`, fermée ce matin sur `raisons_plafond`.
+        # ⚠️⚠️ ET D'OU VIENT LE SEUIL, DANS LE MEME BLOC. Il retombait toujours
+        # sur le quantile 0,995 des couts observes — c'est-a-dire que LE
+        # PORTEFEUILLE definissait ce qui, en lui, est anormal — et aucun
+        # livrable ne le disait. Les deux phrases voyagent avec les chiffres :
+        # celle de la supposition, et celle du cas « aucun grave », ou zero est
+        # une MESURE et doit se distinguer d'un calcul absent.
+        _plan_run = getattr(self, '_plan_run', None)
         self.ecretement_severite = {
             'assiette':                  cible_tr.assiette_seuil,
             'seuil':                     cible_tr.seuil_ecretement,
+            'source_seuil':              cible_tr.source_seuil,
             'n_graves':                  cible_tr.n_graves,
             'n_ecretes_par_nombre':      cible_tr.n_ecretes_par_nombre,
             'seuil_en_sinistres_moyens': cible_tr.seuil_en_sinistres_moyens,
             'prime_grave_unitaire':      cible_tr.prime_grave_unitaire,
             'synthese':                  synthese_assiette_ecretement(cible_tr),
+            'seuil_suppose':             phrase_seuil_suppose(cible_tr,
+                                                              _plan_run),
+            'aucun_grave':               phrase_aucun_grave(cible_tr),
         }
         logger.info(
             f"Sévérité : {cible_tr.n_retenus:,} contrats retenus | seuil écrêtement "

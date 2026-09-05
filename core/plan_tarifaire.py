@@ -38,6 +38,7 @@ import dataclasses
 import difflib
 import hashlib
 import json
+import math
 from dataclasses import asdict as dataclasses_asdict
 from dataclasses import dataclass, field
 from typing import Literal, Optional, Sequence, get_args
@@ -132,6 +133,72 @@ class Chargements:
                 f"chargements : commission = {self.commission} >= 1 — la prime "
                 f"commerciale divise par (1 - commission).")
 
+#: LES ASSIETTES ADMISES POUR UN SEUIL DE SINISTRE GRAVE DÉCLARÉ.
+#: ⚠️ Elles reprennent, mot pour mot, les deux valeurs que `CibleSeverite`
+#: publie déjà sous `assiette_seuil` — une troisième liste divergerait.
+ASSIETTES_SEUIL_GRAVE = ('par_sinistre', 'total_contrat')
+
+
+@dataclass(frozen=True)
+class SeuilGrave:
+    """Le seuil de sinistre GRAVE, déclaré par le client — jamais deviné.
+
+    ⚠️⚠️ POURQUOI IL EXISTE. Sans lui, le seuil d'écrêtement était TOUJOURS le
+    quantile 0,995 des coûts observés — une valeur que le portefeuille se
+    donne à lui-même, et que rien ne publiait comme une hypothèse. Or le vrai
+    seuil de gravité est une donnée de RÉASSURANCE : il vient du traité, du
+    client, ou d'une politique de souscription. Le calculer sur les données
+    revient à laisser le portefeuille définir ce qui, en lui, est anormal.
+
+    ⚠️⚠️ ET IL NE SE REPLIE JAMAIS. Un montant illisible ou <= 0 est un REFUS,
+    pas un retour au quantile : *un seuil déclaré puis silencieusement ignoré
+    serait pire que pas de seuil du tout* — l'actuaire croirait tarifer sous
+    son traité de réassurance alors que le code écrête ailleurs.
+
+    Attributs
+    ─────────
+    montant : float
+        Le seuil, en euros. Strictement positif.
+    assiette : str
+        `'par_sinistre'` (le seuil porte sur CHAQUE sinistre — ce que le mot
+        « grave » désigne) ou `'total_contrat'`. ⚠️ Déclarer `par_sinistre`
+        exige que le plan déclare aussi `cout_par_sinistre` : sans les
+        montants individuels, l'assiette ne peut pas être tenue.
+    source : str
+        D'où vient ce montant — traité de réassurance, politique de
+        souscription, note du client. *Un seuil sans source n'est pas
+        contestable.*
+    """
+
+    montant: float
+    assiette: str = 'par_sinistre'
+    source: str = ''
+
+    def __post_init__(self):
+        if isinstance(self.montant, bool) or not isinstance(
+                self.montant, (int, float)):
+            raise TypeError(
+                f"seuil_grave : `montant` doit être un nombre, reçu "
+                f"{self.montant!r}. Aucun repli sur le quantile n'est fait : "
+                f"un seuil déclaré illisible est un refus.")
+        if not math.isfinite(float(self.montant)) or float(self.montant) <= 0:
+            raise ValueError(
+                f"seuil_grave : `montant` = {self.montant} doit être "
+                f"strictement positif et fini. Aucun repli sur le quantile "
+                f"n'est fait : le tarif serait calculé sur un écrêtement que "
+                f"personne n'a voulu.")
+        if self.assiette not in ASSIETTES_SEUIL_GRAVE:
+            raise ValueError(
+                f"seuil_grave : `assiette` = {self.assiette!r} inconnue. "
+                f"Valeurs admises : {list(ASSIETTES_SEUIL_GRAVE)}.")
+        if not str(self.source or '').strip():
+            raise ValueError(
+                "seuil_grave : `source` est obligatoire — d'où vient ce "
+                "montant (traité de réassurance, politique de souscription, "
+                "note du client) ? Un seuil sans source n'est pas "
+                "contestable devant un auditeur.")
+
+
 #: VERSION DE SCHÉMA DE L'EMPREINTE — la génération de la STRUCTURE hachée par
 #: `empreinte()`, distincte du champ `version` (le CONTENU signé par l'actuaire).
 #: ⚠️⚠️ À BUMPER quand, et seulement quand, la COMPOSITION du payload de
@@ -166,7 +233,14 @@ class Chargements:
 #: opposable. Mesure faite AVANT le bump, comme les trois precedents : aucune
 #: empreinte `s4:` persistee dans `models/` ni `data/`. Golden mis a jour dans
 #: le MEME commit.
-EMPREINTE_SCHEMA = 6
+#: ⚠️ `6` -> `7` LE 05/09/2026 : `seuil_grave` entre dans le payload. Un seuil
+#: de sinistre grave DECLARE ecrete les sinistres et reinjecte la charge en
+#: prime unitaire : deux plans qui n'en different que par lui ne produisent
+#: pas le meme prix. C'est le meme argument que `chargements` -- opposable,
+#: donc hache. Mesure faite AVANT le bump, comme les cinq precedents : aucune
+#: empreinte `s6:` persistee dans `models/` ni `data/`. Golden mis a jour dans
+#: le MEME commit.
+EMPREINTE_SCHEMA = 7
 
 # Transformations dérivées : suffixe appliqué par A2
 _SUFFIXE_TRANSFO = {"log": "log_{}", "carre": "{}_carre", "racine": "{}_racine"}
@@ -502,6 +576,13 @@ class PlanTarifaire:
     # ⚠️ Ils sont DANS L'EMPREINTE : la taxe décide de la prime que paie
     # l'assuré, donc elle est opposable. Voir `Chargements`.
     chargements: Chargements | None = None
+    # ⚠️⚠️ LE SEUIL DE SINISTRE GRAVE, DECLARE PAR LE CLIENT. Sans lui,
+    # l'ecretement retombe sur le quantile 0,995 des couts observes -- une
+    # valeur que le portefeuille se donne A LUI-MEME. Le vrai seuil vient
+    # d'un traite de reassurance ou d'une politique de souscription.
+    # Non declare : le quantile s'applique, mais il est DIT (voir
+    # `core.severite.phrase_seuil_suppose`), jamais suppose en silence.
+    seuil_grave: SeuilGrave | None = None
     # Colonne identifiant de contrat/police (optionnelle). Si déclarée, la couche
     # qualité (core/qualite_donnees.py) dédoublonne PAR CET IDENTIFIANT (règle 1,
     # exclusion sans discussion) ; sinon un doublon de LIGNE entière reste ambigu
@@ -786,6 +867,11 @@ class PlanTarifaire:
             # d'écrêtement, donc de ce qui est écrêté, donc des relativités du
             # modèle de coût. Opposable — d'où le bump `s4` → `s5`.
             "cout_par_sinistre": self.cout_par_sinistre,
+            # ⚠️ Un seuil grave DECLARE ecrete les sinistres et reinjecte la
+            # charge : deux plans qui n'en different que par lui ne produisent
+            # pas le meme prix. Opposable -- d'ou le bump `s6` -> `s7`.
+            "seuil_grave": (dataclasses_asdict(self.seuil_grave)
+                           if self.seuil_grave else None),
             "comportement": (dataclasses_asdict(self.comportement)
                              if self.comportement else None),
             "facteurs": [
@@ -893,6 +979,8 @@ class PlanTarifaire:
             valeurs_absentes=d.get("valeurs_absentes"),
             chargements=(Chargements(**d["chargements"])
                          if d.get("chargements") else None),
+            seuil_grave=(SeuilGrave(**d["seuil_grave"])
+                         if d.get("seuil_grave") else None),
             identifiant_contrat=d.get("identifiant_contrat"),
             echeance=d.get("echeance"),
             cout_par_sinistre=d.get("cout_par_sinistre"),

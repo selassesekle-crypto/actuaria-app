@@ -78,7 +78,7 @@ import pandas as pd
 
 from core.plan_tarifaire import PlanTarifaire
 from core.qualite_donnees import preambule_qualite
-from core.severite import CibleSeverite, construire_cible_severite
+from core.severite import CibleSeverite, construire_cible_severite, seuil_declare
 from direction_non_vie.tarification.a1_ingestion.agent import AgentA1Ingestion
 from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
 from direction_non_vie.tarification.a3_glm.agent import AgentA3GLM
@@ -272,7 +272,8 @@ def _vue_sinistres(
     """
     df = result_a2["dataframe"]
     cible = construire_cible_severite(
-        df[plan.cible_cout], df[plan.cible_frequence], df[plan.exposition])
+        df[plan.cible_cout], df[plan.cible_frequence], df[plan.exposition],
+        seuil=seuil_declare(plan))
     df_sin = df[cible.masque].copy().reset_index(drop=True)
     df_sin[CIBLE_COUT] = cible.severite
     return {**result_a2, "dataframe": df_sin}, cible

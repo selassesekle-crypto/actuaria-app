@@ -35,7 +35,7 @@ from core.conformite_reglementaire import construire_matrice_x
 # l'importait DEPUIS ce fichier** (mesuré). *Un ré-export tacite se casse en
 # silence ; celui-ci n'existait pas.*
 from core.qualite_donnees import preambule_qualite
-from core.severite import construire_cible_severite
+from core.severite import construire_cible_severite, seuil_declare
 from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
 
 # Chargements par défaut (auto). Déclarables dans le plan (étape 6) ; ici en
@@ -664,8 +664,12 @@ def pipeline_complet(portefeuille: pd.DataFrame, plan: PlanTarifaire,
     # La charge grave est réintégrée en charge MOYENNE sur tout le portefeuille
     # (prime_grave_unitaire), pas au contrat.
     cout_total = pd.to_numeric(X[col_cout], errors="coerce").astype(float).fillna(0.0)
+    # ⚠️ Meme source que A3 : un seuil declare au plan l'emporte sur le
+    # quantile. Ici l'assiette est le portefeuille COMPLET (modele de
+    # production), la ou A3 apprend sur le train (modele de validation).
     cible_sev = construire_cible_severite(
-        cout_total, y_freq, expo, quantile_ecretement=quantile_ecretement)
+        cout_total, y_freq, expo, quantile_ecretement=quantile_ecretement,
+        seuil=seuil_declare(plan))
     prime_grave_unitaire = cible_sev.prime_grave_unitaire
 
     # ── GLM COÛT MOYEN — FAMILLE DÉCLARÉE DANS LE PLAN ──────────────────────

@@ -81,6 +81,12 @@ class CibleSeverite:
     #: versionné, mais **26,8 à 8 sinistres/contrat**. Il croît avec la
     #: fréquence : c'est la mesure même du défaut que `socle/C1` décrit.
     seuil_en_sinistres_moyens: float = 0.0
+    #: ⚠️⚠️ D'OU VIENT LE SEUIL : `'declare'` quand le plan l'a pose,
+    #: `'quantile'` quand il a ete calcule sur les couts observes. La
+    #: distinction n'est pas cosmetique : dans le second cas, c'est LE
+    #: PORTEFEUILLE QUI DEFINIT CE QUI, EN LUI, EST ANORMAL -- une hypothese,
+    #: et elle doit se dire. Voir `phrase_seuil_suppose`.
+    source_seuil: str = 'quantile'
 
 
 def construire_cible_severite(
@@ -179,6 +185,27 @@ def construire_cible_severite(
                 f"{float(cout.iloc[pire]):,.2f} EUR. La jointure entre la "
                 f"table des sinistres et celle des contrats est fausse.")
 
+    # ⚠⚠ UN SEUIL DECLARE NE SE REPLIE JAMAIS SUR LE QUANTILE. Il etait
+    # accepte sans aucune verification : un montant negatif ou nul traversait
+    # `float(seuil)` puis desactivait silencieusement l'ecretement au `if
+    # seuil > 0` -- l'actuaire aurait cru tarifer sous son traite de
+    # reassurance pendant que le code n'ecretait rien.
+    #   *Un seuil declare puis ignore en silence est pire que pas de seuil.*
+    source_seuil = 'quantile' if seuil is None else 'declare'
+    if seuil is not None:
+        try:
+            seuil_lu = float(seuil)
+        except (TypeError, ValueError) as _e:
+            raise ValueError(
+                f"seuil de sinistre grave illisible : {seuil!r}. Aucun repli "
+                f"sur le quantile n'est fait -- corrigez la declaration au "
+                f"plan.") from _e
+        if not np.isfinite(seuil_lu) or seuil_lu <= 0:
+            raise ValueError(
+                f"seuil de sinistre grave = {seuil_lu} : il doit etre "
+                f"strictement positif et fini. Aucun repli sur le quantile "
+                f"n'est fait.")
+        seuil = seuil_lu
     if seuil is None:
         if par_sinistre:
             tous = np.concatenate(montants) if montants else np.empty(0)
@@ -226,8 +253,87 @@ def construire_cible_severite(
         n_retenus=int(masque.sum()),
         n_graves=n_graves,
         assiette_seuil='par_sinistre' if par_sinistre else 'total_contrat',
+        source_seuil=source_seuil,
         n_ecretes_par_nombre=n_par_nombre,
         seuil_en_sinistres_moyens=round(float(en_sinistres), 2),
+    )
+
+
+def seuil_declare(plan) -> float | None:
+    """Le montant du seuil grave déclaré au plan, ou ``None``.
+
+    ⚠️ SOURCE UNIQUE POUR LES TROIS CHEMINS qui construisent une cible de
+    sévérité (A3, `pipeline_tarifaire`, `pipeline_agents`). Trois lectures
+    séparées de `plan.seuil_grave` finiraient par diverger — c'est
+    exactement ce qui a laissé les deux GLM diverger.
+
+    ⚠️ Elle ne valide RIEN : `SeuilGrave` refuse déjà à la construction, et
+    `construire_cible_severite` refuse à l'usage. Une troisième validation
+    ici serait une troisième vérité possible.
+    """
+    declare = getattr(plan, 'seuil_grave', None)
+    return None if declare is None else float(declare.montant)
+
+
+def phrase_seuil_suppose(cible: CibleSeverite, plan=None) -> str | None:
+    """L'hypothèse du seuil d'écrêtement, DITE — jamais supposée en silence.
+
+    ⚠️⚠️ SANS ELLE, LE PORTEFEUILLE DÉFINIT CE QUI, EN LUI, EST ANORMAL. Le
+    seuil de gravité retombait toujours sur le quantile 0,995 des coûts
+    observés. Or un seuil de sinistre grave est une donnée de RÉASSURANCE :
+    il vient d'un traité, d'une politique de souscription, d'une note du
+    client. Le calculer sur les données rend le tarif circulaire — un
+    portefeuille très sinistré se donne un seuil élevé, donc écrête peu, donc
+    charge la prime pure de sinistres que le traité aurait pris.
+
+    ⚠️ Même forme que `phrase_chargements_non_declares` : elle ne s'ajoute
+    QUE si rien n'est déclaré. *Un avertissement permanent est un
+    avertissement qu'on cesse de lire.*
+
+    Rend `None` quand le plan a déclaré son seuil : il n'y a plus
+    d'hypothèse à signaler.
+    """
+    if cible is None or getattr(cible, 'source_seuil', '') != 'quantile':
+        return None
+    if cible.seuil_ecretement <= 0:
+        return None
+    lob = getattr(plan, 'lob', None) or '?'
+    return (
+        f"SEUIL DE SINISTRE GRAVE NON DECLARE au plan '{lob}' : le seuil "
+        f"d'ecretement a ete SUPPOSE — quantile des couts observes, soit "
+        f"{cible.seuil_ecretement:,.0f} EUR, sur l'assiette "
+        f"'{cible.assiette_seuil}'. C'est le portefeuille qui definit ici ce "
+        f"qui, en lui, est anormal. Le vrai seuil vient de votre traite de "
+        f"reassurance ou de votre politique de souscription : declarez "
+        f"`seuil_grave` au plan (montant, assiette, source)."
+    )
+
+
+def phrase_aucun_grave(cible: CibleSeverite) -> str | None:
+    """Aucun sinistre au-dessus du seuil : la prime grave vaut 0, et on le dit.
+
+    ⚠️⚠️ ZERO EST ICI UNE MESURE, PAS UNE ABSENCE — et c'est exactement pour
+    cela qu'il faut l'écrire. Une prime grave nulle publiée sans phrase est
+    indiscernable d'un écrêtement qui n'a pas tourné. *L'actuaire doit
+    pouvoir distinguer « aucun grave observé » de « le calcul n'a rien
+    produit ».*
+
+    Ne s'allume que sur un seuil réellement posé : sans seuil, il n'y a rien
+    à dire.
+    """
+    if cible is None or cible.seuil_ecretement <= 0:
+        return None
+    if cible.n_graves:
+        return None
+    origine = ('declare au plan' if getattr(cible, 'source_seuil', '') ==
+               'declare' else 'suppose (quantile des couts observes)')
+    return (
+        f"AUCUN SINISTRE GRAVE — aucun cout n'atteint le seuil de "
+        f"{cible.seuil_ecretement:,.0f} EUR ({origine}, assiette "
+        f"'{cible.assiette_seuil}'). La prime de charge grave vaut donc 0,00 "
+        f"EUR par unite d'exposition : c'est une MESURE, pas un calcul "
+        f"absent. Si ce seuil vous parait haut pour ce portefeuille, c'est "
+        f"la declaration qu'il faut revoir, pas le tarif."
     )
 
 

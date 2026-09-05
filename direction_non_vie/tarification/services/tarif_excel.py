@@ -130,6 +130,31 @@ def export_excel_a3(result_a3: Dict, audit_id: str = "", arrete: Optional[str] =
                 _kpi(ws1, r, f"{label} — Vars retenues",  m.get('nb_vars_retenues', 0))
                 r += 2
 
+        # ⚠️⚠️ LE SEUIL DE SINISTRE GRAVE, DANS LE CLASSEUR SIGNE. Mesuré le
+        # 05/09/2026 : `ecretement_severite` n'atteignait QUE le prompt LLM
+        # (`_construire_contexte_tarif`) — exactement le défaut fermé la veille
+        # sur l'élasticité. Le seuil décide de ce qui est écrêté, donc des
+        # relativités de coût, donc du prix : il appartient au document.
+        _ecr = result_a3.get('ecretement_severite') or {}
+        if _ecr:
+            _section(ws1, r, "▶ SEUIL DE SINISTRE GRAVE"); r += 1
+            _kpi(ws1, r, "Seuil d'écrêtement",
+                 mesure_arrondie(_ecr.get('seuil'), 0), fmt=FMT_NB); r += 1
+            _kpi(ws1, r, "Origine du seuil",
+                 "déclaré au plan" if _ecr.get('source_seuil') == 'declare'
+                 else "supposé (quantile des coûts observés)"); r += 1
+            _kpi(ws1, r, "Assiette", _ecr.get('assiette', 'N/A')); r += 1
+            _kpi(ws1, r, "Sinistres graves", _ecr.get('n_graves', 0)); r += 1
+            _kpi(ws1, r, "Prime grave unitaire",
+                 mesure_arrondie(_ecr.get('prime_grave_unitaire'), 4)); r += 1
+            for _cle, _libelle in (('seuil_suppose', "Hypothèse sur le seuil"),
+                                   ('aucun_grave', "Aucun sinistre grave"),
+                                   ('synthese', "Assiette de l'écrêtement")):
+                if _ecr.get(_cle):
+                    _kpi(ws1, r, _libelle, _ecr[_cle], statut="AMBRE",
+                         wrap=True); r += 1
+            r += 1
+
         _section(ws1, r, "▶ STATUT GLOBAL"); r += 1
         statut = val.get('statut_global', 'N/A')
         _kpi(ws1, r, "Statut validation", statut, statut=statut); r += 1

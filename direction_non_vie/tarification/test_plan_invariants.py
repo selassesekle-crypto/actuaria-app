@@ -2005,10 +2005,18 @@ class TestEmpreinteVersionneeSchema(unittest.TestCase):
         # a valeur absente est EXCLUE, IMPUTEE, ou si le run S'ARRETE. Deux
         # plans qui n'en different que par elle ne tarifent pas les memes
         # contrats.
-        # ⚠️ Mesure faite AVANT le bump, comme les quatre precedents : aucune
-        # empreinte `s5:` persistee dans `models/` ni `data/`.
-        self.assertEqual(EMPREINTE_SCHEMA, 6)
-        self.assertEqual(emp, "s6:e46b58638abdf2ac",
+        # ⚠️⚠️ BUMP `s6` -> `s7` LE 05/09/2026, golden et constante dans le
+        # MEME commit. Motif : `seuil_grave` entre dans le payload -- le seuil
+        # de sinistre GRAVE declare par le client. Il ecrete les sinistres et
+        # reinjecte la charge en prime unitaire : deux plans qui n'en
+        # different que par lui ne produisent pas le meme prix. Mesure sur
+        # `_portefeuille_auto(1500)` : seuil suppose 7 243 EUR (quantile) ->
+        # prime grave 2,4924/expo ; seuil declare 8 000 EUR -> 1,0174/expo.
+        # Meme argument que `chargements` : opposable, donc hache.
+        # ⚠️ Mesure faite AVANT le bump, comme les cinq precedents : aucune
+        # empreinte `s6:` persistee dans `models/` ni `data/`.
+        self.assertEqual(EMPREINTE_SCHEMA, 7)
+        self.assertEqual(emp, "s7:c1f3234e0065b27b",
             "empreinte du plan de reference gele changee : derive de structure "
             "sans bump, OU bump sans mise a jour du golden. Voir le commentaire.")
         print(f"    S3b golden scellé : {emp} ✅")
