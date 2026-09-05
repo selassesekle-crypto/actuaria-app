@@ -84,7 +84,7 @@ def _align(h="left", v="center", wrap=False):
     return Alignment(horizontal=h, vertical=v, wrap_text=wrap)
 
 #: ⚠️⚠️ CONSTAT `services/C14` — LES DEUX MOITIÉS DU BADGE NE NORMALISAIENT
-#: PAS PAREIL. `_statut_fill` faisait `.upper()`, `_MOT_RAG` non. Mesuré :
+#: PAS PAREIL. `_statut_fill` faisait `.upper()`, `MOT_RAG` non. Mesuré :
 #:
 #:     statut='vert'  ->  FOND VERT  +  TEXTE 'vert'   (au lieu de ✓ Conforme)
 #:
@@ -136,6 +136,16 @@ def _section(ws, row, titre, n_cols=8):
                        end_row=row, end_column=n_cols)
     ws.row_dimensions[row].height = 20
 
+#: LE MOT DU BADGE, PAR STATUT — la moitié TEXTE de la pastille.
+#: ⚠️⚠️ IL VIVAIT EN LOCALE DE `_kpi`, DONC NON IMPORTABLE. Le GLYPHE, lui,
+#: venait déjà de sa source unique (`GLYPHE_RAG_EXCEL`) : *les deux moitiés
+#: d'un même badge n'avaient pas le même régime.* Un contrôle qui voulait
+#: vérifier le mot publié devait le RECOPIER — c'est-à-dire créer la seconde
+#: source qui diverge. Constaté le 05/09/2026 en écrivant `ID-2`.
+MOT_RAG = {"VERT": "Conforme", "AMBRE": "À surveiller",
+           "ROUGE": "Non conforme"}
+
+
 def _kpi(ws, row, label, value, statut=None, fmt=None, wrap=False):
     _cell(ws, row, 1, label, bold=True, cf=NOIR, fill=GRIS_L, wrap=wrap)
     _col_w(ws, 1, 38)
@@ -155,16 +165,14 @@ def _kpi(ws, row, label, value, statut=None, fmt=None, wrap=False):
         # divergence que le lot « 30 définitions locales -> 0 » avait fermée.
         #
         # ⚠️⚠️ CONSTAT `services/C14` — LA MÊME NORMALISATION QUE LE FOND.
-        # Cette ligne faisait `_MOT_RAG.get(statut)` sur le statut BRUT
+        # Cette ligne faisait `MOT_RAG.get(statut)` sur le statut BRUT
         # pendant que `_statut_fill` faisait `.upper()` : un `'vert'`
         # minuscule donnait un fond VERT portant le texte `'vert'`.
         # *Deux moitiés d'un même badge ne peuvent pas normaliser
         # différemment — c'est ainsi qu'une pastille cesse de dire ce que sa
         # couleur affirme.*
-        _MOT_RAG = {"VERT": "Conforme", "AMBRE": "À surveiller",
-                    "ROUGE": "Non conforme"}
         _norme = _normaliser_statut(statut)
-        _mot = _MOT_RAG.get(_norme)
+        _mot = MOT_RAG.get(_norme)
         # ⚠️ Le repli reste le statut BRUT, délibérément : un statut inconnu
         # doit rester LISIBLE tel qu'il a été reçu, pour que l'actuaire voie
         # ce que le système n'a pas su interpréter. *Un repli qui reformule

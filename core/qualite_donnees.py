@@ -1489,7 +1489,7 @@ def phrase_ampleur_exclusion(part: float | None, *,
     *L'information était là, la hiérarchie n'y était pas.*
 
     ⛔⛔ ET LA GRADATION PAR LA COULEUR A ÉTÉ ÉCARTÉE, APRÈS MESURE. Le badge
-    ROUGE publie littéralement **« Non conforme »** (`_MOT_RAG`, `services/C9`)
+    ROUGE publie littéralement **« Non conforme »** (`MOT_RAG`, `services/C9`)
     — or un tarif calculé sur un portefeuille réduit n'est pas *non conforme*,
     il est *réduit*. *Le rendre rouge affirmerait plus que ce qu'on sait :
     exactement le défaut que cet audit poursuit.* La hiérarchie va donc dans

@@ -895,18 +895,34 @@ class AgentA1Ingestion:
             granularite = 'indéterminée — aucun identifiant'
         taux_doublons = nb_doublons / max(n, 1) * 100
 
-        # ⚠️ LE REPLI RESTE LÉGITIME — aucun des vingt plans ne déclare
-        # d'identifiant — MAIS IL NE SE TAIT PLUS. Un lecteur doit savoir que
-        # l'identité du contrat n'a pas été déclarée, donc que le compte de
-        # doublons repose sur un nom de colonne deviné.
+        # ⚠️ LE REPLI RESTE LÉGITIME, MAIS IL NE SE TAIT PLUS. Un lecteur doit
+        # savoir que l'identité du contrat n'a pas été déclarée, donc que le
+        # compte de doublons repose sur un nom de colonne deviné.
+        # ⚠️⚠️ ET LE MOTIF A CHANGÉ — RE-MESURÉ LE 05/09/2026. Ce commentaire
+        # disait « aucun des vingt plans ne déclare d'identifiant » : c'est
+        # FAUX aujourd'hui, **les vingt déclarent `identifiant_contrat` ET
+        # `echeance`**. Le repli ne vient donc plus d'un plan incomplet, il
+        # vient de ce qu'**aucun appelant de production ne passe le plan à
+        # `A1.run`** (constat `A1.5`, relevé par AST). *L'information existe,
+        # elle n'atteint pas l'agent qui en a besoin* — et A1 devine une
+        # identité que le plan déclarait.
+        #   Le câblage n'est PAS fait ici : passer le plan ferait dédoublonner
+        #   sur (identifiant, échéance) au lieu du seul identifiant, ce qui
+        #   change les lignes retenues, donc le modèle, donc le prix. C'est
+        #   une décision, pas un correctif.
         note_identite = {
             'plan': (f"Identité du contrat DÉCLARÉE au plan : « {col_id} »"
                      + (f", échéance « {col_ech} »." if col_ech else
                         ". Aucune échéance déclarée : deux lignes de même "
                         "identifiant restent comptées comme un doublon.")),
             'devinee': (f"⚠ Identité du contrat DEVINÉE : « {col_id} » (nom "
-                        f"contenant « id » ou « pol »). Non déclarée au plan "
-                        f"— déclarer `identifiant_contrat` la rend opposable."),
+                        f"contenant « id » ou « pol »). Le plan n'a pas été "
+                        f"transmis à A1, ou n'y déclare pas "
+                        f"`identifiant_contrat` — les vingt plans du "
+                        f"référentiel le déclarent pourtant, ainsi que "
+                        f"`echeance`. Transmettre le plan rend cette identité "
+                        f"opposable, et fait porter le dédoublonnage sur "
+                        f"(identifiant, échéance)."),
             'aucune': ("⚠ Aucun identifiant de contrat : le dédoublonnage "
                        "porte sur la ligne entière."),
         }[source_identifiant]

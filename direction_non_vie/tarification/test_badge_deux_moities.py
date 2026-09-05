@@ -4,7 +4,7 @@ Constat `services/C14`, ouvert le 03/09/2026 en auditant `excel_helpers.py` --
 l'un des trois modules que la carte declarait << jamais audites >>.
 
 La pastille des deux Excel a deux moities : le FOND (`_statut_fill`) et le
-MOT (`_MOT_RAG`). La premiere faisait `.upper()`, la seconde non.
+MOT (`MOT_RAG`). La premiere faisait `.upper()`, la seconde non.
 
 ```
   statut='vert'  ->  FOND VERT  +  TEXTE 'vert'   (au lieu de ✓ Conforme)
@@ -48,19 +48,25 @@ _FONDS = {VERT_H: 'VERT', AMBRE: 'AMBRE', ROUGE: 'ROUGE', GRIS: None}
 
 
 def _mots_rag() -> dict:
-    """La table `_MOT_RAG` telle qu'elle est ECRITE dans `_kpi`, par AST.
+    """La table des mots du badge, LUE A SA SOURCE.
 
-    ⚠️ *Une citation n'est pas une affirmation* : on lit la table du CODE, on
+    ⚠️ *Une citation n'est pas une affirmation* : on lit la table reelle, on
     ne la recopie pas dans le test. Recopiee, elle passerait meme le jour ou
     la vraie table change.
+
+    ⚠️⚠️ ELLE S'IMPORTE DESORMAIS, ET C'EST MIEUX QUE DE LA PARSER. Ce
+    controle extrayait `_MOT_RAG` du SOURCE par AST, faute de pouvoir
+    l'importer : la table vivait en LOCALE de `_kpi`. Elle a ete extraite au
+    niveau module le 05/09/2026 (constat `A1.5`, en ecrivant `ID-2`), et ce
+    test a TIRE TOUT SEUL pour l'exiger -- *avant de deplacer un symbole,
+    chercher tous les controles qui le nomment.* L'import lit l'objet que
+    `_kpi` utilise vraiment, la ou l'AST lisait un texte qui lui ressemblait.
     """
-    arbre = ast.parse(_HELPERS.read_text(encoding='utf-8'))
-    for n in ast.walk(arbre):
-        if (isinstance(n, ast.Assign) and n.targets
-                and getattr(n.targets[0], 'id', '') == '_MOT_RAG'):
-            return ast.literal_eval(n.value)
-    raise AssertionError('`_MOT_RAG` introuvable : le controle ne surveille '
-                         'plus rien')
+    from direction_non_vie.tarification.services.excel_helpers import MOT_RAG
+    if not MOT_RAG:
+        raise AssertionError('`MOT_RAG` est vide : le controle ne surveille '
+                             'plus rien')
+    return dict(MOT_RAG)
 
 
 class TestBadgeDeuxMoities(unittest.TestCase):
@@ -143,11 +149,28 @@ class TestBadgeDeuxMoities(unittest.TestCase):
             # statut)` peut rester en place pendant que la ligne suivante
             # interroge la table avec le statut BRUT -- c'est exactement le
             # plant qui ne tombait pas.
+            # ⚠️⚠️ LE NOM DE LA TABLE SE DERIVE, IL NE SE RECOPIE PAS. Ce
+            # filtre portait `('_MOT_RAG',)` en dur. La table a ete renommee
+            # `MOT_RAG` le 05/09/2026 en l'extrayant au niveau module : ce
+            # contrôle est alors devenu MUET -- il cherchait un nom qui
+            # n'existait plus, ne trouvait rien, et **passait au vert pour
+            # cette raison**. Deux autres controles ont tire ; celui-ci s'est
+            # tu.
+            #   *Un controle qui nomme sa cible en dur atteste sans surveiller
+            #   des que la cible change de nom.* Le nom vient donc de l'objet
+            #   importe, qui ne peut pas diverger de lui-meme.
+            from direction_non_vie.tarification.services import excel_helpers
+            _noms_table = tuple(
+                n for n, v in vars(excel_helpers).items()
+                if v is excel_helpers.MOT_RAG)
+            self.assertTrue(_noms_table,
+                            'la table des mots n a plus de nom de module : '
+                            'ce controle ne peut plus la designer')
             brut = [ast.unparse(n) for n in ast.walk(fn)
                     if isinstance(n, ast.Call)
                     and isinstance(n.func, ast.Attribute)
                     and n.func.attr == 'get'
-                    and getattr(n.func.value, 'id', '') in ('_MOT_RAG',)
+                    and getattr(n.func.value, 'id', '') in _noms_table
                     and n.args and getattr(n.args[0], 'id', '') == 'statut']
             self.assertEqual(
                 brut, [],

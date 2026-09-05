@@ -264,12 +264,16 @@ class TestZoneServices(unittest.TestCase):
         """⚠️⚠️ Le triptyque publiait « ✗ Attention » pour ROUGE contre
         « △ À surveiller » pour AMBRE : *l'escalade s'inversait sur le seul
         mot que l'actuaire lit en diagonale.*"""
-        # ⚠️ Plutot que de simuler openpyxl, on lit la table AU SOURCE : c'est
-        # elle qui decide, et elle est deterministe.
+        # ⚠️⚠️ LA TABLE S'IMPORTE DESORMAIS -- elle vivait en LOCALE de `_kpi`,
+        # et ce controle devait donc la chercher au SOURCE par expression
+        # reguliere. Extraite au niveau module le 05/09/2026 (constat `A1.5`),
+        # elle se lit maintenant TELLE QUE `_kpi` L'UTILISE. *Ce test a tire
+        # tout seul pour l'exiger : avant de deplacer un symbole, chercher
+        # tous les controles qui le nomment.*
+        from direction_non_vie.tarification.services.excel_helpers import (
+            MOT_RAG as mots,
+        )
         source = inspect.getsource(_kpi)
-        table = re.search(r'_MOT_RAG = (\{[^}]*\})', source, re.DOTALL)
-        self.assertIsNotNone(table, 'la table des mots a disparu de `_kpi`')
-        mots = ast.literal_eval(table.group(1))
         self.assertEqual(set(mots), {'VERT', 'AMBRE', 'ROUGE'})
         self.assertIn('Non conforme', mots['ROUGE'])
         self.assertNotIn('Attention', mots['ROUGE'],

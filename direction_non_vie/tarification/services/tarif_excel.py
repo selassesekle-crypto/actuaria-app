@@ -13,7 +13,7 @@ ONGLETS PAR AGENT :
 
 import io
 from core.conformite_reglementaire import (
-    gini_arrondi, mesure_arrondie,
+    gini_arrondi, mesure_arrondie, NON_MESURE,
     avertissement_controle_effet, avertissement_walk_forward,
     synthese_exclusions, synthese_alertes_experience,
     synthese_colonnes_plan_ecartees, synthese_exemptions_effet,
@@ -1151,6 +1151,24 @@ def export_excel_a1(result_a1: Dict, audit_id: str = "", arrete: Optional[str] =
         _kpi(ws1, r, "Taux complétude", qualite.get('taux_completude', 0) / 100, fmt=FMT_PCT); r += 1
         _kpi(ws1, r, "Nb doublons", qualite.get('nb_doublons', 0), fmt=FMT_NB); r += 1
         _kpi(ws1, r, "Taux doublons", qualite.get('taux_doublons', 0) / 100, fmt=FMT_PCT); r += 1
+        # ⚠️⚠️ SUR QUOI CE COMPTE DE DOUBLONS PORTE-T-IL — constat `A1.5`.
+        # A1 calculait `source_identifiant` et `note_identite` depuis le
+        # 24/08 ; mesuré le 05/09/2026, **seuls des tests les lisaient**. Le
+        # titre de ce bloc annonce pourtant « identité », et le classeur
+        # signé publiait « Nb doublons » sans jamais dire SUR QUELLE CLÉ.
+        #   *Un calcul qui n'atteint aucun livrable n'existe pas ; et un titre
+        #   qui annonce plus que son bloc ne porte est une dette.*
+        # ⚠️ Le statut suit la SOURCE, pas le compte : une identité DEVINÉE ou
+        # ABSENTE est un fait à vérifier, une identité déclarée ne l'est pas.
+        _src_id = qualite.get('source_identifiant')
+        _note_id = qualite.get('note_identite')
+        if _note_id:
+            _kpi(ws1, r, "Identité du contrat (clé du dédoublonnage)",
+                 _note_id,
+                 statut=("VERT" if _src_id == 'plan' else "AMBRE"),
+                 wrap=True); r += 1
+        _kpi(ws1, r, "Granularité déclarée",
+             qualite.get('granularite') or NON_MESURE); r += 1
         # ⚠️ LE LIBELLE PORTAIT « [0,1] » EN DUR, comme le code qu'il
         # decrivait. La borne vient desormais de l'unite declaree au plan :
         # ecrire une borne fixe a cote d'un chiffre qui n'en depend plus,
