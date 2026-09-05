@@ -1446,7 +1446,9 @@ def compte_union_lignes(anomalies) -> tuple[int, float | None]:
     return len(union), part
 
 
-def phrase_ampleur_exclusion(part: float | None) -> str | None:
+def phrase_ampleur_exclusion(part: float | None, *,
+                             escalade_declenchee: bool,
+                             validee_par: str | None) -> str | None:
     """La MESURE DE L'AMPLEUR, comparée au seul repère que le module possède.
 
     ⚠️⚠️ CONSTAT `qualite/C19`. `qualite/C18` a fait publier la part du
@@ -1474,6 +1476,27 @@ def phrase_ampleur_exclusion(part: float | None) -> str | None:
     portefeuille cesse d'être tarifable — appartient à l'actuaire signataire,
     et resterait à déclarer au plan le jour où elle sera prise.
 
+    ⚠️⚠️ ET ELLE DISAIT L'INVERSE DE LA VÉRITÉ UNE FOIS SUR DEUX. La phrase
+    affirmait, SANS CONDITION, que « ces retraits-ci ne déclenchent PAS
+    cette exigence ». Or on n'atteint ce point que dans deux états :
+
+      · l'escalade ne s'est pas déclenchée → la phrase est vraie ;
+      · elle S'EST déclenchée et un actuaire nommé l'a validée (sinon la
+        synthèse se serait arrêtée sur « CONTROLE QUALITE BLOQUE »).
+
+    Dans le second, la même synthèse signée portait les DEUX affirmations —
+    **mesuré le 05/09/2026** :
+
+        ⚠ AMPLEUR — ... Ces retraits-ci ne declenchent PAS cette exigence ...
+        ✔ Poursuite malgre anomalie(s) >= 5% VALIDEE par « Selasse Sekle ».
+
+    *Deux phrases contradictoires dans le document que l'actuaire lit avant
+    de signer une assiette réduite de 67 %.*
+
+    ⚠️ L'ÉTAT EST OBLIGATOIRE, SANS VALEUR PAR DÉFAUT. Un défaut à `False`
+    reproduirait la phrase fausse dès qu'un appelant oublierait de le
+    passer — exactement la famille de défauts que ce chantier ferme.
+
     Rend `None` sous le repère : *un avertissement permanent cesse d'être lu.*
     """
     if part is None or part < SEUIL_ESCALADE:
@@ -1482,14 +1505,21 @@ def phrase_ampleur_exclusion(part: float | None) -> str | None:
     _s = f"{SEUIL_ESCALADE:.0%}".replace('%', ' %')
     _reste = f"{1 - part:.1%}".replace('.', ',').replace('%', ' %')
     _fois = f"{part / SEUIL_ESCALADE:.1f}".replace('.', ',')
+    _tete = (f"⚠ AMPLEUR — cette part ({_p}) vaut {_fois} fois le seuil de "
+             f"{_s} au-dela duquel ce module exige une confirmation "
+             f"actuarielle nominative pour les anomalies disqualifiantes. ")
+    if escalade_declenchee:
+        _qui = f"« {validee_par} »" if validee_par else "un actuaire non nomme"
+        _milieu = (f"Cette exigence S'EST declenchee ici, et la poursuite a "
+                   f"ete assumee par {_qui}. ")
+    else:
+        _milieu = ("Ces retraits-ci ne declenchent PAS cette exigence : ils "
+                   "sont legitimes ligne a ligne. ")
     return (
-        f"⚠ AMPLEUR — cette part ({_p}) vaut {_fois} fois le seuil de {_s} "
-        f"au-dela duquel ce module exige une confirmation actuarielle "
-        f"nominative pour les anomalies disqualifiantes. Ces retraits-ci ne "
-        f"declenchent PAS cette exigence : ils sont legitimes ligne a ligne. "
-        f"Le tarif publie est donc calibre sur {_reste} du portefeuille "
-        f"initial. VERIFIEZ que cette assiette reduite reste representative "
-        f"de votre risque avant de signer."
+        _tete + _milieu
+        + f"Le tarif publie est donc calibre sur {_reste} du portefeuille "
+          f"initial. VERIFIEZ que cette assiette reduite reste representative "
+          f"de votre risque avant de signer."
     )
 
 
@@ -1649,7 +1679,14 @@ def synthese_qualite_donnees(rapport: RapportQualite | None) -> str | None:
         # pastille reste AMBRE a 0,1 % comme a 67 % : elle se declenche sur le
         # mot << EXCLUE >>, jamais sur l'ampleur. *L'information etait la, la
         # hierarchie n'y etait pas.*
-        _ampleur = phrase_ampleur_exclusion(part)
+        # ⚠️ L'ETAT D'ESCALADE VOYAGE AVEC LA PART : la phrase disait « ces
+        # retraits ne declenchent PAS cette exigence » meme quand elle S'ETAIT
+        # declenchee et avait ete validee, deux lignes plus bas, par un
+        # actuaire nomme.
+        _ampleur = phrase_ampleur_exclusion(
+            part,
+            escalade_declenchee=bool(rapport.escalade_declenchee),
+            validee_par=rapport.validee_par)
         if _ampleur:
             lignes.append(f"   {_ampleur}")
         # ⚠️⚠️ LA TROISIÈME BRANCHE, TROUVÉE DANS MON PROPRE CORRECTIF.

@@ -530,9 +530,11 @@ class TestAmpleurDeLExclusion(unittest.TestCase):
     def test_AM_1_sous_le_repere_la_phrase_se_TAIT(self):
         """⚠️ *Un avertissement permanent est un avertissement qu'on cesse de
         lire.* A 0,1 %, il n'y a rien a hierarchiser."""
-        self.assertIsNone(phrase_ampleur_exclusion(0.001))
-        self.assertIsNone(phrase_ampleur_exclusion(SEUIL_ESCALADE - 1e-9))
-        self.assertIsNone(phrase_ampleur_exclusion(None),
+        _hors = {'escalade_declenchee': False, 'validee_par': None}
+        self.assertIsNone(phrase_ampleur_exclusion(0.001, **_hors))
+        self.assertIsNone(
+            phrase_ampleur_exclusion(SEUIL_ESCALADE - 1e-9, **_hors))
+        self.assertIsNone(phrase_ampleur_exclusion(None, **_hors),
                           'une part indisponible declenche la phrase')
         texte = synthese_qualite_donnees(self._rapport(4)) or ''
         self.assertNotIn('AMPLEUR', texte)
@@ -544,14 +546,15 @@ class TestAmpleurDeLExclusion(unittest.TestCase):
         Assiette : la phrase doit porter le seuil REEL du module, pas un
         littéral. On le fait varier et on verifie que le texte suit.
         """
-        p = phrase_ampleur_exclusion(0.226) or ''
+        _hors = {'escalade_declenchee': False, 'validee_par': None}
+        p = phrase_ampleur_exclusion(0.226, **_hors) or ''
         self.assertIn('4,5 fois', p, 'le rapport a la reference ne se derive '
                                      'pas de la part')
         self.assertIn(f"{SEUIL_ESCALADE:.0%}".replace('%', ' %'), p)
         self.assertIn('77,4 %', p, "l'assiette restante n'est pas publiee")
         # ⚠️ LE REPERE EST LU, PAS RECOPIE : on le deplace et le texte suit.
         with mock.patch('core.qualite_donnees.SEUIL_ESCALADE', 0.10):
-            p2 = phrase_ampleur_exclusion(0.20) or ''
+            p2 = phrase_ampleur_exclusion(0.20, **_hors) or ''
         self.assertIn('2,0 fois', p2,
                       f"le seuil a ete deplace a 10 % et le RATIO n'a pas "
                       f"suivi : il recopie un litteral. Obtenu : {p2[:80]}")
@@ -571,12 +574,26 @@ class TestAmpleurDeLExclusion(unittest.TestCase):
 
         La decision -- a partir de quelle perte un portefeuille cesse d'etre
         tarifable -- appartient a l'actuaire signataire. La phrase doit donc
-        dire que l'exigence n'a PAS ete declenchee, et rendre la question.
+        rendre la question, sans juger.
+
+        ⚠️⚠️ CE TEST EPINGLAIT UNE PHRASE FAUSSE, ET C'EST POURQUOI IL CHANGE.
+        Il exigeait `assertIn('ne declenchent PAS', p)` SANS CONDITION. Or la
+        phrase n'est vraie que si l'escalade ne s'est pas declenchee : quand
+        elle l'a ete et qu'un actuaire l'a validee, la meme synthese portait
+        les DEUX affirmations contradictoires --
+
+            << ... Ces retraits-ci ne declenchent PAS cette exigence ... >>
+            << Poursuite malgre anomalie(s) >= 5% VALIDEE par << X >>. >>
+
+        -- dans le document que cet actuaire lit AVANT de signer. Le test
+        exige maintenant la phrase qui CORRESPOND A L'ETAT, et AM-3b
+        interdit la contradiction.
         """
-        p = phrase_ampleur_exclusion(0.673) or ''
+        p = phrase_ampleur_exclusion(0.673, escalade_declenchee=False,
+                                     validee_par=None) or ''
         self.assertIn('ne declenchent PAS', p,
-                      "la phrase laisse croire qu'une exigence s'est "
-                      'declenchee')
+                      "sans escalade, la phrase doit dire que l'exigence ne "
+                      "s'est pas declenchee")
         self.assertIn('VERIFIEZ', p, "la question n'est pas rendue a "
                                      "l'actuaire")
         for interdit in ('non conforme', 'invalide', 'inacceptable', 'refuse'):
@@ -585,6 +602,19 @@ class TestAmpleurDeLExclusion(unittest.TestCase):
                              f"comparer")
         print("    AM-3 elle compare, dit que rien ne s'est declenche, et "
               "rend la question")
+
+    def test_AM_3b_sous_escalade_elle_NE_DIT_PLUS_l_inverse(self):
+        """La contre-epreuve : escalade declenchee ET validee."""
+        p = phrase_ampleur_exclusion(0.673, escalade_declenchee=True,
+                                     validee_par='Selasse Sekle') or ''
+        self.assertNotIn('ne declenchent PAS', p,
+                         "la phrase nie une escalade qui a EU LIEU, dans le "
+                         "meme document qui la valide")
+        self.assertIn('Selasse Sekle', p,
+                      "la phrase ne nomme pas qui a assume l'escalade")
+        self.assertIn('VERIFIEZ', p, "la question n'est plus rendue")
+        print("    AM-3b sous escalade validee : la phrase dit l'inverse "
+              "de l'inverse")
 
     def test_AM_4_la_PASTILLE_reste_AMBRE_et_c_est_DELIBERE(self):
         """⛔⛔ LA LIMITE, EPINGLEE PLUTOT QUE TUE.
