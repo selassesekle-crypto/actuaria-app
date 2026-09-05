@@ -28,7 +28,7 @@ import statsmodels.api as sm
 import dataclasses
 from statsmodels.genmod import families as _families
 
-from core.plan_tarifaire import PlanTarifaire
+from core.plan_tarifaire import CHARGEMENTS_DEFAUT, PlanTarifaire
 from core.conformite_reglementaire import construire_matrice_x
 # ⚠️ `QualiteBloquante` n'est plus importée ici : la levée a suivi le préambule
 # dans `core.qualite_donnees`. Vérifié avant de la retirer — **aucun module ne
@@ -43,11 +43,15 @@ from core.severite import (ModeleCout, ajuster_glm_cout,
                            construire_cible_severite, seuil_declare)
 from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
 
-# Chargements par défaut (auto). Déclarables dans le plan (étape 6) ; ici en
-# repli neutre pour la fréquence/coût. Taxes : auto 33 %, MRH 30 %, RC 9 %.
-CHARGEMENTS_DEFAUT = {
-    "frais": 0.15, "commission": 0.10, "marge": 0.03, "taxes": 0.33,
-}
+# ⚠️⚠️ `CHARGEMENTS_DEFAUT` N'EST PLUS DÉFINI ICI — IL EST IMPORTÉ DU SOCLE.
+# Il portait quatre littéraux qui doublaient EXACTEMENT les valeurs par défaut
+# de `core.plan_tarifaire.Chargements` (frais 0,15 · commission 0,10 · marge
+# 0,03 · taxes 0,33, vérifié par exécution). *Deux listes de quatre littéraux
+# finissent par diverger ; une dérivation ne le peut pas.*
+#   Le nom reste atteignable ICI, et c'est délibéré : `test_portes_du_plan` et
+#   les preuves d'audit le lisent sous ce chemin. Ce n'est donc pas un
+#   ré-export tacite — c'est celui-là même que le module utilise, à quatre
+#   endroits ci-dessous.
 
 
 # ══════════════════════════════════════════════════════════════════════════════

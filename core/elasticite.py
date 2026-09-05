@@ -30,6 +30,17 @@ from __future__ import annotations
 from itertools import pairwise
 from typing import NamedTuple
 
+# ⚠️⚠️ CET IMPORT EST HORIZONTAL — `core` vers `core`. Il remplace le seul
+# import de PRODUCTION qui remontait du socle vers une direction :
+# `sensibilite_tarifaire` allait chercher son repli de chargements dans
+# `direction_non_vie.tarification.pipeline_tarifaire`. **Un socle qui a besoin
+# d'une direction n'est pas un socle** — et le jour de la licence, il ne
+# partirait pas seul.
+#   Il est au niveau MODULE, contrairement aux autres imports de ce fichier :
+#   ceux-là sont différés parce qu'ils sont LOURDS (numpy, statsmodels).
+#   `core.plan_tarifaire` coûte 0,115 s et n'amène aucun tiers — mesuré.
+from core.plan_tarifaire import CHARGEMENTS_DEFAUT
+
 #: ⚠️ LE VOCABULAIRE DES SOURCES, REPRIS DU SOCLE — il existe pour empêcher
 #: qu'une règle maison passe silencieusement pour une obligation. Ici il n'a
 #: qu'une valeur, et c'est l'information : rien n'est normatif.
@@ -965,10 +976,6 @@ def sensibilite_tarifaire(plan, df, etat, variations=VARIATIONS_DEFAUT,
     une variation relative du HT est la même variation relative du TTC.
     """
     import numpy as np
-
-    from direction_non_vie.tarification.pipeline_tarifaire import (
-        CHARGEMENTS_DEFAUT,
-    )
 
     ch = dict(CHARGEMENTS_DEFAUT if chargements is None else chargements)
     conventions = {

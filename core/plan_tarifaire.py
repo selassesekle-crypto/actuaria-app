@@ -133,6 +133,25 @@ class Chargements:
                 f"chargements : commission = {self.commission} >= 1 — la prime "
                 f"commerciale divise par (1 - commission).")
 
+
+#: LE REPLI DE CHARGEMENTS, SOUS SA FORME DICTIONNAIRE — **DÉRIVÉ, PAS
+#: RECOPIÉ**. Il vivait dans `direction_non_vie.tarification.pipeline_tarifaire`
+#: sous ce même nom, avec les quatre mêmes littéraux ; `core/elasticite.py`
+#: allait donc le CHERCHER DANS LA DIRECTION — le seul import de production
+#: qui remontait du socle vers une direction, mesuré par AST le 05/09/2026.
+#:
+#:   *Coût mesuré de cet import : 4,41 s et QUATORZE modules amenés — dont le
+#:   provisionnement et la réglementation — pour obtenir quatre flottants.*
+#:
+#: ⚠️ IL DÉRIVE DE `Chargements`, il ne la double pas : deux listes de quatre
+#: littéraux finissent par diverger, une dérivation ne le peut pas.
+#: ⚠️⚠️ ET CES VALEURS RESTENT UN REPLI, PAS UN TARIF. Voir `Chargements` :
+#: `taxes = 0.33` est le taux AUTO appliqué aux 20 LoB, alors que MRH = 30 %
+#: et RC = 9 %. Ce lot déplace l'ORIGINE de la valeur, jamais la valeur —
+#: les vrais taux demandent une SOURCE (le CGI), qui n'est pas arbitrée.
+CHARGEMENTS_DEFAUT: dict[str, float] = dataclasses_asdict(Chargements())
+
+
 #: LES ASSIETTES ADMISES POUR UN SEUIL DE SINISTRE GRAVE DÉCLARÉ.
 #: ⚠️ Elles reprennent, mot pour mot, les deux valeurs que `CibleSeverite`
 #: publie déjà sous `assiette_seuil` — une troisième liste divergerait.
