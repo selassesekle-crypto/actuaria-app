@@ -365,8 +365,76 @@ class TestLaDonneeQuiContreditLUnite(unittest.TestCase):
                          qualite_validee_par='Selasse Sekle')
         self.assertAlmostEqual(float(rq.dataframe_propre['exposition'].sum()),
                                avant, places=6)
+        # ⚠️⚠️ ET LE LIBELLE DOIT LE DIRE. Trouve par le sceau du lot 17c :
+        # remplacer `correction='aucune -- contradiction SIGNALEE'` par
+        # `'plafond applique'` ne faisait rougir AUCUN test. Le comportement
+        # etait surveille, le TEXTE qui l'accompagne ne l'etait pas -- et
+        # c'est ce texte que l'actuaire lit dans le rapport.
+        #   *Un libelle qui annonce une correction qui n'a pas eu lieu est
+        #   une affirmation fausse sur un livrable signe.*
+        a = _code(rq, 'unite_exposition_contredite')
+        self.assertIn('aucune', a.correction.lower(),
+                      f"le libelle publie dit {a.correction!r} alors que la "
+                      f"regle 3 ne corrige RIEN")
         print(f"    UX-14 contradiction signalee, exposition INTACTE "
-              f"({avant:.2f})")
+              f"({avant:.2f}), libelle : {a.correction!r}")
+
+    # ══════════════════════════════════════════════════════════════════════
+    #  A2.6 — LE CONTROLE S'APPLIQUE AUSSI A L'HYPOTHESE IMPLICITE
+    # ══════════════════════════════════════════════════════════════════════
+    #  Ces trois tests vivent ICI et pas dans un fichier neuf : le sujet est
+    #  le meme, et *une liste dupliquee dans deux controles ne se met a jour
+    #  qu'a moitie*.
+
+    def test_UX16_sans_unite_declaree_un_fichier_en_MOIS_ESCALADE(self):
+        """⚠️⚠️ LE CONSTAT `A2.6`, MESURE LE 05/09/2026. La regle 3 exigeait
+        `_unite is not None` : un fichier en mois dont le plan ne declarait
+        rien passait donc SANS ESCALADE, alors que la regle 2 ecrasait 100 %
+        de ses lignes --
+
+            exposition totale 39 979,7  ->  4 000,0   (rapport 9,99)
+            proportion corrigee 1,0 · escalade_declenchee : False
+
+        *L'exposition est le DENOMINATEUR de la prime : la diviser par dix la
+        multiplie par dix.* On ne contredisait qu'une unite DECLAREE ;
+        l'hypothese annuelle, elle, n'etait contredite par rien.
+        """
+        plan = dataclasses.replace(_PLAN_AUTO, unite_exposition=None)
+        rq = _sans_bruit(controler_qualite, _en_mois(), plan, horodatage='t')
+        a = _code(rq, 'unite_exposition_contredite')
+        self.assertIsNotNone(
+            a, "un fichier en MOIS sous un plan qui ne declare AUCUNE unite "
+               "ne declenche aucun signal : l'hypothese annuelle n'est "
+               "contredite par rien, et la prime est multipliee par ~10")
+        self.assertEqual(a.regle, 3, 'la contradiction se SIGNALE')
+        self.assertTrue(rq.escalade_declenchee,
+                        "100 % des lignes sont ecrasees et rien n'escalade")
+        print("    UX-16 unite SUPPOSEE contredite : escalade declenchee")
+
+    def test_UX16b_le_message_dit_que_l_unite_est_SUPPOSEE_pas_declaree(self):
+        """⚠️ Le texte d'une unite declaree affirmerait quelque chose de FAUX
+        ici : le plan ne declare rien. *Un message recopie d'un cas voisin
+        devient une affirmation non verifiee.*"""
+        plan = dataclasses.replace(_PLAN_AUTO, unite_exposition=None)
+        rq = _sans_bruit(controler_qualite, _en_mois(), plan, horodatage='t')
+        a = _code(rq, 'unite_exposition_contredite')
+        self.assertIn('NE DÉCLARE PAS', a.description)
+        self.assertIn('supposée', a.description)
+        self.assertIn('« mois »', a.description)
+        self.assertNotIn('Le plan tarifaire déclare que', a.description,
+                         "le message affirme une declaration qui n'existe pas")
+
+    def test_UX16c_SECOND_SENS_sans_unite_un_fichier_ANNUEL_ne_dit_RIEN(self):
+        """⚠️⚠️ SANS CE SENS, LE CONTROLE SERAIT DU BRUIT. Les 20 plans du
+        depot declarent leur unite (mesure, cf. UX-05) : ce controle est
+        DEFENSIF, il attend le plan client qui ne la declarera pas. Il ne
+        doit rien dire quand la donnee ressemble a l'hypothese."""
+        plan = dataclasses.replace(_PLAN_AUTO, unite_exposition=None)
+        rq = _sans_bruit(controler_qualite, _portefeuille_auto(400, seed=3),
+                         plan, horodatage='t')
+        self.assertIsNone(_code(rq, 'unite_exposition_contredite'))
+        self.assertFalse(rq.escalade_declenchee)
+        print("    UX-16c donnee annuelle, unite non declaree : aucun signal")
 
 
 class TestLEmpreinteEstVersionnee(unittest.TestCase):

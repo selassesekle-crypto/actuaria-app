@@ -645,6 +645,14 @@ BORNES_EXPOSITION: dict[str, float] = {
     'jour': 366.0,
 }
 
+#: ⚠️⚠️ L'UNITÉ SUPPOSÉE QUAND LE PLAN N'EN DÉCLARE AUCUNE — nommée ici parce
+#: qu'elle DÉCIDE. Elle vivait en littéral `'annee'` dans `phrase_plausibilite`
+#: et implicitement dans `borne_exposition` (qui rend `PLAFOND_EXPOSITION`).
+#: *Une hypothèse qui fixe le dénominateur d'une prime mérite un nom, sans quoi
+#: on ne peut ni la citer dans un message, ni la contredire.* Le contrôle de
+#: contradiction s'applique désormais À ELLE aussi — constat `A2.6`.
+UNITE_SUPPOSEE = 'annee'
+
 
 def borne_exposition(plan) -> float:
     """La borne de plausibilité de l'exposition, DÉRIVÉE de l'unité du plan.
@@ -679,7 +687,7 @@ _PLAUSIBILITE = {
 
 def phrase_plausibilite(unite: str | None) -> str:
     """⚠️ Unité non déclarée : la phrase d'AUJOURD'HUI, au caractère près."""
-    return _PLAUSIBILITE[unite or 'annee']
+    return _PLAUSIBILITE[unite or UNITE_SUPPOSEE]
 
 
 def phrase_unite_non_declaree(unite: str | None) -> str:
@@ -939,12 +947,31 @@ def controler_qualite(
     # `_ajouter` ignore un masque vide, et une déclaration `mois` fausse serait
     # redevenue muette — exactement le décor que ce contrôle existe pour
     # empêcher (`UX-12` l'exige bloquant).*
-    if _unite is not None and col_expo in df.columns:
+    # ⚠️⚠️ LE CONTRÔLE S'APPLIQUE AUSSI À L'HYPOTHÈSE IMPLICITE — constat
+    # `A2.6`, mesuré le 05/09/2026. Il exigeait `_unite is not None` : un
+    # fichier exprimé en MOIS dont le plan ne déclarait rien passait donc
+    # **sans escalade**, alors que la règle 2 écrasait 100 % de ses lignes :
+    #
+    #     exposition totale 39 979,7  ->  4 000,0   (rapport 9,99)
+    #     proportion corrigée 1,0 · escalade_declenchee : False
+    #
+    # *L'exposition est le DÉNOMINATEUR de la prime : la diviser par dix la
+    # multiplie par dix.* Le silence tenait à ceci — on ne contredisait qu'une
+    # unité DÉCLARÉE, et l'hypothèse annuelle, elle, n'était contredite par
+    # rien. Elle l'est maintenant, sous son propre nom.
+    #   ⚠️ AUCUN PLAN DU DÉPÔT N'EST CONCERNÉ : les 20 déclarent leur unité
+    #   (mesuré). Ce contrôle est DÉFENSIF — il attend le plan client qui ne
+    #   la déclarera pas.
+    if col_expo in df.columns:
         _obs = pd.to_numeric(df[col_expo], errors='coerce')
         if _obs.notna().any():
             _max = float(_obs.max())
             _apparente = unite_apparente(_max)
-            if _apparente is not None and _apparente != _unite:
+            # ⚠️ L'unité de RÉFÉRENCE est celle qu'on a déclarée, ou, à
+            # défaut, celle qu'on a SUPPOSÉE — jamais « aucune ». C'est bien
+            # une hypothèse qui décide de la borne, donc du prix.
+            _reference = _unite if _unite is not None else UNITE_SUPPOSEE
+            if _apparente is not None and _apparente != _reference:
                 _trop_grand = _max > _borne
                 _preuve = (detecter_sup(df, col_expo, _borne) if _trop_grand
                            else np.ones(len(df), dtype=bool))
@@ -959,8 +986,13 @@ def controler_qualite(
                         _preuve, n0,
                         "Les durées de couverture ne ressemblent pas à "
                         "l'unité déclarée au plan", unite='ligne')
-                    + f" Le plan tarifaire déclare que les durées sont"
-                      f" exprimées en « {_unite} » ; les valeurs observées"
+                    + (f" Le plan tarifaire déclare que les durées sont"
+                       f" exprimées en « {_unite} » ;"
+                       if _unite is not None else
+                       f" Le plan tarifaire NE DÉCLARE PAS `unite_exposition` :"
+                       f" l'hypothèse « {UNITE_SUPPOSEE} » a été supposée, et"
+                       f" c'est elle qui fixe la borne de plausibilité ;")
+                    + f" les valeurs observées"
                       f" ressemblent à des « {_apparente} » (durée maximale"
                       f" relevée : {_max:.4g}). Signalé sur {_ou}."
                       f" Si l'unité déclarée est fausse, la limite de"
