@@ -76,8 +76,11 @@ def _make_r_a3(df=None):
         ).fit(maxiter=100)
     return {
         'success': True, 'branche': 'auto', 'statut_rag': 'VERT',
+        # ⚠️⚠️ `cible` AJOUTEE le 05/09/2026 : le vrai A3 la declare, et A5 y
+        # APPARIE desormais son GLM de reference. Sans elle, la fixture
+        # decrivait une forme de resultat qui n'existe pas.
         'metriques': {
-            'poisson': {'gini': 0.14, 'aic': 1100,
+            'poisson': {'gini': 0.14, 'aic': 1100, 'cible': 'nb_sinistres',
                         'vars_retenues': ['age', 'bonus_malus'],
                         'nb_obs_train': 320, 'nb_obs_test': 80},
         },

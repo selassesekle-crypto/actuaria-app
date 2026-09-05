@@ -54,7 +54,7 @@ from core.conformite_reglementaire import (
     BASE_GINI_COMPTAGE, BASE_GINI_UNITAIRE,
     construire_matrice_x,
     colonne_temporelle, diagnostiquer_evaluation, phrase_evaluation_impossible,
-    gini_texte, mesure_texte, ratio_sur_apprentissage,
+    gini_texte, glm_de_reference, mesure_texte, ratio_sur_apprentissage,
 )
 from core.plan_tarifaire import (
     PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
@@ -531,6 +531,10 @@ class AgentA5DeepLearning:
 
         df      = result_a2['dataframe'].copy()
         rapport = {'etapes': [], 'alertes': []}
+        # ⚠️ LA CIBLE DU RUN, pour les trois methodes qui cherchent le
+        # << GLM de reference >> sans avoir `col_cible` en portee et lisaient
+        # donc `metriques['poisson']` en dur. Posee ici, a chaque appel.
+        self._cible_run = col_cible
 
         # ── REPRODUCTIBILITÉ — LE SEED EST DÉCLARÉ, PAS SUBI ─────────────────
         # ⚠️⚠️ MESURÉ AVANT CE CORRECTIF : trois exécutions strictement
@@ -1551,6 +1555,24 @@ class AgentA5DeepLearning:
     # CLASSEMENT
     # ══════════════════════════════════════════════════════════════════════════
 
+    #: La cible du run en cours, posée par `run`. Déclarée au niveau de la
+    #: classe pour qu'une méthode appelée hors d'un `run` rende `(None, None)`
+    #: plutôt que de lever : l'absence de référence est un état prévu.
+    _cible_run = None
+
+    def _reference_glm(self, result_a3):
+        """Le GLM d'A3 ajusté sur LA CIBLE DE CE RUN : ``(nom, métriques)``.
+
+        ⚠️⚠️ TROIS SITES LISAIENT `metriques['poisson']` EN DUR. Même défaut
+        qu'A4, mesuré le 05/09/2026 : sur une cible de prime pure, la
+        référence publiée était le Poisson, dont le Gini et la RMSE portent
+        sur l'échelle du COMPTAGE. *La bonne mesure du mauvais modèle reste
+        une mauvaise référence.*
+        """
+        if not (result_a3 and result_a3.get('success')):
+            return None, None
+        return glm_de_reference(result_a3.get('metriques'), self._cible_run)
+
     def _classer_modeles(
         self,
         result_a3: Optional[Dict],
@@ -1591,12 +1613,16 @@ class AgentA5DeepLearning:
                     'type':          'Référence A4',
                 })
 
-        # GLM A3
+        # GLM A3 DE MEME CIBLE
         if result_a3 and result_a3.get('success'):
-            _met_glm_a3 = result_a3['metriques'].get('poisson', {})
+            _nom_glm_a3, _met_glm_a3 = self._reference_glm(result_a3)
+            _met_glm_a3 = _met_glm_a3 or {}
             gini_glm = _met_glm_a3.get('gini')
             classement.append({
-                'modele':        'GLM Poisson (A3)',
+                # ⚠️ Le libelle suit le modele : sur `prime_pure`, la
+                # reference est le Tweedie, pas le Poisson.
+                'modele':        (f'GLM {_nom_glm_a3.capitalize()} (A3)'
+                                  if _nom_glm_a3 else 'GLM (A3)'),
                 'gini_test':     gini_glm,
                 'rmse_test':     _met_glm_a3.get('rmse_test'),
                 # ⚠️⚠️ LE LITTÉRAL LE PLUS DUR DU MODULE : `1.0` écrit en clair,
@@ -1706,10 +1732,8 @@ class AgentA5DeepLearning:
         m_tab  = res_tabnet.get('metriques') or {}
 
         # Gini de référence
-        gini_glm = None
+        gini_glm = (self._reference_glm(result_a3)[1] or {}).get('gini')
         gini_ml  = None
-        if result_a3 and result_a3.get('success'):
-            gini_glm = result_a3['metriques'].get('poisson', {}).get('gini')
         if result_a4 and result_a4.get('success'):
             ml_only = [c for c in result_a4.get('classement', [])
                        if 'GLM' not in c['modele']]
@@ -2283,13 +2307,7 @@ class AgentA5DeepLearning:
         # fixe le statut de H3. Un chiffre plausible est plus dangereux qu'un
         # zéro : personne ne le remarque en relecture. Sans référence mesurée,
         # le gain n'existe pas, et la branche AMBRE ci-dessous le dit déjà.
-        gini_glm_ref = None
-        if result_a3 and result_a3.get('success'):
-            gini_glm_ref = (
-                result_a3.get('metriques', {})
-                .get('poisson', {})
-                .get('gini')
-            )
+        gini_glm_ref = (self._reference_glm(result_a3)[1] or {}).get('gini')
         # ⚠️⚠️ LE PLANCHER À ZÉRO PUBLIAIT UN CHIFFRE QU'AUCUN MODÈLE N'AVAIT
         # ATTEINT — part vivante du constat `a5/C1`. `max(..., 0)` écrasait un
         # Gini NÉGATIF vers 0, et le message publié disait « Gini DL = 0.0000 »

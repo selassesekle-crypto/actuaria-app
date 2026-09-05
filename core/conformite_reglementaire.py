@@ -2482,6 +2482,60 @@ def synthese_alertes_experience(alertes: Optional[dict]) -> Optional[str]:
 #: cible par défaut, les deux autres étant écartés par le filtre de cible.
 MODELES_GLM = ('poisson', 'gamma', 'tweedie')
 
+
+def glm_de_reference(metriques_a3, cible):
+    """Le GLM d'A3 ajusté sur CETTE cible : ``(nom, métriques)`` ou ``(None, None)``.
+
+    ⚠️⚠️ IL DÉRIVE DE CE QU'A3 DÉCLARE — il n'énumère aucune table. A3 pose
+    lui-même la cible de chacune de ses trois familles (``metriques[f]
+    ['cible']``) : Poisson sur la fréquence, Gamma sur ``cout_moyen``,
+    Tweedie sur ``prime_pure``. C'est déjà la chaîne sur laquelle A6 apparie
+    les modèles. Une table tenue à la main ici en serait une deuxième, et
+    deux tables divergent.
+
+    ⚠️⚠️ POURQUOI CETTE FONCTION EXISTE. A4 et A5 lisaient
+    ``metriques['poisson']`` QUELLE QUE SOIT leur cible. **Mesuré le
+    05/09/2026** sur ``col_cible='prime_pure'`` : la ligne « GLM de
+    référence » du classement d'A4 publiait le **Poisson** — Gini 0,1912,
+    RMSE 0,7141, ratio 0,9702 — là où le Tweedie, seul GLM de cette cible,
+    vaut 0,1901 / RMSE non mesurée / 0,5051. Le classement comparait donc
+    des RMSE de l'ordre de 1 720 (échelle prime pure) à un 0,7141 (échelle
+    comptage), et le commentaire signé annonçait « Amélioration vs GLM :
+    -5,9 % » entre un Gini de prime pure et un Gini de fréquence.
+
+      *La bonne mesure du mauvais modèle reste une mauvaise référence.*
+
+    Rend ``(None, None)`` quand aucune famille ne porte cette cible : il n'y
+    a alors pas de référence, et cela se DIT — voir
+    :func:`phrase_reference_glm_absente`.
+    """
+    if not isinstance(metriques_a3, dict) or not cible:
+        return None, None
+    for nom in MODELES_GLM:
+        met = metriques_a3.get(nom)
+        if isinstance(met, dict) and met.get('cible') == cible:
+            return nom, met
+    return None, None
+
+
+def phrase_reference_glm_absente(cible, metriques_a3) -> str:
+    """Ce qu'on écrit quand aucun GLM d'A3 ne vise la cible comparée.
+
+    ⚠️ Elle NOMME les cibles réellement disponibles : « pas de référence »
+    sans dire lesquelles existent laisse l'actuaire chercher une panne là où
+    il manque un ajustement.
+    """
+    vues = sorted(
+        f"{nom} ({met.get('cible')!r})"
+        for nom, met in (metriques_a3 or {}).items()
+        if isinstance(met, dict) and met.get('cible'))
+    return (
+        f"Aucun GLM de reference pour la cible {cible!r} : A3 n'a ajuste "
+        f"aucun modele sur cette cible. GLM disponibles : "
+        f"{', '.join(vues) if vues else 'aucun'}. La comparaison ML/GLM "
+        f"n'est pas etablie pour cette cible."
+    )
+
 #: ⚠️ Le vocabulaire de l'état d'un Gini. `ABSENT` n'est PAS `NON_MESURE` :
 #: une clé qui manque dit qu'aucun modèle de ce type n'a été ajusté ; un
 #: `None` dit qu'il l'a été et que son Gini n'a pas pu être calculé.

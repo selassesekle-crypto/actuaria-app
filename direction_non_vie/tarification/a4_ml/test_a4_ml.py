@@ -46,11 +46,19 @@ def _make_r_a2(n=600):
 def _make_r_a3():
     return {
         'success': True, 'branche': 'auto', 'statut_rag': 'VERT',
+        # ⚠️⚠️ `cible` AJOUTEE le 05/09/2026, ET CE N'EST PAS UN DETAIL DE
+        # FIXTURE. Le vrai A3 la declare pour ses trois familles
+        # (`agent.py` l. 490, 505, 520) et A4 y APPARIE desormais sa
+        # reference : sans elle, la fixture decrivait une forme de resultat
+        # qui n'existe pas, et le << GLM de reference >> etait introuvable.
+        # Les chaines sont celles de la production : `plan.cible_frequence`,
+        # `CIBLE_COUT` et `CIBLE_PRIME_PURE`.
         'metriques': {
-            'poisson': {'gini': 0.18, 'aic': 1200, 'vars_retenues': ['age','bonus_malus'],
+            'poisson': {'gini': 0.18, 'aic': 1200, 'cible': 'nb_sinistres',
+                        'vars_retenues': ['age','bonus_malus'],
                         'nb_obs_train': 480, 'nb_obs_test': 120},
-            'gamma':   {'gini': 0.12, 'aic': 980},
-            'tweedie': {'gini': 0.15, 'aic': 1050},
+            'gamma':   {'gini': 0.12, 'aic': 980, 'cible': 'cout_moyen'},
+            'tweedie': {'gini': 0.15, 'aic': 1050, 'cible': 'prime_pure'},
         },
         'relativites_poisson': {},
         'relativites_gamma': {},

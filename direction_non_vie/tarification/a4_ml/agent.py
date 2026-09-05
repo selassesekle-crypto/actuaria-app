@@ -176,7 +176,7 @@ from core.conformite_reglementaire import (
     BASE_GINI_UNITAIRE,
     construire_matrice_x,
     colonne_temporelle, diagnostiquer_evaluation, phrase_evaluation_impossible,
-    gini_texte, mesure_texte, ratio_sur_apprentissage,
+    gini_texte, glm_de_reference, mesure_texte, ratio_sur_apprentissage,
 )
 # ⚠️ SOURCE UNIQUE. L'etat de l'elasticite etait defini ICI au lot L0 ;
 # il vit desormais dans `core/elasticite.py`, avec le catalogue
@@ -788,28 +788,39 @@ class AgentA4ML:
         # statut RAG, sous le libellé publié « Référence A3 ». *Une référence
         # absente est absente ; elle ne vaut pas un chiffre plausible.*
         # ⚠️ Le `.get('gini')` sans repli est volontaire : si A3 a réussi mais
-        # n'a pas produit de Poisson, il n'y a pas davantage de référence.
-        gini_reference_a3 = None
-        if result_a3 and result_a3.get('success'):
-            gini_reference_a3 = (
-                result_a3.get('metriques', {})
-                .get('poisson', {})
-                .get('gini')
-            )
+        # n'a produit aucun GLM de cette cible, il n'y a pas de référence.
+        # ⚠️⚠️ ET LA RÉFÉRENCE SUIT LA CIBLE, elle n'est plus le Poisson en
+        # dur : sur `prime_pure`, c'est le Tweedie. Voir `glm_de_reference`.
+        _nom_glm_ref, _met_glm_ref = glm_de_reference(
+            (result_a3 or {}).get('metriques') if (result_a3 or {}).get('success')
+            else None, col_cible)
+        gini_reference_a3 = (_met_glm_ref or {}).get('gini')
         if gini_reference_a3 is None:
             logger.info(
                 f"[{audit_id}] Gini GLM référence (A3) INDISPONIBLE — la "
                 f"comparaison ne sera pas faite, et elle sera dite."
             )
         else:
+            # ⚠️ LE JOURNAL NOMME LE MODÈLE. Il disait « Gini GLM référence »
+            # sans dire lequel — c'est justement ce qui a laissé le Poisson
+            # servir de référence à une cible de prime pure sans que rien ne
+            # le signale.
             logger.info(
-                f"[{audit_id}] Gini GLM référence (A3) = {gini_texte(gini_reference_a3)}"
+                f"[{audit_id}] Gini GLM référence (A3, {_nom_glm_ref}, "
+                f"cible={col_cible!r}) = {gini_texte(gini_reference_a3)}"
             )
 
         # Réinitialisation pour chaque appel
         self.modeles   = {}
         self.metriques = {}
         self.shap_vals = {}
+        # ⚠️ LA CIBLE DU RUN, POUR LES MÉTHODES QUI NE LA REÇOIVENT PAS.
+        # Quatre d'entre elles cherchent le « GLM de référence » sans avoir
+        # `col_cible` en portée, et lisaient donc `metriques['poisson']` en
+        # dur. Réinitialisée ICI, au même endroit que le reste de l'état de
+        # run : une valeur restée d'un appel précédent comparerait le modèle
+        # d'une cible à la référence d'une autre.
+        self._cible_run = col_cible
 
         logger.info(f"[{audit_id}] Agent A4 ML démarré | branche={sous_branche}")
 
@@ -1750,6 +1761,31 @@ class AgentA4ML:
     # CLASSEMENT DES MODÈLES
     # ══════════════════════════════════════════════════════════════════════════
 
+    #: La cible du run en cours, posée par `run`. ⚠️ Déclarée au niveau de la
+    #: classe pour qu'une méthode appelée hors d'un `run` rende `(None, None)`
+    #: au lieu de lever un `AttributeError` — l'absence de référence est un
+    #: état prévu, pas une panne.
+    _cible_run = None
+
+    def _reference_glm(self, result_a3):
+        """Le GLM d'A3 ajusté sur LA CIBLE DE CE RUN : ``(nom, métriques)``.
+
+        ⚠️⚠️ QUATRE SITES LISAIENT `metriques['poisson']` EN DUR, quelle que
+        soit la cible. Sur `prime_pure`, la ligne « GLM de référence » du
+        classement portait donc les chiffres du **Poisson** — Gini 0,1912,
+        RMSE 0,7141, mesurés sur l'échelle du COMPTAGE — face à des modèles ML
+        dont les RMSE valent ~1 720 sur l'échelle de la prime pure. Le
+        commentaire signé annonçait « Amélioration vs GLM : -5,9 % » entre
+        deux Ginis qui ne portent pas sur la même grandeur.
+
+        La dérivation vit dans `core.conformite_reglementaire` : A3 déclare
+        lui-même la cible de chacune de ses familles, et c'est déjà la chaîne
+        sur laquelle A6 apparie les modèles. *Une seconde table divergerait.*
+        """
+        if not (result_a3 and result_a3.get('success')):
+            return None, None
+        return glm_de_reference(result_a3.get('metriques'), self._cible_run)
+
     def _classer_modeles(
         self,
         result_a3: Optional[Dict]
@@ -1791,15 +1827,22 @@ class AgentA4ML:
                                     else '✅ Stable'),
             })
 
-        # Ajout du GLM Poisson comme référence
+        # Ajout du GLM de MÊME CIBLE comme référence
         if result_a3 and result_a3.get('success'):
-            _met_glm = result_a3['metriques'].get('poisson', {})
-            # ⚠️ Pas de repli à 0 : A3 sans Poisson, ou avec un Poisson dont le
-            # Gini n'a pas pu être calculé, donne `None`. Un zéro ferait entrer
-            # une référence « sans pouvoir discriminant » dans le classement.
+            _nom_glm, _met_glm = self._reference_glm(result_a3)
+            _met_glm = _met_glm or {}
+            # ⚠️ Pas de repli à 0 : A3 sans GLM de cette cible, ou avec un GLM
+            # dont le Gini n'a pas pu être calculé, donne `None`. Un zéro
+            # ferait entrer une référence « sans pouvoir discriminant » dans
+            # le classement.
             gini_glm = _met_glm.get('gini')
             classement.append({
-                'modele':         'GLM Poisson (référence A3)',
+                # ⚠️⚠️ LE NOM SUIT LE MODÈLE. Il disait « GLM Poisson » quelle
+                # que soit la cible — y compris sur `prime_pure`, où la ligne
+                # portait pourtant les chiffres du Poisson, mesurés sur une
+                # AUTRE échelle. Un libellé faux est pire qu'un libellé absent.
+                'modele':         (f'GLM {_nom_glm.capitalize()} (référence A3)'
+                                   if _nom_glm else 'GLM (référence A3)'),
                 'famille':        'GLM',
                 'gini_test':      gini_glm,
                 # ⚠️⚠️ CES TROIS LIGNES ÉTAIENT FABRIQUÉES. `gini_train`
@@ -2032,9 +2075,7 @@ class AgentA4ML:
         # justement `gini_glm is None` pour réserver. Le littéral la rendait
         # inatteignable : *une garde écrite pour un None ne se déclenche jamais
         # si le site d'avant a déjà mis un nombre à la place.*
-        gini_glm = None
-        if result_a3 and result_a3.get('success'):
-            gini_glm = result_a3['metriques'].get('poisson', {}).get('gini')
+        gini_glm = (self._reference_glm(result_a3)[1] or {}).get('gini')
 
         if meilleur_gini_ml is None or gini_glm is None:
             # Gini NON MESURE (aucun sinistre sur le jeu de test) : le critere
@@ -2072,9 +2113,7 @@ class AgentA4ML:
 
         # Gini GLM de référence. ⚠️ Même correctif qu'au site jumeau : le
         # lecteur ci-dessous fait `gini_glm is not None and gini_glm > 0`.
-        gini_glm = None
-        if result_a3 and result_a3.get('success'):
-            gini_glm = result_a3['metriques'].get('poisson', {}).get('gini')
+        gini_glm = (self._reference_glm(result_a3)[1] or {}).get('gini')
 
         # ── NIVEAU 1 : LECTURE ────────────────────────────────────────────────
         nb_modeles = len(rapport.get('modeles_testes', []))
@@ -2607,8 +2646,15 @@ class AgentA4ML:
                 rmse   = c.get('rmse_test')
                 overfit= c.get('overfit_ratio')
 
-                # Taille du point = inverse de l'overfit (plus stable = plus grand)
-                size = max(8, int(20 / max(overfit, 0.5)))
+                # ⚠️⚠️ UNE LIGNE MORTE QUI FAISAIT PLANTER LE GRAPHIQUE.
+                # `size = max(8, int(20 / max(overfit, 0.5)))` calculait une
+                # taille de marqueur **jamais lue** (zéro lecture, relevé par
+                # AST) — le commentaire « Taille du point = inverse de
+                # l'overfit » décrivait une intention jamais câblée. Et depuis
+                # que le ratio peut valoir `None`, `max(None, 0.5)` LÈVE : la
+                # figure disparaissait sur un portefeuille dont un modèle n'a
+                # pas de stabilité mesurable — c'est-à-dire le cas courant.
+                #   *Une ligne morte n'est pas inoffensive : elle s'exécute.*
                 color= COULEURS_MODELES[idx % len(COULEURS_MODELES)]
                 est_meilleur = idx == 0
 
