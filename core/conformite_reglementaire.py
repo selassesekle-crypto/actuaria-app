@@ -2741,9 +2741,27 @@ def source_exposition(expo_contrat, expo_appelant):
 
     ⚠️⚠️ CETTE FONCTION NE CHANGE AUCUN PRIX, ET C'EST DÉLIBÉRÉ. L'appelant
     continue de primer quand il fournit une valeur : basculer sur celle du
-    contrat déplacerait le prix d'un facteur 2 sur les contrats infra-annuels,
-    et **cette décision n'est pas prise**. Ce qui change, c'est que le
-    conflit est DIT. *On rend d'abord visible ; on décide ensuite.*
+    contrat déplacerait le prix, et **cette décision n'est pas prise**. Ce qui
+    change, c'est que le conflit est DIT. *On rend d'abord visible ; on décide
+    ensuite.*
+
+    ⚠️⚠️ ET LA PHRASE NE PROMET PLUS UN RAPPORT EXACT — MESURÉ LE 05/09/2026.
+    Elle annonçait « rapport 1/exposition », c'est-à-dire une pure mise à
+    l'échelle de durée. **Faux dès que le plan dérive un facteur de
+    l'exposition.** `a2` construit `kilometrage_annuel / max(exposition, 0,01)`,
+    qui est un PRÉDICTEUR du GLM : poser l'exposition à 1,0 ne change donc pas
+    seulement la durée facturée, cela change **le profil de risque présenté au
+    modèle**. Mesuré sur 150 contrats par plan :
+
+        `auto`  (kilométrage dérivé)  : annoncé 1,1420, réel **1,1538**
+                                        — écart médian 0,90 %, **jusqu'à
+                                        128,11 EUR sur un contrat**
+        `mrh`, `rcpro`, `flotte_automobile` (aucun facteur dérivé)
+                                      : annoncé = réel, écart **0,00 EUR**
+
+    *Une phrase qui LIMITE est sûre ; une phrase qui AFFIRME au-delà de ce
+    qu'elle tient est une dette.* Elle publie donc l'effet de DURÉE en le
+    nommant comme tel, et dit ce qu'elle ne couvre pas.
     """
     fourni = expo_appelant is not None
     lisible = isinstance(expo_contrat, (int, float)) and not isinstance(
@@ -2772,9 +2790,14 @@ def source_exposition(expo_contrat, expo_appelant):
                 f"{float(expo_contrat):g}, mais aucune exposition n'a ete "
                 f"fournie a `tarifer()` et le defaut d'UN AN s'applique. La "
                 f"prime ci-dessus couvre donc une ANNEE ENTIERE, pas la duree "
-                f"declaree — rapport "
-                f"{EXPO_ANNUELLE / float(expo_contrat):.4g}. Passez "
-                f"`exposition=` explicitement pour tarifer la duree reelle."))
+                f"declaree. L'effet de DUREE seul vaut "
+                f"{EXPO_ANNUELLE / float(expo_contrat):.4g} — mais ce n'est "
+                f"PAS forcement le rapport total : si le plan derive un "
+                f"facteur de l'exposition (un kilometrage annualise, par "
+                f"exemple), l'hypothese d'un an entre AUSSI dans le profil de "
+                f"risque presente au modele, et le rapport reel s'en ecarte. "
+                f"Passez `exposition=` explicitement pour tarifer la duree "
+                f"reelle."))
         return (valeur, EXPO_DU_CONTRAT, None)
     return (valeur, EXPO_SUPPOSEE, (
         f"EXPOSITION NON FOURNIE : ni le contrat ni l'appelant ne la "

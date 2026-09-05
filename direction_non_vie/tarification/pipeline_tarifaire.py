@@ -11,7 +11,11 @@ Chaîne :
     GLM fréquence (Poisson, offset log-exposition)
     GLM coût moyen  — FAMILLE DÉCLARÉE DANS LE PLAN (plan.famille_severite)
     écrêtement des graves + coefficient d'équilibre (étape 6, INV-8)
-    → TarifNonVie.tarifer(contrat)                 → reproduit le portefeuille (INV-7)
+    → TarifNonVie.tarifer(contrat, exposition=…)   → reproduit le portefeuille (INV-7)
+      ⚠️ SOUS CONDITION, ET ELLE EST DANS LA SIGNATURE : sans `exposition=`,
+      `tarifer()` retient UN AN (`EXPO_ANNUELLE`) et les deux chemins donnent
+      deux prix. Mesuré : 299 contrats sur 300 divergent, écart médian
+      +39,90 EUR. Voir `predire_portefeuille` et `test_deux_chemins_du_prix`.
 
 Rien ici ne « sait » ce qu'est une voiture ou un chantier : tout vient du plan.
 """
@@ -113,8 +117,35 @@ class TarifNonVie:
             self.glm_frequence.predict(Xc, offset=np.zeros(len(Xc))), dtype=float)
 
     def predire_portefeuille(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Prédictions vectorisées sur un portefeuille — MÊME chemin que
-        `tarifer()`.
+        """Prédictions vectorisées sur un portefeuille — même CALCUL que
+        `tarifer()`, mais **pas la même exposition** quand l'appelant se tait.
+
+        ⚠️⚠️ LA PHRASE DISAIT « MÊME CHEMIN QUE `tarifer()` », ET C'ÉTAIT FAUX
+        DE MOITIÉ — mesuré le 05/09/2026. Ici l'exposition vient de la COLONNE
+        du portefeuille (`df[plan.exposition]`) ; dans `tarifer()`, si
+        l'appelant ne passe rien, c'est `EXPO_ANNUELLE = 1,0` qui s'applique.
+        Sur 300 contrats de `auto` : **299 divergent de plus d'un centime**,
+        écart médian **+39,90 EUR**, maximum **402,43 EUR**, ratio médian
+        **1,1270**. Avec `exposition=` fourni, l'écart maximum retombe à
+        **0,004953 EUR** — l'arrondi au centime, rien de plus.
+
+        ⚠️ **ET AUCUN ORACLE N'EXERÇAIT LE CAS QUI DIVERGE.** `INV-7a` compare
+        le chemin vectoriel À LUI-MÊME (un contrat contre le portefeuille) ;
+        `INV-7b` compare bien la paire, mais **en passant
+        `exposition=float(row["exposition"])`** — donc dans le seul cas où
+        elle s'accorde. *Un oracle qui ne traverse pas le cas ne le couvre
+        pas.* `test_deux_chemins_du_prix` ferme ce trou.
+
+        ⚠️⚠️ ET L'ÉCART N'EST PAS UNE SIMPLE MISE À L'ÉCHELLE DE DURÉE. `a2`
+        dérive `kilometrage_annuel / max(exposition, 0,01)`, qui est un
+        PRÉDICTEUR : sur `auto`, le rapport réel (1,1538) s'écarte du rapport
+        de durée (1,1420) — **jusqu'à 128,11 EUR sur un contrat**. Sur les
+        plans sans facteur dérivé (`mrh`, `rcpro`, `flotte_automobile`),
+        l'écart est **exactement** la durée.
+
+        ⚠️ Ce module ne DÉCIDE pas laquelle des deux expositions doit primer :
+        c'est une question de produit, rendue à l'actuaire signataire avec ses
+        chiffres. *On rend d'abord visible ; on décide ensuite.*
 
         ⚠️⚠️ CONSTAT `pipeline/C7` — LA PRÉCISION ANNONCÉE N'ÉTAIT PAS
         OBSERVABLE SUR LA SORTIE DE `tarifer()`. Cette phrase promettait « que
@@ -130,6 +161,11 @@ class TarifNonVie:
         compare le chemin vectoriel à lui-même ; l'écart mesuré entre
         `tarifer()` et ce chemin est **0,0036 €** sur 6 contrats — l'arrondi au
         centime, rien de plus.
+        ⚠️ **ET CE 0,0036 € VAUT SOUS LA MÊME CONDITION QUE TOUT CE QUI
+        PRÉCÈDE** : il est mesuré avec `exposition=` FOURNI. Sans le
+        paramètre, l'écart n'est plus un arrondi — il est de +39,90 € en
+        médiane. *Le même chiffre, relu après que le cas non couvert a été
+        trouvé, avait besoin de sa condition.*
 
         ⚠️ *L'oracle était juste ; c'est la phrase qui promettait au-delà de ce
         qu'elle pouvait montrer.* (INV-7)
