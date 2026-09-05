@@ -375,6 +375,25 @@ def libelle_audit(cle) -> str:
     return _LIBELLES_AUDIT.get(brut, brut.replace('_', ' ').capitalize())
 
 
+#: La borne d'une valeur de piste d'audit. ⚠️ CE N'EST PLUS UNE CONTRAINTE DE
+#: MISE EN PAGE — la cellule du tableau enveloppe — mais un garde-fou contre
+#: une valeur pathologique. Elle valait 120, et coupait `note_score_global`
+#: (205 caractères) juste avant sa référence **ACPR-2022-P-01 §4.3**.
+LIMITE_VALEUR_AUDIT = 600
+
+#: La borne d'un message ou d'un conseil d'hypothese dans les tableaux
+#: H1-H5. ⚠️⚠️ ELLE VALAIT 60 A 80, ET ELLE DECAPITAIT DES CONCLUSIONS
+#: ACTUARIELLES. Mesure le 05/09/2026 dans le Word signe :
+#:     << Le GLM explique bien la sinistralite -- defendable devant... >>
+#:     << CV max = 0.245 dans [15%,30%] -- 2 var(s) fragile(s)... >>
+#:     << Pas de derive detectee -- modele applicable sur les... >>
+#: Les messages reels vont jusqu'a 103 caracteres, les conseils jusqu'a 88.
+#: *Une phrase coupee juste avant ce qu'elle nomme n'informe pas, elle
+#: intrigue.* La cellule enveloppe ; la borne ne garde qu'un role de
+#: garde-fou contre une valeur pathologique.
+LIMITE_TEXTE_HYPOTHESE = 200
+
+
 def valeur_audit(valeur, cle=None) -> str:
     """La valeur d'une entrée de piste d'audit, en français.
 
@@ -396,7 +415,22 @@ def valeur_audit(valeur, cle=None) -> str:
                 f'à {h.group(4)} h {h.group(5)}')
     if isinstance(valeur, float):
         return F.nombre(valeur, F.DEC_GINI)
-    return F.tronque(texte, 120)
+    # ⚠️⚠️ LA TRONCATURE COUPAIT UNE TRACE REGLEMENTAIRE. Mesuré le
+    # 05/09/2026 : `note_score_global` fait **205 caractères** et sortait à
+    # 115 — tout ce qui suit « RMSE) » disparaissait, c'est-à-dire
+    # « N'est PAS un R² ni un Gini absolu », le profil retenu, et la
+    # référence **ACPR-2022-P-01 §4.3**. La piste d'audit d'un livrable signé
+    # publiait donc une référence réglementaire amputée.
+    #
+    #   *Une limite d'affichage n'a pas à décider ce qui reste d'une
+    #   traçabilité. La cellule du tableau enveloppe, elle.*
+    #
+    # ⚠️ La borne reste, mais elle n'est plus une contrainte de mise en page :
+    # c'est un garde-fou contre une valeur pathologique. Aucune valeur
+    # légitime ne l'atteint, et `test_faits_publies` le vérifie sur les
+    # octets produits — si une valeur y touchait un jour, ce serait une
+    # trouvaille, pas une mise en forme.
+    return F.tronque(texte, LIMITE_VALEUR_AUDIT)
 
 
 # =============================================================================
@@ -703,6 +737,43 @@ def _bloc_qualite_html(texte: str) -> str:
                         for l in texte.split("\n") if l.strip())
     return (f'<div class="raisons-plafond">\n'
             f'  <div class="raisons-titre">{TITRE_QUALITE_DONNEES}</div>\n'
+            f'    <ul>\n{puces}\n    </ul>\n'
+            f'</div>\n')
+
+
+#: ⚠️⚠️ L'ÉLASTICITÉ N'ATTEIGNAIT NI LE WORD NI LE HTML D'A6. **Mesuré le
+#: 05/09/2026 dans les octets produits** : 7 occurrences dans le classeur A6,
+#: 7 dans le rapport d'équipe, **0** dans les deux formats du rapport de
+#: modèles — alors que `synthese_elasticite` y était bien appelée… dans
+#: `_construire_contexte_tarif`, c'est-à-dire dans LE PROMPT envoyé au LLM.
+#: Et la narration rendue (1 269 caractères) n'en portait aucune trace.
+#:
+#:   *Un calcul qui n'atteint aucun livrable n'existe pas — et un calcul qui
+#:   n'atteint que le prompt n'atteint pas un livrable.*
+TITRE_ELASTICITE = 'Elasticite-prix du portefeuille'
+
+
+def elasticite_publiee(result_a6) -> str:
+    """La synthèse d'élasticité, pour les DEUX formats — une seule source.
+
+    ⚠️ Même source que l'Excel A6 et le rapport d'équipe
+    (`core.elasticite.synthese_elasticite`) : deux rendus, ce seraient deux
+    vérités possibles pour le même fait.
+    """
+    if not result_a6:
+        return ''
+    return synthese_elasticite(result_a6.get('elasticite'),
+                               result_a6.get('sensibilite_tarifaire')) or ''
+
+
+def _bloc_elasticite_html(texte: str) -> str:
+    """Le bloc élasticité en HTML. Vide quand il n'y a rien à dire."""
+    if not texte:
+        return ''
+    puces = "\n".join(f'      <li>{l.strip()}</li>'
+                      for l in texte.split("\n") if l.strip())
+    return (f'<div class="raisons-plafond">\n'
+            f'  <div class="raisons-titre">{TITRE_ELASTICITE}</div>\n'
             f'    <ul>\n{puces}\n    </ul>\n'
             f'</div>\n')
 
@@ -1864,8 +1935,8 @@ def export_html(
         return _row([label,
                      f'<span class="badge-{st.lower()}">{em} {st}</span>',
                      valeur,
-                     F.tronque(h.get('message'), 70),
-                     F.tronque(h.get('conseil'), 80)],
+                     F.tronque(h.get('message'), LIMITE_TEXTE_HYPOTHESE),
+                     F.tronque(h.get('conseil'), LIMITE_TEXTE_HYPOTHESE)],
                     num=colonnes_numeriques('hypotheses'))
 
     html = f"""<!DOCTYPE html>
@@ -2051,7 +2122,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
   </div>
 </div>
 
-{_bloc_raisons_html(raisons_plafond(result_a6))}{_bloc_dl_html(avertissement_dl(result_a6))}{_bloc_qualite_html(avertissement_qualite(result_a6))}{_bloc_reserves_html(reserves_arbitrage(result_a6))}{_ouvrir_chapitre(1)}    <table>
+{_bloc_raisons_html(raisons_plafond(result_a6))}{_bloc_dl_html(avertissement_dl(result_a6))}{_bloc_qualite_html(avertissement_qualite(result_a6))}{_bloc_elasticite_html(elasticite_publiee(result_a6))}{_bloc_reserves_html(reserves_arbitrage(result_a6))}{_ouvrir_chapitre(1)}    <table>
       {_row(titres('glm'), header=True, num=colonnes_numeriques('glm'))}
 """
     for modele in ['poisson', 'gamma', 'tweedie']:
@@ -2175,10 +2246,13 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
       <div class="kpi"><div class="kpi-label">Interprétabilité</div><div class="kpi-value">{F.nombre(prod.get('interpretabilite'), 2)}/1.0</div></div>
     </div>
     <p style="margin-top:8px; font-size:10px; color:{SLATE}; font-style:italic;">
-      ✦ Le « Score global » est une normalisation RELATIVE au meilleur
-      modèle du profil de pondération retenu (le meilleur modèle vaut
-      toujours ≈ 1,0000) — ce n'est PAS une mesure de performance absolue
-      en pourcentage. Réf. : audit V7, recommandation IMPORTANT #1.
+      ✦ Le « Score global » est une somme PONDÉRÉE de critères chacun
+      normalisé RELATIVEMENT au meilleur modèle SUR CE CRITÈRE (Gini,
+      stabilité, interprétabilité, RMSE). Il n'atteindrait 1,0000 qu'un
+      modèle qui serait le meilleur sur TOUS les critères à la fois — ce
+      n'est PAS une mesure de performance absolue en pourcentage, et un
+      critère non mesuré sort du calcul (voir « critères non mesurés »).
+      Réf. : audit V7, recommandation IMPORTANT #1.
     </p>
 """
     if val6:
@@ -2191,7 +2265,7 @@ tr:nth-child(even) td{{background:#f7f9fc;}}
             st = cv.get('statut','?')
             html += _row([cl,
                           f'<span class="badge badge-{st.lower()}">{_statut_emoji(st)} {st}</span>',
-                          F.tronque(cv.get('message'), 80)])
+                          F.tronque(cv.get('message'), LIMITE_TEXTE_HYPOTHESE)])
         html += '    </table>'
     # ⚠️⚠️ LE TABLEAU DE SENSIBILITÉ — ET C'EST UN TABLEAU, PAS UNE FIGURE.
     # Quatre profils, quatre lignes : un graphique à quatre points serait un
@@ -2495,6 +2569,18 @@ def export_word(
             for _ligne in [x.strip() for x in _q_w.split("\n") if x.strip()]:
                 _run(p, '   · ' + _ligne, sz=9, col=NR).add_break()
 
+        # ⚠️⚠️ L'ELASTICITE, DANS LES DEUX FORMATS AUSSI. Elle n'atteignait
+        # que le PROMPT : 0 occurrence dans le Word et le HTML, 7 dans le
+        # classeur A6 et 7 dans le rapport d'equipe. Meme asymetrie que la
+        # qualite des donnees avant `services/C12`.
+        _el_w = elasticite_publiee(result_a6)
+        if _el_w:
+            p = doc.add_paragraph()
+            _run(p, '⚠ ' + TITRE_ELASTICITE, bold=True, sz=10,
+                 col=AR).add_break()
+            for _ligne in [x.strip() for x in _el_w.split("\n") if x.strip()]:
+                _run(p, '   · ' + _ligne, sz=9, col=NR).add_break()
+
         # ⚠️⚠️ LES RÉSERVES D'A6, DANS LES DEUX FORMATS AUSSI — et ce rapport
         # était le dernier muet. Mesuré le 03/09/2026 : elles n'atteignaient
         # QUE l'Excel A6, une surface sur six. Une réserve sur l'arbitrage
@@ -2614,8 +2700,10 @@ def export_word(
                       and not isinstance(brut, bool)
                       else (str(brut)[:60] if brut else F.ABSENT))
             rows_hyp.append([hlabel, h.get('statut','?'), valeur,
-                             F.tronque(h.get('message'), 70),
-                             F.tronque(h.get('conseil'), 60)])
+                             F.tronque(h.get('message'),
+                                       LIMITE_TEXTE_HYPOTHESE),
+                             F.tronque(h.get('conseil'),
+                                       LIMITE_TEXTE_HYPOTHESE)])
         if rows_hyp:
             _tbl(titres('hypotheses'), rows_hyp,
                  ws=[4.2,1.7,1.6,4.5,4.0],
@@ -2675,17 +2763,24 @@ def export_word(
                    'Interprétabilité',
                    f"{prod['interpretabilite']:.2f}/1.0" if 'interpretabilite' in prod else '—']],
                  ws=[4.0,4.0,4.0,4.0])
-            # Audit V7 IMPORTANT #1 : qualification du score composite —
-            # normalisation RELATIVE au meilleur modèle du profil retenu
-            # (le meilleur vaut toujours ≈ 1,0000), PAS une performance
-            # absolue. Absente du livrable avant ce correctif (ne figurait
-            # que dans un commentaire de code, jamais vue par le client).
+            # Audit V7 IMPORTANT #1 : qualification du score composite.
+            # ⚠️⚠️ ET LA QUALIFICATION ÉTAIT FAUSSE. Elle affirmait que « le
+            # meilleur modèle vaut toujours ≈ 1,0000 » — imprimé à côté d'un
+            # score mesuré à **0,9062**. La normalisation est par CRITÈRE :
+            # chaque dimension est ramenée au meilleur SUR ELLE, puis pondérée.
+            # Un modèle n'atteint 1,0000 que s'il est le meilleur sur TOUS les
+            # critères à la fois. *Un lecteur qui croit la phrase interprète le
+            # 0,91 comme un écart de 9 % à un maximum atteignable ; ce n'en est
+            # pas un.*
             p = doc.add_paragraph()
             _run(p,
-                 "✦ Le « Score global » est une normalisation relative au "
-                 "meilleur modèle du profil de pondération retenu (le "
-                 "meilleur modèle vaut toujours ≈ 1,0000) — ce n'est pas "
-                 "une mesure de performance absolue en pourcentage.",
+                 "✦ Le « Score global » est une somme pondérée de critères "
+                 "chacun normalisé relativement au meilleur modèle SUR CE "
+                 "CRITÈRE (Gini, stabilité, interprétabilité, RMSE). Il "
+                 "n'atteindrait 1,0000 qu'un modèle qui serait le meilleur "
+                 "sur tous les critères à la fois — ce n'est pas une mesure "
+                 "de performance absolue en pourcentage, et un critère non "
+                 "mesuré sort du calcul.",
                  sz=9, italic=True)
         # ⚠️ CE TABLEAU N'EXISTAIT PAS DANS LE WORD. Les trois contrôles
         # justifient le choix du modèle de production : le fichier qui part
@@ -2695,7 +2790,7 @@ def export_word(
             for ck, cl in CONTROLES_SELECTION:
                 cv = val6.get(ck, {})
                 rows_ct.append([cl, cv.get('statut','?'),
-                                F.tronque(cv.get('message'), 80)])
+                                F.tronque(cv.get('message'), LIMITE_TEXTE_HYPOTHESE)])
             _tbl(titres('controles'), rows_ct, ws=[5.0,2.5,9.0])
         # ⚠️⚠️ LE TABLEAU DE SENSIBILITÉ, DANS LE WORD AUSSI. Le .docx part au
         # CAC comme le HTML : le rendre d'un seul côté aurait laissé la moitié

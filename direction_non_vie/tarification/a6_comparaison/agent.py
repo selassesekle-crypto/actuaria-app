@@ -2937,10 +2937,25 @@ class AgentA6Comparaison:
             )
 
         # ── NIVEAU 3 : RECOMMANDATION ─────────────────────────────────────────
+        # ⚠️⚠️ « DÉPLOYER » NE SE DIT PAS SOUS AMBRE. Mesuré le 05/09/2026 :
+        # sur un run AMBRE, les quatre surfaces signées portaient
+        # « → Déployer GLM_POISSON comme modèle de tarification » — c'est-à-dire
+        # une autorisation, sous un statut qui dit précisément que le modèle
+        # n'est pas certifié. Le diagnostic juste au-dessus écrit pourtant
+        # « présente des points d'attention » : *le document se contredisait à
+        # deux paragraphes d'intervalle.*
+        # AMBRE reçoit donc le verbe de son statut — une mise en production
+        # SOUS RÉSERVE, avec la levée à faire —, et le VERT garde le sien.
+        _ligne_modele = (
+            f"→ Déployer {mp['modele']} comme modèle de tarification.\n"
+            if statut_rag == 'VERT' else
+            f"→ NE PAS déployer {mp['modele']} en l'état : lever d'abord les "
+            f"points d'attention ci-dessus, puis soumettre le modèle à la "
+            f"validation de l'actuaire signataire.\n")
         if statut_rag in ['VERT', 'AMBRE']:
             n3 = (
                 "RECOMMANDATION :\n"
-                f"→ Déployer {mp['modele']} comme modèle de tarification.\n"
+                f"{_ligne_modele}"
                 f"→ Passer à l'Agent A7 (Provisionnement).\n"
                 f"→ Surveiller le ratio A/E trimestriellement.\n"
                 # ⚠️ LE LIBELLÉ ET LA DÉCISION LISENT LE MÊME NOMBRE. Recopié,

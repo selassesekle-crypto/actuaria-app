@@ -282,7 +282,15 @@ class TestFrontiere(unittest.TestCase):
 
 class TestNomDuPlanPublie(unittest.TestCase):
 
-    #: Les trois surfaces signees qui publient ce libelle.
+    #: Les trois APPELANTS de ce libelle.
+    #: ⚠️⚠️ CORRECTION DU 05/09/2026, MESUREE DANS LES OCTETS : ce ne sont PAS
+    #: trois surfaces signees. Le libelle << ACTION REQUISE -- plan '...' >>
+    #: atteint l'Excel A6 et le rapport d'equipe (HTML et Word), qui nomment
+    #: bien le plan. Le troisieme appelant, dans `rapport_modeles_tarif`,
+    #: vit dans `_construire_contexte_tarif` : il alimente LE PROMPT LLM, pas
+    #: le document -- et le Word/HTML d'A6 ne publient ce libelle sur AUCUN
+    #: chemin. Le correctif reste juste aux trois endroits (le prompt nourrit
+    #: une narration publiee) ; c'est le DECOMPTE qui etait faux.
     SURFACES = (
         'direction_non_vie/tarification/services/tarif_excel.py',
         'direction_non_vie/tarification/services/rapport_modeles_tarif.py',
@@ -294,7 +302,12 @@ class TestNomDuPlanPublie(unittest.TestCase):
         troisieme passait une expression toujours vide. Les six tests de
         `test_colonnes_plan_ecartees`, eux, passent 'auto' EN DUR : ils
         attestaient le libelle sans jamais passer par le site de production.
-        *Un controle qui n'emprunte pas le chemin reel n'en surveille rien.*"""
+        *Un controle qui n'emprunte pas le chemin reel n'en surveille rien.*
+
+        ⚠️ Ce controle porte sur les APPELANTS. La preuve que le nom atteint
+        REELLEMENT les octets publies est ailleurs : `test_faits_publies`
+        cherche << plan 'auto' >> dans le classeur A6 et le rapport d'equipe.
+        """
         muets = []
         for chemin in self.SURFACES:
             plein = os.path.join(_RACINE, chemin)

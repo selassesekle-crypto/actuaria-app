@@ -282,6 +282,30 @@ _CAPACITES_ARBRE = ('estimators_', 'tree_', 'get_booster', 'booster_',
                     'tree_count_')
 
 
+def modele_a_expliquer(classement, modeles):
+    """Le modele du classement que SHAP doit expliquer, ou ``None``.
+
+    ⚠️⚠️ C'ETAIT `classement[0]['modele']`, ET CE N'EST PAS TOUJOURS UN
+    MODELE. Le classement porte aussi la ligne << GLM Poisson (reference
+    A3) >>, RELAYEE d'A3 : elle n'est pas dans `self.modeles`. **Mesure du
+    05/09/2026** : sur un portefeuille de 2 000 lignes elle arrive PREMIERE,
+    et le classeur signe publiait alors << SHAP non calcule : Modele GLM
+    Poisson (reference A3) non trouve >>. Avant le lot precedent, ce meme
+    echec faisait disparaitre le classeur ENTIER, en silence.
+
+      *On explique le modele qu'A4 a CALIBRE, pas celui qu'il relaie.*
+
+    ⚠️ Les deux conditions comptent : la famille ecarte la ligne de
+    reference, et l'appartenance a `modeles` ecarte tout ce qui serait
+    relaye demain sous une autre famille.
+    """
+    for entree in classement or []:
+        nom = entree.get('modele')
+        if str(entree.get('famille', '')).upper() != 'GLM' and nom in modeles:
+            return nom
+    return None
+
+
 def _shap_est_absent(shap_summary) -> bool:
     """SHAP a-t-il produit une importance UTILISABLE ?
 
@@ -1037,10 +1061,26 @@ class AgentA4ML:
             shap_summary = {}
             if calcul_shap and SHAP_OK and classement:
                 logger.info(f"[{audit_id}] Étape 4/4 : SHAP values")
-                meilleur_nom = classement[0]['modele']
-                shap_summary = self._calculer_shap(
-                    meilleur_nom, X_test, feature_names
-                )
+                # ⚠️⚠️ SHAP ETAIT DEMANDE SUR LA LIGNE DE REFERENCE GLM.
+                # `classement[0]` peut etre « GLM Poisson (reference A3) » —
+                # une ligne RELAYEE d'A3, qui n'est pas dans `self.modeles`.
+                # **Mesuré le 05/09/2026** : sur la fixture par defaut cette
+                # ligne EST premiere, et le classeur signe publiait
+                # « SHAP non calcule : Modele GLM Poisson (reference A3) non
+                # trouve ». Avant le lot precedent, ce meme echec faisait
+                # disparaitre le classeur ENTIER, en silence.
+                #   *On explique le modele qu'A4 a CALIBRE, pas celui qu'il
+                #   relaie.*
+                _a_expliquer = modele_a_expliquer(classement, self.modeles)
+                if _a_expliquer is None:
+                    shap_summary = {
+                        'erreur': "aucun modele ML calibre dans le classement "
+                                  "-- SHAP porte sur les modeles d'A4, pas sur "
+                                  "la reference relayee d'A3"}
+                else:
+                    shap_summary = self._calculer_shap(
+                        _a_expliquer, X_test, feature_names
+                    )
                 rapport['etapes'].append('shap')
             else:
                 rapport['etapes'].append('shap_skipped')

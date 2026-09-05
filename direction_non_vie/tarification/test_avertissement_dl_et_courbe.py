@@ -182,10 +182,20 @@ class TestAvertissementDLSurLaSurfaceSignee(unittest.TestCase):
         *Un defaut connu et non traite se declare ; celui-ci s'est aussi
         souvenu du jour ou on le traiterait.*
 
-        Ce lot en cable DEUX sur SIX. Les quatre autres n'ont toujours pour
-        seul point de sortie que `_construire_contexte_tarif` — le prompt.
-        Ce test FIGE ce fait pour qu'il ne se perde pas : il tombera le jour ou
-        l'une d'elles sera cablee, et il faudra alors mettre a jour le compte.
+        ⚠️⚠️ MIS A JOUR LE 05/09/2026 — ET IL EST RETOMBE LE JOUR MEME, POUR
+        LA SECONDE FOIS. `synthese_elasticite` a ete cablee hors du prompt par
+        le lot des faits publies. La mesure qui l'a motivee :
+        **7 occurrences de l'elasticite dans le classeur A6, 7 dans le rapport
+        d'equipe, 0 dans le Word et le HTML d'A6** -- alors qu'elle y etait
+        bien calculee, dans `_construire_contexte_tarif`, c'est-a-dire dans le
+        PROMPT. Et la narration rendue (1 269 caracteres) n'en portait aucune
+        trace. *Un calcul qui n'atteint que le prompt n'atteint pas un
+        livrable.*
+
+        TROIS sont desormais cablees. SIX ne le sont pas : leur seul point de
+        sortie reste `_construire_contexte_tarif`. Ce test FIGE ce fait pour
+        qu'il ne se perde pas : il tombera le jour ou l'une d'elles sera
+        cablee, et il faudra alors mettre a jour le compte.
 
         *Un defaut connu et non traite se declare ; il ne se laisse pas
         oublier entre deux lots.*
@@ -208,11 +218,12 @@ class TestAvertissementDLSurLaSurfaceSignee(unittest.TestCase):
                         and enclos(n.lineno) != '_construire_contexte_tarif'):
                     dehors.add(nom)
         self.assertEqual(
-            dehors, {'synthese_modele_dl', 'synthese_qualite_donnees'},
+            dehors, {'synthese_elasticite', 'synthese_modele_dl',
+                     'synthese_qualite_donnees'},
             f"L'assiette a change : synthese(s) hors du prompt = {sorted(dehors)}. "
             f"Si une autre a ete cablee, mettre a jour le releve et ce test.")
-        print("    A-6 2 syntheses sur 6 sont cablees ; les 4 autres restent "
-              "dans le prompt SEUL, et c'est declare")
+        print("    A-6 3 syntheses cablees ; les 6 autres restent dans le "
+              "prompt SEUL, et c'est declare")
 
 
 class TestCourbeConvergenceMesuree(unittest.TestCase):
