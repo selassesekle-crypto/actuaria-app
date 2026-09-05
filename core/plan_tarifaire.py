@@ -259,7 +259,14 @@ class SeuilGrave:
 #: donc hache. Mesure faite AVANT le bump, comme les cinq precedents : aucune
 #: empreinte `s6:` persistee dans `models/` ni `data/`. Golden mis a jour dans
 #: le MEME commit.
-EMPREINTE_SCHEMA = 7
+#: ⚠️ `7` -> `8` LE 05/09/2026 : `refus_anti_selection` entre dans le payload.
+#: C'est le seul champ du plan qui decide qu'AUCUN tarif ne sort : deux plans
+#: qui n'en different que par lui ne produisent pas le meme resultat -- l'un
+#: rend un prix, l'autre rien. Plus opposable qu'un chargement, donc hache.
+#: Mesure faite AVANT le bump, comme les six precedents : aucune empreinte
+#: `s7:` persistee dans `models/` ni `data/`. Golden mis a jour dans le MEME
+#: commit.
+EMPREINTE_SCHEMA = 8
 
 # Transformations dérivées : suffixe appliqué par A2
 _SUFFIXE_TRANSFO = {"log": "log_{}", "carre": "{}_carre", "racine": "{}_racine"}
@@ -602,6 +609,22 @@ class PlanTarifaire:
     # Non declare : le quantile s'applique, mais il est DIT (voir
     # `core.severite.phrase_seuil_suppose`), jamais suppose en silence.
     seuil_grave: SeuilGrave | None = None
+    # ⚠️⚠️ LE SEUL INTERRUPTEUR QUI EMPÊCHE UN TARIF D'EXISTER, ET IL EST ICI
+    # PARCE QU'IL NE DOIT PAS ÊTRE DANS LE MOTEUR. Déclaré `True`, le tarif est
+    # REFUSÉ quand l'intervalle de confiance du Gini de holdout est entièrement
+    # sous zéro (voir `core.validation_tarif`).
+    #   ⚠️ DÉFAUT `False`, ET C'EST MESURÉ, PAS PRÉFÉRÉ. Cette règle a d'abord
+    #   été câblée EN DUR dans le moteur. La gate l'a réfutée : mesurée sur
+    #   `pipeline_complet`, 18 plans × 3 tailles, elle refuse 2 plans à 1 500
+    #   lignes, 1 à 3 000, 0 à 4 000 — `auto` bascule d'un refus à un accord
+    #   entre 1 500 et 3 000 lignes, MÊMES données, MÊME graine. *Un verdict
+    #   qui dépend de la taille de l'échantillon mesure du bruit.*
+    #   La cause est le rapport sinistres/paramètres du GLM de sévérité (6,5 à
+    #   37,6 selon la taille), publié désormais à côté de chaque Gini.
+    #   ⚠️ OPPOSABLE, DONC DANS L'EMPREINTE : deux plans qui n'en diffèrent que
+    #   par lui ne produisent pas le même résultat — l'un rend un tarif,
+    #   l'autre n'en rend aucun. D'où le bump `s7` → `s8`.
+    refus_anti_selection: bool = False
     # Colonne identifiant de contrat/police (optionnelle). Si déclarée, la couche
     # qualité (core/qualite_donnees.py) dédoublonne PAR CET IDENTIFIANT (règle 1,
     # exclusion sans discussion) ; sinon un doublon de LIGNE entière reste ambigu
@@ -891,6 +914,9 @@ class PlanTarifaire:
             # pas le meme prix. Opposable -- d'ou le bump `s6` -> `s7`.
             "seuil_grave": (dataclasses_asdict(self.seuil_grave)
                            if self.seuil_grave else None),
+            # ⚠️ Il decide qu'aucun tarif ne sort. Opposable -- d'ou le bump
+            # `s7` -> `s8`.
+            "refus_anti_selection": self.refus_anti_selection,
             "comportement": (dataclasses_asdict(self.comportement)
                              if self.comportement else None),
             "facteurs": [
@@ -1000,6 +1026,9 @@ class PlanTarifaire:
                          if d.get("chargements") else None),
             seuil_grave=(SeuilGrave(**d["seuil_grave"])
                          if d.get("seuil_grave") else None),
+            # ⚠️ Defaut `False` : aucun des 20 plans ne bloque aujourd'hui, et
+            # c'est le comportement mesure comme le bon. Voir le champ.
+            refus_anti_selection=bool(d.get("refus_anti_selection", False)),
             identifiant_contrat=d.get("identifiant_contrat"),
             echeance=d.get("echeance"),
             cout_par_sinistre=d.get("cout_par_sinistre"),

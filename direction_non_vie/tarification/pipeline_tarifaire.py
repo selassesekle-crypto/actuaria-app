@@ -17,6 +17,7 @@ Rien ici ne « sait » ce qu'est une voiture ou un chantier : tout vient du plan
 """
 from __future__ import annotations
 
+import logging
 import math
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -34,6 +35,13 @@ import dataclasses
 from core.plan_tarifaire import CHARGEMENTS_DEFAUT, PlanTarifaire
 from core.conformite_reglementaire import construire_matrice_x, source_exposition
 from core.frequence import ajuster_glm_frequence
+from core.validation_tarif import (
+    MINIMUM_POUR_INTERVALLE,
+    gini_lorenz as gini_socle,
+    mesurer_discrimination,
+    publication as publication_validation,
+    valider,
+)
 # ⚠️ `QualiteBloquante` n'est plus importée ici : la levée a suivi le préambule
 # dans `core.qualite_donnees`. Vérifié avant de la retirer — **aucun module ne
 # l'importait DEPUIS ce fichier** (mesuré). *Un ré-export tacite se casse en
@@ -46,6 +54,13 @@ from core.qualite_donnees import preambule_qualite
 from core.severite import (ModeleCout, ajuster_glm_cout,
                            construire_cible_severite, seuil_declare)
 from direction_non_vie.tarification.a2_preprocessing.agent import AgentA2Preprocessing
+
+# ⚠️ Le journal de la zone, au nom de la famille `actuaria.*` déjà en place
+# (`core/conformite_reglementaire.py`). Il n'est PAS réglé ici : régler un
+# niveau au niveau module éteindrait le journal de l'appelant au seul fait
+# d'importer ce fichier — c'est le défaut que `core/test_journaux_importables`
+# verrouille. On se contente d'obtenir le journal, jamais de le configurer.
+logger = logging.getLogger('actuaria.tarif.pipeline')
 
 # ⚠️⚠️ `CHARGEMENTS_DEFAUT` N'EST PLUS DÉFINI ICI — IL EST IMPORTÉ DU SOCLE.
 # Il portait quatre littéraux qui doublaient EXACTEMENT les valeurs par défaut
@@ -78,6 +93,14 @@ class TarifNonVie:
     # dans les livrables, jamais un traitement silencieux. None si la couche n'a
     # pas tourné (ex. appelée hors pipeline_complet).
     rapport_qualite: Optional[Any] = None
+    #: ⚠️⚠️ CE QUE LE TARIF SAIT DE LUI-MÊME — lot 14. Cet objet portait le
+    #: plan, deux GLM, un écrêtement et des chargements : **aucun Gini, aucun
+    #: statut, aucun garde-fou**. Le pouvoir discriminant de ses modèles vivait
+    #: chez A3, dans un rapport qu'il ne lit pas. *Un objet qui produit un prix
+    #: sans savoir ce que vaut son modèle ne peut pas refuser de le produire.*
+    #: `None` = la validation n'a pas été mesurée (appel hors
+    #: `pipeline_complet`) — ce n'est pas « aucun défaut ».
+    validation: Any | None = None
 
     # ── Prédiction interne, partagée par tarifer() et le portefeuille (INV-7) ──
     def _design(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -280,6 +303,13 @@ class TarifNonVie:
                 "exposition_retenue": float(expo_retenue),
                 "exposition_source": expo_source,
                 "exposition_hypothese": expo_phrase,
+                # ⚠️⚠️ CE QUE VAUT LE MODÈLE QUI PRODUIT CE PRIX — lot 14.
+                # Gini de holdout (fréquence et sévérité), son intervalle de
+                # confiance et le nombre d'observations qui le fonde. *Un Gini
+                # sans son effectif ne se conteste pas.*
+                # `None` = validation NON MESURÉE, jamais « aucun défaut ».
+                "validation": (publication_validation(self.validation)
+                               if self.validation is not None else None),
                 "plan_empreinte": empreinte,          # traçabilité ACPR (ex-clé 'plan')
                 "date_calcul": date_calcul,
             }
@@ -341,36 +371,74 @@ def gini_lorenz(y_true, y_pred) -> float:
     qui rend impossible la « métrique divergente » de B9 (INV-6). Ce n'est
     **pas** vrai à l'échelle du dépôt.
 
-    Mesuré par AST le 01/09/2026 — **méthode publiée avec le chiffre** : sur
-    les fonctions de production dont le nom porte `gini`, **8 calculent
-    réellement un coefficient** (critère retenu : leur corps emploie `cumsum`,
-    `trapz` ou une courbe de Lorenz) et 2 n'en calculent pas (une réserve, un
-    verdict). Parmi les 8 : `a3`, `a4`, `a5` ont chacune leur `_calculer_gini`,
-    `a6` son `_gini_lorenz`, `conformite` son `_gini_trie_par`, `charts` la
-    sienne pour la figure — plus celle-ci et son enveloppe locale `_gini_sur`.
+    ⚠️⚠️ **ELLE NE CALCULE PLUS : ELLE DÉLÈGUE AU SOCLE** (lot 14). Le
+    contrôle `pipeline/C3` a mesuré le 05/09/2026 qu'un **neuvième** Gini
+    venait d'entrer au dépôt, dans `core/validation_tarif.py`. Plutôt que d'en
+    laisser deux identiques de part et d'autre de la frontière, le calcul
+    canonique vit dans `core.validation_tarif.gini_lorenz` et **celle-ci
+    l'appelle**. *Deux chemins qui calculent la même grandeur avec deux codes
+    finissent par diverger.*
 
-    ⚠️ **LE CRITÈRE EST UNE HEURISTIQUE, ET LE SENS DE SON ERREUR EST DIT** :
-    il peut compter une aide qui n'est pas une définition à part entière ; il
-    ne peut pas en manquer une qui calcule vraiment. *Il SUR-compte, il ne
-    sous-compte pas.*
+    ⚠️ **ET LA CONVERSION EST ÉCRITE, PAS TUE.** Le socle rend `None` quand le
+    Gini n'est pas calculable ; cette fonction publie un `float` depuis
+    toujours, et `evaluer_stabilite_temporelle` en dépend. Le `0.0` de repli
+    reste donc ici, **à la frontière, visible** — il n'est pas remonté dans le
+    socle, où il redeviendrait « une absence qui se dit zéro ».
+
+    ⚠️⚠️ **DEUX CAS DÉGÉNÉRÉS CHANGENT, ET ILS SONT DITS PLUTÔT QUE TUS.** Le
+    socle refuse ce que l'ancien code calculait quand même :
+      · **une seule ligne** — l'ancien rendait `-1.0`, un extrême fabriqué à
+        partir d'un point ; il rend désormais `0.0`. *Un Gini sur une ligne
+        n'existe pas, et `-1.0` le faisait passer pour le pire modèle
+        possible.*
+      · **longueurs incohérentes** — l'ancien levait un `IndexError`, il rend
+        désormais `0.0`.
+    Les deux seuls appelants de production sont `_gini_sur` (fenêtres du
+    walk-forward, toujours pleines et de même longueur des deux côtés) et une
+    preuve d'audit hors périmètre : **aucun n'atteint ces cas** (mesuré).
+
+    Mesuré par AST le 01/09/2026, **méthode publiée avec le chiffre** : sur les
+    fonctions de production dont le nom porte `gini`, **9 sont comptées** par
+    le critère large (leur corps emploie `cumsum`, `trapz` ou le mot Lorenz —
+    le nom de la fonction en fait partie) et 2 ne calculent rien (une réserve,
+    un verdict). ⚠️ **Mais seulement 6 CALCULENT vraiment** — critère étroit,
+    ajouté le 05/09/2026 : le corps SANS SA DOCSTRING emploie `cumsum`. Les 6 :
+    `core.validation_tarif.gini_lorenz` (canonique), `a3`, `a4`, `a5`
+    (`_calculer_gini`), `a6` (`_gini_lorenz`), `conformite`
+    (`_gini_trie_par`).
+
+    ⚠️⚠️ **ET LA MESURE ÉTROITE A CORRIGÉ LA PROSE DE CE MODULE.** Elle
+    annonçait « `charts` la sienne pour la figure ». **Faux** :
+    `core.charts_tarif.chart_lorenz_gini` reçoit `lorenz_x`/`lorenz_y` déjà
+    calculés et **DESSINE** — elle n'a ni `cumsum` ni `trapz`. Le critère large
+    la comptait sur le seul mot « lorenz » de son nom. *Un relevé au texte
+    sur-compte, et il faut le mesurer pour savoir de combien.* Celle-ci et
+    `_gini_sur` sont les deux autres du large : elles délèguent.
+
+    ⚠️⚠️ **ET LES SIX NE SONT PAS D'ACCORD — MESURÉ, PAS SUPPOSÉ.** `a3` trie
+    par `argsort(-y_pred)` sans `mergesort`, `a4` et `a5` par
+    `argsort(y_pred)[::-1]`, qui inverse l'ordre des EX AEQUO. Sur 500 lignes
+    et 8 modalités de prédiction, les trois tris rendent **0,027476**,
+    **0,046857** et **0,035429** pour la même donnée ; sur des prédictions
+    toutes égales, deux d'entre eux sont **de signes opposés**. *Les faire
+    déléguer déplacerait le classement d'A6, donc le modèle de production
+    publié* — ce n'est pas le périmètre de ce lot, et c'est nommé ici plutôt
+    que laissé à découvrir.
+
+    ⚠️ **LE CRITÈRE LARGE EST UNE HEURISTIQUE, ET LE SENS DE SON ERREUR EST
+    DIT** : il compte des délégations qui ne calculent pas. *Il SUR-compte, il
+    ne sous-compte pas* — d'où la seconde mesure, plus étroite, qui compte les
+    corps employant `cumsum`.
 
     **Ce qui est garanti ici est l'identité ENTRE LES DEUX USAGES DE CE
     MODULE**, pas l'unicité dans le dépôt. *Une phrase qui LIMITE est sûre ;
     une phrase qui AFFIRME au-delà de ce qu'elle tient est une dette.*
     """
-    y_true = np.asarray(y_true, dtype=float)
-    y_pred = np.asarray(y_pred, dtype=float)
-    if len(y_true) == 0:
-        return 0.0
-    ordre = np.argsort(-y_pred, kind="mergesort")
-    y = y_true[ordre]
-    total = float(y.sum())
-    if total <= 0:
-        return 0.0
-    cum_y = np.cumsum(y) / total
-    cum_pop = np.arange(1, len(y) + 1) / len(y)
-    _trap = getattr(np, "trapezoid", None) or np.trapz
-    return float(2.0 * _trap(cum_y, cum_pop) - 1.0)
+    valeur = gini_socle(y_true, y_pred)
+    # ⚠️ Le contrat PUBLIÉ de cette fonction est un `float` : ses appelants
+    # (INV-6, le walk-forward) comparent des nombres. La conversion de
+    # l'absence est donc faite ICI, et elle est écrite.
+    return 0.0 if valeur is None else valeur
 
 
 def evaluer_stabilite_temporelle(portefeuille: pd.DataFrame, plan: PlanTarifaire,
@@ -713,6 +781,94 @@ def pipeline_complet(portefeuille: pd.DataFrame, plan: PlanTarifaire,
         # s'applique il est DIT — `tarifer()` le publie.*
         chargements=_chargements_effectifs(chargements, plan),
         rapport_qualite=rapport_qualite)
+
+    # ── CE QUE LE TARIF SAIT DE SA PROPRE QUALITÉ (lot 14) ──────────────────
+    # ⚠️⚠️ ON MESURE SUR UN HOLDOUT, ON PRODUIT SUR 100 % — la doctrine posée
+    # au lot 13, appliquée ici au chemin déclaratif. Les GLM ci-dessus sont et
+    # restent ceux de PRODUCTION, ajustés sur tout le portefeuille : **le
+    # tarif ne bouge pas d'un centime**. Ce bloc ajuste, à côté, un modèle de
+    # VALIDATION sur 80 % pour mesurer ce que le modèle vaut sur des lignes
+    # qu'il n'a pas vues.
+    #
+    # ⚠️⚠️ ET IL NE BLOQUE RIEN TOUT SEUL — DÉCISION DU 05/09/2026, PRISE
+    # CONTRE MA PREMIÈRE PROPOSITION ET SUR MESURE. Une règle de refus sur
+    # « intervalle entièrement sous zéro » a été câblée ici, puis RÉFUTÉE par
+    # la gate : mesurée sur ce chemin, 18 plans × 3 tailles, elle refuse 2
+    # plans à 1 500 lignes, 1 à 3 000, 0 à 4 000 — `auto` bascule du refus à
+    # l'accord entre 1 500 et 3 000, MÊMES données, MÊME graine. *Un verdict
+    # qui dépend de la taille de l'échantillon mesure du bruit.* Le blocage
+    # dur existe toujours, mais il se DÉCLARE au plan.
+    _validation = None
+    try:
+        _n_val = int(len(df) * 0.80)
+        if _n_val >= 50 and len(df) - _n_val >= MINIMUM_POUR_INTERVALLE:
+            _idx = np.arange(len(df))
+            _tr, _te = _idx[:_n_val], _idx[_n_val:]
+            _Xtr, _Xte = Xc.iloc[_tr], Xc.iloc[_te]
+            _glm_val = ajuster_glm_frequence(
+                pd.concat([_Xtr, y_freq.iloc[_tr].rename(col_freq)], axis=1),
+                [c for c in Xc.columns if c != 'const'], col_freq,
+                np.log(expo.iloc[_tr]), selection=False)['modele']
+            _pred_f = np.asarray(
+                _glm_val.predict(_Xte, offset=np.zeros(len(_Xte))), dtype=float)
+            # ⚠️⚠️ LA PUISSANCE VOYAGE AVEC LE GINI. Le dénominateur d'un GLM
+            # de comptage est le nombre de SINISTRES, jamais de contrats —
+            # même doctrine qu'au lot 17a pour la sélection de variables.
+            # Sans ce rapport, un Gini de holdout négatif n'est pas
+            # diagnosticable : on ne peut pas distinguer « ne segmente pas »
+            # de « ajusté sur trop peu de sinistres pour le dire ».
+            _disc_f = mesurer_discrimination(
+                y_freq.iloc[_te].to_numpy(dtype=float), _pred_f,
+                n_apprentissage=int(float(y_freq.iloc[_tr].sum())),
+                n_parametres=len(_glm_val.params))
+
+            # ⚠️ La sévérité se valide sur les SINISTRÉS du holdout, et sur
+            # eux seuls : c'est l'assiette du GLM de coût.
+            # ⚠️ LE SEUIL D'ÉCRÊTEMENT EST CELUI DE LA PRODUCTION
+            # (`cible_sev.seuil_ecretement`), pas un seuil recalculé sur le
+            # sous-jeu : sinon on validerait un modèle qui n'écrête pas la
+            # même chose que celui qu'on livre.
+            def _cible(indices):
+                return construire_cible_severite(
+                    X[col_cout].iloc[indices], y_freq.iloc[indices],
+                    expo.iloc[indices], seuil=cible_sev.seuil_ecretement)
+
+            _disc_s = None
+            _cible_tr, _cible_te = _cible(_tr), _cible(_te)
+            if (_cible_te.n_retenus >= MINIMUM_POUR_INTERVALLE
+                    and _cible_tr.n_retenus >= MINIMUM_POUR_INTERVALLE):
+                _glm_c_val = ajuster_glm_cout(
+                    _Xtr[np.asarray(_cible_tr.masque, dtype=bool)],
+                    _cible_tr.severite, plan.famille_severite)
+                _Xte_sin = _Xte[np.asarray(_cible_te.masque, dtype=bool)]
+                _disc_s = mesurer_discrimination(
+                    np.asarray(_cible_te.severite, dtype=float),
+                    np.asarray(_glm_c_val.predict(_Xte_sin), dtype=float),
+                    n_apprentissage=int(_cible_tr.n_retenus),
+                    n_parametres=int(_Xtr.shape[1]))
+            # ⚠️ `refus_anti_selection` vient du PLAN et de lui seul. Le moteur
+            # ne décide jamais qu'un tarif n'existe pas.
+            _validation = valider(
+                frequence=_disc_f, severite=_disc_s,
+                refus_anti_selection=bool(
+                    getattr(plan, 'refus_anti_selection', False)))
+    except Exception as _e_val:                              # noqa: BLE001
+        # ⚠️ Une validation qui échoue ne fabrique PAS un tarif validé : elle
+        # laisse `validation=None`, et `None` se lit « non mesurée », jamais
+        # « aucun défaut ».
+        _validation = None
+        logger.warning("Validation du tarif non mesuree : %s", _e_val)
+
+    tarif.validation = _validation
+    # ⚠️⚠️ LA SEULE LEVÉE POSSIBLE, ET ELLE VIENT DU PLAN. `refus` reste VIDE
+    # tant que `plan.refus_anti_selection` n'est pas déclaré : aucun des 20
+    # plans ne le déclare aujourd'hui, donc **cette branche n'est atteinte par
+    # aucun d'eux**. Elle n'est pas morte pour autant — `VT-10` la traverse
+    # avec un plan qui la déclare, et le sceau la replante.
+    if _validation is not None and _validation.refuse:
+        raise CalculImpossibleBloquant(
+            f"Tarification REFUSEE pour le plan '{plan.lob}' : "
+            + " ".join(_validation.refus))
 
     # ── Coefficient d'ÉQUILIBRE technique k (INV-8) ─────────────────────────
     # k = Σ charge observée / Σ (prime_pure prédite). Après ce calage, la prime

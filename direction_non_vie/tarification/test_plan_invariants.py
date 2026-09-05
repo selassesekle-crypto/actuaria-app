@@ -2015,8 +2015,17 @@ class TestEmpreinteVersionneeSchema(unittest.TestCase):
         # Meme argument que `chargements` : opposable, donc hache.
         # ⚠️ Mesure faite AVANT le bump, comme les cinq precedents : aucune
         # empreinte `s6:` persistee dans `models/` ni `data/`.
-        self.assertEqual(EMPREINTE_SCHEMA, 7)
-        self.assertEqual(emp, "s7:c1f3234e0065b27b",
+        # ⚠️⚠️ BUMP `s7` -> `s8` LE 05/09/2026, golden et constante dans le
+        # MEME commit. Motif : `refus_anti_selection` entre dans le payload --
+        # c'est le SEUL champ du plan qui decide qu'AUCUN tarif ne sort. Deux
+        # plans qui n'en different que par lui ne produisent pas le meme
+        # resultat : l'un rend un prix, l'autre rien. Plus opposable qu'un
+        # chargement. Mesure : `s8:340554a7c7b1518e` sans le drapeau,
+        # `s8:4f46e1eeea327003` avec -- l'audit trail les distingue enfin.
+        # ⚠️ Mesure faite AVANT le bump, comme les six precedents : aucune
+        # empreinte `s7:` persistee dans `models/` ni `data/`.
+        self.assertEqual(EMPREINTE_SCHEMA, 8)
+        self.assertEqual(emp, "s8:340554a7c7b1518e",
             "empreinte du plan de reference gele changee : derive de structure "
             "sans bump, OU bump sans mise a jour du golden. Voir le commentaire.")
         print(f"    S3b golden scellé : {emp} ✅")

@@ -151,10 +151,24 @@ class TestC3LaPortee(unittest.TestCase):
         print("    PC-4 la portee est LIMITEE au module, et la methode du "
               "comptage est publiee avec son sens d'erreur")
 
-    def test_le_compte_annonce_est_CELUI_QUE_LA_MESURE_DONNE(self):
-        """⚠️⚠️ ON RE-DERIVE, on ne croit pas la phrase. Meme critere que celui
-        qu'elle publie : un corps qui emploie `cumsum`, `trapz` ou Lorenz."""
-        calculent = []
+    @staticmethod
+    def _releve_des_gini():
+        """Les fonctions `*gini*`, sous DEUX criteres, et c'est le point.
+
+        ⚠️⚠️ LE CRITERE LARGE NE SAIT PAS DISTINGUER UN CALCUL D'UNE
+        DELEGATION. Il lit le TEXTE du corps -- or `def gini_lorenz` contient
+        deja le mot << lorenz >>, et une docstring qui DECRIT le critere
+        contient ses mots-cles. *Un controle qui lit la prose et non le
+        comportement passe sur une delegation comme sur un calcul.*
+
+        D'ou le second critere, plus etroit : le corps SANS SA DOCSTRING
+        emploie `cumsum`. Une delegation n'en a pas.
+
+        ⚠️ Le large N'EST PAS RETIRE -- il reste le filet, et *retrecir une
+        assiette pour faire passer son propre correctif est le defaut qu'on
+        traque ailleurs.* On MESURE les deux, on PUBLIE les deux.
+        """
+        large, implementations = [], []
         for chemin in sorted(_RACINE.rglob('*.py')):
             s = chemin.as_posix()
             if ('.venv' in s or '/audit_2026_08/' in s
@@ -166,24 +180,85 @@ class TestC3LaPortee(unittest.TestCase):
             except SyntaxError:                     # pragma: no cover
                 continue
             for n in ast.walk(arbre):
-                if (isinstance(n, ast.FunctionDef)
+                if not (isinstance(n, ast.FunctionDef)
                         and 'gini' in n.name.lower()):
-                    corps = ast.get_source_segment(source, n) or ''
-                    if ('cumsum' in corps or 'trapz' in corps
-                            or 'lorenz' in corps.lower()):
-                        # ⚠️ LA CLE EST LE CHEMIN COMPLET, pas le nom de
-                        # fichier : `a3`, `a4` et `a5` ont TOUS un
-                        # `agent.py::_calculer_gini`. Ma premiere version
-                        # annoncait « 6 distinctes » pour 8 trouvees —
-                        # *une cle qui COLLISIONNE sous-compte en silence.*
-                        calculent.append(f'{s}::{n.name}')
+                    continue
+                corps = ast.get_source_segment(source, n) or ''
+                if not ('cumsum' in corps or 'trapz' in corps
+                        or 'lorenz' in corps.lower()):
+                    continue
+                # ⚠️ LA CLE EST LE CHEMIN COMPLET, pas le nom de fichier :
+                # `a3`, `a4` et `a5` ont TOUS un `agent.py::_calculer_gini`.
+                # Ma premiere version annoncait « 6 distinctes » pour 8
+                # trouvees — *une cle qui COLLISIONNE sous-compte en silence.*
+                cle = f'{s}::{n.name}'
+                large.append(cle)
+                # ⚠️ On retire la docstring AVANT de chercher `cumsum` : sans
+                # cela, la fonction qui DECRIT le critere se compte elle-meme.
+                instructions = list(n.body)
+                if (instructions and isinstance(instructions[0], ast.Expr)
+                        and isinstance(instructions[0].value, ast.Constant)
+                        and isinstance(instructions[0].value.value, str)):
+                    instructions = instructions[1:]
+                code = '\n'.join(ast.get_source_segment(source, i) or ''
+                                 for i in instructions)
+                if 'cumsum' in code:
+                    implementations.append(cle)
+        return large, implementations
+
+    def test_le_compte_annonce_est_CELUI_QUE_LA_MESURE_DONNE(self):
+        """⚠️⚠️ ON RE-DERIVE, on ne croit pas la phrase. **Et c'est ce controle
+        qui a trouve le NEUVIEME Gini du lot 14**, ajoute par le meme auteur
+        qui ecrivait ailleurs qu'il ne faut pas dupliquer un calcul."""
+        large, implementations = self._releve_des_gini()
+        doc = inspect.getdoc(gini_lorenz) or ''
         self.assertEqual(
-            len(calculent), 8,
-            f"la docstring annonce 8 fonctions qui calculent un Gini, la "
-            f"mesure en trouve {len(calculent)} : {sorted(calculent)}")
-        self.assertIn('**8 calculent', inspect.getdoc(gini_lorenz) or '')
-        print(f"    PC-5 8 fonctions calculent un Gini, comme annonce : "
-              f"{len(set(calculent))} distinctes")
+            len(large), 9,
+            f"la docstring annonce 9 fonctions comptees au critere large, la "
+            f"mesure en trouve {len(large)} : {sorted(large)}")
+        self.assertIn('**9 sont comptées', doc)
+        self.assertEqual(
+            len(implementations), 6,
+            f"la docstring annonce 6 IMPLEMENTATIONS reelles, la mesure en "
+            f"trouve {len(implementations)} : {sorted(implementations)}")
+        self.assertIn('seulement 6 CALCULENT', doc)
+        # ⚠️⚠️ CE QUE LA MESURE ETROITE A CORRIGE, ET QUI DOIT LE RESTER. La
+        # prose annoncait « `charts` la sienne pour la figure » : FAUX --
+        # `chart_lorenz_gini` recoit la courbe DEJA calculee et la DESSINE.
+        # *Un releve au texte SUR-compte ; il faut le mesurer pour savoir de
+        # combien.* Les deux sens sont verifies : si elle redevenait un calcul
+        # la prose serait fausse, et si elle sortait du releve large la phrase
+        # sur le sens d'erreur du critere le serait aussi.
+        self.assertFalse(
+            any(c.endswith('charts_tarif.py::chart_lorenz_gini')
+                for c in implementations),
+            'chart_lorenz_gini calcule desormais un Gini : la prose de '
+            '`gini_lorenz` dit le contraire et doit etre relue')
+        self.assertTrue(
+            any(c.endswith('charts_tarif.py::chart_lorenz_gini')
+                for c in large),
+            'chart_lorenz_gini est sortie du releve large : le critere ne '
+            'sur-compte plus, donc la phrase sur son sens d erreur est fausse')
+        # ⚠️⚠️ LE SENS DE LA DELEGATION SE VERIFIE, il ne se declare pas : les
+        # deux fonctions de ce module doivent etre DANS le large et HORS des
+        # implementations. Sans cela, « elle delegue » resterait une phrase.
+        for nom in ('pipeline_tarifaire.py::gini_lorenz',
+                    'pipeline_tarifaire.py::_gini_sur'):
+            with self.subTest(delegation=nom):
+                self.assertTrue(any(c.endswith(nom) for c in large), nom)
+                self.assertFalse(
+                    any(c.endswith(nom) for c in implementations),
+                    f'{nom} calcule encore un Gini au lieu de deleguer au '
+                    f'socle')
+        # ⚠️ Et le socle, lui, DOIT en etre une : sinon la delegation pointe
+        # vers rien.
+        self.assertTrue(
+            any(c.endswith('core/validation_tarif.py::gini_lorenz')
+                for c in implementations),
+            "le Gini canonique du socle n'est pas une implementation : la "
+            "delegation de la direction ne mene nulle part")
+        print(f"    PC-5 {len(large)} noms comptes au large, dont "
+              f"{len(implementations)} implementations reelles — comme annonce")
 
 
 class TestC6LaGrillePorteToutLeTarif(unittest.TestCase):
