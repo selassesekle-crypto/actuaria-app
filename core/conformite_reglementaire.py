@@ -2631,6 +2631,37 @@ def meilleure_rejetee(vars_exclues) -> float | None:
     return min(mesurees) if mesurees else None
 
 
+#: Ce qu'on affiche à la place d'un chiffre qu'on n'a pas reçu.
+#: ⚠️ Il vit ICI, à côté de `NON_MESURE`, et il en DIFFÈRE : `NON_MESURE` dit
+#: qu'un calcul a eu lieu sans aboutir ; celui-ci dit qu'on n'a **rien reçu**.
+NON_TRANSMIS = 'non transmis'
+
+
+def phrase_qualite_non_transmise(nom_agent: str = 'A1') -> str:
+    """Ce qu'on écrit quand le résultat d'un agent n'atteint pas le rapport.
+
+    ⚠️⚠️ CONSTAT `A6.7`, MESURÉ LE 05/09/2026. L'onglet « Qualité des données »
+    du rapport d'équipe lisait ``r1.get('qualite', {})``. Quand `result_a1`
+    n'était pas transmis — **et aucun appelant ne le transmettait** — il
+    publiait, sur une ABSENCE :
+
+        Score global 0 · Nb lignes 0 · Taux complétude 0 %
+        Nb types d'anomalies 0   -> badge VERT
+        Alertes : Aucune         -> badge VERT
+
+    *Deux badges verts et quatre zéros, sur une donnée que personne n'avait
+    reçue.* Un lecteur y voyait un fichier parfait ; il n'y avait pas de
+    fichier du tout.
+    """
+    return (
+        f"QUALITE DU FICHIER NON TRANSMISE : le resultat de {nom_agent} n'a "
+        f"pas ete fourni a ce rapport. Les compteurs de cette section ne "
+        f"valent donc RIEN -- ils ne disent pas qu'aucune anomalie n'a ete "
+        f"trouvee, ils disent qu'aucune verification n'a ete LUE. Rebranchez "
+        f"`result_a1` sur l'appelant qui produit ce rapport."
+    )
+
+
 #: ⚠️⚠️ D'OÙ VIENT L'EXPOSITION D'UN CONTRAT TARIFÉ — les trois cas, nommés.
 #: Sans ce vocabulaire, `exposition = 1.0` se lisait « contrat annuel »,
 #: qu'il vienne du client, de l'appelant, ou de personne.

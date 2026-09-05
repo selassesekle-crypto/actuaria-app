@@ -431,6 +431,21 @@ def pipeline_agents(
         r6 = AgentA6Comparaison(**_a).run(
             result_a2=r2_cible, result_a3=r3, result_a4=r4,
             result_a5=r5 if r5.get("success") else None,
+            # ⚠️ LE MÊME CHAÎNON MANQUANT QUE `rapport_qualite` — constat
+            # `A6.7`. `A6.run` accepte `result_a1` depuis toujours et le
+            # relaie au rapport d'équipe ; **aucun appelant ne le passait**.
+            # L'onglet « Qualité des données (A1) » lisait donc `{}`.
+            #   ⚠️⚠️ ET CETTE LIGNE-CI EST INERTE AUJOURD'HUI, IL FAUT LE DIRE :
+            #   ce pipeline force `generer_rapport_equipe=False` (l. 464 et
+            #   suivantes), donc il ne produit AUCUN rapport d'équipe. Elle est
+            #   posée parce qu'elle est juste et gratuite — le jour où ce
+            #   drapeau passe à True, la qualité suivra au lieu de manquer.
+            #   *Le correctif qui MORD est ailleurs* : la déclaration dans
+            #   `rapport_equipe_tarif`, qui protège TOUTE surface recevant un
+            #   `result_a1` vide — y compris celles qu'on ne modifie pas ici.
+            #   ⚠️ ZÉRO EURO : mesuré par AST, `result_a1` n'est lu, dans tout
+            #   A6, QUE pour construire `_results_equipe`.
+            result_a1=r1,
             col_cible=cible, plan=plan, environnement=environnement,
             profil_valide_par=profil_valide_par,
             valide_par_actuaire_dl=valide_par_actuaire_dl,

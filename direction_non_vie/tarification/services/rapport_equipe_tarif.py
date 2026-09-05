@@ -28,6 +28,7 @@ from core.conformite_reglementaire import (
     avertissement_walk_forward, synthese_exclusions, synthese_alertes_experience,
     synthese_colonnes_plan_ecartees, synthese_exemptions_effet,
     synthese_modele_dl,
+    NON_TRANSMIS, phrase_qualite_non_transmise,
 )
 from core.elasticite import synthese_elasticite
 from core.qualite_donnees import (MARQUEUR_QUALITE_NON_EXECUTEE,
@@ -460,14 +461,34 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
                  "A1", audit_id, arrete)
         r = 7
         qualite = r1.get('qualite', {})
+        # ⚠️⚠️ UNE ABSENCE NE SE PUBLIE PAS EN VERT — constat `A6.7`. Sans
+        # `result_a1`, tout ce bloc lisait `{}` et affichait quatre zéros avec
+        # DEUX badges verts : « Nb types d'anomalies 0 ✓ » et « Alertes :
+        # Aucune ✓ ». *Un lecteur y voyait un fichier parfait ; il n'y avait
+        # pas de fichier.* Le mot remplace le nombre, exactement comme pour un
+        # Gini non mesuré.
+        _absente = not qualite
         _section(ws2, r, "▶ SCORE QUALITÉ"); r += 1
-        _kpi(ws2, r, "Score global", round(qualite.get('score_global', 0), 1),
-             statut=r1.get('statut_rag'), fmt=FMT_DEC4); r += 1
-        _kpi(ws2, r, "Nb lignes", qualite.get('nb_lignes', 0), fmt=FMT_NB); r += 1
-        _kpi(ws2, r, "Taux complétude", qualite.get('taux_completude', 0) / 100, fmt=FMT_PCT); r += 1
-        _kpi(ws2, r, "Nb types d'anomalies", qualite.get('nb_types_aberrants', 0),
-             statut="VERT" if qualite.get('nb_types_aberrants', 0) == 0 else "AMBRE",
-             fmt=FMT_NB); r += 1
+        if _absente:
+            _kpi(ws2, r, "Qualité du fichier",
+                 phrase_qualite_non_transmise(), statut="AMBRE",
+                 wrap=True); r += 1
+            for _nom in ("Score global", "Nb lignes", "Taux complétude",
+                         "Nb types d'anomalies"):
+                _kpi(ws2, r, _nom, NON_TRANSMIS, statut="AMBRE"); r += 1
+        else:
+            _kpi(ws2, r, "Score global",
+                 round(qualite.get('score_global', 0), 1),
+                 statut=r1.get('statut_rag'), fmt=FMT_DEC4); r += 1
+            _kpi(ws2, r, "Nb lignes", qualite.get('nb_lignes', 0),
+                 fmt=FMT_NB); r += 1
+            _kpi(ws2, r, "Taux complétude",
+                 qualite.get('taux_completude', 0) / 100, fmt=FMT_PCT); r += 1
+            _kpi(ws2, r, "Nb types d'anomalies",
+                 qualite.get('nb_types_aberrants', 0),
+                 statut=("VERT" if qualite.get('nb_types_aberrants', 0) == 0
+                         else "AMBRE"),
+                 fmt=FMT_NB); r += 1
         r += 1
         _section(ws2, r, "▶ ALERTES ABERRANTS"); r += 1
         for alerte in qualite.get('alertes_aberrants', []):
@@ -476,7 +497,10 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
             ws2.row_dimensions[r].height = 30
             r += 1
         if not qualite.get('alertes_aberrants'):
-            _kpi(ws2, r, "Alertes", "Aucune", statut="VERT"); r += 1
+            # ⚠️ « Aucune » n'est VERT que si quelqu'un a CHERCHÉ.
+            _kpi(ws2, r, "Alertes",
+                 NON_TRANSMIS if _absente else "Aucune",
+                 statut="AMBRE" if _absente else "VERT"); r += 1
 
         # ── Onglet 3 : Preprocessing (A2) ─────────────────────────────────────
         ws3 = wb.create_sheet("3-Preprocessing (A2)")
@@ -772,7 +796,19 @@ def export_html_equipe(results: Dict[str, Dict], branche: str = '',
 
         # Section 2 — Qualité données
         qualite = r1.get('qualite', {})
-        section_a1 = f"""
+        # ⚠️⚠️ MÊME CORRECTIF QUE L'EXCEL — constat `A6.7`. Quatre `0` sur une
+        # absence se lisent « fichier parfait ». *Le mot remplace le nombre.*
+        if not qualite:
+            section_a1 = (
+                '<div class="kpi-grid">'
+                + ''.join(f'<div class="kpi"><b>{_n}</b><br>{NON_TRANSMIS}'
+                          f'</div>'
+                          for _n in ('Score qualité', 'Nb lignes',
+                                     'Complétude', 'Anomalies'))
+                + '</div>'
+                + f'<p><b>{phrase_qualite_non_transmise()}</b></p>')
+        else:
+            section_a1 = f"""
         <div class="kpi-grid">
           <div class="kpi"><b>Score qualité</b><br>{qualite.get('score_global',0):.1f}/100</div>
           <div class="kpi"><b>Nb lignes</b><br>{qualite.get('nb_lignes',0):,}</div>
@@ -1080,10 +1116,19 @@ def export_word_equipe(results: Dict[str, Dict], branche: str = '',
         # §2 — Qualité données (A1)
         doc.add_heading("§2 — Qualité des Données (A1)", level=1).runs[0].font.color.rgb = NR
         qualite = r1.get('qualite', {})
-        doc.add_paragraph(f"Score qualité : {qualite.get('score_global',0):.1f}/100")
-        doc.add_paragraph(f"Nb lignes : {qualite.get('nb_lignes',0):,}")
-        doc.add_paragraph(f"Taux complétude : {qualite.get('taux_completude',0):.1f}%")
-        doc.add_paragraph(f"Types d'anomalies détectées : {qualite.get('nb_types_aberrants',0)}")
+        # ⚠️⚠️ TROISIÈME SURFACE, MÊME CORRECTIF — constat `A6.7`. Les trois
+        # rapports lisent le MÊME `r1` : n'en réparer que deux laisserait le
+        # Word affirmer « 0 anomalie » sur une absence.
+        if not qualite:
+            doc.add_paragraph(phrase_qualite_non_transmise())
+            for _nom in ("Score qualité", "Nb lignes", "Taux complétude",
+                         "Types d'anomalies détectées"):
+                doc.add_paragraph(f"{_nom} : {NON_TRANSMIS}")
+        else:
+            doc.add_paragraph(f"Score qualité : {qualite.get('score_global',0):.1f}/100")
+            doc.add_paragraph(f"Nb lignes : {qualite.get('nb_lignes',0):,}")
+            doc.add_paragraph(f"Taux complétude : {qualite.get('taux_completude',0):.1f}%")
+            doc.add_paragraph(f"Types d'anomalies détectées : {qualite.get('nb_types_aberrants',0)}")
         for alerte in qualite.get('alertes_aberrants', []):
             doc.add_paragraph(f"• {alerte}", style='List Bullet')
 
