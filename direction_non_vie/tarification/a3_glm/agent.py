@@ -1210,12 +1210,72 @@ class AgentA3GLM:
 
         metriques['relativites'] = relativites
 
+        # ── LE MODÈLE DE PRODUCTION — MÊME SPÉCIFICATION, 100 % DES DONNÉES ──
+        # ⚠️⚠️ ON VALIDE SUR 80/20, ON PRODUIT SUR 100 %. Jusqu'ici A3 publiait
+        # le modèle des 80 % : les coefficients qu'un actuaire lit — et qu'A6
+        # compare — étaient estimés en jetant un cinquième du portefeuille.
+        # *Le holdout sert à MESURER une performance, pas à amputer le modèle
+        # qu'on livre.*
+        #
+        # ⚠️ MÊME SPÉCIFICATION, ASSIETTE DIFFÉRENTE. On ne REFAIT PAS la
+        # sélection sur 100 % : elle a été validée sur un jeu que le modèle
+        # n'avait pas vu, et la refaire ici la priverait de cette garantie.
+        # `selection=False` avec les variables retenues, c'est exactement
+        # « ré-estimer les mêmes coefficients sur toutes les données ».
+        #
+        # ⚠️⚠️ ET LES MÉTRIQUES NE SUIVENT PAS. `gini`, `rmse_test`,
+        # `overfit_ratio` restent ceux du modèle de VALIDATION : les
+        # recalculer sur le modèle de production serait les mesurer sur des
+        # lignes qu'il a vues. *Deux modèles, deux assiettes — leurs chiffres
+        # ne se mélangent pas.*
+        #
+        # ⚠️ ET `modele` RESTE CELUI DE VALIDATION. Le CANN s'y ancre, A6 s'en
+        # sert : le substituer déplacerait des choses qu'aucune décision ne
+        # couvre. Le modèle de production s'AJOUTE.
+        modele_production, relativites_production = None, {}
+        try:
+            df_complet = pd.concat([df_train, df_test], ignore_index=True)
+            offset_complet = (
+                np.log(np.maximum(df_complet[col_expo], 1e-6))
+                if col_expo in df_complet.columns
+                else np.zeros(len(df_complet)))
+            modele_production = ajuster_glm_frequence(
+                df_complet, list(vars_actives), col_freq, offset_complet,
+                selection=False, journal=logger)['modele']
+            _p = modele_production.pvalues
+            _c = modele_production.conf_int()
+            for var in vars_actives:
+                if var in modele_production.params.index:
+                    _b = float(modele_production.params[var])
+                    relativites_production[var] = {
+                        'beta':       round(_b, 4),
+                        'relativite': round(float(np.exp(_b)), 4),
+                        'ic95_low':   round(float(np.exp(_c.loc[var, 0])), 4),
+                        'ic95_high':  round(float(np.exp(_c.loc[var, 1])), 4),
+                        'pvalue':     round(float(_p[var]), 4),
+                        'sens': 'aggravant' if _b > 0 else 'allegant',
+                    }
+        except Exception as e_prod:                          # noqa: BLE001
+            # ⚠️ Un ré-ajustement qui échoue ne casse PAS la calibration : le
+            # modèle de validation reste publié, et l'absence se DIT plutôt
+            # que de laisser croire à une égalité des deux assiettes.
+            logger.warning("Ré-ajustement de production échoué : %s", e_prod)
+
+        metriques['relativites_production'] = relativites_production
+        metriques['n_obs_validation'] = len(df_train)
+        metriques['n_obs_production'] = (
+            len(df_train) + len(df_test)
+            if modele_production is not None else None)
+
         return {
             'modele':      modele_final,
             'metriques':   metriques,
             'vars':        vars_actives,
             'pred_test':   pred_test,
             'relativites': relativites,
+            # ⚠️ Publié À CÔTÉ, jamais à la place : `modele` reste celui sur
+            # lequel les métriques de holdout ont été mesurées.
+            'modele_production': modele_production,
         }
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -1556,12 +1616,53 @@ class AgentA3GLM:
 
         metriques['relativites'] = relativites_gamma
 
+        # ── LE MODÈLE DE PRODUCTION — 100 % DES SINISTRÉS ───────────────────
+        # ⚠️ MÊME GESTE QUE POUR LA FRÉQUENCE, et pour la même raison : ne le
+        # faire que sur le Poisson créerait l'asymétrie entre voisins que ce
+        # chantier traque partout. L'assiette de la sévérité, ce sont les
+        # contrats SINISTRÉS — train ET test réunis.
+        # ⚠️ La famille reste celle du plan (`self._famille_severite_run`) :
+        # le ré-ajustement ne change ni la spécification ni la loi.
+        modele_production_g, relativites_production_g = None, {}
+        try:
+            df_sin_complet = pd.concat([df_sin_train, df_sin_test],
+                                       ignore_index=True)
+            y_sev_complet = pd.concat(
+                [pd.Series(y_sev_train).reset_index(drop=True),
+                 pd.Series(y_sev_test).reset_index(drop=True)],
+                ignore_index=True)
+            X_complet = (sm.add_constant(
+                df_sin_complet[vars_actives].fillna(0), has_constant='add')
+                if vars_actives else sm.add_constant(
+                pd.DataFrame({'i': np.ones(len(df_sin_complet))}),
+                has_constant='add'))
+            modele_production_g = ajuster_glm_cout(
+                X_complet, y_sev_complet, self._famille_severite_run)
+            for var in vars_actives:
+                if var in modele_production_g.params.index:
+                    _bg = float(modele_production_g.params[var])
+                    relativites_production_g[var] = {
+                        'beta':       round(_bg, 4),
+                        'relativite': round(float(np.exp(_bg)), 4),
+                        'sens': 'aggravant' if _bg > 0 else 'allegant',
+                    }
+        except Exception as e_pg:                            # noqa: BLE001
+            logger.warning("Ré-ajustement Gamma de production échoué : %s",
+                           e_pg)
+
+        metriques['relativites_production'] = relativites_production_g
+        metriques['n_obs_validation'] = len(df_sin_train)
+        metriques['n_obs_production'] = (
+            len(df_sin_train) + len(df_sin_test)
+            if modele_production_g is not None else None)
+
         return {
             'modele':      modele_final,
             'metriques':   metriques,
             'vars':        vars_actives,
             'pred_test':   pred_test,
             'relativites': relativites_gamma,
+            'modele_production': modele_production_g,
         }
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -1785,11 +1886,80 @@ class AgentA3GLM:
             pvalue_meilleure_rejetee=meilleure_rejetee(vars_exclues),
             vars_retenues=vars_actives)
 
+        # ── RELATIVITÉS DE VALIDATION — LE TWEEDIE N'EN PUBLIAIT AUCUNE ─────
+        # ⚠️⚠️ TROUVÉ PAR LE SCEAU DE CE LOT, et c'est un trou préexistant :
+        # Poisson et Gamma publient `metriques['relativites']`, **le Tweedie
+        # non**. Or c'est le GLM de la PRIME PURE — celui qu'A6 retient sur la
+        # cible `prime_pure`. *Un actuaire ne pouvait lire aucun de ses
+        # coefficients, sur le modèle qui porte le prix.*
+        #   Sans elles, les relativités de PRODUCTION ajoutées ci-dessous
+        #   n'auraient rien à quoi se comparer : les publier seules aurait
+        #   donné un jeu de coefficients sans son témoin.
+        relativites_tw = {}
+        try:
+            _pt0 = modele_final.pvalues
+            _ct0 = modele_final.conf_int()
+            for var in vars_actives:
+                if var in modele_final.params.index:
+                    _b0 = float(modele_final.params[var])
+                    relativites_tw[var] = {
+                        'beta':         round(_b0, 4),
+                        'relativite':   round(float(np.exp(_b0)), 4),
+                        'ic95_low':     round(float(np.exp(_ct0.loc[var, 0])), 4),
+                        'ic95_high':    round(float(np.exp(_ct0.loc[var, 1])), 4),
+                        'pvalue':       round(float(_pt0[var]), 4),
+                        'significatif': bool(float(_pt0[var]) <= SEUIL_PVALUE),
+                        'sens': 'aggravant' if _b0 > 0 else 'allegant',
+                    }
+        except Exception as e_rt:                            # noqa: BLE001
+            logger.warning("Calcul relativites Tweedie echoue : %s", e_rt)
+        metriques['relativites'] = relativites_tw
+
+        # ── LE MODÈLE DE PRODUCTION — 100 % DU PORTEFEUILLE ─────────────────
+        # ⚠️ TROISIÈME ET DERNIER MOTEUR, même geste : la symétrie n'est pas
+        # une élégance, c'est ce qui empêche qu'un lecteur croie les trois
+        # comparables quand un seul a été ré-ajusté.
+        # ⚠️ PAS D'OFFSET, ici non plus : la cible du Tweedie est déjà un taux
+        # annualisé — l'ajouter compterait l'exposition DEUX FOIS (docstring
+        # de ce calibrateur, et correctif `0d2b9c2`).
+        modele_production_t, relativites_production_t = None, {}
+        try:
+            df_complet_t = pd.concat([df_train, df_test], ignore_index=True)
+            X_complet_t = (sm.add_constant(
+                df_complet_t[vars_actives].fillna(0), has_constant='add')
+                if vars_actives else sm.add_constant(
+                pd.DataFrame({'i': np.ones(len(df_complet_t))}),
+                has_constant='add'))
+            modele_production_t = sm.GLM(
+                df_complet_t[col_target_tweedie], X_complet_t,
+                family=families.Tweedie(var_power=TWEEDIE_P,
+                                        link=families.links.Log()),
+            ).fit(maxiter=200, disp=False)
+            for var in vars_actives:
+                if var in modele_production_t.params.index:
+                    _bt = float(modele_production_t.params[var])
+                    relativites_production_t[var] = {
+                        'beta':       round(_bt, 4),
+                        'relativite': round(float(np.exp(_bt)), 4),
+                        'sens': 'aggravant' if _bt > 0 else 'allegant',
+                    }
+        except Exception as e_pt:                            # noqa: BLE001
+            logger.warning("Ré-ajustement Tweedie de production échoué : %s",
+                           e_pt)
+
+        metriques['relativites_production'] = relativites_production_t
+        metriques['n_obs_validation'] = len(df_train)
+        metriques['n_obs_production'] = (
+            len(df_train) + len(df_test)
+            if modele_production_t is not None else None)
+
         return {
             'modele':    modele_final,
             'metriques': metriques,
             'vars':      vars_actives,
             'pred_test': pred_test,
+            'relativites': relativites_tw,
+            'modele_production': modele_production_t,
         }
 
     # ══════════════════════════════════════════════════════════════════════════
