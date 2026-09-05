@@ -111,25 +111,82 @@ def _s(v) -> str:
         return '—'
     return re.sub(r'\s+', ' ', str(v)).strip() or '—'
 
+#: Un agent a tourné mais n'a prononcé aucun statut. ⚠️ CE N'EST PAS UN RAG :
+#: c'est l'aveu qu'il n'y en a pas. Le publier vaut mieux que d'en inventer un.
+STATUT_NON_DETERMINE = 'NON DETERMINE'
+
+#: L'agent n'a pas été fourni au rapport — il n'a pas tourné. Différent de
+#: « il a tourné et échoué », et la confusion des deux est tout ce lot.
+STATUT_NON_FOURNI = 'NON FOURNI'
+
+
 def _statut_global(statuts: List[str]) -> str:
-    """Statut consolidé : ROUGE si au moins 1 ROUGE, AMBRE si au moins 1 AMBRE, sinon VERT."""
-    statuts_up = [s.upper() for s in statuts if s]
-    if 'ROUGE' in statuts_up:
+    """Statut consolidé des agents : ROUGE dès qu'un l'est.
+
+    ⚠️⚠️ DEUX DÉFAUTS MESURÉS LE 05/09/2026, ET LES DEUX ALLAIENT DANS LE
+    SENS RASSURANT — celui qui ne se remarque pas.
+
+      · cinq agents VERT et un SIXIÈME EXÉCUTÉ PUIS ÉCHOUÉ EN ROUGE
+        donnaient **VERT**. Le ROUGE n'atteignait jamais cette fonction :
+        `_collecter_statuts` filtrait sur `success`, donc l'agent en échec
+        disparaissait de la liste — et du tableau par agent, sans même un
+        « N/A ». Le rapport qui part au commissaire aux comptes disait que
+        tout allait bien pendant qu'un agent avait planté.
+      · les SIX agents en échec donnaient **AMBRE**, par le `return 'AMBRE'`
+        de la liste vide. Un rapport où rien n'a tourné n'est pas « à
+        surveiller » : il n'a pas de statut.
+
+    ⚠️ « NON FOURNI » ne compte pas : un agent qu'on n'a pas lancé (le Deep
+    Learning est facultatif) n'est pas une anomalie. « NON DÉTERMINÉ », si :
+    un agent qui a tourné sans se prononcer PLAFONNE le consolidé à AMBRE —
+    on ne certifie pas VERT sur un silence.
+    """
+    vus = [s.upper() for s in statuts if s]
+    connus = [s for s in vus if s != STATUT_NON_FOURNI]
+    if not connus:
+        return STATUT_NON_DETERMINE
+    if 'ROUGE' in connus:
         return 'ROUGE'
-    if 'AMBRE' in statuts_up:
+    if 'AMBRE' in connus or STATUT_NON_DETERMINE in connus:
         return 'AMBRE'
-    if statuts_up:
-        return 'VERT'
-    return 'AMBRE'
+    return 'VERT'
 
 
 def _collecter_statuts(results: Dict[str, Dict]) -> Dict[str, str]:
-    """Extrait le statut_rag de chaque agent présent dans results."""
-    return {
-        agent: r.get('statut_rag', 'N/A')
-        for agent, r in results.items()
-        if r and r.get('success')
-    }
+    """Le statut de CHAQUE agent du rapport — y compris ceux qui ont échoué.
+
+    ⚠️⚠️ ELLE FILTRAIT SUR `success`, ET C'ÉTAIT LE DÉFAUT. Un agent exécuté
+    puis en échec sortait de la table : ni son ROUGE dans le consolidé, ni
+    sa ligne dans le tableau par agent. *Un échec qui ne laisse aucune trace
+    dans le livrable est indiscernable d'un succès.*
+
+    Trois états, et ils ne se confondent plus :
+      · absent / vide  → « NON FOURNI »    (l'agent n'a pas tourné)
+      · statut publié  → ce statut         (VERT / AMBRE / ROUGE)
+      · aucun statut   → « NON DETERMINE » (il a tourné, il n'a rien dit)
+
+    ⚠️⚠️ ET UN AGENT EN ÉCHEC NE PEUT PAS CERTIFIER VERT. Le cas existe dans
+    le dépôt — la fixture de `test_c6_syntheses` porte
+    ``{'success': False, 'statut_rag': 'VERT'}`` — et il est contradictoire :
+    un agent qui a planté n'a pas produit de verdict auquel se fier. Prendre
+    sa déclaration au mot rendrait le correctif de ce lot inutile dans le
+    seul cas où il compte. L'échec l'emporte, et le statut devient « NON
+    DETERMINE » — ce qui plafonne le consolidé à AMBRE.
+    *Trouvé par une fixture écrite pour une tout autre raison.*
+    """
+    table: dict[str, str] = {}
+    for agent, r in results.items():
+        if not r:
+            table[agent] = STATUT_NON_FOURNI
+            continue
+        statut = str(r.get('statut_rag') or '').strip().upper()
+        # Deux raisons distinctes, une seule conclusion : cet agent n'a pas
+        # produit de verdict auquel se fier — il s'est tu, ou il a certifié
+        # VERT après avoir échoué.
+        if not statut or (statut == 'VERT' and not r.get('success')):
+            statut = STATUT_NON_DETERMINE
+        table[agent] = statut
+    return table
 
 
 def _md_to_html_light(txt: str) -> str:
