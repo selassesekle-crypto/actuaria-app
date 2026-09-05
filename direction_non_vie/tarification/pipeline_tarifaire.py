@@ -11,11 +11,14 @@ Chaîne :
     GLM fréquence (Poisson, offset log-exposition)
     GLM coût moyen  — FAMILLE DÉCLARÉE DANS LE PLAN (plan.famille_severite)
     écrêtement des graves + coefficient d'équilibre (étape 6, INV-8)
-    → TarifNonVie.tarifer(contrat, exposition=…)   → reproduit le portefeuille (INV-7)
-      ⚠️ SOUS CONDITION, ET ELLE EST DANS LA SIGNATURE : sans `exposition=`,
-      `tarifer()` retient UN AN (`EXPO_ANNUELLE`) et les deux chemins donnent
-      deux prix. Mesuré : 299 contrats sur 300 divergent, écart médian
-      +39,90 EUR. Voir `predire_portefeuille` et `test_deux_chemins_du_prix`.
+    → TarifNonVie.tarifer(contrat)                 → reproduit le portefeuille (INV-7)
+      ⚠️ VRAI DEPUIS LE 05/09/2026 SEULEMENT, ET C'EST UN CHANGEMENT DE PRIX.
+      `tarifer()` retenait UN AN dès que l'appelant se taisait, **même quand
+      le contrat déclarait sa durée** : 299 contrats sur 300 divergeaient du
+      chemin vectoriel, écart médian +39,90 EUR. Le silence de l'appelant veut
+      désormais dire « prends l'exposition du contrat ». Un an n'est supposé
+      que si PERSONNE ne la déclare — et cela se dit.
+      Voir `predire_portefeuille` et `test_deux_chemins_du_prix`.
 
 Rien ici ne « sait » ce qu'est une voiture ou un chantier : tout vient du plan.
 """
@@ -117,35 +120,33 @@ class TarifNonVie:
             self.glm_frequence.predict(Xc, offset=np.zeros(len(Xc))), dtype=float)
 
     def predire_portefeuille(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Prédictions vectorisées sur un portefeuille — même CALCUL que
-        `tarifer()`, mais **pas la même exposition** quand l'appelant se tait.
+        """Prédictions vectorisées sur un portefeuille — **le même prix** que
+        `tarifer()` sur le même contrat, depuis le 05/09/2026.
 
-        ⚠️⚠️ LA PHRASE DISAIT « MÊME CHEMIN QUE `tarifer()` », ET C'ÉTAIT FAUX
-        DE MOITIÉ — mesuré le 05/09/2026. Ici l'exposition vient de la COLONNE
-        du portefeuille (`df[plan.exposition]`) ; dans `tarifer()`, si
-        l'appelant ne passe rien, c'est `EXPO_ANNUELLE = 1,0` qui s'applique.
-        Sur 300 contrats de `auto` : **299 divergent de plus d'un centime**,
-        écart médian **+39,90 EUR**, maximum **402,43 EUR**, ratio médian
-        **1,1270**. Avec `exposition=` fourni, l'écart maximum retombe à
-        **0,004953 EUR** — l'arrondi au centime, rien de plus.
+        ⚠️⚠️ CE N'ÉTAIT PAS VRAI, ET LA PHRASE L'AFFIRMAIT QUAND MÊME. Elle
+        disait « MÊME chemin que `tarifer()` ». Mesuré : ici l'exposition vient
+        de la COLONNE du portefeuille (`df[plan.exposition]`) ; dans
+        `tarifer()`, l'appelant silencieux obtenait `EXPO_ANNUELLE = 1,0`
+        **même quand le contrat déclarait sa durée**. Sur 300 contrats de
+        `auto` : **299 divergeaient de plus d'un centime**, écart médian
+        **+39,90 EUR**, maximum **402,43 EUR**.
 
-        ⚠️ **ET AUCUN ORACLE N'EXERÇAIT LE CAS QUI DIVERGE.** `INV-7a` compare
-        le chemin vectoriel À LUI-MÊME (un contrat contre le portefeuille) ;
-        `INV-7b` compare bien la paire, mais **en passant
-        `exposition=float(row["exposition"])`** — donc dans le seul cas où
-        elle s'accorde. *Un oracle qui ne traverse pas le cas ne le couvre
-        pas.* `test_deux_chemins_du_prix` ferme ce trou.
+        ⚠️ **ET AUCUN ORACLE N'EXERÇAIT LE CAS QUI DIVERGEAIT.** `INV-7a`
+        compare le chemin vectoriel À LUI-MÊME ; `INV-7b` compare bien la
+        paire, mais **en passant `exposition=float(row["exposition"])`** —
+        donc dans le seul cas où elle s'accordait. *Un oracle qui ne traverse
+        pas le cas ne le couvre pas.* `test_deux_chemins_du_prix` ferme ce
+        trou, et `DC-2` exige désormais la COÏNCIDENCE.
 
-        ⚠️⚠️ ET L'ÉCART N'EST PAS UNE SIMPLE MISE À L'ÉCHELLE DE DURÉE. `a2`
-        dérive `kilometrage_annuel / max(exposition, 0,01)`, qui est un
-        PRÉDICTEUR : sur `auto`, le rapport réel (1,1538) s'écarte du rapport
-        de durée (1,1420) — **jusqu'à 128,11 EUR sur un contrat**. Sur les
-        plans sans facteur dérivé (`mrh`, `rcpro`, `flotte_automobile`),
-        l'écart est **exactement** la durée.
-
-        ⚠️ Ce module ne DÉCIDE pas laquelle des deux expositions doit primer :
-        c'est une question de produit, rendue à l'actuaire signataire avec ses
-        chiffres. *On rend d'abord visible ; on décide ensuite.*
+        ⚠️⚠️ IL RESTE UN CAS OÙ LES DEUX DIFFÈRENT, ET IL EST DÉCLARÉ : quand
+        le contrat ne porte AUCUNE exposition, `tarifer()` en suppose une d'un
+        an et le DIT. Cet écart-là n'est pas une simple mise à l'échelle de
+        durée : `a2` dérive `kilometrage_annuel / max(exposition, 0,01)`, un
+        PRÉDICTEUR — sur `auto`, le prix supposé ne se corrige pas en le
+        multipliant par la durée réelle (rapport réel 1,1538 contre 1,1420
+        pour la durée seule, **jusqu'à 128,11 EUR**). Sur les plans sans
+        facteur dérivé (`mrh`, `rcpro`, `flotte_automobile`), il s'y corrige
+        **exactement**.
 
         ⚠️⚠️ CONSTAT `pipeline/C7` — LA PRÉCISION ANNONCÉE N'ÉTAIT PAS
         OBSERVABLE SUR LA SORTIE DE `tarifer()`. Cette phrase promettait « que
@@ -161,11 +162,15 @@ class TarifNonVie:
         compare le chemin vectoriel à lui-même ; l'écart mesuré entre
         `tarifer()` et ce chemin est **0,0036 €** sur 6 contrats — l'arrondi au
         centime, rien de plus.
-        ⚠️ **ET CE 0,0036 € VAUT SOUS LA MÊME CONDITION QUE TOUT CE QUI
-        PRÉCÈDE** : il est mesuré avec `exposition=` FOURNI. Sans le
-        paramètre, l'écart n'est plus un arrondi — il est de +39,90 € en
-        médiane. *Le même chiffre, relu après que le cas non couvert a été
-        trouvé, avait besoin de sa condition.*
+        ⚠️ **ET CE 0,0036 € A CHANGÉ DE PORTÉE DEUX FOIS EN UN JOUR** — il est
+        relu à chaque fois, plutôt que laissé derrière. Il valait pour un
+        appelant qui FOURNIT l'exposition ; l'appelant silencieux, lui,
+        obtenait +39,90 € d'écart médian. Depuis le cas (a), **il vaut pour
+        les deux** : le silence prend la durée du contrat. Il ne cesse de
+        valoir que dans le cas (b) — aucune durée nulle part — où l'écart
+        n'est plus un arrondi mais une hypothèse, et elle est déclarée.
+        *Un chiffre publié se relit chaque fois que le comportement qu'il
+        décrit change.*
 
         ⚠️ *L'oracle était juste ; c'est la phrase qui promettait au-delà de ce
         qu'elle pouvait montrer.* (INV-7)

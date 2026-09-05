@@ -78,22 +78,64 @@ class TestLaPrimitive(unittest.TestCase):
         self.assertIn('0.5', phrase)
         self.assertIn('2', phrase, 'le rapport des deux primes manque')
 
-    def test_EX4_une_exposition_de_contrat_IGNOREE_est_declaree(self):
-        """⚠️⚠️ LE CAS LE PLUS COURANT ET LE PLUS SILENCIEUX : l'appelant ne
-        passe rien, le contrat declare une duree, et c'est quand meme UN AN
-        qui s'applique."""
-        valeur, source, phrase = source_exposition(0.5, None)
-        self.assertEqual(valeur, EXPO_ANNUELLE)
-        self.assertEqual(source, EXPO_SUPPOSEE)
-        self.assertIn('IGNOREE', phrase)
-        self.assertIn('ANNEE ENTIERE', phrase)
+    def test_EX4_CAS_A_le_contrat_declare_donc_on_le_PREND(self):
+        """⚠️⚠️ LE CONTRAT CHANGE LE 05/09/2026, ET C'EST UN PRIX.
+
+        L'appelant se tait, le contrat declare une duree : le silence veut
+        desormais dire << prends celle du contrat >>, jamais << un an >>.
+        L'ancien comportement remplacait **une valeur qu'on a** par un
+        litteral -- le motif que ce chantier ferme partout ailleurs.
+
+        ⚠️ ET IL N'Y A RIEN A SIGNALER : aucune hypothese n'a ete faite.
+        *Une phrase qui s'affiche toujours ne se lit plus.*
+        """
+        for declaree in (0.5, 0.25, 0.75, 1.0):
+            with self.subTest(exposition=declaree):
+                valeur, source, phrase = source_exposition(declaree, None)
+                self.assertEqual(valeur, declaree)
+                self.assertEqual(source, EXPO_DU_CONTRAT)
+                self.assertIsNone(
+                    phrase,
+                    'une exposition PRISE au contrat ne suppose rien : elle '
+                    'n a pas a se declarer comme une hypothese')
+
+    def test_EX4b_CAS_A_aucune_ANNEE_n_est_supposee_a_la_place(self):
+        """Le second sens, et c'est lui qui prouve le changement : la valeur
+        retenue n'est plus jamais `EXPO_ANNUELLE` quand le contrat parle."""
+        for declaree in (0.1, 0.5, 0.9, 2.0):
+            with self.subTest(exposition=declaree):
+                valeur, source, _ = source_exposition(declaree, None)
+                self.assertNotEqual(
+                    (valeur, source), (EXPO_ANNUELLE, EXPO_SUPPOSEE),
+                    f'le contrat declare {declaree} et le systeme suppose '
+                    f'quand meme une annee : le cas (a) est rouvert')
+
+    def test_EX4c_CAS_B_une_duree_NULLE_ou_NEGATIVE_n_est_pas_une_duree(self):
+        """⚠️⚠️ LE CAS DEGENERE QUE LE CAS (a) A FAIT APPARAITRE. Tant que le
+        silence valait << un an >>, un `exposition: 0` declare au contrat
+        etait remplace par 1,0 sans consequence visible. Depuis que le contrat
+        est PRIS, le meme zero produirait **une prime nulle publiee comme un
+        prix**. *Changer qui decide d'une valeur change ce qu'une valeur
+        absurde coute.*"""
+        for absurde in (0, 0.0, -0.5, -1):
+            with self.subTest(exposition=absurde):
+                valeur, source, phrase = source_exposition(absurde, None)
+                self.assertEqual(valeur, EXPO_ANNUELLE)
+                self.assertEqual(source, EXPO_SUPPOSEE)
+                self.assertIn('PAS UTILISABLE', phrase)
+                self.assertIn('NON FOURNIE', phrase)
 
     def test_EX5_aucune_source_donne_un_an_ET_LE_DIT(self):
+        """⚠️ CAS (b) — la seule hypothese qui reste, et elle est nommee."""
         valeur, source, phrase = source_exposition(None, None)
         self.assertEqual(valeur, EXPO_ANNUELLE)
         self.assertEqual(source, EXPO_SUPPOSEE)
         self.assertIn('NON FOURNIE', phrase)
         self.assertIn('hypothese', phrase.lower())
+        # ⚠️ Et elle DIT que l'hypothese ne porte pas que sur la duree : sur un
+        # plan qui derive un facteur de l'exposition, le prix ne se corrige
+        # pas en le multipliant par la duree reelle.
+        self.assertIn('profil de risque', phrase)
 
     def test_EX6_rien_a_signaler_rend_None(self):
         """*Une phrase qui s'affiche toujours ne se lit plus.*"""
@@ -161,18 +203,33 @@ class TestTariferLaPublie(unittest.TestCase):
                 self.assertIn('exposition_source', r)
                 self.assertIn('exposition_hypothese', r)
 
-    def test_EX7_AUCUN_PRIX_NE_BOUGE(self):
-        """⚠️⚠️ LA CONDITION (4), SUR LA SURFACE QUE CE LOT TOUCHE. Les quatre
-        cas rendent exactement ce que le code rendait avant -- mesure sur HEAD
-        le 05/09/2026. *Rendre visible n'est pas rendre different.*"""
+    def test_EX7_LE_PRIX_DE_CHAQUE_CAS_EST_CELUI_DE_SA_SOURCE(self):
+        """⚠️⚠️ CE TEST A CHANGE DE CONTRAT LE 05/09/2026, ET IL LE DIT.
+
+        Il s'appelait `EX7_AUCUN_PRIX_NE_BOUGE` et figeait le comportement
+        d'alors : << contrat 0,5, rien passe >> valait **une annee entiere**.
+        Le cas (a) etant arbitre, ce meme appel rend desormais la duree
+        DECLAREE -- c'est le changement, pas un accident.
+
+        ⚠️ Ce qui NE bouge pas, et qui est mesure ailleurs : **aucun prix de
+        PRODUCTION**. Le seul appelant de `tarifer()` du depot
+        (`demos/fremtpl2_demo.py:171`, releve par AST) passe deja
+        `exposition=`, donc il est dans le cas (c), inchange. Voir `PA-*`.
+
+        *Un test qui garde son ancien nom apres un changement de contrat fait
+        croire que rien n'a change.*
+        """
         sans_expo = {k: v for k, v in self.contrat.items() if k != self.col}
         cas = (
+            # (a) le contrat declare, l'appelant se tait -> LA DUREE DECLAREE
             ('contrat 0,5 · rien passe', {**self.contrat, self.col: 0.5}, {},
-             _PRIME_UN_AN),
+             _PRIME_SIX_MOIS),
+            # (c) l'appelant prime, dans les deux sens -- INCHANGE
             ('contrat 0,5 · parametre 1,0', {**self.contrat, self.col: 0.5},
              {'exposition': 1.0}, _PRIME_UN_AN),
             ('contrat 0,5 · parametre 0,5', {**self.contrat, self.col: 0.5},
              {'exposition': 0.5}, _PRIME_SIX_MOIS),
+            # (b) personne ne declare -> une annee, et c'est DIT
             ('aucune source', sans_expo, {}, _PRIME_UN_AN),
         )
         for nom, contrat, kwargs, attendu in cas:
@@ -180,9 +237,22 @@ class TestTariferLaPublie(unittest.TestCase):
                 r = self.tarif.tarifer(contrat, **kwargs)
                 self.assertAlmostEqual(
                     r['prime_pure'], attendu, places=2,
-                    msg=f'{nom} : le prix a BOUGE. Ce lot ne devait rien '
-                        f'deplacer -- soit le modele a change, soit la '
-                        f'source de l exposition a change de regle.')
+                    msg=f'{nom} : le prix n est pas celui de sa source.')
+
+    def test_EX7b_le_cas_b_est_le_SEUL_qui_suppose_encore_une_annee(self):
+        """⚠️ L'asymetrie qui prouve que (a) et (b) sont bien distincts : le
+        MEME contrat, avec et sans sa colonne d'exposition."""
+        sans_expo = {k: v for k, v in self.contrat.items() if k != self.col}
+        avec = self.tarif.tarifer({**self.contrat, self.col: 0.5})
+        sans = self.tarif.tarifer(sans_expo)
+        self.assertEqual(avec['exposition_source'], EXPO_DU_CONTRAT)
+        self.assertIsNone(avec['exposition_hypothese'])
+        self.assertEqual(sans['exposition_source'], EXPO_SUPPOSEE)
+        self.assertIsNotNone(
+            sans['exposition_hypothese'],
+            "le cas (b) suppose une annee SANS le dire : c'est la garantie "
+            "que Selasse a explicitement demandee")
+        self.assertGreater(sans['prime_pure'], avec['prime_pure'])
 
     def test_EX3b_le_conflit_atteint_le_RESULTAT_de_tarifer(self):
         r = self.tarif.tarifer({**self.contrat, self.col: 0.5},
@@ -190,10 +260,24 @@ class TestTariferLaPublie(unittest.TestCase):
         self.assertEqual(r['exposition_source'], EXPO_DE_L_APPELANT)
         self.assertIn('DIFFERENT', r['exposition_hypothese'])
 
-    def test_EX4b_le_cas_silencieux_atteint_le_RESULTAT(self):
+    def test_EX4d_CAS_A_la_duree_du_contrat_atteint_le_RESULTAT(self):
+        """⚠️ Il verifiait que le cas silencieux publiait << IGNOREE >>. Cette
+        branche n'existe plus : le contrat est PRIS."""
         r = self.tarif.tarifer({**self.contrat, self.col: 0.5})
+        self.assertEqual(r['exposition_retenue'], 0.5)
+        self.assertEqual(r['exposition_source'], EXPO_DU_CONTRAT)
+        self.assertIsNone(r['exposition_hypothese'])
+
+    def test_EX4e_CAS_B_une_duree_ABSURDE_ne_produit_pas_un_prix_NUL(self):
+        """⚠️⚠️ Le garde-fou apparu avec le cas (a) : sans lui,
+        `exposition: 0` publierait une prime de zero euro comme un prix."""
+        r = self.tarif.tarifer({**self.contrat, self.col: 0})
+        self.assertTrue(r['success'])
         self.assertEqual(r['exposition_retenue'], EXPO_ANNUELLE)
-        self.assertIn('IGNOREE', r['exposition_hypothese'])
+        self.assertEqual(r['exposition_source'], EXPO_SUPPOSEE)
+        self.assertIn('PAS UTILISABLE', r['exposition_hypothese'])
+        self.assertGreater(r['prime_pure'], 0.0,
+                           'une exposition nulle a produit un prix NUL')
 
     def test_EX6b_un_contrat_annuel_sans_parametre_ne_signale_RIEN(self):
         r = self.tarif.tarifer({**self.contrat, self.col: 1.0})

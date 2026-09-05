@@ -2739,34 +2739,67 @@ def source_exposition(expo_contrat, expo_appelant):
             tarifer(contrat, exposition=0.5) ->    792,68 EUR
             rapport 2,0807 — et `success: True` DANS LES DEUX CAS.
 
-    ⚠️⚠️ CETTE FONCTION NE CHANGE AUCUN PRIX, ET C'EST DÉLIBÉRÉ. L'appelant
-    continue de primer quand il fournit une valeur : basculer sur celle du
-    contrat déplacerait le prix, et **cette décision n'est pas prise**. Ce qui
-    change, c'est que le conflit est DIT. *On rend d'abord visible ; on décide
-    ensuite.*
+    ⚠️⚠️ ET LE SILENCE DE L'APPELANT NE VEUT PLUS DIRE « UN AN » — ARBITRÉ LE
+    05/09/2026, ET C'EST UN CHANGEMENT DE PRIX ASSUMÉ. Trois cas, et un seul
+    suppose quoi que ce soit :
 
-    ⚠️⚠️ ET LA PHRASE NE PROMET PLUS UN RAPPORT EXACT — MESURÉ LE 05/09/2026.
-    Elle annonçait « rapport 1/exposition », c'est-à-dire une pure mise à
-    l'échelle de durée. **Faux dès que le plan dérive un facteur de
-    l'exposition.** `a2` construit `kilometrage_annuel / max(exposition, 0,01)`,
-    qui est un PRÉDICTEUR du GLM : poser l'exposition à 1,0 ne change donc pas
-    seulement la durée facturée, cela change **le profil de risque présenté au
-    modèle**. Mesuré sur 150 contrats par plan :
+      (a) l'appelant se tait, **le contrat déclare** → on prend CELLE DU
+          CONTRAT (`EXPO_DU_CONTRAT`), et il n'y a **rien à signaler** :
+          aucune hypothèse n'a été faite.
+      (b) l'appelant se tait, **le contrat ne déclare rien** → un an, et
+          **on le DIT** (`EXPO_SUPPOSEE` + phrase). *Ne jamais bloquer,
+          continuer avec une valeur raisonnable, toujours le dire.*
+      (c) l'appelant fournit → il prime, et le conflit est dit s'il y en a un.
 
-        `auto`  (kilométrage dérivé)  : annoncé 1,1420, réel **1,1538**
-                                        — écart médian 0,90 %, **jusqu'à
-                                        128,11 EUR sur un contrat**
-        `mrh`, `rcpro`, `flotte_automobile` (aucun facteur dérivé)
-                                      : annoncé = réel, écart **0,00 EUR**
+    ⚠️⚠️ POURQUOI (a) A CHANGÉ, ET CE N'EST PAS UN CHOIX DE CONFORT. L'ancien
+    code rendait `EXPO_ANNUELLE` **même quand le contrat déclarait sa durée** :
+    ce n'était pas « aucune valeur connue, on suppose raisonnablement », c'était
+    **une valeur qu'on a, remplacée par un littéral** — le motif exact que ce
+    chantier ferme partout ailleurs (le `999` d'A6, le `gini = 0` d'A4,
+    l'`overfit 1.0` d'A5, le `0,72` d'A8). Une phrase honnête posée à côté
+    l'aurait rendu **durable** au lieu de le corriger.
 
-    *Une phrase qui LIMITE est sûre ; une phrase qui AFFIRME au-delà de ce
-    qu'elle tient est une dette.* Elle publie donc l'effet de DURÉE en le
-    nommant comme tel, et dit ce qu'elle ne couvre pas.
+    Ce que l'ancien comportement produisait, mesuré :
+
+        même contrat, `exposition` déclarée à 0,5
+            tarifer(contrat)                 ->  1 649,30 EUR
+            tarifer(contrat, exposition=0.5) ->    792,68 EUR
+            rapport 2,0807 — et `success: True` DANS LES DEUX CAS.
+
+        et sur les 18 plans, un appelant qui omettait le paramètre payait
+        **+16,65 % en médiane** (de +15,10 % à +18,05 %) — 28 315 481 EUR
+        contre 23 609 575 EUR, soit **4 705 907 EUR** de trop.
+
+    ⚠️ ET L'EFFET N'ÉTAIT PAS QU'UNE MISE À L'ÉCHELLE DE DURÉE. `a2` construit
+    `kilometrage_annuel / max(exposition, 0,01)`, un PRÉDICTEUR du GLM : poser
+    l'exposition à 1,0 changeait aussi **le profil de risque présenté au
+    modèle**. Sur `auto`, le rapport réel (1,1538) s'écartait du rapport de
+    durée (1,1420) — jusqu'à **128,11 EUR sur un contrat**. C'est pourquoi le
+    cas (b) le DIT : sa phrase ne promet aucun rapport exact.
+
+    ⚠️ AUCUN PRIX DE PRODUCTION NE BOUGE, ET C'EST MESURÉ, PAS ESPÉRÉ : le
+    seul appelant de `tarifer()` du dépôt (`demos/fremtpl2_demo.py:171`, relevé
+    par AST) passe déjà `exposition=`, donc il est dans le cas (c).
     """
     fourni = expo_appelant is not None
-    lisible = isinstance(expo_contrat, (int, float)) and not isinstance(
+    #: ⚠️ `True` vaut 1 en Python : sans le contrôle de type, un booléen
+    #: passerait pour une durée d'un an.
+    numerique = isinstance(expo_contrat, (int, float)) and not isinstance(
         expo_contrat, bool)
-    valeur = expo_appelant if fourni else EXPO_ANNUELLE
+    #: ⚠️⚠️ ET UNE DURÉE NULLE OU NÉGATIVE N'EST PAS UNE DURÉE. Ce contrôle
+    #: est APPARU AVEC LE CAS (a), et il fallait le voir : tant que le silence
+    #: valait « un an », un `exposition: 0` déclaré au contrat était remplacé
+    #: par 1,0 sans conséquence visible. Depuis que le contrat est PRIS, le
+    #: même zéro produirait une **prime nulle publiée comme un prix**.
+    #: *Changer qui décide d'une valeur change ce qu'une valeur absurde
+    #: coûte.* Même famille que le constat `a1/C4`.
+    lisible = numerique and float(expo_contrat) > 0.0
+    # ⚠️ LA VALEUR SUIT LA SOURCE, elle n'est plus posée avant elle. L'ancienne
+    # ligne `valeur = expo_appelant if fourni else EXPO_ANNUELLE` décidait du
+    # littéral AVANT d'avoir regardé le contrat : c'est là que l'information
+    # se perdait.
+    valeur = expo_appelant if fourni else (
+        float(expo_contrat) if lisible else EXPO_ANNUELLE)
     if fourni and lisible and float(expo_contrat) != float(expo_appelant):
         # ⚠️ DEUX SOURCES QUI DIFFÈRENT. On ne choisit pas laquelle est la
         # bonne — on dit qu'il y en a deux, et laquelle a servi.
@@ -2781,29 +2814,30 @@ def source_exposition(expo_contrat, expo_appelant):
     if fourni:
         return (valeur, EXPO_DE_L_APPELANT, None)
     if lisible:
-        # ⚠️⚠️ LE CAS LE PLUS COURANT, ET LE PLUS SILENCIEUX. L'appelant n'a
-        # rien passé, le contrat porte une durée — et c'est quand même 1,0 qui
-        # s'applique, parce que le défaut du paramètre écrase.
-        if float(expo_contrat) != EXPO_ANNUELLE:
-            return (valeur, EXPO_SUPPOSEE, (
-                f"EXPOSITION DU CONTRAT IGNOREE : le contrat declare "
-                f"{float(expo_contrat):g}, mais aucune exposition n'a ete "
-                f"fournie a `tarifer()` et le defaut d'UN AN s'applique. La "
-                f"prime ci-dessus couvre donc une ANNEE ENTIERE, pas la duree "
-                f"declaree. L'effet de DUREE seul vaut "
-                f"{EXPO_ANNUELLE / float(expo_contrat):.4g} — mais ce n'est "
-                f"PAS forcement le rapport total : si le plan derive un "
-                f"facteur de l'exposition (un kilometrage annualise, par "
-                f"exemple), l'hypothese d'un an entre AUSSI dans le profil de "
-                f"risque presente au modele, et le rapport reel s'en ecarte. "
-                f"Passez `exposition=` explicitement pour tarifer la duree "
-                f"reelle."))
+        # ⚠️⚠️ CAS (a) — LE CONTRAT DECLARE, L'APPELANT SE TAIT. Le silence de
+        # l'appelant veut dire « prends ce que le contrat declare », jamais
+        # « un an ». Aucune hypothese n'est faite, donc il n'y a RIEN a
+        # signaler : *une phrase qui s'affiche toujours ne se lit plus.*
         return (valeur, EXPO_DU_CONTRAT, None)
+    # ⚠️⚠️ CAS (b) — PERSONNE NE DECLARE RIEN. On ne bloque pas, on continue
+    # avec une valeur raisonnable, ET ON LE DIT. C'est la seule hypothese que
+    # cette fonction fasse encore, et elle est nommee.
+    inutilisable = (
+        f"Le contrat porte bien une valeur d'exposition ({expo_contrat!r}), "
+        f"mais elle n'est PAS UTILISABLE comme duree — une duree se lit en "
+        f"nombre strictement positif. Elle n'a donc pas ete retenue. "
+        if numerique else
+        "Ni le contrat ni l'appelant ne declarent d'exposition. ")
     return (valeur, EXPO_SUPPOSEE, (
-        f"EXPOSITION NON FOURNIE : ni le contrat ni l'appelant ne la "
-        f"declarent. Le prix ci-dessus suppose UNE ANNEE ENTIERE "
-        f"({EXPO_ANNUELLE:g}). Ce n'est pas une mesure, c'est une hypothese — "
-        f"elle est dite ici plutot que supposee en silence."))
+        f"DUREE NON FOURNIE, UNE ANNEE SUPPOSEE : {inutilisable}"
+        f"Le prix ci-dessus suppose UNE ANNEE "
+        f"ENTIERE ({EXPO_ANNUELLE:g}). Ce n'est pas une mesure, c'est une "
+        f"HYPOTHESE — elle est dite ici plutot que supposee en silence. "
+        f"⚠ Elle ne porte pas que sur la duree facturee : si le plan derive "
+        f"un facteur de l'exposition (un kilometrage annualise, par exemple), "
+        f"l'hypothese entre AUSSI dans le profil de risque presente au modele, "
+        f"et le prix ne se corrige pas en le multipliant par la duree reelle. "
+        f"Passez `exposition=` des que la duree est connue."))
 
 
 #: ⚠️ Le vocabulaire de l'état d'un Gini. `ABSENT` n'est PAS `NON_MESURE` :
