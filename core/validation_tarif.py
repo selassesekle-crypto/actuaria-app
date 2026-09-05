@@ -92,21 +92,59 @@ def gini_lorenz(y_vrai, y_pred) -> float | None:
     résultat ; l'absence de mesure n'en est pas un.* Un appelant qui a
     besoin d'un flottant convertit lui-même, **et le déclare**.
 
-    ⚠️ Le tri est `mergesort` — donc STABLE. Ce n'est pas un détail de
-    performance : sur des prédictions EX AEQUO (un GLM catégoriel en produit
-    massivement), l'ordre des égalités change le Gini. Mesuré le 05/09/2026
-    sur 500 lignes et 8 modalités : trois tris différents donnent 0,027476,
-    0,046857 et 0,035429 pour la même donnée.
+    ⚠️⚠️ IL TRAITE LES EX AEQUO, ET C'EST LA SEULE FAÇON D'ÊTRE INVARIANT PAR
+    PERMUTATION. Dans un groupe de prédictions ÉGALES, aucune information ne
+    permet de classer : la cible y est donc remplacée par la MOYENNE du groupe,
+    ce qui rend la courbe de Lorenz rectiligne à l'intérieur du palier —
+    exactement ce que veut dire « ce modèle ne sépare pas ces contrats ».
+
+    Mesuré le 05/09/2026, six permutations des MÊMES lignes, étendue du Gini :
+
+        tri `argsort(-p, mergesort)`      0,009710
+        tri `argsort(-p)`                 0,006156
+        tri `argsort(p)[::-1]`            0,013037
+        **ce calcul-ci**                  **0,000000**
+
+    ⚠️ Et sur des prédictions TOUTES ÉGALES — un modèle qui ne sépare rien —
+    les trois tris rendent ±0,0257 selon l'ordre du fichier, **de signes
+    opposés entre eux** ; celui-ci rend **0**, qui est la réponse. *Un Gini
+    fabriqué à partir de l'ordre des lignes n'est pas une mesure du modèle.*
+
+    ⚠️ Sans ex aequo, il coïncide EXACTEMENT avec un tri simple : sur les
+    prédictions réelles d'un GLM (2 373 valeurs distinctes sur 2 500, 5,8 % en
+    ex aequo), l'écart entre les quatre variantes vaut au plus 0,000053.
+    *La divergence était réelle mais latente ; c'est le cas dégénéré qui la
+    rend visible.*
     """
     y_vrai = np.asarray(y_vrai, dtype=float)
     y_pred = np.asarray(y_pred, dtype=float)
     if len(y_vrai) < 2 or len(y_vrai) != len(y_pred):
         return None
+    # ⚠️⚠️ `mergesort` N'EST PAS NÉCESSAIRE À L'EXACTITUDE, ET J'AI ÉCRIT LE
+    # CONTRAIRE. Le sceau du lot 3 l'a montré : un plant qui le remplace par
+    # `quicksort` **ne fait rougir aucun contrôle**. C'est logique — le
+    # regroupement ci-dessous remplace la cible par la MOYENNE du palier, et
+    # une moyenne ne dépend pas de l'ordre interne du groupe. *Le traitement
+    # des ex aequo rend le choix du tri indifférent : c'est la propriété, pas
+    # un effet de bord.* `GU-1c` la vérifie désormais.
+    #   Il est gardé pour une autre raison, celle-là vraie : il rend la sortie
+    #   REPRODUCTIBLE d'une version de NumPy à l'autre.
     ordre = np.argsort(-y_pred, kind='mergesort')
     y = y_vrai[ordre]
     total = float(y.sum())
     if total <= 0:
         return None
+    # ── Les paliers d'EX AEQUO, lissés par leur moyenne ────────────────────
+    p = y_pred[ordre]
+    _, debut, taille = np.unique(-p, return_index=True, return_counts=True)
+    if len(debut) < len(y):          # il y a au moins un palier
+        lisse = np.empty_like(y)
+        for d, t in zip(debut, taille):
+            lisse[d:d + t] = y[d:d + t].mean()
+        y = lisse
+        total = float(y.sum())
+        if total <= 0:
+            return None
     cumul = np.cumsum(y) / total
     population = np.arange(1, len(y) + 1) / len(y)
     trapeze = getattr(np, 'trapezoid', None) or np.trapz

@@ -62,8 +62,11 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 
 import numpy as np
-# Compatibilité NumPy ≥ 2.0 : trapz → trapezoid
-_np_trapz = getattr(np, 'trapezoid', None) or getattr(np, 'trapz', None)
+# ⚠️ `_np_trapz` (compatibilité NumPy ≥ 2.0) A ÉTÉ RETIRÉ AU LOT 3 : le seul
+# usage de ce module était la courbe de Lorenz de `_calculer_gini`, partie
+# dans `core.validation_tarif`. *Un helper qui survit à son usage devient une
+# piste fausse pour qui cherche où la formule est calculée.* La compatibilité
+# vit désormais dans le socle, en un seul endroit.
 import pandas as pd
 try:
     import plotly.graph_objects as go
@@ -136,6 +139,8 @@ from core.plan_tarifaire import (
     alerte_modele_ampute,
 )
 from core.frequence import ajuster_glm_frequence
+# ⚠️ LE Gini DU SOCLE — une seule formule pour tout le dépôt (lot 3).
+from core.validation_tarif import gini_lorenz as gini_socle
 from core.severite import (ajuster_glm_cout, construire_cible_severite,
                            phrase_aucun_grave, phrase_seuil_suppose,
                            seuil_declare, synthese_assiette_ecretement)
@@ -2145,18 +2150,21 @@ class AgentA3GLM:
             # → la courbe de Lorenz est au-dessus de la diagonale si le modèle
             #   discrimine bien → AUC > 0.5 → Gini = 2×AUC - 1 > 0.
             # Réf. : Frees & Valdez (1998), Mildenhall (1999).
-            order   = np.argsort(-np.asarray(y_pred, dtype=float))
-            y_ord   = np.asarray(y_true, dtype=float)[order]
-
-            n       = len(y_ord)
-            total   = float(np.sum(y_ord))
-            cum_obs = np.cumsum(y_ord) / total
-            cum_pop = np.arange(1, n + 1) / n
-
-            # Aire sous la courbe de Lorenz (compatible NumPy 1.x et 2.x)
-            _trapz  = getattr(np, 'trapezoid', None) or getattr(np, 'trapz', None)
-            auc     = float(_trapz(cum_obs, cum_pop))
-            gini    = 2.0 * auc - 1.0
+            # ⚠️⚠️ LA FORMULE VIENT DU SOCLE — elle n'est plus recopiée ici.
+            # Mesuré le 05/09/2026 : ce corps triait par `argsort(-y_pred)`
+            # SANS `mergesort`, `a4` et `a5` par `argsort(y_pred)[::-1]` qui
+            # INVERSE les ex aequo. Trois codes pour une grandeur, trois
+            # réponses dès qu'il y a des égalités — et sur une prédiction
+            # CONSTANTE, deux d'entre eux rendaient des valeurs de SIGNES
+            # OPPOSÉS, tirées de l'ordre du fichier.
+            #   Mesure de l'unification sur `auto` 2 500 : le classement d'A6,
+            #   les modèles de production et les statuts sont INCHANGÉS ; seul
+            #   le Gini du Gamma bouge, −0,0527 → −0,0239, **vers zéro**, qui
+            #   est la vraie valeur d'un modèle dont les prédictions sont
+            #   constantes (1 valeur distincte sur 2 500, mesuré).
+            gini = gini_socle(y_true, y_pred)
+            if gini is None:
+                return None
 
             # ⚠ AUTO-AUDIT (11/07/2026) — NE PAS ÉCRÊTER LE GINI À ZÉRO.
             # L'écrêtage np.clip(gini, 0.0, 1.0) rendait INVISIBLE le cas le plus

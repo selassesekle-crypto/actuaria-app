@@ -2050,6 +2050,17 @@ def detecter_fuites_par_effet(
 
         def _gini_trie_par(x_arr):
             # Gini de la cible lorsqu'on trie les contrats par la variable x.
+            # ⚠️⚠️ ELLE N'A PAS ÉTÉ DÉLÉGUÉE AU SOCLE AU LOT 3, ET C'EST
+            # DÉLIBÉRÉ : elle trie par une **covariable**, pas par une
+            # prédiction — c'est un autre estimateur, et il décide des verdicts
+            # du contrôle anti-fuite ci-dessous (`signal = max(rho, g_norm)`).
+            # ⚠️ Les ex aequo y sont MASSIFS — trier par une variable
+            # catégorielle met tout un groupe à égalité — donc leur traitement
+            # y compte DAVANTAGE qu'ailleurs. Raison de plus pour le mesurer
+            # dans son propre lot plutôt que de le changer en passant :
+            # *changer la formule d'un garde-fou change ce qu'il attrape.*
+            # ⚠️ Elle rend `0.0` là où le socle déclare l'absence : ce contrat
+            # d'absence est celui de son appelant, et il n'a pas été relu.
             ordre = np.argsort(-x_arr)
             y_ord = y_arr[ordre]
             total = float(y_ord.sum())

@@ -64,8 +64,10 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 
 import numpy as np
-# Compatibilité NumPy ≥ 2.0 : trapz → trapezoid
-_np_trapz = getattr(np, 'trapezoid', None) or getattr(np, 'trapz', None)
+# ⚠️ `_np_trapz` (compatibilité NumPy ≥ 2.0) A ÉTÉ RETIRÉ AU LOT 3 : le seul
+# usage de ce module était la courbe de Lorenz de `_calculer_gini`, partie
+# dans `core.validation_tarif`. *Un helper qui survit à son usage devient une
+# piste fausse pour qui cherche où la formule est calculée.*
 import pandas as pd
 try:
     import plotly.graph_objects as go
@@ -186,6 +188,8 @@ from core.elasticite import (
     etat_elasticite,
     sensibilite_tarifaire,
 )
+# ⚠️ LE Gini DU SOCLE — une seule formule pour tout le dépôt (lot 3).
+from core.validation_tarif import gini_lorenz as gini_socle
 from core.plan_tarifaire import (
     PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
     alerte_modele_ampute,
@@ -2001,12 +2005,16 @@ class AgentA4ML:
         if np.sum(y_true) == 0:
             return None
         try:
-            order   = np.argsort(y_pred)[::-1]  # Décroissant — les plus risqués d'abord
-            y_true  = y_true[order]
-            n       = len(y_true)
-            cum_obs = np.cumsum(y_true) / np.sum(y_true)
-            cum_pop = np.arange(1, n + 1) / n
-            auc     = np.trapezoid(cum_obs, cum_pop) if hasattr(np, "trapezoid") else _np_trapz(cum_obs, cum_pop)
+            # ⚠️⚠️ LA FORMULE VIENT DU SOCLE (lot 3). Ce corps triait par
+            # `argsort(y_pred)[::-1]` — un tri croissant PUIS renversé, ce qui
+            # **inverse l'ordre des EX AEQUO** par rapport à A3. La docstring
+            # de cette méthode dit « même méthode que A3 » : c'était faux, et
+            # c'est mesuré (0,027476 · 0,046857 · 0,035429 pour la même donnée
+            # à 8 paliers). Le socle traite les ex aequo et ne dépend plus de
+            # l'ordre des lignes.
+            gini_brut = gini_socle(y_true, y_pred)
+            if gini_brut is None:
+                return None
             # ⚠ AUTO-AUDIT (11/07/2026) — NE PAS ÉCRÊTER LE GINI À ZÉRO.
             # L'écrêtage np.clip(gini, 0.0, 1.0) rendait INVISIBLE le cas le plus
             # dangereux qui soit en tarification : un Gini NÉGATIF, c'est-à-dire
@@ -2017,7 +2025,7 @@ class AgentA4ML:
             # ruineuse (anti-sélection = spirale de sélection adverse).
             # On rapporte désormais la valeur VRAIE, bornée à [−1, 1], et on
             # alerte explicitement en cas d'anti-sélection.
-            gini = float(np.clip(2 * auc - 1, -1.0, 1.0))
+            gini = float(np.clip(gini_brut, -1.0, 1.0))
             if gini < 0:
                 logger.warning(
                     f"[ANTI-SÉLECTION] Gini NÉGATIF ({gini_texte(gini)}) — le modèle "

@@ -212,16 +212,44 @@ class TestC3LaPortee(unittest.TestCase):
         qui ecrivait ailleurs qu'il ne faut pas dupliquer un calcul."""
         large, implementations = self._releve_des_gini()
         doc = inspect.getdoc(gini_lorenz) or ''
+        # ⚠️⚠️ 9 -> 8 ET 6 -> 3 AU LOT 3. `a3`, `a4` et `a5` delegent desormais
+        # au socle ; `a4` sort meme du releve LARGE, son corps ne portant plus
+        # aucun des trois mots-cles. *Le compte publie se remesure a chaque
+        # fois que le code bouge -- c'est tout l'objet de ce controle.*
         self.assertEqual(
-            len(large), 9,
-            f"la docstring annonce 9 fonctions comptees au critere large, la "
+            len(large), 8,
+            f"la docstring annonce 8 fonctions comptees au critere large, la "
             f"mesure en trouve {len(large)} : {sorted(large)}")
-        self.assertIn('**9 sont comptées', doc)
+        self.assertIn('**8 sont comptées', doc)
         self.assertEqual(
-            len(implementations), 6,
-            f"la docstring annonce 6 IMPLEMENTATIONS reelles, la mesure en "
+            len(implementations), 3,
+            f"la docstring annonce 3 IMPLEMENTATIONS reelles, la mesure en "
             f"trouve {len(implementations)} : {sorted(implementations)}")
-        self.assertIn('seulement 6 CALCULENT', doc)
+        self.assertIn('seulement 3 CALCULENT', doc)
+        # ⚠️⚠️ ET LA PROSE ENUMERE — TROUVE PAR UN PLANT MUET. Un plant a
+        # remplace « Les 3 : » par « Les 6 : » devant une liste de trois noms :
+        # **rien n'a rouge**, parce que ce controle ne lisait que le COMPTE.
+        # *Une liste fausse a cote d'un compte juste se lit comme un fait.*
+        # On verifie donc que chaque implementation MESUREE est NOMMEE, et que
+        # le compte annonce dans la meme phrase est celui-la.
+        self.assertIn('Les 3 :', doc,
+                      "la phrase qui enumere les implementations a change de "
+                      "forme : le compte et la liste peuvent diverger")
+        for cle in implementations:
+            module = cle.rsplit('/', 1)[-1].split('::')[0].removesuffix('.py')
+            nom = cle.split('::')[-1]
+            with self.subTest(implementation=cle):
+                self.assertTrue(
+                    nom in doc or module in doc,
+                    f'{cle} calcule un Gini mais n est NOMMEE nulle part dans '
+                    f'la prose : un lecteur ne peut pas savoir qu elle existe')
+        # ⚠️ Et les trois agents delegues doivent etre HORS des
+        # implementations : c'est le fait que le lot 3 a etabli.
+        for agent in ('a3_glm', 'a4_ml', 'a5_deep_learning'):
+            with self.subTest(agent=agent):
+                self.assertFalse(
+                    any(f'/{agent}/agent.py::' in c for c in implementations),
+                    f'{agent} recalcule un Gini au lieu de deleguer au socle')
         # ⚠️⚠️ CE QUE LA MESURE ETROITE A CORRIGE, ET QUI DOIT LE RESTER. La
         # prose annoncait « `charts` la sienne pour la figure » : FAUX --
         # `chart_lorenz_gini` recoit la courbe DEJA calculee et la DESSINE.

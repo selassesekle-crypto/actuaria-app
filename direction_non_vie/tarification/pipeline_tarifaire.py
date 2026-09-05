@@ -439,14 +439,22 @@ def gini_lorenz(y_true, y_pred) -> float:
     preuve d'audit hors périmètre : **aucun n'atteint ces cas** (mesuré).
 
     Mesuré par AST le 01/09/2026, **méthode publiée avec le chiffre** : sur les
-    fonctions de production dont le nom porte `gini`, **9 sont comptées** par
+    fonctions de production dont le nom porte `gini`, **8 sont comptées** par
     le critère large (leur corps emploie `cumsum`, `trapz` ou le mot Lorenz —
     le nom de la fonction en fait partie) et 2 ne calculent rien (une réserve,
-    un verdict). ⚠️ **Mais seulement 6 CALCULENT vraiment** — critère étroit,
-    ajouté le 05/09/2026 : le corps SANS SA DOCSTRING emploie `cumsum`. Les 6 :
-    `core.validation_tarif.gini_lorenz` (canonique), `a3`, `a4`, `a5`
-    (`_calculer_gini`), `a6` (`_gini_lorenz`), `conformite`
-    (`_gini_trie_par`).
+    un verdict). ⚠️ **Mais seulement 3 CALCULENT vraiment** — critère étroit,
+    ajouté le 05/09/2026 : le corps SANS SA DOCSTRING emploie `cumsum`. Les 3 :
+    `core.validation_tarif.gini_lorenz` (**le canonique**), `a6`
+    (`_gini_lorenz`) et `conformite` (`_gini_trie_par`).
+
+    ⚠️⚠️ **ELLES ÉTAIENT SIX, ET ELLES N'ÉTAIENT PAS D'ACCORD** — lot 3.
+    `a3`, `a4` et `a5` **délèguent** désormais au socle, dont le calcul traite
+    les EX AEQUO et ne dépend plus de l'ordre des lignes. Les deux qui restent
+    portent chacune SA raison, écrite dans leur code et vérifiée par `GU-6` :
+    `a6` accumule un TAUX quand `expo` est fourni et son axe de population est
+    `linspace(0, 1, n)` — ce n'est pas le même trapèze ; `conformite` trie par
+    une COVARIABLE et non par une prédiction, et décide des verdicts du
+    contrôle anti-fuite.
 
     ⚠️⚠️ **ET LA MESURE ÉTROITE A CORRIGÉ LA PROSE DE CE MODULE.** Elle
     annonçait « `charts` la sienne pour la figure ». **Faux** :

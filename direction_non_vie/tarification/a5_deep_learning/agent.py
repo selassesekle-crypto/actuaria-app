@@ -57,6 +57,8 @@ from core.conformite_reglementaire import (
     gini_texte, glm_de_reference, mesure_texte, ratio_sur_apprentissage,
     alerte_ancrage_hors_cible,
 )
+# ⚠️ LE Gini DU SOCLE — une seule formule pour tout le dépôt (lot 3).
+from core.validation_tarif import gini_lorenz as gini_socle
 from core.plan_tarifaire import (
     PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
     alerte_modele_ampute,
@@ -1623,13 +1625,14 @@ class AgentA5DeepLearning:
             # Aucun sinistre sur la période de test — Gini incalculable.
             return None
         try:
-            order   = np.argsort(y_pred)[::-1]
-            y_true  = np.array(y_true)[order]
-            n       = len(y_true)
-            cum_obs = np.cumsum(y_true) / np.sum(y_true)
-            cum_pop = np.arange(1, n+1) / n
-            fn      = np.trapezoid if hasattr(np, 'trapezoid') else np.trapz
-            auc     = fn(cum_obs, cum_pop)
+            # ⚠️⚠️ LA FORMULE VIENT DU SOCLE (lot 3). Ce corps triait par
+            # `argsort(y_pred)[::-1]` — comme A4, et donc **avec les ex aequo
+            # INVERSÉS** par rapport à A3, alors que la docstring annonce
+            # « même méthode que A3/A4 ». Mesuré : trois codes, trois réponses
+            # dès qu'il y a des égalités.
+            gini_brut = gini_socle(y_true, y_pred)
+            if gini_brut is None:
+                return None
             # ⚠ AUTO-AUDIT (11/07/2026) — NE PAS ÉCRÊTER LE GINI À ZÉRO.
             # L'écrêtage np.clip(gini, 0.0, 1.0) rendait INVISIBLE le cas le plus
             # dangereux qui soit en tarification : un Gini NÉGATIF, c'est-à-dire
@@ -1640,7 +1643,7 @@ class AgentA5DeepLearning:
             # ruineuse (anti-sélection = spirale de sélection adverse).
             # On rapporte désormais la valeur VRAIE, bornée à [−1, 1], et on
             # alerte explicitement en cas d'anti-sélection.
-            gini = float(np.clip(2 * auc - 1, -1.0, 1.0))
+            gini = float(np.clip(gini_brut, -1.0, 1.0))
             if gini < 0:
                 logger.warning(
                     f"[ANTI-SÉLECTION] Gini NÉGATIF ({gini_texte(gini)}) — le modèle "
@@ -2162,7 +2165,7 @@ class AgentA5DeepLearning:
                 ))
 
                 # Annotations familles
-                for i, (n, f) in enumerate(zip(noms_s, fams_s)):
+                for i, (_, f) in enumerate(zip(noms_s, fams_s)):
                     fig3.add_annotation(
                         x=i, y=-0.02, xref='x', yref='paper',
                         text=f"<span style='font-size:8px;color:{GRIS}'>{f}</span>",
