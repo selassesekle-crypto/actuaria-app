@@ -2631,6 +2631,80 @@ def meilleure_rejetee(vars_exclues) -> float | None:
     return min(mesurees) if mesurees else None
 
 
+#: ⚠️⚠️ D'OÙ VIENT L'EXPOSITION D'UN CONTRAT TARIFÉ — les trois cas, nommés.
+#: Sans ce vocabulaire, `exposition = 1.0` se lisait « contrat annuel »,
+#: qu'il vienne du client, de l'appelant, ou de personne.
+EXPO_DU_CONTRAT = 'contrat'
+EXPO_DE_L_APPELANT = 'appelant'
+EXPO_SUPPOSEE = 'supposee'
+
+#: La durée supposée quand AUCUNE source ne la donne : un an.
+#: ⚠️ Arbitrée par Selasse le 05/09/2026 — « valeur par défaut d'un an,
+#: toujours déclarée explicitement dans le résultat, jamais en silence ».
+EXPO_ANNUELLE = 1.0
+
+
+def source_exposition(expo_contrat, expo_appelant):
+    """Quelle exposition sert au prix, D'OÙ elle vient, et ce qu'il faut dire.
+
+    Rend ``(valeur, source, phrase)``. ``phrase`` vaut ``None`` quand il n'y a
+    rien à signaler.
+
+    ⚠️⚠️ MESURÉ LE 05/09/2026, ET C'EST LE CŒUR DU CONSTAT. `tarifer()`
+    construit sa ligne par ``{**contrat, plan.exposition: exposition}`` : le
+    paramètre est posé APRÈS, donc il **écrase** celui du contrat — et comme
+    il vaut ``1.0`` par défaut, un contrat déclarant une demi-année était
+    tarifé pour une année entière **sans que rien ne le dise** :
+
+        même contrat, `exposition` déclarée à 0,5
+            tarifer(contrat)                 ->  1 649,30 EUR
+            tarifer(contrat, exposition=0.5) ->    792,68 EUR
+            rapport 2,0807 — et `success: True` DANS LES DEUX CAS.
+
+    ⚠️⚠️ CETTE FONCTION NE CHANGE AUCUN PRIX, ET C'EST DÉLIBÉRÉ. L'appelant
+    continue de primer quand il fournit une valeur : basculer sur celle du
+    contrat déplacerait le prix d'un facteur 2 sur les contrats infra-annuels,
+    et **cette décision n'est pas prise**. Ce qui change, c'est que le
+    conflit est DIT. *On rend d'abord visible ; on décide ensuite.*
+    """
+    fourni = expo_appelant is not None
+    lisible = isinstance(expo_contrat, (int, float)) and not isinstance(
+        expo_contrat, bool)
+    valeur = expo_appelant if fourni else EXPO_ANNUELLE
+    if fourni and lisible and float(expo_contrat) != float(expo_appelant):
+        # ⚠️ DEUX SOURCES QUI DIFFÈRENT. On ne choisit pas laquelle est la
+        # bonne — on dit qu'il y en a deux, et laquelle a servi.
+        return (valeur, EXPO_DE_L_APPELANT, (
+            f"DEUX EXPOSITIONS DECLAREES, ET ELLES DIFFERENT : le contrat "
+            f"porte {float(expo_contrat):g}, l'appelant a fourni "
+            f"{float(expo_appelant):g}. C'est celle de L'APPELANT qui a servi "
+            f"au prix ci-dessus ; celle du contrat a ete ignoree. Le rapport "
+            f"des deux primes serait de "
+            f"{float(expo_appelant) / float(expo_contrat):.4g}. Aucune des "
+            f"deux n'est presumee juste : levez la contradiction a la source."))
+    if fourni:
+        return (valeur, EXPO_DE_L_APPELANT, None)
+    if lisible:
+        # ⚠️⚠️ LE CAS LE PLUS COURANT, ET LE PLUS SILENCIEUX. L'appelant n'a
+        # rien passé, le contrat porte une durée — et c'est quand même 1,0 qui
+        # s'applique, parce que le défaut du paramètre écrase.
+        if float(expo_contrat) != EXPO_ANNUELLE:
+            return (valeur, EXPO_SUPPOSEE, (
+                f"EXPOSITION DU CONTRAT IGNOREE : le contrat declare "
+                f"{float(expo_contrat):g}, mais aucune exposition n'a ete "
+                f"fournie a `tarifer()` et le defaut d'UN AN s'applique. La "
+                f"prime ci-dessus couvre donc une ANNEE ENTIERE, pas la duree "
+                f"declaree — rapport "
+                f"{EXPO_ANNUELLE / float(expo_contrat):.4g}. Passez "
+                f"`exposition=` explicitement pour tarifer la duree reelle."))
+        return (valeur, EXPO_DU_CONTRAT, None)
+    return (valeur, EXPO_SUPPOSEE, (
+        f"EXPOSITION NON FOURNIE : ni le contrat ni l'appelant ne la "
+        f"declarent. Le prix ci-dessus suppose UNE ANNEE ENTIERE "
+        f"({EXPO_ANNUELLE:g}). Ce n'est pas une mesure, c'est une hypothese — "
+        f"elle est dite ici plutot que supposee en silence."))
+
+
 #: ⚠️ Le vocabulaire de l'état d'un Gini. `ABSENT` n'est PAS `NON_MESURE` :
 #: une clé qui manque dit qu'aucun modèle de ce type n'a été ajusté ; un
 #: `None` dit qu'il l'a été et que son Gini n'a pas pu être calculé.

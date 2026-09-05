@@ -29,7 +29,7 @@ import dataclasses
 from statsmodels.genmod import families as _families
 
 from core.plan_tarifaire import CHARGEMENTS_DEFAUT, PlanTarifaire
-from core.conformite_reglementaire import construire_matrice_x
+from core.conformite_reglementaire import construire_matrice_x, source_exposition
 # ⚠️ `QualiteBloquante` n'est plus importée ici : la levée a suivi le préambule
 # dans `core.qualite_donnees`. Vérifié avant de la retirer — **aucun module ne
 # l'importait DEPUIS ce fichier** (mesuré). *Un ré-export tacite se casse en
@@ -199,7 +199,8 @@ class TarifNonVie:
                         f"tarification.")
         return anomalies
 
-    def tarifer(self, contrat: dict, exposition: float = 1.0) -> dict:
+    def tarifer(self, contrat: dict,
+                exposition: float | None = None) -> dict:
         """« Tarifez-moi ce contrat. » Le livrable qui vend (étape 5).
 
         CONTRAT DE SORTIE STABLE, directement consommable par une API REST/JSON :
@@ -228,13 +229,27 @@ class TarifNonVie:
                 "plan_empreinte": empreinte,
                 "date_calcul": date_calcul,
             }
+        # ⚠️⚠️ D'OÙ VIENT L'EXPOSITION — constat `G.17`, mesuré le 05/09/2026.
+        # La ligne ci-dessous posait le paramètre APRÈS le contrat, donc il
+        # l'écrasait ; et comme il valait `1.0` par défaut, un contrat
+        # déclarant une demi-année était tarifé pour une année entière, avec
+        # `success: True` : 1 649,30 EUR au lieu de 792,68 (rapport 2,0807).
+        #   ⚠️ LE DÉFAUT EST DEVENU `None` POUR RENDRE LES DEUX CAS
+        #   DISCERNABLES — « l'appelant a passé 1,0 » et « l'appelant n'a rien
+        #   passé » étaient jusqu'ici la même chose. **Le prix ne bouge pas** :
+        #   sans paramètre, l'exposition retenue reste 1,0. Ce qui change,
+        #   c'est qu'on DIT laquelle a servi, et qu'on signale l'autre.
+        expo_retenue, expo_source, expo_phrase = source_exposition(
+            contrat.get(self.plan.exposition), exposition)
         try:
-            df = pd.DataFrame([{**contrat, self.plan.exposition: exposition}])
+            df = pd.DataFrame(
+                [{**contrat, self.plan.exposition: expo_retenue}])
             Xc = self._design(df)
             freq = float(self._taux_frequence(Xc)[0])
             cout = float(self.glm_cout.predict(Xc)[0])
             prime_pure = (self.coefficient_equilibre
-                          * (freq * cout + self.ecretement) * float(exposition))
+                          * (freq * cout + self.ecretement)
+                          * float(expo_retenue))
             ch = self.chargements
             pc = (prime_pure * (1 + ch["frais"]) * (1 + ch["marge"])
                   / (1 - ch["commission"]))
@@ -253,6 +268,14 @@ class TarifNonVie:
                 # plan ne la remplit — l'hypothese doit donc etre DITE.
                 "domaines_non_declares": phrase_domaines_non_declares(
                     self.plan),
+                # ⚠️⚠️ L'EXPOSITION QUI A SERVI AU PRIX, ET D'OÙ ELLE VIENT.
+                # Une prime sans sa durée n'est pas contestable : 1 649,30 EUR
+                # pour un an et 792,68 pour six mois sont le MÊME tarif.
+                # `exposition_hypothese` est `None` quand il n'y a rien à
+                # signaler — une phrase qui s'affiche toujours ne se lit plus.
+                "exposition_retenue": float(expo_retenue),
+                "exposition_source": expo_source,
+                "exposition_hypothese": expo_phrase,
                 "plan_empreinte": empreinte,          # traçabilité ACPR (ex-clé 'plan')
                 "date_calcul": date_calcul,
             }
