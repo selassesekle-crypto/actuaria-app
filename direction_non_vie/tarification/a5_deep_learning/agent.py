@@ -55,6 +55,7 @@ from core.conformite_reglementaire import (
     construire_matrice_x,
     colonne_temporelle, diagnostiquer_evaluation, phrase_evaluation_impossible,
     gini_texte, glm_de_reference, mesure_texte, ratio_sur_apprentissage,
+    alerte_ancrage_hors_cible,
 )
 from core.plan_tarifaire import (
     PlanTarifaire, verifier_completude_plan, plafonner_statut_si_ampute,
@@ -720,8 +721,14 @@ class AgentA5DeepLearning:
                     'message': "CANN NON ancre (glm_gele=False) : couche GLM "
                                "librement entrainable, ce n'est pas un CANN "
                                "Wuthrich, non interpretable (audit S2). Cause : "
-                               "GLM Tweedie (A3) absent/indisponible.",
+                               "GLM de la cible (A3) absent/indisponible.",
                 })
+            # ⚠️⚠️ ANCRÉ, MAIS SUR LE GLM D'UNE AUTRE CIBLE — le defaut que
+            # `glm_gele=True` masquait. La regle vit dans le socle, pour etre
+            # testable DANS LES DEUX SENS : le sceau du lot 7 l'a exige.
+            _alerte_hc = alerte_ancrage_hors_cible(_met_cann, self._cible_run)
+            if _alerte_hc:
+                _alertes_modele.append(_alerte_hc)
 
             # ── MODÈLE AMPUTÉ → PLAFOND AMBRE (cf. A3/A4, même source unique) ─
             # Indépendant, par conception, du plafond d'ancrage CANN ci-dessus :
@@ -1069,13 +1076,63 @@ class AgentA5DeepLearning:
             offset_train_np = np.zeros(len(X_train), dtype=np.float32)
             offset_test_np  = np.zeros(len(X_test),  dtype=np.float32)
 
-        # ── GEL DU GLM TWEEDIE D'A3 (Wüthrich & Merz 2019) ────────────────────
+        # ── GEL DU GLM DE LA CIBLE (Wüthrich & Merz 2019) ─────────────────────
+        # ⚠️⚠️ CONSTAT `A5.CANN` — L'ANCRAGE PORTAIT SUR LE MAUVAIS GLM. Cette
+        # ligne lisait `modeles['tweedie']` **quelle que soit la cible du
+        # CANN**. Or `pipeline_agents:482` ne lance le CANN que sur la
+        # FRÉQUENCE — une cible de COMPTAGE, avec un offset log-exposition —
+        # tandis que le Tweedie d'A3 vise `prime_pure`, un taux déjà annualisé
+        # que sa propre docstring interdit d'assortir d'un offset (« l'appliquer
+        # DEUX FOIS »). Le réseau partait donc des coefficients d'un modèle
+        # d'une autre cible, sur une autre échelle.
+        #
+        #   *Mesuré le 05/09/2026, fixture `auto` 2 500 contrats :*
+        #       CANN                       Gini 0,0615
+        #       GLM Poisson (SA cible)     Gini 0,1912
+        #       GLM Tweedie (ancré alors)  Gini 0,1901, cible `prime_pure`
+        #
+        # Un CANN correctement ancré ÉGALE son GLM à l'époque 0 et ne peut que
+        # s'en écarter en s'améliorant. **Trois fois moins de pouvoir
+        # discriminant que le GLM seul est la signature d'un ancrage faux.**
+        #
+        # ⚠️ LE NOM DE LA FAMILLE SE DÉRIVE, il ne se code pas : `glm_de_
+        # reference` apparie cible → famille à partir de ce qu'A3 DÉCLARE
+        # (`metriques[f]['cible']`), et c'est déjà la source qu'utilisent A4,
+        # A6 et le classement (scellée par `test_reference_glm_par_cible`).
+        # *Une seconde table d'appariement divergerait de la première.*
         w_init, bias_init = None, None
-        glm_ref_info = {'glm_gele': False, 'n_vars_glm_total': 0, 'n_vars_glm_matchees': 0}
+        glm_ref_info = {'glm_gele': False, 'n_vars_glm_total': 0,
+                        'n_vars_glm_matchees': 0, 'glm_ancre': None,
+                        'cible_glm_ancre': None}
 
         if result_a3 and result_a3.get('success'):
             try:
-                modele_glm = result_a3.get('modeles', {}).get('tweedie')
+                _nom_glm, _met_glm = self._reference_glm(result_a3)
+                _dispo = result_a3.get('modeles') or {}
+                if _nom_glm is None and len(_dispo) == 1:
+                    # ⚠️⚠️ REPLI EXPLICITE, ET IL EST DIT. `_cible_run` n'est
+                    # posé que par `run()` : un appelant qui invoque
+                    # `_calibrer_cann` DIRECTEMENT — c'est le cas de l'oracle
+                    # `test_B1_cann_epoch0_egale_glm_statsmodels` — n'a ni
+                    # cible ni `metriques`, donc l'appariement ne peut rien
+                    # rendre. Sans ce repli, mon correctif SUPPRIMAIT
+                    # l'ancrage dans ce cas : régression trouvée par la gate.
+                    #   *Un seul candidat n'est pas un choix : c'est le seul
+                    #   GLM fourni.* `cible_glm_ancre` reste `None` — on ne
+                    #   devine aucune cible, donc aucune alerte « hors cible »
+                    #   ne peut se fonder sur une supposition.
+                    #   ⚠️ En production ce repli ne s'applique JAMAIS : A3
+                    #   publie ses trois familles, donc `len(_dispo) == 3`.
+                    _nom_glm = next(iter(_dispo))
+                    _met_glm = None
+                glm_ref_info['glm_ancre'] = _nom_glm
+                glm_ref_info['cible_glm_ancre'] = (_met_glm or {}).get('cible')
+                # ⚠️ Le Gini du GLM ancré se relève ICI, dans le `try` qui le
+                # produit : le lire plus bas ferait dépendre une publication
+                # d'une variable qui peut ne jamais avoir été affectée.
+                glm_ref_info['gini_glm_ancre'] = (_met_glm or {}).get('gini')
+                modele_glm = ((result_a3.get('modeles') or {}).get(_nom_glm)
+                              if _nom_glm else None)
                 scaler_std = self.scalers.get('standard')
                 if (modele_glm is not None and hasattr(modele_glm, 'params')
                         and scaler_std is not None):
@@ -1163,6 +1220,37 @@ class AgentA5DeepLearning:
                 np.maximum(np.abs(pred_glm_manuel), 1e-6)
             )
             glm_verification_error = float(np.max(ecart_relatif))
+
+            # ⚠️⚠️ CE CONTRÔLE-CI EST CIRCULAIRE, ET C'EST POURQUOI IL N'A RIEN
+            # VU. Il compare le réseau à `exp(X @ w_init + bias_init + offset)`
+            # — une reconstruction faite AVEC LES MÊMES `w_init`/`bias_init`
+            # qu'on vient d'injecter dans `glm_layer`. Il vérifie donc que
+            # `nn.Linear` fait une multiplication matricielle ; il ne peut pas
+            # échouer autrement que par un bug de PyTorch.
+            #
+            #   *Mesuré avant correction : `glm_verification_error = 1e-06`,
+            #   `glm_gele = True`, 5 variables sur 5 appariées, AUCUNE alerte —
+            #   sur un ancrage qui portait sur le GLM d'une AUTRE cible et
+            #   divisait le pouvoir discriminant par trois.*
+            #
+            # Il est CONSERVÉ (il garde la reprojection d'échelle, qui est un
+            # vrai risque) mais il ne suffit plus. Ce qui suit ne se compare
+            # pas au point de départ : il MESURE ce que le réseau ancré vaut,
+            # et le publie à côté de ce que vaut le GLM qui l'ancre.
+            #
+            # ⚠️ AUCUN SEUIL N'EST INVENTÉ ICI, et c'est délibéré — même règle
+            # que pour la puissance de sélection (`G.4`). On publie les deux
+            # Ginis et leur écart ; l'actuaire juge. *Un seuil posé sans source
+            # serait exactement le littéral que ce chantier retire partout.*
+            try:
+                gini_epoch0 = self._calculer_gini(
+                    np.asarray(y_test, dtype=float),
+                    np.asarray(pred_cann_epoch0, dtype=float).ravel())
+            except Exception as _e_g:                       # noqa: BLE001
+                gini_epoch0 = None
+                logger.debug("Gini CANN époque 0 non calculé : %s", _e_g)
+            glm_ref_info['gini_cann_epoch0'] = gini_epoch0
+
             if glm_verification_error < 1e-3:
                 logger.info(
                     f"[CANN] ✓ Vérification GLM gelé OK — écart max "
@@ -1304,6 +1392,19 @@ class AgentA5DeepLearning:
             round(glm_verification_error, 6)
             if glm_verification_error is not None else None
         )
+        # ⚠️⚠️ SUR QUOI LE CANN EST-IL ANCRÉ — la question que le livrable ne
+        # posait pas. `glm_gele` disait SI l'ancrage avait eu lieu, jamais SUR
+        # QUOI : un ancrage parfait sur le GLM d'une autre cible se publiait
+        # « ✓ Conforme ». *Un contrôle qui atteste sans nommer son objet ne
+        # permet à personne de le contredire.*
+        metriques['glm_ancre']       = glm_ref_info.get('glm_ancre')
+        metriques['cible_glm_ancre'] = glm_ref_info.get('cible_glm_ancre')
+        # ⚠️ LES DEUX GINIS CÔTE À CÔTE, SANS SEUIL. Un CANN correctement ancré
+        # ÉGALE son GLM à l'époque 0 ; un écart grossier est la signature d'un
+        # ancrage faux. On publie, on ne tranche pas — *un seuil posé sans
+        # source serait le littéral que ce chantier retire partout ailleurs.*
+        metriques['gini_cann_epoch0'] = glm_ref_info.get('gini_cann_epoch0')
+        metriques['gini_glm_ancre']   = glm_ref_info.get('gini_glm_ancre')
 
         return {'modele': modele, 'metriques': metriques, 'historique': historique}
 

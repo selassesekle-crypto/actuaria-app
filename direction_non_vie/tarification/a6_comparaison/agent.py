@@ -1720,14 +1720,25 @@ class AgentA6Comparaison:
         # fabrique levait ValueError, le proxy prenait le relais, et le gate
         # plafonnait à AMBRE. L'incitation était inversée : pour obtenir un VERT,
         # il fallait choisir une boîte noire.
-        # Les 'DL_*' restent en proxy (réseaux de neurones : pas de fabrique).
+        # ⚠️⚠️ MISE À JOUR — LE CANN EST RECALIBRABLE À SON TOUR. Cette ligne
+        # disait « Les 'DL_*' restent en proxy (réseaux de neurones : pas de
+        # fabrique) », et c'était vrai. Mesuré le 05/09/2026, dès qu'un CANN
+        # correctement ancré devient le modèle retenu : `DL_CANN → proxy GBM`,
+        # `modele_recalibre_fidele = False`, statut plafonné à AMBRE — la
+        # stabilité temporelle publiée était celle d'un AUTRE modèle.
+        #   `_CANNWalkForward` (A4) le recalibre désormais pour de vrai, en
+        #   RÉAPPRENANT son GLM d'ancrage sur chaque fenêtre. Les autres `DL_*`
+        #   (TabNet) restent en proxy : la phrase suit ce que la fabrique sait
+        #   faire, elle ne l'anticipe pas.
         classement = classement or []
         _meilleur = (classement[0] if classement else {})
         _modele_nom_brut = _meilleur.get('modele', 'ML_GBM')
         if _modele_nom_brut.upper().startswith('ML_'):
             _modele_nom = _modele_nom_brut[3:].lower()  # 'ML_GBM' → 'gbm'
         else:
-            _modele_nom = _modele_nom_brut  # GLM_*/DL_* — non couvert, proxy direct
+            # GLM_* et DL_CANN sont reconnus par la fabrique sous ce nom même ;
+            # les autres DL_* n'y sont pas et retomberont en proxy, déclaré.
+            _modele_nom = _modele_nom_brut
         _modele_reel_recalibre = None  # nom effectivement utilisé, jamais menteur
         # FAMILLE (correctif V15 #4) : « construit par nom » EST le contrôle de
         # famille — un nom buildable donne la MÊME famille que la production

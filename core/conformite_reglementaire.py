@@ -2612,6 +2612,53 @@ def phrase_puissance_selection(nb_retenues, nb_candidates, n_sinistres_train,
     )
 
 
+def alerte_ancrage_hors_cible(metriques_cann, cible) -> dict | None:
+    """L'alerte quand un CANN est ancré sur le GLM d'une AUTRE cible.
+
+    ⚠️⚠️ POURQUOI ELLE EXISTE — mesuré le 05/09/2026. `_calibrer_cann` lisait
+    ``modeles['tweedie']`` quelle que soit sa cible, alors que le CANN ne
+    tourne que sur la FRÉQUENCE (`pipeline_agents:482`), une cible de comptage
+    avec offset. Résultat, fixture `auto` 2 500 contrats :
+
+        CANN                        Gini 0,0615
+        GLM Poisson (sa cible)      Gini 0,1912
+        GLM Tweedie (ancré alors)   Gini 0,1901, cible `prime_pure`
+
+    *Un CANN ancré part de son GLM : trois fois moins de pouvoir discriminant
+    est la signature d'un point de départ qui n'est pas le sien.* Et le
+    contrôle de fidélité ne pouvait rien voir : il comparait le réseau aux
+    coefficients qu'on venait d'y injecter.
+
+    ⚠️ ELLE VIT ICI, ET PAS EN LIGNE DANS L'AGENT, POUR ÊTRE TESTABLE DANS LES
+    DEUX SENS. Le sceau du lot 7 l'a exigé : le plant qui désactivait l'alerte
+    restait MUET, parce que la sentinelle ne vérifiait que le cas « aucune
+    alerte quand tout va bien ». *Un garde-fou dont on ne teste qu'un sens
+    n'est vérifié qu'à moitié.*
+
+    ⚠️ LE TEST EST BINAIRE — deux cibles égales ou non. Aucun seuil n'est
+    inventé, donc aucun ne peut dériver. Rend ``None`` quand il n'y a rien à
+    signaler : le CANN n'est pas ancré (une autre alerte le dit déjà), la
+    cible est inconnue, ou les deux cibles concordent.
+    """
+    met = metriques_cann or {}
+    if not met.get('glm_gele'):
+        return None                     # `cann_glm_non_ancre` couvre ce cas
+    cible_ancre = met.get('cible_glm_ancre')
+    if not cible_ancre or not cible or cible_ancre == cible:
+        return None
+    return {
+        'modele': 'CANN', 'severite': 'AMBRE',
+        'code': 'cann_ancre_hors_cible',
+        'message': (
+            f"CANN ancre sur le GLM '{met.get('glm_ancre')}', dont la cible "
+            f"est '{cible_ancre}', alors que le CANN modelise '{cible}'. Les "
+            f"coefficients geles ne sont pas ceux du GLM de cette cible : le "
+            f"reseau part d'un point de depart qui n'est pas le sien, et le "
+            f"controle de fidelite ne peut pas le voir puisqu'il se compare a "
+            f"ces memes coefficients."),
+    }
+
+
 def meilleure_rejetee(vars_exclues) -> float | None:
     """La plus petite p-value parmi les variables ECARTEES — ou ``None``.
 

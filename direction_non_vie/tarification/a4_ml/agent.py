@@ -521,6 +521,15 @@ def _fabriquer_estimateur_nu(nom: str, col_cible: str = 'nb_sinistres'):
         famille = nom_l.replace('glm_', '')
         return _GLMWalkForward(famille=famille, col_cible=col_cible)
 
+    # ⚠️⚠️ LE CANN AUSSI — et c'est la MÊME leçon qu'au-dessus, un cran plus
+    # loin. Tant que cette fabrique ne savait pas le construire, un CANN retenu
+    # en production retombait sur un proxy GBM : `modele_recalibre_fidele =
+    # False`, statut plafonné à AMBRE, et la stabilité temporelle publiée
+    # était celle d'un AUTRE modèle. *Le reproche fait au GLM en V14 valait
+    # mot pour mot pour lui.*
+    if nom_l in ('cann', 'dl_cann'):
+        return _CANNWalkForward(col_cible=col_cible)
+
     raise ValueError(
         f"Modèle '{nom}' non reconnu pour recalibration walk-forward."
     )
@@ -546,15 +555,26 @@ class _GLMWalkForward:
     comportement correct.
     """
 
-    def __init__(self, famille: str = 'poisson', col_cible: str = 'nb_sinistres'):
+    def __init__(self, famille: str = 'poisson', col_cible: str = 'nb_sinistres',
+                 feature_names=None):
         self.famille = famille
         self.col_cible = col_cible
+        # ⚠️ `feature_names` sert à UN seul usage, et il est nommé : le CANN
+        # s'ancre sur les COEFFICIENTS de ce GLM, et il les apparie PAR NOM
+        # (`params.index` contre ses propres colonnes). Sans noms, statsmodels
+        # rend `const, x1, x2…` et **aucune variable ne s'apparie** : l'ancrage
+        # échouerait en silence. `None` conserve exactement le comportement
+        # d'avant — un array anonyme.
+        self.feature_names = list(feature_names) if feature_names else None
         self._res = None
         self._n_features = None
 
     def _design(self, X):
         import statsmodels.api as sm
         X = np.asarray(X, dtype=float)
+        if self.feature_names and X.shape[1] == len(self.feature_names):
+            import pandas as _pd
+            X = _pd.DataFrame(X, columns=self.feature_names)
         return sm.add_constant(X, has_constant='add')
 
     def fit(self, X, y, sample_weight=None):
@@ -608,6 +628,159 @@ class _GLMWalkForward:
 
     def __repr__(self):
         return f"_GLMWalkForward(famille={self.famille!r})"
+
+
+class _CANNWalkForward:
+    """Adaptateur CANN à interface sklearn, pour le recalibrer FIDÈLEMENT.
+
+    ⚠️⚠️ POURQUOI IL EXISTE — c'est le défaut du GLM, à l'identique, un cran
+    plus loin. `a6:1723` l'écrivait sans détour : « Les `DL_*` restent en proxy
+    (réseaux de neurones : pas de fabrique). » Conséquence mesurée le
+    05/09/2026, dès que le CANN devient le modèle retenu :
+
+        modele_recalibre        : DL_CANN -> proxy GBM
+        modele_recalibre_fidele : False
+        statut                  : plafonné à AMBRE, en production
+
+    C'est exactement ce que l'audit V14 avait trouvé pour le GLM — « UN GLM NE
+    POUVAIT JAMAIS ÊTRE CERTIFIÉ VERT. JAMAIS » — et la leçon écrite alors vaut
+    encore : *on a beaucoup vérifié que le système REFUSE ce qu'il doit
+    refuser ; personne n'a vérifié qu'il ACCEPTE ce qu'il doit accepter.*
+
+    ⚠️⚠️ LE GLM D'ANCRAGE EST RÉ-AJUSTÉ SUR LA FENÊTRE, ET C'EST LE POINT.
+    Un CANN vaut « GLM + résidu » : garder le GLM ajusté sur TOUT l'historique
+    ferait entrer le futur dans l'ancrage, à chaque fenêtre. **Ce serait une
+    fuite de données, dans l'instrument même qui sert à détecter les
+    dérives.** Le GLM est donc réappris ici, sur les seules lignes de la
+    fenêtre — par `_GLMWalkForward`, la fabrique GLM déjà en place.
+
+    ⚠️ ET LE RÉSEAU N'EST PAS RÉIMPLÉMENTÉ : `fit()` appelle
+    `AgentA5DeepLearning._calibrer_cann`, celui-là même qui produit le modèle
+    de production. *Deux implémentations du même modèle divergent ; on ne
+    recalibrerait alors pas ce qu'on a retenu.*
+    """
+
+    def __init__(self, col_cible: str = 'nb_sinistres', feature_names=None,
+                 n_epochs: int = 200, batch_size: int = 512,
+                 lr: float = 1e-3):
+        self.col_cible = col_cible
+        self.feature_names = list(feature_names) if feature_names else None
+        self.n_epochs = n_epochs
+        self.batch_size = batch_size
+        self.lr = lr
+        self._modele = None
+        self._noms = None
+        self._scaler = None
+        self.glm_gele = False
+        self.glm_ancre = None
+
+    # ── L'ancrage : le GLM de la cible, RÉAPPRIS sur la fenêtre ─────────────
+    def _glm_de_la_fenetre(self, X, y, expo):
+        """Le GLM sur lequel le CANN s'ancre, ajusté sur CES lignes.
+
+        ⚠️ La famille suit la CIBLE, comme partout ailleurs : comptage →
+        Poisson avec offset. C'est la spécification qu'`_GLMWalkForward`
+        applique déjà pour la production.
+        """
+        famille = 'poisson' if self.col_cible in COLS_COMPTAGE else 'tweedie'
+        glm = _GLMWalkForward(famille=famille, col_cible=self.col_cible,
+                              feature_names=self._noms)
+        glm.fit(X, y, sample_weight=expo)
+        return famille, glm
+
+    def fit(self, X, y, sample_weight=None):
+        import torch
+
+        from direction_non_vie.tarification.a5_deep_learning.agent import (
+            AgentA5DeepLearning,
+        )
+        X = np.asarray(X, dtype=float)
+        y = np.asarray(y, dtype=float)
+        n, p = X.shape
+        self._noms = (self.feature_names if self.feature_names
+                      and len(self.feature_names) == p
+                      else [f'x{i}' for i in range(p)])
+        expo = (np.maximum(np.asarray(sample_weight, dtype=float), 1e-9)
+                if sample_weight is not None else np.ones(n))
+
+        # ⚠️⚠️ LE GLM S'AJUSTE SUR X BRUT, LE RÉSEAU REÇOIT X STANDARDISÉ, ET
+        # LE SCALER FAIT LE PONT. `_calibrer_cann` reprojette les coefficients
+        # (`w = beta * sigma`, `biais += beta * mu`) : sans scaler il REFUSE
+        # d'ancrer — et il a raison, il ne peut pas deviner l'échelle.
+        #   *Mesuré en écrivant ce lot : sans cette standardisation,
+        #   `glm_gele = False`. Le réseau s'entraînait librement et rendait des
+        #   prédictions parfaitement finies — ce n'était simplement plus un
+        #   CANN.* C'est le défaut même que le lot 7 corrige, reproduit ici
+        #   par l'adaptateur : il « marchait » sans être fidèle.
+        scaler = StandardScaler().fit(X)
+        X_std = scaler.transform(X).astype(np.float32)
+        self._scaler = scaler
+
+        famille, glm = self._glm_de_la_fenetre(X, y, expo)
+        # ⚠️ `_calibrer_cann` attend la forme d'un résultat d'A3 : le modèle
+        # ajusté ET la cible déclarée (c'est elle qui pilote l'appariement
+        # cible -> famille). On la lui donne, construite sur la FENÊTRE.
+        result_a3 = {
+            'success': True,
+            'modeles':   {famille: glm._res},
+            'metriques': {famille: {'cible': self.col_cible}},
+        }
+
+        # ⚠️ Un jeu de VALIDATION distinct, découpé sur la fenêtre
+        # d'apprentissage et jamais sur le test : `_calibrer_cann` l'exige
+        # depuis le lot 1.1 (constat `a5/C6`), et pour la même raison ici.
+        coupe = max(1, int(n * 0.85))
+        # ⚠️ INSTANCE NUE (`__new__`, sans `__init__`) : `_calibrer_cann` ne
+        # dépend que de `scalers` et `_cible_run`. C'est le même constat que
+        # pour les `_calibrer_*` d'A3 — une méthode qui n'utilise que des
+        # auxiliaires n'a pas besoin de l'agent entier.
+        agent = AgentA5DeepLearning.__new__(AgentA5DeepLearning)
+        agent.scalers = {'standard': scaler}
+        agent._cible_run = self.col_cible
+        res = agent._calibrer_cann(
+            X_train=X_std[:coupe],
+            X_test=X_std[coupe:],
+            y_train=y[:coupe].astype(np.float32),
+            y_test=y[coupe:].astype(np.float32),
+            feature_names=self._noms,
+            device=torch.device('cpu'),
+            n_epochs=self.n_epochs, batch_size=self.batch_size, lr=self.lr,
+            result_a3=result_a3,
+            expo_train=expo[:coupe], expo_test=expo[coupe:],
+            X_val=X_std[coupe:],
+            y_val=y[coupe:].astype(np.float32),
+            expo_val=expo[coupe:],
+        )
+        self._modele = res['modele']
+        # ⚠️ L'ancrage a-t-il vraiment eu lieu ? On le RELÈVE, on ne le suppose
+        # pas : un CANN non ancré n'est pas un CANN, et le dire ici évite de
+        # rapporter comme « fidèle » une recalibration qui ne l'est pas.
+        self.glm_gele = bool((res.get('metriques') or {}).get('glm_gele'))
+        self.glm_ancre = (res.get('metriques') or {}).get('glm_ancre')
+        return self
+
+    def predict(self, X):
+        import torch
+        if self._modele is None:
+            raise RuntimeError('_CANNWalkForward.predict() avant fit().')
+        # ⚠️ LA MÊME ÉCHELLE QU'À L'AJUSTEMENT. Prédire sur X brut alors que le
+        # réseau a appris sur X standardisé donnerait des prédictions
+        # silencieusement fausses — finies, positives, et sans rapport.
+        X = self._scaler.transform(np.asarray(X, dtype=float)).astype(np.float32)
+        # ⚠️ OFFSET NUL, comme `_GLMWalkForward.predict` : le walk-forward
+        # compare des moyennes par contrat, et l'exposition de la fenêtre de
+        # test entre dans le A/E en aval. *Deux conventions d'offset entre
+        # deux modèles recalibrés rendraient leurs A/E incomparables.*
+        self._modele.eval()
+        with torch.no_grad():
+            pred = self._modele(
+                torch.FloatTensor(X),
+                torch.zeros(len(X), dtype=torch.float32),
+            ).cpu().numpy()
+        return np.asarray(pred, dtype=float).ravel()
+
+    def __repr__(self):
+        return f"_CANNWalkForward(cible={self.col_cible!r})"
 
 
 class _ModeleFrequenceExposition:
