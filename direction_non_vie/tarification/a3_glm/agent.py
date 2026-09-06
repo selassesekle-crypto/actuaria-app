@@ -1780,6 +1780,41 @@ class AgentA3GLM:
             except Exception as e:
                 logger.warning(f"Erreur Tweedie iter {iteration}: {e}")
                 if vars_actives:
+                    # ⚠️⚠️ LA VARIABLE PERDUE POUR L'AUDIT — constat `A3-1`.
+                    # Ce bloc faisait `vars_actives.pop()` ET RIEN D'AUTRE :
+                    # la variable n'était ni retenue, ni exclue, elle n'avait
+                    # jamais existé. Les deux autres familles la déclarent
+                    # depuis longtemps — le Poisson dans
+                    # `core/frequence.py:137-157`, le Gamma vingt lignes plus
+                    # haut avec trente lignes de commentaire qui expliquent
+                    # POURQUOI il faut le faire. *Le correctif avait atteint
+                    # deux familles sur trois.*
+                    # ⚠️⚠️ ET C'EST LE DÉNOMINATEUR DE LA PHRASE DE PUISSANCE
+                    # QUI ÉTAIT FAUX. `phrase_puissance_selection` existe pour
+                    # dire à l'actuaire combien de variables ont été TESTÉES —
+                    # « avec onze candidates testées à 5 %, la probabilité
+                    # qu'au moins une variable de bruit passe vaut ~37 % ».
+                    # Mesuré : le Tweedie annonçait « 1 candidates testées »
+                    # là où le Poisson, sur les mêmes données, en annonçait 4.
+                    # Annoncer 1 au lieu de 4 sous-estime exactement le risque
+                    # que cette phrase existe pour signaler.
+                    # ⚠️ Les trois affirmations du Gamma valent ici mot pour
+                    # mot : la p-value n'a JAMAIS été calculée (`None`, jamais
+                    # 1.0) ; la cause n'est pas établie (le `except` est nu, on
+                    # nomme le TYPE réel) ; et la variable retirée est
+                    # ARBITRAIRE — `vars_actives[-1]` n'est pas celle qui a
+                    # échoué. Le comportement d'ajustement est INCHANGÉ : seule
+                    # la piste d'audit se complète.
+                    vars_exclues.append({
+                        'variable':            vars_actives[-1],
+                        'pvalue':              None,
+                        'pvalue_non_testee':   True,
+                        'variable_arbitraire': True,
+                        'raison': (f"echec de l'ajustement ({type(e).__name__}: "
+                                   f"{str(e)[:60]}) — variable retiree "
+                                   f"ARBITRAIREMENT (la derniere), la cause "
+                                   f"reelle n'est pas etablie"),
+                    })
                     vars_actives.pop()
                 else:
                     break

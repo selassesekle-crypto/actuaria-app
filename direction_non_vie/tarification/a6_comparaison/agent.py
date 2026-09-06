@@ -123,7 +123,7 @@ from core.conformite_reglementaire import (
     VRAISEMBLANCE_IMPLAUSIBLE, VRAISEMBLANCE_NON_CALIBRE,
     reserve_vraisemblance_non_calibree,
     GINI_PLAUSIBLE_MAX_FREQUENCE,
-    AE_FENETRE_ACCEPTABLE, AE_FENETRE_STRICTE,
+    AE_FENETRE_ACCEPTABLE, AE_FENETRE_STRICTE, SEUIL_CV_INSTABLE,
     gini_texte, gini_arrondi, mesure_texte,
 )
 # ⚠️ Le contrat de sortie vit dans la DIRECTION, pas dans `core` : cet import
@@ -145,9 +145,15 @@ from direction_non_vie.tarification.contrat_sortie import (
 #: statut RAG décidait en cherchant `'🔴' in _stab` : **une décision
 #: réglementaire suspendue à la présence d'un emoji dans une chaîne**. Qu'on
 #: réécrive « Instable ❌ » et le garde-fou cesse de bloquer, EN SILENCE —
-#: exactement le défaut `a6/C6`. Le seuil est nommé ici pour que le libellé et
+#: exactement le défaut `a6/C6`. Le seuil est nommé pour que le libellé et
 #: la décision lisent LE MÊME nombre et ne puissent plus diverger.
-SEUIL_CV_INSTABLE = 0.10
+#:
+#: ⚠️⚠️ IL A DÉMÉNAGÉ DANS `core/conformite_reglementaire` — constat `TR-1`.
+#: Il vivait ici, et `avertissement_walk_forward`, qui publie l'avertissement
+#: de stabilité dans les SIX surfaces, ne pouvait donc pas le lire : il
+#: décidait sur `'🔴' in stabilite_wf`, un libellé d'affichage. *Le seuil vit
+#: désormais là où la décision se prend, avec les autres bandes A/E.* Il est
+#: réexporté ici pour tous ses lecteurs existants.
 
 SPLIT_ALEATOIRE = 'aléatoire_80_20'
 SPLIT_WALK_FORWARD = 'walk_forward_temporel_avec_recalibration'

@@ -395,13 +395,79 @@ def comparer(avant: Empreinte, apres: Empreinte) -> list[Ecart]:
                 apres.contenus.get(surface, ABSENT) if surface in apres.contenus
                 else ABSENT))
             continue
-        plat_av = _aplatir(avant.contenus[surface])
-        plat_ap = _aplatir(apres.contenus[surface])
-        for chemin in sorted(set(plat_av) | set(plat_ap)):
-            val_av = plat_av.get(chemin, ABSENT)
-            val_ap = plat_ap.get(chemin, ABSENT)
-            if val_av != val_ap:
-                ecarts.append(Ecart(surface, chemin, val_av, val_ap))
+        ecarts.extend(_ecarts_entre(surface, '', avant.contenus[surface],
+                                    apres.contenus[surface]))
+    return ecarts
+
+
+def _ecarts_entre(surface: str, chemin: str, avant: Any,
+                  apres: Any) -> list[Ecart]:
+    """Descend les deux contenus EN PARALLELE, et compare selon leur forme.
+
+    ⚠️ Un dictionnaire se compare par ses CLES (une coordonnee Excel, une
+    partie de `.docx`) ; une liste par son CONTENU. Aplatir les deux d'un coup
+    forcerait la liste a se comparer par sa position — voir
+    :func:`_ecarts_de_liste`.
+    """
+    if isinstance(avant, Mapping) and isinstance(apres, Mapping):
+        ecarts: list[Ecart] = []
+        for cle in sorted(set(avant) | set(apres), key=str):
+            ecarts.extend(_ecarts_entre(
+                surface, f'{chemin}[{cle}]',
+                avant.get(cle, ABSENT), apres.get(cle, ABSENT)))
+        return ecarts
+    if isinstance(avant, list) and isinstance(apres, list):
+        return _ecarts_de_liste(surface, chemin, avant, apres)
+    plat_av = _aplatir(avant, chemin)
+    plat_ap = _aplatir(apres, chemin)
+    return [Ecart(surface, c, plat_av.get(c, ABSENT), plat_ap.get(c, ABSENT))
+            for c in sorted(set(plat_av) | set(plat_ap))
+            if plat_av.get(c, ABSENT) != plat_ap.get(c, ABSENT)]
+
+
+def _ecarts_de_liste(surface: str, chemin: str, avant: list,
+                     apres: list) -> list[Ecart]:
+    """Ce qui APPARAIT et ce qui DISPARAIT, jamais ce qui se DECALE.
+
+    ⚠️⚠️ TROUVE EN M'EN SERVANT, AU LOT 3. Une liste comparée par sa POSITION
+    dit « la ligne 109 a changé » le jour où une ligne est insérée en 108 :
+    mesuré, l'ajout de DEUX libellés au chapitre 5 du rapport d'équipe rendait
+    **169 écarts** dont 167 n'étaient que le décalage des lignes suivantes. Un
+    verdict noyé dans son propre bruit ne se lit plus — et c'est précisément
+    au lot qui déplace un prix qu'il faudra le lire.
+
+    ⚠️ C'EST LE DEFAUT QUE CE MODULE NOMME DEJA POUR L'EXCEL et qu'il n'avait
+    pas fermé ici : `contenu_xlsx` fait voyager la COORDONNEE avec la valeur
+    pour cette raison exacte. Un HTML et un `.docx` n'ont pas de coordonnée
+    stable — leur unité est la LIGNE, et deux documents se comparent donc par
+    ce qui s'y trouve, pas par le rang où il s'y trouve.
+
+    ⚠️⚠️ MAIS LA POSITION REDEVIENT LE BON REPÈRE QUAND RIEN N'A ÉTÉ INSÉRÉ.
+    Deux listes de MÊME LONGUEUR n'ont subi ni ajout ni retrait : le rang y est
+    stable, et comparer par rang rend le couple « avant → après » — « la date
+    d'arrêté est passée de X à Y » — qu'un multi-ensemble découperait en une
+    disparition et une apparition sans les relier. *Mesuré : `GEL-3b` et
+    `GEL-5b` exigent ce couple, et ils ont refusé la première version de cette
+    fonction.* La règle est donc :
+
+        même longueur      -> par le RANG   (une modification en place)
+        longueur différente -> par le CONTENU (une insertion a tout décalé)
+
+    ⚠️ Le MULTI-ensemble, pas l'ensemble : une ligne présente deux fois avant
+    et une seule fois après est un écart, et un `set` l'effacerait.
+    """
+    from collections import Counter
+
+    if len(avant) == len(apres):
+        return [Ecart(surface, f'{chemin}[{i}]', a, b)
+                for i, (a, b) in enumerate(zip(avant, apres)) if a != b]
+    compte_av = Counter(repr(v) for v in avant)
+    compte_ap = Counter(repr(v) for v in apres)
+    ecarts: list[Ecart] = []
+    for valeur, n in sorted((compte_av - compte_ap).items()):
+        ecarts.append(Ecart(surface, f'{chemin}[disparu x{n}]', valeur, ABSENT))
+    for valeur, n in sorted((compte_ap - compte_av).items()):
+        ecarts.append(Ecart(surface, f'{chemin}[apparu x{n}]', ABSENT, valeur))
     return ecarts
 
 

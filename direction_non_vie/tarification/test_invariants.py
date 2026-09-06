@@ -273,10 +273,18 @@ class TestInvariant_LivrablesCoherentsAvecLeGate(unittest.TestCase):
             ("biais de tarification (A/E hors bande)",
              {'disponible': True, 'modele_recalibre_fidele': True,
               'gini_wf_moyen': 0.2, 'ae_ratio': 0.45}),
+            # ⚠️⚠️ CE CAS PORTE DESORMAIS SON CHAMP — constat `TR-1`. Il
+            # n'etait << degrade >> que par un ROND ROUGE dans un libelle
+            # d'affichage : la source unique decidait sur ce symbole, et le
+            # jour ou quelqu'un ecrivait « Instable ❌ » elle se taisait. Elle
+            # lit maintenant `ae_cv_wf`.
+            # *Le cas prouve toujours qu'une degradation produit un
+            # avertissement — mais la degradation est MESUREE, plus annoncee,
+            # et l'invariant en sort plus fort.*
             ("instabilité temporelle",
              {'disponible': True, 'modele_recalibre_fidele': True,
-              'gini_wf_moyen': 0.2, 'ae_ratio': 1.0,
-              'stabilite_wf': '🔴 Instable'}),
+              'gini_wf_moyen': 0.2, 'ae_ratio': 1.0, 'n_fenetres': 4,
+              'ae_cv_wf': 0.40, 'stabilite_wf': '🔴 Instable'}),
         ]
         for label, bt in cas:
             with self.subTest(cas=label):

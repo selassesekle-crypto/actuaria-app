@@ -42,10 +42,19 @@ _MODELE = {'modele': 'GBM', 'famille': 'GBM', 'gini_test': 0.2145,
 #: `avertissement_walk_forward`, pas une approximation. Ma première version en
 #: manquait une (`modele_recalibre_fidele`) et le contrôle POSITIF a échoué :
 #: c'est exactement son rôle. On corrige le TÉMOIN, jamais l'assertion.
+#: ⚠️⚠️ IL PORTE DESORMAIS `ae_cv_wf` — constat `TR-1`, 06/09/2026. Ce temoin
+#: declarait TROIS fenetres et le libelle « stable », SANS aucun coefficient de
+#: variation : rien n'etablissait la stabilite qu'il affirmait. C'est
+#: exactement le defaut que `TR-1` ferme — le libelle asserte ce qu'aucun champ
+#: ne mesure — et `avertissement_walk_forward`, qui lit maintenant le CHAMP,
+#: le signalait a juste titre.
+#: *Le test prouve toujours la meme chose — un backtest SAIN ne recoit aucun
+#: avertissement — mais << sain >> se mesure desormais au lieu de s'annoncer.*
 _BACKTEST_OK = {'disponible': True, 'modele_recalibre_fidele': True,
                 'modele_recalibre': 'GBM', 'n_fenetres': 3,
                 'gini_wf_moyen': 0.20, 'ae_ratio': 1.00, 'ae_moyen_wf': 1.00,
-                'n_fenetres_rouge': 0, 'stabilite_wf': '🟢 stable',
+                'n_fenetres_rouge': 0, 'ae_cv_wf': 0.02,
+                'stabilite_wf': '🟢 stable',
                 'methode': 'walk_forward_temporel'}
 
 

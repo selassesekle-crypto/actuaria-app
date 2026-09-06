@@ -56,6 +56,38 @@ from direction_non_vie.tarification.a6_comparaison.agent import (
 _AGENTS = ('a3_glm', 'a4_ml', 'a5_deep_learning', 'a6_comparaison')
 _RONDS = ('🟢', '🟡', '🔴')
 
+#: ⚠️⚠️ L'ASSIETTE ETAIT TROP ETROITE, ET C'EST CE QUI A LAISSE PASSER `TR-1`.
+#: `test_aucune_decision_ne_lit_un_rond_colore` ne regardait que les QUATRE
+#: agents. Or le site qui restait -- `conformite:923`, le module qui publie
+#: l'avertissement de stabilite dans les SIX surfaces -- vit dans `core/`.
+#: *Le motif du chantier, applique au filet lui-meme : le correctif avait
+#: atteint le verrou d'A6 et pas son jumeau.*
+#:
+#: Mesure du 06/09/2026, meme critere elargi a TOUT le code de production :
+#: SEPT sites decident sur un glyphe, dont ZERO dans les quatre agents.
+_MODULES_DECIDEURS = tuple(
+    f'direction_non_vie.tarification.{a}.agent' for a in _AGENTS) + (
+    'core.conformite_reglementaire',
+    'core.qualite_donnees',
+    'core.elasticite',
+    'direction_non_vie.tarification.services.rapport_modeles_tarif',
+    'direction_non_vie.tarification.services.rapport_equipe_tarif',
+    'direction_non_vie.tarification.services.tarif_excel',
+)
+
+#: ⚠️ LES SIX AUTRES SITES MESURES, NOMMES UN PAR UN AVEC LEUR MOTIF -- jamais
+#: une categorie, qui laisserait entrer le prochain sans un mot :
+#:
+#:   `actuaria_app.py` (5 sites : l. 1962, 1964, 3457, 3681, 3683) --
+#:   l'application est DEFINITIVEMENT FERMEE, decision actee par Selasse. Les
+#:   cinq defauts sont REELS et comptes ; ils ne sont pas corriges ici.
+#:
+#:   `direction_sante_prevoyance/.../sp_reg1_solvabilite2/agent.py:691` --
+#:   hors du perimetre de ce chantier (Non-Vie / tarification).
+#:
+#: *Ces deux exclusions sont des PERIMETRES, pas des exemptions techniques :
+#: elles ne disent pas que le defaut n'existe pas, elles disent qui le traite.*
+
 
 def _source(module: str) -> str:
     mod = __import__(module, fromlist=['x'])
@@ -134,24 +166,105 @@ class TestDecisionSansEmoji(unittest.TestCase):
         self.assertNotIn('stabilité inter-fenêtres dégradée', motifs)
 
     def test_aucune_decision_ne_lit_un_rond_colore(self):
-        """⚠️ Contrôle par AST : plus aucun `'🔴' in …` dans les quatre agents.
+        """⚠️ Plus aucun `'🔴' in …` dans les modules QUI DÉCIDENT.
 
         Chercher un symbole dans une chaîne d'affichage est une dépendance
         invisible : le jour où le libellé change, la décision se tait.
+
+        ⚠️⚠️ L'ASSIETTE COUVRE DÉSORMAIS `core/` ET `services/` — constat
+        `TR-1`. Elle s'arrêtait aux quatre agents, et le site qui restait
+        vivait dans `core/conformite_reglementaire`. Un filet qui ne regarde
+        pas là où le défaut a survécu certifie ce qu'il n'a pas vu.
         """
         fautifs = []
-        for agent in _AGENTS:
-            src = _source(f'direction_non_vie.tarification.{agent}.agent')
+        for module in _MODULES_DECIDEURS:
+            src = _source(module)
             for i, ligne in enumerate(src.split('\n'), 1):
                 if re.match(r'\s*#', ligne):
                     continue
                 for rond in _RONDS:
                     if re.search(rf"[\'\"]{rond}[\'\"]\s+in\s+", ligne):
-                        fautifs.append(f"{agent}:{i}")
+                        fautifs.append(f"{module}:{i}")
         self.assertEqual(
             fautifs, [],
             f"Décision(s) lisant un rond dans une chaîne : {fautifs}. Le "
             f"libellé est fait pour être lu, pas interrogé par un verrou.")
+        print(f'    assiette sans-emoji : {len(_MODULES_DECIDEURS)} modules '
+              f'(4 agents + core + services), 0 decision sur un glyphe')
+
+    # ══════════════════════════════════════════════════════════════════════
+    # TR-1 — LE SECOND SITE : `avertissement_walk_forward`, dans `core`
+    # ══════════════════════════════════════════════════════════════════════
+
+    def _avertir(self, cv, libelle, n_fenetres=4):
+        """L'avertissement publié dans les SIX surfaces, pour un état donné.
+
+        ⚠️ LES DEUX GARDES AMONT SONT DANS LA FIXTURE. Sans `disponible` ni
+        `modele_recalibre_fidele`, la fonction sort en amont et un contrôle
+        écrit sans elles mesurerait le message d'indisponibilité — mesuré,
+        c'est ce qu'une première version de cette sonde a fait sur NEUF cas.
+        """
+        from core.conformite_reglementaire import avertissement_walk_forward
+        return avertissement_walk_forward({
+            'disponible': True, 'modele_recalibre_fidele': True,
+            'gini_wf_moyen': 0.20, 'ae_ratio': 1.00, 'ae_moyen_wf': 1.00,
+            'n_fenetres_rouge': 0, 'n_fenetres': n_fenetres,
+            'ae_cv_wf': cv, 'stabilite_wf': libelle,
+        }) or ''
+
+    def test_TR1_un_CV_degrade_avertit_MEME_sans_le_rond(self):
+        """⚠️⚠️ LA FAILLE, DANS LE MODULE QUI PUBLIE. A6 avait corrigé son
+        propre verrou ; celui-ci décidait encore sur `'🔴' in stabilite_wf`."""
+        for libelle in ('Instable ❌', '● Instable', 'Instable'):
+            with self.subTest(libelle=libelle):
+                self.assertIn('INSTABILITÉ TEMPORELLE',
+                              self._avertir(0.40, libelle),
+                              'un CV dégradé sans le rond ne déclenche rien : '
+                              'la décision suit encore le symbole')
+
+    def test_TR1_un_rond_SEUL_n_avertit_PLUS(self):
+        """⚠️ SECOND SENS, sans quoi une garde qui avertirait toujours
+        passerait le test précédent."""
+        self.assertNotIn('INSTABILITÉ TEMPORELLE',
+                         self._avertir(0.02, '🔴 Instable'))
+
+    def test_TR1_une_stabilite_NON_MESUREE_se_declare(self):
+        """⚠️⚠️ LA QUATRIÈME BRANCHE, QUI MANQUAIT. Quand `ae_cv_wf` vaut
+        `None`, A6 écrit « Stabilité NON mesurée » et cette fonction restait
+        MUETTE : une absence de contrôle ne se disait nulle part."""
+        message = self._avertir(
+            None, '⚠️ Stabilité NON mesurée — aucune fenêtre avec A/E')
+        self.assertIn('NON MESURÉE', message)
+        self.assertNotIn('INSTABILITÉ TEMPORELLE', message,
+                         "une absence de mesure n'est pas une instabilité")
+
+    def test_TR1_le_nominal_ne_bouge_PAS(self):
+        """⚠️ Contrôle NÉGATIF déclaré, et il porte la mesure du jour : sur les
+        portefeuilles réels le CV vaut 0,6206 et le verdict est inchangé."""
+        self.assertEqual(self._avertir(0.02, '🟢 Stable'), '')
+        self.assertIn('INSTABILITÉ TEMPORELLE',
+                      self._avertir(0.6206, '🔴 Instable'))
+
+    def test_TR1_un_backtest_qui_NE_DECLARE_PAS_ses_fenetres_reste_muet(self):
+        """⚠️⚠️ LA GATE COMPLÈTE A REFUSÉ MA PREMIÈRE VERSION, ET ELLE AVAIT
+        RAISON. La branche d'absence tirait sur `cv is None` seul — donc sur
+        tout backtest ne portant pas la clé, y compris les témoins d'un
+        walk-forward SAIN : quatre invariants sont tombés, dont « un
+        walk-forward sain ne doit produire AUCUN avertissement ».
+
+        *On ne sait pas que la stabilité n'a pas été mesurée ; on sait
+        seulement qu'on n'a pas le champ. Déclarer l'un pour l'autre est le
+        défaut en miroir.* Le discriminant est `n_fenetres`, un CHAMP posé par
+        A6 (`a6:2241`) — pas la phrase « NON mesurée », qui rouvrirait TR-1.
+        """
+        self.assertEqual(
+            self._avertir(None, '🟢 Stable', n_fenetres=None), '',
+            "un backtest qui ne declare pas ses fenetres ne permet pas de "
+            "conclure que la stabilite n'a pas ete mesuree")
+        self.assertIn(
+            'NON MESURÉE',
+            self._avertir(None, '🟢 Stable', n_fenetres=1),
+            'un walk-forward qui a tourne SANS produire de CV doit le dire')
 
     def test_le_seuil_est_NOMME_et_partage(self):
         """⚠️ Le libellé et la décision doivent lire LE MÊME nombre.

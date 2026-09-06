@@ -393,6 +393,53 @@ class TestAbsenceEtIllisible(unittest.TestCase):
 #  GEL-9 — L'INVENTAIRE ENUMERE, IL NE DECLARE PAS
 # =============================================================================
 
+class TestListesComparees(unittest.TestCase):
+    """GEL-14 — UNE INSERTION NE DOIT PAS FAIRE ROUGIR TOUT CE QUI SUIT.
+
+    ⚠️⚠️ TROUVE EN M'EN SERVANT, AU LOT 3. Ajouter deux libelles au chapitre 5
+    du rapport d'equipe rendait **169 ecarts**, dont 167 n'etaient que le
+    decalage des lignes suivantes. C'est le defaut que ce module nomme deja
+    pour l'Excel -- la coordonnee voyage avec la valeur -- et qu'il n'avait pas
+    ferme pour les listes. *Un verdict noye dans son propre bruit ne se lit
+    plus, et c'est au lot qui deplace un prix qu'il faudra le lire.*
+    """
+
+    @staticmethod
+    def _comparer(avant, apres):
+        return G.comparer(G.Empreinte(contenus={'S': avant}),
+                          G.Empreinte(contenus={'S': apres}))
+
+    def test_GEL14_une_insertion_ne_rougit_QUE_la_ligne_inseree(self):
+        avant = ['a', 'b', 'c', 'd', 'e']
+        apres = ['a', 'b', 'NOUVELLE', 'c', 'd', 'e']
+        ecarts = self._comparer(avant, apres)
+        self.assertEqual(
+            len(ecarts), 1,
+            f'{len(ecarts)} ecart(s) pour UNE insertion : les lignes '
+            f'suivantes sont comptees comme changees. {[str(e) for e in ecarts]}')
+        self.assertIn('NOUVELLE', str(ecarts[0]))
+        print('    GEL-14 insertion : 1 ecart, pas 4')
+
+    def test_GEL14b_a_longueur_EGALE_le_couple_avant_apres_est_conserve(self):
+        """⚠️ LE SECOND SENS. Comparer par multi-ensemble PARTOUT decouperait
+        une modification en place en une disparition et une apparition, sans
+        les relier -- et `GEL-3b` comme `GEL-5b` exigent ce couple. La regle
+        est : meme longueur -> par le RANG, longueur differente -> par le
+        CONTENU."""
+        ecarts = self._comparer(['a', '30/06/2026', 'c'],
+                                ['a', '31/12/2026', 'c'])
+        self.assertEqual(len(ecarts), 1)
+        self.assertEqual(ecarts[0].avant, '30/06/2026')
+        self.assertEqual(ecarts[0].apres, '31/12/2026')
+        print('    GEL-14b modification en place : couple avant/apres conserve')
+
+    def test_GEL14c_une_ligne_en_DOUBLE_reste_un_ecart(self):
+        """⚠️ Le MULTI-ensemble, pas l'ensemble : un `set` effacerait une
+        ligne presente deux fois avant et une seule fois apres."""
+        ecarts = self._comparer(['x', 'x', 'y'], ['x', 'y'])
+        self.assertTrue(ecarts, "la perte d'un doublon n'est pas vue")
+
+
 class TestInventaireEnumere(unittest.TestCase):
 
     def test_GEL9_une_cle_bytes_INCONNUE_entre_dans_la_mesure(self):

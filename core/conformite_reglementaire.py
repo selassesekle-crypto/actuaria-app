@@ -900,6 +900,9 @@ def avertissement_walk_forward(backtest: Optional[dict]) -> Optional[str]:
     ae      = bt.get('ae_ratio')
     ae_moy  = bt.get('ae_moyen_wf')
     n_rouge = bt.get('n_fenetres_rouge', 0) or 0
+    # ⚠️ LE CHAMP MESURÉ, ET LE LIBELLÉ À CÔTÉ. `cv` porte la décision ;
+    # `stab` n'est plus que du texte à afficher dans le message.
+    cv      = bt.get('ae_cv_wf')
     stab    = str(bt.get('stabilite_wf', ''))
     if gini_wf is None:
         return ("⚠ VALIDATION TEMPORELLE SANS RÉSULTAT — le walk-forward a "
@@ -920,10 +923,51 @@ def avertissement_walk_forward(backtest: Optional[dict]) -> Optional[str]:
     if ae_moy is not None and not (0.90 <= float(ae_moy) <= 1.10):
         return (f"⚠ BIAIS PERSISTANT — A/E moyen sur toutes les fenêtres = "
                 f"{ae_moy}, hors bande acceptable [0,90 ; 1,10].")
-    if '🔴' in stab:
-        return (f"⚠ INSTABILITÉ TEMPORELLE — stabilité inter-fenêtres : {stab}. "
-                f"Les performances du modèle varient fortement d'un exercice à "
-                f"l'autre.")
+    # ⚠️⚠️ ON DÉCIDE SUR LE CHAMP, JAMAIS SUR LE LIBELLÉ — constat `TR-1`.
+    # Cette branche faisait `if '🔴' in stab`, où `stab` est
+    # `backtest['stabilite_wf']`, un LIBELLÉ D'AFFICHAGE (« 🔴 Instable »)
+    # destiné à être lu par un humain. Ses trois voisines ci-dessus lisent des
+    # NOMBRES (`gini_wf`, `ae`, `n_rouge`, `ae_moy`) ; celle-ci cherchait un
+    # symbole dans une chaîne de texte. *Qu'on écrive « Instable ❌ » et le
+    # garde-fou se tait, EN SILENCE.*
+    # ⚠️⚠️ ET LE CORRECTIF N'AVAIT ATTEINT QU'UN DES DEUX SITES. A6 a réparé
+    # SON PROPRE verrou (`a6:2686`, « le CHAMP, pas son libellé ») et nommé le
+    # seuil ; ce module-ci, qui publie l'avertissement dans les SIX surfaces,
+    # est resté sur le symbole. C'est la cause (b) dans sa forme pure — et la
+    # sentinelle qui aurait dû l'attraper
+    # (`test_decision_sans_emoji.test_aucune_decision_ne_lit_un_rond_colore`)
+    # ne regardait que les quatre agents : `core/` n'était pas dans son
+    # assiette. *Le motif du chantier, appliqué au filet.*
+    if cv is not None and float(cv) > SEUIL_CV_INSTABLE:
+        return (f"⚠ INSTABILITÉ TEMPORELLE — CV de l'A/E inter-fenêtres = "
+                f"{float(cv):.4f} > {SEUIL_CV_INSTABLE}. Les performances du "
+                f"modèle varient fortement d'un exercice à l'autre "
+                f"({stab or 'sans libellé'}).")
+    # ⚠️ QUATRIÈME BRANCHE — UNE ABSENCE DE MESURE SE DÉCLARE. Elle manquait :
+    # quand `ae_cv_wf` vaut `None`, A6 écrit « ⚠️ Stabilité NON mesurée — aucune
+    # fenêtre avec A/E » et cette fonction restait MUETTE. Une stabilité qu'on
+    # n'a pas su mesurer n'est ni bonne ni mauvaise : elle se dit.
+    #   *Ne pas dégrader pour autant — une absence n'est pas une instabilité,
+    #   c'est la règle appliquée partout ailleurs dans ce module.*
+    # ⚠️⚠️ ET ELLE EXIGE `n_fenetres`, PAS SEULEMENT `cv is None` — la gate
+    # complète a refusé la première version. `cv is None` confond DEUX états :
+    # un walk-forward qui a tourné sans produire d'A/E exploitable (le cas de
+    # `TR-1`, réel) et un backtest qui ne porte tout simplement pas la clé
+    # (fixtures d'invariants, formes anciennes). Sur le second, la fonction
+    # criait « stabilité non mesurée » pour un walk-forward SAIN, et quatre
+    # invariants l'ont dit — dont « un walk-forward sain ne doit produire
+    # AUCUN avertissement ».
+    #   *Déclarer une absence qu'on n'a pas su établir est le même défaut en
+    #   miroir : on ne sait pas que la stabilité n'a pas été mesurée, on sait
+    #   seulement qu'on n'a pas le champ.*
+    # ⚠️ Le discriminant est un CHAMP, jamais un libellé : `n_fenetres` est posé
+    # par A6 à côté d'`ae_cv_wf` (`a6:2241`). Y mettre la phrase « NON mesurée »
+    # rouvrirait exactement `TR-1`.
+    if cv is None and gini_wf is not None and bt.get('n_fenetres'):
+        return ("⚠ STABILITÉ TEMPORELLE NON MESURÉE — aucune fenêtre de "
+                "walk-forward n'a produit d'A/E exploitable. La variabilité "
+                "des performances d'un exercice à l'autre n'est PAS établie, "
+                "ni dans un sens ni dans l'autre.")
     return None
 
 
@@ -1880,6 +1924,16 @@ AE_FENETRE_ACCEPTABLE = (0.90, 1.10)
 #: Bande STRICTE, le grain fin À L'INTÉRIEUR de la précédente : un A/E qui y
 #: tombe est « non biaisé », pas seulement « acceptable ».
 AE_FENETRE_STRICTE = (0.95, 1.05)
+
+#: Seuil du coefficient de variation de l'A/E inter-fenêtres au-delà duquel la
+#: stabilité temporelle est dite dégradée.
+#:
+#: ⚠️⚠️ IL VIVAIT DANS `a6_comparaison` — constat `TR-1`. Le module qui PUBLIE
+#: l'avertissement (`avertissement_walk_forward`, plus bas) ne pouvait donc pas
+#: le lire, et il décidait à la place sur la présence de `'🔴'` dans un LIBELLÉ
+#: D'AFFICHAGE. *Un seuil qui ne vit pas là où la décision se prend se recopie,
+#: puis diverge.* Il est ici, avec les autres bandes ; `a6` l'importe.
+SEUIL_CV_INSTABLE = 0.10
 
 
 class EchecControleEffet(RuntimeError):

@@ -593,8 +593,14 @@ def export_excel_equipe(results: Dict[str, Dict], branche: str = '',
         if _avert_wf6:
             _kpi(ws5, r, "⚠ Portée de la validation", _avert_wf6,
                  statut="AMBRE", wrap=True); r += 1
-        if bt6.get('gini_wf_moyen') is not None:
-            _kpi(ws5, r, "Gini WF moyen", gini_arrondi(bt6.get('gini_wf_moyen', 0)), fmt=FMT_DEC4); r += 1
+        # ⚠️ LA LIGNE EXISTE TOUJOURS, MEME ABSENTE — `EX-3`. Elle disparaissait
+        # du classeur quand le Gini WF n'etait pas mesure, la ou HTML et Word
+        # la rendaient : une grandeur qui manque a UNE surface sur trois est
+        # exactement ce que la sentinelle des surfaces jumelles interdit.
+        # ⚠️ Le Gini de TEST, lui, etait deja publie ici (l. 585) — c'est le
+        # HTML et le Word qui ne le portaient pas.
+        _kpi(ws5, r, "Gini WF moyen",
+             gini_arrondi(bt6.get('gini_wf_moyen')), fmt=FMT_DEC4); r += 1
         # ⚠️ `round(None, 4)` leve : A6 publie None pour un A/E non calcule.
         _ae6 = bt6.get('ae_ratio')
         _kpi(ws5, r, "A/E ratio",
@@ -877,13 +883,18 @@ def export_html_equipe(results: Dict[str, Dict], branche: str = '',
         # ⚠️ La ligne 599 du même fichier le faisait déjà correctement pour
         # l'Excel : *le correctif avait atterri sur une surface et pas sur sa
         # jumelle.*
+        # ⚠️ ET LE MEME ARRONDI QUE SES DEUX JUMELLES. La mesure du 06/09 l'a
+        # montre APRES le correctif d'EX-2 : le HTML et le Word rendaient l'A/E
+        # BRUT quand l'Excel l'arrondissait a quatre decimales (l. 601) --
+        # exactement le defaut d'`EX-1`, deplace sur une autre grandeur.
         _ae6 = bt6.get('ae_ratio')
-        _ae_txt6 = '— non calcule' if _ae6 is None else _ae6
+        _ae_txt6 = '— non calcule' if _ae6 is None else round(_ae6, 4)
         section_a6 = f"""
         <div class="kpi-grid">
           <div class="kpi"><b>Modèle retenu</b><br>{prod.get('modele','N/A')}</div>
           <div class="kpi"><b>Score global</b><br>{_score_txt6}</div>
-          <div class="kpi"><b>Gini WF moyen</b><br>{bt6.get('gini_wf_moyen') if bt6.get('gini_wf_moyen') is not None else '—'}</div>
+          <div class="kpi"><b>Gini test du modele retenu</b><br>{gini_texte(prod.get('gini_test'))}</div>
+          <div class="kpi"><b>Gini WF moyen</b><br>{gini_texte(bt6.get('gini_wf_moyen'))}</div>
           <div class="kpi"><b>A/E ratio</b><br>{_ae_txt6}</div>
         </div>
         <p style="font-size:10px;color:#8A9BB0;font-style:italic;margin-top:4px;">
@@ -1193,6 +1204,10 @@ def export_word_equipe(results: Dict[str, Dict], branche: str = '',
         bt6  = r6.get('backtest', {})
         at6  = r6.get('audit_trail', {})
         doc.add_paragraph(f"Modèle de production retenu : {prod.get('modele','N/A')}")
+        # ⚠️ MÊME CONTRAT QUE LE HTML (`EX-2`) : `is None`, jamais `or`.
+        _ae_word = bt6.get('ae_ratio')
+        _ae_txt_word = ('— non calcule' if _ae_word is None
+                        else round(_ae_word, 4))
         _score_txt_eq = f"{prod.get('score_global'):.4f}" if 'score_global' in prod else '—'
         doc.add_paragraph(f"Score global : {_score_txt_eq}")
         # Audit V7 IMPORTANT #1 : qualification du score composite, absente
@@ -1207,7 +1222,24 @@ def export_word_equipe(results: Dict[str, Dict], branche: str = '',
         )
         r_score_note.italic = True
         r_score_note.font.size = Pt(8)
-        doc.add_paragraph(f"Gini walk-forward moyen (recalibré) : {bt6.get('gini_wf_moyen','—')}")
+        # ⚠️⚠️ TROIS FORMATS QUI NE PORTAIENT PAS LES MÊMES GRANDEURS —
+        # constats `EX-1` et `EX-3`, mesurés le 06/09/2026 sur la MÊME entrée :
+        #   · le Gini de test du modèle retenu : Excel oui, HTML non, Word non ;
+        #   · l'A/E : Excel oui, HTML oui, Word ABSENT (vérifié sur un A/E
+        #     nominal de 0,9686, où aucun avertissement ne vient le glisser
+        #     dans une phrase) ;
+        #   · le Gini WF : Excel arrondi, HTML et Word BRUTS — 0.17832145678901234
+        #     à côté de 0.1783 dans le même dossier.
+        # *Trois documents du même dossier ne portaient pas les mêmes faits, et
+        # c'est le Word qui circule.* Les trois passent désormais par
+        # `gini_texte`, la source unique que tous les autres Gini du fichier
+        # utilisaient déjà.
+        doc.add_paragraph(
+            f"Gini test du modèle retenu : {gini_texte(prod.get('gini_test'))}")
+        doc.add_paragraph(
+            f"Gini walk-forward moyen (recalibré) : "
+            f"{gini_texte(bt6.get('gini_wf_moyen'))}")
+        doc.add_paragraph(f"A/E ratio : {_ae_txt_word}")
         doc.add_paragraph(f"Profil de pondération retenu : {at6.get('profil_ponderation','N/A')}")
         doc.add_paragraph(f"Validé par : {at6.get('profil_valide_par') or '⚠ NON VALIDÉ'}")
         doc.add_paragraph(f"Gouvernance conforme : {'Oui' if at6.get('gouvernance_ok') else 'Non'}")
