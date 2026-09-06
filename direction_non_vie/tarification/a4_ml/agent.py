@@ -693,6 +693,33 @@ class _CANNWalkForward:
         glm.fit(X, y, sample_weight=expo)
         return famille, glm
 
+    #: Taille minimale du jeu de VALIDATION du walk-forward CANN.
+    #: ⚠️ Un arret anticipe qui se reglerait sur trois lignes ne mesure rien ;
+    #: et la seule alternative -- se replier sur le test -- est exactement le
+    #: constat `A4-4`. En dessous, on REFUSE.
+    MIN_VALIDATION = 10
+
+    @classmethod
+    def _coupes(cls, n: int) -> tuple[int, int]:
+        """(fin de fenetre d'apprentissage, fin du jeu d'ajustement).
+
+        ⚠️⚠️ LA PRECONDITION SE VERIFIE AVANT TOUT TRAVAIL. Placee apres
+        l'ajustement du GLM, elle etait inatteignable : sur une fenetre trop
+        courte, `statsmodels` mourait le premier et le message parlait d'une
+        deviance NaN. *Un garde-fou qui ne s'execute jamais n'en est pas un.*
+        """
+        coupe = max(1, int(n * 0.85))
+        coupe_fit = max(1, int(coupe * 0.85))
+        if coupe - coupe_fit < cls.MIN_VALIDATION:
+            raise ValueError(
+                f"fenetre d'apprentissage trop courte pour le walk-forward "
+                f"CANN : {coupe} ligne(s) donneraient un jeu de VALIDATION de "
+                f"{coupe - coupe_fit}, sous le minimum de {cls.MIN_VALIDATION}. "
+                f"L'arret anticipe exige un jeu de VALIDATION distinct du "
+                f"test. *Un repli sur le test rouvrirait exactement le constat "
+                f"`A4-4` ; on refuse plutot que de le faire en silence.*")
+        return coupe, coupe_fit
+
     def fit(self, X, y, sample_weight=None):
         import torch
 
@@ -707,6 +734,9 @@ class _CANNWalkForward:
                       else [f'x{i}' for i in range(p)])
         expo = (np.maximum(np.asarray(sample_weight, dtype=float), 1e-9)
                 if sample_weight is not None else np.ones(n))
+
+        # ⚠️ LA PRÉCONDITION D'ABORD, AVANT TOUT AJUSTEMENT — voir `_coupes`.
+        coupe, coupe_fit = self._coupes(n)
 
         # ⚠️⚠️ LE GLM S'AJUSTE SUR X BRUT, LE RÉSEAU REÇOIT X STANDARDISÉ, ET
         # LE SCALER FAIT LE PONT. `_calibrer_cann` reprojette les coefficients
@@ -731,10 +761,24 @@ class _CANNWalkForward:
             'metriques': {famille: {'cible': self.col_cible}},
         }
 
-        # ⚠️ Un jeu de VALIDATION distinct, découpé sur la fenêtre
-        # d'apprentissage et jamais sur le test : `_calibrer_cann` l'exige
-        # depuis le lot 1.1 (constat `a5/C6`), et pour la même raison ici.
-        coupe = max(1, int(n * 0.85))
+        # ⚠️⚠️ CE COMMENTAIRE DISAIT VRAI ET LE CODE FAISAIT L'INVERSE —
+        # constat `A4-4`, corrigé le 07/09/2026. Il annonçait « un jeu de
+        # VALIDATION distinct, découpé sur la fenêtre d'apprentissage et jamais
+        # sur le test », et les trois lignes qui suivaient passaient
+        # `X_val = X_std[coupe:]`, c'est-à-dire LE TEST LUI-MÊME.
+        #   *L'arrêt anticipé se réglait donc sur le pli qui sert ensuite à
+        #   mesurer le modèle : le Gini walk-forward et l'A/E du CANN étaient
+        #   mesurés sur des lignes que l'apprentissage avait vues décider.*
+        # Mesuré : `X_val` et `X_test` n'étaient pas le même OBJET (deux
+        # tranches distinctes) mais portaient les mêmes valeurs — 60 lignes
+        # sur 60 partagées, 0 avec l'entraînement. Un contrôle par `is`
+        # n'aurait rien vu.
+        # ⚠️ LA VALIDATION SE DÉCOUPE MAINTENANT DANS L'APPRENTISSAGE, comme
+        # le texte l'annonçait : 85 % de la fenêtre d'entraînement pour
+        # l'ajustement, les 15 % restants pour l'arrêt anticipé. Le test reste
+        # intouché — c'est la seule façon qu'il mesure quelque chose.
+        # (`coupe` et `coupe_fit` sont calculés plus haut : la précondition
+        #  passe avant l'ajustement du GLM.)
         # ⚠️ INSTANCE NUE (`__new__`, sans `__init__`) : `_calibrer_cann` ne
         # dépend que de `scalers` et `_cible_run`. C'est le même constat que
         # pour les `_calibrer_*` d'A3 — une méthode qui n'utilise que des
@@ -743,18 +787,19 @@ class _CANNWalkForward:
         agent.scalers = {'standard': scaler}
         agent._cible_run = self.col_cible
         res = agent._calibrer_cann(
-            X_train=X_std[:coupe],
+            X_train=X_std[:coupe_fit],
             X_test=X_std[coupe:],
-            y_train=y[:coupe].astype(np.float32),
+            y_train=y[:coupe_fit].astype(np.float32),
             y_test=y[coupe:].astype(np.float32),
             feature_names=self._noms,
             device=torch.device('cpu'),
             n_epochs=self.n_epochs, batch_size=self.batch_size, lr=self.lr,
             result_a3=result_a3,
-            expo_train=expo[:coupe], expo_test=expo[coupe:],
-            X_val=X_std[coupe:],
-            y_val=y[coupe:].astype(np.float32),
-            expo_val=expo[coupe:],
+            expo_train=expo[:coupe_fit], expo_test=expo[coupe:],
+            # ⚠️ LES 15 % DE FIN DE FENÊTRE D'APPRENTISSAGE — jamais le test.
+            X_val=X_std[coupe_fit:coupe],
+            y_val=y[coupe_fit:coupe].astype(np.float32),
+            expo_val=expo[coupe_fit:coupe],
         )
         self._modele = res['modele']
         # ⚠️ L'ancrage a-t-il vraiment eu lieu ? On le RELÈVE, on ne le suppose

@@ -164,6 +164,63 @@ logger = logging.getLogger('actuaria.a5')
 SEUIL_H2_VERT = 0.88
 SEUIL_H2_AMBRE = 0.75
 
+#: Part maximale de lignes que le jeu de VALIDATION peut partager avec le jeu
+#: de TEST avant que `_calibrer_cann` refuse de calibrer.
+#:
+#: ⚠️⚠️ IL EXISTE PARCE QU'UNE GARDE VERIFIAIT LA PRESENCE ET PAS LA PROPRIETE
+#: -- constat `A4-4`. `_calibrer_cann` exigeait un `X_val` non nul et son
+#: message promettait « distinct, jamais le test » ; `_CANNWalkForward.fit`
+#: lui passait la MEME tranche, 60 lignes sur 60, et rien ne tombait.
+#:
+#: ⚠️ POURQUOI UNE MAJORITE ET PAS ZERO : deux contrats aux memes facteurs
+#: existent dans un vrai portefeuille, et refuser sur une seule ligne commune
+#: ferait tomber des decoupages legitimes. Ce qui trahit un jeu de validation
+#: qui EST le test, c'est le RECOUVREMENT MASSIF.
+SEUIL_RECOUVREMENT_VALIDATION = 0.50
+
+
+def refuser_validation_qui_recouvre(X_val, X_test, ou: str) -> None:
+    """Refuse un jeu de VALIDATION qui EST le jeu de test -- constat `A4-4`.
+
+    ⚠️⚠️ LES DEUX CALIBRATIONS PORTAIENT LA MEME PROMESSE ET LE MEME TROU.
+    `_calibrer_cann` et `_calibrer_tabnet` exigent chacune un `X_val` non nul,
+    et leurs messages annoncent tous deux << un jeu de VALIDATION distinct,
+    jamais sur le test >>. Aucune ne verifiait cette promesse. Mesure du
+    06/09/2026 : `_CANNWalkForward.fit` passait la MEME tranche en validation
+    et en test -- 60 lignes sur 60 partagees -- et rien ne tombait.
+      *Un garde-fou qui atteste une propriete sans la surveiller est pire que
+      pas de garde-fou : il rassure.*
+
+    ⚠️ ELLE EST FACTORISEE PARCE QUE LES DEUX SITES SONT JUMEAUX. Corriger le
+    CANN seul aurait laisse TabNet porter la meme promesse creuse -- c'est le
+    motif que ce chantier a paye deux fois.
+
+    ⚠️ ON NE COMPARE PAS PAR IDENTITE (`is`) : les deux tableaux etaient des
+    tranches DISTINCTES du meme tableau, donc `is` rendait False alors que le
+    contenu etait identique. On compare les LIGNES.
+
+    ⚠️ ET ON TOLERE UN RECOUVREMENT MARGINAL : deux contrats aux memes
+    facteurs existent dans un vrai portefeuille, et refuser sur une seule
+    ligne commune ferait tomber des decoupages legitimes. Ce qui trahit un
+    jeu de validation qui EST le test, c'est le recouvrement MASSIF.
+    """
+    if X_val is None or X_test is None:
+        return
+    if not len(X_val) or not len(X_test):
+        return
+    lignes_test = {tuple(np.round(np.asarray(ligne, dtype=float), 12))
+                   for ligne in np.asarray(X_test)}
+    communes = sum(
+        tuple(np.round(np.asarray(ligne, dtype=float), 12)) in lignes_test
+        for ligne in np.asarray(X_val))
+    if communes > SEUIL_RECOUVREMENT_VALIDATION * len(X_val):
+        raise ValueError(
+            f"{ou} : le jeu de VALIDATION partage {communes}/{len(X_val)} "
+            f"lignes avec le jeu de TEST. L'arret anticipe se reglerait sur "
+            f"le pli qui sert ensuite a mesurer le modele, et le Gini comme "
+            f"l'A/E en seraient gonfles. Decouper la validation DANS la "
+            f"fenetre d'apprentissage.")
+
 # ── COLONNES À EXCLURE ────────────────────────────────────────────────────────
 COLS_A_EXCLURE = [
     'id_contrat', 'id_assure', 'id_salarie', 'id_beneficiaire', 'id_adherent',
@@ -1087,6 +1144,7 @@ class AgentA5DeepLearning:
                 "jeu de VALIDATION distinct, jamais sur le test. Les trois jeux "
                 "sont produits par _preparer_donnees (68 / 12 / 20)."
             )
+        refuser_validation_qui_recouvre(X_val, X_test, '_calibrer_cann')
 
         n_features = X_train.shape[1]
 
@@ -1468,6 +1526,12 @@ class AgentA5DeepLearning:
                 "jeu de VALIDATION distinct, jamais sur le test. Les trois jeux "
                 "sont produits par _preparer_donnees (68 / 12 / 20)."
             )
+        # ⚠️ LA SURFACE JUMELLE DU CANN. Cette garde portait la MEME promesse
+        # -- « distinct, jamais sur le test » -- sans la verifier. Aucun
+        # appelant ne la viole aujourd'hui, mais corriger le CANN seul aurait
+        # laisse ici une promesse creuse : c'est le motif que ce chantier a
+        # deja paye deux fois.
+        refuser_validation_qui_recouvre(X_val, X_test, '_calibrer_tabnet')
 
         n_features = X_train.shape[1]
 
