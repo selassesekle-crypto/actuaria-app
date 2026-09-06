@@ -703,7 +703,23 @@ class AgentA6Comparaison:
                 'statut_rag': statut_rag,
                 'nb_modeles': len(classement),
                 'modele_production': modele_production.get('modele','') if modele_production else '',
-                'ae_ratio': backtest.get('ae_ratio', 0),
+                # ⚠️⚠️ AUCUN LITTÉRAL ICI — constat `A6-1`, le pire cas du
+                # périmètre. Ce `.get(..., 0)` convertissait une ABSENCE en
+                # MESURE : `_backtesting_temporel` retourne sans jamais poser
+                # `ae_ratio` sur deux chemins (cible absente du dataframe, et
+                # une seule année distincte), et le chemin voisin (l. 1681)
+                # écrit délibérément `None` avec le commentaire qui explique
+                # pourquoi. Mesuré : sur 3 000 contrats à un seul exercice, le
+                # moteur rendait `['disponible', 'methode', 'note']` sans
+                # `ae_ratio`, et le HTML comme le Word signés portaient
+                # « Ratio A/E : 0 » au chapitre de la piste d'audit.
+                #   *Un A/E de 0 se lit « le modèle attend des sinistres et on
+                #   n'en observe aucun » — un sur-provisionnement massif. Le
+                #   déclencheur, un client qui fournit un seul exercice, est
+                #   le cas NORMAL d'une première tarification.*
+                # ⚠️ Le rendu sait déjà écrire une absence : `tarif_excel`
+                # passe par `mesure_arrondie`, et `_LIBELLES_AUDIT` la rend.
+                'ae_ratio': backtest.get('ae_ratio'),
                 'stabilite_wf': backtest.get('stabilite_wf',''),
                 # R5 — Traçabilité du profil de pondération (ACPR-2022-P-01 §4.3)
                 'profil_ponderation': _nom_profil_retenu,

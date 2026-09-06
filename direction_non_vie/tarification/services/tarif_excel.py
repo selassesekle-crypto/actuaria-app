@@ -14,6 +14,7 @@ ONGLETS PAR AGENT :
 import io
 from core.conformite_reglementaire import (
     gini_arrondi, mesure_arrondie, NON_MESURE,
+    NON_TRANSMIS, phrase_qualite_non_transmise,
     avertissement_controle_effet, avertissement_walk_forward,
     synthese_exclusions, synthese_alertes_experience,
     synthese_colonnes_plan_ecartees, synthese_exemptions_effet,
@@ -1144,13 +1145,38 @@ def export_excel_a1(result_a1: Dict, audit_id: str = "", arrete: Optional[str] =
         # si le FICHIER est lisible ; la couche dit si les LIGNES sont
         # tarifables.
         _section(ws1, r, "▶ QUALITÉ DU FICHIER (lisibilité, complétude, identité)"); r += 1
-        _kpi(ws1, r, "Score qualité du fichier", round(qualite.get('score_global', 0), 1),
-             statut=result_a1.get('statut_rag'), fmt=FMT_DEC4); r += 1
-        _kpi(ws1, r, "Nb lignes", qualite.get('nb_lignes', 0), fmt=FMT_NB); r += 1
-        _kpi(ws1, r, "Nb colonnes", qualite.get('nb_colonnes', 0), fmt=FMT_NB); r += 1
-        _kpi(ws1, r, "Taux complétude", qualite.get('taux_completude', 0) / 100, fmt=FMT_PCT); r += 1
-        _kpi(ws1, r, "Nb doublons", qualite.get('nb_doublons', 0), fmt=FMT_NB); r += 1
-        _kpi(ws1, r, "Taux doublons", qualite.get('taux_doublons', 0) / 100, fmt=FMT_PCT); r += 1
+        # ⚠️⚠️ UNE ABSENCE NE SE PUBLIE PAS EN VERT — constat `A1-2`, et c'est
+        # le CORRECTIF DE `A6.7` QUI N'AVAIT ATTEINT QU'UNE SURFACE SUR DEUX.
+        # Le jumeau `rapport_equipe_tarif.py:470-503` a reçu la garde
+        # `_absente` le 02/09 ; celui-ci non. Mesuré le 06/09/2026 sur le
+        # classeur RÉELLEMENT produit (9 164 octets), avec un `result_a1`
+        # dépourvu de `qualite` : **sept zéros** — score, nb lignes, nb
+        # colonnes, complétude, doublons, taux de doublons, exposition — et
+        # DEUX pastilles vertes « ✓ Conforme », dont celle de « Nb types
+        # d'anomalies » qui survit même à l'absence de `statut_rag`.
+        #   *Un lecteur y voyait un fichier parfait ; il n'y avait pas de
+        #   fichier.* Et « Granularité déclarée » rendait déjà « non mesuré »
+        #   une ligne plus bas : la doctrine était appliquée à côté.
+        # ⚠️ NON ATTEIGNABLE PAR A1 AUJOURD'HUI — son unique appelant est
+        # `a1_ingestion/agent.py:521`, sur le chemin de succès. Mais la
+        # fonction est réexportée publiquement par `services/__init__.py`.
+        _absente = not qualite
+        if _absente:
+            _kpi(ws1, r, "Qualité du fichier",
+                 phrase_qualite_non_transmise(), statut="AMBRE",
+                 wrap=True); r += 1
+            for _nom in ("Score qualité du fichier", "Nb lignes",
+                         "Nb colonnes", "Taux complétude", "Nb doublons",
+                         "Taux doublons"):
+                _kpi(ws1, r, _nom, NON_TRANSMIS, statut="AMBRE"); r += 1
+        else:
+            _kpi(ws1, r, "Score qualité du fichier", round(qualite.get('score_global', 0), 1),
+                 statut=result_a1.get('statut_rag'), fmt=FMT_DEC4); r += 1
+            _kpi(ws1, r, "Nb lignes", qualite.get('nb_lignes', 0), fmt=FMT_NB); r += 1
+            _kpi(ws1, r, "Nb colonnes", qualite.get('nb_colonnes', 0), fmt=FMT_NB); r += 1
+            _kpi(ws1, r, "Taux complétude", qualite.get('taux_completude', 0) / 100, fmt=FMT_PCT); r += 1
+            _kpi(ws1, r, "Nb doublons", qualite.get('nb_doublons', 0), fmt=FMT_NB); r += 1
+            _kpi(ws1, r, "Taux doublons", qualite.get('taux_doublons', 0) / 100, fmt=FMT_PCT); r += 1
         # ⚠️⚠️ SUR QUOI CE COMPTE DE DOUBLONS PORTE-T-IL — constat `A1.5`.
         # A1 calculait `source_identifiant` et `note_identite` depuis le
         # 24/08 ; mesuré le 05/09/2026, **seuls des tests les lisaient**. Le
@@ -1173,11 +1199,21 @@ def export_excel_a1(result_a1: Dict, audit_id: str = "", arrete: Optional[str] =
         # decrivait. La borne vient desormais de l'unite declaree au plan :
         # ecrire une borne fixe a cote d'un chiffre qui n'en depend plus,
         # c'est le rendre faux sans le toucher.
-        _kpi(ws1, r, "Exposition dans la borne déclarée au plan",
-             qualite.get('expo_ok_pct', 0) / 100, fmt=FMT_PCT); r += 1
-        _kpi(ws1, r, "Nb types d'anomalies détectées", qualite.get('nb_types_aberrants', 0),
-             statut="VERT" if qualite.get('nb_types_aberrants', 0) == 0 else "AMBRE",
-             fmt=FMT_NB); r += 1
+        # ⚠️ LES DEUX DERNIERS SUIVENT LA MÊME GARDE — et le second est le pire
+        # des sept : son « ✓ Conforme » VERT était codé en dur sur un compte
+        # d'anomalies à zéro, donc il survivait même à l'absence de
+        # `statut_rag`. *« Aucune anomalie » n'est VERT que si quelqu'un a
+        # CHERCHÉ.*
+        if _absente:
+            for _nom in ("Exposition dans la borne déclarée au plan",
+                         "Nb types d'anomalies détectées"):
+                _kpi(ws1, r, _nom, NON_TRANSMIS, statut="AMBRE"); r += 1
+        else:
+            _kpi(ws1, r, "Exposition dans la borne déclarée au plan",
+                 qualite.get('expo_ok_pct', 0) / 100, fmt=FMT_PCT); r += 1
+            _kpi(ws1, r, "Nb types d'anomalies détectées", qualite.get('nb_types_aberrants', 0),
+                 statut="VERT" if qualite.get('nb_types_aberrants', 0) == 0 else "AMBRE",
+                 fmt=FMT_NB); r += 1
 
         # ── Onglet 2 : Qualité & Aberrants ────────────────────────────────────
         # ⚠️ « §4.2 » NE RENVOYAIT À RIEN. Le numéro apparaissait ici, dans le

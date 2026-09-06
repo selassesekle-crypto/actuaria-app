@@ -865,12 +865,26 @@ def export_html_equipe(results: Dict[str, Dict], branche: str = '',
         bt6  = r6.get('backtest', {})
         at6  = r6.get('audit_trail', {})
         _score_txt6 = f"{prod.get('score_global'):.4f}" if 'score_global' in prod else '—'
+        # ⚠️⚠️ `or` TESTE LA VÉRACITÉ, PAS L'ABSENCE — constat `EX-2`. Un A/E
+        # réellement MESURÉ à 0.0 est falsy : il se publiait « non calculé »,
+        # c'est-à-dire l'inverse exact de la doctrine du dépôt — partout
+        # ailleurs une absence de mesure est déclarée plutôt que convertie en
+        # verdict ; ici une mesure était convertie en absence de mesure.
+        # ⚠️ ET LE CAS EST RÉEL, MESURÉ le 06/09/2026 sur la chaîne complète :
+        # une dernière fenêtre de walk-forward sans aucun sinistre observé
+        # (150 contrats, 0 sinistre) rend `ae_ratio = 0.0`. C'est le cas
+        # normal d'un exercice récent ou d'une branche à faible fréquence.
+        # ⚠️ La ligne 599 du même fichier le faisait déjà correctement pour
+        # l'Excel : *le correctif avait atterri sur une surface et pas sur sa
+        # jumelle.*
+        _ae6 = bt6.get('ae_ratio')
+        _ae_txt6 = '— non calcule' if _ae6 is None else _ae6
         section_a6 = f"""
         <div class="kpi-grid">
           <div class="kpi"><b>Modèle retenu</b><br>{prod.get('modele','N/A')}</div>
           <div class="kpi"><b>Score global</b><br>{_score_txt6}</div>
           <div class="kpi"><b>Gini WF moyen</b><br>{bt6.get('gini_wf_moyen') if bt6.get('gini_wf_moyen') is not None else '—'}</div>
-          <div class="kpi"><b>A/E ratio</b><br>{bt6.get('ae_ratio') or '— non calcule'}</div>
+          <div class="kpi"><b>A/E ratio</b><br>{_ae_txt6}</div>
         </div>
         <p style="font-size:10px;color:#8A9BB0;font-style:italic;margin-top:4px;">
           ✦ Score global : normalisation relative au meilleur modèle du

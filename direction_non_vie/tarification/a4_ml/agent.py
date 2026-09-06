@@ -178,7 +178,8 @@ from core.conformite_reglementaire import (
     BASE_GINI_UNITAIRE,
     construire_matrice_x,
     colonne_temporelle, diagnostiquer_evaluation, phrase_evaluation_impossible,
-    gini_texte, glm_de_reference, mesure_texte, ratio_sur_apprentissage,
+    gini_texte, glm_de_reference, mesure_arrondie, mesure_texte,
+    ratio_sur_apprentissage,
 )
 # ⚠️ SOURCE UNIQUE. L'etat de l'elasticite etait defini ICI au lot L0 ;
 # il vit desormais dans `core/elasticite.py`, avec le catalogue
@@ -3502,13 +3503,30 @@ class AgentA4ML:
                 "titre_graphique": f"{'✅' if h1_statut=='VERT' else '⚠️' if h1_statut=='AMBRE' else '❌'} Overfitting — Ratio test/train = {gini_texte(ratio_of, 3)}",
             },
             "h2_psi": {
-                "psi":        round(psi_global, 4),
+                # ⚠️⚠️ LA BRANCHE QUI GÈRE L'ABSENCE CONDUISAIT À DEUX SITES
+                # QUI NE LA GÈRENT PAS — constat `A4-1`, et c'est le seul du
+                # périmètre qui PLANTE au lieu de publier un chiffre faux. La
+                # ligne 3373 traite explicitement `psi_global is None` et pose
+                # un statut AMBRE ; cent trente lignes plus bas, ces deux
+                # lignes faisaient `round(None, 4)` et `{None:.4f}`, qui lèvent
+                # `TypeError`. Selon le `try` englobant, la validation
+                # actuarielle du modèle est alors perdue ENTIÈRE.
+                # ⚠️ Déclenché quand `_psi_reel` ET `monitoring['psi']` rendent
+                # tous deux `None` : jeu de test sans variance exploitable, ou
+                # monitoring absent.
+                # ⚠️ SES TROIS VOISINS DANS CE MÊME `return` avaient déjà la
+                # garde (`h1_overfitting`, `h3_gini`, `h4_calibration` qui la
+                # commente) — *l'asymétrie entre voisins était le révélateur.*
+                # ⚠️ Les trois f-strings de message (l. 3382, 3386, 3390) n'ont
+                # PAS besoin de garde : elles vivent dans des branches `elif`
+                # que l'absence ne peut pas atteindre. Mesuré, pas supposé.
+                "psi":        mesure_arrondie(psi_global, 4),
                 "psi_source": psi_source,
                 "details":    h2_details,
                 "statut":     h2_statut,
                 "message":    h2_msg,
                 "conseil":    h2_conseil,
-                "titre_graphique": f"{'✅' if h2_statut=='VERT' else '⚠️' if h2_statut=='AMBRE' else '❌'} PSI réel = {psi_global:.4f}",
+                "titre_graphique": f"{'✅' if h2_statut=='VERT' else '⚠️' if h2_statut=='AMBRE' else '❌'} PSI réel = {mesure_texte(psi_global)}",
             },
             "h3_gini": {
                 "gini":   (None if gini_test is None else round(gini_test, 4)),
